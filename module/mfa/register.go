@@ -2,11 +2,11 @@ package mfa
 
 import (
 	"github.com/hydroan/gst/authn"
+	"github.com/hydroan/gst/consts"
 	modelmfa "github.com/hydroan/gst/internal/model/mfa"
 	servicemfa "github.com/hydroan/gst/internal/service/mfa"
 	"github.com/hydroan/gst/model"
 	"github.com/hydroan/gst/module"
-	"github.com/hydroan/gst/types/consts"
 )
 
 // Register wires TOTP-based MFA into the application.

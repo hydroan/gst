@@ -105,7 +105,6 @@ func newModuleCopyPlanProject(t *testing.T) string {
 		filepath.Join(frameworkRoot, "dsl"),
 		filepath.Join(frameworkRoot, "model"),
 		filepath.Join(frameworkRoot, "service"),
-		filepath.Join(frameworkRoot, "types"),
 	} {
 		if err := os.MkdirAll(dir, 0o755); err != nil {
 			t.Fatal(err)
@@ -121,7 +120,7 @@ type Base[M any, REQ any, RSP any] struct{}
 `), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(frameworkRoot, "types", "types.go"), []byte(`package types
+	if err := os.WriteFile(filepath.Join(frameworkRoot, "gst.go"), []byte(`package gst
 
 type ServiceContext struct{}
 `), 0o600); err != nil {

@@ -6,11 +6,11 @@ import (
 	"time"
 
 	"github.com/cockroachdb/errors"
+	"github.com/hydroan/gst"
 	"github.com/hydroan/gst/authn"
 	"github.com/hydroan/gst/database"
 	modelmfa "github.com/hydroan/gst/internal/model/mfa"
 	"github.com/hydroan/gst/service"
-	"github.com/hydroan/gst/types"
 	"github.com/pquerna/otp/totp"
 )
 
@@ -30,7 +30,7 @@ import (
 // with other messages reports an invalid proof, 400 reports both proofs
 // arriving at once, and 429 reports a spent budget, which refuses even a
 // correct proof until its window ends.
-func LoginSecondFactorVerifier(ctx *types.ServiceContext, userID string, factor authn.LoginSecondFactor) error {
+func LoginSecondFactorVerifier(ctx *gst.ServiceContext, userID string, factor authn.LoginSecondFactor) error {
 	userID = strings.TrimSpace(userID)
 	if ctx == nil || userID == "" {
 		return service.NewError(http.StatusUnauthorized, "authentication required")
@@ -71,7 +71,7 @@ func LoginSecondFactorVerifier(ctx *types.ServiceContext, userID string, factor 
 }
 
 // listActiveLoginTOTPDevices loads the active devices that make login MFA mandatory.
-func listActiveLoginTOTPDevices(ctx *types.ServiceContext, userID string) ([]*modelmfa.TOTPDevice, error) {
+func listActiveLoginTOTPDevices(ctx *gst.ServiceContext, userID string) ([]*modelmfa.TOTPDevice, error) {
 	devices := make([]*modelmfa.TOTPDevice, 0)
 	if err := database.Database[*modelmfa.TOTPDevice](ctx).WithQuery(&modelmfa.TOTPDevice{
 		UserID:   userID,
@@ -84,7 +84,7 @@ func listActiveLoginTOTPDevices(ctx *types.ServiceContext, userID string) ([]*mo
 
 // verifyLoginTOTPCode validates a login TOTP code, consumes it against replay,
 // records the matched device usage, and resets the login attempt budget.
-func verifyLoginTOTPCode(ctx *types.ServiceContext, devices []*modelmfa.TOTPDevice, code string) error {
+func verifyLoginTOTPCode(ctx *gst.ServiceContext, devices []*modelmfa.TOTPDevice, code string) error {
 	device := findLoginTOTPDeviceByCode(devices, code)
 	if device == nil {
 		return service.NewError(http.StatusUnauthorized, "invalid TOTP code")
@@ -113,7 +113,7 @@ func verifyLoginTOTPCode(ctx *types.ServiceContext, devices []*modelmfa.TOTPDevi
 
 // verifyLoginBackupCode consumes one login recovery code, maps invalid input
 // to the login error contract, and resets the login attempt budget.
-func verifyLoginBackupCode(ctx *types.ServiceContext, userID, code string) error {
+func verifyLoginBackupCode(ctx *gst.ServiceContext, userID, code string) error {
 	if err := consumeTOTPBackupCode(ctx, userID, code); err != nil {
 		if errors.Is(err, errTOTPBackupCodeInvalid) {
 			return service.NewError(http.StatusUnauthorized, "invalid backup code")

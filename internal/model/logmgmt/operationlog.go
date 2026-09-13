@@ -1,9 +1,9 @@
 package modellogmgmt
 
 import (
+	"github.com/hydroan/gst/consts"
 	. "github.com/hydroan/gst/dsl"
 	"github.com/hydroan/gst/model"
-	"github.com/hydroan/gst/types/consts"
 )
 
 type OperationLog struct {

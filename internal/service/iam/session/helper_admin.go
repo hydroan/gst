@@ -5,20 +5,20 @@ import (
 	"strings"
 	"time"
 
+	"github.com/hydroan/gst"
 	"github.com/hydroan/gst/authz/rbac"
+	"github.com/hydroan/gst/consts"
 	"github.com/hydroan/gst/database"
 	modeliamsession "github.com/hydroan/gst/internal/model/iam/session"
 	modeliamuser "github.com/hydroan/gst/internal/model/iam/user"
 	"github.com/hydroan/gst/internal/service/iam/adminauth"
 	"github.com/hydroan/gst/service"
-	"github.com/hydroan/gst/types"
-	"github.com/hydroan/gst/types/consts"
 )
 
 const adminSessionOnlineWithinQuery = "online_within"
 
 // ensureAdminSessionActor verifies that the current session belongs to a system-root user.
-func ensureAdminSessionActor(ctx *types.ServiceContext) error {
+func ensureAdminSessionActor(ctx *gst.ServiceContext) error {
 	user, err := loadAdminSessionActor(ctx)
 	if err != nil {
 		return err
@@ -33,7 +33,7 @@ func ensureAdminSessionActor(ctx *types.ServiceContext) error {
 	return service.NewError(http.StatusForbidden, "forbidden")
 }
 
-func ensureAdminSessionTarget(ctx *types.ServiceContext, target *modeliamuser.User) error {
+func ensureAdminSessionTarget(ctx *gst.ServiceContext, target *modeliamuser.User) error {
 	actor, err := loadAdminSessionActor(ctx)
 	if err != nil {
 		return err
@@ -41,7 +41,7 @@ func ensureAdminSessionTarget(ctx *types.ServiceContext, target *modeliamuser.Us
 	return adminauth.EnsureTenantAdmin(ctx, actor, target)
 }
 
-func loadAdminSessionActor(ctx *types.ServiceContext) (*modeliamuser.User, error) {
+func loadAdminSessionActor(ctx *gst.ServiceContext) (*modeliamuser.User, error) {
 	_, session, err := CurrentSession(ctx)
 	if err != nil {
 		return nil, err
@@ -63,7 +63,7 @@ func loadAdminSessionActor(ctx *types.ServiceContext) (*modeliamuser.User, error
 // The public contract is a Go duration in the online_within query parameter,
 // for example "5m". A missing value means the caller wants the normal full
 // session list instead of an online-only view.
-func parseAdminSessionOnlineSince(ctx *types.ServiceContext) (time.Time, bool, error) {
+func parseAdminSessionOnlineSince(ctx *gst.ServiceContext) (time.Time, bool, error) {
 	raw := ""
 	if ctx != nil {
 		raw = strings.TrimSpace(ctx.Query().Get(adminSessionOnlineWithinQuery))

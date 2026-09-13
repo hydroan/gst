@@ -5,10 +5,10 @@ import (
 
 	"bench/model/bench"
 
+	"github.com/hydroan/gst"
 	"github.com/hydroan/gst/database"
 	"github.com/hydroan/gst/model"
 	"github.com/hydroan/gst/service"
-	"github.com/hydroan/gst/types"
 )
 
 type List2 struct {
@@ -21,11 +21,11 @@ type List2 struct {
 // condition building (WithQuery model and filter parameters, SELECT and COUNT
 // generation) all run for real; only the final execution is skipped. It
 // benchmarks the framework's query machinery free of database cost.
-func (l *List2) List(ctx *types.ServiceContext, req *model.Empty) (rsp *bench.ListRsp, err error) {
+func (l *List2) List(ctx *gst.ServiceContext, req *model.Empty) (rsp *bench.ListRsp, err error) {
 	var m *bench.Bench
-	var filters []types.Filter
-	var orders []types.Order
-	var cursor types.Cursor
+	var filters []gst.Filter
+	var orders []gst.Order
+	var cursor gst.Cursor
 
 	if m, err = l.QueryModel(ctx); err != nil {
 		return nil, service.NewError(http.StatusBadRequest, err.Error())
@@ -41,7 +41,7 @@ func (l *List2) List(ctx *types.ServiceContext, req *model.Empty) (rsp *bench.Li
 	}
 	page, size := l.QueryPagination(ctx)
 
-	opts := types.QueryOptions{
+	opts := gst.QueryOptions{
 		AllowEmpty:    true,
 		PresentFields: l.QueryPresentFields(ctx),
 		Filters:       filters,

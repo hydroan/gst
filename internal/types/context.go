@@ -10,10 +10,10 @@ import (
 
 	"github.com/cockroachdb/errors"
 	"github.com/gin-gonic/gin"
+	"github.com/hydroan/gst/consts"
 	"github.com/hydroan/gst/internal/execctx"
 	"github.com/hydroan/gst/internal/requestctx"
 	"github.com/hydroan/gst/internal/sse"
-	"github.com/hydroan/gst/types/consts"
 )
 
 var _ context.Context = (*ServiceContext)(nil)

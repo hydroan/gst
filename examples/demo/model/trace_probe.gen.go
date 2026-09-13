@@ -4,29 +4,29 @@
 package model
 
 import (
-	types "github.com/hydroan/gst/types"
+	gst "github.com/hydroan/gst"
 	gorm "gorm.io/gorm"
 )
 
 // TraceProbeCols are the typed column references of TraceProbe.
 var TraceProbeCols = struct {
-	CreatedAt types.TimeColumn
-	CreatedBy types.Column[string]
-	DeletedAt types.Column[gorm.DeletedAt]
-	Hook      types.Column[string]
-	ID        types.Column[string]
-	Name      types.Column[string]
-	Note      types.Column[string]
-	UpdatedAt types.TimeColumn
-	UpdatedBy types.Column[string]
+	CreatedAt gst.TimeColumn
+	CreatedBy gst.Column[string]
+	DeletedAt gst.Column[gorm.DeletedAt]
+	Hook      gst.Column[string]
+	ID        gst.Column[string]
+	Name      gst.Column[string]
+	Note      gst.Column[string]
+	UpdatedAt gst.TimeColumn
+	UpdatedBy gst.Column[string]
 }{
-	CreatedAt: types.NewTimeColumn[*TraceProbe]("created_at"),
-	CreatedBy: types.NewColumn[*TraceProbe, string]("created_by"),
-	DeletedAt: types.NewColumn[*TraceProbe, gorm.DeletedAt]("deleted_at"),
-	Hook:      types.NewColumn[*TraceProbe, string]("hook"),
-	ID:        types.NewColumn[*TraceProbe, string]("id"),
-	Name:      types.NewColumn[*TraceProbe, string]("name"),
-	Note:      types.NewColumn[*TraceProbe, string]("note"),
-	UpdatedAt: types.NewTimeColumn[*TraceProbe]("updated_at"),
-	UpdatedBy: types.NewColumn[*TraceProbe, string]("updated_by"),
+	CreatedAt: gst.NewTimeColumn[*TraceProbe]("created_at"),
+	CreatedBy: gst.NewColumn[*TraceProbe, string]("created_by"),
+	DeletedAt: gst.NewColumn[*TraceProbe, gorm.DeletedAt]("deleted_at"),
+	Hook:      gst.NewColumn[*TraceProbe, string]("hook"),
+	ID:        gst.NewColumn[*TraceProbe, string]("id"),
+	Name:      gst.NewColumn[*TraceProbe, string]("name"),
+	Note:      gst.NewColumn[*TraceProbe, string]("note"),
+	UpdatedAt: gst.NewTimeColumn[*TraceProbe]("updated_at"),
+	UpdatedBy: gst.NewColumn[*TraceProbe, string]("updated_by"),
 }

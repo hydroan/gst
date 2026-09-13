@@ -334,7 +334,7 @@ import (
 
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/service"
-	"github.com/hydroan/gst/types"
+	"github.com/hydroan/gst"
 )
 
 type Creator struct {
@@ -358,7 +358,7 @@ import (
 	"github.com/example/myapp/model/common"
 
 	"github.com/hydroan/gst/service"
-	"github.com/hydroan/gst/types"
+	"github.com/hydroan/gst"
 )
 
 type Dedup struct {

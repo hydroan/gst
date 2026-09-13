@@ -6,13 +6,13 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/errors"
+	"github.com/hydroan/gst"
 	"github.com/hydroan/gst/database"
 	modeliamaccount "github.com/hydroan/gst/internal/model/iam/account"
 	modeliamuser "github.com/hydroan/gst/internal/model/iam/user"
 	serviceiamaccount "github.com/hydroan/gst/internal/service/iam/account"
 	"github.com/hydroan/gst/internal/service/iam/adminauth"
 	"github.com/hydroan/gst/service"
-	"github.com/hydroan/gst/types"
 )
 
 // AdminUserCreateService handles POST /iam/admin/users for privileged
@@ -33,7 +33,7 @@ type AdminUserCreateService struct {
 // here — which tenants an account belongs to is authz's to record, and an IAM
 // that wrote role bindings would own half of a decision it cannot see the rest
 // of.
-func (u *AdminUserCreateService) Create(ctx *types.ServiceContext, req *modeliamuser.AdminUserCreateReq) (rsp *modeliamuser.AdminUserCreateRsp, err error) {
+func (u *AdminUserCreateService) Create(ctx *gst.ServiceContext, req *modeliamuser.AdminUserCreateReq) (rsp *modeliamuser.AdminUserCreateRsp, err error) {
 	log := u.WithContext(ctx, ctx.Phase())
 
 	username := strings.TrimSpace(req.Username)

@@ -4,9 +4,9 @@ import (
 	"net/http"
 
 	"github.com/cockroachdb/errors"
+	"github.com/hydroan/gst"
 	modelemail "github.com/hydroan/gst/internal/model/email"
 	"github.com/hydroan/gst/service"
-	"github.com/hydroan/gst/types"
 )
 
 // ChangeCancelService handles the token cancellation step that revokes a
@@ -17,7 +17,7 @@ type ChangeCancelService struct {
 
 // Create consumes the cancellation token and records that matching
 // confirmation tokens must no longer complete the email change.
-func (s *ChangeCancelService) Create(ctx *types.ServiceContext, req *modelemail.ChangeCancelReq) (rsp *modelemail.ChangeCancelRsp, err error) {
+func (s *ChangeCancelService) Create(ctx *gst.ServiceContext, req *modelemail.ChangeCancelReq) (rsp *modelemail.ChangeCancelRsp, err error) {
 	log := s.WithContext(ctx, ctx.Phase())
 
 	flow, err := consumeEmailFlow(emailServiceContext(ctx), iamEmailFlowKindChangeCancel, req.Token)

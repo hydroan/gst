@@ -3,18 +3,18 @@ package ping
 import (
 	"demo/model"
 
+	"github.com/hydroan/gst"
 	"github.com/hydroan/gst/database"
 	gstmodel "github.com/hydroan/gst/model"
 	"github.com/hydroan/gst/module/iam"
 	"github.com/hydroan/gst/service"
-	"github.com/hydroan/gst/types"
 )
 
 type Lister struct {
 	service.Base[*model.Ping, *gstmodel.Empty, *model.PingRsp]
 }
 
-func (p *Lister) List(ctx *types.ServiceContext, req *gstmodel.Empty) (rsp *model.PingRsp, err error) {
+func (p *Lister) List(ctx *gst.ServiceContext, req *gstmodel.Empty) (rsp *model.PingRsp, err error) {
 	users := make([]*iam.User, 0)
 	n := new(int)
 	// _ = database.Database[*iam.User](ctx).WithDryRun().List(&users)
@@ -23,7 +23,7 @@ func (p *Lister) List(ctx *types.ServiceContext, req *gstmodel.Empty) (rsp *mode
 	_ = database.Database[*iam.User](ctx).List(&users)
 	_ = database.Database[*iam.User](ctx).Count(n)
 
-	// sqls := make([]types.SQLStatement, 0)
+	// sqls := make([]gst.SQLStatement, 0)
 	//
 	// _ = database.Database[*iam.User](ctx).WithDryRun(&sqls).WithQuery(&iam.User{Username: "test"}).List(&users)
 	// pretty.Println(sqls)

@@ -25,17 +25,17 @@ import (
 
 	"demo/model"
 
+	"github.com/hydroan/gst"
+	"github.com/hydroan/gst/consts"
 	"github.com/hydroan/gst/database"
 	"github.com/hydroan/gst/service"
-	"github.com/hydroan/gst/types"
-	"github.com/hydroan/gst/types/consts"
 	"go.uber.org/zap"
 )
 
 // traceServiceHook logs one service hook of the current phase together with the
 // live row count, so a request can be followed across the service, database and
 // model layers. log is the service logger, nil before logger injection runs.
-func traceServiceHook(log types.Logger, ctx *types.ServiceContext, phase consts.Phase, probe *model.TraceProbe, itemCount int) error {
+func traceServiceHook(log gst.Logger, ctx *gst.ServiceContext, phase consts.Phase, probe *model.TraceProbe, itemCount int) error {
 	var total int
 	err := database.Database[*model.TraceProbe](ctx).Count(&total)
 

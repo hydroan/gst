@@ -5,9 +5,9 @@ import (
 	"testing"
 
 	"github.com/gorilla/schema"
+	"github.com/hydroan/gst/consts"
 	"github.com/hydroan/gst/internal/modelregistry"
 	"github.com/hydroan/gst/internal/types"
-	"github.com/hydroan/gst/types/consts"
 )
 
 // The gorilla/schema pipeline below is the reference implementation Decode

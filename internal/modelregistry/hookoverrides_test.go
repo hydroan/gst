@@ -6,9 +6,9 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/hydroan/gst/consts"
 	"github.com/hydroan/gst/internal/modelregistry"
 	"github.com/hydroan/gst/internal/types"
-	"github.com/hydroan/gst/types/consts"
 	"github.com/stoewer/go-strcase"
 	"github.com/stretchr/testify/require"
 )

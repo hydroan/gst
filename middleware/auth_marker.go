@@ -2,7 +2,7 @@ package middleware
 
 import (
 	"github.com/gin-gonic/gin"
-	"github.com/hydroan/gst/types/consts"
+	"github.com/hydroan/gst/consts"
 )
 
 // AuthMarker is a middleware that marks the current route as requiring authentication.

@@ -5,12 +5,12 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/hydroan/gst"
+	"github.com/hydroan/gst/consts"
 	"github.com/hydroan/gst/database"
 	modelmfa "github.com/hydroan/gst/internal/model/mfa"
 	"github.com/hydroan/gst/model"
 	"github.com/hydroan/gst/service"
-	"github.com/hydroan/gst/types"
-	"github.com/hydroan/gst/types/consts"
 	"go.uber.org/zap"
 )
 
@@ -29,7 +29,7 @@ type AdminTOTPResetService struct {
 }
 
 // Delete removes every TOTP device of the target user on behalf of an administrator.
-func (a *AdminTOTPResetService) Delete(ctx *types.ServiceContext, req *model.Empty) (rsp *modelmfa.AdminTOTPResetRsp, err error) {
+func (a *AdminTOTPResetService) Delete(ctx *gst.ServiceContext, req *model.Empty) (rsp *modelmfa.AdminTOTPResetRsp, err error) {
 	log := a.WithContext(ctx, ctx.Phase())
 
 	targetUserID := strings.TrimSpace(ctx.Param("id"))

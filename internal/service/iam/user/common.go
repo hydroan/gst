@@ -4,12 +4,12 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/hydroan/gst"
 	"github.com/hydroan/gst/authz/rbac"
+	"github.com/hydroan/gst/consts"
 	modeliamuser "github.com/hydroan/gst/internal/model/iam/user"
 	"github.com/hydroan/gst/service"
 	"github.com/hydroan/gst/tenant"
-	"github.com/hydroan/gst/types"
-	"github.com/hydroan/gst/types/consts"
 )
 
 // shouldInvalidateUserSessions returns whether a user status transition must revoke all active sessions.
@@ -21,7 +21,7 @@ func shouldInvalidateUserSessions(status modeliamuser.UserStatus) bool {
 //
 // Tenant-aware applications populate TenantID through middleware. Applications
 // without tenant middleware operate in the default authorization domain.
-func currentTenant(ctx *types.ServiceContext) string {
+func currentTenant(ctx *gst.ServiceContext) string {
 	if ctx != nil && strings.TrimSpace(ctx.TenantID()) != "" {
 		return strings.TrimSpace(ctx.TenantID())
 	}
@@ -33,7 +33,7 @@ func currentTenant(ctx *types.ServiceContext) string {
 // System root is intentionally separate from tenant-local roles: it can bypass
 // tenant list scoping as an actor, and tenant admins must not manage it as a
 // target even if root also has tenant role bindings.
-func isSystemRoot(ctx *types.ServiceContext, actor *modeliamuser.User) (bool, error) {
+func isSystemRoot(ctx *gst.ServiceContext, actor *modeliamuser.User) (bool, error) {
 	if actor == nil || strings.TrimSpace(actor.GetID()) == "" {
 		return false, nil
 	}

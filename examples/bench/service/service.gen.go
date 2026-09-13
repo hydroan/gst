@@ -4,8 +4,8 @@ package service
 import (
 	"bench/service/bench"
 
+	"github.com/hydroan/gst/consts"
 	"github.com/hydroan/gst/service"
-	"github.com/hydroan/gst/types/consts"
 )
 
 func init() {

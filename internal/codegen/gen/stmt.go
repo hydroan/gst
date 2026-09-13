@@ -5,7 +5,7 @@ import (
 	"go/ast"
 	"go/token"
 
-	"github.com/hydroan/gst/types/consts"
+	"github.com/hydroan/gst/consts"
 )
 
 // StmtLogInfo create *ast.ExprStmt represents `log.Info(str)`
@@ -120,8 +120,8 @@ func StmtServiceRegister(serviceImport string, phase consts.Phase, route string)
 
 // StmtRouterRegister creates a *ast.ExprStmt represents golang code like below:
 //
-//	router.Register[*model.Group, *model.Group, *model.Group](router.Auth(), "group", &types.ControllerConfig[*model.Group]{}, consts.Create)
-//	router.Register[*model.Group, *model.Group, *model.Group](router.Pub(), "login", &types.ControllerConfig[*auth.LoginReq]{}, consts.Create)
+//	router.Register[*model.Group, *model.Group, *model.Group](router.Auth(), "group", &gst.ControllerConfig[*model.Group]{}, consts.Create)
+//	router.Register[*model.Group, *model.Group, *model.Group](router.Pub(), "login", &gst.ControllerConfig[*auth.LoginReq]{}, consts.Create)
 //
 // routerGroup names the router group accessor ("Auth" or "Pub") and route is
 // the raw route string, shared verbatim with the matching StmtServiceRegister
@@ -148,13 +148,13 @@ func StmtRouterRegister(modelPkgName, modelName, reqName, rspName, gstModelPkg s
 	}
 
 	var paramExpr ast.Expr
-	// expr like: &types.ControllerConfig[*config.Namespace]{}
+	// expr like: &gst.ControllerConfig[*config.Namespace]{}
 	paramExpr = &ast.UnaryExpr{
 		Op: token.AND,
 		X: &ast.CompositeLit{
 			Type: &ast.IndexExpr{
 				X: &ast.SelectorExpr{
-					X:   ast.NewIdent("types"),
+					X:   ast.NewIdent("gst"),
 					Sel: ast.NewIdent("ControllerConfig"),
 				},
 				Index: &ast.StarExpr{
@@ -167,14 +167,14 @@ func StmtRouterRegister(modelPkgName, modelName, reqName, rspName, gstModelPkg s
 			Elts: []ast.Expr{},
 		},
 	}
-	// expr like: &types.ControllerConfig[*config.Namespace]{ParamName: "ns"}
+	// expr like: &gst.ControllerConfig[*config.Namespace]{ParamName: "ns"}
 	if len(paramName) > 0 {
 		paramExpr = &ast.UnaryExpr{
 			Op: token.AND,
 			X: &ast.CompositeLit{
 				Type: &ast.IndexExpr{
 					X: &ast.SelectorExpr{
-						X:   ast.NewIdent("types"),
+						X:   ast.NewIdent("gst"),
 						Sel: ast.NewIdent("ControllerConfig"),
 					},
 					Index: &ast.StarExpr{

@@ -170,7 +170,7 @@ func keep(ctx context.Context) any {
 
 // TestDatabaseChainMethodSetsMatchTypesInterface guards the hardcoded method
 // sets against drift when methods are added to or removed from the
-// types.Database and types.DatabaseOption interfaces.
+// gst.Database and gst.DatabaseOption interfaces.
 func TestDatabaseChainMethodSetsMatchTypesInterface(t *testing.T) {
 	fset := token.NewFileSet()
 	file, err := parser.ParseFile(fset, filepath.Join("..", "..", "internal", "types", "database.go"), nil, 0)
@@ -187,12 +187,12 @@ func assertMethodSetMatches(t *testing.T, interfaceName string, declared []strin
 
 	for _, name := range declared {
 		if !hardcoded[name] {
-			t.Errorf("types.%s method %q is missing from the gg check method set", interfaceName, name)
+			t.Errorf("gst.%s method %q is missing from the gg check method set", interfaceName, name)
 		}
 	}
 	for name := range hardcoded {
 		if !slices.Contains(declared, name) {
-			t.Errorf("gg check method set entry %q no longer exists on types.%s", name, interfaceName)
+			t.Errorf("gg check method set entry %q no longer exists on gst.%s", name, interfaceName)
 		}
 	}
 }

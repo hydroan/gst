@@ -7,9 +7,9 @@ import (
 	"time"
 
 	"github.com/cockroachdb/errors"
+	"github.com/hydroan/gst"
 	modeliamsession "github.com/hydroan/gst/internal/model/iam/session"
 	"github.com/hydroan/gst/service"
-	"github.com/hydroan/gst/types"
 )
 
 // ValidateSession reports whether a stored snapshot is usable as the session
@@ -47,7 +47,7 @@ func ValidateSession(sessionID string, sessionData modeliamsession.Session) erro
 // A snapshot that fails validation is deleted on the way out. It cannot serve
 // another request, and leaving it would let every later request pay to load and
 // reject it again.
-func CurrentSession(ctx *types.ServiceContext) (string, modeliamsession.Session, error) {
+func CurrentSession(ctx *gst.ServiceContext) (string, modeliamsession.Session, error) {
 	sessionID, err := CookieSessionID(ctx)
 	if err != nil {
 		return "", modeliamsession.Session{}, err

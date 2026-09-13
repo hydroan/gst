@@ -15,9 +15,9 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/errors"
+	"github.com/hydroan/gst/consts"
 	"github.com/hydroan/gst/internal/codegen/constants"
 	"github.com/hydroan/gst/internal/codegen/gen"
-	"github.com/hydroan/gst/types/consts"
 )
 
 // columnInspectionPanic is what the inspection reports when it runs code that

@@ -4,19 +4,19 @@ import (
 	"net/http"
 
 	"github.com/cockroachdb/errors"
+	"github.com/hydroan/gst"
 	"github.com/hydroan/gst/database"
 	modeliamaccount "github.com/hydroan/gst/internal/model/iam/account"
 	"github.com/hydroan/gst/internal/service/iam/adminauth"
 	serviceiamsession "github.com/hydroan/gst/internal/service/iam/session"
 	"github.com/hydroan/gst/service"
-	"github.com/hydroan/gst/types"
 )
 
 type ResetPasswordService struct {
 	service.Base[*modeliamaccount.ResetPassword, *modeliamaccount.ResetPasswordReq, *modeliamaccount.ResetPasswordRsp]
 }
 
-func (r *ResetPasswordService) Create(ctx *types.ServiceContext, req *modeliamaccount.ResetPasswordReq) (rsp *modeliamaccount.ResetPasswordRsp, err error) {
+func (r *ResetPasswordService) Create(ctx *gst.ServiceContext, req *modeliamaccount.ResetPasswordReq) (rsp *modeliamaccount.ResetPasswordRsp, err error) {
 	log := r.WithContext(ctx, ctx.Phase())
 	log.Info("resetpassword create")
 

@@ -9,9 +9,9 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/hydroan/gst/config"
+	"github.com/hydroan/gst/consts"
 	"github.com/hydroan/gst/logger"
 	"github.com/hydroan/gst/response"
-	"github.com/hydroan/gst/types/consts"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"

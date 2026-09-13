@@ -4,11 +4,11 @@ import (
 	"net/http"
 
 	"github.com/cockroachdb/errors"
+	"github.com/hydroan/gst"
 	"github.com/hydroan/gst/database"
 	modeliamuser "github.com/hydroan/gst/internal/model/iam/user"
 	serviceiamsession "github.com/hydroan/gst/internal/service/iam/session"
 	"github.com/hydroan/gst/service"
-	"github.com/hydroan/gst/types"
 )
 
 // LoadActor resolves the authenticated user for the current request.
@@ -16,7 +16,7 @@ import (
 // IAM admin APIs use the session snapshot only as the authentication source;
 // they still reload the user row from the database so status, IDs, and system
 // role checks operate on the current persisted user.
-func LoadActor(ctx *types.ServiceContext) (*modeliamuser.User, error) {
+func LoadActor(ctx *gst.ServiceContext) (*modeliamuser.User, error) {
 	_, session, err := serviceiamsession.CurrentSession(ctx)
 	if err != nil {
 		return nil, service.NewErrorWithCause(http.StatusUnauthorized, "invalid session", err)
@@ -41,7 +41,7 @@ func LoadActor(ctx *types.ServiceContext) (*modeliamuser.User, error) {
 // Callers must pass both users to adminauth.EnsureTenantAdmin so target-specific
 // rules, such as tenant membership and system-root protection, are evaluated in
 // one place.
-func LoadActorAndTarget(ctx *types.ServiceContext, targetUserID string) (*modeliamuser.User, *modeliamuser.User, error) {
+func LoadActorAndTarget(ctx *gst.ServiceContext, targetUserID string) (*modeliamuser.User, *modeliamuser.User, error) {
 	actor, err := LoadActor(ctx)
 	if err != nil {
 		return nil, nil, err

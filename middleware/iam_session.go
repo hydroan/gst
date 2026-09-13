@@ -7,12 +7,12 @@ import (
 
 	"github.com/cockroachdb/errors"
 	"github.com/gin-gonic/gin"
+	"github.com/hydroan/gst/consts"
 	modeliamsession "github.com/hydroan/gst/internal/model/iam/session"
 	serviceiamsession "github.com/hydroan/gst/internal/service/iam/session"
 	"github.com/hydroan/gst/requestctx"
 	"github.com/hydroan/gst/response"
 	"github.com/hydroan/gst/service"
-	"github.com/hydroan/gst/types/consts"
 	"github.com/mssola/useragent"
 	"go.uber.org/zap"
 )

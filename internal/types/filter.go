@@ -155,7 +155,7 @@ func (f Filter) Value() any { return f.value }
 // NewFilter builds a filter from its parts, without the shape checks the
 // other constructors lock in at compile time. It serves the framework's own
 // tests, which exercise how the database layer fails closed on a malformed
-// filter; the public types package does not forward it.
+// filter; the public gst package does not forward it.
 func NewFilter(table, column string, op FilterOp, value any) Filter {
 	return Filter{table: table, column: column, op: op, value: value}
 }

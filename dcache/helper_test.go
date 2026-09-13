@@ -4,7 +4,7 @@ import (
 	"testing"
 
 	"github.com/hydroan/gst/config"
-	"github.com/hydroan/gst/types/consts"
+	"github.com/hydroan/gst/consts"
 )
 
 // TestHitRatio pins the percentage arithmetic, including the zero-sample

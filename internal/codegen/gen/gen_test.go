@@ -10,8 +10,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/hydroan/gst/consts"
 	"github.com/hydroan/gst/dsl"
-	"github.com/hydroan/gst/types/consts"
 	"github.com/kr/pretty"
 	_ "github.com/sergi/go-diff/diffmatchpatch"
 )
@@ -488,7 +488,7 @@ func TestGenServiceMethod1(t *testing.T) {
 				ModelFileDir: "/tmp/model",
 			},
 			phase: consts.PHASE_CREATE_BEFORE,
-			want: `func (u *Creator) CreateBefore(ctx *types.ServiceContext, user *model.User) error {
+			want: `func (u *Creator) CreateBefore(ctx *gst.ServiceContext, user *model.User) error {
 	log := u.WithContext(ctx, ctx.Phase())
 	log.Info("user create before")
 	return nil
@@ -527,7 +527,7 @@ func TestGenServiceMethod2(t *testing.T) {
 				ModelFileDir: "/tmp/model",
 			},
 			phase: consts.PHASE_LIST_BEFORE,
-			want: `func (u *Lister) ListBefore(ctx *types.ServiceContext, users *[]*model.User) error {
+			want: `func (u *Lister) ListBefore(ctx *gst.ServiceContext, users *[]*model.User) error {
 	log := u.WithContext(ctx, ctx.Phase())
 	log.Info("user list before")
 	return nil
@@ -566,7 +566,7 @@ func TestGenServiceMethod3(t *testing.T) {
 				ModelFileDir: "/tmp/model",
 			},
 			phase: consts.PHASE_CREATE_MANY_BEFORE,
-			want: `func (u *ManyCreator) CreateManyBefore(ctx *types.ServiceContext, users ...*model.User) error {
+			want: `func (u *ManyCreator) CreateManyBefore(ctx *gst.ServiceContext, users ...*model.User) error {
 	log := u.WithContext(ctx, ctx.Phase())
 	log.Info("user create many before")
 	return nil
@@ -609,7 +609,7 @@ func TestGenServiceMethod4(t *testing.T) {
 			reqName: "*User",
 			rspName: "*User",
 			phase:   consts.PHASE_CREATE,
-			want: `func (u *Creator) Create(ctx *types.ServiceContext, req *model.User) (rsp *model.User, err error) {
+			want: `func (u *Creator) Create(ctx *gst.ServiceContext, req *model.User) (rsp *model.User, err error) {
 	log := u.WithContext(ctx, ctx.Phase())
 	log.Info("user create")
 	return rsp, nil
@@ -629,7 +629,7 @@ func TestGenServiceMethod4(t *testing.T) {
 			reqName: "GroupRequest",
 			rspName: "GroupResponse",
 			phase:   consts.PHASE_UPDATE,
-			want: `func (g *Updater) Update(ctx *types.ServiceContext, req model.GroupRequest) (rsp model.GroupResponse, err error) {
+			want: `func (g *Updater) Update(ctx *gst.ServiceContext, req model.GroupRequest) (rsp model.GroupResponse, err error) {
 	log := g.WithContext(ctx, ctx.Phase())
 	log.Info("group update")
 	return rsp, nil
@@ -647,7 +647,7 @@ func TestGenServiceMethod4(t *testing.T) {
 			reqName: "*GroupRequest",
 			rspName: "*GroupResponse",
 			phase:   consts.PHASE_UPDATE,
-			want: `func (g *Updater) Update(ctx *types.ServiceContext, req *model.GroupRequest) (rsp *model.GroupResponse, err error) {
+			want: `func (g *Updater) Update(ctx *gst.ServiceContext, req *model.GroupRequest) (rsp *model.GroupResponse, err error) {
 	log := g.WithContext(ctx, ctx.Phase())
 	log.Info("group update")
 	return rsp, nil
@@ -687,7 +687,7 @@ func TestGenServiceMethod5(t *testing.T) {
 				ModelFileDir: "/tmp/model",
 			},
 			phase: consts.PHASE_IMPORT,
-			want: `func (u *Importer) Import(ctx *types.ServiceContext, reader io.Reader) (users []*model.User, err error) {
+			want: `func (u *Importer) Import(ctx *gst.ServiceContext, reader io.Reader) (users []*model.User, err error) {
 	log := u.WithContext(ctx, ctx.Phase())
 	log.Info("user import")
 	return users, nil
@@ -726,7 +726,7 @@ func TestGenServiceMethod6(t *testing.T) {
 				ModelFileDir: "/tmp/model",
 			},
 			phase: consts.PHASE_EXPORT,
-			want: `func (u *Exporter) Export(ctx *types.ServiceContext, users ...*model.User) (data []byte, err error) {
+			want: `func (u *Exporter) Export(ctx *gst.ServiceContext, users ...*model.User) (data []byte, err error) {
 	log := u.WithContext(ctx, ctx.Phase())
 	log.Info("user export")
 	return data, nil
@@ -767,7 +767,7 @@ func TestGenerateServiceListEmptyPayload(t *testing.T) {
 			},
 			wantImport:    "\"github.com/hydroan/gst/model\"",
 			wantBase:      "service.Base[*group.Group, *model.Empty, *group.GroupListRsp]",
-			wantSignature: "func (g *Lister) List(ctx *types.ServiceContext, req *model.Empty) (rsp *group.GroupListRsp, err error)",
+			wantSignature: "func (g *Lister) List(ctx *gst.ServiceContext, req *model.Empty) (rsp *group.GroupListRsp, err error)",
 		},
 		{
 			name: "root model package",
@@ -781,7 +781,7 @@ func TestGenerateServiceListEmptyPayload(t *testing.T) {
 			},
 			wantImport:    "gstmodel \"github.com/hydroan/gst/model\"",
 			wantBase:      "service.Base[*model.Group, *gstmodel.Empty, *model.GroupListRsp]",
-			wantSignature: "func (g *Lister) List(ctx *types.ServiceContext, req *gstmodel.Empty) (rsp *model.GroupListRsp, err error)",
+			wantSignature: "func (g *Lister) List(ctx *gst.ServiceContext, req *gstmodel.Empty) (rsp *model.GroupListRsp, err error)",
 		},
 	}
 	for _, tt := range tests {
@@ -833,10 +833,10 @@ func TestGenerateServiceExport(t *testing.T) {
 	// The export controller invocation order: ListBefore, the service Filter
 	// hook (pass-through default, not scaffolded), ListAfter, Export.
 	hookSigsInOrder := []string{
-		"func (u *Exporter) ListBefore(ctx *types.ServiceContext, users *[]*model.User) error",
-		"func (u *Exporter) ListAfter(ctx *types.ServiceContext, users *[]*model.User) error",
+		"func (u *Exporter) ListBefore(ctx *gst.ServiceContext, users *[]*model.User) error",
+		"func (u *Exporter) ListAfter(ctx *gst.ServiceContext, users *[]*model.User) error",
 	}
-	exportSig := "func (u *Exporter) Export(ctx *types.ServiceContext, users ...*model.User) (data []byte, err error)"
+	exportSig := "func (u *Exporter) Export(ctx *gst.ServiceContext, users ...*model.User) (data []byte, err error)"
 
 	t.Run("non-empty model generates list hooks in controller invocation order", func(t *testing.T) {
 		file := GenerateServiceWithPackage(newInfo(false), action, consts.PHASE_EXPORT, "user")
@@ -911,7 +911,7 @@ func TestGenerateServiceSSE(t *testing.T) {
 	if !strings.Contains(got, structDecl) {
 		t.Errorf("generated service missing %q, got:\n%s", structDecl, got)
 	}
-	sseSig := "func (u *Streamer) SSE(ctx *types.ServiceContext) (err error)"
+	sseSig := "func (u *Streamer) SSE(ctx *gst.ServiceContext) (err error)"
 	if !strings.Contains(got, sseSig) {
 		t.Errorf("generated service missing %q, got:\n%s", sseSig, got)
 	}

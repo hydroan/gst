@@ -4,8 +4,8 @@ import (
 	"context"
 
 	"github.com/cockroachdb/errors"
+	"github.com/hydroan/gst/consts"
 	"github.com/hydroan/gst/internal/types"
-	"github.com/hydroan/gst/types/consts"
 )
 
 // ErrRBACDisabled reports a policy write made in a process that holds no policy

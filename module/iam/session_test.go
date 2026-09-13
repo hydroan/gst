@@ -12,6 +12,7 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/gin-gonic/gin"
 	"github.com/hydroan/gst/client"
+	"github.com/hydroan/gst/consts"
 	"github.com/hydroan/gst/database"
 	modeliamsession "github.com/hydroan/gst/internal/model/iam/session"
 	modeliamuser "github.com/hydroan/gst/internal/model/iam/user"
@@ -24,7 +25,6 @@ import (
 	"github.com/hydroan/gst/redis"
 	"github.com/hydroan/gst/router"
 	"github.com/hydroan/gst/service"
-	"github.com/hydroan/gst/types/consts"
 	"github.com/stretchr/testify/require"
 )
 

@@ -3,10 +3,10 @@ package bench
 import (
 	"strconv"
 
-	"github.com/hydroan/gst/types"
+	"github.com/hydroan/gst"
 )
 
-func isDryRun(ctx *types.ServiceContext) bool {
+func isDryRun(ctx *gst.ServiceContext) bool {
 	isDryRunStr := ctx.Query().Get("dry_run")
 	isDryRun, _ := strconv.ParseBool(isDryRunStr)
 

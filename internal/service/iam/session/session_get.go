@@ -4,10 +4,10 @@ import (
 	"net/http"
 
 	"github.com/cockroachdb/errors"
+	"github.com/hydroan/gst"
 	modeliamsession "github.com/hydroan/gst/internal/model/iam/session"
 	"github.com/hydroan/gst/model"
 	"github.com/hydroan/gst/service"
-	"github.com/hydroan/gst/types"
 )
 
 // SessionGetService handles retrieval of a specified session for the current authenticated user.
@@ -16,7 +16,7 @@ type SessionGetService struct {
 }
 
 // Get returns the detail of a specified session for the current authenticated user.
-func (s *SessionGetService) Get(ctx *types.ServiceContext, req *model.Empty) (rsp *modeliamsession.SessionGetRsp, err error) {
+func (s *SessionGetService) Get(ctx *gst.ServiceContext, req *model.Empty) (rsp *modeliamsession.SessionGetRsp, err error) {
 	currentSessionID, currentSession, err := CurrentSession(ctx)
 	if err != nil {
 		return nil, err
@@ -29,7 +29,7 @@ func (s *SessionGetService) Get(ctx *types.ServiceContext, req *model.Empty) (rs
 
 	targetSession, err := Store.LoadSession(ctx, targetSessionID)
 	if err != nil {
-		if errors.Is(err, types.ErrEntryNotFound) {
+		if errors.Is(err, gst.ErrEntryNotFound) {
 			return nil, service.NewError(http.StatusNotFound, "session not found")
 		}
 		return nil, service.NewErrorWithCause(http.StatusInternalServerError, "failed to load target session", err)

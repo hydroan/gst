@@ -5,9 +5,9 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/errors"
+	"github.com/hydroan/gst"
 	modelemail "github.com/hydroan/gst/internal/model/email"
 	"github.com/hydroan/gst/service"
-	"github.com/hydroan/gst/types"
 )
 
 // PasswordResetConfirmService handles the token confirmation step that finalizes
@@ -19,7 +19,7 @@ type PasswordResetConfirmService struct {
 // Create completes the password reset flow by consuming the one-time token,
 // delegating the password update to the configured account gateway, and
 // invalidating active sessions.
-func (s *PasswordResetConfirmService) Create(ctx *types.ServiceContext, req *modelemail.PasswordResetConfirmReq) (rsp *modelemail.PasswordResetConfirmRsp, err error) {
+func (s *PasswordResetConfirmService) Create(ctx *gst.ServiceContext, req *modelemail.PasswordResetConfirmReq) (rsp *modelemail.PasswordResetConfirmRsp, err error) {
 	log := s.WithContext(ctx, ctx.Phase())
 
 	flow, err := consumeEmailFlow(emailServiceContext(ctx), iamEmailFlowKindPasswordReset, req.Token)

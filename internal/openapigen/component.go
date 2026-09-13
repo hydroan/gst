@@ -42,6 +42,12 @@ func schemaComponentNameFromPath(pkgPath, name string) string {
 		return name
 	}
 
+	// The framework's own contracts are reached through the module root,
+	// whose last two segments spell the module owner rather than a package.
+	if pkgPath == rootPkgPath {
+		return pkgPath[strings.LastIndex(pkgPath, "/")+1:] + "." + name
+	}
+
 	if index := strings.LastIndex(pkgPath, "/model/"); index >= 0 {
 		suffix := strings.ReplaceAll(pkgPath[index+len("/model/"):], "/", ".")
 		return suffix + "." + name
@@ -61,18 +67,18 @@ func schemaComponentNameFromPath(pkgPath, name string) string {
 // where business code imports them from.
 const (
 	internalTypesPkgPath = "github.com/hydroan/gst/internal/types"
-	publicTypesPkgPath   = "github.com/hydroan/gst/types"
+	rootPkgPath          = "github.com/hydroan/gst"
 )
 
 // documentedPkgPath returns the package path a type is named after in the
 // document, which is the path business code imports it from. The framework's
 // contracts are defined in internal/types, but projects reach every exported
-// one of them through the public types package under the same name.
+// one of them through the root gst package under the same name.
 func documentedPkgPath(typ reflect.Type) string {
 	if pkgPath := typ.PkgPath(); pkgPath != internalTypesPkgPath {
 		return pkgPath
 	}
-	return publicTypesPkgPath
+	return rootPkgPath
 }
 
 // uniqueComponentName returns the component name for a type, guaranteeing

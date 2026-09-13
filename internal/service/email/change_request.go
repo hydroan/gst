@@ -5,9 +5,9 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/errors"
+	"github.com/hydroan/gst"
 	modelemail "github.com/hydroan/gst/internal/model/email"
 	"github.com/hydroan/gst/service"
-	"github.com/hydroan/gst/types"
 )
 
 // ChangeRequestService handles authenticated requests that start the email
@@ -18,7 +18,7 @@ type ChangeRequestService struct {
 
 // Create validates the current password, checks the target email, and issues
 // one-time confirmation and cancellation tokens for the email change flow.
-func (s *ChangeRequestService) Create(ctx *types.ServiceContext, req *modelemail.ChangeRequestReq) (rsp *modelemail.ChangeRequestRsp, err error) {
+func (s *ChangeRequestService) Create(ctx *gst.ServiceContext, req *modelemail.ChangeRequestReq) (rsp *modelemail.ChangeRequestRsp, err error) {
 	log := s.WithContext(ctx, ctx.Phase())
 	user, newEmail, rsp, err := prepareEmailChangeRequest(ctx, req.NewEmail)
 	if err != nil || user == nil {
@@ -42,7 +42,7 @@ func (s *ChangeRequestService) Create(ctx *types.ServiceContext, req *modelemail
 
 // prepareEmailChangeRequest loads the current account and validates whether the new
 // email can enter the change flow.
-func prepareEmailChangeRequest(ctx *types.ServiceContext, newEmail string) (*AccountSnapshot, string, *modelemail.ChangeRequestRsp, error) {
+func prepareEmailChangeRequest(ctx *gst.ServiceContext, newEmail string) (*AccountSnapshot, string, *modelemail.ChangeRequestRsp, error) {
 	if ctx == nil || strings.TrimSpace(ctx.UserID()) == "" {
 		return nil, "", nil, service.NewError(http.StatusUnauthorized, "authentication required")
 	}
@@ -70,7 +70,7 @@ func prepareEmailChangeRequest(ctx *types.ServiceContext, newEmail string) (*Acc
 
 // verifyEmailChangePassword re-authenticates the current account before issuing
 // email change tokens.
-func verifyEmailChangePassword(ctx *types.ServiceContext, userID, password string) error {
+func verifyEmailChangePassword(ctx *gst.ServiceContext, userID, password string) error {
 	if strings.TrimSpace(userID) == "" {
 		return service.NewError(http.StatusBadRequest, "current account id is required")
 	}
@@ -91,7 +91,7 @@ func verifyEmailChangePassword(ctx *types.ServiceContext, userID, password strin
 
 // startEmailChangeFlow issues the required tokens and dispatches the email
 // change notifications for the target flow.
-func startEmailChangeFlow(ctx *types.ServiceContext, user *AccountSnapshot, newEmail string, includeCancel bool) error {
+func startEmailChangeFlow(ctx *gst.ServiceContext, user *AccountSnapshot, newEmail string, includeCancel bool) error {
 	currentEmail := normalizeAccountEmail(user.Email)
 	if err := clearEmailChangeCancellation(ctx, user.ID, currentEmail, newEmail); err != nil {
 		return service.NewErrorWithCause(http.StatusInternalServerError, "failed to clear previous email change cancellation", err)

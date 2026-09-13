@@ -8,7 +8,7 @@ import (
 	"github.com/hydroan/gst/service"
 
 	"github.com/cockroachdb/errors"
-	"github.com/hydroan/gst/types"
+	"github.com/hydroan/gst"
 )
 
 // emailChangeCancellationKey returns the cache key that records a canceled
@@ -55,7 +55,7 @@ func emailChangeCanceled(ctx context.Context, userID, oldEmail, newEmail string)
 	key := emailChangeCancellationKey(userID, oldEmail, newEmail)
 	record, err := emailThrottleCache().Get(ctx, key)
 	if err != nil {
-		if errors.Is(err, types.ErrEntryNotFound) {
+		if errors.Is(err, gst.ErrEntryNotFound) {
 			return false, nil
 		}
 		return false, errors.Wrap(err, "load email change cancellation marker")
@@ -74,7 +74,7 @@ func emailChangeCanceled(ctx context.Context, userID, oldEmail, newEmail string)
 // email change request for the same address pair can proceed normally.
 func clearEmailChangeCancellation(ctx context.Context, userID, oldEmail, newEmail string) error {
 	key := emailChangeCancellationKey(userID, oldEmail, newEmail)
-	if err := emailThrottleCache().Delete(ctx, key); err != nil && !errors.Is(err, types.ErrEntryNotFound) {
+	if err := emailThrottleCache().Delete(ctx, key); err != nil && !errors.Is(err, gst.ErrEntryNotFound) {
 		return service.NewErrorWithCause(http.StatusInternalServerError, "delete email change cancellation marker", err)
 	}
 	return nil

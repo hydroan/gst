@@ -83,14 +83,14 @@ func Desc(column string) Order { return Order{column: column, direction: OrderDe
 
 // NewOrder builds an order from its parts. It serves the framework's own code
 // and tests, which need an order on a named table or with a direction outside
-// the set; the public types package does not forward it.
+// the set; the public gst package does not forward it.
 func NewOrder(table, column string, direction OrderDirection) Order {
 	return Order{table: table, column: column, direction: direction}
 }
 
 // OrderDirectionOf returns the direction an order sorts in, for the database
 // layer, which validates the direction and flips it for a backward cursor
-// read; the public types package does not forward it.
+// read; the public gst package does not forward it.
 func OrderDirectionOf(o Order) OrderDirection { return o.direction }
 
 // Ordering is what the OrderBy methods of a select, a window and a union

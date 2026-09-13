@@ -6,10 +6,10 @@ import (
 	"unicode/utf8"
 
 	"github.com/gin-gonic/gin"
+	"github.com/hydroan/gst/consts"
 	"github.com/hydroan/gst/internal/requestctx"
 	"github.com/hydroan/gst/logger"
 	prommetrics "github.com/hydroan/gst/metrics"
-	"github.com/hydroan/gst/types/consts"
 	"github.com/hydroan/gst/util"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"

@@ -7,9 +7,9 @@ import (
 
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/config"
+	"github.com/hydroan/gst/consts"
 	"github.com/hydroan/gst/logger"
 	"github.com/hydroan/gst/provider/kafka"
-	"github.com/hydroan/gst/types/consts"
 	"github.com/twmb/franz-go/pkg/kgo"
 )
 

@@ -1,8 +1,8 @@
 package helloworld
 
 import (
+	"github.com/hydroan/gst/consts"
 	"github.com/hydroan/gst/module"
-	"github.com/hydroan/gst/types/consts"
 )
 
 // Register registers two modules: Helloworld and Helloworld2.

@@ -6,21 +6,21 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/errors"
+	"github.com/hydroan/gst"
 	"github.com/hydroan/gst/authz/rbac"
+	"github.com/hydroan/gst/consts"
 	"github.com/hydroan/gst/database"
 	"github.com/hydroan/gst/dsl"
 	"github.com/hydroan/gst/model"
 	"github.com/hydroan/gst/service"
 	"github.com/hydroan/gst/tenant"
-	"github.com/hydroan/gst/types"
-	"github.com/hydroan/gst/types/consts"
 	"gorm.io/datatypes"
 )
 
 // colMenuID references the menu primary key the bound-menu lookups below filter
 // on; module sources carry no generated Cols vars, so the reference is declared
 // here.
-var colMenuID = types.NewColumn[*Menu, string](KeyID)
+var colMenuID = gst.NewColumn[*Menu, string](KeyID)
 
 type Role struct {
 	tenant.Scope
@@ -148,9 +148,9 @@ func (r *Role) validateMenuIDs(ctx context.Context) error {
 		return nil
 	}
 	menus := make([]*Menu, 0)
-	if err := database.Database[*Menu](ctx).WithQuery(&Menu{}, types.QueryOptions{
+	if err := database.Database[*Menu](ctx).WithQuery(&Menu{}, gst.QueryOptions{
 		AllowEmpty: true,
-		Filters:    []types.Filter{colMenuID.In(r.MenuIDs...)},
+		Filters:    []gst.Filter{colMenuID.In(r.MenuIDs...)},
 	}).List(&menus); err != nil {
 		return err
 	}
@@ -283,15 +283,15 @@ func (r *Role) syncPermissions(ctx context.Context) error {
 	// empty set is a round trip for an answer already in hand.
 	newMenus := make([]*Menu, 0)
 	if len(r.MenuIDs) > 0 {
-		if err := database.Database[*Menu](ctx).WithQuery(&Menu{}, types.QueryOptions{
+		if err := database.Database[*Menu](ctx).WithQuery(&Menu{}, gst.QueryOptions{
 			AllowEmpty: true,
-			Filters:    []types.Filter{colMenuID.In(r.MenuIDs...)},
+			Filters:    []gst.Filter{colMenuID.In(r.MenuIDs...)},
 		}).List(&newMenus); err != nil {
 			return err
 		}
 	}
 
-	permissions := make([]types.Permission, 0)
+	permissions := make([]gst.Permission, 0)
 	for _, m := range newMenus {
 		permissions = append(permissions, RoutePermissionsForMenu(m)...)
 	}
@@ -302,14 +302,14 @@ func (r *Role) syncPermissions(ctx context.Context) error {
 // RoutePermissionsForMenu renders the backend route grants a menu carries. It
 // is exported so the reconciliation can derive the same expectation the sync
 // writes, from one implementation rather than two that could disagree.
-func RoutePermissionsForMenu(m *Menu) []types.Permission {
+func RoutePermissionsForMenu(m *Menu) []gst.Permission {
 	if m == nil {
-		return make([]types.Permission, 0)
+		return make([]gst.Permission, 0)
 	}
 
 	// A menu can bind multiple backend routes, and each route can bind multiple
 	// HTTP methods. The policy set stores those as individual path + method rows.
-	permissions := make([]types.Permission, 0)
+	permissions := make([]gst.Permission, 0)
 	for _, route := range m.Routes {
 		object := strings.TrimSpace(route.Path)
 		if len(object) == 0 {
@@ -320,7 +320,7 @@ func RoutePermissionsForMenu(m *Menu) []types.Permission {
 			if len(method) == 0 {
 				continue
 			}
-			permissions = append(permissions, types.Permission{Object: object, Action: method})
+			permissions = append(permissions, gst.Permission{Object: object, Action: method})
 		}
 	}
 	return permissions

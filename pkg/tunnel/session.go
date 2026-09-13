@@ -9,7 +9,7 @@ import (
 
 	"github.com/cockroachdb/errors"
 	"github.com/gorilla/websocket"
-	"github.com/hydroan/gst/types/consts"
+	"github.com/hydroan/gst/consts"
 	"github.com/hydroan/gst/util"
 	"github.com/vmihailenco/msgpack/v5"
 	"go.uber.org/zap"

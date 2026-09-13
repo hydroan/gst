@@ -4,21 +4,21 @@ package router
 import (
 	"bench/model/bench"
 
+	"github.com/hydroan/gst/consts"
 	"github.com/hydroan/gst/router"
-	"github.com/hydroan/gst/types/consts"
 
+	"github.com/hydroan/gst"
 	"github.com/hydroan/gst/model"
-	"github.com/hydroan/gst/types"
 )
 
 func Init() error {
-	router.Register[*bench.Bench, *bench.CreateReq, *bench.CreateRsp](router.Pub(), "bench/create", &types.ControllerConfig[*bench.Bench]{}, consts.Create)
-	router.Register[*bench.Bench, *model.Empty, *bench.DeleteRsp](router.Pub(), "bench/delete/:id", &types.ControllerConfig[*bench.Bench]{ParamName: "id"}, consts.Delete)
-	router.Register[*bench.Bench, *model.Empty, *bench.GetRsp](router.Pub(), "bench/get", &types.ControllerConfig[*bench.Bench]{}, consts.Get)
-	router.Register[*bench.Bench, *bench.Bench, *bench.Bench](router.Pub(), "bench/list", &types.ControllerConfig[*bench.Bench]{}, consts.List)
-	router.Register[*bench.Bench, *model.Empty, *bench.ListRsp](router.Pub(), "bench/list2", &types.ControllerConfig[*bench.Bench]{}, consts.List)
-	router.Register[*bench.Bench, *model.Empty, *bench.PingRsp](router.Pub(), "bench/ping", &types.ControllerConfig[*bench.Bench]{}, consts.List)
-	router.Register[*bench.Bench, *bench.UpdateReq, *bench.UpdateRsp](router.Pub(), "bench/update/:id", &types.ControllerConfig[*bench.Bench]{ParamName: "id"}, consts.Update)
-	router.Register[*bench.Bench, *bench.UpdateByIDReq, *bench.UpdateByIDRsp](router.Pub(), "bench/updatebyid/:id", &types.ControllerConfig[*bench.Bench]{ParamName: "id"}, consts.Patch)
+	router.Register[*bench.Bench, *bench.CreateReq, *bench.CreateRsp](router.Pub(), "bench/create", &gst.ControllerConfig[*bench.Bench]{}, consts.Create)
+	router.Register[*bench.Bench, *model.Empty, *bench.DeleteRsp](router.Pub(), "bench/delete/:id", &gst.ControllerConfig[*bench.Bench]{ParamName: "id"}, consts.Delete)
+	router.Register[*bench.Bench, *model.Empty, *bench.GetRsp](router.Pub(), "bench/get", &gst.ControllerConfig[*bench.Bench]{}, consts.Get)
+	router.Register[*bench.Bench, *bench.Bench, *bench.Bench](router.Pub(), "bench/list", &gst.ControllerConfig[*bench.Bench]{}, consts.List)
+	router.Register[*bench.Bench, *model.Empty, *bench.ListRsp](router.Pub(), "bench/list2", &gst.ControllerConfig[*bench.Bench]{}, consts.List)
+	router.Register[*bench.Bench, *model.Empty, *bench.PingRsp](router.Pub(), "bench/ping", &gst.ControllerConfig[*bench.Bench]{}, consts.List)
+	router.Register[*bench.Bench, *bench.UpdateReq, *bench.UpdateRsp](router.Pub(), "bench/update/:id", &gst.ControllerConfig[*bench.Bench]{ParamName: "id"}, consts.Update)
+	router.Register[*bench.Bench, *bench.UpdateByIDReq, *bench.UpdateByIDRsp](router.Pub(), "bench/updatebyid/:id", &gst.ControllerConfig[*bench.Bench]{ParamName: "id"}, consts.Patch)
 	return nil
 }

@@ -8,7 +8,7 @@ import (
 	"github.com/casbin/casbin/v3"
 	casbinmodel "github.com/casbin/casbin/v3/model"
 	"github.com/cockroachdb/errors"
-	"github.com/hydroan/gst/types/consts"
+	"github.com/hydroan/gst/consts"
 	"github.com/stretchr/testify/require"
 )
 

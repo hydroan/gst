@@ -19,11 +19,11 @@ import (
 // that leave a service method.
 const gstServiceImportPath = "github.com/hydroan/gst/service"
 
-// gstTypesImportPath is the framework package declaring ServiceContext, whose
+// gstImportPath is the framework package declaring ServiceContext, whose
 // SSE method is a sanctioned error exit: its errors are framework-governed —
 // a setup failure carries a framework-built message, and an error after the
 // stream opened never reaches the response envelope at all.
-const gstTypesImportPath = "github.com/hydroan/gst/types"
+const gstImportPath = "github.com/hydroan/gst"
 
 // CheckServiceErrorDiscipline checks that every error a service method can
 // return is created by service.NewError or service.NewErrorWithCause, either
@@ -180,7 +180,7 @@ func (a *svcErrAnalysis) collectFile(path string) {
 			collector.svcAliases = append(collector.svcAliases, name)
 		case importPath == gstDatabaseImportPath:
 			collector.dbAliases = append(collector.dbAliases, name)
-		case importPath == gstTypesImportPath:
+		case importPath == gstImportPath:
 			collector.typesAliases = append(collector.typesAliases, name)
 		case importPath == a.modulePath:
 			collector.projectPkg[name] = "."
@@ -366,7 +366,7 @@ func receiverType(decl *ast.FuncDecl) ast.Expr {
 }
 
 // serviceContextParamNames returns the names of the function's parameters
-// declared as *types.ServiceContext under any recognized types package alias.
+// declared as *gst.ServiceContext under any recognized gst package alias.
 func serviceContextParamNames(decl *ast.FuncDecl, typesAliases []string) map[string]bool {
 	names := map[string]bool{}
 	if decl.Type == nil || decl.Type.Params == nil {
@@ -431,7 +431,7 @@ type svcErrFuncScope struct {
 	recvType   string
 	resultObj  svcErrVarObj // named error result, for naked returns
 	numResults int
-	// ctxParams names the function's *types.ServiceContext parameters, whose
+	// ctxParams names the function's *gst.ServiceContext parameters, whose
 	// SSE method is a sanctioned error exit.
 	ctxParams map[string]bool
 	// assigns maps a declared variable to every expression assigned to it,

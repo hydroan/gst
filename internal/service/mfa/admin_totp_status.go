@@ -4,10 +4,10 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/hydroan/gst"
 	modelmfa "github.com/hydroan/gst/internal/model/mfa"
 	"github.com/hydroan/gst/model"
 	"github.com/hydroan/gst/service"
-	"github.com/hydroan/gst/types"
 	"go.uber.org/zap"
 )
 
@@ -21,7 +21,7 @@ type AdminTOTPStatusService struct {
 }
 
 // Get loads the target user's TOTP enrollment view for an administrator.
-func (a *AdminTOTPStatusService) Get(ctx *types.ServiceContext, req *model.Empty) (rsp *modelmfa.TOTPStatusRsp, err error) {
+func (a *AdminTOTPStatusService) Get(ctx *gst.ServiceContext, req *model.Empty) (rsp *modelmfa.TOTPStatusRsp, err error) {
 	log := a.WithContext(ctx, ctx.Phase())
 
 	targetUserID := strings.TrimSpace(ctx.Param("id"))

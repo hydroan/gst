@@ -5,10 +5,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/hydroan/gst"
 	modeliamsession "github.com/hydroan/gst/internal/model/iam/session"
 	serviceiamsession "github.com/hydroan/gst/internal/service/iam/session"
 	"github.com/hydroan/gst/redis"
-	"github.com/hydroan/gst/types"
 	"github.com/stretchr/testify/require"
 )
 
@@ -93,7 +93,7 @@ func TestTouchSession(t *testing.T) {
 		require.NoError(t, serviceiamsession.Store.TouchSession(t.Context(), sessionID, session, now))
 
 		_, err = redis.Cache[modeliamsession.Session]().Get(t.Context(), serviceiamsession.SessionDataKey(sessionID))
-		require.ErrorIs(t, err, types.ErrEntryNotFound, "the revoked snapshot must not be written back")
+		require.ErrorIs(t, err, gst.ErrEntryNotFound, "the revoked snapshot must not be written back")
 		for _, key := range []string{
 			serviceiamsession.SessionIndexUserKey(session.UserID),
 			serviceiamsession.SessionIndexAllKey(),

@@ -1,6 +1,6 @@
 package types
 
-import "github.com/hydroan/gst/types/consts"
+import "github.com/hydroan/gst/consts"
 
 // Database defines the model-scoped database operation contract.
 // It provides CRUD operations, query builders, and optional dry-run behavior

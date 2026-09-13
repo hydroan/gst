@@ -18,7 +18,7 @@ func TestCheckColumnReferenceMintingFlagsConstructors(t *testing.T) {
 import (
 	"time"
 
-	"github.com/hydroan/gst/types"
+	"github.com/hydroan/gst"
 )
 
 type Sample struct{}
@@ -26,27 +26,27 @@ type Sample struct{}
 func (*Sample) TableName() string { return "samples" }
 
 var (
-	code   = types.NewColumn[*Sample, string]("code")
-	amount = types.NewNumericColumn[*Sample, int64]("amount")
-	at     = types.NewTimeColumn[*Sample]("created_at")
+	code   = gst.NewColumn[*Sample, string]("code")
+	amount = gst.NewNumericColumn[*Sample, int64]("amount")
+	at     = gst.NewTimeColumn[*Sample]("created_at")
 )
 
-func filters(since time.Time) []types.Filter {
-	return []types.Filter{code.Eq("x"), amount.Gt(1), at.Gte(since)}
+func filters(since time.Time) []gst.Filter {
+	return []gst.Filter{code.Eq("x"), amount.Gt(1), at.Gte(since)}
 }
 `)
 	// An alias does not hide the constructor, and a test file is project
 	// code like any other.
 	writeCheckFile(t, filepath.Join(projectDir, "service", "report", "helper_test.go"), `package report
 
-import gsttypes "github.com/hydroan/gst/types"
+import gstalias "github.com/hydroan/gst"
 
-var tested = gsttypes.NewColumn[*Sample, string]("code")
+var tested = gstalias.NewColumn[*Sample, string]("code")
 `)
 	// A dot import spells the constructor bare.
 	writeCheckFile(t, filepath.Join(projectDir, "helper", "scope", "scope.go"), `package scope
 
-import . "github.com/hydroan/gst/types"
+import . "github.com/hydroan/gst"
 
 type Row struct{}
 
@@ -61,7 +61,7 @@ var group = NewColumn[*Row, string]("group_id")
 		t.Fatalf("expected five violations, got %#v", violations)
 	}
 	helperPath := filepath.Join("service", "report", "helper.go")
-	for _, constructor := range []string{"types.NewColumn;", "types.NewNumericColumn;", "types.NewTimeColumn;"} {
+	for _, constructor := range []string{"gst.NewColumn;", "gst.NewNumericColumn;", "gst.NewTimeColumn;"} {
 		matched := 0
 		for _, violation := range violations {
 			if strings.Contains(violation, helperPath) && strings.Contains(violation, constructor) {
@@ -72,8 +72,8 @@ var group = NewColumn[*Row, string]("group_id")
 			t.Fatalf("expected one %s violation in %s, got %#v", constructor, helperPath, violations)
 		}
 	}
-	assertViolationContains(t, violations, filepath.Join("service", "report", "helper_test.go"), "mints a column reference through types.NewColumn")
-	assertViolationContains(t, violations, filepath.Join("helper", "scope", "scope.go"), "mints a column reference through types.NewColumn")
+	assertViolationContains(t, violations, filepath.Join("service", "report", "helper_test.go"), "mints a column reference through gst.NewColumn")
+	assertViolationContains(t, violations, filepath.Join("helper", "scope", "scope.go"), "mints a column reference through gst.NewColumn")
 }
 
 func TestCheckColumnReferenceMintingSkipsGeneratedAndCopiedModules(t *testing.T) {
@@ -86,48 +86,48 @@ func TestCheckColumnReferenceMintingSkipsGeneratedAndCopiedModules(t *testing.T)
 	// Generated files carry the constructors by design.
 	writeCheckFile(t, filepath.Join(projectDir, "model", "record", "record.gen.go"), `package record
 
-import "github.com/hydroan/gst/types"
+import "github.com/hydroan/gst"
 
 type Record struct{}
 
 func (*Record) TableName() string { return "records" }
 
-var RecordCols = struct{ Code types.Column[string] }{
-	Code: types.NewColumn[*Record, string]("code"),
+var RecordCols = struct{ Code gst.Column[string] }{
+	Code: gst.NewColumn[*Record, string]("code"),
 }
 `)
 	// Copied module subtrees keep whatever the framework repository ships.
 	writeCheckFile(t, filepath.Join(projectDir, "model", "sample", "entity.go"), `package sample
 
-import "github.com/hydroan/gst/types"
+import "github.com/hydroan/gst"
 
 type Entity struct{}
 
 func (*Entity) TableName() string { return "entities" }
 
-var code = types.NewColumn[*Entity, string]("code")
+var code = gst.NewColumn[*Entity, string]("code")
 `)
 	writeCheckFile(t, filepath.Join(projectDir, "service", "sample", "helper.go"), `package sample
 
-import "github.com/hydroan/gst/types"
+import "github.com/hydroan/gst"
 
 type Entity struct{}
 
 func (*Entity) TableName() string { return "entities" }
 
-var code = types.NewColumn[*Entity, string]("code")
+var code = gst.NewColumn[*Entity, string]("code")
 `)
 	// A nested Go module belongs to another project.
 	writeCheckFile(t, filepath.Join(projectDir, "tools", "go.mod"), "module tools\n\ngo 1.26\n")
 	writeCheckFile(t, filepath.Join(projectDir, "tools", "main.go"), `package main
 
-import "github.com/hydroan/gst/types"
+import "github.com/hydroan/gst"
 
 type Row struct{}
 
 func (*Row) TableName() string { return "rows" }
 
-var code = types.NewColumn[*Row, string]("code")
+var code = gst.NewColumn[*Row, string]("code")
 
 func main() {}
 `)
@@ -137,11 +137,11 @@ func main() {}
 import (
 	"tmpapp/model/record"
 
-	"github.com/hydroan/gst/types"
+	"github.com/hydroan/gst"
 )
 
-func filters() []types.Filter {
-	return []types.Filter{record.RecordCols.Code.Eq("x")}
+func filters() []gst.Filter {
+	return []gst.Filter{record.RecordCols.Code.Eq("x")}
 }
 `)
 
@@ -166,36 +166,36 @@ func TestCheckColumnReferenceMintingAllowsGenericCodeTypeParameters(t *testing.T
 import (
 	"time"
 
-	"github.com/hydroan/gst/types"
+	"github.com/hydroan/gst"
 )
 
-func expired[M types.Model](cutoff time.Time, ids ...string) []types.Filter {
-	byID := func() types.Filter {
-		return types.NewColumn[M, string]("id").In(ids...)
+func expired[M gst.Model](cutoff time.Time, ids ...string) []gst.Filter {
+	byID := func() gst.Filter {
+		return gst.NewColumn[M, string]("id").In(ids...)
 	}
-	return []types.Filter{types.NewTimeColumn[M]("created_at").Lte(cutoff), byID()}
+	return []gst.Filter{gst.NewTimeColumn[M]("created_at").Lte(cutoff), byID()}
 }
 
-type Totals[M types.Model] struct{}
+type Totals[M gst.Model] struct{}
 
-func (Totals[M]) amount() types.Term {
-	return types.NewNumericColumn[M, int64]("amount").Sum()
+func (Totals[M]) amount() gst.Term {
+	return gst.NewNumericColumn[M, int64]("amount").Sum()
 }
 
-func (*Totals[M]) rows() types.Term {
-	return types.NewColumn[M, string]("id").Count()
+func (*Totals[M]) rows() gst.Term {
+	return gst.NewColumn[M, string]("id").Count()
 }
 
-type Pair[M types.Model, V comparable] struct{}
+type Pair[M gst.Model, V comparable] struct{}
 
-func (p *Pair[M, V]) match(value V) types.Filter {
-	return types.NewColumn[M, V]("value").Eq(value)
+func (p *Pair[M, V]) match(value V) gst.Filter {
+	return gst.NewColumn[M, V]("value").Eq(value)
 }
 `)
 	// A dot import spells the constructor bare.
 	writeCheckFile(t, filepath.Join(projectDir, "helper", "scope", "scope.go"), `package scope
 
-import . "github.com/hydroan/gst/types"
+import . "github.com/hydroan/gst"
 
 func owned[M Model](groupIDs ...string) Filter {
 	return NewColumn[M, string]("group_id").In(groupIDs...)
@@ -216,7 +216,7 @@ func TestCheckColumnReferenceMintingFlagsConcreteModelsInGenericCode(t *testing.
 
 	source := `package retention
 
-import "github.com/hydroan/gst/types"
+import "github.com/hydroan/gst"
 
 type Sample struct{}
 
@@ -224,24 +224,24 @@ func (*Sample) TableName() string { return "samples" }
 
 type M = *Sample
 
-func concrete[N types.Model]() types.Filter {
-	return types.NewColumn[*Sample, string]("code").Eq("concrete")
+func concrete[N gst.Model]() gst.Filter {
+	return gst.NewColumn[*Sample, string]("code").Eq("concrete")
 }
 
-func packageLevel() types.Filter {
-	return types.NewColumn[M, string]("code").Eq("package")
+func packageLevel() gst.Filter {
+	return gst.NewColumn[M, string]("code").Eq("package")
 }
 
-func reused[M types.Model](local bool) types.Filter {
+func reused[M gst.Model](local bool) gst.Filter {
 	if local {
 		type M = *Sample
-		return types.NewColumn[M, string]("code").Eq("reused inside")
+		return gst.NewColumn[M, string]("code").Eq("reused inside")
 	}
-	return types.NewColumn[M, string]("code").Eq("reused outside")
+	return gst.NewColumn[M, string]("code").Eq("reused outside")
 }
 
-func parameter[M types.Model]() types.Filter {
-	return types.NewColumn[M, string]("code").Eq("parameter")
+func parameter[M gst.Model]() gst.Filter {
+	return gst.NewColumn[M, string]("code").Eq("parameter")
 }
 `
 	writeCheckFile(t, filepath.Join(projectDir, "helper", "retention", "retention.go"), source)

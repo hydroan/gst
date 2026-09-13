@@ -12,8 +12,8 @@ import (
 	"demo/service/record/item"
 	"demo/service/trace_probe"
 
+	"github.com/hydroan/gst/consts"
 	"github.com/hydroan/gst/service"
-	"github.com/hydroan/gst/types/consts"
 )
 
 func init() {

@@ -1,9 +1,9 @@
-package types
+package gst
 
 import (
 	"context"
 
-	itypes "github.com/hydroan/gst/internal/types"
+	"github.com/hydroan/gst/internal/types"
 )
 
 // ServiceContext is the per-request context the framework hands to every
@@ -11,10 +11,10 @@ import (
 // context, exposes request metadata (route, params, user identity, trace),
 // and carries the response helpers a service needs without touching Gin
 // directly.
-type ServiceContext = itypes.ServiceContext
+type ServiceContext = types.ServiceContext
 
 // RequestUserID reports the authenticated subject of the request ctx descends
 // from, or "" when no request is behind it.
 func RequestUserID(ctx context.Context) string {
-	return itypes.RequestUserID(ctx)
+	return types.RequestUserID(ctx)
 }

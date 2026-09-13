@@ -7,9 +7,9 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/hydroan/gst/consts"
 	"github.com/hydroan/gst/dsl"
 	"github.com/hydroan/gst/internal/codegen/gen"
-	"github.com/hydroan/gst/types/consts"
 )
 
 func TestValidateModuleCommandNameRejectsPaths(t *testing.T) {
@@ -40,15 +40,15 @@ func TestCollectActionsIgnoresActionsWithoutService(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(sourceServiceDir, "custom.go"), []byte(`package servicecopytest
 
 import (
+	"github.com/hydroan/gst"
 	"github.com/hydroan/gst/service"
-	"github.com/hydroan/gst/types"
 )
 
 type CustomService struct {
 	service.Base[any, any, any]
 }
 
-func (s *CustomService) ListAfter(ctx *types.ServiceContext, data *[]any) error {
+func (s *CustomService) ListAfter(ctx *gst.ServiceContext, data *[]any) error {
 	return nil
 }
 `), 0o600); err != nil {
@@ -210,9 +210,9 @@ func TestAddServiceFilesMergesActionsSharingServiceFile(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(sourceServiceDir, "sample.go"), []byte(`package servicecopytest
 
 import (
+	"github.com/hydroan/gst"
 	modelcopytest "github.com/hydroan/gst/internal/model/copytest"
 	"github.com/hydroan/gst/service"
-	"github.com/hydroan/gst/types"
 )
 
 // SampleService owns sample hooks.
@@ -221,12 +221,12 @@ type SampleService struct {
 }
 
 // CreateAfter copies create hook logic.
-func (s *SampleService) CreateAfter(ctx *types.ServiceContext, req *modelcopytest.CopyTest) error {
+func (s *SampleService) CreateAfter(ctx *gst.ServiceContext, req *modelcopytest.CopyTest) error {
 	return nil
 }
 
 // DeleteAfter copies delete hook logic.
-func (s *SampleService) DeleteAfter(ctx *types.ServiceContext, req *modelcopytest.CopyTest) error {
+func (s *SampleService) DeleteAfter(ctx *gst.ServiceContext, req *modelcopytest.CopyTest) error {
 	return nil
 }
 `), 0o600); err != nil {
@@ -291,8 +291,8 @@ func (s *SampleService) DeleteAfter(ctx *types.ServiceContext, req *modelcopytes
 	}
 	code := string(plan.Files[0].Content)
 	for _, want := range []string{
-		"func (s *Sample) Create(ctx *types.ServiceContext, req *copytest.CopyTest) (rsp *copytest.CopyTest, err error)",
-		"func (s *Sample) Delete(ctx *types.ServiceContext, req *copytest.CopyTest) (rsp *copytest.CopyTest, err error)",
+		"func (s *Sample) Create(ctx *gst.ServiceContext, req *copytest.CopyTest) (rsp *copytest.CopyTest, err error)",
+		"func (s *Sample) Delete(ctx *gst.ServiceContext, req *copytest.CopyTest) (rsp *copytest.CopyTest, err error)",
 		"// CreateAfter copies create hook logic.\nfunc (s *Sample) CreateAfter",
 		"// DeleteAfter copies delete hook logic.\nfunc (s *Sample) DeleteAfter",
 	} {
@@ -307,9 +307,9 @@ func TestAddServiceFilesMergesActionsFromMultipleSourceServiceStructs(t *testing
 	if err := os.WriteFile(filepath.Join(sourceServiceDir, "item.go"), []byte(`package servicecopytest
 
 import (
+	"github.com/hydroan/gst"
 	modelcopytest "github.com/hydroan/gst/internal/model/copytest"
 	"github.com/hydroan/gst/service"
-	"github.com/hydroan/gst/types"
 )
 
 // ItemGetService handles reads.
@@ -323,12 +323,12 @@ type ItemPatchService struct {
 }
 
 // Get copies get logic.
-func (s *ItemGetService) Get(ctx *types.ServiceContext, req *modelcopytest.ItemGetReq) (rsp *modelcopytest.ItemGetRsp, err error) {
+func (s *ItemGetService) Get(ctx *gst.ServiceContext, req *modelcopytest.ItemGetReq) (rsp *modelcopytest.ItemGetRsp, err error) {
 	return itemGetResult(), nil
 }
 
 // Patch copies patch logic.
-func (s *ItemPatchService) Patch(ctx *types.ServiceContext, req *modelcopytest.ItemPatchReq) (rsp *modelcopytest.ItemPatchRsp, err error) {
+func (s *ItemPatchService) Patch(ctx *gst.ServiceContext, req *modelcopytest.ItemPatchReq) (rsp *modelcopytest.ItemPatchRsp, err error) {
 	return itemPatchResult(), nil
 }
 
@@ -430,10 +430,10 @@ func TestAddServiceFilesKeepsEmptyPayloadListRequest(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(sourceServiceDir, "list.go"), []byte(`package servicecopytest
 
 import (
+	"github.com/hydroan/gst"
 	modelcopytest "github.com/hydroan/gst/internal/model/copytest"
 	"github.com/hydroan/gst/model"
 	"github.com/hydroan/gst/service"
-	"github.com/hydroan/gst/types"
 )
 
 // ItemListService lists items.
@@ -442,7 +442,7 @@ type ItemListService struct {
 }
 
 // List copies list logic.
-func (s *ItemListService) List(ctx *types.ServiceContext, req *model.Empty) (rsp *modelcopytest.ItemListRsp, err error) {
+func (s *ItemListService) List(ctx *gst.ServiceContext, req *model.Empty) (rsp *modelcopytest.ItemListRsp, err error) {
 	return &modelcopytest.ItemListRsp{}, nil
 }
 `), 0o600); err != nil {
@@ -510,16 +510,16 @@ func TestAddServiceFilesUsesFlattenServicePackage(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(sourceServiceDir, "sample.go"), []byte(`package servicecopytest
 
 import (
+	"github.com/hydroan/gst"
 	modelcopytest "github.com/hydroan/gst/internal/model/copytest"
 	"github.com/hydroan/gst/service"
-	"github.com/hydroan/gst/types"
 )
 
 type SampleService struct {
 	service.Base[*modelcopytest.Sample, *modelcopytest.Sample, *modelcopytest.Sample]
 }
 
-func (s *SampleService) CreateAfter(ctx *types.ServiceContext, req *modelcopytest.Sample) error {
+func (s *SampleService) CreateAfter(ctx *gst.ServiceContext, req *modelcopytest.Sample) error {
 	return nil
 }
 `), 0o600); err != nil {
@@ -653,7 +653,7 @@ func TestBuildCopyPlanCopiesNestedActionsAndReachableHelpers(t *testing.T) {
 	for _, want := range []string{
 		"package entry\n",
 		`"tmpapp/model/copytest/entry"`,
-		"func (c *Create) Create(ctx *types.ServiceContext, req *entry.Entry) (rsp *entry.Entry, err error)",
+		"func (c *Create) Create(ctx *gst.ServiceContext, req *entry.Entry) (rsp *entry.Entry, err error)",
 	} {
 		if !strings.Contains(entryService, want) {
 			t.Fatalf("nested action service missing %q:\n%s", want, entryService)
@@ -988,17 +988,17 @@ func (Entry) Design() {
 	if err := os.WriteFile(filepath.Join(sourceEntryServiceDir, "create.go"), []byte(`package servicecopytestentry
 
 import (
+	"github.com/hydroan/gst"
 	modelcopytestentry "github.com/hydroan/gst/internal/model/copytest/entry"
 	"github.com/hydroan/gst/internal/service/copytest/shared"
 	"github.com/hydroan/gst/service"
-	"github.com/hydroan/gst/types"
 )
 
 type EntryCreateService struct {
 	service.Base[*modelcopytestentry.Entry, *modelcopytestentry.Entry, *modelcopytestentry.Entry]
 }
 
-func (s *EntryCreateService) Create(ctx *types.ServiceContext, req *modelcopytestentry.Entry) (rsp *modelcopytestentry.Entry, err error) {
+func (s *EntryCreateService) Create(ctx *gst.ServiceContext, req *modelcopytestentry.Entry) (rsp *modelcopytestentry.Entry, err error) {
 	shared.Ensure(req)
 	return entryHelper(req), nil
 }

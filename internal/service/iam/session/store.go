@@ -10,12 +10,12 @@ import (
 	"time"
 
 	"github.com/cockroachdb/errors"
+	"github.com/hydroan/gst"
 	modeliamsession "github.com/hydroan/gst/internal/model/iam/session"
 	modeliamuser "github.com/hydroan/gst/internal/model/iam/user"
 	"github.com/hydroan/gst/logger"
 	"github.com/hydroan/gst/redis"
 	"github.com/hydroan/gst/service"
-	"github.com/hydroan/gst/types"
 	"go.uber.org/zap"
 )
 
@@ -99,7 +99,7 @@ type UserState struct {
 func (store) LoadSession(ctx context.Context, sessionID string) (modeliamsession.Session, error) {
 	sessionID = strings.TrimSpace(sessionID)
 	if sessionID == "" {
-		return modeliamsession.Session{}, types.ErrEntryNotFound
+		return modeliamsession.Session{}, gst.ErrEntryNotFound
 	}
 	return redis.Cache[modeliamsession.Session]().Get(ctx, sessionDataKey(sessionID))
 }
@@ -372,7 +372,7 @@ func (store) TouchSession(ctx context.Context, sessionID string, sessionData mod
 	ttl := time.Until(sessionData.ExpiresAt)
 	if ttl <= 0 {
 		_, _ = Store.DeleteSession(ctx, sessionID)
-		return types.ErrEntryNotFound
+		return gst.ErrEntryNotFound
 	}
 
 	sessionData.LastSeenAt = now
@@ -451,7 +451,7 @@ func deleteUserSessions(ctx context.Context, userID, keepSessionID string) error
 			continue
 		}
 		if _, err = Store.DeleteSession(ctx, sessionID); err != nil {
-			if errors.Is(err, types.ErrEntryNotFound) {
+			if errors.Is(err, gst.ErrEntryNotFound) {
 				_ = Store.DropSessionIndexes(ctx, userID, sessionID)
 				continue
 			}
@@ -473,7 +473,7 @@ func (store) LoadUserState(ctx context.Context, userID string) (UserState, bool)
 	if err == nil {
 		return state, true
 	}
-	if !errors.Is(err, types.ErrEntryNotFound) {
+	if !errors.Is(err, gst.ErrEntryNotFound) {
 		logStoreWarning("failed to load iam user state cache", userID, err)
 	}
 	return UserState{}, false

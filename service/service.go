@@ -10,10 +10,10 @@ import (
 	"reflect"
 	"sync"
 
+	"github.com/hydroan/gst/consts"
 	"github.com/hydroan/gst/internal/serviceregistry"
 	"github.com/hydroan/gst/internal/types"
 	"github.com/hydroan/gst/model"
-	"github.com/hydroan/gst/types/consts"
 )
 
 var _ types.Service[*model.Empty, any, any] = (*Base[*model.Empty, any, any])(nil)

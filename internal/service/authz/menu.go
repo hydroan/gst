@@ -3,20 +3,20 @@ package serviceauthz
 import (
 	"net/http"
 
+	"github.com/hydroan/gst"
 	"github.com/hydroan/gst/authz/rbac"
+	"github.com/hydroan/gst/consts"
 	"github.com/hydroan/gst/database"
 	modelauthz "github.com/hydroan/gst/internal/model/authz"
 	"github.com/hydroan/gst/service"
-	"github.com/hydroan/gst/types"
-	"github.com/hydroan/gst/types/consts"
 	"github.com/samber/lo"
 )
 
 // Column references for the visibility conditions below; module sources carry
 // no generated Cols vars, so the references are declared here.
 var (
-	colMenuID = types.NewColumn[*modelauthz.Menu, string](modelauthz.KeyID)
-	colRoleID = types.NewColumn[*modelauthz.Role, string](modelauthz.KeyID)
+	colMenuID = gst.NewColumn[*modelauthz.Menu, string](modelauthz.KeyID)
+	colRoleID = gst.NewColumn[*modelauthz.Role, string](modelauthz.KeyID)
 )
 
 type MenuService struct {
@@ -30,7 +30,7 @@ type MenuService struct {
 //
 // A subject with no visible menu yields an empty ID set, and IN over an empty
 // list matches nothing, so rows and total go to zero together.
-func (m *MenuService) Filter(ctx *types.ServiceContext, menu *modelauthz.Menu, opts types.QueryOptions) (*modelauthz.Menu, types.QueryOptions, error) {
+func (m *MenuService) Filter(ctx *gst.ServiceContext, menu *modelauthz.Menu, opts gst.QueryOptions) (*modelauthz.Menu, gst.QueryOptions, error) {
 	// The sentinel rows — the root anchor and the unknown/none placeholders —
 	// are tree bookkeeping, not menus anyone manages. They stay hidden from
 	// every caller, including system_root, which the visibility filter below
@@ -54,7 +54,7 @@ func (m *MenuService) Filter(ctx *types.ServiceContext, menu *modelauthz.Menu, o
 // Filter pushed down never reaches them. The top level is already handled by
 // Filter and is not revisited here, which keeps the rows returned and the total
 // in agreement.
-func (m *MenuService) ListAfter(ctx *types.ServiceContext, data *[]*modelauthz.Menu) error {
+func (m *MenuService) ListAfter(ctx *gst.ServiceContext, data *[]*modelauthz.Menu) error {
 	// Without expanded children there is nothing left to narrow, so the common
 	// case resolves roles once, in Filter.
 	if !lo.SomeBy(*data, func(item *modelauthz.Menu) bool { return len(item.Children) > 0 }) {
@@ -91,7 +91,7 @@ func (m *MenuService) ListAfter(ctx *types.ServiceContext, data *[]*modelauthz.M
 // restricted reports whether the caller has to narrow by the returned set. It is
 // false only for system_root. A subject whose roles select no menu at all yields
 // an empty set with restricted true, which the caller turns into an empty result.
-func visibleMenuIDs(ctx *types.ServiceContext, log types.Logger) ([]string, bool, error) {
+func visibleMenuIDs(ctx *gst.ServiceContext, log gst.Logger) ([]string, bool, error) {
 	systemRoot, err := rbac.RBAC().HasSystemRole(ctx, ctx.UserID(), consts.AUTHZ_SYSTEM_ROLE_ROOT)
 	if err != nil {
 		return nil, false, service.NewErrorWithCause(http.StatusInternalServerError, "authorization unavailable", err)
@@ -121,7 +121,7 @@ func visibleMenuIDs(ctx *types.ServiceContext, log types.Logger) ([]string, bool
 			return nil, true, nil
 		}
 		if err := database.Database[*modelauthz.Role](ctx).
-			WithQuery(nil, types.QueryOptions{Filters: []types.Filter{colRoleID.In(roleIDs...)}}).
+			WithQuery(nil, gst.QueryOptions{Filters: []gst.Filter{colRoleID.In(roleIDs...)}}).
 			List(&roles); err != nil {
 			return nil, false, service.NewErrorWithCause(http.StatusInternalServerError, "failed to load roles", err)
 		}

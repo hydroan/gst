@@ -4,7 +4,7 @@ import (
 	"go/ast"
 	"testing"
 
-	"github.com/hydroan/gst/types/consts"
+	"github.com/hydroan/gst/consts"
 	"github.com/kr/pretty"
 )
 
@@ -140,8 +140,8 @@ package service
 import (
 	"helloworld/model"
 
+	"github.com/hydroan/gst/consts"
 	"github.com/hydroan/gst/service"
-	"github.com/hydroan/gst/types/consts"
 )
 
 func init() {
@@ -161,8 +161,8 @@ package service
 import (
 	"helloworld/model"
 
+	"github.com/hydroan/gst/consts"
 	"github.com/hydroan/gst/service"
-	"github.com/hydroan/gst/types/consts"
 )
 
 func init() {
@@ -227,8 +227,8 @@ package router
 import (
 	"helloworld/model"
 
+	"github.com/hydroan/gst/consts"
 	"github.com/hydroan/gst/router"
-	"github.com/hydroan/gst/types/consts"
 )
 
 func Init() error {
@@ -249,8 +249,8 @@ package router
 import (
 	"helloworld/model"
 
+	"github.com/hydroan/gst/consts"
 	"github.com/hydroan/gst/router"
-	"github.com/hydroan/gst/types/consts"
 
 	gstmodel "github.com/hydroan/gst/model"
 )

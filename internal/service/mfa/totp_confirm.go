@@ -5,10 +5,10 @@ import (
 	"time"
 
 	"github.com/cockroachdb/errors"
+	"github.com/hydroan/gst"
 	"github.com/hydroan/gst/database"
 	modelmfa "github.com/hydroan/gst/internal/model/mfa"
 	"github.com/hydroan/gst/service"
-	"github.com/hydroan/gst/types"
 	"github.com/pquerna/otp/totp"
 	"go.uber.org/zap"
 )
@@ -33,7 +33,7 @@ type TOTPConfirmService struct {
 // hashes, and persists the device. The (user_id, secret) unique index is the
 // duplicate guard: a concurrent confirm of the same challenge loses on Create
 // with a conflict.
-func (t *TOTPConfirmService) Create(ctx *types.ServiceContext, req *modelmfa.TOTPConfirmReq) (rsp *modelmfa.TOTPConfirmRsp, err error) {
+func (t *TOTPConfirmService) Create(ctx *gst.ServiceContext, req *modelmfa.TOTPConfirmReq) (rsp *modelmfa.TOTPConfirmRsp, err error) {
 	log := t.WithContext(ctx, ctx.Phase())
 
 	if len(ctx.UserID()) == 0 {

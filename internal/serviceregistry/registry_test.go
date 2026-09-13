@@ -3,10 +3,10 @@ package serviceregistry
 import (
 	"testing"
 
+	"github.com/hydroan/gst/consts"
 	"github.com/hydroan/gst/internal/modelregistry"
 	"github.com/hydroan/gst/logger"
 	"github.com/hydroan/gst/logger/zap"
-	"github.com/hydroan/gst/types/consts"
 	"github.com/stretchr/testify/require"
 )
 

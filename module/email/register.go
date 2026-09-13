@@ -1,9 +1,9 @@
 package email
 
 import (
+	"github.com/hydroan/gst/consts"
 	serviceemail "github.com/hydroan/gst/internal/service/email"
 	"github.com/hydroan/gst/module"
-	"github.com/hydroan/gst/types/consts"
 )
 
 // Register registers email verification, password reset, and email change routes.

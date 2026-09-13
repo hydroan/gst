@@ -5,8 +5,8 @@ import (
 	"go/token"
 	"testing"
 
+	"github.com/hydroan/gst/consts"
 	"github.com/hydroan/gst/dsl"
-	"github.com/hydroan/gst/types/consts"
 	"github.com/kr/pretty"
 )
 
@@ -33,27 +33,27 @@ func TestApplyServiceFile(t *testing.T) {
 import (
 	"helloworld/model"
 
+	"github.com/hydroan/gst"
 	"github.com/hydroan/gst/service"
-	"github.com/hydroan/gst/types"
 )
 
 type user struct {
 	service.Base[*model.User, *model.UserReq, *model.UserRsp]
 }
 
-func (u *user) Create(ctx *types.ServiceContext, req *model.UserReq) (rsp *model.UserRsp, err error) {
+func (u *user) Create(ctx *gst.ServiceContext, req *model.UserReq) (rsp *model.UserRsp, err error) {
 	log := u.WithContext(ctx, ctx.Phase())
 	log.Info("user create")
 	return rsp, nil
 }
 
-func (u *user) CreateBefore(ctx *types.ServiceContext, user *model.User) error {
+func (u *user) CreateBefore(ctx *gst.ServiceContext, user *model.User) error {
 	log := u.WithContext(ctx, ctx.Phase())
 	log.Info("user create before")
 	return nil
 }
 
-func (u *user) CreateAfter(ctx *types.ServiceContext, user *model.User) error {
+func (u *user) CreateAfter(ctx *gst.ServiceContext, user *model.User) error {
 	log := u.WithContext(ctx, ctx.Phase())
 	log.Info("user create after")
 	return nil
@@ -75,27 +75,27 @@ func (u *user) CreateAfter(ctx *types.ServiceContext, user *model.User) error {
 import (
 	"helloworld/model"
 
+	"github.com/hydroan/gst"
 	"github.com/hydroan/gst/service"
-	"github.com/hydroan/gst/types"
 )
 
 type user struct {
 	service.Base[*model.User, *model.User, *model.User]
 }
 
-func (u *user) Create(ctx *types.ServiceContext, req *model.User) (rsp *model.User, err error) {
+func (u *user) Create(ctx *gst.ServiceContext, req *model.User) (rsp *model.User, err error) {
 	log := u.WithContext(ctx, ctx.Phase())
 	log.Info("user create")
 	return rsp, nil
 }
 
-func (u *user) CreateBefore(ctx *types.ServiceContext, user *model.User) error {
+func (u *user) CreateBefore(ctx *gst.ServiceContext, user *model.User) error {
 	log := u.WithContext(ctx, ctx.Phase())
 	log.Info("user create before")
 	return nil
 }
 
-func (u *user) CreateAfter(ctx *types.ServiceContext, user *model.User) error {
+func (u *user) CreateAfter(ctx *gst.ServiceContext, user *model.User) error {
 	log := u.WithContext(ctx, ctx.Phase())
 	log.Info("user create after")
 	return nil
@@ -119,27 +119,27 @@ func (u *user) CreateAfter(ctx *types.ServiceContext, user *model.User) error {
 import (
 	"helloworld/model"
 
+	"github.com/hydroan/gst"
 	"github.com/hydroan/gst/service"
-	"github.com/hydroan/gst/types"
 )
 
 type user struct {
 	service.Base[*model.User, model.UserReq, model.UserRsp]
 }
 
-func (u *user) Create(ctx *types.ServiceContext, req model.UserReq) (rsp model.UserRsp, err error) {
+func (u *user) Create(ctx *gst.ServiceContext, req model.UserReq) (rsp model.UserRsp, err error) {
 	log := u.WithContext(ctx, ctx.Phase())
 	log.Info("user create")
 	return rsp, nil
 }
 
-func (u *user) CreateBefore(ctx *types.ServiceContext, user *model.User) error {
+func (u *user) CreateBefore(ctx *gst.ServiceContext, user *model.User) error {
 	log := u.WithContext(ctx, ctx.Phase())
 	log.Info("user create before")
 	return nil
 }
 
-func (u *user) CreateAfter(ctx *types.ServiceContext, user *model.User) error {
+func (u *user) CreateAfter(ctx *gst.ServiceContext, user *model.User) error {
 	log := u.WithContext(ctx, ctx.Phase())
 	log.Info("user create after")
 	return nil
@@ -153,15 +153,15 @@ func (u *user) CreateAfter(ctx *types.ServiceContext, user *model.User) error {
 import (
 	"helloworld/model"
 
+	"github.com/hydroan/gst"
 	"github.com/hydroan/gst/service"
-	"github.com/hydroan/gst/types"
 )
 
 type user struct {
 	service.Base[*model.User, *model.User, *model.User]
 }
 
-func (u *user) Create(ctx *types.ServiceContext, req *model.User) (rsp *model.User, err error) {
+func (u *user) Create(ctx *gst.ServiceContext, req *model.User) (rsp *model.User, err error) {
 	return rsp, nil
 }
 `,
@@ -177,15 +177,15 @@ func (u *user) Create(ctx *types.ServiceContext, req *model.User) (rsp *model.Us
 import (
 	"helloworld/model"
 
+	"github.com/hydroan/gst"
 	"github.com/hydroan/gst/service"
-	"github.com/hydroan/gst/types"
 )
 
 type user struct {
 	service.Base[*model.User, *model.User, *model.User]
 }
 
-func (u *user) Create(ctx *types.ServiceContext, req *model.User) (rsp *model.User, err error) {
+func (u *user) Create(ctx *gst.ServiceContext, req *model.User) (rsp *model.User, err error) {
 	return rsp, nil
 }
 `,
@@ -197,27 +197,27 @@ func (u *user) Create(ctx *types.ServiceContext, req *model.User) (rsp *model.Us
 import (
 	"helloworld/model/shared"
 
+	"github.com/hydroan/gst"
 	"github.com/hydroan/gst/service"
-	"github.com/hydroan/gst/types"
 )
 
 type Creator struct {
 	service.Base[*shared.Attachment, *shared.Attachment, *shared.Attachment]
 }
 
-func (c *Creator) Create(ctx *types.ServiceContext, req *shared.Attachment) (rsp *shared.Attachment, err error) {
+func (c *Creator) Create(ctx *gst.ServiceContext, req *shared.Attachment) (rsp *shared.Attachment, err error) {
 	log := c.WithContext(ctx, ctx.Phase())
 	log.Info("attachment create")
 	return rsp, nil
 }
 
-func (c *Creator) CreateBefore(ctx *types.ServiceContext, attachment *shared.Attachment) error {
+func (c *Creator) CreateBefore(ctx *gst.ServiceContext, attachment *shared.Attachment) error {
 	log := c.WithContext(ctx, ctx.Phase())
 	log.Info("attachment create before")
 	return nil
 }
 
-func (c *Creator) CreateAfter(ctx *types.ServiceContext, attachment *shared.Attachment) error {
+func (c *Creator) CreateAfter(ctx *gst.ServiceContext, attachment *shared.Attachment) error {
 	log := c.WithContext(ctx, ctx.Phase())
 	log.Info("attachment create after")
 	return nil
@@ -236,27 +236,27 @@ func (c *Creator) CreateAfter(ctx *types.ServiceContext, attachment *shared.Atta
 import (
 	"helloworld/model/shared"
 
+	"github.com/hydroan/gst"
 	"github.com/hydroan/gst/service"
-	"github.com/hydroan/gst/types"
 )
 
 type Upload struct {
 	service.Base[*shared.Attachment, *shared.Attachment, *shared.Attachment]
 }
 
-func (u *Upload) Create(ctx *types.ServiceContext, req *shared.Attachment) (rsp *shared.Attachment, err error) {
+func (u *Upload) Create(ctx *gst.ServiceContext, req *shared.Attachment) (rsp *shared.Attachment, err error) {
 	log := u.WithContext(ctx, ctx.Phase())
 	log.Info("attachment create")
 	return rsp, nil
 }
 
-func (u *Upload) CreateBefore(ctx *types.ServiceContext, attachment *shared.Attachment) error {
+func (u *Upload) CreateBefore(ctx *gst.ServiceContext, attachment *shared.Attachment) error {
 	log := u.WithContext(ctx, ctx.Phase())
 	log.Info("attachment create before")
 	return nil
 }
 
-func (u *Upload) CreateAfter(ctx *types.ServiceContext, attachment *shared.Attachment) error {
+func (u *Upload) CreateAfter(ctx *gst.ServiceContext, attachment *shared.Attachment) error {
 	log := u.WithContext(ctx, ctx.Phase())
 	log.Info("attachment create after")
 	return nil
@@ -270,15 +270,15 @@ func (u *Upload) CreateAfter(ctx *types.ServiceContext, attachment *shared.Attac
 import (
 	"helloworld/model/shared"
 
+	"github.com/hydroan/gst"
 	"github.com/hydroan/gst/service"
-	"github.com/hydroan/gst/types"
 )
 
 type Creator struct {
 	service.Base[*shared.Attachment, *shared.Attachment, *shared.Attachment]
 }
 
-func (c *Creator) Create(ctx *types.ServiceContext, req *shared.Attachment) (rsp *shared.Attachment, err error) {
+func (c *Creator) Create(ctx *gst.ServiceContext, req *shared.Attachment) (rsp *shared.Attachment, err error) {
 	log := c.WithContext(ctx, ctx.Phase())
 	log.Info("attachment create")
 	return rsp, nil
@@ -297,15 +297,15 @@ func (c *Creator) Create(ctx *types.ServiceContext, req *shared.Attachment) (rsp
 import (
 	"helloworld/model/shared"
 
+	"github.com/hydroan/gst"
 	"github.com/hydroan/gst/service"
-	"github.com/hydroan/gst/types"
 )
 
 type Upload struct {
 	service.Base[*shared.Attachment, *shared.AttachmentReq, *shared.AttachmentRsp]
 }
 
-func (u *Upload) Create(ctx *types.ServiceContext, req *shared.AttachmentReq) (rsp *shared.AttachmentRsp, err error) {
+func (u *Upload) Create(ctx *gst.ServiceContext, req *shared.AttachmentReq) (rsp *shared.AttachmentRsp, err error) {
 	log := u.WithContext(ctx, ctx.Phase())
 	log.Info("attachment create")
 	return rsp, nil
@@ -319,15 +319,15 @@ func (u *Upload) Create(ctx *types.ServiceContext, req *shared.AttachmentReq) (r
 import (
 	"helloworld/model/shared"
 
+	"github.com/hydroan/gst"
 	"github.com/hydroan/gst/service"
-	"github.com/hydroan/gst/types"
 )
 
 type Creator struct {
 	service.Base[*shared.Attachment, *shared.Attachment, *shared.Attachment]
 }
 
-func (c *Creator) Create(ctx *types.ServiceContext, req *shared.Attachment) (rsp *shared.Attachment, err error) {
+func (c *Creator) Create(ctx *gst.ServiceContext, req *shared.Attachment) (rsp *shared.Attachment, err error) {
 	log := c.WithContext(ctx, ctx.Phase())
 	log.Info("attachment create")
 	return rsp, nil
@@ -345,15 +345,15 @@ func (c *Creator) Create(ctx *types.ServiceContext, req *shared.Attachment) (rsp
 import (
 	"helloworld/model/shared"
 
+	"github.com/hydroan/gst"
 	"github.com/hydroan/gst/service"
-	"github.com/hydroan/gst/types"
 )
 
 type Creator struct {
 	service.Base[*shared.Attachment, *shared.Attachment, *shared.Attachment]
 }
 
-func (c *Creator) Create(ctx *types.ServiceContext, req *shared.Attachment) (rsp *shared.Attachment, err error) {
+func (c *Creator) Create(ctx *gst.ServiceContext, req *shared.Attachment) (rsp *shared.Attachment, err error) {
 	log := c.WithContext(ctx, ctx.Phase())
 	log.Info("attachment create")
 	return rsp, nil
@@ -367,15 +367,15 @@ func (c *Creator) Create(ctx *types.ServiceContext, req *shared.Attachment) (rsp
 import (
 	"helloworld/model/shared"
 
+	"github.com/hydroan/gst"
 	"github.com/hydroan/gst/service"
-	"github.com/hydroan/gst/types"
 )
 
 type Upload struct {
 	service.Base[*shared.Attachment, *shared.Attachment, *shared.Attachment]
 }
 
-func (u *Upload) Create(ctx *types.ServiceContext, req *shared.Attachment) (rsp *shared.Attachment, err error) {
+func (u *Upload) Create(ctx *gst.ServiceContext, req *shared.Attachment) (rsp *shared.Attachment, err error) {
 	log := u.WithContext(ctx, ctx.Phase())
 	log.Info("attachment create")
 	return rsp, nil
@@ -394,15 +394,15 @@ func (u *Upload) Create(ctx *types.ServiceContext, req *shared.Attachment) (rsp 
 import (
 	"helloworld/model/shared"
 
+	"github.com/hydroan/gst"
 	"github.com/hydroan/gst/service"
-	"github.com/hydroan/gst/types"
 )
 
 type Upload struct {
 	service.Base[*shared.Attachment, *shared.Attachment, *shared.Attachment]
 }
 
-func (u *Upload) Create(ctx *types.ServiceContext, req *shared.Attachment) (rsp *shared.Attachment, err error) {
+func (u *Upload) Create(ctx *gst.ServiceContext, req *shared.Attachment) (rsp *shared.Attachment, err error) {
 	log := u.WithContext(ctx, ctx.Phase())
 	log.Info("attachment create")
 	return rsp, nil
@@ -416,27 +416,27 @@ func (u *Upload) Create(ctx *types.ServiceContext, req *shared.Attachment) (rsp 
 import (
 	"helloworld/model/shared"
 
+	"github.com/hydroan/gst"
 	"github.com/hydroan/gst/service"
-	"github.com/hydroan/gst/types"
 )
 
 type Upload struct {
 	service.Base[*shared.Attachment, *shared.AttachmentReq, *shared.AttachmentRsp]
 }
 
-func (a *Upload) Create(ctx *types.ServiceContext, req *shared.AttachmentReq) (rsp *shared.AttachmentRsp, err error) {
+func (a *Upload) Create(ctx *gst.ServiceContext, req *shared.AttachmentReq) (rsp *shared.AttachmentRsp, err error) {
 	log := a.WithContext(ctx, ctx.Phase())
 	log.Info("attachment create")
 	return rsp, nil
 }
 
-func (a *Upload) CreateBefore(ctx *types.ServiceContext, attachment *shared.Attachment) error {
+func (a *Upload) CreateBefore(ctx *gst.ServiceContext, attachment *shared.Attachment) error {
 	log := a.WithContext(ctx, ctx.Phase())
 	log.Info("attachment create before")
 	return nil
 }
 
-func (a *Upload) CreateAfter(ctx *types.ServiceContext, attachment *shared.Attachment) error {
+func (a *Upload) CreateAfter(ctx *gst.ServiceContext, attachment *shared.Attachment) error {
 	log := a.WithContext(ctx, ctx.Phase())
 	log.Info("attachment create after")
 	return nil
@@ -455,27 +455,27 @@ func (a *Upload) CreateAfter(ctx *types.ServiceContext, attachment *shared.Attac
 import (
 	"helloworld/model/shared"
 
+	"github.com/hydroan/gst"
 	"github.com/hydroan/gst/service"
-	"github.com/hydroan/gst/types"
 )
 
 type Upload struct {
 	service.Base[*shared.Attachment, *shared.AttachmentReq, *shared.AttachmentRsp]
 }
 
-func (u *Upload) Create(ctx *types.ServiceContext, req *shared.AttachmentReq) (rsp *shared.AttachmentRsp, err error) {
+func (u *Upload) Create(ctx *gst.ServiceContext, req *shared.AttachmentReq) (rsp *shared.AttachmentRsp, err error) {
 	log := u.WithContext(ctx, ctx.Phase())
 	log.Info("attachment create")
 	return rsp, nil
 }
 
-func (u *Upload) CreateBefore(ctx *types.ServiceContext, attachment *shared.Attachment) error {
+func (u *Upload) CreateBefore(ctx *gst.ServiceContext, attachment *shared.Attachment) error {
 	log := u.WithContext(ctx, ctx.Phase())
 	log.Info("attachment create before")
 	return nil
 }
 
-func (u *Upload) CreateAfter(ctx *types.ServiceContext, attachment *shared.Attachment) error {
+func (u *Upload) CreateAfter(ctx *gst.ServiceContext, attachment *shared.Attachment) error {
 	log := u.WithContext(ctx, ctx.Phase())
 	log.Info("attachment create after")
 	return nil
@@ -489,15 +489,15 @@ func (u *Upload) CreateAfter(ctx *types.ServiceContext, attachment *shared.Attac
 import (
 	"helloworld/model"
 
+	"github.com/hydroan/gst"
 	"github.com/hydroan/gst/service"
-	"github.com/hydroan/gst/types"
 )
 
 type configSetting struct {
 	service.Base[*model.ConfigSetting, *model.ConfigSetting, *model.ConfigSetting]
 }
 
-func (c *configSetting) Create(ctx *types.ServiceContext, req *model.ConfigSetting) (rsp *model.ConfigSetting, err error) {
+func (c *configSetting) Create(ctx *gst.ServiceContext, req *model.ConfigSetting) (rsp *model.ConfigSetting, err error) {
 	return rsp, nil
 }
 `,
@@ -513,15 +513,15 @@ func (c *configSetting) Create(ctx *types.ServiceContext, req *model.ConfigSetti
 import (
 	"helloworld/model"
 
+	"github.com/hydroan/gst"
 	"github.com/hydroan/gst/service"
-	"github.com/hydroan/gst/types"
 )
 
 type configSetting struct {
 	service.Base[*model.ConfigSetting, *model.ConfigSetting, *model.ConfigSetting]
 }
 
-func (c *configSetting) Create(ctx *types.ServiceContext, req *model.ConfigSetting) (rsp *model.ConfigSetting, err error) {
+func (c *configSetting) Create(ctx *gst.ServiceContext, req *model.ConfigSetting) (rsp *model.ConfigSetting, err error) {
 	return rsp, nil
 }
 `,
@@ -529,7 +529,7 @@ func (c *configSetting) Create(ctx *types.ServiceContext, req *model.ConfigSetti
 		{
 			// Regression test for an incident where isServiceMethod4 matched a hand-written
 			// helper by shape alone: Patcher.validate has the same
-			// (ctx *types.ServiceContext, req *pkg.Req) (*pkg.X, error) shape as the real
+			// (ctx *gst.ServiceContext, req *pkg.Req) (*pkg.X, error) shape as the real
 			// Patch action method, so it was mistaken for the action method and rewritten
 			// in place, corrupting its return type and breaking the build. applyServiceMethod4
 			// must only rewrite the function whose name matches action.Phase.MethodName().
@@ -539,19 +539,19 @@ func (c *configSetting) Create(ctx *types.ServiceContext, req *model.ConfigSetti
 import (
 	"helloworld/model/group"
 
+	"github.com/hydroan/gst"
 	"github.com/hydroan/gst/service"
-	"github.com/hydroan/gst/types"
 )
 
 type Patcher struct {
 	service.Base[*group.SampleRecord, *group.SampleRecordPatchReq, *group.SampleRecordPatchRsp]
 }
 
-func (r *Patcher) Patch(ctx *types.ServiceContext, req *group.SampleRecordPatchReq) (rsp *group.SampleRecordPatchRsp, err error) {
+func (r *Patcher) Patch(ctx *gst.ServiceContext, req *group.SampleRecordPatchReq) (rsp *group.SampleRecordPatchRsp, err error) {
 	return rsp, nil
 }
 
-func (r *Patcher) validate(ctx *types.ServiceContext, req *group.SampleRecordPatchReq) (*group.SampleRecord, error) {
+func (r *Patcher) validate(ctx *gst.ServiceContext, req *group.SampleRecordPatchReq) (*group.SampleRecord, error) {
 	return nil, nil
 }
 `,
@@ -567,19 +567,19 @@ func (r *Patcher) validate(ctx *types.ServiceContext, req *group.SampleRecordPat
 import (
 	"helloworld/model/group"
 
+	"github.com/hydroan/gst"
 	"github.com/hydroan/gst/service"
-	"github.com/hydroan/gst/types"
 )
 
 type Patcher struct {
 	service.Base[*group.SampleRecord, *group.SampleRecordPatchReq, *group.SampleRecordPatchRsp]
 }
 
-func (r *Patcher) Patch(ctx *types.ServiceContext, req *group.SampleRecordPatchReq) (rsp *group.SampleRecordPatchRsp, err error) {
+func (r *Patcher) Patch(ctx *gst.ServiceContext, req *group.SampleRecordPatchReq) (rsp *group.SampleRecordPatchRsp, err error) {
 	return rsp, nil
 }
 
-func (r *Patcher) validate(ctx *types.ServiceContext, req *group.SampleRecordPatchReq) (*group.SampleRecord, error) {
+func (r *Patcher) validate(ctx *gst.ServiceContext, req *group.SampleRecordPatchReq) (*group.SampleRecord, error) {
 	return nil, nil
 }
 `,
@@ -622,15 +622,15 @@ func TestApplyServiceFileWithModelSync(t *testing.T) {
 import (
 	"helloworld/model/identity"
 
+	"github.com/hydroan/gst"
 	"github.com/hydroan/gst/service"
-	"github.com/hydroan/gst/types"
 )
 
 type Creator struct {
 	service.Base[*identity.User, *identity.UserReq, *identity.UserRsp]
 }
 
-func (u *Creator) Create(ctx *types.ServiceContext, req *identity.UserReq) (rsp *identity.UserRsp, err error) {
+func (u *Creator) Create(ctx *gst.ServiceContext, req *identity.UserReq) (rsp *identity.UserRsp, err error) {
 	log := u.WithContext(ctx, ctx.Phase())
 	return rsp, nil
 }
@@ -653,15 +653,15 @@ func (u *Creator) Create(ctx *types.ServiceContext, req *identity.UserReq) (rsp 
 import (
 	"helloworld/model/auth"
 
+	"github.com/hydroan/gst"
 	"github.com/hydroan/gst/service"
-	"github.com/hydroan/gst/types"
 )
 
 type Creator struct {
 	service.Base[*auth.User, *auth.UserReq, *auth.UserRsp]
 }
 
-func (u *Creator) Create(ctx *types.ServiceContext, req *auth.UserReq) (rsp *auth.UserRsp, err error) {
+func (u *Creator) Create(ctx *gst.ServiceContext, req *auth.UserReq) (rsp *auth.UserRsp, err error) {
 	log := u.WithContext(ctx, ctx.Phase())
 	return rsp, nil
 }
@@ -674,15 +674,15 @@ func (u *Creator) Create(ctx *types.ServiceContext, req *auth.UserReq) (rsp *aut
 import (
 	"helloworld/model/auth"
 
+	"github.com/hydroan/gst"
 	"github.com/hydroan/gst/service"
-	"github.com/hydroan/gst/types"
 )
 
 type Creator struct {
 	service.Base[*auth.User, *auth.UserReq, *auth.UserRsp]
 }
 
-func (u *Creator) Create(ctx *types.ServiceContext, req *auth.UserReq) (rsp *auth.UserRsp, err error) {
+func (u *Creator) Create(ctx *gst.ServiceContext, req *auth.UserReq) (rsp *auth.UserRsp, err error) {
 	return rsp, nil
 }
 `,
@@ -704,15 +704,15 @@ func (u *Creator) Create(ctx *types.ServiceContext, req *auth.UserReq) (rsp *aut
 import (
 	"helloworld/model/auth"
 
+	"github.com/hydroan/gst"
 	"github.com/hydroan/gst/service"
-	"github.com/hydroan/gst/types"
 )
 
 type Creator struct {
 	service.Base[*auth.User, *auth.UserReq, *auth.UserRsp]
 }
 
-func (u *Creator) Create(ctx *types.ServiceContext, req *auth.UserReq) (rsp *auth.UserRsp, err error) {
+func (u *Creator) Create(ctx *gst.ServiceContext, req *auth.UserReq) (rsp *auth.UserRsp, err error) {
 	return rsp, nil
 }
 `,
@@ -724,15 +724,15 @@ func (u *Creator) Create(ctx *types.ServiceContext, req *auth.UserReq) (rsp *aut
 import (
 	oldpkg "helloworld/model/identity"
 
+	"github.com/hydroan/gst"
 	"github.com/hydroan/gst/service"
-	"github.com/hydroan/gst/types"
 )
 
 type Creator struct {
 	service.Base[*oldpkg.User, *oldpkg.UserReq, *oldpkg.UserRsp]
 }
 
-func (u *Creator) Create(ctx *types.ServiceContext, req *oldpkg.UserReq) (rsp *oldpkg.UserRsp, err error) {
+func (u *Creator) Create(ctx *gst.ServiceContext, req *oldpkg.UserReq) (rsp *oldpkg.UserRsp, err error) {
 	return rsp, nil
 }
 `,
@@ -754,15 +754,15 @@ func (u *Creator) Create(ctx *types.ServiceContext, req *oldpkg.UserReq) (rsp *o
 import (
 	"helloworld/model/auth"
 
+	"github.com/hydroan/gst"
 	"github.com/hydroan/gst/service"
-	"github.com/hydroan/gst/types"
 )
 
 type Creator struct {
 	service.Base[*auth.User, *auth.UserReq, *auth.UserRsp]
 }
 
-func (u *Creator) Create(ctx *types.ServiceContext, req *auth.UserReq) (rsp *auth.UserRsp, err error) {
+func (u *Creator) Create(ctx *gst.ServiceContext, req *auth.UserReq) (rsp *auth.UserRsp, err error) {
 	return rsp, nil
 }
 `,
@@ -775,15 +775,15 @@ import (
 	"helloworld/model/auth"
 	"helloworld/model/config/namespace"
 
+	"github.com/hydroan/gst"
 	"github.com/hydroan/gst/service"
-	"github.com/hydroan/gst/types"
 )
 
 type Lister struct {
 	service.Base[*auth.Debug, *auth.Debug, *auth.Debug]
 }
 
-func (d *Lister) List(ctx *types.ServiceContext, req *auth.Debug) (rsp *auth.Debug, err error) {
+func (d *Lister) List(ctx *gst.ServiceContext, req *auth.Debug) (rsp *auth.Debug, err error) {
 	files := make([]*namespace.File, 0)
 	return rsp, nil
 }
@@ -807,15 +807,15 @@ import (
 	"helloworld/model/auth"
 	"helloworld/model/config/namespace"
 
+	"github.com/hydroan/gst"
 	"github.com/hydroan/gst/service"
-	"github.com/hydroan/gst/types"
 )
 
 type Lister struct {
 	service.Base[*auth.Debug, *auth.Debug, *auth.Debug]
 }
 
-func (d *Lister) List(ctx *types.ServiceContext, req *auth.Debug) (rsp *auth.Debug, err error) {
+func (d *Lister) List(ctx *gst.ServiceContext, req *auth.Debug) (rsp *auth.Debug, err error) {
 	files := make([]*namespace.File, 0)
 	return rsp, nil
 }
@@ -828,15 +828,15 @@ func (d *Lister) List(ctx *types.ServiceContext, req *auth.Debug) (rsp *auth.Deb
 import (
 	"helloworld/model/debug"
 
+	"github.com/hydroan/gst"
 	"github.com/hydroan/gst/service"
-	"github.com/hydroan/gst/types"
 )
 
 type Ping struct {
 	service.Base[*debug.Ping, *debug.Debug, *debug.PingRsp]
 }
 
-func (p *Ping) Get(ctx *types.ServiceContext, req *debug.Debug) (rsp *debug.PingRsp, err error) {
+func (p *Ping) Get(ctx *gst.ServiceContext, req *debug.Debug) (rsp *debug.PingRsp, err error) {
 	return rsp, nil
 }
 `,
@@ -862,15 +862,15 @@ func (p *Ping) Get(ctx *types.ServiceContext, req *debug.Debug) (rsp *debug.Ping
 import (
 	"helloworld/model/debug"
 
+	"github.com/hydroan/gst"
 	"github.com/hydroan/gst/service"
-	"github.com/hydroan/gst/types"
 )
 
 type Ping struct {
 	service.Base[*debug.Debug, *debug.Debug, *debug.PingRsp]
 }
 
-func (p *Ping) Get(ctx *types.ServiceContext, req *debug.Debug) (rsp *debug.PingRsp, err error) {
+func (p *Ping) Get(ctx *gst.ServiceContext, req *debug.Debug) (rsp *debug.PingRsp, err error) {
 	return rsp, nil
 }
 `,

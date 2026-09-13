@@ -5,12 +5,12 @@ import (
 	"time"
 
 	"github.com/cockroachdb/errors"
+	"github.com/hydroan/gst"
 	"github.com/hydroan/gst/authn"
 	modeliamaccount "github.com/hydroan/gst/internal/model/iam/account"
 	serviceiamsession "github.com/hydroan/gst/internal/service/iam/session"
 	"github.com/hydroan/gst/model"
 	"github.com/hydroan/gst/service"
-	"github.com/hydroan/gst/types"
 	"github.com/mssola/useragent"
 )
 
@@ -20,7 +20,7 @@ type LogoutService struct {
 }
 
 // Create logs out the current session and always clears the session cookie on success.
-func (l *LogoutService) Create(ctx *types.ServiceContext, req *model.Empty) (rsp *modeliamaccount.LogoutRsp, err error) {
+func (l *LogoutService) Create(ctx *gst.ServiceContext, req *model.Empty) (rsp *modeliamaccount.LogoutRsp, err error) {
 	log := l.WithContext(ctx, ctx.Phase())
 
 	sessionID, err := serviceiamsession.CookieSessionID(ctx)
@@ -32,7 +32,7 @@ func (l *LogoutService) Create(ctx *types.ServiceContext, req *model.Empty) (rsp
 
 	deletedSession, err := serviceiamsession.Store.DeleteSession(ctx, sessionID)
 	if err != nil {
-		if errors.Is(err, types.ErrEntryNotFound) {
+		if errors.Is(err, gst.ErrEntryNotFound) {
 			serviceiamsession.ClearCookie(ctx)
 			return &modeliamaccount.LogoutRsp{Msg: "logout successful"}, nil
 		}

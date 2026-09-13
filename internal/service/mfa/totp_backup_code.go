@@ -13,11 +13,11 @@ import (
 	"time"
 
 	"github.com/cockroachdb/errors"
+	"github.com/hydroan/gst"
+	"github.com/hydroan/gst/consts"
 	"github.com/hydroan/gst/database"
 	modelmfa "github.com/hydroan/gst/internal/model/mfa"
 	"github.com/hydroan/gst/service"
-	"github.com/hydroan/gst/types"
-	"github.com/hydroan/gst/types/consts"
 	"gorm.io/datatypes"
 )
 
@@ -33,8 +33,8 @@ const (
 // stale in-memory device snapshot can never write back a recovery-code hash
 // that a concurrently committed consumption already removed.
 var (
-	colTOTPDeviceBackupCodeHashes = types.NewColumn[*modelmfa.TOTPDevice, datatypes.JSONSlice[string]]("backup_code_hashes")
-	colTOTPDeviceLastUsedAt       = types.NewTimeColumn[*modelmfa.TOTPDevice]("last_used_at")
+	colTOTPDeviceBackupCodeHashes = gst.NewColumn[*modelmfa.TOTPDevice, datatypes.JSONSlice[string]]("backup_code_hashes")
+	colTOTPDeviceLastUsedAt       = gst.NewTimeColumn[*modelmfa.TOTPDevice]("last_used_at")
 )
 
 var errTOTPBackupCodeInvalid = errors.New("invalid backup code")
@@ -99,7 +99,7 @@ func matchTOTPBackupCode(secret, normalizedCode, storedHash string) bool {
 // in the same transaction that validates the code. It stays unexported because
 // callers must spend a verification attempt first; a public entry would let
 // recovery codes be guessed outside that budget.
-func consumeTOTPBackupCode(ctx *types.ServiceContext, userID, code string) error {
+func consumeTOTPBackupCode(ctx *gst.ServiceContext, userID, code string) error {
 	if ctx == nil || strings.TrimSpace(userID) == "" {
 		return service.NewError(http.StatusUnauthorized, "authentication required")
 	}

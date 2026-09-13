@@ -6,6 +6,7 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/config"
 
+	"github.com/hydroan/gst/consts"
 	modeliamaccount "github.com/hydroan/gst/internal/model/iam/account"
 	modeliamprofile "github.com/hydroan/gst/internal/model/iam/profile"
 	modeliamuser "github.com/hydroan/gst/internal/model/iam/user"
@@ -17,7 +18,6 @@ import (
 	"github.com/hydroan/gst/model"
 	"github.com/hydroan/gst/module"
 	"github.com/hydroan/gst/router"
-	"github.com/hydroan/gst/types/consts"
 )
 
 // Register registers IAM models, API routes, middleware, and scheduled jobs.

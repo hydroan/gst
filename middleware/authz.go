@@ -9,10 +9,10 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/hydroan/gst/authz/rbac"
 	"github.com/hydroan/gst/config"
+	"github.com/hydroan/gst/consts"
 	"github.com/hydroan/gst/logger"
 	"github.com/hydroan/gst/response"
 	"github.com/hydroan/gst/tenant"
-	"github.com/hydroan/gst/types/consts"
 	"github.com/hydroan/gst/util"
 	"go.uber.org/zap"
 )

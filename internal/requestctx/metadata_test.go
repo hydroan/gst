@@ -9,7 +9,7 @@ import (
 	"testing"
 
 	"github.com/gin-gonic/gin"
-	"github.com/hydroan/gst/types/consts"
+	"github.com/hydroan/gst/consts"
 	"github.com/stretchr/testify/require"
 )
 

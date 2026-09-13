@@ -4,9 +4,9 @@ import (
 	"net/http"
 
 	"github.com/cockroachdb/errors"
+	"github.com/hydroan/gst"
 	modeliamsession "github.com/hydroan/gst/internal/model/iam/session"
 	"github.com/hydroan/gst/service"
-	"github.com/hydroan/gst/types"
 )
 
 // AdminSessionDeleteService handles invalidation of a specified session for privileged administrators.
@@ -15,7 +15,7 @@ type AdminSessionDeleteService struct {
 }
 
 // Delete invalidates a specified session for a privileged administrator.
-func (a *AdminSessionDeleteService) Delete(ctx *types.ServiceContext, req *modeliamsession.AdminSessionDeleteReq) (rsp *modeliamsession.AdminSessionDeleteRsp, err error) {
+func (a *AdminSessionDeleteService) Delete(ctx *gst.ServiceContext, req *modeliamsession.AdminSessionDeleteReq) (rsp *modeliamsession.AdminSessionDeleteRsp, err error) {
 	currentSessionID, _, err := CurrentSession(ctx)
 	if err != nil {
 		return nil, err
@@ -31,7 +31,7 @@ func (a *AdminSessionDeleteService) Delete(ctx *types.ServiceContext, req *model
 
 	targetSession, err := Store.LoadSession(ctx, targetSessionID)
 	if err != nil {
-		if errors.Is(err, types.ErrEntryNotFound) {
+		if errors.Is(err, gst.ErrEntryNotFound) {
 			return nil, service.NewError(http.StatusNotFound, "session not found")
 		}
 		return nil, service.NewErrorWithCause(http.StatusInternalServerError, "failed to load target session", err)
@@ -42,7 +42,7 @@ func (a *AdminSessionDeleteService) Delete(ctx *types.ServiceContext, req *model
 	}
 
 	if _, err = Store.DeleteSession(ctx, targetSessionID); err != nil {
-		if errors.Is(err, types.ErrEntryNotFound) {
+		if errors.Is(err, gst.ErrEntryNotFound) {
 			return nil, service.NewError(http.StatusNotFound, "session not found")
 		}
 		return nil, service.NewErrorWithCause(http.StatusInternalServerError, "failed to delete session", err)

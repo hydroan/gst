@@ -4,8 +4,8 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/hydroan/gst/consts"
 	"github.com/hydroan/gst/dsl"
-	"github.com/hydroan/gst/types/consts"
 )
 
 func TestServiceOutputRel(t *testing.T) {

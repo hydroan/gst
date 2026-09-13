@@ -1,9 +1,9 @@
 package serviceiamsession
 
 import (
+	"github.com/hydroan/gst"
 	modeliamsession "github.com/hydroan/gst/internal/model/iam/session"
 	"github.com/hydroan/gst/service"
-	"github.com/hydroan/gst/types"
 )
 
 // SessionDeleteAllService handles invalidation of all sessions for the current authenticated user.
@@ -12,7 +12,7 @@ type SessionDeleteAllService struct {
 }
 
 // Delete invalidates all sessions for the current authenticated user.
-func (s *SessionDeleteAllService) Delete(ctx *types.ServiceContext, req *modeliamsession.SessionDeleteAllReq) (rsp *modeliamsession.SessionDeleteAllRsp, err error) {
+func (s *SessionDeleteAllService) Delete(ctx *gst.ServiceContext, req *modeliamsession.SessionDeleteAllReq) (rsp *modeliamsession.SessionDeleteAllRsp, err error) {
 	_, currentSession, err := CurrentSession(ctx)
 	if err != nil {
 		return nil, err

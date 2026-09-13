@@ -7,8 +7,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/hydroan/gst/consts"
 	"github.com/hydroan/gst/dsl"
-	"github.com/hydroan/gst/types/consts"
 )
 
 func TestApplyServiceMethod4PointerConversion(t *testing.T) {
@@ -25,10 +25,10 @@ func TestApplyServiceMethod4PointerConversion(t *testing.T) {
 
 import (
 	"helloworld/model"
-	"github.com/hydroan/gst/types"
+	"github.com/hydroan/gst"
 )
 
-func (u *Creator) Create(ctx *types.ServiceContext, req *model.User) (rsp *model.User, err error) {
+func (u *Creator) Create(ctx *gst.ServiceContext, req *model.User) (rsp *model.User, err error) {
 	return rsp, nil
 }`,
 			action: &dsl.Action{
@@ -45,10 +45,10 @@ func (u *Creator) Create(ctx *types.ServiceContext, req *model.User) (rsp *model
 
 import (
 	"helloworld/model"
-	"github.com/hydroan/gst/types"
+	"github.com/hydroan/gst"
 )
 
-func (u *Creator) Create(ctx *types.ServiceContext, req model.User) (rsp model.User, err error) {
+func (u *Creator) Create(ctx *gst.ServiceContext, req model.User) (rsp model.User, err error) {
 	return rsp, nil
 }`,
 			action: &dsl.Action{
@@ -65,10 +65,10 @@ func (u *Creator) Create(ctx *types.ServiceContext, req model.User) (rsp model.U
 
 import (
 	"helloworld/model"
-	"github.com/hydroan/gst/types"
+	"github.com/hydroan/gst"
 )
 
-func (u *Creator) Create(ctx *types.ServiceContext, req *model.User) (rsp *model.User, err error) {
+func (u *Creator) Create(ctx *gst.ServiceContext, req *model.User) (rsp *model.User, err error) {
 	return rsp, nil
 }`,
 			action: &dsl.Action{
@@ -85,10 +85,10 @@ func (u *Creator) Create(ctx *types.ServiceContext, req *model.User) (rsp *model
 
 import (
 	"helloworld/model"
-	"github.com/hydroan/gst/types"
+	"github.com/hydroan/gst"
 )
 
-func (u *Creator) Create(ctx *types.ServiceContext, req model.User) (rsp model.User, err error) {
+func (u *Creator) Create(ctx *gst.ServiceContext, req model.User) (rsp model.User, err error) {
 	return rsp, nil
 }`,
 			action: &dsl.Action{
@@ -145,10 +145,10 @@ func TestApplyServiceMethod4EmptyPayload(t *testing.T) {
 
 import (
 	"helloworld/model/group"
-	"github.com/hydroan/gst/types"
+	"github.com/hydroan/gst"
 )
 
-func (g *Lister) List(ctx *types.ServiceContext, req *group.GroupListReq) (rsp *group.GroupListRsp, err error) {
+func (g *Lister) List(ctx *gst.ServiceContext, req *group.GroupListReq) (rsp *group.GroupListRsp, err error) {
 	return rsp, nil
 }`,
 			action: &dsl.Action{
@@ -167,11 +167,11 @@ func (g *Lister) List(ctx *types.ServiceContext, req *group.GroupListReq) (rsp *
 import (
 	"helloworld/model/group"
 
+	"github.com/hydroan/gst"
 	"github.com/hydroan/gst/model"
-	"github.com/hydroan/gst/types"
 )
 
-func (g *Lister) List(ctx *types.ServiceContext, req *model.Empty) (rsp *group.GroupListRsp, err error) {
+func (g *Lister) List(ctx *gst.ServiceContext, req *model.Empty) (rsp *group.GroupListRsp, err error) {
 	return rsp, nil
 }`,
 			action: &dsl.Action{
@@ -189,10 +189,10 @@ func (g *Lister) List(ctx *types.ServiceContext, req *model.Empty) (rsp *group.G
 
 import (
 	"helloworld/model"
-	"github.com/hydroan/gst/types"
+	"github.com/hydroan/gst"
 )
 
-func (u *Getter) Get(ctx *types.ServiceContext, req *model.UserGetReq) (rsp *model.UserGetRsp, err error) {
+func (u *Getter) Get(ctx *gst.ServiceContext, req *model.UserGetReq) (rsp *model.UserGetRsp, err error) {
 	return rsp, nil
 }`,
 			action: &dsl.Action{
@@ -210,10 +210,10 @@ func (u *Getter) Get(ctx *types.ServiceContext, req *model.UserGetReq) (rsp *mod
 
 import (
 	"helloworld/model/group"
-	"github.com/hydroan/gst/types"
+	"github.com/hydroan/gst"
 )
 
-func (g *Creator) Create(ctx *types.ServiceContext, req *group.GroupCreateReq) (rsp *group.GroupCreateRsp, err error) {
+func (g *Creator) Create(ctx *gst.ServiceContext, req *group.GroupCreateReq) (rsp *group.GroupCreateRsp, err error) {
 	return rsp, nil
 }`,
 			action: &dsl.Action{

@@ -9,7 +9,7 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/hydroan/gst/types/consts"
+	"github.com/hydroan/gst/consts"
 )
 
 // actionMethodPhases maps DSL action method names to their phases. It serves

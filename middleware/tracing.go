@@ -8,10 +8,10 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/hydroan/gst/consts"
 	"github.com/hydroan/gst/internal/execctx"
 	"github.com/hydroan/gst/internal/requestctx"
 	gstotel "github.com/hydroan/gst/otel"
-	"github.com/hydroan/gst/types/consts"
 	"github.com/hydroan/gst/util"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"

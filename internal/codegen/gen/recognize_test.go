@@ -4,7 +4,7 @@ import (
 	"go/ast"
 	"testing"
 
-	"github.com/hydroan/gst/types/consts"
+	"github.com/hydroan/gst/consts"
 )
 
 func TestIsServiceMethod1(t *testing.T) {

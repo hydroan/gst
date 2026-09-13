@@ -4,7 +4,7 @@ import (
 	"runtime"
 	"time"
 
-	"github.com/hydroan/gst/types/consts"
+	"github.com/hydroan/gst/consts"
 
 	"github.com/spf13/viper"
 )

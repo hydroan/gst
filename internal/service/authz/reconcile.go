@@ -6,10 +6,10 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/hydroan/gst/consts"
 	"github.com/hydroan/gst/database"
 	modelauthz "github.com/hydroan/gst/internal/model/authz"
 	"github.com/hydroan/gst/tenant"
-	"github.com/hydroan/gst/types/consts"
 )
 
 // PolicyDrift is one stored authorization rule that the records it should have

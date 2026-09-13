@@ -3,9 +3,9 @@ package serviceiamsession
 import (
 	"net/http"
 
+	"github.com/hydroan/gst"
 	modeliamsession "github.com/hydroan/gst/internal/model/iam/session"
 	"github.com/hydroan/gst/service"
-	"github.com/hydroan/gst/types"
 )
 
 // CurrentDeleteService handles invalidation of the current authenticated session.
@@ -14,7 +14,7 @@ type CurrentDeleteService struct {
 }
 
 // Delete invalidates the current authenticated session and clears the session cookie.
-func (c *CurrentDeleteService) Delete(ctx *types.ServiceContext, req *modeliamsession.CurrentDeleteReq) (rsp *modeliamsession.CurrentDeleteRsp, err error) {
+func (c *CurrentDeleteService) Delete(ctx *gst.ServiceContext, req *modeliamsession.CurrentDeleteReq) (rsp *modeliamsession.CurrentDeleteRsp, err error) {
 	sessionID, err := CookieSessionID(ctx)
 	if err != nil {
 		return nil, err

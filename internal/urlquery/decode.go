@@ -10,10 +10,10 @@ import (
 	"sync"
 
 	"github.com/cockroachdb/errors"
+	"github.com/hydroan/gst/consts"
 	"github.com/hydroan/gst/internal/modelregistry"
 	"github.com/hydroan/gst/internal/modelschema"
 	"github.com/hydroan/gst/internal/types"
-	"github.com/hydroan/gst/types/consts"
 )
 
 // Decode fills the model's own query fields from the URL query, producing the

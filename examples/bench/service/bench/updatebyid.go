@@ -5,9 +5,9 @@ import (
 
 	"bench/model/bench"
 
+	"github.com/hydroan/gst"
 	"github.com/hydroan/gst/database"
 	"github.com/hydroan/gst/service"
-	"github.com/hydroan/gst/types"
 )
 
 type Updatebyid struct {
@@ -19,7 +19,7 @@ type Updatebyid struct {
 // real UPDATE against a primary key that does not exist; UpdateByID returns
 // nil for a missing record, so the benchmark needs no seeding and no cleanup,
 // and table contents do not affect the numbers.
-func (u *Updatebyid) Patch(ctx *types.ServiceContext, req *bench.UpdateByIDReq) (rsp *bench.UpdateByIDRsp, err error) {
+func (u *Updatebyid) Patch(ctx *gst.ServiceContext, req *bench.UpdateByIDReq) (rsp *bench.UpdateByIDRsp, err error) {
 	isDryRun := isDryRun(ctx)
 
 	if isDryRun {

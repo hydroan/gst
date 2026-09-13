@@ -3,8 +3,8 @@ package column
 import (
 	"maps"
 
+	"github.com/hydroan/gst/consts"
 	"github.com/hydroan/gst/module"
-	"github.com/hydroan/gst/types/consts"
 )
 
 var tableColumns = make(map[string][]string)

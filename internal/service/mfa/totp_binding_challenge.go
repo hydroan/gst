@@ -10,9 +10,9 @@ import (
 	"time"
 
 	"github.com/cockroachdb/errors"
+	"github.com/hydroan/gst"
 	"github.com/hydroan/gst/redis"
 	"github.com/hydroan/gst/service"
-	"github.com/hydroan/gst/types"
 )
 
 const (
@@ -39,7 +39,7 @@ var (
 	errTOTPBindChallengeExpired  = errors.New("totp bind challenge expired")
 	errTOTPBindChallengeInvalid  = errors.New("totp bind challenge invalid")
 
-	totpBindChallengeCache = func() types.Cache[totpBindChallenge] {
+	totpBindChallengeCache = func() gst.Cache[totpBindChallenge] {
 		return redis.Cache[totpBindChallenge]()
 	}
 	totpBindChallengeNow          = func() time.Time { return time.Now().UTC() }
@@ -47,7 +47,7 @@ var (
 )
 
 // currentTOTPBindSessionID returns the session that owns the current binding flow.
-func currentTOTPBindSessionID(ctx *types.ServiceContext) (string, error) {
+func currentTOTPBindSessionID(ctx *gst.ServiceContext) (string, error) {
 	if ctx == nil {
 		return "", service.NewError(http.StatusUnauthorized, "authentication required")
 	}
@@ -111,7 +111,7 @@ func loadTOTPBindChallenge(ctx context.Context, challengeID string) (totpBindCha
 
 	challenge, err := totpBindChallengeCache().Get(ctx, totpBindChallengeKey(challengeID))
 	if err != nil {
-		if errors.Is(err, types.ErrEntryNotFound) {
+		if errors.Is(err, gst.ErrEntryNotFound) {
 			return totpBindChallenge{}, errTOTPBindChallengeNotFound
 		}
 		return totpBindChallenge{}, errors.Wrap(err, "load TOTP binding challenge")

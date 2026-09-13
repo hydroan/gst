@@ -34,11 +34,11 @@ import (
 	"sync"
 	"sync/atomic"
 
+	"github.com/hydroan/gst/consts"
 	"github.com/hydroan/gst/internal/serviceregistry"
 	"github.com/hydroan/gst/internal/types"
 	"github.com/hydroan/gst/model"
 	"github.com/hydroan/gst/router"
-	"github.com/hydroan/gst/types/consts"
 )
 
 var (

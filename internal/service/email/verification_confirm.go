@@ -5,10 +5,10 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/errors"
+	"github.com/hydroan/gst"
 	modelemail "github.com/hydroan/gst/internal/model/email"
 	"github.com/hydroan/gst/model"
 	"github.com/hydroan/gst/service"
-	"github.com/hydroan/gst/types"
 )
 
 // VerificationConfirmService handles the token confirmation step that finalizes
@@ -19,7 +19,7 @@ type VerificationConfirmService struct {
 
 // Create consumes the one-time verification token and marks the corresponding
 // email address as verified when the current account state still matches.
-func (s *VerificationConfirmService) Create(ctx *types.ServiceContext, req *modelemail.VerificationConfirmReq) (rsp *modelemail.VerificationConfirmRsp, err error) {
+func (s *VerificationConfirmService) Create(ctx *gst.ServiceContext, req *modelemail.VerificationConfirmReq) (rsp *modelemail.VerificationConfirmRsp, err error) {
 	log := s.WithContext(ctx, ctx.Phase())
 
 	flow, err := consumeEmailFlow(emailServiceContext(ctx), iamEmailFlowKindVerification, req.Token)

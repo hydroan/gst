@@ -9,40 +9,40 @@ import (
 	"demo/model/config/file"
 	"demo/model/record"
 
+	"github.com/hydroan/gst/consts"
 	"github.com/hydroan/gst/router"
-	"github.com/hydroan/gst/types/consts"
 
+	"github.com/hydroan/gst"
 	gstmodel "github.com/hydroan/gst/model"
-	"github.com/hydroan/gst/types"
 )
 
 func Init() error {
-	router.Register[*auth.Login, *gstmodel.Empty, *auth.LoginRsp](router.Pub(), "auth/login", &types.ControllerConfig[*auth.Login]{}, consts.List)
-	router.Register[*common.Search, *common.SearchDedupReq, *common.SearchDedupRsp](router.Auth(), "search-sources/dedup", &types.ControllerConfig[*common.Search]{}, consts.Create)
-	router.Register[*file.Encrypt, *file.EncryptReq, *file.EncryptRsp](router.Auth(), "config/files/encrypt", &types.ControllerConfig[*file.Encrypt]{}, consts.Create)
-	router.Register[*config.File, *config.File, *config.File](router.Auth(), "config/files", &types.ControllerConfig[*config.File]{}, consts.Create)
-	router.Register[*config.File, *config.File, *config.File](router.Auth(), "config/files/:file", &types.ControllerConfig[*config.File]{ParamName: "file"}, consts.Update)
-	router.Register[*config.File, *config.File, *config.File](router.Auth(), "config/files/:file", &types.ControllerConfig[*config.File]{ParamName: "file"}, consts.Patch)
-	router.Register[*config.File, *config.File, *config.File](router.Auth(), "config/files", &types.ControllerConfig[*config.File]{}, consts.List)
-	router.Register[*config.File, *config.File, *config.File](router.Auth(), "config/files/:file", &types.ControllerConfig[*config.File]{ParamName: "file"}, consts.Get)
-	router.Register[*config.File, *config.File, *config.File](router.Auth(), "config/namespaces/:namespace/files", &types.ControllerConfig[*config.File]{}, consts.List)
-	router.Register[*model.Notice, *model.Notice, *model.Notice](router.Pub(), "notices", &types.ControllerConfig[*model.Notice]{}, consts.SSE)
-	router.Register[*model.Ping, *gstmodel.Empty, *model.PingRsp](router.Pub(), "pings", &types.ControllerConfig[*model.Ping]{}, consts.List)
-	router.Register[*record.Item, *record.Item, *record.Item](router.Auth(), "records/:rec/items", &types.ControllerConfig[*record.Item]{}, consts.Create)
-	router.Register[*record.Item, *record.Item, *record.Item](router.Auth(), "records/:rec/items/:id", &types.ControllerConfig[*record.Item]{ParamName: "id"}, consts.Patch)
-	router.Register[*record.Item, *record.Item, *record.Item](router.Auth(), "records/:rec/items", &types.ControllerConfig[*record.Item]{}, consts.List)
-	router.Register[*record.Item, *record.Item, *record.Item](router.Auth(), "records/:rec/items/:id", &types.ControllerConfig[*record.Item]{ParamName: "id"}, consts.Get)
-	router.Register[*record.Item, *record.Item, *record.Item](router.Auth(), "items/batch", &types.ControllerConfig[*record.Item]{}, consts.DeleteMany)
-	router.Register[*model.Record, *model.Record, *model.Record](router.Auth(), "records", &types.ControllerConfig[*model.Record]{}, consts.Create)
-	router.Register[*model.Record, *model.Record, *model.Record](router.Auth(), "records/:rec", &types.ControllerConfig[*model.Record]{ParamName: "rec"}, consts.Delete)
-	router.Register[*model.Record, *model.Record, *model.Record](router.Auth(), "records/:rec", &types.ControllerConfig[*model.Record]{ParamName: "rec"}, consts.Patch)
-	router.Register[*model.Record, *model.Record, *model.Record](router.Auth(), "records", &types.ControllerConfig[*model.Record]{}, consts.List)
-	router.Register[*model.Record, *model.Record, *model.Record](router.Auth(), "records/:rec", &types.ControllerConfig[*model.Record]{ParamName: "rec"}, consts.Get)
-	router.Register[*model.TraceProbe, *model.TraceProbe, *model.TraceProbe](router.Auth(), "trace-probes", &types.ControllerConfig[*model.TraceProbe]{}, consts.Create)
-	router.Register[*model.TraceProbe, *model.TraceProbe, *model.TraceProbe](router.Auth(), "trace-probes/:trace_probe", &types.ControllerConfig[*model.TraceProbe]{ParamName: "trace_probe"}, consts.Delete)
-	router.Register[*model.TraceProbe, *model.TraceProbe, *model.TraceProbe](router.Auth(), "trace-probes/:trace_probe", &types.ControllerConfig[*model.TraceProbe]{ParamName: "trace_probe"}, consts.Update)
-	router.Register[*model.TraceProbe, *model.TraceProbe, *model.TraceProbe](router.Auth(), "trace-probes/:trace_probe", &types.ControllerConfig[*model.TraceProbe]{ParamName: "trace_probe"}, consts.Patch)
-	router.Register[*model.TraceProbe, *model.TraceProbe, *model.TraceProbe](router.Auth(), "trace-probes", &types.ControllerConfig[*model.TraceProbe]{}, consts.List)
-	router.Register[*model.TraceProbe, *model.TraceProbe, *model.TraceProbe](router.Auth(), "trace-probes/:trace_probe", &types.ControllerConfig[*model.TraceProbe]{ParamName: "trace_probe"}, consts.Get)
+	router.Register[*auth.Login, *gstmodel.Empty, *auth.LoginRsp](router.Pub(), "auth/login", &gst.ControllerConfig[*auth.Login]{}, consts.List)
+	router.Register[*common.Search, *common.SearchDedupReq, *common.SearchDedupRsp](router.Auth(), "search-sources/dedup", &gst.ControllerConfig[*common.Search]{}, consts.Create)
+	router.Register[*file.Encrypt, *file.EncryptReq, *file.EncryptRsp](router.Auth(), "config/files/encrypt", &gst.ControllerConfig[*file.Encrypt]{}, consts.Create)
+	router.Register[*config.File, *config.File, *config.File](router.Auth(), "config/files", &gst.ControllerConfig[*config.File]{}, consts.Create)
+	router.Register[*config.File, *config.File, *config.File](router.Auth(), "config/files/:file", &gst.ControllerConfig[*config.File]{ParamName: "file"}, consts.Update)
+	router.Register[*config.File, *config.File, *config.File](router.Auth(), "config/files/:file", &gst.ControllerConfig[*config.File]{ParamName: "file"}, consts.Patch)
+	router.Register[*config.File, *config.File, *config.File](router.Auth(), "config/files", &gst.ControllerConfig[*config.File]{}, consts.List)
+	router.Register[*config.File, *config.File, *config.File](router.Auth(), "config/files/:file", &gst.ControllerConfig[*config.File]{ParamName: "file"}, consts.Get)
+	router.Register[*config.File, *config.File, *config.File](router.Auth(), "config/namespaces/:namespace/files", &gst.ControllerConfig[*config.File]{}, consts.List)
+	router.Register[*model.Notice, *model.Notice, *model.Notice](router.Pub(), "notices", &gst.ControllerConfig[*model.Notice]{}, consts.SSE)
+	router.Register[*model.Ping, *gstmodel.Empty, *model.PingRsp](router.Pub(), "pings", &gst.ControllerConfig[*model.Ping]{}, consts.List)
+	router.Register[*record.Item, *record.Item, *record.Item](router.Auth(), "records/:rec/items", &gst.ControllerConfig[*record.Item]{}, consts.Create)
+	router.Register[*record.Item, *record.Item, *record.Item](router.Auth(), "records/:rec/items/:id", &gst.ControllerConfig[*record.Item]{ParamName: "id"}, consts.Patch)
+	router.Register[*record.Item, *record.Item, *record.Item](router.Auth(), "records/:rec/items", &gst.ControllerConfig[*record.Item]{}, consts.List)
+	router.Register[*record.Item, *record.Item, *record.Item](router.Auth(), "records/:rec/items/:id", &gst.ControllerConfig[*record.Item]{ParamName: "id"}, consts.Get)
+	router.Register[*record.Item, *record.Item, *record.Item](router.Auth(), "items/batch", &gst.ControllerConfig[*record.Item]{}, consts.DeleteMany)
+	router.Register[*model.Record, *model.Record, *model.Record](router.Auth(), "records", &gst.ControllerConfig[*model.Record]{}, consts.Create)
+	router.Register[*model.Record, *model.Record, *model.Record](router.Auth(), "records/:rec", &gst.ControllerConfig[*model.Record]{ParamName: "rec"}, consts.Delete)
+	router.Register[*model.Record, *model.Record, *model.Record](router.Auth(), "records/:rec", &gst.ControllerConfig[*model.Record]{ParamName: "rec"}, consts.Patch)
+	router.Register[*model.Record, *model.Record, *model.Record](router.Auth(), "records", &gst.ControllerConfig[*model.Record]{}, consts.List)
+	router.Register[*model.Record, *model.Record, *model.Record](router.Auth(), "records/:rec", &gst.ControllerConfig[*model.Record]{ParamName: "rec"}, consts.Get)
+	router.Register[*model.TraceProbe, *model.TraceProbe, *model.TraceProbe](router.Auth(), "trace-probes", &gst.ControllerConfig[*model.TraceProbe]{}, consts.Create)
+	router.Register[*model.TraceProbe, *model.TraceProbe, *model.TraceProbe](router.Auth(), "trace-probes/:trace_probe", &gst.ControllerConfig[*model.TraceProbe]{ParamName: "trace_probe"}, consts.Delete)
+	router.Register[*model.TraceProbe, *model.TraceProbe, *model.TraceProbe](router.Auth(), "trace-probes/:trace_probe", &gst.ControllerConfig[*model.TraceProbe]{ParamName: "trace_probe"}, consts.Update)
+	router.Register[*model.TraceProbe, *model.TraceProbe, *model.TraceProbe](router.Auth(), "trace-probes/:trace_probe", &gst.ControllerConfig[*model.TraceProbe]{ParamName: "trace_probe"}, consts.Patch)
+	router.Register[*model.TraceProbe, *model.TraceProbe, *model.TraceProbe](router.Auth(), "trace-probes", &gst.ControllerConfig[*model.TraceProbe]{}, consts.List)
+	router.Register[*model.TraceProbe, *model.TraceProbe, *model.TraceProbe](router.Auth(), "trace-probes/:trace_probe", &gst.ControllerConfig[*model.TraceProbe]{ParamName: "trace_probe"}, consts.Get)
 	return nil
 }

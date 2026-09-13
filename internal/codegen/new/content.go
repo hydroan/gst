@@ -2,7 +2,7 @@
 package new
 
 import (
-	"github.com/hydroan/gst/types/consts"
+	"github.com/hydroan/gst/consts"
 )
 
 var modelContent = consts.CodeGeneratedComment() + `

@@ -14,9 +14,9 @@ func TestMergeModuleServiceSourceCopiesWholeServiceFile(t *testing.T) {
 import (
 	"fmt"
 
+	"github.com/hydroan/gst"
 	modelcopytest "github.com/hydroan/gst/internal/model/copytest"
 	"github.com/hydroan/gst/service"
-	"github.com/hydroan/gst/types"
 )
 
 const helperValue = "copied"
@@ -29,7 +29,7 @@ type ActionService struct {
 }
 
 // Create copies the source business logic.
-func (s *ActionService) Create(ctx *types.ServiceContext, req *modelcopytest.Action) (rsp *modelcopytest.ActionRsp, err error) {
+func (s *ActionService) Create(ctx *gst.ServiceContext, req *modelcopytest.Action) (rsp *modelcopytest.ActionRsp, err error) {
 	// Keep source method body comments.
 	fmt.Println(helperValue)
 	fmt.Println(s.describe("bind"))
@@ -37,7 +37,7 @@ func (s *ActionService) Create(ctx *types.ServiceContext, req *modelcopytest.Act
 }
 
 // CreateAfter copies source hook logic.
-func (s *ActionService) CreateAfter(ctx *types.ServiceContext, req *modelcopytest.Action) error {
+func (s *ActionService) CreateAfter(ctx *gst.ServiceContext, req *modelcopytest.Action) error {
 	// Keep source hook body comments.
 	fmt.Println(s.describe("after"))
 	return nil
@@ -59,21 +59,21 @@ func packageHelper() string {
 import (
 	"tmpapp/model/copytest"
 
+	"github.com/hydroan/gst"
 	"github.com/hydroan/gst/service"
-	"github.com/hydroan/gst/types"
 )
 
 type Creator struct {
 	service.Base[*copytest.CopyTest, *copytest.CopyTest, *copytest.ActionRsp]
 }
 
-func (c *Creator) Create(ctx *types.ServiceContext, req *copytest.CopyTest) (rsp *copytest.ActionRsp, err error) {
+func (c *Creator) Create(ctx *gst.ServiceContext, req *copytest.CopyTest) (rsp *copytest.ActionRsp, err error) {
 	log := c.WithContext(ctx, ctx.Phase())
 	log.Info("copytest: create")
 	return rsp, nil
 }
 
-func (c *Creator) CreateAfter(ctx *types.ServiceContext, req *copytest.CopyTest) error {
+func (c *Creator) CreateAfter(ctx *gst.ServiceContext, req *copytest.CopyTest) error {
 	log := c.WithContext(ctx, ctx.Phase())
 	log.Info("copytest: create after")
 	return nil
@@ -98,7 +98,7 @@ func (c *Creator) CreateAfter(ctx *types.ServiceContext, req *copytest.CopyTest)
 	}
 	code := string(got)
 
-	if !strings.Contains(code, "func (c *Creator) Create(ctx *types.ServiceContext, req *copytest.CopyTest) (rsp *copytest.ActionRsp, err error)") {
+	if !strings.Contains(code, "func (c *Creator) Create(ctx *gst.ServiceContext, req *copytest.CopyTest) (rsp *copytest.ActionRsp, err error)") {
 		t.Fatalf("target signature was not preserved:\n%s", code)
 	}
 	if !strings.Contains(code, "// Creator starts the source action flow.") {
@@ -153,10 +153,10 @@ func TestMergeModuleServiceSourceDropsImportOnlyUsedByReplacedStruct(t *testing.
 	source := []byte(`package servicecopytest
 
 import (
+	"github.com/hydroan/gst"
 	modelcopytest "github.com/hydroan/gst/internal/model/copytest"
 	"github.com/hydroan/gst/model"
 	"github.com/hydroan/gst/service"
-	"github.com/hydroan/gst/types"
 )
 
 // ActionService runs the source action flow.
@@ -165,7 +165,7 @@ type ActionService struct {
 }
 
 // Create copies the source business logic.
-func (s *ActionService) Create(ctx *types.ServiceContext, req *modelcopytest.ActionReq) (rsp *modelcopytest.ActionRsp, err error) {
+func (s *ActionService) Create(ctx *gst.ServiceContext, req *modelcopytest.ActionReq) (rsp *modelcopytest.ActionRsp, err error) {
 	return &modelcopytest.ActionRsp{}, nil
 }
 `)
@@ -174,15 +174,15 @@ func (s *ActionService) Create(ctx *types.ServiceContext, req *modelcopytest.Act
 import (
 	"tmpapp/model/copytest"
 
+	"github.com/hydroan/gst"
 	"github.com/hydroan/gst/service"
-	"github.com/hydroan/gst/types"
 )
 
 type Creator struct {
 	service.Base[*copytest.Action, *copytest.ActionReq, *copytest.ActionRsp]
 }
 
-func (c *Creator) Create(ctx *types.ServiceContext, req *copytest.ActionReq) (rsp *copytest.ActionRsp, err error) {
+func (c *Creator) Create(ctx *gst.ServiceContext, req *copytest.ActionReq) (rsp *copytest.ActionRsp, err error) {
 	return rsp, nil
 }
 `)
@@ -217,9 +217,9 @@ func TestMergeModuleServiceSourceAllowsHookOnlySource(t *testing.T) {
 	source := []byte(`package servicecopytest
 
 import (
+	"github.com/hydroan/gst"
 	modelcopytest "github.com/hydroan/gst/internal/model/copytest"
 	"github.com/hydroan/gst/service"
-	"github.com/hydroan/gst/types"
 )
 
 // ListingService filters items after the built-in list flow.
@@ -228,13 +228,13 @@ type ListingService struct {
 }
 
 // ListAfter copies hook-only service logic.
-func (l *ListingService) ListAfter(ctx *types.ServiceContext, data *[]*modelcopytest.CopyTest) error {
+func (l *ListingService) ListAfter(ctx *gst.ServiceContext, data *[]*modelcopytest.CopyTest) error {
 	// Keep hook-only body comments.
 	return l.filterByOwner(ctx, data)
 }
 
 // filterByOwner copies hook helper methods.
-func (l *ListingService) filterByOwner(ctx *types.ServiceContext, data *[]*modelcopytest.CopyTest) error {
+func (l *ListingService) filterByOwner(ctx *gst.ServiceContext, data *[]*modelcopytest.CopyTest) error {
 	return nil
 }
 `)
@@ -243,15 +243,15 @@ func (l *ListingService) filterByOwner(ctx *types.ServiceContext, data *[]*model
 import (
 	"tmpapp/model/copytest"
 
+	"github.com/hydroan/gst"
 	"github.com/hydroan/gst/service"
-	"github.com/hydroan/gst/types"
 )
 
 type Lister struct {
 	service.Base[*copytest.CopyTest, *copytest.CopyTest, *copytest.CopyTest]
 }
 
-func (l *Lister) List(ctx *types.ServiceContext, req *copytest.CopyTest) (rsp *copytest.CopyTest, err error) {
+func (l *Lister) List(ctx *gst.ServiceContext, req *copytest.CopyTest) (rsp *copytest.CopyTest, err error) {
 	log := l.WithContext(ctx, ctx.Phase())
 	log.Info("copytest: list")
 	return rsp, nil
@@ -276,7 +276,7 @@ func (l *Lister) List(ctx *types.ServiceContext, req *copytest.CopyTest) (rsp *c
 	}
 	code := string(got)
 
-	if !strings.Contains(code, "func (l *Lister) List(ctx *types.ServiceContext, req *copytest.CopyTest) (rsp *copytest.CopyTest, err error)") {
+	if !strings.Contains(code, "func (l *Lister) List(ctx *gst.ServiceContext, req *copytest.CopyTest) (rsp *copytest.CopyTest, err error)") {
 		t.Fatalf("target list method was not preserved:\n%s", code)
 	}
 	if !strings.Contains(code, "// ListAfter copies hook-only service logic.\nfunc (l *Lister) ListAfter") {
@@ -297,16 +297,16 @@ func TestMergeModuleServiceSourceRetargetsMethodBodyParameterNames(t *testing.T)
 	source := []byte(`package servicecopytest
 
 import (
+	"github.com/hydroan/gst"
 	modelcopytest "github.com/hydroan/gst/internal/model/copytest"
 	"github.com/hydroan/gst/service"
-	"github.com/hydroan/gst/types"
 )
 
 type BindingService struct {
 	service.Base[*modelcopytest.Binding, *modelcopytest.Binding, *modelcopytest.Binding]
 }
 
-func (s *BindingService) ListAfter(ctx *types.ServiceContext, data *[]*modelcopytest.Binding) error {
+func (s *BindingService) ListAfter(ctx *gst.ServiceContext, data *[]*modelcopytest.Binding) error {
 	for _, binding := range *data {
 		_ = binding
 	}
@@ -318,15 +318,15 @@ func (s *BindingService) ListAfter(ctx *types.ServiceContext, data *[]*modelcopy
 import (
 	"tmpapp/model/copytest"
 
+	"github.com/hydroan/gst"
 	"github.com/hydroan/gst/service"
-	"github.com/hydroan/gst/types"
 )
 
 type Binding struct {
 	service.Base[*copytest.Binding, *copytest.Binding, *copytest.Binding]
 }
 
-func (b *Binding) ListAfter(ctx *types.ServiceContext, bindings *[]*copytest.Binding) error {
+func (b *Binding) ListAfter(ctx *gst.ServiceContext, bindings *[]*copytest.Binding) error {
 	return nil
 }
 `)
@@ -348,7 +348,7 @@ func (b *Binding) ListAfter(ctx *types.ServiceContext, bindings *[]*copytest.Bin
 		t.Fatalf("mergeModuleServiceSource() error = %v", err)
 	}
 	code := string(got)
-	if !strings.Contains(code, "func (b *Binding) ListAfter(ctx *types.ServiceContext, bindings *[]*copytest.Binding) error") {
+	if !strings.Contains(code, "func (b *Binding) ListAfter(ctx *gst.ServiceContext, bindings *[]*copytest.Binding) error") {
 		t.Fatalf("target method signature was not preserved:\n%s", code)
 	}
 	if !strings.Contains(code, "for _, binding := range *bindings") {
@@ -363,9 +363,9 @@ func TestMergeModuleServiceSourceRejectsDuplicateMethodNames(t *testing.T) {
 	source := []byte(`package servicecopytest
 
 import (
+	"github.com/hydroan/gst"
 	modelcopytest "github.com/hydroan/gst/internal/model/copytest"
 	"github.com/hydroan/gst/service"
-	"github.com/hydroan/gst/types"
 )
 
 type FirstService struct {
@@ -376,11 +376,11 @@ type SecondService struct {
 	service.Base[*modelcopytest.CopyTest, *modelcopytest.CopyTest, *modelcopytest.CopyTest]
 }
 
-func (f *FirstService) CreateBefore(ctx *types.ServiceContext, req *modelcopytest.CopyTest) error {
+func (f *FirstService) CreateBefore(ctx *gst.ServiceContext, req *modelcopytest.CopyTest) error {
 	return nil
 }
 
-func (s *SecondService) CreateBefore(ctx *types.ServiceContext, req *modelcopytest.CopyTest) error {
+func (s *SecondService) CreateBefore(ctx *gst.ServiceContext, req *modelcopytest.CopyTest) error {
 	return nil
 }
 `)
@@ -389,15 +389,15 @@ func (s *SecondService) CreateBefore(ctx *types.ServiceContext, req *modelcopyte
 import (
 	"tmpapp/model/copytest"
 
+	"github.com/hydroan/gst"
 	"github.com/hydroan/gst/service"
-	"github.com/hydroan/gst/types"
 )
 
 type Creator struct {
 	service.Base[*copytest.CopyTest, *copytest.CopyTest, *copytest.CopyTest]
 }
 
-func (c *Creator) Create(ctx *types.ServiceContext, req *copytest.CopyTest) (rsp *copytest.CopyTest, err error) {
+func (c *Creator) Create(ctx *gst.ServiceContext, req *copytest.CopyTest) (rsp *copytest.CopyTest, err error) {
 	return rsp, nil
 }
 `)
@@ -427,16 +427,16 @@ func TestMergeModuleServiceSourceKeepsNonServiceReceiverDoc(t *testing.T) {
 	source := []byte(`package servicecopytest
 
 import (
+	"github.com/hydroan/gst"
 	modelcopytest "github.com/hydroan/gst/internal/model/copytest"
 	"github.com/hydroan/gst/service"
-	"github.com/hydroan/gst/types"
 )
 
 type ActionService struct {
 	service.Base[*modelcopytest.CopyTest, *modelcopytest.CopyTest, *modelcopytest.CopyTest]
 }
 
-func (s *ActionService) CreateAfter(ctx *types.ServiceContext, req *modelcopytest.CopyTest) error {
+func (s *ActionService) CreateAfter(ctx *gst.ServiceContext, req *modelcopytest.CopyTest) error {
 	return nil
 }
 
@@ -452,15 +452,15 @@ func (r *recordState) describe() string {
 import (
 	"tmpapp/model/copytest"
 
+	"github.com/hydroan/gst"
 	"github.com/hydroan/gst/service"
-	"github.com/hydroan/gst/types"
 )
 
 type Creator struct {
 	service.Base[*copytest.CopyTest, *copytest.CopyTest, *copytest.CopyTest]
 }
 
-func (c *Creator) Create(ctx *types.ServiceContext, req *copytest.CopyTest) (rsp *copytest.CopyTest, err error) {
+func (c *Creator) Create(ctx *gst.ServiceContext, req *copytest.CopyTest) (rsp *copytest.CopyTest, err error) {
 	return rsp, nil
 }
 `)
@@ -506,18 +506,18 @@ type ActionService struct {
 	merged := parseModuleCopyTestFile(t, `package copytest
 
 import (
+	"github.com/hydroan/gst"
 	"github.com/hydroan/gst/model"
-	"github.com/hydroan/gst/types"
 )
 
-func (c *Creator) Create(ctx *types.ServiceContext) error {
+func (c *Creator) Create(ctx *gst.ServiceContext) error {
 	return nil
 }
 `)
 
 	dropUnusedMergedServiceImports(merged, moduleCopyPackageQualifiers(source))
 
-	if importPaths := moduleCopyTestImportPaths(merged); strings.Join(importPaths, ",") != "github.com/hydroan/gst/types" {
+	if importPaths := moduleCopyTestImportPaths(merged); strings.Join(importPaths, ",") != "github.com/hydroan/gst" {
 		t.Fatalf("dropUnusedMergedServiceImports() imports = %v, want only types", importPaths)
 	}
 }
@@ -561,11 +561,11 @@ func TestRequireUsedModuleCopyImportsRejectsUnusedFrameworkImport(t *testing.T) 
 		file := parseModuleCopyTestFile(t, `package copytest
 
 import (
+	"github.com/hydroan/gst"
 	"github.com/hydroan/gst/model"
-	"github.com/hydroan/gst/types"
 )
 
-func (c *Creator) Create(ctx *types.ServiceContext) error {
+func (c *Creator) Create(ctx *gst.ServiceContext) error {
 	return nil
 }
 `)
@@ -584,10 +584,10 @@ func (c *Creator) Create(ctx *types.ServiceContext) error {
 
 import (
 	"tmpapp/model/copytest"
-	"github.com/hydroan/gst/types"
+	"github.com/hydroan/gst"
 )
 
-func (c *Creator) Create(ctx *types.ServiceContext) error {
+func (c *Creator) Create(ctx *gst.ServiceContext) error {
 	return nil
 }
 `)
@@ -603,10 +603,10 @@ func (c *Creator) Create(ctx *types.ServiceContext) error {
 
 import (
 	"github.com/skip2/go-qrcode"
-	"github.com/hydroan/gst/types"
+	"github.com/hydroan/gst"
 )
 
-func (c *Creator) Create(ctx *types.ServiceContext) error {
+func (c *Creator) Create(ctx *gst.ServiceContext) error {
 	return qrcode.Check()
 }
 `)
@@ -622,10 +622,10 @@ func (c *Creator) Create(ctx *types.ServiceContext) error {
 import (
 	"tmpapp/model/copytest"
 
-	"github.com/hydroan/gst/types"
+	"github.com/hydroan/gst"
 )
 
-func (c *Creator) Create(ctx *types.ServiceContext) (*copytest.ActionRsp, error) {
+func (c *Creator) Create(ctx *gst.ServiceContext) (*copytest.ActionRsp, error) {
 	return nil, nil
 }
 `)

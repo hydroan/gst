@@ -3,10 +3,10 @@ package serviceiamuser
 import (
 	"net/http"
 
+	"github.com/hydroan/gst"
 	"github.com/hydroan/gst/internal/service/iam/adminauth"
 	"github.com/hydroan/gst/model"
 	"github.com/hydroan/gst/service"
-	"github.com/hydroan/gst/types"
 
 	modeliamuser "github.com/hydroan/gst/internal/model/iam/user"
 	serviceiamaccount "github.com/hydroan/gst/internal/service/iam/account"
@@ -22,7 +22,7 @@ type AdminUserGetService struct {
 }
 
 // Get returns one user visible to the current administrator.
-func (a *AdminUserGetService) Get(ctx *types.ServiceContext, req *model.Empty) (rsp *modeliamuser.AdminUserGetRsp, err error) {
+func (a *AdminUserGetService) Get(ctx *gst.ServiceContext, req *model.Empty) (rsp *modeliamuser.AdminUserGetRsp, err error) {
 	targetUserID := ctx.Param("id")
 	if targetUserID == "" {
 		return nil, service.NewError(http.StatusBadRequest, "user id is required")

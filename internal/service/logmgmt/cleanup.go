@@ -5,10 +5,10 @@ import (
 	"time"
 
 	"github.com/cockroachdb/errors"
+	"github.com/hydroan/gst"
 	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/database"
 	modellogmgmt "github.com/hydroan/gst/internal/model/logmgmt"
-	"github.com/hydroan/gst/types"
 )
 
 // cleanupBatchSize bounds one deletion round. Each round runs in its own
@@ -41,8 +41,8 @@ func Cleanup(ctx context.Context) error {
 // most one batch and deletes it in its own transaction, so neither memory nor
 // a single long transaction grows with the backlog. Both log models purge on
 // delete, so each round physically reclaims space.
-func cleanupExpired[M types.Model](ctx context.Context, cutoff time.Time) error {
-	expired := types.QueryOptions{Filters: []types.Filter{types.NewTimeColumn[M]("created_at").Lte(cutoff)}}
+func cleanupExpired[M gst.Model](ctx context.Context, cutoff time.Time) error {
+	expired := gst.QueryOptions{Filters: []gst.Filter{gst.NewTimeColumn[M]("created_at").Lte(cutoff)}}
 	for {
 		batch := make([]M, 0, cleanupBatchSize)
 		if err := database.Database[M](ctx).

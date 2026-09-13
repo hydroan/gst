@@ -6,8 +6,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/hydroan/gst/consts"
 	"github.com/hydroan/gst/dsl"
-	"github.com/hydroan/gst/types/consts"
 )
 
 func TestApplyServiceFileEmptyPayload(t *testing.T) {
@@ -26,15 +26,15 @@ func TestApplyServiceFileEmptyPayload(t *testing.T) {
 import (
 	"helloworld/model/group"
 
+	"github.com/hydroan/gst"
 	"github.com/hydroan/gst/service"
-	"github.com/hydroan/gst/types"
 )
 
 type Lister struct {
 	service.Base[*group.Group, *group.GroupListReq, *group.GroupListRsp]
 }
 
-func (g *Lister) List(ctx *types.ServiceContext, req *group.GroupListReq) (rsp *group.GroupListRsp, err error) {
+func (g *Lister) List(ctx *gst.ServiceContext, req *group.GroupListReq) (rsp *group.GroupListRsp, err error) {
 	return rsp, nil
 }
 `,
@@ -59,16 +59,16 @@ func (g *Lister) List(ctx *types.ServiceContext, req *group.GroupListReq) (rsp *
 import (
 	"helloworld/model/group"
 
+	"github.com/hydroan/gst"
 	"github.com/hydroan/gst/model"
 	"github.com/hydroan/gst/service"
-	"github.com/hydroan/gst/types"
 )
 
 type Lister struct {
 	service.Base[*group.Group, *model.Empty, *group.GroupListRsp]
 }
 
-func (g *Lister) List(ctx *types.ServiceContext, req *model.Empty) (rsp *group.GroupListRsp, err error) {
+func (g *Lister) List(ctx *gst.ServiceContext, req *model.Empty) (rsp *group.GroupListRsp, err error) {
 	return rsp, nil
 }
 `,
@@ -95,15 +95,15 @@ func (g *Lister) List(ctx *types.ServiceContext, req *model.Empty) (rsp *group.G
 import (
 	"helloworld/model"
 
+	"github.com/hydroan/gst"
 	"github.com/hydroan/gst/service"
-	"github.com/hydroan/gst/types"
 )
 
 type Getter struct {
 	service.Base[*model.User, *model.UserGetReq, *model.UserGetRsp]
 }
 
-func (u *Getter) Get(ctx *types.ServiceContext, req *model.UserGetReq) (rsp *model.UserGetRsp, err error) {
+func (u *Getter) Get(ctx *gst.ServiceContext, req *model.UserGetReq) (rsp *model.UserGetRsp, err error) {
 	return rsp, nil
 }
 `,
@@ -128,16 +128,16 @@ func (u *Getter) Get(ctx *types.ServiceContext, req *model.UserGetReq) (rsp *mod
 import (
 	"helloworld/model/group"
 
+	"github.com/hydroan/gst"
 	"github.com/hydroan/gst/model"
 	"github.com/hydroan/gst/service"
-	"github.com/hydroan/gst/types"
 )
 
 type Lister struct {
 	service.Base[*group.Group, *model.Empty, *group.GroupListRsp]
 }
 
-func (g *Lister) List(ctx *types.ServiceContext, req *model.Empty) (rsp *group.GroupListRsp, err error) {
+func (g *Lister) List(ctx *gst.ServiceContext, req *model.Empty) (rsp *group.GroupListRsp, err error) {
 	return rsp, nil
 }
 `,

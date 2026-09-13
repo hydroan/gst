@@ -5,8 +5,8 @@ import (
 	"slices"
 	"testing"
 
+	"github.com/hydroan/gst/consts"
 	prommetrics "github.com/hydroan/gst/metrics"
-	"github.com/hydroan/gst/types/consts"
 	"github.com/prometheus/client_golang/prometheus"
 	dto "github.com/prometheus/client_model/go"
 )

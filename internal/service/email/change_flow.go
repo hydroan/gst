@@ -7,12 +7,12 @@ import (
 	"github.com/hydroan/gst/service"
 
 	"github.com/cockroachdb/errors"
-	"github.com/hydroan/gst/types"
+	"github.com/hydroan/gst"
 )
 
 // validateEmailChangeTarget ensures the current account can start an email
 // change flow to the requested target address.
-func validateEmailChangeTarget(ctx *types.ServiceContext, user *AccountSnapshot, newEmail string) error {
+func validateEmailChangeTarget(ctx *gst.ServiceContext, user *AccountSnapshot, newEmail string) error {
 	if user == nil || strings.TrimSpace(user.ID) == "" {
 		return service.NewError(http.StatusBadRequest, "current account is required")
 	}

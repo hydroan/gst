@@ -4,29 +4,29 @@
 package model
 
 import (
-	types "github.com/hydroan/gst/types"
+	gst "github.com/hydroan/gst"
 	gorm "gorm.io/gorm"
 )
 
 // RecordCols are the typed column references of Record.
 var RecordCols = struct {
-	CreatedAt types.TimeColumn
-	CreatedBy types.Column[string]
-	DeletedAt types.Column[gorm.DeletedAt]
-	ID        types.Column[string]
-	Title     types.Column[string]
-	Type      types.Column[RecordType]
-	UpdatedAt types.TimeColumn
-	UpdatedBy types.Column[string]
-	UserID    types.Column[string]
+	CreatedAt gst.TimeColumn
+	CreatedBy gst.Column[string]
+	DeletedAt gst.Column[gorm.DeletedAt]
+	ID        gst.Column[string]
+	Title     gst.Column[string]
+	Type      gst.Column[RecordType]
+	UpdatedAt gst.TimeColumn
+	UpdatedBy gst.Column[string]
+	UserID    gst.Column[string]
 }{
-	CreatedAt: types.NewTimeColumn[*Record]("created_at"),
-	CreatedBy: types.NewColumn[*Record, string]("created_by"),
-	DeletedAt: types.NewColumn[*Record, gorm.DeletedAt]("deleted_at"),
-	ID:        types.NewColumn[*Record, string]("id"),
-	Title:     types.NewColumn[*Record, string]("title"),
-	Type:      types.NewColumn[*Record, RecordType]("type"),
-	UpdatedAt: types.NewTimeColumn[*Record]("updated_at"),
-	UpdatedBy: types.NewColumn[*Record, string]("updated_by"),
-	UserID:    types.NewColumn[*Record, string]("user_id"),
+	CreatedAt: gst.NewTimeColumn[*Record]("created_at"),
+	CreatedBy: gst.NewColumn[*Record, string]("created_by"),
+	DeletedAt: gst.NewColumn[*Record, gorm.DeletedAt]("deleted_at"),
+	ID:        gst.NewColumn[*Record, string]("id"),
+	Title:     gst.NewColumn[*Record, string]("title"),
+	Type:      gst.NewColumn[*Record, RecordType]("type"),
+	UpdatedAt: gst.NewTimeColumn[*Record]("updated_at"),
+	UpdatedBy: gst.NewColumn[*Record, string]("updated_by"),
+	UserID:    gst.NewColumn[*Record, string]("user_id"),
 }

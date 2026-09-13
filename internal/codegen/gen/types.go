@@ -1,7 +1,7 @@
 package gen
 
 import (
-	"github.com/hydroan/gst/types/consts"
+	"github.com/hydroan/gst/consts"
 	"github.com/stoewer/go-strcase"
 )
 

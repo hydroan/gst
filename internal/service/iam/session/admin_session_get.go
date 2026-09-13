@@ -4,10 +4,10 @@ import (
 	"net/http"
 
 	"github.com/cockroachdb/errors"
+	"github.com/hydroan/gst"
 	modeliamsession "github.com/hydroan/gst/internal/model/iam/session"
 	"github.com/hydroan/gst/model"
 	"github.com/hydroan/gst/service"
-	"github.com/hydroan/gst/types"
 )
 
 // AdminSessionGetService handles retrieval of a specified session for privileged administrators.
@@ -16,7 +16,7 @@ type AdminSessionGetService struct {
 }
 
 // Get returns the detail of a specified session for a privileged administrator.
-func (a *AdminSessionGetService) Get(ctx *types.ServiceContext, req *model.Empty) (rsp *modeliamsession.AdminSessionGetRsp, err error) {
+func (a *AdminSessionGetService) Get(ctx *gst.ServiceContext, req *model.Empty) (rsp *modeliamsession.AdminSessionGetRsp, err error) {
 	currentSessionID, _, err := CurrentSession(ctx)
 	if err != nil {
 		return nil, err
@@ -32,7 +32,7 @@ func (a *AdminSessionGetService) Get(ctx *types.ServiceContext, req *model.Empty
 
 	targetSession, err := Store.LoadSession(ctx, targetSessionID)
 	if err != nil {
-		if errors.Is(err, types.ErrEntryNotFound) {
+		if errors.Is(err, gst.ErrEntryNotFound) {
 			return nil, service.NewError(http.StatusNotFound, "session not found")
 		}
 		return nil, service.NewErrorWithCause(http.StatusInternalServerError, "failed to load target session", err)

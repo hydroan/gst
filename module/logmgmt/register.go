@@ -6,11 +6,11 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/authn"
 	"github.com/hydroan/gst/config"
+	"github.com/hydroan/gst/consts"
 	"github.com/hydroan/gst/cronjob"
 	servicelogmgmt "github.com/hydroan/gst/internal/service/logmgmt"
 	"github.com/hydroan/gst/module"
 	"github.com/hydroan/gst/router"
-	"github.com/hydroan/gst/types/consts"
 )
 
 // Register registers two modules: LoginLog and OperationLog.

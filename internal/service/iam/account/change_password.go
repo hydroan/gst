@@ -3,19 +3,19 @@ package serviceiamaccount
 import (
 	"net/http"
 
+	"github.com/hydroan/gst"
 	"github.com/hydroan/gst/database"
 	modeliamaccount "github.com/hydroan/gst/internal/model/iam/account"
 	modeliamuser "github.com/hydroan/gst/internal/model/iam/user"
 	serviceiamsession "github.com/hydroan/gst/internal/service/iam/session"
 	"github.com/hydroan/gst/service"
-	"github.com/hydroan/gst/types"
 )
 
 type ChangePasswordService struct {
 	service.Base[*modeliamaccount.ChangePassword, *modeliamaccount.ChangePasswordReq, *modeliamaccount.ChangePasswordRsp]
 }
 
-func (c *ChangePasswordService) Create(ctx *types.ServiceContext, req *modeliamaccount.ChangePasswordReq) (rsp *modeliamaccount.ChangePasswordRsp, err error) {
+func (c *ChangePasswordService) Create(ctx *gst.ServiceContext, req *modeliamaccount.ChangePasswordReq) (rsp *modeliamaccount.ChangePasswordRsp, err error) {
 	log := c.WithContext(ctx, ctx.Phase())
 	log.Info("changepassword create")
 

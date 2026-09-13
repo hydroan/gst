@@ -6,10 +6,10 @@ import (
 	"net/http"
 	"testing"
 
+	"github.com/hydroan/gst/consts"
 	"github.com/hydroan/gst/internal/types"
 	"github.com/hydroan/gst/model"
 	"github.com/hydroan/gst/router"
-	"github.com/hydroan/gst/types/consts"
 	"github.com/stretchr/testify/require"
 )
 

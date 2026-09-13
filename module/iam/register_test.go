@@ -8,13 +8,13 @@ import (
 	"github.com/goforj/godump"
 	"github.com/hydroan/gst/client"
 	"github.com/hydroan/gst/config"
+	"github.com/hydroan/gst/consts"
 	"github.com/hydroan/gst/database"
 	modeliamaccount "github.com/hydroan/gst/internal/model/iam/account"
 	modeliamuser "github.com/hydroan/gst/internal/model/iam/user"
 	serviceiamaccount "github.com/hydroan/gst/internal/service/iam/account"
 	"github.com/hydroan/gst/internal/testutil"
 	"github.com/hydroan/gst/module/iam"
-	"github.com/hydroan/gst/types/consts"
 	"github.com/stretchr/testify/require"
 )
 

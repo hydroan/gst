@@ -3,11 +3,11 @@ package model
 import (
 	"context"
 
+	"github.com/hydroan/gst/consts"
 	"github.com/hydroan/gst/database"
 	. "github.com/hydroan/gst/dsl"
 	"github.com/hydroan/gst/logger"
 	"github.com/hydroan/gst/model"
-	"github.com/hydroan/gst/types/consts"
 	"go.uber.org/zap"
 )
 

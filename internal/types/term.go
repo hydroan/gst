@@ -91,7 +91,7 @@ func (b TimeBucket) Valid() bool {
 // values bind as statement parameters, and the function and the time bucket
 // come from closed sets. The fields are unexported so a term only comes from
 // those constructors; the database layer reads them through the TermXxxOf
-// functions, which the public types package does not forward.
+// functions, which the public gst package does not forward.
 type Term struct {
 	// fn is the aggregate or window function, FnLiteral for a constant, or
 	// FnNone for a group key or a plain column.
@@ -291,7 +291,7 @@ func (t Term) Over(window Window) Term {
 // NewTerm builds a term from its parts, without the checks the column
 // references and the constructors above keep. It serves the framework's own
 // tests, which exercise how the database layer fails closed on a malformed
-// term; the public types package does not forward it.
+// term; the public gst package does not forward it.
 func NewTerm(fn TermFn, table, column string, bucket TimeBucket, alias string) Term {
 	return Term{fn: fn, table: table, column: column, bucket: bucket, alias: alias}
 }
@@ -401,7 +401,7 @@ func TermConditionValueOf(c TermCondition) any { return c.value }
 
 // NewTermCondition builds a condition from its parts, without the checks the
 // comparison methods keep. It serves the framework's own tests; the public
-// types package does not forward it.
+// gst package does not forward it.
 func NewTermCondition(term Term, op CompareOp, value any) TermCondition {
 	return TermCondition{term: term, op: op, value: value}
 }

@@ -4,14 +4,14 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/hydroan/gst"
 	"github.com/hydroan/gst/authz/rbac"
+	"github.com/hydroan/gst/consts"
 	"github.com/hydroan/gst/database"
 	modeliamsession "github.com/hydroan/gst/internal/model/iam/session"
 	modeliamuser "github.com/hydroan/gst/internal/model/iam/user"
 	"github.com/hydroan/gst/model"
 	"github.com/hydroan/gst/service"
-	"github.com/hydroan/gst/types"
-	"github.com/hydroan/gst/types/consts"
 )
 
 // CurrentGetService handles retrieval of the current authenticated session.
@@ -20,7 +20,7 @@ type CurrentGetService struct {
 }
 
 // Get returns the current authenticated session together with the latest user snapshot.
-func (c *CurrentGetService) Get(ctx *types.ServiceContext, req *model.Empty) (rsp *modeliamsession.CurrentGetRsp, err error) {
+func (c *CurrentGetService) Get(ctx *gst.ServiceContext, req *model.Empty) (rsp *modeliamsession.CurrentGetRsp, err error) {
 	_, currentSession, err := CurrentSession(ctx)
 	if err != nil {
 		return nil, err

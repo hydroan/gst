@@ -5,11 +5,11 @@ import (
 	"net/http"
 
 	"github.com/cockroachdb/errors"
+	"github.com/hydroan/gst"
 	"github.com/hydroan/gst/database"
 	modeliamaccount "github.com/hydroan/gst/internal/model/iam/account"
 	modeliamuser "github.com/hydroan/gst/internal/model/iam/user"
 	"github.com/hydroan/gst/service"
-	"github.com/hydroan/gst/types"
 	"go.uber.org/zap"
 )
 
@@ -17,7 +17,7 @@ type SignupService struct {
 	service.Base[*modeliamaccount.Signup, *modeliamaccount.SignupReq, *modeliamaccount.SignupRsp]
 }
 
-func (s *SignupService) Create(ctx *types.ServiceContext, req *modeliamaccount.SignupReq) (rsp *modeliamaccount.SignupRsp, err error) {
+func (s *SignupService) Create(ctx *gst.ServiceContext, req *modeliamaccount.SignupReq) (rsp *modeliamaccount.SignupRsp, err error) {
 	log := s.WithContext(ctx, ctx.Phase())
 
 	// Validate input

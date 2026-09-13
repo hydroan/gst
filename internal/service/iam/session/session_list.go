@@ -5,10 +5,10 @@ import (
 	"sort"
 
 	"github.com/cockroachdb/errors"
+	"github.com/hydroan/gst"
 	modeliamsession "github.com/hydroan/gst/internal/model/iam/session"
 	"github.com/hydroan/gst/model"
 	"github.com/hydroan/gst/service"
-	"github.com/hydroan/gst/types"
 )
 
 // SessionListService handles retrieval of all active sessions for the current authenticated user.
@@ -17,7 +17,7 @@ type SessionListService struct {
 }
 
 // List returns all active sessions for the current authenticated user.
-func (s *SessionListService) List(ctx *types.ServiceContext, req *model.Empty) (rsp *modeliamsession.SessionListRsp, err error) {
+func (s *SessionListService) List(ctx *gst.ServiceContext, req *model.Empty) (rsp *modeliamsession.SessionListRsp, err error) {
 	// CurrentSession already guarantees that the resolved session is bound to
 	// an authenticated user, so the service can directly use currentSession.UserID.
 	currentSessionID, currentSession, err := CurrentSession(ctx)
@@ -39,7 +39,7 @@ func (s *SessionListService) List(ctx *types.ServiceContext, req *model.Empty) (
 		}
 		sessionData, getErr := Store.LoadSession(ctx, sessionID)
 		if getErr != nil {
-			if errors.Is(getErr, types.ErrEntryNotFound) {
+			if errors.Is(getErr, gst.ErrEntryNotFound) {
 				_ = Store.DropSessionIndexes(ctx, currentSession.UserID, sessionID)
 				continue
 			}

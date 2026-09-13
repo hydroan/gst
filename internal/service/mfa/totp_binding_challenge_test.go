@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/hydroan/gst/types"
+	"github.com/hydroan/gst"
 	"github.com/stretchr/testify/require"
 )
 
@@ -20,7 +20,7 @@ func newTOTPBindChallengeTestCache() *totpBindChallengeTestCache {
 func (c *totpBindChallengeTestCache) Get(_ context.Context, key string) (totpBindChallenge, error) {
 	value, ok := c.items[key]
 	if !ok {
-		return totpBindChallenge{}, types.ErrEntryNotFound
+		return totpBindChallenge{}, gst.ErrEntryNotFound
 	}
 	return value, nil
 }
@@ -77,10 +77,10 @@ func TestIssueTOTPBindChallengeUsesOpaqueRandomToken(t *testing.T) {
 	require.Equal(t, now.Add(totpBindChallengeTTL), loaded.ExpiresAt)
 }
 
-func stubTOTPBindChallengeGlobals(cache types.Cache[totpBindChallenge], now time.Time) func() {
+func stubTOTPBindChallengeGlobals(cache gst.Cache[totpBindChallenge], now time.Time) func() {
 	originalCache := totpBindChallengeCache
 	originalNow := totpBindChallengeNow
-	totpBindChallengeCache = func() types.Cache[totpBindChallenge] { return cache }
+	totpBindChallengeCache = func() gst.Cache[totpBindChallenge] { return cache }
 	totpBindChallengeNow = func() time.Time { return now }
 	return func() {
 		totpBindChallengeCache = originalCache

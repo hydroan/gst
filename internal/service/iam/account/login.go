@@ -6,16 +6,16 @@ import (
 	"time"
 
 	"github.com/cockroachdb/errors"
+	"github.com/hydroan/gst"
 	"github.com/hydroan/gst/authn"
 	"github.com/hydroan/gst/authz/rbac"
+	"github.com/hydroan/gst/consts"
 	"github.com/hydroan/gst/database"
 	modeliamaccount "github.com/hydroan/gst/internal/model/iam/account"
 	modeliamsession "github.com/hydroan/gst/internal/model/iam/session"
 	modeliamuser "github.com/hydroan/gst/internal/model/iam/user"
 	serviceiamsession "github.com/hydroan/gst/internal/service/iam/session"
 	"github.com/hydroan/gst/service"
-	"github.com/hydroan/gst/types"
-	"github.com/hydroan/gst/types/consts"
 	"github.com/mssola/useragent"
 	"go.uber.org/zap"
 )
@@ -28,7 +28,7 @@ type LoginService struct {
 //
 // The local login path verifies username, password, and account status before
 // creating the session.
-func (l *LoginService) Create(ctx *types.ServiceContext, req *modeliamaccount.LoginReq) (rsp *modeliamaccount.LoginRsp, err error) {
+func (l *LoginService) Create(ctx *gst.ServiceContext, req *modeliamaccount.LoginReq) (rsp *modeliamaccount.LoginRsp, err error) {
 	log := l.WithContext(ctx, ctx.Phase())
 	// Validate input
 	if req.Username == "" {
@@ -188,7 +188,7 @@ func (l *LoginService) Create(ctx *types.ServiceContext, req *modeliamaccount.Lo
 // outcome as a service error: the installed verifier already answers with one
 // per the authn contract and is passed through untouched, while anything else
 // is an infrastructure failure reported as 500.
-func verifyLoginSecondFactor(ctx *types.ServiceContext, userID string, factor authn.LoginSecondFactor) *service.Error {
+func verifyLoginSecondFactor(ctx *gst.ServiceContext, userID string, factor authn.LoginSecondFactor) *service.Error {
 	err := authn.VerifyLoginSecondFactor(ctx, userID, factor)
 	if err == nil {
 		return nil
@@ -203,7 +203,7 @@ func verifyLoginSecondFactor(ctx *types.ServiceContext, userID string, factor au
 // ensureLoginTenantMembership refuses a login that names a tenant the user holds
 // no role in. The system root exemption is applied by the caller, which resolves
 // that fact for the response anyway.
-func ensureLoginTenantMembership(ctx *types.ServiceContext, userID string, tenantID string) error {
+func ensureLoginTenantMembership(ctx *gst.ServiceContext, userID string, tenantID string) error {
 	roles, err := rbac.RBAC().RolesForSubject(ctx, tenantID, userID)
 	if err != nil {
 		return service.NewErrorWithCause(http.StatusInternalServerError, "authorization unavailable", err)

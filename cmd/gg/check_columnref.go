@@ -25,7 +25,7 @@ var columnConstructors = map[string]bool{
 }
 
 // CheckColumnReferenceMinting reports project code that mints column
-// references through types.NewColumn, NewNumericColumn or NewTimeColumn
+// references through gst.NewColumn, NewNumericColumn or NewTimeColumn
 // instead of reading the XxxCols variables gg gen writes. The one exception is
 // generic code naming its own type parameter as the model, see
 // mintsForTypeParameter. Generated files carry the constructors by design and
@@ -74,7 +74,7 @@ func CheckColumnReferenceMinting(ignore gitignore.Matcher) []string {
 // one file. A file that fails to parse is reported as a violation so broken
 // code cannot slip past the check.
 func checkFileColumnReferenceMinting(path string) []string {
-	aliases, dotImport, found := importNamesOf(path, gstTypesImportPath, "types")
+	aliases, dotImport, found := importNamesOf(path, gstImportPath, "gst")
 	if !found {
 		return nil
 	}
@@ -105,7 +105,7 @@ func checkFileColumnReferenceMinting(path string) []string {
 			}
 			pos := fset.Position(call.Pos())
 			violations = append(violations, fmt.Sprintf(
-				"%s:%d: mints a column reference through types.%s; read the column through the XxxCols variable gg gen writes for its model",
+				"%s:%d: mints a column reference through gst.%s; read the column through the XxxCols variable gg gen writes for its model",
 				relPath, pos.Line, name,
 			))
 			return true

@@ -4,10 +4,10 @@ import (
 	"net/http"
 
 	"github.com/cockroachdb/errors"
+	"github.com/hydroan/gst"
 	modelemail "github.com/hydroan/gst/internal/model/email"
 	"github.com/hydroan/gst/model"
 	"github.com/hydroan/gst/service"
-	"github.com/hydroan/gst/types"
 )
 
 // VerificationResendService handles public requests that resend verification
@@ -18,7 +18,7 @@ type VerificationResendService struct {
 
 // Create resends a verification email for an eligible account while keeping the
 // response stable for unknown or already verified accounts.
-func (s *VerificationResendService) Create(ctx *types.ServiceContext, req *modelemail.VerificationResendReq) (rsp *modelemail.VerificationResendRsp, err error) {
+func (s *VerificationResendService) Create(ctx *gst.ServiceContext, req *modelemail.VerificationResendReq) (rsp *modelemail.VerificationResendRsp, err error) {
 	log := s.WithContext(ctx, ctx.Phase())
 	rsp = &modelemail.VerificationResendRsp{Msg: publicAcceptedMessage(iamEmailFlowKindVerification)}
 

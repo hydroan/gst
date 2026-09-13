@@ -19,9 +19,9 @@ import (
 	"context"
 
 	"github.com/cockroachdb/errors"
+	"github.com/hydroan/gst"
 	"github.com/hydroan/gst/database"
 	"github.com/hydroan/gst/service"
-	"github.com/hydroan/gst/types"
 	"tmpapp/model"
 )
 
@@ -29,7 +29,7 @@ type Getter struct {
 	service.Base[*model.Record, *model.RecordReq, *model.RecordRsp]
 }
 
-func (g *Getter) Get(ctx *types.ServiceContext, req *model.RecordReq) (*model.RecordRsp, error) {
+func (g *Getter) Get(ctx *gst.ServiceContext, req *model.RecordReq) (*model.RecordRsp, error) {
 	record := new(model.Record)
 	if err := database.Database[*model.Record](ctx).Get(record, req.ID); err != nil {
 		return nil, err
@@ -54,9 +54,9 @@ func (g *Getter) Get(ctx *types.ServiceContext, req *model.RecordReq) (*model.Re
 	writeCheckFile(t, filepath.Join(projectDir, "service", "laundry", "laundry.go"), `package laundry
 
 import (
+	"github.com/hydroan/gst"
 	"github.com/hydroan/gst/database"
 	"github.com/hydroan/gst/service"
-	"github.com/hydroan/gst/types"
 	"tmpapp/model"
 )
 
@@ -64,14 +64,14 @@ type Lister struct {
 	service.Base[*model.Record, *model.RecordReq, *model.RecordRsp]
 }
 
-func (l *Lister) List(ctx *types.ServiceContext, req *model.RecordReq) (*model.RecordRsp, error) {
+func (l *Lister) List(ctx *gst.ServiceContext, req *model.RecordReq) (*model.RecordRsp, error) {
 	if err := loadRecords(ctx); err != nil {
 		return nil, err
 	}
 	return &model.RecordRsp{}, nil
 }
 
-func loadRecords(ctx *types.ServiceContext) error {
+func loadRecords(ctx *gst.ServiceContext) error {
 	records := make([]*model.Record, 0)
 	return database.Database[*model.Record](ctx).List(&records)
 }
@@ -118,10 +118,10 @@ import (
 	"net/http"
 
 	"github.com/cockroachdb/errors"
+	"github.com/hydroan/gst"
 	"github.com/hydroan/gst/database"
 	"github.com/hydroan/gst/service"
 	"github.com/hydroan/gst/sse"
-	"github.com/hydroan/gst/types"
 	"tmpapp/helper/guard"
 	"tmpapp/model"
 )
@@ -130,7 +130,7 @@ type Updater struct {
 	service.Base[*model.Record, *model.RecordReq, *model.RecordRsp]
 }
 
-func (u *Updater) Update(ctx *types.ServiceContext, req *model.RecordReq) (*model.RecordRsp, error) {
+func (u *Updater) Update(ctx *gst.ServiceContext, req *model.RecordReq) (*model.RecordRsp, error) {
 	if err := guard.RequireAdmin(ctx); err != nil {
 		return nil, err
 	}
@@ -165,7 +165,7 @@ func (u *Updater) validate(req *model.RecordReq) error {
 
 // SSE returns the framework streaming call directly: ServiceContext.SSE
 // errors are framework-governed and count as a sanctioned exit.
-func (u *Updater) SSE(ctx *types.ServiceContext) error {
+func (u *Updater) SSE(ctx *gst.ServiceContext) error {
 	return ctx.SSE(func(conn *sse.Conn) error {
 		return conn.Send(sse.Event{Data: "sample"})
 	})
@@ -173,7 +173,7 @@ func (u *Updater) SSE(ctx *types.ServiceContext) error {
 
 // loadChecked is a compliant generic helper: the instantiation wrapper must
 // be transparent when the exit flow is resolved.
-func loadChecked[T any](ctx *types.ServiceContext) error {
+func loadChecked[T any](ctx *gst.ServiceContext) error {
 	if ctx == nil {
 		return service.NewError(http.StatusBadRequest, "context is required")
 	}
@@ -189,7 +189,7 @@ func newRecordMissingError(err error) *service.Error {
 // Patch reuses one err variable for several sources. The early compliant
 // return must not be polluted by the raw assignment that happens later in
 // the body: only assignments before a return feed that return.
-func (u *Updater) Patch(ctx *types.ServiceContext, req *model.RecordReq) (*model.RecordRsp, error) {
+func (u *Updater) Patch(ctx *gst.ServiceContext, req *model.RecordReq) (*model.RecordRsp, error) {
 	err := guard.RequireAdmin(ctx)
 	if err != nil {
 		return nil, err
@@ -205,7 +205,7 @@ func (u *Updater) Patch(ctx *types.ServiceContext, req *model.RecordReq) (*model
 // Delete reuses one err variable the idiomatic way. Every raw assignment is
 // checked and answered right away, which kills it for everything after the
 // check, so the later compliant flows through the same variable stay clean.
-func (u *Updater) Delete(ctx *types.ServiceContext, req *model.RecordReq) (*model.RecordRsp, error) {
+func (u *Updater) Delete(ctx *gst.ServiceContext, req *model.RecordReq) (*model.RecordRsp, error) {
 	record := new(model.Record)
 	err := database.Database[*model.Record](ctx).Get(record, req.ID)
 	if err != nil {
@@ -228,7 +228,7 @@ func (u *Updater) Delete(ctx *types.ServiceContext, req *model.RecordReq) (*mode
 // check falls through instead of returning, so that raw assignment is never
 // killed; the next check still stays clean because inside a check's body the
 // variable holds only the value its own init just assigned.
-func (u *Updater) Import(ctx *types.ServiceContext, req *model.RecordReq) (*model.RecordRsp, error) {
+func (u *Updater) Import(ctx *gst.ServiceContext, req *model.RecordReq) (*model.RecordRsp, error) {
 	record := new(model.Record)
 	err := database.Database[*model.Record](ctx).Get(record, req.ID)
 	if err != nil {
@@ -248,11 +248,11 @@ func (u *Updater) Import(ctx *types.ServiceContext, req *model.RecordReq) (*mode
 import (
 	"net/http"
 
+	"github.com/hydroan/gst"
 	"github.com/hydroan/gst/service"
-	"github.com/hydroan/gst/types"
 )
 
-func RequireAdmin(ctx *types.ServiceContext) error {
+func RequireAdmin(ctx *gst.ServiceContext) error {
 	if ctx == nil {
 		return service.NewError(http.StatusForbidden, "admin required")
 	}

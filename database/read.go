@@ -6,8 +6,8 @@ import (
 	"slices"
 
 	"github.com/cockroachdb/errors"
+	"github.com/hydroan/gst/consts"
 	"github.com/hydroan/gst/internal/types"
-	"github.com/hydroan/gst/types/consts"
 )
 
 // nilModel reports whether a read destination is unusable: a nil or invalid

@@ -5,18 +5,18 @@ import (
 	"net/http"
 
 	"github.com/cockroachdb/errors"
+	"github.com/hydroan/gst"
 	"github.com/hydroan/gst/database"
 	modeliamaccount "github.com/hydroan/gst/internal/model/iam/account"
 	modeliamuser "github.com/hydroan/gst/internal/model/iam/user"
 	"github.com/hydroan/gst/service"
-	"github.com/hydroan/gst/types"
 )
 
 // Column references for the per-user lookups below, one per model; module
 // sources carry no generated Cols vars, so the references are declared here.
 var (
-	colEmailIdentityUserID      = types.NewColumn[*modeliamaccount.EmailIdentity, string]("user_id")
-	colPasswordCredentialUserID = types.NewColumn[*modeliamaccount.PasswordCredential, string]("user_id")
+	colEmailIdentityUserID      = gst.NewColumn[*modeliamaccount.EmailIdentity, string]("user_id")
+	colPasswordCredentialUserID = gst.NewColumn[*modeliamaccount.PasswordCredential, string]("user_id")
 )
 
 // buildAdminUserView builds the public admin representation for one IAM user.
@@ -92,7 +92,7 @@ func loadAdminUserEmailMap(ctx context.Context, userIDs []string) (map[string]*m
 
 	identities := make([]*modeliamaccount.EmailIdentity, 0, len(userIDs))
 	if err := database.Database[*modeliamaccount.EmailIdentity](ctx).
-		WithQuery(nil, types.QueryOptions{Filters: []types.Filter{colEmailIdentityUserID.In(userIDs...)}}).
+		WithQuery(nil, gst.QueryOptions{Filters: []gst.Filter{colEmailIdentityUserID.In(userIDs...)}}).
 		List(&identities); err != nil {
 		if errors.Is(err, database.ErrRecordNotFound) {
 			return items, nil
@@ -120,7 +120,7 @@ func loadAdminUserCredentialMap(ctx context.Context, userIDs []string) (map[stri
 
 	credentials := make([]*modeliamaccount.PasswordCredential, 0, len(userIDs))
 	if err := database.Database[*modeliamaccount.PasswordCredential](ctx).
-		WithQuery(nil, types.QueryOptions{Filters: []types.Filter{colPasswordCredentialUserID.In(userIDs...)}}).
+		WithQuery(nil, gst.QueryOptions{Filters: []gst.Filter{colPasswordCredentialUserID.In(userIDs...)}}).
 		List(&credentials); err != nil {
 		if errors.Is(err, database.ErrRecordNotFound) {
 			return items, nil

@@ -4,11 +4,11 @@ import (
 	"net/http"
 
 	"github.com/cockroachdb/errors"
+	"github.com/hydroan/gst"
 	"github.com/hydroan/gst/database"
 	modeliamsession "github.com/hydroan/gst/internal/model/iam/session"
 	modeliamuser "github.com/hydroan/gst/internal/model/iam/user"
 	"github.com/hydroan/gst/service"
-	"github.com/hydroan/gst/types"
 )
 
 // AdminUserSessionDeleteService handles invalidation of all sessions owned by a specified user for privileged administrators.
@@ -17,7 +17,7 @@ type AdminUserSessionDeleteService struct {
 }
 
 // Delete invalidates all indexed sessions of a specified user for a privileged administrator.
-func (a *AdminUserSessionDeleteService) Delete(ctx *types.ServiceContext, req *modeliamsession.AdminUserSessionDeleteReq) (rsp *modeliamsession.AdminUserSessionDeleteRsp, err error) {
+func (a *AdminUserSessionDeleteService) Delete(ctx *gst.ServiceContext, req *modeliamsession.AdminUserSessionDeleteReq) (rsp *modeliamsession.AdminUserSessionDeleteRsp, err error) {
 	_, currentSession, err := CurrentSession(ctx)
 	if err != nil {
 		return nil, err

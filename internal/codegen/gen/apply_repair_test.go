@@ -6,8 +6,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/hydroan/gst/consts"
 	"github.com/hydroan/gst/dsl"
-	"github.com/hydroan/gst/types/consts"
 )
 
 func TestApplyServiceFileWithModelSyncForcesCanonicalServiceStruct(t *testing.T) {
@@ -44,7 +44,7 @@ func TestApplyServiceFileWithModelSyncForcesCanonicalServiceStruct(t *testing.T)
 import (
 	"helloworld/model"
 
-	"github.com/hydroan/gst/types"
+	"github.com/hydroan/gst"
 )
 
 type Exporter struct {
@@ -52,7 +52,7 @@ type Exporter struct {
 	Lister
 }
 
-func (e *Exporter) Export(ctx *types.ServiceContext, users ...*model.User) (data []byte, err error) {
+func (e *Exporter) Export(ctx *gst.ServiceContext, users ...*model.User) (data []byte, err error) {
 	return data, err
 }
 `,
@@ -73,15 +73,15 @@ func (e *Exporter) Export(ctx *types.ServiceContext, users ...*model.User) (data
 import (
 	"helloworld/model"
 
+	"github.com/hydroan/gst"
 	"github.com/hydroan/gst/service"
-	"github.com/hydroan/gst/types"
 )
 
 type Exporter struct {
 	service.Base[*model.User]
 }
 
-func (e *Exporter) Export(ctx *types.ServiceContext, users ...*model.User) (data []byte, err error) {
+func (e *Exporter) Export(ctx *gst.ServiceContext, users ...*model.User) (data []byte, err error) {
 	return data, err
 }
 `,
@@ -100,12 +100,12 @@ func (e *Exporter) Export(ctx *types.ServiceContext, users ...*model.User) (data
 import (
 	"helloworld/model"
 
-	"github.com/hydroan/gst/types"
+	"github.com/hydroan/gst"
 )
 
 func exportHeaders(users ...*model.User) []string { return nil }
 
-var _ = types.ServiceContext{}
+var _ = gst.ServiceContext{}
 `,
 			action:      exportAction,
 			wantChanged: true,
@@ -123,15 +123,15 @@ var _ = types.ServiceContext{}
 import (
 	"helloworld/model"
 
+	"github.com/hydroan/gst"
 	"github.com/hydroan/gst/service"
-	"github.com/hydroan/gst/types"
 )
 
 type Exporter struct {
 	service.Base[*model.User, *model.User, *model.User]
 }
 
-func (e *Exporter) Export(ctx *types.ServiceContext, users ...*model.User) (data []byte, err error) {
+func (e *Exporter) Export(ctx *gst.ServiceContext, users ...*model.User) (data []byte, err error) {
 	return data, err
 }
 `,
@@ -154,15 +154,15 @@ func (e *Exporter) Export(ctx *types.ServiceContext, users ...*model.User) (data
 import (
 	"helloworld/model"
 
+	"github.com/hydroan/gst"
 	"github.com/hydroan/gst/service"
-	"github.com/hydroan/gst/types"
 )
 
 type Mangled struct {
 	service.Base[*model.User, *model.User, *model.User]
 }
 
-func (x *Mangled) Export(ctx *types.ServiceContext, users ...*model.User) (data []byte, err error) {
+func (x *Mangled) Export(ctx *gst.ServiceContext, users ...*model.User) (data []byte, err error) {
 	data = append(data, 'a')
 	return data, err
 }
@@ -185,15 +185,15 @@ func (x *Mangled) Export(ctx *types.ServiceContext, users ...*model.User) (data 
 import (
 	"helloworld/model"
 
+	"github.com/hydroan/gst"
 	"github.com/hydroan/gst/service"
-	"github.com/hydroan/gst/types"
 )
 
 type Creator struct {
 	service.Base[*model.User, *model.User, *model.User]
 }
 
-func (c *Creator) Create(ctx *types.ServiceContext, req *model.User) (rsp *model.User, err error) {
+func (c *Creator) Create(ctx *gst.ServiceContext, req *model.User) (rsp *model.User, err error) {
 	return rsp, err
 }
 `,

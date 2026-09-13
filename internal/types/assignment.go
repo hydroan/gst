@@ -34,7 +34,7 @@ func (a Assignment) Value() any { return a.value }
 // NewAssignment builds an assignment of value to the named column of table;
 // an empty table names the chain's own model. It serves framework code that
 // learns the column only at run time and the framework's own tests; the public
-// types package does not forward it.
+// gst package does not forward it.
 func NewAssignment(table, column string, value any) Assignment {
 	return Assignment{table: table, column: column, value: value}
 }

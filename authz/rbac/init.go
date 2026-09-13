@@ -5,8 +5,8 @@ import (
 
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/config"
+	"github.com/hydroan/gst/consts"
 	"github.com/hydroan/gst/database"
-	"github.com/hydroan/gst/types/consts"
 )
 
 var defaultSystemRootSubjects = []string{

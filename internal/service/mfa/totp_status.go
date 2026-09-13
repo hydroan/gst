@@ -3,11 +3,11 @@ package servicemfa
 import (
 	"net/http"
 
+	"github.com/hydroan/gst"
 	"github.com/hydroan/gst/database"
 	modelmfa "github.com/hydroan/gst/internal/model/mfa"
 	"github.com/hydroan/gst/model"
 	"github.com/hydroan/gst/service"
-	"github.com/hydroan/gst/types"
 	"go.uber.org/zap"
 )
 
@@ -26,7 +26,7 @@ type TOTPStatusService struct {
 // List loads the current user's TOTP devices and builds the status response
 // used by clients to render MFA settings. It requires an authenticated request,
 // returns active devices only, and derives Enabled from the active device count.
-func (t *TOTPStatusService) List(ctx *types.ServiceContext, req *model.Empty) (rsp *modelmfa.TOTPStatusRsp, err error) {
+func (t *TOTPStatusService) List(ctx *gst.ServiceContext, req *model.Empty) (rsp *modelmfa.TOTPStatusRsp, err error) {
 	log := t.WithContext(ctx, ctx.Phase())
 
 	// 1. Verify the authenticated account.
@@ -52,7 +52,7 @@ func (t *TOTPStatusService) List(ctx *types.ServiceContext, req *model.Empty) (r
 // sanitized enrollment view shared by the self-service and administrative
 // status endpoints: device metadata only, never secrets or recovery-code
 // hashes.
-func buildTOTPStatusRsp(ctx *types.ServiceContext, userID string) (*modelmfa.TOTPStatusRsp, error) {
+func buildTOTPStatusRsp(ctx *gst.ServiceContext, userID string) (*modelmfa.TOTPStatusRsp, error) {
 	devices := make([]*modelmfa.TOTPDevice, 0)
 	if err := database.Database[*modelmfa.TOTPDevice](ctx).WithQuery(&modelmfa.TOTPDevice{
 		UserID:   userID,

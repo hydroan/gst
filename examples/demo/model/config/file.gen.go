@@ -4,39 +4,39 @@
 package config
 
 import (
-	types "github.com/hydroan/gst/types"
+	gst "github.com/hydroan/gst"
 	gorm "gorm.io/gorm"
 )
 
 // FileCols are the typed column references of File.
 var FileCols = struct {
-	Checksum    types.Column[string]
-	Content     types.Column[string]
-	CreatedAt   types.TimeColumn
-	CreatedBy   types.Column[string]
-	DeletedAt   types.Column[gorm.DeletedAt]
-	Encrypted   types.Column[bool]
-	Environment types.Column[string]
-	Format      types.Column[FileFormat]
-	ID          types.Column[string]
-	Name        types.Column[string]
-	NamespaceID types.Column[string]
-	Size        types.NumericColumn[int]
-	UpdatedAt   types.TimeColumn
-	UpdatedBy   types.Column[string]
+	Checksum    gst.Column[string]
+	Content     gst.Column[string]
+	CreatedAt   gst.TimeColumn
+	CreatedBy   gst.Column[string]
+	DeletedAt   gst.Column[gorm.DeletedAt]
+	Encrypted   gst.Column[bool]
+	Environment gst.Column[string]
+	Format      gst.Column[FileFormat]
+	ID          gst.Column[string]
+	Name        gst.Column[string]
+	NamespaceID gst.Column[string]
+	Size        gst.NumericColumn[int]
+	UpdatedAt   gst.TimeColumn
+	UpdatedBy   gst.Column[string]
 }{
-	Checksum:    types.NewColumn[*File, string]("checksum"),
-	Content:     types.NewColumn[*File, string]("content"),
-	CreatedAt:   types.NewTimeColumn[*File]("created_at"),
-	CreatedBy:   types.NewColumn[*File, string]("created_by"),
-	DeletedAt:   types.NewColumn[*File, gorm.DeletedAt]("deleted_at"),
-	Encrypted:   types.NewColumn[*File, bool]("encrypted"),
-	Environment: types.NewColumn[*File, string]("environment"),
-	Format:      types.NewColumn[*File, FileFormat]("format"),
-	ID:          types.NewColumn[*File, string]("id"),
-	Name:        types.NewColumn[*File, string]("name"),
-	NamespaceID: types.NewColumn[*File, string]("namespace_id"),
-	Size:        types.NewNumericColumn[*File, int]("size"),
-	UpdatedAt:   types.NewTimeColumn[*File]("updated_at"),
-	UpdatedBy:   types.NewColumn[*File, string]("updated_by"),
+	Checksum:    gst.NewColumn[*File, string]("checksum"),
+	Content:     gst.NewColumn[*File, string]("content"),
+	CreatedAt:   gst.NewTimeColumn[*File]("created_at"),
+	CreatedBy:   gst.NewColumn[*File, string]("created_by"),
+	DeletedAt:   gst.NewColumn[*File, gorm.DeletedAt]("deleted_at"),
+	Encrypted:   gst.NewColumn[*File, bool]("encrypted"),
+	Environment: gst.NewColumn[*File, string]("environment"),
+	Format:      gst.NewColumn[*File, FileFormat]("format"),
+	ID:          gst.NewColumn[*File, string]("id"),
+	Name:        gst.NewColumn[*File, string]("name"),
+	NamespaceID: gst.NewColumn[*File, string]("namespace_id"),
+	Size:        gst.NewNumericColumn[*File, int]("size"),
+	UpdatedAt:   gst.NewTimeColumn[*File]("updated_at"),
+	UpdatedBy:   gst.NewColumn[*File, string]("updated_by"),
 }

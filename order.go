@@ -1,7 +1,7 @@
-package types
+package gst
 
 import (
-	itypes "github.com/hydroan/gst/internal/types"
+	"github.com/hydroan/gst/internal/types"
 )
 
 // Order is one ORDER BY term: a column and the direction to sort it by. Its
@@ -14,10 +14,10 @@ import (
 // an order of another model. A union orders its result columns by name and
 // reads no table, and WithExpand orders the associated table, so neither
 // checks it. An Order with an empty column is skipped rather than rendered.
-type Order = itypes.Order
+type Order = types.Order
 
 // Ordering is what the OrderBy methods of a select, a window and a union
 // accept: an Order sorting by a column reference, or a TermOrder sorting by a
 // projection term. The set is closed, so an ordering can never carry SQL the
 // way a free-form string could.
-type Ordering = itypes.Ordering
+type Ordering = types.Ordering

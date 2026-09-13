@@ -5,9 +5,9 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/hydroan/gst/consts"
 	"github.com/hydroan/gst/dsl"
 	"github.com/hydroan/gst/internal/codegen/gen"
-	"github.com/hydroan/gst/types/consts"
 )
 
 func TestCollectOrphanServiceDirsKeepsImportedHelperDirs(t *testing.T) {

@@ -4,12 +4,12 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/hydroan/gst"
 	"github.com/hydroan/gst/authz/rbac"
+	"github.com/hydroan/gst/consts"
 	modeliamuser "github.com/hydroan/gst/internal/model/iam/user"
 	"github.com/hydroan/gst/service"
 	"github.com/hydroan/gst/tenant"
-	"github.com/hydroan/gst/types"
-	"github.com/hydroan/gst/types/consts"
 )
 
 // EnsureTenantAdmin verifies admin-user operations inside the current tenant.
@@ -19,7 +19,7 @@ import (
 // current tenant, and when a concrete target is supplied the target must also be
 // a member of that tenant. System-root targets are never manageable through
 // tenant-local admin APIs.
-func EnsureTenantAdmin(ctx *types.ServiceContext, actor *modeliamuser.User, target *modeliamuser.User) error {
+func EnsureTenantAdmin(ctx *gst.ServiceContext, actor *modeliamuser.User, target *modeliamuser.User) error {
 	systemRootActor, err := isSystemRoot(ctx, actor)
 	if err != nil {
 		return service.NewErrorWithCause(http.StatusInternalServerError, "authorization unavailable", err)
@@ -70,7 +70,7 @@ func EnsureTenantAdmin(ctx *types.ServiceContext, actor *modeliamuser.User, targ
 //
 // Tenant middleware writes TenantID into ServiceContext. If no tenant resolver is
 // installed, admin APIs operate in the default authorization domain.
-func currentTenant(ctx *types.ServiceContext) string {
+func currentTenant(ctx *gst.ServiceContext) string {
 	if ctx != nil && strings.TrimSpace(ctx.TenantID()) != "" {
 		return strings.TrimSpace(ctx.TenantID())
 	}
@@ -82,7 +82,7 @@ func currentTenant(ctx *types.ServiceContext) string {
 // ServiceContext.Path contains the concrete request path in normal HTTP flows.
 // Route is kept as a fallback for service-level tests or callers that construct
 // contexts without an HTTP request.
-func operationObject(ctx *types.ServiceContext) string {
+func operationObject(ctx *gst.ServiceContext) string {
 	if ctx == nil {
 		return ""
 	}
@@ -93,7 +93,7 @@ func operationObject(ctx *types.ServiceContext) string {
 }
 
 // operationAction returns the action string used for RBAC route authorization.
-func operationAction(ctx *types.ServiceContext) string {
+func operationAction(ctx *gst.ServiceContext) string {
 	if ctx == nil {
 		return ""
 	}
@@ -104,7 +104,7 @@ func operationAction(ctx *types.ServiceContext) string {
 //
 // User rows do not carry tenant_id, so target visibility is derived from RBAC
 // role bindings rather than from the IAM user table.
-func targetBelongsToTenant(ctx *types.ServiceContext, tenant string, userID string) (bool, error) {
+func targetBelongsToTenant(ctx *gst.ServiceContext, tenant string, userID string) (bool, error) {
 	if strings.TrimSpace(userID) == "" {
 		return false, nil
 	}
@@ -116,7 +116,7 @@ func targetBelongsToTenant(ctx *types.ServiceContext, tenant string, userID stri
 }
 
 // isSystemRoot reports whether user holds the framework-level root role.
-func isSystemRoot(ctx *types.ServiceContext, user *modeliamuser.User) (bool, error) {
+func isSystemRoot(ctx *gst.ServiceContext, user *modeliamuser.User) (bool, error) {
 	if user == nil || strings.TrimSpace(user.GetID()) == "" {
 		return false, nil
 	}

@@ -12,6 +12,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/errors"
+	"github.com/hydroan/gst/consts"
 	"github.com/hydroan/gst/ds/tree/trie"
 	"github.com/hydroan/gst/dsl"
 	"github.com/hydroan/gst/internal/clioutput"
@@ -20,7 +21,6 @@ import (
 	"github.com/hydroan/gst/internal/codegen/gen"
 	pkgnew "github.com/hydroan/gst/internal/codegen/new"
 	"github.com/hydroan/gst/internal/ggconfig"
-	"github.com/hydroan/gst/types/consts"
 	"github.com/samber/lo"
 	"github.com/spf13/cobra"
 )
@@ -282,9 +282,9 @@ func genRunWithOptions(opts genRunOptions) error {
 	}
 
 	// generate router/router.gen.go
-	// router always imports "github.com/hydroan/gst/types"
+	// router always imports "github.com/hydroan/gst"
 	// Load package preparation to avoid Golang analysis and speed up generation.
-	routerImportMap["github.com/hydroan/gst/types"] = struct{}{}
+	routerImportMap["github.com/hydroan/gst"] = struct{}{}
 	routerImports := lo.Keys(routerImportMap)
 	sort.Strings(routerImports)
 	routerCode, err := gen.BuildRouterFile("router", routerImports, routerStmts...)

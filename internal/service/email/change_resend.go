@@ -5,9 +5,9 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/errors"
+	"github.com/hydroan/gst"
 	modelemail "github.com/hydroan/gst/internal/model/email"
 	"github.com/hydroan/gst/service"
-	"github.com/hydroan/gst/types"
 )
 
 // ChangeResendService handles authenticated requests that resend confirmation
@@ -18,7 +18,7 @@ type ChangeResendService struct {
 
 // Create revalidates the current account and reissues the confirmation email for
 // the target new email address.
-func (s *ChangeResendService) Create(ctx *types.ServiceContext, req *modelemail.ChangeResendReq) (rsp *modelemail.ChangeResendRsp, err error) {
+func (s *ChangeResendService) Create(ctx *gst.ServiceContext, req *modelemail.ChangeResendReq) (rsp *modelemail.ChangeResendRsp, err error) {
 	log := s.WithContext(ctx, ctx.Phase())
 	if ctx == nil || strings.TrimSpace(ctx.UserID()) == "" {
 		return nil, service.NewError(http.StatusBadRequest, "authentication required")

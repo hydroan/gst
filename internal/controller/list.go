@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/gin-gonic/gin"
+	"github.com/hydroan/gst/consts"
 	"github.com/hydroan/gst/database"
 	modellogmgmt "github.com/hydroan/gst/internal/model/logmgmt"
 	"github.com/hydroan/gst/internal/requestctx"
@@ -12,7 +13,6 @@ import (
 	"github.com/hydroan/gst/internal/urlquery"
 	"github.com/hydroan/gst/logger"
 	gstotel "github.com/hydroan/gst/otel"
-	"github.com/hydroan/gst/types/consts"
 	"go.uber.org/zap"
 )
 

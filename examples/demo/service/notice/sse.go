@@ -3,9 +3,9 @@ package notice
 import (
 	"demo/model"
 
+	"github.com/hydroan/gst"
 	"github.com/hydroan/gst/service"
 	"github.com/hydroan/gst/sse"
-	"github.com/hydroan/gst/types"
 )
 
 type Streamer struct {
@@ -17,7 +17,7 @@ type Streamer struct {
 // conn.Context() is done — see the gst sse package documentation for that
 // shape. Heartbeat comment frames are sent automatically while the stream is
 // open, so an event-quiet connection stays alive on its own.
-func (n *Streamer) SSE(ctx *types.ServiceContext) (err error) {
+func (n *Streamer) SSE(ctx *gst.ServiceContext) (err error) {
 	log := n.WithContext(ctx, ctx.Phase())
 	log.Info("notice sse")
 

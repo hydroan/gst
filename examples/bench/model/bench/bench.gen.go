@@ -4,33 +4,33 @@
 package bench
 
 import (
-	types "github.com/hydroan/gst/types"
+	gst "github.com/hydroan/gst"
 	gorm "gorm.io/gorm"
 )
 
 // BenchCols are the typed column references of Bench.
 var BenchCols = struct {
-	CreatedAt types.TimeColumn
-	CreatedBy types.Column[string]
-	DeletedAt types.Column[gorm.DeletedAt]
-	Field1    types.Column[string]
-	Field2    types.NumericColumn[int]
-	Field3    types.Column[string]
-	Field4    types.NumericColumn[int]
-	Field5    types.Column[bool]
-	ID        types.Column[string]
-	UpdatedAt types.TimeColumn
-	UpdatedBy types.Column[string]
+	CreatedAt gst.TimeColumn
+	CreatedBy gst.Column[string]
+	DeletedAt gst.Column[gorm.DeletedAt]
+	Field1    gst.Column[string]
+	Field2    gst.NumericColumn[int]
+	Field3    gst.Column[string]
+	Field4    gst.NumericColumn[int]
+	Field5    gst.Column[bool]
+	ID        gst.Column[string]
+	UpdatedAt gst.TimeColumn
+	UpdatedBy gst.Column[string]
 }{
-	CreatedAt: types.NewTimeColumn[*Bench]("created_at"),
-	CreatedBy: types.NewColumn[*Bench, string]("created_by"),
-	DeletedAt: types.NewColumn[*Bench, gorm.DeletedAt]("deleted_at"),
-	Field1:    types.NewColumn[*Bench, string]("field1"),
-	Field2:    types.NewNumericColumn[*Bench, int]("field2"),
-	Field3:    types.NewColumn[*Bench, string]("field3"),
-	Field4:    types.NewNumericColumn[*Bench, int]("field4"),
-	Field5:    types.NewColumn[*Bench, bool]("field5"),
-	ID:        types.NewColumn[*Bench, string]("id"),
-	UpdatedAt: types.NewTimeColumn[*Bench]("updated_at"),
-	UpdatedBy: types.NewColumn[*Bench, string]("updated_by"),
+	CreatedAt: gst.NewTimeColumn[*Bench]("created_at"),
+	CreatedBy: gst.NewColumn[*Bench, string]("created_by"),
+	DeletedAt: gst.NewColumn[*Bench, gorm.DeletedAt]("deleted_at"),
+	Field1:    gst.NewColumn[*Bench, string]("field1"),
+	Field2:    gst.NewNumericColumn[*Bench, int]("field2"),
+	Field3:    gst.NewColumn[*Bench, string]("field3"),
+	Field4:    gst.NewNumericColumn[*Bench, int]("field4"),
+	Field5:    gst.NewColumn[*Bench, bool]("field5"),
+	ID:        gst.NewColumn[*Bench, string]("id"),
+	UpdatedAt: gst.NewTimeColumn[*Bench]("updated_at"),
+	UpdatedBy: gst.NewColumn[*Bench, string]("updated_by"),
 }

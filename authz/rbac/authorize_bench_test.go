@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/hydroan/gst/types/consts"
+	"github.com/hydroan/gst/consts"
 )
 
 // BenchmarkAuthorize measures a decision on the branch that costs the most: a

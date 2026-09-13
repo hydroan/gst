@@ -4,8 +4,8 @@ import (
 	"reflect"
 	"sync"
 
+	"github.com/hydroan/gst/consts"
 	"github.com/hydroan/gst/internal/hookoverride"
-	"github.com/hydroan/gst/types/consts"
 )
 
 // Hook override detection for models.

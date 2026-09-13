@@ -3,23 +3,23 @@ package serviceiamuser
 import (
 	"net/http"
 
+	"github.com/hydroan/gst"
 	"github.com/hydroan/gst/authz/rbac"
+	"github.com/hydroan/gst/consts"
 	"github.com/hydroan/gst/database"
 	modeliamuser "github.com/hydroan/gst/internal/model/iam/user"
 	serviceiamaccount "github.com/hydroan/gst/internal/service/iam/account"
 	"github.com/hydroan/gst/internal/service/iam/adminauth"
 	"github.com/hydroan/gst/model"
 	"github.com/hydroan/gst/service"
-	"github.com/hydroan/gst/types"
-	"github.com/hydroan/gst/types/consts"
 )
 
 // Column references for the visibility scope and the default order below;
 // module sources carry no generated Cols vars, so the references are declared
 // here.
 var (
-	colUserID        = types.NewColumn[*modeliamuser.User, string]("id")
-	colUserCreatedAt = types.NewTimeColumn[*modeliamuser.User]("created_at")
+	colUserID        = gst.NewColumn[*modeliamuser.User, string]("id")
+	colUserCreatedAt = gst.NewTimeColumn[*modeliamuser.User]("created_at")
 )
 
 // AdminUserListService handles GET /iam/admin/users for privileged administrators.
@@ -37,7 +37,7 @@ type AdminUserListService struct {
 // endpoint-level permission. The visible user set is applied later by
 // userVisibilityQueryOptions because list requests do not have one concrete target
 // user to check.
-func (a *AdminUserListService) List(ctx *types.ServiceContext, _ *model.Empty) (rsp *modeliamuser.AdminUserListRsp, err error) {
+func (a *AdminUserListService) List(ctx *gst.ServiceContext, _ *model.Empty) (rsp *modeliamuser.AdminUserListRsp, err error) {
 	actor, err := serviceiamaccount.LoadActor(ctx)
 	if err != nil {
 		return nil, err
@@ -74,7 +74,7 @@ func (a *AdminUserListService) List(ctx *types.ServiceContext, _ *model.Empty) (
 // The count and the page are built from one query value and one set of options,
 // because a total computed from anything else describes a different result set
 // than the page beside it.
-func (a *AdminUserListService) listUsers(ctx *types.ServiceContext, actor *modeliamuser.User) ([]*modeliamuser.User, int, error) {
+func (a *AdminUserListService) listUsers(ctx *gst.ServiceContext, actor *modeliamuser.User) ([]*modeliamuser.User, int, error) {
 	opts, err := userVisibilityQueryOptions(ctx, actor)
 	if err != nil {
 		return nil, 0, service.NewErrorWithCause(http.StatusInternalServerError, "failed to list users", err)
@@ -104,7 +104,7 @@ func (a *AdminUserListService) listUsers(ctx *types.ServiceContext, actor *model
 	}
 
 	if len(orders) == 0 {
-		orders = []types.Order{colUserCreatedAt.Desc()}
+		orders = []gst.Order{colUserCreatedAt.Desc()}
 	}
 	page, size := a.QueryPagination(ctx)
 	users := make([]*modeliamuser.User, 0)
@@ -125,45 +125,45 @@ func (a *AdminUserListService) listUsers(ctx *types.ServiceContext, actor *model
 // assigned to at least one role in the current tenant, then querying users by
 // those subject IDs. System root actors bypass this tenant scope and can list
 // every user.
-func userVisibilityQueryOptions(ctx *types.ServiceContext, actor *modeliamuser.User) (types.QueryOptions, error) {
+func userVisibilityQueryOptions(ctx *gst.ServiceContext, actor *modeliamuser.User) (gst.QueryOptions, error) {
 	systemRoot, err := isSystemRoot(ctx, actor)
 	if err != nil {
-		return types.QueryOptions{}, service.NewErrorWithCause(http.StatusInternalServerError, "failed to resolve actor system role", err)
+		return gst.QueryOptions{}, service.NewErrorWithCause(http.StatusInternalServerError, "failed to resolve actor system role", err)
 	}
 	if systemRoot {
-		return types.QueryOptions{AllowEmpty: true}, nil
+		return gst.QueryOptions{AllowEmpty: true}, nil
 	}
 
 	// The current tenant comes from the request context and falls back to the
 	// default authorization domain when the application has no tenant resolver.
 	subjectIDs, err := rbac.RBAC().SubjectsInTenant(ctx, currentTenant(ctx))
 	if err != nil {
-		return types.QueryOptions{}, service.NewErrorWithCause(http.StatusInternalServerError, "failed to list tenant subjects", err)
+		return gst.QueryOptions{}, service.NewErrorWithCause(http.StatusInternalServerError, "failed to list tenant subjects", err)
 	}
 	if len(subjectIDs) == 0 {
 		return emptyUserVisibilityQueryOptions(), nil
 	}
 	subjectIDs, err = excludeSystemRootSubjects(ctx, subjectIDs)
 	if err != nil {
-		return types.QueryOptions{}, err
+		return gst.QueryOptions{}, err
 	}
 	if len(subjectIDs) == 0 {
 		return emptyUserVisibilityQueryOptions(), nil
 	}
-	return types.QueryOptions{Filters: []types.Filter{colUserID.In(subjectIDs...)}}, nil
+	return gst.QueryOptions{Filters: []gst.Filter{colUserID.In(subjectIDs...)}}, nil
 }
 
 // emptyUserVisibilityQueryOptions denies every row: the caller has no subject
 // it may see, so the list answers with none rather than with everyone.
-func emptyUserVisibilityQueryOptions() types.QueryOptions {
-	return types.QueryOptions{Filters: []types.Filter{types.FilterFalse()}}
+func emptyUserVisibilityQueryOptions() gst.QueryOptions {
+	return gst.QueryOptions{Filters: []gst.Filter{gst.FilterFalse()}}
 }
 
 // excludeSystemRootSubjects removes subjects that tenant administrators must
 // never manage through tenant-local user APIs. A root user can be bound to a
 // tenant role for authorization setup, but that binding must not make root
 // visible or manageable from that tenant's admin user list.
-func excludeSystemRootSubjects(ctx *types.ServiceContext, subjectIDs []string) ([]string, error) {
+func excludeSystemRootSubjects(ctx *gst.ServiceContext, subjectIDs []string) ([]string, error) {
 	filtered := make([]string, 0, len(subjectIDs))
 	for _, subjectID := range subjectIDs {
 		systemRoot, err := rbac.RBAC().HasSystemRole(ctx, subjectID, consts.AUTHZ_SYSTEM_ROLE_ROOT)

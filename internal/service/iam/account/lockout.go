@@ -8,9 +8,9 @@ import (
 	"time"
 
 	"github.com/cockroachdb/errors"
+	"github.com/hydroan/gst"
 	serviceiamsession "github.com/hydroan/gst/internal/service/iam/session"
 	"github.com/hydroan/gst/service"
-	"github.com/hydroan/gst/types"
 )
 
 const (
@@ -30,7 +30,7 @@ const (
 // difference between the two replies as whether that account exists. The cost
 // is that a locked-out user is not told why, which is the side to be wrong on
 // while there is no per-address throttle in front of this.
-func ensureLoginNotLockedOut(ctx *types.ServiceContext, username string) error {
+func ensureLoginNotLockedOut(ctx *gst.ServiceContext, username string) error {
 	if serviceiamsession.Store.LoginFailures(ctx, username) < loginFailureLimit() {
 		return nil
 	}
@@ -42,14 +42,14 @@ func ensureLoginNotLockedOut(ctx *types.ServiceContext, username string) error {
 // Only attempts against an account that exists are counted. Counting the rest
 // would let anyone fill Redis with a key per username they invent, and the
 // account they are guessing at is the only one a lockout protects anyway.
-func recordLoginFailure(ctx *types.ServiceContext, username string) {
+func recordLoginFailure(ctx *gst.ServiceContext, username string) {
 	serviceiamsession.Store.RecordLoginFailure(ctx, username, loginFailureWindow())
 }
 
 // clearLoginFailures forgets an account's failed attempts after it proves the
 // password, so a user who eventually gets it right starts from zero rather than
 // one attempt short of a lockout.
-func clearLoginFailures(ctx *types.ServiceContext, username string) {
+func clearLoginFailures(ctx *gst.ServiceContext, username string) {
 	serviceiamsession.Store.ClearLoginFailures(ctx, username)
 }
 

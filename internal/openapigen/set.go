@@ -5,8 +5,8 @@ import (
 	"sync"
 
 	"github.com/getkin/kin-openapi/openapi3"
+	"github.com/hydroan/gst/consts"
 	"github.com/hydroan/gst/internal/types"
-	"github.com/hydroan/gst/types/consts"
 )
 
 // pending holds one closure per registered route, each capturing that route's

@@ -13,6 +13,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/hydroan/gst/authn"
 	"github.com/hydroan/gst/client"
+	"github.com/hydroan/gst/consts"
 	"github.com/hydroan/gst/database"
 	modeliamaccount "github.com/hydroan/gst/internal/model/iam/account"
 	modeliamuser "github.com/hydroan/gst/internal/model/iam/user"
@@ -24,7 +25,6 @@ import (
 	"github.com/hydroan/gst/module/iam"
 	"github.com/hydroan/gst/redis"
 	"github.com/hydroan/gst/service"
-	"github.com/hydroan/gst/types/consts"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/crypto/bcrypt"
 )

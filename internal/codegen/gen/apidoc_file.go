@@ -9,8 +9,8 @@ import (
 	"strings"
 
 	"github.com/hydroan/gst/apidoc"
+	"github.com/hydroan/gst/consts"
 	"github.com/hydroan/gst/internal/codegen/constants"
-	"github.com/hydroan/gst/types/consts"
 )
 
 // StructDocEntry describes the doc comments of one struct extracted from a

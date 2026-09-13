@@ -3,10 +3,10 @@ package zap
 import (
 	"context"
 
+	"github.com/hydroan/gst/consts"
 	"github.com/hydroan/gst/internal/execctx"
 	"github.com/hydroan/gst/internal/requestctx"
 	"github.com/hydroan/gst/internal/types"
-	"github.com/hydroan/gst/types/consts"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 )

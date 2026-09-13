@@ -6,12 +6,12 @@ import (
 	"time"
 
 	"github.com/cockroachdb/errors"
+	"github.com/hydroan/gst"
 	"github.com/hydroan/gst/database"
 	modeliamsession "github.com/hydroan/gst/internal/model/iam/session"
 	modeliamuser "github.com/hydroan/gst/internal/model/iam/user"
 	"github.com/hydroan/gst/model"
 	"github.com/hydroan/gst/service"
-	"github.com/hydroan/gst/types"
 )
 
 // AdminUserSessionListService handles retrieval of all sessions owned by a specified user for privileged administrators.
@@ -20,7 +20,7 @@ type AdminUserSessionListService struct {
 }
 
 // List returns all indexed sessions of a specified user for a privileged administrator.
-func (a *AdminUserSessionListService) List(ctx *types.ServiceContext, req *model.Empty) (rsp *modeliamsession.AdminUserSessionListRsp, err error) {
+func (a *AdminUserSessionListService) List(ctx *gst.ServiceContext, req *model.Empty) (rsp *modeliamsession.AdminUserSessionListRsp, err error) {
 	currentSessionID, _, err := CurrentSession(ctx)
 	if err != nil {
 		return nil, err
@@ -63,7 +63,7 @@ func (a *AdminUserSessionListService) List(ctx *types.ServiceContext, req *model
 // filters by user after loading each session snapshot. That keeps the online
 // path bounded by recently active sessions instead of scanning every session
 // owned by the target user.
-func (a *AdminUserSessionListService) buildView(ctx *types.ServiceContext, user *modeliamuser.User, currentSessionID string, onlineSince time.Time, onlineOnly bool) (modeliamsession.AdminSessionOwnerView, error) {
+func (a *AdminUserSessionListService) buildView(ctx *gst.ServiceContext, user *modeliamuser.User, currentSessionID string, onlineSince time.Time, onlineOnly bool) (modeliamsession.AdminSessionOwnerView, error) {
 	credential, err := loadSessionPasswordCredential(ctx, user.ID)
 	if err != nil {
 		return modeliamsession.AdminSessionOwnerView{}, service.NewErrorWithCause(http.StatusInternalServerError, "failed to load password credential", err)
@@ -102,7 +102,7 @@ func (a *AdminUserSessionListService) buildView(ctx *types.ServiceContext, user 
 
 		sessionData, getErr := Store.LoadSession(ctx, sessionID)
 		if getErr != nil {
-			if errors.Is(getErr, types.ErrEntryNotFound) {
+			if errors.Is(getErr, gst.ErrEntryNotFound) {
 				_ = Store.DropSessionIndexes(ctx, indexUserID, sessionID)
 				continue
 			}

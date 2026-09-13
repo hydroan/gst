@@ -8,7 +8,7 @@ import (
 	"strings"
 
 	"github.com/gertd/go-pluralize"
-	"github.com/hydroan/gst/types/consts"
+	"github.com/hydroan/gst/consts"
 )
 
 var pluralizeCli = pluralize.NewClient()
@@ -18,7 +18,7 @@ var pluralizeCli = pluralize.NewClient()
 import (
 	"codegen/model"
 	"github.com/hydroan/gst/service"
-	"github.com/hydroan/gst/types"
+	"github.com/hydroan/gst"
 )
 */
 func imports(modulePath, modelFileDir, modelPkgName string, otherPkg ...string) *ast.GenDecl {
@@ -50,7 +50,7 @@ func imports(modulePath, modelFileDir, modelPkgName string, otherPkg ...string) 
 			&ast.ImportSpec{
 				Path: &ast.BasicLit{
 					Kind:  token.STRING,
-					Value: `"github.com/hydroan/gst/types"`,
+					Value: `"github.com/hydroan/gst"`,
 				},
 			},
 		},
@@ -114,7 +114,7 @@ func types(modelPkgName, modelName, reqName, rspName string, _ consts.Phase, rol
 
 	if withComment {
 		comments = append(comments, &ast.Comment{
-			Text: fmt.Sprintf("// %s implements the types.Service[*%s.%s, *%s.%s, *%s.%s] interface.",
+			Text: fmt.Sprintf("// %s implements the gst.Service[*%s.%s, *%s.%s, *%s.%s] interface.",
 				strings.ToLower(modelName), modelPkgName, modelName, modelPkgName, modelName, modelPkgName, modelName),
 		})
 	}
@@ -166,8 +166,8 @@ func types(modelPkgName, modelName, reqName, rspName string, _ consts.Phase, rol
 // serviceMethod1 generates an ast node that represents the declaration of below:
 // For example:
 //
-//	"func (u *Creator) CreateBefore(ctx *types.ServiceContext, user *model.User) error {\n}"
-//	"func (g *Updater) UpdateAfter(ctx *types.ServiceContext, group *model.Group) error {\n}",
+//	"func (u *Creator) CreateBefore(ctx *gst.ServiceContext, user *model.User) error {\n}"
+//	"func (g *Updater) UpdateAfter(ctx *gst.ServiceContext, group *model.Group) error {\n}",
 func serviceMethod1(recvName, modelName, modelPkgName string, phase consts.Phase, roleName string, body ...ast.Stmt) *ast.FuncDecl {
 	return &ast.FuncDecl{
 		Recv: &ast.FieldList{
@@ -188,7 +188,7 @@ func serviceMethod1(recvName, modelName, modelPkgName string, phase consts.Phase
 						Names: []*ast.Ident{ast.NewIdent("ctx")},
 						Type: &ast.StarExpr{
 							X: &ast.SelectorExpr{
-								X:   ast.NewIdent("types"),
+								X:   ast.NewIdent("gst"),
 								Sel: ast.NewIdent("ServiceContext"),
 							},
 						},
@@ -221,8 +221,8 @@ func serviceMethod1(recvName, modelName, modelPkgName string, phase consts.Phase
 // serviceMethod2 generates an ast node that represents the declaration of below:
 // For example:
 //
-//	"func (u *Lister) ListBefore(ctx *types.ServiceContext, users *[]*model.User) error {\n}"
-//	"func (u *Lister) ListAfter(ctx *types.ServiceContext, users *[]*model.User) error {\n}"
+//	"func (u *Lister) ListBefore(ctx *gst.ServiceContext, users *[]*model.User) error {\n}"
+//	"func (u *Lister) ListAfter(ctx *gst.ServiceContext, users *[]*model.User) error {\n}"
 func serviceMethod2(recvName, modelName, modelPkgName string, phase consts.Phase, roleName string, body ...ast.Stmt) *ast.FuncDecl {
 	return &ast.FuncDecl{
 		Recv: &ast.FieldList{
@@ -243,7 +243,7 @@ func serviceMethod2(recvName, modelName, modelPkgName string, phase consts.Phase
 						Names: []*ast.Ident{ast.NewIdent("ctx")},
 						Type: &ast.StarExpr{
 							X: &ast.SelectorExpr{
-								X:   ast.NewIdent("types"),
+								X:   ast.NewIdent("gst"),
 								Sel: ast.NewIdent("ServiceContext"),
 							},
 						},
@@ -280,8 +280,8 @@ func serviceMethod2(recvName, modelName, modelPkgName string, phase consts.Phase
 // serviceMethod3 generates an ast node that represents the declaration of below:
 // For example:
 //
-//	"func (u *ManyCreator) CreateManyBefore(ctx *types.ServiceContext, users ...*model.User) error {\n}"
-//	"func (u *ManyCreator) CreateManyAfter(ctx *types.ServiceContext, users ...*model.User) error {\n}"
+//	"func (u *ManyCreator) CreateManyBefore(ctx *gst.ServiceContext, users ...*model.User) error {\n}"
+//	"func (u *ManyCreator) CreateManyAfter(ctx *gst.ServiceContext, users ...*model.User) error {\n}"
 func serviceMethod3(recvName, modelName, modelPkgName string, phase consts.Phase, roleName string, body ...ast.Stmt) *ast.FuncDecl {
 	return &ast.FuncDecl{
 		Recv: &ast.FieldList{
@@ -302,7 +302,7 @@ func serviceMethod3(recvName, modelName, modelPkgName string, phase consts.Phase
 						Names: []*ast.Ident{ast.NewIdent("ctx")},
 						Type: &ast.StarExpr{
 							X: &ast.SelectorExpr{
-								X:   ast.NewIdent("types"),
+								X:   ast.NewIdent("gst"),
 								Sel: ast.NewIdent("ServiceContext"),
 							},
 						},
@@ -337,7 +337,7 @@ func serviceMethod3(recvName, modelName, modelPkgName string, phase consts.Phase
 // serviceMethod4 generates an ast node that represents the declaration of below:
 // For example:
 //
-//	func (u *Creator) Create(ctx *types.ServiceContext, user *model.User) (rsp *model.User, err error) {\n}
+//	func (u *Creator) Create(ctx *gst.ServiceContext, user *model.User) (rsp *model.User, err error) {\n}
 func serviceMethod4(recvName, modelPkgName, reqName, rspName string, phase consts.Phase, roleName string, body ...ast.Stmt) *ast.FuncDecl {
 	// The dsl.PayloadEmpty sentinel resolves to *model.Empty from the gst
 	// model package on either side; any other action type is emitted in the
@@ -364,7 +364,7 @@ func serviceMethod4(recvName, modelPkgName, reqName, rspName string, phase const
 						Names: []*ast.Ident{ast.NewIdent("ctx")},
 						Type: &ast.StarExpr{
 							X: &ast.SelectorExpr{
-								X:   ast.NewIdent("types"),
+								X:   ast.NewIdent("gst"),
 								Sel: ast.NewIdent("ServiceContext"),
 							},
 						},
@@ -397,7 +397,7 @@ func serviceMethod4(recvName, modelPkgName, reqName, rspName string, phase const
 // serviceMethod5 generates an ast node that represents the declaration of below:
 // For example:
 //
-//	func (a *Importer) Import(ctx *types.ServiceContext, reader io.Reader) ([]*model.Sample, error) {\n}
+//	func (a *Importer) Import(ctx *gst.ServiceContext, reader io.Reader) ([]*model.Sample, error) {\n}
 func serviceMethod5(recvName, modelName, modelPkgName string, _ consts.Phase, roleName string, body ...ast.Stmt) *ast.FuncDecl {
 	return &ast.FuncDecl{
 		Recv: &ast.FieldList{
@@ -418,7 +418,7 @@ func serviceMethod5(recvName, modelName, modelPkgName string, _ consts.Phase, ro
 						Names: []*ast.Ident{ast.NewIdent("ctx")},
 						Type: &ast.StarExpr{
 							X: &ast.SelectorExpr{
-								X:   ast.NewIdent("types"),
+								X:   ast.NewIdent("gst"),
 								Sel: ast.NewIdent("ServiceContext"),
 							},
 						},
@@ -461,7 +461,7 @@ func serviceMethod5(recvName, modelName, modelPkgName string, _ consts.Phase, ro
 // serviceMethod7 generates an ast node that represents the declaration of below:
 // For example:
 //
-//	func (a *Streamer) SSE(ctx *types.ServiceContext) error {\n}
+//	func (a *Streamer) SSE(ctx *gst.ServiceContext) error {\n}
 func serviceMethod7(recvName, roleName string, body ...ast.Stmt) *ast.FuncDecl {
 	return &ast.FuncDecl{
 		Recv: &ast.FieldList{
@@ -482,7 +482,7 @@ func serviceMethod7(recvName, roleName string, body ...ast.Stmt) *ast.FuncDecl {
 						Names: []*ast.Ident{ast.NewIdent("ctx")},
 						Type: &ast.StarExpr{
 							X: &ast.SelectorExpr{
-								X:   ast.NewIdent("types"),
+								X:   ast.NewIdent("gst"),
 								Sel: ast.NewIdent("ServiceContext"),
 							},
 						},
@@ -507,7 +507,7 @@ func serviceMethod7(recvName, roleName string, body ...ast.Stmt) *ast.FuncDecl {
 // serviceMethod6 generates an ast node that represents the declaration of below:
 // For example:
 //
-//	func (a *Exporter) Export(ctx *types.ServiceContext, samples ...*model.Sample) ([]byte, error) {\n}
+//	func (a *Exporter) Export(ctx *gst.ServiceContext, samples ...*model.Sample) ([]byte, error) {\n}
 func serviceMethod6(recvName, modelName, modelPkgName string, _ consts.Phase, roleName string, body ...ast.Stmt) *ast.FuncDecl {
 	paramName := pluralizeCli.Plural(strings.ToLower(modelName))
 
@@ -530,7 +530,7 @@ func serviceMethod6(recvName, modelName, modelPkgName string, _ consts.Phase, ro
 						Names: []*ast.Ident{ast.NewIdent("ctx")},
 						Type: &ast.StarExpr{
 							X: &ast.SelectorExpr{
-								X:   ast.NewIdent("types"),
+								X:   ast.NewIdent("gst"),
 								Sel: ast.NewIdent("ServiceContext"),
 							},
 						},

@@ -7,8 +7,8 @@ import (
 	"time"
 
 	"github.com/cockroachdb/errors"
+	"github.com/hydroan/gst"
 	"github.com/hydroan/gst/service"
-	"github.com/hydroan/gst/types"
 )
 
 var (
@@ -44,29 +44,29 @@ var _ AccountGateway = (*missingAccountGateway)(nil)
 // so copied email module code does not import a concrete IAM user model.
 type AccountGateway interface {
 	// FindByEmail resolves the account currently bound to email.
-	FindByEmail(ctx *types.ServiceContext, email string) (*AccountSnapshot, error)
+	FindByEmail(ctx *gst.ServiceContext, email string) (*AccountSnapshot, error)
 
 	// GetByID loads a stable account snapshot by account ID.
-	GetByID(ctx *types.ServiceContext, userID string) (*AccountSnapshot, error)
+	GetByID(ctx *gst.ServiceContext, userID string) (*AccountSnapshot, error)
 
 	// VerifyPassword validates the current password for the account.
-	VerifyPassword(ctx *types.ServiceContext, userID, password string) error
+	VerifyPassword(ctx *gst.ServiceContext, userID, password string) error
 
 	// UpdatePassword persists a new password according to the host password policy.
-	UpdatePassword(ctx *types.ServiceContext, userID, newPassword string) error
+	UpdatePassword(ctx *gst.ServiceContext, userID, newPassword string) error
 
 	// MarkEmailVerified persists the email verification state for the account.
-	MarkEmailVerified(ctx *types.ServiceContext, userID string, verifiedAt time.Time) error
+	MarkEmailVerified(ctx *gst.ServiceContext, userID string, verifiedAt time.Time) error
 
 	// ApplyEmailChange persists a confirmed email change for the account.
-	ApplyEmailChange(ctx *types.ServiceContext, userID, newEmail string, changedAt time.Time) error
+	ApplyEmailChange(ctx *gst.ServiceContext, userID, newEmail string, changedAt time.Time) error
 
 	// InvalidateSessions revokes cached sessions for an account after password reset.
 	//
 	// It takes the request context like every other method here, so the revoke
 	// it performs is attributed to the request that caused it rather than
 	// appearing as unowned background work in traces.
-	InvalidateSessions(ctx *types.ServiceContext, userID string)
+	InvalidateSessions(ctx *gst.ServiceContext, userID string)
 }
 
 // AccountSnapshot is the minimal account state required by email flows. ID must be
@@ -127,28 +127,28 @@ func newAccountGatewayInvalidAccountServiceError(err error) *service.Error {
 // account-backed flows fail with a clear configuration error.
 type missingAccountGateway struct{}
 
-func (missingAccountGateway) FindByEmail(*types.ServiceContext, string) (*AccountSnapshot, error) {
+func (missingAccountGateway) FindByEmail(*gst.ServiceContext, string) (*AccountSnapshot, error) {
 	return nil, ErrAccountGatewayNotConfigured
 }
 
-func (missingAccountGateway) GetByID(*types.ServiceContext, string) (*AccountSnapshot, error) {
+func (missingAccountGateway) GetByID(*gst.ServiceContext, string) (*AccountSnapshot, error) {
 	return nil, ErrAccountGatewayNotConfigured
 }
 
-func (missingAccountGateway) VerifyPassword(*types.ServiceContext, string, string) error {
+func (missingAccountGateway) VerifyPassword(*gst.ServiceContext, string, string) error {
 	return ErrAccountGatewayNotConfigured
 }
 
-func (missingAccountGateway) UpdatePassword(*types.ServiceContext, string, string) error {
+func (missingAccountGateway) UpdatePassword(*gst.ServiceContext, string, string) error {
 	return ErrAccountGatewayNotConfigured
 }
 
-func (missingAccountGateway) MarkEmailVerified(*types.ServiceContext, string, time.Time) error {
+func (missingAccountGateway) MarkEmailVerified(*gst.ServiceContext, string, time.Time) error {
 	return ErrAccountGatewayNotConfigured
 }
 
-func (missingAccountGateway) ApplyEmailChange(*types.ServiceContext, string, string, time.Time) error {
+func (missingAccountGateway) ApplyEmailChange(*gst.ServiceContext, string, string, time.Time) error {
 	return ErrAccountGatewayNotConfigured
 }
 
-func (missingAccountGateway) InvalidateSessions(*types.ServiceContext, string) {}
+func (missingAccountGateway) InvalidateSessions(*gst.ServiceContext, string) {}

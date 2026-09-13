@@ -5,7 +5,7 @@ import (
 	"testing"
 
 	"github.com/hydroan/gst/apidoc"
-	"github.com/hydroan/gst/types/consts"
+	"github.com/hydroan/gst/consts"
 )
 
 func TestOperationIDDerivesFromPath(t *testing.T) {

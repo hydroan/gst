@@ -7,9 +7,9 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/hydroan/gst/consts"
 	"github.com/hydroan/gst/internal/codegen/constants"
 	"github.com/hydroan/gst/internal/codegen/gen"
-	"github.com/hydroan/gst/types/consts"
 	"github.com/stretchr/testify/require"
 )
 

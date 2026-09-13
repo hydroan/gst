@@ -3,7 +3,7 @@ package types
 import (
 	"context"
 
-	"github.com/hydroan/gst/types/consts"
+	"github.com/hydroan/gst/consts"
 )
 
 // Permission is one operation a role is allowed to perform on one object. It is

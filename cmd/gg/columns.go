@@ -13,10 +13,10 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/errors"
+	"github.com/hydroan/gst/consts"
 	"github.com/hydroan/gst/internal/clioutput"
 	"github.com/hydroan/gst/internal/codegen/constants"
 	"github.com/hydroan/gst/internal/codegen/gen"
-	"github.com/hydroan/gst/types/consts"
 )
 
 // columnInfo is one generated column reference, as reported by the inspection
@@ -172,14 +172,14 @@ func describeType(typ reflect.Type, modelPkg string) (expr string, importPath st
 	// packages that alias them. Reflection sees the defined type's internal
 	// path, which a business project cannot import, so the reference is
 	// rewritten to the alias the model source actually wrote: model.Version,
-	// model.Base and their siblings for internal/modelregistry, and the types
+	// model.Base and their siblings for internal/modelregistry, and the root gst
 	// package, which forwards everything internal/types defines under the same
 	// name.
 	switch typ.PkgPath() {
 	case "github.com/hydroan/gst/internal/modelregistry":
 		return "model." + name, "github.com/hydroan/gst/model"
 	case "github.com/hydroan/gst/internal/types":
-		return "types." + name, "github.com/hydroan/gst/types"
+		return "gst." + name, "github.com/hydroan/gst"
 	}
 	// typ.String() carries the package name the compiler recorded, which the
 	// generated file then imports under that exact alias.
@@ -405,7 +405,7 @@ func columnVarName(model string) string {
 
 // renderColumnsFile builds the generated source for one model source file.
 func renderColumnsFile(module string, pkgName string, source string, models []modelColumns) (string, error) {
-	imports := map[string]string{constants.ImportPathTypes: "types"}
+	imports := map[string]string{constants.ImportPathGst: "gst"}
 	for _, m := range models {
 		for _, col := range m.Columns {
 			// A TimeColumn reference carries no type argument, so the column
@@ -506,11 +506,11 @@ func columnTypeParam(col columnInfo) string {
 func columnRefType(col columnInfo) string {
 	switch {
 	case col.Time && col.TypeExpr != "":
-		return "types.TimeColumn"
+		return "gst.TimeColumn"
 	case col.Numeric && col.TypeExpr != "":
-		return fmt.Sprintf("types.NumericColumn[%s]", col.TypeExpr)
+		return fmt.Sprintf("gst.NumericColumn[%s]", col.TypeExpr)
 	default:
-		return fmt.Sprintf("types.Column[%s]", columnTypeParam(col))
+		return fmt.Sprintf("gst.Column[%s]", columnTypeParam(col))
 	}
 }
 
@@ -524,11 +524,11 @@ func columnRefType(col columnInfo) string {
 func columnRefLiteral(model string, col columnInfo) string {
 	switch {
 	case col.Time && col.TypeExpr != "":
-		return fmt.Sprintf("types.NewTimeColumn[*%s](%q)", model, col.DBName)
+		return fmt.Sprintf("gst.NewTimeColumn[*%s](%q)", model, col.DBName)
 	case col.Numeric && col.TypeExpr != "":
-		return fmt.Sprintf("types.NewNumericColumn[*%s, %s](%q)", model, col.TypeExpr, col.DBName)
+		return fmt.Sprintf("gst.NewNumericColumn[*%s, %s](%q)", model, col.TypeExpr, col.DBName)
 	default:
-		return fmt.Sprintf("types.NewColumn[*%s, %s](%q)", model, columnTypeParam(col), col.DBName)
+		return fmt.Sprintf("gst.NewColumn[*%s, %s](%q)", model, columnTypeParam(col), col.DBName)
 	}
 }
 

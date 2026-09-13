@@ -6,12 +6,12 @@ import (
 	"time"
 
 	"github.com/cockroachdb/errors"
+	"github.com/hydroan/gst"
 	"github.com/hydroan/gst/database"
 	modeliamsession "github.com/hydroan/gst/internal/model/iam/session"
 	modeliamuser "github.com/hydroan/gst/internal/model/iam/user"
 	"github.com/hydroan/gst/model"
 	"github.com/hydroan/gst/service"
-	"github.com/hydroan/gst/types"
 )
 
 // AdminSessionListService handles retrieval of all sessions grouped by user for privileged administrators.
@@ -25,7 +25,7 @@ type adminSessionOwnerItem struct {
 }
 
 // List returns all indexed sessions grouped by user for a privileged administrator.
-func (a *AdminSessionListService) List(ctx *types.ServiceContext, req *model.Empty) (rsp *modeliamsession.AdminSessionListRsp, err error) {
+func (a *AdminSessionListService) List(ctx *gst.ServiceContext, req *model.Empty) (rsp *modeliamsession.AdminSessionListRsp, err error) {
 	if err = ensureAdminSessionActor(ctx); err != nil {
 		return nil, err
 	}
@@ -55,7 +55,7 @@ func (a *AdminSessionListService) List(ctx *types.ServiceContext, req *model.Emp
 
 		sessionData, getErr := Store.LoadSession(ctx, sessionID)
 		if getErr != nil {
-			if errors.Is(getErr, types.ErrEntryNotFound) {
+			if errors.Is(getErr, gst.ErrEntryNotFound) {
 				_ = Store.DropSessionIndexes(ctx, "", sessionID)
 				continue
 			}
@@ -124,7 +124,7 @@ func (a *AdminSessionListService) List(ctx *types.ServiceContext, req *model.Emp
 	}, nil
 }
 
-func (a *AdminSessionListService) buildItem(ctx *types.ServiceContext, sourceSession modeliamsession.Session) (*adminSessionOwnerItem, bool, error) {
+func (a *AdminSessionListService) buildItem(ctx *gst.ServiceContext, sourceSession modeliamsession.Session) (*adminSessionOwnerItem, bool, error) {
 	targetUser := new(modeliamuser.User)
 	if err := database.Database[*modeliamuser.User](ctx).Get(targetUser, sourceSession.UserID); err != nil {
 		if errors.Is(err, database.ErrRecordNotFound) {

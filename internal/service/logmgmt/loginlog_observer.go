@@ -3,11 +3,11 @@ package servicelogmgmt
 import (
 	"fmt"
 
+	"github.com/hydroan/gst"
 	"github.com/hydroan/gst/authn"
 	"github.com/hydroan/gst/database"
 	modellogmgmt "github.com/hydroan/gst/internal/model/logmgmt"
 	"github.com/hydroan/gst/logger"
-	"github.com/hydroan/gst/types"
 	"go.uber.org/zap"
 )
 
@@ -21,7 +21,7 @@ import (
 // Observers never block or fail the login itself, so a failed insert is only
 // logged. The user-agent columns keep the historical "<name> <version>" and
 // "<platform> <os>" renderings so rows stay comparable across versions.
-func RecordLoginEvent(ctx *types.ServiceContext, event authn.LoginEvent) {
+func RecordLoginEvent(ctx *gst.ServiceContext, event authn.LoginEvent) {
 	entry := &modellogmgmt.LoginLog{
 		UserID:   event.UserID,
 		Username: event.Username,

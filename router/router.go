@@ -15,12 +15,12 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/hydroan/gst/config"
+	"github.com/hydroan/gst/consts"
 	"github.com/hydroan/gst/internal/controller"
 	"github.com/hydroan/gst/internal/openapigen"
 	"github.com/hydroan/gst/internal/types"
 	"github.com/hydroan/gst/middleware"
 	"github.com/hydroan/gst/response"
-	"github.com/hydroan/gst/types/consts"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	swaggerFiles "github.com/swaggo/files"
 	ginSwagger "github.com/swaggo/gin-swagger"

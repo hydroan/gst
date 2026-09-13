@@ -3,8 +3,8 @@ package serviceregistry
 import (
 	"testing"
 
+	"github.com/hydroan/gst/consts"
 	"github.com/hydroan/gst/internal/modelregistry"
-	"github.com/hydroan/gst/types/consts"
 )
 
 type testUser struct {

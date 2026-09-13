@@ -3,8 +3,8 @@ package service
 import (
 	"testing"
 
+	"github.com/hydroan/gst/consts"
 	"github.com/hydroan/gst/internal/serviceregistry"
-	"github.com/hydroan/gst/types/consts"
 )
 
 func BenchmarkResolveRegisteredService(b *testing.B) {

@@ -4,9 +4,9 @@ import (
 	"net/http"
 
 	"github.com/cockroachdb/errors"
+	"github.com/hydroan/gst"
 	modelemail "github.com/hydroan/gst/internal/model/email"
 	"github.com/hydroan/gst/service"
-	"github.com/hydroan/gst/types"
 )
 
 // PasswordResetRequestService handles public password reset requests that start
@@ -19,7 +19,7 @@ type PasswordResetRequestService struct {
 // It always returns the same public-facing message for accepted requests so the
 // caller cannot infer whether the account exists, while still enforcing throttle
 // limits before any token is created or email is sent.
-func (s *PasswordResetRequestService) Create(ctx *types.ServiceContext, req *modelemail.PasswordResetRequestReq) (rsp *modelemail.PasswordResetRequestRsp, err error) {
+func (s *PasswordResetRequestService) Create(ctx *gst.ServiceContext, req *modelemail.PasswordResetRequestReq) (rsp *modelemail.PasswordResetRequestRsp, err error) {
 	log := s.WithContext(ctx, ctx.Phase())
 	rsp = &modelemail.PasswordResetRequestRsp{Msg: publicAcceptedMessage(iamEmailFlowKindPasswordReset)}
 

@@ -3,8 +3,8 @@
 package versionmod
 
 import (
+	"github.com/hydroan/gst/consts"
 	"github.com/hydroan/gst/module"
-	"github.com/hydroan/gst/types/consts"
 )
 
 // Register registers the version module.

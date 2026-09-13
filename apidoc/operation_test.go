@@ -3,7 +3,7 @@ package apidoc
 import (
 	"testing"
 
-	"github.com/hydroan/gst/types/consts"
+	"github.com/hydroan/gst/consts"
 )
 
 func TestRegisterOperationAndLookupOperation(t *testing.T) {

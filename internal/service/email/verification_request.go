@@ -4,10 +4,10 @@ import (
 	"net/http"
 
 	"github.com/cockroachdb/errors"
+	"github.com/hydroan/gst"
 	modelemail "github.com/hydroan/gst/internal/model/email"
 	"github.com/hydroan/gst/model"
 	"github.com/hydroan/gst/service"
-	"github.com/hydroan/gst/types"
 )
 
 // VerificationRequestService handles public requests that start the email
@@ -18,7 +18,7 @@ type VerificationRequestService struct {
 
 // Create starts an email verification flow and returns a generic acceptance
 // message so callers cannot infer whether the target account exists.
-func (s *VerificationRequestService) Create(ctx *types.ServiceContext, req *modelemail.VerificationRequestReq) (rsp *modelemail.VerificationRequestRsp, err error) {
+func (s *VerificationRequestService) Create(ctx *gst.ServiceContext, req *modelemail.VerificationRequestReq) (rsp *modelemail.VerificationRequestRsp, err error) {
 	log := s.WithContext(ctx, ctx.Phase())
 	rsp = &modelemail.VerificationRequestRsp{Msg: publicAcceptedMessage(iamEmailFlowKindVerification)}
 

@@ -14,6 +14,7 @@ import (
 	"github.com/hydroan/gst/authz/rbac"
 	"github.com/hydroan/gst/client"
 	"github.com/hydroan/gst/config"
+	"github.com/hydroan/gst/consts"
 	"github.com/hydroan/gst/database"
 	modelauthz "github.com/hydroan/gst/internal/model/authz"
 	modeliamaccount "github.com/hydroan/gst/internal/model/iam/account"
@@ -27,7 +28,6 @@ import (
 	"github.com/hydroan/gst/module/authz"
 	"github.com/hydroan/gst/module/iam"
 	"github.com/hydroan/gst/tenant"
-	"github.com/hydroan/gst/types/consts"
 	"github.com/hydroan/gst/util"
 	"github.com/stretchr/testify/require"
 )

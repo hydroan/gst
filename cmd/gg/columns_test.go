@@ -9,10 +9,10 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/hydroan/gst/consts"
 	"github.com/hydroan/gst/dsl"
 	"github.com/hydroan/gst/internal/codegen/constants"
 	"github.com/hydroan/gst/internal/codegen/gen"
-	"github.com/hydroan/gst/types/consts"
 	"github.com/stretchr/testify/require"
 )
 
@@ -198,27 +198,27 @@ func TestRenderColumnsFile(t *testing.T) {
 	})
 
 	t.Run("DeclaresTypedColumns", func(t *testing.T) {
-		require.Contains(t, rendered, `types.NewColumn[*Record, string]("id")`)
-		require.Contains(t, rendered, `types.NewColumn[*Record, RecordStatus]("status")`)
+		require.Contains(t, rendered, `gst.NewColumn[*Record, string]("id")`)
+		require.Contains(t, rendered, `gst.NewColumn[*Record, RecordStatus]("status")`)
 	})
 
 	t.Run("SpecializesNumericColumns", func(t *testing.T) {
 		// SUM and AVG only belong on a numeric column, because a database
 		// answers SUM over text with 0 rather than an error. A named numeric
 		// type keeps its own name as the type argument.
-		require.Contains(t, rendered, `types.NewNumericColumn[*Record, int64]("amount")`)
-		require.Contains(t, rendered, `types.NewNumericColumn[*Record, RecordScore]("score")`)
+		require.Contains(t, rendered, `gst.NewNumericColumn[*Record, int64]("amount")`)
+		require.Contains(t, rendered, `gst.NewNumericColumn[*Record, RecordScore]("score")`)
 	})
 
 	t.Run("SpecializesTimeColumns", func(t *testing.T) {
-		require.Contains(t, rendered, `types.NewTimeColumn[*Record]("created_at")`)
+		require.Contains(t, rendered, `gst.NewTimeColumn[*Record]("created_at")`)
 	})
 
 	t.Run("DegradesUnreproducibleTypesToAny", func(t *testing.T) {
 		// A generic instantiation cannot be written back as source, so the
 		// column keeps its exact name but loses the value type. The original
 		// type is recorded in a comment.
-		require.Contains(t, rendered, `types.NewColumn[*Record, any]("tags")`)
+		require.Contains(t, rendered, `gst.NewColumn[*Record, any]("tags")`)
 		require.Contains(t, rendered, "datatypes.JSONSlice[string]")
 	})
 
@@ -226,12 +226,12 @@ func TestRenderColumnsFile(t *testing.T) {
 		// Specializing would need the type as a type argument, and any is not
 		// the column's type. The plain reference keeps the column usable; a
 		// NumericColumn minted by hand can still sum it.
-		require.Contains(t, rendered, `types.NewColumn[*Record, any]("weight")`)
-		require.NotContains(t, rendered, "types.NewNumericColumn[any]")
+		require.Contains(t, rendered, `gst.NewColumn[*Record, any]("weight")`)
+		require.NotContains(t, rendered, "gst.NewNumericColumn[any]")
 	})
 
 	t.Run("ImportsOnlyWhatItUses", func(t *testing.T) {
-		require.Contains(t, rendered, `types "github.com/hydroan/gst/types"`)
+		require.Contains(t, rendered, `gst "github.com/hydroan/gst"`)
 		// The time column renders as NewTimeColumn without a type argument,
 		// so the file no longer references time.Time; emitting the import
 		// anyway would be an unused import that fails to compile.
@@ -261,7 +261,7 @@ func TestRenderColumnsFileKeepsImportsUsedByTypeArguments(t *testing.T) {
 
 	rendered, err := renderColumnsFile("tmpapp", "sample", "model/sample/record.go", models)
 	require.NoError(t, err)
-	require.Contains(t, rendered, `types.NewNumericColumn[*Record, time.Duration]("elapsed")`)
+	require.Contains(t, rendered, `gst.NewNumericColumn[*Record, time.Duration]("elapsed")`)
 	require.Contains(t, rendered, `time "time"`)
 }
 
@@ -354,7 +354,7 @@ import (
 	"math/rand/v2"
 	"strings"
 
-	"github.com/hydroan/gst/types"
+	"github.com/hydroan/gst"
 )
 
 var (
@@ -362,7 +362,7 @@ var (
 	statusColumn  = RecordCols.Status
 )
 
-var sortableColumns = []types.AnyColumnRef{statusColumn, RecordCols.Score}
+var sortableColumns = []gst.AnyColumnRef{statusColumn, RecordCols.Score}
 
 func init() {
 	if strings.TrimSpace(statusColumn.Name()) == "" {
@@ -370,11 +370,11 @@ func init() {
 	}
 }
 
-func statusFilter() types.Filter {
+func statusFilter() gst.Filter {
 	return statusColumn.Eq(defaultStatus + strings.Repeat("!", rand.IntN(2)))
 }
 
-func sortColumns() []types.AnyColumnRef {
+func sortColumns() []gst.AnyColumnRef {
 	return sortableColumns
 }
 `)
@@ -440,7 +440,7 @@ func (i *Item) DeleteBefore(ctx context.Context) error {
 }
 
 // TestGenRunReferencesFrameworkTypesThroughThePublicPackage runs gg gen
-// against a model whose column is typed by the framework's types package. The
+// against a model whose column is typed by the framework's root package. The
 // generated reference names the type the way the model source does, under the
 // import path a business project can reach.
 func TestGenRunReferencesFrameworkTypesThroughThePublicPackage(t *testing.T) {
@@ -448,13 +448,13 @@ func TestGenRunReferencesFrameworkTypesThroughThePublicPackage(t *testing.T) {
 	writeCheckFile(t, filepath.Join(projectDir, "model", "sample", "rule.go"), `package sample
 
 import (
+	"github.com/hydroan/gst"
 	"github.com/hydroan/gst/dsl"
 	"github.com/hydroan/gst/model"
-	"github.com/hydroan/gst/types"
 )
 
 type Rule struct {
-	Permission types.Permission `+"`json:\"permission\" gorm:\"serializer:json\"`"+`
+	Permission gst.Permission `+"`json:\"permission\" gorm:\"serializer:json\"`"+`
 
 	model.Base
 }
@@ -469,7 +469,7 @@ func (Rule) Design() {
 	require.NoError(t, genRunWithOptions(genRunOptions{Quiet: true}))
 	columns, err := os.ReadFile(filepath.Join("model", "sample", "rule.gen.go"))
 	require.NoError(t, err)
-	require.Contains(t, string(columns), `types.NewColumn[*Rule, types.Permission]("permission")`)
+	require.Contains(t, string(columns), `gst.NewColumn[*Rule, gst.Permission]("permission")`)
 
 	// The project only builds when every import the generated file carries is
 	// one it can reach.

@@ -31,12 +31,12 @@ func TestSchemaComponentName(t *testing.T) {
 
 func TestSchemaComponentNameNamesFrameworkTypesByTheirPublicPackage(t *testing.T) {
 	// Business code reaches the framework's query contracts through the public
-	// types package, so the document names them after that package.
-	if got := schemaComponentName(reflect.TypeFor[types.CompareOp]()); got != "gst.types.CompareOp" {
-		t.Fatalf("schemaComponentName(types.CompareOp) = %q, want %q", got, "gst.types.CompareOp")
+	// root gst package, so the document names them after that package.
+	if got := schemaComponentName(reflect.TypeFor[types.CompareOp]()); got != "gst.CompareOp" {
+		t.Fatalf("schemaComponentName(types.CompareOp) = %q, want %q", got, "gst.CompareOp")
 	}
-	if got := uniqueComponentName(reflect.TypeFor[types.CompareOp]()); got != "gst.types.CompareOp" {
-		t.Fatalf("uniqueComponentName(types.CompareOp) = %q, want %q", got, "gst.types.CompareOp")
+	if got := uniqueComponentName(reflect.TypeFor[types.CompareOp]()); got != "gst.CompareOp" {
+		t.Fatalf("uniqueComponentName(types.CompareOp) = %q, want %q", got, "gst.CompareOp")
 	}
 }
 

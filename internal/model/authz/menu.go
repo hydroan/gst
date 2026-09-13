@@ -7,14 +7,14 @@ import (
 	"strings"
 	"uuid"
 
+	"github.com/hydroan/gst"
 	"github.com/hydroan/gst/authz/rbac"
+	"github.com/hydroan/gst/consts"
 	"github.com/hydroan/gst/database"
 	"github.com/hydroan/gst/dsl"
 	"github.com/hydroan/gst/model"
 	"github.com/hydroan/gst/service"
 	"github.com/hydroan/gst/tenant"
-	"github.com/hydroan/gst/types"
-	"github.com/hydroan/gst/types/consts"
 	"go.uber.org/zap"
 	"gorm.io/datatypes"
 )
@@ -147,7 +147,7 @@ func (m *Menu) UpdateBefore(ctx context.Context) error {
 // anonymous requests before any handler runs, so no subject means no request:
 // seeding, a job, framework code — the deployment's own hand.
 func errIfMenuWriteForbidden(ctx context.Context) error {
-	subject := strings.TrimSpace(types.RequestUserID(ctx))
+	subject := strings.TrimSpace(gst.RequestUserID(ctx))
 	if subject == "" {
 		return nil
 	}

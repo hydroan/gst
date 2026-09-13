@@ -1,10 +1,10 @@
 package authz
 
 import (
+	"github.com/hydroan/gst/consts"
 	"github.com/hydroan/gst/middleware"
 	"github.com/hydroan/gst/model"
 	"github.com/hydroan/gst/module"
-	"github.com/hydroan/gst/types/consts"
 )
 
 // Register registers RBAC authorization modules and middleware.

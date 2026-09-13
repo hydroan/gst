@@ -6,10 +6,10 @@ import (
 	"bench/model/bench"
 
 	"github.com/cockroachdb/errors"
+	"github.com/hydroan/gst"
 	"github.com/hydroan/gst/database"
 	"github.com/hydroan/gst/model"
 	"github.com/hydroan/gst/service"
-	"github.com/hydroan/gst/types"
 )
 
 type Update struct {
@@ -23,7 +23,7 @@ type Update struct {
 // matched rows as ErrRecordNotFound — the expected outcome of this setup —
 // which is swallowed as success; the benchmark therefore needs no seeding and
 // no cleanup, and table contents do not affect the numbers.
-func (u *Update) Update(ctx *types.ServiceContext, req *bench.UpdateReq) (rsp *bench.UpdateRsp, err error) {
+func (u *Update) Update(ctx *gst.ServiceContext, req *bench.UpdateReq) (rsp *bench.UpdateRsp, err error) {
 	isDryRun := isDryRun(ctx)
 
 	data := &bench.Bench{

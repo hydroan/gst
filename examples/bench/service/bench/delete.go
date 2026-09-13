@@ -5,10 +5,10 @@ import (
 
 	"bench/model/bench"
 
+	"github.com/hydroan/gst"
 	"github.com/hydroan/gst/database"
 	"github.com/hydroan/gst/model"
 	"github.com/hydroan/gst/service"
-	"github.com/hydroan/gst/types"
 )
 
 type Delete struct {
@@ -22,7 +22,7 @@ type Delete struct {
 // while matching zero rows and changing nothing. Delete does not error on
 // zero matched rows; the benchmark therefore needs no seeding and no cleanup,
 // and table contents do not affect the numbers.
-func (d *Delete) Delete(ctx *types.ServiceContext, req *model.Empty) (rsp *bench.DeleteRsp, err error) {
+func (d *Delete) Delete(ctx *gst.ServiceContext, req *model.Empty) (rsp *bench.DeleteRsp, err error) {
 	isDryRun := isDryRun(ctx)
 
 	data := &bench.Bench{Base: model.Base{ID: "not exists"}}

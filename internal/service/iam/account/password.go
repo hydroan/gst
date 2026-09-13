@@ -6,11 +6,11 @@ import (
 	"time"
 
 	"github.com/cockroachdb/errors"
+	"github.com/hydroan/gst"
 	"github.com/hydroan/gst/database"
 	modeliamaccount "github.com/hydroan/gst/internal/model/iam/account"
 	gstotel "github.com/hydroan/gst/otel"
 	"github.com/hydroan/gst/service"
-	"github.com/hydroan/gst/types"
 	"go.opentelemetry.io/otel/attribute"
 	"golang.org/x/crypto/bcrypt"
 )
@@ -21,10 +21,10 @@ const minAccountPasswordLength = 6
 // sources carry no generated Cols vars, so the references are declared once
 // here and shared by the password flows.
 var (
-	colUserID             = types.NewColumn[*modeliamaccount.PasswordCredential, string]("user_id")
-	colPasswordHash       = types.NewColumn[*modeliamaccount.PasswordCredential, string]("password_hash")
-	colMustChangePassword = types.NewColumn[*modeliamaccount.PasswordCredential, bool]("must_change_password")
-	colPasswordChangedAt  = types.NewTimeColumn[*modeliamaccount.PasswordCredential]("password_changed_at")
+	colUserID             = gst.NewColumn[*modeliamaccount.PasswordCredential, string]("user_id")
+	colPasswordHash       = gst.NewColumn[*modeliamaccount.PasswordCredential, string]("password_hash")
+	colMustChangePassword = gst.NewColumn[*modeliamaccount.PasswordCredential, bool]("must_change_password")
+	colPasswordChangedAt  = gst.NewTimeColumn[*modeliamaccount.PasswordCredential]("password_changed_at")
 )
 
 func validateChangePasswordInput(req *modeliamaccount.ChangePasswordReq) error {

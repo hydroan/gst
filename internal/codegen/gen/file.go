@@ -6,8 +6,8 @@ import (
 	"go/token"
 	"strings"
 
+	"github.com/hydroan/gst/consts"
 	"github.com/hydroan/gst/internal/codegen/constants"
-	"github.com/hydroan/gst/types/consts"
 )
 
 // BuildModelFile generates a model.go file, the content like below:
@@ -98,7 +98,7 @@ package service
 
 import (
 	"github.com/hydroan/gst/service"
-	"github.com/hydroan/gst/types/consts"
+	"github.com/hydroan/gst/consts"
 )
 
 func init() {

@@ -7,7 +7,7 @@ import (
 	"strings"
 
 	"github.com/gertd/go-pluralize"
-	"github.com/hydroan/gst/types/consts"
+	"github.com/hydroan/gst/consts"
 	"github.com/stoewer/go-strcase"
 )
 

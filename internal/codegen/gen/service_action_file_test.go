@@ -14,15 +14,15 @@ func TestIsActionServiceSource(t *testing.T) {
 
 import (
 	"example.com/mod/model/common"
+	"github.com/hydroan/gst"
 	"github.com/hydroan/gst/service"
-	"github.com/hydroan/gst/types"
 )
 
 type SearchSourceDedup struct {
 	service.Base[*common.Common, *common.Common, *common.Common]
 }
 
-func (s *SearchSourceDedup) Create(ctx *types.ServiceContext, req *common.Common) (rsp *common.Common, err error) {
+func (s *SearchSourceDedup) Create(ctx *gst.ServiceContext, req *common.Common) (rsp *common.Common, err error) {
 	return rsp, nil
 }
 `), 0o600)

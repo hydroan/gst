@@ -3,11 +3,11 @@ package serviceiamprofile
 import (
 	"net/http"
 
+	"github.com/hydroan/gst"
 	"github.com/hydroan/gst/database"
 	modeliamprofile "github.com/hydroan/gst/internal/model/iam/profile"
 	serviceiamsession "github.com/hydroan/gst/internal/service/iam/session"
 	"github.com/hydroan/gst/service"
-	"github.com/hydroan/gst/types"
 )
 
 // ProfilePatchService handles partial updates to the current user's profile.
@@ -16,7 +16,7 @@ type ProfilePatchService struct {
 }
 
 // Patch creates or updates the current user's profile with only the requested fields.
-func (p *ProfilePatchService) Patch(ctx *types.ServiceContext, req *modeliamprofile.ProfilePatchReq) (rsp *modeliamprofile.ProfilePatchRsp, err error) {
+func (p *ProfilePatchService) Patch(ctx *gst.ServiceContext, req *modeliamprofile.ProfilePatchReq) (rsp *modeliamprofile.ProfilePatchRsp, err error) {
 	_, session, err := serviceiamsession.CurrentSession(ctx)
 	if err != nil {
 		return nil, err

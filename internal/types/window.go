@@ -15,7 +15,7 @@ package types
 //
 // The fields are unexported so a window only comes from PartitionBy and
 // OrderBy; the database layer reads them through WindowPartitionOf and
-// WindowOrdersOf, which the public types package does not forward.
+// WindowOrdersOf, which the public gst package does not forward.
 //
 //	RowNumber().Over(PartitionBy(SampleCols.TenantID).OrderBy(SampleCols.CreatedAt.Desc()))
 //	// ROW_NUMBER() OVER (PARTITION BY `tenant_id` ORDER BY `created_at` DESC, `id` ASC)

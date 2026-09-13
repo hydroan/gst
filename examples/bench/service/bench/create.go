@@ -5,16 +5,16 @@ import (
 
 	"bench/model/bench"
 
+	"github.com/hydroan/gst"
 	"github.com/hydroan/gst/database"
 	"github.com/hydroan/gst/service"
-	"github.com/hydroan/gst/types"
 )
 
 type Create struct {
 	service.Base[*bench.Bench, *bench.CreateReq, *bench.CreateRsp]
 }
 
-func (c *Create) Create(ctx *types.ServiceContext, req *bench.CreateReq) (rsp *bench.CreateRsp, err error) {
+func (c *Create) Create(ctx *gst.ServiceContext, req *bench.CreateReq) (rsp *bench.CreateRsp, err error) {
 	isDryRun := isDryRun(ctx)
 
 	data := &bench.Bench{

@@ -17,7 +17,7 @@ import (
 // starts a model-scoped operation chain.
 const gstDatabaseImportPath = "github.com/hydroan/gst/database"
 
-// databaseTerminalMethods lists the types.Database methods that finish an
+// databaseTerminalMethods lists the gst.Database methods that finish an
 // operation chain. TestDatabaseChainMethodSetsMatchTypesInterface guards this
 // set against drifting from the interface declaration.
 var databaseTerminalMethods = map[string]bool{
@@ -34,7 +34,7 @@ var databaseTerminalMethods = map[string]bool{
 	"Count":      true,
 }
 
-// databaseChainMethods lists the types.DatabaseOption methods that keep the
+// databaseChainMethods lists the gst.DatabaseOption methods that keep the
 // chain open. TestDatabaseChainMethodSetsMatchTypesInterface guards this set
 // against drifting from the interface declaration.
 var databaseChainMethods = map[string]bool{

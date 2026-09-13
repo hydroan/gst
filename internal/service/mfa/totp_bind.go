@@ -5,11 +5,11 @@ import (
 	"encoding/base64"
 	"net/http"
 
+	"github.com/hydroan/gst"
+	"github.com/hydroan/gst/consts"
 	modelmfa "github.com/hydroan/gst/internal/model/mfa"
 	"github.com/hydroan/gst/model"
 	"github.com/hydroan/gst/service"
-	"github.com/hydroan/gst/types"
-	"github.com/hydroan/gst/types/consts"
 	"github.com/pquerna/otp/totp"
 	"github.com/skip2/go-qrcode"
 	"go.uber.org/zap"
@@ -31,7 +31,7 @@ type TOTPBindService struct {
 // The method requires an authenticated account and session, generates a new
 // server-held secret, stores it in the binding challenge, and returns the
 // challenge ID with the provisioning URL and QR image for authenticator setup.
-func (t *TOTPBindService) Create(ctx *types.ServiceContext, req *model.Empty) (rsp *modelmfa.TOTPBindRsp, err error) {
+func (t *TOTPBindService) Create(ctx *gst.ServiceContext, req *model.Empty) (rsp *modelmfa.TOTPBindRsp, err error) {
 	log := t.WithContext(ctx, ctx.Phase())
 
 	if len(ctx.UserID()) == 0 {

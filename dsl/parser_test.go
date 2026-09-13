@@ -8,7 +8,7 @@ import (
 	"sort"
 	"testing"
 
-	"github.com/hydroan/gst/types/consts"
+	"github.com/hydroan/gst/consts"
 	"github.com/kr/pretty"
 )
 

@@ -5,7 +5,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/errors"
-	"github.com/hydroan/gst/types/consts"
+	"github.com/hydroan/gst/consts"
 )
 
 // ErrSubjectIsRole reports an assignment whose subject and role share one name.

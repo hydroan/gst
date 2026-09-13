@@ -4,9 +4,9 @@ import (
 	"net/http"
 
 	"github.com/cockroachdb/errors"
+	"github.com/hydroan/gst"
 	modeliamsession "github.com/hydroan/gst/internal/model/iam/session"
 	"github.com/hydroan/gst/service"
-	"github.com/hydroan/gst/types"
 )
 
 // SessionDeleteService handles invalidation of a specified session for the current authenticated user.
@@ -19,7 +19,7 @@ type SessionDeleteService struct {
 // DELETE /api/iam/sessions/others revokes every other indexed session of the
 // same user and keeps the current cookie-backed session active. The endpoint
 // remains idempotent: deleting a missing session still returns success.
-func (s *SessionDeleteService) Delete(ctx *types.ServiceContext, req *modeliamsession.SessionDeleteReq) (rsp *modeliamsession.SessionDeleteRsp, err error) {
+func (s *SessionDeleteService) Delete(ctx *gst.ServiceContext, req *modeliamsession.SessionDeleteReq) (rsp *modeliamsession.SessionDeleteRsp, err error) {
 	currentSessionID, currentSession, err := CurrentSession(ctx)
 	if err != nil {
 		return nil, err
@@ -41,7 +41,7 @@ func (s *SessionDeleteService) Delete(ctx *types.ServiceContext, req *modeliamse
 
 	targetSession, err := Store.LoadSession(ctx, targetSessionID)
 	if err != nil {
-		if errors.Is(err, types.ErrEntryNotFound) {
+		if errors.Is(err, gst.ErrEntryNotFound) {
 			if targetSessionID == currentSessionID {
 				ClearCookie(ctx)
 			}
@@ -61,7 +61,7 @@ func (s *SessionDeleteService) Delete(ctx *types.ServiceContext, req *modeliamse
 	}
 
 	if _, err = Store.DeleteSession(ctx, targetSessionID); err != nil {
-		if errors.Is(err, types.ErrEntryNotFound) {
+		if errors.Is(err, gst.ErrEntryNotFound) {
 			if targetSessionID == currentSessionID {
 				ClearCookie(ctx)
 			}

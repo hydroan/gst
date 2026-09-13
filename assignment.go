@@ -1,7 +1,7 @@
-package types
+package gst
 
 import (
-	itypes "github.com/hydroan/gst/internal/types"
+	"github.com/hydroan/gst/internal/types"
 )
 
 // Assignment is one column-value write, the unit UpdateByID accepts. Service
@@ -11,4 +11,4 @@ import (
 // reference minted for its type parameter. Its fields are unexported, so those
 // references are the only way to build one; Table, Column and Value read it
 // back.
-type Assignment = itypes.Assignment
+type Assignment = types.Assignment

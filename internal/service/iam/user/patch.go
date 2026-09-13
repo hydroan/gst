@@ -6,20 +6,20 @@ import (
 
 	"github.com/cockroachdb/errors"
 
+	"github.com/hydroan/gst"
 	"github.com/hydroan/gst/database"
 	modeliamuser "github.com/hydroan/gst/internal/model/iam/user"
 	serviceiamaccount "github.com/hydroan/gst/internal/service/iam/account"
 	"github.com/hydroan/gst/internal/service/iam/adminauth"
 	serviceiamsession "github.com/hydroan/gst/internal/service/iam/session"
 	"github.com/hydroan/gst/service"
-	"github.com/hydroan/gst/types"
 )
 
 // Column references for the narrow writes below; module sources carry no
 // generated Cols vars, so the references are declared here.
 var (
-	colUsername   = types.NewColumn[*modeliamuser.User, string]("username")
-	colUserStatus = types.NewColumn[*modeliamuser.User, modeliamuser.UserStatus]("status")
+	colUsername   = gst.NewColumn[*modeliamuser.User, string]("username")
+	colUserStatus = gst.NewColumn[*modeliamuser.User, modeliamuser.UserStatus]("status")
 )
 
 // AdminUserPatchService handles PATCH /iam/admin/users/:id for privileged
@@ -34,7 +34,7 @@ type AdminUserPatchService struct {
 }
 
 // Patch writes the fields the request named and leaves the rest alone.
-func (u *AdminUserPatchService) Patch(ctx *types.ServiceContext, req *modeliamuser.AdminUserPatchReq) (rsp *modeliamuser.AdminUserPatchRsp, err error) {
+func (u *AdminUserPatchService) Patch(ctx *gst.ServiceContext, req *modeliamuser.AdminUserPatchReq) (rsp *modeliamuser.AdminUserPatchRsp, err error) {
 	log := u.WithContext(ctx, ctx.Phase())
 
 	targetUserID := ctx.Param("id")
@@ -112,7 +112,7 @@ func (u *AdminUserPatchService) Patch(ctx *types.ServiceContext, req *modeliamus
 // logged rather than returned: failing the request would report a change that
 // did happen as one that did not, and the user-state cache expiring on its own
 // is the backstop either way.
-func revokeSessionsForStatus(ctx *types.ServiceContext, log types.Logger, status modeliamuser.UserStatus, targetUserID string) {
+func revokeSessionsForStatus(ctx *gst.ServiceContext, log gst.Logger, status modeliamuser.UserStatus, targetUserID string) {
 	if !shouldInvalidateUserSessions(status) {
 		serviceiamsession.Store.DropUserState(ctx, targetUserID)
 		return

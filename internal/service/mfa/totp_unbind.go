@@ -7,11 +7,11 @@ import (
 	"time"
 
 	"github.com/cockroachdb/errors"
+	"github.com/hydroan/gst"
+	"github.com/hydroan/gst/consts"
 	"github.com/hydroan/gst/database"
 	modelmfa "github.com/hydroan/gst/internal/model/mfa"
 	"github.com/hydroan/gst/service"
-	"github.com/hydroan/gst/types"
-	"github.com/hydroan/gst/types/consts"
 	"github.com/pquerna/otp/totp"
 	"go.uber.org/zap"
 )
@@ -38,7 +38,7 @@ type TOTPUnbindService struct {
 }
 
 // Create validates fresh authentication, removes the target device, and returns the remaining active count.
-func (t *TOTPUnbindService) Create(ctx *types.ServiceContext, req *modelmfa.TOTPUnbindReq) (rsp *modelmfa.TOTPUnbindRsp, err error) {
+func (t *TOTPUnbindService) Create(ctx *gst.ServiceContext, req *modelmfa.TOTPUnbindReq) (rsp *modelmfa.TOTPUnbindRsp, err error) {
 	log := t.WithContext(ctx, ctx.Phase())
 
 	if len(ctx.UserID()) == 0 {

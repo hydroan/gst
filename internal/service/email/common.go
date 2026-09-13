@@ -12,8 +12,8 @@ import (
 	"github.com/hydroan/gst/service"
 
 	"github.com/cockroachdb/errors"
+	"github.com/hydroan/gst"
 	"github.com/hydroan/gst/redis"
-	"github.com/hydroan/gst/types"
 )
 
 type iamEmailFlowKind string
@@ -92,8 +92,8 @@ var (
 
 	emailNow                                  = func() time.Time { return time.Now().UTC() }
 	emailRandomReader                         = rand.Reader
-	emailFlowCache                            = func() types.Cache[iamEmailFlowState] { return redis.Cache[iamEmailFlowState]() }
-	emailThrottleCache                        = func() types.Cache[emailThrottleRecord] { return redis.Cache[emailThrottleRecord]() }
+	emailFlowCache                            = func() gst.Cache[iamEmailFlowState] { return redis.Cache[iamEmailFlowState]() }
+	emailThrottleCache                        = func() gst.Cache[emailThrottleRecord] { return redis.Cache[emailThrottleRecord]() }
 	activeEmailSender  iamEmailDeliverySender = noopEmailSender{}
 )
 
@@ -142,7 +142,7 @@ func loadEmailFlow(ctx context.Context, kind iamEmailFlowKind, token string) (ia
 
 	flow, err := emailFlowCache().Get(ctx, emailFlowKey(kind, token))
 	if err != nil {
-		if errors.Is(err, types.ErrEntryNotFound) {
+		if errors.Is(err, gst.ErrEntryNotFound) {
 			return iamEmailFlowState{}, errEmailFlowNotFound
 		}
 		return iamEmailFlowState{}, errors.Wrap(err, "load email flow")
@@ -187,7 +187,7 @@ func reserveEmailThrottle(ctx context.Context, kind iamEmailFlowKind, action ema
 		if wait := record.AvailableAt.Sub(emailNow()); wait > 0 {
 			return wait, errEmailFlowThrottled
 		}
-	} else if !errors.Is(err, types.ErrEntryNotFound) {
+	} else if !errors.Is(err, gst.ErrEntryNotFound) {
 		return 0, errors.Wrap(err, "load email throttle")
 	}
 
@@ -231,7 +231,7 @@ func newEmailFlowToken() (string, error) {
 	return base64.RawURLEncoding.EncodeToString(buf), nil
 }
 
-func emailServiceContext(ctx *types.ServiceContext) context.Context {
+func emailServiceContext(ctx *gst.ServiceContext) context.Context {
 	if ctx == nil {
 		return context.Background()
 	}

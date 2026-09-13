@@ -3,11 +3,11 @@ package serviceauthz
 import (
 	"sort"
 
+	"github.com/hydroan/gst"
 	modelauthz "github.com/hydroan/gst/internal/model/authz"
 	"github.com/hydroan/gst/model"
 	"github.com/hydroan/gst/router"
 	"github.com/hydroan/gst/service"
-	"github.com/hydroan/gst/types"
 )
 
 // RoutesService lists every registered backend route for menu binding.
@@ -19,7 +19,7 @@ type RoutesService struct {
 	service.Base[*modelauthz.Routes, *model.Empty, *modelauthz.RoutesRsp]
 }
 
-func (RoutesService) List(ctx *types.ServiceContext, req *model.Empty) (*modelauthz.RoutesRsp, error) {
+func (RoutesService) List(ctx *gst.ServiceContext, req *model.Empty) (*modelauthz.RoutesRsp, error) {
 	routes := router.Routes()
 	items := make([]modelauthz.Route, 0, len(routes))
 	for path, methods := range routes {

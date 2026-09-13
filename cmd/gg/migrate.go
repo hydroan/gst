@@ -6,9 +6,9 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/hydroan/gst/consts"
 	"github.com/hydroan/gst/internal/clioutput"
 	"github.com/hydroan/gst/internal/codegen/gen"
-	"github.com/hydroan/gst/types/consts"
 	"github.com/spf13/cobra"
 )
 
