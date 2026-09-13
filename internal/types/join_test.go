@@ -38,14 +38,14 @@ func TestJoinSources(t *testing.T) {
 		require.True(t, ok)
 		silver, ok := types.Join[*sampleRecord](append(base, types.FilterEq("tier", "silver"))...).(types.ModelJoin)
 		require.True(t, ok)
-		require.Equal(t, "gold", gold.On[1].Value)
-		require.Equal(t, "silver", silver.On[1].Value)
+		require.Equal(t, "gold", gold.On[1].Value())
+		require.Equal(t, "silver", silver.On[1].Value())
 		goldSelect, ok := types.JoinSelect[struct{ Code string }](stubBranch{}, append(base, types.FilterEq("tier", "gold"))...).(types.SelectJoin)
 		require.True(t, ok)
 		silverSelect, ok := types.LeftJoinSelect[struct{ Code string }](stubBranch{}, append(base, types.FilterEq("tier", "silver"))...).(types.SelectJoin)
 		require.True(t, ok)
-		require.Equal(t, "gold", goldSelect.On[1].Value)
-		require.Equal(t, "silver", silverSelect.On[1].Value)
+		require.Equal(t, "gold", goldSelect.On[1].Value())
+		require.Equal(t, "silver", silverSelect.On[1].Value())
 	})
 
 	t.Run("LeftJoinKeepsUnmatchedRows", func(t *testing.T) {
@@ -57,8 +57,8 @@ func TestJoinSources(t *testing.T) {
 	t.Run("EqColCarriesBothTables", func(t *testing.T) {
 		// A join predicate is placed by the tables its two columns carry, so
 		// the reference travels whole rather than as a name.
-		require.Equal(t, "sample_records", on.Table)
-		parent, ok := on.Value.(types.AnyColumnRef)
+		require.Equal(t, "sample_records", on.Table())
+		parent, ok := on.Value().(types.AnyColumnRef)
 		require.True(t, ok)
 		require.Equal(t, "samples", parent.Table())
 		require.Equal(t, "record_code", parent.Name())

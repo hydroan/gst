@@ -637,22 +637,22 @@ func (db *database[M]) UpdateByID(id string, assignments ...types.Assignment) (e
 	}
 	updates := make(map[string]any, len(assignments))
 	for _, assignment := range assignments {
-		if len(assignment.Column) == 0 {
+		if len(assignment.Column()) == 0 {
 			return ErrEmptyFieldName
 		}
 		// The reference names the table it was generated for; a column of
 		// another model is refused even when this model has a column of the
 		// same name, because that is a wrong-model write, not a typo.
-		if len(assignment.Table) > 0 && assignment.Table != db.outerTableName() {
-			return errors.Wrapf(ErrColumnTable, "UpdateByID column %q belongs to table %q, model %s writes %q", assignment.Column, assignment.Table, reflect.TypeOf(*new(M)).Elem().Name(), db.outerTableName())
+		if len(assignment.Table()) > 0 && assignment.Table() != db.outerTableName() {
+			return errors.Wrapf(ErrColumnTable, "UpdateByID column %q belongs to table %q, model %s writes %q", assignment.Column(), assignment.Table(), reflect.TypeOf(*new(M)).Elem().Name(), db.outerTableName())
 		}
-		if assignment.Value == nil {
+		if assignment.Value() == nil {
 			return ErrNilValue
 		}
-		if _, exists := updates[assignment.Column]; exists {
+		if _, exists := updates[assignment.Column()]; exists {
 			return ErrDuplicateColumn
 		}
-		updates[assignment.Column] = assignment.Value
+		updates[assignment.Column()] = assignment.Value()
 	}
 
 	if err = db.prepare(); err != nil {

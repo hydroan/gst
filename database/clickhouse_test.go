@@ -288,7 +288,7 @@ func TestClickhouse(t *testing.T) {
 		// datatypes has no clickhouse arm, so the filter fails closed to an
 		// empty result instead of rendering an empty condition that would
 		// silently widen it.
-		require.Empty(t, listIDs(t, types.Filter{Column: "category", Op: types.FilterOpJSONContains, Value: "alpha"}))
+		require.Empty(t, listIDs(t, types.NewFilter("", "category", types.FilterOpJSONContains, "alpha")))
 	})
 
 	t.Run("RegexFilter", func(t *testing.T) {

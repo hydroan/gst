@@ -2,7 +2,6 @@ package types_test
 
 import (
 	"testing"
-	"time"
 
 	"github.com/hydroan/gst/internal/types"
 	"github.com/stretchr/testify/require"
@@ -56,48 +55,48 @@ func TestFilterConstructors(t *testing.T) {
 		got  types.Filter
 		want types.Filter
 	}{
-		{"Eq", types.FilterEq("age", 18), types.Filter{Column: "age", Op: types.FilterOpEq, Value: 18}},
-		{"Ne", types.FilterNe("age", 18), types.Filter{Column: "age", Op: types.FilterOpNe, Value: 18}},
-		{"Gt", types.FilterGt("age", 18), types.Filter{Column: "age", Op: types.FilterOpGt, Value: 18}},
-		{"Gte", types.FilterGte("age", 18), types.Filter{Column: "age", Op: types.FilterOpGte, Value: 18}},
-		{"Lt", types.FilterLt("age", 18), types.Filter{Column: "age", Op: types.FilterOpLt, Value: 18}},
-		{"Lte", types.FilterLte("age", 18), types.Filter{Column: "age", Op: types.FilterOpLte, Value: 18}},
-		{"In", types.FilterIn("id", []string{"a", "b"}), types.Filter{Column: "id", Op: types.FilterOpIn, Value: []string{"a", "b"}}},
-		{"NotIn", types.FilterNotIn("id", []int{1, 2}), types.Filter{Column: "id", Op: types.FilterOpNotIn, Value: []int{1, 2}}},
-		{"Like", types.FilterLike("name", "sample"), types.Filter{Column: "name", Op: types.FilterOpLike, Value: "sample"}},
-		{"NotLike", types.FilterNotLike("name", "sample"), types.Filter{Column: "name", Op: types.FilterOpNotLike, Value: "sample"}},
-		{"StartsWith", types.FilterStartsWith("name", "sam"), types.Filter{Column: "name", Op: types.FilterOpStartsWith, Value: "sam"}},
-		{"EndsWith", types.FilterEndsWith("name", "ple"), types.Filter{Column: "name", Op: types.FilterOpEndsWith, Value: "ple"}},
-		{"IsNull", types.FilterIsNull("expired_at"), types.Filter{Column: "expired_at", Op: types.FilterOpIsNull, Value: true}},
-		{"IsNotNull", types.FilterIsNotNull("expired_at"), types.Filter{Column: "expired_at", Op: types.FilterOpIsNull, Value: false}},
-		{"Regex", types.FilterRegex("name", "^sam"), types.Filter{Column: "name", Op: types.FilterOpRegex, Value: "^sam"}},
-		{"NotRegex", types.FilterNotRegex("name", "^sam"), types.Filter{Column: "name", Op: types.FilterOpNotRegex, Value: "^sam"}},
-		{"JSONContains", types.FilterJSONContains("tags", "sample"), types.Filter{Column: "tags", Op: types.FilterOpJSONContains, Value: "sample"}},
-		{"False", types.FilterFalse(), types.Filter{Op: types.FilterOpFalse}},
+		{"Eq", types.FilterEq("age", 18), types.NewFilter("", "age", types.FilterOpEq, 18)},
+		{"Ne", types.FilterNe("age", 18), types.NewFilter("", "age", types.FilterOpNe, 18)},
+		{"Gt", types.FilterGt("age", 18), types.NewFilter("", "age", types.FilterOpGt, 18)},
+		{"Gte", types.FilterGte("age", 18), types.NewFilter("", "age", types.FilterOpGte, 18)},
+		{"Lt", types.FilterLt("age", 18), types.NewFilter("", "age", types.FilterOpLt, 18)},
+		{"Lte", types.FilterLte("age", 18), types.NewFilter("", "age", types.FilterOpLte, 18)},
+		{"In", types.FilterIn("id", []string{"a", "b"}), types.NewFilter("", "id", types.FilterOpIn, []string{"a", "b"})},
+		{"NotIn", types.FilterNotIn("id", []int{1, 2}), types.NewFilter("", "id", types.FilterOpNotIn, []int{1, 2})},
+		{"Like", types.FilterLike("name", "sample"), types.NewFilter("", "name", types.FilterOpLike, "sample")},
+		{"NotLike", types.FilterNotLike("name", "sample"), types.NewFilter("", "name", types.FilterOpNotLike, "sample")},
+		{"StartsWith", types.FilterStartsWith("name", "sam"), types.NewFilter("", "name", types.FilterOpStartsWith, "sam")},
+		{"EndsWith", types.FilterEndsWith("name", "ple"), types.NewFilter("", "name", types.FilterOpEndsWith, "ple")},
+		{"IsNull", types.FilterIsNull("expired_at"), types.NewFilter("", "expired_at", types.FilterOpIsNull, true)},
+		{"IsNotNull", types.FilterIsNotNull("expired_at"), types.NewFilter("", "expired_at", types.FilterOpIsNull, false)},
+		{"Regex", types.FilterRegex("name", "^sam"), types.NewFilter("", "name", types.FilterOpRegex, "^sam")},
+		{"NotRegex", types.FilterNotRegex("name", "^sam"), types.NewFilter("", "name", types.FilterOpNotRegex, "^sam")},
+		{"JSONContains", types.FilterJSONContains("tags", "sample"), types.NewFilter("", "tags", types.FilterOpJSONContains, "sample")},
+		{"False", types.FilterFalse(), types.NewFilter("", "", types.FilterOpFalse, nil)},
 		{
 			"Or",
 			types.FilterOr(types.FilterEq("age", 18), types.FilterEq("name", "sample")),
-			types.Filter{Op: types.FilterOpOr, Value: []types.Filter{
-				{Column: "age", Op: types.FilterOpEq, Value: 18},
-				{Column: "name", Op: types.FilterOpEq, Value: "sample"},
-			}},
+			types.NewFilter("", "", types.FilterOpOr, []types.Filter{
+				types.NewFilter("", "age", types.FilterOpEq, 18),
+				types.NewFilter("", "name", types.FilterOpEq, "sample"),
+			}),
 		},
 		{
 			"And",
 			types.FilterAnd(types.FilterEq("age", 18), types.FilterEq("name", "sample")),
-			types.Filter{Op: types.FilterOpAnd, Value: []types.Filter{
-				{Column: "age", Op: types.FilterOpEq, Value: 18},
-				{Column: "name", Op: types.FilterOpEq, Value: "sample"},
-			}},
+			types.NewFilter("", "", types.FilterOpAnd, []types.Filter{
+				types.NewFilter("", "age", types.FilterOpEq, 18),
+				types.NewFilter("", "name", types.FilterOpEq, "sample"),
+			}),
 		},
 		{
 			"NestedGroups",
 			types.FilterOr(types.FilterAnd(types.FilterEq("age", 18))),
-			types.Filter{Op: types.FilterOpOr, Value: []types.Filter{
-				{Op: types.FilterOpAnd, Value: []types.Filter{
-					{Column: "age", Op: types.FilterOpEq, Value: 18},
-				}},
-			}},
+			types.NewFilter("", "", types.FilterOpOr, []types.Filter{
+				types.NewFilter("", "", types.FilterOpAnd, []types.Filter{
+					types.NewFilter("", "age", types.FilterOpEq, 18),
+				}),
+			}),
 		},
 	}
 	for _, tt := range tests {
@@ -105,52 +104,6 @@ func TestFilterConstructors(t *testing.T) {
 			require.Equal(t, tt.want, tt.got)
 		})
 	}
-}
-
-func TestFilterTimeValue(t *testing.T) {
-	local := time.Date(2026, 7, 1, 8, 30, 15, 0, time.Local)
-
-	t.Run("ReadsCanonicalStringBackAsTime", func(t *testing.T) {
-		// The canonical string carries the UTC wall clock, so producing one
-		// from a local instant goes through UTC first; the round trip then
-		// lands on the same instant.
-		filter := types.FilterGte("expired_at", local.UTC().Format(types.FilterTimeLayout))
-		got, ok := filter.TimeValue()
-		require.True(t, ok)
-		require.True(t, got.Equal(local), "want %s, got %s", local, got)
-	})
-
-	t.Run("KeepsSubSecondPrecisionOfWholeDayUpperBound", func(t *testing.T) {
-		// A date-only upper bound is extended to the end of the day, so the
-		// value carries nanoseconds the layout must round-trip.
-		endOfDay := time.Date(2026, 7, 2, 0, 0, 0, 0, time.Local).Add(-time.Nanosecond)
-		filter := types.FilterLte("expired_at", endOfDay.UTC().Format(types.FilterTimeLayout))
-		got, ok := filter.TimeValue()
-		require.True(t, ok)
-		require.True(t, got.Equal(endOfDay), "want %s, got %s", endOfDay, got)
-	})
-
-	t.Run("AcceptsTimeBuiltByConstructorDirectly", func(t *testing.T) {
-		got, ok := types.FilterLt("expired_at", local).TimeValue()
-		require.True(t, ok)
-		require.True(t, got.Equal(local))
-	})
-
-	t.Run("ReportsFalseForNonTimeValue", func(t *testing.T) {
-		for name, filter := range map[string]types.Filter{
-			"MalformedString": types.FilterGte("expired_at", "2026-07-01"),
-			"Numeric":         types.FilterGte("age", 18),
-			"Bool":            types.FilterIsNull("expired_at"),
-			"Slice":           types.FilterIn("name", []string{"sample"}),
-			"Nil":             {Column: "expired_at", Op: types.FilterOpEq},
-		} {
-			t.Run(name, func(t *testing.T) {
-				got, ok := filter.TimeValue()
-				require.False(t, ok)
-				require.True(t, got.IsZero())
-			})
-		}
-	})
 }
 
 func TestFilterGroupsKeepTheirOwnFilters(t *testing.T) {
@@ -161,15 +114,15 @@ func TestFilterGroupsKeepTheirOwnFilters(t *testing.T) {
 	or := types.FilterOr(append(base, types.FilterEq("kind", "gold"))...)
 	and := types.FilterAnd(append(base, types.FilterEq("kind", "silver"))...)
 	exists := types.FilterExists[*sampleRecord](append(base, types.FilterEq("kind", "bronze"))...)
-	orMembers, ok := or.Value.([]types.Filter)
+	orMembers, ok := or.Value().([]types.Filter)
 	require.True(t, ok)
-	andMembers, ok := and.Value.([]types.Filter)
+	andMembers, ok := and.Value().([]types.Filter)
 	require.True(t, ok)
-	sub, ok := exists.Value.(types.Subquery)
+	sub, ok := exists.Value().(types.Subquery)
 	require.True(t, ok)
-	require.Equal(t, "gold", orMembers[1].Value)
-	require.Equal(t, "silver", andMembers[1].Value)
-	require.Equal(t, "bronze", sub.Filters[1].Value)
+	require.Equal(t, "gold", orMembers[1].Value())
+	require.Equal(t, "silver", andMembers[1].Value())
+	require.Equal(t, "bronze", sub.Filters[1].Value())
 }
 
 func TestFilterListsKeepTheirOwnValues(t *testing.T) {
@@ -179,6 +132,6 @@ func TestFilterListsKeepTheirOwnValues(t *testing.T) {
 	base = append(base, "done")
 	in := types.FilterIn("status", append(base, "gold"))
 	notIn := types.FilterNotIn("status", append(base, "silver"))
-	require.Equal(t, []string{"done", "gold"}, in.Value)
-	require.Equal(t, []string{"done", "silver"}, notIn.Value)
+	require.Equal(t, []string{"done", "gold"}, in.Value())
+	require.Equal(t, []string{"done", "silver"}, notIn.Value())
 }

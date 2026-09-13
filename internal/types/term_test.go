@@ -40,10 +40,10 @@ func TestCompareOpValid(t *testing.T) {
 func TestColumnlessTermsCarryDefaultAliases(t *testing.T) {
 	// A term without a column has no column name to project under, so each
 	// carries an alias of its own until As renames it.
-	require.Equal(t, types.Term{Fn: types.FnCount, Alias: types.DefaultCountAlias}, types.Count())
-	require.Equal(t, types.Term{Fn: types.FnRowNumber, Alias: "row_number"}, types.RowNumber())
-	require.Equal(t, types.Term{Fn: types.FnRank, Alias: "rank"}, types.Rank())
-	require.Equal(t, types.Term{Fn: types.FnDenseRank, Alias: "dense_rank"}, types.DenseRank())
+	require.Equal(t, types.NewTerm(types.FnCount, "", "", "", types.DefaultCountAlias), types.Count())
+	require.Equal(t, types.NewTerm(types.FnRowNumber, "", "", "", "row_number"), types.RowNumber())
+	require.Equal(t, types.NewTerm(types.FnRank, "", "", "", "rank"), types.Rank())
+	require.Equal(t, types.NewTerm(types.FnDenseRank, "", "", "", "dense_rank"), types.DenseRank())
 }
 
 func TestTermKinds(t *testing.T) {
@@ -76,7 +76,7 @@ func TestTermOf(t *testing.T) {
 
 	t.Run("ColumnProjectsAsStored", func(t *testing.T) {
 		require.Equal(t,
-			types.Term{Plain: true, Table: "samples", Column: "category", Alias: "category"},
+			types.PlainTerm("samples", "category").As("category"),
 			types.TermOf(category))
 	})
 
@@ -90,28 +90,14 @@ func TestTermModifiersReturnNewTerms(t *testing.T) {
 	total := types.NewNumericColumn[sampleTable, int64]("amount").Sum()
 
 	t.Run("As", func(t *testing.T) {
-		require.Equal(t, "total", total.As("total").Alias)
-		require.Equal(t, "amount", total.Alias, "the original term keeps its column as alias")
-	})
-
-	t.Run("Where", func(t *testing.T) {
-		done := types.FilterEq("status", "done")
-		base := total.Where(done)
-		// Spare capacity on the conditions is where a shared backing array
-		// would show: two refinements of one term must not overwrite each
-		// other.
-		base.Conditions = append(make([]types.Filter, 0, 4), done)
-		failed := base.Where(types.FilterEq("status", "failed"))
-		vip := base.Where(types.FilterEq("tier", "vip"))
-		require.Equal(t, []types.Filter{done, types.FilterEq("status", "failed")}, failed.Conditions)
-		require.Equal(t, []types.Filter{done, types.FilterEq("tier", "vip")}, vip.Conditions)
-		require.Empty(t, total.Conditions, "the original term stays unconditional")
+		require.Equal(t, "total", types.TermAliasOf(total.As("total")))
+		require.Equal(t, "amount", types.TermAliasOf(total), "the original term keeps its column as alias")
 	})
 
 	t.Run("Over", func(t *testing.T) {
 		window := types.PartitionBy(types.NewColumn[sampleTable, string]("tenant_id"))
 		windowed := total.Over(window)
-		require.Equal(t, &window, windowed.Window)
+		require.Equal(t, &window, types.TermWindowOf(windowed))
 		require.True(t, windowed.IsWindowed())
 		require.False(t, total.IsWindowed(), "the original term stays unwindowed")
 	})
@@ -125,12 +111,12 @@ func TestTermBuildsConditions(t *testing.T) {
 		got   types.TermCondition
 		want  types.TermCondition
 	}{
-		{"Eq", total.Eq(10), types.TermCondition{Term: total, Op: types.CompareEq, Value: 10}},
-		{"Ne", total.Ne(10), types.TermCondition{Term: total, Op: types.CompareNe, Value: 10}},
-		{"Gt", total.Gt(10), types.TermCondition{Term: total, Op: types.CompareGt, Value: 10}},
-		{"Gte", total.Gte(10), types.TermCondition{Term: total, Op: types.CompareGte, Value: 10}},
-		{"Lt", total.Lt(10), types.TermCondition{Term: total, Op: types.CompareLt, Value: 10}},
-		{"Lte", total.Lte(10), types.TermCondition{Term: total, Op: types.CompareLte, Value: 10}},
+		{"Eq", total.Eq(10), types.NewTermCondition(total, types.CompareEq, 10)},
+		{"Ne", total.Ne(10), types.NewTermCondition(total, types.CompareNe, 10)},
+		{"Gt", total.Gt(10), types.NewTermCondition(total, types.CompareGt, 10)},
+		{"Gte", total.Gte(10), types.NewTermCondition(total, types.CompareGte, 10)},
+		{"Lt", total.Lt(10), types.NewTermCondition(total, types.CompareLt, 10)},
+		{"Lte", total.Lte(10), types.NewTermCondition(total, types.CompareLte, 10)},
 	}
 	for _, tt := range tests {
 		t.Run(tt.label, func(t *testing.T) {
@@ -141,8 +127,8 @@ func TestTermBuildsConditions(t *testing.T) {
 
 func TestTermBuildsOrders(t *testing.T) {
 	total := types.NewNumericColumn[sampleTable, int64]("amount").Sum()
-	require.Equal(t, types.TermOrder{Term: total, Direction: types.OrderAsc}, total.Asc())
-	require.Equal(t, types.TermOrder{Term: total, Direction: types.OrderDesc}, total.Desc())
+	require.Equal(t, types.NewTermOrder(total, types.OrderAsc), total.Asc())
+	require.Equal(t, types.NewTermOrder(total, types.OrderDesc), total.Desc())
 }
 
 func TestTermAsEmptyKeepsTheAlias(t *testing.T) {
@@ -153,5 +139,5 @@ func TestTermAsEmptyKeepsTheAlias(t *testing.T) {
 	require.Equal(t, amount.Sum().As("total"), amount.Sum().As("total").As(""))
 	require.Equal(t, types.Count(), types.Count().As(""))
 	require.Equal(t, amount.As("total"), amount.As("total").As(""))
-	require.Equal(t, "amount", amount.As("").Alias)
+	require.Equal(t, "amount", types.TermAliasOf(amount.As("")))
 }

@@ -29,7 +29,7 @@ type Bound[T any] struct {
 // never this column's.
 func (c Column[T]) Split(filters []Filter) (own, rest []Filter) {
 	for _, f := range filters {
-		if namesColumn(f.Table, f.Column, c) {
+		if namesColumn(f.table, f.column, c) {
 			own = append(own, f)
 			continue
 		}
@@ -49,24 +49,24 @@ func (c Column[T]) Split(filters []Filter) (own, rest []Filter) {
 func (c Column[T]) Values(filters []Filter) ([]T, error) {
 	var values []T
 	for _, f := range filters {
-		if !namesColumn(f.Table, f.Column, c) {
+		if !namesColumn(f.table, f.column, c) {
 			continue
 		}
-		switch f.Op {
+		switch f.op {
 		case FilterOpEq:
-			value, err := filterValueAs[T](f.Value)
+			value, err := filterValueAs[T](f.value)
 			if err != nil {
 				return nil, errors.Wrapf(err, "column %q", c.name)
 			}
 			values = append(values, value)
 		case FilterOpIn:
-			members, err := filterMembersAs[T](f.Value)
+			members, err := filterMembersAs[T](f.value)
 			if err != nil {
 				return nil, errors.Wrapf(err, "column %q", c.name)
 			}
 			values = append(values, members...)
 		default:
-			return nil, errors.Newf("column %q: operator %q is not an equality filter", c.name, f.Op)
+			return nil, errors.Newf("column %q: operator %q is not an equality filter", c.name, f.op)
 		}
 	}
 	return values, nil
@@ -82,25 +82,25 @@ func (c Column[T]) Values(filters []Filter) ([]T, error) {
 // the two, and a value that does not convert.
 func (c Column[T]) Bounds(filters []Filter) (lower, upper Bound[T], err error) {
 	for _, f := range filters {
-		if !namesColumn(f.Table, f.Column, c) {
+		if !namesColumn(f.table, f.column, c) {
 			continue
 		}
 		end, side := &lower, "lower"
-		switch f.Op {
+		switch f.op {
 		case FilterOpGt, FilterOpGte:
 		case FilterOpLt, FilterOpLte:
 			end, side = &upper, "upper"
 		default:
-			return Bound[T]{}, Bound[T]{}, errors.Newf("column %q: operator %q is not a range filter", c.name, f.Op)
+			return Bound[T]{}, Bound[T]{}, errors.Newf("column %q: operator %q is not a range filter", c.name, f.op)
 		}
 		if end.Present {
 			return Bound[T]{}, Bound[T]{}, errors.Newf("column %q: more than one filter gives the %s bound", c.name, side)
 		}
-		value, convertErr := filterValueAs[T](f.Value)
+		value, convertErr := filterValueAs[T](f.value)
 		if convertErr != nil {
 			return Bound[T]{}, Bound[T]{}, errors.Wrapf(convertErr, "column %q", c.name)
 		}
-		*end = Bound[T]{Value: value, Inclusive: f.Op == FilterOpGte || f.Op == FilterOpLte, Present: true}
+		*end = Bound[T]{Value: value, Inclusive: f.op == FilterOpGte || f.op == FilterOpLte, Present: true}
 	}
 	return lower, upper, nil
 }

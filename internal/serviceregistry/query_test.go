@@ -84,7 +84,7 @@ func TestBaseQueryFilters(t *testing.T) {
 	t.Run("ParsesAgainstTheServiceModel", func(t *testing.T) {
 		filters, err := svc.QueryFilters(newQueryContext(t, "/samples?age[gt]=20&name=alice"))
 		require.NoError(t, err)
-		require.Equal(t, []types.Filter{{Column: "age", Op: types.FilterOpGt, Value: "20"}}, filters)
+		require.Equal(t, []types.Filter{types.NewFilter("", "age", types.FilterOpGt, "20")}, filters)
 	})
 
 	t.Run("RejectsUnknownField", func(t *testing.T) {
@@ -136,7 +136,7 @@ func TestBaseQueryOrders(t *testing.T) {
 	t.Run("ReadsRequestValues", func(t *testing.T) {
 		orders, err := svc.QueryOrders(newQueryContext(t, "/samples?_sort_by=created_at%20desc"))
 		require.NoError(t, err)
-		require.Equal(t, []types.Order{{Column: "created_at", Direction: types.OrderDesc}}, orders)
+		require.Equal(t, []types.Order{types.NewOrder("", "created_at", types.OrderDesc)}, orders)
 	})
 
 	t.Run("UnknownColumnIsAClientError", func(t *testing.T) {

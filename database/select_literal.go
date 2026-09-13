@@ -23,11 +23,11 @@ func literalExpr(value string) string { return "'" + value + "'" }
 // validateLiteral checks a constant term: its value must be safe to inline,
 // and it needs a name to project under.
 func validateLiteral(t types.Term) error {
-	if !aliasPattern.MatchString(t.Literal) {
-		return errors.Wrapf(ErrInvalidLiteral, "%q", t.Literal)
+	if !aliasPattern.MatchString(types.TermLiteralOf(t)) {
+		return errors.Wrapf(ErrInvalidLiteral, "%q", types.TermLiteralOf(t))
 	}
-	if len(t.Alias) == 0 {
-		return errors.Wrapf(ErrLiteralWithoutAlias, "%q", t.Literal)
+	if len(types.TermAliasOf(t)) == 0 {
+		return errors.Wrapf(ErrLiteralWithoutAlias, "%q", types.TermLiteralOf(t))
 	}
 	return nil
 }

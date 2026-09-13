@@ -61,7 +61,7 @@ func TestNewColumnReferences(t *testing.T) {
 		// and read as the plain-name constructors do.
 		require.Empty(t, types.NewColumn[nameless, string]("age").Table())
 		require.Empty(t, types.NewColumn[*nameless, string]("age").Table())
-		require.Equal(t, types.Filter{Column: "age", Op: types.FilterOpEq, Value: "x"}, types.NewColumn[*nameless, string]("age").Eq("x"))
+		require.Equal(t, types.NewFilter("", "age", types.FilterOpEq, "x"), types.NewColumn[*nameless, string]("age").Eq("x"))
 	})
 
 	t.Run("ReadsTheTableThroughAPointerModel", func(t *testing.T) {
@@ -96,37 +96,37 @@ func TestColumnBuildsFilters(t *testing.T) {
 		got   types.Filter
 		want  types.Filter
 	}{
-		{"Eq", age.Eq(18), types.Filter{Table: "samples", Column: "age", Op: types.FilterOpEq, Value: 18}},
-		{"Ne", age.Ne(18), types.Filter{Table: "samples", Column: "age", Op: types.FilterOpNe, Value: 18}},
-		{"Gt", age.Gt(18), types.Filter{Table: "samples", Column: "age", Op: types.FilterOpGt, Value: 18}},
-		{"Gte", age.Gte(18), types.Filter{Table: "samples", Column: "age", Op: types.FilterOpGte, Value: 18}},
-		{"Lt", age.Lt(18), types.Filter{Table: "samples", Column: "age", Op: types.FilterOpLt, Value: 18}},
-		{"Lte", age.Lte(18), types.Filter{Table: "samples", Column: "age", Op: types.FilterOpLte, Value: 18}},
+		{"Eq", age.Eq(18), types.NewFilter("samples", "age", types.FilterOpEq, 18)},
+		{"Ne", age.Ne(18), types.NewFilter("samples", "age", types.FilterOpNe, 18)},
+		{"Gt", age.Gt(18), types.NewFilter("samples", "age", types.FilterOpGt, 18)},
+		{"Gte", age.Gte(18), types.NewFilter("samples", "age", types.FilterOpGte, 18)},
+		{"Lt", age.Lt(18), types.NewFilter("samples", "age", types.FilterOpLt, 18)},
+		{"Lte", age.Lte(18), types.NewFilter("samples", "age", types.FilterOpLte, 18)},
 		{
 			"In",
 			status.In(sampleStatusActive, sampleStatusRemoved),
-			types.Filter{Table: "samples", Column: "status", Op: types.FilterOpIn, Value: []sampleStatus{sampleStatusActive, sampleStatusRemoved}},
+			types.NewFilter("samples", "status", types.FilterOpIn, []sampleStatus{sampleStatusActive, sampleStatusRemoved}),
 		},
 		{
 			"NotIn",
 			status.NotIn(sampleStatusRemoved),
-			types.Filter{Table: "samples", Column: "status", Op: types.FilterOpNotIn, Value: []sampleStatus{sampleStatusRemoved}},
+			types.NewFilter("samples", "status", types.FilterOpNotIn, []sampleStatus{sampleStatusRemoved}),
 		},
-		{"Like", name.Like("sam"), types.Filter{Table: "samples", Column: "name", Op: types.FilterOpLike, Value: "sam"}},
-		{"NotLike", name.NotLike("sam"), types.Filter{Table: "samples", Column: "name", Op: types.FilterOpNotLike, Value: "sam"}},
-		{"StartsWith", name.StartsWith("sa"), types.Filter{Table: "samples", Column: "name", Op: types.FilterOpStartsWith, Value: "sa"}},
-		{"EndsWith", name.EndsWith("le"), types.Filter{Table: "samples", Column: "name", Op: types.FilterOpEndsWith, Value: "le"}},
-		{"IsNull", name.IsNull(), types.Filter{Table: "samples", Column: "name", Op: types.FilterOpIsNull, Value: true}},
-		{"IsNotNull", name.IsNotNull(), types.Filter{Table: "samples", Column: "name", Op: types.FilterOpIsNull, Value: false}},
-		{"Regex", name.Regex("^sa"), types.Filter{Table: "samples", Column: "name", Op: types.FilterOpRegex, Value: "^sa"}},
-		{"NotRegex", name.NotRegex("^sa"), types.Filter{Table: "samples", Column: "name", Op: types.FilterOpNotRegex, Value: "^sa"}},
-		{"JSONContains", name.JSONContains("sam"), types.Filter{Table: "samples", Column: "name", Op: types.FilterOpJSONContains, Value: "sam"}},
+		{"Like", name.Like("sam"), types.NewFilter("samples", "name", types.FilterOpLike, "sam")},
+		{"NotLike", name.NotLike("sam"), types.NewFilter("samples", "name", types.FilterOpNotLike, "sam")},
+		{"StartsWith", name.StartsWith("sa"), types.NewFilter("samples", "name", types.FilterOpStartsWith, "sa")},
+		{"EndsWith", name.EndsWith("le"), types.NewFilter("samples", "name", types.FilterOpEndsWith, "le")},
+		{"IsNull", name.IsNull(), types.NewFilter("samples", "name", types.FilterOpIsNull, true)},
+		{"IsNotNull", name.IsNotNull(), types.NewFilter("samples", "name", types.FilterOpIsNull, false)},
+		{"Regex", name.Regex("^sa"), types.NewFilter("samples", "name", types.FilterOpRegex, "^sa")},
+		{"NotRegex", name.NotRegex("^sa"), types.NewFilter("samples", "name", types.FilterOpNotRegex, "^sa")},
+		{"JSONContains", name.JSONContains("sam"), types.NewFilter("samples", "name", types.FilterOpJSONContains, "sam")},
 		{
 			"EqCol",
 			age.EqCol(types.NewColumn[sampleTable, int]("parent_age")),
-			types.Filter{Table: "samples", Column: "age", Op: types.FilterOpEqCol, Value: types.NewColumn[sampleTable, int]("parent_age")},
+			types.NewFilter("samples", "age", types.FilterOpEqCol, types.NewColumn[sampleTable, int]("parent_age")),
 		},
-		{"EqColWithoutParent", age.EqCol(nil), types.Filter{Table: "samples", Column: "age", Op: types.FilterOpEqCol, Value: ""}},
+		{"EqColWithoutParent", age.EqCol(nil), types.NewFilter("samples", "age", types.FilterOpEqCol, "")},
 	}
 	for _, tt := range tests {
 		t.Run(tt.label, func(t *testing.T) {
@@ -141,7 +141,7 @@ func TestColumnInWithoutValues(t *testing.T) {
 	// the slice type, so the database layer treats it as an empty set and
 	// matches nothing rather than widening the query.
 	require.Equal(t,
-		types.Filter{Table: "samples", Column: "status", Op: types.FilterOpIn, Value: []sampleStatus(nil)},
+		types.NewFilter("samples", "status", types.FilterOpIn, []sampleStatus(nil)),
 		status.In())
 }
 
@@ -153,8 +153,8 @@ func TestColumnInKeepsItsOwnValues(t *testing.T) {
 	base = append(base, sampleStatusActive)
 	in := status.In(append(base, sampleStatusRemoved)...)
 	notIn := status.NotIn(append(base, "archived")...)
-	require.Equal(t, []sampleStatus{sampleStatusActive, sampleStatusRemoved}, in.Value)
-	require.Equal(t, []sampleStatus{sampleStatusActive, "archived"}, notIn.Value)
+	require.Equal(t, []sampleStatus{sampleStatusActive, sampleStatusRemoved}, in.Value())
+	require.Equal(t, []sampleStatus{sampleStatusActive, "archived"}, notIn.Value())
 }
 
 func TestColumnBuildsTerms(t *testing.T) {
@@ -164,12 +164,10 @@ func TestColumnBuildsTerms(t *testing.T) {
 	// Every projection method yields the column with its table, aliased by
 	// its own name; only the function and the bucket differ.
 	term := func(fn types.TermFn, column string) types.Term {
-		return types.Term{Fn: fn, Table: "samples", Column: column, Alias: column}
+		return types.NewTerm(fn, "samples", column, "", column)
 	}
 	bucket := func(b types.TimeBucket) types.Term {
-		key := term(types.FnNone, "occurred_at")
-		key.Bucket = b
-		return key
+		return types.NewTerm(types.FnNone, "samples", "occurred_at", b, "occurred_at")
 	}
 
 	tests := []struct {
@@ -199,8 +197,8 @@ func TestColumnBuildsTerms(t *testing.T) {
 
 func TestColumnBuildsOrders(t *testing.T) {
 	created := types.NewColumn[sampleTable, int]("created_at")
-	require.Equal(t, types.Order{Table: "samples", Column: "created_at", Direction: types.OrderAsc}, created.Asc())
-	require.Equal(t, types.Order{Table: "samples", Column: "created_at", Direction: types.OrderDesc}, created.Desc())
+	require.Equal(t, types.NewOrder("samples", "created_at", types.OrderAsc), created.Asc())
+	require.Equal(t, types.NewOrder("samples", "created_at", types.OrderDesc), created.Desc())
 }
 
 func TestColumnBuildsAssignments(t *testing.T) {
@@ -208,7 +206,7 @@ func TestColumnBuildsAssignments(t *testing.T) {
 	// column's own value type, and the table the reference was built for.
 	status := types.NewColumn[sampleTable, sampleStatus]("status")
 	require.Equal(t,
-		types.Assignment{Table: "samples", Column: "status", Value: sampleStatusActive},
+		types.NewAssignment("samples", "status", sampleStatusActive),
 		status.Set(sampleStatusActive))
 }
 

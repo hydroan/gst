@@ -1411,7 +1411,7 @@ func TestSelectJoinSelectBuildErrors(t *testing.T) {
 			{"NeverAliased", TestAccountCols.Tier.Max(), TestAccountCols.Tier.Max()},
 			{"AliasedToNothing", TestAccountCols.Tier.Max().As(""), TestAccountCols.Tier.Max()},
 			{"AliasedToTheDefault", TestAccountCols.Tier.Max().As("tier"), TestAccountCols.Tier.Max().As("")},
-			{"BuiltByHand", types.Term{Fn: types.FnMax, Table: "test_accounts", Column: "tier"}, TestAccountCols.Tier.Max()},
+			{"BuiltByHand", types.NewTerm(types.FnMax, "test_accounts", "tier", "", ""), TestAccountCols.Tier.Max()},
 		} {
 			t.Run(tt.label, func(t *testing.T) {
 				perCategory := database.Select[*TestRecordTag, struct {

@@ -55,7 +55,7 @@ func Orders(q url.Values, m types.Model) ([]types.Order, error) {
 				return nil, errors.Newf("invalid sort direction %q for column %q: expected asc or desc", fields[1], fields[0])
 			}
 		}
-		orders = append(orders, types.Order{Column: column.DBName, Direction: direction})
+		orders = append(orders, types.NewOrder("", column.DBName, direction))
 	}
 	return orders, nil
 }

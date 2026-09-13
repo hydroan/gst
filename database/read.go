@@ -110,7 +110,7 @@ func (db *database[M]) List(dest *[]M) (err error) {
 	}
 	// A backward cursor read walks the feed in reverse, so the rows come back
 	// upside down; reversing them restores the feed's own order.
-	if db.cursor.Enabled() && db.cursor.Backward {
+	if db.cursor.Enabled() && db.cursor.Backward() {
 		slices.Reverse(*dest)
 	}
 

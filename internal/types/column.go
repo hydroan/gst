@@ -223,17 +223,17 @@ func (c Column[T]) EqCol(parent ColumnRef[T]) Filter {
 // filter builds a filter on this column, carrying the table the reference
 // was built for.
 func (c Column[T]) filter(op FilterOp, value any) Filter {
-	return Filter{Table: c.table, Column: c.name, Op: op, Value: value}
+	return Filter{table: c.table, column: c.name, op: op, value: value}
 }
 
 // Asc orders by the column ascending. The order carries the table the
 // reference was built for, which the chain's reads and a select check: a
 // select that joins tells two tables' columns of one name apart by it, and a
 // chain refuses an order of another model; see Order.
-func (c Column[T]) Asc() Order { return Order{Table: c.table, Column: c.name, Direction: OrderAsc} }
+func (c Column[T]) Asc() Order { return Order{table: c.table, column: c.name, direction: OrderAsc} }
 
 // Desc orders by the column descending; see Asc.
-func (c Column[T]) Desc() Order { return Order{Table: c.table, Column: c.name, Direction: OrderDesc} }
+func (c Column[T]) Desc() Order { return Order{table: c.table, column: c.name, direction: OrderDesc} }
 
 // Set assigns value to the column, the unit UpdateByID accepts. The value is
 // typed by the column, so a wrong-typed value or a misspelled column fails to
@@ -241,7 +241,7 @@ func (c Column[T]) Desc() Order { return Order{Table: c.table, Column: c.name, D
 // a column of another model, which may well share the name, is refused when
 // the write is built.
 func (c Column[T]) Set(value T) Assignment {
-	return Assignment{Table: c.table, Column: c.name, Value: value}
+	return Assignment{table: c.table, column: c.name, value: value}
 }
 
 // The projection methods below turn the column into a Term. Every column
@@ -262,7 +262,7 @@ func (c Column[T]) Group() Term { return c.term(FnNone) }
 // column reference to Select directly means.
 func (c Column[T]) exprTerm() Term {
 	term := c.term(FnNone)
-	term.Plain = true
+	term.plain = true
 	return term
 }
 
@@ -305,7 +305,7 @@ func (c Column[T]) Lead() Term { return c.term(FnLead) }
 // term builds the projection term the methods above share: the column with
 // its table, aliased by its own name until As renames it.
 func (c Column[T]) term(fn TermFn) Term {
-	return Term{Fn: fn, Table: c.table, Column: c.name, Alias: c.name}
+	return Term{fn: fn, table: c.table, column: c.name, alias: c.name}
 }
 
 // NumericColumn is the reference generated for a column whose Go type is
@@ -364,6 +364,6 @@ func (c TimeColumn) ByMonth() Term { return c.bucket(TimeBucketMonth) }
 
 func (c TimeColumn) bucket(bucket TimeBucket) Term {
 	term := c.term(FnNone)
-	term.Bucket = bucket
+	term.bucket = bucket
 	return term
 }

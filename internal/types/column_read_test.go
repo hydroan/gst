@@ -10,9 +10,9 @@ import (
 
 func TestColumnSplit(t *testing.T) {
 	status := types.NewColumn[sampleTable, sampleStatus]("status")
-	parsed := types.Filter{Column: "status", Op: types.FilterOpIn, Value: []string{"active"}}
+	parsed := types.NewFilter("", "status", types.FilterOpIn, []string{"active"})
 	built := status.Eq(sampleStatusActive)
-	otherColumn := types.Filter{Column: "amount", Op: types.FilterOpGt, Value: "1"}
+	otherColumn := types.NewFilter("", "amount", types.FilterOpGt, "1")
 	otherTable := types.NewColumn[*sampleRecord, string]("status").Eq("active")
 	group := types.FilterOr(built, otherColumn)
 
@@ -29,9 +29,9 @@ func TestColumnValues(t *testing.T) {
 
 	t.Run("ReadsParsedAndBuiltEqualityFilters", func(t *testing.T) {
 		values, err := status.Values([]types.Filter{
-			{Column: "status", Op: types.FilterOpEq, Value: "active"},
-			{Column: "amount", Op: types.FilterOpGt, Value: "1"},
-			{Column: "status", Op: types.FilterOpIn, Value: []string{"removed", "active"}},
+			types.NewFilter("", "status", types.FilterOpEq, "active"),
+			types.NewFilter("", "amount", types.FilterOpGt, "1"),
+			types.NewFilter("", "status", types.FilterOpIn, []string{"removed", "active"}),
 			status.In(sampleStatusRemoved),
 		})
 		require.NoError(t, err)
@@ -44,19 +44,19 @@ func TestColumnValues(t *testing.T) {
 		// normalized it to: the string spelling of a number, a bool for a
 		// bool column.
 		amounts, err := types.NewNumericColumn[sampleTable, int64]("amount").Values([]types.Filter{
-			{Column: "amount", Op: types.FilterOpIn, Value: []string{"10", "-3"}},
+			types.NewFilter("", "amount", types.FilterOpIn, []string{"10", "-3"}),
 		})
 		require.NoError(t, err)
 		require.Equal(t, []int64{10, -3}, amounts)
 
 		ratios, err := types.NewNumericColumn[sampleTable, float64]("ratio").Values([]types.Filter{
-			{Column: "ratio", Op: types.FilterOpEq, Value: "0.5"},
+			types.NewFilter("", "ratio", types.FilterOpEq, "0.5"),
 		})
 		require.NoError(t, err)
 		require.Equal(t, []float64{0.5}, ratios)
 
 		flags, err := types.NewColumn[sampleTable, bool]("enabled").Values([]types.Filter{
-			{Column: "enabled", Op: types.FilterOpEq, Value: true},
+			types.NewFilter("", "enabled", types.FilterOpEq, true),
 		})
 		require.NoError(t, err)
 		require.Equal(t, []bool{true}, flags)
@@ -74,17 +74,17 @@ func TestColumnValues(t *testing.T) {
 	})
 
 	t.Run("RefusesOtherOperators", func(t *testing.T) {
-		_, err := status.Values([]types.Filter{{Column: "status", Op: types.FilterOpLike, Value: "act"}})
+		_, err := status.Values([]types.Filter{types.NewFilter("", "status", types.FilterOpLike, "act")})
 		require.ErrorContains(t, err, `operator "like" is not an equality filter`)
 	})
 
 	t.Run("RefusesValuesThatDoNotConvert", func(t *testing.T) {
 		amount := types.NewNumericColumn[sampleTable, int8]("amount")
-		_, err := amount.Values([]types.Filter{{Column: "amount", Op: types.FilterOpEq, Value: "ten"}})
+		_, err := amount.Values([]types.Filter{types.NewFilter("", "amount", types.FilterOpEq, "ten")})
 		require.ErrorContains(t, err, `column "amount"`)
 		_, err = amount.Values([]types.Filter{types.FilterEq("amount", 300)})
 		require.Error(t, err, "a number the column type cannot hold is refused rather than truncated")
-		_, err = amount.Values([]types.Filter{{Column: "amount", Op: types.FilterOpIn, Value: "1,2"}})
+		_, err = amount.Values([]types.Filter{types.NewFilter("", "amount", types.FilterOpIn, "1,2")})
 		require.ErrorContains(t, err, "is not a list")
 	})
 }
@@ -96,9 +96,9 @@ func TestColumnBounds(t *testing.T) {
 
 	t.Run("ReadsParsedTimeBounds", func(t *testing.T) {
 		lower, upper, err := createdAt.Bounds([]types.Filter{
-			{Column: "created_at", Op: types.FilterOpGte, Value: from.Format(types.FilterTimeLayout)},
-			{Column: "status", Op: types.FilterOpEq, Value: "active"},
-			{Column: "created_at", Op: types.FilterOpLte, Value: to.Format(types.FilterTimeLayout)},
+			types.NewFilter("", "created_at", types.FilterOpGte, from.Format(types.FilterTimeLayout)),
+			types.NewFilter("", "status", types.FilterOpEq, "active"),
+			types.NewFilter("", "created_at", types.FilterOpLte, to.Format(types.FilterTimeLayout)),
 		})
 		require.NoError(t, err)
 		require.Equal(t, types.Bound[time.Time]{Value: from, Inclusive: true, Present: true}, lower)
@@ -131,7 +131,7 @@ func TestColumnBounds(t *testing.T) {
 	})
 
 	t.Run("RefusesValuesThatDoNotConvert", func(t *testing.T) {
-		_, _, err := createdAt.Bounds([]types.Filter{{Column: "created_at", Op: types.FilterOpLt, Value: "yesterday"}})
+		_, _, err := createdAt.Bounds([]types.Filter{types.NewFilter("", "created_at", types.FilterOpLt, "yesterday")})
 		require.ErrorContains(t, err, `column "created_at"`)
 	})
 }

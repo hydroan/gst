@@ -217,20 +217,20 @@ func (a *selector[M, R]) resolveSelectJoin(sj types.SelectJoin, alias string) (*
 	for _, key := range info.keys {
 		// A bucket key projects a label such as '2024-01-10', which no column
 		// of the query equals; an ON pinning it would silently match nothing.
-		if key.Bucket != types.TimeBucketNone {
+		if types.TermBucketOf(key) != types.TimeBucketNone {
 			return nil, nil, errors.Wrapf(ErrJoinSelectBucketKey, "%q", termAlias(key))
 		}
 		// The query names the select's keys through its model's column
 		// references, so a key of a table the select joins has no spelling
 		// from outside, and two keys on one column would be one reference
 		// naming both.
-		if len(key.Table) > 0 && key.Table != info.table {
-			return nil, nil, errors.Wrapf(ErrJoinSelectKey, "%q groups by %q of %q", termAlias(key), key.Column, key.Table)
+		if len(types.TermTableOf(key)) > 0 && types.TermTableOf(key) != info.table {
+			return nil, nil, errors.Wrapf(ErrJoinSelectKey, "%q groups by %q of %q", termAlias(key), types.TermColumnOf(key), types.TermTableOf(key))
 		}
-		if _, dup := seen[key.Column]; dup {
-			return nil, nil, errors.Wrapf(ErrJoinSelectKey, "%q groups by %q twice", termAlias(key), key.Column)
+		if _, dup := seen[types.TermColumnOf(key)]; dup {
+			return nil, nil, errors.Wrapf(ErrJoinSelectKey, "%q groups by %q twice", termAlias(key), types.TermColumnOf(key))
 		}
-		seen[key.Column] = struct{}{}
+		seen[types.TermColumnOf(key)] = struct{}{}
 	}
 	keyColumns := make([]string, 0, len(info.keys))
 	keyInfo := tableInfo{
@@ -241,15 +241,15 @@ func (a *selector[M, R]) resolveSelectJoin(sj types.SelectJoin, alias string) (*
 		rename:      make(map[string]string, len(info.keys)),
 	}
 	for _, key := range info.keys {
-		keyColumns = append(keyColumns, key.Column)
-		keyInfo.columns[key.Column] = struct{}{}
-		keyInfo.rename[key.Column] = termAlias(key)
-		if c, known := info.columns[key.Column]; known {
+		keyColumns = append(keyColumns, types.TermColumnOf(key))
+		keyInfo.columns[types.TermColumnOf(key)] = struct{}{}
+		keyInfo.rename[types.TermColumnOf(key)] = termAlias(key)
+		if c, known := info.columns[types.TermColumnOf(key)]; known {
 			if modelschema.ClassifyColumn(c.Type) == modelschema.ColumnClassTime {
-				keyInfo.timeColumns[key.Column] = struct{}{}
+				keyInfo.timeColumns[types.TermColumnOf(key)] = struct{}{}
 			}
 			if modelschema.IsJSONType(c.Type) {
-				keyInfo.jsonColumns[key.Column] = struct{}{}
+				keyInfo.jsonColumns[types.TermColumnOf(key)] = struct{}{}
 			}
 		}
 	}
@@ -287,14 +287,14 @@ func pinnedColumns(jt *joinedTable, before map[string]tableInfo) (map[string]str
 	var walk func(filters []types.Filter)
 	walk = func(filters []types.Filter) {
 		for _, f := range filters {
-			switch f.Op {
+			switch f.Op() {
 			case types.FilterOpAnd:
-				if children, ok := f.Value.([]types.Filter); ok {
+				if children, ok := f.Value().([]types.Filter); ok {
 					walk(children)
 				}
 			case types.FilterOpEq:
 				if ownsColumn(f, jt.table) {
-					pinned[f.Column] = struct{}{}
+					pinned[f.Column()] = struct{}{}
 				}
 			case types.FilterOpEqCol:
 				own, otherTable, otherColumn := eqColSides(f, jt.table)
@@ -325,7 +325,7 @@ func pinnedColumns(jt *joinedTable, before map[string]tableInfo) (map[string]str
 // ownsColumn reports whether a filter names a column of the table: a filter
 // without a table names the table it is applied to.
 func ownsColumn(f types.Filter, table string) bool {
-	return len(f.Table) == 0 || f.Table == table
+	return len(f.Table()) == 0 || f.Table() == table
 }
 
 // eqColSides reads an EqCol predicate from the joined table's side: the
@@ -333,15 +333,15 @@ func ownsColumn(f types.Filter, table string) bool {
 // A predicate naming the joined table on neither side, or on both, pins
 // nothing.
 func eqColSides(f types.Filter, table string) (own, otherTable, otherColumn string) {
-	parent, parentTable, ok := eqColParent(f.Value)
+	parent, parentTable, ok := eqColParent(f.Value())
 	if !ok || len(parent) == 0 {
 		return "", "", ""
 	}
 	switch {
 	case ownsColumn(f, table) && parentTable != table:
-		return f.Column, parentTable, parent
-	case parentTable == table && len(f.Table) > 0 && f.Table != table:
-		return parent, f.Table, f.Column
+		return f.Column(), parentTable, parent
+	case parentTable == table && len(f.Table()) > 0 && f.Table() != table:
+		return parent, f.Table(), f.Column()
 	default:
 		return "", "", ""
 	}
@@ -573,11 +573,11 @@ func (a *selector[M, R]) derivedTerms(shape projectionShape) (map[string]*joined
 // no table, as a plain Count or a constant does, or the table of the queried
 // model or of a model the query joins.
 func (a *selector[M, R]) ownTerm(t types.Term) bool {
-	if len(t.Table) == 0 || t.Table == a.db.outerTableName() {
+	if len(types.TermTableOf(t)) == 0 || types.TermTableOf(t) == a.db.outerTableName() {
 		return true
 	}
 	for _, source := range a.joins {
-		if mj, ok := source.(types.ModelJoin); ok && mj.Model != nil && mj.Model.TableName() == t.Table {
+		if mj, ok := source.(types.ModelJoin); ok && mj.Model != nil && mj.Model.TableName() == types.TermTableOf(t) {
 			return true
 		}
 	}
@@ -591,10 +591,10 @@ func (a *selector[M, R]) ownTerm(t types.Term) bool {
 // constant has no default and every author names it, so it counts as one
 // spelled alike: a constant is the query's own wherever it stands.
 func defaultAlias(t types.Term) bool {
-	if len(t.Column) > 0 {
-		return termAlias(t) == t.Column
+	if len(types.TermColumnOf(t)) > 0 {
+		return termAlias(t) == types.TermColumnOf(t)
 	}
-	switch t.Fn {
+	switch types.TermFnOf(t) {
 	case types.FnCount:
 		return termAlias(t) == types.DefaultCountAlias
 	case types.FnRowNumber:
@@ -616,9 +616,9 @@ func defaultAlias(t types.Term) bool {
 // The aliases the ranking constructors give their terms, read once from the
 // constructors so that the default stays defined in one place.
 var (
-	rowNumberAlias = types.RowNumber().Alias
-	rankAlias      = types.Rank().Alias
-	denseRankAlias = types.DenseRank().Alias
+	rowNumberAlias = types.TermAliasOf(types.RowNumber())
+	rankAlias      = types.TermAliasOf(types.Rank())
+	denseRankAlias = types.TermAliasOf(types.DenseRank())
 )
 
 // derivedOf reports the joined select a term is a column of. The alias
@@ -636,8 +636,8 @@ func (a *selector[M, R]) derivedOf(t types.Term, shape projectionShape) (*joined
 // tableOf is the table a term names: its own, or the queried model's when
 // it carries none, which is what a plain name means everywhere.
 func (s projectionShape) tableOf(t types.Term) string {
-	if len(t.Table) > 0 {
-		return t.Table
+	if len(types.TermTableOf(t)) > 0 {
+		return types.TermTableOf(t)
 	}
 	return s.main
 }
@@ -708,7 +708,7 @@ func (a *selector[M, R]) groupDerivedTerms(shape *projectionShape) error {
 // column is a key of the select at all.
 func keyAliasOf(jt *joinedTable, column string) (string, bool) {
 	for _, key := range jt.derived.keys {
-		if key.Column == column {
+		if types.TermColumnOf(key) == column {
 			return termAlias(key), true
 		}
 	}
@@ -726,10 +726,10 @@ func (a *selector[M, R]) groupsBy(table, column string, shape projectionShape) b
 		// A joined select's measure is a group key under its alias, not under
 		// the column it measured; only the select's own key term names that
 		// column.
-		if jt, derived := a.derivedOf(key, shape); derived && (key.Fn != types.FnNone || jt.table != table) {
+		if jt, derived := a.derivedOf(key, shape); derived && (types.TermFnOf(key) != types.FnNone || jt.table != table) {
 			continue
 		}
-		if key.Column == column && key.Bucket == types.TimeBucketNone && shape.tableOf(key) == table {
+		if types.TermColumnOf(key) == column && types.TermBucketOf(key) == types.TimeBucketNone && shape.tableOf(key) == table {
 			return true
 		}
 	}

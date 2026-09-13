@@ -9,13 +9,13 @@ import (
 
 func TestCursorConstructors(t *testing.T) {
 	forward := types.CursorForward(types.Asc("id"), "abc")
-	require.Equal(t, types.Order{Column: "id", Direction: types.OrderAsc}, forward.Order)
-	require.Equal(t, "abc", forward.Value)
-	require.False(t, forward.Backward)
+	require.Equal(t, types.NewOrder("", "id", types.OrderAsc), forward.Order())
+	require.Equal(t, "abc", forward.Value())
+	require.False(t, forward.Backward())
 
 	backward := types.CursorBackward(types.Desc("created_at"), "abc")
-	require.Equal(t, types.Order{Column: "created_at", Direction: types.OrderDesc}, backward.Order)
-	require.True(t, backward.Backward)
+	require.Equal(t, types.NewOrder("", "created_at", types.OrderDesc), backward.Order())
+	require.True(t, backward.Backward())
 }
 
 func TestCursorEnabled(t *testing.T) {

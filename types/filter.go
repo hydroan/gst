@@ -4,15 +4,51 @@ import (
 	itypes "github.com/hydroan/gst/internal/types"
 )
 
-// Filter is one field-level filter to apply as an AND condition.
-// Column must already be validated against the model's queryable columns by
-// the producer (the List controller validates URL input; service code passing
-// filters directly carries the same responsibility). Table is the table the
-// column belongs to: a column reference fills it in, and URL parsing leaves it
-// empty, which names the queried model's own table. A filter carrying another
-// table is applied to that table when the query joins it and fails closed
-// otherwise. Value holds a normalized typed value and is always bound as a
-// statement parameter.
+// FilterOp is a field-level filter operator: the comparison a Filter applies,
+// which Filter.Op reads back. Operators never widen a query: unknown values
+// are rejected during parsing, and the database layer fails closed on
+// conditions it does not recognize.
+type FilterOp = itypes.FilterOp
+
+// URL-exposed operators, which a request spells as "field[op]=value".
+const (
+	FilterOpEq         = itypes.FilterOpEq         // equal: column = value
+	FilterOpNe         = itypes.FilterOpNe         // not equal: column <> value
+	FilterOpGt         = itypes.FilterOpGt         // greater than: column > value
+	FilterOpGte        = itypes.FilterOpGte        // greater than or equal: column >= value
+	FilterOpLt         = itypes.FilterOpLt         // less than: column < value
+	FilterOpLte        = itypes.FilterOpLte        // less than or equal: column <= value
+	FilterOpIn         = itypes.FilterOpIn         // set membership: column IN (comma-separated values)
+	FilterOpNotIn      = itypes.FilterOpNotIn      // set exclusion: column NOT IN (comma-separated values)
+	FilterOpLike       = itypes.FilterOpLike       // substring match: column LIKE %value%
+	FilterOpNotLike    = itypes.FilterOpNotLike    // substring exclusion: column NOT LIKE %value%
+	FilterOpStartsWith = itypes.FilterOpStartsWith // prefix match: column LIKE value% (can use an index)
+	FilterOpEndsWith   = itypes.FilterOpEndsWith   // suffix match: column LIKE %value
+	FilterOpIsNull     = itypes.FilterOpIsNull     // null check: value true means IS NULL, false means IS NOT NULL
+)
+
+// Service-only operators, which service code builds and no request can spell.
+const (
+	FilterOpRegex        = itypes.FilterOpRegex        // regular expression match: column REGEXP value (dialect-aware)
+	FilterOpNotRegex     = itypes.FilterOpNotRegex     // regular expression exclusion: NOT (column REGEXP value)
+	FilterOpJSONContains = itypes.FilterOpJSONContains // JSON array membership: value is a member of the JSON array column
+	FilterOpOr           = itypes.FilterOpOr           // group: the []Filter value is OR-combined, the group itself AND-combined
+	FilterOpAnd          = itypes.FilterOpAnd          // group: the []Filter value is AND-combined, for nesting inside an OR group
+	FilterOpExists       = itypes.FilterOpExists       // correlated subquery: EXISTS or NOT EXISTS over a related model
+	FilterOpEqCol        = itypes.FilterOpEqCol        // column equals another column: the enclosing query's inside a subquery, a table read beside it inside a join
+	FilterOpFalse        = itypes.FilterOpFalse        // constant predicate: matches nothing, see FilterFalse
+)
+
+// Filter is one field-level filter to apply as an AND condition: the column it
+// compares, the table that column belongs to, the operator and the value. Its
+// fields are unexported, so a filter comes from the generated column
+// references, a reference minted for a type parameter, the grouping, subquery
+// and constant constructors below, or the framework's URL parsing. Table,
+// Column, Op and Value read it back; Split, Values and Bounds on a column
+// reference read one column's filters converted to the column's type. A filter
+// carrying another table is applied to that table when the query joins it and
+// fails closed otherwise, and the value is always bound as a statement
+// parameter.
 type Filter = itypes.Filter
 
 // FilterFalse matches nothing. It is the condition a permission hook returns

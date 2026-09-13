@@ -133,7 +133,7 @@ func TestDatabaseFilterGroups(t *testing.T) {
 	t.Run("MalformedGroupsFailClosed", func(t *testing.T) {
 		require.Empty(t, list(t, types.FilterOr()), "empty OR group")
 		require.Empty(t, list(t, types.FilterAnd()), "empty AND group")
-		require.Empty(t, list(t, types.Filter{Op: types.FilterOpOr, Value: "oops"}),
+		require.Empty(t, list(t, types.NewFilter("", "", types.FilterOpOr, "oops")),
 			"a group value that is not a filter list")
 		require.Empty(t, list(t, types.FilterOr(types.FilterEq("", "x"))),
 			"a child with an empty column")
@@ -151,7 +151,7 @@ func TestDatabaseFilters(t *testing.T) {
 	require.NoError(t, database.Database[*TestUser](context.Background()).
 		WithQuery(nil, types.QueryOptions{
 			Filters: []types.Filter{
-				{Column: "age", Op: types.FilterOpGt, Value: "18"},
+				types.NewFilter("", "age", types.FilterOpGt, "18"),
 			},
 		}).
 		List(&users))
@@ -174,7 +174,7 @@ func TestDatabaseFilters(t *testing.T) {
 	require.NoError(t, database.Database[*TestUser](context.Background()).
 		WithQuery(&TestUser{Name: u1.Name}, types.QueryOptions{
 			Filters: []types.Filter{
-				{Column: "age", Op: types.FilterOpGte, Value: "18"},
+				types.NewFilter("", "age", types.FilterOpGte, "18"),
 			},
 		}).
 		List(&users))
@@ -186,7 +186,7 @@ func TestDatabaseFilters(t *testing.T) {
 	require.NoError(t, database.Database[*TestUser](context.Background()).
 		WithQuery(&TestUser{Name: u1.Name}, types.QueryOptions{
 			Filters: []types.Filter{
-				{Column: "age", Op: types.FilterOpGt, Value: "18"},
+				types.NewFilter("", "age", types.FilterOpGt, "18"),
 			},
 		}).
 		List(&users))
@@ -197,7 +197,7 @@ func TestDatabaseFilters(t *testing.T) {
 	require.NoError(t, database.Database[*TestUser](context.Background()).
 		WithQuery(nil, types.QueryOptions{
 			Filters: []types.Filter{
-				{Column: "age", Op: types.FilterOpEq, Value: "19"},
+				types.NewFilter("", "age", types.FilterOpEq, "19"),
 			},
 		}).
 		List(&users))
@@ -209,7 +209,7 @@ func TestDatabaseFilters(t *testing.T) {
 	require.NoError(t, database.Database[*TestUser](context.Background()).
 		WithQuery(nil, types.QueryOptions{
 			Filters: []types.Filter{
-				{Column: "age", Op: types.FilterOpNe, Value: "19"},
+				types.NewFilter("", "age", types.FilterOpNe, "19"),
 			},
 		}).
 		List(&users))
@@ -232,7 +232,7 @@ func TestDatabaseFilters(t *testing.T) {
 	require.NoError(t, database.Database[*TestUser](context.Background()).
 		WithQuery(nil, types.QueryOptions{
 			Filters: []types.Filter{
-				{Column: "age", Op: types.FilterOpLt, Value: "19"},
+				types.NewFilter("", "age", types.FilterOpLt, "19"),
 			},
 		}).
 		List(&users))
@@ -243,7 +243,7 @@ func TestDatabaseFilters(t *testing.T) {
 	require.NoError(t, database.Database[*TestUser](context.Background()).
 		WithQuery(nil, types.QueryOptions{
 			Filters: []types.Filter{
-				{Column: "age", Op: types.FilterOpLte, Value: "19"},
+				types.NewFilter("", "age", types.FilterOpLte, "19"),
 			},
 		}).
 		List(&users))
@@ -255,7 +255,7 @@ func TestDatabaseFilters(t *testing.T) {
 	require.NoError(t, database.Database[*TestUser](context.Background()).
 		WithQuery(nil, types.QueryOptions{
 			Filters: []types.Filter{
-				{Column: "email", Op: types.FilterOpLike, Value: "@example"},
+				types.NewFilter("", "email", types.FilterOpLike, "@example"),
 			},
 		}).
 		List(&users))
@@ -266,7 +266,7 @@ func TestDatabaseFilters(t *testing.T) {
 	require.NoError(t, database.Database[*TestUser](context.Background()).
 		WithQuery(nil, types.QueryOptions{
 			Filters: []types.Filter{
-				{Column: "name", Op: types.FilterOpNotLike, Value: "1"},
+				types.NewFilter("", "name", types.FilterOpNotLike, "1"),
 			},
 		}).
 		List(&users))
@@ -277,7 +277,7 @@ func TestDatabaseFilters(t *testing.T) {
 	require.NoError(t, database.Database[*TestUser](context.Background()).
 		WithQuery(nil, types.QueryOptions{
 			Filters: []types.Filter{
-				{Column: "age", Op: types.FilterOpIn, Value: []string{"18", "20"}},
+				types.NewFilter("", "age", types.FilterOpIn, []string{"18", "20"}),
 			},
 		}).
 		List(&users))
@@ -298,7 +298,7 @@ func TestDatabaseFilters(t *testing.T) {
 	require.NoError(t, database.Database[*TestUser](context.Background()).
 		WithQuery(nil, types.QueryOptions{
 			Filters: []types.Filter{
-				{Column: "name", Op: types.FilterOpNotIn, Value: []string{"user1", "user2"}},
+				types.NewFilter("", "name", types.FilterOpNotIn, []string{"user1", "user2"}),
 			},
 		}).
 		List(&users))
@@ -311,7 +311,7 @@ func TestDatabaseFilters(t *testing.T) {
 	require.NoError(t, database.Database[*TestUser](context.Background()).
 		WithQuery(nil, types.QueryOptions{
 			Filters: []types.Filter{
-				{Column: "name", Op: types.FilterOpStartsWith, Value: "user"},
+				types.NewFilter("", "name", types.FilterOpStartsWith, "user"),
 			},
 		}).
 		List(&users))
@@ -321,7 +321,7 @@ func TestDatabaseFilters(t *testing.T) {
 	require.NoError(t, database.Database[*TestUser](context.Background()).
 		WithQuery(nil, types.QueryOptions{
 			Filters: []types.Filter{
-				{Column: "name", Op: types.FilterOpStartsWith, Value: "ser"},
+				types.NewFilter("", "name", types.FilterOpStartsWith, "ser"),
 			},
 		}).
 		List(&users))
@@ -332,7 +332,7 @@ func TestDatabaseFilters(t *testing.T) {
 	require.NoError(t, database.Database[*TestUser](context.Background()).
 		WithQuery(nil, types.QueryOptions{
 			Filters: []types.Filter{
-				{Column: "email", Op: types.FilterOpEndsWith, Value: "1@example.com"},
+				types.NewFilter("", "email", types.FilterOpEndsWith, "1@example.com"),
 			},
 		}).
 		List(&users))
@@ -343,7 +343,7 @@ func TestDatabaseFilters(t *testing.T) {
 	require.NoError(t, database.Database[*TestUser](context.Background()).
 		WithQuery(nil, types.QueryOptions{
 			Filters: []types.Filter{
-				{Column: "email", Op: types.FilterOpEndsWith, Value: "user"},
+				types.NewFilter("", "email", types.FilterOpEndsWith, "user"),
 			},
 		}).
 		List(&users))
@@ -360,7 +360,7 @@ func TestDatabaseFilters(t *testing.T) {
 	require.NoError(t, database.Database[*TestUser](context.Background()).
 		WithQuery(nil, types.QueryOptions{
 			Filters: []types.Filter{
-				{Column: "is_active", Op: types.FilterOpIsNull, Value: true},
+				types.NewFilter("", "is_active", types.FilterOpIsNull, true),
 			},
 		}).
 		List(&users))
@@ -370,7 +370,7 @@ func TestDatabaseFilters(t *testing.T) {
 	require.NoError(t, database.Database[*TestUser](context.Background()).
 		WithQuery(nil, types.QueryOptions{
 			Filters: []types.Filter{
-				{Column: "is_active", Op: types.FilterOpIsNull, Value: false},
+				types.NewFilter("", "is_active", types.FilterOpIsNull, false),
 			},
 		}).
 		List(&users))
@@ -388,7 +388,7 @@ func TestDatabaseFilters(t *testing.T) {
 	require.NoError(t, database.Database[*TestUser](context.Background()).
 		WithQuery(nil, types.QueryOptions{
 			Filters: []types.Filter{
-				{Column: "name", Op: types.FilterOpLike, Value: "user_"},
+				types.NewFilter("", "name", types.FilterOpLike, "user_"),
 			},
 		}).
 		List(&users))
@@ -399,7 +399,7 @@ func TestDatabaseFilters(t *testing.T) {
 	require.NoError(t, database.Database[*TestUser](context.Background()).
 		WithQuery(nil, types.QueryOptions{
 			Filters: []types.Filter{
-				{Column: "name", Op: types.FilterOpStartsWith, Value: "user_"},
+				types.NewFilter("", "name", types.FilterOpStartsWith, "user_"),
 			},
 		}).
 		List(&users))
@@ -412,7 +412,7 @@ func TestDatabaseFilters(t *testing.T) {
 	require.NoError(t, database.Database[*TestUser](context.Background()).
 		WithQuery(nil, types.QueryOptions{
 			Filters: []types.Filter{
-				{Column: "name", Op: types.FilterOpRegex, Value: "^user[12]$"},
+				types.NewFilter("", "name", types.FilterOpRegex, "^user[12]$"),
 			},
 		}).
 		List(&users))
@@ -433,7 +433,7 @@ func TestDatabaseFilters(t *testing.T) {
 	require.NoError(t, database.Database[*TestUser](context.Background()).
 		WithQuery(nil, types.QueryOptions{
 			Filters: []types.Filter{
-				{Column: "name", Op: types.FilterOpNotRegex, Value: "^user[0-9]$"},
+				types.NewFilter("", "name", types.FilterOpNotRegex, "^user[0-9]$"),
 			},
 		}).
 		List(&users))
@@ -447,7 +447,7 @@ func TestDatabaseFilters(t *testing.T) {
 	require.Error(t, database.Database[*TestUser](context.Background()).
 		WithQuery(nil, types.QueryOptions{
 			Filters: []types.Filter{
-				{Column: "name", Op: types.FilterOpRegex, Value: "(unclosed"},
+				types.NewFilter("", "name", types.FilterOpRegex, "(unclosed"),
 			},
 		}).
 		List(&users))
@@ -460,7 +460,7 @@ func TestDatabaseFilters(t *testing.T) {
 	require.NoError(t, database.Database[*TestUser](context.Background()).
 		WithQuery(nil, types.QueryOptions{
 			Filters: []types.Filter{
-				{Column: "addr", Op: types.FilterOpJSONContains, Value: "alpha"},
+				types.NewFilter("", "addr", types.FilterOpJSONContains, "alpha"),
 			},
 		}).
 		List(&users))
@@ -471,7 +471,7 @@ func TestDatabaseFilters(t *testing.T) {
 	require.NoError(t, database.Database[*TestUser](context.Background()).
 		WithQuery(nil, types.QueryOptions{
 			Filters: []types.Filter{
-				{Column: "addr", Op: types.FilterOpJSONContains, Value: "gamma"},
+				types.NewFilter("", "addr", types.FilterOpJSONContains, "gamma"),
 			},
 		}).
 		List(&users))
@@ -483,7 +483,7 @@ func TestDatabaseFilters(t *testing.T) {
 	require.NoError(t, database.Database[*TestUser](context.Background()).
 		WithQuery(nil, types.QueryOptions{
 			Filters: []types.Filter{
-				{Column: "age", Op: types.FilterOp("bogus"), Value: "1"},
+				types.NewFilter("", "age", types.FilterOp("bogus"), "1"),
 			},
 		}).
 		List(&users))
@@ -493,7 +493,7 @@ func TestDatabaseFilters(t *testing.T) {
 	require.NoError(t, database.Database[*TestUser](context.Background()).
 		WithQuery(nil, types.QueryOptions{
 			Filters: []types.Filter{
-				{Column: "", Op: types.FilterOpEq, Value: "1"},
+				types.NewFilter("", "", types.FilterOpEq, "1"),
 			},
 		}).
 		List(&users))
@@ -508,7 +508,7 @@ func TestDatabaseTypedFilterValues(t *testing.T) {
 	users := make([]*TestUser, 0)
 	require.NoError(t, database.Database[*TestUser](context.Background()).
 		WithQuery(nil, types.QueryOptions{
-			Filters: []types.Filter{{Column: "name", Op: types.FilterOpIn, Value: []string{u1.Name, u3.Name}}},
+			Filters: []types.Filter{types.NewFilter("", "name", types.FilterOpIn, []string{u1.Name, u3.Name})},
 		}).
 		List(&users))
 	require.Len(t, users, 2, "slice values must bind IN directly")
@@ -519,7 +519,7 @@ func TestDatabaseTypedFilterValues(t *testing.T) {
 	users = make([]*TestUser, 0)
 	require.NoError(t, database.Database[*TestUser](context.Background()).
 		WithQuery(nil, types.QueryOptions{
-			Filters: []types.Filter{{Column: "name", Op: types.FilterOpIn, Value: []sampleStatus{sampleStatus(u1.Name), sampleStatus(u3.Name)}}},
+			Filters: []types.Filter{types.NewFilter("", "name", types.FilterOpIn, []sampleStatus{sampleStatus(u1.Name), sampleStatus(u3.Name)})},
 		}).
 		List(&users))
 	require.Len(t, users, 2, "named string type slices must bind like []string")
@@ -529,7 +529,7 @@ func TestDatabaseTypedFilterValues(t *testing.T) {
 	users = make([]*TestUser, 0)
 	require.NoError(t, database.Database[*TestUser](context.Background()).
 		WithQuery(nil, types.QueryOptions{
-			Filters: []types.Filter{{Column: "name", Op: types.FilterOpIn, Value: []string(nil)}},
+			Filters: []types.Filter{types.NewFilter("", "name", types.FilterOpIn, []string(nil))},
 		}).
 		List(&users))
 	require.Empty(t, users, "a nil slice must match nothing")
@@ -538,7 +538,7 @@ func TestDatabaseTypedFilterValues(t *testing.T) {
 	users = make([]*TestUser, 0)
 	require.NoError(t, database.Database[*TestUser](context.Background()).
 		WithQuery(nil, types.QueryOptions{
-			Filters: []types.Filter{{Column: "name", Op: types.FilterOpIn, Value: []string{}}},
+			Filters: []types.Filter{types.NewFilter("", "name", types.FilterOpIn, []string{})},
 		}).
 		List(&users))
 	require.Empty(t, users, "empty slice must match nothing")
@@ -547,7 +547,7 @@ func TestDatabaseTypedFilterValues(t *testing.T) {
 	users = make([]*TestUser, 0)
 	require.NoError(t, database.Database[*TestUser](context.Background()).
 		WithQuery(nil, types.QueryOptions{
-			Filters: []types.Filter{{Column: "name", Op: types.FilterOpIn, Value: u1.Name + "," + u2.Name}},
+			Filters: []types.Filter{types.NewFilter("", "name", types.FilterOpIn, u1.Name+","+u2.Name)},
 		}).
 		List(&users))
 	require.Empty(t, users, "string value on In must fail closed")
@@ -556,7 +556,7 @@ func TestDatabaseTypedFilterValues(t *testing.T) {
 	users = make([]*TestUser, 0)
 	require.NoError(t, database.Database[*TestUser](context.Background()).
 		WithQuery(nil, types.QueryOptions{
-			Filters: []types.Filter{{Column: "age", Op: types.FilterOpGt, Value: []int{18}}},
+			Filters: []types.Filter{types.NewFilter("", "age", types.FilterOpGt, []int{18})},
 		}).
 		List(&users))
 	require.Empty(t, users, "slice value on a scalar operator must fail closed")
@@ -565,7 +565,7 @@ func TestDatabaseTypedFilterValues(t *testing.T) {
 	users = make([]*TestUser, 0)
 	require.NoError(t, database.Database[*TestUser](context.Background()).
 		WithQuery(nil, types.QueryOptions{
-			Filters: []types.Filter{{Column: "age", Op: types.FilterOpEq, Value: nil}},
+			Filters: []types.Filter{types.NewFilter("", "age", types.FilterOpEq, nil)},
 		}).
 		List(&users))
 	require.Empty(t, users, "nil value must fail closed")
@@ -575,14 +575,14 @@ func TestDatabaseTypedFilterValues(t *testing.T) {
 	users = make([]*TestUser, 0)
 	require.NoError(t, database.Database[*TestUser](context.Background()).
 		WithQuery(nil, types.QueryOptions{
-			Filters: []types.Filter{{Column: "name", Op: types.FilterOpIsNull, Value: false}},
+			Filters: []types.Filter{types.NewFilter("", "name", types.FilterOpIsNull, false)},
 		}).
 		List(&users))
 	require.Len(t, users, 3, "IsNull false must mean IS NOT NULL")
 	users = make([]*TestUser, 0)
 	require.NoError(t, database.Database[*TestUser](context.Background()).
 		WithQuery(nil, types.QueryOptions{
-			Filters: []types.Filter{{Column: "name", Op: types.FilterOpIsNull, Value: "1"}},
+			Filters: []types.Filter{types.NewFilter("", "name", types.FilterOpIsNull, "1")},
 		}).
 		List(&users))
 	require.Empty(t, users, "string value on IsNull must fail closed")
@@ -592,8 +592,8 @@ func TestDatabaseTypedFilterValues(t *testing.T) {
 	require.NoError(t, database.Database[*TestUser](context.Background()).
 		WithQuery(nil, types.QueryOptions{
 			Filters: []types.Filter{
-				{Column: "age", Op: types.FilterOpGt, Value: 18},
-				{Column: "created_at", Op: types.FilterOpGte, Value: time.Now().Add(-time.Hour)},
+				types.NewFilter("", "age", types.FilterOpGt, 18),
+				types.NewFilter("", "created_at", types.FilterOpGte, time.Now().Add(-time.Hour)),
 			},
 		}).
 		List(&users))

@@ -5,7 +5,9 @@ package types
 // that ordering or back down it.
 //
 // This is the database argument. model.Cursor is the separate struct a model
-// embeds to opt in to the cursor URL parameters that produce it.
+// embeds to opt in to the cursor URL parameters that produce it. The fields
+// are unexported so a cursor only comes from CursorForward, CursorBackward and
+// the framework's URL parsing; Order, Value and Backward read it back.
 //
 // Traveling backward reverses both the boundary comparison and the ORDER BY,
 // and List reverses the returned rows afterwards, so a backward page comes
@@ -19,26 +21,38 @@ package types
 // URL-driven cursors always page an ascending feed; a descending feed is a
 // service-side cursor, built with CursorForward on a Desc order.
 type Cursor struct {
-	// Order is the feed's stable ordering. An empty column falls back to the
+	// order is the feed's stable ordering. An empty column falls back to the
 	// primary key in the database layer.
-	Order Order
-	// Value is the boundary row's column value. An empty value disables
+	order Order
+	// value is the boundary row's column value. An empty value disables
 	// cursor pagination, which makes a zero Cursor a no-op.
-	Value string
-	// Backward travels against Order instead of along it, which is what a
+	value string
+	// backward travels against order instead of along it, which is what a
 	// request for the previous page means.
-	Backward bool
+	backward bool
 }
 
 // CursorForward pages along order, starting just past value.
 func CursorForward(order Order, value string) Cursor {
-	return Cursor{Order: order, Value: value}
+	return Cursor{order: order, value: value}
 }
 
 // CursorBackward pages against order, starting just before value.
 func CursorBackward(order Order, value string) Cursor {
-	return Cursor{Order: order, Value: value, Backward: true}
+	return Cursor{order: order, value: value, backward: true}
 }
 
+// Order returns the feed's stable ordering. An empty column in it falls back
+// to the primary key in the database layer.
+func (c Cursor) Order() Order { return c.order }
+
+// Value returns the boundary row's column value; an empty value leaves the
+// cursor disabled.
+func (c Cursor) Value() string { return c.value }
+
+// Backward reports whether the read travels against the ordering, which is
+// what a request for the previous page means.
+func (c Cursor) Backward() bool { return c.backward }
+
 // Enabled reports whether the cursor carries a boundary and should be applied.
-func (c Cursor) Enabled() bool { return len(c.Value) > 0 }
+func (c Cursor) Enabled() bool { return len(c.value) > 0 }

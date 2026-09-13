@@ -75,9 +75,9 @@ func (b TimeBucket) Valid() bool {
 	}
 }
 
-// Term is one term of a projection: a group key when Fn is FnNone, a plain
-// column when Plain is also set, a constant when Fn is FnLiteral, a measure
-// otherwise, and a window function when Window is set.
+// Term is one term of a projection: a group key, a plain column, a constant, a
+// measure, or a window function, which IsGroupKey, IsPlain, IsLiteral,
+// IsMeasure and IsWindowed tell apart.
 //
 // Terms are built through the column references: the generated Cols vars,
 // or references minted with NewColumn and its siblings by code without a Cols
@@ -88,59 +88,96 @@ func (b TimeBucket) Valid() bool {
 // are checked against the model schema when the query is built.
 //
 // A term never holds SQL. Column names are quoted by the database layer,
-// values bind as statement parameters, and Fn and Bucket come from closed sets.
+// values bind as statement parameters, and the function and the time bucket
+// come from closed sets. The fields are unexported so a term only comes from
+// those constructors; the database layer reads them through the TermXxxOf
+// functions, which the public types package does not forward.
 type Term struct {
-	// Fn is the aggregate or window function, FnLiteral for a constant, or
+	// fn is the aggregate or window function, FnLiteral for a constant, or
 	// FnNone for a group key or a plain column.
-	Fn TermFn
-	// Plain marks a column projected as it is stored, which is what a column
+	fn TermFn
+	// plain marks a column projected as it is stored, which is what a column
 	// reference selects as when it is passed to Select directly. It belongs
 	// to a row-level projection, one carrying window functions and no
 	// aggregate; next to an aggregate it is a build error, because there
 	// every column has to be a group key or be aggregated.
-	Plain bool
-	// Window makes the function a window function, evaluated over the rows
+	plain bool
+	// window makes the function a window function, evaluated over the rows
 	// the window names instead of collapsing them; see Over.
-	Window *Window
-	// Table is the table the column belongs to, carried over from the column
+	window *Window
+	// table is the table the column belongs to, carried over from the column
 	// reference. It is empty on the terms naming no column — COUNT(*), the
 	// ranking functions and a constant — and on a reference of a model
 	// without a table.
-	Table string
-	// Column is the snake case column name. It is empty on the terms naming
+	table string
+	// column is the snake case column name. It is empty on the terms naming
 	// no column: COUNT(*), the ranking functions and a constant.
-	Column string
-	// Bucket truncates a time group key. It is only meaningful when Fn is
+	column string
+	// bucket truncates a time group key. It is only meaningful when fn is
 	// FnNone and the column is a time column.
-	Bucket TimeBucket
-	// Conditions restrict a measure to the rows matching them, rendering as a
+	bucket TimeBucket
+	// conditions restrict a measure to the rows matching them, rendering as a
 	// CASE expression inside the aggregate call. They reuse the query filter
 	// tree, so conditional aggregation needs no predicate language of its own.
-	Conditions []Filter
-	// Alias names the term in the SELECT list and binds it to a field of the
+	conditions []Filter
+	// alias names the term in the SELECT list and binds it to a field of the
 	// result row. An empty alias defaults to the column name.
-	Alias string
-	// Literal is the constant a FnLiteral term projects, a plain identifier
+	alias string
+	// literal is the constant a FnLiteral term projects, a plain identifier
 	// rendered as a string literal; see Literal.
-	Literal string
+	literal string
 }
 
 // IsMeasure reports whether the term applies a function rather than naming a
 // column, a window function included; a constant is neither.
-func (t Term) IsMeasure() bool { return t.Fn != FnNone && t.Fn != FnLiteral }
+func (t Term) IsMeasure() bool { return t.fn != FnNone && t.fn != FnLiteral }
 
 // IsLiteral reports whether the term projects a constant.
-func (t Term) IsLiteral() bool { return t.Fn == FnLiteral }
+func (t Term) IsLiteral() bool { return t.fn == FnLiteral }
 
 // IsWindowed reports whether the term is evaluated over a window.
-func (t Term) IsWindowed() bool { return t.Window != nil }
+func (t Term) IsWindowed() bool { return t.window != nil }
 
 // IsGroupKey reports whether the term is a group key: a column or time bucket
 // projected next to aggregates, which the framework derives GROUP BY from.
-func (t Term) IsGroupKey() bool { return t.Fn == FnNone && !t.Plain }
+func (t Term) IsGroupKey() bool { return t.fn == FnNone && !t.plain }
 
 // IsPlain reports whether the term is a column projected as it is stored.
-func (t Term) IsPlain() bool { return t.Fn == FnNone && t.Plain }
+func (t Term) IsPlain() bool { return t.fn == FnNone && t.plain }
+
+// The functions below read the parts of a term for the database layer, which
+// renders them. They are functions rather than methods so the public types
+// package, which forwards Term, does not hand them to business code.
+
+// TermFnOf returns the function the term applies: FnNone for a group key or a
+// plain column, FnLiteral for a constant.
+func TermFnOf(t Term) TermFn { return t.fn }
+
+// TermPlainOf reports whether the term is marked as a column projected as it
+// is stored.
+func TermPlainOf(t Term) bool { return t.plain }
+
+// TermWindowOf returns the window the term is evaluated over, or nil.
+func TermWindowOf(t Term) *Window { return t.window }
+
+// TermTableOf returns the table of the column the term reads.
+func TermTableOf(t Term) string { return t.table }
+
+// TermColumnOf returns the snake case name of the column the term reads.
+func TermColumnOf(t Term) string { return t.column }
+
+// TermBucketOf returns the truncation of a time group key.
+func TermBucketOf(t Term) TimeBucket { return t.bucket }
+
+// TermConditionsOf returns the filters a conditional measure restricts its
+// rows to.
+func TermConditionsOf(t Term) []Filter { return t.conditions }
+
+// TermAliasOf returns the alias recorded on the term.
+func TermAliasOf(t Term) string { return t.alias }
+
+// TermLiteralOf returns the constant a FnLiteral term projects.
+func TermLiteralOf(t Term) string { return t.literal }
 
 // As renames the term in the SELECT list.
 //
@@ -164,7 +201,7 @@ func (t Term) As(alias string) Term {
 	if len(alias) == 0 {
 		return t
 	}
-	t.Alias = alias
+	t.alias = alias
 	return t
 }
 
@@ -177,7 +214,7 @@ func (t Term) As(alias string) Term {
 // The filters are the ordinary query filters, including nested groups, so the
 // same fail-closed rules and the same renderer apply.
 func (t Term) Where(filters ...Filter) Term {
-	t.Conditions = append(append([]Filter(nil), t.Conditions...), filters...)
+	t.conditions = append(append([]Filter(nil), t.conditions...), filters...)
 	return t
 }
 
@@ -198,7 +235,7 @@ const DefaultCountAlias = "count"
 //
 // It projects as "count" unless renamed with As.
 func Count() Term {
-	return Term{Fn: FnCount, Alias: DefaultCountAlias}
+	return Term{fn: FnCount, alias: DefaultCountAlias}
 }
 
 // RowNumber numbers the rows of each partition from 1 in the window's order,
@@ -206,14 +243,14 @@ func Count() Term {
 // stable order the framework completes with the primary key. Like Rank and
 // DenseRank it only exists over a window whose OrderBy is set, which Over
 // declares: without an order there is no first row to number.
-func RowNumber() Term { return Term{Fn: FnRowNumber, Alias: "row_number"} }
+func RowNumber() Term { return Term{fn: FnRowNumber, alias: "row_number"} }
 
 // Rank ranks the rows of each partition in the window's order. Rows sorting
 // equal share a rank and the next rank skips past them: 1, 2, 2, 4.
-func Rank() Term { return Term{Fn: FnRank, Alias: "rank"} }
+func Rank() Term { return Term{fn: FnRank, alias: "rank"} }
 
 // DenseRank ranks like Rank without skipping: 1, 2, 2, 3.
-func DenseRank() Term { return Term{Fn: FnDenseRank, Alias: "dense_rank"} }
+func DenseRank() Term { return Term{fn: FnDenseRank, alias: "dense_rank"} }
 
 // Literal projects a constant, which is how the branches of a union tell
 // their rows apart:
@@ -229,7 +266,7 @@ func DenseRank() Term { return Term{Fn: FnDenseRank, Alias: "dense_rank"} }
 // the identifier rule is what keeps that inlining safe. A constant is neither
 // a group key nor a measure: it stays out of GROUP BY and never comes back
 // NULL.
-func Literal(value string) Term { return Term{Fn: FnLiteral, Literal: value} }
+func Literal(value string) Term { return Term{fn: FnLiteral, literal: value} }
 
 // Over evaluates the term over a window instead of collapsing the rows it
 // reads: every row keeps its place and gains the function's value computed
@@ -247,7 +284,30 @@ func Literal(value string) Term { return Term{Fn: FnLiteral, Literal: value} }
 //	// COALESCE(SUM(`amount`) OVER (PARTITION BY `tenant_id` ORDER BY `created_at` ASC, `id` ASC
 //	//   ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW), 0)
 func (t Term) Over(window Window) Term {
-	t.Window = &window
+	t.window = &window
+	return t
+}
+
+// NewTerm builds a term from its parts, without the checks the column
+// references and the constructors above keep. It serves the framework's own
+// tests, which exercise how the database layer fails closed on a malformed
+// term; the public types package does not forward it.
+func NewTerm(fn TermFn, table, column string, bucket TimeBucket, alias string) Term {
+	return Term{fn: fn, table: table, column: column, bucket: bucket, alias: alias}
+}
+
+// PlainTerm returns the named column projected as it is stored, with no alias.
+// The database layer breaks window ties with it on a key the projection may
+// not select, where an alias would let the breaker read as a projected term.
+func PlainTerm(table, column string) Term {
+	return Term{table: table, column: column, plain: true}
+}
+
+// TermBase returns the term without its alias, window and conditions: what two
+// spellings of one term share, which is how a union finds the branch term an
+// ordering names.
+func TermBase(t Term) Term {
+	t.alias, t.window, t.conditions = "", nil, nil
 	return t
 }
 
@@ -305,47 +365,76 @@ func (o CompareOp) Valid() bool {
 // emit the full expression instead of the alias, which HAVING requires because
 // PostgreSQL does not accept an output alias there.
 type TermCondition struct {
-	Term  Term
-	Op    CompareOp
-	Value any
+	term  Term
+	op    CompareOp
+	value any
 }
 
 // Eq, Ne, Gt, Gte, Lt and Lte build a Having or Qualify condition on the
 // term. The value type is checked when the query is built, because a
 // function's value type follows the function rather than its column: COUNT
 // always yields an integer, AVG a float, and SUM widens.
-func (t Term) Eq(value any) TermCondition { return TermCondition{Term: t, Op: CompareEq, Value: value} }
+func (t Term) Eq(value any) TermCondition { return TermCondition{term: t, op: CompareEq, value: value} }
 
-func (t Term) Ne(value any) TermCondition { return TermCondition{Term: t, Op: CompareNe, Value: value} }
+func (t Term) Ne(value any) TermCondition { return TermCondition{term: t, op: CompareNe, value: value} }
 
-func (t Term) Gt(value any) TermCondition { return TermCondition{Term: t, Op: CompareGt, Value: value} }
+func (t Term) Gt(value any) TermCondition { return TermCondition{term: t, op: CompareGt, value: value} }
 
 func (t Term) Gte(value any) TermCondition {
-	return TermCondition{Term: t, Op: CompareGte, Value: value}
+	return TermCondition{term: t, op: CompareGte, value: value}
 }
 
-func (t Term) Lt(value any) TermCondition { return TermCondition{Term: t, Op: CompareLt, Value: value} }
+func (t Term) Lt(value any) TermCondition { return TermCondition{term: t, op: CompareLt, value: value} }
 
 func (t Term) Lte(value any) TermCondition {
-	return TermCondition{Term: t, Op: CompareLte, Value: value}
+	return TermCondition{term: t, op: CompareLte, value: value}
+}
+
+// TermConditionTermOf returns the term a condition constrains.
+func TermConditionTermOf(c TermCondition) Term { return c.term }
+
+// TermConditionOpOf returns the comparison a condition applies.
+func TermConditionOpOf(c TermCondition) CompareOp { return c.op }
+
+// TermConditionValueOf returns the value a condition compares the term with.
+func TermConditionValueOf(c TermCondition) any { return c.value }
+
+// NewTermCondition builds a condition from its parts, without the checks the
+// comparison methods keep. It serves the framework's own tests; the public
+// types package does not forward it.
+func NewTermCondition(term Term, op CompareOp, value any) TermCondition {
+	return TermCondition{term: term, op: op, value: value}
 }
 
 // TermOrder is one ORDER BY term of a select or of a window. Unlike Order it
 // sorts by a projection term, which is what a TopN report ranks by.
 type TermOrder struct {
-	Term      Term
-	Direction OrderDirection
+	term      Term
+	direction OrderDirection
 }
 
 // Asc and Desc sort the rows by this term. In the select's ORDER BY the term
 // renders as its alias, which every supported dialect accepts there; inside a
 // window it renders as its full expression, the only form OVER accepts.
 func (t Term) Asc() TermOrder {
-	return TermOrder{Term: t, Direction: OrderAsc}
+	return TermOrder{term: t, direction: OrderAsc}
 }
 
 func (t Term) Desc() TermOrder {
-	return TermOrder{Term: t, Direction: OrderDesc}
+	return TermOrder{term: t, direction: OrderDesc}
+}
+
+// TermOrderTermOf returns the term an order sorts by.
+func TermOrderTermOf(o TermOrder) Term { return o.term }
+
+// TermOrderDirectionOf returns the direction an order on a term sorts in.
+func TermOrderDirectionOf(o TermOrder) OrderDirection { return o.direction }
+
+// NewTermOrder builds an order on a term from its parts, without the checks
+// Asc and Desc keep. It serves the framework's own tests; the public types
+// package does not forward it.
+func NewTermOrder(term Term, direction OrderDirection) TermOrder {
+	return TermOrder{term: term, direction: direction}
 }
 
 func (TermOrder) sealedOrdering() {}

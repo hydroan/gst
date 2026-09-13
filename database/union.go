@@ -386,7 +386,7 @@ func (u *union[R]) validate() error {
 		if _, ok := columns[ordered.alias]; !ok {
 			return errors.Wrapf(ErrUnionOrderNotSelected, "%s has no field for %q", typ, ordered.alias)
 		}
-		if to, ok := o.(types.TermOrder); ok && !u.anyBranchSelects(to.Term) {
+		if to, ok := o.(types.TermOrder); ok && !u.anyBranchSelects(types.TermOrderTermOf(to)) {
 			return errors.Wrapf(ErrUnionOrderNotSelected, "no branch projects the term %q", ordered.alias)
 		}
 	}
@@ -400,15 +400,15 @@ func (u *union[R]) validate() error {
 func (u *union[R]) orderedAlias(o types.Ordering) (aliasOrder, error) {
 	switch o := o.(type) {
 	case types.TermOrder:
-		if !o.Direction.Valid() {
-			return aliasOrder{}, errors.Wrapf(ErrUnknownOrderDirection, "%q", o.Direction)
+		if !types.TermOrderDirectionOf(o).Valid() {
+			return aliasOrder{}, errors.Wrapf(ErrUnknownOrderDirection, "%q", types.TermOrderDirectionOf(o))
 		}
-		return aliasOrder{alias: termAlias(o.Term), direction: orderDirection(o.Direction)}, nil
+		return aliasOrder{alias: termAlias(types.TermOrderTermOf(o)), direction: orderDirection(types.TermOrderDirectionOf(o))}, nil
 	case types.Order:
-		if !o.Direction.Valid() {
-			return aliasOrder{}, errors.Wrapf(ErrUnknownOrderDirection, "%q", o.Direction)
+		if !types.OrderDirectionOf(o).Valid() {
+			return aliasOrder{}, errors.Wrapf(ErrUnknownOrderDirection, "%q", types.OrderDirectionOf(o))
 		}
-		return aliasOrder{alias: o.Column, direction: orderDirection(o.Direction)}, nil
+		return aliasOrder{alias: o.Column(), direction: orderDirection(types.OrderDirectionOf(o))}, nil
 	default:
 		return aliasOrder{}, errors.Wrapf(ErrUnknownOrderDirection, "%T", o)
 	}
@@ -481,20 +481,13 @@ func (a *selector[M, R]) chainFor(ctx context.Context, base *gorm.DB) operationC
 func (a *selector[M, R]) selects(t types.Term) bool { return a.isSelected(t) }
 
 func (a *selector[M, R]) projectsAs(t types.Term) (string, bool) {
-	t = termBase(t)
+	t = types.TermBase(t)
 	for _, selected := range a.terms {
-		if reflect.DeepEqual(termBase(selected), t) {
+		if reflect.DeepEqual(types.TermBase(selected), t) {
 			return a.alias(selected), true
 		}
 	}
 	return "", false
-}
-
-// termBase is a term without its alias, window and conditions: what two
-// spellings of one term share.
-func termBase(t types.Term) types.Term {
-	t.Alias, t.Window, t.Conditions = "", nil, nil
-	return t
 }
 
 // buildBranch renders the selector as a member of a union, ordered and

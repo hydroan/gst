@@ -43,12 +43,17 @@ func (db *database[M]) WithCursor(cursor types.Cursor) types.Database[M] {
 	if !cursor.Enabled() {
 		return db
 	}
-	if err := db.ownOrder("WithCursor", cursor.Order); err != nil {
+	if err := db.ownOrder("WithCursor", cursor.Order()); err != nil {
 		db.err = err
 		return db
 	}
-	if len(cursor.Order.Column) == 0 {
-		cursor.Order.Column = modelregistry.DefaultCursorColumn
+	if order := cursor.Order(); len(order.Column()) == 0 {
+		order = types.NewOrder(order.Table(), modelregistry.DefaultCursorColumn, types.OrderDirectionOf(order))
+		if cursor.Backward() {
+			cursor = types.CursorBackward(order, cursor.Value())
+		} else {
+			cursor = types.CursorForward(order, cursor.Value())
+		}
 	}
 	db.cursor = cursor
 
@@ -62,8 +67,8 @@ func (db *database[M]) WithCursor(cursor types.Cursor) types.Database[M] {
 // SQL. An order built from a plain name carries no table and names this
 // model's column.
 func (db *database[M]) ownOrder(option string, order types.Order) error {
-	if len(order.Table) > 0 && order.Table != db.outerTableName() {
-		return errors.Wrapf(ErrColumnTable, "%s column %q belongs to table %q, model %s reads %q", option, order.Column, order.Table, reflect.TypeOf(*new(M)).Elem().Name(), db.outerTableName())
+	if len(order.Table()) > 0 && order.Table() != db.outerTableName() {
+		return errors.Wrapf(ErrColumnTable, "%s column %q belongs to table %q, model %s reads %q", option, order.Column(), order.Table(), reflect.TypeOf(*new(M)).Elem().Name(), db.outerTableName())
 	}
 	return nil
 }
@@ -78,20 +83,20 @@ func (db *database[M]) applyCursorPagination() {
 	if !db.cursor.Enabled() {
 		return
 	}
-	direction := db.cursor.Order.Direction
-	if db.cursor.Backward {
+	direction := types.OrderDirectionOf(db.cursor.Order())
+	if db.cursor.Backward() {
 		direction = direction.Flip()
 	}
 	operator := " > "
 	if direction == types.OrderDesc {
 		operator = " < "
 	}
-	lhs, rhs := db.quoteOrderField(db.cursor.Order.Column), "?"
-	if _, isTime := modelschema.TimeColumnSet(reflect.TypeOf(*new(M)))[db.cursor.Order.Column]; isTime {
+	lhs, rhs := db.quoteOrderField(db.cursor.Order().Column()), "?"
+	if _, isTime := modelschema.TimeColumnSet(reflect.TypeOf(*new(M)))[db.cursor.Order().Column()]; isTime {
 		lhs, rhs = db.timeComparableExpr(lhs), db.timeComparableExpr(rhs)
 	}
-	db.ins = db.ins.Where(lhs+operator+rhs, db.cursor.Value)
-	db.ins = db.ins.Order(db.orderClause(types.Order{Column: db.cursor.Order.Column, Direction: direction}))
+	db.ins = db.ins.Where(lhs+operator+rhs, db.cursor.Value())
+	db.ins = db.ins.Order(db.orderClause(types.NewOrder("", db.cursor.Order().Column(), direction)))
 }
 
 // WithSelect specifies columns to select when querying or updating records,
@@ -278,7 +283,7 @@ func (db *database[M]) WithOrder(orders ...types.Order) types.Database[M] {
 	db.mu.Lock()
 	defer db.mu.Unlock()
 	for _, order := range orders {
-		if len(order.Column) == 0 {
+		if len(order.Column()) == 0 {
 			continue
 		}
 		if err := db.ownOrder("WithOrder", order); err != nil {
@@ -294,10 +299,10 @@ func (db *database[M]) WithOrder(orders ...types.Order) types.Database[M] {
 // ascending, matching SQL's own default.
 func (db *database[M]) orderClause(order types.Order) string {
 	direction := types.OrderAsc
-	if order.Direction == types.OrderDesc {
+	if types.OrderDirectionOf(order) == types.OrderDesc {
 		direction = types.OrderDesc
 	}
-	return db.quoteOrderField(order.Column) + " " + string(direction)
+	return db.quoteOrderField(order.Column()) + " " + string(direction)
 }
 
 // WithPagination applies pagination parameters to the query.
@@ -414,7 +419,7 @@ func (db *database[M]) WithExpand(expand []string, orders ...types.Order) types.
 	// so it is not checked here the way WithOrder checks it.
 	withOrder := func(preload *gorm.DB) *gorm.DB {
 		for _, order := range orders {
-			if len(order.Column) == 0 {
+			if len(order.Column()) == 0 {
 				continue
 			}
 			preload = preload.Order(db.orderClause(order))

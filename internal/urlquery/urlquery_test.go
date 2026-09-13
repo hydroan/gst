@@ -37,8 +37,8 @@ func TestFilters(t *testing.T) {
 		}, &filterTestModel{})
 		require.NoError(t, err)
 		require.Equal(t, []types.Filter{
-			{Column: "age", Op: types.FilterOpGt, Value: "20"},
-			{Column: "remark", Op: types.FilterOpLike, Value: "hello"},
+			types.NewFilter("", "age", types.FilterOpGt, "20"),
+			types.NewFilter("", "remark", types.FilterOpLike, "hello"),
 		}, conds)
 	})
 
@@ -48,7 +48,7 @@ func TestFilters(t *testing.T) {
 			"age[gt]": {"20"},
 		}, &filterTestModel{})
 		require.NoError(t, err)
-		require.Equal(t, []types.Filter{{Column: "age", Op: types.FilterOpGt, Value: "20"}}, conds,
+		require.Equal(t, []types.Filter{types.NewFilter("", "age", types.FilterOpGt, "20")}, conds,
 			"the bare key stays with the exact business filter and only the operator key becomes a filter")
 	})
 
@@ -57,7 +57,7 @@ func TestFilters(t *testing.T) {
 			"itemCount[notlike]": {"sample"},
 		}, &filterTestModel{})
 		require.NoError(t, err)
-		require.Equal(t, []types.Filter{{Column: "item_count", Op: types.FilterOpNotLike, Value: "sample"}}, conds)
+		require.Equal(t, []types.Filter{types.NewFilter("", "item_count", types.FilterOpNotLike, "sample")}, conds)
 	})
 
 	t.Run("AcceptsBaseLiftedColumns", func(t *testing.T) {
@@ -65,7 +65,7 @@ func TestFilters(t *testing.T) {
 			"id[notin]": {"a,b"},
 		}, &filterTestModel{})
 		require.NoError(t, err)
-		require.Equal(t, []types.Filter{{Column: "id", Op: types.FilterOpNotIn, Value: []string{"a", "b"}}}, conds)
+		require.Equal(t, []types.Filter{types.NewFilter("", "id", types.FilterOpNotIn, []string{"a", "b"})}, conds)
 	})
 
 	t.Run("UsesGormColumnNames", func(t *testing.T) {
@@ -74,7 +74,7 @@ func TestFilters(t *testing.T) {
 		}, &filterTestModel{})
 		require.NoError(t, err)
 		require.Equal(t, []types.Filter{
-			{Column: "group_ids", Op: types.FilterOpIn, Value: []string{"a", "b"}},
+			types.NewFilter("", "group_ids", types.FilterOpIn, []string{"a", "b"}),
 		}, conds, "gorm renders GroupIDs as group_ids, not group_i_ds")
 
 		conds, err = Filters(url.Values{
@@ -82,7 +82,7 @@ func TestFilters(t *testing.T) {
 		}, &filterTestModel{})
 		require.NoError(t, err)
 		require.Equal(t, []types.Filter{
-			{Column: "custom_column", Op: types.FilterOpEq, Value: "x"},
+			types.NewFilter("", "custom_column", types.FilterOpEq, "x"),
 		}, conds, "the URL keeps the json name while SQL uses the column tag")
 	})
 
@@ -151,10 +151,10 @@ func TestFilters(t *testing.T) {
 		}, &filterTestModel{})
 		require.NoError(t, err)
 		require.Len(t, conds, 1)
-		require.Equal(t, "expired_at", conds[0].Column)
+		require.Equal(t, "expired_at", conds[0].Column())
 		require.Equal(t,
 			time.Date(2026, 7, 1, 0, 0, 0, 0, time.UTC).Format(types.FilterTimeLayout),
-			conds[0].Value, "the bound travels as the UTC wall clock")
+			conds[0].Value(), "the bound travels as the UTC wall clock")
 
 		conds, err = Filters(url.Values{
 			"expired_at[eq]": {"2026-07-01T08:30:15+08:00"},
@@ -163,7 +163,7 @@ func TestFilters(t *testing.T) {
 		require.Len(t, conds, 1)
 		require.Equal(t,
 			time.Date(2026, 7, 1, 8, 30, 15, 0, time.FixedZone("", 8*3600)).UTC().Format(types.FilterTimeLayout),
-			conds[0].Value, "an explicit offset must be converted to UTC")
+			conds[0].Value(), "an explicit offset must be converted to UTC")
 
 		// A value without an explicit offset names a different instant per
 		// server zone, so it is rejected instead of being guessed at.
@@ -194,8 +194,8 @@ func TestFilters(t *testing.T) {
 		}, &filterTestModel{})
 		require.NoError(t, err)
 		require.Equal(t, []types.Filter{
-			{Column: "remark", Op: types.FilterOpEndsWith, Value: "suffix"},
-			{Column: "remark", Op: types.FilterOpStartsWith, Value: "prefix"},
+			types.NewFilter("", "remark", types.FilterOpEndsWith, "suffix"),
+			types.NewFilter("", "remark", types.FilterOpStartsWith, "prefix"),
 		}, conds)
 
 		_, err = Filters(url.Values{
@@ -211,8 +211,8 @@ func TestFilters(t *testing.T) {
 		}, &filterTestModel{})
 		require.NoError(t, err)
 		require.Equal(t, []types.Filter{
-			{Column: "expired_at", Op: types.FilterOpIsNull, Value: false},
-			{Column: "remark", Op: types.FilterOpIsNull, Value: true},
+			types.NewFilter("", "expired_at", types.FilterOpIsNull, false),
+			types.NewFilter("", "remark", types.FilterOpIsNull, true),
 		}, conds)
 
 		_, err = Filters(url.Values{
@@ -227,7 +227,7 @@ func TestFilters(t *testing.T) {
 		}, &filterTestModel{})
 		require.NoError(t, err)
 		require.Equal(t, []types.Filter{
-			{Column: "created_at", Op: types.FilterOpEq, Value: time.Date(2026, 7, 1, 8, 0, 0, 0, time.UTC).Format(types.FilterTimeLayout)},
+			types.NewFilter("", "created_at", types.FilterOpEq, time.Date(2026, 7, 1, 8, 0, 0, 0, time.UTC).Format(types.FilterTimeLayout)),
 		}, conds, "the bare framework timestamp key is an exact-match filter, consistent with every other documented parameter")
 
 		conds, err = Filters(url.Values{
@@ -249,8 +249,8 @@ func TestFilters(t *testing.T) {
 		}, &filterTestModel{})
 		require.NoError(t, err)
 		require.Equal(t, []types.Filter{
-			{Column: "created_at", Op: types.FilterOpGte, Value: time.Date(2026, 7, 1, 0, 0, 0, 0, time.UTC).Format(types.FilterTimeLayout)},
-			{Column: "updated_at", Op: types.FilterOpLt, Value: time.Date(2026, 7, 15, 0, 0, 0, 0, time.UTC).Format(types.FilterTimeLayout)},
+			types.NewFilter("", "created_at", types.FilterOpGte, time.Date(2026, 7, 1, 0, 0, 0, 0, time.UTC).Format(types.FilterTimeLayout)),
+			types.NewFilter("", "updated_at", types.FilterOpLt, time.Date(2026, 7, 15, 0, 0, 0, 0, time.UTC).Format(types.FilterTimeLayout)),
 		}, conds)
 	})
 
@@ -269,7 +269,7 @@ func TestFilters(t *testing.T) {
 			"age[in]": {"1,2"},
 		}, &filterTestModel{})
 		require.NoError(t, err)
-		require.Equal(t, []types.Filter{{Column: "age", Op: types.FilterOpIn, Value: []string{"1", "2"}}}, conds)
+		require.Equal(t, []types.Filter{types.NewFilter("", "age", types.FilterOpIn, []string{"1", "2"})}, conds)
 	})
 
 	t.Run("BoolFieldNormalizesAndGatesOps", func(t *testing.T) {
@@ -277,13 +277,13 @@ func TestFilters(t *testing.T) {
 			"enabled[eq]": {"true"},
 		}, &filterTestModel{})
 		require.NoError(t, err)
-		require.Equal(t, []types.Filter{{Column: "enabled", Op: types.FilterOpEq, Value: true}}, conds)
+		require.Equal(t, []types.Filter{types.NewFilter("", "enabled", types.FilterOpEq, true)}, conds)
 
 		conds, err = Filters(url.Values{
 			"enabled[ne]": {"0"},
 		}, &filterTestModel{})
 		require.NoError(t, err)
-		require.Equal(t, []types.Filter{{Column: "enabled", Op: types.FilterOpNe, Value: false}}, conds)
+		require.Equal(t, []types.Filter{types.NewFilter("", "enabled", types.FilterOpNe, false)}, conds)
 
 		_, err = Filters(url.Values{
 			"enabled[gt]": {"true"},
@@ -486,35 +486,35 @@ func TestOrders(t *testing.T) {
 	t.Run("SingleColumnDefaultsToAscending", func(t *testing.T) {
 		orders, err := Orders(url.Values{"_sort_by": {"name"}}, &filterTestModel{})
 		require.NoError(t, err)
-		require.Equal(t, []types.Order{{Column: "name", Direction: types.OrderAsc}}, orders)
+		require.Equal(t, []types.Order{types.NewOrder("", "name", types.OrderAsc)}, orders)
 	})
 
 	t.Run("DirectionIsCaseInsensitive", func(t *testing.T) {
 		orders, err := Orders(url.Values{"_sort_by": {"name DESC"}}, &filterTestModel{})
 		require.NoError(t, err)
-		require.Equal(t, []types.Order{{Column: "name", Direction: types.OrderDesc}}, orders)
+		require.Equal(t, []types.Order{types.NewOrder("", "name", types.OrderDesc)}, orders)
 	})
 
 	t.Run("MultipleTermsKeepTheirOrder", func(t *testing.T) {
 		orders, err := Orders(url.Values{"_sort_by": {"age desc, name asc"}}, &filterTestModel{})
 		require.NoError(t, err)
 		require.Equal(t, []types.Order{
-			{Column: "age", Direction: types.OrderDesc},
-			{Column: "name", Direction: types.OrderAsc},
+			types.NewOrder("", "age", types.OrderDesc),
+			types.NewOrder("", "name", types.OrderAsc),
 		}, orders)
 	})
 
 	t.Run("ColumnCarriesTheDatabaseName", func(t *testing.T) {
 		orders, err := Orders(url.Values{"_sort_by": {"renamed desc"}}, &filterTestModel{})
 		require.NoError(t, err)
-		require.Equal(t, []types.Order{{Column: "custom_column", Direction: types.OrderDesc}}, orders,
+		require.Equal(t, []types.Order{types.NewOrder("", "custom_column", types.OrderDesc)}, orders,
 			"the URL names a column by its query name, but ORDER BY needs the database name")
 	})
 
 	t.Run("BaseTimestampIsSortable", func(t *testing.T) {
 		orders, err := Orders(url.Values{"_sort_by": {"created_at desc"}}, &filterTestModel{})
 		require.NoError(t, err)
-		require.Equal(t, []types.Order{{Column: "created_at", Direction: types.OrderDesc}}, orders,
+		require.Equal(t, []types.Order{types.NewOrder("", "created_at", types.OrderDesc)}, orders,
 			`query:"-" only opts the timestamp out of exact filtering, the json name still resolves it`)
 	})
 
@@ -677,8 +677,8 @@ func TestCursor(t *testing.T) {
 	t.Run("MissingDirectionTravelsBackward", func(t *testing.T) {
 		cursor, err := Cursor(url.Values{"_cursor_value": {"abc"}}, &cursorTestModel{})
 		require.NoError(t, err)
-		require.True(t, cursor.Backward)
-		require.Empty(t, cursor.Order.Column, "an unnamed column leaves the primary key fallback to the database layer")
+		require.True(t, cursor.Backward())
+		require.Empty(t, cursor.Order().Column(), "an unnamed column leaves the primary key fallback to the database layer")
 	})
 
 	t.Run("UnknownColumnFails", func(t *testing.T) {
@@ -698,7 +698,7 @@ func TestCursor(t *testing.T) {
 		cursor, err := Cursor(url.Values{"_cursor_value": {"42"}, "_cursor_next": {"true"}}, &cursorAutoTestModel{})
 		require.NoError(t, err)
 		require.True(t, cursor.Enabled())
-		require.Equal(t, "42", cursor.Value)
+		require.Equal(t, "42", cursor.Value())
 	})
 
 	t.Run("MistypedValueOnNumericColumnFails", func(t *testing.T) {

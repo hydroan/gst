@@ -73,7 +73,7 @@ func Filters(q url.Values, m types.Model) ([]types.Filter, error) {
 		if err != nil {
 			return nil, errors.Wrapf(err, "invalid field filter %q", key)
 		}
-		conds = append(conds, types.Filter{Column: col.DBName, Op: op, Value: value})
+		conds = append(conds, types.NewFilter("", col.DBName, op, value))
 	}
 	if len(conds) == 0 {
 		return nil, nil

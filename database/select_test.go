@@ -422,7 +422,7 @@ func TestSelectBuildErrors(t *testing.T) {
 	t.Run("TermWithoutAColumnOrAlias", func(t *testing.T) {
 		// A term built by hand with neither has no name to project under.
 		rows := make([]row, 0)
-		err := database.Select[*TestAggregateRecord, row](ctx, TestAggregateRecordCols.Category.Group(), types.Term{Fn: types.FnCount}).Scan(&rows)
+		err := database.Select[*TestAggregateRecord, row](ctx, TestAggregateRecordCols.Category.Group(), types.NewTerm(types.FnCount, "", "", "", "")).Scan(&rows)
 		require.ErrorIs(t, err, database.ErrInvalidAlias)
 		require.ErrorContains(t, err, "named with As")
 	})
@@ -486,15 +486,17 @@ func TestSelectBuildErrors(t *testing.T) {
 		// The renderer composes SQL from the constant, so a value from outside
 		// the closed set would otherwise reach the statement as text.
 		rows := make([]row, 0)
-		require.ErrorIs(t, database.Select[*TestAggregateRecord, row](ctx, TestAggregateRecordCols.Category.Group(), types.Term{
-			Fn: "TOTALLY_NOT_SQL", Column: "amount", Alias: "total",
-		}).
+		require.ErrorIs(t, database.Select[*TestAggregateRecord, row](ctx, TestAggregateRecordCols.Category.Group(), types.NewTerm(
+			"TOTALLY_NOT_SQL", "",
+			"amount", "",
+			"total",
+		)).
 			Scan(&rows), database.ErrUnknownTermFn)
 	})
 
 	t.Run("UnknownTimeBucket", func(t *testing.T) {
 		rows := make([]row, 0)
-		require.ErrorIs(t, database.Select[*TestAggregateRecord, row](ctx, types.Term{Column: "occurred_at", Bucket: "fortnight", Alias: "category"},
+		require.ErrorIs(t, database.Select[*TestAggregateRecord, row](ctx, types.NewTerm("", "", "occurred_at", "fortnight", "category"),
 			TestAggregateRecordCols.Amount.Sum().As("total")).
 			Scan(&rows), database.ErrUnknownTimeBucket)
 	})
@@ -510,9 +512,10 @@ func TestSelectBuildErrors(t *testing.T) {
 
 	t.Run("BucketOnMeasure", func(t *testing.T) {
 		rows := make([]row, 0)
-		require.ErrorIs(t, database.Select[*TestAggregateRecord, row](ctx, TestAggregateRecordCols.Category.Group(), types.Term{
-			Fn: types.FnSum, Column: "amount", Bucket: types.TimeBucketDay, Alias: "total",
-		}).
+		require.ErrorIs(t, database.Select[*TestAggregateRecord, row](ctx, TestAggregateRecordCols.Category.Group(), types.NewTerm(
+			types.FnSum, "",
+			"amount", types.TimeBucketDay, "total",
+		)).
 			Scan(&rows), database.ErrBucketOnMeasure)
 	})
 
@@ -556,7 +559,7 @@ func TestSelectBuildErrors(t *testing.T) {
 		rows := make([]row, 0)
 		total := TestAggregateRecordCols.Amount.Sum().As("total")
 		require.ErrorIs(t, database.Select[*TestAggregateRecord, row](ctx, TestAggregateRecordCols.Category.Group(), total).
-			Having(types.TermCondition{Term: total, Op: "approximately", Value: 1}).
+			Having(types.NewTermCondition(total, "approximately", 1)).
 			Scan(&rows), database.ErrUnknownCompareOp)
 	})
 
@@ -564,7 +567,7 @@ func TestSelectBuildErrors(t *testing.T) {
 		rows := make([]row, 0)
 		total := TestAggregateRecordCols.Amount.Sum().As("total")
 		require.ErrorIs(t, database.Select[*TestAggregateRecord, row](ctx, TestAggregateRecordCols.Category.Group(), total).
-			OrderBy(types.TermOrder{Term: total, Direction: "sideways"}).
+			OrderBy(types.NewTermOrder(total, "sideways")).
 			Scan(&rows), database.ErrUnknownOrderDirection)
 	})
 

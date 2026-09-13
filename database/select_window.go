@@ -42,8 +42,8 @@ const qualifiedAlias = "q"
 // validateWindow keeps AVG out, whose nesting would answer an average of
 // averages.
 func (a *selector[M, R]) windowExpr(t types.Term, sql string, args []any, shape projectionShape) (string, []any, error) {
-	if shape.grouped && isAggregateFn(t.Fn) {
-		sql = string(t.Fn) + "(" + sql + ")"
+	if shape.grouped && isAggregateFn(types.TermFnOf(t)) {
+		sql = string(types.TermFnOf(t)) + "(" + sql + ")"
 	}
 	over, overArgs, err := a.overExpr(t, shape)
 	if err != nil {
@@ -71,8 +71,8 @@ func (a *selector[M, R]) qualifyWrap(tx *gorm.DB, mode buildMode) *gorm.DB {
 	outer = outer.Table("(?) AS "+a.db.quoteIdent(qualifiedAlias), tx)
 	for _, q := range a.qualifies {
 		outer = outer.Where(clause.Expr{
-			SQL:  a.db.quoteTableColumn(qualifiedAlias, a.alias(q.Term)) + " " + compareOperator(q.Op) + " ?",
-			Vars: []any{q.Value},
+			SQL:  a.db.quoteTableColumn(qualifiedAlias, a.alias(types.TermConditionTermOf(q))) + " " + compareOperator(types.TermConditionOpOf(q)) + " ?",
+			Vars: []any{types.TermConditionValueOf(q)},
 		})
 	}
 	return outer
@@ -82,10 +82,10 @@ func (a *selector[M, R]) qualifyWrap(tx *gorm.DB, mode buildMode) *gorm.DB {
 // term the projection declares and compares against a value SQL can order.
 func (a *selector[M, R]) validateQualify(shape projectionShape) error {
 	for _, q := range a.qualifies {
-		if !a.isSelected(q.Term) || !q.Term.IsWindowed() {
-			return errors.Wrapf(ErrQualifyTermNotWindow, "%q", a.alias(q.Term))
+		if !a.isSelected(types.TermConditionTermOf(q)) || !types.TermConditionTermOf(q).IsWindowed() {
+			return errors.Wrapf(ErrQualifyTermNotWindow, "%q", a.alias(types.TermConditionTermOf(q)))
 		}
-		if err := validateConditionValue(q, a.alias(q.Term), a.termKind(q.Term, shape)); err != nil {
+		if err := validateConditionValue(q, a.alias(types.TermConditionTermOf(q)), a.termKind(types.TermConditionTermOf(q), shape)); err != nil {
 			return err
 		}
 	}
@@ -107,18 +107,18 @@ func (a *selector[M, R]) validateQualify(shape projectionShape) error {
 // and with the tie breaker the steps are stable.
 func (a *selector[M, R]) overExpr(t types.Term, shape projectionShape) (string, []any, error) {
 	parts := make([]string, 0, 3)
-	if len(t.Window.Partition) > 0 {
-		keys := make([]string, 0, len(t.Window.Partition))
-		for _, key := range t.Window.Partition {
+	if len(types.WindowPartitionOf(*types.TermWindowOf(t))) > 0 {
+		keys := make([]string, 0, len(types.WindowPartitionOf(*types.TermWindowOf(t))))
+		for _, key := range types.WindowPartitionOf(*types.TermWindowOf(t)) {
 			keys = append(keys, a.keyExpr(a.windowKey(key, shape), shape))
 		}
 		parts = append(parts, "PARTITION BY "+strings.Join(keys, ", "))
 	}
 	args := make([]any, 0)
-	if len(t.Window.Orders) > 0 {
-		items := make([]string, 0, len(t.Window.Orders)+len(shape.keys))
-		ordered := make(map[string]struct{}, len(t.Window.Orders))
-		for _, o := range t.Window.Orders {
+	if len(types.WindowOrdersOf(*types.TermWindowOf(t))) > 0 {
+		items := make([]string, 0, len(types.WindowOrdersOf(*types.TermWindowOf(t)))+len(shape.keys))
+		ordered := make(map[string]struct{}, len(types.WindowOrdersOf(*types.TermWindowOf(t))))
+		for _, o := range types.WindowOrdersOf(*types.TermWindowOf(t)) {
 			sql, orderArgs, direction, err := a.windowOrderExpr(o, shape)
 			if err != nil {
 				return "", nil, err
@@ -136,7 +136,7 @@ func (a *selector[M, R]) overExpr(t types.Term, shape projectionShape) (string, 
 			ordered[sql] = struct{}{}
 		}
 		parts = append(parts, "ORDER BY "+strings.Join(items, ", "))
-		if isAggregateFn(t.Fn) {
+		if isAggregateFn(types.TermFnOf(t)) {
 			parts = append(parts, "ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW")
 		}
 	}
@@ -166,15 +166,15 @@ func (a *selector[M, R]) windowOrderExpr(o types.Ordering, shape projectionShape
 	switch o := o.(type) {
 	case types.Order:
 		if shape.grouped {
-			return a.keyExpr(a.selectedColumnTerm(o.Table, o.Column, shape.main), shape), nil, orderDirection(o.Direction), nil
+			return a.keyExpr(a.selectedColumnTerm(o.Table(), o.Column(), shape.main), shape), nil, orderDirection(types.OrderDirectionOf(o)), nil
 		}
-		return a.columnExpr(o.Table, o.Column, shape), nil, orderDirection(o.Direction), nil
+		return a.columnExpr(o.Table(), o.Column(), shape), nil, orderDirection(types.OrderDirectionOf(o)), nil
 	case types.TermOrder:
-		sql, args, err := a.termExpr(o.Term, shape)
+		sql, args, err := a.termExpr(types.TermOrderTermOf(o), shape)
 		if err != nil {
 			return "", nil, "", err
 		}
-		return sql, args, orderDirection(o.Direction), nil
+		return sql, args, orderDirection(types.TermOrderDirectionOf(o)), nil
 	default:
 		// Unreachable: Ordering is sealed to the two types above.
 		return "", nil, "", errors.Wrapf(ErrUnknownOrderDirection, "%T", o)
@@ -188,7 +188,7 @@ func (a *selector[M, R]) windowOrderExpr(o types.Ordering, shape projectionShape
 // framework's primary key column gets none either, which leaves the window
 // as the caller ordered it.
 func (a *selector[M, R]) tieBreakers(t types.Term, shape projectionShape) []types.Term {
-	if t.Fn == types.FnRank || t.Fn == types.FnDenseRank {
+	if types.TermFnOf(t) == types.FnRank || types.TermFnOf(t) == types.FnDenseRank {
 		return nil
 	}
 	if shape.grouped {
@@ -199,7 +199,7 @@ func (a *selector[M, R]) tieBreakers(t types.Term, shape projectionShape) []type
 	}
 	// The breaker names the queried table: a joined select may project a
 	// term under the primary key's name, and the breaker must not read as it.
-	return []types.Term{{Table: shape.main, Column: modelregistry.DefaultCursorColumn, Plain: true}}
+	return []types.Term{types.PlainTerm(shape.main, modelregistry.DefaultCursorColumn)}
 }
 
 // isAggregateFn reports whether the function accumulates rows, which is what
@@ -230,7 +230,7 @@ func isWindowFn(fn types.TermFn) bool {
 // projection, the projection's own keys and terms in a grouped one.
 func (a *selector[M, R]) validateWindow(t types.Term, shape projectionShape) error {
 	if !t.IsWindowed() {
-		if isWindowFn(t.Fn) {
+		if isWindowFn(types.TermFnOf(t)) {
 			return errors.Wrapf(ErrWindowFnWithoutWindow, "%q", a.alias(t))
 		}
 		return nil
@@ -238,16 +238,16 @@ func (a *selector[M, R]) validateWindow(t types.Term, shape projectionShape) err
 	if !t.IsMeasure() {
 		return errors.Wrapf(ErrWindowOnKey, "%q", a.alias(t))
 	}
-	if t.Fn == types.FnCountDistinct {
+	if types.TermFnOf(t) == types.FnCountDistinct {
 		return errors.Wrapf(ErrWindowCountDistinct, "%q", a.alias(t))
 	}
-	if shape.grouped && (t.Fn == types.FnAvg || t.Fn == types.FnLag || t.Fn == types.FnLead) {
+	if shape.grouped && (types.TermFnOf(t) == types.FnAvg || types.TermFnOf(t) == types.FnLag || types.TermFnOf(t) == types.FnLead) {
 		return errors.Wrapf(ErrWindowOverGroups, "%q", a.alias(t))
 	}
-	if isWindowFn(t.Fn) && len(t.Window.Orders) == 0 {
+	if isWindowFn(types.TermFnOf(t)) && len(types.WindowOrdersOf(*types.TermWindowOf(t))) == 0 {
 		return errors.Wrapf(ErrWindowWithoutOrder, "%q", a.alias(t))
 	}
-	for _, key := range t.Window.Partition {
+	for _, key := range types.WindowPartitionOf(*types.TermWindowOf(t)) {
 		// A key carries no conditions and a measure no bucket, here as in
 		// the projection: a condition the renderer never reads would
 		// otherwise vanish without a word. The constants are checked the
@@ -256,11 +256,11 @@ func (a *selector[M, R]) validateWindow(t types.Term, shape projectionShape) err
 		if err := a.validateGrouping(key); err != nil {
 			return errors.Wrapf(err, "%q partitions by", a.alias(t))
 		}
-		if !key.Fn.Valid() {
-			return errors.Wrapf(ErrUnknownTermFn, "%q partitions by %q", a.alias(t), key.Fn)
+		if !types.TermFnOf(key).Valid() {
+			return errors.Wrapf(ErrUnknownTermFn, "%q partitions by %q", a.alias(t), types.TermFnOf(key))
 		}
-		if !key.Bucket.Valid() {
-			return errors.Wrapf(ErrUnknownTimeBucket, "%q partitions by %q", a.alias(t), key.Bucket)
+		if !types.TermBucketOf(key).Valid() {
+			return errors.Wrapf(ErrUnknownTimeBucket, "%q partitions by %q", a.alias(t), types.TermBucketOf(key))
 		}
 		// A joined select's term the projection reads is a column of the
 		// derived table, a key in either shape of the projection, passed as
@@ -270,7 +270,7 @@ func (a *selector[M, R]) validateWindow(t types.Term, shape projectionShape) err
 			continue
 		}
 		if key.IsLiteral() {
-			return errors.Wrapf(ErrWindowTermNotSelected, "%q partitions by the constant '%s', which is the same on every row", a.alias(t), key.Literal)
+			return errors.Wrapf(ErrWindowTermNotSelected, "%q partitions by the constant '%s', which is the same on every row", a.alias(t), types.TermLiteralOf(key))
 		}
 		if key.IsMeasure() {
 			if a.readsDerived(key) {
@@ -288,30 +288,30 @@ func (a *selector[M, R]) validateWindow(t types.Term, shape projectionShape) err
 			return errors.Wrapf(err, "%q partitions by", a.alias(t))
 		}
 	}
-	for _, o := range t.Window.Orders {
+	for _, o := range types.WindowOrdersOf(*types.TermWindowOf(t)) {
 		switch o := o.(type) {
 		case types.Order:
-			if !o.Direction.Valid() {
-				return errors.Wrapf(ErrUnknownOrderDirection, "%q", o.Direction)
+			if !types.OrderDirectionOf(o).Valid() {
+				return errors.Wrapf(ErrUnknownOrderDirection, "%q", types.OrderDirectionOf(o))
 			}
 			if shape.grouped {
-				if _, ok := a.selectedColumn(o.Table, o.Column, shape.main); !ok {
-					return errors.Wrapf(ErrWindowTermNotSelected, "%q orders by column %q, which is not a group key; %s", a.alias(t), o.Column, a.groupKeysClause(shape))
+				if _, ok := a.selectedColumn(o.Table(), o.Column(), shape.main); !ok {
+					return errors.Wrapf(ErrWindowTermNotSelected, "%q orders by column %q, which is not a group key; %s", a.alias(t), o.Column(), a.groupKeysClause(shape))
 				}
 				continue
 			}
-			if _, err := a.columnOf(o.Table, o.Column, shape); err != nil {
+			if _, err := a.columnOf(o.Table(), o.Column(), shape); err != nil {
 				return errors.Wrapf(err, "%q orders by", a.alias(t))
 			}
 		case types.TermOrder:
-			if !o.Direction.Valid() {
-				return errors.Wrapf(ErrUnknownOrderDirection, "%q", o.Direction)
+			if !types.TermOrderDirectionOf(o).Valid() {
+				return errors.Wrapf(ErrUnknownOrderDirection, "%q", types.TermOrderDirectionOf(o))
 			}
-			if o.Term.IsWindowed() {
-				return errors.Wrapf(ErrWindowNested, "%q orders by %q", a.alias(t), a.alias(o.Term))
+			if types.TermOrderTermOf(o).IsWindowed() {
+				return errors.Wrapf(ErrWindowNested, "%q orders by %q", a.alias(t), a.alias(types.TermOrderTermOf(o)))
 			}
-			if !a.isSelected(o.Term) {
-				return errors.Wrapf(ErrWindowTermNotSelected, "%q orders by %q", a.alias(t), a.alias(o.Term))
+			if !a.isSelected(types.TermOrderTermOf(o)) {
+				return errors.Wrapf(ErrWindowTermNotSelected, "%q orders by %q", a.alias(t), a.alias(types.TermOrderTermOf(o)))
 			}
 		default:
 			return errors.Wrapf(ErrUnknownOrderDirection, "%T", o)
@@ -338,7 +338,7 @@ func (a *selector[M, R]) groupKey(key types.Term, shape projectionShape) (types.
 			}
 			continue
 		}
-		if key.Fn == types.FnNone && k.Column == key.Column && k.Bucket == key.Bucket && shape.tableOf(k) == shape.tableOf(key) {
+		if types.TermFnOf(key) == types.FnNone && types.TermColumnOf(k) == types.TermColumnOf(key) && types.TermBucketOf(k) == types.TermBucketOf(key) && shape.tableOf(k) == shape.tableOf(key) {
 			return k, true
 		}
 	}
@@ -362,12 +362,12 @@ func (a *selector[M, R]) groupKeysClause(shape projectionShape) string {
 // the tables the select reads: the column must exist on its table, and a
 // bucket must sit on a time column, exactly as a group key would be checked.
 func (a *selector[M, R]) validateRowLevelKey(key types.Term, shape projectionShape) error {
-	column, err := a.columnOf(key.Table, key.Column, shape)
+	column, err := a.columnOf(types.TermTableOf(key), types.TermColumnOf(key), shape)
 	if err != nil {
 		return err
 	}
-	if key.Bucket != types.TimeBucketNone && modelschema.ClassifyColumn(column.Type) != modelschema.ColumnClassTime {
-		return errors.Wrapf(ErrAggregateType, "time bucket over non-time column %q", key.Column)
+	if types.TermBucketOf(key) != types.TimeBucketNone && modelschema.ClassifyColumn(column.Type) != modelschema.ColumnClassTime {
+		return errors.Wrapf(ErrAggregateType, "time bucket over non-time column %q", types.TermColumnOf(key))
 	}
 	return nil
 }

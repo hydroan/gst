@@ -165,7 +165,7 @@ func (db *database[M]) applyFilters(filters []types.Filter) {
 	// failing the request. Server-built callers such as the select builder
 	// read the reason and fail fast instead.
 	if f, reason, foreign := db.foreignTableFilter(filters, db.outerTableName(), ""); foreign {
-		db.err = errors.Wrapf(ErrColumnTable, "filter %q on column %q %s", f.Op, f.Column, reason)
+		db.err = errors.Wrapf(ErrColumnTable, "filter %q on column %q %s", f.Op(), f.Column(), reason)
 		return
 	}
 	if expr, _ := db.renderFilters(filters, false, db.outerScope()); expr != nil {
@@ -187,29 +187,29 @@ func (db *database[M]) foreignTableFilter(filters []types.Filter, own, enclosing
 		reader = fmt.Sprintf("the subquery over %q", own)
 	}
 	for _, f := range filters {
-		switch f.Op {
+		switch f.Op() {
 		case types.FilterOpOr, types.FilterOpAnd:
-			if children, ok := f.Value.([]types.Filter); ok {
+			if children, ok := f.Value().([]types.Filter); ok {
 				if found, reason, foreign = db.foreignTableFilter(children, own, enclosing); foreign {
 					return found, reason, true
 				}
 			}
 		case types.FilterOpExists:
-			if sq, ok := f.Value.(types.Subquery); ok && sq.Model != nil {
+			if sq, ok := f.Value().(types.Subquery); ok && sq.Model != nil {
 				if found, reason, foreign = db.foreignTableFilter(sq.Filters, sq.Model.TableName(), own); foreign {
 					return found, reason, true
 				}
 			}
 		case types.FilterOpEqCol:
-			if len(f.Table) > 0 && f.Table != own {
-				return f, fmt.Sprintf("names table %q, which %s does not read", f.Table, reader), true
+			if len(f.Table()) > 0 && f.Table() != own {
+				return f, fmt.Sprintf("names table %q, which %s does not read", f.Table(), reader), true
 			}
-			if _, parentTable, ok := eqColParent(f.Value); ok && len(enclosing) > 0 && len(parentTable) > 0 && parentTable != enclosing {
+			if _, parentTable, ok := eqColParent(f.Value()); ok && len(enclosing) > 0 && len(parentTable) > 0 && parentTable != enclosing {
 				return f, fmt.Sprintf("ties to a column of %q, which is not the table enclosing %s", parentTable, reader), true
 			}
 		default:
-			if len(f.Table) > 0 && f.Table != own {
-				return f, fmt.Sprintf("names table %q, which %s does not read", f.Table, reader), true
+			if len(f.Table()) > 0 && f.Table() != own {
+				return f, fmt.Sprintf("names table %q, which %s does not read", f.Table(), reader), true
 			}
 		}
 	}
@@ -274,13 +274,13 @@ func (db *database[M]) renderFilter(f types.Filter, scope filterScope) (clause.E
 	// Groups carry their children in Value and subqueries carry their columns
 	// inside it, so neither names a column of its own and both are dispatched
 	// before the empty-column check below.
-	switch f.Op {
+	switch f.Op() {
 	case types.FilterOpOr:
 		return db.groupCondition(f, true, scope)
 	case types.FilterOpAnd:
 		return db.groupCondition(f, false, scope)
 	case types.FilterOpExists:
-		sq, ok := f.Value.(types.Subquery)
+		sq, ok := f.Value().(types.Subquery)
 		if !ok {
 			return db.failClosedFilter(f, "expects a subquery value")
 		}
@@ -290,40 +290,40 @@ func (db *database[M]) renderFilter(f types.Filter, scope filterScope) (clause.E
 		// renders without the warning a filter that cannot be applied logs.
 		return falseExpr(), nil
 	}
-	if len(f.Column) == 0 {
+	if len(f.Column()) == 0 {
 		return db.failClosedFilter(f, "has an empty column")
 	}
 	column, info, err := db.placeFilter(f, scope)
 	if err != nil {
 		return falseExpr(), err
 	}
-	switch f.Op {
+	switch f.Op() {
 	case types.FilterOpEq:
-		return db.scalarFilter(f, db.comparisonSQL(info, f.Column, column, " = "))
+		return db.scalarFilter(f, db.comparisonSQL(info, f.Column(), column, " = "))
 	case types.FilterOpNe:
-		return db.scalarFilter(f, db.comparisonSQL(info, f.Column, column, " <> "))
+		return db.scalarFilter(f, db.comparisonSQL(info, f.Column(), column, " <> "))
 	case types.FilterOpGt:
-		return db.scalarFilter(f, db.comparisonSQL(info, f.Column, column, " > "))
+		return db.scalarFilter(f, db.comparisonSQL(info, f.Column(), column, " > "))
 	case types.FilterOpGte:
-		return db.scalarFilter(f, db.comparisonSQL(info, f.Column, column, " >= "))
+		return db.scalarFilter(f, db.comparisonSQL(info, f.Column(), column, " >= "))
 	case types.FilterOpLt:
-		return db.scalarFilter(f, db.comparisonSQL(info, f.Column, column, " < "))
+		return db.scalarFilter(f, db.comparisonSQL(info, f.Column(), column, " < "))
 	case types.FilterOpLte:
-		return db.scalarFilter(f, db.comparisonSQL(info, f.Column, column, " <= "))
+		return db.scalarFilter(f, db.comparisonSQL(info, f.Column(), column, " <= "))
 	case types.FilterOpIn:
 		return db.listFilter(f, column+" IN ?")
 	case types.FilterOpNotIn:
 		return db.listFilter(f, column+" NOT IN ?")
 	case types.FilterOpLike:
-		return db.patternFilter(f, db.likeColumn(info, f.Column, column)+" LIKE ?"+db.likeEscapeSuffix(), "%", "%")
+		return db.patternFilter(f, db.likeColumn(info, f.Column(), column)+" LIKE ?"+db.likeEscapeSuffix(), "%", "%")
 	case types.FilterOpNotLike:
-		return db.patternFilter(f, db.likeColumn(info, f.Column, column)+" NOT LIKE ?"+db.likeEscapeSuffix(), "%", "%")
+		return db.patternFilter(f, db.likeColumn(info, f.Column(), column)+" NOT LIKE ?"+db.likeEscapeSuffix(), "%", "%")
 	case types.FilterOpStartsWith:
-		return db.patternFilter(f, db.likeColumn(info, f.Column, column)+" LIKE ?"+db.likeEscapeSuffix(), "", "%")
+		return db.patternFilter(f, db.likeColumn(info, f.Column(), column)+" LIKE ?"+db.likeEscapeSuffix(), "", "%")
 	case types.FilterOpEndsWith:
-		return db.patternFilter(f, db.likeColumn(info, f.Column, column)+" LIKE ?"+db.likeEscapeSuffix(), "%", "")
+		return db.patternFilter(f, db.likeColumn(info, f.Column(), column)+" LIKE ?"+db.likeEscapeSuffix(), "%", "")
 	case types.FilterOpIsNull:
-		b, ok := f.Value.(bool)
+		b, ok := f.Value().(bool)
 		if !ok {
 			return db.failClosedFilter(f, "expects a bool value")
 		}
@@ -349,7 +349,7 @@ func (db *database[M]) renderFilter(f types.Filter, scope filterScope) (clause.E
 		default:
 			return db.failClosedFilter(f, "is not supported on this dialect")
 		}
-		s, ok := f.Value.(string)
+		s, ok := f.Value().(string)
 		if !ok {
 			return db.failClosedFilter(f, "expects a string value")
 		}
@@ -373,35 +373,35 @@ func (db *database[M]) renderFilter(f types.Filter, scope filterScope) (clause.E
 // wrong rows. The scope's own columns are therefore checked wherever the
 // scope lists them.
 func (db *database[M]) placeFilter(f types.Filter, scope filterScope) (string, tableInfo, error) {
-	if len(f.Table) > 0 && len(scope.table) > 0 && f.Table != scope.table {
-		info, ok := scope.tables[f.Table]
+	if len(f.Table()) > 0 && len(scope.table) > 0 && f.Table() != scope.table {
+		info, ok := scope.tables[f.Table()]
 		if !ok {
 			// Joined with the column-table sentinel as well, so a caller
 			// matching either sees the same mistake List reports.
-			_, err := db.failClosedFilter(f, fmt.Sprintf("names a column of table %q, which the query does not read", f.Table))
+			_, err := db.failClosedFilter(f, fmt.Sprintf("names a column of table %q, which the query does not read", f.Table()))
 			return "", tableInfo{}, errors.Join(err, ErrColumnTable)
 		}
-		if _, ok := info.columns[f.Column]; !ok {
+		if _, ok := info.columns[f.Column()]; !ok {
 			if info.rename != nil {
-				_, err := db.derivedKeyFilter(f, f.Column, f.Table, info)
+				_, err := db.derivedKeyFilter(f, f.Column(), f.Table(), info)
 				return "", tableInfo{}, err
 			}
 			_, err := db.failClosedFilter(f, "names a column its table does not have")
 			return "", tableInfo{}, err
 		}
-		return db.tableColumn(f.Table, info, f.Column), info, nil
+		return db.tableColumn(f.Table(), info, f.Column()), info, nil
 	}
 	if scope.columns != nil {
-		if _, ok := scope.columns[f.Column]; !ok {
+		if _, ok := scope.columns[f.Column()]; !ok {
 			if scope.derived {
-				_, err := db.derivedKeyFilter(f, f.Column, scope.table, scope.own())
+				_, err := db.derivedKeyFilter(f, f.Column(), scope.table, scope.own())
 				return "", tableInfo{}, err
 			}
 			_, err := db.failClosedFilter(f, fmt.Sprintf("names a column %q does not have", scope.table))
 			return "", tableInfo{}, err
 		}
 	}
-	return db.scopedColumn(f.Column, scope), scope.own(), nil
+	return db.scopedColumn(f.Column(), scope), scope.own(), nil
 }
 
 // derivedKeyFilter refuses a filter naming a column of a joined select's
@@ -420,10 +420,10 @@ func (db *database[M]) derivedKeyFilter(f types.Filter, column, table string, in
 // qualifies.
 func (db *database[M]) placedName(f types.Filter, scope filterScope, info tableInfo) string {
 	qualify := info.qualify
-	if len(qualify) == 0 && len(f.Table) > 0 && len(scope.table) > 0 && f.Table != scope.table {
-		qualify = f.Table
+	if len(qualify) == 0 && len(f.Table()) > 0 && len(scope.table) > 0 && f.Table() != scope.table {
+		qualify = f.Table()
 	}
-	name := info.column(f.Column)
+	name := info.column(f.Column())
 	if len(qualify) == 0 {
 		return name
 	}
@@ -442,7 +442,7 @@ func (db *database[M]) placedName(f types.Filter, scope filterScope, info tableI
 //
 // The caller must hold db.mu.
 func (db *database[M]) eqColCondition(f types.Filter, column string, scope filterScope) (clause.Expression, error) {
-	parent, parentTable, ok := eqColParent(f.Value)
+	parent, parentTable, ok := eqColParent(f.Value())
 	if !ok {
 		return db.failClosedFilter(f, "expects a column name or a column reference value")
 	}
@@ -534,11 +534,11 @@ func eqColParent(value any) (name, table string, ok bool) {
 // so its own predicates do not count.
 func hasCorrelation(filters []types.Filter) bool {
 	for _, f := range filters {
-		switch f.Op {
+		switch f.Op() {
 		case types.FilterOpEqCol:
 			return true
 		case types.FilterOpOr, types.FilterOpAnd:
-			if children, ok := f.Value.([]types.Filter); ok && hasCorrelation(children) {
+			if children, ok := f.Value().([]types.Filter); ok && hasCorrelation(children) {
 				return true
 			}
 		}
@@ -555,7 +555,7 @@ func hasCorrelation(filters []types.Filter) bool {
 // all, fails closed: an empty group is a caller bug, and answering it with the
 // logical identity (TRUE for AND) would widen the result set.
 func (db *database[M]) groupCondition(f types.Filter, or bool, scope filterScope) (clause.Expression, error) {
-	children, ok := f.Value.([]types.Filter)
+	children, ok := f.Value().([]types.Filter)
 	if !ok {
 		return db.failClosedFilter(f, "expects a filter list value")
 	}
@@ -575,11 +575,11 @@ func falseExpr() clause.Expression { return clause.Expr{SQL: "1 = 0"} }
 func (db *database[M]) failClosedFilter(f types.Filter, msg string) (clause.Expression, error) {
 	logger.Database.WithContext(db.ctx, phaseWithQuery).Warnz(
 		"filter cannot be applied, adding safety condition",
-		zap.String("op", string(f.Op)),
-		zap.String("column", f.Column),
+		zap.String("op", string(f.Op())),
+		zap.String("column", f.Column()),
 		zap.String("reason", msg),
 	)
-	return falseExpr(), errors.Wrapf(ErrUnusableFilter, "operator %q on column %q %s", f.Op, f.Column, msg)
+	return falseExpr(), errors.Wrapf(ErrUnusableFilter, "operator %q on column %q %s", f.Op(), f.Column(), msg)
 }
 
 // comparisonSQL renders "column op ?" for one comparison filter. A column its
@@ -604,13 +604,13 @@ func (db *database[M]) likeColumn(info tableInfo, dbName, quotedColumn string) s
 // scalarFilter binds a comparison filter whose value must be a scalar; nil,
 // slice, and array values fail closed.
 func (db *database[M]) scalarFilter(f types.Filter, sql string) (clause.Expression, error) {
-	if f.Value == nil {
+	if f.Value() == nil {
 		return db.failClosedFilter(f, "expects a scalar value")
 	}
-	if k := reflect.ValueOf(f.Value).Kind(); k == reflect.Slice || k == reflect.Array {
+	if k := reflect.ValueOf(f.Value()).Kind(); k == reflect.Slice || k == reflect.Array {
 		return db.failClosedFilter(f, "expects a scalar value")
 	}
-	return clause.Expr{SQL: sql, Vars: []any{f.Value}}, nil
+	return clause.Expr{SQL: sql, Vars: []any{f.Value()}}, nil
 }
 
 // listFilter binds a set-membership filter whose value must be a slice or an
@@ -618,19 +618,19 @@ func (db *database[M]) scalarFilter(f types.Filter, sql string) (clause.Expressi
 // empty slice keeps the SQL list semantics: IN matches nothing, and the result
 // never widens.
 func (db *database[M]) listFilter(f types.Filter, sql string) (clause.Expression, error) {
-	if f.Value == nil {
+	if f.Value() == nil {
 		return db.failClosedFilter(f, "expects a slice value")
 	}
-	if k := reflect.ValueOf(f.Value).Kind(); k != reflect.Slice && k != reflect.Array {
+	if k := reflect.ValueOf(f.Value()).Kind(); k != reflect.Slice && k != reflect.Array {
 		return db.failClosedFilter(f, "expects a slice value")
 	}
-	return clause.Expr{SQL: sql, Vars: []any{f.Value}}, nil
+	return clause.Expr{SQL: sql, Vars: []any{f.Value()}}, nil
 }
 
 // patternFilter binds a LIKE-family filter; the value must be a string and is
 // escaped so the stored value matches literally.
 func (db *database[M]) patternFilter(f types.Filter, sql, prefix, suffix string) (clause.Expression, error) {
-	s, ok := f.Value.(string)
+	s, ok := f.Value().(string)
 	if !ok {
 		return db.failClosedFilter(f, "expects a string value")
 	}
@@ -640,7 +640,7 @@ func (db *database[M]) patternFilter(f types.Filter, sql, prefix, suffix string)
 // stringFilter binds a filter whose value must be a plain string bound as-is
 // (the regex operators).
 func (db *database[M]) stringFilter(f types.Filter, sql string) (clause.Expression, error) {
-	s, ok := f.Value.(string)
+	s, ok := f.Value().(string)
 	if !ok {
 		return db.failClosedFilter(f, "expects a string value")
 	}

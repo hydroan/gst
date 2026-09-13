@@ -226,6 +226,16 @@ func TestDatabaseWithCursor(t *testing.T) {
 		require.Len(t, users, 3, "an order without a column falls back to the primary key")
 		require.Equal(t, []string{"user00002", "user00003", "user00004"},
 			[]string{users[0].ID, users[1].ID, users[2].ID})
+
+		// The fallback keeps the direction: a backward read still walks back
+		// from the boundary and comes back in the feed's own order.
+		users = make([]*TestUser, 0)
+		require.NoError(t, database.Database[*TestUser](context.Background()).
+			WithCursor(types.CursorBackward(types.Order{}, "user00003")).
+			List(&users))
+		require.Len(t, users, 3, "a backward read without a column also falls back to the primary key")
+		require.Equal(t, []string{"user00000", "user00001", "user00002"},
+			[]string{users[0].ID, users[1].ID, users[2].ID})
 	})
 
 	t.Run("Combined", func(t *testing.T) {
@@ -699,7 +709,7 @@ func TestDatabaseWithOrder(t *testing.T) {
 		setupTestData(t)
 
 		users := make([]*TestUser, 0)
-		require.NoError(t, database.Database[*TestUser](context.Background()).WithOrder(types.Order{Column: "name"}).List(&users))
+		require.NoError(t, database.Database[*TestUser](context.Background()).WithOrder(types.NewOrder("", "name", "")).List(&users))
 		assertNameOrder(t, users, []string{u1.Name, u2.Name, u3.Name})
 	})
 

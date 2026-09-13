@@ -13,22 +13,26 @@ package types
 // Rank and DenseRank take no tie breaker: ranking peers equally is what they
 // are for.
 //
+// The fields are unexported so a window only comes from PartitionBy and
+// OrderBy; the database layer reads them through WindowPartitionOf and
+// WindowOrdersOf, which the public types package does not forward.
+//
 //	RowNumber().Over(PartitionBy(SampleCols.TenantID).OrderBy(SampleCols.CreatedAt.Desc()))
 //	// ROW_NUMBER() OVER (PARTITION BY `tenant_id` ORDER BY `created_at` DESC, `id` ASC)
 //	Rank().Over(OrderBy(total.Desc()))
 //	// RANK() OVER (ORDER BY COALESCE(SUM(`amount`), 0) DESC)
 type Window struct {
-	// Partition holds the partition keys. Each is a column of a table the
+	// partition holds the partition keys. Each is a column of a table the
 	// select reads, the queried model's or a joined one's, in a row-level
 	// projection, or one of the projection's group keys in a grouped one; a
 	// joined select's term the projection reads, and the time buckets, work
 	// in both.
-	Partition []Term
-	// Orders sorts each partition. A column order names a column of a table
+	partition []Term
+	// orders sorts each partition. A column order names a column of a table
 	// the select reads in a row-level projection, or a group key in a grouped
 	// one; a term order names a projected term, which is how a grouped
 	// projection ranks by a measure.
-	Orders []Ordering
+	orders []Ordering
 }
 
 // PartitionBy opens a window partitioned by keys. Without keys the whole
@@ -43,7 +47,7 @@ func PartitionBy(keys ...Expr) Window {
 	for _, key := range keys {
 		terms = append(terms, key.exprTerm())
 	}
-	return Window{Partition: terms}
+	return Window{partition: terms}
 }
 
 // OrderBy returns a Window with no partition and the given orders: the
@@ -57,6 +61,12 @@ func OrderBy(orders ...Ordering) Window {
 
 // OrderBy orders each partition of the window.
 func (w Window) OrderBy(orders ...Ordering) Window {
-	w.Orders = append(append([]Ordering(nil), w.Orders...), orders...)
+	w.orders = append(append([]Ordering(nil), w.orders...), orders...)
 	return w
 }
+
+// WindowPartitionOf returns the partition keys of a window.
+func WindowPartitionOf(w Window) []Term { return w.partition }
+
+// WindowOrdersOf returns the orderings each partition of a window is sorted by.
+func WindowOrdersOf(w Window) []Ordering { return w.orders }

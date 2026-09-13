@@ -11,6 +11,6 @@ func TestAssign(t *testing.T) {
 	// Assign takes a plain column name for code that cannot reference a
 	// generated column, mirroring the FilterXxx and Asc/Desc constructors.
 	require.Equal(t,
-		types.Assignment{Column: "age", Value: 18},
+		types.NewAssignment("", "age", 18),
 		types.Assign("age", 18))
 }

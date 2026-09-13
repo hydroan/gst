@@ -528,11 +528,11 @@ func TestSelectWindowBuildErrors(t *testing.T) {
 	t.Run("PartitionKeyOutsideTheClosedSets", func(t *testing.T) {
 		// A key minted by hand with a bucket or a function the framework does
 		// not define is refused, as the same term is in the projection.
-		week := types.Term{Table: "test_aggregate_records", Column: "occurred_at", Bucket: types.TimeBucket("week")}
+		week := types.NewTerm("", "test_aggregate_records", "occurred_at", types.TimeBucket("week"), "")
 		require.ErrorIs(t, scan(database.Select[*TestAggregateRecord, row](ctx, TestAggregateRecordCols.ID,
 			types.RowNumber().Over(types.PartitionBy(week).OrderBy(TestAggregateRecordCols.ID.Asc())).As("rn"))),
 			database.ErrUnknownTimeBucket)
-		median := types.Term{Table: "test_aggregate_records", Column: "amount", Fn: types.TermFn("median")}
+		median := types.NewTerm(types.TermFn("median"), "test_aggregate_records", "amount", "", "")
 		require.ErrorIs(t, scan(database.Select[*TestAggregateRecord, row](ctx, TestAggregateRecordCols.ID,
 			types.RowNumber().Over(types.PartitionBy(median).OrderBy(TestAggregateRecordCols.ID.Asc())).As("rn"))),
 			database.ErrUnknownTermFn)
