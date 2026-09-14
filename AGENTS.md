@@ -125,8 +125,8 @@ gst 是强约定框架（Apple 风格），不是自由框架（Windows 风格�
 - 同一资源对象走自定义业务逻辑：GET /api/iam/sessions、DELETE /api/iam/sessions/:id。还是只需要一个 model 文件和一个 service 文件，但都有自己的 REQ、RSP service 结构体。注意 List、Get 是 HTTP GET 接口，禁止声明 `Payload[T]()`，只声明 `Result[T]()`，请求类型固定为 `*model.Empty`：
   - model 代码文件中的结构体：`SessionListRsp`、`SessionDeleteReq`、`SessionDeleteRsp`。
   - service 结构体方法：
-    `func (s *SessionListService) List(ctx *types.ServiceContext, req *model.Empty) (rsp *modeliamsession.SessionListRsp, err error)`、
-    `func (s *SessionDeleteService) Delete(ctx *types.ServiceContext, req *modeliamsession.SessionDeleteReq) (rsp *modeliamsession.SessionDeleteRsp, err error)`
+    `func (s *SessionListService) List(ctx *gst.ServiceContext, req *model.Empty) (rsp *modeliamsession.SessionListRsp, err error)`、
+    `func (s *SessionDeleteService) Delete(ctx *gst.ServiceContext, req *modeliamsession.SessionDeleteReq) (rsp *modeliamsession.SessionDeleteRsp, err error)`
 
 module 包中的接口测试用例规范：
 

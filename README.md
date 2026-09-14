@@ -242,7 +242,7 @@ filters, err := s.QueryFilters(ctx)
 if err != nil {
 	return nil, service.NewError(http.StatusBadRequest, err.Error())
 }
-opts := types.QueryOptions{
+opts := gst.QueryOptions{
 	AllowEmpty:    true,
 	PresentFields: s.QueryPresentFields(ctx),
 	Filters:       filters,
@@ -269,7 +269,7 @@ if err = database.Database[*appmodel.Sample](ctx).
 这六个方法覆盖 `field[op]` 过滤、零值过滤、排序、分页和 cursor 分页，各项是否生效取决于
 model 声明的 `model.Query`、`model.Pagination`、`model.Cursor`。`QueryOrders` 会校验
 `_sort_by` 的排序列，未知列名直接报错；但它们**不**保证 `List` 与 `Count` 用同一份查询
-条件：统计总数时必须传入同样的查询值和 `types.QueryOptions`（把 `opts` 存成变量复用是
+条件：统计总数时必须传入同样的查询值和 `gst.QueryOptions`（把 `opts` 存成变量复用是
 最省事的写法），否则 total 会和当页数据对不上。
 
 cursor 分页自带 ORDER BY，所以一次请求不能同时用 `_cursor_value` 和 `_sort_by`，
@@ -277,14 +277,14 @@ cursor 分页自带 ORDER BY，所以一次请求不能同时用 `_cursor_value`
 
 #### OR 查询
 
-`QueryOptions` 里的条件默认全部 AND 组合。需要 OR 时用 `types.FilterOr` 构造分组，
+`QueryOptions` 里的条件默认全部 AND 组合。需要 OR 时用 `gst.FilterOr` 构造分组，
 组内条件之间 OR，分组整体仍与其他条件 AND——因此权限隔离这类强制条件不可能被
 OR 掉：
 
 ```go
-Filters: []types.Filter{
+Filters: []gst.Filter{
 	appmodel.SampleCols.TenantID.Eq(tenant),      // 强制条件，始终 AND
-	types.FilterOr(                               // 一个搜索词横跨多列
+	gst.FilterOr(                               // 一个搜索词横跨多列
 		appmodel.SampleCols.Name.Like(keyword),
 		appmodel.SampleCols.Code.Like(keyword),
 	),
@@ -294,19 +294,19 @@ Filters: []types.Filter{
 
 条件用 `gg gen` 为模型生成的列引用来写（上例的 `appmodel.SampleCols`），列名和值类型都在
 编译期校验；拿不到具体模型的泛型工具函数用自己的类型参数现造列引用，例如
-`types.NewColumn[M, string]("id").In(ids...)`，值类型同样在编译期校验。
+`gst.NewColumn[M, string]("id").In(ids...)`，值类型同样在编译期校验。
 
-`types.FilterAnd` 用于在 OR 组内嵌套 AND，配合出 `(a AND b) OR (c AND d)`：
+`gst.FilterAnd` 用于在 OR 组内嵌套 AND，配合出 `(a AND b) OR (c AND d)`：
 
 ```go
-Filters: []types.Filter{
+Filters: []gst.Filter{
 	appmodel.SampleCols.TenantID.Eq(tenant),
-	types.FilterOr(
-		types.FilterAnd(
+	gst.FilterOr(
+		gst.FilterAnd(
 			appmodel.SampleCols.Kind.Eq(KindPrimary),
 			appmodel.SampleCols.Status.Eq(StatusDone),
 		),
-		types.FilterAnd(
+		gst.FilterAnd(
 			appmodel.SampleCols.Kind.Eq(KindSecondary),
 			appmodel.SampleCols.Status.Eq(StatusPending),
 		),
@@ -322,7 +322,7 @@ Filters: []types.Filter{
 客户端无法自行改变条件的组合方式。
 
 需要一个恒为空集的条件时，例如权限钩子里拒绝当前用户看到任何行，用
-`types.FilterFalse()`：它和其他过滤器一样是真实条件，渲染成 `1 = 0`。
+`gst.FilterFalse()`：它和其他过滤器一样是真实条件，渲染成 `1 = 0`。
 
 默认资源的 hook 示例：
 
@@ -333,15 +333,15 @@ import (
 	appmodel "github.com/example/myapp/model"
 
 	"github.com/cockroachdb/errors"
-	"github.com/hydroan/gst/service"
 	"github.com/hydroan/gst"
+	"github.com/hydroan/gst/service"
 )
 
 type Creator struct {
 	service.Base[*appmodel.Record, *appmodel.Record, *appmodel.Record]
 }
 
-func (c *Creator) CreateBefore(ctx *types.ServiceContext, record *appmodel.Record) error {
+func (c *Creator) CreateBefore(ctx *gst.ServiceContext, record *appmodel.Record) error {
 	if record.Title == "" {
 		return errors.New("title is required")
 	}
@@ -357,15 +357,15 @@ package search
 import (
 	"github.com/example/myapp/model/common"
 
-	"github.com/hydroan/gst/service"
 	"github.com/hydroan/gst"
+	"github.com/hydroan/gst/service"
 )
 
 type Dedup struct {
 	service.Base[*common.Search, *common.SearchDedupReq, *common.SearchDedupRsp]
 }
 
-func (d *Dedup) Create(ctx *types.ServiceContext, req *common.SearchDedupReq) (*common.SearchDedupRsp, error) {
+func (d *Dedup) Create(ctx *gst.ServiceContext, req *common.SearchDedupReq) (*common.SearchDedupRsp, error) {
 	seen := make(map[string]struct{}, len(req.Sources))
 	rsp := &common.SearchDedupRsp{}
 
@@ -407,7 +407,7 @@ rows := make([]categoryTotal, 0)
 err := database.Select[*appmodel.Record, categoryTotal](ctx,
         appmodel.RecordCols.Category.Group(), // 不带聚合函数的项即分组键
         appmodel.RecordCols.Amount.Sum(),     // 默认别名就是列名，多数情况不用写 As
-        types.Count().As("records"),
+        gst.Count().As("records"),
     ).
     Where(appmodel.RecordCols.TenantID.Eq(tenantID)).
     Scan(&rows)
@@ -419,11 +419,11 @@ err := database.Select[*appmodel.Record, categoryTotal](ctx,
 要在别处再引用的项先赋给变量：`Having`、`OrderBy`、`Qualify`、窗口的 `PartitionBy` 和
 `OrderBy`、联合的排序、主查询读子投影的项，都是按项的值在投影里找同一个项，把同一个变量
 传两遍最稳，改了别名的项就不再是同一个项。反过来，主查询自己能算出来的项（不带表的
-`types.Count()`、排名函数，主表或主查询连入模型的项）子投影也投影了同一个，而它还顶着构造时的
+`gst.Count()`、排名函数，主表或主查询连入模型的项）子投影也投影了同一个，而它还顶着构造时的
 默认别名（列名、`count`、`row_number` 这些；没写 `As` 和写了默认名都算），框架分不清是谁的，
 构建期报错。改法：想要主查询自己的，给它起个别名；想读子投影的，给子投影的项起个非默认别名再把它
 传给主查询；两个都要就两边各起一个不同的别名。只有主查询自己也能算的项才有这一步，子投影自己
-模型的项直接传即可。`types.Literal` 常量无论别名都算主查询自己的，子投影投了同一个常量就报错；
+模型的项直接传即可。`gst.Literal` 常量无论别名都算主查询自己的，子投影投了同一个常量就报错；
 要知道子投影有没有匹配到行，读它的键列，没匹配到的是 NULL。
 
 几条会影响正确性的约定：
@@ -449,7 +449,7 @@ err := database.Select[*appmodel.Record, categoryTotal](ctx,
   划的边界聚合，且没有任何迹象。
 
 单行结果用 `ScanOne`，分页报表的总组数用 `Count`。只问「有没有相关行」的跨表条件用
-`types.FilterExists` / `FilterNotExists` 半连接；要把另一张表的字段带进结果行，看下面的
+`gst.FilterExists` / `FilterNotExists` 半连接；要把另一张表的字段带进结果行，看下面的
 「连接」小节，框架只放行每行最多对上一行的连接，join 到一对多子表让 `SUM` 静默翻倍的
 那条路写不出来。子表与外层的关联列对用 `子表列.EqCol(外层列)`
 作为谓词传入，复合键就多传几对，每一对都
@@ -459,14 +459,14 @@ err := database.Select[*appmodel.Record, categoryTotal](ctx,
 #### 窗口函数
 
 窗口函数让每一行保留，旁边多出一列由同组其他行算出来的值：每组最新一行、累计、
-排名、上一行的值都是它。窗口用 `types.PartitionBy` 开出分区，再用 `OrderBy` 定
+排名、上一行的值都是它。窗口用 `gst.PartitionBy` 开出分区，再用 `OrderBy` 定
 组内顺序，把它交给度量或排名函数的 `Over`；行级投影直接把列引用传给 `Select`，
 它们按原值投影：
 
 ```go
 // 每个租户最新一条：ROW_NUMBER() OVER (PARTITION BY tenant_id ORDER BY created_at DESC, id ASC)
-rn := types.RowNumber().
-    Over(types.PartitionBy(RecordCols.TenantID).OrderBy(RecordCols.CreatedAt.Desc())).
+rn := gst.RowNumber().
+    Over(gst.PartitionBy(RecordCols.TenantID).OrderBy(RecordCols.CreatedAt.Desc())).
     As("rn")
 err := database.Select[*appmodel.Record, latest](ctx, RecordCols.ID, RecordCols.TenantID, RecordCols.Amount, rn).
     Qualify(rn.Eq(1)). // WHERE 看不见窗口列，Qualify 由框架套一层派生表再筛
@@ -475,16 +475,16 @@ err := database.Select[*appmodel.Record, latest](ctx, RecordCols.ID, RecordCols.
 // 累计：COALESCE(SUM(amount) OVER (PARTITION BY tenant_id ORDER BY created_at ASC, id ASC
 //                 ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW), 0)
 running := RecordCols.Amount.Sum().
-    Over(types.PartitionBy(RecordCols.TenantID).OrderBy(RecordCols.CreatedAt.Asc())).
+    Over(gst.PartitionBy(RecordCols.TenantID).OrderBy(RecordCols.CreatedAt.Asc())).
     As("running")
 
 // 同组合计：每一行旁边带上本租户的总额，窗口不带 OrderBy 就不累计，整组一个数
 // COALESCE(SUM(amount) OVER (PARTITION BY tenant_id), 0)
-tenantTotal := RecordCols.Amount.Sum().Over(types.PartitionBy(RecordCols.TenantID)).As("tenant_total")
+tenantTotal := RecordCols.Amount.Sum().Over(gst.PartitionBy(RecordCols.TenantID)).As("tenant_total")
 
 // 排行：分组投影上开窗，窗口按度量排序，RANK() OVER (ORDER BY COALESCE(SUM(amount), 0) DESC)
 total := RecordCols.Amount.Sum().As("total")
-rank := types.Rank().Over(types.OrderBy(total.Desc())) // types.OrderBy 是 types.PartitionBy().OrderBy 的短写法：只排序、不分区的窗口
+rank := gst.Rank().Over(gst.OrderBy(total.Desc())) // gst.OrderBy 是 gst.PartitionBy().OrderBy 的短写法：只排序、不分区的窗口
 ```
 
 关键字与规则：
@@ -512,7 +512,7 @@ rank := types.Rank().Over(types.OrderBy(total.Desc())) // types.OrderBy 是 type
 几张表的同形态行叠成一份列表，例如收款和退款按时间统一分页，用 `database.UnionAll[R]`。
 分支是普通的 `Select`，各自扫进同一个结果行 `R`；框架按 `R` 的字段顺序渲染每个分支的
 SELECT 列表，按位置对齐写反的错误写不出来。列名不一致的用 `列.As("...")` 对齐，来源
-标记用 `types.Literal` 投影一列常量：
+标记用 `gst.Literal` 投影一列常量：
 
 ```go
 type flow struct {
@@ -524,10 +524,10 @@ type flow struct {
 
 paidAt := PaymentCols.PaidAt.As("at") // 排序还要用它，提成变量共享
 payments := database.Select[*appmodel.Payment, flow](ctx,
-    types.Literal("payment").As("kind"), PaymentCols.ID, PaymentCols.Amount, paidAt).
+    gst.Literal("payment").As("kind"), PaymentCols.ID, PaymentCols.Amount, paidAt).
     Where(PaymentCols.TenantID.Eq(tenantID))
 refunds := database.Select[*appmodel.Refund, flow](ctx,
-    types.Literal("refund").As("kind"), RefundCols.ID, RefundCols.Amount, RefundCols.SettledAt.As("at")).
+    gst.Literal("refund").As("kind"), RefundCols.ID, RefundCols.Amount, RefundCols.SettledAt.As("at")).
     Where(RefundCols.TenantID.Eq(tenantID))
 
 feed := database.UnionAll[flow](ctx, payments, refunds).
@@ -583,7 +583,7 @@ type paymentWithAccount struct {
 
 err := database.Select[*appmodel.Payment, paymentWithAccount](ctx,
         PaymentCols.ID, PaymentCols.Amount, AccountCols.Name.As("account_name")).
-    Join(types.LeftJoin[*appmodel.Account](AccountCols.Code.EqCol(PaymentCols.Account))).
+    Join(gst.LeftJoin[*appmodel.Account](AccountCols.Code.EqCol(PaymentCols.Account))).
     Where(PaymentCols.TenantID.Eq(tenantID)).
     Scan(&rows)
 // SELECT `payments`.`id` AS `id`, `payments`.`amount` AS `amount`, `accounts`.`name` AS `account_name`
@@ -628,7 +628,7 @@ type recordWithTags struct {
     Tags *int64 // 没有标签的记录对不上，这一列是 NULL
 }
 err := database.Select[*appmodel.Record, recordWithTags](ctx, RecordCols.ID, tags).
-    Join(types.LeftJoinSelect(counts, TagCols.RecordID.EqCol(RecordCols.ID))).
+    Join(gst.LeftJoinSelect(counts, TagCols.RecordID.EqCol(RecordCols.ID))).
     Scan(&rows)
 // SELECT `records`.`id` AS `id`, `j0`.`tags` AS `tags`
 // FROM `records`
@@ -653,8 +653,8 @@ err := database.Select[*appmodel.Record, recordWithTags](ctx, RecordCols.ID, tag
   每条主表行带上子投影的项，时间桶只是每行的标签；要按桶汇总就加上度量。
 - 子投影读的表不能是主查询的表，也不能是已经连进来的表：临时表是通过子投影模型的列引用来
   寻址的，同一张表出现两次就分不清。子投影自己再连进来的表不受此限。主查询自己能算出来的项
-  （不带表的 `types.Count()`、排名函数，主表或主查询连入模型的项）子投影也投影了同一个、还顶着
-  默认别名时报 `ErrDuplicateAlias`，起了非默认别名的项当作读透；`types.Literal` 常量无论别名都算
+  （不带表的 `gst.Count()`、排名函数，主表或主查询连入模型的项）子投影也投影了同一个、还顶着
+  默认别名时报 `ErrDuplicateAlias`，起了非默认别名的项当作读透；`gst.Literal` 常量无论别名都算
   主查询自己的。要给每一行带上本表按某个维度的合计，用窗口 `Sum().Over(PartitionBy(键))`，
   不用连接。子投影不能连到自己，也不能两两互连。
 - 子投影不能按时间桶分组后再连：桶是列的标签（如 `2024-01-10`），没有哪一列等于它，构建期报错。
@@ -677,7 +677,7 @@ err := database.Select[*appmodel.Record, recordWithTags](ctx, RecordCols.ID, tag
 | `ErrJoinSelectColumn` | 主查询只能读子投影投影出来的项，把同一个项（共享变量）再传一遍，别改它的别名，也别加 `Over`/`Where`；ON 和 `Where` 里只能用它的键列，别的条件写进子投影 |
 | `ErrDuplicateAlias`，两个子投影投了同一个项 | 给其中一个 `As` 别的别名 |
 | `ErrDuplicateAlias`，主查询自己能算的项子投影也投了且还顶着默认别名 | 想要主查询自己的：给它起个别名；想读子投影的：给子投影的项起个非默认别名，再把它传给主查询；两个都要就两边别名各不相同 |
-| `ErrDuplicateAlias`，主查询和子投影投了同一个 `types.Literal` 常量 | 常量算主查询自己的，换个值或别名；要知道子投影有没有匹配到行，读它的键列，没匹配到的是 NULL |
+| `ErrDuplicateAlias`，主查询和子投影投了同一个 `gst.Literal` 常量 | 常量算主查询自己的，换个值或别名；要知道子投影有没有匹配到行，读它的键列，没匹配到的是 NULL |
 | `ErrDuplicateAlias`，子投影的项加了 `Over`/`Where` 再传给主查询 | 开窗、加条件的项不再是子投影的项：想读子投影的就原样传；主查询自己要开窗、加条件就换个别名 |
 | `ErrJoinSelectNotKeyed` | 主查询分组时按连接列分组；连接列是另一个子投影的键时，把那个键项也投影成分组键 |
 | `ErrJoinDuplicateTable` | 一张表只能作为一个来源，同组合计用窗口；子投影不能连到自己或两两互连 |
