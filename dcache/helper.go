@@ -2,12 +2,11 @@ package dcache
 
 import (
 	"fmt"
-	"os"
 	"time"
 
-	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/consts"
+	"github.com/hydroan/gst/internal/instance"
 	"github.com/hydroan/gst/logger"
 	"github.com/hydroan/gst/provider/kafka"
 	"github.com/twmb/franz-go/pkg/kgo"
@@ -38,18 +37,14 @@ func appName() string {
 // also registers it with bootstrap — deliberate: dcache requires kafka, and
 // the provider's startup ping surfaces a dead broker configuration at boot.
 func newProducer(cfg config.Kafka, topic string) (*kgo.Client, error) {
-	hostname, err := os.Hostname()
-	if err != nil {
-		// First-hand exit of a stack-less third-party/standard-library error;
-		// see the error-stack contract in the database package doc.
-		return nil, errors.WithStack(err)
-	}
 	return kafka.New(cfg,
 		// Route the client's own log lines into dcache's file instead of the
 		// kafka provider's; the last logger option wins.
 		kafka.Logger(&logger.Dcache),
 		kgo.AllowAutoTopicCreation(),
-		kgo.ClientID(fmt.Sprintf("producer-%s-%s", topic, hostname)),
+		// The client id names the process, so the broker's per-client
+		// metrics and quotas tell replicas apart even on one host.
+		kgo.ClientID(fmt.Sprintf("producer-%s-%s", topic, instance.ID())),
 
 		// low latency tuning
 		kgo.ProducerLinger(1*time.Millisecond), // extremely short batching delay
@@ -83,15 +78,11 @@ func newProducer(cfg config.Kafka, topic string) (*kgo.Client, error) {
 // newConsumer creates a kafka consumer; each cache type's instance owns one.
 // Like newProducer it goes through the kafka provider's New.
 func newConsumer(cfg config.Kafka, topic string, group string) (*kgo.Client, error) {
-	hostname, err := os.Hostname()
-	if err != nil {
-		return nil, errors.WithStack(err)
-	}
 	return kafka.New(cfg,
 		kafka.Logger(&logger.Dcache),
 		kgo.AllowAutoTopicCreation(),
 		kgo.ConsumeTopics(topic),
-		kgo.ClientID(fmt.Sprintf("consumer-%s-%s", topic, hostname)),
+		kgo.ClientID(fmt.Sprintf("consumer-%s-%s", topic, instance.ID())),
 
 		// neither automatic nor manual commits are needed, every restart starts from the latest offset
 		kgo.DisableAutoCommit(),

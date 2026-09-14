@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
-	"os"
 	"reflect"
 	"runtime"
 	"runtime/debug"
@@ -22,6 +21,7 @@ import (
 	"github.com/hydroan/gst/consts"
 	"github.com/hydroan/gst/internal/cache/capacity"
 	"github.com/hydroan/gst/internal/cache/registry"
+	"github.com/hydroan/gst/internal/instance"
 	"github.com/hydroan/gst/internal/types"
 	"github.com/hydroan/gst/logger"
 	"github.com/hydroan/gst/util"
@@ -83,7 +83,7 @@ type event struct {
 	raw any
 	TTL time.Duration `json:"ttl"`
 
-	Hostname string `json:"hostname"` // which server produced the event
+	Instance string `json:"instance"` // which process produced the event
 }
 
 // eventLogView is the lazy, bounded log form of an event. It is a separate
@@ -117,7 +117,7 @@ func (v eventLogView) MarshalJSON() ([]byte, error) {
 	return json.Marshal(map[string]any{
 		"ts":       time.Unix(0, v.e.TS).UTC().Format(consts.LayoutTimeEncoder),
 		"cache_id": v.e.CacheID,
-		"hostname": v.e.Hostname,
+		"instance": v.e.Instance,
 		"typ":      v.e.Typ,
 		"op":       v.e.Op.String(),
 		"key":      v.e.Key,
@@ -202,8 +202,7 @@ type replicatedCache[T any] struct {
 	// When an instance receives a peer event it compares event.CacheID with its
 	// own ID and ignores the event when they are equal, because it published that event itself.
 	// NOTE: the cacheID of two replicated cache instances is never the same.
-	cacheID  string
-	hostname string
+	cacheID string
 
 	// stats
 	hits           atomic.Int64
@@ -256,22 +255,17 @@ type replicatedCache[T any] struct {
 // separate stores.
 func newReplicatedCache[T any](store types.Cache[entry[T]]) (*replicatedCache[T], error) {
 	cacheID := uuid.NewV7()
-	hostname, err := os.Hostname()
-	if err != nil {
-		// First-hand exit of a stack-less third-party/standard-library error;
-		// see the error-stack contract in the database package doc.
-		return nil, errors.WithStack(err)
-	}
 
 	dc := &replicatedCache[T]{
-		store:    store,
-		cacheID:  cacheID.String(),
-		typ:      typeName[T](),
-		hostname: hostname,
+		store:   store,
+		cacheID: cacheID.String(),
+		typ:     typeName[T](),
 	}
-	// comp marks the replicated cache name so its log lines are searchable.
-	comp := fmt.Sprintf("[%s:dcache:%s]", hostname, reflect.TypeFor[T]().String())
-	dc.logger = logger.Dcache.With("hostname", hostname, compKey, comp)
+	// comp marks the replicated cache name so its log lines are searchable;
+	// the process behind them is on every entry already, as the instance
+	// field every logger stamps.
+	comp := fmt.Sprintf("[%s:dcache:%s]", instance.ID(), reflect.TypeFor[T]().String())
+	dc.logger = logger.Dcache.With(compKey, comp)
 
 	// Undo the partially built kafka clients when a later step fails: the
 	// registry does not cache failed constructions, so a retried call would
@@ -289,6 +283,7 @@ func newReplicatedCache[T any](store types.Cache[entry[T]]) (*replicatedCache[T]
 		}
 	}()
 
+	var err error
 	if dc.appliedTS, err = lru.New[string, int64](watermarkEntries()); err != nil {
 		return nil, errors.WithStack(err)
 	}
@@ -596,7 +591,7 @@ func (dc *replicatedCache[T]) sendEvent(evt *event) error {
 	}
 	evt.CacheID = dc.cacheID
 	evt.Typ = dc.typ
-	evt.Hostname = dc.hostname
+	evt.Instance = instance.ID()
 
 	// Marshal the caller's value synchronously: doing it in the pool goroutine
 	// would keep reading the value concurrently after Set has returned.
