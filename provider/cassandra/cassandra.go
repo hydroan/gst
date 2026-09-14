@@ -1,14 +1,16 @@
 package cassandra
 
 import (
+	"context"
 	"crypto/tls"
 	"sync"
 
 	"github.com/cockroachdb/errors"
 	"github.com/gocql/gocql"
 	"github.com/hydroan/gst/config"
+	"github.com/hydroan/gst/internal/lifecycle"
+	"github.com/hydroan/gst/internal/types"
 	"github.com/hydroan/gst/logger"
-	"github.com/hydroan/gst/provider"
 	"github.com/hydroan/gst/util"
 	"go.uber.org/zap"
 )
@@ -21,19 +23,20 @@ var (
 // init registers this provider so importing the package compiles the
 // capability in and hands its lifecycle to bootstrap.
 func init() {
-	provider.Register(provider.Provider{
-		Name:    "cassandra",
-		Enabled: func() bool { return config.App.Cassandra.Enabled },
-		Logger:  &logger.Cassandra,
-		Init:    initProvider,
-		Close:   closeProvider,
+	lifecycle.Register(lifecycle.Component{
+		Name:      "cassandra",
+		Stage:     lifecycle.StageProvider,
+		Enabled:   func() bool { return config.App.Cassandra.Enabled },
+		SetLogger: func(l types.Logger) { logger.Cassandra = l },
+		Start:     start,
+		Stop:      stop,
 	})
 }
 
-// initProvider initializes the global Cassandra session.
+// start initializes the global Cassandra session.
 // It reads Cassandra configuration from config.App.Cassandra.
 // The function is thread-safe and ensures the session is initialized only once.
-func initProvider() (err error) {
+func start(_ context.Context) (err error) {
 	cfg := config.App.Cassandra
 	mu.Lock()
 	defer mu.Unlock()
@@ -181,8 +184,8 @@ func Client() (*gocql.Session, error) {
 	return session, nil
 }
 
-// closeProvider closes the global Cassandra session.
-func closeProvider() error {
+// stop closes the global Cassandra session.
+func stop(_ context.Context) error {
 	mu.Lock()
 	defer mu.Unlock()
 	if session != nil {

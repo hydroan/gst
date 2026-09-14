@@ -7,8 +7,9 @@ import (
 
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/config"
+	"github.com/hydroan/gst/internal/lifecycle"
+	"github.com/hydroan/gst/internal/types"
 	"github.com/hydroan/gst/logger"
-	"github.com/hydroan/gst/provider"
 	"github.com/hydroan/gst/util"
 	"github.com/twmb/franz-go/pkg/kadm"
 	"github.com/twmb/franz-go/pkg/kgo"
@@ -28,19 +29,20 @@ var (
 // init registers this provider so importing the package compiles the
 // capability in and hands its lifecycle to bootstrap.
 func init() {
-	provider.Register(provider.Provider{
-		Name:    "kafka",
-		Enabled: func() bool { return config.App.Kafka.Enabled },
-		Logger:  &logger.Kafka,
-		Init:    initProvider,
-		Close:   closeProvider,
+	lifecycle.Register(lifecycle.Component{
+		Name:      "kafka",
+		Stage:     lifecycle.StageProvider,
+		Enabled:   func() bool { return config.App.Kafka.Enabled },
+		SetLogger: func(l types.Logger) { logger.Kafka = l },
+		Start:     start,
+		Stop:      stop,
 	})
 }
 
-// initProvider initializes the global Kafka client backed by franz-go.
+// start initializes the global Kafka client backed by franz-go.
 // It reads Kafka configuration from config.App.Kafka.
 // The function is thread-safe and ensures the client is initialized only once.
-func initProvider() (err error) {
+func start(_ context.Context) (err error) {
 	cfg := config.App.Kafka
 	mu.Lock()
 	defer mu.Unlock()
@@ -143,9 +145,9 @@ func Admin() (*kadm.Client, error) {
 	return kadm.NewClient(c), nil
 }
 
-// closeProvider closes the default Kafka client,
+// stop closes the default Kafka client,
 // allowing a subsequent Init to establish a fresh client.
-func closeProvider() error {
+func stop(_ context.Context) error {
 	mu.Lock()
 	defer mu.Unlock()
 	if client != nil {

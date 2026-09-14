@@ -10,8 +10,9 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/gocql/gocql"
 	"github.com/hydroan/gst/config"
+	"github.com/hydroan/gst/internal/lifecycle"
+	"github.com/hydroan/gst/internal/types"
 	"github.com/hydroan/gst/logger"
-	"github.com/hydroan/gst/provider"
 	"github.com/hydroan/gst/util"
 	"github.com/scylladb/gocqlx/v3"
 	"go.uber.org/zap"
@@ -25,19 +26,20 @@ var (
 // init registers this provider so importing the package compiles the
 // capability in and hands its lifecycle to bootstrap.
 func init() {
-	provider.Register(provider.Provider{
-		Name:    "scylla",
-		Enabled: func() bool { return config.App.Scylla.Enabled },
-		Logger:  &logger.Scylla,
-		Init:    initProvider,
-		Close:   closeProvider,
+	lifecycle.Register(lifecycle.Component{
+		Name:      "scylla",
+		Stage:     lifecycle.StageProvider,
+		Enabled:   func() bool { return config.App.Scylla.Enabled },
+		SetLogger: func(l types.Logger) { logger.Scylla = l },
+		Start:     start,
+		Stop:      stop,
 	})
 }
 
-// initProvider initializes the global ScyllaDB session.
+// start initializes the global ScyllaDB session.
 // It reads ScyllaDB configuration from config.App.Scylla.
 // The function is thread-safe and ensures the session is initialized only once.
-func initProvider() (err error) {
+func start(_ context.Context) (err error) {
 	cfg := config.App.Scylla
 	mu.Lock()
 	defer mu.Unlock()
@@ -231,8 +233,8 @@ func Client() (gocqlx.Session, error) {
 	return session, nil
 }
 
-// closeProvider closes the ScyllaDB session
-func closeProvider() error {
+// stop closes the ScyllaDB session
+func stop(_ context.Context) error {
 	mu.Lock()
 	defer mu.Unlock()
 

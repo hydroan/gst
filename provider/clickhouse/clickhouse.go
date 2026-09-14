@@ -17,7 +17,7 @@ import (
 	"github.com/ClickHouse/clickhouse-go/v2/lib/driver"
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/config"
-	"github.com/hydroan/gst/provider"
+	"github.com/hydroan/gst/internal/lifecycle"
 	"go.uber.org/zap"
 	"go.uber.org/zap/exp/zapslog"
 )
@@ -33,17 +33,18 @@ var (
 // init registers this provider so importing the package compiles the
 // capability in and hands its lifecycle to bootstrap.
 func init() {
-	provider.Register(provider.Provider{
+	lifecycle.Register(lifecycle.Component{
 		Name:    "clickhouse",
+		Stage:   lifecycle.StageProvider,
 		Enabled: func() bool { return config.App.Clickhouse.Enabled },
-		Init:    initProvider,
-		Close:   closeProvider,
+		Start:   start,
+		Stop:    stop,
 	})
 }
 
-// initProvider initializes the global native ClickHouse connection.
+// start initializes the global native ClickHouse connection.
 // It reads the configuration from config.App.Clickhouse.
-func initProvider() (err error) {
+func start(_ context.Context) (err error) {
 	cfg := config.App.Clickhouse
 	mu.Lock()
 	defer mu.Unlock()
@@ -115,8 +116,8 @@ func Client() (driver.Conn, error) {
 	return conn, nil
 }
 
-// closeProvider closes the global native ClickHouse connection.
-func closeProvider() error {
+// stop closes the global native ClickHouse connection.
+func stop(_ context.Context) error {
 	mu.Lock()
 	defer mu.Unlock()
 	if conn == nil {

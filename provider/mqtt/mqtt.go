@@ -1,6 +1,7 @@
 package mqtt
 
 import (
+	"context"
 	"crypto/tls"
 	"encoding/json"
 	"fmt"
@@ -11,8 +12,9 @@ import (
 	"github.com/cockroachdb/errors"
 	mqtt "github.com/eclipse/paho.mqtt.golang"
 	"github.com/hydroan/gst/config"
+	"github.com/hydroan/gst/internal/lifecycle"
+	"github.com/hydroan/gst/internal/types"
 	"github.com/hydroan/gst/logger"
-	"github.com/hydroan/gst/provider"
 	"go.uber.org/zap"
 )
 
@@ -26,16 +28,17 @@ var (
 // init registers this provider so importing the package compiles the
 // capability in and hands its lifecycle to bootstrap.
 func init() {
-	provider.Register(provider.Provider{
-		Name:    "mqtt",
-		Enabled: func() bool { return config.App.Mqtt.Enabled },
-		Logger:  &logger.Mqtt,
-		Init:    initProvider,
-		Close:   closeProvider,
+	lifecycle.Register(lifecycle.Component{
+		Name:      "mqtt",
+		Stage:     lifecycle.StageProvider,
+		Enabled:   func() bool { return config.App.Mqtt.Enabled },
+		SetLogger: func(l types.Logger) { logger.Mqtt = l },
+		Start:     start,
+		Stop:      stop,
 	})
 }
 
-func initProvider() (err error) {
+func start(_ context.Context) (err error) {
 	cfg := config.App.Mqtt
 	mu.Lock()
 	defer mu.Unlock()
@@ -196,8 +199,8 @@ func Health() error {
 	return nil
 }
 
-// closeProvider closes the MQTT client connection
-func closeProvider() error {
+// stop closes the MQTT client connection
+func stop(_ context.Context) error {
 	mu.Lock()
 	defer mu.Unlock()
 

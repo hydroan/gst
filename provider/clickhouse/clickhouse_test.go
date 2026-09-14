@@ -6,8 +6,8 @@ import (
 	"time"
 
 	"github.com/hydroan/gst/config"
+	"github.com/hydroan/gst/internal/lifecycle"
 	"github.com/hydroan/gst/internal/testutil/testcontainer"
-	"github.com/hydroan/gst/provider"
 )
 
 func TestClickhouse(t *testing.T) {
@@ -16,11 +16,11 @@ func TestClickhouse(t *testing.T) {
 		config.App.Clickhouse = config.Clickhouse{Enabled: false}
 		t.Cleanup(func() { config.App.Clickhouse = old })
 
-		// The disabled contract moved out of initProvider: bootstrap gates
+		// The disabled contract moved out of start: bootstrap gates
 		// Init by the registered Enabled function, so it must report false
 		// here and the connection stays uninitialized.
 		var enabled func() bool
-		for _, p := range provider.Registered() {
+		for _, p := range lifecycle.Components(lifecycle.StageProvider) {
 			if p.Name == "clickhouse" {
 				enabled = p.Enabled
 			}
@@ -47,11 +47,11 @@ func TestClickhouse(t *testing.T) {
 		cfg.Compress = true
 		config.App.Clickhouse = cfg
 		t.Cleanup(func() {
-			_ = closeProvider()
+			_ = stop(context.Background())
 			config.App.Clickhouse = old
 		})
 
-		if err = initProvider(); err != nil {
+		if err = start(context.Background()); err != nil {
 			t.Fatalf("Init: %v", err)
 		}
 
@@ -87,7 +87,7 @@ func TestClickhouse(t *testing.T) {
 			t.Fatalf("expected 3 rows, got %d", count)
 		}
 
-		if err = closeProvider(); err != nil {
+		if err = stop(context.Background()); err != nil {
 			t.Fatalf("Close: %v", err)
 		}
 		if _, err = Client(); err == nil {

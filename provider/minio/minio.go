@@ -14,8 +14,9 @@ import (
 
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/config"
+	"github.com/hydroan/gst/internal/lifecycle"
+	"github.com/hydroan/gst/internal/types"
 	"github.com/hydroan/gst/logger"
-	"github.com/hydroan/gst/provider"
 	"github.com/hydroan/gst/util"
 	"github.com/minio/minio-go/v7"
 	"github.com/minio/minio-go/v7/pkg/credentials"
@@ -88,18 +89,19 @@ type CopyOptions struct {
 // init registers this provider so importing the package compiles the
 // capability in and hands its lifecycle to bootstrap.
 func init() {
-	provider.Register(provider.Provider{
-		Name:    "minio",
-		Enabled: func() bool { return config.App.Minio.Enabled },
-		Logger:  &logger.Minio,
-		Init:    initProvider,
+	lifecycle.Register(lifecycle.Component{
+		Name:      "minio",
+		Stage:     lifecycle.StageProvider,
+		Enabled:   func() bool { return config.App.Minio.Enabled },
+		SetLogger: func(l types.Logger) { logger.Minio = l },
+		Start:     start,
 	})
 }
 
-// initProvider initializes the global MinIO client.
+// start initializes the global MinIO client.
 // It reads MinIO configuration from config.App.Minio.
 // The function is thread-safe and ensures the client is initialized only once.
-func initProvider() (err error) {
+func start(_ context.Context) (err error) {
 	cfg := config.App.Minio
 	mu.Lock()
 	defer mu.Unlock()

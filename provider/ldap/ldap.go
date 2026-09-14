@@ -10,8 +10,9 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/go-ldap/ldap/v3"
 	"github.com/hydroan/gst/config"
+	"github.com/hydroan/gst/internal/lifecycle"
+	"github.com/hydroan/gst/internal/types"
 	"github.com/hydroan/gst/logger"
-	"github.com/hydroan/gst/provider"
 	"github.com/hydroan/gst/util"
 	"go.uber.org/zap"
 )
@@ -25,19 +26,20 @@ var (
 // init registers this provider so importing the package compiles the
 // capability in and hands its lifecycle to bootstrap.
 func init() {
-	provider.Register(provider.Provider{
-		Name:    "ldap",
-		Enabled: func() bool { return config.App.Ldap.Enabled },
-		Logger:  &logger.Ldap,
-		Init:    initProvider,
-		Close:   closeProvider,
+	lifecycle.Register(lifecycle.Component{
+		Name:      "ldap",
+		Stage:     lifecycle.StageProvider,
+		Enabled:   func() bool { return config.App.Ldap.Enabled },
+		SetLogger: func(l types.Logger) { logger.Ldap = l },
+		Start:     start,
+		Stop:      stop,
 	})
 }
 
-// initProvider initializes the global LDAP connection.
+// start initializes the global LDAP connection.
 // It reads LDAP configuration from config.App.Ldap.
 // The function is thread-safe and ensures the connection is initialized only once.
-func initProvider() (err error) {
+func start(_ context.Context) (err error) {
 	cfg := config.App.Ldap
 	mu.Lock()
 	defer mu.Unlock()
@@ -132,8 +134,8 @@ func Client() (*ldap.Conn, error) {
 	return gconn, nil
 }
 
-// closeProvider closes the global LDAP connection.
-func closeProvider() error {
+// stop closes the global LDAP connection.
+func stop(_ context.Context) error {
 	mu.Lock()
 	defer mu.Unlock()
 

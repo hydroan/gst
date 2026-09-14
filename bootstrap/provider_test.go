@@ -1,26 +1,88 @@
 package bootstrap
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"runtime"
 	"testing"
 
-	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/config"
-	"github.com/hydroan/gst/internal/types"
-	"github.com/hydroan/gst/provider"
+	"github.com/hydroan/gst/internal/lifecycle"
+	pkgzap "github.com/hydroan/gst/logger/zap"
 	"github.com/stretchr/testify/require"
+
+	// Every provider package registers itself from init. Importing them all
+	// here lets the tests below prove that each package under provider/
+	// self-registers under its package name and gets its own log file; a new
+	// provider package fails them until it self-registers and joins this
+	// import list.
+	_ "github.com/hydroan/gst/provider/cassandra"
+	_ "github.com/hydroan/gst/provider/clickhouse"
+	_ "github.com/hydroan/gst/provider/elastic"
+	_ "github.com/hydroan/gst/provider/etcd"
+	_ "github.com/hydroan/gst/provider/influxdb"
+	_ "github.com/hydroan/gst/provider/kafka"
+	_ "github.com/hydroan/gst/provider/ldap"
+	_ "github.com/hydroan/gst/provider/minio"
+	_ "github.com/hydroan/gst/provider/mongo"
+	_ "github.com/hydroan/gst/provider/mqtt"
+	_ "github.com/hydroan/gst/provider/nats"
+	_ "github.com/hydroan/gst/provider/rethinkdb"
+	_ "github.com/hydroan/gst/provider/rocketmq"
+	_ "github.com/hydroan/gst/provider/scylla"
 )
 
-// TestOptionalProvidersTableMatchesProviderDirectories keeps the warn table
-// aligned with the provider/ directory: every optional provider package must
-// have exactly one enable switch here, so adding a provider without wiring
-// its configuration check fails in CI instead of drifting silently.
-func TestOptionalProvidersTableMatchesProviderDirectories(t *testing.T) {
+// TestEveryProviderPackageSelfRegisters walks the provider/ directory and
+// requires a registration for each package: a provider that forgot its init
+// registration would never start, and its first use would fail in production
+// instead of here.
+func TestEveryProviderPackageSelfRegisters(t *testing.T) {
+	registered := make(map[string]bool)
+	for _, c := range lifecycle.Components(lifecycle.StageProvider) {
+		registered[c.Name] = true
+	}
+
+	for name := range providerDirectories(t) {
+		require.True(t, registered[name], "provider package %q must self-register under its package name", name)
+	}
+}
+
+// TestEveryProviderGetsItsOwnLogFile proves the promise a provider package
+// gets for declaring SetLogger: once the components start, a logger writing
+// <name>.log exists for every compiled-in provider, enabled or not. Every
+// provider declares it, except clickhouse, which has no logger of its own.
+// The fresh configuration leaves every provider disabled, so starting the
+// components binds the loggers without connecting to anything.
+func TestEveryProviderGetsItsOwnLogFile(t *testing.T) {
+	original := config.App
+	config.App = new(config.Config)
+	config.App.Logger.Dir = t.TempDir()
+	config.App.Logger.Level = "info"
+	config.App.Logger.Format = "json"
+	t.Cleanup(func() {
+		pkgzap.Clean()
+		config.App = original
+	})
+
+	require.NoError(t, lifecycle.Start(context.Background()))
+
+	for _, c := range lifecycle.Components(lifecycle.StageProvider) {
+		if c.Name == "clickhouse" {
+			require.Nil(t, c.SetLogger, "clickhouse logs through no logger of its own")
+			continue
+		}
+		require.NotNil(t, c.SetLogger, "provider %q must declare SetLogger to get its own log file", c.Name)
+		require.FileExists(t, filepath.Join(config.App.Logger.Dir, c.Name+".log"), "provider %q must get its own log file", c.Name)
+	}
+}
+
+// providerDirectories returns the names of the packages under provider/.
+func providerDirectories(t *testing.T) map[string]bool {
+	t.Helper()
+
 	_, file, _, ok := runtime.Caller(0)
 	require.True(t, ok)
-
 	entries, err := os.ReadDir(filepath.Join(filepath.Dir(file), "..", "provider"))
 	require.NoError(t, err)
 
@@ -30,104 +92,5 @@ func TestOptionalProvidersTableMatchesProviderDirectories(t *testing.T) {
 			dirs[entry.Name()] = true
 		}
 	}
-	tabled := make(map[string]bool, len(optionalProviders))
-	for name := range optionalProviders {
-		tabled[name] = true
-	}
-
-	require.Equal(t, dirs, tabled)
-}
-
-func TestMissingProviders(t *testing.T) {
-	original := config.App
-	config.App = new(config.Config)
-	t.Cleanup(func() { config.App = original })
-
-	config.App.Elasticsearch.Enabled = true
-	config.App.Kafka.Enabled = true
-
-	require.Equal(t, []string{"elastic"}, missingProviders(map[string]bool{"kafka": true}))
-	require.Empty(t, missingProviders(map[string]bool{"kafka": true, "elastic": true}))
-}
-
-// TestDrainProvidersWiresRegisteredProviders proves the drain hands Init to
-// the initializer, adapts Close into a cleanup handler, assigns a dedicated
-// logger through a declared handle before Init runs, and seals the registry.
-// A provider without an Enabled function counts as enabled (the sample below
-// declares none), while one whose Enabled reports false is left out of the
-// lifecycle — no Init, no Close — though its logger handle is still bound.
-// It mutates package-level bootstrap state, which is fine because bootstrap
-// never runs inside this test binary.
-func TestDrainProvidersWiresRegisteredProviders(t *testing.T) {
-	original := config.App
-	config.App = new(config.Config)
-	config.App.Logger.Dir = t.TempDir()
-	t.Cleanup(func() { config.App = original })
-
-	initCalled := false
-	closeCalled := false
-	var handleLogger types.Logger
-	provider.Register(provider.Provider{
-		Name:   "test_drain_sample",
-		Logger: &handleLogger,
-		Init: func() error {
-			// The dedicated logger must already be assigned when Init runs.
-			initCalled = handleLogger != nil
-			return nil
-		},
-		Close: func() error {
-			closeCalled = true
-			return errors.New("close sentinel")
-		},
-	})
-
-	disabledInitCalled := false
-	disabledCloseCalled := false
-	var disabledLogger types.Logger
-	provider.Register(provider.Provider{
-		Name:    "test_drain_disabled",
-		Enabled: func() bool { return false },
-		Logger:  &disabledLogger,
-		Init: func() error {
-			disabledInitCalled = true
-			return nil
-		},
-		Close: func() error {
-			disabledCloseCalled = true
-			return nil
-		},
-	})
-
-	fnsBefore := len(ins.fns)
-	handlersBefore := len(handlers)
-
-	drainProviders()
-
-	// Exactly one Init and one Close joined the lifecycle: the disabled
-	// provider was skipped, so the single new entries belong to the enabled
-	// sample.
-	require.Len(t, ins.fns, fnsBefore+1)
-	require.NoError(t, ins.fns[fnsBefore]())
-	require.True(t, initCalled)
-	require.False(t, disabledInitCalled)
-
-	require.Len(t, handlers, handlersBefore+1)
-	handlers[handlersBefore]()
-	require.True(t, closeCalled)
-	require.False(t, disabledCloseCalled)
-
-	// The disabled provider keeps its dedicated logger binding: the handle
-	// must not stay on the fallback just because the provider is off.
-	require.NotNil(t, disabledLogger)
-
-	// The dedicated logger's file name follows the registry name, and sink
-	// construction precreates the file, so its existence proves the handle
-	// points at the right sink.
-	require.NotNil(t, handleLogger)
-	require.FileExists(t, filepath.Join(config.App.Dir, "test_drain_sample.log"))
-
-	// The drain seals the registry, so late registration must fail fast.
-	require.Panics(t, func() {
-		provider.Register(provider.Provider{Name: "test_drain_late", Init: func() error { return nil }})
-	})
+	return dirs
 }

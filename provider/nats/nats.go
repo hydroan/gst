@@ -1,14 +1,16 @@
 package nats
 
 import (
+	"context"
 	"crypto/tls"
 	"strings"
 	"sync"
 
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/config"
+	"github.com/hydroan/gst/internal/lifecycle"
+	"github.com/hydroan/gst/internal/types"
 	"github.com/hydroan/gst/logger"
-	"github.com/hydroan/gst/provider"
 	"github.com/hydroan/gst/util"
 	"github.com/nats-io/nats.go"
 	"go.uber.org/zap"
@@ -22,19 +24,20 @@ var (
 // init registers this provider so importing the package compiles the
 // capability in and hands its lifecycle to bootstrap.
 func init() {
-	provider.Register(provider.Provider{
-		Name:    "nats",
-		Enabled: func() bool { return config.App.Nats.Enabled },
-		Logger:  &logger.Nats,
-		Init:    initProvider,
-		Close:   closeProvider,
+	lifecycle.Register(lifecycle.Component{
+		Name:      "nats",
+		Stage:     lifecycle.StageProvider,
+		Enabled:   func() bool { return config.App.Nats.Enabled },
+		SetLogger: func(l types.Logger) { logger.Nats = l },
+		Start:     start,
+		Stop:      stop,
 	})
 }
 
-// initProvider initializes the global NATS client.
+// start initializes the global NATS client.
 // It reads NATS configuration from config.App.Nats.
 // The function is thread-safe and ensures the client is initialized only once.
-func initProvider() (err error) {
+func start(_ context.Context) (err error) {
 	cfg := config.App.Nats
 	mu.Lock()
 	defer mu.Unlock()
@@ -154,7 +157,7 @@ func Client() (*nats.Conn, error) {
 	return conn, nil
 }
 
-func closeProvider() error {
+func stop(_ context.Context) error {
 	mu.Lock()
 	defer mu.Unlock()
 	if conn != nil {

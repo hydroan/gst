@@ -1,6 +1,7 @@
 package rocketmq
 
 import (
+	"context"
 	"sync"
 	"time"
 
@@ -12,8 +13,9 @@ import (
 	"github.com/apache/rocketmq-client-go/v2/rlog"
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/config"
+	"github.com/hydroan/gst/internal/lifecycle"
+	"github.com/hydroan/gst/internal/types"
 	"github.com/hydroan/gst/logger"
-	"github.com/hydroan/gst/provider"
 	"go.uber.org/zap"
 )
 
@@ -27,19 +29,20 @@ var (
 // init registers this provider so importing the package compiles the
 // capability in and hands its lifecycle to bootstrap.
 func init() {
-	provider.Register(provider.Provider{
-		Name:    "rocketmq",
-		Enabled: func() bool { return config.App.RocketMQ.Enabled },
-		Logger:  &logger.RocketMQ,
-		Init:    initProvider,
-		Close:   closeProvider,
+	lifecycle.Register(lifecycle.Component{
+		Name:      "rocketmq",
+		Stage:     lifecycle.StageProvider,
+		Enabled:   func() bool { return config.App.RocketMQ.Enabled },
+		SetLogger: func(l types.Logger) { logger.RocketMQ = l },
+		Start:     start,
+		Stop:      stop,
 	})
 }
 
-// initProvider initializes the global RocketMQ producer.
+// start initializes the global RocketMQ producer.
 // It reads RocketMQ configuration from config.App.RocketMQ.
 // The function is thread-safe and ensures the producer is initialized only once.
-func initProvider() (err error) {
+func start(_ context.Context) (err error) {
 	cfg := config.App.RocketMQ
 	mu.Lock()
 	defer mu.Unlock()
@@ -264,8 +267,8 @@ func Admin() (admin.Admin, error) {
 	return defaultAdmin, nil
 }
 
-// closeProvider closes the RocketMQ producer connection
-func closeProvider() error {
+// stop closes the RocketMQ producer connection
+func stop(_ context.Context) error {
 	mu.Lock()
 	defer mu.Unlock()
 

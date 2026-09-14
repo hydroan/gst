@@ -5,6 +5,8 @@ import (
 	"os"
 	"slices"
 	"sync"
+
+	"go.uber.org/zap"
 )
 
 var (
@@ -43,4 +45,15 @@ func runSafe(handler func()) {
 	}()
 
 	handler()
+}
+
+// closeComponent adapts a component Close to a cleanup handler, logging the
+// returned error centrally so shutdown always continues and individual
+// components do not implement their own logging.
+func closeComponent(name string, closeFn func() error) func() {
+	return func() {
+		if err := closeFn(); err != nil {
+			zap.S().Errorw("failed to close component", "component", name, "err", err)
+		}
+	}
 }

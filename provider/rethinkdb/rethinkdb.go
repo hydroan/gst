@@ -1,13 +1,15 @@
 package rethinkdb
 
 import (
+	"context"
 	"crypto/tls"
 	"sync"
 
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/config"
+	"github.com/hydroan/gst/internal/lifecycle"
+	"github.com/hydroan/gst/internal/types"
 	"github.com/hydroan/gst/logger"
-	"github.com/hydroan/gst/provider"
 	"github.com/hydroan/gst/util"
 	"go.uber.org/zap"
 	r "gopkg.in/rethinkdb/rethinkdb-go.v6"
@@ -21,19 +23,20 @@ var (
 // init registers this provider so importing the package compiles the
 // capability in and hands its lifecycle to bootstrap.
 func init() {
-	provider.Register(provider.Provider{
-		Name:    "rethinkdb",
-		Enabled: func() bool { return config.App.RethinkDB.Enabled },
-		Logger:  &logger.RethinkDB,
-		Init:    initProvider,
-		Close:   closeProvider,
+	lifecycle.Register(lifecycle.Component{
+		Name:      "rethinkdb",
+		Stage:     lifecycle.StageProvider,
+		Enabled:   func() bool { return config.App.RethinkDB.Enabled },
+		SetLogger: func(l types.Logger) { logger.RethinkDB = l },
+		Start:     start,
+		Stop:      stop,
 	})
 }
 
-// initProvider initializes the global RethinkDB session.
+// start initializes the global RethinkDB session.
 // It reads RethinkDB configuration from config.App.RethinkDB.
 // The function is thread-safe and ensures the session is initialized only once.
-func initProvider() (err error) {
+func start(_ context.Context) (err error) {
 	cfg := config.App.RethinkDB
 	mu.Lock()
 	defer mu.Unlock()
@@ -120,8 +123,8 @@ func Client() (*r.Session, error) {
 	return session, nil
 }
 
-// closeProvider closes the RethinkDB session
-func closeProvider() error {
+// stop closes the RethinkDB session
+func stop(_ context.Context) error {
 	mu.Lock()
 	defer mu.Unlock()
 

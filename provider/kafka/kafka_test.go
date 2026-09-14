@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"github.com/hydroan/gst/config"
-	"github.com/hydroan/gst/provider"
+	"github.com/hydroan/gst/internal/lifecycle"
 	"github.com/twmb/franz-go/pkg/kfake"
 	"github.com/twmb/franz-go/pkg/kgo"
 )
@@ -85,11 +85,11 @@ func TestInitProvider(t *testing.T) {
 		config.App.Kafka = config.Kafka{Enabled: false}
 		t.Cleanup(func() { config.App.Kafka = old })
 
-		// The disabled contract moved out of initProvider: bootstrap gates
+		// The disabled contract moved out of start: bootstrap gates
 		// Init by the registered Enabled function, so it must report false
 		// here and the client stays uninitialized.
 		var enabled func() bool
-		for _, p := range provider.Registered() {
+		for _, p := range lifecycle.Components(lifecycle.StageProvider) {
 			if p.Name == "kafka" {
 				enabled = p.Enabled
 			}
@@ -110,11 +110,11 @@ func TestInitProvider(t *testing.T) {
 		old := config.App.Kafka
 		config.App.Kafka = config.Kafka{Enabled: true, Brokers: addrs, ClientID: "gst-test"}
 		t.Cleanup(func() {
-			_ = closeProvider()
+			_ = stop(context.Background())
 			config.App.Kafka = old
 		})
 
-		if err := initProvider(); err != nil {
+		if err := start(context.Background()); err != nil {
 			t.Fatalf("Init: %v", err)
 		}
 
@@ -140,7 +140,7 @@ func TestInitProvider(t *testing.T) {
 			t.Fatalf("expected topic %s to exist", sampleTopic)
 		}
 
-		if err = closeProvider(); err != nil {
+		if err = stop(context.Background()); err != nil {
 			t.Fatalf("Close: %v", err)
 		}
 		if _, err = Client(); err == nil {

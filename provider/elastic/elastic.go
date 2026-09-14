@@ -16,8 +16,9 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/elastic/go-elasticsearch/v8"
 	"github.com/hydroan/gst/config"
+	"github.com/hydroan/gst/internal/lifecycle"
+	"github.com/hydroan/gst/internal/types"
 	"github.com/hydroan/gst/logger"
-	"github.com/hydroan/gst/provider"
 	"github.com/hydroan/gst/util"
 	"go.uber.org/zap"
 )
@@ -42,17 +43,18 @@ var (
 // init registers this provider so importing the package compiles the
 // capability in and hands its lifecycle to bootstrap.
 func init() {
-	provider.Register(provider.Provider{
-		Name:    "elastic",
-		Enabled: func() bool { return config.App.Elasticsearch.Enabled },
-		Logger:  &logger.Elastic,
-		Init:    initProvider,
+	lifecycle.Register(lifecycle.Component{
+		Name:      "elastic",
+		Stage:     lifecycle.StageProvider,
+		Enabled:   func() bool { return config.App.Elasticsearch.Enabled },
+		SetLogger: func(l types.Logger) { logger.Elastic = l },
+		Start:     start,
 	})
 }
 
-// initProvider initializes the global elasticsearch client.
+// start initializes the global elasticsearch client.
 // It reads elasticsearch configuration from config.App.Elasticsearch.
-func initProvider() (err error) {
+func start(_ context.Context) (err error) {
 	cfg := config.App.Elasticsearch
 	if client, err = New(cfg); err != nil {
 		return errors.Wrap(err, "failed to create elasticsearch client")

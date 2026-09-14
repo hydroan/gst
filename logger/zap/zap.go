@@ -87,8 +87,8 @@ func Init() error {
 
 	// Optional provider loggers start on a fallback sharing the global core:
 	// non-nil and safe to use, but owning no file and no sink of their own.
-	// Bootstrap's provider drain replaces each with a dedicated logger for
-	// the providers actually compiled in (see provider.Provider.Logger), so
+	// The lifecycle registry replaces each with a dedicated logger for
+	// the providers actually compiled in (see lifecycle.Component.SetLogger), so
 	// a log file exists exactly for the capabilities the binary carries.
 	logger.Cassandra = newProviderFallback("cassandra")
 	logger.Elastic = newProviderFallback("elastic")

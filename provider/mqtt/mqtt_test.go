@@ -1,6 +1,7 @@
 package mqtt_test
 
 import (
+	"context"
 	"encoding/json"
 	"sync"
 	"testing"
@@ -8,7 +9,7 @@ import (
 
 	"github.com/hydroan/gst/bootstrap"
 	"github.com/hydroan/gst/config"
-	"github.com/hydroan/gst/provider"
+	"github.com/hydroan/gst/internal/lifecycle"
 	"github.com/hydroan/gst/provider/mqtt"
 	"github.com/hydroan/gst/util"
 	"github.com/stretchr/testify/assert"
@@ -23,9 +24,9 @@ func TestMqtt(t *testing.T) {
 	// Close through the registry — the same exit bootstrap's cleanup uses —
 	// instead of a test-only export of the unexported lifecycle.
 	defer func() {
-		for _, p := range provider.Registered() {
-			if p.Close != nil {
-				_ = p.Close()
+		for _, p := range lifecycle.Components(lifecycle.StageProvider) {
+			if p.Stop != nil {
+				_ = p.Stop(context.Background())
 			}
 		}
 	}()

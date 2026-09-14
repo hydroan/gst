@@ -36,10 +36,25 @@ var (
 	mu          sync.Mutex
 )
 
-// componentStopTimeout bounds how long the lifecycle components may take to
-// finish their in-flight work at shutdown, so a stuck job cannot hold the
-// shutdown hostage. It matches the bound router.Stop gives the HTTP drain.
+// componentStopTimeout bounds how long a lifecycle stage may take to finish
+// its in-flight work at shutdown, so a stuck job cannot hold the shutdown
+// hostage. It matches the bound router.Stop gives the HTTP drain.
 const componentStopTimeout = 30 * time.Second
+
+// processCtx is the context every lifecycle component starts on. It is
+// canceled the moment shutdown begins, so background work derived from it
+// winds down on its own.
+var processCtx, cancelProcess = context.WithCancel(context.Background())
+
+// stopLifecycle cancels the process context, so any component still taking
+// on work stops doing so, and stops the started components with a bounded
+// wait for their in-flight work.
+func stopLifecycle() {
+	cancelProcess()
+	ctx, cancel := context.WithTimeout(context.Background(), componentStopTimeout)
+	defer cancel()
+	lifecycle.Stop(ctx)
+}
 
 func Bootstrap() error {
 	mu.Lock()
@@ -71,11 +86,6 @@ func Bootstrap() error {
 		redis.Init,
 		gstotel.Init,
 	)
-
-	// Optional providers join the registry from their package init
-	// functions; drain them here so they initialize after the backbone
-	// providers and before the layers that may build on them.
-	drainProviders()
 
 	ins.Register(
 		// Authorization and Authentication
@@ -130,23 +140,17 @@ func Run() error {
 	module.Wait()
 	dbruntime.Wait()
 
-	// The components that run alongside the server — the scheduler among
-	// them — start here, after the last barrier: every table they may touch
-	// exists, and the listener opens right after. Their process context is
-	// canceled the moment shutdown begins, and they are stopped before the
-	// HTTP drain so nothing starts new work while the process is on its way
-	// out; stopComponents is safe to run more than once.
-	processCtx, cancelProcess := context.WithCancel(context.Background())
-	stopComponents := func() {
-		cancelProcess()
-		ctx, cancel := context.WithTimeout(context.Background(), componentStopTimeout)
-		defer cancel()
-		lifecycle.Stop(ctx)
-	}
+	// The lifecycle components — the providers, then the scheduler and its
+	// kind — start here, after the last barrier: every table they may touch
+	// exists, and the listener opens right after. Their cleanup is
+	// registered before the listener's, so LIFO stops them right after the
+	// HTTP drain: in-flight jobs finish while the connections they may be
+	// using are still open, and the providers close after their last user.
 	if err := lifecycle.Start(processCtx); err != nil {
-		stopComponents()
+		stopLifecycle()
 		return err
 	}
+	registerCleanup(stopLifecycle)
 
 	ins.RegisterGo(
 		router.Run,
@@ -159,11 +163,6 @@ func Run() error {
 	registerCleanup(statsviz.Stop)
 	registerCleanup(debugpprof.Stop)
 	registerCleanup(gops.Stop)
-	// Registered last so LIFO runs it first: on the failure path the
-	// components stop before the HTTP drain begins, and in-flight jobs finish
-	// while the connections they may be using are still open. On the signal
-	// path they are already stopped by then and this is a no-op.
-	registerCleanup(stopComponents)
 
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT)
@@ -172,12 +171,12 @@ func Run() error {
 	select {
 	case sig := <-sigCh:
 		zap.S().Infow("canceled by signal", "signal", sig)
-		// Stop answering readiness before anything is torn down, stop the
-		// components so no new work starts while the process is on its way
-		// out, then hold there for the configured window. Teardown starts
-		// when it elapses.
+		// Stop answering readiness before anything is torn down, cancel the
+		// process context so the components stop taking on new work, then
+		// hold there for the configured window. Teardown starts when it
+		// elapses.
 		controller.Probe.Drain()
-		stopComponents()
+		cancelProcess()
 		awaitDrain(sigCh)
 		return nil
 	case <-failed.Done():

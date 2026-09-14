@@ -10,8 +10,8 @@ import (
 	"time"
 
 	"github.com/hydroan/gst/config"
+	"github.com/hydroan/gst/internal/lifecycle"
 	"github.com/hydroan/gst/logger/zap"
-	"github.com/hydroan/gst/provider"
 	"github.com/hydroan/gst/provider/minio"
 	"github.com/stretchr/testify/require"
 )
@@ -29,8 +29,8 @@ func TestMain(m *testing.M) {
 	// Bring the compiled-in providers up through the registry — the same
 	// entry bootstrap's drain uses — instead of a test-only export of the
 	// unexported lifecycle.
-	for _, p := range provider.Registered() {
-		if err := p.Init(); err != nil {
+	for _, p := range lifecycle.Components(lifecycle.StageProvider) {
+		if err := p.Start(context.Background()); err != nil {
 			fmt.Println("minio not available, skipping tests:", err)
 			os.Exit(0)
 		}

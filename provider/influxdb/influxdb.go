@@ -9,8 +9,9 @@ import (
 
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/config"
+	"github.com/hydroan/gst/internal/lifecycle"
+	"github.com/hydroan/gst/internal/types"
 	"github.com/hydroan/gst/logger"
-	"github.com/hydroan/gst/provider"
 	"github.com/hydroan/gst/util"
 	influxdb2 "github.com/influxdata/influxdb-client-go/v2"
 	"github.com/influxdata/influxdb-client-go/v2/api"
@@ -28,19 +29,20 @@ var (
 // init registers this provider so importing the package compiles the
 // capability in and hands its lifecycle to bootstrap.
 func init() {
-	provider.Register(provider.Provider{
-		Name:    "influxdb",
-		Enabled: func() bool { return config.App.Influxdb.Enabled },
-		Logger:  &logger.Influxdb,
-		Init:    initProvider,
-		Close:   closeProvider,
+	lifecycle.Register(lifecycle.Component{
+		Name:      "influxdb",
+		Stage:     lifecycle.StageProvider,
+		Enabled:   func() bool { return config.App.Influxdb.Enabled },
+		SetLogger: func(l types.Logger) { logger.Influxdb = l },
+		Start:     start,
+		Stop:      stop,
 	})
 }
 
-// initProvider initializes the global InfluxDB client.
+// start initializes the global InfluxDB client.
 // It reads InfluxDB configuration from config.App.Influxdb.
 // The function is thread-safe and ensures the client is initialized only once.
-func initProvider() (err error) {
+func start(_ context.Context) (err error) {
 	cfg := config.App.Influxdb
 	mu.Lock()
 	defer mu.Unlock()
@@ -205,8 +207,8 @@ func QueryAPI() (api.QueryAPI, error) {
 	return queryAPI, nil
 }
 
-// closeProvider gracefully shuts down the InfluxDB client
-func closeProvider() error {
+// stop gracefully shuts down the InfluxDB client
+func stop(_ context.Context) error {
 	mu.Lock()
 	defer mu.Unlock()
 

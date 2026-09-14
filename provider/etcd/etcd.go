@@ -7,9 +7,10 @@ import (
 
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/config"
+	"github.com/hydroan/gst/internal/lifecycle"
+	"github.com/hydroan/gst/internal/types"
 	"github.com/hydroan/gst/logger"
 	pkgzap "github.com/hydroan/gst/logger/zap"
-	"github.com/hydroan/gst/provider"
 	"github.com/hydroan/gst/util"
 	clientv3 "go.etcd.io/etcd/client/v3"
 	"go.uber.org/zap"
@@ -23,19 +24,20 @@ var (
 // init registers this provider so importing the package compiles the
 // capability in and hands its lifecycle to bootstrap.
 func init() {
-	provider.Register(provider.Provider{
-		Name:    "etcd",
-		Enabled: func() bool { return config.App.Etcd.Enabled },
-		Logger:  &logger.Etcd,
-		Init:    initProvider,
-		Close:   closeProvider,
+	lifecycle.Register(lifecycle.Component{
+		Name:      "etcd",
+		Stage:     lifecycle.StageProvider,
+		Enabled:   func() bool { return config.App.Etcd.Enabled },
+		SetLogger: func(l types.Logger) { logger.Etcd = l },
+		Start:     start,
+		Stop:      stop,
 	})
 }
 
-// initProvider initializes the global etcd client.
+// start initializes the global etcd client.
 // It reads etcd configuration from config.App.Etcd.
 // The function is thread-safe and ensures the client is initialized only once.
-func initProvider() (err error) {
+func start(_ context.Context) (err error) {
 	cfg := config.App.Etcd
 	mu.Lock()
 	defer mu.Unlock()
@@ -136,8 +138,8 @@ func Client() (*clientv3.Client, error) {
 	return client, nil
 }
 
-// closeProvider closes the global etcd client.
-func closeProvider() error {
+// stop closes the global etcd client.
+func stop(_ context.Context) error {
 	mu.Lock()
 	defer mu.Unlock()
 	if client == nil {
