@@ -109,6 +109,20 @@ const (
 	SubDirRouter     = "router"
 )
 
+// ProjectImportDirs lists the project packages a generated main.go imports,
+// in import-path order. The migration program imports the same list: its
+// model set is whatever those packages' initialisers registered, so it has to
+// link exactly what the service links. Declared once so the two cannot drift.
+var ProjectImportDirs = []string{
+	SubDirConfigx,
+	SubDirCronjob,
+	SubDirMiddleware,
+	SubDirModel,
+	SubDirModule,
+	SubDirRouter,
+	SubDirService,
+}
+
 // Bootstrap method names
 const (
 	BootstrapBootstrap = "Bootstrap"

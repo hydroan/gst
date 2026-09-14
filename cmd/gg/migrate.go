@@ -8,6 +8,7 @@ import (
 
 	"github.com/hydroan/gst/consts"
 	"github.com/hydroan/gst/internal/clioutput"
+	"github.com/hydroan/gst/internal/codegen/constants"
 	"github.com/hydroan/gst/internal/codegen/gen"
 	"github.com/spf13/cobra"
 )
@@ -71,12 +72,24 @@ func buildMigrateSchemaProgram(moduleName string, source string) string {
 
 func buildMigrateProgramForMode(moduleName string, schemaOnly bool, schemaSource string) string {
 	content := migrateTemplate
+	content = strings.ReplaceAll(content, "{{PROJECT_IMPORTS}}", migrateProjectImports(moduleName))
 	content = strings.ReplaceAll(content, "{{MODULE}}", moduleName)
 	content = strings.ReplaceAll(content, "{{DRY_RUN}}", strconv.FormatBool(migrateDryRun))
 	content = strings.ReplaceAll(content, "{{YES}}", strconv.FormatBool(migrateYes))
 	content = strings.ReplaceAll(content, "{{SCHEMA_ONLY}}", strconv.FormatBool(schemaOnly))
 	content = strings.ReplaceAll(content, "{{SCHEMA_SOURCE}}", strconv.Quote(schemaSource))
 	return fmt.Sprintf("%s\n%s", consts.CodeGeneratedComment(), content)
+}
+
+// migrateProjectImports renders the project packages the migration program
+// links, one blank import per line: the same list a generated main.go
+// imports, so the program registers every model the running service does.
+func migrateProjectImports(moduleName string) string {
+	lines := make([]string, 0, len(constants.ProjectImportDirs))
+	for _, dir := range constants.ProjectImportDirs {
+		lines = append(lines, fmt.Sprintf("\t_ %q", moduleName+"/"+dir))
+	}
+	return strings.Join(lines, "\n")
 }
 
 func runMigrateProgram(content string) error {
@@ -110,10 +123,8 @@ import (
 	"reflect"
 	"sort"
 	"strings"
-	"time"
 
-	_ "{{MODULE}}/model"
-	_ "{{MODULE}}/module"
+{{PROJECT_IMPORTS}}
 
 	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/dbmigrate"
@@ -121,6 +132,10 @@ import (
 	"github.com/hydroan/gst/model"
 	"github.com/hydroan/gst/module"
 	"github.com/hydroan/gst/router"
+
+	// Linked for its initialisers alone: it pulls in every framework package
+	// the running service links, so this program sees the same registrations.
+	_ "github.com/hydroan/gst/bootstrap"
 )
 
 const migrateDryRun = {{DRY_RUN}}
@@ -136,10 +151,9 @@ func main() {
 	// Ensure config resources are cleaned up when the program exits.
 	defer config.Clean()
 
-	// Wait for all models to be registered.
-	// This sleep is necessary because some models might be registered asynchronously
-	// or during the initialization phase of modules.
-	time.Sleep(1 * time.Second)
+	// Module registration runs in the background and registers models of its
+	// own; the schema is not complete until it has finished.
+	module.Wait()
 
 	// Collect all registered models.
 	models := collectModels()
