@@ -1,3 +1,14 @@
+// Package bootstrap brings a gst process up and takes it down again.
+//
+// Bootstrap runs the setup every process needs before it can serve —
+// configuration, logging and metrics, the databases, the backbone clients,
+// the providers, the authorization, service, controller, middleware and
+// router layers, and the modules — and returns once the tables exist and
+// the providers are up. Run starts the listeners and the components that
+// run alongside them, blocks until a termination signal or a listener
+// failure, and tears everything down in reverse. The generated entry point
+// drives both, with the project's route registration in between; a test
+// harness drives them the same way.
 package bootstrap
 
 import (
@@ -31,31 +42,30 @@ import (
 	"go.uber.org/zap"
 )
 
+// Bootstrap runs once per process: a later call returns at once.
 var (
-	initialized bool
 	mu          sync.Mutex
+	initialized bool
 )
-
-// componentStopTimeout bounds how long a lifecycle stage may take to finish
-// its in-flight work at shutdown, so a stuck job cannot hold the shutdown
-// hostage. It matches the bound router.Stop gives the HTTP drain.
-const componentStopTimeout = 30 * time.Second
 
 // processCtx is the context every lifecycle component starts on. It is
 // canceled the moment shutdown begins, so background work derived from it
 // winds down on its own.
 var processCtx, cancelProcess = context.WithCancel(context.Background())
 
-// stopLifecycle cancels the process context, so any component still taking
-// on work stops doing so, and stops the started components with a bounded
-// wait for their in-flight work.
-func stopLifecycle() {
-	cancelProcess()
-	ctx, cancel := context.WithTimeout(context.Background(), componentStopTimeout)
-	defer cancel()
-	lifecycle.Stop(ctx)
-}
+// componentStopTimeout bounds how long the lifecycle components may take to
+// finish their in-flight work at shutdown, so a stuck job cannot hold the
+// shutdown hostage. It matches the bound router.Stop gives the HTTP drain.
+const componentStopTimeout = 30 * time.Second
 
+// Bootstrap brings up everything the process needs before it can serve, in
+// dependency order: configuration, logging and metrics; the databases; the
+// backbone clients and the providers; the authorization, service,
+// controller, middleware and router layers; the modules last. It returns
+// once every table registered so far exists and every enabled provider is
+// up, so whatever runs between Bootstrap and Run — the routes-ready hooks,
+// a test harness seeding data — can rely on them. A failure is fatal to the
+// process: the entry point exits on it.
 func Bootstrap() error {
 	mu.Lock()
 	defer mu.Unlock()
@@ -63,7 +73,7 @@ func Bootstrap() error {
 		return nil
 	}
 
-	ins.Register(
+	startup.Register(
 		config.Init,
 		pkgzap.Init,
 		prommetrics.Init,
@@ -74,20 +84,31 @@ func Bootstrap() error {
 		mysql.Init,
 		clickhouse.Init,
 	)
-	if err := ins.Init(); err != nil {
+	if err := startup.Init(); err != nil {
 		return err
 	}
-	// First database drain: create tables and seed records registered before
-	// provider/module initialization, typically by model package init functions.
+	// First database drain: create the tables registered before the clients
+	// and modules initialize, typically by model package init functions.
 	dbruntime.Wait()
 
-	ins.Register(
-		// backbone providers
+	startup.Register(
+		// backbone clients
 		redis.Init,
 		gstotel.Init,
 	)
+	if err := startup.Init(); err != nil {
+		return err
+	}
 
-	ins.Register(
+	// The providers — the clients of external systems that joined the
+	// lifecycle registry from their package init functions — come up right
+	// after the backbone clients, so the layers below and everything that
+	// runs between Bootstrap and Run can use them.
+	if err := lifecycle.Start(processCtx, lifecycle.StageProvider); err != nil {
+		return err
+	}
+
+	startup.Register(
 		// Authorization and Authentication
 		rbac.Init,
 
@@ -108,18 +129,19 @@ func Bootstrap() error {
 	registerCleanup(pkgzap.Clean)
 	registerCleanup(config.Clean)
 
-	if err := ins.Init(); err != nil {
+	if err := startup.Init(); err != nil {
 		return err
 	}
 
-	// module.Init has released module.Use goroutines. Wait for module registration
-	// first because modules can call model.Register and enqueue tables/records.
-	// This must run before the following database drain; otherwise dbruntime.Wait may
-	// check the database queues before modules have added their entries.
+	// module.Init has released module.Use goroutines. Wait for module
+	// registration first because modules can register models and enqueue
+	// tables. This must run before the following database drain; otherwise
+	// dbruntime.Wait may check the database queues before modules have added
+	// their entries.
 	module.Wait()
 
-	// Second database drain: create tables and seed records added by modules
-	// during Bootstrap after module.Wait has made those registrations visible.
+	// Second database drain: create the tables added by modules during
+	// Bootstrap, after module.Wait has made those registrations visible.
 	dbruntime.Wait()
 
 	// Mark success only after every phase finished: a failed Bootstrap must
@@ -130,29 +152,38 @@ func Bootstrap() error {
 	return nil
 }
 
+// Run starts the listeners and the components that run alongside them, then
+// blocks until the process is told to stop. A termination signal stops it
+// cleanly: readiness goes down first, the components stop taking on work,
+// the configured drain window passes, and everything is torn down in the
+// reverse order of its setup. A listener that fails ends it too, with the
+// failure as the error, so the process never runs on with nothing to
+// report.
 func Run() error {
 	defer clean()
 
-	// Final pre-server drain for modules registered after Bootstrap but before
-	// Run. Keep module.Wait before dbruntime.Wait: late modules may enqueue database
-	// tables/records, and dbruntime.Wait can only process entries that already exist.
-	// Routes-ready hooks run inside router.Run after this barrier.
+	// Final pre-server drain for modules registered after Bootstrap but
+	// before Run. Keep module.Wait before dbruntime.Wait: late modules may
+	// enqueue tables, and dbruntime.Wait can only process entries that
+	// already exist. Routes-ready hooks run inside router.Run after this
+	// barrier.
 	module.Wait()
 	dbruntime.Wait()
 
-	// The lifecycle components — the providers, then the scheduler and its
+	// The components that run alongside the server — the scheduler and its
 	// kind — start here, after the last barrier: every table they may touch
-	// exists, and the listener opens right after. Their cleanup is
-	// registered before the listener's, so LIFO stops them right after the
-	// HTTP drain: in-flight jobs finish while the connections they may be
-	// using are still open, and the providers close after their last user.
-	if err := lifecycle.Start(processCtx); err != nil {
+	// exists, and the listener opens right after. The cleanup registered
+	// here stops the components and the providers, and sits before the
+	// listener's on the stack, so LIFO runs it right after the HTTP drain:
+	// in-flight jobs finish while the connections they may be using are
+	// still open, and the providers close after their last user.
+	if err := lifecycle.Start(processCtx, lifecycle.StageComponent); err != nil {
 		stopLifecycle()
 		return err
 	}
 	registerCleanup(stopLifecycle)
 
-	ins.RegisterGo(
+	startup.RegisterGo(
 		router.Run,
 		statsviz.Run,
 		debugpprof.Run,
@@ -167,7 +198,7 @@ func Run() error {
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT)
 
-	failed := ins.Go()
+	failed := startup.Go()
 	select {
 	case sig := <-sigCh:
 		zap.S().Infow("canceled by signal", "signal", sig)
@@ -184,6 +215,16 @@ func Run() error {
 		// the others: the deferred clean shuts down those still serving.
 		return context.Cause(failed)
 	}
+}
+
+// stopLifecycle cancels the process context, so any component still taking
+// on work stops doing so, and stops the started components with a bounded
+// wait for their in-flight work.
+func stopLifecycle() {
+	cancelProcess()
+	ctx, cancel := context.WithTimeout(context.Background(), componentStopTimeout)
+	defer cancel()
+	lifecycle.Stop(ctx)
 }
 
 // awaitDrain holds the process in its not-ready state for the configured

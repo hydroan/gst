@@ -13,18 +13,20 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestStartRunsProvidersBeforeComponentsAndStopReversesIt proves the clients
-// come up before the work that uses them and go down after it, whatever the
-// names say: the component sorts first by name, the provider still starts
-// first.
-func TestStartRunsProvidersBeforeComponentsAndStopReversesIt(t *testing.T) {
+// TestStagesStartInTurnAndStopInReverse proves the two stages come up in the
+// order bootstrap drives them — the providers first, then the components —
+// and go down in the opposite one, the components first and the providers
+// after their last user, whatever the names say.
+func TestStagesStartInTurnAndStopInReverse(t *testing.T) {
 	resetRegistry(t)
 
 	var events []string
 	Register(recordingComponent("a-worker", StageComponent, &events, nil))
 	Register(recordingComponent("z-client", StageProvider, &events, nil))
 
-	require.NoError(t, Start(context.Background()))
+	require.NoError(t, Start(context.Background(), StageProvider))
+	require.Equal(t, []string{"start z-client"}, events)
+	require.NoError(t, Start(context.Background(), StageComponent))
 	require.Equal(t, []string{"start z-client", "start a-worker"}, events)
 
 	Stop(context.Background())
@@ -42,8 +44,23 @@ func TestStartOrdersAStageByName(t *testing.T) {
 		Register(recordingComponent(name, StageComponent, &events, nil))
 	}
 
-	require.NoError(t, Start(context.Background()))
+	require.NoError(t, Start(context.Background(), StageComponent))
 	require.Equal(t, []string{"start first", "start second", "start third"}, events)
+}
+
+// TestStartLeavesTheOtherStageAlone proves starting one stage neither starts
+// nor seals the other: the components registered for it start when their
+// own stage does.
+func TestStartLeavesTheOtherStageAlone(t *testing.T) {
+	resetRegistry(t)
+
+	var events []string
+	Register(recordingComponent("client", StageProvider, &events, nil))
+
+	require.NoError(t, Start(context.Background(), StageProvider))
+	Register(recordingComponent("worker", StageComponent, &events, nil))
+	require.NoError(t, Start(context.Background(), StageComponent))
+	require.Equal(t, []string{"start client", "start worker"}, events)
 }
 
 // TestDisabledComponentIsLeftOutOfTheLifecycle proves a component whose
@@ -58,14 +75,15 @@ func TestDisabledComponentIsLeftOutOfTheLifecycle(t *testing.T) {
 	Register(off)
 	Register(recordingComponent("on", StageComponent, &events, nil))
 
-	require.NoError(t, Start(context.Background()))
+	require.NoError(t, Start(context.Background(), StageComponent))
 	Stop(context.Background())
 	require.Equal(t, []string{"start on", "stop on"}, events)
 }
 
 // TestSetLoggerReceivesADedicatedLoggerBeforeStart proves every registered
-// component that declared SetLogger — enabled or not — is bound to a logger
-// writing <Name>.log before the first Start runs, and that the file exists.
+// component of a stage that declared SetLogger — enabled or not — is bound
+// to a logger writing <Name>.log before the stage's first Start runs, and
+// that the file exists.
 func TestSetLoggerReceivesADedicatedLoggerBeforeStart(t *testing.T) {
 	resetRegistry(t)
 	dir := withLoggerConfig(t)
@@ -89,7 +107,7 @@ func TestSetLoggerReceivesADedicatedLoggerBeforeStart(t *testing.T) {
 		Start:     func(context.Context) error { return errors.New("must not start") },
 	})
 
-	require.NoError(t, Start(context.Background()))
+	require.NoError(t, Start(context.Background(), StageProvider))
 	require.True(t, boundBeforeStart, "the dedicated logger must be bound before Start runs")
 	require.NotNil(t, offLogger, "a disabled component keeps its dedicated logger binding")
 	// Sink construction precreates the file, so its existence proves the
@@ -116,7 +134,8 @@ func TestProviderStartContextEndsWithStart(t *testing.T) {
 
 	processCtx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	require.NoError(t, Start(processCtx))
+	require.NoError(t, Start(processCtx, StageProvider))
+	require.NoError(t, Start(processCtx, StageComponent))
 	select {
 	case <-providerDone:
 	default:
@@ -133,7 +152,7 @@ func TestProviderStartContextEndsWithStart(t *testing.T) {
 }
 
 // TestStartStopsAtTheFirstFailure proves a component that fails to start
-// halts the sequence: the ones after it never start, the ones before it keep
+// halts its stage: the ones after it never start, the ones before it keep
 // running and are the only ones Stop stops.
 func TestStartStopsAtTheFirstFailure(t *testing.T) {
 	resetRegistry(t)
@@ -143,7 +162,7 @@ func TestStartStopsAtTheFirstFailure(t *testing.T) {
 	Register(recordingComponent("b-failing", StageComponent, &events, errors.New("sample failure")))
 	Register(recordingComponent("c", StageComponent, &events, nil))
 
-	err := Start(context.Background())
+	err := Start(context.Background(), StageComponent)
 	require.ErrorContains(t, err, `failed to start component "b-failing"`)
 	require.ErrorContains(t, err, "sample failure")
 	require.Equal(t, []string{"start a", "start b-failing"}, events)
@@ -166,7 +185,7 @@ func TestStopFailureDoesNotStopTheOthers(t *testing.T) {
 	}
 	Register(failing)
 
-	require.NoError(t, Start(context.Background()))
+	require.NoError(t, Start(context.Background(), StageComponent))
 	Stop(context.Background())
 	require.Equal(t, []string{"start a", "start b", "stop b", "stop a"}, events)
 }
@@ -181,22 +200,22 @@ func TestComponentWithoutStopIsSkippedAtShutdown(t *testing.T) {
 	stopless.Stop = nil
 	Register(stopless)
 
-	require.NoError(t, Start(context.Background()))
+	require.NoError(t, Start(context.Background(), StageComponent))
 	Stop(context.Background())
 	require.Equal(t, []string{"start stopless"}, events)
 }
 
-// TestStartRunsOnceAndStopDrainsWhatStarted proves bootstrap cannot start the
-// components twice, and that Stop only ever stops what has started since the
-// previous Stop.
-func TestStartRunsOnceAndStopDrainsWhatStarted(t *testing.T) {
+// TestStartRunsOncePerStageAndStopDrainsWhatStarted proves bootstrap cannot
+// start a stage twice, and that Stop only ever stops what has started since
+// the previous Stop.
+func TestStartRunsOncePerStageAndStopDrainsWhatStarted(t *testing.T) {
 	resetRegistry(t)
 
 	var events []string
 	Register(recordingComponent("sample", StageComponent, &events, nil))
 
-	require.NoError(t, Start(context.Background()))
-	require.ErrorContains(t, Start(context.Background()), "already started")
+	require.NoError(t, Start(context.Background(), StageComponent))
+	require.ErrorContains(t, Start(context.Background(), StageComponent), "component stage already started")
 
 	Stop(context.Background())
 	Stop(context.Background())
@@ -225,7 +244,7 @@ func TestComponentsListsAStageSortedByName(t *testing.T) {
 // TestRegisterRejectsProgrammerErrors proves the registry refuses what it
 // could only accept by silently dropping a component: an empty name, a
 // missing Start, an unknown stage, a duplicate name across stages, and a
-// registration that comes after the components were started.
+// registration into a stage that was already started.
 func TestRegisterRejectsProgrammerErrors(t *testing.T) {
 	noop := func(context.Context) error { return nil }
 
@@ -258,12 +277,12 @@ func TestRegisterRejectsProgrammerErrors(t *testing.T) {
 			want: "duplicate component registration",
 		},
 		{
-			name: "after the components started",
+			name: "after the stage started",
 			register: func() {
-				require.NoError(t, Start(context.Background()))
+				require.NoError(t, Start(context.Background(), StageComponent))
 				Register(Component{Name: "late", Stage: StageComponent, Start: noop})
 			},
-			want: "registered after bootstrap started the components",
+			want: "registered after bootstrap started the component stage",
 		},
 	}
 	for _, tc := range cases {
@@ -325,13 +344,13 @@ func capturePanic(t *testing.T, fn func()) (msg string) {
 }
 
 // resetRegistry rewinds the package-level registry so each test starts from
-// an empty one that has not been started.
+// an empty one with no stage started.
 func resetRegistry(t *testing.T) {
 	t.Helper()
 
 	mu.Lock()
 	defer mu.Unlock()
 	components = nil
-	started = false
+	stages = [stageCount]stageState{}
 	running = nil
 }

@@ -5,14 +5,16 @@
 // A component registers from its package initialiser, so importing its
 // package is the single act that enables it: a project that never imports the
 // package never links the component, never starts it and never pays for it.
-// Bootstrap starts the components once every table they may touch exists and
-// right before the listener opens, and stops them once the listener has
-// drained. Providers — the clients — start before the components that use
-// them and stop after them; within a stage the order is by name, so nothing
-// in a stage may depend on another member of it. A component whose Enabled
-// reports false is left out of the lifecycle entirely — no Start, no Stop —
-// which makes "disabled means no-op" a bootstrap guarantee instead of a
-// guard every component repeats.
+// Bootstrap starts the providers — the clients — during its core phase, right
+// after the backbone clients, so everything that runs between Bootstrap and
+// Run (the routes-ready hooks, a test harness seeding data) can use them; it
+// starts the components in Run, once every table they may touch exists and
+// right before the listener opens. All of them stop once the listener has
+// drained, the components first and the providers after their last user.
+// Within a stage the order is by name, so nothing in a stage may depend on
+// another member of it. A component whose Enabled reports false is left out
+// of the lifecycle entirely — no Start, no Stop — which makes "disabled means
+// no-op" a bootstrap guarantee instead of a guard every component repeats.
 package lifecycle
 
 import (
@@ -35,13 +37,14 @@ import (
 type Stage int
 
 const (
-	// StageProvider is for clients of external systems. They start before
-	// the components that use them and stop after them, once the listener
-	// has drained and every user of theirs is gone.
+	// StageProvider is for clients of external systems. They start during
+	// Bootstrap, right after the backbone clients, and stop last, after the
+	// listener has drained and every user of theirs is gone.
 	StageProvider Stage = iota
 	// StageComponent is for work that runs alongside the server: the
-	// scheduler, election loops. They start after the providers and stop
-	// first, right after the listener has drained.
+	// scheduler, election loops. They start in Run, once the tables exist and
+	// right before the listener opens, and stop first, right after the
+	// listener has drained.
 	StageComponent
 )
 
@@ -79,14 +82,15 @@ type Component struct {
 	Enabled func() bool
 
 	// SetLogger, when set, receives the dedicated logger writing <Name>.log
-	// right before the components start, enabled or not: declaring it is all
-	// a component does to log to its own file — it can neither forget to
-	// create the logger nor misname the file. A disabled component keeps the
-	// binding too: it costs nothing until written to, and code logging
-	// through the package's logger while the component is off still lands in
-	// the component's own file. Components without a dedicated log file leave
-	// it nil; until the binding the package's logger keeps the fallback the
-	// logging package installed, which routes entries to the global sink.
+	// right before the component's stage starts, enabled or not: declaring
+	// it is all a component does to log to its own file — it can neither
+	// forget to create the logger nor misname the file. A disabled component
+	// keeps the binding too: it costs nothing until written to, and code
+	// logging through the package's logger while the component is off still
+	// lands in the component's own file. Components without a dedicated log
+	// file leave it nil; until the binding the package's logger keeps the
+	// fallback the logging package installed, which routes entries to the
+	// global sink.
 	SetLogger func(types.Logger)
 
 	// Start brings the component up and returns once it is running. It runs
@@ -108,14 +112,19 @@ type Component struct {
 	Stop func(ctx context.Context) error
 }
 
+// stageState is what the registry knows about one stage.
+type stageState struct {
+	// started is set by Start: a registration into the stage after that
+	// would never start, so it fails fast instead.
+	started bool
+}
+
 var (
 	mu         sync.Mutex
 	components []Component
-	// started is set by Start: a registration after it would never start,
-	// so it fails fast instead.
-	started bool
-	// running lists the components whose Start succeeded, in start order;
-	// Stop drains it in reverse.
+	stages     [stageCount]stageState
+	// running lists the components whose Start succeeded, across stages in
+	// start order; Stop drains it in reverse.
 	running []Component
 )
 
@@ -123,9 +132,9 @@ var (
 // package's init function, so importing the package is what enables it.
 //
 // An empty name, a nil Start, an unknown stage, a duplicate name, or a
-// registration after bootstrap has started the components panics: each is a
-// programmer error, and skipping it silently would drop a component the
-// project compiled in on purpose.
+// registration after bootstrap has started the component's stage panics:
+// each is a programmer error, and skipping it silently would drop a
+// component the project compiled in on purpose.
 func Register(c Component) {
 	c.Name = strings.TrimSpace(c.Name)
 	if c.Name == "" {
@@ -141,8 +150,8 @@ func Register(c Component) {
 	mu.Lock()
 	defer mu.Unlock()
 
-	if started {
-		panic(fmt.Sprintf("lifecycle: %s %q registered after bootstrap started the components; register components in package init functions", c.Stage, c.Name))
+	if stages[c.Stage].started {
+		panic(fmt.Sprintf("lifecycle: %s %q registered after bootstrap started the %s stage; register components in package init functions", c.Stage, c.Name, c.Stage))
 	}
 	if slices.ContainsFunc(components, func(r Component) bool { return r.Name == c.Name }) {
 		panic(fmt.Sprintf("lifecycle: duplicate component registration for name %q", c.Name))
@@ -171,25 +180,26 @@ func componentsOf(stage Stage) []Component {
 	return list
 }
 
-// Start binds the dedicated loggers, then starts the enabled components: the
-// providers in name order, then the components in name order. It stops at the
-// first component that fails to start and returns that failure; the
-// components started before it keep running until Stop. Bootstrap calls it
-// once the tables are ready, and only once: a second call is an error,
-// because starting a component twice would double its work. Business code
-// never calls it.
-func Start(ctx context.Context) error {
+// Start binds the dedicated loggers of the stage's components, then starts
+// the enabled ones in name order. It stops at the first component that fails
+// to start and returns that failure; the components started before it keep
+// running until Stop. Bootstrap calls it once per stage — the providers
+// during Bootstrap, the components in Run once the tables are ready — and
+// only once: a second call is an error, because starting a component twice
+// would double its work. Business code never calls it.
+func Start(ctx context.Context, stage Stage) error {
 	mu.Lock()
-	if started {
+	if stages[stage].started {
 		mu.Unlock()
-		return errors.New("lifecycle: components already started")
+		return errors.Newf("lifecycle: %s stage already started", stage)
 	}
-	started = true
-	pending := append(componentsOf(StageProvider), componentsOf(StageComponent)...)
+	stages[stage].started = true
+	pending := componentsOf(stage)
 	mu.Unlock()
 
 	// The bindings land before the first Start, for every registered
-	// component: a compiled-in component always logs to its own file.
+	// component of the stage: a compiled-in component always logs to its own
+	// file.
 	for _, c := range pending {
 		if c.SetLogger != nil {
 			c.SetLogger(pkgzap.New(c.Name + ".log"))

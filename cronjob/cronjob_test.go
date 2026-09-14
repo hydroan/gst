@@ -162,7 +162,7 @@ func TestSchedulerRunsAsLifecycleComponent(t *testing.T) {
 		return nil
 	}, "* * * * * *", "component-job")
 
-	require.NoError(t, lifecycle.Start(context.Background()))
+	require.NoError(t, lifecycle.Start(context.Background(), lifecycle.StageComponent))
 	select {
 	case <-jobStarted:
 	case <-time.After(3 * time.Second):

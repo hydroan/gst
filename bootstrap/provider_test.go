@@ -49,11 +49,11 @@ func TestEveryProviderPackageSelfRegisters(t *testing.T) {
 }
 
 // TestEveryProviderGetsItsOwnLogFile proves the promise a provider package
-// gets for declaring SetLogger: once the components start, a logger writing
-// <name>.log exists for every compiled-in provider, enabled or not. Every
-// provider declares it, except clickhouse, which has no logger of its own.
-// The fresh configuration leaves every provider disabled, so starting the
-// components binds the loggers without connecting to anything.
+// gets for declaring SetLogger: once the provider stage starts, a logger
+// writing <name>.log exists for every compiled-in provider, enabled or not.
+// Every provider declares it, except clickhouse, which has no logger of its
+// own. The fresh configuration leaves every provider disabled, so starting
+// the stage binds the loggers without connecting to anything.
 func TestEveryProviderGetsItsOwnLogFile(t *testing.T) {
 	original := config.App
 	config.App = new(config.Config)
@@ -65,7 +65,7 @@ func TestEveryProviderGetsItsOwnLogFile(t *testing.T) {
 		config.App = original
 	})
 
-	require.NoError(t, lifecycle.Start(context.Background()))
+	require.NoError(t, lifecycle.Start(context.Background(), lifecycle.StageProvider))
 
 	for _, c := range lifecycle.Components(lifecycle.StageProvider) {
 		if c.Name == "clickhouse" {

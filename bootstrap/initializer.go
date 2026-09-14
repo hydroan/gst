@@ -12,43 +12,47 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
-var ins = new(initializer)
+// startup sequences the process: Bootstrap feeds it the init functions of
+// each layer and runs them in turn, Run feeds it the listeners and starts
+// them side by side.
+var startup = new(initializer)
 
+// initializer holds what has been registered and not yet run. Init and Go
+// each empty their queue as they run it, so the next Register starts a new
+// round.
 type initializer struct {
-	fns []func() error // run init function in current goroutine.
-	gos []func() error // long-running functions Go starts, each in its own goroutine.
+	fns []func() error // init functions; Init runs them one after another in the calling goroutine.
+	gos []func() error // long-running functions; Go starts each in a goroutine of its own.
 }
 
+// Register queues init functions for the next Init, in the order they run.
 func (i *initializer) Register(fn ...func() error) {
 	i.fns = append(i.fns, fn...)
 }
 
+// RegisterGo queues long-running functions for the next Go.
 func (i *initializer) RegisterGo(fn ...func() error) {
 	i.gos = append(i.gos, fn...)
 }
 
-// Init executes all registered initialization functions sequentially
-// and logs their execution time for performance monitoring
+// Init runs the queued init functions one after another in registration
+// order, logging how long each took, and stops at the first failure, which
+// it returns.
 func (i *initializer) Init() error {
-	defer func() {
-		i.fns = make([]func() error, 0)
-	}()
+	defer func() { i.fns = nil }()
 
-	for j := range i.fns {
-		fn := i.fns[j]
+	for _, fn := range i.fns {
 		if fn == nil {
 			continue
 		}
-
-		// Execute function with timing measurement using defer pattern
-		if err := i.executeWithTiming(fn); err != nil {
+		if err := runTimed(fn); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-// Go starts every registered long-running function in its own goroutine and
+// Go starts every queued long-running function in its own goroutine and
 // returns at once, with a context that is canceled the moment any of them
 // returns an error; that error is the context's cause.
 //
@@ -62,9 +66,7 @@ func (i *initializer) Init() error {
 // A function that returns nil has finished without failing — a listener that
 // is not enabled returns at once — and cancels nothing.
 func (i *initializer) Go() context.Context {
-	defer func() {
-		i.gos = make([]func() error, 0)
-	}()
+	defer func() { i.gos = nil }()
 
 	g, failed := errgroup.WithContext(context.Background())
 	for _, fn := range i.gos {
@@ -76,23 +78,21 @@ func (i *initializer) Go() context.Context {
 	return failed
 }
 
-// executeWithTiming executes a function and logs its execution time
-func (i *initializer) executeWithTiming(fn func() error) error {
-	funcName := i.getFunctionName(fn)
+// runTimed runs fn and logs how long it took, under its name.
+func runTimed(fn func() error) error {
+	name := functionName(fn)
 
-	// Use defer pattern for cleaner timing measurement
-	start := time.Now()
+	begin := time.Now()
 	defer func() {
-		duration := time.Since(start)
-		// Log with structured fields for better observability
-		zap.S().Debugw("Init function executed", "function", funcName, util.LogDuration(duration))
+		zap.S().Debugw("Init function executed", "function", name, util.LogDuration(time.Since(begin)))
 	}()
 
 	return fn()
 }
 
-// getFunctionName extracts a clean function name from function pointer
-func (i *initializer) getFunctionName(fn func() error) string {
+// functionName names fn the way the timing log refers to it: package and
+// function, without the import path.
+func functionName(fn func() error) string {
 	if fn == nil {
 		return "<nil>"
 	}
@@ -102,11 +102,9 @@ func (i *initializer) getFunctionName(fn func() error) string {
 		return "<unknown>"
 	}
 
-	fullName := pc.Name()
-	// Extract package.function from full path for cleaner logs
-	if lastSlash := strings.LastIndex(fullName, "/"); lastSlash >= 0 {
-		fullName = fullName[lastSlash+1:]
+	name := pc.Name()
+	if lastSlash := strings.LastIndex(name, "/"); lastSlash >= 0 {
+		name = name[lastSlash+1:]
 	}
-
-	return fullName
+	return name
 }
