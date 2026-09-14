@@ -10,7 +10,6 @@ import (
 
 	"github.com/hydroan/gst/authz/rbac"
 	"github.com/hydroan/gst/config"
-	"github.com/hydroan/gst/cronjob"
 	"github.com/hydroan/gst/database/clickhouse"
 	"github.com/hydroan/gst/database/mysql"
 	"github.com/hydroan/gst/database/postgres"
@@ -20,6 +19,7 @@ import (
 	"github.com/hydroan/gst/debug/statsviz"
 	"github.com/hydroan/gst/internal/controller"
 	"github.com/hydroan/gst/internal/dbruntime"
+	"github.com/hydroan/gst/internal/lifecycle"
 	pkgzap "github.com/hydroan/gst/logger/zap"
 	prommetrics "github.com/hydroan/gst/metrics"
 	"github.com/hydroan/gst/middleware"
@@ -36,6 +36,11 @@ var (
 	initialized bool
 	mu          sync.Mutex
 )
+
+// componentStopTimeout bounds how long the lifecycle components may take to
+// finish their in-flight work at shutdown, so a stuck job cannot hold the
+// shutdown hostage. It matches the bound router.Stop gives the HTTP drain.
+const componentStopTimeout = 30 * time.Second
 
 func Bootstrap() error {
 	_, _ = maxprocs.Set(maxprocs.Logger(pkgzap.New("").Infof))
@@ -86,9 +91,6 @@ func Bootstrap() error {
 		middleware.Init,
 		router.Init,
 
-		// task
-		cronjob.Init,
-
 		// module system must be the last to be initialized.
 		module.Init,
 	)
@@ -131,6 +133,24 @@ func Run() error {
 	module.Wait()
 	dbruntime.Wait()
 
+	// The components that run alongside the server — the scheduler among
+	// them — start here, after the last barrier: every table they may touch
+	// exists, and the listener opens right after. Their process context is
+	// canceled the moment shutdown begins, and they are stopped before the
+	// HTTP drain so nothing starts new work while the process is on its way
+	// out; stopComponents is safe to run more than once.
+	processCtx, cancelProcess := context.WithCancel(context.Background())
+	stopComponents := func() {
+		cancelProcess()
+		ctx, cancel := context.WithTimeout(context.Background(), componentStopTimeout)
+		defer cancel()
+		lifecycle.Stop(ctx)
+	}
+	if err := lifecycle.Start(processCtx); err != nil {
+		stopComponents()
+		return err
+	}
+
 	ins.RegisterGo(
 		router.Run,
 		statsviz.Run,
@@ -138,14 +158,15 @@ func Run() error {
 		gops.Run,
 	)
 
-	// Registered before router.Stop so LIFO runs it right after the HTTP
-	// drain: scheduling halts and in-flight jobs finish while the
-	// connections they may be using are still open.
-	registerCleanup(cronjob.Stop)
 	registerCleanup(router.Stop)
 	registerCleanup(statsviz.Stop)
 	registerCleanup(debugpprof.Stop)
 	registerCleanup(gops.Stop)
+	// Registered last so LIFO runs it first: on the failure path the
+	// components stop before the HTTP drain begins, and in-flight jobs finish
+	// while the connections they may be using are still open. On the signal
+	// path they are already stopped by then and this is a no-op.
+	registerCleanup(stopComponents)
 
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT)
@@ -154,9 +175,12 @@ func Run() error {
 	select {
 	case sig := <-sigCh:
 		zap.S().Infow("canceled by signal", "signal", sig)
-		// Stop answering readiness before anything is torn down, then hold
-		// there for the configured window. Teardown starts when it elapses.
+		// Stop answering readiness before anything is torn down, stop the
+		// components so no new work starts while the process is on its way
+		// out, then hold there for the configured window. Teardown starts
+		// when it elapses.
 		controller.Probe.Drain()
+		stopComponents()
 		awaitDrain(sigCh)
 		return nil
 	case <-failed.Done():

@@ -304,7 +304,8 @@ func init() {
 const cronjobContent = `// Package cronjob registers the application's scheduled tasks.
 //
 // Call cronjob.Register(fn, spec, name) in init below; the framework starts
-// all registered jobs on boot. fn is a func(ctx context.Context) error: ctx
+// the scheduler once the process is ready to serve and stops it first at
+// shutdown. fn is a func(ctx context.Context) error: ctx
 // carries the round's identity — the job name and a trace id of the round's
 // own — and, with tracing on, the round's root span, so the statements and
 // log lines the job produces are found again from any of them. Every run is

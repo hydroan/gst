@@ -8,6 +8,7 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/consts"
 	"github.com/hydroan/gst/internal/execctx"
+	"github.com/hydroan/gst/internal/lifecycle"
 	"github.com/hydroan/gst/internal/types"
 	"github.com/hydroan/gst/logger"
 	pkgzap "github.com/hydroan/gst/logger/zap"
@@ -26,7 +27,7 @@ var (
 	parser   cron.Parser
 	mu       sync.Mutex
 
-	inited bool
+	started bool
 )
 
 type cronjob struct {
@@ -46,38 +47,24 @@ type Config struct {
 
 func init() {
 	parser = cron.NewParser(cron.Second | cron.Minute | cron.Hour | cron.Dom | cron.Month | cron.Dow | cron.Descriptor)
+
+	// Importing this package is what enables scheduling: through the
+	// lifecycle registry, bootstrap starts the scheduler once the tables are
+	// ready and stops it as soon as the process begins to drain. A project
+	// that registers no job never imports the package and never runs a
+	// scheduler.
+	lifecycle.Register(lifecycle.Component{Name: "cronjob", Start: start, Stop: stop})
 }
 
-// stopTimeout bounds how long Stop waits for in-flight jobs, so a stuck job
-// cannot hold the shutdown hostage.
-var stopTimeout = 30 * time.Second
-
-// Stop halts scheduling and waits for in-flight jobs to finish, bounded by
-// stopTimeout. Bootstrap registers it into the shutdown sequence after the
-// HTTP drain and before the connections jobs may still be using are closed;
-// without it, shutdown would kill jobs mid-write. In a process that never
-// ran Init it is a no-op.
-func Stop() {
-	mu.Lock()
-	defer mu.Unlock()
-	if c == nil {
-		return
-	}
-
-	select {
-	case <-c.Stop().Done():
-	case <-time.After(stopTimeout):
-		log.Warnz("cronjob stop timed out waiting for in-flight jobs", zap.Duration("timeout", stopTimeout))
-	}
-}
-
-func Init() (err error) {
+// start brings the scheduler up with every job registered so far; jobs
+// registered later are scheduled on the spot.
+func start(_ context.Context) error {
 	if log == nil {
 		// Adopt the shared cronjob logger so this package never opens a
 		// second lumberjack instance on the same file, which would race its
-		// rotation. Bootstrap initializes logging before cronjob.Init, so
-		// the local fallback only serves processes that never ran the
-		// logging setup (e.g. unit tests).
+		// rotation. Bootstrap initializes logging long before the scheduler
+		// starts, so the local fallback only serves processes that never ran
+		// the logging setup (e.g. unit tests).
 		if log = logger.Cronjob; log == nil {
 			log = pkgzap.New("cronjob.log")
 		}
@@ -92,12 +79,32 @@ func Init() (err error) {
 
 	c.Start()
 
-	inited = true
+	started = true
 	return nil
 }
 
-// Register cronjob can be called at any point before or after Init().
-// The config parameter is optional and can be used to customize cronjob behavior.
+// stop halts scheduling and waits for in-flight jobs to finish, for as long
+// as ctx allows: a stuck job cannot hold the shutdown hostage. Bootstrap runs
+// it before the HTTP drain and before the connections jobs may still be using
+// are closed; without it, shutdown would kill jobs mid-write. In a process
+// that never started the scheduler it is a no-op.
+func stop(ctx context.Context) {
+	mu.Lock()
+	defer mu.Unlock()
+	if c == nil {
+		return
+	}
+
+	select {
+	case <-c.Stop().Done():
+	case <-ctx.Done():
+		log.Warnz("cronjob stop timed out waiting for in-flight jobs", zap.Error(ctx.Err()))
+	}
+}
+
+// Register cronjob can be called at any point before or after the scheduler
+// started. The config parameter is optional and can be used to customize
+// cronjob behavior.
 //
 // fn receives the context of the round it runs in. The context carries the
 // round's identity — the job name and a trace id of the round's own, see
@@ -119,7 +126,7 @@ func Register(fn func(ctx context.Context) error, spec string, name string, conf
 		runImmediately: cfg.RunImmediately,
 	}
 
-	if inited {
+	if started {
 		register(cj)
 	} else {
 		cronjobs = append(cronjobs, cj)

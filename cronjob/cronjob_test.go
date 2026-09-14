@@ -15,6 +15,7 @@ import (
 	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/consts"
 	"github.com/hydroan/gst/internal/execctx"
+	"github.com/hydroan/gst/internal/lifecycle"
 	"github.com/hydroan/gst/internal/testutil/oteltest"
 	"github.com/hydroan/gst/logger"
 	pkgzap "github.com/hydroan/gst/logger/zap"
@@ -22,10 +23,10 @@ import (
 	oteltrace "go.opentelemetry.io/otel/trace"
 )
 
-// TestInitAdoptsSharedCronjobLogger proves scheduling logs flow through the
+// TestStartAdoptsSharedCronjobLogger proves scheduling logs flow through the
 // shared logger.Cronjob instance instead of a second package-local logger on
 // the same file, which would race lumberjack rotation against it.
-func TestInitAdoptsSharedCronjobLogger(t *testing.T) {
+func TestStartAdoptsSharedCronjobLogger(t *testing.T) {
 	dir := withCronjobLoggerConfig(t)
 	resetCronjobState(t)
 
@@ -35,7 +36,7 @@ func TestInitAdoptsSharedCronjobLogger(t *testing.T) {
 	t.Cleanup(func() { logger.Cronjob = original })
 
 	Register(func(context.Context) error { return nil }, "0 0 * * * *", "sample-job")
-	require.NoError(t, Init())
+	require.NoError(t, start(context.Background()))
 	pkgzap.Clean()
 
 	data, err := os.ReadFile(filepath.Join(dir, "shared_cronjob.log"))
@@ -46,10 +47,10 @@ func TestInitAdoptsSharedCronjobLogger(t *testing.T) {
 		"no package-local logger may open the shared log file")
 }
 
-// TestInitFallsBackToLocalLoggerWithoutShared keeps the pre-existing
+// TestStartFallsBackToLocalLoggerWithoutShared keeps the pre-existing
 // behavior for processes that never ran the logging setup (unit tests):
 // scheduling still logs through a package-local logger.
-func TestInitFallsBackToLocalLoggerWithoutShared(t *testing.T) {
+func TestStartFallsBackToLocalLoggerWithoutShared(t *testing.T) {
 	dir := withCronjobLoggerConfig(t)
 	resetCronjobState(t)
 
@@ -58,7 +59,7 @@ func TestInitFallsBackToLocalLoggerWithoutShared(t *testing.T) {
 	t.Cleanup(func() { logger.Cronjob = original })
 
 	Register(func(context.Context) error { return nil }, "0 0 * * * *", "fallback-job")
-	require.NoError(t, Init())
+	require.NoError(t, start(context.Background()))
 	pkgzap.Clean()
 
 	data, err := os.ReadFile(filepath.Join(dir, "cronjob.log"))
@@ -82,7 +83,7 @@ func TestStopWaitsForInFlightJob(t *testing.T) {
 		doneOnce.Do(func() { close(jobDone) })
 		return nil
 	}, "* * * * * *", "inflight-job")
-	require.NoError(t, Init())
+	require.NoError(t, start(context.Background()))
 
 	select {
 	case <-jobStarted:
@@ -90,7 +91,7 @@ func TestStopWaitsForInFlightJob(t *testing.T) {
 		t.Fatal("the scheduled job never started")
 	}
 
-	Stop()
+	stop(context.Background())
 
 	select {
 	case <-jobDone:
@@ -100,14 +101,12 @@ func TestStopWaitsForInFlightJob(t *testing.T) {
 }
 
 // TestStopGivesUpOnStuckJob proves a job that never finishes cannot hold the
-// shutdown hostage: Stop returns once the bounded wait elapses.
+// shutdown hostage: stop returns once the context it was given expires.
 func TestStopGivesUpOnStuckJob(t *testing.T) {
 	withCronjobLoggerConfig(t)
 	resetCronjobState(t)
 
-	originalTimeout := stopTimeout
-	stopTimeout = 100 * time.Millisecond
-	t.Cleanup(func() { stopTimeout = originalTimeout })
+	const stopBudget = 100 * time.Millisecond
 
 	var startOnce sync.Once
 	jobStarted := make(chan struct{})
@@ -116,10 +115,10 @@ func TestStopGivesUpOnStuckJob(t *testing.T) {
 		// Outlives the bounded wait by far, yet ends within the test: a job
 		// running on into later tests would log into their loggers and
 		// temporary directories.
-		time.Sleep(10 * stopTimeout)
+		time.Sleep(10 * stopBudget)
 		return nil
 	}, "* * * * * *", "stuck-job")
-	require.NoError(t, Init())
+	require.NoError(t, start(context.Background()))
 
 	select {
 	case <-jobStarted:
@@ -127,21 +126,49 @@ func TestStopGivesUpOnStuckJob(t *testing.T) {
 		t.Fatal("the scheduled job never started")
 	}
 
+	ctx, cancel := context.WithTimeout(context.Background(), stopBudget)
+	defer cancel()
 	begin := time.Now()
-	Stop()
+	stop(ctx)
 	require.Less(t, time.Since(begin), 2*time.Second,
-		"Stop must return once the bounded wait elapses")
+		"stop must return once the context it was given expires")
 	// Drain the round Stop gave up on before the test returns, logging
 	// included, so nothing of it runs on into the next test.
 	<-c.Stop().Done()
 }
 
-// TestStopWithoutInitIsNoop keeps Stop safe in processes that never started
+// TestStopWithoutStartIsNoop keeps stop safe in processes that never started
 // the scheduler.
-func TestStopWithoutInitIsNoop(t *testing.T) {
+func TestStopWithoutStartIsNoop(t *testing.T) {
 	resetCronjobState(t)
 
-	Stop()
+	stop(context.Background())
+}
+
+// TestSchedulerRunsAsLifecycleComponent proves importing the package is what
+// enables scheduling: the component registered from init starts the
+// scheduler when bootstrap starts the lifecycle components, and stops it
+// when bootstrap stops them.
+func TestSchedulerRunsAsLifecycleComponent(t *testing.T) {
+	withCronjobLoggerConfig(t)
+	resetCronjobState(t)
+
+	var startOnce sync.Once
+	jobStarted := make(chan struct{})
+	Register(func(context.Context) error {
+		startOnce.Do(func() { close(jobStarted) })
+		return nil
+	}, "* * * * * *", "component-job")
+
+	require.NoError(t, lifecycle.Start(context.Background()))
+	select {
+	case <-jobStarted:
+	case <-time.After(3 * time.Second):
+		t.Fatal("the scheduler did not start with the lifecycle components")
+	}
+
+	lifecycle.Stop(context.Background())
+	require.True(t, started, "the scheduler must have been started through the component")
 }
 
 // TestScheduledRunsSkipWhileStillRunning proves overlapping ticks are dropped
@@ -163,7 +190,7 @@ func TestScheduledRunsSkipWhileStillRunning(t *testing.T) {
 		running.Add(-1)
 		return nil
 	}, "* * * * * *", "overlap-job")
-	require.NoError(t, Init())
+	require.NoError(t, start(context.Background()))
 
 	select {
 	case <-started:
@@ -174,7 +201,7 @@ func TestScheduledRunsSkipWhileStillRunning(t *testing.T) {
 	// everything finish so Stop does not have to wait out its timeout.
 	time.Sleep(2200 * time.Millisecond)
 	close(block)
-	Stop()
+	stop(context.Background())
 
 	require.EqualValues(t, 1, maxRunning.Load(),
 		"ticks firing while a run is in flight must be skipped, not piled on top of it")
@@ -197,7 +224,7 @@ func TestImmediateRunSharesSkipMutex(t *testing.T) {
 		running.Add(-1)
 		return nil
 	}, "* * * * * *", "immediate-overlap-job", Config{RunImmediately: true})
-	require.NoError(t, Init())
+	require.NoError(t, start(context.Background()))
 
 	select {
 	case <-started:
@@ -205,7 +232,7 @@ func TestImmediateRunSharesSkipMutex(t *testing.T) {
 		t.Fatal("the immediate run never started")
 	}
 	time.Sleep(1800 * time.Millisecond)
-	Stop()
+	stop(context.Background())
 
 	require.EqualValues(t, 1, maxRunning.Load(),
 		"the immediate run must hold the same guard as scheduled runs")
@@ -247,7 +274,7 @@ func TestRunLogsFailureWithErrorStack(t *testing.T) {
 				startOnce.Do(func() { close(started) })
 				return tc.job()
 			}, "* * * * * *", "failing-job")
-			require.NoError(t, Init())
+			require.NoError(t, start(context.Background()))
 
 			select {
 			case <-started:
@@ -256,7 +283,7 @@ func TestRunLogsFailureWithErrorStack(t *testing.T) {
 			}
 			// Stop waits for the in-flight round, whose outcome entry is
 			// written before the round returns.
-			Stop()
+			stop(context.Background())
 			pkgzap.Clean()
 
 			entry := readLogEntry(t, filepath.Join(dir, "cronjob.log"), tc.msg)
@@ -281,7 +308,7 @@ func TestRunStampsRoundIdentity(t *testing.T) {
 		once.Do(func() { seen <- execctx.FromContext(ctx) })
 		return nil
 	}, "* * * * * *", "identity-job")
-	require.NoError(t, Init())
+	require.NoError(t, start(context.Background()))
 
 	var id execctx.Identity
 	select {
@@ -289,7 +316,7 @@ func TestRunStampsRoundIdentity(t *testing.T) {
 	case <-time.After(3 * time.Second):
 		t.Fatal("the scheduled job never started")
 	}
-	Stop()
+	stop(context.Background())
 	pkgzap.Clean()
 
 	require.Equal(t, "identity-job", id.Cronjob)
@@ -319,7 +346,7 @@ func TestRunOpensRoundSpanWhenTracingIsOn(t *testing.T) {
 		})
 		return nil
 	}, "* * * * * *", "traced-job")
-	require.NoError(t, Init())
+	require.NoError(t, start(context.Background()))
 
 	var got roundObservation
 	select {
@@ -327,7 +354,7 @@ func TestRunOpensRoundSpanWhenTracingIsOn(t *testing.T) {
 	case <-time.After(3 * time.Second):
 		t.Fatal("the scheduled job never started")
 	}
-	Stop()
+	stop(context.Background())
 	pkgzap.Clean()
 
 	require.True(t, got.span.HasTraceID(), "the job must run under the round's span")
@@ -372,7 +399,7 @@ func withCronjobLoggerConfig(t *testing.T) string {
 }
 
 // resetCronjobState rewinds the package-level scheduler state so each test
-// exercises Init from scratch.
+// exercises start from scratch.
 func resetCronjobState(t *testing.T) {
 	t.Helper()
 
@@ -382,7 +409,7 @@ func resetCronjobState(t *testing.T) {
 	c = nil
 	log = nil
 	cronjobs = nil
-	inited = false
+	started = false
 }
 
 // readLogEntry returns the first JSON entry of the log file whose msg field
