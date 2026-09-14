@@ -95,11 +95,11 @@ func Init() error {
 
 // Wait blocks until pending module.Use registrations are complete.
 //
-// It waits for model, service, and route registration only. Database table
-// creation and seed record insertion are handled separately by the database runtime.
-// Callers that need module-provided tables and seed records to exist must call
-// the database runtime drain after Wait, not before it, because module registration
-// can enqueue new model.Register work.
+// It waits for model, service, and route registration only. Table creation
+// is handled separately by the database runtime. Callers that need
+// module-provided tables to exist must call the database runtime drain after
+// Wait, not before it, because module registration can enqueue new
+// model.Register work.
 func Wait() {
 	registerMu.Lock()
 	defer registerMu.Unlock()

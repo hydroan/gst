@@ -19,13 +19,11 @@ var _ types.Model = (*AutoBase)(nil)
 // Key behavior differences from Base:
 //   - SetID never generates an ID; the database assigns one on insert.
 //   - GetID returns "" while the ID is unset (0) so framework emptiness
-//     checks such as seeding and not-found detection keep working.
+//     checks such as not-found detection keep working.
 //
-// Caveats:
-//   - Seed records passed to model.Register must set an explicit ID or rely
-//     on a unique index; idempotent seeding depends on conflicting keys.
-//   - Updating a record whose ID is unset fails with database.ErrIDRequired;
-//     use database.Upsert for insert-or-update semantics.
+// Caveat: updating a record whose ID is unset fails with
+// database.ErrIDRequired; use database.Upsert for insert-or-update
+// semantics.
 //
 // created_at/updated_at follow the same NOT NULL, no-database-default
 // contract as Base: every writer provides both explicitly, in UTC.
