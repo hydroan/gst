@@ -77,6 +77,8 @@ gst 是强约定框架（Apple 风格），不是自由框架（Windows 风格�
 
 根包 `gst` 与公开包 `model`、`service`、`sse` 是面向业务项目的 alias 转发层，分别转发 `internal/types`、`internal/modelregistry`、`internal/serviceregistry`、`internal/sse`。internal 包（含测试）需要这些能力时必须直接引用对应的 internal 包，禁止反向 import 公开包，避免 internal → 公开 → internal 的依赖绕行和潜在 import 环。如果所需符号只存在于公开包（如曾经的 `service.Error`），应把实现下沉到 internal 包、公开包改为 alias 转发，而不是让 internal 反向引用。
 
+框架自身代码（含公开包）使用 internal 能力时直接引用 internal 实现包；公开转发包只服务业务项目。
+
 例外，以下内容必须保持公开包 import：
 
 - module 源码 `internal/model/<module>`、`internal/service/<module>`：会被 `gg copy` 复制进业务项目，copy 只改写 module 子树自身的 internal import 前缀，公开包 import 原样保留；若引用其他 internal 包，复制后无法编译。module 的 `_test.go` 不参与 copy，可以引用 internal 包。
