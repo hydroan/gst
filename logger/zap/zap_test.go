@@ -14,6 +14,7 @@ import (
 	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/consts"
 	"github.com/hydroan/gst/internal/execctx"
+	"github.com/hydroan/gst/internal/instance"
 	"github.com/hydroan/gst/internal/requestctx"
 	"github.com/hydroan/gst/internal/types"
 	"github.com/hydroan/gst/logger"
@@ -497,6 +498,32 @@ func TestGormTraceAddsCronjobField(t *testing.T) {
 	fields := entries[0].ContextMap()
 	require.Equal(t, "trace-cron", fields[consts.TRACE_ID])
 	require.Equal(t, "sample_job", fields[consts.CRONJOB])
+}
+
+// TestEveryLoggerStampsTheProcessIdentity proves every entry, whichever
+// constructor built its logger, carries the instance field naming this
+// process, so the entries of replicas can be told apart wherever they are
+// collected together.
+func TestEveryLoggerStampsTheProcessIdentity(t *testing.T) {
+	dir := t.TempDir()
+	withLoggerInitConfig(t, dir, "global.log")
+	restoreGlobalLoggers(t)
+	require.NoError(t, Init())
+
+	zap.S().Info("global")
+	New("typed.log").Infoz("typed")
+	NewGin("gin.log").Info("gin")
+	NewZap("plain.log").Info("plain")
+	NewSugared("sugared.log").Info("sugared")
+	Clean()
+
+	for _, file := range []string{"global.log", "typed.log", "gin.log", "plain.log", "sugared.log"} {
+		data, err := os.ReadFile(filepath.Join(dir, file))
+		require.NoError(t, err)
+		var entry map[string]any
+		require.NoError(t, json.Unmarshal(data, &entry), "%s: %q", file, data)
+		require.Equal(t, instance.ID(), entry["instance"], "%s must carry the process identity", file)
+	}
 }
 
 func captureStdout(t *testing.T, fn func()) string {

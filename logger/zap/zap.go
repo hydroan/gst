@@ -14,6 +14,7 @@ import (
 
 	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/consts"
+	"github.com/hydroan/gst/internal/instance"
 	"github.com/hydroan/gst/internal/types"
 	"github.com/hydroan/gst/logger"
 	"go.uber.org/zap"
@@ -29,6 +30,11 @@ const (
 	// is all a reader inspecting it right after the fact gets to see.
 	defaultLogBufferSize    = 256 * 1024
 	defaultLogFlushInterval = time.Second
+
+	// instanceKey is the field every entry carries naming the process that
+	// wrote it, so the entries of replicas — on one host, or restarts of one
+	// pod — can be told apart wherever they end up collected together.
+	instanceKey = "instance"
 )
 
 var (
@@ -64,7 +70,7 @@ func Init() error {
 	readConf()
 	opt := Option{Console: config.App.Logger.Console}
 	zap.ReplaceGlobals(zap.New(
-		zapcore.NewCore(newLogEncoder(opt), newLogWriter(opt), newLogLevel(opt)),
+		newLogCore(opt),
 		zap.AddCaller(),
 		zap.AddStacktrace(zapcore.FatalLevel),
 	))
@@ -198,7 +204,7 @@ func New(filename string, opts ...Option) *Logger {
 		logFile = filename
 	}
 	logger := zap.New(
-		zapcore.NewCore(newLogEncoder(opts...), newLogWriter(opts...), newLogLevel(opts...)),
+		newLogCore(opts...),
 		zap.AddCaller(),
 		zap.AddCallerSkip(1),
 		zap.AddStacktrace(zapcore.FatalLevel),
@@ -219,7 +225,7 @@ func NewGorm(filename string) gorml.Interface {
 		logFile = filename
 	}
 	logger := zap.New(
-		zapcore.NewCore(newLogEncoder(), newLogWriter(), newLogLevel()),
+		newLogCore(),
 		zap.AddStacktrace(zapcore.FatalLevel),
 	)
 	return &GormLogger{l: &Logger{zlog: logger}}
@@ -232,7 +238,7 @@ func NewGin(filename string) *zap.Logger {
 	if len(filename) > 0 {
 		logFile = filename
 	}
-	return zap.New(zapcore.NewCore(newLogEncoder(Option{DisableMsg: true, DisableLevel: true}), newLogWriter(), newLogLevel()))
+	return zap.New(newLogCore(Option{DisableMsg: true, DisableLevel: true}))
 }
 
 // NewStdLog builds a *log.Logger backed by *zap.Logger.
@@ -249,7 +255,7 @@ func NewZap(filename string, opts ...Option) *zap.Logger {
 		logFile = filename
 	}
 	return zap.New(
-		zapcore.NewCore(newLogEncoder(opts...), newLogWriter(opts...), newLogLevel(opts...)),
+		newLogCore(opts...),
 		zap.AddCaller(),
 		zap.AddStacktrace(zapcore.FatalLevel),
 	)
@@ -264,10 +270,18 @@ func NewSugared(filename string, opts ...Option) *zap.SugaredLogger {
 		logFile = filename
 	}
 	return zap.New(
-		zapcore.NewCore(newLogEncoder(opts...), newLogWriter(opts...), newLogLevel(opts...)),
+		newLogCore(opts...),
 		zap.AddCaller(),
 		zap.AddStacktrace(zapcore.FatalLevel),
 	).Sugar()
+}
+
+// newLogCore builds the core every logger here writes through: the encoder,
+// sink and level opts select, with the process identity stamped on every
+// entry. The field is encoded once, here, not once per entry.
+func newLogCore(opts ...Option) zapcore.Core {
+	core := zapcore.NewCore(newLogEncoder(opts...), newLogWriter(opts...), newLogLevel(opts...))
+	return core.With([]zapcore.Field{zap.String(instanceKey, instance.ID())})
 }
 
 // newLogWriter selects log sink (stdout/stderr or rolling file).
