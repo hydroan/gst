@@ -87,6 +87,12 @@ func Bootstrap() error {
 	if err := startup.Init(); err != nil {
 		return err
 	}
+	// Registered first so they run last: every cleanup after them logs what
+	// it did, and a line written once the log writers have stopped never
+	// reaches its file. The temp directory goes right before the writers,
+	// for the same reason.
+	registerCleanup(pkgzap.Clean)
+	registerCleanup(config.Clean)
 	// First database drain: create the tables registered before the clients
 	// and modules initialize, typically by model package init functions.
 	dbruntime.Wait()
@@ -126,8 +132,6 @@ func Bootstrap() error {
 	registerCleanup(closeComponent("redis", redis.Close))
 	registerCleanup(closeComponent("otel", gstotel.Close))
 	registerCleanup(controller.Clean)
-	registerCleanup(pkgzap.Clean)
-	registerCleanup(config.Clean)
 
 	if err := startup.Init(); err != nil {
 		return err
@@ -156,9 +160,9 @@ func Bootstrap() error {
 // blocks until the process is told to stop. A termination signal stops it
 // cleanly: readiness goes down first, the components stop taking on work,
 // the configured drain window passes, and everything is torn down in the
-// reverse order of its setup. A listener that fails ends it too, with the
-// failure as the error, so the process never runs on with nothing to
-// report.
+// reverse order of its setup. A listener that fails ends it the same way,
+// with the failure as the error, so the process never runs on with nothing
+// to report.
 func Run() error {
 	defer clean()
 
@@ -199,22 +203,25 @@ func Run() error {
 	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT)
 
 	failed := startup.Go()
+	var err error
 	select {
 	case sig := <-sigCh:
 		zap.S().Infow("canceled by signal", "signal", sig)
-		// Stop answering readiness before anything is torn down, cancel the
-		// process context so the components stop taking on new work, then
-		// hold there for the configured window. Teardown starts when it
-		// elapses.
-		controller.Probe.Drain()
-		cancelProcess()
-		awaitDrain(sigCh)
-		return nil
 	case <-failed.Done():
 		// One of the long-running functions failed. Returning is what stops
 		// the others: the deferred clean shuts down those still serving.
-		return context.Cause(failed)
+		err = context.Cause(failed)
+		zap.S().Errorw("shutting down after a failure", "err", err)
 	}
+
+	// Either way the process leaves the same way: stop answering readiness
+	// before anything is torn down, cancel the process context so the
+	// components stop taking on new work, then hold there for the
+	// configured window. Teardown starts when it elapses.
+	controller.Probe.Drain()
+	cancelProcess()
+	awaitDrain(sigCh)
+	return err
 }
 
 // stopLifecycle cancels the process context, so any component still taking

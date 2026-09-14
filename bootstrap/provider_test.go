@@ -1,15 +1,12 @@
 package bootstrap
 
 import (
-	"context"
 	"os"
 	"path/filepath"
 	"runtime"
 	"testing"
 
-	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/internal/lifecycle"
-	pkgzap "github.com/hydroan/gst/logger/zap"
 	"github.com/stretchr/testify/require"
 
 	// Every provider package registers itself from init. Importing them all
@@ -49,23 +46,14 @@ func TestEveryProviderPackageSelfRegisters(t *testing.T) {
 }
 
 // TestEveryProviderGetsItsOwnLogFile proves the promise a provider package
-// gets for declaring SetLogger: once the provider stage starts, a logger
-// writing <name>.log exists for every compiled-in provider, enabled or not.
-// Every provider declares it, except clickhouse, which has no logger of its
-// own. The fresh configuration leaves every provider disabled, so starting
-// the stage binds the loggers without connecting to anything.
+// gets for declaring SetLogger: once the process is bootstrapped, a logger
+// writing <name>.log exists in the configured log directory for every
+// compiled-in provider, enabled or not. Every provider declares it, except
+// clickhouse, which has no logger of its own. The default configuration
+// leaves every provider disabled, so the bootstrap binds the loggers without
+// connecting to anything.
 func TestEveryProviderGetsItsOwnLogFile(t *testing.T) {
-	original := config.App
-	config.App = new(config.Config)
-	config.App.Logger.Dir = t.TempDir()
-	config.App.Logger.Level = "info"
-	config.App.Logger.Format = "json"
-	t.Cleanup(func() {
-		pkgzap.Clean()
-		config.App = original
-	})
-
-	require.NoError(t, lifecycle.Start(context.Background(), lifecycle.StageProvider))
+	bootstrapProcess(t)
 
 	for _, c := range lifecycle.Components(lifecycle.StageProvider) {
 		if c.Name == "clickhouse" {
@@ -73,7 +61,7 @@ func TestEveryProviderGetsItsOwnLogFile(t *testing.T) {
 			continue
 		}
 		require.NotNil(t, c.SetLogger, "provider %q must declare SetLogger to get its own log file", c.Name)
-		require.FileExists(t, filepath.Join(config.App.Logger.Dir, c.Name+".log"), "provider %q must get its own log file", c.Name)
+		require.FileExists(t, filepath.Join(bootstrapLogDir, c.Name+".log"), "provider %q must get its own log file", c.Name)
 	}
 }
 

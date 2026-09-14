@@ -10,8 +10,9 @@ import (
 // probe answers the two questions an orchestrator asks about a process:
 // whether it is alive at all, and whether it should be sent traffic.
 type probe struct {
-	// draining records that shutdown began. It is written once, from the
-	// signal handler, and read by every readiness request after that.
+	// draining records that shutdown began. It is written once, by bootstrap
+	// when the process is told to stop, and read by every readiness request
+	// after that.
 	draining atomic.Bool
 }
 
@@ -49,9 +50,10 @@ func (p *probe) Readyz(c *gin.Context) {
 }
 
 // Drain marks the process as shutting down, which fails Readyz from the next
-// request on. Bootstrap calls it when a termination signal arrives, and then
-// holds the process here for server.shutdown_delay: the mark is only worth
-// anything if something has time to observe it before the listener closes.
+// request on. Bootstrap calls it when the process is told to stop — by a
+// termination signal, or by a listener that failed — and then holds the
+// process here for server.shutdown_delay: the mark is only worth anything if
+// something has time to observe it before the listener closes.
 func (p *probe) Drain() {
 	p.draining.Store(true)
 }
