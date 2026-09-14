@@ -11,6 +11,7 @@ import (
 	"sort"
 
 	"github.com/hydroan/gst/internal/codegen/constants"
+	"github.com/hydroan/gst/internal/codegen/gen"
 
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/internal/clioutput"
@@ -82,9 +83,13 @@ func Run(projectName string) error {
 		clioutput.Success("CREATE", "%s", file)
 	}
 
-	// main.go
-	if err := createFile("main.go", fmt.Sprintf(mainContent,
-		projectName, projectName, projectName, projectName, projectName, projectName, projectName)); err != nil {
+	// main.go is the same file gg gen keeps regenerating, built by the same
+	// generator so the scaffold and the generated version cannot drift.
+	mainFile, err := gen.BuildMainFile(projectName)
+	if err != nil {
+		return err
+	}
+	if err := createFile("main.go", mainFile); err != nil {
 		return err
 	}
 	clioutput.Success("CREATE", "%s", "main.go")

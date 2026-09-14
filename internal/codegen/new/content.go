@@ -271,29 +271,6 @@ func init() {
 }
 `
 
-var mainContent = consts.CodeGeneratedComment() + `
-package main
-
-import (
-	_ "%s/configx"
-	_ "%s/cronjob"
-	_ "%s/middleware"
-	_ "%s/model"
-	_ "%s/module"
-	"%s/router"
-	_ "%s/service"
-
-	"github.com/hydroan/gst/bootstrap"
-	. "github.com/hydroan/gst/util"
-)
-
-func main() {
-	RunOrDie(bootstrap.Bootstrap)
-	RunOrDie(router.Init)
-	RunOrDie(bootstrap.Run)
-}
-`
-
 const configxContent = `// Package configx registers the application's custom configuration sections.
 //
 // Declare a struct and call config.Register[T]() in init below. The section
