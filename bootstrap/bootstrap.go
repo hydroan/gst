@@ -28,7 +28,6 @@ import (
 	"github.com/hydroan/gst/redis"
 	"github.com/hydroan/gst/router"
 	"github.com/hydroan/gst/service"
-	"go.uber.org/automaxprocs/maxprocs"
 	"go.uber.org/zap"
 )
 
@@ -43,8 +42,6 @@ var (
 const componentStopTimeout = 30 * time.Second
 
 func Bootstrap() error {
-	_, _ = maxprocs.Set(maxprocs.Logger(pkgzap.New("").Infof))
-
 	mu.Lock()
 	defer mu.Unlock()
 	if initialized {
