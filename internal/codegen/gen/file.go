@@ -304,6 +304,29 @@ func BuildRouterFile(pkgName string, modelImports []string, stmts ...ast.Stmt) (
 	return FormatNodeExtra(f, false)
 }
 
+// mainImportSpecs builds the imports of a generated main.go: every project
+// package in constants.ProjectImportDirs, then the framework packages main
+// calls into. The router package is the only project import with a name,
+// because main calls router.Init; the others are linked for their
+// initialisers alone.
+func mainImportSpecs(projectName string) []ast.Spec {
+	specs := make([]ast.Spec, 0, len(constants.ProjectImportDirs)+2)
+	for _, dir := range constants.ProjectImportDirs {
+		spec := &ast.ImportSpec{Path: &ast.BasicLit{Value: fmt.Sprintf("%q", projectName+"/"+dir)}}
+		if dir != constants.SubDirRouter {
+			spec.Name = ast.NewIdent("_")
+		}
+		specs = append(specs, spec)
+	}
+	return append(specs,
+		&ast.ImportSpec{Path: &ast.BasicLit{Value: fmt.Sprintf("%q", constants.ImportPathBootstrap)}},
+		&ast.ImportSpec{
+			Path: &ast.BasicLit{Value: fmt.Sprintf("%q", constants.ImportPathUtil)},
+			Name: ast.NewIdent("."),
+		},
+	)
+}
+
 // BuildMainFile generates a main.go file, the content like below:
 /*
 package main
@@ -332,21 +355,8 @@ func BuildMainFile(projectName string) (string, error) {
 		Name: ast.NewIdent(constants.PkgMain),
 		Decls: []ast.Decl{
 			&ast.GenDecl{
-				Tok: token.IMPORT,
-				Specs: []ast.Spec{
-					&ast.ImportSpec{Path: &ast.BasicLit{Value: fmt.Sprintf("%q", projectName+"/"+constants.SubDirConfigx)}, Name: ast.NewIdent("_")},
-					&ast.ImportSpec{Path: &ast.BasicLit{Value: fmt.Sprintf("%q", projectName+"/"+constants.SubDirCronjob)}, Name: ast.NewIdent("_")},
-					&ast.ImportSpec{Path: &ast.BasicLit{Value: fmt.Sprintf("%q", projectName+"/"+constants.SubDirMiddleware)}, Name: ast.NewIdent("_")},
-					&ast.ImportSpec{Path: &ast.BasicLit{Value: fmt.Sprintf("%q", projectName+"/"+constants.SubDirModel)}, Name: ast.NewIdent("_")},
-					&ast.ImportSpec{Path: &ast.BasicLit{Value: fmt.Sprintf("%q", projectName+"/"+constants.SubDirService)}, Name: ast.NewIdent("_")},
-					&ast.ImportSpec{Path: &ast.BasicLit{Value: fmt.Sprintf("%q", projectName+"/"+constants.SubDirModule)}, Name: ast.NewIdent("_")},
-					&ast.ImportSpec{Path: &ast.BasicLit{Value: fmt.Sprintf("%q", projectName+"/"+constants.SubDirRouter)}},
-					&ast.ImportSpec{Path: &ast.BasicLit{Value: fmt.Sprintf("%q", constants.ImportPathBootstrap)}},
-					&ast.ImportSpec{
-						Path: &ast.BasicLit{Value: fmt.Sprintf("%q", constants.ImportPathUtil)},
-						Name: ast.NewIdent("."),
-					},
-				},
+				Tok:   token.IMPORT,
+				Specs: mainImportSpecs(projectName),
 			},
 			&ast.FuncDecl{
 				Name: ast.NewIdent(constants.FuncMain),
