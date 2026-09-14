@@ -146,7 +146,7 @@ func (t Term) IsGroupKey() bool { return t.fn == FnNone && !t.plain }
 func (t Term) IsPlain() bool { return t.fn == FnNone && t.plain }
 
 // The functions below read the parts of a term for the database layer, which
-// renders them. They are functions rather than methods so the public types
+// renders them. They are functions rather than methods so the public gst
 // package, which forwards Term, does not hand them to business code.
 
 // TermFnOf returns the function the term applies: FnNone for a group key or a

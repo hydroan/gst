@@ -13,7 +13,7 @@ import (
 	gitignore "github.com/go-git/go-git/v5/plumbing/format/gitignore"
 )
 
-// columnConstructors are the types functions that mint a column reference
+// columnConstructors are the gst functions that mint a column reference
 // from a column name. Project code reads its columns through the XxxCols
 // variables gg gen writes from the model schema; a reference minted by hand
 // names a column the schema is never asked about, so a typo or a renamed
@@ -190,7 +190,7 @@ func modelTypeParameters(decl *ast.FuncDecl) map[string]bool {
 }
 
 // columnConstructorName returns the column constructor a call invokes, with
-// or without explicit type arguments, when the callee is one of the types
+// or without explicit type arguments, when the callee is one of the gst
 // package's column constructors.
 func columnConstructorName(call *ast.CallExpr, aliases []string, dotImport bool) (string, bool) {
 	fun := call.Fun

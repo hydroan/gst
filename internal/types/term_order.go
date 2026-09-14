@@ -25,7 +25,7 @@ func TermOrderTermOf(o TermOrder) Term { return o.term }
 func TermOrderDirectionOf(o TermOrder) OrderDirection { return o.direction }
 
 // NewTermOrder builds an order on a term from its parts, without the checks
-// Asc and Desc keep. It serves the framework's own tests; the public types
+// Asc and Desc keep. It serves the framework's own tests; the public gst
 // package does not forward it.
 func NewTermOrder(term Term, direction OrderDirection) TermOrder {
 	return TermOrder{term: term, direction: direction}

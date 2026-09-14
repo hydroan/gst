@@ -14,7 +14,7 @@
 //
 // The streaming side, in a service method:
 //
-//	func (s *Watcher) List(ctx *types.ServiceContext, req *model.Empty) (*model.Empty, error) {
+//	func (s *Watcher) List(ctx *gst.ServiceContext, req *model.Empty) (*model.Empty, error) {
 //		events, cancel := s.hub.Subscribe("records:" + ctx.Query().Get("record_id"))
 //		defer cancel()
 //		return nil, ctx.SSE(func(conn *sse.Conn) error {
