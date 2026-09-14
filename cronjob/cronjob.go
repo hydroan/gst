@@ -53,12 +53,15 @@ func init() {
 	// ready and stops it as soon as the process begins to drain. A project
 	// that registers no job never imports the package and never runs a
 	// scheduler.
-	lifecycle.Register(lifecycle.Component{Name: "cronjob", Start: start, Stop: stop})
+	lifecycle.Register(lifecycle.Component{Name: "cronjob", Stage: lifecycle.StageComponent, Start: start, Stop: stop})
 }
 
 // start brings the scheduler up with every job registered so far; jobs
-// registered later are scheduled on the spot.
-func start(_ context.Context) error {
+// registered later are scheduled on the spot. The context is the process
+// context: its cancellation is the first sign of shutdown, and halts
+// scheduling right then so no round starts while the process is on its way
+// out; stop waits for the rounds already in flight.
+func start(ctx context.Context) error {
 	if log == nil {
 		// Adopt the shared cronjob logger so this package never opens a
 		// second lumberjack instance on the same file, which would race its
@@ -78,27 +81,39 @@ func start(_ context.Context) error {
 	}
 
 	c.Start()
+	if ctx.Done() != nil {
+		go func() {
+			<-ctx.Done()
+			mu.Lock()
+			defer mu.Unlock()
+			if c != nil {
+				c.Stop()
+			}
+		}()
+	}
 
 	started = true
 	return nil
 }
 
 // stop halts scheduling and waits for in-flight jobs to finish, for as long
-// as ctx allows: a stuck job cannot hold the shutdown hostage. Bootstrap runs
-// it before the HTTP drain and before the connections jobs may still be using
-// are closed; without it, shutdown would kill jobs mid-write. In a process
-// that never started the scheduler it is a no-op.
-func stop(ctx context.Context) {
+// as ctx allows: a stuck job cannot hold the shutdown hostage, and giving up
+// on one is reported as the error bootstrap logs. Bootstrap runs it before
+// the HTTP drain and before the connections jobs may still be using are
+// closed; without it, shutdown would kill jobs mid-write. In a process that
+// never started the scheduler it is a no-op.
+func stop(ctx context.Context) error {
 	mu.Lock()
 	defer mu.Unlock()
 	if c == nil {
-		return
+		return nil
 	}
 
 	select {
 	case <-c.Stop().Done():
+		return nil
 	case <-ctx.Done():
-		log.Warnz("cronjob stop timed out waiting for in-flight jobs", zap.Error(ctx.Err()))
+		return errors.Wrap(ctx.Err(), "gave up waiting for in-flight jobs")
 	}
 }
 

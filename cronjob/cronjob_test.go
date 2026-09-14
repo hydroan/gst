@@ -91,7 +91,7 @@ func TestStopWaitsForInFlightJob(t *testing.T) {
 		t.Fatal("the scheduled job never started")
 	}
 
-	stop(context.Background())
+	require.NoError(t, stop(context.Background()))
 
 	select {
 	case <-jobDone:
@@ -129,9 +129,11 @@ func TestStopGivesUpOnStuckJob(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), stopBudget)
 	defer cancel()
 	begin := time.Now()
-	stop(ctx)
+	err := stop(ctx)
 	require.Less(t, time.Since(begin), 2*time.Second,
 		"stop must return once the context it was given expires")
+	require.ErrorIs(t, err, context.DeadlineExceeded,
+		"giving up on the in-flight job must be reported, not swallowed")
 	// Drain the round Stop gave up on before the test returns, logging
 	// included, so nothing of it runs on into the next test.
 	<-c.Stop().Done()
@@ -142,7 +144,7 @@ func TestStopGivesUpOnStuckJob(t *testing.T) {
 func TestStopWithoutStartIsNoop(t *testing.T) {
 	resetCronjobState(t)
 
-	stop(context.Background())
+	require.NoError(t, stop(context.Background()))
 }
 
 // TestSchedulerRunsAsLifecycleComponent proves importing the package is what
@@ -201,7 +203,7 @@ func TestScheduledRunsSkipWhileStillRunning(t *testing.T) {
 	// everything finish so Stop does not have to wait out its timeout.
 	time.Sleep(2200 * time.Millisecond)
 	close(block)
-	stop(context.Background())
+	require.NoError(t, stop(context.Background()))
 
 	require.EqualValues(t, 1, maxRunning.Load(),
 		"ticks firing while a run is in flight must be skipped, not piled on top of it")
@@ -232,7 +234,7 @@ func TestImmediateRunSharesSkipMutex(t *testing.T) {
 		t.Fatal("the immediate run never started")
 	}
 	time.Sleep(1800 * time.Millisecond)
-	stop(context.Background())
+	require.NoError(t, stop(context.Background()))
 
 	require.EqualValues(t, 1, maxRunning.Load(),
 		"the immediate run must hold the same guard as scheduled runs")
@@ -283,7 +285,7 @@ func TestRunLogsFailureWithErrorStack(t *testing.T) {
 			}
 			// Stop waits for the in-flight round, whose outcome entry is
 			// written before the round returns.
-			stop(context.Background())
+			require.NoError(t, stop(context.Background()))
 			pkgzap.Clean()
 
 			entry := readLogEntry(t, filepath.Join(dir, "cronjob.log"), tc.msg)
@@ -316,7 +318,7 @@ func TestRunStampsRoundIdentity(t *testing.T) {
 	case <-time.After(3 * time.Second):
 		t.Fatal("the scheduled job never started")
 	}
-	stop(context.Background())
+	require.NoError(t, stop(context.Background()))
 	pkgzap.Clean()
 
 	require.Equal(t, "identity-job", id.Cronjob)
@@ -354,7 +356,7 @@ func TestRunOpensRoundSpanWhenTracingIsOn(t *testing.T) {
 	case <-time.After(3 * time.Second):
 		t.Fatal("the scheduled job never started")
 	}
-	stop(context.Background())
+	require.NoError(t, stop(context.Background()))
 	pkgzap.Clean()
 
 	require.True(t, got.span.HasTraceID(), "the job must run under the round's span")

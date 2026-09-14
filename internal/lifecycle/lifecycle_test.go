@@ -3,28 +3,133 @@ package lifecycle
 import (
 	"context"
 	"fmt"
+	"path/filepath"
 	"testing"
 
 	"github.com/cockroachdb/errors"
+	"github.com/hydroan/gst/config"
+	"github.com/hydroan/gst/internal/types"
+	pkgzap "github.com/hydroan/gst/logger/zap"
 	"github.com/stretchr/testify/require"
 )
 
-// TestStartRunsComponentsInOrderAndStopReversesIt proves the components come
-// up in registration order and go down in the opposite one, the way a defer
-// stack unwinds: what was started last is stopped first.
-func TestStartRunsComponentsInOrderAndStopReversesIt(t *testing.T) {
+// TestStartRunsProvidersBeforeComponentsAndStopReversesIt proves the clients
+// come up before the work that uses them and go down after it, whatever the
+// names say: the component sorts first by name, the provider still starts
+// first.
+func TestStartRunsProvidersBeforeComponentsAndStopReversesIt(t *testing.T) {
 	resetRegistry(t)
 
 	var events []string
-	for _, name := range []string{"first", "second", "third"} {
-		Register(recordingComponent(name, &events, nil))
+	Register(recordingComponent("a-worker", StageComponent, &events, nil))
+	Register(recordingComponent("z-client", StageProvider, &events, nil))
+
+	require.NoError(t, Start(context.Background()))
+	require.Equal(t, []string{"start z-client", "start a-worker"}, events)
+
+	Stop(context.Background())
+	require.Equal(t, []string{"start z-client", "start a-worker", "stop a-worker", "stop z-client"}, events)
+}
+
+// TestStartOrdersAStageByName proves the members of one stage start in name
+// order regardless of registration order, so bootstrap is reproducible
+// across builds.
+func TestStartOrdersAStageByName(t *testing.T) {
+	resetRegistry(t)
+
+	var events []string
+	for _, name := range []string{"second", "third", "first"} {
+		Register(recordingComponent(name, StageComponent, &events, nil))
 	}
 
 	require.NoError(t, Start(context.Background()))
 	require.Equal(t, []string{"start first", "start second", "start third"}, events)
+}
 
+// TestDisabledComponentIsLeftOutOfTheLifecycle proves a component whose
+// Enabled reports false neither starts nor stops, while one without an
+// Enabled function counts as enabled.
+func TestDisabledComponentIsLeftOutOfTheLifecycle(t *testing.T) {
+	resetRegistry(t)
+
+	var events []string
+	off := recordingComponent("off", StageComponent, &events, nil)
+	off.Enabled = func() bool { return false }
+	Register(off)
+	Register(recordingComponent("on", StageComponent, &events, nil))
+
+	require.NoError(t, Start(context.Background()))
 	Stop(context.Background())
-	require.Equal(t, []string{"start first", "start second", "start third", "stop third", "stop second", "stop first"}, events)
+	require.Equal(t, []string{"start on", "stop on"}, events)
+}
+
+// TestSetLoggerReceivesADedicatedLoggerBeforeStart proves every registered
+// component that declared SetLogger — enabled or not — is bound to a logger
+// writing <Name>.log before the first Start runs, and that the file exists.
+func TestSetLoggerReceivesADedicatedLoggerBeforeStart(t *testing.T) {
+	resetRegistry(t)
+	dir := withLoggerConfig(t)
+
+	var sampleLogger, offLogger types.Logger
+	boundBeforeStart := false
+	Register(Component{
+		Name:      "sample",
+		Stage:     StageProvider,
+		SetLogger: func(l types.Logger) { sampleLogger = l },
+		Start: func(context.Context) error {
+			boundBeforeStart = sampleLogger != nil
+			return nil
+		},
+	})
+	Register(Component{
+		Name:      "off",
+		Stage:     StageProvider,
+		Enabled:   func() bool { return false },
+		SetLogger: func(l types.Logger) { offLogger = l },
+		Start:     func(context.Context) error { return errors.New("must not start") },
+	})
+
+	require.NoError(t, Start(context.Background()))
+	require.True(t, boundBeforeStart, "the dedicated logger must be bound before Start runs")
+	require.NotNil(t, offLogger, "a disabled component keeps its dedicated logger binding")
+	// Sink construction precreates the file, so its existence proves the
+	// binding points at the component's own file.
+	require.FileExists(t, filepath.Join(dir, "sample.log"))
+	require.FileExists(t, filepath.Join(dir, "off.log"))
+}
+
+// TestProviderStartContextEndsWithStart proves the two stages get the
+// contexts they are promised: a provider's is canceled as soon as its Start
+// returns, a component keeps the process context for its lifetime.
+func TestProviderStartContextEndsWithStart(t *testing.T) {
+	resetRegistry(t)
+
+	var providerDone, componentDone <-chan struct{}
+	Register(Component{Name: "client", Stage: StageProvider, Start: func(ctx context.Context) error {
+		providerDone = ctx.Done()
+		return nil
+	}})
+	Register(Component{Name: "worker", Stage: StageComponent, Start: func(ctx context.Context) error {
+		componentDone = ctx.Done()
+		return nil
+	}})
+
+	processCtx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	require.NoError(t, Start(processCtx))
+	select {
+	case <-providerDone:
+	default:
+		t.Fatal("a provider's context must end with its Start")
+	}
+	select {
+	case <-componentDone:
+		t.Fatal("a component must keep the process context")
+	default:
+	}
+
+	cancel()
+	<-componentDone
 }
 
 // TestStartStopsAtTheFirstFailure proves a component that fails to start
@@ -34,52 +139,95 @@ func TestStartStopsAtTheFirstFailure(t *testing.T) {
 	resetRegistry(t)
 
 	var events []string
-	Register(recordingComponent("first", &events, nil))
-	Register(recordingComponent("failing", &events, errors.New("sample failure")))
-	Register(recordingComponent("third", &events, nil))
+	Register(recordingComponent("a", StageComponent, &events, nil))
+	Register(recordingComponent("b-failing", StageComponent, &events, errors.New("sample failure")))
+	Register(recordingComponent("c", StageComponent, &events, nil))
 
 	err := Start(context.Background())
-	require.ErrorContains(t, err, `failed to start component "failing"`)
+	require.ErrorContains(t, err, `failed to start component "b-failing"`)
 	require.ErrorContains(t, err, "sample failure")
-	require.Equal(t, []string{"start first", "start failing"}, events)
+	require.Equal(t, []string{"start a", "start b-failing"}, events)
 
 	Stop(context.Background())
-	require.Equal(t, []string{"start first", "start failing", "stop first"}, events)
+	require.Equal(t, []string{"start a", "start b-failing", "stop a"}, events)
 }
 
-// TestStopRunsOnce proves a second Stop is a no-op, so the shutdown path can
-// stop the components early and let the cleanup stack call Stop again.
-func TestStopRunsOnce(t *testing.T) {
+// TestStopFailureDoesNotStopTheOthers proves a Stop that returns an error is
+// logged and the remaining components still stop.
+func TestStopFailureDoesNotStopTheOthers(t *testing.T) {
 	resetRegistry(t)
 
 	var events []string
-	Register(recordingComponent("sample", &events, nil))
+	Register(recordingComponent("a", StageComponent, &events, nil))
+	failing := recordingComponent("b", StageComponent, &events, nil)
+	failing.Stop = func(context.Context) error {
+		events = append(events, "stop b")
+		return errors.New("sample stop failure")
+	}
+	Register(failing)
+
 	require.NoError(t, Start(context.Background()))
+	Stop(context.Background())
+	require.Equal(t, []string{"start a", "start b", "stop b", "stop a"}, events)
+}
+
+// TestComponentWithoutStopIsSkippedAtShutdown proves Stop is optional: a
+// component that declared none is simply left alone.
+func TestComponentWithoutStopIsSkippedAtShutdown(t *testing.T) {
+	resetRegistry(t)
+
+	var events []string
+	stopless := recordingComponent("stopless", StageComponent, &events, nil)
+	stopless.Stop = nil
+	Register(stopless)
+
+	require.NoError(t, Start(context.Background()))
+	Stop(context.Background())
+	require.Equal(t, []string{"start stopless"}, events)
+}
+
+// TestStartRunsOnceAndStopDrainsWhatStarted proves bootstrap cannot start the
+// components twice, and that Stop only ever stops what has started since the
+// previous Stop.
+func TestStartRunsOnceAndStopDrainsWhatStarted(t *testing.T) {
+	resetRegistry(t)
+
+	var events []string
+	Register(recordingComponent("sample", StageComponent, &events, nil))
+
+	require.NoError(t, Start(context.Background()))
+	require.ErrorContains(t, Start(context.Background()), "already started")
 
 	Stop(context.Background())
 	Stop(context.Background())
 	require.Equal(t, []string{"start sample", "stop sample"}, events)
 }
 
-// TestStartRunsOnce proves bootstrap cannot start the components twice: a
-// second Start reports an error instead of doubling their work.
-func TestStartRunsOnce(t *testing.T) {
+// TestComponentsListsAStageSortedByName proves the registry reports a stage's
+// members in name order, enabled or not, and nothing from other stages.
+func TestComponentsListsAStageSortedByName(t *testing.T) {
 	resetRegistry(t)
 
 	var events []string
-	Register(recordingComponent("sample", &events, nil))
-	require.NoError(t, Start(context.Background()))
-	require.ErrorContains(t, Start(context.Background()), "already started")
-	require.Equal(t, []string{"start sample"}, events)
+	Register(recordingComponent("zeta", StageProvider, &events, nil))
+	off := recordingComponent("alpha", StageProvider, &events, nil)
+	off.Enabled = func() bool { return false }
+	Register(off)
+	Register(recordingComponent("loop", StageComponent, &events, nil))
+
+	var names []string
+	for _, c := range Components(StageProvider) {
+		names = append(names, c.Name)
+	}
+	require.Equal(t, []string{"alpha", "zeta"}, names)
 }
 
 // TestRegisterRejectsProgrammerErrors proves the registry refuses what it
 // could only accept by silently dropping a component: an empty name, a
-// missing Start or Stop, a duplicate name, and a registration that comes
-// after the components were started.
+// missing Start, an unknown stage, a duplicate name across stages, and a
+// registration that comes after the components were started.
 func TestRegisterRejectsProgrammerErrors(t *testing.T) {
 	noop := func(context.Context) error { return nil }
-	noopStop := func(context.Context) {}
 
 	cases := []struct {
 		name     string
@@ -88,32 +236,32 @@ func TestRegisterRejectsProgrammerErrors(t *testing.T) {
 	}{
 		{
 			name:     "empty name",
-			register: func() { Register(Component{Name: " ", Start: noop, Stop: noopStop}) },
+			register: func() { Register(Component{Name: " ", Start: noop}) },
 			want:     "non-empty name",
 		},
 		{
 			name:     "missing start",
-			register: func() { Register(Component{Name: "sample", Stop: noopStop}) },
-			want:     "requires a Start and a Stop",
+			register: func() { Register(Component{Name: "sample"}) },
+			want:     "requires a non-nil Start",
 		},
 		{
-			name:     "missing stop",
-			register: func() { Register(Component{Name: "sample", Start: noop}) },
-			want:     "requires a Start and a Stop",
+			name:     "unknown stage",
+			register: func() { Register(Component{Name: "sample", Stage: Stage(7), Start: noop}) },
+			want:     "unknown stage Stage(7)",
 		},
 		{
-			name: "duplicate name",
+			name: "duplicate name across stages",
 			register: func() {
-				Register(Component{Name: "sample", Start: noop, Stop: noopStop})
-				Register(Component{Name: "sample", Start: noop, Stop: noopStop})
+				Register(Component{Name: "sample", Stage: StageProvider, Start: noop})
+				Register(Component{Name: " sample ", Stage: StageComponent, Start: noop})
 			},
 			want: "duplicate component registration",
 		},
 		{
-			name: "after start",
+			name: "after the components started",
 			register: func() {
 				require.NoError(t, Start(context.Background()))
-				Register(Component{Name: "late", Start: noop, Stop: noopStop})
+				Register(Component{Name: "late", Stage: StageComponent, Start: noop})
 			},
 			want: "registered after bootstrap started the components",
 		},
@@ -126,19 +274,39 @@ func TestRegisterRejectsProgrammerErrors(t *testing.T) {
 	}
 }
 
-// recordingComponent builds a component that appends its start and stop to
-// events, failing to start with startErr when that is non-nil.
-func recordingComponent(name string, events *[]string, startErr error) Component {
+// recordingComponent builds a component of stage that appends its start and
+// stop to events, failing to start with startErr when that is non-nil.
+func recordingComponent(name string, stage Stage, events *[]string, startErr error) Component {
 	return Component{
-		Name: name,
+		Name:  name,
+		Stage: stage,
 		Start: func(context.Context) error {
 			*events = append(*events, "start "+name)
 			return startErr
 		},
-		Stop: func(context.Context) {
+		Stop: func(context.Context) error {
 			*events = append(*events, "stop "+name)
+			return nil
 		},
 	}
+}
+
+// withLoggerConfig points config.App at a scratch logger setup so the loggers
+// built during the test write under a temporary directory, and returns it.
+func withLoggerConfig(t *testing.T) string {
+	t.Helper()
+
+	dir := t.TempDir()
+	original := config.App
+	config.App = new(config.Config)
+	config.App.Logger.Dir = dir
+	config.App.Logger.Level = "info"
+	config.App.Logger.Format = "json"
+	t.Cleanup(func() {
+		pkgzap.Clean()
+		config.App = original
+	})
+	return dir
 }
 
 // capturePanic runs fn and returns the message it panics with, failing the
@@ -157,14 +325,13 @@ func capturePanic(t *testing.T, fn func()) (msg string) {
 }
 
 // resetRegistry rewinds the package-level registry so each test starts from
-// an empty, unsealed one.
+// an empty one that has not been started.
 func resetRegistry(t *testing.T) {
 	t.Helper()
 
 	mu.Lock()
 	defer mu.Unlock()
-	sealed = false
-	stopped = false
 	components = nil
-	started = nil
+	started = false
+	running = nil
 }
