@@ -44,16 +44,15 @@ import (
 	"context"
 	"maps"
 	"net/url"
-	"os"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
-	"uuid"
 
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/internal/errorstack"
+	"github.com/hydroan/gst/internal/instance"
 	"github.com/hydroan/gst/logger"
 	"github.com/stoewer/go-strcase"
 	"go.opentelemetry.io/otel"
@@ -361,17 +360,18 @@ func normalizeConfig(cfg config.OTEL) (config.OTEL, error) {
 
 // resourceAttributes builds the OpenTelemetry resource attributes describing
 // this process, so traces can be told apart by environment and by instance
-// when multiple replicas are running in production.
+// when multiple replicas are running in production. The instance is the
+// process identity every other part of the framework names itself by, so a
+// trace, the log entries behind it and a lease holder all point at the same
+// process.
 func resourceAttributes(cfg config.OTEL) []attribute.KeyValue {
-	hostname, hostErr := os.Hostname()
-
 	attrs := []attribute.KeyValue{
 		semconv.ServiceName(cfg.ServiceName),
 		semconv.ServiceVersion(resolveServiceVersion()),
 		semconv.DeploymentEnvironment(string(config.App.Mode)),
-		semconv.ServiceInstanceID(resolveInstanceID(hostname, hostErr)),
+		semconv.ServiceInstanceID(instance.ID()),
 	}
-	if hostErr == nil && hostname != "" {
+	if hostname := instance.Hostname(); hostname != "" {
 		attrs = append(attrs, semconv.HostName(hostname))
 	}
 	return attrs
@@ -389,17 +389,6 @@ func resolveServiceVersion() string {
 		return commit
 	}
 	return "unknown"
-}
-
-// resolveInstanceID returns the service.instance.id resource attribute value.
-// It prefers the process hostname, which already uniquely identifies a
-// container or pod in typical production deployments, falling back to a
-// generated UUID when the hostname is unavailable.
-func resolveInstanceID(hostname string, hostErr error) string {
-	if hostErr == nil && strings.TrimSpace(hostname) != "" {
-		return hostname
-	}
-	return uuid.New().String()
 }
 
 // newExporter creates an OTLP trace exporter based on startup configuration.

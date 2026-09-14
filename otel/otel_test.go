@@ -7,6 +7,7 @@ import (
 
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/config"
+	"github.com/hydroan/gst/internal/instance"
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
@@ -105,16 +106,11 @@ func TestResolveServiceVersionFallsBackToUnknown(t *testing.T) {
 	require.Equal(t, "unknown", resolveServiceVersion())
 }
 
-func TestResolveInstanceIDPrefersHostname(t *testing.T) {
-	require.Equal(t, "node-1", resolveInstanceID("node-1", nil))
-}
-
-func TestResolveInstanceIDFallsBackToGeneratedIDWhenHostnameUnavailable(t *testing.T) {
-	require.NotEmpty(t, resolveInstanceID("", errors.New("lookup failed")))
-	require.NotEmpty(t, resolveInstanceID("", nil))
-}
-
-func TestResourceAttributesIncludesServiceAndEnvironmentInfo(t *testing.T) {
+// TestResourceAttributesNameTheServiceEnvironmentAndInstance proves the
+// resource carries what tells traces apart: the service, its version, the
+// environment, and the process identity as the instance — the same identity
+// the log entries and the lease holder carry — with the hostname beside it.
+func TestResourceAttributesNameTheServiceEnvironmentAndInstance(t *testing.T) {
 	t.Cleanup(func() {
 		config.App.AppInfo.Version = ""
 		config.App.Mode = ""
@@ -133,7 +129,8 @@ func TestResourceAttributesIncludesServiceAndEnvironmentInfo(t *testing.T) {
 	require.Equal(t, "sample-service", values[semconv.ServiceNameKey].AsString())
 	require.Equal(t, "v1.2.3", values[semconv.ServiceVersionKey].AsString())
 	require.Equal(t, "prod", values[semconv.DeploymentEnvironmentKey].AsString())
-	require.NotEmpty(t, values[semconv.ServiceInstanceIDKey].AsString())
+	require.Equal(t, instance.ID(), values[semconv.ServiceInstanceIDKey].AsString())
+	require.Equal(t, instance.Hostname(), values[semconv.HostNameKey].AsString())
 }
 
 func TestIsSpanRecording(t *testing.T) {
