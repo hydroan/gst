@@ -542,7 +542,7 @@ Service code builds the same filters through the typed column references
 value type are both checked by the compiler, so a renamed column or a wrong
 value type fails the build instead of the query. Generic code, which has no
 concrete model and so no generated references, mints one for its type
-parameter, for example `types.NewColumn[M, string]("id").In(ids...)`, and keeps
+parameter, for example `gst.NewColumn[M, string]("id").In(ids...)`, and keeps
 the value type checked. Only the framework's own URL parsing builds a filter
 from a plain column name.
 
@@ -552,7 +552,7 @@ conditions back through the column reference: `Split` takes them out of the
 list, `Values` reads the eq and `in` values, `ExcludedValues` the `ne` and
 `notin` values and `Bounds` the range, all converted to the column's type,
 while `Order.SortsBy` and `Order.Descending` read the sort. Service code also has
-`types.FilterOr` and `types.FilterAnd` to group filters, which is the only way
+`gst.FilterOr` and `gst.FilterAnd` to group filters, which is the only way
 a query expresses OR. Groups are deliberately
 not part of the URL contract: a client cannot change how conditions combine,
 so a mandatory service-side filter can never be OR-ed away.
@@ -580,9 +580,9 @@ filter.
 >`Database equivalent`
 >
 >```go
->database.Database[*model.User](ctx).WithQuery(nil, types.QueryOptions{
+>database.Database[*model.User](ctx).WithQuery(nil, gst.QueryOptions{
 >	AllowEmpty: true,
->	Filters: []types.Filter{
+>	Filters: []gst.Filter{
 >		model.UserCols.Age.Gte(18),
 >		model.UserCols.CreatedAt.Gte(time.Date(2024, 7, 1, 0, 0, 0, 0, time.UTC)),
 >		model.UserCols.CreatedAt.Lte(time.Date(2024, 7, 31, 23, 59, 59, 0, time.UTC)),
