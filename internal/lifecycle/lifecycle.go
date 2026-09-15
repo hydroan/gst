@@ -1,7 +1,10 @@
 // Package lifecycle is the registry of the framework components that have a
 // lifetime of their own: clients of external systems, the scheduler, election
 // loops, anything that owns a connection or a background goroutine — and,
-// through the component package, a project's own long-running work.
+// through the component package, a project's own long-running work. It also
+// holds what such work has in common: Fail, the one way out of a process
+// that cannot go on, and Interrupted, the test of whether work stopped
+// because it was asked to.
 //
 // A component registers from its package initialiser, so importing its
 // package is the single act that enables it: a project that never imports the
@@ -11,12 +14,12 @@
 // test harness seeding data, the routes-ready hooks Run fires first) can
 // use them; it starts the components in Run, once every table they may
 // touch exists and is seeded and right before the listener opens. All of
-// them stop once the listener has
-// drained, the components first and the providers after their last user.
-// Within a stage the order is by name, so nothing in a stage may depend on
-// another member of it. A component whose Enabled reports false is left out
-// of the lifecycle entirely — no Start, no Stop — which makes "disabled means
-// no-op" a bootstrap guarantee instead of a guard every component repeats.
+// them stop once the listener has drained, the components first and the
+// providers after their last user. Within a stage the order is by name, so
+// nothing in a stage may depend on another member of it. A component whose
+// Enabled reports false is left out of the lifecycle entirely — no Start, no
+// Stop — which makes "disabled means no-op" a bootstrap guarantee instead of
+// a guard every component repeats.
 package lifecycle
 
 import (
@@ -44,9 +47,9 @@ const (
 	// listener has drained and every user of theirs is gone.
 	StageProvider Stage = iota
 	// StageComponent is for work that runs alongside the server: the
-	// scheduler, election loops. They start in Run, once the tables exist and
-	// right before the listener opens, and stop first, right after the
-	// listener has drained.
+	// scheduler, election loops, a project's own long-running work. They
+	// start in Run, once the tables exist and right before the listener
+	// opens, and stop first, right after the listener has drained.
 	StageComponent
 )
 
@@ -68,8 +71,9 @@ func (s Stage) String() string {
 // Component is one framework component with a lifetime of its own.
 type Component struct {
 	// Name uniquely identifies the component in the registry, in errors, in
-	// logs and in the name of its log file. Framework providers use their
-	// package name (the final import path element).
+	// logs and in the name of its log file. Framework components use their
+	// package name (the final import path element); a project's work is
+	// registered by the component package under its own name, "component".
 	Name string
 
 	// Stage is what the component is to the process; see Stage.
@@ -270,7 +274,8 @@ func newFailure() (context.Context, context.CancelCauseFunc) {
 
 // Fail reports a failure a component cannot recover from and the process
 // cannot correctly go on with — leader work that will not stop once its
-// lease is lost, while another replica may already be running it. Bootstrap
+// lease is lost, while another replica may already be running it; a
+// project's long-running work that ended before the process did. Bootstrap
 // ends Run on the first one the way it ends on a listener failing: the
 // process shuts down with err as the reason, and its orchestrator restarts
 // it. Later failures change nothing; the first one is the reason.

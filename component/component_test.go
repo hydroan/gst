@@ -13,6 +13,22 @@ import (
 	"go.uber.org/zap/zaptest/observer"
 )
 
+// withRegistry gives the test a registry of its own and restores the
+// process's afterwards.
+func withRegistry(t *testing.T) {
+	t.Helper()
+
+	mu.Lock()
+	savedWorks, savedErr, savedStarted := works, errRegister, started
+	works, errRegister, started = nil, nil, false
+	mu.Unlock()
+	t.Cleanup(func() {
+		mu.Lock()
+		works, errRegister, started = savedWorks, savedErr, savedStarted
+		mu.Unlock()
+	})
+}
+
 // withRecordedFailures records the process failures the work reports
 // instead of ending the process, and restores the real reporting afterwards.
 func withRecordedFailures(t *testing.T) <-chan error {
@@ -36,45 +52,77 @@ func withObservedGlobalLogger(t *testing.T) *observer.ObservedLogs {
 	return logs
 }
 
-// TestRegisterDeclaresTheWorkAsAComponent proves Register puts the work in
-// the component stage of the lifecycle under its name, prefixed so that it
-// cannot collide with a framework component's, and refuses a nil function.
-func TestRegisterDeclaresTheWorkAsAComponent(t *testing.T) {
-	Register(func(ctx context.Context) error {
-		<-ctx.Done()
-		return nil
-	}, "sample")
+// idle is work that runs until the process stops.
+func idle(ctx context.Context) error {
+	<-ctx.Done()
+	return nil
+}
+
+// TestPackageIsOneComponentOfTheLifecycle proves importing the package
+// registers the one component that starts and stops every registered work,
+// and that Register lists the work under its name.
+func TestPackageIsOneComponentOfTheLifecycle(t *testing.T) {
+	withRegistry(t)
 
 	var names []string
 	for _, c := range lifecycle.Components(lifecycle.StageComponent) {
 		names = append(names, c.Name)
 	}
-	require.Contains(t, names, "component:sample")
-	require.Panics(t, func() { Register(nil, "sample-nil") })
+	require.Contains(t, names, "component")
+
+	Register(idle, " sample ")
+	require.Len(t, works, 1)
+	require.Equal(t, "sample", works[0].name, "the name is trimmed")
 }
 
-// TestWorkRunsUntilTheProcessStopsAndIsWaitedFor proves the work runs on the
-// context it is started on until that context ends, and stop returns once
-// the work has — with nothing reported as a failure.
-func TestWorkRunsUntilTheProcessStopsAndIsWaitedFor(t *testing.T) {
-	failures := withRecordedFailures(t)
-	returned := make(chan struct{})
-	w := &work{name: "sample", fn: func(ctx context.Context) error {
-		<-ctx.Done()
-		close(returned)
-		return ctx.Err()
-	}}
+// TestRegisterRefusesWhatItCannotHonor proves a registration without a
+// name, without a function or under a name already taken fails the start
+// naming every one of them, and a registration after the start panics.
+func TestRegisterRefusesWhatItCannotHonor(t *testing.T) {
+	withRegistry(t)
+
+	Register(nil, "sample-nil")
+	Register(idle, "  ")
+	Register(idle, "sample")
+	Register(idle, "sample")
+	err := start(context.Background())
+	require.ErrorContains(t, err, `component "sample-nil": nil function`)
+	require.ErrorContains(t, err, "registered work has no name")
+	require.ErrorContains(t, err, `component "sample": registered twice`)
+
+	withRegistry(t)
 	ctx, cancel := context.WithCancel(context.Background())
-	require.NoError(t, w.start(ctx))
+	require.NoError(t, start(ctx))
+	require.Panics(t, func() { Register(idle, "late") }, "a registration after the start would never run")
+	cancel()
+	require.NoError(t, stop(context.Background()))
+}
+
+// TestStartRunsEveryWorkAndStopWaitsForAll proves the start runs every
+// registered work on the context it is given and stop returns once all of
+// them have — with nothing reported as a failure.
+func TestStartRunsEveryWorkAndStopWaitsForAll(t *testing.T) {
+	withRegistry(t)
+	failures := withRecordedFailures(t)
+	returned := make(chan string, 2)
+	for _, name := range []string{"first", "second"} {
+		Register(func(ctx context.Context) error {
+			<-ctx.Done()
+			returned <- name
+			return ctx.Err()
+		}, name)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	require.NoError(t, start(ctx))
 
 	select {
-	case <-returned:
-		t.Fatal("the work must run until the process stops")
+	case name := <-returned:
+		t.Fatalf("%q must run until the process stops", name)
 	case <-time.After(50 * time.Millisecond):
 	}
 	cancel()
-	require.NoError(t, w.stop(context.Background()))
-	<-returned
+	require.NoError(t, stop(context.Background()))
+	require.Len(t, returned, 2, "stop returns once every work has")
 	require.Empty(t, failures, "returning once the process stops is not a failure")
 }
 
@@ -94,7 +142,7 @@ func TestWorkThatEndsBeforeTheProcessFailsIt(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			failures := withRecordedFailures(t)
 			w := &work{name: "sample", fn: tc.fn}
-			require.NoError(t, w.start(context.Background()))
+			w.start(context.Background())
 
 			select {
 			case err := <-failures:
@@ -129,7 +177,7 @@ func TestWorkFailingWhileStoppingIsLoggedNotFatal(t *testing.T) {
 				return tc.err(ctx)
 			}}
 			ctx, cancel := context.WithCancel(context.Background())
-			require.NoError(t, w.start(ctx))
+			w.start(ctx)
 			cancel()
 			require.NoError(t, w.stop(context.Background()))
 
@@ -155,7 +203,7 @@ func TestStopGivesUpOnWorkThatWillNotReturn(t *testing.T) {
 		return nil
 	}}
 	ctx, cancel := context.WithCancel(context.Background())
-	require.NoError(t, w.start(ctx))
+	w.start(ctx)
 	cancel()
 
 	stopCtx, stopCancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
