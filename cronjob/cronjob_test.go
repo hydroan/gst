@@ -876,15 +876,15 @@ func TestRunOpensRoundSpanWhenTracingIsOn(t *testing.T) {
 // TestRoundThatIgnoresTheLossFailsTheProcess proves the last line behind the
 // lease is the scheduler's too: a round still running once its lease is lost
 // and the grace has passed would run beside the next instant's round on
-// another replica, so the process is failed — through the lifecycle, which
-// ends bootstrap's Run. The failure is process-wide and one-way, so the test
-// first checks nothing failed the process before it.
+// another replica, so the process is failed. The failure is recorded instead
+// of tripping the process-wide one, which is one-way and would keep the test
+// from running twice.
 func TestRoundThatIgnoresTheLossFailsTheProcess(t *testing.T) {
 	withCronjobLoggerConfig(t)
 	resetCronjobState(t)
 	clock := withFakeClock(t, time.Date(2026, 1, 1, 10, 0, 0, 0, time.UTC))
 	withFastLease(t)
-	require.NoError(t, lifecycle.Failure().Err(), "no earlier test may have failed the process")
+	failures := withRecordedFailures(t)
 
 	entered := make(chan struct{}, 1)
 	release := make(chan struct{})
@@ -904,8 +904,8 @@ func TestRoundThatIgnoresTheLossFailsTheProcess(t *testing.T) {
 
 	takeOver(t, "cron:stubborn-job")
 	select {
-	case <-lifecycle.Failure().Done():
-		require.ErrorContains(t, context.Cause(lifecycle.Failure()), `lease "cron:stubborn-job" was lost`)
+	case err := <-failures:
+		require.ErrorContains(t, err, `lease "cron:stubborn-job" was lost`)
 	case <-time.After(5 * time.Second):
 		t.Fatal("a round ignoring the loss must fail the process")
 	}
@@ -994,6 +994,16 @@ func withFastLease(t *testing.T) {
 	t.Helper()
 
 	t.Cleanup(lease.SetTimings(300*time.Millisecond, 50*time.Millisecond, 150*time.Millisecond, 100*time.Millisecond))
+}
+
+// withRecordedFailures records the process failures the lease engine reports
+// instead of ending the test process, and restores the real one afterwards.
+func withRecordedFailures(t *testing.T) <-chan error {
+	t.Helper()
+
+	failures := make(chan error, 4)
+	t.Cleanup(lease.SetFail(func(err error) { failures <- err }))
+	return failures
 }
 
 // startInstances builds and starts n schedulers over the registered jobs —

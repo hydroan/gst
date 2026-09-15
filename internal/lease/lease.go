@@ -97,6 +97,17 @@ func SetTimings(lease, renew, deadline, grace time.Duration) (restore func()) {
 	}
 }
 
+// SetFail replaces what Run does once work under a lost lease will not stop,
+// and returns the function that restores it. It exists for the tests of the
+// capabilities built on leases, which record the failure instead of ending
+// the test process — the process-wide failure is one-way, so a test that
+// tripped it could not run twice; nothing else calls it.
+func SetFail(fn func(error)) (restore func()) {
+	original := fail
+	fail = fn
+	return func() { fail = original }
+}
+
 // table is the name of the lease table.
 const table = "gst_leases"
 

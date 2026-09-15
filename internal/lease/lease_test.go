@@ -576,9 +576,7 @@ func withRecordedFailures(t *testing.T) <-chan error {
 	t.Helper()
 
 	failures := make(chan error, 4)
-	original := fail
-	fail = func(err error) { failures <- err }
-	t.Cleanup(func() { fail = original })
+	t.Cleanup(SetFail(func(err error) { failures <- err }))
 	return failures
 }
 
