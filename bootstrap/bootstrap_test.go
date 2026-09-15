@@ -1,6 +1,7 @@
 package bootstrap
 
 import (
+	"context"
 	"net"
 	"net/http"
 	"os"
@@ -9,6 +10,7 @@ import (
 	"slices"
 	"strconv"
 	"sync"
+	"syscall"
 	"testing"
 	"time"
 
@@ -97,6 +99,28 @@ func TestRunDrainsBeforeTeardownWhenAListenerFails(t *testing.T) {
 	case <-time.After(10 * time.Second):
 		t.Fatal("Run did not return once the drain window passed")
 	}
+}
+
+// TestAwaitShutdownReturnsWhatEndedTheWait proves Run ends for each of the
+// three reasons it may — with nothing to report for a signal, and the failure
+// for a listener's or a component's — so a component failing ends the process
+// the way a listener failing does.
+func TestAwaitShutdownReturnsWhatEndedTheWait(t *testing.T) {
+	never := context.Background()
+
+	sigCh := make(chan os.Signal, 1)
+	sigCh <- syscall.SIGTERM
+	require.NoError(t, awaitShutdown(never, never, sigCh))
+
+	errListener := errors.New("sample listener failure")
+	listeners, failListener := context.WithCancelCause(context.Background())
+	failListener(errListener)
+	require.ErrorIs(t, awaitShutdown(listeners, never, sigCh), errListener)
+
+	errComponent := errors.New("sample component failure")
+	components, failComponent := context.WithCancelCause(context.Background())
+	failComponent(errComponent)
+	require.ErrorIs(t, awaitShutdown(never, components, sigCh), errComponent)
 }
 
 var (

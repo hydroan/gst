@@ -256,3 +256,30 @@ func Stop(ctx context.Context) {
 		}
 	}
 }
+
+// failure is the context a component ends the process through, see Fail.
+var failure, fail = newFailure()
+
+// newFailure builds the failure context and the function that ends it; a
+// test rebuilds them to start from a process nothing has failed in.
+func newFailure() (context.Context, context.CancelCauseFunc) {
+	return context.WithCancelCause(context.Background())
+}
+
+// Fail reports a failure a component cannot recover from and the process
+// cannot correctly go on with — leader work that will not stop once its
+// lease is lost, while another replica may already be running it. Bootstrap
+// ends Run on the first one the way it ends on a listener failing: the
+// process shuts down with err as the reason, and its orchestrator restarts
+// it. Later failures change nothing; the first one is the reason.
+func Fail(err error) {
+	if err == nil {
+		err = errors.New("lifecycle: a component failed without saying why")
+	}
+	fail(err)
+}
+
+// Failure returns the context Fail ends, with the failure as its cause.
+func Failure() context.Context {
+	return failure
+}

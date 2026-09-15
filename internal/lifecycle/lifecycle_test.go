@@ -293,6 +293,25 @@ func TestRegisterRejectsProgrammerErrors(t *testing.T) {
 	}
 }
 
+// TestFailEndsTheProcessWithTheFirstFailure proves a component's failure
+// reaches bootstrap through the failure context, with the first failure as
+// its cause: a later one changes nothing, and a failure reported without an
+// error still names itself.
+func TestFailEndsTheProcessWithTheFirstFailure(t *testing.T) {
+	resetRegistry(t)
+
+	require.NoError(t, Failure().Err(), "nothing has failed yet")
+
+	errFirst := errors.New("sample component failure")
+	Fail(errFirst)
+	Fail(errors.New("a later failure"))
+	require.ErrorIs(t, context.Cause(Failure()), errFirst)
+
+	resetRegistry(t)
+	Fail(nil)
+	require.ErrorContains(t, context.Cause(Failure()), "a component failed without saying why")
+}
+
 // recordingComponent builds a component of stage that appends its start and
 // stop to events, failing to start with startErr when that is non-nil.
 func recordingComponent(name string, stage Stage, events *[]string, startErr error) Component {
@@ -353,4 +372,5 @@ func resetRegistry(t *testing.T) {
 	components = nil
 	stages = [stageCount]stageState{}
 	running = nil
+	failure, fail = newFailure() //nolint:fatcontext // The failure context is process-wide by design; a test starts from a fresh one.
 }

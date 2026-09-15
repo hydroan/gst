@@ -204,17 +204,7 @@ func Run() error {
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT)
 
-	failed := startup.Go()
-	var err error
-	select {
-	case sig := <-sigCh:
-		zap.S().Infow("canceled by signal", "signal", sig)
-	case <-failed.Done():
-		// One of the long-running functions failed. Returning is what stops
-		// the others: the deferred clean shuts down those still serving.
-		err = context.Cause(failed)
-		zap.S().Errorw("shutting down after a failure", "err", err)
-	}
+	err := awaitShutdown(startup.Go(), lifecycle.Failure(), sigCh)
 
 	// Either way the process leaves the same way: stop answering readiness
 	// before anything is torn down, cancel the process context so the
@@ -224,6 +214,28 @@ func Run() error {
 	cancelProcess()
 	awaitDrain(sigCh)
 	return err
+}
+
+// awaitShutdown blocks until the process is told to stop — one of the
+// long-running functions failing (listeners is the context startup.Go
+// cancels with the failure as its cause), a component failing (components,
+// see lifecycle.Fail) or a termination signal — and returns the failure, nil
+// for a signal. Returning is what stops what is still serving: Run's
+// deferred clean shuts it down.
+func awaitShutdown(listeners, components context.Context, sigCh <-chan os.Signal) error {
+	select {
+	case sig := <-sigCh:
+		zap.S().Infow("canceled by signal", "signal", sig)
+		return nil
+	case <-listeners.Done():
+		err := context.Cause(listeners)
+		zap.S().Errorw("shutting down after a failure", "err", err)
+		return err
+	case <-components.Done():
+		err := context.Cause(components)
+		zap.S().Errorw("shutting down after a component failure", "err", err)
+		return err
+	}
 }
 
 // warnUnlinkedProviders reports every provider the configuration enables
