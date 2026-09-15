@@ -17,6 +17,16 @@
 // instants. An instant that passes while the previous run is still in flight
 // is skipped.
 //
+// A job runs once per instant across every replica of the deployment: the
+// replicas share the instant's lease through the primary database, the first
+// to claim it runs the round, the others skip it. Work that belongs to the
+// process itself — refreshing a process-local cache, cleaning a local
+// directory — registers with cronjob.RegisterPerInstance and runs on every
+// replica. On startup a job's most recent instant is caught up once, on one
+// replica, when the job has run before, that instant passed within the last
+// day and no replica ran it; a job that has never run, or whose most recent
+// instant was run, starts with its next instant.
+//
 // Example:
 //
 //	import (
