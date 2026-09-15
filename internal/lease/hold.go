@@ -40,9 +40,13 @@ func Hold(parent context.Context, h *Handle) (ctx context.Context, stop context.
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
-		// The claim counts as the last successful renewal.
-		last := time.Now()
-		timer := time.NewTimer(interval)
+		// The claim counts as the last successful renewal, from the moment
+		// it was sent.
+		last := h.claimedAt
+		if last.IsZero() {
+			last = time.Now()
+		}
+		timer := time.NewTimer(min(interval, time.Until(last.Add(deadline))))
 		defer timer.Stop()
 		for {
 			select {
@@ -72,13 +76,17 @@ func Hold(parent context.Context, h *Handle) (ctx context.Context, stop context.
 			case renewing.Err() != nil:
 				return
 			default:
-				zap.S().Warnw("lease renewal failed", "lease", h.name, "err", err)
+				zap.S().Warnw("lease renewal failed", "component", "lease", "lease", h.name, "err", err)
 			}
 			if time.Since(last) >= deadline {
 				cancel(ErrLost)
 				return
 			}
-			timer.Reset(interval)
+			// The next attempt comes at the interval, or at the deadline
+			// when that is sooner: a renewal that failed just short of its
+			// bound must not leave the holder asleep past the deadline, on
+			// the other side of the margin the successor's claim respects.
+			timer.Reset(max(min(interval, time.Until(last.Add(deadline))), 0))
 		}
 	}()
 	return ctx, func() {
@@ -169,7 +177,7 @@ func Run(ctx context.Context, name string, work func(ctx context.Context) error)
 		return err
 	case <-grace.C:
 		err := errors.Newf("lease %q was lost and the work under it has not stopped within %s", name, stepDownGrace)
-		zap.S().Errorw("work under a lost lease will not stop", "lease", name, "err", err)
+		zap.S().Errorw("work under a lost lease will not stop", "component", "lease", "lease", name, "err", err)
 		fail(err)
 		return <-returned
 	}

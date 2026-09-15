@@ -2,6 +2,7 @@ package lease
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"testing"
 	"time"
@@ -52,13 +53,14 @@ func TestHoldEndsAtTheLocalDeadlineWithoutTheDatabase(t *testing.T) {
 	ctx := context.Background()
 	name := uniqueName(t)
 
+	// The deadline runs from the claim, so the measure starts before it.
+	begin := time.Now()
 	holder, claimed, err := Claim(ctx, name)
 	require.NoError(t, err)
 	require.True(t, claimed)
 	t.Cleanup(func() { _ = holder.Release(ctx) })
 
 	withClosedDatabase(t)
-	begin := time.Now()
 	held, stop := Hold(ctx, holder)
 	defer stop()
 
@@ -78,6 +80,8 @@ func TestHoldGivesUpWhenARenewalCannotGetAConnection(t *testing.T) {
 	ctx := context.Background()
 	name := uniqueName(t)
 
+	// The deadline runs from the claim, so the measure starts before it.
+	begin := time.Now()
 	holder, claimed, err := Claim(ctx, name)
 	require.NoError(t, err)
 	require.True(t, claimed)
@@ -92,7 +96,6 @@ func TestHoldGivesUpWhenARenewalCannotGetAConnection(t *testing.T) {
 	require.NoError(t, tx.Error)
 	t.Cleanup(func() { _ = tx.Rollback().Error })
 
-	begin := time.Now()
 	held, stop := Hold(ctx, holder)
 	defer stop()
 
@@ -339,4 +342,76 @@ func awaitReturned(t *testing.T, returned <-chan error) error {
 		t.Fatal("Run did not return")
 		return nil
 	}
+}
+
+// TestHoldEndsAtTheDeadlineWhenARenewalFailsShortOfItsBound proves the
+// deadline holds even when a renewal fails a moment before its bound: the
+// next attempt is due at the deadline, not a whole interval later, so the
+// holder does not sleep on past the margin its successor's claim respects.
+func TestHoldEndsAtTheDeadlineWhenARenewalFailsShortOfItsBound(t *testing.T) {
+	const interval, deadline = 200 * time.Millisecond, 400 * time.Millisecond
+	t.Cleanup(SetTimings(600*time.Millisecond, interval, deadline, 100*time.Millisecond))
+	// The failure lands at three quarters of the way to the deadline: after
+	// the interval, before the bound, and a whole interval after it would
+	// overshoot the deadline.
+	withDelayedFailingDatabase(t, 150*time.Millisecond)
+
+	begin := time.Now()
+	held, stop := Hold(context.Background(), &Handle{name: "sample", holder: "sample", claimedAt: begin})
+	defer stop()
+
+	awaitDone(held, t)
+	require.ErrorIs(t, context.Cause(held), ErrLost)
+	elapsed := time.Since(begin)
+	require.GreaterOrEqual(t, elapsed, deadline, "a failed renewal must not end the lease before the deadline")
+	require.Less(t, elapsed, deadline+interval*2/5, "the lease must end at the deadline, not an interval later")
+}
+
+// delayedFailingPool is a connection pool whose every statement fails after
+// delay: the database that answers slowly and badly.
+type delayedFailingPool struct {
+	delay time.Duration
+}
+
+var errPoolFailure = errors.New("sample pool failure")
+
+func (p delayedFailingPool) ExecContext(ctx context.Context, _ string, _ ...any) (sql.Result, error) {
+	select {
+	case <-time.After(p.delay):
+		return nil, errPoolFailure
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	}
+}
+
+func (p delayedFailingPool) QueryContext(ctx context.Context, _ string, _ ...any) (*sql.Rows, error) {
+	select {
+	case <-time.After(p.delay):
+		return nil, errPoolFailure
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	}
+}
+
+func (delayedFailingPool) QueryRowContext(context.Context, string, ...any) *sql.Row { return nil }
+
+func (delayedFailingPool) PrepareContext(context.Context, string) (*sql.Stmt, error) {
+	return nil, errPoolFailure
+}
+
+// withDelayedFailingDatabase points the engine at a handle whose statements
+// fail after delay, and restores the suite's database afterwards. The
+// handle keeps a real dialect, so the protocol gets as far as the statement.
+func withDelayedFailingDatabase(t *testing.T, delay time.Duration) {
+	t.Helper()
+
+	slow, err := gorm.Open(sqlite.Open("file::memory:?cache=private"), &gorm.Config{Logger: gormlogger.Discard})
+	require.NoError(t, err)
+	pool := delayedFailingPool{delay: delay}
+	slow.ConnPool = pool
+	slow.Statement.ConnPool = pool
+
+	original := dbruntime.DB
+	dbruntime.DB = slow
+	t.Cleanup(func() { dbruntime.DB = original })
 }

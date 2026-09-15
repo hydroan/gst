@@ -34,10 +34,11 @@
 //	         0 rows: the lease was already gone; the work is done either way.
 //
 // :now is the database server's clock in UTC milliseconds — MySQL
-// UNIX_TIMESTAMP(NOW(3)), PostgreSQL clock_timestamp(), SQLite unixepoch() —
-// so the processes of a deployment need not agree on the time. A ClickHouse
-// primary database has none of this: the claim fails, and with it whatever
-// capability asked for the lease.
+// UNIX_TIMESTAMP() with the milliseconds of NOW(3), PostgreSQL
+// clock_timestamp(), SQLite unixepoch() — read without a round trip through
+// any session time zone, so the processes of a deployment need not agree on
+// the time. A ClickHouse primary database has none of this: the claim
+// fails, and with it whatever capability asked for the lease.
 //
 // The holder renews every 5 seconds and gives itself up 10 seconds after the
 // last renewal it started, 5 seconds before the database lets anyone else
@@ -166,7 +167,12 @@ type Handle struct {
 	name   string
 	holder string
 	term   uint64
-	slotMs int64
+	// claimedAt is the moment the claim was sent, on this process's clock:
+	// the first renewal the local deadline counts from. Taken before the
+	// statement, like every renewal's, so that the round trip of the claim
+	// itself does not eat into the margin between the deadline and the
+	// database's expiry.
+	claimedAt time.Time
 }
 
 // Name returns the coordinated name.
@@ -268,12 +274,13 @@ func claim(ctx context.Context, name string, slotMs *int64) (*Handle, bool, erro
 	}
 	update := fmt.Sprintf("UPDATE %s SET holder = ?, instance = ?, term = term + 1, expires_at_ms = %s + ?, updated_at = ?%s WHERE name = ? AND expires_at_ms <= %s%s",
 		table, now, setSlot, now, whereSlot)
+	claimedAt := time.Now()
 	res := db.WithContext(ctx).Exec(update, args...)
 	if res.Error != nil {
 		return nil, false, errors.Wrapf(res.Error, "claim lease %q", name)
 	}
 	if res.RowsAffected == 1 {
-		return handleOf(ctx, db, name, holder)
+		return handleOf(ctx, db, name, holder, claimedAt)
 	}
 
 	// No row was free. Either the name is held — the insert then does
@@ -293,7 +300,7 @@ func claim(ctx context.Context, name string, slotMs *int64) (*Handle, bool, erro
 	if res.RowsAffected == 0 {
 		return nil, false, nil
 	}
-	return &Handle{name: name, holder: holder, term: 1, slotMs: slotValue}, true, nil
+	return &Handle{name: name, holder: holder, term: 1, claimedAt: claimedAt}, true, nil
 }
 
 // claimInsert returns the insert that claims a name the table has never
@@ -318,12 +325,9 @@ func claimInsert(dialect, now string) string {
 
 // handleOf reads the term the claim just started; the update that won the
 // name does not report it.
-func handleOf(ctx context.Context, db *gorm.DB, name, holder string) (*Handle, bool, error) {
-	var claimed struct {
-		Term   uint64
-		SlotMs int64
-	}
-	res := db.WithContext(ctx).Raw(fmt.Sprintf("SELECT term, slot_ms FROM %s WHERE name = ? AND holder = ?", table), name, holder).Scan(&claimed)
+func handleOf(ctx context.Context, db *gorm.DB, name, holder string, claimedAt time.Time) (*Handle, bool, error) {
+	var term uint64
+	res := db.WithContext(ctx).Raw(fmt.Sprintf("SELECT term FROM %s WHERE name = ? AND holder = ?", table), name, holder).Scan(&term)
 	if res.Error != nil {
 		return nil, false, errors.Wrapf(res.Error, "read the term of lease %q", name)
 	}
@@ -332,7 +336,7 @@ func handleOf(ctx context.Context, db *gorm.DB, name, holder string) (*Handle, b
 		// expiry could do that, neither of which this holder has done.
 		return nil, false, errors.Wrapf(ErrLost, "lease %q vanished right after the claim", name)
 	}
-	return &Handle{name: name, holder: holder, term: claimed.Term, slotMs: claimed.SlotMs}, true, nil
+	return &Handle{name: name, holder: holder, term: term, claimedAt: claimedAt}, true, nil
 }
 
 // Renew extends the lease by leaseDuration from the database's now. ErrLost
@@ -469,7 +473,12 @@ func dialectOf(db *gorm.DB) string {
 func nowExpression(dialect string) (string, error) {
 	switch dialect {
 	case "mysql":
-		return "FLOOR(UNIX_TIMESTAMP(NOW(3)) * 1000)", nil
+		// UNIX_TIMESTAMP() without an argument reads the epoch as is; with
+		// NOW(3) as its argument it would convert a wall-clock time back
+		// through the session time zone, which is ambiguous for the hour a
+		// daylight-saving zone repeats. The milliseconds come from NOW(3),
+		// read at the same statement start.
+		return "UNIX_TIMESTAMP() * 1000 + MICROSECOND(NOW(3)) DIV 1000", nil
 	case "postgres":
 		return "FLOOR(EXTRACT(EPOCH FROM clock_timestamp()) * 1000)::BIGINT", nil
 	case "sqlite":

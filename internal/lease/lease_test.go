@@ -126,7 +126,11 @@ func TestExpiredLeaseIsClaimedByAnother(t *testing.T) {
 	var successor *Handle
 	require.Eventually(t, func() bool {
 		h, claimed, claimErr := Claim(ctx, name)
-		require.NoError(t, claimErr)
+		if claimErr != nil {
+			// A failing assertion belongs on the test goroutine, not
+			// inside the condition.
+			return false
+		}
 		successor = h
 		return claimed
 	}, 5*time.Second, 20*time.Millisecond, "the name must be free once the lease expired")
@@ -154,11 +158,15 @@ func TestClaimOfAnExpiredNameIsExclusiveAcrossConcurrentClaimants(t *testing.T) 
 
 	const claimants = 16
 	winners := make(chan *Handle, claimants)
+	claimErrs := make(chan error, claimants)
 	var wg sync.WaitGroup
 	for range claimants {
 		wg.Go(func() {
 			h, claimed, claimErr := Claim(ctx, name)
-			require.NoError(t, claimErr)
+			if claimErr != nil {
+				claimErrs <- claimErr
+				return
+			}
 			if claimed {
 				winners <- h
 			}
@@ -166,6 +174,10 @@ func TestClaimOfAnExpiredNameIsExclusiveAcrossConcurrentClaimants(t *testing.T) 
 	}
 	wg.Wait()
 	close(winners)
+	close(claimErrs)
+	for claimErr := range claimErrs {
+		require.NoError(t, claimErr)
+	}
 
 	var won []*Handle
 	for h := range winners {
@@ -227,7 +239,11 @@ func TestTransactionOnAnotherInstanceVerifiesAgainstThePrimary(t *testing.T) {
 	var successor *Handle
 	require.Eventually(t, func() bool {
 		h, claimed, claimErr := Claim(ctx, name)
-		require.NoError(t, claimErr)
+		if claimErr != nil {
+			// A failing assertion belongs on the test goroutine, not
+			// inside the condition.
+			return false
+		}
 		successor = h
 		return claimed
 	}, 5*time.Second, 20*time.Millisecond)
@@ -285,7 +301,6 @@ func TestClaimSlotRunsAnInstantOnce(t *testing.T) {
 	h, claimed, err := ClaimSlot(ctx, name, first)
 	require.NoError(t, err)
 	require.True(t, claimed)
-	require.Equal(t, first.UnixMilli(), h.slotMs)
 	require.NoError(t, h.Release(ctx))
 
 	slot, found, err := LastSlot(ctx, name)
@@ -303,9 +318,12 @@ func TestClaimSlotRunsAnInstantOnce(t *testing.T) {
 	h, claimed, err = ClaimSlot(ctx, name, second)
 	require.NoError(t, err)
 	require.True(t, claimed, "the next instant is free")
-	require.Equal(t, second.UnixMilli(), h.slotMs)
 	require.EqualValues(t, 2, h.Term())
 	require.NoError(t, h.Release(ctx))
+	slot, found, err = LastSlot(ctx, name)
+	require.NoError(t, err)
+	require.True(t, found)
+	require.Equal(t, second, slot, "the claim records the instant as the last one run")
 }
 
 // TestTransactionUnderALeaseVerifiesIt proves the transaction guard: a
@@ -335,7 +353,11 @@ func TestTransactionUnderALeaseVerifiesIt(t *testing.T) {
 	var successor *Handle
 	require.Eventually(t, func() bool {
 		h, claimed, claimErr := Claim(ctx, name)
-		require.NoError(t, claimErr)
+		if claimErr != nil {
+			// A failing assertion belongs on the test goroutine, not
+			// inside the condition.
+			return false
+		}
 		successor = h
 		return claimed
 	}, 5*time.Second, 20*time.Millisecond)
