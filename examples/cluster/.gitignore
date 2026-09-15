@@ -47,6 +47,3 @@ build/
 # Generated files
 generated/
 
-# Local replicas started by scripts/run-local.sh
-bin/
-.pids
