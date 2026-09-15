@@ -1,13 +1,12 @@
 # One MySQL and three replicas of the example, all sharing it. The replicas
-# run the same image; each publishes its own port and writes its logs under
-# ./logs/<replica>, so the scenarios in the README can tell them apart.
-#
-# replica1 comes up first and creates the tables; replica2 and replica3 wait
-# for it to be ready and start with auto_migrate off. Replicas starting at
-# the same moment with auto_migrate on all race for CREATE TABLE on a fresh
-# database, and the database refuses all but one of them.
+# run the same image and start together; each publishes its own port and
+# writes its logs under ./logs/<replica>, so the scenarios in the README can
+# tell them apart. Every replica runs with auto_migrate on: the framework
+# serializes table preparation across processes on the server's advisory
+# lock, so three replicas creating the schema at once is fine.
 x-env: &env
   DATABASE_TYPE: mysql
+  DATABASE_AUTO_MIGRATE: "true"
   MYSQL_HOST: mysql
   MYSQL_PORT: "3306"
   MYSQL_DATABASE: cluster
@@ -31,7 +30,7 @@ services:
       timeout: 3s
       retries: 20
 
-  replica1:
+  replica1: &replica
     build:
       context: ../..
       dockerfile: examples/cluster/Dockerfile
@@ -39,9 +38,7 @@ services:
     depends_on:
       mysql:
         condition: service_healthy
-    environment:
-      <<: *env
-      DATABASE_AUTO_MIGRATE: "true"
+    environment: *env
     healthcheck:
       test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8080/-/readyz"]
       interval: 2s
@@ -57,28 +54,14 @@ services:
       - ./logs/replica1:/var/log/cluster
 
   replica2:
-    image: gst-cluster:dev
-    depends_on:
-      replica1:
-        condition: service_healthy
-    environment:
-      <<: *env
-      DATABASE_AUTO_MIGRATE: "false"
-    stop_grace_period: 40s
+    <<: *replica
     ports:
       - "8082:8080"
     volumes:
       - ./logs/replica2:/var/log/cluster
 
   replica3:
-    image: gst-cluster:dev
-    depends_on:
-      replica1:
-        condition: service_healthy
-    environment:
-      <<: *env
-      DATABASE_AUTO_MIGRATE: "false"
-    stop_grace_period: 40s
+    <<: *replica
     ports:
       - "8083:8080"
     volumes:

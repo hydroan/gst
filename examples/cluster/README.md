@@ -23,7 +23,7 @@ cd examples/cluster
 docker compose up --build
 ```
 
-三个副本分别在 `localhost:8081`、`8082`、`8083`，日志在 `logs/replica<n>/`（`cronjob.log`、`leader.log`、`lock.log`、`app.log` 等）。副本 1 先起来并建表，副本 2、3 等它就绪后再起、不再迁移：多个副本同时对一个空库开着 `auto_migrate` 首次建表会一起发 `CREATE TABLE`，数据库只接受其中一个，其余的启动失败。本机不走容器的话，准备一个 MySQL（库名 `cluster`，账号见 `config.ini`），然后 `scripts/run-local.sh`，它同样先起第一个副本。
+三个副本分别在 `localhost:8081`、`8082`、`8083`，日志在 `logs/replica<n>/`（`cronjob.log`、`leader.log`、`lock.log`、`app.log` 等）。三个副本同时启动、都开着 `auto_migrate` 对一个空库建表也没关系：框架用数据库自己的建表锁（MySQL `GET_LOCK`、PostgreSQL advisory lock）让副本轮流准备表，后到的看到表已在就只补差异。本机不走容器的话，准备一个 MySQL（库名 `cluster`，账号见 `config.ini`），然后 `scripts/run-local.sh`。
 
 进 MySQL 看租约表：
 
@@ -92,10 +92,11 @@ watch -n 0.5 curl -s -o /dev/null -w '%{http_code}\n' localhost:8082/-/readyz
 ## Kubernetes
 
 ```bash
-docker build -f examples/cluster/Dockerfile -t gst-cluster:dev ../..   # 在仓库根目录构建
-kind load docker-image gst-cluster:dev                                  # 或推到你的镜像仓库
-kubectl apply -f deploy/k8s/
+# 在仓库根目录构建：go.mod 里的 replace 指向 ../..，构建上下文得是整个仓库
+docker build -f examples/cluster/Dockerfile -t gst-cluster:dev .
+kind load docker-image gst-cluster:dev        # 或推到你的镜像仓库
+kubectl apply -f examples/cluster/deploy/k8s/
 kubectl get pods -l app=cluster -w
 ```
 
-`deploy/k8s/mysql.yaml` 里的 MySQL 只是给示例用的，没有持久卷。首次部署到空库时先只起一个副本让它建表，再扩到三个（`kubectl scale deployment/cluster --replicas=1`，就绪后 `--replicas=3`），原因同上；正式环境的做法是先 `gg migrate` 建表、副本一律 `DATABASE_AUTO_MIGRATE=false`。`kubectl delete pod <leader>` 对应场景 2，`kubectl rollout restart deployment/cluster` 能看到滚动更新期间任务不断：PodDisruptionBudget 保证至少两个副本在，租约让工作在副本之间接力。
+`deploy/k8s/mysql.yaml` 里的 MySQL 只是给示例用的，没有持久卷。三个 Pod 一起对空库建表和 compose 一样安全；正式环境的做法仍是先 `gg migrate` 建表、副本一律 `DATABASE_AUTO_MIGRATE=false`，让 schema 变更走评审而不是启动副作用。`kubectl delete pod <leader>` 对应场景 2，`kubectl rollout restart deployment/cluster` 能看到滚动更新期间任务不断：PodDisruptionBudget 保证至少两个副本在，租约让工作在副本之间接力。

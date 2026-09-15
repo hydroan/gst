@@ -1,8 +1,9 @@
 # Three replicas of the example behind one Service. What matters for the
 # framework's cluster capabilities:
 #
-#   - the pod name is the instance id the framework stamps on every log line
-#     and writes into gst_leases.instance, so a lease names the pod holding it;
+#   - the instance id the framework stamps on every log line and writes into
+#     gst_leases.instance starts with the pod name (the host name, plus a
+#     random suffix per start), so a lease names the pod holding it;
 #   - readiness comes from /-/readyz, which the framework turns off the moment
 #     shutdown begins, so the Service stops routing to a draining pod;
 #   - terminationGracePeriodSeconds outlasts the graceful shutdown — the drain
