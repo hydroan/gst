@@ -3,9 +3,11 @@ package bootstrap
 import (
 	"os"
 	"path/filepath"
+	"reflect"
 	"runtime"
 	"testing"
 
+	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/internal/lifecycle"
 	"github.com/stretchr/testify/require"
 
@@ -62,6 +64,42 @@ func TestEveryProviderGetsItsOwnLogFile(t *testing.T) {
 		}
 		require.NotNil(t, c.SetLogger, "provider %q must declare SetLogger to get its own log file", c.Name)
 		require.FileExists(t, filepath.Join(bootstrapLogDir, c.Name+".log"), "provider %q must get its own log file", c.Name)
+	}
+}
+
+// TestEveryProviderHasAConfigurationSwitch proves the switch list bootstrap
+// warns from names every package under provider/ and nothing else: a
+// provider added without its switch would have its "enabled but not linked"
+// warning silently never fire. Every Enabled switch in the configuration is
+// turned on by reflection, so a new section joins the check on its own.
+func TestEveryProviderHasAConfigurationSwitch(t *testing.T) {
+	original := config.App
+	config.App = new(config.Config)
+	t.Cleanup(func() { config.App = original })
+
+	enableEverySwitch(reflect.ValueOf(config.App).Elem())
+	// With ClickHouse as the primary database its switch serves the dialect,
+	// not the provider; any other primary keeps it in the provider list.
+	config.App.Database.Type = config.DBMySQL
+
+	enabled := make(map[string]bool)
+	for _, name := range config.EnabledProviders() {
+		enabled[name] = true
+	}
+	require.Equal(t, providerDirectories(t), enabled, "the switch list must name exactly the packages under provider/")
+}
+
+// enableEverySwitch sets every bool field named Enabled that sits directly
+// inside a section of the configuration.
+func enableEverySwitch(cfg reflect.Value) {
+	for _, section := range cfg.Fields() {
+		if section.Kind() != reflect.Struct {
+			continue
+		}
+		enabledField := section.FieldByName("Enabled")
+		if enabledField.IsValid() && enabledField.Kind() == reflect.Bool && enabledField.CanSet() {
+			enabledField.SetBool(true)
+		}
 	}
 }
 
