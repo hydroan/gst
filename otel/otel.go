@@ -362,8 +362,7 @@ func normalizeConfig(cfg config.OTEL) (config.OTEL, error) {
 // this process, so traces can be told apart by environment and by instance
 // when multiple replicas are running in production. The instance is the
 // process identity every other part of the framework names itself by, so a
-// trace, the log entries behind it and a lease holder all point at the same
-// process.
+// trace and the log entries behind it point at the same process.
 func resourceAttributes(cfg config.OTEL) []attribute.KeyValue {
 	attrs := []attribute.KeyValue{
 		semconv.ServiceName(cfg.ServiceName),

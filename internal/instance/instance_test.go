@@ -25,8 +25,8 @@ func TestIDIsTheHostnameAndARandomSuffix(t *testing.T) {
 }
 
 // TestIDIsTheSameForTheLifeOfTheProcess proves every reader gets the one
-// identity, so the lease holder, the log entries and the tracing resource
-// all name the same process.
+// identity, so the log entries and the tracing resource name the same
+// process.
 func TestIDIsTheSameForTheLifeOfTheProcess(t *testing.T) {
 	first := ID()
 	second := ID()

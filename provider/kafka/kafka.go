@@ -145,8 +145,8 @@ func Admin() (*kadm.Client, error) {
 	return kadm.NewClient(c), nil
 }
 
-// stop closes the default Kafka client,
-// allowing a subsequent Init to establish a fresh client.
+// stop closes the default Kafka client; a later start establishes a fresh
+// one.
 func stop(_ context.Context) error {
 	mu.Lock()
 	defer mu.Unlock()

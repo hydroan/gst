@@ -109,7 +109,7 @@ func TestResolveServiceVersionFallsBackToUnknown(t *testing.T) {
 // TestResourceAttributesNameTheServiceEnvironmentAndInstance proves the
 // resource carries what tells traces apart: the service, its version, the
 // environment, and the process identity as the instance — the same identity
-// the log entries and the lease holder carry — with the hostname beside it.
+// the log entries carry — with the hostname beside it.
 func TestResourceAttributesNameTheServiceEnvironmentAndInstance(t *testing.T) {
 	t.Cleanup(func() {
 		config.App.AppInfo.Version = ""

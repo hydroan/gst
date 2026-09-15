@@ -1,15 +1,15 @@
 // Package instance answers one question — which process is this — for every
-// part of the framework that tells replicas apart: the holder a lease is
-// written under, the field every log entry carries, the tracing resource,
-// the origin a replicated cache event names. One answer, read everywhere,
-// instead of each place deriving its own by its own rule.
+// part of the framework that tells replicas apart: the field every log entry
+// carries, the tracing resource, the origin a replicated cache event names.
+// One answer, read everywhere, instead of each place deriving its own by its
+// own rule.
 //
 // The identity is the hostname — the pod name under Kubernetes, the
 // container id under Docker — followed by a short random suffix drawn once
 // at process start. The hostname alone would not do: two processes on one
 // host share it, and a restarted container keeps it, yet the restarted
-// process must not pass for the one it replaced — a lease the old process
-// held is not the new one's to keep.
+// process must not pass for the one it replaced — whatever the old process
+// claimed as itself is not the new one's.
 package instance
 
 import (
