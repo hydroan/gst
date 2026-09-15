@@ -3,6 +3,7 @@ package cronjob
 import (
 	"context"
 	"encoding/json"
+	"maps"
 	"os"
 	"path/filepath"
 	"strings"
@@ -14,7 +15,10 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/consts"
+	"github.com/hydroan/gst/database/sqlite"
+	"github.com/hydroan/gst/internal/dbruntime"
 	"github.com/hydroan/gst/internal/execctx"
+	"github.com/hydroan/gst/internal/lease"
 	"github.com/hydroan/gst/internal/lifecycle"
 	"github.com/hydroan/gst/internal/testutil/oteltest"
 	"github.com/hydroan/gst/logger"
@@ -22,7 +26,26 @@ import (
 	"github.com/robfig/cron/v3"
 	"github.com/stretchr/testify/require"
 	oteltrace "go.opentelemetry.io/otel/trace"
+	"gorm.io/gorm"
+	gormlogger "gorm.io/gorm/logger"
 )
+
+// TestMain gives the suite a primary database: a job claims each of its
+// instants through the lease engine, and an in-memory sqlite database —
+// the lease table auto-migrated the way bootstrap would — carries that for
+// every test.
+func TestMain(m *testing.M) {
+	config.App = new(config.Config)
+	config.App.Database.Type = config.DBSqlite
+	config.App.Database.AutoMigrate = true
+	config.App.Sqlite = config.Sqlite{Enabled: true, IsMemory: true, Database: "main"}
+	logger.Gorm = gormlogger.Discard
+	if err := sqlite.Init(); err != nil {
+		panic(err)
+	}
+	dbruntime.Wait()
+	os.Exit(m.Run())
+}
 
 // TestSchedulesAreReadInUTC proves an expression is read in UTC — the zone
 // the schedule computes in is UTC, not the process's, so every replica
@@ -74,6 +97,36 @@ func TestEveryRunsOnTheEpochGrid(t *testing.T) {
 	require.Equal(t, time.Date(2026, 1, 1, 10, 10, 0, 0, time.UTC), got)
 }
 
+// TestPreviousInstantFindsTheMostRecentOne proves the bisection behind the
+// catch-up: it finds the most recent instant at or before now, an instant
+// falling on now itself included, and reports none when the schedule had no
+// instant within the last day.
+func TestPreviousInstantFindsTheMostRecentOne(t *testing.T) {
+	resetCronjobState(t)
+
+	every, err := newJob(noopJob, "@every 5m", "grid-job")
+	require.NoError(t, err)
+	daily, err := newJob(noopJob, "0 0 2 * * *", "daily-job")
+	require.NoError(t, err)
+	yearly, err := newJob(noopJob, "0 0 0 1 1 *", "yearly-job")
+	require.NoError(t, err)
+
+	prev, ok := previousInstant(every.schedule, time.Date(2026, 1, 1, 10, 3, 20, 0, time.UTC))
+	require.True(t, ok)
+	require.Equal(t, time.Date(2026, 1, 1, 10, 0, 0, 0, time.UTC), prev)
+
+	prev, ok = previousInstant(every.schedule, time.Date(2026, 1, 1, 10, 5, 0, 0, time.UTC))
+	require.True(t, ok)
+	require.Equal(t, time.Date(2026, 1, 1, 10, 5, 0, 0, time.UTC), prev, "an instant falling on now counts as passed")
+
+	prev, ok = previousInstant(daily.schedule, time.Date(2026, 1, 1, 10, 0, 0, 0, time.UTC))
+	require.True(t, ok)
+	require.Equal(t, time.Date(2026, 1, 1, 2, 0, 0, 0, time.UTC), prev)
+
+	_, ok = previousInstant(yearly.schedule, time.Date(2026, 6, 15, 10, 0, 0, 0, time.UTC))
+	require.False(t, ok, "an instant older than a day is history, not a missed round")
+}
+
 // TestLoopRunsAtEachInstant proves a started job runs once at every instant
 // of its schedule and not before: the loop waits for the instant, runs, and
 // waits for the next.
@@ -98,6 +151,204 @@ func TestLoopRunsAtEachInstant(t *testing.T) {
 	require.Equal(t, time.Date(2026, 1, 1, 10, 2, 0, 0, time.UTC), awaitRun(t, runs))
 	require.NoError(t, stop(context.Background()))
 	require.Empty(t, runs, "no instant ran twice and none ran early")
+}
+
+// TestInstantRunsOnceAcrossInstances proves the cluster contract: two
+// scheduler instances sharing one primary database — two replicas — run
+// each instant of a job exactly once between them.
+func TestInstantRunsOnceAcrossInstances(t *testing.T) {
+	withCronjobLoggerConfig(t)
+	resetCronjobState(t)
+	clock := withFakeClock(t, time.Date(2026, 1, 1, 10, 0, 0, 0, time.UTC))
+
+	runs := newRunLog()
+	Register(func(context.Context) error {
+		runs.record(clk.Now())
+		return nil
+	}, "@every 1m", "shared-job")
+	startInstances(t, 2)
+
+	for range 3 {
+		clock.untilWaiters(t, 2)
+		clock.Advance(time.Minute)
+		runs.await(t)
+	}
+	clock.untilWaiters(t, 2)
+
+	require.Equal(t, map[time.Time]int{
+		time.Date(2026, 1, 1, 10, 1, 0, 0, time.UTC): 1,
+		time.Date(2026, 1, 1, 10, 2, 0, 0, time.UTC): 1,
+		time.Date(2026, 1, 1, 10, 3, 0, 0, time.UTC): 1,
+	}, runs.counts(), "each instant runs exactly once across the instances")
+}
+
+// TestPerInstanceJobRunsOnEveryInstance proves RegisterPerInstance opts a
+// job out of the cluster contract: every instance runs every instant.
+func TestPerInstanceJobRunsOnEveryInstance(t *testing.T) {
+	withCronjobLoggerConfig(t)
+	resetCronjobState(t)
+	clock := withFakeClock(t, time.Date(2026, 1, 1, 10, 0, 0, 0, time.UTC))
+
+	runs := newRunLog()
+	RegisterPerInstance(func(context.Context) error {
+		runs.record(clk.Now())
+		return nil
+	}, "@every 1m", "local-job")
+	startInstances(t, 2)
+
+	clock.untilWaiters(t, 2)
+	clock.Advance(time.Minute)
+	runs.await(t)
+	runs.await(t)
+	clock.untilWaiters(t, 2)
+
+	require.Equal(t, map[time.Time]int{
+		time.Date(2026, 1, 1, 10, 1, 0, 0, time.UTC): 2,
+	}, runs.counts(), "a per-instance job runs on every instance")
+}
+
+// TestHeldInstantKeepsTheNextFromEveryone proves a round still holding its
+// lease keeps the following instants from the other instances too: the
+// instant is skipped across the deployment, not run elsewhere, and the
+// instants after the round are shared again.
+func TestHeldInstantKeepsTheNextFromEveryone(t *testing.T) {
+	withCronjobLoggerConfig(t)
+	resetCronjobState(t)
+	clock := withFakeClock(t, time.Date(2026, 1, 1, 10, 0, 0, 0, time.UTC))
+
+	runs := newRunLog()
+	var first atomic.Bool
+	release := make(chan struct{})
+	Register(func(context.Context) error {
+		runs.record(clk.Now())
+		if first.CompareAndSwap(false, true) {
+			<-release
+		}
+		return nil
+	}, "@every 1m", "shared-job")
+	startInstances(t, 2)
+
+	// 10:01: one instance wins and holds the lease for the whole round.
+	clock.untilWaiters(t, 2)
+	clock.Advance(time.Minute)
+	runs.await(t)
+	// 10:02: the other instance is refused — the lease is held — and the
+	// winner is still busy, so no one runs it.
+	clock.untilWaiters(t, 1)
+	clock.Advance(time.Minute)
+	clock.untilWaiters(t, 1)
+	close(release)
+	// 10:03: the round is over and the lease released; one instance runs.
+	clock.untilWaiters(t, 2)
+	clock.Advance(time.Minute)
+	runs.await(t)
+	clock.untilWaiters(t, 2)
+
+	require.Equal(t, map[time.Time]int{
+		time.Date(2026, 1, 1, 10, 1, 0, 0, time.UTC): 1,
+		time.Date(2026, 1, 1, 10, 3, 0, 0, time.UTC): 1,
+	}, runs.counts(), "the instant under a held lease runs nowhere")
+}
+
+// TestCatchUpRunsTheMostRecentInstantNoReplicaRan proves the start-up
+// catch-up: a job that has run before, whose most recent instant passed
+// within the last day without any replica claiming it, runs that instant
+// once at start — marked as a catch-up — and then goes on with its next.
+func TestCatchUpRunsTheMostRecentInstantNoReplicaRan(t *testing.T) {
+	dir := withCronjobLoggerConfig(t)
+	resetCronjobState(t)
+	clock := withFakeClock(t, time.Date(2026, 1, 1, 10, 0, 30, 0, time.UTC))
+
+	// The job ran before: an earlier instant is on record.
+	lastRun(t, "cron:catch-up-job", time.Date(2026, 1, 1, 9, 58, 0, 0, time.UTC))
+
+	runs := make(chan time.Time, 8)
+	Register(func(context.Context) error {
+		runs <- clk.Now()
+		return nil
+	}, "@every 1m", "catch-up-job")
+	require.NoError(t, start(context.Background()))
+
+	require.Equal(t, time.Date(2026, 1, 1, 10, 0, 30, 0, time.UTC), awaitRun(t, runs), "the catch-up runs at start")
+	clock.untilWaiting(t)
+	clock.Advance(30 * time.Second)
+	require.Equal(t, time.Date(2026, 1, 1, 10, 1, 0, 0, time.UTC), awaitRun(t, runs), "the schedule goes on with the next instant")
+	require.NoError(t, stop(context.Background()))
+
+	pkgzap.Clean()
+	entry := readLogEntry(t, filepath.Join(dir, "cronjob.log"), "finished cronjob")
+	require.Equal(t, "2026-01-01T10:00:00Z", entry["at"], "the catch-up runs for the instant it caught up")
+	require.Equal(t, true, entry["catch_up"])
+	require.EqualValues(t, 2, entry["term"], "the catch-up starts the next term of the job's lease")
+}
+
+// TestCatchUpSkipsAJobThatNeverRan proves a job appearing for the first
+// time starts with its next instant: the instants before its first
+// deployment were never its to run.
+func TestCatchUpSkipsAJobThatNeverRan(t *testing.T) {
+	withCronjobLoggerConfig(t)
+	resetCronjobState(t)
+	clock := withFakeClock(t, time.Date(2026, 1, 1, 10, 0, 30, 0, time.UTC))
+
+	runs := newRunLog()
+	Register(func(context.Context) error {
+		runs.record(clk.Now())
+		return nil
+	}, "@every 1m", "new-job")
+	require.NoError(t, start(context.Background()))
+
+	clock.untilWaiting(t)
+	require.Empty(t, runs.counts(), "a job never run catches nothing up")
+}
+
+// TestCatchUpSkipsAnInstantAlreadyRun proves the catch-up never repeats an
+// instant: when the most recent instant is the one on record, nothing runs
+// at start.
+func TestCatchUpSkipsAnInstantAlreadyRun(t *testing.T) {
+	withCronjobLoggerConfig(t)
+	resetCronjobState(t)
+	clock := withFakeClock(t, time.Date(2026, 1, 1, 10, 0, 30, 0, time.UTC))
+
+	lastRun(t, "cron:settled-job", time.Date(2026, 1, 1, 10, 0, 0, 0, time.UTC))
+
+	runs := newRunLog()
+	Register(func(context.Context) error {
+		runs.record(clk.Now())
+		return nil
+	}, "@every 1m", "settled-job")
+	require.NoError(t, start(context.Background()))
+
+	clock.untilWaiting(t)
+	require.Empty(t, runs.counts(), "an instant already run is never caught up")
+}
+
+// TestStartRefusesAClickhousePrimary proves a job under a lease cannot start
+// on a primary database that carries no leases: the deployment could not
+// coordinate, so the start fails instead of every replica running every
+// instant. A job registered per instance is unaffected.
+func TestStartRefusesAClickhousePrimary(t *testing.T) {
+	withCronjobLoggerConfig(t)
+	resetCronjobState(t)
+
+	Register(noopJob, "* * * * * *", "shared-job")
+	err := startOnClickhouse()
+	require.ErrorIs(t, err, lease.ErrUnsupportedDatabase)
+	require.ErrorContains(t, err, `cronjob "shared-job" runs once per instant across the deployment`)
+
+	resetCronjobState(t)
+	RegisterPerInstance(noopJob, "0 0 * * * *", "local-job")
+	require.NoError(t, startOnClickhouse(), "a per-instance job needs no lease")
+}
+
+// startOnClickhouse starts the scheduler with a ClickHouse primary database
+// in place of the suite's, for the duration of the start alone: the lease
+// engine reads only the database's name from it, and the suite's database
+// is back before anything touches a table.
+func startOnClickhouse() error {
+	original := dbruntime.DB
+	dbruntime.DB = &gorm.DB{Config: &gorm.Config{Dialector: clickhouseDialector{}}}
+	defer func() { dbruntime.DB = original }()
+	return start(context.Background())
 }
 
 // TestInstantsPassingDuringARunAreSkipped proves a slow round never has the
@@ -272,7 +523,7 @@ func TestRegistrationErrorsFailStartup(t *testing.T) {
 			name: "duplicate name",
 			register: func() {
 				Register(noopJob, "* * * * * *", "sample-job")
-				Register(noopJob, "@hourly", " sample-job ")
+				RegisterPerInstance(noopJob, "@hourly", " sample-job ")
 			},
 			want: `cronjob "sample-job": registered twice`,
 		},
@@ -435,36 +686,45 @@ func TestRunLogsFailureWithErrorStack(t *testing.T) {
 }
 
 // TestRunStampsRoundIdentity proves the context a job runs on carries the
-// round's identity, and that the outcome entry carries the same trace id and
-// the instant the round ran for, so the round is found again from either
-// side.
+// round's identity and its lease, and that the outcome entry carries the
+// same trace id, the instant the round ran for and the lease's term, so the
+// round is found again from either side.
 func TestRunStampsRoundIdentity(t *testing.T) {
 	dir := withCronjobLoggerConfig(t)
 	resetCronjobState(t)
 	clock := withFakeClock(t, time.Date(2026, 1, 1, 10, 0, 0, 0, time.UTC))
 
-	seen := make(chan execctx.Identity, 1)
+	type observation struct {
+		identity execctx.Identity
+		term     uint64
+		leased   bool
+	}
+	seen := make(chan observation, 1)
 	Register(func(ctx context.Context) error {
-		seen <- execctx.FromContext(ctx)
+		term, leased := lease.TermFromContext(ctx)
+		seen <- observation{identity: execctx.FromContext(ctx), term: term, leased: leased}
 		return nil
 	}, "* * * * * *", "identity-job")
 	require.NoError(t, start(context.Background()))
 
 	clock.Advance(time.Second)
-	var id execctx.Identity
+	var got observation
 	select {
-	case id = <-seen:
+	case got = <-seen:
 	case <-time.After(5 * time.Second):
 		t.Fatal("the round did not run")
 	}
 	require.NoError(t, stop(context.Background()))
 	pkgzap.Clean()
 
-	require.Equal(t, "identity-job", id.Cronjob)
-	require.NotEmpty(t, id.TraceID)
+	require.Equal(t, "identity-job", got.identity.Cronjob)
+	require.NotEmpty(t, got.identity.TraceID)
+	require.True(t, got.leased, "the round runs under the instant's lease")
+	require.EqualValues(t, 1, got.term)
 	entry := readLogEntry(t, filepath.Join(dir, "cronjob.log"), "finished cronjob")
-	require.Equal(t, id.TraceID, entry[consts.TRACE_ID])
+	require.Equal(t, got.identity.TraceID, entry[consts.TRACE_ID])
 	require.Equal(t, "2026-01-01T10:00:01Z", entry["at"], "the outcome entry names the instant the round ran for")
+	require.EqualValues(t, 1, entry["term"], "the outcome entry names the lease's term")
 }
 
 // TestRunOpensRoundSpanWhenTracingIsOn proves a round gets a root span of its
@@ -511,10 +771,86 @@ type roundObservation struct {
 	span     oteltrace.SpanContext
 }
 
+// clickhouseDialector stands in for a ClickHouse primary database: only its
+// name is ever read, by the lease engine deciding whether it can run.
+type clickhouseDialector struct {
+	gorm.Dialector
+}
+
+func (clickhouseDialector) Name() string { return "clickhouse" }
+
 // noopJob is a job that does nothing, for tests about scheduling rather
 // than running.
 func noopJob(context.Context) error {
 	return nil
+}
+
+// runLog counts the runs of a job per instant, across every instance
+// running it, and signals each run.
+type runLog struct {
+	mu         sync.Mutex
+	perInstant map[time.Time]int
+	ran        chan struct{}
+}
+
+func newRunLog() *runLog {
+	return &runLog{perInstant: make(map[time.Time]int), ran: make(chan struct{}, 64)}
+}
+
+// record counts one run at the instant at.
+func (l *runLog) record(at time.Time) {
+	l.mu.Lock()
+	l.perInstant[at]++
+	l.mu.Unlock()
+	l.ran <- struct{}{}
+}
+
+// await waits for one run, failing the test when none comes in time.
+func (l *runLog) await(t *testing.T) {
+	t.Helper()
+	awaitSignal(t, l.ran, "a round")
+}
+
+// counts returns a copy of the runs per instant.
+func (l *runLog) counts() map[time.Time]int {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return maps.Clone(l.perInstant)
+}
+
+// lastRun puts an earlier run of a job on record: the lease row exists and
+// names at as the last instant claimed, the way a job that ran before looks
+// to a starting scheduler.
+func lastRun(t *testing.T, leaseName string, at time.Time) {
+	t.Helper()
+
+	h, claimed, err := lease.ClaimSlot(context.Background(), leaseName, at)
+	require.NoError(t, err)
+	require.True(t, claimed)
+	require.NoError(t, h.Release(context.Background()))
+}
+
+// startInstances builds and starts n schedulers over the registered jobs —
+// n replicas sharing the primary database — and stops them once the test
+// ends.
+func startInstances(t *testing.T, n int) []*scheduler {
+	t.Helper()
+
+	if log == nil {
+		log = pkgzap.New("cronjob.log")
+	}
+	instances := make([]*scheduler, 0, n)
+	for range n {
+		s := newScheduler(jobs)
+		s.start(context.Background())
+		instances = append(instances, s)
+	}
+	t.Cleanup(func() {
+		for _, s := range instances {
+			_ = s.stop(context.Background())
+		}
+	})
+	return instances
 }
 
 // fakeClock is a clock the test drives by hand: time stands still until the
@@ -524,7 +860,7 @@ type fakeClock struct {
 	now     time.Time
 	waiters []fakeWaiter
 	// waiting is signaled whenever a wait is registered, so a test can hold
-	// the clock still until the loop is waiting again.
+	// the clock still until the loops are waiting again.
 	waiting chan struct{}
 }
 
@@ -568,18 +904,25 @@ func (c *fakeClock) Wait(ctx context.Context, t time.Time) bool {
 // without the two racing over what "now" is.
 func (c *fakeClock) untilWaiting(t *testing.T) {
 	t.Helper()
+	c.untilWaiters(t, 1)
+}
+
+// untilWaiters blocks until at least n waits are pending on the clock — n
+// loops waiting for their next instant.
+func (c *fakeClock) untilWaiters(t *testing.T, n int) {
+	t.Helper()
 
 	for {
 		c.mu.Lock()
 		pending := len(c.waiters)
 		c.mu.Unlock()
-		if pending > 0 {
+		if pending >= n {
 			return
 		}
 		select {
 		case <-c.waiting:
 		case <-time.After(5 * time.Second):
-			t.Fatal("nothing waited on the clock")
+			t.Fatalf("only %d of %d loops waited on the clock", pending, n)
 		}
 	}
 }
@@ -661,9 +1004,10 @@ func withCronjobLoggerConfig(t *testing.T) string {
 }
 
 // resetCronjobState stops whatever the previous test left running, waits
-// for its loops, and rewinds the package-level scheduler state so each test
-// exercises start from scratch. The loops this test starts are drained
-// again once it ends, so none of them runs on into the next test.
+// for its loops, rewinds the package-level scheduler state and empties the
+// lease table, so each test exercises start from scratch. The loops this
+// test starts are drained again once it ends, so none of them runs on into
+// the next test.
 func resetCronjobState(t *testing.T) {
 	t.Helper()
 
@@ -676,6 +1020,7 @@ func resetCronjobState(t *testing.T) {
 	errRegister = nil
 	log = nil
 	current = nil
+	require.NoError(t, dbruntime.DB.Exec("DELETE FROM gst_leases").Error)
 }
 
 // drainLoops ends the running loops, if any, and waits for them to return.

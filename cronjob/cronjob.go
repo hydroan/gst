@@ -9,22 +9,40 @@
 //
 // Every schedule is read in UTC, and "@every" runs on the multiples of its
 // period counted from the Unix epoch, so every replica of a deployment
-// computes the same instants for a job — the ground a cluster-wide "once per
-// instant" rule stands on. An expression that must follow another wall clock
-// says so itself, with a CRON_TZ= prefix.
+// computes the same instants for a job. An expression that must follow
+// another wall clock says so itself, with a CRON_TZ= prefix.
+//
+// A job runs once per instant across the deployment: the replicas share the
+// instant's lease through the primary database (see the lease package), the
+// first to claim it runs the round while the others skip the instant, and a
+// round still holding the lease keeps the next instants from everyone. A job
+// that must run on every replica — refreshing a process-local cache,
+// cleaning a local directory — registers with RegisterPerInstance and runs
+// without a lease. A ClickHouse primary database cannot carry leases, so a
+// job under a lease fails the start there.
+//
+// On start-up the scheduler catches up the most recent instant of a job when
+// no replica ran it, which is what a rolling deployment or an outage owes
+// the job. The rule, exactly: the job has run before (its lease row exists —
+// a job never run starts with its next instant, the instants before its
+// first deployment were never its to run); the most recent instant that
+// passed lies within the last day (an older one is history, not a missed
+// round); and no replica claimed that instant. The catch-up is one round, on
+// one replica, and never repeats an instant already run.
 //
 // Each job runs in a loop of its own: the loop waits for the next instant of
 // the schedule, runs the job on a context that ends when the process begins
-// shutting down, then computes the next instant from the moment the run
-// ended — an instant that passed while a run was still in flight is skipped,
-// never piled on top of it. The parser is the cron library's; the loop is
-// this package's, because the library's runtime neither tells a job which
-// instant it runs for nor lets a test drive the clock.
+// shutting down or the lease is lost, then computes the next instant from
+// the moment the run ended — an instant that passed while a run was still
+// in flight is skipped, never piled on top of it. The parser is the cron
+// library's; the loop is this package's, because the library's runtime
+// neither tells a job which instant it runs for nor lets a test drive the
+// clock.
 //
 // A registration that cannot be honored — no name, no schedule, a schedule
 // that does not parse or names the process's own zone, a name already taken —
 // fails the process at startup rather than dropping the job: the name is the
-// job's identity in every log line about it.
+// job's identity in every log line about it and the name of its lease.
 package cronjob
 
 import (
@@ -38,6 +56,7 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/consts"
 	"github.com/hydroan/gst/internal/execctx"
+	"github.com/hydroan/gst/internal/lease"
 	"github.com/hydroan/gst/internal/lifecycle"
 	"github.com/hydroan/gst/internal/types"
 	"github.com/hydroan/gst/logger"
@@ -53,6 +72,16 @@ import (
 // parser reads the schedules: six fields with seconds first, plus the
 // descriptors — the syntax the scaffold documents.
 var parser = cron.NewParser(cron.Second | cron.Minute | cron.Hour | cron.Dom | cron.Month | cron.Dow | cron.Descriptor)
+
+const (
+	// catchUpLookback bounds how far back the start-up catch-up looks for a
+	// job's most recent instant: one older than this is history, not a
+	// missed round.
+	catchUpLookback = 24 * time.Hour
+	// releaseTimeout bounds the statement that gives an instant's lease back
+	// once the round is over.
+	releaseTimeout = 5 * time.Second
+)
 
 var (
 	mu sync.Mutex
@@ -78,10 +107,20 @@ type job struct {
 	spec     string
 	fn       func(ctx context.Context) error
 	schedule cron.Schedule
+	// perInstance marks a job every replica runs on its own, without a
+	// lease; the default job runs once per instant across the deployment.
+	perInstance bool
 }
 
-// scheduler is one started scheduler: the loops it runs and what ends them.
+// leaseName is the coordinated name the job's instants are claimed under.
+func (j *job) leaseName() string {
+	return "cron:" + j.name
+}
+
+// scheduler is one started scheduler: the jobs it runs, the loops it runs
+// them in, and what ends them.
 type scheduler struct {
+	jobs []*job
 	// cancel ends the context every loop runs on; stop calls it, and the
 	// process context ending does the same.
 	cancel context.CancelFunc
@@ -109,18 +148,41 @@ func init() {
 // functions: the scheduler starts with the process, and a registration after
 // that panics.
 //
+// The job runs once per instant across the deployment: the replicas share
+// the instant's lease through the primary database, the first to claim it
+// runs the round, the others skip the instant, and a round still holding the
+// lease keeps the next instants from everyone. On start-up the most recent
+// instant no replica ran is caught up once — when the job has run before,
+// the instant lies within the last day and no replica claimed it; see the
+// package documentation for the rule in full. A job that must run on every
+// replica registers with RegisterPerInstance instead.
+//
 // fn receives the context of the round it runs in. The context ends when the
-// process begins shutting down, so a long round can stop early; it carries
-// the round's identity — the job name and a trace id of the round's own, see
-// execctx — and, with tracing on, the round's root span, so every statement,
-// log line and span the job produces is annotated with the round and can be
-// found again from any of them. An instant that passes while the previous
-// round is still in flight is skipped.
+// process begins shutting down or the round's lease is lost, so a long round
+// can stop early, and a transaction opened on it refuses to run once the
+// lease is gone; it carries the round's identity — the job name and a trace
+// id of the round's own, see execctx — and, with tracing on, the round's root
+// span, so every statement, log line and span the job produces is annotated
+// with the round and can be found again from any of them. An instant that
+// passes while the previous round is still in flight is skipped.
 //
 // A registration that cannot be honored — no name, no schedule, a schedule
 // that does not parse or names the Local zone, a name already taken, a nil
 // fn — fails the process at startup.
 func Register(fn func(ctx context.Context) error, spec string, name string) {
+	register(fn, spec, name, false)
+}
+
+// RegisterPerInstance is Register for a job every replica runs on its own,
+// without a lease: work that belongs to the process, such as refreshing a
+// process-local cache or cleaning a local directory. It never catches up an
+// instant. Everything else is as for Register.
+func RegisterPerInstance(fn func(ctx context.Context) error, spec string, name string) {
+	register(fn, spec, name, true)
+}
+
+// register is the body of Register and RegisterPerInstance.
+func register(fn func(ctx context.Context) error, spec, name string, perInstance bool) {
 	mu.Lock()
 	defer mu.Unlock()
 
@@ -132,6 +194,7 @@ func Register(fn func(ctx context.Context) error, spec string, name string) {
 		errRegister = errors.Join(errRegister, err)
 		return
 	}
+	j.perInstance = perInstance
 	jobs = append(jobs, j)
 }
 
@@ -210,18 +273,43 @@ func (s everySchedule) Next(t time.Time) time.Time {
 	return time.Unix(0, (t.UnixNano()/period+1)*period).UTC()
 }
 
-// start brings the scheduler up: a loop per registered job, each on a
-// context derived from ctx. The context is the process context: its
-// cancellation is the first sign of shutdown, and halts scheduling right
-// then so no round starts while the process is on its way out; stop waits
-// for the rounds already in flight. A registration that could not be
-// honored fails the start.
+// previousInstant returns the most recent instant of s at or before now,
+// looking back catchUpLookback at most. The schedule only answers "the first
+// instant after t", so the instant is found by bisection over t: the answer
+// stays at or before now for every t before the instant and moves past now
+// from the instant on.
+func previousInstant(s cron.Schedule, now time.Time) (time.Time, bool) {
+	lo, hi := now.Add(-catchUpLookback), now
+	if first := s.Next(lo); first.IsZero() || first.After(now) {
+		return time.Time{}, false
+	}
+	for hi.Sub(lo) > time.Millisecond {
+		mid := lo.Add(hi.Sub(lo) / 2)
+		if next := s.Next(mid); !next.IsZero() && !next.After(now) {
+			lo = mid
+		} else {
+			hi = mid
+		}
+	}
+	return s.Next(lo), true
+}
+
+// start brings the scheduler up with every registered job, on a context
+// derived from ctx. The context is the process context: its cancellation is
+// the first sign of shutdown, and halts scheduling right then so no round
+// starts while the process is on its way out; stop waits for the rounds
+// already in flight. A registration that could not be honored fails the
+// start, and so does a job under a lease on a primary database that cannot
+// carry one.
 func start(ctx context.Context) error {
 	mu.Lock()
 	defer mu.Unlock()
 
 	if errRegister != nil {
 		return errRegister
+	}
+	if err := requireLeases(jobs); err != nil {
+		return err
 	}
 	if log == nil {
 		// Adopt the shared cronjob logger so this package never opens a
@@ -234,19 +322,25 @@ func start(ctx context.Context) error {
 		}
 	}
 
-	loopCtx, cancel := context.WithCancel(ctx)
-	s := &scheduler{cancel: cancel, done: make(chan struct{})}
-	now := clk.Now()
-	for _, j := range jobs {
-		next := j.schedule.Next(now)
-		log.Infoz("scheduled cronjob", zap.String("name", j.name), zap.String("spec", j.spec), zap.Time("next", next))
-		s.loops.Go(func() { j.loop(loopCtx, next) })
-	}
-	go func() {
-		s.loops.Wait()
-		close(s.done)
-	}()
+	s := newScheduler(jobs)
+	s.start(ctx)
 	current = s
+	return nil
+}
+
+// requireLeases fails the start when a job runs under a lease and the
+// primary database cannot carry one: the deployment could not coordinate,
+// and every replica would run every instant as if it were alone.
+func requireLeases(jobs []*job) error {
+	for _, j := range jobs {
+		if j.perInstance {
+			continue
+		}
+		if err := lease.Available(); err != nil {
+			return errors.Wrapf(err, "cronjob %q runs once per instant across the deployment, which needs a lease", j.name)
+		}
+		return nil
+	}
 	return nil
 }
 
@@ -266,8 +360,33 @@ func stop(ctx context.Context) error {
 	if s == nil {
 		return nil
 	}
-	s.cancel()
+	return s.stop(ctx)
+}
 
+// newScheduler builds a scheduler for jobs; start runs it.
+func newScheduler(jobs []*job) *scheduler {
+	return &scheduler{jobs: jobs, done: make(chan struct{})}
+}
+
+// start spawns a loop per job on a context derived from ctx.
+func (s *scheduler) start(ctx context.Context) {
+	loopCtx, cancel := context.WithCancel(ctx)
+	s.cancel = cancel
+	now := clk.Now()
+	for _, j := range s.jobs {
+		next := j.schedule.Next(now)
+		log.Infoz("scheduled cronjob", zap.String("name", j.name), zap.String("spec", j.spec), zap.Bool("per_instance", j.perInstance), zap.Time("next", next))
+		s.loops.Go(func() { j.loop(loopCtx, next) })
+	}
+	go func() {
+		s.loops.Wait()
+		close(s.done)
+	}()
+}
+
+// stop ends the loops and waits for them, for as long as ctx allows.
+func (s *scheduler) stop(ctx context.Context) error {
+	s.cancel()
 	select {
 	case <-s.done:
 		return nil
@@ -277,13 +396,18 @@ func stop(ctx context.Context) error {
 }
 
 // loop runs the job at each instant of its schedule, starting with next,
-// until ctx ends. The instant after a run is computed from the moment the
-// run ended, so instants that passed while a run was in flight are skipped,
-// never piled on top of it — a slow round must not multiply its downstream
-// calls — and every skip is logged with the number of instants it cost, so
-// a job that keeps overrunning its period does not quietly run less often.
-// A schedule with no instant left — a day that never comes — ends the loop.
+// until ctx ends; a job under a lease first catches up the most recent
+// instant no replica ran. The instant after a run is computed from the
+// moment the run ended, so instants that passed while a run was in flight
+// are skipped, never piled on top of it — a slow round must not multiply its
+// downstream calls — and every skip is logged with the number of instants it
+// cost, so a job that keeps overrunning its period does not quietly run less
+// often. A schedule with no instant left — a day that never comes — ends the
+// loop.
 func (j *job) loop(ctx context.Context, next time.Time) {
+	if !j.perInstance {
+		j.catchUp(ctx)
+	}
 	for {
 		if next.IsZero() {
 			log.Warnz("cronjob has no further instant", zap.String("name", j.name), zap.String("spec", j.spec))
@@ -292,7 +416,7 @@ func (j *job) loop(ctx context.Context, next time.Time) {
 		if !clk.Wait(ctx, next) {
 			return
 		}
-		j.run(ctx, next)
+		j.runInstant(ctx, next, false)
 
 		// Never before the instant just run: a wall clock set back would
 		// otherwise hand the same instant out again.
@@ -318,8 +442,72 @@ func (j *job) instantsBetween(from, to time.Time) int {
 	return skipped
 }
 
+// catchUp runs, once and on one replica, the most recent instant of the job
+// that no replica ran — what a rolling deployment or an outage owes the job.
+// The conditions, all of which must hold: the job has run before, so its
+// lease row exists (a job never run starts with its next instant: the
+// instants before its first deployment were never its to run); the most
+// recent instant that passed lies within catchUpLookback; and no replica
+// claimed that instant — the claim itself decides this last one, so replicas
+// racing for the same catch-up settle it the way they settle any instant.
+func (j *job) catchUp(ctx context.Context) {
+	prev, ok := previousInstant(j.schedule, clk.Now())
+	if !ok {
+		return
+	}
+	last, found, err := lease.LastSlot(ctx, j.leaseName())
+	if err != nil {
+		log.Errorz("cronjob could not read its last instant", zap.Error(err), zap.String("name", j.name), zap.String("spec", j.spec))
+		return
+	}
+	if !found || !last.Before(prev) {
+		return
+	}
+	j.runInstant(ctx, prev, true)
+}
+
+// runInstant runs the round for at. A per-instance job runs it outright; a
+// job shared across the deployment first claims the instant's lease and runs
+// only when it wins, under the lease — its context ends with the lease, and
+// its transactions verify the lease first — then gives the lease back so the
+// next instant is free at once.
+func (j *job) runInstant(ctx context.Context, at time.Time, catchUp bool) {
+	if j.perInstance {
+		j.run(ctx, at)
+		return
+	}
+
+	h, claimed, err := lease.ClaimSlot(ctx, j.leaseName(), at)
+	if err != nil {
+		log.Errorz("cronjob could not claim its instant", zap.Error(err), zap.String("name", j.name), zap.String("spec", j.spec), zap.Time("at", at))
+		return
+	}
+	if !claimed {
+		log.Debugz("cronjob instant claimed elsewhere", zap.String("name", j.name), zap.String("spec", j.spec), zap.Time("at", at))
+		return
+	}
+
+	fields := []zap.Field{zap.Uint64("term", h.Term())}
+	if catchUp {
+		fields = append(fields, zap.Bool("catch_up", true))
+	}
+	held, stopHold := lease.Hold(ctx, h)
+	j.run(lease.WithHandle(held, h), at, fields...)
+	stopHold()
+
+	// The release outlives the round's context on purpose: at shutdown that
+	// context is already gone, and the lease must still be handed back so
+	// another replica can take the next instant without waiting it out.
+	releaseCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), releaseTimeout)
+	defer cancel()
+	if err := h.Release(releaseCtx); err != nil {
+		log.Warnz("cronjob could not release its lease", zap.Error(err), zap.String("name", j.name), zap.Time("at", at))
+	}
+}
+
 // run executes the round scheduled for at. Round identity, panic recovery,
-// timing and outcome logging live here.
+// timing and outcome logging live here; fields are added to every outcome
+// entry.
 //
 // A failure goes out as a typed error field, never formatted into the
 // message: the logging layer derives error_stack from that field, and for a
@@ -327,8 +515,9 @@ func (j *job) instantsBetween(from, to time.Time) int {
 // failing line and not just name the job. Every outcome entry carries the
 // round's trace id — the id the round's statements and log lines carry too —
 // so the round is found again from any of them.
-func (j *job) run(ctx context.Context, at time.Time) {
+func (j *job) run(ctx context.Context, at time.Time, fields ...zap.Field) {
 	ctx, traceID, end := beginRound(ctx, j.name)
+	round := append([]zap.Field{zap.String("name", j.name), zap.String("spec", j.spec), zap.String(consts.TRACE_ID, traceID), zap.Time("at", at)}, fields...)
 	var runErr error
 	// Registered before the recovery below so that it runs after it: a
 	// panic is recorded on the round's span as its outcome.
@@ -336,14 +525,14 @@ func (j *job) run(ctx context.Context, at time.Time) {
 	defer func() {
 		if r := recover(); r != nil {
 			runErr = panicError(r)
-			log.Errorz("cronjob panicked", zap.Error(runErr), zap.String("name", j.name), zap.String("spec", j.spec), zap.String(consts.TRACE_ID, traceID), zap.Time("at", at))
+			log.Errorz("cronjob panicked", append([]zap.Field{zap.Error(runErr)}, round...)...)
 		}
 	}()
 	begin := time.Now()
 	if runErr = j.fn(ctx); runErr != nil {
-		log.Errorz("finished cronjob with error", zap.Error(runErr), zap.String("name", j.name), zap.String("spec", j.spec), zap.String(consts.TRACE_ID, traceID), zap.Time("at", at), util.LogDuration(time.Since(begin)))
+		log.Errorz("finished cronjob with error", append([]zap.Field{zap.Error(runErr)}, append(round, util.LogDuration(time.Since(begin)))...)...)
 	} else {
-		log.Infoz("finished cronjob", zap.String("name", j.name), zap.String("spec", j.spec), zap.String(consts.TRACE_ID, traceID), zap.Time("at", at), util.LogDuration(time.Since(begin)))
+		log.Infoz("finished cronjob", append(round, util.LogDuration(time.Since(begin)))...)
 	}
 }
 
