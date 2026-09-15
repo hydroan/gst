@@ -19,8 +19,9 @@
 // claims the name, keeps it renewed while the work runs, and gives it back
 // once the work has returned. The work runs on a context that ends when the
 // lease is lost — the replica could not renew it for 10 seconds, or found it
-// taken — or the caller's context ends, and the transactions it opens verify
-// the lease first. Work cut short by a lost lease is reported as ErrLost even
+// taken — or the caller's context ends, and the database.Transaction calls
+// it makes verify the lease first. Work cut short by a lost lease is
+// reported as ErrLost even
 // when it returned nothing: another holder may have started the same work
 // since, so its result is not the whole story. Work that runs on past that
 // point — it ignores its context — would run beside the new holder's, so 5
@@ -144,15 +145,20 @@ func New(name string) *Lock {
 	}
 	name = strings.TrimSpace(name)
 	l := &Lock{name: name}
+	// A declaration that cannot be honored is recorded for the start to
+	// report and stays out of locks, so that it neither shadows a later
+	// declaration of the name nor counts as one.
 	switch {
 	case name == "":
 		errDeclare = errors.Join(errDeclare, errors.New("lock: declared lock has no name"))
+		return l
 	case slices.ContainsFunc(locks, func(other *Lock) bool { return other.name == name }):
 		errDeclare = errors.Join(errDeclare, errors.Newf("lock %q: declared twice", name))
-	default:
-		if err := lease.ValidateName(l.leaseName()); err != nil {
-			errDeclare = errors.Join(errDeclare, errors.Wrapf(err, "lock %q", name))
-		}
+		return l
+	}
+	if err := lease.ValidateName(l.leaseName()); err != nil {
+		errDeclare = errors.Join(errDeclare, errors.Wrapf(err, "lock %q", name))
+		return l
 	}
 	locks = append(locks, l)
 	return l
@@ -188,8 +194,9 @@ func start(context.Context) error {
 // is held elsewhere, else what fn returned — or ErrLost, joined with fn's
 // error if any, when the lease behind the lock was lost while fn ran. fn
 // receives a context that ends when the lease is lost or ctx ends, carries
-// the lease so that the transactions opened on it verify it first, and keeps
-// whatever identity ctx carried: the request's, the round's. A panic in fn
+// the lease so that database.Transaction calls on it verify it first, and
+// keeps whatever identity ctx carried: the request's, the round's. A panic
+// in fn
 // is recovered into an error carrying its stack. fn that has not returned 5
 // seconds after its context ended by a lost lease fails the process, see the
 // package documentation.
