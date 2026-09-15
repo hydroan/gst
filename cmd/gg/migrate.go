@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 
@@ -84,9 +85,19 @@ func buildMigrateProgramForMode(moduleName string, schemaOnly bool, schemaSource
 // migrateProjectImports renders the project packages the migration program
 // links, one blank import per line: the same list a generated main.go
 // imports, so the program registers every model the running service does.
+//
+// A package the project does not have yet — a scaffold gg gen has not
+// restored since the framework grew one — is left out, with a note: it
+// registers nothing, and the service does not build without it either, so
+// the migration must not fail on its account. Migration never writes source
+// files; restoring the scaffold is gen's job.
 func migrateProjectImports(moduleName string) string {
 	lines := make([]string, 0, len(constants.ProjectImportDirs))
 	for _, dir := range constants.ProjectImportDirs {
+		if sources, _ := filepath.Glob(filepath.Join(dir, "*.go")); len(sources) == 0 {
+			clioutput.Warn("", "%s/ has no Go files and is left out of the migration program; run gg gen to restore the scaffold", dir)
+			continue
+		}
 		lines = append(lines, fmt.Sprintf("\t_ %q", moduleName+"/"+dir))
 	}
 	return strings.Join(lines, "\n")
