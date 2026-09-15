@@ -106,6 +106,7 @@ func (*raceRecord) Indexes() []modelregistry.Index {
 // succeed, on the dialects with an advisory lock and on the one without.
 func TestMigrateTableCreatesOnceAcrossProcesses(t *testing.T) {
 	withAutoMigrate(t, true)
+	withFastStartupLock(t)
 
 	sqliteFile := filepath.Join(t.TempDir(), "race.db")
 	for _, dialect := range []struct {
@@ -164,7 +165,7 @@ func (*uniqueRecord) Indexes() []modelregistry.Index {
 // driver takes any other single-column unique index for a leftover and
 // drops it: an index declared through Indexes() was dropped and created
 // again on every start, and a start must not drop what the framework
-// created.
+// created. automigrating is what keeps gorm's hands off them.
 func TestMigrateTableLeavesTheIndexesAlone(t *testing.T) {
 	withAutoMigrate(t, true)
 
@@ -250,6 +251,8 @@ func TestStartupLockNameIsOnePerPurposeAndDatabase(t *testing.T) {
 // at once, and never two of them inside it together, on the dialects that
 // offer the lock.
 func TestSerializedRunsOneProcessAtATime(t *testing.T) {
+	withFastStartupLock(t)
+
 	for _, dialect := range []struct {
 		name config.DBType
 		open func(t *testing.T) *gorm.DB

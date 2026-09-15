@@ -245,7 +245,10 @@ var startupLocks = map[string]startupLock{
 // — a large seeding, a column added to a large table — is the project's,
 // and a bound the framework picked would turn a slow start into failed
 // ones. The wait cannot outlive the holder: the lock is the holder's
-// session, and a holder that crashes drops it with its connection. A holder
+// session, and a holder that crashes drops it with its connection — which
+// is also why the process must reach the primary directly or through a
+// session-level pool: a proxy that hands a session's statements to
+// different connections cannot hold the lock. A holder
 // that hangs is a process that never becomes ready, which the orchestrator's
 // startup probe restarts, releasing the lock the same way; the waiting
 // processes say so every startupLockWaitReport meanwhile, and stop waiting
