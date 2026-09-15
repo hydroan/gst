@@ -51,15 +51,121 @@ func TestDatabaseEntryPointsMatchThePackage(t *testing.T) {
 
 // TestCheckDetachedContextFlagsBackgroundAtDatabaseEntry pins the rule's
 // reach: a detached context handed to a framework database function or a
-// dao function is flagged in the directories that run under a context, a
-// generic instantiation included, while the context handed down passes,
-// copied framework modules are the framework's to check, and startup seeding
-// in a module package stays outside the rule.
+// dao function is flagged in the directories that run under a context —
+// written at the call, held in a variable first, derived through the context
+// package, under dot imports, and through a dao package whose name differs
+// from its directory's — a generic instantiation included, while the context
+// handed down passes, a variable that also receives a real context passes,
+// copied framework modules are the framework's to check, ignored directories
+// are not read, and startup seeding in a module package stays outside the
+// rule.
 func TestCheckDetachedContextFlagsBackgroundAtDatabaseEntry(t *testing.T) {
 	projectDir := t.TempDir()
 	t.Chdir(projectDir)
 	writeCheckProjectGoMod(t, projectDir)
 	writeFrameworkModuleFixture(t, projectDir, "sample")
+	writeCheckFile(t, filepath.Join(projectDir, ".gitignore"), "service/scratch/\n")
+
+	// A variable holding a detached context is the context at the call.
+	writeCheckFile(t, filepath.Join(projectDir, "leader", "counter.go"), `package leader
+
+import (
+	"context"
+
+	"tmpapp/dao"
+)
+
+func count(context.Context) error {
+	ctx := context.Background()
+	_, err := dao.Records(ctx)
+	return err
+}
+`)
+	// A context derived from a detached one is detached; one derived from
+	// the context handed down is not.
+	writeCheckFile(t, filepath.Join(projectDir, "lock", "rebuild.go"), `package lock
+
+import (
+	"context"
+	"time"
+
+	"github.com/hydroan/gst/database"
+)
+
+func rebuild(ctx context.Context) error {
+	bounded, cancel := context.WithTimeout(ctx, time.Second)
+	defer cancel()
+	if err := database.Transaction(bounded, func(context.Context) error { return nil }); err != nil {
+		return err
+	}
+	return database.Transaction(context.WithTimeout(context.Background(), time.Second), func(context.Context) error { return nil })
+}
+`)
+	// Dot imports of both packages leave the calls unqualified.
+	writeCheckFile(t, filepath.Join(projectDir, "service", "sweep", "sweep.go"), `package sweep
+
+import (
+	. "context"
+
+	. "github.com/hydroan/gst/database"
+)
+
+func sweep() error {
+	return Transaction(Background(), func(Context) error { return nil })
+}
+`)
+	// A dao package named unlike its directory is used under its own name.
+	writeCheckFile(t, filepath.Join(projectDir, "dao", "menu", "menu.go"), `package menudao
+
+import "context"
+
+func Seed(context.Context) error { return nil }
+`)
+	writeCheckFile(t, filepath.Join(projectDir, "service", "menu", "menu.go"), `package menu
+
+import (
+	"context"
+
+	"tmpapp/dao/menu"
+)
+
+func seed() error {
+	return menudao.Seed(context.TODO())
+}
+`)
+	// A variable that also receives a real context is left alone: the
+	// check reads the syntax, not the flow.
+	writeCheckFile(t, filepath.Join(projectDir, "service", "either", "either.go"), `package either
+
+import (
+	"context"
+
+	"tmpapp/dao"
+)
+
+func either(handed context.Context, detached bool) error {
+	ctx := context.Background()
+	if !detached {
+		ctx = handed
+	}
+	_, err := dao.Records(ctx)
+	return err
+}
+`)
+	// An ignored directory is not read.
+	writeCheckFile(t, filepath.Join(projectDir, "service", "scratch", "scratch.go"), `package scratch
+
+import (
+	"context"
+
+	"tmpapp/dao"
+)
+
+func scratch() error {
+	_, err := dao.Records(context.Background())
+	return err
+}
+`)
 
 	// A copied module subtree keeps whatever the framework repository ships.
 	writeCheckFile(t, filepath.Join(projectDir, "service", "sample", "copied.go"), `package sample
@@ -143,10 +249,14 @@ func seed() error {
 
 	violations := CheckDetachedContext(newProjectIgnoreMatcher())
 
-	if len(violations) != 3 {
-		t.Fatalf("expected three violations, got %#v", violations)
+	if len(violations) != 7 {
+		t.Fatalf("expected seven violations, got %#v", violations)
 	}
 	assertViolationContains(t, violations, filepath.Join("service", "record", "record.go"), ":16: database.Transaction receives context.Background()")
 	assertViolationContains(t, violations, filepath.Join("dao", "record.go"), ":12: database.Database receives context.TODO()")
 	assertViolationContains(t, violations, filepath.Join("cronjob", "sweep.go"), ":10: dao.Records receives context.Background()")
+	assertViolationContains(t, violations, filepath.Join("leader", "counter.go"), ":11: dao.Records receives a context held in ctx")
+	assertViolationContains(t, violations, filepath.Join("lock", "rebuild.go"), ":16: database.Transaction receives context.Background() through context.WithTimeout")
+	assertViolationContains(t, violations, filepath.Join("service", "sweep", "sweep.go"), ":10: database.Transaction receives context.Background()")
+	assertViolationContains(t, violations, filepath.Join("service", "menu", "menu.go"), ":10: menudao.Seed receives context.TODO()")
 }
