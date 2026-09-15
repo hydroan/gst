@@ -86,13 +86,15 @@ func ensureTable(handler *gorm.DB, m types.Model) error {
 	return nil
 }
 
-// migrateTable runs gorm AutoMigrate and creates the custom indexes, once
-// across the processes sharing the database. Replicas starting together all
-// find the table missing and all issue CREATE TABLE, and the server refuses
-// every one but the first: on MySQL and PostgreSQL the processes take turns
-// under the startup lock, and where none can be held — SQLite, or a pool of
-// a single connection — a failure while another process created the table
-// is retried once, against the table that is there now.
+// migrateTable runs gorm AutoMigrate — on a session that leaves the
+// framework's indexes alone, see automigrating — and creates the custom
+// indexes, once across the processes sharing the database. Replicas
+// starting together all find the table missing and all issue CREATE TABLE,
+// and the server refuses every one but the first: on MySQL and PostgreSQL
+// the processes take turns under the startup lock, and where none can be
+// held — SQLite, or a pool of a single connection — a failure while another
+// process created the table is retried once, against the table that is
+// there now.
 //
 // AutoMigrate reads the table name through gorm's Tabler, which is the
 // model's own TableName method. Supplying it again through Table() would make
@@ -101,7 +103,7 @@ func ensureTable(handler *gorm.DB, m types.Model) error {
 func migrateTable(handler *gorm.DB, m types.Model, tableName string) error {
 	return serialized(context.Background(), handler, "migrate", func() error {
 		migrate := func() error {
-			if err := handler.AutoMigrate(m); err != nil {
+			if err := automigrating(handler).AutoMigrate(m); err != nil {
 				return err
 			}
 			return ensureCustomIndexes(handler, m)

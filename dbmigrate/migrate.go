@@ -53,12 +53,11 @@ type MigrateOption struct {
 // Index renames must run through this migration path BEFORE deploying code
 // that carries the new index name: once the rename is applied, startup table
 // preparation matches the new name and does nothing. With database.auto_migrate
-// enabled (local development, tests), deploying first instead makes gorm's
-// MySQL driver silently DROP and re-CREATE single-column unique indexes during
-// startup, which rebuilds the index with a full table scan and skips every
-// review step. With auto_migrate disabled (the production default) nothing is
-// rebuilt, but the model and the database keep drifting until the migration
-// runs.
+// enabled (local development, tests), deploying first instead fails the start:
+// table preparation finds the same definition under the old name and refuses
+// with the rename statement, dropping nothing. With auto_migrate disabled (the
+// production default) the start passes, but the model and the database keep
+// drifting until the migration runs.
 //
 // When a MySQL or PostgreSQL plan drops and re-creates an identical
 // definition — an index on the same table, or a whole table under a new name
