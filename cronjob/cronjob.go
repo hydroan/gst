@@ -65,6 +65,7 @@ import (
 	gstotel "github.com/hydroan/gst/otel"
 	"github.com/hydroan/gst/util"
 	"github.com/robfig/cron/v3"
+	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
@@ -560,7 +561,7 @@ func (j *job) run(ctx context.Context, at time.Time, fields ...zap.Field) (runEr
 	round := append([]zap.Field{zap.String("name", j.name), zap.String("spec", j.spec), zap.String(consts.TRACE_ID, traceID), zap.Time("at", at)}, fields...)
 	// Registered before the recovery below so that it runs after it: a
 	// panic is recorded on the round's span as its outcome.
-	defer func() { end(runErr) }()
+	defer func() { end(runErr, interruption(ctx, runErr)) }()
 	defer func() {
 		if r := recover(); r != nil {
 			runErr = util.PanicError(r)
@@ -570,24 +571,28 @@ func (j *job) run(ctx context.Context, at time.Time, fields ...zap.Field) (runEr
 	begin := time.Now()
 	runErr = j.fn(ctx)
 	round = append(round, util.LogDuration(time.Since(begin)))
-	switch {
+	switch reason := interruption(ctx, runErr); {
 	case runErr == nil:
 		log.Infoz("finished cronjob", round...)
-	case ctx.Err() != nil && errors.Is(runErr, ctx.Err()):
-		// The job stopped because its context ended — the process is
-		// shutting down, or the lease is lost — which is what a job is asked
-		// to do then, not a failure of its own; a rolling deployment ends a
-		// long round this way every time.
-		log.Warnz("cronjob interrupted", append([]zap.Field{zap.String("reason", interruption(ctx))}, round...)...)
+	case reason != "":
+		log.Warnz("cronjob interrupted", append([]zap.Field{zap.String("reason", reason)}, round...)...)
 	default:
 		log.Errorz("finished cronjob with error", append([]zap.Field{zap.Error(runErr)}, round...)...)
 	}
 	return runErr
 }
 
-// interruption names why a round's context ended, for the interruption
-// entry: the lease was lost, or the process is shutting down.
-func interruption(ctx context.Context) string {
+// interruption names why a round ended before its work did — the lease was
+// lost, or the process is shutting down — and is empty for a round that
+// ended on its own, a failure of its own included. A job stopping because
+// its context ended is doing what it is asked to do then, not failing; a
+// rolling deployment ends a long round this way every time. Only an error
+// that is the context's own ending counts: a job that wraps it, or returns
+// an error of its own on the way out, failed.
+func interruption(ctx context.Context, err error) string {
+	if ctx.Err() == nil || !errors.Is(err, ctx.Err()) {
+		return ""
+	}
 	if errors.Is(context.Cause(ctx), lease.ErrLost) {
 		return "lease lost"
 	}
@@ -596,7 +601,8 @@ func interruption(ctx context.Context) string {
 
 // beginRound opens one round of the named job on parent and returns the
 // context the job runs on, the round's trace id, and the function that
-// closes the round with its outcome.
+// closes the round with its outcome: the error the job returned, and the
+// interruption that ended the round, if one did.
 //
 // The context carries the round's identity — the job name and the trace id —
 // for everything the job does downstream: statement comments, the SQL log and
@@ -605,7 +611,12 @@ func interruption(ctx context.Context) string {
 // every span the job's operations open, and the trace id is that span's; with
 // tracing off the id is generated, the way the request middleware generates
 // one.
-func beginRound(parent context.Context, name string) (ctx context.Context, traceID string, end func(err error)) {
+//
+// The span's status says what the log entry says: a round that finished is
+// ok, one that failed is an error, and one that was interrupted is neither —
+// it carries an event naming the interruption and leaves the status unset,
+// so a trace search for failed rounds does not turn up every deployment.
+func beginRound(parent context.Context, name string) (ctx context.Context, traceID string, end func(err error, interruption string)) {
 	ctx = parent
 	var span trace.Span
 	if gstotel.IsEnabled() {
@@ -616,16 +627,19 @@ func beginRound(parent context.Context, name string) (ctx context.Context, trace
 	}
 	ctx = execctx.WithCronjob(ctx, name, traceID)
 
-	return ctx, traceID, func(err error) {
+	return ctx, traceID, func(err error, interruption string) {
 		if span == nil {
 			return
 		}
 		if gstotel.IsSpanRecording(span) {
-			if err != nil {
+			switch {
+			case err == nil:
+				span.SetStatus(codes.Ok, "")
+			case interruption != "":
+				span.AddEvent("interrupted", trace.WithAttributes(attribute.String("reason", interruption)))
+			default:
 				span.SetStatus(codes.Error, err.Error())
 				gstotel.RecordError(span, err)
-			} else {
-				span.SetStatus(codes.Ok, "")
 			}
 		}
 		span.End()

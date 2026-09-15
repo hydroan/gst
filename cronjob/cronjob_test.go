@@ -29,6 +29,8 @@ import (
 	pkgzap "github.com/hydroan/gst/logger/zap"
 	"github.com/robfig/cron/v3"
 	"github.com/stretchr/testify/require"
+	"go.opentelemetry.io/otel/codes"
+	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	oteltrace "go.opentelemetry.io/otel/trace"
 	"gorm.io/gorm"
 	gormlogger "gorm.io/gorm/logger"
@@ -555,12 +557,15 @@ func TestRoundThatLosesItsLeaseIsCutShortAndLogged(t *testing.T) {
 }
 
 // TestRoundInterruptedAtShutdownIsAWarning proves a round that stops because
-// its context ended is not logged as a failure: the job returned the
-// context's own cancellation, which is what it is asked to do when the
-// process shuts down, and every rolling deployment ends a long round this
-// way.
+// its context ended is not recorded as a failure, in the log or in the
+// trace: the job returned the context's own cancellation, which is what it
+// is asked to do when the process shuts down, and every rolling deployment
+// ends a long round this way. The round's span carries the interruption as
+// an event and no error status, so a search for failed rounds skips it.
 func TestRoundInterruptedAtShutdownIsAWarning(t *testing.T) {
 	dir := withCronjobLoggerConfig(t)
+	oteltest.Enable(t)
+	recorder := oteltest.Record(t)
 	resetCronjobState(t)
 	clock := withFakeClock(t, time.Date(2026, 1, 1, 10, 0, 0, 0, time.UTC))
 
@@ -582,6 +587,22 @@ func TestRoundInterruptedAtShutdownIsAWarning(t *testing.T) {
 	require.Equal(t, "interrupted-job", entry["name"])
 	require.Equal(t, "shutting down", entry["reason"])
 	require.Equal(t, "WARN", entry["level"])
+
+	span := oteltest.EndedNamed(t, recorder, "cronjob.InterruptedJob")
+	require.Equal(t, codes.Unset, span.Status().Code, "an interrupted round is neither a success nor a failure")
+	require.Len(t, span.Events(), 1)
+	require.Equal(t, "interrupted", span.Events()[0].Name)
+	require.Equal(t, "shutting down", spanEventAttribute(span.Events()[0], "reason"))
+}
+
+// spanEventAttribute reads one string attribute of a span event.
+func spanEventAttribute(event sdktrace.Event, key string) string {
+	for _, kv := range event.Attributes {
+		if string(kv.Key) == key {
+			return kv.Value.AsString()
+		}
+	}
+	return ""
 }
 
 // TestStopWithoutStartIsNoop keeps stop safe in processes that never started
