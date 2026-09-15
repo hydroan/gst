@@ -94,6 +94,14 @@ func (l *Logger) With(fields ...string) types.Logger {
 	return &Logger{zlog: l.zlog.With(zapFields...)}
 }
 
+// contextFieldCap is the most fields withContextFields binds: the nine it
+// always binds — phase, route, path, method, username, user id, trace id,
+// params, query — and the cron job or leader name (an identity carries at
+// most one of them). The field slice is sized to it once, so binding never
+// regrows it; a field added to withContextFields bumps it, which the
+// worst-case test enforces.
+const contextFieldCap = 10
+
 // withContextFields binds the fields derived from a context — the request
 // metadata and the execution identity — to a derived logger. This runs for
 // every context-scoped logger, so all fields go through one zap With call:
@@ -105,10 +113,11 @@ func (l *Logger) With(fields ...string) types.Logger {
 // routes and are therefore bounded; the query is logged as one raw string
 // because its keys are not. See requestctx.Metadata.RawQuery.
 //
-// The cron job name is present only inside a round: a request's lines carry
-// no empty field for a capability they do not use.
+// The cron job name is present only inside a round and the leader name only
+// inside a tenure: a request's lines carry no empty field for a capability
+// they do not use.
 func (l *Logger) withContextFields(meta requestctx.Metadata, id execctx.Identity, phase consts.Phase) types.Logger {
-	fields := make([]zap.Field, 0, 10)
+	fields := make([]zap.Field, 0, contextFieldCap)
 	fields = append(fields,
 		zap.String(consts.PHASE, string(phase)),
 		zap.String(consts.CTX_ROUTE, meta.Route()),
@@ -122,6 +131,9 @@ func (l *Logger) withContextFields(meta requestctx.Metadata, id execctx.Identity
 	)
 	if len(id.Cronjob) > 0 {
 		fields = append(fields, zap.String(consts.CRONJOB, id.Cronjob))
+	}
+	if len(id.Leader) > 0 {
+		fields = append(fields, zap.String(consts.LEADER, id.Leader))
 	}
 	return &Logger{zlog: l.zlog.With(fields...)}
 }

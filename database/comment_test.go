@@ -142,6 +142,21 @@ func TestSQLCommentCarriesCronjobRound(t *testing.T) {
 	require.Contains(t, capture.last(), "/* cronjob='sample%20job',trace_id='trace-cron' */")
 }
 
+// TestSQLCommentCarriesLeaderTenure pins the annotation of a leader tenure:
+// the leader name joins the trace id the way a cron job's does.
+func TestSQLCommentCarriesLeaderTenure(t *testing.T) {
+	defer cleanupTestData()
+	setupTestData(t)
+
+	capture := &sqlTextCaptureLogger{Interface: database.DB().Logger}
+	session := database.DB().Session(&gorm.Session{Logger: capture})
+	ctx := execctx.WithLeader(context.Background(), "sample work", "trace-leader")
+
+	users := make([]*TestUser, 0)
+	require.NoError(t, database.DatabaseOn[*TestUser](ctx, session).List(&users))
+	require.Contains(t, capture.last(), "/* leader='sample%20work',trace_id='trace-leader' */")
+}
+
 // TestSQLCommentMatchesOperationSpanOutsideRequest pins that the comment is
 // attached once the operation's span is open: outside any request or cron
 // round the statement carries that span's trace id — the id the SQL log

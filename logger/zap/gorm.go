@@ -236,6 +236,14 @@ func sqlCallerPath(file string, line int) string {
 	return path
 }
 
+// traceFieldCap is the most fields one Trace entry carries: caller, the
+// eight base fields, cronjob or leader (an identity carries at most one of
+// them), db_role, record_not_found, and the one field the error/slow branches
+// append (mutually exclusive in the switch). Trace sizes its field slice to
+// it once, so the hot path never regrows; a field added to Trace bumps it,
+// which the worst-case test enforces.
+const traceFieldCap = 13
+
 // Trace logs one executed statement with the request identity, timing, the
 // SQL text, and the business caller that issued it.
 //
@@ -252,11 +260,7 @@ func (g *GormLogger) Trace(ctx context.Context, begin time.Time, fc func() (sql 
 	elapsed := time.Since(begin)
 	sql, rows := fc()
 
-	// Sized to the exact worst case so the hot path never regrows: caller,
-	// the eight base fields, cronjob, db_role, record_not_found, and the one
-	// field the error/slow branches append (mutually exclusive in the switch
-	// below).
-	fields := make([]zap.Field, 0, 13)
+	fields := make([]zap.Field, 0, traceFieldCap)
 	if caller, ok := callerOutside(isSkippedSQLFrame); ok {
 		fields = append(fields, zap.String("caller", caller))
 	}
@@ -271,10 +275,13 @@ func (g *GormLogger) Trace(ctx context.Context, begin time.Time, fc func() (sql 
 		util.LogDuration(elapsed),
 		zap.Int64("rows", rows),
 	)
-	// Present only inside a cron round; a request's lines carry no empty field
-	// for a capability they do not use.
+	// Present only inside a cron round or a leader tenure; a request's lines
+	// carry no empty field for a capability they do not use.
 	if len(id.Cronjob) > 0 {
 		fields = append(fields, zap.String(consts.CRONJOB, id.Cronjob))
+	}
+	if len(id.Leader) > 0 {
+		fields = append(fields, zap.String(consts.LEADER, id.Leader))
 	}
 	// Present only on handles with read replicas attached, where "which node
 	// served this query" stops being answerable by assumption.

@@ -65,6 +65,7 @@ func sqlCommentFor(ctx context.Context) string {
 	// here, at its sorted position.
 	pairs := [...]commentPair{
 		{key: "cronjob", value: id.Cronjob},
+		{key: "leader", value: id.Leader},
 		{key: "trace_id", value: id.TraceID},
 	}
 	return renderComment(pairs[:])

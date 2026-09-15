@@ -26,6 +26,9 @@ type Identity struct {
 	// Cronjob names the cron job whose round is running, and is "" outside a
 	// round. The cron runner stamps it.
 	Cronjob string
+	// Leader names the leader work whose tenure is running, and is "" outside
+	// a tenure. The leader package stamps it.
+	Leader string
 }
 
 // identityKey keys the stamped Identity on a context. One key carries the
@@ -43,6 +46,13 @@ func WithTraceID(ctx context.Context, traceID string) context.Context {
 // keyed by the round's trace id, replacing any identity stamped before.
 func WithCronjob(ctx context.Context, name, traceID string) context.Context {
 	return context.WithValue(ctx, identityKey{}, Identity{TraceID: traceID, Cronjob: name})
+}
+
+// WithLeader returns a context stamped as one tenure of the named leader
+// work, keyed by the tenure's trace id, replacing any identity stamped
+// before.
+func WithLeader(ctx context.Context, name, traceID string) context.Context {
+	return context.WithValue(ctx, identityKey{}, Identity{TraceID: traceID, Leader: name})
 }
 
 // FromContext resolves the identity of ctx: the stamped identity when there is

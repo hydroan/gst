@@ -7,6 +7,8 @@ import (
 
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/config"
+	"github.com/hydroan/gst/internal/dbruntime"
+	"github.com/hydroan/gst/internal/execctx"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
@@ -284,6 +286,28 @@ func TestGormLoggerTraceFlagsSlowQuery(t *testing.T) {
 	require.Equal(t, zapcore.WarnLevel, entry.Level)
 	require.Equal(t, "slow sql detected", entry.Message)
 	require.Contains(t, entry.ContextMap(), "threshold")
+}
+
+// TestTraceFieldsFitTheCapacityInTheWorstCase pins traceFieldCap to the entry
+// Trace emits when every optional field is present — the caller, a cron
+// round's identity, a replica role, record_not_found and the slow-query
+// threshold — so a field added to Trace without bumping the capacity fails
+// here instead of regrowing the slice on every statement.
+func TestTraceFieldsFitTheCapacityInTheWorstCase(t *testing.T) {
+	stubSlowQueryThreshold(t, time.Nanosecond)
+	g, logs := newObservedGormLogger()
+
+	ctx := execctx.WithCronjob(context.Background(), "sample_job", "trace-worst")
+	ctx = dbruntime.WithRole(ctx, "replica")
+	g.Trace(ctx, time.Now().Add(-time.Second), func() (string, int64) { return "SELECT 1", 0 }, gorml.ErrRecordNotFound)
+
+	entry := requireSingleEntry(t, logs)
+	require.Len(t, entry.Context, traceFieldCap,
+		"the worst case must fill the capacity exactly: a new field bumps traceFieldCap, a dropped one lowers it")
+	fields := entry.ContextMap()
+	for _, key := range []string{"caller", "cronjob", "db_role", "record_not_found", "threshold"} {
+		require.Contains(t, fields, key, "the worst case must carry every optional field")
+	}
 }
 
 func TestGormLoggerInfoFormatsArgs(t *testing.T) {

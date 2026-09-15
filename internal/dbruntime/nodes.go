@@ -54,6 +54,12 @@ func NodesFor(handle *gorm.DB) []DBNode {
 // roleContextKey carries the node role that served one statement.
 type roleContextKey struct{}
 
+// WithRole returns ctx stamped with the node role that serves the statement
+// it belongs to; RoleFromContext reads it back.
+func WithRole(ctx context.Context, role string) context.Context {
+	return context.WithValue(ctx, roleContextKey{}, role)
+}
+
 // RoleFromContext reports which node role served the statement this context
 // belongs to, and "" when the statement ran on a handle without replicas —
 // role stamping is only installed alongside a resolver, so a replica-free
@@ -172,7 +178,7 @@ func markStatementRole(stmt *gorm.DB, primaryPool gorm.ConnPool) {
 			role = RoleReplica
 		}
 	}
-	stmt.Statement.Context = context.WithValue(stmt.Statement.Context, roleContextKey{}, role)
+	stmt.Statement.Context = WithRole(stmt.Statement.Context, role)
 	if span := trace.SpanFromContext(stmt.Statement.Context); span.IsRecording() {
 		span.SetAttributes(attribute.String("db.role", role))
 	}

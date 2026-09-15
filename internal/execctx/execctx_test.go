@@ -20,6 +20,12 @@ func TestFromContextReturnsCronjobRound(t *testing.T) {
 	require.Equal(t, Identity{TraceID: "trace-2", Cronjob: "sample_job"}, FromContext(ctx))
 }
 
+func TestFromContextReturnsLeaderTenure(t *testing.T) {
+	ctx := WithLeader(context.Background(), "sample_work", "trace-3")
+
+	require.Equal(t, Identity{TraceID: "trace-3", Leader: "sample_work"}, FromContext(ctx))
+}
+
 func TestFromContextBorrowsSpanTraceID(t *testing.T) {
 	ctx := trace.ContextWithSpanContext(context.Background(), spanContext(t, "11111111111111111111111111111111"))
 

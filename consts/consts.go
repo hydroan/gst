@@ -70,6 +70,7 @@ const (
 	SPAN_ID  = "span_id"
 	SEQ      = "seq"
 	CRONJOB  = "cronjob"
+	LEADER   = "leader"
 	// INSTANCE is the log field naming the process that wrote the entry,
 	// the identity every logger stamps; see internal/instance.
 	INSTANCE = "instance"
