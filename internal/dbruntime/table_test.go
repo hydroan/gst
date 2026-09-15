@@ -2,6 +2,7 @@ package dbruntime
 
 import (
 	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -132,6 +133,16 @@ func TestMigrateTableCreatesOnceAcrossProcesses(t *testing.T) {
 			require.True(t, handles[0].Migrator().HasIndex(&raceRecord{}, "idx_race_records_name"))
 		})
 	}
+}
+
+// TestMigrationLockNameIsOnePerDatabase pins the lock's scope: deployments
+// on two databases of one MySQL server hold two locks, and every name fits
+// MySQL's 64-character limit whatever the database is called.
+func TestMigrationLockNameIsOnePerDatabase(t *testing.T) {
+	require.NotEqual(t, migrationLockName("app"), migrationLockName("app_staging"))
+	require.True(t, strings.HasPrefix(migrationLockName("app"), "gst:migrate:"))
+	require.LessOrEqual(t, len(migrationLockName(strings.Repeat("d", 64))), 64)
+	require.NotEqual(t, migrationLockKey(migrationLockName("app")), migrationLockKey(migrationLockName("app_staging")))
 }
 
 // withAutoMigrate overrides the auto-migrate option and restores it on cleanup.

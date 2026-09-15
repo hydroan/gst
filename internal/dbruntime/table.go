@@ -117,29 +117,37 @@ func migrateTable(handler *gorm.DB, m types.Model, tableName string) error {
 	return err
 }
 
-// migrationLockName is the advisory lock table preparation holds on the
-// servers that offer one: a single name for the whole schema, so that the
-// processes of a deployment prepare their tables one process at a time.
-const migrationLockName = "gst:migrate"
-
-// migrationLockKey is the same lock as an integer, for the server that keys
-// advisory locks by one: a stable hash of the name.
-var migrationLockKey = func() int64 {
+// migrationLockName names the advisory lock table preparation holds on the
+// servers that offer one: one lock per database, so that the processes of a
+// deployment prepare their tables one process at a time while deployments on
+// other databases of the same server go on unhindered. MySQL scopes a named
+// lock to the whole server, so the database is part of the name — hashed,
+// because MySQL allows a lock name 64 characters at most and a database name
+// alone may take them all.
+func migrationLockName(database string) string {
 	h := fnv.New32a()
-	_, _ = h.Write([]byte(migrationLockName))
+	_, _ = h.Write([]byte(database))
+	return fmt.Sprintf("gst:migrate:%08x", h.Sum32())
+}
+
+// migrationLockKey is the lock as an integer, for the server that keys
+// advisory locks by one: a stable hash of the name.
+func migrationLockKey(name string) int64 {
+	h := fnv.New32a()
+	_, _ = h.Write([]byte(name))
 	return int64(h.Sum32())
-}()
+}
 
 // migrationLockTimeout bounds the wait for the lock. A holder is creating a
 // table, which takes milliseconds; a minute covers a server that is slow to
 // come up under a whole deployment starting at once.
 const migrationLockTimeout = time.Minute
 
-// migrationLock is the advisory lock of one dialect, taken and released on
-// the connection that holds it.
+// migrationLock is the advisory lock of one dialect, taken and released by
+// name on the connection that holds it.
 type migrationLock struct {
-	acquire func(ctx context.Context, conn *sql.Conn) error
-	release func(ctx context.Context, conn *sql.Conn) error
+	acquire func(ctx context.Context, conn *sql.Conn, name string) error
+	release func(ctx context.Context, conn *sql.Conn, name string) error
 }
 
 // migrationLocks are the advisory locks table preparation holds, by dialect.
@@ -148,9 +156,9 @@ type migrationLock struct {
 // and blocks until the lock is taken, so the wait is bounded by the context.
 var migrationLocks = map[string]migrationLock{
 	"mysql": {
-		acquire: func(ctx context.Context, conn *sql.Conn) error {
+		acquire: func(ctx context.Context, conn *sql.Conn, name string) error {
 			var got sql.NullInt64
-			if err := conn.QueryRowContext(ctx, "SELECT GET_LOCK(?, ?)", migrationLockName, int64(migrationLockTimeout.Seconds())).Scan(&got); err != nil {
+			if err := conn.QueryRowContext(ctx, "SELECT GET_LOCK(?, ?)", name, int64(migrationLockTimeout.Seconds())).Scan(&got); err != nil {
 				return err
 			}
 			if !got.Valid || got.Int64 != 1 {
@@ -158,18 +166,18 @@ var migrationLocks = map[string]migrationLock{
 			}
 			return nil
 		},
-		release: func(ctx context.Context, conn *sql.Conn) error {
-			_, err := conn.ExecContext(ctx, "DO RELEASE_LOCK(?)", migrationLockName)
+		release: func(ctx context.Context, conn *sql.Conn, name string) error {
+			_, err := conn.ExecContext(ctx, "DO RELEASE_LOCK(?)", name)
 			return err
 		},
 	},
 	"postgres": {
-		acquire: func(ctx context.Context, conn *sql.Conn) error {
-			_, err := conn.ExecContext(ctx, "SELECT pg_advisory_lock($1)", migrationLockKey)
+		acquire: func(ctx context.Context, conn *sql.Conn, name string) error {
+			_, err := conn.ExecContext(ctx, "SELECT pg_advisory_lock($1)", migrationLockKey(name))
 			return err
 		},
-		release: func(ctx context.Context, conn *sql.Conn) error {
-			_, err := conn.ExecContext(ctx, "SELECT pg_advisory_unlock($1)", migrationLockKey)
+		release: func(ctx context.Context, conn *sql.Conn, name string) error {
+			_, err := conn.ExecContext(ctx, "SELECT pg_advisory_unlock($1)", migrationLockKey(name))
 			return err
 		},
 	},
@@ -199,6 +207,7 @@ func lockMigration(handler *gorm.DB) (unlock func(), err error) {
 	if sqlDB.Stats().MaxOpenConnections == 1 {
 		return noop, nil
 	}
+	name := migrationLockName(handler.Migrator().CurrentDatabase())
 
 	// MySQL times the wait out itself; the margin lets its verdict arrive
 	// before the context's.
@@ -208,14 +217,14 @@ func lockMigration(handler *gorm.DB) (unlock func(), err error) {
 	if err != nil {
 		return noop, errors.Wrap(err, "take a connection for the migration lock")
 	}
-	if err := lock.acquire(ctx, conn); err != nil {
+	if err := lock.acquire(ctx, conn, name); err != nil {
 		discardConn(conn)
 		return noop, errors.Wrap(err, "take the migration lock")
 	}
 	return func() {
 		ctx, cancel := context.WithTimeout(context.Background(), migrationLockTimeout)
 		defer cancel()
-		if err := lock.release(ctx, conn); err != nil {
+		if err := lock.release(ctx, conn, name); err != nil {
 			zap.S().Warnw("failed to release the migration lock; discarding its connection", "error", err)
 			discardConn(conn)
 			return
