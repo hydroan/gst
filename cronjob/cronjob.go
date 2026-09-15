@@ -167,6 +167,12 @@ func init() {
 // with the round and can be found again from any of them. An instant that
 // passes while the previous round is still in flight is skipped.
 //
+// The framework opens a single connection to SQLite, so there a transaction
+// of the job blocks the renewal of the round's lease: keep each transaction
+// under 5 seconds — a longer one may hold the renewal back until the lease
+// counts as lost, which ends the round; one over 10 seconds always does — or
+// register work that only ever runs in one process with RegisterPerInstance.
+//
 // A registration that cannot be honored — no name, no schedule, a schedule
 // that does not parse or names the Local zone, a name already taken, a nil
 // fn — fails the process at startup.
@@ -503,7 +509,18 @@ func (j *job) runInstant(ctx context.Context, at time.Time, catchUp bool) bool {
 	}
 	held, stopHold := lease.Hold(ctx, h)
 	j.run(lease.WithHandle(held, h), at, fields...)
+	lost := errors.Is(context.Cause(held), lease.ErrLost)
 	stopHold()
+
+	if lost {
+		// The round outlived its lease — the renewals could not keep it, or
+		// found it taken — and its context ended with it. The job's own error
+		// says only that its context ended, so the loss is recorded here as
+		// the round's outcome; the name is no longer this round's to give
+		// back.
+		log.Warnz("cronjob lost its lease during the round", zap.String("name", j.name), zap.String("spec", j.spec), zap.Time("at", at), zap.Uint64("term", h.Term()))
+		return true
+	}
 
 	// The release outlives the round's context on purpose: at shutdown that
 	// context is already gone, and the lease must still be handed back so
@@ -535,7 +552,7 @@ func (j *job) run(ctx context.Context, at time.Time, fields ...zap.Field) {
 	defer func() { end(runErr) }()
 	defer func() {
 		if r := recover(); r != nil {
-			runErr = panicError(r)
+			runErr = util.PanicError(r)
 			log.Errorz("cronjob panicked", append([]zap.Field{zap.Error(runErr)}, round...)...)
 		}
 	}()
@@ -583,20 +600,6 @@ func beginRound(parent context.Context, name string) (ctx context.Context, trace
 		}
 		span.End()
 	}
-}
-
-// panicError turns a recovered panic value into an error carrying the stack
-// of the panic site. It must be called from the deferred function that
-// recovered, while the goroutine is still unwinding: the frames captured then
-// still include the line that panicked, whereas a stack taken after recovery
-// would only show this package. A panic value that is already an error keeps
-// its own, deeper stack if it has one — the error_stack field reports the
-// deepest stack in the chain — and gains this one otherwise.
-func panicError(recovered any) error {
-	if err, ok := recovered.(error); ok {
-		return errors.WithStack(err)
-	}
-	return errors.Newf("%v", recovered)
 }
 
 // clock is the time as the scheduler sees it: the moment now, and a wait

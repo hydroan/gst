@@ -512,6 +512,53 @@ func TestStopGivesUpOnAJobThatIgnoresItsContext(t *testing.T) {
 		"giving up on the in-flight round must be reported, not swallowed")
 }
 
+// TestRoundThatLosesItsLeaseIsCutShortAndLogged proves a round outliving
+// its lease ends with it: once another replica has taken the name — the
+// lease ended behind the round's back — the round's context ends with
+// ErrLost as the cause, the loss is logged as the round's outcome, and the
+// scheduler goes on to the next instant.
+func TestRoundThatLosesItsLeaseIsCutShortAndLogged(t *testing.T) {
+	dir := withCronjobLoggerConfig(t)
+	resetCronjobState(t)
+	clock := withFakeClock(t, time.Date(2026, 1, 1, 10, 0, 0, 0, time.UTC))
+	t.Cleanup(lease.SetTimings(300*time.Millisecond, 50*time.Millisecond, 150*time.Millisecond))
+
+	entered := make(chan struct{}, 1)
+	ended := make(chan error, 1)
+	Register(func(ctx context.Context) error {
+		entered <- struct{}{}
+		<-ctx.Done()
+		ended <- context.Cause(ctx)
+		return ctx.Err()
+	}, "@every 1m", "lost-job")
+	require.NoError(t, start(context.Background()))
+
+	clock.untilWaiting(t)
+	clock.Advance(time.Minute)
+	awaitSignal(t, entered, "the round")
+
+	// Another replica takes the name: the lease is ended in the table behind
+	// the round's back and claimed anew.
+	require.NoError(t, dbruntime.DB.Exec("UPDATE gst_leases SET expires_at_ms = 0 WHERE name = ?", "cron:lost-job").Error)
+	taken, claimed, err := lease.Claim(context.Background(), "cron:lost-job")
+	require.NoError(t, err)
+	require.True(t, claimed)
+	t.Cleanup(func() { _ = taken.Release(context.Background()) })
+
+	select {
+	case cause := <-ended:
+		require.ErrorIs(t, cause, lease.ErrLost)
+	case <-time.After(5 * time.Second):
+		t.Fatal("the round must end once its lease is lost")
+	}
+	clock.untilWaiting(t)
+	pkgzap.Clean()
+
+	entry := readLogEntry(t, filepath.Join(dir, "cronjob.log"), "cronjob lost its lease during the round")
+	require.Equal(t, "lost-job", entry["name"])
+	require.EqualValues(t, 1, entry["term"], "the entry names the term the round ran in")
+}
+
 // TestStopWithoutStartIsNoop keeps stop safe in processes that never started
 // the scheduler.
 func TestStopWithoutStartIsNoop(t *testing.T) {
