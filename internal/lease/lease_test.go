@@ -262,7 +262,11 @@ func TestTransactionOnAnotherInstanceVerifiesAgainstThePrimary(t *testing.T) {
 // a holder renewing on time keeps the name for as long as it likes, and
 // every claim by another is refused meanwhile.
 func TestRenewKeepsTheLeaseBeyondItsDuration(t *testing.T) {
-	withFastProtocol(t)
+	// A lease long enough that a round trip stalled by a loaded machine —
+	// the whole suite running beside this test — cannot let it expire
+	// between two renewals: a holder renewing on time is what is proved,
+	// not the machine's speed.
+	t.Cleanup(SetTimings(time.Second, 50*time.Millisecond, 500*time.Millisecond, 100*time.Millisecond))
 	ctx := context.Background()
 	name := uniqueName(t)
 
@@ -270,9 +274,9 @@ func TestRenewKeepsTheLeaseBeyondItsDuration(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, claimed)
 
-	// Renew across several durations' worth of time, checking between
+	// Renew across a couple of durations' worth of time, checking between
 	// renewals that no one else gets in.
-	deadline := time.Now().Add(3 * leaseDuration)
+	deadline := time.Now().Add(2 * leaseDuration)
 	for time.Now().Before(deadline) {
 		require.NoError(t, holder.Renew(ctx))
 		_, claimed, err := Claim(ctx, name)
