@@ -4,8 +4,10 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"strings"
 	"testing"
 
+	"github.com/cockroachdb/errors"
 	"github.com/gin-gonic/gin"
 	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/consts"
@@ -116,6 +118,38 @@ func TestTracingSkipsRecordingOnlyStateWhenSamplerDrops(t *testing.T) {
 func TestTracingMarksHTTPSpanAsRequestRoot(t *testing.T) {
 	source := readMiddlewareSource(t, "tracing.go")
 	require.Contains(t, source, "ctx = gstotel.ContextWithRequestRootSpan(ctx)")
+}
+
+// TestTracingSpanAttributesFitTheCapacityInTheWorstCase pins the two batches
+// the root span carries — a request with a content type and length, a failed
+// response — plus one attribute per error the handler reported, so an
+// attribute added without bumping its capacity fails here instead of
+// regrowing the slice on every traced request.
+func TestTracingSpanAttributesFitTheCapacityInTheWorstCase(t *testing.T) {
+	setupTracingTest(t)
+	recorder := oteltest.Record(t)
+
+	router := gin.New()
+	router.Use(tracing())
+	router.POST("/api/samples", func(c *gin.Context) {
+		_ = c.Error(errors.New("first sample failure"))
+		_ = c.Error(errors.New("second sample failure"))
+		c.Status(http.StatusInternalServerError)
+	})
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/api/samples", strings.NewReader("{}"))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Content-Length", "2")
+	router.ServeHTTP(w, req)
+	require.Equal(t, http.StatusInternalServerError, w.Code)
+
+	span := oteltest.EndedNamed(t, recorder, "POST /api/samples")
+	// The error batch adds one attribute per error and re-sets the error flag
+	// the response batch already carries; a span keeps one value per key.
+	const errorsReported = 2
+	require.Len(t, span.Attributes(), requestSpanAttrCap+responseSpanAttrCap+errorsReported,
+		"the worst case must fill both batches exactly: a new attribute bumps requestSpanAttrCap or responseSpanAttrCap")
 }
 
 // setupTracingTest enables real tracing for one middleware test and puts gin

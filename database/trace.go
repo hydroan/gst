@@ -90,6 +90,27 @@ func (db *database[M]) trace(phase consts.Phase, batch ...int) (func(error), tra
 	return db.traceAs(reflect.TypeOf(*new(M)).Elem().Name(), phase, batch...)
 }
 
+// The attribute and field batches below are sized to their worst case once,
+// so an operation never regrows a slice on the hot path; each count is
+// pinned by a worst-case test, which is what keeps it honest when an
+// attribute or a field is added.
+const (
+	// operationStartAttrCap is the most attributes an operation span carries
+	// as it starts: component, operation, model, dry_run and batch_size.
+	operationStartAttrCap = 5
+	// operationOutcomeAttrCap is the most attributes the operation span's
+	// outcome batch carries: the duration and one of record_not_found or
+	// error.
+	operationOutcomeAttrCap = 2
+	// operationLogFieldCap is the most fields the operation's log entry
+	// carries: model, batch_size, the duration pair, dry_run and one of
+	// record_not_found or error.
+	operationLogFieldCap = 5
+	// hookOutcomeAttrCap is the most attributes a hook span's outcome batch
+	// carries: the duration, success and error.
+	hookOutcomeAttrCap = 3
+)
+
 // traceAs is trace with the operation's subject named by the caller: the
 // model for an operation on one model, which trace passes, or the result row
 // for a union, which reads several models through a chain borrowed from one
@@ -116,7 +137,7 @@ func (db *database[M]) traceAs(modelName string, phase consts.Phase, batch ...in
 		// re-runs deduplication. When adding attributes, extend the batches in
 		// this function instead of adding SetAttributes calls.
 		if gstotel.IsSpanRecording(span) {
-			attrs := make([]attribute.KeyValue, 0, 6)
+			attrs := make([]attribute.KeyValue, 0, operationStartAttrCap)
 			attrs = append(
 				attrs,
 				attribute.String("component", "database"),
@@ -152,7 +173,7 @@ func (db *database[M]) traceAs(modelName string, phase consts.Phase, batch ...in
 		// record_not_found field — and only a real failure records the error
 		// and sets the error status.
 		if gstotel.IsSpanRecording(span) {
-			attrs := make([]attribute.KeyValue, 0, 2)
+			attrs := make([]attribute.KeyValue, 0, operationOutcomeAttrCap)
 			attrs = append(attrs, attribute.Int64("database.duration_ms", duration.Milliseconds()))
 
 			switch {
@@ -172,26 +193,38 @@ func (db *database[M]) traceAs(modelName string, phase consts.Phase, batch ...in
 		// Log operation results. Success and record-not-found stay at debug
 		// level: both are normal outcomes whose timing the SQL log and the
 		// operation span already cover, so they only matter when tracing an
-		// operation end to end. Real failures log at error level. Constant
-		// markers (batch_size, dry_run) appear only when meaningful.
-		fields := make([]zap.Field, 0, 5)
-		fields = append(fields, zap.String("model", modelName))
-		if _batch > 0 {
-			fields = append(fields, zap.Int("batch_size", _batch))
-		}
-		fields = append(fields, util.LogDuration(duration))
-		if db.dryRun {
-			fields = append(fields, zap.Bool("dry_run", true))
-		}
-		switch {
-		case err == nil:
+		// operation end to end. Real failures log at error level.
+		fields := operationLogFields(modelName, _batch, duration, db.dryRun, err)
+		if err == nil || errors.Is(err, ErrRecordNotFound) {
 			logger.Database.WithContext(db.ctx, phase).Debugz("database operation completed", fields...)
-		case errors.Is(err, ErrRecordNotFound):
-			logger.Database.WithContext(db.ctx, phase).Debugz("database operation completed", append(fields, zap.Bool("record_not_found", true))...)
-		default:
-			logger.Database.WithContext(db.ctx, phase).Errorz("database operation failed", append(fields, zap.Error(err))...)
+		} else {
+			logger.Database.WithContext(db.ctx, phase).Errorz("database operation failed", fields...)
 		}
 	}, span
+}
+
+// operationLogFields builds the fields of one operation's log entry: the
+// model, the constant markers batch_size and dry_run only when meaningful,
+// the duration pair, and the outcome — record_not_found for a missing row,
+// the error for a failure, nothing for success.
+func operationLogFields(modelName string, batch int, duration time.Duration, dryRun bool, err error) []zap.Field {
+	fields := make([]zap.Field, 0, operationLogFieldCap)
+	fields = append(fields, zap.String("model", modelName))
+	if batch > 0 {
+		fields = append(fields, zap.Int("batch_size", batch))
+	}
+	fields = append(fields, util.LogDuration(duration))
+	if dryRun {
+		fields = append(fields, zap.Bool("dry_run", true))
+	}
+	switch {
+	case err == nil:
+	case errors.Is(err, ErrRecordNotFound):
+		fields = append(fields, zap.Bool("record_not_found", true))
+	default:
+		fields = append(fields, zap.Error(err))
+	}
+	return fields
 }
 
 // traceModelHook runs one model hook under a span of its own, nested under
@@ -252,7 +285,7 @@ func traceModelHook[M types.Model](ctx context.Context, phase consts.Phase, pare
 		// Record execution results in a single batched SetAttributes call; every
 		// call on a recording span locks the span and re-runs deduplication.
 		duration := time.Since(start)
-		attrs := make([]attribute.KeyValue, 0, 3)
+		attrs := make([]attribute.KeyValue, 0, hookOutcomeAttrCap)
 		attrs = append(
 			attrs,
 			attribute.Int64("model.duration_ms", duration.Milliseconds()),

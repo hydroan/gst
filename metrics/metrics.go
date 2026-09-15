@@ -167,31 +167,38 @@ func Init() error {
 		Help:      "Total authorization decisions by outcome, granting rule kind and denial reason",
 	}, []string{"effect", "allowed_by", "denied_by"})
 
-	errs := make([]error, 0, 19)
-	errs = append(errs, prometheus.Register(State))
-	errs = append(errs, prometheus.Register(Uptime))
-	errs = append(errs, prometheus.Register(HTTPRequestsTotal))
-	errs = append(errs, prometheus.Register(ResponseTime))
-	errs = append(errs, prometheus.Register(ErrorRate))
-	errs = append(errs, prometheus.Register(MemoryTotal))
-	errs = append(errs, prometheus.Register(MemoryUsed))
-	errs = append(errs, prometheus.Register(MemoryUsedPercent))
-	errs = append(errs, prometheus.Register(CPUCount))
-	errs = append(errs, prometheus.Register(CPUUsedPercent))
-	errs = append(errs, prometheus.Register(ConcurrentConnections))
-	errs = append(errs, prometheus.Register(CacheHit))
-	errs = append(errs, prometheus.Register(CacheMiss))
-	errs = append(errs, prometheus.Register(QueueSize))
-	errs = append(errs, prometheus.Register(AuthzPolicyDiverged))
-	errs = append(errs, prometheus.Register(AuthzDecisionsTotal))
+	// Every collector the framework registers, in one list, so the error
+	// slice is sized by the list and not by a count kept by hand.
+	registered := []prometheus.Collector{
+		State,
+		Uptime,
+		HTTPRequestsTotal,
+		ResponseTime,
+		ErrorRate,
+		MemoryTotal,
+		MemoryUsed,
+		MemoryUsedPercent,
+		CPUCount,
+		CPUUsedPercent,
+		ConcurrentConnections,
+		CacheHit,
+		CacheMiss,
+		QueueSize,
+		AuthzPolicyDiverged,
+		AuthzDecisionsTotal,
 
-	errs = append(errs, prometheus.Register(collectors.NewBuildInfoCollector()))
-	errs = append(errs, prometheus.Register(collectors.NewProcessCollector(collectors.ProcessCollectorOpts{Namespace: NAMESPACE})))
-	// errs = append(errs, prometheus.Register(collectors.NewGoCollector()))
-	// errs = append(errs, prometheus.Register(collectors.NewGoCollector(
-	// 	collectors.WithGoCollections(collectors.GoRuntimeMetricsCollection),
-	// 	collectors.WithGoCollections(collectors.GoRuntimeMemStatsCollection),
-	// )))
+		collectors.NewBuildInfoCollector(),
+		collectors.NewProcessCollector(collectors.ProcessCollectorOpts{Namespace: NAMESPACE}),
+		// collectors.NewGoCollector(),
+		// collectors.NewGoCollector(
+		// 	collectors.WithGoCollections(collectors.GoRuntimeMetricsCollection),
+		// 	collectors.WithGoCollections(collectors.GoRuntimeMemStatsCollection),
+		// ),
+	}
+	errs := make([]error, 0, len(registered))
+	for _, collector := range registered {
+		errs = append(errs, prometheus.Register(collector))
+	}
 	return errors.WithStack(multierr.Combine(errs...))
 }
 

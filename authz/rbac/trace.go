@@ -16,6 +16,22 @@ func contextOrBackground(ctx context.Context) context.Context {
 	return ctx
 }
 
+// The span attribute batches below are sized to their worst case once, so
+// tracing never regrows a slice; each count is pinned by a worst-case test,
+// which is what keeps it honest when an attribute is added.
+const (
+	// rbacOperationAttrCount is how many attributes traceRBAC records ahead
+	// of the operation's own fields: component and operation.
+	rbacOperationAttrCount = 2
+	// authorizeOutcomeAttrCap is the most attributes the authorize span's
+	// outcome batch carries: success, allowed, allowed_by, denied_by and
+	// matched_rule.
+	authorizeOutcomeAttrCap = 5
+	// rbacTraceFieldCap is the most fields rbacTraceFields returns: tenant
+	// and role.
+	rbacTraceFieldCap = 2
+)
+
 // traceRBAC starts a gst-owned RBAC span and returns a finish callback.
 // The returned context must be passed down the write path so adapter and
 // database spans appear under the RBAC operation in the request trace.
@@ -28,7 +44,7 @@ func traceRBAC(ctx context.Context, operation string, fields []attribute.KeyValu
 	spanCtx, span := gstotel.StartSpan(ctx, gstotel.OperationSpanName("rbac", operation))
 	recording := gstotel.IsSpanRecording(span)
 	if recording {
-		attrs := make([]attribute.KeyValue, 0, len(fields)+2)
+		attrs := make([]attribute.KeyValue, 0, rbacOperationAttrCount+len(fields))
 		attrs = append(
 			attrs,
 			attribute.String("component", "rbac"),
@@ -83,7 +99,7 @@ func traceAuthorize(ctx context.Context, tenant string) func(types.Decision, err
 	return func(decision types.Decision, err error) {
 		defer span.End()
 
-		attrs := make([]attribute.KeyValue, 0, 5)
+		attrs := make([]attribute.KeyValue, 0, authorizeOutcomeAttrCap)
 		attrs = append(
 			attrs,
 			attribute.Bool("rbac.success", err == nil),
@@ -118,7 +134,7 @@ func traceAuthorize(ctx context.Context, tenant string) func(types.Decision, err
 // Subject identifiers are intentionally excluded because they are identity data
 // and would make Jaeger labels noisy for role-binding write paths.
 func rbacTraceFields(tenant string, role string) []attribute.KeyValue {
-	fields := make([]attribute.KeyValue, 0, 2)
+	fields := make([]attribute.KeyValue, 0, rbacTraceFieldCap)
 	if tenant = strings.TrimSpace(tenant); tenant != "" {
 		fields = append(fields, attribute.String("rbac.tenant", tenant))
 	}

@@ -11,6 +11,7 @@ import (
 	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/internal/testutil/oteltest"
 	"github.com/hydroan/gst/middleware/ratelimiter"
+	"github.com/hydroan/gst/response"
 	"github.com/stretchr/testify/require"
 	oteltrace "go.opentelemetry.io/otel/trace"
 )
@@ -146,6 +147,33 @@ func TestMiddlewareWrapperKeepsMiddlewareSpanWhenSamplerDrops(t *testing.T) {
 func TestMiddlewareWrapperStartsMiddlewareSpansFromRequestRoot(t *testing.T) {
 	source := readMiddlewareSource(t, "wrapper.go")
 	require.Contains(t, source, "parentCtx := gstotel.RequestRootContext(originalCtx)")
+}
+
+// TestMiddlewareWrapperSpanAttributesFitTheCapacityInTheWorstCase pins
+// middlewareOutcomeAttrCap to the outcome batch of a middleware that failed
+// the request, on top of the four attributes the span starts with, so an
+// attribute added without bumping the capacity fails here instead of
+// regrowing the slice on every middleware of every traced request.
+func TestMiddlewareWrapperSpanAttributesFitTheCapacityInTheWorstCase(t *testing.T) {
+	setupTracingTest(t)
+	recorder := oteltest.Record(t)
+
+	router := gin.New()
+	router.Use(tracing())
+	router.Use(middlewareWrapper("sample", func(c *gin.Context) {
+		response.Abort(c, http.StatusForbidden, "sample refusal")
+	}))
+	router.GET("/api/ping", func(c *gin.Context) { c.Status(http.StatusNoContent) })
+
+	w := performWrapperRequest(router)
+	require.Equal(t, http.StatusForbidden, w.Code)
+
+	span := oteltest.EndedNamed(t, recorder, "middleware.Sample")
+	// middleware.name, http.method, http.path and http.route are set as the
+	// span starts; the outcome batch adds the rest.
+	const startAttrs = 4
+	require.Len(t, span.Attributes(), startAttrs+middlewareOutcomeAttrCap,
+		"the worst case must fill the outcome batch exactly: a new attribute bumps middlewareOutcomeAttrCap")
 }
 
 func performWrapperRequest(router *gin.Engine) *httptest.ResponseRecorder {

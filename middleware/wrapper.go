@@ -11,6 +11,13 @@ import (
 	"go.opentelemetry.io/otel/trace"
 )
 
+// middlewareOutcomeAttrCap is the most attributes a middleware span's outcome
+// batch carries: the duration in milliseconds and in nanoseconds, the status
+// code, the error flag and the service name. The batch is sized to it once
+// per middleware per traced request, so the hot path never regrows it; the
+// worst-case test keeps the count honest when an attribute is added.
+const middlewareOutcomeAttrCap = 5
+
 // middlewareWrapper wraps any gin middleware with OTEL tracing capabilities.
 // It creates a span for the middleware execution and records performance metrics.
 //
@@ -86,7 +93,7 @@ func middlewareWrapper(name string, middleware gin.HandlerFunc) gin.HandlerFunc 
 			// adding SetAttributes calls.
 			duration := time.Since(start)
 			status := c.Writer.Status()
-			attrs := make([]attribute.KeyValue, 0, 6)
+			attrs := make([]attribute.KeyValue, 0, middlewareOutcomeAttrCap)
 			attrs = append(
 				attrs,
 				attribute.Int64("middleware.duration_ms", duration.Milliseconds()),

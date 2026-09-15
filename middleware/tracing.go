@@ -20,6 +20,19 @@ import (
 	"go.opentelemetry.io/otel/trace"
 )
 
+// The root span's attribute batches are sized to their worst case once, so a
+// traced request never regrows a slice; each count is pinned by a worst-case
+// test, which is what keeps it honest when an attribute is added.
+const (
+	// requestSpanAttrCap is the most attributes the request batch carries:
+	// the eight every request has, plus its content type and content length.
+	requestSpanAttrCap = 10
+	// responseSpanAttrCap is the most attributes the response batch carries:
+	// the status code, the response size and content type, the duration, and
+	// the error flag of a failed request.
+	responseSpanAttrCap = 5
+)
+
 // tracing returns the middleware that opens the request root span, stamps
 // the trace id on the request context as the identity of this execution, and
 // publishes the trace and span ids to the gin context and the response
@@ -67,7 +80,7 @@ func tracing() gin.HandlerFunc {
 			// request, for values a backend already had.
 			recording = gstotel.IsSpanRecording(span)
 			if recording {
-				attrs := make([]attribute.KeyValue, 0, 10)
+				attrs := make([]attribute.KeyValue, 0, requestSpanAttrCap)
 				attrs = append(
 					attrs,
 					attribute.String("http.method", c.Request.Method),
@@ -103,7 +116,7 @@ func tracing() gin.HandlerFunc {
 			defer func() {
 				if recording {
 					statusCode := c.Writer.Status()
-					attrs := make([]attribute.KeyValue, 0, 5)
+					attrs := make([]attribute.KeyValue, 0, responseSpanAttrCap)
 					attrs = append(
 						attrs,
 						attribute.Int("http.status_code", statusCode),
