@@ -6,10 +6,11 @@
 // package is the single act that enables it: a project that never imports the
 // package never links the component, never starts it and never pays for it.
 // Bootstrap starts the providers — the clients — during its core phase, right
-// after the backbone clients, so everything that runs between Bootstrap and
-// Run (the routes-ready hooks, a test harness seeding data) can use them; it
-// starts the components in Run, once every table they may touch exists and
-// right before the listener opens. All of them stop once the listener has
+// after the backbone clients, so everything that runs after Bootstrap (a
+// test harness seeding data, the routes-ready hooks Run fires first) can
+// use them; it starts the components in Run, once every table they may
+// touch exists and is seeded and right before the listener opens. All of
+// them stop once the listener has
 // drained, the components first and the providers after their last user.
 // Within a stage the order is by name, so nothing in a stage may depend on
 // another member of it. A component whose Enabled reports false is left out

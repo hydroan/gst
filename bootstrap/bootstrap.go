@@ -167,6 +167,12 @@ func Bootstrap() error {
 // to report.
 func Run() error {
 	defer clean()
+	// The providers Bootstrap started are stopped on every way out of Run,
+	// the ways that fail before the components start included. Registered
+	// first, so that LIFO runs it right after the HTTP drain: in-flight
+	// jobs finish while the connections they may be using are still open,
+	// and the providers close after their last user.
+	registerCleanup(stopLifecycle)
 
 	// Final pre-server drain for modules registered after Bootstrap but
 	// before Run. Keep module.Wait before dbruntime.Wait: late modules may
@@ -181,24 +187,31 @@ func Run() error {
 	// seeding — and the listener after them. Across the deployment they run
 	// one process at a time, under the startup lock on the primary database:
 	// seeding reads before it writes, and replicas starting together would
-	// each find nothing and each write. A hook that fails ends Run the way a
-	// failing listener would.
-	if err := dbruntime.Serialized("seed", router.RunRoutesReadyHooks); err != nil {
+	// each find nothing and each write. A termination signal is watched
+	// from here on: one that arrives while the process waits its turn ends
+	// the wait, and one that arrives during the hooks ends Run once they
+	// return, both the way a signal after the start does — cleanly, with
+	// nothing to report. A hook that fails ends Run the way a failing
+	// listener would.
+	starting, stopWatching := signal.NotifyContext(processCtx, syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT)
+	err := dbruntime.Serialized(starting, "seed", router.RunRoutesReadyHooks)
+	// Read before the watch stops: stopping it ends the context too.
+	signaled := starting.Err() != nil && processCtx.Err() == nil
+	stopWatching()
+	if signaled {
+		zap.S().Infow("stopped while starting")
+		return nil
+	}
+	if err != nil {
 		return err
 	}
 
 	// The components that run alongside the server — the scheduler and its
 	// kind — start here, after the hooks: every table they may touch exists
-	// and is seeded, and the listener opens right after. The cleanup
-	// registered here stops the components and the providers, and sits
-	// before the listener's on the stack, so LIFO runs it right after the
-	// HTTP drain: in-flight jobs finish while the connections they may be
-	// using are still open, and the providers close after their last user.
-	if err := lifecycle.Start(processCtx, lifecycle.StageComponent); err != nil {
-		stopLifecycle()
+	// and is seeded, and the listener opens right after.
+	if err = lifecycle.Start(processCtx, lifecycle.StageComponent); err != nil {
 		return err
 	}
-	registerCleanup(stopLifecycle)
 
 	startup.RegisterGo(
 		router.Run,
@@ -215,7 +228,7 @@ func Run() error {
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT)
 
-	err := awaitShutdown(startup.Go(), lifecycle.Failure(), sigCh)
+	err = awaitShutdown(startup.Go(), lifecycle.Failure(), sigCh)
 
 	// Either way the process leaves the same way: stop answering readiness
 	// before anything is torn down, cancel the process context so the

@@ -1,13 +1,16 @@
 package dbruntime
 
 import (
+	"context"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/internal/modelregistry"
 	"github.com/stretchr/testify/require"
@@ -15,6 +18,7 @@ import (
 	"go.uber.org/zap/zapcore"
 	"go.uber.org/zap/zaptest/observer"
 	"gorm.io/gorm"
+	"gorm.io/gorm/logger"
 )
 
 // plainRecord is a minimal model for table preparation tests.
@@ -139,6 +143,95 @@ func TestMigrateTableCreatesOnceAcrossProcesses(t *testing.T) {
 	}
 }
 
+// uniqueRecord is a model whose single-column unique index is declared the
+// framework's way, through Indexes() with no tag on the column: gorm's own
+// migration knows nothing of the index.
+type uniqueRecord struct {
+	Code string `gorm:"size:191"`
+
+	modelregistry.Base
+}
+
+func (*uniqueRecord) TableName() string { return "unique_records" }
+
+func (*uniqueRecord) Indexes() []modelregistry.Index {
+	return []modelregistry.Index{{Fields: []string{"Code"}, Unique: true}}
+}
+
+// TestMigrateTableLeavesTheIndexesAlone proves a process starting against a
+// table another process prepared leaves the framework's indexes as they
+// are. gorm migrates the unique constraints its tags declare, and its MySQL
+// driver takes any other single-column unique index for a leftover and
+// drops it: an index declared through Indexes() was dropped and created
+// again on every start, and a start must not drop what the framework
+// created.
+func TestMigrateTableLeavesTheIndexesAlone(t *testing.T) {
+	withAutoMigrate(t, true)
+
+	sqliteFile := filepath.Join(t.TempDir(), "unique.db")
+	for _, dialect := range []struct {
+		name config.DBType
+		open func(t *testing.T) *gorm.DB
+	}{
+		{name: config.DBMySQL, open: newMySQLDB},
+		{name: config.DBPostgres, open: newPostgresDB},
+		{name: config.DBSqlite, open: func(t *testing.T) *gorm.DB {
+			t.Helper()
+			return openSQLiteDB(t, sqliteFile)
+		}},
+	} {
+		t.Run(string(dialect.name), func(t *testing.T) {
+			first, second := dialect.open(t), dialect.open(t)
+			require.NoError(t, first.Migrator().DropTable(&uniqueRecord{}))
+			require.NoError(t, ensureTable(first, &uniqueRecord{}))
+
+			statements := recordStatements(second)
+			require.NoError(t, ensureTable(second, &uniqueRecord{}))
+			for _, statement := range statements.all() {
+				upper := strings.ToUpper(statement)
+				require.Falsef(t, strings.Contains(upper, "INDEX") && (strings.Contains(upper, "DROP") || strings.Contains(upper, "CREATE")),
+					"a start against a prepared table must leave its indexes alone, ran: %s", statement)
+			}
+			plans, err := modelregistry.ParseIndexPlans(second, &uniqueRecord{})
+			require.NoError(t, err)
+			require.Len(t, plans, 1)
+			matches, err := indexMatchesPlan(second, "unique_records", plans[0])
+			require.NoError(t, err)
+			require.True(t, matches, "the unique index stays as declared")
+		})
+	}
+}
+
+// statementLog is a gorm logger that keeps every statement the handle runs.
+type statementLog struct {
+	logger.Interface
+	mu         sync.Mutex
+	statements []string
+}
+
+// recordStatements makes handle log its statements to a statementLog and
+// returns it.
+func recordStatements(handle *gorm.DB) *statementLog {
+	log := &statementLog{Interface: logger.Discard}
+	handle.Logger = log
+	return log
+}
+
+func (l *statementLog) LogMode(logger.LogLevel) logger.Interface { return l }
+
+func (l *statementLog) Trace(_ context.Context, _ time.Time, fc func() (string, int64), _ error) {
+	statement, _ := fc()
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	l.statements = append(l.statements, statement)
+}
+
+func (l *statementLog) all() []string {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return slices.Clone(l.statements)
+}
+
 // TestStartupLockNameIsOnePerPurposeAndDatabase pins the lock's scope:
 // deployments on two databases of one MySQL server hold two locks, the
 // table preparation and the seeding of one deployment hold two, and every
@@ -176,7 +269,7 @@ func TestSerializedRunsOneProcessAtATime(t *testing.T) {
 			var wg sync.WaitGroup
 			for i, handle := range handles {
 				wg.Go(func() {
-					errs[i] = serialized(handle, "sample", func() error {
+					errs[i] = serialized(context.Background(), handle, "sample", func() error {
 						if inside.Add(1) > 1 {
 							overlaps.Add(1)
 						}
@@ -197,10 +290,11 @@ func TestSerializedRunsOneProcessAtATime(t *testing.T) {
 }
 
 // TestStartupLockWaitsForTheHolderAndSaysSo proves a process waits for the
-// holder of a startup lock however long it takes, and says so while it
-// waits: with the lock held by another handle the step does not start, a
-// warning is logged once the report interval passes, and the step runs as
-// soon as the holder lets go.
+// holder of a startup lock however long it takes, says so while it waits,
+// and stops waiting when told to: with the lock held by another handle the
+// step does not start, a warning is logged once the report interval passes,
+// a waiter whose context ends returns with that ending instead of the
+// lock, and the step runs as soon as the holder lets go.
 func TestStartupLockWaitsForTheHolderAndSaysSo(t *testing.T) {
 	for _, dialect := range []struct {
 		name config.DBType
@@ -211,18 +305,22 @@ func TestStartupLockWaitsForTheHolderAndSaysSo(t *testing.T) {
 	} {
 		t.Run(string(dialect.name), func(t *testing.T) {
 			logs := withObservedGlobalLogger(t)
-			original := startupLockWaitReport
-			startupLockWaitReport = 50 * time.Millisecond
-			t.Cleanup(func() { startupLockWaitReport = original })
+			withFastStartupLock(t)
 
-			holder, waiter := dialect.open(t), dialect.open(t)
-			unlock, err := lockStartup(holder, "sample")
+			holder, waiter, quitter := dialect.open(t), dialect.open(t), dialect.open(t)
+			unlock, err := lockStartup(context.Background(), holder, "sample")
 			require.NoError(t, err)
+			unlocked := false
+			t.Cleanup(func() {
+				if !unlocked {
+					unlock()
+				}
+			})
 
 			entered := make(chan struct{})
 			returned := make(chan error, 1)
 			go func() {
-				returned <- serialized(waiter, "sample", func() error {
+				returned <- serialized(context.Background(), waiter, "sample", func() error {
 					close(entered)
 					return nil
 				})
@@ -236,7 +334,26 @@ func TestStartupLockWaitsForTheHolderAndSaysSo(t *testing.T) {
 			require.NotEmpty(t, logs.FilterMessage("still waiting for the startup lock held by another process").All(),
 				"a process waiting past the report interval must say so")
 
+			quitCtx, quit := context.WithCancelCause(context.Background())
+			quitReturned := make(chan error, 1)
+			go func() {
+				quitReturned <- serialized(quitCtx, quitter, "sample", func() error {
+					t.Error("a waiter told to stop must not run the step")
+					return nil
+				})
+			}()
+			// Told to stop once it is waiting, not before it starts to.
+			<-time.After(2 * startupLockWaitReport)
+			quit(errors.New("sample stop"))
+			select {
+			case err := <-quitReturned:
+				require.ErrorContains(t, err, "sample stop", "the waiter reports why its wait ended")
+			case <-time.After(5 * time.Second):
+				t.Fatal("a waiter told to stop must return")
+			}
+
 			unlock()
+			unlocked = true
 			select {
 			case <-entered:
 			case <-time.After(5 * time.Second):
@@ -245,6 +362,16 @@ func TestStartupLockWaitsForTheHolderAndSaysSo(t *testing.T) {
 			require.NoError(t, <-returned)
 		})
 	}
+}
+
+// withFastStartupLock shortens the lock's poll and report intervals for the
+// test and restores them afterwards.
+func withFastStartupLock(t *testing.T) {
+	t.Helper()
+
+	poll, report := startupLockPoll, startupLockWaitReport
+	startupLockPoll, startupLockWaitReport = 20*time.Millisecond, 50*time.Millisecond
+	t.Cleanup(func() { startupLockPoll, startupLockWaitReport = poll, report })
 }
 
 // withObservedGlobalLogger routes the global logger into an observer for the

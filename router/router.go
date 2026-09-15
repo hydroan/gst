@@ -83,8 +83,12 @@ func Routes() map[string][]string {
 // a deployment the hooks run one process at a time, so a hook that reads
 // before it writes never races another replica's; the others wait for as
 // long as the hooks take, and the orchestrator's startup probe is what
-// bounds a process stuck in them. The hook receives a route snapshot;
-// mutating it does not change the router registry.
+// bounds a process stuck in them. A hook is therefore for the database:
+// work that reaches other systems — a client to connect, a topic to
+// create — holds every other replica's start for as long as that system
+// takes to answer, and belongs elsewhere or behind a deadline of its own.
+// The hook receives a route snapshot; mutating it does not change the
+// router registry.
 func OnRoutesReady(fn func(routes map[string][]string) error) {
 	if fn == nil {
 		return
