@@ -13,7 +13,7 @@ go build -o bin/cluster .
 : > .pids
 for n in 1 2 3; do
 	mkdir -p "logs/replica$n"
-	SERVER_PORT="808$n" LOGGER_DIR="logs/replica$n" \
+	SERVER_PORT="808$n" LOGGER_DIR="logs/replica$n" SERVER_SHUTDOWN_DELAY=5s \
 		./bin/cluster > "logs/replica$n/stdout.log" 2>&1 &
 	echo $! >> .pids
 	echo "replica$n: pid $! port 808$n logs logs/replica$n"

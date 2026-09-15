@@ -8,9 +8,13 @@
 #     shutdown begins, so the Service stops routing to a draining pod;
 #   - terminationGracePeriodSeconds outlasts the framework's whole shutdown
 #     at its longest — the drain window, then up to 30 seconds for the HTTP
-#     connections and up to 30 seconds for in-flight jobs — so a pod is never
-#     killed while it is still finishing a round; the lease it holds is
-#     released as the round ends, and a new leader is elected within seconds;
+#     connections, up to 30 seconds for in-flight jobs, and up to 5 seconds
+#     each for the tracing exporter and the debug endpoints when they are on —
+#     so a pod is never killed while it is still finishing a round; the lease
+#     it holds is released as the round ends, and a new leader is elected
+#     within seconds;
+#   - readiness fails on the first probe that sees the pod draining, so the
+#     Service stops routing to it well within the drain window;
 #   - the startup probe covers the time the framework may spend preparing
 #     tables when the whole deployment starts against a slow database, so
 #     liveness does not restart a pod that is still coming up;
@@ -56,7 +60,7 @@ spec:
       labels:
         app: cluster
     spec:
-      terminationGracePeriodSeconds: 70
+      terminationGracePeriodSeconds: 90
       containers:
         - name: cluster
           image: gst-cluster:dev
@@ -84,6 +88,7 @@ spec:
               path: /-/readyz
               port: http
             periodSeconds: 2
+            failureThreshold: 1
           livenessProbe:
             httpGet:
               path: /-/healthz

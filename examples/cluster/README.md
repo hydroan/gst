@@ -87,7 +87,7 @@ docker compose stop replica2 &
 watch -n 0.5 curl -s -o /dev/null -w '%{http_code}\n' localhost:8082/-/readyz
 ```
 
-收到 SIGTERM 的瞬间 `/-/readyz` 变成 503，负载均衡不再分流；`SERVER_SHUTDOWN_DELAY`（这里 5 秒）过后监听才关闭，正在跑的一轮任务跑完、租约放手，进程才退出。框架停机最长是 5 秒排空 + 最多 30 秒等 HTTP 连接 + 最多 30 秒等在途任务，所以 `stop_grace_period` 和 k8s 里的 `terminationGracePeriodSeconds` 都设成 70 秒，盖过最坏情况；示例里的任务几秒就返回，实际停机远短于此。
+收到 SIGTERM 的瞬间 `/-/readyz` 变成 503，负载均衡不再分流；`SERVER_SHUTDOWN_DELAY`（这里 5 秒）过后监听才关闭，正在跑的一轮任务跑完、租约放手，进程才退出。框架停机最长是 5 秒排空 + 最多 30 秒等 HTTP 连接 + 最多 30 秒等在途任务，开了链路追踪和 pprof / statsviz 的部署再各加最多 5 秒关闭它们，合计 80 秒，所以 `stop_grace_period` 和 k8s 里的 `terminationGracePeriodSeconds` 都设成 90 秒，盖过最坏情况；示例里的任务几秒就返回，实际停机远短于此。
 
 ## Kubernetes
 

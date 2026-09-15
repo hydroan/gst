@@ -46,10 +46,11 @@ services:
       retries: 30
     # SIGTERM starts the graceful shutdown; the grace period outlasts the
     # framework's whole shutdown at its longest — the drain window, then up
-    # to 30 seconds for the HTTP connections and up to 30 seconds for
-    # in-flight jobs — or Docker would kill a replica that is still
-    # finishing a round.
-    stop_grace_period: 70s
+    # to 30 seconds for the HTTP connections, up to 30 seconds for in-flight
+    # jobs, and up to 5 seconds each for the tracing exporter and the debug
+    # endpoints when they are on — or Docker would kill a replica that is
+    # still finishing a round.
+    stop_grace_period: 90s
     ports:
       - "8081:8080"
     volumes:
