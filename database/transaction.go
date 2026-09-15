@@ -89,9 +89,14 @@ func transactionOn(ctx context.Context, base *gorm.DB, fn func(ctx context.Conte
 	// Deriving the closure context from spanCtx makes per-statement spans from
 	// otelgorm nest under this transaction span, and the boundary makes
 	// every chain opened on the same handle inside fn join the transaction
-	// while collecting the actions to run once it commits.
+	// while collecting the actions to run once it commits. The guard runs
+	// first, on the transaction itself: work under a lease that is lost
+	// stops here, before a statement of its own.
 	txErr := withTransactionBoundary(spanCtx, base, base.WithContext(spanCtx),
-		func(txCtx context.Context, _ *gorm.DB) error {
+		func(txCtx context.Context, tx *gorm.DB) error {
+			if err := dbruntime.GuardTransaction(txCtx, tx); err != nil {
+				return err
+			}
 			return fn(txCtx)
 		})
 
