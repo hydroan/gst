@@ -74,8 +74,8 @@ var (
 	// failing its first try.
 	errDeclare error
 	// log is the package's logger: the dedicated lock.log the lifecycle
-	// binds before the component starts, or one of the package's own in a
-	// process that never ran the lifecycle.
+	// binds before the component starts, or the global log stream until
+	// then; see logger.
 	log types.Logger
 	// started is set by start. A declaration after that was never checked,
 	// so it fails fast instead.
@@ -116,13 +116,16 @@ func setLogger(l types.Logger) {
 	log = l
 }
 
-// logger returns the package's logger, one of the package's own when the
-// lifecycle has not bound one (unit tests).
+// logger returns the package's logger: the bound lock.log, or, until the
+// lifecycle binds it — a try made during Bootstrap, a unit test — a logger
+// that writes to the global log stream. Opening lock.log here instead would
+// put a second rotation instance on the file once the lifecycle opens its
+// own.
 func logger() types.Logger {
 	mu.Lock()
 	defer mu.Unlock()
 	if log == nil {
-		log = pkgzap.New("lock.log")
+		log = pkgzap.Fallback("lock")
 	}
 	return log
 }

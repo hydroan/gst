@@ -91,19 +91,19 @@ func Init() error {
 	// The lifecycle registry replaces each with a dedicated logger for
 	// the providers actually compiled in (see lifecycle.Component.SetLogger), so
 	// a log file exists exactly for the capabilities the binary carries.
-	logger.Cassandra = newProviderFallback("cassandra")
-	logger.Elastic = newProviderFallback("elastic")
-	logger.Etcd = newProviderFallback("etcd")
-	logger.Influxdb = newProviderFallback("influxdb")
-	logger.Kafka = newProviderFallback("kafka")
-	logger.Ldap = newProviderFallback("ldap")
-	logger.Minio = newProviderFallback("minio")
-	logger.Mongo = newProviderFallback("mongo")
-	logger.Mqtt = newProviderFallback("mqtt")
-	logger.Nats = newProviderFallback("nats")
-	logger.Scylla = newProviderFallback("scylla")
-	logger.RethinkDB = newProviderFallback("rethinkdb")
-	logger.RocketMQ = newProviderFallback("rocketmq")
+	logger.Cassandra = Fallback("cassandra")
+	logger.Elastic = Fallback("elastic")
+	logger.Etcd = Fallback("etcd")
+	logger.Influxdb = Fallback("influxdb")
+	logger.Kafka = Fallback("kafka")
+	logger.Ldap = Fallback("ldap")
+	logger.Minio = Fallback("minio")
+	logger.Mongo = Fallback("mongo")
+	logger.Mqtt = Fallback("mqtt")
+	logger.Nats = Fallback("nats")
+	logger.Scylla = Fallback("scylla")
+	logger.RethinkDB = Fallback("rethinkdb")
+	logger.RocketMQ = Fallback("rocketmq")
 
 	logger.Gin = NewGin("access.log")
 	logger.HTTPBody = NewGin("http_body.log")
@@ -177,17 +177,19 @@ func Clean() {
 	stopBufferedLogWriters()
 }
 
-// newProviderFallback builds the logger an optional provider variable holds
-// until the lifecycle registry binds its dedicated one as the provider stage
-// starts (see lifecycle.Component.SetLogger). It derives from
-// the global zap logger installed by Init — no file, no extra sink, and in
-// particular no second lumberjack instance on any path — so an entry written
-// through it lands in the global log stream, tagged with the component name.
-// In a process that never ran Init (unit tests), the global logger is zap's
-// no-op and the entry is dropped, which matches how such processes behave for
-// every other logger. The caller-skip mirrors New so callers are attributed
-// identically through either logger.
-func newProviderFallback(component string) types.Logger {
+// Fallback builds the logger a component's logger variable holds until the
+// lifecycle registry binds its dedicated one (see
+// lifecycle.Component.SetLogger): a provider's until the provider stage
+// starts, a lock's for a try made before Run. It derives from the global zap
+// logger installed by Init — no file, no extra sink, and in particular no
+// second lumberjack instance on any path, which the binding would then race
+// at rotation — so an entry written through it lands in the global log
+// stream, tagged with the component name. In a process that never ran Init
+// (unit tests), the global logger is zap's no-op and the entry is dropped,
+// which matches how such processes behave for every other logger. The
+// caller-skip mirrors New so callers are attributed identically through
+// either logger.
+func Fallback(component string) types.Logger {
 	return (&Logger{zlog: zap.L().WithOptions(zap.AddCallerSkip(1))}).With("component", component)
 }
 
