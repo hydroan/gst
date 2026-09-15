@@ -304,6 +304,9 @@ func TestClientSafeBindError(t *testing.T) {
 // nil interface and panicking on every request body.
 func TestBindJSONRequestHonorsDisabledValidator(t *testing.T) {
 	gin.SetMode(gin.TestMode)
+	// binding.Validator is process-wide state: t.Setenv makes the testing
+	// package refuse t.Parallel here, so no other test runs while it is nil.
+	t.Setenv("GST_TEST_SERIAL_GUARD", "gin validator disabled")
 	restore := binding.Validator
 	binding.Validator = nil
 	t.Cleanup(func() { binding.Validator = restore })
@@ -325,6 +328,9 @@ func TestBindJSONRequestHonorsDisabledValidator(t *testing.T) {
 // which only encoding/json's error type carries.
 func TestBindJSONRequestDecodesWithStandardLibrary(t *testing.T) {
 	gin.SetMode(gin.TestMode)
+	// gin's codec is process-wide state: t.Setenv makes the testing package
+	// refuse t.Parallel here, so no other test runs while it is swapped.
+	t.Setenv("GST_TEST_SERIAL_GUARD", "gin JSON codec swapped")
 	restore := ginjson.API
 	ginjson.API = swappedGinCodec{}
 	t.Cleanup(func() { ginjson.API = restore })
