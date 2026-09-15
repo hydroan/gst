@@ -46,8 +46,8 @@ func TestCreateRunsOnceAtATime(t *testing.T) {
 	var wg sync.WaitGroup
 	for range 2 {
 		wg.Go(func() {
-			_, err := cli.Post[model.RebuildRsp]("/api/rebuilds", model.RebuildReq{Seconds: 2})
-			results <- err
+			_, postErr := cli.Post[model.RebuildRsp]("/api/rebuilds", model.RebuildReq{Seconds: 2})
+			results <- postErr
 		})
 	}
 	wg.Wait()

@@ -25,7 +25,7 @@ type Delete struct {
 func (d *Delete) Delete(ctx *gst.ServiceContext, req *model.Empty) (rsp *bench.DeleteRsp, err error) {
 	isDryRun := isDryRun(ctx)
 
-	data := &bench.Bench{Base: model.Base{ID: "not exists"}}
+	data := &bench.Bench{ID: "not exists"}
 
 	if isDryRun {
 		err = database.Database[*bench.Bench](ctx).WithDryRun().Delete(data)

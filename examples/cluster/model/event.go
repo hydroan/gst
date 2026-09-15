@@ -1,6 +1,3 @@
-// Package model declares what the example keeps in the database: the events
-// the replicas record, the counter the leader work moves, and the rebuild
-// action a client triggers.
 package model
 
 import (

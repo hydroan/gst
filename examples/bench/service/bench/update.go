@@ -8,7 +8,6 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst"
 	"github.com/hydroan/gst/database"
-	"github.com/hydroan/gst/model"
 	"github.com/hydroan/gst/service"
 )
 
@@ -31,7 +30,7 @@ func (u *Update) Update(ctx *gst.ServiceContext, req *bench.UpdateReq) (rsp *ben
 		Field2: req.Field2,
 		Field3: req.Field3,
 		Field4: req.Field4,
-		Base:   model.Base{ID: "not exists"},
+		ID:     "not exists",
 	}
 
 	if isDryRun {

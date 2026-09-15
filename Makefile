@@ -27,6 +27,17 @@ define run_tool
 		"$$tool" $(2)
 endef
 
+# run_tool_in runs a resolved tool from another directory. golangci-lint has no
+# flag of its own for this: it discovers its configuration by walking up from
+# the working directory, so an example is only linted against its own
+# .golangci.yml when the tool actually runs inside the example -- which is also
+# what gg lint does in a generated project.
+define run_tool_in
+	@tool="$$(command -v $(1) 2>/dev/null || printf '%s' "$(GO_BIN_DIR)/$(1)")"; \
+		echo "$(1) $(3) ($(2))"; \
+		cd $(2) && "$$tool" $(3)
+endef
+
 # Default target
 help:
 	@echo "Available commands:"
@@ -72,10 +83,16 @@ vet:
 	go -C examples/bench vet ./...
 
 # Run golangci-lint (modernize, nilness and shadow run inside it, see .golangci.yml)
+# The example modules are linted too (see build), each against the .golangci.yml
+# gg new writes into a project, so the rules a generated project is held to are
+# the rules the examples demonstrate.
 lint:
 	$(call install_tool_if_missing,golangci-lint,$(GOLANGCI_LINT_VERSION),$(GOLANGCI_LINT_PKG))
 	@echo "Running golangci-lint..."
 	$(call run_tool,golangci-lint,run ./...)
+	$(call run_tool_in,golangci-lint,examples/demo,run ./...)
+	$(call run_tool_in,golangci-lint,examples/cluster,run ./...)
+	$(call run_tool_in,golangci-lint,examples/bench,run ./...)
 
 # Run unit tests
 # Every package is tested, so a newly added package is covered without editing
