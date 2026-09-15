@@ -3,33 +3,25 @@ package lease
 import (
 	"context"
 	"fmt"
-	"os"
 	"sync"
 	"testing"
 	"time"
 
-	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/database"
 	"github.com/hydroan/gst/internal/dbruntime"
 	"github.com/hydroan/gst/internal/testutil"
 	"github.com/stretchr/testify/require"
+	"gorm.io/driver/sqlite"
+	"gorm.io/gorm"
+	gormlogger "gorm.io/gorm/logger"
 )
 
-// envTestDatabase overrides the dialect this suite runs against, the way the
-// database suite's TestMain reads it: the Makefile test target repeats the
-// package once per dialect, because the protocol reads each database's
-// clock through SQL of its own.
-const envTestDatabase = "GST_TEST_DATABASE"
-
-// TestMain runs the suite against MySQL by default and against the dialect
-// envTestDatabase names when it is set. The lease table registers itself
-// when the package is linked, so the bootstrap creates it.
+// TestMain runs the suite against the dialect under test; the Makefile test
+// target repeats the package once per dialect, because the protocol reads
+// each database's clock through SQL of its own. The lease table registers
+// itself when the package is linked, so the bootstrap creates it.
 func TestMain(m *testing.M) {
-	dbType := config.DBMySQL
-	if override := os.Getenv(envTestDatabase); len(override) > 0 {
-		dbType = config.DBType(override)
-	}
-	testutil.Run(m, testutil.Server{Database: dbType})
+	testutil.Run(m, testutil.Server{Database: testutil.DatabaseUnderTest()})
 }
 
 // TestNowExpressionReadsTheDatabaseClock proves the clock expression of the
@@ -260,9 +252,116 @@ func TestTransactionUnderALeaseVerifiesIt(t *testing.T) {
 	require.True(t, ran, "a transaction under no lease is untouched")
 }
 
+// TestHoldKeepsTheLeaseWhileRenewalsSucceed proves successful renewals keep
+// moving the deadline: the held context outlives many deadlines' worth of
+// time, the name stays refused to everyone else, and the context ends only
+// when the holder stops the renewals — without ErrLost.
+func TestHoldKeepsTheLeaseWhileRenewalsSucceed(t *testing.T) {
+	withFastProtocol(t)
+	ctx := context.Background()
+	name := uniqueName(t)
+
+	holder, claimed, err := Claim(ctx, name)
+	require.NoError(t, err)
+	require.True(t, claimed)
+
+	held, stop := Hold(ctx, holder)
+	select {
+	case <-held.Done():
+		t.Fatalf("the lease ended although every renewal succeeded: %v", context.Cause(held))
+	case <-time.After(3 * localDeadline):
+	}
+	_, claimed, err = Claim(ctx, name)
+	require.NoError(t, err)
+	require.False(t, claimed, "a renewed lease is not free")
+
+	stop()
+	awaitDone(held, t)
+	require.NotErrorIs(t, context.Cause(held), ErrLost, "stopping the renewals is not a loss")
+	require.NoError(t, holder.Release(ctx))
+}
+
+// TestHoldEndsAtTheLocalDeadlineWithoutTheDatabase proves a holder that
+// cannot reach the database gives itself up once the local deadline passes
+// without a successful renewal — and not before: a single failure is not a
+// loss. The database goes away by way of a closed connection handle.
+func TestHoldEndsAtTheLocalDeadlineWithoutTheDatabase(t *testing.T) {
+	withFastProtocol(t)
+	ctx := context.Background()
+	name := uniqueName(t)
+
+	holder, claimed, err := Claim(ctx, name)
+	require.NoError(t, err)
+	require.True(t, claimed)
+	t.Cleanup(func() { _ = holder.Release(ctx) })
+
+	withClosedDatabase(t)
+	begin := time.Now()
+	held, stop := Hold(ctx, holder)
+	defer stop()
+
+	awaitDone(held, t)
+	require.ErrorIs(t, context.Cause(held), ErrLost)
+	require.GreaterOrEqual(t, time.Since(begin), localDeadline, "one failed renewal must not end the lease before the deadline")
+}
+
+// TestHoldGivesUpWhenARenewalCannotGetAConnection proves a renewal that
+// cannot reach the database because every connection is taken — on SQLite
+// the single connection, by a transaction of the work itself — is cut at
+// the deadline instead of hanging, so the holder still gives itself up
+// before its successor can start. The pool is narrowed to one connection
+// and that one held by an open transaction for the whole hold.
+func TestHoldGivesUpWhenARenewalCannotGetAConnection(t *testing.T) {
+	withFastProtocol(t)
+	ctx := context.Background()
+	name := uniqueName(t)
+
+	holder, claimed, err := Claim(ctx, name)
+	require.NoError(t, err)
+	require.True(t, claimed)
+	t.Cleanup(func() { _ = holder.Release(ctx) })
+
+	pool, err := dbruntime.DB.DB()
+	require.NoError(t, err)
+	limit := pool.Stats().MaxOpenConnections
+	pool.SetMaxOpenConns(1)
+	t.Cleanup(func() { pool.SetMaxOpenConns(limit) })
+	tx := dbruntime.DB.Begin()
+	require.NoError(t, tx.Error)
+	t.Cleanup(func() { _ = tx.Rollback().Error })
+
+	begin := time.Now()
+	held, stop := Hold(ctx, holder)
+	defer stop()
+
+	awaitDone(held, t)
+	require.ErrorIs(t, context.Cause(held), ErrLost)
+	require.GreaterOrEqual(t, time.Since(begin), localDeadline, "a renewal kept waiting must not end the lease before the deadline")
+}
+
+// TestHoldEndsWithItsParent proves the held context ends with the context
+// it derives from, so shutdown reaches the work under a lease.
+func TestHoldEndsWithItsParent(t *testing.T) {
+	withFastProtocol(t)
+	ctx := context.Background()
+	name := uniqueName(t)
+
+	holder, claimed, err := Claim(ctx, name)
+	require.NoError(t, err)
+	require.True(t, claimed)
+	t.Cleanup(func() { _ = holder.Release(ctx) })
+
+	parent, cancelParent := context.WithCancel(ctx)
+	held, stop := Hold(parent, holder)
+	defer stop()
+
+	cancelParent()
+	awaitDone(held, t)
+	require.ErrorIs(t, context.Cause(held), context.Canceled)
+}
+
 // TestHoldEndsWhenTheLeaseIsTakenAway proves the context Hold hands out
-// ends with ErrLost once a renewal finds the lease gone. On SQLite, where
-// Hold does not renew, it proves the context stays with its parent instead.
+// ends with ErrLost once a renewal finds the lease gone, on every dialect.
 func TestHoldEndsWhenTheLeaseIsTakenAway(t *testing.T) {
 	withFastProtocol(t)
 	ctx := context.Background()
@@ -279,19 +378,40 @@ func TestHoldEndsWhenTheLeaseIsTakenAway(t *testing.T) {
 	// holder's back.
 	require.NoError(t, dbruntime.DB.Exec("UPDATE "+table+" SET expires_at_ms = 0 WHERE name = ?", name).Error)
 
-	if dialectOf(dbruntime.DB) == "sqlite" {
-		select {
-		case <-held.Done():
-			t.Fatalf("on sqlite the held context must end with its parent only: %v", context.Cause(held))
-		case <-time.After(3 * localDeadline):
-		}
-		return
-	}
 	select {
 	case <-held.Done():
 		require.ErrorIs(t, context.Cause(held), ErrLost)
 	case <-time.After(5 * time.Second):
 		t.Fatal("the held context must end once the lease is gone")
+	}
+}
+
+// withClosedDatabase points the engine at a connection handle whose pool is
+// closed — a database that cannot be reached — and restores the suite's
+// database afterwards. The handle still names its dialect, so the protocol
+// gets as far as the statement, which then fails.
+func withClosedDatabase(t *testing.T) {
+	t.Helper()
+
+	closed, err := gorm.Open(sqlite.Open("file::memory:?cache=private"), &gorm.Config{Logger: gormlogger.Discard})
+	require.NoError(t, err)
+	pool, err := closed.DB()
+	require.NoError(t, err)
+	require.NoError(t, pool.Close())
+
+	original := dbruntime.DB
+	dbruntime.DB = closed
+	t.Cleanup(func() { dbruntime.DB = original })
+}
+
+// awaitDone waits for ctx to end, failing the test when it does not in time.
+func awaitDone(ctx context.Context, t *testing.T) {
+	t.Helper()
+
+	select {
+	case <-ctx.Done():
+	case <-time.After(5 * time.Second):
+		t.Fatal("the context did not end")
 	}
 }
 

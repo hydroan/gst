@@ -1,9 +1,9 @@
-// Package lease is the coordination primitive every distributed capability
-// of the framework stands on: a name that at most one healthy process among
-// those sharing the primary database holds at a time. The scheduler claims a
-// name per job and instant so a cluster runs each instant once; leader
-// election keeps a name for as long as the holder stays healthy; a lock
-// claims a name for the duration of one call.
+// Package lease is the coordination primitive the framework's distributed
+// capabilities stand on: a name that at most one healthy process among those
+// sharing the primary database holds at a time. The scheduler claims a name
+// per job and instant, so a cluster runs each instant once; a capability
+// that keeps a name for as long as its holder stays healthy, or claims one
+// for the duration of a call, is built the same way.
 //
 // A lease is one row of gst_leases, updated in place: who holds the name
 // (holder, a token minted per claim and never reused), which process that is
@@ -42,9 +42,10 @@
 // a transaction whose context ends and refuses its Commit. Verify is the
 // third line, for the transaction that would open after the loss.
 //
-// Importing the package is what brings the table: the model registers from
-// init, so a project that links no capability built on leases has no
-// gst_leases table, no statement and no goroutine.
+// Importing the package is what brings leases into a process: the table
+// joins the registered models and the transaction guard is installed from
+// init, so a project that links no capability built on leases carries no
+// table, no statement and no goroutine.
 package lease
 
 import (
@@ -94,7 +95,7 @@ var (
 // row is one coordinated name in gst_leases.
 type row struct {
 	modelregistry.AutoBase
-	Name        string `gorm:"size:191;not null"`  // "cron:<job>", "leader:<name>", "lock:<name>"
+	Name        string `gorm:"size:191;not null"`  // "cron:<job>"; each capability prefixes its own names
 	Holder      string `gorm:"size:32;not null"`   // token minted per claim, never reused
 	Instance    string `gorm:"size:191;not null"`  // the process holding it; for reading logs only
 	Term        uint64 `gorm:"not null;default:0"` // +1 every time the name changes hands
@@ -319,7 +320,8 @@ func Verify(ctx context.Context, tx *gorm.DB) error {
 type handleKey struct{}
 
 // WithHandle returns a context carrying h: the work on it runs under the
-// lease, its transactions verify the lease first, and Term finds the term.
+// lease, its transactions verify the lease first, and TermFromContext finds
+// the term.
 func WithHandle(ctx context.Context, h *Handle) context.Context {
 	return context.WithValue(ctx, handleKey{}, h)
 }

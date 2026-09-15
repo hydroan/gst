@@ -13,26 +13,21 @@ import (
 // or none succeeds within localDeadline of the last one that did — with
 // ErrLost as the cause; parent ending ends it too. The work under the lease
 // runs on that context: the transactions it opens end with it. stop ends
-// the renewals without releasing the lease; the holder releases once its
-// work is done.
+// the renewals and returns once they have — a renewal in flight is cut
+// short — without releasing the lease; the holder releases once its work is
+// done.
 //
-// On SQLite there is no renewal and no local deadline: the framework opens a
-// single connection to it, and a renewal would wait behind the work it is
-// meant to keep alive. The lease then holds for leaseDuration from the claim,
-// and the context ends with parent alone.
+// The framework opens a single connection to SQLite, so there a renewal
+// waits behind the work's own statements: a single transaction of the work
+// that runs longer than localDeadline keeps the renewal from the connection
+// and the lease counts as lost, the same as when the database cannot be
+// reached.
 func Hold(parent context.Context, h *Handle) (ctx context.Context, stop context.CancelFunc) {
-	if db, _, err := primary(); err == nil && dialectOf(db) == "sqlite" {
-		ctx, cancel := context.WithCancelCause(parent)
-		return ctx, func() { cancel(nil) }
-	}
-	return hold(parent, h.name, h.Renew, renewInterval, localDeadline)
-}
-
-// hold is Hold with the renewal, the interval and the deadline injectable,
-// so the loop is tested without a database and in milliseconds.
-func hold(parent context.Context, name string, renew func(context.Context) error, interval, deadline time.Duration) (context.Context, context.CancelFunc) {
 	ctx, cancel := context.WithCancelCause(parent)
+	interval, deadline := renewInterval, localDeadline
+	done := make(chan struct{})
 	go func() {
+		defer close(done)
 		// The claim counts as the last successful renewal.
 		last := time.Now()
 		timer := time.NewTimer(interval)
@@ -53,7 +48,7 @@ func hold(parent context.Context, name string, renew func(context.Context) error
 				return
 			}
 			attempt, cancelAttempt := context.WithTimeout(ctx, min(interval, remaining))
-			err := renew(attempt)
+			err := h.Renew(attempt)
 			cancelAttempt()
 
 			switch {
@@ -65,7 +60,7 @@ func hold(parent context.Context, name string, renew func(context.Context) error
 			case ctx.Err() != nil:
 				return
 			default:
-				zap.S().Warnw("lease renewal failed", "lease", name, "err", err)
+				zap.S().Warnw("lease renewal failed", "lease", h.name, "err", err)
 			}
 			if time.Since(last) >= deadline {
 				cancel(ErrLost)
@@ -74,5 +69,8 @@ func hold(parent context.Context, name string, renew func(context.Context) error
 			timer.Reset(interval)
 		}
 	}()
-	return ctx, func() { cancel(nil) }
+	return ctx, func() {
+		cancel(nil)
+		<-done
+	}
 }
