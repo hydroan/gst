@@ -42,7 +42,7 @@ var (
 	routes  = make(map[string][]string)
 
 	routesReadyMu    sync.Mutex
-	routesReadyHooks []func(routes map[string][]string) error
+	routesReadyHooks []func(ctx context.Context, routes map[string][]string) error
 
 	ginParamPattern = regexp.MustCompile(`:([a-zA-Z0-9_]+)`)
 )
@@ -87,9 +87,14 @@ func Routes() map[string][]string {
 // work that reaches other systems — a client to connect, a topic to
 // create — holds every other replica's start for as long as that system
 // takes to answer, and belongs elsewhere or behind a deadline of its own.
-// The hook receives a route snapshot; mutating it does not change the
-// router registry.
-func OnRoutesReady(fn func(routes map[string][]string) error) {
+//
+// The hook runs on the context of the start: the seeding's statements and
+// transactions run on it, and a termination signal during the start ends
+// it, so a hook cut short returns and the process stops cleanly. The
+// context ends once the hooks have run, so nothing started on it outlives
+// them. The hook also receives a route snapshot; mutating it does not
+// change the router registry.
+func OnRoutesReady(fn func(ctx context.Context, routes map[string][]string) error) {
 	if fn == nil {
 		return
 	}
@@ -232,23 +237,32 @@ func Init() error {
 }
 
 // RunRoutesReadyHooks runs the hooks OnRoutesReady registered, in
-// registration order, and returns the first error. Bootstrap's Run calls it
-// once every route is registered and every table exists, before the
-// components that run alongside the server start and before the listener
-// opens: what the hooks seed is there for the first round of a job and for
-// the first request alike.
-func RunRoutesReadyHooks() error {
+// registration order, on ctx, and returns the first error — ctx ending
+// between two hooks included, so a stop reaches a hook before it starts as
+// well as during one. Bootstrap's Run calls it once every route is
+// registered and every table exists, before the components that run
+// alongside the server start and before the listener opens: what the hooks
+// seed is there for the first round of a job and for the first request
+// alike.
+func RunRoutesReadyHooks(ctx context.Context) error {
 	if err := multierr.Combine(globalErrors...); err != nil {
 		return err
 	}
 
 	routesReadyMu.Lock()
-	hooks := append([]func(routes map[string][]string) error(nil), routesReadyHooks...)
+	hooks := append([]func(context.Context, map[string][]string) error(nil), routesReadyHooks...)
 	routesReadyMu.Unlock()
 
 	for _, hook := range hooks {
-		if err := hook(Routes()); err != nil {
-			zap.S().Errorw("failed to run routes ready hooks", "err", err)
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		if err := hook(ctx, Routes()); err != nil {
+			// A hook cut short by the context ending is the stop's doing,
+			// not a failure of the hook.
+			if ctx.Err() == nil {
+				zap.S().Errorw("failed to run routes ready hooks", "err", err)
+			}
 			return err
 		}
 	}

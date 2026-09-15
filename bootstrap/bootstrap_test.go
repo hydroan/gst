@@ -88,7 +88,7 @@ func TestRunDrainsBeforeTeardownWhenAListenerFails(t *testing.T) {
 		defer orderMu.Unlock()
 		order = append(order, step)
 	}
-	router.OnRoutesReady(func(map[string][]string) error {
+	router.OnRoutesReady(func(context.Context, map[string][]string) error {
 		note("routes-ready hook")
 		return nil
 	})

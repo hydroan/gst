@@ -51,9 +51,9 @@ var contextDerivations = []string{
 // for every log line and statement, the transaction the work may already be
 // in, and the lease behind cluster-once work; a detached context loses all
 // three, so a transaction opened on it neither joins the enclosing one nor
-// stops when the lease is lost. Startup seeding, which has no context to
-// inherit, belongs to the module or router packages outside these
-// directories and passes its context down from there.
+// stops when the lease is lost. Startup seeding belongs to the router
+// package's routes-ready hooks, outside these directories, and passes the
+// context the hook receives down from there.
 //
 // The check is syntactic. Variables are resolved by function scope: a name
 // declared in a closure is the closure's, a parameter is the function's,

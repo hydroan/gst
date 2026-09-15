@@ -188,13 +188,14 @@ func Run() error {
 	// one process at a time, under the startup lock on the primary database:
 	// seeding reads before it writes, and replicas starting together would
 	// each find nothing and each write. A termination signal is watched
-	// from here on: one that arrives while the process waits its turn ends
-	// the wait, and one that arrives during the hooks ends Run once they
-	// return, both the way a signal after the start does — cleanly, with
+	// from here on, through the context the hooks run on: one that arrives
+	// while the process waits its turn ends the wait, and one that arrives
+	// during the hooks ends the statements in flight and the hooks with
+	// them, both the way a signal after the start does — cleanly, with
 	// nothing to report. A hook that fails ends Run the way a failing
 	// listener would.
 	starting, stopWatching := signal.NotifyContext(processCtx, syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT)
-	err := dbruntime.Serialized(starting, "seed", router.RunRoutesReadyHooks)
+	err := dbruntime.Serialized(starting, "seed", func() error { return router.RunRoutesReadyHooks(starting) })
 	// Read before the watch stops: stopping it ends the context too.
 	signaled := starting.Err() != nil && processCtx.Err() == nil
 	stopWatching()

@@ -1,6 +1,7 @@
 package iam
 
 import (
+	"context"
 	"time"
 
 	"github.com/cockroachdb/errors"
@@ -66,7 +67,7 @@ func Register() {
 	// Sessions live only in Redis, so a deployment without it cannot
 	// authenticate anyone. Refusing at startup states that in the one place a
 	// deployment can still act on it.
-	router.OnRoutesReady(func(map[string][]string) error {
+	router.OnRoutesReady(func(context.Context, map[string][]string) error {
 		return requireRedisEnabled()
 	})
 

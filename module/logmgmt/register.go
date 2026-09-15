@@ -1,6 +1,7 @@
 package logmgmt
 
 import (
+	"context"
 	"os"
 
 	"github.com/cockroachdb/errors"
@@ -43,7 +44,7 @@ func Register() {
 	// The check runs on the routes-ready hook: it fires after config loading
 	// and module.Wait, the earliest point where both the loaded configuration
 	// and the finished registration are visible.
-	router.OnRoutesReady(func(map[string][]string) error {
+	router.OnRoutesReady(func(context.Context, map[string][]string) error {
 		return requireAuditEnabled()
 	})
 
