@@ -13,24 +13,26 @@ import (
 // SQL statement comments.
 //
 // Every statement a request issues carries a /* trace_id='...' */ comment,
-// and every statement a cron round issues carries
-// /* cronjob='...',trace_id='...' */, closing the reverse direction of
-// observability: the application-side SQL log already maps a statement to
-// its trace, and the comment gives an operator starting FROM the database —
-// SHOW PROCESSLIST, the slow query log, an audit plugin — the key back to
-// the execution's full trail.
+// every statement a cron round issues carries
+// /* cronjob='...',trace_id='...' */, and every statement a leader tenure
+// issues carries /* leader='...',trace_id='...' */, closing the reverse
+// direction of observability: the application-side SQL log already maps a
+// statement to its trace, and the comment gives an operator starting FROM
+// the database — SHOW PROCESSLIST, the slow query log, an audit plugin — the
+// key back to the execution's full trail.
 //
-// The trace id is the key back to that trail, and the cron job's name is the
-// only other key. Everything else about a request — method, route, user,
-// parameters — is one trace-id lookup away in the log store, and the
-// application-side SQL log already carries those as structured fields, so
-// more keys would only duplicate them into every statement text and bury the
-// SQL under an URL-encoded preamble. The job name earns its place because
-// origin is what an operator classifies a slow query by, scanning the
-// database-side views in bulk, where a lookup per statement does not scale:
-// a statement naming a job came from that job's round, one with a trace id
-// alone came from a request, and one with no comment came from outside this
-// process.
+// The trace id is the key back to that trail, and the name of the job or of
+// the leader's work is the only other key. Everything else about a request —
+// method, route, user, parameters — is one trace-id lookup away in the log
+// store, and the application-side SQL log already carries those as
+// structured fields, so more keys would only duplicate them into every
+// statement text and bury the SQL under an URL-encoded preamble. The name
+// earns its place because origin is what an operator classifies a slow
+// query by, scanning the database-side views in bulk, where a lookup per
+// statement does not scale: a statement naming a job came from that job's
+// round, one naming leader work came from that work's tenure, one with a
+// trace id alone came from a request, and one with no comment came from
+// outside this process.
 //
 // The per-execution-unique comment rules out text-keyed statement caching
 // wholesale; the dialect packages therefore run their connections on

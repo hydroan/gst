@@ -85,7 +85,7 @@ type Component struct {
 	// right before the component's stage starts, enabled or not: declaring
 	// it is all a component does to log to its own file — it can neither
 	// forget to create the logger nor misname the file. A disabled component
-	// keeps the binding too: it costs nothing until written to, and code
+	// keeps the binding too: its file is created and stays empty, and code
 	// logging through the package's logger while the component is off still
 	// lands in the component's own file. Components without a dedicated log
 	// file leave it nil; until the binding the package's logger keeps the

@@ -276,33 +276,3 @@ type Pagination struct {
 	Page int // page number
 	Size int // page size
 }
-
-/*
-操作	方法	描述
-索引文档	es.Index()	创建或替换文档
-更新文档	es.Update()	部分更新已存在的文档
-获取文档	es.Get()	检索特定文档
-删除文档	es.Delete()	从索引中删除文档
-批量操作	es.Bulk()	在单个请求中执行多个索引/更新/删除操作
-搜索	es.Search()	在一个或多个索引中搜索文档
-创建索引	es.Indices.Create()	创建新的索引
-删除索引	es.Indices.Delete()	删除一个或多个索引
-索引别名	es.Indices.PutAlias()	为索引创建或更新别名
-刷新索引	es.Indices.Refresh()	刷新一个或多个索引
-获取映射	es.Indices.GetMapping()	获取一个或多个索引的映射
-更新映射	es.Indices.PutMapping()	更新一个或多个索引的映射
-
-
-es.Index(): 用于创建新文档或替换现有文档。如果文档不存在，它会被创建；如果存在，则会被完全替换。
-es.Update(): 用于部分更新已存在的文档。你可以添加、修改或删除文档中的特定字段，而不影响其他字段。
-es.Get(): 通过索引名和文档ID检索特定文档。可以获取整个文档或指定字段。
-es.Delete(): 从指定索引中删除特定文档。
-es.Bulk(): 允许在单个API调用中执行多个操作，如批量索引、更新或删除文档，提高效率。
-es.Search(): 执行搜索查询，可以在一个或多个索引中搜索文档。支持各种查询类型和聚合。
-es.Indices.Create(): 创建新的索引，可以指定设置和映射。
-es.Indices.Delete(): 删除一个或多个索引及其所有数据。
-es.Indices.PutAlias(): 为一个或多个索引创建或更新别名，便于索引的逻辑分组或无缝切换。
-es.Indices.Refresh(): 刷新索引，使最近的更改对搜索可见。
-es.Indices.GetMapping(): 获取一个或多个索引的映射信息，包括字段类型和索引选项。
-es.Indices.PutMapping(): 更新一个或多个索引的映射，允许添加新字段或修改现有字段的映射。
-*/
