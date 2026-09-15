@@ -148,10 +148,9 @@ func setLogger(l types.Logger) {
 // call already on the wire do not, so fn watches the context around its own
 // side effects. fn that has not returned 5 seconds after its context ended
 // by a lost lease fails the process, see the package documentation. The
-// context carries the tenure's
-// identity — the name and a trace id of the tenure's own, see execctx — so
-// every statement and log line the work produces is annotated with the
-// tenure and found again from any of them.
+// context carries the tenure's identity — the name and a trace id of the
+// tenure's own, see execctx — so every statement and log line the work
+// produces is annotated with the tenure and found again from any of them.
 //
 // fn that returns while still the leader — done, or failed — hands the name
 // back: the campaign resumes after the campaign interval, on this replica or
