@@ -13,7 +13,7 @@ func TestCheckColumnReferenceMintingFlagsConstructors(t *testing.T) {
 	t.Chdir(projectDir)
 	writeCheckProjectGoMod(t, projectDir)
 
-	writeCheckFile(t, filepath.Join(projectDir, "service", "report", "helper.go"), `package report
+	writeCheckFile(t, filepath.Join(projectDir, "service", "record", "helper.go"), `package record
 
 import (
 	"time"
@@ -37,7 +37,7 @@ func filters(since time.Time) []gst.Filter {
 `)
 	// An alias does not hide the constructor, and a test file is project
 	// code like any other.
-	writeCheckFile(t, filepath.Join(projectDir, "service", "report", "helper_test.go"), `package report
+	writeCheckFile(t, filepath.Join(projectDir, "service", "record", "helper_test.go"), `package record
 
 import gstalias "github.com/hydroan/gst"
 
@@ -60,7 +60,7 @@ var group = NewColumn[*Row, string]("group_id")
 	if len(violations) != 5 {
 		t.Fatalf("expected five violations, got %#v", violations)
 	}
-	helperPath := filepath.Join("service", "report", "helper.go")
+	helperPath := filepath.Join("service", "record", "helper.go")
 	for _, constructor := range []string{"gst.NewColumn;", "gst.NewNumericColumn;", "gst.NewTimeColumn;"} {
 		matched := 0
 		for _, violation := range violations {
@@ -72,7 +72,7 @@ var group = NewColumn[*Row, string]("group_id")
 			t.Fatalf("expected one %s violation in %s, got %#v", constructor, helperPath, violations)
 		}
 	}
-	assertViolationContains(t, violations, filepath.Join("service", "report", "helper_test.go"), "mints a column reference through gst.NewColumn")
+	assertViolationContains(t, violations, filepath.Join("service", "record", "helper_test.go"), "mints a column reference through gst.NewColumn")
 	assertViolationContains(t, violations, filepath.Join("helper", "scope", "scope.go"), "mints a column reference through gst.NewColumn")
 }
 
