@@ -131,7 +131,7 @@ func TestHoldEndsWithItsParent(t *testing.T) {
 // its own, so no other process starts the same work while this one is still
 // winding down.
 func TestHoldKeepsRenewingUntilStoppedAfterItsParentEnds(t *testing.T) {
-	withFastProtocol(t)
+	withTolerantProtocol(t)
 	ctx := context.Background()
 	name := uniqueName(t)
 

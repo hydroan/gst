@@ -262,11 +262,7 @@ func TestTransactionOnAnotherInstanceVerifiesAgainstThePrimary(t *testing.T) {
 // a holder renewing on time keeps the name for as long as it likes, and
 // every claim by another is refused meanwhile.
 func TestRenewKeepsTheLeaseBeyondItsDuration(t *testing.T) {
-	// A lease long enough that a round trip stalled by a loaded machine —
-	// the whole suite running beside this test — cannot let it expire
-	// between two renewals: a holder renewing on time is what is proved,
-	// not the machine's speed.
-	t.Cleanup(SetTimings(time.Second, 50*time.Millisecond, 500*time.Millisecond, 100*time.Millisecond))
+	withTolerantProtocol(t)
 	ctx := context.Background()
 	name := uniqueName(t)
 
@@ -412,6 +408,18 @@ func withFastProtocol(t *testing.T) {
 	t.Helper()
 
 	t.Cleanup(SetTimings(300*time.Millisecond, 50*time.Millisecond, 150*time.Millisecond, 100*time.Millisecond))
+}
+
+// withTolerantProtocol shortens the timings less than withFastProtocol, for
+// a test proving that a holder renewing on time keeps its name: a lease
+// long enough that a round trip stalled by a loaded machine — the whole
+// suite running beside the test — cannot let it expire between two
+// renewals, so the test proves the holder's diligence, not the machine's
+// speed.
+func withTolerantProtocol(t *testing.T) {
+	t.Helper()
+
+	t.Cleanup(SetTimings(time.Second, 50*time.Millisecond, 500*time.Millisecond, 100*time.Millisecond))
 }
 
 // uniqueName returns a coordinated name no other test uses: the table is

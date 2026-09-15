@@ -43,9 +43,6 @@ func Hold(parent context.Context, h *Handle) (ctx context.Context, stop context.
 		// The claim counts as the last successful renewal, from the moment
 		// it was sent.
 		last := h.claimedAt
-		if last.IsZero() {
-			last = time.Now()
-		}
 		timer := time.NewTimer(min(interval, time.Until(last.Add(deadline))))
 		defer timer.Stop()
 		for {
