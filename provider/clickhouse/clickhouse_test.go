@@ -16,9 +16,9 @@ func TestClickhouse(t *testing.T) {
 		config.App.Clickhouse = config.Clickhouse{Enabled: false}
 		t.Cleanup(func() { config.App.Clickhouse = old })
 
-		// The disabled contract moved out of start: bootstrap gates
-		// Init by the registered Enabled function, so it must report false
-		// here and the connection stays uninitialized.
+		// The disabled contract lives in the registration: the lifecycle
+		// starts a provider only when its Enabled function reports true, so
+		// it must report false here and the connection stays uninitialized.
 		var enabled func() bool
 		for _, p := range lifecycle.Components(lifecycle.StageProvider) {
 			if p.Name == "clickhouse" {

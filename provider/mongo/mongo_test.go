@@ -22,8 +22,8 @@ func TestMongo(t *testing.T) {
 
 	config.SetConfigFile("../../examples/demo/config.ini")
 	RunOrDie(bootstrap.Bootstrap)
-	// Close through the registry — the same exit bootstrap's cleanup uses —
-	// instead of a test-only export of the unexported lifecycle.
+	// Close through the registry — the same exit the lifecycle takes at
+	// shutdown — instead of a test-only export of the unexported lifecycle.
 	defer func() {
 		for _, p := range lifecycle.Components(lifecycle.StageProvider) {
 			if p.Stop != nil {

@@ -79,15 +79,15 @@ func TestNew(t *testing.T) {
 	})
 }
 
-func TestInitProvider(t *testing.T) {
+func TestStart(t *testing.T) {
 	t.Run("disabled", func(t *testing.T) {
 		old := config.App.Kafka
 		config.App.Kafka = config.Kafka{Enabled: false}
 		t.Cleanup(func() { config.App.Kafka = old })
 
-		// The disabled contract moved out of start: bootstrap gates
-		// Init by the registered Enabled function, so it must report false
-		// here and the client stays uninitialized.
+		// The disabled contract lives in the registration: the lifecycle
+		// starts a provider only when its Enabled function reports true, so
+		// it must report false here and the client stays uninitialized.
 		var enabled func() bool
 		for _, p := range lifecycle.Components(lifecycle.StageProvider) {
 			if p.Name == "kafka" {

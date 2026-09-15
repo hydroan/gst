@@ -27,8 +27,8 @@ func TestMain(m *testing.M) {
 		panic(err)
 	}
 	// Bring the compiled-in providers up through the registry — the same
-	// entry bootstrap's drain uses — instead of a test-only export of the
-	// unexported lifecycle.
+	// entry the provider stage takes at bootstrap — instead of a test-only
+	// export of the unexported lifecycle.
 	for _, p := range lifecycle.Components(lifecycle.StageProvider) {
 		if err := p.Start(context.Background()); err != nil {
 			fmt.Println("minio not available, skipping tests:", err)
