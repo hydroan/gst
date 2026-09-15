@@ -6,6 +6,7 @@ import (
 	"maps"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -1162,6 +1163,11 @@ func (c *fakeClock) Wait(ctx context.Context, t time.Time) bool {
 	case <-wake:
 		return true
 	case <-ctx.Done():
+		// A wait cut short leaves the clock, so that untilWaiters counts
+		// only waits that are still pending.
+		c.mu.Lock()
+		c.waiters = slices.DeleteFunc(c.waiters, func(w fakeWaiter) bool { return w.wake == wake })
+		c.mu.Unlock()
 		return false
 	}
 }
