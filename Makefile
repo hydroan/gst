@@ -148,12 +148,19 @@ generate:
 	go run ./internal/codegen/cmd/apidocgen
 
 # Auto-fix code issues
+# The example modules are fixed too (see lint): golangci-lint reaches only the
+# module it runs in, so each example is fixed from inside it, against its own
+# .golangci.yml. gofumpt walks paths rather than modules, so the run at the
+# root already covers them.
 fix:
 	@echo "Running auto-fix tools..."
 	@echo "Running gofumpt..."
 	gofumpt -l -w .
 	@echo "Running golangci-lint --fix..."
-	golangci-lint run --fix ./...
+	$(call run_tool,golangci-lint,run --fix ./...)
+	$(call run_tool_in,golangci-lint,examples/demo,run --fix ./...)
+	$(call run_tool_in,golangci-lint,examples/cluster,run --fix ./...)
+	$(call run_tool_in,golangci-lint,examples/bench,run --fix ./...)
 	@echo "All auto-fix operations completed!"
 
 # Install gg command and development tools
