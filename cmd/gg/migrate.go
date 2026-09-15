@@ -79,7 +79,7 @@ func buildMigrateProgramForMode(moduleName string, schemaOnly bool, schemaSource
 	content = strings.ReplaceAll(content, "{{YES}}", strconv.FormatBool(migrateYes))
 	content = strings.ReplaceAll(content, "{{SCHEMA_ONLY}}", strconv.FormatBool(schemaOnly))
 	content = strings.ReplaceAll(content, "{{SCHEMA_SOURCE}}", strconv.Quote(schemaSource))
-	return fmt.Sprintf("%s\n%s", consts.CodeGeneratedComment(), content)
+	return fmt.Sprintf("%s\n\n%s", consts.CodeGeneratedComment(), content)
 }
 
 // migrateProjectImports renders the project packages the migration program

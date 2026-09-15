@@ -100,6 +100,7 @@ const (
 
 // Project subdirectories for main.go imports
 const (
+	SubDirComponent  = "component"
 	SubDirConfigx    = "configx"
 	SubDirCronjob    = "cronjob"
 	SubDirLeader     = "leader"
@@ -118,6 +119,7 @@ const (
 // Every directory here is a scaffold file gg new creates and gg gen restores
 // when missing, so a project always has the package main.go imports.
 var ProjectImportDirs = []string{
+	SubDirComponent,
 	SubDirConfigx,
 	SubDirCronjob,
 	SubDirLeader,

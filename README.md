@@ -60,6 +60,7 @@ git init
 | `cronjob/` | 注册定时任务（每个调度时刻整个部署只跑一轮） |
 | `leader/` | 注册常驻任务（任一时刻整个部署只有一个副本在跑） |
 | `lock/` | 声明锁（一件事同一时刻只做一次） |
+| `component/` | 注册常驻组件（每个副本各跑一份、跑到进程结束） |
 | `middleware/` | 注册中间件 |
 | `router/router.gen.go` | 由 `gg gen` 生成的路由注册文件 |
 | `model/model.gen.go` | 由 `gg gen` 生成的模型注册文件 |

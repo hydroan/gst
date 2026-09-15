@@ -1,3 +1,6 @@
+// Package model holds what the cluster example records: the events the
+// replicas write, the progress the leader keeps, and the rebuild the lock
+// guards.
 package model
 
 import (

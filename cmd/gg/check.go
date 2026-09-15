@@ -1226,6 +1226,7 @@ func CheckAllowedDirectories(ignore gitignore.Matcher) []string {
 		"cronjob":    true,
 		"leader":     true,
 		"lock":       true,
+		"component":  true,
 		"configx":    true,
 		"config":     true,
 		"typesx":     true,

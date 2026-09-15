@@ -18,6 +18,7 @@ import (
 )
 
 var requiredFileContentMap = map[string]string{
+	"component/component.go":   componentContent,
 	"configx/configx.go":       configxContent,
 	"cronjob/cronjob.go":       cronjobContent,
 	"leader/leader.go":         leaderContent,
