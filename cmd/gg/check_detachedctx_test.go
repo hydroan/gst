@@ -330,7 +330,7 @@ func init() {
 `)
 
 	// A component runs on the process context it receives; making its own
-	// is flagged like everywhere else under the rule.
+	// is flagged like everywhere else under the rule, passing it on is not.
 	writeCheckFile(t, filepath.Join(projectDir, "component", "consumer.go"), `package component
 
 import (
@@ -341,6 +341,11 @@ import (
 
 func consume(context.Context) error {
 	_, err := dao.Records(context.Background())
+	return err
+}
+
+func poll(ctx context.Context) error {
+	_, err := dao.Records(ctx)
 	return err
 }
 `)

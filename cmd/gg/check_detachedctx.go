@@ -15,8 +15,9 @@ import (
 )
 
 // detachedContextDirs are the project directories whose code runs under a
-// context handed down to it — a request's, a round's, a tenure's, a lock's —
-// and must pass that context on to the database.
+// context handed down to it — a request's, a round's, a tenure's, a lock's,
+// the process's for a component, the start's for a routes-ready hook — and
+// must pass that context on to the database.
 var detachedContextDirs = []string{"service", "dao", "cronjob", "leader", "lock", "component", "router"}
 
 // databaseEntryPoints are the framework database functions that take a
@@ -97,7 +98,7 @@ func CheckDetachedContext(ignore gitignore.Matcher) []string {
 				}
 				return nil
 			}
-			if !strings.HasSuffix(path, ".go") || strings.HasSuffix(path, "_test.go") {
+			if !strings.HasSuffix(path, ".go") || strings.HasSuffix(path, "_test.go") || isGeneratedFileName(path) {
 				return nil
 			}
 			if dir == serviceDir && moduleOwnedPath(owned, serviceDir, path) {
