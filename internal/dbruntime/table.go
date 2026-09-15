@@ -90,80 +90,110 @@ func ensureTable(handler *gorm.DB, m types.Model) error {
 // across the processes sharing the database. Replicas starting together all
 // find the table missing and all issue CREATE TABLE, and the server refuses
 // every one but the first: on MySQL and PostgreSQL the processes take turns
-// under a server-side advisory lock, and where none can be held — SQLite,
-// or a pool of a single connection — a failure while another process created
-// the table is retried once, against the table that is there now.
+// under the startup lock, and where none can be held — SQLite, or a pool of
+// a single connection — a failure while another process created the table
+// is retried once, against the table that is there now.
 //
 // AutoMigrate reads the table name through gorm's Tabler, which is the
 // model's own TableName method. Supplying it again through Table() would make
 // gorm re-parse the schema under a special table name, which renames the
 // constraints of associated models.
 func migrateTable(handler *gorm.DB, m types.Model, tableName string) error {
-	unlock, err := lockMigration(handler)
+	return serialized(handler, "migrate", func() error {
+		migrate := func() error {
+			if err := handler.AutoMigrate(m); err != nil {
+				return err
+			}
+			return ensureCustomIndexes(handler, m)
+		}
+		err := migrate()
+		if err != nil && handler.Migrator().HasTable(tableName) {
+			err = migrate()
+		}
+		return err
+	})
+}
+
+// Serialized runs fn while holding the startup lock named purpose on the
+// primary database, so that of the processes of a deployment starting at
+// once only one runs it at a time: the seeding the routes-ready hooks do
+// reads before it writes, and replicas doing so together would each find
+// nothing and each write. Table preparation runs under the same lock, one
+// table at a time. A process waits for the lock for as long as the holder
+// takes, warning every startupLockWaitReport that it is still waiting; see
+// lockStartup for why the wait has no bound of its own. Where no lock can
+// be held — SQLite, a pool of a single connection — fn runs as is; neither
+// is the shape a deployment takes. A process with no primary database has
+// nothing to coordinate through and runs fn as is too.
+func Serialized(purpose string, fn func() error) error {
+	if DB == nil {
+		return fn()
+	}
+	return serialized(DB, purpose, fn)
+}
+
+// serialized is Serialized on the given handle.
+func serialized(handler *gorm.DB, purpose string, fn func() error) error {
+	unlock, err := lockStartup(handler, purpose)
 	if err != nil {
 		return err
 	}
 	defer unlock()
-
-	migrate := func() error {
-		if migrateErr := handler.AutoMigrate(m); migrateErr != nil {
-			return migrateErr
-		}
-		return ensureCustomIndexes(handler, m)
-	}
-	err = migrate()
-	if err != nil && handler.Migrator().HasTable(tableName) {
-		err = migrate()
-	}
-	return err
+	return fn()
 }
 
-// migrationLockName names the advisory lock table preparation holds on the
-// servers that offer one: one lock per database, so that the processes of a
-// deployment prepare their tables one process at a time while deployments on
-// other databases of the same server go on unhindered. MySQL scopes a named
-// lock to the whole server, so the database is part of the name — hashed,
-// because MySQL allows a lock name 64 characters at most and a database name
-// alone may take them all.
-func migrationLockName(database string) string {
+// startupLockName names the advisory lock a startup step holds on the
+// servers that offer one: one lock per purpose and database, so that the
+// processes of a deployment take the step one process at a time while
+// deployments on other databases of the same server go on unhindered. MySQL
+// scopes a named lock to the whole server, so the database is part of the
+// name — hashed, because MySQL allows a lock name 64 characters at most and
+// a database name alone may take them all.
+func startupLockName(purpose, database string) string {
 	h := fnv.New32a()
 	_, _ = h.Write([]byte(database))
-	return fmt.Sprintf("gst:migrate:%08x", h.Sum32())
+	return fmt.Sprintf("gst:%s:%08x", purpose, h.Sum32())
 }
 
-// migrationLockKey is the lock as an integer, for the server that keys
+// startupLockKey is the lock as an integer, for the server that keys
 // advisory locks by one: a stable hash of the name.
-func migrationLockKey(name string) int64 {
+func startupLockKey(name string) int64 {
 	h := fnv.New32a()
 	_, _ = h.Write([]byte(name))
 	return int64(h.Sum32())
 }
 
-// migrationLockTimeout bounds the wait for the lock. A holder is creating a
-// table, which takes milliseconds; a minute covers a server that is slow to
-// come up under a whole deployment starting at once.
-const migrationLockTimeout = time.Minute
+// startupLockWaitReport is how often a process waiting for a startup lock
+// says so, so that a replica that is slow to become ready shows why. A
+// variable so that tests can shorten it.
+var startupLockWaitReport = 30 * time.Second
 
-// migrationLock is the advisory lock of one dialect, taken and released by
+// startupLockReleaseTimeout bounds the statements around the wait — taking
+// the connection the lock lives on and releasing the lock — which take
+// milliseconds when the database answers at all.
+const startupLockReleaseTimeout = time.Minute
+
+// startupLock is the advisory lock of one dialect, taken and released by
 // name on the connection that holds it.
-type migrationLock struct {
+type startupLock struct {
 	acquire func(ctx context.Context, conn *sql.Conn, name string) error
 	release func(ctx context.Context, conn *sql.Conn, name string) error
 }
 
-// migrationLocks are the advisory locks table preparation holds, by dialect.
-// MySQL names its locks and answers the wait itself: 1 for the lock taken, 0
-// for the timeout and NULL for an error. PostgreSQL keys them by an integer
-// and blocks until the lock is taken, so the wait is bounded by the context.
-var migrationLocks = map[string]migrationLock{
+// startupLocks are the advisory locks the startup steps hold, by dialect.
+// Both wait for as long as the holder takes: MySQL names its locks and is
+// asked to wait without limit, answering 1 for the lock taken and NULL for
+// an error; PostgreSQL keys them by an integer and blocks until the lock is
+// taken.
+var startupLocks = map[string]startupLock{
 	"mysql": {
 		acquire: func(ctx context.Context, conn *sql.Conn, name string) error {
 			var got sql.NullInt64
-			if err := conn.QueryRowContext(ctx, "SELECT GET_LOCK(?, ?)", name, int64(migrationLockTimeout.Seconds())).Scan(&got); err != nil {
+			if err := conn.QueryRowContext(ctx, "SELECT GET_LOCK(?, -1)", name).Scan(&got); err != nil {
 				return err
 			}
 			if !got.Valid || got.Int64 != 1 {
-				return errors.Newf("not granted within %s: another process is still preparing tables", migrationLockTimeout)
+				return errors.New("the lock was not granted")
 			}
 			return nil
 		},
@@ -174,30 +204,39 @@ var migrationLocks = map[string]migrationLock{
 	},
 	"postgres": {
 		acquire: func(ctx context.Context, conn *sql.Conn, name string) error {
-			_, err := conn.ExecContext(ctx, "SELECT pg_advisory_lock($1)", migrationLockKey(name))
+			_, err := conn.ExecContext(ctx, "SELECT pg_advisory_lock($1)", startupLockKey(name))
 			return err
 		},
 		release: func(ctx context.Context, conn *sql.Conn, name string) error {
-			_, err := conn.ExecContext(ctx, "SELECT pg_advisory_unlock($1)", migrationLockKey(name))
+			_, err := conn.ExecContext(ctx, "SELECT pg_advisory_unlock($1)", startupLockKey(name))
 			return err
 		},
 	},
 }
 
-// lockMigration takes the advisory lock table preparation runs under and
-// returns the function that releases it. Both servers scope the lock to the
-// session, so it is held on a connection of its own while the migration runs
-// on the pool's other connections. A pool of a single connection cannot hold
-// the lock and migrate at once, and SQLite has no such lock: there nothing is
-// locked, and the retries of migrateTable and ensureCustomIndexes are what
-// cover a race.
+// lockStartup takes the startup lock named purpose and returns the function
+// that releases it. Both servers scope the lock to the session, so it is
+// held on a connection of its own while the step runs on the pool's other
+// connections. A pool of a single connection cannot hold the lock and work
+// at once, and SQLite has no such lock: there nothing is locked — for table
+// preparation the retries of migrateTable and ensureCustomIndexes cover a
+// race, and neither is the shape a deployment takes.
+//
+// The wait for the lock has no bound of its own: how long the holder takes
+// — a large seeding, a column added to a large table — is the project's,
+// and a bound the framework picked would turn a slow start into failed
+// ones. The wait cannot outlive the holder: the lock is the holder's
+// session, and a holder that crashes drops it with its connection. A holder
+// that hangs is a process that never becomes ready, which the orchestrator's
+// startup probe restarts, releasing the lock the same way; the waiting
+// processes say so every startupLockWaitReport meanwhile.
 //
 // A connection whose lock may still be held — the release failed, or the
 // wait was cut short — is discarded rather than returned to the pool, where
 // it would keep every other process out until it was closed.
-func lockMigration(handler *gorm.DB) (unlock func(), err error) {
+func lockStartup(handler *gorm.DB, purpose string) (unlock func(), err error) {
 	noop := func() {}
-	lock, ok := migrationLocks[strings.ToLower(handler.Dialector.Name())]
+	lock, ok := startupLocks[strings.ToLower(handler.Dialector.Name())]
 	if !ok {
 		return noop, nil
 	}
@@ -208,30 +247,57 @@ func lockMigration(handler *gorm.DB) (unlock func(), err error) {
 	if sqlDB.Stats().MaxOpenConnections == 1 {
 		return noop, nil
 	}
-	name := migrationLockName(databaseNameOf(handler))
+	name := startupLockName(purpose, databaseNameOf(handler))
 
-	// MySQL times the wait out itself; the margin lets its verdict arrive
-	// before the context's.
-	ctx, cancel := context.WithTimeout(context.Background(), migrationLockTimeout+5*time.Second)
-	defer cancel()
-	conn, err := sqlDB.Conn(ctx)
+	connCtx, cancelConn := context.WithTimeout(context.Background(), startupLockReleaseTimeout)
+	defer cancelConn()
+	conn, err := sqlDB.Conn(connCtx)
 	if err != nil {
-		return noop, errors.Wrap(err, "take a connection for the migration lock")
+		return noop, errors.Wrapf(err, "take a connection for the %s lock", purpose)
 	}
-	if err := lock.acquire(ctx, conn, name); err != nil {
+	stopReporting := reportStartupLockWait(purpose)
+	err = lock.acquire(context.Background(), conn, name)
+	stopReporting()
+	if err != nil {
 		discardConn(conn)
-		return noop, errors.Wrap(err, "take the migration lock")
+		return noop, errors.Wrapf(err, "take the %s lock", purpose)
 	}
 	return func() {
-		ctx, cancel := context.WithTimeout(context.Background(), migrationLockTimeout)
+		ctx, cancel := context.WithTimeout(context.Background(), startupLockReleaseTimeout)
 		defer cancel()
 		if err := lock.release(ctx, conn, name); err != nil {
-			zap.S().Warnw("failed to release the migration lock; discarding its connection", "error", err)
+			zap.S().Warnw("failed to release the startup lock; discarding its connection", "purpose", purpose, "error", err)
 			discardConn(conn)
 			return
 		}
 		_ = conn.Close()
 	}, nil
+}
+
+// reportStartupLockWait warns every startupLockWaitReport that the process
+// is still waiting for the lock named purpose, until the returned function
+// is called; a wait shorter than the interval says nothing.
+func reportStartupLockWait(purpose string) (stop func()) {
+	done := make(chan struct{})
+	stopped := make(chan struct{})
+	go func() {
+		defer close(stopped)
+		begin := time.Now()
+		ticker := time.NewTicker(startupLockWaitReport)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-done:
+				return
+			case <-ticker.C:
+				zap.S().Warnw("still waiting for the startup lock held by another process", "purpose", purpose, util.LogDuration(time.Since(begin)))
+			}
+		}
+	}()
+	return func() {
+		close(done)
+		<-stopped
+	}
 }
 
 // databaseNames caches the name of the database behind each handle: the
