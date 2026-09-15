@@ -8,6 +8,7 @@ import (
 	"hash/fnv"
 	"reflect"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -207,7 +208,7 @@ func lockMigration(handler *gorm.DB) (unlock func(), err error) {
 	if sqlDB.Stats().MaxOpenConnections == 1 {
 		return noop, nil
 	}
-	name := migrationLockName(handler.Migrator().CurrentDatabase())
+	name := migrationLockName(databaseNameOf(handler))
 
 	// MySQL times the wait out itself; the margin lets its verdict arrive
 	// before the context's.
@@ -231,6 +232,24 @@ func lockMigration(handler *gorm.DB) (unlock func(), err error) {
 		}
 		_ = conn.Close()
 	}, nil
+}
+
+// databaseNames caches the name of the database behind each handle: the
+// tables are prepared one at a time, each under the lock, and the name that
+// keys the lock does not change while the process runs, so the server is
+// asked once per handle rather than once per table.
+var databaseNames sync.Map // *gorm.DB -> string
+
+// databaseNameOf returns the name of the database handler is connected to.
+func databaseNameOf(handler *gorm.DB) string {
+	if cached, ok := databaseNames.Load(handler); ok {
+		if name, ok := cached.(string); ok {
+			return name
+		}
+	}
+	name := handler.Migrator().CurrentDatabase()
+	databaseNames.Store(handler, name)
+	return name
 }
 
 // discardConn closes conn's underlying connection instead of returning it to
