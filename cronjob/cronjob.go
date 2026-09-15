@@ -161,11 +161,14 @@ func init() {
 // fn receives the context of the round it runs in. The context ends when the
 // process begins shutting down or the round's lease is lost, so a long round
 // can stop early, and a transaction opened on it refuses to run once the
-// lease is gone; it carries the round's identity — the job name and a trace
-// id of the round's own, see execctx — and, with tracing on, the round's root
-// span, so every statement, log line and span the job produces is annotated
-// with the round and can be found again from any of them. An instant that
-// passes while the previous round is still in flight is skipped.
+// lease is gone; a round still running 5 seconds after its lease was lost
+// fails the process — another replica may be running the job's next instant
+// by then, and two rounds of a job never run at once. The context carries
+// the round's identity — the job name and a trace id of the round's own, see
+// execctx — and, with tracing on, the round's root span, so every statement,
+// log line and span the job produces is annotated with the round and can be
+// found again from any of them. An instant that passes while the previous
+// round is still in flight is skipped.
 //
 // The framework opens a single connection to SQLite, so there a transaction
 // of the job blocks the renewal of the round's lease: keep each transaction
