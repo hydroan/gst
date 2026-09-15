@@ -137,7 +137,9 @@ func UnionAllOn[R any](ctx context.Context, instance *gorm.DB, branches ...types
 // here, the way a selector that could not attach does.
 func unionFor[R any](ctx context.Context, base *gorm.DB, branches []types.SelectBranch[R]) *union[R] {
 	if ctx == nil {
-		ctx = context.Background()
+		// Reported at the terminal like the union's other defects; the union
+		// is still built, on a context of its own, so every call stays safe.
+		return &union[R]{ctx: context.Background(), base: base, err: ErrNilContext}
 	}
 	u := &union[R]{ctx: ctx, base: base}
 	if len(branches) == 0 {

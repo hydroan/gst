@@ -102,7 +102,7 @@ func HealthOn(ctx context.Context, instance *gorm.DB) error {
 // healthOn is the shared body of Health and HealthOn.
 func healthOn(ctx context.Context, instance *gorm.DB) error {
 	if ctx == nil {
-		ctx = context.Background()
+		return ErrNilContext
 	}
 	begin := time.Now()
 

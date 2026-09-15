@@ -265,20 +265,14 @@ func TestTransactionFailureIsRecordedOnSpan(t *testing.T) {
 
 // TestTransaction covers the package-level context-injecting transaction entry:
 // nil fn, commit, multi-model rollback, panic rollback, and joining an outer
-// transaction without opening a new one.
+// transaction without opening a new one. A nil context is covered with the
+// other entry points by TestNilContextIsRejected.
 func TestTransaction(t *testing.T) {
 	defer cleanupTestData()
 
 	// nil fn is rejected.
 	err := database.Transaction(context.Background(), nil)
 	require.ErrorIs(t, err, database.ErrNilTransaction)
-
-	// nil ctx falls back to context.Background and still runs the transaction.
-	err = database.Transaction(nil, func(ctx context.Context) error { //nolint:staticcheck
-		users := make([]*TestUser, 0)
-		return database.Database[*TestUser](ctx).List(&users)
-	})
-	require.NoError(t, err, "nil ctx should fall back to context.Background")
 
 	// Commit: chains started from the closure ctx join the transaction automatically.
 	err = database.Transaction(context.Background(), func(ctx context.Context) error {

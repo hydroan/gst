@@ -19,9 +19,6 @@ import (
 type boundaryContextKey struct{}
 
 func contextWithBoundary(ctx context.Context, boundary *transactionBoundary) context.Context {
-	if ctx == nil {
-		ctx = context.Background()
-	}
 	return context.WithValue(ctx, boundaryContextKey{}, boundary)
 }
 

@@ -81,6 +81,14 @@ var (
 	// handed a nil closure.
 	ErrNilTransaction = errors.New("transaction function cannot be nil")
 
+	// ErrNilContext is returned when an entry point is handed a nil context.
+	// The context is what carries the transaction, the lease and the identity
+	// of the work down to the statements, so there is no operation without
+	// one: a chain built on nil reports it from its first terminal operation,
+	// the other entry points at once. Code that has no context to hand down
+	// says so with context.Background.
+	ErrNilContext = errors.New("context cannot be nil")
+
 	// ErrUnusableFilter reports a filter the renderer cannot apply. Client
 	// query paths fail closed to an empty result and only log it; server-built
 	// readers such as the aggregate builder surface it instead, because there
@@ -343,8 +351,10 @@ func (db *database[M]) prepare() error {
 //
 // Parameters:
 //   - ctx: Required context for cancellation, tracing, and request metadata.
-//     In service layer operations, pass the ServiceContext directly.
-//     For non-service layer operations, pass nil.
+//     In service layer operations, pass the ServiceContext directly; code
+//     with no context to hand down passes context.Background. A nil context
+//     is a defect the chain reports as ErrNilContext from its first terminal
+//     operation.
 //
 // Returns a database manipulator with full CRUD and query capabilities.
 //
@@ -409,9 +419,12 @@ func DatabaseOn[M types.Model](ctx context.Context, instance *gorm.DB) types.Dat
 // the context-carried transaction keyed by the given connection handle when
 // present, and stamps the chain with that handle as its identity.
 func databaseFor[M types.Model](ctx context.Context, base *gorm.DB) types.Database[M] {
-	gctx := context.Background()
-	if ctx != nil {
-		gctx = ctx
+	// A nil context is a defect of the chain, reported by its first terminal
+	// operation like the other defects below; the chain is still built, on
+	// a context of its own, so every call on it stays safe.
+	gctx := ctx
+	if gctx == nil {
+		gctx = context.Background()
 	}
 
 	// The handle is the chain's identity and transaction key; the running
@@ -437,7 +450,10 @@ func databaseFor[M types.Model](ctx context.Context, base *gorm.DB) types.Databa
 		ctx:  gctx,
 		base: base,
 	}
-	if isOpenTransaction(base) {
+	switch {
+	case ctx == nil:
+		chain.err = ErrNilContext
+	case isOpenTransaction(base):
 		chain.err = ErrTransactionInstance
 	}
 	return chain

@@ -63,14 +63,14 @@ func TransactionOn(ctx context.Context, instance *gorm.DB, fn func(ctx context.C
 // connection handle keys the context transaction, so per-instance
 // transactions coexist and joining is always same-instance only.
 func transactionOn(ctx context.Context, base *gorm.DB, fn func(ctx context.Context) error) error {
+	if ctx == nil {
+		return ErrNilContext
+	}
 	// ClickHouse has no transactions, so a boundary opened on it could never
 	// deliver the all-or-nothing promise this function makes; the entry fails
 	// per the capability-miss rule instead of pretending.
 	if dialectOf(base) == dialectClickHouse {
 		return errors.Wrap(ErrUnsupportedOnDialect, "Transaction on clickhouse")
-	}
-	if ctx == nil {
-		ctx = context.Background()
 	}
 	if _, ok := dbruntime.TxFromContext(ctx, base); ok {
 		return fn(ctx)
