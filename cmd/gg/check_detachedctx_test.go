@@ -56,6 +56,7 @@ func TestDatabaseEntryPointsMatchThePackage(t *testing.T) {
 // package, under dot imports, and through a dao package whose name differs
 // from its directory's — a generic instantiation included, while the context
 // handed down passes, a variable that also receives a real context passes,
+// a closure's variable does not shadow the enclosing function's parameter,
 // copied framework modules are the framework's to check, ignored directories
 // are not read, and startup seeding in a module package stays outside the
 // rule.
@@ -150,6 +151,28 @@ func either(handed context.Context, detached bool) error {
 	}
 	_, err := dao.Records(ctx)
 	return err
+}
+`)
+	// A closure's ctx is the closure's: the parameter of the enclosing
+	// function is not shadowed by it, and the detached one is only flagged
+	// where it is used.
+	writeCheckFile(t, filepath.Join(projectDir, "service", "shadow", "shadow.go"), `package shadow
+
+import (
+	"context"
+
+	"github.com/hydroan/gst/database"
+)
+
+func shadow(ctx context.Context) error {
+	if err := database.Transaction(ctx, func(context.Context) error { return nil }); err != nil {
+		return err
+	}
+	run := func() error {
+		ctx := context.Background()
+		return database.Transaction(ctx, func(context.Context) error { return nil })
+	}
+	return run()
 }
 `)
 	// An ignored directory is not read.
@@ -249,9 +272,10 @@ func seed() error {
 
 	violations := CheckDetachedContext(newProjectIgnoreMatcher())
 
-	if len(violations) != 7 {
-		t.Fatalf("expected seven violations, got %#v", violations)
+	if len(violations) != 8 {
+		t.Fatalf("expected eight violations, got %#v", violations)
 	}
+	assertViolationContains(t, violations, filepath.Join("service", "shadow", "shadow.go"), ":15: database.Transaction receives a context held in ctx")
 	assertViolationContains(t, violations, filepath.Join("service", "record", "record.go"), ":16: database.Transaction receives context.Background()")
 	assertViolationContains(t, violations, filepath.Join("dao", "record.go"), ":12: database.Database receives context.TODO()")
 	assertViolationContains(t, violations, filepath.Join("cronjob", "sweep.go"), ":10: dao.Records receives context.Background()")

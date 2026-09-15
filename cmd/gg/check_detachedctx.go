@@ -55,8 +55,13 @@ var contextDerivations = []string{
 // inherit, belongs to the module or router packages outside these
 // directories and passes its context down from there.
 //
-// The check is syntactic: a detached context that reaches a call through a
-// function parameter, a struct field or a package variable is beyond it.
+// The check is syntactic. Variables are resolved by function scope: a name
+// declared in a closure is the closure's, a parameter is the function's,
+// and a variable that also receives a context from elsewhere is left alone.
+// A detached context that reaches a call through a function parameter, a
+// struct field or a package variable is beyond it, as is a shadowing
+// declaration inside an if, for or switch block.
+//
 // Code of copyable framework modules under the service directory is skipped:
 // it is checked inside the framework.
 func CheckDetachedContext(ignore gitignore.Matcher) []string {
@@ -133,38 +138,29 @@ func checkFileDetachedContexts(filePath, modulePath string) []string {
 	relPath := relativePath(filePath)
 
 	var violations []string
+	report := func(call *ast.CallExpr, callee string, origin string, arg ast.Expr) {
+		pos := fset.Position(arg.Pos())
+		violations = append(violations, fmt.Sprintf(
+			"%s:%d: %s receives %s; pass the context handed down to this code — it carries the request's or the round's identity, the transaction and the lease — or take one as a parameter",
+			relPath, pos.Line, callee, origin,
+		))
+	}
 	for _, decl := range file.Decls {
-		// Each function body is inspected on its own, so that a context a
-		// function holds in a local variable is known to the calls of that
-		// function alone; the closures inside it see the same variables.
+		// Each declaration is resolved on its own: the variables a function
+		// declares are known to that function's calls and to the closures
+		// inside it, and to nothing else.
+		scope := newContextScope(nil)
 		var body ast.Node = decl
 		if fn, ok := decl.(*ast.FuncDecl); ok {
 			if fn.Body == nil {
 				continue
 			}
 			body = fn.Body
+			scope.declareParams(fn.Recv, fn.Type)
 		}
-		detached := detachedNames(body, imports)
-		ast.Inspect(body, func(n ast.Node) bool {
-			call, ok := n.(*ast.CallExpr)
-			if !ok {
-				return true
-			}
-			callee, ok := entryPointName(call, imports)
-			if !ok {
-				return true
-			}
-			for _, arg := range call.Args {
-				if origin, ok := detachedContext(arg, imports, detached); ok {
-					pos := fset.Position(arg.Pos())
-					violations = append(violations, fmt.Sprintf(
-						"%s:%d: %s receives %s; pass the context handed down to this code — it carries the request's or the round's identity, the transaction and the lease — or take one as a parameter",
-						relPath, pos.Line, callee, origin,
-					))
-				}
-			}
-			return true
-		})
+		scopes := make(map[*ast.FuncLit]*contextScope)
+		collectContextNames(body, scope, scopes, imports)
+		checkDetachedCalls(body, scope, scopes, imports, report)
 	}
 	return violations
 }
@@ -233,28 +229,97 @@ func packageNameOf(dir string) string {
 	return filepath.Base(dir)
 }
 
-// detachedNames collects the local variables a body assigns a detached
-// context to — ctx := context.Background(), var ctx = context.TODO(), or a
-// derivation of either — and never anything else: a variable that also
-// receives a context from elsewhere is left alone, because the check reads
-// the syntax, not the flow.
-func detachedNames(body ast.Node, imports contextImports) map[string]bool {
-	detached := make(map[string]bool)
-	other := make(map[string]bool)
-	record := func(target ast.Expr, value ast.Expr) {
-		ident, ok := target.(*ast.Ident)
-		if !ok || ident.Name == "_" {
-			return
+// contextScope is what one function — a declaration or a closure — knows
+// about the variables declared in it: which hold nothing but a detached
+// context, and which hold something else too. A name is looked up from the
+// innermost scope outward, the way Go resolves it, so a closure's ctx is
+// not its enclosing function's.
+type contextScope struct {
+	parent   *contextScope
+	detached map[string]bool
+	other    map[string]bool
+}
+
+func newContextScope(parent *contextScope) *contextScope {
+	return &contextScope{parent: parent, detached: make(map[string]bool), other: make(map[string]bool)}
+}
+
+// declareParams records a function's receiver and parameters as variables
+// holding something other than a detached context.
+func (s *contextScope) declareParams(recv *ast.FieldList, typ *ast.FuncType) {
+	for _, list := range []*ast.FieldList{recv, typ.Params, typ.Results} {
+		if list == nil {
+			continue
 		}
-		if _, ok := detachedContext(value, imports, nil); ok {
-			detached[ident.Name] = true
-		} else {
-			other[ident.Name] = true
+		for _, field := range list.List {
+			for _, name := range field.Names {
+				s.declare(name.Name, false)
+			}
 		}
 	}
-	ast.Inspect(body, func(n ast.Node) bool {
+}
+
+// declare records a variable declared in this scope and whether the value it
+// is declared with is a detached context.
+func (s *contextScope) declare(name string, detached bool) {
+	if name == "_" {
+		return
+	}
+	if detached {
+		s.detached[name] = true
+	} else {
+		s.other[name] = true
+	}
+}
+
+// assign records a value assigned to an existing variable, in the scope that
+// declares it; an assignment to a name no scope declares — a package
+// variable, a field — is out of reach and ignored.
+func (s *contextScope) assign(name string, detached bool) {
+	for scope := s; scope != nil; scope = scope.parent {
+		if scope.detached[name] || scope.other[name] {
+			scope.declare(name, detached)
+			return
+		}
+	}
+}
+
+// isDetached reports whether name, resolved from this scope outward, holds
+// nothing but a detached context.
+func (s *contextScope) isDetached(name string) bool {
+	for scope := s; scope != nil; scope = scope.parent {
+		if scope.detached[name] || scope.other[name] {
+			return scope.detached[name] && !scope.other[name]
+		}
+	}
+	return false
+}
+
+// collectContextNames walks node, recording in scope every variable it
+// declares or assigns and what it receives, and opening a scope of its own
+// for every closure, remembered in scopes for the check that follows.
+func collectContextNames(node ast.Node, scope *contextScope, scopes map[*ast.FuncLit]*contextScope, imports contextImports) {
+	ast.Inspect(node, func(n ast.Node) bool {
 		switch stmt := n.(type) {
+		case *ast.FuncLit:
+			inner := newContextScope(scope)
+			inner.declareParams(nil, stmt.Type)
+			scopes[stmt] = inner
+			collectContextNames(stmt.Body, inner, scopes, imports)
+			return false
 		case *ast.AssignStmt:
+			record := func(target ast.Expr, value ast.Expr) {
+				ident, ok := target.(*ast.Ident)
+				if !ok {
+					return
+				}
+				_, detached := detachedContext(value, imports, scope)
+				if stmt.Tok == token.DEFINE {
+					scope.declare(ident.Name, detached)
+				} else {
+					scope.assign(ident.Name, detached)
+				}
+			}
 			switch {
 			case len(stmt.Lhs) == len(stmt.Rhs):
 				for i, rhs := range stmt.Rhs {
@@ -262,25 +327,59 @@ func detachedNames(body ast.Node, imports contextImports) map[string]bool {
 				}
 			case len(stmt.Rhs) == 1:
 				// ctx, cancel := context.WithTimeout(...): the context is
-				// the first value.
+				// the first value; the others are not contexts.
 				record(stmt.Lhs[0], stmt.Rhs[0])
+				for _, target := range stmt.Lhs[1:] {
+					if ident, ok := target.(*ast.Ident); ok && stmt.Tok == token.DEFINE {
+						scope.declare(ident.Name, false)
+					}
+				}
 			}
 		case *ast.ValueSpec:
-			switch {
-			case len(stmt.Names) == len(stmt.Values):
-				for i, value := range stmt.Values {
-					record(stmt.Names[i], value)
+			for i, name := range stmt.Names {
+				detached := false
+				if i < len(stmt.Values) {
+					_, detached = detachedContext(stmt.Values[i], imports, scope)
+				} else if len(stmt.Values) == 1 {
+					_, detached = detachedContext(stmt.Values[0], imports, scope)
+					detached = detached && i == 0
 				}
-			case len(stmt.Values) == 1:
-				record(stmt.Names[0], stmt.Values[0])
+				scope.declare(name.Name, detached)
+			}
+		case *ast.RangeStmt:
+			if stmt.Tok == token.DEFINE {
+				for _, target := range []ast.Expr{stmt.Key, stmt.Value} {
+					if ident, ok := target.(*ast.Ident); ok {
+						scope.declare(ident.Name, false)
+					}
+				}
 			}
 		}
 		return true
 	})
-	for name := range other {
-		delete(detached, name)
-	}
-	return detached
+}
+
+// checkDetachedCalls walks node with the scopes collectContextNames built
+// and reports every entry point call whose argument is a detached context.
+func checkDetachedCalls(node ast.Node, scope *contextScope, scopes map[*ast.FuncLit]*contextScope, imports contextImports, report func(call *ast.CallExpr, callee, origin string, arg ast.Expr)) {
+	ast.Inspect(node, func(n ast.Node) bool {
+		switch expr := n.(type) {
+		case *ast.FuncLit:
+			checkDetachedCalls(expr.Body, scopes[expr], scopes, imports, report)
+			return false
+		case *ast.CallExpr:
+			callee, ok := entryPointName(expr, imports)
+			if !ok {
+				return true
+			}
+			for _, arg := range expr.Args {
+				if origin, ok := detachedContext(arg, imports, scope); ok {
+					report(expr, callee, origin, arg)
+				}
+			}
+		}
+		return true
+	})
 }
 
 // entryPointName reports whether call is a framework database entry point
@@ -318,15 +417,16 @@ func entryPointName(call *ast.CallExpr, imports contextImports) (string, bool) {
 
 // detachedContext reports whether expr is a detached context — a call to
 // context.Background() or context.TODO(), a derivation of one through the
-// context package, or a variable named in detached — and names its origin.
-func detachedContext(expr ast.Expr, imports contextImports, detached map[string]bool) (string, bool) {
+// context package, or a variable scope resolves to one — and names its
+// origin. A nil scope resolves no variable.
+func detachedContext(expr ast.Expr, imports contextImports, scope *contextScope) (string, bool) {
 	switch e := expr.(type) {
 	case *ast.Ident:
-		if detached[e.Name] {
+		if scope != nil && scope.isDetached(e.Name) {
 			return "a context held in " + e.Name, true
 		}
 	case *ast.ParenExpr:
-		return detachedContext(e.X, imports, detached)
+		return detachedContext(e.X, imports, scope)
 	case *ast.CallExpr:
 		name, ok := contextFunctionName(e.Fun, imports)
 		if !ok {
@@ -336,7 +436,7 @@ func detachedContext(expr ast.Expr, imports contextImports, detached map[string]
 		case (name == "Background" || name == "TODO") && len(e.Args) == 0:
 			return "context." + name + "()", true
 		case slices.Contains(contextDerivations, name) && len(e.Args) > 0:
-			if origin, ok := detachedContext(e.Args[0], imports, detached); ok {
+			if origin, ok := detachedContext(e.Args[0], imports, scope); ok {
 				return origin + " through context." + name, true
 			}
 		}
