@@ -4,8 +4,8 @@
 package model
 
 import (
-	gst "github.com/hydroan/gst"
-	gorm "gorm.io/gorm"
+	"github.com/hydroan/gst"
+	"gorm.io/gorm"
 )
 
 // RecordCols are the typed column references of Record.

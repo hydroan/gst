@@ -4,8 +4,8 @@
 package bench
 
 import (
-	gst "github.com/hydroan/gst"
-	gorm "gorm.io/gorm"
+	"github.com/hydroan/gst"
+	"gorm.io/gorm"
 )
 
 // BenchCols are the typed column references of Bench.

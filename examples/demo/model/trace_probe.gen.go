@@ -4,8 +4,8 @@
 package model
 
 import (
-	gst "github.com/hydroan/gst"
-	gorm "gorm.io/gorm"
+	"github.com/hydroan/gst"
+	"gorm.io/gorm"
 )
 
 // TraceProbeCols are the typed column references of TraceProbe.

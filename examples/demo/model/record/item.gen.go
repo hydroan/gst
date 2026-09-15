@@ -4,8 +4,8 @@
 package record
 
 import (
-	gst "github.com/hydroan/gst"
-	gorm "gorm.io/gorm"
+	"github.com/hydroan/gst"
+	"gorm.io/gorm"
 )
 
 // ItemCols are the typed column references of Item.
