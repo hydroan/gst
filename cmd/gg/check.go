@@ -49,6 +49,7 @@ var checkCmd = &cobra.Command{
 21. Gorm struct tags must not configure indexes (index, uniqueIndex, unique); models declare indexes through the Indexes() []model.Index method
 22. model.Version declarations must keep the optimistic-locking shape: on database models a named field with json:",omitempty" and gorm:"not null;default:1", and on DSL Payload/Result types (plus the same-package types reachable from their fields) a json tag of exactly "version,omitempty"
 23. Project code, tests included, must not mint column references through gst.NewColumn, NewNumericColumn or NewTimeColumn; columns are read through the XxxCols variables gg gen writes, which the model schema checks, generated files excepted. Generic code, which has no Cols variable to read, may mint a reference whose model is its own type parameter
+24. In service, dao, cronjob, leader and lock code, the context passed to a framework database function or to a dao function must not be context.Background() or context.TODO(): the context handed down carries the request's or the round's identity, the transaction and the lease; startup seeding without a context to inherit lives in module or router packages and passes its context down from there
 
 Model and service subtrees owned by copyable framework modules are skipped by the service test checks, the log field check, the model table name check, the gorm tag index check and the column reference check: copied module code is tested inside the framework repository.
 Paths ignored by the project's Git ignore rules are skipped by every check, so runtime artifacts such as log directories never fail checks.`,
@@ -141,6 +142,7 @@ func collectProjectChecks() []projectCheckResult {
 		{Name: "DSL design rules", Violations: CheckDSLDesign(ignore)},
 		{Name: "Database chain termination", Violations: CheckDatabaseChainTermination(ignore)},
 		{Name: "Transaction closure context", Violations: CheckTransactionClosureContext(ignore)},
+		{Name: "Detached context", Violations: CheckDetachedContext(ignore)},
 		{Name: "Service error discipline", Violations: CheckServiceErrorDiscipline(ignore)},
 		{Name: "Service test coverage", Violations: CheckServiceTestCoverage(ignore)},
 		{Name: "Service test organization", Violations: CheckServiceTestOrganization(ignore)},
