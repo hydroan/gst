@@ -19,37 +19,41 @@ import (
 	"github.com/hydroan/gst/internal/testutil/oteltest"
 	"github.com/hydroan/gst/logger"
 	pkgzap "github.com/hydroan/gst/logger/zap"
+	"github.com/robfig/cron/v3"
 	"github.com/stretchr/testify/require"
 	oteltrace "go.opentelemetry.io/otel/trace"
 )
 
-// TestSchedulesAreReadInUTC proves an expression names UTC wall-clock
-// instants whatever zone the process runs in — every replica must compute
-// the same instants — and that an expression naming its own zone with a
-// CRON_TZ= prefix keeps that zone.
+// TestSchedulesAreReadInUTC proves an expression is read in UTC — the zone
+// the schedule computes in is UTC, not the process's, so every replica
+// computes the same instants — and that an expression naming its own zone
+// with a CRON_TZ= prefix keeps that zone. The zone is asserted on the
+// schedule itself: on a host whose own zone is UTC the instants alone could
+// not tell the two apart.
 func TestSchedulesAreReadInUTC(t *testing.T) {
-	withLocalZone(t, time.FixedZone("sample+08", 8*3600))
 	resetCronjobState(t)
 
-	shanghai, err := time.LoadLocation("Asia/Shanghai")
-	require.NoError(t, err)
 	from := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
 	cases := []struct {
 		spec string
+		zone string
 		next time.Time
 	}{
-		{spec: "0 0 2 * * *", next: time.Date(2026, 1, 1, 2, 0, 0, 0, time.UTC)},
-		{spec: "@daily", next: time.Date(2026, 1, 2, 0, 0, 0, 0, time.UTC)},
+		{spec: "0 0 2 * * *", zone: "UTC", next: time.Date(2026, 1, 1, 2, 0, 0, 0, time.UTC)},
+		{spec: "@daily", zone: "UTC", next: time.Date(2026, 1, 2, 0, 0, 0, 0, time.UTC)},
 		// Midnight UTC is 08:00 in Shanghai, so the next 02:00 there is the
-		// following day's.
-		{spec: "CRON_TZ=Asia/Shanghai 0 0 2 * * *", next: time.Date(2026, 1, 2, 2, 0, 0, 0, shanghai)},
+		// following day's: 18:00 UTC.
+		{spec: "CRON_TZ=Asia/Shanghai 0 0 2 * * *", zone: "Asia/Shanghai", next: time.Date(2026, 1, 1, 18, 0, 0, 0, time.UTC)},
 	}
 	for _, tc := range cases {
 		t.Run(tc.spec, func(t *testing.T) {
 			j, err := newJob(noopJob, tc.spec, "zone-job")
 			require.NoError(t, err)
+			spec, ok := j.schedule.(*cron.SpecSchedule)
+			require.True(t, ok, "an expression parses to a spec schedule")
+			require.Equal(t, tc.zone, spec.Location.String(), "the zone the schedule is read in")
 			got := j.schedule.Next(from)
-			require.True(t, got.Equal(tc.next), "want %s, got %s", tc.next.UTC(), got.UTC())
+			require.True(t, got.Equal(tc.next), "want %s, got %s", tc.next, got.UTC())
 		})
 	}
 }
@@ -98,10 +102,11 @@ func TestLoopRunsAtEachInstant(t *testing.T) {
 
 // TestInstantsPassingDuringARunAreSkipped proves a slow round never has the
 // instants it overran piled on top of it: the loop resumes with the first
-// instant after the run ended. A round overrunning three instants is
-// followed by one run, not four.
+// instant after the run ended, and logs how many instants the run cost. A
+// round overrunning three instants is followed by one run, not four, and by
+// a warning naming the three.
 func TestInstantsPassingDuringARunAreSkipped(t *testing.T) {
-	withCronjobLoggerConfig(t)
+	dir := withCronjobLoggerConfig(t)
 	resetCronjobState(t)
 	clock := withFakeClock(t, time.Date(2026, 1, 1, 10, 0, 0, 0, time.UTC))
 
@@ -129,6 +134,12 @@ func TestInstantsPassingDuringARunAreSkipped(t *testing.T) {
 	awaitSignal(t, entered, "the round after the overrun")
 	require.NoError(t, stop(context.Background()))
 	require.EqualValues(t, 2, runs.Load(), "the instants overrun by the first round must be skipped")
+
+	pkgzap.Clean()
+	entry := readLogEntry(t, filepath.Join(dir, "cronjob.log"), "cronjob skipped instants")
+	require.Equal(t, "overrun-job", entry["name"])
+	require.EqualValues(t, 3, entry["skipped"], "the warning must count the instants the run cost")
+	require.Equal(t, "2026-01-01T10:05:00Z", entry["next"])
 }
 
 // TestStopEndsTheRoundAndWaitsForIt proves stop ends the context of a
@@ -245,6 +256,19 @@ func TestRegistrationErrorsFailStartup(t *testing.T) {
 			want:     `cronjob "sample-job": invalid schedule "not a schedule"`,
 		},
 		{
+			// The parser would read Local as the process's own zone — the one
+			// zone replicas need not share, and the one the UTC default is
+			// there to rule out — so naming it is refused, with either prefix.
+			name:     "Local zone",
+			register: func() { Register(noopJob, "CRON_TZ=Local 0 0 2 * * *", "sample-job") },
+			want:     `names the Local zone`,
+		},
+		{
+			name:     "Local zone with the short prefix",
+			register: func() { Register(noopJob, "TZ=Local 0 0 2 * * *", "sample-job") },
+			want:     `names the Local zone`,
+		},
+		{
 			name: "duplicate name",
 			register: func() {
 				Register(noopJob, "* * * * * *", "sample-job")
@@ -324,14 +348,24 @@ func TestStartFallsBackToLocalLoggerWithoutShared(t *testing.T) {
 	require.Contains(t, string(data), "scheduled cronjob")
 }
 
-// TestSchedulerRunsAsLifecycleComponent proves importing the package is what
-// enables scheduling: the component registered from init starts the
-// scheduler when bootstrap starts the lifecycle components, and stops it
-// when bootstrap stops them.
-func TestSchedulerRunsAsLifecycleComponent(t *testing.T) {
+// TestSchedulerIsALifecycleComponent proves importing the package is what
+// enables scheduling: init registered the scheduler as a lifecycle component
+// whose Start and Stop are this package's, so bootstrap starts it once the
+// tables are ready and stops it as the process drains. The component is
+// driven directly — a lifecycle stage starts once per process, which would
+// make the test unrepeatable.
+func TestSchedulerIsALifecycleComponent(t *testing.T) {
 	withCronjobLoggerConfig(t)
 	resetCronjobState(t)
 	clock := withFakeClock(t, time.Date(2026, 1, 1, 10, 0, 0, 0, time.UTC))
+
+	var component lifecycle.Component
+	for _, c := range lifecycle.Components(lifecycle.StageComponent) {
+		if c.Name == "cronjob" {
+			component = c
+		}
+	}
+	require.NotNil(t, component.Start, "the scheduler must register itself as a lifecycle component")
 
 	entered := make(chan struct{}, 1)
 	Register(func(context.Context) error {
@@ -339,11 +373,10 @@ func TestSchedulerRunsAsLifecycleComponent(t *testing.T) {
 		return nil
 	}, "* * * * * *", "component-job")
 
-	require.NoError(t, lifecycle.Start(context.Background(), lifecycle.StageComponent))
+	require.NoError(t, component.Start(context.Background()))
 	clock.Advance(time.Second)
 	awaitSignal(t, entered, "the round")
-
-	lifecycle.Stop(context.Background())
+	require.NoError(t, component.Stop(context.Background()))
 	require.NotNil(t, current, "the scheduler must have been started through the component")
 }
 
@@ -583,16 +616,6 @@ func withFakeClock(t *testing.T, now time.Time) *fakeClock {
 		clk = original
 	})
 	return clock
-}
-
-// withLocalZone runs the test with the process zone set to loc, the way a
-// process deployed in that zone sees time.Local.
-func withLocalZone(t *testing.T, loc *time.Location) {
-	t.Helper()
-
-	original := time.Local
-	time.Local = loc
-	t.Cleanup(func() { time.Local = original })
 }
 
 // awaitRun receives the next run from runs, failing the test when none

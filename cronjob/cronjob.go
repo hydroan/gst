@@ -22,9 +22,9 @@
 // instant it runs for nor lets a test drive the clock.
 //
 // A registration that cannot be honored — no name, no schedule, a schedule
-// that does not parse, a name already taken — fails the process at startup
-// rather than dropping the job: the name is the job's identity in logs and,
-// under a lease, its key.
+// that does not parse or names the process's own zone, a name already taken —
+// fails the process at startup rather than dropping the job: the name is the
+// job's identity in every log line about it.
 package cronjob
 
 import (
@@ -102,10 +102,12 @@ func init() {
 // Register declares fn as the job named name, run on spec: a six-field cron
 // expression, seconds first, or a descriptor such as "@hourly" or "@every
 // 5m". Schedules are read in UTC — an expression that must follow another
-// wall clock carries a CRON_TZ= prefix — and "@every" runs on the multiples
-// of its period from the Unix epoch, so every replica computes the same
-// instants. Registration belongs in package init functions: the scheduler
-// starts with the process, and a registration after that panics.
+// wall clock carries a CRON_TZ= prefix naming a fixed zone; Local, the
+// process's own zone, is refused because replicas need not share it — and
+// "@every" runs on the multiples of its period from the Unix epoch, so every
+// replica computes the same instants. Registration belongs in package init
+// functions: the scheduler starts with the process, and a registration after
+// that panics.
 //
 // fn receives the context of the round it runs in. The context ends when the
 // process begins shutting down, so a long round can stop early; it carries
@@ -116,8 +118,8 @@ func init() {
 // round is still in flight is skipped.
 //
 // A registration that cannot be honored — no name, no schedule, a schedule
-// that does not parse, a name already taken, a nil fn — fails the process at
-// startup.
+// that does not parse or names the Local zone, a name already taken, a nil
+// fn — fails the process at startup.
 func Register(fn func(ctx context.Context) error, spec string, name string) {
 	mu.Lock()
 	defer mu.Unlock()
@@ -148,12 +150,25 @@ func newJob(fn func(ctx context.Context) error, spec, name string) (*job, error)
 	case slices.ContainsFunc(jobs, func(j *job) bool { return j.name == name }):
 		return nil, errors.Newf("cronjob %q: registered twice", name)
 	}
+	if zone, named := zoneOf(spec); named && zone == "Local" {
+		return nil, errors.Newf("cronjob %q: schedule %q names the Local zone, which is the process's own and need not be shared by every replica; name a fixed zone, or none for UTC", name, spec)
+	}
 
 	parsed, err := parser.Parse(spec)
 	if err != nil {
 		return nil, errors.Wrapf(err, "cronjob %q: invalid schedule %q", name, spec)
 	}
 	return &job{name: name, spec: spec, fn: fn, schedule: inUTC(parsed)}, nil
+}
+
+// zoneOf returns the zone a schedule names with its CRON_TZ= or TZ= prefix —
+// the prefixes the parser reads — and whether it names one at all.
+func zoneOf(spec string) (zone string, named bool) {
+	first, _, _ := strings.Cut(spec, " ")
+	if zone, named = strings.CutPrefix(first, "CRON_TZ="); named {
+		return zone, true
+	}
+	return strings.CutPrefix(first, "TZ=")
 }
 
 // inUTC pins a parsed schedule to UTC: an expression that names no zone is
@@ -165,7 +180,8 @@ func inUTC(s cron.Schedule) cron.Schedule {
 	case *cron.SpecSchedule:
 		// The parser leaves Location at time.Local for an expression that
 		// names no zone; one with a CRON_TZ= prefix gets that zone, which
-		// stays.
+		// stays. An expression naming Local itself never gets here — newJob
+		// refuses it — so time.Local can only mean no zone was named.
 		if s.Location == time.Local {
 			s.Location = time.UTC
 		}
@@ -234,13 +250,15 @@ func start(ctx context.Context) error {
 	return nil
 }
 
-// stop halts scheduling, ends the context of every round in flight and
-// waits for the rounds to return, for as long as ctx allows: a job that
-// ignores its context cannot hold the shutdown hostage, and giving up on one
-// is reported as the error bootstrap logs. Bootstrap runs it before the HTTP
-// drain and before the connections jobs may still be using are closed;
-// without it, shutdown would kill jobs mid-write. In a process that never
-// started the scheduler it is a no-op.
+// stop ends the context of every loop and round in flight and waits for the
+// rounds to return, for as long as ctx allows: a job that ignores its context
+// cannot hold the shutdown hostage, and giving up on one is reported as the
+// error bootstrap logs. Under bootstrap, scheduling has halted before stop
+// runs: the process context ends the moment the drain begins, which stops
+// the loops and ends the rounds' contexts; stop itself runs once the HTTP
+// listener has drained and before the connections jobs may still be using
+// are closed — without it, shutdown would kill jobs mid-write. In a process
+// that never started the scheduler it is a no-op.
 func stop(ctx context.Context) error {
 	mu.Lock()
 	s := current
@@ -261,9 +279,10 @@ func stop(ctx context.Context) error {
 // loop runs the job at each instant of its schedule, starting with next,
 // until ctx ends. The instant after a run is computed from the moment the
 // run ended, so instants that passed while a run was in flight are skipped,
-// never piled on top of it: a slow round must not multiply its downstream
-// calls. A schedule with no instant left — a day that never comes — ends
-// the loop.
+// never piled on top of it — a slow round must not multiply its downstream
+// calls — and every skip is logged with the number of instants it cost, so
+// a job that keeps overrunning its period does not quietly run less often.
+// A schedule with no instant left — a day that never comes — ends the loop.
 func (j *job) loop(ctx context.Context, next time.Time) {
 	for {
 		if next.IsZero() {
@@ -281,8 +300,22 @@ func (j *job) loop(ctx context.Context, next time.Time) {
 		if after.Before(next) {
 			after = next
 		}
-		next = j.schedule.Next(after)
+		following := j.schedule.Next(after)
+		if skipped := j.instantsBetween(next, following); skipped > 0 {
+			log.Warnz("cronjob skipped instants", zap.String("name", j.name), zap.String("spec", j.spec), zap.Int("skipped", skipped), zap.Time("after", next), zap.Time("next", following))
+		}
+		next = following
 	}
+}
+
+// instantsBetween counts the instants of the schedule after from and before
+// to: the ones a run that ended after them skipped.
+func (j *job) instantsBetween(from, to time.Time) int {
+	skipped := 0
+	for t := j.schedule.Next(from); !t.IsZero() && t.Before(to); t = j.schedule.Next(t) {
+		skipped++
+	}
+	return skipped
 }
 
 // run executes the round scheduled for at. Round identity, panic recovery,
