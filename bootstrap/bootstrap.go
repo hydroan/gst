@@ -178,9 +178,12 @@ func Run() error {
 	// The routes-ready hooks run right after the last barrier and before
 	// anything that could use what they seed: the components below — a
 	// scheduler catching up an instant on start-up would otherwise race the
-	// seeding — and the listener after them. A hook that fails ends Run the
-	// way a failing listener would.
-	if err := router.RunRoutesReadyHooks(); err != nil {
+	// seeding — and the listener after them. Across the deployment they run
+	// one process at a time, under the startup lock on the primary database:
+	// seeding reads before it writes, and replicas starting together would
+	// each find nothing and each write. A hook that fails ends Run the way a
+	// failing listener would.
+	if err := dbruntime.Serialized("seed", router.RunRoutesReadyHooks); err != nil {
 		return err
 	}
 
@@ -256,9 +259,46 @@ func warnUnlinkedProviders() {
 	for _, c := range lifecycle.Components(lifecycle.StageProvider) {
 		linked = append(linked, c.Name)
 	}
-	for _, name := range unlinkedProviders(config.EnabledProviders(), linked) {
+	for _, name := range unlinkedProviders(enabledProviders(), linked) {
 		zap.S().Warnw("provider enabled in configuration but not compiled into this binary", "provider", name, "import", "github.com/hydroan/gst/provider/"+name)
 	}
+}
+
+// enabledProviders returns the names — the package names under provider/ —
+// of the providers the loaded configuration enables, to compare with the
+// providers the binary linked.
+//
+// The clickhouse section serves two things: the provider, and the ClickHouse
+// dialect when it is the primary database. With ClickHouse as the primary
+// database the section enables the dialect, and no provider is expected.
+func enabledProviders() []string {
+	sections := []struct {
+		name    string
+		enabled bool
+	}{
+		{"cassandra", config.App.Cassandra.Enabled},
+		{"clickhouse", config.App.Clickhouse.Enabled && config.App.Database.Type != config.DBClickHouse},
+		{"elastic", config.App.Elasticsearch.Enabled},
+		{"etcd", config.App.Etcd.Enabled},
+		{"influxdb", config.App.Influxdb.Enabled},
+		{"kafka", config.App.Kafka.Enabled},
+		{"ldap", config.App.Ldap.Enabled},
+		{"minio", config.App.Minio.Enabled},
+		{"mongo", config.App.Mongo.Enabled},
+		{"mqtt", config.App.Mqtt.Enabled},
+		{"nats", config.App.Nats.Enabled},
+		{"rethinkdb", config.App.RethinkDB.Enabled},
+		{"rocketmq", config.App.RocketMQ.Enabled},
+		{"scylla", config.App.Scylla.Enabled},
+	}
+
+	var names []string
+	for _, section := range sections {
+		if section.enabled {
+			names = append(names, section.name)
+		}
+	}
+	return names
 }
 
 // unlinkedProviders returns the enabled providers that are not linked.

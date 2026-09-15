@@ -79,9 +79,12 @@ func Routes() map[string][]string {
 // OnRoutesReady registers a hook that runs after all routes are registered
 // and every table exists, before the components that run alongside the
 // server start and before the server starts — the place for seeding the
-// data the first round of a job and the first request both count on. The
-// hook receives a route snapshot; mutating it does not change the router
-// registry.
+// data the first round of a job and the first request both count on. Across
+// a deployment the hooks run one process at a time, so a hook that reads
+// before it writes never races another replica's; the others wait for as
+// long as the hooks take, and the orchestrator's startup probe is what
+// bounds a process stuck in them. The hook receives a route snapshot;
+// mutating it does not change the router registry.
 func OnRoutesReady(fn func(routes map[string][]string) error) {
 	if fn == nil {
 		return

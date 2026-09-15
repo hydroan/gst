@@ -99,4 +99,4 @@ kubectl apply -f examples/cluster/deploy/k8s/
 kubectl get pods -l app=cluster -w
 ```
 
-`deploy/k8s/mysql.yaml` 里的 MySQL 只是给示例用的，没有持久卷；清单里没有让应用 Pod 等 MySQL，第一次 apply 时应用 Pod 会在 MySQL 就绪前失败重启几次，随后自己起来（启动探针给了足够的时间）。三个 Pod 一起对空库建表和 compose 一样安全；正式环境的做法仍是先 `gg migrate` 建表、副本一律 `DATABASE_AUTO_MIGRATE=false`，让 schema 变更走评审而不是启动副作用。`kubectl delete pod <leader>` 对应场景 2，`kubectl rollout restart deployment/cluster` 能看到滚动更新期间任务不断：PodDisruptionBudget 保证至少两个副本在，租约让工作在副本之间接力。
+`deploy/k8s/mysql.yaml` 里的 MySQL 只是给示例用的，没有持久卷；清单里没有让应用 Pod 等 MySQL，第一次 apply 时应用 Pod 会在 MySQL 就绪前失败重启几次，随后自己起来（启动探针给了足够的时间）。三个 Pod 一起对空库建表和 compose 一样安全：建表和播种在整个部署里一次只有一个 Pod 在做，其余排队等，等多久由前面的 Pod 决定，启动探针的 `failureThreshold × periodSeconds` 是唯一的上限，播种慢的项目按自己的耗时调它。正式环境的做法仍是先 `gg migrate` 建表、副本一律 `DATABASE_AUTO_MIGRATE=false`，让 schema 变更走评审而不是启动副作用。`kubectl delete pod <leader>` 对应场景 2，`kubectl rollout restart deployment/cluster` 能看到滚动更新期间任务不断：PodDisruptionBudget 保证至少两个副本在，租约让工作在副本之间接力。

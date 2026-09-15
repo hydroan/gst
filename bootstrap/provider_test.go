@@ -73,9 +73,7 @@ func TestEveryProviderGetsItsOwnLogFile(t *testing.T) {
 // warning silently never fire. Every Enabled switch in the configuration is
 // turned on by reflection, so a new section joins the check on its own.
 func TestEveryProviderHasAConfigurationSwitch(t *testing.T) {
-	original := config.App
-	config.App = new(config.Config)
-	t.Cleanup(func() { config.App = original })
+	withFreshConfig(t)
 
 	enableEverySwitch(reflect.ValueOf(config.App).Elem())
 	// With ClickHouse as the primary database its switch serves the dialect,
@@ -83,10 +81,48 @@ func TestEveryProviderHasAConfigurationSwitch(t *testing.T) {
 	config.App.Database.Type = config.DBMySQL
 
 	enabled := make(map[string]bool)
-	for _, name := range config.EnabledProviders() {
+	for _, name := range enabledProviders() {
 		enabled[name] = true
 	}
 	require.Equal(t, providerDirectories(t), enabled, "the switch list must name exactly the packages under provider/")
+}
+
+// TestEnabledProvidersNamesTheEnabledSections proves the names come from the
+// enabled switches alone, under the provider package names the linked
+// providers are compared against.
+func TestEnabledProvidersNamesTheEnabledSections(t *testing.T) {
+	withFreshConfig(t)
+
+	require.Empty(t, enabledProviders())
+
+	config.App.Kafka.Enabled = true
+	config.App.Elasticsearch.Enabled = true
+	require.Equal(t, []string{"elastic", "kafka"}, enabledProviders())
+}
+
+// TestEnabledProvidersLeaveClickhouseToThePrimaryDialect proves the
+// clickhouse switch names the provider only while ClickHouse is not the
+// primary database: as the primary database the switch enables the dialect,
+// and a binary without the provider is in order.
+func TestEnabledProvidersLeaveClickhouseToThePrimaryDialect(t *testing.T) {
+	withFreshConfig(t)
+
+	config.App.Clickhouse.Enabled = true
+	config.App.Database.Type = config.DBClickHouse
+	require.Empty(t, enabledProviders())
+
+	config.App.Database.Type = config.DBMySQL
+	require.Equal(t, []string{"clickhouse"}, enabledProviders())
+}
+
+// withFreshConfig points the configuration at an empty one for the test and
+// restores the previous one afterwards.
+func withFreshConfig(t *testing.T) {
+	t.Helper()
+
+	original := config.App
+	config.App = new(config.Config)
+	t.Cleanup(func() { config.App = original })
 }
 
 // enableEverySwitch sets every bool field named Enabled that sits directly
