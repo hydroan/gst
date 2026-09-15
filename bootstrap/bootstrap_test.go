@@ -48,12 +48,26 @@ func TestTeardownStopsTheLogWritersLast(t *testing.T) {
 		"the temp directory and then the log writers must be the last things torn down")
 }
 
+// TestUnlinkedProvidersAreTheEnabledOnesTheBinaryLacks proves the warning
+// bootstrap logs names exactly the enabled providers no package linked.
+func TestUnlinkedProvidersAreTheEnabledOnesTheBinaryLacks(t *testing.T) {
+	require.Equal(t, []string{"nats"}, unlinkedProviders([]string{"kafka", "nats"}, []string{"kafka", "mongo"}))
+	require.Empty(t, unlinkedProviders([]string{"kafka"}, []string{"kafka"}))
+	require.Empty(t, unlinkedProviders(nil, nil))
+}
+
 // TestRunDrainsBeforeTeardownWhenAListenerFails proves a listener failure
 // stops the process the way a signal does: readiness goes down and the
 // process context is canceled while the listener still answers, the drain
 // window passes, and only then does teardown begin — with the failure
 // returned.
 func TestRunDrainsBeforeTeardownWhenAListenerFails(t *testing.T) {
+	// Run is single-shot: it seals the component stage and unwinds the
+	// cleanup stack, so a process can go through it once.
+	if runCovered {
+		t.Skip("Run ran once in this process already; the first run of this test covered it")
+	}
+	runCovered = true
 	bootstrapProcess(t)
 	original := config.App.Server.ShutdownDelay
 	config.App.Server.ShutdownDelay = 2 * time.Second
@@ -89,6 +103,8 @@ var (
 	bootstrapOnce   sync.Once
 	errBootstrap    error
 	bootstrapLogDir string
+	// runCovered records that Run has been driven once in this process.
+	runCovered bool
 )
 
 // bootstrapProcess bootstraps the test process — on the scratch log

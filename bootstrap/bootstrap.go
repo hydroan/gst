@@ -15,6 +15,7 @@ import (
 	"context"
 	"os"
 	"os/signal"
+	"slices"
 	"sync"
 	"syscall"
 	"time"
@@ -93,6 +94,7 @@ func Bootstrap() error {
 	// for the same reason.
 	registerCleanup(pkgzap.Clean)
 	registerCleanup(config.Clean)
+	warnUnlinkedProviders()
 	// First database drain: create the tables registered before the clients
 	// and modules initialize, typically by model package init functions.
 	dbruntime.Wait()
@@ -222,6 +224,32 @@ func Run() error {
 	cancelProcess()
 	awaitDrain(sigCh)
 	return err
+}
+
+// warnUnlinkedProviders reports every provider the configuration enables
+// that the binary never linked: nothing will start it, and its first use
+// would fail deep inside a request rather than here. A warning rather than
+// a failure, because binaries built from one project may share one
+// configuration while linking different providers.
+func warnUnlinkedProviders() {
+	linked := make([]string, 0)
+	for _, c := range lifecycle.Components(lifecycle.StageProvider) {
+		linked = append(linked, c.Name)
+	}
+	for _, name := range unlinkedProviders(config.EnabledProviders(), linked) {
+		zap.S().Warnw("provider enabled in configuration but not compiled into this binary", "provider", name, "import", "github.com/hydroan/gst/provider/"+name)
+	}
+}
+
+// unlinkedProviders returns the enabled providers that are not linked.
+func unlinkedProviders(enabled, linked []string) []string {
+	var missing []string
+	for _, name := range enabled {
+		if !slices.Contains(linked, name) {
+			missing = append(missing, name)
+		}
+	}
+	return missing
 }
 
 // stopLifecycle cancels the process context, so any component still taking
