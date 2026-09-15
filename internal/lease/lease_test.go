@@ -360,6 +360,38 @@ func TestHoldEndsWithItsParent(t *testing.T) {
 	require.ErrorIs(t, context.Cause(held), context.Canceled)
 }
 
+// TestHoldKeepsRenewingUntilStoppedAfterItsParentEnds proves the renewals
+// outlive the parent context: parent ending tells the work to stop, and until
+// the holder stops the renewals — once its work has returned — the name stays
+// its own, so no other process starts the same work while this one is still
+// winding down.
+func TestHoldKeepsRenewingUntilStoppedAfterItsParentEnds(t *testing.T) {
+	withFastProtocol(t)
+	ctx := context.Background()
+	name := uniqueName(t)
+
+	holder, claimed, err := Claim(ctx, name)
+	require.NoError(t, err)
+	require.True(t, claimed)
+
+	parent, cancelParent := context.WithCancel(ctx)
+	held, stop := Hold(parent, holder)
+	cancelParent()
+	awaitDone(held, t)
+
+	// Long past the lease's duration, the name is still refused to others.
+	time.Sleep(2 * leaseDuration)
+	_, claimed, err = Claim(ctx, name)
+	require.NoError(t, err)
+	require.False(t, claimed, "the lease must stay renewed until the holder stops the renewals")
+
+	stop()
+	require.NoError(t, holder.Release(ctx))
+	_, claimed, err = Claim(ctx, name)
+	require.NoError(t, err)
+	require.True(t, claimed, "released once the work has returned, the name is free")
+}
+
 // TestHoldEndsWhenTheLeaseIsTakenAway proves the context Hold hands out
 // ends with ErrLost once a renewal finds the lease gone, on every dialect.
 func TestHoldEndsWhenTheLeaseIsTakenAway(t *testing.T) {
@@ -420,13 +452,7 @@ func awaitDone(ctx context.Context, t *testing.T) {
 func withFastProtocol(t *testing.T) {
 	t.Helper()
 
-	originalDuration, originalInterval, originalDeadline := leaseDuration, renewInterval, localDeadline
-	leaseDuration = 300 * time.Millisecond
-	renewInterval = 50 * time.Millisecond
-	localDeadline = 150 * time.Millisecond
-	t.Cleanup(func() {
-		leaseDuration, renewInterval, localDeadline = originalDuration, originalInterval, originalDeadline
-	})
+	t.Cleanup(SetTimings(300*time.Millisecond, 50*time.Millisecond, 150*time.Millisecond))
 }
 
 // uniqueName returns a coordinated name no other test uses: the table is

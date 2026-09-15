@@ -17,7 +17,8 @@
 //	             term = term + 1, expires_at_ms = :now + 15000 [, slot_ms = :slot]
 //	          WHERE name = :name AND expires_at_ms <= :now [AND slot_ms < :slot]
 //	         1 row: claimed. 0 rows: held by someone, or the slot was taken.
-//	         No row yet: INSERT; a unique-key collision means someone was first.
+//	         No row yet: INSERT, worded to do nothing when the name is there
+//	         (INSERT IGNORE, ON CONFLICT DO NOTHING); 0 rows: someone was first.
 //	renew    UPDATE gst_leases SET expires_at_ms = :now + 15000
 //	          WHERE name = :name AND holder = :holder AND expires_at_ms > :now
 //	         0 rows: lost.
@@ -78,6 +79,19 @@ var (
 	localDeadline = 10 * time.Second
 )
 
+// SetTimings replaces the protocol's timings and returns the function that
+// restores them. It exists for the tests of the capabilities built on leases,
+// which play the protocol out in milliseconds; a process runs the one
+// protocol every process of its deployment agrees on, so nothing else calls
+// it.
+func SetTimings(lease, renew, deadline time.Duration) (restore func()) {
+	originalLease, originalRenew, originalDeadline := leaseDuration, renewInterval, localDeadline
+	leaseDuration, renewInterval, localDeadline = lease, renew, deadline
+	return func() {
+		leaseDuration, renewInterval, localDeadline = originalLease, originalRenew, originalDeadline
+	}
+}
+
 // table is the name of the lease table.
 const table = "gst_leases"
 
@@ -107,7 +121,7 @@ func (*row) TableName() string { return table }
 func (*row) Purge() bool       { return true }
 
 // Indexes declares the name unique: one row per coordinated name is what
-// makes a claim's INSERT lose to whoever inserted first.
+// makes a claim's INSERT insert nothing when another process inserted first.
 func (*row) Indexes() []modelregistry.Index {
 	return []modelregistry.Index{{Fields: []string{"Name"}, Unique: true}}
 }
@@ -215,22 +229,37 @@ func claim(ctx context.Context, name string, slotMs *int64) (*Handle, bool, erro
 		return handleOf(ctx, db, name, holder)
 	}
 
-	// No row was free. Either the name is held — the insert then collides
-	// with it — or the table has never seen the name and the insert is the
-	// claim; losing the insert to another process means it was first.
+	// No row was free. Either the name is held — the insert then does
+	// nothing — or the table has never seen the name and the insert is the
+	// claim; inserting nothing because another process inserted first means
+	// it was first. Neither is an error, and neither reaches the SQL log as
+	// one: the refused claims of every replica are the protocol's normal
+	// traffic.
 	var slotValue int64
 	if slotMs != nil {
 		slotValue = *slotMs
 	}
-	insert := fmt.Sprintf("INSERT INTO %s (name, holder, instance, term, expires_at_ms, slot_ms, created_at, updated_at) VALUES (?, ?, ?, 1, %s + ?, ?, ?, ?)", table, now)
-	res = db.WithContext(ctx).Exec(insert, name, holder, instance.ID(), leaseDuration.Milliseconds(), slotValue, updatedAt, updatedAt)
+	res = db.WithContext(ctx).Exec(claimInsert(dialectOf(db), now), name, holder, instance.ID(), leaseDuration.Milliseconds(), slotValue, updatedAt, updatedAt)
 	if res.Error != nil {
-		if errors.Is(res.Error, gorm.ErrDuplicatedKey) {
-			return nil, false, nil
-		}
 		return nil, false, errors.Wrapf(res.Error, "claim lease %q", name)
 	}
+	if res.RowsAffected == 0 {
+		return nil, false, nil
+	}
 	return &Handle{name: name, holder: holder, term: 1, slotMs: slotValue}, true, nil
+}
+
+// claimInsert returns the insert that claims a name the table has never
+// seen, worded so that finding the name there — inserted by another process
+// a moment earlier, or held for a long time — inserts nothing instead of
+// failing on the unique key: INSERT IGNORE on MySQL, ON CONFLICT DO NOTHING
+// on PostgreSQL and SQLite.
+func claimInsert(dialect, now string) string {
+	columns := fmt.Sprintf("(name, holder, instance, term, expires_at_ms, slot_ms, created_at, updated_at) VALUES (?, ?, ?, 1, %s + ?, ?, ?, ?)", now)
+	if dialect == "mysql" {
+		return fmt.Sprintf("INSERT IGNORE INTO %s %s", table, columns)
+	}
+	return fmt.Sprintf("INSERT INTO %s %s ON CONFLICT (name) DO NOTHING", table, columns)
 }
 
 // handleOf reads the term the claim just started; the update that won the
