@@ -16,7 +16,7 @@
     "postNotes": [
       "Add authn.AddLoginObserver exactly once: observers multicast, so a second call records every login twice.",
       "Operation logs come from the audit pipeline: set AUDIT_ENABLED=true (or the audit.enabled config key), otherwise the operation log stays empty.",
-      "Register the retention job in project-owned cronjob setup: cronjob.Register(servicelogmgmt.Cleanup, \"0 0 * * * *\", \"cleanup logs\")."
+      "Register the retention job in project-owned cronjob setup: cronjob.Register(servicelogmgmt.Cleanup, \"0 0 * * * *\", \"logmgmt_cleanup\")."
     ]
   }
 }
