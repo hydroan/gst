@@ -18,14 +18,14 @@
 // leader's last renewal and taken by the next campaign after that, 21
 // seconds after the crash at most, and a name its leader released — the
 // process shut down, the work returned — is taken by the next campaign at
-// once, within 6 seconds. The work runs on a context that
-// ends the moment the tenure does, and the transactions opened on that
-// context end with it. Work that runs on past that point — it ignores its
-// context — would run beside the new leader's, the very thing the lease
-// exists to rule out, so 5 seconds after a tenure ended by a lost lease the
-// process fails: bootstrap ends Run with the failure and the orchestrator
-// restarts the replica. A ClickHouse primary database cannot carry leases,
-// so a registration fails the start there.
+// once, within 6 seconds. The work runs on a context that ends the moment
+// the tenure does, and the transactions opened on that context end with
+// it. Work that runs on past that point — it ignores its context — would
+// run beside the new leader's, the very thing the lease exists to rule
+// out, so 5 seconds after a tenure ended by a lost lease the process fails:
+// bootstrap ends Run with the failure and the orchestrator restarts the
+// replica. A ClickHouse primary database cannot carry leases, so a
+// registration fails the start there.
 //
 // The work runs again from scratch on the replica that takes the name over,
 // and its previous run may have been cut anywhere: what it must not repeat,
@@ -143,11 +143,12 @@ func setLogger(l types.Logger) {
 // fn is expected to run until its context ends. The context ends when the
 // process begins shutting down or the lease behind the leadership is lost —
 // the replica could not renew it for 10 seconds, or found it taken — and
-// whatever fn does after that must stop: a transaction opened on the context
-// refuses to run once the lease is gone, a call already on the wire does
-// not, so fn watches the context around its own side effects. fn that has
-// not returned 5 seconds after its context ended by a lost lease fails the
-// process, see the package documentation. The context carries the tenure's
+// whatever fn does after that must stop: a database.Transaction opened on
+// the context refuses to run once the lease is gone, a plain write and a
+// call already on the wire do not, so fn watches the context around its own
+// side effects. fn that has not returned 5 seconds after its context ended
+// by a lost lease fails the process, see the package documentation. The
+// context carries the tenure's
 // identity — the name and a trace id of the tenure's own, see execctx — so
 // every statement and log line the work produces is annotated with the
 // tenure and found again from any of them.

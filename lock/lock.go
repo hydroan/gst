@@ -21,13 +21,12 @@
 // lease is lost — the replica could not renew it for 10 seconds, or found it
 // taken — or the caller's context ends, and the database.Transaction calls
 // it makes verify the lease first. Work cut short by a lost lease is
-// reported as ErrLost even
-// when it returned nothing: another holder may have started the same work
-// since, so its result is not the whole story. Work that runs on past that
-// point — it ignores its context — would run beside the new holder's, so 5
-// seconds after the loss the process fails, as it does for a leader or a
-// cron round. A ClickHouse primary database cannot carry leases, so a
-// declared lock fails the start there.
+// reported as ErrLost even when it returned nothing: another holder may
+// have started the same work since, so its result is not the whole story.
+// Work that runs on past that point — it ignores its context — would run
+// beside the new holder's, so 5 seconds after the loss the process fails,
+// as it does for a leader or a cron round. A ClickHouse primary database
+// cannot carry leases, so a declared lock fails the start there.
 //
 // The framework opens a single connection to SQLite, so there a transaction
 // of the work blocks the renewal of the lease: keep each transaction under 5
@@ -196,10 +195,9 @@ func start(context.Context) error {
 // receives a context that ends when the lease is lost or ctx ends, carries
 // the lease so that database.Transaction calls on it verify it first, and
 // keeps whatever identity ctx carried: the request's, the round's. A panic
-// in fn
-// is recovered into an error carrying its stack. fn that has not returned 5
-// seconds after its context ended by a lost lease fails the process, see the
-// package documentation.
+// in fn is recovered into an error carrying its stack. fn that has not
+// returned 5 seconds after its context ended by a lost lease fails the
+// process, see the package documentation.
 func (l *Lock) TryRun(ctx context.Context, fn func(ctx context.Context) error) error {
 	h, won, err := lease.Claim(ctx, l.leaseName())
 	if err != nil {

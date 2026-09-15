@@ -6,13 +6,16 @@ import (
 	"gorm.io/gorm"
 )
 
-// transactionGuard is the check every transaction runs on itself before its
-// first business statement. One package installs it, from its init: the
-// lease engine, so a transaction opened under a lease refuses to run once
-// the lease is lost. A project that links no such package has no guard, and
-// GuardTransaction costs it a nil check. The guard receives the handle the
-// transaction was opened on beside the transaction itself, so it can tell a
-// transaction on the primary database from one on another instance.
+// transactionGuard is the check every transaction opened through
+// database.Transaction or TransactionOn runs on itself before its first
+// business statement; the transactions the write paths open for themselves
+// and single-statement writes do not pass through it. One package installs
+// it, from its init: the lease engine, so such a transaction opened under a
+// lease refuses to run once the lease is lost. A project that links no such
+// package has no guard, and GuardTransaction costs it a nil check. The guard
+// receives the handle the transaction was opened on beside the transaction
+// itself, so it can tell a transaction on the primary database from one on
+// another instance.
 var transactionGuard func(ctx context.Context, base, tx *gorm.DB) error
 
 // SetTransactionGuard installs guard. It is called from a package init

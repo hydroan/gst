@@ -166,8 +166,9 @@ func init() {
 //
 // fn receives the context of the round it runs in. The context ends when the
 // process begins shutting down or the round's lease is lost, so a long round
-// can stop early, and a transaction opened on it refuses to run once the
-// lease is gone; a round still running 5 seconds after its lease was lost
+// can stop early, and a database.Transaction opened on it refuses to run
+// once the lease is gone — a plain write is not checked, the context is
+// what stops it; a round still running 5 seconds after its lease was lost
 // fails the process — another replica may be running the job's next instant
 // by then, and two rounds of a job never run at once. The context carries
 // the round's identity — the job name and a trace id of the round's own, see
@@ -503,8 +504,7 @@ func (j *job) catchUp(ctx context.Context) (time.Time, bool) {
 // lease — its context ends with the lease, its database.Transaction calls
 // verify the lease first, and a round that will not stop once the lease is
 // lost fails the process, see lease.Run — then gives the lease back so the
-// next instant is
-// free at once.
+// next instant is free at once.
 func (j *job) runInstant(ctx context.Context, at time.Time, catchUp bool) bool {
 	if j.perInstance {
 		// The round logs its own outcome.
