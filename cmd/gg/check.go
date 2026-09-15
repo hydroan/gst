@@ -1241,11 +1241,15 @@ func CheckAllowedDirectories(ignore gitignore.Matcher) []string {
 		"doc":        true,
 	}
 
+	// Directories that hold no Go packages: build and log output, and the
+	// conventional homes of deployment manifests and operator scripts.
 	whitelistDirs := map[string]bool{
 		"tmp":       true,
 		"logs":      true,
 		"dist":      true,
 		"generated": true,
+		"deploy":    true,
+		"scripts":   true,
 	}
 
 	// Read directory contents
