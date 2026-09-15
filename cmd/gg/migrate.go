@@ -94,13 +94,25 @@ func buildMigrateProgramForMode(moduleName string, schemaOnly bool, schemaSource
 func migrateProjectImports(moduleName string) string {
 	lines := make([]string, 0, len(constants.ProjectImportDirs))
 	for _, dir := range constants.ProjectImportDirs {
-		if sources, _ := filepath.Glob(filepath.Join(dir, "*.go")); len(sources) == 0 {
+		if !hasGoSources(dir) {
 			clioutput.Warn("", "%s/ has no Go files and is left out of the migration program; run gg gen to restore the scaffold", dir)
 			continue
 		}
 		lines = append(lines, fmt.Sprintf("\t_ %q", moduleName+"/"+dir))
 	}
 	return strings.Join(lines, "\n")
+}
+
+// hasGoSources reports whether dir holds a Go source file that is not a
+// test: a directory of test files alone is no package to import.
+func hasGoSources(dir string) bool {
+	sources, _ := filepath.Glob(filepath.Join(dir, "*.go"))
+	for _, source := range sources {
+		if !strings.HasSuffix(source, "_test.go") {
+			return true
+		}
+	}
+	return false
 }
 
 func runMigrateProgram(content string) error {
