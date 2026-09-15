@@ -2,6 +2,7 @@ package response
 
 import (
 	"fmt"
+	"math"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -21,6 +22,9 @@ import (
 // framework's models declare absent.
 func TestJSONEncodesWithStandardLibrary(t *testing.T) {
 	gin.SetMode(gin.TestMode)
+	// gin's codec is process-wide state: t.Setenv makes the testing package
+	// refuse t.Parallel here, so no other test runs while it is swapped.
+	t.Setenv("GST_TEST_SERIAL_GUARD", "gin JSON codec swapped")
 	restore := ginjson.API
 	ginjson.API = swappedGinCodec{}
 	t.Cleanup(func() { ginjson.API = restore })
@@ -29,21 +33,91 @@ func TestJSONEncodesWithStandardLibrary(t *testing.T) {
 		Name      string    `json:"name"`
 		CreatedAt time.Time `json:"created_at,omitzero"`
 	}
+	tests := []struct {
+		name string
+		data []any
+		want string
+	}{
+		{"with data", []any{&sample{Name: "sample"}}, `{"code":0,"data":{"name":"sample"},"msg":"success","trace_id":"trace-sample"}`},
+		{"without data", nil, `{"code":0,"data":null,"msg":"success","trace_id":"trace-sample"}`},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			w := httptest.NewRecorder()
+			c, _ := gin.CreateTestContext(w)
+			c.Set(consts.TRACE_ID, "trace-sample")
+
+			JSON(c, CodeSuccess, tt.data...)
+
+			if w.Code != http.StatusOK {
+				t.Errorf("status = %d, want %d", w.Code, http.StatusOK)
+			}
+			if got := w.Header().Get("Content-Type"); got != "application/json; charset=utf-8" {
+				t.Errorf("Content-Type = %q, want %q", got, "application/json; charset=utf-8")
+			}
+			if got := w.Body.String(); got != tt.want {
+				t.Errorf("body = %s, want %s", got, tt.want)
+			}
+		})
+	}
+}
+
+// TestJSONKeepsContentTypeSetBeforehand pins that the envelope render, like
+// gin's own JSON render, leaves a Content-Type already set on the response
+// alone.
+func TestJSONKeepsContentTypeSetBeforehand(t *testing.T) {
+	gin.SetMode(gin.TestMode)
 	w := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(w)
-	c.Set(consts.TRACE_ID, "trace-sample")
+	c.Header("Content-Type", "application/problem+json")
 
-	JSON(c, CodeSuccess, &sample{Name: "sample"})
+	JSON(c, CodeSuccess)
 
-	if w.Code != http.StatusOK {
-		t.Errorf("status = %d, want %d", w.Code, http.StatusOK)
+	if got := w.Header().Get("Content-Type"); got != "application/problem+json" {
+		t.Errorf("Content-Type = %q, want %q", got, "application/problem+json")
+	}
+}
+
+// TestJSONWritesNoBodyForBodylessStatus pins the envelope on a status that
+// cannot carry a body: the JSON Content-Type is still announced and nothing is
+// written.
+func TestJSONWritesNoBodyForBodylessStatus(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+
+	JSON(c, CodeSuccess.WithStatus(http.StatusNoContent))
+
+	if w.Code != http.StatusNoContent {
+		t.Errorf("status = %d, want %d", w.Code, http.StatusNoContent)
 	}
 	if got := w.Header().Get("Content-Type"); got != "application/json; charset=utf-8" {
 		t.Errorf("Content-Type = %q, want %q", got, "application/json; charset=utf-8")
 	}
-	want := `{"code":0,"data":{"name":"sample"},"msg":"success","trace_id":"trace-sample"}`
-	if got := w.Body.String(); got != want {
-		t.Errorf("body = %s, want %s", got, want)
+	if got := w.Body.String(); got != "" {
+		t.Errorf("body = %q, want empty", got)
+	}
+}
+
+// TestJSONRecordsMarshalFailureWithoutWritingBody pins the failure path of the
+// envelope render: an envelope encoding/json cannot encode writes no partial
+// body, and the error reaches the context's errors with the handler chain
+// aborted, as with gin's own JSON render.
+func TestJSONRecordsMarshalFailureWithoutWritingBody(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+
+	JSON(c, CodeSuccess, math.NaN())
+
+	if got := w.Body.String(); got != "" {
+		t.Errorf("body = %q, want empty", got)
+	}
+	if len(c.Errors) != 1 {
+		t.Errorf("context errors = %d, want 1", len(c.Errors))
+	}
+	if !c.IsAborted() {
+		t.Error("handler chain was not aborted after the encoding failure")
 	}
 }
 
