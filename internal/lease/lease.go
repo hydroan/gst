@@ -22,9 +22,13 @@
 //	renew    UPDATE gst_leases SET expires_at_ms = :now + 15000
 //	          WHERE name = :name AND holder = :holder AND expires_at_ms > :now
 //	         0 rows: lost.
-//	verify   SELECT term FROM gst_leases WHERE name = :name AND holder = :holder
-//	         Run as the first statement of every transaction under the lease;
-//	         0 rows: lost, and not one business statement runs.
+//	verify   SELECT term FROM gst_leases
+//	          WHERE name = :name AND holder = :holder AND expires_at_ms > :now
+//	         Run as the first statement of every database.Transaction opened
+//	         under the lease; 0 rows: lost, and not one business statement
+//	         runs. Writes outside such a transaction are not checked: like
+//	         a Kubernetes leader, work stops through its context, not
+//	         through a check on every statement.
 //	release  UPDATE gst_leases SET expires_at_ms = 0
 //	          WHERE name = :name AND holder = :holder
 //	         0 rows: the lease was already gone; the work is done either way.
@@ -126,7 +130,10 @@ var (
 	ErrUnsupportedDatabase = errors.New("leases need a MySQL, PostgreSQL or SQLite primary database")
 )
 
-// row is one coordinated name in gst_leases.
+// row is one coordinated name in gst_leases. The protocol reads one clock,
+// the database's, and it reads it through expires_at_ms alone; created_at
+// and updated_at are the framework's columns, stamped with the writing
+// process's clock, and are there for reading the table, not for deciding.
 type row struct {
 	modelregistry.AutoBase
 	Name        string `gorm:"size:191;not null"`  // "cron:<job>"; each capability prefixes its own names, within nameMaxLength
@@ -329,9 +336,10 @@ func handleOf(ctx context.Context, db *gorm.DB, name, holder string) (*Handle, b
 }
 
 // Renew extends the lease by leaseDuration from the database's now. ErrLost
-// reports the lease expired and was claimed by someone else, or was
-// released; any other error means the database could not answer, which is
-// not yet a loss — Hold keeps trying until the local deadline.
+// reports the lease expired — claimed by someone else since, or not yet,
+// which the holder's own deadline makes unreachable in normal operation —
+// or was released; any other error means the database could not answer,
+// which is not yet a loss — Hold keeps trying until the local deadline.
 func (h *Handle) Renew(ctx context.Context) error {
 	db, now, err := primary()
 	if err != nil {
@@ -370,19 +378,33 @@ func (h *Handle) Release(ctx context.Context) error {
 	return nil
 }
 
-// Verify is the transaction guard: run on tx as the first statement of a
+// Verify is the transaction guard: run as the first statement of a
 // transaction opened under a lease, it reports ErrLost when the lease is no
-// longer this holder's, so not one business statement of the transaction
+// longer this holder's — taken by another, released, or expired with no
+// one to take it yet — so not one business statement of the transaction
 // runs. A context carrying no lease passes. It is the third line behind the
 // holder's own deadline and the context cancellation, for the transaction
 // that would open after the loss.
-func Verify(ctx context.Context, tx *gorm.DB) error {
+//
+// The lease rows live on the primary database, so a transaction opened
+// there runs the check on itself, and one opened on another instance —
+// which has no lease table — is checked against the primary instead, still
+// before its first statement.
+func Verify(ctx context.Context, base, tx *gorm.DB) error {
 	h, ok := FromContext(ctx)
 	if !ok {
 		return nil
 	}
+	db, now, err := primary()
+	if err != nil {
+		return err
+	}
+	conn := tx
+	if base == nil || base.ConnPool != db.ConnPool {
+		conn = db.WithContext(ctx)
+	}
 	var term uint64
-	res := tx.Raw(fmt.Sprintf("SELECT term FROM %s WHERE name = ? AND holder = ?", table), h.name, h.holder).Scan(&term)
+	res := conn.Raw(fmt.Sprintf("SELECT term FROM %s WHERE name = ? AND holder = ? AND expires_at_ms > %s", table, now), h.name, h.holder).Scan(&term)
 	if res.Error != nil {
 		return errors.Wrapf(res.Error, "verify lease %q", h.name)
 	}
@@ -396,8 +418,8 @@ func Verify(ctx context.Context, tx *gorm.DB) error {
 type handleKey struct{}
 
 // WithHandle returns a context carrying h: the work on it runs under the
-// lease, its transactions verify the lease first, and TermFromContext finds
-// the term.
+// lease, the database.Transaction calls it makes verify the lease first, and
+// TermFromContext finds the term.
 func WithHandle(ctx context.Context, h *Handle) context.Context {
 	return context.WithValue(ctx, handleKey{}, h)
 }
@@ -449,7 +471,7 @@ func nowExpression(dialect string) (string, error) {
 	case "mysql":
 		return "FLOOR(UNIX_TIMESTAMP(NOW(3)) * 1000)", nil
 	case "postgres":
-		return "(EXTRACT(EPOCH FROM clock_timestamp()) * 1000)::BIGINT", nil
+		return "FLOOR(EXTRACT(EPOCH FROM clock_timestamp()) * 1000)::BIGINT", nil
 	case "sqlite":
 		return "CAST(unixepoch('subsec') * 1000 AS INTEGER)", nil
 	default:

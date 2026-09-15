@@ -94,7 +94,7 @@ func transactionOn(ctx context.Context, base *gorm.DB, fn func(ctx context.Conte
 	// stops here, before a statement of its own.
 	txErr := withTransactionBoundary(spanCtx, base, base.WithContext(spanCtx),
 		func(txCtx context.Context, tx *gorm.DB) error {
-			if err := dbruntime.GuardTransaction(txCtx, tx); err != nil {
+			if err := dbruntime.GuardTransaction(txCtx, base, tx); err != nil {
 				return err
 			}
 			return fn(txCtx)

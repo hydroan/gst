@@ -15,15 +15,15 @@ import (
 func TestTransactionGuardIsOneSlot(t *testing.T) {
 	t.Cleanup(func() { SetTransactionGuard(nil) })
 
-	require.NoError(t, GuardTransaction(context.Background(), nil), "no guard means no check")
+	require.NoError(t, GuardTransaction(context.Background(), nil, nil), "no guard means no check")
 
 	errGuard := errors.New("sample guard failure")
-	SetTransactionGuard(func(context.Context, *gorm.DB) error { return errGuard })
-	require.ErrorIs(t, GuardTransaction(context.Background(), nil), errGuard)
+	SetTransactionGuard(func(context.Context, *gorm.DB, *gorm.DB) error { return errGuard })
+	require.ErrorIs(t, GuardTransaction(context.Background(), nil, nil), errGuard)
 	require.PanicsWithValue(t, "dbruntime: a transaction guard is already installed", func() {
-		SetTransactionGuard(func(context.Context, *gorm.DB) error { return nil })
+		SetTransactionGuard(func(context.Context, *gorm.DB, *gorm.DB) error { return nil })
 	})
 
 	SetTransactionGuard(nil)
-	require.NoError(t, GuardTransaction(context.Background(), nil), "a cleared slot means no check")
+	require.NoError(t, GuardTransaction(context.Background(), nil, nil), "a cleared slot means no check")
 }
