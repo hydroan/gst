@@ -12,6 +12,7 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/gin-gonic/gin"
 	"github.com/gin-gonic/gin/binding"
+	ginjson "github.com/gin-gonic/gin/codec/json"
 	"github.com/hydroan/gst/consts"
 	"github.com/hydroan/gst/internal/modelregistry"
 	"github.com/hydroan/gst/internal/serviceregistry"
@@ -317,6 +318,42 @@ func TestBindJSONRequestHonorsDisabledValidator(t *testing.T) {
 	require.NoError(t, bindJSONRequest(c, target))
 	require.Len(t, target.Items, 1)
 }
+
+// TestBindJSONRequestDecodesWithStandardLibrary pins request decoding to
+// encoding/json whatever JSON codec gin was built with: the body binds as
+// encoding/json binds it, and a type mismatch still names the offending field,
+// which only encoding/json's error type carries.
+func TestBindJSONRequestDecodesWithStandardLibrary(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	restore := ginjson.API
+	ginjson.API = swappedGinCodec{}
+	t.Cleanup(func() { ginjson.API = restore })
+
+	bind := func(body string) (*normalizeProbeReq, error) {
+		req := httptest.NewRequest(http.MethodPost, "/bind-probes", strings.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		c, _ := gin.CreateTestContext(httptest.NewRecorder())
+		c.Request = req
+		target := &normalizeProbeReq{}
+		return target, bindJSONRequest(c, target)
+	}
+
+	target, err := bind(`{"items":[{"name":"first"}]}`)
+	require.NoError(t, err)
+	require.Len(t, target.Items, 1)
+
+	_, err = bind(`{"items":3}`)
+	var serviceErr *serviceregistry.Error
+	require.ErrorAs(t, err, &serviceErr)
+	require.Equal(t, "invalid value for field 'items'", serviceErr.Msg())
+}
+
+// swappedGinCodec stands in for the codec gin compiles in under the jsoniter,
+// go_json or sonic build tags: decoding through it fails recognizably, and the
+// methods it leaves to the nil embedded Core panic when called.
+type swappedGinCodec struct{ ginjson.Core }
+
+func (swappedGinCodec) Unmarshal([]byte, any) error { return errors.New("swapped codec") }
 
 // BenchmarkBindJSONRequest measures what binding one request body costs, the
 // price every write endpoint pays before its service sees anything.

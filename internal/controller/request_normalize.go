@@ -10,7 +10,6 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/gin-gonic/gin"
 	"github.com/gin-gonic/gin/binding"
-	ginjson "github.com/gin-gonic/gin/codec/json"
 	"github.com/hydroan/gst/internal/serviceregistry"
 	"github.com/hydroan/gst/internal/types"
 )
@@ -38,11 +37,14 @@ var jsonNull = []byte("null")
 // The body is decoded from the bytes already read rather than handed back to
 // gin as a reader: binding through gin wraps those bytes in a reader and drives
 // a streaming decoder across them, paying for a decoder and its buffer to
-// re-read what is already in memory. Decoding still goes through gin's codec
-// and validation through gin's validator, so an application that swapped the
-// JSON implementation keeps that choice here, and a bound request is checked
-// exactly as gin would check it. The body is put back either way — reading it
-// here must not stop anything downstream from reading it again.
+// re-read what is already in memory. Decoding goes through encoding/json
+// whatever JSON codec gin was built with: the codecs gin's jsoniter, go_json
+// and sonic build tags select decode differently, the framework's wire
+// contract is the encoding/json one, and clientSafeBindError translates
+// encoding/json's error types. Validation still goes through gin's validator,
+// so a bound request is checked exactly as gin would check it. The body is put
+// back either way — reading it here must not stop anything downstream from
+// reading it again.
 //
 // Decoding whole bytes also ends the body where the body ends: a streaming
 // decoder stops at the first JSON value and silently drops whatever follows,
@@ -60,7 +62,7 @@ func bindJSONRequest(c *gin.Context, target any) error {
 	}
 	c.Request.Body = io.NopCloser(bytes.NewReader(raw))
 
-	if err = ginjson.API.Unmarshal(raw, target); err != nil {
+	if err = json.Unmarshal(raw, target); err != nil {
 		return clientSafeBindError(err)
 	}
 	// A nil binding.Validator is gin's documented way to turn validation off;
