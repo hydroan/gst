@@ -30,11 +30,6 @@ const (
 	// is all a reader inspecting it right after the fact gets to see.
 	defaultLogBufferSize    = 256 * 1024
 	defaultLogFlushInterval = time.Second
-
-	// instanceKey is the field every entry carries naming the process that
-	// wrote it, so the entries of replicas — on one host, or restarts of one
-	// pod — can be told apart wherever they end up collected together.
-	instanceKey = "instance"
 )
 
 var (
@@ -183,7 +178,8 @@ func Clean() {
 }
 
 // newProviderFallback builds the logger an optional provider variable holds
-// until bootstrap's provider drain assigns its dedicated one. It derives from
+// until the lifecycle registry binds its dedicated one as the provider stage
+// starts (see lifecycle.Component.SetLogger). It derives from
 // the global zap logger installed by Init — no file, no extra sink, and in
 // particular no second lumberjack instance on any path — so an entry written
 // through it lands in the global log stream, tagged with the component name.
@@ -278,10 +274,12 @@ func NewSugared(filename string, opts ...Option) *zap.SugaredLogger {
 
 // newLogCore builds the core every logger here writes through: the encoder,
 // sink and level opts select, with the process identity stamped on every
-// entry. The field is encoded once, here, not once per entry.
+// entry so the entries of replicas — on one host, or restarts of one pod —
+// can be told apart wherever they end up collected together. The field is
+// encoded once, here, not once per entry.
 func newLogCore(opts ...Option) zapcore.Core {
 	core := zapcore.NewCore(newLogEncoder(opts...), newLogWriter(opts...), newLogLevel(opts...))
-	return core.With([]zapcore.Field{zap.String(instanceKey, instance.ID())})
+	return core.With([]zapcore.Field{zap.String(consts.INSTANCE, instance.ID())})
 }
 
 // newLogWriter selects log sink (stdout/stderr or rolling file).

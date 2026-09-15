@@ -144,9 +144,10 @@ func TestInitInstallsFallbackForOptionalProviderLoggers(t *testing.T) {
 
 	require.NoError(t, Init())
 
-	// Optional provider loggers stay usable but file-less until bootstrap's
-	// provider drain assigns dedicated loggers for the providers actually
-	// compiled in; only that assignment may create their log files.
+	// Optional provider loggers stay usable but file-less until the provider
+	// stage starts and the lifecycle registry binds dedicated loggers for the
+	// providers actually compiled in; only that binding may create their log
+	// files.
 	optional := map[string]types.Logger{
 		"cassandra": logger.Cassandra,
 		"elastic":   logger.Elastic,
@@ -165,7 +166,7 @@ func TestInitInstallsFallbackForOptionalProviderLoggers(t *testing.T) {
 	for name, optionalLogger := range optional {
 		require.NotNil(t, optionalLogger, "optional provider logger %s must fall back, not stay nil", name)
 		require.NoFileExists(t, filepath.Join(dir, name+".log"),
-			"optional provider %s must not own a log file before its provider is drained", name)
+			"optional provider %s must not own a log file before the provider stage starts", name)
 	}
 
 	// Core loggers keep their dedicated, precreated files. The distributed
