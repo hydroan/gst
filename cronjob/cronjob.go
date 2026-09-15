@@ -10,7 +10,12 @@
 // Every schedule is read in UTC, and "@every" runs on the multiples of its
 // period counted from the Unix epoch, so every replica of a deployment
 // computes the same instants for a job. An expression that must follow
-// another wall clock says so itself, with a CRON_TZ= prefix.
+// another wall clock says so itself, with a CRON_TZ= prefix. The instants
+// are read off each replica's own clock — the lease decides who runs one,
+// on the database's clock — so the replicas' clocks must agree to within
+// the schedule's granularity, as any clock-synchronized deployment's do: a
+// replica running ahead claims an instant early, and the others find it
+// taken when their clocks reach it.
 //
 // A job runs once per instant across the deployment: the replicas share the
 // instant's lease through the primary database (see the lease package), the
@@ -480,7 +485,10 @@ func (j *job) catchUp(ctx context.Context) (time.Time, bool) {
 	}
 	last, found, err := lease.LastSlot(ctx, j.leaseName())
 	if err != nil {
-		log.Errorz("cronjob could not read its last instant", zap.Error(err), zap.String("name", j.name), zap.String("spec", j.spec))
+		// A process told to stop as it starts is not a database failure.
+		if ctx.Err() == nil {
+			log.Errorz("cronjob could not read its last instant", zap.Error(err), zap.String("name", j.name), zap.String("spec", j.spec))
+		}
 		return time.Time{}, false
 	}
 	if !found || !last.Before(prev) {
@@ -492,9 +500,10 @@ func (j *job) catchUp(ctx context.Context) (time.Time, bool) {
 // runInstant runs the round for at and reports whether a round ran. A
 // per-instance job runs it outright; a job shared across the deployment
 // first claims the instant's lease and runs only when it wins, under the
-// lease — its context ends with the lease, its transactions verify the lease
-// first, and a round that will not stop once the lease is lost fails the
-// process, see lease.Run — then gives the lease back so the next instant is
+// lease — its context ends with the lease, its database.Transaction calls
+// verify the lease first, and a round that will not stop once the lease is
+// lost fails the process, see lease.Run — then gives the lease back so the
+// next instant is
 // free at once.
 func (j *job) runInstant(ctx context.Context, at time.Time, catchUp bool) bool {
 	if j.perInstance {
@@ -505,7 +514,11 @@ func (j *job) runInstant(ctx context.Context, at time.Time, catchUp bool) bool {
 
 	h, claimed, err := lease.ClaimSlot(ctx, j.leaseName(), at)
 	if err != nil {
-		log.Errorz("cronjob could not claim its instant", zap.Error(err), zap.String("name", j.name), zap.String("spec", j.spec), zap.Time("at", at))
+		// An instant that falls on the moment the process is told to stop
+		// is not claimed, and that is not a database failure.
+		if ctx.Err() == nil {
+			log.Errorz("cronjob could not claim its instant", zap.Error(err), zap.String("name", j.name), zap.String("spec", j.spec), zap.Time("at", at))
+		}
 		return false
 	}
 	if !claimed {
@@ -519,7 +532,7 @@ func (j *job) runInstant(ctx context.Context, at time.Time, catchUp bool) bool {
 	}
 	held, stopHold := lease.Hold(ctx, h)
 	// The round logs its own outcome; Run's is the same error, already logged.
-	_ = lease.Run(lease.WithHandle(held, h), j.leaseName(), func(ctx context.Context) error {
+	runErr := lease.Run(lease.WithHandle(held, h), j.leaseName(), func(ctx context.Context) error {
 		return j.run(ctx, at, fields...)
 	})
 	lost := errors.Is(context.Cause(held), lease.ErrLost)
@@ -527,11 +540,13 @@ func (j *job) runInstant(ctx context.Context, at time.Time, catchUp bool) bool {
 
 	if lost {
 		// The round outlived its lease — the renewals could not keep it, or
-		// found it taken — and its context ended with it. The job's own error
-		// says only that its context ended, so the loss is recorded here as
-		// the round's outcome; the name is no longer this round's to give
-		// back.
-		log.Warnz("cronjob lost its lease during the round", zap.String("name", j.name), zap.String("spec", j.spec), zap.Time("at", at), zap.Uint64("term", h.Term()))
+		// found it taken — and its context ended with it. A job that
+		// returned the ending has the loss on its own entry already; one
+		// that returned nothing, or a failure of its own, has it recorded
+		// here. Either way the name is no longer this round's to give back.
+		if !lease.Interrupted(held, runErr) {
+			log.Warnz("cronjob lost its lease during the round", zap.String("name", j.name), zap.String("spec", j.spec), zap.Time("at", at), zap.Uint64("term", h.Term()))
+		}
 		return true
 	}
 
@@ -586,11 +601,12 @@ func (j *job) run(ctx context.Context, at time.Time, fields ...zap.Field) (runEr
 // lost, or the process is shutting down — and is empty for a round that
 // ended on its own, a failure of its own included. A job stopping because
 // its context ended is doing what it is asked to do then, not failing; a
-// rolling deployment ends a long round this way every time. Only an error
-// that is the context's own ending counts: a job that wraps it, or returns
-// an error of its own on the way out, failed.
+// rolling deployment ends a long round this way every time. What counts is
+// decided by lease.Interrupted: the context's own ending, wrapped or not,
+// and nothing else — a job that also reports a failure of its own failed,
+// and the entry carries that failure.
 func interruption(ctx context.Context, err error) string {
-	if ctx.Err() == nil || !errors.Is(err, ctx.Err()) {
+	if !lease.Interrupted(ctx, err) {
 		return ""
 	}
 	if errors.Is(context.Cause(ctx), lease.ErrLost) {

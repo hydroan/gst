@@ -517,8 +517,9 @@ func TestStopGivesUpOnAJobThatIgnoresItsContext(t *testing.T) {
 // TestRoundThatLosesItsLeaseIsCutShortAndLogged proves a round outliving
 // its lease ends with it: once another replica has taken the name — the
 // lease ended behind the round's back — the round's context ends with
-// ErrLost as the cause, the loss is logged as the round's outcome, and the
-// scheduler goes on to the next instant.
+// ErrLost as the cause, the round returning that ending is logged as an
+// interruption naming the loss, once, and the scheduler goes on to the next
+// instant.
 func TestRoundThatLosesItsLeaseIsCutShortAndLogged(t *testing.T) {
 	dir := withCronjobLoggerConfig(t)
 	resetCronjobState(t)
@@ -549,11 +550,48 @@ func TestRoundThatLosesItsLeaseIsCutShortAndLogged(t *testing.T) {
 	clock.untilWaiting(t)
 	pkgzap.Clean()
 
-	entry := readLogEntry(t, filepath.Join(dir, "cronjob.log"), "cronjob lost its lease during the round")
-	require.Equal(t, "lost-job", entry["name"])
-	require.EqualValues(t, 1, entry["term"], "the entry names the term the round ran in")
 	interrupted := readLogEntry(t, filepath.Join(dir, "cronjob.log"), "cronjob interrupted")
+	require.Equal(t, "lost-job", interrupted["name"])
 	require.Equal(t, "lease lost", interrupted["reason"], "the round returning its context's cancellation is an interruption, not a failure")
+	require.EqualValues(t, 1, interrupted["term"], "the entry names the term the round ran in")
+	require.Empty(t, readLogEntries(t, filepath.Join(dir, "cronjob.log"), "cronjob lost its lease during the round"),
+		"the interruption entry is the record of the loss; a second entry would say the same thing")
+}
+
+// TestRoundThatReturnsNothingAfterLosingItsLeaseIsLogged proves the loss
+// is recorded even when the round's own entry does not carry it: a job that
+// returns nothing once its context ended finishes as far as its own entry
+// goes, so the scheduler records the lost lease beside it.
+func TestRoundThatReturnsNothingAfterLosingItsLeaseIsLogged(t *testing.T) {
+	dir := withCronjobLoggerConfig(t)
+	resetCronjobState(t)
+	clock := withFakeClock(t, time.Date(2026, 1, 1, 10, 0, 0, 0, time.UTC))
+	withFastLease(t)
+
+	entered := make(chan struct{}, 1)
+	ended := make(chan struct{}, 1)
+	Register(func(ctx context.Context) error {
+		entered <- struct{}{}
+		<-ctx.Done()
+		ended <- struct{}{}
+		return nil
+	}, "@every 1m", "quiet-lost-job")
+	require.NoError(t, start(context.Background()))
+
+	clock.untilWaiting(t)
+	clock.Advance(time.Minute)
+	awaitSignal(t, entered, "the round")
+
+	takeOver(t, "cron:quiet-lost-job")
+	awaitSignal(t, ended, "the round's end")
+	clock.untilWaiting(t)
+	pkgzap.Clean()
+
+	entry := readLogEntry(t, filepath.Join(dir, "cronjob.log"), "cronjob lost its lease during the round")
+	require.Equal(t, "quiet-lost-job", entry["name"])
+	require.EqualValues(t, 1, entry["term"], "the entry names the term the round ran in")
+	finished := readLogEntry(t, filepath.Join(dir, "cronjob.log"), "finished cronjob")
+	require.Equal(t, "quiet-lost-job", finished["name"], "the round's own entry says it finished: it returned nothing")
 }
 
 // TestRoundInterruptedAtShutdownIsAWarning proves a round that stops because
@@ -924,8 +962,6 @@ func TestRunOpensRoundSpanWhenTracingIsOn(t *testing.T) {
 	require.Equal(t, got.identity.TraceID, span.SpanContext().TraceID().String())
 }
 
-// roundObservation is what a job sees of its round: the identity on its
-// context and the span it runs under.
 // TestRoundThatIgnoresTheLossFailsTheProcess proves the last line behind the
 // lease is the scheduler's too: a round still running once its lease is lost
 // and the grace has passed would run beside the next instant's round on
@@ -964,6 +1000,8 @@ func TestRoundThatIgnoresTheLossFailsTheProcess(t *testing.T) {
 	}
 }
 
+// roundObservation is what a job sees of its round: the identity on its
+// context and the span it runs under.
 type roundObservation struct {
 	identity execctx.Identity
 	span     oteltrace.SpanContext
@@ -1269,15 +1307,31 @@ func drainLoops() {
 func readLogEntry(t *testing.T, path, msg string) map[string]any {
 	t.Helper()
 
+	entries := readLogEntries(t, path, msg)
+	if len(entries) == 0 {
+		require.Failf(t, "missing log entry", "no entry with msg %q in %s", msg, path)
+		return nil
+	}
+	return entries[0]
+}
+
+// readLogEntries returns every JSON entry of the log file whose msg field
+// equals msg, in the order they were written.
+func readLogEntries(t *testing.T, path, msg string) []map[string]any {
+	t.Helper()
+
 	data, err := os.ReadFile(path)
 	require.NoError(t, err)
+	var entries []map[string]any
 	for line := range strings.SplitSeq(strings.TrimSpace(string(data)), "\n") {
+		if line == "" {
+			continue
+		}
 		entry := make(map[string]any)
 		require.NoError(t, json.Unmarshal([]byte(line), &entry), "log line must be JSON: %s", line)
 		if entry["msg"] == msg {
-			return entry
+			entries = append(entries, entry)
 		}
 	}
-	require.Failf(t, "missing log entry", "no entry with msg %q in %s", msg, path)
-	return nil
+	return entries
 }
