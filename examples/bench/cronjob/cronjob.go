@@ -3,11 +3,13 @@
 // Call cronjob.Register(fn, spec, name) in init below; the framework starts
 // the scheduler once the process is ready to serve and stops it first at
 // shutdown. fn is a func(ctx context.Context) error: ctx ends when the
-// process begins shutting down, so a long round can stop early, and it
-// carries the round's identity — the job name and a trace id of the round's
-// own — and, with tracing on, the round's root span, so the statements and
-// log lines the job produces are found again from any of them. Every run is
-// logged under name, and panics are recovered.
+// process begins shutting down or the round's lease is lost, so a long round
+// must stop early — one still running 5 seconds after its lease was lost
+// fails the process, since another replica may be running the next instant
+// by then — and it carries the round's identity — the job name and a trace
+// id of the round's own — and, with tracing on, the round's root span, so
+// the statements and log lines the job produces are found again from any of
+// them. Every run is logged under name, and panics are recovered.
 //
 // spec is a 6-field cron expression "second minute hour day month weekday",
 // e.g. "0 0 2 * * *" (daily at 02:00 UTC), or a descriptor such as "@hourly"

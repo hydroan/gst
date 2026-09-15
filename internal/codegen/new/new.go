@@ -20,6 +20,8 @@ import (
 var requiredFileContentMap = map[string]string{
 	"configx/configx.go":       configxContent,
 	"cronjob/cronjob.go":       cronjobContent,
+	"leader/leader.go":         leaderContent,
+	"lock/lock.go":             lockContent,
 	"middleware/middleware.go": middlewareContent,
 	// These three are the empty first versions of files gg gen owns, so they
 	// carry the generated suffix: a project must compile before its first

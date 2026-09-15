@@ -306,11 +306,13 @@ const cronjobContent = `// Package cronjob registers the application's scheduled
 // Call cronjob.Register(fn, spec, name) in init below; the framework starts
 // the scheduler once the process is ready to serve and stops it first at
 // shutdown. fn is a func(ctx context.Context) error: ctx ends when the
-// process begins shutting down, so a long round can stop early, and it
-// carries the round's identity — the job name and a trace id of the round's
-// own — and, with tracing on, the round's root span, so the statements and
-// log lines the job produces are found again from any of them. Every run is
-// logged under name, and panics are recovered.
+// process begins shutting down or the round's lease is lost, so a long round
+// must stop early — one still running 5 seconds after its lease was lost
+// fails the process, since another replica may be running the next instant
+// by then — and it carries the round's identity — the job name and a trace
+// id of the round's own — and, with tracing on, the round's root span, so
+// the statements and log lines the job produces are found again from any of
+// them. Every run is logged under name, and panics are recovered.
 //
 // spec is a 6-field cron expression "second minute hour day month weekday",
 // e.g. "0 0 2 * * *" (daily at 02:00 UTC), or a descriptor such as "@hourly"
@@ -354,6 +356,100 @@ package cronjob
 func init() {
 	// TODO: register your cron jobs here.
 }
+`
+
+const leaderContent = `// Package leader registers the application's leader work: loops that run on
+// exactly one replica of the deployment at a time.
+//
+// Call leader.Register(fn, name) in init below; every replica campaigns for
+// the name once the process is ready to serve, the winner runs fn, and the
+// others take over within seconds if it dies. fn is a func(ctx
+// context.Context) error expected to run until ctx ends: ctx ends when the
+// process begins shutting down or the lease behind the leadership is lost,
+// and fn must stop then — one still running 5 seconds after its lease was
+// lost fails the process, since another replica may be leading by then. fn
+// runs again from scratch on the replica that takes over, so what it must
+// not repeat it keeps in the database. fn that returns hands the leadership
+// back, and the campaign resumes after a few seconds. Panics are recovered
+// and logged, and every tenure is logged under name in leader.log.
+//
+// Work that runs on a schedule belongs in cronjob instead: a job registered
+// there already runs once per instant across the deployment.
+//
+// On SQLite the framework uses a single database connection, so a
+// transaction inside fn blocks the lease renewal: keep each transaction
+// under 5 seconds, or the lease counts as lost.
+//
+// Example:
+//
+//	import (
+//		"context"
+//
+//		"github.com/hydroan/gst/leader"
+//	)
+//
+//	func relayOutbox(ctx context.Context) error {
+//		for {
+//			select {
+//			case <-ctx.Done():
+//				return nil
+//			default:
+//				// forward the next batch, then wait; return on a failure
+//			}
+//		}
+//	}
+//
+//	func init() {
+//		leader.Register(relayOutbox, "outbox-relay")
+//	}
+package leader
+
+func init() {
+	// TODO: register your leader work here.
+}
+`
+
+const lockContent = `// Package lock declares the application's locks: one for each piece of work
+// that must not run twice at once across the deployment and is done when it
+// returns — an administrator's "rebuild the report", a refresh of a
+// credential every replica shares.
+//
+// Declare each lock in a package variable with lock.New(name) and try it
+// from the code that triggers the work with TryRun(ctx, fn). The try never
+// waits: a lock held elsewhere is refused at once with lock.ErrHeld, and the
+// caller answers accordingly — a conflict to the client, a skipped run to
+// the log. fn receives a context that ends when the lease behind the lock is
+// lost or ctx ends, and must stop then — fn still running 5 seconds after
+// the loss fails the process; a lost lease is reported as lock.ErrLost even
+// when fn returned nothing, since another holder may have started the same
+// work since. A lock protects a piece of work, not rows: two requests
+// writing the same row are kept apart by a transaction and a row lock.
+//
+// On SQLite the framework uses a single database connection, so a
+// transaction inside fn blocks the lease renewal: keep each transaction
+// under 5 seconds, or the lease counts as lost.
+//
+// Example:
+//
+//	import (
+//		"context"
+//
+//		"github.com/cockroachdb/errors"
+//		"github.com/hydroan/gst/lock"
+//	)
+//
+//	var rebuildReport = lock.New("rebuild-report")
+//
+//	func rebuild(ctx context.Context) error {
+//		err := rebuildReport.TryRun(ctx, rebuildReportRows)
+//		if errors.Is(err, lock.ErrHeld) {
+//			return errors.New("a rebuild is already running")
+//		}
+//		return err
+//	}
+package lock
+
+// TODO: declare your locks here, one package variable each.
 `
 
 const middlewareContent = `// Package middleware registers the application's custom HTTP middleware.

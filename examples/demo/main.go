@@ -4,6 +4,8 @@ package main
 import (
 	_ "demo/configx"
 	_ "demo/cronjob"
+	_ "demo/leader"
+	_ "demo/lock"
 	_ "demo/middleware"
 	_ "demo/model"
 	_ "demo/module"

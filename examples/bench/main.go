@@ -4,6 +4,8 @@ package main
 import (
 	_ "bench/configx"
 	_ "bench/cronjob"
+	_ "bench/leader"
+	_ "bench/lock"
 	_ "bench/middleware"
 	_ "bench/model"
 	_ "bench/module"

@@ -102,6 +102,8 @@ const (
 const (
 	SubDirConfigx    = "configx"
 	SubDirCronjob    = "cronjob"
+	SubDirLeader     = "leader"
+	SubDirLock       = "lock"
 	SubDirMiddleware = "middleware"
 	SubDirModel      = "model"
 	SubDirModule     = "module"
@@ -113,9 +115,13 @@ const (
 // in import-path order. The migration program imports the same list: its
 // model set is whatever those packages' initialisers registered, so it has to
 // link exactly what the service links. Declared once so the two cannot drift.
+// Every directory here is a scaffold file gg new creates and gg gen restores
+// when missing, so a project always has the package main.go imports.
 var ProjectImportDirs = []string{
 	SubDirConfigx,
 	SubDirCronjob,
+	SubDirLeader,
+	SubDirLock,
 	SubDirMiddleware,
 	SubDirModel,
 	SubDirModule,

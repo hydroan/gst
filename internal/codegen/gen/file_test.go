@@ -299,6 +299,8 @@ package main
 import (
 	_ "helloworld/configx"
 	_ "helloworld/cronjob"
+	_ "helloworld/leader"
+	_ "helloworld/lock"
 	_ "helloworld/middleware"
 	_ "helloworld/model"
 	_ "helloworld/module"
