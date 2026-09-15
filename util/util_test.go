@@ -276,16 +276,16 @@ func TestLogDuration(t *testing.T) {
 	}
 }
 
-func TestLogStartupFailure(t *testing.T) {
+func TestLogFatalFailure(t *testing.T) {
 	core, logs := observer.New(zapcore.ErrorLevel)
 	restoreGlobals := zap.ReplaceGlobals(zap.New(core))
 	t.Cleanup(restoreGlobals)
 
-	logStartupFailure("main.run", errors.New("listen failed"))
+	logFatalFailure("main.run", errors.New("listen failed"))
 
 	entries := logs.All()
 	require.Len(t, entries, 1)
-	require.Equal(t, "startup failed", entries[0].Message)
+	require.Equal(t, "exiting on error", entries[0].Message)
 	fields := entries[0].ContextMap()
 	require.Equal(t, "main.run", fields["func"])
 	require.Contains(t, fmt.Sprintf("%v", fields["error"]), "listen failed")

@@ -91,25 +91,27 @@ func SplitByDoublePipe(data []byte, atEOF bool) (advance int, token []byte, err 
 	return 0, nil, nil
 }
 
-// RunOrDie runs fn and terminates the process when it returns an error.
-// The failure is recorded in the global zap logger before the process exits,
-// so it reaches file logs collected by log shippers; the stdout report in
-// HandleErr alone is invisible to them, which made crash-looping startups
-// undiagnosable from the log store.
+// RunOrDie runs fn and terminates the process when it returns an error,
+// whether fn is a startup step or the run that serves until the process is
+// told to stop. The failure is recorded in the global zap logger before the
+// process exits, so it reaches file logs collected by log shippers; the
+// stdout report in HandleErr alone is invisible to them, which made
+// crash-looping startups undiagnosable from the log store.
 func RunOrDie(fn func() error) {
 	if err := fn(); err != nil {
 		name := GetFunctionName(fn)
-		logStartupFailure(name, err)
+		logFatalFailure(name, err)
 		HandleErr(fmt.Errorf("%s error: %+w", name, err))
 	}
 }
 
-// logStartupFailure records a fatal startup error in the global zap logger and
-// flushes it, because the process exits right after and buffered entries would
-// be lost. Before zap is initialized the global logger is a no-op, so early
-// failures still surface only through the stdout report in HandleErr.
-func logStartupFailure(name string, err error) {
-	zap.S().Errorw("startup failed", "func", name, "error", err)
+// logFatalFailure records the error the process exits on in the global zap
+// logger and flushes it, because the process exits right after and buffered
+// entries would be lost. Before zap is initialized the global logger is a
+// no-op, so early failures still surface only through the stdout report in
+// HandleErr.
+func logFatalFailure(name string, err error) {
+	zap.S().Errorw("exiting on error", "func", name, "error", err)
 	_ = zap.L().Sync()
 }
 
