@@ -64,9 +64,9 @@ const componentStopTimeout = 30 * time.Second
 // backbone clients and the providers; the authorization, service,
 // controller, middleware and router layers; the modules last. It returns
 // once every table registered so far exists and every enabled provider is
-// up, so whatever runs between Bootstrap and Run — the routes-ready hooks,
-// a test harness seeding data — can rely on them. A failure is fatal to the
-// process: the entry point exits on it.
+// up, so whatever runs between Bootstrap and Run — a test harness seeding
+// data — and the routes-ready hooks, which Run fires first, can rely on
+// them. A failure is fatal to the process: the entry point exits on it.
 func Bootstrap() error {
 	mu.Lock()
 	defer mu.Unlock()
@@ -171,18 +171,26 @@ func Run() error {
 	// Final pre-server drain for modules registered after Bootstrap but
 	// before Run. Keep module.Wait before dbruntime.Wait: late modules may
 	// enqueue tables, and dbruntime.Wait can only process entries that
-	// already exist. Routes-ready hooks run inside router.Run after this
-	// barrier.
+	// already exist.
 	module.Wait()
 	dbruntime.Wait()
 
+	// The routes-ready hooks run right after the last barrier and before
+	// anything that could use what they seed: the components below — a
+	// scheduler catching up an instant on start-up would otherwise race the
+	// seeding — and the listener after them. A hook that fails ends Run the
+	// way a failing listener would.
+	if err := router.RunRoutesReadyHooks(); err != nil {
+		return err
+	}
+
 	// The components that run alongside the server — the scheduler and its
-	// kind — start here, after the last barrier: every table they may touch
-	// exists, and the listener opens right after. The cleanup registered
-	// here stops the components and the providers, and sits before the
-	// listener's on the stack, so LIFO runs it right after the HTTP drain:
-	// in-flight jobs finish while the connections they may be using are
-	// still open, and the providers close after their last user.
+	// kind — start here, after the hooks: every table they may touch exists
+	// and is seeded, and the listener opens right after. The cleanup
+	// registered here stops the components and the providers, and sits
+	// before the listener's on the stack, so LIFO runs it right after the
+	// HTTP drain: in-flight jobs finish while the connections they may be
+	// using are still open, and the providers close after their last user.
 	if err := lifecycle.Start(processCtx, lifecycle.StageComponent); err != nil {
 		stopLifecycle()
 		return err

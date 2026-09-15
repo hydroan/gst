@@ -76,8 +76,12 @@ func Routes() map[string][]string {
 	return result
 }
 
-// OnRoutesReady registers a hook that runs after all routes are registered and before the server starts.
-// The hook receives a route snapshot; mutating it does not change the router registry.
+// OnRoutesReady registers a hook that runs after all routes are registered
+// and every table exists, before the components that run alongside the
+// server start and before the server starts — the place for seeding the
+// data the first round of a job and the first request both count on. The
+// hook receives a route snapshot; mutating it does not change the router
+// registry.
 func OnRoutesReady(fn func(routes map[string][]string) error) {
 	if fn == nil {
 		return
@@ -220,6 +224,30 @@ func Init() error {
 	return nil
 }
 
+// RunRoutesReadyHooks runs the hooks OnRoutesReady registered, in
+// registration order, and returns the first error. Bootstrap's Run calls it
+// once every route is registered and every table exists, before the
+// components that run alongside the server start and before the listener
+// opens: what the hooks seed is there for the first round of a job and for
+// the first request alike.
+func RunRoutesReadyHooks() error {
+	if err := multierr.Combine(globalErrors...); err != nil {
+		return err
+	}
+
+	routesReadyMu.Lock()
+	hooks := append([]func(routes map[string][]string) error(nil), routesReadyHooks...)
+	routesReadyMu.Unlock()
+
+	for _, hook := range hooks {
+		if err := hook(Routes()); err != nil {
+			zap.S().Errorw("failed to run routes ready hooks", "err", err)
+			return err
+		}
+	}
+	return nil
+}
+
 func Run() error {
 	log := zap.S()
 	if err := multierr.Combine(globalErrors...); err != nil {
@@ -230,17 +258,6 @@ func Run() error {
 	addr := net.JoinHostPort(config.App.Server.Listen, strconv.Itoa(config.App.Server.Port))
 	for _, r := range root.Routes() {
 		log.Debugw("", "method", r.Method, "path", r.Path)
-	}
-
-	routesReadyMu.Lock()
-	hooks := append([]func(routes map[string][]string) error(nil), routesReadyHooks...)
-	routesReadyMu.Unlock()
-
-	for _, hook := range hooks {
-		if err := hook(Routes()); err != nil {
-			log.Errorw("failed to run routes ready hooks", "err", err)
-			return err
-		}
 	}
 
 	server = &http.Server{

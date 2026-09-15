@@ -16,6 +16,8 @@ import (
 
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/config"
+	"github.com/hydroan/gst/internal/lifecycle"
+	"github.com/hydroan/gst/router"
 	"github.com/stretchr/testify/require"
 )
 
@@ -58,11 +60,13 @@ func TestUnlinkedProvidersAreTheEnabledOnesTheBinaryLacks(t *testing.T) {
 	require.Empty(t, unlinkedProviders(nil, nil))
 }
 
-// TestRunDrainsBeforeTeardownWhenAListenerFails proves a listener failure
-// stops the process the way a signal does: readiness goes down and the
-// process context is canceled while the listener still answers, the drain
-// window passes, and only then does teardown begin — with the failure
-// returned.
+// TestRunDrainsBeforeTeardownWhenAListenerFails proves the order Run keeps
+// at both ends. Starting: the routes-ready hooks fire before the components
+// start, so what a hook seeds is there for a component's first round.
+// Stopping: a listener failure stops the process the way a signal does —
+// readiness goes down and the process context is canceled while the
+// listener still answers, the drain window passes, and only then does
+// teardown begin — with the failure returned.
 func TestRunDrainsBeforeTeardownWhenAListenerFails(t *testing.T) {
 	// Run is single-shot: it seals the component stage and unwinds the
 	// cleanup stack, so a process can go through it once.
@@ -75,6 +79,28 @@ func TestRunDrainsBeforeTeardownWhenAListenerFails(t *testing.T) {
 	config.App.Server.ShutdownDelay = 2 * time.Second
 	t.Cleanup(func() { config.App.Server.ShutdownDelay = original })
 
+	var (
+		orderMu sync.Mutex
+		order   []string
+	)
+	note := func(step string) {
+		orderMu.Lock()
+		defer orderMu.Unlock()
+		order = append(order, step)
+	}
+	router.OnRoutesReady(func(map[string][]string) error {
+		note("routes-ready hook")
+		return nil
+	})
+	lifecycle.Register(lifecycle.Component{
+		Name:  "sample-order-probe",
+		Stage: lifecycle.StageComponent,
+		Start: func(context.Context) error {
+			note("component start")
+			return nil
+		},
+	})
+
 	errListener := errors.New("sample listener failure")
 	fail := make(chan struct{})
 	startup.RegisterGo(func() error {
@@ -86,6 +112,12 @@ func TestRunDrainsBeforeTeardownWhenAListenerFails(t *testing.T) {
 	go func() { done <- Run() }()
 	require.Eventually(t, func() bool { return readyz() == http.StatusOK },
 		10*time.Second, 20*time.Millisecond, "the server never came up")
+
+	orderMu.Lock()
+	started := slices.Clone(order)
+	orderMu.Unlock()
+	require.Equal(t, []string{"routes-ready hook", "component start"}, started,
+		"the hooks must have seeded before the components started")
 
 	close(fail)
 	require.Eventually(t, func() bool {
