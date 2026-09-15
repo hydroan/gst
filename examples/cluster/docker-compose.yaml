@@ -1,0 +1,85 @@
+# One MySQL and three replicas of the example, all sharing it. The replicas
+# run the same image; each publishes its own port and writes its logs under
+# ./logs/<replica>, so the scenarios in the README can tell them apart.
+#
+# replica1 comes up first and creates the tables; replica2 and replica3 wait
+# for it to be ready and start with auto_migrate off. Replicas starting at
+# the same moment with auto_migrate on all race for CREATE TABLE on a fresh
+# database, and the database refuses all but one of them.
+x-env: &env
+  DATABASE_TYPE: mysql
+  MYSQL_HOST: mysql
+  MYSQL_PORT: "3306"
+  MYSQL_DATABASE: cluster
+  MYSQL_USERNAME: root
+  MYSQL_PASSWORD: cluster
+  SERVER_PORT: "8080"
+  # Once shutdown begins, readiness answers 503 for this long before the
+  # listener closes: the time a load balancer needs to stop routing here.
+  SERVER_SHUTDOWN_DELAY: 5s
+  LOGGER_DIR: /var/log/cluster
+
+services:
+  mysql:
+    image: mysql:8.4
+    environment:
+      MYSQL_ROOT_PASSWORD: cluster
+      MYSQL_DATABASE: cluster
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-uroot", "-pcluster"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  replica1:
+    build:
+      context: ../..
+      dockerfile: examples/cluster/Dockerfile
+    image: gst-cluster:dev
+    depends_on:
+      mysql:
+        condition: service_healthy
+    environment:
+      <<: *env
+      DATABASE_AUTO_MIGRATE: "true"
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8080/-/readyz"]
+      interval: 2s
+      timeout: 2s
+      retries: 30
+    # SIGTERM starts the graceful shutdown; the grace period must outlast the
+    # drain window and the wait for in-flight jobs, or Docker kills a replica
+    # that is still finishing a round.
+    stop_grace_period: 40s
+    ports:
+      - "8081:8080"
+    volumes:
+      - ./logs/replica1:/var/log/cluster
+
+  replica2:
+    image: gst-cluster:dev
+    depends_on:
+      replica1:
+        condition: service_healthy
+    environment:
+      <<: *env
+      DATABASE_AUTO_MIGRATE: "false"
+    stop_grace_period: 40s
+    ports:
+      - "8082:8080"
+    volumes:
+      - ./logs/replica2:/var/log/cluster
+
+  replica3:
+    image: gst-cluster:dev
+    depends_on:
+      replica1:
+        condition: service_healthy
+    environment:
+      <<: *env
+      DATABASE_AUTO_MIGRATE: "false"
+    stop_grace_period: 40s
+    ports:
+      - "8083:8080"
+    volumes:
+      - ./logs/replica3:/var/log/cluster

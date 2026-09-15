@@ -1,0 +1,13 @@
+[server]
+port = 8080
+
+[database]
+type = mysql
+auto_migrate = true
+
+[mysql]
+host = 127.0.0.1
+port = 3306
+database = cluster
+username = root
+password = cluster

@@ -96,6 +96,7 @@ test:
 	GST_TEST_DATABASE=sqlite go test -count=1 $(DIALECT_PACKAGES)
 	@echo "Running example project tests..."
 	go -C examples/demo test ./...
+	go -C examples/cluster test ./...
 
 # Run unit tests with verbose output
 testv:
@@ -107,6 +108,7 @@ testv:
 	GST_TEST_DATABASE=sqlite go test -count=1 -v $(DIALECT_PACKAGES)
 	@echo "Running example project tests with verbose output..."
 	go -C examples/demo test -v ./...
+	go -C examples/cluster test -v ./...
 
 # Regenerate the framework's own generated sources.
 # The framework registers its model doc comments at build time, the same way a

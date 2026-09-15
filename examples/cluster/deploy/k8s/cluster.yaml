@@ -1,0 +1,108 @@
+# Three replicas of the example behind one Service. What matters for the
+# framework's cluster capabilities:
+#
+#   - the pod name is the instance id the framework stamps on every log line
+#     and writes into gst_leases.instance, so a lease names the pod holding it;
+#   - readiness comes from /-/readyz, which the framework turns off the moment
+#     shutdown begins, so the Service stops routing to a draining pod;
+#   - terminationGracePeriodSeconds outlasts the graceful shutdown — the drain
+#     window plus the wait for in-flight jobs — so a pod is never killed while
+#     it is still finishing a round; the lease it holds is released as the
+#     round ends, and a new leader is elected within seconds;
+#   - the disruption budget keeps two replicas up through a rolling update or
+#     a node drain, so the work never stands still.
+apiVersion: v1
+kind: Secret
+metadata:
+  name: cluster-mysql
+type: Opaque
+stringData:
+  password: cluster
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: cluster-env
+data:
+  DATABASE_TYPE: mysql
+  DATABASE_AUTO_MIGRATE: "true"
+  MYSQL_HOST: mysql
+  MYSQL_PORT: "3306"
+  MYSQL_DATABASE: cluster
+  MYSQL_USERNAME: root
+  SERVER_PORT: "8080"
+  # Once shutdown begins, readiness answers 503 for this long before the
+  # listener closes: the time the endpoints controller needs to take the pod
+  # out of the Service.
+  SERVER_SHUTDOWN_DELAY: 5s
+  LOGGER_DIR: /var/log/cluster
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cluster
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: cluster
+  template:
+    metadata:
+      labels:
+        app: cluster
+    spec:
+      terminationGracePeriodSeconds: 40
+      containers:
+        - name: cluster
+          image: gst-cluster:dev
+          imagePullPolicy: IfNotPresent
+          envFrom:
+            - configMapRef:
+                name: cluster-env
+          env:
+            - name: MYSQL_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: cluster-mysql
+                  key: password
+          ports:
+            - name: http
+              containerPort: 8080
+          readinessProbe:
+            httpGet:
+              path: /-/readyz
+              port: http
+            periodSeconds: 2
+          livenessProbe:
+            httpGet:
+              path: /-/healthz
+              port: http
+            periodSeconds: 10
+          volumeMounts:
+            - name: logs
+              mountPath: /var/log/cluster
+      volumes:
+        - name: logs
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: cluster
+spec:
+  selector:
+    app: cluster
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: cluster
+spec:
+  minAvailable: 2
+  selector:
+    matchLabels:
+      app: cluster

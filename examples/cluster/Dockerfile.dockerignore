@@ -1,0 +1,6 @@
+.git
+**/logs
+**/*.db
+**/*.db-*
+**/tmp
+examples/cluster/bin
