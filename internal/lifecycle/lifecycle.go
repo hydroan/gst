@@ -1,6 +1,7 @@
 // Package lifecycle is the registry of the framework components that have a
 // lifetime of their own: clients of external systems, the scheduler, election
-// loops, anything that owns a connection or a background goroutine.
+// loops, anything that owns a connection or a background goroutine — and,
+// through the component package, a project's own long-running work.
 //
 // A component registers from its package initialiser, so importing its
 // package is the single act that enables it: a project that never imports the

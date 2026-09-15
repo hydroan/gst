@@ -86,7 +86,9 @@ func Routes() map[string][]string {
 // bounds a process stuck in them. A hook is therefore for the database:
 // work that reaches other systems — a client to connect, a topic to
 // create — holds every other replica's start for as long as that system
-// takes to answer, and belongs elsewhere or behind a deadline of its own.
+// takes to answer, and belongs elsewhere or behind a deadline of its own;
+// work that runs for the life of the process — a consumer loop — is a
+// component, see component.Register.
 //
 // The hook runs on the context of the start: the seeding's statements and
 // transactions run on it, and a termination signal during the start ends
