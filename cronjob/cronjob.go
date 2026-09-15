@@ -544,7 +544,7 @@ func (j *job) runInstant(ctx context.Context, at time.Time, catchUp bool) bool {
 		// returned the ending has the loss on its own entry already; one
 		// that returned nothing, or a failure of its own, has it recorded
 		// here. Either way the name is no longer this round's to give back.
-		if !lease.Interrupted(held, runErr) {
+		if !util.Interrupted(held, runErr) {
 			log.Warnz("cronjob lost its lease during the round", zap.String("name", j.name), zap.String("spec", j.spec), zap.Time("at", at), zap.Uint64("term", h.Term()))
 		}
 		return true
@@ -602,11 +602,11 @@ func (j *job) run(ctx context.Context, at time.Time, fields ...zap.Field) (runEr
 // ended on its own, a failure of its own included. A job stopping because
 // its context ended is doing what it is asked to do then, not failing; a
 // rolling deployment ends a long round this way every time. What counts is
-// decided by lease.Interrupted: the context's own ending, wrapped or not,
+// decided by util.Interrupted: the context's own ending, wrapped or not,
 // and nothing else — a job that also reports a failure of its own failed,
 // and the entry carries that failure.
 func interruption(ctx context.Context, err error) string {
-	if !lease.Interrupted(ctx, err) {
+	if !util.Interrupted(ctx, err) {
 		return ""
 	}
 	if errors.Is(context.Cause(ctx), lease.ErrLost) {
