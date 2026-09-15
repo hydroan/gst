@@ -330,6 +330,12 @@ const cronjobContent = `// Package cronjob registers the application's scheduled
 // day and no replica ran it; a job that has never run, or whose most recent
 // instant was run, starts with its next instant.
 //
+// On SQLite the framework uses a single database connection, so a
+// transaction inside a job blocks the lease renewal: keep each transaction
+// under 5 seconds — a longer one may end the round with the lease counted as
+// lost, one over 10 seconds always does — or register work that only ever
+// runs in one process with cronjob.RegisterPerInstance.
+//
 // Example:
 //
 //	import (
