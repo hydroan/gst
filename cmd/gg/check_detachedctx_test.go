@@ -75,7 +75,7 @@ func copied(record *model.Record) error {
 	return database.Database[*model.Record](context.Background()).Create(record)
 }
 `)
-	writeCheckFile(t, filepath.Join(projectDir, "service", "report", "report.go"), `package report
+	writeCheckFile(t, filepath.Join(projectDir, "service", "record", "record.go"), `package record
 
 import (
 	"context"
@@ -84,7 +84,7 @@ import (
 	"tmpapp/model"
 )
 
-func rebuild(ctx context.Context, record *model.Record) error {
+func refresh(ctx context.Context, record *model.Record) error {
 	if err := database.Transaction(ctx, func(ctx context.Context) error {
 		return database.Database[*model.Record](ctx).Update(record)
 	}); err != nil {
@@ -110,7 +110,7 @@ func Records() ([]*model.Record, error) {
 	return records, err
 }
 `)
-	writeCheckFile(t, filepath.Join(projectDir, "cronjob", "cleanup.go"), `package cronjob
+	writeCheckFile(t, filepath.Join(projectDir, "cronjob", "sweep.go"), `package cronjob
 
 import (
 	"context"
@@ -118,7 +118,7 @@ import (
 	"tmpapp/dao"
 )
 
-func cleanup(context.Context) error {
+func sweep(context.Context) error {
 	_, err := dao.Records(context.Background())
 	return err
 }
@@ -146,7 +146,7 @@ func seed() error {
 	if len(violations) != 3 {
 		t.Fatalf("expected three violations, got %#v", violations)
 	}
-	assertViolationContains(t, violations, filepath.Join("service", "report", "report.go"), ":16: database.Transaction receives context.Background()")
+	assertViolationContains(t, violations, filepath.Join("service", "record", "record.go"), ":16: database.Transaction receives context.Background()")
 	assertViolationContains(t, violations, filepath.Join("dao", "record.go"), ":12: database.Database receives context.TODO()")
-	assertViolationContains(t, violations, filepath.Join("cronjob", "cleanup.go"), ":10: dao.Records receives context.Background()")
+	assertViolationContains(t, violations, filepath.Join("cronjob", "sweep.go"), ":10: dao.Records receives context.Background()")
 }
