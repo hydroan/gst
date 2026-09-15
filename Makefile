@@ -63,10 +63,13 @@ format:
 	@echo "Running gofumpt..."
 	$(call run_tool,gofumpt,-l -w .)
 
-# Run go vet
+# Run go vet, on the example modules too (see build)
 vet:
 	@echo "Running go vet..."
 	go vet ./...
+	go -C examples/demo vet ./...
+	go -C examples/cluster vet ./...
+	go -C examples/bench vet ./...
 
 # Run golangci-lint (modernize, nilness and shadow run inside it, see .golangci.yml)
 lint:
