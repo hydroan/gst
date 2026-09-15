@@ -1,7 +1,11 @@
 package dbruntime
 
 import (
+	"context"
+	"database/sql"
+	"database/sql/driver"
 	"fmt"
+	"hash/fnv"
 	"reflect"
 	"strings"
 	"sync/atomic"
@@ -73,19 +77,159 @@ func ensureTable(handler *gorm.DB, m types.Model) error {
 
 	inMemory := config.App.Database.Type == config.DBSqlite && config.App.Sqlite.IsMemory
 	if config.App.Database.AutoMigrate || inMemory {
-		// AutoMigrate reads the table name through gorm's Tabler, which is
-		// the model's own TableName method. Supplying it again through
-		// Table() would make gorm re-parse the schema under a special table
-		// name, which renames the constraints of associated models.
-		if err := handler.AutoMigrate(m); err != nil {
-			return err
-		}
-		return ensureCustomIndexes(handler, m)
+		return migrateTable(handler, m, tableName)
 	}
 	if !handler.Migrator().HasTable(tableName) {
 		return errors.Newf("table %q does not exist: run \"gg migrate\" to apply the schema, or enable database.auto_migrate for local development", tableName)
 	}
 	return nil
+}
+
+// migrateTable runs gorm AutoMigrate and creates the custom indexes, once
+// across the processes sharing the database. Replicas starting together all
+// find the table missing and all issue CREATE TABLE, and the server refuses
+// every one but the first: on MySQL and PostgreSQL the processes take turns
+// under a server-side advisory lock, and where none can be held — SQLite,
+// or a pool of a single connection — a failure while another process created
+// the table is retried once, against the table that is there now.
+//
+// AutoMigrate reads the table name through gorm's Tabler, which is the
+// model's own TableName method. Supplying it again through Table() would make
+// gorm re-parse the schema under a special table name, which renames the
+// constraints of associated models.
+func migrateTable(handler *gorm.DB, m types.Model, tableName string) error {
+	unlock, err := lockMigration(handler)
+	if err != nil {
+		return err
+	}
+	defer unlock()
+
+	migrate := func() error {
+		if migrateErr := handler.AutoMigrate(m); migrateErr != nil {
+			return migrateErr
+		}
+		return ensureCustomIndexes(handler, m)
+	}
+	err = migrate()
+	if err != nil && handler.Migrator().HasTable(tableName) {
+		err = migrate()
+	}
+	return err
+}
+
+// migrationLockName is the advisory lock table preparation holds on the
+// servers that offer one: a single name for the whole schema, so that the
+// processes of a deployment prepare their tables one process at a time.
+const migrationLockName = "gst:migrate"
+
+// migrationLockKey is the same lock as an integer, for the server that keys
+// advisory locks by one: a stable hash of the name.
+var migrationLockKey = func() int64 {
+	h := fnv.New32a()
+	_, _ = h.Write([]byte(migrationLockName))
+	return int64(h.Sum32())
+}()
+
+// migrationLockTimeout bounds the wait for the lock. A holder is creating a
+// table, which takes milliseconds; a minute covers a server that is slow to
+// come up under a whole deployment starting at once.
+const migrationLockTimeout = time.Minute
+
+// migrationLock is the advisory lock of one dialect, taken and released on
+// the connection that holds it.
+type migrationLock struct {
+	acquire func(ctx context.Context, conn *sql.Conn) error
+	release func(ctx context.Context, conn *sql.Conn) error
+}
+
+// migrationLocks are the advisory locks table preparation holds, by dialect.
+// MySQL names its locks and answers the wait itself: 1 for the lock taken, 0
+// for the timeout and NULL for an error. PostgreSQL keys them by an integer
+// and blocks until the lock is taken, so the wait is bounded by the context.
+var migrationLocks = map[string]migrationLock{
+	"mysql": {
+		acquire: func(ctx context.Context, conn *sql.Conn) error {
+			var got sql.NullInt64
+			if err := conn.QueryRowContext(ctx, "SELECT GET_LOCK(?, ?)", migrationLockName, int64(migrationLockTimeout.Seconds())).Scan(&got); err != nil {
+				return err
+			}
+			if !got.Valid || got.Int64 != 1 {
+				return errors.Newf("not granted within %s: another process is still preparing tables", migrationLockTimeout)
+			}
+			return nil
+		},
+		release: func(ctx context.Context, conn *sql.Conn) error {
+			_, err := conn.ExecContext(ctx, "DO RELEASE_LOCK(?)", migrationLockName)
+			return err
+		},
+	},
+	"postgres": {
+		acquire: func(ctx context.Context, conn *sql.Conn) error {
+			_, err := conn.ExecContext(ctx, "SELECT pg_advisory_lock($1)", migrationLockKey)
+			return err
+		},
+		release: func(ctx context.Context, conn *sql.Conn) error {
+			_, err := conn.ExecContext(ctx, "SELECT pg_advisory_unlock($1)", migrationLockKey)
+			return err
+		},
+	},
+}
+
+// lockMigration takes the advisory lock table preparation runs under and
+// returns the function that releases it. Both servers scope the lock to the
+// session, so it is held on a connection of its own while the migration runs
+// on the pool's other connections. A pool of a single connection cannot hold
+// the lock and migrate at once, and SQLite has no such lock: there nothing is
+// locked, and the retries of migrateTable and ensureCustomIndexes are what
+// cover a race.
+//
+// A connection whose lock may still be held — the release failed, or the
+// wait was cut short — is discarded rather than returned to the pool, where
+// it would keep every other process out until it was closed.
+func lockMigration(handler *gorm.DB) (unlock func(), err error) {
+	noop := func() {}
+	lock, ok := migrationLocks[strings.ToLower(handler.Dialector.Name())]
+	if !ok {
+		return noop, nil
+	}
+	sqlDB, err := handler.DB()
+	if err != nil {
+		return noop, err
+	}
+	if sqlDB.Stats().MaxOpenConnections == 1 {
+		return noop, nil
+	}
+
+	// MySQL times the wait out itself; the margin lets its verdict arrive
+	// before the context's.
+	ctx, cancel := context.WithTimeout(context.Background(), migrationLockTimeout+5*time.Second)
+	defer cancel()
+	conn, err := sqlDB.Conn(ctx)
+	if err != nil {
+		return noop, errors.Wrap(err, "take a connection for the migration lock")
+	}
+	if err := lock.acquire(ctx, conn); err != nil {
+		discardConn(conn)
+		return noop, errors.Wrap(err, "take the migration lock")
+	}
+	return func() {
+		ctx, cancel := context.WithTimeout(context.Background(), migrationLockTimeout)
+		defer cancel()
+		if err := lock.release(ctx, conn); err != nil {
+			zap.S().Warnw("failed to release the migration lock; discarding its connection", "error", err)
+			discardConn(conn)
+			return
+		}
+		_ = conn.Close()
+	}, nil
+}
+
+// discardConn closes conn's underlying connection instead of returning it to
+// the pool: reporting a bad connection from Raw is how database/sql is told
+// to drop one.
+func discardConn(conn *sql.Conn) {
+	_ = conn.Raw(func(any) error { return driver.ErrBadConn })
+	_ = conn.Close()
 }
 
 // requireTableName returns the model's explicit table name and rejects the

@@ -47,8 +47,16 @@ func TestMain(m *testing.M) {
 // pool is capped at one so every session sees the same in-memory schema.
 func newSQLiteDB(t *testing.T) *gorm.DB {
 	t.Helper()
+	return openSQLiteDB(t, ":memory:")
+}
 
-	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{Logger: logger.Discard})
+// openSQLiteDB opens one handle on the sqlite database at dsn with the single
+// connection the framework gives sqlite; several handles on one file are how
+// several processes sharing it look.
+func openSQLiteDB(t *testing.T, dsn string) *gorm.DB {
+	t.Helper()
+
+	db, err := gorm.Open(sqlite.Open(dsn), &gorm.Config{Logger: logger.Discard})
 	require.NoError(t, err)
 	sqlDB, err := db.DB()
 	require.NoError(t, err)

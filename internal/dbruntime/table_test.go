@@ -1,12 +1,15 @@
 package dbruntime
 
 import (
+	"path/filepath"
+	"sync"
 	"testing"
 	"time"
 
 	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/internal/modelregistry"
 	"github.com/stretchr/testify/require"
+	"gorm.io/gorm"
 )
 
 // plainRecord is a minimal model for table preparation tests.
@@ -70,6 +73,65 @@ func TestEnsureTableRejectsUndeclaredTableName(t *testing.T) {
 	err := ensureTable(db, &undeclaredRecord{})
 	require.ErrorContains(t, err, "must declare an explicit table name")
 	require.False(t, db.Migrator().HasTable("undeclared_records"))
+}
+
+// raceRecord is the model several processes prepare at once; its index makes
+// the custom index step part of the race. The indexed column carries a size:
+// without one gorm maps it to TEXT on MySQL, which cannot be indexed whole.
+type raceRecord struct {
+	Name string `gorm:"size:191"`
+
+	modelregistry.Base
+}
+
+func (*raceRecord) TableName() string { return "race_records" }
+
+func (*raceRecord) Indexes() []modelregistry.Index {
+	return []modelregistry.Index{{Fields: []string{"Name"}}}
+}
+
+// TestMigrateTableCreatesOnceAcrossProcesses proves replicas starting
+// together prepare a table without tripping over each other: every one of
+// several handles — each a pool of its own, the way separate processes look
+// to the server — migrates the same fresh table at once, and all of them
+// succeed, on the dialects with an advisory lock and on the one without.
+func TestMigrateTableCreatesOnceAcrossProcesses(t *testing.T) {
+	withAutoMigrate(t, true)
+
+	sqliteFile := filepath.Join(t.TempDir(), "race.db")
+	for _, dialect := range []struct {
+		name config.DBType
+		open func(t *testing.T) *gorm.DB
+	}{
+		{name: config.DBMySQL, open: newMySQLDB},
+		{name: config.DBPostgres, open: newPostgresDB},
+		{name: config.DBSqlite, open: func(t *testing.T) *gorm.DB {
+			t.Helper()
+			return openSQLiteDB(t, sqliteFile)
+		}},
+	} {
+		t.Run(string(dialect.name), func(t *testing.T) {
+			const processes = 4
+			handles := make([]*gorm.DB, 0, processes)
+			for range processes {
+				handles = append(handles, dialect.open(t))
+			}
+			require.NoError(t, handles[0].Migrator().DropTable(&raceRecord{}))
+
+			errs := make([]error, len(handles))
+			var wg sync.WaitGroup
+			for i, handle := range handles {
+				wg.Go(func() { errs[i] = ensureTable(handle, &raceRecord{}) })
+			}
+			wg.Wait()
+
+			for i, err := range errs {
+				require.NoErrorf(t, err, "process %d must prepare the table beside the others", i)
+			}
+			require.True(t, handles[0].Migrator().HasTable("race_records"))
+			require.True(t, handles[0].Migrator().HasIndex(&raceRecord{}, "idx_race_records_name"))
+		})
+	}
 }
 
 // withAutoMigrate overrides the auto-migrate option and restores it on cleanup.

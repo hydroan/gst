@@ -68,6 +68,11 @@ func modelDisplayName(m types.Model) string {
 // Index renames therefore follow the migrate-then-deploy workflow: apply the
 // rename through gg migrate first, so this bootstrap path finds the new name
 // already in place and does nothing.
+//
+// Processes preparing the table at once, where no lock serializes them, race
+// to create an index; the loser's failure is checked against the table, and
+// the winner's index, under the plan's name and definition, is the outcome
+// it wanted.
 func ensureCustomIndexes(handler *gorm.DB, m types.Model) error {
 	tableName, err := requireTableName(m)
 	if err != nil {
@@ -104,10 +109,28 @@ func ensureCustomIndexes(handler *gorm.DB, m types.Model) error {
 				plan.Table, strings.Join(plan.Columns, ","), renamed, plan.Table, renamed, plan.Name)
 		}
 		if err = handler.Exec(plan.CreateSQL(handler.Dialector)).Error; err != nil {
+			if created, inspectErr := indexMatchesPlan(handler, tableName, plan); inspectErr == nil && created {
+				continue
+			}
 			return errors.Wrapf(err, "failed to create index %q on table %q", plan.Name, plan.Table)
 		}
 	}
 	return nil
+}
+
+// indexMatchesPlan reports whether the table carries an index of the plan's
+// name and definition at this moment.
+func indexMatchesPlan(handler *gorm.DB, tableName string, plan modelregistry.IndexPlan) (bool, error) {
+	existing, err := handler.Migrator().GetIndexes(tableName)
+	if err != nil {
+		return false, err
+	}
+	for _, idx := range existing {
+		if idx.Name() == plan.Name {
+			return matchesPlan(idx, plan), nil
+		}
+	}
+	return false, nil
 }
 
 // matchesPlan reports whether an existing index carries the plan's column
