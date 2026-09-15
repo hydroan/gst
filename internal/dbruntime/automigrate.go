@@ -37,7 +37,9 @@ func (d automigrateDialector) Migrator(db *gorm.DB) gorm.Migrator {
 
 // Translate forwards to the dialect's translator, so that an error of a
 // migration statement reads the same as anywhere else; gorm looks the
-// translator up on the dialector, and an embedded interface hides it.
+// translator up on the dialector, and an embedded interface hides it. It is
+// the one optional interface the session needs: only AutoMigrate runs on
+// it, never a transaction, so the savepoint interface stays hidden.
 func (d automigrateDialector) Translate(err error) error {
 	if translator, ok := d.Dialector.(gorm.ErrorTranslator); ok {
 		return translator.Translate(err)

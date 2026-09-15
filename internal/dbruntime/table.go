@@ -245,9 +245,9 @@ var startupLocks = map[string]startupLock{
 // — a large seeding, a column added to a large table — is the project's,
 // and a bound the framework picked would turn a slow start into failed
 // ones. The wait cannot outlive the holder: the lock is the holder's
-// session, and a holder that crashes drops it with its connection — which
-// is also why the process must reach the primary directly or through a
-// session-level pool: a proxy that hands a session's statements to
+// session, and a holder that crashes drops it with its connection — which is
+// also why the process must reach the primary directly or through a
+// session-level pool, since a proxy that hands a session's statements to
 // different connections cannot hold the lock. A holder
 // that hangs is a process that never becomes ready, which the orchestrator's
 // startup probe restarts, releasing the lock the same way; the waiting
@@ -327,7 +327,10 @@ func awaitStartupLock(ctx context.Context, lock startupLock, conn *sql.Conn, nam
 
 // ending returns why ctx ended when err is that ending's doing — the wait
 // was told to stop, and a statement it cut short is not the reason to
-// report — and err itself otherwise.
+// report — and err itself otherwise. It goes by ctx, not by err: a driver
+// reports a statement cut short in words of its own, not as ctx's error, so
+// a failure of the statement's own that coincides with the stop is reported
+// as the stop; the process is ending either way.
 func ending(ctx context.Context, err error) error {
 	if ctx.Err() != nil {
 		return context.Cause(ctx)

@@ -168,6 +168,7 @@ func (*uniqueRecord) Indexes() []modelregistry.Index {
 // created. automigrating is what keeps gorm's hands off them.
 func TestMigrateTableLeavesTheIndexesAlone(t *testing.T) {
 	withAutoMigrate(t, true)
+	withFastStartupLock(t)
 
 	sqliteFile := filepath.Join(t.TempDir(), "unique.db")
 	for _, dialect := range []struct {
@@ -189,9 +190,9 @@ func TestMigrateTableLeavesTheIndexesAlone(t *testing.T) {
 			statements := recordStatements(second)
 			require.NoError(t, ensureTable(second, &uniqueRecord{}))
 			for _, statement := range statements.all() {
-				upper := strings.ToUpper(statement)
-				require.Falsef(t, strings.Contains(upper, "INDEX") && (strings.Contains(upper, "DROP") || strings.Contains(upper, "CREATE")),
-					"a start against a prepared table must leave its indexes alone, ran: %s", statement)
+				keyword, _, _ := strings.Cut(strings.ToUpper(strings.TrimSpace(statement)), " ")
+				require.NotContainsf(t, []string{"ALTER", "CREATE", "DROP"}, keyword,
+					"a start against a prepared table must leave it as it is, ran: %s", statement)
 			}
 			plans, err := modelregistry.ParseIndexPlans(second, &uniqueRecord{})
 			require.NoError(t, err)
