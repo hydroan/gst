@@ -18,8 +18,9 @@
 // round still holding the lease keeps the next instants from everyone. A job
 // that must run on every replica — refreshing a process-local cache,
 // cleaning a local directory — registers with RegisterPerInstance and runs
-// without a lease. A ClickHouse primary database cannot carry leases, so a
-// job under a lease fails the start there.
+// without a lease; the lease table comes with the package all the same, and
+// stays empty for such a project. A ClickHouse primary database cannot carry
+// leases, so a job under a lease fails the start there.
 //
 // On start-up the scheduler catches up the most recent instant of a job when
 // no replica ran it, which is what a rolling deployment or an outage owes
@@ -397,16 +398,18 @@ func (s *scheduler) stop(ctx context.Context) error {
 
 // loop runs the job at each instant of its schedule, starting with next,
 // until ctx ends; a job under a lease first catches up the most recent
-// instant no replica ran. The instant after a run is computed from the
-// moment the run ended, so instants that passed while a run was in flight
-// are skipped, never piled on top of it — a slow round must not multiply its
-// downstream calls — and every skip is logged with the number of instants it
-// cost, so a job that keeps overrunning its period does not quietly run less
-// often. A schedule with no instant left — a day that never comes — ends the
-// loop.
+// instant no replica ran. The instant after a run — the catch-up included —
+// is computed from the moment the run ended, so instants that passed while
+// a run was in flight are skipped, never piled on top of it — a slow round
+// must not multiply its downstream calls — and every skip is logged with the
+// number of instants it cost, so a job that keeps overrunning its period
+// does not quietly run less often. A schedule with no instant left — a day
+// that never comes — ends the loop.
 func (j *job) loop(ctx context.Context, next time.Time) {
 	if !j.perInstance {
-		j.catchUp(ctx)
+		if ran, ok := j.catchUp(ctx); ok {
+			next = j.nextAfter(ran)
+		}
 	}
 	for {
 		if next.IsZero() {
@@ -417,19 +420,24 @@ func (j *job) loop(ctx context.Context, next time.Time) {
 			return
 		}
 		j.runInstant(ctx, next, false)
-
-		// Never before the instant just run: a wall clock set back would
-		// otherwise hand the same instant out again.
-		after := clk.Now()
-		if after.Before(next) {
-			after = next
-		}
-		following := j.schedule.Next(after)
-		if skipped := j.instantsBetween(next, following); skipped > 0 {
-			log.Warnz("cronjob skipped instants", zap.String("name", j.name), zap.String("spec", j.spec), zap.Int("skipped", skipped), zap.Time("after", next), zap.Time("next", following))
-		}
-		next = following
+		next = j.nextAfter(next)
 	}
+}
+
+// nextAfter returns the instant to wait for once the round for ran ended:
+// the first instant after now — never before ran itself, so a wall clock
+// set back cannot hand the same instant out again — logging the instants
+// the round overran.
+func (j *job) nextAfter(ran time.Time) time.Time {
+	after := clk.Now()
+	if after.Before(ran) {
+		after = ran
+	}
+	following := j.schedule.Next(after)
+	if skipped := j.instantsBetween(ran, following); skipped > 0 {
+		log.Warnz("cronjob skipped instants", zap.String("name", j.name), zap.String("spec", j.spec), zap.Int("skipped", skipped), zap.Time("after", ran), zap.Time("next", following))
+	}
+	return following
 }
 
 // instantsBetween counts the instants of the schedule after from and before
@@ -443,48 +451,50 @@ func (j *job) instantsBetween(from, to time.Time) int {
 }
 
 // catchUp runs, once and on one replica, the most recent instant of the job
-// that no replica ran — what a rolling deployment or an outage owes the job.
-// The conditions, all of which must hold: the job has run before, so its
-// lease row exists (a job never run starts with its next instant: the
-// instants before its first deployment were never its to run); the most
-// recent instant that passed lies within catchUpLookback; and no replica
-// claimed that instant — the claim itself decides this last one, so replicas
-// racing for the same catch-up settle it the way they settle any instant.
-func (j *job) catchUp(ctx context.Context) {
+// that no replica ran — what a rolling deployment or an outage owes the job
+// — and returns that instant and whether a round ran for it. The conditions,
+// all of which must hold: the job has run before, so its lease row exists (a
+// job never run starts with its next instant: the instants before its first
+// deployment were never its to run); the most recent instant that passed
+// lies within catchUpLookback; and no replica claimed that instant — the
+// claim itself decides this last one, so replicas racing for the same
+// catch-up settle it the way they settle any instant.
+func (j *job) catchUp(ctx context.Context) (time.Time, bool) {
 	prev, ok := previousInstant(j.schedule, clk.Now())
 	if !ok {
-		return
+		return time.Time{}, false
 	}
 	last, found, err := lease.LastSlot(ctx, j.leaseName())
 	if err != nil {
 		log.Errorz("cronjob could not read its last instant", zap.Error(err), zap.String("name", j.name), zap.String("spec", j.spec))
-		return
+		return time.Time{}, false
 	}
 	if !found || !last.Before(prev) {
-		return
+		return time.Time{}, false
 	}
-	j.runInstant(ctx, prev, true)
+	return prev, j.runInstant(ctx, prev, true)
 }
 
-// runInstant runs the round for at. A per-instance job runs it outright; a
-// job shared across the deployment first claims the instant's lease and runs
-// only when it wins, under the lease — its context ends with the lease, and
-// its transactions verify the lease first — then gives the lease back so the
-// next instant is free at once.
-func (j *job) runInstant(ctx context.Context, at time.Time, catchUp bool) {
+// runInstant runs the round for at and reports whether a round ran. A
+// per-instance job runs it outright; a job shared across the deployment
+// first claims the instant's lease and runs only when it wins, under the
+// lease — its context ends with the lease, and its transactions verify the
+// lease first — then gives the lease back so the next instant is free at
+// once.
+func (j *job) runInstant(ctx context.Context, at time.Time, catchUp bool) bool {
 	if j.perInstance {
 		j.run(ctx, at)
-		return
+		return true
 	}
 
 	h, claimed, err := lease.ClaimSlot(ctx, j.leaseName(), at)
 	if err != nil {
 		log.Errorz("cronjob could not claim its instant", zap.Error(err), zap.String("name", j.name), zap.String("spec", j.spec), zap.Time("at", at))
-		return
+		return false
 	}
 	if !claimed {
 		log.Debugz("cronjob instant claimed elsewhere", zap.String("name", j.name), zap.String("spec", j.spec), zap.Time("at", at))
-		return
+		return false
 	}
 
 	fields := []zap.Field{zap.Uint64("term", h.Term())}
@@ -503,6 +513,7 @@ func (j *job) runInstant(ctx context.Context, at time.Time, catchUp bool) {
 	if err := h.Release(releaseCtx); err != nil {
 		log.Warnz("cronjob could not release its lease", zap.Error(err), zap.String("name", j.name), zap.Time("at", at))
 	}
+	return true
 }
 
 // run executes the round scheduled for at. Round identity, panic recovery,

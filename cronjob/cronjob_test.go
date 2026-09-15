@@ -15,12 +15,16 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/consts"
+	"github.com/hydroan/gst/database/mysql"
+	"github.com/hydroan/gst/database/postgres"
 	"github.com/hydroan/gst/database/sqlite"
 	"github.com/hydroan/gst/internal/dbruntime"
 	"github.com/hydroan/gst/internal/execctx"
 	"github.com/hydroan/gst/internal/lease"
 	"github.com/hydroan/gst/internal/lifecycle"
+	"github.com/hydroan/gst/internal/testutil"
 	"github.com/hydroan/gst/internal/testutil/oteltest"
+	"github.com/hydroan/gst/internal/testutil/testcontainer"
 	"github.com/hydroan/gst/logger"
 	pkgzap "github.com/hydroan/gst/logger/zap"
 	"github.com/robfig/cron/v3"
@@ -30,21 +34,33 @@ import (
 	gormlogger "gorm.io/gorm/logger"
 )
 
-// TestMain gives the suite a primary database: a job claims each of its
-// instants through the lease engine, and an in-memory sqlite database —
-// the lease table auto-migrated the way bootstrap would — carries that for
-// every test.
+// TestMain gives the suite a primary database — the dialect under test, so
+// the Makefile test target runs the multi-replica scenarios on every dialect
+// the lease engine reads a clock from — prepared the way bootstrap's first
+// phase would, without the lifecycle: the scheduler under test has to be
+// started by the tests themselves.
 func TestMain(m *testing.M) {
-	config.App = new(config.Config)
-	config.App.Database.Type = config.DBSqlite
-	config.App.Database.AutoMigrate = true
-	config.App.Sqlite = config.Sqlite{Enabled: true, IsMemory: true, Database: "main"}
+	os.Exit(run(m))
+}
+
+// run holds the body of TestMain so that the deferred release still happens:
+// the os.Exit in TestMain would skip it.
+func run(m *testing.M) int {
+	release, _, err := testcontainer.SetupDatabase(testutil.DatabaseUnderTest())
+	if err != nil {
+		panic(err)
+	}
+	defer func() { _ = release() }()
+
 	logger.Gorm = gormlogger.Discard
-	if err := sqlite.Init(); err != nil {
+	if err := config.Init(); err != nil {
+		panic(err)
+	}
+	if err := errors.Join(sqlite.Init(), mysql.Init(), postgres.Init()); err != nil {
 		panic(err)
 	}
 	dbruntime.Wait()
-	os.Exit(m.Run())
+	return m.Run()
 }
 
 // TestSchedulesAreReadInUTC proves an expression is read in UTC — the zone
@@ -280,6 +296,50 @@ func TestCatchUpRunsTheMostRecentInstantNoReplicaRan(t *testing.T) {
 	require.Equal(t, "2026-01-01T10:00:00Z", entry["at"], "the catch-up runs for the instant it caught up")
 	require.Equal(t, true, entry["catch_up"])
 	require.EqualValues(t, 2, entry["term"], "the catch-up starts the next term of the job's lease")
+}
+
+// TestInstantsPassingDuringACatchUpAreSkipped proves the instants that pass
+// while the catch-up round is in flight are skipped like any that pass
+// during a round: the loop resumes with the first instant after the
+// catch-up ended, not with the one computed before it began.
+func TestInstantsPassingDuringACatchUpAreSkipped(t *testing.T) {
+	dir := withCronjobLoggerConfig(t)
+	resetCronjobState(t)
+	clock := withFakeClock(t, time.Date(2026, 1, 1, 10, 0, 30, 0, time.UTC))
+
+	lastRun(t, "cron:slow-catch-up-job", time.Date(2026, 1, 1, 9, 58, 0, 0, time.UTC))
+
+	runs := newRunLog()
+	var first atomic.Bool
+	release := make(chan struct{})
+	Register(func(context.Context) error {
+		runs.record(clk.Now())
+		if first.CompareAndSwap(false, true) {
+			<-release
+		}
+		return nil
+	}, "@every 1m", "slow-catch-up-job")
+	require.NoError(t, start(context.Background()))
+
+	// The catch-up for 10:00 runs at once and lasts past 10:01, the instant
+	// the scheduler computed before it began.
+	runs.await(t)
+	clock.Advance(time.Minute)
+	close(release)
+	clock.untilWaiting(t)
+	clock.Advance(30 * time.Second)
+	runs.await(t)
+	require.NoError(t, stop(context.Background()))
+
+	require.Equal(t, map[time.Time]int{
+		time.Date(2026, 1, 1, 10, 0, 30, 0, time.UTC): 1,
+		time.Date(2026, 1, 1, 10, 2, 0, 0, time.UTC):  1,
+	}, runs.counts(), "the instant overrun by the catch-up must be skipped, not run late")
+
+	pkgzap.Clean()
+	entry := readLogEntry(t, filepath.Join(dir, "cronjob.log"), "cronjob skipped instants")
+	require.EqualValues(t, 1, entry["skipped"])
+	require.Equal(t, "2026-01-01T10:00:00Z", entry["after"], "the skip is counted from the instant the catch-up ran for")
 }
 
 // TestCatchUpSkipsAJobThatNeverRan proves a job appearing for the first
