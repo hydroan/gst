@@ -15,7 +15,6 @@ var (
 	App types.Logger
 
 	Runtime types.Logger
-	Cronjob types.Logger
 	Task    types.Logger
 
 	Controller types.Logger

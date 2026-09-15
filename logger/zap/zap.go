@@ -73,7 +73,6 @@ func Init() error {
 	logger.App = New("app.log")
 
 	logger.Runtime = New("runtime.log")
-	logger.Cronjob = New("cronjob.log")
 	logger.Task = New("task.log")
 
 	logger.Controller = New("controller.log")
@@ -122,7 +121,6 @@ func Clean() {
 		logger.App,
 
 		logger.Runtime,
-		logger.Cronjob,
 		logger.Task,
 
 		logger.Controller,
