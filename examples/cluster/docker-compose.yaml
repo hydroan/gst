@@ -44,10 +44,12 @@ services:
       interval: 2s
       timeout: 2s
       retries: 30
-    # SIGTERM starts the graceful shutdown; the grace period must outlast the
-    # drain window and the wait for in-flight jobs, or Docker kills a replica
-    # that is still finishing a round.
-    stop_grace_period: 40s
+    # SIGTERM starts the graceful shutdown; the grace period outlasts the
+    # framework's whole shutdown at its longest — the drain window, then up
+    # to 30 seconds for the HTTP connections and up to 30 seconds for
+    # in-flight jobs — or Docker would kill a replica that is still
+    # finishing a round.
+    stop_grace_period: 70s
     ports:
       - "8081:8080"
     volumes:

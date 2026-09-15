@@ -6,10 +6,14 @@
 #     random suffix per start), so a lease names the pod holding it;
 #   - readiness comes from /-/readyz, which the framework turns off the moment
 #     shutdown begins, so the Service stops routing to a draining pod;
-#   - terminationGracePeriodSeconds outlasts the graceful shutdown — the drain
-#     window plus the wait for in-flight jobs — so a pod is never killed while
-#     it is still finishing a round; the lease it holds is released as the
-#     round ends, and a new leader is elected within seconds;
+#   - terminationGracePeriodSeconds outlasts the framework's whole shutdown
+#     at its longest — the drain window, then up to 30 seconds for the HTTP
+#     connections and up to 30 seconds for in-flight jobs — so a pod is never
+#     killed while it is still finishing a round; the lease it holds is
+#     released as the round ends, and a new leader is elected within seconds;
+#   - the startup probe covers the time the framework may spend preparing
+#     tables when the whole deployment starts against a slow database, so
+#     liveness does not restart a pod that is still coming up;
 #   - the disruption budget keeps two replicas up through a rolling update or
 #     a node drain, so the work never stands still.
 apiVersion: v1
@@ -52,7 +56,7 @@ spec:
       labels:
         app: cluster
     spec:
-      terminationGracePeriodSeconds: 40
+      terminationGracePeriodSeconds: 70
       containers:
         - name: cluster
           image: gst-cluster:dev
@@ -69,6 +73,12 @@ spec:
           ports:
             - name: http
               containerPort: 8080
+          startupProbe:
+            httpGet:
+              path: /-/healthz
+              port: http
+            periodSeconds: 5
+            failureThreshold: 30
           readinessProbe:
             httpGet:
               path: /-/readyz

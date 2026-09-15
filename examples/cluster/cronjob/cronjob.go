@@ -35,8 +35,10 @@ func localTick(ctx context.Context) error {
 
 // slow runs longer than the 15 seconds a lease lasts, so the round keeps the
 // lease alive by renewing it: expires_at_ms of cron:slow in gst_leases keeps
-// moving while the round runs, and the instant that passes meanwhile is
-// skipped rather than run by another replica.
+// moving while the round runs, and no other replica can take the name over
+// meanwhile. Its period is longer than a round, so no instant passes while
+// one runs; a job that overran its period would have the instants that
+// passed skipped, with a warning naming how many.
 func slow(ctx context.Context) error {
 	select {
 	case <-time.After(20 * time.Second):

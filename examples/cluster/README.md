@@ -78,7 +78,7 @@ docker compose unpause replica1
 grep -h 'lease lost' logs/replica1/leader.log
 ```
 
-暂停超过 15 秒，租约在数据库里到期，别的副本当选。旧 leader 恢复后本地截止早就过了，它的 ctx 立刻结束；即便它来得及再发一个事务，事务的第一条语句也会核对租约、发现不是自己的而整个不跑。`leader.log` 里这一任以 `reason: lease lost` 结束，随后它重新竞选。计数没有被两个副本同时加过。
+暂停超过 15 秒，租约在数据库里到期，别的副本当选。旧 leader 恢复后本地截止早就过了，它的 ctx 立刻结束；即便它来得及再用 `database.Transaction` 发一个事务（计数就是这么加的），事务的第一条语句也会核对租约、发现不是自己的而整个不跑。`leader.log` 里这一任以 `reason: lease lost` 结束，随后它重新竞选。计数没有被两个副本同时加过。
 
 ### 5. 优雅停机
 
@@ -87,7 +87,7 @@ docker compose stop replica2 &
 watch -n 0.5 curl -s -o /dev/null -w '%{http_code}\n' localhost:8082/-/readyz
 ```
 
-收到 SIGTERM 的瞬间 `/-/readyz` 变成 503，负载均衡不再分流；`SERVER_SHUTDOWN_DELAY`（这里 5 秒）过后监听才关闭，正在跑的一轮任务跑完、租约放手，进程才退出。`stop_grace_period` 和 k8s 里的 `terminationGracePeriodSeconds` 都设成 40 秒，盖过这个过程。
+收到 SIGTERM 的瞬间 `/-/readyz` 变成 503，负载均衡不再分流；`SERVER_SHUTDOWN_DELAY`（这里 5 秒）过后监听才关闭，正在跑的一轮任务跑完、租约放手，进程才退出。框架停机最长是 5 秒排空 + 最多 30 秒等 HTTP 连接 + 最多 30 秒等在途任务，所以 `stop_grace_period` 和 k8s 里的 `terminationGracePeriodSeconds` 都设成 70 秒，盖过最坏情况；示例里的任务几秒就返回，实际停机远短于此。
 
 ## Kubernetes
 
@@ -99,4 +99,4 @@ kubectl apply -f examples/cluster/deploy/k8s/
 kubectl get pods -l app=cluster -w
 ```
 
-`deploy/k8s/mysql.yaml` 里的 MySQL 只是给示例用的，没有持久卷。三个 Pod 一起对空库建表和 compose 一样安全；正式环境的做法仍是先 `gg migrate` 建表、副本一律 `DATABASE_AUTO_MIGRATE=false`，让 schema 变更走评审而不是启动副作用。`kubectl delete pod <leader>` 对应场景 2，`kubectl rollout restart deployment/cluster` 能看到滚动更新期间任务不断：PodDisruptionBudget 保证至少两个副本在，租约让工作在副本之间接力。
+`deploy/k8s/mysql.yaml` 里的 MySQL 只是给示例用的，没有持久卷；清单里没有让应用 Pod 等 MySQL，第一次 apply 时应用 Pod 会在 MySQL 就绪前失败重启几次，随后自己起来（启动探针给了足够的时间）。三个 Pod 一起对空库建表和 compose 一样安全；正式环境的做法仍是先 `gg migrate` 建表、副本一律 `DATABASE_AUTO_MIGRATE=false`，让 schema 变更走评审而不是启动副作用。`kubectl delete pod <leader>` 对应场景 2，`kubectl rollout restart deployment/cluster` 能看到滚动更新期间任务不断：PodDisruptionBudget 保证至少两个副本在，租约让工作在副本之间接力。
