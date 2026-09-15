@@ -207,8 +207,8 @@ func (l *Lock) TryRun(ctx context.Context, fn func(ctx context.Context) error) e
 		return errors.Wrapf(ErrHeld, "lock %q", l.name)
 	}
 
-	held, stopHold := lease.Hold(ctx, h)
-	err = lease.Run(lease.WithHandle(held, h), l.leaseName(), fn)
+	held, stopHold := lease.Hold(ctx, h, logger())
+	err = lease.Run(lease.WithHandle(held, h), l.leaseName(), logger(), fn)
 	lost := errors.Is(context.Cause(held), lease.ErrLost)
 	stopHold()
 	if lost {

@@ -33,6 +33,9 @@ import (
 	"go.opentelemetry.io/otel/codes"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	oteltrace "go.opentelemetry.io/otel/trace"
+	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
+	"go.uber.org/zap/zaptest/observer"
 	"gorm.io/gorm"
 	gormlogger "gorm.io/gorm/logger"
 )
@@ -276,6 +279,7 @@ func TestHeldInstantKeepsTheNextFromEveryone(t *testing.T) {
 func TestCatchUpRunsTheMostRecentInstantNoReplicaRan(t *testing.T) {
 	dir := withCronjobLoggerConfig(t)
 	resetCronjobState(t)
+	withBoundCronjobLogger(t)
 	clock := withFakeClock(t, time.Date(2026, 1, 1, 10, 0, 30, 0, time.UTC))
 
 	// The job ran before: an earlier instant is on record.
@@ -308,6 +312,7 @@ func TestCatchUpRunsTheMostRecentInstantNoReplicaRan(t *testing.T) {
 func TestInstantsPassingDuringACatchUpAreSkipped(t *testing.T) {
 	dir := withCronjobLoggerConfig(t)
 	resetCronjobState(t)
+	withBoundCronjobLogger(t)
 	clock := withFakeClock(t, time.Date(2026, 1, 1, 10, 0, 30, 0, time.UTC))
 
 	lastRun(t, "cron:slow-catch-up-job", time.Date(2026, 1, 1, 9, 58, 0, 0, time.UTC))
@@ -422,6 +427,7 @@ func startOnClickhouse() error {
 func TestInstantsPassingDuringARunAreSkipped(t *testing.T) {
 	dir := withCronjobLoggerConfig(t)
 	resetCronjobState(t)
+	withBoundCronjobLogger(t)
 	clock := withFakeClock(t, time.Date(2026, 1, 1, 10, 0, 0, 0, time.UTC))
 
 	var runs atomic.Int32
@@ -524,6 +530,7 @@ func TestStopGivesUpOnAJobThatIgnoresItsContext(t *testing.T) {
 func TestRoundThatLosesItsLeaseIsCutShortAndLogged(t *testing.T) {
 	dir := withCronjobLoggerConfig(t)
 	resetCronjobState(t)
+	withBoundCronjobLogger(t)
 	clock := withFakeClock(t, time.Date(2026, 1, 1, 10, 0, 0, 0, time.UTC))
 	withFastLease(t)
 
@@ -566,6 +573,7 @@ func TestRoundThatLosesItsLeaseIsCutShortAndLogged(t *testing.T) {
 func TestRoundThatReturnsNothingAfterLosingItsLeaseIsLogged(t *testing.T) {
 	dir := withCronjobLoggerConfig(t)
 	resetCronjobState(t)
+	withBoundCronjobLogger(t)
 	clock := withFakeClock(t, time.Date(2026, 1, 1, 10, 0, 0, 0, time.UTC))
 	withFastLease(t)
 
@@ -606,6 +614,7 @@ func TestRoundInterruptedAtShutdownIsAWarning(t *testing.T) {
 	oteltest.Enable(t)
 	recorder := oteltest.Record(t)
 	resetCronjobState(t)
+	withBoundCronjobLogger(t)
 	clock := withFakeClock(t, time.Date(2026, 1, 1, 10, 0, 0, 0, time.UTC))
 
 	entered := make(chan struct{}, 1)
@@ -658,6 +667,7 @@ func TestStopWithoutStartIsNoop(t *testing.T) {
 func TestNeverMatchingScheduleEndsItsLoop(t *testing.T) {
 	dir := withCronjobLoggerConfig(t)
 	resetCronjobState(t)
+	withBoundCronjobLogger(t)
 	withFakeClock(t, time.Date(2026, 1, 1, 10, 0, 0, 0, time.UTC))
 
 	Register(noopJob, "0 0 0 30 2 *", "never-job")
@@ -752,60 +762,37 @@ func TestRegisterAfterStartPanics(t *testing.T) {
 		func() { Register(noopJob, "* * * * * *", "late-job") })
 }
 
-// TestStartAdoptsSharedCronjobLogger proves scheduling logs flow through the
-// shared logger.Cronjob instance instead of a second package-local logger on
-// the same file, which would race lumberjack rotation against it.
-func TestStartAdoptsSharedCronjobLogger(t *testing.T) {
+// TestStartFallsBackToTheGlobalStreamWithoutABoundLogger proves what a
+// process that never ran the lifecycle — a unit test — logs through: the
+// entries go to the global log stream, tagged with the component, and the
+// scheduler opens no file of its own, which would put a second rotation
+// instance on the file the lifecycle's own logger owns.
+func TestStartFallsBackToTheGlobalStreamWithoutABoundLogger(t *testing.T) {
 	dir := withCronjobLoggerConfig(t)
 	resetCronjobState(t)
 	withFakeClock(t, time.Date(2026, 1, 1, 10, 0, 0, 0, time.UTC))
-
-	shared := pkgzap.New("shared_cronjob.log")
-	original := logger.Cronjob
-	logger.Cronjob = shared
-	t.Cleanup(func() { logger.Cronjob = original })
-
-	Register(noopJob, "0 0 * * * *", "sample-job")
-	require.NoError(t, start(context.Background()))
-	pkgzap.Clean()
-
-	data, err := os.ReadFile(filepath.Join(dir, "shared_cronjob.log"))
-	require.NoError(t, err)
-	require.Contains(t, string(data), "scheduled cronjob",
-		"scheduling must log through the shared cronjob logger")
-	require.NoFileExists(t, filepath.Join(dir, "cronjob.log"),
-		"no package-local logger may open the shared log file")
-}
-
-// TestStartFallsBackToLocalLoggerWithoutShared keeps the pre-existing
-// behavior for processes that never ran the logging setup (unit tests):
-// scheduling still logs through a package-local logger.
-func TestStartFallsBackToLocalLoggerWithoutShared(t *testing.T) {
-	dir := withCronjobLoggerConfig(t)
-	resetCronjobState(t)
-	withFakeClock(t, time.Date(2026, 1, 1, 10, 0, 0, 0, time.UTC))
-
-	original := logger.Cronjob
-	logger.Cronjob = nil
-	t.Cleanup(func() { logger.Cronjob = original })
+	entries := withObservedGlobalLogger(t)
 
 	Register(noopJob, "0 0 * * * *", "fallback-job")
 	require.NoError(t, start(context.Background()))
 	pkgzap.Clean()
 
-	data, err := os.ReadFile(filepath.Join(dir, "cronjob.log"))
-	require.NoError(t, err)
-	require.Contains(t, string(data), "scheduled cronjob")
+	scheduled := entries.FilterMessage("scheduled cronjob").All()
+	require.Len(t, scheduled, 1, "scheduling must log through the fallback logger")
+	require.Equal(t, "cronjob", scheduled[0].ContextMap()["component"])
+	require.NoFileExists(t, filepath.Join(dir, "cronjob.log"),
+		"the fallback must not open the file the lifecycle's logger owns")
 }
 
 // TestSchedulerIsALifecycleComponent proves importing the package is what
 // enables scheduling: init registered the scheduler as a lifecycle component
-// whose Start and Stop are this package's, so bootstrap starts it once the
-// tables are ready and stops it as the process drains. The component is
-// driven directly — a lifecycle stage starts once per process, which would
-// make the test unrepeatable.
+// whose Start, Stop and logger binding are this package's, so bootstrap
+// starts it once the tables are ready, stops it as the process drains, and
+// hands it the dedicated cronjob.log. The component is driven directly — a
+// lifecycle stage starts once per process, which would make the test
+// unrepeatable.
 func TestSchedulerIsALifecycleComponent(t *testing.T) {
-	withCronjobLoggerConfig(t)
+	dir := withCronjobLoggerConfig(t)
 	resetCronjobState(t)
 	clock := withFakeClock(t, time.Date(2026, 1, 1, 10, 0, 0, 0, time.UTC))
 
@@ -816,6 +803,7 @@ func TestSchedulerIsALifecycleComponent(t *testing.T) {
 		}
 	}
 	require.NotNil(t, component.Start, "the scheduler must register itself as a lifecycle component")
+	require.NotNil(t, component.SetLogger, "the scheduler must take the dedicated logger the lifecycle binds")
 
 	entered := make(chan struct{}, 1)
 	Register(func(context.Context) error {
@@ -823,11 +811,17 @@ func TestSchedulerIsALifecycleComponent(t *testing.T) {
 		return nil
 	}, "* * * * * *", "component-job")
 
+	component.SetLogger(pkgzap.New("bound_cronjob.log"))
 	require.NoError(t, component.Start(context.Background()))
 	clock.Advance(time.Second)
 	awaitSignal(t, entered, "the round")
 	require.NoError(t, component.Stop(context.Background()))
 	require.NotNil(t, current, "the scheduler must have been started through the component")
+
+	pkgzap.Clean()
+	entry := readLogEntry(t, filepath.Join(dir, "bound_cronjob.log"), "scheduled cronjob")
+	require.Equal(t, "component-job", entry["name"])
+	require.NoFileExists(t, filepath.Join(dir, "cronjob.log"), "the bound logger replaces the package's own")
 }
 
 // TestRunLogsFailureWithErrorStack proves a failed round leaves an entry the
@@ -859,6 +853,7 @@ func TestRunLogsFailureWithErrorStack(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			dir := withCronjobLoggerConfig(t)
 			resetCronjobState(t)
+			withBoundCronjobLogger(t)
 			clock := withFakeClock(t, time.Date(2026, 1, 1, 10, 0, 0, 0, time.UTC))
 
 			entered := make(chan struct{}, 1)
@@ -891,6 +886,7 @@ func TestRunLogsFailureWithErrorStack(t *testing.T) {
 func TestRunStampsRoundIdentity(t *testing.T) {
 	dir := withCronjobLoggerConfig(t)
 	resetCronjobState(t)
+	withBoundCronjobLogger(t)
 	clock := withFakeClock(t, time.Date(2026, 1, 1, 10, 0, 0, 0, time.UTC))
 
 	type observation struct {
@@ -1104,9 +1100,7 @@ func withRecordedFailures(t *testing.T) <-chan error {
 func startInstances(t *testing.T, n int) []*scheduler {
 	t.Helper()
 
-	if log == nil {
-		log = pkgzap.New("cronjob.log")
-	}
+	withBoundCronjobLogger(t)
 	instances := make([]*scheduler, 0, n)
 	for range n {
 		s := newScheduler(jobs)
@@ -1274,6 +1268,33 @@ func withCronjobLoggerConfig(t *testing.T) string {
 
 	t.Cleanup(func() { config.App = original })
 	return dir
+}
+
+// withBoundCronjobLogger stands in for the lifecycle, which binds the
+// dedicated cronjob.log before it starts the component, so the scheduler's
+// entries land in a file the test can read back. A test that already bound
+// one keeps it: a second logger on the file would open a second rotation
+// instance on it.
+func withBoundCronjobLogger(t *testing.T) {
+	t.Helper()
+
+	mu.Lock()
+	defer mu.Unlock()
+	if log == nil {
+		log = pkgzap.New("cronjob.log")
+	}
+}
+
+// withObservedGlobalLogger routes the global logger — the stream the
+// package's fallback logger writes to — into an observer for the test, and
+// restores the previous one afterwards.
+func withObservedGlobalLogger(t *testing.T) *observer.ObservedLogs {
+	t.Helper()
+
+	core, logs := observer.New(zapcore.InfoLevel)
+	restore := zap.ReplaceGlobals(zap.New(core))
+	t.Cleanup(restore)
+	return logs
 }
 
 // resetCronjobState stops whatever the previous test left running, waits

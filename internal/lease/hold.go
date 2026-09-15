@@ -6,8 +6,8 @@ import (
 
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/internal/lifecycle"
+	"github.com/hydroan/gst/internal/types"
 	"github.com/hydroan/gst/util"
-	"go.uber.org/zap"
 )
 
 // Hold keeps h renewed on a goroutine of its own and returns a context that
@@ -31,7 +31,11 @@ import (
 // lost, the same as when the database cannot be reached. A transaction
 // shorter than localDeadline minus renewInterval can never do that; one
 // longer than localDeadline always does.
-func Hold(parent context.Context, h *Handle) (ctx context.Context, stop context.CancelFunc) {
+//
+// log is the holder's own logger: a renewal that failed without losing the
+// lease is what explains a round or a tenure cut short, so the entry belongs
+// beside the holder's own rather than in the global stream.
+func Hold(parent context.Context, h *Handle, log types.Logger) (ctx context.Context, stop context.CancelFunc) {
 	ctx, cancel := context.WithCancelCause(parent)
 	// The renewals run on a context of their own, so that parent ending does
 	// not end them; stop does.
@@ -73,7 +77,7 @@ func Hold(parent context.Context, h *Handle) (ctx context.Context, stop context.
 			case renewing.Err() != nil:
 				return
 			default:
-				zap.S().Warnw("lease renewal failed", "component", "lease", "lease", h.name, "err", err)
+				log.Warnw("lease renewal failed", "component", "lease", "lease", h.name, "err", err)
 			}
 			if time.Since(last) >= deadline {
 				cancel(ErrLost)
@@ -113,7 +117,11 @@ var fail = lifecycle.Fail
 // The work runs on a goroutine of its own, so that the lease being lost can
 // be watched while it runs; a panic in it is recovered into an error
 // carrying the stack of the panic site, which Run returns.
-func Run(ctx context.Context, name string, work func(ctx context.Context) error) error {
+//
+// log is the holder's own logger: work that will not stop is the last thing
+// said about a round or a tenure, so the entry belongs beside the holder's
+// own rather than in the global stream.
+func Run(ctx context.Context, name string, log types.Logger, work func(ctx context.Context) error) error {
 	returned := make(chan error, 1)
 	go func() {
 		defer func() {
@@ -140,7 +148,7 @@ func Run(ctx context.Context, name string, work func(ctx context.Context) error)
 		return err
 	case <-grace.C:
 		err := errors.Newf("lease %q was lost and the work under it has not stopped within %s", name, stepDownGrace)
-		zap.S().Errorw("work under a lost lease will not stop", "component", "lease", "lease", name, "err", err)
+		log.Errorw("work under a lost lease will not stop", "component", "lease", "lease", name, "err", err)
 		fail(err)
 		return <-returned
 	}

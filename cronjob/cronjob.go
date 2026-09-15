@@ -65,7 +65,6 @@ import (
 	"github.com/hydroan/gst/internal/lease"
 	"github.com/hydroan/gst/internal/lifecycle"
 	"github.com/hydroan/gst/internal/types"
-	"github.com/hydroan/gst/logger"
 	pkgzap "github.com/hydroan/gst/logger/zap"
 	gstotel "github.com/hydroan/gst/otel"
 	"github.com/hydroan/gst/util"
@@ -98,7 +97,10 @@ var (
 	// start reports them, so the process fails at startup instead of
 	// silently running without those jobs.
 	errRegister error
-	log         types.Logger
+	// log is the scheduler's logger: the dedicated cronjob.log the lifecycle
+	// binds before the component starts, or one writing to the global stream
+	// in a process that never ran the lifecycle.
+	log types.Logger
 	// clk is the time the scheduler goes by. Tests swap in one they drive
 	// by hand, so a schedule of hours plays out in microseconds.
 	clk clock = systemClock{}
@@ -142,7 +144,20 @@ func init() {
 	// ready and stops it as soon as the process begins to drain. A project
 	// that registers no job never imports the package and never runs a
 	// scheduler.
-	lifecycle.Register(lifecycle.Component{Name: "cronjob", Stage: lifecycle.StageComponent, Start: start, Stop: stop})
+	lifecycle.Register(lifecycle.Component{
+		Name:      "cronjob",
+		Stage:     lifecycle.StageComponent,
+		SetLogger: setLogger,
+		Start:     start,
+		Stop:      stop,
+	})
+}
+
+// setLogger binds the dedicated logger the lifecycle hands out.
+func setLogger(l types.Logger) {
+	mu.Lock()
+	defer mu.Unlock()
+	log = l
 }
 
 // Register declares fn as the job named name, run on spec: a six-field cron
@@ -333,14 +348,12 @@ func start(ctx context.Context) error {
 		return err
 	}
 	if log == nil {
-		// Adopt the shared cronjob logger so this package never opens a
-		// second lumberjack instance on the same file, which would race its
-		// rotation. Bootstrap initializes logging long before the scheduler
-		// starts, so the local fallback only serves processes that never ran
-		// the logging setup (e.g. unit tests).
-		if log = logger.Cronjob; log == nil {
-			log = pkgzap.New("cronjob.log")
-		}
+		// The lifecycle binds the dedicated logger before it starts the
+		// component; a process that never ran the lifecycle (unit tests)
+		// logs to the global stream. Opening cronjob.log here instead would
+		// put a second rotation instance on the file once the lifecycle
+		// opens its own.
+		log = pkgzap.Fallback("cronjob")
 	}
 
 	s := newScheduler(jobs)
@@ -530,9 +543,9 @@ func (j *job) runInstant(ctx context.Context, at time.Time, catchUp bool) bool {
 	if catchUp {
 		fields = append(fields, zap.Bool("catch_up", true))
 	}
-	held, stopHold := lease.Hold(ctx, h)
+	held, stopHold := lease.Hold(ctx, h, log)
 	// The round logs its own outcome; Run's is the same error, already logged.
-	runErr := lease.Run(lease.WithHandle(held, h), j.leaseName(), func(ctx context.Context) error {
+	runErr := lease.Run(lease.WithHandle(held, h), j.leaseName(), log, func(ctx context.Context) error {
 		return j.run(ctx, at, fields...)
 	})
 	lost := errors.Is(context.Cause(held), lease.ErrLost)

@@ -320,14 +320,14 @@ func campaignWait() time.Duration {
 // identity, and work that will not stop once the lease is lost fails the
 // process, see lease.Run.
 func (w *work) lead(ctx context.Context, h *lease.Handle) {
-	held, stopHold := lease.Hold(ctx, h)
+	held, stopHold := lease.Hold(ctx, h, log)
 	traceID := util.TraceID()
 	tenure := execctx.WithLeader(lease.WithHandle(held, h), w.name, traceID)
 	fields := []zap.Field{zap.String("name", w.name), zap.Uint64("term", h.Term()), zap.String(consts.TRACE_ID, traceID)}
 	log.Infoz("elected leader", fields...)
 
 	begin := time.Now()
-	err := lease.Run(tenure, w.leaseName(), w.run)
+	err := lease.Run(tenure, w.leaseName(), log, w.run)
 	// Read before the renewals stop: stopping them ends the held context
 	// too, and would make every tenure look like a shutdown.
 	reason, lost := tenureEnd(held)

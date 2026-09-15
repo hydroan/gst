@@ -4,11 +4,13 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"sync"
 	"testing"
 	"time"
 
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/internal/dbruntime"
+	"github.com/hydroan/gst/internal/types"
 	"github.com/stretchr/testify/require"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
@@ -28,7 +30,7 @@ func TestHoldKeepsTheLeaseWhileRenewalsSucceed(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, claimed)
 
-	held, stop := Hold(ctx, holder)
+	held, stop := Hold(ctx, holder, newHolderLog())
 	select {
 	case <-held.Done():
 		t.Fatalf("the lease ended although every renewal succeeded: %v", context.Cause(held))
@@ -61,7 +63,7 @@ func TestHoldEndsAtTheLocalDeadlineWithoutTheDatabase(t *testing.T) {
 	t.Cleanup(func() { _ = holder.Release(ctx) })
 
 	withClosedDatabase(t)
-	held, stop := Hold(ctx, holder)
+	held, stop := Hold(ctx, holder, newHolderLog())
 	defer stop()
 
 	awaitDone(held, t)
@@ -96,7 +98,7 @@ func TestHoldGivesUpWhenARenewalCannotGetAConnection(t *testing.T) {
 	require.NoError(t, tx.Error)
 	t.Cleanup(func() { _ = tx.Rollback().Error })
 
-	held, stop := Hold(ctx, holder)
+	held, stop := Hold(ctx, holder, newHolderLog())
 	defer stop()
 
 	awaitDone(held, t)
@@ -117,7 +119,7 @@ func TestHoldEndsWithItsParent(t *testing.T) {
 	t.Cleanup(func() { _ = holder.Release(ctx) })
 
 	parent, cancelParent := context.WithCancel(ctx)
-	held, stop := Hold(parent, holder)
+	held, stop := Hold(parent, holder, newHolderLog())
 	defer stop()
 
 	cancelParent()
@@ -140,7 +142,7 @@ func TestHoldKeepsRenewingUntilStoppedAfterItsParentEnds(t *testing.T) {
 	require.True(t, claimed)
 
 	parent, cancelParent := context.WithCancel(ctx)
-	held, stop := Hold(parent, holder)
+	held, stop := Hold(parent, holder, newHolderLog())
 	cancelParent()
 	awaitDone(held, t)
 
@@ -168,7 +170,7 @@ func TestHoldEndsWhenTheLeaseIsTakenAway(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, claimed)
 
-	held, stop := Hold(ctx, holder)
+	held, stop := Hold(ctx, holder, newHolderLog())
 	defer stop()
 
 	// An operator's hand: the lease is ended in the table behind the
@@ -188,9 +190,9 @@ func TestHoldEndsWhenTheLeaseIsTakenAway(t *testing.T) {
 func TestRunReturnsWhatTheWorkReturned(t *testing.T) {
 	ctx := context.Background()
 
-	require.NoError(t, Run(ctx, "sample", func(context.Context) error { return nil }))
-	require.ErrorContains(t, Run(ctx, "sample", func(context.Context) error { return errors.New("sample failure") }), "sample failure")
-	err := Run(ctx, "sample", func(context.Context) error { panic("sample panic") })
+	require.NoError(t, Run(ctx, "sample", newHolderLog(), func(context.Context) error { return nil }))
+	require.ErrorContains(t, Run(ctx, "sample", newHolderLog(), func(context.Context) error { return errors.New("sample failure") }), "sample failure")
+	err := Run(ctx, "sample", newHolderLog(), func(context.Context) error { panic("sample panic") })
 	require.ErrorContains(t, err, "sample panic")
 	require.Contains(t, fmt.Sprintf("%+v", err), "hold_test.go", "the error must carry the stack of the panic site")
 }
@@ -204,7 +206,7 @@ func TestRunGivesLostWorkTheGraceToReturn(t *testing.T) {
 
 	held, cancel := context.WithCancelCause(context.Background())
 	cancel(ErrLost)
-	require.ErrorIs(t, Run(held, "sample", context.Cause), ErrLost)
+	require.ErrorIs(t, Run(held, "sample", newHolderLog(), context.Cause), ErrLost)
 	require.Empty(t, failures, "work that returned in time must not fail the process")
 }
 
@@ -220,7 +222,7 @@ func TestRunWaitsForTheWorkAtShutdown(t *testing.T) {
 	release := make(chan struct{})
 	returned := make(chan error, 1)
 	go func() {
-		returned <- Run(ctx, "sample", func(ctx context.Context) error {
+		returned <- Run(ctx, "sample", newHolderLog(), func(ctx context.Context) error {
 			<-ctx.Done()
 			<-release
 			return ctx.Err()
@@ -250,7 +252,7 @@ func TestRunFailsTheProcessWhenLostWorkWillNotStop(t *testing.T) {
 	release := make(chan struct{})
 	returned := make(chan error, 1)
 	go func() {
-		returned <- Run(held, "sample", func(context.Context) error {
+		returned <- Run(held, "sample", newHolderLog(), func(context.Context) error {
 			<-release
 			return nil
 		})
@@ -268,6 +270,50 @@ func TestRunFailsTheProcessWhenLostWorkWillNotStop(t *testing.T) {
 		t.Fatal("Run must keep waiting for the work after failing the process")
 	case <-time.After(3 * stepDownGrace):
 	}
+	close(release)
+	require.NoError(t, awaitReturned(t, returned))
+}
+
+// TestHoldAndRunLogThroughTheHoldersLogger proves both entries the protocol
+// writes go to the logger the holder passed in — the cron job's, the
+// leader's, the lock's — and not to the global stream: a renewal that failed
+// is what explains a round cut short, and work that will not stop is the last
+// thing said about it, so both belong in the file the rest of that work logs
+// to. The entries still name the protocol, so a reader can tell them from the
+// holder's own.
+func TestHoldAndRunLogThroughTheHoldersLogger(t *testing.T) {
+	withFastProtocol(t)
+	// The failure the stubborn work below trips is recorded, not acted on;
+	// this test is about the entry that goes with it.
+	withRecordedFailures(t)
+	entries := newHolderLog()
+
+	// A renewal that cannot reach the database fails without losing the
+	// lease, which is what the warning reports.
+	withClosedDatabase(t)
+	held, stop := Hold(context.Background(), &Handle{name: "sample", holder: "sample", claimedAt: time.Now()}, entries)
+	defer stop()
+
+	renewal := entries.await(t, "lease renewal failed")
+	require.Equal(t, "lease", renewal["component"])
+	require.Equal(t, "sample", renewal["lease"])
+	require.NotNil(t, renewal["err"])
+
+	// The hold above ends with ErrLost once the deadline passes, and work
+	// that ignores the loss is what the failure reports.
+	release := make(chan struct{})
+	returned := make(chan error, 1)
+	go func() {
+		returned <- Run(held, "sample", entries, func(context.Context) error {
+			<-release
+			return nil
+		})
+	}()
+
+	stubborn := entries.await(t, "work under a lost lease will not stop")
+	require.Equal(t, "lease", stubborn["component"])
+	require.Equal(t, "sample", stubborn["lease"])
+	require.NotNil(t, stubborn["err"])
 	close(release)
 	require.NoError(t, awaitReturned(t, returned))
 }
@@ -325,6 +371,79 @@ func awaitReturned(t *testing.T, returned <-chan error) error {
 	}
 }
 
+// holderLog stands in for the logger a holder passes in — the cron job's, the
+// leader's, the lock's — and records what the protocol writes through it. It
+// implements the two methods the protocol calls and no more: an entry written
+// through any other runs into the embedded nil interface, so a call site
+// added later cannot go unnoticed.
+type holderLog struct {
+	types.Logger
+
+	mu      sync.Mutex
+	entries []holderEntry
+}
+
+// holderEntry is one recorded entry: its message and its fields, by key.
+type holderEntry struct {
+	msg    string
+	fields map[string]any
+}
+
+// newHolderLog returns a logger recording what is written through it.
+func newHolderLog() *holderLog {
+	return &holderLog{}
+}
+
+func (l *holderLog) Warnw(msg string, keysAndValues ...any) {
+	l.record(msg, keysAndValues)
+}
+
+func (l *holderLog) Errorw(msg string, keysAndValues ...any) {
+	l.record(msg, keysAndValues)
+}
+
+// record keeps one entry, its alternating key/value fields turned into a map.
+func (l *holderLog) record(msg string, keysAndValues []any) {
+	fields := make(map[string]any, len(keysAndValues)/2)
+	for i := 0; i+1 < len(keysAndValues); i += 2 {
+		key, ok := keysAndValues[i].(string)
+		if !ok {
+			continue
+		}
+		fields[key] = keysAndValues[i+1]
+	}
+
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	l.entries = append(l.entries, holderEntry{msg: msg, fields: fields})
+}
+
+// await returns the fields of the first entry written with msg, waiting for
+// it: the entries come from the renewal goroutine and the grace timer, not
+// from the test's own. It fails the test when none comes in time.
+func (l *holderLog) await(t *testing.T, msg string) map[string]any {
+	t.Helper()
+
+	deadline := time.After(5 * time.Second)
+	for {
+		l.mu.Lock()
+		for _, entry := range l.entries {
+			if entry.msg == msg {
+				l.mu.Unlock()
+				return entry.fields
+			}
+		}
+		l.mu.Unlock()
+
+		select {
+		case <-time.After(5 * time.Millisecond):
+		case <-deadline:
+			t.Fatalf("no entry with msg %q was written through the holder's logger", msg)
+			return nil
+		}
+	}
+}
+
 // TestHoldEndsAtTheDeadlineWhenARenewalFailsShortOfItsBound proves the
 // deadline holds even when a renewal fails a moment before its bound: the
 // next attempt is due at the deadline, not a whole interval later, so the
@@ -338,7 +457,7 @@ func TestHoldEndsAtTheDeadlineWhenARenewalFailsShortOfItsBound(t *testing.T) {
 	withDelayedFailingDatabase(t, 150*time.Millisecond)
 
 	begin := time.Now()
-	held, stop := Hold(context.Background(), &Handle{name: "sample", holder: "sample", claimedAt: begin})
+	held, stop := Hold(context.Background(), &Handle{name: "sample", holder: "sample", claimedAt: begin}, newHolderLog())
 	defer stop()
 
 	awaitDone(held, t)
