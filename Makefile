@@ -154,8 +154,10 @@ generate:
 # root already covers them.
 fix:
 	@echo "Running auto-fix tools..."
+	$(call install_tool_if_missing,gofumpt,$(GOFUMPT_VERSION),$(GOFUMPT_PKG))
 	@echo "Running gofumpt..."
-	gofumpt -l -w .
+	$(call run_tool,gofumpt,-l -w .)
+	$(call install_tool_if_missing,golangci-lint,$(GOLANGCI_LINT_VERSION),$(GOLANGCI_LINT_PKG))
 	@echo "Running golangci-lint --fix..."
 	$(call run_tool,golangci-lint,run --fix ./...)
 	$(call run_tool_in,golangci-lint,examples/demo,run --fix ./...)
