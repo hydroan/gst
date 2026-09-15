@@ -5,6 +5,8 @@ import (
 	"time"
 
 	"github.com/cockroachdb/errors"
+	"github.com/hydroan/gst/internal/lifecycle"
+	"github.com/hydroan/gst/util"
 	"go.uber.org/zap"
 )
 
@@ -83,5 +85,58 @@ func Hold(parent context.Context, h *Handle) (ctx context.Context, stop context.
 		stopRenewing()
 		cancel(nil)
 		<-done
+	}
+}
+
+// fail ends the process when work under a lost lease will not stop; a test
+// observes the call instead.
+var fail = lifecycle.Fail
+
+// Run runs work on ctx — the context Hold returned, or one derived from it —
+// and returns what work returned. It is the protocol's last line. The
+// deadline stops the renewals, the context ends the work and Verify refuses
+// its next transaction; work that ignores all three and runs on once the
+// lease is lost would run beside its successor's, the very thing the lease
+// exists to rule out. So once ctx ends with ErrLost the work has
+// stepDownGrace to return, and past that the process fails through
+// lifecycle.Fail — bootstrap ends its Run, the orchestrator restarts the
+// replica — while the wait goes on for as long as the process lasts, so the
+// caller never claims again beside work of its own still running. ctx ending
+// for any other reason — the process shutting down — is not a loss: Run
+// waits for the work, and whoever stops the process bounds that wait.
+//
+// The work runs on a goroutine of its own, so that the lease being lost can
+// be watched while it runs; a panic in it is recovered into an error
+// carrying the stack of the panic site, which Run returns.
+func Run(ctx context.Context, name string, work func(ctx context.Context) error) error {
+	returned := make(chan error, 1)
+	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				returned <- util.PanicError(r)
+			}
+		}()
+		returned <- work(ctx)
+	}()
+
+	select {
+	case err := <-returned:
+		return err
+	case <-ctx.Done():
+	}
+	if !errors.Is(context.Cause(ctx), ErrLost) {
+		return <-returned
+	}
+
+	grace := time.NewTimer(stepDownGrace)
+	defer grace.Stop()
+	select {
+	case err := <-returned:
+		return err
+	case <-grace.C:
+		err := errors.Newf("lease %q was lost and the work under it has not stopped within %s", name, stepDownGrace)
+		zap.S().Errorw("work under a lost lease will not stop", "lease", name, "err", err)
+		fail(err)
+		return <-returned
 	}
 }

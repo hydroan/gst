@@ -228,7 +228,11 @@ func newJob(fn func(ctx context.Context) error, spec, name string) (*job, error)
 	if err != nil {
 		return nil, errors.Wrapf(err, "cronjob %q: invalid schedule %q", name, spec)
 	}
-	return &job{name: name, spec: spec, fn: fn, schedule: inUTC(parsed)}, nil
+	j := &job{name: name, spec: spec, fn: fn, schedule: inUTC(parsed)}
+	if err := lease.ValidateName(j.leaseName()); err != nil {
+		return nil, errors.Wrapf(err, "cronjob %q", name)
+	}
+	return j, nil
 }
 
 // zoneOf returns the zone a schedule names with its CRON_TZ= or TZ= prefix —
@@ -484,12 +488,14 @@ func (j *job) catchUp(ctx context.Context) (time.Time, bool) {
 // runInstant runs the round for at and reports whether a round ran. A
 // per-instance job runs it outright; a job shared across the deployment
 // first claims the instant's lease and runs only when it wins, under the
-// lease — its context ends with the lease, and its transactions verify the
-// lease first — then gives the lease back so the next instant is free at
-// once.
+// lease — its context ends with the lease, its transactions verify the lease
+// first, and a round that will not stop once the lease is lost fails the
+// process, see lease.Run — then gives the lease back so the next instant is
+// free at once.
 func (j *job) runInstant(ctx context.Context, at time.Time, catchUp bool) bool {
 	if j.perInstance {
-		j.run(ctx, at)
+		// The round logs its own outcome.
+		_ = j.run(ctx, at)
 		return true
 	}
 
@@ -508,7 +514,10 @@ func (j *job) runInstant(ctx context.Context, at time.Time, catchUp bool) bool {
 		fields = append(fields, zap.Bool("catch_up", true))
 	}
 	held, stopHold := lease.Hold(ctx, h)
-	j.run(lease.WithHandle(held, h), at, fields...)
+	// The round logs its own outcome; Run's is the same error, already logged.
+	_ = lease.Run(lease.WithHandle(held, h), j.leaseName(), func(ctx context.Context) error {
+		return j.run(ctx, at, fields...)
+	})
 	lost := errors.Is(context.Cause(held), lease.ErrLost)
 	stopHold()
 
@@ -533,9 +542,9 @@ func (j *job) runInstant(ctx context.Context, at time.Time, catchUp bool) bool {
 	return true
 }
 
-// run executes the round scheduled for at. Round identity, panic recovery,
-// timing and outcome logging live here; fields are added to every outcome
-// entry.
+// run executes the round scheduled for at and returns its outcome, logged
+// already. Round identity, panic recovery, timing and outcome logging live
+// here; fields are added to every outcome entry.
 //
 // A failure goes out as a typed error field, never formatted into the
 // message: the logging layer derives error_stack from that field, and for a
@@ -543,10 +552,9 @@ func (j *job) runInstant(ctx context.Context, at time.Time, catchUp bool) bool {
 // failing line and not just name the job. Every outcome entry carries the
 // round's trace id — the id the round's statements and log lines carry too —
 // so the round is found again from any of them.
-func (j *job) run(ctx context.Context, at time.Time, fields ...zap.Field) {
+func (j *job) run(ctx context.Context, at time.Time, fields ...zap.Field) (runErr error) {
 	ctx, traceID, end := beginRound(ctx, j.name)
 	round := append([]zap.Field{zap.String("name", j.name), zap.String("spec", j.spec), zap.String(consts.TRACE_ID, traceID), zap.Time("at", at)}, fields...)
-	var runErr error
 	// Registered before the recovery below so that it runs after it: a
 	// panic is recorded on the round's span as its outcome.
 	defer func() { end(runErr) }()
@@ -562,6 +570,7 @@ func (j *job) run(ctx context.Context, at time.Time, fields ...zap.Field) {
 	} else {
 		log.Infoz("finished cronjob", append(round, util.LogDuration(time.Since(begin)))...)
 	}
+	return runErr
 }
 
 // beginRound opens one round of the named job on parent and returns the

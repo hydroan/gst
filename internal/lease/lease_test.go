@@ -3,10 +3,12 @@ package lease
 import (
 	"context"
 	"fmt"
+	"strings"
 	"sync"
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/database"
 	"github.com/hydroan/gst/internal/dbruntime"
 	"github.com/hydroan/gst/internal/testutil"
@@ -14,6 +16,7 @@ import (
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 	gormlogger "gorm.io/gorm/logger"
+	"gorm.io/gorm/schema"
 )
 
 // TestMain runs the suite against the dialect under test; the Makefile test
@@ -418,6 +421,118 @@ func TestHoldEndsWhenTheLeaseIsTakenAway(t *testing.T) {
 	}
 }
 
+// TestValidateNameRefusesWhatTheColumnCannotHold pins the name rule to the
+// column it protects: a name as wide as the column passes, one byte more is
+// refused, and the column is as wide as the rule says — so a table change
+// and the rule cannot drift apart.
+func TestValidateNameRefusesWhatTheColumnCannotHold(t *testing.T) {
+	require.NoError(t, ValidateName(strings.Repeat("n", nameMaxLength)))
+	require.ErrorContains(t, ValidateName(strings.Repeat("n", nameMaxLength+1)), "longer than")
+	require.ErrorContains(t, ValidateName(""), "empty name")
+
+	parsed, err := schema.Parse(&row{}, &sync.Map{}, schema.NamingStrategy{})
+	require.NoError(t, err)
+	require.Equal(t, nameMaxLength, parsed.LookUpField("Name").Size, "the name column must be exactly as wide as ValidateName allows")
+}
+
+// TestClaimRefusesAnOverlongName proves the table is never asked to hold a
+// name it would truncate or refuse: the claim fails before the statement, on
+// every dialect alike.
+func TestClaimRefusesAnOverlongName(t *testing.T) {
+	_, claimed, err := Claim(context.Background(), strings.Repeat("n", nameMaxLength+1))
+	require.ErrorContains(t, err, "longer than")
+	require.False(t, claimed)
+}
+
+// TestRunReturnsWhatTheWorkReturned proves Run hands the work's outcome back
+// as is, and turns a panic in the work into an error carrying its stack.
+func TestRunReturnsWhatTheWorkReturned(t *testing.T) {
+	ctx := context.Background()
+
+	require.NoError(t, Run(ctx, "sample", func(context.Context) error { return nil }))
+	require.ErrorContains(t, Run(ctx, "sample", func(context.Context) error { return errors.New("sample failure") }), "sample failure")
+	err := Run(ctx, "sample", func(context.Context) error { panic("sample panic") })
+	require.ErrorContains(t, err, "sample panic")
+	require.Contains(t, fmt.Sprintf("%+v", err), "lease_test.go", "the error must carry the stack of the panic site")
+}
+
+// TestRunGivesLostWorkTheGraceToReturn proves a loss is not yet a failure:
+// work that returns within the grace of losing its lease ends the run the
+// ordinary way, and the process goes on.
+func TestRunGivesLostWorkTheGraceToReturn(t *testing.T) {
+	withFastProtocol(t)
+	failures := withRecordedFailures(t)
+
+	held, cancel := context.WithCancelCause(context.Background())
+	cancel(ErrLost)
+	require.ErrorIs(t, Run(held, "sample", context.Cause), ErrLost)
+	require.Empty(t, failures, "work that returned in time must not fail the process")
+}
+
+// TestRunWaitsForTheWorkAtShutdown proves the context ending for any reason
+// but a loss — the process shutting down — is not a failure: Run waits for
+// the work for as long as it takes, and whoever stops the process bounds
+// that wait.
+func TestRunWaitsForTheWorkAtShutdown(t *testing.T) {
+	withFastProtocol(t)
+	failures := withRecordedFailures(t)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	release := make(chan struct{})
+	returned := make(chan error, 1)
+	go func() {
+		returned <- Run(ctx, "sample", func(ctx context.Context) error {
+			<-ctx.Done()
+			<-release
+			return ctx.Err()
+		})
+	}()
+
+	cancel()
+	select {
+	case <-returned:
+		t.Fatal("Run must wait for the work when the context ends without a loss")
+	case <-time.After(3 * stepDownGrace):
+	}
+	close(release)
+	require.ErrorIs(t, awaitReturned(t, returned), context.Canceled)
+	require.Empty(t, failures, "a shutdown must not fail the process")
+}
+
+// TestRunFailsTheProcessWhenLostWorkWillNotStop proves the last line of the
+// protocol: work still running once its lease is lost and the grace has
+// passed fails the process, and Run keeps waiting for the work rather than
+// handing control back beside it.
+func TestRunFailsTheProcessWhenLostWorkWillNotStop(t *testing.T) {
+	withFastProtocol(t)
+	failures := withRecordedFailures(t)
+
+	held, cancel := context.WithCancelCause(context.Background())
+	release := make(chan struct{})
+	returned := make(chan error, 1)
+	go func() {
+		returned <- Run(held, "sample", func(context.Context) error {
+			<-release
+			return nil
+		})
+	}()
+
+	cancel(ErrLost)
+	select {
+	case err := <-failures:
+		require.ErrorContains(t, err, `lease "sample" was lost and the work under it has not stopped`)
+	case <-time.After(5 * time.Second):
+		t.Fatal("work ignoring the loss must fail the process")
+	}
+	select {
+	case <-returned:
+		t.Fatal("Run must keep waiting for the work after failing the process")
+	case <-time.After(3 * stepDownGrace):
+	}
+	close(release)
+	require.NoError(t, awaitReturned(t, returned))
+}
+
 // withClosedDatabase points the engine at a connection handle whose pool is
 // closed — a database that cannot be reached — and restores the suite's
 // database afterwards. The handle still names its dialect, so the protocol
@@ -452,7 +567,33 @@ func awaitDone(ctx context.Context, t *testing.T) {
 func withFastProtocol(t *testing.T) {
 	t.Helper()
 
-	t.Cleanup(SetTimings(300*time.Millisecond, 50*time.Millisecond, 150*time.Millisecond))
+	t.Cleanup(SetTimings(300*time.Millisecond, 50*time.Millisecond, 150*time.Millisecond, 100*time.Millisecond))
+}
+
+// withRecordedFailures records the process failures Run reports instead of
+// ending the test process, and restores the real one afterwards.
+func withRecordedFailures(t *testing.T) <-chan error {
+	t.Helper()
+
+	failures := make(chan error, 4)
+	original := fail
+	fail = func(err error) { failures <- err }
+	t.Cleanup(func() { fail = original })
+	return failures
+}
+
+// awaitReturned receives Run's return from returned, failing the test when it
+// does not come in time.
+func awaitReturned(t *testing.T, returned <-chan error) error {
+	t.Helper()
+
+	select {
+	case err := <-returned:
+		return err
+	case <-time.After(5 * time.Second):
+		t.Fatal("Run did not return")
+		return nil
+	}
 }
 
 // uniqueName returns a coordinated name no other test uses: the table is

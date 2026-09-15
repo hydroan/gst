@@ -68,9 +68,6 @@ var (
 	// campaignJitter bounds the random addition to campaignInterval that
 	// keeps the replicas of a deployment from claiming in lockstep.
 	campaignJitter = time.Second
-	// stepDownGrace is how long the work may take to return once its tenure
-	// ended by a lost lease before the process fails.
-	stepDownGrace = 5 * time.Second
 )
 
 // releaseTimeout bounds the statement that gives the name back once the work
@@ -92,9 +89,6 @@ var (
 	// current is the started elector, nil until start. A registration after
 	// that would never campaign, so it fails fast instead.
 	current *elector
-	// fail ends the process when work will not stop after losing its lease;
-	// a test observes the call instead.
-	fail = lifecycle.Fail
 )
 
 // work is one registration: the name campaigned for and the function run
@@ -197,7 +191,11 @@ func newWork(fn func(ctx context.Context) error, name string) (*work, error) {
 	case slices.ContainsFunc(works, func(w *work) bool { return w.name == name }):
 		return nil, errors.Newf("leader %q: registered twice", name)
 	}
-	return &work{name: name, fn: fn}, nil
+	w := &work{name: name, fn: fn}
+	if err := lease.ValidateName(w.leaseName()); err != nil {
+		return nil, errors.Wrapf(err, "leader %q", name)
+	}
+	return w, nil
 }
 
 // start brings the elector up for every registered work, on a context
@@ -316,7 +314,9 @@ func campaignWait() time.Duration {
 // is lost, or ctx, the process, is shutting down — then gives the name back,
 // unless the tenure ended because the name was no longer this holder's. The
 // work runs on the tenure's context: it ends with the tenure, its
-// transactions verify the lease first, and it carries the tenure's identity.
+// transactions verify the lease first, it carries the tenure's identity, and
+// work that will not stop once the lease is lost fails the process, see
+// lease.Run.
 func (w *work) lead(ctx context.Context, h *lease.Handle) {
 	held, stopHold := lease.Hold(ctx, h)
 	traceID := util.TraceID()
@@ -325,9 +325,7 @@ func (w *work) lead(ctx context.Context, h *lease.Handle) {
 	log.Infoz("elected leader", fields...)
 
 	begin := time.Now()
-	returned := make(chan error, 1)
-	go func() { returned <- w.run(tenure) }()
-	err := w.awaitReturn(held, returned, fields)
+	err := lease.Run(tenure, w.leaseName(), w.run)
 	// Read before the renewals stop: stopping them ends the held context
 	// too, and would make every tenure look like a shutdown.
 	reason, lost := tenureEnd(held)
@@ -351,36 +349,6 @@ func (w *work) lead(ctx context.Context, h *lease.Handle) {
 	defer cancel()
 	if err := h.Release(releaseCtx); err != nil {
 		log.Warnz("leader could not release its lease", append([]zap.Field{zap.Error(err)}, fields...)...)
-	}
-}
-
-// awaitReturn waits for the work to return and returns its error. The work
-// runs on a goroutine of its own so that the tenure ending can be watched
-// while the work still runs: once the lease is lost, the work has
-// stepDownGrace to return, and work still running after that would run
-// beside the new leader's — the very thing the lease exists to rule out —
-// so the process fails, and the wait goes on for as long as the process
-// lasts. At shutdown the wait is stop's to bound.
-func (w *work) awaitReturn(held context.Context, returned <-chan error, fields []zap.Field) error {
-	select {
-	case err := <-returned:
-		return err
-	case <-held.Done():
-	}
-	if !errors.Is(context.Cause(held), lease.ErrLost) {
-		return <-returned
-	}
-
-	grace := time.NewTimer(stepDownGrace)
-	defer grace.Stop()
-	select {
-	case err := <-returned:
-		return err
-	case <-grace.C:
-		err := errors.Newf("leader %q lost its lease and its work has not stopped within %s", w.name, stepDownGrace)
-		log.Errorz("leader work will not stop", append([]zap.Field{zap.Error(err)}, fields...)...)
-		fail(err)
-		return <-returned
 	}
 }
 

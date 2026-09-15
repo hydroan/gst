@@ -124,18 +124,18 @@ func TestLostLeaseEndsTheTenure(t *testing.T) {
 }
 
 // TestWorkThatIgnoresTheLossFailsTheProcess proves the last line behind the
-// lease: work still running once its lease is lost and the grace has passed
-// would run beside the new leader's, so the process is failed — through the
-// lifecycle, which ends bootstrap's Run.
+// lease reaches the elector: work still running once its lease is lost and
+// the grace has passed would run beside the new leader's, so the process is
+// failed — through the lifecycle, which ends bootstrap's Run. The failure is
+// process-wide and one-way, so the test first checks nothing failed the
+// process before it.
 func TestWorkThatIgnoresTheLossFailsTheProcess(t *testing.T) {
 	withLeaderLoggerConfig(t)
 	resetLeaderState(t)
 	withFastCampaign(t)
 	withFastLease(t)
-	withShortGrace(t)
+	require.NoError(t, lifecycle.Failure().Err(), "no earlier test may have failed the process")
 
-	failures := make(chan error, 1)
-	fail = func(err error) { failures <- err }
 	entered := make(chan struct{}, 1)
 	release := make(chan struct{})
 	Register(func(context.Context) error {
@@ -151,8 +151,8 @@ func TestWorkThatIgnoresTheLossFailsTheProcess(t *testing.T) {
 
 	takeOver(t, "leader:stubborn-work")
 	select {
-	case err := <-failures:
-		require.ErrorContains(t, err, `leader "stubborn-work" lost its lease and its work has not stopped`)
+	case <-lifecycle.Failure().Done():
+		require.ErrorContains(t, context.Cause(lifecycle.Failure()), `lease "leader:stubborn-work" was lost`)
 	case <-time.After(5 * time.Second):
 		t.Fatal("work ignoring the loss must fail the process")
 	}
@@ -321,11 +321,14 @@ func TestRegistrationErrorsFailStartup(t *testing.T) {
 	Register(noopWork, "  ")
 	Register(noopWork, "twice-work")
 	Register(noopWork, "twice-work")
+	// The lease table holds 191 characters, "leader:" included.
+	Register(noopWork, strings.Repeat("n", 185))
 
 	err := start(context.Background())
 	require.ErrorContains(t, err, `leader "nil-work": nil function`)
 	require.ErrorContains(t, err, "leader: registered work has no name")
 	require.ErrorContains(t, err, `leader "twice-work": registered twice`)
+	require.ErrorContains(t, err, "longer than the 191 the name column holds")
 	require.Nil(t, current, "a failed start must leave no elector behind")
 }
 
@@ -551,22 +554,12 @@ func withFastCampaign(t *testing.T) {
 	t.Cleanup(func() { campaignInterval, campaignJitter = originalInterval, originalJitter })
 }
 
-// withFastLease shrinks the lease protocol's timings so a loss is found in
-// milliseconds, and restores them afterwards.
+// withFastLease shrinks the lease protocol's timings so a loss and the grace
+// after it play out in milliseconds, and restores them afterwards.
 func withFastLease(t *testing.T) {
 	t.Helper()
 
-	t.Cleanup(lease.SetTimings(300*time.Millisecond, 50*time.Millisecond, 150*time.Millisecond))
-}
-
-// withShortGrace shrinks the grace work gets to return after losing its
-// lease, and restores it afterwards.
-func withShortGrace(t *testing.T) {
-	t.Helper()
-
-	original := stepDownGrace
-	stepDownGrace = 100 * time.Millisecond
-	t.Cleanup(func() { stepDownGrace = original })
+	t.Cleanup(lease.SetTimings(300*time.Millisecond, 50*time.Millisecond, 150*time.Millisecond, 100*time.Millisecond))
 }
 
 // withLeaderLoggerConfig points config.App at a scratch logger setup so the
@@ -589,7 +582,7 @@ func withLeaderLoggerConfig(t *testing.T) string {
 // its loops, rewinds the package-level elector state and empties the lease
 // table, so each test exercises start from scratch. The loops this test
 // starts are drained again once it ends, so none of them runs on into the
-// next test; a process failure this test did not ask for fails it.
+// next test.
 func resetLeaderState(t *testing.T) {
 	t.Helper()
 
@@ -602,7 +595,6 @@ func resetLeaderState(t *testing.T) {
 	errRegister = nil
 	log = nil
 	current = nil
-	fail = func(err error) { t.Errorf("unexpected process failure: %v", err) }
 	require.NoError(t, dbruntime.DB.Exec("DELETE FROM gst_leases").Error)
 }
 

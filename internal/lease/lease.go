@@ -41,7 +41,9 @@
 // successor can start. The context Hold returns ends at that moment, and the
 // transactions opened under it end with it — the standard library rolls back
 // a transaction whose context ends and refuses its Commit. Verify is the
-// third line, for the transaction that would open after the loss.
+// third line, for the transaction that would open after the loss, and Run
+// the last: work that ignores all three and runs on after the loss fails the
+// process.
 //
 // Importing the package is what brings leases into a process: the table
 // joins the registered models and the transaction guard is installed from
@@ -77,6 +79,9 @@ var (
 	// localDeadline is how long a holder keeps going without a successful
 	// renewal, counted from the moment the last successful one started.
 	localDeadline = 10 * time.Second
+	// stepDownGrace is how long work may take to return once its lease is
+	// lost before the process fails, see Run.
+	stepDownGrace = 5 * time.Second
 )
 
 // SetTimings replaces the protocol's timings and returns the function that
@@ -84,16 +89,20 @@ var (
 // which play the protocol out in milliseconds; a process runs the one
 // protocol every process of its deployment agrees on, so nothing else calls
 // it.
-func SetTimings(lease, renew, deadline time.Duration) (restore func()) {
-	originalLease, originalRenew, originalDeadline := leaseDuration, renewInterval, localDeadline
-	leaseDuration, renewInterval, localDeadline = lease, renew, deadline
+func SetTimings(lease, renew, deadline, grace time.Duration) (restore func()) {
+	originalLease, originalRenew, originalDeadline, originalGrace := leaseDuration, renewInterval, localDeadline, stepDownGrace
+	leaseDuration, renewInterval, localDeadline, stepDownGrace = lease, renew, deadline, grace
 	return func() {
-		leaseDuration, renewInterval, localDeadline = originalLease, originalRenew, originalDeadline
+		leaseDuration, renewInterval, localDeadline, stepDownGrace = originalLease, originalRenew, originalDeadline, originalGrace
 	}
 }
 
 // table is the name of the lease table.
 const table = "gst_leases"
+
+// nameMaxLength is the most bytes a coordinated name may have: the width of
+// the name column, 191 characters, which hold at least that many bytes.
+const nameMaxLength = 191
 
 var (
 	// ErrLost reports that the lease is no longer held: it expired and
@@ -109,7 +118,7 @@ var (
 // row is one coordinated name in gst_leases.
 type row struct {
 	modelregistry.AutoBase
-	Name        string `gorm:"size:191;not null"`  // "cron:<job>"; each capability prefixes its own names
+	Name        string `gorm:"size:191;not null"`  // "cron:<job>"; each capability prefixes its own names, within nameMaxLength
 	Holder      string `gorm:"size:32;not null"`   // token minted per claim, never reused
 	Instance    string `gorm:"size:191;not null"`  // the process holding it; for reading logs only
 	Term        uint64 `gorm:"not null;default:0"` // +1 every time the name changes hands
@@ -159,6 +168,23 @@ func Available() error {
 	return err
 }
 
+// ValidateName reports whether name can be a coordinated name: not empty, and
+// within the width of the name column. The capabilities validate the names
+// they register at startup, so a name that could never be claimed fails the
+// process instead of leaving work that silently never runs — MySQL would
+// truncate the name on the claim's insert and PostgreSQL refuse it, every
+// time — and claim checks again, so no path reaches the table with a name it
+// cannot hold.
+func ValidateName(name string) error {
+	if name == "" {
+		return errors.New("lease: empty name")
+	}
+	if len(name) > nameMaxLength {
+		return errors.Newf("lease: name %q is %d bytes, longer than the %d the name column holds", name, len(name), nameMaxLength)
+	}
+	return nil
+}
+
 // Claim tries to take name for this process, once, without waiting: it
 // returns the handle and true when the name was free — never claimed, expired
 // or released — and false when someone holds it. An error means the database
@@ -198,6 +224,9 @@ func ClaimSlot(ctx context.Context, name string, slot time.Time) (*Handle, bool,
 // claim runs the claim statement, and the insert behind it for a name the
 // table has never seen.
 func claim(ctx context.Context, name string, slotMs *int64) (*Handle, bool, error) {
+	if err := ValidateName(name); err != nil {
+		return nil, false, err
+	}
 	db, now, err := primary()
 	if err != nil {
 		return nil, false, err
@@ -254,6 +283,13 @@ func claim(ctx context.Context, name string, slotMs *int64) (*Handle, bool, erro
 // a moment earlier, or held for a long time — inserts nothing instead of
 // failing on the unique key: INSERT IGNORE on MySQL, ON CONFLICT DO NOTHING
 // on PostgreSQL and SQLite.
+//
+// INSERT IGNORE also turns a value too long for its column into a warning
+// and a truncated row, which is why every name is validated before it gets
+// here: for the literal values the statement carries nothing else IGNORE
+// would hide can occur. ON DUPLICATE KEY UPDATE name = name is no
+// alternative: the connection sets CLIENT_FOUND_ROWS, under which a no-op
+// update reports one affected row, the same as an insert.
 func claimInsert(dialect, now string) string {
 	columns := fmt.Sprintf("(name, holder, instance, term, expires_at_ms, slot_ms, created_at, updated_at) VALUES (?, ?, ?, 1, %s + ?, ?, ?, ?)", now)
 	if dialect == "mysql" {

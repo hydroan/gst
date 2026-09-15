@@ -521,7 +521,7 @@ func TestRoundThatLosesItsLeaseIsCutShortAndLogged(t *testing.T) {
 	dir := withCronjobLoggerConfig(t)
 	resetCronjobState(t)
 	clock := withFakeClock(t, time.Date(2026, 1, 1, 10, 0, 0, 0, time.UTC))
-	t.Cleanup(lease.SetTimings(300*time.Millisecond, 50*time.Millisecond, 150*time.Millisecond))
+	withFastLease(t)
 
 	entered := make(chan struct{}, 1)
 	ended := make(chan error, 1)
@@ -537,14 +537,7 @@ func TestRoundThatLosesItsLeaseIsCutShortAndLogged(t *testing.T) {
 	clock.Advance(time.Minute)
 	awaitSignal(t, entered, "the round")
 
-	// Another replica takes the name: the lease is ended in the table behind
-	// the round's back and claimed anew.
-	require.NoError(t, dbruntime.DB.Exec("UPDATE gst_leases SET expires_at_ms = 0 WHERE name = ?", "cron:lost-job").Error)
-	taken, claimed, err := lease.Claim(context.Background(), "cron:lost-job")
-	require.NoError(t, err)
-	require.True(t, claimed)
-	t.Cleanup(func() { _ = taken.Release(context.Background()) })
-
+	takeOver(t, "cron:lost-job")
 	select {
 	case cause := <-ended:
 		require.ErrorIs(t, cause, lease.ErrLost)
@@ -633,6 +626,13 @@ func TestRegistrationErrorsFailStartup(t *testing.T) {
 				RegisterPerInstance(noopJob, "@hourly", " sample-job ")
 			},
 			want: `cronjob "sample-job": registered twice`,
+		},
+		{
+			// The lease table holds 191 characters, "cron:" included; a job
+			// that could never claim its instants must not start at all.
+			name:     "name the lease table cannot hold",
+			register: func() { Register(noopJob, "* * * * * *", strings.Repeat("n", 187)) },
+			want:     "longer than the 191 the name column holds",
 		},
 	}
 	for _, tc := range cases {
@@ -873,6 +873,44 @@ func TestRunOpensRoundSpanWhenTracingIsOn(t *testing.T) {
 
 // roundObservation is what a job sees of its round: the identity on its
 // context and the span it runs under.
+// TestRoundThatIgnoresTheLossFailsTheProcess proves the last line behind the
+// lease is the scheduler's too: a round still running once its lease is lost
+// and the grace has passed would run beside the next instant's round on
+// another replica, so the process is failed — through the lifecycle, which
+// ends bootstrap's Run. The failure is process-wide and one-way, so the test
+// first checks nothing failed the process before it.
+func TestRoundThatIgnoresTheLossFailsTheProcess(t *testing.T) {
+	withCronjobLoggerConfig(t)
+	resetCronjobState(t)
+	clock := withFakeClock(t, time.Date(2026, 1, 1, 10, 0, 0, 0, time.UTC))
+	withFastLease(t)
+	require.NoError(t, lifecycle.Failure().Err(), "no earlier test may have failed the process")
+
+	entered := make(chan struct{}, 1)
+	release := make(chan struct{})
+	Register(func(context.Context) error {
+		entered <- struct{}{}
+		<-release
+		return nil
+	}, "@every 1m", "stubborn-job")
+	require.NoError(t, start(context.Background()))
+	// Released before the loops are drained, so the round ends within this
+	// test instead of running on into the next one's loggers.
+	t.Cleanup(func() { close(release) })
+
+	clock.untilWaiting(t)
+	clock.Advance(time.Minute)
+	awaitSignal(t, entered, "the round")
+
+	takeOver(t, "cron:stubborn-job")
+	select {
+	case <-lifecycle.Failure().Done():
+		require.ErrorContains(t, context.Cause(lifecycle.Failure()), `lease "cron:stubborn-job" was lost`)
+	case <-time.After(5 * time.Second):
+		t.Fatal("a round ignoring the loss must fail the process")
+	}
+}
+
 type roundObservation struct {
 	identity execctx.Identity
 	span     oteltrace.SpanContext
@@ -935,6 +973,27 @@ func lastRun(t *testing.T, leaseName string, at time.Time) {
 	require.NoError(t, err)
 	require.True(t, claimed)
 	require.NoError(t, h.Release(context.Background()))
+}
+
+// takeOver acts as another replica taking the name: the lease is ended in
+// the table behind the holder's back and claimed anew. The claim is released
+// once the test ends.
+func takeOver(t *testing.T, name string) {
+	t.Helper()
+
+	require.NoError(t, dbruntime.DB.Exec("UPDATE gst_leases SET expires_at_ms = 0 WHERE name = ?", name).Error)
+	taken, claimed, err := lease.Claim(context.Background(), name)
+	require.NoError(t, err)
+	require.True(t, claimed)
+	t.Cleanup(func() { _ = taken.Release(context.Background()) })
+}
+
+// withFastLease shrinks the lease protocol's timings so a loss and the grace
+// after it play out in milliseconds, and restores them afterwards.
+func withFastLease(t *testing.T) {
+	t.Helper()
+
+	t.Cleanup(lease.SetTimings(300*time.Millisecond, 50*time.Millisecond, 150*time.Millisecond, 100*time.Millisecond))
 }
 
 // startInstances builds and starts n schedulers over the registered jobs —
