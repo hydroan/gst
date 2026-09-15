@@ -10,7 +10,7 @@ gst 是强约定框架（Apple 风格），不是自由框架（Windows 风格�
 - 编译期类型安全优先于运行时检查：能由类型系统在编译期拦下的错误，不得推迟到启动期或运行期再检测；生成期、编译期已经确定的信息，不得改成启动期或运行期再反射解析。运行时检查只补 Go 类型系统表达不了的部分，不能替代类型设计：编译期报错暴露最早且没有运行开销，运行时反射既推迟暴露又增加开销。
 - 可选能力走接口断言：少数模型才需要的能力用可选接口表达，实现即启用；不要膨胀必选接口。
 - 可选即兜底，必须即报错：框架允许的每种使用形态（如接口默认实现所支持的省略）都是一等契约，框架内所有消费点必须兜底全部合法形态，不得要求使用方补配置来迁就框架实现；确实必须使用方提供的，在 bootstrap 或 gg 阶段直接报错强制，不留「文档约定 + 项目自觉」的中间态。判定契约以默认实现和存量用法为准，新增校验不得收窄既有契约。
-- 公开包是 alias 转发层：实现下沉 internal 包，公开包只做转发，细节见「internal 包引用方向」。
+- 包的归属按使用方划分：只给或主要给项目用的能力是顶层公开包；只有框架自己用的放 internal，项目开发者看不到就不必理解；两边都大量用的，实现下沉 internal，再由顶层包只转发项目用得到的那部分。目的只有一个：项目开发者面对的表面积最小。细节见「包的归属与 internal 引用方向」。
 - fail fast：配置或声明错误在 bootstrap 或 gg 命令阶段直接报错退出，禁止静默忽略、静默去重、静默改写。
 - 能力缺失显式报错：某个后端或方言不支持框架的一项能力时，该能力的入口直接返回错误，禁止静默 no-op、静默降级或悄悄换实现模拟。唯一例外是该能力在此后端语义上自动成立、no-op 与真实执行不可区分的场景，此时允许 no-op 并必须在能力入口的文档写明。
 - 主路优先：同一件事只保留一条官方路径，扩展能力只补主路够不到的盲区，不做与主路重叠的平行第二入口。
@@ -74,11 +74,15 @@ gst 是强约定框架（Apple 风格），不是自由框架（Windows 风格�
 - URL 参数名与数据库列名是两件事：URL 参数名由 `query` tag → `json` tag → 字段名推导（前后端契约），列名只来自 gorm。`Column.QueryName` 与 `Column.DBName` 分别承载它们，不要混用。
 - `json:"-"` 的字段仍是数据库列，但不可被客户端过滤（`Column.Filterable` 为 false），软删除时间戳属于这一类。
 
-### internal 包引用方向
+### 包的归属与 internal 引用方向
 
-根包 `gst` 与公开包 `model`、`service`、`sse` 是面向业务项目的 alias 转发层，分别转发 `internal/types`、`internal/modelregistry`、`internal/serviceregistry`、`internal/sse`。internal 包（含测试）需要这些能力时必须直接引用对应的 internal 包，禁止反向 import 公开包，避免 internal → 公开 → internal 的依赖绕行和潜在 import 环。如果所需符号只存在于公开包（如曾经的 `service.Error`），应把实现下沉到 internal 包、公开包改为 alias 转发，而不是让 internal 反向引用。
+包放顶层还是 internal，只看谁用它；目的都是让项目开发者面对的表面积最小，使用门槛和复杂度随之最低：
 
-框架自身代码（含公开包）使用 internal 能力时直接引用 internal 实现包；公开转发包只服务业务项目。
+- 只给项目用、或主要给项目用的能力，是顶层公开包，实现就写在包里，如 `bootstrap`、`database`、`controller`、`cronjob`、`leader`。
+- 只有框架自己用的包一律放 `internal`：项目开发者看不到，就不必理解这些细节。
+- 项目和框架都大量使用的能力，实现下沉到 internal 包，再由一个顶层包做 alias 转发，只转发项目用得到的那部分，框架私用的符号不暴露：根包 `gst` 转发 `internal/types`，`model` 转发 `internal/modelregistry`，`service` 转发 `internal/serviceregistry`，`sse` 转发 `internal/sse`。
+
+引用方向随之固定：internal 包（含测试）需要这些能力时直接引用对应的 internal 包，禁止反向 import 公开包，避免 internal → 公开 → internal 的依赖绕行和潜在 import 环；框架自身代码（含公开包）使用 internal 能力时同样直接引用 internal 实现包，公开转发包只服务业务项目。如果所需符号只存在于公开包（如曾经的 `service.Error`），把实现下沉到 internal、公开包改为转发，而不是让 internal 反向引用。
 
 例外，以下内容必须保持公开包 import：
 
