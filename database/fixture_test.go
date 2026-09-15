@@ -2,7 +2,6 @@ package database_test
 
 import (
 	"context"
-	"os"
 	"strings"
 	"testing"
 	"time"
@@ -759,28 +758,17 @@ type TestCategory struct {
 func (*TestCategory) TableName() string { return "test_categories" }
 func (*TestCategory) Purge() bool       { return true }
 
-// envTestDatabase overrides the dialect this suite runs against. It is a
-// contract between this TestMain and the Makefile test target, which repeats
-// the package once per dialect. testutil knows nothing about the variable, so
-// projects built on the public testutil keep full control of their own
-// Server.Database.
-const envTestDatabase = "GST_TEST_DATABASE"
-
-// TestMain runs the suite against MySQL, the framework's primary dialect, by
-// default, and against the dialect envTestDatabase names when it is set. An
-// unsupported value fails the run through the Server.Database validation.
-// Every test in this package must either behave identically across dialects
-// or branch on config.App.Database.Type where a per-dialect contract differs
-// (the Upsert collision test is the pattern). A dialect broken by an open bug
-// takes a t.Skip carrying the bug number, so the account stays greppable
-// until the fix lands.
+// TestMain runs the suite against the dialect under test — MySQL, the
+// framework's primary dialect, unless GST_TEST_DATABASE names another; the
+// Makefile test target repeats the package once per dialect. Every test in
+// this package must either behave identically across dialects or branch on
+// config.App.Database.Type where a per-dialect contract differs (the Upsert
+// collision test is the pattern). A dialect broken by an open bug takes a
+// t.Skip carrying the bug number, so the account stays greppable until the
+// fix lands.
 func TestMain(m *testing.M) {
-	dbType := config.DBMySQL
-	if override := os.Getenv(envTestDatabase); len(override) > 0 {
-		dbType = config.DBType(override)
-	}
 	testutil.Run(m, testutil.Server{
-		Database: dbType,
+		Database: testutil.DatabaseUnderTest(),
 		Register: func() {
 			model.Register[*TestUser]()
 			model.Register[*TestItem]()
