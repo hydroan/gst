@@ -37,8 +37,8 @@ func withObservedGlobalLogger(t *testing.T) *observer.ObservedLogs {
 }
 
 // TestRegisterDeclaresTheWorkAsAComponent proves Register puts the work in
-// the component stage of the lifecycle under its name, and refuses a nil
-// function.
+// the component stage of the lifecycle under its name, prefixed so that it
+// cannot collide with a framework component's, and refuses a nil function.
 func TestRegisterDeclaresTheWorkAsAComponent(t *testing.T) {
 	Register(func(ctx context.Context) error {
 		<-ctx.Done()
@@ -49,7 +49,7 @@ func TestRegisterDeclaresTheWorkAsAComponent(t *testing.T) {
 	for _, c := range lifecycle.Components(lifecycle.StageComponent) {
 		names = append(names, c.Name)
 	}
-	require.Contains(t, names, "sample")
+	require.Contains(t, names, "component:sample")
 	require.Panics(t, func() { Register(nil, "sample-nil") })
 }
 

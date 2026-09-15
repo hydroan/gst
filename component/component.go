@@ -32,13 +32,19 @@ import (
 // restart it. A nil fn, an empty name, a name already registered, or a
 // registration after the process started its components is a programmer
 // error and panics.
+//
+// The registry the work joins is the framework's own — the scheduler, the
+// elector, the providers are in it under their package names — so the work
+// is listed under "component:" and its name, the way a lease name carries
+// its capability: a project's name can never collide with a framework
+// component's, whichever providers it links later.
 func Register(fn func(ctx context.Context) error, name string) {
 	if fn == nil {
 		panic(fmt.Sprintf("component: register requires a non-nil function for %q", name))
 	}
 	w := &work{name: name, fn: fn}
 	lifecycle.Register(lifecycle.Component{
-		Name:  name,
+		Name:  "component:" + name,
 		Stage: lifecycle.StageComponent,
 		Start: w.start,
 		Stop:  w.stop,
@@ -79,7 +85,7 @@ func (w *work) run(ctx context.Context) {
 		fail(err)
 		return
 	}
-	if err != nil && !util.Interrupted(ctx, err) {
+	if err != nil && !lifecycle.Interrupted(ctx, err) {
 		zap.S().Warnw("component ended with an error while stopping", "component", w.name, "err", err)
 	}
 }
