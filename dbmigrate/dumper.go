@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"reflect"
+	"regexp"
 	"sort"
 	"strings"
 	"sync"
@@ -196,6 +197,9 @@ type schemaStatement struct {
 // the database schema string-wise, and GORM's "timestamptz" and "boolean"
 // never match the "timestamp with time zone" and "tinyint(1)" the servers
 // report back, so every run would re-plan the same ALTER COLUMN statements.
+// On SQLite GORM writes a string default in double quotes, which SQLite
+// tolerates and the sqldef parser refuses; the same rewrite runs over the
+// schema the database reports, see sqliteDatabase, so both sides agree.
 func normalizeSchemaSQL(driver config.DBType, sql string) string {
 	sql = strings.ReplaceAll(sql, "CREATE INDEX IF NOT EXISTS", "CREATE INDEX")
 	sql = strings.ReplaceAll(sql, "CREATE UNIQUE INDEX IF NOT EXISTS", "CREATE UNIQUE INDEX")
@@ -208,7 +212,25 @@ func normalizeSchemaSQL(driver config.DBType, sql string) string {
 		sql = strings.ReplaceAll(sql, "DEFAULT true", "DEFAULT 1")
 		sql = strings.ReplaceAll(sql, "DEFAULT false", "DEFAULT 0")
 	}
+	if driver == config.DBSqlite {
+		sql = singleQuoteSQLiteDefaults(sql)
+	}
 	return sql
+}
+
+// sqliteDoubleQuotedDefault matches a DEFAULT clause whose literal is in
+// double quotes, the form GORM's sqlite migrator writes for a string default.
+var sqliteDoubleQuotedDefault = regexp.MustCompile(`DEFAULT "((?:[^"]|"")*)"`)
+
+// singleQuoteSQLiteDefaults rewrites the double-quoted string defaults of a
+// SQLite statement into the single-quoted literals SQL prescribes and the
+// sqldef parser reads.
+func singleQuoteSQLiteDefaults(sql string) string {
+	return sqliteDoubleQuotedDefault.ReplaceAllStringFunc(sql, func(clause string) string {
+		literal := sqliteDoubleQuotedDefault.FindStringSubmatch(clause)[1]
+		literal = strings.ReplaceAll(literal, `""`, `"`)
+		return "DEFAULT '" + strings.ReplaceAll(literal, "'", "''") + "'"
+	})
 }
 
 // schemaModelName is the annotation naming the model a statement came from.

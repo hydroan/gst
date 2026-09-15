@@ -142,7 +142,11 @@ func (d *sqliteDatabase) exportTableDDL(table string) (string, error) {
 	if err := d.db.QueryRow(query, table).Scan(&sql); err != nil {
 		return "", errors.Wrapf(err, "failed to export sqlite table %s", table)
 	}
-	return sql + ";", nil
+	// A table the runtime created carries GORM's double-quoted string
+	// defaults verbatim; the desired schema rewrites them into single quotes,
+	// and the reported schema must read the same, or every run would re-plan
+	// the column.
+	return singleQuoteSQLiteDefaults(sql) + ";", nil
 }
 
 func (d *sqliteDatabase) views() ([]string, error) {

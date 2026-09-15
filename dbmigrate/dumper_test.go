@@ -47,6 +47,19 @@ func (*Sample) Indexes() []model.Index {
 	}
 }
 
+// Ticket carries a string default. gorm's sqlite migrator writes such a
+// default in double quotes, which the migration parser reads as an
+// identifier: the dumped schema and the one the database reports back must
+// both be rewritten for it, or the sqlite migration fails on the first and
+// re-plans the column on every later run.
+type Ticket struct {
+	Status string `json:"status" gorm:"size:32;default:open"`
+
+	model.Base
+}
+
+func (*Ticket) TableName() string { return "tickets" }
+
 // ConflictSampleA and ConflictSampleB declare an index over the same column
 // sequence of one table; Dump must reject the pair instead of rendering the
 // statements of both.
