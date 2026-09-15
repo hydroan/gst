@@ -99,7 +99,7 @@ func rebuild(ctx context.Context) error {
 	if err := database.Transaction(bounded, func(context.Context) error { return nil }); err != nil {
 		return err
 	}
-	return database.Transaction(context.WithTimeout(context.Background(), time.Second), func(context.Context) error { return nil })
+	return database.Transaction(context.WithoutCancel(context.Background()), func(context.Context) error { return nil })
 }
 `)
 	// Dot imports of both packages leave the calls unqualified.
@@ -134,8 +134,46 @@ func seed() error {
 	return menudao.Seed(context.TODO())
 }
 `)
-	// A variable that also receives a real context is left alone: the
-	// check reads the syntax, not the flow.
+	// A parameter overwritten with a detached context, and a variable
+	// declared empty and then given one, both hold a detached context at
+	// the call.
+	writeCheckFile(t, filepath.Join(projectDir, "service", "override", "override.go"), `package override
+
+import (
+	"context"
+
+	"tmpapp/dao"
+)
+
+func override(ctx context.Context) error {
+	ctx = context.Background()
+	_, err := dao.Records(ctx)
+	return err
+}
+
+func declared() error {
+	var ctx context.Context
+	ctx = context.Background()
+	_, err := dao.Records(ctx)
+	return err
+}
+`)
+	// A dao package under a dot import cannot be checked, and says so.
+	writeCheckFile(t, filepath.Join(projectDir, "service", "dotted", "dotted.go"), `package dotted
+
+import (
+	"context"
+
+	. "tmpapp/dao"
+)
+
+func dotted() error {
+	_, err := Records(context.Background())
+	return err
+}
+`)
+	// A variable whose last value is the context handed down is left alone:
+	// the check reads the syntax in source order, not the flow.
 	writeCheckFile(t, filepath.Join(projectDir, "service", "either", "either.go"), `package either
 
 import (
@@ -272,15 +310,25 @@ func seed() error {
 
 	violations := CheckDetachedContext(newProjectIgnoreMatcher())
 
-	if len(violations) != 8 {
-		t.Fatalf("expected eight violations, got %#v", violations)
+	if len(violations) != 11 {
+		t.Fatalf("expected eleven violations, got %#v", violations)
 	}
 	assertViolationContains(t, violations, filepath.Join("service", "shadow", "shadow.go"), ":15: database.Transaction receives a context held in ctx")
+	assertViolationContains(t, violations, filepath.Join("service", "dotted", "dotted.go"), `:6: dot-imports "tmpapp/dao"`)
+	overrides := 0
+	for _, violation := range violations {
+		if strings.Contains(violation, filepath.Join("service", "override", "override.go")) && strings.Contains(violation, "dao.Records receives a context held in ctx") {
+			overrides++
+		}
+	}
+	if overrides != 2 {
+		t.Fatalf("expected the overwritten parameter and the declared variable to be flagged, got %#v", violations)
+	}
 	assertViolationContains(t, violations, filepath.Join("service", "record", "record.go"), ":16: database.Transaction receives context.Background()")
 	assertViolationContains(t, violations, filepath.Join("dao", "record.go"), ":12: database.Database receives context.TODO()")
 	assertViolationContains(t, violations, filepath.Join("cronjob", "sweep.go"), ":10: dao.Records receives context.Background()")
 	assertViolationContains(t, violations, filepath.Join("leader", "counter.go"), ":11: dao.Records receives a context held in ctx")
-	assertViolationContains(t, violations, filepath.Join("lock", "rebuild.go"), ":16: database.Transaction receives context.Background() through context.WithTimeout")
+	assertViolationContains(t, violations, filepath.Join("lock", "rebuild.go"), ":16: database.Transaction receives context.Background() through context.WithoutCancel")
 	assertViolationContains(t, violations, filepath.Join("service", "sweep", "sweep.go"), ":10: database.Transaction receives context.Background()")
 	assertViolationContains(t, violations, filepath.Join("service", "menu", "menu.go"), ":10: menudao.Seed receives context.TODO()")
 }
