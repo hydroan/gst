@@ -550,6 +550,38 @@ func TestRoundThatLosesItsLeaseIsCutShortAndLogged(t *testing.T) {
 	entry := readLogEntry(t, filepath.Join(dir, "cronjob.log"), "cronjob lost its lease during the round")
 	require.Equal(t, "lost-job", entry["name"])
 	require.EqualValues(t, 1, entry["term"], "the entry names the term the round ran in")
+	interrupted := readLogEntry(t, filepath.Join(dir, "cronjob.log"), "cronjob interrupted")
+	require.Equal(t, "lease lost", interrupted["reason"], "the round returning its context's cancellation is an interruption, not a failure")
+}
+
+// TestRoundInterruptedAtShutdownIsAWarning proves a round that stops because
+// its context ended is not logged as a failure: the job returned the
+// context's own cancellation, which is what it is asked to do when the
+// process shuts down, and every rolling deployment ends a long round this
+// way.
+func TestRoundInterruptedAtShutdownIsAWarning(t *testing.T) {
+	dir := withCronjobLoggerConfig(t)
+	resetCronjobState(t)
+	clock := withFakeClock(t, time.Date(2026, 1, 1, 10, 0, 0, 0, time.UTC))
+
+	entered := make(chan struct{}, 1)
+	Register(func(ctx context.Context) error {
+		entered <- struct{}{}
+		<-ctx.Done()
+		return ctx.Err()
+	}, "@every 1m", "interrupted-job")
+	require.NoError(t, start(context.Background()))
+
+	clock.untilWaiting(t)
+	clock.Advance(time.Minute)
+	awaitSignal(t, entered, "the round")
+	require.NoError(t, stop(context.Background()))
+
+	pkgzap.Clean()
+	entry := readLogEntry(t, filepath.Join(dir, "cronjob.log"), "cronjob interrupted")
+	require.Equal(t, "interrupted-job", entry["name"])
+	require.Equal(t, "shutting down", entry["reason"])
+	require.Equal(t, "WARN", entry["level"])
 }
 
 // TestStopWithoutStartIsNoop keeps stop safe in processes that never started

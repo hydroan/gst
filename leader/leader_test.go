@@ -117,7 +117,9 @@ func TestLostLeaseEndsTheTenure(t *testing.T) {
 	require.Equal(t, 2, tenures.started(), "the replica campaigns again after losing the lease")
 
 	pkgzap.Clean()
-	entry := readLogEntry(t, filepath.Join(dir, "leader.log"), "leader stepped down with error")
+	// The work returned its context's own cancellation, which is how a tenure
+	// ends, not a failure of the work.
+	entry := readLogEntry(t, filepath.Join(dir, "leader.log"), "leader stepped down")
 	require.Equal(t, "lost-work", entry["name"])
 	require.Equal(t, "lease lost", entry["reason"])
 	require.EqualValues(t, 1, entry["term"], "the entry names the term the tenure ran in")

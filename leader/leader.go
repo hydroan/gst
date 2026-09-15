@@ -329,6 +329,11 @@ func (w *work) lead(ctx context.Context, h *lease.Handle) {
 	// Read before the renewals stop: stopping them ends the held context
 	// too, and would make every tenure look like a shutdown.
 	reason, lost := tenureEnd(held)
+	if held.Err() != nil && errors.Is(err, held.Err()) {
+		// The work returning the tenure's own cancellation is how a tenure
+		// ends, not a failure of the work.
+		err = nil
+	}
 	stopHold()
 
 	outcome := append(slices.Clone(fields), zap.String("reason", reason), util.LogDuration(time.Since(begin)))

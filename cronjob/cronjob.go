@@ -568,12 +568,30 @@ func (j *job) run(ctx context.Context, at time.Time, fields ...zap.Field) (runEr
 		}
 	}()
 	begin := time.Now()
-	if runErr = j.fn(ctx); runErr != nil {
-		log.Errorz("finished cronjob with error", append([]zap.Field{zap.Error(runErr)}, append(round, util.LogDuration(time.Since(begin)))...)...)
-	} else {
-		log.Infoz("finished cronjob", append(round, util.LogDuration(time.Since(begin)))...)
+	runErr = j.fn(ctx)
+	round = append(round, util.LogDuration(time.Since(begin)))
+	switch {
+	case runErr == nil:
+		log.Infoz("finished cronjob", round...)
+	case ctx.Err() != nil && errors.Is(runErr, ctx.Err()):
+		// The job stopped because its context ended — the process is
+		// shutting down, or the lease is lost — which is what a job is asked
+		// to do then, not a failure of its own; a rolling deployment ends a
+		// long round this way every time.
+		log.Warnz("cronjob interrupted", append([]zap.Field{zap.String("reason", interruption(ctx))}, round...)...)
+	default:
+		log.Errorz("finished cronjob with error", append([]zap.Field{zap.Error(runErr)}, round...)...)
 	}
 	return runErr
+}
+
+// interruption names why a round's context ended, for the interruption
+// entry: the lease was lost, or the process is shutting down.
+func interruption(ctx context.Context) string {
+	if errors.Is(context.Cause(ctx), lease.ErrLost) {
+		return "lease lost"
+	}
+	return "shutting down"
 }
 
 // beginRound opens one round of the named job on parent and returns the
