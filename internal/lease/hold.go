@@ -118,10 +118,11 @@ var fail = lifecycle.Fail
 // be watched while it runs; a panic in it is recovered into an error
 // carrying the stack of the panic site, which Run returns.
 //
+// h is the handle the work runs under: its name is what a failure names.
 // log is the holder's own logger: work that will not stop is the last thing
 // said about a round or a tenure, so the entry belongs beside the holder's
 // own rather than in the global stream.
-func Run(ctx context.Context, name string, log types.Logger, work func(ctx context.Context) error) error {
+func Run(ctx context.Context, h *Handle, log types.Logger, work func(ctx context.Context) error) error {
 	returned := make(chan error, 1)
 	go func() {
 		defer func() {
@@ -147,8 +148,8 @@ func Run(ctx context.Context, name string, log types.Logger, work func(ctx conte
 	case err := <-returned:
 		return err
 	case <-grace.C:
-		err := errors.Newf("lease %q was lost and the work under it has not stopped within %s", name, stepDownGrace)
-		log.Errorw("work under a lost lease will not stop", "component", "lease", "lease", name, "err", err)
+		err := errors.Newf("lease %q was lost and the work under it has not stopped within %s", h.name, stepDownGrace)
+		log.Errorw("work under a lost lease will not stop", "component", "lease", "lease", h.name, "err", err)
 		fail(err)
 		return <-returned
 	}

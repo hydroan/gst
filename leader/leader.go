@@ -327,7 +327,7 @@ func (w *work) lead(ctx context.Context, h *lease.Handle) {
 	log.Infoz("elected leader", fields...)
 
 	begin := time.Now()
-	err := lease.Run(tenure, w.leaseName(), log, w.run)
+	err := lease.Run(tenure, h, log, w.run)
 	// Read before the renewals stop: stopping them ends the held context
 	// too, and would make every tenure look like a shutdown.
 	reason, lost := tenureEnd(held)

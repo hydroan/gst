@@ -545,7 +545,7 @@ func (j *job) runInstant(ctx context.Context, at time.Time, catchUp bool) bool {
 	}
 	held, stopHold := lease.Hold(ctx, h, log)
 	// The round logs its own outcome; Run's is the same error, already logged.
-	runErr := lease.Run(lease.WithHandle(held, h), j.leaseName(), log, func(ctx context.Context) error {
+	runErr := lease.Run(lease.WithHandle(held, h), h, log, func(ctx context.Context) error {
 		return j.run(ctx, at, fields...)
 	})
 	lost := errors.Is(context.Cause(held), lease.ErrLost)

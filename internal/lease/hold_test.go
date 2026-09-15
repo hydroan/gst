@@ -185,14 +185,20 @@ func TestHoldEndsWhenTheLeaseIsTakenAway(t *testing.T) {
 	}
 }
 
+// sampleHandle is a handle for work run outside the claim protocol: a name
+// for the failure to report, claimed just now.
+func sampleHandle() *Handle {
+	return &Handle{name: "sample", holder: "sample", claimedAt: time.Now()}
+}
+
 // TestRunReturnsWhatTheWorkReturned proves Run hands the work's outcome back
 // as is, and turns a panic in the work into an error carrying its stack.
 func TestRunReturnsWhatTheWorkReturned(t *testing.T) {
 	ctx := context.Background()
 
-	require.NoError(t, Run(ctx, "sample", newHolderLog(), func(context.Context) error { return nil }))
-	require.ErrorContains(t, Run(ctx, "sample", newHolderLog(), func(context.Context) error { return errors.New("sample failure") }), "sample failure")
-	err := Run(ctx, "sample", newHolderLog(), func(context.Context) error { panic("sample panic") })
+	require.NoError(t, Run(ctx, sampleHandle(), newHolderLog(), func(context.Context) error { return nil }))
+	require.ErrorContains(t, Run(ctx, sampleHandle(), newHolderLog(), func(context.Context) error { return errors.New("sample failure") }), "sample failure")
+	err := Run(ctx, sampleHandle(), newHolderLog(), func(context.Context) error { panic("sample panic") })
 	require.ErrorContains(t, err, "sample panic")
 	require.Contains(t, fmt.Sprintf("%+v", err), "hold_test.go", "the error must carry the stack of the panic site")
 }
@@ -206,7 +212,7 @@ func TestRunGivesLostWorkTheGraceToReturn(t *testing.T) {
 
 	held, cancel := context.WithCancelCause(context.Background())
 	cancel(ErrLost)
-	require.ErrorIs(t, Run(held, "sample", newHolderLog(), context.Cause), ErrLost)
+	require.ErrorIs(t, Run(held, sampleHandle(), newHolderLog(), context.Cause), ErrLost)
 	require.Empty(t, failures, "work that returned in time must not fail the process")
 }
 
@@ -222,7 +228,7 @@ func TestRunWaitsForTheWorkAtShutdown(t *testing.T) {
 	release := make(chan struct{})
 	returned := make(chan error, 1)
 	go func() {
-		returned <- Run(ctx, "sample", newHolderLog(), func(ctx context.Context) error {
+		returned <- Run(ctx, sampleHandle(), newHolderLog(), func(ctx context.Context) error {
 			<-ctx.Done()
 			<-release
 			return ctx.Err()
@@ -252,7 +258,7 @@ func TestRunFailsTheProcessWhenLostWorkWillNotStop(t *testing.T) {
 	release := make(chan struct{})
 	returned := make(chan error, 1)
 	go func() {
-		returned <- Run(held, "sample", newHolderLog(), func(context.Context) error {
+		returned <- Run(held, sampleHandle(), newHolderLog(), func(context.Context) error {
 			<-release
 			return nil
 		})
@@ -291,7 +297,8 @@ func TestHoldAndRunLogThroughTheHoldersLogger(t *testing.T) {
 	// A renewal that cannot reach the database fails without losing the
 	// lease, which is what the warning reports.
 	withClosedDatabase(t)
-	held, stop := Hold(context.Background(), &Handle{name: "sample", holder: "sample", claimedAt: time.Now()}, entries)
+	h := sampleHandle()
+	held, stop := Hold(context.Background(), h, entries)
 	defer stop()
 
 	renewal := entries.await(t, "lease renewal failed")
@@ -304,7 +311,7 @@ func TestHoldAndRunLogThroughTheHoldersLogger(t *testing.T) {
 	release := make(chan struct{})
 	returned := make(chan error, 1)
 	go func() {
-		returned <- Run(held, "sample", entries, func(context.Context) error {
+		returned <- Run(held, h, entries, func(context.Context) error {
 			<-release
 			return nil
 		})
