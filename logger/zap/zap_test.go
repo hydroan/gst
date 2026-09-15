@@ -593,7 +593,6 @@ func restoreGlobalLoggers(t *testing.T) {
 	savedTyped := map[*types.Logger]types.Logger{}
 	for _, ref := range []*types.Logger{
 		&logger.App,
-		&logger.Runtime, &logger.Task,
 		&logger.Controller, &logger.Service, &logger.Database,
 		&logger.Cache, &logger.Dcache, &logger.Redis,
 		&logger.Authz, &logger.OTEL, &logger.Cassandra, &logger.Elastic,

@@ -14,9 +14,6 @@ var (
 	// mirrors output to stdout.
 	App types.Logger
 
-	Runtime types.Logger
-	Task    types.Logger
-
 	Controller types.Logger
 	Service    types.Logger
 	Database   types.Logger

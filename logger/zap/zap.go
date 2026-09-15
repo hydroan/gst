@@ -72,9 +72,6 @@ func Init() error {
 
 	logger.App = New("app.log")
 
-	logger.Runtime = New("runtime.log")
-	logger.Task = New("task.log")
-
 	logger.Controller = New("controller.log")
 	logger.Service = New("service.log")
 	logger.Database = New("database.log")
@@ -119,9 +116,6 @@ func Clean() {
 	_ = zap.L().Sync()
 	logs := []types.Logger{
 		logger.App,
-
-		logger.Runtime,
-		logger.Task,
 
 		logger.Controller,
 		logger.Service,
