@@ -178,24 +178,55 @@ func Abort(c *gin.Context, status int, msg string) {
 	JSON(c, CodeFailure.WithStatus(status).WithMsg(msg))
 }
 
+// JSON writes coder and data in the API envelope. The envelope is encoded with
+// encoding/json whatever JSON codec gin was built with: the codecs gin's
+// jsoniter, go_json and sonic build tags select encode differently (the first
+// two ignore omitzero), and the framework's wire contract is the encoding/json
+// one.
 func JSON(c *gin.Context, coder types.Coder, data ...any) {
 	// Record the envelope code so post-response middleware (e.g. the HTTP
 	// body logger) can classify the outcome even when the HTTP status is 2xx.
 	c.Set(consts.CTX_RESPONSE_CODE, coder.Code())
+	var payload any
 	if len(data) > 0 {
-		c.JSON(coder.Status(), gin.H{
-			"code":          coder.Code(),
-			"msg":           coder.Msg(),
-			"data":          data[0],
-			consts.TRACE_ID: c.GetString(consts.TRACE_ID),
-		})
-	} else {
-		c.JSON(coder.Status(), gin.H{
-			"code":          coder.Code(),
-			"msg":           coder.Msg(),
-			"data":          nil,
-			consts.TRACE_ID: c.GetString(consts.TRACE_ID),
-		})
+		payload = data[0]
+	}
+	c.Render(coder.Status(), jsonRender{data: gin.H{
+		"code":          coder.Code(),
+		"msg":           coder.Msg(),
+		"data":          payload,
+		consts.TRACE_ID: c.GetString(consts.TRACE_ID),
+	}})
+}
+
+// jsonContentType is the Content-Type of a JSON response, the value gin's own
+// JSON render sets.
+var jsonContentType = []string{"application/json; charset=utf-8"}
+
+// jsonRender renders data as JSON through encoding/json. It mirrors gin's JSON
+// render in everything but the codec: the Content-Type is set only when none
+// is set yet, and a marshaling failure is returned before anything is written,
+// for gin.Context.Render to record and abort on.
+type jsonRender struct {
+	data any
+}
+
+// Render writes the JSON Content-Type and the encoded data.
+func (r jsonRender) Render(w http.ResponseWriter) error {
+	r.WriteContentType(w)
+	body, err := json.Marshal(r.data)
+	if err != nil {
+		return err
+	}
+	_, err = w.Write(body)
+	return err
+}
+
+// WriteContentType sets the JSON Content-Type unless one is already set.
+func (jsonRender) WriteContentType(w http.ResponseWriter) {
+	header := w.Header()
+	if len(header["Content-Type"]) == 0 {
+		header["Content-Type"] = jsonContentType
 	}
 }
 
