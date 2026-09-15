@@ -129,9 +129,11 @@ func Clean() {
 		logger.Service,
 		logger.Database,
 		logger.Cache,
+		logger.Dcache,
 		logger.Redis,
 
 		logger.Authz,
+		logger.OTEL,
 		logger.Cassandra,
 		logger.Elastic,
 		logger.Etcd,
