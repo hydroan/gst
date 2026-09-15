@@ -29,8 +29,8 @@
 //
 // The work runs again from scratch on the replica that takes the name over,
 // and its previous run may have been cut anywhere: what it must not repeat,
-// it keeps in the database — the database the tenure's transactions verify
-// the lease against — and what it must resume, it finds there.
+// it keeps in the database — the database the tenure's database.Transaction
+// calls verify the lease against — and what it must resume, it finds there.
 //
 // A registration that cannot be honored — no name, nil work, a name already
 // taken — fails the process at startup rather than dropping the work: the
@@ -219,8 +219,10 @@ func start(ctx context.Context) error {
 	if log == nil {
 		// The lifecycle binds the dedicated logger before it starts the
 		// component; a process that never ran the lifecycle (unit tests)
-		// gets one of the package's own.
-		log = pkgzap.New("leader.log")
+		// logs to the global stream. Opening leader.log here instead would
+		// put a second rotation instance on the file once the lifecycle
+		// opens its own.
+		log = pkgzap.Fallback("leader")
 	}
 
 	e := newElector(works)
@@ -314,9 +316,9 @@ func campaignWait() time.Duration {
 // is lost, or ctx, the process, is shutting down — then gives the name back,
 // unless the tenure ended because the name was no longer this holder's. The
 // work runs on the tenure's context: it ends with the tenure, its
-// transactions verify the lease first, it carries the tenure's identity, and
-// work that will not stop once the lease is lost fails the process, see
-// lease.Run.
+// database.Transaction calls verify the lease first, it carries the tenure's
+// identity, and work that will not stop once the lease is lost fails the
+// process, see lease.Run.
 func (w *work) lead(ctx context.Context, h *lease.Handle) {
 	held, stopHold := lease.Hold(ctx, h)
 	traceID := util.TraceID()
@@ -329,9 +331,10 @@ func (w *work) lead(ctx context.Context, h *lease.Handle) {
 	// Read before the renewals stop: stopping them ends the held context
 	// too, and would make every tenure look like a shutdown.
 	reason, lost := tenureEnd(held)
-	if held.Err() != nil && errors.Is(err, held.Err()) {
+	if lease.Interrupted(held, err) {
 		// The work returning the tenure's own cancellation is how a tenure
-		// ends, not a failure of the work.
+		// ends, not a failure of the work; a failure of its own beside the
+		// cancellation is reported as one.
 		err = nil
 	}
 	stopHold()
