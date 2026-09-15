@@ -157,6 +157,13 @@ linters:
         # Check deprecated symbols have proper deprecation notice.
         - deprecated
 
+    gomoddirectives:
+      # A replace pointing at a local path is how a project builds against a
+      # framework checkout beside it while verifying a framework change; only
+      # local paths are allowed, a replace pointing at a remote module is
+      # still refused.
+      replace-local: true
+
     govet:
       # These analyzers are not part of the default go vet analyzer set.
       enable:

@@ -129,9 +129,9 @@ linters:
         - deprecated
 
     gomoddirectives:
-      # The example lives inside the gst repository and is built against the
-      # framework source tree next to it, so its local replace is deliberate.
-      # Only local paths are allowed; a replace pointing at a remote module is
+      # A replace pointing at a local path is how a project builds against a
+      # framework checkout beside it while verifying a framework change; only
+      # local paths are allowed, a replace pointing at a remote module is
       # still refused.
       replace-local: true
 
