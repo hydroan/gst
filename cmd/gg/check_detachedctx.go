@@ -17,7 +17,7 @@ import (
 // detachedContextDirs are the project directories whose code runs under a
 // context handed down to it — a request's, a round's, a tenure's, a lock's —
 // and must pass that context on to the database.
-var detachedContextDirs = []string{"service", "dao", "cronjob", "leader", "lock"}
+var detachedContextDirs = []string{"service", "dao", "cronjob", "leader", "lock", "component", "router"}
 
 // databaseEntryPoints are the framework database functions that take a
 // context, for the file that dot-imports the package and calls them without
@@ -42,18 +42,18 @@ var contextDerivations = []string{
 	"WithValue", "WithoutCancel",
 }
 
-// CheckDetachedContext checks that in service, dao, cronjob, leader and lock
-// code, the context passed to a framework database entry point or to a
-// function of the project's dao packages is never context.Background() or
-// context.TODO() — written at the call, held in a local variable first, or
-// wrapped in a context derivation such as context.WithTimeout. The context
-// handed down to that code carries the request's or the round's identity
-// for every log line and statement, the transaction the work may already be
-// in, and the lease behind cluster-once work; a detached context loses all
-// three, so a transaction opened on it neither joins the enclosing one nor
-// stops when the lease is lost. Startup seeding belongs to the router
-// package's routes-ready hooks, outside these directories, and passes the
-// context the hook receives down from there.
+// CheckDetachedContext checks that in service, dao, cronjob, leader, lock,
+// component and router code, the context passed to a framework database entry point
+// or to a function of the project's dao packages is never
+// context.Background() or context.TODO() — written at the call, held in a
+// local variable first, or wrapped in a context derivation such as
+// context.WithTimeout. The context handed down to that code carries the
+// request's or the round's identity for every log line and statement, the
+// transaction the work may already be in, and the lease behind cluster-once
+// work; a detached context loses all three, so a transaction opened on it
+// neither joins the enclosing one nor stops when the lease is lost. Startup
+// seeding runs in the router package's routes-ready hooks, on the context
+// the hook receives, and is checked like the rest.
 //
 // The check is syntactic. Variables are resolved by function scope: a name
 // declared in a closure is the closure's, a parameter is the function's,

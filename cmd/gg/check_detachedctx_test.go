@@ -307,12 +307,51 @@ func seed() error {
 	})
 }
 `)
+	// A routes-ready hook seeds on the context it receives; one that makes
+	// its own instead is flagged like any other code under the rule.
+	writeCheckFile(t, filepath.Join(projectDir, "router", "init.go"), `package router
+
+import (
+	"context"
+
+	"github.com/hydroan/gst/router"
+	"tmpapp/dao"
+)
+
+func init() {
+	router.OnRoutesReady(func(ctx context.Context, _ map[string][]string) error {
+		if _, err := dao.Records(ctx); err != nil {
+			return err
+		}
+		_, err := dao.Records(context.Background())
+		return err
+	})
+}
+`)
+
+	// A component runs on the process context it receives; making its own
+	// is flagged like everywhere else under the rule.
+	writeCheckFile(t, filepath.Join(projectDir, "component", "consumer.go"), `package component
+
+import (
+	"context"
+
+	"tmpapp/dao"
+)
+
+func consume(context.Context) error {
+	_, err := dao.Records(context.Background())
+	return err
+}
+`)
 
 	violations := CheckDetachedContext(newProjectIgnoreMatcher())
 
-	if len(violations) != 11 {
-		t.Fatalf("expected eleven violations, got %#v", violations)
+	if len(violations) != 13 {
+		t.Fatalf("expected thirteen violations, got %#v", violations)
 	}
+	assertViolationContains(t, violations, filepath.Join("router", "init.go"), ":15: dao.Records receives context.Background()")
+	assertViolationContains(t, violations, filepath.Join("component", "consumer.go"), ":10: dao.Records receives context.Background()")
 	assertViolationContains(t, violations, filepath.Join("service", "shadow", "shadow.go"), ":15: database.Transaction receives a context held in ctx")
 	assertViolationContains(t, violations, filepath.Join("service", "dotted", "dotted.go"), `:6: dot-imports "tmpapp/dao"`)
 	overrides := 0
