@@ -28,7 +28,7 @@ func withRoutesReadyHooks(t *testing.T) {
 // TestRoutesReadyHooksRunOnTheContextAndStopWithIt proves the hooks run on
 // the context they are handed and a stop reaches them before as well as
 // during one: a hook sees the very context, and once it has ended no further
-// hook starts and the ending is what comes back.
+// hook starts and the reason it ended is what comes back.
 func TestRoutesReadyHooksRunOnTheContextAndStopWithIt(t *testing.T) {
 	withRoutesReadyHooks(t)
 
@@ -46,6 +46,6 @@ func TestRoutesReadyHooksRunOnTheContextAndStopWithIt(t *testing.T) {
 	})
 
 	err := RunRoutesReadyHooks(ctx)
-	require.ErrorIs(t, err, context.Canceled)
+	require.ErrorContains(t, err, "sample stop")
 	require.Equal(t, []string{"sample"}, ran, "no hook starts once the context has ended")
 }

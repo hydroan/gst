@@ -54,8 +54,9 @@ var (
 // winds down on its own.
 var processCtx, cancelProcess = context.WithCancel(context.Background())
 
-// componentStopTimeout bounds how long the lifecycle components may take to
-// finish their in-flight work at shutdown, so a stuck job cannot hold the
+// componentStopTimeout bounds how long the lifecycle may take to stop what
+// it started at shutdown — the components' in-flight work first, then the
+// providers, all within the one window — so a stuck job cannot hold the
 // shutdown hostage. It matches the bound router.Stop gives the HTTP drain.
 const componentStopTimeout = 30 * time.Second
 
@@ -196,7 +197,13 @@ func Run() error {
 	// listener would.
 	starting, stopWatching := signal.NotifyContext(processCtx, syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT)
 	err := dbruntime.Serialized(starting, "seed", func() error { return router.RunRoutesReadyHooks(starting) })
-	// Read before the watch stops: stopping it ends the context too.
+	// The channel awaitShutdown reads takes over the signals before the
+	// start's watch stops: with no channel registered the signals fall back
+	// to their default disposition, and one arriving then would kill the
+	// process without any of the teardown below. Read the start's outcome
+	// before its watch stops too: stopping it ends the context as well.
+	sigCh := make(chan os.Signal, 1)
+	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT)
 	signaled := starting.Err() != nil && processCtx.Err() == nil
 	stopWatching()
 	if signaled {
@@ -225,9 +232,6 @@ func Run() error {
 	registerCleanup(statsviz.Stop)
 	registerCleanup(debugpprof.Stop)
 	registerCleanup(gops.Stop)
-
-	sigCh := make(chan os.Signal, 1)
-	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT)
 
 	err = awaitShutdown(startup.Go(), lifecycle.Failure(), sigCh)
 

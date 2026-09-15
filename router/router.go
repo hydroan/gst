@@ -240,8 +240,8 @@ func Init() error {
 
 // RunRoutesReadyHooks runs the hooks OnRoutesReady registered, in
 // registration order, on ctx, and returns the first error — ctx ending
-// between two hooks included, so a stop reaches a hook before it starts as
-// well as during one. Bootstrap's Run calls it once every route is
+// between two hooks included, reported as its cause, so a stop reaches a
+// hook before it starts as well as during one. Bootstrap's Run calls it once every route is
 // registered and every table exists, before the components that run
 // alongside the server start and before the listener opens: what the hooks
 // seed is there for the first round of a job and for the first request
@@ -256,8 +256,8 @@ func RunRoutesReadyHooks(ctx context.Context) error {
 	routesReadyMu.Unlock()
 
 	for _, hook := range hooks {
-		if err := ctx.Err(); err != nil {
-			return err
+		if ctx.Err() != nil {
+			return context.Cause(ctx)
 		}
 		if err := hook(ctx, Routes()); err != nil {
 			// A hook cut short by the context ending is the stop's doing,
