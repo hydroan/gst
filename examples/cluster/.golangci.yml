@@ -130,9 +130,10 @@ linters:
 
     gomoddirectives:
       # A replace pointing at a local path is how a project builds against a
-      # framework checkout beside it while verifying a framework change; only
-      # local paths are allowed, a replace pointing at a remote module is
-      # still refused.
+      # framework checkout beside it while verifying a framework change — a
+      # temporary state, removed once the change is released; only local
+      # paths are allowed, a replace pointing at a remote module is still
+      # refused.
       replace-local: true
 
     govet:
