@@ -22,8 +22,9 @@ var (
 // failNowTimeout bounds the teardown of a process that fails now, see
 // lifecycle.FailNow. Nothing left in it then waits for work — stopping the
 // providers, flushing the logs — so it takes a moment; the bound is for a
-// cleanup that hangs, which is left behind so the process can exit.
-const failNowTimeout = 10 * time.Second
+// cleanup that hangs, which is left behind so the process can exit. A
+// variable so a test can play the bound out in milliseconds.
+var failNowTimeout = 10 * time.Second
 
 // clean runs the cleanup stack once; later calls do nothing. Once the process
 // fails now, it waits for the stack no longer than failNowTimeout.
