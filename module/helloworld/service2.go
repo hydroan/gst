@@ -1,8 +1,8 @@
 package helloworld
 
-import "github.com/hydroan/gst/internal/types"
+import "github.com/hydroan/gst"
 
-func (s *Service2) CreateBefore(ctx *types.ServiceContext, hw *Helloworld2) error {
+func (s *Service2) CreateBefore(ctx *gst.ServiceContext, hw *Helloworld2) error {
 	log := s.WithContext(ctx, ctx.Phase())
 
 	log.Info("hello world 2 create before")
@@ -11,7 +11,7 @@ func (s *Service2) CreateBefore(ctx *types.ServiceContext, hw *Helloworld2) erro
 	return nil
 }
 
-func (s *Service2) CreateAfter(ctx *types.ServiceContext, hw *Helloworld2) error {
+func (s *Service2) CreateAfter(ctx *gst.ServiceContext, hw *Helloworld2) error {
 	log := s.WithContext(ctx, ctx.Phase())
 
 	log.Info("hello world 2 create after")
@@ -20,7 +20,7 @@ func (s *Service2) CreateAfter(ctx *types.ServiceContext, hw *Helloworld2) error
 	return nil
 }
 
-func (s *Service2) DeleteBefore(ctx *types.ServiceContext, hw *Helloworld2) error {
+func (s *Service2) DeleteBefore(ctx *gst.ServiceContext, hw *Helloworld2) error {
 	log := s.WithContext(ctx, ctx.Phase())
 
 	log.Info("hello world 2 delete before")
@@ -29,7 +29,7 @@ func (s *Service2) DeleteBefore(ctx *types.ServiceContext, hw *Helloworld2) erro
 	return nil
 }
 
-func (s *Service2) DeleteAfter(ctx *types.ServiceContext, hw *Helloworld2) error {
+func (s *Service2) DeleteAfter(ctx *gst.ServiceContext, hw *Helloworld2) error {
 	log := s.WithContext(ctx, ctx.Phase())
 
 	log.Info("hello world 2 delete after")
@@ -38,7 +38,7 @@ func (s *Service2) DeleteAfter(ctx *types.ServiceContext, hw *Helloworld2) error
 	return nil
 }
 
-func (s *Service2) UpdateBefore(ctx *types.ServiceContext, hw *Helloworld2) error {
+func (s *Service2) UpdateBefore(ctx *gst.ServiceContext, hw *Helloworld2) error {
 	log := s.WithContext(ctx, ctx.Phase())
 
 	log.Info("hello world 2 update before")
@@ -47,7 +47,7 @@ func (s *Service2) UpdateBefore(ctx *types.ServiceContext, hw *Helloworld2) erro
 	return nil
 }
 
-func (s *Service2) UpdateAfter(ctx *types.ServiceContext, hw *Helloworld2) error {
+func (s *Service2) UpdateAfter(ctx *gst.ServiceContext, hw *Helloworld2) error {
 	log := s.WithContext(ctx, ctx.Phase())
 
 	log.Info("hello world 2 update after")
@@ -56,7 +56,7 @@ func (s *Service2) UpdateAfter(ctx *types.ServiceContext, hw *Helloworld2) error
 	return nil
 }
 
-func (s *Service2) PatchBefore(ctx *types.ServiceContext, hw *Helloworld2) error {
+func (s *Service2) PatchBefore(ctx *gst.ServiceContext, hw *Helloworld2) error {
 	log := s.WithContext(ctx, ctx.Phase())
 
 	log.Info("hello world 2 patch before")
@@ -65,7 +65,7 @@ func (s *Service2) PatchBefore(ctx *types.ServiceContext, hw *Helloworld2) error
 	return nil
 }
 
-func (s *Service2) PatchAfter(ctx *types.ServiceContext, hw *Helloworld2) error {
+func (s *Service2) PatchAfter(ctx *gst.ServiceContext, hw *Helloworld2) error {
 	log := s.WithContext(ctx, ctx.Phase())
 
 	log.Info("hello world 2 patch after")
@@ -74,7 +74,7 @@ func (s *Service2) PatchAfter(ctx *types.ServiceContext, hw *Helloworld2) error 
 	return nil
 }
 
-func (s *Service2) ListBefore(ctx *types.ServiceContext, hws *[]*Helloworld2) error {
+func (s *Service2) ListBefore(ctx *gst.ServiceContext, hws *[]*Helloworld2) error {
 	log := s.WithContext(ctx, ctx.Phase())
 
 	log.Info("hello world 2 list before")
@@ -86,7 +86,7 @@ func (s *Service2) ListBefore(ctx *types.ServiceContext, hws *[]*Helloworld2) er
 	return nil
 }
 
-func (s *Service2) ListAfter(ctx *types.ServiceContext, hws *[]*Helloworld2) error {
+func (s *Service2) ListAfter(ctx *gst.ServiceContext, hws *[]*Helloworld2) error {
 	log := s.WithContext(ctx, ctx.Phase())
 
 	log.Info("hello world 2 list after")
@@ -98,7 +98,7 @@ func (s *Service2) ListAfter(ctx *types.ServiceContext, hws *[]*Helloworld2) err
 	return nil
 }
 
-func (s *Service2) GetBefore(ctx *types.ServiceContext, hw *Helloworld2) error {
+func (s *Service2) GetBefore(ctx *gst.ServiceContext, hw *Helloworld2) error {
 	log := s.WithContext(ctx, ctx.Phase())
 
 	log.Info("hello world 2 get before")
@@ -108,7 +108,7 @@ func (s *Service2) GetBefore(ctx *types.ServiceContext, hw *Helloworld2) error {
 	return nil
 }
 
-func (s *Service2) GetAfter(ctx *types.ServiceContext, hw *Helloworld2) error {
+func (s *Service2) GetAfter(ctx *gst.ServiceContext, hw *Helloworld2) error {
 	log := s.WithContext(ctx, ctx.Phase())
 
 	log.Info("hello world 2 get after")
@@ -118,7 +118,7 @@ func (s *Service2) GetAfter(ctx *types.ServiceContext, hw *Helloworld2) error {
 	return nil
 }
 
-func (s *Service2) CreateManyBefore(ctx *types.ServiceContext, hws ...*Helloworld2) error {
+func (s *Service2) CreateManyBefore(ctx *gst.ServiceContext, hws ...*Helloworld2) error {
 	log := s.WithContext(ctx, ctx.Phase())
 
 	log.Info("hello world 2 batch create before")
@@ -129,7 +129,7 @@ func (s *Service2) CreateManyBefore(ctx *types.ServiceContext, hws ...*Helloworl
 	return nil
 }
 
-func (s *Service2) CreateManyAfter(ctx *types.ServiceContext, hws ...*Helloworld2) error {
+func (s *Service2) CreateManyAfter(ctx *gst.ServiceContext, hws ...*Helloworld2) error {
 	log := s.WithContext(ctx, ctx.Phase())
 
 	log.Info("hello world 2 batch create after")
@@ -140,7 +140,7 @@ func (s *Service2) CreateManyAfter(ctx *types.ServiceContext, hws ...*Helloworld
 	return nil
 }
 
-func (s *Service2) DeleteManyBefore(ctx *types.ServiceContext, hws ...*Helloworld2) error {
+func (s *Service2) DeleteManyBefore(ctx *gst.ServiceContext, hws ...*Helloworld2) error {
 	log := s.WithContext(ctx, ctx.Phase())
 
 	log.Info("hello world 2 batch delete before")
@@ -151,7 +151,7 @@ func (s *Service2) DeleteManyBefore(ctx *types.ServiceContext, hws ...*Helloworl
 	return nil
 }
 
-func (s *Service2) DeleteManyAfter(ctx *types.ServiceContext, hws ...*Helloworld2) error {
+func (s *Service2) DeleteManyAfter(ctx *gst.ServiceContext, hws ...*Helloworld2) error {
 	log := s.WithContext(ctx, ctx.Phase())
 
 	log.Info("hello world 2 batch delete after")
@@ -162,7 +162,7 @@ func (s *Service2) DeleteManyAfter(ctx *types.ServiceContext, hws ...*Helloworld
 	return nil
 }
 
-func (s *Service2) UpdateManyBefore(ctx *types.ServiceContext, hws ...*Helloworld2) error {
+func (s *Service2) UpdateManyBefore(ctx *gst.ServiceContext, hws ...*Helloworld2) error {
 	log := s.WithContext(ctx, ctx.Phase())
 
 	log.Info("hello world 2 batch update before")
@@ -173,7 +173,7 @@ func (s *Service2) UpdateManyBefore(ctx *types.ServiceContext, hws ...*Helloworl
 	return nil
 }
 
-func (s *Service2) UpdateManyAfter(ctx *types.ServiceContext, hws ...*Helloworld2) error {
+func (s *Service2) UpdateManyAfter(ctx *gst.ServiceContext, hws ...*Helloworld2) error {
 	log := s.WithContext(ctx, ctx.Phase())
 
 	log.Info("hello world 2 batch update after")
@@ -184,7 +184,7 @@ func (s *Service2) UpdateManyAfter(ctx *types.ServiceContext, hws ...*Helloworld
 	return nil
 }
 
-func (s *Service2) PatchManyBefore(ctx *types.ServiceContext, hws ...*Helloworld2) error {
+func (s *Service2) PatchManyBefore(ctx *gst.ServiceContext, hws ...*Helloworld2) error {
 	log := s.WithContext(ctx, ctx.Phase())
 
 	log.Info("hello world 2 batch patch before")
@@ -195,7 +195,7 @@ func (s *Service2) PatchManyBefore(ctx *types.ServiceContext, hws ...*Helloworld
 	return nil
 }
 
-func (s *Service2) PatchManyAfter(ctx *types.ServiceContext, hws ...*Helloworld2) error {
+func (s *Service2) PatchManyAfter(ctx *gst.ServiceContext, hws ...*Helloworld2) error {
 	log := s.WithContext(ctx, ctx.Phase())
 
 	log.Info("hello world 2 batch patch after")

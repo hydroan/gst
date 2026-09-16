@@ -1,3 +1,8 @@
+// Package helloworld is the complete module example projects are pointed to:
+// one module on an empty model with request and response types of its own,
+// and one on a table-backed model with before and after hooks for each
+// action. It is written the way a project writes a module, against public
+// packages only, so it can be copied into a project as it stands.
 package helloworld
 
 import (

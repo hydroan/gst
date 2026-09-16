@@ -1,12 +1,12 @@
 package helloworld
 
 import (
-	"github.com/hydroan/gst/internal/types"
+	"github.com/hydroan/gst"
 )
 
 var counter = 0
 
-func (s *Service) Create(ctx *types.ServiceContext, req *Req) (*Rsp, error) {
+func (s *Service) Create(ctx *gst.ServiceContext, req *Req) (*Rsp, error) {
 	log := s.WithContext(ctx, ctx.Phase())
 
 	log.Info("helloworld module create")
@@ -20,7 +20,7 @@ func (s *Service) Create(ctx *types.ServiceContext, req *Req) (*Rsp, error) {
 	}, nil
 }
 
-func (s *Service) Delete(ctx *types.ServiceContext, req *Req) (*Rsp, error) {
+func (s *Service) Delete(ctx *gst.ServiceContext, req *Req) (*Rsp, error) {
 	log := s.WithContext(ctx, ctx.Phase())
 
 	log.Info("helloworld module delete")
@@ -34,7 +34,7 @@ func (s *Service) Delete(ctx *types.ServiceContext, req *Req) (*Rsp, error) {
 	}, nil
 }
 
-func (s *Service) Update(ctx *types.ServiceContext, req *Req) (*Rsp, error) {
+func (s *Service) Update(ctx *gst.ServiceContext, req *Req) (*Rsp, error) {
 	log := s.WithContext(ctx, ctx.Phase())
 
 	log.Info("helloworld module update")
@@ -46,7 +46,7 @@ func (s *Service) Update(ctx *types.ServiceContext, req *Req) (*Rsp, error) {
 	}, nil
 }
 
-func (s *Service) Patch(ctx *types.ServiceContext, req *Req) (*Rsp, error) {
+func (s *Service) Patch(ctx *gst.ServiceContext, req *Req) (*Rsp, error) {
 	log := s.WithContext(ctx, ctx.Phase())
 
 	log.Info("helloworld module patch")
@@ -58,7 +58,7 @@ func (s *Service) Patch(ctx *types.ServiceContext, req *Req) (*Rsp, error) {
 	}, nil
 }
 
-func (s *Service) List(ctx *types.ServiceContext, req *Req) (*Rsp, error) {
+func (s *Service) List(ctx *gst.ServiceContext, req *Req) (*Rsp, error) {
 	log := s.WithContext(ctx, ctx.Phase())
 
 	log.Info("helloworld module list")
@@ -69,7 +69,7 @@ func (s *Service) List(ctx *types.ServiceContext, req *Req) (*Rsp, error) {
 	}, nil
 }
 
-func (s *Service) Get(ctx *types.ServiceContext, req *Req) (*Rsp, error) {
+func (s *Service) Get(ctx *gst.ServiceContext, req *Req) (*Rsp, error) {
 	log := s.WithContext(ctx, ctx.Phase())
 
 	log.Info("helloworld module get")
@@ -80,7 +80,7 @@ func (s *Service) Get(ctx *types.ServiceContext, req *Req) (*Rsp, error) {
 	}, nil
 }
 
-func (s *Service) CreateMany(ctx *types.ServiceContext, req *Req) (*Rsp, error) {
+func (s *Service) CreateMany(ctx *gst.ServiceContext, req *Req) (*Rsp, error) {
 	log := s.WithContext(ctx, ctx.Phase())
 
 	log.Info("helloworld module many creator")
@@ -92,7 +92,7 @@ func (s *Service) CreateMany(ctx *types.ServiceContext, req *Req) (*Rsp, error) 
 	}, nil
 }
 
-func (s *Service) DeleteMany(ctx *types.ServiceContext, req *Req) (*Rsp, error) {
+func (s *Service) DeleteMany(ctx *gst.ServiceContext, req *Req) (*Rsp, error) {
 	log := s.WithContext(ctx, ctx.Phase())
 
 	log.Info("helloworld module many deleter")
@@ -104,7 +104,7 @@ func (s *Service) DeleteMany(ctx *types.ServiceContext, req *Req) (*Rsp, error) 
 	}, nil
 }
 
-func (s *Service) UpdateMany(ctx *types.ServiceContext, req *Req) (*Rsp, error) {
+func (s *Service) UpdateMany(ctx *gst.ServiceContext, req *Req) (*Rsp, error) {
 	log := s.WithContext(ctx, ctx.Phase())
 
 	log.Info("helloworld module many updater")
@@ -116,7 +116,7 @@ func (s *Service) UpdateMany(ctx *types.ServiceContext, req *Req) (*Rsp, error) 
 	}, nil
 }
 
-func (s *Service) PatchMany(ctx *types.ServiceContext, req *Req) (*Rsp, error) {
+func (s *Service) PatchMany(ctx *gst.ServiceContext, req *Req) (*Rsp, error) {
 	log := s.WithContext(ctx, ctx.Phase())
 
 	log.Info("helloworld module many patcher")

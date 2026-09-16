@@ -1,30 +1,30 @@
 package helloworld
 
 import (
-	"github.com/hydroan/gst/internal/modelregistry"
-	"github.com/hydroan/gst/internal/serviceregistry"
-	"github.com/hydroan/gst/internal/types"
+	"github.com/hydroan/gst"
+	"github.com/hydroan/gst/model"
+	"github.com/hydroan/gst/service"
 )
 
-var _ types.Module[*Helloworld2, *Helloworld2, *Helloworld2] = (*Module2)(nil)
+var _ gst.Module[*Helloworld2, *Helloworld2, *Helloworld2] = (*Module2)(nil)
 
 type Helloworld2 struct {
 	Before string `json:"before" query:"before"`
 	After  string `json:"after" query:"after"`
 
-	modelregistry.Base
+	model.Base
 }
 
 // TableName pins the table name gorm would otherwise derive.
 func (Helloworld2) TableName() string { return "helloworld2" }
 
 type Service2 struct {
-	serviceregistry.Base[*Helloworld2, *Helloworld2, *Helloworld2]
+	service.Base[*Helloworld2, *Helloworld2, *Helloworld2]
 }
 
 type Module2 struct{}
 
-func (*Module2) Service() types.Service[*Helloworld2, *Helloworld2, *Helloworld2] {
+func (*Module2) Service() gst.Service[*Helloworld2, *Helloworld2, *Helloworld2] {
 	return &Service2{}
 }
 
