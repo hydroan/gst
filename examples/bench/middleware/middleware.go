@@ -1,8 +1,8 @@
 // Package middleware registers the application's custom HTTP middleware.
 //
-// middleware.Register applies to all routes; middleware.RegisterAuth applies
-// only to routes behind authentication. Both take one or more gin.HandlerFunc
-// and wrap each with tracing automatically.
+// middleware.Register applies to every API route; middleware.RegisterAuth
+// applies only to the API routes behind authentication. Both take one or more
+// gin.HandlerFunc and wrap each with tracing automatically.
 //
 // Example:
 //

@@ -33,9 +33,11 @@ var (
 	applyAuthHandler   func(gin.HandlerFunc)
 )
 
-// Register adds global middlewares that apply to all routes.
-// Must be called before router.Init.
-// Middlewares are auto-wrapped for tracing; name is inferred via reflection.
+// Register wraps each middleware for tracing, under the name of the function
+// that built it, and keeps it for every API route: SetApplyHandlers mounts the
+// ones kept before it, and the handlers it installs mount each later one as it
+// arrives. The public middleware.Register forwards to it and documents the
+// contract.
 func Register(middlewares ...gin.HandlerFunc) {
 	middlewareMu.Lock()
 	defer middlewareMu.Unlock()
@@ -56,9 +58,11 @@ func Register(middlewares ...gin.HandlerFunc) {
 	}
 }
 
-// RegisterAuth adds authentication/authorization middlewares.
-// Must be called before router.Init.
-// Middlewares are auto-wrapped for tracing; name is inferred via reflection.
+// RegisterAuth wraps each middleware for tracing, under the name of the
+// function that built it, and keeps it for the routes of the authenticated
+// group: SetApplyHandlers mounts the ones kept before it, and the handlers it
+// installs mount each later one as it arrives. The public
+// middleware.RegisterAuth forwards to it and documents the contract.
 func RegisterAuth(middlewares ...gin.HandlerFunc) {
 	middlewareMu.Lock()
 	defer middlewareMu.Unlock()

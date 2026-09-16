@@ -198,19 +198,23 @@ func BuildServiceFile(pkgName string, modelImports []string, stmts ...ast.Stmt) 
 	return FormatNodeExtra(f, false)
 }
 
-// BuildRouterFile generates a router.go file, the content like below:
+// BuildRouterFile generates the router registration file, router.gen.go, the
+// content like below:
 /*
 package router
 
 import (
 	"helloworld/model"
 
+	"github.com/hydroan/gst/consts"
 	"github.com/hydroan/gst/router"
+
+	"github.com/hydroan/gst"
 )
 
 func Init() error {
-	router.Register[*model.Group, *model.Group, *model.Group](router.Auth(), "group")
-	router.Register[*model.User, *model.User, *model.User](router.Pub(), "user")
+	router.Register[*model.Group, *model.Group, *model.Group](router.Auth(), "groups", &gst.ControllerConfig[*model.Group]{}, consts.List)
+	router.Register[*model.User, *model.User, *model.User](router.Pub(), "users", &gst.ControllerConfig[*model.User]{}, consts.Create)
 	return nil
 }
 */

@@ -80,10 +80,12 @@ func Register() {
 	internalmiddleware.RegisterAuth(middleware.IAMSession())
 
 	// TODO: throttle POST /api/login by client IP. The route is public, so the
-	// limiter belongs on internalmiddleware.Register (global scope) rather than
-	// internalmiddleware.RegisterAuth, narrowed to this one path through
-	// ratelimiter.WithSkipFunc; the default key function is already the client
-	// IP.
+	// limiter registers with Register (global scope), not RegisterAuth. For
+	// projects that copy this module to get it as well, build it in a
+	// zero-argument constructor in a file of the public middleware package — a
+	// ratelimiter.RateLimiter narrowed to this one path through
+	// ratelimiter.WithSkipFunc, whose default key is already the client IP —
+	// and declare that file in module.json with scope "global".
 	module.Use(module.NewWrapper("/login", "id", true, &serviceiamaccount.LoginService{}), module.CRUD(consts.PHASE_CREATE))
 	module.Use(module.NewWrapper("/logout", "id", false, &serviceiamaccount.LogoutService{}), module.CRUD(consts.PHASE_CREATE))
 	module.Use(module.NewWrapper("/signup", "id", true, &serviceiamaccount.SignupService{}), module.CRUD(consts.PHASE_CREATE))
