@@ -52,14 +52,6 @@ func TestTeardownStopsTheLogWritersLast(t *testing.T) {
 		"the temp directory and then the log writers must be the last things torn down")
 }
 
-// TestUnlinkedProvidersAreTheEnabledOnesTheBinaryLacks proves the warning
-// bootstrap logs names exactly the enabled providers no package linked.
-func TestUnlinkedProvidersAreTheEnabledOnesTheBinaryLacks(t *testing.T) {
-	require.Equal(t, []string{"nats"}, unlinkedProviders([]string{"kafka", "nats"}, []string{"kafka", "mongo"}))
-	require.Empty(t, unlinkedProviders([]string{"kafka"}, []string{"kafka"}))
-	require.Empty(t, unlinkedProviders(nil, nil))
-}
-
 // TestRunDrainsBeforeTeardownWhenAListenerFails proves the order Run keeps
 // at both ends. Starting: the routes-ready hooks fire before the components
 // start, so what a hook seeds is there for a component's first round.

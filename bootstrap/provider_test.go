@@ -156,3 +156,11 @@ func providerDirectories(t *testing.T) map[string]bool {
 	}
 	return dirs
 }
+
+// TestUnlinkedProvidersAreTheEnabledOnesTheBinaryLacks proves the warning
+// bootstrap logs names exactly the enabled providers no package linked.
+func TestUnlinkedProvidersAreTheEnabledOnesTheBinaryLacks(t *testing.T) {
+	require.Equal(t, []string{"nats"}, unlinkedProviders([]string{"kafka", "nats"}, []string{"kafka", "mongo"}))
+	require.Empty(t, unlinkedProviders([]string{"kafka"}, []string{"kafka"}))
+	require.Empty(t, unlinkedProviders(nil, nil))
+}
