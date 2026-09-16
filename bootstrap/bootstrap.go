@@ -16,9 +16,11 @@ import (
 	"os"
 	"os/signal"
 	"sync"
+	"sync/atomic"
 	"syscall"
 	"time"
 
+	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/authz/rbac"
 	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/database/clickhouse"
@@ -124,11 +126,9 @@ func Bootstrap() error {
 		serviceregistry.Init,
 
 		controller.Init,
-		middleware.Init,
-		router.Init,
 
-		// module system must be the last to be initialized.
-		module.Init,
+		// The middleware and router layers, then the modules, last.
+		InitRouterAndModules,
 	)
 
 	registerCleanup(closeComponent("redis", redis.Close))
@@ -139,15 +139,9 @@ func Bootstrap() error {
 		return err
 	}
 
-	// module.Init has released module.Use goroutines. Wait for module
-	// registration first because modules can register models and enqueue
-	// tables. This must run before the following database drain; otherwise
-	// dbruntime.Wait may check the database queues before modules have added
-	// their entries.
-	module.Wait()
-
-	// Second database drain: create the tables added by modules during
-	// Bootstrap, after module.Wait has made those registrations visible.
+	// Second database drain: create the tables modules added during
+	// Bootstrap. InitRouterAndModules has waited for their registration, so
+	// the drain sees every entry they queued.
 	dbruntime.Wait()
 
 	// Mark success only after every phase finished: a failed Bootstrap must
@@ -155,6 +149,40 @@ func Bootstrap() error {
 	// retry. Bootstrap is single-shot; callers exit on failure (RunOrDie).
 	initialized = true
 
+	return nil
+}
+
+// routerAndModulesInitialized is set by InitRouterAndModules, which runs once
+// per process.
+var routerAndModulesInitialized atomic.Bool
+
+// InitRouterAndModules initializes the middleware registry and the router that
+// routes and middleware mount on, then releases the modules' registration, and
+// returns once every module has registered. It needs the configuration loaded.
+// It runs once per process: a second call reports an error instead of building
+// the router again under the routes already registered on it.
+//
+// Bootstrap runs it as the last step of its setup. A program that only reads
+// what the project and its modules registered, without serving it — the one gg
+// migrate generates — runs it right after config.Init instead of Bootstrap.
+func InitRouterAndModules() error {
+	if !routerAndModulesInitialized.CompareAndSwap(false, true) {
+		return errors.New("bootstrap: the router and modules were already initialized in this process")
+	}
+	if err := middleware.Init(); err != nil {
+		return err
+	}
+	if err := router.Init(); err != nil {
+		return err
+	}
+	// The modules come last: releasing their registration mounts routes and
+	// middleware on what the calls above built.
+	if err := module.Init(); err != nil {
+		return err
+	}
+	// Modules register models and queue tables as they register, so a
+	// database drain after this returns sees all of them.
+	module.Wait()
 	return nil
 }
 

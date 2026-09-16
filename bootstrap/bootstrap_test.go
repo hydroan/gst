@@ -147,6 +147,16 @@ func TestAwaitShutdownReturnsWhatEndedTheWait(t *testing.T) {
 	require.ErrorIs(t, awaitShutdown(never, components, sigCh), errComponent)
 }
 
+// TestInitRouterAndModulesRunsOncePerProcess pins that the router and modules
+// are initialized once per process. Bootstrap has initialized them, so a second
+// call is refused instead of building the router again under the routes
+// already registered on it.
+func TestInitRouterAndModulesRunsOncePerProcess(t *testing.T) {
+	bootstrapProcess(t)
+
+	require.ErrorContains(t, InitRouterAndModules(), "the router and modules were already initialized")
+}
+
 var (
 	bootstrapOnce   sync.Once
 	errBootstrap    error

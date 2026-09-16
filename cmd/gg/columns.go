@@ -56,7 +56,6 @@ import (
 	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/model"
 	"github.com/hydroan/gst/modelschema"
-	"github.com/hydroan/gst/module"
 
 	_ "{{MODULE}}/model"
 {{UNREGISTERED_IMPORTS}})
@@ -79,15 +78,14 @@ type modelColumns struct {
 }
 
 func main() {
-	// Only the pieces model registration depends on are initialized: resolving
-	// columns never touches the database.
+	// Only the configuration is loaded, the way the service loads it: gorm's
+	// parser calls methods on the models and their field types, and project
+	// code in them may read it. The models come from the model packages
+	// imported above; resolving their columns never touches the database.
 	if err := config.Init(); err != nil {
 		fail(err)
 	}
 	defer config.Clean()
-	if err := module.Init(); err != nil {
-		fail(err)
-	}
 
 	seen := make(map[string]struct{})
 	out := make([]modelColumns, 0)

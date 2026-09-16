@@ -152,11 +152,11 @@ import (
 	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/dbmigrate"
 	"github.com/hydroan/gst/model"
-	"github.com/hydroan/gst/module"
 
-	// Linked for its initialisers alone: it pulls in every framework package
-	// the running service links, so this program sees the same registrations.
-	_ "github.com/hydroan/gst/bootstrap"
+	// bootstrap links every framework package the running service links, so
+	// this program sees the same registrations, and brings up the router and
+	// the modules the way the service does.
+	"github.com/hydroan/gst/bootstrap"
 )
 
 const migrateDryRun = {{DRY_RUN}}
@@ -166,15 +166,12 @@ const migrateSchemaOnly = {{SCHEMA_ONLY}}
 const migrateSchemaSource = {{SCHEMA_SOURCE}}
 
 func main() {
-	// Initialize system components and suppress stdout during initialization
-	// to avoid cluttering the migration output.
-	initComponents()
+	// Load the configuration and initialize the router and modules, with
+	// stdout suppressed during initialization to avoid cluttering the
+	// migration output.
+	initConfigRouterAndModules()
 	// Ensure config resources are cleaned up when the program exits.
 	defer config.Clean()
-
-	// Module registration runs in the background and registers models of its
-	// own; the schema is not complete until it has finished.
-	module.Wait()
 
 	// Collect all registered models.
 	models := collectModels()
@@ -218,10 +215,11 @@ func exitWithError(err error) {
 	os.Exit(1)
 }
 
-// initComponents brings up what model registration runs through (see
-// dbmigrate.Prepare). It temporarily suppresses stdout to prevent
+// initConfigRouterAndModules loads the configuration and initializes the router
+// and modules (see bootstrap.InitRouterAndModules), so every model the project
+// and its modules register is in. It temporarily suppresses stdout to prevent
 // initialization logs from appearing in the console.
-func initComponents() {
+func initConfigRouterAndModules() {
 	oldStdout := os.Stdout
 	null, err := os.Open(os.DevNull)
 	if err != nil {
@@ -233,7 +231,10 @@ func initComponents() {
 		null.Close()
 	}()
 
-	if err = dbmigrate.Prepare(); err != nil {
+	if err = config.Init(); err != nil {
+		exitWithError(err)
+	}
+	if err = bootstrap.InitRouterAndModules(); err != nil {
 		exitWithError(err)
 	}
 }

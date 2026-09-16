@@ -16,7 +16,8 @@ import (
 // The migration program's model set is whatever the linked packages
 // registered, so it has to link the project packages a generated main.go
 // links and the framework entry point that links the rest, and it has to
-// wait for module registration instead of guessing when it is done. A
+// initialize the router and modules through that entry point instead of
+// guessing when module registration is done. A
 // scaffold package the project lacks — restored by gg gen, never by migrate
 // — is left out rather than failing the build, which is what an upgraded
 // project that has not run gen yet looks like.
@@ -50,7 +51,7 @@ func TestMigrateProgramLinksWhatMainLinks(t *testing.T) {
 			t.Fatalf("expected the migration program to import %s, got:\n%s", want, program)
 		}
 	}
-	for _, want := range []string{`_ "github.com/hydroan/gst/bootstrap"`, "module.Wait()"} {
+	for _, want := range []string{`"github.com/hydroan/gst/bootstrap"`, "bootstrap.InitRouterAndModules()"} {
 		if !strings.Contains(program, want) {
 			t.Fatalf("expected the migration program to contain %s, got:\n%s", want, program)
 		}
@@ -63,11 +64,11 @@ func TestMigrateProgramLinksWhatMainLinks(t *testing.T) {
 // The migration program reads the tables modules register as well as the
 // project's own. A module registers its models only once the framework
 // releases module registration, and registering mounts its routes on the
-// router, so the program has to bring up everything registration runs
-// through before it waits for it: dbmigrate.Prepare. Run against a project
-// that registers a module, the schema dump lists the module's table. No build
-// of this repository compiles the program's source, so this is also what pins
-// that it still compiles against the framework.
+// router, so the program has to bring up the router and the modules and wait
+// for their registration: bootstrap.InitRouterAndModules. Run against a
+// project that registers a module, the schema dump lists the module's table.
+// No build of this repository compiles the program's source, so this is also
+// what pins that it still compiles against the framework.
 func TestMigrateSchemaProgramReadsTheTablesModulesRegister(t *testing.T) {
 	projectDir := newGenProject(t)
 	// The dump is rendered in the dialect the configuration names, and the
