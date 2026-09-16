@@ -26,7 +26,7 @@ func Init() (err error) {
 	if Default, err = New(cfg); err != nil {
 		return errors.Wrap(err, "failed to connect to postgres")
 	}
-	zap.S().Infow("successfully connect to postgres", "host", cfg.Host, "port", cfg.Port, "database", cfg.Database, "sslmode", cfg.SSLMode, "timezone", cfg.TimeZone)
+	zap.S().Infow("successfully connect to postgres", "host", cfg.Host, "port", cfg.Port, "database", cfg.Database, "sslmode", cfg.SSLMode)
 	return dbruntime.InitDatabase(Default)
 }
 
@@ -87,9 +87,19 @@ func attachReplicas(db *gorm.DB, cfg config.Postgres) (*gorm.DB, error) {
 // comment.go), making every statement text request-unique, so a text-keyed
 // statement cache — gorm's PrepareStmt or pgx's default statement caching —
 // would never be reused and only grow.
+//
+// TimeZone=UTC pins the session time zone to the framework's one time base
+// across dialects, the way the MySQL DSN pins loc=UTC. PostgreSQL stores a
+// timestamptz as an instant but reads the session zone wherever text meets
+// time: a timestamp string without an offset — the form URL time filters and
+// time cursors bind, see types.FilterTimeLayout — is taken as time in that
+// zone, to_char renders time buckets in it, and values come back carrying its
+// offset. Under any other zone, filters and cursors would shift by the
+// offset, buckets would split days at that zone's midnight, and responses
+// would carry that offset instead of UTC's, so the zone is not configurable.
 func buildDSN(cfg config.Postgres) string {
 	return fmt.Sprintf(
-		"host=%s user=%s password=%s dbname=%s port=%d sslmode=%s TimeZone=%s default_query_exec_mode=simple_protocol",
-		cfg.Host, cfg.Username, cfg.Password, cfg.Database, cfg.Port, cfg.SSLMode, cfg.TimeZone,
+		"host=%s user=%s password=%s dbname=%s port=%d sslmode=%s TimeZone=UTC default_query_exec_mode=simple_protocol",
+		cfg.Host, cfg.Username, cfg.Password, cfg.Database, cfg.Port, cfg.SSLMode,
 	)
 }

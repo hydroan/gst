@@ -211,7 +211,6 @@ port = 3306
 database =
 username = root
 password =
-charset = utf8mb4
 enabled = true
 
 [postgres]
@@ -221,7 +220,6 @@ database =
 username = postgres
 password =
 sslmode = disable
-timezone = Asia/Shanghai
 enabled = true
 
 [redis]

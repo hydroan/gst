@@ -102,7 +102,6 @@ func SetupStandalonePostgres(database, username, password string) (config.Postgr
 		Username: username,
 		Password: password,
 		SSLMode:  "disable",
-		TimeZone: "UTC",
 		Enabled:  true,
 	}
 	reportServiceReady("postgres-standalone", fmt.Sprintf("%s:%d/%s", host, port, database))

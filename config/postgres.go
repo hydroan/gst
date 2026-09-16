@@ -9,7 +9,6 @@ const (
 	POSTGRES_USERNAME = "POSTGRES_USERNAME"
 	POSTGRES_PASSWORD = "POSTGRES_PASSWORD"
 	POSTGRES_SSLMODE  = "POSTGRES_SSLMODE"
-	POSTGRES_TIMEZONE = "POSTGRES_TIMEZONE"
 	POSTGRES_REPLICAS = "POSTGRES_REPLICAS"
 	POSTGRES_ENABLED  = "POSTGRES_ENABLED"
 )
@@ -21,7 +20,6 @@ type Postgres struct {
 	Username string `json:"username" mapstructure:"username" ini:"username" yaml:"username"`
 	Password string `json:"password" mapstructure:"password" ini:"password" yaml:"password"`
 	SSLMode  string `json:"sslmode" mapstructure:"sslmode" ini:"sslmode" yaml:"sslmode"`
-	TimeZone string `json:"timezone" mapstructure:"timezone" ini:"timezone" yaml:"timezone"`
 
 	// Replicas lists read-replica endpoints as host:port entries (comma
 	// separated in ini), sharing every other connection setting with the
@@ -41,6 +39,5 @@ func (*Postgres) setDefault(v *viper.Viper) {
 	v.SetDefault("postgres.username", "postgres")
 	v.SetDefault("postgres.password", "")
 	v.SetDefault("postgres.sslmode", "disable")
-	v.SetDefault("postgres.timezone", "UTC")
 	v.SetDefault("postgres.enabled", true)
 }

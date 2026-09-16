@@ -15,7 +15,6 @@ func TestBuildDSN(t *testing.T) {
 		Username: "postgres",
 		Password: "secret",
 		SSLMode:  "disable",
-		TimeZone: "UTC",
 	}
 	require.Equal(t,
 		"host=127.0.0.1 user=postgres password=secret dbname=sample port=5432 sslmode=disable TimeZone=UTC default_query_exec_mode=simple_protocol",

@@ -114,11 +114,12 @@ func attachReplicas(db *gorm.DB, cfg config.MySQL) (*gorm.DB, error) {
 // and utf8mb4 maps Go's UTF-8 strings exactly.
 //
 // loc=UTC makes the driver store and read DATETIME values as UTC wall-clock
-// time, which is the framework's one time base across dialects: postgres
-// already normalizes timestamptz to UTC and sqlite time text is read in UTC
-// by its date functions. A local loc would make the same instant a different
-// stored wall clock per dialect (and per server timezone), which is what
-// breaks time bucket labels, boundary comparisons, and URL time filters.
+// time, which is the framework's one time base across dialects: the postgres
+// DSN pins the session time zone its timestamptz values are read in to UTC,
+// and sqlite time text is read in UTC by its date functions. A local loc
+// would make the same instant a different stored wall clock per dialect (and
+// per server timezone), which is what breaks time bucket labels, boundary
+// comparisons, and URL time filters.
 //
 // The timeout parameters mirror config.MySQL: timeout (dial) is on by
 // default so a black-holed host fails in seconds instead of blocking until
