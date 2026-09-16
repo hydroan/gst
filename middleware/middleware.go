@@ -41,8 +41,9 @@ func RegisterAuth(middlewares ...gin.HandlerFunc) {
 // a response with a 5xx status, or writes nothing and records an error. Once
 // enough requests have been counted and the configured share of them failed,
 // the breaker opens: requests are refused with 503 until its timeout has
-// passed and trial requests succeed again. Requests to streaming routes bypass
-// the breaker.
+// passed and trial requests succeed again. A request the breaker lets through
+// keeps the answer its handlers gave, failed or not. Requests to streaming
+// routes bypass the breaker.
 func CircuitBreaker() gin.HandlerFunc {
 	return internalmiddleware.CircuitBreaker()
 }

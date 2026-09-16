@@ -4,8 +4,10 @@ import (
 	"fmt"
 	"net/http"
 
+	"github.com/cockroachdb/errors"
 	"github.com/gin-gonic/gin"
 	"github.com/hydroan/gst/internal/response"
+	"github.com/sony/gobreaker"
 	"go.uber.org/zap"
 )
 
@@ -28,7 +30,7 @@ func CircuitBreaker() gin.HandlerFunc {
 		path := c.Request.URL.Path
 		method := c.Request.Method
 
-		if _, err := cb.Execute(func() (any, error) {
+		_, err := cb.Execute(func() (any, error) {
 			c.Next()
 
 			if c.Writer.Written() {
@@ -45,24 +47,25 @@ func CircuitBreaker() gin.HandlerFunc {
 			}
 
 			return nil, nil
-		}); err != nil {
-			if c.Writer.Written() && c.Writer.Status() < 500 {
-				return
-			}
-
-			// Log circuit breaker error
-			zap.S().Errorw(
-				"circuit breaker error",
-				"error", err.Error(),
-				"path", path,
-				"method", method,
-			)
-
-			// The error describes this server to itself — the status a handler
-			// wrote, the path it wrote it for, the gin errors behind it — and
-			// the log above already holds it. The caller is told the one thing
-			// it can act on, which is to try again later.
-			response.Abort(c, http.StatusServiceUnavailable, "service unavailable")
+		})
+		// Only a request the breaker refused is the breaker's to answer: its
+		// handlers never ran. A request the breaker let through was answered by
+		// its handlers, or left unanswered by them, and its failure only counts
+		// against the breaker; writing here would append a second envelope to
+		// an answer already sent.
+		if !errors.Is(err, gobreaker.ErrOpenState) && !errors.Is(err, gobreaker.ErrTooManyRequests) {
+			return
 		}
+
+		zap.S().Errorw(
+			"circuit breaker error",
+			"error", err.Error(),
+			"path", path,
+			"method", method,
+		)
+
+		// The caller is told the one thing it can act on, which is to try again
+		// later.
+		response.Abort(c, http.StatusServiceUnavailable, "service unavailable")
 	}
 }
