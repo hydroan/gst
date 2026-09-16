@@ -350,7 +350,7 @@ func parseDesign(fn *ast.FuncDecl) *Design {
 		// Parse "Route()".
 		// Example:
 		//
-		// Route("/config/apps", func() {
+		// Route("/archive/items", func() {
 		// 	List(func() {
 		// 		Service()
 		// 	})

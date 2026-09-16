@@ -107,19 +107,14 @@ func Endpoint(string) {}
 //
 // Route Generation Examples:
 //   - Param("user") transforms /api/users to /api/users/:user
-//   - Param("app") transforms /api/namespaces/apps to /api/namespaces/apps/:app
-//   - Param("env") transforms /api/namespaces/apps/envs to /api/namespaces/apps/envs/:env
+//   - Param("item") transforms /api/samples/items to /api/samples/items/:item
+//   - Param("entry") transforms /api/samples/items/entries to /api/samples/items/entries/:entry
 //
 // Parameter Propagation:
-// When using hierarchical models (namespace -> app -> env), parent parameters are
+// When using hierarchical models (sample -> item -> entry), parent parameters are
 // automatically propagated to child resources:
-//   - /api/namespaces/:namespace/apps/:app/envs/:env
+//   - /api/samples/:sample/items/:item/entries/:entry
 //   - Child resources inherit all parent path parameters
-//
-// Common Use Cases:
-//   - namespace: Param("namespace") or Param("ns") for multi-tenant applications
-//   - app: Param("app") for application-scoped resources
-//   - env: Param("env") for environment-specific configurations
 //
 // The parameter creates RESTful nested resource patterns, enabling hierarchical API designs
 // where child resources are scoped under parent resources through URL path parameters.
@@ -130,23 +125,23 @@ func Param(string) {}
 // for different access patterns and use cases.
 //
 // The function accepts two parameters:
-//   - path: The route path string (e.g., "apps", "config/apps"). Leading slashes are automatically removed.
+//   - path: The route path string (e.g., "items", "archive/items"). Leading slashes are automatically removed.
 //   - config: A function that defines which operations are enabled for this route
 //
 // The function can be called multiple times within a Design() method to add multiple alternative routes.
 // Each call adds a new route to the model's API endpoints without overriding existing ones.
 //
 // Route Format:
-//   - Simple path: Route("apps", func() {...}) creates /api/apps
-//   - Nested path: Route("config/apps", func() {...}) creates /api/config/apps
-//   - Custom path: Route("admin/applications", func() {...}) creates /api/admin/applications
-//   - Leading slash removed: Route("/config/apps", func() {...}) becomes "config/apps"
+//   - Simple path: Route("items", func() {...}) creates /api/items
+//   - Nested path: Route("archive/items", func() {...}) creates /api/archive/items
+//   - Custom path: Route("admin/items", func() {...}) creates /api/admin/items
+//   - Leading slash removed: Route("/archive/items", func() {...}) becomes "archive/items"
 //
 // Configuration Function:
 // The second parameter is a function that defines which operations are available for this route.
 // You can configure List, Get, Create, Update, Delete, Patch operations within this function:
 //
-//	Route("/config/apps", func() {
+//	Route("/archive/items", func() {
 //	    List(func() {
 //	        Service()
 //	    })
@@ -156,43 +151,43 @@ func Param(string) {}
 //	})
 //
 // Route Generation:
-// For a route path like "/config/apps" with Param("app"), the following routes are generated:
-//   - /api/config/apps (for List operations)
-//   - /api/config/apps/:app (for Get, Update, Delete, Patch operations)
+// For a route path like "/archive/items" with Param("item"), the following routes are generated:
+//   - /api/archive/items (for List operations)
+//   - /api/archive/items/:item (for Get, Update, Delete, Patch operations)
 //
 // Use Exact() inside an action block when the action should use the route path
 // exactly as declared instead of appending the default phase suffix.
 //
 // Usage Examples:
-//   - Route("apps", func() {...}) - Global app listing endpoint
-//   - Route("config/apps", func() {...}) - Configuration-scoped app endpoint
-//   - Route("public/apps", func() {...}) - Public app directory endpoint
+//   - Route("items", func() {...}) - Global item listing endpoint
+//   - Route("archive/items", func() {...}) - Archive-scoped item endpoint
+//   - Route("public/items", func() {...}) - Public item directory endpoint
 //
 // Common Use Cases:
-//   - Global resource access: Access resources without namespace/parent constraints
+//   - Global resource access: Access resources without parent constraints
 //   - Alternative endpoints: Provide different API paths for the same resource
 //   - Cross-cutting concerns: Admin, public, or system-level access patterns
 //   - API versioning: Different route structures for API evolution
 //
 // Multiple Routes Example:
 //
-//	func (App) Design() {
-//	    Endpoint("apps")
-//	    Param("app")
-//	    Route("apps", func() {
+//	func (Item) Design() {
+//	    Endpoint("items")
+//	    Param("item")
+//	    Route("items", func() {
 //	        List(func() {})
 //	        Get(func() {})
 //	    })
-//	    Route("config/apps", func() {
+//	    Route("archive/items", func() {
 //	        List(func() { Service() })
 //	        Get(func() { Service() })
 //	    })
 //	}
 //
 // This creates multiple API endpoints for the same model:
-//   - /api/namespaces/:ns/apps (default hierarchical route)
-//   - /api/apps and /api/apps/:app (additional global route)
-//   - /api/config/apps and /api/config/apps/:app (additional config route)
+//   - /api/samples/:sample/items (default hierarchical route)
+//   - /api/items and /api/items/:item (additional global route)
+//   - /api/archive/items and /api/archive/items/:item (additional archive route)
 func Route(string, func()) {}
 
 // Migrate marks the model as a database model that requires schema migration.
@@ -433,17 +428,12 @@ type Design struct {
 	//
 	// Usage Examples:
 	//   - Param("user") generates routes like /api/users/:user
-	//   - Param("app") generates routes like /api/namespaces/apps/:app
-	//   - Param("env") generates routes like /api/namespaces/apps/envs/:env
+	//   - Param("item") generates routes like /api/samples/items/:item
+	//   - Param("entry") generates routes like /api/samples/items/entries/:entry
 	//
 	// Parameter Propagation:
-	// In hierarchical models (namespace -> app -> env), parent parameters are
-	// automatically propagated: /api/namespaces/:namespace/apps/:app/envs/:env
-	//
-	// Common Use Cases:
-	//   - "namespace" or "ns": for multi-tenant applications
-	//   - "app": for application-scoped resources
-	//   - "env": for environment-specific configurations
+	// In hierarchical models (sample -> item -> entry), parent parameters are
+	// automatically propagated: /api/samples/:sample/items/:item/entries/:entry
 	//
 	// Default: "" (no parameter)
 	Param string
@@ -453,30 +443,30 @@ type Design struct {
 	// providing flexibility for different access patterns and use cases.
 	//
 	// Map Structure:
-	//   - Key: Route path string (e.g., "apps", "config/apps", "public/apps")
+	//   - Key: Route path string (e.g., "items", "archive/items", "public/items")
 	//   - Value: Slice of Action configurations for operations enabled on this route
 	//
 	// Route Examples:
-	//   - "apps" creates /api/apps and /api/apps/:param (if Param is defined)
-	//   - "config/apps" creates /api/config/apps and /api/config/apps/:param
-	//   - "public/apps" creates /api/public/apps and /api/public/apps/:param
+	//   - "items" creates /api/items and /api/items/:param (if Param is defined)
+	//   - "archive/items" creates /api/archive/items and /api/archive/items/:param
+	//   - "public/items" creates /api/public/items and /api/public/items/:param
 	//
 	// Action Configuration:
 	// Each route can have different operations enabled. For example:
-	//   - Route "apps" might only enable List and Get operations
-	//   - Route "admin/apps" might enable all CRUD operations
-	//   - Route "public/apps" might only enable List operation
+	//   - Route "items" might only enable List and Get operations
+	//   - Route "admin/items" might enable all CRUD operations
+	//   - Route "public/items" might only enable List operation
 	//
 	// Multiple routes can be defined by calling Route() multiple times in Design().
 	// Each alternative route can have its own set of enabled operations and configurations.
 	//
 	// Usage in Design():
-	//   Route("/config/apps", func() {
+	//   Route("/archive/items", func() {
 	//       List(func() {})
 	//       Get(func() { Service() })
 	//   })
 	//
-	// This populates routes["/config/apps"] with List and Get Action configurations.
+	// This populates routes["/archive/items"] with List and Get Action configurations.
 	//
 	// Default: nil (no alternative routes)
 	routes map[string][]*Action

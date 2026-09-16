@@ -501,9 +501,9 @@ func pathUnderRoot(path, root string) (string, error) {
 // by replacing directory names with their custom endpoint names (if defined).
 //
 // For example:
-//   - model/config/namespace.go with Endpoint("namespaces") -> config/namespaces
-//   - model/config/namespace/app.go with Endpoint("apps") -> config/namespaces/apps
-//   - model/config/namespace/app/env.go with Endpoint("envs") -> config/namespaces/apps/envs
+//   - model/sample.go with Endpoint("samples") -> samples
+//   - model/sample/item.go with Endpoint("items") -> samples/items
+//   - model/sample/item/entry.go with Endpoint("entries") -> samples/items/entries
 func buildHierarchicalEndpoints(allModels []*gen.ModelInfo) {
 	// Create a map to store directory-to-endpoint mappings
 	// This will store what endpoint name should be used for each directory
@@ -589,78 +589,24 @@ func buildHierarchicalEndpoints(allModels []*gen.ModelInfo) {
 	// }
 }
 
-// propagateParentParams propagates parent resource parameters to all child resource endpoints.
-// This function uses a trie data structure to efficiently organize and traverse the hierarchical
-// endpoint structure, ensuring that parent parameters are correctly inherited by all descendant resources.
+// propagateParentParams propagates the parameter of every parent resource into
+// the endpoints of its descendants, so a nested resource is addressed inside the
+// scope of the resources it belongs to. The endpoints are organized in a trie,
+// which hands each of them its ancestors in one lookup.
 //
-// When a parent resource defines a parameter (e.g., Param("ns")), all its child resources
-// should inherit this parameter in their endpoint paths to maintain proper REST hierarchy.
-// This is essential for creating RESTful APIs that follow nested resource patterns.
+// For example, with model/sample.go declaring Endpoint("samples") and
+// Param("sample"), model/sample/item.go declaring Endpoint("items") and
+// Param("item"), and model/sample/item/entry.go declaring Endpoint("entries"),
+// the endpoints
 //
-// Real-world usage scenarios:
+//	samples, samples/items, samples/items/entries
 //
-// 1. Kubernetes-style namespace hierarchy:
+// become
 //
-//   - model/config/namespace.go defines Endpoint("namespaces") with Param("ns")
+//	samples, samples/:sample/items, samples/:sample/items/:item/entries
 //
-//   - model/config/namespace/app.go defines Endpoint("apps") with Param("app")
-//
-//   - model/config/namespace/app/env.go defines Endpoint("envs")
-//
-//     Before propagation:
-//
-//   - config/namespaces (with Param("ns"))
-//
-//   - config/namespaces/apps (with Param("app"))
-//
-//   - config/namespaces/apps/envs
-//
-//     After propagation:
-//
-//   - config/namespaces
-//
-//   - config/namespaces/:ns/apps
-//
-//   - config/namespaces/:ns/apps/:app/envs
-//
-//     Generated API endpoints:
-//     GET    /api/config/namespaces
-//     POST   /api/config/namespaces
-//     GET    /api/config/namespaces/:ns/apps
-//     POST   /api/config/namespaces/:ns/apps
-//     GET    /api/config/namespaces/:ns/apps/:app/envs
-//     POST   /api/config/namespaces/:ns/apps/:app/envs
-//
-// 2. Multi-tenant organization structure:
-//
-//   - model/tenant.go defines Endpoint("tenants") with Param("tenant")
-//
-//   - model/tenant/project.go defines Endpoint("projects") with Param("project")
-//
-//   - model/tenant/project/resource.go defines Endpoint("resources")
-//
-//     Results in endpoints like:
-//     /api/tenants/:tenant/projects/:project/resources
-//
-// 3. E-commerce category hierarchy:
-//
-//   - model/category.go defines Endpoint("categories") with Param("category")
-//
-//   - model/category/product.go defines Endpoint("products") with Param("product")
-//
-//   - model/category/product/variant.go defines Endpoint("variants")
-//
-//     Results in endpoints like:
-//     /api/categories/:category/products/:product/variants
-//
-// The trie data structure provides several advantages:
-// - Efficient hierarchical organization of endpoints
-// - O(log n) lookup time for ancestor relationships
-// - Natural representation of tree-like endpoint structures
-// - Easy parameter propagation through PathAncestors method
-//
-// This ensures that child resources are properly nested under their parent's parameter scope,
-// maintaining RESTful conventions and enabling proper resource identification in nested APIs.
+// so the last one registers routes such as GET and POST
+// /api/samples/:sample/items/:item/entries.
 func propagateParentParams(allModels []*gen.ModelInfo) {
 	nodeFormater := trie.WithNodeFormatter[string, *gen.ModelInfo](func(v *gen.ModelInfo, depth int, hasValue bool) string {
 		if !hasValue || v == nil {
@@ -682,7 +628,7 @@ func propagateParentParams(allModels []*gen.ModelInfo) {
 	// Build the trie tree
 	for _, m := range allModels {
 		// Split endpoint into segments for trie insertion
-		// e.g., "config/namespaces/apps" -> ["config", "namespaces", "apps"]
+		// e.g., "samples/items/entries" -> ["samples", "items", "entries"]
 		tree.Put(strings.Split(m.Design.Endpoint, "/"), m)
 	}
 

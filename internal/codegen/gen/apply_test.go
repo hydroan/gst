@@ -773,7 +773,7 @@ func (u *Creator) Create(ctx *gst.ServiceContext, req *auth.UserReq) (rsp *auth.
 
 import (
 	"helloworld/model/auth"
-	"helloworld/model/config/namespace"
+	"helloworld/model/sample/item"
 
 	"github.com/hydroan/gst"
 	"github.com/hydroan/gst/service"
@@ -784,7 +784,7 @@ type Lister struct {
 }
 
 func (d *Lister) List(ctx *gst.ServiceContext, req *auth.Debug) (rsp *auth.Debug, err error) {
-	files := make([]*namespace.File, 0)
+	items := make([]*item.Entry, 0)
 	return rsp, nil
 }
 `,
@@ -805,7 +805,7 @@ func (d *Lister) List(ctx *gst.ServiceContext, req *auth.Debug) (rsp *auth.Debug
 
 import (
 	"helloworld/model/auth"
-	"helloworld/model/config/namespace"
+	"helloworld/model/sample/item"
 
 	"github.com/hydroan/gst"
 	"github.com/hydroan/gst/service"
@@ -816,7 +816,7 @@ type Lister struct {
 }
 
 func (d *Lister) List(ctx *gst.ServiceContext, req *auth.Debug) (rsp *auth.Debug, err error) {
-	files := make([]*namespace.File, 0)
+	items := make([]*item.Entry, 0)
 	return rsp, nil
 }
 `,

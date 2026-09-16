@@ -55,7 +55,7 @@ type ServiceTargetInfo struct {
 
 // ServiceOutputRel returns the path under the service root where generated service .go files
 // for a model file should live, relative to the service directory (e.g. "common" for
-// model/common/common.go, or "config/namespace/app/env/item" for model/.../env/item.go).
+// model/common/common.go, or "sample/item/entry" for model/sample/item/entry.go).
 //
 // When the file base name (without .go) equals the immediate parent directory name — a common
 // Go layout such as model/pkg/pkg.go — redundant segments are collapsed so output is

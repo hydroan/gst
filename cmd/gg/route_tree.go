@@ -26,7 +26,7 @@ var routeTreeCmd = &cobra.Command{
 This command analyzes the registered routes and displays them as a URL-first tree.
 
 Optional filter parameter can be used to show only routes matching the specified pattern.
-For example: 'gg route-tree config/namespace' will show only routes under config/namespace.`,
+For example: 'gg route-tree samples/items' will show only routes under samples/items.`,
 	Args: cobra.MaximumNArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 		var filter string
