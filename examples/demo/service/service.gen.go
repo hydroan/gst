@@ -3,10 +3,10 @@
 package service
 
 import (
+	"demo/service/archive/document"
+	"demo/service/archive/document/seal"
 	"demo/service/auth/login"
 	"demo/service/common/search"
-	"demo/service/config/file"
-	"demo/service/config/file/encrypt"
 	"demo/service/notice"
 	"demo/service/ping"
 	"demo/service/record"
@@ -18,12 +18,12 @@ import (
 )
 
 func init() {
+	service.Register[*seal.Creator](consts.PHASE_CREATE, "archive/documents/seal")
+	service.Register[*document.Creator](consts.PHASE_CREATE, "archive/documents")
+	service.Register[*document.Updater](consts.PHASE_UPDATE, "archive/documents/:document")
+	service.Register[*document.Lister](consts.PHASE_LIST, "archive/documents")
 	service.Register[*login.Login](consts.PHASE_LIST, "auth/login")
 	service.Register[*search.Dedup](consts.PHASE_CREATE, "search-sources/dedup")
-	service.Register[*encrypt.Creator](consts.PHASE_CREATE, "config/files/encrypt")
-	service.Register[*file.Creator](consts.PHASE_CREATE, "config/files")
-	service.Register[*file.Updater](consts.PHASE_UPDATE, "config/files/:file")
-	service.Register[*file.Lister](consts.PHASE_LIST, "config/files")
 	service.Register[*notice.Streamer](consts.PHASE_SSE, "notices")
 	service.Register[*ping.Lister](consts.PHASE_LIST, "pings")
 	service.Register[*item.Creator](consts.PHASE_CREATE, "records/:rec/items")

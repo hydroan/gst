@@ -17,6 +17,18 @@ func init() {
 	apidoc.Register("demo/model", "TraceProbe", apidoc.StructDoc{
 		Comment: "TraceProbe exercises standard CRUD context propagation through service,\ndatabase, GORM, and model hooks.",
 	})
+	apidoc.Register("demo/model/archive", "Document", apidoc.StructDoc{
+		Comment: "Document demonstrates a database resource with custom routes and model hooks.",
+	})
+	apidoc.Register("demo/model/archive/document", "Seal", apidoc.StructDoc{
+		Comment: "Seal demonstrates a custom action model for a document.",
+	})
+	apidoc.Register("demo/model/archive/document", "SealReq", apidoc.StructDoc{
+		Comment: "SealReq is the request for sealing a document payload.",
+	})
+	apidoc.Register("demo/model/archive/document", "SealRsp", apidoc.StructDoc{
+		Comment: "SealRsp is the response returned after sealing a document.",
+	})
 	apidoc.Register("demo/model/auth", "Login", apidoc.StructDoc{
 		Comment: "Login demonstrates a public action that is not backed by a database table.",
 	})
@@ -35,18 +47,6 @@ func init() {
 	apidoc.Register("demo/model/common", "SearchSource", apidoc.StructDoc{
 		Comment: "SearchSource is one candidate source returned by an external search provider.",
 	})
-	apidoc.Register("demo/model/config", "File", apidoc.StructDoc{
-		Comment: "File demonstrates a database resource with custom routes and model hooks.",
-	})
-	apidoc.Register("demo/model/config/file", "Encrypt", apidoc.StructDoc{
-		Comment: "Encrypt demonstrates a custom action model for a configuration file.",
-	})
-	apidoc.Register("demo/model/config/file", "EncryptReq", apidoc.StructDoc{
-		Comment: "EncryptReq is the request for encrypting a configuration file payload.",
-	})
-	apidoc.Register("demo/model/config/file", "EncryptRsp", apidoc.StructDoc{
-		Comment: "EncryptRsp is the response returned after encrypting a configuration file.",
-	})
 	apidoc.Register("demo/model/record", "Item", apidoc.StructDoc{
 		Comment: "Item demonstrates a child resource with nested routes and batch actions.",
 	})
@@ -60,13 +60,13 @@ func init() {
 			{Value: "image"},
 		},
 	})
-	apidoc.RegisterEnum("demo/model/config", "FileFormat", apidoc.EnumDoc{
-		Comment: "FileFormat identifies the expected syntax of a configuration file.",
+	apidoc.RegisterEnum("demo/model/archive", "DocumentFormat", apidoc.EnumDoc{
+		Comment: "DocumentFormat identifies the expected syntax of a document.",
 		Values: []apidoc.EnumValue{
 			{Value: "text"},
 			{Value: "json"},
 			{Value: "yaml"},
-			{Value: "env"},
+			{Value: "markdown"},
 		},
 	})
 	apidoc.RegisterEnum("demo/model/record", "ItemKind", apidoc.EnumDoc{

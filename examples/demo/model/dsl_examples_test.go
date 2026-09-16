@@ -4,10 +4,10 @@ import (
 	"testing"
 
 	rootmodel "demo/model"
+	"demo/model/archive"
+	archivedocument "demo/model/archive/document"
 	"demo/model/auth"
 	"demo/model/common"
-	"demo/model/config"
-	configfile "demo/model/config/file"
 	"demo/model/record"
 )
 
@@ -24,8 +24,8 @@ func TestDemoDSLModelsAreAvailable(t *testing.T) {
 		{name: "item resource", model: record.Item{}},
 		{name: "search utility action", model: common.Search{}},
 		{name: "login public action", model: auth.Login{}},
-		{name: "config file resource", model: config.File{}},
-		{name: "config file encrypt action", model: configfile.Encrypt{}},
+		{name: "archive document resource", model: archive.Document{}},
+		{name: "archive document seal action", model: archivedocument.Seal{}},
 	}
 
 	for _, tt := range tests {

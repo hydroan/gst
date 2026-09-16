@@ -4,10 +4,10 @@ package router
 
 import (
 	"demo/model"
+	"demo/model/archive"
+	"demo/model/archive/document"
 	"demo/model/auth"
 	"demo/model/common"
-	"demo/model/config"
-	"demo/model/config/file"
 	"demo/model/record"
 
 	"github.com/hydroan/gst/consts"
@@ -18,15 +18,15 @@ import (
 )
 
 func Init() error {
+	router.Register[*document.Seal, *document.SealReq, *document.SealRsp](router.Auth(), "archive/documents/seal", &gst.ControllerConfig[*document.Seal]{}, consts.Create)
+	router.Register[*archive.Document, *archive.Document, *archive.Document](router.Auth(), "archive/boxes/:box/documents", &gst.ControllerConfig[*archive.Document]{}, consts.List)
+	router.Register[*archive.Document, *archive.Document, *archive.Document](router.Auth(), "archive/documents", &gst.ControllerConfig[*archive.Document]{}, consts.Create)
+	router.Register[*archive.Document, *archive.Document, *archive.Document](router.Auth(), "archive/documents/:document", &gst.ControllerConfig[*archive.Document]{ParamName: "document"}, consts.Update)
+	router.Register[*archive.Document, *archive.Document, *archive.Document](router.Auth(), "archive/documents/:document", &gst.ControllerConfig[*archive.Document]{ParamName: "document"}, consts.Patch)
+	router.Register[*archive.Document, *archive.Document, *archive.Document](router.Auth(), "archive/documents", &gst.ControllerConfig[*archive.Document]{}, consts.List)
+	router.Register[*archive.Document, *archive.Document, *archive.Document](router.Auth(), "archive/documents/:document", &gst.ControllerConfig[*archive.Document]{ParamName: "document"}, consts.Get)
 	router.Register[*auth.Login, *gstmodel.Empty, *auth.LoginRsp](router.Pub(), "auth/login", &gst.ControllerConfig[*auth.Login]{}, consts.List)
 	router.Register[*common.Search, *common.SearchDedupReq, *common.SearchDedupRsp](router.Auth(), "search-sources/dedup", &gst.ControllerConfig[*common.Search]{}, consts.Create)
-	router.Register[*file.Encrypt, *file.EncryptReq, *file.EncryptRsp](router.Auth(), "config/files/encrypt", &gst.ControllerConfig[*file.Encrypt]{}, consts.Create)
-	router.Register[*config.File, *config.File, *config.File](router.Auth(), "config/files", &gst.ControllerConfig[*config.File]{}, consts.Create)
-	router.Register[*config.File, *config.File, *config.File](router.Auth(), "config/files/:file", &gst.ControllerConfig[*config.File]{ParamName: "file"}, consts.Update)
-	router.Register[*config.File, *config.File, *config.File](router.Auth(), "config/files/:file", &gst.ControllerConfig[*config.File]{ParamName: "file"}, consts.Patch)
-	router.Register[*config.File, *config.File, *config.File](router.Auth(), "config/files", &gst.ControllerConfig[*config.File]{}, consts.List)
-	router.Register[*config.File, *config.File, *config.File](router.Auth(), "config/files/:file", &gst.ControllerConfig[*config.File]{ParamName: "file"}, consts.Get)
-	router.Register[*config.File, *config.File, *config.File](router.Auth(), "config/namespaces/:namespace/files", &gst.ControllerConfig[*config.File]{}, consts.List)
 	router.Register[*model.Notice, *model.Notice, *model.Notice](router.Pub(), "notices", &gst.ControllerConfig[*model.Notice]{}, consts.SSE)
 	router.Register[*model.Ping, *gstmodel.Empty, *model.PingRsp](router.Pub(), "pings", &gst.ControllerConfig[*model.Ping]{}, consts.List)
 	router.Register[*record.Item, *record.Item, *record.Item](router.Auth(), "records/:rec/items", &gst.ControllerConfig[*record.Item]{}, consts.Create)

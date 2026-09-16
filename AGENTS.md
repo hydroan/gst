@@ -161,7 +161,7 @@ README.md 面向使用 gst 框架的后端开发者，应保持简洁并聚焦�
 
 1. 在 gst 仓库执行 `make install` 安装 `gg` 命令。
 2. 使用 `gg new myproject` 创建后端项目。
-3. 在业务项目中修改或新增 `model` 文件，例如 `model/user.go`、`model/config/file.go`。
+3. 在业务项目中修改或新增 `model` 文件，例如 `model/user.go`、`model/archive/document.go`。
 4. 修改 model 的 DSL 后执行 `gg gen` 生成 `main.go`、`model/model.gen.go`、`model/apidoc.gen.go`、`service/service.gen.go`、`router/router.gen.go` 等注册代码。
 5. 在对应的 `service` 文件中实现业务逻辑和复杂 hook。
 6. 如果 model 的 `Design()` 中声明了 `Migrate()`，该 model 也是数据库模型；数据库字段变化后使用 `gg migrate --dry-run` 预览迁移，再用 `gg migrate` 按确认执行 schema 迁移。
@@ -183,7 +183,7 @@ README.md 面向使用 gst 框架的后端开发者，应保持简洁并聚焦�
 - 默认 CRUD 资源优先交给框架处理：在 `Design()` 中启用对应动作即可。如果没有额外业务逻辑，不声明 `Service()`。
 - 需要自定义业务逻辑时，在对应动作中声明 `Service()`，然后在同名 service 子目录中实现对应 phase 的 service 结构体。
 - 自定义接口必须为当前接口单独定义 `XXXReq`、`XXXRsp`，即使字段和其他接口完全相同也不要复用。请求和响应类型通过 `Payload[*XXXReq]()`、`Result[*XXXRsp]()` 绑定到 DSL。例外：List、Get 是 HTTP GET 接口，禁止声明 `Payload`，只定义并声明 `Result[*XXXRsp]()`，请求类型固定生成为 `*model.Empty`。
-- 同一资源的嵌套路由或额外动作使用 `Route(...)` 包裹，例如 `/config/files/encrypt`、`/items/batch` 这类非默认 CRUD 路由。
+- 同一资源的嵌套路由或额外动作使用 `Route(...)` 包裹，例如 `/archive/documents/seal`、`/items/batch` 这类非默认 CRUD 路由。
 
 #### service 实现规则
 

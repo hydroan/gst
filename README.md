@@ -194,7 +194,7 @@ func (Search) Design() {
 ### 路由和可见性
 
 - `Endpoint("records")` 定义默认资源路径。
-- `Route("/config/files", func() {...})` 定义额外路径或完全自定义路径。
+- `Route("/archive/documents", func() {...})` 定义额外路径或完全自定义路径。
 - `Public()` 表示公开接口，不走认证中间件；默认不写则需要认证。
 - `Exact()` 表示当前 action 按声明路径原样注册，不追加默认的 `/:id`、`/batch` 等后缀。
 - `Payload[T]()` 定义请求体类型；`Result[T]()` 定义响应体类型。
@@ -893,10 +893,10 @@ gen:
 - [模块注册](./examples/demo/module/module.go)
 - [资源模型：Record](./examples/demo/model/record.go)
 - [嵌套资源模型：Item](./examples/demo/model/record/item.go)
-- [配置文件资源模型：File](./examples/demo/model/config/file.go)
+- [自定义路由资源模型：Document](./examples/demo/model/archive/document.go)
 - [公开动作模型：Login](./examples/demo/model/auth/login.go)
 - [自定义动作模型：搜索去重](./examples/demo/model/common/search.go)
-- [自定义动作模型：文件加密](./examples/demo/model/config/file/encrypt.go)
+- [自定义动作模型：文档封存](./examples/demo/model/archive/document/seal.go)
 - [资源 service hook](./examples/demo/service/record/create.go)
 - [自定义动作 service](./examples/demo/service/common/search/dedup.go)
 - [生成的路由注册](./examples/demo/router/router.gen.go)
