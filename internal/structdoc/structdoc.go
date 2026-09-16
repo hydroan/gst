@@ -268,7 +268,9 @@ func fieldComments(structType *ast.StructType) map[string]string {
 	return fields
 }
 
-// ExtractCommentText extracts text content from a comment group.
+// ExtractCommentText extracts text content from a comment group. Directive
+// comments such as //go:generate or //nolint:errcheck are left out, as go/ast
+// leaves them out of doc text: they instruct tools and describe nothing.
 func ExtractCommentText(commentGroup *ast.CommentGroup) string {
 	if commentGroup == nil || len(commentGroup.List) == 0 {
 		return ""
@@ -279,6 +281,9 @@ func ExtractCommentText(commentGroup *ast.CommentGroup) string {
 		text := comment.Text
 
 		if after, ok := strings.CutPrefix(text, "//"); ok {
+			if isDirective(after) {
+				continue
+			}
 			lines = append(lines, normalizeLineComment(after))
 		} else if strings.HasPrefix(text, "/*") && strings.HasSuffix(text, "*/") {
 			text = strings.TrimPrefix(text, "/*")
@@ -292,6 +297,28 @@ func ExtractCommentText(commentGroup *ast.CommentGroup) string {
 	}
 
 	return strings.Join(trimBlankCommentLines(lines), "\n")
+}
+
+// isDirective reports whether the text of a line comment, without its //, is a
+// directive: //line, //extern and //export, or the //word:word form of
+// //go:generate and //nolint:errcheck. It mirrors the rule go/ast applies.
+func isDirective(text string) bool {
+	if strings.HasPrefix(text, "line ") || strings.HasPrefix(text, "extern ") || strings.HasPrefix(text, "export ") {
+		return true
+	}
+	colon := strings.Index(text, ":")
+	if colon <= 0 || colon+1 >= len(text) {
+		return false
+	}
+	for i := 0; i <= colon+1; i++ {
+		if i == colon {
+			continue
+		}
+		if b := text[i]; (b < 'a' || b > 'z') && (b < '0' || b > '9') {
+			return false
+		}
+	}
+	return true
 }
 
 func normalizeLineComment(text string) string {

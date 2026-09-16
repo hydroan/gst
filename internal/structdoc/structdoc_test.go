@@ -232,17 +232,17 @@ func TestParseSourceDocsEnumConstantsInSeparateFile(t *testing.T) {
 
 func TestExtractCommentTextPreservesMarkdownFormatting(t *testing.T) {
 	comment := &ast.CommentGroup{List: []*ast.Comment{
-		{Text: "// Group is the group record."},
+		{Text: "// Record is the stored record."},
 		{Text: "//"},
 		{Text: "// Business logic: stores the stable identity."},
 		{Text: "//"},
 		{Text: "// Field sources:"},
-		{Text: "//   - ExternalGroupNo: from group_config.group_id."},
-		{Text: "//   - GroupName: from func_config.group_name."},
+		{Text: "//   - ExternalCode: from legacy_record.code."},
+		{Text: "//   - DisplayName: from legacy_setting.display_name."},
 	}}
 
 	got := ExtractCommentText(comment)
-	want := "Group is the group record.\n\nBusiness logic: stores the stable identity.\n\nField sources:\n  - ExternalGroupNo: from group_config.group_id.\n  - GroupName: from func_config.group_name."
+	want := "Record is the stored record.\n\nBusiness logic: stores the stable identity.\n\nField sources:\n  - ExternalCode: from legacy_record.code.\n  - DisplayName: from legacy_setting.display_name."
 	if got != want {
 		t.Fatalf("ExtractCommentText() = %q, want %q", got, want)
 	}
@@ -250,11 +250,29 @@ func TestExtractCommentTextPreservesMarkdownFormatting(t *testing.T) {
 
 func TestExtractCommentTextKeepsFieldCommentText(t *testing.T) {
 	comment := &ast.CommentGroup{List: []*ast.Comment{
-		{Text: "// GroupName is the group display name."},
+		{Text: "// DisplayName is the record display name."},
 	}}
 
 	got := ExtractCommentText(comment)
-	want := "GroupName is the group display name."
+	want := "DisplayName is the record display name."
+	if got != want {
+		t.Fatalf("ExtractCommentText() = %q, want %q", got, want)
+	}
+}
+
+// TestExtractCommentTextLeavesOutDirectives pins that directive comments, which
+// instruct tools, never become doc text, while a comment that merely mentions
+// a word and a colon stays.
+func TestExtractCommentTextLeavesOutDirectives(t *testing.T) {
+	comment := &ast.CommentGroup{List: []*ast.Comment{
+		{Text: "// Title is the display title."},
+		{Text: "//go:generate stringer -type=Title"},
+		{Text: "// note: shown as is."},
+		{Text: "//nolint:staticcheck // kept on purpose."},
+	}}
+
+	got := ExtractCommentText(comment)
+	want := "Title is the display title.\nnote: shown as is."
 	if got != want {
 		t.Fatalf("ExtractCommentText() = %q, want %q", got, want)
 	}
