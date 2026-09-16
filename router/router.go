@@ -18,6 +18,7 @@ import (
 	"github.com/hydroan/gst/consts"
 	"github.com/hydroan/gst/internal/controller"
 	"github.com/hydroan/gst/internal/openapigen"
+	"github.com/hydroan/gst/internal/sse"
 	"github.com/hydroan/gst/internal/types"
 	"github.com/hydroan/gst/middleware"
 	"github.com/hydroan/gst/response"
@@ -283,14 +284,7 @@ func Run() error {
 		log.Debugw("", "method", r.Method, "path", r.Path)
 	}
 
-	server = &http.Server{
-		Addr:           addr,
-		Handler:        root,
-		ReadTimeout:    config.App.Server.ReadTimeout,
-		WriteTimeout:   config.App.Server.WriteTimeout,
-		IdleTimeout:    config.App.IdleTimeout,
-		MaxHeaderBytes: 1 << 20, // 1 MB
-	}
+	server = newServer(addr, root)
 
 	// mark the server as started.
 	started.Store(1)
@@ -301,6 +295,30 @@ func Run() error {
 		return err
 	}
 	return nil
+}
+
+// newServer builds the HTTP server Run serves handler on at addr. A
+// Server-Sent Events stream on it ends the moment the server begins to shut
+// down: Shutdown waits for every active request and cancels none of their
+// contexts, so a stream watching only its request would hold the shutdown for
+// as long as its client stays, up to the bound Stop gives it. Every request
+// context carries the server's shutdown signal for the stream to watch, see
+// sse.StreamContext; ordinary requests do not watch it and run to completion.
+func newServer(addr string, handler http.Handler) *http.Server {
+	shutdown, beginShutdown := context.WithCancel(context.Background())
+	srv := &http.Server{
+		Addr:           addr,
+		Handler:        handler,
+		ReadTimeout:    config.App.Server.ReadTimeout,
+		WriteTimeout:   config.App.Server.WriteTimeout,
+		IdleTimeout:    config.App.IdleTimeout,
+		MaxHeaderBytes: 1 << 20, // 1 MB
+		BaseContext: func(net.Listener) context.Context {
+			return sse.WithServerShutdown(context.Background(), shutdown)
+		},
+	}
+	srv.RegisterOnShutdown(beginShutdown)
+	return srv
 }
 
 func Auth() *gin.RouterGroup { return auth }
