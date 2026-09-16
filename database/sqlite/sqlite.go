@@ -2,9 +2,11 @@ package sqlite
 
 import (
 	"database/sql"
+	"database/sql/driver"
 	"regexp"
 	"strconv"
 	"strings"
+	"sync"
 
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/config"
@@ -25,10 +27,13 @@ var Default *gorm.DB
 // drivers are installed.
 const driverName = "gst_sqlite3"
 
+// sqliteDriver is the driver registered under driverName.
+var sqliteDriver = &sqlite3.SQLiteDriver{
+	ConnectHook: registerRegexpFunc,
+}
+
 func init() {
-	sql.Register(driverName, &sqlite3.SQLiteDriver{
-		ConnectHook: registerRegexpFunc,
-	})
+	sql.Register(driverName, sqliteDriver)
 }
 
 // registerRegexpFunc makes REGEXP work on conn. SQLite parses the operator
@@ -118,14 +123,22 @@ func Init() (err error) {
 // The pool runs under the connection limits of the [database] configuration
 // narrowed to a single connection, the same as the default handle.
 // Connections open through this package's own driver, which carries the
-// framework's REGEXP implementation; see registerRegexpFunc.
+// framework's REGEXP implementation; see registerRegexpFunc. Every handle on
+// the in-memory database shares the one database of the process, which lives
+// until the process ends; see anchorMemoryDatabase.
 func New(cfg config.Sqlite) (*gorm.DB, error) {
+	dsn := buildDSN(cfg)
+	if dsn == memoryDSN {
+		if err := anchorMemoryDatabase(); err != nil {
+			return nil, err
+		}
+	}
 	// No PrepareStmt: the framework's SQL comments carry the request's trace
 	// id (see the database package's comment.go), making statement texts
 	// request-unique, so a text-keyed statement cache would hold one dead
 	// entry per request. Sqlite compiles statements in-process at
 	// microsecond cost, so each run simply compiles its statement.
-	db, err := gorm.Open(sqlite.New(sqlite.Config{DriverName: driverName, DSN: buildDSN(cfg)}), &gorm.Config{Logger: logger.Gorm, TranslateError: true, NowFunc: dbruntime.NowUTC})
+	db, err := gorm.Open(sqlite.New(sqlite.Config{DriverName: driverName, DSN: dsn}), &gorm.Config{Logger: logger.Gorm, TranslateError: true, NowFunc: dbruntime.NowUTC})
 	if err != nil {
 		return nil, err
 	}
@@ -135,14 +148,57 @@ func New(cfg config.Sqlite) (*gorm.DB, error) {
 		return nil, errors.Wrap(err, "failed to get sqlite db")
 	}
 	dbruntime.ConfigurePool(pool)
-	// SQLite serializes writers on the file, so a pool of one connection
-	// avoids the "database table is locked" failures concurrent connections
-	// run into; an in-memory database would even be a separate database per
-	// connection. The lifetime and idle-time limits stay as configured.
+	// SQLite admits one writer at a time, and connections sharing the
+	// in-memory database's cache lock whole tables against each other: a
+	// pool of one connection makes statements queue for it instead of
+	// running into "database is locked" and "database table is locked". The
+	// lifetime and idle-time limits stay as configured, since the in-memory
+	// database outlives the pool's connection; see anchorMemoryDatabase.
 	pool.SetMaxIdleConns(1)
 	pool.SetMaxOpenConns(1)
 	dbruntime.InstallTracing(db)
 	return db, nil
+}
+
+// memoryDSN names the in-memory database. Connections sharing its cache
+// share one database, and the name is the same everywhere in a process, so a
+// process has exactly one in-memory database.
+const memoryDSN = "file::memory:?cache=shared"
+
+var (
+	// memoryAnchorMu guards memoryAnchor.
+	memoryAnchorMu sync.Mutex
+	// memoryAnchor is the connection keeping the in-memory database alive,
+	// see anchorMemoryDatabase. It stays referenced from here on purpose:
+	// the driver closes a connection nothing references any more.
+	memoryAnchor driver.Conn
+)
+
+// anchorMemoryDatabase opens a connection to the in-memory database, once per
+// process, and holds it until the process ends, so the database lives exactly
+// as long as the process.
+//
+// SQLite deletes an in-memory database the moment its last connection
+// closes, and a pool closes its connection on its own: past the configured
+// lifetime or idle time, and after a transaction whose context ended before
+// it finished — database/sql discards that connection instead of reusing it,
+// because this driver cannot reset a session. The tables are created as the
+// process starts, so with the pool's connection the only one, every table
+// and row would go with it. The anchor runs no statement once open, so it
+// never holds a table lock the pool's connection could wait on.
+func anchorMemoryDatabase() error {
+	memoryAnchorMu.Lock()
+	defer memoryAnchorMu.Unlock()
+
+	if memoryAnchor != nil {
+		return nil
+	}
+	conn, err := sqliteDriver.Open(memoryDSN)
+	if err != nil {
+		return errors.Wrap(err, "failed to open the in-memory sqlite database")
+	}
+	memoryAnchor = conn
+	return nil
 }
 
 // restoreInsertClauseContract renders INSERT the way every other dialect does.
@@ -177,7 +233,7 @@ func buildDSN(cfg config.Sqlite) string {
 		if len(cfg.Path) == 0 {
 			zap.S().Warn("sqlite path is empty, using in-memory database")
 		}
-		dsn = "file::memory:?cache=shared" // Ignore file based database if IsMemory is true.
+		dsn = memoryDSN // Ignore file based database if IsMemory is true.
 	} else {
 		// Add comprehensive SQLite optimization parameters
 		params := []string{
