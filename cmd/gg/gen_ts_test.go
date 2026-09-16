@@ -55,6 +55,9 @@ func TestGenTypeScriptRunReplacesTheFilesOfAnEarlierRun(t *testing.T) {
 	if !strings.Contains(output, filepath.Join("generated", "typescript", "model.ts")) || !strings.Contains(output, "SKIP") {
 		t.Errorf("the unchanged model.ts should be skipped:\n%s", output)
 	}
+	if !strings.Contains(output, "KEEP") {
+		t.Errorf("a file gg did not generate should be reported as kept:\n%s", output)
+	}
 	if _, err := os.Stat(stale); !os.IsNotExist(err) {
 		t.Errorf("the generated file no route needs should be removed, stat error = %v", err)
 	}
@@ -101,6 +104,34 @@ func TestGenTypeScriptRunWritesNothingWhenATypeCannotBeDescribed(t *testing.T) {
 	}
 	if _, statErr := os.Stat(filepath.Join(projectDir, "generated", "typescript")); !os.IsNotExist(statErr) {
 		t.Errorf("a failed run must write no file, stat error = %v", statErr)
+	}
+}
+
+func TestGenTypeScriptRunNamesThePreludeAfterTheApplication(t *testing.T) {
+	projectDir := newGenProject(t)
+	writeTypeScriptProject(t, projectDir, typeScriptSampleModel)
+	writeCheckFile(t, filepath.Join(projectDir, "config.ini"), "[app]\nname = shop\n")
+
+	runGenTypeScript(t)
+
+	if _, err := os.Stat(filepath.Join(projectDir, "generated", "typescript", "shop.ts")); err != nil {
+		t.Fatalf("the prelude should be named after the configured application: %v", err)
+	}
+}
+
+func TestGenTypeScriptRunClearsTheOutputWhenTheModelsAreGone(t *testing.T) {
+	projectDir := newGenProject(t)
+	writeTypeScriptProject(t, projectDir, typeScriptSampleModel)
+	runGenTypeScript(t)
+
+	if err := os.RemoveAll(filepath.Join(projectDir, "model")); err != nil {
+		t.Fatal(err)
+	}
+
+	runGenTypeScript(t)
+
+	if _, err := os.Stat(filepath.Join(projectDir, "generated", "typescript")); !os.IsNotExist(err) {
+		t.Errorf("the output must follow the models and disappear with them, stat error = %v", err)
 	}
 }
 

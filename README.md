@@ -814,11 +814,20 @@ REQ/RSP 命名和业务项目根目录结构；根目录结构检查会跳过 Gi
 ### 生成 TypeScript 类型
 
 `gg gen ts` 把 model `Design()` 中各路由收发的 Go 类型（请求 Payload、响应 Result 与模型本身）
-生成为 TypeScript 声明，写到 `generated/typescript/`：每个 Go 包一个文件，另有 `gst.ts` 声明
-响应信封 `Envelope<T>`、默认列表结果 `ListResult<T>` 和默认批量请求体 `ItemsPayload<T>`、
-`IDsPayload`。产物只有类型，文件之间用相对路径互相引用，不依赖任何 npm 包，也不限定请求库和
-前端框架：把整个目录复制到前端项目即可使用。命令和 `gg gen` 一样先执行项目检查、应用 gst.yaml
-的忽略规则；模型变化后重新执行，再把目录复制给前端。
+生成为 TypeScript 声明，写到 `generated/typescript/`。目录结构镜像 `model` 目录：`model/sample` 生成
+`sample.ts`，`model/sample/item` 生成 `sample/item.ts`，`model` 包自身生成 `model.ts`，路径里不重复
+`model` 这一层；model 之外被模型引用到的类型（例如 `pkg/notifier` 里作为字段类型出现的结构）保留
+自己的相对路径 `pkg/notifier.ts`，一眼能看出它不来自 model。另有一个以
+`app.name` 命名的文件（未配置时用框架名 `gst.ts`），声明响应信封 `Envelope<T>`、默认列表结果
+`ListResult<T>` 和默认批量请求体 `ItemsPayload<T>`、`IDsPayload`。
+
+产物只有类型，文件之间用相对路径互相引用，不依赖任何 npm 包，也不限定请求库和前端框架：把整个
+目录复制到前端项目即可使用。命令和 `gg gen` 一样先执行项目检查、应用 gst.yaml 的忽略规则；模型
+变化后重新执行，再把目录复制给前端。
+
+产物始终与 model 保持一致：模型删除、改名或被 gst.yaml 屏蔽后，上次为它生成的文件会被删除，空目录
+一并清理；所有模型都没有了，整个 `generated/typescript` 目录也会消失。目录里不是 gg 生成的文件一律
+不动：挡在产物路径上的直接报错，其余原样保留并在输出里提示。
 
 类型按 `encoding/json` 的实际编码规则生成：
 

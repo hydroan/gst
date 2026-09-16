@@ -4,11 +4,13 @@ import (
 	"cmp"
 	"io/fs"
 	"os"
+	"path"
 	"path/filepath"
 	"slices"
 	"strings"
 
 	"github.com/cockroachdb/errors"
+	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/consts"
 	"github.com/hydroan/gst/dsl"
 	"github.com/hydroan/gst/internal/clioutput"
@@ -26,9 +28,14 @@ var tsCmd = &cobra.Command{
 	Short: "generate TypeScript declarations of the API types",
 	Long: `Generate the TypeScript declarations of the types the API routes declared in
 model Design() send and receive, into generated/typescript: a file per Go
-package, and gst.ts with the response envelope and the default list and batch
-shapes. The files hold types only and refer to each other through relative
-imports, so the directory can be copied into any frontend as it is.
+package of the model directory, mirroring its tree, plus a file named after the
+application holding the response envelope and the default list and batch shapes.
+A type a model borrows from elsewhere in the project keeps its own path. The
+files hold types only and refer to each other through relative imports, so the
+directory can be copied into any frontend as it is.
+
+The directory is kept in step with the models: what an earlier run generated for
+a model that is now gone is removed.
 
 Routes registered at runtime, through gg module add or module.Use, are not
 covered.`,
@@ -58,13 +65,30 @@ func genTypeScriptRun() error {
 	if runProjectChecks(false, nil) > 0 {
 		return errors.New("project checks failed")
 	}
-	scanned, err := scanModels(false)
+	// The declarations mirror the models. A project with no model directory
+	// declares no route at all, and the run then removes what an earlier one
+	// generated rather than leaving stale declarations behind.
+	var models []*gen.ModelInfo
+	if fileExists(modelDir) {
+		scanned, err := scanModels(false)
+		if err != nil {
+			return err
+		}
+		models = scanned.models
+	}
+	appName, err := applicationName()
 	if err != nil {
 		return err
 	}
 
 	clioutput.Section("Generate TypeScript")
-	files, err := ts.Generate(ts.Config{Dir: ".", ModulePath: module, Roots: typeScriptRoots(scanned.models)})
+	files, err := ts.Generate(ts.Config{
+		Dir:        ".",
+		ModulePath: module,
+		RootPath:   path.Join(module, filepath.ToSlash(modelDir)),
+		AppName:    appName,
+		Roots:      typeScriptRoots(models),
+	})
 	var diagnostics *ts.DiagnosticsError
 	switch {
 	case errors.As(err, &diagnostics):
@@ -77,8 +101,25 @@ func genTypeScriptRun() error {
 	}
 
 	clioutput.Section("Done")
+	if len(files) == 0 {
+		clioutput.Done("No route declares a type, so %s holds nothing", typeScriptDir)
+		return nil
+	}
 	clioutput.Done("TypeScript declarations generated in %s", typeScriptDir)
 	return nil
+}
+
+// applicationName returns the name the project configured, which names the file
+// the framework prelude goes to. gg reads the project configuration the way gg
+// migrate does; a project that configured no name falls back to the framework
+// name inside the generator.
+func applicationName() (string, error) {
+	defer config.Clean()
+
+	if err := config.Init(); err != nil {
+		return "", errors.Wrap(err, "read the project configuration")
+	}
+	return config.App.AppInfo.Name, nil
 }
 
 // typeScriptRoots returns the types the routes of models exchange as JSON: the
@@ -114,8 +155,10 @@ func typeScriptRoots(models []*gen.ModelInfo) []ts.TypeRef {
 }
 
 // writeTypeScriptFiles writes files under dir, skipping the unchanged ones, and
-// removes what an earlier run generated that no route needs any more. A file
-// in the way that gg did not generate is never overwritten.
+// removes what an earlier run generated that no route needs any more, so the
+// directory mirrors the models. A file gg did not generate is never touched: one
+// in the way of an output file stops the run, one anywhere else is kept and
+// reported.
 func writeTypeScriptFiles(dir string, files []ts.File) error {
 	header := consts.CodeGeneratedComment()
 	wanted := make(map[string]bool, len(files))
@@ -140,18 +183,20 @@ func writeTypeScriptFiles(dir string, files []ts.File) error {
 }
 
 // removeOrphanTypeScriptFiles removes the generated .ts files under dir the
-// current run did not write, and the directories that leaves empty. A file
-// without the generated header is left alone.
+// current run did not write, and the directories that leaves empty, dir
+// included: a project that generates nothing keeps no output directory. A file
+// without the generated header is kept and reported.
 func removeOrphanTypeScriptFiles(dir string, wanted map[string]bool, header string) error {
+	if !fileExists(dir) {
+		return nil
+	}
 	var dirs []string
 	err := filepath.WalkDir(dir, func(path string, entry fs.DirEntry, walkErr error) error {
 		if walkErr != nil {
 			return walkErr
 		}
 		if entry.IsDir() {
-			if path != dir {
-				dirs = append(dirs, path)
-			}
+			dirs = append(dirs, path)
 			return nil
 		}
 		if wanted[path] || filepath.Ext(path) != ".ts" {
@@ -162,6 +207,7 @@ func removeOrphanTypeScriptFiles(dir string, wanted map[string]bool, header stri
 			return errors.Wrapf(err, "read %s", path)
 		}
 		if !strings.HasPrefix(string(content), header) {
+			clioutput.Warn("KEEP", "%s was not generated by gg", path)
 			return nil
 		}
 		// #nosec G122 -- path comes from walking the output directory, and only

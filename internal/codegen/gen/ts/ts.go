@@ -28,6 +28,15 @@ type Config struct {
 	// ModulePath is the import path prefix of the packages whose types get
 	// declarations of their own.
 	ModulePath string
+	// RootPath is the import path of the package tree the output mirrors: the
+	// model directory, which is therefore not repeated in every output path. A
+	// type declared outside it, such as one a model field borrows from another
+	// package of the project, keeps its path relative to ModulePath.
+	RootPath string
+	// AppName names the prelude file, so a frontend holding the copied
+	// directory can tell whose API these types describe. The framework name is
+	// used when the project configured no name.
+	AppName string
 	// Roots are the types the routes send and receive. Generation declares
 	// them and every project type they reach.
 	Roots []TypeRef
@@ -83,8 +92,11 @@ func (e *DiagnosticsError) Error() string {
 
 // Generate loads the packages of the root types and renders the TypeScript
 // declarations of every project type the roots reach, one file per Go package,
-// sorted by path. The prelude file gst.ts, declaring the JSON the framework
-// wraps around those types, is always part of the result.
+// sorted by path. Alongside them comes the prelude, named after the
+// application, declaring the JSON the framework wraps around those types.
+// Roots without a single type -- a project with no routes -- produce no file at
+// all, so the output can be kept in step with the models by deleting what a run
+// did not write.
 func Generate(cfg Config) ([]File, error) {
 	pkgs, err := load(cfg)
 	if err != nil {

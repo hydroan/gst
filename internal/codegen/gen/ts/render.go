@@ -29,6 +29,9 @@ type generator struct {
 	pkgs       map[string]*packages.Package
 	sources    map[string]*sourceIndex
 	methodSets typeutil.MethodSetCache
+	// preludeFile is the file the framework prelude goes to, named after the
+	// application.
+	preludeFile string
 
 	// decls holds an entry for every project type queued so far; the entry
 	// stays nil until the type is rendered.
@@ -77,6 +80,8 @@ func newGenerator(cfg Config, l *loaded) *generator {
 		enums:    make(map[*types.TypeName]*enumType),
 		inlining: make(map[string]bool),
 		reported: make(map[string]bool),
+
+		preludeFile: preludeFileName(cfg.AppName),
 	}
 	for pkgPath, pkg := range l.pkgs {
 		g.sources[pkgPath] = newSourceIndex(l.fset, pkg)
@@ -485,13 +490,26 @@ func (g *generator) report(s site, format string, args ...any) {
 	}
 }
 
-// preludeFile is the file declaring the JSON the framework wraps around the
-// project's types.
-const preludeFile = "gst.ts"
+// nonFileName matches a character the prelude file name cannot hold.
+var nonFileName = regexp.MustCompile(`[^A-Za-z0-9_-]`)
+
+// preludeFileName returns the file the prelude goes to: the application name,
+// or the framework name when the project configured none. Whatever a file name
+// and an import specifier cannot hold is replaced, so every configured name
+// yields a file a frontend can copy and import.
+func preludeFileName(appName string) string {
+	return cmp.Or(strings.Trim(nonFileName.ReplaceAllString(appName, "_"), "_-"), consts.FrameworkName) + ".ts"
+}
 
 // files assembles the output: the prelude, and a file per package with
 // declarations, which appear in source order.
 func (g *generator) files() []File {
+	// The output mirrors the models: a project whose routes exchange no type
+	// has nothing to describe, and the prelude alone would describe nothing.
+	if len(g.cfg.Roots) == 0 {
+		return nil
+	}
+
 	byPackage := make(map[string][]*declaration)
 	for obj, d := range g.decls {
 		if d != nil && d.text != "" {
@@ -499,8 +517,8 @@ func (g *generator) files() []File {
 		}
 	}
 
-	files := []File{{Path: preludeFile, Content: prelude()}}
-	owners := map[string]string{preludeFile: "the framework prelude"}
+	files := []File{{Path: g.preludeFile, Content: prelude()}}
+	owners := map[string]string{g.preludeFile: "the framework prelude"}
 	aliases := make(map[string]string)
 	for _, pkgPath := range slices.Sorted(maps.Keys(byPackage)) {
 		file := g.filePath(pkgPath)
@@ -543,9 +561,20 @@ func (g *generator) files() []File {
 	return files
 }
 
-// relativePackage returns pkgPath relative to the module path, and index for
-// the module's root package.
+// relativePackage returns the output path of a package, extension aside. The
+// packages of the root tree sit at the output root, so the model directory is
+// not repeated in every path; the root package itself keeps that directory's
+// name. A package outside the tree keeps its path relative to the module, which
+// is what tells a reader it comes from elsewhere.
 func (g *generator) relativePackage(pkgPath string) string {
+	if root := g.cfg.RootPath; root != "" {
+		if pkgPath == root {
+			return path.Base(root)
+		}
+		if rel, inRoot := strings.CutPrefix(pkgPath, root+"/"); inRoot {
+			return rel
+		}
+	}
 	return cmp.Or(strings.TrimPrefix(strings.TrimPrefix(pkgPath, g.cfg.ModulePath), "/"), "index")
 }
 

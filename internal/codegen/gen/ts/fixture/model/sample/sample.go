@@ -7,7 +7,8 @@ import (
 	"encoding/json"
 	"time"
 
-	"github.com/hydroan/gst/internal/codegen/gen/ts/fixture/record"
+	"github.com/hydroan/gst/internal/codegen/gen/ts/fixture/model/record"
+	"github.com/hydroan/gst/internal/codegen/gen/ts/fixture/pkg/notifier"
 	"github.com/hydroan/gst/internal/modelregistry"
 	"gorm.io/datatypes"
 	"gorm.io/gorm"
@@ -59,11 +60,12 @@ type Sample struct {
 	Comment  sql.NullString               `json:"comment"`
 	Version  modelregistry.Version        `json:"version,omitempty"`
 
-	Record  *record.Record `json:"record"`
-	Records Records        `json:"records"`
-	Batch   Batch          `json:"batch"`
-	Entry   Entry          `json:"entry"`
-	Window  struct {
+	Record   *record.Record    `json:"record"`
+	Endpoint notifier.Endpoint `json:"endpoint"`
+	Records  Records           `json:"records"`
+	Batch    Batch             `json:"batch"`
+	Entry    Entry             `json:"entry"`
+	Window   struct {
 		From string `json:"from"`
 		To   string `json:"to,omitempty"`
 	} `json:"window"`

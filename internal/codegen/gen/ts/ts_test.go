@@ -24,7 +24,7 @@ var update = flag.Bool("update", false, "rewrite the golden files under testdata
 const fixtureModule = "github.com/hydroan/gst/internal/codegen/gen/ts/fixture"
 
 var (
-	sampleRoot   = TypeRef{PkgPath: fixtureModule + "/sample", Name: "Sample"}
+	sampleRoot   = TypeRef{PkgPath: fixtureModule + "/model/sample", Name: "Sample"}
 	rejectedRoot = TypeRef{PkgPath: fixtureModule + "/unsupported", Name: "Rejected"}
 )
 
@@ -86,6 +86,39 @@ func TestGenerateReportsTypesWithoutAJSONShape(t *testing.T) {
 		"unsupported.Speaker",
 		"unsupported.class",
 	}, subjects)
+}
+
+func TestGenerateNamesThePreludeAfterTheApplication(t *testing.T) {
+	tests := map[string]string{
+		"an unset name falls back to the framework": "",
+		"a plain name": "shop",
+		"a name with characters a file cannot hold": "Sample Shop / v2",
+	}
+	want := map[string]string{
+		"an unset name falls back to the framework": "gst.ts",
+		"a plain name": "shop.ts",
+		"a name with characters a file cannot hold": "Sample_Shop___v2.ts",
+	}
+	for name, appName := range tests {
+		t.Run(name, func(t *testing.T) {
+			cfg := fixtureConfig(sampleRoot)
+			cfg.AppName = appName
+			files, err := newGenerator(cfg, loadFixture(t)).generate()
+			require.NoError(t, err)
+
+			paths := make([]string, 0, len(files))
+			for _, f := range files {
+				paths = append(paths, f.Path)
+			}
+			require.Contains(t, paths, want[name])
+		})
+	}
+}
+
+func TestGenerateWritesNothingWhenNoRouteDeclaresAType(t *testing.T) {
+	files, err := newGenerator(fixtureConfig(), loadFixture(t)).generate()
+	require.NoError(t, err)
+	require.Empty(t, files)
 }
 
 // typescriptImage is the Node.js image the compiler runs in, and
@@ -230,9 +263,10 @@ func loadFixture(t *testing.T) *loaded {
 	return l
 }
 
-// fixtureConfig configures a run over the fixture packages from roots.
+// fixtureConfig configures a run over the fixture packages from roots, rooted
+// at the fixture model directory the way a project's run is rooted at its own.
 func fixtureConfig(roots ...TypeRef) Config {
-	return Config{Dir: ".", ModulePath: fixtureModule, Roots: roots}
+	return Config{Dir: ".", ModulePath: fixtureModule, RootPath: fixtureModule + "/model", Roots: roots}
 }
 
 // writeFiles writes generated files under dir.

@@ -8,8 +8,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/hydroan/gst/internal/codegen/gen/ts/fixture/record"
-	"github.com/hydroan/gst/internal/codegen/gen/ts/fixture/sample"
+	"github.com/hydroan/gst/internal/codegen/gen/ts/fixture/model/record"
+	"github.com/hydroan/gst/internal/codegen/gen/ts/fixture/model/sample"
 	"github.com/stretchr/testify/require"
 )
 
@@ -24,9 +24,9 @@ func TestPropertiesMatchEncodingJSON(t *testing.T) {
 		ref TypeRef
 		typ reflect.Type
 	}{
-		{TypeRef{PkgPath: fixtureModule + "/sample", Name: "Sample"}, reflect.TypeFor[sample.Sample]()},
-		{TypeRef{PkgPath: fixtureModule + "/sample", Name: "Item"}, reflect.TypeFor[sample.Item]()},
-		{TypeRef{PkgPath: fixtureModule + "/record", Name: "Record"}, reflect.TypeFor[record.Record]()},
+		{TypeRef{PkgPath: fixtureModule + "/model/sample", Name: "Sample"}, reflect.TypeFor[sample.Sample]()},
+		{TypeRef{PkgPath: fixtureModule + "/model/sample", Name: "Item"}, reflect.TypeFor[sample.Item]()},
+		{TypeRef{PkgPath: fixtureModule + "/model/record", Name: "Record"}, reflect.TypeFor[record.Record]()},
 	}
 	for _, tt := range tests {
 		t.Run(tt.ref.Name, func(t *testing.T) {
