@@ -50,9 +50,11 @@ type Conn struct {
 	lastEventID string
 }
 
-// Context returns the request context. It is canceled when the client
-// disconnects, the server shuts down, or the surrounding request is aborted;
-// a Serve callback that waits for work must select on it.
+// Context returns the stream's context: the request's, which also ends the
+// moment the server the request arrived on begins to shut down, with
+// ErrServerShutdown as its cause (see StreamContext). It ends when the client
+// disconnects, the surrounding request is aborted or the server shuts down; a
+// Serve callback that waits for work must select on it.
 func (c *Conn) Context() context.Context {
 	if c == nil {
 		return context.Background()
@@ -110,6 +112,48 @@ func (c *Conn) markClosed() {
 	c.closed = true
 }
 
+// ErrServerShutdown is the cause a stream's context ends with when the server
+// the request arrived on begins to shut down, as opposed to the client going
+// away.
+var ErrServerShutdown = errors.New("sse: the server is shutting down")
+
+type (
+	// shutdownKey carries the shutdown signal of the server a request arrived
+	// on.
+	shutdownKey struct{}
+	// streamKey marks a context StreamContext derived.
+	streamKey struct{}
+)
+
+// WithServerShutdown returns ctx carrying shutdown, a context the server ends
+// the moment it begins to shut down. The server makes it the base of every
+// request context, and StreamContext reads it back. Only the signal travels:
+// request contexts do not end with it, so ordinary requests still run to
+// completion while the server drains.
+func WithServerShutdown(ctx, shutdown context.Context) context.Context {
+	return context.WithValue(ctx, shutdownKey{}, shutdown)
+}
+
+// StreamContext returns a context that ends with ctx or with the shutdown of
+// the server the request arrived on, whichever comes first; the shutdown ends
+// it with ErrServerShutdown as its cause. http.Server.Shutdown waits for every
+// active request and cancels none of their contexts, so a stream watching
+// only its request would hold the shutdown for as long as its client stays.
+// stop releases the watch once the stream is over. A ctx that carries no
+// server signal, or that StreamContext already derived, comes back as is.
+func StreamContext(ctx context.Context) (stream context.Context, stop func()) {
+	shutdown, ok := ctx.Value(shutdownKey{}).(context.Context)
+	if !ok || ctx.Value(streamKey{}) != nil {
+		return ctx, func() {}
+	}
+	stream, cancel := context.WithCancelCause(context.WithValue(ctx, streamKey{}, struct{}{}))
+	stopWatch := context.AfterFunc(shutdown, func() { cancel(ErrServerShutdown) })
+	return stream, func() {
+		stopWatch()
+		cancel(nil)
+	}
+}
+
 // Serve turns the response into a Server-Sent Events stream and runs fn with
 // the live connection. It owns the connection lifecycle:
 //
@@ -117,13 +161,17 @@ func (c *Conn) markClosed() {
 //     WriteTimeout does not kill the long-lived stream;
 //   - writes the SSE response headers and flushes them, so the client's
 //     EventSource fires its open event before the first business event;
+//   - ends the connection's context the moment the server begins to shut
+//     down, so a callback waiting on it returns instead of holding the
+//     shutdown until its client leaves;
 //   - sends keep-alive comment frames on a fixed interval until fn returns;
 //   - rejects sends on the connection once fn returned, so a leaked Conn can
 //     never write into a finished response.
 //
 // fn blocks until the stream is over; returning ends the stream. A callback
 // that waits for events must select on conn.Context().Done() to notice the
-// client disconnecting. The returned error is fn's error, or the setup
+// client disconnecting or the server shutting down. The returned error is
+// fn's error, or the setup
 // failure that prevented streaming (reported before anything was written, so
 // the caller can still answer with a regular error response).
 func Serve(w http.ResponseWriter, r *http.Request, fn func(conn *Conn) error, opts ...Option) error {
@@ -170,14 +218,17 @@ func Serve(w http.ResponseWriter, r *http.Request, fn func(conn *Conn) error, op
 	w.WriteHeader(http.StatusOK)
 	flusher.Flush()
 
+	stream, stopStream := StreamContext(r.Context())
+	defer stopStream()
 	conn := &Conn{
 		w:           w,
 		flusher:     flusher,
-		ctx:         r.Context(),
+		ctx:         stream,
 		lastEventID: r.Header.Get("Last-Event-ID"),
 	}
 	// Deferred in reverse order: stop the heartbeat first, mark closed second,
-	// so no frame is ever written after Serve returned.
+	// release the shutdown watch last, so no frame is ever written after Serve
+	// returned.
 	defer conn.markClosed()
 
 	stop := make(chan struct{})

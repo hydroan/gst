@@ -7,7 +7,8 @@
 //
 //   - sse.go: the wire format. Event is one frame, Encode writes it.
 //   - conn.go: the connection lifecycle. Serve prepares an HTTP response for
-//     streaming and hands the business a Conn that sends events safely.
+//     streaming, hands the business a Conn that sends events safely, and ends
+//     the stream when the server shuts down.
 package sse
 
 import (

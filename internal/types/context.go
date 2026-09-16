@@ -188,7 +188,8 @@ func (sc *ServiceContext) Data(code int, contentType string, data []byte) {
 // writes and flushes the SSE response headers, sends keep-alive comment
 // frames until fn returns, and invalidates the connection afterwards. fn
 // blocks until the stream is over; a callback that waits for events must
-// select on conn.Context().Done() to notice the client disconnecting.
+// select on conn.Context().Done() to notice the client disconnecting or the
+// server shutting down.
 //
 // The error is fn's own error, or the setup failure that prevented streaming
 // (reported before anything was written, so it still surfaces as a regular

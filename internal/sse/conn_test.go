@@ -85,6 +85,73 @@ func TestServe_StreamOutlivesServerDeadlines(t *testing.T) {
 	}
 }
 
+func TestServe_StreamEndsWhenTheServerShutsDown(t *testing.T) {
+	// The request carries the shutdown signal of the server it arrived on, the
+	// way the framework's server stamps every request; the callback waits for
+	// nothing but its context.
+	shutdown, beginShutdown := context.WithCancel(context.Background())
+	causes := make(chan error, 1)
+	srv := startStreamServer(t, time.Second, func(w http.ResponseWriter, r *http.Request) {
+		r = r.WithContext(WithServerShutdown(r.Context(), shutdown))
+		err := Serve(w, r, func(conn *Conn) error {
+			<-conn.Context().Done()
+			causes <- context.Cause(conn.Context())
+			return nil
+		})
+		if err != nil {
+			t.Errorf("Serve failed: %v", err)
+		}
+	})
+
+	rsp := getStream(t, srv.URL, nil)
+	defer rsp.Body.Close()
+	beginShutdown()
+
+	select {
+	case cause := <-causes:
+		if !errors.Is(cause, ErrServerShutdown) {
+			t.Errorf("Expected the stream to end with ErrServerShutdown, got %v", cause)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("The stream must end when the server shuts down")
+	}
+	if _, err := io.ReadAll(rsp.Body); err != nil {
+		t.Errorf("Expected the client to read the end of the stream, got %v", err)
+	}
+}
+
+func TestStreamContext_WatchesTheServerOnce(t *testing.T) {
+	plain := context.Background()
+	if got, stop := StreamContext(plain); got != plain {
+		t.Errorf("Expected a context without a server signal to come back as is")
+	} else {
+		stop()
+	}
+
+	shutdown, beginShutdown := context.WithCancel(context.Background())
+	request := WithServerShutdown(context.Background(), shutdown)
+	stream, stop := StreamContext(request)
+	defer stop()
+	if again, stopAgain := StreamContext(stream); again != stream {
+		t.Errorf("Expected a stream context to come back as is when derived again")
+	} else {
+		stopAgain()
+	}
+
+	beginShutdown()
+	select {
+	case <-stream.Done():
+	case <-time.After(5 * time.Second):
+		t.Fatal("The stream context must end when the server shuts down")
+	}
+	if cause := context.Cause(stream); !errors.Is(cause, ErrServerShutdown) {
+		t.Errorf("Expected ErrServerShutdown as the cause, got %v", cause)
+	}
+	if request.Err() != nil {
+		t.Errorf("Expected the request context itself to run on while the server drains, got %v", request.Err())
+	}
+}
+
 func TestServe_HeadersArriveBeforeFirstEvent(t *testing.T) {
 	release := make(chan struct{})
 	srv := startStreamServer(t, time.Second, func(w http.ResponseWriter, r *http.Request) {
