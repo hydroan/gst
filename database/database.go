@@ -158,6 +158,8 @@ var (
 )
 
 var (
+	// defaultLimit is the limit a chain carries until an option sets one:
+	// -1, GORM's own "no limit", so a read that asks for none stays unbounded.
 	defaultLimit = -1
 
 	// The write paths slice batches themselves instead of delegating to
@@ -176,7 +178,11 @@ var (
 	//     symmetric.
 	defaultBatchSize       = 1000
 	defaultDeleteBatchSize = 10000
-	defaultsColumns        = []string{
+
+	// frameworkColumns are the columns the framework manages on every model,
+	// which a narrowed WithSelect always carries along: without them a
+	// selected read could not identify, order or scope the rows it returns.
+	frameworkColumns = []string{
 		"id",
 		"created_by",
 		"updated_by",
@@ -240,7 +246,7 @@ type database[M types.Model] struct {
 	enablePurge    *bool // delete resource permanently, not only update deleted_at field, only works on 'Delete' method.
 	includeDeleted bool  // include soft-deleted records in read operations; see WithDeleted.
 	replicaRead    *bool // WithReplica's routing choice for this read; nil when the option was not used.
-	batchSize      int   // batch size for bulk operations. affects Create, Update, Delete.
+	batchSize      int   // batch size for the operations that slice their rows: Create, Upsert and Delete.
 	noHook         bool  // disable model hook.
 	dryRun         bool  // build SQL without database I/O, hooks, or object field filling.
 
@@ -285,11 +291,15 @@ func (db *database[M]) quoteOrderField(name string) string {
 	return strings.Join(parts, ".")
 }
 
-// reset clears this wrapper's option fields (WithQuery, WithSelect, limits, etc.) after each
-// CRUD method returns. It does not replace the underlying *gorm.DB session: GORM may still
-// retain WHERE/ORDER clauses on that chain. Reusing the same Database handle for another
-// independent operation is incorrect; callers must call Database[M](ctx) again for each new
-// operation chain. See Database function documentation.
+// reset clears the option fields this wrapper holds — the resolved model, the
+// delete mode, the read scope, the batch size, the hook and dry-run switches,
+// the statement collector, the cursor and the selected columns — after each
+// CRUD method returns. The chain's defect is deliberately left in place: it is
+// invalid for its whole life, not just for one operation. reset does not
+// replace the underlying *gorm.DB session either: GORM may still retain
+// WHERE/ORDER clauses on that chain, so reusing the same Database handle for
+// another independent operation is incorrect; callers must call
+// Database[M](ctx) again for each new operation chain. See Database.
 func (db *database[M]) reset() {
 	db.mu.Lock()
 	defer db.mu.Unlock()
@@ -316,8 +326,10 @@ func (db *database[M]) reset() {
 	db.selectColumns = nil
 }
 
-// prepare prepares the database instance for query execution by applying all configured
-// query conditions, joins, and other settings to the underlying GORM database instance.
+// prepare readies the chain for its terminal operation: it reports the defect
+// recorded at the entry point, refuses a chain with no database behind it, and
+// resolves the model — the type and a zero value of it — along with the delete
+// mode the model asks for when WithPurge did not choose one.
 func (db *database[M]) prepare() error {
 	if db.err != nil {
 		return db.err
@@ -388,14 +400,14 @@ func (db *database[M]) prepare() error {
 //
 // Example:
 //
-//	var users []*User
+//	var samples []*Sample
 //	// Service layer: one Database() call per operation chain (required; anything else is wrong).
-//	_ = Database[*User](ctx).WithQuery(&User{Name: "John"}).List(&users)
-//	u := new(User)
-//	_ = Database[*User](ctx).Get(u, id)
+//	_ = Database[*Sample](ctx).WithQuery(&Sample{Name: "alpha"}).List(&samples)
+//	s := new(Sample)
+//	_ = Database[*Sample](ctx).Get(s, id)
 //
 //	// Non-service layer
-//	_ = Database[*User](context.Background()).WithQuery(&User{Name: "John"}).List(&users)
+//	_ = Database[*Sample](context.Background()).WithQuery(&Sample{Name: "alpha"}).List(&samples)
 func Database[M types.Model](ctx context.Context) types.Database[M] {
 	if DB() == nil {
 		panic("database is not initialized")

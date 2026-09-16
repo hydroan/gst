@@ -71,7 +71,7 @@ func (a *selector[M, R]) qualifyWrap(tx *gorm.DB, mode buildMode) *gorm.DB {
 	outer = outer.Table("(?) AS "+a.db.quoteIdent(qualifiedAlias), tx)
 	for _, q := range a.qualifies {
 		outer = outer.Where(clause.Expr{
-			SQL:  a.db.quoteTableColumn(qualifiedAlias, a.alias(types.TermConditionTermOf(q))) + " " + compareOperator(types.TermConditionOpOf(q)) + " ?",
+			SQL:  a.db.quoteTableColumn(qualifiedAlias, termAlias(types.TermConditionTermOf(q))) + " " + compareOperator(types.TermConditionOpOf(q)) + " ?",
 			Vars: []any{types.TermConditionValueOf(q)},
 		})
 	}
@@ -83,9 +83,9 @@ func (a *selector[M, R]) qualifyWrap(tx *gorm.DB, mode buildMode) *gorm.DB {
 func (a *selector[M, R]) validateQualify(shape projectionShape) error {
 	for _, q := range a.qualifies {
 		if !a.isSelected(types.TermConditionTermOf(q)) || !types.TermConditionTermOf(q).IsWindowed() {
-			return errors.Wrapf(ErrQualifyTermNotWindow, "%q", a.alias(types.TermConditionTermOf(q)))
+			return errors.Wrapf(ErrQualifyTermNotWindow, "%q", termAlias(types.TermConditionTermOf(q)))
 		}
-		if err := validateConditionValue(q, a.alias(types.TermConditionTermOf(q)), a.termKind(types.TermConditionTermOf(q), shape)); err != nil {
+		if err := validateConditionValue(q, termAlias(types.TermConditionTermOf(q)), a.termKind(types.TermConditionTermOf(q), shape)); err != nil {
 			return err
 		}
 	}
@@ -231,21 +231,21 @@ func isWindowFn(fn types.TermFn) bool {
 func (a *selector[M, R]) validateWindow(t types.Term, shape projectionShape) error {
 	if !t.IsWindowed() {
 		if isWindowFn(types.TermFnOf(t)) {
-			return errors.Wrapf(ErrWindowFnWithoutWindow, "%q", a.alias(t))
+			return errors.Wrapf(ErrWindowFnWithoutWindow, "%q", termAlias(t))
 		}
 		return nil
 	}
 	if !t.IsMeasure() {
-		return errors.Wrapf(ErrWindowOnKey, "%q", a.alias(t))
+		return errors.Wrapf(ErrWindowOnKey, "%q", termAlias(t))
 	}
 	if types.TermFnOf(t) == types.FnCountDistinct {
-		return errors.Wrapf(ErrWindowCountDistinct, "%q", a.alias(t))
+		return errors.Wrapf(ErrWindowCountDistinct, "%q", termAlias(t))
 	}
 	if shape.grouped && (types.TermFnOf(t) == types.FnAvg || types.TermFnOf(t) == types.FnLag || types.TermFnOf(t) == types.FnLead) {
-		return errors.Wrapf(ErrWindowOverGroups, "%q", a.alias(t))
+		return errors.Wrapf(ErrWindowOverGroups, "%q", termAlias(t))
 	}
 	if isWindowFn(types.TermFnOf(t)) && len(types.WindowOrdersOf(*types.TermWindowOf(t))) == 0 {
-		return errors.Wrapf(ErrWindowWithoutOrder, "%q", a.alias(t))
+		return errors.Wrapf(ErrWindowWithoutOrder, "%q", termAlias(t))
 	}
 	for _, key := range types.WindowPartitionOf(*types.TermWindowOf(t)) {
 		// A key carries no conditions and a measure no bucket, here as in
@@ -254,13 +254,13 @@ func (a *selector[M, R]) validateWindow(t types.Term, shape projectionShape) err
 		// same way, so a key from outside the closed sets cannot fall
 		// through to a rendering it never named.
 		if err := a.validateGrouping(key); err != nil {
-			return errors.Wrapf(err, "%q partitions by", a.alias(t))
+			return errors.Wrapf(err, "%q partitions by", termAlias(t))
 		}
 		if !types.TermFnOf(key).Valid() {
-			return errors.Wrapf(ErrUnknownTermFn, "%q partitions by %q", a.alias(t), types.TermFnOf(key))
+			return errors.Wrapf(ErrUnknownTermFn, "%q partitions by %q", termAlias(t), types.TermFnOf(key))
 		}
 		if !types.TermBucketOf(key).Valid() {
-			return errors.Wrapf(ErrUnknownTimeBucket, "%q partitions by %q", a.alias(t), types.TermBucketOf(key))
+			return errors.Wrapf(ErrUnknownTimeBucket, "%q partitions by %q", termAlias(t), types.TermBucketOf(key))
 		}
 		// A joined select's term the projection reads is a column of the
 		// derived table, a key in either shape of the projection, passed as
@@ -270,22 +270,22 @@ func (a *selector[M, R]) validateWindow(t types.Term, shape projectionShape) err
 			continue
 		}
 		if key.IsLiteral() {
-			return errors.Wrapf(ErrWindowTermNotSelected, "%q partitions by the constant '%s', which is the same on every row", a.alias(t), types.TermLiteralOf(key))
+			return errors.Wrapf(ErrWindowTermNotSelected, "%q partitions by the constant '%s', which is the same on every row", termAlias(t), types.TermLiteralOf(key))
 		}
 		if key.IsMeasure() {
 			if a.readsDerived(key) {
-				return errors.Wrapf(ErrWindowTermNotSelected, "%q partitions by %q, a term of a joined select the projection does not read; project it to partition by it", a.alias(t), a.alias(key))
+				return errors.Wrapf(ErrWindowTermNotSelected, "%q partitions by %q, a term of a joined select the projection does not read; project it to partition by it", termAlias(t), termAlias(key))
 			}
-			return errors.Wrapf(ErrWindowTermNotSelected, "%q partitions by a measure %q", a.alias(t), a.alias(key))
+			return errors.Wrapf(ErrWindowTermNotSelected, "%q partitions by a measure %q", termAlias(t), termAlias(key))
 		}
 		if shape.grouped {
 			if _, ok := a.groupKey(key, shape); ok {
 				continue
 			}
-			return errors.Wrapf(ErrWindowTermNotSelected, "%q partitions by %q, which is not a group key; %s", a.alias(t), a.alias(key), a.groupKeysClause(shape))
+			return errors.Wrapf(ErrWindowTermNotSelected, "%q partitions by %q, which is not a group key; %s", termAlias(t), termAlias(key), a.groupKeysClause(shape))
 		}
 		if err := a.validateRowLevelKey(key, shape); err != nil {
-			return errors.Wrapf(err, "%q partitions by", a.alias(t))
+			return errors.Wrapf(err, "%q partitions by", termAlias(t))
 		}
 	}
 	for _, o := range types.WindowOrdersOf(*types.TermWindowOf(t)) {
@@ -296,22 +296,22 @@ func (a *selector[M, R]) validateWindow(t types.Term, shape projectionShape) err
 			}
 			if shape.grouped {
 				if _, ok := a.selectedColumn(o.Table(), o.Column(), shape.main); !ok {
-					return errors.Wrapf(ErrWindowTermNotSelected, "%q orders by column %q, which is not a group key; %s", a.alias(t), o.Column(), a.groupKeysClause(shape))
+					return errors.Wrapf(ErrWindowTermNotSelected, "%q orders by column %q, which is not a group key; %s", termAlias(t), o.Column(), a.groupKeysClause(shape))
 				}
 				continue
 			}
 			if _, err := a.columnOf(o.Table(), o.Column(), shape); err != nil {
-				return errors.Wrapf(err, "%q orders by", a.alias(t))
+				return errors.Wrapf(err, "%q orders by", termAlias(t))
 			}
 		case types.TermOrder:
 			if !types.TermOrderDirectionOf(o).Valid() {
 				return errors.Wrapf(ErrUnknownOrderDirection, "%q", types.TermOrderDirectionOf(o))
 			}
 			if types.TermOrderTermOf(o).IsWindowed() {
-				return errors.Wrapf(ErrWindowNested, "%q orders by %q", a.alias(t), a.alias(types.TermOrderTermOf(o)))
+				return errors.Wrapf(ErrWindowNested, "%q orders by %q", termAlias(t), termAlias(types.TermOrderTermOf(o)))
 			}
 			if !a.isSelected(types.TermOrderTermOf(o)) {
-				return errors.Wrapf(ErrWindowTermNotSelected, "%q orders by %q", a.alias(t), a.alias(types.TermOrderTermOf(o)))
+				return errors.Wrapf(ErrWindowTermNotSelected, "%q orders by %q", termAlias(t), termAlias(types.TermOrderTermOf(o)))
 			}
 		default:
 			return errors.Wrapf(ErrUnknownOrderDirection, "%T", o)
@@ -353,7 +353,7 @@ func (a *selector[M, R]) groupKeysClause(shape projectionShape) string {
 	}
 	names := make([]string, 0, len(shape.keys))
 	for _, k := range shape.keys {
-		names = append(names, a.alias(k))
+		names = append(names, termAlias(k))
 	}
 	return "the projection groups by " + strings.Join(names, ", ")
 }

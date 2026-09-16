@@ -548,7 +548,7 @@ func (a *selector[M, R]) derivedTerms(shape projectionShape) (map[string]*joined
 			continue
 		}
 		for _, t := range a.terms {
-			if !jt.sub.selects(t) {
+			if !jt.sub.isSelected(t) {
 				continue
 			}
 			// A term the query could compute itself is one value whether the
@@ -558,16 +558,16 @@ func (a *selector[M, R]) derivedTerms(shape projectionShape) (map[string]*joined
 			// passing the select's aliased term is reading it through.
 			if a.ownTerm(t) && defaultAlias(t) {
 				if t.IsLiteral() {
-					return nil, errors.Wrapf(ErrDuplicateAlias, "the constant %q is projected by the query and by the joined select over %q alike; a constant is the query's own, and whether a row matched the select is read from the select's key, NULL under LeftJoinSelect where none did", a.alias(t), jt.table)
+					return nil, errors.Wrapf(ErrDuplicateAlias, "the constant %q is projected by the query and by the joined select over %q alike; a constant is the query's own, and whether a row matched the select is read from the select's key, NULL under LeftJoinSelect where none did", termAlias(t), jt.table)
 				}
-				return nil, errors.Wrapf(ErrDuplicateAlias, "%q is projected by the query and by the joined select over %q alike, under its default alias; give the query's own term an alias of its own, or alias the select's term and pass it to read it through", a.alias(t), jt.table)
+				return nil, errors.Wrapf(ErrDuplicateAlias, "%q is projected by the query and by the joined select over %q alike, under its default alias; give the query's own term an alias of its own, or alias the select's term and pass it to read it through", termAlias(t), jt.table)
 			}
 			// Two selects projecting the same term would each answer for it;
 			// the query has to tell them apart by alias.
-			if other, taken := derived[a.alias(t)]; taken && other != jt {
-				return nil, errors.Wrapf(ErrDuplicateAlias, "%q is projected by two joined selects, alias one of them differently", a.alias(t))
+			if other, taken := derived[termAlias(t)]; taken && other != jt {
+				return nil, errors.Wrapf(ErrDuplicateAlias, "%q is projected by two joined selects, alias one of them differently", termAlias(t))
 			}
-			derived[a.alias(t)] = jt
+			derived[termAlias(t)] = jt
 		}
 	}
 	return derived, nil
@@ -630,8 +630,8 @@ var (
 // query may carry the same alias — the tie breaker a window is completed
 // with reads under the primary key's name — and it is not the select's.
 func (a *selector[M, R]) derivedOf(t types.Term, shape projectionShape) (*joinedTable, bool) {
-	jt, ok := shape.derived[a.alias(t)]
-	if !ok || !jt.sub.selects(t) {
+	jt, ok := shape.derived[termAlias(t)]
+	if !ok || !jt.sub.isSelected(t) {
 		return nil, false
 	}
 	return jt, true
@@ -657,7 +657,7 @@ func (a *selector[M, R]) readsDerived(t types.Term) bool {
 		if !ok {
 			continue
 		}
-		if sub, ok := sj.Select.(nestedSelect); ok && sub.selects(t) && (!a.ownTerm(t) || !defaultAlias(t)) {
+		if sub, ok := sj.Select.(nestedSelect); ok && sub.isSelected(t) && (!a.ownTerm(t) || !defaultAlias(t)) {
 			return true
 		}
 	}
@@ -702,7 +702,7 @@ func (a *selector[M, R]) groupDerivedTerms(shape *projectionShape) error {
 						remedy += " " + strconv.Quote(alias)
 					}
 				}
-				return errors.Wrapf(ErrJoinSelectNotKeyed, "%q reads %q, which is joined on %q of %q, and the projection does not group by it; %s", a.alias(t), jt.table, column, table, remedy)
+				return errors.Wrapf(ErrJoinSelectNotKeyed, "%q reads %q, which is joined on %q of %q, and the projection does not group by it; %s", termAlias(t), jt.table, column, table, remedy)
 			}
 		}
 	}
@@ -745,7 +745,7 @@ func (a *selector[M, R]) groupsBy(table, column string, shape projectionShape) b
 // derivedExpr renders a term a joined select projects: the derived table's
 // column of the term's alias.
 func (a *selector[M, R]) derivedExpr(jt *joinedTable, t types.Term) string {
-	return a.db.quoteTableColumn(jt.alias, a.alias(t))
+	return a.db.quoteTableColumn(jt.alias, termAlias(t))
 }
 
 // whereScope is the scope the select's own predicates render in: the queried

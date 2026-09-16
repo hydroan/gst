@@ -73,8 +73,8 @@ func cleanupOn[M types.Model](ctx context.Context, base *gorm.DB) (err error) {
 //
 // It is a package-level function because health is a property of the
 // connection, not of any model: the former chain form borrowed a model type
-// it never used. Today it checks the single default handle; once the database
-// grows read replicas this is the entry that will cover every node.
+// it never used. It checks the handle itself, not the read replicas attached
+// to it: Stats is what reports every node's pool.
 //
 // Returns nil if all checks pass. Panics if the database is not initialized,
 // consistent with Database[M].

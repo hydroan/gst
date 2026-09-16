@@ -58,12 +58,12 @@ func (db *database[M]) applyDeletedScope() {
 //
 // Example:
 //
-//	var users []*User
-//	List(&users)  // Get all users
+//	var samples []*Sample
+//	List(&samples)  // Get all records
 //
-//	users := make([]*User, 0)
-//	WithQuery(&User{Status: "active"}).List(&users)  // Get active users
-//	WithPagination(3, 10).List(&users)  // Paginated results
+//	samples := make([]*Sample, 0)
+//	WithQuery(&Sample{Status: "active"}).List(&samples)  // Get active records
+//	WithPagination(3, 10).List(&samples)  // Paginated results
 func (db *database[M]) List(dest *[]M) (err error) {
 	defer db.reset()
 
@@ -237,8 +237,8 @@ func (db *database[M]) Get(dest M, id string) (err error) {
 // Example:
 //
 //	var total int
-//	WithQuery(&User{Status: "active"}).Count(&total)  // Count active records
-//	WithQuery(&User{Name: "john"}).Count(&total)      // Count records matching name
+//	WithQuery(&Sample{Status: "active"}).Count(&total)  // Count active records
+//	WithQuery(&Sample{Name: "alpha"}).Count(&total)     // Count records matching name
 //
 // Note: The count parameter must be a non-nil pointer to int.
 func (db *database[M]) Count(count *int) (err error) {
@@ -287,10 +287,10 @@ func (db *database[M]) Count(count *int) (err error) {
 //
 // Example:
 //
-//	var user User
-//	First(&user)  // Get first user by primary key
-//	WithQuery(&User{Status: "active"}).First(&user)  // Get first active user
-//	WithOrder(UserCols.CreatedAt.Desc()).First(&user)  // Get newest user
+//	var sample Sample
+//	First(&sample)  // Get first record by primary key
+//	WithQuery(&Sample{Status: "active"}).First(&sample)  // Get first active record
+//	WithOrder(SampleCols.CreatedAt.Desc()).First(&sample)  // Get newest record
 func (db *database[M]) First(dest M) (err error) {
 	defer db.reset()
 
@@ -352,10 +352,10 @@ func (db *database[M]) First(dest M) (err error) {
 //
 // Example:
 //
-//	var user User
-//	Last(&user)  // Get last user by primary key
-//	WithQuery(&User{Status: "active"}).Last(&user)  // Get last active user
-//	WithOrder(UserCols.CreatedAt.Asc()).Last(&user)  // Get oldest user (with custom order)
+//	var sample Sample
+//	Last(&sample)  // Get last record by primary key
+//	WithQuery(&Sample{Status: "active"}).Last(&sample)  // Get last active record
+//	WithOrder(SampleCols.CreatedAt.Asc()).Last(&sample)  // Get oldest record (with custom order)
 func (db *database[M]) Last(dest M) (err error) {
 	defer db.reset()
 
@@ -418,9 +418,9 @@ func (db *database[M]) Last(dest M) (err error) {
 //
 // Example:
 //
-//	var user User
-//	Take(&user)  // Get any user record
-//	WithQuery(&User{Status: "active"}).Take(&user)  // Get any active user
+//	var sample Sample
+//	Take(&sample)  // Get any record
+//	WithQuery(&Sample{Status: "active"}).Take(&sample)  // Get any active record
 func (db *database[M]) Take(dest M) (err error) {
 	defer db.reset()
 

@@ -2,52 +2,7 @@ package database
 
 import (
 	"context"
-	"sync"
-
-	"github.com/cockroachdb/errors"
 )
-
-// transactionBoundary collects the actions registered to run once the
-// transaction that owns it has committed.
-type transactionBoundary struct {
-	mu      sync.Mutex
-	actions []func(context.Context) error
-}
-
-func (b *transactionBoundary) add(fn func(context.Context) error) {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-	b.actions = append(b.actions, fn)
-}
-
-// run executes the registered actions in registration order and stops at the
-// first failure.
-//
-// Stopping is deliberate. Actions are registered by the same write that
-// produced them, so a later one usually depends on an earlier one having
-// happened — a revoke followed by a re-grant, for example. Continuing past a
-// failed revoke would apply the grant on top of state the revoke was supposed to
-// have cleared, which is the wrong side to fail on; stopping leaves less access
-// in place, not more.
-//
-// The list is taken under the lock and cleared, so an action that registers
-// another one cannot extend the run it is already part of.
-func (b *transactionBoundary) run(ctx context.Context) error {
-	b.mu.Lock()
-	actions := b.actions
-	b.actions = nil
-	b.mu.Unlock()
-
-	for _, action := range actions {
-		if err := action(ctx); err != nil {
-			// Joined rather than marked so that errors.Is finds both the
-			// sentinel and the action's own error, whichever the caller
-			// matches on.
-			return errors.Join(ErrAfterCommit, err)
-		}
-	}
-	return nil
-}
 
 // AfterCommit registers fn to run after the transaction ctx is inside commits,
 // and runs it immediately when ctx is inside no transaction.

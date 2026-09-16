@@ -48,7 +48,7 @@ func (a *selector[M, R]) groupClauses(tx *gorm.DB, shape projectionShape) (*gorm
 			// key renders to a column or a bucket expression, neither of which
 			// binds a value. Fail loudly rather than drop the values if a
 			// future group key gains any.
-			return nil, errors.Newf("group key %q renders bound values", a.alias(t))
+			return nil, errors.Newf("group key %q renders bound values", termAlias(t))
 		}
 		// Raw keeps gorm from quoting an already quoted expression: the
 		// MySQL, PostgreSQL and SQLite quoters are idempotent, but the
@@ -141,10 +141,10 @@ func (a *selector[M, R]) functionExpr(t types.Term, shape projectionShape) (sql 
 // counting the wrong rows.
 func (a *selector[M, R]) validateGrouping(t types.Term) error {
 	if !t.IsMeasure() && len(types.TermConditionsOf(t)) > 0 {
-		return errors.Wrapf(ErrConditionOnGroupKey, "%q", a.alias(t))
+		return errors.Wrapf(ErrConditionOnGroupKey, "%q", termAlias(t))
 	}
 	if t.IsMeasure() && types.TermBucketOf(t) != types.TimeBucketNone {
-		return errors.Wrapf(ErrBucketOnMeasure, "%q", a.alias(t))
+		return errors.Wrapf(ErrBucketOnMeasure, "%q", termAlias(t))
 	}
 	return nil
 }
@@ -184,12 +184,12 @@ func (a *selector[M, R]) validateHaving(shape projectionShape) error {
 	}
 	for _, h := range a.havings {
 		if !a.isSelected(types.TermConditionTermOf(h)) {
-			return errors.Wrapf(ErrHavingTermNotSelected, "%q", a.alias(types.TermConditionTermOf(h)))
+			return errors.Wrapf(ErrHavingTermNotSelected, "%q", termAlias(types.TermConditionTermOf(h)))
 		}
 		if types.TermConditionTermOf(h).IsWindowed() {
-			return errors.Wrapf(ErrHavingWindowTerm, "%q", a.alias(types.TermConditionTermOf(h)))
+			return errors.Wrapf(ErrHavingWindowTerm, "%q", termAlias(types.TermConditionTermOf(h)))
 		}
-		if err := validateConditionValue(h, a.alias(types.TermConditionTermOf(h)), a.termKind(types.TermConditionTermOf(h), shape)); err != nil {
+		if err := validateConditionValue(h, termAlias(types.TermConditionTermOf(h)), a.termKind(types.TermConditionTermOf(h), shape)); err != nil {
 			return err
 		}
 	}

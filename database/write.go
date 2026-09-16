@@ -66,7 +66,7 @@ func compactModels[M types.Model](objs []M) []M {
 //
 // Example:
 //
-//	Create(&User{Name: "John", Email: "john@example.com"})  // Create single record
+//	Create(&Sample{Name: "alpha", Code: "a-1"})  // Create single record
 //	Create(user1, user2, user3)  // Batch create multiple records
 func (db *database[M]) Create(objs ...M) (err error) {
 	defer db.reset()
@@ -205,10 +205,10 @@ func (db *database[M]) Create(objs ...M) (err error) {
 //
 // Example:
 //
-//	Delete(&user)  // Soft delete by primary key
+//	Delete(&sample)  // Soft delete by primary key
 //	Delete(user1, user2, user3)  // Batch soft delete multiple records
-//	WithQuery(params).Delete(&User{})  // Delete with conditions
-//	WithPurge().Delete(&user)  // Permanent deletion
+//	WithQuery(params).Delete(&Sample{})  // Delete with conditions
+//	WithPurge().Delete(&sample)  // Permanent deletion
 func (db *database[M]) Delete(objs ...M) (err error) {
 	defer db.reset()
 
@@ -425,9 +425,9 @@ func (db *database[M]) Delete(objs ...M) (err error) {
 //
 // Example:
 //
-//	user.Name = "Updated Name"
-//	Update(&user)  // Update single record
-//	Update(user1, user2, user3)  // Batch update multiple records
+//	sample.Name = "Updated Name"
+//	Update(&sample)  // Update single record
+//	Update(first, second, third)  // Update several records in one call
 func (db *database[M]) Update(objs ...M) (err error) {
 	defer db.reset()
 
@@ -618,7 +618,7 @@ func (db *database[M]) updateRowStatement(session *gorm.DB, obj M) *gorm.DB {
 //
 // Example:
 //
-//	UpdateByID("user123", UserCols.Status.Set("active"))
+//	UpdateByID(id, SampleCols.Status.Set("active"))
 //	UpdateByID("record456", RecordCols.Score.Set(99.99), RecordCols.Kind.Set("exam"))
 func (db *database[M]) UpdateByID(id string, assignments ...types.Assignment) (err error) {
 	defer db.reset()

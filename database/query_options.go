@@ -2,6 +2,7 @@ package database
 
 import (
 	"reflect"
+	"slices"
 	"strings"
 
 	"github.com/cockroachdb/errors"
@@ -101,12 +102,12 @@ func (db *database[M]) applyCursorPagination() {
 
 // WithSelect specifies columns to select when querying or updating records,
 // through the generated column references (SampleCols.Name). The method
-// automatically includes defaultsColumns (id, created_by, updated_by,
+// automatically includes frameworkColumns (id, created_by, updated_by,
 // created_at, updated_at, deleted_at) in addition to the specified columns to
 // ensure essential fields are always available.
 //
 // Parameters:
-//   - columns: Column references to select (defaultsColumns will be automatically added)
+//   - columns: Column references to select (frameworkColumns will be automatically added)
 //     If no columns are provided, this is a no-op operation and no columns will be selected (returns all columns).
 //
 // Column references must exist on the model: an unknown column fails the chain
@@ -119,7 +120,7 @@ func (db *database[M]) applyCursorPagination() {
 // WARNING: Using WithSelect may result in the removal of certain fields from table records
 // if there are multiple hooks in the service and model layers. Use with caution.
 //
-// Affected operations: Update, List, Get, First, Last, Take.
+// Affected operations: Update, Upsert, List, Get, First, Last, Take.
 func (db *database[M]) WithSelect(columns ...types.AnyColumnRef) types.Database[M] {
 	db.mu.Lock()
 	defer db.mu.Unlock()
@@ -146,7 +147,7 @@ func (db *database[M]) WithSelect(columns ...types.AnyColumnRef) types.Database[
 			db.err = errors.Wrapf(ErrUnknownColumn, "WithSelect column %q on model %s", col, reflect.TypeOf(*new(M)).Elem().Name())
 			return db
 		}
-		if !contains(defaultsColumns, col) {
+		if !slices.Contains(frameworkColumns, col) {
 			_columns = append(_columns, col)
 		}
 	}
@@ -155,7 +156,7 @@ func (db *database[M]) WithSelect(columns ...types.AnyColumnRef) types.Database[
 		return db
 	}
 	db.selectColumns = append(db.selectColumns, _columns...)
-	db.selectColumns = append(db.selectColumns, defaultsColumns...)
+	db.selectColumns = append(db.selectColumns, frameworkColumns...)
 	return db
 }
 
@@ -390,16 +391,16 @@ func (db *database[M]) WithLimit(limit int) types.Database[M] {
 //
 // Example:
 //
-//	// Load user with their posts
-//	db.WithExpand([]string{"Posts"})
+//	// Load a record with its items
+//	db.WithExpand([]string{"Items"})
 //
-//	// Load user with posts ordered by creation date
-//	db.WithExpand([]string{"Posts"}, PostCols.CreatedAt.Desc())
+//	// Load a record with items ordered by creation date
+//	db.WithExpand([]string{"Items"}, ItemCols.CreatedAt.Desc())
 //
 //	// Load nested relationships
-//	db.WithExpand([]string{"Posts.Comments", "Profile"})
+//	db.WithExpand([]string{"Items.Parts", "Detail"})
 //
-//	// Load category with parent and children (two levels)
+//	// Load a record with parent and children (two levels)
 //	db.WithExpand([]string{"Parent.Parent", "Children.Children"})
 //
 // Note: WithExpand only affects SELECT queries (List, Get, First, Last, etc.).
@@ -460,9 +461,9 @@ func (db *database[M]) WithExpand(expand []string, orders ...types.Order) types.
 //
 // Usage:
 //
-//	WithPurge().Delete(&user)        // Hard delete (enable=true by default)
-//	WithPurge(true).Delete(&user)    // Hard delete (explicit)
-//	WithPurge(false).Delete(&user)   // Soft delete (explicit, overrides model.Purge())
+//	WithPurge().Delete(&sample)        // Hard delete (enable=true by default)
+//	WithPurge(true).Delete(&sample)    // Hard delete (explicit)
+//	WithPurge(false).Delete(&sample)   // Soft delete (explicit, overrides model.Purge())
 //
 // WARNING: Hard delete will permanently remove data from the database and cannot be undone.
 // Only works on 'Delete' method.
@@ -568,22 +569,4 @@ func (db *database[M]) rejectReplicaReadTarget() error {
 		return errors.Wrap(ErrUnsupportedOnDialect, "read with WithReplica on clickhouse")
 	}
 	return nil
-}
-
-// contains checks if a string item exists in a string slice.
-// Uses a map-based approach for O(n) time complexity with O(n) space complexity.
-// More efficient than linear search for larger slices.
-//
-// Parameters:
-//   - slice: The string slice to search in
-//   - item: The string item to search for
-//
-// Returns true if the item is found, false otherwise.
-func contains(slice []string, item string) bool {
-	set := make(map[string]struct{}, len(slice))
-	for _, s := range slice {
-		set[s] = struct{}{}
-	}
-	_, ok := set[item]
-	return ok
 }

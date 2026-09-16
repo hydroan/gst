@@ -29,8 +29,8 @@ import (
 // Query Behavior:
 //
 //	Exact Match (Default):
-//	- Every non-zero field is one equality condition (WHERE name = 'John')
-//	- Multiple fields combine with AND logic (WHERE name = 'John' AND age = 18)
+//	- Every non-zero field is one equality condition (WHERE name = 'alpha')
+//	- Multiple fields combine with AND logic (WHERE name = 'alpha' AND age = 18)
 //	- The value is a literal: a comma is data, never a list separator. A
 //	  query for several values uses the in operator filter instead
 //	  (types.Column.In, URL form "field[in]=a,b"), where the list is explicit.
@@ -51,25 +51,25 @@ import (
 // Examples:
 //
 //	// Exact match - single field
-//	WithQuery(&model.User{Name: "John"})  // WHERE name = 'John'
+//	WithQuery(&Sample{Name: "alpha"})  // WHERE name = 'alpha'
 //
 //	// Exact match - multiple fields (AND logic)
-//	WithQuery(&model.User{Name: "John", Age: 18})  // WHERE name = 'John' AND age = 18
+//	WithQuery(&Sample{Name: "alpha", Age: 18})  // WHERE name = 'alpha' AND age = 18
 //
 //	// Several values for one field - the list is explicit, never comma-parsed
-//	WithQuery(nil, types.QueryOptions{Filters: []types.Filter{model.UserCols.ID.In(ids...)}})
+//	WithQuery(nil, types.QueryOptions{Filters: []types.Filter{SampleCols.ID.In(ids...)}})
 //
 //	// Empty query (blocked by default for safety)
 //	WithQuery(nil)  // WHERE 1 = 0 (returns no records)
-//	WithQuery(&model.User{})  // WHERE 1 = 0 (returns no records)
-//	WithQuery(&model.User{Name: "", Email: ""})  // WHERE 1 = 0 (all values are empty)
+//	WithQuery(&Sample{})  // WHERE 1 = 0 (returns no records)
+//	WithQuery(&Sample{Name: "", Code: ""})  // WHERE 1 = 0 (all values are empty)
 //
 //	// Empty query with AllowEmpty=true (returns all records)
 //	WithQuery(nil, types.QueryOptions{AllowEmpty: true})  // Returns all records
-//	WithQuery(&model.User{}, types.QueryOptions{AllowEmpty: true})  // Returns all records
+//	WithQuery(&Sample{}, types.QueryOptions{AllowEmpty: true})  // Returns all records
 //
 //	// Query with some empty and some non-empty fields (works normally)
-//	WithQuery(&model.User{Name: "John", Email: ""})  // WHERE name = 'John' (Email is ignored)
+//	WithQuery(&Sample{Name: "alpha", Code: ""})  // WHERE name = 'alpha' (Code is ignored)
 //
 // NOTE: The underlying type must be pointer to struct, otherwise panic will occur.
 // NOTE: Empty query conditions (nil or zero value) are blocked by default for safety to prevent
@@ -148,13 +148,13 @@ func (db *database[M]) WithQuery(query M, opts ...types.QueryOptions) types.Data
 	//
 	// Empty Query Examples:
 	//   - WithQuery(nil)                         → nil query
-	//   - WithQuery(&User{})                    → all fields are zero values
-	//   - WithQuery(&User{Name: "", Email: ""}) → all field values are empty strings
+	//   - WithQuery(&Sample{})                   → all fields are zero values
+	//   - WithQuery(&Sample{Name: "", Code: ""}) → all field values are empty strings
 	//   - WithQuery(&KV{Key: ""})               → happens when removed slice is empty
 	//
 	// By default, empty queries (nil or zero value) are blocked by adding "WHERE 1 = 0" condition.
 	// To allow empty queries, use: WithQuery(nil, QueryOptions{AllowEmpty: true}) or
-	//                              WithQuery(&User{}, QueryOptions{AllowEmpty: true})
+	//                              WithQuery(&Sample{}, QueryOptions{AllowEmpty: true})
 	if len(q) == 0 {
 		// Filters are already applied above and alone are sufficient, so the
 		// empty query safety check is not needed.
@@ -200,7 +200,7 @@ func (db *database[M]) WithQuery(query M, opts ...types.QueryOptions) types.Data
 	}
 	// CRITICAL: Check if all query values are empty after filtering
 	// Even if query map is not empty, all values might be empty strings
-	// Example: &User{Name: "", Email: ""} has fields but all values are empty
+	// Example: &Sample{Name: "", Code: ""} has fields but all values are empty
 	// Filters applied earlier are real conditions, so they disable this
 	// safety check.
 	if !hasValidCondition && !hasFilters && !opt.AllowEmpty {
@@ -220,9 +220,6 @@ func (db *database[M]) WithQuery(query M, opts ...types.QueryOptions) types.Data
 // is listed in present: presence marks filter values explicitly provided by the
 // caller, so explicit zero values such as false and 0 still become conditions.
 func structFieldToMap(ctx context.Context, typ reflect.Type, val reflect.Value, q map[string]string, present map[string]struct{}, columns map[string]modelschema.Column) {
-	if q == nil {
-		q = make(map[string]string)
-	}
 	for i := range typ.NumField() {
 		field := typ.Field(i)
 		fieldTyp := field.Type
@@ -320,7 +317,6 @@ func structFieldToMap(ctx context.Context, typ reflect.Type, val reflect.Value, 
 			_v = fmt.Sprintf("%s", v)
 		case reflect.Pointer:
 			v = fieldVal.Elem().Interface()
-			// switch typ.Elem().Kind() {
 			switch fieldVal.Elem().Kind() {
 			case reflect.Bool:
 				_v = strconv.Itoa(boolToInt(v.(bool))) //nolint:errcheck
@@ -376,7 +372,7 @@ func boolToInt(b bool) int {
 	return 0
 }
 
-// indirectTypeAndValue recursively dereferences pointer types and values.
+// indirectTypeAndValue dereferences pointer types and values.
 // Follows pointer chains until reaching a non-pointer type.
 // Used for reflection operations that need to work with the underlying concrete type.
 //

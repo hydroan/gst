@@ -18,15 +18,18 @@ import (
 // Parameters:
 //   - size: The number of records to process per batch.
 //     If set to 0 or negative, uses default batch sizes:
-//   - Create/Update: 1000 records per batch
+//   - Create/Upsert: 1000 records per batch
 //   - Delete: 10000 records per batch
 //     If set to a positive value, uses that value for all operations.
 //
 // Affected Operations:
 //   - Create: Batch inserts records in chunks of the specified size
-//   - Update: Batch updates records in chunks of the specified size
+//   - Upsert: Batch upserts records in chunks of the specified size
 //   - Delete: Batch deletes records in chunks of the specified size
 //     Note: Delete operations use a separate default (10000) if size is not set
+//
+// Update is not one of them: it issues one UPDATE per record, so there is no
+// chunk for a batch size to size.
 //
 // Performance Considerations:
 //   - Larger batch sizes improve performance by reducing database round trips
@@ -37,20 +40,20 @@ import (
 // Examples:
 //
 //	// Set batch size for Create operation
-//	database.Database[*model.User](context.Background()).WithBatchSize(1000).Create(users...)
+//	database.Database[*Sample](context.Background()).WithBatchSize(1000).Create(samples...)
 //
-//	// Set batch size for Update operation
-//	database.Database[*model.User](context.Background()).WithBatchSize(500).Update(users...)
+//	// Set batch size for Upsert operation
+//	database.Database[*Sample](context.Background()).WithBatchSize(500).Upsert(samples...)
 //
 //	// Set batch size for Delete operation
-//	database.Database[*model.User](context.Background()).WithBatchSize(2000).Delete(users...)
+//	database.Database[*Sample](context.Background()).WithBatchSize(2000).Delete(samples...)
 //
 //	// Combined with other methods
-//	database.Database[*model.User](context.Background()).
+//	database.Database[*Sample](context.Background()).
 //	    WithBatchSize(1000).
-//	    Create(users...)
+//	    Create(samples...)
 //
-// NOTE: If size is 0 or not set, default batch sizes are used (1000 for Create/Update, 10000 for Delete).
+// NOTE: If size is 0 or not set, default batch sizes are used (1000 for Create/Upsert, 10000 for Delete).
 // NOTE: The batch size setting applies only to the current operation chain and is reset afterward.
 func (db *database[M]) WithBatchSize(size int) types.Database[M] {
 	db.mu.Lock()
@@ -80,14 +83,14 @@ func (db *database[M]) WithBatchSize(size int) types.Database[M] {
 //
 // Example:
 //
-//	WithDryRun().Create(&user)              // Build INSERT SQL without creating record
+//	WithDryRun().Create(&sample)            // Build INSERT SQL without creating record
 //	WithDryRun().UpdateByID(id, SampleCols.Name.Set(v))  // Build UPDATE SQL without updating record
 //
 //	var statements []types.SQLStatement
-//	err := database.Database[*User](context.Background()).
+//	err := database.Database[*Sample](context.Background()).
 //	    WithDryRun(&statements).
-//	    WithQuery(&User{Name: "John"}).
-//	    List(&users)
+//	    WithQuery(&Sample{Name: "alpha"}).
+//	    List(&samples)
 //
 // WithDryRun is build-only: it does not execute generated SQL, model hooks, or object field filling.
 // Transaction helpers are not supported because they manage real transaction control flow.
@@ -161,8 +164,8 @@ func (db *database[M]) collectSQL(tx *gorm.DB) error {
 //
 // Example:
 //
-//	WithoutHook().Create(&user)  // Create without triggering hooks
-//	WithoutHook().Update(&user)  // Update without validation hooks
+//	WithoutHook().Create(&sample)  // Create without triggering hooks
+//	WithoutHook().Update(&sample)  // Update without validation hooks
 //
 // WithoutHook will disable all model hooks.
 func (db *database[M]) WithoutHook() types.Database[M] {
