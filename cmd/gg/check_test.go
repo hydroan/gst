@@ -449,6 +449,37 @@ func writeCheckProjectGoModAgainstRealFramework(t *testing.T, projectDir string)
 		t.Fatal(err)
 	}
 	writeCheckFile(t, filepath.Join(projectDir, "go.sum"), string(goSum))
+	recordFrameworkSources(t, root)
+}
+
+// recordFrameworkSources reads the framework's Go sources under root. The
+// programs these fixtures build compile against those sources in a child go
+// command, which go test does not see as an input of the test; reading them
+// here does, so a change to the framework reruns the test instead of replaying
+// a cached result that no longer holds.
+func recordFrameworkSources(t *testing.T, root string) {
+	t.Helper()
+
+	err := filepath.WalkDir(root, func(path string, entry os.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if entry.IsDir() {
+			name := entry.Name()
+			if path != root && (name == "examples" || name == "testdata" || strings.HasPrefix(name, ".") || strings.HasPrefix(name, "_")) {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if !strings.HasSuffix(path, ".go") || strings.HasSuffix(path, "_test.go") {
+			return nil
+		}
+		_, readErr := os.ReadFile(path)
+		return readErr
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
 }
 
 // newGenProject creates a temporary project for tests that run gg gen, makes

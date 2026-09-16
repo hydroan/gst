@@ -70,10 +70,14 @@ func TestMigrateProgramLinksWhatMainLinks(t *testing.T) {
 // that it still compiles against the framework.
 func TestMigrateSchemaProgramReadsTheTablesModulesRegister(t *testing.T) {
 	projectDir := newGenProject(t)
+	// The dump is rendered in the dialect the configuration names, and the
+	// program reads the environment: pin the default, so a DATABASE_TYPE set
+	// where the tests run cannot change what the assertion reads.
+	t.Setenv("DATABASE_TYPE", "sqlite")
 	for _, dir := range constants.ProjectImportDirs {
 		content := "package " + dir + "\n"
 		if dir == constants.SubDirModule {
-			content = "package module\n\nimport \"github.com/hydroan/gst/module/helloworld\"\n\nfunc init() {\n\thelloworld.Register()\n}\n"
+			content = migrateSampleModule
 		}
 		writeCheckFile(t, filepath.Join(projectDir, dir, dir+".go"), content)
 	}
@@ -83,7 +87,35 @@ func TestMigrateSchemaProgramReadsTheTablesModulesRegister(t *testing.T) {
 	if err := program.Run(); err != nil {
 		t.Fatalf("expected the migration schema program to run, got %v\n%s", err, out.String())
 	}
-	if !strings.Contains(out.String(), "CREATE TABLE `helloworld2`") {
+	if !strings.Contains(out.String(), "CREATE TABLE `samples`") {
 		t.Fatalf("expected the schema dump to create the table the module registers, got:\n%s", out.String())
 	}
 }
+
+// migrateSampleModule is the module package of a project that registers one
+// module of its own, whose model has a table.
+const migrateSampleModule = `package module
+
+import (
+	"github.com/hydroan/gst/consts"
+	"github.com/hydroan/gst/model"
+	gstmodule "github.com/hydroan/gst/module"
+	"github.com/hydroan/gst/service"
+)
+
+type Sample struct {
+	Name string ` + "`json:\"name\"`" + `
+
+	model.Base
+}
+
+func (Sample) TableName() string { return "samples" }
+
+type SampleService struct {
+	service.Base[*Sample, *Sample, *Sample]
+}
+
+func init() {
+	gstmodule.Use(gstmodule.NewWrapper[*Sample, *Sample, *Sample]("samples", "id", false, &SampleService{}), gstmodule.CRUD(consts.PHASE_LIST))
+}
+`
