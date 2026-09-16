@@ -6,7 +6,6 @@ import (
 	"slices"
 	"time"
 
-	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/consts"
 	"github.com/hydroan/gst/internal/execctx"
 	"github.com/hydroan/gst/internal/lease"
@@ -111,7 +110,7 @@ func (w *work) lead(ctx context.Context, h *lease.Handle) {
 	err := lease.Run(tenure, h, log, w.run)
 	// Read before the renewals stop: stopping them ends the held context
 	// too, and would make every tenure look like a shutdown.
-	reason, lost := tenureEnd(held)
+	reason, lost := tenureEnd(held, h)
 	if lifecycle.Interrupted(held, err) {
 		// The work returning the tenure's own cancellation is how a tenure
 		// ends, not a failure of the work; a failure of its own beside the
@@ -142,11 +141,12 @@ func (w *work) lead(ctx context.Context, h *lease.Handle) {
 }
 
 // tenureEnd names why a tenure ended, for its log entry, and whether it was
-// the lease being lost: the alternatives are the process shutting down and
+// the lease being lost — also while the work wound down after the process
+// began shutting down: the alternatives are the process shutting down and
 // the work returning on its own.
-func tenureEnd(held context.Context) (reason string, lost bool) {
+func tenureEnd(held context.Context, h *lease.Handle) (reason string, lost bool) {
 	switch {
-	case errors.Is(context.Cause(held), lease.ErrLost):
+	case h.Lost():
 		return "lease lost", true
 	case held.Err() != nil:
 		return "shutting down", false

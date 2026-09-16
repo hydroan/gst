@@ -163,14 +163,15 @@ func (j *job) runInstant(ctx context.Context, at time.Time, catchUp bool) bool {
 	runErr := lease.Run(lease.WithHandle(held, h), h, log, func(ctx context.Context) error {
 		return j.run(ctx, at, fields...)
 	})
-	lost := errors.Is(context.Cause(held), lease.ErrLost)
+	lost := h.Lost()
 	stopHold()
 
 	if lost {
 		// The round outlived its lease — the renewals could not keep it, or
-		// found it taken — and its context ended with it. A job that
-		// returned the ending has the loss on its own entry already; one
-		// that returned nothing, or a failure of its own, has it recorded
+		// found it taken — and its context ended with it, unless the process
+		// had begun shutting down before. A job that returned the ending has
+		// the loss or the shutdown on its own entry already; one that
+		// returned nothing, or a failure of its own, has the loss recorded
 		// here. Either way the name is no longer this round's to give back.
 		if !lifecycle.Interrupted(held, runErr) {
 			log.Warnz("cronjob lost its lease during the round", zap.String("name", j.name), zap.String("spec", j.spec), zap.Time("at", at), zap.Uint64("term", h.Term()))

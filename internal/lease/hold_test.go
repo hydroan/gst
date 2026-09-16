@@ -294,7 +294,7 @@ func TestHoldEndsWhenTheLeaseIsTakenAway(t *testing.T) {
 // sampleHandle is a handle for work run outside the claim protocol: a name
 // for the failure to report, claimed just now.
 func sampleHandle() *Handle {
-	return &Handle{name: "sample", holder: "sample", claimedAt: time.Now()}
+	return newHandle("sample", "sample", 0, time.Now())
 }
 
 // TestRunReturnsWhatTheWorkReturned proves Run hands the work's outcome back
@@ -384,6 +384,54 @@ func TestRunFailsTheProcessWhenLostWorkWillNotStop(t *testing.T) {
 	}
 	close(release)
 	require.NoError(t, awaitReturned(t, returned))
+}
+
+// TestRunFailsTheProcessWhenTheLeaseIsLostWhileTheWorkWindsDown proves the
+// last line holds after the context ended for another reason: work told to
+// stop by the process shutting down is waited for, but its renewals go on
+// while it winds down, and once they find the lease lost the work has the
+// grace to return like any other, past which the process fails.
+func TestRunFailsTheProcessWhenTheLeaseIsLostWhileTheWorkWindsDown(t *testing.T) {
+	withFastProtocol(t)
+	failures := withRecordedFailures(t)
+	ctx := context.Background()
+	name := uniqueName(t)
+
+	holder, claimed, err := Claim(ctx, name)
+	require.NoError(t, err)
+	require.True(t, claimed)
+
+	parent, shutDown := context.WithCancel(ctx)
+	held, stop := Hold(parent, holder, newHolderLog())
+	defer stop()
+
+	release := make(chan struct{})
+	returned := make(chan error, 1)
+	go func() {
+		returned <- Run(held, holder, newHolderLog(), func(context.Context) error {
+			<-release
+			return nil
+		})
+	}()
+
+	shutDown()
+	select {
+	case err := <-failures:
+		t.Fatalf("a shutdown alone must not fail the process: %v", err)
+	case <-time.After(3 * stepDownGrace):
+	}
+
+	// Another holder's claim ends the lease behind the winding-down work.
+	require.NoError(t, dbruntime.DB.Exec("UPDATE "+table+" SET expires_at_ms = 0 WHERE name = ?", name).Error)
+	select {
+	case err := <-failures:
+		require.ErrorContains(t, err, "was lost and the work under it has not stopped")
+	case <-time.After(5 * time.Second):
+		t.Fatal("work still winding down once its lease is lost must fail the process past the grace")
+	}
+	close(release)
+	require.NoError(t, awaitReturned(t, returned))
+	require.True(t, holder.Lost(), "the handle must report the loss the context could no longer carry")
 }
 
 // TestHoldAndRunLogThroughTheHoldersLogger proves both entries the protocol
@@ -570,7 +618,7 @@ func TestHoldEndsAtTheDeadlineWhenARenewalFailsShortOfItsBound(t *testing.T) {
 	withDelayedFailingDatabase(t, 150*time.Millisecond)
 
 	begin := time.Now()
-	held, stop := Hold(context.Background(), &Handle{name: "sample", holder: "sample", claimedAt: begin}, newHolderLog())
+	held, stop := Hold(context.Background(), newHandle("sample", "sample", 0, begin), newHolderLog())
 	defer stop()
 
 	awaitDone(held, t)

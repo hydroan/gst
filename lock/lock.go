@@ -230,7 +230,7 @@ func (l *Lock) TryRun(ctx context.Context, fn func(ctx context.Context) error) e
 
 	held, stopHold := lease.Hold(ctx, h, logger())
 	err = lease.Run(lease.WithHandle(held, h), h, logger(), fn)
-	lost := errors.Is(context.Cause(held), lease.ErrLost)
+	lost := h.Lost()
 	stopHold()
 	if lost {
 		// The name is no longer this holder's to give back, and the work's

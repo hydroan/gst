@@ -64,6 +64,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/cockroachdb/errors"
@@ -193,6 +194,16 @@ type Handle struct {
 	// itself does not eat into the margin between the deadline and the
 	// database's expiry.
 	claimedAt time.Time
+	// lost closes the moment Hold knows the lease is lost, whatever else has
+	// ended the work's context by then; see Lost.
+	lost     chan struct{}
+	lostOnce sync.Once
+}
+
+// newHandle returns the handle of the claim of name by holder that started
+// term, sent at claimedAt.
+func newHandle(name, holder string, term uint64, claimedAt time.Time) *Handle {
+	return &Handle{name: name, holder: holder, term: term, claimedAt: claimedAt, lost: make(chan struct{})}
 }
 
 // Name returns the coordinated name.
@@ -201,6 +212,25 @@ func (h *Handle) Name() string { return h.name }
 // Term returns the term the claim started: the number the world outside the
 // database can refuse stale holders by.
 func (h *Handle) Term() uint64 { return h.term }
+
+// Lost reports whether the lease is known lost — a renewal found it gone, or
+// none succeeded before the local deadline — whether or not the context of
+// the work under it had already ended for another reason, such as the
+// process shutting down. Only Hold learns of a loss, so a handle never held
+// is never lost.
+func (h *Handle) Lost() bool {
+	select {
+	case <-h.lost:
+		return true
+	default:
+		return false
+	}
+}
+
+// markLost records the lease as lost; see Lost.
+func (h *Handle) markLost() {
+	h.lostOnce.Do(func() { close(h.lost) })
+}
 
 // Renew extends the lease by leaseDuration from the database's now. ErrLost
 // reports the lease expired — claimed by someone else since, or not yet,
@@ -317,7 +347,7 @@ func claim(ctx context.Context, name string, slotMs *int64) (*Handle, bool, erro
 	if res.RowsAffected == 0 {
 		return nil, false, nil
 	}
-	return &Handle{name: name, holder: holder, term: 1, claimedAt: claimedAt}, true, nil
+	return newHandle(name, holder, 1, claimedAt), true, nil
 }
 
 // claimInsert returns the insert that claims a name the table has never
@@ -353,7 +383,7 @@ func handleOf(ctx context.Context, db *gorm.DB, name, holder string, claimedAt t
 		// expiry could do that, neither of which this holder has done.
 		return nil, false, errors.Wrapf(ErrLost, "lease %q vanished right after the claim", name)
 	}
-	return &Handle{name: name, holder: holder, term: term, claimedAt: claimedAt}, true, nil
+	return newHandle(name, holder, term, claimedAt), true, nil
 }
 
 // LastSlot returns the last instant claimed under name and whether the name

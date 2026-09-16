@@ -49,6 +49,12 @@ func Hold(parent context.Context, h *Handle, log types.Logger) (ctx context.Cont
 	// not end them; stop does.
 	renewing, stopRenewing := context.WithCancel(context.WithoutCancel(parent))
 	interval, deadline := renewInterval, localDeadline
+	// lose records the loss on the handle before it ends ctx, so whoever sees
+	// ctx end with ErrLost finds the handle lost as well.
+	lose := func() {
+		h.markLost()
+		cancel(ErrLost)
+	}
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
@@ -67,7 +73,7 @@ func Hold(parent context.Context, h *Handle, log types.Logger) (ctx context.Cont
 			attempted = time.Now()
 			remaining := last.Add(deadline).Sub(attempted)
 			if remaining <= 0 {
-				cancel(ErrLost)
+				lose()
 				return
 			}
 			attempt, cancelAttempt := context.WithTimeout(renewing, min(deadline/2, remaining))
@@ -78,7 +84,7 @@ func Hold(parent context.Context, h *Handle, log types.Logger) (ctx context.Cont
 			case err == nil:
 				last = attempted
 			case errors.Is(err, ErrLost):
-				cancel(ErrLost)
+				lose()
 				return
 			case renewing.Err() != nil:
 				return
@@ -86,7 +92,7 @@ func Hold(parent context.Context, h *Handle, log types.Logger) (ctx context.Cont
 				log.Warnw("lease renewal failed", "component", "lease", "lease", h.name, "err", err)
 			}
 			if time.Since(last) >= deadline {
-				cancel(ErrLost)
+				lose()
 				return
 			}
 			timer.Reset(untilNextRenewal(attempted, last, interval, deadline))
@@ -136,7 +142,10 @@ func SetFail(fn func(error)) (restore func()) {
 // while the wait goes on for as long as the process lasts, so the caller
 // never claims again beside work of its own still running. ctx ending
 // for any other reason — the process shutting down — is not a loss: Run
-// waits for the work, and whoever stops the process bounds that wait.
+// waits for the work, and whoever stops the process bounds that wait. The
+// renewals go on while the work winds down, though, and a lease they find
+// lost meanwhile — h is lost, see Handle.Lost — leaves the work the grace
+// like any other loss.
 //
 // The work runs on a goroutine of its own, so that the lease being lost can
 // be watched while it runs; a panic in it is recovered into an error
@@ -160,10 +169,15 @@ func Run(ctx context.Context, h *Handle, log types.Logger, work func(ctx context
 	select {
 	case err := <-returned:
 		return err
+	case <-h.lost:
 	case <-ctx.Done():
-	}
-	if !errors.Is(context.Cause(ctx), ErrLost) {
-		return <-returned
+		if !errors.Is(context.Cause(ctx), ErrLost) {
+			select {
+			case err := <-returned:
+				return err
+			case <-h.lost:
+			}
+		}
 	}
 
 	grace := time.NewTimer(stepDownGrace)
