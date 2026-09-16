@@ -290,6 +290,35 @@ func TestCopyableModuleServiceTreesAreSelfContained(t *testing.T) {
 	}
 }
 
+// TestModuleMiddlewareSourcesImportPublicFrameworkPackages pins what gg module
+// copy needs from the middleware source files a manifest names. Copy carries
+// each one whole into the project's middleware package, where the framework's
+// internal packages are out of reach, and rewrites only the imports of the
+// module's own model and service trees. Any other internal import compiles in
+// the framework and fails only when a project copies the module.
+func TestModuleMiddlewareSourcesImportPublicFrameworkPackages(t *testing.T) {
+	for name, manifest := range copyableModuleManifests(t) {
+		t.Run(name, func(t *testing.T) {
+			for _, mw := range manifest.Copy.Middleware {
+				source := filepath.Join("..", filepath.FromSlash(mw.SourceFile))
+				file, err := parser.ParseFile(token.NewFileSet(), source, nil, parser.ImportsOnly)
+				require.NoError(t, err)
+				for _, spec := range file.Imports {
+					importPath, unquoteErr := strconv.Unquote(spec.Path.Value)
+					require.NoError(t, unquoteErr)
+					if !strings.HasPrefix(importPath, "github.com/hydroan/gst/internal/") {
+						continue
+					}
+					owner, ok := moduleTreeOwner(importPath)
+					require.Truef(t, ok && owner == name,
+						"%s imports %q; a middleware source gg module copy carries into a project may import public framework packages and module %s's own model and service trees only",
+						mw.SourceFile, importPath, name)
+				}
+			}
+		})
+	}
+}
+
 // moduleTreeOwner returns the module a framework model or service import
 // belongs to, and whether the path names one at all.
 func moduleTreeOwner(importPath string) (string, bool) {
