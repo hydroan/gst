@@ -6,8 +6,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/hydroan/gst/internal/modelregistry"
 	"github.com/hydroan/gst/internal/modelschema"
-	"github.com/hydroan/gst/model"
 	"github.com/stretchr/testify/require"
 	"gorm.io/gorm"
 )
@@ -15,13 +15,13 @@ import (
 type baseQueryItem struct {
 	Code string `json:"code"`
 
-	model.Base
+	modelregistry.Base
 }
 
 type autoBaseQueryItem struct {
 	Code string `json:"code"`
 
-	model.AutoBase
+	modelregistry.AutoBase
 }
 
 type presenceQueryItem struct {
@@ -30,7 +30,7 @@ type presenceQueryItem struct {
 	Note    *string `json:"note"`
 	Legacy  bool    `json:"legacy_json" query:"flag"`
 
-	model.Base
+	modelregistry.Base
 }
 
 func TestStructFieldToMap(t *testing.T) {

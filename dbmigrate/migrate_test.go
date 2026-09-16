@@ -13,8 +13,8 @@ import (
 
 	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/dbmigrate"
+	"github.com/hydroan/gst/internal/modelregistry"
 	"github.com/hydroan/gst/internal/testutil/testcontainer"
-	"github.com/hydroan/gst/model"
 	"github.com/stretchr/testify/require"
 )
 
@@ -540,7 +540,7 @@ func postgresIndexCount(t *testing.T, cfg *dbmigrate.DatabaseConfig, table, inde
 type TagIndexedWidget struct {
 	Tag string `json:"tag" gorm:"size:191;index"`
 
-	model.Base
+	modelregistry.Base
 }
 
 func (*TagIndexedWidget) TableName() string { return "widgets" }
@@ -548,7 +548,7 @@ func (*TagIndexedWidget) TableName() string { return "widgets" }
 type PlainWidget struct {
 	Tag string `json:"tag" gorm:"size:191"`
 
-	model.Base
+	modelregistry.Base
 }
 
 func (*PlainWidget) TableName() string { return "widgets" }

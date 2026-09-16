@@ -1,21 +1,21 @@
 package column
 
 import (
+	"github.com/hydroan/gst/internal/modelregistry"
+	"github.com/hydroan/gst/internal/serviceregistry"
 	"github.com/hydroan/gst/internal/types"
-	"github.com/hydroan/gst/model"
-	"github.com/hydroan/gst/service"
 )
 
 var _ types.Module[*empty, *empty, rsp] = (*mod)(nil)
 
 type empty struct {
-	model.Empty
+	modelregistry.Empty
 }
 
 type rsp = map[string][]string
 
 type srv struct {
-	service.Base[*empty, *empty, rsp]
+	serviceregistry.Base[*empty, *empty, rsp]
 }
 
 type mod struct{}

@@ -1,16 +1,16 @@
 package helloworld
 
 import (
+	"github.com/hydroan/gst/internal/modelregistry"
+	"github.com/hydroan/gst/internal/serviceregistry"
 	"github.com/hydroan/gst/internal/types"
-	"github.com/hydroan/gst/model"
-	"github.com/hydroan/gst/service"
 )
 
 var _ types.Module[*Helloworld, *Req, *Rsp] = (*Module)(nil)
 
 // Helloworld is the model definition.
 type Helloworld struct {
-	model.Empty
+	modelregistry.Empty
 }
 
 // Req is the custom request type.
@@ -27,7 +27,7 @@ type Rsp struct {
 
 // Service implements the `types.Service` interface.
 type Service struct {
-	service.Base[*Helloworld, *Req, *Rsp]
+	serviceregistry.Base[*Helloworld, *Req, *Rsp]
 }
 
 // Module implements the `types.Module` interface.

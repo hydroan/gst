@@ -8,13 +8,13 @@ import (
 	"github.com/hydroan/gst/consts"
 	"github.com/hydroan/gst/ds/queue/circularbuffer"
 	modellogmgmt "github.com/hydroan/gst/internal/model/logmgmt"
-	"github.com/hydroan/gst/model"
+	"github.com/hydroan/gst/internal/modelregistry"
 	"github.com/stretchr/testify/require"
 )
 
 // auditSample is the resource an audit entry is recorded for.
 type auditSample struct {
-	model.Base
+	modelregistry.Base
 }
 
 func (auditSample) TableName() string { return "audit_samples" }

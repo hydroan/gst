@@ -7,8 +7,8 @@ import (
 	"time"
 
 	"github.com/hydroan/gst/database"
+	"github.com/hydroan/gst/internal/modelregistry"
 	"github.com/hydroan/gst/internal/types"
-	"github.com/hydroan/gst/model"
 	"github.com/hydroan/gst/tenant"
 	"github.com/stretchr/testify/require"
 	"gorm.io/datatypes"
@@ -18,22 +18,22 @@ import (
 type queryableTestUser struct {
 	Name string `json:"name" query:"name"`
 
-	model.Query
-	model.Base
+	modelregistry.Query
+	modelregistry.Base
 }
 
 type paginatableTestUser struct {
 	Name string `json:"name" query:"name"`
 
-	model.Pagination
-	model.Base
+	modelregistry.Pagination
+	modelregistry.Base
 }
 
 type cursorableTestUser struct {
 	Name string `json:"name" query:"name"`
 
-	model.Cursor
-	model.Base
+	modelregistry.Cursor
+	modelregistry.Base
 }
 
 func TestDatabaseWithCursor(t *testing.T) {
@@ -307,7 +307,7 @@ func TestDatabaseWithCursor(t *testing.T) {
 // column references carry no table and read as plain names.
 type virtualUser struct {
 	Name string `json:"name"`
-	model.Empty
+	modelregistry.Empty
 }
 
 func TestDatabaseWithSelect(t *testing.T) {

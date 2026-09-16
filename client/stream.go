@@ -8,7 +8,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/errors"
-	"github.com/hydroan/gst/sse"
+	"github.com/hydroan/gst/internal/sse"
 )
 
 // maxSSELineLength bounds a single SSE line. The default bufio.Scanner limit

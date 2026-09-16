@@ -6,8 +6,8 @@ import (
 	"testing"
 
 	"github.com/hydroan/gst/database"
+	"github.com/hydroan/gst/internal/modelregistry"
 	"github.com/hydroan/gst/internal/types"
-	"github.com/hydroan/gst/model"
 	"github.com/stretchr/testify/require"
 	"gorm.io/gorm"
 )
@@ -546,7 +546,7 @@ func requireSQLContains(t *testing.T, stmt types.SQLStatement, parts ...string) 
 type dryRunSoftDeleteUser struct {
 	Name string `json:"name"`
 
-	model.Base
+	modelregistry.Base
 }
 
 func (*dryRunSoftDeleteUser) TableName() string { return "dry_run_soft_delete_users" }

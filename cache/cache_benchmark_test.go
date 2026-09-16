@@ -17,15 +17,15 @@ import (
 	"github.com/hydroan/gst/internal/cache/otter"
 	"github.com/hydroan/gst/internal/cache/ristretto"
 	"github.com/hydroan/gst/internal/cache/smap"
+	"github.com/hydroan/gst/internal/modelregistry"
 	"github.com/hydroan/gst/internal/testutil"
 	"github.com/hydroan/gst/internal/types"
-	"github.com/hydroan/gst/model"
 	"github.com/hydroan/gst/redis"
 )
 
 type User struct {
 	Name string `json:"name,omitempty"`
-	model.Base
+	modelregistry.Base
 }
 
 // Recorded results — Apple M4 Pro (14 cores), go1.26.4 darwin/arm64,

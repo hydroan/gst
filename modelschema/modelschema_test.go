@@ -3,19 +3,19 @@ package modelschema_test
 import (
 	"testing"
 
-	"github.com/hydroan/gst/model"
+	"github.com/hydroan/gst/internal/modelregistry"
 	"github.com/hydroan/gst/modelschema"
 	"github.com/stretchr/testify/require"
 )
 
 // queryRecord opts in to framework query parameters; plainRecord does not.
 type queryRecord struct {
-	model.Query
-	model.Empty
+	modelregistry.Query
+	modelregistry.Empty
 }
 
 type plainRecord struct {
-	model.Empty
+	modelregistry.Empty
 }
 
 func TestIsQueryable(t *testing.T) {

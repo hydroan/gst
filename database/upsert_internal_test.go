@@ -5,7 +5,6 @@ import (
 	"testing"
 
 	"github.com/hydroan/gst/internal/modelregistry"
-	"github.com/hydroan/gst/model"
 	"github.com/stretchr/testify/require"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
@@ -20,53 +19,53 @@ type syncCollectMergedItem struct {
 	Code string `gorm:"size:191;uniqueIndex"`
 	Ref  string `gorm:"size:191"`
 
-	model.Base
+	modelregistry.Base
 }
 
 func (*syncCollectMergedItem) TableName() string { return "sync_collect_merged_items" }
 
 // Indexes declares the unique key on Ref, next to the tag-declared one on Code.
-func (*syncCollectMergedItem) Indexes() []model.Index {
-	return []model.Index{{Fields: []string{"Ref"}, Unique: true}}
+func (*syncCollectMergedItem) Indexes() []modelregistry.Index {
+	return []modelregistry.Index{{Fields: []string{"Ref"}, Unique: true}}
 }
 
 type syncCollectCompositeItem struct {
 	Code string `gorm:"size:191"`
 	Kind string `gorm:"size:191"`
 
-	model.Base
+	modelregistry.Base
 }
 
 func (*syncCollectCompositeItem) TableName() string { return "sync_collect_composite_items" }
 
 // Indexes declares a composite unique key whose column order must survive.
-func (*syncCollectCompositeItem) Indexes() []model.Index {
-	return []model.Index{{Fields: []string{"Kind", "Code"}, Unique: true}}
+func (*syncCollectCompositeItem) Indexes() []modelregistry.Index {
+	return []modelregistry.Index{{Fields: []string{"Kind", "Code"}, Unique: true}}
 }
 
 type syncCollectPlainIndexItem struct {
 	Code string `gorm:"size:191"`
 
-	model.Base
+	modelregistry.Base
 }
 
 func (*syncCollectPlainIndexItem) TableName() string { return "sync_collect_plain_index_items" }
 
 // Indexes declares a non-unique index, which the sync must ignore.
-func (*syncCollectPlainIndexItem) Indexes() []model.Index {
-	return []model.Index{{Fields: []string{"Code"}}}
+func (*syncCollectPlainIndexItem) Indexes() []modelregistry.Index {
+	return []modelregistry.Index{{Fields: []string{"Code"}}}
 }
 
 type syncCollectPrimaryOnlyItem struct {
-	model.Base
+	modelregistry.Base
 }
 
 func (*syncCollectPrimaryOnlyItem) TableName() string { return "sync_collect_primary_only_items" }
 
 // Indexes declares a unique key covering only the primary key: a primary-key
 // merge keeps the caller's id, so the sync must drop the declaration.
-func (*syncCollectPrimaryOnlyItem) Indexes() []model.Index {
-	return []model.Index{{Fields: []string{"ID"}, Unique: true}}
+func (*syncCollectPrimaryOnlyItem) Indexes() []modelregistry.Index {
+	return []modelregistry.Index{{Fields: []string{"ID"}, Unique: true}}
 }
 
 // newSyncCollectDB opens the DryRun sqlite instance the collect tests parse

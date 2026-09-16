@@ -19,12 +19,12 @@ import (
 	modeliamuser "github.com/hydroan/gst/internal/model/iam/user"
 	serviceiamaccount "github.com/hydroan/gst/internal/service/iam/account"
 	serviceiamsession "github.com/hydroan/gst/internal/service/iam/session"
+	"github.com/hydroan/gst/internal/serviceregistry"
 	"github.com/hydroan/gst/internal/testutil"
 	"github.com/hydroan/gst/internal/types"
 	loggerzap "github.com/hydroan/gst/logger/zap"
 	"github.com/hydroan/gst/module/iam"
 	"github.com/hydroan/gst/redis"
-	"github.com/hydroan/gst/service"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/crypto/bcrypt"
 )
@@ -229,7 +229,7 @@ func TestAccountLoginSecondFactorVerifier(t *testing.T) {
 		if allow {
 			return nil
 		}
-		return service.NewError(http.StatusUnauthorized, authn.MsgSecondFactorRequired)
+		return serviceregistry.NewError(http.StatusUnauthorized, authn.MsgSecondFactorRequired)
 	})
 
 	t.Run("verifier_rejection_blocks_login", func(t *testing.T) {
@@ -493,7 +493,7 @@ func TestAccountChangePassword(t *testing.T) {
 		})
 		require.Error(t, err)
 
-		var serviceErr *service.Error
+		var serviceErr *serviceregistry.Error
 		require.True(t, errors.As(err, &serviceErr))
 		require.Equal(t, http.StatusInternalServerError, serviceErr.Status())
 

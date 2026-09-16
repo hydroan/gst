@@ -8,7 +8,7 @@ import (
 
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/client"
-	"github.com/hydroan/gst/sse"
+	"github.com/hydroan/gst/internal/sse"
 	"github.com/stretchr/testify/require"
 )
 

@@ -6,7 +6,7 @@ import (
 
 	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/dbmigrate"
-	"github.com/hydroan/gst/model"
+	"github.com/hydroan/gst/internal/modelregistry"
 	"github.com/stretchr/testify/require"
 )
 
@@ -14,7 +14,7 @@ type User struct {
 	Username string `json:"username"`
 	Addr     string `json:"addr"`
 
-	model.Base
+	modelregistry.Base
 }
 
 func (*User) TableName() string { return "users" }
@@ -22,7 +22,7 @@ func (*User) TableName() string { return "users" }
 type Group struct {
 	Name string `json:"name"`
 
-	model.Base
+	modelregistry.Base
 }
 
 func (*Group) TableName() string { return "groups" }
@@ -35,13 +35,13 @@ type Sample struct {
 	Title string `json:"title" gorm:"size:191"`
 	Tag   string `json:"tag" gorm:"size:191"`
 
-	model.Base
+	modelregistry.Base
 }
 
 func (*Sample) TableName() string { return "samples" }
 
-func (*Sample) Indexes() []model.Index {
-	return []model.Index{
+func (*Sample) Indexes() []modelregistry.Index {
+	return []modelregistry.Index{
 		{Fields: []string{"Tag", "CreatedAt"}},
 		{Fields: []string{"Title"}, Unique: true},
 	}
@@ -55,7 +55,7 @@ func (*Sample) Indexes() []model.Index {
 type DefaultedRecord struct {
 	Label string `json:"label" gorm:"size:32;default:none"`
 
-	model.Base
+	modelregistry.Base
 }
 
 func (*DefaultedRecord) TableName() string { return "defaulted_records" }
@@ -66,25 +66,25 @@ func (*DefaultedRecord) TableName() string { return "defaulted_records" }
 type ConflictSampleA struct {
 	Kind string `json:"kind" gorm:"size:191"`
 
-	model.Base
+	modelregistry.Base
 }
 
 func (*ConflictSampleA) TableName() string { return "conflict_samples" }
 
-func (*ConflictSampleA) Indexes() []model.Index {
-	return []model.Index{{Fields: []string{"Kind"}}}
+func (*ConflictSampleA) Indexes() []modelregistry.Index {
+	return []modelregistry.Index{{Fields: []string{"Kind"}}}
 }
 
 type ConflictSampleB struct {
 	Kind string `json:"kind" gorm:"size:191"`
 
-	model.Base
+	modelregistry.Base
 }
 
 func (*ConflictSampleB) TableName() string { return "conflict_samples" }
 
-func (*ConflictSampleB) Indexes() []model.Index {
-	return []model.Index{{Fields: []string{"Kind"}, Unique: true}}
+func (*ConflictSampleB) Indexes() []modelregistry.Index {
+	return []modelregistry.Index{{Fields: []string{"Kind"}, Unique: true}}
 }
 
 func TestDumper(t *testing.T) {

@@ -7,8 +7,8 @@ import (
 
 	"github.com/hydroan/gst/database"
 	"github.com/hydroan/gst/internal/dbruntime"
+	"github.com/hydroan/gst/internal/modelregistry"
 	"github.com/hydroan/gst/internal/types"
-	"github.com/hydroan/gst/model"
 	"github.com/stretchr/testify/require"
 )
 
@@ -18,14 +18,14 @@ var (
 )
 
 // versionedNote is the optimistic-locking fixture: a model that declares
-// model.Version and therefore takes part in the whole per-operation contract
+// modelregistry.Version and therefore takes part in the whole per-operation contract
 // documented on that type.
 type versionedNote struct {
-	Title   string        `json:"title" gorm:"size:191"`
-	Body    string        `json:"body" gorm:"size:191"`
-	Version model.Version `json:"version,omitempty" gorm:"not null;default:1"`
+	Title   string                `json:"title" gorm:"size:191"`
+	Body    string                `json:"body" gorm:"size:191"`
+	Version modelregistry.Version `json:"version,omitempty" gorm:"not null;default:1"`
 
-	model.Base
+	modelregistry.Base
 }
 
 func (*versionedNote) TableName() string { return "versioned_notes" }
@@ -283,10 +283,10 @@ func TestVersionBatchUpdateRollsBack(t *testing.T) {
 // below (a runtime-DDL-only hazard the framework's migrate-then-deploy
 // order never hits in production).
 type legacyAdoptedNote struct {
-	Title   string        `json:"title" gorm:"size:191"`
-	Version model.Version `json:"version,omitempty" gorm:"not null;default:1"`
+	Title   string                `json:"title" gorm:"size:191"`
+	Version modelregistry.Version `json:"version,omitempty" gorm:"not null;default:1"`
 
-	model.Base
+	modelregistry.Base
 }
 
 func (*legacyAdoptedNote) TableName() string { return "legacy_adopted_notes" }
@@ -333,7 +333,7 @@ func TestVersionLegacyTableAdoption(t *testing.T) {
 }
 
 func TestUnversionedNotFoundUnchanged(t *testing.T) {
-	// The regression guard: models without model.Version keep the plain
+	// The regression guard: models without modelregistry.Version keep the plain
 	// contract, where a missing row is ErrRecordNotFound.
 	defer cleanupTestData()
 	setupTestData(t)

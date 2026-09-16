@@ -6,8 +6,8 @@ import (
 
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/authn"
+	"github.com/hydroan/gst/internal/serviceregistry"
 	"github.com/hydroan/gst/internal/types"
-	"github.com/hydroan/gst/service"
 	"github.com/stretchr/testify/require"
 )
 
@@ -23,7 +23,7 @@ func TestSetLoginSecondFactorVerifierInstallsGate(t *testing.T) {
 	t.Cleanup(func() { authn.SetLoginSecondFactorVerifier(nil) })
 
 	ctx := &types.ServiceContext{}
-	gateErr := service.NewError(http.StatusUnauthorized, authn.MsgSecondFactorRequired)
+	gateErr := serviceregistry.NewError(http.StatusUnauthorized, authn.MsgSecondFactorRequired)
 
 	var gotCtx *types.ServiceContext
 	var gotUserID string

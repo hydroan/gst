@@ -9,9 +9,9 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/database"
+	"github.com/hydroan/gst/internal/modelregistry"
 	"github.com/hydroan/gst/internal/testutil"
 	"github.com/hydroan/gst/internal/types"
-	"github.com/hydroan/gst/model"
 	"github.com/hydroan/gst/tenant"
 	"github.com/stretchr/testify/require"
 	"gorm.io/datatypes"
@@ -190,7 +190,7 @@ type TestUser struct {
 	IsActive *bool                       `json:"is_active"`
 	Remark   *string                     `json:"remark,omitempty" gorm:"size:10240" query:"remark"`
 
-	model.Base
+	modelregistry.Base
 }
 
 func (t *TestUser) TableName() string { return "test_users" }
@@ -212,7 +212,7 @@ type TestUser2 struct {
 	IsActive *bool   `json:"is_active"`
 	Remark   *string `json:"remark,omitempty" gorm:"size:10240" query:"remark"`
 
-	model.Base
+	modelregistry.Base
 }
 
 func (t *TestUser2) Purge() bool       { return true }
@@ -224,7 +224,7 @@ type TestItem struct {
 	Score       float64 `json:"score"`
 	GroupID     string  `json:"group_id"`
 
-	model.Base
+	modelregistry.Base
 }
 
 func (*TestItem) TableName() string { return "test_items" }
@@ -235,7 +235,7 @@ type TestPlainItem struct {
 	Name          string `json:"name" gorm:"size:191"`
 	CreateAfterID string `json:"-" gorm:"-"`
 
-	model.Base
+	modelregistry.Base
 }
 
 func (*TestPlainItem) TableName() string { return "test_plain_items" }
@@ -252,7 +252,7 @@ type TestUniqueItem struct {
 	CreateAfterID string `json:"-" gorm:"-"`
 	UpdateAfterID string `json:"-" gorm:"-"`
 
-	model.Base
+	modelregistry.Base
 }
 
 func (*TestUniqueItem) TableName() string { return "test_unique_items" }
@@ -276,15 +276,15 @@ type TestIndexerUniqueItem struct {
 	Kind string `json:"kind" gorm:"size:191"`
 	Name string `json:"name" gorm:"size:191"`
 
-	model.Base
+	modelregistry.Base
 }
 
 func (*TestIndexerUniqueItem) TableName() string { return "test_indexer_unique_items" }
 func (*TestIndexerUniqueItem) Purge() bool       { return true }
 
 // Indexes declares the composite unique key on (Code, Kind).
-func (*TestIndexerUniqueItem) Indexes() []model.Index {
-	return []model.Index{{Fields: []string{"Code", "Kind"}, Unique: true}}
+func (*TestIndexerUniqueItem) Indexes() []modelregistry.Index {
+	return []modelregistry.Index{{Fields: []string{"Code", "Kind"}, Unique: true}}
 }
 
 // TestMixedUniqueItem carries one unique key in a struct tag and a second one
@@ -295,28 +295,28 @@ type TestMixedUniqueItem struct {
 	Ref  string `json:"ref" gorm:"size:191"`
 	Name string `json:"name" gorm:"size:191"`
 
-	model.Base
+	modelregistry.Base
 }
 
 func (*TestMixedUniqueItem) TableName() string { return "test_mixed_unique_items" }
 func (*TestMixedUniqueItem) Purge() bool       { return true }
 
 // Indexes declares the unique key on Ref, next to the tag-declared one on Code.
-func (*TestMixedUniqueItem) Indexes() []model.Index {
-	return []model.Index{{Fields: []string{"Ref"}, Unique: true}}
+func (*TestMixedUniqueItem) Indexes() []modelregistry.Index {
+	return []modelregistry.Index{{Fields: []string{"Ref"}, Unique: true}}
 }
 
 type TestAutoItem struct {
 	Code string `json:"code" gorm:"size:191"`
 	Name string `json:"name" gorm:"size:191"`
 
-	model.AutoBase
+	modelregistry.AutoBase
 }
 
 func (*TestAutoItem) TableName() string { return "test_auto_items" }
 func (*TestAutoItem) Purge() bool       { return true }
 
-// TestSoftDeleteItem keeps the model.Base default Purge (soft delete) so write
+// TestSoftDeleteItem keeps the modelregistry.Base default Purge (soft delete) so write
 // tests can assert how writes treat soft-deleted rows. Its table is migrated
 // on demand inside the tests that need it and cleaned up with raw SQL because
 // soft-deleted rows are invisible to List.
@@ -324,12 +324,12 @@ type TestSoftDeleteItem struct {
 	Code string `json:"code" gorm:"size:191;uniqueIndex"`
 	Name string `json:"name" gorm:"size:191"`
 
-	model.Base
+	modelregistry.Base
 }
 
 func (*TestSoftDeleteItem) TableName() string { return "test_soft_delete_items" }
 
-// TestTenantSoftDeleteItem is tenant-scoped and keeps the model.Base default
+// TestTenantSoftDeleteItem is tenant-scoped and keeps the modelregistry.Base default
 // Purge (soft delete), so the WithDeleted tests can assert that lifting the
 // soft-delete condition never lifts tenant scoping: the tenant predicate
 // ignores GORM's Unscoped flag by design (see tenant.ID). Its table is
@@ -338,7 +338,7 @@ type TestTenantSoftDeleteItem struct {
 	Name string `json:"name" gorm:"size:191"`
 
 	tenant.Scope
-	model.Base
+	modelregistry.Base
 }
 
 func (*TestTenantSoftDeleteItem) TableName() string { return "test_tenant_soft_delete_items" }
@@ -350,7 +350,7 @@ func (*TestTenantSoftDeleteItem) TableName() string { return "test_tenant_soft_d
 // ClosedAt; it exists so the tests can point a measure at a column that can
 // hold NULL.
 //
-// It deliberately keeps the model.Base default Purge, so its rows soft delete.
+// It deliberately keeps the modelregistry.Base default Purge, so its rows soft delete.
 // That is what lets the aggregate tests assert the rule an aggregate is most
 // likely to break: scanning into a plain result row parses no model, so
 // without the model the soft-delete condition disappears and an aggregate
@@ -363,7 +363,7 @@ type TestAggregateRecord struct {
 	OccurredAt time.Time  `json:"occurred_at"`
 	ClosedAt   *time.Time `json:"closed_at"`
 
-	model.Base
+	modelregistry.Base
 }
 
 func (*TestAggregateRecord) TableName() string { return "test_aggregate_records" }
@@ -378,7 +378,7 @@ type TestRecordTag struct {
 	Label    string `json:"label" gorm:"size:191"`
 	Category string `json:"category" gorm:"size:191"`
 
-	model.Base
+	modelregistry.Base
 }
 
 func (*TestRecordTag) TableName() string { return "test_record_tags" }
@@ -392,7 +392,7 @@ type TestTagAlias struct {
 	RecordID string `json:"record_id" gorm:"size:191"`
 	Label    string `json:"label" gorm:"size:191"`
 
-	model.Base
+	modelregistry.Base
 }
 
 func (*TestTagAlias) TableName() string { return "test_record_tags" }
@@ -403,7 +403,7 @@ type TestTagNote struct {
 	TagID string `json:"tag_id" gorm:"size:191"`
 	Body  string `json:"body" gorm:"size:191"`
 
-	model.Base
+	modelregistry.Base
 }
 
 func (*TestTagNote) TableName() string { return "test_tag_notes" }
@@ -547,7 +547,7 @@ type TestPayment struct {
 	Amount  int64     `json:"amount"`
 	PaidAt  time.Time `json:"paid_at"`
 
-	model.Base
+	modelregistry.Base
 }
 
 func (*TestPayment) TableName() string { return "test_payments" }
@@ -557,7 +557,7 @@ type TestRefund struct {
 	Amount    int64     `json:"amount"`
 	SettledAt time.Time `json:"settled_at"`
 
-	model.Base
+	modelregistry.Base
 }
 
 func (*TestRefund) TableName() string { return "test_refunds" }
@@ -650,13 +650,13 @@ type TestAccount struct {
 	Name string `json:"name" gorm:"size:191"`
 	Tier string `json:"tier" gorm:"size:191"`
 
-	model.Base
+	modelregistry.Base
 }
 
 func (*TestAccount) TableName() string { return "test_accounts" }
 
-func (*TestAccount) Indexes() []model.Index {
-	return []model.Index{{Fields: []string{"Code"}, Unique: true}}
+func (*TestAccount) Indexes() []modelregistry.Index {
+	return []modelregistry.Index{{Fields: []string{"Code"}, Unique: true}}
 }
 
 // TestAccountCols mirrors the generated column references of the account
@@ -679,7 +679,7 @@ type TestMarkedRecord struct {
 	Mark   *string `json:"mark" gorm:"size:191;not null"`
 	Amount int64   `json:"amount"`
 
-	model.Base
+	modelregistry.Base
 }
 
 func (*TestMarkedRecord) TableName() string { return "test_marked_records" }
@@ -721,7 +721,7 @@ func seedAccountExample() {
 type TestHookConfig struct {
 	Value string `json:"value" gorm:"size:191"`
 
-	model.Base
+	modelregistry.Base
 }
 
 func (*TestHookConfig) TableName() string { return "test_hook_configs" }
@@ -731,7 +731,7 @@ type TestHookGroup struct {
 	ConfigID string `json:"config_id" gorm:"size:191"`
 	Value    string `json:"value" gorm:"size:191"`
 
-	model.Base
+	modelregistry.Base
 }
 
 func (*TestHookGroup) TableName() string { return "test_hook_groups" }
@@ -752,7 +752,7 @@ type TestCategory struct {
 	ParentID string          `json:"parent_id" gorm:"size:191;not null;index:idx_parent_id"`
 	Children []*TestCategory `json:"children,omitempty" gorm:"foreignKey:ParentID"`
 	Parent   *TestCategory   `json:"parent,omitempty" gorm:"foreignKey:ParentID;references:ID"`
-	model.Base
+	modelregistry.Base
 }
 
 func (*TestCategory) TableName() string { return "test_categories" }
@@ -770,23 +770,23 @@ func TestMain(m *testing.M) {
 	testutil.Run(m, testutil.Server{
 		Database: testutil.DatabaseUnderTest(),
 		Register: func() {
-			model.Register[*TestUser]()
-			model.Register[*TestItem]()
-			model.Register[*TestPlainItem]()
-			model.Register[*TestUniqueItem]()
-			model.Register[*TestIndexerUniqueItem]()
-			model.Register[*TestMixedUniqueItem]()
-			model.Register[*TestAutoItem]()
-			model.Register[*TestHookConfig]()
-			model.Register[*TestHookGroup]()
-			model.Register[*TestCategory]()
-			model.Register[*TestAggregateRecord]()
-			model.Register[*TestRecordTag]()
-			model.Register[*TestTagNote]()
-			model.Register[*TestPayment]()
-			model.Register[*TestRefund]()
-			model.Register[*TestAccount]()
-			model.Register[*TestMarkedRecord]()
+			modelregistry.RegisterTable[*TestUser]()
+			modelregistry.RegisterTable[*TestItem]()
+			modelregistry.RegisterTable[*TestPlainItem]()
+			modelregistry.RegisterTable[*TestUniqueItem]()
+			modelregistry.RegisterTable[*TestIndexerUniqueItem]()
+			modelregistry.RegisterTable[*TestMixedUniqueItem]()
+			modelregistry.RegisterTable[*TestAutoItem]()
+			modelregistry.RegisterTable[*TestHookConfig]()
+			modelregistry.RegisterTable[*TestHookGroup]()
+			modelregistry.RegisterTable[*TestCategory]()
+			modelregistry.RegisterTable[*TestAggregateRecord]()
+			modelregistry.RegisterTable[*TestRecordTag]()
+			modelregistry.RegisterTable[*TestTagNote]()
+			modelregistry.RegisterTable[*TestPayment]()
+			modelregistry.RegisterTable[*TestRefund]()
+			modelregistry.RegisterTable[*TestAccount]()
+			modelregistry.RegisterTable[*TestMarkedRecord]()
 		},
 	})
 }

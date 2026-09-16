@@ -4,8 +4,8 @@ import (
 	"github.com/hydroan/gst/authn"
 	"github.com/hydroan/gst/consts"
 	modelmfa "github.com/hydroan/gst/internal/model/mfa"
+	"github.com/hydroan/gst/internal/modelregistry"
 	servicemfa "github.com/hydroan/gst/internal/service/mfa"
-	"github.com/hydroan/gst/model"
 	"github.com/hydroan/gst/module"
 )
 
@@ -30,7 +30,7 @@ import (
 func Register() {
 	servicemfa.SetAccountAdministrator(iamAccountAdministrator{})
 	authn.SetLoginSecondFactorVerifier(servicemfa.LoginSecondFactorVerifier)
-	model.Register[*modelmfa.TOTPDevice]()
+	modelregistry.RegisterTable[*modelmfa.TOTPDevice]()
 
 	module.Use(module.NewWrapper("mfa/totp/bind", "id", false, &servicemfa.TOTPBindService{}), module.CRUD(consts.PHASE_CREATE))
 	module.Use(module.NewWrapper("mfa/totp/confirm", "id", false, &servicemfa.TOTPConfirmService{}), module.CRUD(consts.PHASE_CREATE))

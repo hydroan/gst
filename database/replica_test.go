@@ -23,8 +23,8 @@ import (
 	gstmysql "github.com/hydroan/gst/database/mysql"
 	gstpostgres "github.com/hydroan/gst/database/postgres"
 	"github.com/hydroan/gst/internal/dbruntime"
+	"github.com/hydroan/gst/internal/modelregistry"
 	"github.com/hydroan/gst/internal/testutil/testcontainer"
-	"github.com/hydroan/gst/model"
 	"github.com/stretchr/testify/require"
 	"gorm.io/gorm"
 	gormlogger "gorm.io/gorm/logger"
@@ -60,7 +60,7 @@ func (l *roleCaptureLogger) last() string {
 type routedRecord struct {
 	Note string `json:"note" gorm:"size:191"`
 
-	model.Base
+	modelregistry.Base
 }
 
 func (*routedRecord) TableName() string { return "routed_records" }
@@ -71,7 +71,7 @@ func (*routedRecord) TableName() string { return "routed_records" }
 type replicaFirstRecord struct {
 	Note string `json:"note" gorm:"size:191"`
 
-	model.Base
+	modelregistry.Base
 }
 
 func (*replicaFirstRecord) TableName() string { return "replica_first_records" }

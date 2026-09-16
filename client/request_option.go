@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"github.com/google/go-querystring/query"
-	"github.com/hydroan/gst/model"
+	"github.com/hydroan/gst/internal/modelregistry"
 )
 
 // RequestOption populates per-request state such as query parameters. Options
@@ -19,8 +19,8 @@ type RequestOption func(*requestConfig)
 // requestConfig carries the per-request state RequestOption can populate.
 type requestConfig struct {
 	// query holds framework-owned query parameters. Parameter names come from
-	// the url tags on model.Query, the single authority for those names.
-	query model.Query
+	// the url tags on modelregistry.Query, the single authority for those names.
+	query modelregistry.Query
 	// values holds free-form business filter parameters set by WithQuery.
 	values url.Values
 }
