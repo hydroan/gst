@@ -51,6 +51,17 @@ func TestMemoryDatabaseOutlivesThePoolConnection(t *testing.T) {
 	})
 }
 
+// TestMemoryDatabaseIsSharedAcrossHandles proves a process has one in-memory
+// database: a second handle reads what the first wrote.
+func TestMemoryDatabaseIsSharedAcrossHandles(t *testing.T) {
+	withPoolLifetime(t, 0)
+	first, _ := openMemoryDatabase(t)
+	createSampleTable(t, first, "shared_samples")
+
+	second, _ := openMemoryDatabase(t)
+	requireSampleRows(t, second, "shared_samples", 1)
+}
+
 // withPoolLifetime sets the [database] lifetime and idle-time limits the pool
 // runs under to d, silences the SQL log, and restores both afterwards.
 func withPoolLifetime(t *testing.T, d time.Duration) {
