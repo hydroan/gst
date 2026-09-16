@@ -50,10 +50,6 @@ import (
 	"go.uber.org/zap"
 )
 
-// releaseTimeout bounds the statement that gives the name back once the work
-// has returned.
-const releaseTimeout = 5 * time.Second
-
 var (
 	// ErrHeld reports a lock held elsewhere — the work is running on another
 	// replica, or in another request of this one — which TryRun never waits
@@ -188,6 +184,10 @@ func start(context.Context) error {
 	}
 	return nil
 }
+
+// releaseTimeout bounds the statement that gives the name back once the work
+// has returned.
+const releaseTimeout = 5 * time.Second
 
 // TryRun runs fn under the lock, once, without waiting: ErrHeld when the lock
 // is held elsewhere, else what fn returned — or ErrLost, joined with fn's
