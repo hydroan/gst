@@ -3,7 +3,6 @@ package dbruntime
 import (
 	"context"
 	"database/sql"
-	"fmt"
 	"net"
 	"strconv"
 	"sync"
@@ -182,20 +181,4 @@ func markStatementRole(stmt *gorm.DB, primaryPool gorm.ConnPool) {
 	if span := trace.SpanFromContext(stmt.Statement.Context); span.IsRecording() {
 		span.SetAttributes(attribute.String("db.role", role))
 	}
-}
-
-// replicaPoolMetricNames names the pool metric of each node for one handle:
-// the primary keeps the base name, replicas append their index.
-func replicaPoolMetricNames(base string, nodes []DBNode) []string {
-	names := make([]string, 0, len(nodes))
-	replicaIndex := 0
-	for _, node := range nodes {
-		if node.Role == RolePrimary {
-			names = append(names, base)
-			continue
-		}
-		names = append(names, fmt.Sprintf("%s_replica_%d", base, replicaIndex))
-		replicaIndex++
-	}
-	return names
 }

@@ -20,7 +20,7 @@ type transactionContextKey struct{ base *gorm.DB }
 // Model hooks only receive a context.Context. They do not receive the database
 // wrapper or the raw *gorm.DB transaction, and that is intentional: model code
 // should keep using the framework entry point, for example
-// database.Database[*Config](ctx).Update(config). The transaction therefore has
+// database.Database[*Sample](ctx).Update(sample). The transaction therefore has
 // to travel through the hook context, and the database chain reads it back to
 // bind itself to the same transaction.
 //

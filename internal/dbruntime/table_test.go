@@ -6,17 +6,12 @@ import (
 	"slices"
 	"strings"
 	"sync"
-	"sync/atomic"
 	"testing"
 	"time"
 
-	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/internal/modelregistry"
 	"github.com/stretchr/testify/require"
-	"go.uber.org/zap"
-	"go.uber.org/zap/zapcore"
-	"go.uber.org/zap/zaptest/observer"
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
 )
@@ -234,180 +229,6 @@ func (l *statementLog) all() []string {
 	return slices.Clone(l.statements)
 }
 
-// TestStartupLockNameIsOnePerPurposeAndDatabase pins the lock's scope:
-// deployments on two databases of one MySQL server hold two locks, the
-// table preparation and the seeding of one deployment hold two, and every
-// name fits MySQL's 64-character limit whatever the database is called.
-func TestStartupLockNameIsOnePerPurposeAndDatabase(t *testing.T) {
-	require.NotEqual(t, startupLockName("migrate", "app"), startupLockName("migrate", "app_staging"))
-	require.NotEqual(t, startupLockName("migrate", "app"), startupLockName("seed", "app"))
-	require.True(t, strings.HasPrefix(startupLockName("migrate", "app"), "gst:migrate:"))
-	require.LessOrEqual(t, len(startupLockName("migrate", strings.Repeat("d", 64))), 64)
-	require.NotEqual(t, startupLockKey(startupLockName("migrate", "app")), startupLockKey(startupLockName("migrate", "app_staging")))
-}
-
-// TestSerializedRunsOneProcessAtATime proves the startup lock serializes a
-// step across the processes of a deployment: several handles — each a pool
-// of its own, the way separate processes look to the server — run the step
-// at once, and never two of them inside it together, on the dialects that
-// offer the lock.
-func TestSerializedRunsOneProcessAtATime(t *testing.T) {
-	withFastStartupLock(t)
-
-	for _, dialect := range []struct {
-		name config.DBType
-		open func(t *testing.T) *gorm.DB
-	}{
-		{name: config.DBMySQL, open: newMySQLDB},
-		{name: config.DBPostgres, open: newPostgresDB},
-	} {
-		t.Run(string(dialect.name), func(t *testing.T) {
-			const processes = 4
-			handles := make([]*gorm.DB, 0, processes)
-			for range processes {
-				handles = append(handles, dialect.open(t))
-			}
-
-			var inside, overlaps atomic.Int32
-			errs := make([]error, len(handles))
-			var wg sync.WaitGroup
-			for i, handle := range handles {
-				wg.Go(func() {
-					errs[i] = serialized(context.Background(), handle, "sample", func() error {
-						if inside.Add(1) > 1 {
-							overlaps.Add(1)
-						}
-						time.Sleep(50 * time.Millisecond)
-						inside.Add(-1)
-						return nil
-					})
-				})
-			}
-			wg.Wait()
-
-			for i, err := range errs {
-				require.NoErrorf(t, err, "process %d must take its turn", i)
-			}
-			require.Zero(t, overlaps.Load(), "no two processes may be inside the step at once")
-		})
-	}
-}
-
-// TestStartupLockWaitsForTheHolderAndSaysSo proves a process waits for the
-// holder of a startup lock however long it takes, says so while it waits,
-// and stops waiting when told to: with the lock held by another handle the
-// step does not start, a warning is logged once the report interval passes,
-// a waiter whose context ends returns with that ending instead of the
-// lock, and the step runs as soon as the holder lets go.
-func TestStartupLockWaitsForTheHolderAndSaysSo(t *testing.T) {
-	for _, dialect := range []struct {
-		name config.DBType
-		open func(t *testing.T) *gorm.DB
-	}{
-		{name: config.DBMySQL, open: newMySQLDB},
-		{name: config.DBPostgres, open: newPostgresDB},
-	} {
-		t.Run(string(dialect.name), func(t *testing.T) {
-			logs := withObservedGlobalLogger(t)
-			withFastStartupLock(t)
-
-			holder, waiter, quitter := dialect.open(t), dialect.open(t), dialect.open(t)
-			unlock, err := lockStartup(context.Background(), holder, "sample")
-			require.NoError(t, err)
-			unlocked := false
-			t.Cleanup(func() {
-				if !unlocked {
-					unlock()
-				}
-			})
-
-			entered := make(chan struct{})
-			returned := make(chan error, 1)
-			go func() {
-				returned <- serialized(context.Background(), waiter, "sample", func() error {
-					close(entered)
-					return nil
-				})
-			}()
-
-			select {
-			case <-entered:
-				t.Fatal("the step must not start while another process holds the lock")
-			case <-time.After(200 * time.Millisecond):
-			}
-			require.NotEmpty(t, logs.FilterMessage("still waiting for the startup lock held by another process").All(),
-				"a process waiting past the report interval must say so")
-
-			quitCtx, quit := context.WithCancelCause(context.Background())
-			quitReturned := make(chan error, 1)
-			go func() {
-				quitReturned <- serialized(quitCtx, quitter, "sample", func() error {
-					t.Error("a waiter told to stop must not run the step")
-					return nil
-				})
-			}()
-			// Told to stop once it is waiting, not before it starts to.
-			<-time.After(2 * startupLockWaitReport)
-			quit(errors.New("sample stop"))
-			select {
-			case err := <-quitReturned:
-				require.ErrorContains(t, err, "sample stop", "the waiter reports why its wait ended")
-			case <-time.After(5 * time.Second):
-				t.Fatal("a waiter told to stop must return")
-			}
-
-			unlock()
-			unlocked = true
-			select {
-			case <-entered:
-			case <-time.After(5 * time.Second):
-				t.Fatal("the step must start once the holder lets go")
-			}
-			require.NoError(t, <-returned)
-		})
-	}
-}
-
-// withFastStartupLock shortens the lock's poll and report intervals for the
-// test and restores them afterwards.
-func withFastStartupLock(t *testing.T) {
-	t.Helper()
-
-	poll, report := startupLockPoll, startupLockWaitReport
-	startupLockPoll, startupLockWaitReport = 20*time.Millisecond, 50*time.Millisecond
-	t.Cleanup(func() { startupLockPoll, startupLockWaitReport = poll, report })
-}
-
-// withObservedGlobalLogger routes the global logger into an observer for the
-// test and restores the previous one afterwards.
-func withObservedGlobalLogger(t *testing.T) *observer.ObservedLogs {
-	t.Helper()
-
-	core, logs := observer.New(zapcore.WarnLevel)
-	restore := zap.ReplaceGlobals(zap.New(core))
-	t.Cleanup(restore)
-	return logs
-}
-
-// withAutoMigrate overrides the auto-migrate option and restores it on cleanup.
-func withAutoMigrate(t *testing.T, enabled bool) {
-	t.Helper()
-	old := config.App.Database.AutoMigrate
-	config.App.Database.AutoMigrate = enabled
-	t.Cleanup(func() { config.App.Database.AutoMigrate = old })
-}
-
-// withSqlite selects sqlite as the database type and marks whether it is the
-// in-memory variant, restoring both options on cleanup.
-func withSqlite(t *testing.T, inMemory bool) {
-	t.Helper()
-	oldType, oldIsMemory := config.App.Database.Type, config.App.Sqlite.IsMemory
-	config.App.Database.Type, config.App.Sqlite.IsMemory = config.DBSqlite, inMemory
-	t.Cleanup(func() {
-		config.App.Database.Type, config.App.Sqlite.IsMemory = oldType, oldIsMemory
-	})
-}
-
 func TestWaitReturnsOnceTheQueueDrains(t *testing.T) {
 	// Wait reports back immediately unless InitDatabase started the processing
 	// goroutine; this stands in for that start without a database.
@@ -439,4 +260,23 @@ func TestWaitReturnsOnceTheQueueDrains(t *testing.T) {
 	case <-time.After(5 * time.Second):
 		t.Fatal("Wait did not return after the last table finished")
 	}
+}
+
+// withAutoMigrate overrides the auto-migrate option and restores it on cleanup.
+func withAutoMigrate(t *testing.T, enabled bool) {
+	t.Helper()
+	old := config.App.Database.AutoMigrate
+	config.App.Database.AutoMigrate = enabled
+	t.Cleanup(func() { config.App.Database.AutoMigrate = old })
+}
+
+// withSqlite selects sqlite as the database type and marks whether it is the
+// in-memory variant, restoring both options on cleanup.
+func withSqlite(t *testing.T, inMemory bool) {
+	t.Helper()
+	oldType, oldIsMemory := config.App.Database.Type, config.App.Sqlite.IsMemory
+	config.App.Database.Type, config.App.Sqlite.IsMemory = config.DBSqlite, inMemory
+	t.Cleanup(func() {
+		config.App.Database.Type, config.App.Sqlite.IsMemory = oldType, oldIsMemory
+	})
 }

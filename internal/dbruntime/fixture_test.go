@@ -6,10 +6,14 @@ import (
 	"strconv"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/internal/testutil/testcontainer"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
+	"go.uber.org/zap/zaptest/observer"
 	"gorm.io/driver/mysql"
 	"gorm.io/driver/postgres"
 	"gorm.io/driver/sqlite"
@@ -114,4 +118,25 @@ func newPostgresDB(t *testing.T) *gorm.DB {
 	require.NoError(t, sqlDB.Ping())
 	t.Cleanup(func() { _ = sqlDB.Close() })
 	return db
+}
+
+// withFastStartupLock shortens the lock's poll and report intervals for the
+// test and restores them afterwards.
+func withFastStartupLock(t *testing.T) {
+	t.Helper()
+
+	poll, report := startupLockPoll, startupLockWaitReport
+	startupLockPoll, startupLockWaitReport = 20*time.Millisecond, 50*time.Millisecond
+	t.Cleanup(func() { startupLockPoll, startupLockWaitReport = poll, report })
+}
+
+// withObservedGlobalLogger routes the global logger into an observer for the
+// test and restores the previous one afterwards.
+func withObservedGlobalLogger(t *testing.T) *observer.ObservedLogs {
+	t.Helper()
+
+	core, logs := observer.New(zapcore.WarnLevel)
+	restore := zap.ReplaceGlobals(zap.New(core))
+	t.Cleanup(restore)
+	return logs
 }

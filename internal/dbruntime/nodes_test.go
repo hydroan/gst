@@ -56,12 +56,3 @@ func TestParseReplicaEndpoint(t *testing.T) {
 		})
 	}
 }
-
-func TestReplicaPoolMetricNames(t *testing.T) {
-	names := replicaPoolMetricNames("default", []DBNode{
-		{Role: RolePrimary},
-		{Role: RoleReplica},
-		{Role: RoleReplica},
-	})
-	require.Equal(t, []string{"default", "default_replica_0", "default_replica_1"}, names)
-}
