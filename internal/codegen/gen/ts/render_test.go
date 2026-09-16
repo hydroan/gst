@@ -95,7 +95,8 @@ func TestWriteDocEscapesWhatWouldEndOrRetagTheComment(t *testing.T) {
 }
 
 func TestGenerateReportsRootsItCannotFind(t *testing.T) {
-	_, err := generateFixture(t,
+	_, err := generateFixture(
+		t,
 		TypeRef{PkgPath: fixtureModule + "/model/sample", Name: "Missing"},
 		TypeRef{PkgPath: "example.com/elsewhere", Name: "Sample"},
 	)
