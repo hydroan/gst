@@ -20,6 +20,7 @@ import (
 	"github.com/hydroan/gst/internal/execctx"
 	"github.com/hydroan/gst/internal/lease"
 	"github.com/hydroan/gst/internal/lifecycle"
+	"github.com/hydroan/gst/internal/modelregistry"
 	"github.com/hydroan/gst/internal/testutil"
 	"github.com/hydroan/gst/internal/testutil/testcontainer"
 	logpkg "github.com/hydroan/gst/logger"
@@ -48,9 +49,15 @@ func run(m *testing.M) int {
 	defer func() { _ = release() }()
 
 	logpkg.Gorm = gormlogger.Discard
+	// A write through the database chain logs its outcome; the fallback
+	// drops the entry in a process that never initialized the loggers.
+	logpkg.Database = pkgzap.Fallback("database")
 	if err := config.Init(); err != nil {
 		panic(err)
 	}
+	// Registered before the database opens, so its table is created with the
+	// lease table.
+	modelregistry.RegisterTable[*hookedRecord]()
 	if err := errors.Join(sqlite.Init(), mysql.Init(), postgres.Init()); err != nil {
 		panic(err)
 	}
@@ -115,11 +122,12 @@ func TestTryRunRefusesAHeldLock(t *testing.T) {
 }
 
 // TestTryRunRefusesAnOpenTransaction proves a try made inside an open
-// database transaction — on the default database or on any other instance —
-// is refused with ErrInTransaction before it claims anything: the lock would
-// be given back when the work returns, before the transaction carrying the
-// work's writes commits. The same try made outside the transaction then runs
-// as the name's first claim.
+// database transaction — a transaction closure on the default database or on
+// any other instance, or a model hook, which runs in the transaction its
+// write opens — is refused with ErrInTransaction before it claims anything:
+// the lock would be given back when the work returns, before the transaction
+// carrying the work's writes commits. The same try made outside the
+// transaction then runs as the name's first claim.
 func TestTryRunRefusesAnOpenTransaction(t *testing.T) {
 	withLockLoggerConfig(t)
 	resetLockState(t)
@@ -135,11 +143,15 @@ func TestTryRunRefusesAnOpenTransaction(t *testing.T) {
 
 	transactions := []struct {
 		name string
-		open func(ctx context.Context, fn func(ctx context.Context) error) error
+		// run makes the try inside the transaction under test.
+		run func(ctx context.Context, try func(ctx context.Context) error) error
 	}{
-		{name: "on the default database", open: database.Transaction},
-		{name: "on another instance", open: func(ctx context.Context, fn func(ctx context.Context) error) error {
-			return database.TransactionOn(ctx, other, fn)
+		{name: "in a transaction on the default database", run: database.Transaction},
+		{name: "in a transaction on another instance", run: func(ctx context.Context, try func(ctx context.Context) error) error {
+			return database.TransactionOn(ctx, other, try)
+		}},
+		{name: "in a model hook", run: func(ctx context.Context, try func(ctx context.Context) error) error {
+			return database.Database[*hookedRecord](ctx).Create(&hookedRecord{Name: "sample", afterCreate: try})
 		}},
 	}
 	for _, transaction := range transactions {
@@ -151,7 +163,7 @@ func TestTryRunRefusesAnOpenTransaction(t *testing.T) {
 			defer cancel()
 
 			ran := false
-			err := transaction.open(ctx, func(ctx context.Context) error {
+			err := transaction.run(ctx, func(ctx context.Context) error {
 				return l.TryRun(ctx, func(context.Context) error {
 					ran = true
 					return nil
@@ -169,6 +181,27 @@ func TestTryRunRefusesAnOpenTransaction(t *testing.T) {
 		return nil
 	}))
 	require.EqualValues(t, 1, term, "the refused tries must not have claimed the name")
+}
+
+// TestTryRunRunsAfterTheTransactionCommits proves the order the refusal asks
+// for works when the lock follows a transaction: a try registered to run
+// once the transaction commits receives the context from before it opened,
+// so it takes the lock and runs the work.
+func TestTryRunRunsAfterTheTransactionCommits(t *testing.T) {
+	withLockLoggerConfig(t)
+	resetLockState(t)
+	l := New("after-commit-work")
+
+	ran := false
+	require.NoError(t, database.Transaction(context.Background(), func(ctx context.Context) error {
+		return database.AfterCommit(ctx, func(ctx context.Context) error {
+			return l.TryRun(ctx, func(context.Context) error {
+				ran = true
+				return nil
+			})
+		})
+	}))
+	require.True(t, ran, "a try after the commit must run the work")
 }
 
 // TestTryRunReturnsTheWorkErrorAndRecoversAPanic proves the work's outcome
@@ -343,6 +376,24 @@ type tryObservation struct {
 	term     uint64
 	leased   bool
 	identity execctx.Identity
+}
+
+// hookedRecord is a model whose CreateAfter hook calls afterCreate, inside
+// the transaction the write opens for its hooks.
+type hookedRecord struct {
+	Name string `gorm:"size:191"`
+
+	// afterCreate is what the hook runs; unexported, so it is no column.
+	afterCreate func(ctx context.Context) error
+
+	modelregistry.Base
+}
+
+func (*hookedRecord) TableName() string { return "lock_hooked_records" }
+func (*hookedRecord) Purge() bool       { return true }
+
+func (r *hookedRecord) CreateAfter(ctx context.Context) error {
+	return r.afterCreate(ctx)
 }
 
 // clickhouseDialector stands in for a ClickHouse primary database: only its
