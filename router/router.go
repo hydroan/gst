@@ -34,8 +34,9 @@ import (
 // service.Register call, because a handler finds its service by route and
 // phase; generated code derives both from one design. cfg may be nil, and it
 // is copied, so one config can serve several routes. A blank route, or no
-// verbs, registers nothing.
-func Register[M types.Model, REQ types.Request, RSP types.Response](router gin.IRouter, route string, cfg *types.ControllerConfig[M], verbs ...consts.HTTPVerb) {
+// verbs, panics: the mistake stops the start instead of leaving an endpoint
+// that answers 404.
+func Register[M types.Model, REQ types.Request, RSP types.Response](router *gin.RouterGroup, route string, cfg *types.ControllerConfig[M], verbs ...consts.HTTPVerb) {
 	internalrouter.Register[M, REQ, RSP](router, route, cfg, verbs...)
 }
 

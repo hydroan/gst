@@ -9,28 +9,17 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestRegisterWithoutARouteOrVerbsRegistersNothing pins the two registrations
-// Register turns away as it documents: a blank route, and a route given no
-// verbs. Neither reaches the router group nor the route registry Routes reads.
-func TestRegisterWithoutARouteOrVerbsRegistersNothing(t *testing.T) {
-	cases := []struct {
-		name  string
-		route string
-		verbs []consts.HTTPVerb
-	}{
-		{name: "a blank route", route: "  ", verbs: []consts.HTTPVerb{consts.Create, consts.List}},
-		{name: "no verbs", route: "samples"},
-	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			gin.SetMode(gin.TestMode)
-			engine := gin.New()
-			registered := Routes()
+// TestRegisterPanicsOnABlankRouteOrNoVerbs pins the two registrations Register
+// refuses as declaration mistakes: a blank route, and a route given no verbs.
+// Both panic as they register, so the mistake stops the start instead of
+// leaving an endpoint that answers 404.
+func TestRegisterPanicsOnABlankRouteOrNoVerbs(t *testing.T) {
+	group := gin.New().Group(consts.APIPathPrefix)
 
-			Register[*modelregistry.Empty, *modelregistry.Empty, *modelregistry.Empty](engine.Group(consts.APIPathPrefix), tc.route, nil, tc.verbs...)
-
-			require.Empty(t, engine.Routes())
-			require.Equal(t, registered, Routes())
-		})
-	}
+	require.PanicsWithValue(t, "router: register requires a non-empty route", func() {
+		Register[*modelregistry.Empty, *modelregistry.Empty, *modelregistry.Empty](group, "  ", nil, consts.Create, consts.List)
+	})
+	require.PanicsWithValue(t, `router: register of route "samples" requires at least one verb`, func() {
+		Register[*modelregistry.Empty, *modelregistry.Empty, *modelregistry.Empty](group, "samples", nil)
+	})
 }

@@ -7,6 +7,7 @@ package router
 
 import (
 	"context"
+	"fmt"
 	"net"
 	"net/http"
 	gopath "path"
@@ -321,9 +322,16 @@ func Stop() {
 // it must therefore equal the route passed to the corresponding
 // service.Register call. The config is shallow-copied first, keeping a
 // caller-shared config safe for reuse across routes.
-func Register[M types.Model, REQ types.Request, RSP types.Response](router gin.IRouter, route string, cfg *types.ControllerConfig[M], verbs ...consts.HTTPVerb) {
-	if !validPath(route) {
-		return
+func Register[M types.Model, REQ types.Request, RSP types.Response](router *gin.RouterGroup, route string, cfg *types.ControllerConfig[M], verbs ...consts.HTTPVerb) {
+	// A registration that can register nothing is a mistake in the
+	// declaration: it panics as the process starts, the way the service
+	// registry does for a blank route, instead of leaving an endpoint that
+	// answers 404.
+	if strings.TrimSpace(route) == "" {
+		panic("router: register requires a non-empty route")
+	}
+	if len(verbs) == 0 {
+		panic(fmt.Sprintf("router: register of route %q requires at least one verb", route))
 	}
 	routed := types.ControllerConfig[M]{}
 	if cfg != nil {
@@ -333,20 +341,15 @@ func Register[M types.Model, REQ types.Request, RSP types.Response](router gin.I
 	register[M, REQ, RSP](router, buildPath(route), buildVerbMap(verbs...), &routed)
 }
 
-func register[M types.Model, REQ types.Request, RSP types.Response](router gin.IRouter, path string, verbMap map[consts.HTTPVerb]bool, cfg ...*types.ControllerConfig[M]) {
+func register[M types.Model, REQ types.Request, RSP types.Response](router *gin.RouterGroup, path string, verbMap map[consts.HTTPVerb]bool, cfg ...*types.ControllerConfig[M]) {
 	mu.Lock()
 	defer mu.Unlock()
 
-	var base string
-	if group, ok := router.(*gin.RouterGroup); ok {
-		base = group.BasePath()
-	} else {
-		panic("unknown router type")
-	}
+	base := router.BasePath()
 
 	// Everything except the public route group is documented as requiring
 	// authentication, which is the safe default for custom sub groups.
-	authRequired := router != gin.IRouter(pub)
+	authRequired := router != pub
 
 	if verbMap[consts.Create] {
 		endpoint := gopath.Join(base, path)
@@ -447,15 +450,6 @@ func register[M types.Model, REQ types.Request, RSP types.Response](router gin.I
 		middleware.MarkStreamingRoute(http.MethodGet, endpoint)
 		openapigen.Set[M, REQ, RSP](endpoint, authRequired, consts.SSE)
 	}
-}
-
-func validPath(route string) bool {
-	route = strings.TrimSpace(route)
-	if len(route) == 0 {
-		zap.S().Warn("empty route, skip register routes")
-		return false
-	}
-	return true
 }
 
 func registerRoute(endpoint, method string) {
