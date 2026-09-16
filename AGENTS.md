@@ -80,7 +80,7 @@ gst 是强约定框架（Apple 风格），不是自由框架（Windows 风格�
 
 - 只给项目用、或主要给项目用的能力，是顶层公开包，实现就写在包里，如 `bootstrap`、`database`、`controller`、`cronjob`、`leader`。
 - 只有框架自己用的包一律放 `internal`：项目开发者看不到，就不必理解这些细节。
-- 项目和框架都大量使用的能力，实现下沉到 internal 包，再由一个顶层包做 alias 转发，只转发项目用得到的那部分，框架私用的符号不暴露：根包 `gst` 转发 `internal/types`，`model` 转发 `internal/modelregistry`，`service` 转发 `internal/serviceregistry`，`sse` 转发 `internal/sse`。
+- 项目和框架都大量使用的能力，实现下沉到 internal 包，再由一个顶层包做 alias 转发，只转发项目用得到的那部分，框架私用的符号不暴露：根包 `gst` 转发 `internal/types`，`model` 转发 `internal/modelregistry`，`service` 转发 `internal/serviceregistry`，`sse` 转发 `internal/sse`，`router` 转发 `internal/router`，`middleware` 转发 `internal/middleware`。
 
 引用方向随之固定：internal 包（含测试）需要这些能力时直接引用对应的 internal 包，禁止反向 import 公开包，避免 internal → 公开 → internal 的依赖绕行和潜在 import 环；框架自身代码（含公开包）使用 internal 能力时同样直接引用 internal 实现包，公开转发包只服务业务项目。如果所需符号只存在于公开包（如曾经的 `service.Error`），把实现下沉到 internal、公开包改为转发，而不是让 internal 反向引用。
 

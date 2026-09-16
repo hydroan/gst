@@ -98,6 +98,64 @@ linters:
               desc: "Use github.com/cockroachdb/errors instead"
             - pkg: "github.com/pkg/errors"
               desc: "Use github.com/cockroachdb/errors instead"
+        # Framework code imports the internal packages behind the public
+        # forwarding packages; the forwards serve projects (AGENTS.md, package
+        # ownership and internal import direction). The files left out are the
+        # ones written as project code: godoc examples, the module sources
+        # gg module copy copies into a project (internal/model/<module> and
+        # internal/service/<module>), the middleware source files the module
+        # manifests name, and module/helloworld, the module example projects
+        # are pointed to; so is the external test of a forwarding package,
+        # which imports the package it tests. A trailing $ matches the package
+        # itself and not the packages under it.
+        forwarders:
+          files:
+            - "$all"
+            - "!**/example_*_test.go"
+            - "!**/modelschema/modelschema_test.go"
+            - "!**/internal/model/**"
+            - "!**/internal/service/**"
+            - "!**/middleware/iam_session.go"
+            - "!**/middleware/authz.go"
+            - "!**/module/helloworld/**"
+          deny:
+            - pkg: "github.com/hydroan/gst$"
+              desc: "framework code imports github.com/hydroan/gst/internal/types"
+            - pkg: "github.com/hydroan/gst/model$"
+              desc: "framework code imports github.com/hydroan/gst/internal/modelregistry"
+            - pkg: "github.com/hydroan/gst/service$"
+              desc: "framework code imports github.com/hydroan/gst/internal/serviceregistry"
+            - pkg: "github.com/hydroan/gst/sse$"
+              desc: "framework code imports github.com/hydroan/gst/internal/sse"
+            - pkg: "github.com/hydroan/gst/response$"
+              desc: "framework code imports github.com/hydroan/gst/internal/response"
+            - pkg: "github.com/hydroan/gst/requestctx$"
+              desc: "framework code imports github.com/hydroan/gst/internal/requestctx"
+            - pkg: "github.com/hydroan/gst/testutil$"
+              desc: "framework code imports github.com/hydroan/gst/internal/testutil"
+            - pkg: "github.com/hydroan/gst/router$"
+              desc: "framework code imports github.com/hydroan/gst/internal/router"
+            - pkg: "github.com/hydroan/gst/modelschema$"
+              desc: "framework code imports github.com/hydroan/gst/internal/modelschema"
+        # The same rule for the public middleware package, which the
+        # registration packages of copyable modules also import: the handler
+        # they register is a middleware source file gg module copy carries into
+        # a project, so it lives in the public package, while the registration
+        # call goes through internal/middleware.
+        middleware-forwarder:
+          files:
+            - "$all"
+            - "!**/example_*_test.go"
+            - "!**/internal/model/**"
+            - "!**/internal/service/**"
+            - "!**/middleware/iam_session.go"
+            - "!**/middleware/authz.go"
+            - "!**/module/helloworld/**"
+            - "!**/module/iam/register.go"
+            - "!**/module/authz/register.go"
+          deny:
+            - pkg: "github.com/hydroan/gst/middleware$"
+              desc: "framework code imports github.com/hydroan/gst/internal/middleware; only the handlers a module registers come from the public package"
 
     errcheck:
       check-type-assertions: true
