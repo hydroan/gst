@@ -57,36 +57,13 @@ import (
 	"slices"
 	"strings"
 	"sync"
-	"time"
 
 	"github.com/cockroachdb/errors"
-	"github.com/hydroan/gst/consts"
-	"github.com/hydroan/gst/internal/execctx"
 	"github.com/hydroan/gst/internal/lease"
 	"github.com/hydroan/gst/internal/lifecycle"
 	"github.com/hydroan/gst/internal/types"
 	pkgzap "github.com/hydroan/gst/logger/zap"
-	gstotel "github.com/hydroan/gst/otel"
-	"github.com/hydroan/gst/util"
-	"github.com/robfig/cron/v3"
-	"go.opentelemetry.io/otel/attribute"
-	"go.opentelemetry.io/otel/codes"
-	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
-)
-
-// parser reads the schedules: six fields with seconds first, plus the
-// descriptors — the syntax the scaffold documents.
-var parser = cron.NewParser(cron.Second | cron.Minute | cron.Hour | cron.Dom | cron.Month | cron.Dow | cron.Descriptor)
-
-const (
-	// catchUpLookback bounds how far back the start-up catch-up looks for a
-	// job's most recent instant: one older than this is history, not a
-	// missed round.
-	catchUpLookback = 24 * time.Hour
-	// releaseTimeout bounds the statement that gives an instant's lease back
-	// once the round is over.
-	releaseTimeout = 5 * time.Second
 )
 
 var (
@@ -109,34 +86,6 @@ var (
 	// after that would never be scheduled, so it fails fast instead.
 	current *scheduler
 )
-
-// job is one registered job with its parsed schedule.
-type job struct {
-	name     string
-	spec     string
-	fn       func(ctx context.Context) error
-	schedule cron.Schedule
-	// perInstance marks a job every replica runs on its own, without a
-	// lease; the default job runs once per instant across the deployment.
-	perInstance bool
-}
-
-// leaseName is the coordinated name the job's instants are claimed under.
-func (j *job) leaseName() string {
-	return "cron:" + j.name
-}
-
-// scheduler is one started scheduler: the jobs it runs, the loops it runs
-// them in, and what ends them.
-type scheduler struct {
-	jobs []*job
-	// cancel ends the context every loop runs on; stop calls it, and the
-	// process context ending does the same.
-	cancel context.CancelFunc
-	loops  sync.WaitGroup
-	// done closes once every loop has returned.
-	done chan struct{}
-}
 
 func init() {
 	// Importing this package is what enables scheduling: through the
@@ -260,76 +209,6 @@ func newJob(fn func(ctx context.Context) error, spec, name string) (*job, error)
 	return j, nil
 }
 
-// zoneOf returns the zone a schedule names with its CRON_TZ= or TZ= prefix —
-// the prefixes the parser reads — and whether it names one at all.
-func zoneOf(spec string) (zone string, named bool) {
-	first, _, _ := strings.Cut(spec, " ")
-	if zone, named = strings.CutPrefix(first, "CRON_TZ="); named {
-		return zone, true
-	}
-	return strings.CutPrefix(first, "TZ=")
-}
-
-// inUTC pins a parsed schedule to UTC: an expression that names no zone is
-// read in UTC instead of the process's zone, and "@every" runs on the epoch
-// grid instead of counting from the process start. Every replica then
-// computes the same instants for a job.
-func inUTC(s cron.Schedule) cron.Schedule {
-	switch s := s.(type) {
-	case *cron.SpecSchedule:
-		// The parser leaves Location at time.Local for an expression that
-		// names no zone; one with a CRON_TZ= prefix gets that zone, which
-		// stays. An expression naming Local itself never gets here — newJob
-		// refuses it — so time.Local can only mean no zone was named.
-		if s.Location == time.Local {
-			s.Location = time.UTC
-		}
-		return s
-	case cron.ConstantDelaySchedule:
-		return everySchedule{period: s.Delay}
-	default:
-		return s
-	}
-}
-
-// everySchedule fires every period, on the multiples of the period counted
-// from the Unix epoch: "@every 5m" runs at :00, :05, :10 on every replica
-// alike, where counting from the process start — what the parser's own
-// schedule does — puts each replica on a grid of its own.
-type everySchedule struct {
-	period time.Duration
-}
-
-// Next returns the first grid instant after t.
-func (s everySchedule) Next(t time.Time) time.Time {
-	period := s.period.Nanoseconds()
-	if period <= 0 {
-		return time.Time{}
-	}
-	return time.Unix(0, (t.UnixNano()/period+1)*period).UTC()
-}
-
-// previousInstant returns the most recent instant of s at or before now,
-// looking back catchUpLookback at most. The schedule only answers "the first
-// instant after t", so the instant is found by bisection over t: the answer
-// stays at or before now for every t before the instant and moves past now
-// from the instant on.
-func previousInstant(s cron.Schedule, now time.Time) (time.Time, bool) {
-	lo, hi := now.Add(-catchUpLookback), now
-	if first := s.Next(lo); first.IsZero() || first.After(now) {
-		return time.Time{}, false
-	}
-	for hi.Sub(lo) > time.Millisecond {
-		mid := lo.Add(hi.Sub(lo) / 2)
-		if next := s.Next(mid); !next.IsZero() && !next.After(now) {
-			lo = mid
-		} else {
-			hi = mid
-		}
-	}
-	return s.Next(lo), true
-}
-
 // start brings the scheduler up with every registered job, on a context
 // derived from ctx. The context is the process context: its cancellation is
 // the first sign of shutdown, and halts scheduling right then so no round
@@ -397,6 +276,18 @@ func stop(ctx context.Context) error {
 	return s.stop(ctx)
 }
 
+// scheduler is one started scheduler: the jobs it runs, the loops it runs
+// them in, and what ends them.
+type scheduler struct {
+	jobs []*job
+	// cancel ends the context every loop runs on; stop calls it, and the
+	// process context ending does the same.
+	cancel context.CancelFunc
+	loops  sync.WaitGroup
+	// done closes once every loop has returned.
+	done chan struct{}
+}
+
 // newScheduler builds a scheduler for jobs; start runs it.
 func newScheduler(jobs []*job) *scheduler {
 	return &scheduler{jobs: jobs, done: make(chan struct{})}
@@ -426,287 +317,5 @@ func (s *scheduler) stop(ctx context.Context) error {
 		return nil
 	case <-ctx.Done():
 		return errors.Wrap(ctx.Err(), "gave up waiting for in-flight jobs")
-	}
-}
-
-// loop runs the job at each instant of its schedule, starting with next,
-// until ctx ends; a job under a lease first catches up the most recent
-// instant no replica ran. The instant after a run — the catch-up included —
-// is computed from the moment the run ended, so instants that passed while
-// a run was in flight are skipped, never piled on top of it — a slow round
-// must not multiply its downstream calls — and every skip is logged with the
-// number of instants it cost, so a job that keeps overrunning its period
-// does not quietly run less often. A schedule with no instant left — a day
-// that never comes — ends the loop.
-func (j *job) loop(ctx context.Context, next time.Time) {
-	if !j.perInstance {
-		if ran, ok := j.catchUp(ctx); ok {
-			next = j.nextAfter(ran)
-		}
-	}
-	for {
-		if next.IsZero() {
-			log.Warnz("cronjob has no further instant", zap.String("name", j.name), zap.String("spec", j.spec))
-			return
-		}
-		if !clk.Wait(ctx, next) {
-			return
-		}
-		j.runInstant(ctx, next, false)
-		next = j.nextAfter(next)
-	}
-}
-
-// nextAfter returns the instant to wait for once the round for ran ended:
-// the first instant after now — never before ran itself, so a wall clock
-// set back cannot hand the same instant out again — logging the instants
-// the round overran.
-func (j *job) nextAfter(ran time.Time) time.Time {
-	after := clk.Now()
-	if after.Before(ran) {
-		after = ran
-	}
-	following := j.schedule.Next(after)
-	if skipped := j.instantsBetween(ran, following); skipped > 0 {
-		log.Warnz("cronjob skipped instants", zap.String("name", j.name), zap.String("spec", j.spec), zap.Int("skipped", skipped), zap.Time("after", ran), zap.Time("next", following))
-	}
-	return following
-}
-
-// instantsBetween counts the instants of the schedule after from and before
-// to: the ones a run that ended after them skipped.
-func (j *job) instantsBetween(from, to time.Time) int {
-	skipped := 0
-	for t := j.schedule.Next(from); !t.IsZero() && t.Before(to); t = j.schedule.Next(t) {
-		skipped++
-	}
-	return skipped
-}
-
-// catchUp runs, once and on one replica, the most recent instant of the job
-// that no replica ran — what a rolling deployment or an outage owes the job
-// — and returns that instant and whether a round ran for it. The conditions,
-// all of which must hold: the job has run before, so its lease row exists (a
-// job never run starts with its next instant: the instants before its first
-// deployment were never its to run); the most recent instant that passed
-// lies within catchUpLookback; and no replica claimed that instant — the
-// claim itself decides this last one, so replicas racing for the same
-// catch-up settle it the way they settle any instant.
-func (j *job) catchUp(ctx context.Context) (time.Time, bool) {
-	prev, ok := previousInstant(j.schedule, clk.Now())
-	if !ok {
-		return time.Time{}, false
-	}
-	last, found, err := lease.LastSlot(ctx, j.leaseName())
-	if err != nil {
-		// A process told to stop as it starts is not a database failure.
-		if ctx.Err() == nil {
-			log.Errorz("cronjob could not read its last instant", zap.Error(err), zap.String("name", j.name), zap.String("spec", j.spec))
-		}
-		return time.Time{}, false
-	}
-	if !found || !last.Before(prev) {
-		return time.Time{}, false
-	}
-	return prev, j.runInstant(ctx, prev, true)
-}
-
-// runInstant runs the round for at and reports whether a round ran. A
-// per-instance job runs it outright; a job shared across the deployment
-// first claims the instant's lease and runs only when it wins, under the
-// lease — its context ends with the lease, its database.Transaction calls
-// verify the lease first, and a round that will not stop once the lease is
-// lost fails the process, see lease.Run — then gives the lease back so the
-// next instant is free at once.
-func (j *job) runInstant(ctx context.Context, at time.Time, catchUp bool) bool {
-	if j.perInstance {
-		// The round logs its own outcome.
-		_ = j.run(ctx, at)
-		return true
-	}
-
-	h, claimed, err := lease.ClaimSlot(ctx, j.leaseName(), at)
-	if err != nil {
-		// An instant that falls on the moment the process is told to stop
-		// is not claimed, and that is not a database failure.
-		if ctx.Err() == nil {
-			log.Errorz("cronjob could not claim its instant", zap.Error(err), zap.String("name", j.name), zap.String("spec", j.spec), zap.Time("at", at))
-		}
-		return false
-	}
-	if !claimed {
-		log.Debugz("cronjob instant claimed elsewhere", zap.String("name", j.name), zap.String("spec", j.spec), zap.Time("at", at))
-		return false
-	}
-
-	fields := []zap.Field{zap.Uint64("term", h.Term())}
-	if catchUp {
-		fields = append(fields, zap.Bool("catch_up", true))
-	}
-	held, stopHold := lease.Hold(ctx, h, log)
-	// The round logs its own outcome; Run's is the same error, already logged.
-	runErr := lease.Run(lease.WithHandle(held, h), h, log, func(ctx context.Context) error {
-		return j.run(ctx, at, fields...)
-	})
-	lost := errors.Is(context.Cause(held), lease.ErrLost)
-	stopHold()
-
-	if lost {
-		// The round outlived its lease — the renewals could not keep it, or
-		// found it taken — and its context ended with it. A job that
-		// returned the ending has the loss on its own entry already; one
-		// that returned nothing, or a failure of its own, has it recorded
-		// here. Either way the name is no longer this round's to give back.
-		if !lifecycle.Interrupted(held, runErr) {
-			log.Warnz("cronjob lost its lease during the round", zap.String("name", j.name), zap.String("spec", j.spec), zap.Time("at", at), zap.Uint64("term", h.Term()))
-		}
-		return true
-	}
-
-	// The release outlives the round's context on purpose: at shutdown that
-	// context is already gone, and the lease must still be handed back so
-	// another replica can take the next instant without waiting it out.
-	releaseCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), releaseTimeout)
-	defer cancel()
-	if err := h.Release(releaseCtx); err != nil {
-		log.Warnz("cronjob could not release its lease", zap.Error(err), zap.String("name", j.name), zap.Time("at", at))
-	}
-	return true
-}
-
-// run executes the round scheduled for at and returns its outcome, logged
-// already. Round identity, panic recovery, timing and outcome logging live
-// here; fields are added to every outcome entry.
-//
-// A failure goes out as a typed error field, never formatted into the
-// message: the logging layer derives error_stack from that field, and for a
-// job this entry is the only record of the failure, so it has to locate the
-// failing line and not just name the job. Every outcome entry carries the
-// round's trace id — the id the round's statements and log lines carry too —
-// so the round is found again from any of them.
-func (j *job) run(ctx context.Context, at time.Time, fields ...zap.Field) (runErr error) {
-	ctx, traceID, end := beginRound(ctx, j.name)
-	round := append([]zap.Field{zap.String("name", j.name), zap.String("spec", j.spec), zap.String(consts.TRACE_ID, traceID), zap.Time("at", at)}, fields...)
-	// Registered before the recovery below so that it runs after it: a
-	// panic is recorded on the round's span as its outcome.
-	defer func() { end(runErr, interruption(ctx, runErr)) }()
-	defer func() {
-		if r := recover(); r != nil {
-			runErr = util.PanicError(r)
-			log.Errorz("cronjob panicked", append([]zap.Field{zap.Error(runErr)}, round...)...)
-		}
-	}()
-	begin := time.Now()
-	runErr = j.fn(ctx)
-	round = append(round, util.LogDuration(time.Since(begin)))
-	switch reason := interruption(ctx, runErr); {
-	case runErr == nil:
-		log.Infoz("finished cronjob", round...)
-	case reason != "":
-		log.Warnz("cronjob interrupted", append([]zap.Field{zap.String("reason", reason)}, round...)...)
-	default:
-		log.Errorz("finished cronjob with error", append([]zap.Field{zap.Error(runErr)}, round...)...)
-	}
-	return runErr
-}
-
-// interruption names why a round ended before its work did — the lease was
-// lost, or the process is shutting down — and is empty for a round that
-// ended on its own, a failure of its own included. A job stopping because
-// its context ended is doing what it is asked to do then, not failing; a
-// rolling deployment ends a long round this way every time. What counts is
-// decided by lifecycle.Interrupted: the context's own ending, wrapped or
-// not, and nothing else — a job that also reports a failure of its own
-// failed, and the entry carries that failure.
-func interruption(ctx context.Context, err error) string {
-	if !lifecycle.Interrupted(ctx, err) {
-		return ""
-	}
-	if errors.Is(context.Cause(ctx), lease.ErrLost) {
-		return "lease lost"
-	}
-	return "shutting down"
-}
-
-// beginRound opens one round of the named job on parent and returns the
-// context the job runs on, the round's trace id, and the function that
-// closes the round with its outcome: the error the job returned, and the
-// interruption that ended the round, if one did.
-//
-// The context carries the round's identity — the job name and the trace id —
-// for everything the job does downstream: statement comments, the SQL log and
-// the business log annotate themselves with it, the way they do with a
-// request's. With tracing on the round also gets a root span, the parent of
-// every span the job's operations open, and the trace id is that span's; with
-// tracing off the id is generated, the way the request middleware generates
-// one.
-//
-// The span's status says what the log entry says: a round that finished is
-// ok, one that failed is an error, and one that was interrupted is neither —
-// it carries an event naming the interruption and leaves the status unset,
-// so a trace search for failed rounds does not turn up every deployment.
-func beginRound(parent context.Context, name string) (ctx context.Context, traceID string, end func(err error, interruption string)) {
-	ctx = parent
-	var span trace.Span
-	if gstotel.IsEnabled() {
-		ctx, span = gstotel.StartSpan(ctx, gstotel.OperationSpanName("cronjob", name))
-		traceID = span.SpanContext().TraceID().String()
-	} else {
-		traceID = util.TraceID()
-	}
-	ctx = execctx.WithCronjob(ctx, name, traceID)
-
-	return ctx, traceID, func(err error, interruption string) {
-		if span == nil {
-			return
-		}
-		if gstotel.IsSpanRecording(span) {
-			switch {
-			case err == nil:
-				span.SetStatus(codes.Ok, "")
-			case interruption != "":
-				span.AddEvent("interrupted", trace.WithAttributes(attribute.String("reason", interruption)))
-			default:
-				span.SetStatus(codes.Error, err.Error())
-				gstotel.RecordError(span, err)
-			}
-		}
-		span.End()
-	}
-}
-
-// clock is the time as the scheduler sees it: the moment now, and a wait
-// until a moment. The scheduler never sleeps on its own, so a test can hand
-// it a clock it drives by hand.
-type clock interface {
-	Now() time.Time
-	// Wait blocks until t has passed or ctx ends, and reports whether t
-	// passed.
-	Wait(ctx context.Context, t time.Time) bool
-}
-
-// systemClock is the clock of a running process.
-type systemClock struct{}
-
-func (systemClock) Now() time.Time {
-	return time.Now()
-}
-
-func (systemClock) Wait(ctx context.Context, t time.Time) bool {
-	if ctx.Err() != nil {
-		return false
-	}
-	delay := time.Until(t)
-	if delay <= 0 {
-		return true
-	}
-
-	timer := time.NewTimer(delay)
-	defer timer.Stop()
-	select {
-	case <-timer.C:
-		return true
-	case <-ctx.Done():
-		return false
 	}
 }
