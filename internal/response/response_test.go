@@ -13,6 +13,7 @@ import (
 	ginjson "github.com/gin-gonic/gin/codec/json"
 	"github.com/hydroan/gst/consts"
 	"github.com/hydroan/gst/internal/serviceregistry"
+	"github.com/hydroan/gst/internal/testutil/swap"
 )
 
 // TestJSONEncodesWithStandardLibrary pins the response envelope to
@@ -22,12 +23,7 @@ import (
 // framework's models declare absent.
 func TestJSONEncodesWithStandardLibrary(t *testing.T) {
 	gin.SetMode(gin.TestMode)
-	// gin's codec is process-wide state: t.Setenv makes the testing package
-	// refuse t.Parallel here, so no other test runs while it is swapped.
-	t.Setenv("GST_TEST_SERIAL_GUARD", "gin JSON codec swapped")
-	restore := ginjson.API
-	ginjson.API = swappedGinCodec{}
-	t.Cleanup(func() { ginjson.API = restore })
+	swap.Value(t, &ginjson.API, ginjson.Core(swappedGinCodec{}))
 
 	type sample struct {
 		Name      string    `json:"name"`

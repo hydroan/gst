@@ -16,6 +16,7 @@ import (
 	"github.com/hydroan/gst/consts"
 	"github.com/hydroan/gst/internal/modelregistry"
 	"github.com/hydroan/gst/internal/serviceregistry"
+	"github.com/hydroan/gst/internal/testutil/swap"
 	"github.com/hydroan/gst/internal/types"
 	"github.com/hydroan/gst/logger"
 	"github.com/hydroan/gst/logger/zap"
@@ -304,12 +305,7 @@ func TestClientSafeBindError(t *testing.T) {
 // nil interface and panicking on every request body.
 func TestBindJSONRequestHonorsDisabledValidator(t *testing.T) {
 	gin.SetMode(gin.TestMode)
-	// binding.Validator is process-wide state: t.Setenv makes the testing
-	// package refuse t.Parallel here, so no other test runs while it is nil.
-	t.Setenv("GST_TEST_SERIAL_GUARD", "gin validator disabled")
-	restore := binding.Validator
-	binding.Validator = nil
-	t.Cleanup(func() { binding.Validator = restore })
+	swap.Value(t, &binding.Validator, nil)
 
 	req := httptest.NewRequest(http.MethodPost, "/bind-probes",
 		strings.NewReader(`{"items":[{"name":"first"}]}`))
@@ -328,12 +324,7 @@ func TestBindJSONRequestHonorsDisabledValidator(t *testing.T) {
 // which only encoding/json's error type carries.
 func TestBindJSONRequestDecodesWithStandardLibrary(t *testing.T) {
 	gin.SetMode(gin.TestMode)
-	// gin's codec is process-wide state: t.Setenv makes the testing package
-	// refuse t.Parallel here, so no other test runs while it is swapped.
-	t.Setenv("GST_TEST_SERIAL_GUARD", "gin JSON codec swapped")
-	restore := ginjson.API
-	ginjson.API = swappedGinCodec{}
-	t.Cleanup(func() { ginjson.API = restore })
+	swap.Value(t, &ginjson.API, ginjson.Core(swappedGinCodec{}))
 
 	bind := func(body string) (*normalizeProbeReq, error) {
 		req := httptest.NewRequest(http.MethodPost, "/bind-probes", strings.NewReader(body))

@@ -43,6 +43,7 @@ import (
 
 	"github.com/hydroan/gst/client"
 	testutil "github.com/hydroan/gst/internal/testutil"
+	"github.com/hydroan/gst/internal/testutil/swap"
 	"github.com/hydroan/gst/internal/types"
 )
 
@@ -177,11 +178,13 @@ func RequireSoftDeleted[T any, M interface {
 // SwapValue sets *field to value for the duration of the test and restores
 // the previous value on cleanup, the way t.Setenv does for environment
 // variables. It swaps process-wide state such as bootstrapped configuration
-// fields, so tests touching the same field must not run in parallel.
+// fields, so the test must not run in parallel with any other: like
+// t.Setenv, SwapValue panics in a test that called t.Parallel, and a later
+// t.Parallel call panics too.
 func SwapValue[T any](t *testing.T, field *T, value T) {
 	t.Helper()
 
-	testutil.SwapValue(t, field, value)
+	swap.Value(t, field, value)
 }
 
 // DownloadCSV downloads path as a CSV export through cli and parses the
