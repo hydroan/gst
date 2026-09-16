@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"fmt"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -104,6 +105,111 @@ func TestHoldGivesUpWhenARenewalCannotGetAConnection(t *testing.T) {
 	awaitDone(held, t)
 	require.ErrorIs(t, context.Cause(held), ErrLost)
 	require.GreaterOrEqual(t, time.Since(begin), localDeadline, "a renewal kept waiting must not end the lease before the deadline")
+}
+
+// TestHoldKeepsTheLeaseThroughAFailedRenewal proves a failed renewal is
+// retried before the deadline: in the proportions a deployment runs, one
+// renewal failing — a connection reset, a database failing over — and the
+// next succeeding keeps the lease.
+func TestHoldKeepsTheLeaseThroughAFailedRenewal(t *testing.T) {
+	withProductionProportions(t)
+	ctx := context.Background()
+	name := uniqueName(t)
+
+	holder, claimed, err := Claim(ctx, name)
+	require.NoError(t, err)
+	require.True(t, claimed)
+	t.Cleanup(func() { _ = holder.Release(ctx) })
+
+	withUnsteadyDatabase(t, &unsteadyPool{failures: 1})
+	held, stop := Hold(ctx, holder, newHolderLog())
+	defer stop()
+
+	select {
+	case <-held.Done():
+		t.Fatalf("the lease ended although only one renewal failed: %v", context.Cause(held))
+	case <-time.After(2 * localDeadline):
+	}
+}
+
+// TestHoldKeepsTheLeaseThroughSlowRenewals proves renewals that answer slowly
+// but answer keep the lease: in the proportions a deployment runs, every
+// renewal taking 3 of the 10 seconds of the local deadline — a pool under
+// load, a primary waiting on its replicas — keeps it.
+func TestHoldKeepsTheLeaseThroughSlowRenewals(t *testing.T) {
+	withProductionProportions(t)
+	ctx := context.Background()
+	name := uniqueName(t)
+
+	holder, claimed, err := Claim(ctx, name)
+	require.NoError(t, err)
+	require.True(t, claimed)
+	t.Cleanup(func() { _ = holder.Release(ctx) })
+
+	withUnsteadyDatabase(t, &unsteadyPool{delay: localDeadline * 3 / 10})
+	held, stop := Hold(ctx, holder, newHolderLog())
+	defer stop()
+
+	select {
+	case <-held.Done():
+		t.Fatalf("the lease ended although every renewal succeeded: %v", context.Cause(held))
+	case <-time.After(2 * localDeadline):
+	}
+}
+
+// TestHoldKeepsTheLeaseBetweenTransactionsOnOneConnection proves the renewals
+// get their turn between the work's own transactions when the pool holds a
+// single connection, as SQLite's does: in the proportions a deployment runs,
+// transactions back to back that each take 4 of the 10 seconds of the local
+// deadline keep the lease. The pool is narrowed to one connection.
+func TestHoldKeepsTheLeaseBetweenTransactionsOnOneConnection(t *testing.T) {
+	withProductionProportions(t)
+	ctx := context.Background()
+	name := uniqueName(t)
+
+	holder, claimed, err := Claim(ctx, name)
+	require.NoError(t, err)
+	require.True(t, claimed)
+	t.Cleanup(func() { _ = holder.Release(ctx) })
+
+	pool, err := dbruntime.DB.DB()
+	require.NoError(t, err)
+	limit := pool.Stats().MaxOpenConnections
+	pool.SetMaxOpenConns(1)
+	t.Cleanup(func() { pool.SetMaxOpenConns(limit) })
+
+	held, stop := Hold(ctx, holder, newHolderLog())
+	defer stop()
+
+	working, worked := make(chan struct{}), make(chan error, 1)
+	go func() {
+		for {
+			select {
+			case <-working:
+				worked <- nil
+				return
+			default:
+			}
+			tx := dbruntime.DB.Begin()
+			if tx.Error != nil {
+				worked <- tx.Error
+				return
+			}
+			time.Sleep(localDeadline * 4 / 10)
+			if err := tx.Commit().Error; err != nil {
+				worked <- err
+				return
+			}
+		}
+	}()
+
+	select {
+	case <-held.Done():
+		t.Errorf("the lease ended between the work's transactions: %v", context.Cause(held))
+	case <-time.After(2 * localDeadline):
+	}
+	close(working)
+	require.NoError(t, <-worked)
 }
 
 // TestHoldEndsWithItsParent proves the held context ends with the context
@@ -504,6 +610,45 @@ func (delayedFailingPool) QueryRowContext(context.Context, string, ...any) *sql.
 
 func (delayedFailingPool) PrepareContext(context.Context, string) (*sql.Stmt, error) {
 	return nil, errPoolFailure
+}
+
+// unsteadyPool passes statements through to the suite's pool, failing the
+// first failures of them at once and holding each of the others back for
+// delay first: the database that drops a statement now and then, or answers
+// slowly.
+type unsteadyPool struct {
+	gorm.ConnPool
+
+	failures int32
+	delay    time.Duration
+}
+
+func (p *unsteadyPool) ExecContext(ctx context.Context, query string, args ...any) (sql.Result, error) {
+	if atomic.AddInt32(&p.failures, -1) >= 0 {
+		return nil, errPoolFailure
+	}
+	select {
+	case <-time.After(p.delay):
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	}
+	return p.ConnPool.ExecContext(ctx, query, args...)
+}
+
+// withUnsteadyDatabase routes the engine's statements through pool, set over
+// the suite's own, and restores the suite's database afterwards. The route
+// is a session of its own, so the suite's handle is left untouched.
+func withUnsteadyDatabase(t *testing.T, pool *unsteadyPool) {
+	t.Helper()
+
+	original := dbruntime.DB
+	pool.ConnPool = original.ConnPool
+	unsteady := original.WithContext(context.Background())
+	unsteady.ConnPool = pool
+	unsteady.Statement.ConnPool = pool
+
+	dbruntime.DB = unsteady
+	t.Cleanup(func() { dbruntime.DB = original })
 }
 
 // withDelayedFailingDatabase points the engine at a handle whose statements

@@ -178,10 +178,8 @@ func (w *work) call(ctx context.Context) (err error) {
 
 // stop waits for fn to return, for as long as ctx allows.
 func (w *work) stop(ctx context.Context) error {
-	select {
-	case <-w.done:
-		return nil
-	case <-ctx.Done():
+	if !lifecycle.Await(ctx, w.done) {
 		return errors.Newf("component %q has not returned", w.name)
 	}
+	return nil
 }

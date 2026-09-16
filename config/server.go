@@ -66,10 +66,12 @@ type Server struct {
 	// It is zero by default, which begins the drain at once. A deployment
 	// whose load balancer routes by readiness sets it to that balancer's
 	// polling interval plus a margin: readiness starts failing the moment the
-	// process is told to stop — by a signal, or by a listener that failed —
-	// and this window is what the balancer needs to notice and stop opening
-	// new connections here. Without it the process can refuse connections the
-	// balancer is still sending. A second signal ends the wait.
+	// process is told to stop — by a signal, or by a listener or a component
+	// that failed — and this window is what the balancer needs to notice and
+	// stop opening new connections here. Without it the process can refuse
+	// connections the balancer is still sending. A second signal ends the
+	// wait, and a process that must not wait on anything — work that will not
+	// stop once its lease is lost — skips it.
 	ShutdownDelay time.Duration `json:"shutdown_delay" mapstructure:"shutdown_delay" ini:"shutdown_delay" yaml:"shutdown_delay"`
 
 	ReadTimeout  time.Duration `json:"read_timeout" mapstructure:"read_timeout" ini:"read_timeout" yaml:"read_timeout"`

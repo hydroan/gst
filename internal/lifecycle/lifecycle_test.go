@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/config"
@@ -190,6 +191,72 @@ func TestStopFailureDoesNotStopTheOthers(t *testing.T) {
 	require.Equal(t, []string{"start a", "start b", "stop b", "stop a"}, events)
 }
 
+// TestStopDoesNotWaitForComponentsOnceTheProcessFailsNow proves the waits
+// FailNow rules out are gone from Stop: a component stops on a context that
+// has already ended, and one still waiting for its work when the process
+// fails now stops waiting at once, while the providers get what is left of
+// the window.
+func TestStopDoesNotWaitForComponentsOnceTheProcessFailsNow(t *testing.T) {
+	resetRegistry(t)
+
+	errFailure := errors.New("sample failure")
+	stuck := make(chan struct{})
+	causes := make(chan error, 2)
+	Register(Component{
+		Name:  "sample-worker",
+		Stage: StageComponent,
+		Start: func(context.Context) error { return nil },
+		Stop: func(ctx context.Context) error {
+			close(stuck)
+			<-ctx.Done()
+			causes <- context.Cause(ctx)
+			return nil
+		},
+	})
+	Register(Component{
+		Name:  "sample-client",
+		Stage: StageProvider,
+		Start: func(context.Context) error { return nil },
+		Stop: func(ctx context.Context) error {
+			causes <- ctx.Err()
+			return nil
+		},
+	})
+	require.NoError(t, Start(context.Background(), StageProvider))
+	require.NoError(t, Start(context.Background(), StageComponent))
+
+	stopped := make(chan struct{})
+	go func() {
+		defer close(stopped)
+		Stop(context.Background())
+	}()
+	<-stuck
+	FailNow(errFailure)
+	select {
+	case <-stopped:
+	case <-time.After(5 * time.Second):
+		t.Fatal("Stop kept waiting for a component after the process failed now")
+	}
+	require.ErrorIs(t, <-causes, errFailure, "the component's stop context must end with the failure")
+	require.NoError(t, <-causes, "the providers must get what is left of the window")
+}
+
+// TestAwaitReportsWorkThatReturnedOverAnEndedWindow proves Await answers for
+// the work first: work that has returned is never reported as given up on,
+// even when the window to wait for it has ended too, while work still
+// running is given up on once the window ends.
+func TestAwaitReportsWorkThatReturnedOverAnEndedWindow(t *testing.T) {
+	ended, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	returned := make(chan struct{})
+	close(returned)
+	for range 100 {
+		require.True(t, Await(ended, returned), "work that returned must not be given up on")
+	}
+	require.False(t, Await(ended, make(chan struct{})), "work still running is given up on once the window ends")
+}
+
 // TestComponentWithoutStopIsSkippedAtShutdown proves Stop is optional: a
 // component that declared none is simply left alone.
 func TestComponentWithoutStopIsSkippedAtShutdown(t *testing.T) {
@@ -310,6 +377,27 @@ func TestFailEndsTheProcessWithTheFirstFailure(t *testing.T) {
 	resetRegistry(t)
 	Fail(nil)
 	require.ErrorContains(t, context.Cause(Failure()), "a component failed without saying why")
+	require.NoError(t, FailedNow().Err(), "Fail leaves the shutdown its waits")
+}
+
+// TestFailNowEndsTheProcessWithoutItsWaits proves FailNow reaches bootstrap
+// through both contexts: the failure context, as Fail does, with the first
+// failure as its cause, and the one telling the shutdown not to wait, with
+// this failure as its cause.
+func TestFailNowEndsTheProcessWithoutItsWaits(t *testing.T) {
+	resetRegistry(t)
+
+	errFailure := errors.New("sample failure")
+	FailNow(errFailure)
+	require.ErrorIs(t, context.Cause(Failure()), errFailure)
+	require.ErrorIs(t, context.Cause(FailedNow()), errFailure)
+
+	resetRegistry(t)
+	errEarlier := errors.New("sample earlier failure")
+	Fail(errEarlier)
+	FailNow(errFailure)
+	require.ErrorIs(t, context.Cause(Failure()), errEarlier, "the first failure stays the reason")
+	require.ErrorIs(t, context.Cause(FailedNow()), errFailure, "a later FailNow still ends the waits")
 }
 
 // recordingComponent builds a component of stage that appends its start and
@@ -372,5 +460,6 @@ func resetRegistry(t *testing.T) {
 	components = nil
 	stages = [stageCount]stageState{}
 	running = nil
-	failure, fail = newFailure() //nolint:fatcontext // The failure context is process-wide by design; a test starts from a fresh one.
+	failure, fail = newFailure() //nolint:fatcontext // The failure contexts are process-wide by design; a test starts from fresh ones.
+	failedNow, failNow = newFailure()
 }

@@ -58,7 +58,7 @@ curl -s 'localhost:8080/api/events?kind=cron&name=tick&_size=50' | jq '.data'
 curl -s 'localhost:8080/api/events?kind=cron&name=local-tick&_size=50' | jq '.data'
 ```
 
-`tick` 每 10 秒只有一行，`replica` 每次可能不同——哪个副本先抢到就谁跑；`local-tick` 每 10 秒三行，一个副本一行。`slow` 每 30 秒跑 20 秒，期间租约表里 `cron:slow` 的 `expires_at_ms` 每 5 秒往后挪一次，这就是续期。
+`tick` 每 10 秒只有一行，`replica` 每次可能不同——哪个副本先抢到就谁跑；`local-tick` 每 10 秒三行，一个副本一行。`slow` 每 30 秒跑 20 秒，期间租约表里 `cron:slow` 的 `expires_at_ms` 每 2 秒往后挪一次，这就是续期。
 
 ### 2. 选主：删掉 leader 所在的 Pod，别的副本接手
 

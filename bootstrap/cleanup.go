@@ -1,11 +1,14 @@
 package bootstrap
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"slices"
 	"sync"
+	"time"
 
+	"github.com/hydroan/gst/internal/lifecycle"
 	"go.uber.org/zap"
 )
 
@@ -16,9 +19,35 @@ var (
 	cleanOnce sync.Once
 )
 
-// clean runs the cleanup stack once; later calls do nothing.
+// failNowTimeout bounds the teardown of a process that fails now, see
+// lifecycle.FailNow. Nothing left in it then waits for work — stopping the
+// providers, flushing the logs — so it takes a moment; the bound is for a
+// cleanup that hangs, which is left behind so the process can exit.
+const failNowTimeout = 10 * time.Second
+
+// clean runs the cleanup stack once; later calls do nothing. Once the process
+// fails now, it waits for the stack no longer than failNowTimeout.
 func clean() {
-	cleanOnce.Do(runCleanups)
+	cleanOnce.Do(func() {
+		unwound := make(chan struct{})
+		go func() {
+			defer close(unwound)
+			runCleanups()
+		}()
+
+		failedNow := lifecycle.FailedNow()
+		select {
+		case <-unwound:
+			return
+		case <-failedNow.Done():
+		}
+		select {
+		case <-unwound:
+		case <-time.After(failNowTimeout):
+			zap.S().Errorw("gave up on the teardown after a failure the shutdown must not wait on",
+				"timeout", failNowTimeout, "err", context.Cause(failedNow))
+		}
+	})
 }
 
 // registerCleanup pushes a cleanup onto the stack. Cleanups run serially in

@@ -275,6 +275,23 @@ func TestStopGivesUpOnWorkThatIgnoresItsContext(t *testing.T) {
 		"giving up on the work must be reported, not swallowed")
 }
 
+// TestStopReportsNothingOnceTheWorkReturned proves stop tells work that
+// returned from work it gave up on even when its window has already ended —
+// used up by the components stopped before it, or never given because the
+// process must not wait: work that returned is never reported as given up
+// on.
+func TestStopReportsNothingOnceTheWorkReturned(t *testing.T) {
+	e := newElector(nil)
+	e.cancel = func() {}
+	close(e.done)
+	ended, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	for range 100 {
+		require.NoError(t, e.stop(ended), "work that returned must not be reported as given up on")
+	}
+}
+
 // TestStopWithoutStartIsNoop keeps stop safe in processes that never started
 // the elector.
 func TestStopWithoutStartIsNoop(t *testing.T) {

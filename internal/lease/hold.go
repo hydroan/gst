@@ -12,9 +12,17 @@ import (
 
 // Hold keeps h renewed on a goroutine of its own and returns a context that
 // ends the moment the lease is known to be lost — a renewal reports it gone,
-// or none succeeds within localDeadline of the last one that did — with
-// ErrLost as the cause; parent ending ends it too. The work under the lease
-// runs on that context: the transactions it opens end with it.
+// or none succeeds within localDeadline of the start of the last one that
+// did — with ErrLost as the cause; parent ending ends it too. The work under
+// the lease runs on that context: the transactions it opens end with it.
+//
+// A renewal is due renewInterval after the previous attempt started, the
+// claim counting as the first, and a renewal that failed is tried again at
+// the same cadence, the way client-go renews: a database that drops a
+// statement or stalls for a few seconds costs the holder nothing. Each
+// attempt waits at most half of localDeadline — the bound client-go gives
+// each of its requests — and never past the deadline, so an attempt that
+// hangs leaves room for another and cannot carry the holder past it.
 //
 // The renewals outlive parent on purpose. Parent ending tells the work to
 // stop, and until it has — a round or a tenure winding down, a transaction
@@ -44,10 +52,10 @@ func Hold(parent context.Context, h *Handle, log types.Logger) (ctx context.Cont
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
-		// The claim counts as the last successful renewal, from the moment
-		// it was sent.
-		last := h.claimedAt
-		timer := time.NewTimer(min(interval, time.Until(last.Add(deadline))))
+		// The claim counts as the last attempt and the last successful
+		// renewal, from the moment it was sent.
+		attempted, last := h.claimedAt, h.claimedAt
+		timer := time.NewTimer(untilNextRenewal(attempted, last, interval, deadline))
 		defer timer.Stop()
 		for {
 			select {
@@ -56,21 +64,19 @@ func Hold(parent context.Context, h *Handle, log types.Logger) (ctx context.Cont
 			case <-timer.C:
 			}
 
-			// A renewal is bounded by the time left until the deadline, so
-			// one that hangs cannot carry the holder past it.
-			started := time.Now()
-			remaining := time.Until(last.Add(deadline))
+			attempted = time.Now()
+			remaining := last.Add(deadline).Sub(attempted)
 			if remaining <= 0 {
 				cancel(ErrLost)
 				return
 			}
-			attempt, cancelAttempt := context.WithTimeout(renewing, min(interval, remaining))
+			attempt, cancelAttempt := context.WithTimeout(renewing, min(deadline/2, remaining))
 			err := h.Renew(attempt)
 			cancelAttempt()
 
 			switch {
 			case err == nil:
-				last = started
+				last = attempted
 			case errors.Is(err, ErrLost):
 				cancel(ErrLost)
 				return
@@ -83,11 +89,7 @@ func Hold(parent context.Context, h *Handle, log types.Logger) (ctx context.Cont
 				cancel(ErrLost)
 				return
 			}
-			// The next attempt comes at the interval, or at the deadline
-			// when that is sooner: a renewal that failed just short of its
-			// bound must not leave the holder asleep past the deadline, on
-			// the other side of the margin the successor's claim respects.
-			timer.Reset(max(min(interval, time.Until(last.Add(deadline))), 0))
+			timer.Reset(untilNextRenewal(attempted, last, interval, deadline))
 		}
 	}()
 	return ctx, func() {
@@ -97,9 +99,19 @@ func Hold(parent context.Context, h *Handle, log types.Logger) (ctx context.Cont
 	}
 }
 
-// fail ends the process when work under a lost lease will not stop; a test
-// observes the call instead.
-var fail = lifecycle.Fail
+// untilNextRenewal returns how long a holder waits before its next renewal
+// attempt: interval after the previous attempt started — at once when an
+// attempt took longer — but never past the deadline, deadline after the last
+// successful renewal started. An attempt that failed just short of the
+// deadline must not leave the holder asleep past it, on the other side of
+// the margin its successor's claim respects.
+func untilNextRenewal(attempted, last time.Time, interval, deadline time.Duration) time.Duration {
+	return max(min(time.Until(attempted.Add(interval)), time.Until(last.Add(deadline))), 0)
+}
+
+// fail ends the process, without waiting for anything still running, when
+// work under a lost lease will not stop; a test observes the call instead.
+var fail = lifecycle.FailNow
 
 // SetFail replaces what Run does once work under a lost lease will not stop,
 // and returns the function that restores it. It exists for the tests of the
@@ -119,9 +131,10 @@ func SetFail(fn func(error)) (restore func()) {
 // lease is lost would run beside its successor's, the very thing the lease
 // exists to rule out. So once ctx ends with ErrLost the work has
 // stepDownGrace to return, and past that the process fails through
-// lifecycle.Fail — bootstrap ends its Run, the orchestrator restarts the
-// replica — while the wait goes on for as long as the process lasts, so the
-// caller never claims again beside work of its own still running. ctx ending
+// lifecycle.FailNow — bootstrap ends Run without waiting for anything still
+// running, this work included, and the orchestrator restarts the replica —
+// while the wait goes on for as long as the process lasts, so the caller
+// never claims again beside work of its own still running. ctx ending
 // for any other reason — the process shutting down — is not a loss: Run
 // waits for the work, and whoever stops the process bounds that wait.
 //

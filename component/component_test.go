@@ -214,3 +214,19 @@ func TestStopGivesUpOnWorkThatWillNotReturn(t *testing.T) {
 	require.NoError(t, w.stop(context.Background()))
 	require.Empty(t, failures, "returning once the process stops is not a failure, however late")
 }
+
+// TestStopReportsNothingOnceTheWorkReturned proves stop tells work that
+// returned from work it gave up on even when its window has already ended —
+// used up by the components stopped before it, or never given because the
+// process must not wait: work that returned is never reported as given up
+// on.
+func TestStopReportsNothingOnceTheWorkReturned(t *testing.T) {
+	w := &work{name: "sample", done: make(chan struct{})}
+	close(w.done)
+	ended, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	for range 100 {
+		require.NoError(t, w.stop(ended), "work that returned must not be reported as given up on")
+	}
+}

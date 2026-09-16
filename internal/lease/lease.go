@@ -40,15 +40,17 @@
 // the time. A ClickHouse primary database has none of this: the claim
 // fails, and with it whatever capability asked for the lease.
 //
-// The holder renews every 5 seconds and gives itself up 10 seconds after the
-// last renewal it started, 5 seconds before the database lets anyone else
-// claim the name: a holder that cannot reach the database stops before its
-// successor can start. The context Hold returns ends at that moment, and the
-// transactions opened under it end with it — the standard library rolls back
-// a transaction whose context ends and refuses its Commit. Verify is the
-// third line, for the transaction that would open after the loss, and Run
-// the last: work that ignores all three and runs on after the loss fails the
-// process.
+// The holder renews every 2 seconds, a renewal that failed included, each
+// attempt waiting at most 5 seconds, and gives itself up 10 seconds after the
+// last successful renewal started, 5 seconds before the database lets anyone
+// else claim the name: a database that stalls or drops a statement for a few
+// seconds costs the holder nothing, and a holder that cannot reach it stops
+// before its successor can start. The context Hold returns ends at that
+// moment, and the transactions opened under it end with it — the standard
+// library rolls back a transaction whose context ends and refuses its
+// Commit. Verify is the third line, for the transaction that would open
+// after the loss, and Run the last: work that ignores all three and runs on
+// after the loss fails the process, which then ends without waiting for it.
 //
 // Importing the package is what brings leases into a process: the table
 // joins the registered models and the transaction guard is installed from
@@ -71,16 +73,18 @@ import (
 	"gorm.io/gorm"
 )
 
-// The protocol's timings, in the proportions of client-go's leader election:
-// a holder that has not renewed for localDeadline gives up 5 seconds before
-// the database would let anyone else claim the name. Variables so a test can
-// play the protocol out in milliseconds.
+// The protocol's timings, those of client-go's leader election: a holder
+// renews at the retry period and keeps retrying a renewal that failed until
+// localDeadline has passed, then gives up 5 seconds before the database would
+// let anyone else claim the name. Variables so a test can play the protocol
+// out in milliseconds.
 var (
 	// leaseDuration is how long a claim or renewal holds the name, by the
 	// database clock.
 	leaseDuration = 15 * time.Second
-	// renewInterval is how often a holder renews.
-	renewInterval = 5 * time.Second
+	// renewInterval is how often a holder renews, and retries a renewal that
+	// failed, counted from the start of the previous attempt.
+	renewInterval = 2 * time.Second
 	// localDeadline is how long a holder keeps going without a successful
 	// renewal, counted from the moment the last successful one started.
 	localDeadline = 10 * time.Second

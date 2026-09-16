@@ -24,9 +24,10 @@
 // reported as ErrLost even when it returned nothing: another holder may
 // have started the same work since, so its result is not the whole story.
 // Work that runs on past that point — it ignores its context — would run
-// beside the new holder's, so 5 seconds after the loss the process fails,
-// as it does for a leader or a cron round. A ClickHouse primary database
-// cannot carry leases, so a declared lock fails the start there.
+// beside the new holder's, so 5 seconds after the loss the process fails and
+// exits without waiting for it, as it does for a leader or a cron round. A
+// ClickHouse primary database cannot carry leases, so a declared lock fails
+// the start there.
 //
 // Take a lock outside any database transaction and open the transactions
 // inside the work. The lock is given back as soon as the work returns, while
@@ -38,7 +39,7 @@
 // anything.
 //
 // The framework opens a single connection to SQLite, so there a transaction
-// of the work blocks the renewal of the lease: keep each transaction under 5
+// of the work blocks the renewal of the lease: keep each transaction under 8
 // seconds — a longer one may hold the renewal back until the lease counts as
 // lost, which ends the work; one over 10 seconds always does.
 package lock

@@ -142,6 +142,23 @@ func TestStopGivesUpOnAJobThatIgnoresItsContext(t *testing.T) {
 		"giving up on the in-flight round must be reported, not swallowed")
 }
 
+// TestStopReportsNothingOnceTheRoundsReturned proves stop tells rounds that
+// returned from rounds it gave up on even when its window has already ended —
+// used up by the components stopped before it, or never given because the
+// process must not wait: rounds that returned are never reported as given up
+// on.
+func TestStopReportsNothingOnceTheRoundsReturned(t *testing.T) {
+	s := newScheduler(nil)
+	s.cancel = func() {}
+	close(s.done)
+	ended, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	for range 100 {
+		require.NoError(t, s.stop(ended), "rounds that returned must not be reported as given up on")
+	}
+}
+
 // TestStopWithoutStartIsNoop keeps stop safe in processes that never started
 // the scheduler.
 func TestStopWithoutStartIsNoop(t *testing.T) {

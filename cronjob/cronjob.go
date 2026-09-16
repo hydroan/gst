@@ -133,9 +133,9 @@ func setLogger(l types.Logger) {
 // can stop early, and a database.Transaction opened on it refuses to run
 // once the lease is gone — a plain write is not checked, the context is
 // what stops it; a round still running 5 seconds after its lease was lost
-// fails the process — another replica may be running the job's next instant
-// by then, and two rounds of a job never run at once. The context carries
-// the round's identity — the job name and a trace id of the round's own, see
+// fails the process, which exits without waiting for it — another replica
+// may be running the job's next instant by then. The context carries the
+// round's identity — the job name and a trace id of the round's own, see
 // execctx — and, with tracing on, the round's root span, so every statement,
 // log line and span the job produces is annotated with the round and can be
 // found again from any of them. An instant that passes while the previous
@@ -143,7 +143,7 @@ func setLogger(l types.Logger) {
 //
 // The framework opens a single connection to SQLite, so there a transaction
 // of the job blocks the renewal of the round's lease: keep each transaction
-// under 5 seconds — a longer one may hold the renewal back until the lease
+// under 8 seconds — a longer one may hold the renewal back until the lease
 // counts as lost, which ends the round; one over 10 seconds always does — or
 // register work that only ever runs in one process with RegisterPerInstance.
 //
@@ -312,10 +312,8 @@ func (s *scheduler) start(ctx context.Context) {
 // stop ends the loops and waits for them, for as long as ctx allows.
 func (s *scheduler) stop(ctx context.Context) error {
 	s.cancel()
-	select {
-	case <-s.done:
-		return nil
-	case <-ctx.Done():
-		return errors.Wrap(ctx.Err(), "gave up waiting for in-flight jobs")
+	if !lifecycle.Await(ctx, s.done) {
+		return errors.Wrap(context.Cause(ctx), "gave up waiting for in-flight jobs")
 	}
+	return nil
 }

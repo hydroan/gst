@@ -5,11 +5,12 @@
 // shutdown. fn is a func(ctx context.Context) error: ctx ends when the
 // process begins shutting down or the round's lease is lost, so a long round
 // must stop early — one still running 5 seconds after its lease was lost
-// fails the process, since another replica may be running the next instant
-// by then — and it carries the round's identity — the job name and a trace
-// id of the round's own — and, with tracing on, the round's root span, so
-// the statements and log lines the job produces are found again from any of
-// them. Every run is logged under name, and panics are recovered.
+// fails the process, which exits without waiting for it, since another
+// replica may be running the next instant by then — and it carries the
+// round's identity — the job name and a trace id of the round's own — and,
+// with tracing on, the round's root span, so the statements and log lines
+// the job produces are found again from any of them. Every run is logged
+// under name, and panics are recovered.
 //
 // spec is a 6-field cron expression "second minute hour day month weekday",
 // e.g. "0 0 2 * * *" (daily at 02:00 UTC), or a descriptor such as "@hourly"
@@ -31,7 +32,7 @@
 //
 // On SQLite the framework uses a single database connection, so a
 // transaction inside a job blocks the lease renewal: keep each transaction
-// under 5 seconds — a longer one may end the round with the lease counted as
+// under 8 seconds — a longer one may end the round with the lease counted as
 // lost, one over 10 seconds always does — or register work that only ever
 // runs in one process with cronjob.RegisterPerInstance.
 //

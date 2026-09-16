@@ -12,20 +12,20 @@
 // never links it.
 //
 // Leadership is a lease on the primary database (see the lease package). The
-// leader renews it every 5 seconds and gives itself up 10 seconds after the
-// last renewal it managed, before the database lets another replica claim
-// the name; a name whose leader crashed is free 15 seconds after that
-// leader's last renewal and taken by the next campaign after that, 21
-// seconds after the crash at most, and a name its leader released — the
-// process shut down, the work returned — is taken by the next campaign at
-// once, within 6 seconds. The work runs on a context that ends the moment
-// the tenure does, and the transactions opened on that context end with
-// it. Work that runs on past that point — it ignores its context — would
-// run beside the new leader's, the very thing the lease exists to rule
-// out, so 5 seconds after a tenure ended by a lost lease the process fails:
-// bootstrap ends Run with the failure and the orchestrator restarts the
-// replica. A ClickHouse primary database cannot carry leases, so a
-// registration fails the start there.
+// leader renews it every 2 seconds, retrying a renewal that failed, and gives
+// itself up 10 seconds after the last renewal that succeeded, before the
+// database lets another replica claim the name; a name whose leader crashed
+// is free 15 seconds after that leader's last renewal and taken by the next
+// campaign after that, 21 seconds after the crash at most, and a name its
+// leader released — the process shut down, the work returned — is taken by
+// the next campaign at once, within 6 seconds. The work runs on a context
+// that ends the moment the tenure does, and the transactions opened on that
+// context end with it. Work that runs on past that point — it ignores its
+// context — would run beside the new leader's, the very thing the lease
+// exists to rule out, so 5 seconds after a tenure ended by a lost lease the
+// process fails and exits without waiting for it: bootstrap ends Run with
+// the failure and the orchestrator restarts the replica. A ClickHouse primary
+// database cannot carry leases, so a registration fails the start there.
 //
 // The work runs again from scratch on the replica that takes the name over,
 // and its previous run may have been cut anywhere: what it must not repeat,
@@ -113,7 +113,7 @@ func setLogger(l types.Logger) {
 // logged, and counts as a return with an error.
 //
 // The framework opens a single connection to SQLite, so there a transaction
-// of fn blocks the renewal of the lease: keep each transaction under 5
+// of fn blocks the renewal of the lease: keep each transaction under 8
 // seconds — a longer one may hold the renewal back until the lease counts as
 // lost, which ends the tenure; one over 10 seconds always does.
 //
@@ -238,10 +238,8 @@ func (e *elector) start(ctx context.Context) {
 // stop ends the loops and waits for them, for as long as ctx allows.
 func (e *elector) stop(ctx context.Context) error {
 	e.cancel()
-	select {
-	case <-e.done:
-		return nil
-	case <-ctx.Done():
-		return errors.Wrap(ctx.Err(), "gave up waiting for leader work to return")
+	if !lifecycle.Await(ctx, e.done) {
+		return errors.Wrap(context.Cause(ctx), "gave up waiting for leader work to return")
 	}
+	return nil
 }

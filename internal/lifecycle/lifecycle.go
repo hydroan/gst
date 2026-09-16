@@ -2,9 +2,9 @@
 // lifetime of their own: clients of external systems, the scheduler, election
 // loops, anything that owns a connection or a background goroutine — and,
 // through the component package, a project's own long-running work. It also
-// holds what such work has in common: Fail, the one way out of a process
-// that cannot go on, and Interrupted, the test of whether work stopped
-// because it was asked to.
+// holds what such work has in common: Fail and FailNow, the ways out of a
+// process that cannot go on, Await, the wait for work to return, and
+// Interrupted, the test of whether work stopped because it was asked to.
 //
 // A component registers from its package initialiser, so importing its
 // package is the single act that enables it: a project that never imports the
@@ -245,8 +245,11 @@ func start(ctx context.Context, c Component) error {
 
 // Stop stops the started components in reverse start order — the components
 // first, then the providers they used — giving each the remainder of ctx to
-// finish its in-flight work. A Stop that fails is logged and the others still
-// run. What has been stopped is not stopped again.
+// finish its in-flight work. Once the process fails now the components are
+// no longer waited for: each stops on a context that has ended, so it stops
+// taking on work and reports what has not returned, and the rest of ctx goes
+// to the providers; see FailNow. A Stop that fails is logged and the others
+// still run. What has been stopped is not stopped again.
 func Stop(ctx context.Context) {
 	mu.Lock()
 	stopping := running
@@ -257,14 +260,50 @@ func Stop(ctx context.Context) {
 		if c.Stop == nil {
 			continue
 		}
-		if err := c.Stop(ctx); err != nil {
+		if err := stopOne(ctx, c); err != nil {
 			zap.S().Errorw("failed to stop component", "stage", c.Stage.String(), "component", c.Name, "err", err)
 		}
 	}
 }
 
-// failure is the context a component ends the process through, see Fail.
-var failure, fail = newFailure()
+// stopOne runs one component's Stop: on ctx for a provider, and for a
+// component on ctx ended the moment the process fails now.
+func stopOne(ctx context.Context, c Component) error {
+	if c.Stage == StageProvider {
+		return c.Stop(ctx)
+	}
+	stopCtx, cancel := context.WithCancelCause(ctx)
+	defer cancel(nil)
+	failedNow := FailedNow()
+	stopWatching := context.AfterFunc(failedNow, func() { cancel(context.Cause(failedNow)) })
+	defer stopWatching()
+	return c.Stop(stopCtx)
+}
+
+// Await waits for done to close for as long as ctx allows and reports
+// whether it did. A done already closed wins over a ctx already ended, so
+// work that has returned is never reported as given up on — as it would be
+// by a select, which picks at random between cases that are both ready.
+func Await(ctx context.Context, done <-chan struct{}) bool {
+	select {
+	case <-done:
+		return true
+	default:
+	}
+	select {
+	case <-done:
+		return true
+	case <-ctx.Done():
+		return false
+	}
+}
+
+// failure is the context a component ends the process through, see Fail;
+// failedNow is the one FailNow ends beside it.
+var (
+	failure, fail      = newFailure()
+	failedNow, failNow = newFailure()
+)
 
 // newFailure builds the failure context and the function that ends it; a
 // test rebuilds them to start from a process nothing has failed in.
@@ -273,20 +312,46 @@ func newFailure() (context.Context, context.CancelCauseFunc) {
 }
 
 // Fail reports a failure a component cannot recover from and the process
-// cannot correctly go on with — leader work that will not stop once its
-// lease is lost, while another replica may already be running it; a
-// project's long-running work that ended before the process did. Bootstrap
-// ends Run on the first one the way it ends on a listener failing: the
-// process shuts down with err as the reason, and its orchestrator restarts
-// it. Later failures change nothing; the first one is the reason.
+// cannot correctly go on with — a project's long-running work that ended
+// before the process did. Bootstrap ends Run on the first one the way it
+// ends on a listener failing: the process shuts down with err as the reason,
+// and its orchestrator restarts it. Later failures change nothing; the first
+// one is the reason.
 func Fail(err error) {
-	if err == nil {
-		err = errors.New("lifecycle: a component failed without saying why")
-	}
+	fail(orUnexplained(err))
+}
+
+// FailNow is Fail for a failure the shutdown must not wait on: work that
+// will not stop once its lease is lost, running beside the replica that took
+// the lease over. Every wait of a graceful shutdown — the drain delay, the
+// requests in flight, the components' own work — would keep it running
+// that much longer, so none is kept, from the call on: Stop no longer waits
+// for the components, and bootstrap ends Run without the drain and bounds
+// what is left of its teardown, the way controller-runtime drops its
+// graceful shutdown when leader election is lost. It ends the process like
+// Fail, with err as the reason unless an earlier failure already is.
+func FailNow(err error) {
+	err = orUnexplained(err)
+	failNow(err)
 	fail(err)
 }
 
-// Failure returns the context Fail ends, with the failure as its cause.
+// orUnexplained returns err, or an error saying so when a component failed
+// without one.
+func orUnexplained(err error) error {
+	if err == nil {
+		return errors.New("lifecycle: a component failed without saying why")
+	}
+	return err
+}
+
+// Failure returns the context Fail and FailNow end, with the first failure
+// as its cause.
 func Failure() context.Context {
 	return failure
+}
+
+// FailedNow returns the context FailNow ends, with its failure as the cause.
+func FailedNow() context.Context {
+	return failedNow
 }

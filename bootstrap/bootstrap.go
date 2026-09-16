@@ -58,7 +58,9 @@ var processCtx, cancelProcess = context.WithCancel(context.Background())
 // componentStopTimeout bounds how long the lifecycle may take to stop what
 // it started at shutdown — the components' in-flight work first, then the
 // providers, all within the one window — so a stuck job cannot hold the
-// shutdown hostage. It matches the bound router.Stop gives the HTTP drain.
+// shutdown hostage. It matches the bound router.Stop gives the HTTP drain. A
+// process that fails now does not wait for the components at all, see
+// lifecycle.FailNow.
 const componentStopTimeout = 30 * time.Second
 
 // Bootstrap brings up everything the process needs before it can serve, in
@@ -190,9 +192,13 @@ func InitRouterAndModules() error {
 // blocks until the process is told to stop. A termination signal stops it
 // cleanly: readiness goes down first, the components stop taking on work,
 // the configured drain window passes, and everything is torn down in the
-// reverse order of its setup. A listener that fails ends it the same way,
-// with the failure as the error, so the process never runs on with nothing
-// to report.
+// reverse order of its setup. A listener or a component that fails ends it
+// the same way, with the failure as the error, so the process never runs on
+// with nothing to report. A failure the shutdown must not wait on — work
+// that will not stop once its lease is lost, see lifecycle.FailNow — ends
+// it the same way too, minus every wait: the drain window is skipped, the
+// requests in flight are cut off, the components are not waited for, and
+// the rest of the teardown gets failNowTimeout.
 func Run() error {
 	defer clean()
 	// The providers Bootstrap started are stopped on every way out of Run,
@@ -255,7 +261,7 @@ func Run() error {
 		gops.Run,
 	)
 
-	registerCleanup(router.Stop)
+	registerCleanup(func() { router.Stop(lifecycle.FailedNow()) })
 	registerCleanup(statsviz.Stop)
 	registerCleanup(debugpprof.Stop)
 	registerCleanup(gops.Stop)
@@ -309,10 +315,11 @@ func stopLifecycle() {
 // notice this process dropped out and stop opening connections to it; without
 // it, the listener can start refusing connections the balancer is still
 // sending. A second signal ends the wait, so an operator can always cut a
-// drain short.
+// drain short, and a process that fails now skips it, see lifecycle.FailNow.
 func awaitDrain(sigCh <-chan os.Signal) {
 	delay := config.App.Server.ShutdownDelay
-	if delay <= 0 {
+	failedNow := lifecycle.FailedNow()
+	if delay <= 0 || failedNow.Err() != nil {
 		return
 	}
 
@@ -321,5 +328,7 @@ func awaitDrain(sigCh <-chan os.Signal) {
 	case <-time.After(delay):
 	case sig := <-sigCh:
 		zap.S().Infow("drain cut short by signal", "signal", sig)
+	case <-failedNow.Done():
+		zap.S().Infow("drain cut short by a failure the shutdown must not wait on", "err", context.Cause(failedNow))
 	}
 }

@@ -422,6 +422,18 @@ func withTolerantProtocol(t *testing.T) {
 	t.Cleanup(SetTimings(time.Second, 50*time.Millisecond, 500*time.Millisecond, 100*time.Millisecond))
 }
 
+// withProductionProportions plays the protocol out at a fifth of the timings
+// a deployment runs, keeping their proportions: a test proving the holder
+// rides out what a deployment meets — a renewal that fails, one that answers
+// slowly, the work's own transactions holding the one connection — has to
+// face the retries and the deadline in the ratios a deployment runs, or
+// ratios chosen for the test would prove it instead.
+func withProductionProportions(t *testing.T) {
+	t.Helper()
+
+	t.Cleanup(SetTimings(leaseDuration/5, renewInterval/5, localDeadline/5, stepDownGrace/5))
+}
+
 // uniqueName returns a coordinated name no other test uses: the table is
 // shared by the suite, and leases outlive the test that claimed them.
 func uniqueName(t *testing.T) string {
