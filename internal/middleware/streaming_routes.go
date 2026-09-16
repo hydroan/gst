@@ -15,8 +15,8 @@ import (
 // request timeout would tear the stream down mid-flight. The middlewares
 // concerned consult the registry and leave streaming requests alone.
 //
-// Routes are marked at registration time (generated code marks routes their
-// design declares as streaming; tests mark theirs by hand), keyed by method
+// Routes are marked as they register — the router marks every route
+// registered with the SSE verb; tests mark theirs by hand — keyed by method
 // and the route pattern gin reports as FullPath.
 var (
 	streamingRouteMu sync.RWMutex
@@ -45,10 +45,11 @@ func IsStreamingRoute(method, path string) bool {
 	return ok
 }
 
-// isStreamingRequest reports whether the request resolved to a streaming
+// IsStreamingRequest reports whether the request resolved to a streaming
 // route. Requests gin matched to no route have an empty FullPath and are
-// never streaming.
-func isStreamingRequest(c *gin.Context) bool {
+// never streaming. The public middleware package asks it too, for the
+// request timeout it ships.
+func IsStreamingRequest(c *gin.Context) bool {
 	if c == nil || c.Request == nil {
 		return false
 	}

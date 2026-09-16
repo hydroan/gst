@@ -220,7 +220,7 @@ linters:
       # are the whole answer and there is no body to put an envelope in.
       - linters:
           - forbidigo
-        path: middleware/cors\.go
+        path: internal/middleware/cors\.go
       # Constants in these two packages are named after the string each one
       # stands for: environment variables in config, context keys, query
       # parameters, header names and route phases in consts. The

@@ -35,10 +35,10 @@ import (
 	"sync/atomic"
 
 	"github.com/hydroan/gst/consts"
+	"github.com/hydroan/gst/internal/modelregistry"
+	"github.com/hydroan/gst/internal/router"
 	"github.com/hydroan/gst/internal/serviceregistry"
 	"github.com/hydroan/gst/internal/types"
-	"github.com/hydroan/gst/model"
-	"github.com/hydroan/gst/router"
 )
 
 var (
@@ -99,7 +99,7 @@ func Init() error {
 // is handled separately by the database runtime. Callers that need
 // module-provided tables to exist must call the database runtime drain after
 // Wait, not before it, because module registration can enqueue new
-// model.Register work.
+// table registrations.
 func Wait() {
 	registerMu.Lock()
 	defer registerMu.Unlock()
@@ -130,7 +130,7 @@ func Use[M types.Model, REQ types.Request, RSP types.Response](mod types.Module[
 		<-notify
 
 		if registersModel(options) {
-			model.Register[M]()
+			modelregistry.RegisterTable[M]()
 		}
 
 		route := mod.Route()

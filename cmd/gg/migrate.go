@@ -151,10 +151,8 @@ import (
 
 	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/dbmigrate"
-	"github.com/hydroan/gst/middleware"
 	"github.com/hydroan/gst/model"
 	"github.com/hydroan/gst/module"
-	"github.com/hydroan/gst/router"
 
 	// Linked for its initialisers alone: it pulls in every framework package
 	// the running service links, so this program sees the same registrations.
@@ -220,8 +218,9 @@ func exitWithError(err error) {
 	os.Exit(1)
 }
 
-// initComponents initializes the application components (config, middleware, router, module).
-// It temporarily suppresses stdout to prevent initialization logs from appearing in the console.
+// initComponents brings up what model registration runs through (see
+// dbmigrate.Prepare). It temporarily suppresses stdout to prevent
+// initialization logs from appearing in the console.
 func initComponents() {
 	oldStdout := os.Stdout
 	null, err := os.Open(os.DevNull)
@@ -234,16 +233,7 @@ func initComponents() {
 		null.Close()
 	}()
 
-	if err = config.Init(); err != nil {
-		exitWithError(err)
-	}
-	if err = middleware.Init(); err != nil {
-		exitWithError(err)
-	}
-	if err = router.Init(); err != nil {
-		exitWithError(err)
-	}
-	if err = module.Init(); err != nil {
+	if err = dbmigrate.Prepare(); err != nil {
 		exitWithError(err)
 	}
 }

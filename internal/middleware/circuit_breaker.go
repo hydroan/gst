@@ -5,17 +5,22 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
-	"github.com/hydroan/gst/response"
+	"github.com/hydroan/gst/internal/response"
 	"go.uber.org/zap"
 )
 
+// CircuitBreaker returns the middleware that runs each request through the
+// breaker Init builds; the public middleware.CircuitBreaker forwards to it and
+// documents the contract. It lives beside the breaker rather than in the
+// public package because the breaker is built from configuration as the
+// framework starts.
 func CircuitBreaker() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		// A streaming request holds its connection open for as long as the
 		// client listens; counted as an in-flight request it would sit in the
 		// breaker's counts forever and, worse, occupy the half-open probe
 		// budget so the breaker never closes again.
-		if isStreamingRequest(c) {
+		if IsStreamingRequest(c) {
 			return
 		}
 

@@ -2,8 +2,9 @@ package authz
 
 import (
 	"github.com/hydroan/gst/consts"
+	internalmiddleware "github.com/hydroan/gst/internal/middleware"
+	"github.com/hydroan/gst/internal/modelregistry"
 	"github.com/hydroan/gst/middleware"
-	"github.com/hydroan/gst/model"
 	"github.com/hydroan/gst/module"
 )
 
@@ -48,12 +49,12 @@ import (
 func Register() {
 	// Register AuthzRule explicitly because the policy adapter manages this
 	// table instead of a public CRUD module.
-	model.Register[*AuthzRule]()
+	modelregistry.RegisterTable[*AuthzRule]()
 
 	// Register Authz after the authentication middleware that writes CTX_USER_ID.
 	// Registering Authz before IAMSession makes authenticated requests look
 	// anonymous and returns "permission denied" before session cookies are read.
-	middleware.RegisterAuth(middleware.Authz())
+	internalmiddleware.RegisterAuth(middleware.Authz())
 
 	module.Use[
 		*Role,
@@ -100,7 +101,7 @@ func Register() {
 
 	module.Use[
 		*Routes,
-		*model.Empty,
+		*modelregistry.Empty,
 		*RoutesRsp](
 		&RoutesModule{},
 		module.CRUD(consts.PHASE_LIST),

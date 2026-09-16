@@ -17,7 +17,7 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/internal/lifecycle"
-	"github.com/hydroan/gst/router"
+	"github.com/hydroan/gst/internal/router"
 	"github.com/stretchr/testify/require"
 )
 

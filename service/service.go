@@ -8,17 +8,14 @@ package service
 
 import (
 	"reflect"
-	"sync"
 
 	"github.com/hydroan/gst/consts"
+	"github.com/hydroan/gst/internal/modelregistry"
 	"github.com/hydroan/gst/internal/serviceregistry"
 	"github.com/hydroan/gst/internal/types"
-	"github.com/hydroan/gst/model"
 )
 
-var _ types.Service[*model.Empty, any, any] = (*Base[*model.Empty, any, any])(nil)
-
-var once sync.Once
+var _ types.Service[*modelregistry.Empty, any, any] = (*Base[*modelregistry.Empty, any, any])(nil)
 
 // Base is the default no-op service implementation exposed to application services.
 type Base[M types.Model, REQ types.Request, RSP types.Response] = serviceregistry.Base[M, REQ, RSP]
@@ -52,7 +49,7 @@ type Base[M types.Model, REQ types.Request, RSP types.Response] = serviceregistr
 //
 // Logger initialization:
 //   - If Register is called in an "init" function, logger.Service may be nil,
-//     and the service.Logger will be set later in service.Init().
+//     and the service.Logger will be set later, while the framework bootstraps.
 //   - If Register is called after initialization (e.g., in Init function),
 //     logger.Service is already available, and the service.Logger will be set directly.
 func Register[S types.Service[M, REQ, RSP], M types.Model, REQ types.Request, RSP types.Response](phase consts.Phase, route string) {
@@ -66,11 +63,4 @@ func Register[S types.Service[M, REQ, RSP], M types.Model, REQ types.Request, RS
 		return
 	}
 	serviceregistry.Register[M, REQ, RSP](phase, route, svc)
-}
-
-func Init() error {
-	once.Do(func() {
-		serviceregistry.InitLoggers()
-	})
-	return nil
 }

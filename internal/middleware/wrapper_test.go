@@ -9,9 +9,9 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/hydroan/gst/config"
+	"github.com/hydroan/gst/internal/response"
 	"github.com/hydroan/gst/internal/testutil/oteltest"
 	"github.com/hydroan/gst/middleware/ratelimiter"
-	"github.com/hydroan/gst/response"
 	"github.com/stretchr/testify/require"
 	oteltrace "go.opentelemetry.io/otel/trace"
 )

@@ -18,13 +18,13 @@ import (
 	modeliamuser "github.com/hydroan/gst/internal/model/iam/user"
 	"github.com/hydroan/gst/internal/requestctx"
 	internalresponse "github.com/hydroan/gst/internal/response"
+	"github.com/hydroan/gst/internal/router"
 	serviceiamsession "github.com/hydroan/gst/internal/service/iam/session"
+	"github.com/hydroan/gst/internal/serviceregistry"
 	"github.com/hydroan/gst/internal/testutil"
 	"github.com/hydroan/gst/internal/types"
 	"github.com/hydroan/gst/module/iam"
 	"github.com/hydroan/gst/redis"
-	"github.com/hydroan/gst/router"
-	"github.com/hydroan/gst/service"
 	"github.com/stretchr/testify/require"
 )
 
@@ -349,7 +349,7 @@ func TestSessionUserStateRefresh(t *testing.T) {
 		_, err := serviceiamsession.ValidateSessionUserState(canceledCtx, session)
 		require.Error(t, err)
 
-		var serviceErr *service.Error
+		var serviceErr *serviceregistry.Error
 		require.True(t, errors.As(err, &serviceErr))
 		require.Equal(t, http.StatusInternalServerError, serviceErr.Status())
 		require.Contains(t, err.Error(), "failed to refresh session user state")

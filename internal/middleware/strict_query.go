@@ -7,7 +7,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/hydroan/gst/internal/requestctx"
-	"github.com/hydroan/gst/response"
+	"github.com/hydroan/gst/internal/response"
 )
 
 // strictQuery returns a middleware that rejects ambiguous query strings before

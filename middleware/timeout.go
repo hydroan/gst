@@ -6,7 +6,8 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/hydroan/gst/response"
+	internalmiddleware "github.com/hydroan/gst/internal/middleware"
+	"github.com/hydroan/gst/internal/response"
 	"go.uber.org/zap"
 )
 
@@ -30,7 +31,7 @@ func Timeout(timeout time.Duration) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		// A streaming response legitimately outlives any request timeout;
 		// cutting it down here would end every stream at the deadline.
-		if isStreamingRequest(c) {
+		if internalmiddleware.IsStreamingRequest(c) {
 			return
 		}
 

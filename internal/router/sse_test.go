@@ -7,12 +7,12 @@ import (
 
 	"github.com/hydroan/gst/client"
 	"github.com/hydroan/gst/consts"
+	"github.com/hydroan/gst/internal/middleware"
+	"github.com/hydroan/gst/internal/modelregistry"
+	"github.com/hydroan/gst/internal/router"
+	"github.com/hydroan/gst/internal/serviceregistry"
+	"github.com/hydroan/gst/internal/sse"
 	"github.com/hydroan/gst/internal/types"
-	"github.com/hydroan/gst/middleware"
-	"github.com/hydroan/gst/model"
-	"github.com/hydroan/gst/router"
-	"github.com/hydroan/gst/service"
-	"github.com/hydroan/gst/sse"
 	"github.com/stretchr/testify/require"
 )
 
@@ -26,7 +26,7 @@ const (
 
 // noticeStreamer streams a fixed number of events and ends the stream.
 type noticeStreamer struct {
-	service.Base[*model.Empty, *model.Empty, *model.Empty]
+	serviceregistry.Base[*modelregistry.Empty, *modelregistry.Empty, *modelregistry.Empty]
 }
 
 func (s *noticeStreamer) SSE(ctx *types.ServiceContext) error {
@@ -43,7 +43,7 @@ func (s *noticeStreamer) SSE(ctx *types.ServiceContext) error {
 // endlessStreamer streams until the client goes away, the shape of a real
 // event feed.
 type endlessStreamer struct {
-	service.Base[*model.Empty, *model.Empty, *model.Empty]
+	serviceregistry.Base[*modelregistry.Empty, *modelregistry.Empty, *modelregistry.Empty]
 }
 
 func (s *endlessStreamer) SSE(ctx *types.ServiceContext) error {
@@ -65,18 +65,18 @@ func (s *endlessStreamer) SSE(ctx *types.ServiceContext) error {
 // before the framework bootstraps, while the routes below register after
 // router.Init — the same split generated code has.
 func init() {
-	service.Register[*noticeStreamer](consts.PHASE_SSE, sseStreamRoute)
-	service.Register[*endlessStreamer](consts.PHASE_SSE, sseEndlessRoute)
+	serviceregistry.Register[*modelregistry.Empty, *modelregistry.Empty, *modelregistry.Empty](consts.PHASE_SSE, sseStreamRoute, &noticeStreamer{})
+	serviceregistry.Register[*modelregistry.Empty, *modelregistry.Empty, *modelregistry.Empty](consts.PHASE_SSE, sseEndlessRoute, &endlessStreamer{})
 }
 
 // registerSSERoutes registers the streaming routes; TestMain calls it after
 // router.Init, mirroring where generated route registration runs.
 func registerSSERoutes() {
-	router.Register[*model.Empty, *model.Empty, *model.Empty](
-		router.Auth(), sseStreamRoute, &types.ControllerConfig[*model.Empty]{}, consts.SSE,
+	router.Register[*modelregistry.Empty, *modelregistry.Empty, *modelregistry.Empty](
+		router.Auth(), sseStreamRoute, &types.ControllerConfig[*modelregistry.Empty]{}, consts.SSE,
 	)
-	router.Register[*model.Empty, *model.Empty, *model.Empty](
-		router.Auth(), sseEndlessRoute, &types.ControllerConfig[*model.Empty]{}, consts.SSE,
+	router.Register[*modelregistry.Empty, *modelregistry.Empty, *modelregistry.Empty](
+		router.Auth(), sseEndlessRoute, &types.ControllerConfig[*modelregistry.Empty]{}, consts.SSE,
 	)
 }
 

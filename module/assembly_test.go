@@ -15,10 +15,15 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// middlewareImportPath is the framework middleware package. Module registration
-// calls are matched through it rather than by the qualifier spelling, so an
-// aliased import is read correctly.
-const middlewareImportPath = "github.com/hydroan/gst/middleware"
+// Module registration calls are matched through import paths rather than by
+// the qualifier spelling, so an aliased import is read correctly. A module
+// registers middleware through the framework's internal registry, and the
+// handler it registers comes from the public middleware package, which is
+// where gg module copy takes the handler's source file from.
+const (
+	middlewareRegistryImportPath = "github.com/hydroan/gst/internal/middleware"
+	middlewareImportPath         = "github.com/hydroan/gst/middleware"
+)
 
 // moduleTreeImportPrefixes are the framework import prefixes whose next path
 // segment names the owning module.
@@ -173,7 +178,7 @@ func middlewareRegisterScope(call *ast.CallExpr, imports map[string]string) (str
 		return "", false
 	}
 	qualifier, ok := selector.X.(*ast.Ident)
-	if !ok || imports[qualifier.Name] != middlewareImportPath {
+	if !ok || imports[qualifier.Name] != middlewareRegistryImportPath {
 		return "", false
 	}
 	switch selector.Sel.Name {

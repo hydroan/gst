@@ -9,9 +9,9 @@ import (
 	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/consts"
 	"github.com/hydroan/gst/cronjob"
+	"github.com/hydroan/gst/internal/router"
 	servicelogmgmt "github.com/hydroan/gst/internal/service/logmgmt"
 	"github.com/hydroan/gst/module"
-	"github.com/hydroan/gst/router"
 )
 
 // Register registers two modules: LoginLog and OperationLog.

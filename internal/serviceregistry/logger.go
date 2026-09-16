@@ -3,19 +3,27 @@ package serviceregistry
 import (
 	"reflect"
 	"strings"
+	"sync"
 
 	"github.com/hydroan/gst/logger"
 )
 
-// InitLoggers injects logger.Service into services registered before logger
-// initialization.
-func InitLoggers() {
-	mu.Lock()
-	defer mu.Unlock()
+// initOnce keeps Init to a single pass per process.
+var initOnce sync.Once
 
-	for _, svc := range services {
-		setLogger(svc)
-	}
+// Init injects logger.Service into the services registered before the logger
+// was initialized, once per process; a service registered later gets it as it
+// registers. Bootstrap runs it once the loggers exist.
+func Init() error {
+	initOnce.Do(func() {
+		mu.Lock()
+		defer mu.Unlock()
+
+		for _, svc := range services {
+			setLogger(svc)
+		}
+	})
+	return nil
 }
 
 func setLogger(s any) {

@@ -8,5 +8,5 @@
 // The package-level API is intentionally small:
 //   - Register stores concrete service instances for module/runtime registration.
 //   - Resolve returns the service a controller should execute.
-//   - InitLoggers fills loggers for services registered before logger setup.
+//   - Init fills loggers for services registered before logger setup.
 package serviceregistry

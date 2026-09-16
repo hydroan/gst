@@ -8,17 +8,18 @@ import (
 	"github.com/hydroan/gst/config"
 
 	"github.com/hydroan/gst/consts"
+	internalmiddleware "github.com/hydroan/gst/internal/middleware"
 	modeliamaccount "github.com/hydroan/gst/internal/model/iam/account"
 	modeliamprofile "github.com/hydroan/gst/internal/model/iam/profile"
 	modeliamuser "github.com/hydroan/gst/internal/model/iam/user"
+	"github.com/hydroan/gst/internal/modelregistry"
+	"github.com/hydroan/gst/internal/router"
 	serviceiamaccount "github.com/hydroan/gst/internal/service/iam/account"
 	serviceiamprofile "github.com/hydroan/gst/internal/service/iam/profile"
 	serviceiamsession "github.com/hydroan/gst/internal/service/iam/session"
 	serviceiamuser "github.com/hydroan/gst/internal/service/iam/user"
 	"github.com/hydroan/gst/middleware"
-	"github.com/hydroan/gst/model"
 	"github.com/hydroan/gst/module"
-	"github.com/hydroan/gst/router"
 )
 
 // Register registers IAM models, API routes, middleware, and scheduled jobs.
@@ -76,11 +77,11 @@ func Register() {
 	_ = serviceiamsession.GetSessionExpiration()
 
 	// Register auth middleware before protected routes so auth handlers are attached deterministically.
-	middleware.RegisterAuth(middleware.IAMSession())
+	internalmiddleware.RegisterAuth(middleware.IAMSession())
 
 	// TODO: throttle POST /api/login by client IP. The route is public, so the
-	// limiter belongs on middleware.Register (global scope) rather than
-	// middleware.RegisterAuth, narrowed to this one path through
+	// limiter belongs on internalmiddleware.Register (global scope) rather than
+	// internalmiddleware.RegisterAuth, narrowed to this one path through
 	// ratelimiter.WithSkipFunc; the default key function is already the client
 	// IP.
 	module.Use(module.NewWrapper("/login", "id", true, &serviceiamaccount.LoginService{}), module.CRUD(consts.PHASE_CREATE))
@@ -117,10 +118,10 @@ func Register() {
 	// data: create them explicitly through the standard database chain in a
 	// startup hook such as router.OnRoutesReady, using
 	// serviceiamaccount.NewPasswordCredential for password hashing.
-	model.Register[*modeliamuser.User]()
-	model.Register[*modeliamaccount.PasswordCredential]()
-	model.Register[*modeliamaccount.EmailIdentity]()
-	model.Register[*modeliamprofile.Profile]()
+	modelregistry.RegisterTable[*modeliamuser.User]()
+	modelregistry.RegisterTable[*modeliamaccount.PasswordCredential]()
+	modelregistry.RegisterTable[*modeliamaccount.EmailIdentity]()
+	modelregistry.RegisterTable[*modeliamprofile.Profile]()
 }
 
 // GetSessionExpiration returns the configured session expiration time.

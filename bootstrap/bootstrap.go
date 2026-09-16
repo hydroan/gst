@@ -31,14 +31,14 @@ import (
 	"github.com/hydroan/gst/internal/controller"
 	"github.com/hydroan/gst/internal/dbruntime"
 	"github.com/hydroan/gst/internal/lifecycle"
+	"github.com/hydroan/gst/internal/middleware"
+	"github.com/hydroan/gst/internal/router"
+	"github.com/hydroan/gst/internal/serviceregistry"
 	pkgzap "github.com/hydroan/gst/logger/zap"
 	prommetrics "github.com/hydroan/gst/metrics"
-	"github.com/hydroan/gst/middleware"
 	"github.com/hydroan/gst/module"
 	gstotel "github.com/hydroan/gst/otel"
 	"github.com/hydroan/gst/redis"
-	"github.com/hydroan/gst/router"
-	"github.com/hydroan/gst/service"
 	"go.uber.org/zap"
 )
 
@@ -121,7 +121,7 @@ func Bootstrap() error {
 		rbac.Init,
 
 		// service
-		service.Init,
+		serviceregistry.Init,
 
 		controller.Init,
 		middleware.Init,

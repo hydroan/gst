@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"fmt"
 	"go/parser"
 	"go/token"
@@ -56,5 +57,33 @@ func TestMigrateProgramLinksWhatMainLinks(t *testing.T) {
 	}
 	if _, err := parser.ParseFile(token.NewFileSet(), "main.go", program, parser.AllErrors); err != nil {
 		t.Fatalf("expected the migration program to parse, got %v", err)
+	}
+}
+
+// The migration program reads the tables modules register as well as the
+// project's own. A module registers its models only once the framework
+// releases module registration, and registering mounts its routes on the
+// router, so the program has to bring up everything registration runs
+// through before it waits for it: dbmigrate.Prepare. Run against a project
+// that registers a module, the schema dump lists the module's table. No build
+// of this repository compiles the program's source, so this is also what pins
+// that it still compiles against the framework.
+func TestMigrateSchemaProgramReadsTheTablesModulesRegister(t *testing.T) {
+	projectDir := newGenProject(t)
+	for _, dir := range constants.ProjectImportDirs {
+		content := "package " + dir + "\n"
+		if dir == constants.SubDirModule {
+			content = "package module\n\nimport \"github.com/hydroan/gst/module/helloworld\"\n\nfunc init() {\n\thelloworld.Register()\n}\n"
+		}
+		writeCheckFile(t, filepath.Join(projectDir, dir, dir+".go"), content)
+	}
+
+	var out bytes.Buffer
+	program := projectProgram{Content: buildMigrateSchemaProgram("tmpapp", ""), Stdout: &out}
+	if err := program.Run(); err != nil {
+		t.Fatalf("expected the migration schema program to run, got %v\n%s", err, out.String())
+	}
+	if !strings.Contains(out.String(), "CREATE TABLE `helloworld2`") {
+		t.Fatalf("expected the schema dump to create the table the module registers, got:\n%s", out.String())
 	}
 }

@@ -87,7 +87,7 @@ func bodyLogger() gin.HandlerFunc {
 		// connection; teeing it would capture the first bytes of a stream that
 		// is never a loggable JSON document. Requests stay captured as usual.
 		var writer *bodyLogWriter
-		if rspMode != config.HTTPBodyLogModeNone && !isStreamingRequest(c) {
+		if rspMode != config.HTTPBodyLogModeNone && !IsStreamingRequest(c) {
 			writer = newBodyLogWriter(c.Writer, maxBodySize)
 			c.Writer = writer
 		}

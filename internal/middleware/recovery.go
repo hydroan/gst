@@ -11,8 +11,8 @@ import (
 
 	"github.com/cockroachdb/errors"
 	"github.com/gin-gonic/gin"
+	"github.com/hydroan/gst/internal/response"
 	pkgzap "github.com/hydroan/gst/logger/zap"
-	"github.com/hydroan/gst/response"
 	"go.opentelemetry.io/otel/attribute"
 	"go.uber.org/zap"
 )
