@@ -30,7 +30,6 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	swaggerFiles "github.com/swaggo/files"
 	ginSwagger "github.com/swaggo/gin-swagger"
-	"go.uber.org/multierr"
 	"go.uber.org/zap"
 )
 
@@ -52,8 +51,6 @@ var (
 
 	ginParamPattern = regexp.MustCompile(`:([a-zA-Z0-9_]+)`)
 )
-
-var globalErrors = make([]error, 0)
 
 func routesSnapshot() map[string][]string {
 	routeMu.RLock()
@@ -232,10 +229,6 @@ func Init() error {
 // seed is there for the first round of a job and for the first request
 // alike.
 func RunRoutesReadyHooks(ctx context.Context) error {
-	if err := multierr.Combine(globalErrors...); err != nil {
-		return err
-	}
-
 	routesReadyMu.Lock()
 	hooks := append([]func(context.Context, map[string][]string) error(nil), routesReadyHooks...)
 	routesReadyMu.Unlock()
@@ -258,11 +251,6 @@ func RunRoutesReadyHooks(ctx context.Context) error {
 
 func Run() error {
 	log := zap.S()
-	if err := multierr.Combine(globalErrors...); err != nil {
-		log.Error(err)
-		return err
-	}
-
 	addr := net.JoinHostPort(config.App.Server.Listen, strconv.Itoa(config.App.Server.Port))
 	for _, r := range root.Routes() {
 		log.Debugw("", "method", r.Method, "path", r.Path)
@@ -349,8 +337,6 @@ func register[M types.Model, REQ types.Request, RSP types.Response](router gin.I
 	mu.Lock()
 	defer mu.Unlock()
 
-	// v := reflect.ValueOf(router).Elem()
-	// base := v.FieldByName("basePath").String()
 	var base string
 	if group, ok := router.(*gin.RouterGroup); ok {
 		base = group.BasePath()
@@ -541,12 +527,7 @@ func buildPath(path string) string {
 
 // buildVerbMap creates a map of allowed HTTP verbs according to the specified verbs.
 func buildVerbMap(verbs ...consts.HTTPVerb) map[consts.HTTPVerb]bool {
-	verbMap := make(map[consts.HTTPVerb]bool)
-
-	if len(verbs) == 0 {
-		return make(map[consts.HTTPVerb]bool)
-	}
-
+	verbMap := make(map[consts.HTTPVerb]bool, len(verbs))
 	for _, verb := range verbs {
 		verbMap[verb] = true
 	}

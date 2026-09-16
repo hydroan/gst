@@ -10,12 +10,9 @@ import (
 	"reflect"
 
 	"github.com/hydroan/gst/consts"
-	"github.com/hydroan/gst/internal/modelregistry"
 	"github.com/hydroan/gst/internal/serviceregistry"
 	"github.com/hydroan/gst/internal/types"
 )
-
-var _ types.Service[*modelregistry.Empty, any, any] = (*Base[*modelregistry.Empty, any, any])(nil)
 
 // Base is the default no-op service implementation exposed to application services.
 type Base[M types.Model, REQ types.Request, RSP types.Response] = serviceregistry.Base[M, REQ, RSP]
