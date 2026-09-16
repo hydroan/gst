@@ -4,8 +4,8 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/hydroan/gst"
 	"github.com/hydroan/gst/database"
-	"github.com/hydroan/gst/internal/types"
 )
 
 // The examples below are the runnable reference for the Select builder: one
@@ -42,7 +42,7 @@ func ExampleSelect_scanOne() {
 	got := totals{}
 	if err := database.Select[*TestAggregateRecord, totals](context.Background(),
 		TestAggregateRecordCols.Amount.Sum().As("total"),
-		types.Count().As("records"),
+		gst.Count().As("records"),
 		TestAggregateRecordCols.Amount.Min().As("smallest"),
 		TestAggregateRecordCols.Amount.Max().As("largest"),
 		TestAggregateRecordCols.Amount.Avg().As("average"),
@@ -164,8 +164,8 @@ func ExampleSelect_filterFalse() {
 		Count int64
 	}
 	got := counts{}
-	if err := database.Select[*TestAggregateRecord, counts](context.Background(), types.Count()).
-		Where(types.FilterFalse()).
+	if err := database.Select[*TestAggregateRecord, counts](context.Background(), gst.Count()).
+		Where(gst.FilterFalse()).
 		ScanOne(&got); err != nil {
 		panic(err)
 	}

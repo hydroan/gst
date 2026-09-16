@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/hydroan/gst"
 	"github.com/hydroan/gst/database"
-	"github.com/hydroan/gst/internal/types"
 )
 
 // The grouped examples: group keys, measures, conditional measures, time
@@ -33,7 +33,7 @@ func ExampleSelect_group() {
 	if err := database.Select[*TestAggregateRecord, row](context.Background(),
 		TestAggregateRecordCols.Category.Group(),
 		TestAggregateRecordCols.Amount.Sum(),
-		types.Count(),
+		gst.Count(),
 	).
 		OrderBy(TestAggregateRecordCols.Category.Group().Asc()).
 		Scan(&rows); err != nil {
@@ -66,7 +66,7 @@ func ExampleSelect_count() {
 	}
 	got := counts{}
 	if err := database.Select[*TestAggregateRecord, counts](context.Background(),
-		types.Count().As("rows"),
+		gst.Count().As("rows"),
 		TestAggregateRecordCols.ClosedAt.Count().As("closed"),
 		TestAggregateRecordCols.Category.CountDistinct().As("categories"),
 	).ScanOne(&got); err != nil {
@@ -129,7 +129,7 @@ func ExampleSelect_byHour() {
 	}
 	hour := TestAggregateRecordCols.OccurredAt.ByHour().As("hour")
 	rows := make([]row, 0)
-	if err := database.Select[*TestAggregateRecord, row](context.Background(), hour, types.Count()).
+	if err := database.Select[*TestAggregateRecord, row](context.Background(), hour, gst.Count()).
 		OrderBy(hour.Asc()).
 		Scan(&rows); err != nil {
 		panic(err)
@@ -160,7 +160,7 @@ func ExampleSelect_byDay() {
 	}
 	day := TestAggregateRecordCols.OccurredAt.ByDay().As("day")
 	rows := make([]row, 0)
-	if err := database.Select[*TestAggregateRecord, row](context.Background(), day, types.Count()).
+	if err := database.Select[*TestAggregateRecord, row](context.Background(), day, gst.Count()).
 		OrderBy(day.Asc()).
 		Scan(&rows); err != nil {
 		panic(err)
@@ -222,7 +222,7 @@ func ExampleSelect_having() {
 	total := TestAggregateRecordCols.Amount.Sum().As("total")
 	comparisons := []struct {
 		name string
-		cond types.TermCondition
+		cond gst.TermCondition
 	}{
 		{"eq", total.Eq(600)},
 		{"ne", total.Ne(600)},

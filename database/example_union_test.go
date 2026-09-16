@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/hydroan/gst"
 	"github.com/hydroan/gst/database"
-	"github.com/hydroan/gst/internal/types"
 )
 
 // The union examples stack the seeded payments and refunds (see paymentSeed
@@ -30,16 +30,16 @@ type flow struct {
 // paymentFlows and refundFlows are the two branches every flow example
 // stacks, kept the way a service keeps them: each is an ordinary select
 // scanning into flow, tagged by its kind.
-func paymentFlows(ctx context.Context) types.Selector[*TestPayment, flow] {
+func paymentFlows(ctx context.Context) gst.Selector[*TestPayment, flow] {
 	return database.Select[*TestPayment, flow](ctx,
-		types.Literal("payment").As("kind"),
+		gst.Literal("payment").As("kind"),
 		TestPaymentCols.ID, TestPaymentCols.Account, TestPaymentCols.Amount,
 		TestPaymentCols.PaidAt.As("at"))
 }
 
-func refundFlows(ctx context.Context) types.Selector[*TestRefund, flow] {
+func refundFlows(ctx context.Context) gst.Selector[*TestRefund, flow] {
 	return database.Select[*TestRefund, flow](ctx,
-		types.Literal("refund").As("kind"),
+		gst.Literal("refund").As("kind"),
 		TestRefundCols.ID, TestRefundCols.Account, TestRefundCols.Amount,
 		TestRefundCols.SettledAt.As("at"))
 }
@@ -176,9 +176,9 @@ func ExampleUnionAll_groupedBranches() {
 		Amount  int64
 	}
 	paid := database.Select[*TestPayment, accountTotal](ctx,
-		types.Literal("payment").As("kind"), TestPaymentCols.Account.Group(), TestPaymentCols.Amount.Sum())
+		gst.Literal("payment").As("kind"), TestPaymentCols.Account.Group(), TestPaymentCols.Amount.Sum())
 	refunded := database.Select[*TestRefund, accountTotal](ctx,
-		types.Literal("refund").As("kind"), TestRefundCols.Account.Group(), TestRefundCols.Amount.Sum())
+		gst.Literal("refund").As("kind"), TestRefundCols.Account.Group(), TestRefundCols.Amount.Sum())
 
 	rows := make([]accountTotal, 0)
 	if err := database.UnionAll[accountTotal](ctx, paid, refunded).

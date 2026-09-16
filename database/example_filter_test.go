@@ -4,8 +4,8 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/hydroan/gst"
 	"github.com/hydroan/gst/database"
-	"github.com/hydroan/gst/internal/types"
 )
 
 // The semi-join examples: FilterExists and FilterNotExists tie the records
@@ -34,14 +34,14 @@ func ExampleSelect_filterExists() {
 		Category string
 		Count    int64
 	}
-	vip := types.FilterExists[*TestRecordTag](TestRecordTagCols.RecordID.EqCol(TestAggregateRecordCols.ID), TestRecordTagCols.Label.Eq("vip"))
-	noVip := types.FilterNotExists[*TestRecordTag](TestRecordTagCols.RecordID.EqCol(TestAggregateRecordCols.ID), TestRecordTagCols.Label.Eq("vip"))
+	vip := gst.FilterExists[*TestRecordTag](TestRecordTagCols.RecordID.EqCol(TestAggregateRecordCols.ID), TestRecordTagCols.Label.Eq("vip"))
+	noVip := gst.FilterNotExists[*TestRecordTag](TestRecordTagCols.RecordID.EqCol(TestAggregateRecordCols.ID), TestRecordTagCols.Label.Eq("vip"))
 	for _, scope := range []struct {
 		name   string
-		filter types.Filter
+		filter gst.Filter
 	}{{"vip", vip}, {"no vip", noVip}} {
 		rows := make([]row, 0)
-		if err := database.Select[*TestAggregateRecord, row](context.Background(), TestAggregateRecordCols.Category.Group(), types.Count()).
+		if err := database.Select[*TestAggregateRecord, row](context.Background(), TestAggregateRecordCols.Category.Group(), gst.Count()).
 			Where(scope.filter).
 			OrderBy(TestAggregateRecordCols.Category.Group().Asc()).
 			Scan(&rows); err != nil {
@@ -68,11 +68,11 @@ func ExampleDatabase_filterExists() {
 	seedTagExample()
 	defer cleanupTagData()
 
-	vip := types.FilterExists[*TestRecordTag](TestRecordTagCols.RecordID.EqCol(TestAggregateRecordCols.ID), TestRecordTagCols.Label.Eq("vip"))
+	vip := gst.FilterExists[*TestRecordTag](TestRecordTagCols.RecordID.EqCol(TestAggregateRecordCols.ID), TestRecordTagCols.Label.Eq("vip"))
 	records := make([]*TestAggregateRecord, 0)
 	if err := database.Database[*TestAggregateRecord](context.Background()).
-		WithQuery(nil, types.QueryOptions{Filters: []types.Filter{vip}}).
-		WithOrder(types.Asc("id")).
+		WithQuery(nil, gst.QueryOptions{Filters: []gst.Filter{vip}}).
+		WithOrder(TestAggregateRecordCols.ID.Asc()).
 		List(&records); err != nil {
 		panic(err)
 	}

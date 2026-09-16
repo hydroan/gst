@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"strconv"
 
+	"github.com/hydroan/gst"
 	"github.com/hydroan/gst/database"
-	"github.com/hydroan/gst/internal/types"
 )
 
 // The window examples read the same six seeded rows as the aggregate examples
@@ -36,8 +36,8 @@ func ExampleSelect_rowNumber() {
 		Amount   int64
 		Rn       int64
 	}
-	rn := types.RowNumber().
-		Over(types.PartitionBy(TestAggregateRecordCols.Category).OrderBy(TestAggregateRecordCols.OccurredAt.Desc())).
+	rn := gst.RowNumber().
+		Over(gst.PartitionBy(TestAggregateRecordCols.Category).OrderBy(TestAggregateRecordCols.OccurredAt.Desc())).
 		As("rn")
 	rows := make([]row, 0)
 	if err := database.Select[*TestAggregateRecord, row](context.Background(),
@@ -76,7 +76,7 @@ func ExampleSelect_runningTotal() {
 		Running int64
 	}
 	running := TestAggregateRecordCols.Amount.Sum().
-		Over(types.PartitionBy(TestAggregateRecordCols.Category).OrderBy(TestAggregateRecordCols.OccurredAt.Asc())).
+		Over(gst.PartitionBy(TestAggregateRecordCols.Category).OrderBy(TestAggregateRecordCols.OccurredAt.Asc())).
 		As("running")
 	rows := make([]row, 0)
 	if err := database.Select[*TestAggregateRecord, row](context.Background(),
@@ -116,11 +116,11 @@ func ExampleSelect_partitionTotal() {
 		Rows   int64
 		Total  int64
 	}
-	byCategory := types.PartitionBy(TestAggregateRecordCols.Category)
+	byCategory := gst.PartitionBy(TestAggregateRecordCols.Category)
 	rows := make([]row, 0)
 	if err := database.Select[*TestAggregateRecord, row](context.Background(),
 		TestAggregateRecordCols.ID, TestAggregateRecordCols.Amount,
-		types.Count().Over(byCategory).As("rows"),
+		gst.Count().Over(byCategory).As("rows"),
 		TestAggregateRecordCols.Amount.Sum().Over(byCategory).As("total"),
 	).
 		OrderBy(TestAggregateRecordCols.ID.Asc()).
@@ -154,7 +154,7 @@ func ExampleSelect_lagLead() {
 		Previous *int64
 		Next     *int64
 	}
-	window := types.PartitionBy(TestAggregateRecordCols.Category).OrderBy(TestAggregateRecordCols.OccurredAt.Asc())
+	window := gst.PartitionBy(TestAggregateRecordCols.Category).OrderBy(TestAggregateRecordCols.OccurredAt.Asc())
 	rows := make([]row, 0)
 	if err := database.Select[*TestAggregateRecord, row](context.Background(),
 		TestAggregateRecordCols.ID, TestAggregateRecordCols.Amount,
@@ -201,15 +201,15 @@ func ExampleSelect_rank() {
 		RowNumber int64
 	}
 	total := TestAggregateRecordCols.Amount.Sum().As("total")
-	byTotal := types.OrderBy(total.Desc())
+	byTotal := gst.OrderBy(total.Desc())
 	rows := make([]row, 0)
 	if err := database.Select[*TestAggregateRecord, row](context.Background(),
 		TestAggregateRecordCols.Category.Group(), total,
-		types.Rank().Over(byTotal),
-		types.DenseRank().Over(byTotal),
-		types.RowNumber().Over(byTotal),
+		gst.Rank().Over(byTotal),
+		gst.DenseRank().Over(byTotal),
+		gst.RowNumber().Over(byTotal),
 	).
-		OrderBy(types.RowNumber().Over(byTotal).Asc()).
+		OrderBy(gst.RowNumber().Over(byTotal).Asc()).
 		Scan(&rows); err != nil {
 		panic(err)
 	}
@@ -245,7 +245,7 @@ func ExampleSelect_windowOverGroups() {
 	if err := database.Select[*TestAggregateRecord, row](context.Background(),
 		TestAggregateRecordCols.Category.Group(), TestAggregateRecordCols.Status.Group(),
 		TestAggregateRecordCols.Amount.Sum().As("total"),
-		TestAggregateRecordCols.Amount.Sum().Over(types.PartitionBy(TestAggregateRecordCols.Category)).As("category_total"),
+		TestAggregateRecordCols.Amount.Sum().Over(gst.PartitionBy(TestAggregateRecordCols.Category)).As("category_total"),
 	).
 		OrderBy(TestAggregateRecordCols.Category.Asc(), TestAggregateRecordCols.Status.Asc()).
 		Scan(&rows); err != nil {
@@ -277,8 +277,8 @@ func ExampleSelect_qualifyCount() {
 		Category string
 		Rn       int64
 	}
-	rn := types.RowNumber().
-		Over(types.PartitionBy(TestAggregateRecordCols.Category).OrderBy(TestAggregateRecordCols.OccurredAt.Desc())).
+	rn := gst.RowNumber().
+		Over(gst.PartitionBy(TestAggregateRecordCols.Category).OrderBy(TestAggregateRecordCols.OccurredAt.Desc())).
 		As("rn")
 	latest := database.Select[*TestAggregateRecord, row](context.Background(),
 		TestAggregateRecordCols.ID, TestAggregateRecordCols.Category, rn,

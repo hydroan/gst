@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"strconv"
 
+	"github.com/hydroan/gst"
 	"github.com/hydroan/gst/database"
-	"github.com/hydroan/gst/internal/types"
 )
 
 // The join examples read the seeded payments beside the one seeded account
@@ -42,7 +42,7 @@ func ExampleSelect_join() {
 	rows := make([]taggedRecord, 0)
 	if err := database.Select[*TestRecordTag, taggedRecord](context.Background(),
 		TestRecordTagCols.ID, TestRecordTagCols.Label, TestAggregateRecordCols.Category, TestAggregateRecordCols.Amount).
-		Join(types.Join[*TestAggregateRecord](TestAggregateRecordCols.ID.EqCol(TestRecordTagCols.RecordID))).
+		Join(gst.Join[*TestAggregateRecord](TestAggregateRecordCols.ID.EqCol(TestRecordTagCols.RecordID))).
 		OrderBy(TestRecordTagCols.ID.Asc()).
 		Scan(&rows); err != nil {
 		panic(err)
@@ -81,7 +81,7 @@ func ExampleSelect_leftJoin() {
 	rows := make([]paymentWithAccount, 0)
 	if err := database.Select[*TestPayment, paymentWithAccount](context.Background(),
 		TestPaymentCols.ID, TestPaymentCols.Amount, TestAccountCols.Name.As("account_name")).
-		Join(types.LeftJoin[*TestAccount](TestAccountCols.Code.EqCol(TestPaymentCols.Account))).
+		Join(gst.LeftJoin[*TestAccount](TestAccountCols.Code.EqCol(TestPaymentCols.Account))).
 		OrderBy(TestPaymentCols.ID.Asc()).
 		Scan(&rows); err != nil {
 		panic(err)
@@ -126,7 +126,7 @@ func ExampleSelect_joinGrouped() {
 	rows := make([]accountTotal, 0)
 	if err := database.Select[*TestPayment, accountTotal](context.Background(),
 		TestPaymentCols.Account.Group(), TestAccountCols.Name.Group(), TestPaymentCols.Amount.Sum()).
-		Join(types.Join[*TestAccount](TestAccountCols.Code.EqCol(TestPaymentCols.Account))).
+		Join(gst.Join[*TestAccount](TestAccountCols.Code.EqCol(TestPaymentCols.Account))).
 		Where(TestAccountCols.Tier.Eq("gold")).
 		OrderBy(TestPaymentCols.Account.Group().Asc()).
 		Scan(&rows); err != nil {
@@ -171,7 +171,7 @@ func ExampleSelect_joinSelect() {
 	rows := make([]recordWithTags, 0)
 	if err := database.Select[*TestAggregateRecord, recordWithTags](context.Background(),
 		TestAggregateRecordCols.ID, TestAggregateRecordCols.Category, tags).
-		Join(types.LeftJoinSelect(counts, TestRecordTagCols.RecordID.EqCol(TestAggregateRecordCols.ID))).
+		Join(gst.LeftJoinSelect(counts, TestRecordTagCols.RecordID.EqCol(TestAggregateRecordCols.ID))).
 		OrderBy(TestAggregateRecordCols.ID.Asc()).
 		Scan(&rows); err != nil {
 		panic(err)
@@ -223,7 +223,7 @@ func ExampleSelect_joinSelectGrouped() {
 	rows := make([]accountFlow, 0)
 	if err := database.Select[*TestPayment, accountFlow](context.Background(),
 		TestPaymentCols.Account.Group(), TestPaymentCols.Amount.Sum().As("paid"), refunded).
-		Join(types.LeftJoinSelect(refunds, TestRefundCols.Account.EqCol(TestPaymentCols.Account))).
+		Join(gst.LeftJoinSelect(refunds, TestRefundCols.Account.EqCol(TestPaymentCols.Account))).
 		OrderBy(TestPaymentCols.Account.Group().Asc()).
 		Scan(&rows); err != nil {
 		panic(err)
