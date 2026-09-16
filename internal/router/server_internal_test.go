@@ -56,11 +56,55 @@ func TestShutdownEndsOpenStreams(t *testing.T) {
 	require.ErrorIs(t, <-served, http.ErrServerClosed)
 }
 
-// TestStopClosesTheConnectionsOnceTheWaitIsAbandoned proves Stop waits for
-// the requests in flight only until it is told not to, then closes their
-// connections instead of waiting out its bound: a process that must not wait
-// on anything gets no drain.
-func TestStopClosesTheConnectionsOnceTheWaitIsAbandoned(t *testing.T) {
+// TestStopClosesTheConnectionsTheDrainLeftOpen proves Stop waits for the
+// requests in flight only for as long as it may — until its bound passes, or
+// until it is told not to wait — and then closes their connections instead
+// of leaving them open: a request that outlives the drain is cut off.
+func TestStopClosesTheConnectionsTheDrainLeftOpen(t *testing.T) {
+	t.Run("once the drain times out", func(t *testing.T) {
+		original := drainTimeout
+		drainTimeout = 200 * time.Millisecond
+		t.Cleanup(func() { drainTimeout = original })
+		requested, served := serveARequestThatStaysInFlight(t)
+
+		Stop(context.Background())
+		require.Error(t, awaitResult(t, requested), "the request still in flight must have been cut off")
+		require.ErrorIs(t, awaitResult(t, served), http.ErrServerClosed)
+	})
+
+	t.Run("once the wait is abandoned", func(t *testing.T) {
+		requested, served := serveARequestThatStaysInFlight(t)
+
+		abandon, abandonWait := context.WithCancelCause(context.Background())
+		stopped := make(chan struct{})
+		go func() {
+			defer close(stopped)
+			Stop(abandon)
+		}()
+		select {
+		case <-stopped:
+			t.Fatal("Stop must wait for the request in flight until it is told not to")
+		case <-time.After(200 * time.Millisecond):
+		}
+
+		abandonWait(errors.New("sample failure"))
+		select {
+		case <-stopped:
+		case <-time.After(time.Second):
+			t.Fatal("Stop must return once the wait is abandoned")
+		}
+		require.Error(t, awaitResult(t, requested), "the request in flight must have been cut off")
+		require.ErrorIs(t, awaitResult(t, served), http.ErrServerClosed)
+	})
+}
+
+// serveARequestThatStaysInFlight serves, as the package's server, a handler
+// that does not finish before the test does, sends it one request and waits
+// for the request to reach it. It returns what the request and the server
+// end with.
+func serveARequestThatStaysInFlight(t *testing.T) (requested, served <-chan error) {
+	t.Helper()
+
 	entered, release := make(chan struct{}, 1), make(chan struct{})
 	t.Cleanup(func() { close(release) })
 	srv := newServer("", http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
@@ -69,13 +113,13 @@ func TestStopClosesTheConnectionsOnceTheWaitIsAbandoned(t *testing.T) {
 	}))
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
 	require.NoError(t, err)
-	served := make(chan error, 1)
-	go func() { served <- srv.Serve(listener) }()
+	serving := make(chan error, 1)
+	go func() { serving <- srv.Serve(listener) }()
 	original := server
 	server = srv
 	t.Cleanup(func() { server = original })
 
-	requested := make(chan error, 1)
+	requesting := make(chan error, 1)
 	go func() {
 		req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, "http://"+listener.Addr().String(), nil)
 		if err == nil {
@@ -84,32 +128,26 @@ func TestStopClosesTheConnectionsOnceTheWaitIsAbandoned(t *testing.T) {
 				rsp.Body.Close()
 			}
 		}
-		requested <- err
+		requesting <- err
 	}()
 	select {
 	case <-entered:
 	case <-time.After(5 * time.Second):
 		t.Fatal("the request never reached its handler")
 	}
+	return requesting, serving
+}
 
-	abandon, abandonWait := context.WithCancelCause(context.Background())
-	stopped := make(chan struct{})
-	go func() {
-		defer close(stopped)
-		Stop(abandon)
-	}()
-	select {
-	case <-stopped:
-		t.Fatal("Stop must wait for the request in flight until it is told not to")
-	case <-time.After(200 * time.Millisecond):
-	}
+// awaitResult receives the next result from results, failing the test when
+// none comes in time.
+func awaitResult(t *testing.T, results <-chan error) error {
+	t.Helper()
 
-	abandonWait(errors.New("sample failure"))
 	select {
-	case <-stopped:
-	case <-time.After(time.Second):
-		t.Fatal("Stop must return once the wait is abandoned")
+	case err := <-results:
+		return err
+	case <-time.After(5 * time.Second):
+		t.Fatal("no result came in time")
+		return nil
 	}
-	require.Error(t, <-requested, "the request in flight must have been cut off")
-	require.ErrorIs(t, <-served, http.ErrServerClosed)
 }

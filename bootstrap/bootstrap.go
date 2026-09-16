@@ -261,9 +261,11 @@ func Run() error {
 		gops.Run,
 	)
 
+	// The servers drain what they may, and not at all once the process
+	// fails now.
 	registerCleanup(func() { router.Stop(lifecycle.FailedNow()) })
-	registerCleanup(statsviz.Stop)
-	registerCleanup(debugpprof.Stop)
+	registerCleanup(func() { statsviz.Stop(lifecycle.FailedNow()) })
+	registerCleanup(func() { debugpprof.Stop(lifecycle.FailedNow()) })
 	registerCleanup(gops.Stop)
 
 	err = awaitShutdown(startup.Go(), lifecycle.Failure(), sigCh)

@@ -297,29 +297,30 @@ func newServer(addr string, handler http.Handler) *http.Server {
 func Auth() *gin.RouterGroup { return auth }
 func Pub() *gin.RouterGroup  { return pub }
 
+// drainTimeout bounds how long Stop waits for the requests in flight. A
+// variable so a test can play the bound out in milliseconds.
+var drainTimeout = 30 * time.Second
+
 // Stop shuts the server down: it stops accepting connections and waits for
-// the requests in flight, for up to 30 seconds. Once abandon has ended the
-// wait is over — at once when it already has — and the connections still
-// open are closed, their requests cut off: for a process that must not wait
-// on anything, see lifecycle.FailNow.
+// the requests in flight, for up to drainTimeout and no longer than abandon
+// lasts — not at all when it has already ended, for a process that must not
+// wait on anything, see lifecycle.FailNow. The connections a drain cut short
+// leaves open are closed, their requests cut off, rather than left to run
+// past the teardown of what they use.
 func Stop(abandon context.Context) {
 	if server == nil {
 		return
 	}
 	zap.S().Infow("backend server shutdown initiated")
-	ctx, cancel := context.WithTimeout(abandon, 30*time.Second)
+	ctx, cancel := context.WithTimeout(abandon, drainTimeout)
 	defer cancel()
-	err := server.Shutdown(ctx)
-	switch {
-	case err == nil:
-		zap.S().Infow("backend server shutdown completed")
-	case abandon.Err() != nil:
-		zap.S().Warnw("backend server closing without draining", "reason", context.Cause(abandon))
+	if err := server.Shutdown(ctx); err != nil {
+		zap.S().Warnw("backend server closing the connections its drain left open", "err", err, "reason", context.Cause(ctx))
 		if closeErr := server.Close(); closeErr != nil {
 			zap.S().Errorw("backend server close failed", "err", closeErr)
 		}
-	default:
-		zap.S().Errorw("backend server shutdown failed", "err", err)
+	} else {
+		zap.S().Infow("backend server shutdown completed")
 	}
 	server = nil
 }

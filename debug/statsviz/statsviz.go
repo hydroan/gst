@@ -40,16 +40,27 @@ func Run() error {
 	return nil
 }
 
-func Stop() {
+// drainTimeout bounds how long Stop waits for the requests in flight.
+const drainTimeout = 5 * time.Second
+
+// Stop shuts the statsviz server down: it stops accepting connections and
+// waits for the requests in flight for up to drainTimeout and no longer than
+// abandon lasts, not at all when it has already ended, for a process that
+// must not wait on anything. The connections a drain cut short leaves open
+// are closed.
+func Stop(abandon context.Context) {
 	if server == nil {
 		return
 	}
 
 	zap.S().Infow("statsviz server shutdown initiated")
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(abandon, drainTimeout)
 	defer cancel()
 	if err := server.Shutdown(ctx); err != nil {
-		zap.S().Errorw("statsviz server shutdown failed", "err", err)
+		zap.S().Warnw("statsviz server closing the connections its drain left open", "err", err, "reason", context.Cause(ctx))
+		if closeErr := server.Close(); closeErr != nil {
+			zap.S().Errorw("statsviz server close failed", "err", closeErr)
+		}
 	} else {
 		zap.S().Infow("statsviz server shutdown completed")
 	}
