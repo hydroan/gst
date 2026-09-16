@@ -798,6 +798,7 @@ leader election 一样——它也不做逐写核对，靠续期截止早于租�
 | --- | --- |
 | `gg gen` | 根据 `model` DSL 生成注册文件和 service action 文件 |
 | `gg gen --prune` | 生成后联动清理废弃 service action 文件 |
+| `gg gen ts` | 生成接口收发类型的 TypeScript 声明到 `generated/typescript/`，供前端复制使用 |
 | `gg module copy <name>` | 将内置模块复制为业务项目本地源码，并删除框架源已移除的过时 model/service 文件（`_test.go` 与生成文件除外） |
 | `gg check` | 检查业务项目结构、命名、依赖边界和 tag 约束 |
 | `gg prune` | 只扫描并清理废弃 service action 文件 |
@@ -809,6 +810,33 @@ leader election 一样——它也不做逐写核对，靠续期截止早于租�
 `gg check` 会检查依赖边界、model/service 文件边界、命名规范、`json` tag、
 REQ/RSP 命名和业务项目根目录结构；根目录结构检查会跳过 Git ignore 规则忽略的
 目录。`gg gen` 生成前也会执行这些检查；检查失败会停止生成。
+
+### 生成 TypeScript 类型
+
+`gg gen ts` 把 model `Design()` 中各路由收发的 Go 类型（请求 Payload、响应 Result 与模型本身）
+生成为 TypeScript 声明，写到 `generated/typescript/`：每个 Go 包一个文件，另有 `gst.ts` 声明
+响应信封 `Envelope<T>`、默认列表结果 `ListResult<T>` 和默认批量请求体 `ItemsPayload<T>`、
+`IDsPayload`。产物只有类型，文件之间用相对路径互相引用，不依赖任何 npm 包，也不限定请求库和
+前端框架：把整个目录复制到前端项目即可使用。命令和 `gg gen` 一样先执行项目检查、应用 gst.yaml
+的忽略规则；模型变化后重新执行，再把目录复制给前端。
+
+类型按 `encoding/json` 的实际编码规则生成：
+
+- 字段名取 `json` tag；`json:"-"` 的字段不出现；嵌入结构体的字段展开到外层。
+- 指针、切片、map 字段写成 `?: T | null`；带 `omitempty` 或 `omitzero` 的字段写成 `?:`；其余字段必有。底层是切片或
+  map 的具名类型，声明本身就带 `| null`：它的 nil 值编码为 null，作为响应 Result 时 data 也可能是 null。
+- 数字一律是 `number`，超过 2^53 的 64 位整数在前端会丢失精度；带 `,string` 选项的字段是 `string`。
+- 同包声明了常量的 string、整数类型生成字面量联合，常量注释写进类型注释，与 Swagger 一致；常量用
+  `<<`、`|` 等位运算定义的视为位标志，类型是 `number`；没有零值常量的枚举在使用处补 `| ""` 或 `| 0`。
+- `time.Time`、`datatypes.Date` 是字符串；`any`、`json.RawMessage`、`datatypes.JSON` 是 `unknown`。
+
+JSON 形态由代码决定、无法从类型声明读出的写法，命令会列出全部位置后失败，不写任何文件：自定义了
+`MarshalJSON`、`MarshalText` 等编码方法的类型（上面列出的类型除外）、项目内的泛型类型、带方法的接口、
+channel 与函数字段、键不是字符串或整数的 map，以及 `encoding/json` 不认的 tag 名和 tag 选项。只定义了
+`UnmarshalJSON` 等解码方法的类型照常按自身结构生成，即服务端返回它时的形态。
+
+`gg module add` 或 `module.Use` 在运行期注册的模块路由不在生成范围内，它们收发的类型需要前端自行声明；
+`gg module copy` 复制进项目的模块和业务 model 一样会生成。
 
 ### 项目级配置 gst.yaml
 

@@ -37,7 +37,9 @@ func TestFrameworkRootGuardAllowsMetadataCommands(t *testing.T) {
 func TestFrameworkRootGuardAllowsProjectCommandsOutsideFrameworkRoot(t *testing.T) {
 	writeGoMod(t, t.TempDir(), "example.com/app")
 
-	if _, err := executeRootCommand(t, "gen", "ts"); err != nil {
+	// The guard is asked directly: executing the command would also run the
+	// generation it stands for, against a project that has nothing to generate.
+	if err := rejectFrameworkRootCommand(tsCmd, nil); err != nil {
 		t.Fatalf("expected project command to run outside the gst framework root: %v", err)
 	}
 }

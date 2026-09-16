@@ -33,18 +33,6 @@ var genCmd = &cobra.Command{
 	},
 }
 
-var tsCmd = &cobra.Command{
-	Use:   "ts",
-	Short: "generate typescript interface code",
-	Run: func(cmd *cobra.Command, args []string) {
-		clioutput.Warn("", "TypeScript generation is not implemented yet")
-	},
-}
-
-func init() {
-	genCmd.AddCommand(tsCmd)
-}
-
 type genRunOptions struct {
 	Quiet bool
 	// BaselineViolations lists project check violations that already existed
@@ -103,47 +91,11 @@ func genRunWithOptions(opts genRunOptions) error {
 		}
 	}
 
-	if !fileExists(modelDir) {
-		return fmt.Errorf("model dir not found: %s", modelDir)
-	}
-
-	// Scan all models
-	if !opts.Quiet {
-		clioutput.Section("Scan Models")
-	}
-	allModels, err := codegen.FindModels(module, modelDir, serviceDir, excludes)
+	scanned, err := scanModels(opts.Quiet)
 	if err != nil {
 		return err
 	}
-	buildHierarchicalEndpoints(allModels)
-	propagateParentParams(allModels)
-
-	// Apply project-level route ignores from gst.yaml before any
-	// registration statements are collected, so a matched action behaves
-	// exactly like an action that was never declared.
-	projectCfg, err := ggconfig.Load(".")
-	if err != nil {
-		return err
-	}
-	ignoreResult := applyRouteIgnores(allModels, projectCfg.Gen.Routes.Ignore)
-	if !opts.Quiet && len(ignoreResult.Matches) > 0 {
-		clioutput.Section("Ignore Routes")
-		for _, match := range ignoreResult.Matches {
-			clioutput.Item("IGNORE", "%s %s (%s)", match.Method, match.Path, match.Model)
-		}
-	}
-	reportRouteIgnoreWarnings(ignoreResult)
-
-	// Model ignores run after route ignores so the live-action warning sees
-	// the final enabled-action set.
-	modelIgnores := applyModelIgnores(allModels, projectCfg.Gen.Models.Ignore)
-	if !opts.Quiet && len(modelIgnores.Matches) > 0 {
-		clioutput.Section("Ignore Models")
-		for _, match := range modelIgnores.Matches {
-			clioutput.Item("IGNORE", "model %s (%s)", match.Model, match.File)
-		}
-	}
-	reportModelIgnoreWarnings(modelIgnores)
+	allModels, ignoreResult := scanned.models, scanned.routeIgnores
 
 	// Record old service files list (if prune option is enabled)
 	var oldServiceFiles []string
@@ -411,6 +363,62 @@ func genRunWithOptions(opts genRunOptions) error {
 		clioutput.Done("Code generation completed successfully!")
 	}
 	return nil
+}
+
+// scannedModels is the model set code generation works from.
+type scannedModels struct {
+	models []*gen.ModelInfo
+	// routeIgnores records the actions the gst.yaml route ignores disabled,
+	// with the service files pruning must keep for them.
+	routeIgnores routeIgnoreResult
+}
+
+// scanModels reads the models of the model directory and resolves their
+// routes: hierarchical endpoints and parent params are applied, then the
+// gst.yaml route and model ignores. Route ignores apply before anything reads
+// the actions, so a matched action behaves exactly like an action that was
+// never declared. gg gen and gg gen ts both start from here, which keeps the
+// TypeScript declarations on the routes the generated router registers.
+func scanModels(quiet bool) (scannedModels, error) {
+	if !fileExists(modelDir) {
+		return scannedModels{}, fmt.Errorf("model dir not found: %s", modelDir)
+	}
+
+	if !quiet {
+		clioutput.Section("Scan Models")
+	}
+	allModels, err := codegen.FindModels(module, modelDir, serviceDir, excludes)
+	if err != nil {
+		return scannedModels{}, err
+	}
+	buildHierarchicalEndpoints(allModels)
+	propagateParentParams(allModels)
+
+	projectCfg, err := ggconfig.Load(".")
+	if err != nil {
+		return scannedModels{}, err
+	}
+	ignoreResult := applyRouteIgnores(allModels, projectCfg.Gen.Routes.Ignore)
+	if !quiet && len(ignoreResult.Matches) > 0 {
+		clioutput.Section("Ignore Routes")
+		for _, match := range ignoreResult.Matches {
+			clioutput.Item("IGNORE", "%s %s (%s)", match.Method, match.Path, match.Model)
+		}
+	}
+	reportRouteIgnoreWarnings(ignoreResult)
+
+	// Model ignores run after route ignores so the live-action warning sees
+	// the final enabled-action set.
+	modelIgnores := applyModelIgnores(allModels, projectCfg.Gen.Models.Ignore)
+	if !quiet && len(modelIgnores.Matches) > 0 {
+		clioutput.Section("Ignore Models")
+		for _, match := range modelIgnores.Matches {
+			clioutput.Item("IGNORE", "model %s (%s)", match.Model, match.File)
+		}
+	}
+	reportModelIgnoreWarnings(modelIgnores)
+
+	return scannedModels{models: allModels, routeIgnores: ignoreResult}, nil
 }
 
 func routerTargetForAction(route string, design *dsl.Design, action *dsl.Action) (string, string) {
