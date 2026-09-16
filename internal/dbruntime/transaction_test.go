@@ -35,6 +35,21 @@ func TestTxContextInstanceIsolation(t *testing.T) {
 	require.Same(t, tx, got)
 }
 
+// TestInTransactionSeesEveryInstance verifies the instance-agnostic view of a
+// transaction context: a transaction open on any instance marks the context,
+// for the callers that must not run inside a transaction whichever instance
+// it is open on.
+func TestInTransactionSeesEveryInstance(t *testing.T) {
+	require.False(t, InTransaction(context.Background()))
+	require.False(t, InTransaction(nil)) //nolint:staticcheck // nil is a supported input, mirroring TxFromContext.
+
+	analytics := &gorm.DB{}
+	require.True(t, InTransaction(WithTx(context.Background(), &gorm.DB{}, analytics)),
+		"a transaction on any instance marks the context")
+	require.False(t, InTransaction(WithTx(context.Background(), nil, analytics)),
+		"no transaction, no mark")
+}
+
 // TestHandleResolvesTheContextTransaction covers the resolution the framework's
 // database chain and its third-party adapters share: an operation runs on the
 // context transaction of its own instance, and on the plain handle when there

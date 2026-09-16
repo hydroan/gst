@@ -12,6 +12,7 @@ import (
 
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/config"
+	"github.com/hydroan/gst/database"
 	"github.com/hydroan/gst/database/mysql"
 	"github.com/hydroan/gst/database/postgres"
 	"github.com/hydroan/gst/database/sqlite"
@@ -111,6 +112,63 @@ func TestTryRunRefusesAHeldLock(t *testing.T) {
 	close(release)
 	require.NoError(t, awaitError(t, first))
 	require.NoError(t, l.TryRun(context.Background(), noopWork), "the next try runs once the work has returned")
+}
+
+// TestTryRunRefusesAnOpenTransaction proves a try made inside an open
+// database transaction — on the default database or on any other instance —
+// is refused with ErrInTransaction before it claims anything: the lock would
+// be given back when the work returns, before the transaction carrying the
+// work's writes commits. The same try made outside the transaction then runs
+// as the name's first claim.
+func TestTryRunRefusesAnOpenTransaction(t *testing.T) {
+	withLockLoggerConfig(t)
+	resetLockState(t)
+	l := New("transactional-work")
+
+	other, err := sqlite.New(config.Sqlite{Path: filepath.Join(t.TempDir(), "other.db")})
+	require.NoError(t, err)
+	t.Cleanup(func() {
+		pool, err := other.DB()
+		require.NoError(t, err)
+		require.NoError(t, pool.Close())
+	})
+
+	transactions := []struct {
+		name string
+		open func(ctx context.Context, fn func(ctx context.Context) error) error
+	}{
+		{name: "on the default database", open: database.Transaction},
+		{name: "on another instance", open: func(ctx context.Context, fn func(ctx context.Context) error) error {
+			return database.TransactionOn(ctx, other, fn)
+		}},
+	}
+	for _, transaction := range transactions {
+		t.Run(transaction.name, func(t *testing.T) {
+			// A try that reached the database from inside a transaction on
+			// SQLite's single connection would wait for that connection; the
+			// deadline turns the wait into a failure instead of a hang.
+			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+			defer cancel()
+
+			ran := false
+			err := transaction.open(ctx, func(ctx context.Context) error {
+				return l.TryRun(ctx, func(context.Context) error {
+					ran = true
+					return nil
+				})
+			})
+			require.ErrorIs(t, err, ErrInTransaction)
+			require.ErrorContains(t, err, `lock "transactional-work"`)
+			require.False(t, ran, "a refused try must not run the work")
+		})
+	}
+
+	var term uint64
+	require.NoError(t, l.TryRun(context.Background(), func(ctx context.Context) error {
+		term, _ = lease.TermFromContext(ctx)
+		return nil
+	}))
+	require.EqualValues(t, 1, term, "the refused tries must not have claimed the name")
 }
 
 // TestTryRunReturnsTheWorkErrorAndRecoversAPanic proves the work's outcome

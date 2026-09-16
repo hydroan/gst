@@ -15,6 +15,13 @@ import (
 // view.
 type transactionContextKey struct{ base *gorm.DB }
 
+// openTransactionKey marks a context inside a transaction on any instance.
+//
+// Unlike transactionContextKey it names no handle: it answers the callers
+// that must not run inside a transaction whichever instance holds it, see
+// InTransaction.
+type openTransactionKey struct{}
+
 // WithTx returns a child context carrying tx as the transaction open on base.
 //
 // Model hooks only receive a context.Context. They do not receive the database
@@ -22,7 +29,8 @@ type transactionContextKey struct{ base *gorm.DB }
 // should keep using the framework entry point, for example
 // database.Database[*Sample](ctx).Update(sample). The transaction therefore has
 // to travel through the hook context, and the database chain reads it back to
-// bind itself to the same transaction.
+// bind itself to the same transaction. The child context is also marked as
+// inside a transaction whatever the instance, see InTransaction.
 //
 // The value is scoped to this context tree only. It is not global, does not
 // cross requests, and is lost if code replaces the context with
@@ -34,7 +42,8 @@ func WithTx(ctx context.Context, tx *gorm.DB, base *gorm.DB) context.Context {
 	if tx == nil {
 		return ctx
 	}
-	return context.WithValue(ctx, transactionContextKey{base: base}, tx)
+	ctx = context.WithValue(ctx, transactionContextKey{base: base}, tx)
+	return context.WithValue(ctx, openTransactionKey{}, true)
 }
 
 // TxFromContext returns the transaction ctx carries for base, if any.
@@ -47,6 +56,16 @@ func TxFromContext(ctx context.Context, base *gorm.DB) (*gorm.DB, bool) {
 		return nil, false
 	}
 	return tx, true
+}
+
+// InTransaction reports whether ctx carries a transaction open on any
+// instance.
+func InTransaction(ctx context.Context) bool {
+	if ctx == nil {
+		return false
+	}
+	open, _ := ctx.Value(openTransactionKey{}).(bool)
+	return open
 }
 
 // Handle returns the connection an operation on instance must run through for

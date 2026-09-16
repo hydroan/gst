@@ -28,6 +28,15 @@
 // as it does for a leader or a cron round. A ClickHouse primary database
 // cannot carry leases, so a declared lock fails the start there.
 //
+// Take a lock outside any database transaction and open the transactions
+// inside the work. The lock is given back as soon as the work returns, while
+// a transaction the try was made in — a database.Transaction closure on any
+// instance, or the write a model hook runs in — commits only after that:
+// another holder could start the same work before this one's writes show,
+// and on SQLite the claim would wait for the one connection that transaction
+// holds. TryRun refuses such a try with ErrInTransaction before it claims
+// anything.
+//
 // The framework opens a single connection to SQLite, so there a transaction
 // of the work blocks the renewal of the lease: keep each transaction under 5
 // seconds — a longer one may hold the renewal back until the lease counts as
@@ -43,6 +52,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/errors"
+	"github.com/hydroan/gst/internal/dbruntime"
 	"github.com/hydroan/gst/internal/lease"
 	"github.com/hydroan/gst/internal/lifecycle"
 	"github.com/hydroan/gst/internal/types"
@@ -55,6 +65,12 @@ var (
 	// replica, or in another request of this one — which TryRun never waits
 	// for.
 	ErrHeld = errors.New("lock held elsewhere")
+	// ErrInTransaction reports a try made inside an open database
+	// transaction, refused before it claims anything: the lock would be
+	// given back when the work returns, before that transaction commits the
+	// work's writes. Take the lock first and open the transaction inside the
+	// work.
+	ErrInTransaction = errors.New("lock tried inside an open database transaction")
 	// ErrLost reports work cut short because the lease behind the lock was
 	// lost while it ran; a transaction that refused to run for the same
 	// reason reports it too.
@@ -189,16 +205,20 @@ func start(context.Context) error {
 // has returned.
 const releaseTimeout = 5 * time.Second
 
-// TryRun runs fn under the lock, once, without waiting: ErrHeld when the lock
-// is held elsewhere, else what fn returned — or ErrLost, joined with fn's
-// error if any, when the lease behind the lock was lost while fn ran. fn
-// receives a context that ends when the lease is lost or ctx ends, carries
-// the lease so that database.Transaction calls on it verify it first, and
-// keeps whatever identity ctx carried: the request's, the round's. A panic
-// in fn is recovered into an error carrying its stack. fn that has not
-// returned 5 seconds after its context ended by a lost lease fails the
-// process, see the package documentation.
+// TryRun runs fn under the lock, once, without waiting: ErrInTransaction when
+// ctx is inside an open database transaction, ErrHeld when the lock is held
+// elsewhere, else what fn returned — or ErrLost, joined with fn's error if
+// any, when the lease behind the lock was lost while fn ran. fn receives a
+// context that ends when the lease is lost or ctx ends, carries the lease so
+// that database.Transaction calls on it verify it first, and keeps whatever
+// identity ctx carried: the request's, the round's. A panic in fn is
+// recovered into an error carrying its stack. fn that has not returned 5
+// seconds after its context ended by a lost lease fails the process, see the
+// package documentation.
 func (l *Lock) TryRun(ctx context.Context, fn func(ctx context.Context) error) error {
+	if dbruntime.InTransaction(ctx) {
+		return errors.Wrapf(ErrInTransaction, "lock %q", l.name)
+	}
 	h, won, err := lease.Claim(ctx, l.leaseName())
 	if err != nil {
 		return errors.Wrapf(err, "lock %q", l.name)

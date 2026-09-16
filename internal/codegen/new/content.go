@@ -480,6 +480,12 @@ const lockContent = `// Package lock declares the application's locks: one for e
 // work since. A lock protects a piece of work, not rows: two requests
 // writing the same row are kept apart by a transaction and a row lock.
 //
+// Try a lock outside any database transaction and open the transactions
+// inside fn: the lock is given back as soon as fn returns, before a
+// transaction around the try — a database.Transaction closure, a model
+// hook — commits fn's writes, so such a try is refused with
+// lock.ErrInTransaction.
+//
 // On SQLite the framework uses a single database connection, so a
 // transaction inside fn blocks the lease renewal: keep each transaction
 // under 5 seconds, or the lease counts as lost.

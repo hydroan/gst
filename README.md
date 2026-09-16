@@ -781,7 +781,7 @@ func init() {
 | --- | --- | --- |
 | `cronjob.Register` | 到点做一次、做完就结束 | 表达式按 UTC 解释；每个调度时刻整个部署只跑一轮，其他副本跳过；启动时补跑最近一个没人跑过的时刻；只该在本进程跑的用 `RegisterPerInstance` |
 | `leader.Register` | 一直在跑、不能断的常驻循环 | 任一时刻只有一个副本在跑；它挂了别的副本几秒内接手，fn 从头再跑，所以进度要落库 |
-| `lock.New(name).TryRun` | 由人或事件触发、同一时刻只能有一个在做 | 只试一次不等待，被占着返回 `lock.ErrHeld`；跑一半租约丢失返回 `lock.ErrLost` |
+| `lock.New(name).TryRun` | 由人或事件触发、同一时刻只能有一个在做 | 只试一次不等待，被占着返回 `lock.ErrHeld`；跑一半租约丢失返回 `lock.ErrLost`；先拿锁、在 fn 里开事务，在已开的事务里（包括模型钩子）调用直接返回 `lock.ErrInTransaction`，因为锁会在外层事务提交前放掉 |
 | `component.Register` | 每个副本都要各跑一份、跑到进程结束的事：消费循环、轮询 | 播种之后、监听之前启动，停机时先于 provider 停下，fn 收到的 ctx 在停机时结束；ctx 结束前返回（返回 nil 也算）或 panic 都按失败退出进程 |
 
 前三种建在租约上，共同的规则：fn 收到的 ctx 在停机或租约丢失时结束，fn 必须随之停下——丢租约后 5 秒还不返回，
