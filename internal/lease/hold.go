@@ -101,6 +101,17 @@ func Hold(parent context.Context, h *Handle, log types.Logger) (ctx context.Cont
 // observes the call instead.
 var fail = lifecycle.Fail
 
+// SetFail replaces what Run does once work under a lost lease will not stop,
+// and returns the function that restores it. It exists for the tests of the
+// capabilities built on leases, which record the failure instead of ending
+// the test process — the process-wide failure is one-way, so a test that
+// tripped it could not run twice; nothing else calls it.
+func SetFail(fn func(error)) (restore func()) {
+	original := fail
+	fail = fn
+	return func() { fail = original }
+}
+
 // Run runs work on ctx — the context Hold returned, or one derived from it —
 // and returns what work returned. It is the protocol's last line. The
 // deadline stops the renewals, the context ends the work and Verify refuses

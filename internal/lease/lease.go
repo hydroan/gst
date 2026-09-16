@@ -102,17 +102,6 @@ func SetTimings(lease, renew, deadline, grace time.Duration) (restore func()) {
 	}
 }
 
-// SetFail replaces what Run does once work under a lost lease will not stop,
-// and returns the function that restores it. It exists for the tests of the
-// capabilities built on leases, which record the failure instead of ending
-// the test process — the process-wide failure is one-way, so a test that
-// tripped it could not run twice; nothing else calls it.
-func SetFail(fn func(error)) (restore func()) {
-	original := fail
-	fail = fn
-	return func() { fail = original }
-}
-
 // table is the name of the lease table.
 const table = "gst_leases"
 
@@ -161,27 +150,6 @@ func init() {
 	dbruntime.SetTransactionGuard(Verify)
 }
 
-// Handle is a claimed lease: the proof of holding a name from the claim until
-// the release, or the loss.
-type Handle struct {
-	name   string
-	holder string
-	term   uint64
-	// claimedAt is the moment the claim was sent, on this process's clock:
-	// the first renewal the local deadline counts from. Taken before the
-	// statement, like every renewal's, so that the round trip of the claim
-	// itself does not eat into the margin between the deadline and the
-	// database's expiry.
-	claimedAt time.Time
-}
-
-// Name returns the coordinated name.
-func (h *Handle) Name() string { return h.name }
-
-// Term returns the term the claim started: the number the world outside the
-// database can refuse stale holders by.
-func (h *Handle) Term() uint64 { return h.term }
-
 // Available reports whether the primary database can carry leases: nil on
 // MySQL, PostgreSQL and SQLite, ErrUnsupportedDatabase on ClickHouse, and an
 // error before the database is initialized. A capability built on leases
@@ -209,31 +177,76 @@ func ValidateName(name string) error {
 	return nil
 }
 
+// Handle is a claimed lease: the proof of holding a name from the claim until
+// the release, or the loss.
+type Handle struct {
+	name   string
+	holder string
+	term   uint64
+	// claimedAt is the moment the claim was sent, on this process's clock:
+	// the first renewal the local deadline counts from. Taken before the
+	// statement, like every renewal's, so that the round trip of the claim
+	// itself does not eat into the margin between the deadline and the
+	// database's expiry.
+	claimedAt time.Time
+}
+
+// Name returns the coordinated name.
+func (h *Handle) Name() string { return h.name }
+
+// Term returns the term the claim started: the number the world outside the
+// database can refuse stale holders by.
+func (h *Handle) Term() uint64 { return h.term }
+
+// Renew extends the lease by leaseDuration from the database's now. ErrLost
+// reports the lease expired — claimed by someone else since, or not yet,
+// which the holder's own deadline makes unreachable in normal operation —
+// or was released; any other error means the database could not answer,
+// which is not yet a loss — Hold keeps trying until the local deadline.
+func (h *Handle) Renew(ctx context.Context) error {
+	db, now, err := primary()
+	if err != nil {
+		return err
+	}
+	res := db.WithContext(ctx).Exec(
+		fmt.Sprintf("UPDATE %s SET expires_at_ms = %s + ?, updated_at = ? WHERE name = ? AND holder = ? AND expires_at_ms > %s", table, now, now),
+		leaseDuration.Milliseconds(), dbruntime.NowUTC(), h.name, h.holder)
+	if res.Error != nil {
+		return errors.Wrapf(res.Error, "renew lease %q", h.name)
+	}
+	if res.RowsAffected == 0 {
+		return errors.Wrapf(ErrLost, "renew lease %q", h.name)
+	}
+	return nil
+}
+
+// Release gives the name up at once instead of letting the lease run out,
+// so the next claimant need not wait. ErrLost reports the lease was already
+// gone; the work it protected is done either way, so a caller logs it and
+// moves on.
+func (h *Handle) Release(ctx context.Context) error {
+	db, _, err := primary()
+	if err != nil {
+		return err
+	}
+	res := db.WithContext(ctx).Exec(
+		fmt.Sprintf("UPDATE %s SET expires_at_ms = 0, updated_at = ? WHERE name = ? AND holder = ?", table),
+		dbruntime.NowUTC(), h.name, h.holder)
+	if res.Error != nil {
+		return errors.Wrapf(res.Error, "release lease %q", h.name)
+	}
+	if res.RowsAffected == 0 {
+		return errors.Wrapf(ErrLost, "release lease %q", h.name)
+	}
+	return nil
+}
+
 // Claim tries to take name for this process, once, without waiting: it
 // returns the handle and true when the name was free — never claimed, expired
 // or released — and false when someone holds it. An error means the database
 // could not answer.
 func Claim(ctx context.Context, name string) (*Handle, bool, error) {
 	return claim(ctx, name, nil)
-}
-
-// LastSlot returns the last instant claimed under name and whether the name
-// has ever been claimed. The scheduler reads it as it starts, to tell an
-// instant no replica ran from a job that has never run at all.
-func LastSlot(ctx context.Context, name string) (time.Time, bool, error) {
-	db, _, err := primary()
-	if err != nil {
-		return time.Time{}, false, err
-	}
-	var slotMs int64
-	res := db.WithContext(ctx).Raw(fmt.Sprintf("SELECT slot_ms FROM %s WHERE name = ?", table), name).Scan(&slotMs)
-	if res.Error != nil {
-		return time.Time{}, false, errors.Wrapf(res.Error, "read the last slot of lease %q", name)
-	}
-	if res.RowsAffected == 0 {
-		return time.Time{}, false, nil
-	}
-	return time.UnixMilli(slotMs).UTC(), true, nil
 }
 
 // ClaimSlot is Claim for the scheduler: it also requires the instant slot to
@@ -339,47 +352,23 @@ func handleOf(ctx context.Context, db *gorm.DB, name, holder string, claimedAt t
 	return &Handle{name: name, holder: holder, term: term, claimedAt: claimedAt}, true, nil
 }
 
-// Renew extends the lease by leaseDuration from the database's now. ErrLost
-// reports the lease expired — claimed by someone else since, or not yet,
-// which the holder's own deadline makes unreachable in normal operation —
-// or was released; any other error means the database could not answer,
-// which is not yet a loss — Hold keeps trying until the local deadline.
-func (h *Handle) Renew(ctx context.Context) error {
-	db, now, err := primary()
-	if err != nil {
-		return err
-	}
-	res := db.WithContext(ctx).Exec(
-		fmt.Sprintf("UPDATE %s SET expires_at_ms = %s + ?, updated_at = ? WHERE name = ? AND holder = ? AND expires_at_ms > %s", table, now, now),
-		leaseDuration.Milliseconds(), dbruntime.NowUTC(), h.name, h.holder)
-	if res.Error != nil {
-		return errors.Wrapf(res.Error, "renew lease %q", h.name)
-	}
-	if res.RowsAffected == 0 {
-		return errors.Wrapf(ErrLost, "renew lease %q", h.name)
-	}
-	return nil
-}
-
-// Release gives the name up at once instead of letting the lease run out,
-// so the next claimant need not wait. ErrLost reports the lease was already
-// gone; the work it protected is done either way, so a caller logs it and
-// moves on.
-func (h *Handle) Release(ctx context.Context) error {
+// LastSlot returns the last instant claimed under name and whether the name
+// has ever been claimed. The scheduler reads it as it starts, to tell an
+// instant no replica ran from a job that has never run at all.
+func LastSlot(ctx context.Context, name string) (time.Time, bool, error) {
 	db, _, err := primary()
 	if err != nil {
-		return err
+		return time.Time{}, false, err
 	}
-	res := db.WithContext(ctx).Exec(
-		fmt.Sprintf("UPDATE %s SET expires_at_ms = 0, updated_at = ? WHERE name = ? AND holder = ?", table),
-		dbruntime.NowUTC(), h.name, h.holder)
+	var slotMs int64
+	res := db.WithContext(ctx).Raw(fmt.Sprintf("SELECT slot_ms FROM %s WHERE name = ?", table), name).Scan(&slotMs)
 	if res.Error != nil {
-		return errors.Wrapf(res.Error, "release lease %q", h.name)
+		return time.Time{}, false, errors.Wrapf(res.Error, "read the last slot of lease %q", name)
 	}
 	if res.RowsAffected == 0 {
-		return errors.Wrapf(ErrLost, "release lease %q", h.name)
+		return time.Time{}, false, nil
 	}
-	return nil
+	return time.UnixMilli(slotMs).UTC(), true, nil
 }
 
 // Verify is the transaction guard: run as the first statement of a
