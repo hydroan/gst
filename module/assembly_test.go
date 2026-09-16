@@ -17,9 +17,11 @@ import (
 
 // Module registration calls are matched through import paths rather than by
 // the qualifier spelling, so an aliased import is read correctly. A module
-// registers middleware through the framework's internal registry, and the
-// handler it registers comes from the public middleware package, which is
-// where gg module copy takes the handler's source file from.
+// registers middleware through the framework's internal registry, or through
+// the public middleware package that forwards to it; both mount the handler
+// the same way, so both count. The handler itself comes from the public
+// middleware package, which is where gg module copy takes its source file
+// from.
 const (
 	middlewareRegistryImportPath = "github.com/hydroan/gst/internal/middleware"
 	middlewareImportPath         = "github.com/hydroan/gst/middleware"
@@ -178,7 +180,10 @@ func middlewareRegisterScope(call *ast.CallExpr, imports map[string]string) (str
 		return "", false
 	}
 	qualifier, ok := selector.X.(*ast.Ident)
-	if !ok || imports[qualifier.Name] != middlewareRegistryImportPath {
+	if !ok {
+		return "", false
+	}
+	if path := imports[qualifier.Name]; path != middlewareRegistryImportPath && path != middlewareImportPath {
 		return "", false
 	}
 	switch selector.Sel.Name {

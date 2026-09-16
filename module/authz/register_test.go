@@ -24,7 +24,6 @@ import (
 	serviceiamsession "github.com/hydroan/gst/internal/service/iam/session"
 	"github.com/hydroan/gst/internal/testutil"
 	"github.com/hydroan/gst/internal/types"
-	"github.com/hydroan/gst/model"
 	"github.com/hydroan/gst/module/authz"
 	"github.com/hydroan/gst/module/iam"
 	"github.com/hydroan/gst/tenant"
@@ -103,7 +102,7 @@ func seedBaseline() error {
 	// The ID must go into Menu's own shadowing field: the shadowed Base.ID is
 	// never mapped by GORM for this model, so setting it would persist a
 	// generated UUID instead of the sentinel id.
-	rootMenu := &modelauthz.Menu{ID: model.RootID, ParentID: model.RootID}
+	rootMenu := &modelauthz.Menu{ID: modelauthz.RootID, ParentID: modelauthz.RootID}
 	if err := database.Database[*modelauthz.Menu](ctx).Create(rootMenu); err != nil {
 		return err
 	}
@@ -174,7 +173,7 @@ func TestAuthzMenu(t *testing.T) {
 			// so the seeded root menu must stay invisible to List even for
 			// system_root, whom the visibility filter never restricts.
 			for _, item := range list.Items {
-				require.NotEqual(t, model.RootID, item.ID, "the root sentinel menu must not be listed")
+				require.NotEqual(t, modelauthz.RootID, item.ID, "the root sentinel menu must not be listed")
 			}
 		})
 
