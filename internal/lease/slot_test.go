@@ -293,52 +293,49 @@ func TestClaimSlotGivesUpARoundCutShort(t *testing.T) {
 	require.Equal(t, first.Add(time.Minute), left[0].Slot, "the later instant is the one left to run a second time")
 }
 
-// TestUnfinishedSlotsLeavesOutWhatAnEarlierReleaseWrote proves the protocol
-// before the unfinished and rerun columns runs nothing again and has nothing
-// given up. A row it wrote before the columns existed — every instant it
-// claimed counted as run then — holds 0 in both once they are added, and
-// reads as settled. A row it claims a later instant on once they exist — an
-// earlier release running beside this one in a rolling deployment, or
-// rolled back to — keeps an unfinished instant its claim wrote nothing over:
-// that instant is no longer the last one claimed, so it is settled too, and
-// the instant the earlier release ran is not taken for it.
-func TestUnfinishedSlotsLeavesOutWhatAnEarlierReleaseWrote(t *testing.T) {
+// TestUnfinishedSlotsCountsOnlyTheLastInstantClaimed proves a round is run a
+// second time, or given up by the next claim, only while its unfinished mark
+// names the last instant claimed under the name. A row holding the columns'
+// defaults has nothing to run again and nothing to give up, and neither has
+// a row whose last instant claimed has moved past its unfinished mark,
+// whatever wrote it.
+func TestUnfinishedSlotsCountsOnlyTheLastInstantClaimed(t *testing.T) {
 	ctx := context.Background()
 	first := time.Date(2026, 1, 1, 10, 0, 0, 0, time.UTC)
 
-	t.Run("row written before its columns", func(t *testing.T) {
+	t.Run("no instant on record as unfinished", func(t *testing.T) {
 		name := uniqueName(t)
 		now := dbruntime.NowUTC()
 
-		// The insert of the earlier protocol, whose lease was given back since.
+		// A claimed instant beside the columns' defaults, the lease given back.
 		require.NoError(t, dbruntime.DB.Exec(
 			"INSERT INTO "+table+" (name, holder, instance, term, expires_at_ms, slot_ms, created_at, updated_at) VALUES (?, ?, ?, 3, 0, ?, ?, ?)",
-			name, "earlier-holder", "earlier-instance", first.UnixMilli(), now, now).Error)
+			name, "sample-holder", "sample-instance", first.UnixMilli(), now, now).Error)
 
-		require.Empty(t, unfinished(t, name), "an instant claimed before the upgrade is not run again")
+		require.Empty(t, unfinished(t, name), "a row with no instant on record as unfinished runs nothing again")
 		next, claimed, err := ClaimSlot(ctx, name, first.Add(time.Minute))
 		require.NoError(t, err)
 		require.True(t, claimed)
 		_, gaveUp := next.Superseded()
-		require.False(t, gaveUp, "nor is it given up by the next instant")
+		require.False(t, gaveUp, "nor does the next instant give anything up")
 		require.NoError(t, next.Finish(ctx))
 	})
 
-	t.Run("later instant claimed by an earlier release", func(t *testing.T) {
+	t.Run("unfinished mark behind the last instant claimed", func(t *testing.T) {
 		name := uniqueName(t)
 		cutShort(t, name, first)
-		// The claim of the earlier protocol, given back since: it writes the
-		// slot alone and leaves the unfinished column as it found it.
+		// A later instant on record over the round cut short, the unfinished
+		// mark left on the earlier instant and the lease given back.
 		require.NoError(t, dbruntime.DB.Exec(
 			"UPDATE "+table+" SET holder = ?, instance = ?, term = term + 1, expires_at_ms = 0, slot_ms = ? WHERE name = ?",
-			"earlier-holder", "earlier-instance", first.Add(time.Minute).UnixMilli(), name).Error)
+			"sample-holder", "sample-instance", first.Add(time.Minute).UnixMilli(), name).Error)
 
-		require.Empty(t, unfinished(t, name), "neither the instant the earlier release ran nor the one it moved past is run again")
+		require.Empty(t, unfinished(t, name), "an unfinished mark behind the last instant claimed is not run again")
 		next, claimed, err := ClaimSlot(ctx, name, first.Add(2*time.Minute))
 		require.NoError(t, err)
 		require.True(t, claimed)
 		_, gaveUp := next.Superseded()
-		require.False(t, gaveUp, "the instant the earlier release moved past is not given up once more")
+		require.False(t, gaveUp, "nor given up by the next instant")
 		require.NoError(t, next.Finish(ctx))
 	})
 }

@@ -9,8 +9,8 @@
 // A lease is one row of gst_leases, updated in place: who holds the name
 // (holder, a token minted per claim and never reused), which process that is
 // (instance, for reading logs), the term (incremented every time the name
-// changes hands, the fencing token for the world outside the database) and
-// when the lease expires (by the database clock, never a process clock).
+// changes hands, and logged with every round and tenure) and when the lease
+// expires (by the database clock, never a process clock).
 // Four single-row statements do all the work; no lock outlives its own
 // statement:
 //
@@ -41,11 +41,9 @@
 // time (rerun_slot_ms). A round cut short — its process shut down or died,
 // or its lease was lost — thus stays on record, and runs again once. Only
 // the last instant claimed can be unfinished: an unfinished_slot_ms other
-// than slot_ms was moved past by a claim of the protocol before these
-// columns, which writes slot_ms alone, and is settled. The scheduler's
-// statements take the place of claim, and of release for a round that ran
-// to its end — a round cut short gives its lease back with release — and
-// add three:
+// than slot_ms is settled. The scheduler's statements take the place of
+// claim, and of release for a round that ran to its end — a round cut short
+// gives its lease back with release — and add three:
 //
 //	claim an instant
 //	         SELECT term, slot_ms, unfinished_slot_ms, rerun_slot_ms,
@@ -186,8 +184,9 @@ var (
 //
 // unfinished_slot_ms holds the instant of a round that has not run to its
 // end, and 0 once it has, rather than the last instant that did: a row
-// written before the column existed, when every instant claimed counted as
-// run, then reads as nothing left to run again.
+// holding the column's default has nothing left to run again. Only the last
+// instant claimed can be unfinished, so a value other than slot_ms reads as
+// settled too.
 type row struct {
 	modelregistry.AutoBase
 	Name             string `gorm:"size:191;not null"`  // "cron:<job>"; each capability prefixes its own names, within nameMaxLength

@@ -314,8 +314,7 @@ func TestStopWithoutStartIsNoop(t *testing.T) {
 
 // TestTenureCarriesItsIdentity proves the work runs on a context that says
 // what it is: the tenure's identity for every log line and statement, and
-// the lease — its term readable, its transactions verified — for the world
-// outside the database.
+// the lease: its term readable, its transactions verified.
 func TestTenureCarriesItsIdentity(t *testing.T) {
 	withLeaderLoggerConfig(t)
 	resetLeaderState(t)

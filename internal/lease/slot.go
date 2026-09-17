@@ -108,9 +108,8 @@ func ClaimSlot(ctx context.Context, name string, slot time.Time) (*Handle, bool,
 	}
 	h := newHandle(name, holder, current.Term+1, claimedAt)
 	h.slotMs = slotMs
-	// Only the last instant claimed can be unfinished: one other than it was
-	// moved past by a claim of the protocol before the unfinished column,
-	// which writes the slot alone, and was given up then.
+	// Only the last instant claimed can be unfinished: a mark naming any
+	// other instant is settled, and the claim gives nothing up for it.
 	if current.UnfinishedSlotMs != 0 && current.UnfinishedSlotMs == current.SlotMs {
 		h.superseded = &Unfinished{
 			Name:  name,
