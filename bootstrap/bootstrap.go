@@ -198,9 +198,17 @@ func InitRouterAndModules() error {
 // that will not stop once its lease is lost, see lifecycle.FailNow — ends
 // it the same way too, minus every wait: the drain window is skipped, the
 // requests in flight are cut off, the components are not waited for, and
-// the rest of the teardown gets failNowTimeout.
-func Run() error {
-	defer clean()
+// the rest of the teardown gets failNowTimeout. Such a failure coming while
+// a shutdown is already under way — the lease lost as the work winds down —
+// drops the waits left from then on, and is the error Run returns unless an
+// earlier failure is.
+func Run() (err error) {
+	defer func() {
+		clean()
+		if err == nil {
+			err = context.Cause(lifecycle.FailedNow())
+		}
+	}()
 	// The providers Bootstrap started are stopped on every way out of Run,
 	// the ways that fail before the components start included. Registered
 	// first, so that LIFO runs it right after the HTTP drain: in-flight
@@ -229,7 +237,7 @@ func Run() error {
 	// nothing to report. A hook that fails ends Run the way a failing
 	// listener would.
 	starting, stopWatching := signal.NotifyContext(processCtx, syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT)
-	err := dbruntime.Serialized(starting, "seed", func() error { return router.RunRoutesReadyHooks(starting) })
+	err = dbruntime.Serialized(starting, "seed", func() error { return router.RunRoutesReadyHooks(starting) })
 	// The channel awaitShutdown reads takes over the signals before the
 	// start's watch stops: with no channel registered the signals fall back
 	// to their default disposition, and one arriving then would kill the

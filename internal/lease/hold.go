@@ -37,8 +37,12 @@ import (
 // open when a renewal falls due keeps the renewal from the connection, and
 // once localDeadline has passed since the last renewal the lease counts as
 // lost, the same as when the database cannot be reached. A transaction
-// shorter than localDeadline minus renewInterval can never do that; one
-// longer than localDeadline always does.
+// shorter than localDeadline minus renewInterval can never do that on its
+// own, and one longer than localDeadline always does. Transactions back to
+// back leave the renewals no turn of their own: a renewal that waited out one
+// transaction succeeds, and the attempt due right after it waits out the
+// next, bounded by half of localDeadline — so each transaction must be
+// shorter than that.
 //
 // log is the holder's own logger: a renewal that failed without losing the
 // lease is what explains a round or a tenure cut short, so the entry belongs

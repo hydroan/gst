@@ -1,9 +1,10 @@
 // Package lease is the coordination primitive the framework's distributed
 // capabilities stand on: a name that at most one healthy process among those
 // sharing the primary database holds at a time. The scheduler claims a name
-// per job and instant, so a cluster runs each instant once; a capability
-// that keeps a name for as long as its holder stays healthy, or claims one
-// for the duration of a call, is built the same way.
+// per job and instant, so a cluster claims each instant once, and a second
+// time only for a round cut short; a capability that keeps a name for as
+// long as its holder stays healthy, or claims one for the duration of a
+// call, is built the same way.
 //
 // A lease is one row of gst_leases, updated in place: who holds the name
 // (holder, a token minted per claim and never reused), which process that is
@@ -38,8 +39,13 @@
 // instant again for as long as its round has not run to its end
 // (unfinished_slot_ms, 0 once it has) and the last instant claimed a second
 // time (rerun_slot_ms). A round cut short — its process shut down or died,
-// or its lease was lost — thus stays on record, and runs again once. Its
-// statements take the place of claim and release, and add two:
+// or its lease was lost — thus stays on record, and runs again once. Only
+// the last instant claimed can be unfinished: an unfinished_slot_ms other
+// than slot_ms was moved past by a claim of the protocol before these
+// columns, which writes slot_ms alone, and is settled. The scheduler's
+// statements take the place of claim, and of release for a round that ran
+// to its end — a round cut short gives its lease back with release — and
+// add three:
 //
 //	claim an instant
 //	         SELECT term, slot_ms, unfinished_slot_ms, rerun_slot_ms,
@@ -49,9 +55,9 @@
 //	             term = term + 1, expires_at_ms = :now + 15000,
 //	             slot_ms = :slot, unfinished_slot_ms = :slot
 //	          WHERE name = :name AND term = :term AND expires_at_ms <= :now
-//	         1 row: claimed, and an unfinished_slot_ms read is an instant
-//	         given up for this one. 0 rows: someone claimed first. No row
-//	         yet: the INSERT, with both slots.
+//	         1 row: claimed, and an unfinished_slot_ms read equal to the
+//	         slot_ms read is an instant given up for this one. 0 rows:
+//	         someone claimed first. No row yet: the INSERT, with both slots.
 //	finish   UPDATE gst_leases SET expires_at_ms = 0, unfinished_slot_ms = 0
 //	          WHERE name = :name AND holder = :holder
 //	         the release of a round that ran to its end. 0 rows — the lease
@@ -59,7 +65,7 @@
 //	         UPDATE gst_leases SET unfinished_slot_ms = 0
 //	          WHERE name = :name AND unfinished_slot_ms = :slot
 //	find     SELECT name, term, slot_ms FROM gst_leases
-//	          WHERE name IN (:names) AND unfinished_slot_ms <> 0
+//	          WHERE name IN (:names) AND unfinished_slot_ms = slot_ms
 //	            AND rerun_slot_ms < slot_ms AND expires_at_ms <= :now
 //	         the instants whose round was cut short and that are free to
 //	         claim again, for every job of a scheduler at once.
@@ -67,11 +73,14 @@
 //	         UPDATE gst_leases SET holder = :holder, instance = :instance,
 //	             term = term + 1, expires_at_ms = :now + 15000,
 //	             rerun_slot_ms = slot_ms
-//	          WHERE name = :name AND term = :term AND unfinished_slot_ms <> 0
+//	          WHERE name = :name AND term = :term AND unfinished_slot_ms = slot_ms
 //	            AND rerun_slot_ms < slot_ms AND expires_at_ms <= :now
 //	         1 row: claimed; the term found holds the row to the instant
 //	         found. 0 rows: claimed again elsewhere, recorded finished, or
 //	         given up for a later instant.
+//	last     SELECT slot_ms FROM gst_leases WHERE name = :name
+//	         read as the scheduler starts, to tell an instant no replica
+//	         claimed from a job that has never run.
 //
 // The instant claims read before they write because the claim of an instant
 // has to know what it gives up. A term compared on the write makes the pair

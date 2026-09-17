@@ -112,9 +112,9 @@ func (w *work) lead(ctx context.Context, h *lease.Handle) {
 	// too, and would make every tenure look like a shutdown.
 	reason, lost := tenureEnd(held, h)
 	if lifecycle.Interrupted(held, err) {
-		// The work returning the tenure's own cancellation is how a tenure
-		// ends, not a failure of the work; a failure of its own beside the
-		// cancellation is reported as one.
+		// The work returning the tenure's own ending — its context's error or
+		// cause — is how a tenure ends, not a failure of the work; a failure
+		// of its own beside the ending is reported as one.
 		err = nil
 	}
 	stopHold()

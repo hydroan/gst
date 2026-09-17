@@ -15,12 +15,13 @@
 // under name in the leader log.
 //
 // Work that runs on a schedule belongs in cronjob instead: a job registered
-// there already runs once per instant across the deployment.
+// there already runs each instant on one replica at a time.
 //
 // On SQLite the framework uses a single database connection, so a
 // transaction inside fn blocks the lease renewal: keep each transaction
-// under 8 seconds — a longer one may end the work with the lease counted as
-// lost, one over 10 seconds always does.
+// under 8 seconds, and under 5 when transactions run back to back — a longer
+// one may end the work with the lease counted as lost, one over 10 seconds
+// always does.
 //
 // Example:
 //

@@ -2,20 +2,24 @@ package lease
 
 import (
 	"context"
+	"slices"
+	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/hydroan/gst/internal/dbruntime"
 	"github.com/stretchr/testify/require"
+	"gorm.io/gorm"
 )
 
-// TestClaimSlotRunsAnInstantOnce proves the scheduler's claim: an instant is
+// TestClaimSlotClaimsAnInstantOnce proves the scheduler's claim: an instant is
 // claimed once under a name, an instant already claimed — or an earlier one
 // — is refused even once the lease is released, and a later instant is free.
 // LastSlot reports the instant last claimed, and nothing for a name never
 // claimed.
-func TestClaimSlotRunsAnInstantOnce(t *testing.T) {
+func TestClaimSlotClaimsAnInstantOnce(t *testing.T) {
 	ctx := context.Background()
 	name := uniqueName(t)
 	first := time.Date(2026, 1, 1, 10, 0, 0, 0, time.UTC)
@@ -50,14 +54,15 @@ func TestClaimSlotRunsAnInstantOnce(t *testing.T) {
 	slot, found, err = LastSlot(ctx, name)
 	require.NoError(t, err)
 	require.True(t, found)
-	require.Equal(t, second, slot, "the claim records the instant as the last one run")
+	require.Equal(t, second, slot, "the claim records the instant as the last one claimed")
 }
 
 // TestClaimSlotIsExclusiveAcrossConcurrentClaimants proves the claim of an
 // instant, a read and a write, is as exclusive as a single statement: of
 // many replicas claiming one instant at once, exactly one wins, both for a
 // name the table has never seen — the insert decides — and for one whose
-// lease has been given back — the term compared on the write decides.
+// lease has been given back — the conditions of the write decide. The term
+// among them is pinned by TestClaimSlotRefusesARowChangedSinceItWasRead.
 func TestClaimSlotIsExclusiveAcrossConcurrentClaimants(t *testing.T) {
 	ctx := context.Background()
 	first := time.Date(2026, 1, 1, 10, 0, 0, 0, time.UTC)
@@ -83,6 +88,50 @@ func TestClaimSlotIsExclusiveAcrossConcurrentClaimants(t *testing.T) {
 		require.EqualValues(t, 2, won[0].Term(), "the term moves once, by the winner")
 		require.NoError(t, won[0].Finish(ctx))
 	})
+}
+
+// TestClaimSlotRefusesARowChangedSinceItWasRead proves the write of an
+// instant's claim holds to the row its read found: another replica claims the
+// same instant between the read and the write and runs its round to its end,
+// so the lease is free again by the time the write comes, yet the write finds
+// the term moved and the claim is refused — the instant runs once.
+func TestClaimSlotRefusesARowChangedSinceItWasRead(t *testing.T) {
+	ctx := context.Background()
+	name := uniqueName(t)
+	first := time.Date(2026, 1, 1, 10, 0, 0, 0, time.UTC)
+	second := first.Add(time.Minute)
+
+	h, claimed, err := ClaimSlot(ctx, name, first)
+	require.NoError(t, err)
+	require.True(t, claimed)
+	require.NoError(t, h.Finish(ctx))
+
+	// The other replica's claim and round run in the gap, right before the
+	// write of the claim that read the row first; the claims it makes itself
+	// pass through untouched.
+	var (
+		raced atomic.Bool
+		other *Handle
+		won   bool
+	)
+	const interleave = "test:claim_between_read_and_write"
+	require.NoError(t, dbruntime.DB.Callback().Raw().Before("gorm:raw").Register(interleave, func(tx *gorm.DB) {
+		if !strings.HasPrefix(tx.Statement.SQL.String(), "UPDATE "+table+" SET holder") ||
+			!slices.Contains(tx.Statement.Vars, any(name)) || !raced.CompareAndSwap(false, true) {
+			return
+		}
+		var claimErr error
+		other, won, claimErr = ClaimSlot(ctx, name, second)
+		require.NoError(t, claimErr)
+		require.NoError(t, other.Finish(ctx))
+	}))
+	t.Cleanup(func() { _ = dbruntime.DB.Callback().Raw().Remove(interleave) })
+
+	_, claimed, err = ClaimSlot(ctx, name, second)
+	require.NoError(t, err)
+	require.True(t, won, "the other replica claims the instant in the gap")
+	require.False(t, claimed, "a claim whose row changed since its read is refused")
+	require.EqualValues(t, 2, readSlots(t, name).Term, "the instant is claimed once")
 }
 
 // TestFinishRecordsTheRoundRanToItsEnd proves Finish settles the instant its
@@ -132,6 +181,25 @@ func TestFinishRecordsTheRoundRanToItsEnd(t *testing.T) {
 		require.Equal(t, first.Add(time.Minute).UnixMilli(), readSlots(t, name).UnfinishedSlotMs,
 			"a late round settles its own instant only, never the one claimed after it")
 		require.NoError(t, next.Finish(ctx))
+	})
+
+	t.Run("lease known lost", func(t *testing.T) {
+		withFastProtocol(t)
+		name := uniqueName(t)
+		h, claimed, err := ClaimSlot(ctx, name, first)
+		require.NoError(t, err)
+		require.True(t, claimed)
+		held, stop := Hold(ctx, h, newHolderLog())
+		defer stop()
+
+		// Another replica takes the name behind the holder's back, and the
+		// renewals find it gone.
+		require.NoError(t, dbruntime.DB.Exec("UPDATE "+table+" SET holder = ?, term = term + 1 WHERE name = ?", "other-holder", name).Error)
+		awaitDone(held, t)
+		require.True(t, h.Lost())
+
+		require.NoError(t, h.Finish(ctx), "a holder known lost does not try to give the name back, and reports nothing")
+		require.Zero(t, readSlots(t, name).UnfinishedSlotMs, "the round ran to its end all the same")
 	})
 }
 
@@ -190,8 +258,11 @@ func TestRoundOfACrashedHolderIsFoundOnceItsLeaseExpires(t *testing.T) {
 
 // TestClaimSlotGivesUpARoundCutShort proves the claim of the next instant
 // gives up the instant before it whose round was cut short and not yet run a
-// second time: the handle names that instant, a second claim of it made from
-// what was found before is refused, and nothing is left to find.
+// second time: the handle names that instant, and a second claim of it made
+// from what was found before is refused — while the next instant's round
+// holds the name, and still once that round is cut short too, when the row
+// is free to claim a second time again and only the term found tells the
+// instant given up from the one to run.
 func TestClaimSlotGivesUpARoundCutShort(t *testing.T) {
 	ctx := context.Background()
 	name := uniqueName(t)
@@ -212,32 +283,64 @@ func TestClaimSlotGivesUpARoundCutShort(t *testing.T) {
 	_, claimed, err = ClaimRerun(ctx, found[0])
 	require.NoError(t, err)
 	require.False(t, claimed, "an instant given up is not claimed a second time")
-	require.NoError(t, next.Finish(ctx))
-	require.Empty(t, unfinished(t, name))
+
+	require.NoError(t, next.Release(ctx))
+	_, claimed, err = ClaimRerun(ctx, found[0])
+	require.NoError(t, err)
+	require.False(t, claimed, "nor once a later instant cut short is free to be")
+	left := unfinished(t, name)
+	require.Len(t, left, 1)
+	require.Equal(t, first.Add(time.Minute), left[0].Slot, "the later instant is the one left to run a second time")
 }
 
-// TestUnfinishedSlotsLeavesOutRowsWrittenBeforeItsColumns proves an upgrade
-// runs nothing again: a row the protocol wrote before the unfinished and
-// rerun columns existed — every instant it claimed counted as run then —
-// holds 0 in both once they are added, and reads as settled.
-func TestUnfinishedSlotsLeavesOutRowsWrittenBeforeItsColumns(t *testing.T) {
+// TestUnfinishedSlotsLeavesOutWhatAnEarlierReleaseWrote proves the protocol
+// before the unfinished and rerun columns runs nothing again and has nothing
+// given up. A row it wrote before the columns existed — every instant it
+// claimed counted as run then — holds 0 in both once they are added, and
+// reads as settled. A row it claims a later instant on once they exist — an
+// earlier release running beside this one in a rolling deployment, or
+// rolled back to — keeps an unfinished instant its claim wrote nothing over:
+// that instant is no longer the last one claimed, so it is settled too, and
+// the instant the earlier release ran is not taken for it.
+func TestUnfinishedSlotsLeavesOutWhatAnEarlierReleaseWrote(t *testing.T) {
 	ctx := context.Background()
-	name := uniqueName(t)
 	first := time.Date(2026, 1, 1, 10, 0, 0, 0, time.UTC)
-	now := dbruntime.NowUTC()
 
-	// The insert of the earlier protocol, whose lease was given back since.
-	require.NoError(t, dbruntime.DB.Exec(
-		"INSERT INTO "+table+" (name, holder, instance, term, expires_at_ms, slot_ms, created_at, updated_at) VALUES (?, ?, ?, 3, 0, ?, ?, ?)",
-		name, "earlier-holder", "earlier-instance", first.UnixMilli(), now, now).Error)
+	t.Run("row written before its columns", func(t *testing.T) {
+		name := uniqueName(t)
+		now := dbruntime.NowUTC()
 
-	require.Empty(t, unfinished(t, name), "an instant claimed before the upgrade is not run again")
-	next, claimed, err := ClaimSlot(ctx, name, first.Add(time.Minute))
-	require.NoError(t, err)
-	require.True(t, claimed)
-	_, gaveUp := next.Superseded()
-	require.False(t, gaveUp, "nor is it given up by the next instant")
-	require.NoError(t, next.Finish(ctx))
+		// The insert of the earlier protocol, whose lease was given back since.
+		require.NoError(t, dbruntime.DB.Exec(
+			"INSERT INTO "+table+" (name, holder, instance, term, expires_at_ms, slot_ms, created_at, updated_at) VALUES (?, ?, ?, 3, 0, ?, ?, ?)",
+			name, "earlier-holder", "earlier-instance", first.UnixMilli(), now, now).Error)
+
+		require.Empty(t, unfinished(t, name), "an instant claimed before the upgrade is not run again")
+		next, claimed, err := ClaimSlot(ctx, name, first.Add(time.Minute))
+		require.NoError(t, err)
+		require.True(t, claimed)
+		_, gaveUp := next.Superseded()
+		require.False(t, gaveUp, "nor is it given up by the next instant")
+		require.NoError(t, next.Finish(ctx))
+	})
+
+	t.Run("later instant claimed by an earlier release", func(t *testing.T) {
+		name := uniqueName(t)
+		cutShort(t, name, first)
+		// The claim of the earlier protocol, given back since: it writes the
+		// slot alone and leaves the unfinished column as it found it.
+		require.NoError(t, dbruntime.DB.Exec(
+			"UPDATE "+table+" SET holder = ?, instance = ?, term = term + 1, expires_at_ms = 0, slot_ms = ? WHERE name = ?",
+			"earlier-holder", "earlier-instance", first.Add(time.Minute).UnixMilli(), name).Error)
+
+		require.Empty(t, unfinished(t, name), "neither the instant the earlier release ran nor the one it moved past is run again")
+		next, claimed, err := ClaimSlot(ctx, name, first.Add(2*time.Minute))
+		require.NoError(t, err)
+		require.True(t, claimed)
+		_, gaveUp := next.Superseded()
+		require.False(t, gaveUp, "the instant the earlier release moved past is not given up once more")
+		require.NoError(t, next.Finish(ctx))
+	})
 }
 
 // cutShort claims the instant at under name and gives the lease back without

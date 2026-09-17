@@ -54,14 +54,15 @@ type unfinishedRow struct {
 // the name must be free, and slot later than the last instant claimed under
 // it. The claim records slot as the last instant claimed, and as unfinished
 // until Finish; it is refused when someone holds the name or claimed slot or
-// a later instant already. A cluster then runs each instant of a job once,
+// a later instant already. A cluster then claims each instant of a job once,
 // whichever replica gets there first, and an instant already claimed is
-// refused everywhere.
+// refused everywhere; only a round cut short is claimed a second time, see
+// ClaimRerun.
 //
 // The instant claimed before under name, when its round has not run to its
-// end — cut short, and not run to its end the second time either — is given
-// up by the claim and never runs again; the handle names it, see
-// Handle.Superseded.
+// end — cut short, and not run a second time yet, or cut short the second
+// time too — is given up by the claim and never runs again; the handle names
+// it, see Handle.Superseded.
 func ClaimSlot(ctx context.Context, name string, slot time.Time) (*Handle, bool, error) {
 	if err := ValidateName(name); err != nil {
 		return nil, false, err
@@ -107,7 +108,10 @@ func ClaimSlot(ctx context.Context, name string, slot time.Time) (*Handle, bool,
 	}
 	h := newHandle(name, holder, current.Term+1, claimedAt)
 	h.slotMs = slotMs
-	if current.UnfinishedSlotMs != 0 {
+	// Only the last instant claimed can be unfinished: one other than it was
+	// moved past by a claim of the protocol before the unfinished column,
+	// which writes the slot alone, and was given up then.
+	if current.UnfinishedSlotMs != 0 && current.UnfinishedSlotMs == current.SlotMs {
 		h.superseded = &Unfinished{
 			Name:  name,
 			Slot:  time.UnixMilli(current.UnfinishedSlotMs).UTC(),
@@ -119,8 +123,9 @@ func ClaimSlot(ctx context.Context, name string, slot time.Time) (*Handle, bool,
 
 // Superseded returns the instant the claim of h gave up, and whether it gave
 // one up: the instant claimed before under the name, whose round had not run
-// to its end — cut short, and not run to its end the second time either —
-// and that never runs again now. Only a handle of ClaimSlot gives one up.
+// to its end — cut short, and not run a second time yet, or cut short the
+// second time too — and that never runs again now. Only a handle of
+// ClaimSlot gives one up.
 func (h *Handle) Superseded() (Unfinished, bool) {
 	if h.superseded == nil {
 		return Unfinished{}, false
@@ -186,7 +191,7 @@ func UnfinishedSlots(ctx context.Context, names []string) ([]Unfinished, error) 
 	}
 	var rows []unfinishedRow
 	res := db.WithContext(ctx).Raw(
-		fmt.Sprintf("SELECT name, term, slot_ms FROM %s WHERE name IN ? AND unfinished_slot_ms <> 0 AND rerun_slot_ms < slot_ms AND expires_at_ms <= %s", table, now),
+		fmt.Sprintf("SELECT name, term, slot_ms FROM %s WHERE name IN ? AND unfinished_slot_ms = slot_ms AND rerun_slot_ms < slot_ms AND expires_at_ms <= %s", table, now),
 		names).Scan(&rows)
 	if res.Error != nil {
 		return nil, errors.Wrap(res.Error, "find the unfinished instants of leases")
@@ -222,7 +227,7 @@ func ClaimRerun(ctx context.Context, u Unfinished) (*Handle, bool, error) {
 
 	claimedAt := time.Now()
 	res := db.WithContext(ctx).Exec(
-		fmt.Sprintf("UPDATE %s SET holder = ?, instance = ?, term = term + 1, expires_at_ms = %s + ?, rerun_slot_ms = slot_ms, updated_at = ? WHERE name = ? AND term = ? AND unfinished_slot_ms <> 0 AND rerun_slot_ms < slot_ms AND expires_at_ms <= %s", table, now, now),
+		fmt.Sprintf("UPDATE %s SET holder = ?, instance = ?, term = term + 1, expires_at_ms = %s + ?, rerun_slot_ms = slot_ms, updated_at = ? WHERE name = ? AND term = ? AND unfinished_slot_ms = slot_ms AND rerun_slot_ms < slot_ms AND expires_at_ms <= %s", table, now, now),
 		holder, instance.ID(), leaseDuration.Milliseconds(), updatedAt, u.Name, u.term)
 	if res.Error != nil {
 		return nil, false, errors.Wrapf(res.Error, "claim lease %q again", u.Name)

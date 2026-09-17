@@ -17,10 +17,11 @@
 // replica running ahead claims an instant early, and the others find it
 // taken when their clocks reach it.
 //
-// A job runs once per instant across the deployment: the replicas share the
-// instant's lease through the primary database (see the lease package), the
-// first to claim it runs the round while the others skip the instant, and a
-// round still holding the lease keeps the next instants from everyone. A job
+// Each instant of a job is claimed once across the deployment: the replicas
+// share the instant's lease through the primary database (see the lease
+// package), the first to claim it runs the round while the others skip the
+// instant, and a round still holding the lease — a second run included —
+// keeps the next instants from everyone. A job
 // that must run on every replica — refreshing a process-local cache,
 // cleaning a local directory — registers with RegisterPerInstance and runs
 // without a lease; the lease table comes with the package all the same, and
@@ -29,20 +30,22 @@
 //
 // A round counts once it has run to its end: the job returned nil or an
 // error of its own, or panicked. A round cut short — the job returned the
-// ending of its context as the process shut down or the lease was lost, or
-// never returned because its process crashed or failed — runs a second
-// time, on whichever replica finds it first: every replica looks for such
-// rounds every 15 seconds or so, with one query for all its jobs. A round a
-// shutdown cut short gives its lease back as it stops, and runs again within
-// about 15 seconds; one whose process died waits for its lease to expire
-// first, up to 15 seconds more. The rule, exactly: the round did not run to
-// its end; the instant has not run a second time already (a second round cut
-// short is given up, so a job that brings its process down cannot bring the
-// replicas down one after another); and no later instant has been claimed
-// since (the next instant starting first gives the unfinished one up, with a
-// warning naming it). A job under a lease may therefore run twice for one
-// instant, and must be idempotent: the second round starts over, whatever
-// the first did before it was cut short.
+// ending of its context, ctx.Err() or context.Cause(ctx), as the process shut
+// down or the lease was lost, or never returned because its process crashed
+// or failed — runs a second time, on whichever replica finds it first: every
+// replica looks for such rounds every 15 seconds or so, with one query for
+// all its jobs. A round a shutdown cut short gives its lease back as it
+// stops, and runs again within about 15 seconds; one whose process died waits
+// for its lease to expire first, up to 15 seconds more, and so does one that
+// ran to its end but whose end the database failed to record. The rule,
+// exactly: the round did not run to its end, or its end is not on record; the
+// instant has not run a second time already (a second round cut short is
+// given up, so a job that brings its process down cannot bring the replicas
+// down one after another); and no later instant has been claimed since (the
+// next instant starting first gives the unfinished one up, with a warning
+// naming it). A job under a lease may therefore run twice for one instant,
+// and must be idempotent: the second round starts over, whatever the first
+// did before it was cut short.
 //
 // On start-up the scheduler catches up the most recent instant of a job when
 // no replica claimed it, which is what a rolling deployment or an outage
@@ -166,9 +169,10 @@ func setLogger(l types.Logger) {
 //
 // The framework opens a single connection to SQLite, so there a transaction
 // of the job blocks the renewal of the round's lease: keep each transaction
-// under 8 seconds — a longer one may hold the renewal back until the lease
-// counts as lost, which ends the round; one over 10 seconds always does — or
-// register work that only ever runs in one process with RegisterPerInstance.
+// under 8 seconds, and under 5 when transactions run back to back — a longer
+// one may hold the renewal back until the lease counts as lost, which ends
+// the round; one over 10 seconds always does — or register work that only
+// ever runs in one process with RegisterPerInstance.
 //
 // A registration that cannot be honored — no name, no schedule, a schedule
 // that does not parse or names the Local zone, a name already taken, a nil

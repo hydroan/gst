@@ -332,6 +332,7 @@ func TestRoundCutShortByACrashRunsAgainOnce(t *testing.T) {
 	entry := readLogEntry(t, filepath.Join(dir, "cronjob.log"), "cronjob interrupted")
 	require.Equal(t, "2026-01-01T10:00:00Z", entry["at"], "the second round runs for the instant the crash cut short")
 	require.Equal(t, true, entry["rerun"])
+	require.Zero(t, readLeaseRow(t, "cron:crashed-job").ExpiresAtMs, "the second round gave its lease back as it stopped")
 	require.Empty(t, unfinishedInstants(t, "cron:crashed-job"), "an instant cut short a second time never runs a third")
 }
 
@@ -371,7 +372,9 @@ func TestRoundThatFailedDoesNotRunAgain(t *testing.T) {
 			// The loop waits for the next instant once the round has recorded
 			// its end.
 			clock.untilWaiting(t)
-			require.Empty(t, unfinishedInstants(t, "cron:failed-job"), "a round that failed is not run again")
+			row := readLeaseRow(t, "cron:failed-job")
+			require.Zero(t, row.UnfinishedSlotMs, "a round that failed ran to its end: its instant is not run again")
+			require.Zero(t, row.ExpiresAtMs, "and its lease is given back")
 		})
 	}
 }
@@ -495,46 +498,62 @@ func TestInstantsPassingDuringARunAreSkipped(t *testing.T) {
 // TestRoundThatLosesItsLeaseIsCutShortAndLogged proves a round outliving
 // its lease ends with it: once another replica has taken the name — the
 // lease ended behind the round's back — the round's context ends with
-// ErrLost as the cause, the round returning that ending is logged as an
-// interruption naming the loss, once, and the scheduler goes on to the next
-// instant.
+// ErrLost as the cause, the round returning that ending — the context's
+// error or its cause — is logged as an interruption naming the loss, once,
+// the instant stays on record to run a second time, and the scheduler goes on
+// to the next instant.
 func TestRoundThatLosesItsLeaseIsCutShortAndLogged(t *testing.T) {
-	dir := withCronjobLoggerConfig(t)
-	resetCronjobState(t)
-	withBoundCronjobLogger(t)
-	clock := withFakeClock(t, time.Date(2026, 1, 1, 10, 0, 0, 0, time.UTC))
-	withFastLease(t)
-
-	entered := make(chan struct{}, 1)
-	ended := make(chan error, 1)
-	Register(func(ctx context.Context) error {
-		entered <- struct{}{}
-		<-ctx.Done()
-		ended <- context.Cause(ctx)
-		return ctx.Err()
-	}, "@every 1m", "lost-job")
-	require.NoError(t, start(context.Background()))
-
-	clock.untilWaiting(t)
-	clock.Advance(time.Minute)
-	awaitSignal(t, entered, "the round")
-
-	takeOver(t, "cron:lost-job")
-	select {
-	case cause := <-ended:
-		require.ErrorIs(t, cause, lease.ErrLost)
-	case <-time.After(5 * time.Second):
-		t.Fatal("the round must end once its lease is lost")
+	cases := []struct {
+		name    string
+		returns func(ctx context.Context) error
+	}{
+		{name: "context's error", returns: func(ctx context.Context) error { return ctx.Err() }},
+		{name: "context's cause", returns: context.Cause},
 	}
-	clock.untilWaiting(t)
-	pkgzap.Clean()
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			dir := withCronjobLoggerConfig(t)
+			resetCronjobState(t)
+			withBoundCronjobLogger(t)
+			clock := withFakeClock(t, time.Date(2026, 1, 1, 10, 0, 0, 0, time.UTC))
+			withFastLease(t)
 
-	interrupted := readLogEntry(t, filepath.Join(dir, "cronjob.log"), "cronjob interrupted")
-	require.Equal(t, "lost-job", interrupted["name"])
-	require.Equal(t, "lease lost", interrupted["reason"], "the round returning its context's cancellation is an interruption, not a failure")
-	require.EqualValues(t, 1, interrupted["term"], "the entry names the term the round ran in")
-	require.Empty(t, readLogEntries(t, filepath.Join(dir, "cronjob.log"), "cronjob lost its lease during the round"),
-		"the interruption entry is the record of the loss; a second entry would say the same thing")
+			entered := make(chan struct{}, 1)
+			ended := make(chan error, 1)
+			Register(func(ctx context.Context) error {
+				entered <- struct{}{}
+				<-ctx.Done()
+				ended <- context.Cause(ctx)
+				return tc.returns(ctx)
+			}, "@every 1m", "lost-job")
+			require.NoError(t, start(context.Background()))
+
+			clock.untilWaiting(t)
+			clock.Advance(time.Minute)
+			awaitSignal(t, entered, "the round")
+
+			takeOver(t, "cron:lost-job")
+			select {
+			case cause := <-ended:
+				require.ErrorIs(t, cause, lease.ErrLost)
+			case <-time.After(5 * time.Second):
+				t.Fatal("the round must end once its lease is lost")
+			}
+			clock.untilWaiting(t)
+			pkgzap.Clean()
+
+			interrupted := readLogEntry(t, filepath.Join(dir, "cronjob.log"), "cronjob interrupted")
+			require.Equal(t, "lost-job", interrupted["name"])
+			require.Equal(t, "lease lost", interrupted["reason"], "the round returning its context's ending is an interruption, not a failure")
+			require.EqualValues(t, 1, interrupted["term"], "the entry names the term the round ran in")
+			require.Empty(t, readLogEntries(t, filepath.Join(dir, "cronjob.log"), "cronjob lost its lease during the round"),
+				"the interruption entry is the record of the loss; a second entry would say the same thing")
+			// The replica that took the name over gives it back.
+			endLease(t, "cron:lost-job")
+			require.Equal(t, []time.Time{time.Date(2026, 1, 1, 10, 1, 0, 0, time.UTC)}, unfinishedInstants(t, "cron:lost-job"),
+				"a round the loss cut short stays on record to run a second time")
+		})
+	}
 }
 
 // TestRoundThatReturnsNothingAfterLosingItsLeaseIsLogged proves the loss
@@ -572,6 +591,59 @@ func TestRoundThatReturnsNothingAfterLosingItsLeaseIsLogged(t *testing.T) {
 	require.EqualValues(t, 1, entry["term"], "the entry names the term the round ran in")
 	finished := readLogEntry(t, filepath.Join(dir, "cronjob.log"), "finished cronjob")
 	require.Equal(t, "quiet-lost-job", finished["name"], "the round's own entry says it finished: it returned nothing")
+	// The replica that took the name over gives it back.
+	endLease(t, "cron:quiet-lost-job")
+	require.Empty(t, unfinishedInstants(t, "cron:quiet-lost-job"), "a round that returned nothing ran to its end, its lease lost or not")
+}
+
+// TestRoundThatLosesItsLeaseWhileWindingDownIsLoggedAsALoss proves a loss
+// found once the process began shutting down is recorded as a loss: the
+// round's context ended with the shutdown, the renewals went on while the
+// round wound down and found the name taken, and the round returning its
+// context's ending is logged as an interruption naming the lost lease. The
+// name is no longer the round's to give back, and its instant stays on
+// record to run a second time.
+func TestRoundThatLosesItsLeaseWhileWindingDownIsLoggedAsALoss(t *testing.T) {
+	dir := withCronjobLoggerConfig(t)
+	resetCronjobState(t)
+	withBoundCronjobLogger(t)
+	clock := withFakeClock(t, time.Date(2026, 1, 1, 10, 0, 0, 0, time.UTC))
+	withFastLease(t)
+	withRecordedFailures(t)
+
+	entered, windingDown := make(chan struct{}, 1), make(chan struct{}, 1)
+	Register(func(ctx context.Context) error {
+		entered <- struct{}{}
+		<-ctx.Done()
+		windingDown <- struct{}{}
+		// The round winds down until the renewals find the name taken.
+		h, _ := lease.FromContext(ctx)
+		for !h.Lost() {
+			time.Sleep(5 * time.Millisecond)
+		}
+		return ctx.Err()
+	}, "@every 1m", "winding-down-job")
+	require.NoError(t, start(context.Background()))
+
+	clock.untilWaiting(t)
+	clock.Advance(time.Minute)
+	awaitSignal(t, entered, "the round")
+	stopped := make(chan error, 1)
+	go func() { stopped <- stop(context.Background()) }()
+	awaitSignal(t, windingDown, "the round's wind-down")
+	takeOver(t, "cron:winding-down-job")
+	select {
+	case err := <-stopped:
+		require.NoError(t, err)
+	case <-time.After(5 * time.Second):
+		t.Fatal("the scheduler must stop once the round returned")
+	}
+	pkgzap.Clean()
+
+	interrupted := readLogEntry(t, filepath.Join(dir, "cronjob.log"), "cronjob interrupted")
+	require.Equal(t, "lease lost", interrupted["reason"], "the loss is what ended the round, not the shutdown before it")
+	endLease(t, "cron:winding-down-job")
+	require.Equal(t, []time.Time{time.Date(2026, 1, 1, 10, 1, 0, 0, time.UTC)}, unfinishedInstants(t, "cron:winding-down-job"))
 }
 
 // TestRoundInterruptedAtShutdownIsAWarning proves a round that stops because

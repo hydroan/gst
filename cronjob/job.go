@@ -142,8 +142,8 @@ func (j *job) catchUp(ctx context.Context) (time.Time, bool) {
 // per-instance job runs it outright; a job shared across the deployment
 // first claims the instant's lease and runs only when it wins, see
 // runClaimed. A claim that gives up an earlier instant whose round was cut
-// short, and not run to its end the second time either, says so: that
-// instant never runs again.
+// short — and not run a second time yet, or cut short the second time too —
+// says so: that instant never runs again.
 func (j *job) runInstant(ctx context.Context, at time.Time, catchUp bool) bool {
 	if j.perInstance {
 		// The round logs its own outcome.
@@ -205,7 +205,9 @@ func (j *job) claimed(ctx context.Context, at time.Time, claimed bool, err error
 // end — the job returned nil or an error of its own, or panicked — is
 // recorded finished, and never runs again; one cut short — the job returned
 // the ending of its context — stays unfinished, for a replica to run a second
-// time. fields are added to the round's entries.
+// time. A round whose end the database fails to record stays unfinished too,
+// holding its lease until it expires, and runs a second time like one cut
+// short. fields are added to the round's entries.
 func (j *job) runClaimed(ctx context.Context, h *lease.Handle, at time.Time, fields ...zap.Field) {
 	fields = append([]zap.Field{zap.Uint64("term", h.Term())}, fields...)
 	held, stopHold := lease.Hold(ctx, h, log)
@@ -214,7 +216,8 @@ func (j *job) runClaimed(ctx context.Context, h *lease.Handle, at time.Time, fie
 		return j.run(ctx, at, fields...)
 	})
 	// Read before the renewals stop: stopping them ends the held context
-	// too, and would make every round look cut short.
+	// too, and a round that returned a cancellation of its own — a context
+	// it derived and ended itself — would then read as cut short.
 	finished := !lifecycle.Interrupted(held, runErr)
 	lost := h.Lost()
 	stopHold()
@@ -290,18 +293,21 @@ func (j *job) run(ctx context.Context, at time.Time, fields ...zap.Field) (runEr
 }
 
 // interruption names why a round ended before its work did — the lease was
-// lost, or the process is shutting down — and is empty for a round that
+// lost, also while the round wound down once the process began shutting
+// down, or the process is shutting down — and is empty for a round that
 // ended on its own, a failure of its own included. A job stopping because
 // its context ended is doing what it is asked to do then, not failing; a
 // rolling deployment ends a long round this way every time. What counts is
-// decided by lifecycle.Interrupted: the context's own ending, wrapped or
-// not, and nothing else — a job that also reports a failure of its own
-// failed, and the entry carries that failure.
+// decided by lifecycle.Interrupted: the context's own ending — its error or
+// its cause — wrapped or not, and nothing else — a job that also reports a
+// failure of its own failed, and the entry carries that failure.
 func interruption(ctx context.Context, err error) string {
 	if !lifecycle.Interrupted(ctx, err) {
 		return ""
 	}
-	if errors.Is(context.Cause(ctx), lease.ErrLost) {
+	// The handle, not the context's cause: a loss found after a shutdown
+	// ended the context leaves the cause the shutdown's.
+	if h, ok := lease.FromContext(ctx); ok && h.Lost() {
 		return "lease lost"
 	}
 	return "shutting down"

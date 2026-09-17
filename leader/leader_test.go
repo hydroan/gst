@@ -90,39 +90,51 @@ func TestOneReplicaLeadsAtATime(t *testing.T) {
 // TestLostLeaseEndsTheTenure proves a tenure ends with its lease: once
 // another replica has taken the name — the lease ended behind the leader's
 // back — the work's context ends with ErrLost as the cause and the loss is
-// the tenure's logged outcome; the replica goes on campaigning and wins the
-// name back once the other lets it go.
+// the tenure's logged outcome, the work returning that ending — the
+// context's error or its cause — included; the replica goes on campaigning
+// and wins the name back once the other lets it go.
 func TestLostLeaseEndsTheTenure(t *testing.T) {
-	dir := withLeaderLoggerConfig(t)
-	resetLeaderState(t)
-	withFastCampaign(t)
-	withFastLease(t)
+	cases := []struct {
+		name    string
+		returns func(ctx context.Context) error
+	}{
+		{name: "context's error", returns: func(ctx context.Context) error { return ctx.Err() }},
+		{name: "context's cause", returns: context.Cause},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			dir := withLeaderLoggerConfig(t)
+			resetLeaderState(t)
+			withFastCampaign(t)
+			withFastLease(t)
 
-	tenures := newTenureLog()
-	causes := make(chan error, 8)
-	Register(func(ctx context.Context) error {
-		tenures.begin()
-		defer tenures.end()
-		<-ctx.Done()
-		causes <- context.Cause(ctx)
-		return ctx.Err()
-	}, "lost-work")
-	startInstances(t, 1)
-	tenures.awaitBegin(t)
+			tenures := newTenureLog()
+			causes := make(chan error, 8)
+			Register(func(ctx context.Context) error {
+				tenures.begin()
+				defer tenures.end()
+				<-ctx.Done()
+				causes <- context.Cause(ctx)
+				return tc.returns(ctx)
+			}, "lost-work")
+			startInstances(t, 1)
+			tenures.awaitBegin(t)
 
-	other := takeOver(t, "leader:lost-work")
-	require.ErrorIs(t, awaitCause(t, causes), lease.ErrLost)
-	require.NoError(t, other.Release(context.Background()))
-	tenures.awaitBegin(t)
-	require.Equal(t, 2, tenures.started(), "the replica campaigns again after losing the lease")
+			other := takeOver(t, "leader:lost-work")
+			require.ErrorIs(t, awaitCause(t, causes), lease.ErrLost)
+			require.NoError(t, other.Release(context.Background()))
+			tenures.awaitBegin(t)
+			require.Equal(t, 2, tenures.started(), "the replica campaigns again after losing the lease")
 
-	pkgzap.Clean()
-	// The work returned its context's own cancellation, which is how a tenure
-	// ends, not a failure of the work.
-	entry := readLogEntry(t, filepath.Join(dir, "leader.log"), "leader stepped down")
-	require.Equal(t, "lost-work", entry["name"])
-	require.Equal(t, "lease lost", entry["reason"])
-	require.EqualValues(t, 1, entry["term"], "the entry names the term the tenure ran in")
+			pkgzap.Clean()
+			// The work returned its context's own ending, which is how a tenure
+			// ends, not a failure of the work.
+			entry := readLogEntry(t, filepath.Join(dir, "leader.log"), "leader stepped down")
+			require.Equal(t, "lost-work", entry["name"])
+			require.Equal(t, "lease lost", entry["reason"])
+			require.EqualValues(t, 1, entry["term"], "the entry names the term the tenure ran in")
+		})
+	}
 }
 
 // TestWorkThatIgnoresTheLossFailsTheProcess proves the last line behind the

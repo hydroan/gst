@@ -154,17 +154,43 @@ func unfinishedInstants(t *testing.T, leaseName string) []time.Time {
 	return instants
 }
 
+// leaseRow is what a test reads of a job's lease row: the last instant
+// claimed, the instant whose round has not run to its end, and when the lease
+// expires — 0 once it was given back.
+type leaseRow struct {
+	SlotMs           int64
+	UnfinishedSlotMs int64
+	ExpiresAtMs      int64
+}
+
+// readLeaseRow reads the lease row of a job under its lease name.
+func readLeaseRow(t *testing.T, leaseName string) leaseRow {
+	t.Helper()
+
+	var row leaseRow
+	require.NoError(t, dbruntime.DB.Raw("SELECT slot_ms, unfinished_slot_ms, expires_at_ms FROM gst_leases WHERE name = ?", leaseName).Scan(&row).Error)
+	return row
+}
+
 // takeOver acts as another replica taking the name: the lease is ended in
 // the table behind the holder's back and claimed anew. The claim is released
 // once the test ends.
 func takeOver(t *testing.T, name string) {
 	t.Helper()
 
-	require.NoError(t, dbruntime.DB.Exec("UPDATE gst_leases SET expires_at_ms = 0 WHERE name = ?", name).Error)
+	endLease(t, name)
 	taken, claimed, err := lease.Claim(context.Background(), name)
 	require.NoError(t, err)
 	require.True(t, claimed)
 	t.Cleanup(func() { _ = taken.Release(context.Background()) })
+}
+
+// endLease ends the lease of name in the table, whoever holds it: an
+// operator's hand, or the replica that took the name over giving it back.
+func endLease(t *testing.T, name string) {
+	t.Helper()
+
+	require.NoError(t, dbruntime.DB.Exec("UPDATE gst_leases SET expires_at_ms = 0 WHERE name = ?", name).Error)
 }
 
 // withFastLease shrinks the lease protocol's timings so a loss and the grace

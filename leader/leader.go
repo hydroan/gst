@@ -114,8 +114,9 @@ func setLogger(l types.Logger) {
 //
 // The framework opens a single connection to SQLite, so there a transaction
 // of fn blocks the renewal of the lease: keep each transaction under 8
-// seconds — a longer one may hold the renewal back until the lease counts as
-// lost, which ends the tenure; one over 10 seconds always does.
+// seconds, and under 5 when transactions run back to back — a longer one may
+// hold the renewal back until the lease counts as lost, which ends the
+// tenure; one over 10 seconds always does.
 //
 // A registration that cannot be honored — no name, a name already taken, a
 // nil fn — fails the process at startup.

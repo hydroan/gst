@@ -23,8 +23,9 @@
 //
 // On SQLite the framework uses a single database connection, so a
 // transaction inside fn blocks the lease renewal: keep each transaction
-// under 8 seconds — a longer one may end the work with the lease counted as
-// lost, one over 10 seconds always does.
+// under 8 seconds, and under 5 when transactions run back to back — a longer
+// one may end the work with the lease counted as lost, one over 10 seconds
+// always does.
 //
 // Example:
 //
