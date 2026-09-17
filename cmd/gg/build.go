@@ -154,10 +154,6 @@ func init() {
 func buildRun(cmd *cobra.Command, args []string) error {
 	clioutput.Section("Build")
 
-	oldStdout := os.Stdout
-	devNull, _ := os.OpenFile(os.DevNull, os.O_WRONLY, 0o666)
-	os.Stdout = devNull
-
 	config.Register[Build]()
 	if err := config.Init(); err != nil {
 		return err
@@ -167,7 +163,6 @@ func buildRun(cmd *cobra.Command, args []string) error {
 	// shadows the package name; the error paths need it for explicit cleanup.
 	cleanup := config.Clean
 	defer cleanup()
-	os.Stdout = oldStdout
 
 	// Load configuration
 	config := config.Get[*Build]()

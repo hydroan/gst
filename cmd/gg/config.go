@@ -211,16 +211,14 @@ func defaultConfigData() (map[string]any, error) {
 	var content bytes.Buffer
 	err := withCleanConfigEnvironment(func() error {
 		return inTemporaryDirectory(func() error {
-			return withStdoutDiscarded(func() error {
-				if err := config.Init(); err != nil {
-					return errors.Wrap(err, "failed to initialize default config")
-				}
-				defer config.Clean()
-				if err := config.Save(&content); err != nil {
-					return errors.Wrap(err, "failed to collect default config")
-				}
-				return nil
-			})
+			if err := config.Init(); err != nil {
+				return errors.Wrap(err, "failed to initialize default config")
+			}
+			defer config.Clean()
+			if err := config.Save(&content); err != nil {
+				return errors.Wrap(err, "failed to collect default config")
+			}
+			return nil
 		})
 	})
 	if err != nil {
@@ -298,20 +296,6 @@ func inTemporaryDirectory(fn func() error) error {
 	}
 	defer func() {
 		_ = os.Chdir(oldWD)
-	}()
-	return fn()
-}
-
-func withStdoutDiscarded(fn func() error) error {
-	oldStdout := os.Stdout
-	null, err := os.Open(os.DevNull)
-	if err != nil {
-		return err
-	}
-	defer null.Close()
-	os.Stdout = null
-	defer func() {
-		os.Stdout = oldStdout
 	}()
 	return fn()
 }
