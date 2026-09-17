@@ -336,6 +336,44 @@ func TestRoundCutShortByACrashRunsAgainOnce(t *testing.T) {
 	require.Empty(t, unfinishedInstants(t, "cron:crashed-job"), "an instant cut short a second time never runs a third")
 }
 
+// TestRoundWhoseEndIsNotRecordedRunsAgain proves a round that ran to its end
+// but whose end the database failed to record is left the way a crash leaves
+// one: the failure is logged, the lease is not given back, and once it expires
+// a replica runs the instant a second time — marked as a second run — after
+// which the instant is settled.
+func TestRoundWhoseEndIsNotRecordedRunsAgain(t *testing.T) {
+	dir := withCronjobLoggerConfig(t)
+	resetCronjobState(t)
+	withBoundCronjobLogger(t)
+	withFirstFinishFailing(t, "cron:unrecorded-job")
+	clock := withFakeClock(t, time.Date(2026, 1, 1, 10, 0, 0, 0, time.UTC))
+	withFastLease(t)
+	withFastSweep(t)
+
+	entered := make(chan struct{}, 2)
+	Register(func(context.Context) error {
+		entered <- struct{}{}
+		return nil
+	}, "@every 1m", "unrecorded-job")
+	require.NoError(t, start(context.Background()))
+
+	clock.untilWaiting(t)
+	clock.Advance(time.Minute)
+	awaitSignal(t, entered, "the round")
+	awaitSignal(t, entered, "the round run a second time")
+	require.NoError(t, stop(context.Background()))
+	pkgzap.Clean()
+
+	unrecorded := readLogEntry(t, filepath.Join(dir, "cronjob.log"), "cronjob could not record its round as finished")
+	require.Equal(t, "WARN", unrecorded["level"])
+	require.Equal(t, "2026-01-01T10:01:00Z", unrecorded["at"])
+	finished := readLogEntries(t, filepath.Join(dir, "cronjob.log"), "finished cronjob")
+	require.Len(t, finished, 2)
+	require.Equal(t, "2026-01-01T10:01:00Z", finished[1]["at"], "the second round runs for the instant whose end went unrecorded")
+	require.Equal(t, true, finished[1]["rerun"])
+	require.Zero(t, readLeaseRow(t, "cron:unrecorded-job").UnfinishedSlotMs, "the second round's end is recorded")
+}
+
 // TestRoundThatFailedDoesNotRunAgain proves a round that failed ran to its
 // end — the job returned an error of its own, or panicked — so the instant is
 // settled, and no replica runs it again.

@@ -8,9 +8,11 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/internal/dbruntime"
 	"github.com/hydroan/gst/internal/execctx"
@@ -124,6 +126,25 @@ func withUnreachableDatabase(t *testing.T) {
 	original := dbruntime.DB
 	dbruntime.DB = closed
 	t.Cleanup(func() { dbruntime.DB = original })
+}
+
+// withFirstFinishFailing has the first statement recording a round under
+// leaseName as finished fail, the way a database dropping it would, and takes
+// the failure out once the test ends. The loops run their statements through
+// what it changes, so call it before the helpers whose cleanups drain them,
+// withFakeClock and withFastSweep.
+func withFirstFinishFailing(t *testing.T, leaseName string) {
+	t.Helper()
+
+	var failed atomic.Bool
+	const callback = "test:fail_first_finish"
+	require.NoError(t, dbruntime.DB.Callback().Raw().Before("gorm:raw").Register(callback, func(tx *gorm.DB) {
+		if strings.HasPrefix(tx.Statement.SQL.String(), "UPDATE gst_leases SET expires_at_ms = 0, unfinished_slot_ms = 0") &&
+			slices.Contains(tx.Statement.Vars, any(leaseName)) && failed.CompareAndSwap(false, true) {
+			_ = tx.AddError(errors.New("sample failure"))
+		}
+	}))
+	t.Cleanup(func() { _ = dbruntime.DB.Callback().Raw().Remove(callback) })
 }
 
 // withFastSweep has the schedulers the test starts look for rounds cut short
