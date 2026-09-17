@@ -37,7 +37,8 @@ func TestMain(m *testing.M) {
 // TestCreateRunsOnceAtATime proves the lock behind the action: of two
 // rebuilds requested at once, one runs and the other is refused with 409
 // right away, and once the first is done the next request runs again. Every
-// run leaves one lock event behind.
+// rebuild is recorded as a run under the lock, marked ended once it ran to its
+// end.
 func TestCreateRunsOnceAtATime(t *testing.T) {
 	cli, err := client.New(testutil.BaseURL())
 	require.NoError(t, err)
@@ -72,7 +73,10 @@ func TestCreateRunsOnceAtATime(t *testing.T) {
 	require.NoError(t, err, "the lock is free again once the rebuild returned")
 	require.Equal(t, 1, rsp.Seconds)
 
-	runs := 0
-	require.NoError(t, database.Database[*model.Event](context.Background()).WithQuery(&model.Event{Kind: "lock"}).Count(&runs))
-	require.Equal(t, 2, runs, "every run under the lock leaves one event")
+	runs := make([]*model.Run, 0)
+	require.NoError(t, database.Database[*model.Run](context.Background()).WithQuery(&model.Run{Kind: "lock"}).List(&runs))
+	require.Len(t, runs, 2, "every rebuild is recorded as one run")
+	for _, run := range runs {
+		require.NotNil(t, run.EndedAt, "a rebuild that ran to its end is marked ended")
+	}
 }

@@ -5,18 +5,11 @@ package model
 import "github.com/hydroan/gst/apidoc"
 
 func init() {
-	apidoc.Register("cluster/model", "Event", apidoc.StructDoc{
-		Comment: "Event is one thing a replica did: a cron round, a leader tenure, a run\nunder the lock. Listing the events across the replicas shows who did what\nand how often, which is what the scenarios in the README read.",
+	apidoc.Register("cluster/model", "CounterStep", apidoc.StructDoc{
+		Comment: "CounterStep is one number of the counter the leader work keeps: every second\nthe leader appends the next number, in a transaction under its lease. Seq is\nunique, so no number is written twice, and Tenure names the leadership that\nwrote it: the numbers of one tenure form one unbroken run, and the runs\nfollow each other, unless two leaderships ever wrote at the same time. The\ncounter lives in the database, so a replica taking the leadership over\ncontinues from the last number.",
 		Fields: map[string]string{
-			"Kind":    "\"cron\", \"leader\" or \"lock\"",
-			"Name":    "the job, the leader work or the lock",
-			"Replica": "the replica that did it, see helper.Replica",
-		},
-	})
-	apidoc.Register("cluster/model", "Progress", apidoc.StructDoc{
-		Comment: "Progress is the state of the leader work: how far the counter got, and\nwhich replica moved it last. It lives in the database so that a replica\ntaking the leadership over continues from where the last leader stopped.",
-		Fields: map[string]string{
-			"Replica": "the replica that moved the counter last",
+			"Replica": "the replica that led, see helper.Replica",
+			"Tenure":  "one id per leadership, drawn as it starts",
 		},
 	})
 	apidoc.Register("cluster/model", "Rebuild", apidoc.StructDoc{
@@ -27,5 +20,14 @@ func init() {
 	})
 	apidoc.Register("cluster/model", "RebuildRsp", apidoc.StructDoc{
 		Comment: "RebuildRsp reports which replica ran the rebuild and for how long.",
+	})
+	apidoc.Register("cluster/model", "Run", apidoc.StructDoc{
+		Comment: "Run is one piece of work a replica did: a cron round or a run under the\nlock. It is written as the work starts — CreatedAt is the start — and marked\nended once the work runs to its end, both in a transaction on the work's\ncontext: a run cut short, by its lease lost or its process stopping, keeps\nno end. Listing the runs across the replicas shows who did what and how\noften, and whether two runs of one job or one lock ever overlapped.",
+		Fields: map[string]string{
+			"EndedAt": "when the work ran to its end; nil while it runs or once it was cut short",
+			"Kind":    "\"cron\" or \"lock\"",
+			"Name":    "the job or the lock",
+			"Replica": "the replica that ran it, see helper.Replica",
+		},
 	})
 }

@@ -7,11 +7,9 @@ import (
 	"context"
 	"time"
 
-	"cluster/helper"
-	"cluster/model"
+	"cluster/dao"
 
 	"github.com/hydroan/gst/cronjob"
-	"github.com/hydroan/gst/database"
 )
 
 func init() {
@@ -20,17 +18,17 @@ func init() {
 	cronjob.Register(slow, "@every 30s", "slow")
 }
 
-// tick has each instant claimed once across the deployment: the event list
-// shows one row every 10 seconds however many replicas run, each row naming
-// the replica that won the instant.
+// tick has each instant claimed once across the deployment: the runs show one
+// round every 10 seconds however many replicas run, each naming the replica
+// that won the instant.
 func tick(ctx context.Context) error {
-	return record(ctx, "tick", "each instant claimed once across the deployment")
+	return round(ctx, "tick", nil)
 }
 
-// localTick runs on every replica: the event list shows one row every 10
-// seconds per replica.
+// localTick runs on every replica: the runs show one round every 10 seconds
+// per replica.
 func localTick(ctx context.Context) error {
-	return record(ctx, "local-tick", "on every replica")
+	return round(ctx, "local-tick", nil)
 }
 
 // slow runs longer than the 15 seconds a lease lasts, so the round keeps the
@@ -38,24 +36,34 @@ func localTick(ctx context.Context) error {
 // moving while the round runs, and no other replica can take the name over
 // meanwhile. Its period is longer than a round, so no instant passes while
 // one runs; a job that overran its period would have the instants that
-// passed skipped, with a warning naming how many. A round whose pod is
-// deleted halfway returns its context's ending, so it has not run to its
-// end, and another replica runs it a second time for the same instant.
+// passed skipped, with a warning naming how many. A round cut short — its pod
+// deleted or its process killed halfway — returns its context's ending or
+// never returns, so it has not run to its end, and another replica runs it a
+// second time for the same instant.
 func slow(ctx context.Context) error {
-	select {
-	case <-time.After(20 * time.Second):
-		return record(ctx, "slow", "ran for 20s, longer than the lease")
-	case <-ctx.Done():
-		return ctx.Err()
-	}
+	return round(ctx, "slow", func(ctx context.Context) error {
+		select {
+		case <-time.After(20 * time.Second):
+			return nil
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+	})
 }
 
-// record writes the event of one round.
-func record(ctx context.Context, name, detail string) error {
-	return database.Database[*model.Event](ctx).Create(&model.Event{
-		Kind:    "cron",
-		Name:    name,
-		Replica: helper.Replica(),
-		Detail:  detail,
-	})
+// round records one round of the job named name around work, nil for a round
+// with nothing to do but be recorded: the run is written before the work and
+// marked ended once the work returns nil. The error is returned as it came,
+// so a round cut short reads as cut short.
+func round(ctx context.Context, name string, work func(ctx context.Context) error) error {
+	run, err := dao.StartRun(ctx, "cron", name)
+	if err != nil {
+		return err
+	}
+	if work != nil {
+		if err := work(ctx); err != nil {
+			return err
+		}
+	}
+	return dao.EndRun(ctx, run)
 }

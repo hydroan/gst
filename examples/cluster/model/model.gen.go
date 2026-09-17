@@ -5,6 +5,6 @@ package model
 import "github.com/hydroan/gst/model"
 
 func init() {
-	model.Register[*Event]()
-	model.Register[*Progress]()
+	model.Register[*CounterStep]()
+	model.Register[*Run]()
 }

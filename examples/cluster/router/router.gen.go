@@ -12,8 +12,8 @@ import (
 )
 
 func Init() error {
-	router.Register[*model.Event, *model.Event, *model.Event](router.Auth(), "events", &gst.ControllerConfig[*model.Event]{}, consts.List)
-	router.Register[*model.Progress, *model.Progress, *model.Progress](router.Auth(), "progress", &gst.ControllerConfig[*model.Progress]{}, consts.List)
+	router.Register[*model.CounterStep, *model.CounterStep, *model.CounterStep](router.Auth(), "counter_steps", &gst.ControllerConfig[*model.CounterStep]{}, consts.List)
 	router.Register[*model.Rebuild, *model.RebuildReq, *model.RebuildRsp](router.Auth(), "rebuilds", &gst.ControllerConfig[*model.Rebuild]{}, consts.Create)
+	router.Register[*model.Run, *model.Run, *model.Run](router.Auth(), "runs", &gst.ControllerConfig[*model.Run]{}, consts.List)
 	return nil
 }

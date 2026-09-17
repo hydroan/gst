@@ -1,0 +1,126 @@
+# A MySQL for the example alone. A real deployment brings its own database;
+# the replicas only need MYSQL_HOST and their credentials to point at it.
+apiVersion: v1
+kind: Secret
+metadata:
+  name: mysql
+  namespace: gst-cluster
+  labels:
+    app.kubernetes.io/name: mysql
+    app.kubernetes.io/component: database
+    app.kubernetes.io/part-of: gst-cluster
+type: Opaque
+stringData:
+  root-password: cluster-root
+  # The application's own account, which owns the cluster database and
+  # nothing else.
+  password: cluster
+---
+# Headless: the StatefulSet's governing Service. mysql resolves to the pod.
+apiVersion: v1
+kind: Service
+metadata:
+  name: mysql
+  namespace: gst-cluster
+  labels:
+    app.kubernetes.io/name: mysql
+    app.kubernetes.io/component: database
+    app.kubernetes.io/part-of: gst-cluster
+spec:
+  clusterIP: None
+  selector:
+    app.kubernetes.io/name: mysql
+  ports:
+    - name: mysql
+      port: 3306
+      targetPort: mysql
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: mysql
+  namespace: gst-cluster
+  labels:
+    app.kubernetes.io/name: mysql
+    app.kubernetes.io/component: database
+    app.kubernetes.io/part-of: gst-cluster
+spec:
+  serviceName: mysql
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: mysql
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: mysql
+        app.kubernetes.io/component: database
+        app.kubernetes.io/part-of: gst-cluster
+    spec:
+      automountServiceAccountToken: false
+      enableServiceLinks: false
+      # The image's mysql user, so the database starts without root.
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 999
+        runAsGroup: 999
+        fsGroup: 999
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: mysql
+          image: mysql:8.4
+          env:
+            - name: MYSQL_ROOT_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: mysql
+                  key: root-password
+            - name: MYSQL_DATABASE
+              value: cluster
+            - name: MYSQL_USER
+              value: cluster
+            - name: MYSQL_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: mysql
+                  key: password
+          ports:
+            - name: mysql
+              containerPort: 3306
+          resources:
+            requests:
+              cpu: 100m
+              memory: 512Mi
+            limits:
+              memory: 1Gi
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+          readinessProbe:
+            exec:
+              command: ["sh", "-c", "MYSQL_PWD=\"$MYSQL_PASSWORD\" mysqladmin ping -h 127.0.0.1 -ucluster"]
+            periodSeconds: 5
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/mysql
+            - name: run
+              mountPath: /var/run/mysqld
+      volumes:
+        # The data outlives a restart of the container — the database outage
+        # scenario stops mysqld and counts on it — but not the pod. For data
+        # that outlives the pod, remove this volume and uncomment the
+        # volumeClaimTemplates below; the cluster needs a default StorageClass.
+        - name: data
+          emptyDir: {}
+        - name: run
+          emptyDir: {}
+  # volumeClaimTemplates:
+  #   - metadata:
+  #       name: data
+  #     spec:
+  #       accessModes: ["ReadWriteOnce"]
+  #       resources:
+  #         requests:
+  #           storage: 5Gi

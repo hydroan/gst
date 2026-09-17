@@ -1,0 +1,13 @@
+# Everything the example runs lives in this namespace, so the example comes and
+# goes with it. The namespace enforces the restricted Pod Security Standard:
+# every pod in it runs as a non-root user, cannot escalate privileges, drops
+# all capabilities and uses the runtime's default seccomp profile, and a pod
+# that does not say so is refused.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: gst-cluster
+  labels:
+    app.kubernetes.io/part-of: gst-cluster
+    pod-security.kubernetes.io/enforce: restricted
+    pod-security.kubernetes.io/enforce-version: latest

@@ -3,6 +3,7 @@ package leader
 
 import (
 	"context"
+	"crypto/rand"
 	"time"
 
 	"cluster/helper"
@@ -16,55 +17,40 @@ func init() {
 	leader.Register(count, "counter")
 }
 
-// count is the leader work: every second, move the shared counter forward
-// in a transaction under the lease. A replica that takes the leadership over
-// continues from the count in the database, and records that it did; a
-// replica that lost the leadership without noticing yet has its next
-// transaction refused — the lease is verified first — which ends its tenure
-// with "lease lost" in the leader log.
+// count is the leader work: every second, append the next number of the
+// shared counter in a transaction under the lease. Each leadership draws an id
+// of its own and writes it with every number, so the counter shows which
+// leadership wrote what. A replica that takes the leadership over continues
+// from the last number in the database; one that lost the leadership without
+// noticing yet has its next transaction refused — the lease is verified first —
+// so its numbers never interleave with the new leader's.
 func count(ctx context.Context) error {
-	if err := recordTenure(ctx); err != nil {
-		return err
-	}
-
+	tenure := rand.Text()
 	ticker := time.NewTicker(time.Second)
 	defer ticker.Stop()
 	for {
 		select {
 		case <-ctx.Done():
-			return nil
+			return ctx.Err()
 		case <-ticker.C:
 		}
-		if err := advance(ctx); err != nil {
+		if err := step(ctx, tenure); err != nil {
 			return err
 		}
 	}
 }
 
-// recordTenure writes the event that marks this replica taking the
-// leadership over.
-func recordTenure(ctx context.Context) error {
-	return database.Database[*model.Event](ctx).Create(&model.Event{
-		Kind:    "leader",
-		Name:    "counter",
-		Replica: helper.Replica(),
-		Detail:  "took the leadership",
-	})
-}
-
-// advance moves the counter by one, creating it on the first tenure ever.
-func advance(ctx context.Context) error {
+// step appends the number after the last one, 1 on the first step ever.
+func step(ctx context.Context, tenure string) error {
 	return database.Transaction(ctx, func(ctx context.Context) error {
-		rows := make([]*model.Progress, 0, 1)
-		if err := database.Database[*model.Progress](ctx).WithQuery(&model.Progress{Name: "counter"}).List(&rows); err != nil {
+		last := make([]*model.CounterStep, 0, 1)
+		if err := database.Database[*model.CounterStep](ctx).WithOrder(model.CounterStepCols.Seq.Desc()).WithLimit(1).List(&last); err != nil {
 			return err
 		}
-		if len(rows) == 0 {
-			return database.Database[*model.Progress](ctx).Create(&model.Progress{Name: "counter", Count: 1, Replica: helper.Replica()})
+		next := int64(1)
+		if len(last) > 0 {
+			next = last[0].Seq + 1
 		}
-		progress := rows[0]
-		progress.Count++
-		progress.Replica = helper.Replica()
-		return database.Database[*model.Progress](ctx).Update(progress)
+		return database.Database[*model.CounterStep](ctx).Create(&model.CounterStep{Seq: next, Tenure: tenure, Replica: helper.Replica()})
 	})
 }

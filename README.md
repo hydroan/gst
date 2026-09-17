@@ -822,7 +822,8 @@ func init() {
 - `component.Register`：每个副本各跑一份，不做协调；播种之后、监听之前启动，停机时先于 provider 停下，fn 收到
   的 ctx 在停机时结束。ctx 结束前返回（返回 nil 也算）或 panic 都按失败退出进程，暂时性的失败要在 fn 里重试。
 
-`leader`、`lock`、`component` 包的 godoc 示例（`example_*_test.go`）逐个演示了这些用法和容易踩的坑。
+`leader`、`lock`、`component` 包的 godoc 示例（`example_*_test.go`）逐个演示了这些用法和容易踩的坑。[examples/cluster](./examples/cluster/README.md)
+把定时任务、选主和锁部署成三个副本，给了在 Kubernetes 里制造故障、核对结果的命令。
 
 ### 保证与边界
 
@@ -948,6 +949,8 @@ gen:
 - [生成的 service 注册](./examples/demo/service/service.gen.go)
 
 `examples/bench` 是压测专用项目（由 `gg new` 生成），提供 [BENCHMARK.md](./BENCHMARK.md) 中全部压测接口。
+
+`examples/cluster` 是多副本部署示例：纯 YAML 清单在 Kubernetes 里起三个副本，演示并检验定时任务、选主、锁和多副本同时建表，见[它的 README](./examples/cluster/README.md)。
 
 ## 性能
 
