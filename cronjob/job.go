@@ -19,13 +19,14 @@ import (
 )
 
 // This file holds one job's own side of the scheduler: the loop that waits
-// for its instants, the claim that decides which replica runs one, and the
-// round itself — its identity, its timing and the entry that records its
-// outcome. Registration and the scheduler that owns the loops are in
-// cronjob.go, the schedule arithmetic in schedule.go.
+// for its instants, the claim that decides which replica runs one — or runs
+// a round cut short a second time — and the round itself: its identity, its
+// timing, the entry that records its outcome and the record of its end.
+// Registration, the scheduler that owns the loops and the sweep that finds
+// rounds cut short are in cronjob.go, the schedule arithmetic in schedule.go.
 
-// releaseTimeout bounds the statement that gives an instant's lease back
-// once the round is over.
+// releaseTimeout bounds the statement that gives an instant's lease back,
+// and records whether its round ran to its end, once the round is over.
 const releaseTimeout = 5 * time.Second
 
 // job is one registered job with its parsed schedule.
@@ -46,29 +47,38 @@ func (j *job) leaseName() string {
 
 // loop runs the job at each instant of its schedule, starting with next,
 // until ctx ends; a job under a lease first catches up the most recent
-// instant no replica ran. The instant after a run — the catch-up included —
-// is computed from the moment the run ended, so instants that passed while
-// a run was in flight are skipped, never piled on top of it — a slow round
-// must not multiply its downstream calls — and every skip is logged with the
-// number of instants it cost, so a job that keeps overrunning its period
-// does not quietly run less often. A schedule with no instant left — a day
-// that never comes — ends the loop.
-func (j *job) loop(ctx context.Context, next time.Time) {
+// instant no replica claimed, and runs a second time each round cut short
+// that the sweep hands in on cutShort. The instant after a run — the
+// catch-up and the second run included — is computed from the moment the run
+// ended, so instants that passed while a run was in flight are skipped, never
+// piled on top of it — a slow round must not multiply its downstream calls —
+// and every skip is logged with the number of instants it cost, so a job that
+// keeps overrunning its period does not quietly run less often. A schedule
+// with no instant left — a day that never comes — ends the loop.
+func (j *job) loop(ctx context.Context, next time.Time, cutShort <-chan lease.Unfinished) {
 	if !j.perInstance {
 		if ran, ok := j.catchUp(ctx); ok {
 			next = j.nextAfter(ran)
 		}
 	}
-	for {
+	for ctx.Err() == nil {
 		if next.IsZero() {
 			log.Warnz("cronjob has no further instant", zap.String("name", j.name), zap.String("spec", j.spec))
 			return
 		}
-		if !clk.Wait(ctx, next) {
-			return
+		due, stop := clk.Timer(next)
+		select {
+		case <-due:
+			j.runInstant(ctx, next, false)
+			next = j.nextAfter(next)
+		case u := <-cutShort:
+			stop()
+			if j.rerun(ctx, u) {
+				next = j.nextAfter(u.Slot)
+			}
+		case <-ctx.Done():
+			stop()
 		}
-		j.runInstant(ctx, next, false)
-		next = j.nextAfter(next)
 	}
 }
 
@@ -99,14 +109,16 @@ func (j *job) instantsBetween(from, to time.Time) int {
 }
 
 // catchUp runs, once and on one replica, the most recent instant of the job
-// that no replica ran — what a rolling deployment or an outage owes the job
-// — and returns that instant and whether a round ran for it. The conditions,
-// all of which must hold: the job has run before, so its lease row exists (a
-// job never run starts with its next instant: the instants before its first
-// deployment were never its to run); the most recent instant that passed
-// lies within catchUpLookback; and no replica claimed that instant — the
-// claim itself decides this last one, so replicas racing for the same
-// catch-up settle it the way they settle any instant.
+// that no replica claimed — what a rolling deployment or an outage owes the
+// job — and returns that instant and whether a round ran for it. An instant
+// claimed whose round was cut short is not caught up here: the sweep finds
+// it, and the loop runs it a second time. The conditions, all of which must
+// hold: the job has run before, so its lease row exists (a job never run
+// starts with its next instant: the instants before its first deployment
+// were never its to run); the most recent instant that passed lies within
+// catchUpLookback; and no replica claimed that instant — the claim itself
+// decides this last one, so replicas racing for the same catch-up settle it
+// the way they settle any instant.
 func (j *job) catchUp(ctx context.Context) (time.Time, bool) {
 	prev, ok := previousInstant(j.schedule, clk.Now())
 	if !ok {
@@ -128,11 +140,10 @@ func (j *job) catchUp(ctx context.Context) (time.Time, bool) {
 
 // runInstant runs the round for at and reports whether a round ran. A
 // per-instance job runs it outright; a job shared across the deployment
-// first claims the instant's lease and runs only when it wins, under the
-// lease — its context ends with the lease, its database.Transaction calls
-// verify the lease first, and a round that will not stop once the lease is
-// lost fails the process, see lease.Run — then gives the lease back so the
-// next instant is free at once.
+// first claims the instant's lease and runs only when it wins, see
+// runClaimed. A claim that gives up an earlier instant whose round was cut
+// short, and not run to its end the second time either, says so: that
+// instant never runs again.
 func (j *job) runInstant(ctx context.Context, at time.Time, catchUp bool) bool {
 	if j.perInstance {
 		// The round logs its own outcome.
@@ -141,53 +152,105 @@ func (j *job) runInstant(ctx context.Context, at time.Time, catchUp bool) bool {
 	}
 
 	h, claimed, err := lease.ClaimSlot(ctx, j.leaseName(), at)
-	if err != nil {
-		// An instant that falls on the moment the process is told to stop
-		// is not claimed, and that is not a database failure.
-		if ctx.Err() == nil {
-			log.Errorz("cronjob could not claim its instant", zap.Error(err), zap.String("name", j.name), zap.String("spec", j.spec), zap.Time("at", at))
-		}
+	if !j.claimed(ctx, at, claimed, err) {
 		return false
 	}
-	if !claimed {
-		log.Debugz("cronjob instant claimed elsewhere", zap.String("name", j.name), zap.String("spec", j.spec), zap.Time("at", at))
-		return false
+	if given, ok := h.Superseded(); ok {
+		log.Warnz("cronjob gave up a round cut short", zap.String("name", j.name), zap.String("spec", j.spec), zap.Time("at", given.Slot), zap.Bool("rerun", given.Rerun), zap.Time("next", at))
 	}
-
-	fields := []zap.Field{zap.Uint64("term", h.Term())}
+	var fields []zap.Field
 	if catchUp {
 		fields = append(fields, zap.Bool("catch_up", true))
 	}
+	j.runClaimed(ctx, h, at, fields...)
+	return true
+}
+
+// rerun runs a second time the round for u, an instant of the job cut short,
+// when it wins the instant's second claim, and reports whether a round ran.
+func (j *job) rerun(ctx context.Context, u lease.Unfinished) bool {
+	h, claimed, err := lease.ClaimRerun(ctx, u)
+	if !j.claimed(ctx, u.Slot, claimed, err, zap.Bool("rerun", true)) {
+		return false
+	}
+	j.runClaimed(ctx, h, u.Slot, zap.Bool("rerun", true))
+	return true
+}
+
+// claimed reports whether the claim of the instant at was won, and logs the
+// claim that was not: refused, or failed. fields are added to the entry.
+func (j *job) claimed(ctx context.Context, at time.Time, claimed bool, err error, fields ...zap.Field) bool {
+	entry := append([]zap.Field{zap.String("name", j.name), zap.String("spec", j.spec), zap.Time("at", at)}, fields...)
+	switch {
+	case err != nil:
+		// An instant that falls on the moment the process is told to stop
+		// is not claimed, and that is not a database failure.
+		if ctx.Err() == nil {
+			log.Errorz("cronjob could not claim its instant", append([]zap.Field{zap.Error(err)}, entry...)...)
+		}
+		return false
+	case !claimed:
+		log.Debugz("cronjob instant claimed elsewhere", entry...)
+		return false
+	default:
+		return true
+	}
+}
+
+// runClaimed runs the round for at under h, the lease claimed for it: its
+// context ends with the lease, its database.Transaction calls verify the
+// lease first, and a round that will not stop once the lease is lost fails
+// the process, see lease.Run. The round then records its end, and gives the
+// lease back so the next instant is free at once: a round that ran to its
+// end — the job returned nil or an error of its own, or panicked — is
+// recorded finished, and never runs again; one cut short — the job returned
+// the ending of its context — stays unfinished, for a replica to run a second
+// time. fields are added to the round's entries.
+func (j *job) runClaimed(ctx context.Context, h *lease.Handle, at time.Time, fields ...zap.Field) {
+	fields = append([]zap.Field{zap.Uint64("term", h.Term())}, fields...)
 	held, stopHold := lease.Hold(ctx, h, log)
 	// The round logs its own outcome; Run's is the same error, already logged.
 	runErr := lease.Run(lease.WithHandle(held, h), h, log, func(ctx context.Context) error {
 		return j.run(ctx, at, fields...)
 	})
+	// Read before the renewals stop: stopping them ends the held context
+	// too, and would make every round look cut short.
+	finished := !lifecycle.Interrupted(held, runErr)
 	lost := h.Lost()
 	stopHold()
 
-	if lost {
+	if lost && finished {
 		// The round outlived its lease — the renewals could not keep it, or
-		// found it taken — and its context ended with it, unless the process
-		// had begun shutting down before. A job that returned the ending has
-		// the loss or the shutdown on its own entry already; one that
-		// returned nothing, or a failure of its own, has the loss recorded
-		// here. Either way the name is no longer this round's to give back.
-		if !lifecycle.Interrupted(held, runErr) {
-			log.Warnz("cronjob lost its lease during the round", zap.String("name", j.name), zap.String("spec", j.spec), zap.Time("at", at), zap.Uint64("term", h.Term()))
-		}
-		return true
+		// found it taken — and returned nothing, or a failure of its own. A
+		// job that returned the ending of its context has the loss on its own
+		// entry already; this one has it recorded here.
+		log.Warnz("cronjob lost its lease during the round", append([]zap.Field{zap.String("name", j.name), zap.String("spec", j.spec), zap.Time("at", at)}, fields...)...)
 	}
 
-	// The release outlives the round's context on purpose: at shutdown that
+	// The record outlives the round's context on purpose: at shutdown that
 	// context is already gone, and the lease must still be handed back so
-	// another replica can take the next instant without waiting it out.
-	releaseCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), releaseTimeout)
+	// another replica can take the next instant, or the round cut short,
+	// without waiting the lease out.
+	settleCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), releaseTimeout)
 	defer cancel()
-	if err := h.Release(releaseCtx); err != nil {
-		log.Warnz("cronjob could not release its lease", zap.Error(err), zap.String("name", j.name), zap.Time("at", at))
+	switch {
+	case finished:
+		// Recorded with the lease lost too: the round did run to its end.
+		err := h.Finish(settleCtx)
+		switch {
+		case errors.Is(err, lease.ErrLost):
+			log.Warnz("cronjob could not release its lease", zap.Error(err), zap.String("name", j.name), zap.Time("at", at))
+		case err != nil:
+			log.Warnz("cronjob could not record its round as finished", zap.Error(err), zap.String("name", j.name), zap.Time("at", at))
+		}
+	case lost:
+		// Cut short, and the name is no longer this round's to give back:
+		// the instant stays unfinished for another replica to run.
+	default:
+		if err := h.Release(settleCtx); err != nil {
+			log.Warnz("cronjob could not release its lease", zap.Error(err), zap.String("name", j.name), zap.Time("at", at))
+		}
 	}
-	return true
 }
 
 // run executes the round scheduled for at and returns its outcome, logged

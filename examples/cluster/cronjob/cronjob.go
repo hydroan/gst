@@ -38,7 +38,9 @@ func localTick(ctx context.Context) error {
 // moving while the round runs, and no other replica can take the name over
 // meanwhile. Its period is longer than a round, so no instant passes while
 // one runs; a job that overran its period would have the instants that
-// passed skipped, with a warning naming how many.
+// passed skipped, with a warning naming how many. A round whose pod is
+// deleted halfway returns its context's ending, so it has not run to its
+// end, and another replica runs it a second time for the same instant.
 func slow(ctx context.Context) error {
 	select {
 	case <-time.After(20 * time.Second):

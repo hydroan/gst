@@ -283,49 +283,6 @@ func TestRenewKeepsTheLeaseBeyondItsDuration(t *testing.T) {
 	require.NoError(t, holder.Release(ctx))
 }
 
-// TestClaimSlotRunsAnInstantOnce proves the scheduler's claim: an instant is
-// claimed once under a name, an instant already claimed — or an earlier one
-// — is refused even once the lease is released, and a later instant is free.
-// LastSlot reports the instant last claimed, and nothing for a name never
-// claimed.
-func TestClaimSlotRunsAnInstantOnce(t *testing.T) {
-	ctx := context.Background()
-	name := uniqueName(t)
-	first := time.Date(2026, 1, 1, 10, 0, 0, 0, time.UTC)
-	second := first.Add(time.Minute)
-
-	_, found, err := LastSlot(ctx, name)
-	require.NoError(t, err)
-	require.False(t, found, "a name never claimed has no last slot")
-
-	h, claimed, err := ClaimSlot(ctx, name, first)
-	require.NoError(t, err)
-	require.True(t, claimed)
-	require.NoError(t, h.Release(ctx))
-
-	slot, found, err := LastSlot(ctx, name)
-	require.NoError(t, err)
-	require.True(t, found)
-	require.Equal(t, first, slot)
-
-	_, claimed, err = ClaimSlot(ctx, name, first)
-	require.NoError(t, err)
-	require.False(t, claimed, "an instant already claimed is refused")
-	_, claimed, err = ClaimSlot(ctx, name, first.Add(-time.Minute))
-	require.NoError(t, err)
-	require.False(t, claimed, "an instant before the last claimed one is refused")
-
-	h, claimed, err = ClaimSlot(ctx, name, second)
-	require.NoError(t, err)
-	require.True(t, claimed, "the next instant is free")
-	require.EqualValues(t, 2, h.Term())
-	require.NoError(t, h.Release(ctx))
-	slot, found, err = LastSlot(ctx, name)
-	require.NoError(t, err)
-	require.True(t, found)
-	require.Equal(t, second, slot, "the claim records the instant as the last one run")
-}
-
 // TestTransactionUnderALeaseVerifiesIt proves the transaction guard: a
 // transaction opened on a context under a held lease runs, with the term at
 // hand, and one opened under a lost lease returns ErrLost before a single

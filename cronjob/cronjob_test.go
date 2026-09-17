@@ -21,6 +21,7 @@ import (
 	"github.com/hydroan/gst/logger"
 	pkgzap "github.com/hydroan/gst/logger/zap"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/zap/zapcore"
 	"gorm.io/gorm"
 	gormlogger "gorm.io/gorm/logger"
 )
@@ -165,6 +166,30 @@ func TestStopWithoutStartIsNoop(t *testing.T) {
 	resetCronjobState(t)
 
 	require.NoError(t, stop(context.Background()))
+}
+
+// TestSweepThatCannotReadTheLeasesLogsAnError proves a look for rounds cut
+// short that the database cannot answer is logged as an error carrying the
+// failure, and that the looks go on: a round cut short stays where it is for
+// as long as they fail, which must not pass in silence.
+func TestSweepThatCannotReadTheLeasesLogsAnError(t *testing.T) {
+	withCronjobLoggerConfig(t)
+	entries := withObservedGlobalLogger(t)
+	resetCronjobState(t)
+	withUnreachableDatabase(t)
+	withFakeClock(t, time.Date(2026, 1, 1, 10, 0, 0, 0, time.UTC))
+	withFastSweep(t)
+
+	Register(noopJob, "0 0 2 * * *", "unreachable-job")
+	require.NoError(t, start(context.Background()))
+
+	const msg = "cronjob could not look for rounds cut short"
+	require.Eventually(t, func() bool {
+		return entries.FilterMessage(msg).Len() >= 2
+	}, 5*time.Second, 10*time.Millisecond, "every look that failed is logged, and the looks go on")
+	failed := entries.FilterMessage(msg).All()[0]
+	require.Equal(t, zapcore.ErrorLevel, failed.Level)
+	require.Contains(t, failed.ContextMap()["error"], "database is closed")
 }
 
 // TestRegistrationErrorsFailStartup proves a registration the scheduler

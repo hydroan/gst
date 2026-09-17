@@ -10,9 +10,10 @@
 #     at its longest — the drain window, then up to 30 seconds for the HTTP
 #     connections, up to 30 seconds for in-flight jobs, and up to 5 seconds
 #     each for the tracing exporter and the debug endpoints when they are on —
-#     so a pod is never killed while it is still finishing a round; the lease
-#     it holds is released as the round ends, and a new leader is elected
-#     within seconds;
+#     so a pod is never killed while a round is still winding down: the
+#     round's context ends as shutdown begins, the round gives its lease back
+#     once it returns — cut short, it runs again on another replica — and a
+#     new leader is elected within seconds;
 #   - readiness fails on the first probe that sees the pod draining, so the
 #     Service stops routing to it well within the drain window;
 #   - the startup probe covers the time the framework may spend preparing

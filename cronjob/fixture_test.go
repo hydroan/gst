@@ -21,7 +21,9 @@ import (
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 	"go.uber.org/zap/zaptest/observer"
+	gormsqlite "gorm.io/driver/sqlite"
 	"gorm.io/gorm"
+	gormlogger "gorm.io/gorm/logger"
 )
 
 // roundObservation is what a job sees of its round: the identity on its
@@ -79,15 +81,77 @@ func (l *runLog) counts() map[time.Time]int {
 }
 
 // lastRun puts an earlier run of a job on record: the lease row exists and
-// names at as the last instant claimed, the way a job that ran before looks
-// to a starting scheduler.
+// names at as the last instant claimed, its round run to its end, the way a
+// job that ran before looks to a starting scheduler.
 func lastRun(t *testing.T, leaseName string, at time.Time) {
 	t.Helper()
 
 	h, claimed, err := lease.ClaimSlot(context.Background(), leaseName, at)
 	require.NoError(t, err)
 	require.True(t, claimed)
-	require.NoError(t, h.Release(context.Background()))
+	require.NoError(t, h.Finish(context.Background()))
+}
+
+// cutShortRun puts on record a round of a job cut short, the way a replica
+// leaves it: at is the last instant claimed, its round never ran to its end,
+// and the lease is given back — as a shutdown gives it back — or, when
+// crashed, left to expire, as the lease of a process that died is.
+func cutShortRun(t *testing.T, leaseName string, at time.Time, crashed bool) {
+	t.Helper()
+
+	h, claimed, err := lease.ClaimSlot(context.Background(), leaseName, at)
+	require.NoError(t, err)
+	require.True(t, claimed)
+	if !crashed {
+		require.NoError(t, h.Release(context.Background()))
+	}
+}
+
+// withUnreachableDatabase hands the scheduler a primary database whose
+// connections are closed, so that every statement fails, and puts the suite's
+// database back once the test ends. The loops read the database, so they must
+// be drained before it changes back: call it before the helpers whose
+// cleanups drain them, withFakeClock and withFastSweep.
+func withUnreachableDatabase(t *testing.T) {
+	t.Helper()
+
+	closed, err := gorm.Open(gormsqlite.Open("file::memory:?cache=private"), &gorm.Config{Logger: gormlogger.Discard})
+	require.NoError(t, err)
+	pool, err := closed.DB()
+	require.NoError(t, err)
+	require.NoError(t, pool.Close())
+
+	original := dbruntime.DB
+	dbruntime.DB = closed
+	t.Cleanup(func() { dbruntime.DB = original })
+}
+
+// withFastSweep has the schedulers the test starts look for rounds cut short
+// every few milliseconds, and restores the sweep's timings afterwards.
+func withFastSweep(t *testing.T) {
+	t.Helper()
+
+	interval, jitter := sweepInterval, sweepJitter
+	sweepInterval, sweepJitter = 10*time.Millisecond, 0
+	// The loops read the timings; they must be gone before they change back.
+	t.Cleanup(func() {
+		drainLoops()
+		sweepInterval, sweepJitter = interval, jitter
+	})
+}
+
+// unfinishedInstants returns the instants under the job's lease name that a
+// sweep would hand to a loop to run a second time.
+func unfinishedInstants(t *testing.T, leaseName string) []time.Time {
+	t.Helper()
+
+	found, err := lease.UnfinishedSlots(context.Background(), []string{leaseName})
+	require.NoError(t, err)
+	instants := make([]time.Time, 0, len(found))
+	for _, u := range found {
+		instants = append(instants, u.Slot)
+	}
+	return instants
 }
 
 // takeOver acts as another replica taking the name: the lease is ended in
@@ -143,17 +207,18 @@ func startInstances(t *testing.T, n int) []*scheduler {
 }
 
 // fakeClock is a clock the test drives by hand: time stands still until the
-// test moves it, and a wait ends the moment the test moves past its instant.
+// test moves it, and a timer fires the moment the test moves past its
+// instant.
 type fakeClock struct {
 	mu      sync.Mutex
 	now     time.Time
 	waiters []fakeWaiter
-	// waiting is signaled whenever a wait is registered, so a test can hold
-	// the clock still until the loops are waiting again.
+	// waiting is signaled whenever a timer is set, so a test can hold the
+	// clock still until the loops are waiting again.
 	waiting chan struct{}
 }
 
-// fakeWaiter is one pending Wait: the instant it waits for and the channel
+// fakeWaiter is one pending timer: the instant it waits for and the channel
 // closed once the clock passes it.
 type fakeWaiter struct {
 	at   time.Time
@@ -166,13 +231,14 @@ func (c *fakeClock) Now() time.Time {
 	return c.now
 }
 
-func (c *fakeClock) Wait(ctx context.Context, t time.Time) bool {
+func (c *fakeClock) Timer(t time.Time) (<-chan struct{}, func()) {
+	wake := make(chan struct{})
 	c.mu.Lock()
 	if !t.After(c.now) {
 		c.mu.Unlock()
-		return true
+		close(wake)
+		return wake, func() {}
 	}
-	wake := make(chan struct{})
 	c.waiters = append(c.waiters, fakeWaiter{at: t, wake: wake})
 	c.mu.Unlock()
 	select {
@@ -180,16 +246,12 @@ func (c *fakeClock) Wait(ctx context.Context, t time.Time) bool {
 	default:
 	}
 
-	select {
-	case <-wake:
-		return true
-	case <-ctx.Done():
-		// A wait cut short leaves the clock, so that untilWaiters counts
-		// only waits that are still pending.
+	// A timer stopped leaves the clock, so that untilWaiters counts only
+	// waits that are still pending.
+	return wake, func() {
 		c.mu.Lock()
+		defer c.mu.Unlock()
 		c.waiters = slices.DeleteFunc(c.waiters, func(w fakeWaiter) bool { return w.wake == wake })
-		c.mu.Unlock()
-		return false
 	}
 }
 

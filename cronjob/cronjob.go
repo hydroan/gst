@@ -27,23 +27,41 @@
 // stays empty for such a project. A ClickHouse primary database cannot carry
 // leases, so a job under a lease fails the start there.
 //
+// A round counts once it has run to its end: the job returned nil or an
+// error of its own, or panicked. A round cut short — the job returned the
+// ending of its context as the process shut down or the lease was lost, or
+// never returned because its process crashed or failed — runs a second
+// time, on whichever replica finds it first: every replica looks for such
+// rounds every 15 seconds or so, with one query for all its jobs. A round a
+// shutdown cut short gives its lease back as it stops, and runs again within
+// about 15 seconds; one whose process died waits for its lease to expire
+// first, up to 15 seconds more. The rule, exactly: the round did not run to
+// its end; the instant has not run a second time already (a second round cut
+// short is given up, so a job that brings its process down cannot bring the
+// replicas down one after another); and no later instant has been claimed
+// since (the next instant starting first gives the unfinished one up, with a
+// warning naming it). A job under a lease may therefore run twice for one
+// instant, and must be idempotent: the second round starts over, whatever
+// the first did before it was cut short.
+//
 // On start-up the scheduler catches up the most recent instant of a job when
-// no replica ran it, which is what a rolling deployment or an outage owes
-// the job. The rule, exactly: the job has run before (its lease row exists —
-// a job never run starts with its next instant, the instants before its
-// first deployment were never its to run); the most recent instant that
+// no replica claimed it, which is what a rolling deployment or an outage
+// owes the job. The rule, exactly: the job has run before (its lease row
+// exists — a job never run starts with its next instant, the instants before
+// its first deployment were never its to run); the most recent instant that
 // passed lies within the last day (an older one is history, not a missed
 // round); and no replica claimed that instant. The catch-up is one round, on
-// one replica, and never repeats an instant already run.
+// one replica, and never repeats an instant already claimed; cut short, it
+// runs a second time like any other round.
 //
 // Each job runs in a loop of its own: the loop waits for the next instant of
-// the schedule, runs the job on a context that ends when the process begins
-// shutting down or the lease is lost, then computes the next instant from
-// the moment the run ended — an instant that passed while a run was still
-// in flight is skipped, never piled on top of it. The parser is the cron
-// library's; the loop is this package's, because the library's runtime
-// neither tells a job which instant it runs for nor lets a test drive the
-// clock.
+// the schedule, or for a round of the job cut short that its replica found,
+// runs the job on a context that ends when the process begins shutting down
+// or the lease is lost, then computes the next instant from the moment the
+// run ended — an instant that passed while a run was still in flight is
+// skipped, never piled on top of it. The parser is the cron library's; the
+// loop is this package's, because the library's runtime neither tells a job
+// which instant it runs for nor lets a test drive the clock.
 //
 // A registration that cannot be honored — no name, no schedule, a schedule
 // that does not parse or names the process's own zone, a name already taken —
@@ -54,9 +72,12 @@ package cronjob
 import (
 	"context"
 	"fmt"
+	"maps"
+	"math/rand/v2"
 	"slices"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/internal/lease"
@@ -122,11 +143,13 @@ func setLogger(l types.Logger) {
 // The job runs once per instant across the deployment: the replicas share
 // the instant's lease through the primary database, the first to claim it
 // runs the round, the others skip the instant, and a round still holding the
-// lease keeps the next instants from everyone. On start-up the most recent
-// instant no replica ran is caught up once — when the job has run before,
-// the instant lies within the last day and no replica claimed it; see the
-// package documentation for the rule in full. A job that must run on every
-// replica registers with RegisterPerInstance instead.
+// lease keeps the next instants from everyone. A round cut short by a
+// shutdown, a crash or a lost lease runs a second time, on this replica or
+// another, unless the next instant starts first, so fn must be idempotent;
+// on start-up the most recent instant no replica claimed is caught up once,
+// when the job has run before and the instant lies within the last day. See
+// the package documentation for both rules in full. A job that must run on
+// every replica registers with RegisterPerInstance instead.
 //
 // fn receives the context of the round it runs in. The context ends when the
 // process begins shutting down or the round's lease is lost, so a long round
@@ -157,7 +180,8 @@ func Register(fn func(ctx context.Context) error, spec string, name string) {
 // RegisterPerInstance is Register for a job every replica runs on its own,
 // without a lease: work that belongs to the process, such as refreshing a
 // process-local cache or cleaning a local directory. It never catches up an
-// instant. Everything else is as for Register.
+// instant, nor runs a round cut short a second time. Everything else is as
+// for Register.
 func RegisterPerInstance(fn func(ctx context.Context) error, spec string, name string) {
 	register(fn, spec, name, true)
 }
@@ -283,8 +307,7 @@ type scheduler struct {
 	// cancel ends the context every loop runs on; stop calls it, and the
 	// process context ending does the same.
 	cancel context.CancelFunc
-	loops  sync.WaitGroup
-	// done closes once every loop has returned.
+	// done closes once every loop has returned, and the sweep with them.
 	done chan struct{}
 }
 
@@ -293,20 +316,105 @@ func newScheduler(jobs []*job) *scheduler {
 	return &scheduler{jobs: jobs, done: make(chan struct{})}
 }
 
-// start spawns a loop per job on a context derived from ctx.
+// start spawns a loop per job on a context derived from ctx and, when a job
+// runs under a lease, the sweep that finds the jobs' rounds cut short.
 func (s *scheduler) start(ctx context.Context) {
 	loopCtx, cancel := context.WithCancel(ctx)
 	s.cancel = cancel
 	now := clk.Now()
+	var loops sync.WaitGroup
+	cutShort := make(map[string]chan lease.Unfinished)
 	for _, j := range s.jobs {
 		next := j.schedule.Next(now)
 		log.Infoz("scheduled cronjob", zap.String("name", j.name), zap.String("spec", j.spec), zap.Bool("per_instance", j.perInstance), zap.Time("next", next))
-		s.loops.Go(func() { j.loop(loopCtx, next) })
+		var found chan lease.Unfinished
+		if !j.perInstance {
+			found = make(chan lease.Unfinished, 1)
+			cutShort[j.leaseName()] = found
+		}
+		loops.Go(func() { j.loop(loopCtx, next, found) })
+	}
+
+	// The sweep serves the loops, so it ends once they all have: a scheduler
+	// whose schedules have no instant left is done.
+	sweepCtx, stopSweep := context.WithCancel(loopCtx)
+	var sweeping sync.WaitGroup
+	if len(cutShort) > 0 {
+		sweeping.Go(func() { sweep(sweepCtx, cutShort) })
 	}
 	go func() {
-		s.loops.Wait()
+		loops.Wait()
+		stopSweep()
+		sweeping.Wait()
 		close(s.done)
 	}()
+}
+
+// The sweep's timings. Variables so a test can play them out in
+// milliseconds.
+var (
+	// sweepInterval is how long a scheduler waits before each look for the
+	// rounds of its jobs cut short, the first included: a replica that has
+	// just started has seen no round cut short yet, and the rounds cut short
+	// before it started are there for the next look to find.
+	sweepInterval = 15 * time.Second
+	// sweepJitter bounds the random addition to sweepInterval that keeps the
+	// replicas of a deployment from looking in lockstep.
+	sweepJitter = time.Second
+)
+
+// sweep looks for the rounds cut short of the jobs found holds a channel for,
+// keyed by lease name, every sweepInterval or so, with one query for all of
+// them, and hands each round to its job's loop, which claims the instant a
+// second time. It returns once ctx ends.
+//
+// A channel holds one round. One still there when the next look finds
+// another means the loop has been busy with a round of its own since — the
+// job has one lease, so that round's claim made the round waiting there
+// stale — and the loop takes the stale one, is refused its claim, and the
+// next look finds whatever is left to find.
+func sweep(ctx context.Context, found map[string]chan lease.Unfinished) {
+	names := slices.Sorted(maps.Keys(found))
+	for wait(ctx, sweepWait()) {
+		rounds, err := lease.UnfinishedSlots(ctx, names)
+		if err != nil {
+			// A look cut short by the process stopping is not a database
+			// failure.
+			if ctx.Err() == nil {
+				log.Errorz("cronjob could not look for rounds cut short", zap.Error(err))
+			}
+			continue
+		}
+		for _, u := range rounds {
+			select {
+			case found[u.Name] <- u:
+			default:
+			}
+		}
+	}
+}
+
+// sweepWait is the wait before a look for rounds cut short: the interval
+// plus a random share of the jitter.
+func sweepWait() time.Duration {
+	if sweepJitter <= 0 {
+		return sweepInterval
+	}
+	return sweepInterval + rand.N(sweepJitter) //nolint:gosec // The jitter spreads the looks out; it is not a secret.
+}
+
+// wait blocks until d has passed or ctx ends, and reports whether d passed.
+// The sweep waits on the process's clock rather than on the scheduler's: it
+// looks at leases, whose expiry the database clock decides, not at instants.
+func wait(ctx context.Context, d time.Duration) bool {
+	timer := time.NewTimer(d)
+	defer timer.Stop()
+	select {
+	case <-timer.C:
+		return true
+	case <-ctx.Done():
+		return false
+	}
 }
 
 // stop ends the loops and waits for them, for as long as ctx allows.

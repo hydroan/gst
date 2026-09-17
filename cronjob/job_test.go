@@ -260,6 +260,195 @@ func TestCatchUpSkipsAnInstantAlreadyRun(t *testing.T) {
 	require.Empty(t, runs.counts(), "an instant already run is never caught up")
 }
 
+// TestRoundCutShortByAShutdownRunsAgainElsewhere proves a round counts once
+// it has run to its end: the replica running it shuts down, the round
+// returns its context's ending and gives its lease back, and another replica
+// finds the round and runs it a second time, for the same instant — marked
+// as a second run — after which the instant is settled.
+func TestRoundCutShortByAShutdownRunsAgainElsewhere(t *testing.T) {
+	dir := withCronjobLoggerConfig(t)
+	resetCronjobState(t)
+	withBoundCronjobLogger(t)
+	clock := withFakeClock(t, time.Date(2026, 1, 1, 10, 0, 0, 0, time.UTC))
+	withFastSweep(t)
+
+	entered := make(chan struct{}, 2)
+	var rounds atomic.Int32
+	Register(func(ctx context.Context) error {
+		entered <- struct{}{}
+		if rounds.Add(1) == 1 {
+			<-ctx.Done()
+			return ctx.Err()
+		}
+		return nil
+	}, "@every 1m", "cut-short-job")
+
+	shuttingDown := startInstances(t, 1)[0]
+	clock.untilWaiting(t)
+	clock.Advance(time.Minute)
+	awaitSignal(t, entered, "the round")
+	takingOver := startInstances(t, 1)[0]
+	require.NoError(t, shuttingDown.stop(context.Background()))
+	awaitSignal(t, entered, "the round run a second time")
+	require.NoError(t, takingOver.stop(context.Background()))
+	pkgzap.Clean()
+
+	interrupted := readLogEntry(t, filepath.Join(dir, "cronjob.log"), "cronjob interrupted")
+	require.Equal(t, "2026-01-01T10:01:00Z", interrupted["at"])
+	require.Equal(t, "shutting down", interrupted["reason"])
+	finished := readLogEntries(t, filepath.Join(dir, "cronjob.log"), "finished cronjob")
+	require.Len(t, finished, 1)
+	require.Equal(t, "2026-01-01T10:01:00Z", finished[0]["at"], "the second round runs for the instant cut short")
+	require.Equal(t, true, finished[0]["rerun"])
+	require.EqualValues(t, 2, finished[0]["term"])
+	require.Empty(t, unfinishedInstants(t, "cron:cut-short-job"), "an instant run to its end is settled")
+}
+
+// TestRoundCutShortByACrashRunsAgainOnce proves a round whose process died —
+// its lease never given back — runs a second time once the lease expires,
+// and only once: that round cut short too is given up, and no replica finds
+// the instant again.
+func TestRoundCutShortByACrashRunsAgainOnce(t *testing.T) {
+	dir := withCronjobLoggerConfig(t)
+	resetCronjobState(t)
+	withBoundCronjobLogger(t)
+	withFakeClock(t, time.Date(2026, 1, 1, 10, 0, 30, 0, time.UTC))
+	withFastLease(t)
+	withFastSweep(t)
+
+	cutShortRun(t, "cron:crashed-job", time.Date(2026, 1, 1, 10, 0, 0, 0, time.UTC), true)
+
+	entered := make(chan struct{}, 2)
+	Register(func(ctx context.Context) error {
+		entered <- struct{}{}
+		<-ctx.Done()
+		return ctx.Err()
+	}, "@every 1m", "crashed-job")
+	instance := startInstances(t, 1)[0]
+	awaitSignal(t, entered, "the round run a second time")
+	require.NoError(t, instance.stop(context.Background()))
+	pkgzap.Clean()
+
+	entry := readLogEntry(t, filepath.Join(dir, "cronjob.log"), "cronjob interrupted")
+	require.Equal(t, "2026-01-01T10:00:00Z", entry["at"], "the second round runs for the instant the crash cut short")
+	require.Equal(t, true, entry["rerun"])
+	require.Empty(t, unfinishedInstants(t, "cron:crashed-job"), "an instant cut short a second time never runs a third")
+}
+
+// TestRoundThatFailedDoesNotRunAgain proves a round that failed ran to its
+// end — the job returned an error of its own, or panicked — so the instant is
+// settled, and no replica runs it again.
+func TestRoundThatFailedDoesNotRunAgain(t *testing.T) {
+	cases := []struct {
+		name string
+		job  func() error
+	}{
+		{
+			name: "returned error",
+			job:  func() error { return errors.New("sample failure") },
+		},
+		{
+			name: "panic",
+			job:  func() error { panic("sample panic") },
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			withCronjobLoggerConfig(t)
+			resetCronjobState(t)
+			clock := withFakeClock(t, time.Date(2026, 1, 1, 10, 0, 0, 0, time.UTC))
+
+			entered := make(chan struct{}, 1)
+			Register(func(context.Context) error {
+				entered <- struct{}{}
+				return tc.job()
+			}, "@every 1m", "failed-job")
+			require.NoError(t, start(context.Background()))
+
+			clock.untilWaiting(t)
+			clock.Advance(time.Minute)
+			awaitSignal(t, entered, "the round")
+			// The loop waits for the next instant once the round has recorded
+			// its end.
+			clock.untilWaiting(t)
+			require.Empty(t, unfinishedInstants(t, "cron:failed-job"), "a round that failed is not run again")
+		})
+	}
+}
+
+// TestNextInstantGivesUpARoundCutShort proves a round cut short is given up
+// once a later instant is claimed before any replica ran it again — the next
+// instant on the schedule, or the most recent one a starting scheduler
+// catches up: that round runs, a warning names the instant given up, and
+// nothing is left to run.
+func TestNextInstantGivesUpARoundCutShort(t *testing.T) {
+	cases := []struct {
+		name string
+		// start is where the clock stands as the scheduler starts; the
+		// clock moves on by advance once the loop waits, when advance is not
+		// zero.
+		start   time.Time
+		advance time.Duration
+		// claimed is the later instant whose claim gives the round up.
+		claimed string
+		catchUp bool
+	}{
+		{
+			name:    "next instant",
+			start:   time.Date(2026, 1, 1, 10, 0, 30, 0, time.UTC),
+			advance: 30 * time.Second,
+			claimed: "2026-01-01T10:01:00Z",
+		},
+		{
+			name:    "catch-up at start",
+			start:   time.Date(2026, 1, 1, 10, 2, 30, 0, time.UTC),
+			claimed: "2026-01-01T10:02:00Z",
+			catchUp: true,
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			dir := withCronjobLoggerConfig(t)
+			resetCronjobState(t)
+			withBoundCronjobLogger(t)
+			clock := withFakeClock(t, tc.start)
+
+			// A shutdown cut the round for 10:00 short; the scheduler's first
+			// look for such rounds is 15 seconds away, and a later instant is
+			// claimed first.
+			cutShortRun(t, "cron:given-up-job", time.Date(2026, 1, 1, 10, 0, 0, 0, time.UTC), false)
+
+			runs := make(chan time.Time, 4)
+			Register(func(context.Context) error {
+				runs <- clk.Now()
+				return nil
+			}, "@every 1m", "given-up-job")
+			require.NoError(t, start(context.Background()))
+
+			if tc.advance != 0 {
+				clock.untilWaiting(t)
+				clock.Advance(tc.advance)
+			}
+			awaitRun(t, runs)
+			require.NoError(t, stop(context.Background()))
+			pkgzap.Clean()
+
+			entry := readLogEntry(t, filepath.Join(dir, "cronjob.log"), "cronjob gave up a round cut short")
+			require.Equal(t, "WARN", entry["level"])
+			require.Equal(t, "given-up-job", entry["name"])
+			require.Equal(t, "2026-01-01T10:00:00Z", entry["at"])
+			require.Equal(t, tc.claimed, entry["next"])
+			require.Equal(t, false, entry["rerun"])
+			finished := readLogEntry(t, filepath.Join(dir, "cronjob.log"), "finished cronjob")
+			require.Equal(t, tc.claimed, finished["at"], "the later instant runs")
+			if tc.catchUp {
+				require.Equal(t, true, finished["catch_up"])
+			}
+			require.Empty(t, unfinishedInstants(t, "cron:given-up-job"))
+		})
+	}
+}
+
 // TestInstantsPassingDuringARunAreSkipped proves a slow round never has the
 // instants it overran piled on top of it: the loop resumes with the first
 // instant after the run ended, and logs how many instants the run cost. A

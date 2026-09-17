@@ -1,7 +1,6 @@
 package cronjob
 
 import (
-	"context"
 	"strings"
 	"time"
 
@@ -92,14 +91,15 @@ func previousInstant(s cron.Schedule, now time.Time) (time.Time, bool) {
 	return s.Next(lo), true
 }
 
-// clock is the time as the scheduler sees it: the moment now, and a wait
-// until a moment. The scheduler never sleeps on its own, so a test can hand
-// it a clock it drives by hand.
+// clock is the time as the scheduler sees it: the moment now, and a timer
+// for a moment. The scheduler never sleeps on its own, so a test can hand it
+// a clock it drives by hand.
 type clock interface {
 	Now() time.Time
-	// Wait blocks until t has passed or ctx ends, and reports whether t
-	// passed.
-	Wait(ctx context.Context, t time.Time) bool
+	// Timer returns a channel closed once t has passed — at once when it
+	// has already — and the function that stops the timer, for a wait that
+	// ends another way.
+	Timer(t time.Time) (due <-chan struct{}, stop func())
 }
 
 // systemClock is the clock of a running process.
@@ -109,21 +109,8 @@ func (systemClock) Now() time.Time {
 	return time.Now()
 }
 
-func (systemClock) Wait(ctx context.Context, t time.Time) bool {
-	if ctx.Err() != nil {
-		return false
-	}
-	delay := time.Until(t)
-	if delay <= 0 {
-		return true
-	}
-
-	timer := time.NewTimer(delay)
-	defer timer.Stop()
-	select {
-	case <-timer.C:
-		return true
-	case <-ctx.Done():
-		return false
-	}
+func (systemClock) Timer(t time.Time) (<-chan struct{}, func()) {
+	due := make(chan struct{})
+	timer := time.AfterFunc(time.Until(t), func() { close(due) })
+	return due, func() { timer.Stop() }
 }

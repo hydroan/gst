@@ -8,15 +8,15 @@
 // A lease is one row of gst_leases, updated in place: who holds the name
 // (holder, a token minted per claim and never reused), which process that is
 // (instance, for reading logs), the term (incremented every time the name
-// changes hands, the fencing token for the world outside the database), when
-// the lease expires (by the database clock, never a process clock) and, for
-// the scheduler, the last instant claimed. Four single-row statements do all
-// the work; no lock outlives its own statement:
+// changes hands, the fencing token for the world outside the database) and
+// when the lease expires (by the database clock, never a process clock).
+// Four single-row statements do all the work; no lock outlives its own
+// statement:
 //
 //	claim    UPDATE gst_leases SET holder = :holder, instance = :instance,
-//	             term = term + 1, expires_at_ms = :now + 15000 [, slot_ms = :slot]
-//	          WHERE name = :name AND expires_at_ms <= :now [AND slot_ms < :slot]
-//	         1 row: claimed. 0 rows: held by someone, or the slot was taken.
+//	             term = term + 1, expires_at_ms = :now + 15000
+//	          WHERE name = :name AND expires_at_ms <= :now
+//	         1 row: claimed. 0 rows: held by someone.
 //	         No row yet: INSERT, worded to do nothing when the name is there
 //	         (INSERT IGNORE, ON CONFLICT DO NOTHING); 0 rows: someone was first.
 //	renew    UPDATE gst_leases SET expires_at_ms = :now + 15000
@@ -32,6 +32,51 @@
 //	release  UPDATE gst_leases SET expires_at_ms = 0
 //	          WHERE name = :name AND holder = :holder
 //	         0 rows: the lease was already gone; the work is done either way.
+//
+// The scheduler claims a name per job and instant, and keeps three columns
+// more on it: the last instant claimed (slot_ms, never decreasing), that
+// instant again for as long as its round has not run to its end
+// (unfinished_slot_ms, 0 once it has) and the last instant claimed a second
+// time (rerun_slot_ms). A round cut short — its process shut down or died,
+// or its lease was lost — thus stays on record, and runs again once. Its
+// statements take the place of claim and release, and add two:
+//
+//	claim an instant
+//	         SELECT term, slot_ms, unfinished_slot_ms, rerun_slot_ms,
+//	             expires_at_ms <= :now FROM gst_leases WHERE name = :name
+//	         then, when the lease expired and :slot is past slot_ms:
+//	         UPDATE gst_leases SET holder = :holder, instance = :instance,
+//	             term = term + 1, expires_at_ms = :now + 15000,
+//	             slot_ms = :slot, unfinished_slot_ms = :slot
+//	          WHERE name = :name AND term = :term AND expires_at_ms <= :now
+//	         1 row: claimed, and an unfinished_slot_ms read is an instant
+//	         given up for this one. 0 rows: someone claimed first. No row
+//	         yet: the INSERT, with both slots.
+//	finish   UPDATE gst_leases SET expires_at_ms = 0, unfinished_slot_ms = 0
+//	          WHERE name = :name AND holder = :holder
+//	         the release of a round that ran to its end. 0 rows — the lease
+//	         was lost meanwhile — records the end without the lease:
+//	         UPDATE gst_leases SET unfinished_slot_ms = 0
+//	          WHERE name = :name AND unfinished_slot_ms = :slot
+//	find     SELECT name, term, slot_ms FROM gst_leases
+//	          WHERE name IN (:names) AND unfinished_slot_ms <> 0
+//	            AND rerun_slot_ms < slot_ms AND expires_at_ms <= :now
+//	         the instants whose round was cut short and that are free to
+//	         claim again, for every job of a scheduler at once.
+//	claim again
+//	         UPDATE gst_leases SET holder = :holder, instance = :instance,
+//	             term = term + 1, expires_at_ms = :now + 15000,
+//	             rerun_slot_ms = slot_ms
+//	          WHERE name = :name AND term = :term AND unfinished_slot_ms <> 0
+//	            AND rerun_slot_ms < slot_ms AND expires_at_ms <= :now
+//	         1 row: claimed; the term found holds the row to the instant
+//	         found. 0 rows: claimed again elsewhere, recorded finished, or
+//	         given up for a later instant.
+//
+// The instant claims read before they write because the claim of an instant
+// has to know what it gives up. A term compared on the write makes the pair
+// as exclusive as a single statement: every claim moves the term, so of
+// replicas that read the same row, one write matches.
 //
 // :now is the database server's clock in UTC milliseconds — MySQL
 // UNIX_TIMESTAMP() with the milliseconds of NOW(3), PostgreSQL
@@ -129,14 +174,21 @@ var (
 // the database's, and it reads it through expires_at_ms alone; created_at
 // and updated_at are the framework's columns, stamped with the writing
 // process's clock, and are there for reading the table, not for deciding.
+//
+// unfinished_slot_ms holds the instant of a round that has not run to its
+// end, and 0 once it has, rather than the last instant that did: a row
+// written before the column existed, when every instant claimed counted as
+// run, then reads as nothing left to run again.
 type row struct {
 	modelregistry.AutoBase
-	Name        string `gorm:"size:191;not null"`  // "cron:<job>"; each capability prefixes its own names, within nameMaxLength
-	Holder      string `gorm:"size:32;not null"`   // token minted per claim, never reused
-	Instance    string `gorm:"size:191;not null"`  // the process holding it; for reading logs only
-	Term        uint64 `gorm:"not null;default:0"` // +1 every time the name changes hands
-	ExpiresAtMs int64  `gorm:"not null;default:0"` // database clock, UTC milliseconds
-	SlotMs      int64  `gorm:"not null;default:0"` // scheduler only: the last instant claimed, never decreasing
+	Name             string `gorm:"size:191;not null"`  // "cron:<job>"; each capability prefixes its own names, within nameMaxLength
+	Holder           string `gorm:"size:32;not null"`   // token minted per claim, never reused
+	Instance         string `gorm:"size:191;not null"`  // the process holding it; for reading logs only
+	Term             uint64 `gorm:"not null;default:0"` // +1 every time the name changes hands
+	ExpiresAtMs      int64  `gorm:"not null;default:0"` // database clock, UTC milliseconds
+	SlotMs           int64  `gorm:"not null;default:0"` // scheduler only: the last instant claimed, never decreasing
+	UnfinishedSlotMs int64  `gorm:"not null;default:0"` // scheduler only: slot_ms until its round has run to its end, then 0
+	RerunSlotMs      int64  `gorm:"not null;default:0"` // scheduler only: the last instant claimed a second time; none is claimed a third
 }
 
 func (*row) TableName() string { return table }
@@ -188,6 +240,11 @@ type Handle struct {
 	name   string
 	holder string
 	term   uint64
+	// slotMs is the instant a scheduler's claim was for, 0 for any other
+	// claim.
+	slotMs int64
+	// superseded is the instant a scheduler's claim gave up, see Superseded.
+	superseded *Unfinished
 	// claimedAt is the moment the claim was sent, on this process's clock:
 	// the first renewal the local deadline counts from. Taken before the
 	// statement, like every renewal's, so that the round trip of the claim
@@ -280,21 +337,6 @@ func (h *Handle) Release(ctx context.Context) error {
 // or released — and false when someone holds it. An error means the database
 // could not answer.
 func Claim(ctx context.Context, name string) (*Handle, bool, error) {
-	return claim(ctx, name, nil)
-}
-
-// ClaimSlot is Claim for the scheduler: it also requires the instant slot to
-// lie after the last instant claimed under name, and records it. A cluster
-// then runs each instant of a job once, whichever replica gets there first,
-// and an instant already run is refused everywhere.
-func ClaimSlot(ctx context.Context, name string, slot time.Time) (*Handle, bool, error) {
-	slotMs := slot.UnixMilli()
-	return claim(ctx, name, &slotMs)
-}
-
-// claim runs the claim statement, and the insert behind it for a name the
-// table has never seen.
-func claim(ctx context.Context, name string, slotMs *int64) (*Handle, bool, error) {
 	if err := ValidateName(name); err != nil {
 		return nil, false, err
 	}
@@ -308,21 +350,10 @@ func claim(ctx context.Context, name string, slotMs *int64) (*Handle, bool, erro
 	}
 	updatedAt := dbruntime.NowUTC()
 
-	var setSlot, whereSlot string
-	args := []any{holder, instance.ID(), leaseDuration.Milliseconds(), updatedAt}
-	if slotMs != nil {
-		setSlot = ", slot_ms = ?"
-		args = append(args, *slotMs)
-	}
-	args = append(args, name)
-	if slotMs != nil {
-		whereSlot = " AND slot_ms < ?"
-		args = append(args, *slotMs)
-	}
-	update := fmt.Sprintf("UPDATE %s SET holder = ?, instance = ?, term = term + 1, expires_at_ms = %s + ?, updated_at = ?%s WHERE name = ? AND expires_at_ms <= %s%s",
-		table, now, setSlot, now, whereSlot)
 	claimedAt := time.Now()
-	res := db.WithContext(ctx).Exec(update, args...)
+	res := db.WithContext(ctx).Exec(
+		fmt.Sprintf("UPDATE %s SET holder = ?, instance = ?, term = term + 1, expires_at_ms = %s + ?, updated_at = ? WHERE name = ? AND expires_at_ms <= %s", table, now, now),
+		holder, instance.ID(), leaseDuration.Milliseconds(), updatedAt, name)
 	if res.Error != nil {
 		return nil, false, errors.Wrapf(res.Error, "claim lease %q", name)
 	}
@@ -336,25 +367,31 @@ func claim(ctx context.Context, name string, slotMs *int64) (*Handle, bool, erro
 	// it was first. Neither is an error, and neither reaches the SQL log as
 	// one: the refused claims of every replica are the protocol's normal
 	// traffic.
-	var slotValue int64
-	if slotMs != nil {
-		slotValue = *slotMs
-	}
-	res = db.WithContext(ctx).Exec(claimInsert(dialectOf(db), now), name, holder, instance.ID(), leaseDuration.Milliseconds(), slotValue, updatedAt, updatedAt)
+	return insertClaim(ctx, db, now, name, holder, 0, updatedAt, claimedAt)
+}
+
+// insertClaim runs the insert that claims a name the table has never seen,
+// for the instant slotMs, or none when it is 0, and returns the handle and
+// true when it inserted the row.
+func insertClaim(ctx context.Context, db *gorm.DB, now, name, holder string, slotMs int64, updatedAt, claimedAt time.Time) (*Handle, bool, error) {
+	res := db.WithContext(ctx).Exec(claimInsert(dialectOf(db), now), name, holder, instance.ID(), leaseDuration.Milliseconds(), slotMs, slotMs, updatedAt, updatedAt)
 	if res.Error != nil {
 		return nil, false, errors.Wrapf(res.Error, "claim lease %q", name)
 	}
 	if res.RowsAffected == 0 {
 		return nil, false, nil
 	}
-	return newHandle(name, holder, 1, claimedAt), true, nil
+	h := newHandle(name, holder, 1, claimedAt)
+	h.slotMs = slotMs
+	return h, true, nil
 }
 
 // claimInsert returns the insert that claims a name the table has never
 // seen, worded so that finding the name there — inserted by another process
 // a moment earlier, or held for a long time — inserts nothing instead of
 // failing on the unique key: INSERT IGNORE on MySQL, ON CONFLICT DO NOTHING
-// on PostgreSQL and SQLite.
+// on PostgreSQL and SQLite. The scheduler's insert records its instant as the
+// last one claimed and as unfinished; any other records none.
 //
 // INSERT IGNORE also turns a value too long for its column into a warning
 // and a truncated row, which is why every name is validated before it gets
@@ -363,7 +400,7 @@ func claim(ctx context.Context, name string, slotMs *int64) (*Handle, bool, erro
 // alternative: the connection sets CLIENT_FOUND_ROWS, under which a no-op
 // update reports one affected row, the same as an insert.
 func claimInsert(dialect, now string) string {
-	columns := fmt.Sprintf("(name, holder, instance, term, expires_at_ms, slot_ms, created_at, updated_at) VALUES (?, ?, ?, 1, %s + ?, ?, ?, ?)", now)
+	columns := fmt.Sprintf("(name, holder, instance, term, expires_at_ms, slot_ms, unfinished_slot_ms, created_at, updated_at) VALUES (?, ?, ?, 1, %s + ?, ?, ?, ?, ?)", now)
 	if dialect == "mysql" {
 		return fmt.Sprintf("INSERT IGNORE INTO %s %s", table, columns)
 	}
@@ -384,25 +421,6 @@ func handleOf(ctx context.Context, db *gorm.DB, name, holder string, claimedAt t
 		return nil, false, errors.Wrapf(ErrLost, "lease %q vanished right after the claim", name)
 	}
 	return newHandle(name, holder, term, claimedAt), true, nil
-}
-
-// LastSlot returns the last instant claimed under name and whether the name
-// has ever been claimed. The scheduler reads it as it starts, to tell an
-// instant no replica ran from a job that has never run at all.
-func LastSlot(ctx context.Context, name string) (time.Time, bool, error) {
-	db, _, err := primary()
-	if err != nil {
-		return time.Time{}, false, err
-	}
-	var slotMs int64
-	res := db.WithContext(ctx).Raw(fmt.Sprintf("SELECT slot_ms FROM %s WHERE name = ?", table), name).Scan(&slotMs)
-	if res.Error != nil {
-		return time.Time{}, false, errors.Wrapf(res.Error, "read the last slot of lease %q", name)
-	}
-	if res.RowsAffected == 0 {
-		return time.Time{}, false, nil
-	}
-	return time.UnixMilli(slotMs).UTC(), true, nil
 }
 
 // Verify is the transaction guard: run as the first statement of a

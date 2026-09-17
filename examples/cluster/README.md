@@ -1,12 +1,12 @@
 # cluster：多副本部署示例
 
-一个用 `gg` 生成的最小项目，演示同一份代码在 Kubernetes 里起多个副本时框架的协调能力：定时任务全集群只跑一次、常驻任务只有一个副本在跑、一件事同一时刻只做一次、多个副本同时对空库建表。前三种能力都建在主库的租约表 `gst_leases` 上，不需要 Redis 或 etcd。
+一个用 `gg` 生成的最小项目，演示同一份代码在 Kubernetes 里起多个副本时框架的协调能力：定时任务全集群只跑一次、被打断的一轮换个副本再跑一次、常驻任务只有一个副本在跑、一件事同一时刻只做一次、多个副本同时对空库建表。前三种能力都建在主库的租约表 `gst_leases` 上，不需要 Redis 或 etcd。
 
 ## 里面有什么
 
 | 文件 | 演示什么 |
 | --- | --- |
-| `cronjob/cronjob.go` | `tick`：每 10 秒一轮，整个部署只跑一次；`local-tick`：每个副本各跑；`slow`：一轮跑 20 秒，比 15 秒的租约长，靠续期保住 |
+| `cronjob/cronjob.go` | `tick`：每 10 秒一轮，整个部署只跑一次；`local-tick`：每个副本各跑；`slow`：一轮跑 20 秒，比 15 秒的租约长，靠续期保住；跑到一半删掉它所在的 Pod，别的副本再跑一次 |
 | `leader/leader.go` | 常驻任务 `counter`：每秒在事务里把计数加一；接手的副本从库里的计数接着数 |
 | `lock/lock.go`、`dao/rebuild.go`、`service/rebuild/` | `POST /api/rebuilds` 在锁 `rebuild` 下跑，同时来第二个请求立刻 409 |
 | `model/event.go`、`model/progress.go` | 副本做过的事和计数器的进度，`GET /api/events`、`GET /api/progress` 可以看 |
@@ -46,12 +46,12 @@ done
 
 ```bash
 kubectl exec deploy/mysql -- mysql -uroot -pcluster cluster \
-  -e 'select name, instance, term, expires_at_ms, slot_ms from gst_leases'
+  -e 'select name, instance, term, expires_at_ms, slot_ms, unfinished_slot_ms, rerun_slot_ms from gst_leases'
 ```
 
 ## 场景
 
-### 1. 定时任务：全集群只跑一次
+### 1. 定时任务：全集群只跑一次，被打断的一轮再跑一次
 
 ```bash
 curl -s 'localhost:8080/api/events?kind=cron&name=tick&_size=50' | jq '.data'
@@ -59,6 +59,22 @@ curl -s 'localhost:8080/api/events?kind=cron&name=local-tick&_size=50' | jq '.da
 ```
 
 `tick` 每 10 秒只有一行，`replica` 每次可能不同——哪个副本先抢到就谁跑；`local-tick` 每 10 秒三行，一个副本一行。`slow` 每 30 秒跑 20 秒，期间租约表里 `cron:slow` 的 `expires_at_ms` 每 2 秒往后挪一次，这就是续期。
+
+再看被打断的一轮：等 `slow` 跑起来，删掉正在跑它的 Pod。租约表里 `cron:slow` 还没到期时，`instance` 去掉最后一段随机串就是那个 Pod 的名字：
+
+```bash
+until SLOW=$(kubectl exec deploy/mysql -- mysql -uroot -pcluster cluster -N \
+  -e "select instance from gst_leases where name = 'cron:slow' and expires_at_ms > unix_timestamp(now(3)) * 1000" 2>/dev/null) && [ -n "$SLOW" ]; do
+  sleep 1
+done
+kubectl delete pod "${SLOW%-*}"
+sleep 40
+for p in $(kubectl get pods -l app=cluster -o name); do
+  kubectl logs "$p" -c cluster | grep '"logger":"cronjob"' | grep '"name":"slow"' | grep -E '"rerun":true|"cronjob gave up a round cut short"' | sed "s#^#$p #"
+done
+```
+
+被删的 Pod 停机时这一轮的 ctx 结束、没跑完就交还租约；约 15 秒内另一个副本发现它，为同一个调度时刻（`at` 不变）再跑一轮，日志带 `"rerun":true`。跑完后租约表里 `unfinished_slot_ms` 归零，`rerun_slot_ms` 记着这个时刻。一个时刻只再跑一次；再跑之前下一个时刻已经开始的话就放弃，记一条 `cronjob gave up a round cut short`。所以定时任务要写成跑两遍也没问题。
 
 ### 2. 选主：删掉 leader 所在的 Pod，别的副本接手
 
@@ -104,7 +120,7 @@ kubectl delete pod "$POD" &
 for i in $(seq 1 20); do kubectl exec "$POD" -c cluster -- curl -s -o /dev/null -w '%{http_code}\n' localhost:8080/-/readyz 2>/dev/null || break; sleep 0.5; done
 ```
 
-收到 SIGTERM 的瞬间 `/-/readyz` 变成 503，Service 把它摘掉（`kubectl get endpointslices -l kubernetes.io/service-name=cluster` 里少一个地址）；`SERVER_SHUTDOWN_DELAY`（这里 5 秒）过后监听才关闭，正在跑的一轮任务跑完、租约放手，进程才退出。框架停机最长是 5 秒排空 + 最多 30 秒等 HTTP 连接 + 最多 30 秒等在途任务，开了链路追踪和 pprof / statsviz 的部署再各加最多 5 秒关闭它们，合计 80 秒，所以 `terminationGracePeriodSeconds` 设成 90 秒，盖过最坏情况；示例里的任务几秒就返回，实际停机远短于此。
+收到 SIGTERM 的瞬间 `/-/readyz` 变成 503，Service 把它摘掉（`kubectl get endpointslices -l kubernetes.io/service-name=cluster` 里少一个地址）；`SERVER_SHUTDOWN_DELAY`（这里 5 秒）过后监听才关闭；正在跑的一轮任务在收到 SIGTERM 时就被取消，返回后交还租约（没跑完的这一轮由别的副本再跑一次，见场景 1），进程才退出。框架停机最长是 5 秒排空 + 最多 30 秒等 HTTP 连接 + 最多 30 秒等在途任务，开了链路追踪和 pprof / statsviz 的部署再各加最多 5 秒关闭它们，合计 80 秒，所以 `terminationGracePeriodSeconds` 设成 90 秒，盖过最坏情况；示例里的任务几秒就返回，实际停机远短于此。
 
 ### 6. 滚动更新：工作不断
 
