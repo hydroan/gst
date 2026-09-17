@@ -3,6 +3,7 @@ package database_test
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/consts"
@@ -264,9 +265,10 @@ func TestTransactionFailureIsRecordedOnSpan(t *testing.T) {
 }
 
 // TestTransaction covers the package-level context-injecting transaction entry:
-// nil fn, commit, multi-model rollback, panic rollback, and joining an outer
-// transaction without opening a new one. A nil context is covered with the
-// other entry points by TestNilContextIsRejected.
+// nil fn, commit, multi-model rollback, panic rollback, a context that ends
+// before the commit, and joining an outer transaction without opening a new
+// one. A nil context is covered with the other entry points by
+// TestNilContextIsRejected.
 func TestTransaction(t *testing.T) {
 	defer cleanupTestData()
 
@@ -310,6 +312,23 @@ func TestTransaction(t *testing.T) {
 	users = make([]*TestUser, 0)
 	require.NoError(t, database.Database[*TestUser](context.Background()).List(&users))
 	require.Empty(t, users, "should have 0 records after panic rollback")
+
+	// Context ended before the commit: the standard library rolls the
+	// transaction back as the context ends and then refuses the commit as
+	// done, yet the caller — work told to stop — gets its context's ending.
+	canceled, cancel := context.WithCancel(context.Background())
+	err = database.Transaction(canceled, func(ctx context.Context) error {
+		require.NoError(t, database.Database[*TestUser](ctx).Create(ul...))
+		cancel()
+		// Time for the standard library to see the context end and roll back
+		// before the commit comes.
+		time.Sleep(200 * time.Millisecond)
+		return nil
+	})
+	require.ErrorIs(t, err, context.Canceled)
+	users = make([]*TestUser, 0)
+	require.NoError(t, database.Database[*TestUser](context.Background()).List(&users))
+	require.Empty(t, users, "should have 0 records once the ended context rolled the transaction back")
 
 	// Join: a nested Transaction call joins the outer transaction instead of
 	// opening a new one, so the outer rollback also reverts the inner write.

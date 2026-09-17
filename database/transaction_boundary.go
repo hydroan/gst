@@ -2,6 +2,7 @@ package database
 
 import (
 	"context"
+	"database/sql"
 	"sync"
 
 	"github.com/cockroachdb/errors"
@@ -100,6 +101,15 @@ func withTransactionBoundary(
 	if err := ins.Transaction(func(tx *gorm.DB) error {
 		return fn(contextWithBoundary(dbruntime.WithTx(ctx, tx, base), boundary), tx)
 	}); err != nil {
+		// A context that ends while its transaction is open has the standard
+		// library roll the transaction back, and the commit after that
+		// reports the transaction done rather than the ending that undid it —
+		// or the ending itself, when the commit comes first. The ending is
+		// the reason either way, and work told to stop must be able to tell
+		// its context's ending from a failure of its own.
+		if ctx.Err() != nil && errors.Is(err, sql.ErrTxDone) {
+			err = ctx.Err()
+		}
 		// The stack embedded here covers BEGIN/COMMIT failures, which GORM
 		// hands back without one. An error from fn usually already carries a
 		// deeper stack from its own first-hand exit; the shallower one added
