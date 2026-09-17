@@ -66,7 +66,7 @@ func TestStartRefusesAClickhousePrimary(t *testing.T) {
 	Register(noopJob, "* * * * * *", "shared-job")
 	err := startOnClickhouse()
 	require.ErrorIs(t, err, lease.ErrUnsupportedDatabase)
-	require.ErrorContains(t, err, `cronjob "shared-job" runs once per instant across the deployment`)
+	require.ErrorContains(t, err, `cronjob "shared-job" claims each instant once across the deployment`)
 
 	resetCronjobState(t)
 	RegisterPerInstance(noopJob, "0 0 * * * *", "local-job")

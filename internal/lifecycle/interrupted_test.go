@@ -37,4 +37,5 @@ func TestInterruptedCountsOnlyTheContextsOwnEnding(t *testing.T) {
 	require.True(t, Interrupted(endedWithCause, errors.Join(endedWithCause.Err(), context.Cause(endedWithCause))), "the error joined with the cause is still the ending")
 	require.False(t, Interrupted(endedWithCause, errors.Join(context.Cause(endedWithCause), failure)), "a failure beside the cause must not hide behind it")
 	require.False(t, Interrupted(ended, cause), "the cause of another context is not this one's ending")
+	require.False(t, Interrupted(endedWithCause, errors.New("sample cause")), "a failure of the work's own that reads like the cause is not the ending")
 }

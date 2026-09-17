@@ -1,6 +1,6 @@
-// Package cronjob registers the example's scheduled jobs: one that runs once
-// per instant across the deployment, one that runs on every replica, and one
-// that runs longer than its lease lasts.
+// Package cronjob registers the example's scheduled jobs: one whose instants
+// are each claimed once across the deployment, one that runs on every
+// replica, and one that runs longer than its lease lasts.
 package cronjob
 
 import (
@@ -20,11 +20,11 @@ func init() {
 	cronjob.Register(slow, "@every 30s", "slow")
 }
 
-// tick runs once per instant across the deployment: the event list shows
-// one row every 10 seconds however many replicas run, each row naming the
-// replica that won the instant.
+// tick has each instant claimed once across the deployment: the event list
+// shows one row every 10 seconds however many replicas run, each row naming
+// the replica that won the instant.
 func tick(ctx context.Context) error {
-	return record(ctx, "tick", "once per instant across the deployment")
+	return record(ctx, "tick", "each instant claimed once across the deployment")
 }
 
 // localTick runs on every replica: the event list shows one row every 10

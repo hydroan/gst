@@ -394,11 +394,12 @@ const cronjobContent = `// Package cronjob registers the application's scheduled
 // cut it short and 30 when a crash did, and so does a round that ran to its
 // end but whose end the database failed to record; a second time only, and
 // not at all once the job's next instant has started, which gives it up with
-// a warning. fn must therefore be idempotent: it may run twice for one
-// instant. On startup a job's most recent instant is caught up once, on one
-// replica, when the job has run before, that instant passed within the last
-// day and no replica claimed it; a job that has never run, or whose most
-// recent instant was claimed, starts with its next instant.
+// a warning. A failure of fn's own returned beside ctx's ending counts only
+// joined with it by errors.Join. fn must therefore be idempotent: it may run
+// twice for one instant. On startup a job's most recent instant is caught up
+// once, on one replica, when the job has run before, that instant passed
+// within the last day and no replica claimed it; a job that has never run, or
+// whose most recent instant was claimed, starts with its next instant.
 //
 // On SQLite the framework uses a single database connection, so a
 // transaction inside a job blocks the lease renewal: keep each transaction

@@ -36,7 +36,7 @@ type job struct {
 	fn       func(ctx context.Context) error
 	schedule cron.Schedule
 	// perInstance marks a job every replica runs on its own, without a
-	// lease; the default job runs once per instant across the deployment.
+	// lease; the default job claims each instant once across the deployment.
 	perInstance bool
 }
 

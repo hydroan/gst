@@ -34,18 +34,20 @@
 // down or the lease was lost, or never returned because its process crashed
 // or failed — runs a second time, on whichever replica finds it first: every
 // replica looks for such rounds every 15 seconds or so, with one query for
-// all its jobs. A round a shutdown cut short gives its lease back as it
-// stops, and runs again within about 15 seconds; one whose process died waits
-// for its lease to expire first, up to 15 seconds more, and so does one that
-// ran to its end but whose end the database failed to record. The rule,
-// exactly: the round did not run to its end, or its end is not on record; the
-// instant has not run a second time already (a second round cut short is
-// given up, so a job that brings its process down cannot bring the replicas
-// down one after another); and no later instant has been claimed since (the
-// next instant starting first gives the unfinished one up, with a warning
-// naming it). A job under a lease may therefore run twice for one instant,
-// and must be idempotent: the second round starts over, whatever the first
-// did before it was cut short.
+// all its jobs. A failure of the job's own returned beside the ending counts
+// only joined with it by errors.Join: attached by errors.CombineErrors it goes
+// unseen, and the round reads as cut short. A round a shutdown cut short gives
+// its lease back as it stops, and runs again within about 15 seconds; one
+// whose process died waits for its lease to expire first, up to 15 seconds
+// more, and so does one that ran to its end but whose end the database failed
+// to record. The rule, exactly: the round did not run to its end, or its end
+// is not on record; the instant has not run a second time already (a second
+// round cut short is given up, so a job that brings its process down cannot
+// bring the replicas down one after another); and no later instant has been
+// claimed since (the next instant starting first gives the unfinished one up,
+// with a warning naming it). A job under a lease may therefore run twice for
+// one instant, and must be idempotent: the second round starts over, whatever
+// the first did before it was cut short.
 //
 // On start-up the scheduler catches up the most recent instant of a job when
 // no replica claimed it, which is what a rolling deployment or an outage
@@ -143,8 +145,8 @@ func setLogger(l types.Logger) {
 // functions: the scheduler starts with the process, and a registration after
 // that panics.
 //
-// The job runs once per instant across the deployment: the replicas share
-// the instant's lease through the primary database, the first to claim it
+// Each instant of the job is claimed once across the deployment: the replicas
+// share the instant's lease through the primary database, the first to claim it
 // runs the round, the others skip the instant, and a round still holding the
 // lease keeps the next instants from everyone. A round cut short by a
 // shutdown, a crash or a lost lease runs a second time, on this replica or
@@ -278,7 +280,7 @@ func requireLeases(jobs []*job) error {
 			continue
 		}
 		if err := lease.Available(); err != nil {
-			return errors.Wrapf(err, "cronjob %q runs once per instant across the deployment, which needs a lease", j.name)
+			return errors.Wrapf(err, "cronjob %q claims each instant once across the deployment, which needs a lease", j.name)
 		}
 		return nil
 	}
