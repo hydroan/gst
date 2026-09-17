@@ -42,6 +42,9 @@ func runTests(m *testing.M) int {
 	}
 	defer func() { _ = release() }()
 
+	// File mode keeps the logs out of the test output, where every stream
+	// would otherwise go with stdout the default.
+	os.Setenv(config.LOGGER_OUTPUT, string(config.LoggerOutputFile))
 	if err := config.Init(); err != nil {
 		panic(err)
 	}

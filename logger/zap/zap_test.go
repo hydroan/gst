@@ -570,22 +570,29 @@ func TestStdoutOutputWritesEveryStreamToStdoutUnderItsName(t *testing.T) {
 }
 
 // TestStdoutOutputKeepsConcurrentEntriesWhole proves streams logging at the
-// same time through the shared stdout sink never interleave: every line stdout
-// receives is one whole entry, entries far over a pipe's atomic write size
-// included.
+// same time through the shared stdout sink never interleave: every stream
+// writes through the one sink, and every line stdout receives is one whole
+// entry, entries far over a pipe's atomic write size and over the sink's
+// buffer included.
 func TestStdoutOutputKeepsConcurrentEntriesWhole(t *testing.T) {
 	withLoggerInitConfig(t, t.TempDir(), "")
 	config.App.Logger.Output = config.LoggerOutputStdout
 	payload := strings.Repeat("x", 16*1024)
-	const streams, entries = 8, 50
+	oversized := strings.Repeat("y", defaultLogBufferSize+1024)
+	const streams, entries, oversizedEntries = 8, 50, 4
 
 	output := captureStdout(t, func() {
+		first, second := stdoutLogWriter(), stdoutLogWriter()
+		require.Same(t, first, second, "every stream writes through one sink")
 		var wg sync.WaitGroup
 		for i := range streams {
 			log := New(fmt.Sprintf("stream%d.log", i))
 			wg.Go(func() {
-				for range entries {
+				for j := range entries {
 					log.Infoz("entry", zap.String("payload", payload))
+					if i < 2 && j < oversizedEntries {
+						log.Infoz("entry", zap.String("payload", oversized))
+					}
 				}
 			})
 		}
@@ -597,10 +604,10 @@ func TestStdoutOutputKeepsConcurrentEntriesWhole(t *testing.T) {
 	for line := range strings.Lines(output) {
 		var entry map[string]any
 		require.NoError(t, json.Unmarshal([]byte(line), &entry), "a line is not one whole entry")
-		require.Equal(t, payload, entry["payload"])
+		require.Contains(t, []any{payload, oversized}, entry["payload"])
 		lines++
 	}
-	require.Equal(t, streams*entries, lines)
+	require.Equal(t, streams*entries+2*oversizedEntries, lines)
 }
 
 // TestInitRejectsAnUnknownOutput proves a mistyped output fails logger
