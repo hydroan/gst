@@ -12,6 +12,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/consts"
 	"github.com/hydroan/gst/internal/instance"
@@ -34,6 +35,7 @@ const (
 
 var (
 	mode          config.Mode //nolint:unused
+	logOutput     config.LoggerOutput
 	logFile       string
 	logLevel      string
 	logFormat     string
@@ -63,12 +65,15 @@ type Option struct {
 // Returns error on configuration or initialization failure.
 func Init() error {
 	readConf()
+	if logOutput != config.LoggerOutputStdout && logOutput != config.LoggerOutputFile {
+		return errors.Newf("logger.output must be %q or %q, not %q", config.LoggerOutputStdout, config.LoggerOutputFile, logOutput)
+	}
 	opt := Option{Console: config.App.Logger.Console}
-	zap.ReplaceGlobals(zap.New(
+	zap.ReplaceGlobals(named(zap.New(
 		newLogCore(opt),
 		zap.AddCaller(),
 		zap.AddStacktrace(zapcore.FatalLevel),
-	))
+	)))
 
 	logger.App = New("app.log")
 
@@ -108,9 +113,10 @@ func Init() error {
 	return nil
 }
 
-// Clean flushes the loggers built by Init and stops every buffered file
-// writer the constructors registered, so a process about to exit — or a test
-// about to read a log file back — sees everything that was logged.
+// Clean flushes the loggers built by Init and stops every buffered writer the
+// constructors registered — the file writers and the shared stdout sink — so
+// a process about to exit, or a test about to read a log back, sees everything
+// that was logged.
 func Clean() {
 	// types.Logger
 	_ = zap.L().Sync()
@@ -195,12 +201,12 @@ func New(filename string, opts ...Option) *Logger {
 	if len(filename) > 0 {
 		logFile = filename
 	}
-	logger := zap.New(
+	logger := named(zap.New(
 		newLogCore(opts...),
 		zap.AddCaller(),
 		zap.AddCallerSkip(1),
 		zap.AddStacktrace(zapcore.FatalLevel),
-	)
+	))
 	return &Logger{zlog: logger}
 }
 
@@ -216,10 +222,10 @@ func NewGorm(filename string) gorml.Interface {
 	if len(filename) > 0 {
 		logFile = filename
 	}
-	logger := zap.New(
+	logger := named(zap.New(
 		newLogCore(),
 		zap.AddStacktrace(zapcore.FatalLevel),
-	)
+	))
 	return &GormLogger{l: &Logger{zlog: logger}}
 }
 
@@ -230,7 +236,7 @@ func NewGin(filename string) *zap.Logger {
 	if len(filename) > 0 {
 		logFile = filename
 	}
-	return zap.New(newLogCore(Option{DisableMsg: true, DisableLevel: true}))
+	return named(zap.New(newLogCore(Option{DisableMsg: true, DisableLevel: true})))
 }
 
 // NewStdLog builds a *log.Logger backed by *zap.Logger.
@@ -246,11 +252,11 @@ func NewZap(filename string, opts ...Option) *zap.Logger {
 	if len(filename) > 0 {
 		logFile = filename
 	}
-	return zap.New(
+	return named(zap.New(
 		newLogCore(opts...),
 		zap.AddCaller(),
 		zap.AddStacktrace(zapcore.FatalLevel),
-	)
+	))
 }
 
 // NewSugared builds a *zap.SugaredLogger with optional filename and options.
@@ -261,11 +267,32 @@ func NewSugared(filename string, opts ...Option) *zap.SugaredLogger {
 	if len(filename) > 0 {
 		logFile = filename
 	}
-	return zap.New(
+	return named(zap.New(
 		newLogCore(opts...),
 		zap.AddCaller(),
 		zap.AddStacktrace(zapcore.FatalLevel),
-	).Sugar()
+	)).Sugar()
+}
+
+// named names a logger after the stream it writes in stdout mode, where the
+// stream has no file of its own to tell it apart: zap writes the name as the
+// entry's logger field. In file mode the logger stays unnamed, and its entries
+// unchanged.
+func named(l *zap.Logger) *zap.Logger {
+	if logOutput != config.LoggerOutputStdout {
+		return l
+	}
+	return l.Named(streamName(logFile))
+}
+
+// streamName returns the name a stream goes by in stdout mode: its file name
+// without the ".log" extension, or "global" for a stream that names no file.
+func streamName(file string) string {
+	switch file = strings.TrimSpace(file); file {
+	case "", "/dev/stdout", "/dev/stderr":
+		return "global"
+	}
+	return strings.TrimSuffix(filepath.Base(file), ".log")
 }
 
 // newLogCore builds the core every logger here writes through: the encoder,
@@ -278,9 +305,13 @@ func newLogCore(opts ...Option) zapcore.Core {
 	return core.With([]zapcore.Field{zap.String(consts.INSTANCE, instance.ID())})
 }
 
-// newLogWriter selects log sink (stdout/stderr or rolling file).
+// newLogWriter selects log sink: the shared stdout sink in stdout mode, and in
+// file mode stdout/stderr or a rolling file.
 // opts: opts[0].Console additionally mirrors a file sink to os.Stdout.
 func newLogWriter(opts ...Option) zapcore.WriteSyncer {
+	if logOutput == config.LoggerOutputStdout {
+		return stdoutLogWriter()
+	}
 	switch strings.TrimSpace(logFile) {
 	case "/dev/stdout":
 		return zapcore.AddSync(os.Stdout)
@@ -335,6 +366,32 @@ func precreateLogFile(path string) {
 	_ = file.Close()
 }
 
+// sharedStdoutWriter is the sink every stream writes through in stdout mode.
+// One buffer behind one lock serves them all, so the entries of streams
+// logging at the same time reach stdout whole, and a stream gets the same
+// buffering a file sink does. Clean stops it with the file writers, and the
+// next stdout-mode logger starts a new one.
+var (
+	sharedStdoutWriterMu sync.Mutex
+	sharedStdoutWriter   *zapcore.BufferedWriteSyncer
+)
+
+// stdoutLogWriter returns the shared stdout sink, starting it on first use.
+func stdoutLogWriter() zapcore.WriteSyncer {
+	sharedStdoutWriterMu.Lock()
+	defer sharedStdoutWriterMu.Unlock()
+
+	if sharedStdoutWriter == nil {
+		sharedStdoutWriter = &zapcore.BufferedWriteSyncer{
+			WS:            zapcore.AddSync(os.Stdout),
+			Size:          defaultLogBufferSize,
+			FlushInterval: defaultLogFlushInterval,
+		}
+		registerBufferedLogWriter(sharedStdoutWriter)
+	}
+	return sharedStdoutWriter
+}
+
 func registerBufferedLogWriter(writer *zapcore.BufferedWriteSyncer) {
 	if writer == nil {
 		return
@@ -346,6 +403,10 @@ func registerBufferedLogWriter(writer *zapcore.BufferedWriteSyncer) {
 }
 
 func stopBufferedLogWriters() {
+	sharedStdoutWriterMu.Lock()
+	sharedStdoutWriter = nil
+	sharedStdoutWriterMu.Unlock()
+
 	bufferedLogWritersMu.Lock()
 	writers := bufferedLogWriters
 	bufferedLogWriters = nil
@@ -507,6 +568,7 @@ func newVerbatimJSONEncoder(w io.Writer) *json.Encoder {
 
 func readConf() {
 	mode = config.App.Mode
+	logOutput = config.App.Logger.Output
 	logFile = config.App.Logger.File
 	logLevel = config.App.Logger.Level
 	logFormat = config.App.Logger.Format

@@ -428,7 +428,7 @@ const leaderContent = `// Package leader registers the application's leader work
 // that takes over, so what it must not repeat it keeps in the database. fn
 // that returns hands the leadership back, and the campaign resumes after a
 // few seconds. Panics are recovered and logged, and every tenure is logged
-// under name in leader.log.
+// under name in the leader log.
 //
 // Work that runs on a schedule belongs in cronjob instead: a job registered
 // there already runs once per instant across the deployment.

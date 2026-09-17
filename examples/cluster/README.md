@@ -34,11 +34,11 @@ kind、minikube 这类看不到本机镜像的集群，先 `kind load docker-ima
 kubectl port-forward svc/cluster 8080:8080 &
 ```
 
-框架按关注点分文件写日志（`LOGGER_DIR` 下的 `cronjob.log`、`leader.log`、`lock.log`、`app.log` 等），只有全局流进 stdout；正式部署由日志采集器收这些文件，示例里直接进 Pod 看：
+框架把各路日志都写进 stdout，一行一条，`logger` 字段标明是哪一路（`leader`、`cronjob`、`lock`、`access` 等）；正式部署由采集器收容器输出，示例里用 `kubectl logs` 看：
 
 ```bash
 for p in $(kubectl get pods -l app=cluster -o name); do
-  kubectl exec "$p" -c cluster -- grep -h '"elected leader"\|"leader stepped down"' /var/log/cluster/leader.log | sed "s#^#$p #"
+  kubectl logs "$p" -c cluster | grep '"logger":"leader"' | grep -E '"elected leader"|"leader stepped down"' | sed "s#^#$p #"
 done
 ```
 
@@ -64,7 +64,7 @@ curl -s 'localhost:8080/api/events?kind=cron&name=local-tick&_size=50' | jq '.da
 
 ```bash
 LEADER=$(for p in $(kubectl get pods -l app=cluster -o jsonpath='{.items[*].metadata.name}'); do
-  kubectl exec "$p" -c cluster -- grep -h '"elected leader"\|"leader stepped down"' /var/log/cluster/leader.log 2>/dev/null | tail -1 | grep -q '"elected leader"' && echo "$p"
+  kubectl logs "$p" -c cluster 2>/dev/null | grep '"logger":"leader"' | grep -E '"elected leader"|"leader stepped down"' | tail -1 | grep -q '"elected leader"' && echo "$p"
 done | tail -1)
 curl -s localhost:8080/api/progress | jq '.data'
 kubectl delete pod "$LEADER"
@@ -91,7 +91,7 @@ wait
 kubectl exec "$LEADER" -c cluster -- pkill -STOP cluster    # 冻住 leader 进程
 sleep 20
 kubectl exec "$LEADER" -c cluster -- pkill -CONT cluster
-kubectl exec "$LEADER" -c cluster -- grep 'lease lost' /var/log/cluster/leader.log
+kubectl logs "$LEADER" -c cluster | grep '"logger":"leader"' | grep 'lease lost'
 ```
 
 冻住超过 15 秒，租约在数据库里到期，别的副本当选。旧 leader 恢复后本地截止早就过了，它的 ctx 立刻结束；即便它来得及再用 `database.Transaction` 发一个事务（计数就是这么加的），事务的第一条语句也会核对租约、发现不是自己的而整个不跑。它的日志里这一任以 `reason: lease lost` 结束，随后它重新竞选。计数没有被两个副本同时加过。

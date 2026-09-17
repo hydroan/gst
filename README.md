@@ -709,6 +709,18 @@ gg config defaults server --format yaml
 gg config convert config.ini config.yaml
 ```
 
+### 日志输出
+
+`logger.output` 决定所有日志写到哪里，默认 `stdout`：
+
+- `stdout`：全局日志和访问、SQL、请求体、定时任务、选主、锁、各 provider 的日志都写进标准输出，一行一条，
+  `logger` 字段标明来自哪一路（`access`、`gorm`、`cronjob` 等，即文件模式下的文件名去掉 `.log`；全局那一路取
+  `logger.file` 去掉 `.log`，没配时是 `global`）。不建文件、不轮转，Kubernetes 这类平台直接采集标准输出。
+- `file`：每一路写 `logger.dir` 下自己的文件，按 `max_age`、`max_size`、`max_backups` 轮转，适合由采集器读文件的部署。
+
+两种模式都先缓冲，最迟 1 秒写出，停机时写完。值写错启动直接失败。原来靠采集日志文件的项目升级后要加
+`output = file`（或环境变量 `LOGGER_OUTPUT=file`），否则日志不再落文件。
+
 模型声明 `Migrate()` 后，字段变化先预览迁移计划：
 
 ```bash

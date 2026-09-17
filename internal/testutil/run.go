@@ -138,7 +138,9 @@ func (s Server) prepare() (release func(), afterMigrate func(), err error) {
 	})
 
 	// A log directory of its own keeps the logs of a test run out of the
-	// package source tree, where they would otherwise pile up next to the code.
+	// package source tree, where they would otherwise pile up next to the code,
+	// and file mode keeps them out of the test output, where every stream would
+	// otherwise go with stdout the default.
 	//
 	// The files in it are not evidence a test can read back: the directory
 	// goes away at release, and every file sink buffers its entries (see the
@@ -148,6 +150,7 @@ func (s Server) prepare() (release func(), afterMigrate func(), err error) {
 	// scratch file logger under its own t.TempDir and flushes that one before
 	// reading — see withCronjobLoggerConfig and readLogEntry in the cronjob
 	// tests.
+	os.Setenv(config.LOGGER_OUTPUT, string(config.LoggerOutputFile))
 	os.Setenv(config.LOGGER_DIR, logDir)
 	listenOnFreePort()
 

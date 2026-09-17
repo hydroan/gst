@@ -74,7 +74,7 @@ var (
 	// start reports them, so the process fails at startup instead of
 	// silently running without those jobs.
 	errRegister error
-	// log is the scheduler's logger: the dedicated cronjob.log the lifecycle
+	// log is the scheduler's logger: the dedicated cronjob stream the lifecycle
 	// binds before the component starts, or one writing to the global stream
 	// in a process that never ran the lifecycle.
 	log types.Logger

@@ -3,6 +3,7 @@ package config
 import "github.com/spf13/viper"
 
 const (
+	LOGGER_OUTPUT                  = "LOGGER_OUTPUT"
 	LOGGER_DIR                     = "LOGGER_DIR"
 	LOGGER_PREFIX                  = "LOGGER_PREFIX"
 	LOGGER_FILE                    = "LOGGER_FILE"
@@ -25,6 +26,25 @@ const (
 // Logger represents section "logger" for client-side or server-side configuration,
 // and there is only one copy during the application entire lifetime.
 type Logger struct {
+	// Output selects where every log stream writes (stdout|file). Any other
+	// value fails logger initialization.
+	//
+	// With stdout, every stream — the global one, access, SQL, HTTP body, the
+	// component streams such as cronjob and leader, and the rest — writes to
+	// the process's stdout, one line per entry, and the entry's logger field
+	// names the stream: its file name in file mode without ".log" ("access",
+	// "gorm", "cronjob"), and for the global stream File without ".log", or
+	// "global" when File names no file. No file is created or rotated, so
+	// Dir, Console, MaxAge, MaxSize and MaxBackups do not apply.
+	//
+	// With file, every stream writes to a file of its own under Dir, rotated
+	// by MaxAge, MaxSize and MaxBackups, and its entries carry no logger field.
+	//
+	// Both buffer entries and write them out within a second, and in full when
+	// the process stops.
+	// Default: stdout
+	Output LoggerOutput `json:"output" ini:"output" yaml:"output" mapstructure:"output"`
+
 	// Dir specifies which directory log to.
 	Dir string `json:"dir" ini:"dir" yaml:"dir" mapstructure:"dir"`
 
@@ -32,18 +52,20 @@ type Logger struct {
 	// You can set the prefix name to your project name.
 	Prefix string `json:"prefix" ini:"prefix" yaml:"prefix" mapstructure:"prefix"`
 
-	// File specifies the which file log to.
+	// File specifies the which file the global logger logs to in file mode.
 	// If value is "/dev/stdout", log to os.Stdout.
 	// If value is "/dev/stderr", log to os.Stderr.
 	// If value is empty(length is zero), log to os.Stdout.
+	// In stdout mode it only names the global stream (see Output).
 	File string `json:"file" ini:"file" yaml:"file" mapstructure:"file"`
 
 	// Console additionally mirrors the global logger's output to os.Stdout
-	// when File is set to a real file path. It has no effect when File is
-	// empty or one of "/dev/stdout"/"/dev/stderr", since those already log
-	// to console. Only the global logger built by Init() reads this field;
-	// subsystem loggers stay file-only unless the caller opts in explicitly
-	// via zap.Option.Console.
+	// when File is set to a real file path in file mode. It has no effect when
+	// File is empty or one of "/dev/stdout"/"/dev/stderr", since those already
+	// log to console, nor in stdout mode, where every stream already does.
+	// Only the global logger built by Init() reads this field; subsystem
+	// loggers stay file-only unless the caller opts in explicitly via
+	// zap.Option.Console.
 	// Default: true
 	Console bool `json:"console" ini:"console" yaml:"console" mapstructure:"console"`
 
@@ -52,7 +74,7 @@ type Logger struct {
 	Level string `json:"level" ini:"level" yaml:"level" mapstructure:"level"`
 
 	// Format specifies the log format, supported values are: (json|text).
-	// The Value default to "text" and ignore case.
+	// The Value default to "json" and ignore case.
 	Format string `json:"format" ini:"format" yaml:"format" mapstructure:"format"`
 
 	// ErrorStackDisabled disables attaching the error_stack field to
@@ -65,15 +87,15 @@ type Logger struct {
 
 	// MaxAge is the maximum number of days to retain old log files based on the
 	// timestamp encoded in their filename.
-	// uint is "day" and default to 7.
+	// uint is "day" and default to 30.
 	MaxAge int `json:"max_age" ini:"max_age" yaml:"max_age" mapstructure:"max_age"`
 
 	// MaxSize is the maximum size in megabytes of the log file before it gets
-	// rotated, default to 1MB.
+	// rotated, default to 100MB.
 	MaxSize int `json:"max_size" ini:"max_size" yaml:"max_size" mapstructure:"max_size"`
 
 	// MaxBackups is the maximum number of old log files to retain.
-	// The value default to 3.
+	// The value default to 1.
 	MaxBackups int `json:"max_backups" ini:"max_backups" yaml:"max_backups" mapstructure:"max_backups"`
 
 	// SQLCallerSkipPrefixes lists extra function-path prefixes to skip when
@@ -92,6 +114,18 @@ type Logger struct {
 	// HTTPBody contains HTTP request and response body logging configurations.
 	HTTPBody HTTPBodyLogger `json:"http_body" ini:"http_body" yaml:"http_body" mapstructure:"http_body"`
 }
+
+// LoggerOutput selects where every log stream writes.
+type LoggerOutput string
+
+const (
+	// LoggerOutputStdout writes every log stream to stdout, each entry naming
+	// its stream, which is what a container platform collects.
+	LoggerOutputStdout LoggerOutput = "stdout"
+	// LoggerOutputFile writes every log stream to a rotated file of its own,
+	// for a deployment whose log collector reads files.
+	LoggerOutputFile LoggerOutput = "file"
+)
 
 // HTTPBodyLogMode selects which finished requests get a captured HTTP body
 // written to the log.
@@ -139,6 +173,7 @@ type HTTPBodyLogger struct {
 }
 
 func (*Logger) setDefault(v *viper.Viper) {
+	v.SetDefault("logger.output", LoggerOutputStdout)
 	v.SetDefault("logger.dir", "./logs")
 	v.SetDefault("logger.prefix", "")
 	v.SetDefault("logger.file", "")

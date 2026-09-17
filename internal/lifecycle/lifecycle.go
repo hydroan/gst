@@ -87,16 +87,16 @@ type Component struct {
 	// component without a configuration switch registers nothing extra.
 	Enabled func() bool
 
-	// SetLogger, when set, receives the dedicated logger writing <Name>.log
-	// right before the component's stage starts, enabled or not: declaring
-	// it is all a component does to log to its own file — it can neither
-	// forget to create the logger nor misname the file. A disabled component
-	// keeps the binding too: its file is created and stays empty, and code
-	// logging through the package's logger while the component is off still
-	// lands in the component's own file. Components without a dedicated log
-	// file leave it nil; until the binding the package's logger keeps the
-	// fallback the logging package installed, which routes entries to the
-	// global sink.
+	// SetLogger, when set, receives the dedicated logger of the stream named
+	// Name — <Name>.log in file mode — right before the component's stage
+	// starts, enabled or not: declaring it is all a component does to log to
+	// its own stream — it can neither forget to create the logger nor misname
+	// the stream. A disabled component keeps the binding too: in file mode its
+	// file is created and stays empty, and code logging through the package's
+	// logger while the component is off still lands in the component's own
+	// stream. Components without a dedicated stream leave it nil; until the
+	// binding the package's logger keeps the fallback the logging package
+	// installed, which routes entries to the global sink.
 	SetLogger func(types.Logger)
 
 	// Start brings the component up and returns once it is running. It runs
@@ -205,7 +205,7 @@ func Start(ctx context.Context, stage Stage) error {
 
 	// The bindings land before the first Start, for every registered
 	// component of the stage: a compiled-in component always logs to its own
-	// file.
+	// stream, a file of its own in file mode and its name on stdout otherwise.
 	for _, c := range pending {
 		if c.SetLogger != nil {
 			c.SetLogger(pkgzap.New(c.Name + ".log"))

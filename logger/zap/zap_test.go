@@ -3,11 +3,13 @@ package zap
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -524,9 +526,109 @@ func TestEveryLoggerStampsTheProcessIdentity(t *testing.T) {
 		var entry map[string]any
 		require.NoError(t, json.Unmarshal(data, &entry), "%s: %q", file, data)
 		require.Equal(t, instance.ID(), entry["instance"], "%s must carry the process identity", file)
+		require.NotContains(t, entry, "logger", "%s: in file mode the file names the stream, the entry does not", file)
 	}
 }
 
+// TestStdoutOutputWritesEveryStreamToStdoutUnderItsName proves stdout mode
+// sends every stream, whichever constructor built its logger, to stdout with
+// the process identity and a logger field naming the stream — a fallback
+// component logger writing into the global stream — and creates no file.
+func TestStdoutOutputWritesEveryStreamToStdoutUnderItsName(t *testing.T) {
+	dir := t.TempDir()
+	withLoggerInitConfig(t, dir, "sample.log")
+	config.App.Logger.Output = config.LoggerOutputStdout
+	restoreGlobalLoggers(t)
+
+	output := captureStdout(t, func() {
+		require.NoError(t, Init())
+		zap.S().Info("global")
+		logger.App.Infoz("app")
+		logger.Gorm.Info(context.Background(), "gorm")
+		New("typed.log").Infoz("typed")
+		NewGin("access.log").Info("access")
+		NewZap("plain.log").Info("plain")
+		NewSugared("sugared.log").Info("sugared")
+		Fallback("sample_component").Infoz("fallback")
+		Clean()
+	})
+
+	var names []string
+	for line := range strings.Lines(output) {
+		var entry map[string]any
+		require.NoError(t, json.Unmarshal([]byte(line), &entry), line)
+		require.Equal(t, instance.ID(), entry["instance"], line)
+		name, ok := entry["logger"].(string)
+		require.True(t, ok, "every stdout entry names its stream: %s", line)
+		names = append(names, name)
+	}
+	require.ElementsMatch(t, []string{"sample", "app", "gorm", "typed", "access", "plain", "sugared", "sample"}, names)
+
+	files, err := os.ReadDir(dir)
+	require.NoError(t, err)
+	require.Empty(t, files, "stdout mode creates no log file")
+}
+
+// TestStdoutOutputKeepsConcurrentEntriesWhole proves streams logging at the
+// same time through the shared stdout sink never interleave: every line stdout
+// receives is one whole entry, entries far over a pipe's atomic write size
+// included.
+func TestStdoutOutputKeepsConcurrentEntriesWhole(t *testing.T) {
+	withLoggerInitConfig(t, t.TempDir(), "")
+	config.App.Logger.Output = config.LoggerOutputStdout
+	payload := strings.Repeat("x", 16*1024)
+	const streams, entries = 8, 50
+
+	output := captureStdout(t, func() {
+		var wg sync.WaitGroup
+		for i := range streams {
+			log := New(fmt.Sprintf("stream%d.log", i))
+			wg.Go(func() {
+				for range entries {
+					log.Infoz("entry", zap.String("payload", payload))
+				}
+			})
+		}
+		wg.Wait()
+		Clean()
+	})
+
+	lines := 0
+	for line := range strings.Lines(output) {
+		var entry map[string]any
+		require.NoError(t, json.Unmarshal([]byte(line), &entry), "a line is not one whole entry")
+		require.Equal(t, payload, entry["payload"])
+		lines++
+	}
+	require.Equal(t, streams*entries, lines)
+}
+
+// TestInitRejectsAnUnknownOutput proves a mistyped output fails logger
+// initialization instead of sending the logs somewhere nobody collects them.
+func TestInitRejectsAnUnknownOutput(t *testing.T) {
+	withLoggerInitConfig(t, t.TempDir(), "sample.log")
+	config.App.Logger.Output = "files"
+	restoreGlobalLoggers(t)
+
+	require.ErrorContains(t, Init(), `"files"`)
+}
+
+func TestStreamNameIsTheFileNameWithoutItsExtension(t *testing.T) {
+	for _, tc := range []struct{ file, want string }{
+		{"access.log", "access"},
+		{"logs/sample.log", "sample"},
+		{" cronjob.log ", "cronjob"},
+		{"", "global"},
+		{"/dev/stdout", "global"},
+		{"/dev/stderr", "global"},
+	} {
+		require.Equal(t, tc.want, streamName(tc.file), "file %q", tc.file)
+	}
+}
+
+// captureStdout runs fn with os.Stdout redirected into a pipe and returns what
+// was written. The pipe is drained while fn runs, so fn may write more than the
+// pipe holds.
 func captureStdout(t *testing.T, fn func()) string {
 	t.Helper()
 
@@ -534,16 +636,25 @@ func captureStdout(t *testing.T, fn func()) string {
 	readPipe, writePipe, err := os.Pipe()
 	require.NoError(t, err)
 	os.Stdout = writePipe
+	type drained struct {
+		output []byte
+		err    error
+	}
+	done := make(chan drained, 1)
+	go func() {
+		output, err := io.ReadAll(readPipe)
+		done <- drained{output, err}
+	}()
 
 	fn()
 
 	require.NoError(t, writePipe.Close())
 	os.Stdout = oldStdout
 
-	output, err := io.ReadAll(readPipe)
-	require.NoError(t, err)
+	result := <-done
+	require.NoError(t, result.err)
 	require.NoError(t, readPipe.Close())
-	return string(output)
+	return string(result.output)
 }
 
 func captureStderr(t *testing.T, fn func()) string {
@@ -565,14 +676,16 @@ func captureStderr(t *testing.T, fn func()) string {
 	return string(output)
 }
 
-// withLoggerInitConfig points config.App at a scratch logger setup for tests
-// that run Init, which re-reads every logger setting from config.App rather
-// than the package-level variables withLogWriterConfig covers.
+// withLoggerInitConfig points config.App at a scratch file-mode logger setup
+// for tests that run Init, which re-reads every logger setting from config.App
+// rather than the package-level variables withLogWriterConfig covers.
 func withLoggerInitConfig(t *testing.T, dir, file string) {
 	t.Helper()
 
 	original := config.App
+	originalOutput := logOutput
 	config.App = new(config.Config)
+	config.App.Logger.Output = config.LoggerOutputFile
 	config.App.Logger.Dir = dir
 	config.App.Logger.File = file
 	config.App.Logger.Level = "info"
@@ -581,7 +694,10 @@ func withLoggerInitConfig(t *testing.T, dir, file string) {
 	config.App.Logger.MaxSize = 100
 	config.App.Logger.MaxBackups = 1
 
-	t.Cleanup(func() { config.App = original })
+	t.Cleanup(func() {
+		config.App = original
+		logOutput = originalOutput
+	})
 }
 
 // restoreGlobalLoggers snapshots every logger package global plus the zap
@@ -618,6 +734,7 @@ func withLogWriterConfig(t *testing.T, dir, file string) {
 	t.Helper()
 
 	oldDir := config.App.Dir
+	oldLogOutput := logOutput
 	oldLogFile := logFile
 	oldLogLevel := logLevel
 	oldLogFormat := logFormat
@@ -627,6 +744,7 @@ func withLogWriterConfig(t *testing.T, dir, file string) {
 
 	config.App.Dir = dir
 	config.App.Logger.Dir = dir
+	logOutput = config.LoggerOutputFile
 	logFile = file
 	logLevel = "info"
 	logFormat = "json"
@@ -637,6 +755,7 @@ func withLogWriterConfig(t *testing.T, dir, file string) {
 	t.Cleanup(func() {
 		config.App.Dir = oldDir
 		config.App.Logger.Dir = oldDir
+		logOutput = oldLogOutput
 		logFile = oldLogFile
 		logLevel = oldLogLevel
 		logFormat = oldLogFormat

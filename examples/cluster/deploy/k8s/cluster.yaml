@@ -20,10 +20,10 @@
 #     liveness does not restart a pod that is still coming up;
 #   - the disruption budget keeps two replicas up through a rolling update or
 #     a node drain, so the work never stands still;
-#   - the framework keeps one log file per concern under LOGGER_DIR —
-#     cronjob.log, leader.log, lock.log beside app.log — and only its global
-#     stream goes to stdout; a deployment ships the files with its log
-#     collector, and the scenarios read them with kubectl exec.
+#   - every log stream goes to stdout, one line per entry whose logger field
+#     names the stream — leader, cronjob, lock, access and the rest — so a
+#     deployment's collector ships them like any container output, and the
+#     scenarios read them with kubectl logs.
 apiVersion: v1
 kind: Secret
 metadata:
@@ -48,7 +48,6 @@ data:
   # listener closes: the time the endpoints controller needs to take the pod
   # out of the Service.
   SERVER_SHUTDOWN_DELAY: 5s
-  LOGGER_DIR: /var/log/cluster
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -106,12 +105,6 @@ spec:
               path: /-/healthz
               port: http
             periodSeconds: 10
-          volumeMounts:
-            - name: logs
-              mountPath: /var/log/cluster
-      volumes:
-        - name: logs
-          emptyDir: {}
 ---
 apiVersion: v1
 kind: Service

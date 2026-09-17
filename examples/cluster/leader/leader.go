@@ -21,7 +21,7 @@ func init() {
 // continues from the count in the database, and records that it did; a
 // replica that lost the leadership without noticing yet has its next
 // transaction refused — the lease is verified first — which ends its tenure
-// with "lease lost" in leader.log.
+// with "lease lost" in the leader log.
 func count(ctx context.Context) error {
 	if err := recordTenure(ctx); err != nil {
 		return err

@@ -178,6 +178,7 @@ func bootstrapProcess(t *testing.T) {
 			errBootstrap = err
 			return
 		}
+		t.Setenv(config.LOGGER_OUTPUT, string(config.LoggerOutputFile))
 		t.Setenv(config.LOGGER_DIR, bootstrapLogDir)
 		t.Setenv(config.DATABASE_AUTO_MIGRATE, "true")
 		t.Setenv(config.SERVER_LISTEN, "127.0.0.1")

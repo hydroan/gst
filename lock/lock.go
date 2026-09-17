@@ -86,7 +86,7 @@ var (
 	// reports them, so the process fails at startup instead of a lock
 	// failing its first try.
 	errDeclare error
-	// log is the package's logger: the dedicated lock.log the lifecycle
+	// log is the package's logger: the dedicated lock stream the lifecycle
 	// binds before the component starts, or the global log stream until
 	// then; see logger.
 	log types.Logger
@@ -129,7 +129,7 @@ func setLogger(l types.Logger) {
 	log = l
 }
 
-// logger returns the package's logger: the bound lock.log, or, until the
+// logger returns the package's logger: the bound lock stream, or, until the
 // lifecycle binds it — a try made during Bootstrap, a unit test — a logger
 // that writes to the global log stream. Opening lock.log here instead would
 // put a second rotation instance on the file once the lifecycle opens its

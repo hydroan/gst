@@ -61,7 +61,7 @@ var (
 	// start reports them, so the process fails at startup instead of
 	// silently running without that work.
 	errRegister error
-	// log is the elector's logger: the dedicated leader.log the lifecycle
+	// log is the elector's logger: the dedicated leader stream the lifecycle
 	// binds before the component starts, or one of the package's own in a
 	// process that never ran the lifecycle.
 	log types.Logger
