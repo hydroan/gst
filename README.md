@@ -695,6 +695,13 @@ err := database.Select[*appmodel.Record, recordWithTags](ctx, RecordCols.ID, tag
 `config.ini.example` 是新项目的默认配置模板。复制为 `config.ini` 后按环境修改。
 默认模板会开启 sqlite，适合本地快速启动。
 
+每个配置键都按"环境变量 > 配置文件 > 默认值"取值，配置文件里没写的键、`configx` 里 `config.Register`
+注册的自定义段都一样。变量名是键名转大写、点换成下划线：`server.port` 对应 `SERVER_PORT`，
+`logger.http_body.enabled` 对应 `LOGGER_HTTP_BODY_ENABLED`，自定义段 `Sample` 的 `endpoint` 对应
+`SAMPLE_ENDPOINT`。设成空串、`false`、`0` 同样生效。启动时这几种情况直接失败：变量的值转不成对应类型
+（报错写明变量名和原值，例如 `SERVER_PORT=tcp://…`）；自定义段和框架内置段重名（比如类型叫 `Mysql`）；
+两个类型注册成同一个段。变量名写错不会报错，按上面的规则核对。
+
 服务启动默认不自动建表、不自动迁移（`database.auto_migrate = false`）：启动期只校验注册模型
 的表是否存在，缺表直接报错退出并提示执行 `gg migrate`。`gg new` 生成的配置和 `examples/demo`
 显式开启 `auto_migrate = true`，本地开发、测试环境按需开启即可；生产环境保持默认关闭，

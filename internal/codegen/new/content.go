@@ -286,9 +286,10 @@ const configxContent = `// Package configx registers the application's custom co
 //
 // Declare a struct and call config.Register[T]() in init below. The section
 // name is the snake_case of the struct name (Sample -> [sample] in
-// config.ini). Fields resolve from environment variables (SAMPLE_ENDPOINT),
-// then the config file, then "default" struct tags; see config.Register for
-// details.
+// config.ini) and must not be a section of the framework's own
+// configuration. Fields resolve from environment variables (SAMPLE_ENDPOINT,
+// a nested field SAMPLE_TLS_CERT_FILE), then the config file, then "default"
+// struct tags; see config.Register for details.
 //
 // Example:
 //

@@ -11,126 +11,104 @@ import (
 )
 
 var configData = `
-[wechat]
+[sample]
 app_id = "wx123456789"
 
-[nats]
+[relay]
 username = "nuser"
 password = "npass"
 ; timeout = "30s"
 enabled = true
 `
 
-var filename = "/tmp/config.ini"
+func TestRegisterReadsTheFileOverTheDefaultTags(t *testing.T) {
+	filename := filepath.Join(t.TempDir(), "config.ini")
+	requireWriteConfigFile(t, filename, configData)
 
-func TestRegisterStruct(t *testing.T) {
-	if err := os.WriteFile(filename, []byte(configData), 0o644); err != nil {
-		t.Fatal(err)
-	}
-
-	// Register config before bootstrap
-	config.Register[Wechat]()
+	// Register config before Init
+	config.Register[Sample]()
 	config.SetConfigFile(filename)
 	if err := config.Init(); err != nil {
 		t.Fatal(err)
 	}
-	// Register config after bootstrap
-	config.Register[Nats]()
+	// Register config after Init
+	config.Register[Relay]()
 
-	wechat := config.Get[*Wechat]()
-	assert.Equal(t, "wx123456789", wechat.AppID)
-	assert.Equal(t, "myappsecret", wechat.AppSecret)
-	assert.False(t, wechat.Enabled)
+	sample := config.Get[*Sample]()
+	assert.Equal(t, "wx123456789", sample.AppID)
+	assert.Equal(t, "myappsecret", sample.AppSecret)
+	assert.False(t, sample.Enabled)
 
-	nats := config.Get[Nats]()
-	assert.Equal(t, "nats://127.0.0.1:4222", nats.URL)
-	assert.Equal(t, "nuser", nats.Username)
-	assert.Equal(t, "npass", nats.Password)
-	assert.Equal(t, 5*time.Second, nats.Timeout)
-	assert.True(t, nats.Enabled)
+	relay := config.Get[Relay]()
+	assert.Equal(t, "tcp://127.0.0.1:4222", relay.URL)
+	assert.Equal(t, "nuser", relay.Username)
+	assert.Equal(t, "npass", relay.Password)
+	assert.Equal(t, 5*time.Second, relay.Timeout)
+	assert.True(t, relay.Enabled)
 }
 
-func TestRegisterStructPointer(t *testing.T) {
-	if err := os.WriteFile(filename, []byte(configData), 0o644); err != nil {
-		t.Fatal(err)
-	}
+func TestRegisterTakesAPointerType(t *testing.T) {
+	filename := filepath.Join(t.TempDir(), "config.ini")
+	requireWriteConfigFile(t, filename, configData)
 
-	// Register config before bootstrap
-	config.Register[*Wechat]()
+	// Register config before Init
+	config.Register[*Sample]()
 	config.SetConfigFile(filename)
 	if err := config.Init(); err != nil {
 		t.Fatal(err)
 	}
-	// Register config after bootstrap
-	config.Register[*Nats]()
-	wechat := config.Get[*Wechat]()
+	// Register config after Init
+	config.Register[*Relay]()
+	sample := config.Get[*Sample]()
 
-	assert.Equal(t, "wx123456789", wechat.AppID)
-	assert.Equal(t, "myappsecret", wechat.AppSecret)
-	assert.False(t, wechat.Enabled)
+	assert.Equal(t, "wx123456789", sample.AppID)
+	assert.Equal(t, "myappsecret", sample.AppSecret)
+	assert.False(t, sample.Enabled)
 
-	nats := config.Get[Nats]()
-	assert.Equal(t, "nats://127.0.0.1:4222", nats.URL)
-	assert.Equal(t, "nuser", nats.Username)
-	assert.Equal(t, "npass", nats.Password)
-	assert.Equal(t, 5*time.Second, nats.Timeout)
-	assert.True(t, nats.Enabled)
+	relay := config.Get[Relay]()
+	assert.Equal(t, "tcp://127.0.0.1:4222", relay.URL)
+	assert.Equal(t, "nuser", relay.Username)
+	assert.Equal(t, "npass", relay.Password)
+	assert.Equal(t, 5*time.Second, relay.Timeout)
+	assert.True(t, relay.Enabled)
 }
 
-func TestRegisterStructFromEnv(t *testing.T) {
-	if err := os.WriteFile(filename, []byte(configData), 0o644); err != nil {
-		t.Fatal(err)
-	}
+func TestRegisterReadsTheEnvironmentOverTheFile(t *testing.T) {
+	filename := filepath.Join(t.TempDir(), "config.ini")
+	requireWriteConfigFile(t, filename, configData)
 
-	t.Setenv("WECHAT_APP_SECRET", "my_app_secret")
-	t.Setenv("NATS_USERNAME", "user_from_env")
-	t.Setenv("NATS_PASSWORD", "pass_from_env")
-	t.Setenv("NATS_TIMEOUT", "60s")
+	t.Setenv("SAMPLE_APP_SECRET", "my_app_secret")
+	t.Setenv("RELAY_USERNAME", "user_from_env")
+	t.Setenv("RELAY_PASSWORD", "pass_from_env")
+	t.Setenv("RELAY_TIMEOUT", "60s")
 
-	// Register config before bootstrap
-	config.Register[Wechat]()
+	// Register config before Init
+	config.Register[Sample]()
 	config.SetConfigFile(filename)
 	if err := config.Init(); err != nil {
 		t.Fatal(err)
 	}
-	// Register config after bootstrap
-	config.Register[Nats]()
+	// Register config after Init
+	config.Register[Relay]()
 
-	wechat := config.Get[*Wechat]()
+	sample := config.Get[*Sample]()
 
-	assert.Equal(t, "wx123456789", wechat.AppID)
-	assert.Equal(t, "my_app_secret", wechat.AppSecret)
-	assert.False(t, wechat.Enabled)
+	assert.Equal(t, "wx123456789", sample.AppID)
+	assert.Equal(t, "my_app_secret", sample.AppSecret)
+	assert.False(t, sample.Enabled)
 
-	nats := config.Get[Nats]()
-	assert.Equal(t, "nats://127.0.0.1:4222", nats.URL)
-	assert.Equal(t, "user_from_env", nats.Username)
-	assert.Equal(t, "pass_from_env", nats.Password)
-	assert.Equal(t, 60*time.Second, nats.Timeout)
-	assert.True(t, nats.Enabled)
+	relay := config.Get[Relay]()
+	assert.Equal(t, "tcp://127.0.0.1:4222", relay.URL)
+	assert.Equal(t, "user_from_env", relay.Username)
+	assert.Equal(t, "pass_from_env", relay.Password)
+	assert.Equal(t, 60*time.Second, relay.Timeout)
+	assert.True(t, relay.Enabled)
 }
 
-// TestLoggerSQLCallerSkipPrefixesFromEnv pins the environment form of the
-// logger.sql_caller_skip_prefixes list: built-in sections unmarshal through
-// viper, whose default decode hook splits an environment string on commas.
-func TestLoggerSQLCallerSkipPrefixesFromEnv(t *testing.T) {
-	if err := os.WriteFile(filename, []byte(configData), 0o644); err != nil {
-		t.Fatal(err)
-	}
+func TestRegisterSkipsANonStructType(t *testing.T) {
+	filename := filepath.Join(t.TempDir(), "config.ini")
+	requireWriteConfigFile(t, filename, configData)
 
-	t.Setenv("LOGGER_SQL_CALLER_SKIP_PREFIXES", "example.com/app/dao,example.com/app/repo")
-
-	config.SetConfigFile(filename)
-	if err := config.Init(); err != nil {
-		t.Fatal(err)
-	}
-
-	assert.Equal(t,
-		[]string{"example.com/app/dao", "example.com/app/repo"},
-		config.App.Logger.SQLCallerSkipPrefixes)
-}
-
-func TestRegisterNonStructType(t *testing.T) {
 	// These should be skipped silently without error or panic
 	config.Register[string]()
 	config.Register[int]()
@@ -149,6 +127,25 @@ func TestRegisterNonStructType(t *testing.T) {
 
 	intVal := config.Get[int]()
 	assert.Equal(t, 0, intVal)
+}
+
+// TestLoggerSQLCallerSkipPrefixesFromEnv pins the environment form of the
+// logger.sql_caller_skip_prefixes list: built-in sections unmarshal through
+// viper, whose default decode hook splits an environment string on commas.
+func TestLoggerSQLCallerSkipPrefixesFromEnv(t *testing.T) {
+	filename := filepath.Join(t.TempDir(), "config.ini")
+	requireWriteConfigFile(t, filename, configData)
+
+	t.Setenv("LOGGER_SQL_CALLER_SKIP_PREFIXES", "example.com/app/dao,example.com/app/repo")
+
+	config.SetConfigFile(filename)
+	if err := config.Init(); err != nil {
+		t.Fatal(err)
+	}
+
+	assert.Equal(t,
+		[]string{"example.com/app/dao", "example.com/app/repo"},
+		config.App.Logger.SQLCallerSkipPrefixes)
 }
 
 func TestInitReadsYAMLConfigFile(t *testing.T) {
@@ -279,22 +276,20 @@ func TestInitDefaultsToInMemorySqliteWithoutConfigFile(t *testing.T) {
 	assert.False(t, config.App.Database.AutoMigrate)
 }
 
-type Wechat struct {
+// Sample is a registered section read from the file and its default tags.
+type Sample struct {
 	AppID     string `json:"app_id" mapstructure:"app_id" default:"myappid"`
 	AppSecret string `json:"app_secret" mapstructure:"app_secret" default:"myappsecret"`
 	Enabled   bool   `json:"enabled" mapstructure:"enabled"`
 }
 
-type Nats struct {
-	URL      string        `json:"url" mapstructure:"url" default:"nats://127.0.0.1:4222"`
-	Username string        `json:"username" mapstructure:"username" default:"nats"`
-	Password string        `json:"password" mapstructure:"password" default:"nats"`
+// Relay is a registered section read after Init.
+type Relay struct {
+	URL      string        `json:"url" mapstructure:"url" default:"tcp://127.0.0.1:4222"`
+	Username string        `json:"username" mapstructure:"username" default:"relay"`
+	Password string        `json:"password" mapstructure:"password" default:"relay"`
 	Timeout  time.Duration `json:"timeout" mapstructure:"timeout" default:"5s"`
 	Enabled  bool          `json:"enabled" mapstructure:"enabled"`
-}
-
-type TestConfig struct {
-	Value string `json:"value" mapstructure:"value" default:"default_value"`
 }
 
 func requireWriteConfigFile(t *testing.T, filename, content string) {
