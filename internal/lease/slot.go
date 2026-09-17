@@ -11,9 +11,10 @@ import (
 )
 
 // This file holds the scheduler's side of the protocol: an instant of a job
-// claimed once across the deployment, the end of its round recorded, and a
-// round cut short found and claimed a second time. The claims of any other
-// name, and what every claim does once made, are in lease.go.
+// claimed once across the deployment, the end of its round recorded along
+// with the instants it overran, and a round cut short found and claimed a
+// second time. The claims of any other name, and what every claim does once
+// made, are in lease.go.
 
 // Unfinished is an instant claimed under a scheduler's name whose round has
 // not run to its end: the process running it shut down or died, or its lease
@@ -51,13 +52,15 @@ type unfinishedRow struct {
 }
 
 // ClaimSlot is Claim for an instant of a scheduler's job, slot, under name:
-// the name must be free, and slot later than the last instant claimed under
-// it. The claim records slot as the last instant claimed, and as unfinished
-// until Finish; it is refused when someone holds the name or claimed slot or
-// a later instant already. A cluster then claims each instant of a job once,
-// whichever replica gets there first, and an instant already claimed is
-// refused everywhere; only a round cut short is claimed a second time, see
-// ClaimRerun.
+// the name must be free, and slot later than the last instant on record under
+// it — the last instant claimed, or the last one a round that ran to its end
+// recorded as having come while it held the name, see Finish. The claim
+// records slot as the last instant claimed, and as unfinished until Finish;
+// it is refused when someone holds the name or slot is not later than the
+// instant on record. A cluster then claims each instant of a job once,
+// whichever replica gets there first, and an instant already claimed, or
+// skipped while a round held the name, is refused everywhere; only a round cut
+// short is claimed a second time, see ClaimRerun.
 //
 // The instant claimed before under name, when its round has not run to its
 // end — cut short, and not run a second time yet, or cut short the second
@@ -134,24 +137,36 @@ func (h *Handle) Superseded() (Unfinished, bool) {
 
 // Finish records that the round for the instant h was claimed for ran to its
 // end, so the instant never runs again, and gives the name back, the way
-// Release does. When the name is no longer this holder's the end is recorded
-// all the same, unless a later instant has been claimed since, and ErrLost
-// reports the name was not given back — unless h is known lost, see Lost,
-// and giving it back was not tried. Only a handle of ClaimSlot or ClaimRerun
-// has an instant to finish.
-func (h *Handle) Finish(ctx context.Context) error {
+// Release does. passed is the last instant of the round's schedule to have
+// come by the time the round ended. When it is later than the round's own
+// instant, the round overran the instants up to it: none of them was claimed —
+// a claim of one would have refused the round's own, and the round's lease
+// refused every claim while it held the name — and the record takes passed
+// along as the last instant on record, so they stay skipped, every later
+// claim of them refused, a start-up catch-up included. An instant the database
+// clock has yet to reach is not taken along, so a caller whose clock runs
+// ahead does not skip an instant the other replicas are still to claim.
+//
+// When the name is no longer this holder's the end is recorded all the same,
+// unless a later instant has been claimed since, and passed is not taken
+// along: other replicas may have claimed the name meanwhile. ErrLost then
+// reports the name was not given back — unless h is known lost, see Lost, and
+// giving it back was not tried. Only a handle of ClaimSlot or ClaimRerun has
+// an instant to finish.
+func (h *Handle) Finish(ctx context.Context, passed time.Time) error {
 	if h.slotMs == 0 {
 		return errors.Newf("finish lease %q: the claim was for no instant", h.name)
 	}
-	db, _, err := primary()
+	db, now, err := primary()
 	if err != nil {
 		return err
 	}
 	updatedAt := dbruntime.NowUTC()
 	if !h.Lost() {
+		passedMs := passed.UnixMilli()
 		res := db.WithContext(ctx).Exec(
-			fmt.Sprintf("UPDATE %s SET expires_at_ms = 0, unfinished_slot_ms = 0, updated_at = ? WHERE name = ? AND holder = ?", table),
-			updatedAt, h.name, h.holder)
+			fmt.Sprintf("UPDATE %s SET expires_at_ms = 0, unfinished_slot_ms = 0, slot_ms = CASE WHEN slot_ms < ? AND ? <= %s THEN ? ELSE slot_ms END, updated_at = ? WHERE name = ? AND holder = ?", table, now),
+			passedMs, passedMs, passedMs, updatedAt, h.name, h.holder)
 		if res.Error != nil {
 			return errors.Wrapf(res.Error, "finish lease %q", h.name)
 		}
@@ -239,9 +254,11 @@ func ClaimRerun(ctx context.Context, u Unfinished) (*Handle, bool, error) {
 	return h, true, nil
 }
 
-// LastSlot returns the last instant claimed under name and whether the name
-// has ever been claimed. The scheduler reads it as it starts, to tell an
-// instant no replica claimed from a job that has never run at all.
+// LastSlot returns the last instant on record under name — the last claimed,
+// or the last a round that ran to its end took along, see Finish — and whether
+// the name has ever been claimed. The scheduler reads it as it starts, to tell
+// an instant no replica claimed or skipped from a job that has never run at
+// all.
 func LastSlot(ctx context.Context, name string) (time.Time, bool, error) {
 	db, _, err := primary()
 	if err != nil {

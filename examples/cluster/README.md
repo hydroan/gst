@@ -132,7 +132,7 @@ kubectl -n $NS get pods -l app.kubernetes.io/name=cluster
 logs '.logger == "cronjob" and .name == "slow" and .trace_id != null' | jq -c '{at, msg, reason, rerun, instance}' | tail -3
 ```
 
-进程没机会交还租约，也不留 `cronjob interrupted`；容器随即重启，`RESTARTS` 加一。租约要等到期（最后一次续期后 15 秒），再由某个副本查到，为同一个时刻再跑一轮，前后不超过约 30 秒。再跑它的也可能正是那个 Pod 重启后的新进程。租约到期之前轮到的时刻谁也领不到，会被跳过，再跑的那一轮结束时记 `cronjob skipped instants`。
+进程没机会交还租约，也不留 `cronjob interrupted`；容器随即重启，`RESTARTS` 加一。租约要等到期（最后一次续期后 15 秒），再由某个副本查到，为同一个时刻再跑一轮，前后不超过约 30 秒。再跑它的也可能正是那个 Pod 重启后的新进程。租约到期之前轮到的时刻谁也领不到，会被跳过，再跑的那一轮结束时记 `cronjob skipped instants`，并把这个时刻记进租约表，之后启动的副本也不会补跑它。
 
 `kubectl delete pod --force --grace-period=0` 模拟不了崩溃：kubelet 照样先给进程发 SIGTERM，进程会正常停机、交还租约。要走崩溃这条路，只能像上面这样直接杀进程。
 
@@ -205,7 +205,7 @@ sleep 45
 kubectl -n $NS scale deployment/cluster --replicas=3
 ```
 
-停机期间错过的调度时刻没人领。三个副本一起启动，每个共享任务只由一个副本补跑最近一个时刻，日志带 `"catch_up":true`；更早的时刻不补。补跑的 `slow` 同样要跑 20 秒，盖过了下一个时刻的话，那个时刻被跳过，记 `cronjob skipped instants`。
+停机期间错过的调度时刻没人领。三个副本一起启动，每个共享任务只由一个副本补跑最近一个时刻，日志带 `"catch_up":true`；更早的时刻不补。补跑的 `slow` 同样要跑 20 秒，盖过了下一个时刻的话，那个时刻被跳过，记 `cronjob skipped instants`；跳过的时刻记在租约表里，之后再有副本启动也不会补它。
 
 ### 8. 优雅停机：先摘流量再关
 
@@ -233,7 +233,7 @@ kubectl -n $NS rollout restart deployment/cluster
 kubectl -n $NS rollout status deployment/cluster
 ```
 
-Deployment 的滚动策略是 `maxSurge: 1`、`maxUnavailable: 0`：新 Pod 就绪之后才停旧 Pod，全程保持三个副本在服务。`tick` 每 10 秒照常一轮；leader 随着旧 Pod 停机在副本之间接力；被停机打断的 `slow` 由别的副本再跑一次。PodDisruptionBudget 管不到滚动更新，它限制的是节点排空（drain）这类主动驱逐，保证那种时候至少留两个副本。端口转发连着的 Pod 被替换时会断开，重新开一个即可。
+Deployment 的滚动策略是 `maxSurge: 1`、`maxUnavailable: 0`：新 Pod 就绪之后才停旧 Pod，全程保持三个副本在服务。`tick` 每 10 秒照常一轮；leader 随着旧 Pod 停机在副本之间接力；被停机打断的 `slow` 由别的副本再跑一次。其余副本一直在领时刻，新起的副本没有要补跑的，日志里不该出现 `"catch_up":true`。PodDisruptionBudget 管不到滚动更新，它限制的是节点排空（drain）这类主动驱逐，保证那种时候至少留两个副本。端口转发连着的 Pod 被替换时会断开，重新开一个即可。
 
 ## 正式环境
 

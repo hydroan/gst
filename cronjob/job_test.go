@@ -101,8 +101,9 @@ func TestPerInstanceJobRunsOnEveryInstance(t *testing.T) {
 
 // TestHeldInstantKeepsTheNextFromEveryone proves a round still holding its
 // lease keeps the following instants from the other instances too: the
-// instant is skipped across the deployment, not run elsewhere, and the
-// instants after the round are shared again.
+// instant is skipped across the deployment, not run elsewhere — nor caught up
+// by an instance starting once the round is over, the round having recorded
+// it as it ended — and the instants after the round are shared again.
 func TestHeldInstantKeepsTheNextFromEveryone(t *testing.T) {
 	withCronjobLoggerConfig(t)
 	resetCronjobState(t)
@@ -130,11 +131,16 @@ func TestHeldInstantKeepsTheNextFromEveryone(t *testing.T) {
 	clock.Advance(time.Minute)
 	clock.untilWaiters(t, 1)
 	close(release)
-	// 10:03: the round is over and the lease released; one instance runs.
+	// The round is over and the lease released. An instance starting now
+	// finds 10:02, the most recent instant, overrun rather than missed: it
+	// catches nothing up.
 	clock.untilWaiters(t, 2)
+	startInstances(t, 1)
+	// 10:03: one instance runs.
+	clock.untilWaiters(t, 3)
 	clock.Advance(time.Minute)
 	runs.await(t)
-	clock.untilWaiters(t, 2)
+	clock.untilWaiters(t, 3)
 
 	require.Equal(t, map[time.Time]int{
 		time.Date(2026, 1, 1, 10, 1, 0, 0, time.UTC): 1,
@@ -334,6 +340,52 @@ func TestRoundCutShortByACrashRunsAgainOnce(t *testing.T) {
 	require.Equal(t, true, entry["rerun"])
 	require.Zero(t, readLeaseRow(t, "cron:crashed-job").ExpiresAtMs, "the second round gave its lease back as it stopped")
 	require.Empty(t, unfinishedInstants(t, "cron:crashed-job"), "an instant cut short a second time never runs a third")
+}
+
+// TestInstantKeptByACrashedLeaseStaysSkipped proves an instant that passes
+// while the lease of a crashed round has yet to expire is skipped for good: no
+// replica can claim it then, the second run of the crashed round records it
+// as that run ends, and an instance starting afterwards catches nothing up.
+func TestInstantKeptByACrashedLeaseStaysSkipped(t *testing.T) {
+	dir := withCronjobLoggerConfig(t)
+	resetCronjobState(t)
+	withBoundCronjobLogger(t)
+	clock := withFakeClock(t, time.Date(2026, 1, 1, 10, 0, 30, 0, time.UTC))
+	// A lease long enough for 10:01 to come while the crashed round's lease
+	// still holds, however slow the machine running the test.
+	t.Cleanup(lease.SetTimings(2*time.Second, 200*time.Millisecond, time.Second, 500*time.Millisecond))
+	withFastSweep(t)
+
+	cutShortRun(t, "cron:crash-kept-job", time.Date(2026, 1, 1, 10, 0, 0, 0, time.UTC), true)
+
+	ran := make(chan struct{}, 4)
+	Register(func(context.Context) error {
+		ran <- struct{}{}
+		return nil
+	}, "@every 1m", "crash-kept-job")
+	running := startInstances(t, 1)[0]
+
+	// 10:01 comes while the crashed round's lease holds: its claim is refused.
+	clock.untilWaiting(t)
+	clock.Advance(30 * time.Second)
+	// Once the lease expires, the crashed round runs a second time and ends.
+	awaitSignal(t, ran, "the crashed round run a second time")
+	clock.untilWaiting(t)
+	starting := startInstances(t, 1)[0]
+	// 10:02: one instance runs.
+	clock.untilWaiters(t, 2)
+	clock.Advance(time.Minute)
+	awaitSignal(t, ran, "the round for 10:02")
+	clock.untilWaiters(t, 2)
+	require.NoError(t, running.stop(context.Background()))
+	require.NoError(t, starting.stop(context.Background()))
+	pkgzap.Clean()
+
+	finished := readLogEntries(t, filepath.Join(dir, "cronjob.log"), "finished cronjob")
+	require.Len(t, finished, 2, "10:01, kept from everyone by the crashed round's lease, runs nowhere")
+	require.Equal(t, "2026-01-01T10:00:00Z", finished[0]["at"])
+	require.Equal(t, true, finished[0]["rerun"])
+	require.Equal(t, "2026-01-01T10:02:00Z", finished[1]["at"])
 }
 
 // TestRoundWhoseEndIsNotRecordedRunsAgain proves a round that ran to its end

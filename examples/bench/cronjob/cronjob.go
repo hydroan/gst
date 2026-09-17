@@ -18,7 +18,8 @@
 // CRON_TZ=<zone> for another zone — and "@every" runs on the multiples of
 // its period from the Unix epoch, so every replica computes the same
 // instants. An instant that passes while the previous run is still in flight
-// is skipped.
+// is skipped; a round that runs to its end records the skip, so no replica
+// starting later catches the instant up.
 //
 // Each instant of a job is claimed once across every replica of the
 // deployment: the replicas share the instant's lease through the primary
@@ -39,8 +40,9 @@
 // joined with it by errors.Join. fn must therefore be idempotent: it may run
 // twice for one instant. On startup a job's most recent instant is caught up
 // once, on one replica, when the job has run before, that instant passed
-// within the last day and no replica claimed it; a job that has never run, or
-// whose most recent instant was claimed, starts with its next instant.
+// within the last day, no replica claimed it and no round that ran to its end
+// overran it; a job that has never run, or whose most recent instant was
+// claimed or overrun, starts with its next instant.
 //
 // On SQLite the framework uses a single database connection, so a
 // transaction inside a job blocks the lease renewal: keep each transaction

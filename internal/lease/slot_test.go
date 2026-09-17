@@ -73,7 +73,7 @@ func TestClaimSlotIsExclusiveAcrossConcurrentClaimants(t *testing.T) {
 		won := claimConcurrently(t, func() (*Handle, bool, error) { return ClaimSlot(ctx, name, first) })
 		require.Len(t, won, 1, "exactly one claimant takes the instant")
 		require.EqualValues(t, 1, won[0].Term())
-		require.NoError(t, won[0].Finish(ctx))
+		require.NoError(t, won[0].Finish(ctx, time.Time{}))
 	})
 
 	t.Run("name given back", func(t *testing.T) {
@@ -81,12 +81,12 @@ func TestClaimSlotIsExclusiveAcrossConcurrentClaimants(t *testing.T) {
 		h, claimed, err := ClaimSlot(ctx, name, first)
 		require.NoError(t, err)
 		require.True(t, claimed)
-		require.NoError(t, h.Finish(ctx))
+		require.NoError(t, h.Finish(ctx, time.Time{}))
 
 		won := claimConcurrently(t, func() (*Handle, bool, error) { return ClaimSlot(ctx, name, first.Add(time.Minute)) })
 		require.Len(t, won, 1, "exactly one claimant takes the next instant")
 		require.EqualValues(t, 2, won[0].Term(), "the term moves once, by the winner")
-		require.NoError(t, won[0].Finish(ctx))
+		require.NoError(t, won[0].Finish(ctx, time.Time{}))
 	})
 }
 
@@ -104,7 +104,7 @@ func TestClaimSlotRefusesARowChangedSinceItWasRead(t *testing.T) {
 	h, claimed, err := ClaimSlot(ctx, name, first)
 	require.NoError(t, err)
 	require.True(t, claimed)
-	require.NoError(t, h.Finish(ctx))
+	require.NoError(t, h.Finish(ctx, time.Time{}))
 
 	// The other replica's claim and round run in the gap, right before the
 	// write of the claim that read the row first; the claims it makes itself
@@ -123,7 +123,7 @@ func TestClaimSlotRefusesARowChangedSinceItWasRead(t *testing.T) {
 		var claimErr error
 		other, won, claimErr = ClaimSlot(ctx, name, second)
 		require.NoError(t, claimErr)
-		require.NoError(t, other.Finish(ctx))
+		require.NoError(t, other.Finish(ctx, time.Time{}))
 	}))
 	t.Cleanup(func() { _ = dbruntime.DB.Callback().Raw().Remove(interleave) })
 
@@ -136,10 +136,12 @@ func TestClaimSlotRefusesARowChangedSinceItWasRead(t *testing.T) {
 
 // TestFinishRecordsTheRoundRanToItsEnd proves Finish settles the instant its
 // handle was claimed for: while the name is the holder's it gives the lease
-// back and nothing is left to run again; once the name has changed hands it
-// still settles the instant — a round that ran to its end, however late,
-// never runs a second time — reporting ErrLost, but leaves alone a later
-// instant claimed since.
+// back, nothing is left to run again, and the instants the round overran stay
+// skipped — the last of them on record, as long as the database clock has
+// reached it; once the name has changed hands it still settles the instant —
+// a round that ran to its end, however late, never runs a second time —
+// reporting ErrLost, but records no instant it overran and leaves alone a
+// later instant claimed since.
 func TestFinishRecordsTheRoundRanToItsEnd(t *testing.T) {
 	ctx := context.Background()
 	first := time.Date(2026, 1, 1, 10, 0, 0, 0, time.UTC)
@@ -150,14 +152,50 @@ func TestFinishRecordsTheRoundRanToItsEnd(t *testing.T) {
 		require.NoError(t, err)
 		require.True(t, claimed)
 
-		require.NoError(t, h.Finish(ctx))
+		require.NoError(t, h.Finish(ctx, time.Time{}))
 		require.Zero(t, readSlots(t, name).UnfinishedSlotMs)
 		next, claimed, err := ClaimSlot(ctx, name, first.Add(time.Minute))
 		require.NoError(t, err)
 		require.True(t, claimed, "the lease was given back: the next instant is free at once")
 		_, gaveUp := next.Superseded()
 		require.False(t, gaveUp, "an instant run to its end is not given up by the next")
-		require.NoError(t, next.Finish(ctx))
+		require.NoError(t, next.Finish(ctx, time.Time{}))
+	})
+
+	t.Run("instants overrun", func(t *testing.T) {
+		name := uniqueName(t)
+		h, claimed, err := ClaimSlot(ctx, name, first)
+		require.NoError(t, err)
+		require.True(t, claimed)
+
+		// The round ends two instants late.
+		overrun := first.Add(2 * time.Minute)
+		require.NoError(t, h.Finish(ctx, overrun))
+		last, _, err := LastSlot(ctx, name)
+		require.NoError(t, err)
+		require.Equal(t, overrun, last, "the last instant the round overran is on record")
+		for _, skipped := range []time.Time{first.Add(time.Minute), overrun} {
+			_, claimed, err = ClaimSlot(ctx, name, skipped)
+			require.NoError(t, err)
+			require.False(t, claimed, "an instant the round overran stays skipped")
+		}
+		next, claimed, err := ClaimSlot(ctx, name, overrun.Add(time.Minute))
+		require.NoError(t, err)
+		require.True(t, claimed, "the instant after the overrun is free")
+		_, gaveUp := next.Superseded()
+		require.False(t, gaveUp)
+		require.NoError(t, next.Finish(ctx, time.Time{}))
+	})
+
+	t.Run("instant yet to come by the database clock", func(t *testing.T) {
+		name := uniqueName(t)
+		h, claimed, err := ClaimSlot(ctx, name, first)
+		require.NoError(t, err)
+		require.True(t, claimed)
+
+		// A clock running ahead of the database's names an instant still to come.
+		require.NoError(t, h.Finish(ctx, time.Now().Add(time.Hour)))
+		require.Equal(t, first.UnixMilli(), readSlots(t, name).SlotMs, "an instant the database clock has yet to reach stays free to claim")
 	})
 
 	t.Run("name claimed again elsewhere", func(t *testing.T) {
@@ -165,9 +203,11 @@ func TestFinishRecordsTheRoundRanToItsEnd(t *testing.T) {
 		late := cutShort(t, name, first)
 		again := claimAgain(t, name)
 
-		require.ErrorIs(t, late.Finish(ctx), ErrLost, "the name was no longer the late round's to give back")
-		require.Zero(t, readSlots(t, name).UnfinishedSlotMs, "the late round ran to its end all the same")
-		require.NoError(t, again.Finish(ctx))
+		require.ErrorIs(t, late.Finish(ctx, first.Add(time.Minute)), ErrLost, "the name was no longer the late round's to give back")
+		row := readSlots(t, name)
+		require.Zero(t, row.UnfinishedSlotMs, "the late round ran to its end all the same")
+		require.Equal(t, first.UnixMilli(), row.SlotMs, "a round that lost the name records no instant it overran")
+		require.NoError(t, again.Finish(ctx, time.Time{}))
 	})
 
 	t.Run("later instant claimed since", func(t *testing.T) {
@@ -177,10 +217,12 @@ func TestFinishRecordsTheRoundRanToItsEnd(t *testing.T) {
 		require.NoError(t, err)
 		require.True(t, claimed)
 
-		require.ErrorIs(t, late.Finish(ctx), ErrLost)
-		require.Equal(t, first.Add(time.Minute).UnixMilli(), readSlots(t, name).UnfinishedSlotMs,
+		require.ErrorIs(t, late.Finish(ctx, first.Add(2*time.Minute)), ErrLost)
+		row := readSlots(t, name)
+		require.Equal(t, first.Add(time.Minute).UnixMilli(), row.UnfinishedSlotMs,
 			"a late round settles its own instant only, never the one claimed after it")
-		require.NoError(t, next.Finish(ctx))
+		require.Equal(t, first.Add(time.Minute).UnixMilli(), row.SlotMs, "nor does it move the record past the instant claimed after it")
+		require.NoError(t, next.Finish(ctx, time.Time{}))
 	})
 
 	t.Run("lease known lost", func(t *testing.T) {
@@ -198,8 +240,10 @@ func TestFinishRecordsTheRoundRanToItsEnd(t *testing.T) {
 		awaitDone(held, t)
 		require.True(t, h.Lost())
 
-		require.NoError(t, h.Finish(ctx), "a holder known lost does not try to give the name back, and reports nothing")
-		require.Zero(t, readSlots(t, name).UnfinishedSlotMs, "the round ran to its end all the same")
+		require.NoError(t, h.Finish(ctx, first.Add(time.Minute)), "a holder known lost does not try to give the name back, and reports nothing")
+		row := readSlots(t, name)
+		require.Zero(t, row.UnfinishedSlotMs, "the round ran to its end all the same")
+		require.Equal(t, first.UnixMilli(), row.SlotMs, "a holder known lost records no instant it overran")
 	})
 }
 
@@ -232,7 +276,7 @@ func TestRoundCutShortIsClaimedASecondTimeOnce(t *testing.T) {
 	given, gaveUp := next.Superseded()
 	require.True(t, gaveUp)
 	require.Equal(t, Unfinished{Name: name, Slot: first, Rerun: true}, given)
-	require.NoError(t, next.Finish(ctx))
+	require.NoError(t, next.Finish(ctx, time.Time{}))
 }
 
 // TestRoundOfACrashedHolderIsFoundOnceItsLeaseExpires proves a round whose
@@ -318,7 +362,7 @@ func TestUnfinishedSlotsCountsOnlyTheLastInstantClaimed(t *testing.T) {
 		require.True(t, claimed)
 		_, gaveUp := next.Superseded()
 		require.False(t, gaveUp, "nor does the next instant give anything up")
-		require.NoError(t, next.Finish(ctx))
+		require.NoError(t, next.Finish(ctx, time.Time{}))
 	})
 
 	t.Run("unfinished mark behind the last instant claimed", func(t *testing.T) {
@@ -336,7 +380,7 @@ func TestUnfinishedSlotsCountsOnlyTheLastInstantClaimed(t *testing.T) {
 		require.True(t, claimed)
 		_, gaveUp := next.Superseded()
 		require.False(t, gaveUp, "nor given up by the next instant")
-		require.NoError(t, next.Finish(ctx))
+		require.NoError(t, next.Finish(ctx, time.Time{}))
 	})
 }
 

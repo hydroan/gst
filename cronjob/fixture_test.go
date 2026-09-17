@@ -91,7 +91,7 @@ func lastRun(t *testing.T, leaseName string, at time.Time) {
 	h, claimed, err := lease.ClaimSlot(context.Background(), leaseName, at)
 	require.NoError(t, err)
 	require.True(t, claimed)
-	require.NoError(t, h.Finish(context.Background()))
+	require.NoError(t, h.Finish(context.Background(), time.Time{}))
 }
 
 // cutShortRun puts on record a round of a job cut short, the way a replica

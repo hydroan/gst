@@ -21,12 +21,12 @@
 // share the instant's lease through the primary database (see the lease
 // package), the first to claim it runs the round while the others skip the
 // instant, and a round still holding the lease — a second run included —
-// keeps the next instants from everyone. A job
-// that must run on every replica — refreshing a process-local cache,
-// cleaning a local directory — registers with RegisterPerInstance and runs
-// without a lease; the lease table comes with the package all the same, and
-// stays empty for such a project. A ClickHouse primary database cannot carry
-// leases, so a job under a lease fails the start there.
+// keeps the next instants from everyone. A job that must run on every
+// replica — refreshing a process-local cache, cleaning a local directory —
+// registers with RegisterPerInstance and runs without a lease; the lease table
+// comes with the package all the same, and stays empty for such a project. A
+// ClickHouse primary database cannot carry leases, so a job under a lease
+// fails the start there.
 //
 // A round counts once it has run to its end: the job returned nil or an
 // error of its own, or panicked. A round cut short — the job returned the
@@ -55,18 +55,22 @@
 // exists — a job never run starts with its next instant, the instants before
 // its first deployment were never its to run); the most recent instant that
 // passed lies within the last day (an older one is history, not a missed
-// round); and no replica claimed that instant. The catch-up is one round, on
-// one replica, and never repeats an instant already claimed; cut short, it
-// runs a second time like any other round.
+// round); and no replica claimed that instant, nor did a round that ran to its
+// end overrun it (such a round records, as it ends, the instants it overran,
+// and they stay skipped). The catch-up is one round, on one replica, and never
+// repeats an instant already claimed; cut short, it runs a second time like
+// any other round.
 //
 // Each job runs in a loop of its own: the loop waits for the next instant of
 // the schedule, or for a round of the job cut short that its replica found,
 // runs the job on a context that ends when the process begins shutting down
 // or the lease is lost, then computes the next instant from the moment the
 // run ended — an instant that passed while a run was still in flight is
-// skipped, never piled on top of it. The parser is the cron library's; the
-// loop is this package's, because the library's runtime neither tells a job
-// which instant it runs for nor lets a test drive the clock.
+// skipped, never piled on top of it, and a round that ran to its end puts the
+// skip on record, so no replica starting afterwards catches the instant up.
+// The parser is the cron library's; the loop is this package's, because the
+// library's runtime neither tells a job which instant it runs for nor lets a
+// test drive the clock.
 //
 // A registration that cannot be honored — no name, no schedule, a schedule
 // that does not parse or names the process's own zone, a name already taken —
@@ -151,10 +155,11 @@ func setLogger(l types.Logger) {
 // lease keeps the next instants from everyone. A round cut short by a
 // shutdown, a crash or a lost lease runs a second time, on this replica or
 // another, unless the next instant starts first, so fn must be idempotent;
-// on start-up the most recent instant no replica claimed is caught up once,
-// when the job has run before and the instant lies within the last day. See
-// the package documentation for both rules in full. A job that must run on
-// every replica registers with RegisterPerInstance instead.
+// on start-up the most recent instant that no replica claimed, and no round
+// that ran to its end overran, is caught up once, when the job has run before
+// and the instant lies within the last day. See the package documentation for
+// both rules in full. A job that must run on every replica registers with
+// RegisterPerInstance instead.
 //
 // fn receives the context of the round it runs in. The context ends when the
 // process begins shutting down or the round's lease is lost, so a long round
