@@ -260,6 +260,36 @@ func TestGormLoggerTraceKeepsRecordNotFoundAtInfo(t *testing.T) {
 	require.NotContains(t, fields, "error")
 }
 
+// TestGormLoggerTraceLogsCanceledStatementAtInfo proves a statement its
+// context canceled logs at info level as canceled, with no error: whoever
+// canceled it — a client gone, a shutdown, a holder that stopped renewing its
+// lease — ended it, and nothing failed in the database. A statement past its
+// deadline still logs as a failure: the database took too long.
+func TestGormLoggerTraceLogsCanceledStatementAtInfo(t *testing.T) {
+	stubSlowQueryThreshold(t, time.Hour)
+
+	t.Run("canceled", func(t *testing.T) {
+		g, logs := newObservedGormLogger()
+
+		g.Trace(context.Background(), time.Now(), func() (string, int64) { return "SELECT 1", 0 }, errors.Wrap(context.Canceled, "sample"))
+
+		entry := requireSingleEntry(t, logs)
+		require.Equal(t, zapcore.InfoLevel, entry.Level)
+		require.Equal(t, "sql canceled", entry.Message)
+		require.NotContains(t, entry.ContextMap(), "error")
+	})
+
+	t.Run("deadline exceeded", func(t *testing.T) {
+		g, logs := newObservedGormLogger()
+
+		g.Trace(context.Background(), time.Now(), func() (string, int64) { return "SELECT 1", 0 }, context.DeadlineExceeded)
+
+		entry := requireSingleEntry(t, logs)
+		require.Equal(t, zapcore.ErrorLevel, entry.Level)
+		require.Equal(t, "sql failed", entry.Message)
+	})
+}
+
 func TestGormLoggerTraceLogsFailureWithRequestFields(t *testing.T) {
 	stubSlowQueryThreshold(t, time.Hour)
 	g, logs := newObservedGormLogger()

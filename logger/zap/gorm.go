@@ -249,9 +249,13 @@ const traceFieldCap = 13
 //
 // gorm.ErrRecordNotFound stays at info level with a record_not_found marker:
 // a read matching no row is a documented outcome of First/Take, and logging
-// it as an error buries real failures under normal traffic. Statements over
-// the configured threshold log as slow queries; real errors log at error
-// level with the same field set.
+// it as an error buries real failures under normal traffic. A statement its
+// context canceled logs at info level as canceled, for the same reason:
+// whoever canceled it — a client gone, a shutdown, a holder that stopped
+// renewing its lease — ended it, and nothing failed in the database; a
+// statement past its deadline is a failure, the database having taken too
+// long. Statements over the configured threshold log as slow queries; real
+// errors log at error level with the same field set.
 func (g *GormLogger) Trace(ctx context.Context, begin time.Time, fc func() (sql string, rowsAffected int64), err error) {
 	meta := requestctx.FromContext(ctx)
 	username := meta.Username()
@@ -294,6 +298,8 @@ func (g *GormLogger) Trace(ctx context.Context, begin time.Time, fc func() (sql 
 	}
 
 	switch {
+	case errors.Is(err, context.Canceled):
+		g.l.Infoz("sql canceled", fields...)
 	case err != nil && !notFound:
 		g.l.Errorz("sql failed", append(fields, zap.Error(err))...)
 	case elapsed > config.App.Database.SlowQueryThreshold:
