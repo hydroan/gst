@@ -11,7 +11,8 @@ import (
 )
 
 // sampleSection is a registered section reading its fields every way a field
-// can: a default tag of each kind, a list and a nested struct.
+// can: a default tag of each kind, a list, a nested struct, a time, and a
+// field no key reads.
 type sampleSection struct {
 	Endpoint string        `mapstructure:"endpoint" default:"127.0.0.1:8080"`
 	Enabled  bool          `mapstructure:"enabled" default:"true"`
@@ -21,6 +22,8 @@ type sampleSection struct {
 	Nested   struct {
 		Label string `mapstructure:"label" default:"nested"`
 	} `mapstructure:"nested"`
+	Since    time.Time `mapstructure:"since"`
+	Internal string    `mapstructure:"-" default:"internal"`
 }
 
 // TestInitReadsTheEnvironmentForKeysTheFileLeavesOut proves a framework key
@@ -60,6 +63,28 @@ func TestRegisteredSectionTakesEveryEnvironmentValue(t *testing.T) {
 	require.Equal(t, []string{"alpha", "beta"}, section.Tags)
 	require.Equal(t, "from-env", section.Nested.Label)
 	require.Equal(t, 5*time.Second, section.Timeout, "a field no variable sets keeps its default tag")
+	require.Equal(t, "internal", section.Internal, "a field no key reads keeps its default tag")
+	require.True(t, section.Since.IsZero(), "a time is a value of its own, not a nested section")
+}
+
+// TestVariableNamedLikeASectionHasNoEffect proves a variable named like a
+// section rather than a key — a framework section, a registered section or a
+// nested struct in one — reads no key: the keys under it still resolve from
+// their own variables, the file and the defaults.
+func TestVariableNamedLikeASectionHasNoEffect(t *testing.T) {
+	withFreshRegistry(t, "[server]\nport = 8097\n[sample_section]\nretries = 7\n")
+	t.Setenv("SERVER", "prod")
+	t.Setenv("SAMPLE_SECTION", "")
+	t.Setenv("SAMPLE_SECTION_NESTED", "on")
+
+	Register[sampleSection]()
+	require.NoError(t, Init())
+
+	require.Equal(t, 8097, App.Server.Port)
+	section := Get[sampleSection]()
+	require.Equal(t, 7, section.Retries)
+	require.Equal(t, "127.0.0.1:8080", section.Endpoint)
+	require.Equal(t, "nested", section.Nested.Label)
 }
 
 // TestInitFailsOnAnEnvironmentValueItCannotDecode proves a variable whose value
@@ -85,13 +110,76 @@ func TestInitFailsOnAnEnvironmentValueItCannotDecode(t *testing.T) {
 	})
 
 	t.Run("malformed_default_tag", func(t *testing.T) {
-		withFreshRegistry(t, "")
-		type malformedDefault struct {
-			Timeout time.Duration `mapstructure:"timeout" default:"soon"`
+		cases := []struct {
+			name     string
+			register func()
+			tag      string
+		}{
+			{
+				name: "duration",
+				register: func() {
+					Register[struct {
+						Timeout time.Duration `mapstructure:"timeout" default:"soon"`
+					}]()
+				},
+				tag: "soon",
+			},
+			{
+				name: "bool",
+				register: func() {
+					Register[struct {
+						Enabled bool `mapstructure:"enabled" default:"yes-please"`
+					}]()
+				},
+				tag: "yes-please",
+			},
+			{
+				name: "int",
+				register: func() {
+					Register[struct {
+						Retries int `mapstructure:"retries" default:"three"`
+					}]()
+				},
+				tag: "three",
+			},
+			{
+				name: "uint_out_of_range",
+				register: func() {
+					Register[struct {
+						Port uint16 `mapstructure:"port" default:"70000"`
+					}]()
+				},
+				tag: "70000",
+			},
+			{
+				name: "float",
+				register: func() {
+					Register[struct {
+						Ratio float64 `mapstructure:"ratio" default:"half"`
+					}]()
+				},
+				tag: "half",
+			},
+			{
+				name: "pointer_in_nested_struct",
+				register: func() {
+					Register[struct {
+						Nested struct {
+							Enabled *bool `mapstructure:"enabled" default:"ture"`
+						} `mapstructure:"nested"`
+					}]()
+				},
+				tag: "ture",
+			},
 		}
+		for _, tc := range cases {
+			t.Run(tc.name, func(t *testing.T) {
+				withFreshRegistry(t, "")
 
-		Register[malformedDefault]()
-		require.ErrorContains(t, Init(), `default tag "soon"`)
+				tc.register()
+				require.ErrorContains(t, Init(), `default tag "`+tc.tag+`"`)
+			})
+		}
 	})
 }
 
