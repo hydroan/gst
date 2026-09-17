@@ -18,7 +18,7 @@ import (
 
 const (
 	// httpBodyLogMessage is the log message of every body log entry. Body logs
-	// go to their own log file (http_body.log) whose encoder drops the message
+	// go to a stream of their own (http_body) whose encoder drops the message
 	// field, so this only shows up when a custom logger keeps that field.
 	httpBodyLogMessage = "http_body"
 

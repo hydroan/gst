@@ -40,8 +40,9 @@ type Logger struct {
 	// With file, every stream writes to a file of its own under Dir, rotated
 	// by MaxAge, MaxSize and MaxBackups, and its entries carry no logger field.
 	//
-	// Both buffer entries and write them out within a second, and in full when
-	// the process stops.
+	// Stdout and the files buffer entries and write them out within a second,
+	// and in full when the process stops. In file mode a stream naming no file,
+	// or naming /dev/stdout or /dev/stderr, writes straight through.
 	// Default: stdout
 	Output LoggerOutput `json:"output" ini:"output" yaml:"output" mapstructure:"output"`
 

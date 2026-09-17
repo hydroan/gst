@@ -88,10 +88,11 @@ func Init() error {
 	logger.OTEL = New("otel.log")
 
 	// Optional provider loggers start on a fallback sharing the global core:
-	// non-nil and safe to use, but owning no file and no sink of their own.
-	// The lifecycle registry replaces each with a dedicated logger for
-	// the providers actually compiled in (see lifecycle.Component.SetLogger), so
-	// a log file exists exactly for the capabilities the binary carries.
+	// non-nil and safe to use, but owning no stream of their own. The
+	// lifecycle registry replaces each with a dedicated logger for the
+	// providers actually compiled in (see lifecycle.Component.SetLogger), so a
+	// stream of its own — a log file in file mode — exists exactly for the
+	// capabilities the binary carries.
 	logger.Cassandra = Fallback("cassandra")
 	logger.Elastic = Fallback("elastic")
 	logger.Etcd = Fallback("etcd")
@@ -194,7 +195,8 @@ func Fallback(component string) types.Logger {
 }
 
 // New builds a types.Logger backed by *zap.Logger.
-// filename: target log file name ("/dev/stdout" for console)
+// filename: the stream's log file, whose name without ".log" names the
+// stream in stdout mode ("/dev/stdout" for console)
 // opts: optional encoder options
 func New(filename string, opts ...Option) *Logger {
 	readConf()
@@ -211,7 +213,8 @@ func New(filename string, opts ...Option) *Logger {
 }
 
 // NewGorm builds a gorm logger.Interface.
-// filename: target log file name ("/dev/stdout" for console)
+// filename: the stream's log file, whose name without ".log" names the
+// stream in stdout mode ("/dev/stdout" for console)
 //
 // The logger deliberately has no zap caller annotation: the wrapper depth
 // between business code and the log call varies per operation, so a fixed
@@ -230,7 +233,8 @@ func NewGorm(filename string) gorml.Interface {
 }
 
 // NewGin builds a *zap.Logger for Gin access logs.
-// filename: target log file name ("/dev/stdout" for console)
+// filename: the stream's log file, whose name without ".log" names the
+// stream in stdout mode ("/dev/stdout" for console)
 func NewGin(filename string) *zap.Logger {
 	readConf()
 	if len(filename) > 0 {
@@ -245,7 +249,8 @@ func NewStdLog() *log.Logger {
 }
 
 // NewZap builds a *zap.Logger with optional filename and options.
-// filename: target log file name ("/dev/stdout" for console)
+// filename: the stream's log file, whose name without ".log" names the
+// stream in stdout mode ("/dev/stdout" for console)
 // opts: optional encoder options
 func NewZap(filename string, opts ...Option) *zap.Logger {
 	readConf()
@@ -260,7 +265,8 @@ func NewZap(filename string, opts ...Option) *zap.Logger {
 }
 
 // NewSugared builds a *zap.SugaredLogger with optional filename and options.
-// filename: target log file name ("/dev/stdout" for console)
+// filename: the stream's log file, whose name without ".log" names the
+// stream in stdout mode ("/dev/stdout" for console)
 // opts: optional encoder options
 func NewSugared(filename string, opts ...Option) *zap.SugaredLogger {
 	readConf()

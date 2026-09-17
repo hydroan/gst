@@ -71,7 +71,7 @@ func (s Stage) String() string {
 // Component is one framework component with a lifetime of its own.
 type Component struct {
 	// Name uniquely identifies the component in the registry, in errors, in
-	// logs and in the name of its log file. Framework components use their
+	// logs and in the name of its log stream. Framework components use their
 	// package name (the final import path element); a project's work is
 	// registered by the component package under its own name, "component".
 	Name string
