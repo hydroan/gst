@@ -20,8 +20,7 @@ import (
 //
 // Zero-valued fields are skipped so a partially filled section leaves the
 // remaining framework defaults alone, which also means a false bool cannot be
-// exported this way. Fields with no single environment representation, such as
-// slices and maps, are skipped as well.
+// exported this way. Slices and maps are skipped as well.
 func ApplyConfigToEnv(cfg any) {
 	val := reflect.ValueOf(cfg)
 	for val.Kind() == reflect.Pointer {
@@ -86,10 +85,9 @@ func sectionName(typ reflect.Type) string {
 
 // configSections maps each section type of config.Config to the name the
 // section is stored under. Those mapstructure tags are the only authority for
-// the name: config.Init runs viper with AutomaticEnv and a "." to "_" key
-// replacer, so an environment lookup is the upper-cased config path and
-// nothing else. A type name cannot stand in for the tag, config.AppInfo lives
-// under section "app".
+// the name: config.Init binds every key to the upper-cased config path with
+// its dots turned into underscores, and to nothing else. A type name cannot
+// stand in for the tag, config.AppInfo lives under section "app".
 var configSections = buildConfigSections()
 
 func buildConfigSections() map[reflect.Type]string {

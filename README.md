@@ -698,7 +698,7 @@ err := database.Select[*appmodel.Record, recordWithTags](ctx, RecordCols.ID, tag
 每个配置键都按"环境变量 > 配置文件 > 默认值"取值，配置文件里没写的键、`configx` 里 `config.Register`
 注册的自定义段都一样。变量名是键名转大写、点换成下划线：`server.port` 对应 `SERVER_PORT`，
 `logger.http_body.enabled` 对应 `LOGGER_HTTP_BODY_ENABLED`，自定义段 `Sample` 的 `endpoint` 对应
-`SAMPLE_ENDPOINT`。设成空串、`false`、`0` 同样生效。启动时这几种情况直接失败：变量的值转不成对应类型
+`SAMPLE_ENDPOINT`。设成空串、`false`、`0` 同样生效，只有时长和 map 类型的键没有空的写法，设成空串启动失败。启动时这几种情况直接失败：变量的值转不成对应类型
 （报错写明变量名和原值，例如 `SERVER_PORT=tcp://…`）；自定义段和框架内置段重名（比如类型叫 `Mysql`）；
 两个类型注册成同一个段；自定义段的 `default` 标签写错（比如 bool 字段写成 `default:"yes"`）。变量名写错、
 或者只写到段名（比如 `SERVER`）都不会报错，也不生效，按上面的规则核对。

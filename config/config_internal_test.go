@@ -11,9 +11,12 @@ import (
 )
 
 // sampleSection is a registered section reading its fields every way a field
-// can: a default tag of each kind, a list, a nested struct, a time, and a
-// field no key reads.
+// can: a default tag of each kind, a list, a nested struct, an unexported
+// struct squashed in, a time and a pointer to one, a field no key reads, and
+// fields whose tags package defaults passes over.
 type sampleSection struct {
+	sampleBase `mapstructure:",squash"`
+
 	Endpoint string        `mapstructure:"endpoint" default:"127.0.0.1:8080"`
 	Enabled  bool          `mapstructure:"enabled" default:"true"`
 	Retries  int           `mapstructure:"retries" default:"3"`
@@ -22,8 +25,20 @@ type sampleSection struct {
 	Nested   struct {
 		Label string `mapstructure:"label" default:"nested"`
 	} `mapstructure:"nested"`
-	Since    time.Time `mapstructure:"since"`
-	Internal string    `mapstructure:"-" default:"internal"`
+	Since    time.Time     `mapstructure:"since"`
+	Until    *time.Time    `mapstructure:"until"`
+	Internal string        `mapstructure:"-" default:"internal"`
+	Unset    time.Duration `mapstructure:"unset" default:"-"`
+	Blank    time.Duration `mapstructure:"blank" default:""`
+	Skipped  struct {
+		Enabled bool `mapstructure:"enabled" default:"yes"`
+	} `mapstructure:"skipped" default:"-"`
+}
+
+// sampleBase is squashed into sampleSection unexported: its fields are keys
+// of the section all the same.
+type sampleBase struct {
+	Region string `mapstructure:"region"`
 }
 
 // TestInitReadsTheEnvironmentForKeysTheFileLeavesOut proves a framework key
@@ -43,15 +58,18 @@ func TestInitReadsTheEnvironmentForKeysTheFileLeavesOut(t *testing.T) {
 
 // TestRegisteredSectionTakesEveryEnvironmentValue proves a registered
 // section's fields read their environment variables over the file and the
-// default tags — an empty string, false and 0 included, a nested field and a
-// list alike — and fall back to the file, then the default tags.
+// default tags — an empty string, false and 0 included, a nested field, a list
+// and a field of a squashed unexported struct alike — and fall back to the
+// file, then the default tags; a tag package defaults passes over fails
+// nothing.
 func TestRegisteredSectionTakesEveryEnvironmentValue(t *testing.T) {
-	withFreshRegistry(t, "[sample_section]\nendpoint = file.example:8080\nretries = 7\n")
+	withFreshRegistry(t, "[sample_section]\nendpoint = file.example:8080\nretries = 7\nregion = file-region\n")
 	t.Setenv("SAMPLE_SECTION_ENDPOINT", "")
 	t.Setenv("SAMPLE_SECTION_ENABLED", "false")
 	t.Setenv("SAMPLE_SECTION_RETRIES", "0")
 	t.Setenv("SAMPLE_SECTION_TAGS", "alpha,beta")
 	t.Setenv("SAMPLE_SECTION_NESTED_LABEL", "from-env")
+	t.Setenv("SAMPLE_SECTION_REGION", "env-region")
 
 	Register[sampleSection]()
 	require.NoError(t, Init())
@@ -62,9 +80,14 @@ func TestRegisteredSectionTakesEveryEnvironmentValue(t *testing.T) {
 	require.Zero(t, section.Retries)
 	require.Equal(t, []string{"alpha", "beta"}, section.Tags)
 	require.Equal(t, "from-env", section.Nested.Label)
+	require.Equal(t, "env-region", section.Region, "a field of a squashed unexported struct reads its variable too")
 	require.Equal(t, 5*time.Second, section.Timeout, "a field no variable sets keeps its default tag")
 	require.Equal(t, "internal", section.Internal, "a field no key reads keeps its default tag")
 	require.True(t, section.Since.IsZero(), "a time is a value of its own, not a nested section")
+	require.Nil(t, section.Until, "a pointer to a time nothing sets stays nil")
+	require.Zero(t, section.Unset)
+	require.Zero(t, section.Blank)
+	require.False(t, section.Skipped.Enabled, "a struct tagged to be passed over keeps its zero value")
 }
 
 // TestVariableNamedLikeASectionHasNoEffect proves a variable named like a
@@ -120,6 +143,15 @@ func TestInitFailsOnAnEnvironmentValueItCannotDecode(t *testing.T) {
 				register: func() {
 					Register[struct {
 						Timeout time.Duration `mapstructure:"timeout" default:"soon"`
+					}]()
+				},
+				tag: "soon",
+			},
+			{
+				name: "duration_pointer",
+				register: func() {
+					Register[struct {
+						Wait *time.Duration `mapstructure:"wait" default:"soon"`
 					}]()
 				},
 				tag: "soon",

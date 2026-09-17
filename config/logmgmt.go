@@ -13,7 +13,8 @@ const (
 
 // Logmgmt configures the log-management module.
 //
-// CleanupCron is read through the environment key only: the module registers
+// The cleanup schedule has no key of its own: it is read from the
+// LOGMGMT_CLEANUP_CRON environment variable only, since the module registers
 // its cronjob at package initialization, before configuration files are
 // loaded, so a file-provided schedule could not take effect there anyway.
 type Logmgmt struct {

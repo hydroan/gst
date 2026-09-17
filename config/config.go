@@ -467,9 +467,10 @@ func loadSection(name string, typ reflect.Type) error {
 	if err := defaults.Set(defaultCfg.Interface()); err != nil {
 		return errors.Wrapf(err, "config: section %q of %s: failed to apply the default tags", name, typ)
 	}
-	if err := errors.Join(checkDefaultTags(typ), setDefaultDurationFields(typ, defaultCfg.Elem())); err != nil {
+	if err := checkDefaultTags(typ); err != nil {
 		return errors.Wrapf(err, "config: section %q of %s", name, typ)
 	}
+	setDefaultDurationFields(typ, defaultCfg.Elem())
 	walkConfigKeys(name, defaultCfg.Elem(), func(key string, field reflect.Value) {
 		cv.SetDefault(key, field.Interface())
 	})
@@ -526,12 +527,13 @@ func keepUnkeyedDefaults(section, defaultValues reflect.Value) {
 // checkDefaultTags reports each "default" struct tag of typ, a registered
 // section's struct type, that package defaults cannot set its field from —
 // it leaves such a field zero without a word — walking into nested structs
-// and pointers to them. A duration's tag is setDefaultDurationFields' to
-// report, and a list, a map or a struct fails in defaults.Set already.
+// and pointers to them. A field tagged "-" is passed over, as package defaults
+// passes over it, and a list, a map or a struct fails in defaults.Set already.
 func checkDefaultTags(typ reflect.Type) error {
 	var errs error
 	for sf := range typ.Fields() {
-		if !sf.IsExported() {
+		tag := sf.Tag.Get("default")
+		if !sf.IsExported() || tag == "-" {
 			continue
 		}
 		fieldTyp := sf.Type
@@ -542,8 +544,7 @@ func checkDefaultTags(typ reflect.Type) error {
 			errs = errors.Join(errs, checkDefaultTags(fieldTyp))
 			continue
 		}
-		tag := sf.Tag.Get("default")
-		if tag == "" || tag == "-" || fieldTyp == reflect.TypeFor[time.Duration]() {
+		if tag == "" {
 			continue
 		}
 		if err := parseDefaultTag(tag, fieldTyp); err != nil {
@@ -572,9 +573,14 @@ func parseDefaultTag(tag string, typ reflect.Type) error {
 	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32:
 		_, err = strconv.ParseInt(tag, 0, typ.Bits())
 	case reflect.Int64:
-		// A duration first, as for a time.Duration.
-		if _, durationErr := time.ParseDuration(tag); durationErr != nil {
-			_, err = strconv.ParseInt(tag, 0, 64)
+		// A duration first, then an integer; a time.Duration reports why the
+		// tag is no duration.
+		_, durationErr := time.ParseDuration(tag)
+		if durationErr == nil {
+			break
+		}
+		if _, err = strconv.ParseInt(tag, 0, 64); err != nil && typ == reflect.TypeFor[time.Duration]() {
+			err = durationErr
 		}
 	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uintptr:
 		_, err = strconv.ParseUint(tag, 0, typ.Bits())
@@ -585,47 +591,43 @@ func parseDefaultTag(tag string, typ reflect.Type) error {
 }
 
 // setDefaultDurationFields sets each zero time.Duration field of val, a value
-// of struct type typ, from its "default" struct tag, walking into nested
-// structs and pointers to them; a time.Time is a value, not one to walk into.
-// Package defaults sets duration fields from their tags already, but skips a
-// tag it cannot parse without a word; a malformed duration tag is reported
-// here instead.
-func setDefaultDurationFields(typ reflect.Type, val reflect.Value) error {
+// of struct type typ, from its "default" struct tag, walking into nested and
+// embedded structs and pointers to them — a time.Time is a value, not one to
+// walk into — and passing over a field tagged "-". A tag that does not parse
+// leaves its field alone; checkDefaultTags reports it.
+func setDefaultDurationFields(typ reflect.Type, val reflect.Value) {
 	if typ.Kind() != reflect.Struct {
-		return nil
+		return
 	}
-	var errs error
 	for i := range typ.NumField() {
 		fieldTyp := typ.Field(i)
 		fieldVal := val.Field(i)
-		if !fieldTyp.IsExported() {
-			// Package defaults leaves such a field alone, and reflection
-			// cannot set one.
+		defaultValue, tagged := fieldTyp.Tag.Lookup("default")
+		if defaultValue == "-" {
 			continue
 		}
 
-		// Handle embedded structs
+		// Handle embedded structs, an unexported one included: the fields it
+		// promotes are the struct's own.
 		if fieldTyp.Anonymous && fieldTyp.Type.Kind() == reflect.Struct {
-			errs = errors.Join(errs, setDefaultDurationFields(fieldTyp.Type, fieldVal))
+			setDefaultDurationFields(fieldTyp.Type, fieldVal)
+			continue
+		}
+		if !fieldTyp.IsExported() {
+			// Reflection cannot set any other unexported field.
 			continue
 		}
 
 		// Handle time.Duration field
-		if fieldTyp.Type == reflect.TypeFor[time.Duration]() {
-			// Check if the field has a default tag and its current value is zero
-			if defaultValue, ok := fieldTyp.Tag.Lookup("default"); ok && fieldVal.Interface().(time.Duration) == 0 { //nolint:errcheck
-				// Parse the duration string
-				if duration, err := time.ParseDuration(defaultValue); err == nil {
-					fieldVal.Set(reflect.ValueOf(duration))
-				} else {
-					errs = errors.Join(errs, errors.Wrapf(err, "field %s: default tag %q", fieldTyp.Name, defaultValue))
-				}
+		if fieldTyp.Type == reflect.TypeFor[time.Duration]() && tagged && fieldVal.Interface().(time.Duration) == 0 { //nolint:errcheck
+			if duration, err := time.ParseDuration(defaultValue); err == nil {
+				fieldVal.Set(reflect.ValueOf(duration))
 			}
 		}
 
 		// Recursively process nested structs (if not embedded)
-		if fieldTyp.Type.Kind() == reflect.Struct && !fieldTyp.Anonymous && fieldTyp.Type != reflect.TypeFor[time.Time]() {
-			errs = errors.Join(errs, setDefaultDurationFields(fieldTyp.Type, fieldVal))
+		if fieldTyp.Type.Kind() == reflect.Struct && fieldTyp.Type != reflect.TypeFor[time.Time]() {
+			setDefaultDurationFields(fieldTyp.Type, fieldVal)
 		}
 
 		// Handle pointer to struct
@@ -634,10 +636,9 @@ func setDefaultDurationFields(typ reflect.Type, val reflect.Value) error {
 			if fieldVal.IsNil() {
 				fieldVal.Set(reflect.New(fieldTyp.Type.Elem()))
 			}
-			errs = errors.Join(errs, setDefaultDurationFields(fieldTyp.Type.Elem(), fieldVal.Elem()))
+			setDefaultDurationFields(fieldTyp.Type.Elem(), fieldVal.Elem())
 		}
 	}
-	return errs
 }
 
 // bindEnv binds every key of the configuration struct cfg under prefix to its
@@ -674,25 +675,26 @@ func decodeEnvValue(value string, typ reflect.Type) error {
 // walkConfigKeys calls visit with every key of the configuration struct cfg
 // under prefix and the field holding its value, the keys viper decodes: a
 // field is keyed by its mapstructure name, else its field name in lower case,
-// a squashed field adds no key of its own, and a nested struct, or a pointer
-// to one, is walked into. A time.Time is a single value.
+// a squashed field adds no key of its own — an unexported embedded struct
+// squashed in counts, its fields are decoded all the same — and a nested
+// struct, or a pointer to one, is walked into. A time.Time, or a pointer to
+// one, is a single value.
 func walkConfigKeys(prefix string, cfg reflect.Value, visit func(key string, field reflect.Value)) {
 	for sf, field := range cfg.Fields() {
-		if !sf.IsExported() {
-			continue
-		}
 		name, options, _ := strings.Cut(sf.Tag.Get("mapstructure"), ",")
-		if name == "-" {
+		squash := slices.Contains(strings.Split(options, ","), "squash")
+		decoded := sf.IsExported() || squash && sf.Anonymous && sf.Type.Kind() == reflect.Struct
+		if name == "-" || !decoded {
 			continue
 		}
 		key := prefix
-		if !slices.Contains(strings.Split(options, ","), "squash") {
+		if !squash {
 			if name == "" {
 				name = sf.Name
 			}
 			key = strings.TrimPrefix(prefix+"."+strings.ToLower(name), ".")
 		}
-		if field.Kind() == reflect.Pointer && field.Type().Elem().Kind() == reflect.Struct {
+		if field.Kind() == reflect.Pointer && field.Type().Elem().Kind() == reflect.Struct && field.Type().Elem() != reflect.TypeFor[time.Time]() {
 			if field.IsNil() {
 				field.Set(reflect.New(field.Type().Elem()))
 			}
