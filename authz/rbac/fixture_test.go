@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/internal/dbruntime"
 	zaplogger "github.com/hydroan/gst/logger/zap"
 	"github.com/prometheus/client_golang/prometheus"
@@ -23,6 +24,9 @@ import (
 func TestMain(m *testing.M) {
 	// Opening a transaction logs through logger.Database, and a failed in-memory
 	// update logs through logger.Authz. Both are nil until the loggers are wired.
+	// The process runs no config.Init, so the output is set here: file mode
+	// keeps the logs out of the test output.
+	config.App.Logger.Output = config.LoggerOutputFile
 	if err := zaplogger.Init(); err != nil {
 		panic(err)
 	}
