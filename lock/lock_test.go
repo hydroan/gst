@@ -294,16 +294,6 @@ func TestStartRefusesAClickhousePrimary(t *testing.T) {
 	require.ErrorContains(t, err, `lock "clustered-work" runs its work once at a time across the deployment`)
 }
 
-// startOnClickhouse checks the locks on a ClickHouse primary database — a
-// connection handle that only names its dialect — and puts the suite's
-// database back.
-func startOnClickhouse() error {
-	original := dbruntime.DB
-	dbruntime.DB = &gorm.DB{Config: &gorm.Config{Dialector: clickhouseDialector{}}}
-	defer func() { dbruntime.DB = original }()
-	return start(context.Background())
-}
-
 // TestLocksAreALifecycleComponent proves importing the package is what
 // enables locks: init registered them as a lifecycle component whose Start
 // and logger binding are this package's, so bootstrap checks the
@@ -403,6 +393,16 @@ type clickhouseDialector struct {
 }
 
 func (clickhouseDialector) Name() string { return "clickhouse" }
+
+// startOnClickhouse checks the locks on a ClickHouse primary database — a
+// connection handle that only names its dialect — and puts the suite's
+// database back.
+func startOnClickhouse() error {
+	original := dbruntime.DB
+	dbruntime.DB = &gorm.DB{Config: &gorm.Config{Dialector: clickhouseDialector{}}}
+	defer func() { dbruntime.DB = original }()
+	return start(context.Background())
+}
 
 // noopWork is work that returns at once, for tests about the try rather than
 // the work.

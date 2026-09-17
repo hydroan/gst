@@ -19,6 +19,19 @@ import (
 	"go.uber.org/zap"
 )
 
+var (
+	mu sync.Mutex
+	// works holds every registration, in registration order.
+	works []*work
+	// errRegister collects the registrations that cannot be honored; start
+	// fails on it, so a bad registration is reported at startup and not
+	// lost.
+	errRegister error
+	// started is set by start: a registration after that would never run,
+	// so it fails fast instead.
+	started bool
+)
+
 func init() {
 	// Importing this package is what enables the work: through the
 	// lifecycle registry, bootstrap starts every registered function once
@@ -32,18 +45,6 @@ func init() {
 		Stop:  stop,
 	})
 }
-
-var (
-	mu    sync.Mutex
-	works []*work
-	// errRegister collects the registrations that cannot be honored; start
-	// fails on it, so a bad registration is reported at startup and not
-	// lost.
-	errRegister error
-	// started is set by start: a registration after that would never run,
-	// so it fails fast instead.
-	started bool
-)
 
 // Register declares fn as the work named name, run on every replica for the
 // life of the process. Registration belongs in package init functions: the

@@ -96,21 +96,6 @@ var (
 	started bool
 )
 
-// Lock is one declared lock.
-type Lock struct {
-	name string
-}
-
-// Name returns the lock's name.
-func (l *Lock) Name() string {
-	return l.name
-}
-
-// leaseName is the coordinated name the lock is claimed under.
-func (l *Lock) leaseName() string {
-	return "lock:" + l.name
-}
-
 func init() {
 	// Importing this package is what enables locks: through the lifecycle
 	// registry, bootstrap checks the declared locks once the tables are
@@ -142,6 +127,21 @@ func logger() types.Logger {
 		log = pkgzap.Fallback("lock")
 	}
 	return log
+}
+
+// Lock is one declared lock.
+type Lock struct {
+	name string
+}
+
+// Name returns the lock's name.
+func (l *Lock) Name() string {
+	return l.name
+}
+
+// leaseName is the coordinated name the lock is claimed under.
+func (l *Lock) leaseName() string {
+	return "lock:" + l.name
 }
 
 // New declares the lock named name and returns it. Declarations belong in

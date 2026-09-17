@@ -63,8 +63,8 @@ var (
 	// silently running without that work.
 	errRegister error
 	// log is the elector's logger: the dedicated leader stream the lifecycle
-	// binds before the component starts, or one of the package's own in a
-	// process that never ran the lifecycle.
+	// binds before the component starts, or, in a process that never ran the
+	// lifecycle, a logger that writes to the global log stream; see start.
 	log types.Logger
 	// current is the started elector, nil until start. A registration after
 	// that would never campaign, so it fails fast instead.

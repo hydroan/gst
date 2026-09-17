@@ -13,51 +13,6 @@ import (
 	"go.uber.org/zap/zaptest/observer"
 )
 
-// withRegistry gives the test a registry of its own and restores the
-// process's afterwards.
-func withRegistry(t *testing.T) {
-	t.Helper()
-
-	mu.Lock()
-	savedWorks, savedErr, savedStarted := works, errRegister, started
-	works, errRegister, started = nil, nil, false
-	mu.Unlock()
-	t.Cleanup(func() {
-		mu.Lock()
-		works, errRegister, started = savedWorks, savedErr, savedStarted
-		mu.Unlock()
-	})
-}
-
-// withRecordedFailures records the process failures the work reports
-// instead of ending the process, and restores the real reporting afterwards.
-func withRecordedFailures(t *testing.T) <-chan error {
-	t.Helper()
-
-	failures := make(chan error, 4)
-	original := fail
-	fail = func(err error) { failures <- err }
-	t.Cleanup(func() { fail = original })
-	return failures
-}
-
-// withObservedGlobalLogger routes the global logger into an observer for the
-// test and restores the previous one afterwards.
-func withObservedGlobalLogger(t *testing.T) *observer.ObservedLogs {
-	t.Helper()
-
-	core, logs := observer.New(zapcore.WarnLevel)
-	restore := zap.ReplaceGlobals(zap.New(core))
-	t.Cleanup(restore)
-	return logs
-}
-
-// idle is work that runs until the process stops.
-func idle(ctx context.Context) error {
-	<-ctx.Done()
-	return nil
-}
-
 // TestPackageIsOneComponentOfTheLifecycle proves importing the package
 // registers the one component that starts and stops every registered work,
 // and that Register lists the work under its name.
@@ -229,4 +184,49 @@ func TestStopReportsNothingOnceTheWorkReturned(t *testing.T) {
 	for range 100 {
 		require.NoError(t, w.stop(ended), "work that returned must not be reported as given up on")
 	}
+}
+
+// idle is work that runs until the process stops.
+func idle(ctx context.Context) error {
+	<-ctx.Done()
+	return nil
+}
+
+// withRegistry gives the test a registry of its own and restores the
+// process's afterwards.
+func withRegistry(t *testing.T) {
+	t.Helper()
+
+	mu.Lock()
+	savedWorks, savedErr, savedStarted := works, errRegister, started
+	works, errRegister, started = nil, nil, false
+	mu.Unlock()
+	t.Cleanup(func() {
+		mu.Lock()
+		works, errRegister, started = savedWorks, savedErr, savedStarted
+		mu.Unlock()
+	})
+}
+
+// withRecordedFailures records the process failures the work reports
+// instead of ending the process, and restores the real reporting afterwards.
+func withRecordedFailures(t *testing.T) <-chan error {
+	t.Helper()
+
+	failures := make(chan error, 4)
+	original := fail
+	fail = func(err error) { failures <- err }
+	t.Cleanup(func() { fail = original })
+	return failures
+}
+
+// withObservedGlobalLogger routes the global logger into an observer for the
+// test and restores the previous one afterwards.
+func withObservedGlobalLogger(t *testing.T) *observer.ObservedLogs {
+	t.Helper()
+
+	core, logs := observer.New(zapcore.WarnLevel)
+	restore := zap.ReplaceGlobals(zap.New(core))
+	t.Cleanup(restore)
+	return logs
 }

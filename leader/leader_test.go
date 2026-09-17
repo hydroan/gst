@@ -304,8 +304,8 @@ func TestStopReportsNothingOnceTheWorkReturned(t *testing.T) {
 	}
 }
 
-// TestStopWithoutStartIsNoop keeps stop safe in processes that never started
-// the elector.
+// TestStopWithoutStartIsNoop proves stop does nothing in a process that never
+// started the elector.
 func TestStopWithoutStartIsNoop(t *testing.T) {
 	resetLeaderState(t)
 
@@ -389,16 +389,6 @@ func TestStartRefusesAClickhousePrimary(t *testing.T) {
 	require.ErrorContains(t, err, `leader "clustered-work" runs on one replica of the deployment`)
 }
 
-// startOnClickhouse starts the elector on a ClickHouse primary database — a
-// connection handle that only names its dialect — and puts the suite's
-// database back.
-func startOnClickhouse() error {
-	original := dbruntime.DB
-	dbruntime.DB = &gorm.DB{Config: &gorm.Config{Dialector: clickhouseDialector{}}}
-	defer func() { dbruntime.DB = original }()
-	return start(context.Background())
-}
-
 // TestElectorIsALifecycleComponent proves importing the package is what
 // enables the elections: init registered the elector as a lifecycle
 // component whose Start, Stop and logger binding are this package's, so
@@ -453,6 +443,16 @@ type clickhouseDialector struct {
 
 func (clickhouseDialector) Name() string { return "clickhouse" }
 
+// startOnClickhouse starts the elector on a ClickHouse primary database — a
+// connection handle that only names its dialect — and puts the suite's
+// database back.
+func startOnClickhouse() error {
+	original := dbruntime.DB
+	dbruntime.DB = &gorm.DB{Config: &gorm.Config{Dialector: clickhouseDialector{}}}
+	defer func() { dbruntime.DB = original }()
+	return start(context.Background())
+}
+
 // noopWork is work that returns at once, for tests about registration
 // rather than running.
 func noopWork(context.Context) error {
@@ -469,6 +469,7 @@ type tenureLog struct {
 	began      chan struct{}
 }
 
+// newTenureLog returns a log with no tenure counted yet.
 func newTenureLog() *tenureLog {
 	return &tenureLog{began: make(chan struct{}, 64)}
 }
