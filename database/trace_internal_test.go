@@ -53,6 +53,25 @@ func TestOperationLogFieldsFitTheCapacityInTheWorstCase(t *testing.T) {
 	require.Equal(t, operationLogFieldCap, cap(fields), "the slice must not have regrown")
 }
 
+// TestOperationLogFieldsReadTheOutcome pins the outcome field of an
+// operation's log entry: record_not_found for a missing row, canceled for an
+// operation its context canceled, and the error for a failure alone.
+func TestOperationLogFieldsReadTheOutcome(t *testing.T) {
+	keys := func(err error) map[string]bool {
+		got := make(map[string]bool)
+		for _, field := range operationLogFields("TraceSample", 0, time.Millisecond, false, err) {
+			got[field.Key] = true
+		}
+		return got
+	}
+
+	require.True(t, keys(ErrRecordNotFound)["record_not_found"])
+	canceled := keys(errors.Wrap(context.Canceled, "sample"))
+	require.True(t, canceled["canceled"])
+	require.False(t, canceled["error"], "a canceled operation carries no error")
+	require.True(t, keys(errors.New("sample failure"))["error"])
+}
+
 // TestHookSpanAttributesFitTheCapacityInTheWorstCase pins hookOutcomeAttrCap
 // to the outcome batch of a hook that failed, on top of the three attributes
 // the hook span starts with.

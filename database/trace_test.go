@@ -74,6 +74,22 @@ func TestTraceSpanReadsOutcomeLikeTheLog(t *testing.T) {
 		require.NotContains(t, attrs, "error")
 	})
 
+	t.Run("an operation its context canceled marks the span canceled, not failed", func(t *testing.T) {
+		ctx, cancel := context.WithCancel(context.Background())
+		cancel()
+		items := make([]*TestItem, 0)
+		err := database.Database[*TestItem](ctx).List(&items)
+		require.ErrorIs(t, err, context.Canceled)
+
+		span := lastEndedNamed(t, recorder, "database.TestItem.List")
+		require.NotEqual(t, codes.Error, span.Status().Code)
+		require.Empty(t, span.Events(), "a canceled operation must not be recorded as an exception")
+		attrs := spanAttributes(span)
+		canceled, ok := attrs["database.canceled"].(bool)
+		require.True(t, ok && canceled, "the span must carry database.canceled")
+		require.NotContains(t, attrs, "error")
+	})
+
 	t.Run("a real failure records the error and marks the span failed", func(t *testing.T) {
 		code := "trace-dup-" + strconv.FormatInt(time.Now().UnixNano(), 36)
 		first := &TestUniqueItem{UniqueCode: code, Name: "first"}

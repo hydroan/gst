@@ -170,8 +170,9 @@ func (db *database[M]) traceAs(modelName string, phase consts.Phase, batch ...in
 		// record-not-found are normal outcomes, so neither marks the span as
 		// failed — a missing row is answered by an OK span carrying
 		// database.record_not_found, the counterpart of the log's
-		// record_not_found field — and only a real failure records the error
-		// and sets the error status.
+		// record_not_found field — an operation its context canceled carries
+		// database.canceled beside the log's canceled field, and only a real
+		// failure records the error and sets the error status.
 		if gstotel.IsSpanRecording(span) {
 			attrs := make([]attribute.KeyValue, 0, operationOutcomeAttrCap)
 			attrs = append(attrs, attribute.Int64("database.duration_ms", duration.Milliseconds()))
@@ -182,6 +183,10 @@ func (db *database[M]) traceAs(modelName string, phase consts.Phase, batch ...in
 			case errors.Is(err, ErrRecordNotFound):
 				span.SetStatus(codes.Ok, "")
 				attrs = append(attrs, attribute.Bool("database.record_not_found", true))
+			case errors.Is(err, context.Canceled):
+				// Left unset: the operation did not complete, and did not fail
+				// either — whoever canceled its context ended it.
+				attrs = append(attrs, attribute.Bool("database.canceled", true))
 			default:
 				span.SetStatus(codes.Error, err.Error())
 				gstotel.RecordError(span, err)
@@ -193,11 +198,16 @@ func (db *database[M]) traceAs(modelName string, phase consts.Phase, batch ...in
 		// Log operation results. Success and record-not-found stay at debug
 		// level: both are normal outcomes whose timing the SQL log and the
 		// operation span already cover, so they only matter when tracing an
-		// operation end to end. Real failures log at error level.
+		// operation end to end. An operation its context canceled stays at
+		// debug level too, since whoever canceled it ended it. Real failures
+		// log at error level.
 		fields := operationLogFields(modelName, _batch, duration, db.dryRun, err)
-		if err == nil || errors.Is(err, ErrRecordNotFound) {
+		switch {
+		case err == nil || errors.Is(err, ErrRecordNotFound):
 			logger.Database.WithContext(db.ctx, phase).Debugz("database operation completed", fields...)
-		} else {
+		case errors.Is(err, context.Canceled):
+			logger.Database.WithContext(db.ctx, phase).Debugz("database operation canceled", fields...)
+		default:
 			logger.Database.WithContext(db.ctx, phase).Errorz("database operation failed", fields...)
 		}
 	}, span
@@ -206,7 +216,8 @@ func (db *database[M]) traceAs(modelName string, phase consts.Phase, batch ...in
 // operationLogFields builds the fields of one operation's log entry: the
 // model, the constant markers batch_size and dry_run only when meaningful,
 // the duration pair, and the outcome — record_not_found for a missing row,
-// the error for a failure, nothing for success.
+// canceled for an operation its context canceled, the error for a failure,
+// nothing for success.
 func operationLogFields(modelName string, batch int, duration time.Duration, dryRun bool, err error) []zap.Field {
 	fields := make([]zap.Field, 0, operationLogFieldCap)
 	fields = append(fields, zap.String("model", modelName))
@@ -221,6 +232,8 @@ func operationLogFields(modelName string, batch int, duration time.Duration, dry
 	case err == nil:
 	case errors.Is(err, ErrRecordNotFound):
 		fields = append(fields, zap.Bool("record_not_found", true))
+	case errors.Is(err, context.Canceled):
+		fields = append(fields, zap.Bool("canceled", true))
 	default:
 		fields = append(fields, zap.Error(err))
 	}
