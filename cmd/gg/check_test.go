@@ -385,6 +385,29 @@ type Record struct {
 	}
 }
 
+// TestCheckAllowedDirectoriesAcceptsConventionalProjectDirectories proves the
+// directories a project conventionally keeps beside its packages — test
+// suites, development scripts and Helm charts, next to the deployment
+// manifests and operator scripts — pass the directory check, while a
+// directory the project structure has no place for is still reported.
+func TestCheckAllowedDirectoriesAcceptsConventionalProjectDirectories(t *testing.T) {
+	projectDir := t.TempDir()
+	t.Chdir(projectDir)
+
+	writeCheckFile(t, filepath.Join(projectDir, "go.mod"), "module tmpapp\n\ngo 1.26\n\nrequire github.com/hydroan/gst v0.0.0\n")
+	for _, dir := range []string{"deploy", "scripts", "test", "hack", "charts", "sample"} {
+		if err := os.MkdirAll(filepath.Join(projectDir, dir), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	violations := CheckAllowedDirectories(newProjectIgnoreMatcher())
+	want := []string{"Directory 'sample' is not allowed in project structure"}
+	if !slices.Equal(violations, want) {
+		t.Fatalf("expected only the unplaced directory reported, got %#v", violations)
+	}
+}
+
 func writeCheckFile(t *testing.T, path string, content string) {
 	t.Helper()
 
