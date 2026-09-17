@@ -54,9 +54,10 @@ func ExampleLock_TryRun() {
 
 // ExampleLock_TryRun_scheduledJob hands long work from a request to a
 // scheduled job. The work runs on the context the try is given, so work tried
-// in a request stops when the client disconnects or the request times out. A
-// request asking for a long rebuild records the ask instead, and a job picks
-// it up. The same lock keeps the job apart from a rebuild an administrator
+// in a request stops when the client disconnects, and work that outlasts the
+// server's write timeout — 15 seconds unless configured — runs on while its
+// response never reaches the client. A request asking for a long rebuild
+// records the ask instead, and a job picks it up. The same lock keeps the job apart from a rebuild an administrator
 // starts by hand, and a job that finds the lock held skips the round: the
 // other holder is doing the work already.
 func ExampleLock_TryRun_scheduledJob() {
