@@ -26,6 +26,10 @@ import (
 // Work that must happen only once the transaction is durable belongs in
 // AfterCommit instead, which runs it after the commit and skips it on rollback.
 //
+// ctx ending before the commit rolls the transaction back, and the error
+// returned is that ending, ctx.Err(), wrapped: work told to stop tells it from
+// a failure of its own.
+//
 // Returns ErrNilTransaction if fn is nil, and an error marked with
 // ErrAfterCommit when the transaction committed but a registered after-commit
 // action failed. Returns ErrUnsupportedOnDialect on a ClickHouse instance,

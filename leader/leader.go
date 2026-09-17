@@ -22,10 +22,11 @@
 // that ends the moment the tenure does, and the transactions opened on that
 // context end with it. Work that runs on past that point — it ignores its
 // context — would run beside the new leader's, the very thing the lease
-// exists to rule out, so 5 seconds after a tenure ended by a lost lease the
-// process fails and exits without waiting for it: bootstrap ends Run with
-// the failure and the orchestrator restarts the replica. A ClickHouse primary
-// database cannot carry leases, so a registration fails the start there.
+// exists to rule out, so 5 seconds after the lease was lost — also while the
+// work winds down after the process began shutting down — the process fails
+// and exits without waiting for it: bootstrap ends Run with the failure and
+// the orchestrator restarts the replica. A ClickHouse primary database cannot
+// carry leases, so a registration fails the start there.
 //
 // The work runs again from scratch on the replica that takes the name over,
 // and its previous run may have been cut anywhere: what it must not repeat,
@@ -101,8 +102,8 @@ func setLogger(l types.Logger) {
 // whatever fn does after that must stop: a database.Transaction opened on
 // the context refuses to run once the lease is gone, a plain write and a
 // call already on the wire do not, so fn watches the context around its own
-// side effects. fn that has not returned 5 seconds after its context ended
-// by a lost lease fails the process, see the package documentation. The
+// side effects. fn that has not returned 5 seconds after the lease was lost,
+// shutting down or not, fails the process, see the package documentation. The
 // context carries the tenure's identity — the name and a trace id of the
 // tenure's own, see execctx — so every statement and log line the work
 // produces is annotated with the tenure and found again from any of them.

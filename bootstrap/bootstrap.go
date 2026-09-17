@@ -94,7 +94,7 @@ func Bootstrap() error {
 	}
 	// Registered first so they run last: every cleanup after them logs what
 	// it did, and a line written once the log writers have stopped never
-	// reaches its file. The temp directory goes right before the writers,
+	// reaches the output. The temp directory goes right before the writers,
 	// for the same reason.
 	registerCleanup(pkgzap.Clean)
 	registerCleanup(config.Clean)
