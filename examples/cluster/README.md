@@ -207,6 +207,26 @@ kubectl -n $NS scale deployment/cluster --replicas=3
 
 停机期间错过的调度时刻没人领。三个副本一起启动，每个共享任务只由一个副本补跑最近一个时刻，日志带 `"catch_up":true`；更早的时刻不补。补跑的 `slow` 同样要跑 20 秒，盖过了下一个时刻的话，那个时刻被跳过，记 `cronjob skipped instants`；跳过的时刻记在租约表里，之后再有副本启动也不会补它。
 
+检验这一点，要让补跑的 `slow` 一定盖过下一个时刻，再赶在下下个时刻之前启动一个副本。`slow` 的时刻落在每分钟的 0 秒和 30 秒，所以等秒数除以 30 余 10～13 时再恢复：
+
+```bash
+kubectl -n $NS scale deployment/cluster --replicas=0
+kubectl -n $NS wait --for=delete pod -l app.kubernetes.io/name=cluster --timeout=150s
+sleep 35
+until s=$(( $(date +%s) % 30 )) && [ "$s" -ge 10 ] && [ "$s" -lt 14 ]; do sleep 0.3; done
+SINCE=$(date -u +%Y-%m-%dT%H:%M:%S); UP_MS=$(( $(date +%s) * 1000 ))
+kubectl -n $NS scale deployment/cluster --replicas=3
+# 补跑的一轮跑完时，把 slot_ms 记到它盖过的时刻，那个时刻晚于恢复的时刻。
+until SKIPPED=$(echo "SELECT slot_ms FROM gst_leases WHERE name = 'cron:slow' AND unfinished_slot_ms = 0 AND slot_ms > $UP_MS" | sqlv) && [ -n "$SKIPPED" ]; do sleep 1; done
+kubectl -n $NS scale deployment/cluster --replicas=4
+jq -rn --argjson ms "$SKIPPED" '"on record: \($ms / 1000 | todate)"'
+sleep 40
+logs ".name == \"slow\" and .ts >= \"$SINCE\" and (.trace_id != null or .msg == \"cronjob skipped instants\")" | jq -c '{msg, at, catch_up, after, instance}'
+kubectl -n $NS scale deployment/cluster --replicas=3
+```
+
+补跑的那一轮跑完时，记下它盖过的时刻：`on record` 打出的就是这个时刻，日志里 `cronjob skipped instants` 的 `after` 是补跑的时刻，被跳过的是它 30 秒之后那个。第 4 个副本在下一个时刻之前启动，它不补跑被跳过的时刻：日志里只有最初那一次 `"catch_up":true`，被跳过的时刻没有任何一轮。日志里没有 `cronjob skipped instants` 的话，是副本起得太快、补跑没盖过下一个时刻，这次检验不算数，重做一遍。
+
 ### 8. 优雅停机：先摘流量再关
 
 ```bash
