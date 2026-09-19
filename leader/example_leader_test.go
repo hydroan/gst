@@ -6,9 +6,12 @@ import (
 	"time"
 
 	"github.com/cockroachdb/errors"
+	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/database"
 	"github.com/hydroan/gst/leader"
 	"github.com/hydroan/gst/logger"
+	"github.com/hydroan/gst/provider/kafka"
+	"github.com/twmb/franz-go/pkg/kgo"
 )
 
 // ExampleRegister registers leader work the way a project does, from the init
@@ -131,6 +134,83 @@ func ExampleRegister_resume() {
 	}, "record-scan")
 }
 
+// ExampleRegister_kafkaConsumer has one replica of the deployment consume a
+// Kafka topic, and another take over when it goes: within about 6 seconds of
+// a leader that shut down, within about 21 of one that crashed or lost the
+// primary database.
+//
+// The lease is what makes the consumer the only one, so the work assigns the
+// partitions itself instead of joining a consumer group: a group would be a
+// second coordinator, and the membership of a leader that crashed would hold
+// the partitions until the group's session timeout — 45 seconds by default —
+// well past the lease's.
+//
+// Where the consumption stands lives in the database, written together with
+// each record's results in one database.Transaction opened on the tenure's
+// context. The transaction refuses to run once the lease is lost, so a replica
+// that lost the name cannot record progress in place of the new leader, and
+// the new leader reads the offsets back and goes on from them: no record is
+// skipped and none is applied twice. Offsets committed to Kafka instead would
+// be a write the lease does not check: a record the last leader applied but
+// had not committed yet would be applied again.
+//
+// The framework knows whether a replica reaches the primary database, not
+// whether it reaches Kafka, and a poll does not fail while Kafka is out of
+// reach, it just brings nothing. So a poll waits 30 seconds at most, and one
+// that brought nothing pings Kafka: a replica that cannot reach it returns,
+// which hands the name back, and waits a campaign interval before it
+// campaigns again, so another replica usually takes the name over. Calls the
+// work makes outside the transaction — a message produced to another topic, a
+// call to another system — are not checked against the lease: their receivers
+// deduplicate.
+func ExampleRegister_kafkaConsumer() {
+	leader.Register(func(ctx context.Context) error {
+		offsets, err := loadConsumedOffsets(ctx, "events")
+		if err != nil {
+			return errors.Wrap(err, "load consumed offsets")
+		}
+		client, err := kafka.New(config.App.Kafka, kgo.ConsumePartitions(map[string]map[int32]kgo.Offset{"events": offsets}))
+		if err != nil {
+			return errors.Wrap(err, "create kafka client")
+		}
+		defer client.Close()
+
+		for {
+			pollCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+			fetches := client.PollFetches(pollCtx)
+			cancel()
+			if ctx.Err() != nil {
+				// The tenure ended: stop consuming at once.
+				return ctx.Err()
+			}
+			for _, fetchErr := range fetches.Errors() {
+				// The end of the poll's own wait is not a failure.
+				if !errors.Is(fetchErr.Err, context.DeadlineExceeded) {
+					return errors.Wrapf(fetchErr.Err, "fetch %s partition %d", fetchErr.Topic, fetchErr.Partition)
+				}
+			}
+			if fetches.NumRecords() == 0 {
+				// A quiet topic, or Kafka out of reach: only a ping tells.
+				if err := client.Ping(ctx); err != nil && ctx.Err() == nil {
+					return errors.Wrap(err, "reach kafka")
+				}
+				continue
+			}
+			for _, record := range fetches.Records() {
+				err := database.Transaction(ctx, func(ctx context.Context) error {
+					if err := applyEvent(ctx, record.Value); err != nil {
+						return err
+					}
+					return saveConsumedOffset(ctx, record.Topic, record.Partition, record.Offset+1)
+				})
+				if err != nil {
+					return errors.Wrapf(err, "apply the event at %s partition %d offset %d", record.Topic, record.Partition, record.Offset)
+				}
+			}
+		}
+	}, "event-consumer")
+}
+
 // ExampleRegister_returning shows what each way out of the work means. The
 // work is expected to run until ctx ends, and returning that ending — ctx.Err()
 // or context.Cause(ctx), wrapped or not — ends the tenure normally. Returning
@@ -230,6 +310,20 @@ func scanRecordsAfter(context.Context, int64, int) ([]int64, int64, error) { ret
 
 // saveScanBatch writes a batch's results and the new cursor.
 func saveScanBatch(context.Context, []int64, int64) error { return nil }
+
+// loadConsumedOffsets reads, for every partition of topic, the offset its
+// consumption goes on from: the one stored after the last record applied, or
+// the start of a partition never consumed.
+func loadConsumedOffsets(context.Context, string) (map[int32]kgo.Offset, error) {
+	return map[int32]kgo.Offset{}, nil
+}
+
+// applyEvent applies one event to the project's tables.
+func applyEvent(context.Context, []byte) error { return nil }
+
+// saveConsumedOffset stores the offset the consumption of a partition goes on
+// from.
+func saveConsumedOffset(context.Context, string, int32, int64) error { return nil }
 
 // relayOnce relays what is pending.
 func relayOnce(context.Context) error { return nil }
