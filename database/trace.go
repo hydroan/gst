@@ -37,6 +37,7 @@ const (
 	phaseCleanup       consts.Phase = "cleanup"
 	phaseHealth        consts.Phase = "health"
 	phaseWithQuery     consts.Phase = "with_query"
+	phaseTransaction   consts.Phase = "transaction"
 )
 
 // trace returns a timing function for database operations that provides comprehensive
