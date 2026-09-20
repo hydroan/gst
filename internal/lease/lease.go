@@ -129,8 +129,9 @@ import (
 // The protocol's timings, those of client-go's leader election: a holder
 // renews at the retry period and keeps retrying a renewal that failed until
 // localDeadline has passed, then gives up 5 seconds before the database would
-// let anyone else claim the name. Variables so a test can play the protocol
-// out in milliseconds.
+// let anyone else claim the name. Variables rather than constants so the
+// framework's own tests can play the protocol out in milliseconds, which is
+// what SetTimings in testhooks.go is for.
 var (
 	// leaseDuration is how long a claim or renewal holds the name, by the
 	// database clock.
@@ -145,19 +146,6 @@ var (
 	// lost before the process fails, see Run.
 	stepDownGrace = 5 * time.Second
 )
-
-// SetTimings replaces the protocol's timings and returns the function that
-// restores them. It exists for the tests of the capabilities built on leases,
-// which play the protocol out in milliseconds; a process runs the one
-// protocol every process of its deployment agrees on, so nothing else calls
-// it.
-func SetTimings(lease, renew, deadline, grace time.Duration) (restore func()) {
-	originalLease, originalRenew, originalDeadline, originalGrace := leaseDuration, renewInterval, localDeadline, stepDownGrace
-	leaseDuration, renewInterval, localDeadline, stepDownGrace = lease, renew, deadline, grace
-	return func() {
-		leaseDuration, renewInterval, localDeadline, stepDownGrace = originalLease, originalRenew, originalDeadline, originalGrace
-	}
-}
 
 // table is the name of the lease table.
 const table = "gst_leases"
