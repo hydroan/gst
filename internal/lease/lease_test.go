@@ -372,8 +372,20 @@ func TestClaimsAreBoundedByHalfTheLocalDeadline(t *testing.T) {
 
 	deadline, ok := ctx.Deadline()
 	require.True(t, ok, "a statement of the protocol runs under a deadline of its own")
-	require.InDelta(t, localDeadline/2, time.Until(deadline), float64(20*time.Millisecond),
-		"the bound is what a renewal attempt gets: a statement slower than that would not have kept a lease alive either")
+	// The fast protocol's half-deadline is well under the floor, so the floor
+	// is what the statement gets here: the bound is for a connection that
+	// answers nothing, not for a database that is merely busy.
+	require.InDelta(t, statementFloor, time.Until(deadline), float64(20*time.Millisecond))
+
+	t.Run("HalfTheDeadlineOnceItIsPastTheFloor", func(t *testing.T) {
+		t.Cleanup(SetTimings(30*time.Second, 2*time.Second, 10*time.Second, 5*time.Second))
+		ctx, cancel := bounded(context.Background())
+		defer cancel()
+		deadline, ok := ctx.Deadline()
+		require.True(t, ok)
+		require.InDelta(t, localDeadline/2, time.Until(deadline), float64(20*time.Millisecond),
+			"a statement slower than half the local deadline would not have kept a lease alive either")
+	})
 }
 
 // TestBoundKeepsTheCallersDeadlineWhenItIsSooner proves the bound never
@@ -382,14 +394,14 @@ func TestClaimsAreBoundedByHalfTheLocalDeadline(t *testing.T) {
 func TestBoundKeepsTheCallersDeadlineWhenItIsSooner(t *testing.T) {
 	withFastProtocol(t)
 
-	caller, cancelCaller := context.WithTimeout(context.Background(), localDeadline/10)
+	caller, cancelCaller := context.WithTimeout(context.Background(), statementFloor/10)
 	defer cancelCaller()
 	ctx, cancel := bounded(caller)
 	defer cancel()
 
 	deadline, ok := ctx.Deadline()
 	require.True(t, ok)
-	require.Less(t, time.Until(deadline), localDeadline/2)
+	require.Less(t, time.Until(deadline), statementFloor)
 }
 
 // withFastProtocol shrinks the protocol's timings so expiry and renewal play

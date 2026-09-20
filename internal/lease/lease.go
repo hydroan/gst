@@ -147,6 +147,13 @@ var (
 	stepDownGrace = 5 * time.Second
 )
 
+// statementFloor is the least a statement of the protocol is given, whatever
+// the protocol's own timings are. The bound exists for a connection that is
+// gone but not closed, which answers nothing at all; a database answering in
+// under a second is not that case, and a test playing the protocol out in
+// milliseconds must not turn an ordinary round trip into a failure.
+const statementFloor = time.Second
+
 // bounded returns ctx with the bound one statement of the protocol gets when
 // its caller has none of its own: a claim, the read of the last instant, the
 // sweep for the rounds cut short. A database that stopped answering would
@@ -156,7 +163,7 @@ var (
 // (see Hold): a statement that cannot answer within it would not have kept a
 // lease alive either, and the caller comes back at its own cadence.
 func bounded(ctx context.Context) (context.Context, context.CancelFunc) {
-	return context.WithTimeout(ctx, localDeadline/2)
+	return context.WithTimeout(ctx, max(localDeadline/2, statementFloor))
 }
 
 // RetryInterval is how soon a caller tries again after the database failed
