@@ -61,8 +61,80 @@ func (a *AppInfo) setDefault(v *viper.Viper) {
 	v.SetDefault("app.platform", runtime.GOOS+"/"+runtime.GOARCH)
 	v.SetDefault("app.compiler", runtime.Compiler)
 
-	// Try to get build info from runtime
+	// What the build linked in first, then what the module records for
+	// whatever the build did not carry.
+	a.setLinkedBuildInfo()
 	a.setBuildInfo()
+
+	// The linked values are the defaults of their keys, so a file or an
+	// environment variable still overrides them and nothing else has to know
+	// where they came from.
+	if !a.BuildTime.IsZero() {
+		v.SetDefault("app.build_time", a.BuildTime)
+	}
+	for key, value := range map[string]string{
+		"app.version":    a.Version,
+		"app.git_commit": a.GitCommit,
+		"app.git_branch": a.GitBranch,
+		"app.go_version": a.GoVersion,
+		"app.platform":   a.Platform,
+		"app.compiler":   a.Compiler,
+	} {
+		if value != "" {
+			v.SetDefault(key, value)
+		}
+	}
+	if len(a.BuildTags) > 0 {
+		v.SetDefault("app.build_tags", a.BuildTags)
+	}
+}
+
+// The build information a build links in. gg build sets them with the
+// linker's -X, which only writes string variables, so they are strings here
+// and parsed into the typed fields below. A build without gg leaves them
+// empty and the values come from runtime/debug instead.
+var (
+	appVersion   string
+	appCommit    string
+	appBranch    string
+	appBuildTime string
+	appGoVersion string
+	appPlatform  string
+	appCompiler  string
+	appBuildTags string
+)
+
+// setLinkedBuildInfo applies what the build linked in. It runs before the
+// runtime/debug fallback and before the configuration is read, so a value the
+// build carries wins over what the module records, and a configuration file
+// or an environment variable still wins over both.
+func (a *AppInfo) setLinkedBuildInfo() {
+	if appVersion != "" {
+		a.Version = appVersion
+	}
+	if appCommit != "" {
+		a.GitCommit = appCommit
+	}
+	if appBranch != "" {
+		a.GitBranch = appBranch
+	}
+	if appBuildTime != "" {
+		if t, err := time.Parse(time.RFC3339, appBuildTime); err == nil {
+			a.BuildTime = t
+		}
+	}
+	if appGoVersion != "" {
+		a.GoVersion = appGoVersion
+	}
+	if appPlatform != "" {
+		a.Platform = appPlatform
+	}
+	if appCompiler != "" {
+		a.Compiler = appCompiler
+	}
+	if appBuildTags != "" {
+		a.BuildTags = strings.Split(appBuildTags, ",")
+	}
 }
 
 // setBuildInfo attempts to extract build information from runtime/debug
