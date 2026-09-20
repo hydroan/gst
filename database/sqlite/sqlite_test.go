@@ -3,6 +3,7 @@ package sqlite
 import (
 	"context"
 	"database/sql"
+	"strings"
 	"testing"
 	"time"
 
@@ -105,4 +106,50 @@ func requireSampleRows(t *testing.T, db *gorm.DB, table string, want int64) {
 	var count int64
 	require.NoError(t, db.Raw("SELECT COUNT(*) FROM "+table).Scan(&count).Error)
 	require.Equal(t, want, count)
+}
+
+// TestBuildDSNKeepsWhatThePathAsked pins the two ways a configured path used
+// to be read wrong: a path naming memory opened as a file, which lives as
+// long as one connection and vanishes with it, and a path carrying
+// parameters of its own gaining a second question mark, which sqlite reads as
+// part of a value — the tuning after it is silently lost.
+func TestBuildDSNKeepsWhatThePathAsked(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		cfg  config.Sqlite
+		want string
+	}{
+		{
+			name: "MemoryPathWithoutTheFlag",
+			cfg:  config.Sqlite{Path: ":memory:"},
+			want: memoryDSN,
+		},
+		{
+			name: "MemoryFileURIWithoutTheFlag",
+			cfg:  config.Sqlite{Path: "file::memory:?cache=shared"},
+			want: memoryDSN,
+		},
+		{
+			name: "FlagWithoutThePath",
+			cfg:  config.Sqlite{IsMemory: true, Path: "/tmp/ignored.db"},
+			want: memoryDSN,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			require.Equal(t, tc.want, buildDSN(tc.cfg))
+		})
+	}
+
+	t.Run("PathWithParametersKeepsOneQuestionMark", func(t *testing.T) {
+		dsn := buildDSN(config.Sqlite{Path: "/tmp/app.db?_txlock=immediate"})
+		require.Equal(t, 1, strings.Count(dsn, "?"), "a second question mark makes the parameters after it part of a value")
+		require.Contains(t, dsn, "_txlock=immediate", "what the path asked for survives")
+		require.Contains(t, dsn, "_journal_mode=WAL", "and the framework's own tuning is appended to it")
+	})
+
+	t.Run("PlainPathTakesTheParameters", func(t *testing.T) {
+		dsn := buildDSN(config.Sqlite{Path: "/tmp/app.db"})
+		require.True(t, strings.HasPrefix(dsn, "/tmp/app.db?"))
+		require.Contains(t, dsn, "_busy_timeout=5000")
+	})
 }
