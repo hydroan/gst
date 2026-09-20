@@ -73,12 +73,13 @@ func (a *AppInfo) setDefault(v *viper.Viper) {
 		v.SetDefault("app.build_time", a.BuildTime)
 	}
 	for key, value := range map[string]string{
-		"app.version":    a.Version,
-		"app.git_commit": a.GitCommit,
-		"app.git_branch": a.GitBranch,
-		"app.go_version": a.GoVersion,
-		"app.platform":   a.Platform,
-		"app.compiler":   a.Compiler,
+		"app.version":        a.Version,
+		"app.git_commit":     a.GitCommit,
+		"app.git_branch":     a.GitBranch,
+		"app.go_version":     a.GoVersion,
+		"app.platform":       a.Platform,
+		"app.compiler":       a.Compiler,
+		"app.git_tree_state": a.GitTreeState,
 	} {
 		if value != "" {
 			v.SetDefault(key, value)
@@ -94,14 +95,15 @@ func (a *AppInfo) setDefault(v *viper.Viper) {
 // and parsed into the typed fields below. A build without gg leaves them
 // empty and the values come from runtime/debug instead.
 var (
-	appVersion   string
-	appCommit    string
-	appBranch    string
-	appBuildTime string
-	appGoVersion string
-	appPlatform  string
-	appCompiler  string
-	appBuildTags string
+	appVersion      string
+	appCommit       string
+	appBranch       string
+	appBuildTime    string
+	appGoVersion    string
+	appPlatform     string
+	appCompiler     string
+	appBuildTags    string
+	appGitTreeState string
 )
 
 // setLinkedBuildInfo applies what the build linked in. It runs before the
@@ -134,6 +136,9 @@ func (a *AppInfo) setLinkedBuildInfo() {
 	}
 	if appBuildTags != "" {
 		a.BuildTags = strings.Split(appBuildTags, ",")
+	}
+	if appGitTreeState != "" {
+		a.GitTreeState = appGitTreeState
 	}
 }
 
