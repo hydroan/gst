@@ -13,6 +13,7 @@ import (
 	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/config"
+	"github.com/hydroan/gst/internal/dbruntime"
 	"github.com/hydroan/gst/internal/modelregistry"
 	"github.com/maxrichie5/go-sqlfmt/sqlfmt"
 	"gorm.io/driver/mysql"
@@ -65,7 +66,7 @@ func (s *SchemaDumper) Dump(driver config.DBType, dst ...any) (string, error) {
 	switch driver {
 	case config.DBMySQL:
 		dialector = mysql.New(mysql.Config{Conn: s.db, SkipInitializeWithVersion: true})
-		tableOptions = "ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin"
+		tableOptions = dbruntime.MySQLTableOptions
 	case config.DBPostgres:
 		dialector = postgres.New(postgres.Config{Conn: s.db, PreferSimpleProtocol: true})
 	case config.DBSqlite:

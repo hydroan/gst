@@ -161,6 +161,28 @@ func (*uniqueRecord) Indexes() []modelregistry.Index {
 // drops it: an index declared through Indexes() was dropped and created
 // again on every start, and a start must not drop what the framework
 // created. automigrating is what keeps gorm's hands off them.
+// TestMigrateTableCreatesMySQLTablesLikeTheMigrationDoes pins the table the
+// startup path creates against the one gg migrate creates. The collation is
+// what would diverge: a server default of utf8mb4_0900_ai_ci compares
+// strings case-insensitively, so a unique key created at startup would
+// refuse a row the migrated schema accepts, and a lookup would find rows the
+// other schema does not — the same code behaving differently by where its
+// tables came from.
+func TestMigrateTableCreatesMySQLTablesLikeTheMigrationDoes(t *testing.T) {
+	withAutoMigrate(t, true)
+	withFastStartupLock(t)
+
+	handle := newMySQLDB(t)
+	require.NoError(t, handle.Migrator().DropTable(&raceRecord{}))
+	require.NoError(t, ensureTable(handle, &raceRecord{}))
+
+	var collation string
+	require.NoError(t, handle.Raw(
+		"SELECT table_collation FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = ?",
+		"race_records").Scan(&collation).Error)
+	require.Equal(t, "utf8mb4_bin", collation, "a table created at startup carries the collation gg migrate writes")
+}
+
 func TestMigrateTableLeavesTheIndexesAlone(t *testing.T) {
 	withAutoMigrate(t, true)
 	withFastStartupLock(t)
