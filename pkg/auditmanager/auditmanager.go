@@ -9,32 +9,34 @@ import (
 	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/consts"
 	"github.com/hydroan/gst/database"
-	"github.com/hydroan/gst/ds/queue/circularbuffer"
 	modellogmgmt "github.com/hydroan/gst/internal/model/logmgmt"
 	"github.com/hydroan/gst/internal/types"
-	"go.uber.org/zap"
+	prommetrics "github.com/hydroan/gst/metrics"
 )
 
-// AuditManager manages audit logging based on configuration.
-// It provides a centralized way to handle operation logging across all Factory functions,
-// replacing the previous direct enqueuing of OperationLog records.
-// The manager supports configurable filtering, field exclusion, and data truncation.
+// writeTimeout bounds the statement that writes one entry. The entry is
+// written where the operation happened, so this bound is what keeps a
+// database that stopped answering from holding the response back, while
+// staying wide enough that a loaded one still records the operation.
+const writeTimeout = 5 * time.Second
+
+// AuditManager writes the operation log: one entry per operation the
+// configuration does not exclude, written by the handler that performed it,
+// before the request answers. It holds the audit configuration and nothing
+// else — no buffer, no goroutine — so a record that was asked for either
+// reaches the table or is reported as failed.
 type AuditManager struct {
 	config *config.Audit
-	cb     *circularbuffer.CircularBuffer[*modellogmgmt.OperationLog]
 }
 
-// New creates a new audit manager instance.
-// This replaces the previous direct usage of circular buffer for operation logging.
-func New(auditConfig *config.Audit, cb *circularbuffer.CircularBuffer[*modellogmgmt.OperationLog]) *AuditManager {
-	return &AuditManager{
-		config: auditConfig,
-		cb:     cb,
-	}
+// New creates an audit manager that reads auditConfig on every call, so a
+// configuration reloaded in place takes effect without rebuilding it.
+func New(auditConfig *config.Audit) *AuditManager {
+	return &AuditManager{config: auditConfig}
 }
 
-// RecordOperation records a single operation audit log, with configurable
-// filtering and support for both synchronous and asynchronous writing.
+// RecordOperation records a single operation audit log, leaving out what the
+// configuration excludes.
 //
 // The entry is produced by build rather than handed in, because building one
 // is the expensive part: it serializes the record, reads the request and
@@ -49,6 +51,13 @@ func New(auditConfig *config.Audit, cb *circularbuffer.CircularBuffer[*modellogm
 //
 // A nil build is an error rather than a silent skip: an audit entry that was
 // asked for and never written is a gap in a security record.
+//
+// The write runs on a context derived from ctx, which keeps what the request
+// carries — the trace the statement is annotated with, the identity every log
+// line takes — and leaves its cancellation behind: the operation the entry
+// records has already happened, and a client that went away must not take the
+// record of it with it. writeTimeout bounds the write instead. A failure is
+// counted and returned to the caller, which logs it beside the request.
 func (am *AuditManager) RecordOperation(ctx context.Context, m types.Model, op consts.OP,
 	build func() *modellogmgmt.OperationLog,
 ) error {
@@ -74,34 +83,16 @@ func (am *AuditManager) RecordOperation(ctx context.Context, m types.Model, op c
 	// Record the table name; every model declares it explicitly.
 	operationLog.Table = m.TableName()
 
-	if am.config.AsyncWrite {
-		// Use existing circular buffer for async writing
-		am.cb.Enqueue(operationLog)
-		return nil
-	}
-
-	// Synchronous writing
-	if err := database.Database[*modellogmgmt.OperationLog](ctx).Create(operationLog); err != nil {
+	writeCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), writeTimeout)
+	defer cancel()
+	if err := database.Database[*modellogmgmt.OperationLog](writeCtx).Create(operationLog); err != nil {
+		// Counted as well as returned: a record that never reached the table
+		// is a gap in a security record, and the count is what an alert can
+		// watch. The metric is nil in a process that never initialized them.
+		if prommetrics.AuditWriteFailuresTotal != nil {
+			prommetrics.AuditWriteFailuresTotal.Inc()
+		}
 		return errors.Wrap(err, "failed to write audit log")
 	}
 	return nil
-}
-
-// Consume operation log.
-func (am *AuditManager) Consume() {
-	operationLogs := make([]*modellogmgmt.OperationLog, 0, config.App.Server.CircularBuffer.SizeOperationLog)
-	ticker := time.NewTicker(5 * time.Second)
-
-	for range ticker.C {
-		operationLogs = operationLogs[:0]
-		for !am.cb.IsEmpty() {
-			ol, _ := am.cb.Dequeue()
-			operationLogs = append(operationLogs, ol)
-		}
-		if len(operationLogs) > 0 {
-			if err := database.Database[*modellogmgmt.OperationLog](context.Background()).WithBatchSize(1000).Create(operationLogs...); err != nil {
-				zap.S().Error(err)
-			}
-		}
-	}
 }

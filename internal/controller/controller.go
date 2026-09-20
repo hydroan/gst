@@ -6,23 +6,15 @@
 package controller
 
 import (
-	"context"
 	"sync"
 
 	"github.com/hydroan/gst/config"
-	"github.com/hydroan/gst/database"
-	"github.com/hydroan/gst/ds/queue/circularbuffer"
-	modellogmgmt "github.com/hydroan/gst/internal/model/logmgmt"
 	"github.com/hydroan/gst/pkg/auditmanager"
-	"go.uber.org/zap"
 )
 
 // TODO: Record failed operations.
 
 var (
-	// Global circular buffer for async operation logs.
-	cb *circularbuffer.CircularBuffer[*modellogmgmt.OperationLog]
-
 	// Global audit manager instance.
 	am *auditmanager.AuditManager
 
@@ -42,33 +34,9 @@ func Init() (err error) {
 		return nil
 	}
 
-	// Initialize circular buffer.
-	cb, err = circularbuffer.New(int(config.App.Server.CircularBuffer.SizeOperationLog), circularbuffer.WithSafe[*modellogmgmt.OperationLog]())
-	if err != nil {
-		return err
-	}
-
-	// Initialize audit manager.
-	am = auditmanager.New(&config.App.Audit, cb)
-
-	// Consume operation log.
-	go am.Consume()
+	am = auditmanager.New(&config.App.Audit)
 
 	initialized = true
 
 	return nil
-}
-
-// Clean flushes buffered operation logs during shutdown.
-func Clean() {
-	operationLogs := make([]*modellogmgmt.OperationLog, 0, config.App.Server.CircularBuffer.SizeOperationLog)
-	for !cb.IsEmpty() {
-		ol, _ := cb.Dequeue()
-		operationLogs = append(operationLogs, ol)
-	}
-	if len(operationLogs) > 0 {
-		if err := database.Database[*modellogmgmt.OperationLog](context.Background()).WithLimit(-1).WithBatchSize(100).Create(operationLogs...); err != nil {
-			zap.S().Error(err)
-		}
-	}
 }

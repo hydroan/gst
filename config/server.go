@@ -80,9 +80,6 @@ type Server struct {
 
 	// Circuit breaker
 	CircuitBreaker CircuitBreaker `json:"circuit_breaker" mapstructure:"circuit_breaker" ini:"circuit_breaker" yaml:"circuit_breaker"`
-
-	// Circular buffer
-	CircularBuffer CircularBuffer `json:"circular_buffer" mapstructure:"circular_buffer" ini:"circular_buffer" yaml:"circular_buffer"`
 }
 
 type CircuitBreaker struct {
@@ -93,9 +90,6 @@ type CircuitBreaker struct {
 	FailureRate float64       `json:"failure_rate" mapstructure:"failure_rate" ini:"failure_rate" yaml:"failure_rate"`
 	MinRequests uint32        `json:"min_requests" mapstructure:"min_requests" ini:"min_requests" yaml:"min_requests"`
 	Enabled     bool          `json:"enabled" mapstructure:"enabled" ini:"enabled" yaml:"enabled"`
-}
-type CircularBuffer struct {
-	SizeOperationLog int64 `json:"size_operation_log" mapstructure:"size_operation_log" ini:"size" yaml:"size_operation_log"`
 }
 
 func (*Server) setDefault(v *viper.Viper) {
@@ -119,5 +113,4 @@ func (*Server) setDefault(v *viper.Viper) {
 	v.SetDefault("server.circuit_breaker.enabled", true)
 
 	// Circular buffer defaults
-	v.SetDefault("server.circular_buffer.size_operation_log", int64(10000))
 }

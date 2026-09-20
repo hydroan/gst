@@ -50,9 +50,9 @@ const (
 )
 
 func TestMain(m *testing.M) {
-	// Enable audit and sync write before Bootstrap so operationlog test can list logs immediately.
+	// Enable the audit before Bootstrap so the operationlog test can list the
+	// entries the requests leave behind.
 	os.Setenv(config.AUDIT_ENABLED, "true")
-	os.Setenv(config.AUDIT_ASYNC_WRITE, "false")
 
 	testutil.Run(m, testutil.Server{
 		Database: config.DBMySQL,

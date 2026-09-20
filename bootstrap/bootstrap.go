@@ -135,7 +135,6 @@ func Bootstrap() error {
 
 	registerCleanup(closeComponent("redis", redis.Close))
 	registerCleanup(closeComponent("otel", gstotel.Close))
-	registerCleanup(controller.Clean)
 
 	if err := startup.Init(); err != nil {
 		return err
