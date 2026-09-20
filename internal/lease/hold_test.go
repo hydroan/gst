@@ -69,6 +69,7 @@ func TestHoldEndsAtTheLocalDeadlineWithoutTheDatabase(t *testing.T) {
 
 	awaitDone(held, t)
 	require.ErrorIs(t, context.Cause(held), ErrLost)
+	require.ErrorContains(t, context.Cause(held), "no renewal", "a lease given up at the deadline says so, not that someone else took it")
 	require.GreaterOrEqual(t, time.Since(begin), localDeadline, "one failed renewal must not end the lease before the deadline")
 }
 
@@ -286,6 +287,10 @@ func TestHoldEndsWhenTheLeaseIsTakenAway(t *testing.T) {
 	select {
 	case <-held.Done():
 		require.ErrorIs(t, context.Cause(held), ErrLost)
+		// The cause says which of the ways a lease ends this was: a name
+		// taken elsewhere calls for a different answer than a database that
+		// went silent, and whoever reads the ending has only this to go on.
+		require.ErrorContains(t, context.Cause(held), "no longer this holder's")
 	case <-time.After(5 * time.Second):
 		t.Fatal("the held context must end once the lease is gone")
 	}

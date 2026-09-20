@@ -54,10 +54,16 @@ func Hold(parent context.Context, h *Handle, log types.Logger) (ctx context.Cont
 	renewing, stopRenewing := context.WithCancel(context.WithoutCancel(parent))
 	interval, deadline := renewInterval, localDeadline
 	// lose records the loss on the handle before it ends ctx, so whoever sees
-	// ctx end with ErrLost finds the handle lost as well.
-	lose := func() {
+	// ctx end with ErrLost finds the handle lost as well. The reason travels
+	// with it — as the context's cause and as the holder's own entry —
+	// because the three ways a lease ends call for three different answers:
+	// a name taken elsewhere means this replica fell behind, a deadline
+	// passed with renewals failing means the database could not be reached,
+	// and one passed with none even attempted means this process was held up.
+	lose := func(reason error) {
 		h.markLost()
-		cancel(ErrLost)
+		log.Warnw("lease lost", "component", "lease", "lease", h.name, "reason", reason)
+		cancel(reason)
 	}
 	done := make(chan struct{})
 	go func() {
@@ -77,7 +83,7 @@ func Hold(parent context.Context, h *Handle, log types.Logger) (ctx context.Cont
 			attempted = time.Now()
 			remaining := last.Add(deadline).Sub(attempted)
 			if remaining <= 0 {
-				lose()
+				lose(errors.Wrapf(ErrLost, "no renewal of %q succeeded within %s of the last one", h.name, deadline))
 				return
 			}
 			attempt, cancelAttempt := context.WithTimeout(renewing, min(deadline/2, remaining))
@@ -88,7 +94,7 @@ func Hold(parent context.Context, h *Handle, log types.Logger) (ctx context.Cont
 			case err == nil:
 				last = attempted
 			case errors.Is(err, ErrLost):
-				lose()
+				lose(errors.Wrapf(err, "the lease %q is no longer this holder's", h.name))
 				return
 			case renewing.Err() != nil:
 				return
@@ -96,7 +102,7 @@ func Hold(parent context.Context, h *Handle, log types.Logger) (ctx context.Cont
 				log.Warnw("lease renewal failed", "component", "lease", "lease", h.name, "err", err)
 			}
 			if time.Since(last) >= deadline {
-				lose()
+				lose(errors.Wrapf(ErrLost, "no renewal of %q succeeded within %s of the last one", h.name, deadline))
 				return
 			}
 			timer.Reset(untilNextRenewal(attempted, last, interval, deadline))
