@@ -368,15 +368,18 @@ func withFastProtocol(t *testing.T) {
 }
 
 // withTolerantProtocol shortens the timings less than withFastProtocol, for
-// a test proving that a holder renewing on time keeps its name: a lease
-// long enough that a round trip stalled by a loaded machine — the whole
-// suite running beside the test — cannot let it expire between two
-// renewals, so the test proves the holder's diligence, not the machine's
-// speed.
+// tests proving that a holder renewing on time keeps its name. What those
+// tests ride on is the margin: a holder gives the lease up the moment no
+// renewal has succeeded within the deadline, so a machine that keeps the
+// renewing goroutine — or its statement — waiting that long fails them for
+// reasons of its own. Two seconds is well past what the suite running beside
+// them under the race detector takes, half a second was not, and the lease
+// outlives the deadline, so they prove the holder's diligence rather than the
+// machine's speed.
 func withTolerantProtocol(t *testing.T) {
 	t.Helper()
 
-	t.Cleanup(SetTimings(time.Second, 50*time.Millisecond, 500*time.Millisecond, 100*time.Millisecond))
+	t.Cleanup(SetTimings(3*time.Second, 100*time.Millisecond, 2*time.Second, 300*time.Millisecond))
 }
 
 // withProductionProportions plays the protocol out at a fifth of the timings
