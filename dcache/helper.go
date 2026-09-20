@@ -1,6 +1,7 @@
 package dcache
 
 import (
+	"context"
 	"fmt"
 	"time"
 
@@ -77,8 +78,15 @@ func newProducer(cfg config.Kafka, topic string) (*kgo.Client, error) {
 
 // newConsumer creates a kafka consumer; each cache type's instance owns one.
 // Like newProducer it goes through the kafka provider's New.
-func newConsumer(cfg config.Kafka, topic string, group string) (*kgo.Client, error) {
+// newConsumer builds the consumer of one replicated cache. onAssigned is
+// called every time the group hands this member the topic's partitions; the
+// construction waits for the first call, see awaitAssignment.
+func newConsumer(cfg config.Kafka, topic string, group string, onAssigned func()) (*kgo.Client, error) {
 	return kafka.New(cfg,
+		// The group hands out the partitions asynchronously, and the consumer
+		// reads nothing until it does; the callback is how construction knows
+		// the instance has stopped being deaf to its peers.
+		kgo.OnPartitionsAssigned(func(context.Context, *kgo.Client, map[string][]int32) { onAssigned() }),
 		kafka.Logger(&logger.Dcache),
 		kgo.AllowAutoTopicCreation(),
 		kgo.ConsumeTopics(topic),

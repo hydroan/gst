@@ -25,9 +25,16 @@
 //   - Consumers join Kafka with a fresh group id at the end of the topic.
 //     Events published while an instance is down are never replayed for it;
 //     its store misses those writes until the same key is written again or
-//     the TTL expires.
-//   - Cross-host ordering is decided by producer UnixNano timestamps. Clock
-//     skew between hosts can drop a legitimately newer write as stale.
+//     the TTL expires. Building a cache waits for the group to hand it the
+//     partitions, so events published once it is in use do reach it; the
+//     wait is bounded, and an instance built while Kafka is out of reach
+//     starts deaf to its peers and says so in the log.
+//   - Cross-host ordering is decided by producer UnixNano timestamps, each
+//     raised past the newest stamp its instance has already applied to that
+//     key, so an instance whose clock trails a peer's still publishes writes
+//     the peers accept. Two instances writing one key before either has seen
+//     the other's event are still separated by their clocks alone: the one
+//     running ahead wins, whichever wrote first.
 //   - Delivery is best-effort and bounded: a record that cannot be
 //     delivered within its budget (a few retries inside a few seconds),
 //     that exceeds the broker's message size limit, or that arrives while

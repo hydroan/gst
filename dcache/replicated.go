@@ -35,6 +35,12 @@ const (
 
 	// minGoroutines is the floor of the event-publishing pool capacity.
 	minGoroutines = 10000
+
+	// assignmentWait bounds how long the construction of a cache waits for
+	// the consumer group to hand it the topic's partitions; see
+	// awaitAssignment for what the wait buys and why running out is not a
+	// failure.
+	assignmentWait = 5 * time.Second
 )
 
 // watermarkEntries bounds the per-key timestamp table: an order of magnitude
@@ -296,7 +302,11 @@ func newReplicatedCache[T any](store types.Cache[entry[T]]) (*replicatedCache[T]
 	if dc.pub, err = newProducer(cfg, dc.topic); err != nil {
 		return nil, err
 	}
-	if dc.sub, err = newConsumer(cfg, dc.topic, dc.topic+"-"+dc.cacheID); err != nil {
+	assigned := make(chan struct{})
+	var assignedOnce sync.Once
+	if dc.sub, err = newConsumer(cfg, dc.topic, dc.topic+"-"+dc.cacheID, func() {
+		assignedOnce.Do(func() { close(assigned) })
+	}); err != nil {
 		return nil, err
 	}
 
@@ -324,9 +334,34 @@ func newReplicatedCache[T any](store types.Cache[entry[T]]) (*replicatedCache[T]
 
 	dc.listenEvents()
 	dc.startMonitor()
+	dc.awaitAssignment(assigned)
 
 	succeeded = true
 	return dc, nil
+}
+
+// awaitAssignment holds the construction until the consumer group has handed
+// this instance the topic's partitions, or until assignmentWait has passed.
+//
+// The wait is what keeps a fresh instance from serving reads while it is deaf
+// to its peers: the consumer starts at the end of the topic, so a delete
+// another instance published before the group answered is never delivered
+// here, and the entry it removed stays readable until its ttl runs out. The
+// group usually answers in well under a second, and a wait that runs out is
+// logged rather than failed: the broadcast is best effort by contract, so a
+// kafka that is slow or away must not take the cache down with it.
+func (dc *replicatedCache[T]) awaitAssignment(assigned <-chan struct{}) {
+	timer := time.NewTimer(assignmentWait)
+	defer timer.Stop()
+	select {
+	case <-assigned:
+	case <-timer.C:
+		dc.logger.Warnz(
+			"the replicated cache starts before its consumer joined the group; peer events are missed until it does",
+			zap.Duration("waited", assignmentWait),
+			zap.String("topic", dc.topic),
+		)
+	}
 }
 
 // Set sets a key-value pair in the store and publishes an opSet event that
@@ -350,7 +385,7 @@ func (dc *replicatedCache[T]) Set(ctx context.Context, key string, value T, ttl 
 	// store first and reporting its failure also keeps the peers from
 	// holding a value this instance does not have.
 	dc.watermarkMu.Lock()
-	ts := time.Now().UnixNano()
+	ts := dc.stampLocked(key)
 	if err = dc.store.Set(ctx, key, entry[T]{Value: value}, ttl); err != nil {
 		dc.watermarkMu.Unlock()
 		return err
@@ -406,7 +441,7 @@ func (dc *replicatedCache[T]) Delete(ctx context.Context, key string) (err error
 	// See Set: the delete and its watermark entry are one critical section,
 	// so a stale peer set cannot resurrect the key this instance removed.
 	dc.watermarkMu.Lock()
-	ts := time.Now().UnixNano()
+	ts := dc.stampLocked(key)
 	if err = dc.store.Delete(ctx, key); err != nil && !errors.Is(err, types.ErrEntryNotFound) {
 		dc.watermarkMu.Unlock()
 		return err
@@ -568,6 +603,22 @@ func (dc *replicatedCache[T]) applyPeerDelete(evt *event) (stale bool, err error
 	}
 	dc.appliedTS.Add(evt.Key, evt.TS)
 	return false, nil
+}
+
+// stampLocked returns the timestamp this instance's next write of key
+// carries. It is the clock's reading, unless the key's watermark has already
+// reached it: a peer whose clock runs ahead would otherwise leave every write
+// made here looking older than what the peers have applied, and they would
+// drop it as stale while this instance keeps it — the two then disagree until
+// the entry expires. One nanosecond past the watermark keeps the newest write
+// the newest everywhere, and keeps a key's stamps rising. The caller holds
+// watermarkMu.
+func (dc *replicatedCache[T]) stampLocked(key string) int64 {
+	ts := time.Now().UnixNano()
+	if last, ok := dc.appliedTS.Get(key); ok && ts <= last {
+		return last + 1
+	}
+	return ts
 }
 
 // advanceWatermarkLocked records ts as the newest applied timestamp of key

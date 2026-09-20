@@ -35,15 +35,14 @@ func TestPeerPropagation(t *testing.T) {
 	peer, err := newReplicatedCache[typedProbe](peerStore)
 	require.NoError(t, err)
 
+	// Published once, not on every probe: the peer's construction returned
+	// only after its group handed it the partitions, so a single event
+	// published afterwards is one the peer still receives. Only its delivery
+	// is waited for.
 	want := typedProbe{Name: "typed", Num: 42}
+	require.NoError(t, source.Set(ctx, "propagated-key", want, time.Minute))
 	var got typedProbe
 	require.Eventually(t, func() bool {
-		// Republish on every probe: consumers start at the end of the topic,
-		// so an event published before the peer's group has joined would
-		// never be delivered to it.
-		if err := source.Set(ctx, "propagated-key", want, time.Minute); err != nil {
-			return false
-		}
 		val, err := peer.Get(ctx, "propagated-key")
 		if err != nil {
 			return false
@@ -55,17 +54,43 @@ func TestPeerPropagation(t *testing.T) {
 	// The event carries the original ttl through to the peer store.
 	require.Equal(t, time.Minute, peerStore.lastTTL("propagated-key"))
 
-	// A delete on the source removes the entry from the peer as well. The
-	// republished deletes carry ever newer timestamps, so any set event still
-	// in flight from the loop above is rejected as stale rather than
-	// resurrecting the entry.
+	// A delete on the source removes the entry from the peer as well.
+	require.NoError(t, source.Delete(ctx, "propagated-key"))
 	require.Eventually(t, func() bool {
-		if err := source.Delete(ctx, "propagated-key"); err != nil {
-			return false
-		}
 		_, err := peer.Get(ctx, "propagated-key")
 		return errors.Is(err, types.ErrEntryNotFound)
 	}, 30*time.Second, 100*time.Millisecond, "the delete event must reach the peer's store")
+}
+
+// TestLocalWriteOutstampsAPeerAhead is the regression guard for the write
+// stamp: an instance whose clock trails a peer's must still publish writes
+// the peers accept. Stamping the clock's own reading would leave them below
+// the watermark the peer event already set, and every peer would drop this
+// instance's writes as stale while it kept them.
+func TestLocalWriteOutstampsAPeerAhead(t *testing.T) {
+	ctx := context.Background()
+
+	dc, err := newReplicatedCache[int](newFakeStore[int]())
+	require.NoError(t, err)
+
+	const key = "peer-ahead-key"
+	ahead := time.Now().Add(time.Minute).UnixNano()
+	stale, err := dc.applyPeerSet(&event{TS: ahead, Op: opSet, Key: key, Typ: dc.typ, CacheID: "peer"}, 1)
+	require.NoError(t, err)
+	require.False(t, stale)
+
+	require.NoError(t, dc.Set(ctx, key, 2, time.Minute))
+	afterSet, ok := dc.appliedTS.Get(key)
+	require.True(t, ok)
+	require.Greater(t, afterSet, ahead, "a local set must outrank what the peers have already applied")
+	got, err := dc.Get(ctx, key)
+	require.NoError(t, err)
+	require.Equal(t, 2, got, "the local store holds what was just written")
+
+	require.NoError(t, dc.Delete(ctx, key))
+	afterDelete, ok := dc.appliedTS.Get(key)
+	require.True(t, ok)
+	require.Greater(t, afterDelete, afterSet, "a local delete must outrank the set it removes")
 }
 
 // TestCacheRequiresKafkaEnabled asserts the exported constructor fails fast
