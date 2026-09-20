@@ -23,7 +23,11 @@ import (
 // time, the name stays refused to everyone else, and the context ends only
 // when the holder stops the renewals — without ErrLost.
 func TestHoldKeepsTheLeaseWhileRenewalsSucceed(t *testing.T) {
-	withFastProtocol(t)
+	// The tolerant timings, not the fast ones: what this proves is that a
+	// holder renewing on time keeps its name, so the margin has to be wider
+	// than the machine can stall the renewing goroutine while the rest of
+	// the suite runs beside it.
+	withTolerantProtocol(t)
 	ctx := context.Background()
 	name := uniqueName(t)
 
@@ -397,7 +401,11 @@ func TestRunFailsTheProcessWhenLostWorkWillNotStop(t *testing.T) {
 // while it winds down, and once they find the lease lost the work has the
 // grace to return like any other, past which the process fails.
 func TestRunFailsTheProcessWhenTheLeaseIsLostWhileTheWorkWindsDown(t *testing.T) {
-	withFastProtocol(t)
+	// The tolerant timings: the first half of this test waits out a window
+	// in which nothing may happen, which holds only while the renewals keep
+	// up — under the fast timings a loaded machine loses the lease there and
+	// fails the process for a reason the test is not about.
+	withTolerantProtocol(t)
 	failures := withRecordedFailures(t)
 	ctx := context.Background()
 	name := uniqueName(t)
