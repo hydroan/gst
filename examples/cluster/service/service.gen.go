@@ -3,6 +3,7 @@
 package service
 
 import (
+	"cluster/service/cached"
 	"cluster/service/rebuild"
 
 	"github.com/hydroan/gst/consts"
@@ -10,5 +11,8 @@ import (
 )
 
 func init() {
+	service.Register[*cached.Creator](consts.PHASE_CREATE, "caches")
+	service.Register[*cached.Deleter](consts.PHASE_DELETE, "caches/:id")
+	service.Register[*cached.Getter](consts.PHASE_GET, "caches/:id")
 	service.Register[*rebuild.Creator](consts.PHASE_CREATE, "rebuilds")
 }

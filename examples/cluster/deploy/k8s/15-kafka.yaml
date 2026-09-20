@@ -1,0 +1,129 @@
+# One Kafka broker for the example alone, so the replicated cache has
+# something to broadcast through. A real deployment brings its own cluster;
+# the replicas only need KAFKA_BROKERS to point at it.
+#
+# It runs in KRaft mode as its own controller, which is why no ZooKeeper
+# appears here. The group's initial rebalance delay is left at its default of
+# three seconds: that delay is exactly the window in which a replica that
+# started serving before its consumer joined would be deaf to its peers,
+# which is what the cache scenarios in the README exercise.
+apiVersion: v1
+kind: Service
+metadata:
+  name: kafka
+  namespace: gst-cluster
+  labels:
+    app.kubernetes.io/name: kafka
+    app.kubernetes.io/component: broker
+    app.kubernetes.io/part-of: gst-cluster
+spec:
+  clusterIP: None
+  selector:
+    app.kubernetes.io/name: kafka
+  ports:
+    - name: kafka
+      port: 9092
+      targetPort: kafka
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: kafka
+  namespace: gst-cluster
+  labels:
+    app.kubernetes.io/name: kafka
+    app.kubernetes.io/component: broker
+    app.kubernetes.io/part-of: gst-cluster
+spec:
+  serviceName: kafka
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: kafka
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: kafka
+        app.kubernetes.io/component: broker
+        app.kubernetes.io/part-of: gst-cluster
+    spec:
+      automountServiceAccountToken: false
+      enableServiceLinks: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: kafka
+          image: apache/kafka:3.9.1
+          env:
+            # A fixed cluster id keeps a restarted broker formatting the same
+            # storage instead of a new one.
+            - name: CLUSTER_ID
+              value: gst-cluster-example
+            - name: KAFKA_NODE_ID
+              value: "1"
+            - name: KAFKA_PROCESS_ROLES
+              value: broker,controller
+            - name: KAFKA_LISTENERS
+              value: PLAINTEXT://:9092,CONTROLLER://:9093
+            # The replicas reach the broker through the headless Service, so
+            # that is the address it advertises.
+            - name: KAFKA_ADVERTISED_LISTENERS
+              value: PLAINTEXT://kafka:9092
+            - name: KAFKA_CONTROLLER_LISTENER_NAMES
+              value: CONTROLLER
+            - name: KAFKA_LISTENER_SECURITY_PROTOCOL_MAP
+              value: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT
+            - name: KAFKA_CONTROLLER_QUORUM_VOTERS
+              value: 1@localhost:9093
+            - name: KAFKA_INTER_BROKER_LISTENER_NAME
+              value: PLAINTEXT
+            # One broker, so nothing can be replicated further than itself.
+            - name: KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR
+              value: "1"
+            - name: KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR
+              value: "1"
+            - name: KAFKA_TRANSACTION_STATE_LOG_MIN_ISR
+              value: "1"
+            # The cache topic is created on first use; more than one partition
+            # is what makes the assignment the consumers wait for a real one.
+            - name: KAFKA_NUM_PARTITIONS
+              value: "3"
+            - name: KAFKA_AUTO_CREATE_TOPICS_ENABLE
+              value: "true"
+            - name: KAFKA_LOG_DIRS
+              value: /var/lib/kafka/data
+          ports:
+            - name: kafka
+              containerPort: 9092
+            - name: controller
+              containerPort: 9093
+          resources:
+            requests:
+              cpu: 200m
+              memory: 512Mi
+            limits:
+              memory: 1Gi
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+          readinessProbe:
+            # The port answers only once the broker is serving, which is what
+            # the replicas need before they open their caches.
+            tcpSocket:
+              port: kafka
+            periodSeconds: 5
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/kafka/data
+      volumes:
+        # The topic outlives a restart of the container but not the pod: the
+        # cache broadcasts nothing worth keeping, every entry is rebuildable
+        # from its source of truth.
+        - name: data
+          emptyDir: {}

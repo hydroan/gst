@@ -1,6 +1,6 @@
 # cluster：多副本部署示例
 
-一个用 `gg` 生成的最小项目，演示同一份代码在 Kubernetes 里起多个副本时框架的协调能力：定时任务每个调度时刻全部署只领一次、被打断的一轮换个副本再跑一次、常驻任务同一时刻只有一个副本在跑、一件事同一时刻只做一次、多个副本同时对空库建表。定时任务、选主和锁都建在主库的租约表 `gst_leases` 上，不需要 Redis 或 etcd。
+一个用 `gg` 生成的最小项目，演示同一份代码在 Kubernetes 里起多个副本时框架的协调能力：定时任务每个调度时刻全部署只领一次、被打断的一轮换个副本再跑一次、常驻任务同一时刻只有一个副本在跑、一件事同一时刻只做一次、多个副本同时对空库建表、一个副本写进复制缓存的条目其余副本都跟上。定时任务、选主和锁都建在主库的租约表 `gst_leases` 上，不需要 Redis 或 etcd；复制缓存另外需要 Kafka 广播。
 
 每个场景都给了制造故障和核对结果的命令，可以拿它在真实集群里检验这些能力。
 
@@ -11,10 +11,11 @@
 | `cronjob/cronjob.go` | `tick`：每 10 秒一轮，全部署只领一次；`local-tick`：每个副本各跑；`slow`：一轮跑 20 秒，比 15 秒的租约长，靠续期保住 |
 | `leader/leader.go` | 常驻任务 `counter`：每秒在事务里给计数器追加下一个数字，并记下是哪一任写的；接手的副本从库里最后一个数字接着数 |
 | `lock/lock.go`、`dao/rebuild.go`、`service/rebuild/` | `POST /api/rebuilds` 在锁 `rebuild` 下跑，同时来第二个请求立刻 409 |
+| `dao/cache.go`、`component/cache.go`、`service/cached/` | 复制缓存：每个副本在开始服务之前打开缓存，`POST /api/caches` 写一条、`GET /api/caches/:key` 只读本副本自己的那份、`DELETE /api/caches/:key` 删一条 |
 | `model/run.go`、`dao/run.go` | 每一轮定时任务、每一次锁下的运行：开始时记一行，跑完时补上结束时间，都写在工作自己的事务里；被打断的没有结束时间。`GET /api/runs` |
 | `model/counter_step.go` | 计数器的每个数字，和写它的那一任、那个副本。`GET /api/counter_steps` |
 | `Dockerfile` | 镜像：以非 root 用户运行，配置全部来自环境变量；PID 1 是 tini，方便从 Pod 里给进程发信号 |
-| `deploy/k8s/` | 纯 YAML 清单：命名空间（强制 restricted 安全标准）、MySQL、三副本 Deployment（探针、资源、只读根文件系统、停机宽限、滚动更新策略）、Service、PodDisruptionBudget |
+| `deploy/k8s/` | 纯 YAML 清单：命名空间（强制 restricted 安全标准）、MySQL、单 broker Kafka（KRaft，给复制缓存广播用）、三副本 Deployment（探针、资源、只读根文件系统、停机宽限、滚动更新策略）、Service、PodDisruptionBudget |
 | `scripts/up.sh`、`scripts/down.sh` | 构建镜像、apply 清单、等就绪；整套删掉 |
 | `scripts/collect-logs.sh` | 把每个副本、每一代容器的日志存到本地，供事后核对 |
 
@@ -254,6 +255,74 @@ kubectl -n $NS rollout status deployment/cluster
 ```
 
 Deployment 的滚动策略是 `maxSurge: 1`、`maxUnavailable: 0`：新 Pod 就绪之后才停旧 Pod，全程保持三个副本在服务。`tick` 每 10 秒照常一轮；leader 随着旧 Pod 停机在副本之间接力；被停机打断的 `slow` 由别的副本再跑一次。其余副本一直在领时刻，新起的副本没有要补跑的，日志里不该出现 `"catch_up":true`。PodDisruptionBudget 管不到滚动更新，它限制的是节点排空（drain）这类主动驱逐，保证那种时候至少留两个副本。端口转发连着的 Pod 被替换时会断开，重新开一个即可。
+
+### 10. 复制缓存：一个副本写，其余副本都要跟上
+
+这一组三个步骤连着做，用的是同一套小工具。缓存只在进程内存里，没有共享存储层，所以「读」只读被问的那个副本自己那份——某个副本没收到事件，这里就看得出来。
+
+```bash
+cput() { kubectl -n $NS exec "$1" -c cluster -- curl -s -X POST localhost:8080/api/caches -H 'content-type: application/json' -d "{\"key\":\"$2\",\"value\":\"$3\"}"; echo; }
+cget() { kubectl -n $NS exec "$1" -c cluster -- curl -s "localhost:8080/api/caches/$2"; echo; }
+cdel() { kubectl -n $NS exec "$1" -c cluster -- curl -s -X DELETE "localhost:8080/api/caches/$2"; echo; }
+```
+
+**10.1 写进去、删掉，其余副本都跟上**
+
+```bash
+P1=$(pods | sed -n 1p)
+cput "$P1" color blue
+sleep 2
+for p in $(pods); do cget "$p" color; done
+cdel "$P1" color
+sleep 2
+for p in $(pods); do cget "$p" color; done
+```
+
+第一轮每个副本都回 `"found":true,"value":"blue"`，`replica` 各不相同——写只发生在 `$P1`，其余两个是从 Kafka 事件里应用的。删除之后第二轮每个副本都回 `"found":false`。
+
+**10.2 新起的副本不是聋的**
+
+```bash
+kubectl -n $NS scale deployment/cluster --replicas=4
+kubectl -n $NS rollout status deployment/cluster --timeout=300s
+NEW=$(kubectl -n $NS get pods -l app.kubernetes.io/name=cluster --sort-by=.metadata.creationTimestamp -o jsonpath='{.items[-1].metadata.name}')
+# 等新副本的缓存入组：这一行出现就是入组完成。
+until kubectl -n $NS logs "$NEW" -c cluster | grep -q 'new group session begun'; do sleep 1; done
+OLD=$(pods | grep -v "^$NEW$" | sed -n 1p)
+cput "$OLD" fresh-key fresh-value
+sleep 2
+cget "$NEW" fresh-key
+kubectl -n $NS scale deployment/cluster --replicas=3
+```
+
+新副本必须回 `"found":true`。要点在于「打开缓存」这个调用本身会等到消费组把分区分给它才返回（最多 5 秒）：消费者从主题末尾开始读，分配之前发布的事件位移比起点还早，永远补不回来，而消费组首次再均衡默认就要等 3 秒。所以拿到缓存句柄的代码一定不是聋的——区别只在这 3 秒等在哪里。示例用启动组件提前打开，等待就发生在启动阶段（和监听并行，不阻塞就绪）；不提前打开的项目，这次等待会落在第一个用到缓存的请求上。
+
+**10.3 Kafka 断掉：各写各的，恢复后自己接上**
+
+```bash
+kubectl -n $NS scale statefulset/kafka --replicas=0
+P1=$(pods | sed -n 1p); P2=$(pods | sed -n 2p)
+cput "$P1" split-key from-p1
+sleep 3
+cget "$P2" split-key
+# 断网期间的日志：每 30 秒最多一条，带上这段时间里失败了多少次。
+kubectl -n $NS logs "$P2" -c cluster --since=60s | grep -c 'failed to fetch from kafka'
+kubectl -n $NS scale statefulset/kafka --replicas=1
+kubectl -n $NS rollout status statefulset/kafka --timeout=300s
+sleep 40
+cput "$P1" rejoined-key after-kafka
+sleep 4
+cget "$P2" rejoined-key
+cget "$P2" split-key
+logs '.logger == "dcache" and (.msg | test("unknown to the cluster|recovered"))'
+```
+
+Kafka 不在时：`$P1` 自己读得到 `split-key`，`$P2` 读不到——广播是尽力而为的，投递不了就丢。这段时间里失败的拉取每 30 秒最多记一条，日志里的 `failed_polls` 是这期间失败的次数；没有这个限速的话，拉取一失败就立刻返回，一秒能刷几十条。
+
+Kafka 回来以后（这里的 broker 用临时卷，Pod 删掉数据就没了，回来时主题是重建的、ID 变了），副本自己就能接上：日志里先出现一条 `the cache topic is unknown to the cluster, consuming it anew`，紧接着 `fetching from kafka recovered`，之后新写的 `rejoined-key` 照常传播，实测二三十秒内恢复。断网期间丢掉的 `split-key` 不会补，到期之前 `$P2` 一直读不到它——缓存的每一项都必须能从数据源重建，这是包文档里写明的取舍。
+
+**这里验不到的**：两个副本时钟不一致时谁的写入算数。同一节点上的 Pod 共用宿主机时钟，要让单个 Pod 的时钟偏掉得给容器 `CAP_SYS_TIME` 或塞假时钟，这个示例不上这类工具。框架里那条规则（一次写入的时间戳不会低于本副本已经应用过的最大值，否则对端会把它当过期丢掉）由 `dcache` 包的单元测试钉着。
+
 
 ## 正式环境
 
