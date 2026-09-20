@@ -7,8 +7,10 @@ import (
 	"context"
 	"time"
 
+	"cluster/configx"
 	"cluster/dao"
 
+	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/cronjob"
 )
 
@@ -35,15 +37,17 @@ func localTick(ctx context.Context) error {
 // lease alive by renewing it: expires_at_ms of cron:slow in gst_leases keeps
 // moving while the round runs, and no other replica can take the name over
 // meanwhile. Its period is longer than a round, so no instant passes while
-// one runs; a job that overran its period would have the instants that
-// passed skipped, with a warning naming how many. A round cut short — its pod
+// one runs while it takes the 20 seconds it takes by default; raise
+// JOBS_SLOW_SECONDS past the period and the instants that pass while a round
+// runs are skipped, with a warning while the round runs and another naming
+// how many it skipped once it returns. A round cut short — its pod
 // deleted or its process killed halfway — returns its context's ending or
 // never returns, so it has not run to its end, and another replica runs it a
 // second time for the same instant.
 func slow(ctx context.Context) error {
 	return round(ctx, "slow", func(ctx context.Context) error {
 		select {
-		case <-time.After(20 * time.Second):
+		case <-time.After(time.Duration(config.Get[configx.Jobs]().SlowSeconds) * time.Second):
 			return nil
 		case <-ctx.Done():
 			return ctx.Err()

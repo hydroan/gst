@@ -25,7 +25,7 @@ func init() {
 		Comment: "Rebuild is the action a client triggers: work that must not run twice at\nonce across the deployment. The service runs it under the \"rebuild\" lock.",
 	})
 	apidoc.Register("cluster/model", "RebuildReq", apidoc.StructDoc{
-		Comment: "RebuildReq says how long the rebuild takes: long enough to send a second\nrequest while it runs and see that one refused.",
+		Comment: "RebuildReq says how long the rebuild takes: long enough to send a second\nrequest while it runs and see that one refused. InTransaction asks for the\nlock to be taken from inside a transaction, which the framework refuses.",
 	})
 	apidoc.Register("cluster/model", "RebuildRsp", apidoc.StructDoc{
 		Comment: "RebuildRsp reports which replica ran the rebuild and for how long.",
@@ -38,5 +38,11 @@ func init() {
 			"Name":    "the job or the lock",
 			"Replica": "the replica that ran it, see helper.Replica",
 		},
+	})
+	apidoc.Register("cluster/model", "StepDown", apidoc.StructDoc{
+		Comment: "StepDown is the request that ends the leadership on the replica that takes\nit: the leader work returns a failure of its own instead of running until\nits context ends, which is how a deployment sees what the framework does\nwith work that gives the name back early.",
+	})
+	apidoc.Register("cluster/model", "StepDownRsp", apidoc.StructDoc{
+		Comment: "StepDownRsp reports which replica took the request, and whether that\nreplica had leader work to end.",
 	})
 }

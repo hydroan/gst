@@ -23,8 +23,10 @@ type Creator struct {
 // as a failure even though the work itself may have finished.
 func (c *Creator) Create(ctx *gst.ServiceContext, req *model.RebuildReq) (*model.RebuildRsp, error) {
 	seconds := max(req.Seconds, 1)
-	err := dao.Rebuild(ctx, seconds)
+	err := dao.Rebuild(ctx, seconds, req.InTransaction)
 	switch {
+	case errors.Is(err, lock.ErrInTransaction):
+		return nil, service.NewError(http.StatusBadRequest, "a lock cannot be taken inside a transaction")
 	case errors.Is(err, lock.ErrHeld):
 		return nil, service.NewError(http.StatusConflict, "a rebuild is already running")
 	case err != nil:

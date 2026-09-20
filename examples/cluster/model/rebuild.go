@@ -12,9 +12,11 @@ type Rebuild struct {
 }
 
 // RebuildReq says how long the rebuild takes: long enough to send a second
-// request while it runs and see that one refused.
+// request while it runs and see that one refused. InTransaction asks for the
+// lock to be taken from inside a transaction, which the framework refuses.
 type RebuildReq struct {
-	Seconds int `json:"seconds"`
+	Seconds       int  `json:"seconds"`
+	InTransaction bool `json:"in_transaction"`
 }
 
 // RebuildRsp reports which replica ran the rebuild and for how long.
