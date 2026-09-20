@@ -99,15 +99,26 @@ func TestClickhouse(t *testing.T) {
 		require.Equal(t, 6, count)
 	})
 
-	t.Run("CursorPagesOnTime", func(t *testing.T) {
+	t.Run("CursorPagesByAnIdentifyingColumn", func(t *testing.T) {
 		page := make([]*TestAggregateRecord, 0)
-		boundary := time.Date(2024, 1, 10, 8, 0, 0, 0, time.UTC)
 		require.NoError(t, database.DatabaseOn[*TestAggregateRecord](ctx, ins).
-			WithCursor(types.CursorForward(types.Asc("occurred_at"), boundary.Format(types.FilterTimeLayout))).
+			WithCursor(types.CursorForward(types.Asc("id"), "a1")).
 			WithLimit(1).
 			List(&page))
 		require.Len(t, page, 1)
 		require.Equal(t, "a2", page[0].ID, "the boundary row itself must not leak back into the page")
+
+		// The seed shows why the column has to identify a row: a4 and a5
+		// share an instant, so a page boundary on occurred_at would leave
+		// whichever of them the page had no room for unread. The rule is the
+		// model's declaration, so it reads the same here as on a dialect that
+		// enforces uniqueness.
+		boundary := time.Date(2024, 2, 10, 8, 0, 0, 0, time.UTC)
+		err := database.DatabaseOn[*TestAggregateRecord](ctx, ins).
+			WithCursor(types.CursorForward(types.Asc("occurred_at"), boundary.Format(types.FilterTimeLayout))).
+			WithLimit(1).
+			List(&page)
+		require.ErrorIs(t, err, database.ErrSharedCursorColumn)
 	})
 
 	t.Run("SelectGroupsMeasuresAndHaving", func(t *testing.T) {

@@ -155,6 +155,14 @@ var (
 	// mistake apart from a typo. A plain name carries no table and always
 	// means the chain's own model.
 	ErrColumnTable = errors.New("column reference belongs to another table")
+
+	// ErrSharedCursorColumn is returned when a cursor pages by a column two
+	// rows can share. The cursor is one boundary value, so the rows holding
+	// that same value are split between pages: the ones the page had no room
+	// for are never read again, and the feed has a hole in it nothing
+	// reports. The primary key, and any column carrying a unique index of
+	// its own, leave no such gap.
+	ErrSharedCursorColumn = errors.New("cursor column is not unique")
 )
 
 var (

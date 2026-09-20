@@ -22,6 +22,23 @@ type querySample struct {
 	modelregistry.Base
 }
 
+// querySnapshot pages by a column of its own: a cursor may only travel by a
+// column no two rows share, so a model paged by anything but its primary key
+// declares that column unique.
+type querySnapshot struct {
+	Code       string    `query:"code"`
+	SnapshotAt time.Time `json:"snapshot_at" query:"snapshot_at"`
+
+	modelregistry.Query
+	modelregistry.Base
+}
+
+func (querySnapshot) TableName() string { return "query_snapshots" }
+
+func (querySnapshot) Indexes() []modelregistry.Index {
+	return []modelregistry.Index{{Fields: []string{"SnapshotAt"}, Unique: true}}
+}
+
 type queryPlainSample struct {
 	Name string `query:"name"`
 
@@ -32,6 +49,7 @@ type queryPlainSample struct {
 // what makes them usable as the service model below.
 var (
 	_ types.Model = (*querySample)(nil)
+	_ types.Model = (*querySnapshot)(nil)
 	_ types.Model = (*queryPlainSample)(nil)
 )
 
@@ -39,6 +57,10 @@ var (
 // action itself and therefore parses the request through its own base.
 type querySampleService struct {
 	serviceregistry.Base[*querySample, *querySample, *querySample]
+}
+
+type querySnapshotService struct {
+	serviceregistry.Base[*querySnapshot, *querySnapshot, *querySnapshot]
 }
 
 type queryPlainService struct {
@@ -156,12 +178,21 @@ func TestBaseQueryCursor(t *testing.T) {
 	var svc querySampleService
 
 	t.Run("ReadsRequestValues", func(t *testing.T) {
-		cursor, err := svc.QueryCursor(newQueryContext(t, "/samples?_cursor_value=2026-07-01T08:30:15%2B08:00&_cursor_next=true&_cursor_field=created_at"))
+		var snapshots querySnapshotService
+		cursor, err := snapshots.QueryCursor(newQueryContext(t, "/snapshots?_cursor_value=2026-07-01T08:30:15%2B08:00&_cursor_next=true&_cursor_field=snapshot_at"))
 		require.NoError(t, err)
 		// A time boundary is accepted in RFC 3339 only, like a time filter
 		// bound, and travels as the UTC wall clock.
 		boundary := time.Date(2026, 7, 1, 8, 30, 15, 0, time.FixedZone("UTC+8", 8*3600)).UTC().Format(types.FilterTimeLayout)
-		require.Equal(t, types.CursorForward(types.Asc("created_at"), boundary), cursor)
+		require.Equal(t, types.CursorForward(types.Asc("snapshot_at"), boundary), cursor)
+	})
+
+	t.Run("SharedColumnIsAClientError", func(t *testing.T) {
+		// created_at is what a feed in creation order reaches for, and the
+		// column rows share most readily: the ones a page has no room for
+		// would fall between the pages unread.
+		_, err := svc.QueryCursor(newQueryContext(t, "/samples?_cursor_value=2026-07-01T08:30:15%2B08:00&_cursor_field=created_at"))
+		require.ErrorContains(t, err, "not unique")
 	})
 
 	t.Run("UnknownColumnIsAClientError", func(t *testing.T) {

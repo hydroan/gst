@@ -368,6 +368,23 @@ type TestAggregateRecord struct {
 
 func (*TestAggregateRecord) TableName() string { return "test_aggregate_records" }
 
+// TestCursorSnapshot is the model the time-column cursor walk pages through:
+// its instant carries a unique index of its own, which is what a cursor
+// column must have — on a column two rows can share, the rows on a page
+// boundary fall between the pages.
+type TestCursorSnapshot struct {
+	Label      string    `json:"label" gorm:"size:191"`
+	SnapshotAt time.Time `json:"snapshot_at"`
+
+	modelregistry.Base
+}
+
+func (*TestCursorSnapshot) TableName() string { return "test_cursor_snapshots" }
+
+func (*TestCursorSnapshot) Indexes() []modelregistry.Index {
+	return []modelregistry.Index{{Fields: []string{"SnapshotAt"}, Unique: true}}
+}
+
 // TestRecordTag is the related model of TestAggregateRecord, used by the
 // correlated-subquery filters. It soft deletes like its parent, so the tests
 // can assert that a subquery hides the same rows a List on it hides. Category
@@ -781,6 +798,7 @@ func TestMain(m *testing.M) {
 			modelregistry.RegisterTable[*TestHookGroup]()
 			modelregistry.RegisterTable[*TestCategory]()
 			modelregistry.RegisterTable[*TestAggregateRecord]()
+			modelregistry.RegisterTable[*TestCursorSnapshot]()
 			modelregistry.RegisterTable[*TestRecordTag]()
 			modelregistry.RegisterTable[*TestTagNote]()
 			modelregistry.RegisterTable[*TestPayment]()

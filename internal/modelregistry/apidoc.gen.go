@@ -28,9 +28,9 @@ func init() {
 		},
 	})
 	apidoc.Register("github.com/hydroan/gst/internal/modelregistry", "Cursor", apidoc.StructDoc{
-		Comment: "Cursor declares cursor-pagination query parameters for List actions.\n\nCursor owns cursor position and direction only. Ordering for cursor pagination\nis derived from CursorField and CursorNext, so SortBy intentionally remains\noutside this struct to avoid multiple competing order sources. Embedding\nCursor also lets the client tune the batch size via _size (the field lives\nin Pagination; the controller reads it from the URL directly), while _page\nstays rejected: offset paging conflicts with cursor semantics.",
+		Comment: "Cursor declares cursor-pagination query parameters for List actions.\n\nCursor owns cursor position and direction only. Ordering for cursor pagination\nis derived from CursorField and CursorNext, so SortBy intentionally remains\noutside this struct to avoid multiple competing order sources. The field\nnamed must be one no two rows share — the primary key, or a field carrying\na unique index of its own — because the cursor is a single boundary value:\non a shared one the rows holding it are split between pages and the ones a\npage had no room for are never read. Any other field is a 400. Embedding\nCursor also lets the client tune the batch size via _size (the field lives\nin Pagination; the controller reads it from the URL directly), while _page\nstays rejected: offset paging conflicts with cursor semantics.",
 		Fields: map[string]string{
-			"CursorField": "CursorField names the single field the cursor orders by.",
+			"CursorField": "CursorField names the single field the cursor orders by; it must be the primary key or a field with a unique index of its own, see DefaultCursorColumn.",
 			"CursorNext":  "CursorNext chooses the cursor direction; false requests the previous page.",
 			"CursorValue": "CursorValue is the current cursor token; it must parse as the cursor column's Go type.",
 		},

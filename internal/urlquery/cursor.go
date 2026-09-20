@@ -25,6 +25,12 @@ import (
 // value instead of failing (MySQL turns a non-numeric boundary on a numeric
 // column into 0) and silently restart the feed from the first page.
 //
+// The column must also be one rows cannot share — the primary key, or a
+// column with a unique index of its own: a cursor is a single boundary
+// value, so on a shared value the rows a page had no room for fall between
+// the pages and are never read. A client naming any other column is refused
+// rather than served a feed with holes in it.
+//
 // A URL cursor always pages an ascending feed: _cursor_next only chooses
 // whether the request travels along the feed or back down it. A descending
 // feed is a service-side cursor, built with types.CursorForward on a Desc
@@ -51,6 +57,17 @@ func Cursor(q url.Values, m types.Model) (types.Cursor, error) {
 		resolved, ok := columns[field]
 		if !ok {
 			return types.Cursor{}, errors.Newf("unknown cursor column %q", field)
+		}
+		identifying, err := modelregistry.IdentifyingColumns(m)
+		if err != nil {
+			return types.Cursor{}, err
+		}
+		if _, ok := identifying[resolved.DBName]; !ok {
+			// Rows sharing the boundary's value are split between pages, and
+			// the ones the page had no room for are never read again. The
+			// client is told instead of quietly getting fewer rows.
+			return types.Cursor{}, errors.Newf(
+				"cursor column %q is not unique: page by the primary key, or by a column with a unique index of its own", field)
 		}
 		column = resolved.DBName
 		columnType = resolved.Type

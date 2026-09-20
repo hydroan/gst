@@ -613,6 +613,29 @@ type cursorTestModel struct {
 	modelregistry.Base
 }
 
+// cursorUniqueTestModel carries the two kinds of column a cursor may page
+// by besides the primary key: one under a unique index of its own, and one
+// under a unique index it shares, which identifies no row on its own.
+type cursorUniqueTestModel struct {
+	Code       string    `json:"code" query:"code"`
+	SnapshotAt time.Time `json:"snapshot_at" query:"snapshot_at"`
+	Shard      string    `json:"shard" query:"shard"`
+	Slot       int       `json:"slot" query:"slot"`
+
+	modelregistry.Cursor
+	modelregistry.Base
+}
+
+func (cursorUniqueTestModel) TableName() string { return "cursor_unique_test_models" }
+
+func (cursorUniqueTestModel) Indexes() []modelregistry.Index {
+	return []modelregistry.Index{
+		{Fields: []string{"Code"}, Unique: true},
+		{Fields: []string{"SnapshotAt"}, Unique: true},
+		{Fields: []string{"Shard", "Slot"}, Unique: true},
+	}
+}
+
 type cursorAutoTestModel struct {
 	modelregistry.Cursor
 	modelregistry.AutoBase
@@ -676,13 +699,53 @@ func TestCursor(t *testing.T) {
 		cursor, err := Cursor(url.Values{
 			"_cursor_value": {"2026-07-01T08:30:15+08:00"},
 			"_cursor_next":  {"true"},
-			"_cursor_field": {"created_at"},
-		}, &cursorTestModel{})
+			"_cursor_field": {"snapshot_at"},
+		}, &cursorUniqueTestModel{})
 		require.NoError(t, err)
 		// A time boundary is normalized like a time filter bound: the RFC 3339
 		// input travels as the UTC wall clock.
 		boundary := time.Date(2026, 7, 1, 8, 30, 15, 0, time.FixedZone("", 8*3600)).UTC().Format(types.FilterTimeLayout)
-		require.Equal(t, types.CursorForward(types.Asc("created_at"), boundary), cursor)
+		require.Equal(t, types.CursorForward(types.Asc("snapshot_at"), boundary), cursor)
+	})
+
+	t.Run("SharedColumnFails", func(t *testing.T) {
+		// created_at is the column a feed in creation order reaches for
+		// first, and the one rows share most readily: two rows written in the
+		// same instant split across the page boundary, and the ones the page
+		// had no room for are never read again.
+		_, err := Cursor(url.Values{
+			"_cursor_value": {"2026-07-01T08:30:15+08:00"},
+			"_cursor_field": {"created_at"},
+		}, &cursorTestModel{})
+		require.ErrorContains(t, err, "not unique", "a column rows can share must be refused, not served with holes")
+
+		// A column under a unique index it shares with another identifies no
+		// row on its own either.
+		_, err = Cursor(url.Values{
+			"_cursor_value": {"a"},
+			"_cursor_field": {"shard"},
+		}, &cursorUniqueTestModel{})
+		require.ErrorContains(t, err, "not unique")
+	})
+
+	t.Run("ColumnWithItsOwnUniqueIndexPasses", func(t *testing.T) {
+		cursor, err := Cursor(url.Values{
+			"_cursor_value": {"abc"},
+			"_cursor_next":  {"true"},
+			"_cursor_field": {"code"},
+		}, &cursorUniqueTestModel{})
+		require.NoError(t, err, "a column no two rows share leaves no gap between pages")
+		require.Equal(t, "code", cursor.Order().Column())
+	})
+
+	t.Run("PrimaryKeyPasses", func(t *testing.T) {
+		cursor, err := Cursor(url.Values{
+			"_cursor_value": {"abc"},
+			"_cursor_next":  {"true"},
+			"_cursor_field": {"id"},
+		}, &cursorTestModel{})
+		require.NoError(t, err)
+		require.Equal(t, "id", cursor.Order().Column())
 	})
 
 	t.Run("MissingDirectionTravelsBackward", func(t *testing.T) {

@@ -76,13 +76,17 @@ type paginatable interface {
 //
 // Cursor owns cursor position and direction only. Ordering for cursor pagination
 // is derived from CursorField and CursorNext, so SortBy intentionally remains
-// outside this struct to avoid multiple competing order sources. Embedding
+// outside this struct to avoid multiple competing order sources. The field
+// named must be one no two rows share — the primary key, or a field carrying
+// a unique index of its own — because the cursor is a single boundary value:
+// on a shared one the rows holding it are split between pages and the ones a
+// page had no room for are never read. Any other field is a 400. Embedding
 // Cursor also lets the client tune the batch size via _size (the field lives
 // in Pagination; the controller reads it from the URL directly), while _page
 // stays rejected: offset paging conflicts with cursor semantics.
 type Cursor struct {
 	CursorValue *string `json:"-" gorm:"-" query:"_cursor_value" url:"_cursor_value,omitempty"` // CursorValue is the current cursor token; it must parse as the cursor column's Go type.
-	CursorField string  `json:"-" gorm:"-" query:"_cursor_field" url:"_cursor_field,omitempty"` // CursorField names the single field the cursor orders by.
+	CursorField string  `json:"-" gorm:"-" query:"_cursor_field" url:"_cursor_field,omitempty"` // CursorField names the single field the cursor orders by; it must be the primary key or a field with a unique index of its own, see DefaultCursorColumn.
 	CursorNext  bool    `json:"-" gorm:"-" query:"_cursor_next" url:"_cursor_next,omitempty"`   // CursorNext chooses the cursor direction; false requests the previous page.
 }
 
@@ -96,7 +100,14 @@ type cursorable interface {
 
 // DefaultCursorColumn is the database column cursor pagination falls back to
 // when the caller did not name one. It is the primary key of every framework
-// base model, which is the only column guaranteed to be unique and monotonic.
+// base model, the one column a cursor can always page by: no two rows share
+// it, so no row falls between two pages.
+//
+// Rising, not monotonic across writers: Base draws its id before the insert
+// and AutoBase takes it from the sequence at insert time, so of two rows
+// written at once the one with the smaller id may commit second. A feed read
+// while those writes are in flight can therefore pass over the later commit;
+// a feed of rows already committed reads them all.
 // The database layer applies the fallback when building the boundary
 // comparison, and URL parsing resolves the same column to type-check the
 // cursor value, so both consumers read this single definition.

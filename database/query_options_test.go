@@ -111,34 +111,27 @@ func TestDatabaseWithCursor(t *testing.T) {
 		}
 	})
 
-	t.Run("CustomField", func(t *testing.T) {
+	t.Run("SharedColumnIsRefused", func(t *testing.T) {
 		defer cleanupTestData()
 		setupTestData(t)
 
-		// Test cursor pagination with custom field (created_at)
 		users := make([]*TestUser, 0)
 		require.NoError(t, database.Database[*TestUser](context.Background()).List(&users))
 		require.Len(t, users, 3)
 
-		// Get first record's created_at as cursor: per the WithCursor contract
-		// a time boundary is the UTC wall clock (YYYY-MM-DD HH:MM:SS.ffffff).
-		firstUser := users[0]
-		require.False(t, firstUser.CreatedAt.IsZero(), "first user should have created_at")
-		cursorValue := firstUser.CreatedAt.UTC().Format("2006-01-02 15:04:05.000000")
-
-		// Fetch next page using created_at as cursor field
+		// created_at is the column a feed in creation order reaches for
+		// first, and the one rows share most readily: several rows written in
+		// the same instant carry the same boundary value, so the ones a page
+		// has no room for fall between the pages and are never read. The
+		// chain refuses it instead of serving a feed with holes in it.
+		boundary := users[0].CreatedAt.UTC().Format(types.FilterTimeLayout)
 		nextUsers := make([]*TestUser, 0)
-		require.NoError(t, database.Database[*TestUser](context.Background()).
+		err := database.Database[*TestUser](context.Background()).
 			WithLimit(1).
-			WithCursor(types.CursorForward(types.Asc("created_at"), cursorValue)).
-			List(&nextUsers))
-		if len(nextUsers) > 0 {
-			require.NotEqual(t, firstUser.ID, nextUsers[0].ID, "should fetch different record when available")
-			require.False(t, nextUsers[0].CreatedAt.IsZero(), "next user should have created_at")
-			require.True(t, nextUsers[0].CreatedAt.After(firstUser.CreatedAt) ||
-				nextUsers[0].CreatedAt.Equal(firstUser.CreatedAt),
-				"next record should have created_at >= cursor value")
-		}
+			WithCursor(types.CursorForward(types.Asc("created_at"), boundary)).
+			List(&nextUsers)
+		require.ErrorIs(t, err, database.ErrSharedCursorColumn)
+		require.Empty(t, nextUsers, "a refused chain reads nothing")
 	})
 
 	t.Run("TimeFieldPagesAcrossDialects", func(t *testing.T) {
@@ -146,28 +139,40 @@ func TestDatabaseWithCursor(t *testing.T) {
 		// most, so the walk is pinned on every dialect: each boundary is the
 		// UTC wall clock of the previous row per the WithCursor contract, and
 		// every page must return exactly the next distinct instant.
-		defer cleanupAggregateData()
-		setupAggregateData(t)
+		ctx := context.Background()
+		instants := []time.Time{
+			time.Date(2024, 1, 10, 8, 0, 0, 0, time.UTC),
+			time.Date(2024, 1, 10, 9, 0, 0, 0, time.UTC),
+			time.Date(2024, 1, 11, 8, 0, 0, 0, time.UTC),
+		}
+		snapshots := make([]*TestCursorSnapshot, 0, len(instants))
+		for i, at := range instants {
+			snapshot := &TestCursorSnapshot{Label: fmt.Sprintf("s%d", i+1), SnapshotAt: at}
+			snapshot.ID = fmt.Sprintf("snapshot-%d", i+1)
+			snapshots = append(snapshots, snapshot)
+		}
+		require.NoError(t, database.Database[*TestCursorSnapshot](ctx).Create(snapshots...))
+		defer func() {
+			require.NoError(t, database.Database[*TestCursorSnapshot](ctx).WithPurge().Delete(snapshots...))
+		}()
 
-		next := func(t *testing.T, boundary time.Time) []*TestAggregateRecord {
+		next := func(t *testing.T, boundary time.Time) []*TestCursorSnapshot {
 			t.Helper()
-			page := make([]*TestAggregateRecord, 0)
-			require.NoError(t, database.Database[*TestAggregateRecord](context.Background()).
-				WithCursor(types.CursorForward(types.Asc("occurred_at"), boundary.UTC().Format(types.FilterTimeLayout))).
+			page := make([]*TestCursorSnapshot, 0)
+			require.NoError(t, database.Database[*TestCursorSnapshot](ctx).
+				WithCursor(types.CursorForward(types.Asc("snapshot_at"), boundary.UTC().Format(types.FilterTimeLayout))).
 				WithLimit(1).
 				List(&page))
 			return page
 		}
 
-		// The seed's first three instants are strictly increasing: a1 at
-		// 2024-01-10 08:00, a2 at 09:00, a3 at 2024-01-11 08:00.
-		page := next(t, time.Date(2024, 1, 10, 8, 0, 0, 0, time.UTC))
+		page := next(t, instants[0])
 		require.Len(t, page, 1)
-		require.Equal(t, "a2", page[0].ID, "the boundary row itself must not leak back into the page")
+		require.Equal(t, "s2", page[0].Label, "the boundary row itself must not leak back into the page")
 
-		page = next(t, page[0].OccurredAt)
+		page = next(t, page[0].SnapshotAt)
 		require.Len(t, page, 1)
-		require.Equal(t, "a3", page[0].ID)
+		require.Equal(t, "s3", page[0].Label)
 	})
 
 	t.Run("EmptyCursor", func(t *testing.T) {

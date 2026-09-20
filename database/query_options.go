@@ -32,11 +32,19 @@ import (
 // wall clock the framework stores on every dialect, so a boundary read back
 // from a row formats as row.CreatedAt.UTC().
 //
+// The column must be one rows cannot share: the primary key, or a column
+// carrying a unique index of its own. A cursor is a single boundary value,
+// so on a column two rows can share, the rows on the boundary's own value
+// are split between pages and the ones a page had no room for are never
+// read — a feed with holes nothing reports. Naming any other column fails
+// the chain. A feed in creation order pages by the primary key of a base
+// model, which the rows are created in the order of.
+//
 // Examples:
 //
 //	WithCursor(types.CursorForward(SampleCols.ID.Asc(), lastID)).WithLimit(10).List(&next)
 //	WithCursor(types.CursorBackward(SampleCols.ID.Asc(), firstID)).WithLimit(10).List(&prev)
-//	WithCursor(types.CursorForward(SampleCols.CreatedAt.Desc(), lastCreatedAt)).WithLimit(10).List(&older)
+//	WithCursor(types.CursorForward(SampleCols.ID.Desc(), lastID)).WithLimit(10).List(&older)
 func (db *database[M]) WithCursor(cursor types.Cursor) types.Database[M] {
 	db.mu.Lock()
 	defer db.mu.Unlock()
@@ -56,9 +64,30 @@ func (db *database[M]) WithCursor(cursor types.Cursor) types.Database[M] {
 			cursor = types.CursorForward(order, cursor.Value())
 		}
 	}
+	if err := db.identifyingCursorColumn(cursor.Order().Column()); err != nil {
+		db.err = err
+		return db
+	}
 	db.cursor = cursor
 
 	return db
+}
+
+// identifyingCursorColumn refuses a cursor over a column two rows can share.
+// The boundary is one value, so those rows are split between pages: the ones
+// the page had no room for are skipped, and the caller reads a feed with
+// holes in it that nothing reports. The primary key and a column with a
+// unique index of its own leave no such gap.
+func (db *database[M]) identifyingCursorColumn(column string) error {
+	identifying, err := modelregistry.IdentifyingColumns(*new(M))
+	if err != nil {
+		return err
+	}
+	if _, ok := identifying[column]; !ok {
+		return errors.Wrapf(ErrSharedCursorColumn,
+			"WithCursor pages by %q: page by the primary key, or by a column with a unique index of its own", column)
+	}
+	return nil
 }
 
 // ownOrder refuses an order of another model's column. The reference names
