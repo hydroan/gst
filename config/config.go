@@ -194,7 +194,7 @@ func Init() (err error) {
 	if err = bindEnv("", reflect.ValueOf(App).Elem()); err != nil {
 		return err
 	}
-	if err = cv.Unmarshal(App); err != nil {
+	if err = cv.Unmarshal(App, decodeHooks()); err != nil {
 		return errors.Wrap(err, "failed to unmarshal config")
 	}
 
@@ -456,7 +456,45 @@ func checkSection(name string, typ reflect.Type) error {
 	if registered, ok := registeredTypes[name]; ok && registered != typ {
 		return errors.Newf("config: %s and %s both register section %q", registered, typ, name)
 	}
-	return nil
+	return checkEnvNames(name, typ)
+}
+
+// checkEnvNames refuses a section whose keys would read an environment
+// variable another key already reads. Two keys reach the same variable
+// whenever their names differ only where the framework does not look: the
+// variable is the key uppercased with its dots turned into underscores, so
+// a section "logger_http" with a key "body_enabled" reads
+// LOGGER_HTTP_BODY_ENABLED, and so does the framework's own
+// logger.http_body_enabled. One variable would then set two keys, and which
+// of them the deployment meant is not something the framework can tell.
+func checkEnvNames(name string, typ reflect.Type) error {
+	taken := map[string]string{}
+	collect := func(prefix string, value reflect.Value) {
+		walkConfigKeys(prefix, value, func(key string, _ reflect.Value) {
+			taken[envName(key)] = key
+		})
+	}
+	collect("", reflect.ValueOf(App).Elem())
+	for registered, registeredTyp := range registeredTypes {
+		if registered == name {
+			continue
+		}
+		collect(registered, reflect.New(registeredTyp).Elem())
+	}
+
+	var errs error
+	walkConfigKeys(name, reflect.New(typ).Elem(), func(key string, _ reflect.Value) {
+		if other, clash := taken[envName(key)]; clash {
+			errs = errors.Join(errs, errors.Newf(
+				"config: %s registers key %q, which reads the same environment variable %s as %q", typ, key, envName(key), other))
+		}
+	})
+	return errs
+}
+
+// envName is the environment variable a configuration key reads.
+func envName(key string) string {
+	return strings.ToUpper(strings.ReplaceAll(key, ".", "_"))
 }
 
 // loadSection loads a registered section: its default tags make the section's
@@ -464,6 +502,10 @@ func checkSection(name string, typ reflect.Type) error {
 // resolves from the environment, the file and the defaults in that order.
 func loadSection(name string, typ reflect.Type) error {
 	defaultCfg := reflect.New(typ)
+	// The default tags are applied to what exists: a nested struct behind a
+	// nil pointer has no fields yet, so its tags would be skipped and the
+	// section would come up with zeros where it declared values.
+	allocateNestedStructs(defaultCfg.Elem())
 	if err := defaults.Set(defaultCfg.Interface()); err != nil {
 		return errors.Wrapf(err, "config: section %q of %s: failed to apply the default tags", name, typ)
 	}
@@ -487,7 +529,7 @@ func loadSection(name string, typ reflect.Type) error {
 		Type: typ,
 		Tag:  reflect.StructTag(`mapstructure:"` + name + `"`),
 	}}))
-	if err := cv.Unmarshal(holder.Interface()); err != nil {
+	if err := cv.Unmarshal(holder.Interface(), decodeHooks()); err != nil {
 		return errors.Wrapf(err, "config: section %q of %s: failed to decode", name, typ)
 	}
 	section := holder.Elem().Field(0)
@@ -641,6 +683,30 @@ func setDefaultDurationFields(typ reflect.Type, val reflect.Value) {
 	}
 }
 
+// allocateNestedStructs replaces every nil pointer to a struct in cfg with a
+// pointer to a zero one, so that whatever walks the configuration afterwards
+// — the default tags, the keys, the environment bindings — sees the fields
+// behind it. A time behind a pointer is a value, not a struct to walk into.
+func allocateNestedStructs(cfg reflect.Value) {
+	for sf, field := range cfg.Fields() {
+		if !sf.IsExported() && (!sf.Anonymous || sf.Type.Kind() != reflect.Struct) {
+			continue
+		}
+		if field.Kind() == reflect.Pointer && field.Type().Elem().Kind() == reflect.Struct && field.Type().Elem() != reflect.TypeFor[time.Time]() {
+			if field.IsNil() {
+				if !field.CanSet() {
+					continue
+				}
+				field.Set(reflect.New(field.Type().Elem()))
+			}
+			field = field.Elem()
+		}
+		if field.Kind() == reflect.Struct && field.Type() != reflect.TypeFor[time.Time]() {
+			allocateNestedStructs(field)
+		}
+	}
+}
+
 // bindEnv binds every key of the configuration struct cfg under prefix to its
 // environment variable, so a key no file or default mentions reads it too, and
 // checks the variables that are set decode into their keys' types, so a value
@@ -652,7 +718,7 @@ func bindEnv(prefix string, cfg reflect.Value) error {
 			errs = errors.Join(errs, errors.Wrapf(err, "config: failed to bind the environment variable of %s", key))
 			return
 		}
-		name := strings.ToUpper(strings.ReplaceAll(key, ".", "_"))
+		name := envName(key)
 		value, ok := os.LookupEnv(name)
 		if !ok {
 			return
@@ -669,7 +735,7 @@ func bindEnv(prefix string, cfg reflect.Value) error {
 func decodeEnvValue(value string, typ reflect.Type) error {
 	v := viper.New()
 	v.Set("value", value)
-	return v.UnmarshalKey("value", reflect.New(typ).Interface())
+	return v.UnmarshalKey("value", reflect.New(typ).Interface(), decodeHooks())
 }
 
 // walkConfigKeys calls visit with every key of the configuration struct cfg

@@ -39,7 +39,7 @@ func Load(file string) (*Config, error) {
 	if err := v.ReadInConfig(); err != nil {
 		return nil, errors.Wrapf(err, "failed to read config file %s", file)
 	}
-	if err := v.Unmarshal(c); err != nil {
+	if err := v.Unmarshal(c, decodeHooks()); err != nil {
 		return nil, errors.Wrapf(err, "failed to unmarshal config file %s", file)
 	}
 	return c, nil

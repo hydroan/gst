@@ -89,7 +89,7 @@ func (*Influxdb) setDefault(v *viper.Viper) {
 
 	v.SetDefault("influxdb.tls_enabled", false)
 	v.SetDefault("influxdb.cert_file", "")
-	v.SetDefault("influxdb.key_file", 0)
+	v.SetDefault("influxdb.key_file", "")
 	v.SetDefault("influxdb.ca_file", "")
 	v.SetDefault("influxdb.insecure_skip_verify", false)
 
