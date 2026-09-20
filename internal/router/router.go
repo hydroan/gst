@@ -17,12 +17,12 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
-	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/consts"
 	"github.com/hydroan/gst/internal/controller"
+	"github.com/hydroan/gst/internal/lifecycle"
 	"github.com/hydroan/gst/internal/middleware"
 	"github.com/hydroan/gst/internal/openapigen"
 	"github.com/hydroan/gst/internal/response"
@@ -297,9 +297,12 @@ func newServer(addr string, handler http.Handler) *http.Server {
 func Auth() *gin.RouterGroup { return auth }
 func Pub() *gin.RouterGroup  { return pub }
 
-// drainTimeout bounds how long Stop waits for the requests in flight. A
-// variable so a test can play the bound out in milliseconds.
-var drainTimeout = 30 * time.Second
+// drainTimeout bounds how long Stop waits for the requests in flight. It is
+// the shutdown's one window, shared with what the components and the
+// providers are stopped within, so the whole teardown is a budget an
+// orchestrator's grace can be set against. A variable so a test can play the
+// bound out in milliseconds.
+var drainTimeout = lifecycle.StopTimeout
 
 // Stop shuts the server down: it stops accepting connections and waits for
 // the requests in flight, for up to drainTimeout and no longer than abandon

@@ -243,6 +243,14 @@ func start(ctx context.Context, c Component) error {
 	return nil
 }
 
+// StopTimeout is how long a shutdown waits for what it is stopping: the
+// requests in flight first, then the components' own work and the providers
+// after them, each phase within this window. It is one definition because
+// the phases are one budget from the outside: the orchestrator's grace has
+// to cover their sum, and a number that drifted apart in two packages would
+// make that sum something nobody could state.
+const StopTimeout = 30 * time.Second
+
 // Stop stops the started components in reverse start order — the components
 // first, then the providers they used — giving each the remainder of ctx to
 // finish its in-flight work. Once the process fails now the components are
@@ -270,7 +278,7 @@ func Stop(ctx context.Context) {
 // component on ctx ended the moment the process fails now.
 func stopOne(ctx context.Context, c Component) error {
 	if c.Stage == StageProvider {
-		return c.Stop(ctx)
+		return awaitProviderStop(ctx, c)
 	}
 	stopCtx, cancel := context.WithCancelCause(ctx)
 	defer cancel(nil)
@@ -278,6 +286,39 @@ func stopOne(ctx context.Context, c Component) error {
 	stopWatching := context.AfterFunc(failedNow, func() { cancel(context.Cause(failedNow)) })
 	defer stopWatching()
 	return c.Stop(stopCtx)
+}
+
+// awaitProviderStop runs a provider's Stop and waits for it only as long as
+// ctx allows.
+//
+// A provider's Stop takes the context and most clients have no use for it:
+// closing a pool or a consumer group is a wait with no way to hurry it. One
+// that never returns would hold the whole shutdown, and a process that
+// outstays its orchestrator's grace is killed — with the log lines it had
+// not written yet, and the work it was still winding down. Leaving a close
+// behind costs a connection the server drops on its own once the process
+// goes.
+func awaitProviderStop(ctx context.Context, c Component) error {
+	stopped := make(chan error, 1)
+	go func() { stopped <- c.Stop(ctx) }()
+	select {
+	case err := <-stopped:
+		return err
+	case <-ctx.Done():
+		zap.S().Warnw("provider did not stop within the shutdown window, leaving it behind",
+			"component", c.Name, "reason", context.Cause(ctx))
+		return nil
+	}
+}
+
+// AbandonWaits ends every wait a graceful shutdown would keep, without
+// reporting a failure: the operator asked for the process to go now — a
+// second termination signal — and what is left of the teardown runs without
+// waiting for anything. The process still leaves through its own exit, so
+// the buffered log lines are written and the exit code stays the one a
+// clean shutdown has.
+func AbandonWaits(reason error) {
+	failNow(orUnexplained(reason))
 }
 
 // Await waits for done to close for as long as ctx allows and reports

@@ -51,7 +51,9 @@ func run(m *testing.M) int {
 	if err := errors.Join(sqlite.Init(), mysql.Init(), postgres.Init()); err != nil {
 		panic(err)
 	}
-	dbruntime.Wait()
+	if err := dbruntime.Wait(); err != nil {
+		panic(err)
+	}
 	return m.Run()
 }
 

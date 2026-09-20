@@ -430,7 +430,29 @@ done
 
 框架停机最长是：5 秒排空，加最多 30 秒等 HTTP 连接，加最多 30 秒等在途任务；开了链路追踪和调试端点（pprof、statsviz）的部署，关闭它们再各加最多 5 秒，合计 80 秒。所以 `terminationGracePeriodSeconds` 设成 90 秒，盖过最坏情况。示例里的任务几秒就返回，实际停机要短得多。
 
-**6.4 滚动更新：工作不断**
+**6.4 催一把：第二个信号**
+
+```bash
+kubectl -n $NS patch configmap cluster --type merge -p '{"data":{"SERVER_SHUTDOWN_DELAY":"60s"}}'
+kubectl -n $NS rollout restart deployment/cluster
+kubectl -n $NS rollout status deployment/cluster --timeout=300s
+P=$(pods | sed -n 1p)
+kubectl -n $NS delete pod "$P" --wait=false
+sleep 3
+kubectl -n $NS exec "$P" -c cluster -- pkill -TERM -x cluster
+time kubectl -n $NS wait --for=delete pod/"$P" --timeout=120s
+kubectl -n $NS patch configmap cluster --type merge -p '{"data":{"SERVER_SHUTDOWN_DELAY":"5s"}}'
+kubectl -n $NS rollout restart deployment/cluster
+kubectl -n $NS rollout status deployment/cluster --timeout=300s
+```
+
+把排空窗口调到 60 秒，是为了看清第二个信号做了什么。删 Pod 送来第一个 SIGTERM，进程摘掉流量，开始等这 60 秒；第二个 SIGTERM 把剩下的等待全部丢掉——排空窗口、在途请求、组件自己的工作——进程当场退出，`wait --for=delete` 几秒就返回，而不是一分多钟。日志里 `draining before shutdown` 之后紧跟着 `shutdown hurried by a second signal` 和 `drain cut short`。
+
+催停机不算失败：退出码和干净停机一样，容器的结束原因还是 Completed。
+
+框架接管的信号只有 SIGINT 和 SIGTERM 这两个编排器会送的。SIGQUIT 留给 Go 运行时：`pkill -QUIT -x cluster` 打印全部 goroutine 的栈再退出，是看一个卡住的进程卡在哪的办法，框架接管了它就没了。
+
+**6.5 滚动更新：工作不断**
 
 ```bash
 kubectl -n $NS rollout restart deployment/cluster

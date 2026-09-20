@@ -55,14 +55,6 @@ var (
 // winds down on its own.
 var processCtx, cancelProcess = context.WithCancel(context.Background())
 
-// componentStopTimeout bounds how long the lifecycle may take to stop what
-// it started at shutdown — the components' in-flight work first, then the
-// providers, all within the one window — so a stuck job cannot hold the
-// shutdown hostage. It matches the bound router.Stop gives the HTTP drain. A
-// process that fails now does not wait for the components at all, see
-// lifecycle.FailNow.
-const componentStopTimeout = 30 * time.Second
-
 // Bootstrap brings up everything the process needs before it can serve, in
 // dependency order: configuration, logging and metrics; the databases; the
 // backbone clients and the providers; the authorization, service,
@@ -101,7 +93,9 @@ func Bootstrap() error {
 	warnUnlinkedProviders()
 	// First database drain: create the tables registered before the clients
 	// and modules initialize, typically by model package init functions.
-	dbruntime.Wait()
+	if err := dbruntime.Wait(); err != nil {
+		return err
+	}
 
 	startup.Register(
 		// backbone clients
@@ -143,7 +137,9 @@ func Bootstrap() error {
 	// Second database drain: create the tables modules added during
 	// Bootstrap. InitRouterAndModules has waited for their registration, so
 	// the drain sees every entry they queued.
-	dbruntime.Wait()
+	if err := dbruntime.Wait(); err != nil {
+		return err
+	}
 
 	// Mark success only after every phase finished: a failed Bootstrap must
 	// keep returning its error instead of turning into a silent nil on a
@@ -200,12 +196,23 @@ func InitRouterAndModules() error {
 // the rest of the teardown gets failNowTimeout. Such a failure coming while
 // a shutdown is already under way — the lease lost as the work winds down —
 // drops the waits left from then on, and is the error Run returns unless an
-// earlier failure is.
+// earlier failure is. A second termination signal drops the waits the same
+// way without failing anything, so an operator can hurry a shutdown along
+// and still get the exit of a clean one.
+//
+// The signals Run answers are the two an orchestrator sends: SIGINT and
+// SIGTERM. SIGQUIT stays with the runtime, whose answer to it — every
+// goroutine's stack on stderr, then the exit — is how a wedged process is
+// read from the outside, and catching it would take that away.
 func Run() (err error) {
 	defer func() {
 		clean()
+		// A failure that arrives during the teardown is still what the
+		// process leaves on. Reading the failure and not the fail-now
+		// context is what keeps a second signal — which drops the waits
+		// without failing anything — an exit as clean as the first signal's.
 		if err == nil {
-			err = context.Cause(lifecycle.FailedNow())
+			err = context.Cause(lifecycle.Failure())
 		}
 	}()
 	// The providers Bootstrap started are stopped on every way out of Run,
@@ -220,7 +227,9 @@ func Run() (err error) {
 	// enqueue tables, and dbruntime.Wait can only process entries that
 	// already exist.
 	module.Wait()
-	dbruntime.Wait()
+	if err = dbruntime.Wait(); err != nil {
+		return err
+	}
 
 	// The routes-ready hooks run right after the last barrier and before
 	// anything that could use what they seed: the components below — a
@@ -235,7 +244,7 @@ func Run() (err error) {
 	// them, both the way a signal after the start does — cleanly, with
 	// nothing to report. A hook that fails ends Run the way a failing
 	// listener would.
-	starting, stopWatching := signal.NotifyContext(processCtx, syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT)
+	starting, stopWatching := signal.NotifyContext(processCtx, syscall.SIGINT, syscall.SIGTERM)
 	err = dbruntime.Serialized(starting, "seed", func() error { return router.RunRoutesReadyHooks(starting) })
 	// The channel awaitShutdown reads takes over the signals before the
 	// start's watch stops: with no channel registered the signals fall back
@@ -243,7 +252,7 @@ func Run() (err error) {
 	// process without any of the teardown below. Read the start's outcome
 	// before its watch stops too: stopping it ends the context as well.
 	sigCh := make(chan os.Signal, 1)
-	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT)
+	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
 	signaled := starting.Err() != nil && processCtx.Err() == nil
 	stopWatching()
 	if signaled {
@@ -277,13 +286,25 @@ func Run() (err error) {
 
 	err = awaitShutdown(startup.Go(), lifecycle.Failure(), sigCh)
 
+	// From here the process is leaving, and everything left is a wait: the
+	// drain delay, the requests in flight, the components' own work. A
+	// second signal drops all of them at once — the operator asked for the
+	// process to go now — without reporting a failure, so the process still
+	// exits the way a clean shutdown does. The watch runs until the process
+	// goes; there is nothing after the teardown for it to hold up.
+	go func() {
+		sig := <-sigCh
+		zap.S().Infow("shutdown hurried by a second signal", "signal", sig)
+		lifecycle.AbandonWaits(errors.Newf("shutdown hurried by a second %s", sig))
+	}()
+
 	// Either way the process leaves the same way: stop answering readiness
 	// before anything is torn down, cancel the process context so the
 	// components stop taking on new work, then hold there for the
 	// configured window. Teardown starts when it elapses.
 	controller.Probe.Drain()
 	cancelProcess()
-	awaitDrain(sigCh)
+	awaitDrain()
 	return err
 }
 
@@ -310,11 +331,14 @@ func awaitShutdown(listeners, components context.Context, sigCh <-chan os.Signal
 }
 
 // stopLifecycle cancels the process context, so any component still taking
-// on work stops doing so, and stops the started components with a bounded
-// wait for their in-flight work.
+// on work stops doing so, and stops the started components within
+// lifecycle.StopTimeout — their in-flight work first, then the providers,
+// all within the one window — so a stuck job cannot hold the shutdown
+// hostage. A process that fails now does not wait for the components at
+// all, see lifecycle.FailNow.
 func stopLifecycle() {
 	cancelProcess()
-	ctx, cancel := context.WithTimeout(context.Background(), componentStopTimeout)
+	ctx, cancel := context.WithTimeout(context.Background(), lifecycle.StopTimeout)
 	defer cancel()
 	lifecycle.Stop(ctx)
 }
@@ -323,9 +347,10 @@ func stopLifecycle() {
 // delay. That window is what a load balancer routing by readiness needs to
 // notice this process dropped out and stop opening connections to it; without
 // it, the listener can start refusing connections the balancer is still
-// sending. A second signal ends the wait, so an operator can always cut a
-// drain short, and a process that fails now skips it, see lifecycle.FailNow.
-func awaitDrain(sigCh <-chan os.Signal) {
+// sending. It is the first of the waits a second signal drops, so an
+// operator can always cut a drain short, and a process that fails now skips
+// it, see lifecycle.FailNow.
+func awaitDrain() {
 	delay := config.App.Server.ShutdownDelay
 	failedNow := lifecycle.FailedNow()
 	if delay <= 0 || failedNow.Err() != nil {
@@ -335,9 +360,7 @@ func awaitDrain(sigCh <-chan os.Signal) {
 	zap.S().Infow("draining before shutdown", "delay", delay)
 	select {
 	case <-time.After(delay):
-	case sig := <-sigCh:
-		zap.S().Infow("drain cut short by signal", "signal", sig)
 	case <-failedNow.Done():
-		zap.S().Infow("drain cut short by a failure the shutdown must not wait on", "err", context.Cause(failedNow))
+		zap.S().Infow("drain cut short", "err", context.Cause(failedNow))
 	}
 }

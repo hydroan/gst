@@ -400,6 +400,58 @@ func TestFailNowEndsTheProcessWithoutItsWaits(t *testing.T) {
 	require.ErrorIs(t, context.Cause(FailedNow()), errFailure, "a later FailNow still ends the waits")
 }
 
+// TestAbandonWaitsDropsTheWaitsWithoutFailingTheProcess proves the other way
+// the waits end: the operator asked for the process to go now, so the
+// shutdown stops waiting for anything, but nothing failed — the failure
+// context stays open, and bootstrap reads it to decide the process leaves
+// clean.
+func TestAbandonWaitsDropsTheWaitsWithoutFailingTheProcess(t *testing.T) {
+	resetRegistry(t)
+
+	errHurried := errors.New("sample second signal")
+	AbandonWaits(errHurried)
+	require.ErrorIs(t, context.Cause(FailedNow()), errHurried)
+	require.NoError(t, Failure().Err(), "being hurried along is not a failure")
+
+	resetRegistry(t)
+	AbandonWaits(nil)
+	require.Error(t, FailedNow().Err(), "the waits end even when the reason was not given")
+}
+
+// TestProviderLeftBehindWhenItsStopOutstaysTheWindow proves a provider whose
+// Stop does not return is left behind once the window is over: the shutdown
+// carries on rather than holding the process until its orchestrator kills it,
+// with the log lines it had not written yet.
+func TestProviderLeftBehindWhenItsStopOutstaysTheWindow(t *testing.T) {
+	resetRegistry(t)
+
+	stopping := make(chan struct{})
+	Register(Component{
+		Name:  "sample-stuck-provider",
+		Stage: StageProvider,
+		Start: func(context.Context) error { return nil },
+		Stop: func(context.Context) error {
+			close(stopping)
+			select {}
+		},
+	})
+	require.NoError(t, Start(t.Context(), StageProvider))
+
+	ctx, cancel := context.WithCancel(t.Context())
+	stopped := make(chan struct{})
+	go func() {
+		defer close(stopped)
+		Stop(ctx)
+	}()
+	<-stopping
+	cancel()
+	select {
+	case <-stopped:
+	case <-time.After(5 * time.Second):
+		t.Fatal("a provider that will not stop must be left behind, not waited for")
+	}
+}
+
 // recordingComponent builds a component of stage that appends its start and
 // stop to events, failing to start with startErr when that is non-nil.
 func recordingComponent(name string, stage Stage, events *[]string, startErr error) Component {

@@ -263,11 +263,8 @@ func TestWaitReturnsOnceTheQueueDrains(t *testing.T) {
 	<-modelregistry.TableChan
 	require.Equal(t, 1, modelregistry.TablesPending())
 
-	returned := make(chan struct{})
-	go func() {
-		Wait()
-		close(returned)
-	}()
+	returned := make(chan error, 1)
+	go func() { returned <- Wait() }()
 
 	select {
 	case <-returned:
@@ -278,10 +275,53 @@ func TestWaitReturnsOnceTheQueueDrains(t *testing.T) {
 	modelregistry.TableDone()
 
 	select {
-	case <-returned:
+	case err := <-returned:
+		require.NoError(t, err)
 	case <-time.After(5 * time.Second):
 		t.Fatal("Wait did not return after the last table finished")
 	}
+}
+
+// TestWaitReportsATableThePreparationCouldNotGet proves where a table the
+// deployment could not get reaches the caller. Preparation runs on a
+// goroutine of its own, so failing there cannot end the start where it
+// stands — a panic on that goroutine would take the process down with its
+// buffered log lines unwritten and the entries already on disk reading like
+// a start that went fine. Wait hands the failure back instead, in time for
+// the start to end through the exit every other startup failure leaves
+// through.
+func TestWaitReportsATableThePreparationCouldNotGet(t *testing.T) {
+	tablePreparationStarted.Store(1)
+	t.Cleanup(func() { tablePreparationStarted.Store(0) })
+	forgetPreparationFailure(t)
+
+	db := newSQLiteDB(t)
+	withAutoMigrate(t, true)
+
+	// Queued and taken off the way the processing goroutine does, then
+	// prepared here: the model declares no table name, so it is one no
+	// database could have given it.
+	modelregistry.RegisterTable[*undeclaredRecord]()
+	<-modelregistry.TableChan
+	prepareTable(db, &undeclaredRecord{})
+
+	err := Wait()
+	require.ErrorContains(t, err, "failed to prepare table")
+	require.ErrorContains(t, err, "must declare an explicit table name")
+}
+
+// forgetPreparationFailure clears the failure the preparation recorded, on
+// the way in and out: it is process-wide, and one test's failure is not the
+// next test's.
+func forgetPreparationFailure(t *testing.T) {
+	t.Helper()
+	forget := func() {
+		prepareFailure.mu.Lock()
+		defer prepareFailure.mu.Unlock()
+		prepareFailure.err = nil
+	}
+	forget()
+	t.Cleanup(forget)
 }
 
 // withAutoMigrate overrides the auto-migrate option and restores it on cleanup.

@@ -2,9 +2,9 @@ package dbruntime
 
 import (
 	"context"
-	"fmt"
 	"reflect"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -37,9 +37,43 @@ func prepareTable(db *gorm.DB, m types.Model) {
 	begin := time.Now()
 	typ := reflect.TypeOf(m).Elem()
 	if err := ensureTable(db, m); err != nil {
-		panic(errors.Wrap(err, fmt.Sprintf("failed to prepare table(%s)", typ.String())))
+		// Recorded rather than panicked: preparation runs on a goroutine of
+		// its own, where a panic ends the process where it stands — the
+		// buffered log lines never reach the file, the exit code is the
+		// runtime's, and the entries already written can read as a start that
+		// went fine. Wait hands the failure to the caller, which leaves
+		// through the one exit every other startup failure leaves through.
+		recordPrepareFailure(errors.Wrapf(err, "failed to prepare table(%s)", typ.String()))
+		return
 	}
 	zap.S().Infow("database table ready", "model", typ.String(), util.LogDuration(time.Since(begin)))
+}
+
+// prepareFailure is the first failure the preparation met, the one Wait
+// reports. Later ones are not collected: the first one already ends the
+// start, and the tables behind it were never going to be prepared.
+var prepareFailure struct {
+	mu  sync.Mutex
+	err error
+}
+
+// recordPrepareFailure keeps the first failure and logs every one, so a run
+// that met several says so even though only the first ends the start.
+func recordPrepareFailure(err error) {
+	prepareFailure.mu.Lock()
+	defer prepareFailure.mu.Unlock()
+	zap.S().Errorw("failed to prepare a database table", "error", err)
+	if prepareFailure.err == nil {
+		prepareFailure.err = err
+	}
+}
+
+// preparationFailed returns the failure the preparation met, nil when none
+// did.
+func preparationFailed() error {
+	prepareFailure.mu.Lock()
+	defer prepareFailure.mu.Unlock()
+	return prepareFailure.err
 }
 
 // ensureTable prepares the backing table for a registered model.
@@ -137,17 +171,22 @@ const tableProgressLogInterval = 500 * time.Millisecond
 // model leaves that queue when its preparation starts, not when its table
 // exists.
 //
+// It returns the first failure the preparation met, if any: preparation runs
+// on a goroutine of its own, so this is where a table the deployment could
+// not get reaches the caller, in time to end the start through its ordinary
+// exit.
+//
 // Called before InitDatabase it returns straight away with a warning, because
 // nothing is preparing tables yet and there is no end to wait for.
 //
 // Wait only observes work already queued. If another subsystem, such as module
 // registration, can still call model.Register, drain that subsystem first and
 // then call Wait so its tables are visible.
-func Wait() {
+func Wait() error {
 	if tablePreparationStarted.Load() == 0 {
 		zap.S().Warnw("Wait() called before InitDatabase(), returning immediately",
 			"reason", "processing goroutine not started")
-		return
+		return nil
 	}
 
 	startTime := time.Now()
@@ -174,11 +213,16 @@ func Wait() {
 		awaitTableProgress(lastLogTime)
 	}
 
+	if err := preparationFailed(); err != nil {
+		return err
+	}
+
 	elapsed := time.Since(startTime)
 	zap.S().Infow(
 		"database initialization completed",
 		util.LogDuration(elapsed),
 	)
+	return nil
 }
 
 // awaitTableProgress blocks until a table finishes preparing or the next
