@@ -12,9 +12,6 @@ import (
 	"strings"
 	"time"
 
-	"golang.org/x/text/cases"
-	"golang.org/x/text/language"
-
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/internal/clioutput"
@@ -146,7 +143,7 @@ func init() {
 	buildCmd.Flags().StringVarP(&buildVersion, "version", "v", "", "Version (default: auto-detect)")
 	buildCmd.Flags().StringVarP(&buildOutput, "output", "o", "", "Output file path (overrides name and path)")
 	buildCmd.Flags().StringVar(&buildExtra, "extra", "", "Extra build flags")
-	buildCmd.Flags().StringToStringVar(&buildVarMap, "var", nil, "Custom variables (key=value)")
+	buildCmd.Flags().StringToStringVar(&buildVarMap, "var", nil, "Variables to link in, each naming its package-level string variable: --var 'myapp/build.Channel=beta'")
 	buildCmd.Flags().BoolVar(&buildDumpEnv, "dump-env", false, "Dump build environment")
 	buildCmd.Flags().BoolVar(&buildExitWhenError, "exit-on-error", false, "Exit immediately on error")
 }
@@ -540,10 +537,13 @@ func buildLdflags(info *BuildInfo, config *Build) string {
 	flags = append(flags, fmt.Sprintf("-X 'github.com/hydroan/gst/config.appBuildTags=%s'", info.BuildTags))
 	flags = append(flags, fmt.Sprintf("-X 'github.com/hydroan/gst/config.appGitTreeState=%s'", info.GitTreeState))
 
-	// Add custom variables to ldflags
-	caser := cases.Title(language.English)
-	for k, v := range info.CustomVars {
-		flags = append(flags, fmt.Sprintf("-X 'github.com/hydroan/gst/config.app%s=%s'", caser.String(k), v))
+	// A custom variable names the package-level string variable it writes,
+	// fully qualified — "myapp/build.Channel=beta". The linker ignores a -X
+	// naming a variable it cannot find, without a word, so a name the
+	// framework invented for the caller would be a flag that changes
+	// nothing: only the project knows where its own variable lives.
+	for path, value := range info.CustomVars {
+		flags = append(flags, fmt.Sprintf("-X '%s=%s'", path, value))
 	}
 
 	// Add extra ldflags if specified
