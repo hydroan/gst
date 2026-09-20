@@ -128,7 +128,10 @@ func PatchManyFactory[M types.Model, REQ types.Request, RSP types.Response](cfg 
 			var results []M
 			v := meta.newModel()
 			v.SetID(m.GetID())
-			if err = database.Database[M](requestContext(c)).WithLimit(1).WithQuery(v).List(&results); err != nil {
+			// Pinned to the primary: the row read here is merged with the
+			// patch and written straight back, so a stale one would write
+			// the untouched fields back as they were on the replica.
+			if err = database.Database[M](requestContext(c)).WithReplica(false).WithLimit(1).WithQuery(v).List(&results); err != nil {
 				log.Errorz("database operation failed", zap.Error(err))
 				gstotel.RecordError(span, err)
 				continue

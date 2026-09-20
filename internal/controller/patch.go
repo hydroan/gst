@@ -144,8 +144,11 @@ func PatchFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...*
 			return
 		}
 
-		// Make sure the record must be already exists.
-		if err := database.Database[M](requestContext(c)).WithLimit(1).WithQuery(m).List(&data); err != nil {
+		// Make sure the record must be already exists. The read is pinned to
+		// the primary because what it reads is written straight back: the
+		// patch merges onto this row, so a replica still catching up would
+		// have the fields the request does not touch written back stale.
+		if err := database.Database[M](requestContext(c)).WithReplica(false).WithLimit(1).WithQuery(m).List(&data); err != nil {
 			log.Errorz("database operation failed", zap.Error(err))
 			handleServiceError(c, err)
 			gstotel.RecordError(span, err)
