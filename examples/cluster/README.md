@@ -96,7 +96,16 @@ logs '.logger == "cronjob" and .trace_id != null and .name != "local-tick"' | jq
 logs '.level == "WARN" or .level == "ERROR"' | jq -r '[.level, .logger, .msg] | @tsv' | sort | uniq -c | sort -rn
 ```
 
-场景本身会带来的，各场景里都写了：停机打断的 `cronjob interrupted`、超时跳过的 `cronjob skipped instants`、数据库出故障时的 `lease renewal failed`、`sql failed`、`slow sql detected` 等。锁被占时接口返回 409，controller 那一路照例记一条 ERROR `service operation failed`（`a rebuild is already running`）。除此之外的 WARN、ERROR 都值得查清楚。
+场景本身会带来的，各场景里都写了：
+
+- 停机打断的 `cronjob interrupted`、跑超时跳过的 `cronjob skipped instants`；
+- 数据库出故障时的 `lease renewal failed`、`lease lost`（带 `reason`）、`sql failed`、`slow sql detected`、`leader campaign failed`；
+- 认领没答上来时的 `cronjob could not claim its instant, trying again`，以及重试到下一个时刻还没成的 `cronjob could not claim its instant`；
+- 一轮跑过下一个时刻时的 `cronjob round is still running at its next instant`；
+- 事务被数据库拖住超过 5 秒时的 `transaction held its connection for a long time`；
+- 锁被占时接口返回 409，controller 那一路照例记一条 ERROR `service operation failed`（`a rebuild is already running`）。
+
+除此之外的 WARN、ERROR 都值得查清楚。
 
 ## 场景
 
