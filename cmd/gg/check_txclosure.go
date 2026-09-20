@@ -14,15 +14,21 @@ import (
 )
 
 // CheckTransactionClosureContext checks that inside a database.Transaction
-// closure, every database.Database chain and every nested database.Transaction
-// call uses the closure's own context parameter. Passing any other context
-// identifier makes the operation silently escape the transaction, which is
-// exactly the bug the context-injecting Transaction API exists to prevent.
+// closure, every call into the database package — a chain, a select, a
+// nested transaction, an after-commit registration, whatever the package's
+// entry points are — takes the closure's own context. Passing any other
+// context makes the operation silently escape the transaction, which is
+// exactly the bug the context-injecting Transaction API exists to prevent,
+// and an after-commit action registered on an escaped context runs at once
+// instead of after the commit.
 //
-// The check is purely syntactic, mirroring CheckDatabaseChainTermination: it
-// flags context arguments that are plain identifiers different from the
-// enclosing closure's context parameter name. Non-identifier arguments (call
-// results, selector expressions) are left alone.
+// The check is purely syntactic, mirroring CheckDatabaseChainTermination. A
+// context argument is flagged when it is a plain identifier other than the
+// closure's parameter, or a detached context written at the call
+// (context.Background, context.TODO), including through a derivation such as
+// context.WithTimeout: a context derived from the closure's own passes, since
+// it still carries the transaction. Anything else — a call result, a selector
+// expression — is left alone.
 func CheckTransactionClosureContext(ignore gitignore.Matcher) []string {
 	var violations []string
 
@@ -83,6 +89,7 @@ func checkFileTransactionClosures(filePath string) []string {
 		if !ok {
 			return true
 		}
+		inTransaction := contextsInTransaction(closure.Body, ctxParam)
 
 		ast.Inspect(closure.Body, func(inner ast.Node) bool {
 			innerCall, ok := inner.(*ast.CallExpr)
@@ -94,7 +101,7 @@ func checkFileTransactionClosures(filePath string) []string {
 			// checked by the enclosing file walk; only its context argument is
 			// this closure's responsibility, so its subtree is skipped here.
 			if _, _, isNested := transactionClosure(innerCall, aliases, dotImport); isNested {
-				if name, escapes := escapingContextIdent(innerCall.Args[0], ctxParam); escapes {
+				if name, escapes := escapingContextIdent(innerCall.Args[0], inTransaction); escapes {
 					pos := fset.Position(innerCall.Pos())
 					violations = append(violations, fmt.Sprintf(
 						"%s:%d: nested database.Transaction receives context %q inside a database.Transaction closure whose context parameter is %q; it starts a separate transaction instead of joining the enclosing one",
@@ -104,14 +111,15 @@ func checkFileTransactionClosures(filePath string) []string {
 				return false
 			}
 
-			if !isDatabaseChainStart(innerCall, aliases, dotImport) || len(innerCall.Args) != 1 {
+			entry, ok := databaseEntryPointCall(innerCall, aliases, dotImport)
+			if !ok {
 				return true
 			}
-			if name, escapes := escapingContextIdent(innerCall.Args[0], ctxParam); escapes {
+			if name, escapes := escapingContext(innerCall.Args[0], inTransaction); escapes {
 				pos := fset.Position(innerCall.Pos())
 				violations = append(violations, fmt.Sprintf(
-					"%s:%d: database.Database uses context %q inside a database.Transaction closure whose context parameter is %q; the chain escapes the transaction",
-					relPath, pos.Line, name, ctxParam,
+					"%s:%d: database.%s uses context %s inside a database.Transaction closure whose context parameter is %q; the call escapes the transaction",
+					relPath, pos.Line, entry, name, ctxParam,
 				))
 			}
 			return true
@@ -152,12 +160,123 @@ func isDatabaseTransactionCall(call *ast.CallExpr, aliases []string, dotImport b
 	return false
 }
 
-// escapingContextIdent reports whether arg is a plain identifier that differs
-// from the closure's context parameter name, naming the identifier when so.
-func escapingContextIdent(arg ast.Expr, ctxParam string) (string, bool) {
+// escapingContextIdent reports whether arg is a plain identifier naming a
+// context that does not carry the closure's transaction, naming it when so.
+func escapingContextIdent(arg ast.Expr, inTransaction map[string]struct{}) (string, bool) {
 	ident, ok := arg.(*ast.Ident)
-	if !ok || ident.Name == ctxParam {
+	if !ok {
+		return "", false
+	}
+	if _, held := inTransaction[ident.Name]; held {
 		return "", false
 	}
 	return ident.Name, true
+}
+
+// contextsInTransaction returns the names inside the closure that hold a
+// context carrying its transaction: the closure's own parameter, and every
+// variable assigned from a derivation of one — the bound a statement of the
+// transaction takes for itself, for instance. A derivation carries the
+// transaction; only a context from elsewhere leaves it.
+func contextsInTransaction(body *ast.BlockStmt, ctxParam string) map[string]struct{} {
+	held := map[string]struct{}{ctxParam: {}}
+	ast.Inspect(body, func(n ast.Node) bool {
+		assign, ok := n.(*ast.AssignStmt)
+		if !ok || len(assign.Rhs) != 1 {
+			return true
+		}
+		call, ok := assign.Rhs[0].(*ast.CallExpr)
+		if !ok || len(call.Args) == 0 {
+			return true
+		}
+		sel, ok := call.Fun.(*ast.SelectorExpr)
+		if !ok || sel.Sel == nil || !slices.Contains(contextDerivations, sel.Sel.Name) {
+			return true
+		}
+		if pkg, isIdent := sel.X.(*ast.Ident); !isIdent || pkg.Name != "context" {
+			return true
+		}
+		source, ok := call.Args[0].(*ast.Ident)
+		if !ok {
+			return true
+		}
+		if _, ok := held[source.Name]; !ok {
+			return true
+		}
+		// The derived context is the first result; the rest is the cancel.
+		if ident, ok := assign.Lhs[0].(*ast.Ident); ok {
+			held[ident.Name] = struct{}{}
+		}
+		return true
+	})
+	return held
+}
+
+// escapingContext reports whether arg is a context that does not carry the
+// closure's transaction, naming it as it reads in the source. A derivation
+// written at the call is followed to what it derives from, so
+// context.WithTimeout(ctx, d) passes and context.WithTimeout(context.Background(), d)
+// does not.
+func escapingContext(arg ast.Expr, inTransaction map[string]struct{}) (string, bool) {
+	switch expr := arg.(type) {
+	case *ast.Ident:
+		if _, held := inTransaction[expr.Name]; held {
+			return "", false
+		}
+		return fmt.Sprintf("%q", expr.Name), true
+	case *ast.CallExpr:
+		sel, ok := expr.Fun.(*ast.SelectorExpr)
+		if !ok || sel.Sel == nil {
+			return "", false
+		}
+		pkg, ok := sel.X.(*ast.Ident)
+		if !ok || pkg.Name != "context" {
+			return "", false
+		}
+		switch {
+		case sel.Sel.Name == "Background" || sel.Sel.Name == "TODO":
+			return "context." + sel.Sel.Name + "()", true
+		case slices.Contains(contextDerivations, sel.Sel.Name) && len(expr.Args) > 0:
+			if name, escapes := escapingContext(expr.Args[0], inTransaction); escapes {
+				return "context." + sel.Sel.Name + " of " + name, true
+			}
+		}
+	}
+	return "", false
+}
+
+// databaseEntryPointCall reports whether call enters the framework's database
+// package through one of its context-taking entry points, naming the entry.
+// The list is the one CheckDetachedContext keeps: both rules ask the same
+// question about the same calls, one about a detached context and one about
+// a context that left the transaction.
+func databaseEntryPointCall(call *ast.CallExpr, aliases []string, dotImport bool) (string, bool) {
+	if len(call.Args) == 0 {
+		return "", false
+	}
+	fun := call.Fun
+	// A generic entry point carries its type arguments: database.Database[M].
+	switch indexed := fun.(type) {
+	case *ast.IndexExpr:
+		fun = indexed.X
+	case *ast.IndexListExpr:
+		fun = indexed.X
+	}
+	switch expr := fun.(type) {
+	case *ast.SelectorExpr:
+		ident, ok := expr.X.(*ast.Ident)
+		if !ok || expr.Sel == nil || !slices.Contains(aliases, ident.Name) {
+			return "", false
+		}
+		if !slices.Contains(databaseEntryPoints, expr.Sel.Name) {
+			return "", false
+		}
+		return expr.Sel.Name, true
+	case *ast.Ident:
+		if !dotImport || !slices.Contains(databaseEntryPoints, expr.Name) {
+			return "", false
+		}
+		return expr.Name, true
+	}
+	return "", false
 }

@@ -68,6 +68,73 @@ func update(outerCtx context.Context, record *model.Record) error {
 	}
 }
 
+// TestCheckTransactionClosureContextFlagsEveryEntryPoint covers the calls
+// besides a chain that leave the transaction the same way: a select, an
+// after-commit registration — which would run its action at once instead of
+// after the commit — and a context detached at the call, written plainly or
+// through a derivation.
+func TestCheckTransactionClosureContextFlagsEveryEntryPoint(t *testing.T) {
+	projectDir := t.TempDir()
+	t.Chdir(projectDir)
+
+	writeCheckFile(t, filepath.Join(projectDir, "go.mod"), "module tmpapp\n\ngo 1.26\n")
+	writeCheckFile(t, filepath.Join(projectDir, "service", "entry", "entry.go"), `package entry
+
+import (
+	"context"
+	"time"
+
+	"github.com/hydroan/gst/database"
+	"tmpapp/model"
+)
+
+func update(outerCtx context.Context, record *model.Record) error {
+	return database.Transaction(outerCtx, func(ctx context.Context) error {
+		rows := make([]*model.Record, 0)
+		if err := database.Select[*model.Record, model.Record](outerCtx).Scan(&rows); err != nil {
+			return err
+		}
+		if err := database.AfterCommit(outerCtx, func(context.Context) error { return nil }); err != nil {
+			return err
+		}
+		if err := database.Database[*model.Record](context.Background()).Update(record); err != nil {
+			return err
+		}
+		bounded, cancel := context.WithTimeout(context.Background(), time.Second)
+		defer cancel()
+		if err := database.Database[*model.Record](bounded).Update(record); err != nil {
+			return err
+		}
+		// Derived from the closure's own context: still inside the transaction.
+		own, stop := context.WithTimeout(ctx, time.Second)
+		defer stop()
+		return database.Database[*model.Record](own).Update(record)
+	})
+}
+`)
+
+	violations := CheckTransactionClosureContext(newProjectIgnoreMatcher())
+	joined := strings.Join(violations, "\n")
+	for _, want := range []string{
+		"database.Select uses context \"outerCtx\"",
+		"database.AfterCommit uses context \"outerCtx\"",
+		"database.Database uses context context.Background()",
+	} {
+		if !strings.Contains(joined, want) {
+			t.Fatalf("expected a violation naming %s, got:\n%s", want, joined)
+		}
+	}
+	// A context bounded from the closure's own still carries the transaction,
+	// so the statement under it is not flagged; one bounded from a detached
+	// context is, by the name it was given.
+	if strings.Contains(joined, "context \"own\"") {
+		t.Fatalf("a context derived from the closure's own must pass, got:\n%s", joined)
+	}
+	if want := "database.Database uses context \"bounded\""; !strings.Contains(joined, want) {
+		t.Fatalf("expected a violation naming %s, got:\n%s", want, joined)
+	}
+}
+
 func TestCheckTransactionClosureContextAllowsClosureContext(t *testing.T) {
 	projectDir := t.TempDir()
 	t.Chdir(projectDir)
