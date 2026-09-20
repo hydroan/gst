@@ -9,6 +9,7 @@ import (
 
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/consts"
+	"github.com/hydroan/gst/internal/dbruntime"
 	"github.com/hydroan/gst/internal/execctx"
 	"github.com/hydroan/gst/internal/lease"
 	"github.com/hydroan/gst/internal/testutil/oteltest"
@@ -43,6 +44,88 @@ func TestLoopRunsAtEachInstant(t *testing.T) {
 	require.Equal(t, time.Date(2026, 1, 1, 10, 2, 0, 0, time.UTC), awaitRun(t, runs))
 	require.NoError(t, stop(context.Background()))
 	require.Empty(t, runs, "no instant ran twice and none ran early")
+}
+
+// TestClaimThatFailedIsTriedAgainWithinTheInstant proves what a database
+// that stumbles costs the job: nothing. The claim of an instant is the
+// job's only chance at it — an instant no replica claimed is never caught up
+// once a later round records having overrun it — so a claim the database
+// could not answer is tried again until the next instant is due.
+func TestClaimThatFailedIsTriedAgainWithinTheInstant(t *testing.T) {
+	withCronjobLoggerConfig(t)
+	resetCronjobState(t)
+	clock := withFakeClock(t, time.Date(2026, 1, 1, 10, 0, 30, 0, time.UTC))
+
+	runs := newRunLog()
+	Register(func(context.Context) error {
+		runs.record(clk.Now())
+		return nil
+	}, "@every 1m", "claim-retry-job")
+	require.NoError(t, start(context.Background()))
+	clock.untilWaiting(t)
+
+	// The lease table out of reach: the claim of 10:01 fails the way it does
+	// while the primary cannot answer.
+	require.NoError(t, dbruntime.DB.Exec("ALTER TABLE gst_leases RENAME TO gst_leases_hidden").Error)
+	clock.Advance(30 * time.Second)
+	// The loop is waiting again — on its retry, not on the next instant.
+	clock.untilWaiting(t)
+	require.Empty(t, runs.counts(), "the round cannot have run while the claim failed")
+
+	require.NoError(t, dbruntime.DB.Exec("ALTER TABLE gst_leases_hidden RENAME TO gst_leases").Error)
+	clock.Advance(lease.RetryInterval())
+	runs.await(t)
+	require.NoError(t, stop(context.Background()))
+
+	require.Len(t, runs.counts(), 1, "the retry runs the round once, not once per try")
+	// Which instant ran is what the lease row records: the round itself ran
+	// later than 10:01, at the try that found the database answering again.
+	var slotMs int64
+	require.NoError(t, dbruntime.DB.Raw("SELECT slot_ms FROM gst_leases WHERE name = ?", "cron:claim-retry-job").Scan(&slotMs).Error)
+	require.Equal(t, time.Date(2026, 1, 1, 10, 1, 0, 0, time.UTC), time.UnixMilli(slotMs).UTC(),
+		"the instant the claim failed for is the one that ran")
+}
+
+// TestRoundStillRunningAtItsNextInstantSaysSo proves the warning a round
+// that overran writes while it is still running. The entries naming the
+// instants a round skipped come only once it returns, and a round that
+// stopped the job for the whole deployment — the lease it holds is the one
+// every replica claims the next instant with — must not stay silent until
+// then, if it ever returns at all.
+//
+// The instants here pass in real time: the warning waits on the clock the
+// process runs on, not on the one a test drives by hand.
+func TestRoundStillRunningAtItsNextInstantSaysSo(t *testing.T) {
+	dir := withCronjobLoggerConfig(t)
+	resetCronjobState(t)
+	withBoundCronjobLogger(t)
+
+	release := make(chan struct{})
+	started := make(chan struct{}, 1)
+	Register(func(context.Context) error {
+		select {
+		case started <- struct{}{}:
+		default:
+		}
+		<-release
+		return nil
+	}, "@every 1s", "overrunning-job")
+	require.NoError(t, start(context.Background()))
+
+	select {
+	case <-started:
+	case <-time.After(5 * time.Second):
+		t.Fatal("the round did not start")
+	}
+	// Two instants of the schedule pass while the round is held.
+	time.Sleep(2500 * time.Millisecond)
+	close(release)
+	require.NoError(t, stop(context.Background()))
+
+	pkgzap.Clean()
+	entry := readLogEntry(t, filepath.Join(dir, "cronjob.log"), "cronjob round is still running at its next instant")
+	require.Equal(t, "overrunning-job", entry["name"])
+	require.EqualValues(t, 1, entry["overrun"], "the first entry is written at the first instant the round overran")
 }
 
 // TestInstantRunsOnceAcrossInstances proves the cluster contract: two

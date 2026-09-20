@@ -154,7 +154,7 @@ func (j *job) runInstant(ctx context.Context, at time.Time, catchUp bool) bool {
 		return true
 	}
 
-	h, claimed, err := lease.ClaimSlot(ctx, j.leaseName(), at)
+	h, claimed, err := j.claimSlot(ctx, at)
 	if !j.claimed(ctx, at, claimed, err) {
 		return false
 	}
@@ -167,6 +167,41 @@ func (j *job) runInstant(ctx context.Context, at time.Time, catchUp bool) bool {
 	}
 	j.runClaimed(ctx, h, at, fields...)
 	return true
+}
+
+// claimSlot claims the instant at, trying again for as long as the database
+// cannot answer and the instant is still this replica's to take.
+//
+// The claim is the job's only chance at its instant: an instant no replica
+// claimed is caught up only until a later round records having overrun it,
+// and a claim that failed records nothing, so giving the instant up on the
+// first failure loses the round outright — a database that stumbles for a
+// second costs the deployment a scheduled run. The tries run at the
+// protocol's own cadence, and stop once the next instant is nearer than the
+// next try: that instant is the loop's next move, and running this one then
+// would pile the job on top of itself.
+func (j *job) claimSlot(ctx context.Context, at time.Time) (*lease.Handle, bool, error) {
+	following := j.schedule.Next(at)
+	for {
+		h, claimed, err := lease.ClaimSlot(ctx, j.leaseName(), at)
+		if err == nil || ctx.Err() != nil {
+			return h, claimed, err
+		}
+		retryAt := clk.Now().Add(lease.RetryInterval())
+		if !following.IsZero() && !retryAt.Before(following) {
+			return nil, false, err
+		}
+		log.Warnz("cronjob could not claim its instant, trying again",
+			zap.Error(err), zap.String("name", j.name), zap.String("spec", j.spec),
+			zap.Time("at", at), zap.Time("until", following))
+		due, stop := clk.Timer(retryAt)
+		select {
+		case <-due:
+		case <-ctx.Done():
+			stop()
+			return nil, false, err
+		}
+	}
 }
 
 // rerun runs a second time the round for u, an instant of the job cut short,
@@ -215,6 +250,9 @@ func (j *job) claimed(ctx context.Context, at time.Time, claimed bool, err error
 // second time like one cut short. fields are added to the round's entries.
 func (j *job) runClaimed(ctx context.Context, h *lease.Handle, at time.Time, fields ...zap.Field) {
 	fields = append([]zap.Field{zap.Uint64("term", h.Term())}, fields...)
+	round, endRound := context.WithCancel(ctx)
+	defer endRound()
+	j.warnWhileOverrunning(round, at, fields...)
 	held, stopHold := lease.Hold(ctx, h, log)
 	// The round logs its own outcome; Run's is the same error, already logged.
 	runErr := lease.Run(lease.WithHandle(held, h), h, log, func(ctx context.Context) error {
@@ -262,6 +300,42 @@ func (j *job) runClaimed(ctx context.Context, h *lease.Handle, at time.Time, fie
 			log.Warnz("cronjob could not release its lease", zap.Error(err), zap.String("name", j.name), zap.Time("at", at))
 		}
 	}
+}
+
+// warnWhileOverrunning reports, on a goroutine of its own, every instant of
+// the schedule that passes while the round for at is still running; ctx ends
+// when the round returns.
+//
+// A round that has not returned by its next instant has stopped the job for
+// the whole deployment — the lease it holds is the one every replica claims
+// the next instant with — and nothing else says so until it returns, which a
+// round waiting on something that never answers does not do. The entries the
+// loop writes afterwards name the instants a round skipped, and those come
+// too late to act on.
+//
+// It waits on time itself rather than on the scheduler's clock: what it
+// reports is how long a round has been running, which is a length of real
+// time even where a test drives the instants by hand, and a wait of its own
+// on that clock would be one the test cannot tell from the loop's.
+func (j *job) warnWhileOverrunning(ctx context.Context, at time.Time, fields ...zap.Field) {
+	go func() {
+		overrun := 0
+		for next := j.schedule.Next(time.Now()); !next.IsZero(); next = j.schedule.Next(next) {
+			timer := time.NewTimer(time.Until(next))
+			select {
+			case <-timer.C:
+			case <-ctx.Done():
+				timer.Stop()
+				return
+			}
+			overrun++
+			log.Warnz("cronjob round is still running at its next instant",
+				append([]zap.Field{
+					zap.String("name", j.name), zap.String("spec", j.spec),
+					zap.Time("at", at), zap.Time("instant", next), zap.Int("overrun", overrun),
+				}, fields...)...)
+		}
+	}()
 }
 
 // run executes the round scheduled for at and returns its outcome, logged
