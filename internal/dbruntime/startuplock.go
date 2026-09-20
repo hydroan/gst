@@ -176,7 +176,14 @@ func lockStartup(ctx context.Context, handler *gorm.DB, purpose string) (unlock 
 		return noop, err
 	}
 	if sqlDB.Stats().MaxOpenConnections == 1 {
-		return noop, nil
+		// The lock lives on a connection of its own, held for as long as the
+		// step runs: a pool of one has none to spare, and the step would run
+		// on every replica at once with nothing saying so. A dialect that
+		// offers no lock at all is answered above — this one offers it, and
+		// the deployment cannot use it, which the capability-miss rule makes
+		// a startup failure rather than a silent difference.
+		return noop, errors.Errorf(
+			"the %s lock needs a connection of its own: raise database.max_open_conns to at least 2", purpose)
 	}
 	name := startupLockName(purpose, databaseNameOf(handler))
 

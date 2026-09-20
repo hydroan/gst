@@ -26,6 +26,37 @@ func TestStartupLockNameIsOnePerPurposeAndDatabase(t *testing.T) {
 	require.NotEqual(t, startupLockKey(startupLockName("migrate", "app")), startupLockKey(startupLockName("migrate", "app_staging")))
 }
 
+// TestSerializedRefusesAPoolOfOneConnection pins the capability-miss
+// answer. The lock lives on a connection held for the whole step, so a pool
+// with none to spare cannot serialize anything; running the step anyway
+// would let every replica take it at once — each preparing tables and
+// seeding over the others — with nothing in the logs saying the lock was
+// skipped.
+func TestSerializedRefusesAPoolOfOneConnection(t *testing.T) {
+	for _, dialect := range []struct {
+		name config.DBType
+		open func(t *testing.T) *gorm.DB
+	}{
+		{name: config.DBMySQL, open: newMySQLDB},
+		{name: config.DBPostgres, open: newPostgresDB},
+	} {
+		t.Run(string(dialect.name), func(t *testing.T) {
+			handle := dialect.open(t)
+			sqlDB, err := handle.DB()
+			require.NoError(t, err)
+			sqlDB.SetMaxOpenConns(1)
+
+			ran := false
+			err = serialized(context.Background(), handle, "sample", func() error {
+				ran = true
+				return nil
+			})
+			require.ErrorContains(t, err, "max_open_conns", "the error says which setting to raise")
+			require.False(t, ran, "a step that cannot be serialized must not run")
+		})
+	}
+}
+
 // TestSerializedRunsOneProcessAtATime proves the startup lock serializes a
 // step across the processes of a deployment: several handles — each a pool
 // of its own, the way separate processes look to the server — run the step
