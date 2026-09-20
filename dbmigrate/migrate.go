@@ -46,9 +46,30 @@ type MigrateOption struct {
 	EnableDrop bool
 }
 
-// Migrate applies the schema changes to the database.
-// It returns true if any changes were applied (or would be applied in dry-run mode),
-// and false if the database schema is already up-to-date.
+// Plan is what a migration would do to the database: the statements it would
+// run, in order, and the rename advisory that belongs beside them.
+//
+// It exists so that what a reviewer approved is what runs. A plan is computed
+// against the schema the database has at that moment; computing it a second
+// time to execute it would plan against whatever the database has by then,
+// which is not what was shown — a table created in between turns a CREATE
+// into an ALTER, and one dropped in between turns nothing into a CREATE.
+// Apply runs the statements of the plan as they stand.
+type Plan struct {
+	// Statements are the DDL statements of the plan, in execution order.
+	Statements []string
+	// Advisory is the rename advisory, empty when the plan suggests none.
+	Advisory string
+}
+
+// Changed reports whether the plan has anything to run: a database already
+// matching the models plans nothing.
+func (p Plan) Changed() bool { return len(p.Statements) > 0 }
+
+// Migrate plans the schema changes towards the models' schema, and applies
+// them unless the option asks for a dry run. It returns the plan either way,
+// so a caller that plans first can execute exactly what it showed through
+// Apply.
 //
 // Index renames must run through this migration path BEFORE deploying code
 // that carries the new index name: once the rename is applied, startup table
@@ -66,22 +87,14 @@ type MigrateOption struct {
 // as a data-loss guard, because the planned DROP TABLE would discard every
 // row that the metadata-only rename keeps. The caller owns when and how to
 // present it; executing the rename stays a human decision.
-func Migrate(schemas []string, dbtyp config.DBType, cfg *DatabaseConfig, opt *MigrateOption) (migrated bool, advisory string, err error) {
+func Migrate(schemas []string, dbtyp config.DBType, cfg *DatabaseConfig, opt *MigrateOption) (plan Plan, err error) {
 	if len(schemas) == 0 || cfg == nil {
-		return false, "", nil
+		return Plan{}, nil
 	}
 	if opt == nil {
 		opt = &MigrateOption{}
 	}
 
-	dbcfg := database.Config{
-		DbName:   cfg.Database,
-		User:     cfg.Username,
-		Password: cfg.Password,
-		Host:     cfg.Host,
-		Port:     cfg.Port,
-		SslMode:  cfg.SSLMode,
-	}
 	migOpt := &sqldef.Options{
 		DryRun:      opt.DryRun,
 		DesiredDDLs: strings.Join(schemas, ";\n"),
@@ -90,37 +103,64 @@ func Migrate(schemas []string, dbtyp config.DBType, cfg *DatabaseConfig, opt *Mi
 		},
 	}
 
-	var db database.Database
-	var parseMode parser.ParserMode
-	var genMode schema.GeneratorMode
-
-	switch dbtyp {
-	case config.DBMySQL:
-		db, err = mysql.NewDatabase(dbcfg)
-		parseMode = parser.ParserModeMysql
-		genMode = schema.GeneratorModeMysql
-	case config.DBPostgres:
-		db, err = postgres.NewDatabase(dbcfg)
-		parseMode = parser.ParserModePostgres
-		genMode = schema.GeneratorModePostgres
-	case config.DBSqlite:
-		db, err = newSQLiteDatabase(dbcfg)
-		parseMode = parser.ParserModeSQLite3
-		genMode = schema.GeneratorModeSQLite3
-	default:
-		// ClickHouse (and any other analytical store) is deliberately not
-		// migratable here: its schema is a query-model design — engine,
-		// ORDER BY, partitioning, TTL — that cannot be derived from Go models,
-		// so the application owns it through hand-written DDL.
-		return false, "", errors.Newf("schema migration does not support %q: its schema is managed by hand-written DDL on the application side", dbtyp)
-	}
+	db, parseMode, genMode, err := openTarget(dbtyp, cfg)
 	if err != nil {
-		return false, "", err
+		return Plan{}, err
 	}
 	defer db.Close()
 
 	sqlParser := database.NewParser(parseMode)
 	return runMigration(genMode, db, sqlParser, migOpt)
+}
+
+// Apply runs the statements of a plan as they stand, against the same kind of
+// target Migrate planned them for. Nothing is planned again: what runs is
+// what the plan carries, including the destructive statements a reviewer
+// approved. A plan with nothing to run does nothing.
+func Apply(plan Plan, dbtyp config.DBType, cfg *DatabaseConfig) error {
+	if !plan.Changed() || cfg == nil {
+		return nil
+	}
+	db, _, _, err := openTarget(dbtyp, cfg)
+	if err != nil {
+		return err
+	}
+	defer db.Close()
+
+	return database.RunDDLs(db, plan.Statements, "", "", database.StdoutLogger{})
+}
+
+// openTarget opens the database a migration runs against, with the parser and
+// generator modes of its dialect.
+func openTarget(dbtyp config.DBType, cfg *DatabaseConfig) (database.Database, parser.ParserMode, schema.GeneratorMode, error) {
+	dbcfg := database.Config{
+		DbName:   cfg.Database,
+		User:     cfg.Username,
+		Password: cfg.Password,
+		Host:     cfg.Host,
+		Port:     cfg.Port,
+		SslMode:  cfg.SSLMode,
+	}
+
+	var db database.Database
+	var err error
+	switch dbtyp {
+	case config.DBMySQL:
+		db, err = mysql.NewDatabase(dbcfg)
+		return db, parser.ParserModeMysql, schema.GeneratorModeMysql, err
+	case config.DBPostgres:
+		db, err = postgres.NewDatabase(dbcfg)
+		return db, parser.ParserModePostgres, schema.GeneratorModePostgres, err
+	case config.DBSqlite:
+		db, err = newSQLiteDatabase(dbcfg)
+		return db, parser.ParserModeSQLite3, schema.GeneratorModeSQLite3, err
+	default:
+		// ClickHouse (and any other analytical store) is deliberately not
+		// migratable here: its schema is a query-model design — engine,
+		// ORDER BY, partitioning, TTL — that cannot be derived from Go models,
+		// so the application owns it through hand-written DDL.
+		return nil, 0, 0, errors.Newf("schema migration does not support %q: its schema is managed by hand-written DDL on the application side", dbtyp)
+	}
 }
 
 // runMigration executes the database migration logic.
@@ -133,7 +173,7 @@ func Migrate(schemas []string, dbtyp config.DBType, cfg *DatabaseConfig, opt *Mi
 // the only caller and never asks for them: schema export, the current-file
 // diff, the before-apply hook, and the SQL Server statement suffix. Consult
 // sqldef itself if one of them ever becomes necessary here.
-func runMigration(generatorMode schema.GeneratorMode, db database.Database, sqlParser database.Parser, options *sqldef.Options) (migrated bool, advisory string, err error) {
+func runMigration(generatorMode schema.GeneratorMode, db database.Database, sqlParser database.Parser, options *sqldef.Options) (plan Plan, err error) {
 	// Set the generator config on the database for privilege filtering
 	// Note: MySQL will populate MysqlLowerCaseTableNames from the server
 	db.SetGeneratorConfig(options.Config)
@@ -141,18 +181,19 @@ func runMigration(generatorMode schema.GeneratorMode, db database.Database, sqlP
 
 	currentDDLs, exportErr := db.ExportDDLs()
 	if exportErr != nil {
-		return false, "", errors.Wrap(exportErr, "failed to export ddls")
+		return Plan{}, errors.Wrap(exportErr, "failed to export ddls")
 	}
 
 	defaultSchema := db.GetDefaultSchema()
 
 	ddls, genErr := schema.GenerateIdempotentDDLs(generatorMode, sqlParser, options.DesiredDDLs, currentDDLs, options.Config, defaultSchema)
 	if genErr != nil {
-		return false, "", genErr
+		return Plan{}, genErr
 	}
 	if len(ddls) == 0 {
-		return false, "", nil
+		return Plan{}, nil
 	}
+	plan = Plan{Statements: ddls}
 
 	// Detect verified table and index renames for the caller to present
 	// alongside the plan. Detection guides only; nothing is rewritten or
@@ -161,7 +202,7 @@ func runMigration(generatorMode schema.GeneratorMode, db database.Database, sqlP
 	// SQLite stays out: it backs local development and tests, where databases
 	// are created fresh and hold no schema worth renaming.
 	if generatorMode == schema.GeneratorModeMysql || generatorMode == schema.GeneratorModePostgres {
-		advisory = combineAdvisories(
+		plan.Advisory = combineAdvisories(
 			formatTableRenames(generatorMode, detectTableRenames(generatorMode, sqlParser, options.Config, defaultSchema, ddls, currentDDLs)),
 			formatIndexRenames(generatorMode, detectIndexRenames(ddls, currentDDLs)),
 		)
@@ -170,17 +211,16 @@ func runMigration(generatorMode schema.GeneratorMode, db database.Database, sqlP
 	if options.DryRun {
 		dryRunDB, dryRunErr := newDryRunDatabase(db)
 		if dryRunErr != nil {
-			return false, "", dryRunErr
+			return Plan{}, dryRunErr
 		}
 		defer dryRunDB.Close()
 		db = dryRunDB
 	}
 
-	err = database.RunDDLs(db, ddls, "", "", database.StdoutLogger{})
-	if err != nil {
-		return false, "", err
+	if err = database.RunDDLs(db, ddls, "", "", database.StdoutLogger{}); err != nil {
+		return Plan{}, err
 	}
-	return true, advisory, nil
+	return plan, nil
 }
 
 var (

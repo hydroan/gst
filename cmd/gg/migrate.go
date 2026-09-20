@@ -551,8 +551,11 @@ func performMigration(schema string, cfg *dbmigrate.DatabaseConfig) error {
 
 	fmt.Println("\n▶ Migration Plan")
 
-	// Dry Run: Check for changes without executing.
-	hasChange, advisory, err := dbmigrate.Migrate([]string{schema}, dbtyp, cfg, &dbmigrate.MigrateOption{
+	// Planned once, against the schema the database has now. What is applied
+	// below is this plan, statement for statement: planning again to execute
+	// would plan against whatever the database has by then, which is not what
+	// was shown and approved.
+	plan, err := dbmigrate.Migrate([]string{schema}, dbtyp, cfg, &dbmigrate.MigrateOption{
 		DryRun:     true,
 		EnableDrop: true,
 	})
@@ -560,16 +563,16 @@ func performMigration(schema string, cfg *dbmigrate.DatabaseConfig) error {
 		return err
 	}
 
-	if !hasChange {
+	if !plan.Changed() {
 		fmt.Println("  → No changes detected.")
 		return nil
 	}
 
 	// The advisory gets its own section after the plan, so suspected table
 	// and index renames stay visible right before the reviewer decides.
-	if len(advisory) != 0 {
+	if len(plan.Advisory) != 0 {
 		fmt.Println("\n▶ Rename Advisory")
-		fmt.Print(advisory)
+		fmt.Print(plan.Advisory)
 	}
 
 	if migrateDryRun {
@@ -586,12 +589,8 @@ func performMigration(schema string, cfg *dbmigrate.DatabaseConfig) error {
 
 	fmt.Println("\n▶ Apply Migration")
 
-	// Execute Migration.
-	_, _, err = dbmigrate.Migrate([]string{schema}, dbtyp, cfg, &dbmigrate.MigrateOption{
-		DryRun:     false,
-		EnableDrop: true,
-	})
-	if err != nil {
+	// The statements shown above, as they stand.
+	if err := dbmigrate.Apply(plan, dbtyp, cfg); err != nil {
 		return err
 	}
 	fmt.Println("  ✔ Migration executed successfully.")
