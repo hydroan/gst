@@ -147,6 +147,25 @@ var (
 	stepDownGrace = 5 * time.Second
 )
 
+// bounded returns ctx with the bound one statement of the protocol gets when
+// its caller has none of its own: a claim, the read of the last instant, the
+// sweep for the rounds cut short. A database that stopped answering would
+// otherwise hold whoever asked — a scheduler loop, a campaign, the sweep —
+// for as long as it stays silent, which on a connection that is gone but not
+// closed is forever. Half the local deadline is what a renewal attempt gets
+// (see Hold): a statement that cannot answer within it would not have kept a
+// lease alive either, and the caller comes back at its own cadence.
+func bounded(ctx context.Context) (context.Context, context.CancelFunc) {
+	return context.WithTimeout(ctx, localDeadline/2)
+}
+
+// RetryInterval is how soon a caller tries again after the database failed
+// to answer: the cadence the protocol already keeps against it, which a
+// caller waiting for the same database has no reason to beat.
+func RetryInterval() time.Duration {
+	return renewInterval
+}
+
 // table is the name of the lease table.
 const table = "gst_leases"
 
@@ -345,6 +364,8 @@ func Claim(ctx context.Context, name string) (*Handle, bool, error) {
 		return nil, false, err
 	}
 	updatedAt := dbruntime.NowUTC()
+	ctx, cancel := bounded(ctx)
+	defer cancel()
 
 	claimedAt := time.Now()
 	res := db.WithContext(ctx).Exec(

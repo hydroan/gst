@@ -359,6 +359,39 @@ func TestClaimRefusesAnOverlongName(t *testing.T) {
 	require.False(t, claimed)
 }
 
+// TestClaimsAreBoundedByHalfTheLocalDeadline pins the bound the protocol's
+// own statements carry when their caller has none: a database that stopped
+// answering — a connection gone but not closed answers nothing and reports
+// nothing — would otherwise hold a scheduler loop, a campaign or the sweep
+// for as long as it stays silent.
+func TestClaimsAreBoundedByHalfTheLocalDeadline(t *testing.T) {
+	withFastProtocol(t)
+
+	ctx, cancel := bounded(context.Background())
+	defer cancel()
+
+	deadline, ok := ctx.Deadline()
+	require.True(t, ok, "a statement of the protocol runs under a deadline of its own")
+	require.InDelta(t, localDeadline/2, time.Until(deadline), float64(20*time.Millisecond),
+		"the bound is what a renewal attempt gets: a statement slower than that would not have kept a lease alive either")
+}
+
+// TestBoundKeepsTheCallersDeadlineWhenItIsSooner proves the bound never
+// stretches a caller's own: a process shutting down, or a caller that gave
+// the claim a shorter window, still ends the statement when it said so.
+func TestBoundKeepsTheCallersDeadlineWhenItIsSooner(t *testing.T) {
+	withFastProtocol(t)
+
+	caller, cancelCaller := context.WithTimeout(context.Background(), localDeadline/10)
+	defer cancelCaller()
+	ctx, cancel := bounded(caller)
+	defer cancel()
+
+	deadline, ok := ctx.Deadline()
+	require.True(t, ok)
+	require.Less(t, time.Until(deadline), localDeadline/2)
+}
+
 // withFastProtocol shrinks the protocol's timings so expiry and renewal play
 // out in milliseconds, and restores them afterwards.
 func withFastProtocol(t *testing.T) {

@@ -80,6 +80,8 @@ func ClaimSlot(ctx context.Context, name string, slot time.Time) (*Handle, bool,
 	}
 	slotMs := slot.UnixMilli()
 	updatedAt := dbruntime.NowUTC()
+	ctx, cancel := bounded(ctx)
+	defer cancel()
 
 	var current slotState
 	res := db.WithContext(ctx).Raw(
@@ -203,6 +205,9 @@ func UnfinishedSlots(ctx context.Context, names []string) ([]Unfinished, error) 
 	if err != nil {
 		return nil, err
 	}
+	ctx, cancel := bounded(ctx)
+	defer cancel()
+
 	var rows []unfinishedRow
 	res := db.WithContext(ctx).Raw(
 		fmt.Sprintf("SELECT name, term, slot_ms FROM %s WHERE name IN ? AND unfinished_slot_ms = slot_ms AND rerun_slot_ms < slot_ms AND expires_at_ms <= %s", table, now),
@@ -238,6 +243,8 @@ func ClaimRerun(ctx context.Context, u Unfinished) (*Handle, bool, error) {
 		return nil, false, err
 	}
 	updatedAt := dbruntime.NowUTC()
+	ctx, cancel := bounded(ctx)
+	defer cancel()
 
 	claimedAt := time.Now()
 	res := db.WithContext(ctx).Exec(
@@ -264,6 +271,9 @@ func LastSlot(ctx context.Context, name string) (time.Time, bool, error) {
 	if err != nil {
 		return time.Time{}, false, err
 	}
+	ctx, cancel := bounded(ctx)
+	defer cancel()
+
 	var slotMs int64
 	res := db.WithContext(ctx).Raw(fmt.Sprintf("SELECT slot_ms FROM %s WHERE name = ?", table), name).Scan(&slotMs)
 	if res.Error != nil {
