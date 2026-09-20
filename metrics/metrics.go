@@ -18,23 +18,24 @@ const (
 )
 
 var (
-	State                 prometheus.Gauge
-	Uptime                prometheus.Gauge
-	HTTPRequestsTotal     *prometheus.CounterVec
-	HTTPRequestDuration   *prometheus.HistogramVec
-	ResponseTime          prometheus.Histogram
-	ErrorRate             prometheus.Counter
-	MemoryTotal           prometheus.Gauge
-	MemoryUsed            prometheus.Gauge
-	MemoryUsedPercent     prometheus.Gauge
-	CPUCount              prometheus.Gauge
-	CPUUsedPercent        prometheus.Gauge
-	ConcurrentConnections prometheus.Gauge
-	CacheHit              *prometheus.CounterVec
-	CacheMiss             *prometheus.CounterVec
-	QueueSize             prometheus.Gauge
-	AuthzPolicyDiverged   prometheus.Gauge
-	AuthzDecisionsTotal   *prometheus.CounterVec
+	State                   prometheus.Gauge
+	Uptime                  prometheus.Gauge
+	HTTPRequestsTotal       *prometheus.CounterVec
+	HTTPRequestDuration     *prometheus.HistogramVec
+	ResponseTime            prometheus.Histogram
+	ErrorRate               prometheus.Counter
+	MemoryTotal             prometheus.Gauge
+	MemoryUsed              prometheus.Gauge
+	MemoryUsedPercent       prometheus.Gauge
+	CPUCount                prometheus.Gauge
+	CPUUsedPercent          prometheus.Gauge
+	ConcurrentConnections   prometheus.Gauge
+	CacheHit                *prometheus.CounterVec
+	CacheMiss               *prometheus.CounterVec
+	QueueSize               prometheus.Gauge
+	AuthzPolicyDiverged     prometheus.Gauge
+	AuthzDecisionsTotal     *prometheus.CounterVec
+	AuditWriteFailuresTotal prometheus.Counter
 )
 
 func Init() error {
@@ -167,6 +168,17 @@ func Init() error {
 		Help:      "Total authorization decisions by outcome, granting rule kind and denial reason",
 	}, []string{"effect", "allowed_by", "denied_by"})
 
+	// An operation the framework performed whose record never reached the
+	// table. The operation itself succeeded and the request answered, so
+	// nothing else reports the gap in the security record; the count is what
+	// an alert watches.
+	AuditWriteFailuresTotal = prometheus.NewCounter(prometheus.CounterOpts{
+		Namespace: NAMESPACE,
+		Subsystem: SUBSYSTEM,
+		Name:      "audit_write_failures_total",
+		Help:      "Total audit entries that could not be written",
+	})
+
 	// Every collector the framework registers, in one list, so the error
 	// slice is sized by the list and not by a count kept by hand.
 	registered := []prometheus.Collector{
@@ -186,6 +198,7 @@ func Init() error {
 		QueueSize,
 		AuthzPolicyDiverged,
 		AuthzDecisionsTotal,
+		AuditWriteFailuresTotal,
 
 		collectors.NewBuildInfoCollector(),
 		collectors.NewProcessCollector(collectors.ProcessCollectorOpts{Namespace: NAMESPACE}),
