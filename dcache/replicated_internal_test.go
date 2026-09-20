@@ -11,6 +11,8 @@ import (
 	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/internal/types"
 	"github.com/stretchr/testify/require"
+	"github.com/twmb/franz-go/pkg/kerr"
+	"github.com/twmb/franz-go/pkg/kgo"
 )
 
 // typedProbe is the struct proving typed values survive the kafka round trip.
@@ -91,6 +93,22 @@ func TestLocalWriteOutstampsAPeerAhead(t *testing.T) {
 	afterDelete, ok := dc.appliedTS.Get(key)
 	require.True(t, ok)
 	require.Greater(t, afterDelete, afterSet, "a local delete must outrank the set it removes")
+}
+
+// TestTopicUnknownRecognizesARecreatedTopic pins which fetch failures make
+// the listener resolve the topic anew: the cluster not knowing it, and
+// knowing it under a different id than the one this client holds, are both
+// what a topic recreated under the consumer looks like from here and neither
+// clears on its own. Anything else is transient and must not cost a
+// rebalance.
+func TestTopicUnknownRecognizesARecreatedTopic(t *testing.T) {
+	require.True(t, topicUnknown([]kgo.FetchError{{Topic: "t", Partition: 0, Err: kerr.UnknownTopicID}}))
+	require.True(t, topicUnknown([]kgo.FetchError{{Topic: "t", Partition: 1, Err: kerr.InconsistentTopicID}}))
+	require.True(t, topicUnknown([]kgo.FetchError{{Topic: "t", Partition: 2, Err: kerr.UnknownTopicOrPartition}}))
+
+	require.False(t, topicUnknown(nil))
+	require.False(t, topicUnknown([]kgo.FetchError{{Topic: "t", Partition: 0, Err: kerr.NotLeaderForPartition}}))
+	require.False(t, topicUnknown([]kgo.FetchError{{Topic: "t", Partition: 0, Err: context.Canceled}}))
 }
 
 // TestCacheRequiresKafkaEnabled asserts the exported constructor fails fast

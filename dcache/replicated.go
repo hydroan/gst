@@ -26,6 +26,7 @@ import (
 	"github.com/hydroan/gst/logger"
 	"github.com/hydroan/gst/util"
 	"github.com/panjf2000/ants/v2"
+	"github.com/twmb/franz-go/pkg/kerr"
 	"github.com/twmb/franz-go/pkg/kgo"
 	"go.uber.org/zap"
 )
@@ -41,6 +42,19 @@ const (
 	// awaitAssignment for what the wait buys and why running out is not a
 	// failure.
 	assignmentWait = 5 * time.Second
+
+	// fetchErrorInterval bounds how often a run of failing polls is reported.
+	// A failing poll returns at once, so a failure that stands — a topic the
+	// cluster no longer knows, a broker refusing every fetch — would
+	// otherwise write one line per poll, tens of them a second, for as long
+	// as it lasts. The count on the line carries what the skipped ones would
+	// have said.
+	fetchErrorInterval = 30 * time.Second
+
+	// fetchRetryPause is how long the listener waits after a poll that
+	// brought neither records nor anything but errors, which keeps the same
+	// failure from spinning a core.
+	fetchRetryPause = time.Second
 )
 
 // watermarkEntries bounds the per-key timestamp table: an order of magnitude
@@ -484,6 +498,14 @@ func (dc *replicatedCache[T]) listenEvents() {
 	go func() {
 		defer dc.logPanic("replicatedCache.listenEvents")
 
+		// The state of a run of failing polls, owned by this goroutine:
+		// how many have failed, when the run was last reported, and when the
+		// topic was last resolved anew because of it.
+		var (
+			failed     int
+			reportedAt time.Time
+			resolvedAt time.Time
+		)
 		for {
 			fetches := dc.sub.PollFetches(context.Background())
 			if fetches.IsClientClosed() {
@@ -492,17 +514,45 @@ func (dc *replicatedCache[T]) listenEvents() {
 				dc.logger.Error("kafka consumer client closed, stopping the event listener")
 				return
 			}
-			fetches.EachError(func(s string, i int32, err error) {
-				dc.logger.Errorz(
-					"failed to fetch from kafka",
-					zap.Error(err),
-					zap.String("topic", dc.topic),
-					zap.String("s", s),
-					zap.Int32("i", i),
-				)
-			})
+			if errs := fetches.Errors(); len(errs) > 0 {
+				failed++
+				if now := time.Now(); reportedAt.IsZero() || now.Sub(reportedAt) >= fetchErrorInterval {
+					reportedAt = now
+					dc.logger.Errorz(
+						"failed to fetch from kafka",
+						zap.Error(errs[0].Err),
+						zap.String("topic", errs[0].Topic),
+						zap.Int32("partition", errs[0].Partition),
+						zap.Int("failed_polls", failed),
+					)
+				}
+				// A topic the cluster no longer knows under the id this
+				// client resolved — one recreated after the cluster lost it —
+				// is never fetched again while the client holds that id, and
+				// every poll fails at once. Forgetting the topic and
+				// consuming it anew is what re-resolves the id; it costs a
+				// rebalance, so it is tried at the same bounded rate as the
+				// report.
+				if topicUnknown(errs) && (resolvedAt.IsZero() || time.Since(resolvedAt) >= fetchErrorInterval) {
+					resolvedAt = time.Now()
+					dc.logger.Warnz(
+						"the cache topic is unknown to the cluster, consuming it anew",
+						zap.String("topic", dc.topic),
+					)
+					dc.sub.PurgeTopicsFromClient(dc.topic)
+					dc.sub.AddConsumeTopics(dc.topic)
+				}
+			} else if failed > 0 {
+				dc.logger.Infoz("fetching from kafka recovered", zap.String("topic", dc.topic), zap.Int("failed_polls", failed))
+				failed, reportedAt, resolvedAt = 0, time.Time{}, time.Time{}
+			}
 			records := fetches.Records()
 			if len(records) == 0 {
+				if failed > 0 {
+					// Nothing came and the failure stands: without this the
+					// loop would poll, fail and log as fast as the CPU allows.
+					time.Sleep(fetchRetryPause)
+				}
 				continue
 			}
 			for _, record := range records {
@@ -568,6 +618,22 @@ func (dc *replicatedCache[T]) listenEvents() {
 			}
 		}
 	}()
+}
+
+// topicUnknown reports whether a poll failed because the cluster does not
+// know the topic the client is fetching, or knows it under a different id
+// than the one the client resolved: both are what a topic recreated after a
+// cluster rebuild looks like from here, and neither clears on its own.
+func topicUnknown(errs []kgo.FetchError) bool {
+	for _, e := range errs {
+		switch {
+		case errors.Is(e.Err, kerr.UnknownTopicID),
+			errors.Is(e.Err, kerr.InconsistentTopicID),
+			errors.Is(e.Err, kerr.UnknownTopicOrPartition):
+			return true
+		}
+	}
+	return false
 }
 
 // applyPeerSet applies a peer set event to the store when it is newer than
