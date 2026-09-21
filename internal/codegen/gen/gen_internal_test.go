@@ -798,9 +798,9 @@ func TestGenerateServiceListEmptyPayload(t *testing.T) {
 				Result:  "*" + tt.info.ModelName + "ListRsp",
 				Phase:   consts.PHASE_LIST,
 			}
-			file := GenerateServiceWithPackage(tt.info, action, consts.PHASE_LIST, "group")
+			file := GenerateService(tt.info, action, consts.PHASE_LIST, "group")
 			if file == nil {
-				t.Fatal("GenerateServiceWithPackage returned nil")
+				t.Fatal("GenerateService returned nil")
 			}
 			got, err := FormatNodeExtra(file)
 			if err != nil {
@@ -844,9 +844,9 @@ func TestGenerateServiceExport(t *testing.T) {
 	exportSig := "func (u *Exporter) Export(ctx *gst.ServiceContext, users ...*model.User) (data []byte, err error)"
 
 	t.Run("non-empty_model_generates_list_hooks_in_controller_invocation_order", func(t *testing.T) {
-		file := GenerateServiceWithPackage(newInfo(false), action, consts.PHASE_EXPORT, "user")
+		file := GenerateService(newInfo(false), action, consts.PHASE_EXPORT, "user")
 		if file == nil {
-			t.Fatal("GenerateServiceWithPackage returned nil")
+			t.Fatal("GenerateService returned nil")
 		}
 		got, err := FormatNodeExtra(file)
 		if err != nil {
@@ -866,9 +866,9 @@ func TestGenerateServiceExport(t *testing.T) {
 	})
 
 	t.Run("empty_model_generates_Export_only", func(t *testing.T) {
-		file := GenerateServiceWithPackage(newInfo(true), action, consts.PHASE_EXPORT, "user")
+		file := GenerateService(newInfo(true), action, consts.PHASE_EXPORT, "user")
 		if file == nil {
-			t.Fatal("GenerateServiceWithPackage returned nil")
+			t.Fatal("GenerateService returned nil")
 		}
 		got, err := FormatNodeExtra(file)
 		if err != nil {
@@ -903,9 +903,9 @@ func TestGenerateServiceSSE(t *testing.T) {
 		Phase:   consts.PHASE_SSE,
 	}
 
-	file := GenerateServiceWithPackage(info, action, consts.PHASE_SSE, "user")
+	file := GenerateService(info, action, consts.PHASE_SSE, "user")
 	if file == nil {
-		t.Fatal("GenerateServiceWithPackage returned nil")
+		t.Fatal("GenerateService returned nil")
 	}
 	got, err := FormatNodeExtra(file)
 	if err != nil {

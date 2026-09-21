@@ -148,7 +148,7 @@ func StmtRouterRegister(modelPkgName, modelName, reqName, rspName, gstModelPkg s
 	}
 
 	var paramExpr ast.Expr
-	// expr like: &gst.ControllerConfig[*config.Namespace]{}
+	// expr like: &gst.ControllerConfig[*sample.Record]{}
 	paramExpr = &ast.UnaryExpr{
 		Op: token.AND,
 		X: &ast.CompositeLit{
@@ -167,7 +167,7 @@ func StmtRouterRegister(modelPkgName, modelName, reqName, rspName, gstModelPkg s
 			Elts: []ast.Expr{},
 		},
 	}
-	// expr like: &gst.ControllerConfig[*config.Namespace]{ParamName: "ns"}
+	// expr like: &gst.ControllerConfig[*sample.Record]{ParamName: "id"}
 	if len(paramName) > 0 {
 		paramExpr = &ast.UnaryExpr{
 			Op: token.AND,

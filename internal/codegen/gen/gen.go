@@ -449,11 +449,11 @@ func genServiceMethod7(info *ModelInfo, action *dsl.Action, phase consts.Phase, 
 	)
 }
 
-func GenerateService(info *ModelInfo, action *dsl.Action, phase consts.Phase) *ast.File {
-	return GenerateServiceWithPackage(info, action, phase, strings.ToLower(info.ModelName))
-}
-
-func GenerateServiceWithPackage(info *ModelInfo, action *dsl.Action, phase consts.Phase, servicePkgName string) *ast.File {
+// GenerateService builds the scaffold of the action's service file in package
+// servicePkgName: the service struct named after the action's role and the
+// methods of phase. It returns nil when the action is disabled or declares no
+// service.
+func GenerateService(info *ModelInfo, action *dsl.Action, phase consts.Phase, servicePkgName string) *ast.File {
 	if !action.Enabled || !action.Service {
 		return nil
 	}
@@ -461,7 +461,7 @@ func GenerateServiceWithPackage(info *ModelInfo, action *dsl.Action, phase const
 	roleName := action.RoleName()
 
 	// When Filename is set, derive the receiver variable name from RoleName
-	// (e.g., Upload → "u", Parse → "p") instead of the model name (e.g., Attachment → "a").
+	// (e.g., Archive → "a", Publish → "p") instead of the model name (e.g., Record → "r").
 	if len(action.Filename) > 0 && len(roleName) > 0 {
 		copied := *info
 		copied.ModelVarName = strings.ToLower(roleName[:1])
@@ -481,8 +481,6 @@ func GenerateServiceWithPackage(info *ModelInfo, action *dsl.Action, phase const
 
 	decls := []ast.Decl{
 		imports(info.ModulePath, info.ModelFileDir, info.ModelPkgName, otherPkgs...),
-		// Inits(info.ModelName),
-		// Types(info.ModelPkgName, info.ModelName, info.Design.Create.Payload, info.Design.Create.Result),
 	}
 
 	// add types
@@ -533,7 +531,7 @@ func GenerateServiceWithPackage(info *ModelInfo, action *dsl.Action, phase const
 			decls = append(decls, genServiceMethod1(info, action, phase.Before(), roleName)) // generate patch before hook
 			decls = append(decls, genServiceMethod1(info, action, phase.After(), roleName))  // generate patch after hook
 		}
-	case consts.PHASE_LIST: // List method use GenerateServiceMethod2
+	case consts.PHASE_LIST: // List hooks use genServiceMethod2
 		decls = append(decls, genServiceMethod4(info, action, action.Payload, action.Result, phase, roleName))
 		// Skip generate hooks for empty models
 		if !info.Design.IsEmpty {
@@ -547,7 +545,7 @@ func GenerateServiceWithPackage(info *ModelInfo, action *dsl.Action, phase const
 			decls = append(decls, genServiceMethod1(info, action, phase.Before(), roleName)) // generate get before hook
 			decls = append(decls, genServiceMethod1(info, action, phase.After(), roleName))  // generate get after hook
 		}
-	case consts.PHASE_CREATE_MANY: // XXXMany methods use GenerateServiceMethod3
+	case consts.PHASE_CREATE_MANY: // XXXMany hooks use genServiceMethod3
 		decls = append(decls, genServiceMethod4(info, action, action.Payload, action.Result, phase, roleName))
 		// Skip generate hooks for empty models
 		if !info.Design.IsEmpty {

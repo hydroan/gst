@@ -127,13 +127,11 @@ func genRunWithOptions(opts genRunOptions) error {
 
 	for _, m := range allModels {
 		if m.Design.Enabled && m.Design.Migrate {
-			// If the ModelFileDir is "model" or "model/", the model package name is the same as the model name,
-			// and the statement in model/model.go will be "Register[*Project]()".
-			// otherwise, the model package name is the last segment of the model file dir.
-			//
-			// For example:
-			// If the ModelFileDir is "model/setting", the model package name is "setting",
-			// then the statement in model/model.go should be "Register[*setting.Project]()"
+			// A model in the root model package (ModelFileDir "model" or
+			// "model/") registers unqualified in model/model.gen.go, as in
+			// "Register[*Record]()"; any other model is qualified by its
+			// package name, as in "Register[*sample.Record]()" for
+			// ModelFileDir "model/sample".
 			if m.ModelPkgName == strings.TrimRight(m.ModelFileDir, "/") {
 				modelStmts = append(modelStmts, gen.StmtModelRegister(m.ModelName))
 			} else {
@@ -331,7 +329,7 @@ func genRunWithOptions(opts genRunOptions) error {
 				return
 			}
 			target := gen.ServiceTarget(m, act, modelDir, serviceDir)
-			if file := gen.GenerateServiceWithPackage(m, act, act.Phase, target.PackageName); file != nil {
+			if file := gen.GenerateService(m, act, act.Phase, target.PackageName); file != nil {
 				fset := token.NewFileSet()
 				code, err := gen.FormatNodeExtraWithFileSet(file, fset)
 				// pretty.Println(file)

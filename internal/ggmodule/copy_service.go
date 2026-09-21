@@ -526,7 +526,7 @@ func generateTargetServiceShell(actions []moduleCopyAction) ([]byte, error) {
 	}
 	var file *ast.File
 	for _, action := range actions {
-		next := gen.GenerateServiceWithPackage(action.ModelInfo, action.Action, action.Action.Phase, moduleCopyServicePackageName(action))
+		next := gen.GenerateService(action.ModelInfo, action.Action, action.Action.Phase, moduleCopyServicePackageName(action))
 		if next == nil {
 			return nil, fmt.Errorf("failed to generate service shell for %s", action.Action.ServiceFilename())
 		}
