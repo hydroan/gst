@@ -6,8 +6,8 @@
 // not the need. A file can carry the suffix and still use nothing unexported
 // of its package, or even declare the external test package; Check finds both,
 // so an internal test is always one that could not be written from outside.
-// The framework's make check runs it over the framework, and gg check over a
-// project.
+// The rule binds the framework alone: make check runs it over the framework,
+// and a project is held to no rule on where its tests live.
 package testplacement
 
 import (
