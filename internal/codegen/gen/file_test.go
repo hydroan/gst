@@ -16,7 +16,6 @@ func TestBuildModelFile(t *testing.T) {
 		modelImports []string
 		stmts        []ast.Stmt
 		want         string
-		wantErr      bool
 	}{
 		{
 			name:         "empty",
@@ -30,7 +29,6 @@ package model
 func init() {
 }
 `,
-			wantErr: false,
 		},
 		{
 			name:         "user",
@@ -47,7 +45,6 @@ func init() {
 	model.Register[*User]()
 }
 `,
-			wantErr: false,
 		},
 		{
 			name:         "user_group",
@@ -72,20 +69,13 @@ func init() {
 	model.Register[*Group]()
 }
 `,
-			wantErr: false,
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, gotErr := gen.BuildModelFile(tt.pkgName, tt.modelImports, tt.stmts...)
-			if gotErr != nil {
-				if !tt.wantErr {
-					t.Errorf("BuildModelFile() failed: %v", gotErr)
-				}
-				return
-			}
-			if tt.wantErr {
-				t.Fatal("BuildModelFile() succeeded unexpectedly")
+			got, err := gen.BuildModelFile(tt.pkgName, tt.modelImports, tt.stmts...)
+			if err != nil {
+				t.Fatalf("BuildModelFile() failed: %v", err)
 			}
 			if got != tt.want {
 				t.Errorf("BuildModelFile() = \n%v\n, want \n%v\n", pretty.Sprintf("% #v", got), pretty.Sprintf("% #v", tt.want))
@@ -101,7 +91,6 @@ func TestBuildServiceFile(t *testing.T) {
 		modelImports []string
 		stmts        []ast.Stmt
 		want         string
-		wantErr      bool
 	}{
 		{
 			name:         "empty",
@@ -115,7 +104,6 @@ package service
 func init() {
 }
 `,
-			wantErr: false,
 		},
 		{
 			name:         "user",
@@ -137,7 +125,6 @@ func init() {
 	service.Register[*user](consts.PHASE_CREATE, "users")
 }
 `,
-			wantErr: false,
 		},
 		{
 			name:         "user_group",
@@ -160,20 +147,13 @@ func init() {
 	service.Register[*group](consts.PHASE_UPDATE, "groups/:id")
 }
 `,
-			wantErr: false,
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, gotErr := gen.BuildServiceFile(tt.pkgName, tt.modelImports, tt.stmts...)
-			if gotErr != nil {
-				if !tt.wantErr {
-					t.Errorf("BuildServiceFile() failed: %v", gotErr)
-				}
-				return
-			}
-			if tt.wantErr {
-				t.Fatal("BuildServiceFile() succeeded unexpectedly")
+			got, err := gen.BuildServiceFile(tt.pkgName, tt.modelImports, tt.stmts...)
+			if err != nil {
+				t.Fatalf("BuildServiceFile() failed: %v", err)
 			}
 			if got != tt.want {
 				t.Errorf("BuildServiceFile() = \n%v\n, want \n%v\n", pretty.Sprintf("% #v", got), pretty.Sprintf("% #v", tt.want))
@@ -189,7 +169,6 @@ func TestBuildRouterFile(t *testing.T) {
 		modelImports []string
 		stmts        []ast.Stmt
 		want         string
-		wantErr      bool
 	}{
 		{
 			name:         "empty",
@@ -204,7 +183,6 @@ func Init() error {
 	return nil
 }
 `,
-			wantErr: false,
 		},
 		{
 			name:         "log_println_hello_world",
@@ -227,7 +205,6 @@ func Init() error {
 	return nil
 }
 `,
-			wantErr: false,
 		},
 		{
 			name:         "aliased_gst_model_import",
@@ -252,20 +229,13 @@ func Init() error {
 	return nil
 }
 `,
-			wantErr: false,
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, gotErr := gen.BuildRouterFile(tt.pkgName, tt.modelImports, tt.stmts...)
-			if gotErr != nil {
-				if !tt.wantErr {
-					t.Errorf("BuildRouterFile() failed: %v", gotErr)
-				}
-				return
-			}
-			if tt.wantErr {
-				t.Fatal("BuildRouterFile() succeeded unexpectedly")
+			got, err := gen.BuildRouterFile(tt.pkgName, tt.modelImports, tt.stmts...)
+			if err != nil {
+				t.Fatalf("BuildRouterFile() failed: %v", err)
 			}
 			if got != tt.want {
 				t.Errorf("BuildRouterFile() = \n%v\n, want \n%v\n", pretty.Sprintf("% #v", got), pretty.Sprintf("% #v", tt.want))
@@ -279,7 +249,6 @@ func TestBuildMainFile(t *testing.T) {
 		name        string
 		projectName string
 		want        string
-		wantErr     bool
 	}{
 		{
 			name:        "helloworld",
@@ -310,20 +279,13 @@ func main() {
 	RunOrDie(bootstrap.Run)
 }
 `,
-			wantErr: false,
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, gotErr := gen.BuildMainFile(tt.projectName)
-			if gotErr != nil {
-				if !tt.wantErr {
-					t.Errorf("BuildMainFile() failed: %v", gotErr)
-				}
-				return
-			}
-			if tt.wantErr {
-				t.Fatal("BuildMainFile() succeeded unexpectedly")
+			got, err := gen.BuildMainFile(tt.projectName)
+			if err != nil {
+				t.Fatalf("BuildMainFile() failed: %v", err)
 			}
 			if got != tt.want {
 				t.Errorf("BuildMainFile() = \n%v,\n want \n%v\n", pretty.Sprintf("% #v", got), pretty.Sprintf("% #v", tt.want))

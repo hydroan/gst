@@ -13,7 +13,6 @@ import (
 	"github.com/hydroan/gst/consts"
 	"github.com/hydroan/gst/dsl"
 	"github.com/kr/pretty"
-	_ "github.com/sergi/go-diff/diffmatchpatch"
 )
 
 var defaultImportModelSource = `
@@ -174,24 +173,28 @@ func TestFindModelPackageName(t *testing.T) {
 }
 
 func TestFindModels(t *testing.T) {
+	// The module and its model files live in a directory of their own, as in
+	// TestGetModulePath: a go.mod written into the package directory would
+	// briefly turn it into a module of its own.
+	dir := t.TempDir()
+	t.Chdir(dir)
 	content := []byte("module github.com/hydroan/gst")
 	if err := os.WriteFile("go.mod", content, 0o600); err != nil {
 		t.Fatal(err)
 	}
-	defer os.Remove("go.mod")
 
 	modulePath, err := GetModulePath()
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	tmpdir := "/tmp/model"
-	if err = os.MkdirAll(tmpdir, 0o750); err != nil {
+	modelDir := filepath.Join(dir, "model")
+	if err = os.MkdirAll(modelDir, 0o750); err != nil {
 		t.Fatal(err)
 	}
 
-	filename1 := filepath.Join(tmpdir, "user.go")
-	filename2 := filepath.Join(tmpdir, "user2.go")
+	filename1 := filepath.Join(modelDir, "user.go")
+	filename2 := filepath.Join(modelDir, "user2.go")
 	if err = os.WriteFile(filename1, []byte(defaultImportModelSource), 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -202,20 +205,19 @@ func TestFindModels(t *testing.T) {
 	tests := []struct {
 		name       string
 		modulePath string
-		modelPath  string
+		modelDir   string
 		filename   string
 		want       []*ModelInfo
-		wantErr    bool
 	}{
 		{
 			name:       "default",
 			modulePath: modulePath,
-			modelPath:  tmpdir,
+			modelDir:   modelDir,
 			filename:   filename1,
 			want: []*ModelInfo{
 				{
 					ModulePath:    "github.com/hydroan/gst",
-					ModelFileDir:  tmpdir,
+					ModelFileDir:  modelDir,
 					ModelFilePath: filename1,
 					ModelPkgName:  "model",
 					ModelName:     "User",
@@ -241,7 +243,7 @@ func TestFindModels(t *testing.T) {
 				},
 				{
 					ModulePath:    "github.com/hydroan/gst",
-					ModelFileDir:  tmpdir,
+					ModelFileDir:  modelDir,
 					ModelFilePath: filename1,
 					ModelPkgName:  "model",
 					ModelName:     "Group",
@@ -267,7 +269,7 @@ func TestFindModels(t *testing.T) {
 				},
 				{
 					ModulePath:    "github.com/hydroan/gst",
-					ModelFileDir:  tmpdir,
+					ModelFileDir:  modelDir,
 					ModelFilePath: filename1,
 					ModelPkgName:  "model",
 					ModelName:     "Device",
@@ -292,17 +294,16 @@ func TestFindModels(t *testing.T) {
 					},
 				},
 			},
-			wantErr: false,
 		},
 		{
 			name:       "named",
 			modulePath: modulePath,
-			modelPath:  tmpdir,
+			modelDir:   modelDir,
 			filename:   filename2,
 			want: []*ModelInfo{
 				{
 					ModulePath:    "github.com/hydroan/gst",
-					ModelFileDir:  tmpdir,
+					ModelFileDir:  modelDir,
 					ModelFilePath: filename2,
 					ModelPkgName:  "model",
 					ModelName:     "User",
@@ -328,7 +329,7 @@ func TestFindModels(t *testing.T) {
 				},
 				{
 					ModulePath:    "github.com/hydroan/gst",
-					ModelFileDir:  tmpdir,
+					ModelFileDir:  modelDir,
 					ModelFilePath: filename2,
 					ModelPkgName:  "model",
 					ModelName:     "Group",
@@ -354,7 +355,7 @@ func TestFindModels(t *testing.T) {
 				},
 				{
 					ModulePath:    "github.com/hydroan/gst",
-					ModelFileDir:  tmpdir,
+					ModelFileDir:  modelDir,
 					ModelFilePath: filename2,
 					ModelPkgName:  "model",
 					ModelName:     "Device",
@@ -383,15 +384,9 @@ func TestFindModels(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, gotErr := FindModels(tt.modulePath, tt.modelPath, tt.filename)
-			if gotErr != nil {
-				if !tt.wantErr {
-					t.Errorf("FindModels() failed: %v", gotErr)
-				}
-				return
-			}
-			if tt.wantErr {
-				t.Fatal("FindModels() succeeded unexpectedly")
+			got, err := FindModels(tt.modulePath, tt.modelDir, tt.filename)
+			if err != nil {
+				t.Fatalf("FindModels() failed: %v", err)
 			}
 			var got2 []ModelInfo
 			var want2 []ModelInfo

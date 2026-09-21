@@ -120,3 +120,41 @@ func TestServiceTarget(t *testing.T) {
 		})
 	}
 }
+
+func TestModelInfo_ModelImportPath(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name         string
+		modelFileDir string
+		wantPath     string
+		wantImport   bool
+	}{
+		{
+			// The root model package is the package the generated model
+			// registration file lives in, so it is never imported there.
+			name:         "root_model_package",
+			modelFileDir: "model",
+			wantPath:     "",
+			wantImport:   false,
+		},
+		{
+			name:         "sub_package",
+			modelFileDir: "model/sample",
+			wantPath:     "helloworld/model/sample",
+			wantImport:   true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			m := &gen.ModelInfo{ModulePath: "helloworld", ModelFileDir: tt.modelFileDir}
+			gotPath, gotImport := m.ModelImportPath()
+			if gotPath != tt.wantPath || gotImport != tt.wantImport {
+				t.Errorf("ModelImportPath() = (%q, %v), want (%q, %v)", gotPath, gotImport, tt.wantPath, tt.wantImport)
+			}
+		})
+	}
+}

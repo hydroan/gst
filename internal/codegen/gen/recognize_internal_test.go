@@ -8,8 +8,8 @@ import (
 )
 
 func TestIsServiceMethod1(t *testing.T) {
-	fn1 := serviceMethod1("u", "User", "CreateBefore", "model", "Creator")
-	fn2 := serviceMethod2("u", "User", "ListBefore", "model", "Lister")
+	fn1 := serviceMethod1("u", "User", "model", consts.PHASE_CREATE_BEFORE, "Creator")
+	fn2 := serviceMethod2("u", "User", "model", consts.PHASE_LIST_BEFORE, "Lister")
 	if !isServiceMethod1(fn1) {
 		t.Fatalf("expected isServiceMethod1 to return true for ServiceMethod1-generated func")
 	}
@@ -19,8 +19,8 @@ func TestIsServiceMethod1(t *testing.T) {
 }
 
 func TestIsServiceMethod2(t *testing.T) {
-	fn := serviceMethod2("u", "User", "ListBefore", "model", "Lister")
-	fnNeg := serviceMethod3("u", "User", "CreateManyBefore", "model", "ManyCreator")
+	fn := serviceMethod2("u", "User", "model", consts.PHASE_LIST_BEFORE, "Lister")
+	fnNeg := serviceMethod3("u", "User", "model", consts.PHASE_CREATE_MANY_BEFORE, "ManyCreator")
 	if !isServiceMethod2(fn) {
 		t.Fatalf("expected isServiceMethod2 to return true for ServiceMethod2-generated func")
 	}
@@ -30,8 +30,8 @@ func TestIsServiceMethod2(t *testing.T) {
 }
 
 func TestIsServiceMethod3(t *testing.T) {
-	fn := serviceMethod3("u", "User", "CreateManyBefore", "model", "ManyCreator")
-	fnNeg := serviceMethod1("u", "User", "CreateBefore", "model", "Creator")
+	fn := serviceMethod3("u", "User", "model", consts.PHASE_CREATE_MANY_BEFORE, "ManyCreator")
+	fnNeg := serviceMethod1("u", "User", "model", consts.PHASE_CREATE_BEFORE, "Creator")
 	if !isServiceMethod3(fn) {
 		t.Fatalf("expected isServiceMethod3 to return true for ServiceMethod3-generated func")
 	}
@@ -42,7 +42,7 @@ func TestIsServiceMethod3(t *testing.T) {
 
 func TestIsServiceMethod4(t *testing.T) {
 	fn := serviceMethod4("u", "model", "*UserReq", "*UserRsp", consts.PHASE_CREATE, "Creator")
-	fnNeg := serviceMethod3("u", "User", "CreateManyBefore", "model", "ManyCreator")
+	fnNeg := serviceMethod3("u", "User", "model", consts.PHASE_CREATE_MANY_BEFORE, "ManyCreator")
 	if !isServiceMethod4(fn) {
 		t.Fatalf("expected isServiceMethod4 to return true for ServiceMethod4-generated func")
 	}

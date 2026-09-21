@@ -285,6 +285,21 @@ func TestStmtRouterRegister(t *testing.T) {
 			verb:         "List",
 			want:         `router.Register[*model.Group, *gstmodel.Empty, *model.GroupListRsp](router.Auth(), "groups", &gst.ControllerConfig[*model.Group]{}, consts.List)`,
 		},
+		{
+			// A route ending in a path parameter names it in the controller
+			// config.
+			name:         "route_param_named_in_controller_config",
+			modelPkgName: "group",
+			modelName:    "Group",
+			reqName:      "*Group",
+			rspName:      "*Group",
+			gstModelPkg:  "model",
+			routerGroup:  "Auth",
+			route:        "groups/:id",
+			paramName:    "id",
+			verb:         "Get",
+			want:         `router.Register[*group.Group, *group.Group, *group.Group](router.Auth(), "groups/:id", &gst.ControllerConfig[*group.Group]{ParamName: "id"}, consts.Get)`,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

@@ -79,7 +79,6 @@ require (
 	github.com/samber/lo v1.53.0
 	github.com/scylladb/gocqlx/v3 v3.0.1
 	github.com/segmentio/fasthash v1.0.3
-	github.com/sergi/go-diff v1.4.0
 	github.com/skip2/go-qrcode v0.0.0-20200617195104-da1b6568686e
 	github.com/sony/gobreaker v1.0.0
 	github.com/spf13/cobra v1.10.2
@@ -403,6 +402,7 @@ require (
 	github.com/scylladb/go-reflectx v1.0.1 // indirect
 	github.com/securego/gosec/v2 v2.28.0 // indirect
 	github.com/segmentio/asm v1.2.1 // indirect
+	github.com/sergi/go-diff v1.4.0 // indirect
 	github.com/shirou/gopsutil/v4 v4.26.7 // indirect
 	github.com/shopspring/decimal v1.4.0 // indirect
 	github.com/sirupsen/logrus v1.10.1 // indirect
