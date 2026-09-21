@@ -399,7 +399,7 @@ func genServiceMethod4(info *ModelInfo, modelQualifier string, action *dsl.Actio
 // service error discipline check on the very next gg run.
 func genServiceMethod5(info *ModelInfo, modelQualifier string, action *dsl.Action, phase consts.Phase, roleName string) *ast.FuncDecl {
 	return serviceMethod5(
-		info.ModelVarName, info.ModelName, modelQualifier, phase, roleName,
+		info.ModelVarName, info.ModelName, modelQualifier, roleName,
 		StmtLogWithContext(info.ModelVarName),
 		StmtLogInfo(serviceActionLogQuoted(info.ModelName, phase, action)),
 		EmptyLine(),
@@ -413,7 +413,7 @@ func genServiceMethod5(info *ModelInfo, modelQualifier string, action *dsl.Actio
 // service error discipline check.
 func genServiceMethod6(info *ModelInfo, modelQualifier string, action *dsl.Action, phase consts.Phase, roleName string) *ast.FuncDecl {
 	return serviceMethod6(
-		info.ModelVarName, info.ModelName, modelQualifier, phase, roleName,
+		info.ModelVarName, info.ModelName, modelQualifier, roleName,
 		StmtLogWithContext(info.ModelVarName),
 		StmtLogInfo(serviceActionLogQuoted(info.ModelName, phase, action)),
 		EmptyLine(),

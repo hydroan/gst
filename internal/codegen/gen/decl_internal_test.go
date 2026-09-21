@@ -522,7 +522,7 @@ func TestServiceMethod5(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			res := serviceMethod5(tt.recvName, tt.modelName, tt.modelPkgName, tt.phase, tt.phase.RoleName())
+			res := serviceMethod5(tt.recvName, tt.modelName, tt.modelPkgName, tt.phase.RoleName())
 			got, err := FormatNode(res)
 			if err != nil {
 				t.Error(err)
@@ -556,7 +556,7 @@ func TestServiceMethod6(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			res := serviceMethod6(tt.recvName, tt.modelName, tt.modelPkgName, tt.phase, tt.phase.RoleName())
+			res := serviceMethod6(tt.recvName, tt.modelName, tt.modelPkgName, tt.phase.RoleName())
 			got, err := FormatNode(res)
 			if err != nil {
 				t.Error(err)

@@ -432,7 +432,7 @@ func serviceMethod4(recvName, modelQualifier, reqName, rspName string, phase con
 // For example:
 //
 //	func (a *Importer) Import(ctx *gst.ServiceContext, reader io.Reader) ([]*model.Sample, error) {\n}
-func serviceMethod5(recvName, modelName, modelQualifier string, _ consts.Phase, roleName string, body ...ast.Stmt) *ast.FuncDecl {
+func serviceMethod5(recvName, modelName, modelQualifier, roleName string, body ...ast.Stmt) *ast.FuncDecl {
 	return &ast.FuncDecl{
 		Recv: &ast.FieldList{
 			List: []*ast.Field{
@@ -542,7 +542,7 @@ func serviceMethod7(recvName, roleName string, body ...ast.Stmt) *ast.FuncDecl {
 // For example:
 //
 //	func (a *Exporter) Export(ctx *gst.ServiceContext, samples ...*model.Sample) ([]byte, error) {\n}
-func serviceMethod6(recvName, modelName, modelQualifier string, _ consts.Phase, roleName string, body ...ast.Stmt) *ast.FuncDecl {
+func serviceMethod6(recvName, modelName, modelQualifier, roleName string, body ...ast.Stmt) *ast.FuncDecl {
 	paramName := pluralizeCli.Plural(strings.ToLower(modelName))
 
 	return &ast.FuncDecl{
