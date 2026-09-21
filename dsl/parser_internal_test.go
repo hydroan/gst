@@ -14,15 +14,13 @@ import (
 
 func TestParse(t *testing.T) {
 	tests := []struct {
-		name     string
-		code     string
-		endpoint string
-		want     map[string]*Design
+		name string
+		code string
+		want map[string]*Design
 	}{
 		{
-			name:     "user",
-			code:     userSource,
-			endpoint: "",
+			name: "user",
+			code: userSource,
 			want: map[string]*Design{
 				"User": {
 					Enabled:  true,
@@ -61,9 +59,8 @@ func TestParse(t *testing.T) {
 			},
 		},
 		{
-			name:     "user2",
-			code:     user2Source,
-			endpoint: "",
+			name: "user2",
+			code: user2Source,
 			want: map[string]*Design{
 				"User2": {
 					Enabled:    false,
@@ -87,9 +84,8 @@ func TestParse(t *testing.T) {
 			},
 		},
 		{
-			name:     "user3_4",
-			code:     user3And4Source,
-			endpoint: "",
+			name: "user3_4",
+			code: user3And4Source,
 			want: map[string]*Design{
 				"User3": {
 					Enabled:    true,
@@ -130,15 +126,13 @@ func TestParse(t *testing.T) {
 			},
 		},
 		{
-			name:     "user4",
-			code:     user4Source,
-			endpoint: "",
-			want:     map[string]*Design{},
+			name: "user4",
+			code: user4Source,
+			want: map[string]*Design{},
 		},
 		{
-			name:     "user5",
-			code:     user5Source,
-			endpoint: "",
+			name: "user5",
+			code: user5Source,
 			want: map[string]*Design{
 				"User5": {
 					Enabled:    true,
@@ -161,9 +155,8 @@ func TestParse(t *testing.T) {
 			},
 		},
 		{
-			name:     "user6_7",
-			code:     user6And7Source,
-			endpoint: "",
+			name: "user6_7",
+			code: user6And7Source,
 			want: map[string]*Design{
 				"User6": {
 					Enabled:    true,
@@ -187,9 +180,8 @@ func TestParse(t *testing.T) {
 			},
 		},
 		{
-			name:     "user8_9",
-			code:     user8And9Source,
-			endpoint: "",
+			name: "user8_9",
+			code: user8And9Source,
 			want: map[string]*Design{
 				"User8": {
 					Enabled:    true,
@@ -240,7 +232,7 @@ func TestParse(t *testing.T) {
 				t.Error(err)
 				return
 			}
-			got := Parse(f, tt.endpoint)
+			got := Parse(f)
 			if len(got) != len(tt.want) {
 				t.Fatalf("Parse() = \n%v\n, want \n%v\n", pretty.Sprintf("% #v", got), pretty.Sprintf("% #v", tt.want))
 			}

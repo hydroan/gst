@@ -21,14 +21,13 @@ var pluralizeCli = pluralize.NewClient()
 //
 // Parameters:
 //   - file: The parsed AST file node to analyze
-//   - endpoint: Optional endpoint override - if provided, will overwrite the default endpoint for enabled designs
 //
 // Returns:
 //   - map[string]*Design: A map where keys are model names and values are their parsed Design configurations
 //
 // Example usage:
 //
-//	designs := Parse(fileNode, "custom-endpoint")
+//	designs := Parse(fileNode)
 //	for modelName, design := range designs {
 //		fmt.Printf("Model %s has endpoint: %s\n", modelName, design.Endpoint)
 //	}
@@ -37,7 +36,7 @@ var pluralizeCli = pluralize.NewClient()
 //   - Global settings: Enabled(), Endpoint("path"), Migrate()
 //   - Action configuration: Create().Payload[Type].Result[Type]
 //   - Service and visibility: Service(), Public()
-func Parse(file *ast.File, endpoint string) map[string]*Design {
+func Parse(file *ast.File) map[string]*Design {
 	designBase, designEmpty := parse(file)
 
 	// If struct contains model.Base and model.Empty, then remove it from designEmpty.
@@ -129,10 +128,6 @@ func Parse(file *ast.File, endpoint string) map[string]*Design {
 			for _, action := range actions {
 				initDefaultAction(name, action)
 			}
-		}
-
-		if len(endpoint) > 0 && design.Enabled {
-			design.Endpoint = endpoint
 		}
 
 		m[name] = design

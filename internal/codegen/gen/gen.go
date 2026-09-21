@@ -255,7 +255,7 @@ func FindModels(module string, modelDir string, filename string) ([]*ModelInfo, 
 		return nil, errors.Join(errs...)
 	}
 
-	designs := dsl.Parse(f, "")
+	designs := dsl.Parse(f)
 	// Note: route assembly (prefixing the model file dir onto Design.Endpoint)
 	// lives in cmd/gg/gen.go so custom routes declared in the DSL are handled
 	// in one place.

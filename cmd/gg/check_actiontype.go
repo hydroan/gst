@@ -170,7 +170,7 @@ func checkPackageActionTypeForm(paths []string) []string {
 
 		// Judge the parsed action type strings per action, so the empty
 		// struct pair rule sees both sides of one action together.
-		designs := dsl.Parse(file.node, "")
+		designs := dsl.Parse(file.node)
 		for _, modelName := range slices.Sorted(maps.Keys(designs)) {
 			designs[modelName].Range(func(_ string, action *dsl.Action) {
 				violations = append(violations, checkActionTypePair(relPath, action, resolve)...)

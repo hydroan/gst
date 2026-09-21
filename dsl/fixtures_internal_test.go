@@ -93,7 +93,7 @@ func parseDesignFromSource(t *testing.T, src, modelName string) *Design {
 		t.Fatalf("parse source failed: %v", err)
 	}
 
-	designs := Parse(file, "")
+	designs := Parse(file)
 	design, ok := designs[modelName]
 	if !ok {
 		t.Fatalf("model %s not found", modelName)
