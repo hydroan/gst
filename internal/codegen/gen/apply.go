@@ -447,7 +447,7 @@ func forceCanonicalServiceStruct(file *ast.File, action *dsl.Action, modelInfo *
 	if spec == nil {
 		existing := findServiceTypeName(file)
 		if len(existing) == 0 {
-			file.Decls = append(file.Decls, types(modelInfo.ModelPkgName, modelInfo.ModelName, action.Payload, action.Result, action.Phase, roleName, false))
+			file.Decls = append(file.Decls, types(modelInfo.ModelPkgName, modelInfo.ModelName, action.Payload, action.Result, action.Phase, roleName))
 			ensureServiceImportSpec(file)
 			ensureModelImportSpec(file, modelInfo)
 			return true
@@ -555,7 +555,7 @@ func removeStructInteriorComments(file *ast.File, structType *ast.StructType) {
 // generatedServiceBaseField builds the service.Base[...] embedded field
 // exactly as generated service code declares it for the action.
 func generatedServiceBaseField(modelInfo *ModelInfo, action *dsl.Action, roleName string) *ast.Field {
-	decl := types(modelInfo.ModelPkgName, modelInfo.ModelName, action.Payload, action.Result, action.Phase, roleName, false)
+	decl := types(modelInfo.ModelPkgName, modelInfo.ModelName, action.Payload, action.Result, action.Phase, roleName)
 	typeSpec, ok := decl.Specs[0].(*ast.TypeSpec)
 	if !ok {
 		return nil

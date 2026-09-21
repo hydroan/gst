@@ -81,7 +81,6 @@ func TestTypes(t *testing.T) {
 		reqName      string
 		rspName      string
 		phase        consts.Phase
-		withComments bool
 		want         string
 	}{
 		{
@@ -166,7 +165,7 @@ func TestTypes(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			res := types(tt.modelPkgName, tt.modelName, tt.reqName, tt.rspName, tt.phase, tt.phase.RoleName(), tt.withComments)
+			res := types(tt.modelPkgName, tt.modelName, tt.reqName, tt.rspName, tt.phase, tt.phase.RoleName())
 			var buf bytes.Buffer
 			fset := token.NewFileSet()
 			if err := format.Node(&buf, fset, res); err != nil {

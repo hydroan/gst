@@ -77,12 +77,6 @@ func imports(modulePath, modelFileDir, modelPkgName string, otherPkg ...string) 
 	return genDecl
 }
 
-// types returns an ast node that represents the declaration of below:
-/*
-type userCreator struct {
-	service.Base[*model.User, *model.User, *model.User]
-}
-*/
 // actionTypeExpr builds the type expression of one explicit action type,
 // transcribing the declared form: a leading '*' yields the pointer form and a
 // bare name stays a value type. The form itself is enforced by gg checks
@@ -109,26 +103,21 @@ func actionTypeOrEmptyExpr(modelPkgName, typeName string) ast.Expr {
 	return actionTypeExpr(modelPkgName, typeName)
 }
 
-func types(modelPkgName, modelName, reqName, rspName string, _ consts.Phase, roleName string, withComment bool) *ast.GenDecl {
-	comments := []*ast.Comment{}
-
-	if withComment {
-		comments = append(comments, &ast.Comment{
-			Text: fmt.Sprintf("// %s implements the gst.Service[*%s.%s, *%s.%s, *%s.%s] interface.",
-				strings.ToLower(modelName), modelPkgName, modelName, modelPkgName, modelName, modelPkgName, modelName),
-		})
-	}
-
+// types builds the declaration of the service struct named roleName, which
+// embeds service.Base over the model and the action's request and response
+// types:
+//
+//	type Creator struct {
+//		service.Base[*model.User, *model.UserReq, *model.UserRsp]
+//	}
+func types(modelPkgName, modelName, reqName, rspName string, _ consts.Phase, roleName string) *ast.GenDecl {
 	// The dsl.PayloadEmpty sentinel resolves to *model.Empty from the gst
-	// model package on either side; any other action type is emitted in the
-	// canonical pointer form.
+	// model package on either side; any other action type is emitted in its
+	// declared form.
 	reqExpr := actionTypeOrEmptyExpr(modelPkgName, reqName)
 	rspExpr := actionTypeOrEmptyExpr(modelPkgName, rspName)
 
 	return &ast.GenDecl{
-		Doc: &ast.CommentGroup{
-			List: comments,
-		},
 		Tok: token.TYPE,
 		Specs: []ast.Spec{
 			&ast.TypeSpec{
@@ -337,11 +326,11 @@ func serviceMethod3(recvName, modelName, modelPkgName string, phase consts.Phase
 // serviceMethod4 generates an ast node that represents the declaration of below:
 // For example:
 //
-//	func (u *Creator) Create(ctx *gst.ServiceContext, user *model.User) (rsp *model.User, err error) {\n}
+//	func (u *Creator) Create(ctx *gst.ServiceContext, req *model.User) (rsp *model.User, err error) {\n}
 func serviceMethod4(recvName, modelPkgName, reqName, rspName string, phase consts.Phase, roleName string, body ...ast.Stmt) *ast.FuncDecl {
 	// The dsl.PayloadEmpty sentinel resolves to *model.Empty from the gst
-	// model package on either side; any other action type is emitted in the
-	// canonical pointer form.
+	// model package on either side; any other action type is emitted in its
+	// declared form.
 	reqExpr := actionTypeOrEmptyExpr(modelPkgName, reqName)
 	rspExpr := actionTypeOrEmptyExpr(modelPkgName, rspName)
 

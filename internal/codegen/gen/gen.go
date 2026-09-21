@@ -169,13 +169,6 @@ func GetModulePath() (string, error) {
 	return moduleName, scanner.Err()
 }
 
-// findModelPackageName finds the actual name of the imported model package
-// import "github.com/hydroan/gst/model" returns "model"
-// import model_auth "github.com/hydroan/gst/model" returns model_auth
-func findModelPackageName(file *ast.File) string {
-	return file.Name.Name
-}
-
 // isModelBase checks if a struct field is an anonymous embedding of a
 // database base model (model.Base or model.AutoBase), handling aliased
 // imports of the model package.
@@ -249,7 +242,7 @@ func FindModels(module string, modelDir string, filename string) ([]*ModelInfo, 
 		return nil, err
 	}
 
-	modelPkgName := findModelPackageName(node)
+	modelPkgName := node.Name.Name
 	if len(modelPkgName) == 0 {
 		return nil, fmt.Errorf("file %s has no model package", filename)
 	}
@@ -481,11 +474,7 @@ func GenerateService(info *ModelInfo, action *dsl.Action, phase consts.Phase, se
 
 	decls := []ast.Decl{
 		imports(info.ModulePath, info.ModelFileDir, info.ModelPkgName, otherPkgs...),
-	}
-
-	// add types
-	if action.Enabled {
-		decls = append(decls, types(info.ModelPkgName, info.ModelName, action.Payload, action.Result, phase, roleName, false))
+		types(info.ModelPkgName, info.ModelName, action.Payload, action.Result, phase, roleName),
 	}
 
 	// add methods

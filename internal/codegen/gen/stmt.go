@@ -132,8 +132,8 @@ func StmtRouterRegister(modelPkgName, modelName, reqName, rspName, gstModelPkg s
 	// *<gstModelPkg>.Empty. gstModelPkg is the file-level qualifier decided
 	// once per router file by RouterGstModelUse: plain "model" by default,
 	// the gstmodel alias when a routed business model package is itself
-	// named "model". Any other action type is emitted in the canonical
-	// pointer form.
+	// named "model". Any other action type is emitted in its declared
+	// form.
 	var reqExpr ast.Expr
 	if isEmptyPayload(reqName) {
 		reqExpr = emptyReqExpr(gstModelPkg)

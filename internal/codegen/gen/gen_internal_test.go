@@ -1,9 +1,6 @@
 package gen
 
 import (
-	"go/ast"
-	"go/parser"
-	"go/token"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -132,43 +129,6 @@ func TestGetModulePathInWorkspaceReturnsCurrentModuleOnly(t *testing.T) {
 	}
 	if got != "example.com/app" {
 		t.Fatalf("GetModulePath() = %q, want %q (workspace mode must not leak other modules)", got, "example.com/app")
-	}
-}
-
-func TestFindModelPackageName(t *testing.T) {
-	fset := token.NewFileSet()
-	file1, err := parser.ParseFile(fset, "user.go", defaultImportModelSource, parser.ParseComments)
-	if err != nil {
-		t.Fatal(err)
-	}
-	file2, err := parser.ParseFile(fset, "user.go", namedImportModelSource, parser.ParseComments)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	tests := []struct {
-		name string
-		file *ast.File
-		want string
-	}{
-		{
-			name: "default",
-			file: file1,
-			want: "model",
-		},
-		{
-			name: "named",
-			file: file2,
-			want: "model",
-		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got := findModelPackageName(tt.file)
-			if got != tt.want {
-				t.Errorf("findModelPackageName() = %v, want %v", got, tt.want)
-			}
-		})
 	}
 }
 
