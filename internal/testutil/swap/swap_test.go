@@ -1,8 +1,9 @@
-package swap
+package swap_test
 
 import (
 	"testing"
 
+	"github.com/hydroan/gst/internal/testutil/swap"
 	"github.com/stretchr/testify/require"
 )
 
@@ -10,7 +11,7 @@ func TestValueRestoresThePreviousValueOnCleanup(t *testing.T) {
 	value := "before"
 
 	t.Run("swapped for the subtest", func(t *testing.T) {
-		Value(t, &value, "after")
+		swap.Value(t, &value, "after")
 		require.Equal(t, "after", value)
 	})
 
@@ -19,7 +20,7 @@ func TestValueRestoresThePreviousValueOnCleanup(t *testing.T) {
 
 func TestValueKeepsTheTestOutOfParallelRuns(t *testing.T) {
 	value := "before"
-	Value(t, &value, "after")
+	swap.Value(t, &value, "after")
 
 	require.Panics(t, t.Parallel)
 }
@@ -28,6 +29,6 @@ func TestValueRefusesATestAlreadyRunningInParallel(t *testing.T) {
 	t.Parallel()
 
 	value := "before"
-	require.Panics(t, func() { Value(t, &value, "after") })
+	require.Panics(t, func() { swap.Value(t, &value, "after") })
 	require.Equal(t, "before", value)
 }

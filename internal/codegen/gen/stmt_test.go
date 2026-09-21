@@ -1,4 +1,4 @@
-package gen
+package gen_test
 
 import (
 	"bytes"
@@ -9,6 +9,7 @@ import (
 
 	"github.com/hydroan/gst/consts"
 	"github.com/hydroan/gst/dsl"
+	"github.com/hydroan/gst/internal/codegen/gen"
 )
 
 func TestStmtLogInfo(t *testing.T) {
@@ -29,7 +30,7 @@ func TestStmtLogInfo(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			buf.Reset()
-			res := StmtLogInfo(tt.str)
+			res := gen.StmtLogInfo(tt.str)
 			if err := format.Node(&buf, fset, res); err != nil {
 				t.Error(err)
 				return
@@ -62,7 +63,7 @@ func TestStmtModelRegister(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := StmtModelRegister(tt.structName)
+			got := gen.StmtModelRegister(tt.structName)
 			var buf bytes.Buffer
 			fset := token.NewFileSet()
 			if err := format.Node(&buf, fset, got); err != nil {
@@ -112,8 +113,8 @@ func TestReturns(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			res := Returns(tt.exprs...)
-			got, err := FormatNode(res)
+			res := gen.Returns(tt.exprs...)
+			got, err := gen.FormatNode(res)
 			if err != nil {
 				t.Error(err)
 				return
@@ -145,8 +146,8 @@ func TestStmtLogWithContext(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			res := StmtLogWithContext(tt.modelVarName)
-			got, err := FormatNode(res)
+			res := gen.StmtLogWithContext(tt.modelVarName)
+			got, err := gen.FormatNode(res)
 			if err != nil {
 				t.Error(err)
 				return
@@ -253,8 +254,8 @@ func TestStmtRouterRegister(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			res := StmtRouterRegister(tt.modelPkgName, tt.modelName, tt.reqName, tt.respName, tt.gstModelPkg, tt.routerGroup, tt.route, tt.paramName, tt.verb)
-			got, err := FormatNode(res)
+			res := gen.StmtRouterRegister(tt.modelPkgName, tt.modelName, tt.reqName, tt.respName, tt.gstModelPkg, tt.routerGroup, tt.route, tt.paramName, tt.verb)
+			got, err := gen.FormatNode(res)
 			if err != nil {
 				t.Error(err)
 				return
@@ -292,8 +293,8 @@ func TestStmtServiceRegister(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			res := StmtServiceRegister(tt.structName, tt.phase, tt.route)
-			got, err := FormatNode(res)
+			res := gen.StmtServiceRegister(tt.structName, tt.phase, tt.route)
+			got, err := gen.FormatNode(res)
 			if err != nil {
 				t.Error(err)
 				return

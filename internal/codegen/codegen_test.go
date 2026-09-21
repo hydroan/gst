@@ -1,13 +1,14 @@
-package codegen
+package codegen_test
 
 import (
 	"testing"
 
+	"github.com/hydroan/gst/internal/codegen"
 	"github.com/hydroan/gst/internal/codegen/gen"
 )
 
 func TestExtractAPIDocs(t *testing.T) {
-	entries, err := ExtractAPIDocs("example.com/proj", "testdata/apidocmodel", nil)
+	entries, err := codegen.ExtractAPIDocs("example.com/proj", "testdata/apidocmodel", nil)
 	if err != nil {
 		t.Fatalf("ExtractAPIDocs() error = %v", err)
 	}
@@ -52,7 +53,7 @@ func TestExtractAPIDocs(t *testing.T) {
 }
 
 func TestExtractAPIDocsEnums(t *testing.T) {
-	entries, err := ExtractAPIDocs("example.com/proj", "testdata/apidocmodel", nil)
+	entries, err := codegen.ExtractAPIDocs("example.com/proj", "testdata/apidocmodel", nil)
 	if err != nil {
 		t.Fatalf("ExtractAPIDocs() error = %v", err)
 	}
@@ -81,11 +82,11 @@ func TestExtractAPIDocsEnums(t *testing.T) {
 }
 
 func TestExtractAPIDocsDeterministicOrder(t *testing.T) {
-	first, err := ExtractAPIDocs("example.com/proj", "testdata/apidocmodel", nil)
+	first, err := codegen.ExtractAPIDocs("example.com/proj", "testdata/apidocmodel", nil)
 	if err != nil {
 		t.Fatalf("ExtractAPIDocs() error = %v", err)
 	}
-	second, err := ExtractAPIDocs("example.com/proj", "testdata/apidocmodel", nil)
+	second, err := codegen.ExtractAPIDocs("example.com/proj", "testdata/apidocmodel", nil)
 	if err != nil {
 		t.Fatalf("ExtractAPIDocs() error = %v", err)
 	}

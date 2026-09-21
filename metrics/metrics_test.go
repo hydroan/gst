@@ -1,4 +1,4 @@
-package prommetrics
+package prommetrics_test
 
 import (
 	"context"
@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/errors"
+	prommetrics "github.com/hydroan/gst/metrics"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/stretchr/testify/require"
 )
@@ -21,18 +22,18 @@ func (nopConnector) Connect(context.Context) (driver.Conn, error) {
 func (nopConnector) Driver() driver.Driver { return nil }
 
 func TestRegisterDBStats(t *testing.T) {
-	require.Error(t, RegisterDBStats(nil, "nil-db"), "a nil handle has no pool to report")
+	require.Error(t, prommetrics.RegisterDBStats(nil, "nil-db"), "a nil handle has no pool to report")
 
 	db := sql.OpenDB(nopConnector{})
 	t.Cleanup(func() { _ = db.Close() })
 
-	require.NoError(t, RegisterDBStats(db, "register-db-stats-test"))
+	require.NoError(t, prommetrics.RegisterDBStats(db, "register-db-stats-test"))
 
 	// Registering the same name again replaces the previous collector instead
 	// of failing, so re-initialization stays idempotent.
 	replacement := sql.OpenDB(nopConnector{})
 	t.Cleanup(func() { _ = replacement.Close() })
-	require.NoError(t, RegisterDBStats(replacement, "register-db-stats-test"))
+	require.NoError(t, prommetrics.RegisterDBStats(replacement, "register-db-stats-test"))
 
 	// The registered collector serves pool gauges labeled with the db name.
 	families, err := prometheus.DefaultGatherer.Gather()

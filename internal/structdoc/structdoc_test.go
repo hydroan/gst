@@ -1,8 +1,10 @@
-package structdoc
+package structdoc_test
 
 import (
 	"go/ast"
 	"testing"
+
+	"github.com/hydroan/gst/internal/structdoc"
 )
 
 const testSource = `package demo
@@ -48,7 +50,7 @@ type writeState struct {
 `
 
 func TestParseSource(t *testing.T) {
-	docs, err := ParseSource("demo.go", []byte(testSource))
+	docs, err := structdoc.ParseSource("demo.go", []byte(testSource))
 	if err != nil {
 		t.Fatalf("ParseSource() error = %v", err)
 	}
@@ -151,7 +153,7 @@ type StatusAlias = SampleStatus
 `
 
 func TestParseSourceDocsEnums(t *testing.T) {
-	docs, err := ParseSourceDocs("demo.go", []byte(enumSource))
+	docs, err := structdoc.ParseSourceDocs("demo.go", []byte(enumSource))
 	if err != nil {
 		t.Fatalf("ParseSourceDocs() error = %v", err)
 	}
@@ -216,7 +218,7 @@ func TestParseSourceDocsEnums(t *testing.T) {
 }
 
 func TestParseSourceDocsEnumConstantsInSeparateFile(t *testing.T) {
-	docs, err := ParseSourceDocs("consts.go", []byte("package demo\n\nconst StatusOn Status = \"on\" // enabled\n"))
+	docs, err := structdoc.ParseSourceDocs("consts.go", []byte("package demo\n\nconst StatusOn Status = \"on\" // enabled\n"))
 	if err != nil {
 		t.Fatalf("ParseSourceDocs() error = %v", err)
 	}
@@ -241,7 +243,7 @@ func TestExtractCommentTextPreservesMarkdownFormatting(t *testing.T) {
 		{Text: "//   - DisplayName: from legacy_setting.display_name."},
 	}}
 
-	got := ExtractCommentText(comment)
+	got := structdoc.ExtractCommentText(comment)
 	want := "Record is the stored record.\n\nBusiness logic: stores the stable identity.\n\nField sources:\n  - ExternalCode: from legacy_record.code.\n  - DisplayName: from legacy_setting.display_name."
 	if got != want {
 		t.Fatalf("ExtractCommentText() = %q, want %q", got, want)
@@ -253,7 +255,7 @@ func TestExtractCommentTextKeepsFieldCommentText(t *testing.T) {
 		{Text: "// DisplayName is the record display name."},
 	}}
 
-	got := ExtractCommentText(comment)
+	got := structdoc.ExtractCommentText(comment)
 	want := "DisplayName is the record display name."
 	if got != want {
 		t.Fatalf("ExtractCommentText() = %q, want %q", got, want)
@@ -271,7 +273,7 @@ func TestExtractCommentTextLeavesOutDirectives(t *testing.T) {
 		{Text: "//nolint:staticcheck // kept on purpose."},
 	}}
 
-	got := ExtractCommentText(comment)
+	got := structdoc.ExtractCommentText(comment)
 	want := "Title is the display title.\nnote: shown as is."
 	if got != want {
 		t.Fatalf("ExtractCommentText() = %q, want %q", got, want)
@@ -279,7 +281,7 @@ func TestExtractCommentTextLeavesOutDirectives(t *testing.T) {
 }
 
 func TestParseSourceInvalid(t *testing.T) {
-	if _, err := ParseSource("bad.go", []byte("not go source")); err == nil {
+	if _, err := structdoc.ParseSource("bad.go", []byte("not go source")); err == nil {
 		t.Fatal("ParseSource() error = nil, want parse error")
 	}
 }

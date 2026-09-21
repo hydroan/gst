@@ -1,4 +1,4 @@
-package middleware
+package middleware_test
 
 import (
 	"net/http"
@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/gin-gonic/gin"
+	"github.com/hydroan/gst/middleware"
 	"github.com/stretchr/testify/require"
 )
 
@@ -33,7 +34,7 @@ func filterStatus(t *testing.T, handler gin.HandlerFunc, peer, forwarded string,
 }
 
 func TestIPWhitelistAdmitsListedAddressesOnly(t *testing.T) {
-	handler := IPWhitelist([]string{"10.1.2.3", "192.168.0.0/16"})
+	handler := middleware.IPWhitelist([]string{"10.1.2.3", "192.168.0.0/16"})
 
 	require.Equal(t, http.StatusOK, filterStatus(t, handler, "10.1.2.3:41000", ""), "the listed address")
 	require.Equal(t, http.StatusOK, filterStatus(t, handler, "192.168.4.5:41000", ""), "an address inside the listed range")
@@ -41,7 +42,7 @@ func TestIPWhitelistAdmitsListedAddressesOnly(t *testing.T) {
 }
 
 func TestIPBlacklistRejectsListedAddressesOnly(t *testing.T) {
-	handler := IPBlacklist([]string{"10.1.2.3", "192.168.0.0/16"})
+	handler := middleware.IPBlacklist([]string{"10.1.2.3", "192.168.0.0/16"})
 
 	require.Equal(t, http.StatusForbidden, filterStatus(t, handler, "10.1.2.3:41000", ""), "the listed address")
 	require.Equal(t, http.StatusForbidden, filterStatus(t, handler, "192.168.4.5:41000", ""), "an address inside the listed range")
@@ -51,7 +52,7 @@ func TestIPBlacklistRejectsListedAddressesOnly(t *testing.T) {
 // TestIPFilterBlacklistOutranksWhitelist pins the documented precedence: an
 // address inside an allowed range is still refused when it is named as blocked.
 func TestIPFilterBlacklistOutranksWhitelist(t *testing.T) {
-	handler := IPFilter(&IPFilterConfig{
+	handler := middleware.IPFilter(&middleware.IPFilterConfig{
 		Whitelist: []string{"192.168.0.0/16"},
 		Blacklist: []string{"192.168.1.100"},
 	})
@@ -65,7 +66,7 @@ func TestIPFilterBlacklistOutranksWhitelist(t *testing.T) {
 // the address on the lists is the client's, not the proxy's — so a blocked
 // client stays blocked even though every request arrives from the same peer.
 func TestIPFilterFiltersForwardedAddressBehindTrustedProxy(t *testing.T) {
-	handler := IPBlacklist([]string{"203.0.113.9"})
+	handler := middleware.IPBlacklist([]string{"203.0.113.9"})
 	const proxy = "10.1.2.3:41000"
 
 	require.Equal(t, http.StatusForbidden,
@@ -79,9 +80,9 @@ func TestIPFilterFiltersForwardedAddressBehindTrustedProxy(t *testing.T) {
 // address in a header the server has no reason to believe.
 func TestIPFilterIgnoresForwardedAddressFromUntrustedPeer(t *testing.T) {
 	require.Equal(t, http.StatusForbidden,
-		filterStatus(t, IPBlacklist([]string{"203.0.113.9"}), "203.0.113.9:41000", "198.51.100.4"),
+		filterStatus(t, middleware.IPBlacklist([]string{"203.0.113.9"}), "203.0.113.9:41000", "198.51.100.4"),
 		"a blocked caller forging an allowed address")
 	require.Equal(t, http.StatusForbidden,
-		filterStatus(t, IPWhitelist([]string{"10.1.2.3"}), "203.0.113.9:41000", "10.1.2.3"),
+		filterStatus(t, middleware.IPWhitelist([]string{"10.1.2.3"}), "203.0.113.9:41000", "10.1.2.3"),
 		"an unlisted caller forging a listed address")
 }

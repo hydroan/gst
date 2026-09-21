@@ -1,4 +1,4 @@
-package middleware
+package middleware_test
 
 import (
 	"net/http"
@@ -8,6 +8,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	internalmiddleware "github.com/hydroan/gst/internal/middleware"
+	"github.com/hydroan/gst/middleware"
 	"github.com/stretchr/testify/require"
 )
 
@@ -16,7 +17,7 @@ func TestTimeoutLeavesStreamingRouteAlone(t *testing.T) {
 
 	gin.SetMode(gin.TestMode)
 	router := gin.New()
-	router.Use(Timeout(30 * time.Millisecond))
+	router.Use(middleware.Timeout(30 * time.Millisecond))
 	router.GET("/api/timeout/stream", func(c *gin.Context) {
 		// Outlives the timeout on purpose; only the streaming exemption lets
 		// this response finish.

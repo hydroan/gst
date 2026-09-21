@@ -1,15 +1,17 @@
-package sse
+package sse_test
 
 import (
 	"fmt"
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/hydroan/gst/internal/sse"
 )
 
 // receiveOne reads one event with a bounded wait so a broken hub fails the
 // test instead of hanging it.
-func receiveOne(t *testing.T, ch <-chan Event) Event {
+func receiveOne(t *testing.T, ch <-chan sse.Event) sse.Event {
 	t.Helper()
 	select {
 	case event, ok := <-ch:
@@ -19,12 +21,12 @@ func receiveOne(t *testing.T, ch <-chan Event) Event {
 		return event
 	case <-time.After(2 * time.Second):
 		t.Fatal("Timed out waiting for an event")
-		return Event{}
+		return sse.Event{}
 	}
 }
 
 // requireClosed asserts the channel is closed and drained.
-func requireClosed(t *testing.T, ch <-chan Event) {
+func requireClosed(t *testing.T, ch <-chan sse.Event) {
 	t.Helper()
 	for {
 		select {
@@ -39,7 +41,7 @@ func requireClosed(t *testing.T, ch <-chan Event) {
 }
 
 func TestHub_PublishReachesTopicSubscribers(t *testing.T) {
-	hub := NewHub()
+	hub := sse.NewHub()
 	defer hub.Close()
 
 	first, cancelFirst := hub.Subscribe("orders")
@@ -49,9 +51,9 @@ func TestHub_PublishReachesTopicSubscribers(t *testing.T) {
 	other, cancelOther := hub.Subscribe("draws")
 	defer cancelOther()
 
-	hub.Publish("orders", Event{Event: "orders", Data: "changed"})
+	hub.Publish("orders", sse.Event{Event: "orders", Data: "changed"})
 
-	for _, ch := range []<-chan Event{first, second} {
+	for _, ch := range []<-chan sse.Event{first, second} {
 		event := receiveOne(t, ch)
 		if event.Data != "changed" {
 			t.Errorf("Expected the published event, got %+v", event)
@@ -65,15 +67,15 @@ func TestHub_PublishReachesTopicSubscribers(t *testing.T) {
 }
 
 func TestHub_MultiTopicSubscriptionReceivesUnion(t *testing.T) {
-	hub := NewHub()
+	hub := sse.NewHub()
 	defer hub.Close()
 
 	ch, cancel := hub.Subscribe("orders", "draws")
 	defer cancel()
 
-	hub.Publish("orders", Event{Data: "order"})
-	hub.Publish("draws", Event{Data: "draw"})
-	hub.Publish("bets", Event{Data: "bet"})
+	hub.Publish("orders", sse.Event{Data: "order"})
+	hub.Publish("draws", sse.Event{Data: "draw"})
+	hub.Publish("bets", sse.Event{Data: "bet"})
 
 	if got := receiveOne(t, ch).Data; got != "order" {
 		t.Errorf("Expected the orders event first, got %v", got)
@@ -89,11 +91,11 @@ func TestHub_MultiTopicSubscriptionReceivesUnion(t *testing.T) {
 }
 
 func TestHub_EmptySubscriptionNeverDelivers(t *testing.T) {
-	hub := NewHub()
+	hub := sse.NewHub()
 	defer hub.Close()
 
 	ch, cancel := hub.Subscribe()
-	hub.Publish("orders", Event{Data: "order"})
+	hub.Publish("orders", sse.Event{Data: "order"})
 
 	select {
 	case event, ok := <-ch:
@@ -110,7 +112,7 @@ func TestHub_EmptySubscriptionNeverDelivers(t *testing.T) {
 }
 
 func TestHub_SlowSubscriberLosesOldestEvents(t *testing.T) {
-	hub := NewHub(WithSubscriberBuffer(2))
+	hub := sse.NewHub(sse.WithSubscriberBuffer(2))
 	defer hub.Close()
 
 	slow, cancelSlow := hub.Subscribe("orders")
@@ -120,7 +122,7 @@ func TestHub_SlowSubscriberLosesOldestEvents(t *testing.T) {
 
 	// Nobody reads yet: four events against a buffer of two.
 	for i := 1; i <= 4; i++ {
-		hub.Publish("orders", Event{Data: i})
+		hub.Publish("orders", sse.Event{Data: i})
 	}
 
 	// The slow subscriber lost the oldest two events and keeps the newest two.
@@ -143,7 +145,7 @@ func TestHub_SlowSubscriberLosesOldestEvents(t *testing.T) {
 }
 
 func TestHub_CancelStopsDeliveryAndClosesChannel(t *testing.T) {
-	hub := NewHub()
+	hub := sse.NewHub()
 	defer hub.Close()
 
 	ch, cancel := hub.Subscribe("orders")
@@ -151,7 +153,7 @@ func TestHub_CancelStopsDeliveryAndClosesChannel(t *testing.T) {
 	cancel() // idempotent
 
 	requireClosed(t, ch)
-	hub.Publish("orders", Event{Data: "after cancel"}) // must not panic
+	hub.Publish("orders", sse.Event{Data: "after cancel"}) // must not panic
 
 	if stats := hub.Stats(); stats.Subscribers != 0 {
 		t.Errorf("Expected no live subscribers after cancel, got %d", stats.Subscribers)
@@ -159,7 +161,7 @@ func TestHub_CancelStopsDeliveryAndClosesChannel(t *testing.T) {
 }
 
 func TestHub_CloseShutsEverythingDown(t *testing.T) {
-	hub := NewHub()
+	hub := sse.NewHub()
 
 	first, cancelFirst := hub.Subscribe("orders")
 	defer cancelFirst()
@@ -171,8 +173,8 @@ func TestHub_CloseShutsEverythingDown(t *testing.T) {
 	requireClosed(t, first)
 	requireClosed(t, second)
 
-	hub.Publish("orders", Event{Data: "after close"}) // no-op, must not panic
-	cancelFirst()                                     // canceling after Close must not panic
+	hub.Publish("orders", sse.Event{Data: "after close"}) // no-op, must not panic
+	cancelFirst()                                         // canceling after Close must not panic
 
 	late, cancelLate := hub.Subscribe("orders")
 	requireClosed(t, late)
@@ -188,7 +190,7 @@ func TestHub_CloseShutsEverythingDown(t *testing.T) {
 }
 
 func TestHub_StatsCountsDistinctSubscribers(t *testing.T) {
-	hub := NewHub()
+	hub := sse.NewHub()
 	defer hub.Close()
 
 	_, cancelMulti := hub.Subscribe("orders", "draws")
@@ -201,8 +203,8 @@ func TestHub_StatsCountsDistinctSubscribers(t *testing.T) {
 		t.Errorf("Expected 2 distinct subscribers, got %d", stats.Subscribers)
 	}
 
-	hub.Publish("orders", Event{Data: "one"})
-	hub.Publish("missing", Event{Data: "two"})
+	hub.Publish("orders", sse.Event{Data: "one"})
+	hub.Publish("missing", sse.Event{Data: "two"})
 
 	stats = hub.Stats()
 	if stats.Published != 2 {
@@ -216,11 +218,11 @@ func TestHub_RejectsInvalidBuffer(t *testing.T) {
 			t.Error("Expected NewHub to panic on a non-positive buffer capacity")
 		}
 	}()
-	NewHub(WithSubscriberBuffer(0))
+	sse.NewHub(sse.WithSubscriberBuffer(0))
 }
 
 func TestHub_ConcurrentPublishSubscribeCancelClose(t *testing.T) {
-	hub := NewHub(WithSubscriberBuffer(4))
+	hub := sse.NewHub(sse.WithSubscriberBuffer(4))
 
 	var wg sync.WaitGroup
 	for worker := range 8 {
@@ -230,7 +232,7 @@ func TestHub_ConcurrentPublishSubscribeCancelClose(t *testing.T) {
 			topic := fmt.Sprintf("topic-%d", worker%3)
 			for i := range 200 {
 				ch, cancel := hub.Subscribe(topic)
-				hub.Publish(topic, Event{Data: i})
+				hub.Publish(topic, sse.Event{Data: i})
 				select {
 				case <-ch:
 				default:

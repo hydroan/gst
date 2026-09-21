@@ -1,18 +1,19 @@
-package apidoc
+package apidoc_test
 
 import (
 	"testing"
 
+	"github.com/hydroan/gst/apidoc"
 	"github.com/hydroan/gst/consts"
 )
 
 func TestRegisterOperationAndLookupOperation(t *testing.T) {
-	RegisterOperation("POST", "/api/users/{id}/disable", OperationDoc{
+	apidoc.RegisterOperation("POST", "/api/users/{id}/disable", apidoc.OperationDoc{
 		Summary:     "Disable the user",
 		Description: "Disable the user and revoke all of its sessions.",
 	})
 
-	doc, ok := LookupOperation("POST", "/api/users/{id}/disable")
+	doc, ok := apidoc.LookupOperation("POST", "/api/users/{id}/disable")
 	if !ok {
 		t.Fatal("LookupOperation() ok = false, want true")
 	}
@@ -27,9 +28,9 @@ func TestRegisterOperationAndLookupOperation(t *testing.T) {
 func TestLookupOperationNormalizesMethodAndParamStyle(t *testing.T) {
 	// Registering with gin-style ":id" params and a lowercase method must be
 	// found by a lookup that uses OpenAPI-style "{id}" params, and vice versa.
-	RegisterOperation("post", "/api/users/:id/enable", OperationDoc{Summary: "Enable the user"})
+	apidoc.RegisterOperation("post", "/api/users/:id/enable", apidoc.OperationDoc{Summary: "Enable the user"})
 
-	doc, ok := LookupOperation("POST", "/api/users/{id}/enable")
+	doc, ok := apidoc.LookupOperation("POST", "/api/users/{id}/enable")
 	if !ok {
 		t.Fatal("LookupOperation() ok = false, want true for equivalent param styles")
 	}
@@ -39,16 +40,16 @@ func TestLookupOperationNormalizesMethodAndParamStyle(t *testing.T) {
 }
 
 func TestLookupOperationMissing(t *testing.T) {
-	if _, ok := LookupOperation("GET", "/api/not/registered"); ok {
+	if _, ok := apidoc.LookupOperation("GET", "/api/not/registered"); ok {
 		t.Fatal("LookupOperation() ok = true, want false for unregistered operation")
 	}
 }
 
 func TestRegisterOperationReplacesPreviousEntry(t *testing.T) {
-	RegisterOperation("PUT", "/api/replaced", OperationDoc{Summary: "old"})
-	RegisterOperation("PUT", "/api/replaced", OperationDoc{Summary: "new"})
+	apidoc.RegisterOperation("PUT", "/api/replaced", apidoc.OperationDoc{Summary: "old"})
+	apidoc.RegisterOperation("PUT", "/api/replaced", apidoc.OperationDoc{Summary: "new"})
 
-	doc, ok := LookupOperation("PUT", "/api/replaced")
+	doc, ok := apidoc.LookupOperation("PUT", "/api/replaced")
 	if !ok {
 		t.Fatal("LookupOperation() ok = false, want true")
 	}
@@ -60,12 +61,12 @@ func TestRegisterOperationReplacesPreviousEntry(t *testing.T) {
 func TestDefaultSummary(t *testing.T) {
 	tests := []struct {
 		name string
-		op   Operation
+		op   apidoc.Operation
 		want string
 	}{
 		{
 			name: "verb with model comment",
-			op: Operation{
+			op: apidoc.Operation{
 				Path:         "/api/users",
 				Verb:         consts.List,
 				ModelComment: "The user record.",
@@ -74,7 +75,7 @@ func TestDefaultSummary(t *testing.T) {
 		},
 		{
 			name: "trailing Chinese period of the comment line is trimmed",
-			op: Operation{
+			op: apidoc.Operation{
 				Path:         "/api/users",
 				Verb:         consts.Create,
 				ModelComment: "用户。",
@@ -83,7 +84,7 @@ func TestDefaultSummary(t *testing.T) {
 		},
 		{
 			name: "only the first comment line is used",
-			op: Operation{
+			op: apidoc.Operation{
 				Path:         "/api/users/{id}",
 				Verb:         consts.Update,
 				ModelComment: "The user record.\nThe second line must not leak into the summary.",
@@ -92,7 +93,7 @@ func TestDefaultSummary(t *testing.T) {
 		},
 		{
 			name: "many verb becomes a batch action",
-			op: Operation{
+			op: apidoc.Operation{
 				Path:         "/api/users/batch",
 				Verb:         consts.CreateMany,
 				ModelComment: "The user record.",
@@ -101,7 +102,7 @@ func TestDefaultSummary(t *testing.T) {
 		},
 		{
 			name: "trailing action segment after a path param wins over the verb",
-			op: Operation{
+			op: apidoc.Operation{
 				Path:         "/api/users/{id}/disable",
 				Verb:         consts.Create,
 				CustomTypes:  true,
@@ -111,7 +112,7 @@ func TestDefaultSummary(t *testing.T) {
 		},
 		{
 			name: "gin-style trailing action segment",
-			op: Operation{
+			op: apidoc.Operation{
 				Path:         "/api/users/:id/reset_password",
 				Verb:         consts.Create,
 				CustomTypes:  true,
@@ -121,7 +122,7 @@ func TestDefaultSummary(t *testing.T) {
 		},
 		{
 			name: "default CRUD nested collection route keeps the verb",
-			op: Operation{
+			op: apidoc.Operation{
 				Path:         "/api/tenants/{tenant}/users",
 				Verb:         consts.Create,
 				ModelComment: "The user record.",
@@ -130,7 +131,7 @@ func TestDefaultSummary(t *testing.T) {
 		},
 		{
 			name: "custom list route keeps the verb",
-			op: Operation{
+			op: apidoc.Operation{
 				Path:         "/api/tenants/{tenant}/users",
 				Verb:         consts.List,
 				CustomTypes:  true,
@@ -140,7 +141,7 @@ func TestDefaultSummary(t *testing.T) {
 		},
 		{
 			name: "no comment falls back to resource path segments",
-			op: Operation{
+			op: apidoc.Operation{
 				Path: "/api/sample/records/{id}",
 				Verb: consts.Patch,
 			},
@@ -148,7 +149,7 @@ func TestDefaultSummary(t *testing.T) {
 		},
 		{
 			name: "no comment with a trailing action segment does not repeat the action",
-			op: Operation{
+			op: apidoc.Operation{
 				Path:        "/api/users/{id}/disable",
 				Verb:        consts.Create,
 				CustomTypes: true,
@@ -157,7 +158,7 @@ func TestDefaultSummary(t *testing.T) {
 		},
 		{
 			name: "no comment and no resource segments falls back to the model name",
-			op: Operation{
+			op: apidoc.Operation{
 				Path:      "/api",
 				Verb:      consts.Get,
 				ModelName: "User",
@@ -168,7 +169,7 @@ func TestDefaultSummary(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := DefaultSummary(tt.op); got != tt.want {
+			if got := apidoc.DefaultSummary(tt.op); got != tt.want {
 				t.Errorf("DefaultSummary() = %q, want %q", got, tt.want)
 			}
 		})
@@ -177,23 +178,23 @@ func TestDefaultSummary(t *testing.T) {
 
 func TestDefaultDescription(t *testing.T) {
 	t.Run("uses the full model comment", func(t *testing.T) {
-		op := Operation{
+		op := apidoc.Operation{
 			Path:         "/api/users",
 			Verb:         consts.List,
 			ModelComment: "The user record.\nIt keeps the account and status fields.",
 		}
 		want := "The user record.\nIt keeps the account and status fields."
-		if got := DefaultDescription(op); got != want {
+		if got := apidoc.DefaultDescription(op); got != want {
 			t.Errorf("DefaultDescription() = %q, want the full comment", got)
 		}
 	})
 
 	t.Run("falls back to the default summary without a comment", func(t *testing.T) {
-		op := Operation{
+		op := apidoc.Operation{
 			Path: "/api/sample/records/{id}",
 			Verb: consts.Patch,
 		}
-		if got := DefaultDescription(op); got != DefaultSummary(op) {
+		if got := apidoc.DefaultDescription(op); got != apidoc.DefaultSummary(op) {
 			t.Errorf("DefaultDescription() = %q, want DefaultSummary fallback", got)
 		}
 	})

@@ -1,9 +1,13 @@
-package apidoc
+package apidoc_test
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/hydroan/gst/apidoc"
+)
 
 func TestRegisterAndLookup(t *testing.T) {
-	Register("example.com/demo/model", "User", StructDoc{
+	apidoc.Register("example.com/demo/model", "User", apidoc.StructDoc{
 		Comment: "User is a demo model.",
 		Fields: map[string]string{
 			"Name": "Name is the user name.",
@@ -11,7 +15,7 @@ func TestRegisterAndLookup(t *testing.T) {
 		},
 	})
 
-	doc, ok := Lookup("example.com/demo/model", "User")
+	doc, ok := apidoc.Lookup("example.com/demo/model", "User")
 	if !ok {
 		t.Fatal("Lookup() ok = false, want true")
 	}
@@ -24,16 +28,16 @@ func TestRegisterAndLookup(t *testing.T) {
 }
 
 func TestLookupMissing(t *testing.T) {
-	if _, ok := Lookup("example.com/demo/model", "NotRegistered"); ok {
+	if _, ok := apidoc.Lookup("example.com/demo/model", "NotRegistered"); ok {
 		t.Fatal("Lookup() ok = true, want false for unregistered struct")
 	}
 }
 
 func TestRegisterReplacesPreviousEntry(t *testing.T) {
-	Register("example.com/demo/model", "Replaced", StructDoc{Comment: "old"})
-	Register("example.com/demo/model", "Replaced", StructDoc{Comment: "new"})
+	apidoc.Register("example.com/demo/model", "Replaced", apidoc.StructDoc{Comment: "old"})
+	apidoc.Register("example.com/demo/model", "Replaced", apidoc.StructDoc{Comment: "new"})
 
-	doc, ok := Lookup("example.com/demo/model", "Replaced")
+	doc, ok := apidoc.Lookup("example.com/demo/model", "Replaced")
 	if !ok {
 		t.Fatal("Lookup() ok = false, want true")
 	}
@@ -43,15 +47,15 @@ func TestRegisterReplacesPreviousEntry(t *testing.T) {
 }
 
 func TestRegisterEnumAndLookupEnum(t *testing.T) {
-	RegisterEnum("example.com/demo/model", "Status", EnumDoc{
+	apidoc.RegisterEnum("example.com/demo/model", "Status", apidoc.EnumDoc{
 		Comment: "Status is a demo enum.",
-		Values: []EnumValue{
+		Values: []apidoc.EnumValue{
 			{Value: "active", Comment: "the record is active"},
 			{Value: "disabled", Comment: "the record is disabled"},
 		},
 	})
 
-	doc, ok := LookupEnum("example.com/demo/model", "Status")
+	doc, ok := apidoc.LookupEnum("example.com/demo/model", "Status")
 	if !ok {
 		t.Fatal("LookupEnum() ok = false, want true")
 	}
@@ -62,26 +66,26 @@ func TestRegisterEnumAndLookupEnum(t *testing.T) {
 		t.Fatalf("doc.Values = %#v, want the two registered values in order", doc.Values)
 	}
 
-	if _, ok := LookupEnum("example.com/demo/model", "NotRegistered"); ok {
+	if _, ok := apidoc.LookupEnum("example.com/demo/model", "NotRegistered"); ok {
 		t.Fatal("LookupEnum() ok = true, want false for unregistered enum")
 	}
 }
 
 func TestRegisterEnumAndLookupEnumCopyValues(t *testing.T) {
-	values := []EnumValue{{Value: "a", Comment: "original"}}
-	RegisterEnum("example.com/demo/model", "Isolated", EnumDoc{Values: values})
+	values := []apidoc.EnumValue{{Value: "a", Comment: "original"}}
+	apidoc.RegisterEnum("example.com/demo/model", "Isolated", apidoc.EnumDoc{Values: values})
 
 	// Mutating the caller's slice after RegisterEnum must not affect the registry.
 	values[0].Comment = "mutated by caller"
 
-	doc, _ := LookupEnum("example.com/demo/model", "Isolated")
+	doc, _ := apidoc.LookupEnum("example.com/demo/model", "Isolated")
 	if doc.Values[0].Comment != "original" {
 		t.Fatalf("doc.Values[0].Comment = %q, want %q", doc.Values[0].Comment, "original")
 	}
 
 	// Mutating the looked-up slice must not affect later lookups.
 	doc.Values[0].Comment = "mutated by reader"
-	again, _ := LookupEnum("example.com/demo/model", "Isolated")
+	again, _ := apidoc.LookupEnum("example.com/demo/model", "Isolated")
 	if again.Values[0].Comment != "original" {
 		t.Fatalf("again.Values[0].Comment = %q, want %q", again.Values[0].Comment, "original")
 	}
@@ -89,19 +93,19 @@ func TestRegisterEnumAndLookupEnumCopyValues(t *testing.T) {
 
 func TestRegisterAndLookupCopyFields(t *testing.T) {
 	fields := map[string]string{"Name": "original"}
-	Register("example.com/demo/model", "Isolated", StructDoc{Fields: fields})
+	apidoc.Register("example.com/demo/model", "Isolated", apidoc.StructDoc{Fields: fields})
 
 	// Mutating the caller's map after Register must not affect the registry.
 	fields["Name"] = "mutated by caller"
 
-	doc, _ := Lookup("example.com/demo/model", "Isolated")
+	doc, _ := apidoc.Lookup("example.com/demo/model", "Isolated")
 	if doc.Fields["Name"] != "original" {
 		t.Fatalf("doc.Fields[Name] = %q, want %q", doc.Fields["Name"], "original")
 	}
 
 	// Mutating the looked-up map must not affect later lookups.
 	doc.Fields["Name"] = "mutated by reader"
-	again, _ := Lookup("example.com/demo/model", "Isolated")
+	again, _ := apidoc.Lookup("example.com/demo/model", "Isolated")
 	if again.Fields["Name"] != "original" {
 		t.Fatalf("again.Fields[Name] = %q, want %q", again.Fields["Name"], "original")
 	}

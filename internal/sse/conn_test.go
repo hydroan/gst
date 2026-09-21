@@ -1,4 +1,4 @@
-package sse
+package sse_test
 
 import (
 	"bufio"
@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/errors"
+	"github.com/hydroan/gst/internal/sse"
 )
 
 // startStreamServer starts a real HTTP server with aggressively short
@@ -53,19 +54,19 @@ func TestServe_StreamOutlivesServerDeadlines(t *testing.T) {
 	// deadlines. The short heartbeat also exercises concurrent writes under
 	// the race detector.
 	srv := startStreamServer(t, 200*time.Millisecond, func(w http.ResponseWriter, r *http.Request) {
-		err := Serve(w, r, func(conn *Conn) error {
+		err := sse.Serve(w, r, func(conn *sse.Conn) error {
 			for i := 1; i <= 6; i++ {
 				select {
 				case <-conn.Context().Done():
 					return nil
 				case <-time.After(200 * time.Millisecond):
 				}
-				if err := conn.Send(Event{Event: "tick", Data: i}); err != nil {
+				if err := conn.Send(sse.Event{Event: "tick", Data: i}); err != nil {
 					return err
 				}
 			}
 			return nil
-		}, WithHeartbeatInterval(50*time.Millisecond))
+		}, sse.WithHeartbeatInterval(50*time.Millisecond))
 		if err != nil {
 			t.Errorf("Serve failed: %v", err)
 		}
@@ -92,8 +93,8 @@ func TestServe_StreamEndsWhenTheServerShutsDown(t *testing.T) {
 	shutdown, beginShutdown := context.WithCancel(context.Background())
 	causes := make(chan error, 1)
 	srv := startStreamServer(t, time.Second, func(w http.ResponseWriter, r *http.Request) {
-		r = r.WithContext(WithServerShutdown(r.Context(), shutdown))
-		err := Serve(w, r, func(conn *Conn) error {
+		r = r.WithContext(sse.WithServerShutdown(r.Context(), shutdown))
+		err := sse.Serve(w, r, func(conn *sse.Conn) error {
 			<-conn.Context().Done()
 			causes <- context.Cause(conn.Context())
 			return nil
@@ -109,7 +110,7 @@ func TestServe_StreamEndsWhenTheServerShutsDown(t *testing.T) {
 
 	select {
 	case cause := <-causes:
-		if !errors.Is(cause, ErrServerShutdown) {
+		if !errors.Is(cause, sse.ErrServerShutdown) {
 			t.Errorf("Expected the stream to end with ErrServerShutdown, got %v", cause)
 		}
 	case <-time.After(5 * time.Second):
@@ -122,17 +123,17 @@ func TestServe_StreamEndsWhenTheServerShutsDown(t *testing.T) {
 
 func TestStreamContext_WatchesTheServerOnce(t *testing.T) {
 	plain := context.Background()
-	if got, stop := StreamContext(plain); got != plain {
+	if got, stop := sse.StreamContext(plain); got != plain {
 		t.Errorf("Expected a context without a server signal to come back as is")
 	} else {
 		stop()
 	}
 
 	shutdown, beginShutdown := context.WithCancel(context.Background())
-	request := WithServerShutdown(context.Background(), shutdown)
-	stream, stop := StreamContext(request)
+	request := sse.WithServerShutdown(context.Background(), shutdown)
+	stream, stop := sse.StreamContext(request)
 	defer stop()
-	if again, stopAgain := StreamContext(stream); again != stream {
+	if again, stopAgain := sse.StreamContext(stream); again != stream {
 		t.Errorf("Expected a stream context to come back as is when derived again")
 	} else {
 		stopAgain()
@@ -144,7 +145,7 @@ func TestStreamContext_WatchesTheServerOnce(t *testing.T) {
 	case <-time.After(5 * time.Second):
 		t.Fatal("The stream context must end when the server shuts down")
 	}
-	if cause := context.Cause(stream); !errors.Is(cause, ErrServerShutdown) {
+	if cause := context.Cause(stream); !errors.Is(cause, sse.ErrServerShutdown) {
 		t.Errorf("Expected ErrServerShutdown as the cause, got %v", cause)
 	}
 	if request.Err() != nil {
@@ -155,7 +156,7 @@ func TestStreamContext_WatchesTheServerOnce(t *testing.T) {
 func TestServe_HeadersArriveBeforeFirstEvent(t *testing.T) {
 	release := make(chan struct{})
 	srv := startStreamServer(t, time.Second, func(w http.ResponseWriter, r *http.Request) {
-		_ = Serve(w, r, func(conn *Conn) error {
+		_ = sse.Serve(w, r, func(conn *sse.Conn) error {
 			select {
 			case <-release:
 			case <-conn.Context().Done():
@@ -183,13 +184,13 @@ func TestServe_HeadersArriveBeforeFirstEvent(t *testing.T) {
 
 func TestServe_HeartbeatFramesFlow(t *testing.T) {
 	srv := startStreamServer(t, time.Second, func(w http.ResponseWriter, r *http.Request) {
-		_ = Serve(w, r, func(conn *Conn) error {
+		_ = sse.Serve(w, r, func(conn *sse.Conn) error {
 			select {
 			case <-conn.Context().Done():
 			case <-time.After(300 * time.Millisecond):
 			}
 			return nil
-		}, WithHeartbeatInterval(50*time.Millisecond))
+		}, sse.WithHeartbeatInterval(50*time.Millisecond))
 	})
 
 	rsp := getStream(t, srv.URL, nil)
@@ -206,8 +207,8 @@ func TestServe_HeartbeatFramesFlow(t *testing.T) {
 func TestServe_ClientDisconnectCancelsContext(t *testing.T) {
 	unblocked := make(chan error, 1)
 	srv := startStreamServer(t, time.Second, func(w http.ResponseWriter, r *http.Request) {
-		_ = Serve(w, r, func(conn *Conn) error {
-			if err := conn.Send(Event{Data: "first"}); err != nil {
+		_ = sse.Serve(w, r, func(conn *sse.Conn) error {
+			if err := conn.Send(sse.Event{Data: "first"}); err != nil {
 				unblocked <- err
 				return err
 			}
@@ -237,7 +238,7 @@ func TestServe_ClientDisconnectCancelsContext(t *testing.T) {
 func TestServe_LastEventID(t *testing.T) {
 	got := make(chan string, 1)
 	srv := startStreamServer(t, time.Second, func(w http.ResponseWriter, r *http.Request) {
-		_ = Serve(w, r, func(conn *Conn) error {
+		_ = sse.Serve(w, r, func(conn *sse.Conn) error {
 			got <- conn.LastEventID()
 			return nil
 		})
@@ -255,9 +256,9 @@ func TestServe_LastEventID(t *testing.T) {
 }
 
 func TestServe_ConnUnusableAfterCallbackReturns(t *testing.T) {
-	leaked := make(chan *Conn, 1)
+	leaked := make(chan *sse.Conn, 1)
 	srv := startStreamServer(t, time.Second, func(w http.ResponseWriter, r *http.Request) {
-		_ = Serve(w, r, func(conn *Conn) error {
+		_ = sse.Serve(w, r, func(conn *sse.Conn) error {
 			leaked <- conn
 			return nil
 		})
@@ -268,18 +269,18 @@ func TestServe_ConnUnusableAfterCallbackReturns(t *testing.T) {
 	_, _ = io.Copy(io.Discard, rsp.Body)
 
 	conn := <-leaked
-	if err := conn.Send(Event{Data: "late"}); err == nil {
+	if err := conn.Send(sse.Event{Data: "late"}); err == nil {
 		t.Error("Expected a send on a finished connection to fail")
 	}
 }
 
 func TestServe_SendRejectsInvalidEventAndKeepsStreaming(t *testing.T) {
 	srv := startStreamServer(t, time.Second, func(w http.ResponseWriter, r *http.Request) {
-		_ = Serve(w, r, func(conn *Conn) error {
-			if err := conn.Send(Event{}); err == nil {
+		_ = sse.Serve(w, r, func(conn *sse.Conn) error {
+			if err := conn.Send(sse.Event{}); err == nil {
 				t.Error("Expected an empty event to be rejected")
 			}
-			return conn.Send(Event{Data: "still alive"})
+			return conn.Send(sse.Event{Data: "still alive"})
 		})
 	})
 
@@ -309,7 +310,7 @@ func (w opaqueWriter) Flush() {
 func TestServe_FailsFastWhenDeadlinesAreUnreachable(t *testing.T) {
 	served := make(chan error, 1)
 	srv := startStreamServer(t, time.Second, func(w http.ResponseWriter, r *http.Request) {
-		served <- Serve(opaqueWriter{w}, r, func(*Conn) error {
+		served <- sse.Serve(opaqueWriter{w}, r, func(*sse.Conn) error {
 			t.Error("The callback must not run when streaming setup fails")
 			return nil
 		})
@@ -333,16 +334,16 @@ func TestServe_FailsFastWhenDeadlinesAreUnreachable(t *testing.T) {
 }
 
 func TestServe_RejectsBadArguments(t *testing.T) {
-	if err := Serve(nil, nil, func(*Conn) error { return nil }); err == nil {
+	if err := sse.Serve(nil, nil, func(*sse.Conn) error { return nil }); err == nil {
 		t.Error("Expected Serve to reject nil writer and request")
 	}
 
 	recorder := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "/stream", nil)
-	if err := Serve(recorder, req, nil); err == nil {
+	if err := sse.Serve(recorder, req, nil); err == nil {
 		t.Error("Expected Serve to reject a nil callback")
 	}
-	if err := Serve(recorder, req, func(*Conn) error { return nil }, WithHeartbeatInterval(0)); err == nil {
+	if err := sse.Serve(recorder, req, func(*sse.Conn) error { return nil }, sse.WithHeartbeatInterval(0)); err == nil {
 		t.Error("Expected Serve to reject a non-positive heartbeat interval")
 	}
 }

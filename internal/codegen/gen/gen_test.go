@@ -80,17 +80,6 @@ type Device struct {
 }
 	`
 
-var dataServiceUserCreate string
-
-func init() {
-	var data []byte
-	var err error
-	if data, err = os.ReadFile("./testdata/service/user_create.go"); err != nil {
-		panic(err)
-	}
-	dataServiceUserCreate = string(data)
-}
-
 func TestGetModulePath(t *testing.T) {
 	content := []byte("module github.com/hydroan/gst")
 	if err := os.WriteFile("go.mod", content, 0o600); err != nil {

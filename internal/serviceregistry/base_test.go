@@ -1,9 +1,10 @@
-package serviceregistry
+package serviceregistry_test
 
 import (
 	"testing"
 
 	"github.com/hydroan/gst/internal/modelregistry"
+	"github.com/hydroan/gst/internal/serviceregistry"
 	"github.com/stretchr/testify/require"
 )
 
@@ -13,7 +14,7 @@ import (
 // forces Service() on both actions; this is the runtime backstop for
 // hand-wired registrations.
 func TestBaseImportExportDefaultsRefuse(t *testing.T) {
-	base := Base[*modelregistry.Empty, any, any]{}
+	base := serviceregistry.Base[*modelregistry.Empty, any, any]{}
 
 	_, err := base.Import(nil, nil)
 	require.ErrorContains(t, err, "import service is not implemented")

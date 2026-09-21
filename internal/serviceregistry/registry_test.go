@@ -1,10 +1,11 @@
-package serviceregistry
+package serviceregistry_test
 
 import (
 	"testing"
 
 	"github.com/hydroan/gst/consts"
 	"github.com/hydroan/gst/internal/modelregistry"
+	"github.com/hydroan/gst/internal/serviceregistry"
 	"github.com/hydroan/gst/logger"
 	"github.com/hydroan/gst/logger/zap"
 	"github.com/stretchr/testify/require"
@@ -21,24 +22,24 @@ func TestRegisterAndResolve(t *testing.T) {
 	logger.Service = zap.New("")
 
 	type svc struct {
-		Base[*testUser, *testUser, *testUser]
+		serviceregistry.Base[*testUser, *testUser, *testUser]
 	}
 
 	registered := &svc{}
 	phase := consts.Phase("test_register_and_resolve")
 
-	Register[*testUser, *testUser, *testUser](phase, "samples", registered)
-	resolved := Resolve[*testUser, *testUser, *testUser](Key(phase, "samples"))
+	serviceregistry.Register[*testUser, *testUser, *testUser](phase, "samples", registered)
+	resolved := serviceregistry.Resolve[*testUser, *testUser, *testUser](serviceregistry.Key(phase, "samples"))
 
 	require.Same(t, registered, resolved)
 	require.NotNil(t, registered.Logger)
 }
 
 func TestResolveReturnsBaseWhenServiceMissing(t *testing.T) {
-	key := Key(consts.Phase("test_missing_service"), "samples")
-	resolved := Resolve[*testUser, *testUser, *testUser](key)
+	key := serviceregistry.Key(consts.Phase("test_missing_service"), "samples")
+	resolved := serviceregistry.Resolve[*testUser, *testUser, *testUser](key)
 
-	_, ok := resolved.(*Base[*testUser, *testUser, *testUser])
+	_, ok := resolved.(*serviceregistry.Base[*testUser, *testUser, *testUser])
 	require.True(t, ok)
 }
 
@@ -47,20 +48,20 @@ func TestResolveReturnsBaseWhenServiceMissing(t *testing.T) {
 // per-request resolution through that key must still find the service.
 func TestResolveSeesLateRegistration(t *testing.T) {
 	type svc struct {
-		Base[*testUser, *testUser, *testUser]
+		serviceregistry.Base[*testUser, *testUser, *testUser]
 	}
 
 	phase := consts.Phase("test_resolve_late_registration")
-	key := Key(phase, "samples")
+	key := serviceregistry.Key(phase, "samples")
 
-	resolved := Resolve[*testUser, *testUser, *testUser](key)
-	_, ok := resolved.(*Base[*testUser, *testUser, *testUser])
+	resolved := serviceregistry.Resolve[*testUser, *testUser, *testUser](key)
+	_, ok := resolved.(*serviceregistry.Base[*testUser, *testUser, *testUser])
 	require.True(t, ok, "missing service should resolve to the no-op Base")
 
 	registered := &svc{}
-	Register[*testUser, *testUser, *testUser](phase, "samples", registered)
+	serviceregistry.Register[*testUser, *testUser, *testUser](phase, "samples", registered)
 
-	require.Same(t, registered, Resolve[*testUser, *testUser, *testUser](key))
+	require.Same(t, registered, serviceregistry.Resolve[*testUser, *testUser, *testUser](key))
 }
 
 // TestRegisterKeysByRoute guards the fix for silent overwrites: two services
@@ -69,21 +70,21 @@ func TestResolveSeesLateRegistration(t *testing.T) {
 // are registered under different routes.
 func TestRegisterKeysByRoute(t *testing.T) {
 	type startSvc struct {
-		Base[*testUser, *testUser, *testUser]
+		serviceregistry.Base[*testUser, *testUser, *testUser]
 	}
 	type stopSvc struct {
-		Base[*testUser, *testUser, *testUser]
+		serviceregistry.Base[*testUser, *testUser, *testUser]
 	}
 
 	phase := consts.Phase("test_register_keys_by_route")
 	start := &startSvc{}
 	stop := &stopSvc{}
 
-	Register[*testUser, *testUser, *testUser](phase, "samples/:id/start", start)
-	Register[*testUser, *testUser, *testUser](phase, "samples/:id/stop", stop)
+	serviceregistry.Register[*testUser, *testUser, *testUser](phase, "samples/:id/start", start)
+	serviceregistry.Register[*testUser, *testUser, *testUser](phase, "samples/:id/stop", stop)
 
-	require.Same(t, start, Resolve[*testUser, *testUser, *testUser](Key(phase, "samples/:id/start")))
-	require.Same(t, stop, Resolve[*testUser, *testUser, *testUser](Key(phase, "samples/:id/stop")))
+	require.Same(t, start, serviceregistry.Resolve[*testUser, *testUser, *testUser](serviceregistry.Key(phase, "samples/:id/start")))
+	require.Same(t, stop, serviceregistry.Resolve[*testUser, *testUser, *testUser](serviceregistry.Key(phase, "samples/:id/stop")))
 }
 
 // TestRegisterPanicsOnDuplicateRouteAndPhase pins the fail-fast contract: a
@@ -91,24 +92,24 @@ func TestRegisterKeysByRoute(t *testing.T) {
 // of silently overwriting the first service.
 func TestRegisterPanicsOnDuplicateRouteAndPhase(t *testing.T) {
 	type svc struct {
-		Base[*testUser, *testUser, *testUser]
+		serviceregistry.Base[*testUser, *testUser, *testUser]
 	}
 
 	phase := consts.Phase("test_register_duplicate")
-	Register[*testUser, *testUser, *testUser](phase, "samples", &svc{})
+	serviceregistry.Register[*testUser, *testUser, *testUser](phase, "samples", &svc{})
 
 	require.Panics(t, func() {
-		Register[*testUser, *testUser, *testUser](phase, "samples", &svc{})
+		serviceregistry.Register[*testUser, *testUser, *testUser](phase, "samples", &svc{})
 	})
 }
 
 func TestRegisterPanicsOnEmptyRoute(t *testing.T) {
 	type svc struct {
-		Base[*testUser, *testUser, *testUser]
+		serviceregistry.Base[*testUser, *testUser, *testUser]
 	}
 
 	require.Panics(t, func() {
-		Register[*testUser, *testUser, *testUser](consts.Phase("test_register_empty_route"), "  ", &svc{})
+		serviceregistry.Register[*testUser, *testUser, *testUser](consts.Phase("test_register_empty_route"), "  ", &svc{})
 	})
 }
 
@@ -118,16 +119,16 @@ func TestRegisterPanicsOnEmptyRoute(t *testing.T) {
 // no-op Base instead of panicking mid-request.
 func TestResolveReturnsBaseOnTypeMismatch(t *testing.T) {
 	type svc struct {
-		Base[*testUser, *testUser, *testUser]
+		serviceregistry.Base[*testUser, *testUser, *testUser]
 	}
 
 	phase := consts.Phase("test_resolve_type_mismatch")
-	Register[*testUser, *testUser, *testUser](phase, "samples", &svc{})
+	serviceregistry.Register[*testUser, *testUser, *testUser](phase, "samples", &svc{})
 
 	var resolved any
 	require.NotPanics(t, func() {
-		resolved = Resolve[*testRecord, *testRecord, *testRecord](Key(phase, "samples"))
+		resolved = serviceregistry.Resolve[*testRecord, *testRecord, *testRecord](serviceregistry.Key(phase, "samples"))
 	})
-	_, ok := resolved.(*Base[*testRecord, *testRecord, *testRecord])
+	_, ok := resolved.(*serviceregistry.Base[*testRecord, *testRecord, *testRecord])
 	require.True(t, ok, "type mismatch should degrade to the no-op Base")
 }

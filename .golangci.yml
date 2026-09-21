@@ -105,14 +105,17 @@ linters:
         # gg module copy copies into a project (internal/model/<module> and
         # internal/service/<module>), the middleware source files the module
         # manifests name, and module/helloworld, the module example projects
-        # are pointed to; so is the external test of a forwarding package,
-        # which imports the package it tests. A trailing $ matches the package
+        # are pointed to; so are the external tests of a forwarding package,
+        # which import the package they test. A trailing $ matches the package
         # itself and not the packages under it.
         forwarders:
           files:
             - "$all"
             - "!**/example_*_test.go"
             - "!**/modelschema/modelschema_test.go"
+            - "!**/service/error_test.go"
+            - "!**/service/service_bench_test.go"
+            - "!**/service/service_test.go"
             - "!**/internal/model/**"
             - "!**/internal/service/**"
             - "!**/middleware/iam_session.go"
@@ -141,11 +144,15 @@ linters:
         # registration packages of copyable modules also import: the handler
         # they register is a middleware source file gg module copy carries into
         # a project, so it lives in the public package, while the registration
-        # call goes through internal/middleware.
+        # call goes through internal/middleware. The package's external tests
+        # are left out as above.
         middleware-forwarder:
           files:
             - "$all"
             - "!**/example_*_test.go"
+            - "!**/middleware/authz_test.go"
+            - "!**/middleware/ip_filter_test.go"
+            - "!**/middleware/timeout_test.go"
             - "!**/internal/model/**"
             - "!**/internal/service/**"
             - "!**/middleware/iam_session.go"

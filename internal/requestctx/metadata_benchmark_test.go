@@ -1,4 +1,4 @@
-package requestctx
+package requestctx_test
 
 import (
 	"context"
@@ -8,6 +8,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/hydroan/gst/consts"
+	"github.com/hydroan/gst/internal/requestctx"
 )
 
 // BenchmarkRequestMetadataWithoutParams measures the per-request metadata cost
@@ -44,7 +45,7 @@ func benchmarkRequestMetadata(b *testing.B, route, target string, paramKeys []st
 		b.ReportAllocs()
 		b.ResetTimer()
 		for b.Loop() {
-			WithMetadata(base, FromGin(c))
+			requestctx.WithMetadata(base, requestctx.FromGin(c))
 		}
 		b.StopTimer()
 	})

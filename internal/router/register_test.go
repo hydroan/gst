@@ -1,4 +1,4 @@
-package router
+package router_test
 
 import (
 	"testing"
@@ -6,6 +6,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/hydroan/gst/consts"
 	"github.com/hydroan/gst/internal/modelregistry"
+	"github.com/hydroan/gst/internal/router"
 	"github.com/stretchr/testify/require"
 )
 
@@ -17,9 +18,9 @@ func TestRegisterPanicsOnABlankRouteOrNoVerbs(t *testing.T) {
 	group := gin.New().Group(consts.APIPathPrefix)
 
 	require.PanicsWithValue(t, "router: register requires a non-empty route", func() {
-		Register[*modelregistry.Empty, *modelregistry.Empty, *modelregistry.Empty](group, "  ", nil, consts.Create, consts.List)
+		router.Register[*modelregistry.Empty, *modelregistry.Empty, *modelregistry.Empty](group, "  ", nil, consts.Create, consts.List)
 	})
 	require.PanicsWithValue(t, `router: register of route "samples" requires at least one verb`, func() {
-		Register[*modelregistry.Empty, *modelregistry.Empty, *modelregistry.Empty](group, "samples", nil)
+		router.Register[*modelregistry.Empty, *modelregistry.Empty, *modelregistry.Empty](group, "samples", nil)
 	})
 }

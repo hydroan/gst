@@ -1,8 +1,9 @@
-package filetype
+package filetype_test
 
 import (
 	"testing"
 
+	"github.com/hydroan/gst/pkg/filetype"
 	"github.com/stretchr/testify/require"
 )
 
@@ -147,7 +148,7 @@ func TestDetectFiletype(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			require.NotPanics(t, func() {
-				_, _ = Detect(tc.filename)
+				_, _ = filetype.Detect(tc.filename)
 			})
 		})
 	}

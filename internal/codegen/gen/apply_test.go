@@ -1,14 +1,27 @@
-package gen
+package gen_test
 
 import (
 	"go/parser"
 	"go/token"
+	"os"
 	"testing"
 
 	"github.com/hydroan/gst/consts"
 	"github.com/hydroan/gst/dsl"
+	"github.com/hydroan/gst/internal/codegen/gen"
 	"github.com/kr/pretty"
 )
+
+var dataServiceUserCreate string
+
+func init() {
+	var data []byte
+	var err error
+	if data, err = os.ReadFile("./testdata/service/user_create.go"); err != nil {
+		panic(err)
+	}
+	dataServiceUserCreate = string(data)
+}
 
 func TestApplyServiceFile(t *testing.T) {
 	tests := []struct {
@@ -593,8 +606,8 @@ func (r *Patcher) validate(ctx *gst.ServiceContext, req *group.SampleRecordPatch
 				t.Error(err)
 				return
 			}
-			ApplyServiceFile(file, tt.action, tt.servicePkgName)
-			got, err := FormatNodeExtra(file)
+			gen.ApplyServiceFile(file, tt.action, tt.servicePkgName)
+			got, err := gen.FormatNodeExtra(file)
 			if err != nil {
 				t.Error(err)
 				return
@@ -612,7 +625,7 @@ func TestApplyServiceFileWithModelSync(t *testing.T) {
 		code           string
 		action         *dsl.Action
 		servicePkgName string
-		modelInfo      *ModelInfo
+		modelInfo      *gen.ModelInfo
 		want           string
 	}{
 		{
@@ -642,7 +655,7 @@ func (u *Creator) Create(ctx *gst.ServiceContext, req *identity.UserReq) (rsp *i
 				Phase:   consts.PHASE_CREATE,
 			},
 			servicePkgName: "user",
-			modelInfo: &ModelInfo{
+			modelInfo: &gen.ModelInfo{
 				ModulePath:   "helloworld",
 				ModelFileDir: "model/auth",
 				ModelPkgName: "auth",
@@ -693,7 +706,7 @@ func (u *Creator) Create(ctx *gst.ServiceContext, req *auth.UserReq) (rsp *auth.
 				Phase:   consts.PHASE_CREATE,
 			},
 			servicePkgName: "user",
-			modelInfo: &ModelInfo{
+			modelInfo: &gen.ModelInfo{
 				ModulePath:   "helloworld",
 				ModelFileDir: "model/auth",
 				ModelPkgName: "auth",
@@ -743,7 +756,7 @@ func (u *Creator) Create(ctx *gst.ServiceContext, req *oldpkg.UserReq) (rsp *old
 				Phase:   consts.PHASE_CREATE,
 			},
 			servicePkgName: "user",
-			modelInfo: &ModelInfo{
+			modelInfo: &gen.ModelInfo{
 				ModulePath:   "helloworld",
 				ModelFileDir: "model/auth",
 				ModelPkgName: "auth",
@@ -795,7 +808,7 @@ func (d *Lister) List(ctx *gst.ServiceContext, req *auth.Debug) (rsp *auth.Debug
 				Phase:   consts.PHASE_LIST,
 			},
 			servicePkgName: "debug",
-			modelInfo: &ModelInfo{
+			modelInfo: &gen.ModelInfo{
 				ModulePath:   "helloworld",
 				ModelFileDir: "model/auth",
 				ModelPkgName: "auth",
@@ -851,7 +864,7 @@ func (p *Ping) Get(ctx *gst.ServiceContext, req *debug.Debug) (rsp *debug.PingRs
 				Phase:    consts.PHASE_GET,
 			},
 			servicePkgName: "debug",
-			modelInfo: &ModelInfo{
+			modelInfo: &gen.ModelInfo{
 				ModulePath:   "helloworld",
 				ModelFileDir: "model/debug",
 				ModelPkgName: "debug",
@@ -884,8 +897,8 @@ func (p *Ping) Get(ctx *gst.ServiceContext, req *debug.Debug) (rsp *debug.PingRs
 				t.Error(err)
 				return
 			}
-			ApplyServiceFileWithModelSync(file, tt.action, tt.servicePkgName, tt.modelInfo)
-			got, err := FormatNodeExtra(file)
+			gen.ApplyServiceFileWithModelSync(file, tt.action, tt.servicePkgName, tt.modelInfo)
+			got, err := gen.FormatNodeExtra(file)
 			if err != nil {
 				t.Error(err)
 				return

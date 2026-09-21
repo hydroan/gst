@@ -1,4 +1,4 @@
-package serviceregistry
+package serviceregistry_test
 
 import (
 	"net/http"
@@ -7,12 +7,13 @@ import (
 
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/internal/errorstack"
+	"github.com/hydroan/gst/internal/serviceregistry"
 	"github.com/hydroan/gst/internal/types"
 	"github.com/stretchr/testify/require"
 )
 
 func TestNewError(t *testing.T) {
-	err := NewError(http.StatusBadRequest, "invalid input")
+	err := serviceregistry.NewError(http.StatusBadRequest, "invalid input")
 
 	require.Error(t, err)
 	require.Equal(t, http.StatusBadRequest, err.Status())
@@ -28,7 +29,7 @@ func TestNewError(t *testing.T) {
 
 func TestNewErrorNormalizesInvalidStatus(t *testing.T) {
 	for _, status := range []int{0, http.StatusOK, http.StatusFound, 99, 600} {
-		err := NewError(status, "should not leak")
+		err := serviceregistry.NewError(status, "should not leak")
 
 		require.Equal(t, http.StatusInternalServerError, err.Status())
 		require.Equal(t, -1, err.Code())
@@ -37,7 +38,7 @@ func TestNewErrorNormalizesInvalidStatus(t *testing.T) {
 }
 
 func TestNewErrorUsesHTTPStatusTextWhenMessageIsEmpty(t *testing.T) {
-	err := NewError(http.StatusNotFound, "")
+	err := serviceregistry.NewError(http.StatusNotFound, "")
 
 	require.Equal(t, http.StatusNotFound, err.Status())
 	require.Equal(t, -1, err.Code())
@@ -46,7 +47,7 @@ func TestNewErrorUsesHTTPStatusTextWhenMessageIsEmpty(t *testing.T) {
 
 func TestNewErrorWithCauseIncludesCauseInErrorButNotMsg(t *testing.T) {
 	cause := errors.New("database password leaked")
-	err := NewErrorWithCause(http.StatusInternalServerError, "failed to load user", cause)
+	err := serviceregistry.NewErrorWithCause(http.StatusInternalServerError, "failed to load user", cause)
 
 	require.ErrorIs(t, err, cause)
 	// Msg stays client-safe: the response envelope renders Msg, never Error.
@@ -71,7 +72,7 @@ func TestNewErrorCapturesStackTraceAtConstructionSite(t *testing.T) {
 }
 
 func TestNewErrorWithCauseStackTracePrefersCauseOrigin(t *testing.T) {
-	err := NewErrorWithCause(http.StatusInternalServerError, "failed to load record", newSampleStackCause())
+	err := serviceregistry.NewErrorWithCause(http.StatusInternalServerError, "failed to load record", newSampleStackCause())
 
 	stackTrace := errorstack.Origin(err)
 	require.NotEmpty(t, stackTrace)
@@ -83,13 +84,13 @@ func TestNewErrorWithCauseStackTracePrefersCauseOrigin(t *testing.T) {
 }
 
 func TestErrorStackTraceOnNilReceiverIsEmpty(t *testing.T) {
-	require.Nil(t, (*Error)(nil).StackTrace())
+	require.Nil(t, (*serviceregistry.Error)(nil).StackTrace())
 }
 
 // newSampleStackError constructs a service error inside a dedicated helper,
 // so tests can assert the captured stack points at this construction site.
-func newSampleStackError() *Error {
-	return NewError(http.StatusConflict, "sample record missing")
+func newSampleStackError() *serviceregistry.Error {
+	return serviceregistry.NewError(http.StatusConflict, "sample record missing")
 }
 
 // newSampleStackCause creates a cause error with its own embedded stack

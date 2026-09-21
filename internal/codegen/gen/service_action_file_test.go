@@ -1,9 +1,11 @@
-package gen
+package gen_test
 
 import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/hydroan/gst/internal/codegen/gen"
 )
 
 func TestIsActionServiceSource(t *testing.T) {
@@ -29,7 +31,7 @@ func (s *SearchSourceDedup) Create(ctx *gst.ServiceContext, req *common.Common) 
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !IsActionServiceSource(good) {
+	if !gen.IsActionServiceSource(good) {
 		t.Fatal("expected custom-filename-style service file to be recognized")
 	}
 
@@ -41,7 +43,7 @@ func Helper() {}
 	if err != nil {
 		t.Fatal(err)
 	}
-	if IsActionServiceSource(bad) {
+	if gen.IsActionServiceSource(bad) {
 		t.Fatal("expected plain helper not to be recognized")
 	}
 
@@ -52,12 +54,12 @@ func {`), 0o600)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if IsActionServiceSource(syntaxErr) {
+	if gen.IsActionServiceSource(syntaxErr) {
 		t.Fatal("expected broken parse to return false")
 	}
 
 	legacy := filepath.Join("testdata", "service", "user_create.go")
-	if !IsActionServiceSource(legacy) {
+	if !gen.IsActionServiceSource(legacy) {
 		t.Fatal("expected testdata service file to be recognized")
 	}
 }

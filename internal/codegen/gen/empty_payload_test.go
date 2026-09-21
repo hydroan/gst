@@ -1,9 +1,11 @@
-package gen
+package gen_test
 
 import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/hydroan/gst/internal/codegen/gen"
 )
 
 // modelInfosFromSource writes source into a temporary model package directory
@@ -11,7 +13,7 @@ import (
 // a hand-built dsl.Design leaves undeclared action pointers nil, which panics
 // inside dsl.Design.Range. pkgDir is relative to the model directory; an
 // empty pkgDir places the file in the model root package.
-func modelInfosFromSource(t *testing.T, pkgDir, filename, source string) []*ModelInfo {
+func modelInfosFromSource(t *testing.T, pkgDir, filename, source string) []*gen.ModelInfo {
 	t.Helper()
 	modelDir := filepath.Join(t.TempDir(), "model")
 	fixtureDir := filepath.Join(modelDir, pkgDir)
@@ -23,7 +25,7 @@ func modelInfosFromSource(t *testing.T, pkgDir, filename, source string) []*Mode
 		t.Fatal(err)
 	}
 
-	models, err := FindModels("tmpapp", modelDir, path)
+	models, err := gen.FindModels("tmpapp", modelDir, path)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -139,7 +141,7 @@ type Snapshot struct {
 
 	tests := []struct {
 		name       string
-		models     []*ModelInfo
+		models     []*gen.ModelInfo
 		wantPkg    string
 		wantNeeded bool
 	}{
@@ -179,7 +181,7 @@ type Snapshot struct {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			gotPkg, gotNeeded := RouterGstModelUse(tt.models)
+			gotPkg, gotNeeded := gen.RouterGstModelUse(tt.models)
 			if gotPkg != tt.wantPkg {
 				t.Errorf("RouterGstModelUse() pkgName = %q, want %q", gotPkg, tt.wantPkg)
 			}
@@ -209,7 +211,7 @@ func TestGstModelImportEntry(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := GstModelImportEntry(tt.pkgName); got != tt.want {
+			if got := gen.GstModelImportEntry(tt.pkgName); got != tt.want {
 				t.Errorf("GstModelImportEntry(%q) = %q, want %q", tt.pkgName, got, tt.want)
 			}
 		})

@@ -1,4 +1,4 @@
-package testutil
+package testutil_test
 
 import (
 	"encoding/json"
@@ -7,6 +7,7 @@ import (
 
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/client"
+	"github.com/hydroan/gst/internal/testutil"
 	"github.com/stretchr/testify/require"
 )
 
@@ -17,7 +18,7 @@ func TestRequireErrorAcceptsWrappedRejectionAndReturnsIt(t *testing.T) {
 		Msg:        "permission denied for sample",
 	}, "call sample endpoint")
 
-	respErr := RequireError(t, err, http.StatusForbidden, "permission denied", "sample")
+	respErr := testutil.RequireError(t, err, http.StatusForbidden, "permission denied", "sample")
 	require.Equal(t, -1, respErr.Code)
 }
 
@@ -29,7 +30,7 @@ func TestDecodeRespReturnsDecodedPayload(t *testing.T) {
 		TraceID: "trace-1",
 	}
 
-	rsp := DecodeResp[struct {
+	rsp := testutil.DecodeResp[struct {
 		Name  string `json:"name"`
 		Count int    `json:"count"`
 	}](t, resp)
@@ -42,5 +43,5 @@ func TestRequireDataFieldsSeesTopLevelFields(t *testing.T) {
 		Data: json.RawMessage(`{"enabled":false,"device_count":0}`),
 	}
 
-	RequireDataFields(t, resp, "enabled", "device_count")
+	testutil.RequireDataFields(t, resp, "enabled", "device_count")
 }

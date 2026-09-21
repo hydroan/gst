@@ -1,9 +1,10 @@
-package dbruntime
+package dbruntime_test
 
 import (
 	"context"
 	"testing"
 
+	"github.com/hydroan/gst/internal/dbruntime"
 	"github.com/stretchr/testify/require"
 	"gorm.io/gorm"
 )
@@ -15,22 +16,22 @@ import (
 func TestTxContextInstanceIsolation(t *testing.T) {
 	analytics := &gorm.DB{}
 	tx := &gorm.DB{}
-	ctx := WithTx(context.Background(), tx, analytics)
+	ctx := dbruntime.WithTx(context.Background(), tx, analytics)
 
-	got, ok := TxFromContext(ctx, analytics)
+	got, ok := dbruntime.TxFromContext(ctx, analytics)
 	require.True(t, ok)
 	require.Same(t, tx, got)
 
 	primary := &gorm.DB{}
-	_, ok = TxFromContext(ctx, primary)
+	_, ok = dbruntime.TxFromContext(ctx, primary)
 	require.False(t, ok, "a lookup keyed by another handle must not see this transaction")
 
 	primaryTx := &gorm.DB{}
-	ctx = WithTx(ctx, primaryTx, primary)
-	got, ok = TxFromContext(ctx, primary)
+	ctx = dbruntime.WithTx(ctx, primaryTx, primary)
+	got, ok = dbruntime.TxFromContext(ctx, primary)
 	require.True(t, ok)
 	require.Same(t, primaryTx, got)
-	got, ok = TxFromContext(ctx, analytics)
+	got, ok = dbruntime.TxFromContext(ctx, analytics)
 	require.True(t, ok, "per-instance transactions must coexist in one context tree")
 	require.Same(t, tx, got)
 }
@@ -40,13 +41,13 @@ func TestTxContextInstanceIsolation(t *testing.T) {
 // for the callers that must not run inside a transaction whichever instance
 // it is open on.
 func TestInTransactionSeesEveryInstance(t *testing.T) {
-	require.False(t, InTransaction(context.Background()))
-	require.False(t, InTransaction(nil)) //nolint:staticcheck // nil is a supported input, mirroring TxFromContext.
+	require.False(t, dbruntime.InTransaction(context.Background()))
+	require.False(t, dbruntime.InTransaction(nil)) //nolint:staticcheck // nil is a supported input, mirroring TxFromContext.
 
 	analytics := &gorm.DB{}
-	require.True(t, InTransaction(WithTx(context.Background(), &gorm.DB{}, analytics)),
+	require.True(t, dbruntime.InTransaction(dbruntime.WithTx(context.Background(), &gorm.DB{}, analytics)),
 		"a transaction on any instance marks the context")
-	require.False(t, InTransaction(WithTx(context.Background(), nil, analytics)),
+	require.False(t, dbruntime.InTransaction(dbruntime.WithTx(context.Background(), nil, analytics)),
 		"no transaction, no mark")
 }
 
@@ -59,13 +60,13 @@ func TestHandleResolvesTheContextTransaction(t *testing.T) {
 	analytics := &gorm.DB{}
 	tx := &gorm.DB{}
 
-	require.Same(t, primary, Handle(context.Background(), primary),
+	require.Same(t, primary, dbruntime.Handle(context.Background(), primary),
 		"outside a transaction the instance itself is the connection")
 
-	ctx := WithTx(context.Background(), tx, primary)
-	require.Same(t, tx, Handle(ctx, primary), "an operation must join its instance's transaction")
-	require.Same(t, analytics, Handle(ctx, analytics),
+	ctx := dbruntime.WithTx(context.Background(), tx, primary)
+	require.Same(t, tx, dbruntime.Handle(ctx, primary), "an operation must join its instance's transaction")
+	require.Same(t, analytics, dbruntime.Handle(ctx, analytics),
 		"another instance must not be pulled into this transaction")
 
-	require.Panics(t, func() { Handle(context.Background(), nil) })
+	require.Panics(t, func() { dbruntime.Handle(context.Background(), nil) })
 }

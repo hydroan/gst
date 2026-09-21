@@ -1,15 +1,16 @@
-package gen
+package gen_test
 
 import (
 	"strings"
 	"testing"
 
 	"github.com/hydroan/gst/apidoc"
+	"github.com/hydroan/gst/internal/codegen/gen"
 )
 
 func TestBuildAPIDocFile(t *testing.T) {
-	entries := APIDocEntries{
-		Structs: []StructDocEntry{
+	entries := gen.APIDocEntries{
+		Structs: []gen.StructDocEntry{
 			{
 				PkgPath:  "example.com/proj/model",
 				TypeName: "User",
@@ -29,7 +30,7 @@ func TestBuildAPIDocFile(t *testing.T) {
 				},
 			},
 		},
-		Enums: []EnumDocEntry{
+		Enums: []gen.EnumDocEntry{
 			{
 				PkgPath:  "example.com/proj/model",
 				TypeName: "UserStatus",
@@ -44,7 +45,7 @@ func TestBuildAPIDocFile(t *testing.T) {
 		},
 	}
 
-	code, err := BuildAPIDocFile("model", entries)
+	code, err := gen.BuildAPIDocFile("model", entries)
 	if err != nil {
 		t.Fatalf("BuildAPIDocFile() error = %v", err)
 	}
@@ -69,7 +70,7 @@ func TestBuildAPIDocFile(t *testing.T) {
 }
 
 func TestBuildAPIDocFileWithoutEntries(t *testing.T) {
-	code, err := BuildAPIDocFile("model", APIDocEntries{})
+	code, err := gen.BuildAPIDocFile("model", gen.APIDocEntries{})
 	if err != nil {
 		t.Fatalf("BuildAPIDocFile() error = %v", err)
 	}

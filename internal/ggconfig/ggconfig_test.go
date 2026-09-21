@@ -1,4 +1,4 @@
-package ggconfig
+package ggconfig_test
 
 import (
 	"net/http"
@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"reflect"
 	"testing"
+
+	"github.com/hydroan/gst/internal/ggconfig"
 )
 
 func TestParseRouteRule(t *testing.T) {
@@ -22,7 +24,7 @@ func TestParseRouteRule(t *testing.T) {
 			{"DELETE /samples/", "DELETE", []string{"samples"}},
 		}
 		for _, tt := range tests {
-			rule, err := ParseRouteRule(tt.raw)
+			rule, err := ggconfig.ParseRouteRule(tt.raw)
 			if err != nil {
 				t.Fatalf("ParseRouteRule(%q) error = %v", tt.raw, err)
 			}
@@ -49,7 +51,7 @@ func TestParseRouteRule(t *testing.T) {
 			"POST /api",
 			"POST /api//signup",
 		} {
-			if _, err := ParseRouteRule(raw); err == nil {
+			if _, err := ggconfig.ParseRouteRule(raw); err == nil {
 				t.Errorf("ParseRouteRule(%q) expected error, got nil", raw)
 			}
 		}
@@ -76,7 +78,7 @@ func TestRouteRuleMatch(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			rule, err := ParseRouteRule(tt.rule)
+			rule, err := ggconfig.ParseRouteRule(tt.rule)
 			if err != nil {
 				t.Fatalf("ParseRouteRule(%q) error = %v", tt.rule, err)
 			}
@@ -100,7 +102,7 @@ func TestNormalizeRoutePath(t *testing.T) {
 		{"", nil},
 	}
 	for _, tt := range tests {
-		if got := NormalizeRoutePath(tt.path); !reflect.DeepEqual(got, tt.want) {
+		if got := ggconfig.NormalizeRoutePath(tt.path); !reflect.DeepEqual(got, tt.want) {
 			t.Errorf("NormalizeRoutePath(%q) = %v, want %v", tt.path, got, tt.want)
 		}
 	}
@@ -110,14 +112,14 @@ func TestLoad(t *testing.T) {
 	writeConfig := func(t *testing.T, content string) string {
 		t.Helper()
 		dir := t.TempDir()
-		if err := os.WriteFile(filepath.Join(dir, FileName), []byte(content), 0o600); err != nil {
+		if err := os.WriteFile(filepath.Join(dir, ggconfig.FileName), []byte(content), 0o600); err != nil {
 			t.Fatal(err)
 		}
 		return dir
 	}
 
 	t.Run("missing file yields empty config", func(t *testing.T) {
-		cfg, err := Load(t.TempDir())
+		cfg, err := ggconfig.Load(t.TempDir())
 		if err != nil {
 			t.Fatalf("Load() error = %v", err)
 		}
@@ -140,7 +142,7 @@ gen:
         - GET
         - DELETE
 `)
-		cfg, err := Load(dir)
+		cfg, err := ggconfig.Load(dir)
 		if err != nil {
 			t.Fatalf("Load() error = %v", err)
 		}
@@ -163,21 +165,21 @@ gen:
     ignroe:
       /api/signup: [POST]
 `)
-		if _, err := Load(dir); err == nil {
+		if _, err := ggconfig.Load(dir); err == nil {
 			t.Fatal("Load() expected error for unknown field, got nil")
 		}
 	})
 
 	t.Run("unsupported version is rejected", func(t *testing.T) {
 		dir := writeConfig(t, "version: 2\n")
-		if _, err := Load(dir); err == nil {
+		if _, err := ggconfig.Load(dir); err == nil {
 			t.Fatal("Load() expected error for version 2, got nil")
 		}
 	})
 
 	t.Run("missing version is rejected", func(t *testing.T) {
 		dir := writeConfig(t, "gen:\n  routes:\n    ignore: {}\n")
-		if _, err := Load(dir); err == nil {
+		if _, err := ggconfig.Load(dir); err == nil {
 			t.Fatal("Load() expected error for missing version, got nil")
 		}
 	})
@@ -189,7 +191,7 @@ gen:
     ignore:
       - POST /api/signup
 `)
-		if _, err := Load(dir); err == nil {
+		if _, err := ggconfig.Load(dir); err == nil {
 			t.Fatal("Load() expected error for non-mapping ignore, got nil")
 		}
 	})
@@ -201,7 +203,7 @@ gen:
     ignore:
       /api/signup: [TRACE]
 `)
-		if _, err := Load(dir); err == nil {
+		if _, err := ggconfig.Load(dir); err == nil {
 			t.Fatal("Load() expected error for invalid method, got nil")
 		}
 	})
@@ -213,7 +215,7 @@ gen:
     ignore:
       /api/signup: []
 `)
-		if _, err := Load(dir); err == nil {
+		if _, err := ggconfig.Load(dir); err == nil {
 			t.Fatal("Load() expected error for empty method list, got nil")
 		}
 	})
@@ -232,7 +234,7 @@ gen:
 		for _, tt := range tests {
 			t.Run(tt.name, func(t *testing.T) {
 				dir := writeConfig(t, "version: 1\ngen:\n  routes:\n    ignore:\n"+tt.entries)
-				if _, err := Load(dir); err == nil {
+				if _, err := ggconfig.Load(dir); err == nil {
 					t.Fatal("Load() expected error for duplicate route paths, got nil")
 				}
 			})
@@ -246,7 +248,7 @@ gen:
     ignore:
       /api/signup: [POST, post]
 `)
-		if _, err := Load(dir); err == nil {
+		if _, err := ggconfig.Load(dir); err == nil {
 			t.Fatal("Load() expected error for duplicate methods, got nil")
 		}
 	})
@@ -260,7 +262,7 @@ gen:
         methods: [GET]
         from: model/iam/
 `)
-		cfg, err := Load(dir)
+		cfg, err := ggconfig.Load(dir)
 		if err != nil {
 			t.Fatalf("Load() error = %v", err)
 		}
@@ -280,7 +282,7 @@ gen:
       /api/signup:
         methods: [POST]
 `)
-		cfg, err := Load(dir)
+		cfg, err := ggconfig.Load(dir)
 		if err != nil {
 			t.Fatalf("Load() error = %v", err)
 		}
@@ -298,7 +300,7 @@ gen:
         methods: [POST]
         form: model/iam
 `)
-		if _, err := Load(dir); err == nil {
+		if _, err := ggconfig.Load(dir); err == nil {
 			t.Fatal("Load() expected error for unknown field in rule object, got nil")
 		}
 	})
@@ -313,7 +315,7 @@ gen:
         methods: [POST]
         from: `+from+`
 `)
-			if _, err := Load(dir); err == nil {
+			if _, err := ggconfig.Load(dir); err == nil {
 				t.Errorf("Load() expected error for from %s, got nil", from)
 			}
 		}
@@ -334,7 +336,7 @@ func TestRouteRuleMatchesSource(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			rule := RouteRule{From: tt.from}
+			rule := ggconfig.RouteRule{From: tt.from}
 			if got := rule.MatchesSource(tt.modelFilePath); got != tt.want {
 				t.Errorf("MatchesSource(%q) with From=%q = %v, want %v", tt.modelFilePath, tt.from, got, tt.want)
 			}
@@ -354,14 +356,14 @@ gen:
       Widget:
       Gadget: {}
 `
-		if err := os.WriteFile(filepath.Join(dir, FileName), []byte(content), 0o600); err != nil {
+		if err := os.WriteFile(filepath.Join(dir, ggconfig.FileName), []byte(content), 0o600); err != nil {
 			t.Fatal(err)
 		}
-		cfg, err := Load(dir)
+		cfg, err := ggconfig.Load(dir)
 		if err != nil {
 			t.Fatalf("Load() error = %v", err)
 		}
-		want := ModelIgnoreRules{
+		want := ggconfig.ModelIgnoreRules{
 			{Name: "Profile", From: "model/iam", Raw: "Profile"},
 			{Name: "Widget", Raw: "Widget"},
 			{Name: "Gadget", Raw: "Gadget"},
@@ -384,10 +386,10 @@ gen:
 		} {
 			t.Run(name, func(t *testing.T) {
 				dir := t.TempDir()
-				if err := os.WriteFile(filepath.Join(dir, FileName), []byte(content), 0o600); err != nil {
+				if err := os.WriteFile(filepath.Join(dir, ggconfig.FileName), []byte(content), 0o600); err != nil {
 					t.Fatal(err)
 				}
-				if _, err := Load(dir); err == nil {
+				if _, err := ggconfig.Load(dir); err == nil {
 					t.Fatalf("Load() expected error, got nil")
 				}
 			})
@@ -410,7 +412,7 @@ func TestModelRuleMatchesSource(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			rule := ModelRule{Name: "User", From: tt.from}
+			rule := ggconfig.ModelRule{Name: "User", From: tt.from}
 			if got := rule.MatchesSource(tt.path); got != tt.want {
 				t.Errorf("MatchesSource(%q) = %v, want %v", tt.path, got, tt.want)
 			}

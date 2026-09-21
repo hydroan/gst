@@ -1,4 +1,4 @@
-package httpwrapper
+package httpwrapper_test
 
 import (
 	"bytes"
@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/hydroan/gst/pkg/httpwrapper"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -67,12 +68,12 @@ func TestWrappedResponse(t *testing.T) {
 func testWrappedRequest(t *testing.T, req *http.Request, body []byte) {
 	t.Helper()
 
-	reqWrapper := &WrappedRequest{Request: req}
+	reqWrapper := &httpwrapper.WrappedRequest{Request: req}
 	data, err := json.Marshal(reqWrapper)
 	require.NoError(t, err)
 	assert.NotEmpty(t, data)
 
-	reqWrapper = new(WrappedRequest)
+	reqWrapper = new(httpwrapper.WrappedRequest)
 	require.NoError(t, json.Unmarshal(data, reqWrapper))
 	got, err := io.ReadAll(reqWrapper.Body)
 	require.NoError(t, err)
@@ -84,12 +85,12 @@ func testWrappedRequest(t *testing.T, req *http.Request, body []byte) {
 func testWrappedResponse(t *testing.T, resp *http.Response, body []byte) {
 	t.Helper()
 
-	respWrapper := &WrappedResponse{Response: resp}
+	respWrapper := &httpwrapper.WrappedResponse{Response: resp}
 	data, err := json.Marshal(respWrapper)
 	require.NoError(t, err)
 	assert.NotEmpty(t, data)
 
-	respWrapper = new(WrappedResponse)
+	respWrapper = new(httpwrapper.WrappedResponse)
 	require.NoError(t, json.Unmarshal(data, respWrapper))
 	got, err := io.ReadAll(respWrapper.Body)
 	require.NoError(t, err)

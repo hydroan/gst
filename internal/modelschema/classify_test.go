@@ -1,4 +1,4 @@
-package modelschema
+package modelschema_test
 
 import (
 	"database/sql/driver"
@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/hydroan/gst/internal/modelschema"
 	"github.com/stretchr/testify/require"
 	"gorm.io/datatypes"
 	"gorm.io/gorm"
@@ -34,13 +35,13 @@ func TestClassifyColumn(t *testing.T) {
 			// A pointer column aggregates its pointed-to value.
 			reflect.TypeFor[*int64](),
 		} {
-			require.Equal(t, ColumnClassNumeric, ClassifyColumn(typ), typ.String())
+			require.Equal(t, modelschema.ColumnClassNumeric, modelschema.ClassifyColumn(typ), typ.String())
 		}
 	})
 
 	t.Run("Time", func(t *testing.T) {
-		require.Equal(t, ColumnClassTime, ClassifyColumn(reflect.TypeFor[time.Time]()))
-		require.Equal(t, ColumnClassTime, ClassifyColumn(reflect.TypeFor[*time.Time]()))
+		require.Equal(t, modelschema.ColumnClassTime, modelschema.ClassifyColumn(reflect.TypeFor[time.Time]()))
+		require.Equal(t, modelschema.ColumnClassTime, modelschema.ClassifyColumn(reflect.TypeFor[*time.Time]()))
 	})
 
 	t.Run("Other", func(t *testing.T) {
@@ -51,9 +52,9 @@ func TestClassifyColumn(t *testing.T) {
 			// so a TimeColumn typed on it would not compile.
 			reflect.TypeFor[namedTime](),
 		} {
-			require.Equal(t, ColumnClassOther, ClassifyColumn(typ), typ.String())
+			require.Equal(t, modelschema.ColumnClassOther, modelschema.ClassifyColumn(typ), typ.String())
 		}
-		require.Equal(t, ColumnClassOther, ClassifyColumn(nil))
+		require.Equal(t, modelschema.ColumnClassOther, modelschema.ClassifyColumn(nil))
 	})
 
 	t.Run("RejectsValuerHeuristic", func(t *testing.T) {
@@ -64,7 +65,7 @@ func TestClassifyColumn(t *testing.T) {
 		for _, typ := range []reflect.Type{
 			reflect.TypeFor[textValuer](), reflect.TypeFor[gorm.DeletedAt](),
 		} {
-			require.Equal(t, ColumnClassOther, ClassifyColumn(typ), typ.String())
+			require.Equal(t, modelschema.ColumnClassOther, modelschema.ClassifyColumn(typ), typ.String())
 		}
 	})
 }
@@ -88,7 +89,7 @@ func TestIsJSONType(t *testing.T) {
 			// spelling is case-insensitive.
 			reflect.TypeFor[pointerDataType](),
 		} {
-			require.True(t, IsJSONType(typ), typ.String())
+			require.True(t, modelschema.IsJSONType(typ), typ.String())
 		}
 	})
 
@@ -98,8 +99,8 @@ func TestIsJSONType(t *testing.T) {
 			reflect.TypeFor[[]byte](), reflect.TypeFor[gorm.DeletedAt](),
 			reflect.TypeFor[time.Time](),
 		} {
-			require.False(t, IsJSONType(typ), typ.String())
+			require.False(t, modelschema.IsJSONType(typ), typ.String())
 		}
-		require.False(t, IsJSONType(nil))
+		require.False(t, modelschema.IsJSONType(nil))
 	})
 }

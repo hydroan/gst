@@ -1,4 +1,4 @@
-package middleware
+package middleware_test
 
 import (
 	"net/http"
@@ -10,6 +10,7 @@ import (
 	"github.com/hydroan/gst/consts"
 	"github.com/hydroan/gst/internal/types"
 	"github.com/hydroan/gst/logger"
+	"github.com/hydroan/gst/middleware"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
@@ -28,7 +29,7 @@ func TestAuthzLogsDecisionDuration(t *testing.T) {
 		recorder := setupAuthzLoggerTest(t)
 
 		router := gin.New()
-		router.Use(func(c *gin.Context) { c.Set(consts.CTX_USER_ID, "u-1") }, Authz())
+		router.Use(func(c *gin.Context) { c.Set(consts.CTX_USER_ID, "u-1") }, middleware.Authz())
 		router.GET("/api/records", func(c *gin.Context) { c.Status(http.StatusOK) })
 
 		w := performAuthzRequest(router, "/api/records")
@@ -49,7 +50,7 @@ func TestAuthzLogsDecisionDuration(t *testing.T) {
 		recorder := setupAuthzLoggerTest(t)
 
 		router := gin.New()
-		router.Use(Authz())
+		router.Use(middleware.Authz())
 		router.GET("/api/records", func(c *gin.Context) { c.Status(http.StatusOK) })
 
 		w := performAuthzRequest(router, "/api/records")

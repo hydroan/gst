@@ -1,20 +1,22 @@
-package sse
+package sse_test
 
 import (
 	"bytes"
 	"encoding/json"
 	"strings"
 	"testing"
+
+	"github.com/hydroan/gst/internal/sse"
 )
 
 func TestEncode_SimpleString(t *testing.T) {
 	var buf bytes.Buffer
-	event := Event{
+	event := sse.Event{
 		Event: "message",
 		Data:  "some data",
 	}
 
-	if err := Encode(&buf, event); err != nil {
+	if err := sse.Encode(&buf, event); err != nil {
 		t.Fatalf("Encode failed: %v", err)
 	}
 
@@ -26,12 +28,12 @@ func TestEncode_SimpleString(t *testing.T) {
 
 func TestEncode_MultiLineData(t *testing.T) {
 	var buf bytes.Buffer
-	event := Event{
+	event := sse.Event{
 		Event: "message",
 		Data:  "some data\nmore data",
 	}
 
-	if err := Encode(&buf, event); err != nil {
+	if err := sse.Encode(&buf, event); err != nil {
 		t.Fatalf("Encode failed: %v", err)
 	}
 
@@ -43,13 +45,13 @@ func TestEncode_MultiLineData(t *testing.T) {
 
 func TestEncode_WithID(t *testing.T) {
 	var buf bytes.Buffer
-	event := Event{
+	event := sse.Event{
 		ID:    "124",
 		Event: "message",
 		Data:  "some data",
 	}
 
-	if err := Encode(&buf, event); err != nil {
+	if err := sse.Encode(&buf, event); err != nil {
 		t.Fatalf("Encode failed: %v", err)
 	}
 
@@ -61,13 +63,13 @@ func TestEncode_WithID(t *testing.T) {
 
 func TestEncode_WithRetry(t *testing.T) {
 	var buf bytes.Buffer
-	event := Event{
+	event := sse.Event{
 		Event: "message",
 		Data:  "some data",
 		Retry: 3000,
 	}
 
-	if err := Encode(&buf, event); err != nil {
+	if err := sse.Encode(&buf, event); err != nil {
 		t.Fatalf("Encode failed: %v", err)
 	}
 
@@ -79,9 +81,9 @@ func TestEncode_WithRetry(t *testing.T) {
 
 func TestEncode_CommentOnly(t *testing.T) {
 	var buf bytes.Buffer
-	event := Event{Comment: "ping"}
+	event := sse.Event{Comment: "ping"}
 
-	if err := Encode(&buf, event); err != nil {
+	if err := sse.Encode(&buf, event); err != nil {
 		t.Fatalf("Encode failed: %v", err)
 	}
 
@@ -93,9 +95,9 @@ func TestEncode_CommentOnly(t *testing.T) {
 
 func TestEncode_MultiLineComment(t *testing.T) {
 	var buf bytes.Buffer
-	event := Event{Comment: "first\nsecond"}
+	event := sse.Event{Comment: "first\nsecond"}
 
-	if err := Encode(&buf, event); err != nil {
+	if err := sse.Encode(&buf, event); err != nil {
 		t.Fatalf("Encode failed: %v", err)
 	}
 
@@ -107,9 +109,9 @@ func TestEncode_MultiLineComment(t *testing.T) {
 
 func TestEncode_CommentPrecedesFields(t *testing.T) {
 	var buf bytes.Buffer
-	event := Event{Comment: "note", ID: "7", Event: "message", Data: "payload"}
+	event := sse.Event{Comment: "note", ID: "7", Event: "message", Data: "payload"}
 
-	if err := Encode(&buf, event); err != nil {
+	if err := sse.Encode(&buf, event); err != nil {
 		t.Fatalf("Encode failed: %v", err)
 	}
 
@@ -121,9 +123,9 @@ func TestEncode_CommentPrecedesFields(t *testing.T) {
 
 func TestEncode_EmptyStringData(t *testing.T) {
 	var buf bytes.Buffer
-	event := Event{Event: "message", Data: ""}
+	event := sse.Event{Event: "message", Data: ""}
 
-	if err := Encode(&buf, event); err != nil {
+	if err := sse.Encode(&buf, event); err != nil {
 		t.Fatalf("Encode failed: %v", err)
 	}
 
@@ -137,7 +139,7 @@ func TestEncode_EmptyStringData(t *testing.T) {
 
 func TestEncode_ComplexData(t *testing.T) {
 	var buf bytes.Buffer
-	event := Event{
+	event := sse.Event{
 		ID:    "124",
 		Event: "message",
 		Data: map[string]any{
@@ -147,7 +149,7 @@ func TestEncode_ComplexData(t *testing.T) {
 		},
 	}
 
-	if err := Encode(&buf, event); err != nil {
+	if err := sse.Encode(&buf, event); err != nil {
 		t.Fatalf("Encode failed: %v", err)
 	}
 
@@ -179,13 +181,13 @@ func TestEncode_ComplexData(t *testing.T) {
 
 func TestEncode_EmptyObject(t *testing.T) {
 	var buf bytes.Buffer
-	event := Event{
+	event := sse.Event{
 		ID:    "123",
 		Event: "message",
 		Data:  map[string]any{}, // Empty object must still be sent as data: {}
 	}
 
-	if err := Encode(&buf, event); err != nil {
+	if err := sse.Encode(&buf, event); err != nil {
 		t.Fatalf("Encode failed: %v", err)
 	}
 
@@ -198,13 +200,13 @@ func TestEncode_EmptyObject(t *testing.T) {
 
 func TestEncode_NilData(t *testing.T) {
 	var buf bytes.Buffer
-	event := Event{
+	event := sse.Event{
 		ID:    "123",
 		Event: "message",
 		Data:  nil, // No data field should be written
 	}
 
-	if err := Encode(&buf, event); err != nil {
+	if err := sse.Encode(&buf, event); err != nil {
 		t.Fatalf("Encode failed: %v", err)
 	}
 
@@ -216,14 +218,14 @@ func TestEncode_NilData(t *testing.T) {
 
 func TestEncode_FieldOrder(t *testing.T) {
 	var buf bytes.Buffer
-	event := Event{
+	event := sse.Event{
 		ID:    "124",
 		Event: "message",
 		Retry: 3000,
 		Data:  "test",
 	}
 
-	if err := Encode(&buf, event); err != nil {
+	if err := sse.Encode(&buf, event); err != nil {
 		t.Fatalf("Encode failed: %v", err)
 	}
 
@@ -259,11 +261,11 @@ func TestEncode_PrimitiveTypes(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			var buf bytes.Buffer
-			event := Event{
+			event := sse.Event{
 				Data: tt.data,
 			}
 
-			if err := Encode(&buf, event); err != nil {
+			if err := sse.Encode(&buf, event); err != nil {
 				t.Fatalf("Encode failed: %v", err)
 			}
 
@@ -277,22 +279,22 @@ func TestEncode_PrimitiveTypes(t *testing.T) {
 func TestEncode_RejectsInvalidEvents(t *testing.T) {
 	tests := []struct {
 		name  string
-		event Event
+		event sse.Event
 	}{
-		{"empty event", Event{}},
-		{"id with newline", Event{ID: "1\n2", Data: "x"}},
-		{"id with carriage return", Event{ID: "1\r2", Data: "x"}},
-		{"id with NUL", Event{ID: "1\x002", Data: "x"}},
-		{"event type with newline", Event{Event: "a\nb", Data: "x"}},
-		{"event type with carriage return", Event{Event: "a\rb", Data: "x"}},
-		{"comment with carriage return", Event{Comment: "a\rb"}},
-		{"negative retry", Event{Retry: -1, Data: "x"}},
+		{"empty event", sse.Event{}},
+		{"id with newline", sse.Event{ID: "1\n2", Data: "x"}},
+		{"id with carriage return", sse.Event{ID: "1\r2", Data: "x"}},
+		{"id with NUL", sse.Event{ID: "1\x002", Data: "x"}},
+		{"event type with newline", sse.Event{Event: "a\nb", Data: "x"}},
+		{"event type with carriage return", sse.Event{Event: "a\rb", Data: "x"}},
+		{"comment with carriage return", sse.Event{Comment: "a\rb"}},
+		{"negative retry", sse.Event{Retry: -1, Data: "x"}},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			var buf bytes.Buffer
-			if err := Encode(&buf, tt.event); err == nil {
+			if err := sse.Encode(&buf, tt.event); err == nil {
 				t.Fatalf("Expected an error, got output %q", buf.String())
 			}
 			if buf.Len() != 0 {

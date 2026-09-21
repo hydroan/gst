@@ -1,4 +1,4 @@
-package response
+package response_test
 
 import (
 	"fmt"
@@ -12,6 +12,7 @@ import (
 	"github.com/gin-gonic/gin"
 	ginjson "github.com/gin-gonic/gin/codec/json"
 	"github.com/hydroan/gst/consts"
+	"github.com/hydroan/gst/internal/response"
 	"github.com/hydroan/gst/internal/serviceregistry"
 	"github.com/hydroan/gst/internal/testutil/swap"
 )
@@ -43,7 +44,7 @@ func TestJSONEncodesWithStandardLibrary(t *testing.T) {
 			c, _ := gin.CreateTestContext(w)
 			c.Set(consts.TRACE_ID, "trace-sample")
 
-			JSON(c, CodeSuccess, tt.data...)
+			response.JSON(c, response.CodeSuccess, tt.data...)
 
 			if w.Code != http.StatusOK {
 				t.Errorf("status = %d, want %d", w.Code, http.StatusOK)
@@ -67,7 +68,7 @@ func TestJSONKeepsContentTypeSetBeforehand(t *testing.T) {
 	c, _ := gin.CreateTestContext(w)
 	c.Header("Content-Type", "application/problem+json")
 
-	JSON(c, CodeSuccess)
+	response.JSON(c, response.CodeSuccess)
 
 	if got := w.Header().Get("Content-Type"); got != "application/problem+json" {
 		t.Errorf("Content-Type = %q, want %q", got, "application/problem+json")
@@ -82,7 +83,7 @@ func TestJSONWritesNoBodyForBodylessStatus(t *testing.T) {
 	w := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(w)
 
-	JSON(c, CodeSuccess.WithStatus(http.StatusNoContent))
+	response.JSON(c, response.CodeSuccess.WithStatus(http.StatusNoContent))
 
 	if w.Code != http.StatusNoContent {
 		t.Errorf("status = %d, want %d", w.Code, http.StatusNoContent)
@@ -104,7 +105,7 @@ func TestJSONRecordsMarshalFailureWithoutWritingBody(t *testing.T) {
 	w := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(w)
 
-	JSON(c, CodeSuccess, math.NaN())
+	response.JSON(c, response.CodeSuccess, math.NaN())
 
 	if got := w.Body.String(); got != "" {
 		t.Errorf("body = %q, want empty", got)
@@ -130,7 +131,7 @@ func TestAttachment(t *testing.T) {
 	w := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(w)
 
-	Attachment(c, []byte("hello"), "exported.csv", "text/csv; charset=utf-8")
+	response.Attachment(c, []byte("hello"), "exported.csv", "text/csv; charset=utf-8")
 
 	if got := w.Header().Get("Content-Disposition"); got != "attachment; filename=exported.csv" {
 		t.Errorf("Content-Disposition = %q, want %q", got, "attachment; filename=exported.csv")
@@ -150,9 +151,9 @@ func TestWithErrKeepsServiceErrorCauseOutOfMessage(t *testing.T) {
 	// Both WithErr variants must render the client-safe Msg for service-layer
 	// errors, wherever they sit in the wrap chain.
 	for name, msg := range map[string]string{
-		"code":         CodeFailure.WithErr(serviceErr).Msg(),
-		"codeInstance": CodeFailure.WithStatus(http.StatusBadRequest).WithErr(serviceErr).Msg(),
-		"wrapped":      CodeFailure.WithErr(errors.Wrap(serviceErr, "load account")).Msg(),
+		"code":         response.CodeFailure.WithErr(serviceErr).Msg(),
+		"codeInstance": response.CodeFailure.WithStatus(http.StatusBadRequest).WithErr(serviceErr).Msg(),
+		"wrapped":      response.CodeFailure.WithErr(errors.Wrap(serviceErr, "load account")).Msg(),
 	} {
 		if msg != "failed to load user" {
 			t.Errorf("%s: msg = %q, want %q", name, msg, "failed to load user")
@@ -160,14 +161,14 @@ func TestWithErrKeepsServiceErrorCauseOutOfMessage(t *testing.T) {
 	}
 
 	// Plain errors keep rendering their full Error text.
-	if got := CodeFailure.WithErr(errors.New("plain failure")).Msg(); got != "plain failure" {
+	if got := response.CodeFailure.WithErr(errors.New("plain failure")).Msg(); got != "plain failure" {
 		t.Errorf("plain: msg = %q, want %q", got, "plain failure")
 	}
 }
 
 func TestCodeStringRendersMessageNotBareInteger(t *testing.T) {
-	got := CodeNotFound.String()
-	want := fmt.Sprintf("Requested resource not found. (code=%d)", int32(CodeNotFound))
+	got := response.CodeNotFound.String()
+	want := fmt.Sprintf("Requested resource not found. (code=%d)", int32(response.CodeNotFound))
 	if got != want {
 		t.Errorf("String() = %q, want %q", got, want)
 	}

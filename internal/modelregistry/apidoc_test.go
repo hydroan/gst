@@ -1,10 +1,11 @@
-package modelregistry
+package modelregistry_test
 
 import (
 	"reflect"
 	"testing"
 
 	"github.com/hydroan/gst/apidoc"
+	"github.com/hydroan/gst/internal/modelregistry"
 )
 
 // TestGeneratedDocsRegisterEveryDeclaredStruct checks that apidoc.gen.go
@@ -28,7 +29,7 @@ func TestGeneratedDocsRegisterEveryDeclaredStruct(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.typeName, func(t *testing.T) {
-			doc, ok := apidoc.Lookup(reflect.TypeFor[Base]().PkgPath(), tt.typeName)
+			doc, ok := apidoc.Lookup(reflect.TypeFor[modelregistry.Base]().PkgPath(), tt.typeName)
 			if !ok {
 				t.Fatalf("apidoc.Lookup(%s) ok = false, want docs registered at init", tt.typeName)
 			}
@@ -64,7 +65,7 @@ func TestGeneratedDocsKeepImplementationNotesOutOfFieldDocs(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.typeName+"."+tt.field, func(t *testing.T) {
-			doc, ok := apidoc.Lookup(reflect.TypeFor[Base]().PkgPath(), tt.typeName)
+			doc, ok := apidoc.Lookup(reflect.TypeFor[modelregistry.Base]().PkgPath(), tt.typeName)
 			if !ok {
 				t.Fatalf("apidoc.Lookup(%s) ok = false, want docs registered at init", tt.typeName)
 			}

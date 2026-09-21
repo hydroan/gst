@@ -1,15 +1,16 @@
-package bufferpool
+package bufferpool_test
 
 import (
 	"sync"
 	"testing"
 
+	"github.com/hydroan/gst/pkg/bufferpool"
 	"github.com/stretchr/testify/assert"
 )
 
 func TestBuffers(t *testing.T) {
 	const dummyData = "dummy data"
-	p := NewPool()
+	p := bufferpool.NewPool()
 
 	var wg sync.WaitGroup
 	for range 10 {

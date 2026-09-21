@@ -1,4 +1,4 @@
-package gen
+package gen_test
 
 import (
 	"go/parser"
@@ -8,10 +8,11 @@ import (
 
 	"github.com/hydroan/gst/consts"
 	"github.com/hydroan/gst/dsl"
+	"github.com/hydroan/gst/internal/codegen/gen"
 )
 
 func TestApplyServiceFileWithModelSyncForcesCanonicalServiceStruct(t *testing.T) {
-	modelInfo := &ModelInfo{
+	modelInfo := &gen.ModelInfo{
 		ModulePath:   "helloworld",
 		ModelFileDir: "model",
 		ModelPkgName: "model",
@@ -221,12 +222,12 @@ func (c *Creator) Create(ctx *gst.ServiceContext, req *model.User) (rsp *model.U
 				t.Fatal(err)
 			}
 
-			changed := ApplyServiceFileWithModelSync(file, tt.action, "user", modelInfo)
+			changed := gen.ApplyServiceFileWithModelSync(file, tt.action, "user", modelInfo)
 			if changed != tt.wantChanged {
 				t.Errorf("ApplyServiceFileWithModelSync changed = %v, want %v", changed, tt.wantChanged)
 			}
 
-			got, err := FormatNodeExtra(file)
+			got, err := gen.FormatNodeExtra(file)
 			if err != nil {
 				t.Fatal(err)
 			}

@@ -1,13 +1,15 @@
-package middleware
+package middleware_test
 
 import (
 	"reflect"
 	"testing"
+
+	"github.com/hydroan/gst/internal/middleware"
 )
 
 func TestRouterParamsManager(t *testing.T) {
 	t.Run("EmptyPath", func(t *testing.T) {
-		routeManager := NewRouteParamsManager()
+		routeManager := middleware.NewRouteParamsManager()
 		routeManager.Add("")
 
 		params := routeManager.Get("")
@@ -17,7 +19,7 @@ func TestRouterParamsManager(t *testing.T) {
 	})
 
 	t.Run("PathWithoutParams", func(t *testing.T) {
-		routeManager := NewRouteParamsManager()
+		routeManager := middleware.NewRouteParamsManager()
 		routeManager.Add("/api/resources")
 
 		params := routeManager.Get("/api/resources")
@@ -27,7 +29,7 @@ func TestRouterParamsManager(t *testing.T) {
 	})
 
 	t.Run("SingleColonParam", func(t *testing.T) {
-		routeManager := NewRouteParamsManager()
+		routeManager := middleware.NewRouteParamsManager()
 		routeManager.Add("/api/resources/:id")
 
 		params := routeManager.Get("/api/resources/:id")
@@ -38,7 +40,7 @@ func TestRouterParamsManager(t *testing.T) {
 	})
 
 	t.Run("MultipleParts", func(t *testing.T) {
-		routeManager := NewRouteParamsManager()
+		routeManager := middleware.NewRouteParamsManager()
 		routeManager.Add("/users/:userId/posts/:postId/comments/:commentId")
 
 		params := routeManager.Get("/users/:userId/posts/:postId/comments/:commentId")
@@ -50,7 +52,7 @@ func TestRouterParamsManager(t *testing.T) {
 	})
 
 	t.Run("BracketParams", func(t *testing.T) {
-		routeManager := NewRouteParamsManager()
+		routeManager := middleware.NewRouteParamsManager()
 		routeManager.Add("/api/resources/{id}")
 
 		params := routeManager.Get("/api/resources/{id}")
@@ -61,7 +63,7 @@ func TestRouterParamsManager(t *testing.T) {
 	})
 
 	t.Run("MixedParamFormats", func(t *testing.T) {
-		routeManager := NewRouteParamsManager()
+		routeManager := middleware.NewRouteParamsManager()
 		routeManager.Add("/api/:version/resources/{resourceId}/items/:itemId")
 
 		params := routeManager.Get("/api/:version/resources/{resourceId}/items/:itemId")
@@ -73,7 +75,7 @@ func TestRouterParamsManager(t *testing.T) {
 	})
 
 	t.Run("SpecialCharactersInParams", func(t *testing.T) {
-		routeManager := NewRouteParamsManager()
+		routeManager := middleware.NewRouteParamsManager()
 		routeManager.Add("/api/:param_with_underscore/{param-with-dash}")
 
 		params := routeManager.Get("/api/:param_with_underscore/{param-with-dash}")
@@ -85,7 +87,7 @@ func TestRouterParamsManager(t *testing.T) {
 	})
 
 	t.Run("ParamWithoutName", func(t *testing.T) {
-		routeManager := NewRouteParamsManager()
+		routeManager := middleware.NewRouteParamsManager()
 		routeManager.Add("/api/resources/:/items/{}")
 
 		params := routeManager.Get("/api/resources/:/items/{}")
@@ -97,7 +99,7 @@ func TestRouterParamsManager(t *testing.T) {
 	})
 
 	t.Run("DuplicateParamNames", func(t *testing.T) {
-		routeManager := NewRouteParamsManager()
+		routeManager := middleware.NewRouteParamsManager()
 		routeManager.Add("/api/:id/sub/:id")
 
 		params := routeManager.Get("/api/:id/sub/:id")
@@ -109,7 +111,7 @@ func TestRouterParamsManager(t *testing.T) {
 	})
 
 	t.Run("MultipleRoutes", func(t *testing.T) {
-		routeManager := NewRouteParamsManager()
+		routeManager := middleware.NewRouteParamsManager()
 
 		// register multiple routes
 		routeManager.Add("/api/users/:userId")
@@ -130,7 +132,7 @@ func TestRouterParamsManager(t *testing.T) {
 	})
 
 	t.Run("UnregisteredRoute", func(t *testing.T) {
-		routeManager := NewRouteParamsManager()
+		routeManager := middleware.NewRouteParamsManager()
 		routeManager.Add("/api/users/:userId")
 
 		// try to get the params of a route that was never registered
@@ -143,7 +145,7 @@ func TestRouterParamsManager(t *testing.T) {
 	})
 
 	t.Run("TrailingSlash", func(t *testing.T) {
-		routeManager := NewRouteParamsManager()
+		routeManager := middleware.NewRouteParamsManager()
 
 		// register a route with a trailing slash
 		routeManager.Add("/api/users/:userId/")
@@ -181,7 +183,7 @@ func TestRouteParamsManagerTableDriven(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			routeManager := NewRouteParamsManager()
+			routeManager := middleware.NewRouteParamsManager()
 			routeManager.Add(tt.path)
 
 			got := routeManager.Get(tt.path)

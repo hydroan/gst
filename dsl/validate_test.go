@@ -1,10 +1,12 @@
-package dsl
+package dsl_test
 
 import (
 	"go/parser"
 	"go/token"
 	"strings"
 	"testing"
+
+	"github.com/hydroan/gst/dsl"
 )
 
 func TestValidateFlattenUsage(t *testing.T) {
@@ -72,7 +74,7 @@ func TestValidateFlattenUsage(t *testing.T) {
 				t.Fatalf("parse source failed: %v", err)
 			}
 
-			errs := Validate(file, tt.modelDir, tt.filename)
+			errs := dsl.Validate(file, tt.modelDir, tt.filename)
 			if tt.wantError == "" {
 				if len(errs) != 0 {
 					t.Fatalf("Validate returned errors: %v", errs)
@@ -285,7 +287,7 @@ func TestValidateExactUsage(t *testing.T) {
 				t.Fatalf("parse source failed: %v", err)
 			}
 
-			errs := Validate(file, tt.modelDir, tt.filename)
+			errs := dsl.Validate(file, tt.modelDir, tt.filename)
 			if tt.wantError == "" {
 				if len(errs) != 0 {
 					t.Fatalf("Validate returned errors: %v", errs)
@@ -460,7 +462,7 @@ func TestValidateListGetPayloadUsage(t *testing.T) {
 				t.Fatalf("parse source failed: %v", err)
 			}
 
-			errs := Validate(file, tt.modelDir, tt.filename)
+			errs := dsl.Validate(file, tt.modelDir, tt.filename)
 			if tt.wantError == "" {
 				if len(errs) != 0 {
 					t.Fatalf("Validate returned errors: %v", errs)
@@ -620,7 +622,7 @@ func TestValidateImportExportPayloadResultUsage(t *testing.T) {
 				t.Fatalf("parse source failed: %v", err)
 			}
 
-			errs := Validate(file, tt.modelDir, tt.filename)
+			errs := dsl.Validate(file, tt.modelDir, tt.filename)
 			if tt.wantError == "" {
 				if len(errs) != 0 {
 					t.Fatalf("Validate returned errors: %v", errs)
@@ -706,7 +708,7 @@ func TestValidateServiceFilenameCollision(t *testing.T) {
 				t.Fatalf("parse source failed: %v", err)
 			}
 
-			errs := Validate(file, tt.modelDir, tt.filename)
+			errs := dsl.Validate(file, tt.modelDir, tt.filename)
 			if tt.wantError == "" {
 				if len(errs) != 0 {
 					t.Fatalf("Validate returned errors: %v", errs)
@@ -1073,7 +1075,7 @@ func TestValidateVirtualModelListResult(t *testing.T) {
 				t.Fatalf("parse source failed: %v", err)
 			}
 
-			errs := Validate(file, "/repo/model", filename)
+			errs := dsl.Validate(file, "/repo/model", filename)
 			if tt.wantError == "" {
 				if len(errs) != 0 {
 					t.Fatalf("Validate returned errors: %v", errs)
@@ -1245,7 +1247,7 @@ func TestValidateSSEUsage(t *testing.T) {
 				t.Fatalf("parse source failed: %v", err)
 			}
 
-			errs := Validate(file, tt.modelDir, tt.filename)
+			errs := dsl.Validate(file, tt.modelDir, tt.filename)
 			if tt.wantError == "" {
 				if len(errs) != 0 {
 					t.Fatalf("Validate returned errors: %v", errs)

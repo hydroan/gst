@@ -1,4 +1,4 @@
-package gen
+package gen_test
 
 import (
 	"path/filepath"
@@ -6,6 +6,7 @@ import (
 
 	"github.com/hydroan/gst/consts"
 	"github.com/hydroan/gst/dsl"
+	"github.com/hydroan/gst/internal/codegen/gen"
 )
 
 func TestServiceOutputRel(t *testing.T) {
@@ -47,7 +48,7 @@ func TestServiceOutputRel(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			got := ServiceOutputRel(tt.modelFile, modelDir)
+			got := gen.ServiceOutputRel(tt.modelFile, modelDir)
 			if got != tt.want {
 				t.Fatalf("ServiceOutputRel(%q, %q) = %q, want %q", tt.modelFile, modelDir, got, tt.want)
 			}
@@ -60,7 +61,7 @@ func TestServiceTarget(t *testing.T) {
 
 	modelDir := filepath.Join("repo", "model")
 	serviceDir := filepath.Join("repo", "service")
-	model := &ModelInfo{
+	model := &gen.ModelInfo{
 		ModulePath:    "github.com/acme/app",
 		ModelPkgName:  "authz",
 		ModelName:     "Role",
@@ -106,7 +107,7 @@ func TestServiceTarget(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			got := ServiceTarget(model, tt.action, modelDir, serviceDir)
+			got := gen.ServiceTarget(model, tt.action, modelDir, serviceDir)
 			if got.FilePath != tt.wantFile {
 				t.Fatalf("FilePath = %q, want %q", got.FilePath, tt.wantFile)
 			}

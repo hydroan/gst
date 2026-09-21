@@ -1,49 +1,50 @@
-package execctx
+package execctx_test
 
 import (
 	"context"
 	"testing"
 
+	"github.com/hydroan/gst/internal/execctx"
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/otel/trace"
 )
 
 func TestFromContextReturnsStampedTraceID(t *testing.T) {
-	ctx := WithTraceID(context.Background(), "trace-1")
+	ctx := execctx.WithTraceID(context.Background(), "trace-1")
 
-	require.Equal(t, Identity{TraceID: "trace-1"}, FromContext(ctx))
+	require.Equal(t, execctx.Identity{TraceID: "trace-1"}, execctx.FromContext(ctx))
 }
 
 func TestFromContextReturnsCronjobRound(t *testing.T) {
-	ctx := WithCronjob(context.Background(), "sample_job", "trace-2")
+	ctx := execctx.WithCronjob(context.Background(), "sample_job", "trace-2")
 
-	require.Equal(t, Identity{TraceID: "trace-2", Cronjob: "sample_job"}, FromContext(ctx))
+	require.Equal(t, execctx.Identity{TraceID: "trace-2", Cronjob: "sample_job"}, execctx.FromContext(ctx))
 }
 
 func TestFromContextReturnsLeaderTenure(t *testing.T) {
-	ctx := WithLeader(context.Background(), "sample_work", "trace-3")
+	ctx := execctx.WithLeader(context.Background(), "sample_work", "trace-3")
 
-	require.Equal(t, Identity{TraceID: "trace-3", Leader: "sample_work"}, FromContext(ctx))
+	require.Equal(t, execctx.Identity{TraceID: "trace-3", Leader: "sample_work"}, execctx.FromContext(ctx))
 }
 
 func TestFromContextBorrowsSpanTraceID(t *testing.T) {
 	ctx := trace.ContextWithSpanContext(context.Background(), spanContext(t, "11111111111111111111111111111111"))
 
-	require.Equal(t, Identity{TraceID: "11111111111111111111111111111111"}, FromContext(ctx))
+	require.Equal(t, execctx.Identity{TraceID: "11111111111111111111111111111111"}, execctx.FromContext(ctx))
 }
 
 func TestFromContextPrefersStampOverSpan(t *testing.T) {
 	// The stamp is what the middleware published to the caller; a span opened
 	// later must not change the id the annotations carry.
-	ctx := WithTraceID(context.Background(), "trace-1")
+	ctx := execctx.WithTraceID(context.Background(), "trace-1")
 	ctx = trace.ContextWithSpanContext(ctx, spanContext(t, "22222222222222222222222222222222"))
 
-	require.Equal(t, Identity{TraceID: "trace-1"}, FromContext(ctx))
+	require.Equal(t, execctx.Identity{TraceID: "trace-1"}, execctx.FromContext(ctx))
 }
 
 func TestFromContextIsZeroWithoutIdentity(t *testing.T) {
-	require.Equal(t, Identity{}, FromContext(context.Background()))
-	require.Equal(t, Identity{}, FromContext(nil)) //nolint:staticcheck // nil is a supported input, mirroring requestctx.FromContext.
+	require.Equal(t, execctx.Identity{}, execctx.FromContext(context.Background()))
+	require.Equal(t, execctx.Identity{}, execctx.FromContext(nil)) //nolint:staticcheck // nil is a supported input, mirroring requestctx.FromContext.
 }
 
 // spanContext builds a valid span context carrying the given trace id, the
