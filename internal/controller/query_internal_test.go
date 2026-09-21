@@ -65,6 +65,194 @@ func TestDecodeListQueryGatesQueryKeys(t *testing.T) {
 	})
 }
 
+func TestDecodeListQueryPageSizeGating(t *testing.T) {
+	type cursorOnlyModel struct {
+		Name string `query:"name"`
+
+		modelregistry.Cursor
+		modelregistry.Base
+	}
+	type paginatableModel struct {
+		Name string `query:"name"`
+
+		modelregistry.Pagination
+		modelregistry.Base
+	}
+	type plainModel struct {
+		Name string `query:"name"`
+
+		modelregistry.Base
+	}
+
+	t.Run("CursorModelAcceptsSizeButRejectsPage", func(t *testing.T) {
+		var m cursorOnlyModel
+		require.NoError(t, decodeListQuery(&m, map[string][]string{"_size": {"50"}}),
+			"cursor pagination needs a client-adjustable batch size")
+		require.Error(t, decodeListQuery(&m, map[string][]string{"_page": {"2"}}),
+			"offset paging conflicts with cursor semantics")
+	})
+
+	t.Run("PaginatableModelAcceptsBoth", func(t *testing.T) {
+		var m paginatableModel
+		require.NoError(t, decodeListQuery(&m, map[string][]string{"_page": {"2"}, "_size": {"50"}}))
+	})
+
+	t.Run("PlainModelRejectsBoth", func(t *testing.T) {
+		var m plainModel
+		require.Error(t, decodeListQuery(&m, map[string][]string{"_size": {"50"}}))
+		require.Error(t, decodeListQuery(&m, map[string][]string{"_page": {"2"}}))
+	})
+}
+
+type filterKeyTestModel struct {
+	Name string `query:"name"`
+	Age  int    `json:"age"`
+
+	modelregistry.Query
+	modelregistry.Base
+}
+
+func TestDecodeListQueryIgnoresFilterKeys(t *testing.T) {
+	var m filterKeyTestModel
+	require.NoError(t, decodeListQuery(&m, map[string][]string{
+		"name":       {"alice"},
+		"age":        {"10"},
+		"age[gt]":    {"20"},
+		"created_at": {"2026-07-01"},
+	}))
+	require.Equal(t, "alice", m.Name)
+	require.Equal(t, 10, m.Age,
+		"the bare key keeps feeding the exact business filter while its operator key is left to urlquery.Filters")
+}
+
+type listBenchmarkModel struct {
+	Name string `query:"name"`
+
+	modelregistry.Base
+}
+
+type listBenchmarkQueryableModel struct {
+	Name string `query:"name"`
+
+	modelregistry.Query
+	modelregistry.Base
+}
+
+type listBenchmarkPaginatableModel struct {
+	Name string `query:"name"`
+
+	modelregistry.Pagination
+	modelregistry.Base
+}
+
+type listBenchmarkCursorableModel struct {
+	Name string `query:"name"`
+
+	modelregistry.Cursor
+	modelregistry.Base
+}
+
+var (
+	listBenchmarkPlainQuery = map[string][]string{
+		"name": {"alice"},
+	}
+	listBenchmarkFullQuery = map[string][]string{
+		"name":          {"alice"},
+		"_sort_by":      {"created_at desc"},
+		"_page":         {"2"},
+		"_size":         {"10"},
+		"_cursor_value": {"0196a0b3-c9d1-713c-870e-adc76af9f857"},
+		"_cursor_field": {"id"},
+		"_cursor_next":  {"true"},
+	}
+	listBenchmarkPaginationQuery = map[string][]string{
+		"_page": {"2"},
+		"_size": {"10"},
+	}
+	listBenchmarkCursorQuery = map[string][]string{
+		"_cursor_value": {"0196a0b3-c9d1-713c-870e-adc76af9f857"},
+		"_cursor_field": {"id"},
+		"_cursor_next":  {"true"},
+	}
+	listBenchmarkRejectedQuery = map[string][]string{
+		"_sort_by": {"created_at desc"},
+	}
+)
+
+func BenchmarkDecodeListQuery(b *testing.B) {
+	b.Run("PlainModelField", func(b *testing.B) {
+		b.ReportAllocs()
+		for b.Loop() {
+			var m listBenchmarkModel
+			if err := decodeListQuery(&m, listBenchmarkPlainQuery); err != nil {
+				b.Fatal(err)
+			}
+		}
+	})
+
+	b.Run("Query", func(b *testing.B) {
+		b.ReportAllocs()
+		for b.Loop() {
+			var m listBenchmarkQueryableModel
+			if err := decodeListQuery(&m, listBenchmarkFullQuery); err != nil {
+				b.Fatal(err)
+			}
+		}
+	})
+
+	b.Run("Pagination", func(b *testing.B) {
+		b.ReportAllocs()
+		for b.Loop() {
+			var m listBenchmarkPaginatableModel
+			if err := decodeListQuery(&m, listBenchmarkPaginationQuery); err != nil {
+				b.Fatal(err)
+			}
+		}
+	})
+
+	b.Run("Cursor", func(b *testing.B) {
+		b.ReportAllocs()
+		for b.Loop() {
+			var m listBenchmarkCursorableModel
+			if err := decodeListQuery(&m, listBenchmarkCursorQuery); err != nil {
+				b.Fatal(err)
+			}
+		}
+	})
+
+	b.Run("RejectFrameworkKey", func(b *testing.B) {
+		b.ReportAllocs()
+		for b.Loop() {
+			var m listBenchmarkModel
+			if err := decodeListQuery(&m, listBenchmarkRejectedQuery); err == nil {
+				b.Fatal("expected framework query key to be rejected")
+			}
+		}
+	})
+}
+
+func TestCheckCursorOrderConflict(t *testing.T) {
+	cursor := types.CursorForward(types.Asc("id"), "abc")
+	orders := []types.Order{types.Desc("created_at")}
+
+	t.Run("CursorWithExplicitOrderIsRejected", func(t *testing.T) {
+		require.Error(t, checkCursorOrderConflict(cursor, orders),
+			"a second order source demotes the cursor column to a secondary sort key and breaks the boundary condition")
+	})
+
+	t.Run("CursorAloneIsAccepted", func(t *testing.T) {
+		require.NoError(t, checkCursorOrderConflict(cursor, nil))
+	})
+
+	t.Run("OrderAloneIsAccepted", func(t *testing.T) {
+		require.NoError(t, checkCursorOrderConflict(types.Cursor{}, orders))
+	})
+
+	t.Run("NeitherIsAccepted", func(t *testing.T) {
+		require.NoError(t, checkCursorOrderConflict(types.Cursor{}, nil))
+	})
+}
+
 type expandQueryTestModel struct {
 	Children   []*expandQueryTestModel
 	Parent     *expandQueryTestModel
@@ -119,88 +307,6 @@ func TestParseExpandQuery(t *testing.T) {
 	t.Run("NoExpandParameterReturnsNothing", func(t *testing.T) {
 		c := newTestGetContext(t, "/items")
 		require.Empty(t, parseExpandQuery(c, &expandQueryTestModel{}))
-	})
-}
-
-type filterKeyTestModel struct {
-	Name string `query:"name"`
-	Age  int    `json:"age"`
-
-	modelregistry.Query
-	modelregistry.Base
-}
-
-func TestDecodeListQueryPageSizeGating(t *testing.T) {
-	type cursorOnlyModel struct {
-		Name string `query:"name"`
-
-		modelregistry.Cursor
-		modelregistry.Base
-	}
-	type paginatableModel struct {
-		Name string `query:"name"`
-
-		modelregistry.Pagination
-		modelregistry.Base
-	}
-	type plainModel struct {
-		Name string `query:"name"`
-
-		modelregistry.Base
-	}
-
-	t.Run("CursorModelAcceptsSizeButRejectsPage", func(t *testing.T) {
-		var m cursorOnlyModel
-		require.NoError(t, decodeListQuery(&m, map[string][]string{"_size": {"50"}}),
-			"cursor pagination needs a client-adjustable batch size")
-		require.Error(t, decodeListQuery(&m, map[string][]string{"_page": {"2"}}),
-			"offset paging conflicts with cursor semantics")
-	})
-
-	t.Run("PaginatableModelAcceptsBoth", func(t *testing.T) {
-		var m paginatableModel
-		require.NoError(t, decodeListQuery(&m, map[string][]string{"_page": {"2"}, "_size": {"50"}}))
-	})
-
-	t.Run("PlainModelRejectsBoth", func(t *testing.T) {
-		var m plainModel
-		require.Error(t, decodeListQuery(&m, map[string][]string{"_size": {"50"}}))
-		require.Error(t, decodeListQuery(&m, map[string][]string{"_page": {"2"}}))
-	})
-}
-
-func TestDecodeListQueryIgnoresFilterKeys(t *testing.T) {
-	var m filterKeyTestModel
-	require.NoError(t, decodeListQuery(&m, map[string][]string{
-		"name":       {"alice"},
-		"age":        {"10"},
-		"age[gt]":    {"20"},
-		"created_at": {"2026-07-01"},
-	}))
-	require.Equal(t, "alice", m.Name)
-	require.Equal(t, 10, m.Age,
-		"the bare key keeps feeding the exact business filter while its operator key is left to urlquery.Filters")
-}
-
-func TestCheckCursorOrderConflict(t *testing.T) {
-	cursor := types.CursorForward(types.Asc("id"), "abc")
-	orders := []types.Order{types.Desc("created_at")}
-
-	t.Run("CursorWithExplicitOrderIsRejected", func(t *testing.T) {
-		require.Error(t, checkCursorOrderConflict(cursor, orders),
-			"a second order source demotes the cursor column to a secondary sort key and breaks the boundary condition")
-	})
-
-	t.Run("CursorAloneIsAccepted", func(t *testing.T) {
-		require.NoError(t, checkCursorOrderConflict(cursor, nil))
-	})
-
-	t.Run("OrderAloneIsAccepted", func(t *testing.T) {
-		require.NoError(t, checkCursorOrderConflict(types.Cursor{}, orders))
-	})
-
-	t.Run("NeitherIsAccepted", func(t *testing.T) {
-		require.NoError(t, checkCursorOrderConflict(types.Cursor{}, nil))
 	})
 }
 

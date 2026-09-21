@@ -9,17 +9,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// probeStatus runs one probe endpoint and reports the status it answered.
-func probeStatus(t *testing.T, endpoint func(*gin.Context), path string) int {
-	t.Helper()
-
-	recorder := httptest.NewRecorder()
-	c, _ := gin.CreateTestContext(recorder)
-	c.Request = httptest.NewRequest(http.MethodGet, path, nil)
-	endpoint(c)
-	return recorder.Code
-}
-
 // TestReadyzAnswersOKWhileServing covers the ordinary answer of a process
 // that is running and waiting on nothing.
 func TestReadyzAnswersOKWhileServing(t *testing.T) {
@@ -45,4 +34,15 @@ func TestHealthzStaysOKWhileDraining(t *testing.T) {
 	p.Drain()
 
 	require.Equal(t, http.StatusOK, probeStatus(t, p.Healthz, "/-/healthz"))
+}
+
+// probeStatus runs one probe endpoint and reports the status it answered.
+func probeStatus(t *testing.T, endpoint func(*gin.Context), path string) int {
+	t.Helper()
+
+	recorder := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(recorder)
+	c.Request = httptest.NewRequest(http.MethodGet, path, nil)
+	endpoint(c)
+	return recorder.Code
 }

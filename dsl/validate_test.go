@@ -18,47 +18,47 @@ func TestValidateFlattenUsage(t *testing.T) {
 		wantError string
 	}{
 		{
-			name:     "valid route action",
+			name:     "valid_route_action",
 			source:   validateNestedModelSource,
 			modelDir: "/repo/model",
 			filename: "/repo/model/authz/role.go",
 		},
 		{
-			name:      "flatten on root model file",
+			name:      "flatten_on_root_model_file",
 			source:    validateRootModelSource,
 			modelDir:  "/repo/model",
 			filename:  "/repo/model/role.go",
 			wantError: "root model file",
 		},
 		{
-			name:     "framework module package scan is not root model file",
+			name:     "framework_module_package_scan_is_not_root_model_file",
 			source:   validateFrameworkModuleModelSource,
 			modelDir: "/repo/internal/model/authz",
 			filename: "/repo/internal/model/authz/role.go",
 		},
 		{
-			name:      "flatten outside action",
+			name:      "flatten_outside_action",
 			source:    validateFlattenTopLevelSource,
 			modelDir:  "/repo/model",
 			filename:  "/repo/model/authz/role.go",
 			wantError: "Flatten() can only be used inside an action block",
 		},
 		{
-			name:      "flatten missing filename",
+			name:      "flatten_missing_filename",
 			source:    validateFlattenMissingFilenameSource,
 			modelDir:  "/repo/model",
 			filename:  "/repo/model/authz/role.go",
 			wantError: "missing Filename",
 		},
 		{
-			name:      "flatten without service",
+			name:      "flatten_without_service",
 			source:    validateFlattenWithoutServiceSource,
 			modelDir:  "/repo/model",
 			filename:  "/repo/model/authz/role.go",
 			wantError: "does not enable Service()",
 		},
 		{
-			name:      "service outside action",
+			name:      "service_outside_action",
 			source:    validateServiceTopLevelSource,
 			modelDir:  "/repo/model",
 			filename:  "/repo/model/authz/role.go",
@@ -246,33 +246,33 @@ func TestValidateExactUsage(t *testing.T) {
 		wantError string
 	}{
 		{
-			name:     "exact delete with payload and result",
+			name:     "exact_delete_with_payload_and_result",
 			source:   validateExactDeleteWithPayloadSource,
 			modelDir: "/repo/model",
 			filename: "/repo/model/iam/session.go",
 		},
 		{
-			name:      "exact delete without payload or result",
+			name:      "exact_delete_without_payload_or_result",
 			source:    validateExactDeleteWithoutPayloadSource,
 			modelDir:  "/repo/model",
 			filename:  "/repo/model/iam/session.go",
 			wantError: "uses dsl.Exact() but relies on the built-in controller",
 		},
 		{
-			name:      "exact get in route block without payload or result",
+			name:      "exact_get_in_route_block_without_payload_or_result",
 			source:    validateExactGetWithoutPayloadSource,
 			modelDir:  "/repo/model",
 			filename:  "/repo/model/iam/session.go",
 			wantError: "uses dsl.Exact() but relies on the built-in controller",
 		},
 		{
-			name:     "exact list without payload or result",
+			name:     "exact_list_without_payload_or_result",
 			source:   validateExactListSource,
 			modelDir: "/repo/model",
 			filename: "/repo/model/iam/session.go",
 		},
 		{
-			name:     "exact get with result only",
+			name:     "exact_get_with_result_only",
 			source:   validateExactGetWithResultSource,
 			modelDir: "/repo/model",
 			filename: "/repo/model/iam/session.go",
@@ -427,27 +427,27 @@ func TestValidateListGetPayloadUsage(t *testing.T) {
 		wantError string
 	}{
 		{
-			name:      "payload on list action",
+			name:      "payload_on_list_action",
 			source:    validatePayloadOnListSource,
 			modelDir:  "/repo/model",
 			filename:  "/repo/model/iam/session.go",
 			wantError: "List action handles an HTTP GET request and cannot declare Payload",
 		},
 		{
-			name:      "payload on get action in route block",
+			name:      "payload_on_get_action_in_route_block",
 			source:    validatePayloadOnGetInRouteSource,
 			modelDir:  "/repo/model",
 			filename:  "/repo/model/iam/session.go",
 			wantError: "Get action handles an HTTP GET request and cannot declare Payload",
 		},
 		{
-			name:     "result only on list action",
+			name:     "result_only_on_list_action",
 			source:   validateResultOnlyOnListSource,
 			modelDir: "/repo/model",
 			filename: "/repo/model/iam/session.go",
 		},
 		{
-			name:     "payload on create action",
+			name:     "payload_on_create_action",
 			source:   validatePayloadOnCreateSource,
 			modelDir: "/repo/model",
 			filename: "/repo/model/iam/session.go",
@@ -578,35 +578,35 @@ func TestValidateImportExportPayloadResultUsage(t *testing.T) {
 		wantError string
 	}{
 		{
-			name:      "payload on export action",
+			name:      "payload_on_export_action",
 			source:    validatePayloadOnExportSource,
 			modelDir:  "/repo/model",
 			filename:  "/repo/model/sample/record.go",
 			wantError: "Export action delegates to the fixed service method Export(ctx, ...M) ([]byte, error) and cannot declare Payload",
 		},
 		{
-			name:      "result on export action",
+			name:      "result_on_export_action",
 			source:    validateResultOnExportSource,
 			modelDir:  "/repo/model",
 			filename:  "/repo/model/sample/record.go",
 			wantError: "Export action delegates to the fixed service method Export(ctx, ...M) ([]byte, error) and cannot declare Result",
 		},
 		{
-			name:      "payload on import action in route block",
+			name:      "payload_on_import_action_in_route_block",
 			source:    validatePayloadOnImportInRouteSource,
 			modelDir:  "/repo/model",
 			filename:  "/repo/model/sample/record.go",
 			wantError: "Import action delegates to the fixed service method Import(ctx, io.Reader) ([]M, error) and cannot declare Payload",
 		},
 		{
-			name:      "result on import action",
+			name:      "result_on_import_action",
 			source:    validateResultOnImportSource,
 			modelDir:  "/repo/model",
 			filename:  "/repo/model/sample/record.go",
 			wantError: "Import action delegates to the fixed service method Import(ctx, io.Reader) ([]M, error) and cannot declare Result",
 		},
 		{
-			name:      "import and export without service",
+			name:      "import_and_export_without_service",
 			source:    validateEnabledOnlyImportExportSource,
 			modelDir:  "/repo/model",
 			filename:  "/repo/model/sample/record.go",
@@ -644,6 +644,110 @@ func TestValidateImportExportPayloadResultUsage(t *testing.T) {
 	}
 }
 
+const validatePayloadOnExportSource = `
+package sample
+
+import (
+	. "github.com/hydroan/gst/dsl"
+	"github.com/hydroan/gst/model"
+)
+
+type Record struct {
+	model.Base
+}
+
+func (Record) Design() {
+	Export(func() {
+		Service()
+		Payload[*RecordExportReq]()
+	})
+}
+`
+
+const validateResultOnExportSource = `
+package sample
+
+import (
+	. "github.com/hydroan/gst/dsl"
+	"github.com/hydroan/gst/model"
+)
+
+type Record struct {
+	model.Base
+}
+
+func (Record) Design() {
+	Export(func() {
+		Service()
+		Result[*RecordExportRsp]()
+	})
+}
+`
+
+const validatePayloadOnImportInRouteSource = `
+package sample
+
+import (
+	. "github.com/hydroan/gst/dsl"
+	"github.com/hydroan/gst/model"
+)
+
+type Record struct {
+	model.Base
+}
+
+func (Record) Design() {
+	Route("sample/records", func() {
+		Import(func() {
+			Service()
+			Payload[*RecordImportReq]()
+		})
+	})
+}
+`
+
+const validateResultOnImportSource = `
+package sample
+
+import (
+	. "github.com/hydroan/gst/dsl"
+	"github.com/hydroan/gst/model"
+)
+
+type Record struct {
+	model.Base
+}
+
+func (Record) Design() {
+	Import(func() {
+		Service()
+		Result[*RecordImportRsp]()
+	})
+}
+`
+
+const validateEnabledOnlyImportExportSource = `
+package sample
+
+import (
+	. "github.com/hydroan/gst/dsl"
+	"github.com/hydroan/gst/model"
+)
+
+type Record struct {
+	model.Base
+}
+
+func (Record) Design() {
+	Import(func() {
+		Enabled(true)
+	})
+	Export(func() {
+		Enabled(true)
+	})
+}
+`
+
 func TestValidateServiceFilenameCollision(t *testing.T) {
 	tests := []struct {
 		name      string
@@ -653,47 +757,47 @@ func TestValidateServiceFilenameCollision(t *testing.T) {
 		wantError string
 	}{
 		{
-			name:      "two route actions share one filename",
+			name:      "two_route_actions_share_one_filename",
 			source:    validateSharedFilenameRouteActionsSource,
 			modelDir:  "/repo/model",
 			filename:  "/repo/model/sample/record.go",
 			wantError: `service file "shared.go" is generated by multiple actions: Get on Record (route "sample/detail"), List on Record (route "sample/list")`,
 		},
 		{
-			name:      "explicit filename collides with phase default filename",
+			name:      "explicit_filename_collides_with_phase_default_filename",
 			source:    validateSharedDefaultFilenameSource,
 			modelDir:  "/repo/model",
 			filename:  "/repo/model/sample/record.go",
 			wantError: `service file "get.go" is generated by multiple actions: Get on Record, Patch on Record (route "sample/detail")`,
 		},
 		{
-			name:      "two models in one file share the default filename",
+			name:      "two_models_in_one_file_share_the_default_filename",
 			source:    validateTwoModelsDefaultFilenameSource,
 			modelDir:  "/repo/model",
 			filename:  "/repo/model/sample/record.go",
 			wantError: `service file "get.go" is generated by multiple actions: Get on Item, Get on Record`,
 		},
 		{
-			name:      "both flatten actions share one filename",
+			name:      "both_flatten_actions_share_one_filename",
 			source:    validateSharedFilenameBothFlattenSource,
 			modelDir:  "/repo/model",
 			filename:  "/repo/model/sample/record.go",
 			wantError: `service file "shared.go" is generated by multiple actions`,
 		},
 		{
-			name:     "same filename with flatten and non-flatten targets different dirs",
+			name:     "same_filename_with_flatten_and_non-flatten_targets_different_dirs",
 			source:   validateSharedFilenameFlattenMixSource,
 			modelDir: "/repo/model",
 			filename: "/repo/model/sample/record.go",
 		},
 		{
-			name:     "distinct filenames per action",
+			name:     "distinct_filenames_per_action",
 			source:   validateDistinctFilenamesSource,
 			modelDir: "/repo/model",
 			filename: "/repo/model/sample/record.go",
 		},
 		{
-			name:     "action without service does not generate a file",
+			name:     "action_without_service_does_not_generate_a_file",
 			source:   validateSharedFilenameWithoutServiceSource,
 			modelDir: "/repo/model",
 			filename: "/repo/model/sample/record.go",
@@ -837,7 +941,7 @@ func (Record) Design() {
 			Flatten()
 		})
 	})
-	Route("sample/parse", func() {
+	Route("sample/publish", func() {
 		Update(func() {
 			Service()
 			Filename("shared.go")
@@ -867,7 +971,7 @@ func (Record) Design() {
 			Flatten()
 		})
 	})
-	Route("sample/parse", func() {
+	Route("sample/publish", func() {
 		Update(func() {
 			Service()
 			Filename("shared.go")
@@ -936,110 +1040,6 @@ func (Record) Design() {
 }
 `
 
-const validatePayloadOnExportSource = `
-package sample
-
-import (
-	. "github.com/hydroan/gst/dsl"
-	"github.com/hydroan/gst/model"
-)
-
-type Record struct {
-	model.Base
-}
-
-func (Record) Design() {
-	Export(func() {
-		Service()
-		Payload[*RecordExportReq]()
-	})
-}
-`
-
-const validateResultOnExportSource = `
-package sample
-
-import (
-	. "github.com/hydroan/gst/dsl"
-	"github.com/hydroan/gst/model"
-)
-
-type Record struct {
-	model.Base
-}
-
-func (Record) Design() {
-	Export(func() {
-		Service()
-		Result[*RecordExportRsp]()
-	})
-}
-`
-
-const validatePayloadOnImportInRouteSource = `
-package sample
-
-import (
-	. "github.com/hydroan/gst/dsl"
-	"github.com/hydroan/gst/model"
-)
-
-type Record struct {
-	model.Base
-}
-
-func (Record) Design() {
-	Route("sample/records", func() {
-		Import(func() {
-			Service()
-			Payload[*RecordImportReq]()
-		})
-	})
-}
-`
-
-const validateResultOnImportSource = `
-package sample
-
-import (
-	. "github.com/hydroan/gst/dsl"
-	"github.com/hydroan/gst/model"
-)
-
-type Record struct {
-	model.Base
-}
-
-func (Record) Design() {
-	Import(func() {
-		Service()
-		Result[*RecordImportRsp]()
-	})
-}
-`
-
-const validateEnabledOnlyImportExportSource = `
-package sample
-
-import (
-	. "github.com/hydroan/gst/dsl"
-	"github.com/hydroan/gst/model"
-)
-
-type Record struct {
-	model.Base
-}
-
-func (Record) Design() {
-	Import(func() {
-		Enabled(true)
-	})
-	Export(func() {
-		Enabled(true)
-	})
-}
-`
-
 func TestValidateVirtualModelListResult(t *testing.T) {
 	tests := []struct {
 		name      string
@@ -1047,21 +1047,21 @@ func TestValidateVirtualModelListResult(t *testing.T) {
 		wantError string
 	}{
 		{
-			name:   "virtual model list with result passes",
+			name:   "virtual_model_list_with_result_passes",
 			source: validateVirtualListWithResultSource,
 		},
 		{
-			name:      "virtual model list without result is rejected",
+			name:      "virtual_model_list_without_result_is_rejected",
 			source:    validateVirtualListWithoutResultSource,
 			wantError: "virtual model has no table to list from",
 		},
 		{
-			name:      "virtual model route list without result is rejected",
+			name:      "virtual_model_route_list_without_result_is_rejected",
 			source:    validateVirtualRouteListWithoutResultSource,
 			wantError: "virtual model has no table to list from",
 		},
 		{
-			name:   "table-backed model list without result passes",
+			name:   "table-backed_model_list_without_result_passes",
 			source: validateBaseListWithoutResultSource,
 		},
 	}
@@ -1191,47 +1191,47 @@ func TestValidateSSEUsage(t *testing.T) {
 		wantError string
 	}{
 		{
-			name:     "valid sse action",
+			name:     "valid_sse_action",
 			source:   validateSSESource,
 			modelDir: "/repo/model",
 			filename: "/repo/model/sample/record.go",
 		},
 		{
-			name:     "sse and get share a route",
+			name:     "sse_and_get_share_a_route",
 			source:   validateSSEWithGetSource,
 			modelDir: "/repo/model",
 			filename: "/repo/model/sample/record.go",
 		},
 		{
-			name:      "sse without service",
+			name:      "sse_without_service",
 			source:    validateSSEWithoutServiceSource,
 			modelDir:  "/repo/model",
 			filename:  "/repo/model/sample/record.go",
 			wantError: "SSE action has no built-in implementation and must declare Service()",
 		},
 		{
-			name:      "payload on sse action",
+			name:      "payload_on_sse_action",
 			source:    validatePayloadOnSSESource,
 			modelDir:  "/repo/model",
 			filename:  "/repo/model/sample/record.go",
 			wantError: "SSE action delegates to the fixed service method SSE(ctx) error and cannot declare Payload",
 		},
 		{
-			name:      "result on sse action",
+			name:      "result_on_sse_action",
 			source:    validateResultOnSSESource,
 			modelDir:  "/repo/model",
 			filename:  "/repo/model/sample/record.go",
 			wantError: "SSE action delegates to the fixed service method SSE(ctx) error and cannot declare Result",
 		},
 		{
-			name:      "sse and list share a route block",
+			name:      "sse_and_list_share_a_route_block",
 			source:    validateSSEWithListInRouteSource,
 			modelDir:  "/repo/model",
 			filename:  "/repo/model/sample/record.go",
 			wantError: "SSE and List cannot share one route: both register the GET route path itself",
 		},
 		{
-			name:      "sse and list share the design top level",
+			name:      "sse_and_list_share_the_design_top_level",
 			source:    validateSSEWithListTopLevelSource,
 			modelDir:  "/repo/model",
 			filename:  "/repo/model/sample/record.go",

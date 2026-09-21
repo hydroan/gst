@@ -25,26 +25,27 @@ const (
 	csvTestMIME  = "text/csv; charset=utf-8"
 )
 
-func TestExportAttachment(t *testing.T) {
+func TestResolveExportFormat(t *testing.T) {
+	xlsxBytes := minimalXLSX(t)
+	csvBytes := append([]byte{0xEF, 0xBB, 0xBF}, []byte("账号,昵称\na1,昵称1\n")...)
+
 	tests := []struct {
-		name         string
-		format       string
-		wantFilename string
-		wantType     string
+		name        string
+		queryFormat string
+		data        []byte
+		want        string
 	}{
-		{"xlsx", "xlsx", xlsxTestName, xlsxTestMIME},
-		{"csv", "csv", csvTestName, csvTestMIME},
-		{"empty defaults to xlsx", "", xlsxTestName, xlsxTestMIME},
-		{"unknown defaults to xlsx", "pdf", xlsxTestName, xlsxTestMIME},
+		{"query_xlsx_wins_over_bytes", "xlsx", csvBytes, "xlsx"},
+		{"query_csv_wins_over_bytes", "csv", xlsxBytes, "csv"},
+		{"empty_query_sniffs_xlsx_bytes", "", xlsxBytes, "xlsx"},
+		{"empty_query_sniffs_csv_bytes", "", csvBytes, "csv"},
+		{"unknown_query_sniffs_xlsx_bytes", "pdf", xlsxBytes, "xlsx"},
+		{"unknown_query_sniffs_csv_bytes", "pdf", csvBytes, "csv"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			gotFilename, gotType := exportAttachment(tt.format)
-			if gotFilename != tt.wantFilename {
-				t.Errorf("filename = %q, want %q", gotFilename, tt.wantFilename)
-			}
-			if gotType != tt.wantType {
-				t.Errorf("contentType = %q, want %q", gotType, tt.wantType)
+			if got := resolveExportFormat(tt.queryFormat, tt.data); got != tt.want {
+				t.Errorf("resolveExportFormat(%q, ...) = %q, want %q", tt.queryFormat, got, tt.want)
 			}
 		})
 	}
@@ -69,27 +70,26 @@ func minimalXLSX(t *testing.T) []byte {
 	return buf.Bytes()
 }
 
-func TestResolveExportFormat(t *testing.T) {
-	xlsxBytes := minimalXLSX(t)
-	csvBytes := append([]byte{0xEF, 0xBB, 0xBF}, []byte("账号,昵称\na1,昵称1\n")...)
-
+func TestExportAttachment(t *testing.T) {
 	tests := []struct {
-		name        string
-		queryFormat string
-		data        []byte
-		want        string
+		name         string
+		format       string
+		wantFilename string
+		wantType     string
 	}{
-		{"query xlsx wins over bytes", "xlsx", csvBytes, "xlsx"},
-		{"query csv wins over bytes", "csv", xlsxBytes, "csv"},
-		{"empty query sniffs xlsx bytes", "", xlsxBytes, "xlsx"},
-		{"empty query sniffs csv bytes", "", csvBytes, "csv"},
-		{"unknown query sniffs xlsx bytes", "pdf", xlsxBytes, "xlsx"},
-		{"unknown query sniffs csv bytes", "pdf", csvBytes, "csv"},
+		{"xlsx", "xlsx", xlsxTestName, xlsxTestMIME},
+		{"csv", "csv", csvTestName, csvTestMIME},
+		{"empty_defaults_to_xlsx", "", xlsxTestName, xlsxTestMIME},
+		{"unknown_defaults_to_xlsx", "pdf", xlsxTestName, xlsxTestMIME},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := resolveExportFormat(tt.queryFormat, tt.data); got != tt.want {
-				t.Errorf("resolveExportFormat(%q, ...) = %q, want %q", tt.queryFormat, got, tt.want)
+			gotFilename, gotType := exportAttachment(tt.format)
+			if gotFilename != tt.wantFilename {
+				t.Errorf("filename = %q, want %q", gotFilename, tt.wantFilename)
+			}
+			if gotType != tt.wantType {
+				t.Errorf("contentType = %q, want %q", gotType, tt.wantType)
 			}
 		})
 	}

@@ -1,18 +1,23 @@
 package dsl
 
-import "os"
+import (
+	"go/parser"
+	"go/token"
+	"os"
+	"testing"
+)
 
 var (
-	input1  string
-	input2  string
-	input3  string
-	input4  string
-	input5  string
-	input6  string
-	input7  string
-	input8  string
-	input9  string
-	input10 string
+	userSource        string
+	user2Source       string
+	user3And4Source   string
+	user4Source       string
+	user5Source       string
+	user6And7Source   string
+	user8And9Source   string
+	user10And11Source string
+	user12Source      string
+	user13Source      string
 )
 
 func init() {
@@ -20,59 +25,78 @@ func init() {
 	if err != nil {
 		panic(err)
 	}
-	input1 = string(data1)
+	userSource = string(data1)
 
 	data2, err := os.ReadFile("./testdata/user2.go")
 	if err != nil {
 		panic(err)
 	}
-	input2 = string(data2)
+	user2Source = string(data2)
 
 	data3, err := os.ReadFile("./testdata/user3_4.go")
 	if err != nil {
 		panic(err)
 	}
-	input3 = string(data3)
+	user3And4Source = string(data3)
 
 	data4, err := os.ReadFile("./testdata/user4.go")
 	if err != nil {
 		panic(err)
 	}
-	input4 = string(data4)
+	user4Source = string(data4)
 
 	data5, err := os.ReadFile("./testdata/user5.go")
 	if err != nil {
 		panic(err)
 	}
-	input5 = string(data5)
+	user5Source = string(data5)
 
 	data6, err := os.ReadFile("./testdata/user6_7.go")
 	if err != nil {
 		panic(err)
 	}
-	input6 = string(data6)
+	user6And7Source = string(data6)
 
 	data7, err := os.ReadFile("./testdata/user8_9.go")
 	if err != nil {
 		panic(err)
 	}
-	input7 = string(data7)
+	user8And9Source = string(data7)
 
 	data8, err := os.ReadFile("./testdata/user10_11.go")
 	if err != nil {
 		panic(err)
 	}
-	input8 = string(data8)
+	user10And11Source = string(data8)
 
 	data9, err := os.ReadFile("./testdata/user12.go")
 	if err != nil {
 		panic(err)
 	}
-	input9 = string(data9)
+	user12Source = string(data9)
 
 	data10, err := os.ReadFile("./testdata/user13.go")
 	if err != nil {
 		panic(err)
 	}
-	input10 = string(data10)
+	user13Source = string(data10)
+}
+
+// parseDesignFromSource parses src and returns the design Parse builds for
+// the model named modelName, failing the test when src declares no such model.
+func parseDesignFromSource(t *testing.T, src, modelName string) *Design {
+	t.Helper()
+
+	fset := token.NewFileSet()
+	file, err := parser.ParseFile(fset, "", src, parser.ParseComments)
+	if err != nil {
+		t.Fatalf("parse source failed: %v", err)
+	}
+
+	designs := Parse(file, "")
+	design, ok := designs[modelName]
+	if !ok {
+		t.Fatalf("model %s not found", modelName)
+	}
+	return design
 }

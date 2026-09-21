@@ -12,262 +12,224 @@ import (
 	"github.com/kr/pretty"
 )
 
-func TestIsModelBase(t *testing.T) {
-	fset := token.NewFileSet()
-
+func TestParse(t *testing.T) {
 	tests := []struct {
-		name string // description of this test case
-		// Named input parameters for target function.
-		code string
-		want []bool
+		name     string
+		code     string
+		endpoint string
+		want     map[string]*Design
 	}{
 		{
-			name: "input1",
-			code: input1,
-			want: []bool{true},
+			name:     "user",
+			code:     userSource,
+			endpoint: "",
+			want: map[string]*Design{
+				"User": {
+					Enabled:  true,
+					Endpoint: "iam-user2",
+					Param:    ":user",
+					Migrate:  true,
+					routes: map[string][]*Action{
+						"iam/users": {
+							// The Payload[*UserReq] declaration in testdata/user.go is
+							// discarded: List handles an HTTP GET request, so declaring
+							// Result fixes the request type to PayloadEmpty.
+							{Enabled: true, Service: true, Payload: PayloadEmpty, Result: "*UserRsp", Phase: consts.PHASE_LIST},
+							{Enabled: true, Service: true, Payload: "*User", Result: "*User", Phase: consts.PHASE_GET},
+						},
+						"tenant/users": {
+							{Enabled: true, Service: false, Payload: "*UserReq", Result: "*User", Phase: consts.PHASE_CREATE},
+							{Enabled: true, Service: false, Payload: "*User", Result: "*User", Phase: consts.PHASE_UPDATE},
+							{Enabled: true, Service: false, Payload: "*User", Result: "*User", Phase: consts.PHASE_PATCH},
+							{Enabled: true, Service: false, Payload: "*User", Result: "*User", Phase: consts.PHASE_CREATE_MANY},
+						},
+					},
+					Create:     &Action{Enabled: true, Service: true, Public: true, Payload: "User", Result: "*User", Phase: consts.PHASE_CREATE},
+					Delete:     &Action{Enabled: true, Service: false, Public: false, Payload: "*User", Result: "*User", Phase: consts.PHASE_DELETE},
+					Update:     &Action{Enabled: false, Service: false, Public: false, Payload: "*User", Result: "User", Phase: consts.PHASE_UPDATE},
+					Patch:      &Action{Enabled: false, Service: false, Public: false, Payload: "*User", Result: "*User"},
+					List:       &Action{Enabled: true, Service: false, Public: false, Payload: "*User", Result: "*User", Phase: consts.PHASE_LIST},
+					Get:        &Action{Enabled: false, Service: false, Public: false, Payload: "*User", Result: "*User"},
+					CreateMany: &Action{Enabled: false, Service: false, Public: false, Payload: "*User", Result: "*User"},
+					DeleteMany: &Action{Enabled: false, Service: false, Public: false, Payload: "*User", Result: "*User"},
+					UpdateMany: &Action{Enabled: false, Service: false, Public: false, Payload: "*User", Result: "*User"},
+					PatchMany:  &Action{Enabled: false, Service: false, Public: false, Payload: "*User", Result: "*User"},
+					Import:     &Action{Enabled: false, Service: false, Public: false, Payload: "*User", Result: "*User"},
+					Export:     &Action{Enabled: false, Service: false, Public: false, Payload: "*User", Result: "*User"},
+					SSE:        &Action{Enabled: false, Service: false, Public: false, Payload: "*User", Result: "*User"},
+				},
+			},
 		},
 		{
-			name: "input2",
-			code: input2,
-			want: []bool{true},
+			name:     "user2",
+			code:     user2Source,
+			endpoint: "",
+			want: map[string]*Design{
+				"User2": {
+					Enabled:    false,
+					Endpoint:   "user2s",
+					Param:      ":user",
+					Migrate:    false,
+					Create:     &Action{Enabled: true, Service: false, Public: false, Payload: "User2", Result: "*User3", Phase: consts.PHASE_CREATE},
+					Delete:     &Action{Enabled: false, Service: false, Public: false, Payload: "*User2", Result: "*User2"},
+					Update:     &Action{Enabled: false, Service: false, Public: false, Payload: "*User2", Result: "*User2"},
+					Patch:      &Action{Enabled: true, Service: false, Public: false, Payload: "*User", Result: "User", Phase: consts.PHASE_PATCH},
+					List:       &Action{Enabled: false, Service: false, Public: false, Payload: "*User2", Result: "*User2"},
+					Get:        &Action{Enabled: false, Service: false, Public: false, Payload: "*User2", Result: "*User2"},
+					CreateMany: &Action{Enabled: false, Service: false, Public: false, Payload: "*User2", Result: "*User2"},
+					DeleteMany: &Action{Enabled: false, Service: false, Public: false, Payload: "*User2", Result: "*User2"},
+					UpdateMany: &Action{Enabled: false, Service: false, Public: false, Payload: "*User2", Result: "*User2"},
+					PatchMany:  &Action{Enabled: false, Service: false, Public: false, Payload: "*User2", Result: "*User2"},
+					Import:     &Action{Enabled: false, Service: false, Public: false, Payload: "*User2", Result: "*User2"},
+					Export:     &Action{Enabled: false, Service: false, Public: false, Payload: "*User2", Result: "*User2"},
+					SSE:        &Action{Enabled: false, Service: false, Public: false, Payload: "*User2", Result: "*User2"},
+				},
+			},
 		},
 		{
-			name: "input3",
-			code: input3,
-			want: []bool{true, true},
+			name:     "user3_4",
+			code:     user3And4Source,
+			endpoint: "",
+			want: map[string]*Design{
+				"User3": {
+					Enabled:    true,
+					Endpoint:   "user",
+					Migrate:    false,
+					Create:     &Action{Enabled: false, Service: false, Public: false, Payload: "User", Result: "*User", Phase: consts.PHASE_CREATE},
+					Delete:     &Action{Enabled: false, Service: false, Public: false, Payload: "*User3", Result: "*User3"},
+					Update:     &Action{Enabled: true, Service: false, Public: false, Payload: "*User", Result: "User", Phase: consts.PHASE_UPDATE},
+					Patch:      &Action{Enabled: false, Service: false, Public: false, Payload: "*User3", Result: "*User3"},
+					List:       &Action{Enabled: false, Service: false, Public: false, Payload: "*User3", Result: "*User3"},
+					Get:        &Action{Enabled: false, Service: false, Public: false, Payload: "*User3", Result: "*User3"},
+					CreateMany: &Action{Enabled: false, Service: false, Public: false, Payload: "*User3", Result: "*User3"},
+					DeleteMany: &Action{Enabled: false, Service: false, Public: false, Payload: "*User3", Result: "*User3"},
+					UpdateMany: &Action{Enabled: false, Service: false, Public: false, Payload: "*User3", Result: "*User3"},
+					PatchMany:  &Action{Enabled: false, Service: false, Public: false, Payload: "*User3", Result: "*User3"},
+					Import:     &Action{Enabled: false, Service: false, Public: false, Payload: "*User3", Result: "*User3"},
+					Export:     &Action{Enabled: false, Service: false, Public: false, Payload: "*User3", Result: "*User3"},
+					SSE:        &Action{Enabled: false, Service: false, Public: false, Payload: "*User3", Result: "*User3"},
+				},
+				"User4": {
+					Enabled:    true,
+					Endpoint:   "user4s",
+					Migrate:    false,
+					Create:     &Action{Enabled: true, Service: false, Public: false, Payload: "User", Result: "*User", Phase: consts.PHASE_CREATE},
+					Delete:     &Action{Enabled: false, Service: false, Public: false, Payload: "*User4", Result: "*User4"},
+					Update:     &Action{Enabled: false, Service: false, Public: false, Payload: "*User", Result: "User", Phase: consts.PHASE_UPDATE},
+					Patch:      &Action{Enabled: false, Service: false, Public: false, Payload: "*User4", Result: "*User4"},
+					List:       &Action{Enabled: false, Service: false, Public: false, Payload: "*User4", Result: "*User4"},
+					Get:        &Action{Enabled: false, Service: false, Public: false, Payload: "*User4", Result: "*User4"},
+					CreateMany: &Action{Enabled: false, Service: false, Public: false, Payload: "*User4", Result: "*User4"},
+					DeleteMany: &Action{Enabled: false, Service: false, Public: false, Payload: "*User4", Result: "*User4"},
+					UpdateMany: &Action{Enabled: false, Service: false, Public: false, Payload: "*User4", Result: "*User4"},
+					PatchMany:  &Action{Enabled: false, Service: false, Public: false, Payload: "*User4", Result: "*User4"},
+					Import:     &Action{Enabled: false, Service: false, Public: false, Payload: "*User4", Result: "*User4"},
+					Export:     &Action{Enabled: false, Service: false, Public: false, Payload: "*User4", Result: "*User4"},
+					SSE:        &Action{Enabled: false, Service: false, Public: false, Payload: "*User4", Result: "*User4"},
+				},
+			},
 		},
 		{
-			name: "input4",
-			code: input4,
-			want: []bool{false},
+			name:     "user4",
+			code:     user4Source,
+			endpoint: "",
+			want:     map[string]*Design{},
 		},
 		{
-			name: "input5",
-			code: input5,
-			want: []bool{true},
+			name:     "user5",
+			code:     user5Source,
+			endpoint: "",
+			want: map[string]*Design{
+				"User5": {
+					Enabled:    true,
+					Endpoint:   "user5s",
+					Migrate:    false,
+					Create:     &Action{Enabled: false, Service: false, Public: false, Payload: "*User5", Result: "*User5"},
+					Delete:     &Action{Enabled: false, Service: false, Public: false, Payload: "*User5", Result: "*User5"},
+					Update:     &Action{Enabled: false, Service: false, Public: false, Payload: "*User5", Result: "*User5"},
+					Patch:      &Action{Enabled: false, Service: false, Public: false, Payload: "*User5", Result: "*User5"},
+					List:       &Action{Enabled: false, Service: false, Public: false, Payload: "*User5", Result: "*User5"},
+					Get:        &Action{Enabled: false, Service: false, Public: false, Payload: "*User5", Result: "*User5"},
+					CreateMany: &Action{Enabled: false, Service: false, Public: false, Payload: "*User5", Result: "*User5"},
+					DeleteMany: &Action{Enabled: false, Service: false, Public: false, Payload: "*User5", Result: "*User5"},
+					UpdateMany: &Action{Enabled: false, Service: false, Public: false, Payload: "*User5", Result: "*User5"},
+					PatchMany:  &Action{Enabled: false, Service: false, Public: false, Payload: "*User5", Result: "*User5"},
+					Import:     &Action{Enabled: false, Service: false, Public: false, Payload: "*User5", Result: "*User5"},
+					Export:     &Action{Enabled: false, Service: false, Public: false, Payload: "*User5", Result: "*User5"},
+					SSE:        &Action{Enabled: false, Service: false, Public: false, Payload: "*User5", Result: "*User5"},
+				},
+			},
 		},
 		{
-			name: "input6",
-			code: input6,
-			want: []bool{false, false},
+			name:     "user6_7",
+			code:     user6And7Source,
+			endpoint: "",
+			want: map[string]*Design{
+				"User6": {
+					Enabled:    true,
+					Endpoint:   "user6s",
+					Migrate:    false,
+					IsEmpty:    true,
+					Create:     &Action{Enabled: false, Service: false, Public: false, Payload: "*User6", Result: "*User6"},
+					Delete:     &Action{Enabled: false, Service: false, Public: false, Payload: "*User6", Result: "*User6"},
+					Update:     &Action{Enabled: false, Service: false, Public: false, Payload: "*User6", Result: "*User6"},
+					Patch:      &Action{Enabled: false, Service: false, Public: false, Payload: "*User6", Result: "*User6"},
+					List:       &Action{Enabled: false, Service: false, Public: false, Payload: "*User6", Result: "*User6"},
+					Get:        &Action{Enabled: false, Service: false, Public: false, Payload: "*User6", Result: "*User6"},
+					CreateMany: &Action{Enabled: false, Service: false, Public: false, Payload: "*User6", Result: "*User6"},
+					DeleteMany: &Action{Enabled: false, Service: false, Public: false, Payload: "*User6", Result: "*User6"},
+					UpdateMany: &Action{Enabled: false, Service: false, Public: false, Payload: "*User6", Result: "*User6"},
+					PatchMany:  &Action{Enabled: false, Service: false, Public: false, Payload: "*User6", Result: "*User6"},
+					Import:     &Action{Enabled: false, Service: false, Public: false, Payload: "*User6", Result: "*User6"},
+					Export:     &Action{Enabled: false, Service: false, Public: false, Payload: "*User6", Result: "*User6"},
+					SSE:        &Action{Enabled: false, Service: false, Public: false, Payload: "*User6", Result: "*User6"},
+				},
+			},
 		},
 		{
-			name: "input7",
-			code: input7,
-			want: []bool{false, false, false},
-		},
-		{
-			name: "input8",
-			code: input8,
-			want: []bool{true, true},
-		},
-		{
-			name: "input9",
-			code: input9,
-			want: []bool{true},
-		},
-		{
-			name: "input10",
-			code: input10,
-			want: []bool{true},
-		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			f, err := parser.ParseFile(fset, "", tt.code, parser.ParseComments)
-			if err != nil {
-				t.Error(err)
-				return
-			}
-			modelBases := []bool{}
-			for _, decl := range f.Decls {
-				genDecl, ok := decl.(*ast.GenDecl)
-				if !ok || genDecl == nil || genDecl.Tok != token.TYPE {
-					continue
-				}
-				for _, spec := range genDecl.Specs {
-					typeSpec, ok := spec.(*ast.TypeSpec)
-					if !ok || typeSpec == nil {
-						continue
-					}
-					structType, ok := typeSpec.Type.(*ast.StructType)
-					if !ok || structType == nil || structType.Fields == nil {
-						continue
-					}
-					var hasModelBase bool
-					for _, field := range structType.Fields.List {
-						if IsModelBase(f, field) {
-							hasModelBase = true
-							break
-						}
-					}
-					if hasModelBase {
-						modelBases = append(modelBases, true)
-					} else {
-						modelBases = append(modelBases, false)
-					}
-				}
-
-			}
-			if !reflect.DeepEqual(modelBases, tt.want) {
-				t.Errorf("IsModelBase() = %v, want %v", modelBases, tt.want)
-			}
-		})
-	}
-}
-
-func TestIsModelEmpty(t *testing.T) {
-	fset := token.NewFileSet()
-
-	tests := []struct {
-		name string // description of this test case
-		code string
-		want []bool
-	}{
-		{
-			name: "input1",
-			code: input1,
-			want: []bool{false},
-		},
-		{
-			name: "input2",
-			code: input2,
-			want: []bool{false},
-		},
-		{
-			name: "input3",
-			code: input3,
-			want: []bool{false, false},
-		},
-		{
-			name: "input4",
-			code: input4,
-			want: []bool{false},
-		},
-		{
-			name: "input5",
-			code: input5,
-			want: []bool{false},
-		},
-		{
-			name: "input6",
-			code: input6,
-			want: []bool{true, false},
-		},
-		{
-			name: "input7",
-			code: input7,
-			want: []bool{true, false, true},
-		},
-		{
-			name: "input8",
-			code: input8,
-			want: []bool{false, false},
-		},
-		{
-			name: "input9",
-			code: input9,
-			want: []bool{false},
-		},
-		{
-			name: "input10",
-			code: input10,
-			want: []bool{false},
-		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			f, err := parser.ParseFile(fset, "", tt.code, parser.ParseComments)
-			if err != nil {
-				t.Error(err)
-				return
-			}
-			modelEmptys := []bool{}
-			for _, decl := range f.Decls {
-				genDecl, ok := decl.(*ast.GenDecl)
-				if !ok || genDecl == nil || genDecl.Tok != token.TYPE {
-					continue
-				}
-				for _, spec := range genDecl.Specs {
-					typeSpec, ok := spec.(*ast.TypeSpec)
-					if !ok || typeSpec == nil {
-						continue
-					}
-					structType, ok := typeSpec.Type.(*ast.StructType)
-					if !ok || structType == nil || structType.Fields == nil {
-						continue
-					}
-					var hasModelEmpty bool
-					for _, field := range structType.Fields.List {
-						if IsModelEmpty(f, field) {
-							hasModelEmpty = true
-							break
-						}
-					}
-					if hasModelEmpty {
-						modelEmptys = append(modelEmptys, true)
-					} else {
-						modelEmptys = append(modelEmptys, false)
-					}
-				}
-
-			}
-			if !reflect.DeepEqual(modelEmptys, tt.want) {
-				t.Errorf("IsModelBase() = %v, want %v", modelEmptys, tt.want)
-			}
-		})
-	}
-}
-
-func Test_parse(t *testing.T) {
-	tests := []struct {
-		name string // description of this test case
-		// Named input parameters for target function.
-		code  string
-		want1 map[string]struct{}
-		want2 map[string]struct{}
-	}{
-		{
-			name:  "input1",
-			code:  input1,
-			want1: map[string]struct{}{"User": {}},
-			want2: map[string]struct{}{},
-		},
-		{
-			name:  "input2",
-			code:  input2,
-			want1: map[string]struct{}{"User2": {}},
-			want2: map[string]struct{}{},
-		},
-		{
-			name:  "input3",
-			code:  input3,
-			want1: map[string]struct{}{"User3": {}, "User4": {}},
-			want2: map[string]struct{}{},
-		},
-		{
-			name:  "input4",
-			code:  input4,
-			want1: map[string]struct{}{},
-			want2: map[string]struct{}{},
-		},
-		{
-			name:  "input5",
-			code:  input5,
-			want1: map[string]struct{}{"User5": {}},
-			want2: map[string]struct{}{},
-		},
-		{
-			name:  "input6",
-			code:  input6,
-			want1: map[string]struct{}{},
-			want2: map[string]struct{}{"User6": {}},
-		},
-		{
-			name:  "input7",
-			code:  input7,
-			want1: map[string]struct{}{},
-			want2: map[string]struct{}{"User8": {}, "SampleRecord": {}},
+			name:     "user8_9",
+			code:     user8And9Source,
+			endpoint: "",
+			want: map[string]*Design{
+				"User8": {
+					Enabled:    true,
+					Endpoint:   "user8s",
+					Migrate:    false,
+					IsEmpty:    true,
+					Create:     &Action{Enabled: false, Service: false, Public: false, Payload: "*User8", Result: "*User8"},
+					Delete:     &Action{Enabled: false, Service: false, Public: false, Payload: "*User8", Result: "*User8"},
+					Update:     &Action{Enabled: false, Service: false, Public: false, Payload: "*User8", Result: "*User8"},
+					Patch:      &Action{Enabled: false, Service: false, Public: false, Payload: "*User8", Result: "*User8"},
+					List:       &Action{Enabled: false, Service: false, Public: false, Payload: "*User8", Result: "*User8"},
+					Get:        &Action{Enabled: false, Service: false, Public: false, Payload: "*User8", Result: "*User8"},
+					CreateMany: &Action{Enabled: false, Service: false, Public: false, Payload: "*User8", Result: "*User8"},
+					DeleteMany: &Action{Enabled: false, Service: false, Public: false, Payload: "*User8", Result: "*User8"},
+					UpdateMany: &Action{Enabled: false, Service: false, Public: false, Payload: "*User8", Result: "*User8"},
+					PatchMany:  &Action{Enabled: false, Service: false, Public: false, Payload: "*User8", Result: "*User8"},
+					Import:     &Action{Enabled: false, Service: false, Public: false, Payload: "*User8", Result: "*User8"},
+					Export:     &Action{Enabled: false, Service: false, Public: false, Payload: "*User8", Result: "*User8"},
+					SSE:        &Action{Enabled: false, Service: false, Public: false, Payload: "*User8", Result: "*User8"},
+				},
+				"SampleRecord": {
+					Enabled:    true,
+					Endpoint:   "sample_records",
+					Migrate:    false,
+					IsEmpty:    true,
+					Create:     &Action{Enabled: false, Service: false, Public: false, Payload: "*SampleRecord", Result: "*SampleRecord"},
+					Delete:     &Action{Enabled: false, Service: false, Public: false, Payload: "*SampleRecord", Result: "*SampleRecord"},
+					Update:     &Action{Enabled: false, Service: false, Public: false, Payload: "*SampleRecord", Result: "*SampleRecord"},
+					Patch:      &Action{Enabled: false, Service: false, Public: false, Payload: "*SampleRecord", Result: "*SampleRecord"},
+					List:       &Action{Enabled: false, Service: false, Public: false, Payload: "*SampleRecord", Result: "*SampleRecord"},
+					Get:        &Action{Enabled: false, Service: false, Public: false, Payload: "*SampleRecord", Result: "*SampleRecord"},
+					CreateMany: &Action{Enabled: false, Service: false, Public: false, Payload: "*SampleRecord", Result: "*SampleRecord"},
+					DeleteMany: &Action{Enabled: false, Service: false, Public: false, Payload: "*SampleRecord", Result: "*SampleRecord"},
+					UpdateMany: &Action{Enabled: false, Service: false, Public: false, Payload: "*SampleRecord", Result: "*SampleRecord"},
+					PatchMany:  &Action{Enabled: false, Service: false, Public: false, Payload: "*SampleRecord", Result: "*SampleRecord"},
+					Import:     &Action{Enabled: false, Service: false, Public: false, Payload: "*SampleRecord", Result: "*SampleRecord"},
+					Export:     &Action{Enabled: false, Service: false, Public: false, Payload: "*SampleRecord", Result: "*SampleRecord"},
+					SSE:        &Action{Enabled: false, Service: false, Public: false, Payload: "*SampleRecord", Result: "*SampleRecord"},
+				},
+			},
 		},
 	}
 	for _, tt := range tests {
@@ -278,274 +240,37 @@ func Test_parse(t *testing.T) {
 				t.Error(err)
 				return
 			}
-			res1, res2 := parse(f)
-			got1 := make(map[string]struct{})
-			for k := range res1 {
-				got1[k] = struct{}{}
+			got := Parse(f, tt.endpoint)
+			if len(got) != len(tt.want) {
+				t.Fatalf("Parse() = \n%v\n, want \n%v\n", pretty.Sprintf("% #v", got), pretty.Sprintf("% #v", tt.want))
 			}
-			got2 := make(map[string]struct{})
-			for k := range res2 {
-				got2[k] = struct{}{}
+			var gotKeys []string
+			var wantKeys []string
+			for k := range got {
+				gotKeys = append(gotKeys, k)
 			}
-			if !reflect.DeepEqual(got1, tt.want1) {
-				t.Errorf("parse() return 1 = %v, want %v", got1, tt.want1)
+			for k := range tt.want {
+				wantKeys = append(wantKeys, k)
 			}
-			if !reflect.DeepEqual(got2, tt.want2) {
-				t.Errorf("parse() return 2 = %v, want %v", got2, tt.want2)
+			sort.Strings(gotKeys)
+			sort.Strings(wantKeys)
+			if !reflect.DeepEqual(gotKeys, wantKeys) {
+				t.Fatalf("Parse() = %v, want %v", got, tt.want)
 			}
-		})
-	}
-}
-
-func TestFindAllModelBase(t *testing.T) {
-	tests := []struct {
-		name string // description of this test case
-		// Named input parameters for target function.
-		code string
-		want []string
-	}{
-		{
-			name: "input1",
-			code: input1,
-			want: []string{"User"},
-		},
-		{
-			name: "input2",
-			code: input2,
-			want: []string{"User2"},
-		},
-		{
-			name: "input3",
-			code: input3,
-			want: []string{"User3", "User4"},
-		},
-		{
-			name: "input4",
-			code: input4,
-			want: []string{},
-		},
-		{
-			name: "input5",
-			code: input5,
-			want: []string{"User5"},
-		},
-		{
-			name: "input6",
-			code: input6,
-			want: []string{},
-		},
-		{
-			name: "input7",
-			code: input7,
-			want: []string{},
-		},
-		{
-			name: "input8",
-			code: input8,
-			want: []string{"User10", "User11"},
-		},
-		{
-			name: "input9",
-			code: input9,
-			want: []string{"User12"},
-		},
-		{
-			name: "input10",
-			code: input10,
-			want: []string{"User13"},
-		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			fset := token.NewFileSet()
-			f, err := parser.ParseFile(fset, "", tt.code, parser.ParseComments)
-			if err != nil {
-				t.Error(err)
-				return
-			}
-			got := FindAllModelBase(f)
-			if !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("FindAllModelBase() = %v, want %v", got, tt.want)
+			for _, k := range gotKeys {
+				if !reflect.DeepEqual(got[k], tt.want[k]) {
+					t.Fatalf("Parse() = \n%v\nwant \n%v\ndiff: \n%v\n",
+						pretty.Sprintf("% #v", got[k]),
+						pretty.Sprintf("% #v", tt.want[k]),
+						pretty.Diff(got[k], tt.want[k]))
+				}
 			}
 		})
 	}
 }
-
-func TestFindAllModelEmpty(t *testing.T) {
-	tests := []struct {
-		name string // description of this test case
-		// Named input parameters for target function.
-		code string
-		want []string
-	}{
-		{
-			name: "input1",
-			code: input1,
-			want: []string{},
-		},
-		{
-			name: "input2",
-			code: input2,
-			want: []string{},
-		},
-		{
-			name: "input3",
-			code: input3,
-			want: []string{},
-		},
-		{
-			name: "input4",
-			code: input4,
-			want: []string{},
-		},
-		{
-			name: "input5",
-			code: input5,
-			want: []string{},
-		},
-		{
-			name: "input6",
-			code: input6,
-			want: []string{"User6"},
-		},
-		{
-			name: "input7",
-			code: input7,
-			want: []string{"User8", "SampleRecord"},
-		},
-		{
-			name: "input8",
-			code: input8,
-			want: []string{},
-		},
-		{
-			name: "input9",
-			code: input9,
-			want: []string{},
-		},
-		{
-			name: "input10",
-			code: input10,
-			want: []string{},
-		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			fset := token.NewFileSet()
-			f, err := parser.ParseFile(fset, "", tt.code, parser.ParseComments)
-			if err != nil {
-				t.Error(err)
-				return
-			}
-			got := FindAllModelEmpty(f)
-			if !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("FindAllModelEmpty() = %v, want %v", got, tt.want)
-			}
-		})
-	}
-}
-
-func TestDesignRangeOrderDefaultRoute(t *testing.T) {
-	design := parseDesignFromSource(t, defaultRouteOrderSource, "OrderSample")
-
-	var got []consts.Phase
-	design.Range(func(route string, act *Action) {
-		got = append(got, act.Phase)
-	})
-
-	want := []consts.Phase{
-		consts.PHASE_LIST,
-		consts.PHASE_IMPORT,
-		consts.PHASE_EXPORT,
-		consts.PHASE_GET,
-	}
-	if !reflect.DeepEqual(got, want) {
-		t.Fatalf("unexpected action order: got %v want %v", got, want)
-	}
-}
-
-func TestDesignRangeOrderCustomRoute(t *testing.T) {
-	design := parseDesignFromSource(t, routeOrderSource, "RouteSample")
-
-	var got []consts.Phase
-	design.Range(func(route string, act *Action) {
-		if route == "sample/records" {
-			got = append(got, act.Phase)
-		}
-	})
-
-	want := []consts.Phase{
-		consts.PHASE_LIST,
-		consts.PHASE_IMPORT,
-		consts.PHASE_EXPORT,
-		consts.PHASE_GET,
-	}
-	if !reflect.DeepEqual(got, want) {
-		t.Fatalf("unexpected route action order: got %v want %v", got, want)
-	}
-}
-
-const defaultRouteOrderSource = `
-package model
-
-import (
-	. "github.com/hydroan/gst/dsl"
-	"github.com/hydroan/gst/model"
-)
-
-type OrderSample struct {
-	model.Base
-}
-
-func (OrderSample) Design() {
-	Endpoint("sample/records")
-	Get(func() {
-		Enabled(true)
-	})
-	Export(func() {
-		Enabled(true)
-	})
-	Import(func() {
-		Enabled(true)
-	})
-	List(func() {
-		Enabled(true)
-	})
-}
-`
-
-const routeOrderSource = `
-package model
-
-import (
-	. "github.com/hydroan/gst/dsl"
-	"github.com/hydroan/gst/model"
-)
-
-type RouteSample struct {
-	model.Base
-}
-
-func (RouteSample) Design() {
-	Route("/sample/records", func() {
-		Get(func() {
-			Enabled(true)
-		})
-		Export(func() {
-			Enabled(true)
-		})
-		Import(func() {
-			Enabled(true)
-		})
-		List(func() {
-			Enabled(true)
-		})
-	})
-}
-`
 
 func TestParseFilename(t *testing.T) {
-	design := parseDesignFromSource(t, filenameSource, "Attachment")
+	design := parseDesignFromSource(t, filenameSource, "Record")
 
 	// Collect actions by route path
 	routeActions := make(map[string]*Action)
@@ -557,10 +282,10 @@ func TestParseFilename(t *testing.T) {
 		t.Fatalf("expected 2 route actions, got %d", len(routeActions))
 	}
 
-	// Route: attachment/upload with Filename("upload")
-	uploadAct, ok := routeActions["attachment/upload"]
+	// Route: record/upload with Filename("upload")
+	uploadAct, ok := routeActions["record/upload"]
 	if !ok {
-		t.Fatal("expected route 'attachment/upload' not found")
+		t.Fatal("expected route 'record/upload' not found")
 	}
 	if uploadAct.Filename != "upload" {
 		t.Errorf("expected Filename 'upload', got %q", uploadAct.Filename)
@@ -572,19 +297,19 @@ func TestParseFilename(t *testing.T) {
 		t.Errorf("expected RoleName 'Upload', got %q", uploadAct.RoleName())
 	}
 
-	// Route: attachment/parse with Filename("parse")
-	parseAct, ok := routeActions["attachment/parse"]
+	// Route: record/publish with Filename("publish")
+	publishAct, ok := routeActions["record/publish"]
 	if !ok {
-		t.Fatal("expected route 'attachment/parse' not found")
+		t.Fatal("expected route 'record/publish' not found")
 	}
-	if parseAct.Filename != "parse" {
-		t.Errorf("expected Filename 'parse', got %q", parseAct.Filename)
+	if publishAct.Filename != "publish" {
+		t.Errorf("expected Filename 'publish', got %q", publishAct.Filename)
 	}
-	if parseAct.ServiceFilename() != "parse.go" {
-		t.Errorf("expected ServiceFilename 'parse.go', got %q", parseAct.ServiceFilename())
+	if publishAct.ServiceFilename() != "publish.go" {
+		t.Errorf("expected ServiceFilename 'publish.go', got %q", publishAct.ServiceFilename())
 	}
-	if parseAct.RoleName() != "Parse" {
-		t.Errorf("expected RoleName 'Parse', got %q", parseAct.RoleName())
+	if publishAct.RoleName() != "Publish" {
+		t.Errorf("expected RoleName 'Publish', got %q", publishAct.RoleName())
 	}
 }
 
@@ -638,58 +363,6 @@ func TestParseExact(t *testing.T) {
 	}
 }
 
-func TestRoleName(t *testing.T) {
-	tests := []struct {
-		name     string
-		filename string
-		phase    consts.Phase
-		want     string
-	}{
-		{name: "default create", filename: "", phase: consts.PHASE_CREATE, want: "Creator"},
-		{name: "default delete", filename: "", phase: consts.PHASE_DELETE, want: "Deleter"},
-		{name: "default list", filename: "", phase: consts.PHASE_LIST, want: "Lister"},
-		{name: "custom upload", filename: "upload", phase: consts.PHASE_CREATE, want: "Upload"},
-		{name: "custom parse", filename: "parse", phase: consts.PHASE_CREATE, want: "Parse"},
-		{name: "with directory and ext", filename: "a/b/user_upload.rs", phase: consts.PHASE_CREATE, want: "UserUpload"},
-		{name: "uppercase", filename: "Upload", phase: consts.PHASE_CREATE, want: "Upload"},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			act := &Action{Filename: tt.filename, Phase: tt.phase}
-			got := act.RoleName()
-			if got != tt.want {
-				t.Errorf("RoleName() = %q, want %q", got, tt.want)
-			}
-		})
-	}
-}
-
-func TestServiceFilenameEdgeCases(t *testing.T) {
-	tests := []struct {
-		name     string
-		filename string
-		phase    consts.Phase
-		want     string
-	}{
-		{name: "simple name", filename: "upload", phase: consts.PHASE_CREATE, want: "upload.go"},
-		{name: "with directory prefix", filename: "a/b/c", phase: consts.PHASE_CREATE, want: "c.go"},
-		{name: "with extension", filename: "upload.rs", phase: consts.PHASE_CREATE, want: "upload.go"},
-		{name: "with directory and extension", filename: "a/b/c.rs", phase: consts.PHASE_CREATE, want: "c.go"},
-		{name: "uppercase", filename: "Upload", phase: consts.PHASE_CREATE, want: "upload.go"},
-		{name: "empty falls back to phase", filename: "", phase: consts.PHASE_CREATE, want: "create.go"},
-		{name: "with .go extension", filename: "upload.go", phase: consts.PHASE_CREATE, want: "upload.go"},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			act := &Action{Filename: tt.filename, Phase: tt.phase}
-			got := act.ServiceFilename()
-			if got != tt.want {
-				t.Errorf("ServiceFilename() = %q, want %q", got, tt.want)
-			}
-		})
-	}
-}
-
 const filenameSource = `
 package model
 
@@ -698,24 +371,24 @@ import (
 	"github.com/hydroan/gst/model"
 )
 
-type Attachment struct {
+type Record struct {
 	model.Base
 }
 
-func (Attachment) Design() {
+func (Record) Design() {
 	Migrate()
-	Route("/attachment/upload", func() {
+	Route("/record/upload", func() {
 		Create(func() {
 			Enabled(true)
 			Service()
 			Filename("upload")
 		})
 	})
-	Route("/attachment/parse", func() {
+	Route("/record/publish", func() {
 		Create(func() {
 			Enabled(true)
 			Service()
-			Filename("parse")
+			Filename("publish")
 		})
 	})
 }
@@ -787,23 +460,6 @@ func (AdminUserSession) Design() {
 	})
 }
 `
-
-func parseDesignFromSource(t *testing.T, src, modelName string) *Design {
-	t.Helper()
-
-	fset := token.NewFileSet()
-	file, err := parser.ParseFile(fset, "", src, parser.ParseComments)
-	if err != nil {
-		t.Fatalf("parse source failed: %v", err)
-	}
-
-	designs := Parse(file, "")
-	design, ok := designs[modelName]
-	if !ok {
-		t.Fatalf("model %s not found", modelName)
-	}
-	return design
-}
 
 func TestParseDeclaredActionDefaultEnabled(t *testing.T) {
 	design := parseDesignFromSource(t, declaredActionDefaultEnabledSource, "DeclaredDefault")
@@ -1012,225 +668,54 @@ func (Record) Design() {
 }
 `
 
-func TestParse(t *testing.T) {
+func TestParseSplitsBaseAndEmptyModels(t *testing.T) {
 	tests := []struct {
-		name string // description of this test case
-		// Named input parameters for target function.
-		code     string
-		endpoint string
-		want     map[string]*Design
+		name      string
+		code      string
+		wantBase  map[string]struct{}
+		wantEmpty map[string]struct{}
 	}{
 		{
-			name:     "input1",
-			code:     input1,
-			endpoint: "",
-			want: map[string]*Design{
-				"User": {
-					Enabled:  true,
-					Endpoint: "iam-user2",
-					Param:    ":user",
-					Migrate:  true,
-					routes: map[string][]*Action{
-						"iam/users": {
-							// The Payload[*UserReq] declaration in testdata/user.go is
-							// discarded: List handles an HTTP GET request, so declaring
-							// Result fixes the request type to PayloadEmpty.
-							{Enabled: true, Service: true, Payload: PayloadEmpty, Result: "*UserRsp", Phase: consts.PHASE_LIST},
-							{Enabled: true, Service: true, Payload: "*User", Result: "*User", Phase: consts.PHASE_GET},
-						},
-						"tenant/users": {
-							{Enabled: true, Service: false, Payload: "*UserReq", Result: "*User", Phase: consts.PHASE_CREATE},
-							{Enabled: true, Service: false, Payload: "*User", Result: "*User", Phase: consts.PHASE_UPDATE},
-							{Enabled: true, Service: false, Payload: "*User", Result: "*User", Phase: consts.PHASE_PATCH},
-							{Enabled: true, Service: false, Payload: "*User", Result: "*User", Phase: consts.PHASE_CREATE_MANY},
-						},
-					},
-					Create:     &Action{Enabled: true, Service: true, Public: true, Payload: "User", Result: "*User", Phase: consts.PHASE_CREATE},
-					Delete:     &Action{Enabled: true, Service: false, Public: false, Payload: "*User", Result: "*User", Phase: consts.PHASE_DELETE},
-					Update:     &Action{Enabled: false, Service: false, Public: false, Payload: "*User", Result: "User", Phase: consts.PHASE_UPDATE},
-					Patch:      &Action{Enabled: false, Service: false, Public: false, Payload: "*User", Result: "*User"},
-					List:       &Action{Enabled: true, Service: false, Public: false, Payload: "*User", Result: "*User", Phase: consts.PHASE_LIST},
-					Get:        &Action{Enabled: false, Service: false, Public: false, Payload: "*User", Result: "*User"},
-					CreateMany: &Action{Enabled: false, Service: false, Public: false, Payload: "*User", Result: "*User"},
-					DeleteMany: &Action{Enabled: false, Service: false, Public: false, Payload: "*User", Result: "*User"},
-					UpdateMany: &Action{Enabled: false, Service: false, Public: false, Payload: "*User", Result: "*User"},
-					PatchMany:  &Action{Enabled: false, Service: false, Public: false, Payload: "*User", Result: "*User"},
-					Import:     &Action{Enabled: false, Service: false, Public: false, Payload: "*User", Result: "*User"},
-					Export:     &Action{Enabled: false, Service: false, Public: false, Payload: "*User", Result: "*User"},
-					SSE:        &Action{Enabled: false, Service: false, Public: false, Payload: "*User", Result: "*User"},
-				},
-			},
+			name:      "user",
+			code:      userSource,
+			wantBase:  map[string]struct{}{"User": {}},
+			wantEmpty: map[string]struct{}{},
 		},
 		{
-			name:     "input2",
-			code:     input2,
-			endpoint: "",
-			want: map[string]*Design{
-				"User2": {
-					Enabled:    false,
-					Endpoint:   "user2s",
-					Param:      ":user",
-					Migrate:    false,
-					Create:     &Action{Enabled: true, Service: false, Public: false, Payload: "User2", Result: "*User3", Phase: consts.PHASE_CREATE},
-					Delete:     &Action{Enabled: false, Service: false, Public: false, Payload: "*User2", Result: "*User2"},
-					Update:     &Action{Enabled: false, Service: false, Public: false, Payload: "*User2", Result: "*User2"},
-					Patch:      &Action{Enabled: true, Service: false, Public: false, Payload: "*User", Result: "User", Phase: consts.PHASE_PATCH},
-					List:       &Action{Enabled: false, Service: false, Public: false, Payload: "*User2", Result: "*User2"},
-					Get:        &Action{Enabled: false, Service: false, Public: false, Payload: "*User2", Result: "*User2"},
-					CreateMany: &Action{Enabled: false, Service: false, Public: false, Payload: "*User2", Result: "*User2"},
-					DeleteMany: &Action{Enabled: false, Service: false, Public: false, Payload: "*User2", Result: "*User2"},
-					UpdateMany: &Action{Enabled: false, Service: false, Public: false, Payload: "*User2", Result: "*User2"},
-					PatchMany:  &Action{Enabled: false, Service: false, Public: false, Payload: "*User2", Result: "*User2"},
-					Import:     &Action{Enabled: false, Service: false, Public: false, Payload: "*User2", Result: "*User2"},
-					Export:     &Action{Enabled: false, Service: false, Public: false, Payload: "*User2", Result: "*User2"},
-					SSE:        &Action{Enabled: false, Service: false, Public: false, Payload: "*User2", Result: "*User2"},
-				},
-			},
+			name:      "user2",
+			code:      user2Source,
+			wantBase:  map[string]struct{}{"User2": {}},
+			wantEmpty: map[string]struct{}{},
 		},
 		{
-			name:     "input3",
-			code:     input3,
-			endpoint: "",
-			want: map[string]*Design{
-				"User3": {
-					Enabled:    true,
-					Endpoint:   "user",
-					Migrate:    false,
-					Create:     &Action{Enabled: false, Service: false, Public: false, Payload: "User", Result: "*User", Phase: consts.PHASE_CREATE},
-					Delete:     &Action{Enabled: false, Service: false, Public: false, Payload: "*User3", Result: "*User3"},
-					Update:     &Action{Enabled: true, Service: false, Public: false, Payload: "*User", Result: "User", Phase: consts.PHASE_UPDATE},
-					Patch:      &Action{Enabled: false, Service: false, Public: false, Payload: "*User3", Result: "*User3"},
-					List:       &Action{Enabled: false, Service: false, Public: false, Payload: "*User3", Result: "*User3"},
-					Get:        &Action{Enabled: false, Service: false, Public: false, Payload: "*User3", Result: "*User3"},
-					CreateMany: &Action{Enabled: false, Service: false, Public: false, Payload: "*User3", Result: "*User3"},
-					DeleteMany: &Action{Enabled: false, Service: false, Public: false, Payload: "*User3", Result: "*User3"},
-					UpdateMany: &Action{Enabled: false, Service: false, Public: false, Payload: "*User3", Result: "*User3"},
-					PatchMany:  &Action{Enabled: false, Service: false, Public: false, Payload: "*User3", Result: "*User3"},
-					Import:     &Action{Enabled: false, Service: false, Public: false, Payload: "*User3", Result: "*User3"},
-					Export:     &Action{Enabled: false, Service: false, Public: false, Payload: "*User3", Result: "*User3"},
-					SSE:        &Action{Enabled: false, Service: false, Public: false, Payload: "*User3", Result: "*User3"},
-				},
-				"User4": {
-					Enabled:    true,
-					Endpoint:   "user4s",
-					Migrate:    false,
-					Create:     &Action{Enabled: true, Service: false, Public: false, Payload: "User", Result: "*User", Phase: consts.PHASE_CREATE},
-					Delete:     &Action{Enabled: false, Service: false, Public: false, Payload: "*User4", Result: "*User4"},
-					Update:     &Action{Enabled: false, Service: false, Public: false, Payload: "*User", Result: "User", Phase: consts.PHASE_UPDATE},
-					Patch:      &Action{Enabled: false, Service: false, Public: false, Payload: "*User4", Result: "*User4"},
-					List:       &Action{Enabled: false, Service: false, Public: false, Payload: "*User4", Result: "*User4"},
-					Get:        &Action{Enabled: false, Service: false, Public: false, Payload: "*User4", Result: "*User4"},
-					CreateMany: &Action{Enabled: false, Service: false, Public: false, Payload: "*User4", Result: "*User4"},
-					DeleteMany: &Action{Enabled: false, Service: false, Public: false, Payload: "*User4", Result: "*User4"},
-					UpdateMany: &Action{Enabled: false, Service: false, Public: false, Payload: "*User4", Result: "*User4"},
-					PatchMany:  &Action{Enabled: false, Service: false, Public: false, Payload: "*User4", Result: "*User4"},
-					Import:     &Action{Enabled: false, Service: false, Public: false, Payload: "*User4", Result: "*User4"},
-					Export:     &Action{Enabled: false, Service: false, Public: false, Payload: "*User4", Result: "*User4"},
-					SSE:        &Action{Enabled: false, Service: false, Public: false, Payload: "*User4", Result: "*User4"},
-				},
-			},
+			name:      "user3_4",
+			code:      user3And4Source,
+			wantBase:  map[string]struct{}{"User3": {}, "User4": {}},
+			wantEmpty: map[string]struct{}{},
 		},
 		{
-			name:     "input4",
-			code:     input4,
-			endpoint: "",
-			want:     map[string]*Design{},
+			name:      "user4",
+			code:      user4Source,
+			wantBase:  map[string]struct{}{},
+			wantEmpty: map[string]struct{}{},
 		},
 		{
-			name:     "input5",
-			code:     input5,
-			endpoint: "",
-			want: map[string]*Design{
-				"User5": {
-					Enabled:    true,
-					Endpoint:   "user5s",
-					Migrate:    false,
-					Create:     &Action{Enabled: false, Service: false, Public: false, Payload: "*User5", Result: "*User5"},
-					Delete:     &Action{Enabled: false, Service: false, Public: false, Payload: "*User5", Result: "*User5"},
-					Update:     &Action{Enabled: false, Service: false, Public: false, Payload: "*User5", Result: "*User5"},
-					Patch:      &Action{Enabled: false, Service: false, Public: false, Payload: "*User5", Result: "*User5"},
-					List:       &Action{Enabled: false, Service: false, Public: false, Payload: "*User5", Result: "*User5"},
-					Get:        &Action{Enabled: false, Service: false, Public: false, Payload: "*User5", Result: "*User5"},
-					CreateMany: &Action{Enabled: false, Service: false, Public: false, Payload: "*User5", Result: "*User5"},
-					DeleteMany: &Action{Enabled: false, Service: false, Public: false, Payload: "*User5", Result: "*User5"},
-					UpdateMany: &Action{Enabled: false, Service: false, Public: false, Payload: "*User5", Result: "*User5"},
-					PatchMany:  &Action{Enabled: false, Service: false, Public: false, Payload: "*User5", Result: "*User5"},
-					Import:     &Action{Enabled: false, Service: false, Public: false, Payload: "*User5", Result: "*User5"},
-					Export:     &Action{Enabled: false, Service: false, Public: false, Payload: "*User5", Result: "*User5"},
-					SSE:        &Action{Enabled: false, Service: false, Public: false, Payload: "*User5", Result: "*User5"},
-				},
-			},
+			name:      "user5",
+			code:      user5Source,
+			wantBase:  map[string]struct{}{"User5": {}},
+			wantEmpty: map[string]struct{}{},
 		},
 		{
-			name:     "input6",
-			code:     input6,
-			endpoint: "",
-			want: map[string]*Design{
-				"User6": {
-					Enabled:    true,
-					Endpoint:   "user6s",
-					Migrate:    false,
-					IsEmpty:    true,
-					Create:     &Action{Enabled: false, Service: false, Public: false, Payload: "*User6", Result: "*User6"},
-					Delete:     &Action{Enabled: false, Service: false, Public: false, Payload: "*User6", Result: "*User6"},
-					Update:     &Action{Enabled: false, Service: false, Public: false, Payload: "*User6", Result: "*User6"},
-					Patch:      &Action{Enabled: false, Service: false, Public: false, Payload: "*User6", Result: "*User6"},
-					List:       &Action{Enabled: false, Service: false, Public: false, Payload: "*User6", Result: "*User6"},
-					Get:        &Action{Enabled: false, Service: false, Public: false, Payload: "*User6", Result: "*User6"},
-					CreateMany: &Action{Enabled: false, Service: false, Public: false, Payload: "*User6", Result: "*User6"},
-					DeleteMany: &Action{Enabled: false, Service: false, Public: false, Payload: "*User6", Result: "*User6"},
-					UpdateMany: &Action{Enabled: false, Service: false, Public: false, Payload: "*User6", Result: "*User6"},
-					PatchMany:  &Action{Enabled: false, Service: false, Public: false, Payload: "*User6", Result: "*User6"},
-					Import:     &Action{Enabled: false, Service: false, Public: false, Payload: "*User6", Result: "*User6"},
-					Export:     &Action{Enabled: false, Service: false, Public: false, Payload: "*User6", Result: "*User6"},
-					SSE:        &Action{Enabled: false, Service: false, Public: false, Payload: "*User6", Result: "*User6"},
-				},
-			},
+			name:      "user6_7",
+			code:      user6And7Source,
+			wantBase:  map[string]struct{}{},
+			wantEmpty: map[string]struct{}{"User6": {}},
 		},
 		{
-			name:     "input7",
-			code:     input7,
-			endpoint: "",
-			want: map[string]*Design{
-				"User8": {
-					Enabled:    true,
-					Endpoint:   "user8s",
-					Migrate:    false,
-					IsEmpty:    true,
-					Create:     &Action{Enabled: false, Service: false, Public: false, Payload: "*User8", Result: "*User8"},
-					Delete:     &Action{Enabled: false, Service: false, Public: false, Payload: "*User8", Result: "*User8"},
-					Update:     &Action{Enabled: false, Service: false, Public: false, Payload: "*User8", Result: "*User8"},
-					Patch:      &Action{Enabled: false, Service: false, Public: false, Payload: "*User8", Result: "*User8"},
-					List:       &Action{Enabled: false, Service: false, Public: false, Payload: "*User8", Result: "*User8"},
-					Get:        &Action{Enabled: false, Service: false, Public: false, Payload: "*User8", Result: "*User8"},
-					CreateMany: &Action{Enabled: false, Service: false, Public: false, Payload: "*User8", Result: "*User8"},
-					DeleteMany: &Action{Enabled: false, Service: false, Public: false, Payload: "*User8", Result: "*User8"},
-					UpdateMany: &Action{Enabled: false, Service: false, Public: false, Payload: "*User8", Result: "*User8"},
-					PatchMany:  &Action{Enabled: false, Service: false, Public: false, Payload: "*User8", Result: "*User8"},
-					Import:     &Action{Enabled: false, Service: false, Public: false, Payload: "*User8", Result: "*User8"},
-					Export:     &Action{Enabled: false, Service: false, Public: false, Payload: "*User8", Result: "*User8"},
-					SSE:        &Action{Enabled: false, Service: false, Public: false, Payload: "*User8", Result: "*User8"},
-				},
-				"SampleRecord": {
-					Enabled:    true,
-					Endpoint:   "sample_records",
-					Migrate:    false,
-					IsEmpty:    true,
-					Create:     &Action{Enabled: false, Service: false, Public: false, Payload: "*SampleRecord", Result: "*SampleRecord"},
-					Delete:     &Action{Enabled: false, Service: false, Public: false, Payload: "*SampleRecord", Result: "*SampleRecord"},
-					Update:     &Action{Enabled: false, Service: false, Public: false, Payload: "*SampleRecord", Result: "*SampleRecord"},
-					Patch:      &Action{Enabled: false, Service: false, Public: false, Payload: "*SampleRecord", Result: "*SampleRecord"},
-					List:       &Action{Enabled: false, Service: false, Public: false, Payload: "*SampleRecord", Result: "*SampleRecord"},
-					Get:        &Action{Enabled: false, Service: false, Public: false, Payload: "*SampleRecord", Result: "*SampleRecord"},
-					CreateMany: &Action{Enabled: false, Service: false, Public: false, Payload: "*SampleRecord", Result: "*SampleRecord"},
-					DeleteMany: &Action{Enabled: false, Service: false, Public: false, Payload: "*SampleRecord", Result: "*SampleRecord"},
-					UpdateMany: &Action{Enabled: false, Service: false, Public: false, Payload: "*SampleRecord", Result: "*SampleRecord"},
-					PatchMany:  &Action{Enabled: false, Service: false, Public: false, Payload: "*SampleRecord", Result: "*SampleRecord"},
-					Import:     &Action{Enabled: false, Service: false, Public: false, Payload: "*SampleRecord", Result: "*SampleRecord"},
-					Export:     &Action{Enabled: false, Service: false, Public: false, Payload: "*SampleRecord", Result: "*SampleRecord"},
-					SSE:        &Action{Enabled: false, Service: false, Public: false, Payload: "*SampleRecord", Result: "*SampleRecord"},
-				},
-			},
+			name:      "user8_9",
+			code:      user8And9Source,
+			wantBase:  map[string]struct{}{},
+			wantEmpty: map[string]struct{}{"User8": {}, "SampleRecord": {}},
 		},
 	}
 	for _, tt := range tests {
@@ -1241,30 +726,372 @@ func TestParse(t *testing.T) {
 				t.Error(err)
 				return
 			}
-			got := Parse(f, tt.endpoint)
-			if len(got) != len(tt.want) {
-				t.Fatalf("Parse() = \n%v\n, want \n%v\n", pretty.Sprintf("% #v", got), pretty.Sprintf("% #v", tt.want))
+			base, empty := parse(f)
+			gotBase := make(map[string]struct{})
+			for k := range base {
+				gotBase[k] = struct{}{}
 			}
-			var keys1 []string
-			var keys2 []string
-			for k := range got {
-				keys1 = append(keys1, k)
+			gotEmpty := make(map[string]struct{})
+			for k := range empty {
+				gotEmpty[k] = struct{}{}
 			}
-			for k := range tt.want {
-				keys2 = append(keys2, k)
+			if !reflect.DeepEqual(gotBase, tt.wantBase) {
+				t.Errorf("parse() return 1 = %v, want %v", gotBase, tt.wantBase)
 			}
-			sort.Strings(keys1)
-			sort.Strings(keys2)
-			if !reflect.DeepEqual(keys1, keys2) {
-				t.Fatalf("Parse() = %v, want %v", got, tt.want)
+			if !reflect.DeepEqual(gotEmpty, tt.wantEmpty) {
+				t.Errorf("parse() return 2 = %v, want %v", gotEmpty, tt.wantEmpty)
 			}
-			for _, k := range keys1 {
-				if !reflect.DeepEqual(got[k], tt.want[k]) {
-					t.Fatalf("Parse() = \n%v\nwant \n%v\ndiff: \n%v\n",
-						pretty.Sprintf("% #v", got[k]),
-						pretty.Sprintf("% #v", tt.want[k]),
-						pretty.Diff(got[k], tt.want[k]))
+		})
+	}
+}
+
+func TestFindAllModelBase(t *testing.T) {
+	tests := []struct {
+		name string
+		code string
+		want []string
+	}{
+		{
+			name: "user",
+			code: userSource,
+			want: []string{"User"},
+		},
+		{
+			name: "user2",
+			code: user2Source,
+			want: []string{"User2"},
+		},
+		{
+			name: "user3_4",
+			code: user3And4Source,
+			want: []string{"User3", "User4"},
+		},
+		{
+			name: "user4",
+			code: user4Source,
+			want: []string{},
+		},
+		{
+			name: "user5",
+			code: user5Source,
+			want: []string{"User5"},
+		},
+		{
+			name: "user6_7",
+			code: user6And7Source,
+			want: []string{},
+		},
+		{
+			name: "user8_9",
+			code: user8And9Source,
+			want: []string{},
+		},
+		{
+			name: "user10_11",
+			code: user10And11Source,
+			want: []string{"User10", "User11"},
+		},
+		{
+			name: "user12",
+			code: user12Source,
+			want: []string{"User12"},
+		},
+		{
+			name: "user13",
+			code: user13Source,
+			want: []string{"User13"},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			fset := token.NewFileSet()
+			f, err := parser.ParseFile(fset, "", tt.code, parser.ParseComments)
+			if err != nil {
+				t.Error(err)
+				return
+			}
+			got := FindAllModelBase(f)
+			if !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("FindAllModelBase() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestFindAllModelEmpty(t *testing.T) {
+	tests := []struct {
+		name string
+		code string
+		want []string
+	}{
+		{
+			name: "user",
+			code: userSource,
+			want: []string{},
+		},
+		{
+			name: "user2",
+			code: user2Source,
+			want: []string{},
+		},
+		{
+			name: "user3_4",
+			code: user3And4Source,
+			want: []string{},
+		},
+		{
+			name: "user4",
+			code: user4Source,
+			want: []string{},
+		},
+		{
+			name: "user5",
+			code: user5Source,
+			want: []string{},
+		},
+		{
+			name: "user6_7",
+			code: user6And7Source,
+			want: []string{"User6"},
+		},
+		{
+			name: "user8_9",
+			code: user8And9Source,
+			want: []string{"User8", "SampleRecord"},
+		},
+		{
+			name: "user10_11",
+			code: user10And11Source,
+			want: []string{},
+		},
+		{
+			name: "user12",
+			code: user12Source,
+			want: []string{},
+		},
+		{
+			name: "user13",
+			code: user13Source,
+			want: []string{},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			fset := token.NewFileSet()
+			f, err := parser.ParseFile(fset, "", tt.code, parser.ParseComments)
+			if err != nil {
+				t.Error(err)
+				return
+			}
+			got := FindAllModelEmpty(f)
+			if !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("FindAllModelEmpty() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestIsModelBase(t *testing.T) {
+	fset := token.NewFileSet()
+
+	tests := []struct {
+		name string
+		code string
+		want []bool
+	}{
+		{
+			name: "user",
+			code: userSource,
+			want: []bool{true},
+		},
+		{
+			name: "user2",
+			code: user2Source,
+			want: []bool{true},
+		},
+		{
+			name: "user3_4",
+			code: user3And4Source,
+			want: []bool{true, true},
+		},
+		{
+			name: "user4",
+			code: user4Source,
+			want: []bool{false},
+		},
+		{
+			name: "user5",
+			code: user5Source,
+			want: []bool{true},
+		},
+		{
+			name: "user6_7",
+			code: user6And7Source,
+			want: []bool{false, false},
+		},
+		{
+			name: "user8_9",
+			code: user8And9Source,
+			want: []bool{false, false, false},
+		},
+		{
+			name: "user10_11",
+			code: user10And11Source,
+			want: []bool{true, true},
+		},
+		{
+			name: "user12",
+			code: user12Source,
+			want: []bool{true},
+		},
+		{
+			name: "user13",
+			code: user13Source,
+			want: []bool{true},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			f, err := parser.ParseFile(fset, "", tt.code, parser.ParseComments)
+			if err != nil {
+				t.Error(err)
+				return
+			}
+			modelBases := []bool{}
+			for _, decl := range f.Decls {
+				genDecl, ok := decl.(*ast.GenDecl)
+				if !ok || genDecl == nil || genDecl.Tok != token.TYPE {
+					continue
 				}
+				for _, spec := range genDecl.Specs {
+					typeSpec, ok := spec.(*ast.TypeSpec)
+					if !ok || typeSpec == nil {
+						continue
+					}
+					structType, ok := typeSpec.Type.(*ast.StructType)
+					if !ok || structType == nil || structType.Fields == nil {
+						continue
+					}
+					var hasModelBase bool
+					for _, field := range structType.Fields.List {
+						if IsModelBase(f, field) {
+							hasModelBase = true
+							break
+						}
+					}
+					if hasModelBase {
+						modelBases = append(modelBases, true)
+					} else {
+						modelBases = append(modelBases, false)
+					}
+				}
+
+			}
+			if !reflect.DeepEqual(modelBases, tt.want) {
+				t.Errorf("IsModelBase() = %v, want %v", modelBases, tt.want)
+			}
+		})
+	}
+}
+
+func TestIsModelEmpty(t *testing.T) {
+	fset := token.NewFileSet()
+
+	tests := []struct {
+		name string
+		code string
+		want []bool
+	}{
+		{
+			name: "user",
+			code: userSource,
+			want: []bool{false},
+		},
+		{
+			name: "user2",
+			code: user2Source,
+			want: []bool{false},
+		},
+		{
+			name: "user3_4",
+			code: user3And4Source,
+			want: []bool{false, false},
+		},
+		{
+			name: "user4",
+			code: user4Source,
+			want: []bool{false},
+		},
+		{
+			name: "user5",
+			code: user5Source,
+			want: []bool{false},
+		},
+		{
+			name: "user6_7",
+			code: user6And7Source,
+			want: []bool{true, false},
+		},
+		{
+			name: "user8_9",
+			code: user8And9Source,
+			want: []bool{true, false, true},
+		},
+		{
+			name: "user10_11",
+			code: user10And11Source,
+			want: []bool{false, false},
+		},
+		{
+			name: "user12",
+			code: user12Source,
+			want: []bool{false},
+		},
+		{
+			name: "user13",
+			code: user13Source,
+			want: []bool{false},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			f, err := parser.ParseFile(fset, "", tt.code, parser.ParseComments)
+			if err != nil {
+				t.Error(err)
+				return
+			}
+			modelEmpties := []bool{}
+			for _, decl := range f.Decls {
+				genDecl, ok := decl.(*ast.GenDecl)
+				if !ok || genDecl == nil || genDecl.Tok != token.TYPE {
+					continue
+				}
+				for _, spec := range genDecl.Specs {
+					typeSpec, ok := spec.(*ast.TypeSpec)
+					if !ok || typeSpec == nil {
+						continue
+					}
+					structType, ok := typeSpec.Type.(*ast.StructType)
+					if !ok || structType == nil || structType.Fields == nil {
+						continue
+					}
+					var hasModelEmpty bool
+					for _, field := range structType.Fields.List {
+						if IsModelEmpty(f, field) {
+							hasModelEmpty = true
+							break
+						}
+					}
+					if hasModelEmpty {
+						modelEmpties = append(modelEmpties, true)
+					} else {
+						modelEmpties = append(modelEmpties, false)
+					}
+				}
+
+			}
+			if !reflect.DeepEqual(modelEmpties, tt.want) {
+				t.Errorf("IsModelEmpty() = %v, want %v", modelEmpties, tt.want)
 			}
 		})
 	}

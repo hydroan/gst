@@ -61,19 +61,6 @@ func (s *normalizeProbeService) Create(_ *types.ServiceContext, req *normalizePr
 	return rsp, nil
 }
 
-// newNormalizeProbeEngine wires the probe service into a fresh engine on its
-// own route so each test observes exactly what the service receives.
-func newNormalizeProbeEngine(t *testing.T, route string) *gin.Engine {
-	t.Helper()
-	gin.SetMode(gin.TestMode)
-	logger.Controller = zap.New("")
-
-	serviceregistry.Register[*normalizeProbeModel, *normalizeProbeReq, *normalizeProbeRsp](consts.PHASE_CREATE, route, &normalizeProbeService{})
-	engine := gin.New()
-	engine.POST("/"+route, CreateFactory[*normalizeProbeModel, *normalizeProbeReq, *normalizeProbeRsp](&types.ControllerConfig[*normalizeProbeModel]{Route: route}))
-	return engine
-}
-
 // TestCreateFactoryRestoresNullBodyRequest guards the nil-request contract: a
 // literal JSON null body unmarshals into a nil pointer without any binding
 // error, and the service must still receive a usable zero-value request.
@@ -270,34 +257,6 @@ func TestUpdateManyFactoryBindFailureRendersInvalidParamCode(t *testing.T) {
 	require.Contains(t, recorder.Body.String(), `"msg":"invalid value for field 'items'"`)
 }
 
-// TestClientSafeBindError pins the translation table of body decoding
-// failures: one stable client-safe message per decoder error kind, with the
-// original error preserved as the cause so logs keep the full decoder text.
-func TestClientSafeBindError(t *testing.T) {
-	tests := []struct {
-		name    string
-		err     error
-		wantMsg string
-	}{
-		{"type mismatch names the field", json.Unmarshal([]byte(`{"items":3}`), &normalizeProbeReq{}), "invalid value for field 'items'"},
-		{"top-level type mismatch has no field", json.Unmarshal([]byte(`[1]`), &normalizeProbeReq{}), "request body has an unexpected JSON type"},
-		{"malformed body", json.Unmarshal([]byte(`{`), &normalizeProbeReq{}), "request body is not valid JSON"},
-		{"other errors fall back to the generic message", errors.New("read failed"), "invalid request body"},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			wrapped := clientSafeBindError(tt.err)
-
-			var serviceErr *serviceregistry.Error
-			require.ErrorAs(t, wrapped, &serviceErr)
-			require.Equal(t, tt.wantMsg, serviceErr.Msg())
-			require.Equal(t, http.StatusBadRequest, serviceErr.Status())
-			require.ErrorIs(t, wrapped, tt.err, "the original error must survive as the cause")
-			require.Contains(t, wrapped.Error(), tt.err.Error(), "logs must keep the full decoder text")
-		})
-	}
-}
-
 // TestBindJSONRequestHonorsDisabledValidator pins gin's validator-disable
 // convention: an application may turn validation off by setting
 // binding.Validator to nil, and gin's own binding paths treat that as "skip
@@ -372,6 +331,34 @@ func BenchmarkBindJSONRequest(b *testing.B) {
 	}
 }
 
+// TestClientSafeBindError pins the translation table of body decoding
+// failures: one stable client-safe message per decoder error kind, with the
+// original error preserved as the cause so logs keep the full decoder text.
+func TestClientSafeBindError(t *testing.T) {
+	tests := []struct {
+		name    string
+		err     error
+		wantMsg string
+	}{
+		{"type_mismatch_names_the_field", json.Unmarshal([]byte(`{"items":3}`), &normalizeProbeReq{}), "invalid value for field 'items'"},
+		{"top-level_type_mismatch_has_no_field", json.Unmarshal([]byte(`[1]`), &normalizeProbeReq{}), "request body has an unexpected JSON type"},
+		{"malformed_body", json.Unmarshal([]byte(`{`), &normalizeProbeReq{}), "request body is not valid JSON"},
+		{"other_errors_fall_back_to_the_generic_message", errors.New("read failed"), "invalid request body"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			wrapped := clientSafeBindError(tt.err)
+
+			var serviceErr *serviceregistry.Error
+			require.ErrorAs(t, wrapped, &serviceErr)
+			require.Equal(t, tt.wantMsg, serviceErr.Msg())
+			require.Equal(t, http.StatusBadRequest, serviceErr.Status())
+			require.ErrorIs(t, wrapped, tt.err, "the original error must survive as the cause")
+			require.Contains(t, wrapped.Error(), tt.err.Error(), "logs must keep the full decoder text")
+		})
+	}
+}
+
 // TestCompactNilSliceElements covers the reflective walk over the value
 // shapes JSON binding can produce.
 func TestCompactNilSliceElements(t *testing.T) {
@@ -403,4 +390,17 @@ func TestCompactNilSliceElements(t *testing.T) {
 	require.Equal(t, []*normalizeProbeItem{first}, s.ByKey["only"], "slices held as map values are compacted")
 	require.Equal(t, []string{"kept", "", "kept-too"}, s.Names, "slices of non-nilable elements stay untouched")
 	require.Nil(t, s.Missing, "nil slices stay nil instead of becoming empty")
+}
+
+// newNormalizeProbeEngine wires the probe service into a fresh engine on its
+// own route so each test observes exactly what the service receives.
+func newNormalizeProbeEngine(t *testing.T, route string) *gin.Engine {
+	t.Helper()
+	gin.SetMode(gin.TestMode)
+	logger.Controller = zap.New("")
+
+	serviceregistry.Register[*normalizeProbeModel, *normalizeProbeReq, *normalizeProbeRsp](consts.PHASE_CREATE, route, &normalizeProbeService{})
+	engine := gin.New()
+	engine.POST("/"+route, CreateFactory[*normalizeProbeModel, *normalizeProbeReq, *normalizeProbeRsp](&types.ControllerConfig[*normalizeProbeModel]{Route: route}))
+	return engine
 }
