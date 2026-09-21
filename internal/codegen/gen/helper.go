@@ -7,6 +7,8 @@ import (
 	"go/format"
 	"go/token"
 	"path"
+	"slices"
+	"strconv"
 	"strings"
 
 	"github.com/stoewer/go-strcase"
@@ -149,44 +151,79 @@ func MethodAddComments(code string, modelName string) string {
 	return code
 }
 
-// ResolveImportConflicts detects import conflicts and generates unique aliases
-// Returns a map where key is the import path and value is the alias (empty string means no alias needed)
+// ResolveImportConflicts picks the alias each import of a generated file
+// needs. An import keeps its package name, taken as its last path segment,
+// unless another import shares it; then it is aliased with its last two
+// segments joined by an underscore ("svc/pkg1/user" becomes "pkg1_user"). An
+// alias that still clashes with another import's name takes one more leading
+// segment at a time, and one that runs out of segments gets a numeric suffix,
+// so no two imports share a name. The result maps each import path to its
+// alias, or to "" when it needs none.
 func ResolveImportConflicts(imports []string) map[string]string {
-	aliases := make(map[string]string)
-	baseNames := make(map[string][]string) // baseName -> []importPath
+	paths := slices.Compact(slices.Sorted(slices.Values(imports)))
 
-	// Group imports by their base package name
-	for _, imp := range imports {
-		baseName := path.Base(imp)
-		baseNames[baseName] = append(baseNames[baseName], imp)
+	shared := make(map[string]int, len(paths))
+	for _, importPath := range paths {
+		shared[path.Base(importPath)]++
 	}
-
-	// Generate aliases for conflicting imports
-	for _, paths := range baseNames {
-		if len(paths) == 1 {
-			// No conflict, no alias needed
-			aliases[paths[0]] = ""
-		} else {
-			// Conflict detected, generate unique aliases
-			for _, importPath := range paths {
-				alias := generateAlias(importPath)
-				aliases[importPath] = alias
+	// depth is the number of trailing path segments an import's name is built
+	// from; depth 1 is its package name, which needs no alias.
+	depth := make(map[string]int, len(paths))
+	for _, importPath := range paths {
+		depth[importPath] = 1
+		if shared[path.Base(importPath)] > 1 {
+			depth[importPath] = 2
+		}
+	}
+	for {
+		byName := make(map[string][]string, len(paths))
+		for _, importPath := range paths {
+			name := importName(importPath, depth[importPath])
+			byName[name] = append(byName[name], importPath)
+		}
+		grown := false
+		for _, clashing := range byName {
+			if len(clashing) < 2 {
+				continue
 			}
+			for _, importPath := range clashing {
+				if depth[importPath] > 1 && depth[importPath] <= strings.Count(importPath, "/") {
+					depth[importPath]++
+					grown = true
+				}
+			}
+		}
+		if !grown {
+			break
 		}
 	}
 
+	aliases := make(map[string]string, len(paths))
+	taken := make(map[string]bool, len(paths))
+	for _, importPath := range paths {
+		if depth[importPath] == 1 {
+			aliases[importPath] = ""
+			taken[path.Base(importPath)] = true
+		}
+	}
+	for _, importPath := range paths {
+		if depth[importPath] == 1 {
+			continue
+		}
+		name := importName(importPath, depth[importPath])
+		alias := name
+		for n := 2; taken[alias]; n++ {
+			alias = name + strconv.Itoa(n)
+		}
+		aliases[importPath] = alias
+		taken[alias] = true
+	}
 	return aliases
 }
 
-// generateAlias creates a unique alias for an import path
-// For example: "myproject/service/config/tag" -> "config_tag"
-func generateAlias(importPath string) string {
-	parts := strings.Split(importPath, "/")
-	if len(parts) < 2 {
-		return path.Base(importPath)
-	}
-
-	// Use the last two parts joined with underscore
-	// e.g., "myproject/service/config/tag" -> "config_tag"
-	return parts[len(parts)-2] + "_" + parts[len(parts)-1]
+// importName joins the last depth segments of importPath with underscores, or
+// all of them when it has fewer.
+func importName(importPath string, depth int) string {
+	segments := strings.Split(importPath, "/")
+	return strings.Join(segments[max(len(segments)-depth, 0):], "_")
 }

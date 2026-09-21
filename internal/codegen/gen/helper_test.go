@@ -43,6 +43,47 @@ func TestResolveImportConflicts(t *testing.T) {
 				"helloworld/service/item":           "",
 			},
 		},
+		{
+			name:    "aliases_sharing_the_last_two_segments_grow_until_they_differ",
+			imports: []string{"helloworld/service/sample/record/item", "helloworld/service/archive/record/item"},
+			want: map[string]string{
+				"helloworld/service/sample/record/item":  "sample_record_item",
+				"helloworld/service/archive/record/item": "archive_record_item",
+			},
+		},
+		{
+			name:    "alias_grows_past_an_unaliased_import_of_the_same_name",
+			imports: []string{"helloworld/service/record_item", "helloworld/service/sample/record/item", "helloworld/service/archive/item"},
+			want: map[string]string{
+				"helloworld/service/record_item":        "",
+				"helloworld/service/sample/record/item": "sample_record_item",
+				"helloworld/service/archive/item":       "archive_item",
+			},
+		},
+		{
+			// Underscores inside segments can make two different paths join
+			// to the same name at every length; a number tells them apart.
+			name: "aliases_that_cannot_grow_apart_take_a_number",
+			imports: []string{
+				"helloworld/service/x/y_z",
+				"helloworld/service/v/y_z",
+				"helloworld/service/x_y/z",
+				"helloworld/service/w/z",
+			},
+			want: map[string]string{
+				"helloworld/service/x/y_z": "helloworld_service_x_y_z",
+				"helloworld/service/v/y_z": "v_y_z",
+				"helloworld/service/x_y/z": "helloworld_service_x_y_z2",
+				"helloworld/service/w/z":   "w_z",
+			},
+		},
+		{
+			name:    "a_repeated_import_needs_no_alias",
+			imports: []string{"helloworld/service/record", "helloworld/service/record"},
+			want: map[string]string{
+				"helloworld/service/record": "",
+			},
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
