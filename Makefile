@@ -1,4 +1,4 @@
-.PHONY: check build format vet lint test testv generate fix install uninstall help
+.PHONY: check build format vet lint testplacement test testv generate fix install uninstall help
 
 # Tool versions - must match go.mod exactly
 GOLANGCI_LINT_VERSION := $(shell go list -m -f '{{.Version}}' github.com/golangci/golangci-lint/v2)
@@ -46,6 +46,7 @@ help:
 	@echo "  format         - Format code with gofumpt"
 	@echo "  vet            - Run go vet"
 	@echo "  lint           - Run golangci-lint (includes modernize, nilness and shadow)"
+	@echo "  testplacement  - Check that every test file named as an internal test has to be one"
 	@echo "  test           - Run unit tests (simple output)"
 	@echo "  testv          - Run unit tests with verbose output"
 	@echo "  generate       - Regenerate the framework's own generated sources"
@@ -56,7 +57,7 @@ help:
 
 # Run all code quality checks
 # Order matches make install tool installation order
-check: build lint format vet
+check: build lint testplacement format vet
 	@echo "All checks passed successfully!"
 
 # Build the project and the example modules: each example is a module of its
@@ -93,6 +94,14 @@ lint:
 	$(call run_tool_in,golangci-lint,examples/demo,run ./...)
 	$(call run_tool_in,golangci-lint,examples/cluster,run ./...)
 	$(call run_tool_in,golangci-lint,examples/bench,run ./...)
+
+# Check that every test file named as an internal test has to be one (see
+# internal/testplacement): testpackage in golangci-lint makes a test file that
+# joins its package carry the _internal_test.go suffix, and this check makes
+# the suffix true.
+testplacement:
+	@echo "Running the test placement check..."
+	go run ./internal/testplacement/cmd/testplacementcheck
 
 # Run unit tests
 # Every package is tested, so a newly added package is covered without editing
