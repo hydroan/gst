@@ -808,6 +808,9 @@ func TestApplyServiceFileWithModelSync(t *testing.T) {
 		servicePkgName string
 		modelInfo      *gen.ModelInfo
 		want           string
+		// wantErr is the error of a file rejected before anything is
+		// rewritten, which want then repeats unchanged.
+		wantErr string
 	}{
 		{
 			name: "update_import_and_package_references",
@@ -1225,9 +1228,9 @@ func (u *Creator) Create(ctx *gst.ServiceContext, req *sample.UserReq) (rsp *sam
 		},
 		{
 			// An earlier gg generated this file, which imports two packages as
-			// service and cannot build; nothing tells which package a reference
-			// means, so it is left as it is.
-			name: "leave_file_importing_two_packages_under_one_name",
+			// service and cannot build; nothing tells which package a
+			// reference means, so it is rejected with the ways to fix it.
+			name: "reject_file_importing_two_packages_under_one_name",
 			code: `package user
 
 import (
@@ -1275,6 +1278,52 @@ func (u *Creator) Create(ctx *gst.ServiceContext, req *service.UserReq) (rsp *se
 	return rsp, nil
 }
 `,
+			wantErr: "imports \"helloworld/model/service\" and \"github.com/hydroan/gst/service\" under the same name service, so it cannot build; import the model package as model_service \"helloworld/model/service\" and refer to it through model_service, or delete the file for gg gen to generate it again",
+		},
+		{
+			// Without a service struct, the model import tells the name the
+			// file refers to the model package by.
+			name: "reject_file_importing_two_packages_under_one_name_without_service_struct",
+			code: `package user
+
+import (
+	"helloworld/model/service"
+
+	"github.com/hydroan/gst"
+	"github.com/hydroan/gst/service"
+)
+
+func (u *Creator) Create(ctx *gst.ServiceContext, req *service.UserReq) (rsp *service.UserRsp, err error) {
+	return rsp, nil
+}
+`,
+			action: &dsl.Action{
+				Enabled: true,
+				Payload: "*UserReq",
+				Result:  "*UserRsp",
+				Phase:   consts.PHASE_CREATE,
+			},
+			servicePkgName: "user",
+			modelInfo: &gen.ModelInfo{
+				ModulePath:   "helloworld",
+				ModelFileDir: "model/service",
+				ModelPkgName: "service",
+				ModelName:    "User",
+			},
+			want: `package user
+
+import (
+	"helloworld/model/service"
+
+	"github.com/hydroan/gst"
+	"github.com/hydroan/gst/service"
+)
+
+func (u *Creator) Create(ctx *gst.ServiceContext, req *service.UserReq) (rsp *service.UserRsp, err error) {
+	return rsp, nil
+}
+`,
+			wantErr: "imports \"helloworld/model/service\" and \"github.com/hydroan/gst/service\" under the same name service, so it cannot build; import the model package as model_service \"helloworld/model/service\" and refer to it through model_service, or delete the file for gg gen to generate it again",
 		},
 		{
 			// Imports are matched by the name the file refers to them by: the gst
@@ -1338,7 +1387,13 @@ func (u *Creator) Create(ctx *gstfw.ServiceContext, req *model_gst.UserReq) (rsp
 				t.Error(err)
 				return
 			}
-			gen.ApplyServiceFileWithModelSync(file, tt.action, tt.servicePkgName, tt.modelInfo)
+			_, err = gen.ApplyServiceFileWithModelSync(file, tt.action, tt.servicePkgName, tt.modelInfo)
+			switch {
+			case tt.wantErr != "" && (err == nil || err.Error() != tt.wantErr):
+				t.Errorf("ApplyServiceFileWithModelSync() error = %v, want %s", err, tt.wantErr)
+			case tt.wantErr == "" && err != nil:
+				t.Fatalf("ApplyServiceFileWithModelSync() error = %v", err)
+			}
 			got, err := gen.FormatNodeExtra(file)
 			if err != nil {
 				t.Error(err)
@@ -1595,7 +1650,10 @@ func (c *Creator) Create(ctx *gst.ServiceContext, req *model.User) (rsp *model.U
 			if tt.modelInfo != nil {
 				info = tt.modelInfo
 			}
-			changed := gen.ApplyServiceFileWithModelSync(file, tt.action, "user", info)
+			changed, err := gen.ApplyServiceFileWithModelSync(file, tt.action, "user", info)
+			if err != nil {
+				t.Fatalf("ApplyServiceFileWithModelSync() error = %v", err)
+			}
 			if changed != tt.wantChanged {
 				t.Errorf("ApplyServiceFileWithModelSync changed = %v, want %v", changed, tt.wantChanged)
 			}

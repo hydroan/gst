@@ -729,3 +729,59 @@ func (i *Creator) Create(ctx *gst.ServiceContext, req *io.Item) (rsp *io.Item, e
 		})
 	}
 }
+
+// TestGenRunRejectsServiceFileImportingTwoPackagesUnderOneName runs gg gen
+// over a service file an earlier gg generated for a model package named
+// service: it imports that package and the gst service package under the same
+// name and cannot build. Nothing tells which package a reference through the
+// name means, so gg gen stops with an error telling how to fix the file, and
+// leaves the file as it is.
+func TestGenRunRejectsServiceFileImportingTwoPackagesUnderOneName(t *testing.T) {
+	projectDir := newGenProject(t)
+	writeCheckFile(t, filepath.Join(projectDir, "model/service/item.go"), `package service
+
+import (
+	"github.com/hydroan/gst/dsl"
+	"github.com/hydroan/gst/model"
+)
+
+type Item struct {
+	model.Empty
+}
+
+func (Item) Design() {
+	dsl.Endpoint("items")
+	dsl.Create(func() {
+		dsl.Service()
+	})
+}
+`)
+	serviceFile := "service/service/item/create.go"
+	source := `package item
+
+import (
+	"tmpapp/model/service"
+
+	"github.com/hydroan/gst"
+	"github.com/hydroan/gst/service"
+)
+
+type Creator struct {
+	service.Base[*service.Item, *service.Item, *service.Item]
+}
+
+func (i *Creator) Create(ctx *gst.ServiceContext, req *service.Item) (rsp *service.Item, err error) {
+	log := i.WithContext(ctx, ctx.Phase())
+	log.Info("item create")
+	return rsp, nil
+}
+`
+	writeCheckFile(t, filepath.Join(projectDir, serviceFile), source)
+	writeCheckFile(t, filepath.Join(projectDir, "service/service/item/create_test.go"), "package item_test\n")
+
+	err := genRunWithOptions(genRunOptions{Quiet: true})
+	require.EqualError(t, err, `service file service/service/item/create.go: imports "tmpapp/model/service" and "github.com/hydroan/gst/service" under the same name service, so it cannot build; import the model package as model_service "tmpapp/model/service" and refer to it through model_service, or delete the file for gg gen to generate it again`)
+	got, err := os.ReadFile(serviceFile)
+	require.NoError(t, err)
+	require.Equal(t, source, string(got))
+}

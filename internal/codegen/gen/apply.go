@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/dsl"
 	"github.com/hydroan/gst/internal/codegen/constants"
 )
@@ -655,16 +656,42 @@ func insertImportSpec(file *ast.File, spec *ast.ImportSpec) {
 //	model_service "myproject/model/service"
 //	service.Base[*model_service.User, *model_service.User, *model_service.User]
 //
+// A file that imports the model package under a name another import takes
+// cannot build, and nothing tells which package a reference through that
+// name means, so it is rejected before anything is rewritten. An earlier gg
+// generated such files for a model package named like a framework package:
+//
+//	import (
+//		"myproject/model/service"
+//		"github.com/hydroan/gst/service"
+//	)
+//
+//	type Creator struct {
+//		service.Base[*service.User, *service.User, *service.User]
+//	}
+//
+// The error tells how to fix the file: import the model package as
+// model_service "myproject/model/service" and refer to it through
+// model_service, or delete the file for gg gen to generate it again.
+//
 // Parameters:
 // - file: The AST file to process
 // - action: The DSL action configuration
 // - servicePkgName: The expected service package name
 // - modelInfo: The correct model generation context
 //
-// Returns true if any changes were made to the file.
-func ApplyServiceFileWithModelSync(file *ast.File, action *dsl.Action, servicePkgName string, modelInfo *ModelInfo) bool {
+// It returns whether any changes were made to the file, and the error of a
+// file it rejects.
+func ApplyServiceFileWithModelSync(file *ast.File, action *dsl.Action, servicePkgName string, modelInfo *ModelInfo) (bool, error) {
 	if file == nil || action == nil {
-		return false
+		return false, nil
+	}
+	if modelInfo != nil {
+		if name, importPaths := ambiguousModelImport(file, modelInfo); len(importPaths) > 1 {
+			qualifier := serviceModelQualifier(modelInfo, action.Phase)
+			return false, errors.Newf("imports %s under the same name %s, so it cannot build; import the model package as %s %q and refer to it through %s, or delete the file for gg gen to generate it again",
+				strings.Join(importPaths, " and "), name, qualifier, modelInfo.ImportPath(), qualifier)
+		}
 	}
 
 	// Force the service struct body back to its canonical form before
@@ -681,7 +708,7 @@ func ApplyServiceFileWithModelSync(file *ast.File, action *dsl.Action, servicePk
 		changed = true
 	}
 	if modelInfo == nil || modelInfo.ModulePath == "" || modelInfo.ModelFileDir == "" || modelInfo.ModelPkgName == "" {
-		return changed
+		return changed, nil
 	}
 
 	// The qualifier the service struct refers to the model package by is
@@ -694,25 +721,7 @@ func ApplyServiceFileWithModelSync(file *ast.File, action *dsl.Action, servicePk
 	correctQualifier := serviceModelQualifier(modelInfo, action.Phase)
 	if currentQualifier == "" || currentQualifier == correctQualifier {
 		// No import changes needed
-		return changed
-	}
-	// A file importing two packages under the qualifier it refers to the
-	// model package by cannot build, and nothing tells which package a
-	// reference means. An earlier gg generated such files for a model package
-	// named like a framework package:
-	//
-	//	import (
-	//		"myproject/model/service"
-	//		"github.com/hydroan/gst/service"
-	//	)
-	//
-	//	type Creator struct {
-	//		service.Base[*service.User, *service.User, *service.User]
-	//	}
-	//
-	// Such a file is left as it is.
-	if countImportsNamed(file, currentQualifier) > 1 {
-		return changed
+		return changed, nil
 	}
 	importMapping := map[string]string{currentQualifier: correctQualifier}
 
@@ -733,7 +742,30 @@ func ApplyServiceFileWithModelSync(file *ast.File, action *dsl.Action, servicePk
 		changed = true
 	}
 
-	return changed
+	return changed, nil
+}
+
+// ambiguousModelImport returns the name the file refers to the model package
+// by, and the path of every import the file declares under that name. The
+// name is the qualifier of the service struct's service.Base embedding, or,
+// with no such struct, the name of the model import. More than one path
+// means the file cannot build, as in
+//
+//	"myproject/model/service"        // service
+//	"github.com/hydroan/gst/service" // service
+func ambiguousModelImport(file *ast.File, modelInfo *ModelInfo) (name string, importPaths []string) {
+	name = serviceModelPackageName(file)
+	if name == "" {
+		spec := findImportSpec(file, modelInfo.ImportPath())
+		if spec == nil {
+			return "", nil
+		}
+		name = importSpecName(spec)
+	}
+	if name == "" {
+		return "", nil
+	}
+	return name, importPathsNamed(file, name)
 }
 
 func serviceModelPackageName(file *ast.File) string {
@@ -866,11 +898,12 @@ func importSpecName(spec *ast.ImportSpec) string {
 	return path.Base(importPath)
 }
 
-// countImportsNamed returns how many imports the file declares under name
-// (see importSpecName). It walks the import declarations rather than
-// file.Imports, which misses the imports inserted since the file was parsed.
-func countImportsNamed(file *ast.File, name string) int {
-	count := 0
+// importPathsNamed returns the quoted path of every import the file declares
+// under name (see importSpecName). It walks the import declarations rather
+// than file.Imports, which misses the imports inserted since the file was
+// parsed.
+func importPathsNamed(file *ast.File, name string) []string {
+	var importPaths []string
 	for _, decl := range file.Decls {
 		genDecl, ok := decl.(*ast.GenDecl)
 		if !ok || genDecl.Tok != token.IMPORT {
@@ -878,11 +911,11 @@ func countImportsNamed(file *ast.File, name string) int {
 		}
 		for _, spec := range genDecl.Specs {
 			if importSpec, ok := spec.(*ast.ImportSpec); ok && importSpecName(importSpec) == name {
-				count++
+				importPaths = append(importPaths, importSpec.Path.Value)
 			}
 		}
 	}
-	return count
+	return importPaths
 }
 
 // syncModelPackageReferences updates package references in the code.
