@@ -81,41 +81,30 @@ type Device struct {
 	`
 
 func TestGetModulePath(t *testing.T) {
-	content := []byte("module github.com/hydroan/gst")
-	if err := os.WriteFile("go.mod", content, 0o600); err != nil {
-		t.Fatal(err)
-	}
-	defer os.Remove("go.mod")
+	// Each case runs in a directory of its own: GetModulePath reads go.mod
+	// from the working directory, and a go.mod written into the package
+	// directory would briefly turn it into a module of its own.
+	t.Run("reads the module path from go.mod", func(t *testing.T) {
+		t.Chdir(t.TempDir())
+		if err := os.WriteFile("go.mod", []byte("module github.com/hydroan/gst"), 0o600); err != nil {
+			t.Fatal(err)
+		}
 
-	tests := []struct {
-		name    string // description of this test case
-		want    string
-		wantErr bool
-	}{
-		{
-			name:    "test1",
-			want:    "github.com/hydroan/gst",
-			wantErr: false,
-		},
-	}
+		got, err := GetModulePath()
+		if err != nil {
+			t.Fatalf("GetModulePath() failed: %v", err)
+		}
+		if got != "github.com/hydroan/gst" {
+			t.Errorf("GetModulePath() = %v, want %v", got, "github.com/hydroan/gst")
+		}
+	})
+	t.Run("fails without go.mod", func(t *testing.T) {
+		t.Chdir(t.TempDir())
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got, gotErr := GetModulePath()
-			if gotErr != nil {
-				if !tt.wantErr {
-					t.Errorf("getModulePath() failed: %v", gotErr)
-				}
-				return
-			}
-			if tt.wantErr {
-				t.Fatal("getModulePath() succeeded unexpectedly")
-			}
-			if got != tt.want {
-				t.Errorf("getModulePath() = %v, want %v", got, tt.want)
-			}
-		})
-	}
+		if _, err := GetModulePath(); err == nil {
+			t.Fatal("GetModulePath() succeeded without a go.mod")
+		}
+	})
 }
 
 func TestGetModulePathInWorkspaceReturnsCurrentModuleOnly(t *testing.T) {

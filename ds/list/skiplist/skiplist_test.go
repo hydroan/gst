@@ -3,6 +3,9 @@ package skiplist_test
 import (
 	"encoding/json"
 	"fmt"
+	"maps"
+	"slices"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -443,6 +446,24 @@ func TestSkipList_String(t *testing.T) {
 		9:  "nine",
 	}
 
-	sl, _ := skiplist.NewFromOrderedMap(m, skiplist.WithNodeFormatter(func(k int, v string) string { return fmt.Sprintf("%d:%s", k, v) }))
-	fmt.Println(sl)
+	sl, err := skiplist.NewFromOrderedMap(m, skiplist.WithNodeFormatter(func(k int, v string) string { return fmt.Sprintf("%d:%s", k, v) }))
+	require.NoError(t, err)
+
+	// The levels above 0 are drawn at random, so only the frame and level 0,
+	// which always holds every node in key order, are fixed.
+	keys := slices.Sorted(maps.Keys(m))
+	nodes := make([]string, 0, len(keys))
+	for _, k := range keys {
+		nodes = append(nodes, fmt.Sprintf("%d:%s", k, m[k]))
+	}
+	got := sl.String()
+	require.True(t, strings.HasPrefix(got, "SkipList Structure:\n"), got)
+	require.Contains(t, got, "Level 0: "+strings.Join(nodes, " -> ")+" -> nil\n")
+	for _, line := range strings.Split(strings.TrimSuffix(got, "\n"), "\n")[1:] {
+		require.True(t, strings.HasSuffix(line, "nil"), line)
+	}
+
+	empty, err := skiplist.NewOrdered[int, string]()
+	require.NoError(t, err)
+	require.Equal(t, "SkipList is empty", empty.String())
 }

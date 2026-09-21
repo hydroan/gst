@@ -1,0 +1,255 @@
+package util
+
+import (
+	"fmt"
+	"math"
+	"os"
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/cockroachdb/errors"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
+	"go.uber.org/zap/zaptest/observer"
+)
+
+func TestTraceID(t *testing.T) {
+	first, second := TraceID(), TraceID()
+
+	require.Regexp(t, `^[0-9a-v]{20}$`, first)
+	require.NotEqual(t, first, second)
+}
+
+func BenchmarkTraceID(b *testing.B) {
+	for b.Loop() {
+		TraceID()
+	}
+}
+
+func TestContains(t *testing.T) {
+	slice := []string{"a", "b", "c"}
+	assert.True(t, Contains(slice, "a"))
+	assert.True(t, Contains(slice, "b"))
+	assert.True(t, Contains(slice, "c"))
+	assert.False(t, Contains(slice, "d"))
+
+	slice2 := []int{1, 2, 3}
+	assert.True(t, Contains(slice2, 1))
+	assert.True(t, Contains(slice2, 2))
+	assert.True(t, Contains(slice2, 3))
+	assert.False(t, Contains(slice2, 4))
+}
+
+func TestFileExists(t *testing.T) {
+	dir := t.TempDir()
+	tmpFile, err := os.CreateTemp(dir, "test")
+	require.NoError(t, err)
+	require.NoError(t, tmpFile.Close())
+
+	assert.True(t, FileExists(dir))
+	assert.True(t, FileExists(dir+"/"))
+	assert.True(t, FileExists(tmpFile.Name()))
+	assert.False(t, FileExists(tmpFile.Name()+"---"))
+}
+
+func TestRound(t *testing.T) {
+	tests := []struct {
+		name      string
+		value     any // float32 or float64
+		precision uint
+		want      any // float32 or float64
+	}{
+		{
+			name:      "float64 positive round down",
+			value:     3.14159,
+			precision: 3,
+			want:      3.142,
+		},
+		{
+			name:      "float64 positive round up",
+			value:     3.14859,
+			precision: 3,
+			want:      3.149,
+		},
+		{
+			name:      "float32 positive round down",
+			value:     float32(3.14159),
+			precision: 3,
+			want:      float32(3.142),
+		},
+		{
+			name:      "float64 negative round down",
+			value:     -3.14159,
+			precision: 3,
+			want:      -3.142,
+		},
+		{
+			name:      "float32 negative round down",
+			value:     float32(-3.14159),
+			precision: 3,
+			want:      float32(-3.142),
+		},
+		{
+			name:      "float64 zero precision",
+			value:     3.14159,
+			precision: 0,
+			want:      3.0,
+		},
+		{
+			name:      "float64 large number",
+			value:     123456.789,
+			precision: 2,
+			want:      123456.79,
+		},
+		{
+			name:      "float32 small number",
+			value:     float32(0.0000123),
+			precision: 7,
+			want:      float32(0.0000123),
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var got any
+			switch v := tt.value.(type) {
+			case float64:
+				got = Round(v, tt.precision)
+			case float32:
+				got = Round(v, tt.precision)
+			}
+
+			// compare result
+			switch want := tt.want.(type) {
+			case float64:
+				got64 := got.(float64) //nolint:errcheck
+				if math.Abs(got64-want) > 1e-10 {
+					t.Errorf("Round() = %v, want %v", got64, want)
+				}
+			case float32:
+				got32 := got.(float32) //nolint:errcheck
+				if math.Abs(float64(got32-want)) > 1e-6 {
+					t.Errorf("Round() = %v, want %v", got32, want)
+				}
+			}
+		})
+	}
+}
+
+func TestHashID(t *testing.T) {
+	require.Equal(t, "66b9ec68ea8183d132be601aa2a87eca", HashID("user", "email", "address"))
+	require.NotEqual(t, HashID("user", "email", "address"), HashID("address", "email", "user"))
+	require.Empty(t, HashID())
+}
+
+func TestFormatDurationSmart(t *testing.T) {
+	tests := []struct {
+		input     time.Duration
+		precision int
+		expected  string
+	}{
+		// nanosecond tier: prints an integer, precision does not apply
+		{0, 2, "0ns"},
+		{1 * time.Nanosecond, 2, "1ns"},
+		{900 * time.Nanosecond, 3, "900ns"},
+		{-900 * time.Nanosecond, 3, "-900ns"},
+		// tier boundaries: each unit starts exactly at 1 of that unit
+		{999 * time.Nanosecond, 2, "999ns"},
+		{1 * time.Microsecond, 2, "1.00µs"},
+		{999500 * time.Nanosecond, 1, "999.5µs"},
+		{1 * time.Millisecond, 2, "1.00ms"},
+		{999 * time.Millisecond, 1, "999.0ms"},
+		{1 * time.Second, 2, "1.00s"},
+		{59 * time.Second, 0, "59s"},
+		{60 * time.Second, 1, "1.0min"},
+		// microsecond tier
+		{18400 * time.Nanosecond, 2, "18.40µs"},
+		{500 * time.Microsecond, 2, "500.00µs"},
+		{-500 * time.Microsecond, 2, "-500.00µs"},
+		// remaining tiers
+		{2 * time.Millisecond, 0, "2ms"},
+		{1500 * time.Millisecond, 2, "1.50s"},
+		{2 * time.Second, 2, "2.00s"},
+		{90 * time.Second, 3, "1.500min"},
+		{2*time.Minute + 3*time.Second, 2, "2.05min"},
+		{-2 * time.Second, 2, "-2.00s"},
+		{-90 * time.Second, 1, "-1.5min"},
+		// test precision bounds
+		{123456789 * time.Nanosecond, -5, "123ms"},
+		{123456789 * time.Nanosecond, 15, "123.456789000ms"},
+	}
+
+	for _, tc := range tests {
+		got := FormatDurationSmart(tc.input, tc.precision)
+		if got != tc.expected {
+			t.Errorf("FormatDurationSmart(%v, %d) = %v; want %v", tc.input, tc.precision, got, tc.expected)
+		}
+	}
+
+	// precision defaults to 2 when omitted
+	if got := FormatDurationSmart(2120 * time.Microsecond); got != "2.12ms" {
+		t.Errorf("FormatDurationSmart(2120µs) = %v; want 2.12ms", got)
+	}
+}
+
+func TestLogDuration(t *testing.T) {
+	tests := []struct {
+		input    time.Duration
+		expected string
+	}{
+		{2120 * time.Microsecond, `{"duration":2120000,"duration_human":"2.12ms"}`},
+		// sub-microsecond work stays visible instead of rounding away
+		{900 * time.Nanosecond, `{"duration":900,"duration_human":"900ns"}`},
+		{0, `{"duration":0,"duration_human":"0ns"}`},
+		{-1500 * time.Millisecond, `{"duration":-1500000000,"duration_human":"-1.50s"}`},
+		{90 * time.Second, `{"duration":90000000000,"duration_human":"1.50min"}`},
+	}
+
+	// An empty config drops the entry keys, leaving only the fields under test.
+	encoder := zapcore.NewJSONEncoder(zapcore.EncoderConfig{})
+	for _, tc := range tests {
+		buf, err := encoder.EncodeEntry(zapcore.Entry{}, []zapcore.Field{LogDuration(tc.input)})
+		if err != nil {
+			t.Fatalf("EncodeEntry(%v) error: %v", tc.input, err)
+		}
+		// Both halves must sit at the top level of the entry, and the machine
+		// half must be an integer so a log store never has to reconcile types.
+		if got := strings.TrimSpace(buf.String()); got != tc.expected {
+			t.Errorf("LogDuration(%v) = %v; want %v", tc.input, got, tc.expected)
+		}
+	}
+}
+
+func TestLogFatalFailure(t *testing.T) {
+	core, logs := observer.New(zapcore.ErrorLevel)
+	restoreGlobals := zap.ReplaceGlobals(zap.New(core))
+	t.Cleanup(restoreGlobals)
+
+	logFatalFailure("main.run", errors.New("listen failed"))
+
+	entries := logs.All()
+	require.Len(t, entries, 1)
+	require.Equal(t, "exiting on error", entries[0].Message)
+	fields := entries[0].ContextMap()
+	require.Equal(t, "main.run", fields["func"])
+	require.Contains(t, fmt.Sprintf("%v", fields["error"]), "listen failed")
+}
+
+func BenchmarkRound(b *testing.B) {
+	b.Run("float64", func(b *testing.B) {
+		value := 3.14159
+		for b.Loop() {
+			Round(value, 3)
+		}
+	})
+
+	b.Run("float32", func(b *testing.B) {
+		value := float32(3.14159)
+		for b.Loop() {
+			Round(value, 3)
+		}
+	})
+}

@@ -197,7 +197,9 @@ func ParseScheme(req *http.Request) string {
 	return ""
 }
 
-// Tcping work like command `tcping`.
+// Tcping works like the tcping command: it reports whether one TCP connection
+// to host:port succeeds within timeout. A timeout under 500ms is raised to one
+// second.
 func Tcping(host string, port int, timeout time.Duration) bool {
 	if timeout < 500*time.Millisecond {
 		timeout = 1 * time.Second
@@ -223,11 +225,10 @@ func _tcping(host string, port, count int, interval, timeout time.Duration) (min
 	return pinger.Result().MinDuration, pinger.Result().MaxDuration, pinger.Result().Avg(), pinger.Result()
 }
 
-// Ping work like command `ping`.
-// If target ip is reachable, return true, nil,
-// If target ip is unreachable, return false, nil,
-// If error encountered, return false, error.
-// More usage see tests in `pkg/util/util_test.go`.
+// Ping works like the ping command: it sends one ICMP echo to ip and reports
+// whether the reply came back within timeout. It returns an error only when the
+// ping cannot run at all, such as an empty ip or a socket the process may not
+// open. A timeout under 500ms is raised to one second.
 func Ping(ip string, timeout time.Duration) (bool, error) {
 	if len(ip) == 0 {
 		return false, errors.New("ip is empty")
