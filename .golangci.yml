@@ -69,6 +69,7 @@ linters:
 
     # Test quality.
     - testifylint
+    - testpackage
     - thelper
     - tparallel
     - usetesting
@@ -250,6 +251,19 @@ linters:
       dot-import-whitelist:
         - github.com/hydroan/gst/dsl
         - github.com/hydroan/gst/internal/response
+
+    testpackage:
+      # A test file tests its package from outside, through the API callers
+      # see, unless its name ends in _internal_test.go -- the form gg check
+      # already pairs with a source file (foo_internal_test.go is the internal
+      # test of foo.go). The suffix ends the name, so a benchmark is
+      # foo_benchmark_internal_test.go. export_test.go gets no pass: the name
+      # cannot tell a file that re-exports internals from one that tests an
+      # export.go. A main package stays allowed: nothing imports it, so its
+      # tests have no outside to test from.
+      skip-regexp: _internal_test\.go$
+      allow-packages:
+        - main
 
   # Exclusions moved under linters.exclusions for v2
   exclusions:
