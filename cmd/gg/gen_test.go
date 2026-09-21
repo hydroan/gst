@@ -96,9 +96,10 @@ func (Entry) Design() {
 			},
 		},
 		{
-			// The router registration file imports both the root model package
-			// and a package named model below it.
-			name: "routed_model_packages_sharing_a_name",
+			// The router registration file imports the root model package, a
+			// package named model below it, and the framework's model package
+			// for the model.Empty request of a List declaring only its result.
+			name: "routed_model_packages_named_model",
 			files: map[string]string{
 				"model/record.go": `package model
 
@@ -111,9 +112,13 @@ type Record struct {
 	model.Empty
 }
 
+type RecordListRsp struct{}
+
 func (Record) Design() {
 	dsl.Endpoint("records")
-	dsl.Create(func() {})
+	dsl.List(func() {
+		dsl.Result[*RecordListRsp]()
+	})
 }
 `,
 				"model/sample/model/item.go": `package model
@@ -135,10 +140,67 @@ func (Item) Design() {
 			},
 			want: map[string][]string{
 				routerFile: {
+					`gstmodel "github.com/hydroan/gst/model"`,
 					`tmpapp_model "tmpapp/model"`,
 					`sample_model "tmpapp/model/sample/model"`,
-					`router.Register[*tmpapp_model.Record`,
+					`router.Register[*tmpapp_model.Record, *gstmodel.Empty, *tmpapp_model.RecordListRsp]`,
 					`router.Register[*sample_model.Item`,
+				},
+			},
+		},
+		{
+			// The router registration file imports the gst and router framework
+			// packages by those names. A model package cannot be named consts:
+			// model directories are singular, and const is a keyword.
+			name: "routed_model_packages_named_like_framework_imports",
+			files: map[string]string{
+				"model/gst/item.go": `package gst
+
+import (
+	"github.com/hydroan/gst/dsl"
+	"github.com/hydroan/gst/model"
+)
+
+type Item struct {
+	Name string ` + "`json:\"name\"`" + `
+
+	model.Base
+}
+
+func (Item) TableName() string { return "gst_items" }
+
+func (Item) Design() {
+	dsl.Migrate()
+	dsl.Endpoint("items")
+	dsl.Create(func() {})
+}
+`,
+				"model/router/entry.go": `package router
+
+import (
+	"github.com/hydroan/gst/dsl"
+	"github.com/hydroan/gst/model"
+)
+
+type Entry struct {
+	model.Empty
+}
+
+func (Entry) Design() {
+	dsl.Endpoint("entries")
+	dsl.Create(func() {})
+}
+`,
+			},
+			want: map[string][]string{
+				routerFile: {
+					`model_gst "tmpapp/model/gst"`,
+					`model_router "tmpapp/model/router"`,
+					`router.Register[*model_gst.Item`,
+					`router.Register[*model_router.Entry`,
+				},
+				modelFile: {
+					`model.Register[*gst.Item]()`,
 				},
 			},
 		},
