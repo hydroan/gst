@@ -1069,6 +1069,266 @@ func (p *Ping) Get(ctx *gst.ServiceContext, req *debug.Debug) (rsp *debug.PingRs
 }
 `,
 		},
+		{
+			// A model package named service is referred to through the alias gg gen
+			// generated it under, which stays.
+			name: "keep_alias_of_model_package_named_like_framework_package",
+			code: `package user
+
+import (
+	model_service "helloworld/model/service"
+
+	"github.com/hydroan/gst"
+	"github.com/hydroan/gst/service"
+)
+
+type Creator struct {
+	service.Base[*model_service.User, *model_service.UserReq, *model_service.UserRsp]
+}
+
+func (u *Creator) Create(ctx *gst.ServiceContext, req *model_service.UserReq) (rsp *model_service.UserRsp, err error) {
+	return rsp, nil
+}
+`,
+			action: &dsl.Action{
+				Enabled: true,
+				Payload: "*UserReq",
+				Result:  "*UserRsp",
+				Phase:   consts.PHASE_CREATE,
+			},
+			servicePkgName: "user",
+			modelInfo: &gen.ModelInfo{
+				ModulePath:   "helloworld",
+				ModelFileDir: "model/service",
+				ModelPkgName: "service",
+				ModelName:    "User",
+			},
+			want: `package user
+
+import (
+	model_service "helloworld/model/service"
+
+	"github.com/hydroan/gst"
+	"github.com/hydroan/gst/service"
+)
+
+type Creator struct {
+	service.Base[*model_service.User, *model_service.UserReq, *model_service.UserRsp]
+}
+
+func (u *Creator) Create(ctx *gst.ServiceContext, req *model_service.UserReq) (rsp *model_service.UserRsp, err error) {
+	return rsp, nil
+}
+`,
+		},
+		{
+			// Renaming the model package to service moves its references to an
+			// alias, and leaves the gst service package alone.
+			name: "alias_model_package_renamed_to_framework_package_name",
+			code: `package user
+
+import (
+	"helloworld/model/sample"
+
+	"github.com/hydroan/gst"
+	"github.com/hydroan/gst/service"
+)
+
+type Creator struct {
+	service.Base[*sample.User, *sample.UserReq, *sample.UserRsp]
+}
+
+func (u *Creator) Create(ctx *gst.ServiceContext, req *sample.UserReq) (rsp *sample.UserRsp, err error) {
+	return rsp, nil
+}
+`,
+			action: &dsl.Action{
+				Enabled: true,
+				Payload: "*UserReq",
+				Result:  "*UserRsp",
+				Phase:   consts.PHASE_CREATE,
+			},
+			servicePkgName: "user",
+			modelInfo: &gen.ModelInfo{
+				ModulePath:   "helloworld",
+				ModelFileDir: "model/service",
+				ModelPkgName: "service",
+				ModelName:    "User",
+			},
+			want: `package user
+
+import (
+	model_service "helloworld/model/service"
+
+	"github.com/hydroan/gst"
+	"github.com/hydroan/gst/service"
+)
+
+type Creator struct {
+	service.Base[*model_service.User, *model_service.UserReq, *model_service.UserRsp]
+}
+
+func (u *Creator) Create(ctx *gst.ServiceContext, req *model_service.UserReq) (rsp *model_service.UserRsp, err error) {
+	return rsp, nil
+}
+`,
+		},
+		{
+			name: "drop_alias_when_model_package_no_longer_clashes",
+			code: `package user
+
+import (
+	model_service "helloworld/model/service"
+
+	"github.com/hydroan/gst"
+	"github.com/hydroan/gst/service"
+)
+
+type Creator struct {
+	service.Base[*model_service.User, *model_service.UserReq, *model_service.UserRsp]
+}
+
+func (u *Creator) Create(ctx *gst.ServiceContext, req *model_service.UserReq) (rsp *model_service.UserRsp, err error) {
+	return rsp, nil
+}
+`,
+			action: &dsl.Action{
+				Enabled: true,
+				Payload: "*UserReq",
+				Result:  "*UserRsp",
+				Phase:   consts.PHASE_CREATE,
+			},
+			servicePkgName: "user",
+			modelInfo: &gen.ModelInfo{
+				ModulePath:   "helloworld",
+				ModelFileDir: "model/sample",
+				ModelPkgName: "sample",
+				ModelName:    "User",
+			},
+			want: `package user
+
+import (
+	"helloworld/model/sample"
+
+	"github.com/hydroan/gst"
+	"github.com/hydroan/gst/service"
+)
+
+type Creator struct {
+	service.Base[*sample.User, *sample.UserReq, *sample.UserRsp]
+}
+
+func (u *Creator) Create(ctx *gst.ServiceContext, req *sample.UserReq) (rsp *sample.UserRsp, err error) {
+	return rsp, nil
+}
+`,
+		},
+		{
+			// An earlier gg generated this file, which imports two packages as
+			// service and cannot build; nothing tells which package a reference
+			// means, so it is left as it is.
+			name: "leave_file_importing_two_packages_under_one_name",
+			code: `package user
+
+import (
+	"helloworld/model/service"
+
+	"github.com/hydroan/gst"
+	"github.com/hydroan/gst/service"
+)
+
+type Creator struct {
+	service.Base[*service.User, *service.UserReq, *service.UserRsp]
+}
+
+func (u *Creator) Create(ctx *gst.ServiceContext, req *service.UserReq) (rsp *service.UserRsp, err error) {
+	return rsp, nil
+}
+`,
+			action: &dsl.Action{
+				Enabled: true,
+				Payload: "*UserReq",
+				Result:  "*UserRsp",
+				Phase:   consts.PHASE_CREATE,
+			},
+			servicePkgName: "user",
+			modelInfo: &gen.ModelInfo{
+				ModulePath:   "helloworld",
+				ModelFileDir: "model/service",
+				ModelPkgName: "service",
+				ModelName:    "User",
+			},
+			want: `package user
+
+import (
+	"helloworld/model/service"
+
+	"github.com/hydroan/gst"
+	"github.com/hydroan/gst/service"
+)
+
+type Creator struct {
+	service.Base[*service.User, *service.UserReq, *service.UserRsp]
+}
+
+func (u *Creator) Create(ctx *gst.ServiceContext, req *service.UserReq) (rsp *service.UserRsp, err error) {
+	return rsp, nil
+}
+`,
+		},
+		{
+			// Imports are matched by the name the file refers to them by: the gst
+			// package the file names gstfw is not the model package gst, though
+			// its path ends in gst.
+			name: "leave_framework_import_named_otherwise",
+			code: `package user
+
+import (
+	"helloworld/model/gst"
+
+	gstfw "github.com/hydroan/gst"
+	"github.com/hydroan/gst/service"
+)
+
+type Creator struct {
+	service.Base[*gst.User, *gst.UserReq, *gst.UserRsp]
+}
+
+func (u *Creator) Create(ctx *gstfw.ServiceContext, req *gst.UserReq) (rsp *gst.UserRsp, err error) {
+	return rsp, nil
+}
+`,
+			action: &dsl.Action{
+				Enabled: true,
+				Payload: "*UserReq",
+				Result:  "*UserRsp",
+				Phase:   consts.PHASE_CREATE,
+			},
+			servicePkgName: "user",
+			modelInfo: &gen.ModelInfo{
+				ModulePath:   "helloworld",
+				ModelFileDir: "model/gst",
+				ModelPkgName: "gst",
+				ModelName:    "User",
+			},
+			want: `package user
+
+import (
+	model_gst "helloworld/model/gst"
+
+	gstfw "github.com/hydroan/gst"
+	"github.com/hydroan/gst/service"
+)
+
+type Creator struct {
+	service.Base[*model_gst.User, *model_gst.UserReq, *model_gst.UserRsp]
+}
+
+func (u *Creator) Create(ctx *gstfw.ServiceContext, req *model_gst.UserReq) (rsp *model_gst.UserRsp, err error) {
+	return rsp, nil
+}
+`,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -1107,8 +1367,10 @@ func TestApplyServiceFileWithModelSyncForcesCanonicalServiceStruct(t *testing.T)
 	}
 
 	tests := []struct {
-		name         string
-		code         string
+		name string
+		code string
+		// modelInfo overrides the root model package the cases share.
+		modelInfo    *gen.ModelInfo
 		action       *dsl.Action
 		wantChanged  bool
 		wantContains []string // substrings that must appear in the rewritten file
@@ -1193,6 +1455,33 @@ var _ = gst.ServiceContext{}
 			wantContains: []string{
 				"type Exporter struct",
 				"service.Base[*model.User, *model.User, *model.User]",
+				`"github.com/hydroan/gst/service"`,
+			},
+		},
+		{
+			// A struct restored for a model package named service refers to
+			// it through the alias the import it restores declares.
+			name: "restores_deleted_struct_under_model_package_alias",
+			code: `package user
+
+import (
+	"github.com/hydroan/gst"
+)
+
+var _ = gst.ServiceContext{}
+`,
+			modelInfo: &gen.ModelInfo{
+				ModulePath:   "helloworld",
+				ModelFileDir: "model/service",
+				ModelPkgName: "service",
+				ModelName:    "User",
+			},
+			action:      exportAction,
+			wantChanged: true,
+			wantContains: []string{
+				"type Exporter struct",
+				"service.Base[*model_service.User, *model_service.User, *model_service.User]",
+				`model_service "helloworld/model/service"`,
 				`"github.com/hydroan/gst/service"`,
 			},
 		},
@@ -1302,7 +1591,11 @@ func (c *Creator) Create(ctx *gst.ServiceContext, req *model.User) (rsp *model.U
 				t.Fatal(err)
 			}
 
-			changed := gen.ApplyServiceFileWithModelSync(file, tt.action, "user", modelInfo)
+			info := modelInfo
+			if tt.modelInfo != nil {
+				info = tt.modelInfo
+			}
+			changed := gen.ApplyServiceFileWithModelSync(file, tt.action, "user", info)
 			if changed != tt.wantChanged {
 				t.Errorf("ApplyServiceFileWithModelSync changed = %v, want %v", changed, tt.wantChanged)
 			}

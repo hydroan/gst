@@ -63,11 +63,11 @@ func GstModelImportEntry(pkgName string) string {
 }
 
 // emptyReqPkgName returns the package qualifier a generated service file uses
-// to reference model.Empty. When the business model package itself is named
-// "model" (root model files), the gst model package is imported under the
-// gstmodel alias to avoid the name clash.
-func emptyReqPkgName(modelPkgName string) string {
-	if modelPkgName == gstModelPkgName {
+// to reference model.Empty. When the file refers to the business model
+// package as "model" (modelQualifier), as with the root model package, the gst
+// model package is imported under the gstmodel alias to avoid the name clash.
+func emptyReqPkgName(modelQualifier string) string {
+	if modelQualifier == gstModelPkgName {
 		return gstModelPkgAlias
 	}
 	return gstModelPkgName
@@ -75,8 +75,8 @@ func emptyReqPkgName(modelPkgName string) string {
 
 // emptyReqImport returns the imports() entry ("path" or "alias path") that
 // makes the emptyReqPkgName qualifier resolvable in a generated service file.
-func emptyReqImport(modelPkgName string) string {
-	return GstModelImportEntry(emptyReqPkgName(modelPkgName))
+func emptyReqImport(modelQualifier string) string {
+	return GstModelImportEntry(emptyReqPkgName(modelQualifier))
 }
 
 // emptyReqExpr builds the *<pkgName>.Empty type expression that generated

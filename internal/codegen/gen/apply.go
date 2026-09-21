@@ -4,7 +4,8 @@ import (
 	"fmt"
 	"go/ast"
 	"go/token"
-	"path/filepath"
+	"path"
+	"strconv"
 	"strings"
 
 	"github.com/hydroan/gst/dsl"
@@ -441,15 +442,16 @@ func forceCanonicalServiceStruct(file *ast.File, action *dsl.Action, modelInfo *
 	if len(roleName) == 0 {
 		return false
 	}
+	qualifier := serviceModelQualifier(modelInfo, action.Phase)
 
 	renamed := false
 	spec := findStructTypeSpec(file, roleName)
 	if spec == nil {
 		existing := findServiceTypeName(file)
 		if len(existing) == 0 {
-			file.Decls = append(file.Decls, types(modelInfo.ModelPkgName, modelInfo.ModelName, action.Payload, action.Result, roleName))
+			file.Decls = append(file.Decls, types(qualifier, modelInfo.ModelName, action.Payload, action.Result, roleName))
 			ensureServiceImportSpec(file)
-			ensureModelImportSpec(file, modelInfo)
+			ensureModelImportSpec(file, modelInfo.ImportPath(), qualifier)
 			return true
 		}
 		// With Filename set, a well-formed service struct under another name
@@ -480,7 +482,7 @@ func forceCanonicalServiceStruct(file *ast.File, action *dsl.Action, modelInfo *
 		return renamed
 	}
 
-	baseField := generatedServiceBaseField(modelInfo, action, roleName)
+	baseField := generatedServiceBaseField(qualifier, modelInfo.ModelName, action, roleName)
 	if baseField == nil {
 		return false
 	}
@@ -490,7 +492,7 @@ func forceCanonicalServiceStruct(file *ast.File, action *dsl.Action, modelInfo *
 	}
 	structType.Fields.List = []*ast.Field{baseField}
 	ensureServiceImportSpec(file)
-	ensureModelImportSpec(file, modelInfo)
+	ensureModelImportSpec(file, modelInfo.ImportPath(), qualifier)
 	return true
 }
 
@@ -553,9 +555,11 @@ func removeStructInteriorComments(file *ast.File, structType *ast.StructType) {
 }
 
 // generatedServiceBaseField builds the service.Base[...] embedded field
-// exactly as generated service code declares it for the action.
-func generatedServiceBaseField(modelInfo *ModelInfo, action *dsl.Action, roleName string) *ast.Field {
-	decl := types(modelInfo.ModelPkgName, modelInfo.ModelName, action.Payload, action.Result, roleName)
+// exactly as generated service code declares it for the action, referring to
+// the model package by modelQualifier (see serviceModelQualifier), as in
+// service.Base[*model_service.Item, *model_service.Item, *model_service.Item].
+func generatedServiceBaseField(modelQualifier, modelName string, action *dsl.Action, roleName string) *ast.Field {
+	decl := types(modelQualifier, modelName, action.Payload, action.Result, roleName)
 	typeSpec, ok := decl.Specs[0].(*ast.TypeSpec)
 	if !ok {
 		return nil
@@ -602,25 +606,16 @@ func ensureServiceImportSpec(file *ast.File) {
 	})
 }
 
-// ensureModelImportSpec inserts the business model import a restored
-// service.Base embedding references, aliased when the package name differs
-// from the last import path segment.
-func ensureModelImportSpec(file *ast.File, modelInfo *ModelInfo) {
-	importPath := filepath.Join(modelInfo.ModulePath, modelInfo.ModelFileDir)
+// ensureModelImportSpec inserts the import of the model package at
+// importPath that a restored service.Base embedding refers to by
+// modelQualifier, named after the qualifier when it is not the last path
+// segment, as in model_service "helloworld/model/service" (see
+// modelImportSpec).
+func ensureModelImportSpec(file *ast.File, importPath, modelQualifier string) {
 	if file == nil || findImportSpec(file, importPath) != nil {
 		return
 	}
-
-	spec := &ast.ImportSpec{
-		Path: &ast.BasicLit{
-			Kind:  token.STRING,
-			Value: fmt.Sprintf("%q", importPath),
-		},
-	}
-	if fields := strings.Split(importPath, "/"); len(fields) > 0 && fields[len(fields)-1] != modelInfo.ModelPkgName {
-		spec.Name = ast.NewIdent(modelInfo.ModelPkgName)
-	}
-	insertImportSpec(file, spec)
+	insertImportSpec(file, modelImportSpec(importPath, modelQualifier))
 }
 
 // insertImportSpec appends the import spec to the first import declaration,
@@ -647,6 +642,18 @@ func insertImportSpec(file *ast.File, spec *ast.ImportSpec) {
 // Example transformation when "model/oldpkg" is renamed to "model/newpkg":
 // - Import statement: "myproject/model/oldpkg" -> "myproject/model/newpkg"
 // - Type references: oldpkg.User -> newpkg.User, oldpkg.UserReq -> newpkg.UserReq, oldpkg.UserRsp -> newpkg.UserRsp
+//
+// A model package named like a framework package the file imports is referred
+// to through an alias (see serviceModelQualifier), so renaming "model/sample"
+// to "model/service" turns
+//
+//	"myproject/model/sample"
+//	service.Base[*sample.User, *sample.User, *sample.User]
+//
+// into
+//
+//	model_service "myproject/model/service"
+//	service.Base[*model_service.User, *model_service.User, *model_service.User]
 //
 // Parameters:
 // - file: The AST file to process
@@ -677,19 +684,47 @@ func ApplyServiceFileWithModelSync(file *ast.File, action *dsl.Action, servicePk
 		return changed
 	}
 
-	// Build a map of old package names to new package names
-	// by comparing current imports with the correct model import path
-	correctModelImportPath := filepath.Join(modelInfo.ModulePath, modelInfo.ModelFileDir)
-	correctModelPkgName := modelInfo.ModelPkgName
-	importMapping := buildModelImportMapping(file, correctModelPkgName)
-
-	if len(importMapping) == 0 {
+	// The qualifier the service struct refers to the model package by is
+	// mapped to the one it should use, so only the main model import and its
+	// references are rewritten, never other sibling model packages the user
+	// code imports. The qualifier to use is the package name, or an alias
+	// when a framework package the file imports takes that name (see
+	// serviceModelQualifier).
+	currentQualifier := serviceModelPackageName(file)
+	correctQualifier := serviceModelQualifier(modelInfo, action.Phase)
+	if currentQualifier == "" || currentQualifier == correctQualifier {
 		// No import changes needed
 		return changed
 	}
+	// A file importing two packages under the qualifier it refers to the
+	// model package by cannot build, and nothing tells which package a
+	// reference means. An earlier gg generated such files for a model package
+	// named like a framework package:
+	//
+	//	import (
+	//		"myproject/model/service"
+	//		"github.com/hydroan/gst/service"
+	//	)
+	//
+	//	type Creator struct {
+	//		service.Base[*service.User, *service.User, *service.User]
+	//	}
+	//
+	// Such a file is left as it is.
+	if countImportsNamed(file, currentQualifier) > 1 {
+		return changed
+	}
+	importMapping := map[string]string{currentQualifier: correctQualifier}
+
+	// The import declares a name only for an alias: otherwise the name of
+	// the package it imports is the qualifier.
+	importName := ""
+	if correctQualifier != modelInfo.ModelPkgName {
+		importName = correctQualifier
+	}
 
 	// Update import statements
-	if syncModelImports(file, correctModelImportPath, importMapping) {
+	if syncModelImports(file, modelInfo.ImportPath(), importName, importMapping) {
 		changed = true
 	}
 
@@ -699,17 +734,6 @@ func ApplyServiceFileWithModelSync(file *ast.File, action *dsl.Action, servicePk
 	}
 
 	return changed
-}
-
-// buildModelImportMapping builds a mapping from the currently-used service model package name
-// to correctModelPkgName (only when they differ), so we only rewrite the main model import/reference
-// instead of accidentally rewriting other sibling model packages used in user code.
-func buildModelImportMapping(file *ast.File, correctModelPkgName string) map[string]string {
-	currentModelPkgName := serviceModelPackageName(file)
-	if currentModelPkgName == "" || currentModelPkgName == correctModelPkgName {
-		return nil
-	}
-	return map[string]string{currentModelPkgName: correctModelPkgName}
 }
 
 func serviceModelPackageName(file *ast.File) string {
@@ -773,11 +797,24 @@ func selectorPackageName(expr ast.Expr) string {
 	return ""
 }
 
-// syncModelImports updates import statements based on the import mapping.
-// This function precisely modifies only the import path values in the AST,
-// preserving all other aspects of the code including formatting, comments, and structure.
-// Returns true if any imports were updated.
-func syncModelImports(file *ast.File, correctModelImportPath string, mapping map[string]string) bool {
+// syncModelImports points every import whose name is a key of mapping at
+// correctModelImportPath, declaring importName as its name, or no name when
+// importName is empty (see importSpecName). For example, with mapping
+// {"sample": "model_service"} and importName model_service,
+//
+//	"myproject/model/sample"
+//
+// becomes
+//
+//	model_service "myproject/model/service"
+//
+// and with mapping {"model_service": "sample"} and no importName, the
+// reverse happens. An import named differently, such as the gst service
+// package the file imports as service, is left alone. It modifies only the
+// import paths and names in the AST, preserving all other aspects of the code
+// including formatting, comments, and structure, and returns true if any
+// imports were updated.
+func syncModelImports(file *ast.File, correctModelImportPath, importName string, mapping map[string]string) bool {
 	changed := false
 
 	for _, decl := range file.Decls {
@@ -791,38 +828,61 @@ func syncModelImports(file *ast.File, correctModelImportPath string, mapping map
 			if !ok || importSpec.Path == nil {
 				continue
 			}
-
-			// Get the import path without quotes
-			importPath := strings.Trim(importSpec.Path.Value, `"`)
-
-			// Check if we need to update this import
-			shouldUpdate := false
-
-			// Check if the current import path's base name is in the mapping
-			baseName := filepath.Base(importPath)
-			if _, found := mapping[baseName]; found {
-				shouldUpdate = true
+			if _, found := mapping[importSpecName(importSpec)]; !found {
+				continue
 			}
 
-			// Also check if there's an explicit alias that's in the mapping
-			if importSpec.Name != nil && importSpec.Name.Name != "" && importSpec.Name.Name != "_" {
-				if _, found := mapping[importSpec.Name.Name]; found {
-					shouldUpdate = true
-				}
+			importSpec.Path.Value = strconv.Quote(correctModelImportPath)
+			importSpec.Name = nil
+			if importName != "" {
+				importSpec.Name = ast.NewIdent(importName)
 			}
-
-			if shouldUpdate {
-				// Update the import path to the correct one
-				importSpec.Path.Value = `"` + correctModelImportPath + `"`
-				changed = true
-
-				// Remove the explicit alias since the import path now has the correct name
-				importSpec.Name = nil
-			}
+			changed = true
 		}
 	}
 
 	return changed
+}
+
+// importSpecName returns the name a file refers to an import by: the name
+// the import declares, or else the last segment of its path, as in
+//
+//	model_service "myproject/model/service" // model_service
+//	"github.com/hydroan/gst/service"        // service
+//
+// A blank or dot import gives the file no name to refer to it by, and reports
+// "".
+func importSpecName(spec *ast.ImportSpec) string {
+	if spec.Name != nil {
+		if spec.Name.Name == "_" || spec.Name.Name == "." {
+			return ""
+		}
+		return spec.Name.Name
+	}
+	importPath, err := strconv.Unquote(spec.Path.Value)
+	if err != nil {
+		return ""
+	}
+	return path.Base(importPath)
+}
+
+// countImportsNamed returns how many imports the file declares under name
+// (see importSpecName). It walks the import declarations rather than
+// file.Imports, which misses the imports inserted since the file was parsed.
+func countImportsNamed(file *ast.File, name string) int {
+	count := 0
+	for _, decl := range file.Decls {
+		genDecl, ok := decl.(*ast.GenDecl)
+		if !ok || genDecl.Tok != token.IMPORT {
+			continue
+		}
+		for _, spec := range genDecl.Specs {
+			if importSpec, ok := spec.(*ast.ImportSpec); ok && importSpecName(importSpec) == name {
+				count++
+			}
+		}
+	}
+	return count
 }
 
 // syncModelPackageReferences updates package references in the code.

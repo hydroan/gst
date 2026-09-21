@@ -4,56 +4,93 @@ import (
 	"fmt"
 	"go/ast"
 	"go/token"
+	"path"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	"github.com/gertd/go-pluralize"
 	"github.com/hydroan/gst/consts"
+	"github.com/hydroan/gst/internal/codegen/constants"
 )
 
 var pluralizeCli = pluralize.NewClient()
 
-// imports generates an ast node that represents the declaration of below:
-/*
-import (
-	"codegen/model"
-	"github.com/hydroan/gst/service"
-	"github.com/hydroan/gst"
-)
-*/
-func imports(modulePath, modelFileDir, modelPkgName string, otherPkg ...string) *ast.GenDecl {
-	importModel := filepath.Join(modulePath, modelFileDir)
-	fields := strings.Split(importModel, "/")
-	if len(fields) > 0 && fields[len(fields)-1] != modelPkgName {
-		// model_setting "mymodule/model/setting"
-		importModel = fmt.Sprintf("%s %q", modelPkgName, importModel)
-	} else {
-		// "mymodule/model"
-		importModel = fmt.Sprintf("%q", importModel)
+// serviceScaffoldImports lists the framework packages a generated service file
+// of an action with phase imports besides the model package: the gst service
+// package its service struct embeds Base from, the gst package its methods
+// take the ServiceContext from, and io for the Reader an Import method reads.
+// The gst model package a model.Empty request or result needs is imported
+// separately (see emptyReqImport).
+func serviceScaffoldImports(phase consts.Phase) []string {
+	importPaths := []string{constants.ImportPathService, constants.ImportPathGst}
+	if phase == consts.PHASE_IMPORT {
+		importPaths = append(importPaths, constants.ImportPathIO)
 	}
+	return importPaths
+}
 
+// serviceModelQualifier returns the name a generated service file of an
+// action with phase refers to the model package by: its package name, or the
+// alias ResolveImportConflicts picks when a package of serviceScaffoldImports
+// takes that name. For example, the Create service file of a model in
+// package service at "helloworld/model/service" imports
+//
+//	model_service "helloworld/model/service"
+//	"github.com/hydroan/gst/service"
+//	"github.com/hydroan/gst"
+//
+// and declares
+//
+//	type Creator struct {
+//		service.Base[*model_service.Item, *model_service.Item, *model_service.Item]
+//	}
+//
+// A model in package io is aliased model_io only in the service file of an
+// Import action, the one that imports io.
+func serviceModelQualifier(info *ModelInfo, phase consts.Phase) string {
+	importPath := info.ImportPath()
+	aliases := ResolveImportConflicts(map[string]string{importPath: info.ModelPkgName}, importNames(serviceScaffoldImports(phase))...)
+	if alias := aliases[importPath]; alias != "" {
+		return alias
+	}
+	return info.ModelPkgName
+}
+
+// modelImportSpec builds the import of the model package at importPath that a
+// service file refers to by modelQualifier, named after the qualifier when
+// the qualifier is not the last segment of the path:
+//
+//	"helloworld/model/sample"                     // qualifier sample
+//	recorditem "helloworld/model/record_item"     // qualifier recorditem, the package name
+//	model_service "helloworld/model/service"      // qualifier model_service, an alias
+func modelImportSpec(importPath, modelQualifier string) *ast.ImportSpec {
+	spec := &ast.ImportSpec{Path: &ast.BasicLit{Kind: token.STRING, Value: strconv.Quote(importPath)}}
+	if path.Base(importPath) != modelQualifier {
+		spec.Name = ast.NewIdent(modelQualifier)
+	}
+	return spec
+}
+
+// imports builds the imports of a generated service file of an action with
+// phase, in this order: the model package under modelQualifier (see
+// modelImportSpec), the packages of serviceScaffoldImports, then every otherPkg
+// entry. For example, an Import action on a model in package io at
+// "helloworld/model/io" builds
+//
+//	import (
+//		model_io "helloworld/model/io"
+//		"github.com/hydroan/gst/service"
+//		"github.com/hydroan/gst"
+//		"io"
+//	)
+func imports(modulePath, modelFileDir, modelQualifier string, phase consts.Phase, otherPkg ...string) *ast.GenDecl {
 	genDecl := &ast.GenDecl{
-		Tok: token.IMPORT,
-		Specs: []ast.Spec{
-			&ast.ImportSpec{
-				Path: &ast.BasicLit{
-					Kind:  token.STRING,
-					Value: importModel,
-				},
-			},
-			&ast.ImportSpec{
-				Path: &ast.BasicLit{
-					Kind:  token.STRING,
-					Value: `"github.com/hydroan/gst/service"`,
-				},
-			},
-			&ast.ImportSpec{
-				Path: &ast.BasicLit{
-					Kind:  token.STRING,
-					Value: `"github.com/hydroan/gst"`,
-				},
-			},
-		},
+		Tok:   token.IMPORT,
+		Specs: []ast.Spec{modelImportSpec(filepath.Join(modulePath, modelFileDir), modelQualifier)},
+	}
+	for _, importPath := range serviceScaffoldImports(phase) {
+		genDecl.Specs = append(genDecl.Specs, &ast.ImportSpec{Path: &ast.BasicLit{Kind: token.STRING, Value: strconv.Quote(importPath)}})
 	}
 
 	for _, pkg := range otherPkg {
@@ -63,8 +100,8 @@ func imports(modulePath, modelFileDir, modelPkgName string, otherPkg ...string) 
 		// An entry in "alias path" form imports the package under the alias,
 		// e.g. `gstmodel "github.com/hydroan/gst/model"`.
 		value := fmt.Sprintf("%q", pkg)
-		if alias, path, ok := strings.Cut(pkg, " "); ok {
-			value = fmt.Sprintf("%s %q", alias, path)
+		if alias, importPath, ok := strings.Cut(pkg, " "); ok {
+			value = fmt.Sprintf("%s %q", alias, importPath)
 		}
 		genDecl.Specs = append(genDecl.Specs, &ast.ImportSpec{
 			Path: &ast.BasicLit{
@@ -95,27 +132,35 @@ func actionTypeExpr(pkgName, typeName string) ast.Expr {
 
 // actionTypeOrEmptyExpr builds the type expression of one action type,
 // resolving the dsl.PayloadEmpty sentinel to *model.Empty from the gst model
-// package (aliased when the business model package is itself named "model").
-func actionTypeOrEmptyExpr(modelPkgName, typeName string) ast.Expr {
+// package (aliased when the file refers to the business model package as
+// "model") and qualifying any other type by modelQualifier.
+func actionTypeOrEmptyExpr(modelQualifier, typeName string) ast.Expr {
 	if isEmptyPayload(typeName) {
-		return emptyReqExpr(emptyReqPkgName(modelPkgName))
+		return emptyReqExpr(emptyReqPkgName(modelQualifier))
 	}
-	return actionTypeExpr(modelPkgName, typeName)
+	return actionTypeExpr(modelQualifier, typeName)
 }
 
 // types builds the declaration of the service struct named roleName, which
 // embeds service.Base over the model and the action's request and response
-// types:
+// types, referring to the model package by modelQualifier (see
+// serviceModelQualifier):
 //
 //	type Creator struct {
 //		service.Base[*model.User, *model.UserReq, *model.UserRsp]
 //	}
-func types(modelPkgName, modelName, reqName, rspName, roleName string) *ast.GenDecl {
+//
+// or, with modelQualifier model_service,
+//
+//	type Creator struct {
+//		service.Base[*model_service.User, *model_service.UserReq, *model_service.UserRsp]
+//	}
+func types(modelQualifier, modelName, reqName, rspName, roleName string) *ast.GenDecl {
 	// The dsl.PayloadEmpty sentinel resolves to *model.Empty from the gst
 	// model package on either side; any other action type is emitted in its
 	// declared form.
-	reqExpr := actionTypeOrEmptyExpr(modelPkgName, reqName)
-	rspExpr := actionTypeOrEmptyExpr(modelPkgName, rspName)
+	reqExpr := actionTypeOrEmptyExpr(modelQualifier, reqName)
+	rspExpr := actionTypeOrEmptyExpr(modelQualifier, rspName)
 
 	return &ast.GenDecl{
 		Tok: token.TYPE,
@@ -135,7 +180,7 @@ func types(modelPkgName, modelName, reqName, rspName, roleName string) *ast.GenD
 									Indices: []ast.Expr{
 										&ast.StarExpr{
 											X: &ast.SelectorExpr{
-												X:   ast.NewIdent(modelPkgName),
+												X:   ast.NewIdent(modelQualifier),
 												Sel: ast.NewIdent(modelName),
 											},
 										},
@@ -157,7 +202,7 @@ func types(modelPkgName, modelName, reqName, rspName, roleName string) *ast.GenD
 //
 //	"func (u *Creator) CreateBefore(ctx *gst.ServiceContext, user *model.User) error {\n}"
 //	"func (g *Updater) UpdateAfter(ctx *gst.ServiceContext, group *model.Group) error {\n}",
-func serviceMethod1(recvName, modelName, modelPkgName string, phase consts.Phase, roleName string, body ...ast.Stmt) *ast.FuncDecl {
+func serviceMethod1(recvName, modelName, modelQualifier string, phase consts.Phase, roleName string, body ...ast.Stmt) *ast.FuncDecl {
 	return &ast.FuncDecl{
 		Recv: &ast.FieldList{
 			List: []*ast.Field{
@@ -186,7 +231,7 @@ func serviceMethod1(recvName, modelName, modelPkgName string, phase consts.Phase
 						Names: []*ast.Ident{ast.NewIdent(strings.ToLower(modelName))},
 						Type: &ast.StarExpr{
 							X: &ast.SelectorExpr{
-								X:   ast.NewIdent(modelPkgName),
+								X:   ast.NewIdent(modelQualifier),
 								Sel: ast.NewIdent(modelName),
 							},
 						},
@@ -212,7 +257,7 @@ func serviceMethod1(recvName, modelName, modelPkgName string, phase consts.Phase
 //
 //	"func (u *Lister) ListBefore(ctx *gst.ServiceContext, users *[]*model.User) error {\n}"
 //	"func (u *Lister) ListAfter(ctx *gst.ServiceContext, users *[]*model.User) error {\n}"
-func serviceMethod2(recvName, modelName, modelPkgName string, phase consts.Phase, roleName string, body ...ast.Stmt) *ast.FuncDecl {
+func serviceMethod2(recvName, modelName, modelQualifier string, phase consts.Phase, roleName string, body ...ast.Stmt) *ast.FuncDecl {
 	return &ast.FuncDecl{
 		Recv: &ast.FieldList{
 			List: []*ast.Field{
@@ -243,7 +288,7 @@ func serviceMethod2(recvName, modelName, modelPkgName string, phase consts.Phase
 							X: &ast.ArrayType{
 								Elt: &ast.StarExpr{
 									X: &ast.SelectorExpr{
-										X:   ast.NewIdent(modelPkgName),
+										X:   ast.NewIdent(modelQualifier),
 										Sel: ast.NewIdent(modelName),
 									},
 								},
@@ -271,7 +316,7 @@ func serviceMethod2(recvName, modelName, modelPkgName string, phase consts.Phase
 //
 //	"func (u *ManyCreator) CreateManyBefore(ctx *gst.ServiceContext, users ...*model.User) error {\n}"
 //	"func (u *ManyCreator) CreateManyAfter(ctx *gst.ServiceContext, users ...*model.User) error {\n}"
-func serviceMethod3(recvName, modelName, modelPkgName string, phase consts.Phase, roleName string, body ...ast.Stmt) *ast.FuncDecl {
+func serviceMethod3(recvName, modelName, modelQualifier string, phase consts.Phase, roleName string, body ...ast.Stmt) *ast.FuncDecl {
 	return &ast.FuncDecl{
 		Recv: &ast.FieldList{
 			List: []*ast.Field{
@@ -301,7 +346,7 @@ func serviceMethod3(recvName, modelName, modelPkgName string, phase consts.Phase
 						Type: &ast.Ellipsis{
 							Elt: &ast.StarExpr{
 								X: &ast.SelectorExpr{
-									X:   ast.NewIdent(modelPkgName),
+									X:   ast.NewIdent(modelQualifier),
 									Sel: ast.NewIdent(modelName),
 								},
 							},
@@ -327,12 +372,12 @@ func serviceMethod3(recvName, modelName, modelPkgName string, phase consts.Phase
 // For example:
 //
 //	func (u *Creator) Create(ctx *gst.ServiceContext, req *model.User) (rsp *model.User, err error) {\n}
-func serviceMethod4(recvName, modelPkgName, reqName, rspName string, phase consts.Phase, roleName string, body ...ast.Stmt) *ast.FuncDecl {
+func serviceMethod4(recvName, modelQualifier, reqName, rspName string, phase consts.Phase, roleName string, body ...ast.Stmt) *ast.FuncDecl {
 	// The dsl.PayloadEmpty sentinel resolves to *model.Empty from the gst
 	// model package on either side; any other action type is emitted in its
 	// declared form.
-	reqExpr := actionTypeOrEmptyExpr(modelPkgName, reqName)
-	rspExpr := actionTypeOrEmptyExpr(modelPkgName, rspName)
+	reqExpr := actionTypeOrEmptyExpr(modelQualifier, reqName)
+	rspExpr := actionTypeOrEmptyExpr(modelQualifier, rspName)
 
 	return &ast.FuncDecl{
 		Recv: &ast.FieldList{
@@ -387,7 +432,7 @@ func serviceMethod4(recvName, modelPkgName, reqName, rspName string, phase const
 // For example:
 //
 //	func (a *Importer) Import(ctx *gst.ServiceContext, reader io.Reader) ([]*model.Sample, error) {\n}
-func serviceMethod5(recvName, modelName, modelPkgName string, _ consts.Phase, roleName string, body ...ast.Stmt) *ast.FuncDecl {
+func serviceMethod5(recvName, modelName, modelQualifier string, _ consts.Phase, roleName string, body ...ast.Stmt) *ast.FuncDecl {
 	return &ast.FuncDecl{
 		Recv: &ast.FieldList{
 			List: []*ast.Field{
@@ -428,7 +473,7 @@ func serviceMethod5(recvName, modelName, modelPkgName string, _ consts.Phase, ro
 						Type: &ast.ArrayType{
 							Elt: &ast.StarExpr{
 								X: &ast.SelectorExpr{
-									X:   ast.NewIdent(modelPkgName),
+									X:   ast.NewIdent(modelQualifier),
 									Sel: ast.NewIdent(modelName),
 								},
 							},
@@ -497,7 +542,7 @@ func serviceMethod7(recvName, roleName string, body ...ast.Stmt) *ast.FuncDecl {
 // For example:
 //
 //	func (a *Exporter) Export(ctx *gst.ServiceContext, samples ...*model.Sample) ([]byte, error) {\n}
-func serviceMethod6(recvName, modelName, modelPkgName string, _ consts.Phase, roleName string, body ...ast.Stmt) *ast.FuncDecl {
+func serviceMethod6(recvName, modelName, modelQualifier string, _ consts.Phase, roleName string, body ...ast.Stmt) *ast.FuncDecl {
 	paramName := pluralizeCli.Plural(strings.ToLower(modelName))
 
 	return &ast.FuncDecl{
@@ -529,7 +574,7 @@ func serviceMethod6(recvName, modelName, modelPkgName string, _ consts.Phase, ro
 						Type: &ast.Ellipsis{
 							Elt: &ast.StarExpr{
 								X: &ast.SelectorExpr{
-									X:   ast.NewIdent(modelPkgName),
+									X:   ast.NewIdent(modelQualifier),
 									Sel: ast.NewIdent(modelName),
 								},
 							},

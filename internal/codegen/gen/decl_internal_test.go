@@ -14,18 +14,20 @@ import (
 
 func TestImports(t *testing.T) {
 	tests := []struct {
-		name         string
-		modulePath   string
-		modelFileDir string
-		modelPkgName string
-		otherPkgs    []string
-		want         string
+		name           string
+		modulePath     string
+		modelFileDir   string
+		modelQualifier string
+		phase          consts.Phase
+		otherPkgs      []string
+		want           string
 	}{
 		{
-			name:         "root_model_package",
-			modulePath:   "codegen",
-			modelFileDir: "model",
-			modelPkgName: "model",
+			name:           "root_model_package",
+			modulePath:     "codegen",
+			modelFileDir:   "model",
+			modelQualifier: "model",
+			phase:          consts.PHASE_CREATE,
 			want: `import (
 	"codegen/model"
 	"github.com/hydroan/gst/service"
@@ -33,11 +35,12 @@ func TestImports(t *testing.T) {
 )`,
 		},
 		{
-			name:         "other_package",
-			modulePath:   "codegen",
-			modelFileDir: "model/group",
-			modelPkgName: "group",
-			otherPkgs:    []string{"github.com/hydroan/gst/model"},
+			name:           "other_package",
+			modulePath:     "codegen",
+			modelFileDir:   "model/group",
+			modelQualifier: "group",
+			phase:          consts.PHASE_CREATE,
+			otherPkgs:      []string{"github.com/hydroan/gst/model"},
 			want: `import (
 	"codegen/model/group"
 	"github.com/hydroan/gst/service"
@@ -46,11 +49,12 @@ func TestImports(t *testing.T) {
 )`,
 		},
 		{
-			name:         "aliased_other_package",
-			modulePath:   "codegen",
-			modelFileDir: "model",
-			modelPkgName: "model",
-			otherPkgs:    []string{"gstmodel github.com/hydroan/gst/model"},
+			name:           "aliased_other_package",
+			modulePath:     "codegen",
+			modelFileDir:   "model",
+			modelQualifier: "model",
+			phase:          consts.PHASE_CREATE,
+			otherPkgs:      []string{"gstmodel github.com/hydroan/gst/model"},
 			want: `import (
 	"codegen/model"
 	"github.com/hydroan/gst/service"
@@ -58,16 +62,129 @@ func TestImports(t *testing.T) {
 	gstmodel "github.com/hydroan/gst/model"
 )`,
 		},
+		{
+			// The package in model/record_item is named recorditem, which the
+			// import states.
+			name:           "package_named_unlike_its_directory",
+			modulePath:     "codegen",
+			modelFileDir:   "model/record_item",
+			modelQualifier: "recorditem",
+			phase:          consts.PHASE_CREATE,
+			want: `import (
+	recorditem "codegen/model/record_item"
+	"github.com/hydroan/gst/service"
+	"github.com/hydroan/gst"
+)`,
+		},
+		{
+			// A model package named service takes an alias in the file, which
+			// imports the gst service package as service.
+			name:           "aliased_model_package",
+			modulePath:     "codegen",
+			modelFileDir:   "model/service",
+			modelQualifier: "model_service",
+			phase:          consts.PHASE_CREATE,
+			want: `import (
+	model_service "codegen/model/service"
+	"github.com/hydroan/gst/service"
+	"github.com/hydroan/gst"
+)`,
+		},
+		{
+			name:           "import_action_reads_through_io",
+			modulePath:     "codegen",
+			modelFileDir:   "model/sample",
+			modelQualifier: "sample",
+			phase:          consts.PHASE_IMPORT,
+			want: `import (
+	"codegen/model/sample"
+	"github.com/hydroan/gst/service"
+	"github.com/hydroan/gst"
+	"io"
+)`,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := FormatNode(imports(tt.modulePath, tt.modelFileDir, tt.modelPkgName, tt.otherPkgs...))
+			got, err := FormatNode(imports(tt.modulePath, tt.modelFileDir, tt.modelQualifier, tt.phase, tt.otherPkgs...))
 			if err != nil {
 				t.Error(err)
 				return
 			}
 			if !reflect.DeepEqual(got, tt.want) {
 				t.Errorf("imports() = \n%v\n, want \n%v\n", pretty.Sprintf("% #v", got), pretty.Sprintf("% #v", tt.want))
+			}
+		})
+	}
+}
+
+func TestServiceModelQualifier(t *testing.T) {
+	tests := []struct {
+		name         string
+		modelFileDir string
+		modelPkgName string
+		phase        consts.Phase
+		want         string
+	}{
+		{
+			name:         "package_name_no_framework_import_takes",
+			modelFileDir: "model/sample",
+			modelPkgName: "sample",
+			phase:        consts.PHASE_CREATE,
+			want:         "sample",
+		},
+		{
+			// The gst model package a model.Empty request needs is the one
+			// that yields its name, as gstmodel (see emptyReqPkgName).
+			name:         "root_model_package",
+			modelFileDir: "model",
+			modelPkgName: "model",
+			phase:        consts.PHASE_LIST,
+			want:         "model",
+		},
+		{
+			// The example of the serviceModelQualifier doc comment.
+			name:         "package_named_service",
+			modelFileDir: "model/service",
+			modelPkgName: "service",
+			phase:        consts.PHASE_CREATE,
+			want:         "model_service",
+		},
+		{
+			name:         "nested_package_named_service",
+			modelFileDir: "model/sample/service",
+			modelPkgName: "service",
+			phase:        consts.PHASE_CREATE,
+			want:         "sample_service",
+		},
+		{
+			name:         "package_named_gst",
+			modelFileDir: "model/gst",
+			modelPkgName: "gst",
+			phase:        consts.PHASE_GET,
+			want:         "model_gst",
+		},
+		{
+			name:         "package_named_io_in_an_import_action",
+			modelFileDir: "model/io",
+			modelPkgName: "io",
+			phase:        consts.PHASE_IMPORT,
+			want:         "model_io",
+		},
+		{
+			// Only the service file of an Import action imports io.
+			name:         "package_named_io_in_any_other_action",
+			modelFileDir: "model/io",
+			modelPkgName: "io",
+			phase:        consts.PHASE_CREATE,
+			want:         "io",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			info := &ModelInfo{ModulePath: "helloworld", ModelFileDir: tt.modelFileDir, ModelPkgName: tt.modelPkgName}
+			if got := serviceModelQualifier(info, tt.phase); got != tt.want {
+				t.Errorf("serviceModelQualifier() = %q, want %q", got, tt.want)
 			}
 		})
 	}

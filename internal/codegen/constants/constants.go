@@ -13,6 +13,10 @@ const (
 	ImportPathUtil      = "github.com/hydroan/gst/util"
 	ImportPathAPIDoc    = "github.com/hydroan/gst/apidoc"
 
+	// ImportPathIO is the standard library package the Import method of a
+	// generated service file reads its input through.
+	ImportPathIO = "io"
+
 	// ModelPackagePath is the package path for comparison
 	ModelPackagePath = `"github.com/hydroan/gst/model"`
 )

@@ -1,9 +1,12 @@
 package main
 
 import (
+	"go/parser"
+	"go/token"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/hydroan/gst/internal/codegen/constants"
@@ -513,6 +516,213 @@ func Init() error {
 				require.NoError(t, err)
 				require.Equal(t, want, string(got), file)
 			}
+
+			output, err := exec.Command("go", "build", "-mod=mod", "./...").CombinedOutput()
+			require.NoError(t, err, "go build:\n%s", output)
+		})
+	}
+}
+
+// TestGenRunAliasesServiceFileModelImports pins how gg gen imports the model
+// package into the service files it generates. The model package keeps its
+// package name unless a framework package the service file imports takes
+// it: the gst service and gst packages, and io for an Import action. Then the
+// file imports the model package under an alias built from its last path
+// segments and refers to it through the alias. Running gg gen again, which
+// corrects the service files that already exist, keeps them as they are, and
+// the project builds.
+func TestGenRunAliasesServiceFileModelImports(t *testing.T) {
+	tests := []struct {
+		name  string
+		files map[string]string
+		// want maps each generated service file to its whole content.
+		want map[string]string
+	}{
+		{
+			name: "model_package_named_service",
+			files: map[string]string{
+				"model/service/item.go": `package service
+
+import (
+	"github.com/hydroan/gst/dsl"
+	"github.com/hydroan/gst/model"
+)
+
+type Item struct {
+	model.Empty
+}
+
+func (Item) Design() {
+	dsl.Endpoint("items")
+	dsl.Create(func() {
+		dsl.Service()
+	})
+}
+`,
+			},
+			want: map[string]string{
+				"service/service/item/create.go": `package item
+
+import (
+	model_service "tmpapp/model/service"
+
+	"github.com/hydroan/gst"
+	"github.com/hydroan/gst/service"
+)
+
+type Creator struct {
+	service.Base[*model_service.Item, *model_service.Item, *model_service.Item]
+}
+
+func (i *Creator) Create(ctx *gst.ServiceContext, req *model_service.Item) (rsp *model_service.Item, err error) {
+	log := i.WithContext(ctx, ctx.Phase())
+	log.Info("item create")
+	return rsp, nil
+}
+`,
+			},
+		},
+		{
+			name: "model_package_named_gst",
+			files: map[string]string{
+				"model/gst/item.go": `package gst
+
+import (
+	"github.com/hydroan/gst/dsl"
+	"github.com/hydroan/gst/model"
+)
+
+type Item struct {
+	model.Empty
+}
+
+func (Item) Design() {
+	dsl.Endpoint("items")
+	dsl.Create(func() {
+		dsl.Service()
+	})
+}
+`,
+			},
+			want: map[string]string{
+				"service/gst/item/create.go": `package item
+
+import (
+	model_gst "tmpapp/model/gst"
+
+	"github.com/hydroan/gst"
+	"github.com/hydroan/gst/service"
+)
+
+type Creator struct {
+	service.Base[*model_gst.Item, *model_gst.Item, *model_gst.Item]
+}
+
+func (i *Creator) Create(ctx *gst.ServiceContext, req *model_gst.Item) (rsp *model_gst.Item, err error) {
+	log := i.WithContext(ctx, ctx.Phase())
+	log.Info("item create")
+	return rsp, nil
+}
+`,
+			},
+		},
+		{
+			// Only the service file of the Import action imports io, so only
+			// it aliases the model package.
+			name: "model_package_named_io",
+			files: map[string]string{
+				"model/io/item.go": `package io
+
+import (
+	"github.com/hydroan/gst/dsl"
+	"github.com/hydroan/gst/model"
+)
+
+type Item struct {
+	model.Empty
+}
+
+func (Item) Design() {
+	dsl.Endpoint("items")
+	dsl.Import(func() {
+		dsl.Service()
+	})
+	dsl.Create(func() {
+		dsl.Service()
+	})
+}
+`,
+			},
+			want: map[string]string{
+				"service/io/item/import.go": `package item
+
+import (
+	"io"
+	model_io "tmpapp/model/io"
+
+	"github.com/hydroan/gst"
+	"github.com/hydroan/gst/service"
+)
+
+type Importer struct {
+	service.Base[*model_io.Item, *model_io.Item, *model_io.Item]
+}
+
+func (i *Importer) Import(ctx *gst.ServiceContext, reader io.Reader) (items []*model_io.Item, err error) {
+	log := i.WithContext(ctx, ctx.Phase())
+	log.Info("item import")
+	return items, nil
+}
+`,
+				"service/io/item/create.go": `package item
+
+import (
+	"tmpapp/model/io"
+
+	"github.com/hydroan/gst"
+	"github.com/hydroan/gst/service"
+)
+
+type Creator struct {
+	service.Base[*io.Item, *io.Item, *io.Item]
+}
+
+func (i *Creator) Create(ctx *gst.ServiceContext, req *io.Item) (rsp *io.Item, err error) {
+	log := i.WithContext(ctx, ctx.Phase())
+	log.Info("item create")
+	return rsp, nil
+}
+`,
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			projectDir := newGenProject(t)
+			for path, content := range tt.files {
+				writeCheckFile(t, filepath.Join(projectDir, path), content)
+			}
+
+			requireServiceFiles := func() {
+				t.Helper()
+				for file, want := range tt.want {
+					got, err := os.ReadFile(file)
+					require.NoError(t, err)
+					require.Equal(t, want, string(got), file)
+				}
+			}
+			require.NoError(t, genRunWithOptions(genRunOptions{Quiet: true}))
+			requireServiceFiles()
+
+			// gg check wants a test next to every service file before gg gen
+			// runs again, as it would in a project.
+			for file, want := range tt.want {
+				source, err := parser.ParseFile(token.NewFileSet(), file, want, parser.PackageClauseOnly)
+				require.NoError(t, err)
+				writeCheckFile(t, strings.TrimSuffix(file, ".go")+"_test.go", "package "+source.Name.Name+"_test\n")
+			}
+			require.NoError(t, genRunWithOptions(genRunOptions{Quiet: true}))
+			requireServiceFiles()
 
 			output, err := exec.Command("go", "build", "-mod=mod", "./...").CombinedOutput()
 			require.NoError(t, err, "go build:\n%s", output)
