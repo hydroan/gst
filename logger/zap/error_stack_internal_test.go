@@ -23,7 +23,7 @@ func TestErrorAttachesErrorStackFieldFromErrorOrigin(t *testing.T) {
 
 	stackTrace := errorStackField(t, entries[0])
 	require.Contains(t, stackTrace, "newStackTracedError")
-	require.Contains(t, stackTrace, "error_stack_test.go")
+	require.Contains(t, stackTrace, "error_stack_internal_test.go")
 }
 
 func TestErrorfAttachesErrorStackFieldFromErrorOrigin(t *testing.T) {

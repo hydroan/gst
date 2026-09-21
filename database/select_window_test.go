@@ -11,7 +11,7 @@ import (
 )
 
 // The window tests read the same six seeded rows as the aggregate tests (see
-// aggregateSeed in fixture_test.go), so every expectation below is a literal
+// aggregateSeed in fixtures_test.go), so every expectation below is a literal
 // a reader can check against that table by hand.
 
 // latestRow is the row-level projection the latest-per-group idiom reads.

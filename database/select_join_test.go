@@ -13,7 +13,7 @@ import (
 )
 
 // The join tests read the seeded payments (see paymentSeed in
-// fixture_test.go) beside the one seeded account (see accountSeed: acme
+// fixtures_test.go) beside the one seeded account (see accountSeed: acme
 // alone, so bolt's payments meet no account), and the seeded records and
 // tags (see aggregateSeed and tagSeed). Every expectation below is a literal
 // a reader can check against those tables by hand.

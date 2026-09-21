@@ -161,7 +161,7 @@ func TestRecordErrorRecordsErrorOriginStackTrace(t *testing.T) {
 
 			stackTrace := exceptionStackTrace(t, span)
 			require.Contains(t, stackTrace, "newStackTracedError")
-			require.Contains(t, stackTrace, "otel_test.go")
+			require.Contains(t, stackTrace, "otel_internal_test.go")
 		})
 	}
 }

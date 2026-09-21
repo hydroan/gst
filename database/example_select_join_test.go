@@ -10,7 +10,7 @@ import (
 )
 
 // The join examples read the seeded payments beside the one seeded account
-// (see paymentSeed and accountSeed in fixture_test.go), and the seeded tags
+// (see paymentSeed and accountSeed in fixtures_test.go), and the seeded tags
 // beside their records (see tagSeed and aggregateSeed). They are written the
 // way project code is written, through the generated Cols vars the fixture
 // mirrors. The SQL each one renders is quoted in MySQL spelling.

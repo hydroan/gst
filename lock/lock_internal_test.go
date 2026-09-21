@@ -216,7 +216,7 @@ func TestTryRunReturnsTheWorkErrorAndRecoversAPanic(t *testing.T) {
 	require.ErrorContains(t, l.TryRun(context.Background(), func(context.Context) error { return errors.New("sample failure") }), "sample failure")
 	err := l.TryRun(context.Background(), func(context.Context) error { panic("sample panic") })
 	require.ErrorContains(t, err, "sample panic")
-	require.Contains(t, fmt.Sprintf("%+v", err), "lock_test.go", "the error must carry the stack of the panic site")
+	require.Contains(t, fmt.Sprintf("%+v", err), "lock_internal_test.go", "the error must carry the stack of the panic site")
 }
 
 // TestTryRunReportsLostEvenWhenTheWorkSucceeded proves a try ends with its

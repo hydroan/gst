@@ -315,7 +315,7 @@ func TestRunReturnsWhatTheWorkReturned(t *testing.T) {
 	require.ErrorContains(t, Run(ctx, sampleHandle(), newHolderLog(), func(context.Context) error { return errors.New("sample failure") }), "sample failure")
 	err := Run(ctx, sampleHandle(), newHolderLog(), func(context.Context) error { panic("sample panic") })
 	require.ErrorContains(t, err, "sample panic")
-	require.Contains(t, fmt.Sprintf("%+v", err), "hold_test.go", "the error must carry the stack of the panic site")
+	require.Contains(t, fmt.Sprintf("%+v", err), "hold_internal_test.go", "the error must carry the stack of the panic site")
 }
 
 // TestRunGivesLostWorkTheGraceToReturn proves a loss is not yet a failure:

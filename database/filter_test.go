@@ -14,7 +14,7 @@ import (
 
 // Tests for the predicate engine in filter.go: the operator filters, their
 // grouping and nesting, and the fail-closed rules. WithQuery's own behavior --
-// how a model value becomes conditions -- is covered in query_test.go.
+// how a model value becomes conditions -- is covered in with_query_test.go.
 
 func TestDatabaseFilterGroups(t *testing.T) {
 	defer cleanupTestData()
@@ -753,7 +753,7 @@ func TestFilterOfAnotherTableFailsTheChain(t *testing.T) {
 
 // The semi-join tests below cover FilterExists and FilterNotExists over the
 // aggregate fixture: the records and the tags that point at them, described at
-// aggregateSeed and tagSeed in fixture_test.go.
+// aggregateSeed and tagSeed in fixtures_test.go.
 
 func TestFilterExists(t *testing.T) {
 	defer cleanupAggregateData()

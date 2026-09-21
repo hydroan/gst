@@ -5,7 +5,6 @@ import (
 
 	"github.com/hydroan/gst/database"
 	"github.com/hydroan/gst/internal/modelregistry"
-	"github.com/hydroan/gst/internal/testutil"
 	"github.com/stretchr/testify/require"
 )
 
@@ -20,14 +19,6 @@ type SampleRecord struct {
 }
 
 func (r *SampleRecord) TableName() string { return "testutil_sample_records" }
-
-// TestMain boots the framework against the default sqlite database and
-// registers the sample model the database assertions run against.
-func TestMain(m *testing.M) {
-	testutil.Run(m, testutil.Server{
-		Register: func() { modelregistry.RegisterTable[*SampleRecord]() },
-	})
-}
 
 // createSampleRecord seeds one sample row and returns it. Callers keep names
 // unique to their test so the shared table stays free of cross-test matches.

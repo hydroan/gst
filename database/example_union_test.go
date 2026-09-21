@@ -10,7 +10,7 @@ import (
 )
 
 // The union examples stack the seeded payments and refunds (see paymentSeed
-// and refundSeed in fixture_test.go) into one flow, and are written the way
+// and refundSeed in fixtures_test.go) into one flow, and are written the way
 // project code is written, through the generated Cols vars the fixture
 // mirrors. The SQL each one renders is quoted in MySQL spelling; the other
 // dialects differ only in the identifier quotes.

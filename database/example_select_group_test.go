@@ -11,7 +11,7 @@ import (
 
 // The grouped examples: group keys, measures, conditional measures, time
 // buckets and HAVING, over the six seeded rows described at aggregateSeed in
-// fixture_test.go. The SQL each one renders is quoted in MySQL spelling.
+// fixtures_test.go. The SQL each one renders is quoted in MySQL spelling.
 
 // Group makes a column a group key; the framework derives GROUP BY from the
 // group keys, so the projection and its GROUP BY cannot disagree. Sum and the

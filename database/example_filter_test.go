@@ -9,7 +9,7 @@ import (
 )
 
 // The semi-join examples: FilterExists and FilterNotExists tie the records
-// described at aggregateSeed in fixture_test.go to the tags described at
+// described at aggregateSeed in fixtures_test.go to the tags described at
 // tagSeed. The SQL each one renders is quoted in MySQL spelling.
 
 // FilterExists is a semi join: it keeps the rows that have at least one

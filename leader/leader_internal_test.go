@@ -208,7 +208,7 @@ func TestWorkThatReturnsIsCampaignedForAgain(t *testing.T) {
 	require.Equal(t, "failing-work", entry["name"])
 	require.Equal(t, "work returned", entry["reason"])
 	require.Contains(t, entry["error"], "sample failure")
-	require.Contains(t, entry["error_stack"], "leader_test.go", "the entry must locate the failing line")
+	require.Contains(t, entry["error_stack"], "leader_internal_test.go", "the entry must locate the failing line")
 }
 
 // TestWorkPanicIsRecoveredAndLogged proves a panic in the work neither takes
@@ -233,7 +233,7 @@ func TestWorkPanicIsRecoveredAndLogged(t *testing.T) {
 	entry := readLogEntry(t, filepath.Join(dir, "leader.log"), "leader work panicked")
 	require.Equal(t, "panicking-work", entry["name"])
 	require.Contains(t, entry["error"], "sample panic")
-	require.Contains(t, entry["error_stack"], "leader_test.go", "the stack must locate the line that panicked")
+	require.Contains(t, entry["error_stack"], "leader_internal_test.go", "the stack must locate the line that panicked")
 }
 
 // TestStopEndsTheTenureAndReleasesTheName proves shutdown reaches the work —

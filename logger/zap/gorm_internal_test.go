@@ -185,7 +185,7 @@ func BenchmarkCallerOutsideSkippedSQLFramesConfigured(b *testing.B) {
 func TestCallerOutsideReturnsFirstUnskippedFrame(t *testing.T) {
 	caller, ok := callerOutside(func(string) bool { return false })
 	require.True(t, ok)
-	require.Contains(t, caller, "gorm_test.go:")
+	require.Contains(t, caller, "gorm_internal_test.go:")
 }
 
 func TestCallerOutsideReportsMissWhenEveryFrameSkipped(t *testing.T) {

@@ -16,7 +16,7 @@ import (
 // and paging, result-row matching, dry runs and the build errors. The grouped
 // side is covered in select_group_test.go, the window side in
 // select_window_test.go and the constants in select_literal_test.go. They all
-// read the seeded rows described at aggregateSeed in fixture_test.go, so every
+// read the seeded rows described at aggregateSeed in fixtures_test.go, so every
 // expectation is a literal a reader can check against that table by hand.
 
 // TestSelectWithDryRun pins that WithDryRun builds the aggregate without

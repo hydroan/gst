@@ -10,7 +10,7 @@ import (
 
 // The examples below are the runnable reference for the Select builder: one
 // per keyword, each reading the six seeded rows described at aggregateSeed in
-// fixture_test.go and printing its result rows. They are written the way
+// fixtures_test.go and printing its result rows. They are written the way
 // project code is written: through the Cols vars gg gen generates next to a
 // model, which the fixture mirrors under the same names. They print rows
 // rather than SQL because the rendered statement differs between dialects only

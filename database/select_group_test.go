@@ -11,7 +11,7 @@ import (
 
 // Tests for the grouped side of the select builder (select_group.go): group
 // keys, measures, conditional measures, time buckets and HAVING, over the
-// seeded rows described at aggregateSeed in fixture_test.go.
+// seeded rows described at aggregateSeed in fixtures_test.go.
 
 func TestSelectScalar(t *testing.T) {
 	defer cleanupAggregateData()

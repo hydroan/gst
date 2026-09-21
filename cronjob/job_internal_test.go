@@ -936,7 +936,7 @@ func TestRunLogsFailureWithErrorStack(t *testing.T) {
 			entry := readLogEntry(t, filepath.Join(dir, "cronjob.log"), tc.msg)
 			require.Equal(t, tc.err, entry["error"])
 			require.NotEmpty(t, entry[consts.TRACE_ID], "the outcome entry must carry the round's trace id")
-			require.Contains(t, entry["error_stack"], "job_test.go",
+			require.Contains(t, entry["error_stack"], "job_internal_test.go",
 				"error_stack must point at the line inside the job that failed")
 		})
 	}
