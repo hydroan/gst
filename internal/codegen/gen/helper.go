@@ -10,6 +10,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"unicode"
 
 	"github.com/stoewer/go-strcase"
 	goimports "golang.org/x/tools/imports"
@@ -157,7 +158,9 @@ func MethodAddComments(code string, modelName string) string {
 // segments joined by an underscore ("svc/pkg1/user" becomes "pkg1_user"). An
 // alias that still clashes with another import's name takes one more leading
 // segment at a time, and one that runs out of segments gets a numeric suffix,
-// so no two imports share a name. The result maps each import path to its
+// so no two imports share a name. Every alias is a Go identifier: characters
+// an identifier cannot hold become underscores, and one that would start with
+// a digit gets an underscore in front. The result maps each import path to its
 // alias, or to "" when it needs none.
 func ResolveImportConflicts(imports []string) map[string]string {
 	paths := slices.Compact(slices.Sorted(slices.Values(imports)))
@@ -203,7 +206,7 @@ func ResolveImportConflicts(imports []string) map[string]string {
 	for _, importPath := range paths {
 		if depth[importPath] == 1 {
 			aliases[importPath] = ""
-			taken[path.Base(importPath)] = true
+			taken[importName(importPath, 1)] = true
 		}
 	}
 	for _, importPath := range paths {
@@ -222,8 +225,20 @@ func ResolveImportConflicts(imports []string) map[string]string {
 }
 
 // importName joins the last depth segments of importPath with underscores, or
-// all of them when it has fewer.
+// all of them when it has fewer, into a Go identifier: every character an
+// identifier cannot hold becomes an underscore, and a name that is still not
+// one, because it starts with a digit or is a keyword, gets an underscore in
+// front.
 func importName(importPath string, depth int) string {
 	segments := strings.Split(importPath, "/")
-	return strings.Join(segments[max(len(segments)-depth, 0):], "_")
+	name := strings.Map(func(r rune) rune {
+		if r == '_' || unicode.IsLetter(r) || unicode.IsDigit(r) {
+			return r
+		}
+		return '_'
+	}, strings.Join(segments[max(len(segments)-depth, 0):], "_"))
+	if !token.IsIdentifier(name) {
+		name = "_" + name
+	}
+	return name
 }

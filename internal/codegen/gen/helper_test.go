@@ -78,6 +78,30 @@ func TestResolveImportConflicts(t *testing.T) {
 			},
 		},
 		{
+			name:    "alias_replaces_characters_an_identifier_cannot_hold",
+			imports: []string{"helloworld/service/my-dir/item", "helloworld/service/other/item"},
+			want: map[string]string{
+				"helloworld/service/my-dir/item": "my_dir_item",
+				"helloworld/service/other/item":  "other_item",
+			},
+		},
+		{
+			name:    "alias_grown_into_a_dotted_host_stays_an_identifier",
+			imports: []string{"example.com/x/item", "example.org/x/item"},
+			want: map[string]string{
+				"example.com/x/item": "example_com_x_item",
+				"example.org/x/item": "example_org_x_item",
+			},
+		},
+		{
+			name:    "alias_starting_with_a_digit_takes_a_leading_underscore",
+			imports: []string{"helloworld/service/2fa/item", "helloworld/service/other/item"},
+			want: map[string]string{
+				"helloworld/service/2fa/item":   "_2fa_item",
+				"helloworld/service/other/item": "other_item",
+			},
+		},
+		{
 			name:    "a_repeated_import_needs_no_alias",
 			imports: []string{"helloworld/service/record", "helloworld/service/record"},
 			want: map[string]string{
