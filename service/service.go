@@ -7,6 +7,7 @@
 package service
 
 import (
+	"fmt"
 	"reflect"
 
 	"github.com/hydroan/gst/consts"
@@ -29,7 +30,8 @@ type Base[M types.Model, REQ types.Request, RSP types.Response] = serviceregistr
 // keep hand-written registrations aligned the same way. Hook services (whose
 // model, request, and response types are identical) register with their route
 // all the same. Registering two services under one route and phase panics at
-// startup instead of silently overwriting the first one.
+// startup instead of silently overwriting the first one, and so does an
+// interface type argument, which names no service to register.
 //
 // The service type parameter S is normally a pointer to a struct type
 // embedding Base; the registry always stores a pointer instance.
@@ -55,9 +57,13 @@ func Register[S types.Service[M, REQ, RSP], M types.Model, REQ types.Request, RS
 		typ = typ.Elem()
 	}
 
+	// A pointer to any concrete type that satisfies the constraint implements
+	// the service interface, so only an interface type argument fails here:
+	// it names no service to dispatch to, and registering nothing in its place
+	// would leave the route on the built-in handling without a word.
 	svc, ok := reflect.TypeAssert[types.Service[M, REQ, RSP]](reflect.New(typ))
 	if !ok {
-		return
+		panic(fmt.Sprintf("service: register of route %q phase %q requires a concrete service type, not the interface %s", route, phase, typ))
 	}
 	serviceregistry.Register[M, REQ, RSP](phase, route, svc)
 }
