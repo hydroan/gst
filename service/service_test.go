@@ -3,6 +3,7 @@ package service_test
 import (
 	"fmt"
 	"reflect"
+	"sync/atomic"
 	"testing"
 
 	"github.com/hydroan/gst/consts"
@@ -31,20 +32,24 @@ func TestRegisterResolvesAPointerInstance(t *testing.T) {
 	}
 
 	t.Run("base by pointer", func(t *testing.T) {
-		service.Register[*base](consts.PHASE_CREATE, "samples/pointer")
-		requireResolvesTo[base](t, consts.PHASE_CREATE, "samples/pointer")
+		route := newRoute("samples/pointer")
+		service.Register[*base](consts.PHASE_CREATE, route)
+		requireResolvesTo[base](t, consts.PHASE_CREATE, route)
 	})
 	t.Run("base by value", func(t *testing.T) {
-		service.Register[base](consts.PHASE_CREATE, "samples/struct")
-		requireResolvesTo[base](t, consts.PHASE_CREATE, "samples/struct")
+		route := newRoute("samples/struct")
+		service.Register[base](consts.PHASE_CREATE, route)
+		requireResolvesTo[base](t, consts.PHASE_CREATE, route)
 	})
 	t.Run("canonical struct by pointer", func(t *testing.T) {
-		service.Register[*canonical](consts.PHASE_CREATE, "records/pointer")
-		requireResolvesTo[canonical](t, consts.PHASE_CREATE, "records/pointer")
+		route := newRoute("records/pointer")
+		service.Register[*canonical](consts.PHASE_CREATE, route)
+		requireResolvesTo[canonical](t, consts.PHASE_CREATE, route)
 	})
 	t.Run("canonical struct by value", func(t *testing.T) {
-		service.Register[canonical](consts.PHASE_CREATE, "records/struct")
-		requireResolvesTo[canonical](t, consts.PHASE_CREATE, "records/struct")
+		route := newRoute("records/struct")
+		service.Register[canonical](consts.PHASE_CREATE, route)
+		requireResolvesTo[canonical](t, consts.PHASE_CREATE, route)
 	})
 }
 
@@ -82,16 +87,17 @@ func TestRegisterInjectsTheServiceLogger(t *testing.T) {
 	type canonical = struct {
 		service.Base[*testUser, *testUser, *testUser]
 	}
-	service.Register[*base](consts.PHASE_CREATE, "samples/service")
-	service.Register[*base](consts.PHASE_DELETE, "samples/service")
-	service.Register[*canonical](consts.PHASE_CREATE, "records/service")
+	samples, records := newRoute("samples/service"), newRoute("records/service")
+	service.Register[*base](consts.PHASE_CREATE, samples)
+	service.Register[*base](consts.PHASE_DELETE, samples)
+	service.Register[*canonical](consts.PHASE_CREATE, records)
 
 	for _, phase := range []consts.Phase{consts.PHASE_CREATE, consts.PHASE_DELETE} {
-		s, ok := serviceregistry.Resolve[*testUser, *testUser, *testUser](serviceregistry.Key(phase, "samples/service")).(*base)
+		s, ok := serviceregistry.Resolve[*testUser, *testUser, *testUser](serviceregistry.Key(phase, samples)).(*base)
 		require.True(t, ok)
 		require.NotNil(t, s.Logger, "phase %s", phase)
 	}
-	s, ok := serviceregistry.Resolve[*testUser, *testUser, *testUser](serviceregistry.Key(consts.PHASE_CREATE, "records/service")).(*canonical)
+	s, ok := serviceregistry.Resolve[*testUser, *testUser, *testUser](serviceregistry.Key(consts.PHASE_CREATE, records)).(*canonical)
 	require.True(t, ok)
 	require.NotNil(t, s.Logger)
 }
@@ -102,4 +108,16 @@ func requireResolvesTo[S any](t *testing.T, phase consts.Phase, route string) {
 
 	got := serviceregistry.Resolve[*testUser, *testUser, *testUser](serviceregistry.Key(phase, route))
 	require.Equal(t, reflect.TypeFor[*S](), reflect.TypeOf(got), "route %q phase %q", route, phase)
+}
+
+// routeSeq numbers the routes the tests register. The registry refuses a
+// second registration of one route and phase and lives as long as the
+// process, so a repeated run (go test -count) registers under routes of its
+// own.
+var routeSeq atomic.Int64
+
+// newRoute returns a route named after route that no earlier registration of
+// the process used.
+func newRoute(route string) string {
+	return fmt.Sprintf("%s-%d", route, routeSeq.Add(1))
 }

@@ -1,6 +1,8 @@
 package serviceregistry_test
 
 import (
+	"fmt"
+	"sync/atomic"
 	"testing"
 
 	"github.com/hydroan/gst/consts"
@@ -26,7 +28,7 @@ func TestRegisterAndResolve(t *testing.T) {
 	}
 
 	registered := &svc{}
-	phase := consts.Phase("test_register_and_resolve")
+	phase := newPhase("test_register_and_resolve")
 
 	serviceregistry.Register[*testUser, *testUser, *testUser](phase, "samples", registered)
 	resolved := serviceregistry.Resolve[*testUser, *testUser, *testUser](serviceregistry.Key(phase, "samples"))
@@ -51,7 +53,7 @@ func TestResolveSeesLateRegistration(t *testing.T) {
 		serviceregistry.Base[*testUser, *testUser, *testUser]
 	}
 
-	phase := consts.Phase("test_resolve_late_registration")
+	phase := newPhase("test_resolve_late_registration")
 	key := serviceregistry.Key(phase, "samples")
 
 	resolved := serviceregistry.Resolve[*testUser, *testUser, *testUser](key)
@@ -76,7 +78,7 @@ func TestRegisterKeysByRoute(t *testing.T) {
 		serviceregistry.Base[*testUser, *testUser, *testUser]
 	}
 
-	phase := consts.Phase("test_register_keys_by_route")
+	phase := newPhase("test_register_keys_by_route")
 	start := &startSvc{}
 	stop := &stopSvc{}
 
@@ -95,7 +97,7 @@ func TestRegisterPanicsOnDuplicateRouteAndPhase(t *testing.T) {
 		serviceregistry.Base[*testUser, *testUser, *testUser]
 	}
 
-	phase := consts.Phase("test_register_duplicate")
+	phase := newPhase("test_register_duplicate")
 	serviceregistry.Register[*testUser, *testUser, *testUser](phase, "samples", &svc{})
 
 	require.Panics(t, func() {
@@ -122,7 +124,7 @@ func TestResolveReturnsBaseOnTypeMismatch(t *testing.T) {
 		serviceregistry.Base[*testUser, *testUser, *testUser]
 	}
 
-	phase := consts.Phase("test_resolve_type_mismatch")
+	phase := newPhase("test_resolve_type_mismatch")
 	serviceregistry.Register[*testUser, *testUser, *testUser](phase, "samples", &svc{})
 
 	var resolved any
@@ -131,4 +133,16 @@ func TestResolveReturnsBaseOnTypeMismatch(t *testing.T) {
 	})
 	_, ok := resolved.(*serviceregistry.Base[*testRecord, *testRecord, *testRecord])
 	require.True(t, ok, "type mismatch should degrade to the no-op Base")
+}
+
+// phaseSeq numbers the phases the tests register under. The registry refuses
+// a second registration of one route and phase and lives as long as the
+// process, so a repeated run (go test -count) registers under phases of its
+// own.
+var phaseSeq atomic.Int64
+
+// newPhase returns a phase named after name that no earlier registration of
+// the process used.
+func newPhase(name string) consts.Phase {
+	return consts.Phase(fmt.Sprintf("%s-%d", name, phaseSeq.Add(1)))
 }
