@@ -8,7 +8,6 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
-	"sort"
 	"strings"
 
 	"github.com/cockroachdb/errors"
@@ -21,7 +20,6 @@ import (
 	"github.com/hydroan/gst/internal/codegen/gen"
 	pkgnew "github.com/hydroan/gst/internal/codegen/new"
 	"github.com/hydroan/gst/internal/ggconfig"
-	"github.com/samber/lo"
 	"github.com/spf13/cobra"
 )
 
@@ -114,9 +112,11 @@ func genRunWithOptions(opts genRunOptions) error {
 	modelStmts := make([]ast.Stmt, 0)
 	serviceStmts := make([]ast.Stmt, 0)
 	routerStmts := make([]ast.Stmt, 0)
-	modelImportMap := make(map[string]struct{})
-	routerImportMap := make(map[string]struct{})
-	serviceImportMap := make(map[string]struct{})
+	// The packages each registration file imports, every import path mapped
+	// to the name of the package it declares.
+	modelPkgs := make(map[string]string)
+	routerPkgs := make(map[string]string)
+	servicePkgs := make(map[string]string)
 	writeGenFile := func(filename string, content string) error {
 		if opts.Quiet {
 			return writeGeneratedFile(filename, content, false)
@@ -126,42 +126,48 @@ func genRunWithOptions(opts genRunOptions) error {
 	}
 
 	for _, m := range allModels {
-		if m.Design.Enabled && m.Design.Migrate {
-			// A model in the root model package (ModelFileDir "model" or
-			// "model/") registers unqualified in model/model.gen.go, as in
-			// "Register[*Record]()"; any other model is qualified by its
-			// package name, as in "Register[*sample.Record]()" for
-			// ModelFileDir "model/sample".
-			if m.ModelPkgName == strings.TrimRight(m.ModelFileDir, "/") {
-				modelStmts = append(modelStmts, gen.StmtModelRegister(m.ModelName))
-			} else {
-				modelStmts = append(modelStmts, gen.StmtModelRegister(fmt.Sprintf("%s.%s", m.ModelPkgName, m.ModelName)))
-			}
-
-			if path, shouldImport := m.ModelImportPath(); shouldImport {
-				modelImportMap[path] = struct{}{}
-			}
+		// The model registration file belongs to the root model package; a
+		// model anywhere else is registered through an import of its package.
+		if m.Design.Enabled && m.Design.Migrate && !m.InModelRoot(modelDir) {
+			modelPkgs[m.ImportPath()] = m.ModelPkgName
 		}
 
 		m.Design.Range(func(s string, a *dsl.Action) {
 			if a.Service {
 				target := gen.ServiceTarget(m, a, modelDir, serviceDir)
-				serviceImportMap[target.ImportPath] = struct{}{}
+				servicePkgs[target.ImportPath] = target.PackageName
 			}
-			routerImportMap[m.RouterImportPath()] = struct{}{}
+			routerPkgs[m.ImportPath()] = m.ModelPkgName
 		})
 	}
 
-	// Resolve import conflicts
-	serviceImports := lo.Keys(serviceImportMap)
-	sort.Strings(serviceImports)
-	serviceAliasMap := gen.ResolveImportConflicts(serviceImports)
 	// A dsl.PayloadEmpty side is emitted as *model.Empty (or *gstmodel.Empty
 	// when a routed business model package is itself named "model"), so the
-	// qualifier and the import entry are decided once per router file.
+	// qualifier and the import are decided once per router file.
 	gstModelPkg, gstModelNeeded := gen.RouterGstModelUse(allModels)
+	routerGstModelPkg := ""
 	if gstModelNeeded {
-		routerImportMap[gen.GstModelImportEntry(gstModelPkg)] = struct{}{}
+		routerGstModelPkg = gstModelPkg
+	}
+	// A package whose name another import or a framework import of the same
+	// file already takes is imported under an alias, and its registrations
+	// refer to it through the alias.
+	modelAliases := gen.ModelFileAliases(modelPkgs)
+	serviceAliases := gen.ServiceFileAliases(servicePkgs)
+	routerAliases := gen.RouterFileAliases(routerPkgs, routerGstModelPkg)
+
+	for _, m := range allModels {
+		if !m.Design.Enabled || !m.Design.Migrate {
+			continue
+		}
+		// A model in the root model package registers unqualified, as in
+		// "Register[*Record]()"; any other is qualified by the name its
+		// package is imported under, as in "Register[*sample.Record]()".
+		if m.InModelRoot(modelDir) {
+			modelStmts = append(modelStmts, gen.StmtModelRegister(m.ModelName))
+		} else {
+			modelStmts = append(modelStmts, gen.StmtModelRegister(importQualifier(modelAliases, m.ImportPath(), m.ModelPkgName)+"."+m.ModelName))
+		}
 	}
 	for _, m := range allModels {
 		m.Design.Range(func(route string, act *dsl.Action) {
@@ -172,20 +178,13 @@ func genRunWithOptions(opts genRunOptions) error {
 
 			if act.Service {
 				target := gen.ServiceTarget(m, act, modelDir, serviceDir)
-				if alias := serviceAliasMap[target.ImportPath]; len(alias) > 0 {
-					// alias import package, eg:
-					// pkg1_user "service/pkg1/user"
-					// pkg2_user "service/pkg2/user"
-					serviceStmts = append(serviceStmts, gen.StmtServiceRegister(fmt.Sprintf("%s.%s", alias, act.RoleName()), act.Phase, route))
-				} else {
-					serviceStmts = append(serviceStmts, gen.StmtServiceRegister(fmt.Sprintf("%s.%s", target.PackageName, act.RoleName()), act.Phase, route))
-				}
+				serviceStmts = append(serviceStmts, gen.StmtServiceRegister(importQualifier(serviceAliases, target.ImportPath, target.PackageName)+"."+act.RoleName(), act.Phase, route))
 			}
 			base := "Auth"
 			if act.Public {
 				base = "Pub"
 			}
-			routerStmts = append(routerStmts, gen.StmtRouterRegister(m.ModelPkgName, m.ModelName, act.Payload, act.Result, gstModelPkg, base, route, paramName, act.Phase.MethodName()))
+			routerStmts = append(routerStmts, gen.StmtRouterRegister(importQualifier(routerAliases, m.ImportPath(), m.ModelPkgName), m.ModelName, act.Payload, act.Result, gstModelPkg, base, route, paramName, act.Phase.MethodName()))
 		})
 	}
 
@@ -195,9 +194,7 @@ func genRunWithOptions(opts genRunOptions) error {
 	if !opts.Quiet {
 		clioutput.Section("Generate Files")
 	}
-	modelImports := lo.Keys(modelImportMap)
-	sort.Strings(modelImports)
-	modelCode, err := gen.BuildModelFile("model", modelImports, modelStmts...)
+	modelCode, err := gen.BuildModelFile("model", modelAliases, modelStmts...)
 	if err != nil {
 		return errors.Wrap(err, "build model/model.gen.go")
 	}
@@ -221,9 +218,7 @@ func genRunWithOptions(opts genRunOptions) error {
 	}
 
 	// generate service/service.gen.go
-	serviceImports = lo.Keys(serviceImportMap)
-	sort.Strings(serviceImports)
-	serviceCode, err := gen.BuildServiceFile("service", serviceImports, serviceStmts...)
+	serviceCode, err := gen.BuildServiceFile("service", serviceAliases, serviceStmts...)
 	if err != nil {
 		return errors.Wrap(err, "build service/service.gen.go")
 	}
@@ -232,12 +227,7 @@ func genRunWithOptions(opts genRunOptions) error {
 	}
 
 	// generate router/router.gen.go
-	// router always imports "github.com/hydroan/gst"
-	// Load package preparation to avoid Golang analysis and speed up generation.
-	routerImportMap["github.com/hydroan/gst"] = struct{}{}
-	routerImports := lo.Keys(routerImportMap)
-	sort.Strings(routerImports)
-	routerCode, err := gen.BuildRouterFile("router", routerImports, routerStmts...)
+	routerCode, err := gen.BuildRouterFile("router", routerGstModelPkg, routerAliases, routerStmts...)
 	if err != nil {
 		return errors.Wrap(err, "build router/router.gen.go")
 	}
@@ -415,6 +405,16 @@ func scanModels(quiet bool) (scannedModels, error) {
 	reportModelIgnoreWarnings(modelIgnores)
 
 	return scannedModels{models: allModels, routeIgnores: ignoreResult}, nil
+}
+
+// importQualifier returns the name a generated registration file refers to
+// the package at importPath by: the alias aliases maps it to, or its package
+// name pkgName when it was imported without one.
+func importQualifier(aliases map[string]string, importPath, pkgName string) string {
+	if alias := aliases[importPath]; alias != "" {
+		return alias
+	}
+	return pkgName
 }
 
 func routerTargetForAction(route string, design *dsl.Design, action *dsl.Action) (string, string) {

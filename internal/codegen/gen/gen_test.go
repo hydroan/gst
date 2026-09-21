@@ -121,28 +121,30 @@ func TestServiceTarget(t *testing.T) {
 	}
 }
 
-func TestModelInfo_ModelImportPath(t *testing.T) {
+func TestModelInfo_InModelRoot(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
 		name         string
 		modelFileDir string
-		wantPath     string
-		wantImport   bool
+		want         bool
 	}{
 		{
-			// The root model package is the package the generated model
-			// registration file lives in, so it is never imported there.
 			name:         "root_model_package",
 			modelFileDir: "model",
-			wantPath:     "",
-			wantImport:   false,
+			want:         true,
 		},
 		{
 			name:         "sub_package",
 			modelFileDir: "model/sample",
-			wantPath:     "helloworld/model/sample",
-			wantImport:   true,
+			want:         false,
+		},
+		{
+			// A package named model below the root is still a sub package:
+			// the root is told apart by its directory, not by its name.
+			name:         "sub_package_named_model",
+			modelFileDir: "model/sample/model",
+			want:         false,
 		},
 	}
 
@@ -151,9 +153,8 @@ func TestModelInfo_ModelImportPath(t *testing.T) {
 			t.Parallel()
 
 			m := &gen.ModelInfo{ModulePath: "helloworld", ModelFileDir: tt.modelFileDir}
-			gotPath, gotImport := m.ModelImportPath()
-			if gotPath != tt.wantPath || gotImport != tt.wantImport {
-				t.Errorf("ModelImportPath() = (%q, %v), want (%q, %v)", gotPath, gotImport, tt.wantPath, tt.wantImport)
+			if got := m.InModelRoot("model"); got != tt.want {
+				t.Errorf("InModelRoot(%q) = %v, want %v", "model", got, tt.want)
 			}
 		})
 	}

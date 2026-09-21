@@ -130,7 +130,7 @@ func typeScriptRoots(models []*gen.ModelInfo) []ts.TypeRef {
 	seen := make(map[ts.TypeRef]bool)
 	var roots []ts.TypeRef
 	for _, m := range models {
-		pkgPath := m.RouterImportPath()
+		pkgPath := m.ImportPath()
 		m.Design.Range(func(_ string, action *dsl.Action) {
 			switch action.Phase {
 			case consts.PHASE_IMPORT, consts.PHASE_EXPORT, consts.PHASE_SSE:

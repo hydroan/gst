@@ -5,7 +5,7 @@ import (
 	"go/ast"
 	"go/format"
 	"go/token"
-	"path"
+	"maps"
 	"slices"
 	"strconv"
 	"strings"
@@ -133,37 +133,52 @@ func fixCommentPosition(code string) string {
 	return strings.Join(lines, "\n")
 }
 
-// ResolveImportConflicts picks the alias each import of a generated file
-// needs. An import keeps its package name, taken as its last path segment,
-// unless another import shares it; then it is aliased with its last two
-// segments joined by an underscore ("svc/pkg1/user" becomes "pkg1_user"). An
-// alias that still clashes with another import's name takes one more leading
-// segment at a time, and one that runs out of segments gets a numeric suffix,
-// so no two imports share a name. Every alias is a Go identifier: characters
-// an identifier cannot hold become underscores, and one that would start with
-// a digit gets an underscore in front. The result maps each import path to its
-// alias, or to "" when it needs none.
-func ResolveImportConflicts(imports []string) map[string]string {
-	paths := slices.Compact(slices.Sorted(slices.Values(imports)))
+// ResolveImportConflicts picks the alias each project import of a generated
+// file needs. imports maps every import path to the name of the package it
+// declares, and reserved lists the names the file's framework imports take.
+// An import keeps its package name when no reserved name and no other import
+// claims it; otherwise it is aliased with its last two path segments joined by
+// an underscore ("svc/pkg1/user" becomes "pkg1_user"). An alias that still
+// clashes with another name takes one more leading segment at a time, and one
+// that runs out of segments gets a numeric suffix, so no two imports share a
+// name and none takes a framework import's. Every alias is a Go identifier:
+// characters an identifier cannot hold become underscores, and one that would
+// start with a digit gets an underscore in front. The result maps each import
+// path to its alias, or to "" when it needs none.
+func ResolveImportConflicts(imports map[string]string, reserved ...string) map[string]string {
+	paths := slices.Sorted(maps.Keys(imports))
 
-	shared := make(map[string]int, len(paths))
-	for _, importPath := range paths {
-		shared[path.Base(importPath)]++
+	claims := make(map[string]int, len(paths)+len(reserved))
+	for _, reservedName := range reserved {
+		claims[reservedName]++
 	}
-	// depth is the number of trailing path segments an import's name is built
-	// from; depth 1 is its package name, which needs no alias.
+	for _, importPath := range paths {
+		claims[imports[importPath]]++
+	}
+	// depth is the number of trailing path segments an aliased import's name
+	// is built from; 0 marks an import that keeps its package name.
 	depth := make(map[string]int, len(paths))
 	for _, importPath := range paths {
-		depth[importPath] = 1
-		if shared[path.Base(importPath)] > 1 {
+		if claims[imports[importPath]] > 1 {
 			depth[importPath] = 2
 		}
 	}
+	name := func(importPath string) string {
+		if depth[importPath] == 0 {
+			return imports[importPath]
+		}
+		return importName(importPath, depth[importPath])
+	}
 	for {
-		byName := make(map[string][]string, len(paths))
+		// A reserved name is held by a framework import, entered as "" so
+		// it counts toward a clash but never grows.
+		byName := make(map[string][]string, len(paths)+len(reserved))
+		for _, reservedName := range reserved {
+			byName[reservedName] = append(byName[reservedName], "")
+		}
 		for _, importPath := range paths {
-			name := importName(importPath, depth[importPath])
-			byName[name] = append(byName[name], importPath)
+			n := name(importPath)
+			byName[n] = append(byName[n], importPath)
 		}
 		grown := false
 		for _, clashing := range byName {
@@ -171,7 +186,7 @@ func ResolveImportConflicts(imports []string) map[string]string {
 				continue
 			}
 			for _, importPath := range clashing {
-				if depth[importPath] > 1 && depth[importPath] <= strings.Count(importPath, "/") {
+				if depth[importPath] > 0 && depth[importPath] <= strings.Count(importPath, "/") {
 					depth[importPath]++
 					grown = true
 				}
@@ -183,21 +198,23 @@ func ResolveImportConflicts(imports []string) map[string]string {
 	}
 
 	aliases := make(map[string]string, len(paths))
-	taken := make(map[string]bool, len(paths))
+	taken := make(map[string]bool, len(paths)+len(reserved))
+	for _, reservedName := range reserved {
+		taken[reservedName] = true
+	}
 	for _, importPath := range paths {
-		if depth[importPath] == 1 {
+		if depth[importPath] == 0 {
 			aliases[importPath] = ""
-			taken[importName(importPath, 1)] = true
+			taken[imports[importPath]] = true
 		}
 	}
 	for _, importPath := range paths {
-		if depth[importPath] == 1 {
+		if depth[importPath] == 0 {
 			continue
 		}
-		name := importName(importPath, depth[importPath])
-		alias := name
+		alias := name(importPath)
 		for n := 2; taken[alias]; n++ {
-			alias = name + strconv.Itoa(n)
+			alias = name(importPath) + strconv.Itoa(n)
 		}
 		aliases[importPath] = alias
 		taken[alias] = true

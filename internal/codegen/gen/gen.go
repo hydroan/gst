@@ -22,20 +22,18 @@ import (
 // ModelInfo stores model information
 //
 // Examples:
-// {ModulePath:"github.com/hydroan/gst", ModelPkgName:"model", ModelName:"User", ModelVarName:"u", ModelFileDir:"/tmp/model"},
-// {ModulePath:"github.com/hydroan/gst", ModelPkgName:"model", ModelName:"Group", ModelVarName:"g", ModelFileDir:"/tmp/model"},
-// {ModulePath:"github.com/hydroan/gst", ModelPkgName:"model_auth", ModelName:"User", ModelVarName:"u", ModelFileDir:"/tmp/model"},
-// {ModulePath:"github.com/hydroan/gst", ModelPkgName:"model_auth", ModelName:"Group", ModelVarName:"g", ModelFileDir:"/tmp/model"},
+// {ModulePath:"helloworld", ModelPkgName:"model", ModelName:"User", ModelVarName:"u", ModelFileDir:"model", ModelFilePath:"model/user.go"},
+// {ModulePath:"helloworld", ModelPkgName:"sample", ModelName:"Group", ModelVarName:"g", ModelFileDir:"model/sample", ModelFilePath:"model/sample/group.go"},
 type ModelInfo struct {
 	// module related fields
 	ModulePath string // module path parsed from go.mod
 
 	// model related fields
-	ModelPkgName  string // model package name, e.g.: model, model_authz, model_log
+	ModelPkgName  string // model package name, e.g.: model, sample
 	ModelName     string // model name, e.g.: User, Group
 	ModelVarName  string // lowercase model variable name, e.g.: u, g
-	ModelFileDir  string // relative path of model file directory, e.g.: github.com/hydroan/gst/model
-	ModelFilePath string // relative path of model file, e.g.: github.com/hydroan/gst/model/user.go
+	ModelFileDir  string // directory of the model file, relative to the project root, e.g.: model/sample
+	ModelFilePath string // path of the model file, relative to the project root, e.g.: model/sample/group.go
 
 	// custom request and response related fields
 	Design *dsl.Design
@@ -120,19 +118,16 @@ func flattenedServiceOutputRel(modelFilePath, modelDir string) string {
 	return dir
 }
 
-func (m *ModelInfo) RouterImportPath() string {
+// ImportPath returns the import path of the package the model is declared in.
+func (m *ModelInfo) ImportPath() string {
 	return filepath.Join(m.ModulePath, m.ModelFileDir)
 }
 
-func (m *ModelInfo) ModelImportPath() (string, bool) {
-	// If a struct anonymous inherits from model.Base, than the model will be imported in model/model.go using
-	// statement such like: "model.Register[*User]()".
-	// Imported the model is not determinated by m.Design.Eanbled value.
-	path := filepath.Join(m.ModulePath, m.ModelFileDir)
-	if !strings.HasSuffix(path, "/model") {
-		return path, true
-	}
-	return "", false
+// InModelRoot reports whether the model is declared in the root model package,
+// the directory modelDir itself, which the generated model registration file
+// belongs to.
+func (m *ModelInfo) InModelRoot(modelDir string) bool {
+	return filepath.Clean(m.ModelFileDir) == filepath.Clean(modelDir)
 }
 
 // GetModulePath parses go.mod to get module path

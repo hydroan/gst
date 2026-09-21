@@ -51,9 +51,10 @@ func RouterGstModelUse(models []*ModelInfo) (pkgName string, needed bool) {
 	return pkgName, needed
 }
 
-// GstModelImportEntry returns the imports() entry ("path" or "alias path")
-// that makes the given gst model package qualifier resolvable in a
-// generated file.
+// GstModelImportEntry returns the import entry ("path" or "alias path") that
+// makes the given gst model package qualifier resolvable in a generated file:
+// a service file takes it through imports(), the router file through
+// BuildRouterFile.
 func GstModelImportEntry(pkgName string) string {
 	if pkgName == gstModelPkgAlias {
 		return gstModelPkgAlias + " " + GstModelImportPath

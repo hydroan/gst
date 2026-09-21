@@ -4,13 +4,84 @@ import (
 	"fmt"
 	"go/ast"
 	"go/token"
+	"maps"
+	"path"
+	"slices"
+	"strconv"
 	"strings"
 
 	"github.com/hydroan/gst/consts"
 	"github.com/hydroan/gst/internal/codegen/constants"
 )
 
-// BuildModelFile generates a model.go file, the content like below:
+// The framework packages each generated registration file imports under
+// their own names. Both the file's imports and the names its project imports
+// are aliased around come from these lists. The router file leads with the
+// router and consts imports and sorts the gst import in among the rest.
+var (
+	modelFileImports        = []string{constants.ImportPathModel}
+	serviceFileImports      = []string{constants.ImportPathService, constants.ImportPathConsts}
+	routerFileLeadImports   = []string{constants.ImportPathRouter, constants.ImportPathConsts}
+	routerFileSortedImports = []string{constants.ImportPathGst}
+)
+
+// ModelFileAliases picks the aliases the project imports of the model
+// registration file need (see ResolveImportConflicts); imports maps each
+// imported model package path to its package name.
+func ModelFileAliases(imports map[string]string) map[string]string {
+	return ResolveImportConflicts(imports, importNames(modelFileImports)...)
+}
+
+// ServiceFileAliases picks the aliases the project imports of the service
+// registration file need (see ResolveImportConflicts); imports maps each
+// imported service package path to its package name.
+func ServiceFileAliases(imports map[string]string) map[string]string {
+	return ResolveImportConflicts(imports, importNames(serviceFileImports)...)
+}
+
+// RouterFileAliases picks the aliases the project imports of the router
+// registration file need (see ResolveImportConflicts); imports maps each
+// imported model package path to its package name, and gstModelPkg is the
+// name the file imports the gst model package under, "" when it does not.
+func RouterFileAliases(imports map[string]string, gstModelPkg string) map[string]string {
+	reserved := importNames(slices.Concat(routerFileLeadImports, routerFileSortedImports))
+	if gstModelPkg != "" {
+		reserved = append(reserved, gstModelPkg)
+	}
+	return ResolveImportConflicts(imports, reserved...)
+}
+
+// importNames returns the package name of each framework import path, its
+// last segment.
+func importNames(importPaths []string) []string {
+	names := make([]string, len(importPaths))
+	for i, importPath := range importPaths {
+		names[i] = path.Base(importPath)
+	}
+	return names
+}
+
+// importSpecs builds the imports of a generated registration file: the
+// framework packages under their own names, then each project import under
+// the alias aliases maps it to, if any.
+func importSpecs(frameworkImports []string, aliases map[string]string) []ast.Spec {
+	specs := make([]ast.Spec, 0, len(frameworkImports)+len(aliases))
+	for _, importPath := range frameworkImports {
+		specs = append(specs, &ast.ImportSpec{Path: &ast.BasicLit{Kind: token.STRING, Value: strconv.Quote(importPath)}})
+	}
+	for _, importPath := range slices.Sorted(maps.Keys(aliases)) {
+		spec := &ast.ImportSpec{Path: &ast.BasicLit{Kind: token.STRING, Value: strconv.Quote(importPath)}}
+		if alias := aliases[importPath]; alias != "" {
+			spec.Name = ast.NewIdent(alias)
+		}
+		specs = append(specs, spec)
+	}
+	return specs
+}
+
+// BuildModelFile generates the model registration file, model.gen.go, the
+// content like below; aliases maps each model package it imports to the alias
+// ModelFileAliases picked for it:
 /*
 package model
 
@@ -21,7 +92,7 @@ func init() {
 	model.Register[*User]()
 }
 */
-func BuildModelFile(pkgName string, modelImports []string, stmts ...ast.Stmt) (string, error) {
+func BuildModelFile(pkgName string, aliases map[string]string, stmts ...ast.Stmt) (string, error) {
 	// Create init function body
 	body := make([]ast.Stmt, 0, len(stmts))
 	body = append(body, stmts...)
@@ -40,23 +111,8 @@ func BuildModelFile(pkgName string, modelImports []string, stmts ...ast.Stmt) (s
 
 	// Create import declaration
 	importDecl := &ast.GenDecl{
-		Tok: token.IMPORT,
-		Specs: []ast.Spec{
-			&ast.ImportSpec{
-				Path: &ast.BasicLit{
-					Kind:  token.STRING,
-					Value: fmt.Sprintf(`"%s"`, constants.ImportPathModel),
-				},
-			},
-		},
-	}
-	for _, modelImport := range modelImports {
-		importDecl.Specs = append(importDecl.Specs, &ast.ImportSpec{
-			Path: &ast.BasicLit{
-				Kind:  token.STRING,
-				Value: fmt.Sprintf(`"%s"`, modelImport),
-			},
-		})
+		Tok:   token.IMPORT,
+		Specs: importSpecs(modelFileImports, aliases),
 	}
 
 	// Create file AST
@@ -92,31 +148,27 @@ func BuildModelFile(pkgName string, modelImports []string, stmts ...ast.Stmt) (s
 	return FormatNodeExtra(f, false)
 }
 
-// BuildServiceFile generates a service.go file, the content like below:
+// BuildServiceFile generates the service registration file, service.gen.go,
+// the content like below; aliases maps each service package it imports to the
+// alias ServiceFileAliases picked for it, such as pkg1_user and pkg2_user for
+// "myproject/service/pkg1/user" and "myproject/service/pkg2/user":
 /*
 package service
 
 import (
-	"github.com/hydroan/gst/service"
+	"helloworld/service/group"
+	"helloworld/service/user"
+
 	"github.com/hydroan/gst/consts"
+	"github.com/hydroan/gst/service"
 )
 
 func init() {
-	service.Register[*group](consts.PHASE_UPDATE, "groups/:id")
-	service.Register[*user](consts.PHASE_CREATE, "users")
+	service.Register[*group.Updater](consts.PHASE_UPDATE, "groups/:id")
+	service.Register[*user.Creator](consts.PHASE_CREATE, "users")
 }
 */
-// FIXME: process imports automatically problem.
-func BuildServiceFile(pkgName string, modelImports []string, stmts ...ast.Stmt) (string, error) {
-	// Handle import conflicts when modelImports contain packages with same base name
-	// For example: ["myproject/service/pkg1/user", "myproject/service/pkg2/user"]
-	// Should be renamed to:
-	// import (
-	//     pkg1_user "myproject/service/pkg1/user"
-	//     pkg2_user "myproject/service/pkg2/user"
-	// )
-	importAliases := ResolveImportConflicts(modelImports)
-
+func BuildServiceFile(pkgName string, aliases map[string]string, stmts ...ast.Stmt) (string, error) {
 	body := make([]ast.Stmt, 0, len(stmts))
 	body = append(body, stmts...)
 
@@ -131,39 +183,9 @@ func BuildServiceFile(pkgName string, modelImports []string, stmts ...ast.Stmt) 
 		},
 	}
 
-	// imports service
 	imports := &ast.GenDecl{
-		Tok: token.IMPORT,
-		Specs: []ast.Spec{
-			&ast.ImportSpec{
-				Path: &ast.BasicLit{
-					Kind:  token.STRING,
-					Value: fmt.Sprintf(`"%s"`, constants.ImportPathService),
-				},
-			},
-			&ast.ImportSpec{
-				Path: &ast.BasicLit{
-					Kind:  token.STRING,
-					Value: fmt.Sprintf(`"%s"`, constants.ImportPathConsts),
-				},
-			},
-		},
-	}
-	// imports, such like: "helloworld/model"
-	// Use aliases to resolve import conflicts
-	for _, importPath := range modelImports {
-		alias := importAliases[importPath]
-		importSpec := &ast.ImportSpec{
-			Path: &ast.BasicLit{
-				Kind:  token.STRING,
-				Value: fmt.Sprintf("%q", importPath),
-			},
-		}
-		// Add alias if needed to resolve conflicts
-		if alias != "" {
-			importSpec.Name = ast.NewIdent(alias)
-		}
-		imports.Specs = append(imports.Specs, importSpec)
+		Tok:   token.IMPORT,
+		Specs: importSpecs(serviceFileImports, aliases),
 	}
 
 	f := &ast.File{
@@ -199,17 +221,18 @@ func BuildServiceFile(pkgName string, modelImports []string, stmts ...ast.Stmt) 
 }
 
 // BuildRouterFile generates the router registration file, router.gen.go, the
-// content like below:
+// content like below; gstModelPkg is the name the file imports the gst model
+// package under, "" when no registration references it, and aliases maps each
+// model package it imports to the alias RouterFileAliases picked for it:
 /*
 package router
 
 import (
 	"helloworld/model"
 
+	"github.com/hydroan/gst"
 	"github.com/hydroan/gst/consts"
 	"github.com/hydroan/gst/router"
-
-	"github.com/hydroan/gst"
 )
 
 func Init() error {
@@ -218,8 +241,7 @@ func Init() error {
 	return nil
 }
 */
-// FIXME: process imports automatically problem.
-func BuildRouterFile(pkgName string, modelImports []string, stmts ...ast.Stmt) (string, error) {
+func BuildRouterFile(pkgName, gstModelPkg string, aliases map[string]string, stmts ...ast.Stmt) (string, error) {
 	body := make([]ast.Stmt, 0, len(stmts)+1)
 	body = append(body, stmts...)
 	body = append(body, &ast.ReturnStmt{
@@ -244,36 +266,32 @@ func BuildRouterFile(pkgName string, modelImports []string, stmts ...ast.Stmt) (
 		},
 	}
 
-	importDecl := &ast.GenDecl{
-		Tok: token.IMPORT,
-		Specs: []ast.Spec{
-			&ast.ImportSpec{
-				Path: &ast.BasicLit{
-					Kind:  token.STRING,
-					Value: fmt.Sprintf(`"%s"`, constants.ImportPathRouter),
-				},
-			},
-			&ast.ImportSpec{
-				Path: &ast.BasicLit{
-					Kind:  token.STRING,
-					Value: fmt.Sprintf(`"%s"`, constants.ImportPathConsts),
-				},
-			},
-		},
+	// Every import after the lead ones is ordered by its entry: the import
+	// path, or "gstmodel path" for the gst model package imported under the
+	// gstmodel alias. Where the imports stand decides how the file groups
+	// them: gofumpt lifts a project import without a dot in its path, which
+	// it takes for a standard library one, to the top, and the imports on
+	// either side of the gap it leaves become separate groups. Ordering by
+	// the entry keeps that grouping as it has always been.
+	entries := slices.Concat(slices.Collect(maps.Keys(aliases)), routerFileSortedImports)
+	if gstModelPkg != "" {
+		entries = append(entries, GstModelImportEntry(gstModelPkg))
 	}
-	for _, imp := range modelImports {
-		// An entry in "alias path" form imports the package under the alias,
-		// e.g. `gstmodel "github.com/hydroan/gst/model"`.
-		value := fmt.Sprintf("%q", imp)
-		if alias, path, ok := strings.Cut(imp, " "); ok {
-			value = fmt.Sprintf("%s %q", alias, path)
+	slices.Sort(entries)
+	importDecl := &ast.GenDecl{
+		Tok:   token.IMPORT,
+		Specs: importSpecs(routerFileLeadImports, nil),
+	}
+	for _, entry := range entries {
+		alias, importPath, ok := strings.Cut(entry, " ")
+		if !ok {
+			alias, importPath = aliases[entry], entry
 		}
-		importDecl.Specs = append(importDecl.Specs, &ast.ImportSpec{
-			Path: &ast.BasicLit{
-				Kind:  token.STRING,
-				Value: value,
-			},
-		})
+		spec := &ast.ImportSpec{Path: &ast.BasicLit{Kind: token.STRING, Value: strconv.Quote(importPath)}}
+		if alias != "" {
+			spec.Name = ast.NewIdent(alias)
+		}
+		importDecl.Specs = append(importDecl.Specs, spec)
 	}
 
 	f := &ast.File{
