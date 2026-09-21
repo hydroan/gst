@@ -2,7 +2,6 @@ package gen
 
 import (
 	"bytes"
-	"fmt"
 	"go/ast"
 	"go/format"
 	"go/token"
@@ -12,7 +11,6 @@ import (
 	"strings"
 	"unicode"
 
-	"github.com/stoewer/go-strcase"
 	goimports "golang.org/x/tools/imports"
 	fumpt "mvdan.cc/gofumpt/format"
 )
@@ -133,23 +131,6 @@ func fixCommentPosition(code string) string {
 	}
 
 	return strings.Join(lines, "\n")
-}
-
-func MethodAddComments(code string, modelName string) string {
-	for _, method := range Methods {
-		str := strings.ReplaceAll(strcase.SnakeCase(method), "_", " ")
-		// Add comment after log.Info
-		searchStr := fmt.Sprintf(`log.Info("%s %s")`, strings.ToLower(modelName), str)
-		replaceStr := fmt.Sprintf(`log.Info("%s %s")
-	// =============================
-	// Add your business logic here.
-	// =============================
-`, strings.ToLower(modelName), str)
-
-		code = strings.ReplaceAll(code, searchStr, replaceStr)
-	}
-
-	return code
 }
 
 // ResolveImportConflicts picks the alias each import of a generated file

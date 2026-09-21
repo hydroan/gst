@@ -332,12 +332,10 @@ func genRunWithOptions(opts genRunOptions) error {
 			if file := gen.GenerateService(m, act, act.Phase, target.PackageName); file != nil {
 				fset := token.NewFileSet()
 				code, err := gen.FormatNodeExtraWithFileSet(file, fset)
-				// pretty.Println(file)
 				if err != nil {
 					applyErr = err
 					return
 				}
-				// code = gen.MethodAddComments(code, m.ModelName)
 				applyErr = applyFile(target.FilePath, code, act, target.PackageName, m)
 			}
 		})
