@@ -16,7 +16,7 @@ import (
 	_ "github.com/sergi/go-diff/diffmatchpatch"
 )
 
-var src1 = `
+var defaultImportModelSource = `
 package model
 
 import "github.com/hydroan/gst/model"
@@ -48,7 +48,7 @@ type Device struct {
 }
 	`
 
-var src2 = `
+var namedImportModelSource = `
 package model
 
 import model_auth "github.com/hydroan/gst/model"
@@ -84,7 +84,7 @@ func TestGetModulePath(t *testing.T) {
 	// Each case runs in a directory of its own: GetModulePath reads go.mod
 	// from the working directory, and a go.mod written into the package
 	// directory would briefly turn it into a module of its own.
-	t.Run("reads the module path from go.mod", func(t *testing.T) {
+	t.Run("reads_the_module_path_from_go.mod", func(t *testing.T) {
 		t.Chdir(t.TempDir())
 		if err := os.WriteFile("go.mod", []byte("module github.com/hydroan/gst"), 0o600); err != nil {
 			t.Fatal(err)
@@ -98,7 +98,7 @@ func TestGetModulePath(t *testing.T) {
 			t.Errorf("GetModulePath() = %v, want %v", got, "github.com/hydroan/gst")
 		}
 	})
-	t.Run("fails without go.mod", func(t *testing.T) {
+	t.Run("fails_without_go.mod", func(t *testing.T) {
 		t.Chdir(t.TempDir())
 
 		if _, err := GetModulePath(); err == nil {
@@ -138,18 +138,17 @@ func TestGetModulePathInWorkspaceReturnsCurrentModuleOnly(t *testing.T) {
 
 func TestFindModelPackageName(t *testing.T) {
 	fset := token.NewFileSet()
-	file1, err := parser.ParseFile(fset, "user.go", src1, parser.ParseComments)
+	file1, err := parser.ParseFile(fset, "user.go", defaultImportModelSource, parser.ParseComments)
 	if err != nil {
 		t.Fatal(err)
 	}
-	file2, err := parser.ParseFile(fset, "user.go", src2, parser.ParseComments)
+	file2, err := parser.ParseFile(fset, "user.go", namedImportModelSource, parser.ParseComments)
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	tests := []struct {
-		name string // description of this test case
-		// Named input parameters for target function.
+		name string
 		file *ast.File
 		want string
 	}{
@@ -193,16 +192,15 @@ func TestFindModels(t *testing.T) {
 
 	filename1 := filepath.Join(tmpdir, "user.go")
 	filename2 := filepath.Join(tmpdir, "user2.go")
-	if err = os.WriteFile(filename1, []byte(src1), 0o600); err != nil {
+	if err = os.WriteFile(filename1, []byte(defaultImportModelSource), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if err = os.WriteFile(filename2, []byte(src2), 0o600); err != nil {
+	if err = os.WriteFile(filename2, []byte(namedImportModelSource), 0o600); err != nil {
 		t.Fatal(err)
 	}
 
 	tests := []struct {
-		name string // description of this test case
-		// Named input parameters for target function.
+		name       string
 		modulePath string
 		modelPath  string
 		filename   string
@@ -412,28 +410,27 @@ func TestFindModels(t *testing.T) {
 
 func TestModelPkg2ServicePkg(t *testing.T) {
 	tests := []struct {
-		name string // description of this test case
-		// Named input parameters for target function.
+		name    string
 		pkgName string
 		want    string
 	}{
 		{
-			name:    "test1",
+			name:    "plain_model",
 			pkgName: "model",
 			want:    "service",
 		},
 		{
-			name:    "test2",
+			name:    "digit_suffix",
 			pkgName: "model2",
 			want:    "service2",
 		},
 		{
-			name:    "test3",
+			name:    "underscore_suffix",
 			pkgName: "model_system",
 			want:    "service_system",
 		},
 		{
-			name:    "test4",
+			name:    "camel_case_suffix",
 			pkgName: "modelAuth",
 			want:    "serviceAuth",
 		},
@@ -448,13 +445,53 @@ func TestModelPkg2ServicePkg(t *testing.T) {
 	}
 }
 
+func TestHumanizeDSLFilename(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		in   string
+		want string
+	}{
+		{"archive_sample_items", "archive sample items"},
+		{"archive-sample-items", "archive sample items"},
+		{"path/to/foo_bar-baz", "foo bar baz"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.in, func(t *testing.T) {
+			t.Parallel()
+			if got := humanizeDSLFilename(tt.in); got != tt.want {
+				t.Fatalf("humanizeDSLFilename(%q) = %q, want %q", tt.in, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestServiceActionLogQuoted(t *testing.T) {
+	t.Parallel()
+	act := &dsl.Action{Filename: "archive_sample_items"}
+	if got := serviceActionLogQuoted("Common", consts.PHASE_CREATE, act); got != `"common: archive sample items"` {
+		t.Fatalf("main create: got %s", got)
+	}
+	if got := serviceActionLogQuoted("Common", consts.PHASE_CREATE_BEFORE, act); got != `"common: archive sample items before"` {
+		t.Fatalf("before hook: got %s", got)
+	}
+	if got := serviceActionLogQuoted("Common", consts.PHASE_CREATE_AFTER, act); got != `"common: archive sample items after"` {
+		t.Fatalf("after hook: got %s", got)
+	}
+	act2 := &dsl.Action{Filename: "archive-sample-items"}
+	if got := serviceActionLogQuoted("Common", consts.PHASE_CREATE, act2); got != `"common: archive sample items"` {
+		t.Fatalf("hyphen filename: got %s", got)
+	}
+	if got := serviceActionLogQuoted("User", consts.PHASE_CREATE, nil); got != `"user create"` {
+		t.Fatalf("no Filename: got %s", got)
+	}
+}
+
 func TestGenServiceMethod1(t *testing.T) {
 	tests := []struct {
-		name string // description of this test case
-		// Named input parameters for target function.
+		name  string
 		info  *ModelInfo
-		want  string
 		phase consts.Phase
+		want  string
 	}{
 		{
 			name: "user",
@@ -489,8 +526,7 @@ func TestGenServiceMethod1(t *testing.T) {
 
 func TestGenServiceMethod2(t *testing.T) {
 	tests := []struct {
-		name string // description of this test case
-		// Named input parameters for target function.
+		name  string
 		info  *ModelInfo
 		phase consts.Phase
 		want  string
@@ -528,8 +564,7 @@ func TestGenServiceMethod2(t *testing.T) {
 
 func TestGenServiceMethod3(t *testing.T) {
 	tests := []struct {
-		name string // description of this test case
-		// Named input parameters for target function.
+		name  string
 		info  *ModelInfo
 		phase consts.Phase
 		want  string
@@ -567,8 +602,7 @@ func TestGenServiceMethod3(t *testing.T) {
 
 func TestGenServiceMethod4(t *testing.T) {
 	tests := []struct {
-		name string // description of this test case
-		// Named input parameters for target function.
+		name    string
 		info    *ModelInfo
 		reqName string
 		rspName string
@@ -614,7 +648,7 @@ func TestGenServiceMethod4(t *testing.T) {
 }`,
 		},
 		{
-			name: "group2",
+			name: "group_starred_names_transcribed",
 			info: &ModelInfo{
 				ModelPkgName: "model",
 				ModelName:    "Group",
@@ -649,8 +683,7 @@ func TestGenServiceMethod4(t *testing.T) {
 
 func TestGenServiceMethod5(t *testing.T) {
 	tests := []struct {
-		name string // description of this test case
-		// Named input parameters for target function.
+		name  string
 		info  *ModelInfo
 		phase consts.Phase
 		want  string
@@ -688,8 +721,7 @@ func TestGenServiceMethod5(t *testing.T) {
 
 func TestGenServiceMethod6(t *testing.T) {
 	tests := []struct {
-		name string // description of this test case
-		// Named input parameters for target function.
+		name  string
 		info  *ModelInfo
 		phase consts.Phase
 		want  string
@@ -719,7 +751,7 @@ func TestGenServiceMethod6(t *testing.T) {
 				return
 			}
 			if got != tt.want {
-				t.Errorf("genServiceMethod5() = \n%v\n, want \n%v\n", pretty.Sprintf("% #v", got), pretty.Sprintf("% #v", tt.want))
+				t.Errorf("genServiceMethod6() = \n%v\n, want \n%v\n", pretty.Sprintf("% #v", got), pretty.Sprintf("% #v", tt.want))
 			}
 		})
 	}
@@ -734,7 +766,7 @@ func TestGenerateServiceListEmptyPayload(t *testing.T) {
 		wantSignature string
 	}{
 		{
-			name: "sub package model",
+			name: "sub_package_model",
 			info: &ModelInfo{
 				ModulePath:   "helloworld",
 				ModelPkgName: "group",
@@ -748,7 +780,7 @@ func TestGenerateServiceListEmptyPayload(t *testing.T) {
 			wantSignature: "func (g *Lister) List(ctx *gst.ServiceContext, req *model.Empty) (rsp *group.GroupListRsp, err error)",
 		},
 		{
-			name: "root model package",
+			name: "root_model_package",
 			info: &ModelInfo{
 				ModulePath:   "helloworld",
 				ModelPkgName: "model",
@@ -816,7 +848,7 @@ func TestGenerateServiceExport(t *testing.T) {
 	}
 	exportSig := "func (u *Exporter) Export(ctx *gst.ServiceContext, users ...*model.User) (data []byte, err error)"
 
-	t.Run("non-empty model generates list hooks in controller invocation order", func(t *testing.T) {
+	t.Run("non-empty_model_generates_list_hooks_in_controller_invocation_order", func(t *testing.T) {
 		file := GenerateServiceWithPackage(newInfo(false), action, consts.PHASE_EXPORT, "user")
 		if file == nil {
 			t.Fatal("GenerateServiceWithPackage returned nil")
@@ -838,7 +870,7 @@ func TestGenerateServiceExport(t *testing.T) {
 		}
 	})
 
-	t.Run("empty model generates Export only", func(t *testing.T) {
+	t.Run("empty_model_generates_Export_only", func(t *testing.T) {
 		file := GenerateServiceWithPackage(newInfo(true), action, consts.PHASE_EXPORT, "user")
 		if file == nil {
 			t.Fatal("GenerateServiceWithPackage returned nil")

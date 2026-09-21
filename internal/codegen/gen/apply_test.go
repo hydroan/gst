@@ -4,6 +4,7 @@ import (
 	"go/parser"
 	"go/token"
 	"os"
+	"strings"
 	"testing"
 
 	"github.com/hydroan/gst/consts"
@@ -25,7 +26,7 @@ func init() {
 
 func TestApplyServiceFile(t *testing.T) {
 	tests := []struct {
-		name           string // description of this test case
+		name           string
 		code           string
 		action         *dsl.Action
 		servicePkgName string
@@ -205,299 +206,299 @@ func (u *user) Create(ctx *gst.ServiceContext, req *model.User) (rsp *model.User
 		},
 		{
 			name: "rename_struct_and_receiver_with_filename",
-			code: `package attachment
+			code: `package record
 
 import (
-	"helloworld/model/shared"
+	"helloworld/model/sample"
 
 	"github.com/hydroan/gst"
 	"github.com/hydroan/gst/service"
 )
 
 type Creator struct {
-	service.Base[*shared.Attachment, *shared.Attachment, *shared.Attachment]
+	service.Base[*sample.Record, *sample.Record, *sample.Record]
 }
 
-func (c *Creator) Create(ctx *gst.ServiceContext, req *shared.Attachment) (rsp *shared.Attachment, err error) {
+func (c *Creator) Create(ctx *gst.ServiceContext, req *sample.Record) (rsp *sample.Record, err error) {
 	log := c.WithContext(ctx, ctx.Phase())
-	log.Info("attachment create")
+	log.Info("record create")
 	return rsp, nil
 }
 
-func (c *Creator) CreateBefore(ctx *gst.ServiceContext, attachment *shared.Attachment) error {
+func (c *Creator) CreateBefore(ctx *gst.ServiceContext, record *sample.Record) error {
 	log := c.WithContext(ctx, ctx.Phase())
-	log.Info("attachment create before")
+	log.Info("record create before")
 	return nil
 }
 
-func (c *Creator) CreateAfter(ctx *gst.ServiceContext, attachment *shared.Attachment) error {
+func (c *Creator) CreateAfter(ctx *gst.ServiceContext, record *sample.Record) error {
 	log := c.WithContext(ctx, ctx.Phase())
-	log.Info("attachment create after")
+	log.Info("record create after")
 	return nil
 }
 `,
 			action: &dsl.Action{
 				Enabled:  true,
-				Payload:  "*Attachment",
-				Result:   "*Attachment",
+				Payload:  "*Record",
+				Result:   "*Record",
 				Filename: "upload",
 				Phase:    consts.PHASE_CREATE,
 			},
-			servicePkgName: "attachment",
-			want: `package attachment
+			servicePkgName: "record",
+			want: `package record
 
 import (
-	"helloworld/model/shared"
+	"helloworld/model/sample"
 
 	"github.com/hydroan/gst"
 	"github.com/hydroan/gst/service"
 )
 
 type Upload struct {
-	service.Base[*shared.Attachment, *shared.Attachment, *shared.Attachment]
+	service.Base[*sample.Record, *sample.Record, *sample.Record]
 }
 
-func (u *Upload) Create(ctx *gst.ServiceContext, req *shared.Attachment) (rsp *shared.Attachment, err error) {
+func (u *Upload) Create(ctx *gst.ServiceContext, req *sample.Record) (rsp *sample.Record, err error) {
 	log := u.WithContext(ctx, ctx.Phase())
-	log.Info("attachment create")
+	log.Info("record create")
 	return rsp, nil
 }
 
-func (u *Upload) CreateBefore(ctx *gst.ServiceContext, attachment *shared.Attachment) error {
+func (u *Upload) CreateBefore(ctx *gst.ServiceContext, record *sample.Record) error {
 	log := u.WithContext(ctx, ctx.Phase())
-	log.Info("attachment create before")
+	log.Info("record create before")
 	return nil
 }
 
-func (u *Upload) CreateAfter(ctx *gst.ServiceContext, attachment *shared.Attachment) error {
+func (u *Upload) CreateAfter(ctx *gst.ServiceContext, record *sample.Record) error {
 	log := u.WithContext(ctx, ctx.Phase())
-	log.Info("attachment create after")
+	log.Info("record create after")
 	return nil
 }
 `,
 		},
 		{
 			name: "rename_struct_and_receiver_with_filename_and_payload",
-			code: `package attachment
+			code: `package record
 
 import (
-	"helloworld/model/shared"
+	"helloworld/model/sample"
 
 	"github.com/hydroan/gst"
 	"github.com/hydroan/gst/service"
 )
 
 type Creator struct {
-	service.Base[*shared.Attachment, *shared.Attachment, *shared.Attachment]
+	service.Base[*sample.Record, *sample.Record, *sample.Record]
 }
 
-func (c *Creator) Create(ctx *gst.ServiceContext, req *shared.Attachment) (rsp *shared.Attachment, err error) {
+func (c *Creator) Create(ctx *gst.ServiceContext, req *sample.Record) (rsp *sample.Record, err error) {
 	log := c.WithContext(ctx, ctx.Phase())
-	log.Info("attachment create")
+	log.Info("record create")
 	return rsp, nil
 }
 `,
 			action: &dsl.Action{
 				Enabled:  true,
-				Payload:  "*AttachmentReq",
-				Result:   "*AttachmentRsp",
+				Payload:  "*RecordReq",
+				Result:   "*RecordRsp",
 				Filename: "upload",
 				Phase:    consts.PHASE_CREATE,
 			},
-			servicePkgName: "attachment",
-			want: `package attachment
+			servicePkgName: "record",
+			want: `package record
 
 import (
-	"helloworld/model/shared"
+	"helloworld/model/sample"
 
 	"github.com/hydroan/gst"
 	"github.com/hydroan/gst/service"
 )
 
 type Upload struct {
-	service.Base[*shared.Attachment, *shared.AttachmentReq, *shared.AttachmentRsp]
+	service.Base[*sample.Record, *sample.RecordReq, *sample.RecordRsp]
 }
 
-func (u *Upload) Create(ctx *gst.ServiceContext, req *shared.AttachmentReq) (rsp *shared.AttachmentRsp, err error) {
+func (u *Upload) Create(ctx *gst.ServiceContext, req *sample.RecordReq) (rsp *sample.RecordRsp, err error) {
 	log := u.WithContext(ctx, ctx.Phase())
-	log.Info("attachment create")
+	log.Info("record create")
 	return rsp, nil
 }
 `,
 		},
 		{
 			name: "no_rename_when_filename_not_set",
-			code: `package attachment
+			code: `package record
 
 import (
-	"helloworld/model/shared"
+	"helloworld/model/sample"
 
 	"github.com/hydroan/gst"
 	"github.com/hydroan/gst/service"
 )
 
 type Creator struct {
-	service.Base[*shared.Attachment, *shared.Attachment, *shared.Attachment]
+	service.Base[*sample.Record, *sample.Record, *sample.Record]
 }
 
-func (c *Creator) Create(ctx *gst.ServiceContext, req *shared.Attachment) (rsp *shared.Attachment, err error) {
+func (c *Creator) Create(ctx *gst.ServiceContext, req *sample.Record) (rsp *sample.Record, err error) {
 	log := c.WithContext(ctx, ctx.Phase())
-	log.Info("attachment create")
+	log.Info("record create")
 	return rsp, nil
 }
 `,
 			action: &dsl.Action{
 				Enabled: true,
-				Payload: "*Attachment",
-				Result:  "*Attachment",
+				Payload: "*Record",
+				Result:  "*Record",
 				Phase:   consts.PHASE_CREATE,
 			},
-			servicePkgName: "attachment",
-			want: `package attachment
+			servicePkgName: "record",
+			want: `package record
 
 import (
-	"helloworld/model/shared"
+	"helloworld/model/sample"
 
 	"github.com/hydroan/gst"
 	"github.com/hydroan/gst/service"
 )
 
 type Creator struct {
-	service.Base[*shared.Attachment, *shared.Attachment, *shared.Attachment]
+	service.Base[*sample.Record, *sample.Record, *sample.Record]
 }
 
-func (c *Creator) Create(ctx *gst.ServiceContext, req *shared.Attachment) (rsp *shared.Attachment, err error) {
+func (c *Creator) Create(ctx *gst.ServiceContext, req *sample.Record) (rsp *sample.Record, err error) {
 	log := c.WithContext(ctx, ctx.Phase())
-	log.Info("attachment create")
+	log.Info("record create")
 	return rsp, nil
 }
 `,
 		},
 		{
 			name: "no_change_when_struct_and_receiver_already_match",
-			code: `package attachment
+			code: `package record
 
 import (
-	"helloworld/model/shared"
+	"helloworld/model/sample"
 
 	"github.com/hydroan/gst"
 	"github.com/hydroan/gst/service"
 )
 
 type Upload struct {
-	service.Base[*shared.Attachment, *shared.Attachment, *shared.Attachment]
+	service.Base[*sample.Record, *sample.Record, *sample.Record]
 }
 
-func (u *Upload) Create(ctx *gst.ServiceContext, req *shared.Attachment) (rsp *shared.Attachment, err error) {
+func (u *Upload) Create(ctx *gst.ServiceContext, req *sample.Record) (rsp *sample.Record, err error) {
 	log := u.WithContext(ctx, ctx.Phase())
-	log.Info("attachment create")
+	log.Info("record create")
 	return rsp, nil
 }
 `,
 			action: &dsl.Action{
 				Enabled:  true,
-				Payload:  "*Attachment",
-				Result:   "*Attachment",
+				Payload:  "*Record",
+				Result:   "*Record",
 				Filename: "upload",
 				Phase:    consts.PHASE_CREATE,
 			},
-			servicePkgName: "attachment",
-			want: `package attachment
+			servicePkgName: "record",
+			want: `package record
 
 import (
-	"helloworld/model/shared"
+	"helloworld/model/sample"
 
 	"github.com/hydroan/gst"
 	"github.com/hydroan/gst/service"
 )
 
 type Upload struct {
-	service.Base[*shared.Attachment, *shared.Attachment, *shared.Attachment]
+	service.Base[*sample.Record, *sample.Record, *sample.Record]
 }
 
-func (u *Upload) Create(ctx *gst.ServiceContext, req *shared.Attachment) (rsp *shared.Attachment, err error) {
+func (u *Upload) Create(ctx *gst.ServiceContext, req *sample.Record) (rsp *sample.Record, err error) {
 	log := u.WithContext(ctx, ctx.Phase())
-	log.Info("attachment create")
+	log.Info("record create")
 	return rsp, nil
 }
 `,
 		},
 		{
 			name: "rename_receiver_when_struct_already_matches",
-			code: `package attachment
+			code: `package record
 
 import (
-	"helloworld/model/shared"
+	"helloworld/model/sample"
 
 	"github.com/hydroan/gst"
 	"github.com/hydroan/gst/service"
 )
 
 type Upload struct {
-	service.Base[*shared.Attachment, *shared.AttachmentReq, *shared.AttachmentRsp]
+	service.Base[*sample.Record, *sample.RecordReq, *sample.RecordRsp]
 }
 
-func (a *Upload) Create(ctx *gst.ServiceContext, req *shared.AttachmentReq) (rsp *shared.AttachmentRsp, err error) {
-	log := a.WithContext(ctx, ctx.Phase())
-	log.Info("attachment create")
+func (r *Upload) Create(ctx *gst.ServiceContext, req *sample.RecordReq) (rsp *sample.RecordRsp, err error) {
+	log := r.WithContext(ctx, ctx.Phase())
+	log.Info("record create")
 	return rsp, nil
 }
 
-func (a *Upload) CreateBefore(ctx *gst.ServiceContext, attachment *shared.Attachment) error {
-	log := a.WithContext(ctx, ctx.Phase())
-	log.Info("attachment create before")
+func (r *Upload) CreateBefore(ctx *gst.ServiceContext, record *sample.Record) error {
+	log := r.WithContext(ctx, ctx.Phase())
+	log.Info("record create before")
 	return nil
 }
 
-func (a *Upload) CreateAfter(ctx *gst.ServiceContext, attachment *shared.Attachment) error {
-	log := a.WithContext(ctx, ctx.Phase())
-	log.Info("attachment create after")
+func (r *Upload) CreateAfter(ctx *gst.ServiceContext, record *sample.Record) error {
+	log := r.WithContext(ctx, ctx.Phase())
+	log.Info("record create after")
 	return nil
 }
 `,
 			action: &dsl.Action{
 				Enabled:  true,
-				Payload:  "*AttachmentReq",
-				Result:   "*AttachmentRsp",
+				Payload:  "*RecordReq",
+				Result:   "*RecordRsp",
 				Filename: "upload",
 				Phase:    consts.PHASE_CREATE,
 			},
-			servicePkgName: "attachment",
-			want: `package attachment
+			servicePkgName: "record",
+			want: `package record
 
 import (
-	"helloworld/model/shared"
+	"helloworld/model/sample"
 
 	"github.com/hydroan/gst"
 	"github.com/hydroan/gst/service"
 )
 
 type Upload struct {
-	service.Base[*shared.Attachment, *shared.AttachmentReq, *shared.AttachmentRsp]
+	service.Base[*sample.Record, *sample.RecordReq, *sample.RecordRsp]
 }
 
-func (u *Upload) Create(ctx *gst.ServiceContext, req *shared.AttachmentReq) (rsp *shared.AttachmentRsp, err error) {
+func (u *Upload) Create(ctx *gst.ServiceContext, req *sample.RecordReq) (rsp *sample.RecordRsp, err error) {
 	log := u.WithContext(ctx, ctx.Phase())
-	log.Info("attachment create")
+	log.Info("record create")
 	return rsp, nil
 }
 
-func (u *Upload) CreateBefore(ctx *gst.ServiceContext, attachment *shared.Attachment) error {
+func (u *Upload) CreateBefore(ctx *gst.ServiceContext, record *sample.Record) error {
 	log := u.WithContext(ctx, ctx.Phase())
-	log.Info("attachment create before")
+	log.Info("record create before")
 	return nil
 }
 
-func (u *Upload) CreateAfter(ctx *gst.ServiceContext, attachment *shared.Attachment) error {
+func (u *Upload) CreateAfter(ctx *gst.ServiceContext, record *sample.Record) error {
 	log := u.WithContext(ctx, ctx.Phase())
-	log.Info("attachment create after")
+	log.Info("record create after")
 	return nil
 }
 `,
 		},
 		{
-			name: "package_name_correction_configsetting",
-			code: `package config_setting
+			name: "package_name_correction_underscore",
+			code: `package sample_item
 
 import (
 	"helloworld/model"
@@ -506,22 +507,22 @@ import (
 	"github.com/hydroan/gst/service"
 )
 
-type configSetting struct {
-	service.Base[*model.ConfigSetting, *model.ConfigSetting, *model.ConfigSetting]
+type sampleItem struct {
+	service.Base[*model.SampleItem, *model.SampleItem, *model.SampleItem]
 }
 
-func (c *configSetting) Create(ctx *gst.ServiceContext, req *model.ConfigSetting) (rsp *model.ConfigSetting, err error) {
+func (s *sampleItem) Create(ctx *gst.ServiceContext, req *model.SampleItem) (rsp *model.SampleItem, err error) {
 	return rsp, nil
 }
 `,
 			action: &dsl.Action{
 				Enabled: true,
-				Payload: "*ConfigSetting",
-				Result:  "*ConfigSetting",
+				Payload: "*SampleItem",
+				Result:  "*SampleItem",
 				Phase:   consts.PHASE_CREATE,
 			},
-			servicePkgName: "configsetting",
-			want: `package configsetting
+			servicePkgName: "sampleitem",
+			want: `package sampleitem
 
 import (
 	"helloworld/model"
@@ -530,11 +531,11 @@ import (
 	"github.com/hydroan/gst/service"
 )
 
-type configSetting struct {
-	service.Base[*model.ConfigSetting, *model.ConfigSetting, *model.ConfigSetting]
+type sampleItem struct {
+	service.Base[*model.SampleItem, *model.SampleItem, *model.SampleItem]
 }
 
-func (c *configSetting) Create(ctx *gst.ServiceContext, req *model.ConfigSetting) (rsp *model.ConfigSetting, err error) {
+func (s *sampleItem) Create(ctx *gst.ServiceContext, req *model.SampleItem) (rsp *model.SampleItem, err error) {
 	return rsp, nil
 }
 `,
@@ -619,9 +620,189 @@ func (r *Patcher) validate(ctx *gst.ServiceContext, req *group.SampleRecordPatch
 	}
 }
 
+func TestApplyServiceFileEmptyPayload(t *testing.T) {
+	tests := []struct {
+		name           string
+		code           string
+		action         *dsl.Action
+		servicePkgName string
+		wantContains   []string
+		wantAbsent     []string
+	}{
+		{
+			name: "switch_business_req_to_empty_payload_adds_gst_model_import",
+			code: `package group
+
+import (
+	"helloworld/model/group"
+
+	"github.com/hydroan/gst"
+	"github.com/hydroan/gst/service"
+)
+
+type Lister struct {
+	service.Base[*group.Group, *group.GroupListReq, *group.GroupListRsp]
+}
+
+func (g *Lister) List(ctx *gst.ServiceContext, req *group.GroupListReq) (rsp *group.GroupListRsp, err error) {
+	return rsp, nil
+}
+`,
+			action: &dsl.Action{
+				Enabled: true,
+				Service: true,
+				Payload: dsl.PayloadEmpty,
+				Result:  "*GroupListRsp",
+				Phase:   consts.PHASE_LIST,
+			},
+			servicePkgName: "group",
+			wantContains: []string{
+				`"github.com/hydroan/gst/model"`,
+				"service.Base[*group.Group, *model.Empty, *group.GroupListRsp]",
+				"req *model.Empty",
+			},
+		},
+		{
+			name: "switch_empty_payload_back_to_model_removes_gst_model_import",
+			code: `package group
+
+import (
+	"helloworld/model/group"
+
+	"github.com/hydroan/gst"
+	"github.com/hydroan/gst/model"
+	"github.com/hydroan/gst/service"
+)
+
+type Lister struct {
+	service.Base[*group.Group, *model.Empty, *group.GroupListRsp]
+}
+
+func (g *Lister) List(ctx *gst.ServiceContext, req *model.Empty) (rsp *group.GroupListRsp, err error) {
+	return rsp, nil
+}
+`,
+			action: &dsl.Action{
+				Enabled: true,
+				Service: true,
+				Payload: "*Group",
+				Result:  "*Group",
+				Phase:   consts.PHASE_LIST,
+			},
+			servicePkgName: "group",
+			wantContains: []string{
+				"service.Base[*group.Group, *group.Group, *group.Group]",
+				"req *group.Group",
+			},
+			wantAbsent: []string{
+				`"github.com/hydroan/gst/model"`,
+			},
+		},
+		{
+			name: "switch_to_empty_payload_in_root_model_package_uses_gstmodel_alias",
+			code: `package user
+
+import (
+	"helloworld/model"
+
+	"github.com/hydroan/gst"
+	"github.com/hydroan/gst/service"
+)
+
+type Getter struct {
+	service.Base[*model.User, *model.UserGetReq, *model.UserGetRsp]
+}
+
+func (u *Getter) Get(ctx *gst.ServiceContext, req *model.UserGetReq) (rsp *model.UserGetRsp, err error) {
+	return rsp, nil
+}
+`,
+			action: &dsl.Action{
+				Enabled: true,
+				Service: true,
+				Payload: dsl.PayloadEmpty,
+				Result:  "*UserGetRsp",
+				Phase:   consts.PHASE_GET,
+			},
+			servicePkgName: "user",
+			wantContains: []string{
+				`gstmodel "github.com/hydroan/gst/model"`,
+				"service.Base[*model.User, *gstmodel.Empty, *model.UserGetRsp]",
+				"req *gstmodel.Empty",
+			},
+		},
+		{
+			name: "empty_payload_apply_is_idempotent_for_existing_import",
+			code: `package group
+
+import (
+	"helloworld/model/group"
+
+	"github.com/hydroan/gst"
+	"github.com/hydroan/gst/model"
+	"github.com/hydroan/gst/service"
+)
+
+type Lister struct {
+	service.Base[*group.Group, *model.Empty, *group.GroupListRsp]
+}
+
+func (g *Lister) List(ctx *gst.ServiceContext, req *model.Empty) (rsp *group.GroupListRsp, err error) {
+	return rsp, nil
+}
+`,
+			action: &dsl.Action{
+				Enabled: true,
+				Service: true,
+				Payload: dsl.PayloadEmpty,
+				Result:  "*GroupListRsp",
+				Phase:   consts.PHASE_LIST,
+			},
+			servicePkgName: "group",
+			wantContains: []string{
+				"service.Base[*group.Group, *model.Empty, *group.GroupListRsp]",
+				"req *model.Empty",
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			fset := token.NewFileSet()
+			file, err := parser.ParseFile(fset, "", tt.code, parser.ParseComments)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			gen.ApplyServiceFile(file, tt.action, tt.servicePkgName)
+
+			got, err := gen.FormatNodeExtraWithFileSet(file, fset)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			for _, want := range tt.wantContains {
+				if !strings.Contains(got, want) {
+					t.Errorf("applied service missing %q, got:\n%s", want, got)
+				}
+			}
+			// The gst model import must be pruned when the request type moves
+			// back to a business type, otherwise the file no longer compiles.
+			for _, absent := range tt.wantAbsent {
+				if strings.Contains(got, absent) {
+					t.Errorf("applied service still contains %q, got:\n%s", absent, got)
+				}
+			}
+			if strings.Count(got, gen.GstModelImportPath) > 1 {
+				t.Errorf("gst model import duplicated, got:\n%s", got)
+			}
+		})
+	}
+}
+
 func TestApplyServiceFileWithModelSync(t *testing.T) {
 	tests := []struct {
-		name           string // description of this test case
+		name           string
 		code           string
 		action         *dsl.Action
 		servicePkgName string
@@ -905,6 +1086,243 @@ func (p *Ping) Get(ctx *gst.ServiceContext, req *debug.Debug) (rsp *debug.PingRs
 			}
 			if got != tt.want {
 				t.Errorf("got:\n%s\nwant:\n%s", pretty.Sprintf("% #v", got), pretty.Sprintf("% #v", tt.want))
+			}
+		})
+	}
+}
+
+func TestApplyServiceFileWithModelSyncForcesCanonicalServiceStruct(t *testing.T) {
+	modelInfo := &gen.ModelInfo{
+		ModulePath:   "helloworld",
+		ModelFileDir: "model",
+		ModelPkgName: "model",
+		ModelName:    "User",
+	}
+	exportAction := &dsl.Action{
+		Enabled: true,
+		Service: true,
+		Payload: "*User",
+		Result:  "*User",
+		Phase:   consts.PHASE_EXPORT,
+	}
+
+	tests := []struct {
+		name         string
+		code         string
+		action       *dsl.Action
+		wantChanged  bool
+		wantContains []string // substrings that must appear in the rewritten file
+		wantAbsent   []string // substrings that must not appear in the rewritten file
+	}{
+		{
+			// A hand edit replaced the service.Base embedding with another
+			// service struct and dropped the service import; the struct body is
+			// generated code, so it is forced back to the canonical single
+			// embedding and the extra field is discarded.
+			name: "forces_body_with_foreign_embedding",
+			code: `package user
+
+import (
+	"helloworld/model"
+
+	"github.com/hydroan/gst"
+)
+
+type Exporter struct {
+	// service.Base[*model.User, *model.User, *model.User]
+	Lister
+}
+
+func (e *Exporter) Export(ctx *gst.ServiceContext, users ...*model.User) (data []byte, err error) {
+	return data, err
+}
+`,
+			action:      exportAction,
+			wantChanged: true,
+			wantContains: []string{
+				"service.Base[*model.User, *model.User, *model.User]",
+				`"github.com/hydroan/gst/service"`,
+			},
+			wantAbsent: []string{"Lister"},
+		},
+		{
+			// A malformed service.Base embedding (wrong arity) is replaced by
+			// the canonical one instead of gaining a duplicate next to it.
+			name: "forces_body_with_malformed_embedding",
+			code: `package user
+
+import (
+	"helloworld/model"
+
+	"github.com/hydroan/gst"
+	"github.com/hydroan/gst/service"
+)
+
+type Exporter struct {
+	service.Base[*model.User]
+}
+
+func (e *Exporter) Export(ctx *gst.ServiceContext, users ...*model.User) (data []byte, err error) {
+	return data, err
+}
+`,
+			action:      exportAction,
+			wantChanged: true,
+			wantContains: []string{
+				"service.Base[*model.User, *model.User, *model.User]",
+			},
+		},
+		{
+			// A struct that was deleted entirely is regenerated, so gg gen
+			// always converges on a registrable service struct.
+			name: "restores_deleted_struct",
+			code: `package user
+
+import (
+	"helloworld/model"
+
+	"github.com/hydroan/gst"
+)
+
+func exportHeaders(users ...*model.User) []string { return nil }
+
+var _ = gst.ServiceContext{}
+`,
+			action:      exportAction,
+			wantChanged: true,
+			wantContains: []string{
+				"type Exporter struct",
+				"service.Base[*model.User, *model.User, *model.User]",
+				`"github.com/hydroan/gst/service"`,
+			},
+		},
+		{
+			// A struct that already has the canonical body needs no rewrite.
+			name: "keeps_canonical_struct_untouched",
+			code: `package user
+
+import (
+	"helloworld/model"
+
+	"github.com/hydroan/gst"
+	"github.com/hydroan/gst/service"
+)
+
+type Exporter struct {
+	service.Base[*model.User, *model.User, *model.User]
+}
+
+func (e *Exporter) Export(ctx *gst.ServiceContext, users ...*model.User) (data []byte, err error) {
+	return data, err
+}
+`,
+			action:      exportAction,
+			wantChanged: false,
+			wantContains: []string{
+				"service.Base[*model.User, *model.User, *model.User]",
+			},
+		},
+		{
+			// A hand edit renamed the struct of a Filename-less action away
+			// from the phase role name. No rename path covers this case, yet
+			// the generated registration code still references the role name,
+			// so the struct and its method receivers are restored to the
+			// canonical name; receiver variable names and method bodies are
+			// user-visible code and stay untouched.
+			name: "restores_renamed_struct_without_filename",
+			code: `package user
+
+import (
+	"helloworld/model"
+
+	"github.com/hydroan/gst"
+	"github.com/hydroan/gst/service"
+)
+
+type Mangled struct {
+	service.Base[*model.User, *model.User, *model.User]
+}
+
+func (x *Mangled) Export(ctx *gst.ServiceContext, users ...*model.User) (data []byte, err error) {
+	data = append(data, 'a')
+	return data, err
+}
+`,
+			action:      exportAction,
+			wantChanged: true,
+			wantContains: []string{
+				"type Exporter struct",
+				"func (x *Exporter) Export",
+				"data = append(data, 'a')",
+			},
+			wantAbsent: []string{"Mangled"},
+		},
+		{
+			// With Filename set, a canonical struct still carrying the old role
+			// name belongs to the rename path, not the force-rewrite path.
+			name: "skips_rewrite_when_filename_rename_applies",
+			code: `package user
+
+import (
+	"helloworld/model"
+
+	"github.com/hydroan/gst"
+	"github.com/hydroan/gst/service"
+)
+
+type Creator struct {
+	service.Base[*model.User, *model.User, *model.User]
+}
+
+func (c *Creator) Create(ctx *gst.ServiceContext, req *model.User) (rsp *model.User, err error) {
+	return rsp, err
+}
+`,
+			action: &dsl.Action{
+				Enabled:  true,
+				Service:  true,
+				Payload:  "*User",
+				Result:   "*User",
+				Filename: "upload",
+				Phase:    consts.PHASE_CREATE,
+			},
+			wantChanged: true,
+			wantContains: []string{
+				"type Upload struct",
+				"service.Base[*model.User, *model.User, *model.User]",
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			fset := token.NewFileSet()
+			file, err := parser.ParseFile(fset, "", tt.code, parser.ParseComments)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			changed := gen.ApplyServiceFileWithModelSync(file, tt.action, "user", modelInfo)
+			if changed != tt.wantChanged {
+				t.Errorf("ApplyServiceFileWithModelSync changed = %v, want %v", changed, tt.wantChanged)
+			}
+
+			got, err := gen.FormatNodeExtra(file)
+			if err != nil {
+				t.Fatal(err)
+			}
+			for _, want := range tt.wantContains {
+				if !strings.Contains(got, want) {
+					t.Errorf("Expected to find %q in rewritten code, but got:\n%s", want, got)
+				}
+			}
+			for _, absent := range tt.wantAbsent {
+				if strings.Contains(got, absent) {
+					t.Errorf("Expected %q to be removed from rewritten code, but got:\n%s", absent, got)
+				}
+			}
+			if count := strings.Count(got, "service.Base["); count != 1 {
+				t.Errorf("Expected exactly one service.Base embedding, found %d in:\n%s", count, got)
 			}
 		})
 	}

@@ -2,7 +2,6 @@ package gen
 
 import (
 	"bytes"
-	"fmt"
 	"go/format"
 	"go/token"
 	"reflect"
@@ -15,16 +14,15 @@ import (
 
 func TestImports(t *testing.T) {
 	tests := []struct {
-		name string // description of this test case
-		// Named input parameters for target function.
+		name         string
 		modulePath   string
 		modelFileDir string
 		modelPkgName string
 		otherPkgs    []string
-
-		want string
+		want         string
 	}{
 		{
+			name:         "root_model_package",
 			modulePath:   "codegen",
 			modelFileDir: "model",
 			modelPkgName: "model",
@@ -35,7 +33,7 @@ func TestImports(t *testing.T) {
 )`,
 		},
 		{
-			name:         "other package",
+			name:         "other_package",
 			modulePath:   "codegen",
 			modelFileDir: "model/group",
 			modelPkgName: "group",
@@ -48,7 +46,7 @@ func TestImports(t *testing.T) {
 )`,
 		},
 		{
-			name:         "aliased other package",
+			name:         "aliased_other_package",
 			modulePath:   "codegen",
 			modelFileDir: "model",
 			modelPkgName: "model",
@@ -68,7 +66,6 @@ func TestImports(t *testing.T) {
 				t.Error(err)
 				return
 			}
-			fmt.Println(got)
 			if !reflect.DeepEqual(got, tt.want) {
 				t.Errorf("imports() = \n%v\n, want \n%v\n", pretty.Sprintf("% #v", got), pretty.Sprintf("% #v", tt.want))
 			}
@@ -78,9 +75,8 @@ func TestImports(t *testing.T) {
 
 func TestTypes(t *testing.T) {
 	tests := []struct {
-		name string // description of this test case
-		// Named input parameters for target function.
-		modelPkgname string
+		name         string
+		modelPkgName string
 		modelName    string
 		reqName      string
 		rspName      string
@@ -90,7 +86,7 @@ func TestTypes(t *testing.T) {
 	}{
 		{
 			name:         "user",
-			modelPkgname: "model",
+			modelPkgName: "model",
 			modelName:    "User",
 			reqName:      "*User",
 			rspName:      "*User",
@@ -103,7 +99,7 @@ func TestTypes(t *testing.T) {
 			// Bare action type names (the declared form of slice and map
 			// action types) are transcribed as value types.
 			name:         "user_bare_names_transcribed",
-			modelPkgname: "model",
+			modelPkgName: "model",
 			modelName:    "User",
 			reqName:      "UserReq",
 			rspName:      "UserRsp",
@@ -113,8 +109,8 @@ func TestTypes(t *testing.T) {
 }`,
 		},
 		{
-			name:         "user2",
-			modelPkgname: "model",
+			name:         "user_starred_names_transcribed",
+			modelPkgName: "model",
 			modelName:    "User",
 			reqName:      "*UserReq",
 			rspName:      "*UserRsp",
@@ -124,8 +120,8 @@ func TestTypes(t *testing.T) {
 }`,
 		},
 		{
-			name:         "list with empty payload",
-			modelPkgname: "group",
+			name:         "list_with_empty_payload",
+			modelPkgName: "group",
 			modelName:    "Group",
 			reqName:      dsl.PayloadEmpty,
 			rspName:      "*GroupListRsp",
@@ -135,8 +131,8 @@ func TestTypes(t *testing.T) {
 }`,
 		},
 		{
-			name:         "list with empty payload in root model package",
-			modelPkgname: "model",
+			name:         "list_with_empty_payload_in_root_model_package",
+			modelPkgName: "model",
 			modelName:    "User",
 			reqName:      dsl.PayloadEmpty,
 			rspName:      "*UserListRsp",
@@ -146,8 +142,8 @@ func TestTypes(t *testing.T) {
 }`,
 		},
 		{
-			name:         "create with empty result",
-			modelPkgname: "group",
+			name:         "create_with_empty_result",
+			modelPkgName: "group",
 			modelName:    "Group",
 			reqName:      "*GroupCreateReq",
 			rspName:      dsl.PayloadEmpty,
@@ -157,8 +153,8 @@ func TestTypes(t *testing.T) {
 }`,
 		},
 		{
-			name:         "create with empty result in root model package",
-			modelPkgname: "model",
+			name:         "create_with_empty_result_in_root_model_package",
+			modelPkgName: "model",
 			modelName:    "User",
 			reqName:      "*UserCreateReq",
 			rspName:      dsl.PayloadEmpty,
@@ -170,7 +166,7 @@ func TestTypes(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			res := types(tt.modelPkgname, tt.modelName, tt.reqName, tt.rspName, tt.phase, tt.phase.RoleName(), tt.withComments)
+			res := types(tt.modelPkgName, tt.modelName, tt.reqName, tt.rspName, tt.phase, tt.phase.RoleName(), tt.withComments)
 			var buf bytes.Buffer
 			fset := token.NewFileSet()
 			if err := format.Node(&buf, fset, res); err != nil {
@@ -187,8 +183,7 @@ func TestTypes(t *testing.T) {
 
 func TestServiceMethod1(t *testing.T) {
 	tests := []struct {
-		name string // description of this test case
-		// Named input parameters for target function.
+		name         string
 		recvName     string
 		modelName    string
 		modelPkgName string
@@ -228,8 +223,7 @@ func TestServiceMethod1(t *testing.T) {
 
 func TestServiceMethod2(t *testing.T) {
 	tests := []struct {
-		name string // description of this test case
-		// Named input parameters for target function.
+		name         string
 		recvName     string
 		modelName    string
 		modelPkgName string
@@ -270,12 +264,11 @@ func TestServiceMethod2(t *testing.T) {
 
 func TestServiceMethod3(t *testing.T) {
 	tests := []struct {
-		name string // description of this test case
-		// Named input parameters for target function.
+		name         string
 		recvName     string
 		modelName    string
-		phase        consts.Phase
 		modelPkgName string
+		phase        consts.Phase
 		want         string
 	}{
 		{
@@ -312,8 +305,7 @@ func TestServiceMethod3(t *testing.T) {
 
 func TestServiceMethod4(t *testing.T) {
 	tests := []struct {
-		name string // description of this test case
-		// Named input parameters for target function.
+		name         string
 		recvName     string
 		modelPkgName string
 		reqName      string
@@ -342,7 +334,7 @@ func TestServiceMethod4(t *testing.T) {
 			want:         "func (g *Updater) Update(ctx *gst.ServiceContext, req model.GroupRequest) (rsp model.GroupResponse, err error) {\n}",
 		},
 		{
-			name:         "Update2",
+			name:         "UpdateStarredNamesTranscribed",
 			recvName:     "g",
 			modelPkgName: "model",
 			reqName:      "*GroupRequest",
@@ -396,8 +388,7 @@ func TestServiceMethod4(t *testing.T) {
 
 func TestServiceMethod5(t *testing.T) {
 	tests := []struct {
-		name string // description of this test case
-		// Named input parameters for target function.
+		name         string
 		recvName     string
 		modelName    string
 		modelPkgName string
@@ -405,7 +396,7 @@ func TestServiceMethod5(t *testing.T) {
 		want         string
 	}{
 		{
-			name:         "dns",
+			name:         "Import",
 			recvName:     "a",
 			modelName:    "Sample",
 			modelPkgName: "model",
@@ -431,8 +422,7 @@ func TestServiceMethod5(t *testing.T) {
 
 func TestServiceMethod6(t *testing.T) {
 	tests := []struct {
-		name string // description of this test case
-		// Named input parameters for target function.
+		name         string
 		recvName     string
 		modelName    string
 		modelPkgName string
@@ -440,6 +430,7 @@ func TestServiceMethod6(t *testing.T) {
 		want         string
 	}{
 		{
+			name:         "Export",
 			recvName:     "a",
 			modelName:    "Sample",
 			modelPkgName: "model",

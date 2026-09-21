@@ -17,12 +17,12 @@ func TestStmtLogInfo(t *testing.T) {
 	var buf bytes.Buffer
 
 	tests := []struct {
-		name string // description of this test case
-		// Named input parameters for target function.
+		name string
 		str  string
 		want string
 	}{
 		{
+			name: "hello_world",
 			str:  `"hello world"`,
 			want: `log.Info("hello world")`,
 		},
@@ -43,59 +43,24 @@ func TestStmtLogInfo(t *testing.T) {
 	}
 }
 
-func TestStmtModelRegister(t *testing.T) {
-	tests := []struct {
-		name string // description of this test case
-		// Named input parameters for target function.
-		structName string
-		want       string
-	}{
-		{
-			name:       "User",
-			structName: "User",
-			want:       `model.Register[*User]()`,
-		},
-		{
-			name:       "Group",
-			structName: "Group",
-			want:       `model.Register[*Group]()`,
-		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got := gen.StmtModelRegister(tt.structName)
-			var buf bytes.Buffer
-			fset := token.NewFileSet()
-			if err := format.Node(&buf, fset, got); err != nil {
-				t.Error(err)
-				return
-			}
-			if buf.String() != tt.want {
-				t.Errorf("StmtModelRegister() = %v, want %v", buf.String(), tt.want)
-			}
-		})
-	}
-}
-
 func TestReturns(t *testing.T) {
 	tests := []struct {
-		name string // description of this test case
-		// Named input parameters for target function.
+		name  string
 		exprs []ast.Expr
 		want  string
 	}{
 		{
-			name:  "return error",
+			name:  "return_error",
 			exprs: []ast.Expr{ast.NewIdent("error")},
 			want:  `return error`,
 		},
 		{
-			name:  "return nil",
+			name:  "return_nil",
 			exprs: []ast.Expr{ast.NewIdent("nil")},
 			want:  `return nil`,
 		},
 		{
-			name: "return &model.User{}, nil",
+			name: "return_multiple_values",
 			exprs: []ast.Expr{
 				&ast.UnaryExpr{
 					Op: token.AND,
@@ -128,8 +93,7 @@ func TestReturns(t *testing.T) {
 
 func TestStmtLogWithContext(t *testing.T) {
 	tests := []struct {
-		name string // description of this test case
-		// Named input parameters for target function.
+		name         string
 		modelVarName string
 		want         string
 	}{
@@ -159,109 +123,34 @@ func TestStmtLogWithContext(t *testing.T) {
 	}
 }
 
-func TestStmtRouterRegister(t *testing.T) {
+func TestStmtModelRegister(t *testing.T) {
 	tests := []struct {
-		name string // description of this test case
-		// Named input parameters for target function.
-		modelPkgName string
-		modelName    string
-		reqName      string
-		respName     string
-		gstModelPkg  string
-		routerGroup  string
-		route        string
-		paramName    string
-		verb         string
-		want         string
+		name       string
+		structName string
+		want       string
 	}{
 		{
-			name:         "test1",
-			modelPkgName: "model",
-			modelName:    "Group",
-			reqName:      "*Group",
-			routerGroup:  "Auth",
-			respName:     "*Group",
-			gstModelPkg:  "model",
-			route:        "group",
-			verb:         "Create",
-			want:         `router.Register[*model.Group, *model.Group, *model.Group](router.Auth(), "group", &gst.ControllerConfig[*model.Group]{}, consts.Create)`,
+			name:       "User",
+			structName: "User",
+			want:       `model.Register[*User]()`,
 		},
 		{
-			// Bare action type names (the declared form of slice and map
-			// action types) are transcribed as value types.
-			name:         "test2_bare_names_transcribed",
-			modelPkgName: "pkgmodel",
-			modelName:    "Group",
-			reqName:      "GroupRequest",
-			respName:     "GroupResponse",
-			gstModelPkg:  "model",
-			routerGroup:  "Auth",
-			route:        "group2",
-			verb:         "Update",
-			want:         `router.Register[*pkgmodel.Group, pkgmodel.GroupRequest, pkgmodel.GroupResponse](router.Auth(), "group2", &gst.ControllerConfig[*pkgmodel.Group]{}, consts.Update)`,
-		},
-		{
-			name:         "test3",
-			modelPkgName: "pkgmodel",
-			modelName:    "Group",
-			reqName:      "*GroupRequest",
-			respName:     "*GroupResponse",
-			gstModelPkg:  "model",
-			routerGroup:  "Pub",
-			route:        "login",
-			verb:         "Update",
-			want:         `router.Register[*pkgmodel.Group, *pkgmodel.GroupRequest, *pkgmodel.GroupResponse](router.Pub(), "login", &gst.ControllerConfig[*pkgmodel.Group]{}, consts.Update)`,
-		},
-		{
-			name:         "list with empty payload",
-			modelPkgName: "group",
-			modelName:    "Group",
-			reqName:      dsl.PayloadEmpty,
-			respName:     "*GroupListRsp",
-			gstModelPkg:  "model",
-			routerGroup:  "Auth",
-			route:        "groups",
-			verb:         "List",
-			want:         `router.Register[*group.Group, *model.Empty, *group.GroupListRsp](router.Auth(), "groups", &gst.ControllerConfig[*group.Group]{}, consts.List)`,
-		},
-		{
-			name:         "create with empty result",
-			modelPkgName: "group",
-			modelName:    "Group",
-			reqName:      "*GroupCreateReq",
-			respName:     dsl.PayloadEmpty,
-			gstModelPkg:  "model",
-			routerGroup:  "Auth",
-			route:        "groups",
-			verb:         "Create",
-			want:         `router.Register[*group.Group, *group.GroupCreateReq, *model.Empty](router.Auth(), "groups", &gst.ControllerConfig[*group.Group]{}, consts.Create)`,
-		},
-		{
-			// A project routing a root model package keeps the gstmodel
-			// alias so the Empty qualifier cannot clash with the business
-			// "model" import.
-			name:         "empty payload in root model package keeps gstmodel alias",
-			modelPkgName: "model",
-			modelName:    "Group",
-			reqName:      dsl.PayloadEmpty,
-			respName:     "*GroupListRsp",
-			gstModelPkg:  "gstmodel",
-			routerGroup:  "Auth",
-			route:        "groups",
-			verb:         "List",
-			want:         `router.Register[*model.Group, *gstmodel.Empty, *model.GroupListRsp](router.Auth(), "groups", &gst.ControllerConfig[*model.Group]{}, consts.List)`,
+			name:       "Group",
+			structName: "Group",
+			want:       `model.Register[*Group]()`,
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			res := gen.StmtRouterRegister(tt.modelPkgName, tt.modelName, tt.reqName, tt.respName, tt.gstModelPkg, tt.routerGroup, tt.route, tt.paramName, tt.verb)
-			got, err := gen.FormatNode(res)
-			if err != nil {
+			got := gen.StmtModelRegister(tt.structName)
+			var buf bytes.Buffer
+			fset := token.NewFileSet()
+			if err := format.Node(&buf, fset, got); err != nil {
 				t.Error(err)
 				return
 			}
-			if got != tt.want {
-				t.Errorf("StmtRouterRegister() = %v, want %v", got, tt.want)
+			if buf.String() != tt.want {
+				t.Errorf("StmtModelRegister() = %v, want %v", buf.String(), tt.want)
 			}
 		})
 	}
@@ -269,22 +158,21 @@ func TestStmtRouterRegister(t *testing.T) {
 
 func TestStmtServiceRegister(t *testing.T) {
 	tests := []struct {
-		name string // description of this test case
-		// Named input parameters for target function.
+		name       string
 		structName string
 		route      string
-		want       string
 		phase      consts.Phase
+		want       string
 	}{
 		{
-			name:       "test1",
+			name:       "user",
 			structName: "user",
 			route:      "users",
 			phase:      consts.PHASE_CREATE,
 			want:       `service.Register[*user](consts.PHASE_CREATE, "users")`,
 		},
 		{
-			name:       "test2",
+			name:       "group",
 			structName: "group",
 			route:      "groups/:id",
 			phase:      consts.PHASE_UPDATE,
@@ -301,6 +189,113 @@ func TestStmtServiceRegister(t *testing.T) {
 			}
 			if got != tt.want {
 				t.Errorf("StmtServiceRegister() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestStmtRouterRegister(t *testing.T) {
+	tests := []struct {
+		name         string
+		modelPkgName string
+		modelName    string
+		reqName      string
+		rspName      string
+		gstModelPkg  string
+		routerGroup  string
+		route        string
+		paramName    string
+		verb         string
+		want         string
+	}{
+		{
+			name:         "model_as_payload_and_result",
+			modelPkgName: "model",
+			modelName:    "Group",
+			reqName:      "*Group",
+			rspName:      "*Group",
+			gstModelPkg:  "model",
+			routerGroup:  "Auth",
+			route:        "group",
+			verb:         "Create",
+			want:         `router.Register[*model.Group, *model.Group, *model.Group](router.Auth(), "group", &gst.ControllerConfig[*model.Group]{}, consts.Create)`,
+		},
+		{
+			// Bare action type names (the declared form of slice and map
+			// action types) are transcribed as value types.
+			name:         "bare_names_transcribed",
+			modelPkgName: "pkgmodel",
+			modelName:    "Group",
+			reqName:      "GroupRequest",
+			rspName:      "GroupResponse",
+			gstModelPkg:  "model",
+			routerGroup:  "Auth",
+			route:        "group2",
+			verb:         "Update",
+			want:         `router.Register[*pkgmodel.Group, pkgmodel.GroupRequest, pkgmodel.GroupResponse](router.Auth(), "group2", &gst.ControllerConfig[*pkgmodel.Group]{}, consts.Update)`,
+		},
+		{
+			name:         "starred_names_in_pub_group",
+			modelPkgName: "pkgmodel",
+			modelName:    "Group",
+			reqName:      "*GroupRequest",
+			rspName:      "*GroupResponse",
+			gstModelPkg:  "model",
+			routerGroup:  "Pub",
+			route:        "login",
+			verb:         "Update",
+			want:         `router.Register[*pkgmodel.Group, *pkgmodel.GroupRequest, *pkgmodel.GroupResponse](router.Pub(), "login", &gst.ControllerConfig[*pkgmodel.Group]{}, consts.Update)`,
+		},
+		{
+			name:         "list_with_empty_payload",
+			modelPkgName: "group",
+			modelName:    "Group",
+			reqName:      dsl.PayloadEmpty,
+			rspName:      "*GroupListRsp",
+			gstModelPkg:  "model",
+			routerGroup:  "Auth",
+			route:        "groups",
+			verb:         "List",
+			want:         `router.Register[*group.Group, *model.Empty, *group.GroupListRsp](router.Auth(), "groups", &gst.ControllerConfig[*group.Group]{}, consts.List)`,
+		},
+		{
+			name:         "create_with_empty_result",
+			modelPkgName: "group",
+			modelName:    "Group",
+			reqName:      "*GroupCreateReq",
+			rspName:      dsl.PayloadEmpty,
+			gstModelPkg:  "model",
+			routerGroup:  "Auth",
+			route:        "groups",
+			verb:         "Create",
+			want:         `router.Register[*group.Group, *group.GroupCreateReq, *model.Empty](router.Auth(), "groups", &gst.ControllerConfig[*group.Group]{}, consts.Create)`,
+		},
+		{
+			// A project routing a root model package keeps the gstmodel
+			// alias so the Empty qualifier cannot clash with the business
+			// "model" import.
+			name:         "empty_payload_in_root_model_package_keeps_gstmodel_alias",
+			modelPkgName: "model",
+			modelName:    "Group",
+			reqName:      dsl.PayloadEmpty,
+			rspName:      "*GroupListRsp",
+			gstModelPkg:  "gstmodel",
+			routerGroup:  "Auth",
+			route:        "groups",
+			verb:         "List",
+			want:         `router.Register[*model.Group, *gstmodel.Empty, *model.GroupListRsp](router.Auth(), "groups", &gst.ControllerConfig[*model.Group]{}, consts.List)`,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			res := gen.StmtRouterRegister(tt.modelPkgName, tt.modelName, tt.reqName, tt.rspName, tt.gstModelPkg, tt.routerGroup, tt.route, tt.paramName, tt.verb)
+			got, err := gen.FormatNode(res)
+			if err != nil {
+				t.Error(err)
+				return
+			}
+			if got != tt.want {
+				t.Errorf("StmtRouterRegister() = %v, want %v", got, tt.want)
 			}
 		})
 	}

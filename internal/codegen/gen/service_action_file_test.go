@@ -11,7 +11,7 @@ import (
 func TestIsActionServiceSource(t *testing.T) {
 	t.Parallel()
 	tmp := t.TempDir()
-	good := filepath.Join(tmp, "search_source_dedup.go")
+	good := filepath.Join(tmp, "archive_sample_items.go")
 	err := os.WriteFile(good, []byte(`package common
 
 import (
@@ -20,11 +20,11 @@ import (
 	"github.com/hydroan/gst/service"
 )
 
-type SearchSourceDedup struct {
+type ArchiveSampleItems struct {
 	service.Base[*common.Common, *common.Common, *common.Common]
 }
 
-func (s *SearchSourceDedup) Create(ctx *gst.ServiceContext, req *common.Common) (rsp *common.Common, err error) {
+func (a *ArchiveSampleItems) Create(ctx *gst.ServiceContext, req *common.Common) (rsp *common.Common, err error) {
 	return rsp, nil
 }
 `), 0o600)

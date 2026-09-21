@@ -8,30 +8,6 @@ import (
 	"github.com/hydroan/gst/internal/codegen/gen"
 )
 
-// modelInfosFromSource writes source into a temporary model package directory
-// and scans it with FindModels, so Design values are built by the DSL parser:
-// a hand-built dsl.Design leaves undeclared action pointers nil, which panics
-// inside dsl.Design.Range. pkgDir is relative to the model directory; an
-// empty pkgDir places the file in the model root package.
-func modelInfosFromSource(t *testing.T, pkgDir, filename, source string) []*gen.ModelInfo {
-	t.Helper()
-	modelDir := filepath.Join(t.TempDir(), "model")
-	fixtureDir := filepath.Join(modelDir, pkgDir)
-	if err := os.MkdirAll(fixtureDir, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	path := filepath.Join(fixtureDir, filename)
-	if err := os.WriteFile(path, []byte(source), 0o600); err != nil {
-		t.Fatal(err)
-	}
-
-	models, err := gen.FindModels("tmpapp", modelDir, path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	return models
-}
-
 func TestRouterGstModelUse(t *testing.T) {
 	subPkgListSource := `package sample
 
@@ -146,31 +122,31 @@ type Snapshot struct {
 		wantNeeded bool
 	}{
 		{
-			name:       "sub package empty payload uses plain model qualifier",
+			name:       "sub_package_empty_payload_uses_plain_model_qualifier",
 			models:     modelInfosFromSource(t, "sample", "record.go", subPkgListSource),
 			wantPkg:    "model",
 			wantNeeded: true,
 		},
 		{
-			name:       "routed root model package falls back to gstmodel alias",
+			name:       "routed_root_model_package_falls_back_to_gstmodel_alias",
 			models:     modelInfosFromSource(t, "", "item.go", rootPkgListSource),
 			wantPkg:    "gstmodel",
 			wantNeeded: true,
 		},
 		{
-			name:       "defaulted empty result alone still needs the import",
+			name:       "defaulted_empty_result_alone_still_needs_the_import",
 			models:     modelInfosFromSource(t, "sample", "record.go", subPkgCreateEmptyResultSource),
 			wantPkg:    "model",
 			wantNeeded: true,
 		},
 		{
-			name:       "no empty side leaves the import out",
+			name:       "no_empty_side_leaves_the_import_out",
 			models:     modelInfosFromSource(t, "sample", "record.go", subPkgCreateBothSidesSource),
 			wantPkg:    "model",
 			wantNeeded: false,
 		},
 		{
-			name: "unrouted root model file does not force the alias",
+			name: "unrouted_root_model_file_does_not_force_the_alias",
 			models: append(
 				modelInfosFromSource(t, "", "snapshot.go", unroutedRootPkgSource),
 				modelInfosFromSource(t, "sample", "record.go", subPkgListSource)...,
@@ -199,12 +175,12 @@ func TestGstModelImportEntry(t *testing.T) {
 		want    string
 	}{
 		{
-			name:    "plain qualifier imports without alias",
+			name:    "plain_qualifier_imports_without_alias",
 			pkgName: "model",
 			want:    "github.com/hydroan/gst/model",
 		},
 		{
-			name:    "gstmodel qualifier imports under the alias",
+			name:    "gstmodel_qualifier_imports_under_the_alias",
 			pkgName: "gstmodel",
 			want:    "gstmodel github.com/hydroan/gst/model",
 		},
@@ -216,4 +192,28 @@ func TestGstModelImportEntry(t *testing.T) {
 			}
 		})
 	}
+}
+
+// modelInfosFromSource writes source into a temporary model package directory
+// and scans it with FindModels, so Design values are built by the DSL parser:
+// a hand-built dsl.Design leaves undeclared action pointers nil, which panics
+// inside dsl.Design.Range. pkgDir is relative to the model directory; an
+// empty pkgDir places the file in the model root package.
+func modelInfosFromSource(t *testing.T, pkgDir, filename, source string) []*gen.ModelInfo {
+	t.Helper()
+	modelDir := filepath.Join(t.TempDir(), "model")
+	fixtureDir := filepath.Join(modelDir, pkgDir)
+	if err := os.MkdirAll(fixtureDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(fixtureDir, filename)
+	if err := os.WriteFile(path, []byte(source), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	models, err := gen.FindModels("tmpapp", modelDir, path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return models
 }

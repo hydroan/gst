@@ -24,7 +24,7 @@ func TestBuildAPIDocFile(t *testing.T) {
 			},
 			{
 				PkgPath:  "example.com/proj/model/sub",
-				TypeName: "EncryptReq",
+				TypeName: "ArchiveReq",
 				Doc: apidoc.StructDoc{
 					Fields: map[string]string{"Path": "Path is the file path."},
 				},
@@ -57,7 +57,7 @@ func TestBuildAPIDocFile(t *testing.T) {
 		`apidoc.Register("example.com/proj/model", "User", apidoc.StructDoc{`,
 		`Comment: "User is the user record.\nIt spans multiple lines.",`,
 		`"Name": "Name is the user name.",`,
-		`apidoc.Register("example.com/proj/model/sub", "EncryptReq", apidoc.StructDoc{`,
+		`apidoc.Register("example.com/proj/model/sub", "ArchiveReq", apidoc.StructDoc{`,
 		`apidoc.RegisterEnum("example.com/proj/model", "UserStatus", apidoc.EnumDoc{`,
 		`Comment: "UserStatus is the lifecycle status.",`,
 		`{Value: "active", Comment: "the user can log in"},`,

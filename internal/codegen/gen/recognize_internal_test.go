@@ -52,17 +52,18 @@ func TestIsServiceMethod4(t *testing.T) {
 }
 
 func TestIsServiceType(t *testing.T) {
-	// Positive case: struct embeds service.Base[*model.User, *model.User, *model.User]
+	// Positive case: types transcribes the bare payload and result names as value
+	// types, so the struct embeds service.Base[*model.User, model.User, model.User]
 	gd := types("model", "User", "User", "User", consts.PHASE_CREATE, consts.PHASE_CREATE.RoleName(), false)
 	if len(gd.Specs) == 0 {
-		t.Fatalf("Types() returned no specs")
+		t.Fatalf("types() returned no specs")
 	}
 	ts, ok := gd.Specs[0].(*ast.TypeSpec)
 	if !ok {
 		t.Fatalf("expected first spec to be *ast.TypeSpec")
 	}
 	if !isServiceType(ts) {
-		t.Fatalf("expected isServiceType to return true for valid service.Base with three pointer type params")
+		t.Fatalf("expected isServiceType to return true for valid service.Base with a pointer model and value payload and result")
 	}
 
 	// Positive case 2: struct embeds service.Base with mixed pointer and non-pointer types
@@ -102,7 +103,7 @@ func TestIsServiceType(t *testing.T) {
 		},
 	}
 	if isServiceType(neg1) {
-		t.Fatalf("expected IsServiceType to return false for non-Base selector")
+		t.Fatalf("expected isServiceType to return false for non-Base selector")
 	}
 
 	// Negative case 2: one of the type params is an invalid type (not pointer or selector)

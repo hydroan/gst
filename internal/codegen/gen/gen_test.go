@@ -35,8 +35,8 @@ func TestServiceOutputRel(t *testing.T) {
 		},
 		{
 			name:      "stem_differs_from_parent_dir",
-			modelFile: filepath.Join("repo", "model", "config", "namespace", "app", "env", "item.go"),
-			want:      filepath.Join("config", "namespace", "app", "env", "item"),
+			modelFile: filepath.Join("repo", "model", "sample", "record", "entry", "detail", "item.go"),
+			want:      filepath.Join("sample", "record", "entry", "detail", "item"),
 		},
 		{
 			name:      "flat_model_file",
@@ -77,7 +77,7 @@ func TestServiceTarget(t *testing.T) {
 		wantPkg    string
 	}{
 		{
-			name: "default nested service target",
+			name: "default_nested_service_target",
 			action: &dsl.Action{
 				Enabled:  true,
 				Service:  true,
@@ -89,7 +89,7 @@ func TestServiceTarget(t *testing.T) {
 			wantPkg:    "role",
 		},
 		{
-			name: "flatten service target",
+			name: "flatten_service_target",
 			action: &dsl.Action{
 				Enabled:  true,
 				Service:  true,
