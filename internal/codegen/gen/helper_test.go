@@ -167,6 +167,23 @@ func TestResolveImportConflicts(t *testing.T) {
 				"helloworld/service/archive/item": "",
 			},
 		},
+		{
+			// The example of the ResolveImportConflicts doc comment.
+			name: "documented_example",
+			imports: map[string]string{
+				"helloworld/service/account/recorditem": "recorditem",
+				"helloworld/service/sample/item":        "item",
+				"helloworld/service/sample/record_item": "recorditem",
+				"helloworld/service/sample/service":     "service",
+			},
+			reserved: []string{"service", "consts"},
+			want: map[string]string{
+				"helloworld/service/account/recorditem": "account_recorditem",
+				"helloworld/service/sample/item":        "",
+				"helloworld/service/sample/record_item": "sample_record_item",
+				"helloworld/service/sample/service":     "sample_service",
+			},
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

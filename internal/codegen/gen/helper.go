@@ -138,13 +138,30 @@ func fixCommentPosition(code string) string {
 // declares, and reserved lists the names the file's framework imports take.
 // An import keeps its package name when no reserved name and no other import
 // claims it; otherwise it is aliased with its last two path segments joined by
-// an underscore ("svc/pkg1/user" becomes "pkg1_user"). An alias that still
-// clashes with another name takes one more leading segment at a time, and one
-// that runs out of segments gets a numeric suffix, so no two imports share a
-// name and none takes a framework import's. Every alias is a Go identifier:
-// characters an identifier cannot hold become underscores, and one that would
-// start with a digit gets an underscore in front. The result maps each import
-// path to its alias, or to "" when it needs none.
+// an underscore ("svc/pkg1/user" becomes "pkg1_user"). Every import in a clash
+// is aliased, not all but one: which import kept the name would depend on the
+// others, and a new import sharing the name could take it away. An alias that
+// still clashes with another name takes one more leading segment at a time,
+// and one that runs out of segments gets a numeric suffix, so no two imports
+// share a name and none takes a framework import's. Every alias is a Go
+// identifier: characters an identifier cannot hold become underscores, and one
+// that would start with a digit gets an underscore in front. The result maps
+// each import path to its alias, or to "" when it needs none.
+//
+// For example, the service registration file reserves service and consts for
+// its framework imports, so the imports
+//
+//	"helloworld/service/account/recorditem" // package recorditem
+//	"helloworld/service/sample/item"        // package item
+//	"helloworld/service/sample/record_item" // package recorditem
+//	"helloworld/service/sample/service"     // package service
+//
+// are written as
+//
+//	account_recorditem "helloworld/service/account/recorditem"
+//	"helloworld/service/sample/item"
+//	sample_record_item "helloworld/service/sample/record_item"
+//	sample_service "helloworld/service/sample/service"
 func ResolveImportConflicts(imports map[string]string, reserved ...string) map[string]string {
 	paths := slices.Sorted(maps.Keys(imports))
 
