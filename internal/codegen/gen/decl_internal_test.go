@@ -165,7 +165,7 @@ func TestTypes(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			res := types(tt.modelPkgName, tt.modelName, tt.reqName, tt.rspName, tt.phase, tt.phase.RoleName())
+			res := types(tt.modelPkgName, tt.modelName, tt.reqName, tt.rspName, tt.phase.RoleName())
 			var buf bytes.Buffer
 			fset := token.NewFileSet()
 			if err := format.Node(&buf, fset, res); err != nil {

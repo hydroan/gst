@@ -54,7 +54,7 @@ func TestIsServiceMethod4(t *testing.T) {
 func TestIsServiceType(t *testing.T) {
 	// Positive case: types transcribes the bare payload and result names as value
 	// types, so the struct embeds service.Base[*model.User, model.User, model.User]
-	gd := types("model", "User", "User", "User", consts.PHASE_CREATE, consts.PHASE_CREATE.RoleName())
+	gd := types("model", "User", "User", "User", consts.PHASE_CREATE.RoleName())
 	if len(gd.Specs) == 0 {
 		t.Fatalf("types() returned no specs")
 	}

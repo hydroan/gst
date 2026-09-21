@@ -82,11 +82,6 @@ func ServiceOutputRel(modelFilePath, modelDir string) string {
 	return outRel
 }
 
-func (m *ModelInfo) ServiceImportPath(modelDir, serviceDir string) string {
-	rel := ServiceOutputRel(m.ModelFilePath, modelDir)
-	return filepath.Join(m.ModulePath, serviceDir, rel)
-}
-
 func ServiceTarget(m *ModelInfo, action *dsl.Action, modelDir, serviceDir string) ServiceTargetInfo {
 	rel := ServiceOutputRel(m.ModelFilePath, modelDir)
 	packageName := strings.ToLower(m.ModelName)
@@ -241,16 +236,12 @@ func FindModels(module string, modelDir string, filename string) ([]*ModelInfo, 
 	if len(modelPkgName) == 0 {
 		return nil, fmt.Errorf("file %s has no model package", filename)
 	}
-	f, err := parser.ParseFile(fset, filename, nil, parser.ParseComments)
-	if err != nil {
-		return nil, err
-	}
 
-	if errs := dsl.Validate(f, modelDir, filename); len(errs) > 0 {
+	if errs := dsl.Validate(node, modelDir, filename); len(errs) > 0 {
 		return nil, errors.Join(errs...)
 	}
 
-	designs := dsl.Parse(f)
+	designs := dsl.Parse(node)
 	// Note: route assembly (prefixing the model file dir onto Design.Endpoint)
 	// lives in cmd/gg/gen.go so custom routes declared in the DSL are handled
 	// in one place.
@@ -469,7 +460,7 @@ func GenerateService(info *ModelInfo, action *dsl.Action, phase consts.Phase, se
 
 	decls := []ast.Decl{
 		imports(info.ModulePath, info.ModelFileDir, info.ModelPkgName, otherPkgs...),
-		types(info.ModelPkgName, info.ModelName, action.Payload, action.Result, phase, roleName),
+		types(info.ModelPkgName, info.ModelName, action.Payload, action.Result, roleName),
 	}
 
 	// add methods

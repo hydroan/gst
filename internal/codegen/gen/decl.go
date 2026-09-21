@@ -110,7 +110,7 @@ func actionTypeOrEmptyExpr(modelPkgName, typeName string) ast.Expr {
 //	type Creator struct {
 //		service.Base[*model.User, *model.UserReq, *model.UserRsp]
 //	}
-func types(modelPkgName, modelName, reqName, rspName string, _ consts.Phase, roleName string) *ast.GenDecl {
+func types(modelPkgName, modelName, reqName, rspName, roleName string) *ast.GenDecl {
 	// The dsl.PayloadEmpty sentinel resolves to *model.Empty from the gst
 	// model package on either side; any other action type is emitted in its
 	// declared form.
