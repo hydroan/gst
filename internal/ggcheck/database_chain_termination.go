@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	gitignore "github.com/go-git/go-git/v5/plumbing/format/gitignore"
+	"github.com/hydroan/gst/internal/gghelper"
 	"github.com/hydroan/gst/internal/goast"
 )
 
@@ -113,7 +114,7 @@ func checkFileDatabaseChains(filePath string) []string {
 	}
 
 	parents := nodeParents(file)
-	relPath := relativePath(filePath)
+	relPath := gghelper.RelativePath(filePath)
 
 	var violations []string
 	ast.Inspect(file, func(n ast.Node) bool {

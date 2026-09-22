@@ -11,6 +11,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/hydroan/gst/internal/gghelper"
 	"golang.org/x/tools/go/ast/astutil"
 )
 
@@ -132,7 +133,7 @@ func (p *CopyPlan) addMiddlewareFiles() error {
 			Kind:        moduleCopyFileMiddleware,
 			TargetPath:  middleware.TargetPath,
 			Content:     content,
-			Preexisting: fileExists(middleware.TargetPath),
+			Preexisting: gghelper.FileExists(middleware.TargetPath),
 		})
 	}
 	return nil
@@ -192,7 +193,7 @@ func (p *CopyPlan) collectStaleMiddlewareFiles() error {
 func (e *CopyExecution) middlewareHandlersOnDisk() (map[string]bool, error) {
 	handlers := make(map[string]bool)
 	for _, middleware := range e.Plan.Middleware {
-		if !fileExists(middleware.TargetPath) {
+		if !gghelper.FileExists(middleware.TargetPath) {
 			continue
 		}
 		owner, err := middlewareMarkerModule(middleware.TargetPath)

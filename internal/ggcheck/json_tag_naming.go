@@ -14,6 +14,7 @@ import (
 	gitignore "github.com/go-git/go-git/v5/plumbing/format/gitignore"
 	"github.com/hydroan/gst/dsl"
 	"github.com/hydroan/gst/internal/ggconst"
+	"github.com/hydroan/gst/internal/gghelper"
 )
 
 // JSONTagNaming holds the json tags of models and of explicit DSL Payload and
@@ -92,7 +93,7 @@ func checkFileModelJSONTagNaming(filePath string) []string {
 		return violations
 	}
 
-	relPath := relativePath(filePath)
+	relPath := gghelper.RelativePath(filePath)
 
 	// Check only model structs
 	for _, decl := range node.Decls {
@@ -183,7 +184,7 @@ func checkPackageActionTypeJSONTagNaming(paths []string) []string {
 		if !ok {
 			continue
 		}
-		relPath := relativePath(path)
+		relPath := gghelper.RelativePath(path)
 		for _, decl := range node.Decls {
 			genDecl, ok := decl.(*ast.GenDecl)
 			if !ok || genDecl.Tok != token.TYPE {

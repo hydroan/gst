@@ -2,7 +2,6 @@ package main
 
 import (
 	"os"
-	"path/filepath"
 	"strings"
 
 	"github.com/hydroan/gst/internal/clioutput"
@@ -17,29 +16,12 @@ func checkErr(err error) {
 	panic(err)
 }
 
-func fileExists(filename string) bool {
-	_, err := os.Stat(filename)
-	return !os.IsNotExist(err)
-}
-
-func ensureParentDir(filename string) error {
-	dir := filepath.Dir(filename)
-
-	var err error
-	if _, err = os.Stat(dir); err == nil {
-		return nil
-	} else if os.IsNotExist(err) {
-		return os.MkdirAll(dir, 0o755)
-	}
-	return err
-}
-
 func writeFileWithLog(filename string, content string) {
 	checkErr(writeGeneratedFile(filename, content, true))
 }
 
 func writeGeneratedFile(filename string, content string, log bool) error {
-	if fileExists(filename) {
+	if gghelper.FileExists(filename) {
 		oldData, err := os.ReadFile(filename)
 		if err != nil {
 			return err
@@ -60,7 +42,7 @@ func writeGeneratedFile(filename string, content string, log bool) error {
 		if log {
 			clioutput.Success("CREATE", "%s", filename)
 		}
-		if err := ensureParentDir(filename); err != nil {
+		if err := gghelper.EnsureParentDir(filename); err != nil {
 			return err
 		}
 		if err := os.WriteFile(filename, []byte(content), ggconst.FileModeGenerated); err != nil {
@@ -78,17 +60,4 @@ func currentProjectModulePath() string {
 		return ""
 	}
 	return strings.Trim(modulePath, "/")
-}
-
-// relativePath returns filePath relative to the current working directory when possible.
-func relativePath(filePath string) string {
-	cwd, err := os.Getwd()
-	if err != nil {
-		return filePath
-	}
-	relPath, err := filepath.Rel(cwd, filePath)
-	if err != nil {
-		return filePath
-	}
-	return relPath
 }

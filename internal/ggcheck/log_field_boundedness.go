@@ -11,6 +11,7 @@ import (
 
 	"github.com/go-git/go-git/v5/plumbing/format/gitignore"
 	"github.com/hydroan/gst/internal/ggconst"
+	"github.com/hydroan/gst/internal/gghelper"
 	"github.com/hydroan/gst/internal/goast"
 )
 
@@ -81,10 +82,10 @@ func checkFileLogFieldBoundedness(filePath string) []string {
 	fset := token.NewFileSet()
 	node, err := parser.ParseFile(fset, filePath, nil, parser.ParseComments)
 	if err != nil {
-		return append(violations, fmt.Sprintf("%s has parse error: %v", relativePath(filePath), err))
+		return append(violations, fmt.Sprintf("%s has parse error: %v", gghelper.RelativePath(filePath), err))
 	}
 
-	relPath := relativePath(filePath)
+	relPath := gghelper.RelativePath(filePath)
 
 	for _, decl := range node.Decls {
 		funcDecl, ok := decl.(*ast.FuncDecl)

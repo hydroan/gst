@@ -8,6 +8,7 @@ import (
 	"go/token"
 	"os"
 
+	"github.com/hydroan/gst/internal/gghelper"
 	gofumpt "mvdan.cc/gofumpt/format"
 )
 
@@ -30,7 +31,7 @@ func writeGoFile(path string, fset *token.FileSet, file *ast.File) error {
 	if err != nil {
 		return err
 	}
-	if err := ensureParentDir(path); err != nil {
+	if err := gghelper.EnsureParentDir(path); err != nil {
 		return err
 	}
 	// #nosec G703 -- every caller passes a path joined from the project

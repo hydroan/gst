@@ -15,6 +15,7 @@ import (
 	"github.com/go-git/go-git/v5/plumbing/format/gitignore"
 	"github.com/hydroan/gst/dsl"
 	"github.com/hydroan/gst/internal/ggconst"
+	"github.com/hydroan/gst/internal/gghelper"
 	"github.com/hydroan/gst/internal/goast"
 	"github.com/hydroan/gst/internal/modelregistry"
 	gormschema "gorm.io/gorm/schema"
@@ -56,7 +57,7 @@ func checkVersionFieldDeclaration(ignore gitignore.Matcher) []string {
 
 	var violations []string
 	for _, finding := range findings {
-		relPath := relativePath(finding.Path)
+		relPath := gghelper.RelativePath(finding.Path)
 		if finding.Embedded {
 			violations = append(violations, fmt.Sprintf(
 				"%s:%d: struct '%s' embeds model.Version; optimistic locking requires a named field: Version model.Version `json:\"version,omitempty\" gorm:\"%s\"` (an embedded Version is not recognized and the lock silently does not engage)",
@@ -89,7 +90,7 @@ func checkVersionFieldDeclaration(ignore gitignore.Matcher) []string {
 		return append(violations, err.Error())
 	}
 	for _, finding := range actionFindings {
-		relPath := relativePath(finding.Path)
+		relPath := gghelper.RelativePath(finding.Path)
 		if finding.Blocked {
 			violations = append(violations, fmt.Sprintf(
 				"%s:%d: field '%s.%s' (model.Version) in a DSL action type carries json:\"-\"; the version must serialize so clients can hand it back",
@@ -295,7 +296,7 @@ func versionJSONName(fieldName string) string {
 func scanVersionFieldFile(path string) ([]VersionFieldFinding, error) {
 	imports, err := parser.ParseFile(token.NewFileSet(), path, nil, parser.ImportsOnly)
 	if err != nil {
-		return nil, fmt.Errorf("%s has parse error: %w", relativePath(path), err)
+		return nil, fmt.Errorf("%s has parse error: %w", gghelper.RelativePath(path), err)
 	}
 	names := goast.ImportedNames(imports, ggconst.ImportPathModel, ggconst.PkgModel)
 	if len(names.Qualifiers) == 0 && !names.DotImported {
@@ -305,7 +306,7 @@ func scanVersionFieldFile(path string) ([]VersionFieldFinding, error) {
 	fset := token.NewFileSet()
 	file, err := parser.ParseFile(fset, path, nil, parser.ParseComments)
 	if err != nil {
-		return nil, fmt.Errorf("%s has parse error: %w", relativePath(path), err)
+		return nil, fmt.Errorf("%s has parse error: %w", gghelper.RelativePath(path), err)
 	}
 
 	var findings []VersionFieldFinding

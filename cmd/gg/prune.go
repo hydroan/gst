@@ -7,6 +7,7 @@ import (
 	"github.com/hydroan/gst/internal/codegen"
 	"github.com/hydroan/gst/internal/codegen/gen"
 	"github.com/hydroan/gst/internal/ggconst"
+	"github.com/hydroan/gst/internal/gghelper"
 	"github.com/spf13/cobra"
 )
 
@@ -26,7 +27,7 @@ func pruneRun() {
 		checkErr(err)
 	}
 
-	if !fileExists(ggconst.DirModel) {
+	if !gghelper.FileExists(ggconst.DirModel) {
 		clioutput.Error("", "model dir not found: %s", ggconst.DirModel)
 		os.Exit(1)
 	}

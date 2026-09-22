@@ -12,6 +12,7 @@ import (
 	"github.com/hydroan/gst/internal/codegen/gen"
 	"github.com/hydroan/gst/internal/ggconfig"
 	"github.com/hydroan/gst/internal/ggconst"
+	"github.com/hydroan/gst/internal/gghelper"
 )
 
 // ServiceTestCoverage requires a test file for every service file generated
@@ -75,7 +76,7 @@ func checkServiceTestCoverage(ignore gitignore.Matcher) []string {
 			}
 			// A service file that does not exist yet is gg gen's business:
 			// requiring its test here would block the gen run that scaffolds it.
-			if !fileExists(target.FilePath) {
+			if !gghelper.FileExists(target.FilePath) {
 				return
 			}
 			if serviceTestFileExists(target.FilePath) {
@@ -97,5 +98,5 @@ func checkServiceTestCoverage(ignore gitignore.Matcher) []string {
 // file in its directory: <stem>_test.go or its internal form <stem>_internal_test.go.
 func serviceTestFileExists(servicePath string) bool {
 	stem := strings.TrimSuffix(servicePath, ".go")
-	return fileExists(stem+"_test.go") || fileExists(stem+"_internal_test.go")
+	return gghelper.FileExists(stem+"_test.go") || gghelper.FileExists(stem+"_internal_test.go")
 }

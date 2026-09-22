@@ -10,6 +10,7 @@ import (
 
 	gitignore "github.com/go-git/go-git/v5/plumbing/format/gitignore"
 	"github.com/hydroan/gst/internal/ggconst"
+	"github.com/hydroan/gst/internal/gghelper"
 )
 
 // ModelActionTypeNaming holds explicit DSL Payload type names to the Req
@@ -59,7 +60,7 @@ func checkFileActionTypeNaming(filePath string) []string {
 		return violations
 	}
 
-	relPath := relativePath(filePath)
+	relPath := gghelper.RelativePath(filePath)
 
 	for _, decl := range node.Decls {
 		funcDecl, ok := decl.(*ast.FuncDecl)

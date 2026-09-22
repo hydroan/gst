@@ -10,6 +10,7 @@ import (
 	"github.com/hydroan/gst/internal/clioutput"
 	"github.com/hydroan/gst/internal/ggcheck"
 	"github.com/hydroan/gst/internal/ggconst"
+	"github.com/hydroan/gst/internal/gghelper"
 )
 
 // fillVersionFieldTags rewrites named model.Version fields under the model
@@ -38,12 +39,12 @@ func fillVersionFieldTags(quiet bool) error {
 		if finding.Embedded {
 			return fmt.Errorf(
 				"%s:%d: struct '%s' embeds model.Version; optimistic locking requires a named field (Version model.Version `json:\"version,omitempty\" gorm:\"%s\"`) — gen cannot heal a field shape",
-				relativePath(finding.Path), finding.Line, finding.Struct, ggcheck.VersionRequiredTag)
+				gghelper.RelativePath(finding.Path), finding.Line, finding.Struct, ggcheck.VersionRequiredTag)
 		}
 		if finding.JSONBlocked {
 			return fmt.Errorf(
 				"%s:%d: field '%s.%s' (model.Version) carries json:\"-\"; the version must serialize so clients can hand it back — gen cannot un-hide a field its author silenced",
-				relativePath(finding.Path), finding.Line, finding.Struct, finding.Field)
+				gghelper.RelativePath(finding.Path), finding.Line, finding.Struct, finding.Field)
 		}
 		byFile[finding.Path] = append(byFile[finding.Path], finding)
 	}
@@ -62,7 +63,7 @@ func fillVersionFieldTags(quiet bool) error {
 					fixes = append(fixes, `json:",omitempty"`)
 				}
 				clioutput.Success("FIX", "%s: filled %s on %s.%s",
-					relativePath(path), strings.Join(fixes, " and "), finding.Struct, finding.Field)
+					gghelper.RelativePath(path), strings.Join(fixes, " and "), finding.Struct, finding.Field)
 			}
 		}
 	}
@@ -95,14 +96,14 @@ func rewriteVersionFieldTags(path string, findings []ggcheck.VersionFieldFinding
 	sort.SliceStable(insertions, func(i, j int) bool { return insertions[i].Offset > insertions[j].Offset })
 	for _, insertion := range insertions {
 		if insertion.Offset < 0 || insertion.Offset > len(source) {
-			return fmt.Errorf("%s: version tag rewrite offset out of range", relativePath(path))
+			return fmt.Errorf("%s: version tag rewrite offset out of range", gghelper.RelativePath(path))
 		}
 		source = append(source[:insertion.Offset], append([]byte(insertion.Text), source[insertion.Offset:]...)...)
 	}
 
 	formatted, err := format.Source(source)
 	if err != nil {
-		return fmt.Errorf("%s: version tag rewrite produced unparsable code: %w", relativePath(path), err)
+		return fmt.Errorf("%s: version tag rewrite produced unparsable code: %w", gghelper.RelativePath(path), err)
 	}
 	// The path comes from the model-directory walk and is fenced to it by
 	// pathUnderRoot above; the taint analyzer cannot see through the fence.

@@ -17,6 +17,7 @@ import (
 	pkgnew "github.com/hydroan/gst/internal/codegen/new"
 	"github.com/hydroan/gst/internal/ggconfig"
 	"github.com/hydroan/gst/internal/ggconst"
+	"github.com/hydroan/gst/internal/gghelper"
 	"github.com/spf13/cobra"
 )
 
@@ -261,7 +262,7 @@ func genRunWithOptions(opts genRunOptions) error {
 			return err
 		}
 
-		if fileExists(safePath) {
+		if gghelper.FileExists(safePath) {
 			// Read original file content to preserve comments and formatting
 			src, err := os.ReadFile(safePath)
 			if err != nil {
@@ -287,7 +288,7 @@ func genRunWithOptions(opts genRunOptions) error {
 				if !opts.Quiet {
 					clioutput.Status(clioutput.StyleWarn, clioutput.SymbolSuccess, "UPDATE", "%s", safePath)
 				}
-				if err := ensureParentDir(safePath); err != nil {
+				if err := gghelper.EnsureParentDir(safePath); err != nil {
 					return err
 				}
 				// #nosec G703 -- safePath validated under serviceDir by pathUnderRoot
@@ -301,7 +302,7 @@ func genRunWithOptions(opts genRunOptions) error {
 			if !opts.Quiet {
 				clioutput.Success("CREATE", "%s", safePath)
 			}
-			if err := ensureParentDir(safePath); err != nil {
+			if err := gghelper.EnsureParentDir(safePath); err != nil {
 				return err
 			}
 			// #nosec G703 -- safePath validated under serviceDir by pathUnderRoot
@@ -366,7 +367,7 @@ type scannedModels struct {
 // never declared. gg gen and gg gen ts both start from here, which keeps the
 // TypeScript declarations on the routes the generated router registers.
 func scanModels(quiet bool) (scannedModels, error) {
-	if !fileExists(ggconst.DirModel) {
+	if !gghelper.FileExists(ggconst.DirModel) {
 		return scannedModels{}, fmt.Errorf("model dir not found: %s", ggconst.DirModel)
 	}
 

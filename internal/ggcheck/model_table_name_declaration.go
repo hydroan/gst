@@ -12,6 +12,7 @@ import (
 
 	"github.com/go-git/go-git/v5/plumbing/format/gitignore"
 	"github.com/hydroan/gst/internal/ggconst"
+	"github.com/hydroan/gst/internal/gghelper"
 	"github.com/hydroan/gst/internal/goast"
 )
 
@@ -76,7 +77,7 @@ func checkModelTableNameDeclaration(ignore gitignore.Matcher) []string {
 		fset := token.NewFileSet()
 		node, err := parser.ParseFile(fset, path, nil, parser.ParseComments)
 		if err != nil {
-			violations = append(violations, fmt.Sprintf("%s has parse error: %v", relativePath(path), err))
+			violations = append(violations, fmt.Sprintf("%s has parse error: %v", gghelper.RelativePath(path), err))
 			return nil
 		}
 		dir := filepath.Dir(path)
@@ -130,14 +131,14 @@ func checkModelTableNameDeclaration(ignore gitignore.Matcher) []string {
 		if !ok {
 			violations = append(violations, fmt.Sprintf(
 				"%s:%d: model '%s' embeds %s but declares no TableName() string; declare it on the struct returning a non-empty string literal — the base default \"\" fails at startup and inside gg migrate",
-				relativePath(model.position.Filename), model.position.Line, model.name, model.embedded,
+				gghelper.RelativePath(model.position.Filename), model.position.Line, model.name, model.embedded,
 			))
 			continue
 		}
 		if !method.literal {
 			violations = append(violations, fmt.Sprintf(
 				"%s:%d: TableName of model '%s' must be a single return of a non-empty string literal: the framework and gg migrate call it on zero-value instances",
-				relativePath(method.position.Filename), method.position.Line, model.name,
+				gghelper.RelativePath(method.position.Filename), method.position.Line, model.name,
 			))
 		}
 	}

@@ -16,6 +16,7 @@ import (
 	"github.com/hydroan/gst/consts"
 	"github.com/hydroan/gst/internal/clioutput"
 	"github.com/hydroan/gst/internal/ggconst"
+	"github.com/hydroan/gst/internal/gghelper"
 	"github.com/spf13/cobra"
 	"github.com/stoewer/go-strcase"
 )
@@ -121,7 +122,7 @@ func runModelRoutes(w io.Writer, filter string, opts *modelRoutesCommandOptions)
 
 // parseModelRoutesFromProject parses generated router registrations and links them to model files.
 func parseModelRoutesFromProject(routerFile, modelRoot string) ([]modelRoute, error) {
-	if !fileExists(routerFile) {
+	if !gghelper.FileExists(routerFile) {
 		return nil, errors.Newf("router file not found: %s. Please run 'gg gen' first", routerFile)
 	}
 

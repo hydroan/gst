@@ -11,6 +11,7 @@ import (
 
 	gitignore "github.com/go-git/go-git/v5/plumbing/format/gitignore"
 	"github.com/hydroan/gst/internal/ggconst"
+	"github.com/hydroan/gst/internal/gghelper"
 	"github.com/hydroan/gst/internal/goast"
 )
 
@@ -87,9 +88,9 @@ func checkFileColumnReferenceMinting(path string) []string {
 	fset := token.NewFileSet()
 	file, err := parser.ParseFile(fset, path, nil, parser.ParseComments)
 	if err != nil {
-		return []string{fmt.Sprintf("%s has parse error: %v", relativePath(path), err)}
+		return []string{fmt.Sprintf("%s has parse error: %v", gghelper.RelativePath(path), err)}
 	}
-	relPath := relativePath(path)
+	relPath := gghelper.RelativePath(path)
 
 	var violations []string
 	for _, decl := range file.Decls {

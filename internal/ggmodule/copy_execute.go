@@ -6,6 +6,7 @@ import (
 
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/internal/clioutput"
+	"github.com/hydroan/gst/internal/gghelper"
 )
 
 // moduleCopyWriteStatus is what one write did to a target file. It is a named
@@ -236,7 +237,7 @@ func (e *CopyExecution) write(file moduleCopyFile) error {
 }
 
 func writeModuleCopyFile(path string, content []byte, preexisting bool, force bool) (status moduleCopyWriteStatus, wrote bool, err error) {
-	if fileExists(path) {
+	if gghelper.FileExists(path) {
 		oldData, err := os.ReadFile(path)
 		if err != nil {
 			return "", false, err
@@ -253,7 +254,7 @@ func writeModuleCopyFile(path string, content []byte, preexisting bool, force bo
 		return moduleCopyWriteUpdate, true, nil
 	}
 
-	if err := ensureParentDir(path); err != nil {
+	if err := gghelper.EnsureParentDir(path); err != nil {
 		return "", false, err
 	}
 	if err := os.WriteFile(path, content, 0o600); err != nil {

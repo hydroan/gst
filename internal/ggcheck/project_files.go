@@ -1,6 +1,6 @@
 // How every check reads the project: the walk that honors the project's Git
-// ignore rules, the files gg generates and owns, and paths as the checks print
-// them.
+// ignore rules, the files gg generates and owns, and the module path the
+// project's go.mod declares.
 
 package ggcheck
 
@@ -21,19 +21,6 @@ func currentProjectModulePath() string {
 		return ""
 	}
 	return strings.Trim(modulePath, "/")
-}
-
-// relativePath returns filePath relative to the current working directory when possible.
-func relativePath(filePath string) string {
-	cwd, err := os.Getwd()
-	if err != nil {
-		return filePath
-	}
-	relPath, err := filepath.Rel(cwd, filePath)
-	if err != nil {
-		return filePath
-	}
-	return relPath
 }
 
 // newProjectIgnoreMatcher loads Git ignore rules for the project root. Every
@@ -74,12 +61,6 @@ func walkProjectDir(root string, ignore gitignore.Matcher, checkFn func(path str
 		}
 		return checkFn(path, info)
 	})
-}
-
-// fileExists reports whether a file exists at filename.
-func fileExists(filename string) bool {
-	_, err := os.Stat(filename)
-	return !os.IsNotExist(err)
 }
 
 // isGeneratedFileName reports whether a path is a file gg generates and owns.

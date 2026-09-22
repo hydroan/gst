@@ -9,6 +9,7 @@ import (
 
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/internal/codegen/gen"
+	"github.com/hydroan/gst/internal/gghelper"
 )
 
 func (p *CopyPlan) findModels() ([]*gen.ModelInfo, error) {
@@ -75,7 +76,7 @@ func (p *CopyPlan) addModelFiles() error {
 			Kind:        moduleCopyFileModel,
 			TargetPath:  targetPath,
 			Content:     content,
-			Preexisting: fileExists(targetPath),
+			Preexisting: gghelper.FileExists(targetPath),
 		})
 	}
 	return nil

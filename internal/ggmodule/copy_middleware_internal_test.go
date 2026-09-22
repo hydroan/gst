@@ -8,6 +8,8 @@ import (
 	"slices"
 	"strings"
 	"testing"
+
+	"github.com/hydroan/gst/internal/gghelper"
 )
 
 func TestBuildCopyPlanIncludesMiddlewareFiles(t *testing.T) {
@@ -382,7 +384,7 @@ func init() {
 	if err := exec.Run(); err != nil {
 		t.Fatalf("Run() error = %v", err)
 	}
-	if fileExists(staleMiddleware) {
+	if gghelper.FileExists(staleMiddleware) {
 		t.Fatalf("Run() left stale middleware %s in place", staleMiddleware)
 	}
 	if !slices.Contains(exec.DeletedFiles, staleMiddleware) {

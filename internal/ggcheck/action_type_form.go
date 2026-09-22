@@ -14,6 +14,7 @@ import (
 	"github.com/go-git/go-git/v5/plumbing/format/gitignore"
 	"github.com/hydroan/gst/dsl"
 	"github.com/hydroan/gst/internal/ggconst"
+	"github.com/hydroan/gst/internal/gghelper"
 )
 
 // ActionTypeForm holds explicit DSL Payload and Result type arguments to the
@@ -157,7 +158,7 @@ func checkPackageActionTypeForm(paths []string) []string {
 	}
 
 	for _, file := range files {
-		relPath := relativePath(file.path)
+		relPath := gghelper.RelativePath(file.path)
 
 		// The parser silently drops unsupported type arguments, so reject them
 		// at the AST level before judging the parsed action strings.

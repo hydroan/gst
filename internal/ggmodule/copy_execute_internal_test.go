@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 	"slices"
 	"testing"
+
+	"github.com/hydroan/gst/internal/gghelper"
 )
 
 func TestCopyExecutionRequiresGenRunnerBeforeWritingFiles(t *testing.T) {
@@ -33,7 +35,7 @@ func TestCopyExecutionRequiresGenRunnerBeforeWritingFiles(t *testing.T) {
 	if len(exec.WrittenFiles) != 0 {
 		t.Fatalf("Run() wrote %v before reporting the missing gg gen runner", exec.WrittenFiles)
 	}
-	if fileExists(modelTarget) {
+	if gghelper.FileExists(modelTarget) {
 		t.Fatalf("Run() created %s before reporting the missing gg gen runner", modelTarget)
 	}
 }
@@ -65,7 +67,7 @@ func TestCopyExecutionPrunesStaleFilesBeforeGen(t *testing.T) {
 			// carries Design() DSL that gen would faithfully regenerate
 			// registrations for.
 			for _, path := range []string{staleModel, staleService} {
-				if fileExists(path) {
+				if gghelper.FileExists(path) {
 					t.Errorf("RunGen ran while stale file %s still exists", path)
 				}
 			}
@@ -77,7 +79,7 @@ func TestCopyExecutionPrunesStaleFilesBeforeGen(t *testing.T) {
 		t.Fatalf("Run() error = %v", err)
 	}
 	for _, path := range []string{staleModel, staleService} {
-		if fileExists(path) {
+		if gghelper.FileExists(path) {
 			t.Fatalf("Run() left stale file %s in place", path)
 		}
 	}
@@ -134,7 +136,7 @@ func TestCopyExecutionPruneRejectsStalePathOutsideRoot(t *testing.T) {
 	if err == nil {
 		t.Fatal("Run() succeeded, want an error for a stale path outside the model dir")
 	}
-	if !fileExists(outsideFile) {
+	if !gghelper.FileExists(outsideFile) {
 		t.Fatal("Run() deleted a file outside the model dir")
 	}
 }
@@ -177,7 +179,7 @@ func TestModuleCopyRunPrunesStaleFilesAndKeepsExemptFiles(t *testing.T) {
 		filepath.Join("model", "copytest", "stale_model.go"),
 		filepath.Join("service", "copytest", "stale_service.go"),
 	} {
-		if fileExists(path) {
+		if gghelper.FileExists(path) {
 			t.Fatalf("Run() left stale file %s in place", path)
 		}
 	}
@@ -188,7 +190,7 @@ func TestModuleCopyRunPrunesStaleFilesAndKeepsExemptFiles(t *testing.T) {
 		filepath.Join("model", "copytest", "copytest.go"),
 		filepath.Join("service", "copytest", "create.go"),
 	} {
-		if !fileExists(path) {
+		if !gghelper.FileExists(path) {
 			t.Fatalf("Run() should keep %s", path)
 		}
 	}

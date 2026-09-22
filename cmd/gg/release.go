@@ -82,9 +82,9 @@ func releaseRun(cmd *cobra.Command, args []string) error {
 
 	// Check configuration file and auto-create if not exists
 	configFile := ".goreleaser.yml"
-	if !fileExists(configFile) {
+	if !gghelper.FileExists(configFile) {
 		configFile = ".goreleaser.yaml"
-		if !fileExists(configFile) {
+		if !gghelper.FileExists(configFile) {
 			clioutput.Item("", "No .goreleaser.yml found, creating default configuration")
 			if err := initGoreleaserConfig(); err != nil {
 				return fmt.Errorf("failed to generate config: %w", err)
@@ -244,7 +244,7 @@ func checkGoreleaserSetup() error {
 	configFiles := []string{".goreleaser.yml", ".goreleaser.yaml"}
 	configFound := false
 	for _, configFile := range configFiles {
-		if fileExists(configFile) {
+		if gghelper.FileExists(configFile) {
 			clioutput.Success("", "Configuration found: %s", configFile)
 			configFound = true
 			break

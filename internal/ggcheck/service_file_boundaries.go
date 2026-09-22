@@ -10,6 +10,7 @@ import (
 
 	gitignore "github.com/go-git/go-git/v5/plumbing/format/gitignore"
 	"github.com/hydroan/gst/internal/ggconst"
+	"github.com/hydroan/gst/internal/gghelper"
 	"github.com/hydroan/gst/internal/goast"
 )
 
@@ -64,7 +65,7 @@ func checkFileServiceBoundary(filePath string) []string {
 		return violations
 	}
 
-	relPath := relativePath(filePath)
+	relPath := gghelper.RelativePath(filePath)
 	violations = append(violations, fmt.Sprintf("Service file '%s' should contain at most one service struct (found: %s)", relPath, strings.Join(serviceNames, ", ")))
 
 	return violations

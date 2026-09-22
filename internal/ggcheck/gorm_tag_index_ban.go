@@ -13,6 +13,7 @@ import (
 
 	"github.com/go-git/go-git/v5/plumbing/format/gitignore"
 	"github.com/hydroan/gst/internal/ggconst"
+	"github.com/hydroan/gst/internal/gghelper"
 )
 
 // gormIndexTagKeys are the gorm tag keys that configure an index. unique is
@@ -79,9 +80,9 @@ func checkFileGormTagIndexBan(path string) []string {
 	fset := token.NewFileSet()
 	node, err := parser.ParseFile(fset, path, nil, parser.ParseComments)
 	if err != nil {
-		return append(violations, fmt.Sprintf("%s has parse error: %v", relativePath(path), err))
+		return append(violations, fmt.Sprintf("%s has parse error: %v", gghelper.RelativePath(path), err))
 	}
-	relPath := relativePath(path)
+	relPath := gghelper.RelativePath(path)
 
 	for _, decl := range node.Decls {
 		genDecl, ok := decl.(*ast.GenDecl)

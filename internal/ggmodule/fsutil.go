@@ -22,11 +22,6 @@ func requireDir(path string) error {
 	return nil
 }
 
-func fileExists(filename string) bool {
-	_, err := os.Stat(filename)
-	return !os.IsNotExist(err)
-}
-
 func goFilesInDir(root string) ([]string, error) {
 	files := make([]string, 0)
 	err := filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
@@ -101,18 +96,6 @@ func isGeneratedFile(path string) (bool, error) {
 		}
 	}
 	return false, nil
-}
-
-func ensureParentDir(filename string) error {
-	dir := filepath.Dir(filename)
-
-	var err error
-	if _, err = os.Stat(dir); err == nil {
-		return nil
-	} else if os.IsNotExist(err) {
-		return os.MkdirAll(dir, 0o755)
-	}
-	return err
 }
 
 // requirePathUnderRoot returns path cleaned and verified to be under root (no path traversal).

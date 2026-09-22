@@ -11,6 +11,7 @@ import (
 
 	"github.com/go-git/go-git/v5/plumbing/format/gitignore"
 	"github.com/hydroan/gst/internal/ggconst"
+	"github.com/hydroan/gst/internal/gghelper"
 )
 
 // ServiceTestOrganization pairs every test file under the service directory
@@ -81,10 +82,10 @@ func checkServiceTestOrganization(ignore gitignore.Matcher) []string {
 // internal test form of foo.go.
 func pairedSourceFileExists(testPath string) bool {
 	stem := strings.TrimSuffix(testPath, "_test.go")
-	if fileExists(stem + ".go") {
+	if gghelper.FileExists(stem + ".go") {
 		return true
 	}
-	if internal := strings.TrimSuffix(stem, "_internal"); internal != stem && fileExists(internal+".go") {
+	if internal := strings.TrimSuffix(stem, "_internal"); internal != stem && gghelper.FileExists(internal+".go") {
 		return true
 	}
 	return false

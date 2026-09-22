@@ -17,6 +17,7 @@ import (
 	"github.com/hydroan/gst/internal/codegen/gen"
 	"github.com/hydroan/gst/internal/codegen/gen/ts"
 	"github.com/hydroan/gst/internal/ggconst"
+	"github.com/hydroan/gst/internal/gghelper"
 	"github.com/spf13/cobra"
 )
 
@@ -70,7 +71,7 @@ func genTypeScriptRun() error {
 	// declares no route at all, and the run then removes what an earlier one
 	// generated rather than leaving stale declarations behind.
 	var models []*gen.ModelInfo
-	if fileExists(ggconst.DirModel) {
+	if gghelper.FileExists(ggconst.DirModel) {
 		scanned, err := scanModels(false)
 		if err != nil {
 			return err
@@ -188,7 +189,7 @@ func writeTypeScriptFiles(dir string, files []ts.File) error {
 // included: a project that generates nothing keeps no output directory. A file
 // without the generated header is kept and reported.
 func removeOrphanTypeScriptFiles(dir string, wanted map[string]bool, header string) error {
-	if !fileExists(dir) {
+	if !gghelper.FileExists(dir) {
 		return nil
 	}
 	var dirs []string

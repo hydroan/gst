@@ -1,6 +1,7 @@
-// Package gghelper holds what more than one gg command package reads about
-// the project gg runs in, such as the module path its go.mod declares. Code a
-// single command package uses stays in that package.
+// Package gghelper holds what more than one gg command package needs about
+// the project gg runs in: the module path its go.mod declares, and the small
+// file and path helpers the commands share. Code a single command package
+// uses stays in that package.
 package gghelper
 
 import (

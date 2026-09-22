@@ -10,6 +10,7 @@ import (
 
 	"github.com/hydroan/gst/dsl"
 	"github.com/hydroan/gst/internal/codegen/gen"
+	"github.com/hydroan/gst/internal/gghelper"
 )
 
 func (p *CopyPlan) collectActions(models []*gen.ModelInfo) ([]moduleCopyAction, error) {
@@ -156,7 +157,7 @@ func (p *CopyPlan) addServiceFiles(helperFiles []string) error {
 			Kind:        moduleCopyFileService,
 			TargetPath:  first.TargetPath,
 			Content:     content,
-			Preexisting: fileExists(first.TargetPath),
+			Preexisting: gghelper.FileExists(first.TargetPath),
 		})
 	}
 
@@ -177,7 +178,7 @@ func (p *CopyPlan) addServiceFiles(helperFiles []string) error {
 			Kind:        moduleCopyFileHelper,
 			TargetPath:  targetPath,
 			Content:     content,
-			Preexisting: fileExists(targetPath),
+			Preexisting: gghelper.FileExists(targetPath),
 		})
 	}
 	return nil

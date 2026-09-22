@@ -14,6 +14,7 @@ import (
 	gitignore "github.com/go-git/go-git/v5/plumbing/format/gitignore"
 	"github.com/hydroan/gst/internal/codegen/gen"
 	"github.com/hydroan/gst/internal/ggconst"
+	"github.com/hydroan/gst/internal/gghelper"
 	"github.com/hydroan/gst/internal/goast"
 )
 
@@ -123,7 +124,7 @@ func checkFileDetachedContexts(filePath, modulePath string) []string {
 		return nil
 	}
 	imports := contextImportsOf(file, modulePath)
-	relPath := relativePath(filePath)
+	relPath := gghelper.RelativePath(filePath)
 	var violations []string
 	for _, spec := range imports.daoDot {
 		pos := fset.Position(spec.Pos())
