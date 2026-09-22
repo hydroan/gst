@@ -117,17 +117,8 @@ func TestCollectOrphanServiceDirsFlagsUnreferencedDirs(t *testing.T) {
 func setupOrphanPruneProject(t *testing.T) {
 	t.Helper()
 
-	oldModelDir := modelDir
-	oldServiceDir := serviceDir
-	t.Cleanup(func() {
-		modelDir = oldModelDir
-		serviceDir = oldServiceDir
-	})
-
 	projectDir := t.TempDir()
 	t.Chdir(projectDir)
-	modelDir = "model"
-	serviceDir = "service"
 
 	writeOrphanPruneFile(t, "go.mod", "module tmpapp\n\ngo 1.26\n")
 }

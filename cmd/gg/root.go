@@ -2,15 +2,11 @@ package main
 
 import (
 	"github.com/cockroachdb/errors"
+	"github.com/hydroan/gst/internal/gghelper"
 	"github.com/spf13/cobra"
 )
 
 var (
-	modelDir     = "model"
-	serviceDir   = "service"
-	routerDir    = "router"
-	daoDir       = "dao"
-	excludes     []string
 	module       string
 	debug        bool
 	prune        bool
@@ -51,7 +47,7 @@ func rejectFrameworkRootCommand(cmd *cobra.Command, args []string) error {
 	if isMetadataCommand(cmd) {
 		return nil
 	}
-	if isGstFrameworkProject(".") {
+	if gghelper.IsFrameworkProject(".") {
 		return errors.New("gg commands cannot run in the gst framework repository root")
 	}
 	return nil

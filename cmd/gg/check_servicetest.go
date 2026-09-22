@@ -14,6 +14,7 @@ import (
 	"github.com/hydroan/gst/internal/codegen"
 	"github.com/hydroan/gst/internal/codegen/gen"
 	"github.com/hydroan/gst/internal/ggconfig"
+	"github.com/hydroan/gst/internal/ggconst"
 	"github.com/hydroan/gst/internal/ggmodule"
 )
 
@@ -28,7 +29,7 @@ import (
 func CheckServiceTestCoverage(ignore gitignore.Matcher) []string {
 	var violations []string
 
-	if _, err := os.Stat(modelDir); os.IsNotExist(err) {
+	if _, err := os.Stat(ggconst.DirModel); os.IsNotExist(err) {
 		return violations
 	}
 
@@ -40,7 +41,7 @@ func CheckServiceTestCoverage(ignore gitignore.Matcher) []string {
 	if err != nil {
 		return append(violations, fmt.Sprintf("loading gst.yaml: %v", err))
 	}
-	allModels, err := codegen.FindModels(currentProjectModulePath(), modelDir, excludes)
+	allModels, err := codegen.FindModels(currentProjectModulePath(), ggconst.DirModel)
 	if err != nil {
 		return append(violations, fmt.Sprintf("scanning model designs: %v", err))
 	}
@@ -61,13 +62,13 @@ func CheckServiceTestCoverage(ignore gitignore.Matcher) []string {
 			if !act.Enabled || !act.Service {
 				return
 			}
-			target := gen.ServiceTarget(m, act, modelDir, serviceDir)
+			target := gen.ServiceTarget(m, act, ggconst.DirModel, ggconst.DirService)
 			if seen[target.FilePath] {
 				return
 			}
 			seen[target.FilePath] = true
 
-			if moduleOwnedPath(owned, serviceDir, target.FilePath) || isIgnoredProjectPath(ignore, target.FilePath, false) {
+			if moduleOwnedPath(owned, ggconst.DirService, target.FilePath) || isIgnoredProjectPath(ignore, target.FilePath, false) {
 				return
 			}
 			// A service file that does not exist yet is gg gen's business:
@@ -109,7 +110,7 @@ func serviceTestFileExists(servicePath string) bool {
 func CheckServiceTestOrganization(ignore gitignore.Matcher) []string {
 	var violations []string
 
-	if _, err := os.Stat(serviceDir); os.IsNotExist(err) {
+	if _, err := os.Stat(ggconst.DirService); os.IsNotExist(err) {
 		return violations
 	}
 
@@ -118,9 +119,9 @@ func CheckServiceTestOrganization(ignore gitignore.Matcher) []string {
 		return append(violations, fmt.Sprintf("listing copyable framework modules: %v", err))
 	}
 
-	walkErr := walkProjectDir(serviceDir, ignore, func(path string, info os.FileInfo) error {
+	walkErr := walkProjectDir(ggconst.DirService, ignore, func(path string, info os.FileInfo) error {
 		if info.IsDir() {
-			if path != serviceDir && moduleOwnedPath(owned, serviceDir, path) {
+			if path != ggconst.DirService && moduleOwnedPath(owned, ggconst.DirService, path) {
 				return filepath.SkipDir
 			}
 			return nil

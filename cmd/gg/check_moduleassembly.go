@@ -13,6 +13,7 @@ import (
 	"strings"
 
 	"github.com/go-git/go-git/v5/plumbing/format/gitignore"
+	"github.com/hydroan/gst/internal/ggconst"
 	"github.com/hydroan/gst/internal/ggmodule"
 	"github.com/hydroan/gst/internal/goast"
 )
@@ -39,7 +40,7 @@ func CheckModuleAssembly(ignore gitignore.Matcher) []string {
 	}
 	copied := make([]string, 0, len(names))
 	for _, name := range names {
-		if info, statErr := os.Stat(filepath.Join(modelDir, name)); statErr == nil && info.IsDir() {
+		if info, statErr := os.Stat(filepath.Join(ggconst.DirModel, name)); statErr == nil && info.IsDir() {
 			copied = append(copied, name)
 		}
 	}
@@ -66,7 +67,7 @@ func CheckModuleAssembly(ignore gitignore.Matcher) []string {
 
 	walkErr := walkProjectDir(".", ignore, func(path string, info os.FileInfo) error {
 		if info.IsDir() {
-			if moduleOwnedPath(owned, modelDir, path) || moduleOwnedPath(owned, serviceDir, path) {
+			if moduleOwnedPath(owned, ggconst.DirModel, path) || moduleOwnedPath(owned, ggconst.DirService, path) {
 				return filepath.SkipDir
 			}
 			return nil

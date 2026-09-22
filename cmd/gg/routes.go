@@ -76,8 +76,8 @@ Use --scope auth or --scope pub to display only authenticated or public routes.`
 }
 
 func runModelRoutes(w io.Writer, filter string, opts *modelRoutesCommandOptions) error {
-	routerFile := filepath.Join(routerDir, ggconst.FileRouterGen)
-	routes, err := parseModelRoutesFromProject(routerFile, modelDir)
+	routerFile := filepath.Join(ggconst.DirRouter, ggconst.FileRouterGen)
+	routes, err := parseModelRoutesFromProject(routerFile, ggconst.DirModel)
 	if err != nil {
 		return err
 	}
@@ -593,7 +593,7 @@ func normalizeRouteScope(scope string) (string, error) {
 
 func trimModelSourceRoot(source string) string {
 	source = filepath.ToSlash(source)
-	prefix := strings.Trim(filepath.ToSlash(modelDir), "/")
+	prefix := strings.Trim(filepath.ToSlash(ggconst.DirModel), "/")
 	if prefix == "" || prefix == "." {
 		return source
 	}

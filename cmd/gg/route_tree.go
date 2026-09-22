@@ -79,7 +79,7 @@ func filterRouteTree(routes map[string][]string, filter string) map[string][]str
 // parseModelRoutesFromProject, and keys their HTTP methods by path for the
 // URL route tree.
 func parseRouteTreeFromFile() (map[string][]string, error) {
-	registered, err := parseModelRoutesFromProject(filepath.Join(routerDir, ggconst.FileRouterGen), modelDir)
+	registered, err := parseModelRoutesFromProject(filepath.Join(ggconst.DirRouter, ggconst.FileRouterGen), ggconst.DirModel)
 	if err != nil {
 		return nil, err
 	}

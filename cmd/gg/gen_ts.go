@@ -16,6 +16,7 @@ import (
 	"github.com/hydroan/gst/internal/clioutput"
 	"github.com/hydroan/gst/internal/codegen/gen"
 	"github.com/hydroan/gst/internal/codegen/gen/ts"
+	"github.com/hydroan/gst/internal/ggconst"
 	"github.com/spf13/cobra"
 )
 
@@ -69,7 +70,7 @@ func genTypeScriptRun() error {
 	// declares no route at all, and the run then removes what an earlier one
 	// generated rather than leaving stale declarations behind.
 	var models []*gen.ModelInfo
-	if fileExists(modelDir) {
+	if fileExists(ggconst.DirModel) {
 		scanned, err := scanModels(false)
 		if err != nil {
 			return err
@@ -85,7 +86,7 @@ func genTypeScriptRun() error {
 	files, err := ts.Generate(ts.Config{
 		Dir:        ".",
 		ModulePath: module,
-		RootPath:   path.Join(module, filepath.ToSlash(modelDir)),
+		RootPath:   path.Join(module, filepath.ToSlash(ggconst.DirModel)),
 		AppName:    appName,
 		Roots:      typeScriptRoots(models),
 	})

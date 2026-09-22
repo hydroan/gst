@@ -52,7 +52,7 @@ func findModelsFromSource(t *testing.T, pkgDir, filename, source string) []*gen.
 	// from the project root) rather than the absolute t.TempDir() path.
 	t.Chdir(projectDir)
 
-	allModels, err := codegen.FindModels("tmpapp", "model", nil)
+	allModels, err := codegen.FindModels("tmpapp", "model")
 	if err != nil {
 		t.Fatal(err)
 	}

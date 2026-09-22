@@ -6,13 +6,9 @@ import (
 )
 
 func TestCheckGormTagIndexBanFlagsIndexKeys(t *testing.T) {
-	oldModelDir := modelDir
-	t.Cleanup(func() { modelDir = oldModelDir })
-
 	projectDir := t.TempDir()
 	t.Chdir(projectDir)
 	writeCheckProjectGoMod(t, projectDir)
-	modelDir = "model"
 
 	writeCheckFile(t, filepath.Join(projectDir, "model", "group", "group.go"), `package group
 
@@ -66,13 +62,9 @@ func (Device) TableName() string { return "devices" }
 }
 
 func TestCheckGormTagIndexBanSkipsCopiedModulesGeneratedAndTests(t *testing.T) {
-	oldModelDir := modelDir
-	t.Cleanup(func() { modelDir = oldModelDir })
-
 	projectDir := t.TempDir()
 	t.Chdir(projectDir)
 	writeCheckProjectGoMod(t, projectDir)
-	modelDir = "model"
 
 	writeFrameworkModuleFixture(t, projectDir, "sample")
 

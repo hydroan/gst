@@ -10,6 +10,7 @@ import (
 	"github.com/hydroan/gst/dsl"
 	"github.com/hydroan/gst/internal/clioutput"
 	"github.com/hydroan/gst/internal/codegen/gen"
+	"github.com/hydroan/gst/internal/ggconst"
 )
 
 // scanExistingServiceFiles scans existing service files in the service directory.
@@ -117,7 +118,7 @@ func pruneServiceFiles(oldServiceFiles []string, allModels []*gen.ModelInfo, kep
 			clioutput.Success("", "No disabled service files to prune")
 		}
 		// Still check for empty directories even if no files to delete
-		removeEmptyDirectories(serviceDir)
+		removeEmptyDirectories(ggconst.DirService)
 		handleOrphanServiceDirs(allModels, keptDirs)
 		return
 	}
@@ -149,7 +150,7 @@ func pruneServiceFiles(oldServiceFiles []string, allModels []*gen.ModelInfo, kep
 	}
 
 	// Remove empty directories after deleting files
-	removeEmptyDirectories(serviceDir)
+	removeEmptyDirectories(ggconst.DirService)
 	handleOrphanServiceDirs(allModels, keptDirs)
 }
 
@@ -158,7 +159,7 @@ func currentServiceFiles(allModels []*gen.ModelInfo) map[string]bool {
 	for _, m := range allModels {
 		m.Design.Range(func(route string, act *dsl.Action) {
 			if act.Enabled && act.Service {
-				target := gen.ServiceTarget(m, act, modelDir, serviceDir)
+				target := gen.ServiceTarget(m, act, ggconst.DirModel, ggconst.DirService)
 				current[target.FilePath] = true
 			}
 		})

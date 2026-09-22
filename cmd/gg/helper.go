@@ -1,12 +1,9 @@
 package main
 
 import (
-	"fmt"
 	"os"
 	"path/filepath"
-	"strings"
 
-	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/internal/clioutput"
 	"github.com/hydroan/gst/internal/ggconst"
 )
@@ -69,21 +66,4 @@ func writeGeneratedFile(filename string, content string, log bool) error {
 		}
 	}
 	return nil
-}
-
-func getModuleName() (string, error) {
-	content, err := os.ReadFile("go.mod")
-	if err != nil {
-		return "", fmt.Errorf("failed to read go.mod: %w", err)
-	}
-
-	lines := strings.SplitSeq(string(content), "\n")
-	for line := range lines {
-		line = strings.TrimSpace(line)
-		if strings.HasPrefix(line, "module ") {
-			return strings.TrimSpace(strings.TrimPrefix(line, "module")), nil
-		}
-	}
-
-	return "", errors.New("module name not found in go.mod")
 }

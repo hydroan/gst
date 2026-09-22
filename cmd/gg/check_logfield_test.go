@@ -6,16 +6,9 @@ import (
 )
 
 func TestCheckLogFieldBoundednessFlagsMarshalerMethodsAndNamespaceCalls(t *testing.T) {
-	oldModelDir, oldServiceDir := modelDir, serviceDir
-	t.Cleanup(func() {
-		modelDir, serviceDir = oldModelDir, oldServiceDir
-	})
-
 	projectDir := t.TempDir()
 	t.Chdir(projectDir)
 	writeCheckProjectGoMod(t, projectDir)
-	modelDir = "model"
-	serviceDir = "service"
 
 	writeCheckFile(t, filepath.Join(projectDir, "model", "sample", "sample.go"), `package sample
 
@@ -72,16 +65,9 @@ func Fields() []zap.Field {
 }
 
 func TestCheckLogFieldBoundednessResolvesZapImportForms(t *testing.T) {
-	oldModelDir, oldServiceDir := modelDir, serviceDir
-	t.Cleanup(func() {
-		modelDir, serviceDir = oldModelDir, oldServiceDir
-	})
-
 	projectDir := t.TempDir()
 	t.Chdir(projectDir)
 	writeCheckProjectGoMod(t, projectDir)
-	modelDir = "model"
-	serviceDir = "service"
 
 	writeCheckFile(t, filepath.Join(projectDir, "helper", "alias.go"), `package helper
 
@@ -124,16 +110,9 @@ func scope(string) {}
 }
 
 func TestCheckLogFieldBoundednessSkipsCopiedModulesAndGeneratedFiles(t *testing.T) {
-	oldModelDir, oldServiceDir := modelDir, serviceDir
-	t.Cleanup(func() {
-		modelDir, serviceDir = oldModelDir, oldServiceDir
-	})
-
 	projectDir := t.TempDir()
 	t.Chdir(projectDir)
 	writeCheckProjectGoMod(t, projectDir)
-	modelDir = "model"
-	serviceDir = "service"
 
 	writeFrameworkModuleFixture(t, projectDir, "sample")
 

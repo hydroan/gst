@@ -6,13 +6,9 @@ import (
 )
 
 func TestCheckModelTableNameDeclarationFlagsMissingAndNonLiteral(t *testing.T) {
-	oldModelDir := modelDir
-	t.Cleanup(func() { modelDir = oldModelDir })
-
 	projectDir := t.TempDir()
 	t.Chdir(projectDir)
 	writeCheckProjectGoMod(t, projectDir)
-	modelDir = "model"
 
 	// A model without any TableName declaration.
 	writeCheckFile(t, filepath.Join(projectDir, "model", "group", "group.go"), `package group
@@ -114,13 +110,9 @@ type Login struct {
 }
 
 func TestCheckModelTableNameDeclarationSkipsCopiedModulesGeneratedAndTests(t *testing.T) {
-	oldModelDir := modelDir
-	t.Cleanup(func() { modelDir = oldModelDir })
-
 	projectDir := t.TempDir()
 	t.Chdir(projectDir)
 	writeCheckProjectGoMod(t, projectDir)
-	modelDir = "model"
 
 	writeFrameworkModuleFixture(t, projectDir, "sample")
 

@@ -195,11 +195,10 @@ func (Signup) Design() {
 // instead of turning it into a deletion candidate.
 func TestApplyRouteIgnoresKeepsServiceFilesForPrune(t *testing.T) {
 	projectDir := t.TempDir()
+	t.Chdir(projectDir)
 	writeSignupModelFixture(t, projectDir)
 
-	relModelDir := filepath.Join(projectDir, "model")
-	relServiceDir := filepath.Join(projectDir, "service")
-	allModels, err := codegen.FindModels("tmpapp", relModelDir, nil)
+	allModels, err := codegen.FindModels("tmpapp", ggconst.DirModel)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -213,16 +212,12 @@ func TestApplyRouteIgnoresKeepsServiceFilesForPrune(t *testing.T) {
 	var signupServiceFile string
 	allModels[0].Design.Range(func(route string, act *dsl.Action) {
 		if act.Service {
-			signupServiceFile = gen.ServiceTarget(allModels[0], act, relModelDir, relServiceDir).FilePath
+			signupServiceFile = gen.ServiceTarget(allModels[0], act, ggconst.DirModel, ggconst.DirService).FilePath
 		}
 	})
 	if signupServiceFile == "" {
 		t.Fatal("fixture should declare a service-bearing action")
 	}
-
-	oldModelDir, oldServiceDir := modelDir, serviceDir
-	t.Cleanup(func() { modelDir, serviceDir = oldModelDir, oldServiceDir })
-	modelDir, serviceDir = relModelDir, relServiceDir
 
 	result := applyRouteIgnores(allModels, parseRules(t, "POST /api/signup"))
 
@@ -331,7 +326,7 @@ func (Admin) Design() {
 			}
 		}
 		t.Chdir(projectDir)
-		allModels, err := codegen.FindModels("tmpapp", "model", nil)
+		allModels, err := codegen.FindModels("tmpapp", "model")
 		if err != nil {
 			t.Fatal(err)
 		}

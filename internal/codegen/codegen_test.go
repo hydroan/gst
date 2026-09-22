@@ -136,7 +136,7 @@ func TestExtractAPIDocsSkipsFilesOutsideCodeGeneration(t *testing.T) {
 // database model Record of the root package and the model Item of its
 // sample package, each with the path of its model file.
 func TestFindModels(t *testing.T) {
-	models, err := codegen.FindModels("example.com/proj", "testdata/findmodel", nil)
+	models, err := codegen.FindModels("example.com/proj", "testdata/findmodel")
 	if err != nil {
 		t.Fatalf("FindModels() error = %v", err)
 	}

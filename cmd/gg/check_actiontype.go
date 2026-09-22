@@ -13,6 +13,7 @@ import (
 
 	"github.com/go-git/go-git/v5/plumbing/format/gitignore"
 	"github.com/hydroan/gst/dsl"
+	"github.com/hydroan/gst/internal/ggconst"
 )
 
 // CheckActionTypeForm checks the explicit DSL Payload and Result type
@@ -27,7 +28,7 @@ import (
 func CheckActionTypeForm(ignore gitignore.Matcher) []string {
 	var violations []string
 
-	if _, err := os.Stat(modelDir); os.IsNotExist(err) {
+	if _, err := os.Stat(ggconst.DirModel); os.IsNotExist(err) {
 		return violations
 	}
 
@@ -35,7 +36,7 @@ func CheckActionTypeForm(ignore gitignore.Matcher) []string {
 	// different file of the package that references them.
 	var packageDirs []string
 	packageFiles := make(map[string][]string)
-	err := walkProjectDir(modelDir, ignore, func(path string, info os.FileInfo) error {
+	err := walkProjectDir(ggconst.DirModel, ignore, func(path string, info os.FileInfo) error {
 		if info.IsDir() || !strings.HasSuffix(path, ".go") || strings.HasSuffix(path, "_test.go") {
 			return nil
 		}

@@ -13,6 +13,7 @@ import (
 
 	gitignore "github.com/go-git/go-git/v5/plumbing/format/gitignore"
 	"github.com/hydroan/gst/internal/codegen/gen"
+	"github.com/hydroan/gst/internal/ggconst"
 	"github.com/hydroan/gst/internal/goast"
 )
 
@@ -103,7 +104,7 @@ func CheckDetachedContext(ignore gitignore.Matcher) []string {
 			if !strings.HasSuffix(path, ".go") || strings.HasSuffix(path, "_test.go") || isGeneratedFileName(path) {
 				return nil
 			}
-			if dir == serviceDir && moduleOwnedPath(owned, serviceDir, path) {
+			if dir == ggconst.DirService && moduleOwnedPath(owned, ggconst.DirService, path) {
 				return nil
 			}
 			violations = append(violations, checkFileDetachedContexts(path, modulePath)...)

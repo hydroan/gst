@@ -10,14 +10,8 @@ import (
 )
 
 func TestCheckActionTypeFormStructAndSliceForms(t *testing.T) {
-	oldModelDir := modelDir
-	t.Cleanup(func() {
-		modelDir = oldModelDir
-	})
-
 	projectDir := t.TempDir()
 	t.Chdir(projectDir)
-	modelDir = "model"
 
 	// A struct action type must use the pointer form, while a slice or map
 	// action type (declared through a named alias) must use the value form.
@@ -73,14 +67,8 @@ type SamplePatchRsp = []*Sample
 }
 
 func TestCheckActionTypeFormEmptyStructPairRule(t *testing.T) {
-	oldModelDir := modelDir
-	t.Cleanup(func() {
-		modelDir = oldModelDir
-	})
-
 	projectDir := t.TempDir()
 	t.Chdir(projectDir)
-	modelDir = "model"
 
 	// Empty struct action types are the delegation marker for actions that
 	// carry no data: they are allowed only when both sides of the action are
@@ -141,14 +129,8 @@ type SampleCreateRsp struct {
 }
 
 func TestCheckActionTypeFormRejectsUnsupportedArguments(t *testing.T) {
-	oldModelDir := modelDir
-	t.Cleanup(func() {
-		modelDir = oldModelDir
-	})
-
 	projectDir := t.TempDir()
 	t.Chdir(projectDir)
-	modelDir = "model"
 
 	// The type argument must be a named type declared in the same model
 	// package: slice literals, cross-package selectors, and undeclared names
@@ -197,14 +179,8 @@ type SampleItem struct {
 }
 
 func TestCheckActionTypeFormRejectsInterfacePayloads(t *testing.T) {
-	oldModelDir := modelDir
-	t.Cleanup(func() {
-		modelDir = oldModelDir
-	})
-
 	projectDir := t.TempDir()
 	t.Chdir(projectDir)
-	modelDir = "model"
 
 	// A request body decodes into no interface with methods, whether the
 	// interface declares them itself or embeds an interface that does, and
@@ -362,14 +338,8 @@ type SampleCycleB interface{ SampleCycleA }
 }
 
 func TestCheckActionTypeFormAllowsDefaultCRUDAndEmptySides(t *testing.T) {
-	oldModelDir := modelDir
-	t.Cleanup(func() {
-		modelDir = oldModelDir
-	})
-
 	projectDir := t.TempDir()
 	t.Chdir(projectDir)
-	modelDir = "model"
 
 	// Default CRUD actions keep the model type on both sides, and a GET
 	// action with a declared Result carries the *model.Empty sentinel as its

@@ -9,6 +9,7 @@ import (
 	"github.com/hydroan/gst/internal/clioutput"
 	"github.com/hydroan/gst/internal/codegen/gen"
 	"github.com/hydroan/gst/internal/ggconfig"
+	"github.com/hydroan/gst/internal/ggconst"
 )
 
 // routeIgnoreMatch records one generated route disabled by a gst.yaml
@@ -73,7 +74,7 @@ func applyRouteIgnores(allModels []*gen.ModelInfo, rules []ggconfig.RouteRule) r
 					continue
 				}
 				if act.Service {
-					target := gen.ServiceTarget(m, act, modelDir, serviceDir)
+					target := gen.ServiceTarget(m, act, ggconst.DirModel, ggconst.DirService)
 					result.KeptServiceFiles[target.FilePath] = true
 					result.KeptServiceDirs[filepath.Clean(target.Dir)] = true
 				}

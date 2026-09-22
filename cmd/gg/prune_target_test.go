@@ -7,24 +7,15 @@ import (
 	"github.com/hydroan/gst/consts"
 	"github.com/hydroan/gst/dsl"
 	"github.com/hydroan/gst/internal/codegen/gen"
+	"github.com/hydroan/gst/internal/ggconst"
 )
 
 func TestCurrentServiceFilesUsesFlattenTarget(t *testing.T) {
-	oldModelDir := modelDir
-	oldServiceDir := serviceDir
-	t.Cleanup(func() {
-		modelDir = oldModelDir
-		serviceDir = oldServiceDir
-	})
-
-	modelDir = filepath.Join("repo", "model")
-	serviceDir = filepath.Join("repo", "service")
-
 	models := []*gen.ModelInfo{flattenPruneModel()}
 	got := currentServiceFiles(models)
 
-	wantCurrent := filepath.Join(serviceDir, "authz", "role.go")
-	wantOld := filepath.Join(serviceDir, "authz", "role", "role.go")
+	wantCurrent := filepath.Join(ggconst.DirService, "authz", "role.go")
+	wantOld := filepath.Join(ggconst.DirService, "authz", "role", "role.go")
 	if !got[wantCurrent] {
 		t.Fatalf("currentServiceFiles missing flattened file %q", wantCurrent)
 	}
@@ -34,19 +25,9 @@ func TestCurrentServiceFilesUsesFlattenTarget(t *testing.T) {
 }
 
 func TestCurrentServiceDirsUsesFlattenTarget(t *testing.T) {
-	oldModelDir := modelDir
-	oldServiceDir := serviceDir
-	t.Cleanup(func() {
-		modelDir = oldModelDir
-		serviceDir = oldServiceDir
-	})
-
-	modelDir = filepath.Join("repo", "model")
-	serviceDir = filepath.Join("repo", "service")
-
 	got := currentServiceDirs([]*gen.ModelInfo{flattenPruneModel()})
-	wantDir := filepath.Clean(filepath.Join(serviceDir, "authz"))
-	oldDir := filepath.Clean(filepath.Join(serviceDir, "authz", "role"))
+	wantDir := filepath.Clean(filepath.Join(ggconst.DirService, "authz"))
+	oldDir := filepath.Clean(filepath.Join(ggconst.DirService, "authz", "role"))
 
 	if len(got.ModelDirs) != 1 || got.ModelDirs[0] != wantDir {
 		t.Fatalf("ModelDirs = %v, want [%s]", got.ModelDirs, wantDir)
@@ -67,8 +48,8 @@ func flattenPruneModel() *gen.ModelInfo {
 		ModulePath:    "github.com/acme/app",
 		ModelPkgName:  "authz",
 		ModelName:     "Role",
-		ModelFileDir:  filepath.Join("repo", "model", "authz"),
-		ModelFilePath: filepath.Join("repo", "model", "authz", "role.go"),
+		ModelFileDir:  filepath.Join(ggconst.DirModel, "authz"),
+		ModelFilePath: filepath.Join(ggconst.DirModel, "authz", "role.go"),
 		Design: &dsl.Design{
 			Enabled:  true,
 			Endpoint: "authz/roles",

@@ -25,10 +25,10 @@ func TestParseRouteTreeFromFileReadsGeneratedRoutes(t *testing.T) {
 	)
 	require.NoError(t, err)
 
-	oldRouterDir, oldModelDir := routerDir, modelDir
-	t.Cleanup(func() { routerDir, modelDir = oldRouterDir, oldModelDir })
-	routerDir, modelDir = t.TempDir(), t.TempDir()
-	require.NoError(t, os.WriteFile(filepath.Join(routerDir, ggconst.FileRouterGen), []byte(code), 0o600))
+	t.Chdir(t.TempDir())
+	require.NoError(t, os.Mkdir(ggconst.DirModel, 0o755))
+	require.NoError(t, os.Mkdir(ggconst.DirRouter, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(ggconst.DirRouter, ggconst.FileRouterGen), []byte(code), 0o600))
 
 	routes, err := parseRouteTreeFromFile()
 	require.NoError(t, err)

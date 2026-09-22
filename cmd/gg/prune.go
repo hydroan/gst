@@ -6,6 +6,7 @@ import (
 	"github.com/hydroan/gst/internal/clioutput"
 	"github.com/hydroan/gst/internal/codegen"
 	"github.com/hydroan/gst/internal/codegen/gen"
+	"github.com/hydroan/gst/internal/ggconst"
 	"github.com/spf13/cobra"
 )
 
@@ -25,14 +26,14 @@ func pruneRun() {
 		checkErr(err)
 	}
 
-	if !fileExists(modelDir) {
-		clioutput.Error("", "model dir not found: %s", modelDir)
+	if !fileExists(ggconst.DirModel) {
+		clioutput.Error("", "model dir not found: %s", ggconst.DirModel)
 		os.Exit(1)
 	}
 
 	// Scan all models
 	clioutput.Section("Scan Models")
-	allModels, err := codegen.FindModels(module, modelDir, excludes)
+	allModels, err := codegen.FindModels(module, ggconst.DirModel)
 	checkErr(err)
 	if len(allModels) == 0 {
 		clioutput.Item("", "No models found, pruning service files only")
@@ -45,7 +46,7 @@ func pruneRun() {
 	// enabled makes prune treat the file as expected without extra bookkeeping.
 
 	// Scan existing service files
-	oldServiceFiles := scanExistingServiceFiles(serviceDir)
+	oldServiceFiles := scanExistingServiceFiles(ggconst.DirService)
 
 	// Prune disabled service files
 	clioutput.Section("Prune Disabled Service Files")

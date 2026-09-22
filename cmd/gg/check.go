@@ -18,6 +18,7 @@ import (
 	"github.com/hydroan/gst/internal/clioutput"
 	"github.com/hydroan/gst/internal/codegen/gen"
 	"github.com/hydroan/gst/internal/ggconst"
+	"github.com/hydroan/gst/internal/gghelper"
 	"github.com/hydroan/gst/internal/goast"
 	"github.com/spf13/cobra"
 	"golang.org/x/text/cases"
@@ -310,11 +311,11 @@ func CheckArchitectureDependency(ignore gitignore.Matcher) []string {
 func checkServiceDependencies(modulePath string, ignore gitignore.Matcher) []string {
 	var violations []string
 
-	if _, err := os.Stat(serviceDir); os.IsNotExist(err) {
+	if _, err := os.Stat(ggconst.DirService); os.IsNotExist(err) {
 		return violations
 	}
 
-	err := walkProjectDir(serviceDir, ignore, func(path string, _ os.FileInfo) error {
+	err := walkProjectDir(ggconst.DirService, ignore, func(path string, _ os.FileInfo) error {
 		if !strings.HasSuffix(path, ".go") || strings.Contains(path, "_test.go") {
 			return nil
 		}
@@ -342,11 +343,11 @@ func checkServiceDependencies(modulePath string, ignore gitignore.Matcher) []str
 func checkDAODependencies(modulePath string, ignore gitignore.Matcher) []string {
 	var violations []string
 
-	if _, err := os.Stat(daoDir); os.IsNotExist(err) {
+	if _, err := os.Stat(ggconst.DirDAO); os.IsNotExist(err) {
 		return violations
 	}
 
-	err := walkProjectDir(daoDir, ignore, func(path string, _ os.FileInfo) error {
+	err := walkProjectDir(ggconst.DirDAO, ignore, func(path string, _ os.FileInfo) error {
 		if !strings.HasSuffix(path, ".go") || strings.Contains(path, "_test.go") {
 			return nil
 		}
@@ -367,11 +368,11 @@ func checkDAODependencies(modulePath string, ignore gitignore.Matcher) []string 
 func checkModelDependencies(modulePath string, ignore gitignore.Matcher) []string {
 	var violations []string
 
-	if _, err := os.Stat(modelDir); os.IsNotExist(err) {
+	if _, err := os.Stat(ggconst.DirModel); os.IsNotExist(err) {
 		return violations
 	}
 
-	err := walkProjectDir(modelDir, ignore, func(path string, _ os.FileInfo) error {
+	err := walkProjectDir(ggconst.DirModel, ignore, func(path string, _ os.FileInfo) error {
 		if !strings.HasSuffix(path, ".go") || strings.Contains(path, "_test.go") {
 			return nil
 		}
@@ -426,7 +427,7 @@ func checkFileForArchitectureImports(filePath, layerType, modulePath string) []s
 func CheckModelSingularNaming(ignore gitignore.Matcher) []string {
 	var violations []string
 
-	if _, err := os.Stat(modelDir); os.IsNotExist(err) {
+	if _, err := os.Stat(ggconst.DirModel); os.IsNotExist(err) {
 		return violations
 	}
 
@@ -467,9 +468,9 @@ func CheckModelSingularNaming(ignore gitignore.Matcher) []string {
 
 	client := pluralize.NewClient()
 
-	err := walkProjectDir(modelDir, ignore, func(path string, info os.FileInfo) error {
+	err := walkProjectDir(ggconst.DirModel, ignore, func(path string, info os.FileInfo) error {
 		// Get relative path from model directory
-		relPath, err := filepath.Rel(modelDir, path)
+		relPath, err := filepath.Rel(ggconst.DirModel, path)
 		if err != nil {
 			return err
 		}
@@ -522,11 +523,11 @@ func CheckModelSingularNaming(ignore gitignore.Matcher) []string {
 func CheckModelFileNameHyphens(ignore gitignore.Matcher) []string {
 	var violations []string
 
-	if _, err := os.Stat(modelDir); os.IsNotExist(err) {
+	if _, err := os.Stat(ggconst.DirModel); os.IsNotExist(err) {
 		return violations
 	}
 
-	err := walkProjectDir(modelDir, ignore, func(path string, info os.FileInfo) error {
+	err := walkProjectDir(ggconst.DirModel, ignore, func(path string, info os.FileInfo) error {
 		if info.IsDir() || !strings.HasSuffix(path, ".go") || strings.Contains(path, "_test.go") || isGeneratedFileName(path) {
 			return nil
 		}
@@ -545,7 +546,7 @@ func CheckModelFileNameHyphens(ignore gitignore.Matcher) []string {
 }
 
 func currentProjectModulePath() string {
-	modulePath, err := getModuleName()
+	modulePath, err := gghelper.ModulePath()
 	if err != nil {
 		return ""
 	}
@@ -590,7 +591,7 @@ func sameServiceModuleImport(filePath, importPath, modulePath string) bool {
 }
 
 func serviceModuleNameFromPath(filePath string) string {
-	rel, err := filepath.Rel(filepath.Clean(serviceDir), filepath.Clean(filePath))
+	rel, err := filepath.Rel(filepath.Clean(ggconst.DirService), filepath.Clean(filePath))
 	if err != nil || rel == "." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
 		return ""
 	}
@@ -634,7 +635,7 @@ func projectImportLayer(importPath, modulePath string) string {
 func CheckJSONTagNaming(ignore gitignore.Matcher) []string {
 	var violations []string
 
-	if _, err := os.Stat(modelDir); os.IsNotExist(err) {
+	if _, err := os.Stat(ggconst.DirModel); os.IsNotExist(err) {
 		return violations
 	}
 
@@ -642,7 +643,7 @@ func CheckJSONTagNaming(ignore gitignore.Matcher) []string {
 	// be declared in a different file of the package that references it.
 	var packageDirs []string
 	packageFiles := make(map[string][]string)
-	err := walkProjectDir(modelDir, ignore, func(path string, info os.FileInfo) error {
+	err := walkProjectDir(ggconst.DirModel, ignore, func(path string, info os.FileInfo) error {
 		// Skip directories and non-Go files
 		if info.IsDir() || !strings.HasSuffix(path, ".go") {
 			return nil
@@ -920,11 +921,11 @@ func toSnakeCase(s string) string {
 func CheckModelActionTypeNaming(ignore gitignore.Matcher) []string {
 	var violations []string
 
-	if _, err := os.Stat(modelDir); os.IsNotExist(err) {
+	if _, err := os.Stat(ggconst.DirModel); os.IsNotExist(err) {
 		return violations
 	}
 
-	err := walkProjectDir(modelDir, ignore, func(path string, info os.FileInfo) error {
+	err := walkProjectDir(ggconst.DirModel, ignore, func(path string, info os.FileInfo) error {
 		if info.IsDir() || !strings.HasSuffix(path, ".go") || strings.Contains(path, "_test.go") {
 			return nil
 		}
@@ -1063,11 +1064,11 @@ func actionTypeBaseName(expr ast.Expr) (string, bool) {
 func CheckModelFileBoundary(ignore gitignore.Matcher) []string {
 	var violations []string
 
-	if _, err := os.Stat(modelDir); os.IsNotExist(err) {
+	if _, err := os.Stat(ggconst.DirModel); os.IsNotExist(err) {
 		return violations
 	}
 
-	err := walkProjectDir(modelDir, ignore, func(path string, info os.FileInfo) error {
+	err := walkProjectDir(ggconst.DirModel, ignore, func(path string, info os.FileInfo) error {
 		if info.IsDir() || !strings.HasSuffix(path, ".go") || strings.Contains(path, "_test.go") {
 			return nil
 		}
@@ -1131,11 +1132,11 @@ func modelStructNames(node *ast.File) []string {
 func CheckServiceFileBoundary(ignore gitignore.Matcher) []string {
 	var violations []string
 
-	if _, err := os.Stat(serviceDir); os.IsNotExist(err) {
+	if _, err := os.Stat(ggconst.DirService); os.IsNotExist(err) {
 		return violations
 	}
 
-	err := walkProjectDir(serviceDir, ignore, func(path string, info os.FileInfo) error {
+	err := walkProjectDir(ggconst.DirService, ignore, func(path string, info os.FileInfo) error {
 		if info.IsDir() || !strings.HasSuffix(path, ".go") || strings.Contains(path, "_test.go") {
 			return nil
 		}
@@ -1226,18 +1227,18 @@ func relativePath(filePath string) string {
 func CheckModelPackageNaming(ignore gitignore.Matcher) []string {
 	var violations []string
 
-	if _, err := os.Stat(modelDir); os.IsNotExist(err) {
+	if _, err := os.Stat(ggconst.DirModel); os.IsNotExist(err) {
 		return violations
 	}
 
-	err := walkProjectDir(modelDir, ignore, func(path string, info os.FileInfo) error {
+	err := walkProjectDir(ggconst.DirModel, ignore, func(path string, info os.FileInfo) error {
 		// Skip directories and non-Go files
 		if info.IsDir() || !strings.HasSuffix(path, ".go") {
 			return nil
 		}
 
 		// Skip files in the root model directory
-		relPath, err := filepath.Rel(modelDir, path)
+		relPath, err := filepath.Rel(ggconst.DirModel, path)
 		if err != nil {
 			return err
 		}
@@ -1269,7 +1270,7 @@ func CheckModelPackageNaming(ignore gitignore.Matcher) []string {
 
 		// Check if package name matches directory name
 		if packageName != expectedName {
-			relativePath, _ := filepath.Rel(modelDir, path)
+			relativePath, _ := filepath.Rel(ggconst.DirModel, path)
 			violations = append(violations, fmt.Sprintf("%s: package name '%s' should match directory name '%s'", relativePath, packageName, dirName))
 		}
 
@@ -1288,7 +1289,7 @@ func CheckAllowedDirectories(ignore gitignore.Matcher) []string {
 	var violations []string
 
 	// Check if this is a gst framework project by reading go.mod
-	if isGstFrameworkProject(projectDir) {
+	if gghelper.IsFrameworkProject(projectDir) {
 		// Skip directory restriction check for gst framework itself
 		return violations
 	}
@@ -1414,26 +1415,6 @@ func walkProjectDir(root string, ignore gitignore.Matcher, checkFn func(path str
 	})
 }
 
-// isGstFrameworkProject checks if this is the gst framework project itself
-func isGstFrameworkProject(projectDir string) bool {
-	goModPath := filepath.Join(projectDir, "go.mod")
-	content, err := os.ReadFile(goModPath)
-	if err != nil {
-		return false
-	}
-
-	// Check if module name is github.com/hydroan/gst
-	lines := strings.SplitSeq(string(content), "\n")
-	for line := range lines {
-		line = strings.TrimSpace(line)
-		if strings.HasPrefix(line, "module ") {
-			moduleName := strings.TrimSpace(strings.TrimPrefix(line, "module"))
-			return moduleName == "github.com/hydroan/gst"
-		}
-	}
-	return false
-}
-
 // usesGstFramework checks if the project uses gst framework as a dependency
 func usesGstFramework(projectDir string) bool {
 	goModPath := filepath.Join(projectDir, "go.mod")
@@ -1452,22 +1433,21 @@ func usesGstFramework(projectDir string) bool {
 func CheckDSLDesign(ignore gitignore.Matcher) []string {
 	var violations []string
 
-	if _, err := os.Stat(modelDir); os.IsNotExist(err) {
+	if _, err := os.Stat(ggconst.DirModel); os.IsNotExist(err) {
 		return violations
 	}
 
-	err := walkProjectDir(modelDir, ignore, func(path string, info os.FileInfo) error {
+	err := walkProjectDir(ggconst.DirModel, ignore, func(path string, info os.FileInfo) error {
 		base := filepath.Base(path)
 		if info.IsDir() {
-			if path != modelDir && (base == "vendor" || base == "testdata") {
+			if path != ggconst.DirModel && (base == "vendor" || base == "testdata") {
 				return filepath.SkipDir
 			}
 			return nil
 		}
 		if !strings.HasSuffix(base, ".go") ||
 			strings.HasSuffix(base, "_test.go") ||
-			strings.HasPrefix(base, "_") ||
-			slices.Contains(excludes, base) {
+			strings.HasPrefix(base, "_") {
 			return nil
 		}
 
@@ -1477,7 +1457,7 @@ func CheckDSLDesign(ignore gitignore.Matcher) []string {
 			violations = append(violations, fmt.Sprintf("%s: %v", path, parseErr))
 			return nil
 		}
-		for _, validateErr := range dsl.Validate(file, modelDir, path) {
+		for _, validateErr := range dsl.Validate(file, ggconst.DirModel, path) {
 			violations = append(violations, validateErr.Error())
 		}
 		return nil

@@ -8,13 +8,9 @@ import (
 )
 
 func TestFillVersionFieldTags(t *testing.T) {
-	oldModelDir := modelDir
-	t.Cleanup(func() { modelDir = oldModelDir })
-
 	projectDir := t.TempDir()
 	t.Chdir(projectDir)
 	writeCheckProjectGoMod(t, projectDir)
-	modelDir = "model"
 
 	path := filepath.Join(projectDir, "model", "document", "document.go")
 	writeCheckFile(t, path, `package document
@@ -80,13 +76,9 @@ func (Partial) TableName() string { return "partials" }
 }
 
 func TestFillVersionFieldTagsRejectsEmbedded(t *testing.T) {
-	oldModelDir := modelDir
-	t.Cleanup(func() { modelDir = oldModelDir })
-
 	projectDir := t.TempDir()
 	t.Chdir(projectDir)
 	writeCheckProjectGoMod(t, projectDir)
-	modelDir = "model"
 
 	writeCheckFile(t, filepath.Join(projectDir, "model", "document", "document.go"), `package document
 
@@ -108,13 +100,9 @@ func (Embedded) TableName() string { return "embeddeds" }
 }
 
 func TestFillVersionFieldTagsRejectsHiddenJSON(t *testing.T) {
-	oldModelDir := modelDir
-	t.Cleanup(func() { modelDir = oldModelDir })
-
 	projectDir := t.TempDir()
 	t.Chdir(projectDir)
 	writeCheckProjectGoMod(t, projectDir)
-	modelDir = "model"
 
 	// json:"-" hides the version clients must hand back; un-hiding it is a
 	// semantic decision, so gen aborts instead of healing.

@@ -15,6 +15,7 @@ import (
 	"github.com/hydroan/gst/dsl"
 	"github.com/hydroan/gst/internal/clioutput"
 	"github.com/hydroan/gst/internal/codegen/gen"
+	"github.com/hydroan/gst/internal/ggconst"
 )
 
 const cleanOrphansConfirmation = "delete orphan service leftovers"
@@ -56,7 +57,7 @@ func matchesPrunePattern(path string, pattern string) bool {
 
 func currentServiceDirs(allModels []*gen.ModelInfo) serviceDirSet {
 	knownDirs := map[string]bool{
-		filepath.Clean(serviceDir): true,
+		filepath.Clean(ggconst.DirService): true,
 	}
 	modelDirs := make([]string, 0, len(allModels))
 	modelDirSet := make(map[string]bool)
@@ -66,7 +67,7 @@ func currentServiceDirs(allModels []*gen.ModelInfo) serviceDirSet {
 			if !act.Enabled || !act.Service {
 				return
 			}
-			dir := filepath.Clean(gen.ServiceTarget(m, act, modelDir, serviceDir).Dir)
+			dir := filepath.Clean(gen.ServiceTarget(m, act, ggconst.DirModel, ggconst.DirService).Dir)
 			if !modelDirSet[dir] {
 				modelDirSet[dir] = true
 				modelDirs = append(modelDirs, dir)
@@ -83,7 +84,7 @@ func currentServiceDirs(allModels []*gen.ModelInfo) serviceDirSet {
 }
 
 func addServiceDirAncestors(knownDirs map[string]bool, dir string) {
-	root := filepath.Clean(serviceDir)
+	root := filepath.Clean(ggconst.DirService)
 	for {
 		knownDirs[dir] = true
 		if dir == root || dir == "." || dir == string(filepath.Separator) {
@@ -99,7 +100,7 @@ func addServiceDirAncestors(knownDirs map[string]bool, dir string) {
 }
 
 func scanOrphanServiceDirs(currentDirs serviceDirSet, ignorePatterns []string) []orphanServiceDir {
-	root := filepath.Clean(serviceDir)
+	root := filepath.Clean(ggconst.DirService)
 	dirs := make([]string, 0)
 
 	_ = filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
@@ -253,7 +254,7 @@ func importedServiceHelperDirs(currentDirs serviceDirSet) []string {
 	if modulePath == "" {
 		return nil
 	}
-	importPrefix := modulePath + "/" + filepath.ToSlash(filepath.Clean(serviceDir))
+	importPrefix := modulePath + "/" + filepath.ToSlash(filepath.Clean(ggconst.DirService))
 
 	helperDirs := make([]string, 0)
 	helperDirSet := make(map[string]bool)
@@ -341,7 +342,7 @@ func serviceDirForImport(importPath string, importPrefix string) (string, bool) 
 		return "", false
 	}
 	rel := strings.TrimPrefix(importPath, importPrefix+"/")
-	return filepath.Join(filepath.Clean(serviceDir), filepath.FromSlash(rel)), true
+	return filepath.Join(filepath.Clean(ggconst.DirService), filepath.FromSlash(rel)), true
 }
 
 // handleOrphanServiceDirs reports or cleans service directories no model
@@ -410,5 +411,5 @@ func cleanOrphanServiceDirs(orphans []orphanServiceDir) {
 			}
 		}
 	}
-	removeEmptyDirectories(serviceDir)
+	removeEmptyDirectories(ggconst.DirService)
 }

@@ -64,6 +64,7 @@ const (
 	DirModel    = "model"
 	DirService  = "service"
 	DirRouter   = "router"
+	DirDAO      = "dao"
 )
 
 // Package names

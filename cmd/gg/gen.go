@@ -98,7 +98,7 @@ func genRunWithOptions(opts genRunOptions) error {
 	// Record old service files list (if prune option is enabled)
 	var oldServiceFiles []string
 	if prune {
-		oldServiceFiles = scanExistingServiceFiles(serviceDir)
+		oldServiceFiles = scanExistingServiceFiles(ggconst.DirService)
 	}
 
 	if !opts.Quiet {
@@ -128,13 +128,13 @@ func genRunWithOptions(opts genRunOptions) error {
 	for _, m := range allModels {
 		// The model registration file belongs to the root model package; a
 		// model anywhere else is registered through an import of its package.
-		if m.Design.Enabled && m.Design.Migrate && !m.InModelRoot(modelDir) {
+		if m.Design.Enabled && m.Design.Migrate && !m.InModelRoot(ggconst.DirModel) {
 			modelPkgs[m.ImportPath()] = m.ModelPkgName
 		}
 
 		m.Design.Range(func(s string, a *dsl.Action) {
 			if a.Service {
-				target := gen.ServiceTarget(m, a, modelDir, serviceDir)
+				target := gen.ServiceTarget(m, a, ggconst.DirModel, ggconst.DirService)
 				servicePkgs[target.ImportPath] = target.PackageName
 			}
 			routerPkgs[m.ImportPath()] = m.ModelPkgName
@@ -163,7 +163,7 @@ func genRunWithOptions(opts genRunOptions) error {
 		// A model in the root model package registers unqualified, as in
 		// "Register[*Record]()"; any other is qualified by the name its
 		// package is imported under, as in "Register[*sample.Record]()".
-		if m.InModelRoot(modelDir) {
+		if m.InModelRoot(ggconst.DirModel) {
 			modelStmts = append(modelStmts, gen.StmtModelRegister(m.ModelName))
 		} else {
 			modelStmts = append(modelStmts, gen.StmtModelRegister(importQualifier(modelAliases, m.ImportPath(), m.ModelPkgName)+"."+m.ModelName))
@@ -177,7 +177,7 @@ func genRunWithOptions(opts genRunOptions) error {
 			route, paramName := routerTargetForAction(route, m.Design, act)
 
 			if act.Service {
-				target := gen.ServiceTarget(m, act, modelDir, serviceDir)
+				target := gen.ServiceTarget(m, act, ggconst.DirModel, ggconst.DirService)
 				serviceStmts = append(serviceStmts, gen.StmtServiceRegister(importQualifier(serviceAliases, target.ImportPath, target.PackageName)+"."+act.RoleName(), act.Phase, route))
 			}
 			base := "Auth"
@@ -198,14 +198,14 @@ func genRunWithOptions(opts genRunOptions) error {
 	if err != nil {
 		return errors.Wrap(err, "build model/model.gen.go")
 	}
-	if writeErr := writeGenFile(filepath.Join(modelDir, ggconst.FileModelGen), modelCode); writeErr != nil {
+	if writeErr := writeGenFile(filepath.Join(ggconst.DirModel, ggconst.FileModelGen), modelCode); writeErr != nil {
 		return writeErr
 	}
 
 	// generate model/apidoc.gen.go, which registers struct and field doc comments
 	// so the OpenAPI document keeps schema descriptions in binaries deployed
 	// without Go source files.
-	docEntries, err := codegen.ExtractAPIDocs(module, modelDir, excludes)
+	docEntries, err := codegen.ExtractAPIDocs(module, ggconst.DirModel, nil)
 	if err != nil {
 		return errors.Wrap(err, "extract api docs")
 	}
@@ -213,7 +213,7 @@ func genRunWithOptions(opts genRunOptions) error {
 	if err != nil {
 		return errors.Wrap(err, "build model/apidoc.gen.go")
 	}
-	if writeErr := writeGenFile(filepath.Join(modelDir, ggconst.FileAPIDocGen), apidocCode); writeErr != nil {
+	if writeErr := writeGenFile(filepath.Join(ggconst.DirModel, ggconst.FileAPIDocGen), apidocCode); writeErr != nil {
 		return writeErr
 	}
 
@@ -222,7 +222,7 @@ func genRunWithOptions(opts genRunOptions) error {
 	if err != nil {
 		return errors.Wrap(err, "build service/service.gen.go")
 	}
-	if writeErr := writeGenFile(filepath.Join(serviceDir, ggconst.FileServiceGen), serviceCode); writeErr != nil {
+	if writeErr := writeGenFile(filepath.Join(ggconst.DirService, ggconst.FileServiceGen), serviceCode); writeErr != nil {
 		return writeErr
 	}
 
@@ -231,13 +231,13 @@ func genRunWithOptions(opts genRunOptions) error {
 	if err != nil {
 		return errors.Wrap(err, "build router/router.gen.go")
 	}
-	if writeErr := writeGenFile(filepath.Join(routerDir, ggconst.FileRouterGen), routerCode); writeErr != nil {
+	if writeErr := writeGenFile(filepath.Join(ggconst.DirRouter, ggconst.FileRouterGen), routerCode); writeErr != nil {
 		return writeErr
 	}
 
 	// Generate the typed column references of every model, so filters can
 	// name columns through the compiler instead of through string literals.
-	if genErr := generateColumnFiles(module, modelDir, allModels, opts.Quiet); genErr != nil {
+	if genErr := generateColumnFiles(module, ggconst.DirModel, allModels, opts.Quiet); genErr != nil {
 		return genErr
 	}
 
@@ -259,7 +259,7 @@ func genRunWithOptions(opts genRunOptions) error {
 
 	fset := token.NewFileSet()
 	applyFile := func(filename string, code string, action *dsl.Action, servicePkgName string, modelInfo *gen.ModelInfo) error {
-		safePath, err := pathUnderRoot(filename, serviceDir)
+		safePath, err := pathUnderRoot(filename, ggconst.DirService)
 		if err != nil {
 			return err
 		}
@@ -276,7 +276,7 @@ func genRunWithOptions(opts genRunOptions) error {
 			}
 
 			// Apply changes and sync model imports to handle import path and package name updates
-			changed, err := gen.ApplyServiceFileWithModelSync(f, action, servicePkgName, modelDir, modelInfo)
+			changed, err := gen.ApplyServiceFileWithModelSync(f, action, servicePkgName, ggconst.DirModel, modelInfo)
 			if err != nil {
 				return errors.Wrapf(err, "service file %s", safePath)
 			}
@@ -321,7 +321,7 @@ func genRunWithOptions(opts genRunOptions) error {
 			if applyErr != nil {
 				return
 			}
-			target := gen.ServiceTarget(m, act, modelDir, serviceDir)
+			target := gen.ServiceTarget(m, act, ggconst.DirModel, ggconst.DirService)
 			if file := gen.GenerateService(m, act, act.Phase, target.PackageName); file != nil {
 				fset := token.NewFileSet()
 				code, err := gen.FormatNodeExtraWithFileSet(file, fset)
@@ -369,14 +369,14 @@ type scannedModels struct {
 // never declared. gg gen and gg gen ts both start from here, which keeps the
 // TypeScript declarations on the routes the generated router registers.
 func scanModels(quiet bool) (scannedModels, error) {
-	if !fileExists(modelDir) {
-		return scannedModels{}, fmt.Errorf("model dir not found: %s", modelDir)
+	if !fileExists(ggconst.DirModel) {
+		return scannedModels{}, fmt.Errorf("model dir not found: %s", ggconst.DirModel)
 	}
 
 	if !quiet {
 		clioutput.Section("Scan Models")
 	}
-	allModels, err := codegen.FindModels(module, modelDir, excludes)
+	allModels, err := codegen.FindModels(module, ggconst.DirModel)
 	if err != nil {
 		return scannedModels{}, err
 	}

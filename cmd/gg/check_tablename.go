@@ -29,7 +29,7 @@ import (
 // subtrees owned by copyable framework modules are skipped, since copied
 // module code is owned by the framework repository.
 func CheckModelTableNameDeclaration(ignore gitignore.Matcher) []string {
-	if _, err := os.Stat(modelDir); os.IsNotExist(err) {
+	if _, err := os.Stat(ggconst.DirModel); os.IsNotExist(err) {
 		return nil
 	}
 
@@ -53,9 +53,9 @@ func CheckModelTableNameDeclaration(ignore gitignore.Matcher) []string {
 	methodKey := func(dir, receiver string) string { return dir + "\x00" + receiver }
 
 	var violations []string
-	walkErr := walkProjectDir(modelDir, ignore, func(path string, info os.FileInfo) error {
+	walkErr := walkProjectDir(ggconst.DirModel, ignore, func(path string, info os.FileInfo) error {
 		if info.IsDir() {
-			if moduleOwnedPath(owned, modelDir, path) {
+			if moduleOwnedPath(owned, ggconst.DirModel, path) {
 				return filepath.SkipDir
 			}
 			return nil

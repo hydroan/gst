@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	gitignore "github.com/go-git/go-git/v5/plumbing/format/gitignore"
+	"github.com/hydroan/gst/internal/ggconst"
 	"github.com/hydroan/gst/internal/goast"
 )
 
@@ -49,7 +50,7 @@ func CheckColumnReferenceMinting(ignore gitignore.Matcher) []string {
 			if _, statErr := os.Stat(filepath.Join(path, "go.mod")); statErr == nil {
 				return filepath.SkipDir
 			}
-			if moduleOwnedPath(owned, modelDir, path) || moduleOwnedPath(owned, serviceDir, path) {
+			if moduleOwnedPath(owned, ggconst.DirModel, path) || moduleOwnedPath(owned, ggconst.DirService, path) {
 				return filepath.SkipDir
 			}
 			return nil

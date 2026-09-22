@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/hydroan/gst/internal/clioutput"
+	"github.com/hydroan/gst/internal/ggconst"
 	gormschema "gorm.io/gorm/schema"
 )
 
@@ -77,7 +78,7 @@ type tagInsertion struct {
 // rewriteVersionFieldTags applies the tag fixes of one file bottom-up, so
 // earlier offsets stay valid, and writes the result back gofmt-formatted.
 func rewriteVersionFieldTags(path string, findings []versionFieldFinding) error {
-	safePath, err := pathUnderRoot(path, modelDir)
+	safePath, err := pathUnderRoot(path, ggconst.DirModel)
 	if err != nil {
 		return err
 	}

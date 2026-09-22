@@ -11,20 +11,8 @@ import (
 )
 
 func TestCheckArchitectureDependencyAllowsSameServiceModuleImports(t *testing.T) {
-	oldModelDir := modelDir
-	oldServiceDir := serviceDir
-	oldDaoDir := daoDir
-	t.Cleanup(func() {
-		modelDir = oldModelDir
-		serviceDir = oldServiceDir
-		daoDir = oldDaoDir
-	})
-
 	projectDir := t.TempDir()
 	t.Chdir(projectDir)
-	modelDir = "model"
-	serviceDir = "service"
-	daoDir = "dao"
 
 	writeCheckFile(t, filepath.Join(projectDir, "go.mod"), "module tmpapp\n\ngo 1.26\n")
 	writeCheckFile(t, filepath.Join(projectDir, "service", "iam", "account", "login.go"), `package account
@@ -49,14 +37,8 @@ import _ "tmpapp/service/iam/session"
 }
 
 func TestCheckModelSingularNamingAllowsExemptPlurals(t *testing.T) {
-	oldModelDir := modelDir
-	t.Cleanup(func() {
-		modelDir = oldModelDir
-	})
-
 	projectDir := t.TempDir()
 	t.Chdir(projectDir)
-	modelDir = "model"
 
 	// types, data and stats are plural in form but name one body of content,
 	// so model directories and files may keep them; records, statistics and
@@ -79,14 +61,8 @@ func TestCheckModelSingularNamingAllowsExemptPlurals(t *testing.T) {
 }
 
 func TestCheckModelFileNameHyphens(t *testing.T) {
-	oldModelDir := modelDir
-	t.Cleanup(func() {
-		modelDir = oldModelDir
-	})
-
 	projectDir := t.TempDir()
 	t.Chdir(projectDir)
-	modelDir = "model"
 
 	writeCheckFile(t, filepath.Join(projectDir, "model", "record", "record-item.go"), "package record\n")
 	writeCheckFile(t, filepath.Join(projectDir, "model", "record", "record_note.go"), "package record\n")
@@ -126,14 +102,8 @@ func TestProjectCheckHelpNumbersEveryCheckInRunOrder(t *testing.T) {
 }
 
 func TestCheckModelSingularNamingSkipsGitIgnoredPaths(t *testing.T) {
-	oldModelDir := modelDir
-	t.Cleanup(func() {
-		modelDir = oldModelDir
-	})
-
 	projectDir := t.TempDir()
 	t.Chdir(projectDir)
-	modelDir = "model"
 
 	// A runtime artifact directory ignored by Git rules, such as the log
 	// directory a test run leaves behind, must not fail naming checks.
@@ -158,14 +128,8 @@ func TestCheckModelSingularNamingSkipsGitIgnoredPaths(t *testing.T) {
 }
 
 func TestCheckModelPackageNamingAllowsUnderscoreStrippedAndExternalTestPackages(t *testing.T) {
-	oldModelDir := modelDir
-	t.Cleanup(func() {
-		modelDir = oldModelDir
-	})
-
 	projectDir := t.TempDir()
 	t.Chdir(projectDir)
-	modelDir = "model"
 
 	// A package name with underscores stripped from the directory name is allowed.
 	writeCheckFile(t, filepath.Join(projectDir, "model", "sample_record", "sample_record.go"), "package samplerecord\n")
@@ -193,14 +157,8 @@ func TestCheckModelPackageNamingAllowsUnderscoreStrippedAndExternalTestPackages(
 }
 
 func TestCheckModelPackageNamingSkipsGitIgnoredPaths(t *testing.T) {
-	oldModelDir := modelDir
-	t.Cleanup(func() {
-		modelDir = oldModelDir
-	})
-
 	projectDir := t.TempDir()
 	t.Chdir(projectDir)
-	modelDir = "model"
 
 	writeCheckFile(t, filepath.Join(projectDir, ".gitignore"), "generated\n")
 
@@ -226,14 +184,8 @@ func TestCheckModelPackageNamingSkipsGitIgnoredPaths(t *testing.T) {
 // check reports a base type embedded through a pointer: under the DSL design
 // rules, which gate gg gen as well.
 func TestCheckDSLDesignRejectsBaseTypesEmbeddedThroughAPointer(t *testing.T) {
-	oldModelDir := modelDir
-	t.Cleanup(func() {
-		modelDir = oldModelDir
-	})
-
 	projectDir := t.TempDir()
 	t.Chdir(projectDir)
-	modelDir = "model"
 
 	writeCheckFile(t, filepath.Join(projectDir, "model", "record", "record.go"), `package record
 
@@ -256,14 +208,8 @@ func (Record) TableName() string { return "records" }
 }
 
 func TestCheckDSLDesignRejectsExactOnBuiltinIDActions(t *testing.T) {
-	oldModelDir := modelDir
-	t.Cleanup(func() {
-		modelDir = oldModelDir
-	})
-
 	projectDir := t.TempDir()
 	t.Chdir(projectDir)
-	modelDir = "model"
 
 	writeCheckFile(t, filepath.Join(projectDir, "model", "iam", "session.go"), `package iam
 
@@ -319,14 +265,8 @@ func (Current) Design() {
 }
 
 func TestCheckJSONTagNamingFlagsDSLActionTypeTags(t *testing.T) {
-	oldModelDir := modelDir
-	t.Cleanup(func() {
-		modelDir = oldModelDir
-	})
-
 	projectDir := t.TempDir()
 	t.Chdir(projectDir)
-	modelDir = "model"
 
 	// Explicit DSL Payload and Result types carry the wire format of custom
 	// actions, so their json tags must be snake_case just like model structs.
@@ -380,14 +320,8 @@ type SampleCreateRsp struct {
 }
 
 func TestCheckJSONTagNamingSkipsUnreferencedActionLikeStructs(t *testing.T) {
-	oldModelDir := modelDir
-	t.Cleanup(func() {
-		modelDir = oldModelDir
-	})
-
 	projectDir := t.TempDir()
 	t.Chdir(projectDir)
-	modelDir = "model"
 
 	writeCheckFile(t, filepath.Join(projectDir, "model", "sample", "sample.go"), `package sample
 
@@ -437,14 +371,8 @@ type PushRsp struct {
 }
 
 func TestCheckJSONTagNamingFlagsModelStructTags(t *testing.T) {
-	oldModelDir := modelDir
-	t.Cleanup(func() {
-		modelDir = oldModelDir
-	})
-
 	projectDir := t.TempDir()
 	t.Chdir(projectDir)
-	modelDir = "model"
 
 	writeCheckFile(t, filepath.Join(projectDir, "model", "record", "record.go"), `package record
 
@@ -473,12 +401,8 @@ type Record struct {
 // manifests and operator scripts — pass the directory check, while a
 // directory the project structure has no place for is still reported.
 func TestCheckServiceFileBoundaryCountsFrameworkServiceStructs(t *testing.T) {
-	oldServiceDir := serviceDir
-	t.Cleanup(func() { serviceDir = oldServiceDir })
-
 	projectDir := t.TempDir()
 	t.Chdir(projectDir)
-	serviceDir = "service"
 	writeCheckFile(t, filepath.Join(projectDir, "go.mod"), "module tmpapp\n\ngo 1.26\n")
 
 	// Two service structs in one file, the framework package imported under
@@ -650,20 +574,10 @@ func recordFrameworkSources(t *testing.T, root string) {
 func newGenProject(t *testing.T) string {
 	t.Helper()
 
-	oldModelDir := modelDir
-	oldServiceDir := serviceDir
-	oldRouterDir := routerDir
-	oldDaoDir := daoDir
-	oldExcludes := excludes
 	oldModule := module
 	oldPrune := prune
 	oldCleanOrphans := cleanOrphans
 	t.Cleanup(func() {
-		modelDir = oldModelDir
-		serviceDir = oldServiceDir
-		routerDir = oldRouterDir
-		daoDir = oldDaoDir
-		excludes = oldExcludes
 		module = oldModule
 		prune = oldPrune
 		cleanOrphans = oldCleanOrphans
@@ -671,11 +585,6 @@ func newGenProject(t *testing.T) string {
 
 	projectDir := t.TempDir()
 	t.Chdir(projectDir)
-	modelDir = "model"
-	serviceDir = "service"
-	routerDir = "router"
-	daoDir = "dao"
-	excludes = nil
 	module = ""
 	prune = false
 	cleanOrphans = false

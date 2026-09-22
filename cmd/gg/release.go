@@ -10,6 +10,7 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/internal/clioutput"
 	"github.com/hydroan/gst/internal/ggconst"
+	"github.com/hydroan/gst/internal/gghelper"
 	"github.com/spf13/cobra"
 )
 
@@ -121,7 +122,7 @@ func initGoreleaserConfig() error {
 	clioutput.Item("", "Generating .goreleaser.yml configuration")
 
 	// Get module name for binary name
-	moduleName, err := getModuleName()
+	moduleName, err := gghelper.ModulePath()
 	if err != nil {
 		return fmt.Errorf("failed to get module name: %w", err)
 	}

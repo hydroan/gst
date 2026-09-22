@@ -7,13 +7,9 @@ import (
 )
 
 func TestCheckVersionFieldDeclarations(t *testing.T) {
-	oldModelDir := modelDir
-	t.Cleanup(func() { modelDir = oldModelDir })
-
 	projectDir := t.TempDir()
 	t.Chdir(projectDir)
 	writeCheckProjectGoMod(t, projectDir)
-	modelDir = "model"
 
 	// An embedded Version and a bare named field are both deviations; a
 	// compliant field and an unrelated local Version type are not.
@@ -130,13 +126,9 @@ type UpdateReq struct {
 }
 
 func TestCheckVersionFieldDeclarationsActionTypes(t *testing.T) {
-	oldModelDir := modelDir
-	t.Cleanup(func() { modelDir = oldModelDir })
-
 	projectDir := t.TempDir()
 	t.Chdir(projectDir)
 	writeCheckProjectGoMod(t, projectDir)
-	modelDir = "model"
 
 	// The Design-referenced request deviates by wire name, its nested item
 	// type (reached through a slice of pointers) by a missing omitempty, and

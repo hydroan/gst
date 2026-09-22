@@ -46,10 +46,10 @@ func walkModelFiles(modelDir string, excludes []string, fn func(path string) err
 // participate in code generation (see walkModelFiles), each carrying the path
 // of its model file (see gen.FindModels). A file that fails to parse or
 // declares an invalid DSL fails the whole call.
-func FindModels(module, modelDir string, excludes []string) ([]*gen.ModelInfo, error) {
+func FindModels(module, modelDir string) ([]*gen.ModelInfo, error) {
 	allModels := make([]*gen.ModelInfo, 0)
 
-	if err := walkModelFiles(modelDir, excludes, func(path string) error {
+	if err := walkModelFiles(modelDir, nil, func(path string) error {
 		models, err := gen.FindModels(module, modelDir, path)
 		if err != nil {
 			return err

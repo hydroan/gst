@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/go-git/go-git/v5/plumbing/format/gitignore"
+	"github.com/hydroan/gst/internal/ggconst"
 	"github.com/hydroan/gst/internal/goast"
 )
 
@@ -45,7 +46,7 @@ func CheckLogFieldBoundedness(ignore gitignore.Matcher) []string {
 			if strings.HasPrefix(base, ".") || base == "vendor" || base == "testdata" {
 				return filepath.SkipDir
 			}
-			if moduleOwnedPath(owned, modelDir, path) || moduleOwnedPath(owned, serviceDir, path) {
+			if moduleOwnedPath(owned, ggconst.DirModel, path) || moduleOwnedPath(owned, ggconst.DirService, path) {
 				return filepath.SkipDir
 			}
 			return nil

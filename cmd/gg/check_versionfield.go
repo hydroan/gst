@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/go-git/go-git/v5/plumbing/format/gitignore"
+	"github.com/hydroan/gst/internal/ggconst"
 )
 
 // CheckVersionFieldDeclarations reports model.Version declarations that
@@ -95,7 +96,7 @@ func CheckVersionFieldDeclarations(ignore gitignore.Matcher) []string {
 // reference a type declared in a sibling file, so files are grouped per
 // directory the same way the json tag naming check groups them.
 func collectActionTypeVersionFindings(ignore gitignore.Matcher) ([]actionTypeVersionFinding, error) {
-	if _, err := os.Stat(modelDir); os.IsNotExist(err) {
+	if _, err := os.Stat(ggconst.DirModel); os.IsNotExist(err) {
 		return nil, nil
 	}
 
@@ -106,9 +107,9 @@ func collectActionTypeVersionFindings(ignore gitignore.Matcher) ([]actionTypeVer
 
 	var packageDirs []string
 	packageFiles := make(map[string][]string)
-	walkErr := walkProjectDir(modelDir, ignore, func(path string, info os.FileInfo) error {
+	walkErr := walkProjectDir(ggconst.DirModel, ignore, func(path string, info os.FileInfo) error {
 		if info.IsDir() {
-			if moduleOwnedPath(owned, modelDir, path) {
+			if moduleOwnedPath(owned, ggconst.DirModel, path) {
 				return filepath.SkipDir
 			}
 			return nil
@@ -138,7 +139,7 @@ func collectActionTypeVersionFindings(ignore gitignore.Matcher) ([]actionTypeVer
 // collectVersionFieldFindings walks the model directory and gathers every
 // deviating model.Version declaration, in walk order.
 func collectVersionFieldFindings(ignore gitignore.Matcher) ([]versionFieldFinding, error) {
-	if _, err := os.Stat(modelDir); os.IsNotExist(err) {
+	if _, err := os.Stat(ggconst.DirModel); os.IsNotExist(err) {
 		return nil, nil
 	}
 
@@ -148,9 +149,9 @@ func collectVersionFieldFindings(ignore gitignore.Matcher) ([]versionFieldFindin
 	}
 
 	var findings []versionFieldFinding
-	walkErr := walkProjectDir(modelDir, ignore, func(path string, info os.FileInfo) error {
+	walkErr := walkProjectDir(ggconst.DirModel, ignore, func(path string, info os.FileInfo) error {
 		if info.IsDir() {
-			if moduleOwnedPath(owned, modelDir, path) {
+			if moduleOwnedPath(owned, ggconst.DirModel, path) {
 				return filepath.SkipDir
 			}
 			return nil
