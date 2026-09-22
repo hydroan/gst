@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"net/http/cookiejar"
 	"strings"
+	"time"
 
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/consts"
@@ -20,6 +21,7 @@ import (
 type Client struct {
 	addr       string
 	httpClient *http.Client
+	timeout    time.Duration // applied by New, see WithTimeout
 	username   string
 	password   string
 	token      string
@@ -59,6 +61,11 @@ func New(addr string, opts ...Option) (*Client, error) {
 			continue
 		}
 		opt(client)
+	}
+	if client.timeout > 0 {
+		httpClient := *client.httpClient
+		httpClient.Timeout = client.timeout
+		client.httpClient = &httpClient
 	}
 
 	return client, nil

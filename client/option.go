@@ -10,6 +10,10 @@ import (
 
 type Option func(*Client)
 
+// WithHTTPClient sends the requests through client instead of the http.Client
+// New creates, whose cookie jar carries a login cookie over to later
+// requests. The client is used as it is and never modified: a timeout set by
+// WithTimeout applies to a copy.
 func WithHTTPClient(client *http.Client) Option {
 	return func(c *Client) {
 		if client != nil {
@@ -45,15 +49,16 @@ func WithLogger(logger types.Logger) Option {
 	}
 }
 
+// WithTimeout bounds each request of the client, the reading of the response
+// included, by timeout (see http.Client.Timeout); a timeout of zero or less
+// sets none. New applies it last, to a copy of the http.Client, so the order
+// of the options does not matter and a client handed to WithHTTPClient, such
+// as a shared http.DefaultClient, keeps its own timeout.
 func WithTimeout(timeout time.Duration) Option {
 	return func(c *Client) {
-		if timeout <= 0 {
-			return
+		if timeout > 0 {
+			c.timeout = timeout
 		}
-		if c.httpClient == nil {
-			c.httpClient = http.DefaultClient
-		}
-		c.httpClient.Timeout = timeout
 	}
 }
 

@@ -38,7 +38,7 @@ func (r *TestRecord) Purge() bool { return true }
 
 func TestMain(m *testing.M) {
 	testutil.Run(m, testutil.Server{
-		Register: func() { modelregistry.RegisterTable[*TestRecord]() },
+		Register: func() { modelregistry.Register[*TestRecord]() },
 		Routes: func() error {
 			router.Register[*TestRecord, *TestRecord, *TestRecord](router.Auth(), "test-record", nil, consts.Create)
 			router.Register[*TestRecord, *TestRecord, *TestRecord](router.Auth(), "test-record/:id", &types.ControllerConfig[*TestRecord]{ParamName: "id"}, consts.Delete)
