@@ -2,6 +2,7 @@ package controller
 
 import (
 	"context"
+	"fmt"
 	"reflect"
 	"time"
 
@@ -55,6 +56,12 @@ func newFactoryMeta[M types.Model, REQ types.Request, RSP types.Response](route 
 	name := typ.Name()
 
 	reqTyp := reflect.TypeFor[REQ]()
+	// The request type is what a request body decodes into, and an interface
+	// with methods admits no JSON value: every request to the route would fail
+	// to bind, so the declaration is refused as the route registers.
+	if reqTyp.Kind() == reflect.Interface && reqTyp.NumMethod() > 0 {
+		panic(fmt.Sprintf("controller: request type %s is an interface with methods, which no request body decodes into; declare a concrete type, or any", reqTyp))
+	}
 	reqKind := reqTyp.Kind()
 	for reqTyp.Kind() == reflect.Pointer {
 		reqTyp = reqTyp.Elem()
