@@ -18,7 +18,7 @@ const sseMediaType = "text/event-stream"
 // parameters are documented; the response is the raw event stream, not the
 // JSON envelope.
 func setSSE[M types.Model, REQ types.Request, RSP types.Response](path string, pathItem *openapi3.PathItem) {
-	typ := reflect.TypeOf(*new(M))
+	typ := reflect.TypeFor[M]()
 
 	pathItem.Get = &openapi3.Operation{
 		OperationID: operationID(path, consts.SSE),

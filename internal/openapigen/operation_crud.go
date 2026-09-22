@@ -10,9 +10,9 @@ import (
 )
 
 func setCreate[M types.Model, REQ types.Request, RSP types.Response](path string, pathItem *openapi3.PathItem) {
-	typ := reflect.TypeOf(*new(M))
-	reqKey := actionComponentKey(reflect.TypeOf(*new(REQ)), typ, path, consts.PHASE_CREATE)
-	rspKey := actionComponentKey(reflect.TypeOf(*new(RSP)), typ, path, consts.PHASE_CREATE)
+	typ := reflect.TypeFor[M]()
+	reqKey := actionComponentKey(reflect.TypeFor[REQ](), typ, path, consts.PHASE_CREATE)
+	rspKey := actionComponentKey(reflect.TypeFor[RSP](), typ, path, consts.PHASE_CREATE)
 	reqSchemaRef := newSchemaRefWithDocs(*new(REQ))
 	rspSchemaRef := newSchemaRefWithDocs(apiResponse[RSP]{})
 	registerSchema[M, REQ, RSP](reqKey, rspKey, reqSchemaRef, rspSchemaRef)
@@ -30,9 +30,9 @@ func setCreate[M types.Model, REQ types.Request, RSP types.Response](path string
 }
 
 func setDelete[M types.Model, REQ types.Request, RSP types.Response](path string, pathItem *openapi3.PathItem) {
-	typ := reflect.TypeOf(*new(M))
-	reqKey := actionComponentKey(reflect.TypeOf(*new(REQ)), typ, path, consts.PHASE_DELETE)
-	rspKey := actionComponentKey(reflect.TypeOf(*new(RSP)), typ, path, consts.PHASE_DELETE)
+	typ := reflect.TypeFor[M]()
+	reqKey := actionComponentKey(reflect.TypeFor[REQ](), typ, path, consts.PHASE_DELETE)
+	rspKey := actionComponentKey(reflect.TypeFor[RSP](), typ, path, consts.PHASE_DELETE)
 	rspSchemaRef := newSchemaRefWithDocs(apiResponse[RSP]{})
 	registerSchema[M, REQ, RSP](reqKey, rspKey, nil, rspSchemaRef)
 
@@ -47,9 +47,9 @@ func setDelete[M types.Model, REQ types.Request, RSP types.Response](path string
 }
 
 func setUpdate[M types.Model, REQ types.Request, RSP types.Response](path string, pathItem *openapi3.PathItem) {
-	typ := reflect.TypeOf(*new(M))
-	reqKey := actionComponentKey(reflect.TypeOf(*new(REQ)), typ, path, consts.PHASE_UPDATE)
-	rspKey := actionComponentKey(reflect.TypeOf(*new(RSP)), typ, path, consts.PHASE_UPDATE)
+	typ := reflect.TypeFor[M]()
+	reqKey := actionComponentKey(reflect.TypeFor[REQ](), typ, path, consts.PHASE_UPDATE)
+	rspKey := actionComponentKey(reflect.TypeFor[RSP](), typ, path, consts.PHASE_UPDATE)
 	reqSchemaRef := newSchemaRefWithDocs(*new(REQ))
 	rspSchemaRef := newSchemaRefWithDocs(apiResponse[RSP]{})
 	registerSchema[M, REQ, RSP](reqKey, rspKey, reqSchemaRef, rspSchemaRef)
@@ -67,9 +67,9 @@ func setUpdate[M types.Model, REQ types.Request, RSP types.Response](path string
 }
 
 func setPatch[M types.Model, REQ types.Request, RSP types.Response](path string, pathItem *openapi3.PathItem) {
-	typ := reflect.TypeOf(*new(M))
-	reqKey := actionComponentKey(reflect.TypeOf(*new(REQ)), typ, path, consts.PHASE_PATCH)
-	rspKey := actionComponentKey(reflect.TypeOf(*new(RSP)), typ, path, consts.PHASE_PATCH)
+	typ := reflect.TypeFor[M]()
+	reqKey := actionComponentKey(reflect.TypeFor[REQ](), typ, path, consts.PHASE_PATCH)
+	rspKey := actionComponentKey(reflect.TypeFor[RSP](), typ, path, consts.PHASE_PATCH)
 	reqSchemaRef := newSchemaRefWithDocs(*new(REQ))
 	rspSchemaRef := newSchemaRefWithDocs(apiResponse[RSP]{})
 	registerSchema[M, REQ, RSP](reqKey, rspKey, reqSchemaRef, rspSchemaRef)
@@ -87,9 +87,9 @@ func setPatch[M types.Model, REQ types.Request, RSP types.Response](path string,
 }
 
 func setList[M types.Model, REQ types.Request, RSP types.Response](path string, pathItem *openapi3.PathItem) {
-	typ := reflect.TypeOf(*new(M))
-	reqKey := actionComponentKey(reflect.TypeOf(*new(REQ)), typ, path, consts.PHASE_LIST)
-	rspKey := actionComponentKey(reflect.TypeOf(*new(RSP)), typ, path, consts.PHASE_LIST)
+	typ := reflect.TypeFor[M]()
+	reqKey := actionComponentKey(reflect.TypeFor[REQ](), typ, path, consts.PHASE_LIST)
+	rspKey := actionComponentKey(reflect.TypeFor[RSP](), typ, path, consts.PHASE_LIST)
 
 	var rspSchemaRef *openapi3.SchemaRef
 	if modelregistry.AreTypesEqual[M, REQ, RSP]() {
@@ -111,9 +111,9 @@ func setList[M types.Model, REQ types.Request, RSP types.Response](path string, 
 }
 
 func setGet[M types.Model, REQ types.Request, RSP types.Response](path string, pathItem *openapi3.PathItem) {
-	typ := reflect.TypeOf(*new(M))
-	reqKey := actionComponentKey(reflect.TypeOf(*new(REQ)), typ, path, consts.PHASE_GET)
-	rspKey := actionComponentKey(reflect.TypeOf(*new(RSP)), typ, path, consts.PHASE_GET)
+	typ := reflect.TypeFor[M]()
+	reqKey := actionComponentKey(reflect.TypeFor[REQ](), typ, path, consts.PHASE_GET)
+	rspKey := actionComponentKey(reflect.TypeFor[RSP](), typ, path, consts.PHASE_GET)
 	rspSchemaRef := newSchemaRefWithDocs(apiResponse[RSP]{})
 	registerSchema[M, REQ, RSP](reqKey, rspKey, nil, rspSchemaRef)
 
@@ -128,9 +128,9 @@ func setGet[M types.Model, REQ types.Request, RSP types.Response](path string, p
 }
 
 func setCreateMany[M types.Model, REQ types.Request, RSP types.Response](path string, pathItem *openapi3.PathItem) {
-	typ := reflect.TypeOf(*new(M))
-	reqKey := actionComponentKey(reflect.TypeOf(*new(REQ)), typ, path, consts.PHASE_CREATE_MANY)
-	rspKey := actionComponentKey(reflect.TypeOf(*new(RSP)), typ, path, consts.PHASE_CREATE_MANY)
+	typ := reflect.TypeFor[M]()
+	reqKey := actionComponentKey(reflect.TypeFor[REQ](), typ, path, consts.PHASE_CREATE_MANY)
+	rspKey := actionComponentKey(reflect.TypeFor[RSP](), typ, path, consts.PHASE_CREATE_MANY)
 
 	var reqSchemaRef *openapi3.SchemaRef
 	var rspSchemaRef *openapi3.SchemaRef
@@ -156,9 +156,9 @@ func setCreateMany[M types.Model, REQ types.Request, RSP types.Response](path st
 }
 
 func setDeleteMany[M types.Model, REQ types.Request, RSP types.Response](path string, pathItem *openapi3.PathItem) {
-	typ := reflect.TypeOf(*new(M))
-	reqKey := actionComponentKey(reflect.TypeOf(*new(REQ)), typ, path, consts.PHASE_DELETE_MANY)
-	rspKey := actionComponentKey(reflect.TypeOf(*new(RSP)), typ, path, consts.PHASE_DELETE_MANY)
+	typ := reflect.TypeFor[M]()
+	reqKey := actionComponentKey(reflect.TypeFor[REQ](), typ, path, consts.PHASE_DELETE_MANY)
+	rspKey := actionComponentKey(reflect.TypeFor[RSP](), typ, path, consts.PHASE_DELETE_MANY)
 	reqSchemaRef := deleteManyIDsRequestSchema()
 	var rspSchemaRef *openapi3.SchemaRef
 	if modelregistry.AreTypesEqual[M, REQ, RSP]() {
@@ -204,9 +204,9 @@ func deleteManyIDsRequestSchema() *openapi3.SchemaRef {
 }
 
 func setUpdateMany[M types.Model, REQ types.Request, RSP types.Response](path string, pathItem *openapi3.PathItem) {
-	typ := reflect.TypeOf(*new(M))
-	reqKey := actionComponentKey(reflect.TypeOf(*new(REQ)), typ, path, consts.PHASE_UPDATE_MANY)
-	rspKey := actionComponentKey(reflect.TypeOf(*new(RSP)), typ, path, consts.PHASE_UPDATE_MANY)
+	typ := reflect.TypeFor[M]()
+	reqKey := actionComponentKey(reflect.TypeFor[REQ](), typ, path, consts.PHASE_UPDATE_MANY)
+	rspKey := actionComponentKey(reflect.TypeFor[RSP](), typ, path, consts.PHASE_UPDATE_MANY)
 
 	var reqSchemaRef *openapi3.SchemaRef
 	var rspSchemaRef *openapi3.SchemaRef
@@ -232,9 +232,9 @@ func setUpdateMany[M types.Model, REQ types.Request, RSP types.Response](path st
 }
 
 func setPatchMany[M types.Model, REQ types.Request, RSP types.Response](path string, pathItem *openapi3.PathItem) {
-	typ := reflect.TypeOf(*new(M))
-	reqKey := actionComponentKey(reflect.TypeOf(*new(REQ)), typ, path, consts.PHASE_PATCH_MANY)
-	rspKey := actionComponentKey(reflect.TypeOf(*new(RSP)), typ, path, consts.PHASE_PATCH_MANY)
+	typ := reflect.TypeFor[M]()
+	reqKey := actionComponentKey(reflect.TypeFor[REQ](), typ, path, consts.PHASE_PATCH_MANY)
+	rspKey := actionComponentKey(reflect.TypeFor[RSP](), typ, path, consts.PHASE_PATCH_MANY)
 
 	var reqSchemaRef *openapi3.SchemaRef
 	var rspSchemaRef *openapi3.SchemaRef

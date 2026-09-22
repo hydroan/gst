@@ -146,7 +146,7 @@ func componentDescriptionName(typ, modelTyp reflect.Type) string {
 // register Model, Model Payload, Model Result into openapi3 schema.
 func registerSchema[M types.Model, REQ types.Request, RSP types.Response](reqKey, rspKey string, reqSchemaRef *openapi3.SchemaRef, rspSchemaRef *openapi3.SchemaRef) {
 	if !modelregistry.IsEmpty[M]() {
-		typ := reflect.TypeOf(*new(M))
+		typ := reflect.TypeFor[M]()
 		name := uniqueComponentName(typ)
 		docMutex.Lock()
 		if doc.Components.Schemas == nil {
@@ -161,7 +161,7 @@ func registerSchema[M types.Model, REQ types.Request, RSP types.Response](reqKey
 	}
 
 	if !modelregistry.IsEmpty[REQ]() {
-		name := componentDescriptionName(reflect.TypeOf(*new(REQ)), reflect.TypeOf(*new(M)))
+		name := componentDescriptionName(reflect.TypeFor[REQ](), reflect.TypeFor[M]())
 
 		docMutex.Lock()
 		if doc.Components.RequestBodies == nil {
@@ -182,7 +182,7 @@ func registerSchema[M types.Model, REQ types.Request, RSP types.Response](reqKey
 	}
 
 	{
-		name := componentDescriptionName(reflect.TypeOf(*new(RSP)), reflect.TypeOf(*new(M)))
+		name := componentDescriptionName(reflect.TypeFor[RSP](), reflect.TypeFor[M]())
 		if modelregistry.IsEmpty[RSP]() {
 			markEmptyResponseData(rspSchemaRef)
 		}

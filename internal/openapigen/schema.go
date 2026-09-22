@@ -38,7 +38,13 @@ func getFieldTag(field reflect.StructField, tagName string) string {
 // components. Those $ref targets are named through uniqueComponentName, the
 // same rule registerSchema names components with, otherwise the $ref points at
 // a component that was never registered and the whole document fails to load.
+//
+// The zero value of an interface-typed payload or result is nil: such a type
+// binds any JSON value, which the empty schema describes.
 func newSchemaRefWithDocs(value any) *openapi3.SchemaRef {
+	if value == nil {
+		return openapi3.NewSchemaRef("", openapi3.NewSchema())
+	}
 	schemaRef, err := openapi3gen.NewSchemaRefForValue(value, nil, openapi3gen.CreateTypeNameGenerator(uniqueComponentName))
 	if err != nil {
 		return schemaRef

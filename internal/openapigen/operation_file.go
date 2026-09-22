@@ -32,9 +32,9 @@ const (
 // upload with a required binary "file" field, and the response reuses the
 // standard success envelope returned by the controller.
 func setImport[M types.Model, REQ types.Request, RSP types.Response](path string, pathItem *openapi3.PathItem) {
-	typ := reflect.TypeOf(*new(M))
-	reqKey := actionComponentKey(reflect.TypeOf(*new(REQ)), typ, path, consts.PHASE_IMPORT)
-	rspKey := actionComponentKey(reflect.TypeOf(*new(RSP)), typ, path, consts.PHASE_IMPORT)
+	typ := reflect.TypeFor[M]()
+	reqKey := actionComponentKey(reflect.TypeFor[REQ](), typ, path, consts.PHASE_IMPORT)
+	rspKey := actionComponentKey(reflect.TypeFor[RSP](), typ, path, consts.PHASE_IMPORT)
 	rspSchemaRef := newSchemaRefWithDocs(apiResponse[RSP]{})
 	// The upload is documented inline as multipart/form-data rather than as a
 	// JSON request component, so no request schema is registered under reqKey.
@@ -85,7 +85,7 @@ func importFileRequestBody() *openapi3.RequestBodyRef {
 // streams the result as a downloadable file, so the operation carries the list
 // filters plus the file-format selector and a binary file response.
 func setExport[M types.Model, REQ types.Request, RSP types.Response](path string, pathItem *openapi3.PathItem) {
-	typ := reflect.TypeOf(*new(M))
+	typ := reflect.TypeFor[M]()
 
 	pathItem.Get = &openapi3.Operation{
 		OperationID: operationID(path, consts.Export),

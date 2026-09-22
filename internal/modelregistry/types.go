@@ -21,13 +21,15 @@ func AreTypesEqual[M types.Model, REQ types.Request, RSP types.Response]() bool 
 
 // IsEmpty reports whether T carries no data of its own, so there is nothing
 // to bind a request into or describe as a body: T, its pointers removed, is
-// not a struct, is a struct without fields, or is a struct whose every field
-// is an Empty marker. The controllers ask it to hand an action model to its
-// service instead of the default CRUD flow (see AreTypesEqual), and the
-// OpenAPI generator asks it to leave a request or response body out.
+// a struct without fields or a struct whose every field is an Empty marker.
+// A type of any other kind carries its value — a string, a number, the
+// elements of a slice or of a map — and is never empty. The controllers ask
+// it to hand an action model to its service instead of the default CRUD flow
+// (see AreTypesEqual), and the OpenAPI generator asks it to leave a request
+// or response body out.
 //
 // For example, it reports true for Login and Logout, and false for Signup,
-// which carries a field beside the marker:
+// which carries a field beside the marker, and for Signups, a slice:
 //
 //	type Login struct {
 //		model.Empty
@@ -40,6 +42,8 @@ func AreTypesEqual[M types.Model, REQ types.Request, RSP types.Response]() bool 
 //		model.Empty
 //	}
 //
+//	type Signups []*Signup
+//
 // Models embed Empty by value; Register and gg gen reject *model.Empty.
 func IsEmpty[T any]() bool {
 	typ := reflect.TypeFor[T]()
@@ -48,7 +52,7 @@ func IsEmpty[T any]() bool {
 	}
 
 	if typ.Kind() != reflect.Struct {
-		return true
+		return false
 	}
 	if typ.NumField() == 0 {
 		return true

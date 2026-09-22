@@ -166,42 +166,51 @@ func TestIsQueryMarkerType(t *testing.T) {
 }
 
 func TestIsEmpty(t *testing.T) {
-	type t1 string
-	type t2 int
-	type t3 struct{}
-	type t4 struct{ modelregistry.Empty }
-	type t5 struct{ *modelregistry.Empty }
-	type t6 struct{ _ string }
-	type t7 struct {
+	type t1 struct{}
+	type t2 struct{ modelregistry.Empty }
+	type t3 struct{ *modelregistry.Empty }
+	type t4 = modelregistry.Empty
+	type t5 struct{ _ string }
+	type t6 struct {
 		_ string
 		modelregistry.Empty
 	}
-	type t8 = modelregistry.Empty
+	type t7 string
+	type t8 int
+	type t9 []t5
+	type t10 map[string]t5
 
 	require.True(t, modelregistry.IsEmpty[t1]())
 	require.True(t, modelregistry.IsEmpty[t2]())
 	require.True(t, modelregistry.IsEmpty[t3]())
 	require.True(t, modelregistry.IsEmpty[t4]())
-	require.True(t, modelregistry.IsEmpty[t5]())
+	require.True(t, modelregistry.IsEmpty[*t4]())
+
+	// A struct with a field besides the markers carries it, and a type of any
+	// other kind carries its value: a string, a number, the elements of a
+	// slice or of a map.
+	require.False(t, modelregistry.IsEmpty[t5]())
 	require.False(t, modelregistry.IsEmpty[t6]())
 	require.False(t, modelregistry.IsEmpty[t7]())
-	require.True(t, modelregistry.IsEmpty[t8]())
-	require.True(t, modelregistry.IsEmpty[*t8]())
+	require.False(t, modelregistry.IsEmpty[t8]())
+	require.False(t, modelregistry.IsEmpty[t9]())
+	require.False(t, modelregistry.IsEmpty[t10]())
 }
 
 func TestIsTableModel(t *testing.T) {
-	type t1 string
-	type t2 int
-	type t3 struct{}
-	type t4 struct{ modelregistry.Empty }
-	type t5 struct{ modelregistry.Base }
+	type t1 struct{ modelregistry.Base }
+	type t2 string
+	type t3 int
+	type t4 struct{}
+	type t5 struct{ modelregistry.Empty }
 	type t6 struct {
 		Name string
 		*modelregistry.Empty
 	}
 
+	require.True(t, modelregistry.IsTableModel[*t1]())
+
 	require.False(t, modelregistry.IsTableModel[t1]())
-	require.False(t, modelregistry.IsTableModel[*t1]())
 	require.False(t, modelregistry.IsTableModel[t2]())
 	require.False(t, modelregistry.IsTableModel[*t2]())
 	require.False(t, modelregistry.IsTableModel[t3]())
@@ -209,7 +218,7 @@ func TestIsTableModel(t *testing.T) {
 	require.False(t, modelregistry.IsTableModel[t4]())
 	require.False(t, modelregistry.IsTableModel[*t4]())
 	require.False(t, modelregistry.IsTableModel[t5]())
-	require.True(t, modelregistry.IsTableModel[*t5]())
+	require.False(t, modelregistry.IsTableModel[*t5]())
 	require.False(t, modelregistry.IsTableModel[*t6]())
 }
 

@@ -201,6 +201,53 @@ func TestSetDeclaresResponsesForEmptyResponseType(t *testing.T) {
 	}
 }
 
+// openapiEntry is the element of the slice payload and the map result below.
+type openapiEntry struct {
+	// Key names the entry.
+	Key string `json:"key"`
+}
+
+// openapiEntryBatch is a slice payload, which a model declares in its value
+// form: the request body is the JSON array of its entries.
+type openapiEntryBatch []*openapiEntry
+
+// openapiEntryIndex is a map result, answered as the JSON object of its
+// entries.
+type openapiEntryIndex map[string]*openapiEntry
+
+// TestSetDocumentsSliceAndMapBodies asserts that a slice payload and a map
+// result are documented as the data they carry: the request body is an array
+// schema and the response data an object schema, not the absent body and the
+// null data member of a type without fields.
+func TestSetDocumentsSliceAndMapBodies(t *testing.T) {
+	set[*openapiActionModel, openapiEntryBatch, openapiEntryIndex]("/api/openapi-collections", true, consts.Create)
+
+	op := operationForPath(t, "/api/openapi-collections")
+	payload := registeredRequestBodySchema(t, op.RequestBody)
+	if !payload.Type.Is(openapi3.TypeArray) {
+		t.Fatalf("payload type = %v, want array", payload.Type)
+	}
+	data := dataSchema(t, registeredResponseSchema(t, op.Responses.Status(200)))
+	if !data.Type.Is(openapi3.TypeObject) {
+		t.Fatalf("response data type = %v, want object", data.Type)
+	}
+}
+
+// TestSetDocumentsInterfaceBodies asserts that an interface payload and
+// result, which bind any JSON value, are documented as such: a request body
+// whose schema admits any value and a response whose data member is present,
+// instead of a panic while the route registers.
+func TestSetDocumentsInterfaceBodies(t *testing.T) {
+	set[*openapiActionModel, any, any]("/api/openapi-values", true, consts.Create)
+
+	op := operationForPath(t, "/api/openapi-values")
+	payload := registeredRequestBodySchema(t, op.RequestBody)
+	if payload.Type != nil {
+		t.Fatalf("payload type = %v, want none: an interface payload admits any value", payload.Type)
+	}
+	dataSchema(t, registeredResponseSchema(t, op.Responses.Status(200)))
+}
+
 // openapiTreeNode is self-referential, which makes the schema generator emit a
 // component $ref to break the cycle instead of inlining forever.
 type openapiTreeNode struct {
