@@ -2,6 +2,15 @@
 // Check finds the violations of one rule in the project in the working
 // directory; the gg command running the checks decides which run, in what
 // order, and how their results print.
+//
+// Every check lives in a file of its own, named after the check: the file
+// dsl_design_rules.go declares the DSL design rules Check, its name and rule,
+// the function finding its violations and the helpers no other check uses.
+// Helpers several checks share are grouped by purpose in project_files.go,
+// copied_modules.go, dsl_action_types.go and framework_packages.go, and each
+// test file pairs with the file it tests. TestEveryCheckIsDeclaredInAFileNamedAfterIt
+// holds the layout: gathering several checks into one file, or naming a
+// check's file otherwise, fails it.
 package ggcheck
 
 import (
