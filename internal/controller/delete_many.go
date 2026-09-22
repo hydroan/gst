@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"io"
+	"strings"
 
 	"github.com/cockroachdb/errors"
 	"github.com/gin-gonic/gin"
@@ -80,10 +81,11 @@ func DeleteManyFactory[M types.Model, REQ types.Request, RSP types.Response](cfg
 		// 1.Perform business logic processing before batch delete resources.
 		req.Items = make([]M, 0, len(req.IDs))
 		for _, id := range req.IDs {
-			// An empty id names no record: a defective request, refused
-			// before anything is deleted. Setting it on a UUID-keyed model
-			// would mint a fresh id instead.
-			if len(id) == 0 {
+			// An empty id, or one of whitespace alone, names no record: a
+			// defective request, refused before anything is deleted.
+			// Setting an empty one on a UUID-keyed model would mint a fresh
+			// id instead. Any other id is used as sent, never trimmed.
+			if strings.TrimSpace(id) == "" {
 				err = errors.Wrapf(database.ErrIDRequired, "delete many %s", meta.name)
 				log.Errorz("batch delete with an empty id", zap.Error(err))
 				JSON(c, databaseErrorCoder(err))

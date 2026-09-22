@@ -9,17 +9,29 @@ import (
 )
 
 // TestUpdateManyWritesNothingWhenOneRecordIsMissing pins that a batch update
-// is all or nothing: an item naming a record that does not exist fails the
-// batch with 404, and the record beside it keeps what it stored.
+// is all or nothing: an item naming a record that does not exist — an unknown
+// id, or one of whitespace alone, used as sent — fails the batch with 404,
+// and the record beside it keeps what it stored.
 func TestUpdateManyWritesNothingWhenOneRecordIsMissing(t *testing.T) {
-	record := createSample(t, "update-many-kept")
+	tests := []struct {
+		name string
+		id   string // the id as written inside the JSON string
+	}{
+		{name: "unknown", id: `missing`},
+		{name: "blank", id: ` \t `},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			record := createSample(t, "update-many-kept-"+tt.name)
 
-	rsp := serve(t, http.MethodPut, "/controller-samples/batch",
-		controller.UpdateManyFactory[*sampleRecord, *sampleRecord, *sampleRecord](configFor[*sampleRecord](sampleRoute)),
-		"/controller-samples/batch", `{"items":[{"id":"`+record.GetID()+`","name":"update-many-renamed"},{"id":"missing","name":"update-many-other"}]}`)
+			rsp := serve(t, http.MethodPut, "/controller-samples/batch",
+				controller.UpdateManyFactory[*sampleRecord, *sampleRecord, *sampleRecord](configFor[*sampleRecord](sampleRoute)),
+				"/controller-samples/batch", `{"items":[{"id":"`+record.GetID()+`","name":"update-many-renamed"},{"id":"`+tt.id+`","name":"update-many-other"}]}`)
 
-	require.Equal(t, http.StatusNotFound, rsp.Code)
-	requireSampleName(t, record.GetID(), "update-many-kept")
+			require.Equal(t, http.StatusNotFound, rsp.Code)
+			requireSampleName(t, record.GetID(), "update-many-kept-"+tt.name)
+		})
+	}
 }
 
 // TestUpdateManyWritesNothingTheBeforeHookRefuses pins that an
