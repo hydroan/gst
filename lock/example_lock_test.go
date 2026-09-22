@@ -57,9 +57,9 @@ func ExampleLock_TryRun() {
 // in a request stops when the client disconnects, and work that outlasts the
 // server's write timeout — 15 seconds unless configured — runs on while its
 // response never reaches the client. A request asking for a long rebuild
-// records the ask instead, and a job picks it up. The same lock keeps the job apart from a rebuild an administrator
-// starts by hand, and a job that finds the lock held skips the round: the
-// other holder is doing the work already.
+// records the ask instead, and a job picks it up. The same lock keeps the job
+// apart from a rebuild an administrator starts by hand, and a job that finds
+// the lock held skips the round: the other holder is doing the work already.
 func ExampleLock_TryRun_scheduledJob() {
 	// cronjob/cronjob.go, from init:
 	cronjob.Register(func(ctx context.Context) error {
