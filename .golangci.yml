@@ -164,6 +164,16 @@ linters:
           deny:
             - pkg: "github.com/hydroan/gst/middleware$"
               desc: "framework code imports github.com/hydroan/gst/internal/middleware; only the handlers a module registers come from the public package"
+        # Only the gg command prints. The packages it runs return what they
+        # found, or report progress through callbacks the command passes, and
+        # the command decides how that shows.
+        clioutput:
+          files:
+            - "$all"
+            - "!**/cmd/gg/**"
+          deny:
+            - pkg: "github.com/hydroan/gst/internal/clioutput$"
+              desc: "only the gg command prints; return the result, or take a progress callback the command passes"
 
     errcheck:
       check-type-assertions: true
