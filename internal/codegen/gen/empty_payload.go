@@ -7,13 +7,8 @@ import (
 	"strings"
 
 	"github.com/hydroan/gst/dsl"
+	"github.com/hydroan/gst/internal/codegen/constants"
 )
-
-// GstModelImportPath is the import path of the gst model package that
-// defines model.Empty, the type generated for the dsl.PayloadEmpty side of an
-// action: the side it leaves undeclared when it declares the other one, such
-// as the request of a List or Get action declaring Result.
-const GstModelImportPath = "github.com/hydroan/gst/model"
 
 const (
 	// gstModelPkgName is the package name of the gst model package.
@@ -61,9 +56,9 @@ func RouterGstModelUse(models []*ModelInfo) (pkgName string, needed bool) {
 // gstmodel and "github.com/hydroan/gst/model" for model.
 func GstModelImportEntry(pkgName string) string {
 	if pkgName == gstModelPkgAlias {
-		return gstModelPkgAlias + " " + GstModelImportPath
+		return gstModelPkgAlias + " " + constants.ImportPathModel
 	}
-	return GstModelImportPath
+	return constants.ImportPathModel
 }
 
 // emptyReqPkgName returns the package qualifier a generated service file uses
@@ -123,27 +118,20 @@ func payloadTypeTarget(payload, modelPkg string) (targetPkg, actionType string) 
 // and "github.com/hydroan/gst/model" otherwise. It reports whether the file
 // was modified.
 func ensureEmptyReqImportSpec(file *ast.File, modelPkg string) bool {
-	if file == nil || findImportSpec(file, GstModelImportPath) != nil {
+	if file == nil || findImportSpec(file, constants.ImportPathModel) != nil {
 		return false
 	}
 
 	spec := &ast.ImportSpec{
 		Path: &ast.BasicLit{
 			Kind:  token.STRING,
-			Value: fmt.Sprintf("%q", GstModelImportPath),
+			Value: fmt.Sprintf("%q", constants.ImportPathModel),
 		},
 	}
 	if emptyReqPkgName(modelPkg) == gstModelPkgAlias {
 		spec.Name = ast.NewIdent(gstModelPkgAlias)
 	}
-
-	for _, decl := range file.Decls {
-		if genDecl, ok := decl.(*ast.GenDecl); ok && genDecl.Tok == token.IMPORT {
-			genDecl.Specs = append(genDecl.Specs, spec)
-			return true
-		}
-	}
-	file.Decls = append([]ast.Decl{&ast.GenDecl{Tok: token.IMPORT, Specs: []ast.Spec{spec}}}, file.Decls...)
+	insertImportSpec(file, spec)
 	return true
 }
 
@@ -153,7 +141,7 @@ func ensureEmptyReqImportSpec(file *ast.File, modelPkg string) bool {
 // that still references the package keeps the import. It reports whether the
 // file was modified.
 func pruneGstModelImportSpec(file *ast.File) bool {
-	spec := findImportSpec(file, GstModelImportPath)
+	spec := findImportSpec(file, constants.ImportPathModel)
 	if spec == nil {
 		return false
 	}

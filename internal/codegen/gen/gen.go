@@ -200,16 +200,8 @@ func isModelBase(file *ast.File, field *ast.Field) bool {
 	}
 
 	aliasName := constants.PkgModel
-	for _, imp := range file.Imports {
-		if imp.Path == nil {
-			continue
-		}
-		if imp.Path.Value == constants.ModelPackagePath {
-			if imp.Name != nil {
-				aliasName = imp.Name.Name
-			}
-			break
-		}
+	if spec := findImportSpec(file, constants.ImportPathModel); spec != nil && spec.Name != nil {
+		aliasName = spec.Name.Name
 	}
 
 	switch t := field.Type.(type) {
@@ -234,16 +226,8 @@ func isModelEmpty(file *ast.File, field *ast.Field) bool {
 	}
 
 	aliasName := constants.PkgModel
-	for _, imp := range file.Imports {
-		if imp.Path == nil {
-			continue
-		}
-		if imp.Path.Value == constants.ModelPackagePath {
-			if imp.Name != nil {
-				aliasName = imp.Name.Name
-			}
-			break
-		}
+	if spec := findImportSpec(file, constants.ImportPathModel); spec != nil && spec.Name != nil {
+		aliasName = spec.Name.Name
 	}
 
 	switch t := field.Type.(type) {

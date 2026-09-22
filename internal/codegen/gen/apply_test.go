@@ -9,6 +9,7 @@ import (
 
 	"github.com/hydroan/gst/consts"
 	"github.com/hydroan/gst/dsl"
+	"github.com/hydroan/gst/internal/codegen/constants"
 	"github.com/hydroan/gst/internal/codegen/gen"
 	"github.com/kr/pretty"
 )
@@ -795,7 +796,7 @@ func (g *Lister) List(ctx *gst.ServiceContext, req *model.Empty) (rsp *group.Gro
 					t.Errorf("applied service still contains %q, got:\n%s", absent, got)
 				}
 			}
-			if strings.Count(got, gen.GstModelImportPath) > 1 {
+			if strings.Count(got, constants.ImportPathModel) > 1 {
 				t.Errorf("gst model import duplicated, got:\n%s", got)
 			}
 		})

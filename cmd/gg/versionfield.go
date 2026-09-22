@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/hydroan/gst/dsl"
+	"github.com/hydroan/gst/internal/codegen/constants"
 	"github.com/hydroan/gst/internal/modelregistry"
 )
 
@@ -24,10 +25,6 @@ import (
 // "gg check" reports deviations read-only, and the framework panics at
 // runtime on first touch as the last net. Dot imports of the model package
 // are not resolved here; the runtime layer still catches those.
-
-// gstModelImportPath is the framework package whose Version type opts a
-// model into optimistic locking.
-const gstModelImportPath = "github.com/hydroan/gst/model"
 
 // versionRequiredTag is the exact gorm tag payload a model.Version field
 // must carry.
@@ -385,7 +382,7 @@ func localFieldTypeNames(expr ast.Expr) []string {
 func modelAliasesOf(file *ast.File) []string {
 	var aliases []string
 	for _, imp := range file.Imports {
-		if imp.Path == nil || imp.Path.Value != `"`+gstModelImportPath+`"` {
+		if imp.Path == nil || imp.Path.Value != `"`+constants.ImportPathModel+`"` {
 			continue
 		}
 		switch {
@@ -408,7 +405,7 @@ func modelImportAliases(path string) (aliases []string, found bool, err error) {
 		return nil, false, fmt.Errorf("%s has parse error: %w", relativePath(path), err)
 	}
 	for _, imp := range file.Imports {
-		if imp.Path == nil || imp.Path.Value != `"`+gstModelImportPath+`"` {
+		if imp.Path == nil || imp.Path.Value != `"`+constants.ImportPathModel+`"` {
 			continue
 		}
 		found = true
