@@ -325,7 +325,9 @@ func CheckModelSingularNaming(ignore gitignore.Matcher) []string {
 		return violations
 	}
 
-	// Common plural file names that are allowed in Go projects
+	// Common plural file names that are allowed in Go projects. data and
+	// stats name one body of content rather than many items; stats is the
+	// conventional short form of statistics.
 	allowedPluralFiles := map[string]bool{
 		"types":       true,
 		"errors":      true,
@@ -348,10 +350,14 @@ func CheckModelSingularNaming(ignore gitignore.Matcher) []string {
 		"entities":    true,
 		"records":     true,
 		"data":        true,
+		"stats":       true,
 	}
+	// Plural directory names that are allowed: types for a directory of
+	// shared types, and data and stats, which name one body of content.
 	allowedPluralDirs := map[string]bool{
 		"types": true,
 		"data":  true,
+		"stats": true,
 	}
 
 	client := pluralize.NewClient()

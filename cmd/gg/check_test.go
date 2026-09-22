@@ -47,7 +47,7 @@ import _ "tmpapp/service/iam/session"
 	}
 }
 
-func TestCheckModelSingularNamingAllowsSharedTypesDirectory(t *testing.T) {
+func TestCheckModelSingularNamingAllowsExemptPlurals(t *testing.T) {
 	oldModelDir := modelDir
 	t.Cleanup(func() {
 		modelDir = oldModelDir
@@ -57,29 +57,20 @@ func TestCheckModelSingularNamingAllowsSharedTypesDirectory(t *testing.T) {
 	t.Chdir(projectDir)
 	modelDir = "model"
 
-	if err := os.MkdirAll(filepath.Join(projectDir, "model", "types"), 0o755); err != nil {
-		t.Fatal(err)
+	// types, data and stats are plural in form but name one body of content,
+	// so model directories and files may keep them; records is an ordinary
+	// plural.
+	for _, dir := range []string{"types", "data", "stats", "records"} {
+		if err := os.MkdirAll(filepath.Join(projectDir, "model", dir), 0o755); err != nil {
+			t.Fatal(err)
+		}
 	}
-	if err := os.MkdirAll(filepath.Join(projectDir, "model", "records"), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	// stats is an ordinary plural as well: the check grants no exception for
-	// a name some project happens to use.
-	if err := os.MkdirAll(filepath.Join(projectDir, "model", "stats"), 0o755); err != nil {
-		t.Fatal(err)
-	}
+	writeCheckFile(t, filepath.Join(projectDir, "model", "stats", "stats.go"), "package stats\n")
 
 	violations := CheckModelSingularNaming(newProjectIgnoreMatcher())
 
-	for _, violation := range violations {
-		if strings.Contains(violation, filepath.Join("model", "types")) {
-			t.Fatalf("shared model types directory should be allowed, got violations: %#v", violations)
-		}
-	}
-	if len(violations) != 2 ||
-		!strings.Contains(violations[0], filepath.Join("model", "records")) ||
-		!strings.Contains(violations[1], filepath.Join("model", "stats")) {
-		t.Fatalf("expected only the ordinary plural model directory violations, got %#v", violations)
+	if len(violations) != 1 || !strings.Contains(violations[0], filepath.Join("model", "records")) {
+		t.Fatalf("expected only the ordinary plural model directory violation, got %#v", violations)
 	}
 }
 
