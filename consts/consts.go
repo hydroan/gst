@@ -448,8 +448,6 @@ const (
 // field is sortable and range-filterable on arrival.
 const LayoutTimeEncoder = time.RFC3339Nano
 
-const IMPORT_PATH_MODEL = `"github.com/hydroan/gst/model"`
-
 // LockMode represents the lock mode for database row-level locking
 type LockMode string
 
