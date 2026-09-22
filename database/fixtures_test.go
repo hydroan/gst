@@ -204,6 +204,18 @@ func (t *TestUser) UpdateBefore(ctx context.Context) error {
 	return nil
 }
 
+// TestScoredRecord carries JSON arrays of numbers: an exact match on either
+// column fails closed, the way it does on a JSON array of strings.
+type TestScoredRecord struct {
+	Name    string                       `json:"name"`
+	Scores  datatypes.JSONSlice[int]     `json:"scores"`
+	Weights datatypes.JSONSlice[float64] `json:"weights"`
+
+	modelregistry.Base
+}
+
+func (*TestScoredRecord) TableName() string { return "test_scored_records" }
+
 type TestUser2 struct {
 	Name     string  `json:"name"`
 	Email    string  `json:"email"`

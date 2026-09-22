@@ -9,6 +9,7 @@ import (
 	"github.com/hydroan/gst/internal/modelregistry"
 	"github.com/hydroan/gst/internal/modelschema"
 	"github.com/stretchr/testify/require"
+	"gorm.io/datatypes"
 	"gorm.io/gorm"
 )
 
@@ -22,6 +23,15 @@ type autoBaseQueryItem struct {
 	Code string `json:"code"`
 
 	modelregistry.AutoBase
+}
+
+type sliceQueryItem struct {
+	Codes   datatypes.JSONSlice[string]  `json:"codes"`
+	Scores  datatypes.JSONSlice[int]     `json:"scores"`
+	Ranks   datatypes.JSONSlice[uint8]   `json:"ranks"`
+	Weights datatypes.JSONSlice[float64] `json:"weights"`
+
+	modelregistry.Base
 }
 
 type presenceQueryItem struct {
@@ -136,5 +146,24 @@ func TestStructFieldToMap(t *testing.T) {
 	t.Run("present nil pointer stays ignored", func(t *testing.T) {
 		q := toMap(&presenceQueryItem{}, nil, map[string]struct{}{"note": {}})
 		require.NotContains(t, q, "note", "a nil pointer carries no value to filter by")
+	})
+
+	t.Run("number slices join their elements like string slices", func(t *testing.T) {
+		q := toMap(&sliceQueryItem{
+			Codes:   datatypes.NewJSONSlice([]string{"a", "b"}),
+			Scores:  datatypes.NewJSONSlice([]int{1, -2}),
+			Ranks:   datatypes.NewJSONSlice([]uint8{3}),
+			Weights: datatypes.NewJSONSlice([]float64{0.5, 2}),
+		}, nil, nil)
+		require.Equal(t, map[string]string{"codes": "a,b", "scores": "1,-2", "ranks": "3", "weights": "0.5,2"}, q)
+	})
+
+	t.Run("empty slices add an empty value", func(t *testing.T) {
+		q := toMap(&sliceQueryItem{
+			Codes:   datatypes.NewJSONSlice([]string{}),
+			Scores:  datatypes.NewJSONSlice([]int{}),
+			Weights: datatypes.NewJSONSlice([]float64{}),
+		}, nil, nil)
+		require.Equal(t, map[string]string{"codes": "", "scores": "", "weights": ""}, q)
 	})
 }

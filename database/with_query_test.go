@@ -10,6 +10,7 @@ import (
 	"github.com/hydroan/gst/database"
 	"github.com/hydroan/gst/internal/types"
 	"github.com/stretchr/testify/require"
+	"gorm.io/datatypes"
 	"gorm.io/gorm"
 )
 
@@ -205,6 +206,29 @@ func TestDatabaseWithQuery(t *testing.T) {
 			WithQuery(nil, types.QueryOptions{Filters: []types.Filter{types.FilterIn("id", []string{u1.ID, u2.ID})}}).
 			List(&users))
 		require.Len(t, users, 2, "an explicit list of values is the in filter's job")
+	})
+
+	t.Run("NumberArraysOnJSONColumnsFailClosed", func(t *testing.T) {
+		ctx := context.Background()
+		t.Cleanup(func() { _ = database.DB().Exec("DELETE FROM test_scored_records").Error })
+		row := &TestScoredRecord{Name: "scored", Scores: datatypes.NewJSONSlice([]int{1, 2}), Weights: datatypes.NewJSONSlice([]float64{0.5})}
+		require.NoError(t, database.Database[*TestScoredRecord](ctx).Create(row))
+
+		rows := make([]*TestScoredRecord, 0)
+		require.NoError(t, database.Database[*TestScoredRecord](ctx).WithQuery(&TestScoredRecord{Name: "scored"}).List(&rows))
+		require.Len(t, rows, 1)
+
+		// An exact match on a JSON document cannot compare, so a condition on
+		// a number array answers no rows, as one on a string array does,
+		// instead of being dropped and leaving the name alone to match.
+		for _, query := range []*TestScoredRecord{
+			{Name: "scored", Scores: datatypes.NewJSONSlice([]int{1, 2})},
+			{Name: "scored", Weights: datatypes.NewJSONSlice([]float64{0.5})},
+		} {
+			rows = make([]*TestScoredRecord, 0)
+			require.NoError(t, database.Database[*TestScoredRecord](ctx).WithQuery(query).List(&rows))
+			require.Empty(t, rows)
+		}
 	})
 
 	t.Run("AllowEmpty", func(t *testing.T) {

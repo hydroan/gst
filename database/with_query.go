@@ -23,7 +23,8 @@ import (
 // Parameters:
 //   - query: A model instance with fields set as query conditions. Can be nil to indicate empty query.
 //     When nil or all fields are zero values, it's treated as an empty query.
-//     Supported field types: string, int, int8, int16, int32, int64, uint, uint8, uint16, uint32, uint64, float32, float64, bool, pointer types.
+//     Supported field types: string, int, int8, int16, int32, int64, uint, uint8, uint16, uint32, uint64, float32, float64, bool, pointer types,
+//     and slices of strings, integers and floats, whose elements join with commas into one value.
 //   - opts: Optional QueryOptions to control query behavior (empty-query safety, operator filters)
 //
 // Query Behavior:
@@ -38,7 +39,7 @@ import (
 //	JSON columns (fields whose type declares a JSON gorm data type, such as
 //	the gorm.io/datatypes types): a JSON document is not a scalar, so an
 //	exact match fails closed to an empty result on every dialect instead of
-//	comparing. Substring matching on a JSON document goes through the
+//	comparing, a JSON array of numbers as much as one of strings. Substring matching on a JSON document goes through the
 //	like-family operator filters, which cast the column where the dialect
 //	requires it.
 //
@@ -334,9 +335,9 @@ func structFieldToMap(ctx context.Context, typ reflect.Type, val reflect.Value, 
 				reflect.Copy(slice, fieldVal)
 				_v = strings.Join(slice.Interface().([]string), ",") //nolint:errcheck
 			case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64, reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
-			// TODO: handle integer slice.
+				_v = joinSliceElements(fieldVal, "%d")
 			case reflect.Float32, reflect.Float64:
-			// TODO: handle float slice.
+				_v = joinSliceElements(fieldVal, "%g")
 			default:
 				_v = fmt.Sprintf("%v", v)
 			}
@@ -347,6 +348,18 @@ func structFieldToMap(ctx context.Context, typ reflect.Type, val reflect.Value, 
 
 		q[columnName] = _v
 	}
+}
+
+// joinSliceElements formats every element of the slice v with format, the
+// verb a scalar field of the element's kind is formatted with, and joins them
+// with commas into one value: []int{1, -2} with "%d" gives "1,-2", and an
+// empty slice gives "".
+func joinSliceElements(v reflect.Value, format string) string {
+	elems := make([]string, v.Len())
+	for i := range v.Len() {
+		elems[i] = fmt.Sprintf(format, v.Index(i).Interface())
+	}
+	return strings.Join(elems, ",")
 }
 
 // boolToInt converts a boolean value to an integer.

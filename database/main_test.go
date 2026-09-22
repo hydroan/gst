@@ -37,6 +37,7 @@ func TestMain(m *testing.M) {
 			modelregistry.RegisterTable[*TestRefund]()
 			modelregistry.RegisterTable[*TestAccount]()
 			modelregistry.RegisterTable[*TestMarkedRecord]()
+			modelregistry.RegisterTable[*TestScoredRecord]()
 		},
 	})
 }
