@@ -1,7 +1,9 @@
 package arraystack_test
 
 import (
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/hydroan/gst/ds/stack/arraystack"
 	"github.com/stretchr/testify/assert"
@@ -111,6 +113,34 @@ func TestPeek(t *testing.T) {
 	assert.Equal(t, 3, stack.Len())
 }
 
+// TestPeekDoesNotDeadlockAgainstWriters runs Peek on a concurrency-safe stack
+// while another goroutine keeps writing. A read lock must not be taken twice
+// by one goroutine: a writer queued between the two acquisitions blocks the
+// second one, while the writer itself waits for the first to be released.
+func TestPeekDoesNotDeadlockAgainstWriters(t *testing.T) {
+	stack, err := arraystack.New(intCmp, arraystack.WithSafe[int]())
+	require.NoError(t, err)
+	stack.Push(1)
+
+	requireFinishes(t, func() {
+		var wg sync.WaitGroup
+		for range 8 {
+			wg.Go(func() {
+				for range 20000 {
+					stack.Peek()
+				}
+			})
+		}
+		wg.Go(func() {
+			for i := range 20000 {
+				stack.Push(i)
+				stack.Pop()
+			}
+		})
+		wg.Wait()
+	})
+}
+
 func TestLen(t *testing.T) {
 	stack, err := newIntStack()
 	require.NoError(t, err)
@@ -203,4 +233,21 @@ func TestUnmarshalJSON(t *testing.T) {
 	require.NoError(t, stack.UnmarshalJSON(data))
 	assert.Equal(t, []int{3, 2, 1}, stack.Values())
 	assert.Equal(t, "stack:{3, 2, 1}", stack.String())
+}
+
+// requireFinishes fails the test when fn has not returned within ten seconds,
+// which is how a deadlock among the goroutines fn waits for shows up.
+func requireFinishes(t *testing.T, fn func()) {
+	t.Helper()
+
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		fn()
+	}()
+	select {
+	case <-done:
+	case <-time.After(10 * time.Second):
+		t.Fatal("the goroutines did not finish: they deadlocked")
+	}
 }

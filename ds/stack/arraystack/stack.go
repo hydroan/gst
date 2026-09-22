@@ -121,7 +121,7 @@ func (s *Stack[E]) Peek() (E, bool) {
 		defer s.mu.RUnlock()
 	}
 
-	return s.list.Get(s.Len() - 1)
+	return s.list.Get(s.list.Len() - 1)
 }
 
 // IsEmpty reports whether the stack has no elements.

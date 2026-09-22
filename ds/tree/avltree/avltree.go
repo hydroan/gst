@@ -298,7 +298,7 @@ func (t *Tree[K, V]) IsEmpty() bool {
 		defer t.mu.RUnlock()
 	}
 
-	return t.Size() == 0
+	return t.size == 0
 }
 
 // Height returns the height of the tree: the number of nodes on the longest

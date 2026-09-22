@@ -5,7 +5,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"strconv"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/hydroan/gst/ds/tree/avltree"
 	"github.com/stretchr/testify/assert"
@@ -159,6 +161,34 @@ func TestAVLTree_Delete(t *testing.T) {
 
 	// Verify tree is empty
 	assert.True(t, tree.IsEmpty())
+}
+
+// TestAVLTree_IsEmptyDoesNotDeadlockAgainstWriters runs IsEmpty on a
+// concurrency-safe tree while another goroutine keeps writing. A read lock
+// must not be taken twice by one goroutine: a writer queued between the two
+// acquisitions blocks the second one, while the writer itself waits for the
+// first to be released.
+func TestAVLTree_IsEmptyDoesNotDeadlockAgainstWriters(t *testing.T) {
+	tree := newIntStringTree(t)
+	tree.Put(1, "one")
+
+	requireFinishes(t, func() {
+		var wg sync.WaitGroup
+		for range 8 {
+			wg.Go(func() {
+				for range 20000 {
+					tree.IsEmpty()
+				}
+			})
+		}
+		wg.Go(func() {
+			for i := range 20000 {
+				tree.Put(i+2, "value")
+				tree.Delete(i + 2)
+			}
+		})
+		wg.Wait()
+	})
 }
 
 func TestAVLTree_MinMax(t *testing.T) {
@@ -369,4 +399,21 @@ func TestAVLTree_MarshalJSON(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, tree.Keys(), tree2.Keys())
 	assert.Equal(t, tree.Values(), tree2.Values())
+}
+
+// requireFinishes fails the test when fn has not returned within ten seconds,
+// which is how a deadlock among the goroutines fn waits for shows up.
+func requireFinishes(t *testing.T, fn func()) {
+	t.Helper()
+
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		fn()
+	}()
+	select {
+	case <-done:
+	case <-time.After(10 * time.Second):
+		t.Fatal("the goroutines did not finish: they deadlocked")
+	}
 }
