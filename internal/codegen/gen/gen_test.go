@@ -121,6 +121,30 @@ func TestServiceTarget(t *testing.T) {
 	}
 }
 
+func TestModelPackageName(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name    string
+		dirName string
+		want    string
+	}{
+		{name: "plain_directory", dirName: "sample", want: "sample"},
+		{name: "underscored_directory", dirName: "record_item", want: "recorditem"},
+		{name: "root_model_directory", dirName: "model", want: "model"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			if got := gen.ModelPackageName(tt.dirName); got != tt.want {
+				t.Errorf("ModelPackageName(%q) = %q, want %q", tt.dirName, got, tt.want)
+			}
+		})
+	}
+}
+
 func TestModelInfo_InModelRoot(t *testing.T) {
 	t.Parallel()
 

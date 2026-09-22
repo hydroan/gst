@@ -17,6 +17,7 @@ import (
 	"github.com/hydroan/gst/dsl"
 	"github.com/hydroan/gst/internal/clioutput"
 	"github.com/hydroan/gst/internal/codegen/constants"
+	"github.com/hydroan/gst/internal/codegen/gen"
 	"github.com/spf13/cobra"
 	"golang.org/x/text/cases"
 	"golang.org/x/text/language"
@@ -1173,9 +1174,9 @@ func CheckModelPackageNaming(ignore gitignore.Matcher) []string {
 
 		packageName := node.Name.Name
 
-		// Go convention discourages underscores in package names, so strip them
-		// from the directory name before comparing.
-		expectedName := strings.ReplaceAll(dirName, "_", "")
+		// Go convention discourages underscores in package names, so the
+		// directory name is compared without them.
+		expectedName := gen.ModelPackageName(dirName)
 
 		// Allow black-box test files to use the `<package>_test` external test package name.
 		if strings.HasSuffix(path, "_test.go") && packageName == expectedName+"_test" {

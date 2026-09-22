@@ -125,6 +125,14 @@ func (m *ModelInfo) InModelRoot(modelDir string) bool {
 	return filepath.Clean(m.ModelFileDir) == filepath.Clean(modelDir)
 }
 
+// ModelPackageName returns the name a model package in the directory named
+// dirName declares, as gg check requires: the directory name with its
+// underscores stripped, as in record_item holding package recorditem and
+// sample holding package sample.
+func ModelPackageName(dirName string) string {
+	return strings.ReplaceAll(dirName, "_", "")
+}
+
 // GetModulePath parses go.mod to get module path
 func GetModulePath() (string, error) {
 	file, err := os.Open("go.mod")
