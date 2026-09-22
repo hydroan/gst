@@ -26,8 +26,9 @@ import (
 // hand-written DTOs are contracts gg gen never rewrites, and a missing or
 // mismatched name stays green in Go-side tests — both ends marshal the same
 // struct — while real clients sending "version" never bind it. Model
-// subtrees owned by copyable framework modules are skipped, like every
-// model check.
+// subtrees owned by copyable framework modules are skipped, as in the model
+// table name and gorm tag index checks: copied module code is checked inside
+// the framework.
 func CheckVersionFieldDeclarations(ignore gitignore.Matcher) []string {
 	findings, err := collectVersionFieldFindings(ignore)
 	if err != nil {

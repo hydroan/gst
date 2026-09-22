@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/hydroan/gst/dsl"
+	codegenast "github.com/hydroan/gst/internal/codegen/ast"
 	"github.com/hydroan/gst/internal/codegen/constants"
 	"github.com/hydroan/gst/internal/modelregistry"
 )
@@ -23,8 +24,9 @@ import (
 // and the omitempty are load-bearing). Three layers enforce it, all reading
 // the detection below: "gg gen" heals named fields by filling the tags in,
 // "gg check" reports deviations read-only, and the framework panics at
-// runtime on first touch as the last net. Dot imports of the model package
-// are not resolved here; the runtime layer still catches those.
+// runtime on first touch as the last net. The model package is recognized
+// under every name a file imports it by, a dot import included (see
+// codegenast.ImportedNames).
 
 // versionRequiredTag is the exact gorm tag payload a model.Version field
 // must carry.
@@ -62,9 +64,13 @@ type versionFieldFinding struct {
 // one Go file. A file that does not import the framework model package is
 // free of them by construction and costs one imports-only parse.
 func scanVersionFieldFile(path string) ([]versionFieldFinding, error) {
-	aliases, ok, err := modelImportAliases(path)
-	if err != nil || !ok {
-		return nil, err
+	imports, err := parser.ParseFile(token.NewFileSet(), path, nil, parser.ImportsOnly)
+	if err != nil {
+		return nil, fmt.Errorf("%s has parse error: %w", relativePath(path), err)
+	}
+	names := codegenast.ImportedNames(imports, constants.ImportPathModel, constants.PkgModel)
+	if len(names.Qualifiers) == 0 && !names.DotImported {
+		return nil, nil
 	}
 
 	fset := token.NewFileSet()
@@ -93,11 +99,11 @@ func scanVersionFieldFile(path string) ([]versionFieldFinding, error) {
 			// client hands the version back — but it never reaches the
 			// database, and a gorm tag on it would be dead weight. The
 			// embedded framework base is what marks a struct as a model.
-			if !structEmbedsModelBase(structType, aliases) {
+			if !slices.ContainsFunc(structType.Fields.List, func(field *ast.Field) bool { return dsl.IsModelBase(file, field) }) {
 				continue
 			}
 			for _, field := range structType.Fields.List {
-				if !isModelVersionType(field.Type, aliases) {
+				if !names.Refers(field.Type, "Version") {
 					continue
 				}
 				if finding, deviates := versionFieldDeviation(fset, path, typeSpec.Name.Name, field); deviates {
@@ -107,28 +113,6 @@ func scanVersionFieldFile(path string) ([]versionFieldFinding, error) {
 		}
 	}
 	return findings, nil
-}
-
-// structEmbedsModelBase reports whether the struct embeds the framework's
-// model.Base or model.AutoBase under one of the file's import aliases, which
-// is what marks it as a database model rather than a request/response type.
-func structEmbedsModelBase(structType *ast.StructType, aliases []string) bool {
-	for _, field := range structType.Fields.List {
-		if len(field.Names) > 0 {
-			continue
-		}
-		selector, ok := field.Type.(*ast.SelectorExpr)
-		if !ok || selector.Sel == nil {
-			continue
-		}
-		if selector.Sel.Name != "Base" && selector.Sel.Name != "AutoBase" {
-			continue
-		}
-		if ident, ok := selector.X.(*ast.Ident); ok && slices.Contains(aliases, ident.Name) {
-			return true
-		}
-	}
-	return false
 }
 
 // versionFieldDeviation classifies one model.Version field against the
@@ -229,7 +213,7 @@ func scanPackageActionTypeVersionFields(paths []string) []actionTypeVersionFindi
 		spec *ast.TypeSpec
 	}
 	files := make(map[string]*ast.File, len(paths))
-	aliasesByPath := make(map[string][]string, len(paths))
+	namesByPath := make(map[string]codegenast.PackageNames, len(paths))
 	covered := make(map[string]bool)
 	declarations := make(map[string]declaration)
 	for _, path := range paths {
@@ -238,7 +222,7 @@ func scanPackageActionTypeVersionFields(paths []string) []actionTypeVersionFindi
 			continue
 		}
 		files[path] = node
-		aliasesByPath[path] = modelAliasesOf(node)
+		namesByPath[path] = codegenast.ImportedNames(node, constants.ImportPathModel, constants.PkgModel)
 		for _, name := range slices.Concat(dsl.FindAllModelBase(node), dsl.FindAllModelEmpty(node)) {
 			covered[name] = true
 		}
@@ -294,7 +278,7 @@ func scanPackageActionTypeVersionFields(paths []string) []actionTypeVersionFindi
 	for len(worklist) > 0 {
 		decl := declarations[worklist[0]]
 		worklist = worklist[1:]
-		aliases := aliasesByPath[decl.path]
+		names := namesByPath[decl.path]
 		switch typed := decl.spec.Type.(type) {
 		case *ast.Ident:
 			// A type alias or defined type hops to its target declaration.
@@ -304,7 +288,7 @@ func scanPackageActionTypeVersionFields(paths []string) []actionTypeVersionFindi
 				continue
 			}
 			for _, field := range typed.Fields.List {
-				if !isModelVersionType(field.Type, aliases) {
+				if !names.Refers(field.Type, "Version") {
 					for _, name := range localFieldTypeNames(field.Type) {
 						enqueue(name)
 					}
@@ -375,60 +359,4 @@ func localFieldTypeNames(expr ast.Expr) []string {
 		return localFieldTypeNames(typed.Value)
 	}
 	return nil
-}
-
-// modelAliasesOf returns the local names under which an already parsed file
-// imports the framework model package.
-func modelAliasesOf(file *ast.File) []string {
-	var aliases []string
-	for _, imp := range file.Imports {
-		if imp.Path == nil || imp.Path.Value != `"`+constants.ImportPathModel+`"` {
-			continue
-		}
-		switch {
-		case imp.Name == nil:
-			aliases = append(aliases, "model")
-		case imp.Name.Name != "_" && imp.Name.Name != ".":
-			aliases = append(aliases, imp.Name.Name)
-		}
-	}
-	return aliases
-}
-
-// modelImportAliases returns the local names under which path imports the
-// framework model package. Parsing imports only keeps files that never
-// mention the package cheap to skip.
-func modelImportAliases(path string) (aliases []string, found bool, err error) {
-	fset := token.NewFileSet()
-	file, err := parser.ParseFile(fset, path, nil, parser.ImportsOnly)
-	if err != nil {
-		return nil, false, fmt.Errorf("%s has parse error: %w", relativePath(path), err)
-	}
-	for _, imp := range file.Imports {
-		if imp.Path == nil || imp.Path.Value != `"`+constants.ImportPathModel+`"` {
-			continue
-		}
-		found = true
-		switch {
-		case imp.Name == nil:
-			aliases = append(aliases, "model")
-		case imp.Name.Name != "_" && imp.Name.Name != ".":
-			aliases = append(aliases, imp.Name.Name)
-		}
-	}
-	return aliases, found, nil
-}
-
-// isModelVersionType reports whether expr is a reference to the framework
-// model package's Version type under one of the file's import aliases.
-func isModelVersionType(expr ast.Expr, aliases []string) bool {
-	selector, ok := expr.(*ast.SelectorExpr)
-	if !ok || selector.Sel == nil || selector.Sel.Name != "Version" {
-		return false
-	}
-	ident, ok := selector.X.(*ast.Ident)
-	if !ok {
-		return false
-	}
-	return slices.Contains(aliases, ident.Name)
 }

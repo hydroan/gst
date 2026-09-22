@@ -73,6 +73,19 @@ type Aliased struct {
 
 func (Aliased) TableName() string { return "aliaseds" }
 `)
+	// A dot import names the version and the base without a qualifier.
+	writeCheckFile(t, filepath.Join(projectDir, "model", "document", "dotted.go"), `package document
+
+import . "github.com/hydroan/gst/model"
+
+type Dotted struct {
+	Version Version `+"`json:\"version\"`"+`
+
+	Base
+}
+
+func (Dotted) TableName() string { return "dotteds" }
+`)
 	writeCheckFile(t, filepath.Join(projectDir, "model", "document", "unrelated.go"), `package document
 
 type Version int64
@@ -105,13 +118,14 @@ type UpdateReq struct {
 		}
 		t.Fatalf("expected a violation containing %q, got %#v", substr, violations)
 	}
-	if len(violations) != 5 {
-		t.Fatalf("expected 5 violations, got %#v", violations)
+	if len(violations) != 6 {
+		t.Fatalf("expected 6 violations, got %#v", violations)
 	}
 	require("struct 'Embedded' embeds model.Version")
 	require("field 'Bare.Version' (model.Version) is missing gorm not null, gorm default:1, json omitempty")
 	require("field 'Partial.Version' (model.Version) is missing gorm default:1, json omitempty")
 	require("field 'Aliased.Revision' (model.Version) is missing gorm not null, gorm default:1, json omitempty")
+	require("field 'Dotted.Version' (model.Version) is missing gorm not null, gorm default:1, json omitempty")
 	require("field 'Hidden.Version' (model.Version) carries json:\"-\"")
 }
 

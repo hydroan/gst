@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/go-git/go-git/v5/plumbing/format/gitignore"
+	codegenast "github.com/hydroan/gst/internal/codegen/ast"
 	"github.com/hydroan/gst/internal/codegen/constants"
 )
 
@@ -71,7 +72,7 @@ func CheckModelTableNameDeclaration(ignore gitignore.Matcher) []string {
 			return nil
 		}
 		dir := filepath.Dir(path)
-		modelNames := modelImportNames(node)
+		modelNames := codegenast.ImportedNames(node, constants.ImportPathModel, constants.PkgModel)
 
 		for _, decl := range node.Decls {
 			switch d := decl.(type) {
@@ -135,33 +136,10 @@ func CheckModelTableNameDeclaration(ignore gitignore.Matcher) []string {
 	return violations
 }
 
-// modelImportNames returns the names the framework model package is imported
-// under in one file.
-func modelImportNames(file *ast.File) map[string]bool {
-	names := make(map[string]bool)
-	for _, imp := range file.Imports {
-		if imp.Path == nil {
-			continue
-		}
-		path, err := strconv.Unquote(imp.Path.Value)
-		if err != nil || path != constants.ImportPathModel {
-			continue
-		}
-		switch {
-		case imp.Name == nil:
-			names[constants.PkgModel] = true
-		case imp.Name.Name == "." || imp.Name.Name == "_":
-		default:
-			names[imp.Name.Name] = true
-		}
-	}
-	return names
-}
-
 // embeddedBaseName returns the framework base a struct embeds ("model.Base"
 // or "model.AutoBase"), or "" when it embeds neither. Virtual models embed
 // model.Empty and have no table, so they never report here.
-func embeddedBaseName(structType *ast.StructType, modelNames map[string]bool) string {
+func embeddedBaseName(structType *ast.StructType, modelNames codegenast.PackageNames) string {
 	for _, field := range structType.Fields.List {
 		if len(field.Names) != 0 {
 			continue
@@ -170,18 +148,10 @@ func embeddedBaseName(structType *ast.StructType, modelNames map[string]bool) st
 		if star, ok := typ.(*ast.StarExpr); ok {
 			typ = star.X
 		}
-		selector, ok := typ.(*ast.SelectorExpr)
-		if !ok || selector.Sel == nil {
-			continue
-		}
-		ident, ok := selector.X.(*ast.Ident)
-		if !ok || !modelNames[ident.Name] {
-			continue
-		}
-		switch selector.Sel.Name {
-		case "Base":
+		switch {
+		case modelNames.Refers(typ, "Base"):
 			return "model.Base"
-		case "AutoBase":
+		case modelNames.Refers(typ, "AutoBase"):
 			return "model.AutoBase"
 		}
 	}

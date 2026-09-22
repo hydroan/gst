@@ -58,6 +58,15 @@ type Entry struct {
 	model.AutoBase
 }
 `)
+	// A dot import names the base without a qualifier.
+	writeCheckFile(t, filepath.Join(projectDir, "model", "audit", "dotted.go"), `package audit
+
+import . "github.com/hydroan/gst/model"
+
+type Dotted struct {
+	Base
+}
+`)
 	// The method may live in another file of the same package.
 	writeCheckFile(t, filepath.Join(projectDir, "model", "note", "note.go"), `package note
 
@@ -83,13 +92,14 @@ type Login struct {
 
 	violations := CheckModelTableNameDeclaration(newProjectIgnoreMatcher())
 
-	if len(violations) != 4 {
-		t.Fatalf("expected four violations, got %#v", violations)
+	if len(violations) != 5 {
+		t.Fatalf("expected five violations, got %#v", violations)
 	}
 	assertViolationContains(t, violations, filepath.Join("model", "group", "group.go"), "model 'Group' embeds model.Base but declares no TableName() string")
 	assertViolationContains(t, violations, filepath.Join("model", "group", "dynamic.go"), "TableName of model 'Dynamic' must be a single return of a non-empty string literal")
 	assertViolationContains(t, violations, filepath.Join("model", "group", "unnamed.go"), "TableName of model 'Unnamed' must be a single return of a non-empty string literal")
 	assertViolationContains(t, violations, filepath.Join("model", "audit", "entry.go"), "model 'Entry' embeds model.AutoBase but declares no TableName() string")
+	assertViolationContains(t, violations, filepath.Join("model", "audit", "dotted.go"), "model 'Dotted' embeds model.Base but declares no TableName() string")
 }
 
 func TestCheckModelTableNameDeclarationSkipsCopiedModulesGeneratedAndTests(t *testing.T) {
