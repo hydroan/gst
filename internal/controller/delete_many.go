@@ -19,11 +19,6 @@ import (
 	"go.uber.org/zap"
 )
 
-// DeleteMany handles a batch delete request with the default factory settings.
-func DeleteMany[M types.Model, REQ types.Request, RSP types.Response](c *gin.Context) {
-	DeleteManyFactory[M, REQ, RSP]()(c)
-}
-
 // DeleteManyFactory returns a Gin handler that deletes multiple resources.
 //
 // When M, REQ, and RSP are the same type, the handler binds the JSON body into
@@ -104,12 +99,9 @@ func DeleteManyFactory[M types.Model, REQ types.Request, RSP types.Response](cfg
 			gstotel.RecordError(span, err)
 			return
 		}
-		if req.Options == nil {
-			req.Options = new(options)
-		}
-		// 2.Batch delete resources in database.
+		// 2.Batch delete resources in database. Whether the rows are purged
+		// is the model's decision (its Purge method), never the request's.
 		if !errors.Is(reqErr, io.EOF) {
-			// purge mode is currently not allowed in request.
 			if err = database.Database[M](requestContext(c)).Delete(req.Items...); err != nil {
 				log.Errorz("database operation failed", zap.Error(err))
 				JSON(c, databaseErrorCoder(err))

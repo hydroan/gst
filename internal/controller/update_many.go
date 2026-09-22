@@ -19,17 +19,12 @@ import (
 	"go.uber.org/zap"
 )
 
-// UpdateMany handles a batch update request with the default factory settings.
-func UpdateMany[M types.Model, REQ types.Request, RSP types.Response](c *gin.Context) {
-	UpdateManyFactory[M, REQ, RSP]()(c)
-}
-
 // UpdateManyFactory returns a Gin handler that replaces multiple resources.
 //
 // When M, REQ, and RSP are the same type, the handler binds the JSON body into
 // requestData[M], runs batch update hooks, updates the items through the
 // configured database handler, records an operation log, and returns the request
-// data with a summary when a body was provided.
+// data.
 //
 // When REQ or RSP differs from M, the handler binds the JSON body into REQ and
 // delegates the operation to the phase service's UpdateMany method.
@@ -140,13 +135,6 @@ func UpdateManyFactory[M types.Model, REQ types.Request, RSP types.Response](cfg
 			log.Warnz("record operation log failed", zap.Error(err))
 		}
 
-		if !errors.Is(reqErr, io.EOF) {
-			req.Summary = &summary{
-				Total:     len(req.Items),
-				Succeeded: len(req.Items),
-				Failed:    0,
-			}
-		}
 		JSON(c, CodeSuccess, req)
 	}
 }

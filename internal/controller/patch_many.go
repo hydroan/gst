@@ -21,21 +21,15 @@ import (
 	"go.uber.org/zap"
 )
 
-// PatchMany handles a batch patch request with the default factory settings.
-func PatchMany[M types.Model, REQ types.Request, RSP types.Response](c *gin.Context) {
-	PatchManyFactory[M, REQ, RSP]()(c)
-}
-
 // PatchManyFactory returns a Gin handler that partially updates multiple resources.
 //
 // When M, REQ, and RSP are the same type, the handler binds the JSON body into
 // requestData[M], loads matching existing records for the requested items, copies
 // fields present in each item into those records, runs batch patch hooks, updates
 // the patched models through the configured database handler, records an operation
-// log, and answers with the patched records, as the hooks left them, and a summary
-// when a body was provided. The batch patches all of its items or none, as a batch
-// update does: an item whose record does not exist fails the whole batch with 404
-// before anything is written.
+// log, and answers with the patched records, as the hooks left them. The batch
+// patches all of its items or none, as a batch update does: an item whose record
+// does not exist fails the whole batch with 404 before anything is written.
 //
 // Each write is the whole record the handler loaded, not only the fields its
 // item carried, so concurrent patches of one record resolve as last writer
@@ -195,13 +189,6 @@ func PatchManyFactory[M types.Model, REQ types.Request, RSP types.Response](cfg 
 		// may have set, not the items of the request.
 		rsp := req
 		rsp.Items = shouldUpdates
-		if !errors.Is(reqErr, io.EOF) {
-			rsp.Summary = &summary{
-				Total:     len(req.Items),
-				Succeeded: len(req.Items),
-				Failed:    0,
-			}
-		}
 
 		// 4.record operation log to database.
 		// NOTE: We should record the `req` instead of `oldVal`, the req is `newVal`.

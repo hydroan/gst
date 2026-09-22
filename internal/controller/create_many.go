@@ -24,26 +24,6 @@ type requestData[M types.Model] struct {
 	IDs []string `json:"ids,omitempty"`
 	// Items is the resource list that should be batch create/update/partial update.
 	Items []M `json:"items,omitempty"`
-	// Options is the batch operation options.
-	Options *options `json:"options,omitempty"`
-	// Summary is the batch operation result summary.
-	Summary *summary `json:"summary,omitempty"`
-}
-
-type options struct {
-	Atomic bool `json:"atomic,omitempty"`
-	Purge  bool `json:"purge,omitempty"`
-}
-
-type summary struct {
-	Total     int `json:"total"`
-	Succeeded int `json:"succeeded"`
-	Failed    int `json:"failed"`
-}
-
-// CreateMany handles a batch create request with the default factory settings.
-func CreateMany[M types.Model, REQ types.Request, RSP types.Response](c *gin.Context) {
-	CreateManyFactory[M, REQ, RSP]()(c)
 }
 
 // CreateManyFactory returns a Gin handler that creates multiple resources.
@@ -51,8 +31,7 @@ func CreateMany[M types.Model, REQ types.Request, RSP types.Response](c *gin.Con
 // When M, REQ, and RSP are the same type, the handler binds the JSON body into
 // requestData[M], fills creator/updater fields on each item, runs batch create
 // hooks, writes the items through the configured database handler, records an
-// operation log, and returns the request data with a summary when a body was
-// provided.
+// operation log, and returns the request data.
 //
 // When REQ or RSP differs from M, the handler binds the JSON body into REQ and
 // delegates the operation to the phase service's CreateMany method.
@@ -106,9 +85,6 @@ func CreateManyFactory[M types.Model, REQ types.Request, RSP types.Response](cfg
 		}
 		normalizeBatchRequest(&req)
 
-		if req.Options == nil {
-			req.Options = new(options)
-		}
 		for _, m := range req.Items {
 			m.SetCreatedBy(c.GetString(consts.CTX_USERNAME))
 			m.SetUpdatedBy(c.GetString(consts.CTX_USERNAME))
@@ -171,13 +147,6 @@ func CreateManyFactory[M types.Model, REQ types.Request, RSP types.Response](cfg
 			log.Warnz("record operation log failed", zap.Error(err))
 		}
 
-		if !errors.Is(reqErr, io.EOF) {
-			req.Summary = &summary{
-				Total:     len(req.Items),
-				Succeeded: len(req.Items),
-				Failed:    0,
-			}
-		}
 		JSON(c, CodeSuccess, req)
 	}
 }

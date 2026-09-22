@@ -16,16 +16,9 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// helloworld2BatchRsp is the structured batch response with items, options and
-// summary fields.
+// helloworld2BatchRsp is the structured batch response with its items.
 type helloworld2BatchRsp struct {
-	Items   []*helloworld.Helloworld2 `json:"items"`
-	Options map[string]any            `json:"options"`
-	Summary struct {
-		Total     int `json:"total"`
-		Succeeded int `json:"succeeded"`
-		Failed    int `json:"failed"`
-	} `json:"summary"`
+	Items []*helloworld.Helloworld2 `json:"items"`
 }
 
 func TestHelloworld2Module(t *testing.T) {
@@ -87,6 +80,11 @@ func TestHelloworld2Module(t *testing.T) {
 		},
 		{
 			name:   "patch_many_missing_record",
+			before: "",
+			after:  "",
+		},
+		{
+			name:   "patch_many_item_without_id",
 			before: "",
 			after:  "",
 		},
@@ -175,13 +173,19 @@ func TestHelloworld2Module(t *testing.T) {
 				require.NoError(t, err)
 				check2(t, tt, batch)
 
-			case "patch_many_missing_record":
+			case "patch_many_missing_record", "patch_many_item_without_id":
 				createHelloworld2TestRecord(t, cli, res1)
-				// res2 was never created: the batch patches all of its items
-				// or none, so it answers 404 and leaves res1 as its create
-				// stored it. The record is read from the database directly, as
-				// the get hooks overwrite the fields they would show.
-				_, err = cli.Patch[helloworld2BatchRsp](helloworld2Path+"/batch", client.BatchItems([]*helloworld.Helloworld2{res1, res2}))
+				// The second item names a record that was never created, or
+				// no record at all when it carries no id: the batch patches
+				// all of its items or none, so it answers 404 and leaves res1
+				// as its create stored it. The record is read from the
+				// database directly, as the get hooks overwrite the fields
+				// they would show.
+				other := res2
+				if tt.name == "patch_many_item_without_id" {
+					other = new(helloworld.Helloworld2)
+				}
+				_, err = cli.Patch[helloworld2BatchRsp](helloworld2Path+"/batch", client.BatchItems([]*helloworld.Helloworld2{res1, other}))
 				testutil.RequireError(t, err, http.StatusNotFound)
 				stored := new(helloworld.Helloworld2)
 				require.NoError(t, database.Database[*helloworld.Helloworld2](context.Background()).Get(stored, id))

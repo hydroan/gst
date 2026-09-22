@@ -35,13 +35,5 @@ type apiBatchResponse[T any] struct {
 }
 
 type batchData[T any] struct {
-	Items   []T            `json:"items"`
-	Options map[string]any `json:"options"`
-	Summary batchSummary   `json:"summary"`
-}
-
-type batchSummary struct {
-	Total     int `json:"total"`
-	Succeeded int `json:"succeeded"`
-	Failed    int `json:"failed"`
+	Items []T `json:"items"`
 }
