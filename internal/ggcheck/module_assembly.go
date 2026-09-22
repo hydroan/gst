@@ -1,4 +1,4 @@
-package main
+package ggcheck
 
 import (
 	"bytes"
@@ -18,7 +18,15 @@ import (
 	"github.com/hydroan/gst/internal/goast"
 )
 
-// CheckModuleAssembly reports assembly calls a copied framework module
+// ModuleAssembly requires the assembly calls a copied framework module
+// declares to be made in project code.
+var ModuleAssembly = Check{
+	Name: "Module assembly",
+	Rule: "the assembly calls a copied framework module declares in its module.json must be made in the project's non-test code, outside the model and service subtrees the module was copied into",
+	run:  checkModuleAssembly,
+}
+
+// checkModuleAssembly reports assembly calls a copied framework module
 // requires but the project never makes. gg module copy reproduces a module's
 // routes, models and middleware; the rest of its Register body is the
 // project's to write, and a missing call fails open — a login second-factor
@@ -31,7 +39,7 @@ import (
 // registrations happen to import it, which is exactly the accident this check
 // exists to prevent. Test files are skipped for the same reason — wiring that
 // only runs under go test does not arm the binary.
-func CheckModuleAssembly(ignore gitignore.Matcher) []string {
+func checkModuleAssembly(ignore gitignore.Matcher) []string {
 	// Cheapest first: a name whose model subtree is absent was never copied,
 	// so a project that copied nothing reads no manifest and walks nothing.
 	names, err := ggmodule.CopyableModuleNames()

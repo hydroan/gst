@@ -46,9 +46,9 @@ func TestGenTypeScriptRunReplacesTheFilesOfAnEarlierRun(t *testing.T) {
 
 	outputDir := filepath.Join(projectDir, "generated", "typescript")
 	stale := filepath.Join(outputDir, "model", "gone", "stale.ts")
-	writeCheckFile(t, stale, consts.CodeGeneratedComment()+"\n\nexport type Stale = string;\n")
+	writeProjectFile(t, stale, consts.CodeGeneratedComment()+"\n\nexport type Stale = string;\n")
 	handwritten := filepath.Join(outputDir, "notes.ts")
-	writeCheckFile(t, handwritten, "export type Note = string;\n")
+	writeProjectFile(t, handwritten, "export type Note = string;\n")
 
 	output := runGenTypeScript(t)
 
@@ -74,7 +74,7 @@ func TestGenTypeScriptRunRefusesToOverwriteAFileItDidNotGenerate(t *testing.T) {
 	writeTypeScriptProject(t, projectDir, typeScriptSampleModel)
 	target := filepath.Join(projectDir, "generated", "typescript", "gst.ts")
 	const handwritten = "export type Handwritten = string;\n"
-	writeCheckFile(t, target, handwritten)
+	writeProjectFile(t, target, handwritten)
 
 	var err error
 	captureStdout(t, func() { err = genTypeScriptRun() })
@@ -110,7 +110,7 @@ func TestGenTypeScriptRunWritesNothingWhenATypeCannotBeDescribed(t *testing.T) {
 func TestGenTypeScriptRunNamesThePreludeAfterTheApplication(t *testing.T) {
 	projectDir := newGenProject(t)
 	writeTypeScriptProject(t, projectDir, typeScriptSampleModel)
-	writeCheckFile(t, filepath.Join(projectDir, "config.ini"), "[app]\nname = shop\n")
+	writeProjectFile(t, filepath.Join(projectDir, "config.ini"), "[app]\nname = shop\n")
 
 	runGenTypeScript(t)
 
@@ -197,8 +197,8 @@ func (Sample) Design() {
 func writeTypeScriptProject(t *testing.T, projectDir, modelSource string) {
 	t.Helper()
 
-	writeCheckFile(t, filepath.Join(projectDir, "gst.yaml"), "version: 1\ngen:\n  routes:\n    ignore:\n      /api/samples: [GET]\n")
-	writeCheckFile(t, filepath.Join(projectDir, "model", "sample.go"), strings.ReplaceAll(modelSource, "'", "`"))
+	writeProjectFile(t, filepath.Join(projectDir, "gst.yaml"), "version: 1\ngen:\n  routes:\n    ignore:\n      /api/samples: [GET]\n")
+	writeProjectFile(t, filepath.Join(projectDir, "model", "sample.go"), strings.ReplaceAll(modelSource, "'", "`"))
 }
 
 // runGenTypeScript runs gg gen ts, failing the test on an error, and returns

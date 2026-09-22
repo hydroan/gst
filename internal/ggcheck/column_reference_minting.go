@@ -1,4 +1,4 @@
-package main
+package ggcheck
 
 import (
 	"fmt"
@@ -21,7 +21,15 @@ import (
 // field surfaces only when the query runs.
 var columnConstructors = []string{"NewColumn", "NewNumericColumn", "NewTimeColumn"}
 
-// CheckColumnReferenceMinting reports project code that mints column
+// ColumnReferenceMinting keeps project code from minting column references by
+// hand.
+var ColumnReferenceMinting = Check{
+	Name: "Column reference minting",
+	Rule: "project code, tests included, must not mint column references through gst.NewColumn, NewNumericColumn or NewTimeColumn; columns are read through the XxxCols variables gg gen writes, which the model schema checks, generated files excepted. Generic code, which has no Cols variable to read, may mint a reference whose model is its own type parameter",
+	run:  checkColumnReferenceMinting,
+}
+
+// checkColumnReferenceMinting reports project code that mints column
 // references through gst.NewColumn, NewNumericColumn or NewTimeColumn
 // instead of reading the XxxCols variables gg gen writes. The one exception is
 // generic code naming its own type parameter as the model, see
@@ -30,7 +38,7 @@ var columnConstructors = []string{"NewColumn", "NewNumericColumn", "NewTimeColum
 // modules, whose code is owned by the framework repository. Test files are
 // checked like any other file: a test that mints a reference by hand stops
 // noticing a renamed column just as production code does.
-func CheckColumnReferenceMinting(ignore gitignore.Matcher) []string {
+func checkColumnReferenceMinting(ignore gitignore.Matcher) []string {
 	owned, err := copyableModuleOwners()
 	if err != nil {
 		return []string{fmt.Sprintf("listing copyable framework modules: %v", err)}

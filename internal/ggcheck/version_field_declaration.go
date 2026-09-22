@@ -1,4 +1,4 @@
-package main
+package ggcheck
 
 import (
 	"fmt"
@@ -10,7 +10,15 @@ import (
 	"github.com/hydroan/gst/internal/ggconst"
 )
 
-// CheckVersionFieldDeclarations reports model.Version declarations that
+// VersionFieldDeclaration holds model.Version declarations to the optimistic-
+// locking shape.
+var VersionFieldDeclaration = Check{
+	Name: "Version field declaration",
+	Rule: `model.Version declarations must keep the optimistic-locking shape: on database models a named field with json:",omitempty" and gorm:"not null;default:1", and on DSL Payload/Result types (plus the same-package types reachable from their fields) a json tag of exactly "version,omitempty"`,
+	run:  checkVersionFieldDeclaration,
+}
+
+// checkVersionFieldDeclaration reports model.Version declarations that
 // deviate from the required shape. On database models that is a NAMED
 // top-level field carrying json:",omitempty" serialization and
 // gorm:"not null;default:1". An embedded Version is not recognized by the
@@ -30,7 +38,7 @@ import (
 // subtrees owned by copyable framework modules are skipped, as in the model
 // table name and gorm tag index checks: copied module code is checked inside
 // the framework.
-func CheckVersionFieldDeclarations(ignore gitignore.Matcher) []string {
+func checkVersionFieldDeclaration(ignore gitignore.Matcher) []string {
 	findings, err := collectVersionFieldFindings(ignore)
 	if err != nil {
 		return []string{err.Error()}
@@ -42,7 +50,7 @@ func CheckVersionFieldDeclarations(ignore gitignore.Matcher) []string {
 		if finding.Embedded {
 			violations = append(violations, fmt.Sprintf(
 				"%s:%d: struct '%s' embeds model.Version; optimistic locking requires a named field: Version model.Version `json:\"version,omitempty\" gorm:\"%s\"` (an embedded Version is not recognized and the lock silently does not engage)",
-				relPath, finding.Line, finding.Struct, versionRequiredTag,
+				relPath, finding.Line, finding.Struct, VersionRequiredTag,
 			))
 			continue
 		}
@@ -136,9 +144,17 @@ func collectActionTypeVersionFindings(ignore gitignore.Matcher) ([]actionTypeVer
 	return findings, nil
 }
 
+// VersionFieldFindings reports every model.Version declaration of a database
+// model under the model directory that deviates from the required shape, the
+// declarations gg gen heals by filling their tags in. Paths the project's Git
+// ignore rules ignore are left out.
+func VersionFieldFindings() ([]VersionFieldFinding, error) {
+	return collectVersionFieldFindings(newProjectIgnoreMatcher())
+}
+
 // collectVersionFieldFindings walks the model directory and gathers every
 // deviating model.Version declaration, in walk order.
-func collectVersionFieldFindings(ignore gitignore.Matcher) ([]versionFieldFinding, error) {
+func collectVersionFieldFindings(ignore gitignore.Matcher) ([]VersionFieldFinding, error) {
 	if _, err := os.Stat(ggconst.DirModel); os.IsNotExist(err) {
 		return nil, nil
 	}
@@ -148,7 +164,7 @@ func collectVersionFieldFindings(ignore gitignore.Matcher) ([]versionFieldFindin
 		return nil, fmt.Errorf("listing copyable framework modules: %w", err)
 	}
 
-	var findings []versionFieldFinding
+	var findings []VersionFieldFinding
 	walkErr := walkProjectDir(ggconst.DirModel, ignore, func(path string, info os.FileInfo) error {
 		if info.IsDir() {
 			if moduleOwnedPath(owned, ggconst.DirModel, path) {

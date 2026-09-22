@@ -5,15 +5,17 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/hydroan/gst/internal/ggcheck"
 )
 
 func TestFillVersionFieldTags(t *testing.T) {
 	projectDir := t.TempDir()
 	t.Chdir(projectDir)
-	writeCheckProjectGoMod(t, projectDir)
+	writeProjectGoMod(t, projectDir)
 
 	path := filepath.Join(projectDir, "model", "document", "document.go")
-	writeCheckFile(t, path, `package document
+	writeProjectFile(t, path, `package document
 
 import "github.com/hydroan/gst/model"
 
@@ -60,7 +62,7 @@ func (Partial) TableName() string { return "partials" }
 	}
 
 	// The healed file passes the check and a second run changes nothing.
-	if violations := CheckVersionFieldDeclarations(newProjectIgnoreMatcher()); len(violations) != 0 {
+	if violations := ggcheck.Run([]ggcheck.Check{ggcheck.VersionFieldDeclaration})[0].Violations; len(violations) != 0 {
 		t.Fatalf("healed file should pass the check, got %#v", violations)
 	}
 	if err := fillVersionFieldTags(true); err != nil {
@@ -78,9 +80,9 @@ func (Partial) TableName() string { return "partials" }
 func TestFillVersionFieldTagsRejectsEmbedded(t *testing.T) {
 	projectDir := t.TempDir()
 	t.Chdir(projectDir)
-	writeCheckProjectGoMod(t, projectDir)
+	writeProjectGoMod(t, projectDir)
 
-	writeCheckFile(t, filepath.Join(projectDir, "model", "document", "document.go"), `package document
+	writeProjectFile(t, filepath.Join(projectDir, "model", "document", "document.go"), `package document
 
 import "github.com/hydroan/gst/model"
 
@@ -102,11 +104,11 @@ func (Embedded) TableName() string { return "embeddeds" }
 func TestFillVersionFieldTagsRejectsHiddenJSON(t *testing.T) {
 	projectDir := t.TempDir()
 	t.Chdir(projectDir)
-	writeCheckProjectGoMod(t, projectDir)
+	writeProjectGoMod(t, projectDir)
 
 	// json:"-" hides the version clients must hand back; un-hiding it is a
 	// semantic decision, so gen aborts instead of healing.
-	writeCheckFile(t, filepath.Join(projectDir, "model", "document", "document.go"), `package document
+	writeProjectFile(t, filepath.Join(projectDir, "model", "document", "document.go"), `package document
 
 import "github.com/hydroan/gst/model"
 

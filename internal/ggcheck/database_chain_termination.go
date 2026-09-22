@@ -1,4 +1,4 @@
-package main
+package ggcheck
 
 import (
 	"fmt"
@@ -55,13 +55,21 @@ var databaseChainMethods = map[string]bool{
 	"WithoutHook":    true,
 }
 
-// CheckDatabaseChainTermination checks that every database.Database operation
+// DatabaseChainTermination requires every database.Database chain to end in a
+// terminal operation.
+var DatabaseChainTermination = Check{
+	Name: "Database chain termination",
+	Rule: "database.Database operation chains must end with a terminal operation inline or be passed directly as a call argument",
+	run:  checkDatabaseChainTermination,
+}
+
+// checkDatabaseChainTermination checks that every database.Database operation
 // chain either ends with a terminal operation inline or is handed directly to
 // a helper as a call argument. Database implementations share an underlying
 // GORM session, so storing the chain value in a variable and running
 // operations later is incorrect usage; each independent operation must start
 // with its own database.Database call.
-func CheckDatabaseChainTermination(ignore gitignore.Matcher) []string {
+func checkDatabaseChainTermination(ignore gitignore.Matcher) []string {
 	var violations []string
 
 	err := walkProjectDir(".", ignore, func(path string, info os.FileInfo) error {

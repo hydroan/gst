@@ -80,7 +80,7 @@ func TestMigrateSchemaProgramReadsTheTablesModulesRegister(t *testing.T) {
 		if dir == ggconst.SubDirModule {
 			content = migrateSampleModule
 		}
-		writeCheckFile(t, filepath.Join(projectDir, dir, dir+".go"), content)
+		writeProjectFile(t, filepath.Join(projectDir, dir, dir+".go"), content)
 	}
 
 	var out bytes.Buffer

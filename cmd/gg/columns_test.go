@@ -321,7 +321,7 @@ func TestRemoveOrphanColumnFilesRefusesHandWrittenFile(t *testing.T) {
 // writes must then satisfy the same code in the project's own build.
 func TestGenRunGeneratesColumnsReadByHandwrittenModelCode(t *testing.T) {
 	projectDir := newGenProject(t)
-	writeCheckFile(t, filepath.Join(projectDir, "model", "sample", "record.go"), `package sample
+	writeProjectFile(t, filepath.Join(projectDir, "model", "sample", "record.go"), `package sample
 
 import (
 	"context"
@@ -348,7 +348,7 @@ func (r *Record) CreateBefore(ctx context.Context) error {
 	return database.Database[*Record](ctx).UpdateByID(r.ID, RecordCols.Status.Set("active"))
 }
 `)
-	writeCheckFile(t, filepath.Join(projectDir, "model", "sample", "status.go"), `package sample
+	writeProjectFile(t, filepath.Join(projectDir, "model", "sample", "status.go"), `package sample
 
 import (
 	"math/rand/v2"
@@ -378,7 +378,7 @@ func sortColumns() []gst.AnyColumnRef {
 	return sortableColumns
 }
 `)
-	writeCheckFile(t, filepath.Join(projectDir, "model", "item", "item.go"), `package item
+	writeProjectFile(t, filepath.Join(projectDir, "model", "item", "item.go"), `package item
 
 import (
 	"context"
@@ -445,7 +445,7 @@ func (i *Item) DeleteBefore(ctx context.Context) error {
 // import path a business project can reach.
 func TestGenRunReferencesFrameworkTypesThroughTheRootPackage(t *testing.T) {
 	projectDir := newGenProject(t)
-	writeCheckFile(t, filepath.Join(projectDir, "model", "sample", "rule.go"), `package sample
+	writeProjectFile(t, filepath.Join(projectDir, "model", "sample", "rule.go"), `package sample
 
 import (
 	"github.com/hydroan/gst"

@@ -1,4 +1,4 @@
-package main
+package ggcheck
 
 import (
 	"fmt"
@@ -15,7 +15,15 @@ import (
 	"github.com/hydroan/gst/internal/goast"
 )
 
-// CheckModelTableNameDeclaration reports business model structs that leave
+// ModelTableNameDeclaration requires every database model to declare its table
+// name as a string literal.
+var ModelTableNameDeclaration = Check{
+	Name: "Model table name declaration",
+	Rule: "model structs embedding model.Base or model.AutoBase must declare TableName() string on the struct itself, as a single return of a non-empty string literal",
+	run:  checkModelTableNameDeclaration,
+}
+
+// checkModelTableNameDeclaration reports business model structs that leave
 // their table name undeclared or declare it as anything but a single return
 // of a non-empty string literal. A model embedding model.Base or
 // model.AutoBase must declare TableName() string itself: gorm's Tabler and
@@ -28,7 +36,7 @@ import (
 // declarations and methods aggregate per directory before matching. Model
 // subtrees owned by copyable framework modules are skipped, since copied
 // module code is owned by the framework repository.
-func CheckModelTableNameDeclaration(ignore gitignore.Matcher) []string {
+func checkModelTableNameDeclaration(ignore gitignore.Matcher) []string {
 	if _, err := os.Stat(ggconst.DirModel); os.IsNotExist(err) {
 		return nil
 	}

@@ -1,4 +1,4 @@
-package main
+package ggcheck
 
 import (
 	"fmt"
@@ -24,7 +24,14 @@ var gormIndexTagKeys = map[string]bool{
 	"unique":      true,
 }
 
-// CheckGormTagIndexBan reports struct fields that configure indexes through
+// GormTagIndexBan keeps index settings out of gorm struct tags.
+var GormTagIndexBan = Check{
+	Name: "Gorm tag index ban",
+	Rule: "gorm struct tags must not configure indexes (index, uniqueIndex, unique); models declare indexes through the Indexes() []model.Index method",
+	run:  checkGormTagIndexBan,
+}
+
+// checkGormTagIndexBan reports struct fields that configure indexes through
 // gorm struct tags. Indexes are declared exclusively through the model's
 // Indexes() []model.Index method, which validates the fields, generates the
 // names, and feeds bootstrap and gg migrate from one definition; a tag index
@@ -32,7 +39,7 @@ var gormIndexTagKeys = map[string]bool{
 // the framework base structs themselves. Model subtrees owned by copyable
 // framework modules are skipped, since copied module code is owned by the
 // framework repository.
-func CheckGormTagIndexBan(ignore gitignore.Matcher) []string {
+func checkGormTagIndexBan(ignore gitignore.Matcher) []string {
 	if _, err := os.Stat(ggconst.DirModel); os.IsNotExist(err) {
 		return nil
 	}

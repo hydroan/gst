@@ -1,12 +1,14 @@
-package main
+package ggcheck_test
 
 import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/hydroan/gst/internal/ggcheck"
 )
 
-func TestCheckServiceTestCoverageAllowsCoveredAndExemptServiceFiles(t *testing.T) {
+func TestServiceTestCoverageAllowsCoveredAndExemptServiceFiles(t *testing.T) {
 	projectDir := t.TempDir()
 	t.Chdir(projectDir)
 
@@ -136,14 +138,14 @@ func (Thing) Design() {
 `)
 	writeCheckFile(t, filepath.Join(projectDir, "service", "sample", "thing", "create.go"), "package thing\n")
 
-	violations := CheckServiceTestCoverage(newProjectIgnoreMatcher())
+	violations := runCheck(ggcheck.ServiceTestCoverage)
 
 	if len(violations) != 0 {
 		t.Fatalf("expected no violations, got %#v", violations)
 	}
 }
 
-func TestCheckServiceTestCoverageFlagsServiceFilesWithoutTests(t *testing.T) {
+func TestServiceTestCoverageFlagsServiceFilesWithoutTests(t *testing.T) {
 	projectDir := t.TempDir()
 	t.Chdir(projectDir)
 
@@ -174,7 +176,7 @@ func (Record) Design() {
 	writeCheckFile(t, filepath.Join(projectDir, "service", "record", "create.go"), "package record\n")
 	writeCheckFile(t, filepath.Join(projectDir, "service", "record", "parse.go"), "package record\n")
 
-	violations := CheckServiceTestCoverage(newProjectIgnoreMatcher())
+	violations := runCheck(ggcheck.ServiceTestCoverage)
 
 	if len(violations) != 2 {
 		t.Fatalf("expected two violations, got %#v", violations)
@@ -189,7 +191,7 @@ func (Record) Design() {
 	}
 }
 
-func TestCheckServiceTestOrganizationAllowsPairedSpecialAndMarkedFiles(t *testing.T) {
+func TestServiceTestOrganizationAllowsPairedSpecialAndMarkedFiles(t *testing.T) {
 	projectDir := t.TempDir()
 	t.Chdir(projectDir)
 	writeCheckProjectGoMod(t, projectDir)
@@ -227,14 +229,14 @@ func requireItem(t *testing.T, ok bool) { t.Helper() }
 	writeFrameworkModuleFixture(t, projectDir, "sample")
 	writeCheckFile(t, filepath.Join(projectDir, "service", "sample", "stray_test.go"), "package sample\n")
 
-	violations := CheckServiceTestOrganization(newProjectIgnoreMatcher())
+	violations := runCheck(ggcheck.ServiceTestOrganization)
 
 	if len(violations) != 0 {
 		t.Fatalf("expected no violations, got %#v", violations)
 	}
 }
 
-func TestCheckServiceTestOrganizationFlagsUnpairedAndMisplacedTests(t *testing.T) {
+func TestServiceTestOrganizationFlagsUnpairedAndMisplacedTests(t *testing.T) {
 	projectDir := t.TempDir()
 	t.Chdir(projectDir)
 	writeCheckProjectGoMod(t, projectDir)
@@ -267,7 +269,7 @@ import "testing"
 func TestSetup(t *testing.T) { t.Log("ok") }
 `)
 
-	violations := CheckServiceTestOrganization(newProjectIgnoreMatcher())
+	violations := runCheck(ggcheck.ServiceTestOrganization)
 
 	if len(violations) != 4 {
 		t.Fatalf("expected four violations, got %#v", violations)

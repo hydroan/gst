@@ -1,4 +1,4 @@
-package main
+package ggcheck
 
 import (
 	"fmt"
@@ -26,7 +26,15 @@ const gstServiceImportPath = "github.com/hydroan/gst/service"
 // stream opened never reaches the response envelope at all.
 const gstImportPath = "github.com/hydroan/gst"
 
-// CheckServiceErrorDiscipline checks that every error a service method can
+// ServiceErrorDiscipline requires the errors leaving service methods to be
+// built by service.NewError or service.NewErrorWithCause.
+var ServiceErrorDiscipline = Check{
+	Name: "Service error discipline",
+	Rule: "errors leaving service methods must be built by service.NewError or service.NewErrorWithCause",
+	run:  checkServiceErrorDiscipline,
+}
+
+// checkServiceErrorDiscipline checks that every error a service method can
 // return is created by service.NewError or service.NewErrorWithCause, either
 // directly at the exit or inside a project function the exit's error flows
 // from. An error built any other way reaches the client and the logs as-is:
@@ -62,7 +70,7 @@ const gstImportPath = "github.com/hydroan/gst"
 // a type switch variable, fails closed at the call, and so does a type of
 // another package or an interface, whose method bodies the checker cannot
 // see.
-func CheckServiceErrorDiscipline(ignore gitignore.Matcher) []string {
+func checkServiceErrorDiscipline(ignore gitignore.Matcher) []string {
 	analysis := &svcErrAnalysis{
 		modulePath:   currentProjectModulePath(),
 		fset:         token.NewFileSet(),

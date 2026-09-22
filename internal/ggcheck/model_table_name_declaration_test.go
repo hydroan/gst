@@ -1,11 +1,13 @@
-package main
+package ggcheck_test
 
 import (
 	"path/filepath"
 	"testing"
+
+	"github.com/hydroan/gst/internal/ggcheck"
 )
 
-func TestCheckModelTableNameDeclarationFlagsMissingAndNonLiteral(t *testing.T) {
+func TestModelTableNameDeclarationFlagsMissingAndNonLiteral(t *testing.T) {
 	projectDir := t.TempDir()
 	t.Chdir(projectDir)
 	writeCheckProjectGoMod(t, projectDir)
@@ -97,7 +99,7 @@ type Login struct {
 }
 `)
 
-	violations := CheckModelTableNameDeclaration(newProjectIgnoreMatcher())
+	violations := runCheck(ggcheck.ModelTableNameDeclaration)
 
 	if len(violations) != 5 {
 		t.Fatalf("expected five violations, got %#v", violations)
@@ -109,7 +111,7 @@ type Login struct {
 	assertViolationContains(t, violations, filepath.Join("model", "audit", "dotted.go"), "model 'Dotted' embeds model.Base but declares no TableName() string")
 }
 
-func TestCheckModelTableNameDeclarationSkipsCopiedModulesGeneratedAndTests(t *testing.T) {
+func TestModelTableNameDeclarationSkipsCopiedModulesGeneratedAndTests(t *testing.T) {
 	projectDir := t.TempDir()
 	t.Chdir(projectDir)
 	writeCheckProjectGoMod(t, projectDir)
@@ -154,7 +156,7 @@ type Record struct {
 func (Record) TableName() string { return "records" }
 `)
 
-	violations := CheckModelTableNameDeclaration(newProjectIgnoreMatcher())
+	violations := runCheck(ggcheck.ModelTableNameDeclaration)
 
 	if len(violations) != 0 {
 		t.Fatalf("expected no violations, got %#v", violations)

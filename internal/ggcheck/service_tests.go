@@ -1,4 +1,4 @@
-package main
+package ggcheck
 
 import (
 	"fmt"
@@ -18,7 +18,15 @@ import (
 	"github.com/hydroan/gst/internal/ggmodule"
 )
 
-// CheckServiceTestCoverage checks that every service file generated for a DSL
+// ServiceTestCoverage requires a test file for every service file generated
+// for a DSL Service() action.
+var ServiceTestCoverage = Check{
+	Name: "Service test coverage",
+	Rule: "service files generated for DSL Service() actions must have a matching test file (create.go pairs with create_test.go or create_internal_test.go)",
+	run:  checkServiceTestCoverage,
+}
+
+// checkServiceTestCoverage checks that every service file generated for a DSL
 // Service() action has a matching test file next to it: create.go pairs with
 // create_test.go, or with create_internal_test.go for internal tests. The
 // expected file list comes from the same DSL scan and route-ignore pipeline
@@ -26,7 +34,7 @@ import (
 // not generated yet are not reported. Service subtrees owned by copyable
 // framework modules are skipped: copied module code is tested inside the
 // framework repository and stays unmodified in projects.
-func CheckServiceTestCoverage(ignore gitignore.Matcher) []string {
+func checkServiceTestCoverage(ignore gitignore.Matcher) []string {
 	var violations []string
 
 	if _, err := os.Stat(ggconst.DirModel); os.IsNotExist(err) {
@@ -96,7 +104,15 @@ func serviceTestFileExists(servicePath string) bool {
 	return fileExists(stem+"_test.go") || fileExists(stem+"_internal_test.go")
 }
 
-// CheckServiceTestOrganization checks that every test file under the service
+// ServiceTestOrganization pairs every test file under the service directory
+// with a source file of its package.
+var ServiceTestOrganization = Check{
+	Name: "Service test organization",
+	Rule: "test files under the service directory must pair with a source file of their package; main_test.go only declares TestMain, fixtures_test.go only holds shared test fixtures, and test cases without a source file of their own belong in the test file of a related source file",
+	run:  checkServiceTestOrganization,
+}
+
+// checkServiceTestOrganization checks that every test file under the service
 // directory maps to a source file of its package: foo_test.go and its internal
 // form foo_internal_test.go both pair with foo.go. Two names are reserved
 // instead of paired: main_test.go only declares TestMain, and fixtures_test.go
@@ -104,8 +120,8 @@ func serviceTestFileExists(servicePath string) bool {
 // deliberately no per-file exemption: test cases without a source file of
 // their own belong in the test file of a related source file, so pairing
 // stays the only shape. Service subtrees owned by copyable framework modules
-// are skipped like in CheckServiceTestCoverage.
-func CheckServiceTestOrganization(ignore gitignore.Matcher) []string {
+// are skipped like in checkServiceTestCoverage.
+func checkServiceTestOrganization(ignore gitignore.Matcher) []string {
 	var violations []string
 
 	if _, err := os.Stat(ggconst.DirService); os.IsNotExist(err) {

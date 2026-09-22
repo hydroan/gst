@@ -1,4 +1,4 @@
-package main
+package ggcheck
 
 import (
 	"fmt"
@@ -46,7 +46,15 @@ var contextDerivations = []string{
 	"WithValue", "WithoutCancel",
 }
 
-// CheckDetachedContext checks that in service, dao, cronjob, leader, lock,
+// DetachedContext keeps context.Background() and context.TODO() out of the
+// framework database and dao calls of project code.
+var DetachedContext = Check{
+	Name: "Detached context",
+	Rule: "in service, dao, cronjob, leader, lock, component and router code, the context passed to a framework database function or to a dao function must not be context.Background() or context.TODO(): the context handed down — a request's, a round's, a tenure's, a lock's, the process's, the start's — carries the identity, the transaction and the lease the work runs under; startup seeding runs in the router package's routes-ready hooks on the context the hook receives",
+	run:  checkDetachedContext,
+}
+
+// checkDetachedContext checks that in service, dao, cronjob, leader, lock,
 // component and router code, the context passed to a framework database entry point
 // or to a function of the project's dao packages is never
 // context.Background() or context.TODO() — written at the call, held in a
@@ -71,7 +79,7 @@ var contextDerivations = []string{
 //
 // Code of copyable framework modules under the service directory is skipped:
 // it is checked inside the framework.
-func CheckDetachedContext(ignore gitignore.Matcher) []string {
+func checkDetachedContext(ignore gitignore.Matcher) []string {
 	modulePath, err := gen.GetModulePath()
 	if err != nil {
 		return []string{fmt.Sprintf("reading the module path: %v", err)}

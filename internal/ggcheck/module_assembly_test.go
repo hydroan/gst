@@ -1,9 +1,11 @@
-package main
+package ggcheck_test
 
 import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/hydroan/gst/internal/ggcheck"
 )
 
 // writeAssemblyFixtureFramework lays down a minimal framework source tree with
@@ -38,15 +40,15 @@ func writeAssemblyFixtureProject(t *testing.T, projectDir string) {
 	writeCheckFile(t, filepath.Join(projectDir, "service", "sample", "gate.go"), "package sample\n")
 }
 
-func TestCheckModuleAssemblyReportsMissingCall(t *testing.T) {
+func TestModuleAssemblyReportsMissingCall(t *testing.T) {
 	projectDir := t.TempDir()
 	t.Chdir(projectDir)
 	writeAssemblyFixtureProject(t, projectDir)
 
-	violations := CheckModuleAssembly(newProjectIgnoreMatcher())
+	violations := runCheck(ggcheck.ModuleAssembly)
 
 	if len(violations) != 1 {
-		t.Fatalf("CheckModuleAssembly() = %v, want one violation", violations)
+		t.Fatalf("checkModuleAssembly() = %v, want one violation", violations)
 	}
 	for _, want := range []string{"module sample", "authn.SetSampleGate", "the sample gate stays off"} {
 		if !strings.Contains(violations[0], want) {
@@ -55,7 +57,7 @@ func TestCheckModuleAssemblyReportsMissingCall(t *testing.T) {
 	}
 }
 
-func TestCheckModuleAssemblyAcceptsAliasedCall(t *testing.T) {
+func TestModuleAssemblyAcceptsAliasedCall(t *testing.T) {
 	projectDir := t.TempDir()
 	t.Chdir(projectDir)
 	writeAssemblyFixtureProject(t, projectDir)
@@ -71,12 +73,12 @@ func init() {
 }
 `)
 
-	if violations := CheckModuleAssembly(newProjectIgnoreMatcher()); len(violations) != 0 {
-		t.Fatalf("CheckModuleAssembly() = %v, want no violation", violations)
+	if violations := runCheck(ggcheck.ModuleAssembly); len(violations) != 0 {
+		t.Fatalf("checkModuleAssembly() = %v, want no violation", violations)
 	}
 }
 
-func TestCheckModuleAssemblyAcceptsDotImportedCall(t *testing.T) {
+func TestModuleAssemblyAcceptsDotImportedCall(t *testing.T) {
 	projectDir := t.TempDir()
 	t.Chdir(projectDir)
 	writeAssemblyFixtureProject(t, projectDir)
@@ -91,12 +93,12 @@ func init() {
 }
 `)
 
-	if violations := CheckModuleAssembly(newProjectIgnoreMatcher()); len(violations) != 0 {
-		t.Fatalf("CheckModuleAssembly() = %v, want no violation", violations)
+	if violations := runCheck(ggcheck.ModuleAssembly); len(violations) != 0 {
+		t.Fatalf("checkModuleAssembly() = %v, want no violation", violations)
 	}
 }
 
-func TestCheckModuleAssemblyRejectsSameNameFromAnotherPackage(t *testing.T) {
+func TestModuleAssemblyRejectsSameNameFromAnotherPackage(t *testing.T) {
 	projectDir := t.TempDir()
 	t.Chdir(projectDir)
 	writeAssemblyFixtureProject(t, projectDir)
@@ -112,12 +114,12 @@ func init() {
 }
 `)
 
-	if violations := CheckModuleAssembly(newProjectIgnoreMatcher()); len(violations) != 1 {
-		t.Fatalf("CheckModuleAssembly() = %v, want one violation", violations)
+	if violations := runCheck(ggcheck.ModuleAssembly); len(violations) != 1 {
+		t.Fatalf("checkModuleAssembly() = %v, want one violation", violations)
 	}
 }
 
-func TestCheckModuleAssemblyIgnoresCallInsideCopiedModuleAndTests(t *testing.T) {
+func TestModuleAssemblyIgnoresCallInsideCopiedModuleAndTests(t *testing.T) {
 	projectDir := t.TempDir()
 	t.Chdir(projectDir)
 	writeAssemblyFixtureProject(t, projectDir)
@@ -136,12 +138,12 @@ func init() {
 	writeCheckFile(t, filepath.Join(projectDir, "service", "sample", "gate.go"), "package sample\n"+call)
 	writeCheckFile(t, filepath.Join(projectDir, "module", "module_test.go"), "package module\n"+call)
 
-	if violations := CheckModuleAssembly(newProjectIgnoreMatcher()); len(violations) != 1 {
-		t.Fatalf("CheckModuleAssembly() = %v, want one violation", violations)
+	if violations := runCheck(ggcheck.ModuleAssembly); len(violations) != 1 {
+		t.Fatalf("checkModuleAssembly() = %v, want one violation", violations)
 	}
 }
 
-func TestCheckModuleAssemblySkipsModuleTheProjectNeverCopied(t *testing.T) {
+func TestModuleAssemblySkipsModuleTheProjectNeverCopied(t *testing.T) {
 	projectDir := t.TempDir()
 	t.Chdir(projectDir)
 	writeCheckProjectGoMod(t, projectDir)
@@ -149,7 +151,7 @@ func TestCheckModuleAssemblySkipsModuleTheProjectNeverCopied(t *testing.T) {
 
 	// No model/sample subtree means the module was never copied, so the
 	// project owes nothing and no manifest is read.
-	if violations := CheckModuleAssembly(newProjectIgnoreMatcher()); len(violations) != 0 {
-		t.Fatalf("CheckModuleAssembly() = %v, want no violation", violations)
+	if violations := runCheck(ggcheck.ModuleAssembly); len(violations) != 0 {
+		t.Fatalf("checkModuleAssembly() = %v, want no violation", violations)
 	}
 }

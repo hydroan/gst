@@ -1,12 +1,14 @@
-package main
+package ggcheck_test
 
 import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/hydroan/gst/internal/ggcheck"
 )
 
-func TestCheckServiceErrorDisciplineFlagsRawErrorSources(t *testing.T) {
+func TestServiceErrorDisciplineFlagsRawErrorSources(t *testing.T) {
 	projectDir := t.TempDir()
 	t.Chdir(projectDir)
 
@@ -196,7 +198,7 @@ func (g *Getter) Get(ctx *gst.ServiceContext, req *model.RecordReq) (*model.Reco
 }
 `)
 
-	violations := CheckServiceErrorDiscipline(newProjectIgnoreMatcher())
+	violations := runCheck(ggcheck.ServiceErrorDiscipline)
 
 	// Violations point at the raw error expressions themselves: the raw
 	// constructor of the dot-imported service on dotted.go:15, the call into
@@ -235,7 +237,7 @@ func (g *Getter) Get(ctx *gst.ServiceContext, req *model.RecordReq) (*model.Reco
 	}
 }
 
-func TestCheckServiceErrorDisciplineAllowsCompliantSources(t *testing.T) {
+func TestServiceErrorDisciplineAllowsCompliantSources(t *testing.T) {
 	projectDir := t.TempDir()
 	t.Chdir(projectDir)
 
@@ -519,7 +521,7 @@ func Sweep() error {
 }
 `)
 
-	violations := CheckServiceErrorDiscipline(newProjectIgnoreMatcher())
+	violations := runCheck(ggcheck.ServiceErrorDiscipline)
 	if len(violations) != 0 {
 		t.Fatalf("expected no violations, got %#v", violations)
 	}

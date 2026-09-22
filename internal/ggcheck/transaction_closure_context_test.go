@@ -1,12 +1,14 @@
-package main
+package ggcheck_test
 
 import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/hydroan/gst/internal/ggcheck"
 )
 
-func TestCheckTransactionClosureContextFlagsOuterContext(t *testing.T) {
+func TestTransactionClosureContextFlagsOuterContext(t *testing.T) {
 	projectDir := t.TempDir()
 	t.Chdir(projectDir)
 
@@ -49,7 +51,7 @@ func update(outerCtx context.Context, record *model.Record) error {
 }
 `)
 
-	violations := CheckTransactionClosureContext(newProjectIgnoreMatcher())
+	violations := runCheck(ggcheck.TransactionClosureContext)
 
 	wantSubstrings := []string{
 		filepath.Join("service", "nested", "nested.go") + ":12:",
@@ -68,12 +70,12 @@ func update(outerCtx context.Context, record *model.Record) error {
 	}
 }
 
-// TestCheckTransactionClosureContextFlagsEveryEntryPoint covers the calls
+// TestTransactionClosureContextFlagsEveryEntryPoint covers the calls
 // besides a chain that leave the transaction the same way: a select, an
 // after-commit registration — which would run its action at once instead of
 // after the commit — and a context detached at the call, written plainly or
 // through a derivation.
-func TestCheckTransactionClosureContextFlagsEveryEntryPoint(t *testing.T) {
+func TestTransactionClosureContextFlagsEveryEntryPoint(t *testing.T) {
 	projectDir := t.TempDir()
 	t.Chdir(projectDir)
 
@@ -113,7 +115,7 @@ func update(outerCtx context.Context, record *model.Record) error {
 }
 `)
 
-	violations := CheckTransactionClosureContext(newProjectIgnoreMatcher())
+	violations := runCheck(ggcheck.TransactionClosureContext)
 	joined := strings.Join(violations, "\n")
 	for _, want := range []string{
 		"database.Select uses context \"outerCtx\"",
@@ -135,7 +137,7 @@ func update(outerCtx context.Context, record *model.Record) error {
 	}
 }
 
-func TestCheckTransactionClosureContextAllowsClosureContext(t *testing.T) {
+func TestTransactionClosureContextAllowsClosureContext(t *testing.T) {
 	projectDir := t.TempDir()
 	t.Chdir(projectDir)
 
@@ -183,7 +185,7 @@ func cleanup(ctx context.Context, record *model.Record) error {
 }
 `)
 
-	violations := CheckTransactionClosureContext(newProjectIgnoreMatcher())
+	violations := runCheck(ggcheck.TransactionClosureContext)
 
 	if len(violations) != 0 {
 		t.Fatalf("expected no violations, got %#v", violations)

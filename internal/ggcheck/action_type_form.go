@@ -1,4 +1,4 @@
-package main
+package ggcheck
 
 import (
 	"fmt"
@@ -16,7 +16,15 @@ import (
 	"github.com/hydroan/gst/internal/ggconst"
 )
 
-// CheckActionTypeForm checks the explicit DSL Payload and Result type
+// ActionTypeForm holds explicit DSL Payload and Result type arguments to the
+// forms the generated code relies on.
+var ActionTypeForm = Check{
+	Name: "Action type form",
+	Rule: "explicit DSL Payload/Result types must be named types declared in the same model package: struct types use the pointer form, slice and map types use the value form, an empty struct type may only pair with an empty peer side, and a Payload type is never an interface with methods",
+	run:  checkActionTypeForm,
+}
+
+// checkActionTypeForm checks the explicit DSL Payload and Result type
 // declarations of every model package. The type argument must be a named type
 // declared in the same package; struct types must use the pointer form, slice
 // and map types must use the value form, and an empty struct type is the
@@ -25,7 +33,7 @@ import (
 // be an interface with methods, which no request body decodes into, named by
 // value or through a pointer; a Result is only encoded, so any interface
 // serves there.
-func CheckActionTypeForm(ignore gitignore.Matcher) []string {
+func checkActionTypeForm(ignore gitignore.Matcher) []string {
 	var violations []string
 
 	if _, err := os.Stat(ggconst.DirModel); os.IsNotExist(err) {

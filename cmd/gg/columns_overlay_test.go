@@ -16,10 +16,10 @@ import (
 func TestColumnInspectionOverlayStubsGeneratedColumnFiles(t *testing.T) {
 	t.Chdir(t.TempDir())
 	columns := filepath.Join("model", "sample", "record.gen.go")
-	writeCheckFile(t, columns, consts.CodeGeneratedComment()+"\n// source: model/sample/record.go\n\npackage sample\n\nvar RecordCols = struct{}{}\n")
-	writeCheckFile(t, filepath.Join("model", "sample", "handwritten.gen.go"), "package sample\n")
-	writeCheckFile(t, filepath.Join("model", ggconst.FileModelGen), consts.CodeGeneratedComment()+"\n\npackage model\n")
-	writeCheckFile(t, filepath.Join("model", "sample", "record.go"), "package sample\n\ntype Record struct{}\n")
+	writeProjectFile(t, columns, consts.CodeGeneratedComment()+"\n// source: model/sample/record.go\n\npackage sample\n\nvar RecordCols = struct{}{}\n")
+	writeProjectFile(t, filepath.Join("model", "sample", "handwritten.gen.go"), "package sample\n")
+	writeProjectFile(t, filepath.Join("model", ggconst.FileModelGen), consts.CodeGeneratedComment()+"\n\npackage model\n")
+	writeProjectFile(t, filepath.Join("model", "sample", "record.go"), "package sample\n\ntype Record struct{}\n")
 
 	overlay, err := columnInspectionOverlay("tmpapp", "model", nil)
 	require.NoError(t, err)
@@ -36,7 +36,7 @@ func TestColumnInspectionOverlayStubsGeneratedColumnFiles(t *testing.T) {
 // inspection build starts from, and compiles them through it.
 func TestColumnInspectionOverlayLeavesOutColumnDependents(t *testing.T) {
 	t.Chdir(t.TempDir())
-	writeCheckFile(t, "go.mod", "module tmpapp\n\ngo 1.27\n")
+	writeProjectFile(t, "go.mod", "module tmpapp\n\ngo 1.27\n")
 	recordSource := filepath.Join("model", "sample", "record.go")
 	compactSource := filepath.Join("model", "sample", "compact.go")
 	itemSource := filepath.Join("model", "item", "item.go")
@@ -121,12 +121,12 @@ func archiveID() string {
 `,
 	}
 	for path, content := range sources {
-		writeCheckFile(t, path, content)
+		writeProjectFile(t, path, content)
 	}
 	// Archive was renamed since the previous generation, whose column file is
 	// the only place still declaring its column var.
 	archiveColumns := filepath.Join("model", "archive", "archive.gen.go")
-	writeCheckFile(t, archiveColumns, consts.CodeGeneratedComment()+"\n\npackage archive\n\nvar ArchiveCols = struct{ ID string }{ID: \"id\"}\n")
+	writeProjectFile(t, archiveColumns, consts.CodeGeneratedComment()+"\n\npackage archive\n\nvar ArchiveCols = struct{ ID string }{ID: \"id\"}\n")
 	models := []*gen.ModelInfo{{
 		ModulePath: "tmpapp", ModelPkgName: "sample", ModelName: "Record",
 		ModelFileDir: filepath.Join("model", "sample"), ModelFilePath: recordSource,
@@ -194,7 +194,7 @@ func archiveID() string {
 
 func TestColumnInspectionOverlayLeavesUnparsableFilesToTheCompiler(t *testing.T) {
 	t.Chdir(t.TempDir())
-	writeCheckFile(t, filepath.Join("model", "sample", "record.go"), "package sample\n\nfunc status() string {\n\treturn RecordCols.Status.Name()\n")
+	writeProjectFile(t, filepath.Join("model", "sample", "record.go"), "package sample\n\nfunc status() string {\n\treturn RecordCols.Status.Name()\n")
 	models := []*gen.ModelInfo{{
 		ModulePath: "tmpapp", ModelPkgName: "sample", ModelName: "Record",
 		ModelFileDir: filepath.Join("model", "sample"),
@@ -238,7 +238,7 @@ func (r *Record) statusColumnName() string {
 
 var defaultStatusColumn = (&Record{}).statusColumnName()
 `
-	writeCheckFile(t, filepath.Join(projectDir, "model", "sample", "record.go"), source)
+	writeProjectFile(t, filepath.Join(projectDir, "model", "sample", "record.go"), source)
 
 	var genErr error
 	stderr := captureStderr(t, func() {

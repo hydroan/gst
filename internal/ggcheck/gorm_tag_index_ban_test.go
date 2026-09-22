@@ -1,11 +1,13 @@
-package main
+package ggcheck_test
 
 import (
 	"path/filepath"
 	"testing"
+
+	"github.com/hydroan/gst/internal/ggcheck"
 )
 
-func TestCheckGormTagIndexBanFlagsIndexKeys(t *testing.T) {
+func TestGormTagIndexBanFlagsIndexKeys(t *testing.T) {
 	projectDir := t.TempDir()
 	t.Chdir(projectDir)
 	writeCheckProjectGoMod(t, projectDir)
@@ -51,7 +53,7 @@ type Device struct {
 func (Device) TableName() string { return "devices" }
 `)
 
-	violations := CheckGormTagIndexBan(newProjectIgnoreMatcher())
+	violations := runCheck(ggcheck.GormTagIndexBan)
 
 	if len(violations) != 3 {
 		t.Fatalf("expected three violations, got %#v", violations)
@@ -61,7 +63,7 @@ func (Device) TableName() string { return "devices" }
 	assertViolationContains(t, violations, filepath.Join("model", "group", "device.go"), "field 'Device.Serial' configures an index through the gorm tag (unique)")
 }
 
-func TestCheckGormTagIndexBanSkipsCopiedModulesGeneratedAndTests(t *testing.T) {
+func TestGormTagIndexBanSkipsCopiedModulesGeneratedAndTests(t *testing.T) {
 	projectDir := t.TempDir()
 	t.Chdir(projectDir)
 	writeCheckProjectGoMod(t, projectDir)
@@ -96,7 +98,7 @@ type Record struct {
 }
 `)
 
-	violations := CheckGormTagIndexBan(newProjectIgnoreMatcher())
+	violations := runCheck(ggcheck.GormTagIndexBan)
 
 	if len(violations) != 0 {
 		t.Fatalf("expected no violations, got %#v", violations)

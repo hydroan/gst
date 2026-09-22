@@ -1,11 +1,13 @@
-package main
+package ggcheck_test
 
 import (
 	"path/filepath"
 	"testing"
+
+	"github.com/hydroan/gst/internal/ggcheck"
 )
 
-func TestCheckLogFieldBoundednessFlagsMarshalerMethodsAndNamespaceCalls(t *testing.T) {
+func TestLogFieldBoundednessFlagsMarshalerMethodsAndNamespaceCalls(t *testing.T) {
 	projectDir := t.TempDir()
 	t.Chdir(projectDir)
 	writeCheckProjectGoMod(t, projectDir)
@@ -53,7 +55,7 @@ func Fields() []zap.Field {
 }
 `)
 
-	violations := CheckLogFieldBoundedness(newProjectIgnoreMatcher())
+	violations := runCheck(ggcheck.LogFieldBoundedness)
 
 	if len(violations) != 4 {
 		t.Fatalf("expected four violations, got %#v", violations)
@@ -64,7 +66,7 @@ func Fields() []zap.Field {
 	assertViolationContains(t, violations, filepath.Join("helper", "log.go"), "zap.Namespace must not be called")
 }
 
-func TestCheckLogFieldBoundednessResolvesZapImportForms(t *testing.T) {
+func TestLogFieldBoundednessResolvesZapImportForms(t *testing.T) {
 	projectDir := t.TempDir()
 	t.Chdir(projectDir)
 	writeCheckProjectGoMod(t, projectDir)
@@ -100,7 +102,7 @@ func Clean() {
 func scope(string) {}
 `)
 
-	violations := CheckLogFieldBoundedness(newProjectIgnoreMatcher())
+	violations := runCheck(ggcheck.LogFieldBoundedness)
 
 	if len(violations) != 2 {
 		t.Fatalf("expected two violations, got %#v", violations)
@@ -109,7 +111,7 @@ func scope(string) {}
 	assertViolationContains(t, violations, filepath.Join("helper", "dot.go"), "zap.Namespace must not be called")
 }
 
-func TestCheckLogFieldBoundednessSkipsCopiedModulesAndGeneratedFiles(t *testing.T) {
+func TestLogFieldBoundednessSkipsCopiedModulesAndGeneratedFiles(t *testing.T) {
 	projectDir := t.TempDir()
 	t.Chdir(projectDir)
 	writeCheckProjectGoMod(t, projectDir)
@@ -149,7 +151,7 @@ type Record struct {
 }
 `)
 
-	violations := CheckLogFieldBoundedness(newProjectIgnoreMatcher())
+	violations := runCheck(ggcheck.LogFieldBoundedness)
 
 	if len(violations) != 0 {
 		t.Fatalf("expected no violations, got %#v", violations)

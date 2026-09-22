@@ -1,4 +1,4 @@
-package main
+package ggcheck_test
 
 import (
 	"path/filepath"
@@ -6,9 +6,11 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+
+	"github.com/hydroan/gst/internal/ggcheck"
 )
 
-func TestCheckColumnReferenceMintingFlagsConstructors(t *testing.T) {
+func TestColumnReferenceMintingFlagsConstructors(t *testing.T) {
 	projectDir := t.TempDir()
 	t.Chdir(projectDir)
 	writeCheckProjectGoMod(t, projectDir)
@@ -55,7 +57,7 @@ func (*Row) TableName() string { return "rows" }
 var group = NewColumn[*Row, string]("group_id")
 `)
 
-	violations := CheckColumnReferenceMinting(newProjectIgnoreMatcher())
+	violations := runCheck(ggcheck.ColumnReferenceMinting)
 
 	if len(violations) != 5 {
 		t.Fatalf("expected five violations, got %#v", violations)
@@ -76,7 +78,7 @@ var group = NewColumn[*Row, string]("group_id")
 	assertViolationContains(t, violations, filepath.Join("helper", "scope", "scope.go"), "mints a column reference through gst.NewColumn")
 }
 
-func TestCheckColumnReferenceMintingSkipsGeneratedAndCopiedModules(t *testing.T) {
+func TestColumnReferenceMintingSkipsGeneratedAndCopiedModules(t *testing.T) {
 	projectDir := t.TempDir()
 	t.Chdir(projectDir)
 	writeCheckProjectGoMod(t, projectDir)
@@ -145,14 +147,14 @@ func filters() []gst.Filter {
 }
 `)
 
-	violations := CheckColumnReferenceMinting(newProjectIgnoreMatcher())
+	violations := runCheck(ggcheck.ColumnReferenceMinting)
 
 	if len(violations) != 0 {
 		t.Fatalf("expected no violations, got %#v", violations)
 	}
 }
 
-func TestCheckColumnReferenceMintingAllowsGenericCodeTypeParameters(t *testing.T) {
+func TestColumnReferenceMintingAllowsGenericCodeTypeParameters(t *testing.T) {
 	projectDir := t.TempDir()
 	t.Chdir(projectDir)
 	writeCheckProjectGoMod(t, projectDir)
@@ -202,14 +204,14 @@ func owned[M Model](groupIDs ...string) Filter {
 }
 `)
 
-	violations := CheckColumnReferenceMinting(newProjectIgnoreMatcher())
+	violations := runCheck(ggcheck.ColumnReferenceMinting)
 
 	if len(violations) != 0 {
 		t.Fatalf("expected no violations, got %#v", violations)
 	}
 }
 
-func TestCheckColumnReferenceMintingFlagsConcreteModelsInGenericCode(t *testing.T) {
+func TestColumnReferenceMintingFlagsConcreteModelsInGenericCode(t *testing.T) {
 	projectDir := t.TempDir()
 	t.Chdir(projectDir)
 	writeCheckProjectGoMod(t, projectDir)
@@ -246,7 +248,7 @@ func parameter[M gst.Model]() gst.Filter {
 `
 	writeCheckFile(t, filepath.Join(projectDir, "helper", "retention", "retention.go"), source)
 
-	violations := CheckColumnReferenceMinting(newProjectIgnoreMatcher())
+	violations := runCheck(ggcheck.ColumnReferenceMinting)
 
 	// A concrete model has a generated Cols var wherever the call sits, and a
 	// name that is no type parameter of the enclosing function denotes a

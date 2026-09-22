@@ -3,9 +3,11 @@ package main
 import (
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/hydroan/gst/internal/clioutput"
 	"github.com/hydroan/gst/internal/ggconst"
+	"github.com/hydroan/gst/internal/gghelper"
 )
 
 func checkErr(err error) {
@@ -66,4 +68,27 @@ func writeGeneratedFile(filename string, content string, log bool) error {
 		}
 	}
 	return nil
+}
+
+// currentProjectModulePath returns the module path of the project in the
+// working directory, or "" when its go.mod cannot be read.
+func currentProjectModulePath() string {
+	modulePath, err := gghelper.ModulePath()
+	if err != nil {
+		return ""
+	}
+	return strings.Trim(modulePath, "/")
+}
+
+// relativePath returns filePath relative to the current working directory when possible.
+func relativePath(filePath string) string {
+	cwd, err := os.Getwd()
+	if err != nil {
+		return filePath
+	}
+	relPath, err := filepath.Rel(cwd, filePath)
+	if err != nil {
+		return filePath
+	}
+	return relPath
 }

@@ -1,4 +1,4 @@
-package main
+package ggcheck
 
 import (
 	"fmt"
@@ -18,7 +18,15 @@ import (
 // check forbids.
 const zapImportPath = "go.uber.org/zap"
 
-// CheckLogFieldBoundedness reports project code that would re-open unbounded
+// LogFieldBoundedness keeps zapcore marshalers and zap.Namespace out of
+// project code.
+var LogFieldBoundedness = Check{
+	Name: "Log field boundedness",
+	Rule: "project code must not declare MarshalLogObject or MarshalLogArray methods and must not call zap.Namespace: zapcore marshalers and nested namespaces bypass the reflected-value collapsing that keeps log-store field mappings bounded",
+	run:  checkLogFieldBoundedness,
+}
+
+// checkLogFieldBoundedness reports project code that would re-open unbounded
 // structured log fields. The framework encoder collapses every reflected log
 // value into a single JSON string field so a log store's per-index field
 // mapping stays bounded no matter what gets logged. Declaring a zapcore
@@ -29,7 +37,7 @@ const zapImportPath = "go.uber.org/zap"
 // project including test files; model and service subtrees owned by copyable
 // framework modules are skipped, since copied module code is owned by the
 // framework repository.
-func CheckLogFieldBoundedness(ignore gitignore.Matcher) []string {
+func checkLogFieldBoundedness(ignore gitignore.Matcher) []string {
 	var violations []string
 
 	owned, err := copyableModuleOwners()

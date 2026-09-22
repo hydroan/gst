@@ -8,8 +8,8 @@ import (
 	"strings"
 
 	"github.com/hydroan/gst/internal/clioutput"
+	"github.com/hydroan/gst/internal/ggcheck"
 	"github.com/hydroan/gst/internal/ggconst"
-	gormschema "gorm.io/gorm/schema"
 )
 
 // fillVersionFieldTags rewrites named model.Version fields under the model
@@ -25,7 +25,7 @@ import (
 // shape itself) and json:"-" (un-hiding a field its author silenced is a
 // semantic decision no tool should make).
 func fillVersionFieldTags(quiet bool) error {
-	findings, err := collectVersionFieldFindings(newProjectIgnoreMatcher())
+	findings, err := ggcheck.VersionFieldFindings()
 	if err != nil {
 		return err
 	}
@@ -33,12 +33,12 @@ func fillVersionFieldTags(quiet bool) error {
 		return nil
 	}
 
-	byFile := make(map[string][]versionFieldFinding)
+	byFile := make(map[string][]ggcheck.VersionFieldFinding)
 	for _, finding := range findings {
 		if finding.Embedded {
 			return fmt.Errorf(
 				"%s:%d: struct '%s' embeds model.Version; optimistic locking requires a named field (Version model.Version `json:\"version,omitempty\" gorm:\"%s\"`) — gen cannot heal a field shape",
-				relativePath(finding.Path), finding.Line, finding.Struct, versionRequiredTag)
+				relativePath(finding.Path), finding.Line, finding.Struct, ggcheck.VersionRequiredTag)
 		}
 		if finding.JSONBlocked {
 			return fmt.Errorf(
@@ -69,15 +69,9 @@ func fillVersionFieldTags(quiet bool) error {
 	return nil
 }
 
-// tagInsertion is one byte-offset insertion a finding's heal expands to.
-type tagInsertion struct {
-	offset int
-	text   string
-}
-
 // rewriteVersionFieldTags applies the tag fixes of one file bottom-up, so
 // earlier offsets stay valid, and writes the result back gofmt-formatted.
-func rewriteVersionFieldTags(path string, findings []versionFieldFinding) error {
+func rewriteVersionFieldTags(path string, findings []ggcheck.VersionFieldFinding) error {
 	safePath, err := pathUnderRoot(path, ggconst.DirModel)
 	if err != nil {
 		return err
@@ -91,19 +85,19 @@ func rewriteVersionFieldTags(path string, findings []versionFieldFinding) error 
 		return err
 	}
 
-	var insertions []tagInsertion
+	var insertions []ggcheck.TagInsertion
 	for _, finding := range findings {
-		insertions = append(insertions, finding.insertions()...)
+		insertions = append(insertions, finding.TagInsertions()...)
 	}
 	// Bottom-up keeps earlier offsets valid; the stable sort keeps one
 	// finding's same-offset insertions in declaration order, which lands
 	// them as ` json:"..." gorm:"..."` in the healed tag.
-	sort.SliceStable(insertions, func(i, j int) bool { return insertions[i].offset > insertions[j].offset })
+	sort.SliceStable(insertions, func(i, j int) bool { return insertions[i].Offset > insertions[j].Offset })
 	for _, insertion := range insertions {
-		if insertion.offset < 0 || insertion.offset > len(source) {
+		if insertion.Offset < 0 || insertion.Offset > len(source) {
 			return fmt.Errorf("%s: version tag rewrite offset out of range", relativePath(path))
 		}
-		source = append(source[:insertion.offset], append([]byte(insertion.text), source[insertion.offset:]...)...)
+		source = append(source[:insertion.Offset], append([]byte(insertion.Text), source[insertion.Offset:]...)...)
 	}
 
 	formatted, err := format.Source(source)
@@ -113,43 +107,4 @@ func rewriteVersionFieldTags(path string, findings []versionFieldFinding) error 
 	// The path comes from the model-directory walk and is fenced to it by
 	// pathUnderRoot above; the taint analyzer cannot see through the fence.
 	return os.WriteFile(safePath, formatted, stat.Mode().Perm()) //nolint:gosec
-}
-
-// insertions expands one healable finding into its byte insertions. The
-// json name for a field without any json section follows gorm's naming
-// strategy, so the wire name matches the column name a bare field gets.
-func (finding versionFieldFinding) insertions() []tagInsertion {
-	if !finding.hasTag {
-		// No tag at all: both sections are missing by construction; add the
-		// whole literal right after the field type.
-		return []tagInsertion{{
-			offset: finding.insertAfter,
-			text:   " `json:\"" + versionJSONName(finding.Field) + ",omitempty\" gorm:\"" + versionRequiredTag + "\"`",
-		}}
-	}
-
-	var insertions []tagInsertion
-	if len(finding.Missing) > 0 {
-		if finding.hasGormSection {
-			// Append the missing settings inside the existing gorm value.
-			insertions = append(insertions, tagInsertion{finding.gormValueEnd, ";" + strings.Join(finding.Missing, ";")})
-		} else {
-			// Add a gorm section before the literal's closing backquote.
-			insertions = append(insertions, tagInsertion{finding.tagEnd - 1, ` gorm:"` + versionRequiredTag + `"`})
-		}
-	}
-	if finding.JSONMissing {
-		if finding.hasJSONSection {
-			// Append omitempty inside the existing json value.
-			insertions = append(insertions, tagInsertion{finding.jsonValueEnd, ",omitempty"})
-		} else {
-			insertions = append(insertions, tagInsertion{finding.tagEnd - 1, ` json:"` + versionJSONName(finding.Field) + `,omitempty"`})
-		}
-	}
-	return insertions
-}
-
-// versionJSONName renders the wire name a healed json section uses.
-func versionJSONName(fieldName string) string {
-	return gormschema.NamingStrategy{}.ColumnName("", fieldName)
 }

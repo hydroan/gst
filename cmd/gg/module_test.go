@@ -369,7 +369,7 @@ func newModuleListProjectWithFramework(t *testing.T) string {
 			t.Fatal(err)
 		}
 	}
-	writeCheckProjectGoMod(t, projectDir)
+	writeProjectGoMod(t, projectDir)
 	return projectDir
 }
 

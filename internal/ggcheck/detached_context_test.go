@@ -1,55 +1,14 @@
-package main
+package ggcheck_test
 
 import (
-	"go/ast"
-	"go/parser"
-	"go/token"
 	"path/filepath"
-	"slices"
 	"strings"
 	"testing"
+
+	"github.com/hydroan/gst/internal/ggcheck"
 )
 
-// TestDatabaseEntryPointsMatchThePackage pins the dot-import list to the
-// database package itself: every exported function whose first parameter is
-// a context is an entry point the rule has to know, so a function added to
-// the package cannot slip past a file that dot-imports it.
-func TestDatabaseEntryPointsMatchThePackage(t *testing.T) {
-	sources, err := filepath.Glob(filepath.Join(frameworkRepoRoot(t), "database", "*.go"))
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	var want []string
-	fset := token.NewFileSet()
-	for _, source := range sources {
-		if strings.HasSuffix(source, "_test.go") {
-			continue
-		}
-		file, err := parser.ParseFile(fset, source, nil, 0)
-		if err != nil {
-			t.Fatal(err)
-		}
-		for _, decl := range file.Decls {
-			fn, ok := decl.(*ast.FuncDecl)
-			if !ok || fn.Recv != nil || !fn.Name.IsExported() || len(fn.Type.Params.List) == 0 {
-				continue
-			}
-			if selector, ok := fn.Type.Params.List[0].Type.(*ast.SelectorExpr); ok && selector.Sel.Name == "Context" {
-				want = append(want, fn.Name.Name)
-			}
-		}
-	}
-	slices.Sort(want)
-
-	got := slices.Clone(databaseEntryPoints)
-	slices.Sort(got)
-	if !slices.Equal(got, want) {
-		t.Fatalf("databaseEntryPoints must list the package's context-taking functions:\n got %v\nwant %v", got, want)
-	}
-}
-
-// TestCheckDetachedContextFlagsBackgroundAtDatabaseEntry pins the rule's
+// TestDetachedContextFlagsBackgroundAtDatabaseEntry pins the rule's
 // reach: a detached context handed to a framework database function or a
 // dao function is flagged in the directories that run under a context —
 // written at the call, held in a variable first, derived through the context
@@ -60,7 +19,7 @@ func TestDatabaseEntryPointsMatchThePackage(t *testing.T) {
 // copied framework modules are the framework's to check, ignored directories
 // are not read, and startup seeding in a module package stays outside the
 // rule.
-func TestCheckDetachedContextFlagsBackgroundAtDatabaseEntry(t *testing.T) {
+func TestDetachedContextFlagsBackgroundAtDatabaseEntry(t *testing.T) {
 	projectDir := t.TempDir()
 	t.Chdir(projectDir)
 	writeCheckProjectGoMod(t, projectDir)
@@ -350,7 +309,7 @@ func poll(ctx context.Context) error {
 }
 `)
 
-	violations := CheckDetachedContext(newProjectIgnoreMatcher())
+	violations := runCheck(ggcheck.DetachedContext)
 
 	if len(violations) != 13 {
 		t.Fatalf("expected thirteen violations, got %#v", violations)

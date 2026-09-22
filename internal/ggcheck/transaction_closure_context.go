@@ -1,4 +1,4 @@
-package main
+package ggcheck
 
 import (
 	"fmt"
@@ -14,7 +14,15 @@ import (
 	"github.com/hydroan/gst/internal/goast"
 )
 
-// CheckTransactionClosureContext checks that inside a database.Transaction
+// TransactionClosureContext holds the database calls inside a
+// database.Transaction closure to the context the closure receives.
+var TransactionClosureContext = Check{
+	Name: "Transaction closure context",
+	Rule: "database.Database chains and nested database.Transaction calls inside a database.Transaction closure must use the closure's context parameter",
+	run:  checkTransactionClosureContext,
+}
+
+// checkTransactionClosureContext checks that inside a database.Transaction
 // closure, every call into the database package — a chain, a select, a
 // nested transaction, an after-commit registration, whatever the package's
 // entry points are — takes the closure's own context. Passing any other
@@ -23,14 +31,14 @@ import (
 // and an after-commit action registered on an escaped context runs at once
 // instead of after the commit.
 //
-// The check is purely syntactic, mirroring CheckDatabaseChainTermination. A
+// The check is purely syntactic, mirroring checkDatabaseChainTermination. A
 // context argument is flagged when it is a plain identifier other than the
 // closure's parameter, or a detached context written at the call
 // (context.Background, context.TODO), including through a derivation such as
 // context.WithTimeout: a context derived from the closure's own passes, since
 // it still carries the transaction. Anything else — a call result, a selector
 // expression — is left alone.
-func CheckTransactionClosureContext(ignore gitignore.Matcher) []string {
+func checkTransactionClosureContext(ignore gitignore.Matcher) []string {
 	var violations []string
 
 	err := walkProjectDir(".", ignore, func(path string, info os.FileInfo) error {
@@ -235,7 +243,7 @@ func escapingContext(arg ast.Expr, inTransaction map[string]struct{}) (string, b
 
 // databaseEntryPointCall reports whether call enters the framework's database
 // package through one of its context-taking entry points, naming the entry.
-// The list is the one CheckDetachedContext keeps: both rules ask the same
+// The list is the one checkDetachedContext keeps: both rules ask the same
 // question about the same calls, one about a detached context and one about
 // a context that left the transaction.
 func databaseEntryPointCall(call *ast.CallExpr, dbNames goast.PackageNames) (string, bool) {

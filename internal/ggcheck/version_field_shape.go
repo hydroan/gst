@@ -1,4 +1,4 @@
-package main
+package ggcheck
 
 import (
 	"fmt"
@@ -14,6 +14,7 @@ import (
 	"github.com/hydroan/gst/internal/ggconst"
 	"github.com/hydroan/gst/internal/goast"
 	"github.com/hydroan/gst/internal/modelregistry"
+	gormschema "gorm.io/gorm/schema"
 )
 
 // Shared detection for model.Version declarations.
@@ -28,14 +29,14 @@ import (
 // under every name a file imports it by, a dot import included (see
 // goast.ImportedNames).
 
-// versionRequiredTag is the exact gorm tag payload a model.Version field
+// VersionRequiredTag is the exact gorm tag payload a model.Version field
 // must carry.
-const versionRequiredTag = "not null;default:1"
+const VersionRequiredTag = "not null;default:1"
 
-// versionFieldFinding describes one model.Version declaration that deviates
+// VersionFieldFinding describes one model.Version declaration that deviates
 // from the required shape, with enough byte geometry for gg gen to rewrite
 // the named-field cases in place.
-type versionFieldFinding struct {
+type VersionFieldFinding struct {
 	Path     string
 	Line     int
 	Struct   string
@@ -60,10 +61,56 @@ type versionFieldFinding struct {
 	insertAfter    int // offset right after the field type, for a new tag
 }
 
+// TagInsertion is one insertion a finding's heal expands to: Text goes in at
+// byte Offset of the file.
+type TagInsertion struct {
+	Offset int
+	Text   string
+}
+
+// TagInsertions expands one healable finding into its byte insertions. The
+// json name for a field without any json section follows gorm's naming
+// strategy, so the wire name matches the column name a bare field gets.
+func (finding VersionFieldFinding) TagInsertions() []TagInsertion {
+	if !finding.hasTag {
+		// No tag at all: both sections are missing by construction; add the
+		// whole literal right after the field type.
+		return []TagInsertion{{
+			Offset: finding.insertAfter,
+			Text:   " `json:\"" + versionJSONName(finding.Field) + ",omitempty\" gorm:\"" + VersionRequiredTag + "\"`",
+		}}
+	}
+
+	var insertions []TagInsertion
+	if len(finding.Missing) > 0 {
+		if finding.hasGormSection {
+			// Append the missing settings inside the existing gorm value.
+			insertions = append(insertions, TagInsertion{finding.gormValueEnd, ";" + strings.Join(finding.Missing, ";")})
+		} else {
+			// Add a gorm section before the literal's closing backquote.
+			insertions = append(insertions, TagInsertion{finding.tagEnd - 1, ` gorm:"` + VersionRequiredTag + `"`})
+		}
+	}
+	if finding.JSONMissing {
+		if finding.hasJSONSection {
+			// Append omitempty inside the existing json value.
+			insertions = append(insertions, TagInsertion{finding.jsonValueEnd, ",omitempty"})
+		} else {
+			insertions = append(insertions, TagInsertion{finding.tagEnd - 1, ` json:"` + versionJSONName(finding.Field) + `,omitempty"`})
+		}
+	}
+	return insertions
+}
+
+// versionJSONName renders the wire name a healed json section uses.
+func versionJSONName(fieldName string) string {
+	return gormschema.NamingStrategy{}.ColumnName("", fieldName)
+}
+
 // scanVersionFieldFile reports every deviating model.Version declaration in
 // one Go file. A file that does not import the framework model package is
 // free of them by construction and costs one imports-only parse.
-func scanVersionFieldFile(path string) ([]versionFieldFinding, error) {
+func scanVersionFieldFile(path string) ([]VersionFieldFinding, error) {
 	imports, err := parser.ParseFile(token.NewFileSet(), path, nil, parser.ImportsOnly)
 	if err != nil {
 		return nil, fmt.Errorf("%s has parse error: %w", relativePath(path), err)
@@ -79,7 +126,7 @@ func scanVersionFieldFile(path string) ([]versionFieldFinding, error) {
 		return nil, fmt.Errorf("%s has parse error: %w", relativePath(path), err)
 	}
 
-	var findings []versionFieldFinding
+	var findings []VersionFieldFinding
 	for _, decl := range file.Decls {
 		genDecl, ok := decl.(*ast.GenDecl)
 		if !ok {
@@ -117,8 +164,8 @@ func scanVersionFieldFile(path string) ([]versionFieldFinding, error) {
 
 // versionFieldDeviation classifies one model.Version field against the
 // required shape and computes the rewrite geometry for gg gen.
-func versionFieldDeviation(fset *token.FileSet, path, structName string, field *ast.Field) (versionFieldFinding, bool) {
-	finding := versionFieldFinding{
+func versionFieldDeviation(fset *token.FileSet, path, structName string, field *ast.Field) (VersionFieldFinding, bool) {
+	finding := VersionFieldFinding{
 		Path:   path,
 		Line:   fset.Position(field.Pos()).Line,
 		Struct: structName,
@@ -145,7 +192,7 @@ func versionFieldDeviation(fset *token.FileSet, path, structName string, field *
 	finding.JSONMissing = !jsonCompliant
 	finding.JSONBlocked = !jsonHealable
 	if len(finding.Missing) == 0 && !finding.JSONMissing {
-		return versionFieldFinding{}, false
+		return VersionFieldFinding{}, false
 	}
 
 	if finding.hasTag {

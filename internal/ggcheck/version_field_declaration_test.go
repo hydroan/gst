@@ -1,12 +1,16 @@
-package main
+package ggcheck_test
 
 import (
+	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
+
+	"github.com/hydroan/gst/internal/ggcheck"
 )
 
-func TestCheckVersionFieldDeclarations(t *testing.T) {
+func TestVersionFieldDeclaration(t *testing.T) {
 	projectDir := t.TempDir()
 	t.Chdir(projectDir)
 	writeCheckProjectGoMod(t, projectDir)
@@ -103,7 +107,7 @@ type UpdateReq struct {
 }
 `)
 
-	violations := CheckVersionFieldDeclarations(newProjectIgnoreMatcher())
+	violations := runCheck(ggcheck.VersionFieldDeclaration)
 
 	require := func(substr string) {
 		t.Helper()
@@ -125,7 +129,7 @@ type UpdateReq struct {
 	require("field 'Hidden.Version' (model.Version) carries json:\"-\"")
 }
 
-func TestCheckVersionFieldDeclarationsActionTypes(t *testing.T) {
+func TestVersionFieldDeclarationActionTypes(t *testing.T) {
 	projectDir := t.TempDir()
 	t.Chdir(projectDir)
 	writeCheckProjectGoMod(t, projectDir)
@@ -188,7 +192,7 @@ type StrayReq struct {
 }
 `)
 
-	violations := CheckVersionFieldDeclarations(newProjectIgnoreMatcher())
+	violations := runCheck(ggcheck.VersionFieldDeclaration)
 
 	require := func(substr string) {
 		t.Helper()
@@ -205,4 +209,66 @@ type StrayReq struct {
 	require(`field 'NoteUpdateReq.Version' (model.Version) in a DSL action type must carry json:"version,omitempty" (got json:"revision,omitempty")`)
 	require(`field 'NoteItem.Version' (model.Version) in a DSL action type must carry json:"version,omitempty" (got json:"version")`)
 	require(`field 'NoteUpdateRsp.Version' (model.Version) in a DSL action type carries json:"-"`)
+}
+
+// TestVersionFieldFindingsHealThroughTagInsertions pins what gg gen writes for
+// a deviating model.Version field of a database model: a field without a tag
+// gains the whole tag, and a partial tag gains only the settings it lacks.
+func TestVersionFieldFindingsHealThroughTagInsertions(t *testing.T) {
+	projectDir := t.TempDir()
+	t.Chdir(projectDir)
+	writeCheckProjectGoMod(t, projectDir)
+	samplePath := filepath.Join("model", "sample", "sample.go")
+	writeCheckFile(t, filepath.Join(projectDir, samplePath), `package sample
+
+import "github.com/hydroan/gst/model"
+
+type Sample struct {
+	model.Base
+	Version model.Version
+}
+`)
+	recordPath := filepath.Join("model", "record", "record.go")
+	writeCheckFile(t, filepath.Join(projectDir, recordPath), `package record
+
+import "github.com/hydroan/gst/model"
+
+type Record struct {
+	model.Base
+	Revision model.Version `+"`json:\"revision\" gorm:\"not null\"`"+`
+}
+`)
+
+	findings, err := ggcheck.VersionFieldFindings()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	healed := make(map[string]string, len(findings))
+	for _, finding := range findings {
+		source, readErr := os.ReadFile(finding.Path)
+		if readErr != nil {
+			t.Fatal(readErr)
+		}
+		insertions := finding.TagInsertions()
+		// Bottom-up, as gg gen applies them, keeps earlier offsets valid.
+		slices.SortStableFunc(insertions, func(a, b ggcheck.TagInsertion) int { return b.Offset - a.Offset })
+		for _, insertion := range insertions {
+			source = slices.Insert(source, insertion.Offset, []byte(insertion.Text)...)
+		}
+		healed[finding.Path] = string(source)
+	}
+
+	want := map[string]string{
+		samplePath: "\tVersion model.Version `json:\"version,omitempty\" gorm:\"not null;default:1\"`\n",
+		recordPath: "\tRevision model.Version `json:\"revision,omitempty\" gorm:\"not null;default:1\"`\n",
+	}
+	if len(healed) != len(want) {
+		t.Fatalf("healed files = %d, want %d: %v", len(healed), len(want), findings)
+	}
+	for path, line := range want {
+		if !strings.Contains(healed[path], line) {
+			t.Fatalf("healed %s = %q, want it to contain %q", path, healed[path], line)
+		}
+	}
 }

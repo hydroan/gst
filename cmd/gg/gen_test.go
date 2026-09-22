@@ -507,7 +507,7 @@ func Init() error {
 		t.Run(tt.name, func(t *testing.T) {
 			projectDir := newGenProject(t)
 			for path, content := range tt.files {
-				writeCheckFile(t, filepath.Join(projectDir, path), content)
+				writeProjectFile(t, filepath.Join(projectDir, path), content)
 			}
 
 			require.NoError(t, genRunWithOptions(genRunOptions{Quiet: true}))
@@ -704,7 +704,7 @@ func (i *Creator) Create(ctx *gst.ServiceContext, req *io.Item) (rsp *io.Item, e
 		t.Run(tt.name, func(t *testing.T) {
 			projectDir := newGenProject(t)
 			for path, content := range tt.files {
-				writeCheckFile(t, filepath.Join(projectDir, path), content)
+				writeProjectFile(t, filepath.Join(projectDir, path), content)
 			}
 
 			requireServiceFiles := func() {
@@ -723,7 +723,7 @@ func (i *Creator) Create(ctx *gst.ServiceContext, req *io.Item) (rsp *io.Item, e
 			for file, want := range tt.want {
 				source, err := parser.ParseFile(token.NewFileSet(), file, want, parser.PackageClauseOnly)
 				require.NoError(t, err)
-				writeCheckFile(t, strings.TrimSuffix(file, ".go")+"_test.go", "package "+source.Name.Name+"_test\n")
+				writeProjectFile(t, strings.TrimSuffix(file, ".go")+"_test.go", "package "+source.Name.Name+"_test\n")
 			}
 			require.NoError(t, genRunWithOptions(genRunOptions{Quiet: true}))
 			requireServiceFiles()
@@ -742,7 +742,7 @@ func (i *Creator) Create(ctx *gst.ServiceContext, req *io.Item) (rsp *io.Item, e
 // leaves the file as it is.
 func TestGenRunRejectsServiceFileImportingTwoPackagesUnderOneName(t *testing.T) {
 	projectDir := newGenProject(t)
-	writeCheckFile(t, filepath.Join(projectDir, "model/service/item.go"), `package service
+	writeProjectFile(t, filepath.Join(projectDir, "model/service/item.go"), `package service
 
 import (
 	"github.com/hydroan/gst/dsl"
@@ -780,8 +780,8 @@ func (i *Creator) Create(ctx *gst.ServiceContext, req *service.Item) (rsp *servi
 	return rsp, nil
 }
 `
-	writeCheckFile(t, filepath.Join(projectDir, serviceFile), source)
-	writeCheckFile(t, filepath.Join(projectDir, "service/service/item/create_test.go"), "package item_test\n")
+	writeProjectFile(t, filepath.Join(projectDir, serviceFile), source)
+	writeProjectFile(t, filepath.Join(projectDir, "service/service/item/create_test.go"), "package item_test\n")
 
 	err := genRunWithOptions(genRunOptions{Quiet: true})
 	require.EqualError(t, err, `service file service/service/item/create.go: refers to both the model package and "github.com/hydroan/gst/service" as service, so it cannot build; import the model package as model_service "tmpapp/model/service" and refer to it through model_service, or delete the file for gg gen to generate it again`)
@@ -796,7 +796,7 @@ func (i *Creator) Create(ctx *gst.ServiceContext, req *service.Item) (rsp *servi
 // The file builds, and gg gen leaves it as it is.
 func TestGenRunKeepsServiceFileImportingAVersionedModule(t *testing.T) {
 	projectDir := newGenProject(t)
-	writeCheckFile(t, filepath.Join(projectDir, "model/api/v2/item.go"), `package v2
+	writeProjectFile(t, filepath.Join(projectDir, "model/api/v2/item.go"), `package v2
 
 import (
 	"github.com/hydroan/gst/dsl"
@@ -835,8 +835,8 @@ func (i *Creator) Create(ctx *gst.ServiceContext, req *v2.Item) (rsp *v2.Item, e
 	return rsp, nil
 }
 `
-	writeCheckFile(t, filepath.Join(projectDir, serviceFile), source)
-	writeCheckFile(t, filepath.Join(projectDir, "service/api/v2/item/create_test.go"), "package item_test\n")
+	writeProjectFile(t, filepath.Join(projectDir, serviceFile), source)
+	writeProjectFile(t, filepath.Join(projectDir, "service/api/v2/item/create_test.go"), "package item_test\n")
 
 	require.NoError(t, genRunWithOptions(genRunOptions{Quiet: true}))
 	got, err := os.ReadFile(serviceFile)
