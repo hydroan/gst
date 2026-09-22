@@ -41,6 +41,10 @@ func getFieldTag(field reflect.StructField, tagName string) string {
 //
 // The zero value of an interface-typed payload or result is nil: such a type
 // binds any JSON value, which the empty schema describes.
+//
+// A fixed-length array type, [N]T, is documented with the empty schema as
+// well, as though it held any value: openapi3gen describes slices but not
+// arrays. A slice type documents the element type.
 func newSchemaRefWithDocs(value any) *openapi3.SchemaRef {
 	if value == nil {
 		return openapi3.NewSchemaRef("", openapi3.NewSchema())
