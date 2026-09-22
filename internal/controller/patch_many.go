@@ -122,6 +122,16 @@ func PatchManyFactory[M types.Model, REQ types.Request, RSP types.Response](cfg 
 			}
 		}
 		for i, m := range req.Items {
+			// An item without an id names no record: a defective request,
+			// refused before any record is read. Setting an empty id on a
+			// UUID-keyed model would mint a fresh one instead.
+			if len(m.GetID()) == 0 {
+				err = errors.Wrapf(database.ErrIDRequired, "patch many %s item %d", meta.name, i)
+				log.Errorz("batch patch item without its id", zap.Error(err))
+				JSON(c, databaseErrorCoder(err))
+				gstotel.RecordError(span, err)
+				return
+			}
 			var results []M
 			v := meta.newModel()
 			v.SetID(m.GetID())

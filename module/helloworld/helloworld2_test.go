@@ -175,18 +175,18 @@ func TestHelloworld2Module(t *testing.T) {
 
 			case "patch_many_missing_record", "patch_many_item_without_id":
 				createHelloworld2TestRecord(t, cli, res1)
-				// The second item names a record that was never created, or
-				// no record at all when it carries no id: the batch patches
-				// all of its items or none, so it answers 404 and leaves res1
-				// as its create stored it. The record is read from the
-				// database directly, as the get hooks overwrite the fields
-				// they would show.
-				other := res2
+				// The second item names a record that was never created,
+				// which answers 404, or carries no id at all, a defective
+				// request answered 400. Either way the batch patches all of
+				// its items or none, so res1 keeps what its create stored.
+				// The record is read from the database directly, as the get
+				// hooks overwrite the fields they would show.
+				other, status := res2, http.StatusNotFound
 				if tt.name == "patch_many_item_without_id" {
-					other = new(helloworld.Helloworld2)
+					other, status = new(helloworld.Helloworld2), http.StatusBadRequest
 				}
 				_, err = cli.Patch[helloworld2BatchRsp](helloworld2Path+"/batch", client.BatchItems([]*helloworld.Helloworld2{res1, other}))
-				testutil.RequireError(t, err, http.StatusNotFound)
+				testutil.RequireError(t, err, status)
 				stored := new(helloworld.Helloworld2)
 				require.NoError(t, database.Database[*helloworld.Helloworld2](context.Background()).Get(stored, id))
 				assert.Equal(t, "hello world 2 create before", stored.Before)

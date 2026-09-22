@@ -22,3 +22,18 @@ func TestDeleteManyKeepsTheRecordsTheBeforeHookRefuses(t *testing.T) {
 	require.Contains(t, rsp.Body.String(), refusedMsg)
 	requireSampleName(t, record.GetID(), "delete-many-refused")
 }
+
+// TestDeleteManyRefusesAnEmptyID pins the 400 of a batch delete listing an
+// empty id: the request is defective, and the record beside it is not
+// deleted either.
+func TestDeleteManyRefusesAnEmptyID(t *testing.T) {
+	record := createSample(t, "delete-many-identified")
+
+	rsp := serve(t, http.MethodDelete, "/controller-samples/batch",
+		controller.DeleteManyFactory[*sampleRecord, *sampleRecord, *sampleRecord](configFor[*sampleRecord](sampleRoute)),
+		"/controller-samples/batch", `{"ids":["`+record.GetID()+`",""]}`)
+
+	require.Equal(t, http.StatusBadRequest, rsp.Code)
+	require.Contains(t, rsp.Body.String(), `"code":1000`)
+	requireSampleName(t, record.GetID(), "delete-many-identified")
+}

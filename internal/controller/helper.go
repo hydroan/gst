@@ -216,11 +216,13 @@ func handleServiceError(c *gin.Context, err error) {
 }
 
 // databaseErrorCoder maps database errors to their canonical API codes: a
-// service-layer error keeps the status and message it was constructed with,
-// database.ErrRecordNotFound renders 404 and database.ErrDuplicatedKey renders
-// 409 with their fixed client-safe messages; anything else falls back to the
-// generic failure message. Handlers log the full error themselves, so every
-// branch deliberately keeps internal detail out of the response.
+// service-layer error keeps the status and message it was constructed with;
+// database.ErrRecordNotFound renders 404, database.ErrDuplicatedKey and
+// database.ErrStaleObject render 409, and database.ErrVersionRequired and
+// database.ErrIDRequired, request defects both, render 400, each with its
+// fixed client-safe message; anything else falls back to the generic failure
+// message. Handlers log the full error themselves, so every branch
+// deliberately keeps internal detail out of the response.
 //
 // The service error is honored first, and here as well as in the action path:
 // a model hook refusing an operation states its status deliberately — a guard
@@ -243,7 +245,18 @@ func databaseErrorCoder(err error) types.Coder {
 		// A versioned record arrived without the version it was read with —
 		// a request defect, not a conflict.
 		return CodeInvalidParam
+	case errors.Is(err, database.ErrIDRequired):
+		// A batch item arrived without the id naming its record — a request
+		// defect as well.
+		return CodeInvalidParam
 	default:
+		// TODO: this fallback, like handleServiceError's, answers an
+		// unexpected failure with 400, reporting a server-side problem as the
+		// client's. Server-side failures should answer 5xx and client-side
+		// ones 4xx; doing it right also takes mapping the database errors
+		// client data causes (a value too long, a missing foreign key, a
+		// failed check) to 4xx, and giving the validation errors of the authz
+		// model hooks a 4xx status.
 		return CodeFailure
 	}
 }

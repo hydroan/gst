@@ -267,6 +267,7 @@ func TestDatabaseErrorCoder(t *testing.T) {
 		{"duplicated_key_renders_409", errors.Wrap(database.ErrDuplicatedKey, "create sample"), http.StatusConflict, "Resource already exists."},
 		{"stale_object_renders_409", errors.Wrap(database.ErrStaleObject, "update sample"), http.StatusConflict, "Resource was modified by another operation. Reload and retry."},
 		{"missing_version_renders_400", errors.Wrap(database.ErrVersionRequired, "update sample"), http.StatusBadRequest, "Invalid parameters provided in the request."},
+		{"missing_id_renders_400", errors.Wrap(database.ErrIDRequired, "update sample"), http.StatusBadRequest, "Invalid parameters provided in the request."},
 		{"other_errors_hide_internal_text", errors.New("Error 1146: Table 'sample' doesn't exist"), http.StatusBadRequest, "failure"},
 	}
 	for _, tt := range tests {

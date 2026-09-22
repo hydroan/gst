@@ -80,6 +80,16 @@ func DeleteManyFactory[M types.Model, REQ types.Request, RSP types.Response](cfg
 		// 1.Perform business logic processing before batch delete resources.
 		req.Items = make([]M, 0, len(req.IDs))
 		for _, id := range req.IDs {
+			// An empty id names no record: a defective request, refused
+			// before anything is deleted. Setting it on a UUID-keyed model
+			// would mint a fresh id instead.
+			if len(id) == 0 {
+				err = errors.Wrapf(database.ErrIDRequired, "delete many %s", meta.name)
+				log.Errorz("batch delete with an empty id", zap.Error(err))
+				JSON(c, databaseErrorCoder(err))
+				gstotel.RecordError(span, err)
+				return
+			}
 			m := meta.newModel()
 			if !setRouteID(m, id) {
 				// An id the model rejects cannot match any row; skip it to keep

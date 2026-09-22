@@ -19,6 +19,16 @@ import (
 	"go.uber.org/zap"
 )
 
+// requestData is the body of a batch request: the items to create, update or
+// patch, or the ids to delete.
+//
+// TODO: decide whether a batch update or patch may skip the items whose
+// record does not exist and apply the rest, instead of failing whole. A
+// switch for it would be a member of this body beside items, and the answer
+// would have to list the items it skipped.
+//
+// TODO: decide whether a batch delete may accept an empty id instead of
+// refusing the request, switched on by a member of this body beside ids.
 type requestData[M types.Model] struct {
 	// IDs is the id list that should be batch delete.
 	IDs []string `json:"ids,omitempty"`

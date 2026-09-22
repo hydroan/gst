@@ -38,3 +38,17 @@ func TestCreateManyWritesNothingTheBeforeHookRefuses(t *testing.T) {
 	require.Contains(t, rsp.Body.String(), refusedMsg)
 	require.Zero(t, countSamplesNamed(t, name))
 }
+
+// TestCreateManyIgnoresMembersTheBatchDoesNotDeclare pins that a batch
+// request carrying a member the batch body does not declare, such as the
+// options member it once had, is applied as if the member were absent.
+func TestCreateManyIgnoresMembersTheBatchDoesNotDeclare(t *testing.T) {
+	name := uniqueName("create-many-optioned")
+
+	rsp := serve(t, http.MethodPost, "/controller-samples/batch",
+		controller.CreateManyFactory[*sampleRecord, *sampleRecord, *sampleRecord](configFor[*sampleRecord](sampleRoute)),
+		"/controller-samples/batch", `{"items":[{"name":"`+name+`"}],"options":{"atomic":true}}`)
+
+	require.Equal(t, http.StatusOK, rsp.Code, rsp.Body.String())
+	require.Equal(t, 1, countSamplesNamed(t, name))
+}

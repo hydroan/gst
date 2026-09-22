@@ -35,3 +35,18 @@ func TestUpdateManyWritesNothingTheBeforeHookRefuses(t *testing.T) {
 	require.Contains(t, rsp.Body.String(), refusedMsg)
 	requireSampleName(t, record.GetID(), "update-many-refused")
 }
+
+// TestUpdateManyRefusesAnItemWithoutAnID pins the 400 of a batch update
+// with an item that names no record: the request is defective, and the item
+// beside it is not written either.
+func TestUpdateManyRefusesAnItemWithoutAnID(t *testing.T) {
+	record := createSample(t, "update-many-identified")
+
+	rsp := serve(t, http.MethodPut, "/controller-samples/batch",
+		controller.UpdateManyFactory[*sampleRecord, *sampleRecord, *sampleRecord](configFor[*sampleRecord](sampleRoute)),
+		"/controller-samples/batch", `{"items":[{"id":"`+record.GetID()+`","name":"update-many-renamed"},{"name":"update-many-other"}]}`)
+
+	require.Equal(t, http.StatusBadRequest, rsp.Code)
+	require.Contains(t, rsp.Body.String(), `"code":1000`)
+	requireSampleName(t, record.GetID(), "update-many-identified")
+}
