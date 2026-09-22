@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/hydroan/gst/ds/multimap"
+	"github.com/hydroan/gst/ds/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -17,25 +18,24 @@ func TestMultiMap_Creation(t *testing.T) {
 		tests := []struct {
 			name    string
 			cmp     func(int, int) int
-			wantErr bool
+			wantErr error
 		}{
 			{
-				name:    "with valid equal function",
-				cmp:     intCmp,
-				wantErr: false,
+				name: "with valid comparison function",
+				cmp:  intCmp,
 			},
 			{
-				name:    "with nil equal function",
+				name:    "with nil comparison function",
 				cmp:     nil,
-				wantErr: true,
+				wantErr: types.ErrComparisonNil,
 			},
 		}
 
 		for _, tt := range tests {
 			t.Run(tt.name, func(t *testing.T) {
 				mm, err := multimap.New[string, int](tt.cmp)
-				if tt.wantErr {
-					require.Error(t, err)
+				if tt.wantErr != nil {
+					require.ErrorIs(t, err, tt.wantErr)
 					assert.Nil(t, mm)
 				} else {
 					require.NoError(t, err)

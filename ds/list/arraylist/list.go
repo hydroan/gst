@@ -27,11 +27,13 @@ type List[E any] struct {
 }
 
 // New creates and returns a new array-backed list.
-// The provided equal function is used to compare elements for equality.
+// The provided cmp orders the elements: Sort sorts by it, and Contains,
+// IndexOf and Remove treat two elements as equal when it returns 0. A nil
+// cmp fails with types.ErrComparisonNil.
 // Optional options can be passed to modify the list's behavior, such as enabling concurrent safety.
 func New[E any](cmp func(E, E) int, ops ...Option[E]) (*List[E], error) {
 	if cmp == nil {
-		return nil, types.ErrEqualNil
+		return nil, types.ErrComparisonNil
 	}
 	l := &List[E]{
 		elements: make([]E, 0, minCap), // NOTE: zero capacity will cause growBy blocked.

@@ -14,12 +14,11 @@ type MultiMap[K comparable, V any] struct {
 	mu   types.Locker
 }
 
-// New creates an empty MultiMap.
-// cmp is used to compare values for equality.
-// cmp is nil will case error.
+// New creates an empty MultiMap. cmp compares values: two values are equal
+// when it returns 0. A nil cmp fails with types.ErrComparisonNil.
 func New[K comparable, V any](cmp func(V, V) int, ops ...Option[K, V]) (*MultiMap[K, V], error) {
 	if cmp == nil {
-		return nil, types.ErrEqualNil
+		return nil, types.ErrComparisonNil
 	}
 	m := &MultiMap[K, V]{
 		data: make(map[K][]V),

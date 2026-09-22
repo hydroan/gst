@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/hydroan/gst/ds/tree/avltree"
+	"github.com/hydroan/gst/ds/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -25,25 +26,24 @@ func TestAVLTree_New(t *testing.T) {
 	tests := []struct {
 		name    string
 		cmp     func(int, int) int
-		wantErr bool
+		wantErr error
 	}{
 		{
 			name:    "nil comparator",
 			cmp:     nil,
-			wantErr: true,
+			wantErr: types.ErrComparisonNil,
 		},
 		{
-			name:    "valid comparator",
-			cmp:     cmp.Compare[int],
-			wantErr: false,
+			name: "valid comparator",
+			cmp:  cmp.Compare[int],
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			tree, err := avltree.New[int, int](tt.cmp)
-			if tt.wantErr {
-				require.Error(t, err)
+			if tt.wantErr != nil {
+				require.ErrorIs(t, err, tt.wantErr)
 				assert.Nil(t, tree)
 			} else {
 				require.NoError(t, err)

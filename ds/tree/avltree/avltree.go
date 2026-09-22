@@ -21,11 +21,12 @@ type Tree[K comparable, V any] struct {
 	nodeFormatter func(K, V) string
 }
 
-// New creates and returns a AVL tree.
-// The provided function "cmp" determines the order of the keys.
+// New creates and returns an AVL tree.
+// The provided function "cmp" determines the order of the keys; a nil cmp
+// fails with types.ErrComparisonNil.
 func New[K comparable, V any](cmp func(K, K) int, ops ...Option[K, V]) (*Tree[K, V], error) {
 	if cmp == nil {
-		return nil, types.ErrEqualNil
+		return nil, types.ErrComparisonNil
 	}
 	t := &Tree[K, V]{cmp: cmp, mu: types.FakeLocker{}}
 	for _, op := range ops {

@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/hydroan/gst/ds/list/arraylist"
+	"github.com/hydroan/gst/ds/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -13,11 +14,19 @@ func cmp(a, b int) int {
 }
 
 func TestNew(t *testing.T) {
-	list, err := arraylist.New(cmp)
-	require.NoError(t, err)
-	assert.NotNil(t, list)
-	assert.True(t, list.IsEmpty())
-	assert.Equal(t, 0, list.Len())
+	t.Run("valid comparison function", func(t *testing.T) {
+		list, err := arraylist.New(cmp)
+		require.NoError(t, err)
+		assert.NotNil(t, list)
+		assert.True(t, list.IsEmpty())
+		assert.Equal(t, 0, list.Len())
+	})
+
+	t.Run("nil comparison function", func(t *testing.T) {
+		list, err := arraylist.New[int](nil)
+		require.ErrorIs(t, err, types.ErrComparisonNil)
+		assert.Nil(t, list)
+	})
 }
 
 func TestNewFromSlice(t *testing.T) {
