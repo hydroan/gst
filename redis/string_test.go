@@ -316,6 +316,24 @@ func TestGetIntReportsUndecodableValue(t *testing.T) {
 	}
 }
 
+// TestGetIntDecodesSixtyFourBitValues reads back a value beyond the 32-bit
+// range: GetInt returns an int64, so it decodes the whole 64-bit range on every
+// platform, including one whose int is 32 bits wide.
+func TestGetIntDecodesSixtyFourBitValues(t *testing.T) {
+	ctx := t.Context()
+	if err := redis.Set(ctx, "redis-test:large", "4294967296", time.Minute); err != nil {
+		t.Fatalf("set: %v", err)
+	}
+
+	got, err := redis.GetInt(ctx, "redis-test:large")
+	if err != nil {
+		t.Fatalf("getint: %v", err)
+	}
+	if got != 1<<32 {
+		t.Fatalf("want %d, got %d", int64(1<<32), got)
+	}
+}
+
 // clearKey deletes key now and again when the test ends, so a test that
 // depends on the key being absent holds in a repeated run of the process.
 func clearKey(t *testing.T, key string) {

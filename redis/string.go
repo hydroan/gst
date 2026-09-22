@@ -140,9 +140,9 @@ func GetInt(ctx context.Context, key string) (int64, error) {
 		}
 		return 0, errors.WithStack(err)
 	}
-	val, err := strconv.Atoi(cache)
+	val, err := strconv.ParseInt(cache, 10, 64)
 	if err != nil {
 		return 0, errors.WithStack(err)
 	}
-	return int64(val), nil
+	return val, nil
 }
