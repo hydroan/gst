@@ -49,9 +49,7 @@ func CheckServiceTestCoverage(ignore gitignore.Matcher) []string {
 	// Route-ignored actions are disabled here for the same reason gg gen
 	// disables them: their service files stay on disk without a registered
 	// route, so no test can exercise them.
-	buildHierarchicalEndpoints(allModels)
-	propagateParentParams(allModels)
-	applyRouteIgnores(allModels, cfg.Gen.Routes.Ignore)
+	codegen.ResolveRoutes(allModels, cfg.Gen.Routes.Ignore)
 
 	seen := make(map[string]bool)
 	for _, m := range allModels {

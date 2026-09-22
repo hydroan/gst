@@ -1,4 +1,4 @@
-package main
+package codegen
 
 import (
 	"path/filepath"
@@ -6,25 +6,24 @@ import (
 	"strings"
 
 	"github.com/hydroan/gst/dsl"
-	"github.com/hydroan/gst/internal/clioutput"
 	"github.com/hydroan/gst/internal/codegen/gen"
 	"github.com/hydroan/gst/internal/ggconfig"
 	"github.com/hydroan/gst/internal/ggconst"
 )
 
-// routeIgnoreMatch records one generated route disabled by a gst.yaml
+// RouteIgnoreMatch records one generated route disabled by a gst.yaml
 // gen.routes.ignore rule.
-type routeIgnoreMatch struct {
+type RouteIgnoreMatch struct {
 	Method string
 	Path   string
 	Model  string
 }
 
-// routeIgnoreResult reports how the gst.yaml ignore rules applied to the
-// scanned models.
-type routeIgnoreResult struct {
+// RouteIgnoreResult reports how the gst.yaml route ignore rules applied to
+// the models.
+type RouteIgnoreResult struct {
 	// Matches lists the disabled routes in scan order.
-	Matches []routeIgnoreMatch
+	Matches []RouteIgnoreMatch
 
 	// Unmatched lists rules that matched no generated route, usually a sign
 	// the configuration is stale after a framework module update.
@@ -34,7 +33,7 @@ type routeIgnoreResult struct {
 	// under more than one model directory. Such a rule likely swallows a
 	// project's own re-declaration of a framework route and should be scoped
 	// with "from".
-	MultiSourceRules []multiSourceRule
+	MultiSourceRules []MultiSourceRule
 
 	// KeptServiceFiles are the service files owned by ignored Service()
 	// actions. Ignoring a route only removes its registrations from the
@@ -53,10 +52,10 @@ type routeIgnoreResult struct {
 // router registration files (service/service.gen.go, router/router.gen.go)
 // and no new service file is generated for it, but existing service files
 // are kept on disk. Rules with a From prefix only apply to models declared
-// under that directory. Models must have hierarchical endpoints built before
-// calling this.
-func applyRouteIgnores(allModels []*gen.ModelInfo, rules []ggconfig.RouteRule) routeIgnoreResult {
-	result := routeIgnoreResult{}
+// under that directory. ResolveRoutes runs it once the endpoints are
+// resolved, which the rules match against.
+func applyRouteIgnores(allModels []*gen.ModelInfo, rules []ggconfig.RouteRule) RouteIgnoreResult {
+	result := RouteIgnoreResult{}
 	if len(rules) == 0 {
 		return result
 	}
@@ -67,7 +66,7 @@ func applyRouteIgnores(allModels []*gen.ModelInfo, rules []ggconfig.RouteRule) r
 	matchedDirs := make([]map[string]bool, len(rules))
 	for _, m := range allModels {
 		m.Design.Range(func(route string, act *dsl.Action) {
-			finalRoute, _ := routerTargetForAction(route, m.Design, act)
+			finalRoute, _ := RouterTargetForAction(route, m.Design, act)
 			method := act.Phase.ToHTTPVerb().HTTPMethod()
 			for i, rule := range rules {
 				if !rule.Match(method, finalRoute) || !rule.MatchesSource(m.ModelFilePath) {
@@ -83,8 +82,8 @@ func applyRouteIgnores(allModels []*gen.ModelInfo, rules []ggconfig.RouteRule) r
 				if matchedDirs[i] == nil {
 					matchedDirs[i] = make(map[string]bool)
 				}
-				matchedDirs[i][modelRootDir(m.ModelFilePath)] = true
-				result.Matches = append(result.Matches, routeIgnoreMatch{
+				matchedDirs[i][ModelRootDir(m.ModelFilePath)] = true
+				result.Matches = append(result.Matches, RouteIgnoreMatch{
 					Method: method,
 					Path:   "/api/" + strings.Join(ggconfig.NormalizeRoutePath(finalRoute), "/"),
 					Model:  m.ModelName,
@@ -105,22 +104,29 @@ func applyRouteIgnores(allModels []*gen.ModelInfo, rules []ggconfig.RouteRule) r
 				dirs = append(dirs, dir)
 			}
 			sort.Strings(dirs)
-			result.MultiSourceRules = append(result.MultiSourceRules, multiSourceRule{Raw: rule.Raw, Dirs: dirs})
+			result.MultiSourceRules = append(result.MultiSourceRules, MultiSourceRule{Raw: rule.Raw, Dirs: dirs})
 		}
 	}
 	return result
 }
 
-// reportRouteIgnoreWarnings warns about ignore rules that matched no
-// generated route (a stale rule means a previously ignored route may have
-// silently come back) and about From-less rules matching models under
-// several directories (likely swallowing the project's own re-declaration).
-// Warnings are emitted even in quiet mode.
-func reportRouteIgnoreWarnings(result routeIgnoreResult) {
-	for _, rule := range result.Unmatched {
-		clioutput.Warn("", "gst.yaml ignore rule matched no route: %s", rule.Raw)
+// MultiSourceRule records a From-less rule that matched models under more
+// than one model directory. The route ignore result carries it, and the
+// model ignores of gg gen reuse it, to warn about rules that likely swallow
+// a project's own declaration.
+type MultiSourceRule struct {
+	Raw  string
+	Dirs []string
+}
+
+// ModelRootDir returns the first two path segments of a model file path
+// (e.g. "model/iam" for "model/iam/user/user.go"), the granularity at which
+// module copy lays out framework modules. Files directly under the model
+// root yield just the root (e.g. "model" for "model/user.go").
+func ModelRootDir(modelFilePath string) string {
+	parts := strings.SplitN(filepath.ToSlash(modelFilePath), "/", 3)
+	if len(parts) < 3 {
+		return parts[0]
 	}
-	for _, rule := range result.MultiSourceRules {
-		clioutput.Warn("", "gst.yaml ignore rule %q matched models under %s; add \"from\" to scope it to one directory", rule.Raw, strings.Join(rule.Dirs, ", "))
-	}
+	return parts[0] + "/" + parts[1]
 }
