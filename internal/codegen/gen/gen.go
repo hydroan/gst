@@ -1,13 +1,10 @@
 package gen
 
 import (
-	"bufio"
 	"fmt"
 	"go/ast"
 	"go/parser"
 	"go/token"
-	"os"
-	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -150,43 +147,6 @@ func (m *ModelInfo) InModelRoot(modelDir string) bool {
 // sample holding package sample.
 func ModelPackageName(dirName string) string {
 	return strings.ReplaceAll(dirName, "_", "")
-}
-
-// GetModulePath returns the module path of the project in the working
-// directory: the one go list -m reports, run with workspace mode off, or,
-// when that fails, the one the module directive of go.mod declares. It fails
-// when the working directory holds no go.mod.
-func GetModulePath() (string, error) {
-	file, err := os.Open("go.mod")
-	if err != nil {
-		return "", err
-	}
-	defer file.Close()
-
-	// If go command exists, get module path directly through go list -m command.
-	// Disable workspace mode explicitly: inside a go.work workspace "go list -m"
-	// prints every workspace module (one per line) instead of the current one,
-	// which would corrupt every generated import path.
-	cmd := exec.Command("go", "list", "-m")
-	cmd.Env = append(os.Environ(), "GOWORK=off")
-	output, err := cmd.Output()
-	if err == nil {
-		return strings.TrimSpace(string(output)), nil
-	}
-
-	var moduleName string
-	scanner := bufio.NewScanner(file)
-	for scanner.Scan() {
-		line := strings.TrimSpace(scanner.Text())
-		if strings.HasPrefix(line, "module") {
-			parts := strings.Fields(line)
-			if len(parts) == 2 {
-				moduleName = parts[1]
-			}
-		}
-	}
-
-	return moduleName, scanner.Err()
 }
 
 // FindModels returns the models the model file filename declares: its

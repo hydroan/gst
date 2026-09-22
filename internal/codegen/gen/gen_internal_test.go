@@ -76,89 +76,27 @@ type Device struct {
 }
 	`
 
-func TestGetModulePath(t *testing.T) {
-	// Each case runs in a directory of its own: GetModulePath reads go.mod
-	// from the working directory, and a go.mod written into the package
-	// directory would briefly turn it into a module of its own.
-	t.Run("reads_the_module_path_from_go.mod", func(t *testing.T) {
-		t.Chdir(t.TempDir())
-		if err := os.WriteFile("go.mod", []byte("module github.com/hydroan/gst"), 0o600); err != nil {
-			t.Fatal(err)
-		}
-
-		got, err := GetModulePath()
-		if err != nil {
-			t.Fatalf("GetModulePath() failed: %v", err)
-		}
-		if got != "github.com/hydroan/gst" {
-			t.Errorf("GetModulePath() = %v, want %v", got, "github.com/hydroan/gst")
-		}
-	})
-	t.Run("fails_without_go.mod", func(t *testing.T) {
-		t.Chdir(t.TempDir())
-
-		if _, err := GetModulePath(); err == nil {
-			t.Fatal("GetModulePath() succeeded without a go.mod")
-		}
-	})
-}
-
-func TestGetModulePathInWorkspaceReturnsCurrentModuleOnly(t *testing.T) {
-	dir := t.TempDir()
-	appDir := filepath.Join(dir, "app")
-	libDir := filepath.Join(dir, "lib")
-	for moduleDir, moduleName := range map[string]string{appDir: "example.com/app", libDir: "example.com/lib"} {
-		if err := os.MkdirAll(moduleDir, 0o750); err != nil {
-			t.Fatal(err)
-		}
-		if err := os.WriteFile(filepath.Join(moduleDir, "go.mod"), []byte("module "+moduleName+"\n\ngo 1.24\n"), 0o600); err != nil {
-			t.Fatal(err)
-		}
-	}
-	goWork := filepath.Join(dir, "go.work")
-	if err := os.WriteFile(goWork, []byte("go 1.24\n\nuse (\n\t./app\n\t./lib\n)\n"), 0o600); err != nil {
-		t.Fatal(err)
-	}
-
-	t.Chdir(appDir)
-	t.Setenv("GOWORK", goWork)
-
-	got, err := GetModulePath()
-	if err != nil {
-		t.Fatalf("GetModulePath() error = %v", err)
-	}
-	if got != "example.com/app" {
-		t.Fatalf("GetModulePath() = %q, want %q (workspace mode must not leak other modules)", got, "example.com/app")
-	}
-}
-
 func TestFindModels(t *testing.T) {
-	// The module and its model files live in a directory of their own, as in
-	// TestGetModulePath: a go.mod written into the package directory would
-	// briefly turn it into a module of its own.
+	// The model files live in a directory of their own: a go.mod written into
+	// the package directory would briefly turn it into a module of its own.
 	dir := t.TempDir()
 	t.Chdir(dir)
-	content := []byte("module github.com/hydroan/gst")
-	if err := os.WriteFile("go.mod", content, 0o600); err != nil {
-		t.Fatal(err)
-	}
-
-	modulePath, err := GetModulePath()
-	if err != nil {
+	modulePath := "github.com/hydroan/gst"
+	if err := os.WriteFile("go.mod", []byte("module "+modulePath), 0o600); err != nil {
 		t.Fatal(err)
 	}
 
 	modelDir := filepath.Join(dir, "model")
-	if err = os.MkdirAll(modelDir, 0o750); err != nil {
+	if err := os.MkdirAll(modelDir, 0o750); err != nil {
 		t.Fatal(err)
 	}
 
 	filename1 := filepath.Join(modelDir, "user.go")
 	filename2 := filepath.Join(modelDir, "user2.go")
-	if err = os.WriteFile(filename1, []byte(defaultImportModelSource), 0o600); err != nil {
+	if err := os.WriteFile(filename1, []byte(defaultImportModelSource), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if err = os.WriteFile(filename2, []byte(namedImportModelSource), 0o600); err != nil {
+	if err := os.WriteFile(filename2, []byte(namedImportModelSource), 0o600); err != nil {
 		t.Fatal(err)
 	}
 
