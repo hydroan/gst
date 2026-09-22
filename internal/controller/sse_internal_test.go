@@ -43,7 +43,7 @@ func TestSSEFactoryRecordsAStreamEndedByShutdownAsInterrupted(t *testing.T) {
 	oteltest.Enable(t)
 	recorder := oteltest.Record(t)
 
-	serviceregistry.Register[*factoryRouteModel, *factoryRouteModel, *factoryRouteModel](consts.PHASE_SSE, "samples/stream", &sseSampleService{})
+	registerTestService[*factoryRouteModel, *factoryRouteModel, *factoryRouteModel](consts.PHASE_SSE, "samples/stream", &sseSampleService{})
 	engine := gin.New()
 	engine.GET("/samples/stream", SSEFactory[*factoryRouteModel, *factoryRouteModel, *factoryRouteModel](&types.ControllerConfig[*factoryRouteModel]{Route: "samples/stream"}))
 

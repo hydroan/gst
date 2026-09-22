@@ -112,6 +112,10 @@ type exportVirtualSampleService struct {
 	gotModels int
 }
 
+// exportVirtualSampleSvc is the one exportVirtualSampleService the export
+// test registers, whatever the number of its runs.
+var exportVirtualSampleSvc = &exportVirtualSampleService{}
+
 func (s *exportVirtualSampleService) Export(_ *types.ServiceContext, ms ...*exportVirtualSample) ([]byte, error) {
 	s.gotModels = len(ms)
 	return []byte("name\nsample\n"), nil
@@ -121,11 +125,12 @@ func TestExportFactoryVirtualModelSkipsListing(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	logger.Controller = zap.New("")
 
-	// No database is configured in this test on purpose: a virtual model has
-	// no table, so the handler must never reach the controller-side listing.
+	// A virtual model has no table, so the handler must never reach the
+	// controller-side listing.
 	const route = "test/export_virtual_samples/export"
-	svc := &exportVirtualSampleService{}
-	serviceregistry.Register[*exportVirtualSample, *exportVirtualSample, *exportVirtualSample](consts.PHASE_EXPORT, route, svc)
+	svc := exportVirtualSampleSvc
+	svc.gotModels = 0
+	registerTestService[*exportVirtualSample, *exportVirtualSample, *exportVirtualSample](consts.PHASE_EXPORT, route, svc)
 
 	rec := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(rec)
@@ -162,6 +167,10 @@ type exportFormatSampleService struct {
 	filterReached bool
 }
 
+// exportFormatSampleSvc is the one exportFormatSampleService the export test
+// registers, whatever the number of its runs.
+var exportFormatSampleSvc = &exportFormatSampleService{}
+
 func (s *exportFormatSampleService) Filter(_ *types.ServiceContext, m *exportFormatSample,
 	opts types.QueryOptions,
 ) (*exportFormatSample, types.QueryOptions, error) {
@@ -174,8 +183,9 @@ func TestExportFactoryKeepsFormatParamFromModelBind(t *testing.T) {
 	logger.Controller = zap.New("")
 
 	const route = "test/export_format_samples/export"
-	svc := &exportFormatSampleService{}
-	serviceregistry.Register[*exportFormatSample, *exportFormatSample, *exportFormatSample](consts.PHASE_EXPORT, route, svc)
+	svc := exportFormatSampleSvc
+	svc.filterReached = false
+	registerTestService[*exportFormatSample, *exportFormatSample, *exportFormatSample](consts.PHASE_EXPORT, route, svc)
 
 	rec := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(rec)

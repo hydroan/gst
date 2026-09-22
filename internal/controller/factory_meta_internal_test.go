@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/gin-gonic/gin"
@@ -17,6 +18,21 @@ import (
 	"github.com/hydroan/gst/logger/zap"
 	"github.com/stretchr/testify/require"
 )
+
+// registeredTestServices records the routes and phases registerTestService
+// has registered a service under.
+var registeredTestServices sync.Map
+
+// registerTestService registers svc under phase and route unless an earlier
+// run of the test already did: the registry refuses a second registration of
+// a route and phase, which a test registering its service on every run would
+// attempt under -count. A service a test asserts the state of is therefore
+// shared across the runs, and the test resets that state first.
+func registerTestService[M types.Model, REQ types.Request, RSP types.Response](phase consts.Phase, route string, svc types.Service[M, REQ, RSP]) {
+	if _, registered := registeredTestServices.LoadOrStore(string(phase)+"|"+route, true); !registered {
+		serviceregistry.Register[M, REQ, RSP](phase, route, svc)
+	}
+}
 
 // factoryRouteModel is the model fixture the controller factory tests share:
 // the route-dispatch and hook-tracing tests here, and the SSE test.
@@ -58,8 +74,8 @@ func TestCreateFactoryDispatchesActionServiceByRoute(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	logger.Controller = zap.New("")
 
-	serviceregistry.Register[*factoryRouteModel, *factoryRouteReq, *factoryRouteRsp](consts.PHASE_CREATE, "samples/:id/start", &factoryStartService{})
-	serviceregistry.Register[*factoryRouteModel, *factoryRouteReq, *factoryRouteRsp](consts.PHASE_CREATE, "samples/:id/stop", &factoryStopService{})
+	registerTestService[*factoryRouteModel, *factoryRouteReq, *factoryRouteRsp](consts.PHASE_CREATE, "samples/:id/start", &factoryStartService{})
+	registerTestService[*factoryRouteModel, *factoryRouteReq, *factoryRouteRsp](consts.PHASE_CREATE, "samples/:id/stop", &factoryStopService{})
 
 	engine := gin.New()
 	engine.POST("/samples/:id/start", CreateFactory[*factoryRouteModel, *factoryRouteReq, *factoryRouteRsp](&types.ControllerConfig[*factoryRouteModel]{Route: "samples/:id/start"}))
