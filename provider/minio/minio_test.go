@@ -243,31 +243,45 @@ func TestCopyWithEmptyOptionsUsesTheDefaultBucket(t *testing.T) {
 	require.True(t, exists)
 }
 
-// TestDefaultBucketIsTheFirstConfigured configures two buckets, comma
-// separated as the configuration allows: every operation naming no bucket
-// uses the first, and the second stays reachable by name.
-func TestDefaultBucketIsTheFirstConfigured(t *testing.T) {
-	first, second := config.App.Minio.Bucket, bucketNamed("second")
-	require.NoError(t, minio.EnsureBucket(context.TODO(), second))
-	config.App.Minio.Bucket = first + ", " + second
-	t.Cleanup(func() { config.App.Minio.Bucket = first })
+// TestDefaultBucket pins the bucket an operation naming none uses: the first
+// bucket the setting lists, comma separated as the configuration allows, and
+// none when the setting lists no bucket at all.
+func TestDefaultBucket(t *testing.T) {
+	t.Run("the first bucket listed", func(t *testing.T) {
+		// The second bucket stays reachable by name.
+		first, second := config.App.Minio.Bucket, bucketNamed("second")
+		require.NoError(t, minio.EnsureBucket(context.TODO(), second))
+		config.App.Minio.Bucket = first + ", " + second
+		t.Cleanup(func() { config.App.Minio.Bucket = first })
 
-	_, err := minio.Put(context.TODO(), "default/note.txt", strings.NewReader("note"))
-	require.NoError(t, err)
-	defer func() { _ = minio.Remove(context.TODO(), "default/note.txt") }()
+		_, err := minio.Put(context.TODO(), "default/note.txt", strings.NewReader("note"))
+		require.NoError(t, err)
+		defer func() { _ = minio.Remove(context.TODO(), "default/note.txt") }()
 
-	exists, err := minio.Exists(context.TODO(), "default/note.txt")
-	require.NoError(t, err)
-	require.True(t, exists)
-	reader, _, err := minio.Get(context.TODO(), "default/note.txt", &minio.GetOptions{Bucket: first})
-	require.NoError(t, err)
-	defer reader.Close()
-	content, err := io.ReadAll(reader)
-	require.NoError(t, err)
-	require.Equal(t, "note", string(content))
-	exists, err = minio.Exists(context.TODO(), "default/note.txt", &minio.ExistsOptions{Bucket: second})
-	require.NoError(t, err)
-	require.False(t, exists)
+		exists, err := minio.Exists(context.TODO(), "default/note.txt")
+		require.NoError(t, err)
+		require.True(t, exists)
+		reader, _, err := minio.Get(context.TODO(), "default/note.txt", &minio.GetOptions{Bucket: first})
+		require.NoError(t, err)
+		defer reader.Close()
+		content, err := io.ReadAll(reader)
+		require.NoError(t, err)
+		require.Equal(t, "note", string(content))
+		exists, err = minio.Exists(context.TODO(), "default/note.txt", &minio.ExistsOptions{Bucket: second})
+		require.NoError(t, err)
+		require.False(t, exists)
+	})
+
+	t.Run("none when the setting lists none", func(t *testing.T) {
+		// Separators alone list no bucket, so an operation naming none has
+		// nowhere to write and fails.
+		first := config.App.Minio.Bucket
+		config.App.Minio.Bucket = " , "
+		t.Cleanup(func() { config.App.Minio.Bucket = first })
+
+		_, err := minio.Put(context.TODO(), "default/note.txt", strings.NewReader("note"))
+		require.Error(t, err)
+	})
 }
 
 // bucketNamed returns the name of a further bucket of this test binary: the
