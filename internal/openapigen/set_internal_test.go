@@ -215,21 +215,66 @@ type openapiEntryBatch []*openapiEntry
 // entries.
 type openapiEntryIndex map[string]*openapiEntry
 
-// TestSetDocumentsSliceAndMapBodies asserts that a slice payload and a map
-// result are documented as the data they carry: the request body is an array
-// schema and the response data an object schema, not the absent body and the
-// null data member of a type without fields.
+// TestSetDocumentsSliceAndMapBodies asserts that slice and map payloads and
+// results are documented as the data they carry — through a pointer as well —
+// instead of the absent body and the null data member of a type without
+// fields.
 func TestSetDocumentsSliceAndMapBodies(t *testing.T) {
 	set[*openapiActionModel, openapiEntryBatch, openapiEntryIndex]("/api/openapi-collections", true, consts.Create)
+	set[*openapiActionModel, *openapiEntryBatch, openapiEntryBatch]("/api/openapi-collection-pointers", true, consts.Create)
 
-	op := operationForPath(t, "/api/openapi-collections")
-	payload := registeredRequestBodySchema(t, op.RequestBody)
-	if !payload.Type.Is(openapi3.TypeArray) {
-		t.Fatalf("payload type = %v, want array", payload.Type)
+	for path, wantData := range map[string]openapi3.Types{
+		"/api/openapi-collections":         {openapi3.TypeObject},
+		"/api/openapi-collection-pointers": {openapi3.TypeArray},
+	} {
+		op := operationForPath(t, path)
+		payload := registeredRequestBodySchema(t, op.RequestBody)
+		if !payload.Type.Is(openapi3.TypeArray) {
+			t.Fatalf("%s payload type = %v, want array", path, payload.Type)
+		}
+		data := dataSchema(t, registeredResponseSchema(t, op.Responses.Status(200)))
+		if !data.Type.Is(wantData.Slice()[0]) {
+			t.Fatalf("%s response data type = %v, want %v", path, data.Type, wantData)
+		}
 	}
-	data := dataSchema(t, registeredResponseSchema(t, op.Responses.Status(200)))
-	if !data.Type.Is(openapi3.TypeObject) {
-		t.Fatalf("response data type = %v, want object", data.Type)
+}
+
+// openapiDeletableModel backs the delete routes whose documented answer the
+// test below reads.
+type openapiDeletableModel struct {
+	// Name is the record name.
+	Name string `json:"name"`
+
+	modelregistry.Base
+}
+
+// TestSetDocumentsNoDataForDefaultDeletes asserts that a delete the framework
+// performs itself, single or batch, documents the answer it gives: the
+// envelope with a null data member, not the deleted record, while a delete a
+// service performs keeps its response type.
+func TestSetDocumentsNoDataForDefaultDeletes(t *testing.T) {
+	set[*openapiDeletableModel, *openapiDeletableModel, *openapiDeletableModel]("/api/openapi-deletables/{id}", true, consts.Delete)
+	set[*openapiDeletableModel, *openapiDeletableModel, *openapiDeletableModel]("/api/openapi-deletables/batch", true, consts.DeleteMany)
+	set[*openapiDeletableModel, *openapiFirstActionReq, *openapiFirstActionRsp]("/api/openapi-deletable-actions/{id}", true, consts.Delete)
+
+	for _, path := range []string{"/api/openapi-deletables/{id}", "/api/openapi-deletables/batch"} {
+		item := doc.Paths.Value(path)
+		if item == nil || item.Delete == nil {
+			t.Fatalf("DELETE %s is missing from the document", path)
+		}
+		data := dataSchema(t, registeredResponseSchema(t, item.Delete.Responses.Status(200)))
+		if data.Type != nil || len(data.Properties) != 0 || !data.Nullable {
+			t.Fatalf("%s response data = %+v, want a null member without type or properties", path, data)
+		}
+	}
+
+	item := doc.Paths.Value("/api/openapi-deletable-actions/{id}")
+	if item == nil || item.Delete == nil {
+		t.Fatal("DELETE /api/openapi-deletable-actions/{id} is missing from the document")
+	}
+	data := dataSchema(t, registeredResponseSchema(t, item.Delete.Responses.Status(200)))
+	if _, ok := data.Properties["id"]; !ok {
+		t.Fatalf("service delete response data = %v, want the id of its response type", propertyNames(data))
 	}
 }
 

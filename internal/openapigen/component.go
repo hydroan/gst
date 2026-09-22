@@ -224,9 +224,10 @@ func newResponses[RSP types.Response](rspKey string) *openapi3.Responses {
 	return openapi3.NewResponses(openapi3.WithStatus(200, &openapi3.ResponseRef{Ref: "#/components/responses/" + rspKey}))
 }
 
-// markEmptyResponseData rewrites the data member of an envelope whose response
-// type carries no fields. Such an action answers with data set to null, so the
-// member records only its nullability rather than an empty object body.
+// markEmptyResponseData rewrites the data member of an envelope whose action
+// answers without data: a response type that carries no fields, or a delete
+// the framework performs itself. Such an action answers with data set to
+// null, so the member records only its nullability rather than a body.
 func markEmptyResponseData(schemaRef *openapi3.SchemaRef) {
 	if schemaRef == nil || schemaRef.Value == nil {
 		return

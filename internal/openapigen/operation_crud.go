@@ -34,6 +34,11 @@ func setDelete[M types.Model, REQ types.Request, RSP types.Response](path string
 	reqKey := actionComponentKey(reflect.TypeFor[REQ](), typ, path, consts.PHASE_DELETE)
 	rspKey := actionComponentKey(reflect.TypeFor[RSP](), typ, path, consts.PHASE_DELETE)
 	rspSchemaRef := newSchemaRefWithDocs(apiResponse[RSP]{})
+	// The framework's own delete answers without data; only a service's
+	// delete answers with its response type.
+	if modelregistry.AreTypesEqual[M, REQ, RSP]() {
+		markEmptyResponseData(rspSchemaRef)
+	}
 	registerSchema[M, REQ, RSP](reqKey, rspKey, nil, rspSchemaRef)
 
 	pathItem.Delete = &openapi3.Operation{
@@ -160,11 +165,11 @@ func setDeleteMany[M types.Model, REQ types.Request, RSP types.Response](path st
 	reqKey := actionComponentKey(reflect.TypeFor[REQ](), typ, path, consts.PHASE_DELETE_MANY)
 	rspKey := actionComponentKey(reflect.TypeFor[RSP](), typ, path, consts.PHASE_DELETE_MANY)
 	reqSchemaRef := deleteManyIDsRequestSchema()
-	var rspSchemaRef *openapi3.SchemaRef
+	rspSchemaRef := newSchemaRefWithDocs(apiResponse[RSP]{})
+	// The framework's own batch delete answers without data, like the single
+	// delete; only a service's batch delete answers with its response type.
 	if modelregistry.AreTypesEqual[M, REQ, RSP]() {
-		rspSchemaRef = newSchemaRefWithDocs(apiBatchResponse[RSP]{})
-	} else {
-		rspSchemaRef = newSchemaRefWithDocs(apiResponse[RSP]{})
+		markEmptyResponseData(rspSchemaRef)
 	}
 	registerSchema[M, REQ, RSP](reqKey, rspKey, reqSchemaRef, rspSchemaRef)
 
