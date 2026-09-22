@@ -65,6 +65,50 @@ func (User) Design() {
 	}
 }
 
+// TestApplyRouteIgnoresMatchesStreamingAndExportRoutes verifies that rules
+// match the SSE and export actions under GET, the method the framework router
+// serves them by.
+func TestApplyRouteIgnoresMatchesStreamingAndExportRoutes(t *testing.T) {
+	models := findModelsFromSource(t, "notice", "notice.go", `package notice
+
+import (
+	"github.com/hydroan/gst/dsl"
+	"github.com/hydroan/gst/model"
+)
+
+type Notice struct {
+	model.Base
+}
+
+func (Notice) Design() {
+	dsl.Endpoint("notices")
+	dsl.SSE(func() {
+		dsl.Service()
+	})
+	dsl.Export(func() {
+		dsl.Service()
+	})
+	dsl.Create(func() {})
+}
+`)
+	design := findDesign(t, models, "Notice")
+	rules := parseRules(
+		t,
+		"GET /api/notice/notices",
+		"GET /api/notice/notices/export",
+	)
+
+	result := applyRouteIgnores(models, rules)
+
+	if len(result.Unmatched) != 0 {
+		t.Fatalf("Unmatched = %v, want empty", result.Unmatched)
+	}
+	remaining := collectActions(design)
+	if len(remaining) != 1 || remaining[0].Phase != consts.PHASE_CREATE {
+		t.Fatalf("remaining actions = %v, want only PHASE_CREATE", remainingPhases(remaining))
+	}
+}
+
 func TestApplyRouteIgnoresReportsUnmatchedRules(t *testing.T) {
 	models := findModelsFromSource(t, "group", "group.go", `package model
 

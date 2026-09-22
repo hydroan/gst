@@ -2,40 +2,49 @@ package main
 
 import (
 	"bytes"
+	"go/ast"
 	"io"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/hydroan/gst/consts"
+	"github.com/hydroan/gst/internal/codegen/constants"
+	"github.com/hydroan/gst/internal/codegen/gen"
+	"github.com/stretchr/testify/require"
 )
 
-func TestRoutePhaseMethodMatchesRuntimeRegistration(t *testing.T) {
-	// Expected methods mirror the runtime registration table in the
-	// framework router's register function (internal/router/router.go):
-	// Export is served via GET, Import via POST.
-	tests := []struct {
-		phase string
-		want  string
-	}{
-		{"Create", "POST"},
-		{"CreateMany", "POST"},
-		{"Import", "POST"},
-		{"Delete", "DELETE"},
-		{"DeleteMany", "DELETE"},
-		{"Update", "PUT"},
-		{"UpdateMany", "PUT"},
-		{"Patch", "PATCH"},
-		{"PatchMany", "PATCH"},
-		{"List", "GET"},
-		{"Get", "GET"},
-		{"Export", "GET"},
-		{"Unknown", ""},
+// TestParseModelRoutesReadsTheRuntimeMethodOfEveryVerb builds a router file
+// the way gg gen writes router/router.gen.go, one route per action phase, and
+// reads each route back under the method the framework router registers the
+// verb by, consts.HTTPVerb.HTTPMethod (see the router's own test of that).
+func TestParseModelRoutesReadsTheRuntimeMethodOfEveryVerb(t *testing.T) {
+	phases := []consts.Phase{
+		consts.PHASE_CREATE, consts.PHASE_DELETE, consts.PHASE_UPDATE, consts.PHASE_PATCH,
+		consts.PHASE_LIST, consts.PHASE_GET,
+		consts.PHASE_CREATE_MANY, consts.PHASE_DELETE_MANY, consts.PHASE_UPDATE_MANY, consts.PHASE_PATCH_MANY,
+		consts.PHASE_IMPORT, consts.PHASE_EXPORT, consts.PHASE_SSE,
 	}
-	for _, tt := range tests {
-		if got := routePhaseMethod(tt.phase); got != tt.want {
-			t.Errorf("routePhaseMethod(%q) = %q, want %q", tt.phase, got, tt.want)
-		}
+	stmts := make([]ast.Stmt, 0, len(phases))
+	want := make(map[string]string, len(phases))
+	for _, phase := range phases {
+		path := "samples/" + string(phase)
+		stmts = append(stmts, gen.StmtRouterRegister("model", "Sample", "*Sample", "*Sample", "model", "Auth", path, "", phase.MethodName()))
+		want[path] = phase.ToHTTPVerb().HTTPMethod()
 	}
+	code, err := gen.BuildRouterFile("router", "model", map[string]string{"tmpapp/model": ""}, stmts...)
+	require.NoError(t, err)
+	routerFile := filepath.Join(t.TempDir(), constants.FileRouterGen)
+	require.NoError(t, os.WriteFile(routerFile, []byte(code), 0o600))
+
+	routes, err := parseModelRoutesFromProject(routerFile, t.TempDir())
+	require.NoError(t, err)
+	got := make(map[string]string, len(routes))
+	for _, route := range routes {
+		got[route.Path] = route.Method
+	}
+	require.Equal(t, want, got)
 }
 
 // TestRoutesHeaderShowsAPIBasePath verifies both route views print the shared

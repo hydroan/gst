@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"regexp"
 	"sort"
 	"strings"
 
@@ -75,56 +74,21 @@ func filterRouteTree(routes map[string][]string, filter string) map[string][]str
 	return filteredRoutes
 }
 
-// parseRouteTreeFromFile parses the generated router/router.gen.go for URL
-// route tree output.
+// parseRouteTreeFromFile reads the routes of the generated
+// router/router.gen.go the way gg routes does, see
+// parseModelRoutesFromProject, and keys their HTTP methods by path for the
+// URL route tree.
 func parseRouteTreeFromFile() (map[string][]string, error) {
-	routerFile := filepath.Join(routerDir, constants.FileRouterGen)
-	if !fileExists(routerFile) {
-		return nil, fmt.Errorf("router file not found: %s. Please run 'gg gen' first", routerFile)
-	}
-
-	content, err := os.ReadFile(routerFile)
+	registered, err := parseModelRoutesFromProject(filepath.Join(routerDir, constants.FileRouterGen), modelDir)
 	if err != nil {
-		return nil, fmt.Errorf("failed to read router file: %w", err)
+		return nil, err
 	}
 
 	routes := make(map[string][]string)
-	lines := strings.Split(string(content), "\n")
-	routePattern := regexp.MustCompile(`router\.Register\[.*?\]\([^,]+,\s*"([^"]+)",\s*&gst\.ControllerConfig\[.*?\]\{.*?\},\s*consts\.(\w+)\)`)
-
-	for _, line := range lines {
-		matches := routePattern.FindStringSubmatch(strings.TrimSpace(line))
-		if len(matches) != 3 {
-			continue
-		}
-
-		path := matches[1]
-		method := convertRouteTreeConstToHTTPMethod(matches[2])
-		if method == "" {
-			continue
-		}
-		routes[path] = append(routes[path], method)
+	for _, route := range registered {
+		routes[route.Path] = append(routes[route.Path], route.Method)
 	}
-
 	return routes, nil
-}
-
-// convertRouteTreeConstToHTTPMethod converts route phase constants to HTTP methods.
-func convertRouteTreeConstToHTTPMethod(constMethod string) string {
-	switch constMethod {
-	case "Create", "CreateMany", "Import", "Export":
-		return "POST"
-	case "Delete", "DeleteMany":
-		return "DELETE"
-	case "Update", "UpdateMany":
-		return "PUT"
-	case "Patch", "PatchMany":
-		return "PATCH"
-	case "List", "Get":
-		return "GET"
-	default:
-		return ""
-	}
 }
 
 // printRouteTree builds and prints the URL route tree structure.

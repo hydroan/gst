@@ -17,6 +17,7 @@ import (
 	"github.com/hydroan/gst/internal/clioutput"
 	"github.com/hydroan/gst/internal/codegen/constants"
 	"github.com/spf13/cobra"
+	"github.com/stoewer/go-strcase"
 )
 
 type modelRoute struct {
@@ -176,7 +177,11 @@ func modelRouteFromCall(call *ast.CallExpr, modelSources map[string]string) (mod
 		Source: lookupModelSource(modelSources, model),
 		Scope:  routeScope(call.Args[0]),
 		Path:   path,
-		Method: routePhaseMethod(phase),
+		// The last argument names the verb the way gg gen writes it,
+		// consts.<Phase.MethodName()> such as consts.CreateMany; the route
+		// is served under the method the framework router registers that
+		// verb by.
+		Method: consts.HTTPVerb(strcase.SnakeCase(phase)).HTTPMethod(),
 		Phase:  phase,
 		Param:  routeParamName(call.Args[2]),
 	}, true
@@ -706,23 +711,6 @@ func routeParamName(expr ast.Expr) string {
 		}
 	}
 	return ""
-}
-
-func routePhaseMethod(phase string) string {
-	switch phase {
-	case "Create", "CreateMany", "Import":
-		return "POST"
-	case "Delete", "DeleteMany":
-		return "DELETE"
-	case "Update", "UpdateMany":
-		return "PUT"
-	case "Patch", "PatchMany":
-		return "PATCH"
-	case "List", "Get", "Export":
-		return "GET"
-	default:
-		return ""
-	}
 }
 
 func selectorName(expr ast.Expr) (string, bool) {

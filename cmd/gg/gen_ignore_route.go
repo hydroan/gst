@@ -67,7 +67,7 @@ func applyRouteIgnores(allModels []*gen.ModelInfo, rules []ggconfig.RouteRule) r
 	for _, m := range allModels {
 		m.Design.Range(func(route string, act *dsl.Action) {
 			finalRoute, _ := routerTargetForAction(route, m.Design, act)
-			method := routePhaseMethod(act.Phase.MethodName())
+			method := act.Phase.ToHTTPVerb().HTTPMethod()
 			for i, rule := range rules {
 				if !rule.Match(method, finalRoute) || !rule.MatchesSource(m.ModelFilePath) {
 					continue
