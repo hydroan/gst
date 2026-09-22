@@ -164,7 +164,7 @@ func ExportFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...
 				WithOrder(orders...).
 				List(&data); err != nil {
 				log.Errorz("database operation failed", zap.Error(err))
-				handleServiceError(c, err)
+				JSON(c, databaseErrorCoder(err))
 				gstotel.RecordError(span, err)
 				return
 			}

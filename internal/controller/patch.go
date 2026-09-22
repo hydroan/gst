@@ -145,7 +145,7 @@ func PatchFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...*
 		// have the fields the request does not touch written back stale.
 		if err := database.Database[M](requestContext(c)).WithReplica(false).WithLimit(1).WithQuery(m).List(&data); err != nil {
 			log.Errorz("database operation failed", zap.Error(err))
-			handleServiceError(c, err)
+			JSON(c, databaseErrorCoder(err))
 			gstotel.RecordError(span, err)
 			return
 		}

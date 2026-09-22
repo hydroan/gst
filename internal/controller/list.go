@@ -151,7 +151,7 @@ func ListFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...*t
 			WithOrder(orders...).
 			List(&data); err != nil {
 			log.Errorz("database operation failed", zap.Error(err))
-			handleServiceError(c, err)
+			JSON(c, databaseErrorCoder(err))
 			gstotel.RecordError(span, err)
 			return
 		}
@@ -173,7 +173,7 @@ func ListFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...*t
 				WithQuery(m, queryOpts).
 				Count(total); err != nil {
 				log.Errorz("database operation failed", zap.Error(err))
-				handleServiceError(c, err)
+				JSON(c, databaseErrorCoder(err))
 				gstotel.RecordError(span, err)
 				return
 			}
