@@ -11,6 +11,6 @@ import (
 // registers the sample model the database assertions run against.
 func TestMain(m *testing.M) {
 	testutil.Run(m, testutil.Server{
-		Register: func() { modelregistry.RegisterTable[*SampleRecord]() },
+		Register: func() { modelregistry.Register[*SampleRecord]() },
 	})
 }

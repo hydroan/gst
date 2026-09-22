@@ -83,5 +83,5 @@ func RegisteredModels() []any {
 //  2. Ensure the model package is imported by the application entrypoint.
 //  3. The function is safe for concurrent use.
 func Register[M types.Model]() {
-	modelregistry.RegisterTable[M]()
+	modelregistry.Register[M]()
 }

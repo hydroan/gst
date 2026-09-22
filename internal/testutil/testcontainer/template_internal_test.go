@@ -31,7 +31,7 @@ func TestSchemaTemplate(t *testing.T) {
 	// Registering the model gives this binary a schema to fingerprint. Taking
 	// it back off the queue and reporting it done leaves the pending count
 	// where the test found it, since nothing here drains that queue.
-	modelregistry.RegisterTable[*templateSample]()
+	modelregistry.Register[*templateSample]()
 	<-modelregistry.TableChan
 	modelregistry.TableDone()
 

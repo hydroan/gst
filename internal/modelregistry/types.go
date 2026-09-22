@@ -40,7 +40,7 @@ func AreTypesEqual[M types.Model, REQ types.Request, RSP types.Response]() bool 
 //		model.Empty
 //	}
 //
-// Models embed Empty by value; RegisterTable and gg gen reject *model.Empty.
+// Models embed Empty by value; Register and gg gen reject *model.Empty.
 func IsEmpty[T any]() bool {
 	typ := reflect.TypeFor[T]()
 	for typ.Kind() == reflect.Pointer {
@@ -64,8 +64,8 @@ func IsEmpty[T any]() bool {
 	return typ.NumField() == invalidFieldCount
 }
 
-// IsValid reports whether T is a database-backed model, the kind
-// RegisterTable queues for table setup: T is a pointer to a struct that has
+// IsTableModel reports whether T is a database-backed model, the kind
+// Register queues for table setup: T is a pointer to a struct that has
 // fields, none of them an Empty marker. For example, with
 //
 //	type Record struct {
@@ -78,10 +78,10 @@ func IsEmpty[T any]() bool {
 //		model.Empty
 //	}
 //
-// IsValid reports true for *Record, and false for Record, which is not a
+// IsTableModel reports true for *Record, and false for Record, which is not a
 // pointer, for *Login, a virtual model, and for a pointer to a struct
 // without fields.
-func IsValid[T any]() bool {
+func IsTableModel[T any]() bool {
 	typ := reflect.TypeFor[T]()
 
 	// T type not pointer, return false.

@@ -225,7 +225,7 @@ func (*row) Indexes() []modelregistry.Index {
 func init() {
 	// Importing this package brings the table and the transaction guard: a
 	// project that links no capability built on leases carries neither.
-	modelregistry.RegisterTable[*row]()
+	modelregistry.Register[*row]()
 	dbruntime.SetTransactionGuard(Verify)
 }
 

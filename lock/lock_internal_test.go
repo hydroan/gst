@@ -57,7 +57,7 @@ func run(m *testing.M) int {
 	}
 	// Registered before the database opens, so its table is created with the
 	// lease table.
-	modelregistry.RegisterTable[*hookedRecord]()
+	modelregistry.Register[*hookedRecord]()
 	if err := errors.Join(sqlite.Init(), mysql.Init(), postgres.Init()); err != nil {
 		panic(err)
 	}

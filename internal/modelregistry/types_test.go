@@ -134,7 +134,7 @@ func TestQueryable(t *testing.T) {
 func TestIsVirtual(t *testing.T) {
 	// Embedding Empty is the opt-in, alone or beside other fields; IsEmpty
 	// stays a separate, narrower predicate. An embedded *Empty promotes the
-	// marker too, though RegisterTable and gg gen reject that form.
+	// marker too, though Register and gg gen reject that form.
 	require.True(t, modelregistry.IsVirtual(new(virtualSample)))
 	require.True(t, modelregistry.IsVirtual(new(t1)))
 	require.True(t, modelregistry.IsVirtual(new(t4)))
@@ -189,7 +189,7 @@ func TestIsEmpty(t *testing.T) {
 	require.True(t, modelregistry.IsEmpty[*t8]())
 }
 
-func TestIsValid(t *testing.T) {
+func TestIsTableModel(t *testing.T) {
 	type t1 string
 	type t2 int
 	type t3 struct{}
@@ -200,17 +200,17 @@ func TestIsValid(t *testing.T) {
 		*modelregistry.Empty
 	}
 
-	require.False(t, modelregistry.IsValid[t1]())
-	require.False(t, modelregistry.IsValid[*t1]())
-	require.False(t, modelregistry.IsValid[t2]())
-	require.False(t, modelregistry.IsValid[*t2]())
-	require.False(t, modelregistry.IsValid[t3]())
-	require.False(t, modelregistry.IsValid[*t3]())
-	require.False(t, modelregistry.IsValid[t4]())
-	require.False(t, modelregistry.IsValid[*t4]())
-	require.False(t, modelregistry.IsValid[t5]())
-	require.True(t, modelregistry.IsValid[*t5]())
-	require.False(t, modelregistry.IsValid[*t6]())
+	require.False(t, modelregistry.IsTableModel[t1]())
+	require.False(t, modelregistry.IsTableModel[*t1]())
+	require.False(t, modelregistry.IsTableModel[t2]())
+	require.False(t, modelregistry.IsTableModel[*t2]())
+	require.False(t, modelregistry.IsTableModel[t3]())
+	require.False(t, modelregistry.IsTableModel[*t3]())
+	require.False(t, modelregistry.IsTableModel[t4]())
+	require.False(t, modelregistry.IsTableModel[*t4]())
+	require.False(t, modelregistry.IsTableModel[t5]())
+	require.True(t, modelregistry.IsTableModel[*t5]())
+	require.False(t, modelregistry.IsTableModel[*t6]())
 }
 
 func BenchmarkIsModelEmpty(b *testing.B) {

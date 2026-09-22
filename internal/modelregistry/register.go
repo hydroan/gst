@@ -22,7 +22,7 @@ var tablesPending atomic.Int32
 
 // enqueueTable queues a model for table registration. It is the only way to
 // put a model on TableChan, so that the pending count can never miss one, and
-// it is reached through RegisterTable alone: a model that took the queue
+// it is reached through Register alone: a model that took the queue
 // without being recorded would have a table nothing knows it declared, which
 // SchemaFingerprint would then answer for a schema it never saw.
 func enqueueTable(m types.Model) {
@@ -70,7 +70,7 @@ var (
 	registeredModels []types.Model
 )
 
-// RegisterTable records M as a registered model and queues it for table
+// Register records M as a registered model and queues it for table
 // setup. Models that embed Empty are ignored: they map to no table. A model
 // embedding *Empty panics, telling the author to embed Empty by value: the
 // pointer form is not recognized as a virtual model, and gg gen rejects it as
@@ -78,7 +78,7 @@ var (
 //
 // It is the single entry point for both steps, so the recorded set and the
 // queue can never disagree about what was registered.
-func RegisterTable[M types.Model]() {
+func Register[M types.Model]() {
 	typ := reflect.TypeFor[M]()
 	for typ.Kind() == reflect.Pointer {
 		typ = typ.Elem()
@@ -90,7 +90,7 @@ func RegisterTable[M types.Model]() {
 			}
 		}
 	}
-	if !IsValid[M]() {
+	if !IsTableModel[M]() {
 		return
 	}
 	table := newModelSnapshot[M]()
@@ -103,7 +103,7 @@ func RegisterTable[M types.Model]() {
 }
 
 // RegisteredModels returns independent values of the models registered
-// through RegisterTable. Mutating them does not change what is registered.
+// through Register. Mutating them does not change what is registered.
 func RegisteredModels() []any {
 	registeredMu.Lock()
 	defer registeredMu.Unlock()

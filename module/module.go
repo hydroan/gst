@@ -130,7 +130,7 @@ func Use[M types.Model, REQ types.Request, RSP types.Response](mod types.Module[
 		<-notify
 
 		if registersModel(options) {
-			modelregistry.RegisterTable[M]()
+			modelregistry.Register[M]()
 		}
 
 		route := mod.Route()

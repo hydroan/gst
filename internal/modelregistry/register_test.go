@@ -24,11 +24,11 @@ func TestTableDoneSignalsWaiters(t *testing.T) {
 	t.Cleanup(drain)
 
 	// enqueue counts one model as pending the way the database runtime sees it:
-	// queued by RegisterTable, then taken off the queue and prepared.
+	// queued by Register, then taken off the queue and prepared.
 	enqueue := func(t *testing.T, count int) {
 		t.Helper()
 		for range count {
-			modelregistry.RegisterTable[*IndexedSample]()
+			modelregistry.Register[*IndexedSample]()
 			<-modelregistry.TableChan
 		}
 	}
@@ -86,14 +86,14 @@ type SkippedSample struct {
 	modelregistry.Empty
 }
 
-// PointerEmptySample embeds *Empty, the form RegisterTable rejects.
+// PointerEmptySample embeds *Empty, the form Register rejects.
 type PointerEmptySample struct {
 	Name string
 
 	*modelregistry.Empty
 }
 
-func TestRegisterTable(t *testing.T) {
+func TestRegister(t *testing.T) {
 	registered := func() bool {
 		return slices.ContainsFunc(modelregistry.RegisteredModels(), func(m any) bool {
 			_, ok := m.(*RegisteredSample)
@@ -104,7 +104,7 @@ func TestRegisterTable(t *testing.T) {
 	t.Run("a_database_backed_model_is_recorded_and_queued", func(t *testing.T) {
 		require.False(t, registered(), "the sample must not be registered before the subtest registers it")
 
-		modelregistry.RegisterTable[*RegisteredSample]()
+		modelregistry.Register[*RegisteredSample]()
 
 		// The recorded set is what a schema dump reads; the queue is what the
 		// database runtime prepares tables from. Registering feeds both, which
@@ -120,7 +120,7 @@ func TestRegisterTable(t *testing.T) {
 	t.Run("an_empty_model_maps_to_no_table", func(t *testing.T) {
 		before := len(modelregistry.RegisteredModels())
 
-		modelregistry.RegisterTable[*SkippedSample]()
+		modelregistry.Register[*SkippedSample]()
 
 		require.Len(t, modelregistry.RegisteredModels(), before)
 		require.Empty(t, modelregistry.TableChan)
@@ -130,7 +130,7 @@ func TestRegisterTable(t *testing.T) {
 		before := len(modelregistry.RegisteredModels())
 
 		require.PanicsWithValue(t, "model modelregistry_test.PointerEmptySample embeds *model.Empty; embed model.Empty by value: the pointer form is not recognized as a virtual model", func() {
-			modelregistry.RegisterTable[*PointerEmptySample]()
+			modelregistry.Register[*PointerEmptySample]()
 		})
 		require.Len(t, modelregistry.RegisteredModels(), before)
 		require.Empty(t, modelregistry.TableChan)

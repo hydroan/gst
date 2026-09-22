@@ -49,7 +49,7 @@ import (
 func Register() {
 	// Register AuthzRule explicitly because the policy adapter manages this
 	// table instead of a public CRUD module.
-	modelregistry.RegisterTable[*AuthzRule]()
+	modelregistry.Register[*AuthzRule]()
 
 	// Register Authz after the authentication middleware that writes CTX_USER_ID.
 	// Registering Authz before IAMSession makes authenticated requests look

@@ -259,7 +259,7 @@ func TestWaitReturnsOnceTheQueueDrains(t *testing.T) {
 
 	// Queue a model and take it off the way the processing goroutine does, so
 	// it counts as pending until its TableDone lands.
-	modelregistry.RegisterTable[*plainRecord]()
+	modelregistry.Register[*plainRecord]()
 	<-modelregistry.TableChan
 	require.Equal(t, 1, modelregistry.TablesPending())
 
@@ -301,7 +301,7 @@ func TestWaitReportsATableThePreparationCouldNotGet(t *testing.T) {
 	// Queued and taken off the way the processing goroutine does, then
 	// prepared here: the model declares no table name, so it is one no
 	// database could have given it.
-	modelregistry.RegisterTable[*undeclaredRecord]()
+	modelregistry.Register[*undeclaredRecord]()
 	<-modelregistry.TableChan
 	prepareTable(db, &undeclaredRecord{})
 

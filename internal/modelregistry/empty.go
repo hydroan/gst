@@ -50,7 +50,7 @@ type virtual interface {
 // IsVirtual reports whether m is a virtual, table-less resource: whether its
 // type embeds Empty. m must be a model pointer, which is the only shape
 // models flow through the framework in. An embedded *Empty would promote the
-// marker as well, but models embed Empty by value: RegisterTable and gg gen
+// marker as well, but models embed Empty by value: Register and gg gen
 // reject the pointer form.
 func IsVirtual(m any) bool {
 	_, ok := m.(virtual)

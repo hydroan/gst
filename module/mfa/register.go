@@ -30,7 +30,7 @@ import (
 func Register() {
 	servicemfa.SetAccountAdministrator(iamAccountAdministrator{})
 	authn.SetLoginSecondFactorVerifier(servicemfa.LoginSecondFactorVerifier)
-	modelregistry.RegisterTable[*modelmfa.TOTPDevice]()
+	modelregistry.Register[*modelmfa.TOTPDevice]()
 
 	module.Use(module.NewWrapper("mfa/totp/bind", "id", false, &servicemfa.TOTPBindService{}), module.CRUD(consts.PHASE_CREATE))
 	module.Use(module.NewWrapper("mfa/totp/confirm", "id", false, &servicemfa.TOTPConfirmService{}), module.CRUD(consts.PHASE_CREATE))

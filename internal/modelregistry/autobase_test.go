@@ -16,7 +16,7 @@ type AutoUser struct {
 
 func TestAutoBaseImplementsModel(t *testing.T) {
 	require.Implements(t, (*types.Model)(nil), &modelregistry.AutoBase{})
-	require.True(t, modelregistry.IsValid[*AutoUser]())
+	require.True(t, modelregistry.IsTableModel[*AutoUser]())
 	require.False(t, modelregistry.IsEmpty[AutoUser]())
 }
 

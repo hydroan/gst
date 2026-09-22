@@ -120,10 +120,10 @@ func Register() {
 	// data: create them explicitly through the standard database chain in a
 	// startup hook such as router.OnRoutesReady, using
 	// serviceiamaccount.NewPasswordCredential for password hashing.
-	modelregistry.RegisterTable[*modeliamuser.User]()
-	modelregistry.RegisterTable[*modeliamaccount.PasswordCredential]()
-	modelregistry.RegisterTable[*modeliamaccount.EmailIdentity]()
-	modelregistry.RegisterTable[*modeliamprofile.Profile]()
+	modelregistry.Register[*modeliamuser.User]()
+	modelregistry.Register[*modeliamaccount.PasswordCredential]()
+	modelregistry.Register[*modeliamaccount.EmailIdentity]()
+	modelregistry.Register[*modeliamprofile.Profile]()
 }
 
 // GetSessionExpiration returns the configured session expiration time.
