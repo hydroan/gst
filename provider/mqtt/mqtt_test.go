@@ -45,7 +45,7 @@ func TestMqtt(t *testing.T) {
 		var received []byte
 		var receivedTopic string
 
-		// subscript
+		// subscribe
 		require.NoError(t, mqtt.Subscribe(topic, func(topic string, payload []byte) error {
 			received = payload
 			receivedTopic = topic
@@ -53,7 +53,7 @@ func TestMqtt(t *testing.T) {
 			return nil
 		}))
 
-		// public
+		// publish
 		require.NoError(t, mqtt.Publish(topic, message))
 		done := make(chan struct{})
 

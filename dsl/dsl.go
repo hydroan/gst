@@ -17,7 +17,7 @@
 //		// Enable API generation (default: true)
 //		Enabled(true)
 //
-//		// Set custom endpoint (default: lowercase model name)
+//		// Set custom endpoint (default: pluralized snake_case model name)
 //		Endpoint("users")
 //
 //		// Add path parameter for dynamic routing
@@ -52,10 +52,10 @@
 // When multiple Route definitions share the same operation type (e.g., both use Create),
 // use Filename to specify distinct service filenames:
 //
-//	Route("/attachment/upload", func() {
+//	Route("/items/archive", func() {
 //		Create(func() {
 //			Service()
-//			Filename("upload")  // generates upload.go instead of create.go
+//			Filename("archive")  // generates archive.go instead of create.go
 //		})
 //	})
 //
@@ -226,18 +226,19 @@ func Service() {}
 //
 // Example:
 //
-//	// Without Filename, both routes would generate service/shared/attachment/create.go,
-//	// causing a conflict. With Filename, they produce separate files:
-//	Route("/attachment/upload", func() {
+//	// Without Filename, both routes of a model declared in model/sample/item.go
+//	// would generate service/sample/item/create.go, causing a conflict. With
+//	// Filename, they produce separate files:
+//	Route("/items/archive", func() {
 //	    Create(func() {
 //	        Service()
-//	        Filename("upload")  // generates service/shared/attachment/upload.go
+//	        Filename("archive")  // generates service/sample/item/archive.go
 //	    })
 //	})
-//	Route("/attachment/parse", func() {
+//	Route("/items/restore", func() {
 //	    Create(func() {
 //	        Service()
-//	        Filename("parse")   // generates service/shared/attachment/parse.go
+//	        Filename("restore")  // generates service/sample/item/restore.go
 //	    })
 //	})
 func Filename(string) {}
@@ -417,7 +418,7 @@ type Design struct {
 	Enabled bool
 
 	// Endpoint specifies the URL path segment for this model's API routes.
-	// Defaults to the lowercase version of the model name.
+	// Defaults to the pluralized snake_case form of the model name.
 	// Used by the router to construct API endpoints.
 	Endpoint string
 
@@ -466,7 +467,8 @@ type Design struct {
 	//       Get(func() { Service() })
 	//   })
 	//
-	// This populates routes["/archive/items"] with List and Get Action configurations.
+	// This populates routes["archive/items"] (the leading slash is removed) with
+	// List and Get Action configurations.
 	//
 	// Default: nil (no alternative routes)
 	routes map[string][]*Action
@@ -554,7 +556,7 @@ type Action struct {
 
 	// Filename specifies a custom filename (without extension) for the generated service file.
 	// When set, it overrides the default filename derived from the Phase.
-	// For example, Filename="upload" generates "upload.go" instead of "create.go".
+	// For example, Filename="archive" generates "archive.go" instead of "create.go".
 	// Default: "" (uses Phase-based filename)
 	Filename string
 
@@ -571,7 +573,7 @@ type Action struct {
 // RoleName returns the struct name for the generated service file.
 // If Filename is set, it extracts the base name (stripping any directory prefix
 // and file extension) and converts it to UpperCamelCase.
-// For example, Filename("upload") returns "Upload", Filename("a/b/user_upload.rs") returns "UserUpload".
+// For example, Filename("archive") returns "Archive", Filename("a/b/item_archive.rs") returns "ItemArchive".
 // Otherwise, it falls back to Phase.RoleName() (e.g., "Creator", "Updater", "Deleter").
 func (a *Action) RoleName() string {
 	if len(a.Filename) > 0 {
@@ -585,7 +587,7 @@ func (a *Action) RoleName() string {
 // ServiceFilename returns the filename for the generated service file.
 // If Filename is set, it extracts the base name (stripping any directory prefix
 // and file extension), converts it to lowercase, and appends ".go".
-// For example, "a/b/c.rs" becomes "c.go", "Upload" becomes "upload.go".
+// For example, "a/b/c.rs" becomes "c.go", "Archive" becomes "archive.go".
 // Otherwise, it falls back to the lowercase Phase name + ".go".
 func (a *Action) ServiceFilename() string {
 	if len(a.Filename) > 0 {

@@ -8,35 +8,35 @@ import (
 
 func TestDetectIndexRenames(t *testing.T) {
 	t.Run("identical definitions form a verified pair", func(t *testing.T) {
-		current := "CREATE TABLE `groups` (\n" +
+		current := "CREATE TABLE `samples` (\n" +
 			"  `id` char(36) NOT NULL,\n" +
 			"  PRIMARY KEY (`id`),\n" +
-			"  UNIQUE KEY `idx_groups_group_no` (`group_no`)\n" +
+			"  UNIQUE KEY `idx_samples_code` (`code`)\n" +
 			") ENGINE=InnoDB;"
 		pairs := detectIndexRenames([]string{
-			"ALTER TABLE `groups` ADD UNIQUE INDEX `idx_groups_group_no2` (`group_no`)",
-			"ALTER TABLE `groups` DROP INDEX `idx_groups_group_no`",
+			"ALTER TABLE `samples` ADD UNIQUE INDEX `idx_samples_code2` (`code`)",
+			"ALTER TABLE `samples` DROP INDEX `idx_samples_code`",
 		}, current)
 		require.Equal(t, []indexRenamePair{{
-			Table:   "groups",
-			From:    "idx_groups_group_no",
-			To:      "idx_groups_group_no2",
-			Columns: "group_no",
+			Table:   "samples",
+			From:    "idx_samples_code",
+			To:      "idx_samples_code2",
+			Columns: "code",
 			Unique:  true,
 		}}, pairs)
 	})
 
 	t.Run("changed column sets are rebuilds, not renames", func(t *testing.T) {
-		// Regression: dropping (group_id, admin_user_id, created_at) while
-		// adding (group_id, created_at) must not be reported as a rename.
-		current := "CREATE TABLE `admin_operation_logs` (\n" +
+		// Regression: dropping (group_id, kind, created_at) while adding
+		// (group_id, created_at) must not be reported as a rename.
+		current := "CREATE TABLE `records` (\n" +
 			"  `id` char(36) NOT NULL,\n" +
 			"  PRIMARY KEY (`id`),\n" +
-			"  KEY `idx_admin_operation_logs_group_id_admin_user_id_created_at` (`group_id`,`admin_user_id`,`created_at`)\n" +
+			"  KEY `idx_records_group_id_kind_created_at` (`group_id`,`kind`,`created_at`)\n" +
 			") ENGINE=InnoDB;"
 		pairs := detectIndexRenames([]string{
-			"CREATE INDEX `idx_admin_operation_logs_group_id_created_at` ON `admin_operation_logs` (`group_id`, `created_at`)",
-			"ALTER TABLE `admin_operation_logs` DROP INDEX `idx_admin_operation_logs_group_id_admin_user_id_created_at`",
+			"CREATE INDEX `idx_records_group_id_created_at` ON `records` (`group_id`, `created_at`)",
+			"ALTER TABLE `records` DROP INDEX `idx_records_group_id_kind_created_at`",
 		}, current)
 		require.Empty(t, pairs)
 	})

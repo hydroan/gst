@@ -69,11 +69,10 @@ func ImportFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...
 			gstotel.RecordError(span, err)
 			return
 		}
-		// filetype must be png or jpg.
+		// The detected file type is not checked: the service's Import decides
+		// which formats it accepts.
 		filetype, mime := filetype.DetectBytes(buf.Bytes())
 		_, _ = filetype, mime
-
-		// check filetype
 
 		ml, err := meta.traceServiceImport(ctrlSpanCtx, consts.PHASE_IMPORT, func(spanCtx context.Context) ([]M, error) {
 			return meta.service().

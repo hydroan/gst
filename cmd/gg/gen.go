@@ -582,10 +582,6 @@ func buildHierarchicalEndpoints(allModels []*gen.ModelInfo) {
 		// Join all parts to form the complete endpoint
 		m.Design.Endpoint = strings.Join(endpointParts, "/")
 	}
-
-	// for _, m := range allModels {
-	// 	fmt.Println("-----", m.ModelFilePath, "=>", m.Design.Endpoint)
-	// }
 }
 
 // propagateParentParams propagates the parameter of every parent resource into

@@ -20,8 +20,8 @@ func TestServiceOutputRel(t *testing.T) {
 	}{
 		{
 			name:      "duplicate_dir_and_stem",
-			modelFile: filepath.Join("repo", "model", "common", "common.go"),
-			want:      "common",
+			modelFile: filepath.Join("repo", "model", "sample", "sample.go"),
+			want:      "sample",
 		},
 		{
 			name:      "nested_duplicate_collapses_once",

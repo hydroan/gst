@@ -150,7 +150,7 @@ func (db *database[M]) WithQuery(query M, opts ...types.QueryOptions) types.Data
 	//   - WithQuery(nil)                         → nil query
 	//   - WithQuery(&Sample{})                   → all fields are zero values
 	//   - WithQuery(&Sample{Name: "", Code: ""}) → all field values are empty strings
-	//   - WithQuery(&KV{Key: ""})               → happens when removed slice is empty
+	//   - WithQuery(&Sample{Code: code})         → code came from an empty slice
 	//
 	// By default, empty queries (nil or zero value) are blocked by adding "WHERE 1 = 0" condition.
 	// To allow empty queries, use: WithQuery(nil, QueryOptions{AllowEmpty: true}) or
@@ -199,8 +199,10 @@ func (db *database[M]) WithQuery(query M, opts ...types.QueryOptions) types.Data
 		db.ins = db.ins.Where(db.quoteIdent(k)+" = ?", v)
 	}
 	// CRITICAL: Check if all query values are empty after filtering
-	// Even if query map is not empty, all values might be empty strings
-	// Example: &Sample{Name: "", Code: ""} has fields but all values are empty
+	// Even if query map is not empty, all values might be empty strings: a
+	// zero-valued field stays out of the map unless it is marked present, but
+	// a non-nil pointer to an empty string, an empty non-nil string slice, or
+	// an empty string marked present each add a key whose value is empty.
 	// Filters applied earlier are real conditions, so they disable this
 	// safety check.
 	if !hasValidCondition && !hasFilters && !opt.AllowEmpty {

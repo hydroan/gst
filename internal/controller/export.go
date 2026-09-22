@@ -69,7 +69,7 @@ func Export[M types.Model, REQ types.Request, RSP types.Response](c *gin.Context
 // The handler decodes query parameters into M, applies service filters, runs
 // list hooks, queries the configured database handler with export-oriented limit
 // and query options, delegates byte generation to the phase service's Export
-// method, and writes the result as an attachment
+// method, and writes the result as an attachment.
 func ExportFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...*types.ControllerConfig[M]) gin.HandlerFunc {
 	meta := newFactoryMeta[M, REQ, RSP](routeFromConfig(cfg...), consts.PHASE_EXPORT, consts.PHASE_LIST_BEFORE, consts.PHASE_LIST_AFTER)
 	return func(c *gin.Context) {

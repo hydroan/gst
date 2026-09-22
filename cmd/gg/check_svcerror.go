@@ -783,9 +783,10 @@ func (s *svcErrFuncScope) resolveCall(call *ast.CallExpr, visiting map[svcErrVar
 		}
 		// A method call on a same-package package-level variable (a manager
 		// singleton) resolves through the variable's recorded concrete type.
-		// Local variables never register there, so the lookup alone decides;
-		// a same-named local shadowing the package variable is not a shape
-		// this project uses.
+		// Local variables never register there, so the lookup alone decides:
+		// a local variable shadowing a package-level variable of the same
+		// name is not told apart and resolves through the package variable's
+		// type.
 		if typeName, ok := s.file.analysis.pkgVarTypes[s.file.pkgDir][ident.Name]; ok {
 			return []svcErrSource{{
 				kind:   svcErrSourceCall,

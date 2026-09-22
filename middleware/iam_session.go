@@ -22,7 +22,8 @@ func sessionRequiresPasswordChange(session modeliamsession.Session) bool {
 	return session.MustChangePassword
 }
 
-// mustChangePasswordExemptRoutes are allowed while MustChangePassword is true on the session.
+// mustChangePasswordExempt reports whether the request may proceed while
+// MustChangePassword is true on the session.
 func mustChangePasswordExempt(method, path string) bool {
 	switch {
 	case method == http.MethodPost && path == "/api/iam/change-password":

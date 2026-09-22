@@ -21,9 +21,9 @@ func WithSafe[K comparable, V any]() Option[K, V] {
 // WithNodeFormatter creates a option that sets the node formatter when call tree.String().
 // Example usage:
 //
-//	tree.WithNodeFormatter(func(k string, v int) string {
+//	tree, _ := rbtree.NewOrderedKeys(rbtree.WithNodeFormatter(func(k string, v int) string {
 //		return fmt.Sprintf("%s:%d ", k, v)
-//	})
+//	}))
 func WithNodeFormatter[K comparable, V any](fn func(K, V) string) Option[K, V] {
 	return func(t *Tree[K, V]) error {
 		if fn == nil {

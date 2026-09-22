@@ -34,7 +34,7 @@ var pluralizeCli = pluralize.NewClient()
 //
 // The parser supports various DSL patterns:
 //   - Global settings: Enabled(), Endpoint("path"), Migrate()
-//   - Action configuration: Create().Payload[Type].Result[Type]
+//   - Action configuration: Create(func() { Payload[Type](); Result[Type]() })
 //   - Service and visibility: Service(), Public()
 func Parse(file *ast.File) map[string]*Design {
 	designBase, designEmpty := parse(file)
@@ -259,7 +259,7 @@ func parse(file *ast.File) (map[string]*ast.FuncDecl, map[string]*ast.FuncDecl) 
 
 // parseDesign parses a Design method's AST declaration and extracts the DSL configuration.
 // It analyzes the function body to find DSL calls like Enabled(), Endpoint(), Migrate(),
-// and action configurations like Create().Payload[Type].Result[Type].
+// and action configurations like Create(func() { Payload[Type](); Result[Type]() }).
 //
 // Parameters:
 //   - fn: The AST function declaration for the Design() method
@@ -492,7 +492,7 @@ func parseDesign(fn *ast.FuncDecl) *Design {
 //   - args: The function call arguments, expected to contain a function literal
 //
 // Returns:
-//   - actionResult: Parsed configuration including payload/result types and flags
+//   - *Action: Parsed configuration including payload/result types and flags
 //   - bool: true if parsing was successful, false otherwise
 //
 // The function parses DSL calls within the action function body:
@@ -508,8 +508,8 @@ func parseDesign(fn *ast.FuncDecl) *Design {
 //
 //	Create(func() {
 //	    Service()
-//	    Payload[CreateUserRequest]
-//	    Result[*User]
+//	    Payload[CreateUserRequest]()
+//	    Result[*User]()
 //	})
 func parseAction(phase consts.Phase, funcName string, expr ast.Expr) (*Action, bool) {
 	var payload string
@@ -613,16 +613,16 @@ func parseAction(phase consts.Phase, funcName string, expr ast.Expr) (*Action, b
 					exact = true
 				}
 
-				// Parse Filename("upload")/Filename("parse")
+				// Parse Filename("archive").
 				var isFilenameCall bool
 				switch fun := call.Fun.(type) {
 				case *ast.Ident:
-					// anonymous import: Filename("upload")
+					// anonymous import: Filename("archive")
 					if fun != nil && fun.Name == "Filename" {
 						isFilenameCall = true
 					}
 				case *ast.SelectorExpr:
-					// non-anonymous import: dsl.Filename("upload")
+					// non-anonymous import: dsl.Filename("archive")
 					if fun != nil && fun.Sel != nil && fun.Sel.Name == "Filename" {
 						isFilenameCall = true
 					}
@@ -716,22 +716,6 @@ func parseAction(phase consts.Phase, funcName string, expr ast.Expr) (*Action, b
 	}, true
 }
 
-// // actionResult holds the parsed configuration for a single DSL action.
-// // It contains all the settings that can be configured for an API action
-// // through the DSL, including type information and behavioral flags.
-// type actionResult struct {
-// 	// payload is the name of the request payload type (e.g., "CreateUserRequest")
-// 	payload string
-// 	// result is the name of the response result type (e.g., "User" or "*User")
-// 	result string
-// 	// enabled indicates whether this action should generate API endpoints
-// 	enabled bool
-// 	// service indicates whether to generate service layer code for this action
-// 	service bool
-// 	// public indicates whether the generated API endpoint should be publicly accessible
-// 	public bool
-// }
-
 // FindAllModelBase finds all struct types that embed a database base model
 // (model.Base or model.AutoBase) as an anonymous field. It searches for
 // structs containing anonymous fields of type "model.Base", "model.AutoBase",
@@ -789,7 +773,6 @@ func FindAllModelBase(file *ast.File) []string {
 //
 // This function is used to identify lightweight models that typically don't require
 // database migration and have simplified API generation.
-// FindAllModelEmpty finds all struct types that embed model.Empty as an anonymous field
 func FindAllModelEmpty(file *ast.File) []string {
 	names := make([]string, 0)
 	if file == nil {
@@ -848,7 +831,7 @@ var modelBaseNames = []string{"Base", "AutoBase"}
 //   - pkgmodel.Base, pkgmodel.AutoBase (with aliased import)
 //   - Base, AutoBase (with dot import)
 func IsModelBase(file *ast.File, field *ast.Field) bool {
-	// Not anonymouse field.
+	// Not an anonymous field.
 	if file == nil || field == nil || len(field.Names) != 0 {
 		return false
 	}
@@ -897,10 +880,8 @@ func IsModelBase(file *ast.File, field *ast.Field) bool {
 //   - model.Empty (with standard import)
 //   - pkgmodel.Empty (with aliased import)
 //   - Empty (with dot import)
-//
-// IsModelEmpty checks if a struct field is an anonymous embedding of model.Empty
 func IsModelEmpty(file *ast.File, field *ast.Field) bool {
-	// Not anonymouse field.
+	// Not an anonymous field.
 	if file == nil || field == nil || len(field.Names) != 0 {
 		return false
 	}

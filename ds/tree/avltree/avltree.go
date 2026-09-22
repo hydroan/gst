@@ -9,8 +9,8 @@ import (
 )
 
 // Tree represents a generic AVL tree.
-// It support keys of any comparable type and value of any type.
-// The tree use a custom comparison function to matain order.
+// It supports keys of any comparable type and values of any type.
+// The tree uses a custom comparison function to maintain order.
 type Tree[K comparable, V any] struct {
 	root *Node[K, V]
 	cmp  func(K, K) int
@@ -22,7 +22,7 @@ type Tree[K comparable, V any] struct {
 }
 
 // New creates and returns a AVL tree.
-// The provided function "cmp" is determines the order of the keys.
+// The provided function "cmp" determines the order of the keys.
 func New[K comparable, V any](cmp func(K, K) int, ops ...Option[K, V]) (*Tree[K, V], error) {
 	if cmp == nil {
 		return nil, types.ErrEqualNil
@@ -61,7 +61,7 @@ func NewFromSlice[V any](slice []V, ops ...Option[int, V]) (*Tree[int, V], error
 }
 
 // NewFromMap creates and returns a AVL tree from a given map.
-// The provided function "cmp" is determines the order of the keys.
+// The provided function "cmp" determines the order of the keys.
 func NewFromMap[K comparable, V any](m map[K]V, cmp func(K, K) int, ops ...Option[K, V]) (*Tree[K, V], error) {
 	t, err := New(cmp, ops...)
 	if err != nil {
@@ -301,8 +301,8 @@ func (t *Tree[K, V]) IsEmpty() bool {
 	return t.Size() == 0
 }
 
-// Height returns the height of the tree.
-// The height is the length of the longest path from root to leaf.
+// Height returns the height of the tree: the number of nodes on the longest
+// path from the root to a leaf, 0 for an empty tree.
 func (t *Tree[K, V]) Height() int {
 	if t.safe {
 		t.mu.RLock()
@@ -814,19 +814,16 @@ func doubleRotate[K comparable, V any](c int, s *Node[K, V]) *Node[K, V] {
 	return p
 }
 
-// rotate does left rotate or right rotate.
+// rotate rotates the subtree rooted at s and returns its new root, the child
+// of s on the c side:
 //
-//	c == -1 Left Rotate
-//	c == 1 Right Rotate
+//	c == -1: right rotation, lifting the left child
+//	c == 1:  left rotation, lifting the right child
 //
-// Children[a], Children[a^1]
+// a = (c + 1) / 2 indexes that child in Children, and a^1 the opposite side:
 //
-//	a = (c + 1) / 2
-//		c = -1 -> a = 0: Left Rotate
-//		c = 1  -> a = 1: Right Rotate
-//	a^1
-//		0^1 = 1 -> Right Node
-//		1^1 = 0 -> Left Node
+//	c = -1 -> a = 0, a^1 = 1: the left child rises and s becomes its right child
+//	c = 1  -> a = 1, a^1 = 0: the right child rises and s becomes its left child
 //
 // references: https://github.com/emirpasic/gods/blob/8323d02ee3ca1499478f9ccd7a299fb1c5005780/trees/avltree/avltree.go#L387
 func rotate[K comparable, V any](c int, s *Node[K, V]) *Node[K, V] {

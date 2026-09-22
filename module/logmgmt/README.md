@@ -5,9 +5,9 @@ Login and operation logging for gst applications.
 ## What it provides
 
 - **Login log** — every IAM login lifecycle event (success, failure, logout) is
-  recorded to the `login_logs` table by a login observer that
-  `internal/service/logmgmt` installs into the `authn` hook at package
-  initialization. Queryable through `GET /api/log/loginlog[/:id]`.
+  recorded to the `login_logs` table by `servicelogmgmt.RecordLoginEvent`, the
+  login observer `Register` adds through `authn.AddLoginObserver`. Queryable
+  through `GET /api/log/loginlog[/:id]`.
 - **Operation log** — mutations recorded by the audit pipeline land in the
   `operation_logs` table. Queryable through `GET /api/log/operationlog[/:id]`.
 - **Retention** — `servicelogmgmt.Cleanup` deletes rows older than the
@@ -36,10 +36,12 @@ default).
 gg module copy logmgmt
 ```
 
-The copied service package installs the login observer the same way, through
-package initialization. Two manual steps remain, printed as post notes: enable
-the audit pipeline in configuration, and register the retention job in
-project-owned cronjob setup.
+The copied service package does not add the login observer by itself:
+project-owned assembly code calls
+`authn.AddLoginObserver(servicelogmgmt.RecordLoginEvent)` exactly once, and
+`gg check` fails until it does. Two more manual steps are printed as post
+notes: enable the audit pipeline in configuration, and register the retention
+job in project-owned cronjob setup.
 
 ## Tenancy
 

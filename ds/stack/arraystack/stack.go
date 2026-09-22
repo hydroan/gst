@@ -31,7 +31,7 @@ func New[E any](cmp func(E, E) int, ops ...Option[E]) (s *Stack[E], err error) {
 			return nil, err
 		}
 	}
-	// internal list alway concurrent unsafe.
+	// The internal list is always concurrency-unsafe.
 	s.list, err = arraylist.New(cmp)
 	if err != nil {
 		return nil, err

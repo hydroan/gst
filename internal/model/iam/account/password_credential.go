@@ -45,7 +45,7 @@ func (PasswordCredential) Indexes() []model.Index {
 // considers gone, and reports a duplicate key for a conflict nothing can see.
 //
 // Nothing reads a deleted credential either. It carries no history worth
-// keeping — a password hash, a failure count, a lock expiry — all of which
-// describe a login that can no longer happen, while the hash is the one field
-// least worth leaving behind.
+// keeping — a password hash, a must-change flag, the time of the last change —
+// all of which describe a login that can no longer happen, while the hash is
+// the one field least worth leaving behind.
 func (PasswordCredential) Purge() bool { return true }

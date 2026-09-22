@@ -18,7 +18,7 @@
 
 ## 与登录链路的关系
 
-`LoginLog` 的写入方是 `internal/service/logmgmt` 在包初始化时向 `authn` 注册的登录观察者，事件来自 IAM 登录/登出流程，覆盖成功、失败、登出三态。观察者永不阻塞登录。
+`LoginLog` 的写入方是登录观察者 `servicelogmgmt.RecordLoginEvent`：`logmgmt.Register()` 通过 `authn.AddLoginObserver` 注册它，copy 路径由项目自有装配代码注册。事件来自 IAM 登录/登出流程，覆盖成功、失败、登出三态。观察者永不阻塞登录。
 
 ## 模型边界
 

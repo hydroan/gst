@@ -11,7 +11,7 @@ import (
 //	func (*Report) PreferReplica() bool { return true }
 //
 // The declaration means "every read of this model tolerates replication
-// staleness" — audit trails, historical ledgers, report rows. It is a
+// staleness" — audit trails, archived documents, report rows. It is a
 // default, not a mandate: a call site takes a single read back to the
 // primary with WithReplica(false), a transaction always stays on the
 // primary, and a deployment without configured replicas serves the reads

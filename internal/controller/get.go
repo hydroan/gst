@@ -124,8 +124,9 @@ func GetFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...*ty
 			gstotel.RecordError(span, err)
 			return
 		}
-		// It will returns a empty types.Model if found nothing from database,
-		// we should response status code "CodeNotFound".
+		// A model without an id or creation time holds no stored record (a
+		// missing row already failed above with ErrRecordNotFound), so answer
+		// CodeNotFound instead of an empty resource.
 		if len(m.GetID()) == 0 || m.GetCreatedAt().Equal(time.Time{}) {
 			log.Errorz(CodeNotFound.String())
 			JSON(c, CodeNotFound)

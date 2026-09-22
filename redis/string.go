@@ -10,8 +10,9 @@ import (
 	goredis "github.com/redis/go-redis/v9"
 )
 
-// Set set any data into redis with specific key.
-// If the data type is custom type or structure, you must implement the interface encoding.BinaryMarshaler.
+// Set stores data at key. The key expires after config.App.Redis.Expiration
+// unless an expiration is given. A custom type or struct must implement
+// encoding.BinaryMarshaler.
 func Set(ctx context.Context, key string, data any, expiration ...time.Duration) error {
 	client, err := Client()
 	if err != nil {
@@ -28,7 +29,8 @@ func Set(ctx context.Context, key string, data any, expiration ...time.Duration)
 	return errors.WithStack(client.Set(ctx, Key(key), data, ttl).Err())
 }
 
-// Get will get raw cache([]byte) from redis.
+// Get returns the raw bytes stored at key, or ErrKeyNotExists when the key
+// does not exist.
 func Get(ctx context.Context, key string) (cache []byte, err error) {
 	client, err := Client()
 	if err != nil {
@@ -124,7 +126,8 @@ func IncrFixedWindow(ctx context.Context, key string, window time.Duration) (int
 	return count.Val(), nil
 }
 
-// GetInt get cache from redis and decode into integer.
+// GetInt reads the value at key and decodes it as an integer, reporting
+// ErrKeyNotExists when the key does not exist.
 func GetInt(ctx context.Context, key string) (int64, error) {
 	client, err := Client()
 	if err != nil {

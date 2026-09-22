@@ -75,7 +75,8 @@ func filterRouteTree(routes map[string][]string, filter string) map[string][]str
 	return filteredRoutes
 }
 
-// parseRouteTreeFromFile parses generated router.go for URL route tree output.
+// parseRouteTreeFromFile parses the generated router/router.gen.go for URL
+// route tree output.
 func parseRouteTreeFromFile() (map[string][]string, error) {
 	routerFile := filepath.Join(routerDir, constants.FileRouterGen)
 	if !fileExists(routerFile) {

@@ -97,7 +97,7 @@ func TestNormalizeRoutePath(t *testing.T) {
 		{"/api/iam/admin/users/:id", []string{"iam", "admin", "users", ":id"}},
 		{"iam/admin/users", []string{"iam", "admin", "users"}},
 		{"/signup/", []string{"signup"}},
-		{"{group}/robots", []string{":group", "robots"}},
+		{"{group}/items", []string{":group", "items"}},
 		{"/api", nil},
 		{"", nil},
 	}

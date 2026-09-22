@@ -83,12 +83,12 @@ func benchmark(b *testing.B, cm types.Cache[string]) {
 		for i := range b.N {
 			idx := i % count
 			if i%3 == 0 {
-				// 30% set
+				// one operation in three is a set
 				if err := cm.Set(ctx, keys[idx], values[idx], ttl); err != nil {
 					b.Fatal(err)
 				}
 			} else {
-				// 70% get
+				// the other two are gets
 				if _, err := cm.Get(ctx, keys[idx]); err != nil && !errors.Is(err, types.ErrEntryNotFound) {
 					b.Fatal(err)
 				}

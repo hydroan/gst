@@ -11,7 +11,7 @@ import (
 )
 
 // Register registers two modules: Helloworld and Helloworld2.
-// helloworld demo just used for demo, that not contains any business logic.
+// Both exist only as a demo and carry no business logic.
 //
 // Models:
 //   - Helloworld
@@ -24,21 +24,20 @@ import (
 //   - PATCH    /api/hello-world/:id
 //   - GET      /api/hello-world
 //   - GET      /api/hello-world/:id
-//   - POST     /api/helloworld/batch
-//   - DELETE   /api/helloworld/batch
-//   - PUT      /api/helloworld/batch
-//   - PATCH    /api/helloworld/batch
+//   - POST     /api/hello-world/batch
+//   - DELETE   /api/hello-world/batch
+//   - PUT      /api/hello-world/batch
+//   - PATCH    /api/hello-world/batch
 //   - POST     /api/hello-world2
 //   - DELETE   /api/hello-world2/:id
 //   - PUT      /api/hello-world2/:id
 //   - PATCH    /api/hello-world2/:id
 //   - GET      /api/hello-world2
 //   - GET      /api/hello-world2/:id
-//   - POST     /api/helloworld2/batch
-//   - DELETE   /api/helloworld2/batch
-//   - PUT      /api/helloworld2/batch
-//   - PATCH    /api/helloworld2/batch
-
+//   - POST     /api/hello-world2/batch
+//   - DELETE   /api/hello-world2/batch
+//   - PUT      /api/hello-world2/batch
+//   - PATCH    /api/hello-world2/batch
 func Register() {
 	module.Use[
 		*Helloworld,

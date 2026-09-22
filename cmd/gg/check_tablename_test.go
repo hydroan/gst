@@ -59,17 +59,17 @@ type Entry struct {
 }
 `)
 	// The method may live in another file of the same package.
-	writeCheckFile(t, filepath.Join(projectDir, "model", "player", "player.go"), `package player
+	writeCheckFile(t, filepath.Join(projectDir, "model", "note", "note.go"), `package note
 
 import "github.com/hydroan/gst/model"
 
-type Player struct {
+type Note struct {
 	model.Base
 }
 `)
-	writeCheckFile(t, filepath.Join(projectDir, "model", "player", "table.go"), `package player
+	writeCheckFile(t, filepath.Join(projectDir, "model", "note", "table.go"), `package note
 
-func (Player) TableName() string { return "players" }
+func (Note) TableName() string { return "notes" }
 `)
 	// Virtual models embed model.Empty and have no table to declare.
 	writeCheckFile(t, filepath.Join(projectDir, "model", "auth", "login.go"), `package auth

@@ -386,17 +386,17 @@ func TestHumanizeDSLFilename(t *testing.T) {
 func TestServiceActionLogQuoted(t *testing.T) {
 	t.Parallel()
 	act := &dsl.Action{Filename: "archive_sample_items"}
-	if got := serviceActionLogQuoted("Common", consts.PHASE_CREATE, act); got != `"common: archive sample items"` {
+	if got := serviceActionLogQuoted("Record", consts.PHASE_CREATE, act); got != `"record: archive sample items"` {
 		t.Fatalf("main create: got %s", got)
 	}
-	if got := serviceActionLogQuoted("Common", consts.PHASE_CREATE_BEFORE, act); got != `"common: archive sample items before"` {
+	if got := serviceActionLogQuoted("Record", consts.PHASE_CREATE_BEFORE, act); got != `"record: archive sample items before"` {
 		t.Fatalf("before hook: got %s", got)
 	}
-	if got := serviceActionLogQuoted("Common", consts.PHASE_CREATE_AFTER, act); got != `"common: archive sample items after"` {
+	if got := serviceActionLogQuoted("Record", consts.PHASE_CREATE_AFTER, act); got != `"record: archive sample items after"` {
 		t.Fatalf("after hook: got %s", got)
 	}
 	act2 := &dsl.Action{Filename: "archive-sample-items"}
-	if got := serviceActionLogQuoted("Common", consts.PHASE_CREATE, act2); got != `"common: archive sample items"` {
+	if got := serviceActionLogQuoted("Record", consts.PHASE_CREATE, act2); got != `"record: archive sample items"` {
 		t.Fatalf("hyphen filename: got %s", got)
 	}
 	if got := serviceActionLogQuoted("User", consts.PHASE_CREATE, nil); got != `"user create"` {

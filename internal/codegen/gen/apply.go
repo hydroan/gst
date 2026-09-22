@@ -18,13 +18,13 @@ import (
 // applyServiceRoleName renames the service struct type and all associated receiver
 // types and variable names to match the action's RoleName.
 // This is needed when Filename is set, causing the struct name to differ from the
-// default Phase-based name (e.g., "Creator" → "Upload").
+// default Phase-based name (e.g., "Creator" → "Archive").
 //
 // It performs three updates:
-//  1. Renames the struct type declaration (e.g., type Creator struct → type Upload struct)
-//  2. Renames receiver types in all methods (e.g., func (a *Creator) → func (u *Upload))
+//  1. Renames the struct type declaration (e.g., type Creator struct → type Archive struct)
+//  2. Renames receiver types in all methods (e.g., func (c *Creator) → func (a *Archive))
 //  3. Renames receiver variable names and all references in method bodies
-//     (e.g., "a" → "u", a.WithContext → u.WithContext)
+//     (e.g., "c" → "a", c.WithContext → a.WithContext)
 func applyServiceRoleName(file *ast.File, action *dsl.Action) bool {
 	if file == nil || action == nil || len(action.Filename) == 0 {
 		return false
@@ -69,7 +69,7 @@ func applyServiceRoleName(file *ast.File, action *dsl.Action) bool {
 	// 2 & 3. Update receiver type and variable name in all methods.
 	// The receiver type is renamed when the struct name changed.
 	// The receiver variable name is always checked and updated to match newRecvVar,
-	// even when the struct name already matches (e.g., struct is "Upload" but receiver is still "a").
+	// even when the struct name already matches (e.g., struct is "Archive" but receiver is still "r").
 	for _, decl := range file.Decls {
 		funcDecl, ok := decl.(*ast.FuncDecl)
 		if !ok || funcDecl == nil || funcDecl.Recv == nil || len(funcDecl.Recv.List) == 0 {

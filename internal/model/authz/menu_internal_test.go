@@ -62,17 +62,17 @@ func TestMenuShadowedIDColumn(t *testing.T) {
 // a menu would be persisted with an empty primary key.
 func TestMenuIDAccessors(t *testing.T) {
 	t.Run("keeps assigned id", func(t *testing.T) {
-		m := &Menu{ID: "config/group"}
+		m := &Menu{ID: "sample/detail"}
 		m.SetID()
-		require.Equal(t, "config/group", m.ID)
-		require.Equal(t, "config/group", m.GetID())
+		require.Equal(t, "sample/detail", m.ID)
+		require.Equal(t, "sample/detail", m.GetID())
 		require.Empty(t, m.Base.ID, "the shadowed field must stay untouched")
 	})
 
 	t.Run("adopts requested id", func(t *testing.T) {
 		m := new(Menu)
-		m.SetID("query/sample_archived_record_history")
-		require.Equal(t, "query/sample_archived_record_history", m.GetID())
+		m.SetID("report/sample_archived_record_history")
+		require.Equal(t, "report/sample_archived_record_history", m.GetID())
 	})
 
 	t.Run("generates id when none is given", func(t *testing.T) {

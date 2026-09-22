@@ -221,7 +221,8 @@ func TestDatabaseWithQuery(t *testing.T) {
 		require.Empty(t, users, "empty struct should be blocked by default")
 
 		// Test query with all empty string fields without AllowEmpty (should return no records)
-		// This tests the second check point where all field values are empty strings
+		// Empty strings are zero values and are skipped, so this reaches the same
+		// empty-query check as the empty struct above
 		require.NoError(t, database.Database[*TestUser](context.Background()).
 			WithQuery(&TestUser{Name: "", Email: ""}).
 			List(&users))
@@ -291,7 +292,8 @@ func TestDatabaseWithQuery(t *testing.T) {
 		require.True(t, foundU3, "should find u3")
 
 		// Test query with all empty string fields with AllowEmpty=true (should return all records)
-		// This tests the second check point with AllowEmpty=true
+		// The empty strings are skipped like any zero value, so AllowEmpty lifts
+		// the same empty-query check as for the empty struct
 		users = make([]*TestUser, 0)
 		require.NoError(t, database.Database[*TestUser](context.Background()).
 			WithQuery(&TestUser{Name: "", Email: ""}, types.QueryOptions{AllowEmpty: true}).

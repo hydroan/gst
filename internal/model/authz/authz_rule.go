@@ -8,17 +8,18 @@ import (
 // AuthzRule stores authorization policy and grouping rules.
 //
 // The table is written and read exclusively by the policy adapter in
-// authz/rbac, never
-// through the framework's CRUD chain, so this model exists to own the schema:
-// it is what gg migrate builds the table and its unique index from. The
-// adapter never migrates, which keeps a single definition of the table.
+// authz/rbac, never through the framework's CRUD chain, so this model exists to
+// own the schema: it is what gg migrate builds the table and its unique index
+// from. The adapter never migrates, which keeps a single definition of the
+// table.
 //
 // It embeds AutoBase because the adapter requires an auto-incrementing integer
-// primary key and loads policies in primary-key order. The audit and soft-delete
-// columns AutoBase brings are never written by the adapter and stay NULL; Purge
-// exists to keep the soft-delete column from ever taking effect, because the
-// adapter reads without a deleted_at condition and would keep enforcing a rule
-// the framework considers deleted.
+// primary key and loads policies in primary-key order. Of the other columns
+// AutoBase brings, the adapter writes only the two NOT NULL timestamps; the
+// creator, updater, and soft-delete columns stay NULL. Purge exists to keep the
+// soft-delete column from ever taking effect, because the adapter reads without
+// a deleted_at condition and would keep enforcing a rule the framework
+// considers deleted.
 //
 // Policy rows use ptype "p":
 //   - V0: tenant, for example "default"

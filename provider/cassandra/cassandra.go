@@ -131,7 +131,7 @@ func New(cfg config.Cassandra) (*gocql.Session, error) {
 	return s, nil
 }
 
-// Helper function to parse consistency level
+// parseConsistency parses a consistency level name into its gocql value.
 func parseConsistency(consistency string) (gocql.Consistency, error) {
 	switch consistency {
 	case "ANY":
@@ -157,9 +157,9 @@ func parseConsistency(consistency string) (gocql.Consistency, error) {
 	}
 }
 
-// Helper function to get the appropriate retry policy. An empty policy name
-// falls back to the simple policy; an unknown name is a configuration error,
-// mirroring how getConsistencyLevel rejects unknown consistency levels.
+// getRetryPolicy returns the retry policy named by policyName. An empty policy
+// name falls back to the simple policy; an unknown name is a configuration
+// error, mirroring how parseConsistency rejects unknown consistency levels.
 func getRetryPolicy(policyName string, maxRetryCount int) (gocql.RetryPolicy, error) {
 	switch policyName {
 	case "", "default":

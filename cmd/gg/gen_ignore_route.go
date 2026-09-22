@@ -48,12 +48,12 @@ type routeIgnoreResult struct {
 }
 
 // applyRouteIgnores disables every action whose generated route matches an
-// ignore rule. A disabled action drops out of the generated registration
-// files (model/model.go, service/service.go, router/router.go) and no new
-// service file is generated for it, but existing service files are kept on
-// disk. Rules with a From prefix only apply to models declared under that
-// directory. Models must have hierarchical endpoints built before calling
-// this.
+// ignore rule. A disabled action drops out of the generated service and
+// router registration files (service/service.gen.go, router/router.gen.go)
+// and no new service file is generated for it, but existing service files
+// are kept on disk. Rules with a From prefix only apply to models declared
+// under that directory. Models must have hierarchical endpoints built before
+// calling this.
 func applyRouteIgnores(allModels []*gen.ModelInfo, rules []ggconfig.RouteRule) routeIgnoreResult {
 	result := routeIgnoreResult{}
 	if len(rules) == 0 {

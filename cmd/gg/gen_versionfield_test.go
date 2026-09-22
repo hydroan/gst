@@ -16,8 +16,8 @@ func TestFillVersionFieldTags(t *testing.T) {
 	writeCheckProjectGoMod(t, projectDir)
 	modelDir = "model"
 
-	path := filepath.Join(projectDir, "model", "config", "config.go")
-	writeCheckFile(t, path, `package config
+	path := filepath.Join(projectDir, "model", "document", "document.go")
+	writeCheckFile(t, path, `package document
 
 import "github.com/hydroan/gst/model"
 
@@ -88,7 +88,7 @@ func TestFillVersionFieldTagsRejectsEmbedded(t *testing.T) {
 	writeCheckProjectGoMod(t, projectDir)
 	modelDir = "model"
 
-	writeCheckFile(t, filepath.Join(projectDir, "model", "config", "config.go"), `package config
+	writeCheckFile(t, filepath.Join(projectDir, "model", "document", "document.go"), `package document
 
 import "github.com/hydroan/gst/model"
 
@@ -118,7 +118,7 @@ func TestFillVersionFieldTagsRejectsHiddenJSON(t *testing.T) {
 
 	// json:"-" hides the version clients must hand back; un-hiding it is a
 	// semantic decision, so gen aborts instead of healing.
-	writeCheckFile(t, filepath.Join(projectDir, "model", "config", "config.go"), `package config
+	writeCheckFile(t, filepath.Join(projectDir, "model", "document", "document.go"), `package document
 
 import "github.com/hydroan/gst/model"
 

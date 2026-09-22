@@ -41,9 +41,9 @@ var errTOTPBackupCodeInvalid = errors.New("invalid backup code")
 
 // GenerateTOTPBackupCodes creates one-time recovery codes for a new TOTP device.
 //
-// The codes use a 16-character unambiguous Base32 alphabet and are formatted in
-// groups for manual entry. Callers return these raw codes only once to the user
-// during device confirmation.
+// Each code is 16 characters drawn from an unambiguous Base32 alphabet,
+// formatted in groups of four for manual entry. Callers return these raw codes
+// only once to the user during device confirmation.
 func GenerateTOTPBackupCodes() ([]string, error) {
 	codes := make([]string, totpBackupCodeCount)
 	for i := range codes {

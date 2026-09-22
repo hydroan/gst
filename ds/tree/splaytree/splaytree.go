@@ -27,8 +27,8 @@ func (n *Node[K, V]) String() string {
 }
 
 // Tree represents a generic splay tree.
-// It support keys of any comparable type and value of any type.
-// The tree use a custom comparison function to matain order.
+// It supports keys of any comparable type and values of any type.
+// The tree uses a custom comparison function to maintain order.
 type Tree[K comparable, V any] struct {
 	root *Node[K, V]
 	cmp  func(K, K) int
@@ -40,7 +40,7 @@ type Tree[K comparable, V any] struct {
 }
 
 // New creates and returns a splay tree.
-// The provided function "cmp" is determines the order of the keys.
+// The provided function "cmp" determines the order of the keys.
 func New[K comparable, V any](cmp func(K, K) int, ops ...Option[K, V]) (*Tree[K, V], error) {
 	if cmp == nil {
 		return nil, types.ErrEqualNil
@@ -79,7 +79,7 @@ func NewFromSlice[V any](slice []V, ops ...Option[int, V]) (*Tree[int, V], error
 }
 
 // NewFromMap creates and returns a splay tree from a given map.
-// The provided function "cmp" is determines the order of the keys.
+// The provided function "cmp" determines the order of the keys.
 func NewFromMap[K comparable, V any](m map[K]V, cmp func(K, K) int, ops ...Option[K, V]) (*Tree[K, V], error) {
 	t, err := New(cmp, ops...)
 	if err != nil {
@@ -153,7 +153,8 @@ func (t *Tree[K, V]) put(key K, val V) {
 // Get retrieves the value associated with the given key.
 // It returns the value and true if the key exists,
 // otherwise returns the zero value and false.
-// The accessed node will be splayed to the root if found.
+// The last node on the search path, which is the node of key if found, is
+// splayed to the root.
 func (t *Tree[K, V]) Get(key K) (V, bool) {
 	if t.safe {
 		t.mu.Lock()
@@ -286,7 +287,7 @@ func (t *Tree[K, V]) Clear() {
 
 // Keys returns a sorted slice of all keys in the tree.
 //
-// Unlink Get/Put operations, this operation does not perform any splay operations.
+// Unlike Get/Put operations, this operation does not perform any splay operations.
 func (t *Tree[K, V]) Keys() []K {
 	if t.safe {
 		t.mu.RLock()

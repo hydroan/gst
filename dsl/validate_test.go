@@ -934,14 +934,14 @@ type Record struct {
 }
 
 func (Record) Design() {
-	Route("sample/upload", func() {
+	Route("sample/archive", func() {
 		Create(func() {
 			Service()
 			Filename("shared.go")
 			Flatten()
 		})
 	})
-	Route("sample/publish", func() {
+	Route("sample/restore", func() {
 		Update(func() {
 			Service()
 			Filename("shared.go")
@@ -964,14 +964,14 @@ type Record struct {
 }
 
 func (Record) Design() {
-	Route("sample/upload", func() {
+	Route("sample/archive", func() {
 		Create(func() {
 			Service()
 			Filename("shared.go")
 			Flatten()
 		})
 	})
-	Route("sample/publish", func() {
+	Route("sample/restore", func() {
 		Update(func() {
 			Service()
 			Filename("shared.go")
@@ -1069,7 +1069,7 @@ func TestValidateVirtualModelListResult(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			fset := token.NewFileSet()
-			filename := "/repo/model/stats/sample.go"
+			filename := "/repo/model/report/sample.go"
 			file, err := parser.ParseFile(fset, filename, tt.source, parser.ParseComments)
 			if err != nil {
 				t.Fatalf("parse source failed: %v", err)
@@ -1096,7 +1096,7 @@ func TestValidateVirtualModelListResult(t *testing.T) {
 }
 
 const validateVirtualListWithResultSource = `
-package stats
+package report
 
 import (
 	. "github.com/hydroan/gst/dsl"
@@ -1122,7 +1122,7 @@ func (Sample) Design() {
 `
 
 const validateVirtualListWithoutResultSource = `
-package stats
+package report
 
 import (
 	. "github.com/hydroan/gst/dsl"
@@ -1142,7 +1142,7 @@ func (Sample) Design() {
 `
 
 const validateVirtualRouteListWithoutResultSource = `
-package stats
+package report
 
 import (
 	. "github.com/hydroan/gst/dsl"
@@ -1155,7 +1155,7 @@ type Sample struct {
 }
 
 func (Sample) Design() {
-	Route("stats/samples", func() {
+	Route("report/samples", func() {
 		List(func() {
 			Service()
 		})
@@ -1164,7 +1164,7 @@ func (Sample) Design() {
 `
 
 const validateBaseListWithoutResultSource = `
-package stats
+package report
 
 import (
 	. "github.com/hydroan/gst/dsl"

@@ -117,8 +117,8 @@ func TestBuildColumnsProgramInspectsIgnoredModelsUnconditionally(t *testing.T) {
 		RegisterIgnored: true,
 	}
 	virtual := &gen.ModelInfo{
-		ModulePath: "tmpapp", ModelPkgName: "stats", ModelName: "Summary",
-		ModelFileDir: "model/stats", ModelFilePath: "model/stats/summary.go",
+		ModulePath: "tmpapp", ModelPkgName: "report", ModelName: "Summary",
+		ModelFileDir: "model/report", ModelFilePath: "model/report/summary.go",
 		Design: &dsl.Design{Enabled: true, Migrate: false},
 	}
 

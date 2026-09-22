@@ -109,7 +109,7 @@ func DeleteManyFactory[M types.Model, REQ types.Request, RSP types.Response](cfg
 		}
 		// 2.Batch delete resources in database.
 		if !errors.Is(reqErr, io.EOF) {
-			// purge mode is current not allowed in request.
+			// purge mode is currently not allowed in request.
 			//
 			// if err = database.Database[M](requestContext(c)).WithPurge(req.Options.Purge).Delete(req.Items...); err != nil {
 			if err = database.Database[M](requestContext(c)).Delete(req.Items...); err != nil {

@@ -188,8 +188,8 @@ func (u *user) Create(ctx *gst.ServiceContext, req *model.User) (rsp *model.User
 				Result:  "*User",
 				Phase:   consts.PHASE_CREATE,
 			},
-			servicePkgName: "callback",
-			want: `package callback
+			servicePkgName: "account",
+			want: `package account
 
 import (
 	"helloworld/model"
@@ -208,6 +208,7 @@ func (u *user) Create(ctx *gst.ServiceContext, req *model.User) (rsp *model.User
 `,
 		},
 		{
+			// The rename the applyServiceRoleName doc comment shows.
 			name: "rename_struct_and_receiver_with_filename",
 			code: `package record
 
@@ -244,7 +245,7 @@ func (c *Creator) CreateAfter(ctx *gst.ServiceContext, record *sample.Record) er
 				Enabled:  true,
 				Payload:  "*Record",
 				Result:   "*Record",
-				Filename: "upload",
+				Filename: "archive",
 				Phase:    consts.PHASE_CREATE,
 			},
 			servicePkgName: "record",
@@ -257,24 +258,24 @@ import (
 	"github.com/hydroan/gst/service"
 )
 
-type Upload struct {
+type Archive struct {
 	service.Base[*sample.Record, *sample.Record, *sample.Record]
 }
 
-func (u *Upload) Create(ctx *gst.ServiceContext, req *sample.Record) (rsp *sample.Record, err error) {
-	log := u.WithContext(ctx, ctx.Phase())
+func (a *Archive) Create(ctx *gst.ServiceContext, req *sample.Record) (rsp *sample.Record, err error) {
+	log := a.WithContext(ctx, ctx.Phase())
 	log.Info("record create")
 	return rsp, nil
 }
 
-func (u *Upload) CreateBefore(ctx *gst.ServiceContext, record *sample.Record) error {
-	log := u.WithContext(ctx, ctx.Phase())
+func (a *Archive) CreateBefore(ctx *gst.ServiceContext, record *sample.Record) error {
+	log := a.WithContext(ctx, ctx.Phase())
 	log.Info("record create before")
 	return nil
 }
 
-func (u *Upload) CreateAfter(ctx *gst.ServiceContext, record *sample.Record) error {
-	log := u.WithContext(ctx, ctx.Phase())
+func (a *Archive) CreateAfter(ctx *gst.ServiceContext, record *sample.Record) error {
+	log := a.WithContext(ctx, ctx.Phase())
 	log.Info("record create after")
 	return nil
 }
@@ -305,7 +306,7 @@ func (c *Creator) Create(ctx *gst.ServiceContext, req *sample.Record) (rsp *samp
 				Enabled:  true,
 				Payload:  "*RecordReq",
 				Result:   "*RecordRsp",
-				Filename: "upload",
+				Filename: "archive",
 				Phase:    consts.PHASE_CREATE,
 			},
 			servicePkgName: "record",
@@ -318,12 +319,12 @@ import (
 	"github.com/hydroan/gst/service"
 )
 
-type Upload struct {
+type Archive struct {
 	service.Base[*sample.Record, *sample.RecordReq, *sample.RecordRsp]
 }
 
-func (u *Upload) Create(ctx *gst.ServiceContext, req *sample.RecordReq) (rsp *sample.RecordRsp, err error) {
-	log := u.WithContext(ctx, ctx.Phase())
+func (a *Archive) Create(ctx *gst.ServiceContext, req *sample.RecordReq) (rsp *sample.RecordRsp, err error) {
+	log := a.WithContext(ctx, ctx.Phase())
 	log.Info("record create")
 	return rsp, nil
 }
@@ -388,12 +389,12 @@ import (
 	"github.com/hydroan/gst/service"
 )
 
-type Upload struct {
+type Archive struct {
 	service.Base[*sample.Record, *sample.Record, *sample.Record]
 }
 
-func (u *Upload) Create(ctx *gst.ServiceContext, req *sample.Record) (rsp *sample.Record, err error) {
-	log := u.WithContext(ctx, ctx.Phase())
+func (a *Archive) Create(ctx *gst.ServiceContext, req *sample.Record) (rsp *sample.Record, err error) {
+	log := a.WithContext(ctx, ctx.Phase())
 	log.Info("record create")
 	return rsp, nil
 }
@@ -402,7 +403,7 @@ func (u *Upload) Create(ctx *gst.ServiceContext, req *sample.Record) (rsp *sampl
 				Enabled:  true,
 				Payload:  "*Record",
 				Result:   "*Record",
-				Filename: "upload",
+				Filename: "archive",
 				Phase:    consts.PHASE_CREATE,
 			},
 			servicePkgName: "record",
@@ -415,18 +416,20 @@ import (
 	"github.com/hydroan/gst/service"
 )
 
-type Upload struct {
+type Archive struct {
 	service.Base[*sample.Record, *sample.Record, *sample.Record]
 }
 
-func (u *Upload) Create(ctx *gst.ServiceContext, req *sample.Record) (rsp *sample.Record, err error) {
-	log := u.WithContext(ctx, ctx.Phase())
+func (a *Archive) Create(ctx *gst.ServiceContext, req *sample.Record) (rsp *sample.Record, err error) {
+	log := a.WithContext(ctx, ctx.Phase())
 	log.Info("record create")
 	return rsp, nil
 }
 `,
 		},
 		{
+			// The receiver rename applyServiceRoleName describes for a struct
+			// already named after the action.
 			name: "rename_receiver_when_struct_already_matches",
 			code: `package record
 
@@ -437,23 +440,23 @@ import (
 	"github.com/hydroan/gst/service"
 )
 
-type Upload struct {
+type Archive struct {
 	service.Base[*sample.Record, *sample.RecordReq, *sample.RecordRsp]
 }
 
-func (r *Upload) Create(ctx *gst.ServiceContext, req *sample.RecordReq) (rsp *sample.RecordRsp, err error) {
+func (r *Archive) Create(ctx *gst.ServiceContext, req *sample.RecordReq) (rsp *sample.RecordRsp, err error) {
 	log := r.WithContext(ctx, ctx.Phase())
 	log.Info("record create")
 	return rsp, nil
 }
 
-func (r *Upload) CreateBefore(ctx *gst.ServiceContext, record *sample.Record) error {
+func (r *Archive) CreateBefore(ctx *gst.ServiceContext, record *sample.Record) error {
 	log := r.WithContext(ctx, ctx.Phase())
 	log.Info("record create before")
 	return nil
 }
 
-func (r *Upload) CreateAfter(ctx *gst.ServiceContext, record *sample.Record) error {
+func (r *Archive) CreateAfter(ctx *gst.ServiceContext, record *sample.Record) error {
 	log := r.WithContext(ctx, ctx.Phase())
 	log.Info("record create after")
 	return nil
@@ -463,7 +466,7 @@ func (r *Upload) CreateAfter(ctx *gst.ServiceContext, record *sample.Record) err
 				Enabled:  true,
 				Payload:  "*RecordReq",
 				Result:   "*RecordRsp",
-				Filename: "upload",
+				Filename: "archive",
 				Phase:    consts.PHASE_CREATE,
 			},
 			servicePkgName: "record",
@@ -476,24 +479,24 @@ import (
 	"github.com/hydroan/gst/service"
 )
 
-type Upload struct {
+type Archive struct {
 	service.Base[*sample.Record, *sample.RecordReq, *sample.RecordRsp]
 }
 
-func (u *Upload) Create(ctx *gst.ServiceContext, req *sample.RecordReq) (rsp *sample.RecordRsp, err error) {
-	log := u.WithContext(ctx, ctx.Phase())
+func (a *Archive) Create(ctx *gst.ServiceContext, req *sample.RecordReq) (rsp *sample.RecordRsp, err error) {
+	log := a.WithContext(ctx, ctx.Phase())
 	log.Info("record create")
 	return rsp, nil
 }
 
-func (u *Upload) CreateBefore(ctx *gst.ServiceContext, record *sample.Record) error {
-	log := u.WithContext(ctx, ctx.Phase())
+func (a *Archive) CreateBefore(ctx *gst.ServiceContext, record *sample.Record) error {
+	log := a.WithContext(ctx, ctx.Phase())
 	log.Info("record create before")
 	return nil
 }
 
-func (u *Upload) CreateAfter(ctx *gst.ServiceContext, record *sample.Record) error {
-	log := u.WithContext(ctx, ctx.Phase())
+func (a *Archive) CreateAfter(ctx *gst.ServiceContext, record *sample.Record) error {
+	log := a.WithContext(ctx, ctx.Phase())
 	log.Info("record create after")
 	return nil
 }
@@ -969,10 +972,10 @@ func (u *Creator) Create(ctx *gst.ServiceContext, req *auth.UserReq) (rsp *auth.
 		},
 		{
 			name: "do_not_update_unrelated_model_imports",
-			code: `package debug
+			code: `package record
 
 import (
-	"helloworld/model/auth"
+	"helloworld/model/archive"
 	"helloworld/model/sample/item"
 
 	"github.com/hydroan/gst"
@@ -980,31 +983,31 @@ import (
 )
 
 type Lister struct {
-	service.Base[*auth.Debug, *auth.Debug, *auth.Debug]
+	service.Base[*archive.Record, *archive.Record, *archive.Record]
 }
 
-func (d *Lister) List(ctx *gst.ServiceContext, req *auth.Debug) (rsp *auth.Debug, err error) {
+func (r *Lister) List(ctx *gst.ServiceContext, req *archive.Record) (rsp *archive.Record, err error) {
 	items := make([]*item.Entry, 0)
 	return rsp, nil
 }
 `,
 			action: &dsl.Action{
 				Enabled: true,
-				Payload: "*Debug",
-				Result:  "*Debug",
+				Payload: "*Record",
+				Result:  "*Record",
 				Phase:   consts.PHASE_LIST,
 			},
-			servicePkgName: "debug",
+			servicePkgName: "record",
 			modelInfo: &gen.ModelInfo{
 				ModulePath:   "helloworld",
-				ModelFileDir: "model/auth",
-				ModelPkgName: "auth",
-				ModelName:    "Debug",
+				ModelFileDir: "model/archive",
+				ModelPkgName: "archive",
+				ModelName:    "Record",
 			},
-			want: `package debug
+			want: `package record
 
 import (
-	"helloworld/model/auth"
+	"helloworld/model/archive"
 	"helloworld/model/sample/item"
 
 	"github.com/hydroan/gst"
@@ -1012,10 +1015,10 @@ import (
 )
 
 type Lister struct {
-	service.Base[*auth.Debug, *auth.Debug, *auth.Debug]
+	service.Base[*archive.Record, *archive.Record, *archive.Record]
 }
 
-func (d *Lister) List(ctx *gst.ServiceContext, req *auth.Debug) (rsp *auth.Debug, err error) {
+func (r *Lister) List(ctx *gst.ServiceContext, req *archive.Record) (rsp *archive.Record, err error) {
 	items := make([]*item.Entry, 0)
 	return rsp, nil
 }
@@ -1023,26 +1026,26 @@ func (d *Lister) List(ctx *gst.ServiceContext, req *auth.Debug) (rsp *auth.Debug
 		},
 		{
 			name: "update_stale_service_model_type",
-			code: `package debug
+			code: `package sample
 
 import (
-	"helloworld/model/debug"
+	"helloworld/model/sample"
 
 	"github.com/hydroan/gst"
 	"github.com/hydroan/gst/service"
 )
 
 type Ping struct {
-	service.Base[*debug.Ping, *debug.Debug, *debug.PingRsp]
+	service.Base[*sample.Ping, *sample.Record, *sample.PingRsp]
 }
 
-func (p *Ping) Get(ctx *gst.ServiceContext, req *debug.Debug) (rsp *debug.PingRsp, err error) {
+func (p *Ping) Get(ctx *gst.ServiceContext, req *sample.Record) (rsp *sample.PingRsp, err error) {
 	return rsp, nil
 }
 `,
 			action: &dsl.Action{
 				Enabled: true,
-				Payload: "*Debug",
+				Payload: "*Record",
 				Result:  "*PingRsp",
 				// Filename keeps the struct name "Ping" canonical for the
 				// action, so this case exercises only the stale model type
@@ -1050,27 +1053,27 @@ func (p *Ping) Get(ctx *gst.ServiceContext, req *debug.Debug) (rsp *debug.PingRs
 				Filename: "ping",
 				Phase:    consts.PHASE_GET,
 			},
-			servicePkgName: "debug",
+			servicePkgName: "sample",
 			modelInfo: &gen.ModelInfo{
 				ModulePath:   "helloworld",
-				ModelFileDir: "model/debug",
-				ModelPkgName: "debug",
-				ModelName:    "Debug",
+				ModelFileDir: "model/sample",
+				ModelPkgName: "sample",
+				ModelName:    "Record",
 			},
-			want: `package debug
+			want: `package sample
 
 import (
-	"helloworld/model/debug"
+	"helloworld/model/sample"
 
 	"github.com/hydroan/gst"
 	"github.com/hydroan/gst/service"
 )
 
 type Ping struct {
-	service.Base[*debug.Debug, *debug.Debug, *debug.PingRsp]
+	service.Base[*sample.Record, *sample.Record, *sample.PingRsp]
 }
 
-func (p *Ping) Get(ctx *gst.ServiceContext, req *debug.Debug) (rsp *debug.PingRsp, err error) {
+func (p *Ping) Get(ctx *gst.ServiceContext, req *sample.Record) (rsp *sample.PingRsp, err error) {
 	return rsp, nil
 }
 `,
@@ -1795,12 +1798,12 @@ func (c *Creator) Create(ctx *gst.ServiceContext, req *model.User) (rsp *model.U
 				Service:  true,
 				Payload:  "*User",
 				Result:   "*User",
-				Filename: "upload",
+				Filename: "archive",
 				Phase:    consts.PHASE_CREATE,
 			},
 			wantChanged: true,
 			wantContains: []string{
-				"type Upload struct",
+				"type Archive struct",
 				"service.Base[*model.User, *model.User, *model.User]",
 			},
 		},

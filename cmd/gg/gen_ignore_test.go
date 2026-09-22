@@ -32,9 +32,9 @@ func parseRules(t *testing.T, raws ...string) []ggconfig.RouteRule {
 // findModelsFromSource writes source into a temporary project's model
 // directory and scans it with codegen.FindModels, running the same
 // endpoint/param setup genRunWithOptions performs before the ignore passes.
-// This is the fallback construction path documented in the task brief: a
-// directly built dsl.Design leaves undeclared action fields nil, which
-// panics inside dsl.Design.Range, so tests must go through the DSL parser.
+// Tests build their models this way because a directly built dsl.Design
+// leaves undeclared action fields nil, which panics inside dsl.Design.Range,
+// so they must go through the DSL parser.
 func findModelsFromSource(t *testing.T, pkgDir, filename, source string) []*gen.ModelInfo {
 	t.Helper()
 	projectDir := t.TempDir()

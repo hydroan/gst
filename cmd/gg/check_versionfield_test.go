@@ -17,7 +17,7 @@ func TestCheckVersionFieldDeclarations(t *testing.T) {
 
 	// An embedded Version and a bare named field are both deviations; a
 	// compliant field and an unrelated local Version type are not.
-	writeCheckFile(t, filepath.Join(projectDir, "model", "config", "config.go"), `package config
+	writeCheckFile(t, filepath.Join(projectDir, "model", "document", "document.go"), `package document
 
 import "github.com/hydroan/gst/model"
 
@@ -61,7 +61,7 @@ type Hidden struct {
 
 func (Hidden) TableName() string { return "hiddens" }
 `)
-	writeCheckFile(t, filepath.Join(projectDir, "model", "config", "aliased.go"), `package config
+	writeCheckFile(t, filepath.Join(projectDir, "model", "document", "aliased.go"), `package document
 
 import gstmodel "github.com/hydroan/gst/model"
 
@@ -73,7 +73,7 @@ type Aliased struct {
 
 func (Aliased) TableName() string { return "aliaseds" }
 `)
-	writeCheckFile(t, filepath.Join(projectDir, "model", "config", "unrelated.go"), `package config
+	writeCheckFile(t, filepath.Join(projectDir, "model", "document", "unrelated.go"), `package document
 
 type Version int64
 
@@ -84,7 +84,7 @@ type Unrelated struct {
 	// A request DTO carries model.Version so clients can hand the version
 	// back; it is not a database model (no embedded base) and must not be
 	// held to the gorm tag contract.
-	writeCheckFile(t, filepath.Join(projectDir, "model", "config", "request.go"), `package config
+	writeCheckFile(t, filepath.Join(projectDir, "model", "document", "request.go"), `package document
 
 import "github.com/hydroan/gst/model"
 

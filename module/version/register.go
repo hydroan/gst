@@ -9,7 +9,7 @@ import (
 
 // Register registers the version module.
 //
-// Modals and Result:
+// Models and results:
 //   - Version, VersionRsp
 //
 // Routes:

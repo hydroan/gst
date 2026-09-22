@@ -8,7 +8,7 @@ import (
 
 type Option[V any] func(*List[V]) error
 
-// WithSafe creates a Option that make the doublely-linked list safe for concurrent use.
+// WithSafe creates an Option that makes the doubly-linked list safe for concurrent use.
 func WithSafe[V any]() Option[V] {
 	return func(m *List[V]) error {
 		m.mu = new(sync.RWMutex)
@@ -17,8 +17,9 @@ func WithSafe[V any]() Option[V] {
 	}
 }
 
-// WithSorted creates a option that ensure the doublely-linked to always makeup a sorted
-// order elements based on the provided compator function.
+// WithSorted creates an Option that records cmp as the order of the
+// doubly-linked list. No list operation reads it yet: elements stay where the
+// operations put them, and MergeSorted takes a comparison function of its own.
 func WithSorted[V any](cmp func(V, V) int) Option[V] {
 	return func(m *List[V]) error {
 		m.sorted = true

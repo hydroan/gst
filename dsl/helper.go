@@ -47,8 +47,8 @@ var routePhaseOrder = []consts.Phase{
 //
 // Example:
 //
-//	rangeAction(design, func(route string, a *Action,) {
-//		fmt.Printf("%s %s payload=%s result=%s\n", action.Phase.MethodName(), route, a.Payload, a.Result)
+//	rangeAction(design, func(route string, a *Action) {
+//		fmt.Printf("%s %s payload=%s result=%s\n", a.Phase.MethodName(), route, a.Payload, a.Result)
 //	})
 func rangeAction(d *Design, fn func(string, *Action)) {
 	if d == nil || fn == nil || !d.Enabled {

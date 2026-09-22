@@ -32,7 +32,7 @@ func New[E any](cmp func(E, E) int, ops ...Option[E]) (*Queue[E], error) {
 			return nil, err
 		}
 	}
-	// internal list alway concurrent unsafe.
+	// The internal list is always concurrency-unsafe.
 	q.list, err = linkedlist.New[E]()
 	if err != nil {
 		return nil, err

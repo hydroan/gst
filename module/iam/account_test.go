@@ -654,7 +654,7 @@ func TestAccountResetPassword(t *testing.T) {
 		require.NotEmpty(t, victimSessionAfterReset)
 	})
 
-	t.Run("must_change_password_blocks_list", func(t *testing.T) {
+	t.Run("must_change_password_blocks_admin_user_patch", func(t *testing.T) {
 		cli := accountSessionClient(t, victimSessionAfterReset)
 
 		_, err := cli.Patch[iam.AdminUserPatchRsp](adminUserPath(victim.UserID), iam.AdminUserPatchReq{Status: new(modeliamuser.UserStatusActive)})

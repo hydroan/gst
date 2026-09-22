@@ -570,7 +570,7 @@ func TestTOTPAdmin(t *testing.T) {
 		assertTOTPDeviceActive(t, deviceID)
 	})
 
-	t.Run("root_cannot_be_targeted_by_itself_through_tenant_api", func(t *testing.T) {
+	t.Run("root_may_target_itself_through_tenant_api", func(t *testing.T) {
 		// EnsureTenantAdmin grants root as an actor, so root may manage any
 		// account, including inspecting the root account: system-root actors
 		// bypass the target checks entirely.

@@ -14,11 +14,12 @@ import (
 
 // EnsureTenantAdmin verifies admin-user operations inside the current tenant.
 //
-// The helper is shared by user list/get/status flows. System-root actors bypass
-// tenant checks. Tenant administrators must pass route authorization in the
-// current tenant, and when a concrete target is supplied the target must also be
-// a member of that tenant. System-root targets are never manageable through
-// tenant-local admin APIs.
+// The helper is shared by the admin user, admin session, and password reset
+// flows, and reaches other modules through iam.EnsureAdminOnUser. System-root
+// actors bypass tenant checks. Tenant administrators must pass route
+// authorization in the current tenant, and when a concrete target is supplied
+// the target must also be a member of that tenant. System-root targets are
+// never manageable through tenant-local admin APIs.
 func EnsureTenantAdmin(ctx *gst.ServiceContext, actor *modeliamuser.User, target *modeliamuser.User) error {
 	systemRootActor, err := isSystemRoot(ctx, actor)
 	if err != nil {

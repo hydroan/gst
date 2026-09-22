@@ -144,7 +144,7 @@ func PatchFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...*
 			return
 		}
 
-		// Make sure the record must be already exists. The read is pinned to
+		// Make sure the record already exists. The read is pinned to
 		// the primary because what it reads is written straight back: the
 		// patch merges onto this row, so a replica still catching up would
 		// have the fields the request does not touch written back stale.

@@ -61,8 +61,9 @@ func TTL(ctx context.Context, key string) (time.Duration, error) {
 	return ttl, errors.WithStack(err)
 }
 
-// RemovePrefix will scan and delete all redis key that matchs the `prefix`.
-// for example: myprefix*
+// RemovePrefix scans for and deletes every key matching prefix, for example
+// myprefix*. A prefix without a trailing wildcard gets one, and the namespace
+// applies as it does to every other key.
 func RemovePrefix(ctx context.Context, prefix string) (err error) {
 	client, err := Client()
 	if err != nil {

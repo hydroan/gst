@@ -22,7 +22,7 @@ import (
 	"github.com/hydroan/gst/module"
 )
 
-// Register registers IAM models, API routes, middleware, and scheduled jobs.
+// Register registers IAM models, API routes, and middleware.
 //
 // API Routes:
 //

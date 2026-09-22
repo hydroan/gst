@@ -68,17 +68,16 @@ type Claims struct {
 	Scope             string `json:"scope,omitempty"`
 
 	// Standard Claims
-	AuthTime *jwt.NumericDate `json:"auth_time"` // The time at which the JWT was issued.
+	AuthTime *jwt.NumericDate `json:"auth_time"` // The time at which the end user authenticated.
 	Typ      string           `json:"typ"`       // The media type of this complete JWT. eg: Bearer
 	Azp      string           `json:"azp"`       // The authorized party to which the ID Token was issued.
 	Sid      string           `json:"sid"`       // An identifier for a session at the relying party.
-	Acr      string           `json:"acr"`       // Authentication Context Class. Learn more
+	Acr      string           `json:"acr"`       // The Authentication Context Class Reference.
 	AtHash   string           `json:"at_hash"`   // Access Token hash value encoded in base64url format.
 
 	jwt.RegisteredClaims
 }
 
-// GenTokens generates an access token and a refresh token.
 // GenTokens issues an access token and a refresh token for a user.
 //
 // The tokens are self-contained: everything a later Verify needs is signed into
@@ -139,7 +138,8 @@ func genRefreshToken(key []byte, userID string) (rToken string, err error) {
 	return rToken, nil
 }
 
-// RefreshTokens issues a new access token from the given refresh token.
+// RefreshTokens issues a new access token and refresh token from a valid
+// refresh token and the access token issued with it, which may have expired.
 func RefreshTokens(accessToken, refreshToken string) (newAccessToken, newRefreshToken string, err error) {
 	key, err := signingKey()
 	if err != nil {
@@ -177,7 +177,8 @@ func RefreshTokens(accessToken, refreshToken string) (newAccessToken, newRefresh
 	return GenTokens(accessClaims.UserID, accessClaims.Username)
 }
 
-// ParseToken parse token
+// ParseToken parses tokenStr, checks its signature, lifetime, and issuer, and
+// returns the claims it carries.
 func ParseToken(tokenStr string) (*Claims, error) {
 	if len(tokenStr) == 0 {
 		return nil, ErrTokenMalformed

@@ -7,9 +7,9 @@ import (
 )
 
 type OperationLog struct {
-	User       string    `json:"user,omitempty" query:"user"`   // the operator, empty for local accounts such as root
+	User       string    `json:"user,omitempty" query:"user"`   // the operator's username, empty for an anonymous request
 	IP         string    `json:"ip,omitempty" query:"ip"`       // the operator's ip
-	OP         consts.OP `json:"op,omitempty" query:"op"`       // the action: create, delete, update or read
+	OP         consts.OP `json:"op,omitempty" query:"op"`       // the action, one of the consts.OP values such as create or patch_many
 	Table      string    `json:"table,omitempty" query:"table"` // the table that was operated on
 	Model      string    `json:"model,omitempty" query:"model"`
 	RecordID   string    `json:"record_id,omitempty" query:"record_id"`     // id of the table record

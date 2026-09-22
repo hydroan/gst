@@ -89,26 +89,26 @@ func TestFormatIndexRenames(t *testing.T) {
 
 	t.Run("pairs render comments plus executable statements at the end", func(t *testing.T) {
 		guidance := formatIndexRenames(schema.GeneratorModeMysql, []indexRenamePair{
-			{Table: "groups", From: "idx_groups_group_no", To: "idx_groups_group_no2", Columns: "group_no", Unique: true},
+			{Table: "samples", From: "idx_samples_code", To: "idx_samples_code2", Columns: "code", Unique: true},
 			{Table: "records", From: "idx_records_kind", To: "idx_records_kind2", Columns: "kind"},
 		})
-		require.Contains(t, guidance, "  -- Table `groups`: `idx_groups_group_no` -> `idx_groups_group_no2` (group_no, UNIQUE)")
+		require.Contains(t, guidance, "  -- Table `samples`: `idx_samples_code` -> `idx_samples_code2` (code, UNIQUE)")
 		require.Contains(t, guidance, "  -- Table `records`: `idx_records_kind` -> `idx_records_kind2` (kind)")
 
 		statementBlock := guidance[strings.LastIndex(guidance, "\n\n"):]
-		require.Contains(t, statementBlock, "ALTER TABLE `groups` RENAME INDEX `idx_groups_group_no` TO `idx_groups_group_no2`;")
+		require.Contains(t, statementBlock, "ALTER TABLE `samples` RENAME INDEX `idx_samples_code` TO `idx_samples_code2`;")
 		require.Contains(t, statementBlock, "ALTER TABLE `records` RENAME INDEX `idx_records_kind` TO `idx_records_kind2`;")
 		requireCopyPasteSafe(t, guidance)
 	})
 
 	t.Run("postgres pairs render that server's rename syntax", func(t *testing.T) {
 		guidance := formatIndexRenames(schema.GeneratorModePostgres, []indexRenamePair{
-			{Table: "groups", From: "idx_groups_group_no", To: "idx_groups_group_no2", Columns: "group_no", Unique: true},
+			{Table: "samples", From: "idx_samples_code", To: "idx_samples_code2", Columns: "code", Unique: true},
 		})
-		require.Contains(t, guidance, `  -- Table "groups": "idx_groups_group_no" -> "idx_groups_group_no2" (group_no, UNIQUE)`)
+		require.Contains(t, guidance, `  -- Table "samples": "idx_samples_code" -> "idx_samples_code2" (code, UNIQUE)`)
 
 		statementBlock := guidance[strings.LastIndex(guidance, "\n\n"):]
-		require.Contains(t, statementBlock, `ALTER INDEX "idx_groups_group_no" RENAME TO "idx_groups_group_no2";`)
+		require.Contains(t, statementBlock, `ALTER INDEX "idx_samples_code" RENAME TO "idx_samples_code2";`)
 		requireCopyPasteSafe(t, guidance)
 	})
 }

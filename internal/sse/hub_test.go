@@ -44,14 +44,14 @@ func TestHub_PublishReachesTopicSubscribers(t *testing.T) {
 	hub := sse.NewHub()
 	defer hub.Close()
 
-	first, cancelFirst := hub.Subscribe("orders")
+	first, cancelFirst := hub.Subscribe("records")
 	defer cancelFirst()
-	second, cancelSecond := hub.Subscribe("orders")
+	second, cancelSecond := hub.Subscribe("records")
 	defer cancelSecond()
-	other, cancelOther := hub.Subscribe("draws")
+	other, cancelOther := hub.Subscribe("notes")
 	defer cancelOther()
 
-	hub.Publish("orders", sse.Event{Event: "orders", Data: "changed"})
+	hub.Publish("records", sse.Event{Event: "records", Data: "changed"})
 
 	for _, ch := range []<-chan sse.Event{first, second} {
 		event := receiveOne(t, ch)
@@ -70,18 +70,18 @@ func TestHub_MultiTopicSubscriptionReceivesUnion(t *testing.T) {
 	hub := sse.NewHub()
 	defer hub.Close()
 
-	ch, cancel := hub.Subscribe("orders", "draws")
+	ch, cancel := hub.Subscribe("records", "notes")
 	defer cancel()
 
-	hub.Publish("orders", sse.Event{Data: "order"})
-	hub.Publish("draws", sse.Event{Data: "draw"})
-	hub.Publish("bets", sse.Event{Data: "bet"})
+	hub.Publish("records", sse.Event{Data: "record"})
+	hub.Publish("notes", sse.Event{Data: "note"})
+	hub.Publish("tasks", sse.Event{Data: "task"})
 
-	if got := receiveOne(t, ch).Data; got != "order" {
-		t.Errorf("Expected the orders event first, got %v", got)
+	if got := receiveOne(t, ch).Data; got != "record" {
+		t.Errorf("Expected the records event first, got %v", got)
 	}
-	if got := receiveOne(t, ch).Data; got != "draw" {
-		t.Errorf("Expected the draws event second, got %v", got)
+	if got := receiveOne(t, ch).Data; got != "note" {
+		t.Errorf("Expected the notes event second, got %v", got)
 	}
 	select {
 	case event := <-ch:
@@ -95,7 +95,7 @@ func TestHub_EmptySubscriptionNeverDelivers(t *testing.T) {
 	defer hub.Close()
 
 	ch, cancel := hub.Subscribe()
-	hub.Publish("orders", sse.Event{Data: "order"})
+	hub.Publish("records", sse.Event{Data: "record"})
 
 	select {
 	case event, ok := <-ch:
@@ -115,14 +115,14 @@ func TestHub_SlowSubscriberLosesOldestEvents(t *testing.T) {
 	hub := sse.NewHub(sse.WithSubscriberBuffer(2))
 	defer hub.Close()
 
-	slow, cancelSlow := hub.Subscribe("orders")
+	slow, cancelSlow := hub.Subscribe("records")
 	defer cancelSlow()
-	fast, cancelFast := hub.Subscribe("orders")
+	fast, cancelFast := hub.Subscribe("records")
 	defer cancelFast()
 
 	// Nobody reads yet: four events against a buffer of two.
 	for i := 1; i <= 4; i++ {
-		hub.Publish("orders", sse.Event{Data: i})
+		hub.Publish("records", sse.Event{Data: i})
 	}
 
 	// The slow subscriber lost the oldest two events and keeps the newest two.
@@ -148,12 +148,12 @@ func TestHub_CancelStopsDeliveryAndClosesChannel(t *testing.T) {
 	hub := sse.NewHub()
 	defer hub.Close()
 
-	ch, cancel := hub.Subscribe("orders")
+	ch, cancel := hub.Subscribe("records")
 	cancel()
 	cancel() // idempotent
 
 	requireClosed(t, ch)
-	hub.Publish("orders", sse.Event{Data: "after cancel"}) // must not panic
+	hub.Publish("records", sse.Event{Data: "after cancel"}) // must not panic
 
 	if stats := hub.Stats(); stats.Subscribers != 0 {
 		t.Errorf("Expected no live subscribers after cancel, got %d", stats.Subscribers)
@@ -163,9 +163,9 @@ func TestHub_CancelStopsDeliveryAndClosesChannel(t *testing.T) {
 func TestHub_CloseShutsEverythingDown(t *testing.T) {
 	hub := sse.NewHub()
 
-	first, cancelFirst := hub.Subscribe("orders")
+	first, cancelFirst := hub.Subscribe("records")
 	defer cancelFirst()
-	second, _ := hub.Subscribe("orders", "draws")
+	second, _ := hub.Subscribe("records", "notes")
 
 	hub.Close()
 	hub.Close() // idempotent
@@ -173,10 +173,10 @@ func TestHub_CloseShutsEverythingDown(t *testing.T) {
 	requireClosed(t, first)
 	requireClosed(t, second)
 
-	hub.Publish("orders", sse.Event{Data: "after close"}) // no-op, must not panic
-	cancelFirst()                                         // canceling after Close must not panic
+	hub.Publish("records", sse.Event{Data: "after close"}) // no-op, must not panic
+	cancelFirst()                                          // canceling after Close must not panic
 
-	late, cancelLate := hub.Subscribe("orders")
+	late, cancelLate := hub.Subscribe("records")
 	requireClosed(t, late)
 	cancelLate()
 
@@ -193,9 +193,9 @@ func TestHub_StatsCountsDistinctSubscribers(t *testing.T) {
 	hub := sse.NewHub()
 	defer hub.Close()
 
-	_, cancelMulti := hub.Subscribe("orders", "draws")
+	_, cancelMulti := hub.Subscribe("records", "notes")
 	defer cancelMulti()
-	_, cancelSingle := hub.Subscribe("orders")
+	_, cancelSingle := hub.Subscribe("records")
 	defer cancelSingle()
 
 	stats := hub.Stats()
@@ -203,7 +203,7 @@ func TestHub_StatsCountsDistinctSubscribers(t *testing.T) {
 		t.Errorf("Expected 2 distinct subscribers, got %d", stats.Subscribers)
 	}
 
-	hub.Publish("orders", sse.Event{Data: "one"})
+	hub.Publish("records", sse.Event{Data: "one"})
 	hub.Publish("missing", sse.Event{Data: "two"})
 
 	stats = hub.Stats()

@@ -45,8 +45,8 @@ var (
 		"./testdata/gst/filetype/sample-compress/sample.bz2",
 		"./testdata/gst/filetype/sample-compress/sample.rar",
 		"./testdata/gst/filetype/sample-compress/sample.zst",
-		"./testdata/gst/filetype/sample-compress/sample.lzma", // unknow
-		"./testdata/gst/filetype/sample-compress/sample.lzop", // unknow
+		"./testdata/gst/filetype/sample-compress/sample.lzma", // unknown
+		"./testdata/gst/filetype/sample-compress/sample.lzop", // unknown
 	}
 	imageFiles = []string{
 		"./testdata/gst/filetype/sample-images/sample.gif",
@@ -65,7 +65,7 @@ var (
 		"./testdata/gst/filetype/sample-videos/sample.webm",
 		"./testdata/gst/filetype/sample-videos/sample.wmv",
 	}
-	audoFiles = []string{
+	audioFiles = []string{
 		"./testdata/gst/filetype/sample-audio/sample.mp3",
 		"./testdata/gst/filetype/sample-audio/sample.ogg",
 		"./testdata/gst/filetype/sample-audio/sample.wav",
@@ -92,7 +92,7 @@ func TestDetectFiletype(t *testing.T) {
 			len(compressFiles)+
 			len(imageFiles)+
 			len(videoFiles)+
-			len(audoFiles)+
+			len(audioFiles)+
 			len(otherFiles),
 	)
 
@@ -131,7 +131,7 @@ func TestDetectFiletype(t *testing.T) {
 		})
 	}
 
-	for _, filename := range audoFiles {
+	for _, filename := range audioFiles {
 		cases = append(cases, testCase{
 			name:     "audio_" + filename,
 			filename: filename,

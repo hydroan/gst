@@ -9,8 +9,8 @@ import (
 )
 
 // Tree represents a generic red-black tree.
-// It support keys of any comparable type and value of any type.
-// The tree use a custom comparison function to matain order.
+// It supports keys of any comparable type and values of any type.
+// The tree uses a custom comparison function to maintain order.
 type Tree[K comparable, V any] struct {
 	root *Node[K, V]
 	size int
@@ -23,7 +23,7 @@ type Tree[K comparable, V any] struct {
 }
 
 // New creates and returns a red-black tree.
-// The provided function "cmp" is determines the order of the keys.
+// The provided function "cmp" determines the order of the keys.
 func New[K comparable, V any](cmp func(K, K) int, ops ...Option[K, V]) (*Tree[K, V], error) {
 	if cmp == nil {
 		return nil, types.ErrEqualNil
@@ -62,7 +62,7 @@ func NewFromSlice[V any](slice []V, ops ...Option[int, V]) (*Tree[int, V], error
 }
 
 // NewFromMap creates and returns a red-black tree from a given map.
-// The provided function "cmp" is determines the order of the keys.
+// The provided function "cmp" determines the order of the keys.
 func NewFromMap[K comparable, V any](m map[K]V, cmp func(K, K) int, ops ...Option[K, V]) (*Tree[K, V], error) {
 	t, err := New(cmp, ops...)
 	if err != nil {
@@ -262,8 +262,8 @@ func (t *Tree[K, V]) Values() []V {
 	return values
 }
 
-// Min returns the minimum node in the tree.
-// If the tree is empty, it returns the nil.
+// Min returns the minimum key in the tree and its value.
+// If the tree is empty, it returns zero values and false.
 func (t *Tree[K, V]) Min() (K, V, bool) {
 	if t.safe {
 		t.mu.RLock()
@@ -282,8 +282,8 @@ func (t *Tree[K, V]) Min() (K, V, bool) {
 	return curr.Key, curr.Value, true
 }
 
-// Max returns the maximum node in the tree.
-// If the tree is empty, it returns the nil.
+// Max returns the maximum key in the tree and its value.
+// If the tree is empty, it returns zero values and false.
 func (t *Tree[K, V]) Max() (K, V, bool) {
 	if t.safe {
 		t.mu.RLock()
@@ -303,7 +303,7 @@ func (t *Tree[K, V]) Max() (K, V, bool) {
 }
 
 // Floor returns the largest node with a key less than or equal to the given key.
-// If such a node exists, it is returned along with true; otherwise, nil and false are returned.
+// If such a node exists, its key and value are returned along with true; otherwise, zero values and false are returned.
 func (t *Tree[K, V]) Floor(key K) (K, V, bool) {
 	if t.safe {
 		t.mu.RLock()
@@ -340,7 +340,7 @@ func (t *Tree[K, V]) Floor(key K) (K, V, bool) {
 }
 
 // Ceiling returns the smallest node with a key greater than or equal to the given key.
-// If such a node exists, it is returned along with true; otherwise, nil and false are returned.
+// If such a node exists, its key and value are returned along with true; otherwise, zero values and false are returned.
 func (t *Tree[K, V]) Ceiling(key K) (K, V, bool) {
 	if t.safe {
 		t.mu.RLock()

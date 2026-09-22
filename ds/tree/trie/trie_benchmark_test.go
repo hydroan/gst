@@ -107,7 +107,7 @@ func BenchmarkTrie_Put(b *testing.B) {
 		}
 	})
 
-	b.Run("concurr safe", func(b *testing.B) {
+	b.Run("concur safe", func(b *testing.B) {
 		trie := createTrie1(b, true)
 		b.ResetTimer()
 		b.RunParallel(func(p *testing.PB) {
@@ -141,7 +141,7 @@ func BenchmarkTrie_Get(b *testing.B) {
 		}
 	})
 
-	b.Run("concurr safe", func(b *testing.B) {
+	b.Run("concur safe", func(b *testing.B) {
 		trie := createTrie1(b, true)
 		for i := range 100000 {
 			trie.Put([]rune(stringKeys[i%len(stringKeys)]), i)
@@ -178,7 +178,7 @@ func BenchmarkTrie_Delete(b *testing.B) {
 		}
 	})
 
-	b.Run("concurr safe", func(b *testing.B) {
+	b.Run("concur safe", func(b *testing.B) {
 		trie := createTrie1(b, true)
 		for i := range 100000 {
 			trie.Put([]rune(stringKeys[i%len(stringKeys)]), i)
@@ -215,7 +215,7 @@ func BenchmarkTrie_DeletePrefix(b *testing.B) {
 		}
 	})
 
-	b.Run("concurr safe", func(b *testing.B) {
+	b.Run("concur safe", func(b *testing.B) {
 		trie := createTrie1(b, true)
 		for i := range 100000 {
 			trie.Put([]rune(stringKeys[i%len(stringKeys)]), i)

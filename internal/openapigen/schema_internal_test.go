@@ -33,14 +33,14 @@ func init() {
 		"Name": "Name is the option name.",
 	})
 	registerFixtureDoc("nestedPayloadReq", "", map[string]string{
-		"MaxAmount": "MaxAmount is the request level limit.",
-		"Options":   "Options is the full nested option collection.",
+		"MaxCount": "MaxCount is the request level limit.",
+		"Options":  "Options is the full nested option collection.",
 	})
-	registerFixtureDoc("embeddedSchemeRow", "", map[string]string{
+	registerFixtureDoc("embeddedSampleRow", "", map[string]string{
 		"Status": "Status is the record status.",
 		"Label":  "Label is the row label.",
 	})
-	registerFixtureDoc("embeddedSchemeView", "", map[string]string{
+	registerFixtureDoc("embeddedSampleView", "", map[string]string{
 		"Options": "Options is the nested option collection of the row.",
 	})
 	registerFixtureDoc("cyclicCategory", "", map[string]string{
@@ -272,8 +272,8 @@ type nestedPayloadOption struct {
 
 // nestedPayloadReq is a request body carrying a nested item collection.
 type nestedPayloadReq struct {
-	MaxAmount int64                  `json:"max_amount"`
-	Options   []*nestedPayloadOption `json:"options"`
+	MaxCount int64                  `json:"max_count"`
+	Options  []*nestedPayloadOption `json:"options"`
 }
 
 func TestAddSchemaDocsForTypeDecoratesNestedStructFields(t *testing.T) {
@@ -347,27 +347,27 @@ func TestAddSchemaDocsForTypeDecoratesAnonymousStructBySignature(t *testing.T) {
 	}
 }
 
-// embeddedSchemeRow is the persisted row promoted into view structs.
-type embeddedSchemeRow struct {
+// embeddedSampleRow is the persisted row promoted into view structs.
+type embeddedSampleRow struct {
 	Status enumFieldStatus `json:"status"`
 	Label  string          `json:"label"`
 }
 
-// embeddedSchemeView is a response view embedding the persisted row.
-type embeddedSchemeView struct {
-	*embeddedSchemeRow
+// embeddedSampleView is a response view embedding the persisted row.
+type embeddedSampleView struct {
+	*embeddedSampleRow
 	Options []*nestedPayloadOption `json:"options"`
 }
 
 func TestAddSchemaDocsForTypeDecoratesEmbeddedStructFields(t *testing.T) {
 	registerEnumFieldStatus()
 
-	schemaRef, err := openapi3gen.NewSchemaRefForValue(embeddedSchemeView{}, nil)
+	schemaRef, err := openapi3gen.NewSchemaRefForValue(embeddedSampleView{}, nil)
 	if err != nil {
 		t.Fatalf("NewSchemaRefForValue() error = %v", err)
 	}
 
-	addSchemaDocsForType(reflect.TypeFor[embeddedSchemeView](), schemaRef, nil)
+	addSchemaDocsForType(reflect.TypeFor[embeddedSampleView](), schemaRef, nil)
 
 	label := schemaRef.Value.Properties["label"]
 	if label == nil || label.Value == nil {
@@ -427,7 +427,7 @@ func TestAddSchemaDocsForTypeCutsCyclicStructTypes(t *testing.T) {
 // customListRsp is a custom list response whose shape mimics the framework
 // list wrapper (items plus total), so wrapper shape sniffing would misfire.
 type customListRsp struct {
-	Items []*embeddedSchemeView `json:"items"`
+	Items []*embeddedSampleView `json:"items"`
 	Total int64                 `json:"total"`
 }
 

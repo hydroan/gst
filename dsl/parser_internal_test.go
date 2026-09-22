@@ -274,34 +274,34 @@ func TestParseFilename(t *testing.T) {
 		t.Fatalf("expected 2 route actions, got %d", len(routeActions))
 	}
 
-	// Route: record/upload with Filename("upload")
-	uploadAct, ok := routeActions["record/upload"]
+	// Route: record/archive with Filename("archive")
+	archiveAct, ok := routeActions["record/archive"]
 	if !ok {
-		t.Fatal("expected route 'record/upload' not found")
+		t.Fatal("expected route 'record/archive' not found")
 	}
-	if uploadAct.Filename != "upload" {
-		t.Errorf("expected Filename 'upload', got %q", uploadAct.Filename)
+	if archiveAct.Filename != "archive" {
+		t.Errorf("expected Filename 'archive', got %q", archiveAct.Filename)
 	}
-	if uploadAct.ServiceFilename() != "upload.go" {
-		t.Errorf("expected ServiceFilename 'upload.go', got %q", uploadAct.ServiceFilename())
+	if archiveAct.ServiceFilename() != "archive.go" {
+		t.Errorf("expected ServiceFilename 'archive.go', got %q", archiveAct.ServiceFilename())
 	}
-	if uploadAct.RoleName() != "Upload" {
-		t.Errorf("expected RoleName 'Upload', got %q", uploadAct.RoleName())
+	if archiveAct.RoleName() != "Archive" {
+		t.Errorf("expected RoleName 'Archive', got %q", archiveAct.RoleName())
 	}
 
-	// Route: record/publish with Filename("publish")
-	publishAct, ok := routeActions["record/publish"]
+	// Route: record/restore with Filename("restore")
+	restoreAct, ok := routeActions["record/restore"]
 	if !ok {
-		t.Fatal("expected route 'record/publish' not found")
+		t.Fatal("expected route 'record/restore' not found")
 	}
-	if publishAct.Filename != "publish" {
-		t.Errorf("expected Filename 'publish', got %q", publishAct.Filename)
+	if restoreAct.Filename != "restore" {
+		t.Errorf("expected Filename 'restore', got %q", restoreAct.Filename)
 	}
-	if publishAct.ServiceFilename() != "publish.go" {
-		t.Errorf("expected ServiceFilename 'publish.go', got %q", publishAct.ServiceFilename())
+	if restoreAct.ServiceFilename() != "restore.go" {
+		t.Errorf("expected ServiceFilename 'restore.go', got %q", restoreAct.ServiceFilename())
 	}
-	if publishAct.RoleName() != "Publish" {
-		t.Errorf("expected RoleName 'Publish', got %q", publishAct.RoleName())
+	if restoreAct.RoleName() != "Restore" {
+		t.Errorf("expected RoleName 'Restore', got %q", restoreAct.RoleName())
 	}
 }
 
@@ -369,18 +369,18 @@ type Record struct {
 
 func (Record) Design() {
 	Migrate()
-	Route("/record/upload", func() {
+	Route("/record/archive", func() {
 		Create(func() {
 			Enabled(true)
 			Service()
-			Filename("upload")
+			Filename("archive")
 		})
 	})
-	Route("/record/publish", func() {
+	Route("/record/restore", func() {
 		Create(func() {
 			Enabled(true)
 			Service()
-			Filename("publish")
+			Filename("restore")
 		})
 	})
 }

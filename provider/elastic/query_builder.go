@@ -262,7 +262,7 @@ func (qb *QueryBuilder) TimeRangeLte(field string, tm time.Time) *QueryBuilder {
 	})
 }
 
-// Size sets the size parameter, must be positive
+// Size sets the size parameter, must be non-negative
 func (qb *QueryBuilder) Size(size int) *QueryBuilder {
 	if size >= 0 {
 		qb.size = size
@@ -281,21 +281,20 @@ func (qb *QueryBuilder) From(from int) *QueryBuilder {
 // Source sets the _source field filtering
 // if fields is empty, all fields will be returned
 // if fields is not empty, only the specified fields will be returned
-// if fields is nil or empty array, no fields will be returned
 func (qb *QueryBuilder) Source(fields ...string) *QueryBuilder {
 	qb.source = fields
 	return qb
 }
 
 // SearchAfter sets the search_after parameter for deep pagination
-// SearchAfter always used with Sort.
+// SearchAfter must be used together with Sort.
 func (qb *QueryBuilder) SearchAfter(value ...any) *QueryBuilder {
 	qb.searchAfter = value
 	return qb
 }
 
 // Sort adds a sort condition
-// Sort always used with SearchAfter.
+// SearchAfter requires at least one sort condition.
 func (qb *QueryBuilder) Sort(field string, order Order) *QueryBuilder {
 	if field == "" {
 		return qb
@@ -320,7 +319,6 @@ func (qb *QueryBuilder) Aggs(name string, agg map[string]any) *QueryBuilder {
 	return qb
 }
 
-// AggsTerm adds a terms aggregation
 // AggsTerm adds a terms aggregation.
 // orderBy accepts two parameters: field and order.
 // field can be "_count" or "_key",

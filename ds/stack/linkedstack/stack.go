@@ -29,7 +29,7 @@ func New[E any](ops ...Option[E]) (s *Stack[E], err error) {
 			return nil, err
 		}
 	}
-	// internal list alway concurrent unsafe.
+	// The internal list is always concurrency-unsafe.
 	s.list, err = linkedlist.New[E]()
 	if err != nil {
 		return nil, err

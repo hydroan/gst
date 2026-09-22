@@ -52,7 +52,7 @@ func CreateFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...
 			var rsp RSP
 			req := meta.newRequest()
 
-			// If the request content type if "multipart/form-data", then the request body is a file.
+			// If the request content type is "multipart/form-data", then the request body is a file.
 			// We should not try to parse it as JSON.
 			if !strings.EqualFold(c.ContentType(), "multipart/form-data") {
 				if reqErr := bindJSONRequest(c, &req); reqErr != nil && !errors.Is(reqErr, io.EOF) {

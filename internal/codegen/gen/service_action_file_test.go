@@ -12,19 +12,19 @@ func TestIsActionServiceSource(t *testing.T) {
 	t.Parallel()
 	tmp := t.TempDir()
 	good := filepath.Join(tmp, "archive_sample_items.go")
-	err := os.WriteFile(good, []byte(`package common
+	err := os.WriteFile(good, []byte(`package sample
 
 import (
-	"example.com/mod/model/common"
+	"example.com/mod/model/sample"
 	"github.com/hydroan/gst"
 	"github.com/hydroan/gst/service"
 )
 
 type ArchiveSampleItems struct {
-	service.Base[*common.Common, *common.Common, *common.Common]
+	service.Base[*sample.Item, *sample.Item, *sample.Item]
 }
 
-func (a *ArchiveSampleItems) Create(ctx *gst.ServiceContext, req *common.Common) (rsp *common.Common, err error) {
+func (a *ArchiveSampleItems) Create(ctx *gst.ServiceContext, req *sample.Item) (rsp *sample.Item, err error) {
 	return rsp, nil
 }
 `), 0o600)
@@ -36,7 +36,7 @@ func (a *ArchiveSampleItems) Create(ctx *gst.ServiceContext, req *common.Common)
 	}
 
 	bad := filepath.Join(tmp, "helper.go")
-	err = os.WriteFile(bad, []byte(`package common
+	err = os.WriteFile(bad, []byte(`package sample
 
 func Helper() {}
 `), 0o600)
@@ -48,7 +48,7 @@ func Helper() {}
 	}
 
 	syntaxErr := filepath.Join(tmp, "broken.go")
-	err = os.WriteFile(syntaxErr, []byte(`package common
+	err = os.WriteFile(syntaxErr, []byte(`package sample
 
 func {`), 0o600)
 	if err != nil {

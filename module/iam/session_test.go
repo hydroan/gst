@@ -1345,8 +1345,8 @@ func clearSessionsAfterTest(t *testing.T) {
 	t.Helper()
 
 	t.Cleanup(func() {
-		// Both namespaces, because the user-state cache is keyed by user and is
-		// therefore deliberately outside the session prefix.
+		// Every IAM namespace, because the user-state cache and the login
+		// failure counters are deliberately outside the session prefix.
 		require.NoError(t, serviceiamsession.Store.Purge(context.Background()))
 	})
 }

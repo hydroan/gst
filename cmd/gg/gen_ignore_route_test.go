@@ -15,14 +15,14 @@ import (
 	"github.com/hydroan/gst/internal/codegen/gen"
 )
 
-// Deviation from the brief: dsl.Design cannot be constructed directly with
-// only the List/Get/Create fields set. dsl.Design.Range (via the unexported
-// rangeAction helper) dereferences every action pointer unconditionally
-// (e.g. d.Delete.Enabled), so any action field left nil by a hand-built
-// Design literal panics. Only dsl.Parse (used by codegen.FindModels)
-// initializes all twelve action pointers, so these two cases are built from
-// temporary model files parsed through codegen.FindModels, per the brief's
-// documented fallback.
+// TestApplyRouteIgnoresDisablesDefaultEndpointActions verifies that route
+// rules disable exactly the default-endpoint actions they match. Like every
+// case in this file, it parses its models from source instead of building a
+// dsl.Design literal: dsl.Design.Range (via the unexported rangeAction
+// helper) dereferences every action pointer unconditionally (e.g.
+// d.Delete.Enabled), so an action field a hand-built literal leaves nil
+// panics, and only dsl.Parse, which codegen.FindModels runs, initializes all
+// thirteen of them.
 func TestApplyRouteIgnoresDisablesDefaultEndpointActions(t *testing.T) {
 	models := findModelsFromSource(t, filepath.Join("iam", "admin"), "users.go", `package admin
 

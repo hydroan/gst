@@ -78,7 +78,7 @@ func RegisteredModels() []any {
 //	Register[*model.User]()
 //
 // NOTE:
-//  1. Register is usually called from the generated model/model.go file.
+//  1. Register is usually called from the generated model/model.gen.go file.
 //  2. Ensure the model package is imported by the application entrypoint.
 //  3. The function is safe for concurrent use.
 func Register[M types.Model]() {

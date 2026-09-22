@@ -60,8 +60,8 @@ type ServiceTargetInfo struct {
 }
 
 // ServiceOutputRel returns the path under the service root where generated service .go files
-// for a model file should live, relative to the service directory (e.g. "common" for
-// model/common/common.go, or "sample/item/entry" for model/sample/item/entry.go).
+// for a model file should live, relative to the service directory (e.g. "sample" for
+// model/sample/sample.go, or "sample/item/entry" for model/sample/item/entry.go).
 //
 // When the file base name (without .go) equals the immediate parent directory name — a common
 // Go layout such as model/pkg/pkg.go — redundant segments are collapsed so output is
@@ -314,7 +314,7 @@ func FindModels(module string, modelDir string, filename string) ([]*ModelInfo, 
 
 // humanizeDSLFilename turns a DSL Filename() value into a space-separated label: underscores
 // and hyphens become spaces; consecutive whitespace is collapsed. It returns
-// "batch upload" for batch_upload and "export report" for export-report.go.
+// "archive sample items" for archive_sample_items and "export report" for export-report.go.
 func humanizeDSLFilename(filename string) string {
 	name := filepath.Base(filename)
 	name = strings.TrimSuffix(name, filepath.Ext(name))
@@ -548,7 +548,7 @@ func GenerateService(info *ModelInfo, action *dsl.Action, phase consts.Phase, se
 	roleName := action.RoleName()
 
 	// When Filename is set, derive the receiver variable name from RoleName
-	// (e.g., Archive → "a", Publish → "p") instead of the model name (e.g., Record → "r").
+	// (e.g., Archive → "a") instead of the model name (e.g., Record → "r").
 	if len(action.Filename) > 0 && len(roleName) > 0 {
 		copied := *info
 		copied.ModelVarName = strings.ToLower(roleName[:1])

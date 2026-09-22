@@ -18,20 +18,20 @@ var (
 	Hello = tunnel.NewCmd("hello", 1001)
 )
 
-type ByePaylod struct {
+type ByePayload struct {
 	Field1 string
 	Field2 uint64
 }
-type HelloPaylod struct {
+type HelloPayload struct {
 	Field3 string
 	Field4 float64
 }
 
 var (
-	byePayload1   = ByePaylod{Field1: "bye1", Field2: 123}
-	byePayload2   = ByePaylod{Field1: "bye2", Field2: 456}
-	helloPayload1 = HelloPaylod{Field3: "hello1", Field4: 3.14}
-	helloPayload2 = HelloPaylod{Field3: "hello2", Field4: 3.14}
+	byePayload1   = ByePayload{Field1: "bye1", Field2: 123}
+	byePayload2   = ByePayload{Field1: "bye2", Field2: 456}
+	helloPayload1 = HelloPayload{Field3: "hello1", Field4: 3.14}
+	helloPayload2 = HelloPayload{Field3: "hello2", Field4: 3.14}
 )
 
 func TestSession(t *testing.T) {
@@ -82,7 +82,7 @@ func server(addrCh chan<- string, errCh chan<- error) {
 				return
 			}
 		case Hello:
-			payload := new(HelloPaylod)
+			payload := new(HelloPayload)
 			if err := tunnel.DecodePayload(event.Payload, payload); err != nil {
 				errCh <- err
 				return
@@ -96,7 +96,7 @@ func server(addrCh chan<- string, errCh chan<- error) {
 				return
 			}
 		case Bye:
-			payload := new(ByePaylod)
+			payload := new(ByePayload)
 			if err := tunnel.DecodePayload(event.Payload, payload); err != nil {
 				errCh <- err
 				return
@@ -136,13 +136,13 @@ func client(t *testing.T, addrCh <-chan string, doneCh chan<- struct{}) {
 			t.Log("server pong")
 			_ = session.Write(&tunnel.Event{Cmd: Hello, Payload: helloPayload1})
 		case Hello:
-			payload := new(HelloPaylod)
+			payload := new(HelloPayload)
 			require.NoError(t, tunnel.DecodePayload(event.Payload, payload))
 			assert.Equal(t, helloPayload2, *payload)
 			t.Logf("server hello: %+v\n", *payload)
 			_ = session.Write(&tunnel.Event{Cmd: Bye, Payload: byePayload1})
 		case Bye:
-			payload := new(ByePaylod)
+			payload := new(ByePayload)
 			require.NoError(t, tunnel.DecodePayload(event.Payload, payload))
 			assert.Equal(t, byePayload2, *payload)
 			t.Logf("server bye: %+v\n", *payload)

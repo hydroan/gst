@@ -18,8 +18,8 @@ func WithSafe[E comparable]() Option[E] {
 	}
 }
 
-// WithSorted creates a option that ensure the set to always makeup a sorted
-// order elements based on the provided compator function.
+// WithSorted creates an Option that orders the elements of the set by the
+// provided comparison function wherever the set hands them out.
 //
 // This affects the behavior of the following methods:
 // - "Slice": Returns a sorted slice of the elements in the set.
