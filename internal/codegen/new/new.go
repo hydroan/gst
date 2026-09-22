@@ -3,18 +3,16 @@ package new
 
 import (
 	"fmt"
-	"io"
 	"maps"
 	"os"
-	"os/exec"
 	"path/filepath"
+	"slices"
 	"sort"
 
 	"github.com/hydroan/gst/internal/codegen/gen"
 	"github.com/hydroan/gst/internal/ggconst"
 
 	"github.com/cockroachdb/errors"
-	"github.com/hydroan/gst/internal/clioutput"
 )
 
 var requiredFileContentMap = map[string]string{
@@ -44,102 +42,36 @@ func newProjectFileContentMap() map[string]string {
 	return files
 }
 
-// ============================================================
-// Run: initialize a new project
-// ============================================================
+// ProjectFile is one file a new project starts with: Content goes to Path,
+// relative to the project directory.
+type ProjectFile struct {
+	Path    string
+	Content string
+}
 
-func Run(projectName string) error {
-	projectDir := filepath.Base(projectName)
-
-	// project directory
-	clioutput.Section("Create Project Directory")
-	if err := os.MkdirAll(projectDir, 0o755); err != nil {
-		clioutput.Error("", "failed to create project directory")
-		return err
-	}
-	clioutput.Success("", "%s", projectDir)
-
-	// switch into it
-	if err := os.Chdir(projectDir); err != nil {
-		return err
-	}
-
-	// initialize the Go module
-	clioutput.Section("Initialize Go Module")
-	clioutput.Info("", "go mod init %s", projectName)
-	cmd := exec.Command("go", "mod", "init", projectName)
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	if err := cmd.Run(); err != nil {
-		clioutput.Error("", "go mod init failed")
-		return err
-	}
-	clioutput.Success("", "Go module initialized")
-
-	// generate the project files
-	clioutput.Section("Generate Project Files")
-	for file, content := range projectFileContentMap {
-		if err := createFile(file, content); err != nil {
-			clioutput.Error("", "Failed to create %s", file)
-			return err
-		}
-		clioutput.Success("CREATE", "%s", file)
+// ProjectFiles returns the files gg new writes into a new project, in the
+// order it writes them: the scaffold sorted by path, then main.go, .gitignore
+// and config.ini.example. projectName is the module path the project is
+// created under; its last element names the application in the example
+// configuration, as sampleapp does for example.com/sampleapp.
+func ProjectFiles(projectName string) ([]ProjectFile, error) {
+	paths := slices.Sorted(maps.Keys(projectFileContentMap))
+	files := make([]ProjectFile, 0, len(paths)+3)
+	for _, path := range paths {
+		files = append(files, ProjectFile{Path: path, Content: projectFileContentMap[path]})
 	}
 
 	// main.go is the same file gg gen keeps regenerating, built by the same
 	// generator so the scaffold and the generated version cannot drift.
 	mainFile, err := gen.BuildMainFile(projectName)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	if err := createFile("main.go", mainFile); err != nil {
-		return err
-	}
-	clioutput.Success("CREATE", "%s", "main.go")
-
-	// .gitignore
-	if err := createFile(".gitignore", gitignoreContent); err != nil {
-		return err
-	}
-	clioutput.Success("CREATE", "%s", ".gitignore")
-
-	// config.ini.example
-	if err := createTemplateConfig(projectDir); err != nil {
-		return err
-	}
-	clioutput.Success("CREATE", "%s", "config.ini.example")
-
-	// run go mod tidy
-	clioutput.Section("Run Go Mod Tidy")
-	cmd = exec.Command("go", "mod", "tidy")
-	cmd.Stdout = io.Discard
-	cmd.Stderr = os.Stderr
-	if err := cmd.Run(); err != nil {
-		clioutput.Error("", "go mod tidy failed")
-		return err
-	}
-	clioutput.Success("", "Dependencies tidied")
-
-	// initialize the git repository
-	clioutput.Section("Initialize Git Repository")
-	cmd = exec.Command("git", "init")
-	cmd.Stdout = io.Discard
-	cmd.Stderr = os.Stderr
-	if err := cmd.Run(); err != nil {
-		clioutput.Error("", "git init failed")
-		return err
-	}
-	clioutput.Success("", "Git repository initialized")
-
-	// closing hints
-	clioutput.Section("Project Initialization Completed")
-	clioutput.Done("Project %s created successfully!", clioutput.Text(clioutput.StyleBold, "%s", projectDir))
-	clioutput.Section("Next Steps")
-	clioutput.Command("cd %s", projectDir)
-	clioutput.Command("git add .")
-	clioutput.Command("git commit -m \"Initial commit\"")
-
-	return nil
+	return append(files,
+		ProjectFile{Path: ggconst.FileMain, Content: mainFile},
+		ProjectFile{Path: ".gitignore", Content: gitignoreContent},
+		ProjectFile{Path: "config.ini.example", Content: templateConfig(filepath.Base(projectName))},
+	), nil
 }
 
 // ============================================================
@@ -174,8 +106,10 @@ func createFile(path string, content string) error {
 	return os.WriteFile(path, []byte(content), ggconst.FileModeGenerated)
 }
 
-func createTemplateConfig(appName string) error {
-	content := fmt.Sprintf(`[app]
+// templateConfig renders the config.ini.example of a new project whose
+// application is named appName.
+func templateConfig(appName string) string {
+	return fmt.Sprintf(`[app]
 name = %s
 description = A Go application built with gst framework
 
@@ -229,5 +163,4 @@ db = 0
 password =
 namespace = %s
 `, appName, appName)
-	return os.WriteFile("config.ini.example", []byte(content), ggconst.FileModeGenerated)
 }
