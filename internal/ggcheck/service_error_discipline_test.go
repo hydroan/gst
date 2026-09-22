@@ -526,3 +526,24 @@ func Sweep() error {
 		t.Fatalf("expected no violations, got %#v", violations)
 	}
 }
+
+// TestServiceErrorDisciplineReportsAnUnreadableModulePath pins that a project
+// whose module path cannot be read fails the check instead of passing it: the
+// checker needs the module path to tell the project's own packages apart.
+func TestServiceErrorDisciplineReportsAnUnreadableModulePath(t *testing.T) {
+	projectDir := t.TempDir()
+	t.Chdir(projectDir)
+
+	writeCheckFile(t, filepath.Join(projectDir, "service", "record", "create.go"), `package record
+
+import "errors"
+
+func Create() error { return errors.New("boom") }
+`)
+
+	violations := runCheck(ggcheck.ServiceErrorDiscipline)
+
+	if len(violations) != 1 || !strings.Contains(violations[0], "reading the module path") {
+		t.Fatalf("expected one violation naming the unreadable module path, got %#v", violations)
+	}
+}

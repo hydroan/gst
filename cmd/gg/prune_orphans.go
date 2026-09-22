@@ -220,7 +220,7 @@ func isManagedServiceFile(path string) bool {
 // the orphan directories plus the helper directories kept because live
 // service code still imports them. Directories in keptDirs hold service files
 // of gst.yaml-ignored actions and are treated as owned; keptDirs may be nil.
-func collectOrphanServiceDirs(allModels []*gen.ModelInfo, keptDirs map[string]bool) (orphans, keptHelpers []orphanServiceDir) {
+func collectOrphanServiceDirs(allModels []*gen.ModelInfo, keptDirs map[string]bool, modulePath string) (orphans, keptHelpers []orphanServiceDir) {
 	currentDirs := currentServiceDirs(allModels)
 	for dir := range keptDirs {
 		currentDirs.ModelDirs = append(currentDirs.ModelDirs, dir)
@@ -228,7 +228,7 @@ func collectOrphanServiceDirs(allModels []*gen.ModelInfo, keptDirs map[string]bo
 	}
 	sort.Strings(currentDirs.ModelDirs)
 
-	helperDirs := importedServiceHelperDirs(currentDirs)
+	helperDirs := importedServiceHelperDirs(currentDirs, modulePath)
 	keptHelpers = make([]orphanServiceDir, 0, len(helperDirs))
 	for _, dir := range helperDirs {
 		keptHelpers = append(keptHelpers, orphanServiceDir{
@@ -246,14 +246,11 @@ func collectOrphanServiceDirs(allModels []*gen.ModelInfo, keptDirs map[string]bo
 
 // importedServiceHelperDirs returns service directories that no model action
 // owns but live service code under the owned directories still imports,
-// directly or transitively. Module copy installs such shared helper packages
+// directly or transitively. modulePath is the project's, which the command
+// read before generating. Module copy installs such shared helper packages
 // (for example iam/adminauth); deleting them would break the build, so orphan
 // cleanup must treat them as owned.
-func importedServiceHelperDirs(currentDirs serviceDirSet) []string {
-	modulePath := currentProjectModulePath()
-	if modulePath == "" {
-		return nil
-	}
+func importedServiceHelperDirs(currentDirs serviceDirSet, modulePath string) []string {
 	importPrefix := modulePath + "/" + filepath.ToSlash(filepath.Clean(ggconst.DirService))
 
 	helperDirs := make([]string, 0)
@@ -347,8 +344,8 @@ func serviceDirForImport(importPath string, importPrefix string) (string, bool) 
 
 // handleOrphanServiceDirs reports or cleans service directories no model
 // owns; see collectOrphanServiceDirs for the ownership rules.
-func handleOrphanServiceDirs(allModels []*gen.ModelInfo, keptDirs map[string]bool) {
-	orphans, keptHelpers := collectOrphanServiceDirs(allModels, keptDirs)
+func handleOrphanServiceDirs(allModels []*gen.ModelInfo, keptDirs map[string]bool, modulePath string) {
+	orphans, keptHelpers := collectOrphanServiceDirs(allModels, keptDirs, modulePath)
 	reportKeptServiceHelperDirs(keptHelpers)
 	if len(orphans) == 0 {
 		return

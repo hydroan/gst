@@ -119,7 +119,7 @@ func pruneServiceFiles(oldServiceFiles []string, allModels []*gen.ModelInfo, kep
 		}
 		// Still check for empty directories even if no files to delete
 		removeEmptyDirectories(ggconst.DirService)
-		handleOrphanServiceDirs(allModels, keptDirs)
+		handleOrphanServiceDirs(allModels, keptDirs, module)
 		return
 	}
 
@@ -151,7 +151,7 @@ func pruneServiceFiles(oldServiceFiles []string, allModels []*gen.ModelInfo, kep
 
 	// Remove empty directories after deleting files
 	removeEmptyDirectories(ggconst.DirService)
-	handleOrphanServiceDirs(allModels, keptDirs)
+	handleOrphanServiceDirs(allModels, keptDirs, module)
 }
 
 func currentServiceFiles(allModels []*gen.ModelInfo) map[string]bool {

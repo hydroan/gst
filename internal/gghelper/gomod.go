@@ -8,29 +8,27 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strings"
 
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/internal/ggconst"
+	"golang.org/x/mod/modfile"
 )
 
 // ModulePath returns the module path the go.mod of the working directory
-// declares: example.com/app for a go.mod starting with module example.com/app.
+// declares: example.com/app for a go.mod starting with module example.com/app,
+// and for one whose module directive carries the deprecation comment go
+// documents or a quoted path, both of which go itself accepts.
 func ModulePath() (string, error) {
 	content, err := os.ReadFile("go.mod")
 	if err != nil {
 		return "", fmt.Errorf("failed to read go.mod: %w", err)
 	}
 
-	lines := strings.SplitSeq(string(content), "\n")
-	for line := range lines {
-		line = strings.TrimSpace(line)
-		if strings.HasPrefix(line, "module ") {
-			return strings.TrimSpace(strings.TrimPrefix(line, "module")), nil
-		}
+	modulePath := modfile.ModulePath(content)
+	if modulePath == "" {
+		return "", errors.New("module name not found in go.mod")
 	}
-
-	return "", errors.New("module name not found in go.mod")
+	return modulePath, nil
 }
 
 // IsFrameworkProject reports whether the go.mod in projectDir declares the gst
@@ -40,14 +38,5 @@ func IsFrameworkProject(projectDir string) bool {
 	if err != nil {
 		return false
 	}
-
-	lines := strings.SplitSeq(string(content), "\n")
-	for line := range lines {
-		line = strings.TrimSpace(line)
-		if strings.HasPrefix(line, "module ") {
-			moduleName := strings.TrimSpace(strings.TrimPrefix(line, "module"))
-			return moduleName == ggconst.ImportPathGst
-		}
-	}
-	return false
+	return modfile.ModulePath(content) == ggconst.ImportPathGst
 }

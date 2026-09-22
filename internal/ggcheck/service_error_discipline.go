@@ -12,6 +12,7 @@ import (
 	"strings"
 
 	gitignore "github.com/go-git/go-git/v5/plumbing/format/gitignore"
+	"github.com/hydroan/gst/internal/gghelper"
 	"github.com/hydroan/gst/internal/goast"
 )
 
@@ -65,19 +66,19 @@ var ServiceErrorDiscipline = Check{
 // another package or an interface, whose method bodies the checker cannot
 // see.
 func checkServiceErrorDiscipline(ignore gitignore.Matcher) []string {
+	modulePath, err := gghelper.ModulePath()
+	if err != nil {
+		return []string{fmt.Sprintf("reading the module path: %v", err)}
+	}
 	analysis := &svcErrAnalysis{
-		modulePath:   currentProjectModulePath(),
+		modulePath:   modulePath,
 		fset:         token.NewFileSet(),
 		summaries:    map[svcErrFuncKey]*svcErrFuncSummary{},
 		entryTypes:   map[string]map[string]bool{},
 		pkgVarTypes:  map[string]map[string]string{},
 		packageNames: map[string]string{},
 	}
-	if analysis.modulePath == "" {
-		return nil
-	}
-
-	err := walkProjectDir(".", ignore, func(path string, info os.FileInfo) error {
+	err = walkProjectDir(".", ignore, func(path string, info os.FileInfo) error {
 		if info.IsDir() {
 			if path == "." {
 				return nil

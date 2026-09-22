@@ -11,6 +11,7 @@ import (
 
 	gitignore "github.com/go-git/go-git/v5/plumbing/format/gitignore"
 	"github.com/hydroan/gst/internal/ggconst"
+	"github.com/hydroan/gst/internal/gghelper"
 	"golang.org/x/text/cases"
 	"golang.org/x/text/language"
 )
@@ -27,7 +28,10 @@ var ArchitectureDependencies = Check{
 func checkArchitectureDependencies(ignore gitignore.Matcher) []string {
 	//nolint:prealloc
 	var violations []string
-	modulePath := currentProjectModulePath()
+	modulePath, err := gghelper.ModulePath()
+	if err != nil {
+		return []string{fmt.Sprintf("reading the module path: %v", err)}
+	}
 
 	// Check service files
 	serviceViolations := checkServiceDependencies(modulePath, ignore)

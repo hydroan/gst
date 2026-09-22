@@ -12,16 +12,7 @@ import (
 	"github.com/go-git/go-billy/v5/osfs"
 	gitignore "github.com/go-git/go-git/v5/plumbing/format/gitignore"
 	"github.com/hydroan/gst/internal/ggconst"
-	"github.com/hydroan/gst/internal/gghelper"
 )
-
-func currentProjectModulePath() string {
-	modulePath, err := gghelper.ModulePath()
-	if err != nil {
-		return ""
-	}
-	return strings.Trim(modulePath, "/")
-}
 
 // newProjectIgnoreMatcher loads Git ignore rules for the project root. Every
 // check walks the project from its root, so the root is not a parameter.

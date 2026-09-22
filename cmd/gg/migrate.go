@@ -9,8 +9,8 @@ import (
 
 	"github.com/hydroan/gst/consts"
 	"github.com/hydroan/gst/internal/clioutput"
-	"github.com/hydroan/gst/internal/codegen/gen"
 	"github.com/hydroan/gst/internal/ggconst"
+	"github.com/hydroan/gst/internal/gghelper"
 	"github.com/spf13/cobra"
 )
 
@@ -22,7 +22,7 @@ var migrateCmd = &cobra.Command{
 	SilenceErrors: true,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		// 1. Get module name
-		moduleName, err := gen.GetModulePath()
+		moduleName, err := gghelper.ModulePath()
 		if err != nil {
 			return fmt.Errorf("failed to get module path: %w", err)
 		}
@@ -39,7 +39,7 @@ var migrateSchemaCmd = &cobra.Command{
 	SilenceUsage:  true,
 	SilenceErrors: true,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		moduleName, err := gen.GetModulePath()
+		moduleName, err := gghelper.ModulePath()
 		if err != nil {
 			return fmt.Errorf("failed to get module path: %w", err)
 		}

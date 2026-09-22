@@ -52,7 +52,7 @@ func genRunWithOptions(opts genRunOptions) error {
 
 	if len(module) == 0 {
 		var err error
-		module, err = gen.GetModulePath()
+		module, err = gghelper.ModulePath()
 		if err != nil {
 			return err
 		}

@@ -46,7 +46,11 @@ func checkServiceTestCoverage(ignore gitignore.Matcher) []string {
 	if err != nil {
 		return append(violations, fmt.Sprintf("loading gst.yaml: %v", err))
 	}
-	allModels, err := codegen.FindModels(currentProjectModulePath(), ggconst.DirModel)
+	modulePath, err := gghelper.ModulePath()
+	if err != nil {
+		return append(violations, fmt.Sprintf("reading the module path: %v", err))
+	}
+	allModels, err := codegen.FindModels(modulePath, ggconst.DirModel)
 	if err != nil {
 		return append(violations, fmt.Sprintf("scanning model designs: %v", err))
 	}

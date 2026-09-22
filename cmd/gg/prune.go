@@ -5,7 +5,6 @@ import (
 
 	"github.com/hydroan/gst/internal/clioutput"
 	"github.com/hydroan/gst/internal/codegen"
-	"github.com/hydroan/gst/internal/codegen/gen"
 	"github.com/hydroan/gst/internal/ggconst"
 	"github.com/hydroan/gst/internal/gghelper"
 	"github.com/spf13/cobra"
@@ -23,7 +22,7 @@ var pruneCmd = &cobra.Command{
 func pruneRun() {
 	if len(module) == 0 {
 		var err error
-		module, err = gen.GetModulePath()
+		module, err = gghelper.ModulePath()
 		checkErr(err)
 	}
 

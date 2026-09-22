@@ -2,7 +2,6 @@ package main
 
 import (
 	"os"
-	"strings"
 
 	"github.com/hydroan/gst/internal/clioutput"
 	"github.com/hydroan/gst/internal/ggconst"
@@ -50,14 +49,4 @@ func writeGeneratedFile(filename string, content string, log bool) error {
 		}
 	}
 	return nil
-}
-
-// currentProjectModulePath returns the module path of the project in the
-// working directory, or "" when its go.mod cannot be read.
-func currentProjectModulePath() string {
-	modulePath, err := gghelper.ModulePath()
-	if err != nil {
-		return ""
-	}
-	return strings.Trim(modulePath, "/")
 }

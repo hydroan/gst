@@ -12,7 +12,6 @@ import (
 	"strings"
 
 	gitignore "github.com/go-git/go-git/v5/plumbing/format/gitignore"
-	"github.com/hydroan/gst/internal/codegen/gen"
 	"github.com/hydroan/gst/internal/ggconst"
 	"github.com/hydroan/gst/internal/gghelper"
 	"github.com/hydroan/gst/internal/goast"
@@ -58,7 +57,7 @@ var DetachedContext = Check{
 // Code of copyable framework modules under the service directory is skipped:
 // it is checked inside the framework.
 func checkDetachedContext(ignore gitignore.Matcher) []string {
-	modulePath, err := gen.GetModulePath()
+	modulePath, err := gghelper.ModulePath()
 	if err != nil {
 		return []string{fmt.Sprintf("reading the module path: %v", err)}
 	}

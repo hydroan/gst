@@ -4,10 +4,13 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	gitignore "github.com/go-git/go-git/v5/plumbing/format/gitignore"
+	"github.com/hydroan/gst/internal/ggconst"
 	"github.com/hydroan/gst/internal/gghelper"
+	"golang.org/x/mod/modfile"
 )
 
 // DirectoryRestrictions limits the top-level directories to the ones the
@@ -112,12 +115,19 @@ func checkDirectoryRestrictions(ignore gitignore.Matcher) []string {
 
 // usesGstFramework checks if the project uses gst framework as a dependency
 func usesGstFramework(projectDir string) bool {
-	goModPath := filepath.Join(projectDir, "go.mod")
-	content, err := os.ReadFile(goModPath)
+	content, err := os.ReadFile(filepath.Join(projectDir, "go.mod"))
 	if err != nil {
 		return false
 	}
 
-	// Check if github.com/hydroan/gst is in dependencies
-	return strings.Contains(string(content), "github.com/hydroan/gst")
+	// The framework must be required, not merely mentioned: a module path
+	// that starts like the framework's, or a comment naming it, is another
+	// project's business.
+	file, err := modfile.ParseLax("go.mod", content, nil)
+	if err != nil {
+		return false
+	}
+	return slices.ContainsFunc(file.Require, func(require *modfile.Require) bool {
+		return require.Mod.Path == ggconst.ImportPathGst
+	})
 }

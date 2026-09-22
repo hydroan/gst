@@ -60,7 +60,7 @@ func init() {
 func genTypeScriptRun() error {
 	if len(module) == 0 {
 		var err error
-		if module, err = gen.GetModulePath(); err != nil {
+		if module, err = gghelper.ModulePath(); err != nil {
 			return err
 		}
 	}
