@@ -77,16 +77,71 @@ func loadRecords(ctx *gst.ServiceContext) error {
 }
 `)
 
+	// A name the method declares itself shadows the package-level meaning of
+	// the same name: mgr is the local other, not the package's manager, and
+	// service is a local other, not the framework package.
+	writeCheckFile(t, filepath.Join(projectDir, "service", "shadow", "shadow.go"), `package shadow
+
+import (
+	"net/http"
+
+	"github.com/cockroachdb/errors"
+	"github.com/hydroan/gst"
+	"github.com/hydroan/gst/service"
+	"tmpapp/model"
+)
+
+type Getter struct {
+	service.Base[*model.Record, *model.RecordReq, *model.RecordRsp]
+}
+
+type other struct{}
+
+func (other) Do() error { return errors.New("raw") }
+
+func (other) NewError() error { return errors.New("raw constructor") }
+
+type manager struct{}
+
+func (manager) Do() error { return service.NewError(http.StatusBadRequest, "bad request") }
+
+var mgr = manager{}
+
+func (g *Getter) Get(ctx *gst.ServiceContext, req *model.RecordReq) (*model.RecordRsp, error) {
+	mgr := other{}
+	return nil, mgr.Do()
+}
+
+func (g *Getter) Delete(ctx *gst.ServiceContext, req *model.RecordReq) (*model.RecordRsp, error) {
+	service := other{}
+	return nil, service.NewError()
+}
+
+// List calls Do on a local variable whose declaration does not spell its
+// type out, so the call fails closed.
+func (g *Getter) List(ctx *gst.ServiceContext, req *model.RecordReq) (*model.RecordRsp, error) {
+	cli := newOther()
+	return nil, cli.Do()
+}
+
+func newOther() other { return other{} }
+`)
+
 	violations := CheckServiceErrorDiscipline(newProjectIgnoreMatcher())
 
 	// Violations point at the raw error expressions themselves: the database
-	// calls on laundry.go:23 / sample.go:19 / sample.go:26 and the raw
-	// constructor on sample.go:23, since those are the places to wrap.
+	// calls on laundry.go:23 / sample.go:19 / sample.go:26, the raw
+	// constructor on sample.go:23, the raw constructors the shadowing locals
+	// reach on shadow.go:18 and shadow.go:20, and the call on a local of
+	// unknown type on shadow.go:42, since those are the places to wrap.
 	wantSubstrings := []string{
 		filepath.Join("service", "laundry", "laundry.go") + ":23:",
 		filepath.Join("service", "sample", "sample.go") + ":19:",
 		filepath.Join("service", "sample", "sample.go") + ":23:",
 		filepath.Join("service", "sample", "sample.go") + ":26:",
+		filepath.Join("service", "shadow", "shadow.go") + ":18:",
+		filepath.Join("service", "shadow", "shadow.go") + ":20:",
+		filepath.Join("service", "shadow", "shadow.go") + ":42:",
 	}
 	if len(violations) != len(wantSubstrings) {
 		t.Fatalf("expected %d violations, got %#v", len(wantSubstrings), violations)
@@ -241,6 +296,63 @@ func (u *Updater) Import(ctx *gst.ServiceContext, req *model.RecordReq) (*model.
 		return nil, err
 	}
 	return &model.RecordRsp{}, nil
+}
+`)
+	// Methods called on a package-level singleton, on local variables and on
+	// a parameter whose declarations spell their type out resolve to that
+	// type's methods.
+	writeCheckFile(t, filepath.Join(projectDir, "service", "singleton", "singleton.go"), `package singleton
+
+import (
+	"net/http"
+
+	"github.com/hydroan/gst"
+	"github.com/hydroan/gst/service"
+	"tmpapp/model"
+)
+
+type Getter struct {
+	service.Base[*model.Record, *model.RecordReq, *model.RecordRsp]
+}
+
+type manager struct{}
+
+func (manager) Do() error { return service.NewError(http.StatusBadRequest, "bad request") }
+
+var mgr = manager{}
+
+func (g *Getter) Get(ctx *gst.ServiceContext, req *model.RecordReq) (*model.RecordRsp, error) {
+	return nil, mgr.Do()
+}
+
+func (g *Getter) List(ctx *gst.ServiceContext, req *model.RecordReq) (*model.RecordRsp, error) {
+	local := manager{}
+	if err := local.Do(); err != nil {
+		return nil, err
+	}
+	var declared manager
+	if err := declared.Do(); err != nil {
+		return nil, err
+	}
+	pointer := &manager{}
+	if err := pointer.Do(); err != nil {
+		return nil, err
+	}
+	return nil, run(manager{})
+}
+
+func run(m manager) error { return m.Do() }
+
+// Update calls a compliant helper that calls itself.
+func (g *Getter) Update(ctx *gst.ServiceContext, req *model.RecordReq) (*model.RecordRsp, error) {
+	return nil, countdown(3)
+}
+
+func countdown(n int) error {
+	if n == 0 {
+		return service.NewError(http.StatusBadRequest, "countdown finished")
+	}
+	return countdown(n - 1)
 }
 `)
 	writeCheckFile(t, filepath.Join(projectDir, "helper", "guard", "guard.go"), `package guard
