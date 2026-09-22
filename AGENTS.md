@@ -96,7 +96,7 @@ gst 是强约定框架（Apple 风格），不是自由框架（Windows 风格�
 ### 结束收尾
 
 1. 修改完 `dsl`、`cmd/gg`、`internal/codegen`、 `internal/ggmodule` 包的代码后，需要及时安装最新版本的 `gg` 工具
-3. 开发完后：必须执行 `make check` 确保代码检查能通过。如果没有修改代码，例如只修改了 Makefile、Markdown 等和代码无关的文件则不需要执行 `make check`
+2. 开发完后：必须执行 `make check` 确保代码检查能通过。如果没有修改代码，例如只修改了 Makefile、Markdown 等和代码无关的文件则不需要执行 `make check`
 
 
 
@@ -133,7 +133,7 @@ gst 是强约定框架（Apple 风格），不是自由框架（Windows 风格�
 开发 module 时，每个接口对应的【model/REQ/RSP】、【业务逻辑】必须写在自己对应的单独代码文件中，禁止将多个接口的【model/REQ/RSP】写在同一个 model 代码文件中，禁止将多个不同接口的【业务逻辑】写在同一个 service 代码文件中。三种场景如下：
 
 - 完全不同的业务逻辑和接口：/api/users，/api/groups，那么需要两个 model 文件和两个 service 文件
-- 同一资源对象则走框架提供的 curd：POST /api/configs、DELETE /api/configs/:id、 DELETE /api/configs、PUT /api/configs/:id、PATCH /api/configs/:id、GET /api/configs、GET /api/configs/:id，只需要一个 model 文件且 model 文件中没有自定义 REQ 和 RSP，service 文件中只有一个结构体，在结构体上加上不同的 hooks。
+- 同一资源对象则走框架提供的 CRUD：POST /api/records、DELETE /api/records/:id、 DELETE /api/records、PUT /api/records/:id、PATCH /api/records/:id、GET /api/records、GET /api/records/:id，只需要一个 model 文件且 model 文件中没有自定义 REQ 和 RSP，service 文件中只有一个结构体，在结构体上加上不同的 hooks。
 - 同一资源对象走自定义业务逻辑：GET /api/iam/sessions、DELETE /api/iam/sessions/:id。还是只需要一个 model 文件和一个 service 文件，但都有自己的 REQ、RSP service 结构体。注意 List、Get 是 HTTP GET 接口，禁止声明 `Payload[T]()`，只声明 `Result[T]()`，请求类型固定为 `*model.Empty`：
   - model 代码文件中的结构体：`SessionListRsp`、`SessionDeleteReq`、`SessionDeleteRsp`。
   - service 结构体方法：
@@ -142,7 +142,7 @@ gst 是强约定框架（Apple 风格），不是自由框架（Windows 风格�
 
 module 包中的接口测试用例规范：
 
-- 测试文件名要符合子 module 名，例如 module/iam/session_test.go 就是专门用来存放 session 相关接口的测试用例，其对应的接口实现放在 internal/{model,service}/session 目录中。
+- 测试文件名要符合子 module 名，例如 module/iam/session_test.go 就是专门用来存放 session 相关接口的测试用例，其对应的接口实现放在 internal/{model,service}/iam/session 目录中。
 - 测试组织方式要改成一个接口对应一个顶层测试函数，各个顶层测试函数应该尽量避免相互影响。
 - 如果同一个接口有多种场景，则在这个接口对应的测试函数里 用 t.Run(...) 做子测试，如果只有一个场景，则不需要额外使用 t.Run(...) 来运行子测试。
 - 测试用到的辅助函数应该放在其对应的测试文件中，例如 session 子模块相关的测试辅助函数应该放在 session_test.go 中，account 子模块相关的测试辅助函数应该放在 account_test.go 中。并且测试用例使用到的辅助函数尽量放在顶层测试函数之后。
@@ -183,7 +183,7 @@ README.md 面向使用 gst 框架的后端开发者，应保持简洁并聚焦�
 
 - 普通数据库资源使用 `model.Base`，通常在 `Design()` 中声明 `Migrate()`、`Endpoint(...)` 和 `Param(...)`。
 - 索引一律通过模型的 `Indexes() []model.Index` 方法集中声明：`Fields` 写 Go 字段名、顺序即列序，`Unique` 声明唯一索引，索引名由框架生成；唯一例外是主键，由 `model.Base`/`model.AutoBase` 内置声明。禁止用 gorm tag 的 `index`/`uniqueIndex`/`unique` 配置索引（gg check 强制）。
-- 不落数据库、只表示动作或自定义接口的模型优先使用 `model.Empty`，例如登录、刷新 token、文件加密、批量处理等接口。
+- 不落数据库、只表示动作或自定义接口的模型优先使用 `model.Empty`，例如登录、刷新 token、格式转换、批量处理等接口。
 - 默认 CRUD 资源优先交给框架处理：在 `Design()` 中启用对应动作即可。如果没有额外业务逻辑，不声明 `Service()`。
 - 需要自定义业务逻辑时，在对应动作中声明 `Service()`，然后在同名 service 子目录中实现对应 phase 的 service 结构体。
 - 自定义接口必须为当前接口单独定义 `XXXReq`、`XXXRsp`，即使字段和其他接口完全相同也不要复用。请求和响应类型通过 `Payload[*XXXReq]()`、`Result[*XXXRsp]()` 绑定到 DSL。例外：List、Get 是 HTTP GET 接口，禁止声明 `Payload`，只定义并声明 `Result[*XXXRsp]()`，请求类型固定生成为 `*model.Empty`。
@@ -201,10 +201,10 @@ README.md 面向使用 gst 框架的后端开发者，应保持简洁并聚焦�
 #### 常见接口模式
 
 - `model/record.go`：普通数据库资源 model，启用 CRUD，并通过 service hook 做当前用户过滤、返回字段补充、关联对象填充等逻辑。
-- `model/common/common.go`：通用工具类接口，使用 `model.Empty` 定义非数据库动作，并为当前接口单独定义请求和响应。适合搜索结果去重、文件解析、批量转换等没有独立数据表的动作。
-- `model/auth/login.go`：登录跳转类公开接口，使用 `model.Empty` 定义动作模型，在 DSL 中声明 `Public()`，service 返回登录地址、token、回调结果等响应。
+- `model/tool/entry.go`：通用工具类接口，使用 `model.Empty` 定义非数据库动作，并为当前接口单独定义请求和响应。适合条目合并、格式转换、批量转换等没有独立数据表的动作。
+- `model/auth/login.go`：登录跳转类公开接口，使用 `model.Empty` 定义动作模型，在 DSL 中声明 `Public()`，service 返回登录地址、token 等响应。
 - `model/sample/item.go`：嵌套资源 model，同一个 model 可以同时提供默认资源路由和自定义嵌套路由；必填校验、默认值、派生字段等轻量逻辑放在 model hook。
-- `model/sample/item/archive.go`：动作类接口，归档、复制、发布这类动作使用空模型加独立 `XXXReq`、`XXXRsp`，业务逻辑放在对应 service。
+- `model/sample/item/archive.go`：动作类接口，归档、封存、恢复这类动作使用空模型加独立 `XXXReq`、`XXXRsp`，业务逻辑放在对应 service。
 
 #### 后端项目使用注意事项
 
