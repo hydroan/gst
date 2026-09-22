@@ -155,7 +155,7 @@ func TestApplyRouteIgnoresKeepsServiceFilesForPrune(t *testing.T) {
 
 	relModelDir := filepath.Join(projectDir, "model")
 	relServiceDir := filepath.Join(projectDir, "service")
-	allModels, err := codegen.FindModels("tmpapp", relModelDir, relServiceDir, nil)
+	allModels, err := codegen.FindModels("tmpapp", relModelDir, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -287,7 +287,7 @@ func (Admin) Design() {
 			}
 		}
 		t.Chdir(projectDir)
-		allModels, err := codegen.FindModels("tmpapp", "model", "service", nil)
+		allModels, err := codegen.FindModels("tmpapp", "model", nil)
 		if err != nil {
 			t.Fatal(err)
 		}

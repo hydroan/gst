@@ -32,7 +32,7 @@ func pruneRun() {
 
 	// Scan all models
 	clioutput.Section("Scan Models")
-	allModels, err := codegen.FindModels(module, modelDir, serviceDir, excludes)
+	allModels, err := codegen.FindModels(module, modelDir, excludes)
 	checkErr(err)
 	if len(allModels) == 0 {
 		clioutput.Item("", "No models found, pruning service files only")

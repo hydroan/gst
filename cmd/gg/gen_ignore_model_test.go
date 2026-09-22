@@ -147,7 +147,7 @@ func (User) Design() {
 }
 `)
 	t.Chdir(projectDir)
-	models, err := codegen.FindModels("tmpapp", "model", "service", nil)
+	models, err := codegen.FindModels("tmpapp", "model", nil)
 	if err != nil {
 		t.Fatal(err)
 	}

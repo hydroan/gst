@@ -376,7 +376,7 @@ func scanModels(quiet bool) (scannedModels, error) {
 	if !quiet {
 		clioutput.Section("Scan Models")
 	}
-	allModels, err := codegen.FindModels(module, modelDir, serviceDir, excludes)
+	allModels, err := codegen.FindModels(module, modelDir, excludes)
 	if err != nil {
 		return scannedModels{}, err
 	}
