@@ -5,10 +5,12 @@ import (
 	"go/ast"
 	"go/token"
 	"path"
+	"slices"
 	"strconv"
 	"strings"
 
 	"github.com/cockroachdb/errors"
+	"github.com/hydroan/gst/consts"
 	"github.com/hydroan/gst/dsl"
 	"github.com/hydroan/gst/internal/codegen/constants"
 )
@@ -656,10 +658,11 @@ func insertImportSpec(file *ast.File, spec *ast.ImportSpec) {
 //	model_service "myproject/model/service"
 //	service.Base[*model_service.User, *model_service.User, *model_service.User]
 //
-// A file that imports the model package under a name another import takes
-// cannot build, and nothing tells which package a reference through that
-// name means, so it is rejected before anything is rewritten. An earlier gg
-// generated such files for a model package named like a framework package:
+// A file that refers to the model package by the name of a framework package
+// it imports cannot build, and nothing tells which package a reference
+// through that name means, so it is rejected before anything is rewritten.
+// An earlier gg generated such files for a model package named like a
+// framework package:
 //
 //	import (
 //		"myproject/model/service"
@@ -672,25 +675,31 @@ func insertImportSpec(file *ast.File, spec *ast.ImportSpec) {
 //
 // The error tells how to fix the file: import the model package as
 // model_service "myproject/model/service" and refer to it through
-// model_service, or delete the file for gg gen to generate it again.
+// model_service, or delete the file for gg gen to generate it again. Only the
+// framework packages count (see frameworkImportNamed): a file importing
+// "github.com/cespare/xxhash/v2", a package named xxhash, next to a model
+// package named v2 builds, and is synced like any other.
 //
 // Parameters:
 // - file: The AST file to process
 // - action: The DSL action configuration
 // - servicePkgName: The expected service package name
+// - modelDir: The root model directory, such as model
 // - modelInfo: The correct model generation context
 //
 // It returns whether any changes were made to the file, and the error of a
 // file it rejects.
-func ApplyServiceFileWithModelSync(file *ast.File, action *dsl.Action, servicePkgName string, modelInfo *ModelInfo) (bool, error) {
+func ApplyServiceFileWithModelSync(file *ast.File, action *dsl.Action, servicePkgName, modelDir string, modelInfo *ModelInfo) (bool, error) {
 	if file == nil || action == nil {
 		return false, nil
 	}
 	if modelInfo != nil {
-		if name, importPaths := ambiguousModelImport(file, modelInfo); len(importPaths) > 1 {
-			qualifier := serviceModelQualifier(modelInfo, action.Phase)
-			return false, errors.Newf("imports %s under the same name %s, so it cannot build; import the model package as %s %q and refer to it through %s, or delete the file for gg gen to generate it again",
-				strings.Join(importPaths, " and "), name, qualifier, modelInfo.ImportPath(), qualifier)
+		if name := serviceModelName(file, modelInfo); name != "" {
+			if frameworkPath := frameworkImportNamed(file, action.Phase, name); frameworkPath != "" {
+				qualifier := serviceModelQualifier(modelInfo, action.Phase)
+				return false, errors.Newf("refers to both the model package and %q as %s, so it cannot build; import the model package as %s %q and refer to it through %s, or delete the file for gg gen to generate it again",
+					frameworkPath, name, qualifier, modelInfo.ImportPath(), qualifier)
+			}
 		}
 	}
 
@@ -733,7 +742,7 @@ func ApplyServiceFileWithModelSync(file *ast.File, action *dsl.Action, servicePk
 	}
 
 	// Update import statements
-	if syncModelImports(file, modelInfo.ImportPath(), importName, importMapping) {
+	if syncModelImports(file, path.Join(modelInfo.ModulePath, modelDir), modelInfo.ImportPath(), importName, importMapping) {
 		changed = true
 	}
 
@@ -745,27 +754,64 @@ func ApplyServiceFileWithModelSync(file *ast.File, action *dsl.Action, servicePk
 	return changed, nil
 }
 
-// ambiguousModelImport returns the name the file refers to the model package
-// by, and the path of every import the file declares under that name. The
-// name is the qualifier of the service struct's service.Base embedding, or,
-// with no such struct, the name of the model import. More than one path
-// means the file cannot build, as in
+// serviceModelName returns the name the file refers to the model package by:
+// the qualifier of the service struct's service.Base embedding, or, with no
+// such struct, the name of the model import, which is the model package name
+// unless the import declares another. It returns "" when the file shows
+// neither.
+func serviceModelName(file *ast.File, modelInfo *ModelInfo) string {
+	if name := serviceModelPackageName(file); name != "" {
+		return name
+	}
+	spec := findImportSpec(file, modelInfo.ImportPath())
+	switch {
+	case spec == nil:
+		return ""
+	case spec.Name != nil:
+		return spec.Name.Name
+	default:
+		return modelInfo.ModelPkgName
+	}
+}
+
+// frameworkImportNamed returns the path of the package of
+// serviceScaffoldImports that the service file of an action with phase
+// imports under name, or "" when none of them takes that name. Their names
+// are known without reading them, the last segment of their paths unless the
+// import declares another, so the file
 //
-//	"myproject/model/service"        // service
-//	"github.com/hydroan/gst/service" // service
-func ambiguousModelImport(file *ast.File, modelInfo *ModelInfo) (name string, importPaths []string) {
-	name = serviceModelPackageName(file)
-	if name == "" {
-		spec := findImportSpec(file, modelInfo.ImportPath())
-		if spec == nil {
-			return "", nil
+//	"myproject/model/service"
+//	"github.com/hydroan/gst/service"
+//
+// imports "github.com/hydroan/gst/service" under service. Any other package
+// imported without a name is left out: only the package itself tells its
+// name, as with "github.com/cespare/xxhash/v2", named xxhash.
+func frameworkImportNamed(file *ast.File, phase consts.Phase, name string) string {
+	frameworkPaths := serviceScaffoldImports(phase)
+	for _, decl := range file.Decls {
+		genDecl, ok := decl.(*ast.GenDecl)
+		if !ok || genDecl.Tok != token.IMPORT {
+			continue
 		}
-		name = importSpecName(spec)
+		for _, spec := range genDecl.Specs {
+			importSpec, ok := spec.(*ast.ImportSpec)
+			if !ok || importSpec.Path == nil {
+				continue
+			}
+			importPath, err := strconv.Unquote(importSpec.Path.Value)
+			if err != nil || !slices.Contains(frameworkPaths, importPath) {
+				continue
+			}
+			importName := path.Base(importPath)
+			if importSpec.Name != nil {
+				importName = importSpec.Name.Name
+			}
+			if importName == name {
+				return importPath
+			}
+		}
 	}
-	if name == "" {
-		return "", nil
-	}
-	return name, importPathsNamed(file, name)
+	return ""
 }
 
 func serviceModelPackageName(file *ast.File) string {
@@ -829,24 +875,27 @@ func selectorPackageName(expr ast.Expr) string {
 	return ""
 }
 
-// syncModelImports points every import whose name is a key of mapping at
+// syncModelImports points the model import whose name is a key of mapping at
 // correctModelImportPath, declaring importName as its name, or no name when
-// importName is empty (see importSpecName). For example, with mapping
-// {"sample": "model_service"} and importName model_service,
+// importName is empty. Only imports of the model packages under modelRoot,
+// such as "myproject/model", count (see modelImportName); an import of any
+// other package is never touched, even when its path ends in the same name.
+// For example, with mapping {"v2": "v3"},
 //
-//	"myproject/model/sample"
+//	"myproject/model/api/v2"
+//	"github.com/cespare/xxhash/v2"
 //
 // becomes
 //
-//	model_service "myproject/model/service"
+//	"myproject/model/api/v3"
+//	"github.com/cespare/xxhash/v2"
 //
-// and with mapping {"model_service": "sample"} and no importName, the
-// reverse happens. An import named differently, such as the gst service
-// package the file imports as service, is left alone. It modifies only the
-// import paths and names in the AST, preserving all other aspects of the code
-// including formatting, comments, and structure, and returns true if any
-// imports were updated.
-func syncModelImports(file *ast.File, correctModelImportPath, importName string, mapping map[string]string) bool {
+// and with mapping {"sample": "model_service"} and importName model_service,
+// "myproject/model/sample" becomes model_service "myproject/model/service".
+// It modifies only the import paths and names in the AST, preserving all
+// other aspects of the code including formatting, comments, and structure,
+// and returns true if any imports were updated.
+func syncModelImports(file *ast.File, modelRoot, correctModelImportPath, importName string, mapping map[string]string) bool {
 	changed := false
 
 	for _, decl := range file.Decls {
@@ -860,7 +909,7 @@ func syncModelImports(file *ast.File, correctModelImportPath, importName string,
 			if !ok || importSpec.Path == nil {
 				continue
 			}
-			if _, found := mapping[importSpecName(importSpec)]; !found {
+			if _, found := mapping[modelImportName(importSpec, modelRoot)]; !found {
 				continue
 			}
 
@@ -876,46 +925,28 @@ func syncModelImports(file *ast.File, correctModelImportPath, importName string,
 	return changed
 }
 
-// importSpecName returns the name a file refers to an import by: the name
-// the import declares, or else the last segment of its path, as in
+// modelImportName returns the name a file refers to the model package it
+// imports through spec by: the name the import declares, or else the name
+// the package declares, which gg check pins to its directory name (see
+// ModelPackageName). It returns "" for an import of any package outside
+// modelRoot, or one that gives the file no name to refer to it by:
 //
-//	model_service "myproject/model/service" // model_service
-//	"github.com/hydroan/gst/service"        // service
-//
-// A blank or dot import gives the file no name to refer to it by, and reports
-// "".
-func importSpecName(spec *ast.ImportSpec) string {
+//	"myproject/model/sample"                 // sample
+//	"myproject/model/record_item"            // recorditem
+//	model_service "myproject/model/service"  // model_service
+//	"github.com/cespare/xxhash/v2"           // "", not a model package
+func modelImportName(spec *ast.ImportSpec, modelRoot string) string {
+	importPath, err := strconv.Unquote(spec.Path.Value)
+	if err != nil || (importPath != modelRoot && !strings.HasPrefix(importPath, modelRoot+"/")) {
+		return ""
+	}
 	if spec.Name != nil {
 		if spec.Name.Name == "_" || spec.Name.Name == "." {
 			return ""
 		}
 		return spec.Name.Name
 	}
-	importPath, err := strconv.Unquote(spec.Path.Value)
-	if err != nil {
-		return ""
-	}
-	return path.Base(importPath)
-}
-
-// importPathsNamed returns the quoted path of every import the file declares
-// under name (see importSpecName). It walks the import declarations rather
-// than file.Imports, which misses the imports inserted since the file was
-// parsed.
-func importPathsNamed(file *ast.File, name string) []string {
-	var importPaths []string
-	for _, decl := range file.Decls {
-		genDecl, ok := decl.(*ast.GenDecl)
-		if !ok || genDecl.Tok != token.IMPORT {
-			continue
-		}
-		for _, spec := range genDecl.Specs {
-			if importSpec, ok := spec.(*ast.ImportSpec); ok && importSpecName(importSpec) == name {
-				importPaths = append(importPaths, importSpec.Path.Value)
-			}
-		}
-	}
-	return importPaths
+	return ModelPackageName(path.Base(importPath))
 }
 
 // syncModelPackageReferences updates package references in the code.

@@ -276,7 +276,7 @@ func genRunWithOptions(opts genRunOptions) error {
 			}
 
 			// Apply changes and sync model imports to handle import path and package name updates
-			changed, err := gen.ApplyServiceFileWithModelSync(f, action, servicePkgName, modelInfo)
+			changed, err := gen.ApplyServiceFileWithModelSync(f, action, servicePkgName, modelDir, modelInfo)
 			if err != nil {
 				return errors.Wrapf(err, "service file %s", safePath)
 			}

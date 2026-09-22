@@ -1278,7 +1278,7 @@ func (u *Creator) Create(ctx *gst.ServiceContext, req *service.UserReq) (rsp *se
 	return rsp, nil
 }
 `,
-			wantErr: "imports \"helloworld/model/service\" and \"github.com/hydroan/gst/service\" under the same name service, so it cannot build; import the model package as model_service \"helloworld/model/service\" and refer to it through model_service, or delete the file for gg gen to generate it again",
+			wantErr: "refers to both the model package and \"github.com/hydroan/gst/service\" as service, so it cannot build; import the model package as model_service \"helloworld/model/service\" and refer to it through model_service, or delete the file for gg gen to generate it again",
 		},
 		{
 			// Without a service struct, the model import tells the name the
@@ -1323,12 +1323,177 @@ func (u *Creator) Create(ctx *gst.ServiceContext, req *service.UserReq) (rsp *se
 	return rsp, nil
 }
 `,
-			wantErr: "imports \"helloworld/model/service\" and \"github.com/hydroan/gst/service\" under the same name service, so it cannot build; import the model package as model_service \"helloworld/model/service\" and refer to it through model_service, or delete the file for gg gen to generate it again",
+			wantErr: "refers to both the model package and \"github.com/hydroan/gst/service\" as service, so it cannot build; import the model package as model_service \"helloworld/model/service\" and refer to it through model_service, or delete the file for gg gen to generate it again",
 		},
 		{
-			// Imports are matched by the name the file refers to them by: the gst
-			// package the file names gstfw is not the model package gst, though
-			// its path ends in gst.
+			// The path of the versioned xxhash module ends in v2, like the
+			// model package, but the package it imports is named xxhash: the
+			// file builds, and nothing in it changes.
+			name: "keep_model_package_named_like_the_last_segment_of_another_import",
+			code: `package item
+
+import (
+	"helloworld/model/api/v2"
+
+	"github.com/cespare/xxhash/v2"
+	"github.com/hydroan/gst"
+	"github.com/hydroan/gst/service"
+)
+
+type Creator struct {
+	service.Base[*v2.Item, *v2.Item, *v2.Item]
+}
+
+func (i *Creator) Create(ctx *gst.ServiceContext, req *v2.Item) (rsp *v2.Item, err error) {
+	_ = xxhash.Sum64String("item")
+	return rsp, nil
+}
+`,
+			action: &dsl.Action{
+				Enabled: true,
+				Payload: "*Item",
+				Result:  "*Item",
+				Phase:   consts.PHASE_CREATE,
+			},
+			servicePkgName: "item",
+			modelInfo: &gen.ModelInfo{
+				ModulePath:   "helloworld",
+				ModelFileDir: "model/api/v2",
+				ModelPkgName: "v2",
+				ModelName:    "Item",
+			},
+			want: `package item
+
+import (
+	"helloworld/model/api/v2"
+
+	"github.com/cespare/xxhash/v2"
+	"github.com/hydroan/gst"
+	"github.com/hydroan/gst/service"
+)
+
+type Creator struct {
+	service.Base[*v2.Item, *v2.Item, *v2.Item]
+}
+
+func (i *Creator) Create(ctx *gst.ServiceContext, req *v2.Item) (rsp *v2.Item, err error) {
+	_ = xxhash.Sum64String("item")
+	return rsp, nil
+}
+`,
+		},
+		{
+			// Renaming the model package rewrites the model import alone, not
+			// the xxhash import whose path ends in the old name too.
+			name: "sync_only_the_model_import_when_another_import_path_ends_in_its_name",
+			code: `package item
+
+import (
+	"helloworld/model/api/v2"
+
+	"github.com/cespare/xxhash/v2"
+	"github.com/hydroan/gst"
+	"github.com/hydroan/gst/service"
+)
+
+type Creator struct {
+	service.Base[*v2.Item, *v2.Item, *v2.Item]
+}
+
+func (i *Creator) Create(ctx *gst.ServiceContext, req *v2.Item) (rsp *v2.Item, err error) {
+	_ = xxhash.Sum64String("item")
+	return rsp, nil
+}
+`,
+			action: &dsl.Action{
+				Enabled: true,
+				Payload: "*Item",
+				Result:  "*Item",
+				Phase:   consts.PHASE_CREATE,
+			},
+			servicePkgName: "item",
+			modelInfo: &gen.ModelInfo{
+				ModulePath:   "helloworld",
+				ModelFileDir: "model/api/v3",
+				ModelPkgName: "v3",
+				ModelName:    "Item",
+			},
+			want: `package item
+
+import (
+	"helloworld/model/api/v3"
+
+	"github.com/cespare/xxhash/v2"
+	"github.com/hydroan/gst"
+	"github.com/hydroan/gst/service"
+)
+
+type Creator struct {
+	service.Base[*v3.Item, *v3.Item, *v3.Item]
+}
+
+func (i *Creator) Create(ctx *gst.ServiceContext, req *v3.Item) (rsp *v3.Item, err error) {
+	_ = xxhash.Sum64String("item")
+	return rsp, nil
+}
+`,
+		},
+		{
+			// The package in model/record_item is named recorditem, as gg
+			// check requires, which the import states without a name.
+			name: "sync_unnamed_import_of_a_package_named_unlike_its_directory",
+			code: `package item
+
+import (
+	"helloworld/model/record_item"
+
+	"github.com/hydroan/gst"
+	"github.com/hydroan/gst/service"
+)
+
+type Creator struct {
+	service.Base[*recorditem.Item, *recorditem.Item, *recorditem.Item]
+}
+
+func (i *Creator) Create(ctx *gst.ServiceContext, req *recorditem.Item) (rsp *recorditem.Item, err error) {
+	return rsp, nil
+}
+`,
+			action: &dsl.Action{
+				Enabled: true,
+				Payload: "*Item",
+				Result:  "*Item",
+				Phase:   consts.PHASE_CREATE,
+			},
+			servicePkgName: "item",
+			modelInfo: &gen.ModelInfo{
+				ModulePath:   "helloworld",
+				ModelFileDir: "model/archive",
+				ModelPkgName: "archive",
+				ModelName:    "Item",
+			},
+			want: `package item
+
+import (
+	"helloworld/model/archive"
+
+	"github.com/hydroan/gst"
+	"github.com/hydroan/gst/service"
+)
+
+type Creator struct {
+	service.Base[*archive.Item, *archive.Item, *archive.Item]
+}
+
+func (i *Creator) Create(ctx *gst.ServiceContext, req *archive.Item) (rsp *archive.Item, err error) {
+	return rsp, nil
+}
+`,
+		},
+		{
+			// Only model imports are synced: the gst package the file imports as
+			// gstfw is left alone, though its path ends in gst like the path of
+			// the model package.
 			name: "leave_framework_import_named_otherwise",
 			code: `package user
 
@@ -1387,7 +1552,7 @@ func (u *Creator) Create(ctx *gstfw.ServiceContext, req *model_gst.UserReq) (rsp
 				t.Error(err)
 				return
 			}
-			_, err = gen.ApplyServiceFileWithModelSync(file, tt.action, tt.servicePkgName, tt.modelInfo)
+			_, err = gen.ApplyServiceFileWithModelSync(file, tt.action, tt.servicePkgName, "model", tt.modelInfo)
 			switch {
 			case tt.wantErr != "" && (err == nil || err.Error() != tt.wantErr):
 				t.Errorf("ApplyServiceFileWithModelSync() error = %v, want %s", err, tt.wantErr)
@@ -1650,7 +1815,7 @@ func (c *Creator) Create(ctx *gst.ServiceContext, req *model.User) (rsp *model.U
 			if tt.modelInfo != nil {
 				info = tt.modelInfo
 			}
-			changed, err := gen.ApplyServiceFileWithModelSync(file, tt.action, "user", info)
+			changed, err := gen.ApplyServiceFileWithModelSync(file, tt.action, "user", "model", info)
 			if err != nil {
 				t.Fatalf("ApplyServiceFileWithModelSync() error = %v", err)
 			}

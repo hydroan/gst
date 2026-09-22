@@ -780,8 +780,65 @@ func (i *Creator) Create(ctx *gst.ServiceContext, req *service.Item) (rsp *servi
 	writeCheckFile(t, filepath.Join(projectDir, "service/service/item/create_test.go"), "package item_test\n")
 
 	err := genRunWithOptions(genRunOptions{Quiet: true})
-	require.EqualError(t, err, `service file service/service/item/create.go: imports "tmpapp/model/service" and "github.com/hydroan/gst/service" under the same name service, so it cannot build; import the model package as model_service "tmpapp/model/service" and refer to it through model_service, or delete the file for gg gen to generate it again`)
+	require.EqualError(t, err, `service file service/service/item/create.go: refers to both the model package and "github.com/hydroan/gst/service" as service, so it cannot build; import the model package as model_service "tmpapp/model/service" and refer to it through model_service, or delete the file for gg gen to generate it again`)
 	got, err := os.ReadFile(serviceFile)
 	require.NoError(t, err)
 	require.Equal(t, source, string(got))
+}
+
+// TestGenRunKeepsServiceFileImportingAVersionedModule runs gg gen over a
+// service file that imports a versioned module whose path ends in v2, the
+// name of its model package, although the module declares package xxhash.
+// The file builds, and gg gen leaves it as it is.
+func TestGenRunKeepsServiceFileImportingAVersionedModule(t *testing.T) {
+	projectDir := newGenProject(t)
+	writeCheckFile(t, filepath.Join(projectDir, "model/api/v2/item.go"), `package v2
+
+import (
+	"github.com/hydroan/gst/dsl"
+	"github.com/hydroan/gst/model"
+)
+
+type Item struct {
+	model.Empty
+}
+
+func (Item) Design() {
+	dsl.Endpoint("items")
+	dsl.Create(func() {
+		dsl.Service()
+	})
+}
+`)
+	serviceFile := "service/api/v2/item/create.go"
+	source := `package item
+
+import (
+	"tmpapp/model/api/v2"
+
+	"github.com/cespare/xxhash/v2"
+	"github.com/hydroan/gst"
+	"github.com/hydroan/gst/service"
+)
+
+type Creator struct {
+	service.Base[*v2.Item, *v2.Item, *v2.Item]
+}
+
+func (i *Creator) Create(ctx *gst.ServiceContext, req *v2.Item) (rsp *v2.Item, err error) {
+	log := i.WithContext(ctx, ctx.Phase())
+	log.Info("item create", "hash", xxhash.Sum64String("item"))
+	return rsp, nil
+}
+`
+	writeCheckFile(t, filepath.Join(projectDir, serviceFile), source)
+	writeCheckFile(t, filepath.Join(projectDir, "service/api/v2/item/create_test.go"), "package item_test\n")
+
+	require.NoError(t, genRunWithOptions(genRunOptions{Quiet: true}))
+	got, err := os.ReadFile(serviceFile)
+	require.NoError(t, err)
+	require.Equal(t, source, string(got))
+
+	output, err := exec.Command("go", "build", "-mod=mod", "./...").CombinedOutput()
+	require.NoError(t, err, "go build:\n%s", output)
 }
