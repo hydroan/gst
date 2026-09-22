@@ -1182,7 +1182,7 @@ func (Sample) Design() {
 }
 `
 
-func TestValidateEmptyEmbedding(t *testing.T) {
+func TestValidateBaseTypeEmbedding(t *testing.T) {
 	tests := []struct {
 		name      string
 		source    string
@@ -1201,6 +1201,16 @@ func TestValidateEmptyEmbedding(t *testing.T) {
 			name:      "aliased_pointer_embedding_is_rejected",
 			source:    validateEmptyAliasedPointerEmbeddingSource,
 			wantError: "struct Sample embeds *model.Empty; embed model.Empty by value",
+		},
+		{
+			name:      "pointer_base_embedding_is_rejected",
+			source:    validateBasePointerEmbeddingSource,
+			wantError: "struct Sample embeds *model.Base; embed model.Base by value: the framework recognizes model.Base only when it is embedded by value",
+		},
+		{
+			name:      "pointer_auto_base_embedding_is_rejected",
+			source:    validateAutoBasePointerEmbeddingSource,
+			wantError: "struct Counter embeds *model.AutoBase; embed model.AutoBase by value: the framework recognizes model.AutoBase only when it is embedded by value",
 		},
 	}
 
@@ -1286,6 +1296,34 @@ import gstmodel "github.com/hydroan/gst/model"
 type Sample struct {
 	*gstmodel.Empty
 }
+`
+
+const validateBasePointerEmbeddingSource = `
+package report
+
+import "github.com/hydroan/gst/model"
+
+type Sample struct {
+	Name string
+
+	*model.Base
+}
+
+func (Sample) TableName() string { return "samples" }
+`
+
+const validateAutoBasePointerEmbeddingSource = `
+package report
+
+import "github.com/hydroan/gst/model"
+
+type Counter struct {
+	Name string
+
+	*model.AutoBase
+}
+
+func (Counter) TableName() string { return "counters" }
 `
 
 func TestValidateSSEUsage(t *testing.T) {

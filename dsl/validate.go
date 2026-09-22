@@ -101,9 +101,9 @@ var actionOnlyMethodNames = map[string]bool{
 
 // Validate checks DSL keyword placement and generation semantics for one model file.
 // It intentionally validates only model Design() methods for structs embedding
-// model.Base or model.Empty, matching Parse's model discovery scope, and
-// rejects the one embedding that scope cannot see: *model.Empty (see
-// validateEmptyEmbeddings).
+// model.Base, model.AutoBase or model.Empty, matching Parse's model discovery
+// scope, and rejects the embeddings that scope cannot see: those base types
+// embedded through a pointer (see validatePointerEmbeddings).
 // Do not duplicate Go compiler or type-checker diagnostics here, such as wrong
 // argument counts or incompatible argument types. Keep this validator focused on
 // DSL structure, keyword placement, and generation-specific semantics.
@@ -113,7 +113,7 @@ func Validate(file *ast.File, modelDir string, filename string) []error {
 		delete(designEmpty, name)
 	}
 
-	errs := validateEmptyEmbeddings(file, filename)
+	errs := validatePointerEmbeddings(file, filename)
 	records := make([]serviceActionRecord, 0)
 	rootModelFile := isRootModelFile(file, modelDir, filename)
 	for _, name := range slices.Sorted(maps.Keys(designBase)) {
@@ -132,18 +132,20 @@ func Validate(file *ast.File, modelDir string, filename string) []error {
 	return errs
 }
 
-// validateEmptyEmbeddings rejects every struct of the file that embeds
-// *model.Empty. A virtual model embeds model.Empty by value; the pointer form
-// is not recognized as one, so gg gen would generate nothing for the struct
-// and the framework would take it for a database model without a table name.
-// For
+// validatePointerEmbeddings rejects every struct of the file that embeds one of
+// the framework's base types, model.Base, model.AutoBase or model.Empty,
+// through a pointer. The framework recognizes a base type embedded by value
+// only: gg gen generates nothing for the pointer form, and at run time a
+// database model's nil *model.Base has no id to set while a *model.Empty is
+// taken for a database model without a table name. For
 //
-//	type Login struct {
-//		*model.Empty
+//	type Record struct {
+//		*model.Base
 //	}
 //
-// it reports "struct Login embeds *model.Empty; embed model.Empty by value".
-func validateEmptyEmbeddings(file *ast.File, filename string) []error {
+// it reports "struct Record embeds *model.Base; embed model.Base by value: the
+// framework recognizes model.Base only when it is embedded by value".
+func validatePointerEmbeddings(file *ast.File, filename string) []error {
 	names := goast.ImportedNames(file, ggconst.ImportPathModel, ggconst.PkgModel)
 	errs := make([]error, 0)
 	for _, decl := range file.Decls {
@@ -162,10 +164,14 @@ func validateEmptyEmbeddings(file *ast.File, filename string) []error {
 			}
 			for _, field := range structType.Fields.List {
 				star, ok := field.Type.(*ast.StarExpr)
-				if !ok || len(field.Names) != 0 || !names.Refers(star.X, ggconst.FieldEmpty) {
+				if !ok || len(field.Names) != 0 {
 					continue
 				}
-				errs = append(errs, fmt.Errorf("%s: struct %s embeds *model.Empty; embed model.Empty by value: the pointer form is not recognized as a virtual model", filename, typeSpec.Name.Name))
+				for _, baseType := range []string{ggconst.FieldBase, ggconst.FieldAutoBase, ggconst.FieldEmpty} {
+					if names.Refers(star.X, baseType) {
+						errs = append(errs, fmt.Errorf("%s: struct %s embeds *model.%s; embed model.%[3]s by value: the framework recognizes model.%[3]s only when it is embedded by value", filename, typeSpec.Name.Name, baseType))
+					}
+				}
 			}
 		}
 	}

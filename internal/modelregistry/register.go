@@ -72,9 +72,10 @@ var (
 
 // Register records M as a registered model and queues it for table
 // setup. Models that embed Empty are ignored: they map to no table. A model
-// embedding *Empty panics, telling the author to embed Empty by value: the
-// pointer form is not recognized as a virtual model, and gg gen rejects it as
-// well (see dsl.Validate).
+// embedding a base type through a pointer — *Base, *AutoBase or *Empty —
+// panics, telling the author to embed it by value: the framework recognizes
+// the base types embedded by value only, and gg gen rejects the pointer form
+// as well (see dsl.Validate).
 //
 // It is the single entry point for both steps, so the recorded set and the
 // queue can never disagree about what was registered.
@@ -85,8 +86,12 @@ func Register[M types.Model]() {
 	}
 	if typ.Kind() == reflect.Struct {
 		for field := range typ.Fields() {
-			if field.Anonymous && field.Type == reflect.TypeFor[*Empty]() {
-				panic(fmt.Sprintf("model %s embeds *model.Empty; embed model.Empty by value: the pointer form is not recognized as a virtual model", typ))
+			if !field.Anonymous || field.Type.Kind() != reflect.Pointer {
+				continue
+			}
+			switch base := field.Type.Elem(); base {
+			case reflect.TypeFor[Base](), reflect.TypeFor[AutoBase](), reflect.TypeFor[Empty]():
+				panic(fmt.Sprintf("model %s embeds *model.%s; embed model.%[2]s by value: the framework recognizes model.%[2]s only when it is embedded by value", typ, base.Name()))
 			}
 		}
 	}

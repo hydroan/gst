@@ -86,12 +86,29 @@ type SkippedSample struct {
 	modelregistry.Empty
 }
 
-// PointerEmptySample embeds *Empty, the form Register rejects.
+// PointerEmptySample, PointerBaseSample and PointerAutoBaseSample embed a base
+// type through a pointer, the form Register rejects.
 type PointerEmptySample struct {
 	Name string
 
 	*modelregistry.Empty
 }
+
+type PointerBaseSample struct {
+	Name string
+
+	*modelregistry.Base
+}
+
+func (*PointerBaseSample) TableName() string { return "pointer_base_samples" }
+
+type PointerAutoBaseSample struct {
+	Name string
+
+	*modelregistry.AutoBase
+}
+
+func (*PointerAutoBaseSample) TableName() string { return "pointer_auto_base_samples" }
 
 func TestRegister(t *testing.T) {
 	registered := func() bool {
@@ -126,11 +143,17 @@ func TestRegister(t *testing.T) {
 		require.Empty(t, modelregistry.TableChan)
 	})
 
-	t.Run("an_empty_embedded_by_pointer_is_rejected", func(t *testing.T) {
+	t.Run("a_base_type_embedded_by_pointer_is_rejected", func(t *testing.T) {
 		before := len(modelregistry.RegisteredModels())
 
-		require.PanicsWithValue(t, "model modelregistry_test.PointerEmptySample embeds *model.Empty; embed model.Empty by value: the pointer form is not recognized as a virtual model", func() {
+		require.PanicsWithValue(t, "model modelregistry_test.PointerEmptySample embeds *model.Empty; embed model.Empty by value: the framework recognizes model.Empty only when it is embedded by value", func() {
 			modelregistry.Register[*PointerEmptySample]()
+		})
+		require.PanicsWithValue(t, "model modelregistry_test.PointerBaseSample embeds *model.Base; embed model.Base by value: the framework recognizes model.Base only when it is embedded by value", func() {
+			modelregistry.Register[*PointerBaseSample]()
+		})
+		require.PanicsWithValue(t, "model modelregistry_test.PointerAutoBaseSample embeds *model.AutoBase; embed model.AutoBase by value: the framework recognizes model.AutoBase only when it is embedded by value", func() {
+			modelregistry.Register[*PointerAutoBaseSample]()
 		})
 		require.Len(t, modelregistry.RegisteredModels(), before)
 		require.Empty(t, modelregistry.TableChan)

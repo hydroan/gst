@@ -44,7 +44,8 @@ func AreTypesEqual[M types.Model, REQ types.Request, RSP types.Response]() bool 
 //
 //	type Signups []*Signup
 //
-// Models embed Empty by value; Register and gg gen reject *model.Empty.
+// Models embed Empty by value; Register and gg gen reject the pointer form of
+// every base type.
 func IsEmpty[T any]() bool {
 	typ := reflect.TypeFor[T]()
 	for typ.Kind() == reflect.Pointer {
