@@ -15,7 +15,10 @@ import (
 
 // walkModelFiles walks modelDir and invokes fn for every Go source file that
 // participates in code generation, skipping vendor/testdata directories,
-// test files, ignored files and excluded file names.
+// test files, ignored files (whose names start with "_") and the file names
+// excludes lists. Under model it visits model/sample/record.go, and skips
+// model/sample/record_test.go, model/sample/_draft.go and every file of
+// model/sample/testdata.
 func walkModelFiles(modelDir string, excludes []string, fn func(path string) error) error {
 	return filepath.Walk(modelDir, func(path string, info fs.FileInfo, err error) error {
 		if err != nil {
@@ -40,7 +43,10 @@ func walkModelFiles(modelDir string, excludes []string, fn func(path string) err
 	})
 }
 
-// FindModels finds all model infos in a directory
+// FindModels returns the models declared by the Go files under modelDir that
+// participate in code generation (see walkModelFiles), each carrying the path
+// of its model file (see gen.FindModels). A file that fails to parse or
+// declares an invalid DSL fails the whole call.
 func FindModels(module, modelDir, serviceDir string, excludes []string) ([]*gen.ModelInfo, error) {
 	allModels := make([]*gen.ModelInfo, 0)
 
@@ -65,10 +71,13 @@ func FindModels(module, modelDir, serviceDir string, excludes []string) ([]*gen.
 // ExtractAPIDocs extracts the struct doc comments and enum declarations of
 // every exported type declared under modelDir, including custom request and
 // response types; unexported types never reach the API surface and are
-// skipped. Enum constants may live in a different file than their type
-// declaration; entries of the same package are merged. The returned entries
-// are sorted by package path and type name so generated output stays
-// deterministic.
+// skipped. Each entry is keyed by the import path of its package, module
+// followed by the directory, as in helloworld/model/sample for
+// model/sample/record.go in module helloworld. Enum constants may live in a
+// different file than their type declaration; entries of the same package are
+// merged, so a type Status declared in status.go gathers the values its
+// constants in values.go declare. The returned entries are sorted by package
+// path and type name so generated output stays deterministic.
 func ExtractAPIDocs(module, modelDir string, excludes []string) (gen.APIDocEntries, error) {
 	var entries gen.APIDocEntries
 	enumByKey := make(map[string]*gen.EnumDocEntry)
@@ -125,7 +134,8 @@ func ExtractAPIDocs(module, modelDir string, excludes []string) (gen.APIDocEntri
 	return entries, nil
 }
 
-// HasMethod checks if a struct has a specific method
+// HasMethod reports whether file declares the method methodName on the
+// struct structName, with a value or a pointer receiver.
 func HasMethod(file *ast.File, structName, methodName string) bool {
 	for _, decl := range file.Decls {
 		if funcDecl, ok := decl.(*ast.FuncDecl); ok {
@@ -153,7 +163,9 @@ func HasMethod(file *ast.File, structName, methodName string) bool {
 	return false
 }
 
-// FindServiceStruct finds the service struct that inherits from service.Base[*Model]
+// FindServiceStruct returns the struct declared in file that embeds
+// service.Base[*modelName] (see IsServiceBaseType), or nil when there is
+// none.
 func FindServiceStruct(file *ast.File, modelName string) *ast.TypeSpec {
 	for _, decl := range file.Decls {
 		if genDecl, ok := decl.(*ast.GenDecl); ok {
@@ -176,7 +188,10 @@ func FindServiceStruct(file *ast.File, modelName string) *ast.TypeSpec {
 	return nil
 }
 
-// IsServiceBaseType checks if the type is service.Base[*ModelName]
+// IsServiceBaseType checks if the type is service.Base[*ModelName], with a
+// single type parameter, as in service.Base[*User] or
+// service.Base[*sample.User]. It does not match the service.Base[T1, T2, T3]
+// generated service files embed.
 func IsServiceBaseType(expr ast.Expr, modelName string) bool {
 	if indexExpr, ok := expr.(*ast.IndexExpr); ok {
 		// Check if X is service.Base
@@ -185,7 +200,7 @@ func IsServiceBaseType(expr ast.Expr, modelName string) bool {
 				if selectorExpr.Sel.Name == "Base" {
 					// Check if the type parameter is *ModelName
 					if starExpr, ok := indexExpr.Index.(*ast.StarExpr); ok {
-						// Handle qualified names like model_cmdb.DNS
+						// Handle qualified names like sample.Record
 						switch x := starExpr.X.(type) {
 						case *ast.Ident:
 							return x.Name == modelName

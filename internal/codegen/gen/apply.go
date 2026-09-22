@@ -143,16 +143,34 @@ func renameIdent(node ast.Node, oldName, newName string) {
 	})
 }
 
-// ApplyServiceFile will apply the dsl.Action to the ast.File.
-// It will modify the struct type and struct methods if Payload
-// or Result is changed, and returns true.
-// Otherwise returns false.
-// The servicePkgName parameter specifies the expected package name for the service file.
-// This should match the package name used in service registration to maintain consistency.
+// ApplyServiceFile brings an existing service file in line with action: the
+// package clause with servicePkgName, the service struct and its receivers
+// with the role name of an action declaring a Filename, the type parameters of
+// the service.Base embedding and the request and result types of the action
+// method with the action's Payload and Result, and the gst model import with
+// whether a model.Empty request or result needs it. For example, once the
+// Create action declares Payload[*UserReq]() and Result[*UserRsp](),
+//
+//	service.Base[*model.User, *model.User, *model.User]
+//	func (u *Creator) Create(ctx *gst.ServiceContext, req *model.User) (rsp *model.User, err error)
+//
+// becomes
+//
+//	service.Base[*model.User, *model.UserReq, *model.UserRsp]
+//	func (u *Creator) Create(ctx *gst.ServiceContext, req *model.UserReq) (rsp *model.UserRsp, err error)
+//
+// Method bodies are left alone. The servicePkgName parameter specifies the
+// expected package name for the service file. This should match the package
+// name used in service registration to maintain consistency. It reports
+// whether it changed anything.
 func ApplyServiceFile(file *ast.File, action *dsl.Action, servicePkgName string) bool {
 	return applyServiceFile(file, action, servicePkgName, "")
 }
 
+// applyServiceFile is ApplyServiceFile that also points the first type
+// parameter of the service.Base embedding at correctModelName, the current
+// model, when it is not empty: service.Base[*model.Account, ...] becomes
+// service.Base[*model.User, ...] for User.
 func applyServiceFile(file *ast.File, action *dsl.Action, servicePkgName, correctModelName string) bool {
 	if file == nil || action == nil {
 		return false
@@ -297,7 +315,9 @@ func applyServiceMethod4(fn *ast.FuncDecl, action *dsl.Action, modelPkg string) 
 // actionType selects the pointer form and a bare name selects the value form
 // (the form itself is enforced by gg checks). When targetPkg is empty the
 // current package qualifier is kept. It returns the possibly replaced
-// expression and whether anything changed.
+// expression and whether anything changed. For example, with targetPkg
+// sample it rewrites *model.User to sample.UserRsp for the action type
+// UserRsp.
 func applyTypeRef(expr ast.Expr, targetPkg, actionType string) (ast.Expr, bool) {
 	if actionType == "" {
 		return expr, false
@@ -351,8 +371,8 @@ func applyTypeRef(expr ast.Expr, targetPkg, actionType string) (ast.Expr, bool) 
 }
 
 // applyServiceType updates a service struct type to match the generated service generics.
-// It transforms: type user struct { service.Base[*model.User, *model.User, *model.User] }
-// into:         type user struct { service.Base[*model.User, *model.UserReq, *model.UserRsp] }
+// It transforms: type Creator struct { service.Base[*model.User, *model.User, *model.User] }
+// into:          type Creator struct { service.Base[*model.User, *model.UserReq, *model.UserRsp] }
 // transcribing the declared form of the action's Payload/Result. When
 // correctModelName is provided, it also corrects the first generic parameter
 // to the current model.
@@ -814,6 +834,11 @@ func frameworkImportNamed(file *ast.File, phase consts.Phase, name string) strin
 	return ""
 }
 
+// serviceModelPackageName returns the qualifier the service struct of the
+// file refers to the model package by: the package of the first type
+// parameter of its service.Base embedding, as in sample for
+// service.Base[*sample.User, *sample.UserReq, *sample.UserRsp]. It returns ""
+// when the file declares no service struct.
 func serviceModelPackageName(file *ast.File) string {
 	if file == nil {
 		return ""
@@ -863,6 +888,9 @@ func serviceModelPackageName(file *ast.File) string {
 	return ""
 }
 
+// selectorPackageName returns the package qualifier of a qualified type,
+// looking through one pointer: sample for *sample.User and sample.User, and
+// "" for any other expression.
 func selectorPackageName(expr ast.Expr) string {
 	switch t := expr.(type) {
 	case *ast.StarExpr:

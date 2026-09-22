@@ -8,7 +8,10 @@ import (
 	"github.com/hydroan/gst/consts"
 )
 
-// StmtLogInfo create *ast.ExprStmt represents `log.Info(str)`
+// StmtLogInfo builds the statement that logs str, a quoted Go string
+// literal: for str `"item create"` it builds
+//
+//	log.Info("item create")
 func StmtLogInfo(str string) *ast.ExprStmt {
 	return &ast.ExprStmt{
 		X: &ast.CallExpr{
@@ -28,18 +31,32 @@ func StmtLogInfo(str string) *ast.ExprStmt {
 	}
 }
 
+// EmptyLine builds an empty statement, which the generated service methods
+// place before their return statement. It prints as nothing, so no blank line
+// shows up there: a body built from StmtLogInfo(`"item create"`), EmptyLine()
+// and Returns(ast.NewIdent("nil")) prints as
+//
+//	log.Info("item create")
+//	return nil
 func EmptyLine() *ast.EmptyStmt {
 	return &ast.EmptyStmt{}
 }
 
+// Returns builds the return statement of exprs: for ast.NewIdent("rsp") and
+// ast.NewIdent("nil") it builds
+//
+//	return rsp, nil
 func Returns(exprs ...ast.Expr) *ast.ReturnStmt {
 	return &ast.ReturnStmt{
 		Results: exprs,
 	}
 }
 
-// StmtLogWithContext create *ast.AssignStmt represents `log := u.WithContext(ctx, ctx.Phase())`
-// modelVarName is model variable name.
+// StmtLogWithContext builds the statement that opens a generated service
+// method, taking the logger of the phase from the receiver named
+// modelVarName: for u it builds
+//
+//	log := u.WithContext(ctx, ctx.Phase())
 func StmtLogWithContext(modelVarName string) *ast.AssignStmt {
 	return &ast.AssignStmt{
 		Lhs: []ast.Expr{
@@ -66,9 +83,13 @@ func StmtLogWithContext(modelVarName string) *ast.AssignStmt {
 	}
 }
 
-// StmtModelRegister creates a *ast.ExprStmt represents golang code like below:
+// StmtModelRegister builds the registration of a model in model.gen.go.
+// modelName is the model type as the file refers to it, qualified when the
+// model is declared outside the root model package: for User and
+// sample.Group it builds
 //
 //	model.Register[*User]()
+//	model.Register[*sample.Group]()
 func StmtModelRegister(modelName string) *ast.ExprStmt {
 	return &ast.ExprStmt{
 		X: &ast.CallExpr{
@@ -85,7 +106,9 @@ func StmtModelRegister(modelName string) *ast.ExprStmt {
 	}
 }
 
-// StmtServiceRegister creates a *ast.ExprStmt represents golang code like below:
+// StmtServiceRegister builds the registration of a service in
+// service.gen.go. serviceImport is the service type as the file refers to
+// it: for user.Creator, consts.PHASE_CREATE and the route users it builds
 //
 //	service.Register[*user.Creator](consts.PHASE_CREATE, "users")
 //
@@ -118,15 +141,22 @@ func StmtServiceRegister(serviceImport string, phase consts.Phase, route string)
 	}
 }
 
-// StmtRouterRegister creates a *ast.ExprStmt represents golang code like below:
+// StmtRouterRegister builds the registration of an action in router.gen.go:
+// the model type, then the action's request and result types, reqName and
+// rspName qualified by modelPkgName, the qualifier the file refers to the
+// model package by. For example, it builds
 //
 //	router.Register[*model.Group, *model.Group, *model.Group](router.Auth(), "group", &gst.ControllerConfig[*model.Group]{}, consts.Create)
-//	router.Register[*model.Group, *model.Group, *model.Group](router.Pub(), "login", &gst.ControllerConfig[*auth.LoginReq]{}, consts.Create)
+//	router.Register[*model.Group, *gstmodel.Empty, *model.GroupListRsp](router.Auth(), "groups", &gst.ControllerConfig[*model.Group]{}, consts.List)
+//	router.Register[*group.Group, *group.Group, *group.Group](router.Auth(), "groups/:id", &gst.ControllerConfig[*group.Group]{ParamName: "id"}, consts.Get)
 //
-// routerGroup names the router group accessor ("Auth" or "Pub") and route is
-// the raw route string, shared verbatim with the matching StmtServiceRegister
-// statement. gstModelPkg is the qualifier the router file uses for
-// model.Empty, resolved once per file by RouterGstModelUse.
+// A dsl.PayloadEmpty side becomes *model.Empty under gstModelPkg, the
+// qualifier the router file uses for model.Empty, resolved once per file by
+// RouterGstModelUse. routerGroup names the router group accessor ("Auth" or
+// "Pub"), route is the raw route string, shared verbatim with the matching
+// StmtServiceRegister statement, paramName is the route parameter the
+// controller reads the resource id from, "" for none, and verb names the
+// consts value of the action, such as Create.
 func StmtRouterRegister(modelPkgName, modelName, reqName, rspName, gstModelPkg string, routerGroup string, route string, paramName string, verb string) *ast.ExprStmt {
 	// The dsl.PayloadEmpty sentinel on either side resolves to
 	// *<gstModelPkg>.Empty. gstModelPkg is the file-level qualifier decided

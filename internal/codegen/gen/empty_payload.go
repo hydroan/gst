@@ -10,8 +10,9 @@ import (
 )
 
 // GstModelImportPath is the import path of the gst model package that
-// defines model.Empty, the request type generated for List and Get actions
-// declaring Result (dsl.PayloadEmpty).
+// defines model.Empty, the type generated for the dsl.PayloadEmpty side of an
+// action: the side it leaves undeclared when it declares the other one, such
+// as the request of a List or Get action declaring Result.
 const GstModelImportPath = "github.com/hydroan/gst/model"
 
 const (
@@ -25,12 +26,14 @@ const (
 // RouterGstModelUse resolves how the generated router file references the
 // gst model package. pkgName is the qualifier emitted for model.Empty: the
 // plain package name by default, falling back to the gstmodel alias when a
-// routed business model package is itself named "model" (Go forbids an
-// identifier in both the file and package block, so the plain qualifier
-// would clash with that import). needed reports whether any routed action
-// resolves either side to dsl.PayloadEmpty, i.e. whether the qualifier
-// appears in the file at all. Call it after the route/model ignore passes so
-// disabled actions no longer count as routed.
+// routed business model package is itself named "model" (two imports cannot
+// take the same name in one file, so the plain qualifier would clash with
+// that import). needed reports whether any routed action resolves either
+// side to dsl.PayloadEmpty, i.e. whether the qualifier appears in the file at
+// all. For example, a routed root model package with a List declaring only
+// its result yields ("gstmodel", true), and routed models in package sample
+// declaring both sides of every action yield ("model", false). Call it after
+// the route/model ignore passes so disabled actions no longer count as routed.
 func RouterGstModelUse(models []*ModelInfo) (pkgName string, needed bool) {
 	pkgName = gstModelPkgName
 	for _, m := range models {
@@ -54,7 +57,8 @@ func RouterGstModelUse(models []*ModelInfo) (pkgName string, needed bool) {
 // GstModelImportEntry returns the import entry ("path" or "alias path") that
 // makes the given gst model package qualifier resolvable in a generated file:
 // a service file takes it through imports(), the router file through
-// BuildRouterFile.
+// BuildRouterFile. It returns "gstmodel github.com/hydroan/gst/model" for
+// gstmodel and "github.com/hydroan/gst/model" for model.
 func GstModelImportEntry(pkgName string) string {
 	if pkgName == gstModelPkgAlias {
 		return gstModelPkgAlias + " " + GstModelImportPath
@@ -65,7 +69,8 @@ func GstModelImportEntry(pkgName string) string {
 // emptyReqPkgName returns the package qualifier a generated service file uses
 // to reference model.Empty. When the file refers to the business model
 // package as "model" (modelQualifier), as with the root model package, the gst
-// model package is imported under the gstmodel alias to avoid the name clash.
+// model package is imported under the gstmodel alias to avoid the name clash:
+// it returns gstmodel for model and model for sample.
 func emptyReqPkgName(modelQualifier string) string {
 	if modelQualifier == gstModelPkgName {
 		return gstModelPkgAlias
@@ -74,13 +79,16 @@ func emptyReqPkgName(modelQualifier string) string {
 }
 
 // emptyReqImport returns the imports() entry ("path" or "alias path") that
-// makes the emptyReqPkgName qualifier resolvable in a generated service file.
+// makes the emptyReqPkgName qualifier resolvable in a generated service file:
+// "gstmodel github.com/hydroan/gst/model" for model, and
+// "github.com/hydroan/gst/model" for any other modelQualifier.
 func emptyReqImport(modelQualifier string) string {
 	return GstModelImportEntry(emptyReqPkgName(modelQualifier))
 }
 
 // emptyReqExpr builds the *<pkgName>.Empty type expression that generated
-// code uses as the request type for dsl.PayloadEmpty.
+// code uses as the type of a dsl.PayloadEmpty request or result: for
+// gstmodel it builds *gstmodel.Empty.
 func emptyReqExpr(pkgName string) ast.Expr {
 	return &ast.StarExpr{
 		X: &ast.SelectorExpr{
@@ -90,13 +98,15 @@ func emptyReqExpr(pkgName string) ast.Expr {
 	}
 }
 
-// isEmptyPayload reports whether the request type name is the
-// dsl.PayloadEmpty sentinel.
-func isEmptyPayload(reqName string) bool { return reqName == dsl.PayloadEmpty }
+// isEmptyPayload reports whether the action type name, of a request or a
+// result, is the dsl.PayloadEmpty sentinel.
+func isEmptyPayload(typeName string) bool { return typeName == dsl.PayloadEmpty }
 
-// payloadTypeTarget resolves an action payload name to the package qualifier
-// and type name used when rewriting existing service code. modelPkg is the
-// business model package qualifier of the file being rewritten.
+// payloadTypeTarget resolves an action type name, of a request or a result,
+// to the package qualifier and type name used when rewriting existing service
+// code. modelPkg is the business model package qualifier of the file being
+// rewritten. With modelPkg sample it returns ("model", "*Empty") for
+// dsl.PayloadEmpty and ("sample", "*RecordReq") for *RecordReq.
 func payloadTypeTarget(payload, modelPkg string) (targetPkg, actionType string) {
 	if isEmptyPayload(payload) {
 		return emptyReqPkgName(modelPkg), "*Empty"
@@ -105,9 +115,13 @@ func payloadTypeTarget(payload, modelPkg string) (targetPkg, actionType string) 
 }
 
 // ensureEmptyReqImportSpec inserts the gst model import into a parsed service
-// file so a rewritten *model.Empty request type resolves. The import is
-// aliased to gstmodel when the business model package is itself named
-// "model". It reports whether the file was modified.
+// file so a rewritten *model.Empty request or result type resolves: when the
+// file refers to the business model package as model (modelPkg), it inserts
+//
+//	gstmodel "github.com/hydroan/gst/model"
+//
+// and "github.com/hydroan/gst/model" otherwise. It reports whether the file
+// was modified.
 func ensureEmptyReqImportSpec(file *ast.File, modelPkg string) bool {
 	if file == nil || findImportSpec(file, GstModelImportPath) != nil {
 		return false
@@ -134,8 +148,8 @@ func ensureEmptyReqImportSpec(file *ast.File, modelPkg string) bool {
 }
 
 // pruneGstModelImportSpec removes the gst model import when the file no
-// longer references its qualifier, so switching a request type back to a
-// business type does not leave an unused import behind. Hand-written code
+// longer references its qualifier, so switching a request or result type back
+// to a business type does not leave an unused import behind. Hand-written code
 // that still references the package keeps the import. It reports whether the
 // file was modified.
 func pruneGstModelImportSpec(file *ast.File) bool {
@@ -182,6 +196,8 @@ func pruneGstModelImportSpec(file *ast.File) bool {
 }
 
 // findImportSpec returns the import spec for the given import path, or nil.
+// It looks through file.Imports, the imports the file was parsed with, so it
+// misses an import inserted into the AST since.
 func findImportSpec(file *ast.File, importPath string) *ast.ImportSpec {
 	for _, imp := range file.Imports {
 		if imp.Path != nil && strings.Trim(imp.Path.Value, `"`) == importPath {

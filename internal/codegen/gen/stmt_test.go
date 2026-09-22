@@ -22,9 +22,10 @@ func TestStmtLogInfo(t *testing.T) {
 		want string
 	}{
 		{
-			name: "hello_world",
-			str:  `"hello world"`,
-			want: `log.Info("hello world")`,
+			// The example of the StmtLogInfo doc comment.
+			name: "item_create",
+			str:  `"item create"`,
+			want: `log.Info("item create")`,
 		},
 	}
 	for _, tt := range tests {
@@ -129,15 +130,16 @@ func TestStmtModelRegister(t *testing.T) {
 		structName string
 		want       string
 	}{
+		// The examples of the StmtModelRegister doc comment.
 		{
 			name:       "User",
 			structName: "User",
 			want:       `model.Register[*User]()`,
 		},
 		{
-			name:       "Group",
-			structName: "Group",
-			want:       `model.Register[*Group]()`,
+			name:       "model_of_another_package",
+			structName: "sample.Group",
+			want:       `model.Register[*sample.Group]()`,
 		},
 	}
 	for _, tt := range tests {
@@ -165,18 +167,19 @@ func TestStmtServiceRegister(t *testing.T) {
 		want       string
 	}{
 		{
+			// The example of the StmtServiceRegister doc comment.
 			name:       "user",
-			structName: "user",
+			structName: "user.Creator",
 			route:      "users",
 			phase:      consts.PHASE_CREATE,
-			want:       `service.Register[*user](consts.PHASE_CREATE, "users")`,
+			want:       `service.Register[*user.Creator](consts.PHASE_CREATE, "users")`,
 		},
 		{
 			name:       "group",
-			structName: "group",
+			structName: "group.Updater",
 			route:      "groups/:id",
 			phase:      consts.PHASE_UPDATE,
-			want:       `service.Register[*group](consts.PHASE_UPDATE, "groups/:id")`,
+			want:       `service.Register[*group.Updater](consts.PHASE_UPDATE, "groups/:id")`,
 		},
 	}
 	for _, tt := range tests {
@@ -209,6 +212,7 @@ func TestStmtRouterRegister(t *testing.T) {
 		want         string
 	}{
 		{
+			// An example of the StmtRouterRegister doc comment.
 			name:         "model_as_payload_and_result",
 			modelPkgName: "model",
 			modelName:    "Group",
@@ -273,7 +277,8 @@ func TestStmtRouterRegister(t *testing.T) {
 		{
 			// A project routing a root model package keeps the gstmodel
 			// alias so the Empty qualifier cannot clash with the business
-			// "model" import.
+			// "model" import. An example of the StmtRouterRegister doc
+			// comment.
 			name:         "empty_payload_in_root_model_package_keeps_gstmodel_alias",
 			modelPkgName: "model",
 			modelName:    "Group",
@@ -287,7 +292,7 @@ func TestStmtRouterRegister(t *testing.T) {
 		},
 		{
 			// A route ending in a path parameter names it in the controller
-			// config.
+			// config. An example of the StmtRouterRegister doc comment.
 			name:         "route_param_named_in_controller_config",
 			modelPkgName: "group",
 			modelName:    "Group",

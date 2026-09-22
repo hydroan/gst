@@ -449,6 +449,7 @@ func TestGenServiceMethod1(t *testing.T) {
 		want  string
 	}{
 		{
+			// The example of the genServiceMethod1 doc comment.
 			name: "user",
 			info: &ModelInfo{
 				ModelPkgName: "model",
@@ -487,6 +488,7 @@ func TestGenServiceMethod2(t *testing.T) {
 		want  string
 	}{
 		{
+			// The example of the genServiceMethod2 doc comment.
 			name: "user",
 			info: &ModelInfo{
 				ModelPkgName: "model",
@@ -525,6 +527,7 @@ func TestGenServiceMethod3(t *testing.T) {
 		want  string
 	}{
 		{
+			// The example of the genServiceMethod3 doc comment.
 			name: "user",
 			info: &ModelInfo{
 				ModelPkgName: "model",
@@ -565,6 +568,7 @@ func TestGenServiceMethod4(t *testing.T) {
 		want    string
 	}{
 		{
+			// The example of the genServiceMethod4 doc comment.
 			name: "user",
 			info: &ModelInfo{
 				ModelPkgName: "model",
@@ -644,6 +648,7 @@ func TestGenServiceMethod5(t *testing.T) {
 		want  string
 	}{
 		{
+			// The example of the genServiceMethod5 doc comment.
 			name: "user",
 			info: &ModelInfo{
 				ModelPkgName: "model",
@@ -682,6 +687,7 @@ func TestGenServiceMethod6(t *testing.T) {
 		want  string
 	}{
 		{
+			// The example of the genServiceMethod6 doc comment.
 			name: "user",
 			info: &ModelInfo{
 				ModelPkgName: "model",
@@ -709,6 +715,109 @@ func TestGenServiceMethod6(t *testing.T) {
 				t.Errorf("genServiceMethod6() = \n%v\n, want \n%v\n", pretty.Sprintf("% #v", got), pretty.Sprintf("% #v", tt.want))
 			}
 		})
+	}
+}
+
+func TestGenServiceMethod7(t *testing.T) {
+	tests := []struct {
+		name  string
+		info  *ModelInfo
+		phase consts.Phase
+		want  string
+	}{
+		{
+			// The example of the genServiceMethod7 doc comment.
+			name: "user",
+			info: &ModelInfo{
+				ModelPkgName: "model",
+				ModelName:    "User",
+				ModelVarName: "u",
+				ModulePath:   "codegen",
+				ModelFileDir: "model",
+			},
+			phase: consts.PHASE_SSE,
+			want: `func (u *Streamer) SSE(ctx *gst.ServiceContext) (err error) {
+	log := u.WithContext(ctx, ctx.Phase())
+	log.Info("user sse")
+	return nil
+}`,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := FormatNode(genServiceMethod7(tt.info, nil, tt.phase, tt.phase.RoleName()))
+			if err != nil {
+				t.Error(err)
+				return
+			}
+			if got != tt.want {
+				t.Errorf("genServiceMethod7() = \n%v\n, want \n%v\n", pretty.Sprintf("% #v", got), pretty.Sprintf("% #v", tt.want))
+			}
+		})
+	}
+}
+
+// TestGenerateServiceCreate compares the whole service file GenerateService
+// builds for the example of its doc comment: a Create action on a database
+// model, which gets the before and after hooks.
+func TestGenerateServiceCreate(t *testing.T) {
+	info := &ModelInfo{
+		ModulePath:   "helloworld",
+		ModelPkgName: "model",
+		ModelName:    "User",
+		ModelVarName: "u",
+		ModelFileDir: "model",
+		Design:       &dsl.Design{},
+	}
+	action := &dsl.Action{
+		Enabled: true,
+		Service: true,
+		Payload: "*User",
+		Result:  "*User",
+		Phase:   consts.PHASE_CREATE,
+	}
+
+	file := GenerateService(info, action, consts.PHASE_CREATE, "user")
+	if file == nil {
+		t.Fatal("GenerateService returned nil")
+	}
+	got, err := FormatNodeExtra(file)
+	if err != nil {
+		t.Fatalf("format generated service failed: %v", err)
+	}
+	want := `package user
+
+import (
+	"helloworld/model"
+
+	"github.com/hydroan/gst"
+	"github.com/hydroan/gst/service"
+)
+
+type Creator struct {
+	service.Base[*model.User, *model.User, *model.User]
+}
+
+func (u *Creator) Create(ctx *gst.ServiceContext, req *model.User) (rsp *model.User, err error) {
+	log := u.WithContext(ctx, ctx.Phase())
+	log.Info("user create")
+	return rsp, nil
+}
+
+func (u *Creator) CreateBefore(ctx *gst.ServiceContext, user *model.User) error {
+	log := u.WithContext(ctx, ctx.Phase())
+	log.Info("user create before")
+	return nil
+}
+
+func (u *Creator) CreateAfter(ctx *gst.ServiceContext, user *model.User) error {
+	log := u.WithContext(ctx, ctx.Phase())
+	log.Info("user create after")
+	return nil
+}
+`
+	if got != want {
+		t.Errorf("GenerateService() =\n%s\nwant\n%s", got, want)
 	}
 }
 

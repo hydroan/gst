@@ -22,7 +22,10 @@ import (
 // here builds its own import set, so there is nothing left for it to fix.
 var formatOnlyImports = &goimports.Options{Comments: true, TabIndent: true, TabWidth: 8, FormatOnly: true}
 
-// FormatNode use go standard lib "go/format" to format ast.Node into code.
+// FormatNode prints node as Go source in the go/format style, moving the
+// generated header onto a line of its own (see fixCommentPosition). With
+// processImport set, goimports then regroups and sorts the imports, adding or
+// removing none (see formatOnlyImports).
 func FormatNode(node ast.Node, processImport ...bool) (string, error) {
 	var buf bytes.Buffer
 	fset := token.NewFileSet()
@@ -51,12 +54,17 @@ func FormatNode(node ast.Node, processImport ...bool) (string, error) {
 	return formattedStr, nil
 }
 
-// FormatNodeExtra use "https://github.com/mvdan/gofumpt" to format ast.Node into code.
+// FormatNodeExtra prints node like FormatNode, but in the stricter gofumpt
+// style (https://github.com/mvdan/gofumpt) with its GroupParams,
+// ClotheReturns and BalanceCalls rules. The generated registration and
+// service files are printed through it.
 func FormatNodeExtra(node ast.Node, processImport ...bool) (string, error) {
 	return FormatNodeExtraWithFileSet(node, nil, processImport...)
 }
 
-// FormatNodeExtraWithFileSet formats the node with the given FileSet, which keeps comments in place.
+// FormatNodeExtraWithFileSet is FormatNodeExtra printing node through fset,
+// the FileSet the positions of a parsed file refer to, which keeps its
+// comments in place; a nil fset stands for a new one.
 func FormatNodeExtraWithFileSet(node ast.Node, fset *token.FileSet, processImport ...bool) (string, error) {
 	var buf bytes.Buffer
 	// create a new FileSet if none was provided

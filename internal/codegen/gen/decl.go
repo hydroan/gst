@@ -116,9 +116,11 @@ func imports(modulePath, modelFileDir, modelQualifier string, phase consts.Phase
 
 // actionTypeExpr builds the type expression of one explicit action type,
 // transcribing the declared form: a leading '*' yields the pointer form and a
-// bare name stays a value type. The form itself is enforced by gg checks
-// (struct types are pointers, slice and map types are values), so the
-// generator emits exactly what the DSL declares.
+// bare name stays a value type, so for the package sample it builds
+// *sample.RecordReq from *RecordReq and sample.RecordRsp from RecordRsp. The
+// form itself is enforced by gg checks (struct types are pointers, slice and
+// map types are values), so the generator emits exactly what the DSL
+// declares.
 func actionTypeExpr(pkgName, typeName string) ast.Expr {
 	sel := &ast.SelectorExpr{
 		X:   ast.NewIdent(pkgName),
@@ -146,13 +148,13 @@ func actionTypeOrEmptyExpr(modelQualifier, typeName string) ast.Expr {
 // types, referring to the model package by modelQualifier (see
 // serviceModelQualifier):
 //
-//	type Creator struct {
+//	type Updater struct {
 //		service.Base[*model.User, *model.UserReq, *model.UserRsp]
 //	}
 //
 // or, with modelQualifier model_service,
 //
-//	type Creator struct {
+//	type Updater struct {
 //		service.Base[*model_service.User, *model_service.UserReq, *model_service.UserRsp]
 //	}
 func types(modelQualifier, modelName, reqName, rspName, roleName string) *ast.GenDecl {
@@ -197,11 +199,14 @@ func types(modelQualifier, modelName, reqName, rspName, roleName string) *ast.Ge
 	}
 }
 
-// serviceMethod1 generates an ast node that represents the declaration of below:
-// For example:
+// serviceMethod1 builds the declaration of a hook taking one model, with the
+// given body. For example:
 //
-//	"func (u *Creator) CreateBefore(ctx *gst.ServiceContext, user *model.User) error {\n}"
-//	"func (g *Updater) UpdateAfter(ctx *gst.ServiceContext, group *model.Group) error {\n}",
+//	func (u *Creator) CreateBefore(ctx *gst.ServiceContext, user *model.User) error {
+//	}
+//
+//	func (g *Updater) UpdateAfter(ctx *gst.ServiceContext, group *model_auth.Group) error {
+//	}
 func serviceMethod1(recvName, modelName, modelQualifier string, phase consts.Phase, roleName string, body ...ast.Stmt) *ast.FuncDecl {
 	return &ast.FuncDecl{
 		Recv: &ast.FieldList{
@@ -252,11 +257,11 @@ func serviceMethod1(recvName, modelName, modelQualifier string, phase consts.Pha
 	}
 }
 
-// serviceMethod2 generates an ast node that represents the declaration of below:
-// For example:
+// serviceMethod2 builds the declaration of a hook taking a pointer to a list
+// of models, with the given body. For example:
 //
-//	"func (u *Lister) ListBefore(ctx *gst.ServiceContext, users *[]*model.User) error {\n}"
-//	"func (u *Lister) ListAfter(ctx *gst.ServiceContext, users *[]*model.User) error {\n}"
+//	func (u *Lister) ListBefore(ctx *gst.ServiceContext, users *[]*model.User) error {
+//	}
 func serviceMethod2(recvName, modelName, modelQualifier string, phase consts.Phase, roleName string, body ...ast.Stmt) *ast.FuncDecl {
 	return &ast.FuncDecl{
 		Recv: &ast.FieldList{
@@ -311,11 +316,11 @@ func serviceMethod2(recvName, modelName, modelQualifier string, phase consts.Pha
 	}
 }
 
-// serviceMethod3 generates an ast node that represents the declaration of below:
-// For example:
+// serviceMethod3 builds the declaration of a hook taking models as variadic
+// arguments, with the given body. For example:
 //
-//	"func (u *ManyCreator) CreateManyBefore(ctx *gst.ServiceContext, users ...*model.User) error {\n}"
-//	"func (u *ManyCreator) CreateManyAfter(ctx *gst.ServiceContext, users ...*model.User) error {\n}"
+//	func (u *ManyCreator) CreateManyBefore(ctx *gst.ServiceContext, users ...*model.User) error {
+//	}
 func serviceMethod3(recvName, modelName, modelQualifier string, phase consts.Phase, roleName string, body ...ast.Stmt) *ast.FuncDecl {
 	return &ast.FuncDecl{
 		Recv: &ast.FieldList{
@@ -368,10 +373,11 @@ func serviceMethod3(recvName, modelName, modelQualifier string, phase consts.Pha
 	}
 }
 
-// serviceMethod4 generates an ast node that represents the declaration of below:
-// For example:
+// serviceMethod4 builds the declaration of an action method taking the
+// request and returning the result, with the given body. For example:
 //
-//	func (u *Creator) Create(ctx *gst.ServiceContext, req *model.User) (rsp *model.User, err error) {\n}
+//	func (u *Creator) Create(ctx *gst.ServiceContext, req *model.User) (rsp *model.User, err error) {
+//	}
 func serviceMethod4(recvName, modelQualifier, reqName, rspName string, phase consts.Phase, roleName string, body ...ast.Stmt) *ast.FuncDecl {
 	// The dsl.PayloadEmpty sentinel resolves to *model.Empty from the gst
 	// model package on either side; any other action type is emitted in its
@@ -428,10 +434,11 @@ func serviceMethod4(recvName, modelQualifier, reqName, rspName string, phase con
 	}
 }
 
-// serviceMethod5 generates an ast node that represents the declaration of below:
-// For example:
+// serviceMethod5 builds the declaration of an Import method reading models,
+// with the given body. For example:
 //
-//	func (a *Importer) Import(ctx *gst.ServiceContext, reader io.Reader) ([]*model.Sample, error) {\n}
+//	func (a *Importer) Import(ctx *gst.ServiceContext, reader io.Reader) (samples []*model.Sample, err error) {
+//	}
 func serviceMethod5(recvName, modelName, modelQualifier, roleName string, body ...ast.Stmt) *ast.FuncDecl {
 	return &ast.FuncDecl{
 		Recv: &ast.FieldList{
@@ -492,56 +499,11 @@ func serviceMethod5(recvName, modelName, modelQualifier, roleName string, body .
 	}
 }
 
-// serviceMethod7 generates an ast node that represents the declaration of below:
-// For example:
+// serviceMethod6 builds the declaration of an Export method writing models,
+// with the given body. For example:
 //
-//	func (a *Streamer) SSE(ctx *gst.ServiceContext) error {\n}
-func serviceMethod7(recvName, roleName string, body ...ast.Stmt) *ast.FuncDecl {
-	return &ast.FuncDecl{
-		Recv: &ast.FieldList{
-			List: []*ast.Field{
-				{
-					Names: []*ast.Ident{ast.NewIdent(recvName)},
-					Type: &ast.StarExpr{
-						X: ast.NewIdent(roleName),
-					},
-				},
-			},
-		},
-		Name: ast.NewIdent("SSE"),
-		Type: &ast.FuncType{
-			Params: &ast.FieldList{
-				List: []*ast.Field{
-					{
-						Names: []*ast.Ident{ast.NewIdent("ctx")},
-						Type: &ast.StarExpr{
-							X: &ast.SelectorExpr{
-								X:   ast.NewIdent("gst"),
-								Sel: ast.NewIdent("ServiceContext"),
-							},
-						},
-					},
-				},
-			},
-			Results: &ast.FieldList{
-				List: []*ast.Field{
-					{
-						Names: []*ast.Ident{ast.NewIdent("err")},
-						Type:  ast.NewIdent("error"),
-					},
-				},
-			},
-		},
-		Body: &ast.BlockStmt{
-			List: body,
-		},
-	}
-}
-
-// serviceMethod6 generates an ast node that represents the declaration of below:
-// For example:
-//
-//	func (a *Exporter) Export(ctx *gst.ServiceContext, samples ...*model.Sample) ([]byte, error) {\n}
+//	func (a *Exporter) Export(ctx *gst.ServiceContext, samples ...*model.Sample) (data []byte, err error) {
+//	}
 func serviceMethod6(recvName, modelName, modelQualifier, roleName string, body ...ast.Stmt) *ast.FuncDecl {
 	paramName := pluralizeCli.Plural(strings.ToLower(modelName))
 
@@ -590,6 +552,53 @@ func serviceMethod6(recvName, modelName, modelQualifier, roleName string, body .
 							Elt: ast.NewIdent("byte"),
 						},
 					},
+					{
+						Names: []*ast.Ident{ast.NewIdent("err")},
+						Type:  ast.NewIdent("error"),
+					},
+				},
+			},
+		},
+		Body: &ast.BlockStmt{
+			List: body,
+		},
+	}
+}
+
+// serviceMethod7 builds the declaration of an SSE method, with the given
+// body. For example:
+//
+//	func (a *Streamer) SSE(ctx *gst.ServiceContext) (err error) {
+//	}
+func serviceMethod7(recvName, roleName string, body ...ast.Stmt) *ast.FuncDecl {
+	return &ast.FuncDecl{
+		Recv: &ast.FieldList{
+			List: []*ast.Field{
+				{
+					Names: []*ast.Ident{ast.NewIdent(recvName)},
+					Type: &ast.StarExpr{
+						X: ast.NewIdent(roleName),
+					},
+				},
+			},
+		},
+		Name: ast.NewIdent("SSE"),
+		Type: &ast.FuncType{
+			Params: &ast.FieldList{
+				List: []*ast.Field{
+					{
+						Names: []*ast.Ident{ast.NewIdent("ctx")},
+						Type: &ast.StarExpr{
+							X: &ast.SelectorExpr{
+								X:   ast.NewIdent("gst"),
+								Sel: ast.NewIdent("ServiceContext"),
+							},
+						},
+					},
+				},
+			},
+			Results: &ast.FieldList{
+				List: []*ast.Field{
 					{
 						Names: []*ast.Ident{ast.NewIdent("err")},
 						Type:  ast.NewIdent("error"),

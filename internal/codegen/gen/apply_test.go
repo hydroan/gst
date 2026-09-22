@@ -33,6 +33,8 @@ func TestApplyServiceFile(t *testing.T) {
 		want           string
 	}{
 		{
+			// The rewrite the ApplyServiceFile doc comment shows, here on a
+			// service struct named user.
 			name: "user_create_with_payload_result",
 			code: dataServiceUserCreate,
 			action: &dsl.Action{

@@ -44,11 +44,19 @@ type ModelInfo struct {
 	RegisterIgnored bool
 }
 
+// ServiceTargetInfo locates the service file of an action (see
+// ServiceTarget). For a Create action on the model Item of model/sample/item.go
+// in module helloworld it holds
+//
+//	Dir:         "service/sample/item"
+//	FilePath:    "service/sample/item/create.go"
+//	ImportPath:  "helloworld/service/sample/item"
+//	PackageName: "item"
 type ServiceTargetInfo struct {
-	Dir         string
-	FilePath    string
-	ImportPath  string
-	PackageName string
+	Dir         string // directory of the service file, under the service directory
+	FilePath    string // path of the service file
+	ImportPath  string // import path of the service package
+	PackageName string // name of the service package
 }
 
 // ServiceOutputRel returns the path under the service root where generated service .go files
@@ -82,6 +90,14 @@ func ServiceOutputRel(modelFilePath, modelDir string) string {
 	return outRel
 }
 
+// ServiceTarget locates the service file of the action on model m under
+// serviceDir. By default the file lives in a package of its own named after
+// the model, in the directory ServiceOutputRel maps the model file to: a
+// Create action on the model Role of model/authz/role.go goes to
+// service/authz/role/create.go, in package role. With Flatten the file lives
+// in the directory of the model package itself and takes its package name:
+// with Filename("role.go") too, the same action goes to service/authz/role.go,
+// in package authz.
 func ServiceTarget(m *ModelInfo, action *dsl.Action, modelDir, serviceDir string) ServiceTargetInfo {
 	rel := ServiceOutputRel(m.ModelFilePath, modelDir)
 	packageName := strings.ToLower(m.ModelName)
@@ -99,6 +115,10 @@ func ServiceTarget(m *ModelInfo, action *dsl.Action, modelDir, serviceDir string
 	}
 }
 
+// flattenedServiceOutputRel returns the directory under the service root a
+// flattened service file of the model file lives in: the directory of the
+// model file relative to modelDir, as in "authz" for model/authz/role.go, or
+// "" for a model file in modelDir itself.
 func flattenedServiceOutputRel(modelFilePath, modelDir string) string {
 	modelDir = filepath.Clean(modelDir)
 	modelFilePath = filepath.Clean(modelFilePath)
@@ -133,7 +153,10 @@ func ModelPackageName(dirName string) string {
 	return strings.ReplaceAll(dirName, "_", "")
 }
 
-// GetModulePath parses go.mod to get module path
+// GetModulePath returns the module path of the project in the working
+// directory: the one go list -m reports, run with workspace mode off, or,
+// when that fails, the one the module directive of go.mod declares. It fails
+// when the working directory holds no go.mod.
 func GetModulePath() (string, error) {
 	file, err := os.Open("go.mod")
 	if err != nil {
@@ -171,7 +194,7 @@ func GetModulePath() (string, error) {
 // database base model (model.Base or model.AutoBase), handling aliased
 // imports of the model package.
 func isModelBase(file *ast.File, field *ast.Field) bool {
-	// Not anonymouse field.
+	// Not anonymous field.
 	if len(field.Names) != 0 {
 		return false
 	}
@@ -201,8 +224,11 @@ func isModelBase(file *ast.File, field *ast.Field) bool {
 	return false
 }
 
+// isModelEmpty checks if a struct field is an anonymous embedding of
+// model.Empty, the base of a model without a database table, handling aliased
+// imports of the model package.
 func isModelEmpty(file *ast.File, field *ast.Field) bool {
-	// Not anonymouse field.
+	// Not anonymous field.
 	if len(field.Names) != 0 {
 		return false
 	}
@@ -232,7 +258,10 @@ func isModelEmpty(file *ast.File, field *ast.Field) bool {
 	return false
 }
 
-// FindModels finds all structs in model files
+// FindModels returns the models the model file filename declares: its
+// structs embedding model.Base, model.AutoBase or model.Empty, each with the
+// design its Design method declares (see dsl.Parse). The DSL of the file is
+// validated first, and every violation is returned as one error.
 func FindModels(module string, modelDir string, filename string) ([]*ModelInfo, error) {
 	fset := token.NewFileSet()
 	node, err := parser.ParseFile(fset, filename, nil, parser.ParseComments)
@@ -299,7 +328,8 @@ func FindModels(module string, modelDir string, filename string) ([]*ModelInfo, 
 	return models, nil
 }
 
-// modelPkg2ServicePkg converts model name to service name.
+// modelPkg2ServicePkg converts a model package name to its service package
+// name: model to service, model_auth to service_auth.
 func modelPkg2ServicePkg(pkgName string) string {
 	if pkgName == constants.PkgModel {
 		return constants.PkgService
@@ -314,7 +344,8 @@ func modelPkg2ServicePkg(pkgName string) string {
 }
 
 // humanizeDSLFilename turns a DSL Filename() value into a space-separated label: underscores
-// and hyphens become spaces; consecutive whitespace is collapsed.
+// and hyphens become spaces; consecutive whitespace is collapsed. It returns
+// "batch upload" for batch_upload and "export report" for export-report.go.
 func humanizeDSLFilename(filename string) string {
 	name := filepath.Base(filename)
 	name = strings.TrimSuffix(name, filepath.Ext(name))
@@ -324,8 +355,10 @@ func humanizeDSLFilename(filename string) string {
 }
 
 // serviceActionLogQuoted returns a Go string literal (as used in ast.BasicLit.Value) for
-// log.Info in generated service methods. When action.Filename is set, uses
-// "{model}: {humanized filename}" with optional hook suffix (before/after/filter/...).
+// log.Info in generated service methods: "{model} {phase}", as in
+// "user create" and "user create before". When action.Filename is set, uses
+// "{model}: {humanized filename}" with optional hook suffix (before/after/filter/...),
+// as in "user: archive before" for Filename("archive").
 func serviceActionLogQuoted(modelName string, phase consts.Phase, action *dsl.Action) string {
 	modelLower := strings.ToLower(modelName)
 	phaseSnake := strings.ReplaceAll(strcase.SnakeCase(phase.MethodName()), "_", " ")
@@ -349,8 +382,14 @@ func serviceActionLogQuoted(modelName string, phase consts.Phase, action *dsl.Ac
 
 // genServiceMethod1 uses AST to generate CreateBefore,CreateAfter,UpdateBefore,UpdateAfter,
 // DeleteBefore,DeleteAfter,GetBefore,GetAfter,PatchBefore,PatchAfter methods. modelQualifier is
-// the name the file refers to the model package by (see serviceModelQualifier), as in
-// "func (i *Creator) CreateBefore(ctx *gst.ServiceContext, item *model_service.Item) error".
+// the name the file refers to the model package by (see serviceModelQualifier). For the model
+// User and phase consts.PHASE_CREATE_BEFORE it generates
+//
+//	func (u *Creator) CreateBefore(ctx *gst.ServiceContext, user *model.User) error {
+//		log := u.WithContext(ctx, ctx.Phase())
+//		log.Info("user create before")
+//		return nil
+//	}
 func genServiceMethod1(info *ModelInfo, modelQualifier string, action *dsl.Action, phase consts.Phase, roleName string) *ast.FuncDecl {
 	return serviceMethod1(
 		info.ModelVarName, info.ModelName, modelQualifier, phase, roleName,
@@ -362,7 +401,14 @@ func genServiceMethod1(info *ModelInfo, modelQualifier string, action *dsl.Actio
 }
 
 // genServiceMethod2 uses AST to generate ListBefore, ListAfter methods, referring to the
-// model package by modelQualifier (see genServiceMethod1).
+// model package by modelQualifier (see genServiceMethod1). For the model User and phase
+// consts.PHASE_LIST_BEFORE it generates
+//
+//	func (u *Lister) ListBefore(ctx *gst.ServiceContext, users *[]*model.User) error {
+//		log := u.WithContext(ctx, ctx.Phase())
+//		log.Info("user list before")
+//		return nil
+//	}
 func genServiceMethod2(info *ModelInfo, modelQualifier string, action *dsl.Action, phase consts.Phase, roleName string) *ast.FuncDecl {
 	return serviceMethod2(
 		info.ModelVarName, info.ModelName, modelQualifier, phase, roleName,
@@ -375,7 +421,14 @@ func genServiceMethod2(info *ModelInfo, modelQualifier string, action *dsl.Actio
 
 // genServiceMethod3 uses AST to generate CreateManyBefore, CreateManyAfter,
 // DeleteManyBefore, DeleteManyAfter, UpdateManyBefore, UpdateManyAfter, PatchManyBefore, PatchManyAfter,
-// referring to the model package by modelQualifier (see genServiceMethod1).
+// referring to the model package by modelQualifier (see genServiceMethod1). For the model User
+// and phase consts.PHASE_CREATE_MANY_BEFORE it generates
+//
+//	func (u *ManyCreator) CreateManyBefore(ctx *gst.ServiceContext, users ...*model.User) error {
+//		log := u.WithContext(ctx, ctx.Phase())
+//		log.Info("user create many before")
+//		return nil
+//	}
 func genServiceMethod3(info *ModelInfo, modelQualifier string, action *dsl.Action, phase consts.Phase, roleName string) *ast.FuncDecl {
 	return serviceMethod3(
 		info.ModelVarName, info.ModelName, modelQualifier, phase, roleName,
@@ -387,7 +440,14 @@ func genServiceMethod3(info *ModelInfo, modelQualifier string, action *dsl.Actio
 }
 
 // genServiceMethod4 uses AST to generate Create,Delete,Update,Patch,List,Get,CreateMany,DeleteMany,UpdateMany,PatchMany methods,
-// referring to the model package by modelQualifier (see genServiceMethod1).
+// referring to the model package by modelQualifier (see genServiceMethod1). For the model User,
+// the request and result types *User and phase consts.PHASE_CREATE it generates
+//
+//	func (u *Creator) Create(ctx *gst.ServiceContext, req *model.User) (rsp *model.User, err error) {
+//		log := u.WithContext(ctx, ctx.Phase())
+//		log.Info("user create")
+//		return rsp, nil
+//	}
 func genServiceMethod4(info *ModelInfo, modelQualifier string, action *dsl.Action, reqName, rspName string, phase consts.Phase, roleName string) *ast.FuncDecl {
 	return serviceMethod4(
 		info.ModelVarName, modelQualifier, reqName, rspName, phase, roleName,
@@ -404,7 +464,14 @@ func genServiceMethod4(info *ModelInfo, modelQualifier string, action *dsl.Actio
 // genServiceMethod5 uses AST to generate Import method, referring to the model
 // package by modelQualifier (see genServiceMethod1). The scaffold returns a
 // literal nil error: returning the never-assigned named err would fail the
-// service error discipline check on the very next gg run.
+// service error discipline check on the very next gg run. For the model User
+// it generates
+//
+//	func (u *Importer) Import(ctx *gst.ServiceContext, reader io.Reader) (users []*model.User, err error) {
+//		log := u.WithContext(ctx, ctx.Phase())
+//		log.Info("user import")
+//		return users, nil
+//	}
 func genServiceMethod5(info *ModelInfo, modelQualifier string, action *dsl.Action, phase consts.Phase, roleName string) *ast.FuncDecl {
 	return serviceMethod5(
 		info.ModelVarName, info.ModelName, modelQualifier, roleName,
@@ -418,7 +485,13 @@ func genServiceMethod5(info *ModelInfo, modelQualifier string, action *dsl.Actio
 // genServiceMethod6 uses AST to generate Export method, referring to the model
 // package by modelQualifier (see genServiceMethod1). Like the Import scaffold,
 // it returns a literal nil error to keep generated code compliant with the
-// service error discipline check.
+// service error discipline check. For the model User it generates
+//
+//	func (u *Exporter) Export(ctx *gst.ServiceContext, users ...*model.User) (data []byte, err error) {
+//		log := u.WithContext(ctx, ctx.Phase())
+//		log.Info("user export")
+//		return data, nil
+//	}
 func genServiceMethod6(info *ModelInfo, modelQualifier string, action *dsl.Action, phase consts.Phase, roleName string) *ast.FuncDecl {
 	return serviceMethod6(
 		info.ModelVarName, info.ModelName, modelQualifier, roleName,
@@ -432,7 +505,13 @@ func genServiceMethod6(info *ModelInfo, modelQualifier string, action *dsl.Actio
 // genServiceMethod7 uses AST to generate the SSE method scaffold. Like the
 // Import scaffold, it returns a literal nil error to keep generated code
 // compliant with the service error discipline check; the business fills in
-// the streaming callback through ctx.SSE.
+// the streaming callback through ctx.SSE. For the model User it generates
+//
+//	func (u *Streamer) SSE(ctx *gst.ServiceContext) (err error) {
+//		log := u.WithContext(ctx, ctx.Phase())
+//		log.Info("user sse")
+//		return nil
+//	}
 func genServiceMethod7(info *ModelInfo, action *dsl.Action, phase consts.Phase, roleName string) *ast.FuncDecl {
 	return serviceMethod7(
 		info.ModelVarName, roleName,
@@ -446,7 +525,42 @@ func genServiceMethod7(info *ModelInfo, action *dsl.Action, phase consts.Phase, 
 // GenerateService builds the scaffold of the action's service file in package
 // servicePkgName: the service struct named after the action's role and the
 // methods of phase. It returns nil when the action is disabled or declares no
-// service.
+// service. For a Create action on the model User of the root model package,
+// a database model, the file prints as
+//
+//	package user
+//
+//	import (
+//		"helloworld/model"
+//
+//		"github.com/hydroan/gst"
+//		"github.com/hydroan/gst/service"
+//	)
+//
+//	type Creator struct {
+//		service.Base[*model.User, *model.User, *model.User]
+//	}
+//
+//	func (u *Creator) Create(ctx *gst.ServiceContext, req *model.User) (rsp *model.User, err error) {
+//		log := u.WithContext(ctx, ctx.Phase())
+//		log.Info("user create")
+//		return rsp, nil
+//	}
+//
+//	func (u *Creator) CreateBefore(ctx *gst.ServiceContext, user *model.User) error {
+//		log := u.WithContext(ctx, ctx.Phase())
+//		log.Info("user create before")
+//		return nil
+//	}
+//
+//	func (u *Creator) CreateAfter(ctx *gst.ServiceContext, user *model.User) error {
+//		log := u.WithContext(ctx, ctx.Phase())
+//		log.Info("user create after")
+//		return nil
+//	}
+//
+// A model without a database table, one embedding model.Empty, gets no
+// before and after hooks.
 func GenerateService(info *ModelInfo, action *dsl.Action, phase consts.Phase, servicePkgName string) *ast.File {
 	if !action.Enabled || !action.Service {
 		return nil
@@ -504,63 +618,63 @@ func GenerateService(info *ModelInfo, action *dsl.Action, phase consts.Phase, se
 		}
 	case consts.PHASE_DELETE:
 		decls = append(decls, genServiceMethod4(info, qualifier, action, action.Payload, action.Result, phase, roleName))
-		// Skip generate hooks for empty models
+		// Skip generating hooks for empty models
 		if !info.Design.IsEmpty {
 			decls = append(decls, genServiceMethod1(info, qualifier, action, phase.Before(), roleName)) // generate delete before hook
 			decls = append(decls, genServiceMethod1(info, qualifier, action, phase.After(), roleName))  // generate delete after hook
 		}
 	case consts.PHASE_UPDATE:
 		decls = append(decls, genServiceMethod4(info, qualifier, action, action.Payload, action.Result, phase, roleName))
-		// Skip generate hooks for empty models
+		// Skip generating hooks for empty models
 		if !info.Design.IsEmpty {
 			decls = append(decls, genServiceMethod1(info, qualifier, action, phase.Before(), roleName)) // generate update before hook
 			decls = append(decls, genServiceMethod1(info, qualifier, action, phase.After(), roleName))  // generate update after hook
 		}
 	case consts.PHASE_PATCH:
 		decls = append(decls, genServiceMethod4(info, qualifier, action, action.Payload, action.Result, phase, roleName))
-		// Skip generate hooks for empty models
+		// Skip generating hooks for empty models
 		if !info.Design.IsEmpty {
 			decls = append(decls, genServiceMethod1(info, qualifier, action, phase.Before(), roleName)) // generate patch before hook
 			decls = append(decls, genServiceMethod1(info, qualifier, action, phase.After(), roleName))  // generate patch after hook
 		}
 	case consts.PHASE_LIST: // List hooks use genServiceMethod2
 		decls = append(decls, genServiceMethod4(info, qualifier, action, action.Payload, action.Result, phase, roleName))
-		// Skip generate hooks for empty models
+		// Skip generating hooks for empty models
 		if !info.Design.IsEmpty {
 			decls = append(decls, genServiceMethod2(info, qualifier, action, phase.Before(), roleName)) // generate list before hook
 			decls = append(decls, genServiceMethod2(info, qualifier, action, phase.After(), roleName))  // generate list after hook
 		}
 	case consts.PHASE_GET:
 		decls = append(decls, genServiceMethod4(info, qualifier, action, action.Payload, action.Result, phase, roleName))
-		// Skip generate hooks for empty models
+		// Skip generating hooks for empty models
 		if !info.Design.IsEmpty {
 			decls = append(decls, genServiceMethod1(info, qualifier, action, phase.Before(), roleName)) // generate get before hook
 			decls = append(decls, genServiceMethod1(info, qualifier, action, phase.After(), roleName))  // generate get after hook
 		}
 	case consts.PHASE_CREATE_MANY: // XXXMany hooks use genServiceMethod3
 		decls = append(decls, genServiceMethod4(info, qualifier, action, action.Payload, action.Result, phase, roleName))
-		// Skip generate hooks for empty models
+		// Skip generating hooks for empty models
 		if !info.Design.IsEmpty {
 			decls = append(decls, genServiceMethod3(info, qualifier, action, phase.Before(), roleName)) // generate create many before hook
 			decls = append(decls, genServiceMethod3(info, qualifier, action, phase.After(), roleName))  // generate create many after hook
 		}
 	case consts.PHASE_DELETE_MANY:
 		decls = append(decls, genServiceMethod4(info, qualifier, action, action.Payload, action.Result, phase, roleName))
-		// Skip generate hooks for empty models
+		// Skip generating hooks for empty models
 		if !info.Design.IsEmpty {
 			decls = append(decls, genServiceMethod3(info, qualifier, action, phase.Before(), roleName)) // generate delete many before hook
 			decls = append(decls, genServiceMethod3(info, qualifier, action, phase.After(), roleName))  // generate delete many after hook
 		}
 	case consts.PHASE_UPDATE_MANY:
 		decls = append(decls, genServiceMethod4(info, qualifier, action, action.Payload, action.Result, phase, roleName))
-		// Skip generate hooks for empty models
+		// Skip generating hooks for empty models
 		if !info.Design.IsEmpty {
 			decls = append(decls, genServiceMethod3(info, qualifier, action, phase.Before(), roleName)) // generate update many before hook
 			decls = append(decls, genServiceMethod3(info, qualifier, action, phase.After(), roleName))  // generate update many after hook
 		}
 	case consts.PHASE_PATCH_MANY:
 		decls = append(decls, genServiceMethod4(info, qualifier, action, action.Payload, action.Result, phase, roleName))
-		// Skip generate hooks for empty models
+		// Skip generating hooks for empty models
 		if !info.Design.IsEmpty {
 			decls = append(decls, genServiceMethod3(info, qualifier, action, phase.Before(), roleName)) // generate patch many before hook
 			decls = append(decls, genServiceMethod3(info, qualifier, action, phase.After(), roleName))  // generate patch many after hook
@@ -574,7 +688,7 @@ func GenerateService(info *ModelInfo, action *dsl.Action, phase consts.Phase, se
 		// Export: it invokes ListBefore, applies the service Filter hook when
 		// building the query, then invokes ListAfter. Filter has a pass-through
 		// default, so only the Before/After hooks are scaffolded here.
-		// Skip generate hooks for empty models
+		// Skip generating hooks for empty models
 		if !info.Design.IsEmpty {
 			decls = append(decls, genServiceMethod2(info, qualifier, action, consts.PHASE_LIST_BEFORE, roleName)) // generate list before hook
 			decls = append(decls, genServiceMethod2(info, qualifier, action, consts.PHASE_LIST_AFTER, roleName))  // generate list after hook

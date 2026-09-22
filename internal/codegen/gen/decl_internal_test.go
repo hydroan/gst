@@ -91,13 +91,16 @@ func TestImports(t *testing.T) {
 )`,
 		},
 		{
+			// The example of the imports doc comment: an Import action reads
+			// through io, which the model package in model/io takes an alias
+			// for.
 			name:           "import_action_reads_through_io",
-			modulePath:     "codegen",
-			modelFileDir:   "model/sample",
-			modelQualifier: "sample",
+			modulePath:     "helloworld",
+			modelFileDir:   "model/io",
+			modelQualifier: "model_io",
 			phase:          consts.PHASE_IMPORT,
 			want: `import (
-	"codegen/model/sample"
+	model_io "helloworld/model/io"
 	"github.com/hydroan/gst/service"
 	"github.com/hydroan/gst"
 	"io"
@@ -212,6 +215,18 @@ func TestTypes(t *testing.T) {
 }`,
 		},
 		{
+			// The second example of the types doc comment.
+			name:         "model_package_under_an_alias",
+			modelPkgName: "model_service",
+			modelName:    "User",
+			reqName:      "*UserReq",
+			rspName:      "*UserRsp",
+			phase:        consts.PHASE_UPDATE,
+			want: `type Updater struct {
+	service.Base[*model_service.User, *model_service.UserReq, *model_service.UserRsp]
+}`,
+		},
+		{
 			// Bare action type names (the declared form of slice and map
 			// action types) are transcribed as value types.
 			name:         "user_bare_names_transcribed",
@@ -225,6 +240,7 @@ func TestTypes(t *testing.T) {
 }`,
 		},
 		{
+			// The first example of the types doc comment.
 			name:         "user_starred_names_transcribed",
 			modelPkgName: "model",
 			modelName:    "User",
@@ -307,6 +323,7 @@ func TestServiceMethod1(t *testing.T) {
 		want         string
 	}{
 		{
+			// The examples of the serviceMethod1 doc comment, with UpdateAfter.
 			name:         "CreateBefore",
 			recvName:     "u",
 			modelName:    "User",
@@ -347,6 +364,7 @@ func TestServiceMethod2(t *testing.T) {
 		want         string
 	}{
 		{
+			// The example of the serviceMethod2 doc comment.
 			name:         "ListBefore",
 			recvName:     "u",
 			modelName:    "User",
@@ -388,6 +406,7 @@ func TestServiceMethod3(t *testing.T) {
 		want         string
 	}{
 		{
+			// The example of the serviceMethod3 doc comment.
 			name:         "CreateManyBefore",
 			recvName:     "u",
 			modelName:    "User",
@@ -430,6 +449,7 @@ func TestServiceMethod4(t *testing.T) {
 		want         string
 	}{
 		{
+			// The example of the serviceMethod4 doc comment.
 			name:         "Create",
 			recvName:     "u",
 			modelPkgName: "model",
@@ -512,6 +532,7 @@ func TestServiceMethod5(t *testing.T) {
 		want         string
 	}{
 		{
+			// The example of the serviceMethod5 doc comment.
 			name:         "Import",
 			recvName:     "a",
 			modelName:    "Sample",
@@ -546,6 +567,7 @@ func TestServiceMethod6(t *testing.T) {
 		want         string
 	}{
 		{
+			// The example of the serviceMethod6 doc comment.
 			name:         "Export",
 			recvName:     "a",
 			modelName:    "Sample",
@@ -564,6 +586,36 @@ func TestServiceMethod6(t *testing.T) {
 			}
 			if got != tt.want {
 				t.Errorf("serviceMethod6() = \n%v\n, want \n%v\n", pretty.Sprintf("% #v", got), pretty.Sprintf("% #v", tt.want))
+			}
+		})
+	}
+}
+
+func TestServiceMethod7(t *testing.T) {
+	tests := []struct {
+		name     string
+		recvName string
+		phase    consts.Phase
+		want     string
+	}{
+		{
+			// The example of the serviceMethod7 doc comment.
+			name:     "SSE",
+			recvName: "a",
+			phase:    consts.PHASE_SSE,
+			want:     "func (a *Streamer) SSE(ctx *gst.ServiceContext) (err error) {\n}",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			res := serviceMethod7(tt.recvName, tt.phase.RoleName())
+			got, err := FormatNode(res)
+			if err != nil {
+				t.Error(err)
+				return
+			}
+			if got != tt.want {
+				t.Errorf("serviceMethod7() = \n%v\n, want \n%v\n", pretty.Sprintf("% #v", got), pretty.Sprintf("% #v", tt.want))
 			}
 		})
 	}

@@ -7,11 +7,8 @@ import (
 	"github.com/hydroan/gst/internal/codegen/gen"
 )
 
-func TestExtractAPIDocs(t *testing.T) {
-	entries, err := codegen.ExtractAPIDocs("example.com/proj", "testdata/apidocmodel", nil)
-	if err != nil {
-		t.Fatalf("ExtractAPIDocs() error = %v", err)
-	}
+func TestExtractAPIDocsStructs(t *testing.T) {
+	entries := extractTestAPIDocs(t)
 
 	byKey := make(map[string]gen.StructDocEntry, len(entries.Structs))
 	for _, entry := range entries.Structs {
@@ -36,9 +33,9 @@ func TestExtractAPIDocs(t *testing.T) {
 		t.Fatal("UserCreateReq entry missing, custom request types must be extracted")
 	}
 
-	sub, hasSub := byKey["example.com/proj/testdata/apidocmodel/sub.EncryptReq"]
+	sub, hasSub := byKey["example.com/proj/testdata/apidocmodel/sub.ArchiveReq"]
 	if !hasSub {
-		t.Fatal("sub.EncryptReq entry missing, nested packages must be extracted")
+		t.Fatal("sub.ArchiveReq entry missing, nested packages must be extracted")
 	}
 	if want := "Path is the file path."; sub.Doc.Fields["Path"] != want {
 		t.Fatalf("sub.Doc.Fields[Path] = %q, want %q", sub.Doc.Fields["Path"], want)
@@ -53,10 +50,7 @@ func TestExtractAPIDocs(t *testing.T) {
 }
 
 func TestExtractAPIDocsEnums(t *testing.T) {
-	entries, err := codegen.ExtractAPIDocs("example.com/proj", "testdata/apidocmodel", nil)
-	if err != nil {
-		t.Fatalf("ExtractAPIDocs() error = %v", err)
-	}
+	entries := extractTestAPIDocs(t)
 
 	var status *gen.EnumDocEntry
 	for i := range entries.Enums {
@@ -82,14 +76,8 @@ func TestExtractAPIDocsEnums(t *testing.T) {
 }
 
 func TestExtractAPIDocsDeterministicOrder(t *testing.T) {
-	first, err := codegen.ExtractAPIDocs("example.com/proj", "testdata/apidocmodel", nil)
-	if err != nil {
-		t.Fatalf("ExtractAPIDocs() error = %v", err)
-	}
-	second, err := codegen.ExtractAPIDocs("example.com/proj", "testdata/apidocmodel", nil)
-	if err != nil {
-		t.Fatalf("ExtractAPIDocs() error = %v", err)
-	}
+	first := extractTestAPIDocs(t)
+	second := extractTestAPIDocs(t)
 
 	if len(first.Structs) != len(second.Structs) || len(first.Enums) != len(second.Enums) {
 		t.Fatalf("entry counts differ between runs: %d/%d vs %d/%d",
@@ -105,4 +93,17 @@ func TestExtractAPIDocsDeterministicOrder(t *testing.T) {
 			t.Fatalf("enum entry order differs at index %d", i)
 		}
 	}
+}
+
+// extractTestAPIDocs extracts the API docs of the model package in
+// testdata/apidocmodel, as a project of module example.com/proj would declare
+// it, failing the test on error.
+func extractTestAPIDocs(t *testing.T) gen.APIDocEntries {
+	t.Helper()
+
+	entries, err := codegen.ExtractAPIDocs("example.com/proj", "testdata/apidocmodel", nil)
+	if err != nil {
+		t.Fatalf("ExtractAPIDocs() error = %v", err)
+	}
+	return entries
 }
