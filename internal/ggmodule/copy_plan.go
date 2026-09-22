@@ -11,6 +11,7 @@ import (
 
 	"github.com/hydroan/gst/dsl"
 	"github.com/hydroan/gst/internal/codegen/gen"
+	"github.com/hydroan/gst/internal/gghelper"
 )
 
 const (
@@ -114,7 +115,7 @@ func BuildCopyPlan(name string, opts CopyOptions) (*CopyPlan, error) {
 		return nil, fmt.Errorf("gg module copy must run from the project root: %w", err)
 	}
 
-	projectModule, err := readProjectModulePath()
+	projectModule, err := gghelper.ModulePath()
 	if err != nil {
 		return nil, err
 	}

@@ -1,15 +1,16 @@
 package ggmodule
 
 import (
-	"fmt"
-	"os"
 	"os/exec"
 	"strings"
 
 	"github.com/cockroachdb/errors"
+	"github.com/hydroan/gst/internal/ggconst"
 )
 
-const frameworkModulePath = "github.com/hydroan/gst"
+// frameworkModulePath is the module path of the gst framework, whose module
+// sources gg module copy reads.
+const frameworkModulePath = ggconst.ImportPathGst
 
 // findFrameworkRoot resolves the directory holding the framework source for
 // the current working directory's project.
@@ -67,21 +68,4 @@ func goCommandError(err error) error {
 		return errors.Newf("%s", strings.TrimSpace(string(exitErr.Stderr)))
 	}
 	return err
-}
-
-func readProjectModulePath() (string, error) {
-	content, err := os.ReadFile("go.mod")
-	if err != nil {
-		return "", fmt.Errorf("failed to read go.mod: %w", err)
-	}
-
-	lines := strings.SplitSeq(string(content), "\n")
-	for line := range lines {
-		line = strings.TrimSpace(line)
-		if strings.HasPrefix(line, "module ") {
-			return strings.TrimSpace(strings.TrimPrefix(line, "module")), nil
-		}
-	}
-
-	return "", errors.New("module name not found in go.mod")
 }
