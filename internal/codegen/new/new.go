@@ -11,6 +11,7 @@ import (
 
 	"github.com/hydroan/gst/internal/codegen/gen"
 	"github.com/hydroan/gst/internal/ggconst"
+	"github.com/hydroan/gst/internal/gghelper"
 
 	"github.com/cockroachdb/errors"
 )
@@ -74,10 +75,9 @@ func ProjectFiles(projectName string) ([]ProjectFile, error) {
 	), nil
 }
 
-// ============================================================
-// helpers
-// ============================================================
-
+// EnsureFileExists writes every scaffold file missing from the project in the
+// working directory, among them the empty first versions of the files gg gen
+// owns, and returns the paths it created, sorted.
 func EnsureFileExists() ([]string, error) {
 	files := make([]string, 0, len(requiredFileContentMap))
 	for file := range requiredFileContentMap {
@@ -89,21 +89,16 @@ func EnsureFileExists() ([]string, error) {
 	for _, file := range files {
 		content := requiredFileContentMap[file]
 		if _, err := os.Stat(file); err != nil && errors.Is(err, os.ErrNotExist) {
-			if err := createFile(file, content); err != nil {
+			if err := gghelper.EnsureParentDir(file); err != nil {
+				return created, err
+			}
+			if err := os.WriteFile(file, []byte(content), ggconst.FileModeGenerated); err != nil {
 				return created, err
 			}
 			created = append(created, file)
 		}
 	}
 	return created, nil
-}
-
-func createFile(path string, content string) error {
-	dir := filepath.Dir(path)
-	if err := os.MkdirAll(dir, 0o755); err != nil {
-		return err
-	}
-	return os.WriteFile(path, []byte(content), ggconst.FileModeGenerated)
 }
 
 // templateConfig renders the config.ini.example of a new project whose
