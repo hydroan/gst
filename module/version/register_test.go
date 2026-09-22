@@ -2,6 +2,7 @@ package versionmod_test
 
 import (
 	"testing"
+	"time"
 
 	"github.com/hydroan/gst/client"
 	"github.com/hydroan/gst/config"
@@ -39,7 +40,26 @@ func TestVersion(t *testing.T) {
 	require.NoError(t, err)
 
 	require.NotEmpty(t, rsp)
-	require.NotEmpty(t, rsp.BuildTime)
 	require.NotEmpty(t, rsp.GoVersion)
 	require.NotEmpty(t, rsp.Timestamp)
+}
+
+// TestVersionReportsTheBuildTime checks build_time against the build time the
+// application records: a frontend compares it to tell a new release from a
+// restart, so it must not follow the process start time.
+func TestVersionReportsTheBuildTime(t *testing.T) {
+	original := config.App.AppInfo.BuildTime
+	t.Cleanup(func() { config.App.AppInfo.BuildTime = original })
+
+	built := time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC)
+	config.App.AppInfo.BuildTime = built
+	rsp, err := new(versionmod.VersionService).List(nil, nil)
+	require.NoError(t, err)
+	require.Equal(t, built.Unix(), rsp.BuildTime)
+
+	// A binary built without a recorded build time reports none.
+	config.App.AppInfo.BuildTime = time.Time{}
+	rsp, err = new(versionmod.VersionService).List(nil, nil)
+	require.NoError(t, err)
+	require.Zero(t, rsp.BuildTime)
 }

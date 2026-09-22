@@ -45,7 +45,7 @@ func (Version) Design() {
 // VersionRsp contains version information returned to frontend
 type VersionRsp struct {
 	Version     string `json:"version"`     // Backend version string (semantic version)
-	BuildTime   int64  `json:"build_time"`  // Build timestamp (Unix timestamp)
+	BuildTime   int64  `json:"build_time"`  // Build timestamp (Unix seconds), 0 when the build recorded none
 	GitCommit   string `json:"git_commit"`  // Git commit hash (short hash)
 	GitBranch   string `json:"git_branch"`  // Git branch name
 	GoVersion   string `json:"go_version"`  // Go compiler version
@@ -70,9 +70,16 @@ func (l *VersionService) List(ctx *types.ServiceContext, req *Version) (rsp *Ver
 		version = appInfo.GitCommit
 	}
 
+	// The build time is when the binary was built, not when the process
+	// started: a restart must not look like a new release.
+	var buildTime int64
+	if !appInfo.BuildTime.IsZero() {
+		buildTime = appInfo.BuildTime.Unix()
+	}
+
 	return &VersionRsp{
 		Version:     version,
-		BuildTime:   startTime.Unix(),
+		BuildTime:   buildTime,
 		GitCommit:   appInfo.GitCommit,
 		GitBranch:   appInfo.GitBranch,
 		GoVersion:   runtime.Version(),
