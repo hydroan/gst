@@ -159,9 +159,6 @@ func PatchFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...*
 			JSON(c, CodeNotFound)
 			return
 		}
-		// req.SetCreatedAt(data[0].GetCreatedAt())
-		// req.SetCreatedBy(data[0].GetCreatedBy())
-		// req.SetUpdatedBy(c.GetString(CTX_USERNAME))
 		data[0].SetUpdatedBy(c.GetString(consts.CTX_USERNAME))
 
 		newVal := reflect.ValueOf(req).Elem()
