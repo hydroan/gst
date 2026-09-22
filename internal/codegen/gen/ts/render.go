@@ -65,6 +65,9 @@ type fileContext struct {
 	imports map[string]bool
 }
 
+// newGenerator prepares a generation run of cfg over the loaded packages: it
+// indexes the syntax of every project package (see newSourceIndex) and names
+// the prelude file after the application (see preludeFileName).
 func newGenerator(cfg Config, l *loaded) *generator {
 	dir, err := filepath.Abs(cfg.Dir)
 	if err != nil {
@@ -148,7 +151,22 @@ func (g *generator) declares(obj *types.TypeName) bool {
 	return obj.Pkg() != nil && g.sources[obj.Pkg().Path()] != nil && obj.Parent() == obj.Pkg().Scope()
 }
 
-// render renders the declaration of a project type.
+// render renders the declaration of a project type, under its doc comment: an
+// interface for a struct type, a union of constants for an enum type, and a
+// type alias for any other, as in
+//
+//	export interface Record {
+//	  title: string;
+//	  parent?: Record | null;
+//	  state: State;
+//	}
+//
+//	export type Status = "active" | "archived";
+//
+//	export type Records = ($record.Record | null)[] | null;
+//
+// for the struct Record, the string type Status with the constants active and
+// archived, and the named slice type Records of *record.Record.
 func (g *generator) render(obj *types.TypeName) *declaration {
 	ctx := &fileContext{pkgPath: obj.Pkg().Path(), imports: make(map[string]bool)}
 	s := site{subject: obj.Pkg().Path() + "." + obj.Name(), pos: obj.Pos()}
@@ -210,7 +228,17 @@ func (g *generator) render(obj *types.TypeName) *declaration {
 	return d
 }
 
-// writeInterface writes an interface declaration with a property per key.
+// writeInterface writes an interface declaration with a property per key, as
+// in
+//
+//	export interface Endpoint {
+//	  /** URL is the address reports go to. */
+//	  url: string;
+//	  token?: string;
+//	}
+//
+// A struct without keys gets the single member [key: string]: never, which
+// admits the empty object alone.
 func (g *generator) writeInterface(b *strings.Builder, name string, fields []jsonField, ctx *fileContext, s site) {
 	fmt.Fprintf(b, "export interface %s {\n", name)
 	if len(fields) == 0 {
@@ -248,7 +276,23 @@ func (g *generator) fieldSite(s site, name string, f *types.Var) site {
 // property renders the property of one key. It is optional when the key may
 // be absent -- an omitempty or omitzero option, a nil-able type, promotion
 // through an embedded pointer -- and nullable when a value of the field's type
-// may encode as null.
+// may encode as null. For example, the fields
+//
+//	Name    string  `json:"name"`
+//	Summary string  `json:"summary,omitempty"`
+//	Remark  *string `json:"remark"`
+//	Count   int64   `json:"count,string"`
+//	Current Status  `json:"status"`
+//	Retired Status  `json:"retired,omitempty"`
+//
+// with Status an enum whose constants leave its zero value out, render as
+//
+//	name: string
+//	summary?: string
+//	remark?: string | null
+//	count: string
+//	status: Status | ""
+//	retired?: Status
 func (g *generator) property(f jsonField, ctx *fileContext, s site) string {
 	t := f.field.Type()
 	var value string
@@ -363,7 +407,11 @@ func (g *generator) builtin(kind builtinKind, n *types.Named, ctx *fileContext, 
 	}
 }
 
-// structural renders a type by its structure.
+// structural renders a type by its structure: string for []byte, which
+// encodes as base64, number[] for [2]int, { [key: string]: number } for
+// map[int]float64, ($record.Record | null)[] for []*record.Record, and
+// { from: string; to?: string } for an unnamed struct of the keys from and
+// to,omitempty.
 func (g *generator) structural(t types.Type, ctx *fileContext, s site) string {
 	switch u := t.(type) {
 	case *types.Basic:
@@ -415,7 +463,8 @@ func (g *generator) structural(t types.Type, ctx *fileContext, s site) string {
 }
 
 // value renders a value position: the type, the zero value of an enum no
-// constant covers, and null when a value of t may encode as null.
+// constant covers, and null when a value of t may encode as null, as in
+// Status | "" for an element of []Status.
 func (g *generator) value(t types.Type, ctx *fileContext, s site) string {
 	value := g.expr(t, ctx, s)
 	if zero := g.enumZero(t); zero != "" {
@@ -428,7 +477,10 @@ func (g *generator) value(t types.Type, ctx *fileContext, s site) string {
 }
 
 // enumZero returns the zero value literal of the project enum t holds,
-// directly or through a pointer, when no constant of the enum covers it.
+// directly or through a pointer, when no constant of the enum covers it: the
+// TypeScript literal "" for a string enum without an empty constant, 0 for an
+// integer enum starting at 1, and an empty result for an enum that has a
+// constant of its zero value or combines its constants bitwise.
 func (g *generator) enumZero(t types.Type) string {
 	t = types.Unalias(t)
 	if p, ok := t.(*types.Pointer); ok {
@@ -467,7 +519,8 @@ func (g *generator) checkMapKey(key types.Type, s site) {
 	g.report(s, "map key type %s has no JSON encoding; use a string or integer key type", key)
 }
 
-// arrayOf renders an array of elem, parenthesizing a union.
+// arrayOf renders an array of elem, parenthesizing a union: string[] for
+// string and (Record | null)[] for Record | null.
 func arrayOf(elem string) string {
 	if strings.Contains(elem, " | ") {
 		return "(" + elem + ")[]"
@@ -496,13 +549,25 @@ var nonFileName = regexp.MustCompile(`[^A-Za-z0-9_-]`)
 // preludeFileName returns the file the prelude goes to: the application name,
 // or the framework name when the project configured none. Whatever a file name
 // and an import specifier cannot hold is replaced, so every configured name
-// yields a file a frontend can copy and import.
+// yields a file a frontend can copy and import: shop.ts for shop,
+// Sample_Shop___v2.ts for "Sample Shop / v2", and gst.ts for none.
 func preludeFileName(appName string) string {
 	return cmp.Or(strings.Trim(nonFileName.ReplaceAllString(appName, "_"), "_-"), consts.FrameworkName) + ".ts"
 }
 
 // files assembles the output: the prelude, and a file per package with
-// declarations, which appear in source order.
+// declarations, which appear in source order after the imports of the
+// packages they refer to, as in
+//
+//	// Code generated by gst; DO NOT EDIT.
+//
+//	import type * as $record from "./record.js";
+//	import type * as $pkg$notifier from "./pkg/notifier.js";
+//
+//	/** Sample is a resource kept by the sample service. */
+//	export interface Sample {
+//	  ...
+//	}
 func (g *generator) files() []File {
 	// The output mirrors the models: a project whose routes exchange no type
 	// has nothing to describe, and the prelude alone would describe nothing.
@@ -565,7 +630,11 @@ func (g *generator) files() []File {
 // packages of the root tree sit at the output root, so the model directory is
 // not repeated in every path; the root package itself keeps that directory's
 // name. A package outside the tree keeps its path relative to the module, which
-// is what tells a reader it comes from elsewhere.
+// is what tells a reader it comes from elsewhere. With the module
+// example.com/app and the root tree example.com/app/model, it returns sample
+// for example.com/app/model/sample, model for example.com/app/model,
+// pkg/notifier for example.com/app/pkg/notifier, and index for the module
+// root package.
 func (g *generator) relativePackage(pkgPath string) string {
 	if root := g.cfg.RootPath; root != "" {
 		if pkgPath == root {
@@ -587,8 +656,9 @@ func (g *generator) filePath(pkgPath string) string {
 var nonIdentifier = regexp.MustCompile(`[^A-Za-z0-9_]`)
 
 // importAlias names the namespace a file imports a package under: the relative
-// package path with its segments joined by $. Go identifiers never hold $, so
-// the name cannot collide with a declaration.
+// package path with its segments joined by $, as in $sample, $iam$account and
+// $pkg$http_client for pkg/http-client. Go identifiers never hold $, so the
+// name cannot collide with a declaration.
 func (g *generator) importAlias(pkgPath string) string {
 	segments := strings.Split(g.relativePackage(pkgPath), "/")
 	for i, segment := range segments {
@@ -598,8 +668,10 @@ func (g *generator) importAlias(pkgPath string) string {
 }
 
 // relativeImport returns the specifier the file at from imports the file at to
-// with. The .js extension resolves under every TypeScript module resolution
-// mode, including the node modes, which require an extension.
+// with: ./record.js from sample.ts to record.ts, ../record.js from
+// iam/account.ts, and ../../pkg/notifier.js from iam/admin/user.ts to
+// pkg/notifier.ts. The .js extension resolves under every TypeScript module
+// resolution mode, including the node modes, which require an extension.
 func relativeImport(from, to string) string {
 	var fromDirs []string
 	if dir := path.Dir(from); dir != "." {
@@ -622,8 +694,19 @@ func relativeImport(from, to string) string {
 	return specifier
 }
 
-// writeDoc writes doc as a JSDoc comment. A "*/" would end the comment early
-// and a line starting with @ would read as a JSDoc tag, so both are escaped.
+// writeDoc writes doc as a JSDoc comment, on one line for a single line of
+// doc and as a block otherwise:
+//
+//	/** Title is the display title. */
+//
+//	/**
+//	 * Title is the display title.
+//	 *
+//	 * \@internal must not read as a tag
+//	 */
+//
+// A "*/" would end the comment early and a line starting with @ would read as
+// a JSDoc tag, so both are escaped.
 func writeDoc(b *strings.Builder, indent, doc string) {
 	if doc == "" {
 		return
@@ -653,7 +736,8 @@ func writeDoc(b *strings.Builder, indent, doc string) {
 var identifier = regexp.MustCompile(`^[A-Za-z_$][A-Za-z0-9_$]*$`)
 
 // propertyName renders a JSON key as a property name, quoted unless it is a
-// plain identifier.
+// plain identifier: title and trace_id stay as they are, while - and
+// created at become "-" and "created at".
 func propertyName(key string) string {
 	if identifier.MatchString(key) {
 		return key

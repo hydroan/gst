@@ -134,7 +134,8 @@ func (idx *sourceIndex) addConstants(info *types.Info, decl *ast.GenDecl) {
 	}
 }
 
-// usesBitwiseOperator reports whether expr applies a bitwise operator.
+// usesBitwiseOperator reports whether expr applies a bitwise operator: 1 << iota,
+// read | write and all &^ write do, iota + 1 and first * 10 do not.
 func usesBitwiseOperator(expr ast.Expr) bool {
 	found := false
 	ast.Inspect(expr, func(n ast.Node) bool {
@@ -149,7 +150,8 @@ func usesBitwiseOperator(expr ast.Expr) bool {
 	return found
 }
 
-// commentText returns the text of the first non-empty comment group.
+// commentText returns the text of the first non-empty comment group, as in
+// the doc comment of a field before its trailing comment.
 func commentText(groups ...*ast.CommentGroup) string {
 	for _, group := range groups {
 		if group != nil && len(group.List) > 0 {
@@ -239,7 +241,9 @@ func (g *generator) buildEnum(obj *types.TypeName) *enumType {
 const maxSafeInteger = 1<<53 - 1
 
 // constantLiteral renders the value of c as a TypeScript literal and reports
-// whether it is the zero value.
+// whether it is the zero value: "active" for the string constant active, ""
+// and zero for the empty string, 1 for the integer 1. An integer a JavaScript
+// number cannot hold exactly is reported, and yields no literal.
 func (g *generator) constantLiteral(c *types.Const) (literal string, zero, ok bool) {
 	val := c.Val()
 	switch val.Kind() {
@@ -260,7 +264,8 @@ func (g *generator) constantLiteral(c *types.Const) (literal string, zero, ok bo
 }
 
 // enumBody renders the right-hand side of the declaration of an enum type: the
-// union of its constants, or number for a bit set.
+// union of its constants, as in "active" | "archived", or number for a bit
+// set.
 func enumBody(e *enumType) string {
 	switch {
 	case e.bitwise:
@@ -278,7 +283,14 @@ func enumBody(e *enumType) string {
 
 // enumDoc appends the constants of e to the doc comment of its type, one line
 // each with the constant's own comment, as the OpenAPI document lists enum
-// values.
+// values:
+//
+//	State is the progress of a record. Its first constant is the zero value.
+//
+//	- 0: StateOpen marks a record in progress.
+//	- 1: StateClosed marks a finished record.
+//
+// A bit set lists its constants under "Any bitwise combination of:".
 func enumDoc(doc string, e *enumType) string {
 	lines := make([]string, 0, len(e.values)+3)
 	if doc != "" {

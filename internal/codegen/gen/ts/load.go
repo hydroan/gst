@@ -94,7 +94,9 @@ func packageErrors(pkgs []*packages.Package) error {
 	return errors.Newf("the packages do not type-check:\n%s", strings.Join(lines, "\n"))
 }
 
-// inModule reports whether pkgPath is modulePath or a package below it.
+// inModule reports whether pkgPath is modulePath or a package below it:
+// example.com/app and example.com/app/model are in module example.com/app,
+// example.com/application is not.
 func inModule(pkgPath, modulePath string) bool {
 	return pkgPath == modulePath || strings.HasPrefix(pkgPath, modulePath+"/")
 }

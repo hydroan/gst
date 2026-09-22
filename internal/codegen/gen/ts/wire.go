@@ -34,7 +34,9 @@ type jsonField struct {
 // encoding/json resolves them: the fields of embedded structs are promoted
 // breadth first; a key defined at several depths belongs to the shallowest
 // field; a tie at one depth goes to the only tagged field and otherwise drops
-// the key; keys keep the order of the fields they come from.
+// the key; keys keep the order of the fields they come from. So a model
+// embedding model.Base first encodes to id, created_by, updated_by,
+// created_at and updated_at, then to the keys of its own fields.
 func (g *generator) jsonFields(st *types.Struct, s site) []jsonField {
 	type level struct {
 		st         *types.Struct
@@ -155,12 +157,14 @@ type jsonTagOptions struct {
 	quoted    bool
 }
 
-// parseJSONTag splits a json struct tag into its key name and options. The
-// problem it reports is a tag that encoding/json and the JSON v2 experiment
-// read differently, so no single TypeScript shape describes it: a name
-// encoding/json rejects, or an option other than omitempty, omitzero and
-// string. A rejected name comes back empty, as encoding/json then falls back
-// to the Go field name.
+// parseJSONTag splits a json struct tag into its key name and options: name
+// and omitempty for name,omitempty, count and string for count,string, and
+// the key - for -,. The problem it reports is a tag that encoding/json and the
+// JSON v2 experiment read differently, so no single TypeScript shape
+// describes it: a name encoding/json rejects, or an option other than
+// omitempty, omitzero and string, such as inline in name,inline. A rejected
+// name comes back empty, as encoding/json then falls back to the Go field
+// name.
 func parseJSONTag(tag string) (string, jsonTagOptions, string) {
 	name, rest, _ := strings.Cut(tag, ",")
 	var (
@@ -192,7 +196,9 @@ func parseJSONTag(tag string) (string, jsonTagOptions, string) {
 }
 
 // validTagName reports whether encoding/json accepts a non-empty name as a key
-// name.
+// name: letters, digits, spaces and the punctuation !#$%&()*+-./:;<=>?@[]^_{|}~,
+// so trace_id and created at pass while a name holding a quote or a
+// backslash does not.
 func validTagName(name string) bool {
 	for _, c := range name {
 		switch {
@@ -206,7 +212,7 @@ func validTagName(name string) bool {
 
 // quotable reports whether the string tag option applies to a field of type t:
 // encoding/json quotes booleans, numbers and strings, held directly or through
-// one unnamed pointer.
+// one unnamed pointer, as with int64 and *int, but not []string.
 func quotable(t types.Type) bool {
 	t = types.Unalias(t)
 	if p, ok := t.(*types.Pointer); ok {
@@ -279,8 +285,9 @@ func (g *generator) method(t types.Type, names []string) string {
 }
 
 // nilable reports whether a value of t can be nil: a pointer, slice, map or
-// interface. A request may leave such a field out, and a nil value reaches the
-// client as null or not at all.
+// interface, such as *string, []string or any, but not string. A request may
+// leave such a field out, and a nil value reaches the client as null or not at
+// all.
 func nilable(t types.Type) bool {
 	switch types.Unalias(t).Underlying().(type) {
 	case *types.Pointer, *types.Slice, *types.Map, *types.Interface:
@@ -290,9 +297,9 @@ func nilable(t types.Type) bool {
 	}
 }
 
-// nullable reports whether a value of t may encode as null. Raw JSON and
-// interface values are left out: their TypeScript type, unknown, admits null
-// already.
+// nullable reports whether a value of t may encode as null, as a *string,
+// []string or map value may. Raw JSON and interface values are left out:
+// their TypeScript type, unknown, admits null already.
 func nullable(t types.Type) bool {
 	t = types.Unalias(t)
 	if n, ok := t.(*types.Named); ok {
