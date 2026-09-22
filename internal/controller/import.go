@@ -17,11 +17,6 @@ import (
 	"go.uber.org/zap"
 )
 
-// Import handles an import request with the default factory settings.
-func Import[M types.Model, REQ types.Request, RSP types.Response](c *gin.Context) {
-	ImportFactory[M, REQ, RSP]()(c)
-}
-
 // ImportFactory returns a Gin handler that imports resources from an uploaded file.
 //
 // The handler reads the multipart form file named "file", rejects files larger

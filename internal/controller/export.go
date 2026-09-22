@@ -59,11 +59,6 @@ func exportAttachment(format string) (filename, contentType string) {
 	}
 }
 
-// Export handles an export request with the default factory settings.
-func Export[M types.Model, REQ types.Request, RSP types.Response](c *gin.Context) {
-	ExportFactory[M, REQ, RSP]()(c)
-}
-
 // ExportFactory returns a Gin handler that exports resources.
 //
 // The handler decodes query parameters into M, applies service filters, runs

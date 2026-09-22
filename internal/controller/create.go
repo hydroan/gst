@@ -20,11 +20,6 @@ import (
 	"go.uber.org/zap"
 )
 
-// Create handles a create request with the default factory settings.
-func Create[M types.Model, REQ types.Request, RSP types.Response](c *gin.Context) {
-	CreateFactory[M, REQ, RSP]()(c)
-}
-
 // CreateFactory returns a Gin handler that creates one resource.
 //
 // When M, REQ, and RSP are the same type, the handler binds the JSON body into

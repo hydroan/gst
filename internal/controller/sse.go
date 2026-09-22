@@ -17,11 +17,6 @@ import (
 	"go.uber.org/zap"
 )
 
-// SSE handles a Server-Sent Events request with the default factory settings.
-func SSE[M types.Model, REQ types.Request, RSP types.Response](c *gin.Context) {
-	SSEFactory[M, REQ, RSP]()(c)
-}
-
 // SSEFactory returns a Gin handler that streams Server-Sent Events.
 //
 // The action always delegates to the phase service's SSE method, which opens

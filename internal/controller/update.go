@@ -19,11 +19,6 @@ import (
 	"go.uber.org/zap"
 )
 
-// Update handles a full update (replace) request with the default factory settings.
-func Update[M types.Model, REQ types.Request, RSP types.Response](c *gin.Context) {
-	UpdateFactory[M, REQ, RSP]()(c)
-}
-
 // UpdateFactory returns a Gin handler that replaces one resource.
 //
 // When M, REQ, and RSP are the same type, the handler binds the JSON body into

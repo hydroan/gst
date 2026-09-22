@@ -18,11 +18,6 @@ import (
 	"go.uber.org/zap"
 )
 
-// Get handles a single-resource get request with the default factory settings.
-func Get[M types.Model, REQ types.Request, RSP types.Response](c *gin.Context) {
-	GetFactory[M, REQ, RSP]()(c)
-}
-
 // GetFactory returns a Gin handler that retrieves one resource.
 //
 // When M, REQ, and RSP are the same type, the handler reads the configured route

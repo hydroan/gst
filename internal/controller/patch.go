@@ -21,11 +21,6 @@ import (
 	"go.uber.org/zap"
 )
 
-// Patch handles a partial update request with the default factory settings.
-func Patch[M types.Model, REQ types.Request, RSP types.Response](c *gin.Context) {
-	PatchFactory[M, REQ, RSP]()(c)
-}
-
 // PatchFactory returns a Gin handler that partially updates one resource.
 //
 // When M, REQ, and RSP are the same type, the handler reads the resource id

@@ -19,11 +19,6 @@ import (
 	"go.uber.org/zap"
 )
 
-// Delete handles a delete request with the default factory settings.
-func Delete[M types.Model, REQ types.Request, RSP types.Response](c *gin.Context) {
-	DeleteFactory[M, REQ, RSP]()(c)
-}
-
 // DeleteFactory returns a Gin handler that deletes one resource.
 //
 // When M, REQ, and RSP are the same type, the handler reads the resource id

@@ -16,11 +16,6 @@ import (
 	"go.uber.org/zap"
 )
 
-// List handles a list request with the default factory settings.
-func List[M types.Model, REQ types.Request, RSP types.Response](c *gin.Context) {
-	ListFactory[M, REQ, RSP]()(c)
-}
-
 // ListFactory returns a Gin handler that lists resources.
 //
 // When M, REQ, and RSP are the same type, the handler decodes query parameters
