@@ -1,6 +1,8 @@
 package codegen_test
 
 import (
+	"fmt"
+	"slices"
 	"testing"
 
 	"github.com/hydroan/gst/internal/codegen"
@@ -41,11 +43,11 @@ func TestExtractAPIDocsStructs(t *testing.T) {
 		t.Fatalf("sub.Doc.Fields[Path] = %q, want %q", sub.Doc.Fields["Path"], want)
 	}
 
-	if _, hasPlain := byKey["example.com/proj/testdata/apidocmodel.plain"]; hasPlain {
-		t.Fatal("plain entry present, structs without comments must be skipped")
+	if _, hasPlain := byKey["example.com/proj/testdata/apidocmodel.Plain"]; hasPlain {
+		t.Fatal("Plain entry present, structs without comments must be skipped")
 	}
-	if _, hasIgnored := byKey["example.com/proj/testdata/apidocmodel.Ignored"]; hasIgnored {
-		t.Fatal(`Ignored entry present, files with the "_" prefix must be skipped`)
+	if _, hasHidden := byKey["example.com/proj/testdata/apidocmodel.hidden"]; hasHidden {
+		t.Fatal("hidden entry present, unexported structs must be skipped")
 	}
 }
 
@@ -92,6 +94,63 @@ func TestExtractAPIDocsDeterministicOrder(t *testing.T) {
 		if first.Enums[i].PkgPath != second.Enums[i].PkgPath || first.Enums[i].TypeName != second.Enums[i].TypeName {
 			t.Fatalf("enum entry order differs at index %d", i)
 		}
+	}
+}
+
+// TestExtractAPIDocsSkipsFilesOutsideCodeGeneration checks the files the
+// extraction leaves out: test files, files whose names start with "_", files
+// in vendor and testdata directories, and the file names excludes lists.
+func TestExtractAPIDocsSkipsFilesOutsideCodeGeneration(t *testing.T) {
+	entries, err := codegen.ExtractAPIDocs("example.com/proj", "testdata/apidocmodel", []string{"excluded.go"})
+	if err != nil {
+		t.Fatalf("ExtractAPIDocs() error = %v", err)
+	}
+
+	skipped := map[string]string{
+		"example.com/proj/testdata/apidocmodel.InTestFile":       "test files",
+		"example.com/proj/testdata/apidocmodel.Ignored":          `files with the "_" prefix`,
+		"example.com/proj/testdata/apidocmodel/vendor.Vendored":  "vendor directories",
+		"example.com/proj/testdata/apidocmodel/testdata.Fixture": "testdata directories",
+		"example.com/proj/testdata/apidocmodel.Excluded":         "the files excludes lists",
+	}
+	for _, entry := range entries.Structs {
+		key := entry.PkgPath + "." + entry.TypeName
+		if reason, ok := skipped[key]; ok {
+			t.Errorf("%s entry present, %s must be skipped", key, reason)
+		}
+	}
+
+	// Without excludes the excluded file is extracted like any other.
+	found := false
+	for _, entry := range extractTestAPIDocs(t).Structs {
+		if entry.TypeName == "Excluded" {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatal("Excluded entry missing, a file excludes does not list must be extracted")
+	}
+}
+
+// TestFindModels finds the models declared under testdata/findmodel: the
+// database model Record of the root package and the model Item of its
+// sample package, each with the path of its model file.
+func TestFindModels(t *testing.T) {
+	models, err := codegen.FindModels("example.com/proj", "testdata/findmodel", "service", nil)
+	if err != nil {
+		t.Fatalf("FindModels() error = %v", err)
+	}
+
+	got := make([]string, 0, len(models))
+	for _, m := range models {
+		got = append(got, fmt.Sprintf("%s.%s %s migrate=%v", m.ModelPkgName, m.ModelName, m.ModelFilePath, m.Design.Migrate))
+	}
+	want := []string{
+		"findmodel.Record testdata/findmodel/record.go migrate=true",
+		"sample.Item testdata/findmodel/sample/item.go migrate=false",
+	}
+	if !slices.Equal(got, want) {
+		t.Fatalf("FindModels() = %q, want %q", got, want)
 	}
 }
 

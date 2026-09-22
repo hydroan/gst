@@ -13,8 +13,14 @@ type UserCreateReq struct {
 	Name string `json:"name"`
 }
 
-type plain struct {
+type Plain struct {
 	Value string
+}
+
+// hidden is documented but unexported.
+type hidden struct {
+	// Value is documented too.
+	Value string `json:"value"`
 }
 
 // UserStatus is the lifecycle status of a user.
