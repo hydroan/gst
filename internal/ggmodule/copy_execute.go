@@ -5,39 +5,34 @@ import (
 	"os"
 
 	"github.com/cockroachdb/errors"
-	"github.com/hydroan/gst/internal/clioutput"
 	"github.com/hydroan/gst/internal/gghelper"
 )
 
-// moduleCopyWriteStatus is what one write did to a target file. It is a named
-// type so a misspelled status cannot silently fall through the print switch.
-type moduleCopyWriteStatus string
+// CopyWriteStatus is what one write or delete of a module copy did to a
+// target file: SKIP, UPDATE, CREATE or DELETE. It is a named type so a
+// misspelled status cannot silently fall through a switch printing it.
+type CopyWriteStatus string
 
 const (
-	moduleCopyWriteSkip   moduleCopyWriteStatus = "SKIP"
-	moduleCopyWriteUpdate moduleCopyWriteStatus = "UPDATE"
-	moduleCopyWriteCreate moduleCopyWriteStatus = "CREATE"
-	moduleCopyWriteDelete moduleCopyWriteStatus = "DELETE"
+	CopyWriteSkip   CopyWriteStatus = "SKIP"
+	CopyWriteUpdate CopyWriteStatus = "UPDATE"
+	CopyWriteCreate CopyWriteStatus = "CREATE"
+	CopyWriteDelete CopyWriteStatus = "DELETE"
 )
-
-func printModuleCopyStatus(status moduleCopyWriteStatus, path string) {
-	switch status {
-	case moduleCopyWriteSkip:
-		clioutput.Item(string(status), "%s", path)
-	case moduleCopyWriteUpdate:
-		clioutput.Status(clioutput.StyleWarn, clioutput.SymbolSuccess, string(status), "%s", path)
-	case moduleCopyWriteCreate:
-		clioutput.Success(string(status), "%s", path)
-	case moduleCopyWriteDelete:
-		clioutput.Status(clioutput.StyleWarn, clioutput.SymbolWarn, string(status), "%s", path)
-	}
-}
 
 // CopyExecution applies a previously checked CopyPlan.
 type CopyExecution struct {
-	Plan         *CopyPlan
-	Options      CopyOptions
-	RunGen       func() error
+	Plan    *CopyPlan
+	Options CopyOptions
+	RunGen  func() error
+
+	// OnSection and OnFile receive the progress of Run as it goes: OnSection
+	// the title of each phase Run enters, such as "Copy Model Files", and
+	// OnFile what Run did to each file it writes or deletes, the middleware
+	// registration file included. Run reports nothing through a nil one.
+	OnSection func(title string)
+	OnFile    func(status CopyWriteStatus, path string)
+
 	WrittenFiles []string
 	DeletedFiles []string
 }
@@ -56,7 +51,7 @@ func (e *CopyExecution) Run() error {
 		return errors.New("module copy requires a gg gen runner")
 	}
 
-	clioutput.Section("Copy Model Files")
+	e.section("Copy Model Files")
 	for _, file := range e.Plan.Files {
 		if file.Kind != moduleCopyFileModel {
 			continue
@@ -74,7 +69,7 @@ func (e *CopyExecution) Run() error {
 		return err
 	}
 
-	clioutput.Section("Copy Service Files")
+	e.section("Copy Service Files")
 	for _, file := range e.Plan.Files {
 		if file.Kind != moduleCopyFileService {
 			continue
@@ -86,7 +81,7 @@ func (e *CopyExecution) Run() error {
 
 	helperFiles := e.Plan.HelperTargets()
 	if len(helperFiles) > 0 {
-		clioutput.Section("Copy Helper Files")
+		e.section("Copy Helper Files")
 		for _, file := range e.Plan.Files {
 			if file.Kind != moduleCopyFileHelper {
 				continue
@@ -98,7 +93,7 @@ func (e *CopyExecution) Run() error {
 	}
 
 	if len(e.Plan.Middleware) > 0 {
-		clioutput.Section("Copy Middleware Files")
+		e.section("Copy Middleware Files")
 		// Snapshot module-owned handler names before the writes below replace
 		// the old file contents; reconciliation needs them to retire register
 		// calls of renamed handlers.
@@ -115,15 +110,29 @@ func (e *CopyExecution) Run() error {
 			}
 		}
 
-		clioutput.Section("Register Middleware")
+		e.section("Register Middleware")
 		status, path, err := e.reconcileMiddlewareRegistrations(obsoleteHandlers)
 		if err != nil {
 			return err
 		}
-		printModuleCopyStatus(status, path)
+		e.file(status, path)
 	}
 
 	return nil
+}
+
+// section reports that Run enters the phase title names.
+func (e *CopyExecution) section(title string) {
+	if e.OnSection != nil {
+		e.OnSection(title)
+	}
+}
+
+// file reports what Run did to the file at path.
+func (e *CopyExecution) file(status CopyWriteStatus, path string) {
+	if e.OnFile != nil {
+		e.OnFile(status, path)
+	}
 }
 
 // pruneStaleFiles deletes target files an older copy produced that the current
@@ -140,7 +149,7 @@ func (e *CopyExecution) pruneStaleFiles() error {
 		return nil
 	}
 
-	clioutput.Section("Prune Stale Files")
+	e.section("Prune Stale Files")
 	for _, group := range []struct {
 		files []string
 		root  string
@@ -197,7 +206,7 @@ func (e *CopyExecution) remove(path string, root string) error {
 		}
 		return err
 	}
-	printModuleCopyStatus(moduleCopyWriteDelete, safePath)
+	e.file(CopyWriteDelete, safePath)
 	e.DeletedFiles = append(e.DeletedFiles, safePath)
 	return nil
 }
@@ -229,21 +238,21 @@ func (e *CopyExecution) write(file moduleCopyFile) error {
 	if err != nil {
 		return err
 	}
-	printModuleCopyStatus(status, file.TargetPath)
+	e.file(status, file.TargetPath)
 	if wrote {
 		e.WrittenFiles = append(e.WrittenFiles, file.TargetPath)
 	}
 	return nil
 }
 
-func writeModuleCopyFile(path string, content []byte, preexisting bool, force bool) (status moduleCopyWriteStatus, wrote bool, err error) {
+func writeModuleCopyFile(path string, content []byte, preexisting bool, force bool) (status CopyWriteStatus, wrote bool, err error) {
 	if gghelper.FileExists(path) {
 		oldData, err := os.ReadFile(path)
 		if err != nil {
 			return "", false, err
 		}
 		if string(oldData) == string(content) {
-			return moduleCopyWriteSkip, false, nil
+			return CopyWriteSkip, false, nil
 		}
 		if preexisting && !force {
 			return "", false, fmt.Errorf("%s already exists; use --force to overwrite", path)
@@ -251,7 +260,7 @@ func writeModuleCopyFile(path string, content []byte, preexisting bool, force bo
 		if err := os.WriteFile(path, content, 0o600); err != nil {
 			return "", false, err
 		}
-		return moduleCopyWriteUpdate, true, nil
+		return CopyWriteUpdate, true, nil
 	}
 
 	if err := gghelper.EnsureParentDir(path); err != nil {
@@ -260,5 +269,5 @@ func writeModuleCopyFile(path string, content []byte, preexisting bool, force bo
 	if err := os.WriteFile(path, content, 0o600); err != nil {
 		return "", false, err
 	}
-	return moduleCopyWriteCreate, true, nil
+	return CopyWriteCreate, true, nil
 }

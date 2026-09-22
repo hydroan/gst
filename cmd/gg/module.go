@@ -146,9 +146,15 @@ func runModuleCopy(name string, opts moduleCopyOptions) error {
 	// Snapshot current project check violations before any file is written, so
 	// the copy-time gen run fails only on violations introduced by this copy.
 	baseline := collectProjectCheckBaseline()
-	exec := ggmodule.CopyExecution{Plan: plan, Options: copyOpts, RunGen: func() error {
-		return runModuleCopyGen(baseline)
-	}}
+	exec := ggmodule.CopyExecution{
+		Plan:    plan,
+		Options: copyOpts,
+		RunGen: func() error {
+			return runModuleCopyGen(baseline)
+		},
+		OnSection: clioutput.Section,
+		OnFile:    printModuleCopyStatus,
+	}
 	if err := exec.Run(); err != nil {
 		if len(exec.WrittenFiles) > 0 || len(exec.DeletedFiles) > 0 {
 			printModuleCopyCleanup(name)
@@ -161,6 +167,21 @@ func runModuleCopy(name string, opts moduleCopyOptions) error {
 	printModuleCopyCleanup(name)
 	printModuleCopyPostNotes(plan.PostNotes)
 	return nil
+}
+
+// printModuleCopyStatus prints what module copy did to one file, styled by
+// what happened to it.
+func printModuleCopyStatus(status ggmodule.CopyWriteStatus, path string) {
+	switch status {
+	case ggmodule.CopyWriteSkip:
+		clioutput.Item(string(status), "%s", path)
+	case ggmodule.CopyWriteUpdate:
+		clioutput.Status(clioutput.StyleWarn, clioutput.SymbolSuccess, string(status), "%s", path)
+	case ggmodule.CopyWriteCreate:
+		clioutput.Success(string(status), "%s", path)
+	case ggmodule.CopyWriteDelete:
+		clioutput.Status(clioutput.StyleWarn, clioutput.SymbolWarn, string(status), "%s", path)
+	}
 }
 
 // runModuleCopyGen reuses gg gen's generator path but suppresses generated-file

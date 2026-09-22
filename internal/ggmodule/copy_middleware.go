@@ -227,7 +227,7 @@ func (e *CopyExecution) middlewareHandlersOnDisk() (map[string]bool, error) {
 // explanatory comments, grouped imports, or existing init work; AST editing
 // preserves those structures while touching only the import and calls owned
 // by module copy.
-func (e *CopyExecution) reconcileMiddlewareRegistrations(obsoleteHandlers map[string]bool) (status moduleCopyWriteStatus, path string, err error) {
+func (e *CopyExecution) reconcileMiddlewareRegistrations(obsoleteHandlers map[string]bool) (status CopyWriteStatus, path string, err error) {
 	targetDir := e.Plan.TargetMiddlewareDir
 	targetPath := filepath.Join(targetDir, middlewareRegistrationFilename)
 	fset, file, preexisting, err := parseOrCreateMiddlewareRegistrationFile(targetPath)
@@ -282,7 +282,7 @@ func (e *CopyExecution) reconcileMiddlewareRegistrations(obsoleteHandlers map[st
 		}
 	}
 	if !changed {
-		return moduleCopyWriteSkip, targetPath, nil
+		return CopyWriteSkip, targetPath, nil
 	}
 
 	if err := writeGoFile(targetPath, fset, file); err != nil {
@@ -290,9 +290,9 @@ func (e *CopyExecution) reconcileMiddlewareRegistrations(obsoleteHandlers map[st
 	}
 	e.WrittenFiles = append(e.WrittenFiles, targetPath)
 	if preexisting {
-		return moduleCopyWriteUpdate, targetPath, nil
+		return CopyWriteUpdate, targetPath, nil
 	}
-	return moduleCopyWriteCreate, targetPath, nil
+	return CopyWriteCreate, targetPath, nil
 }
 
 // topLevelFunctionNames returns the names of the top-level functions a Go
@@ -372,7 +372,7 @@ func (e *CopyExecution) removeMiddlewareRegistrations(handlerNames map[string]bo
 	if err := writeGoFile(safePath, fset, file); err != nil { // #nosec G703 -- safePath validated under the middleware dir by requirePathUnderRoot
 		return err
 	}
-	printModuleCopyStatus(moduleCopyWriteUpdate, safePath)
+	e.file(CopyWriteUpdate, safePath)
 	e.WrittenFiles = append(e.WrittenFiles, safePath)
 	return nil
 }

@@ -89,6 +89,52 @@ func TestCopyExecutionPrunesStaleFilesBeforeGen(t *testing.T) {
 	}
 }
 
+// TestCopyExecutionReportsProgressThroughItsCallbacks pins what Run hands the
+// command to print, in the order it happens: the title of each phase it
+// enters and what it did to each file.
+func TestCopyExecutionReportsProgressThroughItsCallbacks(t *testing.T) {
+	t.Chdir(t.TempDir())
+
+	model := filepath.Join("model", "copytest", "sample.go")
+	stale := filepath.Join("service", "copytest", "stale.go")
+	if err := os.MkdirAll(filepath.Dir(stale), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(stale, []byte("package copytest\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	var events []string
+	exec := &CopyExecution{
+		Plan: &CopyPlan{
+			Name:              "copytest",
+			ModelDir:          "model",
+			ServiceDir:        "service",
+			Files:             []moduleCopyFile{{Kind: moduleCopyFileModel, TargetPath: model, Content: []byte("package copytest\n")}},
+			StaleServiceFiles: []string{stale},
+		},
+		RunGen:    func() error { return nil },
+		OnSection: func(title string) { events = append(events, "section "+title) },
+		OnFile: func(status CopyWriteStatus, path string) {
+			events = append(events, string(status)+" "+path)
+		},
+	}
+
+	if err := exec.Run(); err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	want := []string{
+		"section Copy Model Files",
+		"CREATE " + model,
+		"section Prune Stale Files",
+		"DELETE " + stale,
+		"section Copy Service Files",
+	}
+	if !slices.Equal(events, want) {
+		t.Fatalf("events = %q, want %q", events, want)
+	}
+}
+
 func TestCopyExecutionPruneTreatsMissingStaleFileAsPruned(t *testing.T) {
 	t.Chdir(t.TempDir())
 
