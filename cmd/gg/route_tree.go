@@ -90,7 +90,7 @@ func parseRouteTreeFromFile() (map[string][]string, error) {
 
 	routes := make(map[string][]string)
 	lines := strings.Split(string(content), "\n")
-	routePattern := regexp.MustCompile(`router\.Register\[.*?\]\([^,]+,\s*"([^"]+)",\s*&types\.ControllerConfig\[.*?\]\{.*?\},\s*consts\.(\w+)\)`)
+	routePattern := regexp.MustCompile(`router\.Register\[.*?\]\([^,]+,\s*"([^"]+)",\s*&gst\.ControllerConfig\[.*?\]\{.*?\},\s*consts\.(\w+)\)`)
 
 	for _, line := range lines {
 		matches := routePattern.FindStringSubmatch(strings.TrimSpace(line))
