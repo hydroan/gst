@@ -71,7 +71,7 @@ var projectChecks = []projectCheck{
 	},
 	{
 		name:  "Action type form",
-		rule:  "explicit DSL Payload/Result types must be named types declared in the same model package: struct types use the pointer form, slice and map types use the value form, and an empty struct type may only pair with an empty peer side",
+		rule:  "explicit DSL Payload/Result types must be named types declared in the same model package: struct types use the pointer form, slice and map types use the value form, an empty struct type may only pair with an empty peer side, and a Payload type is never an interface with methods",
 		check: CheckActionTypeForm,
 	},
 	{

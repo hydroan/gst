@@ -1,6 +1,9 @@
 package main
 
 import (
+	"go/ast"
+	"go/parser"
+	"go/token"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -190,6 +193,171 @@ type SampleItem struct {
 	}
 	if !strings.Contains(joined, "Update action declares Payload[*SampleMissingReq] but the type is not declared in the model package") {
 		t.Fatalf("expected undeclared-type violation, got %#v", violations)
+	}
+}
+
+func TestCheckActionTypeFormRejectsInterfacePayloads(t *testing.T) {
+	oldModelDir := modelDir
+	t.Cleanup(func() {
+		modelDir = oldModelDir
+	})
+
+	projectDir := t.TempDir()
+	t.Chdir(projectDir)
+	modelDir = "model"
+
+	// A request body decodes into no interface with methods, whether the
+	// interface declares them itself or embeds an interface that does, and
+	// whether Payload names it by value or through a pointer. An interface
+	// without methods holds any JSON value, and a Result is only encoded, so
+	// neither is a violation.
+	writeCheckFile(t, filepath.Join(projectDir, "model", "sample", "sample.go"), `package sample
+
+import (
+	"fmt"
+
+	. "github.com/hydroan/gst/dsl"
+	"github.com/hydroan/gst/model"
+)
+
+type Sample struct {
+	model.Base
+}
+
+func (Sample) Design() {
+	Create(func() {
+		Service()
+		Payload[SampleCreateReq]()
+		Result[SampleCreateRsp]()
+	})
+	Update(func() {
+		Service()
+		Payload[*SampleUpdateReq]()
+	})
+	Patch(func() {
+		Service()
+		Payload[SamplePatchReq]()
+	})
+	Delete(func() {
+		Service()
+		Payload[SampleDeleteReq]()
+	})
+}
+
+type SampleCreateReq interface {
+	Bind()
+}
+
+type SampleCreateRsp interface {
+	Render()
+}
+
+type SampleUpdateReq interface {
+	fmt.Stringer
+}
+
+type SamplePatchReq interface {
+	SampleBinder
+}
+
+type SampleBinder interface {
+	Bind()
+}
+
+type SampleDeleteReq interface {
+	SampleAny
+}
+
+type SampleAny = interface{}
+`)
+
+	violations := CheckActionTypeForm(newProjectIgnoreMatcher())
+
+	if len(violations) != 3 {
+		t.Fatalf("expected three interface violations, got %#v", violations)
+	}
+	joined := strings.Join(violations, "\n")
+	for _, want := range []string{
+		"Create action declares Payload[SampleCreateReq] whose type is an interface with methods, which no request body decodes into; declare a struct type and use the pointer form Payload[*SampleCreateReq]",
+		"Update action declares Payload[*SampleUpdateReq] whose type is an interface with methods, which no request body decodes into; declare a struct type and use the pointer form Payload[*SampleUpdateReq]",
+		"Patch action declares Payload[SamplePatchReq] whose type is an interface with methods, which no request body decodes into; declare a struct type and use the pointer form Payload[*SamplePatchReq]",
+	} {
+		if !strings.Contains(joined, want) {
+			t.Fatalf("expected violation %q, got %#v", want, violations)
+		}
+	}
+}
+
+func TestInterfaceDeclaresMethods(t *testing.T) {
+	// Each type below is an interface, declaring methods itself, through what
+	// it embeds, or not at all; a cycle of embeddings must end the walk.
+	file, err := parser.ParseFile(token.NewFileSet(), "sample.go", `package sample
+
+import (
+	"fmt"
+	. "io"
+)
+
+type SampleBinder interface{ Bind() }
+
+type SampleAny = interface{}
+
+type SampleOwn interface{ Bind() }
+
+type SampleEmpty interface{}
+
+type SampleEmbedsLocal interface{ SampleBinder }
+
+type SampleEmbedsEmptyAlias interface{ SampleAny }
+
+type SampleEmbedsAny interface{ any }
+
+type SampleEmbedsError interface{ error }
+
+type SampleEmbedsForeign interface{ fmt.Stringer }
+
+type SampleEmbedsDotImported interface{ Reader }
+
+type SampleCycleA interface{ SampleCycleB }
+
+type SampleCycleB interface{ SampleCycleA }
+`, 0)
+	if err != nil {
+		t.Fatalf("parse source failed: %v", err)
+	}
+	typeExprs := make(map[string]ast.Expr)
+	for _, decl := range file.Decls {
+		genDecl, ok := decl.(*ast.GenDecl)
+		if !ok || genDecl.Tok != token.TYPE {
+			continue
+		}
+		for _, spec := range genDecl.Specs {
+			if typeSpec, ok := spec.(*ast.TypeSpec); ok {
+				typeExprs[typeSpec.Name.Name] = typeSpec.Type
+			}
+		}
+	}
+
+	tests := []struct {
+		name string
+		want bool
+	}{
+		{name: "SampleOwn", want: true},
+		{name: "SampleEmpty", want: false},
+		{name: "SampleEmbedsLocal", want: true},
+		{name: "SampleEmbedsEmptyAlias", want: false},
+		{name: "SampleEmbedsAny", want: false},
+		{name: "SampleEmbedsError", want: true},
+		{name: "SampleEmbedsForeign", want: true},
+		{name: "SampleEmbedsDotImported", want: true},
+		{name: "SampleCycleA", want: false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := interfaceDeclaresMethods(typeExprs[tt.name], typeExprs, make(map[string]bool)); got != tt.want {
+				t.Fatalf("interfaceDeclaresMethods(%s) = %t, want %t", tt.name, got, tt.want)
+			}
+		})
 	}
 }
 

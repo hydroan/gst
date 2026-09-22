@@ -20,7 +20,10 @@ import (
 // declared in the same package; struct types must use the pointer form, slice
 // and map types must use the value form, and an empty struct type is the
 // delegation marker for actions without data, so it may only pair with an
-// empty peer side (an omitted side counts as empty).
+// empty peer side (an omitted side counts as empty). A Payload type must not
+// be an interface with methods, which no request body decodes into, named by
+// value or through a pointer; a Result is only encoded, so any interface
+// serves there.
 func CheckActionTypeForm(ignore gitignore.Matcher) []string {
 	var violations []string
 
@@ -65,6 +68,7 @@ const (
 	actionTypeStruct
 	actionTypeEmptyStruct
 	actionTypeSliceOrMap
+	actionTypeMethodInterface
 	actionTypeOther
 )
 
@@ -120,6 +124,11 @@ func checkPackageActionTypeForm(paths []string) []string {
 				return actionTypeStruct
 			case *ast.ArrayType, *ast.MapType:
 				return actionTypeSliceOrMap
+			case *ast.InterfaceType:
+				if interfaceDeclaresMethods(t, typeExprs, make(map[string]bool)) {
+					return actionTypeMethodInterface
+				}
+				return actionTypeOther
 			case *ast.StarExpr:
 				expr = t.X
 			case *ast.Ident:
@@ -179,6 +188,50 @@ func checkPackageActionTypeForm(paths []string) []string {
 	}
 
 	return violations
+}
+
+// interfaceDeclaresMethods reports whether the interface expr declares a
+// method, itself or through an interface it embeds. An embedded name the
+// package declares is followed through typeExprs, the package's type
+// declarations. An embedded interface of another package, such as
+// fmt.Stringer, or one dot-imported, cannot be read here and counts as
+// declaring methods, as do error and any embedded form besides a name or an
+// interface literal; any declares none. For
+//
+//	type SampleBinder interface{ Bind() }
+//	type SampleReq interface{ SampleBinder }
+//	type SampleAny = interface{}
+//	type SampleOpenReq interface{ SampleAny }
+//
+// it reports true for the type of SampleReq and false for that of
+// SampleOpenReq. seen guards the names already followed against a cycle.
+func interfaceDeclaresMethods(expr ast.Expr, typeExprs map[string]ast.Expr, seen map[string]bool) bool {
+	switch t := expr.(type) {
+	case *ast.InterfaceType:
+		if t.Methods == nil {
+			return false
+		}
+		for _, field := range t.Methods.List {
+			if len(field.Names) > 0 || interfaceDeclaresMethods(field.Type, typeExprs, seen) {
+				return true
+			}
+		}
+		return false
+	case *ast.Ident:
+		next, declared := typeExprs[t.Name]
+		if !declared {
+			return t.Name != "any"
+		}
+		if seen[t.Name] {
+			return false
+		}
+		seen[t.Name] = true
+		return interfaceDeclaresMethods(next, typeExprs, seen)
+	case *ast.ParenExpr:
+		return interfaceDeclaresMethods(t.X, typeExprs, seen)
+	default:
+		return true
+	}
 }
 
 // checkActionTypePair checks the Payload and Result type strings of one
@@ -244,10 +297,20 @@ func checkActionTypePair(relPath string, action *dsl.Action, resolve func(string
 					relPath, actionName, kind, name, kind, name,
 				))
 			}
+		case actionTypeMethodInterface:
+			// A Result is only encoded, and any value encodes; a request
+			// body decodes into no interface with methods.
+			if kind == "Payload" {
+				violations = append(violations, fmt.Sprintf(
+					"%s: %s action declares Payload[%s] whose type is an interface with methods, which no request body decodes into; declare a struct type and use the pointer form Payload[*%s]",
+					relPath, actionName, raw, name,
+				))
+			}
 		case actionTypeOther:
 			// The underlying type cannot be classified inside this package
-			// (for example an alias to another package's type); no form
-			// verdict is possible.
+			// (for example an alias to another package's type), or takes no
+			// particular form (an interface without methods, which holds any
+			// JSON value); no form verdict applies.
 		}
 	}
 

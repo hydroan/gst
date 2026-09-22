@@ -50,21 +50,23 @@ type phaseSpan struct {
 // resolves no service, degrading to the no-op default service. hookPhases
 // lists the additional service hook phases the handler traces (for example
 // the before/after phases of a CRUD operation), so their span names are
-// precomputed as well.
+// precomputed as well. It panics, naming route, when REQ is an interface with
+// methods or a pointer to one, a request type no request body decodes into.
 func newFactoryMeta[M types.Model, REQ types.Request, RSP types.Response](route string, phase consts.Phase, hookPhases ...consts.Phase) *factoryMeta[M, REQ, RSP] {
 	typ := reflect.TypeOf(*new(M)).Elem()
 	name := typ.Name()
 
 	reqTyp := reflect.TypeFor[REQ]()
-	// The request type is what a request body decodes into, and an interface
-	// with methods admits no JSON value: every request to the route would fail
-	// to bind, so the declaration is refused as the route registers.
-	if reqTyp.Kind() == reflect.Interface && reqTyp.NumMethod() > 0 {
-		panic(fmt.Sprintf("controller: request type %s is an interface with methods, which no request body decodes into; declare a concrete type, or any", reqTyp))
-	}
 	reqKind := reqTyp.Kind()
 	for reqTyp.Kind() == reflect.Pointer {
 		reqTyp = reqTyp.Elem()
+	}
+	// The request type is what a request body decodes into, and an interface
+	// with methods admits no JSON value, pointed to or not: every request to
+	// the route would fail to bind, so the declaration is refused as the route
+	// registers.
+	if reqTyp.Kind() == reflect.Interface && reqTyp.NumMethod() > 0 {
+		panic(fmt.Sprintf("controller: route %q: request type %s is an interface with methods or a pointer to one, which no request body decodes into; declare a concrete type, or any", route, reflect.TypeFor[REQ]()))
 	}
 
 	serviceSpans := make(map[consts.Phase]phaseSpan, len(hookPhases)+1)
