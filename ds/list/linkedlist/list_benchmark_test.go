@@ -389,7 +389,7 @@ func benchmarkMerge(b *testing.B, size int) {
 		b.ResetTimer()
 		for range b.N {
 			l2 := createLinkedList(b, size, false)
-			l1.Merge(l2)
+			_ = l1.Merge(l2)
 		}
 	})
 
@@ -398,7 +398,7 @@ func benchmarkMerge(b *testing.B, size int) {
 		b.ResetTimer()
 		for range b.N {
 			l2 := createLinkedList(b, size, true)
-			l1.Merge(l2)
+			_ = l1.Merge(l2)
 		}
 	})
 }
@@ -442,7 +442,7 @@ func benchmarkMergeSorted(b *testing.B, size int) {
 				b.Fatalf("failed to create list: %v", err)
 			}
 			b.StartTimer()
-			l1.MergeSorted(l2, cmp)
+			_ = l1.MergeSorted(l2, cmp)
 		}
 	})
 
@@ -464,7 +464,7 @@ func benchmarkMergeSorted(b *testing.B, size int) {
 				b.Fatalf("failed to create list: %v", err)
 			}
 			b.StartTimer()
-			l1.MergeSorted(l2, cmp)
+			_ = l1.MergeSorted(l2, cmp)
 		}
 	})
 }

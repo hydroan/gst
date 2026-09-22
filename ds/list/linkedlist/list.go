@@ -10,13 +10,17 @@
 package linkedlist
 
 import (
+	"reflect"
 	"slices"
 
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/ds/types"
 )
 
-var ErrNilCmp = errors.New("nil comparator")
+// ErrMergeWithSelf is returned by Merge and MergeSorted when a list is asked
+// to merge with itself: emptying the other list afterwards would empty the
+// result.
+var ErrMergeWithSelf = errors.New("cannot merge a list with itself")
 
 // List represents a doubly-linked list.
 type List[V any] struct {
@@ -328,20 +332,22 @@ func (l *List[V]) Reverse() {
 }
 
 // Merge appends all elements from other list to the end of current list.
-// The other list is emptied after the merge.
-func (l *List[V]) Merge(other *List[V]) {
+// The other list is emptied after the merge; a nil other merges nothing. It
+// fails with ErrMergeWithSelf, changing nothing, when other is l itself.
+func (l *List[V]) Merge(other *List[V]) error {
+	if other == l {
+		return ErrMergeWithSelf
+	}
 	if other == nil {
-		return
+		return nil
 	}
+
+	unlock := lockBoth(l, other)
+	defer unlock()
+
 	if other.isEmpty() {
-		return
+		return nil
 	}
-
-	l.mu.Lock()
-	other.mu.Lock()
-	defer l.mu.Unlock()
-	defer other.mu.Unlock()
-
 	if l.isEmpty() {
 		l.Head = other.Head
 		l.Tail = other.Tail
@@ -356,6 +362,7 @@ func (l *List[V]) Merge(other *List[V]) {
 	other.Head = nil
 	other.Tail = nil
 	other.count = 0
+	return nil
 }
 
 // MergeSorted merges two lists into one sorted list using the provided cmp function.
@@ -364,34 +371,42 @@ func (l *List[V]) Merge(other *List[V]) {
 //   - zero if a = b.
 //   - positive value if a > b.
 //
-// Both input list can be unsorted, the resulting list will be sorted.
-// The other list is emptied after the merge.
-func (l *List[V]) MergeSorted(other *List[V], cmp func(V, V) int) {
-	if other == nil {
-		return
-	}
-	if other.isEmpty() {
-		return
-	}
+// Both input list can be unsorted, the resulting list will be sorted, also
+// when other is empty or nil. The other list is emptied after the merge. It
+// fails, changing neither list, with types.ErrComparisonNil when cmp is nil
+// and with ErrMergeWithSelf when other is l itself.
+func (l *List[V]) MergeSorted(other *List[V], cmp func(V, V) int) error {
 	if cmp == nil {
-		return
+		return types.ErrComparisonNil
+	}
+	if other == l {
+		return ErrMergeWithSelf
 	}
 
-	l.mu.Lock()
-	other.mu.Lock()
-	defer l.mu.Unlock()
-	defer other.mu.Unlock()
-
-	merged := make([]V, 0, l.count+other.count)
-	curr := l.Head
-	for curr != nil {
-		merged = append(merged, curr.Value)
-		curr = curr.Next
+	var unlock func()
+	if other == nil {
+		l.mu.Lock()
+		unlock = l.mu.Unlock
+	} else {
+		unlock = lockBoth(l, other)
 	}
-	curr = other.Head
-	for curr != nil {
+	defer unlock()
+
+	size := l.count
+	if other != nil {
+		size += other.count
+	}
+	merged := make([]V, 0, size)
+	for curr := l.Head; curr != nil; curr = curr.Next {
 		merged = append(merged, curr.Value)
-		curr = curr.Next
+	}
+	if other != nil {
+		for curr := other.Head; curr != nil; curr = curr.Next {
+			merged = append(merged, curr.Value)
+		}
+		other.Head = nil
+		other.Tail = nil
+		other.count = 0
 	}
 	slices.SortFunc(merged, cmp)
 	l.Head = nil
@@ -400,9 +415,24 @@ func (l *List[V]) MergeSorted(other *List[V], cmp func(V, V) int) {
 	for _, v := range merged {
 		l.pushBackNode(&Node[V]{Value: v})
 	}
-	other.Head = nil
-	other.Tail = nil
-	other.count = 0
+	return nil
+}
+
+// lockBoth write-locks l and other in the order of their addresses, which is
+// the same order whichever of the two lists a merge starts from: two lists
+// merging into each other at once then never each hold the lock the other
+// waits for. It returns the function that unlocks both.
+func lockBoth[V any](l, other *List[V]) (unlock func()) {
+	first, second := l, other
+	if reflect.ValueOf(first).Pointer() > reflect.ValueOf(second).Pointer() {
+		first, second = second, first
+	}
+	first.mu.Lock()
+	second.mu.Lock()
+	return func() {
+		second.mu.Unlock()
+		first.mu.Unlock()
+	}
 }
 
 // Clone returns a deep copy of the list.

@@ -3,10 +3,12 @@ package linkedlist_test
 import (
 	"math/rand/v2"
 	"slices"
+	"sync"
 	"testing"
 	"time"
 
 	"github.com/hydroan/gst/ds/list/linkedlist"
+	"github.com/hydroan/gst/ds/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -226,7 +228,7 @@ func TestList_Merge(t *testing.T) {
 		require.NoError(t, err)
 		l2, err := linkedlist.New[int]()
 		require.NoError(t, err)
-		l1.Merge(l2)
+		require.NoError(t, l1.Merge(l2))
 		assert.Equal(t, []int{1, 3, 5}, l1.Slice())
 	})
 
@@ -235,7 +237,7 @@ func TestList_Merge(t *testing.T) {
 		require.NoError(t, err)
 		l2, err := linkedlist.NewFromSlice([]int{1, 3, 5})
 		require.NoError(t, err)
-		l1.Merge(l2)
+		require.NoError(t, l1.Merge(l2))
 		assert.Equal(t, []int{1, 3, 5}, l1.Slice())
 	})
 
@@ -244,8 +246,27 @@ func TestList_Merge(t *testing.T) {
 		require.NoError(t, err)
 		l2, err := linkedlist.NewFromSlice([]int{2, 4, 6})
 		require.NoError(t, err)
-		l1.Merge(l2)
+		require.NoError(t, l1.Merge(l2))
 		assert.Equal(t, []int{1, 3, 5, 2, 4, 6}, l1.Slice())
+		assert.Empty(t, l2.Slice())
+	})
+
+	t.Run("merge a nil list", func(t *testing.T) {
+		l, err := linkedlist.NewFromSlice([]int{1, 3, 5})
+		require.NoError(t, err)
+		require.NoError(t, l.Merge(nil))
+		assert.Equal(t, []int{1, 3, 5}, l.Slice())
+	})
+
+	t.Run("merge a list with itself", func(t *testing.T) {
+		l, err := linkedlist.NewFromSlice([]int{1, 3, 5})
+		require.NoError(t, err)
+		require.ErrorIs(t, l.Merge(l), linkedlist.ErrMergeWithSelf)
+		assert.Equal(t, []int{1, 3, 5}, l.Slice())
+	})
+
+	t.Run("merge lists into each other from several goroutines", func(t *testing.T) {
+		requireMergesIntoEachOtherSettle(t, func(a, b *linkedlist.List[int]) error { return a.Merge(b) })
 	})
 }
 
@@ -266,7 +287,7 @@ func TestList_MergeSorted(t *testing.T) {
 		require.NoError(t, err)
 		l2, err := linkedlist.New[int]()
 		require.NoError(t, err)
-		l1.MergeSorted(l2, cmp)
+		require.NoError(t, l1.MergeSorted(l2, cmp))
 		assert.Equal(t, []int{1, 3, 5}, l1.Slice())
 	})
 
@@ -275,7 +296,7 @@ func TestList_MergeSorted(t *testing.T) {
 		require.NoError(t, err)
 		l2, err := linkedlist.NewFromSlice([]int{1, 3, 5})
 		require.NoError(t, err)
-		l1.MergeSorted(l2, cmp)
+		require.NoError(t, l1.MergeSorted(l2, cmp))
 		assert.Equal(t, []int{1, 3, 5}, l1.Slice())
 	})
 
@@ -284,8 +305,9 @@ func TestList_MergeSorted(t *testing.T) {
 		require.NoError(t, err)
 		l2, err := linkedlist.NewFromSlice([]int{2, 4, 6})
 		require.NoError(t, err)
-		l1.MergeSorted(l2, cmp)
+		require.NoError(t, l1.MergeSorted(l2, cmp))
 		assert.Equal(t, []int{1, 2, 3, 4, 5, 6}, l1.Slice())
+		assert.Empty(t, l2.Slice())
 	})
 
 	t.Run("merge random lists", func(t *testing.T) {
@@ -306,9 +328,86 @@ func TestList_MergeSorted(t *testing.T) {
 		require.NoError(t, err)
 		l2, err := linkedlist.NewFromSlice(s2)
 		require.NoError(t, err)
-		l1.MergeSorted(l2, cmp)
+		require.NoError(t, l1.MergeSorted(l2, cmp))
 		assert.True(t, slices.IsSorted(l1.Slice()))
 	})
+
+	// The result is sorted whatever the other list holds, nothing included.
+	t.Run("an unsorted list merged with an empty one ends sorted", func(t *testing.T) {
+		l1, err := linkedlist.NewFromSlice([]int{3, 1, 2})
+		require.NoError(t, err)
+		l2, err := linkedlist.New[int]()
+		require.NoError(t, err)
+		require.NoError(t, l1.MergeSorted(l2, cmp))
+		assert.Equal(t, []int{1, 2, 3}, l1.Slice())
+	})
+
+	t.Run("an unsorted list merged with a nil one ends sorted", func(t *testing.T) {
+		l, err := linkedlist.NewFromSlice([]int{3, 1, 2})
+		require.NoError(t, err)
+		require.NoError(t, l.MergeSorted(nil, cmp))
+		assert.Equal(t, []int{1, 2, 3}, l.Slice())
+	})
+
+	t.Run("a nil comparison function changes neither list", func(t *testing.T) {
+		l1, err := linkedlist.NewFromSlice([]int{3, 1})
+		require.NoError(t, err)
+		l2, err := linkedlist.NewFromSlice([]int{2})
+		require.NoError(t, err)
+		require.ErrorIs(t, l1.MergeSorted(l2, nil), types.ErrComparisonNil)
+		assert.Equal(t, []int{3, 1}, l1.Slice())
+		assert.Equal(t, []int{2}, l2.Slice())
+	})
+
+	t.Run("merge a list with itself", func(t *testing.T) {
+		l, err := linkedlist.NewFromSlice([]int{3, 1, 2})
+		require.NoError(t, err)
+		require.ErrorIs(t, l.MergeSorted(l, cmp), linkedlist.ErrMergeWithSelf)
+		assert.Equal(t, []int{3, 1, 2}, l.Slice())
+	})
+
+	t.Run("merge lists into each other from several goroutines", func(t *testing.T) {
+		requireMergesIntoEachOtherSettle(t, func(a, b *linkedlist.List[int]) error { return a.MergeSorted(b, cmp) })
+	})
+}
+
+// requireMergesIntoEachOtherSettle merges two concurrency-safe lists into
+// each other from several goroutines at once, round after round. Every merge
+// must look at the lists only under their locks: one that judged a list empty
+// or not before locking it walks a list another merge has just emptied and
+// crashes. And every merge must take the two locks in the order the others
+// take them: two merges locking them in opposite orders each hold the lock the
+// other waits for, which the time limit of the rounds reports.
+func requireMergesIntoEachOtherSettle(t *testing.T, merge func(into, from *linkedlist.List[int]) error) {
+	t.Helper()
+	a, err := linkedlist.New[int](linkedlist.WithSafe[int]())
+	require.NoError(t, err)
+	b, err := linkedlist.New[int](linkedlist.WithSafe[int]())
+	require.NoError(t, err)
+
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		for range 1000 {
+			a.PushBack(1)
+			b.PushBack(2)
+			// The merges leave the start line together, so one can hold its
+			// first lock while another asks for it.
+			start := make(chan struct{})
+			var wg sync.WaitGroup
+			for range 4 {
+				wg.Go(func() { <-start; _ = merge(a, b) })
+				wg.Go(func() { <-start; _ = merge(b, a) })
+			}
+			close(start)
+			wg.Wait()
+		}
+	}()
+	select {
+	case <-done:
+	case <-time.After(10 * time.Second):
+		t.Fatal("two lists merging into each other at the same time deadlocked")
+	}
 }
 
 func TestList_Clone(t *testing.T) {

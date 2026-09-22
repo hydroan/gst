@@ -45,7 +45,7 @@ func ExampleList_merge() {
 	l1, _ := linkedlist.NewFromSlice([]int{1, 3, 5})
 	l2, _ := linkedlist.NewFromSlice([]int{2, 4, 6})
 
-	l1.Merge(l2)
+	_ = l1.Merge(l2)
 
 	fmt.Println(l1.Slice())
 	// Output: [1 3 5 2 4 6]
@@ -65,7 +65,7 @@ func ExampleList_merge_sorted() {
 	l1, _ := linkedlist.NewFromSlice([]int{1, 3, 5})
 	l2, _ := linkedlist.NewFromSlice([]int{2, 4, 6})
 
-	l1.MergeSorted(l2, cmp)
+	_ = l1.MergeSorted(l2, cmp)
 
 	fmt.Println(l1.Slice())
 	// Output: [1 2 3 4 5 6]
