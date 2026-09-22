@@ -24,8 +24,6 @@ type List[V any] struct {
 	count      int
 	mu         types.Locker
 	safe       bool
-	sorted     bool
-	cmp        func(V, V) int
 }
 
 // New creates and returns an empty doubly-linked list.
