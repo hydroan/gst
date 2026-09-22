@@ -140,6 +140,13 @@ func genRefreshToken(key []byte, userID string) (rToken string, err error) {
 
 // RefreshTokens issues a new access token and refresh token from a valid
 // refresh token and the access token issued with it, which may have expired.
+//
+// Both tokens are signed with the same key, so the claims tell them apart:
+// a refresh token names no user, and an access token names one. An access
+// token passed as the refresh token is refused with ErrInvalidRefreshToken —
+// accepted, it would let whoever holds the short-lived access token alone
+// mint a pair — and a refresh token passed as the access token with
+// ErrInvalidAccessToken. Tokens of another issuer are refused the same way.
 func RefreshTokens(accessToken, refreshToken string) (newAccessToken, newRefreshToken string, err error) {
 	key, err := signingKey()
 	if err != nil {
@@ -153,7 +160,7 @@ func RefreshTokens(accessToken, refreshToken string) (newAccessToken, newRefresh
 	if token, err = jwt.ParseWithClaims(refreshToken, refreshClaims, keyFn); err != nil {
 		return "", "", errors.Wrap(err, ErrInvalidRefreshToken.Error())
 	}
-	if !token.Valid {
+	if !token.Valid || refreshClaims.Issuer != issuer || len(refreshClaims.UserID) != 0 || len(refreshClaims.Username) != 0 {
 		return "", "", ErrInvalidRefreshToken
 	}
 	if time.Now().After(refreshClaims.ExpiresAt.Time) {
@@ -167,6 +174,9 @@ func RefreshTokens(accessToken, refreshToken string) (newAccessToken, newRefresh
 			return "", "", errors.Wrap(err, ErrInvalidAccessToken.Error())
 		}
 	} else if !token.Valid {
+		return "", "", ErrInvalidAccessToken
+	}
+	if accessClaims.Issuer != issuer || len(accessClaims.UserID) < MinUserIDLength || len(accessClaims.Username) < MinUsernameLength {
 		return "", "", ErrInvalidAccessToken
 	}
 	// verify whether subject is the same

@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	gojwt "github.com/golang-jwt/jwt/v5"
 	"github.com/hydroan/gst/authn/jwt"
 	"github.com/hydroan/gst/config"
 	"github.com/stretchr/testify/require"
@@ -266,4 +267,50 @@ func TestRefreshTokens(t *testing.T) {
 		_, _, err = jwt.RefreshTokens(accessToken, "not-a-refresh-token")
 		require.Error(t, err)
 	})
+
+	// An access token is signed with the same key as a refresh token, so it
+	// passes for one unless the claims tell them apart: accepted, it would
+	// let whoever holds the short-lived access token alone mint a pair.
+	t.Run("rejects_an_access_token_passed_as_the_refresh_token", func(t *testing.T) {
+		accessToken, _, err := jwt.GenTokens(sampleUserID, sampleUsername)
+		require.NoError(t, err)
+
+		_, _, err = jwt.RefreshTokens(accessToken, accessToken)
+		require.ErrorIs(t, err, jwt.ErrInvalidRefreshToken)
+	})
+
+	t.Run("rejects_a_refresh_token_passed_as_the_access_token", func(t *testing.T) {
+		_, refreshToken, err := jwt.GenTokens(sampleUserID, sampleUsername)
+		require.NoError(t, err)
+
+		_, _, err = jwt.RefreshTokens(refreshToken, refreshToken)
+		require.ErrorIs(t, err, jwt.ErrInvalidAccessToken)
+	})
+
+	t.Run("rejects_tokens_of_another_issuer", func(t *testing.T) {
+		accessToken, refreshToken, err := jwt.GenTokens(sampleUserID, sampleUsername)
+		require.NoError(t, err)
+		registered := gojwt.RegisteredClaims{
+			ExpiresAt: gojwt.NewNumericDate(time.Now().Add(time.Hour)),
+			Issuer:    "another-issuer",
+			Subject:   sampleUserID,
+		}
+		foreignRefresh := signSampleToken(t, registered)
+		foreignAccess := signSampleToken(t, jwt.Claims{UserID: sampleUserID, Username: sampleUsername, RegisteredClaims: registered})
+
+		_, _, err = jwt.RefreshTokens(accessToken, foreignRefresh)
+		require.ErrorIs(t, err, jwt.ErrInvalidRefreshToken)
+		_, _, err = jwt.RefreshTokens(foreignAccess, refreshToken)
+		require.ErrorIs(t, err, jwt.ErrInvalidAccessToken)
+	})
+}
+
+// signSampleToken signs claims with the sample signing key, the way a token
+// this package did not issue can still carry a valid signature.
+func signSampleToken(t *testing.T, claims gojwt.Claims) string {
+	t.Helper()
+
+	token, err := gojwt.NewWithClaims(gojwt.SigningMethodHS256, claims).SignedString([]byte(sampleSigningKey))
+	require.NoError(t, err)
+	return token
 }
