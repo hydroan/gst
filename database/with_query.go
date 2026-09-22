@@ -317,21 +317,6 @@ func structFieldToMap(ctx context.Context, typ reflect.Type, val reflect.Value, 
 			_v = fmt.Sprintf("%g", v)
 		case reflect.String:
 			_v = fmt.Sprintf("%s", v)
-		case reflect.Pointer:
-			v = fieldVal.Elem().Interface()
-			switch fieldVal.Elem().Kind() {
-			case reflect.Bool:
-				_v = strconv.Itoa(boolToInt(v.(bool))) //nolint:errcheck
-			case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64, reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
-				_v = fmt.Sprintf("%d", v)
-			case reflect.Float32, reflect.Float64:
-				_v = fmt.Sprintf("%g", v)
-			case reflect.String:
-				_v = fmt.Sprintf("%s", v)
-			case reflect.Struct, reflect.Map, reflect.Chan, reflect.Func: // ignore the struct, map, chan, func
-			default:
-				_v = fmt.Sprintf("%v", v)
-			}
 		case reflect.Slice:
 			_len := fieldVal.Len()
 			if _len == 0 {
