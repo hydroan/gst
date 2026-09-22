@@ -1212,6 +1212,11 @@ func TestValidateBaseTypeEmbedding(t *testing.T) {
 			source:    validateAutoBasePointerEmbeddingSource,
 			wantError: "struct Counter embeds *model.AutoBase; embed model.AutoBase by value: the framework recognizes model.AutoBase only when it is embedded by value",
 		},
+		{
+			name:      "pointer_base_embedding_in_a_struct_beside_the_model_is_rejected",
+			source:    validateHelperPointerBaseEmbeddingSource,
+			wantError: "struct sampleView embeds *model.Base; embed model.Base by value: the framework recognizes model.Base only when it is embedded by value",
+		},
 	}
 
 	for _, tt := range tests {
@@ -1324,6 +1329,34 @@ type Counter struct {
 }
 
 func (Counter) TableName() string { return "counters" }
+`
+
+// validateHelperPointerBaseEmbeddingSource declares, beside a model embedding
+// model.Base by value, a struct that is no model and embeds *model.Base: every
+// struct of a model file is held to the value form, not the models alone.
+const validateHelperPointerBaseEmbeddingSource = `
+package report
+
+import (
+	. "github.com/hydroan/gst/dsl"
+	"github.com/hydroan/gst/model"
+)
+
+type Sample struct {
+	Name string
+
+	model.Base
+}
+
+func (Sample) Design() {
+	Migrate()
+}
+
+type sampleView struct {
+	Label string
+
+	*model.Base
+}
 `
 
 func TestValidateSSEUsage(t *testing.T) {
