@@ -5,9 +5,20 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/go-ldap/ldap/v3"
 	"github.com/hydroan/gst/config"
 	"github.com/stretchr/testify/require"
 )
+
+// TestMemberLookupFilterCompiles checks the filter GetGroupMembers reads each
+// member entry with: a presence filter the LDAP client accepts. "(uid)", the
+// form it once built, fails to compile, so every member was skipped.
+func TestMemberLookupFilterCompiles(t *testing.T) {
+	filter := memberLookupFilter("uid")
+	require.Equal(t, "(uid=*)", filter)
+	_, err := ldap.CompileFilter(filter)
+	require.NoError(t, err)
+}
 
 func TestCheckConnectionRestoresNilConnection(t *testing.T) {
 	// A nil gconn is the state a failed reconnect leaves behind. The heartbeat

@@ -481,9 +481,7 @@ func GetGroupMembers(groupName string) ([]string, error) {
 	usernames := make([]string, 0, len(memberDNS))
 	for _, memberDN := range memberDNS {
 		// Search for this user to get their username
-		filter := fmt.Sprintf("(%s)", ldap.EscapeFilter(cfg.UserAttribute))
-
-		entries, err := Search(memberDN, filter, []string{cfg.UserAttribute}, ldap.ScopeBaseObject)
+		entries, err := Search(memberDN, memberLookupFilter(cfg.UserAttribute), []string{cfg.UserAttribute}, ldap.ScopeBaseObject)
 		if err != nil {
 			// Skip this user if there's an error
 			zap.S().Warnw("failed to find user attributes", "dn", memberDN, "error", err)
@@ -499,6 +497,14 @@ func GetGroupMembers(groupName string) ([]string, error) {
 	}
 
 	return usernames, nil
+}
+
+// memberLookupFilter returns the filter GetGroupMembers reads a member entry
+// with: a presence filter on the user attribute, such as (uid=*) for uid. The
+// search is scoped to the member's own DN, so the filter only has to match any
+// entry that carries the attribute.
+func memberLookupFilter(userAttribute string) string {
+	return fmt.Sprintf("(%s=*)", ldap.EscapeFilter(userAttribute))
 }
 
 // AddUser adds a new user to the LDAP directory
