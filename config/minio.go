@@ -35,9 +35,13 @@ const (
 )
 
 type Minio struct {
-	Endpoint     string        `json:"endpoint" mapstructure:"endpoint" ini:"endpoint" yaml:"endpoint"`
-	AccessKey    string        `json:"access_key" mapstructure:"access_key" ini:"access_key" yaml:"access_key"`
-	SecretKey    string        `json:"secret_key" mapstructure:"secret_key" ini:"secret_key" yaml:"secret_key"`
+	Endpoint  string `json:"endpoint" mapstructure:"endpoint" ini:"endpoint" yaml:"endpoint"`
+	AccessKey string `json:"access_key" mapstructure:"access_key" ini:"access_key" yaml:"access_key"`
+	SecretKey string `json:"secret_key" mapstructure:"secret_key" ini:"secret_key" yaml:"secret_key"`
+	// Bucket names the bucket the provider's operations use when their
+	// options name none. Several buckets may be listed, comma separated, as
+	// in "media, archive": each is created at startup when missing, and the
+	// first is the default.
 	Bucket       string        `json:"bucket" mapstructure:"bucket" ini:"bucket" yaml:"bucket"`
 	Location     string        `json:"location" mapstructure:"location" ini:"location" yaml:"location"`
 	Secure       bool          `json:"secure" mapstructure:"secure" ini:"secure" yaml:"secure"`

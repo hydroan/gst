@@ -243,6 +243,33 @@ func TestCopyWithEmptyOptionsUsesTheDefaultBucket(t *testing.T) {
 	require.True(t, exists)
 }
 
+// TestDefaultBucketIsTheFirstConfigured configures two buckets, comma
+// separated as the configuration allows: every operation naming no bucket
+// uses the first, and the second stays reachable by name.
+func TestDefaultBucketIsTheFirstConfigured(t *testing.T) {
+	first, second := config.App.Minio.Bucket, bucketNamed("second")
+	require.NoError(t, minio.EnsureBucket(context.TODO(), second))
+	config.App.Minio.Bucket = first + ", " + second
+	t.Cleanup(func() { config.App.Minio.Bucket = first })
+
+	_, err := minio.Put(context.TODO(), "default/note.txt", strings.NewReader("note"))
+	require.NoError(t, err)
+	defer func() { _ = minio.Remove(context.TODO(), "default/note.txt") }()
+
+	exists, err := minio.Exists(context.TODO(), "default/note.txt")
+	require.NoError(t, err)
+	require.True(t, exists)
+	reader, _, err := minio.Get(context.TODO(), "default/note.txt", &minio.GetOptions{Bucket: first})
+	require.NoError(t, err)
+	defer reader.Close()
+	content, err := io.ReadAll(reader)
+	require.NoError(t, err)
+	require.Equal(t, "note", string(content))
+	exists, err = minio.Exists(context.TODO(), "default/note.txt", &minio.ExistsOptions{Bucket: second})
+	require.NoError(t, err)
+	require.False(t, exists)
+}
+
 // bucketNamed returns the name of a further bucket of this test binary: the
 // default bucket SetupMinio assigned followed by suffix, which is what makes
 // the release remove it together with the default one.

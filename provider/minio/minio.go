@@ -117,13 +117,7 @@ func start(_ context.Context) (err error) {
 	// Try to establish a connection to MinIO and verify the connection
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	// Multiple buckets separated by comma.
-	buckets := strings.FieldsFunc(cfg.Bucket, func(r rune) bool { return r == ',' })
-	for _, bucket := range buckets {
-		bucket = strings.TrimSpace(bucket)
-		if len(bucket) == 0 {
-			continue
-		}
+	for _, bucket := range configuredBuckets(cfg.Bucket) {
 		if err := ensureBucket(ctx, newClient, bucket); err != nil {
 			return err
 		}
@@ -133,6 +127,29 @@ func start(_ context.Context) (err error) {
 
 	client = newClient
 	return nil
+}
+
+// configuredBuckets returns the buckets a bucket setting lists, comma
+// separated, each trimmed of the spaces around it: "media, archive" lists
+// media and archive, and an empty entry, as in "media,,", lists nothing.
+func configuredBuckets(setting string) []string {
+	var buckets []string
+	for bucket := range strings.SplitSeq(setting, ",") {
+		if bucket = strings.TrimSpace(bucket); len(bucket) > 0 {
+			buckets = append(buckets, bucket)
+		}
+	}
+	return buckets
+}
+
+// defaultBucket returns the bucket an operation uses when its options name
+// none: the first bucket config.App.Minio.Bucket lists, media for
+// "media, archive", or "" when it lists none.
+func defaultBucket() string {
+	if buckets := configuredBuckets(config.App.Minio.Bucket); len(buckets) > 0 {
+		return buckets[0]
+	}
+	return ""
 }
 
 // New returns a new MinIO client with given configuration.
@@ -256,7 +273,7 @@ func Put(ctx context.Context, objectKey string, reader io.Reader, opts ...*PutOp
 	putOpts := minio.PutObjectOptions{}
 	// set default size to -1 to let minio SDK handle automatically
 	var size int64 = -1
-	bucket := config.App.Minio.Bucket
+	bucket := defaultBucket()
 	contentType := detectContentType(objectKey)
 
 	if len(opts) > 0 && opts[0] != nil {
@@ -311,7 +328,7 @@ func Get(ctx context.Context, objectKey string, opts ...*GetOptions) (io.ReadClo
 	}
 
 	getOpts := minio.GetObjectOptions{}
-	bucket := config.App.Minio.Bucket
+	bucket := defaultBucket()
 
 	if len(opts) > 0 && opts[0] != nil {
 		opt := opts[0]
@@ -368,7 +385,7 @@ func Remove(ctx context.Context, objectKey string, opts ...*RemoveOptions) error
 	}
 
 	removeOpts := minio.RemoveObjectOptions{}
-	bucket := config.App.Minio.Bucket
+	bucket := defaultBucket()
 
 	if len(opts) > 0 && opts[0] != nil {
 		opt := opts[0]
@@ -393,7 +410,7 @@ func Remove(ctx context.Context, objectKey string, opts ...*RemoveOptions) error
 // Exists checks whether an object exists.
 func Exists(ctx context.Context, objectKey string, opts ...*ExistsOptions) (bool, error) {
 	opt := minio.StatObjectOptions{}
-	bucket := config.App.Minio.Bucket
+	bucket := defaultBucket()
 
 	if len(opts) > 0 && opts[0] != nil {
 		opt.VersionID = opts[0].VersionID
@@ -431,7 +448,7 @@ func Stat(ctx context.Context, objectKey string, opts ...*StatOptions) (*ObjectI
 	}
 
 	statOpts := minio.StatObjectOptions{}
-	bucket := config.App.Minio.Bucket
+	bucket := defaultBucket()
 
 	if len(opts) > 0 && opts[0] != nil {
 		opt := opts[0]
@@ -475,7 +492,7 @@ func PresignedGetURL(ctx context.Context, objectKey string, expires time.Duratio
 		return "", err
 	}
 
-	bucket := config.App.Minio.Bucket
+	bucket := defaultBucket()
 	if len(opts) > 0 && opts[0] != nil {
 		opt := opts[0]
 		if len(opt.Bucket) > 0 {
@@ -508,7 +525,7 @@ func PresignedPutURL(ctx context.Context, objectKey string, expires time.Duratio
 		return "", err
 	}
 
-	bucket := config.App.Minio.Bucket
+	bucket := defaultBucket()
 	if len(opts) > 0 && opts[0] != nil {
 		opt := opts[0]
 		if len(opt.Bucket) > 0 {
@@ -538,7 +555,7 @@ func List(ctx context.Context, opts ...*ListOptions) <-chan ObjectInfo {
 		defer close(ch)
 
 		listOpts := minio.ListObjectsOptions{}
-		bucket := config.App.Minio.Bucket
+		bucket := defaultBucket()
 		if len(opts) > 0 && opts[0] != nil {
 			opt := opts[0]
 			listOpts.Prefix = opt.Prefix
@@ -577,7 +594,7 @@ func Copy(ctx context.Context, srcKey, dstKey string, opts ...*CopyOptions) (*Ob
 		return nil, err
 	}
 
-	bucket := config.App.Minio.Bucket
+	bucket := defaultBucket()
 	if len(opts) > 0 && opts[0] != nil && len(opts[0].Bucket) > 0 {
 		bucket = opts[0].Bucket
 	}
