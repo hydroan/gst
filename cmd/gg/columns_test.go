@@ -11,8 +11,8 @@ import (
 
 	"github.com/hydroan/gst/consts"
 	"github.com/hydroan/gst/dsl"
-	"github.com/hydroan/gst/internal/codegen/constants"
 	"github.com/hydroan/gst/internal/codegen/gen"
+	"github.com/hydroan/gst/internal/ggconst"
 	"github.com/stretchr/testify/require"
 )
 
@@ -287,7 +287,7 @@ func TestRemoveOrphanColumnFiles(t *testing.T) {
 	generated := consts.CodeGeneratedComment() + "\n\npackage sample\n"
 	kept := filepath.Join(sampleDir, "record.gen.go")
 	orphan := filepath.Join(sampleDir, "removed.gen.go")
-	registration := filepath.Join(dir, "model", constants.FileModelGen)
+	registration := filepath.Join(dir, "model", ggconst.FileModelGen)
 	require.NoError(t, os.WriteFile(kept, []byte(generated), 0o600))
 	require.NoError(t, os.WriteFile(orphan, []byte(generated), 0o600))
 	require.NoError(t, os.WriteFile(registration, []byte(generated), 0o600))

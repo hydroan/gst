@@ -14,8 +14,8 @@ import (
 
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/internal/codegen"
-	"github.com/hydroan/gst/internal/codegen/constants"
 	"github.com/hydroan/gst/internal/codegen/gen"
+	"github.com/hydroan/gst/internal/ggconst"
 )
 
 const (
@@ -37,7 +37,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	path := filepath.Join(modelRegistryPkgDir, constants.FileAPIDocGen)
+	path := filepath.Join(modelRegistryPkgDir, ggconst.FileAPIDocGen)
 	if err := os.WriteFile(path, []byte(code), 0o644); err != nil { //nolint:gosec // generated source, world readable on purpose
 		fmt.Fprintln(os.Stderr, "apidocgen:", err)
 		os.Exit(1)
@@ -54,7 +54,7 @@ func main() {
 // both go through this function, so the two can never disagree about what the
 // file should contain.
 func buildModelRegistryAPIDoc() (string, error) {
-	entries, err := codegen.ExtractAPIDocs(constants.ImportPathGst, modelRegistryPkgDir, []string{constants.FileAPIDocGen})
+	entries, err := codegen.ExtractAPIDocs(ggconst.ImportPathGst, modelRegistryPkgDir, []string{ggconst.FileAPIDocGen})
 	if err != nil {
 		return "", errors.Wrapf(err, "extract %s api docs", modelRegistryPkgDir)
 	}

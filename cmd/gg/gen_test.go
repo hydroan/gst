@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/hydroan/gst/internal/codegen/constants"
+	"github.com/hydroan/gst/internal/ggconst"
 	"github.com/stretchr/testify/require"
 )
 
@@ -22,9 +22,9 @@ import (
 // their names. Each case writes a few model files, runs gg gen, compares the
 // registration files it writes as a whole, and builds the project.
 func TestGenRunAliasesCollidingImports(t *testing.T) {
-	modelFile := filepath.Join("model", constants.FileModelGen)
-	serviceFile := filepath.Join("service", constants.FileServiceGen)
-	routerFile := filepath.Join("router", constants.FileRouterGen)
+	modelFile := filepath.Join("model", ggconst.FileModelGen)
+	serviceFile := filepath.Join("service", ggconst.FileServiceGen)
+	routerFile := filepath.Join("router", ggconst.FileRouterGen)
 
 	tests := []struct {
 		name  string

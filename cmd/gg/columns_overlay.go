@@ -16,8 +16,8 @@ import (
 
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/consts"
-	"github.com/hydroan/gst/internal/codegen/constants"
 	"github.com/hydroan/gst/internal/codegen/gen"
+	"github.com/hydroan/gst/internal/ggconst"
 )
 
 // columnInspectionPanic is what the inspection reports when it runs code that
@@ -134,7 +134,7 @@ func scanColumnInspectionFiles(module string, modelDir string) (*columnInspectio
 			}
 			return nil
 		}
-		if ignored || !strings.HasSuffix(name, constants.ExtensionGo) || strings.HasSuffix(name, constants.PatternTestFile) {
+		if ignored || !strings.HasSuffix(name, ggconst.ExtensionGo) || strings.HasSuffix(name, ggconst.PatternTestFile) {
 			return nil
 		}
 		content, readErr := os.ReadFile(path) //nolint:gosec // path comes from the model directory walk.

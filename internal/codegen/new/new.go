@@ -10,8 +10,8 @@ import (
 	"path/filepath"
 	"sort"
 
-	"github.com/hydroan/gst/internal/codegen/constants"
 	"github.com/hydroan/gst/internal/codegen/gen"
+	"github.com/hydroan/gst/internal/ggconst"
 
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/internal/clioutput"
@@ -27,12 +27,12 @@ var requiredFileContentMap = map[string]string{
 	// These three are the empty first versions of files gg gen owns, so they
 	// carry the generated suffix: a project must compile before its first
 	// generation, and the generator then overwrites the same file.
-	"model/" + constants.FileModelGen:     modelContent,
-	"service/" + constants.FileServiceGen: serviceContent,
-	"module/module.go":                    moduleContent,
-	"router/" + constants.FileRouterGen:   routerContent,
-	"dao/.gitkeep":                        "",
-	"provider/.gitkeep":                   "",
+	"model/" + ggconst.FileModelGen:     modelContent,
+	"service/" + ggconst.FileServiceGen: serviceContent,
+	"module/module.go":                  moduleContent,
+	"router/" + ggconst.FileRouterGen:   routerContent,
+	"dao/.gitkeep":                      "",
+	"provider/.gitkeep":                 "",
 }
 
 var projectFileContentMap = newProjectFileContentMap()
@@ -171,7 +171,7 @@ func createFile(path string, content string) error {
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return err
 	}
-	return os.WriteFile(path, []byte(content), constants.FileModeGenerated)
+	return os.WriteFile(path, []byte(content), ggconst.FileModeGenerated)
 }
 
 func createTemplateConfig(appName string) error {
@@ -229,5 +229,5 @@ db = 0
 password =
 namespace = %s
 `, appName, appName)
-	return os.WriteFile("config.ini.example", []byte(content), constants.FileModeGenerated)
+	return os.WriteFile("config.ini.example", []byte(content), ggconst.FileModeGenerated)
 }

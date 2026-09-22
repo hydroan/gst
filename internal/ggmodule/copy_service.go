@@ -10,6 +10,7 @@ import (
 
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/internal/codegen/gen"
+	"github.com/hydroan/gst/internal/goast"
 )
 
 type moduleServiceMergeInput struct {
@@ -147,7 +148,7 @@ func mergeSourceServiceDecls(
 					sourceRecv := methodReceiverName(d)
 					targetRecv := methodReceiverName(targetMethod)
 					if sourceRecv != "" && targetRecv != "" && sourceRecv != targetRecv && d.Body != nil {
-						renameIdent(d.Body, sourceRecv, targetRecv)
+						goast.RenameIdent(d.Body, sourceRecv, targetRecv)
 					}
 					// The generated target shell owns method signatures. When a
 					// source body is grafted onto that signature, the source
@@ -250,7 +251,7 @@ func alignReceiverName(fn *ast.FuncDecl, name string) {
 	}
 	fn.Recv.List[0].Names[0].Name = name
 	if fn.Body != nil {
-		renameIdent(fn.Body, current, name)
+		goast.RenameIdent(fn.Body, current, name)
 	}
 }
 
@@ -271,7 +272,7 @@ func renameFieldListIdents(body ast.Node, sourceFields *ast.FieldList, targetFie
 		if sourceName == "" || targetName == "" || sourceName == targetName {
 			continue
 		}
-		renameIdent(body, sourceName, targetName)
+		goast.RenameIdent(body, sourceName, targetName)
 	}
 }
 
@@ -294,16 +295,6 @@ func fieldListNames(fields *ast.FieldList) []string {
 		}
 	}
 	return names
-}
-
-func renameIdent(node ast.Node, oldName string, newName string) {
-	ast.Inspect(node, func(n ast.Node) bool {
-		ident, ok := n.(*ast.Ident)
-		if ok && ident.Name == oldName {
-			ident.Name = newName
-		}
-		return true
-	})
 }
 
 func findMethod(file *ast.File, recvType string, methodName string) *ast.FuncDecl {

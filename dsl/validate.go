@@ -10,8 +10,8 @@ import (
 	"strings"
 
 	"github.com/hydroan/gst/consts"
-	codegenast "github.com/hydroan/gst/internal/codegen/ast"
-	"github.com/hydroan/gst/internal/codegen/constants"
+	"github.com/hydroan/gst/internal/ggconst"
+	"github.com/hydroan/gst/internal/goast"
 )
 
 // actionMethodPhases maps DSL action method names to their phases. It serves
@@ -144,7 +144,7 @@ func Validate(file *ast.File, modelDir string, filename string) []error {
 //
 // it reports "struct Login embeds *model.Empty; embed model.Empty by value".
 func validateEmptyEmbeddings(file *ast.File, filename string) []error {
-	names := codegenast.ImportedNames(file, constants.ImportPathModel, constants.PkgModel)
+	names := goast.ImportedNames(file, ggconst.ImportPathModel, ggconst.PkgModel)
 	errs := make([]error, 0)
 	for _, decl := range file.Decls {
 		genDecl, ok := decl.(*ast.GenDecl)
@@ -162,7 +162,7 @@ func validateEmptyEmbeddings(file *ast.File, filename string) []error {
 			}
 			for _, field := range structType.Fields.List {
 				star, ok := field.Type.(*ast.StarExpr)
-				if !ok || len(field.Names) != 0 || !names.Refers(star.X, constants.FieldEmpty) {
+				if !ok || len(field.Names) != 0 || !names.Refers(star.X, ggconst.FieldEmpty) {
 					continue
 				}
 				errs = append(errs, fmt.Errorf("%s: struct %s embeds *model.Empty; embed model.Empty by value: the pointer form is not recognized as a virtual model", filename, typeSpec.Name.Name))

@@ -8,7 +8,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/hydroan/gst/internal/codegen/constants"
+	"github.com/hydroan/gst/internal/ggconst"
 )
 
 func requireDir(path string) error {
@@ -55,7 +55,7 @@ func goFilesInDir(root string) ([]string, error) {
 // agree on skipping them; consuming this single decision keeps the two walks
 // from disagreeing about what counts as module code.
 func skipModuleSourceDir(root string, path string, name string) bool {
-	return path != root && (name == constants.DirVendor || name == constants.DirTestData)
+	return path != root && (name == ggconst.DirVendor || name == ggconst.DirTestData)
 }
 
 func goFilesInPackageDir(root string) ([]string, error) {

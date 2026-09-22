@@ -10,7 +10,7 @@ import (
 
 	"github.com/hydroan/gst/apidoc"
 	"github.com/hydroan/gst/consts"
-	"github.com/hydroan/gst/internal/codegen/constants"
+	"github.com/hydroan/gst/internal/ggconst"
 )
 
 // StructDocEntry describes the doc comments of one struct extracted from a
@@ -82,7 +82,7 @@ func buildAPIDocSource(pkgName string, entries APIDocEntries) string {
 	// If there are no entries, the init function body is empty,
 	// so we should not import any external package.
 	if len(entries.Structs) > 0 || len(entries.Enums) > 0 {
-		b.WriteString("import " + strconv.Quote(constants.ImportPathAPIDoc) + "\n\n")
+		b.WriteString("import " + strconv.Quote(ggconst.ImportPathAPIDoc) + "\n\n")
 	}
 
 	b.WriteString("func init() {\n")

@@ -5,8 +5,8 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/hydroan/gst/internal/codegen/constants"
 	"github.com/hydroan/gst/internal/codegen/gen"
+	"github.com/hydroan/gst/internal/ggconst"
 	"github.com/stretchr/testify/require"
 )
 
@@ -28,7 +28,7 @@ func TestParseRouteTreeFromFileReadsGeneratedRoutes(t *testing.T) {
 	oldRouterDir, oldModelDir := routerDir, modelDir
 	t.Cleanup(func() { routerDir, modelDir = oldRouterDir, oldModelDir })
 	routerDir, modelDir = t.TempDir(), t.TempDir()
-	require.NoError(t, os.WriteFile(filepath.Join(routerDir, constants.FileRouterGen), []byte(code), 0o600))
+	require.NoError(t, os.WriteFile(filepath.Join(routerDir, ggconst.FileRouterGen), []byte(code), 0o600))
 
 	routes, err := parseRouteTreeFromFile()
 	require.NoError(t, err)

@@ -8,7 +8,7 @@ import (
 	"strings"
 
 	"github.com/hydroan/gst/ds/tree/trie"
-	"github.com/hydroan/gst/internal/codegen/constants"
+	"github.com/hydroan/gst/internal/ggconst"
 	"github.com/spf13/cobra"
 )
 
@@ -79,7 +79,7 @@ func filterRouteTree(routes map[string][]string, filter string) map[string][]str
 // parseModelRoutesFromProject, and keys their HTTP methods by path for the
 // URL route tree.
 func parseRouteTreeFromFile() (map[string][]string, error) {
-	registered, err := parseModelRoutesFromProject(filepath.Join(routerDir, constants.FileRouterGen), modelDir)
+	registered, err := parseModelRoutesFromProject(filepath.Join(routerDir, ggconst.FileRouterGen), modelDir)
 	if err != nil {
 		return nil, err
 	}

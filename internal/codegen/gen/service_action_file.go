@@ -27,7 +27,7 @@ func IsActionServiceSource(path string) bool {
 		}
 		for _, spec := range genDecl.Specs {
 			ts, ok := spec.(*ast.TypeSpec)
-			if ok && isServiceType(ts) {
+			if ok && isServiceType(f, ts) {
 				return true
 			}
 		}

@@ -10,8 +10,8 @@ import (
 	"testing"
 
 	"github.com/hydroan/gst/consts"
-	"github.com/hydroan/gst/internal/codegen/constants"
 	"github.com/hydroan/gst/internal/codegen/gen"
+	"github.com/hydroan/gst/internal/ggconst"
 	"github.com/stretchr/testify/require"
 )
 
@@ -35,7 +35,7 @@ func TestParseModelRoutesReadsTheRuntimeMethodOfEveryVerb(t *testing.T) {
 	}
 	code, err := gen.BuildRouterFile("router", "model", map[string]string{"tmpapp/model": ""}, stmts...)
 	require.NoError(t, err)
-	routerFile := filepath.Join(t.TempDir(), constants.FileRouterGen)
+	routerFile := filepath.Join(t.TempDir(), ggconst.FileRouterGen)
 	require.NoError(t, os.WriteFile(routerFile, []byte(code), 0o600))
 
 	routes, err := parseModelRoutesFromProject(routerFile, t.TempDir())

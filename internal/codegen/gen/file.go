@@ -11,7 +11,7 @@ import (
 	"strings"
 
 	"github.com/hydroan/gst/consts"
-	"github.com/hydroan/gst/internal/codegen/constants"
+	"github.com/hydroan/gst/internal/ggconst"
 )
 
 // The framework packages each generated registration file imports under
@@ -19,10 +19,10 @@ import (
 // are aliased around come from these lists. The router file leads with the
 // router and consts imports and sorts the gst import in among the rest.
 var (
-	modelFileImports        = []string{constants.ImportPathModel}
-	serviceFileImports      = []string{constants.ImportPathService, constants.ImportPathConsts}
-	routerFileLeadImports   = []string{constants.ImportPathRouter, constants.ImportPathConsts}
-	routerFileSortedImports = []string{constants.ImportPathGst}
+	modelFileImports        = []string{ggconst.ImportPathModel}
+	serviceFileImports      = []string{ggconst.ImportPathService, ggconst.ImportPathConsts}
+	routerFileLeadImports   = []string{ggconst.ImportPathRouter, ggconst.ImportPathConsts}
+	routerFileSortedImports = []string{ggconst.ImportPathGst}
 )
 
 // ModelFileAliases picks the aliases the project imports of the model
@@ -111,7 +111,7 @@ func BuildModelFile(pkgName string, aliases map[string]string, stmts ...ast.Stmt
 
 	// Create init function declaration
 	initDecl := &ast.FuncDecl{
-		Name: ast.NewIdent(constants.FuncInit),
+		Name: ast.NewIdent(ggconst.FuncInit),
 		Type: &ast.FuncType{
 			TypeParams: nil,
 			Params:     nil,
@@ -188,7 +188,7 @@ func BuildServiceFile(pkgName string, aliases map[string]string, stmts ...ast.St
 	body = append(body, stmts...)
 
 	initDecl := &ast.FuncDecl{
-		Name: ast.NewIdent(constants.FuncInit),
+		Name: ast.NewIdent(ggconst.FuncInit),
 		Type: &ast.FuncType{
 			TypeParams: nil,
 			Params:     nil,
@@ -269,7 +269,7 @@ func BuildRouterFile(pkgName, gstModelPkg string, aliases map[string]string, stm
 	})
 
 	initDecl := &ast.FuncDecl{
-		Name: ast.NewIdent(constants.FuncInit2),
+		Name: ast.NewIdent(ggconst.FuncInit2),
 		Type: &ast.FuncType{
 			TypeParams: nil,
 			Params:     nil,
@@ -345,23 +345,23 @@ func BuildRouterFile(pkgName, gstModelPkg string, aliases map[string]string, stm
 }
 
 // mainImportSpecs builds the imports of a generated main.go: every project
-// package in constants.ProjectImportDirs, then the framework packages main
+// package in ggconst.ProjectImportDirs, then the framework packages main
 // calls into. The router package is the only project import with a name,
 // because main calls router.Init; the others are linked for their
 // initialisers alone.
 func mainImportSpecs(projectName string) []ast.Spec {
-	specs := make([]ast.Spec, 0, len(constants.ProjectImportDirs)+2)
-	for _, dir := range constants.ProjectImportDirs {
+	specs := make([]ast.Spec, 0, len(ggconst.ProjectImportDirs)+2)
+	for _, dir := range ggconst.ProjectImportDirs {
 		spec := &ast.ImportSpec{Path: &ast.BasicLit{Value: fmt.Sprintf("%q", projectName+"/"+dir)}}
-		if dir != constants.SubDirRouter {
+		if dir != ggconst.SubDirRouter {
 			spec.Name = ast.NewIdent("_")
 		}
 		specs = append(specs, spec)
 	}
 	return append(specs,
-		&ast.ImportSpec{Path: &ast.BasicLit{Value: fmt.Sprintf("%q", constants.ImportPathBootstrap)}},
+		&ast.ImportSpec{Path: &ast.BasicLit{Value: fmt.Sprintf("%q", ggconst.ImportPathBootstrap)}},
 		&ast.ImportSpec{
-			Path: &ast.BasicLit{Value: fmt.Sprintf("%q", constants.ImportPathUtil)},
+			Path: &ast.BasicLit{Value: fmt.Sprintf("%q", ggconst.ImportPathUtil)},
 			Name: ast.NewIdent("."),
 		},
 	)
@@ -397,46 +397,46 @@ func mainImportSpecs(projectName string) []ast.Spec {
 //	}
 func BuildMainFile(projectName string) (string, error) {
 	f := &ast.File{
-		Name: ast.NewIdent(constants.PkgMain),
+		Name: ast.NewIdent(ggconst.PkgMain),
 		Decls: []ast.Decl{
 			&ast.GenDecl{
 				Tok:   token.IMPORT,
 				Specs: mainImportSpecs(projectName),
 			},
 			&ast.FuncDecl{
-				Name: ast.NewIdent(constants.FuncMain),
+				Name: ast.NewIdent(ggconst.FuncMain),
 				Type: &ast.FuncType{},
 				Body: &ast.BlockStmt{
 					List: []ast.Stmt{
 						&ast.ExprStmt{
 							X: &ast.CallExpr{
-								Fun: ast.NewIdent(constants.FuncRunOrDie),
+								Fun: ast.NewIdent(ggconst.FuncRunOrDie),
 								Args: []ast.Expr{
 									&ast.SelectorExpr{
-										X:   ast.NewIdent(constants.PkgBootstrap),
-										Sel: ast.NewIdent(constants.BootstrapBootstrap),
+										X:   ast.NewIdent(ggconst.PkgBootstrap),
+										Sel: ast.NewIdent(ggconst.BootstrapBootstrap),
 									},
 								},
 							},
 						},
 						&ast.ExprStmt{
 							X: &ast.CallExpr{
-								Fun: ast.NewIdent(constants.FuncRunOrDie),
+								Fun: ast.NewIdent(ggconst.FuncRunOrDie),
 								Args: []ast.Expr{
 									&ast.SelectorExpr{
-										X:   ast.NewIdent(constants.PkgRouter),
-										Sel: ast.NewIdent(constants.RouterInit),
+										X:   ast.NewIdent(ggconst.PkgRouter),
+										Sel: ast.NewIdent(ggconst.RouterInit),
 									},
 								},
 							},
 						},
 						&ast.ExprStmt{
 							X: &ast.CallExpr{
-								Fun: ast.NewIdent(constants.FuncRunOrDie),
+								Fun: ast.NewIdent(ggconst.FuncRunOrDie),
 								Args: []ast.Expr{
 									&ast.SelectorExpr{
-										X:   ast.NewIdent(constants.PkgBootstrap),
-										Sel: ast.NewIdent(constants.BootstrapRun),
+										X:   ast.NewIdent(ggconst.PkgBootstrap),
+										Sel: ast.NewIdent(ggconst.BootstrapRun),
 									},
 								},
 							},

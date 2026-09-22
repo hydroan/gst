@@ -1,4 +1,9 @@
-package constants
+// Package ggconst holds the conventions the framework's tooling shares: the
+// import paths of the framework packages, the names of the files, packages
+// and fields gg generates and reads, and the patterns it recognizes them by.
+// The dsl parser, the syntax tree helpers of goast, the code generator and
+// the gg commands all read them from here, so a convention is spelled once.
+package ggconst
 
 // Import paths
 const (

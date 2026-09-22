@@ -16,8 +16,9 @@ import (
 	gitignore "github.com/go-git/go-git/v5/plumbing/format/gitignore"
 	"github.com/hydroan/gst/dsl"
 	"github.com/hydroan/gst/internal/clioutput"
-	"github.com/hydroan/gst/internal/codegen/constants"
 	"github.com/hydroan/gst/internal/codegen/gen"
+	"github.com/hydroan/gst/internal/ggconst"
+	"github.com/hydroan/gst/internal/goast"
 	"github.com/spf13/cobra"
 	"golang.org/x/text/cases"
 	"golang.org/x/text/language"
@@ -1067,7 +1068,7 @@ func serviceStructNames(node *ast.File) []string {
 			}
 
 			for _, field := range structType.Fields.List {
-				if isServiceBase(node, field) {
+				if goast.IsServiceBase(node, field) {
 					names = append(names, typeSpec.Name.Name)
 					break
 				}
@@ -1076,52 +1077,6 @@ func serviceStructNames(node *ast.File) []string {
 	}
 
 	return names
-}
-
-// isServiceBase reports whether the field anonymously embeds service.Base[M, REQ, RSP].
-func isServiceBase(file *ast.File, field *ast.Field) bool {
-	if file == nil || field == nil || len(field.Names) != 0 {
-		return false
-	}
-
-	indexListExpr, ok := field.Type.(*ast.IndexListExpr)
-	if !ok || len(indexListExpr.Indices) != 3 {
-		return false
-	}
-
-	return isServiceBaseName(file, indexListExpr.X)
-}
-
-// isServiceBaseName checks whether expr names the gst service.Base type.
-func isServiceBaseName(file *ast.File, expr ast.Expr) bool {
-	aliasNames := []string{"service"}
-	var dotImport bool
-
-	for _, imp := range file.Imports {
-		if imp.Path == nil || imp.Path.Value != `"github.com/hydroan/gst/service"` {
-			continue
-		}
-		if imp.Name == nil {
-			continue
-		}
-		if imp.Name.Name == "." {
-			dotImport = true
-			continue
-		}
-		if !slices.Contains(aliasNames, imp.Name.Name) {
-			aliasNames = append(aliasNames, imp.Name.Name)
-		}
-	}
-
-	switch x := expr.(type) {
-	case *ast.SelectorExpr:
-		ident, ok := x.X.(*ast.Ident)
-		return ok && x.Sel != nil && x.Sel.Name == "Base" && slices.Contains(aliasNames, ident.Name)
-	case *ast.Ident:
-		return dotImport && x.Name == "Base"
-	}
-
-	return false
 }
 
 // relativePath returns filePath relative to the current working directory when possible.
@@ -1406,5 +1361,5 @@ func CheckDSLDesign(ignore gitignore.Matcher) []string {
 
 // isGeneratedFileName reports whether a path is a file gg generates and owns.
 func isGeneratedFileName(path string) bool {
-	return strings.HasSuffix(path, constants.SuffixGenGo)
+	return strings.HasSuffix(path, ggconst.SuffixGenGo)
 }

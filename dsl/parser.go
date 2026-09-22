@@ -8,8 +8,8 @@ import (
 
 	"github.com/gertd/go-pluralize"
 	"github.com/hydroan/gst/consts"
-	codegenast "github.com/hydroan/gst/internal/codegen/ast"
-	"github.com/hydroan/gst/internal/codegen/constants"
+	"github.com/hydroan/gst/internal/ggconst"
+	"github.com/hydroan/gst/internal/goast"
 	"github.com/stoewer/go-strcase"
 )
 
@@ -803,12 +803,12 @@ func FindAllModelEmpty(file *ast.File) []string {
 // modelBaseNames are the database base model type names recognized by
 // IsModelBase. Base uses a UUIDv7 string primary key and AutoBase uses an
 // auto-increment integer primary key; both mark a struct as a database model.
-var modelBaseNames = []string{constants.FieldBase, constants.FieldAutoBase}
+var modelBaseNames = []string{ggconst.FieldBase, ggconst.FieldAutoBase}
 
 // IsModelBase reports whether a struct field embeds a database base model,
 // model.Base or model.AutoBase, by value. The qualifier must be a name file
 // imports the framework model package under, and a bare name counts only
-// when the file dot-imports the package (see codegenast.ImportedNames). With
+// when the file dot-imports the package (see goast.ImportedNames). With
 //
 //	import (
 //		"example.com/app/model"
@@ -831,7 +831,7 @@ func IsModelBase(file *ast.File, field *ast.Field) bool {
 // the field gstmodel.Empty reports true, and a bare Empty reports true only
 // under a dot import of the framework model package.
 func IsModelEmpty(file *ast.File, field *ast.Field) bool {
-	return embedsModelType(file, field, constants.FieldEmpty)
+	return embedsModelType(file, field, ggconst.FieldEmpty)
 }
 
 // embedsModelType reports whether field is an anonymous value embedding of
@@ -841,7 +841,7 @@ func embedsModelType(file *ast.File, field *ast.Field, typeNames ...string) bool
 	if file == nil || field == nil || len(field.Names) != 0 {
 		return false
 	}
-	return codegenast.ImportedNames(file, constants.ImportPathModel, constants.PkgModel).Refers(field.Type, typeNames...)
+	return goast.ImportedNames(file, ggconst.ImportPathModel, ggconst.PkgModel).Refers(field.Type, typeNames...)
 }
 
 // starName converts a type name to its pointer equivalent.

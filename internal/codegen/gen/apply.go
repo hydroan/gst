@@ -12,7 +12,8 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/consts"
 	"github.com/hydroan/gst/dsl"
-	"github.com/hydroan/gst/internal/codegen/constants"
+	"github.com/hydroan/gst/internal/ggconst"
+	"github.com/hydroan/gst/internal/goast"
 )
 
 // applyServiceRoleName renames the service struct type and all associated receiver
@@ -55,7 +56,7 @@ func applyServiceRoleName(file *ast.File, action *dsl.Action) bool {
 			}
 			for _, spec := range genDecl.Specs {
 				typeSpec, ok := spec.(*ast.TypeSpec)
-				if !ok || !isServiceType(typeSpec) {
+				if !ok || !isServiceType(file, typeSpec) {
 					continue
 				}
 				if typeSpec.Name.Name != newRoleName {
@@ -105,7 +106,7 @@ func applyServiceRoleName(file *ast.File, action *dsl.Action) bool {
 
 			// Update all references to the old receiver variable in the method body
 			if funcDecl.Body != nil {
-				renameIdent(funcDecl.Body, oldName, newRecvVar)
+				goast.RenameIdent(funcDecl.Body, oldName, newRecvVar)
 			}
 		}
 	}
@@ -123,24 +124,13 @@ func findServiceTypeName(file *ast.File) string {
 		}
 		for _, spec := range genDecl.Specs {
 			typeSpec, ok := spec.(*ast.TypeSpec)
-			if !ok || !isServiceType(typeSpec) {
+			if !ok || !isServiceType(file, typeSpec) {
 				continue
 			}
 			return typeSpec.Name.Name
 		}
 	}
 	return ""
-}
-
-// renameIdent walks an AST node and renames all *ast.Ident nodes
-// matching oldName to newName.
-func renameIdent(node ast.Node, oldName, newName string) {
-	ast.Inspect(node, func(n ast.Node) bool {
-		if ident, ok := n.(*ast.Ident); ok && ident.Name == oldName {
-			ident.Name = newName
-		}
-		return true
-	})
 }
 
 // ApplyServiceFile brings an existing service file in line with action: the
@@ -193,7 +183,7 @@ func applyServiceFile(file *ast.File, action *dsl.Action, servicePkgName, correc
 		if genDecl, ok := decl.(*ast.GenDecl); ok && genDecl.Tok == token.TYPE {
 			for _, spec := range genDecl.Specs {
 				if typeSpec, ok := spec.(*ast.TypeSpec); ok {
-					if isServiceType(typeSpec) {
+					if isServiceType(file, typeSpec) {
 						if applyServiceType(typeSpec, action, correctModelName) {
 							changed = true
 						}
@@ -405,7 +395,7 @@ func applyServiceType(spec *ast.TypeSpec, action *dsl.Action, correctModelName .
 						// The first generic parameter always references the
 						// business model package, so it provides the target
 						// qualifier for the payload and result parameters.
-						modelPkg := selectorPackageName(indexListExpr.Indices[0])
+						modelPkg := goast.TypeQualifier(indexListExpr.Indices[0])
 						// Handle second parameter (Payload)
 						if action.Payload != "" {
 							targetPkg, targetType := payloadTypeTarget(action.Payload, modelPkg)
@@ -468,7 +458,7 @@ func forceCanonicalServiceStruct(file *ast.File, action *dsl.Action, modelInfo *
 	qualifier := serviceModelQualifier(modelInfo, action.Phase)
 
 	renamed := false
-	spec := findStructTypeSpec(file, roleName)
+	spec := goast.FindStructTypeSpec(file, roleName)
 	if spec == nil {
 		existing := findServiceTypeName(file)
 		if len(existing) == 0 {
@@ -501,7 +491,7 @@ func forceCanonicalServiceStruct(file *ast.File, action *dsl.Action, modelInfo *
 	if !ok {
 		return renamed
 	}
-	if isCanonicalServiceStructBody(structType) {
+	if isCanonicalServiceStructBody(file, structType) {
 		return renamed
 	}
 
@@ -509,7 +499,7 @@ func forceCanonicalServiceStruct(file *ast.File, action *dsl.Action, modelInfo *
 	if baseField == nil {
 		return false
 	}
-	removeStructInteriorComments(file, structType)
+	goast.RemoveStructInteriorComments(file, structType)
 	if structType.Fields == nil {
 		structType.Fields = &ast.FieldList{}
 	}
@@ -526,7 +516,7 @@ func forceCanonicalServiceStruct(file *ast.File, action *dsl.Action, modelInfo *
 // left untouched. It returns the renamed type spec, or nil when no struct
 // named oldName exists.
 func renameServiceStruct(file *ast.File, oldName, newName string) *ast.TypeSpec {
-	spec := findStructTypeSpec(file, oldName)
+	spec := goast.FindStructTypeSpec(file, oldName)
 	if spec == nil {
 		return nil
 	}
@@ -548,33 +538,14 @@ func renameServiceStruct(file *ast.File, oldName, newName string) *ast.TypeSpec 
 }
 
 // isCanonicalServiceStructBody reports whether the struct body is exactly the
-// generated form: a single embedded service.Base[T1, T2, T3] field. Stale
-// type parameters still count as canonical; applyServiceType syncs them
-// separately without rewriting the body.
-func isCanonicalServiceStructBody(structType *ast.StructType) bool {
+// generated form: a single embedded service.Base[T1, T2, T3] field (see
+// isServiceBaseEmbedding). Stale type parameters still count as canonical;
+// applyServiceType syncs them separately without rewriting the body.
+func isCanonicalServiceStructBody(file *ast.File, structType *ast.StructType) bool {
 	if structType.Fields == nil || len(structType.Fields.List) != 1 {
 		return false
 	}
-	field := structType.Fields.List[0]
-	return len(field.Names) == 0 && is_service_base_with_three_type_params(field.Type)
-}
-
-// removeStructInteriorComments drops every comment group positioned inside
-// the struct braces: a force-rewritten body takes its comments with it, and a
-// stale comment would otherwise interleave with the position-less replacement
-// field when printing.
-func removeStructInteriorComments(file *ast.File, structType *ast.StructType) {
-	if structType.Fields == nil || !structType.Fields.Opening.IsValid() || !structType.Fields.Closing.IsValid() {
-		return
-	}
-	kept := file.Comments[:0]
-	for _, group := range file.Comments {
-		if group.Pos() > structType.Fields.Opening && group.End() < structType.Fields.Closing {
-			continue
-		}
-		kept = append(kept, group)
-	}
-	file.Comments = kept
+	return isServiceBaseEmbedding(file, structType.Fields.List[0])
 }
 
 // generatedServiceBaseField builds the service.Base[...] embedded field
@@ -594,37 +565,16 @@ func generatedServiceBaseField(modelQualifier, modelName string, action *dsl.Act
 	return structType.Fields.List[0]
 }
 
-// findStructTypeSpec returns the struct type spec declared with the given
-// name, or nil when the file declares no such struct.
-func findStructTypeSpec(file *ast.File, name string) *ast.TypeSpec {
-	for _, decl := range file.Decls {
-		genDecl, ok := decl.(*ast.GenDecl)
-		if !ok || genDecl.Tok != token.TYPE {
-			continue
-		}
-		for _, spec := range genDecl.Specs {
-			typeSpec, ok := spec.(*ast.TypeSpec)
-			if !ok || typeSpec.Name == nil || typeSpec.Name.Name != name {
-				continue
-			}
-			if _, ok := typeSpec.Type.(*ast.StructType); ok {
-				return typeSpec
-			}
-		}
-	}
-	return nil
-}
-
 // ensureServiceImportSpec inserts the gst service import so a restored
 // service.Base embedding resolves.
 func ensureServiceImportSpec(file *ast.File) {
-	if file == nil || findImportSpec(file, constants.ImportPathService) != nil {
+	if file == nil || goast.FindImportSpec(file, ggconst.ImportPathService) != nil {
 		return
 	}
-	insertImportSpec(file, &ast.ImportSpec{
+	goast.InsertImportSpec(file, &ast.ImportSpec{
 		Path: &ast.BasicLit{
 			Kind:  token.STRING,
-			Value: fmt.Sprintf("%q", constants.ImportPathService),
+			Value: fmt.Sprintf("%q", ggconst.ImportPathService),
 		},
 	})
 }
@@ -635,22 +585,10 @@ func ensureServiceImportSpec(file *ast.File) {
 // segment, as in model_service "helloworld/model/service" (see
 // modelImportSpec).
 func ensureModelImportSpec(file *ast.File, importPath, modelQualifier string) {
-	if file == nil || findImportSpec(file, importPath) != nil {
+	if file == nil || goast.FindImportSpec(file, importPath) != nil {
 		return
 	}
-	insertImportSpec(file, modelImportSpec(importPath, modelQualifier))
-}
-
-// insertImportSpec appends the import spec to the first import declaration,
-// creating one at the top of the file when none exists.
-func insertImportSpec(file *ast.File, spec *ast.ImportSpec) {
-	for _, decl := range file.Decls {
-		if genDecl, ok := decl.(*ast.GenDecl); ok && genDecl.Tok == token.IMPORT {
-			genDecl.Specs = append(genDecl.Specs, spec)
-			return
-		}
-	}
-	file.Decls = append([]ast.Decl{&ast.GenDecl{Tok: token.IMPORT, Specs: []ast.Spec{spec}}}, file.Decls...)
+	goast.InsertImportSpec(file, modelImportSpec(importPath, modelQualifier))
 }
 
 // ApplyServiceFileWithModelSync extends ApplyServiceFile to handle import path and package name updates.
@@ -783,7 +721,7 @@ func serviceModelName(file *ast.File, modelInfo *ModelInfo) string {
 	if name := serviceModelPackageName(file); name != "" {
 		return name
 	}
-	spec := findImportSpec(file, modelInfo.ImportPath())
+	spec := goast.FindImportSpec(file, modelInfo.ImportPath())
 	switch {
 	case spec == nil:
 		return ""
@@ -851,7 +789,7 @@ func serviceModelPackageName(file *ast.File) string {
 		}
 		for _, spec := range genDecl.Specs {
 			typeSpec, ok := spec.(*ast.TypeSpec)
-			if !ok || !isServiceType(typeSpec) {
+			if !ok || !isServiceType(file, typeSpec) {
 				continue
 			}
 
@@ -880,26 +818,11 @@ func serviceModelPackageName(file *ast.File) string {
 					continue
 				}
 
-				return selectorPackageName(indexListExpr.Indices[0])
+				return goast.TypeQualifier(indexListExpr.Indices[0])
 			}
 		}
 	}
 
-	return ""
-}
-
-// selectorPackageName returns the package qualifier of a qualified type,
-// looking through one pointer: sample for *sample.User and sample.User, and
-// "" for any other expression.
-func selectorPackageName(expr ast.Expr) string {
-	switch t := expr.(type) {
-	case *ast.StarExpr:
-		return selectorPackageName(t.X)
-	case *ast.SelectorExpr:
-		if ident, ok := t.X.(*ast.Ident); ok {
-			return ident.Name
-		}
-	}
 	return ""
 }
 

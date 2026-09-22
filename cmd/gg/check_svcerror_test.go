@@ -127,14 +127,36 @@ func (g *Getter) List(ctx *gst.ServiceContext, req *model.RecordReq) (*model.Rec
 func newOther() other { return other{} }
 `)
 
+	// A service struct of a file that dot-imports the framework service
+	// package is checked like any other.
+	writeCheckFile(t, filepath.Join(projectDir, "service", "dotted", "dotted.go"), `package dotted
+
+import (
+	"github.com/cockroachdb/errors"
+	"github.com/hydroan/gst"
+	. "github.com/hydroan/gst/service"
+	"tmpapp/model"
+)
+
+type Getter struct {
+	Base[*model.Record, *model.RecordReq, *model.RecordRsp]
+}
+
+func (g *Getter) Get(ctx *gst.ServiceContext, req *model.RecordReq) (*model.RecordRsp, error) {
+	return nil, errors.New("raw")
+}
+`)
+
 	violations := CheckServiceErrorDiscipline(newProjectIgnoreMatcher())
 
-	// Violations point at the raw error expressions themselves: the database
+	// Violations point at the raw error expressions themselves: the raw
+	// constructor of the dot-imported service on dotted.go:15, the database
 	// calls on laundry.go:23 / sample.go:19 / sample.go:26, the raw
 	// constructor on sample.go:23, the raw constructors the shadowing locals
 	// reach on shadow.go:18 and shadow.go:20, and the call on a local of
 	// unknown type on shadow.go:42, since those are the places to wrap.
 	wantSubstrings := []string{
+		filepath.Join("service", "dotted", "dotted.go") + ":15:",
 		filepath.Join("service", "laundry", "laundry.go") + ":23:",
 		filepath.Join("service", "sample", "sample.go") + ":19:",
 		filepath.Join("service", "sample", "sample.go") + ":23:",

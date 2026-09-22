@@ -11,8 +11,8 @@ import (
 	"strings"
 
 	"github.com/go-git/go-git/v5/plumbing/format/gitignore"
-	codegenast "github.com/hydroan/gst/internal/codegen/ast"
-	"github.com/hydroan/gst/internal/codegen/constants"
+	"github.com/hydroan/gst/internal/ggconst"
+	"github.com/hydroan/gst/internal/goast"
 )
 
 // CheckModelTableNameDeclaration reports business model structs that leave
@@ -72,7 +72,7 @@ func CheckModelTableNameDeclaration(ignore gitignore.Matcher) []string {
 			return nil
 		}
 		dir := filepath.Dir(path)
-		modelNames := codegenast.ImportedNames(node, constants.ImportPathModel, constants.PkgModel)
+		modelNames := goast.ImportedNames(node, ggconst.ImportPathModel, ggconst.PkgModel)
 
 		for _, decl := range node.Decls {
 			switch d := decl.(type) {
@@ -139,7 +139,7 @@ func CheckModelTableNameDeclaration(ignore gitignore.Matcher) []string {
 // embeddedBaseName returns the framework base a struct embeds ("model.Base"
 // or "model.AutoBase"), or "" when it embeds neither. Virtual models embed
 // model.Empty and have no table, so they never report here.
-func embeddedBaseName(structType *ast.StructType, modelNames codegenast.PackageNames) string {
+func embeddedBaseName(structType *ast.StructType, modelNames goast.PackageNames) string {
 	for _, field := range structType.Fields.List {
 		if len(field.Names) != 0 {
 			continue

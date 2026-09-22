@@ -15,8 +15,8 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/consts"
 	"github.com/hydroan/gst/internal/clioutput"
-	"github.com/hydroan/gst/internal/codegen/constants"
 	"github.com/hydroan/gst/internal/codegen/gen"
+	"github.com/hydroan/gst/internal/ggconst"
 )
 
 // columnInfo is one generated column reference, as reported by the inspection
@@ -392,7 +392,7 @@ func packageImportPath(module string, dir string) string {
 // columnsFileName returns the generated file that belongs to a model source
 // file: model/sample/record.go becomes model/sample/record.gen.go.
 func columnsFileName(source string) string {
-	return strings.TrimSuffix(source, constants.ExtensionGo) + constants.SuffixGenGo
+	return strings.TrimSuffix(source, ggconst.ExtensionGo) + ggconst.SuffixGenGo
 }
 
 // columnVarName returns the name of the var holding a model's generated
@@ -416,7 +416,7 @@ func importSpec(name, path string) string {
 
 // renderColumnsFile builds the generated source for one model source file.
 func renderColumnsFile(module string, pkgName string, source string, models []modelColumns) (string, error) {
-	imports := map[string]string{constants.ImportPathGst: "gst"}
+	imports := map[string]string{ggconst.ImportPathGst: "gst"}
 	for _, m := range models {
 		for _, col := range m.Columns {
 			// A TimeColumn reference carries no type argument, so the column
@@ -553,7 +553,7 @@ func writeGeneratedFileIfChanged(path string, content string, quiet bool) error 
 	if err != nil && !os.IsNotExist(err) {
 		return errors.Wrapf(err, "read %s", path)
 	}
-	if err = os.WriteFile(path, []byte(content), constants.FileModeGenerated); err != nil {
+	if err = os.WriteFile(path, []byte(content), ggconst.FileModeGenerated); err != nil {
 		return errors.Wrapf(err, "write %s", path)
 	}
 	if !quiet {
@@ -566,11 +566,11 @@ func writeGeneratedFileIfChanged(path string, content string, quiet bool) error 
 // at all: it carries the generated suffix and is not one of the files another
 // generation step owns, such as the model registration and apidoc files.
 func isColumnFileCandidate(path string) bool {
-	if !strings.HasSuffix(path, constants.SuffixGenGo) {
+	if !strings.HasSuffix(path, ggconst.SuffixGenGo) {
 		return false
 	}
 	base := filepath.Base(path)
-	return base != constants.FileModelGen && base != constants.FileAPIDocGen
+	return base != ggconst.FileModelGen && base != ggconst.FileAPIDocGen
 }
 
 // removeOrphanColumnFiles deletes generated column files whose model source no
@@ -617,7 +617,7 @@ func moduleRequiresGst() (bool, error) {
 	if err != nil {
 		return false, errors.Wrap(err, "read go.mod")
 	}
-	return strings.Contains(string(content), constants.ImportPathGst), nil
+	return strings.Contains(string(content), ggconst.ImportPathGst), nil
 }
 
 // columnsCacheKey hashes everything that can change the resolved columns:
@@ -669,9 +669,9 @@ func columnsCacheKey(program string, modelDir string) (string, error) {
 			}
 			return nil
 		}
-		if !strings.HasSuffix(path, constants.ExtensionGo) ||
-			strings.HasSuffix(path, constants.PatternTestFile) ||
-			strings.HasSuffix(path, constants.SuffixGenGo) {
+		if !strings.HasSuffix(path, ggconst.ExtensionGo) ||
+			strings.HasSuffix(path, ggconst.PatternTestFile) ||
+			strings.HasSuffix(path, ggconst.SuffixGenGo) {
 			return nil
 		}
 		content, readErr := os.ReadFile(path) //nolint:gosec // path comes from walking the project's model directory.

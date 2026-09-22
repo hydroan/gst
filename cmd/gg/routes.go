@@ -15,7 +15,7 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/consts"
 	"github.com/hydroan/gst/internal/clioutput"
-	"github.com/hydroan/gst/internal/codegen/constants"
+	"github.com/hydroan/gst/internal/ggconst"
 	"github.com/spf13/cobra"
 	"github.com/stoewer/go-strcase"
 )
@@ -76,7 +76,7 @@ Use --scope auth or --scope pub to display only authenticated or public routes.`
 }
 
 func runModelRoutes(w io.Writer, filter string, opts *modelRoutesCommandOptions) error {
-	routerFile := filepath.Join(routerDir, constants.FileRouterGen)
+	routerFile := filepath.Join(routerDir, ggconst.FileRouterGen)
 	routes, err := parseModelRoutesFromProject(routerFile, modelDir)
 	if err != nil {
 		return err

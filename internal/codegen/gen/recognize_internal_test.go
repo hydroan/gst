@@ -2,9 +2,12 @@ package gen
 
 import (
 	"go/ast"
+	"go/token"
+	"strconv"
 	"testing"
 
 	"github.com/hydroan/gst/consts"
+	"github.com/hydroan/gst/internal/ggconst"
 )
 
 func TestIsServiceMethod1(t *testing.T) {
@@ -52,6 +55,10 @@ func TestIsServiceMethod4(t *testing.T) {
 }
 
 func TestIsServiceType(t *testing.T) {
+	// The file imports the framework service package the way generated
+	// service files do; the qualifier of service.Base is read from it.
+	file := serviceImportFile("")
+
 	// Positive case: types transcribes the bare payload and result names as value
 	// types, so the struct embeds service.Base[*model.User, model.User, model.User]
 	gd := types("model", "User", "User", "User", consts.PHASE_CREATE.RoleName())
@@ -62,7 +69,7 @@ func TestIsServiceType(t *testing.T) {
 	if !ok {
 		t.Fatalf("expected first spec to be *ast.TypeSpec")
 	}
-	if !isServiceType(ts) {
+	if !isServiceType(file, ts) {
 		t.Fatalf("expected isServiceType to return true for valid service.Base with a pointer model and value payload and result")
 	}
 
@@ -82,7 +89,7 @@ func TestIsServiceType(t *testing.T) {
 			}},
 		},
 	}
-	if !isServiceType(pos2) {
+	if !isServiceType(file, pos2) {
 		t.Fatalf("expected isServiceType to return true for valid service.Base with mixed pointer and non-pointer types")
 	}
 
@@ -102,7 +109,7 @@ func TestIsServiceType(t *testing.T) {
 			}},
 		},
 	}
-	if isServiceType(neg1) {
+	if isServiceType(file, neg1) {
 		t.Fatalf("expected isServiceType to return false for non-Base selector")
 	}
 
@@ -122,7 +129,7 @@ func TestIsServiceType(t *testing.T) {
 			}},
 		},
 	}
-	if isServiceType(neg2) {
+	if isServiceType(file, neg2) {
 		t.Fatalf("expected isServiceType to return false when a type param is invalid")
 	}
 
@@ -141,7 +148,43 @@ func TestIsServiceType(t *testing.T) {
 			}},
 		},
 	}
-	if isServiceType(neg3) {
+	if isServiceType(file, neg3) {
 		t.Fatalf("expected isServiceType to return false for wrong number of type params")
 	}
+
+	// Positive case 3: the framework service package imported under an alias
+	aliased := &ast.TypeSpec{
+		Name: ast.NewIdent("userx"),
+		Type: &ast.StructType{
+			Fields: &ast.FieldList{List: []*ast.Field{
+				{Type: &ast.IndexListExpr{
+					X: &ast.SelectorExpr{X: ast.NewIdent("svc"), Sel: ast.NewIdent("Base")},
+					Indices: []ast.Expr{
+						&ast.StarExpr{X: &ast.SelectorExpr{X: ast.NewIdent("model"), Sel: ast.NewIdent("User")}},
+						&ast.StarExpr{X: &ast.SelectorExpr{X: ast.NewIdent("model"), Sel: ast.NewIdent("User")}},
+						&ast.StarExpr{X: &ast.SelectorExpr{X: ast.NewIdent("model"), Sel: ast.NewIdent("User")}},
+					},
+				}},
+			}},
+		},
+	}
+	if !isServiceType(serviceImportFile("svc"), aliased) {
+		t.Fatalf("expected isServiceType to return true for service.Base under an import alias")
+	}
+
+	// Negative case 4: a file that does not import the framework service
+	// package embeds no service.Base of it
+	if isServiceType(&ast.File{}, ts) {
+		t.Fatalf("expected isServiceType to return false without the service import")
+	}
+}
+
+// serviceImportFile returns a file importing the framework service package,
+// under name when it is not empty.
+func serviceImportFile(name string) *ast.File {
+	spec := &ast.ImportSpec{Path: &ast.BasicLit{Kind: token.STRING, Value: strconv.Quote(ggconst.ImportPathService)}}
+	if name != "" {
+		spec.Name = ast.NewIdent(name)
+	}
+	return &ast.File{Imports: []*ast.ImportSpec{spec}}
 }

@@ -11,8 +11,8 @@ import (
 	"github.com/hydroan/gst/consts"
 	"github.com/hydroan/gst/dsl"
 	"github.com/hydroan/gst/internal/codegen"
-	"github.com/hydroan/gst/internal/codegen/constants"
 	"github.com/hydroan/gst/internal/codegen/gen"
+	"github.com/hydroan/gst/internal/ggconst"
 )
 
 // TestApplyRouteIgnoresDisablesDefaultEndpointActions verifies that route
@@ -450,7 +450,7 @@ func (Sample) Design() {
 		t.Fatalf("genRunWithOptions() error = %v", err)
 	}
 
-	routerCode, err := os.ReadFile(filepath.Join(projectDir, "router", constants.FileRouterGen))
+	routerCode, err := os.ReadFile(filepath.Join(projectDir, "router", ggconst.FileRouterGen))
 	if err != nil {
 		t.Fatal(err)
 	}

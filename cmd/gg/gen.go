@@ -16,10 +16,10 @@ import (
 	"github.com/hydroan/gst/dsl"
 	"github.com/hydroan/gst/internal/clioutput"
 	"github.com/hydroan/gst/internal/codegen"
-	"github.com/hydroan/gst/internal/codegen/constants"
 	"github.com/hydroan/gst/internal/codegen/gen"
 	pkgnew "github.com/hydroan/gst/internal/codegen/new"
 	"github.com/hydroan/gst/internal/ggconfig"
+	"github.com/hydroan/gst/internal/ggconst"
 	"github.com/spf13/cobra"
 )
 
@@ -198,7 +198,7 @@ func genRunWithOptions(opts genRunOptions) error {
 	if err != nil {
 		return errors.Wrap(err, "build model/model.gen.go")
 	}
-	if writeErr := writeGenFile(filepath.Join(modelDir, constants.FileModelGen), modelCode); writeErr != nil {
+	if writeErr := writeGenFile(filepath.Join(modelDir, ggconst.FileModelGen), modelCode); writeErr != nil {
 		return writeErr
 	}
 
@@ -213,7 +213,7 @@ func genRunWithOptions(opts genRunOptions) error {
 	if err != nil {
 		return errors.Wrap(err, "build model/apidoc.gen.go")
 	}
-	if writeErr := writeGenFile(filepath.Join(modelDir, constants.FileAPIDocGen), apidocCode); writeErr != nil {
+	if writeErr := writeGenFile(filepath.Join(modelDir, ggconst.FileAPIDocGen), apidocCode); writeErr != nil {
 		return writeErr
 	}
 
@@ -222,7 +222,7 @@ func genRunWithOptions(opts genRunOptions) error {
 	if err != nil {
 		return errors.Wrap(err, "build service/service.gen.go")
 	}
-	if writeErr := writeGenFile(filepath.Join(serviceDir, constants.FileServiceGen), serviceCode); writeErr != nil {
+	if writeErr := writeGenFile(filepath.Join(serviceDir, ggconst.FileServiceGen), serviceCode); writeErr != nil {
 		return writeErr
 	}
 
@@ -231,7 +231,7 @@ func genRunWithOptions(opts genRunOptions) error {
 	if err != nil {
 		return errors.Wrap(err, "build router/router.gen.go")
 	}
-	if writeErr := writeGenFile(filepath.Join(routerDir, constants.FileRouterGen), routerCode); writeErr != nil {
+	if writeErr := writeGenFile(filepath.Join(routerDir, ggconst.FileRouterGen), routerCode); writeErr != nil {
 		return writeErr
 	}
 
@@ -246,7 +246,7 @@ func genRunWithOptions(opts genRunOptions) error {
 	if err != nil {
 		return errors.Wrap(err, "build main.go")
 	}
-	if err := writeGenFile(constants.FileMain, mainCode); err != nil {
+	if err := writeGenFile(ggconst.FileMain, mainCode); err != nil {
 		return err
 	}
 
@@ -294,7 +294,7 @@ func genRunWithOptions(opts genRunOptions) error {
 					return err
 				}
 				// #nosec G703 -- safePath validated under serviceDir by pathUnderRoot
-				if err := os.WriteFile(safePath, []byte(code), constants.FileModeGenerated); err != nil {
+				if err := os.WriteFile(safePath, []byte(code), ggconst.FileModeGenerated); err != nil {
 					return err
 				}
 			} else if !opts.Quiet {
@@ -308,7 +308,7 @@ func genRunWithOptions(opts genRunOptions) error {
 				return err
 			}
 			// #nosec G703 -- safePath validated under serviceDir by pathUnderRoot
-			if err := os.WriteFile(safePath, []byte(code), constants.FileModeGenerated); err != nil {
+			if err := os.WriteFile(safePath, []byte(code), ggconst.FileModeGenerated); err != nil {
 				return err
 			}
 		}

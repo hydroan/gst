@@ -7,8 +7,8 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/hydroan/gst/internal/codegen/constants"
 	"github.com/hydroan/gst/internal/codegen/gen"
+	"github.com/hydroan/gst/internal/ggconst"
 	"github.com/hydroan/gst/internal/structdoc"
 )
 
@@ -25,15 +25,15 @@ func walkModelFiles(modelDir string, excludes []string, fn func(path string) err
 		}
 
 		base := filepath.Base(path)
-		if path != modelDir && (base == constants.DirVendor || base == constants.DirTestData) {
+		if path != modelDir && (base == ggconst.DirVendor || base == ggconst.DirTestData) {
 			return filepath.SkipDir
 		}
 		if info.IsDir() {
 			return nil
 		}
-		if !strings.HasSuffix(info.Name(), constants.ExtensionGo) ||
-			strings.HasSuffix(info.Name(), constants.PatternTestFile) ||
-			strings.HasPrefix(info.Name(), constants.PrefixIgnore) ||
+		if !strings.HasSuffix(info.Name(), ggconst.ExtensionGo) ||
+			strings.HasSuffix(info.Name(), ggconst.PatternTestFile) ||
+			strings.HasPrefix(info.Name(), ggconst.PrefixIgnore) ||
 			slices.Contains(excludes, info.Name()) {
 			return nil
 		}

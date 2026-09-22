@@ -11,7 +11,7 @@ import (
 
 	"github.com/gertd/go-pluralize"
 	"github.com/hydroan/gst/consts"
-	"github.com/hydroan/gst/internal/codegen/constants"
+	"github.com/hydroan/gst/internal/ggconst"
 )
 
 var pluralizeCli = pluralize.NewClient()
@@ -23,9 +23,9 @@ var pluralizeCli = pluralize.NewClient()
 // The gst model package a model.Empty request or result needs is imported
 // separately (see emptyReqImport).
 func serviceScaffoldImports(phase consts.Phase) []string {
-	importPaths := []string{constants.ImportPathService, constants.ImportPathGst}
+	importPaths := []string{ggconst.ImportPathService, ggconst.ImportPathGst}
 	if phase == consts.PHASE_IMPORT {
-		importPaths = append(importPaths, constants.ImportPathIO)
+		importPaths = append(importPaths, ggconst.ImportPathIO)
 	}
 	return importPaths
 }

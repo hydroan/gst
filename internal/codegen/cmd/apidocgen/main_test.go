@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/hydroan/gst/internal/codegen/constants"
+	"github.com/hydroan/gst/internal/ggconst"
 )
 
 // TestModelRegistryAPIDocIsCurrent fails when the checked-in generated file
@@ -20,7 +20,7 @@ func TestModelRegistryAPIDocIsCurrent(t *testing.T) {
 		t.Fatalf("buildModelRegistryAPIDoc() error = %v", err)
 	}
 
-	path := filepath.Join(modelRegistryPkgDir, constants.FileAPIDocGen)
+	path := filepath.Join(modelRegistryPkgDir, ggconst.FileAPIDocGen)
 	got, err := os.ReadFile(path)
 	if err != nil {
 		t.Fatalf("read %s: %v", path, err)

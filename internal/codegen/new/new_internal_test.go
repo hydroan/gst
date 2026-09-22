@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/hydroan/gst/internal/codegen/constants"
+	"github.com/hydroan/gst/internal/ggconst"
 	"github.com/stretchr/testify/require"
 )
 
@@ -13,7 +13,7 @@ import (
 // main.go imports has a scaffold file: gg new creates it and gg gen restores
 // it, so the import never dangles.
 func TestScaffoldCoversEveryImportedDirectory(t *testing.T) {
-	for _, dir := range constants.ProjectImportDirs {
+	for _, dir := range ggconst.ProjectImportDirs {
 		found := false
 		for path := range requiredFileContentMap {
 			if strings.HasPrefix(path, dir+"/") && strings.HasSuffix(path, ".go") {

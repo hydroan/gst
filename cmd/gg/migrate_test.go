@@ -10,7 +10,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/hydroan/gst/internal/codegen/constants"
+	"github.com/hydroan/gst/internal/ggconst"
 )
 
 // The migration program's model set is whatever the linked packages
@@ -23,8 +23,8 @@ import (
 // project that has not run gen yet looks like.
 func TestMigrateProgramLinksWhatMainLinks(t *testing.T) {
 	projectDir := t.TempDir()
-	for _, dir := range constants.ProjectImportDirs {
-		if dir == constants.SubDirLock {
+	for _, dir := range ggconst.ProjectImportDirs {
+		if dir == ggconst.SubDirLock {
 			// Left missing on purpose.
 			continue
 		}
@@ -39,9 +39,9 @@ func TestMigrateProgramLinksWhatMainLinks(t *testing.T) {
 
 	program := buildMigrateProgramForMode("sample", false, "")
 
-	for _, dir := range constants.ProjectImportDirs {
+	for _, dir := range ggconst.ProjectImportDirs {
 		want := fmt.Sprintf("_ %q", "sample/"+dir)
-		if dir == constants.SubDirLock {
+		if dir == ggconst.SubDirLock {
 			if strings.Contains(program, want) {
 				t.Fatalf("expected the migration program to leave the missing %s out, got:\n%s", want, program)
 			}
@@ -75,9 +75,9 @@ func TestMigrateSchemaProgramReadsTheTablesModulesRegister(t *testing.T) {
 	// program reads the environment: pin the default, so a DATABASE_TYPE set
 	// where the tests run cannot change what the assertion reads.
 	t.Setenv("DATABASE_TYPE", "sqlite")
-	for _, dir := range constants.ProjectImportDirs {
+	for _, dir := range ggconst.ProjectImportDirs {
 		content := "package " + dir + "\n"
-		if dir == constants.SubDirModule {
+		if dir == ggconst.SubDirModule {
 			content = migrateSampleModule
 		}
 		writeCheckFile(t, filepath.Join(projectDir, dir, dir+".go"), content)

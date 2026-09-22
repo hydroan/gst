@@ -4,10 +4,10 @@ import (
 	"fmt"
 	"go/ast"
 	"go/token"
-	"strings"
 
 	"github.com/hydroan/gst/dsl"
-	"github.com/hydroan/gst/internal/codegen/constants"
+	"github.com/hydroan/gst/internal/ggconst"
+	"github.com/hydroan/gst/internal/goast"
 )
 
 const (
@@ -56,9 +56,9 @@ func RouterGstModelUse(models []*ModelInfo) (pkgName string, needed bool) {
 // gstmodel and "github.com/hydroan/gst/model" for model.
 func GstModelImportEntry(pkgName string) string {
 	if pkgName == gstModelPkgAlias {
-		return gstModelPkgAlias + " " + constants.ImportPathModel
+		return gstModelPkgAlias + " " + ggconst.ImportPathModel
 	}
-	return constants.ImportPathModel
+	return ggconst.ImportPathModel
 }
 
 // emptyReqPkgName returns the package qualifier a generated service file uses
@@ -118,20 +118,20 @@ func payloadTypeTarget(payload, modelPkg string) (targetPkg, actionType string) 
 // and "github.com/hydroan/gst/model" otherwise. It reports whether the file
 // was modified.
 func ensureEmptyReqImportSpec(file *ast.File, modelPkg string) bool {
-	if file == nil || findImportSpec(file, constants.ImportPathModel) != nil {
+	if file == nil || goast.FindImportSpec(file, ggconst.ImportPathModel) != nil {
 		return false
 	}
 
 	spec := &ast.ImportSpec{
 		Path: &ast.BasicLit{
 			Kind:  token.STRING,
-			Value: fmt.Sprintf("%q", constants.ImportPathModel),
+			Value: fmt.Sprintf("%q", ggconst.ImportPathModel),
 		},
 	}
 	if emptyReqPkgName(modelPkg) == gstModelPkgAlias {
 		spec.Name = ast.NewIdent(gstModelPkgAlias)
 	}
-	insertImportSpec(file, spec)
+	goast.InsertImportSpec(file, spec)
 	return true
 }
 
@@ -141,7 +141,7 @@ func ensureEmptyReqImportSpec(file *ast.File, modelPkg string) bool {
 // that still references the package keeps the import. It reports whether the
 // file was modified.
 func pruneGstModelImportSpec(file *ast.File) bool {
-	spec := findImportSpec(file, constants.ImportPathModel)
+	spec := goast.FindImportSpec(file, ggconst.ImportPathModel)
 	if spec == nil {
 		return false
 	}
@@ -181,16 +181,4 @@ func pruneGstModelImportSpec(file *ast.File) bool {
 		}
 	}
 	return false
-}
-
-// findImportSpec returns the import spec for the given import path, or nil.
-// It looks through file.Imports, the imports the file was parsed with, so it
-// misses an import inserted into the AST since.
-func findImportSpec(file *ast.File, importPath string) *ast.ImportSpec {
-	for _, imp := range file.Imports {
-		if imp.Path != nil && strings.Trim(imp.Path.Value, `"`) == importPath {
-			return imp
-		}
-	}
-	return nil
 }

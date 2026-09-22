@@ -2,6 +2,9 @@ package gen
 
 import (
 	"go/ast"
+	"slices"
+
+	"github.com/hydroan/gst/internal/goast"
 )
 
 // isServiceMethod1 checks whether a function declaration matches the shape
@@ -13,24 +16,24 @@ func isServiceMethod1(fn *ast.FuncDecl) bool {
 		return false
 	}
 	// receiver must be pointer to an ident (e.g., *user)
-	if !is_pointer_to_ident(fn.Recv) {
+	if !goast.IsPointerReceiver(fn.Recv) {
 		return false
 	}
 	// params: (ctx *gst.ServiceContext, second *pkg.Model)
 	if len(fn.Type.Params.List) != 2 {
 		return false
 	}
-	if !is_ctx_service_context(fn.Type.Params.List[0]) {
+	if !isServiceContextParam(fn.Type.Params.List[0]) {
 		return false
 	}
-	if !is_star_selector(fn.Type.Params.List[1]) {
+	if !goast.IsPointerToQualified(fn.Type.Params.List[1].Type) {
 		return false
 	}
 	// results: error
 	if len(fn.Type.Results.List) != 1 {
 		return false
 	}
-	if !isErrorIdent(fn.Type.Results.List[0].Type) {
+	if !goast.IsBuiltinError(fn.Type.Results.List[0].Type) {
 		return false
 	}
 	return true
@@ -44,24 +47,24 @@ func isServiceMethod2(fn *ast.FuncDecl) bool {
 	if fn == nil || fn.Recv == nil || fn.Type == nil || fn.Type.Params == nil || fn.Type.Results == nil {
 		return false
 	}
-	if !is_pointer_to_ident(fn.Recv) {
+	if !goast.IsPointerReceiver(fn.Recv) {
 		return false
 	}
 	if len(fn.Type.Params.List) != 2 {
 		return false
 	}
-	if !is_ctx_service_context(fn.Type.Params.List[0]) {
+	if !isServiceContextParam(fn.Type.Params.List[0]) {
 		return false
 	}
 	// Second param must be: *[]*pkg.Model
-	if !is_ptr_to_slice_of_star_selector(fn.Type.Params.List[1]) {
+	if !isPointerToSliceOfPointers(fn.Type.Params.List[1]) {
 		return false
 	}
 	// results: error
 	if len(fn.Type.Results.List) != 1 {
 		return false
 	}
-	if !isErrorIdent(fn.Type.Results.List[0].Type) {
+	if !goast.IsBuiltinError(fn.Type.Results.List[0].Type) {
 		return false
 	}
 	return true
@@ -75,24 +78,24 @@ func isServiceMethod3(fn *ast.FuncDecl) bool {
 	if fn == nil || fn.Recv == nil || fn.Type == nil || fn.Type.Params == nil || fn.Type.Results == nil {
 		return false
 	}
-	if !is_pointer_to_ident(fn.Recv) {
+	if !goast.IsPointerReceiver(fn.Recv) {
 		return false
 	}
 	if len(fn.Type.Params.List) != 2 {
 		return false
 	}
-	if !is_ctx_service_context(fn.Type.Params.List[0]) {
+	if !isServiceContextParam(fn.Type.Params.List[0]) {
 		return false
 	}
 	// Second param must be: ...*pkg.Model
-	if !is_variadic_star_selector(fn.Type.Params.List[1]) {
+	if !isVariadicOfPointers(fn.Type.Params.List[1]) {
 		return false
 	}
 	// results: error
 	if len(fn.Type.Results.List) != 1 {
 		return false
 	}
-	if !isErrorIdent(fn.Type.Results.List[0].Type) {
+	if !goast.IsBuiltinError(fn.Type.Results.List[0].Type) {
 		return false
 	}
 	return true
@@ -107,27 +110,27 @@ func isServiceMethod4(fn *ast.FuncDecl) bool {
 	if fn == nil || fn.Recv == nil || fn.Type == nil || fn.Type.Params == nil || fn.Type.Results == nil {
 		return false
 	}
-	if !is_pointer_to_ident(fn.Recv) {
+	if !goast.IsPointerReceiver(fn.Recv) {
 		return false
 	}
 	if len(fn.Type.Params.List) != 2 {
 		return false
 	}
-	if !is_ctx_service_context(fn.Type.Params.List[0]) {
+	if !isServiceContextParam(fn.Type.Params.List[0]) {
 		return false
 	}
 	// Second param must be: *pkg.Req or pkg.Req
-	if !is_star_or_selector(fn.Type.Params.List[1]) {
+	if !isQualifiedOrPointer(fn.Type.Params.List[1].Type) {
 		return false
 	}
 	// results: (*pkg.Rsp, error) or (pkg.Rsp, error)
 	if len(fn.Type.Results.List) != 2 {
 		return false
 	}
-	if !is_star_or_selector_type(fn.Type.Results.List[0].Type) {
+	if !isQualifiedOrPointer(fn.Type.Results.List[0].Type) {
 		return false
 	}
-	if !isErrorIdent(fn.Type.Results.List[1].Type) {
+	if !goast.IsBuiltinError(fn.Type.Results.List[1].Type) {
 		return false
 	}
 	return true
@@ -135,30 +138,18 @@ func isServiceMethod4(fn *ast.FuncDecl) bool {
 
 // ---------- helpers ----------
 
-// is_pointer_to_ident checks the receiver is a single pointer to a named
-// type, as in (u *Creator).
-func is_pointer_to_ident(recv *ast.FieldList) bool { //nolint:staticcheck
-	if recv == nil || len(recv.List) != 1 {
-		return false
-	}
-	se, ok := recv.List[0].Type.(*ast.StarExpr)
-	if !ok {
-		return false
-	}
-	_, ok = se.X.(*ast.Ident)
-	return ok
-}
-
-// is_ctx_service_context checks "*gst.ServiceContext" type.
-func is_ctx_service_context(field *ast.Field) bool { //nolint:staticcheck
+// isServiceContextParam checks the parameter is declared as
+// *gst.ServiceContext, the way every generated service method declares its
+// first parameter.
+func isServiceContextParam(field *ast.Field) bool {
 	if field == nil {
 		return false
 	}
-	se, ok := field.Type.(*ast.StarExpr)
+	star, ok := field.Type.(*ast.StarExpr)
 	if !ok {
 		return false
 	}
-	sel, ok := se.X.(*ast.SelectorExpr)
+	sel, ok := star.X.(*ast.SelectorExpr)
 	if !ok {
 		return false
 	}
@@ -169,185 +160,66 @@ func is_ctx_service_context(field *ast.Field) bool { //nolint:staticcheck
 	return pkg.Name == "gst" && sel.Sel != nil && sel.Sel.Name == "ServiceContext"
 }
 
-// is_star_selector checks "*pkg.Type".
-func is_star_selector(field *ast.Field) bool { //nolint:staticcheck
+// isQualifiedOrPointer checks the type is qualified by a package name, by
+// value or behind one pointer, as in model.User and *model.User.
+func isQualifiedOrPointer(expr ast.Expr) bool {
+	return goast.IsQualified(expr) || goast.IsPointerToQualified(expr)
+}
+
+// isPointerToSliceOfPointers checks the parameter is declared as a pointer
+// to a slice of pointers to a qualified type, as in *[]*model.User.
+func isPointerToSliceOfPointers(field *ast.Field) bool {
 	if field == nil {
 		return false
 	}
-	return is_star_selector_type(field.Type)
+	star, ok := field.Type.(*ast.StarExpr)
+	if !ok {
+		return false
+	}
+	arr, ok := star.X.(*ast.ArrayType)
+	return ok && goast.IsPointerToQualified(arr.Elt)
 }
 
-// is_star_or_selector checks if the field is either *pkg.Type or pkg.Type
-func is_star_or_selector(field *ast.Field) bool { //nolint:staticcheck
-	if field == nil {
-		return false
-	}
-	return is_star_or_selector_type(field.Type)
-}
-
-// is_star_selector_type checks the expression is a pointer to a qualified
-// type, as in *model.User.
-func is_star_selector_type(expr ast.Expr) bool { //nolint:staticcheck
-	se, ok := expr.(*ast.StarExpr)
-	if !ok {
-		return false
-	}
-	sel, ok := se.X.(*ast.SelectorExpr)
-	if !ok {
-		return false
-	}
-	_, ok = sel.X.(*ast.Ident)
-	if !ok {
-		return false
-	}
-	return sel.Sel != nil
-}
-
-// is_selector_type checks if the expression is a SelectorExpr (pkg.Type)
-func is_selector_type(expr ast.Expr) bool { //nolint:staticcheck
-	sel, ok := expr.(*ast.SelectorExpr)
-	if !ok {
-		return false
-	}
-	_, ok = sel.X.(*ast.Ident)
-	if !ok {
-		return false
-	}
-	return sel.Sel != nil
-}
-
-// is_star_or_selector_type checks if the expression is either *pkg.Type or pkg.Type
-func is_star_or_selector_type(expr ast.Expr) bool { //nolint:staticcheck
-	return is_star_selector_type(expr) || is_selector_type(expr)
-}
-
-// is_ptr_to_slice_of_star_selector checks "*[]*pkg.Type".
-func is_ptr_to_slice_of_star_selector(field *ast.Field) bool { //nolint:staticcheck
-	if field == nil {
-		return false
-	}
-	se, ok := field.Type.(*ast.StarExpr)
-	if !ok {
-		return false
-	}
-	arr, ok := se.X.(*ast.ArrayType)
-	if !ok {
-		return false
-	}
-	innerStar, ok := arr.Elt.(*ast.StarExpr)
-	if !ok {
-		return false
-	}
-	sel, ok := innerStar.X.(*ast.SelectorExpr)
-	if !ok {
-		return false
-	}
-	_, ok = sel.X.(*ast.Ident)
-	if !ok {
-		return false
-	}
-	return sel.Sel != nil
-}
-
-// is_variadic_star_selector checks "...*pkg.Type".
-func is_variadic_star_selector(field *ast.Field) bool { //nolint:staticcheck
+// isVariadicOfPointers checks the parameter is variadic over pointers to a
+// qualified type, as in ...*model.User.
+func isVariadicOfPointers(field *ast.Field) bool {
 	if field == nil {
 		return false
 	}
 	ell, ok := field.Type.(*ast.Ellipsis)
-	if !ok {
-		return false
-	}
-	innerStar, ok := ell.Elt.(*ast.StarExpr)
-	if !ok {
-		return false
-	}
-	sel, ok := innerStar.X.(*ast.SelectorExpr)
-	if !ok {
-		return false
-	}
-	_, ok = sel.X.(*ast.Ident)
-	if !ok {
-		return false
-	}
-	return sel.Sel != nil
+	return ok && goast.IsPointerToQualified(ell.Elt)
 }
 
-// isErrorIdent checks if expr is the builtin error identifier.
-func isErrorIdent(expr ast.Expr) bool {
-	id, ok := expr.(*ast.Ident)
-	return ok && id.Name == "error"
-}
-
-// isServiceType checks if a type declaration is a service struct: a struct
-// embedding service.Base over the model, request and response types (see
-// is_service_base_with_three_type_params), as in
+// isServiceType checks if a type declaration of file is a service struct: a
+// struct embedding service.Base over the model, request and response types
+// (see isServiceBaseEmbedding), as in
 //
 //	type Creator struct {
 //		service.Base[*model.User, *model.UserReq, *model.UserRsp]
 //	}
-func isServiceType(spec *ast.TypeSpec) bool {
+func isServiceType(file *ast.File, spec *ast.TypeSpec) bool {
 	if spec == nil || spec.Type == nil {
 		return false
 	}
-
-	// Must be a struct type
 	structType, ok := spec.Type.(*ast.StructType)
 	if !ok || structType.Fields == nil {
 		return false
 	}
-
-	// Check if this struct embeds service.Base[T1, T2, T3]
-	for _, field := range structType.Fields.List {
-		if len(field.Names) == 0 { // Embedded field
-			if is_service_base_with_three_type_params(field.Type) {
-				return true
-			}
-		}
-	}
-	return false
+	return slices.ContainsFunc(structType.Fields.List, func(field *ast.Field) bool {
+		return isServiceBaseEmbedding(file, field)
+	})
 }
 
-// is_service_base_with_three_type_params checks if the type is
-// service.Base[T1, T2, T3] with each type parameter a pointer or a qualified
-// value type, as in service.Base[*model.User, *model.UserReq, model.UserRsp].
-func is_service_base_with_three_type_params(expr ast.Expr) bool { //nolint:staticcheck
-	// Look for service.Base[T1, T2, T3] pattern
-	indexListExpr, ok := expr.(*ast.IndexListExpr)
-	if !ok {
+// isServiceBaseEmbedding checks the field embeds the framework's service.Base
+// (see goast.IsServiceBase) over type arguments the generator can
+// rewrite, each qualified by a package name by value or behind one pointer,
+// as in service.Base[*model.User, *model.UserReq, model.UserRsp].
+func isServiceBaseEmbedding(file *ast.File, field *ast.Field) bool {
+	if !goast.IsServiceBase(file, field) {
 		return false
 	}
-
-	// Check if X is service.Base
-	selectorExpr, ok := indexListExpr.X.(*ast.SelectorExpr)
-	if !ok {
-		return false
-	}
-
-	ident, ok := selectorExpr.X.(*ast.Ident)
-	if !ok || ident.Name != "service" {
-		return false
-	}
-
-	if selectorExpr.Sel.Name != "Base" {
-		return false
-	}
-
-	// Must have exactly 3 type parameters
-	if len(indexListExpr.Indices) != 3 {
-		return false
-	}
-
-	// All type parameters should be either pointer types (*model.Something) or selector types (model.Something)
-	for _, index := range indexListExpr.Indices {
-		if _, ok := index.(*ast.StarExpr); ok {
-			continue // Pointer type is valid
-		}
-		if _, ok := index.(*ast.SelectorExpr); ok {
-			continue // Non-pointer selector type is also valid
-		}
-		return false // Neither pointer nor selector type
-	}
-
-	return true
+	instance, ok := field.Type.(*ast.IndexListExpr)
+	return ok && !slices.ContainsFunc(instance.Indices, func(arg ast.Expr) bool {
+		return !isQualifiedOrPointer(arg)
+	})
 }

@@ -79,7 +79,7 @@ func (Aliased) TableName() string { return "aliaseds" }
 import . "github.com/hydroan/gst/model"
 
 type Dotted struct {
-	Version Version `+"`json:\"version\"`"+`
+	Rev Version `+"`json:\"version\"`"+`
 
 	Base
 }
@@ -125,7 +125,7 @@ type UpdateReq struct {
 	require("field 'Bare.Version' (model.Version) is missing gorm not null, gorm default:1, json omitempty")
 	require("field 'Partial.Version' (model.Version) is missing gorm default:1, json omitempty")
 	require("field 'Aliased.Revision' (model.Version) is missing gorm not null, gorm default:1, json omitempty")
-	require("field 'Dotted.Version' (model.Version) is missing gorm not null, gorm default:1, json omitempty")
+	require("field 'Dotted.Rev' (model.Version) is missing gorm not null, gorm default:1, json omitempty")
 	require("field 'Hidden.Version' (model.Version) carries json:\"-\"")
 }
 

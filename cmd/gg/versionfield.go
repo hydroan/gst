@@ -11,8 +11,8 @@ import (
 	"strings"
 
 	"github.com/hydroan/gst/dsl"
-	codegenast "github.com/hydroan/gst/internal/codegen/ast"
-	"github.com/hydroan/gst/internal/codegen/constants"
+	"github.com/hydroan/gst/internal/ggconst"
+	"github.com/hydroan/gst/internal/goast"
 	"github.com/hydroan/gst/internal/modelregistry"
 )
 
@@ -26,7 +26,7 @@ import (
 // "gg check" reports deviations read-only, and the framework panics at
 // runtime on first touch as the last net. The model package is recognized
 // under every name a file imports it by, a dot import included (see
-// codegenast.ImportedNames).
+// goast.ImportedNames).
 
 // versionRequiredTag is the exact gorm tag payload a model.Version field
 // must carry.
@@ -68,7 +68,7 @@ func scanVersionFieldFile(path string) ([]versionFieldFinding, error) {
 	if err != nil {
 		return nil, fmt.Errorf("%s has parse error: %w", relativePath(path), err)
 	}
-	names := codegenast.ImportedNames(imports, constants.ImportPathModel, constants.PkgModel)
+	names := goast.ImportedNames(imports, ggconst.ImportPathModel, ggconst.PkgModel)
 	if len(names.Qualifiers) == 0 && !names.DotImported {
 		return nil, nil
 	}
@@ -213,7 +213,7 @@ func scanPackageActionTypeVersionFields(paths []string) []actionTypeVersionFindi
 		spec *ast.TypeSpec
 	}
 	files := make(map[string]*ast.File, len(paths))
-	namesByPath := make(map[string]codegenast.PackageNames, len(paths))
+	namesByPath := make(map[string]goast.PackageNames, len(paths))
 	covered := make(map[string]bool)
 	declarations := make(map[string]declaration)
 	for _, path := range paths {
@@ -222,7 +222,7 @@ func scanPackageActionTypeVersionFields(paths []string) []actionTypeVersionFindi
 			continue
 		}
 		files[path] = node
-		namesByPath[path] = codegenast.ImportedNames(node, constants.ImportPathModel, constants.PkgModel)
+		namesByPath[path] = goast.ImportedNames(node, ggconst.ImportPathModel, ggconst.PkgModel)
 		for _, name := range slices.Concat(dsl.FindAllModelBase(node), dsl.FindAllModelEmpty(node)) {
 			covered[name] = true
 		}

@@ -12,6 +12,7 @@ import (
 	"strings"
 
 	gitignore "github.com/go-git/go-git/v5/plumbing/format/gitignore"
+	"github.com/hydroan/gst/internal/goast"
 )
 
 // gstServiceImportPath is the framework package whose NewError and
@@ -299,7 +300,7 @@ func (c *svcErrFileCollector) collectServiceTypes(decl *ast.GenDecl) {
 			continue
 		}
 		for _, field := range structType.Fields.List {
-			if len(field.Names) > 0 || !c.isServiceBase(field.Type) {
+			if !goast.IsServiceBase(c.file, field) {
 				continue
 			}
 			types := c.analysis.entryTypes[c.pkgDir]
@@ -310,24 +311,6 @@ func (c *svcErrFileCollector) collectServiceTypes(decl *ast.GenDecl) {
 			types[typeSpec.Name.Name] = true
 		}
 	}
-}
-
-// isServiceBase reports whether expr denotes service.Base under any
-// recognized import alias, with or without type arguments.
-func (c *svcErrFileCollector) isServiceBase(expr ast.Expr) bool {
-	switch expr := expr.(type) {
-	case *ast.IndexExpr:
-		return c.isServiceBase(expr.X)
-	case *ast.IndexListExpr:
-		return c.isServiceBase(expr.X)
-	case *ast.SelectorExpr:
-		ident, ok := expr.X.(*ast.Ident)
-		if !ok || expr.Sel == nil || expr.Sel.Name != "Base" {
-			return false
-		}
-		return slices.Contains(c.svcAliases, ident.Name)
-	}
-	return false
 }
 
 // collectFunc summarizes one function whose last result is error.

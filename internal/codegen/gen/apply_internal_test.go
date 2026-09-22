@@ -372,7 +372,7 @@ type user struct {
 				if genDecl, ok := decl.(*ast.GenDecl); ok && genDecl.Tok == token.TYPE {
 					for _, spec := range genDecl.Specs {
 						if typeSpec, ok := spec.(*ast.TypeSpec); ok {
-							if isServiceType(typeSpec) {
+							if isServiceType(file, typeSpec) {
 								found = true
 								changed := applyServiceType(typeSpec, tt.action)
 								if !changed {

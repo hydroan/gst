@@ -9,8 +9,8 @@ import (
 
 	"github.com/hydroan/gst/consts"
 	"github.com/hydroan/gst/internal/clioutput"
-	"github.com/hydroan/gst/internal/codegen/constants"
 	"github.com/hydroan/gst/internal/codegen/gen"
+	"github.com/hydroan/gst/internal/ggconst"
 	"github.com/spf13/cobra"
 )
 
@@ -92,8 +92,8 @@ func buildMigrateProgramForMode(moduleName string, schemaOnly bool, schemaSource
 // the migration must not fail on its account. Migration never writes source
 // files; restoring the scaffold is gen's job.
 func migrateProjectImports(moduleName string) string {
-	lines := make([]string, 0, len(constants.ProjectImportDirs))
-	for _, dir := range constants.ProjectImportDirs {
+	lines := make([]string, 0, len(ggconst.ProjectImportDirs))
+	for _, dir := range ggconst.ProjectImportDirs {
 		if !hasGoSources(dir) {
 			clioutput.Warn("", "%s/ has no Go files and is left out of the migration program; run gg gen to restore the scaffold", dir)
 			continue

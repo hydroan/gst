@@ -8,8 +8,8 @@ import (
 	"testing"
 
 	"github.com/hydroan/gst/consts"
-	"github.com/hydroan/gst/internal/codegen/constants"
 	"github.com/hydroan/gst/internal/codegen/gen"
+	"github.com/hydroan/gst/internal/ggconst"
 	"github.com/stretchr/testify/require"
 )
 
@@ -18,7 +18,7 @@ func TestColumnInspectionOverlayStubsGeneratedColumnFiles(t *testing.T) {
 	columns := filepath.Join("model", "sample", "record.gen.go")
 	writeCheckFile(t, columns, consts.CodeGeneratedComment()+"\n// source: model/sample/record.go\n\npackage sample\n\nvar RecordCols = struct{}{}\n")
 	writeCheckFile(t, filepath.Join("model", "sample", "handwritten.gen.go"), "package sample\n")
-	writeCheckFile(t, filepath.Join("model", constants.FileModelGen), consts.CodeGeneratedComment()+"\n\npackage model\n")
+	writeCheckFile(t, filepath.Join("model", ggconst.FileModelGen), consts.CodeGeneratedComment()+"\n\npackage model\n")
 	writeCheckFile(t, filepath.Join("model", "sample", "record.go"), "package sample\n\ntype Record struct{}\n")
 
 	overlay, err := columnInspectionOverlay("tmpapp", "model", nil)

@@ -1,7 +1,8 @@
-package codegenast
+package goast
 
 import (
 	"go/ast"
+	"go/token"
 	"slices"
 	"strconv"
 )
@@ -64,4 +65,51 @@ func (n PackageNames) Refers(expr ast.Expr, typeNames ...string) bool {
 		return n.DotImported && slices.Contains(typeNames, t.Name)
 	}
 	return false
+}
+
+// FindImportSpec returns the import spec of file for importPath, or nil. For
+// a file importing
+//
+//	import gstmodel "github.com/hydroan/gst/model"
+//
+// FindImportSpec(file, "github.com/hydroan/gst/model") returns that spec,
+// named gstmodel, and FindImportSpec(file, "fmt") returns nil. It looks
+// through file.Imports, the imports the file was parsed with, so it misses an
+// import inserted into the tree since.
+func FindImportSpec(file *ast.File, importPath string) *ast.ImportSpec {
+	for _, imp := range file.Imports {
+		if imp.Path == nil {
+			continue
+		}
+		if path, err := strconv.Unquote(imp.Path.Value); err == nil && path == importPath {
+			return imp
+		}
+	}
+	return nil
+}
+
+// InsertImportSpec appends spec to the first import declaration of file,
+// creating one at the top of the file when none exists. With the spec of
+// "fmt" it turns
+//
+//	import (
+//		"context"
+//	)
+//
+// into
+//
+//	import (
+//		"context"
+//		"fmt"
+//	)
+//
+// and gives a file without imports an import "fmt" above its declarations.
+func InsertImportSpec(file *ast.File, spec *ast.ImportSpec) {
+	for _, decl := range file.Decls {
+		if genDecl, ok := decl.(*ast.GenDecl); ok && genDecl.Tok == token.IMPORT {
+			genDecl.Specs = append(genDecl.Specs, spec)
+			return
+		}
+	}
+	file.Decls = append([]ast.Decl{&ast.GenDecl{Tok: token.IMPORT, Specs: []ast.Spec{spec}}}, file.Decls...)
 }
