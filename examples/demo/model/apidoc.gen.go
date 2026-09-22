@@ -35,23 +35,23 @@ func init() {
 	apidoc.Register("demo/model/auth", "LoginRsp", apidoc.StructDoc{
 		Comment: "LoginRsp contains the URL a client should open to start authentication.",
 	})
-	apidoc.Register("demo/model/common", "Search", apidoc.StructDoc{
-		Comment: "Search demonstrates a non-database utility action.",
-	})
-	apidoc.Register("demo/model/common", "SearchDedupReq", apidoc.StructDoc{
-		Comment: "SearchDedupReq is the request for deduplicating search sources.",
-	})
-	apidoc.Register("demo/model/common", "SearchDedupRsp", apidoc.StructDoc{
-		Comment: "SearchDedupRsp is the response returned after source deduplication.",
-	})
-	apidoc.Register("demo/model/common", "SearchSource", apidoc.StructDoc{
-		Comment: "SearchSource is one candidate source returned by an external search provider.",
-	})
 	apidoc.Register("demo/model/record", "Item", apidoc.StructDoc{
 		Comment: "Item demonstrates a child resource with nested routes and batch actions.",
 	})
-	apidoc.Register("demo/model/record", "SearchSource", apidoc.StructDoc{
-		Comment: "SearchSource describes an external reference attached to an item.",
+	apidoc.Register("demo/model/record", "ItemLink", apidoc.StructDoc{
+		Comment: "ItemLink describes an external reference attached to an item.",
+	})
+	apidoc.Register("demo/model/tool", "Entry", apidoc.StructDoc{
+		Comment: "Entry is a non-database action model.",
+	})
+	apidoc.Register("demo/model/tool", "EntryMergeReq", apidoc.StructDoc{
+		Comment: "EntryMergeReq is the request for merging entries.",
+	})
+	apidoc.Register("demo/model/tool", "EntryMergeRsp", apidoc.StructDoc{
+		Comment: "EntryMergeRsp is the response returned after merging.",
+	})
+	apidoc.Register("demo/model/tool", "EntryPair", apidoc.StructDoc{
+		Comment: "EntryPair is one key/value pair submitted for merging.",
 	})
 	apidoc.RegisterEnum("demo/model", "RecordType", apidoc.EnumDoc{
 		Comment: "RecordType identifies the content type handled by a record.",

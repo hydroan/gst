@@ -11,10 +11,10 @@
 //	curl -s -i -b ./cookies.txt \
 //	  -X POST http://localhost:8090/api/trace-probes \
 //	  -H 'Content-Type: application/json' \
-//	  -d '{"name":"trace-probe-codex","note":"standard-crud-context"}'
+//	  -d '{"name":"trace-probe-sample","note":"standard-crud-context"}'
 //
-//	curl -s -i -b ./demo-cookies.txt \
-//	  'http://localhost:8090/api/trace-probes?name=trace-probe-codex'
+//	curl -s -i -b ./cookies.txt \
+//	  'http://localhost:8090/api/trace-probes?name=trace-probe-sample'
 //
 //	curl -s -i -b ./cookies.txt \
 //	  http://localhost:8090/api/trace-probes/019efee7-76e5-7520-a405-9d4c7bead437

@@ -7,8 +7,8 @@ import (
 	"demo/model/archive"
 	archivedocument "demo/model/archive/document"
 	"demo/model/auth"
-	"demo/model/common"
 	"demo/model/record"
+	"demo/model/tool"
 )
 
 type designer interface {
@@ -22,7 +22,7 @@ func TestDemoDSLModelsAreAvailable(t *testing.T) {
 	}{
 		{name: "record resource", model: rootmodel.Record{}},
 		{name: "item resource", model: record.Item{}},
-		{name: "search utility action", model: common.Search{}},
+		{name: "entry utility action", model: tool.Entry{}},
 		{name: "login public action", model: auth.Login{}},
 		{name: "archive document resource", model: archive.Document{}},
 		{name: "archive document seal action", model: archivedocument.Seal{}},

@@ -6,11 +6,11 @@ import (
 	"demo/service/archive/document"
 	"demo/service/archive/document/seal"
 	"demo/service/auth/login"
-	"demo/service/common/search"
 	"demo/service/notice"
 	"demo/service/ping"
 	"demo/service/record"
 	"demo/service/record/item"
+	"demo/service/tool/entry"
 	"demo/service/trace_probe"
 
 	"github.com/hydroan/gst/consts"
@@ -23,7 +23,6 @@ func init() {
 	service.Register[*document.Updater](consts.PHASE_UPDATE, "archive/documents/:document")
 	service.Register[*document.Lister](consts.PHASE_LIST, "archive/documents")
 	service.Register[*login.Login](consts.PHASE_LIST, "auth/login")
-	service.Register[*search.Dedup](consts.PHASE_CREATE, "search-sources/dedup")
 	service.Register[*notice.Streamer](consts.PHASE_SSE, "notices")
 	service.Register[*ping.Lister](consts.PHASE_LIST, "pings")
 	service.Register[*item.Creator](consts.PHASE_CREATE, "records/:rec/items")
@@ -33,6 +32,7 @@ func init() {
 	service.Register[*record.Deleter](consts.PHASE_DELETE, "records/:rec")
 	service.Register[*record.Patcher](consts.PHASE_PATCH, "records/:rec")
 	service.Register[*record.Lister](consts.PHASE_LIST, "records")
+	service.Register[*entry.Merge](consts.PHASE_CREATE, "entries/merge")
 	service.Register[*traceprobe.Creator](consts.PHASE_CREATE, "trace-probes")
 	service.Register[*traceprobe.Deleter](consts.PHASE_DELETE, "trace-probes/:trace_probe")
 	service.Register[*traceprobe.Updater](consts.PHASE_UPDATE, "trace-probes/:trace_probe")

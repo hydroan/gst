@@ -7,8 +7,8 @@ import (
 	"demo/model/archive"
 	"demo/model/archive/document"
 	"demo/model/auth"
-	"demo/model/common"
 	"demo/model/record"
+	"demo/model/tool"
 
 	"github.com/hydroan/gst/consts"
 	"github.com/hydroan/gst/router"
@@ -26,7 +26,6 @@ func Init() error {
 	router.Register[*archive.Document, *archive.Document, *archive.Document](router.Auth(), "archive/documents", &gst.ControllerConfig[*archive.Document]{}, consts.List)
 	router.Register[*archive.Document, *archive.Document, *archive.Document](router.Auth(), "archive/documents/:document", &gst.ControllerConfig[*archive.Document]{ParamName: "document"}, consts.Get)
 	router.Register[*auth.Login, *gstmodel.Empty, *auth.LoginRsp](router.Pub(), "auth/login", &gst.ControllerConfig[*auth.Login]{}, consts.List)
-	router.Register[*common.Search, *common.SearchDedupReq, *common.SearchDedupRsp](router.Auth(), "search-sources/dedup", &gst.ControllerConfig[*common.Search]{}, consts.Create)
 	router.Register[*model.Notice, *model.Notice, *model.Notice](router.Pub(), "notices", &gst.ControllerConfig[*model.Notice]{}, consts.SSE)
 	router.Register[*model.Ping, *gstmodel.Empty, *model.PingRsp](router.Pub(), "pings", &gst.ControllerConfig[*model.Ping]{}, consts.List)
 	router.Register[*record.Item, *record.Item, *record.Item](router.Auth(), "records/:rec/items", &gst.ControllerConfig[*record.Item]{}, consts.Create)
@@ -39,6 +38,7 @@ func Init() error {
 	router.Register[*model.Record, *model.Record, *model.Record](router.Auth(), "records/:rec", &gst.ControllerConfig[*model.Record]{ParamName: "rec"}, consts.Patch)
 	router.Register[*model.Record, *model.Record, *model.Record](router.Auth(), "records", &gst.ControllerConfig[*model.Record]{}, consts.List)
 	router.Register[*model.Record, *model.Record, *model.Record](router.Auth(), "records/:rec", &gst.ControllerConfig[*model.Record]{ParamName: "rec"}, consts.Get)
+	router.Register[*tool.Entry, *tool.EntryMergeReq, *tool.EntryMergeRsp](router.Auth(), "entries/merge", &gst.ControllerConfig[*tool.Entry]{}, consts.Create)
 	router.Register[*model.TraceProbe, *model.TraceProbe, *model.TraceProbe](router.Auth(), "trace-probes", &gst.ControllerConfig[*model.TraceProbe]{}, consts.Create)
 	router.Register[*model.TraceProbe, *model.TraceProbe, *model.TraceProbe](router.Auth(), "trace-probes/:trace_probe", &gst.ControllerConfig[*model.TraceProbe]{ParamName: "trace_probe"}, consts.Delete)
 	router.Register[*model.TraceProbe, *model.TraceProbe, *model.TraceProbe](router.Auth(), "trace-probes/:trace_probe", &gst.ControllerConfig[*model.TraceProbe]{ParamName: "trace_probe"}, consts.Update)

@@ -78,8 +78,8 @@ git init
 1. 在 `model/**/*.go` 中声明资源模型或动作模型。
 2. 每次修改 DSL 后运行 `gg gen`。
 3. 在生成的 `service/**` 文件中实现业务逻辑或 hook。
-5. 使用 `gg check` 检查项目结构和依赖边界。
-6. 删除 model 或关闭 action 后，运行 `gg prune` 或 `gg gen --prune` 清理废弃
+4. 使用 `gg check` 检查项目结构和依赖边界。
+5. 删除 model 或关闭 action 后，运行 `gg prune` 或 `gg gen --prune` 清理废弃
    service 文件。
 
 ## 模型 DSL
@@ -102,8 +102,8 @@ import (
 
 // Record is a database-backed resource.
 type Record struct {
-	UserID string `json:"user_id" schema:"user_id"`
-	Title  string `json:"title" schema:"title"`
+	UserID string `json:"user_id" query:"user_id"`
+	Title  string `json:"title" query:"title"`
 
 	model.Base
 }
@@ -147,48 +147,48 @@ func (Record) Design() {
 `XXXReq`、`XXXRsp`。即使字段完全一样，也不要复用其他接口的请求和响应结构体。
 
 ```go
-package common
+package tool
 
 import (
 	. "github.com/hydroan/gst/dsl"
 	"github.com/hydroan/gst/model"
 )
 
-// Search is a non-database action model.
-type Search struct {
+// Entry is a non-database action model.
+type Entry struct {
 	model.Empty
 }
 
-// SearchSource is one candidate source returned by a search provider.
-type SearchSource struct {
-	URL   string `json:"url"`
-	Title string `json:"title,omitempty"`
+// EntryPair is one key/value pair submitted for merging.
+type EntryPair struct {
+	Key   string `json:"key"`
+	Value string `json:"value,omitempty"`
 }
 
-// SearchDedupReq is the request for deduplicating search sources.
-type SearchDedupReq struct {
-	Sources []SearchSource `json:"sources"`
+// EntryMergeReq is the request for merging entries.
+type EntryMergeReq struct {
+	Entries []EntryPair `json:"entries"`
 }
 
-// SearchDedupRsp is the response returned after deduplication.
-type SearchDedupRsp struct {
-	Sources []SearchSource `json:"sources"`
+// EntryMergeRsp is the response returned after merging.
+type EntryMergeRsp struct {
+	Entries []EntryPair `json:"entries"`
 }
 
-func (Search) Design() {
-	Route("/search-sources/dedup", func() {
+func (Entry) Design() {
+	Route("/entries/merge", func() {
 		Create(func() {
-			Filename("dedup")
+			Filename("merge")
 			Service()
-			Payload[*SearchDedupReq]()
-			Result[*SearchDedupRsp]()
+			Payload[*EntryMergeReq]()
+			Result[*EntryMergeRsp]()
 		})
 	})
 }
 ```
 
-这个接口会生成 `POST /api/search-sources/dedup`，并生成
-`service/common/search/dedup.go`。`Filename("dedup")` 用于避免同一个 model 内多
+这个接口会生成 `POST /api/entries/merge`，并生成
+`service/tool/entry/merge.go`。`Filename("merge")` 用于避免同一个 model 内多
 个 `Create` action 都生成 `create.go`。
 
 ### 路由和可见性
@@ -265,7 +265,7 @@ if err = database.Database[*appmodel.Sample](ctx).
 	WithOrder(orders...).
 	WithPagination(s.QueryPagination(ctx)).
 	List(&items); err != nil {
-	return nil, err
+	return nil, service.NewErrorWithCause(http.StatusInternalServerError, "failed to list samples", err)
 }
 ```
 
@@ -333,9 +333,10 @@ Filters: []gst.Filter{
 package record
 
 import (
+	"net/http"
+
 	appmodel "github.com/example/myapp/model"
 
-	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst"
 	"github.com/hydroan/gst/service"
 )
@@ -346,7 +347,7 @@ type Creator struct {
 
 func (c *Creator) CreateBefore(ctx *gst.ServiceContext, record *appmodel.Record) error {
 	if record.Title == "" {
-		return errors.New("title is required")
+		return service.NewError(http.StatusBadRequest, "title is required")
 	}
 	return nil
 }
@@ -355,29 +356,30 @@ func (c *Creator) CreateBefore(ctx *gst.ServiceContext, record *appmodel.Record)
 自定义动作的 service 示例：
 
 ```go
-package search
+package entry
 
 import (
-	"github.com/example/myapp/model/common"
+	"github.com/example/myapp/model/tool"
 
 	"github.com/hydroan/gst"
 	"github.com/hydroan/gst/service"
 )
 
-type Dedup struct {
-	service.Base[*common.Search, *common.SearchDedupReq, *common.SearchDedupRsp]
+type Merge struct {
+	service.Base[*tool.Entry, *tool.EntryMergeReq, *tool.EntryMergeRsp]
 }
 
-func (d *Dedup) Create(ctx *gst.ServiceContext, req *common.SearchDedupReq) (*common.SearchDedupRsp, error) {
-	seen := make(map[string]struct{}, len(req.Sources))
-	rsp := &common.SearchDedupRsp{}
+func (m *Merge) Create(ctx *gst.ServiceContext, req *tool.EntryMergeReq) (*tool.EntryMergeRsp, error) {
+	index := make(map[string]int, len(req.Entries))
+	rsp := &tool.EntryMergeRsp{}
 
-	for _, source := range req.Sources {
-		if _, ok := seen[source.URL]; ok {
+	for _, pair := range req.Entries {
+		if i, ok := index[pair.Key]; ok {
+			rsp.Entries[i] = pair // 同一个 key 以后出现的值为准
 			continue
 		}
-		seen[source.URL] = struct{}{}
-		rsp.Sources = append(rsp.Sources, source)
+		index[pair.Key] = len(rsp.Entries)
+		rsp.Entries = append(rsp.Entries, pair)
 	}
 	return rsp, nil
 }
@@ -941,10 +943,10 @@ gen:
 - [嵌套资源模型：Item](./examples/demo/model/record/item.go)
 - [自定义路由资源模型：Document](./examples/demo/model/archive/document.go)
 - [公开动作模型：Login](./examples/demo/model/auth/login.go)
-- [自定义动作模型：搜索去重](./examples/demo/model/common/search.go)
+- [自定义动作模型：工具类动作](./examples/demo/model/tool/entry.go)
 - [自定义动作模型：文档封存](./examples/demo/model/archive/document/seal.go)
 - [资源 service hook](./examples/demo/service/record/create.go)
-- [自定义动作 service](./examples/demo/service/common/search/dedup.go)
+- [自定义动作 service](./examples/demo/service/tool/entry/merge.go)
 - [生成的路由注册](./examples/demo/router/router.gen.go)
 - [生成的 service 注册](./examples/demo/service/service.gen.go)
 
