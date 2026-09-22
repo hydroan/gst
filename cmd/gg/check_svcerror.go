@@ -58,9 +58,10 @@ const gstImportPath = "github.com/hydroan/gst"
 //
 // A local variable resolves to the type its declaration spells out: x :=
 // T{}, x := &T{}, var x T, var x = T{}, or a parameter x T. A declaration
-// that does not spell the type out, such as x := newT(), fails closed at the
-// call, and so does a type of another package or an interface, whose method
-// bodies the checker cannot see.
+// that does not spell the type out, such as x := newT(), a range variable or
+// a type switch variable, fails closed at the call, and so does a type of
+// another package or an interface, whose method bodies the checker cannot
+// see.
 func CheckServiceErrorDiscipline(ignore gitignore.Matcher) []string {
 	analysis := &svcErrAnalysis{
 		modulePath:  currentProjectModulePath(),

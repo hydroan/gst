@@ -125,6 +125,21 @@ func (g *Getter) List(ctx *gst.ServiceContext, req *model.RecordReq) (*model.Rec
 }
 
 func newOther() other { return other{} }
+
+// Update calls Do on a range variable and on a type switch variable, whose
+// declarations do not spell their types out either, so both calls fail
+// closed.
+func (g *Getter) Update(ctx *gst.ServiceContext, req *model.RecordReq) (*model.RecordRsp, error) {
+	for _, item := range []other{{}} {
+		return nil, item.Do()
+	}
+	var value any = other{}
+	switch v := value.(type) {
+	case other:
+		return nil, v.Do()
+	}
+	return nil, nil
+}
 `)
 
 	// A service struct of a file that dot-imports the framework service
@@ -153,8 +168,10 @@ func (g *Getter) Get(ctx *gst.ServiceContext, req *model.RecordReq) (*model.Reco
 	// constructor of the dot-imported service on dotted.go:15, the database
 	// calls on laundry.go:23 / sample.go:19 / sample.go:26, the raw
 	// constructor on sample.go:23, the raw constructors the shadowing locals
-	// reach on shadow.go:18 and shadow.go:20, and the call on a local of
-	// unknown type on shadow.go:42, since those are the places to wrap.
+	// reach on shadow.go:18 and shadow.go:20, and the calls on locals of
+	// unknown type — a call result on shadow.go:42, a range variable on
+	// shadow.go:52 and a type switch variable on shadow.go:57 — since those
+	// are the places to wrap.
 	wantSubstrings := []string{
 		filepath.Join("service", "dotted", "dotted.go") + ":15:",
 		filepath.Join("service", "laundry", "laundry.go") + ":23:",
@@ -164,6 +181,8 @@ func (g *Getter) Get(ctx *gst.ServiceContext, req *model.RecordReq) (*model.Reco
 		filepath.Join("service", "shadow", "shadow.go") + ":18:",
 		filepath.Join("service", "shadow", "shadow.go") + ":20:",
 		filepath.Join("service", "shadow", "shadow.go") + ":42:",
+		filepath.Join("service", "shadow", "shadow.go") + ":52:",
+		filepath.Join("service", "shadow", "shadow.go") + ":57:",
 	}
 	if len(violations) != len(wantSubstrings) {
 		t.Fatalf("expected %d violations, got %#v", len(wantSubstrings), violations)
