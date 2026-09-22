@@ -1,6 +1,7 @@
 package database
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"maps"
@@ -24,7 +25,8 @@ import (
 //   - query: A model instance with fields set as query conditions. Can be nil to indicate empty query.
 //     When nil or all fields are zero values, it's treated as an empty query.
 //     Supported field types: string, int, int8, int16, int32, int64, uint, uint8, uint16, uint32, uint64, float32, float64, bool, pointer types,
-//     and slices of strings, integers and floats, whose elements join with commas into one value.
+//     slices of strings, integers and floats, whose elements join with commas into one value, and byte slices,
+//     which match byte for byte.
 //   - opts: Optional QueryOptions to control query behavior (empty-query safety, operator filters)
 //
 // Query Behavior:
@@ -119,7 +121,7 @@ func (db *database[M]) WithQuery(query M, opts ...types.QueryOptions) types.Data
 	// Process non-nil, non-empty query
 	typ := reflect.TypeOf(query).Elem()
 	val := reflect.ValueOf(query).Elem()
-	q := make(map[string]string)
+	q := make(map[string]any)
 
 	// Column names come from gorm through modelschema. A model gorm cannot
 	// parse has no usable columns at all, so the query falls closed instead
@@ -184,7 +186,7 @@ func (db *database[M]) WithQuery(query M, opts ...types.QueryOptions) types.Data
 	hasValidCondition := false
 	for _, k := range slices.Sorted(maps.Keys(q)) {
 		v := q[k]
-		if len(v) == 0 {
+		if s, ok := v.(string); ok && len(s) == 0 {
 			continue
 		}
 		hasValidCondition = true
@@ -202,8 +204,8 @@ func (db *database[M]) WithQuery(query M, opts ...types.QueryOptions) types.Data
 	// CRITICAL: Check if all query values are empty after filtering
 	// Even if query map is not empty, all values might be empty strings: a
 	// zero-valued field stays out of the map unless it is marked present, but
-	// a non-nil pointer to an empty string, an empty non-nil string slice, or
-	// an empty string marked present each add a key whose value is empty.
+	// a non-nil pointer to an empty string, an empty non-nil slice, or an
+	// empty string marked present each add a key whose value is empty.
 	// Filters applied earlier are real conditions, so they disable this
 	// safety check.
 	if !hasValidCondition && !hasFilters && !opt.AllowEmpty {
@@ -217,12 +219,13 @@ func (db *database[M]) WithQuery(query M, opts ...types.QueryOptions) types.Data
 }
 
 // structFieldToMap extracts the field tags from a struct and writes them into a map.
-// This map can then be used to build SQL query conditions.
+// This map can then be used to build SQL query conditions: each value is the
+// string a condition binds, except for a byte slice, which binds as it is.
 //
 // Zero-value fields are treated as unset and skipped, unless their column name
 // is listed in present: presence marks filter values explicitly provided by the
 // caller, so explicit zero values such as false and 0 still become conditions.
-func structFieldToMap(ctx context.Context, typ reflect.Type, val reflect.Value, q map[string]string, present map[string]struct{}, columns map[string]modelschema.Column) {
+func structFieldToMap(ctx context.Context, typ reflect.Type, val reflect.Value, q map[string]any, present map[string]struct{}, columns map[string]modelschema.Column) {
 	for i := range typ.NumField() {
 		field := typ.Field(i)
 		fieldTyp := field.Type
@@ -319,6 +322,17 @@ func structFieldToMap(ctx context.Context, typ reflect.Type, val reflect.Value, 
 		case reflect.String:
 			_v = fmt.Sprintf("%s", v)
 		case reflect.Slice:
+			if fieldVal.Type().Elem().Kind() == reflect.Uint8 {
+				// A byte slice is one binary value, not a list of numbers: it
+				// binds as it is, so an exact match compares byte for byte. An
+				// empty one adds an empty value, like an empty string.
+				if fieldVal.Len() == 0 {
+					q[columnName] = ""
+				} else {
+					q[columnName] = bytes.Clone(fieldVal.Bytes())
+				}
+				continue
+			}
 			_len := fieldVal.Len()
 			if _len == 0 {
 				logger.Database.WithContext(ctx, phaseWithQuery).Debugz("query model slice field is empty, treated as a single zero value")
@@ -334,7 +348,7 @@ func structFieldToMap(ctx context.Context, typ reflect.Type, val reflect.Value, 
 				slice = reflect.MakeSlice(reflect.TypeFor[[]string](), _len, _len)
 				reflect.Copy(slice, fieldVal)
 				_v = strings.Join(slice.Interface().([]string), ",") //nolint:errcheck
-			case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64, reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+			case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64, reflect.Uint, reflect.Uint16, reflect.Uint32, reflect.Uint64:
 				_v = joinSliceElements(fieldVal, "%d")
 			case reflect.Float32, reflect.Float64:
 				_v = joinSliceElements(fieldVal, "%g")

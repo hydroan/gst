@@ -231,6 +231,22 @@ func TestDatabaseWithQuery(t *testing.T) {
 		}
 	})
 
+	t.Run("ByteSliceMatchesByteForByte", func(t *testing.T) {
+		ctx := context.Background()
+		t.Cleanup(func() { _ = database.DB().Exec("DELETE FROM test_scored_records").Error })
+		row := &TestScoredRecord{Name: "digested", Digest: []byte{0x00, 0xff, 0x10}}
+		require.NoError(t, database.Database[*TestScoredRecord](ctx).Create(row))
+
+		rows := make([]*TestScoredRecord, 0)
+		require.NoError(t, database.Database[*TestScoredRecord](ctx).WithQuery(&TestScoredRecord{Name: "digested", Digest: []byte{0x00, 0xff, 0x10}}).List(&rows))
+		require.Len(t, rows, 1, "the same bytes match")
+		require.Equal(t, row.ID, rows[0].ID)
+
+		rows = make([]*TestScoredRecord, 0)
+		require.NoError(t, database.Database[*TestScoredRecord](ctx).WithQuery(&TestScoredRecord{Name: "digested", Digest: []byte{0x00, 0xff}}).List(&rows))
+		require.Empty(t, rows, "other bytes do not")
+	})
+
 	t.Run("AllowEmpty", func(t *testing.T) {
 		defer cleanupTestData()
 		setupTestData(t)

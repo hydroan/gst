@@ -28,8 +28,9 @@ type autoBaseQueryItem struct {
 type sliceQueryItem struct {
 	Codes   datatypes.JSONSlice[string]  `json:"codes"`
 	Scores  datatypes.JSONSlice[int]     `json:"scores"`
-	Ranks   datatypes.JSONSlice[uint8]   `json:"ranks"`
+	Ranks   datatypes.JSONSlice[int8]    `json:"ranks"`
 	Weights datatypes.JSONSlice[float64] `json:"weights"`
+	Digest  []byte                       `json:"digest"`
 
 	modelregistry.Base
 }
@@ -44,9 +45,9 @@ type presenceQueryItem struct {
 }
 
 func TestStructFieldToMap(t *testing.T) {
-	toMap := func(m any, q map[string]string, present map[string]struct{}) map[string]string {
+	toMap := func(m any, q map[string]any, present map[string]struct{}) map[string]any {
 		if q == nil {
-			q = make(map[string]string)
+			q = make(map[string]any)
 		}
 		typ := reflect.TypeOf(m).Elem()
 		val := reflect.ValueOf(m).Elem()
@@ -73,7 +74,7 @@ func TestStructFieldToMap(t *testing.T) {
 		item := &baseQueryItem{}
 		item.ID = "id1"
 
-		q := toMap(item, map[string]string{"id": "outer"}, nil)
+		q := toMap(item, map[string]any{"id": "outer"}, nil)
 		require.Equal(t, "outer", q["id"], "outer model value should have higher priority")
 	})
 
@@ -94,7 +95,7 @@ func TestStructFieldToMap(t *testing.T) {
 		item := &autoBaseQueryItem{}
 		item.ID = 123
 
-		q := toMap(item, map[string]string{"id": "outer"}, nil)
+		q := toMap(item, map[string]any{"id": "outer"}, nil)
 		require.Equal(t, "outer", q["id"], "outer model value should have higher priority")
 	})
 
@@ -152,10 +153,15 @@ func TestStructFieldToMap(t *testing.T) {
 		q := toMap(&sliceQueryItem{
 			Codes:   datatypes.NewJSONSlice([]string{"a", "b"}),
 			Scores:  datatypes.NewJSONSlice([]int{1, -2}),
-			Ranks:   datatypes.NewJSONSlice([]uint8{3}),
+			Ranks:   datatypes.NewJSONSlice([]int8{3}),
 			Weights: datatypes.NewJSONSlice([]float64{0.5, 2}),
 		}, nil, nil)
-		require.Equal(t, map[string]string{"codes": "a,b", "scores": "1,-2", "ranks": "3", "weights": "0.5,2"}, q)
+		require.Equal(t, map[string]any{"codes": "a,b", "scores": "1,-2", "ranks": "3", "weights": "0.5,2"}, q)
+	})
+
+	t.Run("a byte slice is one binary value", func(t *testing.T) {
+		q := toMap(&sliceQueryItem{Digest: []byte{0x00, 0xff, 0x10}}, nil, nil)
+		require.Equal(t, map[string]any{"digest": []byte{0x00, 0xff, 0x10}}, q)
 	})
 
 	t.Run("empty slices add an empty value", func(t *testing.T) {
@@ -163,7 +169,8 @@ func TestStructFieldToMap(t *testing.T) {
 			Codes:   datatypes.NewJSONSlice([]string{}),
 			Scores:  datatypes.NewJSONSlice([]int{}),
 			Weights: datatypes.NewJSONSlice([]float64{}),
+			Digest:  []byte{},
 		}, nil, nil)
-		require.Equal(t, map[string]string{"codes": "", "scores": "", "weights": ""}, q)
+		require.Equal(t, map[string]any{"codes": "", "scores": "", "weights": "", "digest": ""}, q)
 	})
 }
