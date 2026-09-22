@@ -550,7 +550,7 @@ func List(ctx context.Context, opts ...*ListOptions) <-chan ObjectInfo {
 
 		for obj := range cli.ListObjects(ctx, bucket, listOpts) {
 			if obj.Err != nil {
-				logger.Minio.Error(err)
+				logger.Minio.Error(obj.Err)
 				continue
 			}
 			ch <- ObjectInfo{
@@ -578,7 +578,7 @@ func Copy(ctx context.Context, srcKey, dstKey string, opts ...*CopyOptions) (*Ob
 	}
 
 	bucket := config.App.Minio.Bucket
-	if len(opts) > 0 && opts[0] != nil {
+	if len(opts) > 0 && opts[0] != nil && len(opts[0].Bucket) > 0 {
 		bucket = opts[0].Bucket
 	}
 

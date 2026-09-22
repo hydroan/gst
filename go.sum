@@ -965,6 +965,8 @@ github.com/testcontainers/testcontainers-go/modules/clickhouse v0.44.0 h1:TOkNKu
 github.com/testcontainers/testcontainers-go/modules/clickhouse v0.44.0/go.mod h1:/9m3N7gu2ErXf7bUdK/u6KY0X19gRrWZjiDtqmctlhI=
 github.com/testcontainers/testcontainers-go/modules/kafka v0.44.0 h1:KOyj22XaB0X2RsyQKQKthzcWObKtni0kLrV1HqFVeec=
 github.com/testcontainers/testcontainers-go/modules/kafka v0.44.0/go.mod h1:OP4szEj4BpOH/UZhbtNER1ERRSj4YJ6hu2x+FIBdo5o=
+github.com/testcontainers/testcontainers-go/modules/minio v0.44.0 h1:pL6fNLanz9f/IhVr50U877HcAB1Zyfa+7Wo182K6T6o=
+github.com/testcontainers/testcontainers-go/modules/minio v0.44.0/go.mod h1:tE8z7l7xrs6QZgyM28lryrAdQhfT66kBA0fFUni7rPc=
 github.com/testcontainers/testcontainers-go/modules/mysql v0.44.0 h1:oJPJPxNE6YQ0zlq6mZKh06JOlyimCky4ruQUimdDet4=
 github.com/testcontainers/testcontainers-go/modules/mysql v0.44.0/go.mod h1:MSOAU6ukCpehJVHQDN1k9JgOZXZuqHD+2pT20M3JkIg=
 github.com/testcontainers/testcontainers-go/modules/postgres v0.44.0 h1:8fdv/9y3JMxjQ+ULAcOG8RtgeNu5t9XF9LolSXDuTwM=
