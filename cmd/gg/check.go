@@ -346,12 +346,10 @@ func CheckModelSingularNaming(ignore gitignore.Matcher) []string {
 		"entities":    true,
 		"records":     true,
 		"data":        true,
-		"stats":       true,
 	}
 	allowedPluralDirs := map[string]bool{
 		"types": true,
 		"data":  true,
-		"stats": true,
 	}
 
 	client := pluralize.NewClient()

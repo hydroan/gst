@@ -63,6 +63,11 @@ func TestCheckModelSingularNamingAllowsSharedTypesDirectory(t *testing.T) {
 	if err := os.MkdirAll(filepath.Join(projectDir, "model", "records"), 0o755); err != nil {
 		t.Fatal(err)
 	}
+	// stats is an ordinary plural as well: the check grants no exception for
+	// a name some project happens to use.
+	if err := os.MkdirAll(filepath.Join(projectDir, "model", "stats"), 0o755); err != nil {
+		t.Fatal(err)
+	}
 
 	violations := CheckModelSingularNaming(newProjectIgnoreMatcher())
 
@@ -71,8 +76,10 @@ func TestCheckModelSingularNamingAllowsSharedTypesDirectory(t *testing.T) {
 			t.Fatalf("shared model types directory should be allowed, got violations: %#v", violations)
 		}
 	}
-	if len(violations) != 1 || !strings.Contains(violations[0], filepath.Join("model", "records")) {
-		t.Fatalf("expected only ordinary plural model directory violation, got %#v", violations)
+	if len(violations) != 2 ||
+		!strings.Contains(violations[0], filepath.Join("model", "records")) ||
+		!strings.Contains(violations[1], filepath.Join("model", "stats")) {
+		t.Fatalf("expected only the ordinary plural model directory violations, got %#v", violations)
 	}
 }
 
