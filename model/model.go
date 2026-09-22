@@ -65,7 +65,8 @@ func RegisteredModels() []any {
 // Register registers a database-backed model for table setup.
 //
 // Models that embed Empty are ignored because they do not represent
-// database tables.
+// database tables. Empty is embedded by value: a model embedding
+// *model.Empty panics here.
 //
 // Register only manages the schema. Baseline data (seed rows) belongs to the
 // application: create it explicitly through the standard database chain in a

@@ -1,6 +1,7 @@
 package modelregistry
 
 import (
+	"fmt"
 	"reflect"
 	"sync"
 	"sync/atomic"
@@ -70,11 +71,25 @@ var (
 )
 
 // RegisterTable records M as a registered model and queues it for table
-// setup. Models that embed Empty are ignored: they map to no table.
+// setup. Models that embed Empty are ignored: they map to no table. A model
+// embedding *Empty panics, telling the author to embed Empty by value: the
+// pointer form is not recognized as a virtual model, and gg gen rejects it as
+// well (see dsl.Validate).
 //
 // It is the single entry point for both steps, so the recorded set and the
 // queue can never disagree about what was registered.
 func RegisterTable[M types.Model]() {
+	typ := reflect.TypeFor[M]()
+	for typ.Kind() == reflect.Pointer {
+		typ = typ.Elem()
+	}
+	if typ.Kind() == reflect.Struct {
+		for field := range typ.Fields() {
+			if field.Anonymous && field.Type == reflect.TypeFor[*Empty]() {
+				panic(fmt.Sprintf("model %s embeds *model.Empty; embed model.Empty by value: the pointer form is not recognized as a virtual model", typ))
+			}
+		}
+	}
 	if !IsValid[M]() {
 		return
 	}

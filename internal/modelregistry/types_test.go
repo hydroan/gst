@@ -132,8 +132,9 @@ func TestQueryable(t *testing.T) {
 }
 
 func TestIsVirtual(t *testing.T) {
-	// Embedding Empty is the opt-in, whether by value, by pointer, or beside
-	// other fields; IsEmpty stays a separate, narrower predicate.
+	// Embedding Empty is the opt-in, alone or beside other fields; IsEmpty
+	// stays a separate, narrower predicate. An embedded *Empty promotes the
+	// marker too, though RegisterTable and gg gen reject that form.
 	require.True(t, modelregistry.IsVirtual(new(virtualSample)))
 	require.True(t, modelregistry.IsVirtual(new(t1)))
 	require.True(t, modelregistry.IsVirtual(new(t4)))
@@ -194,6 +195,10 @@ func TestIsValid(t *testing.T) {
 	type t3 struct{}
 	type t4 struct{ modelregistry.Empty }
 	type t5 struct{ modelregistry.Base }
+	type t6 struct {
+		Name string
+		*modelregistry.Empty
+	}
 
 	require.False(t, modelregistry.IsValid[t1]())
 	require.False(t, modelregistry.IsValid[*t1]())
@@ -205,6 +210,7 @@ func TestIsValid(t *testing.T) {
 	require.False(t, modelregistry.IsValid[*t4]())
 	require.False(t, modelregistry.IsValid[t5]())
 	require.True(t, modelregistry.IsValid[*t5]())
+	require.False(t, modelregistry.IsValid[*t6]())
 }
 
 func BenchmarkIsModelEmpty(b *testing.B) {

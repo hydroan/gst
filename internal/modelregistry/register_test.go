@@ -86,6 +86,13 @@ type SkippedSample struct {
 	modelregistry.Empty
 }
 
+// PointerEmptySample embeds *Empty, the form RegisterTable rejects.
+type PointerEmptySample struct {
+	Name string
+
+	*modelregistry.Empty
+}
+
 func TestRegisterTable(t *testing.T) {
 	registered := func() bool {
 		return slices.ContainsFunc(modelregistry.RegisteredModels(), func(m any) bool {
@@ -115,6 +122,16 @@ func TestRegisterTable(t *testing.T) {
 
 		modelregistry.RegisterTable[*SkippedSample]()
 
+		require.Len(t, modelregistry.RegisteredModels(), before)
+		require.Empty(t, modelregistry.TableChan)
+	})
+
+	t.Run("an_empty_embedded_by_pointer_is_rejected", func(t *testing.T) {
+		before := len(modelregistry.RegisteredModels())
+
+		require.PanicsWithValue(t, "model modelregistry_test.PointerEmptySample embeds *model.Empty; embed model.Empty by value: the pointer form is not recognized as a virtual model", func() {
+			modelregistry.RegisterTable[*PointerEmptySample]()
+		})
 		require.Len(t, modelregistry.RegisteredModels(), before)
 		require.Empty(t, modelregistry.TableChan)
 	})

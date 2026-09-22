@@ -19,20 +19,28 @@ func AreTypesEqual[M types.Model, REQ types.Request, RSP types.Response]() bool 
 	return typ1 == typ2 && typ2 == typ3
 }
 
-// IsEmpty reports whether T has no fields beyond Empty markers.
+// IsEmpty reports whether T carries no data of its own, so there is nothing
+// to bind a request into or describe as a body: T, its pointers removed, is
+// not a struct, is a struct without fields, or is a struct whose every field
+// is an Empty marker. The controllers ask it to hand an action model to its
+// service instead of the default CRUD flow (see AreTypesEqual), and the
+// OpenAPI generator asks it to leave a request or response body out.
 //
-// For example, these structs return true:
+// For example, it reports true for Login and Logout, and false for Signup,
+// which carries a field beside the marker:
 //
 //	type Login struct {
 //		model.Empty
 //	}
 //
-//	type Login struct {
-//		*model.Empty
+//	type Logout struct{}
+//
+//	type Signup struct {
+//		Email string
+//		model.Empty
 //	}
 //
-//	type Logout struct{
-//	}
+// Models embed Empty by value; RegisterTable and gg gen reject *model.Empty.
 func IsEmpty[T any]() bool {
 	typ := reflect.TypeFor[T]()
 	for typ.Kind() == reflect.Pointer {
@@ -48,11 +56,7 @@ func IsEmpty[T any]() bool {
 
 	invalidFieldCount := 0
 	for field := range typ.Fields() {
-		ftyp := field.Type
-		for ftyp.Kind() == reflect.Pointer {
-			ftyp = ftyp.Elem()
-		}
-		if ftyp == reflect.TypeFor[Empty]() {
+		if isEmptyMarker(field.Type) {
 			invalidFieldCount++
 		}
 	}
@@ -60,9 +64,23 @@ func IsEmpty[T any]() bool {
 	return typ.NumField() == invalidFieldCount
 }
 
-// IsValid reports whether T is a database-backed model.
+// IsValid reports whether T is a database-backed model, the kind
+// RegisterTable queues for table setup: T is a pointer to a struct that has
+// fields, none of them an Empty marker. For example, with
 //
-// T must be a pointer to a non-empty struct and must not embed Empty.
+//	type Record struct {
+//		Name string
+//		model.Base
+//	}
+//
+//	type Login struct {
+//		Name string
+//		model.Empty
+//	}
+//
+// IsValid reports true for *Record, and false for Record, which is not a
+// pointer, for *Login, a virtual model, and for a pointer to a struct
+// without fields.
 func IsValid[T any]() bool {
 	typ := reflect.TypeFor[T]()
 
@@ -84,10 +102,19 @@ func IsValid[T any]() bool {
 
 	// T fields contains `Empty`, return false
 	for field := range typ.Fields() {
-		if field.Type == reflect.TypeFor[Empty]() {
+		if isEmptyMarker(field.Type) {
 			return false
 		}
 	}
 
 	return true
+}
+
+// isEmptyMarker reports whether a field of type typ is an Empty marker: Empty
+// itself, or a pointer to it.
+func isEmptyMarker(typ reflect.Type) bool {
+	for typ.Kind() == reflect.Pointer {
+		typ = typ.Elem()
+	}
+	return typ == reflect.TypeFor[Empty]()
 }
