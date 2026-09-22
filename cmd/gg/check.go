@@ -38,7 +38,7 @@ var checkCmd = &cobra.Command{
 9. Model files should contain at most one model struct
 10. Service files should contain at most one service struct
 11. Only allowed directories are enforced for gst framework projects
-12. Model Design() DSL must pass the same validation rules that gate gg gen
+12. Model files must pass the same validation rules that gate gg gen: the Design() DSL rules, and model.Empty embedded by value, never as *model.Empty
 13. database.Database operation chains must end with a terminal operation inline or be passed directly as a call argument
 14. database.Database chains and nested database.Transaction calls inside a database.Transaction closure must use the closure's context parameter
 15. Errors leaving service methods must be built by service.NewError or service.NewErrorWithCause
@@ -50,9 +50,10 @@ var checkCmd = &cobra.Command{
 21. Gorm struct tags must not configure indexes (index, uniqueIndex, unique); models declare indexes through the Indexes() []model.Index method
 22. model.Version declarations must keep the optimistic-locking shape: on database models a named field with json:",omitempty" and gorm:"not null;default:1", and on DSL Payload/Result types (plus the same-package types reachable from their fields) a json tag of exactly "version,omitempty"
 23. Project code, tests included, must not mint column references through gst.NewColumn, NewNumericColumn or NewTimeColumn; columns are read through the XxxCols variables gg gen writes, which the model schema checks, generated files excepted. Generic code, which has no Cols variable to read, may mint a reference whose model is its own type parameter
-24. In service, dao, cronjob, leader, lock, component and router code, the context passed to a framework database function or to a dao function must not be context.Background() or context.TODO(): the context handed down — a request's, a round's, a tenure's, the process's, the start's — carries the identity, the transaction and the lease the work runs under; startup seeding runs in the router package's routes-ready hooks on the context the hook receives
+24. In service, dao, cronjob, leader, lock, component and router code, the context passed to a framework database function or to a dao function must not be context.Background() or context.TODO(): the context handed down — a request's, a round's, a tenure's, a lock's, the process's, the start's — carries the identity, the transaction and the lease the work runs under; startup seeding runs in the router package's routes-ready hooks on the context the hook receives
+25. The assembly calls a copied framework module declares in its module.json must be made in the project's non-test code, outside the model and service subtrees the module was copied into
 
-Model and service subtrees owned by copyable framework modules are skipped by the service test checks, the log field check, the model table name check, the gorm tag index check and the column reference check: copied module code is tested inside the framework repository.
+Model and service subtrees owned by copyable framework modules are skipped by the service test checks, the log field check, the model table name check, the gorm tag index check, the version field check and the column reference check, and their service subtrees by the detached context check: copied module code is tested inside the framework repository.
 Paths ignored by the project's Git ignore rules are skipped by every check, so runtime artifacts such as log directories never fail checks.`,
 	Run: func(cmd *cobra.Command, args []string) {
 		checkRun()

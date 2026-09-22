@@ -15,7 +15,6 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/consts"
 	"github.com/hydroan/gst/dsl"
-	"github.com/hydroan/gst/internal/codegen/constants"
 	"github.com/stoewer/go-strcase"
 )
 
@@ -190,58 +189,6 @@ func GetModulePath() (string, error) {
 	return moduleName, scanner.Err()
 }
 
-// isModelBase checks if a struct field is an anonymous embedding of a
-// database base model (model.Base or model.AutoBase), handling aliased
-// imports of the model package.
-func isModelBase(file *ast.File, field *ast.Field) bool {
-	// Not anonymous field.
-	if len(field.Names) != 0 {
-		return false
-	}
-
-	aliasName := constants.PkgModel
-	if spec := findImportSpec(file, constants.ImportPathModel); spec != nil && spec.Name != nil {
-		aliasName = spec.Name.Name
-	}
-
-	switch t := field.Type.(type) {
-	case *ast.SelectorExpr:
-		if ident, ok := t.X.(*ast.Ident); ok {
-			return ident.Name == aliasName && (t.Sel.Name == constants.FieldBase || t.Sel.Name == constants.FieldAutoBase)
-		}
-	case *ast.Ident:
-		return t.Name == constants.FieldBase || t.Name == constants.FieldAutoBase
-	}
-
-	return false
-}
-
-// isModelEmpty checks if a struct field is an anonymous embedding of
-// model.Empty, the base of a model without a database table, handling aliased
-// imports of the model package.
-func isModelEmpty(file *ast.File, field *ast.Field) bool {
-	// Not anonymous field.
-	if len(field.Names) != 0 {
-		return false
-	}
-
-	aliasName := constants.PkgModel
-	if spec := findImportSpec(file, constants.ImportPathModel); spec != nil && spec.Name != nil {
-		aliasName = spec.Name.Name
-	}
-
-	switch t := field.Type.(type) {
-	case *ast.SelectorExpr:
-		if ident, ok := t.X.(*ast.Ident); ok {
-			return ident.Name == aliasName && t.Sel.Name == constants.FieldEmpty
-		}
-	case *ast.Ident:
-		return t.Name == constants.FieldEmpty
-	}
-
-	return false
-}
-
 // FindModels returns the models the model file filename declares: its
 // structs embedding model.Base, model.AutoBase or model.Empty, each with the
 // design its Design method declares (see dsl.Parse). The DSL of the file is
@@ -284,7 +231,7 @@ func FindModels(module string, modelDir string, filename string) ([]*ModelInfo, 
 			}
 			hasModel := false
 			for _, field := range structType.Fields.List {
-				if isModelBase(node, field) || isModelEmpty(node, field) {
+				if dsl.IsModelBase(node, field) || dsl.IsModelEmpty(node, field) {
 					hasModel = true
 					break
 				}

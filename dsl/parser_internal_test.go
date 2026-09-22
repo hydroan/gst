@@ -4,7 +4,9 @@ import (
 	"go/ast"
 	"go/parser"
 	"go/token"
+	"maps"
 	"reflect"
+	"slices"
 	"sort"
 	"testing"
 
@@ -302,6 +304,89 @@ func TestParseFilename(t *testing.T) {
 	}
 	if restoreAct.RoleName() != "Restore" {
 		t.Errorf("expected RoleName 'Restore', got %q", restoreAct.RoleName())
+	}
+}
+
+func TestParseDecodesStringArguments(t *testing.T) {
+	// The arguments are read the way the Go compiler reads them: escapes
+	// decode, and a raw string is taken as written.
+	design := parseDesignFromSource(t, escapedStringArgumentSource, "Record")
+
+	if design.Endpoint != "sample-records" {
+		t.Errorf("expected Endpoint 'sample-records', got %q", design.Endpoint)
+	}
+	if design.Param != ":rec" {
+		t.Errorf("expected Param ':rec', got %q", design.Param)
+	}
+	routeActions := make(map[string]*Action)
+	design.Range(func(route string, act *Action) {
+		routeActions[route] = act
+	})
+	archiveAct, ok := routeActions["sample/records/archive"]
+	if !ok {
+		t.Fatalf("expected route 'sample/records/archive', got %v", slices.Sorted(maps.Keys(routeActions)))
+	}
+	if archiveAct.Filename != "archive" {
+		t.Errorf("expected Filename 'archive', got %q", archiveAct.Filename)
+	}
+}
+
+const escapedStringArgumentSource = `package sample
+
+import (
+	. "github.com/hydroan/gst/dsl"
+	"github.com/hydroan/gst/model"
+)
+
+type Record struct {
+	model.Base
+}
+
+func (Record) Design() {
+	Endpoint("sample\u002frecords")
+	Param(` + "`rec`" + `)
+	Route("sample\u002frecords/archive", func() {
+		Create(func() {
+			Service()
+			Filename("\x61rchive")
+		})
+	})
+}
+`
+
+func TestStringLiteral(t *testing.T) {
+	tests := []struct {
+		literal string
+		want    string
+	}{
+		{literal: `"users"`, want: "users"},
+		{literal: "`users`", want: "users"},
+		{literal: `"a\""`, want: `a"`},
+		{literal: `"a\tb"`, want: "a\tb"},
+		{literal: `"'draft'"`, want: "'draft'"},
+		{literal: `"sample\\"`, want: `sample\`},
+	}
+	for _, tt := range tests {
+		expr, err := parser.ParseExpr(tt.literal)
+		if err != nil {
+			t.Fatalf("parse %s: %v", tt.literal, err)
+		}
+		got, ok := stringLiteral(expr)
+		if !ok || got != tt.want {
+			t.Errorf("stringLiteral(%s) = %q, %v, want %q, true", tt.literal, got, ok, tt.want)
+		}
+	}
+
+	// Anything but a string literal has no string value, a string constant
+	// named by an identifier included.
+	for _, src := range []string{"users", "'u'", "42", `"a" + "b"`} {
+		expr, err := parser.ParseExpr(src)
+		if err != nil {
+			t.Fatalf("parse %s: %v", src, err)
+		}
+		if got, ok := stringLiteral(expr); ok {
+			t.Errorf("stringLiteral(%s) = %q, true, want false", src, got)
+		}
 	}
 }
 
@@ -941,6 +1026,53 @@ func TestIsModelBase(t *testing.T) {
 			code: user13Source,
 			want: []bool{true},
 		},
+		{
+			// A qualifier names the framework model package only when the
+			// file imports the package under it: here model is another one.
+			name: "other_model_package",
+			code: `package sample
+
+import (
+	"example.com/app/model"
+	gstmodel "github.com/hydroan/gst/model"
+)
+
+type Sample struct {
+	model.Base
+}
+
+type Record struct {
+	gstmodel.Base
+}
+`,
+			want: []bool{false, true},
+		},
+		{
+			// A bare Base is the framework's only under a dot import; without
+			// one it is a type of the file's own package.
+			name: "local_base_type",
+			code: `package sample
+
+type Base struct{}
+
+type Sample struct {
+	Base
+}
+`,
+			want: []bool{false, false},
+		},
+		{
+			// A file that does not import the framework model package embeds
+			// none of its types.
+			name: "no_model_import",
+			code: `package sample
+
+type Sample struct {
+	model.Base
+}
+`,
+			want: []bool{false},
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -1042,6 +1174,53 @@ func TestIsModelEmpty(t *testing.T) {
 		{
 			name: "user13",
 			code: user13Source,
+			want: []bool{false},
+		},
+		{
+			// A qualifier names the framework model package only when the
+			// file imports the package under it: here model is another one.
+			name: "other_model_package",
+			code: `package sample
+
+import (
+	"example.com/app/model"
+	gstmodel "github.com/hydroan/gst/model"
+)
+
+type Sample struct {
+	model.Empty
+}
+
+type Record struct {
+	gstmodel.Empty
+}
+`,
+			want: []bool{false, true},
+		},
+		{
+			// A bare Empty is the framework's only under a dot import;
+			// without one it is a type of the file's own package.
+			name: "local_empty_type",
+			code: `package sample
+
+type Empty struct{}
+
+type Sample struct {
+	Empty
+}
+`,
+			want: []bool{false, false},
+		},
+		{
+			// A file that does not import the framework model package embeds
+			// none of its types.
+			name: "no_model_import",
+			code: `package sample
+
+type Sample struct {
+	model.Empty
+}
+`,
 			want: []bool{false},
 		},
 	}

@@ -1,9 +1,11 @@
 package dsl
 
 import (
+	"go/ast"
+	"go/token"
 	"maps"
 	"slices"
-	"strings"
+	"strconv"
 
 	"github.com/hydroan/gst/consts"
 )
@@ -127,21 +129,16 @@ func is(name string) bool {
 	return slices.Contains(methodList, name)
 }
 
-// trimQuote removes surrounding quotes from a string.
-// It trims double quotes ("), single quotes ('), and backticks (`) from both ends.
-//
-// Parameters:
-//   - str: The string to trim quotes from
-//
-// Returns:
-//   - string: The string with surrounding quotes removed
-//
-// Example:
-//
-//	trimQuote(`"hello"`) returns "hello"
-//	trimQuote("'world'") returns "world"
-func trimQuote(str string) string {
-	return strings.TrimFunc(str, func(r rune) bool {
-		return r == '`' || r == '"' || r == '\''
-	})
+// stringLiteral returns the value of expr when it is a Go string literal,
+// decoded the way the compiler reads it (see strconv.Unquote): "users" and
+// `users` both give users, "a\"b" gives a"b, "a\tb" gives a, a tab and b,
+// and "'draft'" gives 'draft' with its quotes. ok is false for anything
+// else, a string constant named by an identifier included.
+func stringLiteral(expr ast.Expr) (value string, ok bool) {
+	lit, isLit := expr.(*ast.BasicLit)
+	if !isLit || lit == nil || lit.Kind != token.STRING {
+		return "", false
+	}
+	value, err := strconv.Unquote(lit.Value)
+	return value, err == nil
 }

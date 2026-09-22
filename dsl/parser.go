@@ -8,6 +8,8 @@ import (
 
 	"github.com/gertd/go-pluralize"
 	"github.com/hydroan/gst/consts"
+	codegenast "github.com/hydroan/gst/internal/codegen/ast"
+	"github.com/hydroan/gst/internal/codegen/constants"
 	"github.com/stoewer/go-strcase"
 )
 
@@ -324,18 +326,16 @@ func parseDesign(fn *ast.FuncDecl) *Design {
 
 		// Parse "Endpoint()".
 		if funcName == "Endpoint" && len(call.Args) == 1 {
-			if arg, ok := call.Args[0].(*ast.BasicLit); ok && arg != nil && arg.Kind == token.STRING {
-				defaults.Endpoint = trimQuote(arg.Value)
-				defaults.Endpoint = strings.TrimLeft(defaults.Endpoint, "/")
+			if value, ok := stringLiteral(call.Args[0]); ok {
+				defaults.Endpoint = strings.TrimLeft(value, "/")
 				defaults.Endpoint = strings.ReplaceAll(defaults.Endpoint, "/", "-")
 			}
 		}
 
 		// Parse "Param()".
 		if funcName == "Param" && len(call.Args) == 1 {
-			if arg, ok := call.Args[0].(*ast.BasicLit); ok && arg != nil && arg.Kind == token.STRING {
-				defaults.Param = trimQuote(arg.Value)
-				defaults.Param = strings.TrimFunc(defaults.Param, func(r rune) bool {
+			if value, ok := stringLiteral(call.Args[0]); ok {
+				defaults.Param = strings.TrimFunc(value, func(r rune) bool {
 					return r == ' ' || r == '{' || r == '}' || r == '[' || r == ']' || r == ':'
 				})
 				defaults.Param = ":" + defaults.Param
@@ -355,9 +355,8 @@ func parseDesign(fn *ast.FuncDecl) *Design {
 		// })
 		if funcName == "Route" && len(call.Args) == 2 {
 			var route string
-			if arg, ok := call.Args[0].(*ast.BasicLit); ok && arg != nil && arg.Kind == token.STRING {
-				route = trimQuote(arg.Value)
-				route = strings.TrimLeft(route, "/")
+			if value, ok := stringLiteral(call.Args[0]); ok {
+				route = strings.TrimLeft(value, "/")
 			}
 			if len(route) > 0 {
 				if defaults.routes == nil {
@@ -628,8 +627,8 @@ func parseAction(phase consts.Phase, funcName string, expr ast.Expr) (*Action, b
 					}
 				}
 				if isFilenameCall && len(call.Args) > 0 && call.Args[0] != nil {
-					if arg, ok := call.Args[0].(*ast.BasicLit); ok && arg != nil && arg.Kind == token.STRING {
-						filename = trimQuote(arg.Value)
+					if value, ok := stringLiteral(call.Args[0]); ok {
+						filename = value
 					}
 				}
 
@@ -717,10 +716,8 @@ func parseAction(phase consts.Phase, funcName string, expr ast.Expr) (*Action, b
 }
 
 // FindAllModelBase finds all struct types that embed a database base model
-// (model.Base or model.AutoBase) as an anonymous field. It searches for
-// structs containing anonymous fields of type "model.Base", "model.AutoBase",
-// or aliased versions like "pkgmodel.Base" where pkgmodel is an import alias
-// for the model package.
+// (model.Base or model.AutoBase) as an anonymous field, the embedding
+// recognized as IsModelBase recognizes it.
 //
 // Parameters:
 //   - file: The AST file to search in
@@ -761,9 +758,8 @@ func FindAllModelBase(file *ast.File) []string {
 	return names
 }
 
-// FindAllModelEmpty finds all struct types that embed model.Empty as an anonymous field.
-// It searches for structs containing anonymous fields of type "model.Empty" or aliased versions
-// like "pkgmodel.Empty" where pkgmodel is an import alias for the model package.
+// FindAllModelEmpty finds all struct types that embed model.Empty as an
+// anonymous field, the embedding recognized as IsModelEmpty recognizes it.
 //
 // Parameters:
 //   - file: The AST file to search in
@@ -807,107 +803,45 @@ func FindAllModelEmpty(file *ast.File) []string {
 // modelBaseNames are the database base model type names recognized by
 // IsModelBase. Base uses a UUIDv7 string primary key and AutoBase uses an
 // auto-increment integer primary key; both mark a struct as a database model.
-var modelBaseNames = []string{"Base", "AutoBase"}
+var modelBaseNames = []string{constants.FieldBase, constants.FieldAutoBase}
 
-// IsModelBase checks if a struct field is an anonymous embedding of a database
-// base model (model.Base or model.AutoBase). It handles various import
-// patterns including direct imports, aliased imports, and dot imports of the
-// model package.
+// IsModelBase reports whether a struct field embeds a database base model,
+// model.Base or model.AutoBase, by value. The qualifier must be a name file
+// imports the framework model package under, and a bare name counts only
+// when the file dot-imports the package (see codegenast.ImportedNames). With
 //
-// Parameters:
-//   - file: The AST file containing import information
-//   - field: The struct field to check
+//	import (
+//		"example.com/app/model"
+//		gstmodel "github.com/hydroan/gst/model"
+//	)
 //
-// Returns:
-//   - bool: true if the field is an anonymous database base model embedding
-//
-// Supported import patterns:
-//   - import "github.com/hydroan/gst/model"
-//   - import pkgmodel "github.com/hydroan/gst/model"
-//   - import . "github.com/hydroan/gst/model"
-//
-// Example field patterns that return true:
-//   - model.Base, model.AutoBase (with standard import)
-//   - pkgmodel.Base, pkgmodel.AutoBase (with aliased import)
-//   - Base, AutoBase (with dot import)
+// the fields gstmodel.Base and gstmodel.AutoBase report true, while
+// model.Base, another package's type, and a bare Base, a type of the file's
+// own package, report false; under a dot import of the framework model
+// package the bare Base and AutoBase report true.
 func IsModelBase(file *ast.File, field *ast.Field) bool {
-	// Not an anonymous field.
-	if file == nil || field == nil || len(field.Names) != 0 {
-		return false
-	}
-
-	aliasNames := []string{"model"}
-	for _, imp := range file.Imports {
-		if imp.Path == nil {
-			continue
-		}
-		if imp.Path.Value == consts.IMPORT_PATH_MODEL {
-			if imp.Name != nil && !slices.Contains(aliasNames, imp.Name.Name) {
-				aliasNames = append(aliasNames, imp.Name.Name)
-			}
-		}
-	}
-
-	switch t := field.Type.(type) {
-	case *ast.SelectorExpr:
-		if ident, ok := t.X.(*ast.Ident); ok {
-			return slices.Contains(aliasNames, ident.Name) && slices.Contains(modelBaseNames, t.Sel.Name)
-		}
-	case *ast.Ident:
-		return slices.Contains(modelBaseNames, t.Name)
-	}
-
-	return false
+	return embedsModelType(file, field, modelBaseNames...)
 }
 
-// IsModelEmpty checks if a struct field is an anonymous embedding of model.Empty.
-// It handles various import patterns including direct imports, aliased imports,
-// and dot imports of the model package.
+// IsModelEmpty reports whether a struct field embeds model.Empty by value,
+// under the same import rules as IsModelBase: with
 //
-// Parameters:
-//   - file: The AST file containing import information
-//   - field: The struct field to check
+//	import gstmodel "github.com/hydroan/gst/model"
 //
-// Returns:
-//   - bool: true if the field is an anonymous model.Empty embedding
-//
-// Supported import patterns:
-//   - import "github.com/hydroan/gst/model"
-//   - import pkgmodel "github.com/hydroan/gst/model"
-//   - import . "github.com/hydroan/gst/model"
-//
-// Example field patterns that return true:
-//   - model.Empty (with standard import)
-//   - pkgmodel.Empty (with aliased import)
-//   - Empty (with dot import)
+// the field gstmodel.Empty reports true, and a bare Empty reports true only
+// under a dot import of the framework model package.
 func IsModelEmpty(file *ast.File, field *ast.Field) bool {
-	// Not an anonymous field.
+	return embedsModelType(file, field, constants.FieldEmpty)
+}
+
+// embedsModelType reports whether field is an anonymous value embedding of
+// one of the framework model package's types typeNames, referred to the way
+// file imports the package.
+func embedsModelType(file *ast.File, field *ast.Field, typeNames ...string) bool {
 	if file == nil || field == nil || len(field.Names) != 0 {
 		return false
 	}
-
-	aliasNames := []string{"model"}
-	for _, imp := range file.Imports {
-		if imp.Path == nil {
-			continue
-		}
-		if imp.Path.Value == consts.IMPORT_PATH_MODEL {
-			if imp.Name != nil && !slices.Contains(aliasNames, imp.Name.Name) {
-				aliasNames = append(aliasNames, imp.Name.Name)
-			}
-		}
-	}
-
-	switch t := field.Type.(type) {
-	case *ast.SelectorExpr:
-		if ident, ok := t.X.(*ast.Ident); ok {
-			return slices.Contains(aliasNames, ident.Name) && t.Sel.Name == "Empty"
-		}
-	case *ast.Ident:
-		return t.Name == "Empty"
-	}
-
-	return false
+	return codegenast.ImportedNames(file, constants.ImportPathModel, constants.PkgModel).Refers(field.Type, typeNames...)
 }
 
 // starName converts a type name to its pointer equivalent.

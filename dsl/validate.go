@@ -10,6 +10,8 @@ import (
 	"strings"
 
 	"github.com/hydroan/gst/consts"
+	codegenast "github.com/hydroan/gst/internal/codegen/ast"
+	"github.com/hydroan/gst/internal/codegen/constants"
 )
 
 // actionMethodPhases maps DSL action method names to their phases. It serves
@@ -99,7 +101,9 @@ var actionOnlyMethodNames = map[string]bool{
 
 // Validate checks DSL keyword placement and generation semantics for one model file.
 // It intentionally validates only model Design() methods for structs embedding
-// model.Base or model.Empty, matching Parse's model discovery scope.
+// model.Base or model.Empty, matching Parse's model discovery scope, and
+// rejects the one embedding that scope cannot see: *model.Empty (see
+// validateEmptyEmbeddings).
 // Do not duplicate Go compiler or type-checker diagnostics here, such as wrong
 // argument counts or incompatible argument types. Keep this validator focused on
 // DSL structure, keyword placement, and generation-specific semantics.
@@ -109,7 +113,7 @@ func Validate(file *ast.File, modelDir string, filename string) []error {
 		delete(designEmpty, name)
 	}
 
-	errs := make([]error, 0)
+	errs := validateEmptyEmbeddings(file, filename)
 	records := make([]serviceActionRecord, 0)
 	rootModelFile := isRootModelFile(file, modelDir, filename)
 	for _, name := range slices.Sorted(maps.Keys(designBase)) {
@@ -125,6 +129,46 @@ func Validate(file *ast.File, modelDir string, filename string) []error {
 		errs = append(errs, designErrs...)
 	}
 	errs = append(errs, validateServiceFilenameCollisions(records, filename)...)
+	return errs
+}
+
+// validateEmptyEmbeddings rejects every struct of the file that embeds
+// *model.Empty. A virtual model embeds model.Empty by value; the pointer form
+// is not recognized as one, so gg gen would generate nothing for the struct
+// and the framework would take it for a database model without a table name.
+// For
+//
+//	type Login struct {
+//		*model.Empty
+//	}
+//
+// it reports "struct Login embeds *model.Empty; embed model.Empty by value".
+func validateEmptyEmbeddings(file *ast.File, filename string) []error {
+	names := codegenast.ImportedNames(file, constants.ImportPathModel, constants.PkgModel)
+	errs := make([]error, 0)
+	for _, decl := range file.Decls {
+		genDecl, ok := decl.(*ast.GenDecl)
+		if !ok || genDecl.Tok != token.TYPE {
+			continue
+		}
+		for _, spec := range genDecl.Specs {
+			typeSpec, ok := spec.(*ast.TypeSpec)
+			if !ok || typeSpec.Name == nil {
+				continue
+			}
+			structType, ok := typeSpec.Type.(*ast.StructType)
+			if !ok || structType.Fields == nil {
+				continue
+			}
+			for _, field := range structType.Fields.List {
+				star, ok := field.Type.(*ast.StarExpr)
+				if !ok || len(field.Names) != 0 || !names.Refers(star.X, constants.FieldEmpty) {
+					continue
+				}
+				errs = append(errs, fmt.Errorf("%s: struct %s embeds *model.Empty; embed model.Empty by value: the pointer form is not recognized as a virtual model", filename, typeSpec.Name.Name))
+			}
+		}
+	}
 	return errs
 }
 
@@ -440,11 +484,10 @@ func stringArgValue(call *ast.CallExpr, current string) string {
 	if len(call.Args) == 0 {
 		return current
 	}
-	lit, ok := call.Args[0].(*ast.BasicLit)
-	if !ok || lit == nil || lit.Kind != token.STRING {
-		return current
+	if value, ok := stringLiteral(call.Args[0]); ok {
+		return value
 	}
-	return trimQuote(lit.Value)
+	return current
 }
 
 func isRootModelFile(file *ast.File, modelDir string, filename string) bool {

@@ -1182,6 +1182,112 @@ func (Sample) Design() {
 }
 `
 
+func TestValidateEmptyEmbedding(t *testing.T) {
+	tests := []struct {
+		name      string
+		source    string
+		wantError string
+	}{
+		{
+			name:   "value_embedding_passes",
+			source: validateEmptyValueEmbeddingSource,
+		},
+		{
+			name:      "pointer_embedding_is_rejected",
+			source:    validateEmptyPointerEmbeddingSource,
+			wantError: "struct Sample embeds *model.Empty; embed model.Empty by value",
+		},
+		{
+			name:      "aliased_pointer_embedding_is_rejected",
+			source:    validateEmptyAliasedPointerEmbeddingSource,
+			wantError: "struct Sample embeds *model.Empty; embed model.Empty by value",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			fset := token.NewFileSet()
+			filename := "/repo/model/report/sample.go"
+			file, err := parser.ParseFile(fset, filename, tt.source, parser.ParseComments)
+			if err != nil {
+				t.Fatalf("parse source failed: %v", err)
+			}
+
+			errs := dsl.Validate(file, "/repo/model", filename)
+			if tt.wantError == "" {
+				if len(errs) != 0 {
+					t.Fatalf("Validate returned errors: %v", errs)
+				}
+				return
+			}
+			for _, err := range errs {
+				if strings.Contains(err.Error(), tt.wantError) {
+					return
+				}
+			}
+			t.Fatalf("Validate errors %v do not contain %q", errs, tt.wantError)
+		})
+	}
+}
+
+const validateEmptyValueEmbeddingSource = `
+package report
+
+import (
+	. "github.com/hydroan/gst/dsl"
+	"github.com/hydroan/gst/model"
+)
+
+type Sample struct {
+	Name string
+
+	model.Empty
+}
+
+type SampleCreateRsp struct{}
+
+func (Sample) Design() {
+	Create(func() {
+		Service()
+		Result[*SampleCreateRsp]()
+	})
+}
+`
+
+const validateEmptyPointerEmbeddingSource = `
+package report
+
+import (
+	. "github.com/hydroan/gst/dsl"
+	"github.com/hydroan/gst/model"
+)
+
+type Sample struct {
+	Name string
+
+	*model.Empty
+}
+
+type SampleCreateRsp struct{}
+
+func (Sample) Design() {
+	Create(func() {
+		Service()
+		Result[*SampleCreateRsp]()
+	})
+}
+`
+
+const validateEmptyAliasedPointerEmbeddingSource = `
+package report
+
+import gstmodel "github.com/hydroan/gst/model"
+
+type Sample struct {
+	*gstmodel.Empty
+}
+`
+
 func TestValidateSSEUsage(t *testing.T) {
 	tests := []struct {
 		name      string
