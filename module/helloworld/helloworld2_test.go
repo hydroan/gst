@@ -1,12 +1,14 @@
 package helloworld_test
 
 import (
+	"context"
 	"net/http"
 	"strconv"
 	"testing"
 	"time"
 
 	"github.com/hydroan/gst/client"
+	"github.com/hydroan/gst/database"
 	"github.com/hydroan/gst/internal/testutil"
 	"github.com/hydroan/gst/module/helloworld"
 	"github.com/kr/pretty"
@@ -82,6 +84,11 @@ func TestHelloworld2Module(t *testing.T) {
 			name:   "patch_many",
 			before: "hello world 2 batch patch before",
 			after:  "hello world 2 batch patch after",
+		},
+		{
+			name:   "patch_many_missing_record",
+			before: "",
+			after:  "",
 		},
 	}
 	for _, tt := range tests {
@@ -166,12 +173,19 @@ func TestHelloworld2Module(t *testing.T) {
 				createHelloworld2TestRecord(t, cli, res2)
 				batch, err = cli.Patch[helloworld2BatchRsp](helloworld2Path+"/batch", client.BatchItems([]*helloworld.Helloworld2{res1, res2}))
 				require.NoError(t, err)
-				require.Len(t, batch.Items, 2)
-				// The batch patch answers with the request body instead of the
-				// patched records, so the values its hooks set never reach the
-				// response: check2(t, tt, batch) replaces this skip once it
-				// answers with the records.
-				t.Skip("the batch patch response carries the request body, not the patched records")
+				check2(t, tt, batch)
+
+			case "patch_many_missing_record":
+				createHelloworld2TestRecord(t, cli, res1)
+				// res2 was never created: the batch patches all of its items
+				// or none, so it answers 404 and leaves res1 as its create
+				// stored it. The record is read from the database directly, as
+				// the get hooks overwrite the fields they would show.
+				_, err = cli.Patch[helloworld2BatchRsp](helloworld2Path+"/batch", client.BatchItems([]*helloworld.Helloworld2{res1, res2}))
+				testutil.RequireError(t, err, http.StatusNotFound)
+				stored := new(helloworld.Helloworld2)
+				require.NoError(t, database.Database[*helloworld.Helloworld2](context.Background()).Get(stored, id))
+				assert.Equal(t, "hello world 2 create before", stored.Before)
 			}
 		})
 	}

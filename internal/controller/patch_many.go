@@ -32,7 +32,10 @@ func PatchMany[M types.Model, REQ types.Request, RSP types.Response](c *gin.Cont
 // requestData[M], loads matching existing records for the requested items, copies
 // fields present in each item into those records, runs batch patch hooks, updates
 // the patched models through the configured database handler, records an operation
-// log, and returns the request data with a summary when a body was provided.
+// log, and answers with the patched records, as the hooks left them, and a summary
+// when a body was provided. The batch patches all of its items or none, as a batch
+// update does: an item whose record does not exist fails the whole batch with 404
+// before anything is written.
 //
 // Each write is the whole record the handler loaded, not only the fields its
 // item carried, so concurrent patches of one record resolve as last writer
@@ -133,16 +136,16 @@ func PatchManyFactory[M types.Model, REQ types.Request, RSP types.Response](cfg 
 			// the untouched fields back as they were on the replica.
 			if err = database.Database[M](requestContext(c)).WithReplica(false).WithLimit(1).WithQuery(v).List(&results); err != nil {
 				log.Errorz("database operation failed", zap.Error(err))
+				JSON(c, databaseErrorCoder(err))
 				gstotel.RecordError(span, err)
-				continue
+				return
 			}
-			if len(results) != 1 {
-				log.Warnz("partial update resource not found", zap.String("id", m.GetID()), zap.Int("count", len(results)))
-				continue
-			}
-			if len(results[0].GetID()) == 0 {
-				log.Warnz("partial update resource matched a row without id", zap.String("id", m.GetID()))
-				continue
+			if len(results) != 1 || len(results[0].GetID()) == 0 {
+				err = errors.Wrapf(database.ErrRecordNotFound, "patch many %s id=%s", meta.name, m.GetID())
+				log.Errorz("partial update resource not found", zap.Error(err))
+				JSON(c, databaseErrorCoder(err))
+				gstotel.RecordError(span, err)
+				return
 			}
 			oldVal, newVal := reflect.ValueOf(results[0]).Elem(), reflect.ValueOf(m).Elem()
 			fields := patchFieldSet{}
@@ -188,19 +191,32 @@ func PatchManyFactory[M types.Model, REQ types.Request, RSP types.Response](cfg 
 			return
 		}
 
+		// The response carries the patched records, whose fields the hooks
+		// may have set, not the items of the request.
+		rsp := req
+		rsp.Items = shouldUpdates
+		if !errors.Is(reqErr, io.EOF) {
+			rsp.Summary = &summary{
+				Total:     len(req.Items),
+				Succeeded: len(req.Items),
+				Failed:    0,
+			}
+		}
+
 		// 4.record operation log to database.
 		// NOTE: We should record the `req` instead of `oldVal`, the req is `newVal`.
-		// Record, Request, and Response carry the same serialized payload on
-		// this action, so one marshal feeds all three columns.
+		// Record and Request both carry the request payload, so one marshal
+		// feeds both columns; Response carries the patched records instead.
 		m := meta.newModel()
 		if err = am.RecordOperation(requestContext(c), m, consts.OP_PATCH_MANY,
 			func() *modellogmgmt.OperationLog {
 				record, _ := json.Marshal(req)
+				respData, _ := json.Marshal(rsp)
 				return &modellogmgmt.OperationLog{
 					Model:     meta.name,
 					Record:    util.BytesToString(record),
 					Request:   util.BytesToString(record),
-					Response:  util.BytesToString(record),
+					Response:  util.BytesToString(respData),
 					IP:        requestctx.GinClientIP(c),
 					User:      c.GetString(consts.CTX_USERNAME),
 					TraceID:   c.GetString(consts.TRACE_ID),
@@ -212,13 +228,6 @@ func PatchManyFactory[M types.Model, REQ types.Request, RSP types.Response](cfg 
 			log.Warnz("record operation log failed", zap.Error(err))
 		}
 
-		if !errors.Is(reqErr, io.EOF) {
-			req.Summary = &summary{
-				Total:     len(req.Items),
-				Succeeded: len(req.Items),
-				Failed:    0,
-			}
-		}
-		JSON(c, CodeSuccess, req)
+		JSON(c, CodeSuccess, rsp)
 	}
 }
