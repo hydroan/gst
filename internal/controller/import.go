@@ -13,7 +13,6 @@ import (
 	"github.com/hydroan/gst/internal/types"
 	"github.com/hydroan/gst/logger"
 	gstotel "github.com/hydroan/gst/otel"
-	"github.com/hydroan/gst/pkg/filetype"
 	"go.uber.org/zap"
 )
 
@@ -64,11 +63,6 @@ func ImportFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...
 			gstotel.RecordError(span, err)
 			return
 		}
-		// The detected file type is not checked: the service's Import decides
-		// which formats it accepts.
-		filetype, mime := filetype.DetectBytes(buf.Bytes())
-		_, _ = filetype, mime
-
 		ml, err := meta.traceServiceImport(ctrlSpanCtx, consts.PHASE_IMPORT, func(spanCtx context.Context) ([]M, error) {
 			return meta.service().
 				Import(types.NewServiceContext(c, spanCtx, consts.PHASE_IMPORT), buf)
@@ -96,6 +90,11 @@ func ImportFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...
 		}
 		// One transaction for the whole import: a duplicate on the create side
 		// or a missing ID on the update side rolls everything back.
+		//
+		// TODO: the controller opens this transaction, and with it decides
+		// how an import persists: rows with an id replace their records, the
+		// rest are created, and all of it rolls back together. Decide whether
+		// the service's Import should persist the rows and make that choice.
 		if err := database.Transaction(requestContext(c), func(txCtx context.Context) error {
 			if err := database.Database[M](txCtx).Create(toCreate...); err != nil {
 				return err
