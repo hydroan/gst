@@ -31,15 +31,19 @@ func StmtLogInfo(str string) *ast.ExprStmt {
 	}
 }
 
-// EmptyLine builds an empty statement, which the generated service methods
-// place before their return statement. It prints as nothing, so no blank line
-// shows up there: a body built from StmtLogInfo(`"item create"`), EmptyLine()
-// and Returns(ast.NewIdent("nil")) prints as
+// EmptyLine builds a statement that prints as an empty line, which the
+// generated service methods place before their return statement: a body
+// built from StmtLogInfo(`"item create"`), EmptyLine() and
+// Returns(ast.NewIdent("nil")) prints as
 //
 //	log.Info("item create")
+//
 //	return nil
-func EmptyLine() *ast.EmptyStmt {
-	return &ast.EmptyStmt{}
+//
+// It is an expression statement of an empty identifier: go/printer drops an
+// *ast.EmptyStmt from a statement list without leaving a line for it.
+func EmptyLine() ast.Stmt {
+	return &ast.ExprStmt{X: ast.NewIdent("")}
 }
 
 // Returns builds the return statement of exprs: for ast.NewIdent("rsp") and

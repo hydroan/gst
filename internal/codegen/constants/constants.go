@@ -90,13 +90,6 @@ const (
 	FuncRunOrDie = "RunOrDie"
 )
 
-// Prefix for model package conversion
-const (
-	PrefixModel         = "model"
-	PrefixService       = "service"
-	SeparatorUnderscore = "_"
-)
-
 // Cache file
 const (
 	CacheFileName = ".gg_cache.json"

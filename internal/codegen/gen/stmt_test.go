@@ -44,6 +44,28 @@ func TestStmtLogInfo(t *testing.T) {
 	}
 }
 
+// TestEmptyLine prints the body of the example of the EmptyLine doc comment,
+// which leaves an empty line before the return statement.
+func TestEmptyLine(t *testing.T) {
+	fn := &ast.FuncDecl{
+		Name: ast.NewIdent("f"),
+		Type: &ast.FuncType{},
+		Body: &ast.BlockStmt{List: []ast.Stmt{
+			gen.StmtLogInfo(`"item create"`),
+			gen.EmptyLine(),
+			gen.Returns(ast.NewIdent("nil")),
+		}},
+	}
+	got, err := gen.FormatNode(fn)
+	if err != nil {
+		t.Fatalf("FormatNode() error = %v", err)
+	}
+	want := "func f() {\n\tlog.Info(\"item create\")\n\n\treturn nil\n}"
+	if got != want {
+		t.Errorf("FormatNode() = %q, want %q", got, want)
+	}
+}
+
 func TestReturns(t *testing.T) {
 	tests := []struct {
 		name  string

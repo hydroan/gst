@@ -328,21 +328,6 @@ func FindModels(module string, modelDir string, filename string) ([]*ModelInfo, 
 	return models, nil
 }
 
-// modelPkg2ServicePkg converts a model package name to its service package
-// name: model to service, model_auth to service_auth.
-func modelPkg2ServicePkg(pkgName string) string {
-	if pkgName == constants.PkgModel {
-		return constants.PkgService
-	}
-	// For model_xxx format, replace with service_xxx
-	modelPrefix := constants.PrefixModel + constants.SeparatorUnderscore
-	servicePrefix := constants.PrefixService + constants.SeparatorUnderscore
-	if strings.HasPrefix(pkgName, modelPrefix) {
-		return strings.Replace(pkgName, modelPrefix, servicePrefix, 1)
-	}
-	return strings.Replace(pkgName, constants.PrefixModel, constants.PrefixService, 1)
-}
-
 // humanizeDSLFilename turns a DSL Filename() value into a space-separated label: underscores
 // and hyphens become spaces; consecutive whitespace is collapsed. It returns
 // "batch upload" for batch_upload and "export report" for export-report.go.
@@ -388,6 +373,7 @@ func serviceActionLogQuoted(modelName string, phase consts.Phase, action *dsl.Ac
 //	func (u *Creator) CreateBefore(ctx *gst.ServiceContext, user *model.User) error {
 //		log := u.WithContext(ctx, ctx.Phase())
 //		log.Info("user create before")
+//
 //		return nil
 //	}
 func genServiceMethod1(info *ModelInfo, modelQualifier string, action *dsl.Action, phase consts.Phase, roleName string) *ast.FuncDecl {
@@ -407,6 +393,7 @@ func genServiceMethod1(info *ModelInfo, modelQualifier string, action *dsl.Actio
 //	func (u *Lister) ListBefore(ctx *gst.ServiceContext, users *[]*model.User) error {
 //		log := u.WithContext(ctx, ctx.Phase())
 //		log.Info("user list before")
+//
 //		return nil
 //	}
 func genServiceMethod2(info *ModelInfo, modelQualifier string, action *dsl.Action, phase consts.Phase, roleName string) *ast.FuncDecl {
@@ -427,6 +414,7 @@ func genServiceMethod2(info *ModelInfo, modelQualifier string, action *dsl.Actio
 //	func (u *ManyCreator) CreateManyBefore(ctx *gst.ServiceContext, users ...*model.User) error {
 //		log := u.WithContext(ctx, ctx.Phase())
 //		log.Info("user create many before")
+//
 //		return nil
 //	}
 func genServiceMethod3(info *ModelInfo, modelQualifier string, action *dsl.Action, phase consts.Phase, roleName string) *ast.FuncDecl {
@@ -446,6 +434,7 @@ func genServiceMethod3(info *ModelInfo, modelQualifier string, action *dsl.Actio
 //	func (u *Creator) Create(ctx *gst.ServiceContext, req *model.User) (rsp *model.User, err error) {
 //		log := u.WithContext(ctx, ctx.Phase())
 //		log.Info("user create")
+//
 //		return rsp, nil
 //	}
 func genServiceMethod4(info *ModelInfo, modelQualifier string, action *dsl.Action, reqName, rspName string, phase consts.Phase, roleName string) *ast.FuncDecl {
@@ -470,6 +459,7 @@ func genServiceMethod4(info *ModelInfo, modelQualifier string, action *dsl.Actio
 //	func (u *Importer) Import(ctx *gst.ServiceContext, reader io.Reader) (users []*model.User, err error) {
 //		log := u.WithContext(ctx, ctx.Phase())
 //		log.Info("user import")
+//
 //		return users, nil
 //	}
 func genServiceMethod5(info *ModelInfo, modelQualifier string, action *dsl.Action, phase consts.Phase, roleName string) *ast.FuncDecl {
@@ -490,6 +480,7 @@ func genServiceMethod5(info *ModelInfo, modelQualifier string, action *dsl.Actio
 //	func (u *Exporter) Export(ctx *gst.ServiceContext, users ...*model.User) (data []byte, err error) {
 //		log := u.WithContext(ctx, ctx.Phase())
 //		log.Info("user export")
+//
 //		return data, nil
 //	}
 func genServiceMethod6(info *ModelInfo, modelQualifier string, action *dsl.Action, phase consts.Phase, roleName string) *ast.FuncDecl {
@@ -510,6 +501,7 @@ func genServiceMethod6(info *ModelInfo, modelQualifier string, action *dsl.Actio
 //	func (u *Streamer) SSE(ctx *gst.ServiceContext) (err error) {
 //		log := u.WithContext(ctx, ctx.Phase())
 //		log.Info("user sse")
+//
 //		return nil
 //	}
 func genServiceMethod7(info *ModelInfo, action *dsl.Action, phase consts.Phase, roleName string) *ast.FuncDecl {
@@ -544,18 +536,21 @@ func genServiceMethod7(info *ModelInfo, action *dsl.Action, phase consts.Phase, 
 //	func (u *Creator) Create(ctx *gst.ServiceContext, req *model.User) (rsp *model.User, err error) {
 //		log := u.WithContext(ctx, ctx.Phase())
 //		log.Info("user create")
+//
 //		return rsp, nil
 //	}
 //
 //	func (u *Creator) CreateBefore(ctx *gst.ServiceContext, user *model.User) error {
 //		log := u.WithContext(ctx, ctx.Phase())
 //		log.Info("user create before")
+//
 //		return nil
 //	}
 //
 //	func (u *Creator) CreateAfter(ctx *gst.ServiceContext, user *model.User) error {
 //		log := u.WithContext(ctx, ctx.Phase())
 //		log.Info("user create after")
+//
 //		return nil
 //	}
 //

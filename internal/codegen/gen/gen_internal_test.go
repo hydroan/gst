@@ -363,43 +363,6 @@ func TestFindModels(t *testing.T) {
 	}
 }
 
-func TestModelPkg2ServicePkg(t *testing.T) {
-	tests := []struct {
-		name    string
-		pkgName string
-		want    string
-	}{
-		{
-			name:    "plain_model",
-			pkgName: "model",
-			want:    "service",
-		},
-		{
-			name:    "digit_suffix",
-			pkgName: "model2",
-			want:    "service2",
-		},
-		{
-			name:    "underscore_suffix",
-			pkgName: "model_system",
-			want:    "service_system",
-		},
-		{
-			name:    "camel_case_suffix",
-			pkgName: "modelAuth",
-			want:    "serviceAuth",
-		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got := modelPkg2ServicePkg(tt.pkgName)
-			if got != tt.want {
-				t.Errorf("modelPkg2ServicePkg() = %v, want %v", got, tt.want)
-			}
-		})
-	}
-}
-
 func TestHumanizeDSLFilename(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
@@ -462,6 +425,7 @@ func TestGenServiceMethod1(t *testing.T) {
 			want: `func (u *Creator) CreateBefore(ctx *gst.ServiceContext, user *model.User) error {
 	log := u.WithContext(ctx, ctx.Phase())
 	log.Info("user create before")
+
 	return nil
 }`,
 		},
@@ -501,6 +465,7 @@ func TestGenServiceMethod2(t *testing.T) {
 			want: `func (u *Lister) ListBefore(ctx *gst.ServiceContext, users *[]*model.User) error {
 	log := u.WithContext(ctx, ctx.Phase())
 	log.Info("user list before")
+
 	return nil
 }`,
 		},
@@ -540,6 +505,7 @@ func TestGenServiceMethod3(t *testing.T) {
 			want: `func (u *ManyCreator) CreateManyBefore(ctx *gst.ServiceContext, users ...*model.User) error {
 	log := u.WithContext(ctx, ctx.Phase())
 	log.Info("user create many before")
+
 	return nil
 }`,
 		},
@@ -583,6 +549,7 @@ func TestGenServiceMethod4(t *testing.T) {
 			want: `func (u *Creator) Create(ctx *gst.ServiceContext, req *model.User) (rsp *model.User, err error) {
 	log := u.WithContext(ctx, ctx.Phase())
 	log.Info("user create")
+
 	return rsp, nil
 }`,
 		},
@@ -603,6 +570,7 @@ func TestGenServiceMethod4(t *testing.T) {
 			want: `func (g *Updater) Update(ctx *gst.ServiceContext, req model.GroupRequest) (rsp model.GroupResponse, err error) {
 	log := g.WithContext(ctx, ctx.Phase())
 	log.Info("group update")
+
 	return rsp, nil
 }`,
 		},
@@ -621,6 +589,7 @@ func TestGenServiceMethod4(t *testing.T) {
 			want: `func (g *Updater) Update(ctx *gst.ServiceContext, req *model.GroupRequest) (rsp *model.GroupResponse, err error) {
 	log := g.WithContext(ctx, ctx.Phase())
 	log.Info("group update")
+
 	return rsp, nil
 }`,
 		},
@@ -661,6 +630,7 @@ func TestGenServiceMethod5(t *testing.T) {
 			want: `func (u *Importer) Import(ctx *gst.ServiceContext, reader io.Reader) (users []*model.User, err error) {
 	log := u.WithContext(ctx, ctx.Phase())
 	log.Info("user import")
+
 	return users, nil
 }`,
 		},
@@ -700,6 +670,7 @@ func TestGenServiceMethod6(t *testing.T) {
 			want: `func (u *Exporter) Export(ctx *gst.ServiceContext, users ...*model.User) (data []byte, err error) {
 	log := u.WithContext(ctx, ctx.Phase())
 	log.Info("user export")
+
 	return data, nil
 }`,
 		},
@@ -739,6 +710,7 @@ func TestGenServiceMethod7(t *testing.T) {
 			want: `func (u *Streamer) SSE(ctx *gst.ServiceContext) (err error) {
 	log := u.WithContext(ctx, ctx.Phase())
 	log.Info("user sse")
+
 	return nil
 }`,
 		},
@@ -801,18 +773,21 @@ type Creator struct {
 func (u *Creator) Create(ctx *gst.ServiceContext, req *model.User) (rsp *model.User, err error) {
 	log := u.WithContext(ctx, ctx.Phase())
 	log.Info("user create")
+
 	return rsp, nil
 }
 
 func (u *Creator) CreateBefore(ctx *gst.ServiceContext, user *model.User) error {
 	log := u.WithContext(ctx, ctx.Phase())
 	log.Info("user create before")
+
 	return nil
 }
 
 func (u *Creator) CreateAfter(ctx *gst.ServiceContext, user *model.User) error {
 	log := u.WithContext(ctx, ctx.Phase())
 	log.Info("user create after")
+
 	return nil
 }
 `

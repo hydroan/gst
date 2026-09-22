@@ -577,6 +577,7 @@ type Creator struct {
 func (i *Creator) Create(ctx *gst.ServiceContext, req *model_service.Item) (rsp *model_service.Item, err error) {
 	log := i.WithContext(ctx, ctx.Phase())
 	log.Info("item create")
+
 	return rsp, nil
 }
 `,
@@ -621,6 +622,7 @@ type Creator struct {
 func (i *Creator) Create(ctx *gst.ServiceContext, req *model_gst.Item) (rsp *model_gst.Item, err error) {
 	log := i.WithContext(ctx, ctx.Phase())
 	log.Info("item create")
+
 	return rsp, nil
 }
 `,
@@ -671,6 +673,7 @@ type Importer struct {
 func (i *Importer) Import(ctx *gst.ServiceContext, reader io.Reader) (items []*model_io.Item, err error) {
 	log := i.WithContext(ctx, ctx.Phase())
 	log.Info("item import")
+
 	return items, nil
 }
 `,
@@ -690,6 +693,7 @@ type Creator struct {
 func (i *Creator) Create(ctx *gst.ServiceContext, req *io.Item) (rsp *io.Item, err error) {
 	log := i.WithContext(ctx, ctx.Phase())
 	log.Info("item create")
+
 	return rsp, nil
 }
 `,
