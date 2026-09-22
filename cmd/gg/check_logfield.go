@@ -7,11 +7,15 @@ import (
 	"go/token"
 	"os"
 	"path/filepath"
-	"slices"
 	"strings"
 
 	"github.com/go-git/go-git/v5/plumbing/format/gitignore"
+	"github.com/hydroan/gst/internal/goast"
 )
+
+// zapImportPath is the logging package whose Namespace function the log field
+// check forbids.
+const zapImportPath = "go.uber.org/zap"
 
 // CheckLogFieldBoundedness reports project code that would re-open unbounded
 // structured log fields. The framework encoder collapses every reflected log
@@ -90,13 +94,13 @@ func checkFileLogFieldBoundedness(filePath string) []string {
 		))
 	}
 
-	aliases, dotImported := zapImportAliases(node)
-	if len(aliases) == 0 && !dotImported {
+	zapNames := goast.ImportedNames(node, zapImportPath, "zap")
+	if len(zapNames.Qualifiers) == 0 && !zapNames.DotImported {
 		return violations
 	}
 	ast.Inspect(node, func(n ast.Node) bool {
 		call, ok := n.(*ast.CallExpr)
-		if !ok || !isZapNamespaceCall(call.Fun, aliases, dotImported) {
+		if !ok || !zapNames.Refers(call.Fun, "Namespace") {
 			return true
 		}
 		pos := fset.Position(call.Pos())
@@ -108,37 +112,4 @@ func checkFileLogFieldBoundedness(filePath string) []string {
 	})
 
 	return violations
-}
-
-// zapImportAliases returns the names the zap package is imported under in one
-// file, and whether it is dot-imported.
-func zapImportAliases(file *ast.File) (aliases []string, dotImported bool) {
-	for _, imp := range file.Imports {
-		if imp.Path == nil || imp.Path.Value != `"go.uber.org/zap"` {
-			continue
-		}
-		switch {
-		case imp.Name == nil:
-			aliases = append(aliases, "zap")
-		case imp.Name.Name == ".":
-			dotImported = true
-		case imp.Name.Name == "_":
-		default:
-			aliases = append(aliases, imp.Name.Name)
-		}
-	}
-	return aliases, dotImported
-}
-
-// isZapNamespaceCall reports whether a call expression invokes zap.Namespace
-// under any of the file's zap import names.
-func isZapNamespaceCall(fun ast.Expr, aliases []string, dotImported bool) bool {
-	switch x := fun.(type) {
-	case *ast.SelectorExpr:
-		ident, ok := x.X.(*ast.Ident)
-		return ok && x.Sel != nil && x.Sel.Name == "Namespace" && slices.Contains(aliases, ident.Name)
-	case *ast.Ident:
-		return dotImported && x.Name == "Namespace"
-	}
-	return false
 }

@@ -288,7 +288,7 @@ gantt
   - 实现：指 `database.Database[M](ctx)` 链上的写方法。
 - 事务的租约核对只在开头做一次：核对通过后，进程如果长时间停顿（被冻结、长时间 GC）到租约已被别人接手才恢复，这个事务仍可能提交。事务要短，关键写入要自带条件（唯一约束、按状态更新）。
   - 实现：平时的兜底是本地截止先取消 ctx；只有停顿跨过本地截止与数据库到期之间的余量，才会在丢租约后提交。
-- 业务自己用 `context.Background()` 另起 ctx 写库，框架运行期看不见；gg check 规则 24 在 service、dao、cronjob、leader、lock、component、router 目录里拦这种写法，包括赋给变量再传、包一层 `WithTimeout` 再传。
+- 业务自己用 `context.Background()` 另起 ctx 写库，框架运行期看不见；gg check 的「Detached context」规则在 service、dao、cronjob、leader、lock、component、router 目录里拦这种写法，包括赋给变量再传、包一层 `WithTimeout` 再传。
 - 定时任务每个时刻至多跑两轮，不是"恰好一次"：被打断的一轮只再跑一次，再跑也被打断就放弃；再跑之前下一个时刻已经开始也放弃，记 WARN `cronjob gave up a round cut short`。
 - 所有副本同时停机期间错过的调度，启动时只补最近一个，而且只补一天以内的。一轮跑超时，期间到点的时刻谁也领不到，直接跳过、不堆叠；这一轮跑完时把跳过的时刻记下，之后启动的副本也不补。
   - 实现：登记跑完的语句顺带把 `slot_ms` 推到这一轮结束时最近一个已到的时刻，只推数据库时钟已经到了的；被打断的一轮不推，它盖过的时刻按「只补最近一个」处理。

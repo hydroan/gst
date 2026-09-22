@@ -51,18 +51,18 @@ func ImportedNames(file *ast.File, importPath, defaultName string) PackageNames 
 	return names
 }
 
-// Refers reports whether expr names one of the package's types typeNames:
-// a selector qualified by one of the qualifiers, or a bare name under a dot
-// import. With the qualifier gstmodel, gstmodel.Base refers to Base and a
-// bare Base does not, being a type of the file's own package; under a dot
-// import the bare Base refers to it too.
-func (n PackageNames) Refers(expr ast.Expr, typeNames ...string) bool {
+// Refers reports whether expr names one of the package's exported names, a
+// type or a function alike: a selector qualified by one of the qualifiers,
+// or a bare name under a dot import. With the qualifier gstmodel,
+// gstmodel.Base refers to Base and a bare Base does not, being a name of the
+// file's own package; under a dot import the bare Base refers to it too.
+func (n PackageNames) Refers(expr ast.Expr, names ...string) bool {
 	switch t := expr.(type) {
 	case *ast.SelectorExpr:
 		ident, ok := t.X.(*ast.Ident)
-		return ok && slices.Contains(n.Qualifiers, ident.Name) && slices.Contains(typeNames, t.Sel.Name)
+		return ok && slices.Contains(n.Qualifiers, ident.Name) && slices.Contains(names, t.Sel.Name)
 	case *ast.Ident:
-		return n.DotImported && slices.Contains(typeNames, t.Name)
+		return n.DotImported && slices.Contains(names, t.Name)
 	}
 	return false
 }

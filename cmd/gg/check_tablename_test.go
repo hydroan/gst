@@ -67,6 +67,17 @@ type Dotted struct {
 	Base
 }
 `)
+	// A base embedded through a pointer is no model the framework recognizes:
+	// the DSL design rules report that embedding, once, and this check keeps
+	// out of it.
+	writeCheckFile(t, filepath.Join(projectDir, "model", "audit", "pointer.go"), `package audit
+
+import "github.com/hydroan/gst/model"
+
+type Pointer struct {
+	*model.Base
+}
+`)
 	// The method may live in another file of the same package.
 	writeCheckFile(t, filepath.Join(projectDir, "model", "note", "note.go"), `package note
 

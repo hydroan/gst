@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	gitignore "github.com/go-git/go-git/v5/plumbing/format/gitignore"
+	"github.com/hydroan/gst/internal/goast"
 )
 
 // CheckTransactionClosureContext checks that inside a database.Transaction
@@ -66,7 +67,7 @@ func CheckTransactionClosureContext(ignore gitignore.Matcher) []string {
 // database.Transaction calls inside database.Transaction closures whose
 // context argument is not the closure's context parameter.
 func checkFileTransactionClosures(filePath string) []string {
-	aliases, dotImport, ok := gstDatabaseImportNames(filePath)
+	dbNames, ok := gstDatabaseImportNames(filePath)
 	if !ok {
 		return nil
 	}
@@ -85,7 +86,7 @@ func checkFileTransactionClosures(filePath string) []string {
 		if !ok {
 			return true
 		}
-		closure, ctxParam, ok := transactionClosure(call, aliases, dotImport)
+		closure, ctxParam, ok := transactionClosure(call, dbNames)
 		if !ok {
 			return true
 		}
@@ -100,7 +101,7 @@ func checkFileTransactionClosures(filePath string) []string {
 			// A nested Transaction closure has its own context parameter and is
 			// checked by the enclosing file walk; only its context argument is
 			// this closure's responsibility, so its subtree is skipped here.
-			if _, _, isNested := transactionClosure(innerCall, aliases, dotImport); isNested {
+			if _, _, isNested := transactionClosure(innerCall, dbNames); isNested {
 				if name, escapes := escapingContextIdent(innerCall.Args[0], inTransaction); escapes {
 					pos := fset.Position(innerCall.Pos())
 					violations = append(violations, fmt.Sprintf(
@@ -111,7 +112,7 @@ func checkFileTransactionClosures(filePath string) []string {
 				return false
 			}
 
-			entry, ok := databaseEntryPointCall(innerCall, aliases, dotImport)
+			entry, ok := databaseEntryPointCall(innerCall, dbNames)
 			if !ok {
 				return true
 			}
@@ -132,8 +133,8 @@ func checkFileTransactionClosures(filePath string) []string {
 
 // transactionClosure reports whether call is database.Transaction with an
 // inline closure, returning the closure and its context parameter name.
-func transactionClosure(call *ast.CallExpr, aliases []string, dotImport bool) (*ast.FuncLit, string, bool) {
-	if !isDatabaseTransactionCall(call, aliases, dotImport) || len(call.Args) != 2 {
+func transactionClosure(call *ast.CallExpr, dbNames goast.PackageNames) (*ast.FuncLit, string, bool) {
+	if !dbNames.Refers(call.Fun, "Transaction") || len(call.Args) != 2 {
 		return nil, "", false
 	}
 	closure, ok := call.Args[1].(*ast.FuncLit)
@@ -145,19 +146,6 @@ func transactionClosure(call *ast.CallExpr, aliases []string, dotImport bool) (*
 		return nil, "", false
 	}
 	return closure, names[0].Name, true
-}
-
-// isDatabaseTransactionCall reports whether call invokes the framework's
-// package-level Transaction function under any recognized import name.
-func isDatabaseTransactionCall(call *ast.CallExpr, aliases []string, dotImport bool) bool {
-	switch fun := call.Fun.(type) {
-	case *ast.SelectorExpr:
-		ident, ok := fun.X.(*ast.Ident)
-		return ok && fun.Sel != nil && fun.Sel.Name == "Transaction" && slices.Contains(aliases, ident.Name)
-	case *ast.Ident:
-		return dotImport && fun.Name == "Transaction"
-	}
-	return false
 }
 
 // escapingContextIdent reports whether arg is a plain identifier naming a
@@ -250,7 +238,7 @@ func escapingContext(arg ast.Expr, inTransaction map[string]struct{}) (string, b
 // The list is the one CheckDetachedContext keeps: both rules ask the same
 // question about the same calls, one about a detached context and one about
 // a context that left the transaction.
-func databaseEntryPointCall(call *ast.CallExpr, aliases []string, dotImport bool) (string, bool) {
+func databaseEntryPointCall(call *ast.CallExpr, dbNames goast.PackageNames) (string, bool) {
 	if len(call.Args) == 0 {
 		return "", false
 	}
@@ -262,20 +250,13 @@ func databaseEntryPointCall(call *ast.CallExpr, aliases []string, dotImport bool
 	case *ast.IndexListExpr:
 		fun = indexed.X
 	}
+	if !dbNames.Refers(fun, databaseEntryPoints...) {
+		return "", false
+	}
 	switch expr := fun.(type) {
 	case *ast.SelectorExpr:
-		ident, ok := expr.X.(*ast.Ident)
-		if !ok || expr.Sel == nil || !slices.Contains(aliases, ident.Name) {
-			return "", false
-		}
-		if !slices.Contains(databaseEntryPoints, expr.Sel.Name) {
-			return "", false
-		}
 		return expr.Sel.Name, true
 	case *ast.Ident:
-		if !dotImport || !slices.Contains(databaseEntryPoints, expr.Name) {
-			return "", false
-		}
 		return expr.Name, true
 	}
 	return "", false

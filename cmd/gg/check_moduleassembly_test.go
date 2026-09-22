@@ -76,6 +76,26 @@ func init() {
 	}
 }
 
+func TestCheckModuleAssemblyAcceptsDotImportedCall(t *testing.T) {
+	projectDir := t.TempDir()
+	t.Chdir(projectDir)
+	writeAssemblyFixtureProject(t, projectDir)
+
+	// A dot import names the function without a qualifier.
+	writeCheckFile(t, filepath.Join(projectDir, "module", "module.go"), `package module
+
+import . "github.com/hydroan/gst/authn"
+
+func init() {
+	SetSampleGate(nil)
+}
+`)
+
+	if violations := CheckModuleAssembly(newProjectIgnoreMatcher()); len(violations) != 0 {
+		t.Fatalf("CheckModuleAssembly() = %v, want no violation", violations)
+	}
+}
+
 func TestCheckModuleAssemblyRejectsSameNameFromAnotherPackage(t *testing.T) {
 	projectDir := t.TempDir()
 	t.Chdir(projectDir)

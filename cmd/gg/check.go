@@ -26,39 +26,162 @@ import (
 
 var checkCmd = &cobra.Command{
 	Use:   "check",
-	Short: "check architecture dependencies in generated code",
-	Long: `Check architecture dependencies in generated code:
-1. Service code should not call other service code
-2. DAO code should not call service, router, controller, or middleware code
-3. Model code should not call service or dao code
-4. Model directories and files must be singular
-5. Model file names should not contain hyphens (use underscores instead)
-6. Model struct and explicit DSL Payload/Result type json tags should use snake_case naming
-7. Model package names must match their directory names
-8. Explicit DSL Payload types should end with Req and Result types should end with Rsp
-9. Model files should contain at most one model struct
-10. Service files should contain at most one service struct
-11. Only allowed directories are enforced for gst framework projects
-12. Model files must pass the same validation rules that gate gg gen: the Design() DSL rules, and model.Empty embedded by value, never as *model.Empty
-13. database.Database operation chains must end with a terminal operation inline or be passed directly as a call argument
-14. database.Database chains and nested database.Transaction calls inside a database.Transaction closure must use the closure's context parameter
-15. Errors leaving service methods must be built by service.NewError or service.NewErrorWithCause
-16. Explicit DSL Payload/Result types must be named types declared in the same model package: struct types use the pointer form, slice and map types use the value form, and an empty struct type may only pair with an empty peer side
-17. Service files generated for DSL Service() actions must have a matching test file (create.go pairs with create_test.go or create_internal_test.go)
-18. Test files under the service directory must pair with a source file of their package; main_test.go only declares TestMain, fixtures_test.go only holds shared test fixtures, and test cases without a source file of their own belong in the test file of a related source file
-19. Project code must not declare MarshalLogObject or MarshalLogArray methods and must not call zap.Namespace: zapcore marshalers and nested namespaces bypass the reflected-value collapsing that keeps log-store field mappings bounded
-20. Model structs embedding model.Base or model.AutoBase must declare TableName() string on the struct itself, as a single return of a non-empty string literal
-21. Gorm struct tags must not configure indexes (index, uniqueIndex, unique); models declare indexes through the Indexes() []model.Index method
-22. model.Version declarations must keep the optimistic-locking shape: on database models a named field with json:",omitempty" and gorm:"not null;default:1", and on DSL Payload/Result types (plus the same-package types reachable from their fields) a json tag of exactly "version,omitempty"
-23. Project code, tests included, must not mint column references through gst.NewColumn, NewNumericColumn or NewTimeColumn; columns are read through the XxxCols variables gg gen writes, which the model schema checks, generated files excepted. Generic code, which has no Cols variable to read, may mint a reference whose model is its own type parameter
-24. In service, dao, cronjob, leader, lock, component and router code, the context passed to a framework database function or to a dao function must not be context.Background() or context.TODO(): the context handed down — a request's, a round's, a tenure's, a lock's, the process's, the start's — carries the identity, the transaction and the lease the work runs under; startup seeding runs in the router package's routes-ready hooks on the context the hook receives
-25. The assembly calls a copied framework module declares in its module.json must be made in the project's non-test code, outside the model and service subtrees the module was copied into
-
-Model and service subtrees owned by copyable framework modules are skipped by the service test checks, the log field check, the model table name check, the gorm tag index check, the version field check and the column reference check, and their service subtrees by the detached context check: copied module code is tested inside the framework repository.
-Paths ignored by the project's Git ignore rules are skipped by every check, so runtime artifacts such as log directories never fail checks.`,
+	Short: "check the project against the framework's conventions",
+	Long:  projectCheckHelp(),
 	Run: func(cmd *cobra.Command, args []string) {
 		checkRun()
 	},
+}
+
+// projectCheck is one gg check rule: the name its result prints under, the
+// rule the help states for it, and the check that finds its violations.
+type projectCheck struct {
+	name  string
+	rule  string
+	check func(gitignore.Matcher) []string
+}
+
+// projectChecks lists every gg check rule in the order gg check runs them,
+// prints their results and numbers them in its help.
+var projectChecks = []projectCheck{
+	{
+		name:  "Architecture dependencies",
+		rule:  "service code must not call other service code, dao code must not call service, router, controller or middleware code, and model code must not call service or dao code",
+		check: CheckArchitectureDependency,
+	},
+	{
+		name:  "Model singular naming",
+		rule:  "model directories and files must be singular",
+		check: CheckModelSingularNaming,
+	},
+	{
+		name:  "Model file name hyphens",
+		rule:  "model file names must not contain hyphens (use underscores instead)",
+		check: CheckModelFileNameHyphens,
+	},
+	{
+		name:  "JSON tag naming",
+		rule:  "model struct and explicit DSL Payload/Result type json tags must use snake_case naming",
+		check: CheckJSONTagNaming,
+	},
+	{
+		name:  "Model action type naming",
+		rule:  "explicit DSL Payload types must end with Req and Result types with Rsp",
+		check: CheckModelActionTypeNaming,
+	},
+	{
+		name:  "Action type form",
+		rule:  "explicit DSL Payload/Result types must be named types declared in the same model package: struct types use the pointer form, slice and map types use the value form, and an empty struct type may only pair with an empty peer side",
+		check: CheckActionTypeForm,
+	},
+	{
+		name:  "Model file boundaries",
+		rule:  "model files must contain at most one model struct",
+		check: CheckModelFileBoundary,
+	},
+	{
+		name:  "Service file boundaries",
+		rule:  "service files must contain at most one service struct",
+		check: CheckServiceFileBoundary,
+	},
+	{
+		name:  "Model package naming",
+		rule:  "model package names must match their directory names",
+		check: CheckModelPackageNaming,
+	},
+	{
+		name:  "Directory restrictions",
+		rule:  "top-level directories must be ones the framework layout names, such as model, service, router and dao, or hold no Go packages, such as logs and deploy",
+		check: CheckAllowedDirectories,
+	},
+	{
+		name:  "DSL design rules",
+		rule:  "model files must pass the same validation rules that gate gg gen: the Design() DSL rules, and the base types model.Base, model.AutoBase and model.Empty embedded by value, never through a pointer",
+		check: CheckDSLDesign,
+	},
+	{
+		name:  "Database chain termination",
+		rule:  "database.Database operation chains must end with a terminal operation inline or be passed directly as a call argument",
+		check: CheckDatabaseChainTermination,
+	},
+	{
+		name:  "Transaction closure context",
+		rule:  "database.Database chains and nested database.Transaction calls inside a database.Transaction closure must use the closure's context parameter",
+		check: CheckTransactionClosureContext,
+	},
+	{
+		name:  "Detached context",
+		rule:  "in service, dao, cronjob, leader, lock, component and router code, the context passed to a framework database function or to a dao function must not be context.Background() or context.TODO(): the context handed down — a request's, a round's, a tenure's, a lock's, the process's, the start's — carries the identity, the transaction and the lease the work runs under; startup seeding runs in the router package's routes-ready hooks on the context the hook receives",
+		check: CheckDetachedContext,
+	},
+	{
+		name:  "Service error discipline",
+		rule:  "errors leaving service methods must be built by service.NewError or service.NewErrorWithCause",
+		check: CheckServiceErrorDiscipline,
+	},
+	{
+		name:  "Service test coverage",
+		rule:  "service files generated for DSL Service() actions must have a matching test file (create.go pairs with create_test.go or create_internal_test.go)",
+		check: CheckServiceTestCoverage,
+	},
+	{
+		name:  "Service test organization",
+		rule:  "test files under the service directory must pair with a source file of their package; main_test.go only declares TestMain, fixtures_test.go only holds shared test fixtures, and test cases without a source file of their own belong in the test file of a related source file",
+		check: CheckServiceTestOrganization,
+	},
+	{
+		name:  "Log field boundedness",
+		rule:  "project code must not declare MarshalLogObject or MarshalLogArray methods and must not call zap.Namespace: zapcore marshalers and nested namespaces bypass the reflected-value collapsing that keeps log-store field mappings bounded",
+		check: CheckLogFieldBoundedness,
+	},
+	{
+		name:  "Model table name declaration",
+		rule:  "model structs embedding model.Base or model.AutoBase must declare TableName() string on the struct itself, as a single return of a non-empty string literal",
+		check: CheckModelTableNameDeclaration,
+	},
+	{
+		name:  "Gorm tag index ban",
+		rule:  "gorm struct tags must not configure indexes (index, uniqueIndex, unique); models declare indexes through the Indexes() []model.Index method",
+		check: CheckGormTagIndexBan,
+	},
+	{
+		name:  "Version field declaration",
+		rule:  `model.Version declarations must keep the optimistic-locking shape: on database models a named field with json:",omitempty" and gorm:"not null;default:1", and on DSL Payload/Result types (plus the same-package types reachable from their fields) a json tag of exactly "version,omitempty"`,
+		check: CheckVersionFieldDeclarations,
+	},
+	{
+		name:  "Module assembly",
+		rule:  "the assembly calls a copied framework module declares in its module.json must be made in the project's non-test code, outside the model and service subtrees the module was copied into",
+		check: CheckModuleAssembly,
+	},
+	{
+		name:  "Column reference minting",
+		rule:  "project code, tests included, must not mint column references through gst.NewColumn, NewNumericColumn or NewTimeColumn; columns are read through the XxxCols variables gg gen writes, which the model schema checks, generated files excepted. Generic code, which has no Cols variable to read, may mint a reference whose model is its own type parameter",
+		check: CheckColumnReferenceMinting,
+	},
+}
+
+// projectCheckSkips closes the gg check help: what the checks leave out.
+const projectCheckSkips = `Model and service subtrees owned by copyable framework modules are skipped by Service test coverage, Service test organization, Log field boundedness, Model table name declaration, Gorm tag index ban, Version field declaration and Column reference minting, and their service subtrees by Detached context: copied module code is tested inside the framework repository.
+Paths ignored by the project's Git ignore rules are skipped by every check, so runtime artifacts such as log directories never fail checks.`
+
+// projectCheckHelp renders the gg check help from projectChecks: one numbered
+// line per check, in the order gg check runs them and under the name its
+// result prints, then projectCheckSkips. The help starts
+//
+//	Check the project against the framework's conventions:
+//	1. Architecture dependencies: service code must not call other service code, dao code must not call service, router, controller or middleware code, and model code must not call service or dao code
+//	2. Model singular naming: model directories and files must be singular
+//	3. Model file name hyphens: model file names must not contain hyphens (use underscores instead)
+func projectCheckHelp() string {
+	var b strings.Builder
+	b.WriteString("Check the project against the framework's conventions:\n")
+	for i, pc := range projectChecks {
+		fmt.Fprintf(&b, "%d. %s: %s\n", i+1, pc.name, pc.rule)
+	}
+	b.WriteString("\n")
+	b.WriteString(projectCheckSkips)
+	return b.String()
 }
 
 func checkRun() {
@@ -132,30 +255,11 @@ func collectProjectChecks() []projectCheckResult {
 	// One matcher serves every check: building it scans the whole worktree
 	// for ignore files, which is too expensive to repeat per check.
 	ignore := newProjectIgnoreMatcher()
-	return []projectCheckResult{
-		{Name: "Architecture dependencies", Violations: CheckArchitectureDependency(ignore)},
-		{Name: "Model singular naming", Violations: CheckModelSingularNaming(ignore)},
-		{Name: "JSON tag naming", Violations: CheckJSONTagNaming(ignore)},
-		{Name: "Model action type naming", Violations: CheckModelActionTypeNaming(ignore)},
-		{Name: "Action type form", Violations: CheckActionTypeForm(ignore)},
-		{Name: "Model file boundaries", Violations: CheckModelFileBoundary(ignore)},
-		{Name: "Service file boundaries", Violations: CheckServiceFileBoundary(ignore)},
-		{Name: "Model package naming", Violations: CheckModelPackageNaming(ignore)},
-		{Name: "Directory restrictions", Violations: CheckAllowedDirectories(ignore)},
-		{Name: "DSL design rules", Violations: CheckDSLDesign(ignore)},
-		{Name: "Database chain termination", Violations: CheckDatabaseChainTermination(ignore)},
-		{Name: "Transaction closure context", Violations: CheckTransactionClosureContext(ignore)},
-		{Name: "Detached context", Violations: CheckDetachedContext(ignore)},
-		{Name: "Service error discipline", Violations: CheckServiceErrorDiscipline(ignore)},
-		{Name: "Service test coverage", Violations: CheckServiceTestCoverage(ignore)},
-		{Name: "Service test organization", Violations: CheckServiceTestOrganization(ignore)},
-		{Name: "Log field boundedness", Violations: CheckLogFieldBoundedness(ignore)},
-		{Name: "Model table name declaration", Violations: CheckModelTableNameDeclaration(ignore)},
-		{Name: "Gorm tag index ban", Violations: CheckGormTagIndexBan(ignore)},
-		{Name: "Version field declaration", Violations: CheckVersionFieldDeclarations(ignore)},
-		{Name: "Module assembly", Violations: CheckModuleAssembly(ignore)},
-		{Name: "Column reference minting", Violations: CheckColumnReferenceMinting(ignore)},
+	results := make([]projectCheckResult, 0, len(projectChecks))
+	for _, pc := range projectChecks {
+		results = append(results, projectCheckResult{Name: pc.name, Violations: pc.check(ignore)})
 	}
+	return results
 }
 
 func printProjectCheckResults(results []projectCheckResult) {
@@ -317,7 +421,8 @@ func checkFileForArchitectureImports(filePath, layerType, modulePath string) []s
 	return violations
 }
 
-// CheckModelSingularNaming checks if model directories and files use singular names
+// CheckModelSingularNaming checks that model directories and files use
+// singular names.
 func CheckModelSingularNaming(ignore gitignore.Matcher) []string {
 	var violations []string
 
@@ -393,14 +498,6 @@ func CheckModelSingularNaming(ignore gitignore.Matcher) []string {
 			// Check Go file name (without .go extension)
 			fileName := strings.TrimSuffix(info.Name(), ".go")
 
-			// Check if file name contains hyphen
-			if strings.Contains(fileName, "-") {
-				suggestedName := strings.ReplaceAll(fileName, "-", "_")
-				violation := fmt.Sprintf("Model file '%s' should not contain hyphens (suggested: %s.go)",
-					path, suggestedName)
-				violations = append(violations, violation)
-			}
-
 			// File name length must greater than 3 before check.
 			// Check singular must before plural.
 			// Skip check for allowed plural file names
@@ -411,6 +508,33 @@ func CheckModelSingularNaming(ignore gitignore.Matcher) []string {
 			}
 		}
 
+		return nil
+	})
+	if err != nil {
+		violations = append(violations, fmt.Sprintf("walking model directory: %v", err))
+	}
+
+	return violations
+}
+
+// CheckModelFileNameHyphens checks that model file names separate words with
+// underscores rather than hyphens.
+func CheckModelFileNameHyphens(ignore gitignore.Matcher) []string {
+	var violations []string
+
+	if _, err := os.Stat(modelDir); os.IsNotExist(err) {
+		return violations
+	}
+
+	err := walkProjectDir(modelDir, ignore, func(path string, info os.FileInfo) error {
+		if info.IsDir() || !strings.HasSuffix(path, ".go") || strings.Contains(path, "_test.go") || isGeneratedFileName(path) {
+			return nil
+		}
+		fileName := strings.TrimSuffix(info.Name(), ".go")
+		if strings.Contains(fileName, "-") {
+			violations = append(violations, fmt.Sprintf("Model file '%s' should not contain hyphens (suggested: %s.go)",
+				path, strings.ReplaceAll(fileName, "-", "_")))
+		}
 		return nil
 	})
 	if err != nil {

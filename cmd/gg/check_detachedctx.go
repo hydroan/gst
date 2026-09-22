@@ -8,10 +8,12 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 
 	gitignore "github.com/go-git/go-git/v5/plumbing/format/gitignore"
 	"github.com/hydroan/gst/internal/codegen/gen"
+	"github.com/hydroan/gst/internal/goast"
 )
 
 // detachedContextDirs are the project directories whose code runs under a
@@ -114,14 +116,13 @@ func CheckDetachedContext(ignore gitignore.Matcher) []string {
 	return violations
 }
 
-// contextImports are the local names one file knows the context package,
-// the framework database package and the project's dao packages by.
+// contextImports are the names one file knows the context package, the
+// framework database package and the project's dao packages by.
 type contextImports struct {
-	context    []string
-	contextDot bool
-	database   []string
-	dbDot      bool
-	dao        []string
+	context  goast.PackageNames
+	database goast.PackageNames
+	// dao holds the qualifiers of every dao package the file imports.
+	dao []string
 	// daoDot lists the dao packages imported under a dot, whose calls the
 	// check cannot tell apart.
 	daoDot []*ast.ImportSpec
@@ -145,10 +146,10 @@ func checkFileDetachedContexts(filePath, modulePath string) []string {
 			relPath, pos.Line, spec.Path.Value,
 		))
 	}
-	if len(imports.context) == 0 && !imports.contextDot {
+	if len(imports.context.Qualifiers) == 0 && !imports.context.DotImported {
 		return violations
 	}
-	if len(imports.database) == 0 && !imports.dbDot && len(imports.dao) == 0 {
+	if len(imports.database.Qualifiers) == 0 && !imports.database.DotImported && len(imports.dao) == 0 {
 		return violations
 	}
 
@@ -179,51 +180,32 @@ func checkFileDetachedContexts(filePath, modulePath string) []string {
 	return violations
 }
 
-// contextImportsOf reads the local names file imports the context package,
-// the framework database package and the project's dao packages under.
+// contextImportsOf reads the names file knows the context package, the
+// framework database package and the project's dao packages by. A dao
+// package imported without an alias goes by its package clause.
 func contextImportsOf(file *ast.File, modulePath string) contextImports {
-	var imports contextImports
+	imports := contextImports{
+		context:  goast.ImportedNames(file, "context", "context"),
+		database: goast.ImportedNames(file, gstDatabaseImportPath, "database"),
+	}
 	daoPath := modulePath + "/dao"
+	resolved := make(map[string]bool)
 	for _, spec := range file.Imports {
-		path := strings.Trim(spec.Path.Value, `"`)
-		alias := ""
-		if spec.Name != nil {
-			alias = spec.Name.Name
-		}
-		if alias == "_" {
+		path, err := strconv.Unquote(spec.Path.Value)
+		if err != nil || (path != daoPath && !strings.HasPrefix(path, daoPath+"/")) {
 			continue
 		}
-		switch {
-		case path == "context":
-			if alias == "." {
-				imports.contextDot = true
-			} else {
-				imports.context = append(imports.context, localName(alias, "context"))
-			}
-		case path == gstDatabaseImportPath:
-			if alias == "." {
-				imports.dbDot = true
-			} else {
-				imports.database = append(imports.database, localName(alias, "database"))
-			}
-		case path == daoPath || strings.HasPrefix(path, daoPath+"/"):
-			if alias == "." {
-				imports.daoDot = append(imports.daoDot, spec)
-				continue
-			}
-			imports.dao = append(imports.dao, localName(alias, packageNameOf(strings.TrimPrefix(path, modulePath+"/"))))
+		if spec.Name != nil && spec.Name.Name == "." {
+			imports.daoDot = append(imports.daoDot, spec)
 		}
+		if resolved[path] {
+			continue
+		}
+		resolved[path] = true
+		names := goast.ImportedNames(file, path, packageNameOf(strings.TrimPrefix(path, modulePath+"/")))
+		imports.dao = append(imports.dao, names.Qualifiers...)
 	}
 	return imports
-}
-
-// localName returns the name an import is used under: its alias, or the
-// package's own name.
-func localName(alias, packageName string) string {
-	if alias != "" {
-		return alias
-	}
-	return packageName
 }
 
 // packageNameOf reads the package clause of the project directory dir — the
@@ -420,14 +402,14 @@ func entryPointName(call *ast.CallExpr, imports contextImports) (string, bool) {
 		if !ok || f.Sel == nil {
 			return "", false
 		}
-		if slices.Contains(imports.database, ident.Name) {
+		if slices.Contains(imports.database.Qualifiers, ident.Name) {
 			return "database." + f.Sel.Name, true
 		}
 		if slices.Contains(imports.dao, ident.Name) {
 			return ident.Name + "." + f.Sel.Name, true
 		}
 	case *ast.Ident:
-		if imports.dbDot && slices.Contains(databaseEntryPoints, f.Name) {
+		if imports.database.Refers(f, databaseEntryPoints...) {
 			return "database." + f.Name, true
 		}
 	}
@@ -469,12 +451,12 @@ func contextFunctionName(fun ast.Expr, imports contextImports) (string, bool) {
 	switch f := fun.(type) {
 	case *ast.SelectorExpr:
 		ident, ok := f.X.(*ast.Ident)
-		if !ok || f.Sel == nil || !slices.Contains(imports.context, ident.Name) {
+		if !ok || f.Sel == nil || !slices.Contains(imports.context.Qualifiers, ident.Name) {
 			return "", false
 		}
 		return f.Sel.Name, true
 	case *ast.Ident:
-		if imports.contextDot {
+		if imports.context.DotImported {
 			return f.Name, true
 		}
 	}

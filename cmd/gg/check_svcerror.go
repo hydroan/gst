@@ -7,8 +7,8 @@ import (
 	"go/token"
 	"os"
 	"path/filepath"
-	"slices"
 	"sort"
+	"strconv"
 	"strings"
 
 	gitignore "github.com/go-git/go-git/v5/plumbing/format/gitignore"
@@ -64,11 +64,12 @@ const gstImportPath = "github.com/hydroan/gst"
 // see.
 func CheckServiceErrorDiscipline(ignore gitignore.Matcher) []string {
 	analysis := &svcErrAnalysis{
-		modulePath:  currentProjectModulePath(),
-		fset:        token.NewFileSet(),
-		summaries:   map[svcErrFuncKey]*svcErrFuncSummary{},
-		entryTypes:  map[string]map[string]bool{},
-		pkgVarTypes: map[string]map[string]string{},
+		modulePath:   currentProjectModulePath(),
+		fset:         token.NewFileSet(),
+		summaries:    map[svcErrFuncKey]*svcErrFuncSummary{},
+		entryTypes:   map[string]map[string]bool{},
+		pkgVarTypes:  map[string]map[string]string{},
+		packageNames: map[string]string{},
 	}
 	if analysis.modulePath == "" {
 		return nil
@@ -178,6 +179,21 @@ type svcErrAnalysis struct {
 	pkgVarTypes map[string]map[string]string
 	entries     []svcErrFuncKey
 	files       []*svcErrFileCollector
+	// packageNames caches the package clause of every project directory an
+	// import names, see packageName.
+	packageNames map[string]string
+}
+
+// packageName returns the package clause of the project directory dir, the
+// name an import of it without an alias goes by. It reads the directory once
+// per analysis, however many files import it.
+func (a *svcErrAnalysis) packageName(dir string) string {
+	if name, ok := a.packageNames[dir]; ok {
+		return name
+	}
+	name := packageNameOf(dir)
+	a.packageNames[dir] = name
+	return name
 }
 
 // collectFile parses one project file and records service struct types and
@@ -191,28 +207,32 @@ func (a *svcErrAnalysis) collectFile(path string) {
 	collector := &svcErrFileCollector{
 		analysis:   a,
 		pkgDir:     filepath.ToSlash(filepath.Dir(path)),
+		svc:        goast.ImportedNames(file, gstServiceImportPath, "service"),
+		db:         goast.ImportedNames(file, gstDatabaseImportPath, "database"),
+		gst:        goast.ImportedNames(file, gstImportPath, "gst"),
 		projectPkg: map[string]string{},
 	}
 	for _, imp := range file.Imports {
 		if imp.Path == nil {
 			continue
 		}
-		importPath := strings.Trim(imp.Path.Value, `"`)
-		name := filepath.Base(importPath)
-		if imp.Name != nil {
-			name = imp.Name.Name
+		importPath, err := strconv.Unquote(imp.Path.Value)
+		if err != nil {
+			continue
 		}
+		var dir string
 		switch {
-		case importPath == gstServiceImportPath:
-			collector.svcAliases = append(collector.svcAliases, name)
-		case importPath == gstDatabaseImportPath:
-			collector.dbAliases = append(collector.dbAliases, name)
-		case importPath == gstImportPath:
-			collector.typesAliases = append(collector.typesAliases, name)
 		case importPath == a.modulePath:
-			collector.projectPkg[name] = "."
+			dir = "."
 		case strings.HasPrefix(importPath, a.modulePath+"/"):
-			collector.projectPkg[name] = strings.TrimPrefix(importPath, a.modulePath+"/")
+			dir = strings.TrimPrefix(importPath, a.modulePath+"/")
+		default:
+			continue
+		}
+		// A dot-imported project package names nothing here: its calls
+		// read as same-package calls and fail closed.
+		for _, name := range goast.ImportedNames(file, importPath, a.packageName(dir)).Qualifiers {
+			collector.projectPkg[name] = dir
 		}
 	}
 
@@ -226,16 +246,19 @@ func (a *svcErrAnalysis) collectFile(path string) {
 	a.files = append(a.files, collector)
 }
 
-// svcErrFileCollector is the per-file context: the parsed file plus import
-// aliases of the framework packages and of project-internal packages.
+// svcErrFileCollector is the per-file context: the parsed file plus the names
+// it knows the framework packages and the project's own packages by.
 type svcErrFileCollector struct {
-	analysis     *svcErrAnalysis
-	file         *ast.File
-	pkgDir       string
-	svcAliases   []string
-	dbAliases    []string
-	typesAliases []string
-	projectPkg   map[string]string
+	analysis *svcErrAnalysis
+	file     *ast.File
+	pkgDir   string
+	// svc, db and gst are the names of the framework service, database and
+	// root packages.
+	svc goast.PackageNames
+	db  goast.PackageNames
+	gst goast.PackageNames
+	// projectPkg maps every qualifier of a project package to its directory.
+	projectPkg map[string]string
 }
 
 // collectPackageVars records the concrete type of package-level variables
@@ -336,7 +359,7 @@ func (c *svcErrFileCollector) collectFunc(decl *ast.FuncDecl) {
 		file:       c,
 		decl:       decl,
 		numResults: 0,
-		ctxParams:  serviceContextParams(decl, c.typesAliases),
+		ctxParams:  serviceContextParams(decl, c.gst),
 	}
 	for _, field := range results {
 		n := len(field.Names)
@@ -376,25 +399,17 @@ func receiverType(decl *ast.FuncDecl) ast.Expr {
 }
 
 // serviceContextParams returns the declaration objects of the function's
-// parameters declared as *gst.ServiceContext under any recognized gst
-// package alias. Objects rather than names tell the parameter apart from a
-// local variable that reuses its name.
-func serviceContextParams(decl *ast.FuncDecl, typesAliases []string) map[svcErrVarObj]bool {
+// parameters declared as *gst.ServiceContext under the names gstNames
+// resolves. Objects rather than names tell the parameter apart from a local
+// variable that reuses its name.
+func serviceContextParams(decl *ast.FuncDecl, gstNames goast.PackageNames) map[svcErrVarObj]bool {
 	params := map[svcErrVarObj]bool{}
 	if decl.Type == nil || decl.Type.Params == nil {
 		return params
 	}
 	for _, field := range decl.Type.Params.List {
 		star, ok := field.Type.(*ast.StarExpr)
-		if !ok {
-			continue
-		}
-		sel, ok := star.X.(*ast.SelectorExpr)
-		if !ok || sel.Sel == nil || sel.Sel.Name != "ServiceContext" {
-			continue
-		}
-		pkg, ok := sel.X.(*ast.Ident)
-		if !ok || !slices.Contains(typesAliases, pkg.Name) {
+		if !ok || !gstNames.Refers(star.X, "ServiceContext") {
 			continue
 		}
 		for _, name := range field.Names {
@@ -406,19 +421,11 @@ func serviceContextParams(decl *ast.FuncDecl, typesAliases []string) map[svcErrV
 	return params
 }
 
-// isServiceErrorPtr reports whether expr denotes *service.Error under any
-// recognized import alias of the framework service package.
+// isServiceErrorPtr reports whether expr denotes *service.Error under the
+// names the file knows the framework service package by.
 func (c *svcErrFileCollector) isServiceErrorPtr(expr ast.Expr) bool {
 	star, ok := expr.(*ast.StarExpr)
-	if !ok {
-		return false
-	}
-	sel, ok := star.X.(*ast.SelectorExpr)
-	if !ok || sel.Sel == nil || sel.Sel.Name != "Error" {
-		return false
-	}
-	ident, ok := sel.X.(*ast.Ident)
-	return ok && slices.Contains(c.svcAliases, ident.Name)
+	return ok && c.svc.Refers(star.X, "Error")
 }
 
 // svcErrReceiverTypeName extracts the receiver's type name, unwrapping
@@ -745,6 +752,14 @@ func (s *svcErrFuncScope) resolveCall(call *ast.CallExpr, visiting map[svcErrVar
 		if s.declaresLocally(svcErrDeclObj(fun)) {
 			return []svcErrSource{s.raw(call)}
 		}
+		// A dot import names the framework constructors and the
+		// transaction without a qualifier.
+		if s.file.svc.Refers(fun, "NewError", "NewErrorWithCause") {
+			return []svcErrSource{{kind: svcErrSourceNewError}}
+		}
+		if s.file.db.Refers(fun, "Transaction") {
+			return s.resolveTransaction(call, visiting)
+		}
 		// A same-package call; whether it is compliant is the callee
 		// summary's business.
 		return []svcErrSource{{
@@ -784,10 +799,10 @@ func (s *svcErrFuncScope) resolveCall(call *ast.CallExpr, visiting map[svcErrVar
 		if obj := svcErrDeclObj(ident); s.declaresLocally(obj) {
 			return s.resolveLocalCall(call, fun, obj)
 		}
-		if slices.Contains(s.file.svcAliases, ident.Name) && (fun.Sel.Name == "NewError" || fun.Sel.Name == "NewErrorWithCause") {
+		if s.file.svc.Refers(fun, "NewError", "NewErrorWithCause") {
 			return []svcErrSource{{kind: svcErrSourceNewError}}
 		}
-		if slices.Contains(s.file.dbAliases, ident.Name) && fun.Sel.Name == "Transaction" {
+		if s.file.db.Refers(fun, "Transaction") {
 			return s.resolveTransaction(call, visiting)
 		}
 		if pkgDir, ok := s.file.projectPkg[ident.Name]; ok {

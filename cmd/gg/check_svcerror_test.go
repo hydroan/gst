@@ -412,6 +412,62 @@ func RequireAdmin(ctx *gst.ServiceContext) error {
 	return nil
 }
 `)
+	// A dot import of the framework packages names their constructors,
+	// transactions and service context without a qualifier.
+	writeCheckFile(t, filepath.Join(projectDir, "service", "dotted", "dotted.go"), `package dotted
+
+import (
+	"context"
+	"net/http"
+
+	. "github.com/hydroan/gst"
+	. "github.com/hydroan/gst/database"
+	. "github.com/hydroan/gst/service"
+	"tmpapp/model"
+)
+
+type Getter struct {
+	Base[*model.Record, *model.RecordReq, *model.RecordRsp]
+}
+
+func (g *Getter) Get(ctx *ServiceContext, req *model.RecordReq) (*model.RecordRsp, error) {
+	if req.ID == "" {
+		return nil, NewError(http.StatusBadRequest, "id is required")
+	}
+	return nil, Transaction(ctx, func(txCtx context.Context) error {
+		return NewErrorWithCause(http.StatusConflict, "record busy", nil)
+	})
+}
+`)
+	// A project package is named by its package clause, not by its
+	// directory: helper/v2 declares package limit.
+	writeCheckFile(t, filepath.Join(projectDir, "helper", "v2", "limit.go"), `package limit
+
+import (
+	"net/http"
+
+	"github.com/hydroan/gst/service"
+)
+
+func Check() error { return service.NewError(http.StatusTooManyRequests, "slow down") }
+`)
+	writeCheckFile(t, filepath.Join(projectDir, "service", "limited", "limited.go"), `package limited
+
+import (
+	"github.com/hydroan/gst"
+	"github.com/hydroan/gst/service"
+	"tmpapp/helper/v2"
+	"tmpapp/model"
+)
+
+type Getter struct {
+	service.Base[*model.Record, *model.RecordReq, *model.RecordRsp]
+}
+
+func (g *Getter) Get(ctx *gst.ServiceContext, req *model.RecordReq) (*model.RecordRsp, error) {
+	return nil, limit.Check()
+}
+`)
 	// Functions outside service structs are not entry points; their raw
 	// returns stay unreported as long as no service exit reaches them.
 	writeCheckFile(t, filepath.Join(projectDir, "cronjob", "job.go"), `package cronjob

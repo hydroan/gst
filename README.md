@@ -835,7 +835,7 @@ func init() {
 - fn 收到的 ctx 结束时必须停下：丢租约后 5 秒还不返回，进程立即以失败退出。
 - 只有在 fn 的 ctx 上用 `database.Transaction` / `TransactionOn` 开的事务会先核对租约；普通的 Create / Update / Delete
   和外部调用都不核对，外部调用要幂等，关键写入要自带条件（唯一约束、按状态更新）。
-- 不要用 `context.Background()` 另起 ctx 写库：框架看不见它，gg check 规则 24 会拦。
+- 不要用 `context.Background()` 另起 ctx 写库：框架看不见它，gg check 的「Detached context」规则会拦。
 - 定时任务每个时刻至多跑两轮，fn 必须幂等；所有副本同时停机期间错过的调度，启动时只补最近一个。
 - 本地用 SQLite 开发时，fn 里单个事务控制在 8 秒内，连续的事务每个 5 秒内；内存 SQLite 不能用于多副本部署。
 - 副本必须直连主库或走会话级连接池；租约表的结构有变化时，先 `gg migrate` 再发布。

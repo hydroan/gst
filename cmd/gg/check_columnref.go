@@ -7,10 +7,10 @@ import (
 	"go/token"
 	"os"
 	"path/filepath"
-	"slices"
 	"strings"
 
 	gitignore "github.com/go-git/go-git/v5/plumbing/format/gitignore"
+	"github.com/hydroan/gst/internal/goast"
 )
 
 // columnConstructors are the gst functions that mint a column reference
@@ -18,11 +18,7 @@ import (
 // variables gg gen writes from the model schema; a reference minted by hand
 // names a column the schema is never asked about, so a typo or a renamed
 // field surfaces only when the query runs.
-var columnConstructors = map[string]bool{
-	"NewColumn":        true,
-	"NewNumericColumn": true,
-	"NewTimeColumn":    true,
-}
+var columnConstructors = []string{"NewColumn", "NewNumericColumn", "NewTimeColumn"}
 
 // CheckColumnReferenceMinting reports project code that mints column
 // references through gst.NewColumn, NewNumericColumn or NewTimeColumn
@@ -74,7 +70,7 @@ func CheckColumnReferenceMinting(ignore gitignore.Matcher) []string {
 // one file. A file that fails to parse is reported as a violation so broken
 // code cannot slip past the check.
 func checkFileColumnReferenceMinting(path string) []string {
-	aliases, dotImport, found := importNamesOf(path, gstImportPath, "gst")
+	gstNames, found := importedNamesOf(path, gstImportPath, "gst")
 	if !found {
 		return nil
 	}
@@ -99,7 +95,7 @@ func checkFileColumnReferenceMinting(path string) []string {
 			if !ok {
 				return true
 			}
-			name, minted := columnConstructorName(call, aliases, dotImport)
+			name, minted := columnConstructorName(call, gstNames)
 			if !minted || mintsForTypeParameter(call, typeParams) {
 				return true
 			}
@@ -191,8 +187,8 @@ func modelTypeParameters(decl *ast.FuncDecl) map[string]bool {
 
 // columnConstructorName returns the column constructor a call invokes, with
 // or without explicit type arguments, when the callee is one of the gst
-// package's column constructors.
-func columnConstructorName(call *ast.CallExpr, aliases []string, dotImport bool) (string, bool) {
+// package's column constructors under the names gstNames resolves.
+func columnConstructorName(call *ast.CallExpr, gstNames goast.PackageNames) (string, bool) {
 	fun := call.Fun
 	switch f := fun.(type) {
 	case *ast.IndexExpr:
@@ -200,45 +196,26 @@ func columnConstructorName(call *ast.CallExpr, aliases []string, dotImport bool)
 	case *ast.IndexListExpr:
 		fun = f.X
 	}
+	if !gstNames.Refers(fun, columnConstructors...) {
+		return "", false
+	}
 	switch x := fun.(type) {
 	case *ast.SelectorExpr:
-		ident, ok := x.X.(*ast.Ident)
-		if !ok || x.Sel == nil || !columnConstructors[x.Sel.Name] || !slices.Contains(aliases, ident.Name) {
-			return "", false
-		}
 		return x.Sel.Name, true
 	case *ast.Ident:
-		if dotImport && columnConstructors[x.Name] {
-			return x.Name, true
-		}
+		return x.Name, true
 	}
 	return "", false
 }
 
-// importNamesOf reports the names a file refers to the package at importPath
-// by: the aliases it imports the package under, defaultName standing for a
-// plain import, and whether it dot-imports the package. found is false when
-// the file does not import the package at all.
-func importNamesOf(filePath, importPath, defaultName string) (aliases []string, dotImport bool, found bool) {
-	fset := token.NewFileSet()
-	file, err := parser.ParseFile(fset, filePath, nil, parser.ImportsOnly)
+// importedNamesOf parses only the imports of filePath and reports how the
+// file refers to the package at importPath (see goast.ImportedNames), and
+// whether it imports the package at all: a file that does not import it
+// needs no full parse.
+func importedNamesOf(filePath, importPath, defaultName string) (goast.PackageNames, bool) {
+	file, err := parser.ParseFile(token.NewFileSet(), filePath, nil, parser.ImportsOnly)
 	if err != nil {
-		return nil, false, false
+		return goast.PackageNames{}, false
 	}
-
-	for _, imp := range file.Imports {
-		if imp.Path == nil || imp.Path.Value != `"`+importPath+`"` {
-			continue
-		}
-		found = true
-		switch {
-		case imp.Name == nil:
-			aliases = append(aliases, defaultName)
-		case imp.Name.Name == ".":
-			dotImport = true
-		case imp.Name.Name != "_":
-			aliases = append(aliases, imp.Name.Name)
-		}
-	}
-	return aliases, dotImport, found
+	return goast.ImportedNames(file, importPath, defaultName), goast.FindImportSpec(file, importPath) != nil
 }

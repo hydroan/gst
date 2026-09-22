@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	gitignore "github.com/go-git/go-git/v5/plumbing/format/gitignore"
+	"github.com/hydroan/gst/internal/goast"
 )
 
 // gstDatabaseImportPath is the framework package whose Database function
@@ -96,7 +97,7 @@ func CheckDatabaseChainTermination(ignore gitignore.Matcher) []string {
 // checkFileDatabaseChains reports database.Database chains in one file that do
 // not end with a terminal operation inline.
 func checkFileDatabaseChains(filePath string) []string {
-	aliases, dotImport, ok := gstDatabaseImportNames(filePath)
+	dbNames, ok := gstDatabaseImportNames(filePath)
 	if !ok {
 		return nil
 	}
@@ -113,7 +114,7 @@ func checkFileDatabaseChains(filePath string) []string {
 	var violations []string
 	ast.Inspect(file, func(n ast.Node) bool {
 		call, ok := n.(*ast.CallExpr)
-		if !ok || !isDatabaseChainStart(call, aliases, dotImport) {
+		if !ok || !isDatabaseChainStart(call, dbNames) {
 			return true
 		}
 		if message, bad := databaseChainViolation(call, parents); bad {
@@ -126,32 +127,22 @@ func checkFileDatabaseChains(filePath string) []string {
 	return violations
 }
 
-// gstDatabaseImportNames returns the local names under which filePath imports
-// the framework database package. It parses imports only, so files that do
-// not use the package stay cheap to scan.
-func gstDatabaseImportNames(filePath string) (aliases []string, dotImport bool, found bool) {
-	return importNamesOf(filePath, gstDatabaseImportPath, "database")
+// gstDatabaseImportNames returns how filePath refers to the framework database
+// package, and whether it imports the package at all. It parses imports only,
+// so files that do not use the package stay cheap to scan.
+func gstDatabaseImportNames(filePath string) (goast.PackageNames, bool) {
+	return importedNamesOf(filePath, gstDatabaseImportPath, "database")
 }
 
 // isDatabaseChainStart reports whether call is a generic database.Database
-// instantiation call that starts an operation chain.
-func isDatabaseChainStart(call *ast.CallExpr, aliases []string, dotImport bool) bool {
-	var generic ast.Expr
+// instantiation call that starts an operation chain, under the names dbNames
+// resolves.
+func isDatabaseChainStart(call *ast.CallExpr, dbNames goast.PackageNames) bool {
 	switch fun := call.Fun.(type) {
 	case *ast.IndexExpr:
-		generic = fun.X
+		return dbNames.Refers(fun.X, "Database")
 	case *ast.IndexListExpr:
-		generic = fun.X
-	default:
-		return false
-	}
-
-	switch x := generic.(type) {
-	case *ast.SelectorExpr:
-		ident, ok := x.X.(*ast.Ident)
-		return ok && x.Sel != nil && x.Sel.Name == "Database" && slices.Contains(aliases, ident.Name)
-	case *ast.Ident:
-		return dotImport && x.Name == "Database"
+		return dbNames.Refers(fun.X, "Database")
 	}
 	return false
 }

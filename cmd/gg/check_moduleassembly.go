@@ -7,13 +7,14 @@ import (
 	"go/parser"
 	"go/token"
 	"os"
+	gopath "path"
 	"path/filepath"
 	"sort"
-	"strconv"
 	"strings"
 
 	"github.com/go-git/go-git/v5/plumbing/format/gitignore"
 	"github.com/hydroan/gst/internal/ggmodule"
+	"github.com/hydroan/gst/internal/goast"
 )
 
 // CheckModuleAssembly reports assembly calls a copied framework module
@@ -95,7 +96,7 @@ func CheckModuleAssembly(ignore gitignore.Matcher) []string {
 		}
 		violations = append(violations, fmt.Sprintf(
 			"module %s is copied but the project never calls %s.%s: %s",
-			call.Module, lastImportSegment(call.Import), call.Function, call.Reason))
+			call.Module, gopath.Base(call.Import), call.Function, call.Reason))
 	}
 	sort.Strings(violations)
 
@@ -117,9 +118,9 @@ func mentionsAnyFunction(source []byte, wanted map[string]bool) bool {
 }
 
 // collectAssemblyCalls marks every required call the file makes. A call counts
-// only when the qualifier resolves through this file's import table to the
-// declared package, so an alias matches and a same-named function from another
-// package does not.
+// only when it names the declared package the way this file imports it —
+// under its package name, an alias or a dot import — so a same-named function
+// from another package does not.
 func collectAssemblyCalls(path string, source []byte, pending []ggmodule.AssemblyCall, satisfied map[string]bool) {
 	file, err := parser.ParseFile(token.NewFileSet(), path, source, parser.SkipObjectResolution)
 	if err != nil {
@@ -128,57 +129,21 @@ func collectAssemblyCalls(path string, source []byte, pending []ggmodule.Assembl
 		return
 	}
 
-	imports := importPathsByName(file)
+	names := make([]goast.PackageNames, len(pending))
+	for i, required := range pending {
+		names[i] = goast.ImportedNames(file, required.Import, gopath.Base(required.Import))
+	}
 	ast.Inspect(file, func(node ast.Node) bool {
 		call, ok := node.(*ast.CallExpr)
 		if !ok {
 			return true
 		}
-		selector, ok := call.Fun.(*ast.SelectorExpr)
-		if !ok || selector.Sel == nil {
-			return true
-		}
-		qualifier, ok := selector.X.(*ast.Ident)
-		if !ok {
-			return true
-		}
-		for _, required := range pending {
-			if selector.Sel.Name == required.Function && imports[qualifier.Name] == required.Import {
+		for i, required := range pending {
+			if names[i].Refers(call.Fun, required.Function) {
 				satisfied[assemblyKey(required)] = true
 			}
 		}
 
 		return true
 	})
-}
-
-// importPathsByName maps the local name of each import to its path, so a
-// selector qualifier can be resolved to the package it really names.
-func importPathsByName(file *ast.File) map[string]string {
-	paths := make(map[string]string, len(file.Imports))
-	for _, spec := range file.Imports {
-		if spec.Path == nil {
-			continue
-		}
-		path, err := strconv.Unquote(spec.Path.Value)
-		if err != nil {
-			continue
-		}
-		name := lastImportSegment(path)
-		if spec.Name != nil {
-			name = spec.Name.Name
-		}
-		paths[name] = path
-	}
-
-	return paths
-}
-
-// lastImportSegment returns the package name an import path defaults to.
-func lastImportSegment(path string) string {
-	if index := strings.LastIndex(path, "/"); index >= 0 {
-		return path[index+1:]
-	}
-
-	return path
 }

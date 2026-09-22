@@ -136,22 +136,20 @@ func CheckModelTableNameDeclaration(ignore gitignore.Matcher) []string {
 	return violations
 }
 
-// embeddedBaseName returns the framework base a struct embeds ("model.Base"
-// or "model.AutoBase"), or "" when it embeds neither. Virtual models embed
-// model.Empty and have no table, so they never report here.
+// embeddedBaseName returns the framework base a struct embeds by value
+// ("model.Base" or "model.AutoBase"), or "" when it embeds neither. Virtual
+// models embed model.Empty and have no table, so they never report here, and
+// a base embedded through a pointer is no model the framework recognizes: the
+// DSL design rules report that embedding.
 func embeddedBaseName(structType *ast.StructType, modelNames goast.PackageNames) string {
 	for _, field := range structType.Fields.List {
 		if len(field.Names) != 0 {
 			continue
 		}
-		typ := field.Type
-		if star, ok := typ.(*ast.StarExpr); ok {
-			typ = star.X
-		}
 		switch {
-		case modelNames.Refers(typ, "Base"):
+		case modelNames.Refers(field.Type, ggconst.FieldBase):
 			return "model.Base"
-		case modelNames.Refers(typ, "AutoBase"):
+		case modelNames.Refers(field.Type, ggconst.FieldAutoBase):
 			return "model.AutoBase"
 		}
 	}

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -58,9 +59,9 @@ func TestCheckModelSingularNamingAllowsExemptPlurals(t *testing.T) {
 	modelDir = "model"
 
 	// types, data and stats are plural in form but name one body of content,
-	// so model directories and files may keep them; records is an ordinary
-	// plural.
-	for _, dir := range []string{"types", "data", "stats", "records"} {
+	// so model directories and files may keep them; records, statistics and
+	// metrics are ordinary plurals.
+	for _, dir := range []string{"types", "data", "stats", "records", "statistics", "metrics"} {
 		if err := os.MkdirAll(filepath.Join(projectDir, "model", dir), 0o755); err != nil {
 			t.Fatal(err)
 		}
@@ -69,8 +70,58 @@ func TestCheckModelSingularNamingAllowsExemptPlurals(t *testing.T) {
 
 	violations := CheckModelSingularNaming(newProjectIgnoreMatcher())
 
-	if len(violations) != 1 || !strings.Contains(violations[0], filepath.Join("model", "records")) {
-		t.Fatalf("expected only the ordinary plural model directory violation, got %#v", violations)
+	if len(violations) != 3 {
+		t.Fatalf("expected the ordinary plural model directory violations only, got %#v", violations)
+	}
+	for _, dir := range []string{"records", "statistics", "metrics"} {
+		assertViolationContains(t, violations, filepath.Join("model", dir), "should be singular")
+	}
+}
+
+func TestCheckModelFileNameHyphens(t *testing.T) {
+	oldModelDir := modelDir
+	t.Cleanup(func() {
+		modelDir = oldModelDir
+	})
+
+	projectDir := t.TempDir()
+	t.Chdir(projectDir)
+	modelDir = "model"
+
+	writeCheckFile(t, filepath.Join(projectDir, "model", "record", "record-item.go"), "package record\n")
+	writeCheckFile(t, filepath.Join(projectDir, "model", "record", "record_note.go"), "package record\n")
+
+	violations := CheckModelFileNameHyphens(newProjectIgnoreMatcher())
+
+	if len(violations) != 1 {
+		t.Fatalf("expected one hyphenated model file violation, got %#v", violations)
+	}
+	assertViolationContains(t, violations, filepath.Join("model", "record", "record-item.go"), "should not contain hyphens (suggested: record_item.go)")
+}
+
+// TestProjectCheckHelpNumbersEveryCheckInRunOrder pins the help
+// projectCheckHelp renders: it opens with the lines its comment shows, and
+// numbers every check in the order gg check runs them, under the name its
+// result prints.
+func TestProjectCheckHelpNumbersEveryCheckInRunOrder(t *testing.T) {
+	help := projectCheckHelp()
+
+	opening := strings.Join([]string{
+		"Check the project against the framework's conventions:",
+		"1. Architecture dependencies: service code must not call other service code, dao code must not call service, router, controller or middleware code, and model code must not call service or dao code",
+		"2. Model singular naming: model directories and files must be singular",
+		"3. Model file name hyphens: model file names must not contain hyphens (use underscores instead)",
+	}, "\n")
+	if !strings.HasPrefix(help, opening) {
+		t.Fatalf("help opening = %q, want %q", help[:min(len(help), len(opening))], opening)
+	}
+	for i, pc := range projectChecks {
+		if line := fmt.Sprintf("\n%d. %s: %s\n", i+1, pc.name, pc.rule); !strings.Contains(help, line) {
+			t.Fatalf("help lacks the line of check %d %q", i+1, pc.name)
+		}
+	}
+	if !strings.HasSuffix(help, "\n\n"+projectCheckSkips) {
+		t.Fatal("help does not close with the paths the checks skip")
 	}
 }
 
@@ -168,6 +219,39 @@ func TestCheckModelPackageNamingSkipsGitIgnoredPaths(t *testing.T) {
 	}
 	if len(violations) != 1 || !strings.Contains(violations[0], filepath.Join("mismatch", "mismatch.go")) {
 		t.Fatalf("expected only genuine package name mismatch violation, got %#v", violations)
+	}
+}
+
+// TestCheckDSLDesignRejectsBaseTypesEmbeddedThroughAPointer pins where gg
+// check reports a base type embedded through a pointer: under the DSL design
+// rules, which gate gg gen as well.
+func TestCheckDSLDesignRejectsBaseTypesEmbeddedThroughAPointer(t *testing.T) {
+	oldModelDir := modelDir
+	t.Cleanup(func() {
+		modelDir = oldModelDir
+	})
+
+	projectDir := t.TempDir()
+	t.Chdir(projectDir)
+	modelDir = "model"
+
+	writeCheckFile(t, filepath.Join(projectDir, "model", "record", "record.go"), `package record
+
+import "github.com/hydroan/gst/model"
+
+type Record struct {
+	Name string
+
+	*model.Base
+}
+
+func (Record) TableName() string { return "records" }
+`)
+
+	violations := CheckDSLDesign(newProjectIgnoreMatcher())
+
+	if len(violations) != 1 || !strings.Contains(violations[0], "struct Record embeds *model.Base; embed model.Base by value") {
+		t.Fatalf("expected the pointer-embedded base to be reported once, got %#v", violations)
 	}
 }
 
