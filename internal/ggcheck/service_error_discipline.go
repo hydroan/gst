@@ -20,12 +20,6 @@ import (
 // that leave a service method.
 const gstServiceImportPath = "github.com/hydroan/gst/service"
 
-// gstImportPath is the framework package declaring ServiceContext, whose
-// SSE method is a sanctioned error exit: its errors are framework-governed —
-// a setup failure carries a framework-built message, and an error after the
-// stream opened never reaches the response envelope at all.
-const gstImportPath = "github.com/hydroan/gst"
-
 // ServiceErrorDiscipline requires the errors leaving service methods to be
 // built by service.NewError or service.NewErrorWithCause.
 var ServiceErrorDiscipline = Check{

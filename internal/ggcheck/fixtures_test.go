@@ -55,3 +55,34 @@ func writeCheckProjectGoMod(t *testing.T, projectDir string) {
 		t.Fatal(err)
 	}
 }
+
+// writeFrameworkModuleFixture writes a minimal framework source tree under
+// projectDir/internal/gst declaring one copyable module, which is how
+// CopyableModuleNames discovers module-owned service subtrees.
+func writeFrameworkModuleFixture(t *testing.T, projectDir, name string) {
+	t.Helper()
+
+	frameworkDir := filepath.Join(projectDir, "internal", "gst")
+	writeCheckFile(t, filepath.Join(frameworkDir, "go.mod"), "module github.com/hydroan/gst\n\ngo 1.26\n")
+	writeCheckFile(t, filepath.Join(frameworkDir, "module", name, "register.go"), "package "+name+"\n\nfunc Register() {}\n")
+	writeCheckFile(t, filepath.Join(frameworkDir, "module", name, "module.json"), "{}\n")
+}
+
+// assertViolationContains asserts that exactly one violation mentions path and
+// that this violation also carries want.
+func assertViolationContains(t *testing.T, violations []string, path, want string) {
+	t.Helper()
+
+	matched := make([]string, 0, 1)
+	for _, violation := range violations {
+		if strings.Contains(violation, path) {
+			matched = append(matched, violation)
+		}
+	}
+	if len(matched) != 1 {
+		t.Fatalf("expected one violation for %s, got %#v", path, violations)
+	}
+	if !strings.Contains(matched[0], want) {
+		t.Fatalf("expected violation for %s to contain %q, got %q", path, want, matched[0])
+	}
+}

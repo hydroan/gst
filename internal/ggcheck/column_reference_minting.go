@@ -216,15 +216,3 @@ func columnConstructorName(call *ast.CallExpr, gstNames goast.PackageNames) (str
 	}
 	return "", false
 }
-
-// importedNamesOf parses only the imports of filePath and reports how the
-// file refers to the package at importPath (see goast.ImportedNames), and
-// whether it imports the package at all: a file that does not import it
-// needs no full parse.
-func importedNamesOf(filePath, importPath, defaultName string) (goast.PackageNames, bool) {
-	file, err := parser.ParseFile(token.NewFileSet(), filePath, nil, parser.ImportsOnly)
-	if err != nil {
-		return goast.PackageNames{}, false
-	}
-	return goast.ImportedNames(file, importPath, defaultName), goast.FindImportSpec(file, importPath) != nil
-}

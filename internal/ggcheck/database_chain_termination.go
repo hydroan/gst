@@ -14,10 +14,6 @@ import (
 	"github.com/hydroan/gst/internal/goast"
 )
 
-// gstDatabaseImportPath is the framework package whose Database function
-// starts a model-scoped operation chain.
-const gstDatabaseImportPath = "github.com/hydroan/gst/database"
-
 // databaseTerminalMethods lists the gst.Database methods that finish an
 // operation chain. TestDatabaseChainMethodSetsMatchDatabaseInterfaces guards this
 // set against drifting from the interface declaration.
@@ -133,13 +129,6 @@ func checkFileDatabaseChains(filePath string) []string {
 	})
 
 	return violations
-}
-
-// gstDatabaseImportNames returns how filePath refers to the framework database
-// package, and whether it imports the package at all. It parses imports only,
-// so files that do not use the package stay cheap to scan.
-func gstDatabaseImportNames(filePath string) (goast.PackageNames, bool) {
-	return importedNamesOf(filePath, gstDatabaseImportPath, "database")
 }
 
 // isDatabaseChainStart reports whether call is a generic database.Database

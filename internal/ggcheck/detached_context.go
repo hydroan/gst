@@ -23,29 +23,6 @@ import (
 // must pass that context on to the database.
 var detachedContextDirs = []string{"service", "dao", "cronjob", "leader", "lock", "component", "router"}
 
-// databaseEntryPoints are the framework database functions that take a
-// context, for the file that dot-imports the package and calls them without
-// a qualifier; with a qualifier every function of the package counts. The
-// test of this rule pins the list to the package.
-var databaseEntryPoints = []string{
-	"AfterCommit",
-	"Cleanup", "CleanupOn",
-	"Database", "DatabaseOn",
-	"Health", "HealthOn",
-	"Select", "SelectOn",
-	"Transaction", "TransactionOn",
-	"UnionAll", "UnionAllOn",
-}
-
-// contextDerivations are the context functions that derive a context from
-// their first argument: a context derived from a detached one is detached.
-var contextDerivations = []string{
-	"WithCancel", "WithCancelCause",
-	"WithDeadline", "WithDeadlineCause",
-	"WithTimeout", "WithTimeoutCause",
-	"WithValue", "WithoutCancel",
-}
-
 // DetachedContext keeps context.Background() and context.TODO() out of the
 // framework database and dao calls of project code.
 var DetachedContext = Check{
@@ -215,24 +192,6 @@ func contextImportsOf(file *ast.File, modulePath string) contextImports {
 		imports.dao = append(imports.dao, names.Qualifiers...)
 	}
 	return imports
-}
-
-// packageNameOf reads the package clause of the project directory dir — the
-// name an import without an alias is used under — and falls back to the
-// directory's name when no source is there to read.
-func packageNameOf(dir string) string {
-	sources, _ := filepath.Glob(filepath.Join(dir, "*.go"))
-	for _, source := range sources {
-		if strings.HasSuffix(source, "_test.go") {
-			continue
-		}
-		file, err := parser.ParseFile(token.NewFileSet(), source, nil, parser.PackageClauseOnly)
-		if err != nil || file.Name == nil {
-			continue
-		}
-		return file.Name.Name
-	}
-	return filepath.Base(dir)
 }
 
 // contextScope is what one function — a declaration or a closure — knows
