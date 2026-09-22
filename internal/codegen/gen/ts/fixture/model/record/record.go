@@ -5,9 +5,9 @@ package record
 // Record is an item a sample points at.
 type Record struct {
 	// Title is the display title.
-	Title  string  `json:"title"`
-	Parent *Record `json:"parent"`
-	State  State   `json:"state"`
+	Title    string  `json:"title"`
+	Parent   *Record `json:"parent"`
+	Progress State   `json:"state"`
 }
 
 // State is the progress of a record. Its first constant is the zero value.

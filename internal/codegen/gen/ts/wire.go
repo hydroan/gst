@@ -11,8 +11,9 @@ import (
 )
 
 // This file holds the encoding/json rules the declarations follow: which keys
-// a struct encodes to, which values may be null, and which types decide their
-// encoding through methods of their own.
+// a struct encodes to, which values may be null, which types decide their
+// encoding through methods of their own, and how byte slices and map keys
+// encode.
 
 // jsonField is one key of the JSON object a struct encodes to.
 type jsonField struct {
@@ -26,8 +27,13 @@ type jsonField struct {
 	// viaPointer marks a key promoted through an embedded pointer, which a nil
 	// pointer drops together with every other key of the embedded struct.
 	viaPointer bool
-	tagged     bool
-	index      []int
+	// tagged marks a key the json tag names, which wins a tie with the keys of
+	// untagged fields at the same depth.
+	tagged bool
+	// index is the path of field indexes from the encoded struct down to the
+	// field, as reflect.StructField.Index holds it; its length is the depth of
+	// the field.
+	index []int
 }
 
 // jsonFields resolves the keys of the JSON object st encodes to, the way
@@ -251,7 +257,9 @@ var builtins = map[string]builtinKind{
 	"gorm.io/gorm.DeletedAt":       builtinNullableString,
 }
 
-// builtinOf reports the builtin shape of n, if it has one.
+// builtinOf reports the builtin shape of n, if it has one: builtinString for
+// time.Time, and builtinWrapper for datatypes.JSONType[*Options] as for any
+// other instantiation of datatypes.JSONType.
 func builtinOf(n *types.Named) (builtinKind, bool) {
 	obj := n.Origin().Obj()
 	if obj.Pkg() == nil {
@@ -282,6 +290,29 @@ func (g *generator) method(t types.Type, names []string) string {
 		}
 	}
 	return ""
+}
+
+// isByteSlice reports whether encoding/json encodes s as a base64 string: a
+// slice of bytes whose element type has no marshal methods.
+func (g *generator) isByteSlice(s *types.Slice) bool {
+	elem := types.Unalias(s.Elem())
+	b, ok := elem.Underlying().(*types.Basic)
+	return ok && b.Kind() == types.Uint8 && g.method(elem, marshalMethods) == ""
+}
+
+// checkMapKey reports a map key type without a stable JSON encoding. Keys of
+// string and integer types encode as strings; a key type with text marshal
+// methods is keyed differently with and without the JSON v2 experiment.
+func (g *generator) checkMapKey(key types.Type, s site) {
+	key = types.Unalias(key)
+	if method := g.method(key, keyMarshalMethods); method != "" {
+		g.report(s, "map key type %s declares %s, which encoding/json and the JSON v2 experiment apply to keys differently; use a string or integer key type without it", key, method)
+		return
+	}
+	if b, ok := key.Underlying().(*types.Basic); ok && b.Info()&(types.IsString|types.IsInteger) != 0 {
+		return
+	}
+	g.report(s, "map key type %s has no JSON encoding; use a string or integer key type", key)
 }
 
 // nilable reports whether a value of t can be nil: a pointer, slice, map or

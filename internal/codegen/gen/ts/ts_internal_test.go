@@ -28,6 +28,11 @@ var (
 	rejectedRoot = TypeRef{PkgPath: fixtureModule + "/unsupported", Name: "Rejected"}
 )
 
+// TestGenerateMatchesGoldenFiles holds the files generated from Sample against
+// testdata/golden; run it with -update to rewrite them. The golden files carry
+// the examples of the Generate, render, writeInterface, property, expr, ref,
+// builtin, structural, value, files, enumBody, enumZero and constantLiteral doc
+// comments.
 func TestGenerateMatchesGoldenFiles(t *testing.T) {
 	files, err := generateFixture(t, sampleRoot)
 	require.NoError(t, err)
@@ -88,21 +93,29 @@ func TestGenerateReportsTypesWithoutAJSONShape(t *testing.T) {
 	}, subjects)
 }
 
+func TestGenerateReportsRootsItCannotFind(t *testing.T) {
+	_, err := generateFixture(
+		t,
+		TypeRef{PkgPath: fixtureModule + "/model/sample", Name: "Missing"},
+		TypeRef{PkgPath: "example.com/elsewhere", Name: "Sample"},
+	)
+	var diagnostics *DiagnosticsError
+	require.ErrorAs(t, err, &diagnostics)
+
+	require.Contains(t, diagnostics.Error(), "the package declares no type Missing")
+	require.Contains(t, diagnostics.Error(), "the package is not part of module "+fixtureModule)
+}
+
 func TestGenerateNamesThePreludeAfterTheApplication(t *testing.T) {
-	tests := map[string]string{
-		"an unset name falls back to the framework": "",
-		"a plain name": "shop",
-		"a name with characters a file cannot hold": "Sample Shop / v2",
+	tests := map[string]struct{ appName, file string }{
+		"an unset name falls back to the framework": {"", "gst.ts"},
+		"a plain name": {"shop", "shop.ts"},
+		"a name with characters a file cannot hold": {"Sample Shop / v2", "Sample_Shop___v2.ts"},
 	}
-	want := map[string]string{
-		"an unset name falls back to the framework": "gst.ts",
-		"a plain name": "shop.ts",
-		"a name with characters a file cannot hold": "Sample_Shop___v2.ts",
-	}
-	for name, appName := range tests {
+	for name, tt := range tests {
 		t.Run(name, func(t *testing.T) {
 			cfg := fixtureConfig(sampleRoot)
-			cfg.AppName = appName
+			cfg.AppName = tt.appName
 			files, err := newGenerator(cfg, loadFixture(t)).generate()
 			require.NoError(t, err)
 
@@ -110,7 +123,7 @@ func TestGenerateNamesThePreludeAfterTheApplication(t *testing.T) {
 			for _, f := range files {
 				paths = append(paths, f.Path)
 			}
-			require.Contains(t, paths, want[name])
+			require.Contains(t, paths, tt.file)
 		})
 	}
 }

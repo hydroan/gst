@@ -39,7 +39,7 @@ type Sample struct {
 	Grid     [2]int            `json:"grid"`
 	Pointers []*record.Record  `json:"pointers"`
 
-	Status     Status     `json:"status"`
+	Current    Status     `json:"status"`
 	Previous   *Status    `json:"previous,omitempty"`
 	Retired    Status     `json:"retired,omitempty"`
 	History    []Status   `json:"history"`
