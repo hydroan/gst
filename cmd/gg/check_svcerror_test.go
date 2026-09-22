@@ -162,18 +162,54 @@ func (g *Getter) Get(ctx *gst.ServiceContext, req *model.RecordReq) (*model.Reco
 }
 `)
 
+	// A function of a dot-imported project package reads as a function of
+	// the calling package, which declares none such, so the call fails closed
+	// even though the function returns a service error: the checker does not
+	// look into dot-imported project packages.
+	writeCheckFile(t, filepath.Join(projectDir, "helper", "helper.go"), `package helper
+
+import (
+	"net/http"
+
+	"github.com/hydroan/gst/service"
+)
+
+func CheckRecord() error {
+	return service.NewError(http.StatusBadRequest, "bad request")
+}
+`)
+	writeCheckFile(t, filepath.Join(projectDir, "service", "imported", "imported.go"), `package imported
+
+import (
+	"github.com/hydroan/gst"
+	"github.com/hydroan/gst/service"
+	. "tmpapp/helper"
+	"tmpapp/model"
+)
+
+type Getter struct {
+	service.Base[*model.Record, *model.RecordReq, *model.RecordRsp]
+}
+
+func (g *Getter) Get(ctx *gst.ServiceContext, req *model.RecordReq) (*model.RecordRsp, error) {
+	return nil, CheckRecord()
+}
+`)
+
 	violations := CheckServiceErrorDiscipline(newProjectIgnoreMatcher())
 
 	// Violations point at the raw error expressions themselves: the raw
-	// constructor of the dot-imported service on dotted.go:15, the database
-	// calls on laundry.go:23 / sample.go:19 / sample.go:26, the raw
-	// constructor on sample.go:23, the raw constructors the shadowing locals
-	// reach on shadow.go:18 and shadow.go:20, and the calls on locals of
-	// unknown type — a call result on shadow.go:42, a range variable on
-	// shadow.go:52 and a type switch variable on shadow.go:57 — since those
-	// are the places to wrap.
+	// constructor of the dot-imported service on dotted.go:15, the call into
+	// the dot-imported project package on imported.go:15, the database calls
+	// on laundry.go:23 / sample.go:19 / sample.go:26, the raw constructor on
+	// sample.go:23, the raw constructors the shadowing locals reach on
+	// shadow.go:18 and shadow.go:20, and the calls on locals of unknown type —
+	// a call result on shadow.go:42, a range variable on shadow.go:52 and a
+	// type switch variable on shadow.go:57 — since those are the places to
+	// wrap.
 	wantSubstrings := []string{
 		filepath.Join("service", "dotted", "dotted.go") + ":15:",
+		filepath.Join("service", "imported", "imported.go") + ":15:",
 		filepath.Join("service", "laundry", "laundry.go") + ":23:",
 		filepath.Join("service", "sample", "sample.go") + ":19:",
 		filepath.Join("service", "sample", "sample.go") + ":23:",
