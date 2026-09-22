@@ -408,8 +408,10 @@ func (v HTTPVerb) String() string {
 }
 
 // HTTPMethod returns the HTTP request method of the route registered for the
-// verb, eg. Create, CreateMany and Import all map to "POST". Unknown verbs
-// return an empty string.
+// verb, eg. Create, CreateMany and Import all map to "POST", and List, Get,
+// Export and SSE to "GET". Unknown verbs return an empty string. It is the
+// one table of verb methods: the framework router registers routes by it,
+// and gg reads route methods from it.
 func (v HTTPVerb) HTTPMethod() string {
 	switch v {
 	case Create, CreateMany, Import:

@@ -361,110 +361,68 @@ func register[M types.Model, REQ types.Request, RSP types.Response](router *gin.
 	mu.Lock()
 	defer mu.Unlock()
 
-	base := router.BasePath()
+	endpoint := gopath.Join(router.BasePath(), path)
 
 	// Everything except the public route group is documented as requiring
 	// authentication, which is the safe default for custom sub groups.
 	authRequired := router != pub
 
-	if verbMap[consts.Create] {
-		endpoint := gopath.Join(base, path)
-		router.POST(path, controller.CreateFactory[M, REQ, RSP](cfg...))
-		registerRoute(endpoint, http.MethodPost)
+	// handle serves a verb's controller under the method the verb maps to,
+	// consts.HTTPVerb.HTTPMethod: the one table gg routes, gg route-tree and
+	// gg gen's route ignore rules read the method from as well.
+	handle := func(verb consts.HTTPVerb, handler gin.HandlerFunc) {
+		method := verb.HTTPMethod()
+		router.Handle(method, path, handler)
+		registerRoute(endpoint, method)
 		middleware.RouteManager.Add(endpoint)
-		openapigen.Set[M, REQ, RSP](endpoint, authRequired, consts.Create)
-	}
-	if verbMap[consts.Delete] {
-		endpoint := gopath.Join(base, path)
-		router.DELETE(path, controller.DeleteFactory[M, REQ, RSP](cfg...))
-		registerRoute(endpoint, http.MethodDelete)
-		middleware.RouteManager.Add(endpoint)
-		openapigen.Set[M, REQ, RSP](endpoint, authRequired, consts.Delete)
-	}
-	if verbMap[consts.Update] {
-		endpoint := gopath.Join(base, path)
-		router.PUT(path, controller.UpdateFactory[M, REQ, RSP](cfg...))
-		registerRoute(endpoint, http.MethodPut)
-		middleware.RouteManager.Add(endpoint)
-		openapigen.Set[M, REQ, RSP](endpoint, authRequired, consts.Update)
-	}
-	if verbMap[consts.Patch] {
-		endpoint := gopath.Join(base, path)
-		router.PATCH(path, controller.PatchFactory[M, REQ, RSP](cfg...))
-		registerRoute(endpoint, http.MethodPatch)
-		middleware.RouteManager.Add(endpoint)
-		openapigen.Set[M, REQ, RSP](endpoint, authRequired, consts.Patch)
-	}
-	if verbMap[consts.List] {
-		endpoint := gopath.Join(base, path)
-		router.GET(path, controller.ListFactory[M, REQ, RSP](cfg...))
-		registerRoute(endpoint, http.MethodGet)
-		middleware.RouteManager.Add(endpoint)
-		openapigen.Set[M, REQ, RSP](endpoint, authRequired, consts.List)
+		openapigen.Set[M, REQ, RSP](endpoint, authRequired, verb)
 	}
 
+	if verbMap[consts.Create] {
+		handle(consts.Create, controller.CreateFactory[M, REQ, RSP](cfg...))
+	}
+	if verbMap[consts.Delete] {
+		handle(consts.Delete, controller.DeleteFactory[M, REQ, RSP](cfg...))
+	}
+	if verbMap[consts.Update] {
+		handle(consts.Update, controller.UpdateFactory[M, REQ, RSP](cfg...))
+	}
+	if verbMap[consts.Patch] {
+		handle(consts.Patch, controller.PatchFactory[M, REQ, RSP](cfg...))
+	}
+	if verbMap[consts.List] {
+		handle(consts.List, controller.ListFactory[M, REQ, RSP](cfg...))
+	}
 	if verbMap[consts.Get] {
-		endpoint := gopath.Join(base, path)
-		router.GET(path, controller.GetFactory[M, REQ, RSP](cfg...))
-		registerRoute(endpoint, http.MethodGet)
-		middleware.RouteManager.Add(endpoint)
-		openapigen.Set[M, REQ, RSP](endpoint, authRequired, consts.Get)
+		handle(consts.Get, controller.GetFactory[M, REQ, RSP](cfg...))
 	}
 
 	if verbMap[consts.CreateMany] {
-		endpoint := gopath.Join(base, path)
-		router.POST(path, controller.CreateManyFactory[M, REQ, RSP](cfg...))
-		registerRoute(endpoint, http.MethodPost)
-		middleware.RouteManager.Add(endpoint)
-		openapigen.Set[M, REQ, RSP](endpoint, authRequired, consts.CreateMany)
+		handle(consts.CreateMany, controller.CreateManyFactory[M, REQ, RSP](cfg...))
 	}
 	if verbMap[consts.DeleteMany] {
-		endpoint := gopath.Join(base, path)
-		router.DELETE(path, controller.DeleteManyFactory[M, REQ, RSP](cfg...))
-		registerRoute(endpoint, http.MethodDelete)
-		middleware.RouteManager.Add(endpoint)
-		openapigen.Set[M, REQ, RSP](endpoint, authRequired, consts.DeleteMany)
+		handle(consts.DeleteMany, controller.DeleteManyFactory[M, REQ, RSP](cfg...))
 	}
 	if verbMap[consts.UpdateMany] {
-		endpoint := gopath.Join(base, path)
-		router.PUT(path, controller.UpdateManyFactory[M, REQ, RSP](cfg...))
-		registerRoute(endpoint, http.MethodPut)
-		middleware.RouteManager.Add(endpoint)
-		openapigen.Set[M, REQ, RSP](endpoint, authRequired, consts.UpdateMany)
+		handle(consts.UpdateMany, controller.UpdateManyFactory[M, REQ, RSP](cfg...))
 	}
 	if verbMap[consts.PatchMany] {
-		endpoint := gopath.Join(base, path)
-		router.PATCH(path, controller.PatchManyFactory[M, REQ, RSP](cfg...))
-		registerRoute(endpoint, http.MethodPatch)
-		middleware.RouteManager.Add(endpoint)
-		openapigen.Set[M, REQ, RSP](endpoint, authRequired, consts.PatchMany)
+		handle(consts.PatchMany, controller.PatchManyFactory[M, REQ, RSP](cfg...))
 	}
 
 	if verbMap[consts.Import] {
-		endpoint := gopath.Join(base, path)
-		router.POST(path, controller.ImportFactory[M, REQ, RSP](cfg...))
-		registerRoute(endpoint, http.MethodPost)
-		middleware.RouteManager.Add(endpoint)
-		openapigen.Set[M, REQ, RSP](endpoint, authRequired, consts.Import)
+		handle(consts.Import, controller.ImportFactory[M, REQ, RSP](cfg...))
 	}
 	if verbMap[consts.Export] {
-		endpoint := gopath.Join(base, path)
-		router.GET(path, controller.ExportFactory[M, REQ, RSP](cfg...))
-		registerRoute(endpoint, http.MethodGet)
-		middleware.RouteManager.Add(endpoint)
-		openapigen.Set[M, REQ, RSP](endpoint, authRequired, consts.Export)
+		handle(consts.Export, controller.ExportFactory[M, REQ, RSP](cfg...))
 	}
 
 	if verbMap[consts.SSE] {
-		endpoint := gopath.Join(base, path)
-		router.GET(path, controller.SSEFactory[M, REQ, RSP](cfg...))
-		registerRoute(endpoint, http.MethodGet)
-		middleware.RouteManager.Add(endpoint)
+		handle(consts.SSE, controller.SSEFactory[M, REQ, RSP](cfg...))
 		// Streaming responses are exempt from request-scoped response
 		// treatment (body capture, circuit breaking, request timeouts); the
 		// registry is how the middlewares concerned recognize them.
-		middleware.MarkStreamingRoute(http.MethodGet, endpoint)
-		openapigen.Set[M, REQ, RSP](endpoint, authRequired, consts.SSE)
+		middleware.MarkStreamingRoute(consts.SSE.HTTPMethod(), endpoint)
 	}
 }
 

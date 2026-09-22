@@ -24,3 +24,31 @@ func TestRegisterPanicsOnABlankRouteOrNoVerbs(t *testing.T) {
 		router.Register[*modelregistry.Empty, *modelregistry.Empty, *modelregistry.Empty](group, "samples", nil)
 	})
 }
+
+// TestRegisterServesEveryVerbUnderItsMethod pins the method the router serves
+// each verb under to consts.HTTPVerb.HTTPMethod, the table gg routes, gg
+// route-tree and gg gen's route ignore rules read as well: the engine routes
+// the method, and Routes records it.
+func TestRegisterServesEveryVerbUnderItsMethod(t *testing.T) {
+	engine := gin.New()
+	group := engine.Group(consts.APIPathPrefix)
+	verbs := []consts.HTTPVerb{
+		consts.Create, consts.Delete, consts.Update, consts.Patch, consts.List, consts.Get,
+		consts.CreateMany, consts.DeleteMany, consts.UpdateMany, consts.PatchMany,
+		consts.Import, consts.Export, consts.SSE,
+	}
+	for _, verb := range verbs {
+		router.Register[*modelregistry.Empty, *modelregistry.Empty, *modelregistry.Empty](group, "verb-methods/"+string(verb), nil, verb)
+	}
+
+	served := make(map[string]string, len(verbs))
+	for _, route := range engine.Routes() {
+		served[route.Path] = route.Method
+	}
+	recorded := router.Routes()
+	for _, verb := range verbs {
+		path := consts.APIPathPrefix + "/verb-methods/" + string(verb)
+		require.Equal(t, verb.HTTPMethod(), served[path], "verb %s", verb)
+		require.Equal(t, []string{verb.HTTPMethod()}, recorded[path], "verb %s", verb)
+	}
+}
