@@ -80,7 +80,7 @@ func TestBaseAliasesServiceRegistryBase(t *testing.T) {
 // in the generated form embeds.
 func TestRegisterInjectsTheServiceLogger(t *testing.T) {
 	previous := logger.Service
-	logger.Service = zap.New("")
+	logger.Service = zap.Fallback("service")
 	t.Cleanup(func() { logger.Service = previous })
 
 	type base = service.Base[*testUser, *testUser, *testUser]

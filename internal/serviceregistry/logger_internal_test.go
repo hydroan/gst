@@ -31,7 +31,7 @@ type pointerBaseService struct {
 // registration made after the service logger is set, which injects the logger
 // on the spot.
 func TestRegisterPanicsOnAPointerEmbeddedBaseOnceTheLoggerExists(t *testing.T) {
-	setServiceLogger(t, zap.New(""))
+	setServiceLogger(t, zap.Fallback("service"))
 
 	require.Panics(t, func() {
 		Register[*loggerTestRecord, *loggerTestRecord, *loggerTestRecord](
@@ -56,7 +56,7 @@ func TestInitPanicsOnAPointerEmbeddedBaseRegisteredBeforeTheLogger(t *testing.T)
 	// Init runs once per process. A fresh once lets the pass run here, and
 	// again when the test is repeated.
 	initOnce = sync.Once{}
-	logger.Service = zap.New("")
+	logger.Service = zap.Fallback("service")
 	require.Panics(t, func() { _ = Init() })
 }
 

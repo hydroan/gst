@@ -21,7 +21,7 @@ type testRecord struct {
 }
 
 func TestRegisterAndResolve(t *testing.T) {
-	logger.Service = zap.New("")
+	logger.Service = zap.Fallback("service")
 
 	type svc struct {
 		serviceregistry.Base[*testUser, *testUser, *testUser]

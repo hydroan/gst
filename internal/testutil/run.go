@@ -139,8 +139,12 @@ func (s Server) prepare() (release func(), afterMigrate func(), err error) {
 
 	// A log directory of its own keeps the logs of a test run out of the
 	// package source tree, where they would otherwise pile up next to the code,
-	// and file mode keeps them out of the test output, where every stream would
-	// otherwise go with stdout the default.
+	// and the settings below keep them out of the test output, where every
+	// stream would otherwise go with stdout the default. File mode alone is not
+	// enough: the global stream still writes to stdout when it names no file,
+	// and the console mirror copies it there when it names one. So the global
+	// stream gets a file of its own, named after what stdout mode calls it,
+	// and the mirror is turned off.
 	//
 	// The files in it are not evidence a test can read back: the directory
 	// goes away at release, and every file sink buffers its entries (see the
@@ -152,6 +156,8 @@ func (s Server) prepare() (release func(), afterMigrate func(), err error) {
 	// tests.
 	os.Setenv(config.LOGGER_OUTPUT, string(config.LoggerOutputFile))
 	os.Setenv(config.LOGGER_DIR, logDir)
+	os.Setenv(config.LOGGER_FILE, "global.log")
+	os.Setenv(config.LOGGER_CONSOLE, "false")
 	listenOnFreePort()
 
 	cleanDatabase, publishTemplate, err := testcontainer.SetupDatabase(s.Database)

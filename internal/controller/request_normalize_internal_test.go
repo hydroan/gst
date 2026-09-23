@@ -18,8 +18,6 @@ import (
 	"github.com/hydroan/gst/internal/serviceregistry"
 	"github.com/hydroan/gst/internal/testutil/swap"
 	"github.com/hydroan/gst/internal/types"
-	"github.com/hydroan/gst/logger"
-	"github.com/hydroan/gst/logger/zap"
 	"github.com/stretchr/testify/require"
 )
 
@@ -170,7 +168,6 @@ func TestCreateFactoryBindFailureOnMalformedJSON(t *testing.T) {
 // payload live there, pinned by TestCreateFactoryRestoresNullBodyRequest.
 func TestCreateFactoryRequiresBodyOnModelPath(t *testing.T) {
 	gin.SetMode(gin.TestMode)
-	logger.Controller = zap.New("")
 
 	engine := gin.New()
 	engine.POST("/required-body-create-probes",
@@ -192,7 +189,6 @@ func TestCreateFactoryRequiresBodyOnModelPath(t *testing.T) {
 // bare io.EOF text.
 func TestUpdateFactoryRequiresBody(t *testing.T) {
 	gin.SetMode(gin.TestMode)
-	logger.Controller = zap.New("")
 
 	engine := gin.New()
 	engine.PUT("/required-body-probes/:id",
@@ -218,7 +214,6 @@ func TestUpdateFactoryRequiresBody(t *testing.T) {
 // failure into a nil-dereference panic instead of a 400.
 func TestDeleteManyFactoryBindFailureRendersClientSafeMessage(t *testing.T) {
 	gin.SetMode(gin.TestMode)
-	logger.Controller = zap.New("")
 
 	engine := gin.New()
 	engine.DELETE("/bind-error-delete-probes/batch",
@@ -240,7 +235,6 @@ func TestDeleteManyFactoryBindFailureRendersClientSafeMessage(t *testing.T) {
 // single-resource ones.
 func TestUpdateManyFactoryBindFailureRendersInvalidParamCode(t *testing.T) {
 	gin.SetMode(gin.TestMode)
-	logger.Controller = zap.New("")
 
 	engine := gin.New()
 	engine.PUT("/bind-error-code-probes/batch",
@@ -397,7 +391,6 @@ func TestCompactNilSliceElements(t *testing.T) {
 func newNormalizeProbeEngine(t *testing.T, route string) *gin.Engine {
 	t.Helper()
 	gin.SetMode(gin.TestMode)
-	logger.Controller = zap.New("")
 
 	registerTestService[*normalizeProbeModel, *normalizeProbeReq, *normalizeProbeRsp](consts.PHASE_CREATE, route, &normalizeProbeService{})
 	engine := gin.New()

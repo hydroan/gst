@@ -32,10 +32,13 @@ func runTests(m *testing.M) int {
 	defer func() { _ = release() }()
 
 	// File mode keeps the logs out of the test output, where every stream
-	// would otherwise go with stdout the default, and a log directory of its
-	// own keeps them out of the package source tree: log files written there
-	// change with every run, which go's test cache takes for changed source in
-	// every test that reads or lists that tree.
+	// would otherwise go with stdout the default, once the global stream has a
+	// file of its own and the console mirror is off: in file mode the global
+	// stream still writes to stdout when it names no file, and the mirror
+	// copies it there when it names one. A log directory of its own keeps the
+	// files out of the package source tree: log files written there change
+	// with every run, which go's test cache takes for changed source in every
+	// test that reads or lists that tree.
 	logDir, err := os.MkdirTemp("", "gst_logs_")
 	if err != nil {
 		panic(err)
@@ -43,6 +46,8 @@ func runTests(m *testing.M) int {
 	defer func() { _ = os.RemoveAll(logDir) }()
 	os.Setenv(config.LOGGER_OUTPUT, string(config.LoggerOutputFile))
 	os.Setenv(config.LOGGER_DIR, logDir)
+	os.Setenv(config.LOGGER_FILE, "global.log")
+	os.Setenv(config.LOGGER_CONSOLE, "false")
 
 	if err := config.Init(); err != nil {
 		panic(err)

@@ -13,8 +13,6 @@ import (
 	"github.com/hydroan/gst/internal/modelregistry"
 	"github.com/hydroan/gst/internal/serviceregistry"
 	"github.com/hydroan/gst/internal/types"
-	"github.com/hydroan/gst/logger"
-	"github.com/hydroan/gst/logger/zap"
 	"github.com/stretchr/testify/require"
 )
 
@@ -123,7 +121,6 @@ func (s *exportVirtualSampleService) Export(_ *types.ServiceContext, ms ...*expo
 
 func TestExportFactoryVirtualModelSkipsListing(t *testing.T) {
 	gin.SetMode(gin.TestMode)
-	logger.Controller = zap.New("")
 
 	// A virtual model has no table, so the handler must never reach the
 	// controller-side listing.
@@ -180,7 +177,6 @@ func (s *exportFormatSampleService) Filter(_ *types.ServiceContext, m *exportFor
 
 func TestExportFactoryKeepsFormatParamFromModelBind(t *testing.T) {
 	gin.SetMode(gin.TestMode)
-	logger.Controller = zap.New("")
 
 	const route = "test/export_format_samples/export"
 	svc := exportFormatSampleSvc

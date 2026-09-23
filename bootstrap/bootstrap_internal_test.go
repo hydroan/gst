@@ -178,8 +178,13 @@ func bootstrapProcess(t *testing.T) {
 			errBootstrap = err
 			return
 		}
+		// File mode keeps the process's logs out of the test output once the
+		// global stream has a file of its own and the console mirror is off;
+		// otherwise the global stream still reaches stdout.
 		t.Setenv(config.LOGGER_OUTPUT, string(config.LoggerOutputFile))
 		t.Setenv(config.LOGGER_DIR, bootstrapLogDir)
+		t.Setenv(config.LOGGER_FILE, "global.log")
+		t.Setenv(config.LOGGER_CONSOLE, "false")
 		t.Setenv(config.DATABASE_AUTO_MIGRATE, "true")
 		t.Setenv(config.SERVER_LISTEN, "127.0.0.1")
 		t.Setenv(config.SERVER_PORT, strconv.Itoa(port))

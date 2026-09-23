@@ -3,6 +3,7 @@ package tunnel_test
 import (
 	"fmt"
 	"net"
+	"os"
 	"testing"
 
 	"github.com/hydroan/gst/bootstrap"
@@ -33,6 +34,25 @@ var (
 	helloPayload1 = HelloPayload{Field3: "hello1", Field4: 3.14}
 	helloPayload2 = HelloPayload{Field3: "hello2", Field4: 3.14}
 )
+
+// TestMain gives the process TestSession bootstraps a scratch log directory,
+// removed once the tests are done, and keeps its logs out of the test output:
+// file mode, with a file of its own for the global stream and the console
+// mirror off, since otherwise the global stream still reaches stdout.
+func TestMain(m *testing.M) {
+	dir, err := os.MkdirTemp("", "gst_logs_")
+	if err != nil {
+		panic(err)
+	}
+	os.Setenv(config.LOGGER_OUTPUT, string(config.LoggerOutputFile))
+	os.Setenv(config.LOGGER_DIR, dir)
+	os.Setenv(config.LOGGER_FILE, "global.log")
+	os.Setenv(config.LOGGER_CONSOLE, "false")
+
+	code := m.Run()
+	_ = os.RemoveAll(dir)
+	os.Exit(code)
+}
 
 func TestSession(t *testing.T) {
 	t.Setenv(config.DATABASE_AUTO_MIGRATE, "true")

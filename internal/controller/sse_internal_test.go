@@ -14,8 +14,6 @@ import (
 	"github.com/hydroan/gst/internal/sse"
 	"github.com/hydroan/gst/internal/testutil/oteltest"
 	"github.com/hydroan/gst/internal/types"
-	"github.com/hydroan/gst/logger"
-	"github.com/hydroan/gst/logger/zap"
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/otel/codes"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
@@ -39,7 +37,6 @@ func (*sseSampleService) SSE(ctx *types.ServiceContext) error {
 // neither span is marked as failed although the service returned the ending.
 func TestSSEFactoryRecordsAStreamEndedByShutdownAsInterrupted(t *testing.T) {
 	gin.SetMode(gin.TestMode)
-	logger.Controller = zap.New("")
 	oteltest.Enable(t)
 	recorder := oteltest.Record(t)
 

@@ -435,7 +435,7 @@ func TestAccountChangePassword(t *testing.T) {
 		require.NoError(t, redis.Set(t.Context(), accountSessionDataKey(t, syncFailUser.SessionID), "not-a-session", time.Hour))
 
 		svc := &serviceiamaccount.ChangePasswordService{}
-		svc.Logger = loggerzap.New("")
+		svc.Logger = loggerzap.Fallback("service")
 
 		resp, err := svc.Create(serviceCtx, &iam.ChangePasswordReq{
 			OldPassword: syncFailUser.Password,
@@ -485,7 +485,7 @@ func TestAccountChangePassword(t *testing.T) {
 			consts.PHASE_CREATE,
 		)
 		svc := &serviceiamaccount.ChangePasswordService{}
-		svc.Logger = loggerzap.New("")
+		svc.Logger = loggerzap.Fallback("service")
 
 		_, err = svc.Create(serviceCtx, &iam.ChangePasswordReq{
 			OldPassword: revokeFailUser.Password,

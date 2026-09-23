@@ -14,8 +14,6 @@ import (
 	"github.com/hydroan/gst/internal/serviceregistry"
 	"github.com/hydroan/gst/internal/testutil/oteltest"
 	"github.com/hydroan/gst/internal/types"
-	"github.com/hydroan/gst/logger"
-	"github.com/hydroan/gst/logger/zap"
 	"github.com/stretchr/testify/require"
 )
 
@@ -72,7 +70,6 @@ func (s *factoryStopService) Create(*types.ServiceContext, *factoryRouteReq) (*f
 // must each receive the requests of their own route.
 func TestCreateFactoryDispatchesActionServiceByRoute(t *testing.T) {
 	gin.SetMode(gin.TestMode)
-	logger.Controller = zap.New("")
 
 	registerTestService[*factoryRouteModel, *factoryRouteReq, *factoryRouteRsp](consts.PHASE_CREATE, "samples/:id/start", &factoryStartService{})
 	registerTestService[*factoryRouteModel, *factoryRouteReq, *factoryRouteRsp](consts.PHASE_CREATE, "samples/:id/stop", &factoryStopService{})
