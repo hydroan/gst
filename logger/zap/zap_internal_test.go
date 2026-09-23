@@ -267,6 +267,25 @@ func TestCleanFlushesBufferedFileSink(t *testing.T) {
 	}
 }
 
+// TestCleanLeavesARemovedLogDirectoryRemoved pins what a test harness relies
+// on when it removes its log directory after Clean: the stopped writers put
+// nothing more on disk, so an entry logged afterwards cannot recreate the
+// directory the way a writer opening its file on its first write does.
+func TestCleanLeavesARemovedLogDirectoryRemoved(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "logs")
+	withLogWriterConfig(t, dir, "sample.log")
+
+	log := New("sample.log")
+	log.Infoz("logged before clean")
+	Clean()
+	require.NoError(t, os.RemoveAll(dir))
+
+	log.Infoz("logged after clean")
+	// A running writer would have written the entry out by now.
+	time.Sleep(defaultLogFlushInterval + 200*time.Millisecond)
+	require.NoDirExists(t, dir)
+}
+
 func TestNewLogEncoderTimestampIsUTCAndOrdersWithinASecond(t *testing.T) {
 	encoder := newLogEncoder()
 	at := time.Date(2026, 7, 29, 14, 3, 8, 243834831, time.FixedZone("", 8*60*60))
