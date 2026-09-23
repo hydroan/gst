@@ -83,11 +83,12 @@ func writeProjectGoModAgainstRealFramework(t *testing.T, projectDir string) {
 }
 
 // frameworkSourcesRecorded makes recordFrameworkSources record the sources
-// once per test binary: go test keeps what a binary read for its whole run,
-// and the framework does not change under a running test.
+// once per test binary, and errFrameworkSources keeps what stopped that
+// recording for every later caller: go test keeps what a binary read for its
+// whole run, and the framework does not change under a running test.
 var (
 	frameworkSourcesRecorded sync.Once
-	frameworkSourcesErr      error
+	errFrameworkSources      error
 )
 
 // recordFrameworkSources records the framework's Go sources under root as
@@ -114,25 +115,25 @@ func recordFrameworkSources(t *testing.T, root string) {
 		list.Dir = root
 		output, err := list.Output()
 		if err != nil {
-			frameworkSourcesErr = errors.Wrap(err, "list the framework packages")
+			errFrameworkSources = errors.Wrap(err, "list the framework packages")
 			return
 		}
 		for line := range strings.Lines(string(output)) {
 			fields := strings.Split(strings.TrimSuffix(line, "\n"), "\t")
 			if _, err := os.Stat(fields[0]); err != nil {
-				frameworkSourcesErr = err
+				errFrameworkSources = err
 				return
 			}
 			for _, name := range fields[1:] {
 				if _, err := os.ReadFile(filepath.Join(fields[0], name)); err != nil {
-					frameworkSourcesErr = err
+					errFrameworkSources = err
 					return
 				}
 			}
 		}
 	})
-	if frameworkSourcesErr != nil {
-		t.Fatal(frameworkSourcesErr)
+	if errFrameworkSources != nil {
+		t.Fatal(errFrameworkSources)
 	}
 }
 
