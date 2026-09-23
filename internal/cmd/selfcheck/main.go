@@ -13,6 +13,15 @@
 // suffix and still use nothing unexported of its package, or even declare the
 // external test package; the check reports both, so an internal test is always
 // one that could not be written from outside.
+//
+// # Thin forwarding
+//
+// A function whose only work is handing its own parameters, unchanged and in
+// order, to another function is a layer that adds a name and nothing else.
+// The check reports it where the layer can go: the function has a single use,
+// which can call the other one itself, or the function it forwards to has no
+// other use, so the two can be one. checkForwarding spells out what counts,
+// and what the check leaves alone because it cannot count every use.
 package main
 
 import (
@@ -45,6 +54,7 @@ type check struct {
 // checks lists the rules in the order they run and report.
 var checks = []check{
 	{name: "testplacement", run: checkTestPlacement},
+	{name: "forwarding", run: checkForwarding},
 }
 
 func main() {
