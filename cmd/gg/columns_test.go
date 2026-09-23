@@ -166,9 +166,9 @@ func (Rule) Design() {
 `)
 
 	require.NoError(t, genRunWithOptions(genRunOptions{Quiet: true}))
-	columns, err := os.ReadFile(filepath.Join("model", "sample", "rule.gen.go"))
+	columnFile, err := os.ReadFile(filepath.Join("model", "sample", "rule.gen.go"))
 	require.NoError(t, err)
-	require.Contains(t, string(columns), `gst.NewColumn[*Rule, gst.Permission]("permission")`)
+	require.Contains(t, string(columnFile), `gst.NewColumn[*Rule, gst.Permission]("permission")`)
 
 	// The project only builds when every import the generated file carries is
 	// one it can reach.
