@@ -6,11 +6,10 @@ import (
 	"slices"
 	"testing"
 
-	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/bootstrap"
 	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/internal/testutil/testcontainer"
-	pkgzap "github.com/hydroan/gst/logger/zap"
+	"github.com/hydroan/gst/internal/testutil/testlog"
 )
 
 // Server declares what a test package needs before its tests can run. Every
@@ -128,42 +127,17 @@ func (s Server) prepare() (release func(), afterMigrate func(), err error) {
 	// there is nothing to publish.
 	afterMigrate = func() {}
 
-	logDir, err := os.MkdirTemp("", "gst_logs_")
+	// The logs of the run go to a directory of their own, out of the test
+	// output and the package source tree.
+	_, releaseLogs, err := testlog.ToTempDir()
 	if err != nil {
-		return release, afterMigrate, errors.Wrap(err, "failed to create the test log directory")
+		return release, afterMigrate, err
 	}
 	releases = append(releases, func() {
-		// The log writers are stopped first. They hold entries back for up to
-		// a second, and a file writer opens its file on its first write,
-		// creating the directory when it is missing, so a write arriving after
-		// the removal would recreate the directory and leave it behind.
-		pkgzap.Clean()
-		if removeErr := os.RemoveAll(logDir); removeErr != nil {
-			reportReleaseFailure("log directory", removeErr)
+		if releaseErr := releaseLogs(); releaseErr != nil {
+			reportReleaseFailure("log directory", releaseErr)
 		}
 	})
-
-	// A log directory of its own keeps the logs of a test run out of the
-	// package source tree, where they would otherwise pile up next to the code,
-	// and the settings below keep them out of the test output, where every
-	// stream would otherwise go with stdout the default. File mode alone is not
-	// enough: the global stream still writes to stdout when it names no file,
-	// and the console mirror copies it there when it names one. So the global
-	// stream gets a file of its own, named after what stdout mode calls it,
-	// and the mirror is turned off.
-	//
-	// The files in it are not evidence a test can read back: the directory
-	// goes away at release, and every file sink buffers its entries (see the
-	// buffered writer in logger/zap), so a test process that ends within the
-	// flush interval leaves most of them empty. A test that needs to assert
-	// on log output instead swaps the package logger it cares about for a
-	// scratch file logger under its own t.TempDir and flushes that one before
-	// reading — see withCronjobLoggerConfig and readLogEntry in the cronjob
-	// tests.
-	os.Setenv(config.LOGGER_OUTPUT, string(config.LoggerOutputFile))
-	os.Setenv(config.LOGGER_DIR, logDir)
-	os.Setenv(config.LOGGER_FILE, "global.log")
-	os.Setenv(config.LOGGER_CONSOLE, "false")
 	listenOnFreePort()
 
 	cleanDatabase, publishTemplate, err := testcontainer.SetupDatabase(s.Database)

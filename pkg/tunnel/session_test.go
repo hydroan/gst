@@ -9,7 +9,7 @@ import (
 	"github.com/hydroan/gst/bootstrap"
 	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/consts"
-	pkgzap "github.com/hydroan/gst/logger/zap"
+	"github.com/hydroan/gst/internal/testutil/testlog"
 	"github.com/hydroan/gst/pkg/tunnel"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -37,24 +37,16 @@ var (
 )
 
 // TestMain gives the process TestSession bootstraps a scratch log directory,
-// removed once the tests are done, and keeps its logs out of the test output:
-// file mode, with a file of its own for the global stream and the console
-// mirror off, since otherwise the global stream still reaches stdout.
+// which keeps its logs out of the test output, and removes it once the tests
+// are done.
 func TestMain(m *testing.M) {
-	dir, err := os.MkdirTemp("", "gst_logs_")
+	_, releaseLogs, err := testlog.ToTempDir()
 	if err != nil {
 		panic(err)
 	}
-	os.Setenv(config.LOGGER_OUTPUT, string(config.LoggerOutputFile))
-	os.Setenv(config.LOGGER_DIR, dir)
-	os.Setenv(config.LOGGER_FILE, "global.log")
-	os.Setenv(config.LOGGER_CONSOLE, "false")
 
 	code := m.Run()
-	// Stopping the log writers first keeps a write arriving after the removal
-	// from recreating the directory.
-	pkgzap.Clean()
-	_ = os.RemoveAll(dir)
+	_ = releaseLogs()
 	os.Exit(code)
 }
 

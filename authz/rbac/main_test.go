@@ -4,8 +4,8 @@ import (
 	"os"
 	"testing"
 
-	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/internal/dbruntime"
+	"github.com/hydroan/gst/internal/testutil/testlog"
 	zaplogger "github.com/hydroan/gst/logger/zap"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
@@ -24,26 +24,14 @@ func TestMain(m *testing.M) {
 func runTests(m *testing.M) int {
 	// Opening a transaction logs through logger.Database, and a failed in-memory
 	// update logs through logger.Authz. Both are nil until the loggers are wired.
-	// The process runs no config.Init, so the output is set here. File mode
-	// keeps the logs out of the test output once the global stream names a
-	// file of its own: naming none, it would still write to stdout. The console
-	// mirror is off already, as it is in any config never initialized. A log
-	// directory of its own keeps the files out of the package source tree: log
-	// files written there change with every run, which go's test cache takes
-	// for changed source in every test that reads or lists that tree.
-	logDir, err := os.MkdirTemp("", "gst_logs_")
+	// The logs go to a directory of their own, out of the test output and the
+	// package source tree; the process runs no config.Init, and ToTempDir
+	// writes the settings to config.App for the logger Init to read.
+	_, releaseLogs, err := testlog.ToTempDir()
 	if err != nil {
 		panic(err)
 	}
-	defer func() {
-		// Stopping the log writers first keeps a write arriving after the
-		// removal from recreating the directory.
-		zaplogger.Clean()
-		_ = os.RemoveAll(logDir)
-	}()
-	config.App.Logger.Output = config.LoggerOutputFile
-	config.App.Logger.Dir = logDir
-	config.App.Logger.File = "global.log"
+	defer func() { _ = releaseLogs() }()
 	if err = zaplogger.Init(); err != nil {
 		panic(err)
 	}

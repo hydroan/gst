@@ -18,24 +18,22 @@ import (
 	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/internal/lifecycle"
 	"github.com/hydroan/gst/internal/router"
-	pkgzap "github.com/hydroan/gst/logger/zap"
+	"github.com/hydroan/gst/internal/testutil/testlog"
 	"github.com/stretchr/testify/require"
 )
 
-// TestMain gives the bootstrapped process a scratch log directory that
-// outlives the tests sharing it, and removes it once they are done.
+// TestMain gives the bootstrapped process a scratch log directory, which keeps
+// its logs out of the test output and outlives the tests sharing it, and
+// removes it once they are done.
 func TestMain(m *testing.M) {
-	dir, err := os.MkdirTemp("", "gst_bootstrap_test_")
+	dir, releaseLogs, err := testlog.ToTempDir()
 	if err != nil {
 		panic(err)
 	}
 	bootstrapLogDir = dir
 
 	code := m.Run()
-	// Stopping the log writers first keeps a write arriving after the removal
-	// from recreating the directory.
-	pkgzap.Clean()
-	_ = os.RemoveAll(dir)
+	_ = releaseLogs()
 	os.Exit(code)
 }
 
@@ -182,13 +180,6 @@ func bootstrapProcess(t *testing.T) {
 			errBootstrap = err
 			return
 		}
-		// File mode keeps the process's logs out of the test output once the
-		// global stream has a file of its own and the console mirror is off;
-		// otherwise the global stream still reaches stdout.
-		t.Setenv(config.LOGGER_OUTPUT, string(config.LoggerOutputFile))
-		t.Setenv(config.LOGGER_DIR, bootstrapLogDir)
-		t.Setenv(config.LOGGER_FILE, "global.log")
-		t.Setenv(config.LOGGER_CONSOLE, "false")
 		t.Setenv(config.DATABASE_AUTO_MIGRATE, "true")
 		t.Setenv(config.SERVER_LISTEN, "127.0.0.1")
 		t.Setenv(config.SERVER_PORT, strconv.Itoa(port))
