@@ -24,7 +24,7 @@ import (
 func TestMigrateProgramLinksWhatMainLinks(t *testing.T) {
 	projectDir := t.TempDir()
 	for _, dir := range ggconst.ProjectImportDirs {
-		if dir == ggconst.SubDirLock {
+		if dir == ggconst.DirLock {
 			// Left missing on purpose.
 			continue
 		}
@@ -41,7 +41,7 @@ func TestMigrateProgramLinksWhatMainLinks(t *testing.T) {
 
 	for _, dir := range ggconst.ProjectImportDirs {
 		want := fmt.Sprintf("_ %q", "sample/"+dir)
-		if dir == ggconst.SubDirLock {
+		if dir == ggconst.DirLock {
 			if strings.Contains(program, want) {
 				t.Fatalf("expected the migration program to leave the missing %s out, got:\n%s", want, program)
 			}
@@ -77,7 +77,7 @@ func TestMigrateSchemaProgramReadsTheTablesModulesRegister(t *testing.T) {
 	t.Setenv("DATABASE_TYPE", "sqlite")
 	for _, dir := range ggconst.ProjectImportDirs {
 		content := "package " + dir + "\n"
-		if dir == ggconst.SubDirModule {
+		if dir == ggconst.DirModule {
 			content = migrateSampleModule
 		}
 		writeProjectFile(t, filepath.Join(projectDir, dir, dir+".go"), content)

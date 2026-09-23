@@ -353,7 +353,7 @@ func mainImportSpecs(projectName string) []ast.Spec {
 	specs := make([]ast.Spec, 0, len(ggconst.ProjectImportDirs)+2)
 	for _, dir := range ggconst.ProjectImportDirs {
 		spec := &ast.ImportSpec{Path: &ast.BasicLit{Value: fmt.Sprintf("%q", projectName+"/"+dir)}}
-		if dir != ggconst.SubDirRouter {
+		if dir != ggconst.DirRouter {
 			spec.Name = ast.NewIdent("_")
 		}
 		specs = append(specs, spec)

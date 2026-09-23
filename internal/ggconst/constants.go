@@ -57,14 +57,24 @@ const (
 	FileMain = "main.go"
 )
 
-// Directory names
+// Directory names. The project directories are spelled here alone: gg reads
+// and writes them, and ProjectImportDirs below lists the ones a generated
+// main.go imports.
 const (
 	DirVendor   = "vendor"
 	DirTestData = "testdata"
-	DirModel    = "model"
-	DirService  = "service"
-	DirRouter   = "router"
-	DirDAO      = "dao"
+
+	DirComponent  = "component"
+	DirConfigx    = "configx"
+	DirCronjob    = "cronjob"
+	DirDAO        = "dao"
+	DirLeader     = "leader"
+	DirLock       = "lock"
+	DirMiddleware = "middleware"
+	DirModel      = "model"
+	DirModule     = "module"
+	DirRouter     = "router"
+	DirService    = "service"
 )
 
 // Package names
@@ -98,20 +108,6 @@ const (
 	CacheFileName = ".gg_cache.json"
 )
 
-// Project subdirectories for main.go imports
-const (
-	SubDirComponent  = "component"
-	SubDirConfigx    = "configx"
-	SubDirCronjob    = "cronjob"
-	SubDirLeader     = "leader"
-	SubDirLock       = "lock"
-	SubDirMiddleware = "middleware"
-	SubDirModel      = "model"
-	SubDirModule     = "module"
-	SubDirService    = "service"
-	SubDirRouter     = "router"
-)
-
 // ProjectImportDirs lists the project packages a generated main.go imports,
 // in import-path order. The migration program imports the same list: its
 // model set is whatever those packages' initialisers registered, so it has to
@@ -119,16 +115,16 @@ const (
 // Every directory here is a scaffold file gg new creates and gg gen restores
 // when missing, so a project always has the package main.go imports.
 var ProjectImportDirs = []string{
-	SubDirComponent,
-	SubDirConfigx,
-	SubDirCronjob,
-	SubDirLeader,
-	SubDirLock,
-	SubDirMiddleware,
-	SubDirModel,
-	SubDirModule,
-	SubDirRouter,
-	SubDirService,
+	DirComponent,
+	DirConfigx,
+	DirCronjob,
+	DirLeader,
+	DirLock,
+	DirMiddleware,
+	DirModel,
+	DirModule,
+	DirRouter,
+	DirService,
 }
 
 // Bootstrap method names
