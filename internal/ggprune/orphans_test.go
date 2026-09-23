@@ -14,6 +14,29 @@ import (
 	"github.com/hydroan/gst/internal/ggprune"
 )
 
+func TestFindOrphanDirsFlagsUnreferencedDirs(t *testing.T) {
+	setupOrphanPruneProject(t)
+
+	writeProjectFile(t, filepath.Join("service", "authz", "role.go"), `package authz
+`)
+	writeProjectFile(t, filepath.Join("service", "leftover", "leftover.go"), `package leftover
+`)
+
+	orphans, keptHelpers := findOrphanDirs(t, []*gen.ModelInfo{orphanPruneModel()}, nil, ggconfig.PruneConfig{})
+
+	wantDir := filepath.Join("service", "leftover")
+	if len(orphans) != 1 || orphans[0].Path != wantDir {
+		t.Fatalf("orphans = %#v, want single dir %q", orphans, wantDir)
+	}
+	wantFile := filepath.Join(wantDir, "leftover.go")
+	if len(orphans[0].Files) != 1 || orphans[0].Files[0] != wantFile {
+		t.Fatalf("orphans[0].Files = %#v, want [%s]", orphans[0].Files, wantFile)
+	}
+	if len(keptHelpers) != 0 {
+		t.Fatalf("unreferenced dir should not be reported as kept helper, got %#v", keptHelpers)
+	}
+}
+
 func TestFindOrphanDirsKeepsImportedHelperDirs(t *testing.T) {
 	setupOrphanPruneProject(t)
 
@@ -270,29 +293,6 @@ func TestFindOrphanDirsKeepsNothingForAMissingImport(t *testing.T) {
 
 	if len(keptHelpers) != 0 {
 		t.Fatalf("keptHelpers = %#v, want none for an import of a missing directory", keptHelpers)
-	}
-}
-
-func TestFindOrphanDirsFlagsUnreferencedDirs(t *testing.T) {
-	setupOrphanPruneProject(t)
-
-	writeProjectFile(t, filepath.Join("service", "authz", "role.go"), `package authz
-`)
-	writeProjectFile(t, filepath.Join("service", "leftover", "leftover.go"), `package leftover
-`)
-
-	orphans, keptHelpers := findOrphanDirs(t, []*gen.ModelInfo{orphanPruneModel()}, nil, ggconfig.PruneConfig{})
-
-	wantDir := filepath.Join("service", "leftover")
-	if len(orphans) != 1 || orphans[0].Path != wantDir {
-		t.Fatalf("orphans = %#v, want single dir %q", orphans, wantDir)
-	}
-	wantFile := filepath.Join(wantDir, "leftover.go")
-	if len(orphans[0].Files) != 1 || orphans[0].Files[0] != wantFile {
-		t.Fatalf("orphans[0].Files = %#v, want [%s]", orphans[0].Files, wantFile)
-	}
-	if len(keptHelpers) != 0 {
-		t.Fatalf("unreferenced dir should not be reported as kept helper, got %#v", keptHelpers)
 	}
 }
 

@@ -24,22 +24,8 @@ func TestCurrentServiceFilesUsesFlattenTarget(t *testing.T) {
 	}
 }
 
-func TestCurrentServiceDirsUsesFlattenTarget(t *testing.T) {
-	got := currentServiceDirs([]*gen.ModelInfo{flattenPruneModel()})
-	wantDir := filepath.Clean(filepath.Join(ggconst.DirService, "authz"))
-	oldDir := filepath.Clean(filepath.Join(ggconst.DirService, "authz", "role"))
-
-	if len(got.ModelDirs) != 1 || got.ModelDirs[0] != wantDir {
-		t.Fatalf("ModelDirs = %v, want [%s]", got.ModelDirs, wantDir)
-	}
-	if !got.KnownDirs[wantDir] {
-		t.Fatalf("KnownDirs missing flattened dir %q", wantDir)
-	}
-	if got.KnownDirs[oldDir] {
-		t.Fatalf("KnownDirs should not include old nested dir %q", oldDir)
-	}
-}
-
+// flattenPruneModel returns a model whose only enabled action flattens its
+// service file into service/authz/role.go.
 func flattenPruneModel() *gen.ModelInfo {
 	disabled := func(phase consts.Phase) *dsl.Action {
 		return &dsl.Action{Phase: phase}

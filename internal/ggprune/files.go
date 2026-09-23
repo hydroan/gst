@@ -13,6 +13,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/hydroan/gst/consts"
 	"github.com/hydroan/gst/dsl"
 	"github.com/hydroan/gst/internal/codegen/gen"
 	"github.com/hydroan/gst/internal/ggconfig"
@@ -41,6 +42,45 @@ func ScanServiceFiles(serviceDir string, ignore gghelper.ProjectIgnore) ([]strin
 		return nil
 	})
 	return files, err
+}
+
+// isManagedServiceFile reports whether path is a service file gg manages (see
+// ScanServiceFiles): service/sample/record/create.go is, and so is
+// service/sample/record/archive.go declaring a service that embeds
+// service.Base[...], while service/sample/record/create_test.go and a
+// service/sample/record/util.go declaring no such service are not.
+func isManagedServiceFile(path string) bool {
+	if !strings.HasSuffix(path, ".go") {
+		return false
+	}
+	fileName := filepath.Base(path)
+	if strings.HasSuffix(fileName, "_test.go") {
+		return false
+	}
+	if phaseFileNames()[fileName] {
+		return true
+	}
+	return gen.IsActionServiceSource(path)
+}
+
+// phaseFileNames returns the names of the standard phase files, create.go
+// through sse.go.
+func phaseFileNames() map[string]bool {
+	return map[string]bool{
+		consts.PHASE_CREATE.Filename():      true,
+		consts.PHASE_DELETE.Filename():      true,
+		consts.PHASE_UPDATE.Filename():      true,
+		consts.PHASE_PATCH.Filename():       true,
+		consts.PHASE_LIST.Filename():        true,
+		consts.PHASE_GET.Filename():         true,
+		consts.PHASE_CREATE_MANY.Filename(): true,
+		consts.PHASE_DELETE_MANY.Filename(): true,
+		consts.PHASE_UPDATE_MANY.Filename(): true,
+		consts.PHASE_PATCH_MANY.Filename():  true,
+		consts.PHASE_IMPORT.Filename():      true,
+		consts.PHASE_EXPORT.Filename():      true,
+		consts.PHASE_SSE.Filename():         true,
+	}
 }
 
 // FilePlan is what prune intends for the service files of disabled actions.
@@ -73,19 +113,8 @@ func PlanFiles(existing []string, models []*gen.ModelInfo, kept map[string]bool,
 	return FilePlan{Delete: filesToDelete, Ignored: ignoredFiles}
 }
 
-// filterIgnoredFiles splits files into the ones prune may delete and the ones
-// a gst.yaml prune.ignore entry in protect covers.
-func filterIgnoredFiles(files []string, protect ggconfig.PruneConfig) (filtered []string, ignored []string) {
-	for _, file := range files {
-		if protect.Ignores(file) {
-			ignored = append(ignored, file)
-		} else {
-			filtered = append(filtered, file)
-		}
-	}
-	return filtered, ignored
-}
-
+// currentServiceFiles returns the service files the enabled Service() actions
+// of allModels expect, such as service/sample/record/create.go for a Create.
 func currentServiceFiles(allModels []*gen.ModelInfo) map[string]bool {
 	current := make(map[string]bool)
 	for _, m := range allModels {
@@ -97,6 +126,19 @@ func currentServiceFiles(allModels []*gen.ModelInfo) map[string]bool {
 		})
 	}
 	return current
+}
+
+// filterIgnoredFiles splits files into the ones prune may delete and the ones
+// a gst.yaml prune.ignore entry in protect covers.
+func filterIgnoredFiles(files []string, protect ggconfig.PruneConfig) (filtered []string, ignored []string) {
+	for _, file := range files {
+		if protect.Ignores(file) {
+			ignored = append(ignored, file)
+		} else {
+			filtered = append(filtered, file)
+		}
+	}
+	return filtered, ignored
 }
 
 // RemoveFiles deletes paths in order and reports each one to report, with the
@@ -141,6 +183,8 @@ func RemoveEmptyDirs(rootDir string, protect ggconfig.PruneConfig, ignore gghelp
 	}
 }
 
+// directoryDepth returns how many levels below rootDir path lies: under
+// service, service/sample/record lies 2 levels down, and service itself 0.
 func directoryDepth(rootDir, path string) int {
 	rel, err := filepath.Rel(rootDir, path)
 	if err != nil || rel == "." {
