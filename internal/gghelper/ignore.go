@@ -7,6 +7,7 @@ import (
 
 	"github.com/go-git/go-billy/v5/osfs"
 	gitignore "github.com/go-git/go-git/v5/plumbing/format/gitignore"
+	"github.com/hydroan/gst/internal/ggconst"
 )
 
 // ProjectIgnore is the set of paths the project's Git ignore rules exclude.
@@ -53,4 +54,24 @@ func (p ProjectIgnore) Walk(root string, fn func(path string, info os.FileInfo) 
 		}
 		return fn(path, info)
 	})
+}
+
+// ExcludedDir reports whether a walk over the project's code from root leaves
+// out the directory at path and everything below it: a hidden directory, a
+// vendor or testdata directory, or a directory holding a go.mod of its own,
+// whose code belongs to another module. None of them holds code the project
+// builds; gg check checks none of them, and gg prune counts no import from
+// them. The root itself is never left out. Walking from ".", "." and "service"
+// stay in, while ".git", "service/testdata" and "tools", holding
+// tools/go.mod, are left out.
+func ExcludedDir(root, path string) bool {
+	if path == root {
+		return false
+	}
+	base := filepath.Base(path)
+	if strings.HasPrefix(base, ".") || base == ggconst.DirVendor || base == ggconst.DirTestData {
+		return true
+	}
+	_, err := os.Stat(filepath.Join(path, "go.mod"))
+	return err == nil
 }

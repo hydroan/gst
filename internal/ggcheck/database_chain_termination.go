@@ -70,7 +70,7 @@ func checkDatabaseChainTermination(ignore gghelper.ProjectIgnore) []string {
 
 	err := ignore.Walk(".", func(path string, info os.FileInfo) error {
 		if info.IsDir() {
-			if excludedDir(".", path) {
+			if gghelper.ExcludedDir(".", path) {
 				return filepath.SkipDir
 			}
 			return nil

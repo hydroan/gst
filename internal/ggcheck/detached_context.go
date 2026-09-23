@@ -72,7 +72,7 @@ func checkDetachedContext(ignore gghelper.ProjectIgnore) []string {
 		}
 		walkErr := ignore.Walk(dir, func(path string, info os.FileInfo) error {
 			if info.IsDir() {
-				if excludedDir(dir, path) {
+				if gghelper.ExcludedDir(dir, path) {
 					return filepath.SkipDir
 				}
 				return nil

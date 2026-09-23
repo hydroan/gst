@@ -76,3 +76,39 @@ func TestProjectIgnoreIgnoresWithoutRules(t *testing.T) {
 		t.Fatal("Ignores() = true without any ignore rule")
 	}
 }
+
+func TestExcludedDir(t *testing.T) {
+	t.Chdir(t.TempDir())
+	for _, dir := range []string{".git", "vendor", "tools", filepath.Join("service", "sample"), filepath.Join("service", ".cache"), filepath.Join("service", "testdata")} {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.WriteFile(filepath.Join("tools", "go.mod"), []byte("module example.com/tools\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	tests := []struct {
+		name string
+		root string
+		path string
+		want bool
+	}{
+		{name: "the project root", root: ".", path: "."},
+		{name: "a project directory", root: ".", path: "service"},
+		{name: "a directory below it", root: ".", path: filepath.Join("service", "sample")},
+		{name: "a hidden directory", root: ".", path: ".git", want: true},
+		{name: "a hidden directory further down", root: ".", path: filepath.Join("service", ".cache"), want: true},
+		{name: "vendor", root: ".", path: "vendor", want: true},
+		{name: "testdata further down", root: ".", path: filepath.Join("service", "testdata"), want: true},
+		{name: "a directory holding its own go.mod", root: ".", path: "tools", want: true},
+		{name: "a walk root below the project root", root: "service", path: "service"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := gghelper.ExcludedDir(tt.root, tt.path); got != tt.want {
+				t.Fatalf("ExcludedDir(%q, %q) = %t, want %t", tt.root, tt.path, got, tt.want)
+			}
+		})
+	}
+}
