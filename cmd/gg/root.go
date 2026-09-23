@@ -27,7 +27,7 @@ var rootCmd = &cobra.Command{
 func init() {
 	rootCmd.PersistentFlags().BoolVarP(&debug, "debug", "d", false, "enable debug logging")
 	rootCmd.PersistentFlags().BoolVar(&prune, "prune", false, "Prune disabled service action files with user confirmation")
-	rootCmd.PersistentFlags().BoolVar(&cleanOrphans, "clean-orphans", false, "Delete unmanaged files in orphan service directories after pruning")
+	rootCmd.PersistentFlags().BoolVar(&cleanOrphans, "clean-orphans", false, "After pruning, delete unmanaged files in orphan service directories and middleware left by removed copied modules")
 
 	rootCmd.AddCommand(
 		genCmd,

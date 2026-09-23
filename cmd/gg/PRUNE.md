@@ -63,13 +63,13 @@ partition "第 3 步：孤儿目录和孤儿中间件文件" {
         :列出孤儿目录和孤儿中间件文件，不删;
       else (加了)
         :列出孤儿目录和孤儿中间件文件;
-        if (输入 delete orphan service leftovers？) then (一致)
+        if (输入 delete orphan leftovers？) then (一致)
           :先删孤儿中间件文件
           和它们的注册调用;
           :再删孤儿目录清单里的文件;
           :再删一遍空目录;
         else (不一致)
-          :Orphan service directory cleanup canceled; <<cancel>>
+          :Orphan cleanup canceled; <<cancel>>
         endif
       endif
     else (没有)
@@ -236,12 +236,12 @@ stop
 既没有孤儿目录，也没有孤儿中间件文件时，第 3 步结束。有的话：
 
 - **没加 `--clean-orphans`**：在 `Unmanaged Orphan Service Directories Kept` 下面逐个列出孤儿目录，标注 `(no current model maps to this directory)`，下面缩进列出它的文件清单；在 `Orphan Module Middleware Files Kept` 下面逐个列出孤儿中间件文件，标注 `(copied with module <name>, whose model/<name> is gone; its register calls go with it)`。什么都不删。
-- **加了 `--clean-orphans`**：用同样的格式分别列在 `Unmanaged Orphan Service Directories` 和 `Orphan Module Middleware Files` 下面。项目里有 `.gg.yaml` 或 `.gg.yml` 时再警告一次它们不生效。接着警告 `This will delete unmanaged files that gg cannot prove it owns.`，要求输入 `delete orphan service leftovers`。
+- **加了 `--clean-orphans`**：用同样的格式分别列在 `Unmanaged Orphan Service Directories` 和 `Orphan Module Middleware Files` 下面。项目里有 `.gg.yaml` 或 `.gg.yml` 时再警告一次它们不生效。有孤儿目录时接着警告 `This will delete unmanaged files that gg cannot prove it owns.`（孤儿中间件文件带着所有权标记，用不着这句警告），然后要求输入 `delete orphan leftovers`。
   - 输入与它完全一致（区分大小写，前后空白不计）：
     1. 先删孤儿中间件文件，逐个打印 `Deleted ...`；再从 `middleware/middleware.go` 删掉调用这些文件里函数的 `Register`、`RegisterAuth` 语句，框架 middleware 包的导入没人用了也一并删掉，打印 `Removed their register calls from middleware/middleware.go`。这一步出错时打印 `Failed to delete orphan module middleware, so orphan service directories are kept: ...`，第 3 步到此结束：孤儿目录是因为这些中间件要删才成了孤儿，中间件删不掉，它们也留着。
     2. 再删除孤儿目录清单里的文件，逐个打印 `Deleted ...` 或 `Failed to delete ...`。
     3. 最后再做一遍第 2 步。
-  - 其他输入：打印 `Orphan service directory cleanup canceled`，什么都不删。
+  - 其他输入：打印 `Orphan cleanup canceled`，什么都不删。
 
 ## 不会被删的东西
 

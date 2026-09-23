@@ -105,13 +105,18 @@ func TestPruneRunStopsOnABrokenConfig(t *testing.T) {
 // carrying the module's ownership marker, its register calls, and the service
 // directory only that middleware imported. Without --clean-orphans they are
 // listed and kept, and a prune.ignore entry keeps the file for good, together
-// with what it imports.
+// with what it imports. Only the orphan directory's files draw the warning
+// about files gg cannot prove it owns. Any answer but the confirmation phrase
+// keeps everything, and so does a middleware file prune cannot delete or a
+// middleware directory it cannot read: the service directory is an orphan
+// only because the middleware goes.
 func TestPruneServiceFilesCleansUpAfterARemovedCopiedModule(t *testing.T) {
 	t.Run("cleaned with --clean-orphans", func(t *testing.T) {
 		middlewareFile, registrationFile, helperFile := setupRemovedModuleProject(t, true)
 
+		var stdout string
 		withStdin(t, cleanOrphansConfirmation+"\n", func() {
-			captureStdout(t, func() {
+			stdout = captureStdout(t, func() {
 				pruneServiceFiles(nil, nil, nil, nil, ggconfig.PruneConfig{}, gghelper.NewProjectIgnore())
 			})
 		})
@@ -127,6 +132,9 @@ func TestPruneServiceFilesCleansUpAfterARemovedCopiedModule(t *testing.T) {
 		}
 		if strings.Contains(string(registration), "SampleAuth") || strings.Contains(string(registration), `"github.com/hydroan/gst/middleware"`) {
 			t.Errorf("%s still registers the deleted middleware:\n%s", registrationFile, registration)
+		}
+		if !strings.Contains(stdout, "This will delete unmanaged files that gg cannot prove it owns.") {
+			t.Errorf("output lacks the warning about the orphan directory's unmanaged files:\n%s", stdout)
 		}
 	})
 
@@ -170,6 +178,103 @@ func TestPruneServiceFilesCleansUpAfterARemovedCopiedModule(t *testing.T) {
 		}
 		if !strings.Contains(string(registration), "middleware.RegisterAuth(SampleAuth())") {
 			t.Errorf("%s lost the register call of the kept middleware:\n%s", registrationFile, registration)
+		}
+	})
+
+	t.Run("canceled", func(t *testing.T) {
+		middlewareFile, registrationFile, _ := setupRemovedModuleProject(t, true)
+		// The module's service directory is already gone, so the marked
+		// middleware is all there is to clean.
+		if err := os.RemoveAll(filepath.Join(ggconst.DirService, "sample")); err != nil {
+			t.Fatal(err)
+		}
+
+		var stdout string
+		withStdin(t, "no\n", func() {
+			stdout = captureStdout(t, func() {
+				pruneServiceFiles(nil, nil, nil, nil, ggconfig.PruneConfig{}, gghelper.NewProjectIgnore())
+			})
+		})
+
+		if _, err := os.Stat(middlewareFile); err != nil {
+			t.Errorf("%s should be kept when the cleanup is canceled: %v", middlewareFile, err)
+		}
+		registration, err := os.ReadFile(registrationFile)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !strings.Contains(string(registration), "middleware.RegisterAuth(SampleAuth())") {
+			t.Errorf("%s lost a register call although the cleanup was canceled:\n%s", registrationFile, registration)
+		}
+		if !strings.Contains(stdout, "Orphan cleanup canceled") || strings.Contains(stdout, "cannot prove it owns") {
+			t.Errorf("want the cancel reported without the warning about unmanaged files, since only marked middleware is listed:\n%s", stdout)
+		}
+	})
+
+	t.Run("kept when the middleware cannot be deleted", func(t *testing.T) {
+		middlewareFile, registrationFile, helperFile := setupRemovedModuleProject(t, true)
+		// Prune reads the functions a middleware file declares before deleting
+		// it, to find their register calls; a file that stopped parsing ends
+		// the cleanup right there.
+		writeProjectFile(t, middlewareFile, `// Managed by gg module copy (module sample). Removing the module removes this file.
+
+package middleware
+
+import "tmpapp/service/sample/session"
+
+func SampleAuth() any {
+	return session.Check
+`)
+
+		var stdout string
+		withStdin(t, cleanOrphansConfirmation+"\n", func() {
+			stdout = captureStdout(t, func() {
+				pruneServiceFiles(nil, nil, nil, nil, ggconfig.PruneConfig{}, gghelper.NewProjectIgnore())
+			})
+		})
+
+		for _, path := range []string{middlewareFile, registrationFile, helperFile} {
+			if _, err := os.Stat(path); err != nil {
+				t.Errorf("%s should be kept when the middleware cannot be deleted: %v", path, err)
+			}
+		}
+		if !strings.Contains(stdout, "Failed to delete orphan module middleware, so orphan service directories are kept") {
+			t.Errorf("output lacks the failure and what it keeps:\n%s", stdout)
+		}
+	})
+
+	t.Run("kept when the middleware directory cannot be read", func(t *testing.T) {
+		if os.Geteuid() == 0 {
+			t.Skip("root reads a directory whatever its permissions")
+		}
+		middlewareFile, registrationFile, helperFile := setupRemovedModuleProject(t, true)
+		dir, err := filepath.Abs(ggconst.DirMiddleware)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err = os.Chmod(dir, 0o000); err != nil {
+			t.Fatal(err)
+		}
+		// Give the permission back before the temporary directory is removed.
+		t.Cleanup(func() { _ = os.Chmod(dir, 0o755) })
+
+		var stdout string
+		withStdin(t, cleanOrphansConfirmation+"\n", func() {
+			stdout = captureStdout(t, func() {
+				pruneServiceFiles(nil, nil, nil, nil, ggconfig.PruneConfig{}, gghelper.NewProjectIgnore())
+			})
+		})
+
+		if err = os.Chmod(dir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		for _, path := range []string{middlewareFile, registrationFile, helperFile} {
+			if _, statErr := os.Stat(path); statErr != nil {
+				t.Errorf("%s should be kept when the middleware directory cannot be read: %v", path, statErr)
+			}
+		}
+		if !strings.Contains(stdout, "failed to read the middleware directory, so orphans are not checked") {
+			t.Errorf("output lacks the warning about the unreadable middleware directory:\n%s", stdout)
 		}
 	})
 }

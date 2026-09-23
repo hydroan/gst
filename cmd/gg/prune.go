@@ -220,8 +220,13 @@ func handleOrphans(allModels []*gen.ModelInfo, keptDirs map[string]bool, moduleP
 		reportOrphanServiceDirs("Unmanaged Orphan Service Directories", orphans)
 		reportOrphanMiddleware("Orphan Module Middleware Files", orphanMiddleware)
 		remindUnreadPruneSettings()
-		if !confirmCleanOrphanServiceDirs() {
-			clioutput.Item("", "Orphan service directory cleanup canceled")
+		// Orphan middleware carries the ownership marker module copy wrote;
+		// only an orphan directory holds files gg cannot vouch for.
+		if len(orphans) > 0 {
+			clioutput.Warn("", "This will delete unmanaged files that gg cannot prove it owns.")
+		}
+		if !confirmCleanOrphans() {
+			clioutput.Item("", "Orphan cleanup canceled")
 			return
 		}
 		// The middleware goes first: the directories it imports are orphans
@@ -277,6 +282,8 @@ func cleanOrphanMiddleware(files []string) error {
 	})
 }
 
+// reportOrphanServiceDirs lists the orphan service directories under section,
+// each with the unmanaged files cleaning it deletes.
 func reportOrphanServiceDirs(section string, orphans []ggprune.OrphanDir) {
 	if len(orphans) == 0 {
 		return
@@ -302,10 +309,13 @@ func reportKeptServiceHelperDirs(keptHelpers []ggprune.OrphanDir) {
 	}
 }
 
-const cleanOrphansConfirmation = "delete orphan service leftovers"
+// cleanOrphansConfirmation is the phrase --clean-orphans has the user type
+// before it deletes anything.
+const cleanOrphansConfirmation = "delete orphan leftovers"
 
-func confirmCleanOrphanServiceDirs() bool {
-	clioutput.Warn("", "This will delete unmanaged files that gg cannot prove it owns.")
+// confirmCleanOrphans asks the user to type cleanOrphansConfirmation and
+// reports whether they did.
+func confirmCleanOrphans() bool {
 	clioutput.Prompt("Type %q to continue: ", cleanOrphansConfirmation)
 
 	reader := bufio.NewReader(os.Stdin)
@@ -316,6 +326,8 @@ func confirmCleanOrphanServiceDirs() bool {
 	return strings.TrimSpace(response) == cleanOrphansConfirmation
 }
 
+// cleanOrphanServiceDirs deletes the unmanaged files of the orphan service
+// directories, and then the directories this leaves empty.
 func cleanOrphanServiceDirs(orphans []ggprune.OrphanDir, protect ggconfig.PruneConfig, ignore gghelper.ProjectIgnore) {
 	var files []string
 	for _, orphan := range orphans {
