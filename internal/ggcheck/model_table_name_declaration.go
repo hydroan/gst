@@ -109,7 +109,7 @@ func checkModelTableNameDeclaration(ignore gghelper.ProjectIgnore) []string {
 				if d.Name == nil || d.Name.Name != "TableName" || d.Recv == nil || len(d.Recv.List) == 0 {
 					continue
 				}
-				receiver, ok := actionTypeBaseName(d.Recv.List[0].Type)
+				receiver, ok := typeBaseName(d.Recv.List[0].Type)
 				if !ok {
 					continue
 				}

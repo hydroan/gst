@@ -47,7 +47,7 @@ func checkArchitectureDependencies(ignore gghelper.ProjectIgnore) []string {
 	return violations
 }
 
-// checkServiceDependencies checks if service code calls other service code
+// checkServiceDependencies checks if service code calls other service code.
 func checkServiceDependencies(modulePath string, ignore gghelper.ProjectIgnore) []string {
 	var violations []string
 
@@ -104,7 +104,8 @@ func checkDAODependencies(modulePath string, ignore gghelper.ProjectIgnore) []st
 	return violations
 }
 
-// checkModelDependencies checks if model code calls upper-layer or data-access code.
+// checkModelDependencies checks if model code calls upper-layer or
+// data-access code.
 func checkModelDependencies(modulePath string, ignore gghelper.ProjectIgnore) []string {
 	var violations []string
 
@@ -134,7 +135,8 @@ func checkModelDependencies(modulePath string, ignore gghelper.ProjectIgnore) []
 	return violations
 }
 
-// checkFileForArchitectureImports checks a single file for forbidden project-layer imports.
+// checkFileForArchitectureImports checks a single file for forbidden
+// project-layer imports.
 func checkFileForArchitectureImports(filePath, layerType, modulePath string) []string {
 	var violations []string
 
@@ -162,6 +164,11 @@ func checkFileForArchitectureImports(filePath, layerType, modulePath string) []s
 	return violations
 }
 
+// forbiddenArchitectureImportLayer returns the project layer importPath
+// belongs to when a file of layerType must not import it, or "" when the
+// import is allowed: in module tmpapp, a dao file importing
+// tmpapp/service/sample gives service, and a model file importing tmpapp/dao
+// gives dao.
 func forbiddenArchitectureImportLayer(filePath, importPath, layerType, modulePath string) string {
 	importLayer := projectImportLayer(importPath, modulePath)
 	if importLayer == "" {
@@ -189,6 +196,9 @@ func forbiddenArchitectureImportLayer(filePath, importPath, layerType, modulePat
 	return ""
 }
 
+// sameServiceModuleImport reports whether a service file imports a package of
+// its own service module: service/iam/account/login.go importing
+// tmpapp/service/iam/session does, importing tmpapp/service/sample does not.
 func sameServiceModuleImport(filePath, importPath, modulePath string) bool {
 	// Copied modules can have multiple cooperating packages under one service
 	// module, such as service/iam/account importing service/iam/session. The
@@ -199,6 +209,9 @@ func sameServiceModuleImport(filePath, importPath, modulePath string) bool {
 	return sourceModule != "" && sourceModule == importModule
 }
 
+// serviceModuleNameFromPath returns the service module a file belongs to, the
+// first directory below the service directory: service/iam/account/login.go
+// gives iam, while service/login.go and model/iam/user.go give "".
 func serviceModuleNameFromPath(filePath string) string {
 	rel, err := filepath.Rel(filepath.Clean(ggconst.DirService), filepath.Clean(filePath))
 	if err != nil || rel == "." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
@@ -211,6 +224,9 @@ func serviceModuleNameFromPath(filePath string) string {
 	return moduleName
 }
 
+// serviceModuleNameFromImport returns the service module an import path
+// points into: in module tmpapp, tmpapp/service/iam/session gives iam, while
+// tmpapp/service and tmpapp/dao/iam give "".
 func serviceModuleNameFromImport(importPath, modulePath string) string {
 	prefix := strings.Trim(modulePath, "/") + "/service/"
 	if !strings.HasPrefix(importPath, prefix) {
@@ -221,6 +237,9 @@ func serviceModuleNameFromImport(importPath, modulePath string) string {
 	return moduleName
 }
 
+// projectImportLayer returns the top-level project directory an import path
+// points into: in module tmpapp, tmpapp/service/sample gives service, while
+// tmpapp itself and github.com/x/y give "".
 func projectImportLayer(importPath, modulePath string) string {
 	if len(modulePath) == 0 {
 		return ""

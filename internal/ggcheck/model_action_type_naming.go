@@ -83,7 +83,7 @@ func checkFileActionTypeNaming(filePath string) []string {
 				return true
 			}
 
-			typeName, ok := actionTypeBaseName(typeExpr)
+			typeName, ok := typeBaseName(typeExpr)
 			if !ok || typeName == modelName {
 				return true
 			}
@@ -113,5 +113,5 @@ func designReceiverTypeName(fn *ast.FuncDecl) (string, bool) {
 	if fn.Recv == nil || len(fn.Recv.List) == 0 {
 		return "", false
 	}
-	return actionTypeBaseName(fn.Recv.List[0].Type)
+	return typeBaseName(fn.Recv.List[0].Type)
 }

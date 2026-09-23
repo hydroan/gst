@@ -77,9 +77,9 @@ func checkModelSingularNaming(ignore gghelper.ProjectIgnore) []string {
 		}
 
 		if info.IsDir() {
-			// Check directory name.
-			// Directory name length must greater than 3 before check.
-			// Check singular must before plural.
+			// Check the directory name. Names of three letters or fewer are
+			// not checked, and a name counts as plural only when it does not
+			// also read as singular, so singular is checked first.
 			dirName := info.Name()
 			if len(dirName) > 3 && !allowedPluralDirs[dirName] && !client.IsSingular(dirName) && client.IsPlural(dirName) {
 				violation := fmt.Sprintf("Model directory '%s' should be singular (suggested: %s)",
@@ -95,9 +95,9 @@ func checkModelSingularNaming(ignore gghelper.ProjectIgnore) []string {
 			// Check Go file name (without .go extension)
 			fileName := strings.TrimSuffix(info.Name(), ".go")
 
-			// File name length must greater than 3 before check.
-			// Check singular must before plural.
-			// Skip check for allowed plural file names
+			// As for directories, names of three letters or fewer are not
+			// checked and singular is checked first; the allowed plural file
+			// names are skipped.
 			if len(fileName) > 3 && !allowedPluralFiles[fileName] && !client.IsSingular(fileName) && client.IsPlural(fileName) {
 				violation := fmt.Sprintf("Model file '%s' should be singular (suggested: %s.go)",
 					path, client.Singular(fileName))

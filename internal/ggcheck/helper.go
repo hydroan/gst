@@ -1,7 +1,8 @@
 // The helpers the checks share: the files gg generates and owns, the subtrees
-// gg module copy writes, the explicit DSL Payload and Result calls, and what
-// the checks know about the framework's own packages. No check lives here;
-// every check has a file of its own.
+// gg module copy writes, the explicit DSL Payload and Result calls and the
+// names type expressions end in, and what the checks know about imports and
+// packages, the framework's own and the project's. No check lives here; every
+// check has a file of its own.
 
 package ggcheck
 
@@ -51,19 +52,6 @@ func moduleOwnedPath(owned map[string]bool, root, path string) bool {
 	return owned[first]
 }
 
-// localActionTypeName resolves a DSL type argument to a type name declared in
-// the same package. Pointer forms are unwrapped; qualified names from other
-// packages are not resolved.
-func localActionTypeName(expr ast.Expr) (string, bool) {
-	switch x := expr.(type) {
-	case *ast.Ident:
-		return x.Name, true
-	case *ast.StarExpr:
-		return localActionTypeName(x.X)
-	}
-	return "", false
-}
-
 // dslActionTypeCall returns the kind and type argument for DSL Payload/Result calls.
 func dslActionTypeCall(expr ast.Expr) (string, ast.Expr, bool) {
 	switch x := expr.(type) {
@@ -96,13 +84,29 @@ func dslActionTypeName(expr ast.Expr) (string, bool) {
 	return "", false
 }
 
-// actionTypeBaseName extracts the named type from supported DSL type arguments.
-func actionTypeBaseName(expr ast.Expr) (string, bool) {
+// localActionTypeName resolves a DSL type argument to a type name declared in
+// the same package. Pointer forms are unwrapped; qualified names from other
+// packages are not resolved.
+func localActionTypeName(expr ast.Expr) (string, bool) {
 	switch x := expr.(type) {
 	case *ast.Ident:
 		return x.Name, true
 	case *ast.StarExpr:
-		return actionTypeBaseName(x.X)
+		return localActionTypeName(x.X)
+	}
+	return "", false
+}
+
+// typeBaseName returns the name a type expression ends in, the way a
+// receiver, an embedded field or a DSL type argument names its type: Record
+// for Record, *Record and model.Record. Any other form, such as a slice or a
+// generic instantiation, names none.
+func typeBaseName(expr ast.Expr) (string, bool) {
+	switch x := expr.(type) {
+	case *ast.Ident:
+		return x.Name, true
+	case *ast.StarExpr:
+		return typeBaseName(x.X)
 	case *ast.SelectorExpr:
 		if x.Sel != nil {
 			return x.Sel.Name, true
@@ -122,6 +126,14 @@ func importedNamesOf(filePath, importPath, defaultName string) (goast.PackageNam
 	}
 	return goast.ImportedNames(file, importPath, defaultName), goast.FindImportSpec(file, importPath) != nil
 }
+
+// gstImportPath is the framework's root package. It declares the column
+// constructors project code must not mint references with, and
+// ServiceContext, whose SSE method is a sanctioned error exit: its errors are
+// framework-governed — a setup failure carries a framework-built message, and
+// an error after the stream opened never reaches the response envelope at
+// all.
+const gstImportPath = "github.com/hydroan/gst"
 
 // gstDatabaseImportPath is the framework package whose Database function
 // starts a model-scoped operation chain.
@@ -174,9 +186,3 @@ func packageNameOf(dir string) string {
 	}
 	return filepath.Base(dir)
 }
-
-// gstImportPath is the framework package declaring ServiceContext, whose
-// SSE method is a sanctioned error exit: its errors are framework-governed —
-// a setup failure carries a framework-built message, and an error after the
-// stream opened never reaches the response envelope at all.
-const gstImportPath = "github.com/hydroan/gst"

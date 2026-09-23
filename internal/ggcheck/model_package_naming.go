@@ -20,7 +20,8 @@ var ModelPackageNaming = Check{
 	run:  checkModelPackageNaming,
 }
 
-// checkModelPackageNaming checks if model package names match their directory names
+// checkModelPackageNaming checks if model package names match their directory
+// names.
 func checkModelPackageNaming(ignore gghelper.ProjectIgnore) []string {
 	var violations []string
 
@@ -67,8 +68,7 @@ func checkModelPackageNaming(ignore gghelper.ProjectIgnore) []string {
 
 		// Check if package name matches directory name
 		if packageName != expectedName {
-			relativePath, _ := filepath.Rel(ggconst.DirModel, path)
-			violations = append(violations, fmt.Sprintf("%s: package name '%s' should match directory name '%s'", relativePath, packageName, dirName))
+			violations = append(violations, fmt.Sprintf("%s: package name '%s' should match directory name '%s'", relPath, packageName, dirName))
 		}
 
 		return nil

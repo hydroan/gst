@@ -16,7 +16,8 @@ var DirectoryRestrictions = Check{
 	run:  checkDirectoryRestrictions,
 }
 
-// checkDirectoryRestrictions checks if only allowed directories exist in the project
+// checkDirectoryRestrictions checks if only allowed directories exist in the
+// project.
 func checkDirectoryRestrictions(ignore gghelper.ProjectIgnore) []string {
 	projectDir := "."
 	var violations []string
@@ -95,7 +96,8 @@ func checkDirectoryRestrictions(ignore gghelper.ProjectIgnore) []string {
 
 		dirName := entry.Name()
 
-		// Skip hidden directories and common project files
+		// Skip hidden directories and the ones the project's Git ignore
+		// rules exclude
 		if strings.HasPrefix(dirName, ".") {
 			continue
 		}

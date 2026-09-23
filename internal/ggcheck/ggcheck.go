@@ -6,10 +6,11 @@
 // Every check lives in a file of its own, named after the check: the file
 // dsl_design_rules.go declares the DSL design rules Check, its name and rule,
 // the function finding its violations and the helpers no other check uses.
-// Helpers several checks share live in helper.go, which holds no check, and
-// each test file pairs with the file it tests. TestEveryCheckIsDeclaredInAFileNamedAfterIt
-// holds the layout: gathering several checks into one file, or naming a
-// check's file otherwise, fails it.
+// Helpers several checks share live in helper.go, which holds no check. Each
+// test file pairs with the file it tests, but for fixtures_test.go, which
+// holds the fixtures the tests share.
+// TestEveryCheckIsDeclaredInAFileNamedAfterIt holds the layout: gathering
+// several checks into one file, or naming a check's file otherwise, fails it.
 package ggcheck
 
 import "github.com/hydroan/gst/internal/gghelper"

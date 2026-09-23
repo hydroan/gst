@@ -88,7 +88,7 @@ func checkFileLogFieldBoundedness(filePath string) []string {
 		if name != "MarshalLogObject" && name != "MarshalLogArray" {
 			continue
 		}
-		recvName, _ := actionTypeBaseName(funcDecl.Recv.List[0].Type)
+		recvName, _ := typeBaseName(funcDecl.Recv.List[0].Type)
 		pos := fset.Position(funcDecl.Pos())
 		violations = append(violations, fmt.Sprintf(
 			"%s:%d: type '%s' must not declare %s: zapcore marshalers re-open the structured field expansion the log encoder collapses to keep log-store field mappings bounded; log the value with zap.Any instead",

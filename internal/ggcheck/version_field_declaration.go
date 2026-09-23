@@ -109,51 +109,6 @@ func checkVersionFieldDeclaration(ignore gghelper.ProjectIgnore) []string {
 	return violations
 }
 
-// collectActionTypeVersionFindings gathers the deviating model.Version
-// fields of DSL action types, package by package: a Design method may
-// reference a type declared in a sibling file, so files are grouped per
-// directory the same way the json tag naming check groups them.
-func collectActionTypeVersionFindings(ignore gghelper.ProjectIgnore) ([]actionTypeVersionFinding, error) {
-	if _, err := os.Stat(ggconst.DirModel); os.IsNotExist(err) {
-		return nil, nil
-	}
-
-	owned, err := copyableModuleOwners()
-	if err != nil {
-		return nil, fmt.Errorf("listing copyable framework modules: %w", err)
-	}
-
-	var packageDirs []string
-	packageFiles := make(map[string][]string)
-	walkErr := ignore.Walk(ggconst.DirModel, func(path string, info os.FileInfo) error {
-		if info.IsDir() {
-			if moduleOwnedPath(owned, ggconst.DirModel, path) {
-				return filepath.SkipDir
-			}
-			return nil
-		}
-		base := filepath.Base(path)
-		if !strings.HasSuffix(base, ".go") || strings.HasSuffix(base, "_test.go") || isGeneratedFileName(path) {
-			return nil
-		}
-		dir := filepath.Dir(path)
-		if _, seen := packageFiles[dir]; !seen {
-			packageDirs = append(packageDirs, dir)
-		}
-		packageFiles[dir] = append(packageFiles[dir], path)
-		return nil
-	})
-	if walkErr != nil {
-		return nil, fmt.Errorf("walking model directory: %w", walkErr)
-	}
-
-	var findings []actionTypeVersionFinding
-	for _, dir := range packageDirs {
-		findings = append(findings, scanPackageActionTypeVersionFields(packageFiles[dir])...)
-	}
-	return findings, nil
-}
-
 // VersionFieldFindings reports every model.Version declaration of a database
 // model under the model directory that deviates from the required shape, the
 // declarations gg gen heals by filling their tags in. Paths the project's Git
@@ -424,6 +379,51 @@ type actionTypeVersionFinding struct {
 	Got     string
 	HasJSON bool
 	Blocked bool
+}
+
+// collectActionTypeVersionFindings gathers the deviating model.Version
+// fields of DSL action types, package by package: a Design method may
+// reference a type declared in a sibling file, so files are grouped per
+// directory the same way the json tag naming check groups them.
+func collectActionTypeVersionFindings(ignore gghelper.ProjectIgnore) ([]actionTypeVersionFinding, error) {
+	if _, err := os.Stat(ggconst.DirModel); os.IsNotExist(err) {
+		return nil, nil
+	}
+
+	owned, err := copyableModuleOwners()
+	if err != nil {
+		return nil, fmt.Errorf("listing copyable framework modules: %w", err)
+	}
+
+	var packageDirs []string
+	packageFiles := make(map[string][]string)
+	walkErr := ignore.Walk(ggconst.DirModel, func(path string, info os.FileInfo) error {
+		if info.IsDir() {
+			if moduleOwnedPath(owned, ggconst.DirModel, path) {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		base := filepath.Base(path)
+		if !strings.HasSuffix(base, ".go") || strings.HasSuffix(base, "_test.go") || isGeneratedFileName(path) {
+			return nil
+		}
+		dir := filepath.Dir(path)
+		if _, seen := packageFiles[dir]; !seen {
+			packageDirs = append(packageDirs, dir)
+		}
+		packageFiles[dir] = append(packageFiles[dir], path)
+		return nil
+	})
+	if walkErr != nil {
+		return nil, fmt.Errorf("walking model directory: %w", walkErr)
+	}
+
+	var findings []actionTypeVersionFinding
+	for _, dir := range packageDirs {
+		findings = append(findings, scanPackageActionTypeVersionFields(packageFiles[dir])...)
+	}
+	return findings, nil
 }
 
 // scanPackageActionTypeVersionFields reports every deviating model.Version

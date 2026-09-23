@@ -31,8 +31,8 @@ var DetachedContext = Check{
 }
 
 // checkDetachedContext checks that in service, dao, cronjob, leader, lock,
-// component and router code, the context passed to a framework database entry point
-// or to a function of the project's dao packages is never
+// component and router code, the context passed to a framework database
+// entry point or to a function of the project's dao packages is never
 // context.Background() or context.TODO() — written at the call, held in a
 // local variable first, or wrapped in a context derivation such as
 // context.WithTimeout. The context handed down to that code carries the
@@ -196,6 +196,8 @@ type contextScope struct {
 	other    map[string]bool
 }
 
+// newContextScope opens the scope of a function: a declaration, whose parent
+// is nil, or a closure inside parent.
 func newContextScope(parent *contextScope) *contextScope {
 	return &contextScope{parent: parent, detached: make(map[string]bool), other: make(map[string]bool)}
 }

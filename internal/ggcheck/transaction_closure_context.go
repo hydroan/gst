@@ -148,19 +148,6 @@ func transactionClosure(call *ast.CallExpr, dbNames goast.PackageNames) (*ast.Fu
 	return closure, names[0].Name, true
 }
 
-// escapingContextIdent reports whether arg is a plain identifier naming a
-// context that does not carry the closure's transaction, naming it when so.
-func escapingContextIdent(arg ast.Expr, inTransaction map[string]struct{}) (string, bool) {
-	ident, ok := arg.(*ast.Ident)
-	if !ok {
-		return "", false
-	}
-	if _, held := inTransaction[ident.Name]; held {
-		return "", false
-	}
-	return ident.Name, true
-}
-
 // contextsInTransaction returns the names inside the closure that hold a
 // context carrying its transaction: the closure's own parameter, and every
 // variable assigned from a derivation of one — the bound a statement of the
@@ -198,6 +185,19 @@ func contextsInTransaction(body *ast.BlockStmt, ctxParam string) map[string]stru
 		return true
 	})
 	return held
+}
+
+// escapingContextIdent reports whether arg is a plain identifier naming a
+// context that does not carry the closure's transaction, naming it when so.
+func escapingContextIdent(arg ast.Expr, inTransaction map[string]struct{}) (string, bool) {
+	ident, ok := arg.(*ast.Ident)
+	if !ok {
+		return "", false
+	}
+	if _, held := inTransaction[ident.Name]; held {
+		return "", false
+	}
+	return ident.Name, true
 }
 
 // escapingContext reports whether arg is a context that does not carry the

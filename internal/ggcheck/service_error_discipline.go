@@ -141,6 +141,9 @@ type svcErrFuncKey struct {
 	name   string
 }
 
+// svcErrSourceKind classifies where an error exit value comes from: nil, a
+// framework error constructor, a project function whose own exits decide, or
+// a raw source the check reports.
 type svcErrSourceKind int
 
 const (
@@ -166,13 +169,21 @@ type svcErrFuncSummary struct {
 // svcErrAnalysis carries the whole-project state: per-function summaries and
 // the service struct types whose methods are the checked entry points.
 type svcErrAnalysis struct {
-	modulePath  string
-	fset        *token.FileSet
-	summaries   map[svcErrFuncKey]*svcErrFuncSummary
-	entryTypes  map[string]map[string]bool
+	modulePath string
+	fset       *token.FileSet
+	summaries  map[svcErrFuncKey]*svcErrFuncSummary
+	// entryTypes holds, per package directory, the service struct types
+	// declared there.
+	entryTypes map[string]map[string]bool
+	// pkgVarTypes maps, per package directory, a package-level variable to
+	// the type its declaration spells out, see collectPackageVars.
 	pkgVarTypes map[string]map[string]string
-	entries     []svcErrFuncKey
-	files       []*svcErrFileCollector
+	// entries lists the service methods the report walks the error flow
+	// from.
+	entries []svcErrFuncKey
+	// files holds the collector of every parsed file, whose functions are
+	// summarized once every file was collected.
+	files []*svcErrFileCollector
 	// packageNames caches the package clause of every project directory an
 	// import names, see packageName.
 	packageNames map[string]string

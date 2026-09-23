@@ -143,7 +143,7 @@ func fieldDisplayName(field *ast.Field) string {
 	if len(field.Names) > 0 {
 		return field.Names[0].Name
 	}
-	if name, ok := actionTypeBaseName(field.Type); ok {
+	if name, ok := typeBaseName(field.Type); ok {
 		return name
 	}
 	return "(embedded)"

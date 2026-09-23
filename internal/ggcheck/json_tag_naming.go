@@ -236,10 +236,14 @@ func structJSONTagViolations(relPath string, structType *ast.StructType) []strin
 	return violations
 }
 
-// extractJSONTag extracts the json tag value from struct tag
+// jsonTagPattern matches the json key of a struct tag, capturing its value.
+var jsonTagPattern = regexp.MustCompile(`json:"([^"]+)"`)
+
+// extractJSONTag extracts the json name from a struct tag, leaving its
+// options out: `gorm:"column:user_id" json:"userId,omitempty"` gives userId,
+// and a tag without a json key gives "".
 func extractJSONTag(tag string) string {
-	re := regexp.MustCompile(`json:"([^"]+)"`)
-	matches := re.FindStringSubmatch(tag)
+	matches := jsonTagPattern.FindStringSubmatch(tag)
 	if len(matches) > 1 {
 		// Remove options like omitempty
 		parts := strings.Split(matches[1], ",")
@@ -248,7 +252,9 @@ func extractJSONTag(tag string) string {
 	return ""
 }
 
-// isSnakeCase checks if a string is in snake_case format
+// isSnakeCase reports whether a json name is in snake_case: user_id is, while
+// userId and user-id are not. The json:"-" marker and single characters
+// pass.
 func isSnakeCase(s string) bool {
 	if s == "" {
 		return true
@@ -274,7 +280,8 @@ func isSnakeCase(s string) bool {
 	return true
 }
 
-// toSnakeCase converts camelCase or kebab-case to snake_case
+// toSnakeCase converts camelCase or kebab-case to snake_case: userId and
+// user-id both give user_id.
 func toSnakeCase(s string) string {
 	if s == "" {
 		return s
