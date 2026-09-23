@@ -194,32 +194,129 @@ UPDATE gst_leases
 
 横轴是秒，0 秒是副本 A 最后一次成功续期发起的时刻；数据库认定的到期在 15 秒，A 自己的截止在 10 秒。
 
-<!-- 甘特图画的是下面三种情形的文字，改文字时同步改图。 -->
+<!-- 这张图画的是下面三种情形的文字，改文字时同步改图。 -->
 
-```mermaid
-gantt
-    dateFormat X
-    axisFormat %-Ss
-    tickInterval 5second
-    todayMarker off
-
-    section 参考
-    A 本地截止 :milestone, 10, 0s
-    数据库到期 :milestone, 15, 0s
-
-    section 情形 1
-    A 持有，每 2 秒续期，到期不断后移 :active, 0, 25
-
-    section 情形 2
-    A 持有 :active, 0, 2
-    没有心跳，租约在数据库里等到期 :crit, 2, 15
-    B 抢到，从头跑 fn :done, 15, 25
-
-    section 情形 3
-    A 持有 :active, 0, 1
-    每 2 秒重试续期都失败 · 库里仍是 A :crit, 1, 10
-    A 取消 ctx → 事务回滚、Commit 被拒 :milestone, 10, 0s
-    B 抢到；A 醒来后校验得 0 行 :done, 15, 25
+```vega-lite
+{
+  "$schema": "https://vega.github.io/schema/vega-lite/v5.json",
+  "description": "三种情形下租约的时间线：横轴是秒，0 秒是副本 A 最后一次成功续期发起的时刻",
+  "width": 680,
+  "height": {"step": 80},
+  "padding": {"left": 5, "top": 24, "right": 10, "bottom": 5},
+  "config": {"view": {"stroke": null}, "axis": {"labelFontSize": 12}},
+  "encoding": {"y": {"field": "lane", "type": "ordinal", "axis": null}},
+  "layer": [
+    {
+      "data": {"values": [
+        {"lane": 1, "start": 0, "end": 25, "kind": "hold"},
+        {"lane": 2, "start": 0, "end": 2, "kind": "hold"},
+        {"lane": 2, "start": 2, "end": 15, "kind": "dead", "label": "没有心跳，租约在数据库里等到期"},
+        {"lane": 2, "start": 15, "end": 25, "kind": "take", "label": "15–20s 之间 B 抢到，从头跑 fn"},
+        {"lane": 3, "start": 0, "end": 1, "kind": "hold"},
+        {"lane": 3, "start": 1, "end": 10, "kind": "dead", "label": "每 2 秒重试续期都失败 · 库里仍是 A"},
+        {"lane": 3, "start": 15, "end": 25, "kind": "take", "label": "B 抢到；A 醒来后校验得 0 行"}
+      ]},
+      "layer": [
+        {
+          "mark": {"type": "bar", "size": 26, "strokeWidth": 1.5},
+          "encoding": {
+            "x": {
+              "field": "start", "type": "quantitative", "title": null,
+              "scale": {"domain": [0, 25], "nice": false},
+              "axis": {"values": [0, 5, 10, 15, 20, 25], "labelExpr": "datum.value + 's'", "grid": true}
+            },
+            "x2": {"field": "end"},
+            "color": {
+              "field": "kind", "type": "nominal", "legend": null,
+              "scale": {"domain": ["hold", "dead", "take"], "range": ["#d7efe9", "#f3d9dd", "#f4e6c8"]}
+            },
+            "stroke": {
+              "condition": [
+                {"test": "datum.kind === 'hold'", "value": "#0f7b6c"},
+                {"test": "datum.kind === 'take'", "value": "#b7791f"}
+              ],
+              "value": null
+            }
+          }
+        },
+        {
+          "transform": [{"filter": "datum.label"}],
+          "mark": {"type": "text", "align": "left", "dx": 8, "fontSize": 12},
+          "encoding": {
+            "x": {"field": "start", "type": "quantitative"},
+            "text": {"field": "label"},
+            "color": {"condition": {"test": "datum.kind === 'dead'", "value": "#b23a48"}, "value": "#4a5563"}
+          }
+        }
+      ]
+    },
+    {
+      "data": {"values": [
+        {"lane": 1, "t": 0}, {"lane": 1, "t": 2}, {"lane": 1, "t": 4}, {"lane": 1, "t": 6},
+        {"lane": 1, "t": 8}, {"lane": 1, "t": 10}, {"lane": 1, "t": 12}, {"lane": 1, "t": 14},
+        {"lane": 1, "t": 16}, {"lane": 1, "t": 18}, {"lane": 1, "t": 20}, {"lane": 1, "t": 22},
+        {"lane": 1, "t": 24}, {"lane": 2, "t": 0}, {"lane": 3, "t": 0}
+      ]},
+      "mark": {"type": "point", "filled": true, "size": 50, "color": "#0f7b6c", "opacity": 1},
+      "encoding": {"x": {"field": "t", "type": "quantitative"}}
+    },
+    {
+      "data": {"values": [
+        {"lane": 1, "t": 0, "note": "B 每次竞选都改到 0 行 · 换人只看心跳，不看时长", "tone": "ink"},
+        {"lane": 3, "t": 10, "note": "10s：A 取消 ctx → 事务回滚、Commit 被拒", "tone": "lost"}
+      ]},
+      "mark": {"type": "text", "align": "left", "dx": 6, "dy": 25, "fontSize": 12},
+      "encoding": {
+        "x": {"field": "t", "type": "quantitative"},
+        "text": {"field": "note"},
+        "color": {"condition": {"test": "datum.tone === 'lost'", "value": "#b23a48"}, "value": "#4a5563"}
+      }
+    },
+    {
+      "data": {"values": [
+        {"lane": 1, "title": "健康地干 10 分钟", "sub": "每 2 秒续期，到期不断后移"},
+        {"lane": 2, "title": "进程在 2 秒时死亡", "sub": "开着的事务被数据库回滚"},
+        {"lane": 3, "title": "1 秒起卡住或断网", "sub": "续期发不出去或没回音"}
+      ]},
+      "layer": [
+        {
+          "mark": {"type": "text", "align": "left", "dy": -7, "fontSize": 13, "fontWeight": "bold", "color": "#1b2430"},
+          "encoding": {"x": {"value": -180}, "text": {"field": "title"}}
+        },
+        {
+          "mark": {"type": "text", "align": "left", "dy": 10, "fontSize": 11.5, "color": "#4a5563"},
+          "encoding": {"x": {"value": -180}, "text": {"field": "sub"}}
+        }
+      ]
+    },
+    {
+      "data": {"values": [{"t": 10, "label": "A 本地截止 10s"}]},
+      "layer": [
+        {
+          "mark": {"type": "rule", "strokeWidth": 2, "color": "#b23a48"},
+          "encoding": {"x": {"field": "t", "type": "quantitative"}, "y": null}
+        },
+        {
+          "mark": {"type": "text", "align": "left", "dx": 5, "dy": -10, "fontSize": 12, "fontWeight": "bold", "color": "#b23a48"},
+          "encoding": {"x": {"field": "t", "type": "quantitative"}, "y": {"value": 0}, "text": {"field": "label"}}
+        }
+      ]
+    },
+    {
+      "data": {"values": [{"t": 15, "label": "数据库到期 15s"}]},
+      "layer": [
+        {
+          "mark": {"type": "rule", "strokeWidth": 2, "strokeDash": [4, 3], "color": "#b7791f"},
+          "encoding": {"x": {"field": "t", "type": "quantitative"}, "y": null}
+        },
+        {
+          "mark": {"type": "text", "align": "left", "dx": 5, "dy": -10, "fontSize": 12, "fontWeight": "bold", "color": "#b7791f"},
+          "encoding": {"x": {"field": "t", "type": "quantitative"}, "y": {"value": 0}, "text": {"field": "label"}}
+        }
+      ]
+    }
+  ]
+}
 ```
 
 **情形 1：健康地干 10 分钟**
