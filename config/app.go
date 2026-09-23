@@ -10,6 +10,8 @@ import (
 	"github.com/hydroan/gst/consts"
 
 	"github.com/spf13/viper"
+	"golang.org/x/mod/module"
+	"golang.org/x/mod/semver"
 )
 
 const (
@@ -39,7 +41,8 @@ type AppInfo struct {
 	Homepage    string `json:"homepage" mapstructure:"homepage" ini:"homepage" yaml:"homepage"`
 	License     string `json:"license" mapstructure:"license" ini:"license" yaml:"license"`
 
-	// Build and runtime information
+	// Build and runtime information. BuildTime is the time the configuration
+	// names, or else the time of the commit Go recorded in the binary.
 	BuildTime    time.Time `json:"build_time" mapstructure:"build_time" ini:"build_time" yaml:"build_time"`
 	GitCommit    string    `json:"git_commit" mapstructure:"git_commit" ini:"git_commit" yaml:"git_commit"`
 	GitBranch    string    `json:"git_branch" mapstructure:"git_branch" ini:"git_branch" yaml:"git_branch"`
@@ -61,24 +64,20 @@ func (a *AppInfo) setDefault(v *viper.Viper) {
 	v.SetDefault("app.platform", runtime.GOOS+"/"+runtime.GOARCH)
 	v.SetDefault("app.compiler", runtime.Compiler)
 
-	// What the build linked in first, then what the module records for
-	// whatever the build did not carry.
-	a.setLinkedBuildInfo()
-	a.setBuildInfo()
-
-	// The linked values are the defaults of their keys, so a file or an
-	// environment variable still overrides them and nothing else has to know
-	// where they came from.
+	// What the build information Go records in the binary supplies becomes the
+	// default of its key, so a file or an environment variable still overrides
+	// it and nothing else has to know where it came from. The git branch is not
+	// among it: a deployment that reports one sets it through APP_GIT_BRANCH or
+	// the configuration file.
+	if info, ok := debug.ReadBuildInfo(); ok {
+		a.setBuildInfo(info)
+	}
 	if !a.BuildTime.IsZero() {
 		v.SetDefault("app.build_time", a.BuildTime)
 	}
 	for key, value := range map[string]string{
 		"app.version":        a.Version,
 		"app.git_commit":     a.GitCommit,
-		"app.git_branch":     a.GitBranch,
-		"app.go_version":     a.GoVersion,
-		"app.platform":       a.Platform,
-		"app.compiler":       a.Compiler,
 		"app.git_tree_state": a.GitTreeState,
 	} {
 		if value != "" {
@@ -90,81 +89,17 @@ func (a *AppInfo) setDefault(v *viper.Viper) {
 	}
 }
 
-// The build information a build links in. gg build sets them with the
-// linker's -X, which only writes string variables, so they are strings here
-// and parsed into the typed fields below. A build without gg leaves them
-// empty and the values come from runtime/debug instead.
-var (
-	appVersion      string
-	appCommit       string
-	appBranch       string
-	appBuildTime    string
-	appGoVersion    string
-	appPlatform     string
-	appCompiler     string
-	appBuildTags    string
-	appGitTreeState string
-)
-
-// setLinkedBuildInfo applies what the build linked in. It runs before the
-// runtime/debug fallback and before the configuration is read, so a value the
-// build carries wins over what the module records, and a configuration file
-// or an environment variable still wins over both.
-func (a *AppInfo) setLinkedBuildInfo() {
-	if appVersion != "" {
-		a.Version = appVersion
-	}
-	if appCommit != "" {
-		a.GitCommit = appCommit
-	}
-	if appBranch != "" {
-		a.GitBranch = appBranch
-	}
-	if appBuildTime != "" {
-		if t, err := time.Parse(time.RFC3339, appBuildTime); err == nil {
-			a.BuildTime = t
-		}
-	}
-	if appGoVersion != "" {
-		a.GoVersion = appGoVersion
-	}
-	if appPlatform != "" {
-		a.Platform = appPlatform
-	}
-	if appCompiler != "" {
-		a.Compiler = appCompiler
-	}
-	if appBuildTags != "" {
-		a.BuildTags = strings.Split(appBuildTags, ",")
-	}
-	if appGitTreeState != "" {
-		a.GitTreeState = appGitTreeState
-	}
-}
-
-// setBuildInfo attempts to extract build information from runtime/debug
-func (a *AppInfo) setBuildInfo() {
-	buildInfo, ok := debug.ReadBuildInfo()
-	if !ok {
-		return
-	}
-
-	// Set platform and compiler information
-	a.Platform = runtime.GOOS + "/" + runtime.GOARCH
-	a.Compiler = runtime.Compiler
-
-	// Extract version control information from build settings
+// setBuildInfo fills in what the build information Go records in the binary
+// supplies: the commit, its time, whether the tree had local changes, the
+// build tags and the main module version.
+func (a *AppInfo) setBuildInfo(buildInfo *debug.BuildInfo) {
 	for _, setting := range buildInfo.Settings {
 		switch setting.Key {
 		case "vcs.revision":
-			if a.GitCommit == "" {
-				a.GitCommit = setting.Value
-			}
+			a.GitCommit = setting.Value
 		case "vcs.time":
-			if a.BuildTime.IsZero() {
-				if t, err := time.Parse(time.RFC3339, setting.Value); err == nil {
-					a.BuildTime = t
-				}
+			if t, err := time.Parse(time.RFC3339, setting.Value); err == nil {
+				a.BuildTime = t
 			}
 		case "vcs.modified":
 			if setting.Value == "true" {
@@ -187,9 +122,14 @@ func (a *AppInfo) setBuildInfo() {
 		}
 	}
 
-	// Use module version if available and no custom version is set
-	if a.Version == "dev" && buildInfo.Main.Version != "(devel)" && buildInfo.Main.Version != "" {
-		a.Version = buildInfo.Main.Version
-		a.GitTag = buildInfo.Main.Version
+	// The version is the one Go records for the main module: a tag, or a
+	// pseudo-version for a commit no tag names, "+dirty" marking local changes
+	// either way. Only a tag names the tag. A build outside version control
+	// records "(devel)", which is no version.
+	if moduleVersion := buildInfo.Main.Version; moduleVersion != "(devel)" && moduleVersion != "" {
+		a.Version = moduleVersion
+		if !module.IsPseudoVersion(moduleVersion) {
+			a.GitTag = semver.Canonical(moduleVersion)
+		}
 	}
 }
