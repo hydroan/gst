@@ -768,7 +768,7 @@ MySQL 是 `RENAME INDEX`，PostgreSQL 是 `ALTER INDEX ... RENAME TO`）：确�
 
 ## 内置模块
 
-业务项目可以在 `module/` 中注册内置模块。下面是注册 IAM 默认用户的形式：
+业务项目可以在 `module/` 中注册内置模块。下面是注册 IAM 模块的形式：
 
 ```go
 package module
@@ -776,18 +776,13 @@ package module
 import "github.com/hydroan/gst/module/iam"
 
 func init() {
-	iam.Register(iam.Config{
-		DefaultUsers: []*iam.User{
-			{
-				Username: "root",
-				Password: "toor",
-			},
-		},
-	})
+	iam.Register()
 }
 ```
 
-应用入口会空导入 `module`，因此 `init()` 会在启动阶段执行。
+应用入口会空导入 `module`，因此 `init()` 会在启动阶段执行。默认账号属于业务数据，框架不代为创建；
+需要时由项目在启动钩子（如 `router.OnRoutesReady`）里通过标准数据库链写入，做法见
+`examples/demo/module/module.go` 的注释。
 
 ## 多副本部署
 
@@ -853,7 +848,6 @@ func init() {
 | `gg routes` | 按 model 层级打印当前生成的接口路径 |
 | `gg route-tree` | 按 URL 层级打印当前生成的路由树 |
 | `gg migrate` | 生成当前数据库方言的 schema，预览并按确认执行数据库迁移 |
-| `gg dev` | 监听 model 变更自动生成代码，并使用 Air 热重载启动业务项目 |
 
 `gg check` 会检查依赖边界、model/service 文件边界、命名规范、`json` tag、
 REQ/RSP 命名和业务项目根目录结构；根目录结构检查会跳过 Git ignore 规则忽略的
