@@ -105,6 +105,32 @@ func TestBuildColumnsProgramInspectsIgnoredModelsUnconditionally(t *testing.T) {
 
 	program := buildColumnsProgram("tmpapp", []*gen.ModelInfo{ignored, virtual})
 
+	t.Run("FillsTheTemplateWithAliasedImportsAndModelEntries", func(t *testing.T) {
+		// The imports and entries are the example of buildColumnsProgram's doc
+		// comment.
+		imports := "\tvm0 \"tmpapp/model/iam/user\"\n\tvm1 \"tmpapp/model/report\"\n"
+		entries := `	// Models that declare a Design but no Migrate never reach the registry.
+	// Their query columns resolve the same way, so those that opted in to
+	// framework query parameters are inspected alongside the registered ones.
+	for _, m := range []any{
+		&vm1.Summary{},
+	} {
+		if !modelschema.IsQueryable(m) {
+			continue
+		}
+		models = append(models, m)
+	}
+	// Models whose registration is ignored by gst.yaml gen.models.ignore
+	// stay table-backed: their column files must keep matching the
+	// module-copied model sources, so they are inspected unconditionally.
+	models = append(models,
+		&vm0.User{},
+	)
+`
+		want := strings.NewReplacer("{{MODULE}}", "tmpapp", "{{UNREGISTERED_IMPORTS}}", imports, "{{UNREGISTERED_MODELS}}", entries).Replace(columnsProgram)
+		require.Equal(t, want, program)
+	})
+
 	t.Run("AppendsIgnoredModelsWithoutTheCapabilityGuard", func(t *testing.T) {
 		// A model ignored by gst.yaml gen.models.ignore stays table-backed:
 		// its column file must keep matching the module-copied source, so it

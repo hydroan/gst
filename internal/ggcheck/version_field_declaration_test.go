@@ -214,6 +214,7 @@ type StrayReq struct {
 // TestVersionFieldFindingsHealThroughTagInsertions pins what gg gen writes for
 // a deviating model.Version field of a database model: a field without a tag
 // gains the whole tag, and a partial tag gains only the settings it lacks.
+// The two fields are the example of the doc comment of TagInsertions.
 func TestVersionFieldFindingsHealThroughTagInsertions(t *testing.T) {
 	projectDir := t.TempDir()
 	t.Chdir(projectDir)

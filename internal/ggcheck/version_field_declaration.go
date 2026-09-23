@@ -208,6 +208,15 @@ type TagInsertion struct {
 // TagInsertions expands one healable finding into its byte insertions. The
 // json name for a field without any json section follows gorm's naming
 // strategy, so the wire name matches the column name a bare field gets.
+// Applied to the file, the insertions heal
+//
+//	Version model.Version
+//	Revision model.Version `json:"revision" gorm:"not null"`
+//
+// into
+//
+//	Version model.Version `json:"version,omitempty" gorm:"not null;default:1"`
+//	Revision model.Version `json:"revision,omitempty" gorm:"not null;default:1"`
 func (finding VersionFieldFinding) TagInsertions() []TagInsertion {
 	if !finding.hasTag {
 		// No tag at all: both sections are missing by construction; add the
@@ -239,7 +248,8 @@ func (finding VersionFieldFinding) TagInsertions() []TagInsertion {
 	return insertions
 }
 
-// versionJSONName renders the wire name a healed json section uses.
+// versionJSONName renders the wire name a healed json section uses: version
+// for the field Version.
 func versionJSONName(fieldName string) string {
 	return gormschema.NamingStrategy{}.ColumnName("", fieldName)
 }

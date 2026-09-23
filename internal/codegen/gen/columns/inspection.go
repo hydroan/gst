@@ -194,6 +194,36 @@ func fail(err error) {
 // Models ignored by gst.yaml gen.models.ignore are also compiled in as
 // explicit entries but skip the query-parameter gate: they remain
 // table-backed and their column files must not drift from the sources.
+//
+// For the model Summary of model/report, which declares a Design but no
+// Migrate, and the model User of model/iam/user, whose registration
+// gen.models.ignore drops, it imports their packages in module tmpapp next to
+// the registration import,
+//
+//	_ "tmpapp/model"
+//	vm0 "tmpapp/model/iam/user"
+//	vm1 "tmpapp/model/report"
+//
+// and adds them to the models the registry returns:
+//
+//	models := model.RegisteredModels()
+//	// Models that declare a Design but no Migrate never reach the registry.
+//	// Their query columns resolve the same way, so those that opted in to
+//	// framework query parameters are inspected alongside the registered ones.
+//	for _, m := range []any{
+//		&vm1.Summary{},
+//	} {
+//		if !modelschema.IsQueryable(m) {
+//			continue
+//		}
+//		models = append(models, m)
+//	}
+//	// Models whose registration is ignored by gst.yaml gen.models.ignore
+//	// stay table-backed: their column files must keep matching the
+//	// module-copied model sources, so they are inspected unconditionally.
+//	models = append(models,
+//		&vm0.User{},
+//	)
 func buildColumnsProgram(module string, models []*gen.ModelInfo) string {
 	program := strings.ReplaceAll(columnsProgram, "{{MODULE}}", module)
 
