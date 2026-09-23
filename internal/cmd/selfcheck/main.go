@@ -17,6 +17,7 @@ package main
 
 import (
 	"fmt"
+	"go/types"
 	"os"
 	"path/filepath"
 
@@ -126,4 +127,14 @@ func relative(root, path string) string {
 		return path
 	}
 	return filepath.ToSlash(rel)
+}
+
+// derefNamed returns the named type t is, or points to.
+func derefNamed(t types.Type) (*types.Named, bool) {
+	t = types.Unalias(t)
+	if ptr, ok := t.(*types.Pointer); ok {
+		t = types.Unalias(ptr.Elem())
+	}
+	named, ok := t.(*types.Named)
+	return named, ok
 }
