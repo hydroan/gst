@@ -10,6 +10,7 @@ import (
 	"go/ast"
 	"go/parser"
 	"go/token"
+	"os"
 	"path/filepath"
 	"strings"
 
@@ -50,6 +51,24 @@ func moduleOwnedPath(owned map[string]bool, root, path string) bool {
 	}
 	first, _, _ := strings.Cut(rel, string(filepath.Separator))
 	return owned[first]
+}
+
+// excludedDir reports whether a check walking the project from root leaves
+// out the directory at path and everything below it: a hidden directory, a
+// vendor or testdata directory, or a directory holding a go.mod of its own,
+// whose code belongs to another module. The root itself is never left out.
+// Walking from ".", "." and "service" stay in, while ".git",
+// "service/testdata" and "tools", holding tools/go.mod, are left out.
+func excludedDir(root, path string) bool {
+	if path == root {
+		return false
+	}
+	base := filepath.Base(path)
+	if strings.HasPrefix(base, ".") || base == ggconst.DirVendor || base == ggconst.DirTestData {
+		return true
+	}
+	_, err := os.Stat(filepath.Join(path, "go.mod"))
+	return err == nil
 }
 
 // localActionTypeName resolves a DSL type argument to a type name declared in

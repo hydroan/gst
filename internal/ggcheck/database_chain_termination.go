@@ -70,15 +70,7 @@ func checkDatabaseChainTermination(ignore gghelper.ProjectIgnore) []string {
 
 	err := ignore.Walk(".", func(path string, info os.FileInfo) error {
 		if info.IsDir() {
-			if path == "." {
-				return nil
-			}
-			base := filepath.Base(path)
-			if strings.HasPrefix(base, ".") || base == "vendor" || base == "testdata" {
-				return filepath.SkipDir
-			}
-			// Nested Go modules belong to other projects.
-			if _, statErr := os.Stat(filepath.Join(path, "go.mod")); statErr == nil {
+			if excludedDir(".", path) {
 				return filepath.SkipDir
 			}
 			return nil
