@@ -48,7 +48,7 @@
 // Managed by gg module copy (module <name>). Removing the module removes this file.
 ```
 
-`middleware/` 里还放着项目自己的中间件和别的模块复制来的文件，只有带着本模块这行标记的文件，copy 才认作自己的，才可能删掉。
+`middleware/` 里还放着项目自己的中间件和别的模块复制来的文件，只有带着本模块这行标记的文件，copy 才认作自己的，才可能删掉。整个模块被删掉之后，prune 也靠这行标记认出它留下的中间件文件，见「删除复制来的模块」。
 
 ## gg module list
 
@@ -314,9 +314,7 @@ copy 成功结束时，以及执行中途在写入或删除文件之后出错时
 To remove copied module code, delete model/<name>, then run: gg gen --prune --clean-orphans
 ```
 
-删掉 `model/<name>/` 后，模块的动作不再存在，`gg gen --prune --clean-orphans` 会删掉对应的 service 文件和孤儿目录，清理规则见 [PRUNE.md](PRUNE.md)。
-
-这条提示只管 model 和 service。复制来的中间件文件和 `middleware/middleware.go` 里它们的注册调用都不会被删，要手动删掉。它们留着时，prune 还会把它们引用的 service 目录当成仍在使用的目录保留下来。
+删掉 `model/<name>/` 后，模块的动作不再存在，`gg gen --prune --clean-orphans` 会删掉对应的 service 文件和孤儿目录。这个模块复制来的中间件文件成了孤儿中间件文件，也在同一步里删掉，`middleware/middleware.go` 里它们的注册调用一并删掉。清理规则见 [PRUNE.md](PRUNE.md)。
 
 ## 终端输出的段落标题
 

@@ -163,52 +163,31 @@ func (e *CopyExecution) pruneStaleFiles() error {
 			}
 		}
 	}
-	return e.pruneStaleMiddleware(staleMiddlewareFiles)
-}
-
-// pruneStaleMiddleware deletes stale middleware files and then drops their
-// register calls from the registration file, together with the framework
-// middleware import when those calls were its last use: the calls reference
-// handler functions the deleted files declared, and an import left without a
-// use is a compile error, so leaving either behind would break the project
-// build the moment the files are gone.
-func (e *CopyExecution) pruneStaleMiddleware(staleFiles []string) error {
-	if len(staleFiles) == 0 {
-		return nil
-	}
-	handlerNames := make(map[string]bool)
-	for _, path := range staleFiles {
-		names, err := topLevelFunctionNames(path)
-		if err != nil {
-			return err
-		}
-		for _, name := range names {
-			handlerNames[name] = true
-		}
-		if err := e.remove(path, e.Plan.TargetMiddlewareDir); err != nil {
-			return err
-		}
-	}
-	return e.removeMiddlewareRegistrations(handlerNames)
+	return RemoveMiddlewareFiles(e.Plan.TargetMiddlewareDir, staleMiddlewareFiles, e.recordPrune)
 }
 
 // remove deletes one stale file after the same path-traversal check writes go
 // through. A file that is already gone counts as pruned: the desired state is
 // absence, and a parallel cleanup must not fail the copy.
 func (e *CopyExecution) remove(path string, root string) error {
-	safePath, err := requirePathUnderRoot(path, root)
-	if err != nil {
+	safePath, removed, err := removeUnderRoot(path, root)
+	if err != nil || !removed {
 		return err
 	}
-	if err := os.Remove(safePath); err != nil {
-		if os.IsNotExist(err) {
-			return nil
-		}
-		return err
-	}
-	e.file(CopyWriteDelete, safePath)
-	e.DeletedFiles = append(e.DeletedFiles, safePath)
+	e.recordPrune(CopyWriteDelete, safePath)
 	return nil
+}
+
+// recordPrune reports what pruning did to the file at path, a deletion or the
+// registration file it rewrote, and remembers the file for the cleanup the
+// command prints when a later step fails.
+func (e *CopyExecution) recordPrune(status CopyWriteStatus, path string) {
+	e.file(status, path)
+	if status == CopyWriteDelete {
+		e.DeletedFiles = append(e.DeletedFiles, path)
+		return
+	}
+	e.WrittenFiles = append(e.WrittenFiles, path)
 }
 
 func (e *CopyExecution) write(file moduleCopyFile) error {

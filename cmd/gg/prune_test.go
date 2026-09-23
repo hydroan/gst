@@ -81,7 +81,7 @@ func TestPruneServiceFilesRemindsOfUnreadSettingsBeforeAsking(t *testing.T) {
 
 // TestPruneRunStopsOnABrokenConfig pins that gg prune reports what stops it
 // before it deletes anything, here a gst.yaml prune.ignore entry outside
-// service/, as an error the command prints, not as a panic.
+// service/ and middleware/, as an error the command prints, not as a panic.
 func TestPruneRunStopsOnABrokenConfig(t *testing.T) {
 	newGenProject(t)
 	listFile := filepath.Join(ggconst.DirService, "record", "list.go")
@@ -97,6 +97,121 @@ func TestPruneRunStopsOnABrokenConfig(t *testing.T) {
 	if _, statErr := os.Stat(listFile); statErr != nil {
 		t.Fatalf("a run that stops must delete nothing: %v", statErr)
 	}
+}
+
+// TestPruneServiceFilesCleansUpAfterARemovedCopiedModule pins that the
+// removal path gg module copy prints, deleting model/<name> and then pruning
+// with --clean-orphans, takes the middleware the copy wrote as well: the file
+// carrying the module's ownership marker, its register calls, and the service
+// directory only that middleware imported. Without --clean-orphans they are
+// listed and kept, and a prune.ignore entry keeps the file for good, together
+// with what it imports.
+func TestPruneServiceFilesCleansUpAfterARemovedCopiedModule(t *testing.T) {
+	t.Run("cleaned with --clean-orphans", func(t *testing.T) {
+		middlewareFile, registrationFile, helperFile := setupRemovedModuleProject(t, true)
+
+		withStdin(t, cleanOrphansConfirmation+"\n", func() {
+			captureStdout(t, func() {
+				pruneServiceFiles(nil, nil, nil, nil, ggconfig.PruneConfig{}, gghelper.NewProjectIgnore())
+			})
+		})
+
+		for _, path := range []string{middlewareFile, helperFile} {
+			if _, err := os.Stat(path); !os.IsNotExist(err) {
+				t.Errorf("%s should be deleted with the module, stat error = %v", path, err)
+			}
+		}
+		registration, err := os.ReadFile(registrationFile)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if strings.Contains(string(registration), "SampleAuth") || strings.Contains(string(registration), `"github.com/hydroan/gst/middleware"`) {
+			t.Errorf("%s still registers the deleted middleware:\n%s", registrationFile, registration)
+		}
+	})
+
+	t.Run("listed without --clean-orphans", func(t *testing.T) {
+		middlewareFile, registrationFile, helperFile := setupRemovedModuleProject(t, false)
+
+		stdout := captureStdout(t, func() {
+			pruneServiceFiles(nil, nil, nil, nil, ggconfig.PruneConfig{}, gghelper.NewProjectIgnore())
+		})
+
+		for _, path := range []string{middlewareFile, registrationFile, helperFile} {
+			if _, err := os.Stat(path); err != nil {
+				t.Errorf("%s should be kept without --clean-orphans: %v", path, err)
+			}
+		}
+		for _, want := range []string{"Orphan Module Middleware Files Kept", middlewareFile + " (copied with module sample, whose model/sample is gone"} {
+			if !strings.Contains(stdout, want) {
+				t.Errorf("output lacks %q:\n%s", want, stdout)
+			}
+		}
+	})
+
+	t.Run("kept by prune.ignore", func(t *testing.T) {
+		middlewareFile, registrationFile, helperFile := setupRemovedModuleProject(t, true)
+		protect := ggconfig.PruneConfig{Ignore: []string{filepath.ToSlash(middlewareFile)}}
+
+		withStdin(t, cleanOrphansConfirmation+"\n", func() {
+			captureStdout(t, func() {
+				pruneServiceFiles(nil, nil, nil, nil, protect, gghelper.NewProjectIgnore())
+			})
+		})
+
+		for _, path := range []string{middlewareFile, registrationFile, helperFile} {
+			if _, err := os.Stat(path); err != nil {
+				t.Errorf("%s should be kept: %v", path, err)
+			}
+		}
+		registration, err := os.ReadFile(registrationFile)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !strings.Contains(string(registration), "middleware.RegisterAuth(SampleAuth())") {
+			t.Errorf("%s lost the register call of the kept middleware:\n%s", registrationFile, registration)
+		}
+	})
+}
+
+// setupRemovedModuleProject moves the test into a project, module tmpapp, that
+// copied the module sample and then deleted model/sample: the middleware the
+// copy wrote still carries the module's ownership marker, is still registered
+// in middleware/middleware.go, and imports service/sample/session, which
+// nothing else imports. clean sets --clean-orphans for the test.
+func setupRemovedModuleProject(t *testing.T, clean bool) (middlewareFile, registrationFile, helperFile string) {
+	t.Helper()
+
+	oldModule, oldCleanOrphans := module, cleanOrphans
+	t.Cleanup(func() {
+		module, cleanOrphans = oldModule, oldCleanOrphans
+	})
+	module, cleanOrphans = "tmpapp", clean
+	t.Chdir(t.TempDir())
+
+	middlewareFile = filepath.Join(ggconst.DirMiddleware, "sample_auth.go")
+	registrationFile = filepath.Join(ggconst.DirMiddleware, "middleware.go")
+	helperFile = filepath.Join(ggconst.DirService, "sample", "session", "session.go")
+	writeProjectFile(t, middlewareFile, `// Managed by gg module copy (module sample). Removing the module removes this file.
+
+package middleware
+
+import "tmpapp/service/sample/session"
+
+func SampleAuth() any {
+	return session.Check
+}
+`)
+	writeProjectFile(t, registrationFile, `package middleware
+
+import "github.com/hydroan/gst/middleware"
+
+func init() {
+	middleware.RegisterAuth(SampleAuth())
+}
+`)
+	writeProjectFile(t, helperFile, "package session\n\nvar Check any\n")
+	return middlewareFile, registrationFile, helperFile
 }
 
 // withStdin runs fn with os.Stdin reading input.

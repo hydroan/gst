@@ -274,6 +274,10 @@
 // so only a file carrying this module's marker may ever be deleted by this
 // module's copy. Files copied before the marker existed show up as a --force
 // overwrite on their next copy, which upgrades them into prune management.
+// The marker also outlives the module: once the project deletes
+// model/<name>, the files carrying the module's marker are orphans
+// (OrphanMiddlewareFiles), and gg prune --clean-orphans deletes them together
+// with their register calls (RemoveMiddlewareFiles).
 //
 // Registration is a reconciliation of middleware/middleware.go against the
 // manifest, scoped to the handlers this module owns (the top-level functions

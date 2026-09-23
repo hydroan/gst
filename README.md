@@ -933,8 +933,8 @@ gen:
 - 忽略不影响 model 的 `Migrate` 注册：表结构照常创建，模块内部逻辑
   （如登录查询用户表）不受影响。
 
-`gg prune`（以及 `gg gen --prune`）清理停用 action 的 service 文件和孤儿
-service 目录时，会跳过 `prune.ignore` 列出的路径：
+`gg prune`（以及 `gg gen --prune`）清理停用 action 的 service 文件、孤儿
+service 目录和被删掉的复制模块留下的中间件文件时，会跳过 `prune.ignore` 列出的路径：
 
 ```yaml
 version: 1
@@ -945,12 +945,12 @@ prune:
     - service/record/list.go   # 只保护这一个文件
 ```
 
-- 每项是 `service/` 下的一个路径（相对项目根目录），按目录层级匹配：
+- 每项是 `service/` 或 `middleware/` 下的一个路径（相对项目根目录），按目录层级匹配：
   `service/legacy` 覆盖该目录及其下全部内容，但不覆盖 `service/legacyx`；
   写到具体文件就只保护这一个文件。它不是通配符，也不是正则。
 - 列出的路径在任何情况下都不会被删：停用 action 的 service 文件、孤儿目录
-  里的文件、清理后变空的目录都算。
-- 不在 `service/` 下、写法不规整或重复的条目直接报错；指向不存在路径的条目
+  里的文件、清理后变空的目录、被删掉的复制模块留下的中间件文件都算。
+- 不在 `service/` 或 `middleware/` 下、写法不规整或重复的条目直接报错；指向不存在路径的条目
   在 prune 时输出 warning。
 - `gg` 只读取 `gst.yaml`，项目里如果还有 `.gg.yaml`、`gst.yml` 这类同类
   文件，会输出 warning 提示它们不会被读取。

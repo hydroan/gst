@@ -1,6 +1,6 @@
 # gg prune 清理逻辑
 
-`gg prune` 和 `gg gen --prune` 清理项目 `service/` 目录里不再需要的文件。本文说明它们删什么、不删什么、按什么顺序删、哪一步会先问你。清理只发生在 `service/` 目录里，其他目录一个文件都不删。
+`gg prune` 和 `gg gen --prune` 清理项目 `service/` 目录里不再需要的文件，以及被删掉的复制模块留在 `middleware/` 里的中间件文件。本文说明它们删什么、不删什么、按什么顺序删、哪一步会先问你。除了这些中间件文件和它们在 `middleware/middleware.go` 里的注册调用，`service/` 以外一个文件都不删。
 
 ## 总览
 
@@ -8,7 +8,7 @@
 
 1. **停用的 service 文件**：删掉 model、关掉 action，或者 action 去掉 `Service()` 之后，留在磁盘上的 service 文件。先列清单，你回答 `y` 才删。
 2. **空目录**：`service/` 下的空目录直接删，不询问。
-3. **孤儿目录**：没有任何 model 对应、也没有活代码 import 的 service 目录。默认只列出来；加了 `--clean-orphans` 并输入确认短语，才删掉其中 gg 不认得的文件。
+3. **孤儿目录和孤儿中间件文件**：孤儿目录是没有任何 model 对应、也没有活代码 import 的 service 目录；孤儿中间件文件是 `gg module copy` 写进 `middleware/`、所属模块已经被删掉的中间件文件。默认只列出来；加了 `--clean-orphans` 并输入确认短语，才删掉孤儿目录里 gg 不认得的文件和孤儿中间件文件，连同中间件的注册调用。
 
 ```plantuml
 @startuml
@@ -51,19 +51,22 @@ partition "第 1 步：停用的 service 文件" {
 partition "第 2 步：空目录" {
   :删掉 service/ 下的空目录，不询问;
 }
-partition "第 3 步：孤儿目录" {
+partition "第 3 步：孤儿目录和孤儿中间件文件" {
+  :找出孤儿中间件文件;
   :从活代码出发顺着 import 找
   还有人在用的目录;
-  if (项目代码的 import 都读得出来？) then (是)
+  if (middleware/ 和项目代码的 import 都读得出来？) then (是)
     :有的话列出 Service Helper Directories Kept;
     :找出孤儿目录和其中 gg 不认得的文件;
-    if (有孤儿目录？) then (有)
+    if (有孤儿目录或孤儿中间件文件？) then (有)
       if (加了 --clean-orphans？) then (没加)
-        :列出 Unmanaged Orphan Service Directories Kept，不删;
+        :列出孤儿目录和孤儿中间件文件，不删;
       else (加了)
-        :列出 Unmanaged Orphan Service Directories;
+        :列出孤儿目录和孤儿中间件文件;
         if (输入 delete orphan service leftovers？) then (一致)
-          :删除清单里的文件;
+          :先删孤儿中间件文件
+          和它们的注册调用;
+          :再删孤儿目录清单里的文件;
           :再删一遍空目录;
         else (不一致)
           :Orphan service directory cleanup canceled; <<cancel>>
@@ -85,7 +88,7 @@ stop
 | --- | --- |
 | `gg prune` | 只清理，不生成代码 |
 | `gg gen --prune` | 先生成代码，再清理 |
-| 以上两个命令加 `--clean-orphans` | 第 3 步允许删除孤儿目录里的文件；`gg gen` 带它时必须同时带 `--prune`，否则直接报错 |
+| 以上两个命令加 `--clean-orphans` | 第 3 步允许删除孤儿目录里的文件和孤儿中间件文件；`gg gen` 带它时必须同时带 `--prune`，否则直接报错 |
 
 `gg module copy` 在内部重新生成代码时不做任何清理。
 
@@ -110,7 +113,9 @@ stop
 
 **孤儿候选目录**：`service/` 下既不属于 model、也不在属于 model 的目录里面、也不是中间层的目录。隐藏目录、`vendor`、`testdata`、自带 `go.mod` 的子目录不单独当候选，跟着所在的目录走：所在目录是孤儿时随它一起清理，否则原样保留。
 
-**prune.ignore**：gst.yaml 里的保护清单。每一项是 `service/` 下的一个路径，按目录层级匹配：`service/legacy` 覆盖这个目录和它下面的全部内容，但不覆盖 `service/legacyx`；写到具体文件就只覆盖这一个文件。被覆盖的路径在三步里都不会被删。写法和校验规则见 README 的[项目级配置 gst.yaml](../../README.md#项目级配置-gstyaml)。
+**孤儿中间件文件**：`middleware/` 下带着 `gg module copy` 所有权标记（第一行是 `// Managed by gg module copy (module <name>). ...`），而项目里已经没有 `model/<name>/` 目录的文件，也就是被删掉的复制模块留下的中间件。`middleware/middleware.go` 永远不算。所有权标记见 [MODULE.md](MODULE.md)。
+
+**prune.ignore**：gst.yaml 里的保护清单。每一项是 `service/` 或 `middleware/` 下的一个路径，按目录层级匹配：`service/legacy` 覆盖这个目录和它下面的全部内容，但不覆盖 `service/legacyx`；写到具体文件就只覆盖这一个文件。被覆盖的路径在三步里都不会被删。写法和校验规则见 README 的[项目级配置 gst.yaml](../../README.md#项目级配置-gstyaml)。
 
 ## 第 0 步：准备
 
@@ -153,6 +158,7 @@ stop
 - 隐藏目录、`vendor`、`testdata`、自带 `go.mod` 的子目录里的文件，以及被 Git 忽略的文件。gg check 遍历项目时跳过的也是这些。
 - 只能通过符号链接到达的目录里的文件：遍历不跟符号链接走，和 gg check、`go` 命令的 `./...` 一样。
 - 孤儿候选目录里的文件。
+- 孤儿中间件文件：它们在 3.4 和孤儿目录一起删掉，只有它们 import 的 service 目录也就跟着成了孤儿。
 
 孤儿候选目录里的文件满足下面任一条件时，仍然算活代码，因为 prune 不会删它们：
 
@@ -167,7 +173,7 @@ stop
 
 找到的目录列在 `Service Helper Directories Kept` 下面，每行标注 `(imported by live project code)`。
 
-项目里有目录或文件读不了（比如权限不够），或者某个文件的 import 部分写错、解析不出来时，gg 没法确认那里的代码 import 了什么，所以不判定孤儿：打印警告 `failed to trace which service directories live code imports, so orphan service directories are not checked: ...`，第 3 步到此结束，什么都不删。
+项目里有目录或文件读不了（比如权限不够），或者某个文件的 import 部分写错、解析不出来时，gg 没法确认那里的代码 import 了什么，所以不判定孤儿：打印警告 `failed to trace which service directories live code imports, so orphan service directories are not checked: ...`，第 3 步到此结束，什么都不删。`middleware/` 目录本身读不了时同样到此结束，警告是 `failed to read the middleware directory, so orphans are not checked: ...`。
 
 ### 3.2 找出孤儿目录
 
@@ -219,18 +225,28 @@ stop
 - 孤儿目录的文件清单包含它所有子目录里 gg 不认得的文件，`testdata` 这类目录里的也算在内，跳过被 Git 忽略的。
 - 孤儿目录里 gg 管的 service 文件不在清单里，它们归第 1 步处理。
 
-### 3.3 列出或删除
+### 3.3 找出孤儿中间件文件
 
-没有孤儿目录时，第 3 步结束。有的话：
+- 逐个检查 `middleware/` 下直接放着的 Go 文件，子目录、测试文件和 `middleware/middleware.go` 不看。带着模块复制所有权标记、而项目里没有对应 `model/<name>/` 目录的，是孤儿中间件文件。
+- 被 `prune.ignore` 覆盖的、被 Git 忽略的不算：它们不删，被 `prune.ignore` 覆盖的仍是活代码。
+- 想留下某个孤儿中间件文件，可以把它写进 `prune.ignore`，或者删掉它第一行的所有权标记，让它变成项目自己的文件。
 
-- **没加 `--clean-orphans`**：在 `Unmanaged Orphan Service Directories Kept` 下面逐个列出孤儿目录，标注 `(no current model maps to this directory)`，下面缩进列出它的文件清单。什么都不删。
-- **加了 `--clean-orphans`**：用同样的格式列在 `Unmanaged Orphan Service Directories` 下面。项目里有 `.gg.yaml` 或 `.gg.yml` 时再警告一次它们不生效。接着警告 `This will delete unmanaged files that gg cannot prove it owns.`，要求输入 `delete orphan service leftovers`。
-  - 输入与它完全一致（区分大小写，前后空白不计）：删除全部清单里的文件，逐个打印 `Deleted ...` 或 `Failed to delete ...`，然后再做一遍第 2 步。
+### 3.4 列出或删除
+
+既没有孤儿目录，也没有孤儿中间件文件时，第 3 步结束。有的话：
+
+- **没加 `--clean-orphans`**：在 `Unmanaged Orphan Service Directories Kept` 下面逐个列出孤儿目录，标注 `(no current model maps to this directory)`，下面缩进列出它的文件清单；在 `Orphan Module Middleware Files Kept` 下面逐个列出孤儿中间件文件，标注 `(copied with module <name>, whose model/<name> is gone; its register calls go with it)`。什么都不删。
+- **加了 `--clean-orphans`**：用同样的格式分别列在 `Unmanaged Orphan Service Directories` 和 `Orphan Module Middleware Files` 下面。项目里有 `.gg.yaml` 或 `.gg.yml` 时再警告一次它们不生效。接着警告 `This will delete unmanaged files that gg cannot prove it owns.`，要求输入 `delete orphan service leftovers`。
+  - 输入与它完全一致（区分大小写，前后空白不计）：
+    1. 先删孤儿中间件文件，逐个打印 `Deleted ...`；再从 `middleware/middleware.go` 删掉调用这些文件里函数的 `Register`、`RegisterAuth` 语句，框架 middleware 包的导入没人用了也一并删掉，打印 `Removed their register calls from middleware/middleware.go`。这一步出错时打印 `Failed to delete orphan module middleware, so orphan service directories are kept: ...`，第 3 步到此结束：孤儿目录是因为这些中间件要删才成了孤儿，中间件删不掉，它们也留着。
+    2. 再删除孤儿目录清单里的文件，逐个打印 `Deleted ...` 或 `Failed to delete ...`。
+    3. 最后再做一遍第 2 步。
   - 其他输入：打印 `Orphan service directory cleanup canceled`，什么都不删。
 
 ## 不会被删的东西
 
-- `service/` 以外的任何文件和目录。
+- `service/` 以外的文件和目录，孤儿中间件文件和它们的注册调用除外。
+- `middleware/` 里没有模块复制所有权标记的文件，以及所属模块的 `model/<name>/` 还在的中间件文件。
 - 被 Git 忽略的文件和目录。
 - 当前应有的 service 文件；`gg gen --prune` 时被路由屏蔽的 action 的 service 文件。
 - 属于 model 的目录、中间层目录里 gg 不认得的文件。
@@ -250,3 +266,5 @@ stop
 | `Service Helper Directories Kept` | 第 3 步有被活代码 import 而保留的目录 |
 | `Unmanaged Orphan Service Directories Kept` | 第 3 步有孤儿目录，没加 `--clean-orphans` |
 | `Unmanaged Orphan Service Directories` | 第 3 步有孤儿目录，加了 `--clean-orphans` |
+| `Orphan Module Middleware Files Kept` | 第 3 步有孤儿中间件文件，没加 `--clean-orphans` |
+| `Orphan Module Middleware Files` | 第 3 步有孤儿中间件文件，加了 `--clean-orphans` |

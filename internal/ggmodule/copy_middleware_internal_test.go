@@ -550,3 +550,84 @@ func CopyAuth() any {
 		t.Fatalf("middleware registration used an unnecessary alias:\n%s", code)
 	}
 }
+
+// TestOrphanMiddlewareFiles pins which middleware files a removed copied
+// module left behind: the files carrying the ownership marker of a module that
+// has no model directory. A module whose model directory exists is still
+// copied, and a file without the marker, like the registration file, is never
+// one of them.
+func TestOrphanMiddlewareFiles(t *testing.T) {
+	t.Chdir(t.TempDir())
+	for name, content := range map[string]string{
+		"removed_auth.go": moduleCopyMiddlewareMarker("removed") + "\n\npackage middleware\n",
+		"kept_auth.go":    moduleCopyMiddlewareMarker("kept") + "\n\npackage middleware\n",
+		"project.go":      "package middleware\n",
+		"middleware.go":   moduleCopyMiddlewareMarker("removed") + "\n\npackage middleware\n",
+	} {
+		path := filepath.Join("middleware", name)
+		if err := gghelper.EnsureParentDir(path); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.MkdirAll(filepath.Join("model", "kept"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	orphans, err := OrphanMiddlewareFiles("middleware", "model")
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []OrphanMiddleware{{Path: filepath.Join("middleware", "removed_auth.go"), Module: "removed"}}
+	if !slices.Equal(orphans, want) {
+		t.Fatalf("OrphanMiddlewareFiles() = %+v, want %+v", orphans, want)
+	}
+
+	if orphans, err = OrphanMiddlewareFiles("absent", "model"); err != nil || len(orphans) != 0 {
+		t.Fatalf("OrphanMiddlewareFiles() without a middleware directory = %+v, %v, want nothing", orphans, err)
+	}
+}
+
+// TestRemoveMiddlewareFiles pins that deleting middleware files takes their
+// register calls with them, and the framework middleware import once nothing
+// uses it, reporting each deleted file and then the rewritten registration
+// file; a file already gone is passed over without a report.
+func TestRemoveMiddlewareFiles(t *testing.T) {
+	t.Chdir(t.TempDir())
+	oldAuth := filepath.Join("middleware", "old_auth.go")
+	registration := filepath.Join("middleware", "middleware.go")
+	if err := gghelper.EnsureParentDir(oldAuth); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(oldAuth, []byte(moduleCopyMiddlewareMarker("copytest")+"\n\npackage middleware\n\nfunc OldAuth() any {\n\treturn nil\n}\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(registration, []byte("package middleware\n\nimport \"github.com/hydroan/gst/middleware\"\n\nfunc init() {\n\tmiddleware.RegisterAuth(OldAuth())\n}\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	var reported []string
+	err := RemoveMiddlewareFiles("middleware", []string{oldAuth, filepath.Join("middleware", "gone.go")}, func(status CopyWriteStatus, path string) {
+		reported = append(reported, string(status)+" "+path)
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	want := []string{"DELETE " + oldAuth, "UPDATE " + registration}
+	if !slices.Equal(reported, want) {
+		t.Fatalf("reported = %q, want %q", reported, want)
+	}
+	if gghelper.FileExists(oldAuth) {
+		t.Fatalf("%s should be deleted", oldAuth)
+	}
+	code, err := os.ReadFile(registration)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(code), "OldAuth") || strings.Contains(string(code), `"github.com/hydroan/gst/middleware"`) {
+		t.Fatalf("the register call of the deleted middleware and its import should be gone:\n%s", code)
+	}
+}

@@ -119,6 +119,24 @@ func requirePathUnderRoot(path, root string) (string, error) {
 	return path, nil
 }
 
+// removeUnderRoot deletes path after checking that it lies under root, the
+// check every write goes through too, and returns the checked path. A file
+// that is already gone is no error but reports removed as false: the desired
+// state is absence, and a parallel cleanup must not fail the run.
+func removeUnderRoot(path, root string) (safePath string, removed bool, err error) {
+	safePath, err = requirePathUnderRoot(path, root)
+	if err != nil {
+		return "", false, err
+	}
+	if err = os.Remove(safePath); err != nil {
+		if os.IsNotExist(err) {
+			return safePath, false, nil
+		}
+		return "", false, err
+	}
+	return safePath, true, nil
+}
+
 func canonicalModuleCopyPath(path string) (string, error) {
 	abs, err := filepath.Abs(path)
 	if err != nil {

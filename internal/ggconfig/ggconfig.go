@@ -65,12 +65,12 @@ type GenModelsConfig struct {
 type PruneConfig struct {
 	// Ignore lists the paths gg prune never deletes, whatever the reason it
 	// would: a disabled action's service file, a file in an orphan service
-	// directory, or a directory left empty. Each entry is a path under
-	// service/, relative to the project root, and matches by directory level,
-	// the way the from field of an ignore rule does: "service/iam" covers
-	// service/iam and everything below it but not service/iamx, and
-	// "service/record/list.go" covers that one file. Entries are plain paths:
-	// no wildcards, no regular expressions.
+	// directory, a directory left empty, or the middleware of a removed copied
+	// module. Each entry is a path under service/ or middleware/, relative to
+	// the project root, and matches by directory level, the way the from field
+	// of an ignore rule does: "service/iam" covers service/iam and everything
+	// below it but not service/iamx, and "service/record/list.go" covers that
+	// one file. Entries are plain paths: no wildcards, no regular expressions.
 	Ignore []string `yaml:"ignore"`
 }
 
@@ -115,8 +115,9 @@ func Load(dir string) (*Config, error) {
 }
 
 // validatePruneIgnore cleans every prune.ignore entry in place and rejects an
-// entry that is not a clean relative path, lies outside service/, the only
-// directory gg prune deletes from, or repeats another entry.
+// entry that is not a clean relative path, lies outside service/ and
+// middleware/, the directories gg prune deletes from, or repeats another
+// entry.
 func validatePruneIgnore(c *PruneConfig) error {
 	seen := make(map[string]bool, len(c.Ignore))
 	for i, entry := range c.Ignore {
@@ -124,8 +125,8 @@ func validatePruneIgnore(c *PruneConfig) error {
 		if !ok {
 			return errors.Newf("entry %q: want a relative path like \"%s/sample\"", entry, ggconst.DirService)
 		}
-		if !underPath(ggconst.DirService, cleaned) {
-			return errors.Newf("entry %q is outside %s/, the only directory gg prune deletes from", entry, ggconst.DirService)
+		if !underPath(ggconst.DirService, cleaned) && !underPath(ggconst.DirMiddleware, cleaned) {
+			return errors.Newf("entry %q is outside %s/ and %s/, the directories gg prune deletes from", entry, ggconst.DirService, ggconst.DirMiddleware)
 		}
 		if seen[cleaned] {
 			return errors.Newf("entry %q is listed twice", entry)

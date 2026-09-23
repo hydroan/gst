@@ -4,6 +4,8 @@ import (
 	"bufio"
 	"fmt"
 	"os"
+	"path/filepath"
+	"slices"
 	"strings"
 
 	"github.com/cockroachdb/errors"
@@ -13,6 +15,7 @@ import (
 	"github.com/hydroan/gst/internal/ggconfig"
 	"github.com/hydroan/gst/internal/ggconst"
 	"github.com/hydroan/gst/internal/gghelper"
+	"github.com/hydroan/gst/internal/ggmodule"
 	"github.com/hydroan/gst/internal/ggprune"
 	"github.com/spf13/cobra"
 )
@@ -141,7 +144,7 @@ func pruneServiceFiles(oldServiceFiles []string, allModels []*gen.ModelInfo, kep
 		}
 		// Still check for empty directories even if no files to delete
 		removeEmptyServiceDirs(protect, ignore)
-		handleOrphanServiceDirs(allModels, keptDirs, module, protect, ignore)
+		handleOrphans(allModels, keptDirs, module, protect, ignore)
 		return
 	}
 
@@ -168,7 +171,7 @@ func pruneServiceFiles(oldServiceFiles []string, allModels []*gen.ModelInfo, kep
 
 	// Remove empty directories after deleting files
 	removeEmptyServiceDirs(protect, ignore)
-	handleOrphanServiceDirs(allModels, keptDirs, module, protect, ignore)
+	handleOrphans(allModels, keptDirs, module, protect, ignore)
 }
 
 // reportRemoval prints how deleting one file went.
@@ -188,25 +191,43 @@ func removeEmptyServiceDirs(protect ggconfig.PruneConfig, ignore gghelper.Projec
 	})
 }
 
-// handleOrphanServiceDirs reports or cleans service directories no model
-// owns; see ggprune.FindOrphanDirs for the ownership rules. When the project
-// cannot be read in full, it warns and leaves every directory alone.
-func handleOrphanServiceDirs(allModels []*gen.ModelInfo, keptDirs map[string]bool, modulePath string, protect ggconfig.PruneConfig, ignore gghelper.ProjectIgnore) {
-	orphans, keptHelpers, err := ggprune.FindOrphanDirs(allModels, keptDirs, modulePath, protect, ignore)
+// handleOrphans reports or cleans what the project left behind: the service
+// directories no model owns, see ggprune.FindOrphanDirs for the ownership
+// rules, and the middleware module copy wrote for modules the project removed,
+// see orphanModuleMiddleware. When the project cannot be read in full, it
+// warns and leaves everything alone.
+func handleOrphans(allModels []*gen.ModelInfo, keptDirs map[string]bool, modulePath string, protect ggconfig.PruneConfig, ignore gghelper.ProjectIgnore) {
+	orphanMiddleware, err := orphanModuleMiddleware(protect, ignore)
+	if err != nil {
+		clioutput.Warn("", "failed to read the middleware directory, so orphans are not checked: %v", err)
+		return
+	}
+	orphanFiles := make([]string, 0, len(orphanMiddleware))
+	for _, file := range orphanMiddleware {
+		orphanFiles = append(orphanFiles, file.Path)
+	}
+	orphans, keptHelpers, err := ggprune.FindOrphanDirs(allModels, keptDirs, orphanFiles, modulePath, protect, ignore)
 	if err != nil {
 		clioutput.Warn("", "failed to trace which service directories live code imports, so orphan service directories are not checked: %v", err)
 		return
 	}
 	reportKeptServiceHelperDirs(keptHelpers)
-	if len(orphans) == 0 {
+	if len(orphans) == 0 && len(orphanMiddleware) == 0 {
 		return
 	}
 
 	if cleanOrphans {
 		reportOrphanServiceDirs("Unmanaged Orphan Service Directories", orphans)
+		reportOrphanMiddleware("Orphan Module Middleware Files", orphanMiddleware)
 		remindUnreadPruneSettings()
 		if !confirmCleanOrphanServiceDirs() {
 			clioutput.Item("", "Orphan service directory cleanup canceled")
+			return
+		}
+		// The middleware goes first: the directories it imports are orphans
+		// only because it is deleted, so they stay if it cannot be.
+		if err := cleanOrphanMiddleware(orphanFiles); err != nil {
+			clioutput.Error("", "Failed to delete orphan module middleware, so orphan service directories are kept: %v", err)
 			return
 		}
 		cleanOrphanServiceDirs(orphans, protect, ignore)
@@ -214,9 +235,52 @@ func handleOrphanServiceDirs(allModels []*gen.ModelInfo, keptDirs map[string]boo
 	}
 
 	reportOrphanServiceDirs("Unmanaged Orphan Service Directories Kept", orphans)
+	reportOrphanMiddleware("Orphan Module Middleware Files Kept", orphanMiddleware)
+}
+
+// orphanModuleMiddleware lists the middleware module copy wrote for modules the
+// project removed (see ggmodule.OrphanMiddlewareFiles), but for the files
+// prune deletes none of: the ones a gst.yaml prune.ignore entry in protect
+// covers, which stay live code, and the ones the project's Git ignore rules
+// exclude.
+func orphanModuleMiddleware(protect ggconfig.PruneConfig, ignore gghelper.ProjectIgnore) ([]ggmodule.OrphanMiddleware, error) {
+	orphans, err := ggmodule.OrphanMiddlewareFiles(ggconst.DirMiddleware, ggconst.DirModel)
+	if err != nil {
+		return nil, err
+	}
+	return slices.DeleteFunc(orphans, func(orphan ggmodule.OrphanMiddleware) bool {
+		return protect.Ignores(orphan.Path) || ignore.Ignores(orphan.Path, false)
+	}), nil
+}
+
+// reportOrphanMiddleware lists the orphan middleware files under section; each
+// goes together with its register calls.
+func reportOrphanMiddleware(section string, orphans []ggmodule.OrphanMiddleware) {
+	if len(orphans) == 0 {
+		return
+	}
+	clioutput.Section(section)
+	for _, orphan := range orphans {
+		clioutput.Item("", "%s (copied with module %s, whose %s is gone; its register calls go with it)", orphan.Path, orphan.Module, filepath.Join(ggconst.DirModel, orphan.Module))
+	}
+}
+
+// cleanOrphanMiddleware deletes the orphan middleware files and their register
+// calls, printing each file it changes.
+func cleanOrphanMiddleware(files []string) error {
+	return ggmodule.RemoveMiddlewareFiles(ggconst.DirMiddleware, files, func(status ggmodule.CopyWriteStatus, path string) {
+		if status == ggmodule.CopyWriteDelete {
+			clioutput.Success("", "Deleted %s", path)
+			return
+		}
+		clioutput.Success("", "Removed their register calls from %s", path)
+	})
 }
 
 func reportOrphanServiceDirs(section string, orphans []ggprune.OrphanDir) {
+	if len(orphans) == 0 {
+		return
+	}
 	clioutput.Section(section)
 	for _, orphan := range orphans {
 		clioutput.Item("", "%s (no current model maps to this directory)", orphan.Path)

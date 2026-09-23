@@ -183,6 +183,62 @@ func (p *CopyPlan) collectStaleMiddlewareFiles() error {
 	return nil
 }
 
+// OrphanMiddleware is a middleware file module copy wrote for a module the
+// project no longer holds.
+type OrphanMiddleware struct {
+	// Path is the file in the project middleware directory.
+	Path string
+	// Module is the module its ownership marker names.
+	Module string
+}
+
+// OrphanMiddlewareFiles returns the middleware files module copy wrote for
+// modules the project no longer holds: the files of middlewareDir whose
+// ownership marker names a module without a directory under modelDir, which
+// is how a project removes a copied module. The registration file is never one
+// of them. With middleware/sample_auth.go marked for module sample and no
+// model/sample, it returns that file for module sample; once model/sample
+// exists again, nothing.
+func OrphanMiddlewareFiles(middlewareDir, modelDir string) ([]OrphanMiddleware, error) {
+	info, err := os.Stat(middlewareDir)
+	if os.IsNotExist(err) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	if !info.IsDir() {
+		return nil, fmt.Errorf("%s is not a directory", middlewareDir)
+	}
+
+	files, err := goFilesInPackageDir(middlewareDir)
+	if err != nil {
+		return nil, err
+	}
+	orphans := make([]OrphanMiddleware, 0)
+	for _, path := range files {
+		if filepath.Base(path) == middlewareRegistrationFilename {
+			continue
+		}
+		owner, ownerErr := middlewareMarkerModule(path)
+		if ownerErr != nil {
+			return nil, ownerErr
+		}
+		if owner == "" {
+			continue
+		}
+		modelInfo, statErr := os.Stat(filepath.Join(modelDir, owner))
+		switch {
+		case statErr == nil && modelInfo.IsDir():
+			continue
+		case statErr != nil && !os.IsNotExist(statErr):
+			return nil, statErr
+		}
+		orphans = append(orphans, OrphanMiddleware{Path: path, Module: owner})
+	}
+	return orphans, nil
+}
+
 // middlewareHandlersOnDisk collects the top-level function names of the
 // planned middleware targets as they currently exist on disk, before the copy
 // overwrites them. A handler rename would otherwise leave its old register
@@ -316,36 +372,70 @@ func topLevelFunctionNames(path string) ([]string, error) {
 	return names, nil
 }
 
+// RemoveMiddlewareFiles deletes paths, files of the project middleware
+// directory middlewareDir, and then drops the Register and RegisterAuth calls
+// naming their top-level functions from the registration file there, together
+// with the framework middleware import once nothing there uses it: the calls
+// would name functions the deleted files declared, and an import left without
+// a use is a compile error. Each deletion goes to report as CopyWriteDelete,
+// and the rewritten registration file as CopyWriteUpdate. A file that is
+// already gone counts as deleted, unreported. The first failure stops it.
+func RemoveMiddlewareFiles(middlewareDir string, paths []string, report func(status CopyWriteStatus, path string)) error {
+	handlerNames := make(map[string]bool)
+	for _, path := range paths {
+		names, err := topLevelFunctionNames(path)
+		if err != nil {
+			return err
+		}
+		for _, name := range names {
+			handlerNames[name] = true
+		}
+		safePath, removed, err := removeUnderRoot(path, middlewareDir)
+		if err != nil {
+			return err
+		}
+		if removed {
+			report(CopyWriteDelete, safePath)
+		}
+	}
+	registration, changed, err := removeMiddlewareRegistrations(middlewareDir, handlerNames)
+	if err != nil || !changed {
+		return err
+	}
+	report(CopyWriteUpdate, registration)
+	return nil
+}
+
 // removeMiddlewareRegistrations drops the middleware.Register and
 // middleware.RegisterAuth calls whose zero-argument handler constructors are
-// named in handlerNames. It edits only init functions, mirrors the shape
-// matching of ensureMiddlewareRegisterCall, and leaves the registration file
-// untouched when nothing matches. When the dropped calls were the framework
-// middleware import's last use, the import goes with them, so the file still
-// compiles.
-func (e *CopyExecution) removeMiddlewareRegistrations(handlerNames map[string]bool) error {
+// named in handlerNames from the registration file of middlewareDir, and
+// returns the file and whether it rewrote it. It edits only init functions,
+// mirrors the shape matching of ensureMiddlewareRegisterCall, and leaves the
+// registration file untouched when nothing matches. When the dropped calls
+// were the framework middleware import's last use, the import goes with them,
+// so the file still compiles.
+func removeMiddlewareRegistrations(middlewareDir string, handlerNames map[string]bool) (path string, changed bool, err error) {
 	if len(handlerNames) == 0 {
-		return nil
+		return "", false, nil
 	}
-	targetPath := filepath.Join(e.Plan.TargetMiddlewareDir, middlewareRegistrationFilename)
+	targetPath := filepath.Join(middlewareDir, middlewareRegistrationFilename)
 	src, err := os.ReadFile(targetPath)
 	if os.IsNotExist(err) {
-		return nil
+		return "", false, nil
 	}
 	if err != nil {
-		return err
+		return "", false, err
 	}
 	fset := token.NewFileSet()
 	file, err := parser.ParseFile(fset, targetPath, src, parser.ParseComments)
 	if err != nil {
-		return err
+		return "", false, err
 	}
 	importAlias := frameworkMiddlewareImportAlias(file)
 	if importAlias == "" {
-		return nil
+		return "", false, nil
 	}
 
-	changed := false
 	for _, decl := range file.Decls {
 		fn, ok := decl.(*ast.FuncDecl)
 		if !ok || fn.Recv != nil || fn.Name == nil || fn.Name.Name != "init" || fn.Body == nil {
@@ -362,19 +452,17 @@ func (e *CopyExecution) removeMiddlewareRegistrations(handlerNames map[string]bo
 		fn.Body.List = kept
 	}
 	if !changed {
-		return nil
+		return "", false, nil
 	}
 	dropUnusedFrameworkMiddlewareImport(fset, file)
-	safePath, err := requirePathUnderRoot(targetPath, e.Plan.TargetMiddlewareDir)
+	safePath, err := requirePathUnderRoot(targetPath, middlewareDir)
 	if err != nil {
-		return err
+		return "", false, err
 	}
-	if err := writeGoFile(safePath, fset, file); err != nil { // #nosec G703 -- safePath validated under the middleware dir by requirePathUnderRoot
-		return err
+	if err = writeGoFile(safePath, fset, file); err != nil { // #nosec G703 -- safePath validated under the middleware dir by requirePathUnderRoot
+		return "", false, err
 	}
-	e.file(CopyWriteUpdate, safePath)
-	e.WrittenFiles = append(e.WrittenFiles, safePath)
-	return nil
+	return safePath, true, nil
 }
 
 // isPrunedMiddlewareRegisterCall matches middleware.Register(Handler()) and

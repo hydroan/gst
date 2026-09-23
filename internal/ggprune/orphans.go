@@ -30,12 +30,14 @@ type OrphanDir struct {
 // directories plus the helper directories kept because live project code
 // still imports them. Directories in keptDirs hold service files of
 // gst.yaml-ignored actions and are treated as owned; keptDirs may be nil.
-// What the gst.yaml prune.ignore entries in protect cover is never an orphan.
-// It returns an error, and no directories, when the imports of part of the
-// project cannot be read, because a directory or a file cannot be opened or
-// its imports do not parse: an import it could not see might be all that
-// keeps a directory.
-func FindOrphanDirs(allModels []*gen.ModelInfo, keptDirs map[string]bool, modulePath string, protect ggconfig.PruneConfig, ignore gghelper.ProjectIgnore) (orphans, keptHelpers []OrphanDir, err error) {
+// orphanFiles are the files outside the service directory that orphan cleanup
+// deletes along with the orphans, such as the middleware a removed module
+// left behind; what they import keeps nothing. What the gst.yaml prune.ignore
+// entries in protect cover is never an orphan. It returns an error, and no
+// directories, when the imports of part of the project cannot be read,
+// because a directory or a file cannot be opened or its imports do not parse:
+// an import it could not see might be all that keeps a directory.
+func FindOrphanDirs(allModels []*gen.ModelInfo, keptDirs map[string]bool, orphanFiles []string, modulePath string, protect ggconfig.PruneConfig, ignore gghelper.ProjectIgnore) (orphans, keptHelpers []OrphanDir, err error) {
 	currentDirs := currentServiceDirs(allModels)
 	for dir := range keptDirs {
 		currentDirs.ownedDirs = append(currentDirs.ownedDirs, dir)
@@ -43,7 +45,7 @@ func FindOrphanDirs(allModels []*gen.ModelInfo, keptDirs map[string]bool, module
 	}
 	sort.Strings(currentDirs.ownedDirs)
 
-	helperDirs, err := importedServiceHelperDirs(currentDirs, modulePath, protect, ignore)
+	helperDirs, err := importedServiceHelperDirs(currentDirs, orphanFiles, modulePath, protect, ignore)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -138,20 +140,24 @@ func addServiceDirAncestors(knownDirs map[string]bool, dir string) {
 //
 // Live code is every Go file of the project, test files and files a build
 // constraint leaves out included, but for the .gen.go files gg generates,
-// whose imports follow the models they were generated from, and the files of
-// the service directories no model owns. A file of such a directory turns
-// live once live code imports the directory, once it sits right in a
-// directory between an imported one and the service root, which orphan
-// cleanup leaves alone, or when a gst.yaml prune.ignore entry in protect
-// covers it: prune deletes none of them. So a stale service/service.gen.go
+// whose imports follow the models they were generated from, orphanFiles,
+// which orphan cleanup deletes, and the files of the service directories no
+// model owns. A file of such a directory turns live once live code imports the
+// directory, once it sits right in a directory between an imported one and the
+// service root, which orphan cleanup leaves alone, or when a gst.yaml
+// prune.ignore entry in protect covers it: prune deletes none of them. So a stale service/service.gen.go
 // keeps nothing a deleted model left behind, and a leftover keeps nothing it
 // imports. What the project's code walks leave out holds no live code: the
 // directories gghelper.ExcludedDir names, the paths the Git ignore rules
 // exclude, and what only a symbolic link leads to. An import of a service
 // directory no longer on disk keeps nothing.
-func importedServiceHelperDirs(currentDirs serviceDirSet, modulePath string, protect ggconfig.PruneConfig, ignore gghelper.ProjectIgnore) ([]string, error) {
+func importedServiceHelperDirs(currentDirs serviceDirSet, orphanFiles []string, modulePath string, protect ggconfig.PruneConfig, ignore gghelper.ProjectIgnore) ([]string, error) {
 	importPrefix := modulePath + "/" + filepath.ToSlash(filepath.Clean(ggconst.DirService))
 	serviceRoot := filepath.Clean(ggconst.DirService)
+	deleted := make(map[string]bool, len(orphanFiles))
+	for _, file := range orphanFiles {
+		deleted[filepath.Clean(file)] = true
+	}
 
 	helperDirs := make([]string, 0)
 	helperDirSet := make(map[string]bool)
@@ -166,7 +172,7 @@ func importedServiceHelperDirs(currentDirs serviceDirSet, modulePath string, pro
 		return isInsideAnyDir(dir, helperDirs)
 	}
 	live := func(path string) bool {
-		if strings.HasSuffix(path, ggconst.SuffixGenGo) {
+		if strings.HasSuffix(path, ggconst.SuffixGenGo) || deleted[filepath.Clean(path)] {
 			return false
 		}
 		dir := filepath.Dir(path)
