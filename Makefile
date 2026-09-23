@@ -64,22 +64,22 @@ help:
 check: build lint selfcheck format vet
 	@echo "All checks passed successfully!"
 
-# Build the project and the example modules: each example is a module of its
-# own, which go build ./... does not reach into, and an API change that breaks
-# one must fail the check rather than the next person to open the example.
+# Build the project. The example modules are not built: vet type-checks each
+# of them, which already fails the check on an API change that breaks one, and
+# building them would add only the link of each example's program, which go
+# build never caches and so would redo on every check.
 build:
 	@echo "Running go build..."
 	go build ./...
-	go -C examples/demo build ./...
-	go -C examples/cluster build ./...
-	go -C examples/bench build ./...
 
 format:
 	$(call install_tool_if_missing,gofumpt,$(GOFUMPT_VERSION),$(GOFUMPT_PKG))
 	@echo "Running gofumpt..."
 	$(call run_tool,gofumpt,-l -w .)
 
-# Run go vet, on the example modules too (see build)
+# Run go vet, on the example modules too: each example is a module of its own,
+# which go vet ./... does not reach into, and an API change that breaks one
+# must fail the check rather than the next person to open the example.
 vet:
 	@echo "Running go vet..."
 	go vet ./...
@@ -88,7 +88,7 @@ vet:
 	go -C examples/bench vet ./...
 
 # Run golangci-lint (modernize, nilness and shadow run inside it, see .golangci.yml)
-# The example modules are linted too (see build), each against the .golangci.yml
+# The example modules are linted too (see vet), each against the .golangci.yml
 # gg new writes into a project, so the rules a generated project is held to are
 # the rules the examples demonstrate.
 lint:
