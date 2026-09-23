@@ -3,7 +3,9 @@ package ggprune_test
 import (
 	"os"
 	"path/filepath"
+	"reflect"
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/hydroan/gst/consts"
@@ -122,8 +124,8 @@ import _ "tmpapp/service/iam/adminauth"
 // a test file, the service root and a directory above a model's own or above
 // a kept helper's, and what prune.ignore keeps, down to a single file inside
 // an orphan. Deleting the directory would break the build, or the tests for a
-// test file. A file a build constraint leaves out counts too, and so do the
-// imports read before a file stops parsing: prune errs on the side of keeping.
+// test file. A file a build constraint leaves out counts too: prune errs on the
+// side of keeping.
 func TestFindOrphanDirsKeepsHelperDirsImportedByLiveCode(t *testing.T) {
 	importers := []struct {
 		name    string
@@ -136,7 +138,6 @@ func TestFindOrphanDirsKeepsHelperDirsImportedByLiveCode(t *testing.T) {
 	}{
 		{name: "cronjob", path: filepath.Join("cronjob", "cleanup.go"), pkg: "cronjob"},
 		{name: "file a build constraint leaves out", path: filepath.Join("cronjob", "tool.go"), pkg: "main", header: "//go:build ignore\n\n"},
-		{name: "file whose imports stop parsing", path: filepath.Join("cronjob", "broken.go"), pkg: "cronjob", tail: "\nimport \"unterminated\n"},
 		{name: "nested package", path: filepath.Join("internal", "task", "run.go"), pkg: "task"},
 		{name: "project root", path: "wire.go", pkg: "main"},
 		{name: "test file", path: filepath.Join("cronjob", "cleanup_test.go"), pkg: "cronjob"},
@@ -224,33 +225,50 @@ func TestFindOrphanDirsIgnoresImportsFromCodeThatIsNotLive(t *testing.T) {
 	}
 }
 
-// TestFindOrphanDirsFailsOnUnreadableCode pins that orphan detection fails
-// instead of guessing when part of the project cannot be read, a directory or
-// a single file: an import in the unread part might be all that keeps a
-// directory.
-func TestFindOrphanDirsFailsOnUnreadableCode(t *testing.T) {
-	if os.Geteuid() == 0 {
-		t.Skip("root reads a directory or a file whatever its permissions")
+// TestFindOrphanDirsFailsOnImportsItCannotRead pins that orphan detection
+// fails instead of guessing when it cannot read the imports of part of the
+// project: a directory or a file it may not open, or a file whose imports do
+// not parse, even after some of them did. An import in the part it could not
+// read might be all that keeps a directory, and the error names that part.
+func TestFindOrphanDirsFailsOnImportsItCannotRead(t *testing.T) {
+	tests := []struct {
+		name   string
+		locked string
+		broken string
+		want   string
+	}{
+		{name: "directory it may not open", locked: "data", want: "data"},
+		{name: "file it may not open", locked: filepath.Join("cronjob", "job.go"), want: filepath.Join("cronjob", "job.go")},
+		{name: "imports that stop parsing", broken: "package cronjob\n\nimport _ \"tmpapp/service/helper\"\n\nimport \"unterminated\n", want: filepath.Join("cronjob", "broken.go")},
+		{name: "first import that does not parse", broken: "package cronjob\n\nimport (\n\talias extra \"tmpapp/service/helper\"\n)\n", want: filepath.Join("cronjob", "broken.go")},
 	}
-	for _, locked := range []string{"data", filepath.Join("cronjob", "job.go")} {
-		t.Run(locked, func(t *testing.T) {
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if tt.locked != "" && os.Geteuid() == 0 {
+				t.Skip("root reads a directory or a file whatever its permissions")
+			}
 			setupHelperImportProject(t)
 			writeProjectFile(t, filepath.Join("data", "job.go"), "package data\n\nimport _ \"tmpapp/service/helper\"\n")
 			writeProjectFile(t, filepath.Join("cronjob", "job.go"), "package cronjob\n\nimport _ \"tmpapp/service/helper\"\n")
-			path, err := filepath.Abs(locked)
-			if err != nil {
-				t.Fatal(err)
+			if tt.broken != "" {
+				writeProjectFile(t, filepath.Join("cronjob", "broken.go"), tt.broken)
 			}
-			if err = os.Chmod(path, 0o000); err != nil {
-				t.Fatal(err)
+			if tt.locked != "" {
+				path, err := filepath.Abs(tt.locked)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if err = os.Chmod(path, 0o000); err != nil {
+					t.Fatal(err)
+				}
+				// Give the permission back before the temporary directory is removed.
+				t.Cleanup(func() { _ = os.Chmod(path, 0o755) })
 			}
-			// Give the permission back before the temporary directory is removed.
-			t.Cleanup(func() { _ = os.Chmod(path, 0o755) })
 
 			orphans, keptHelpers, err := ggprune.FindOrphanDirs([]*gen.ModelInfo{helperImportModel()}, nil, "tmpapp", ggconfig.PruneConfig{}, gghelper.NewProjectIgnore())
 
-			if err == nil {
-				t.Fatalf("FindOrphanDirs() error = nil, want one for the unreadable %s", locked)
+			if err == nil || !strings.Contains(err.Error(), tt.want) {
+				t.Fatalf("FindOrphanDirs() error = %v, want one naming %s", err, tt.want)
 			}
 			if len(orphans) != 0 || len(keptHelpers) != 0 {
 				t.Fatalf("FindOrphanDirs() = %#v, %#v, want no directories alongside the error", orphans, keptHelpers)
@@ -293,6 +311,38 @@ func TestFindOrphanDirsKeepsNothingForAMissingImport(t *testing.T) {
 
 	if len(keptHelpers) != 0 {
 		t.Fatalf("keptHelpers = %#v, want none for an import of a missing directory", keptHelpers)
+	}
+}
+
+// TestFindOrphanDirsJudgesExcludedDirectoriesWithTheirParent pins that the
+// directories a walk over the project's code leaves out, hidden, vendor and
+// testdata directories and nested modules, are never orphans on their own:
+// they go with the directory holding them. Below a directory orphan cleanup
+// leaves alone they stay, as the testdata a test next to them reads must;
+// below an orphan they are cleaned with it.
+func TestFindOrphanDirsJudgesExcludedDirectoriesWithTheirParent(t *testing.T) {
+	setupHelperImportProject(t)
+	for path, content := range map[string]string{
+		filepath.Join("service", "authz", "common_test.go"):                "package authz\n",
+		filepath.Join("service", "authz", "testdata", "input.json"):        "{}\n",
+		filepath.Join("service", ".cache", "state.json"):                   "{}\n",
+		filepath.Join("service", "vendor", "example.com", "lib", "lib.go"): "package lib\n",
+		filepath.Join("service", "tools", "go.mod"):                        "module tmpapp/service/tools\n\ngo 1.26\n",
+		filepath.Join("service", "tools", "main.go"):                       "package main\n",
+		filepath.Join("service", "legacy", "legacy.go"):                    "package legacy\n",
+		filepath.Join("service", "legacy", "testdata", "input.json"):       "{}\n",
+	} {
+		writeProjectFile(t, path, content)
+	}
+
+	orphans, _ := findOrphanDirs(t, []*gen.ModelInfo{helperImportModel()}, nil, ggconfig.PruneConfig{})
+
+	want := []ggprune.OrphanDir{
+		{Path: filepath.Join("service", "helper"), Files: []string{filepath.Join("service", "helper", "helper.go")}},
+		{Path: filepath.Join("service", "legacy"), Files: []string{filepath.Join("service", "legacy", "legacy.go"), filepath.Join("service", "legacy", "testdata", "input.json")}},
+	}
+	if !reflect.DeepEqual(orphans, want) {
+		t.Fatalf("orphans = %#v, want %#v", orphans, want)
 	}
 }
 

@@ -61,10 +61,10 @@ func (p ProjectIgnore) Walk(root string, fn func(path string, info os.FileInfo) 
 // vendor or testdata directory, or a directory holding a go.mod of its own,
 // whose code belongs to another module. None of them holds code the project
 // builds: gg gen reads no model from them, gg check checks none of them, gg
-// prune counts no import from them, and gg migrate schema reads no model type
-// from them. The root itself is never left out. Walking from ".", "." and "service"
-// stay in, while ".git", "service/testdata" and "tools", holding
-// tools/go.mod, are left out.
+// prune counts no import from them and judges none of them an orphan on its
+// own, and gg migrate schema reads no model type from them. The root itself is
+// never left out. Walking from ".", "." and "service" stay in, while ".git",
+// "service/testdata" and "tools", holding tools/go.mod, are left out.
 func ExcludedDir(root, path string) bool {
 	if path == root {
 		return false

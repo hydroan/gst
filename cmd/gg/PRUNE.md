@@ -54,7 +54,7 @@ partition "第 2 步：空目录" {
 partition "第 3 步：孤儿目录" {
   :从活代码出发顺着 import 找
   还有人在用的目录;
-  if (项目里的代码都读得了？) then (是)
+  if (项目代码的 import 都读得出来？) then (是)
     :有的话列出 Service Helper Directories Kept;
     :找出孤儿目录和其中 gg 不认得的文件;
     if (有孤儿目录？) then (有)
@@ -108,7 +108,7 @@ stop
 
 **中间层目录**：`service/` 与属于 model 的目录之间的各级目录，包括 `service/` 本身。例如 `service/sample/record` 属于 model 时，`service/sample` 和 `service/` 都是中间层目录。
 
-**孤儿候选目录**：`service/` 下既不属于 model、也不在属于 model 的目录里面、也不是中间层的目录。
+**孤儿候选目录**：`service/` 下既不属于 model、也不在属于 model 的目录里面、也不是中间层的目录。隐藏目录、`vendor`、`testdata`、自带 `go.mod` 的子目录不单独当候选，跟着所在的目录走：所在目录是孤儿时随它一起清理，否则原样保留。
 
 **prune.ignore**：gst.yaml 里的保护清单。每一项是 `service/` 下的一个路径，按目录层级匹配：`service/legacy` 覆盖这个目录和它下面的全部内容，但不覆盖 `service/legacyx`；写到具体文件就只覆盖这一个文件。被覆盖的路径在三步里都不会被删。写法和校验规则见 README 的[项目级配置 gst.yaml](../../README.md#项目级配置-gstyaml)。
 
@@ -164,15 +164,14 @@ stop
 
 - 孤儿候选目录之间的 import 不算数：一个没人用的目录 import 了另一个，两个都还是孤儿。
 - import 了一个磁盘上已经不存在的 service 目录，什么都不保留。
-- 文件的 import 部分写错、解析到一半出错时，出错之前已经读到的 import 仍然算数，宁可多留。
 
 找到的目录列在 `Service Helper Directories Kept` 下面，每行标注 `(imported by live project code)`。
 
-项目里有目录或文件读不了（比如权限不够）时，gg 没法确认那里的代码 import 了什么，所以不判定孤儿：打印警告 `failed to trace which service directories live code imports, so orphan service directories are not checked: ...`，第 3 步到此结束，什么都不删。
+项目里有目录或文件读不了（比如权限不够），或者某个文件的 import 部分写错、解析不出来时，gg 没法确认那里的代码 import 了什么，所以不判定孤儿：打印警告 `failed to trace which service directories live code imports, so orphan service directories are not checked: ...`，第 3 步到此结束，什么都不删。
 
 ### 3.2 找出孤儿目录
 
-按从浅到深的顺序，逐个检查 `service/` 下的目录：
+按从浅到深的顺序，逐个检查 `service/` 下的目录；隐藏目录、`vendor`、`testdata`、自带 `go.mod` 的子目录连同它们下面的目录都不单独检查：
 
 ```plantuml
 @startuml
@@ -217,7 +216,7 @@ stop
 @enduml
 ```
 
-- 孤儿目录的文件清单包含它所有子目录里 gg 不认得的文件，跳过被 Git 忽略的。
+- 孤儿目录的文件清单包含它所有子目录里 gg 不认得的文件，`testdata` 这类目录里的也算在内，跳过被 Git 忽略的。
 - 孤儿目录里 gg 管的 service 文件不在清单里，它们归第 1 步处理。
 
 ### 3.3 列出或删除
@@ -235,6 +234,7 @@ stop
 - 被 Git 忽略的文件和目录。
 - 当前应有的 service 文件；`gg gen --prune` 时被路由屏蔽的 action 的 service 文件。
 - 属于 model 的目录、中间层目录里 gg 不认得的文件。
+- 孤儿目录以外的隐藏目录、`vendor`、`testdata`、自带 `go.mod` 的子目录。
 - `prune.ignore` 覆盖的路径，三步都不删。
 - 3.1 保留的目录，连同它的子目录，以及它上面各层中间层目录里的文件。
 - 第 1 步没有回答 `y` 或 `yes` 时，一切。

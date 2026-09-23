@@ -31,8 +31,10 @@ type OrphanDir struct {
 // still imports them. Directories in keptDirs hold service files of
 // gst.yaml-ignored actions and are treated as owned; keptDirs may be nil.
 // What the gst.yaml prune.ignore entries in protect cover is never an orphan.
-// It returns an error, and no directories, when part of the project cannot be
-// read: an import it could not see might be all that keeps a directory.
+// It returns an error, and no directories, when the imports of part of the
+// project cannot be read, because a directory or a file cannot be opened or
+// its imports do not parse: an import it could not see might be all that
+// keeps a directory.
 func FindOrphanDirs(allModels []*gen.ModelInfo, keptDirs map[string]bool, modulePath string, protect ggconfig.PruneConfig, ignore gghelper.ProjectIgnore) (orphans, keptHelpers []OrphanDir, err error) {
 	currentDirs := currentServiceDirs(allModels)
 	for dir := range keptDirs {
@@ -213,9 +215,8 @@ func importedServiceHelperDirs(currentDirs serviceDirSet, modulePath string, pro
 // that live accepts and returns the service directories referenced through
 // project-local service imports. It walks dir the way gg walks the project's
 // code, leaving out what gghelper.ExcludedDir names and not following
-// symbolic links. A file whose imports stop parsing still counts with the
-// ones read before the error; a directory or file that cannot be read fails
-// the walk.
+// symbolic links. A directory or file that cannot be read fails the walk, and
+// so does a file whose imports do not parse.
 func importedServiceDirsUnderDir(dir string, importPrefix string, live func(path string) bool, ignore gghelper.ProjectIgnore) ([]string, error) {
 	dirs := make([]string, 0)
 	seen := make(map[string]bool)
@@ -231,10 +232,10 @@ func importedServiceDirsUnderDir(dir string, importPrefix string, live func(path
 		if !strings.HasSuffix(path, ".go") || !live(path) {
 			return nil
 		}
-		// A syntax error still leaves the imports read before it; only a
-		// file that could not be read comes back without an AST.
+		// Imports that do not parse fail the walk like a file that cannot be
+		// read: one the parser gave up on might be all that keeps a directory.
 		file, err := parser.ParseFile(fset, path, nil, parser.ImportsOnly)
-		if file == nil {
+		if err != nil {
 			return err
 		}
 		for _, imp := range file.Imports {
@@ -275,7 +276,9 @@ func serviceDirForImport(importPath string, importPrefix string) (string, bool) 
 // root, visiting the shallower directories first: a directory that is not
 // known, lies inside no owned directory and no orphan found already, is not
 // covered by a prune.ignore entry in protect, and holds unmanaged files
-// prune.ignore does not cover.
+// prune.ignore does not cover. A directory gghelper.ExcludedDir names is no
+// orphan on its own but goes with the directory holding it: kept with a
+// directory orphan cleanup leaves alone, cleaned with an orphan.
 func scanOrphanServiceDirs(currentDirs serviceDirSet, protect ggconfig.PruneConfig, ignore gghelper.ProjectIgnore) []OrphanDir {
 	root := filepath.Clean(ggconst.DirService)
 	dirs := make([]string, 0)
@@ -287,6 +290,9 @@ func scanOrphanServiceDirs(currentDirs serviceDirSet, protect ggconfig.PruneConf
 		}
 		if path == root || !info.IsDir() {
 			return nil
+		}
+		if gghelper.ExcludedDir(root, path) {
+			return filepath.SkipDir
 		}
 		dirs = append(dirs, filepath.Clean(path))
 		return nil
