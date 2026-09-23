@@ -1,4 +1,4 @@
-.PHONY: check build format vet lint testplacement test testv testvv generate fix install uninstall help
+.PHONY: check build format vet lint selfcheck test testv testvv generate fix install uninstall help
 
 # Tool versions - must match go.mod exactly
 GOLANGCI_LINT_VERSION := $(shell go list -m -f '{{.Version}}' github.com/golangci/golangci-lint/v2)
@@ -49,7 +49,7 @@ help:
 	@echo "  format         - Format code with gofumpt"
 	@echo "  vet            - Run go vet"
 	@echo "  lint           - Run golangci-lint (includes modernize, nilness and shadow)"
-	@echo "  testplacement  - Check that every test file named as an internal test has to be one"
+	@echo "  selfcheck      - Check the framework's source against the rules golangci-lint cannot express"
 	@echo "  test           - Run unit tests, a line per package"
 	@echo "  testv          - Run unit tests, a line per test"
 	@echo "  testvv         - Run unit tests with the full go test -v output"
@@ -61,7 +61,7 @@ help:
 
 # Run all code quality checks
 # Order matches make install tool installation order
-check: build lint testplacement format vet
+check: build lint selfcheck format vet
 	@echo "All checks passed successfully!"
 
 # Build the project and the example modules: each example is a module of its
@@ -99,13 +99,13 @@ lint:
 	$(call run_tool_in,golangci-lint,examples/cluster,run ./...)
 	$(call run_tool_in,golangci-lint,examples/bench,run ./...)
 
-# Check that every test file named as an internal test has to be one (see
-# internal/testplacement): testpackage in golangci-lint makes a test file that
-# joins its package carry the _internal_test.go suffix, and this check makes
-# the suffix true.
-testplacement:
-	@echo "Running the test placement check..."
-	go run ./internal/testplacement/cmd/testplacementcheck
+# Hold the framework's own source to the rules golangci-lint cannot express
+# (see internal/cmd/selfcheck): testpackage in golangci-lint, for one, makes a
+# test file that joins its package carry the _internal_test.go suffix, and the
+# test placement check makes the suffix true.
+selfcheck:
+	@echo "Running the framework's self check..."
+	go run ./internal/cmd/selfcheck
 
 # Run unit tests
 # Every package is tested, so a newly added package is covered without editing
@@ -169,7 +169,7 @@ testvv: test
 # A forgotten run is caught by the test suite, not by review.
 generate:
 	@echo "Regenerating framework sources..."
-	go run ./internal/codegen/cmd/apidocgen
+	go run ./internal/cmd/apidocgen
 
 # Auto-fix code issues
 # The example modules are fixed too (see lint): golangci-lint reaches only the

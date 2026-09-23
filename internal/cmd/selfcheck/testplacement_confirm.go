@@ -1,4 +1,4 @@
-package testplacement
+package main
 
 import (
 	"fmt"

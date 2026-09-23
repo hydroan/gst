@@ -1,14 +1,4 @@
-// Package testplacement checks that a test file named as an internal test
-// needs to be one.
-//
-// golangci-lint's testpackage makes a test file that joins the package it
-// tests say so: its name ends in _internal_test.go. That settles the name but
-// not the need. A file can carry the suffix and still use nothing unexported
-// of its package, or even declare the external test package; Check finds both,
-// so an internal test is always one that could not be written from outside.
-// The rule binds the framework alone: make check runs it over the framework,
-// and a project is held to no rule on where its tests live.
-package testplacement
+package main
 
 import (
 	"fmt"
@@ -24,23 +14,24 @@ import (
 // it tests; testpackage's skip-regexp names the same suffix.
 const internalTestSuffix = "_internal_test.go"
 
-// Violation is a test file named as an internal test that does not have to be
+// violation is a test file named as an internal test that does not have to be
 // one.
-type Violation struct {
+type violation struct {
 	// File is the path of the test file, relative to the checked directory.
 	File string
 	// Message says what is wrong and how to fix it.
 	Message string
 }
 
-// Check loads the packages under dir, tests included, and reports the test
-// files named *_internal_test.go that could be external tests: those that
-// declare the external test package, and those that use nothing unexported of
-// the package they test, which Check confirms by type-checking them as
-// external tests. A test file whose move would not compile is never reported,
-// and neither is one that another internal test file depends on. Test files of
-// a main package are left alone, since nothing can import a main package.
-func Check(dir string) ([]Violation, error) {
+// checkTestPlacement loads the packages under dir, tests included, and reports
+// the test files named *_internal_test.go that could be external tests: those
+// that declare the external test package, and those that use nothing
+// unexported of the package they test, which checkTestPlacement confirms by
+// type-checking them as external tests. A test file whose move would not
+// compile is never reported, and neither is one that another internal test
+// file depends on. Test files of a main package are left alone, since nothing
+// can import a main package.
+func checkTestPlacement(dir string) ([]violation, error) {
 	root, err := filepath.Abs(dir)
 	if err != nil {
 		return nil, errors.Wrap(err, "testplacement: resolve the checked directory")
@@ -55,14 +46,14 @@ func Check(dir string) ([]Violation, error) {
 		}
 	}
 
-	var violations []Violation
+	var violations []violation
 	for _, p := range pkgs {
 		switch {
 		case isExternalTest(p):
 			for _, path := range p.CompiledGoFiles {
 				if strings.HasSuffix(path, internalTestSuffix) {
 					file := relative(root, path)
-					violations = append(violations, Violation{
+					violations = append(violations, violation{
 						File:    file,
 						Message: fmt.Sprintf("Test file '%s' is named as an internal test but declares package %s: drop _internal from its name", file, p.Name),
 					})
@@ -75,7 +66,7 @@ func Check(dir string) ([]Violation, error) {
 			}
 			for _, f := range movable {
 				file := relative(root, f.path)
-				violations = append(violations, Violation{
+				violations = append(violations, violation{
 					File:    file,
 					Message: fmt.Sprintf("Test file '%s' uses nothing unexported of package %s: declare package %s_test and drop _internal from its name", file, p.Name, p.Name),
 				})

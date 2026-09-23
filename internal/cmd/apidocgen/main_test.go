@@ -13,7 +13,7 @@ import (
 // keeps the runtime from parsing Go sources, but it also means a forgotten
 // `make generate` would ship stale descriptions; this is what catches that.
 func TestModelRegistryAPIDocIsCurrent(t *testing.T) {
-	t.Chdir("../../../..")
+	t.Chdir("../../..")
 
 	want, err := buildModelRegistryAPIDoc()
 	if err != nil {
