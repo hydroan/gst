@@ -301,7 +301,7 @@ func TestNewLogEncoderTimestampIsUTCAndOrdersWithinASecond(t *testing.T) {
 	require.Equal(t, 0, offset)
 }
 
-func TestNewLogEncoderReflectedValuesCollapseToOneStringField(t *testing.T) {
+func TestNewLogEncoderReflectedObjectsAndArraysCollapseToOneStringField(t *testing.T) {
 	encoder := newLogEncoder()
 
 	encode := func(t *testing.T, fields ...zapcore.Field) map[string]any {
@@ -390,7 +390,72 @@ func TestNewLogEncoderReflectedValuesCollapseToOneStringField(t *testing.T) {
 		require.IsType(t, float64(0), entry["count"], "count must stay a native JSON number")
 		require.InDelta(t, 3, entry["count"], 0)
 	})
+
+	// Named scalar types — enums declared as `type Mode string` and the like —
+	// reach the encoder through the same reflection fallback, since zap.Any
+	// recognizes only the unnamed types. A scalar adds a single key whatever
+	// its type, so each keeps the native JSON type its typed field would give
+	// it rather than landing as a quoted copy of its JSON.
+	t.Run("named scalar types keep their native JSON types", func(t *testing.T) {
+		type sampleKind string
+		type sampleLevel int
+		type sampleFlag bool
+		entry := encode(t,
+			zap.Any("kind", sampleKind("sample")),
+			zap.Any("level", sampleLevel(3)),
+			zap.Any("enabled", sampleFlag(true)),
+			zap.Any("status", sampleStatus{name: "active"}),
+			zap.Any("record", (*sampleRecord)(nil)),
+		)
+		require.Equal(t, "sample", entry["kind"])
+		require.IsType(t, float64(0), entry["level"], "level must stay a native JSON number")
+		require.InDelta(t, 3, entry["level"], 0)
+		require.Equal(t, true, entry["enabled"])
+		// A value marshaling itself to a JSON scalar is a scalar too, and so
+		// is the null a nil pointer encodes to.
+		require.Equal(t, "active", entry["status"])
+		require.Contains(t, entry, "record")
+		require.Nil(t, entry["record"])
+	})
 }
+
+// BenchmarkNewLogEncoderReflectedValue measures encoding an entry whose one
+// field reaches the reflected encoder: a named scalar, written as it is, and a
+// struct, collapsed into one string field.
+func BenchmarkNewLogEncoderReflectedValue(b *testing.B) {
+	type sampleKind string
+	type sampleRecord struct {
+		Name  string `json:"name"`
+		Count int    `json:"count"`
+	}
+	encoder := newLogEncoder()
+	entry := zapcore.Entry{Time: time.Now(), Message: "sample"}
+
+	for _, bc := range []struct {
+		name  string
+		field zapcore.Field
+	}{
+		{name: "named scalar", field: zap.Any("kind", sampleKind("sample"))},
+		{name: "struct", field: zap.Any("record", sampleRecord{Name: "sample", Count: 3})},
+	} {
+		b.Run(bc.name, func(b *testing.B) {
+			b.ReportAllocs()
+			for b.Loop() {
+				buf, err := encoder.EncodeEntry(entry, []zapcore.Field{bc.field})
+				if err != nil {
+					b.Fatal(err)
+				}
+				buf.Free()
+			}
+		})
+	}
+}
+
+// sampleStatus marshals itself to a JSON string, the way an enum with a JSON
+// form of its own does.
+type sampleStatus struct{ name string }
+
+func (s sampleStatus) MarshalJSON() ([]byte, error) { return json.Marshal(s.name) }
 
 func TestWithContextAddsMetadataFields(t *testing.T) {
 	core, logs := observer.New(zapcore.InfoLevel)

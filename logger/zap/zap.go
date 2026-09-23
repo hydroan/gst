@@ -451,8 +451,8 @@ func newLogEncoder(opt ...Option) zapcore.Encoder {
 	// backstops any time.Duration that reaches a logger without going through
 	// util.LogDuration, so no entry can carry a differently scaled duration.
 	encConfig.EncodeDuration = zapcore.NanosDurationEncoder
-	// Reflected values collapse into a single JSON string field instead of a
-	// nested object; see stringifyReflectedEncoder for why.
+	// Reflected objects and arrays collapse into a single JSON string field
+	// instead of nesting; see stringifyReflectedEncoder for why.
 	encConfig.NewReflectedEncoder = newStringifyReflectedEncoder
 	// encConfig.EncodeCaller = zapcore.ShortCallerEncoder
 	// encConfig.EncodeLevel = zapcore.LowercaseColorLevelEncoder
@@ -489,16 +489,20 @@ func utcTimeEncoder(t time.Time, enc zapcore.PrimitiveArrayEncoder) {
 	enc.AppendString(t.UTC().Format(consts.LayoutTimeEncoder))
 }
 
-// stringifyReflectedEncoder renders every reflected log value as a single
-// JSON string instead of a nested JSON object. zap falls back to reflection
-// for values no typed Field constructor understands (structs, maps, and
-// slices or arrays of either), and the default reflected encoder inlines
-// their JSON shape into the entry. A log store that indexes each key then
-// grows its field mapping with every distinct shape logged anywhere in the
-// codebase and eventually hits its per-index field cap, after which it drops
-// entries. Collapsing the value into one string field keeps the mapping
-// bounded no matter what gets logged, and the string still carries the
-// value's JSON, so the content stays machine-readable. Typed fields and
+// stringifyReflectedEncoder renders a reflected log value whose JSON is an
+// object or an array as a single JSON string instead of nesting it. zap falls
+// back to reflection for values no typed Field constructor understands:
+// structs, maps, slices or arrays of either, and named types such as
+// `type Mode string` whose underlying type it would understand. The default
+// reflected encoder inlines their JSON shape into the entry. A log store that
+// indexes each key then grows its field mapping with every distinct shape
+// logged anywhere in the codebase and eventually hits its per-index field
+// cap, after which it drops entries. Collapsing the value into one string
+// field keeps the mapping bounded no matter what gets logged, and the string
+// still carries the value's JSON, so the content stays machine-readable. A
+// value whose JSON is a scalar — a string, number, boolean or null — adds a
+// single key whatever its Go type, so it is written as it is and keeps the
+// native JSON type a typed field would give it. Typed fields and
 // zapcore.ObjectMarshaler implementations are unaffected; the marshaler
 // escape hatch is reserved for framework-internal objects whose key sets are
 // fixed, never for open-ended shapes such as data models.
@@ -511,9 +515,9 @@ func newStringifyReflectedEncoder(w io.Writer) zapcore.ReflectedEncoder {
 	return stringifyReflectedEncoder{w: w}
 }
 
-// reflectedValueBuffers pools the buffer holding a value's JSON between the
-// two encoding passes below. Reflected values reach the encoder on every
-// request that logs one, so the buffer would otherwise be allocated per entry.
+// reflectedValueBuffers pools the buffer Encode first writes a value's JSON
+// into. Reflected values reach the encoder on every request that logs one, so
+// the buffer would otherwise be allocated per entry.
 var reflectedValueBuffers = sync.Pool{
 	New: func() any { return new(bytes.Buffer) },
 }
@@ -538,18 +542,20 @@ func releaseReflectedValueBuffer(buf *bytes.Buffer) {
 }
 
 // Encode implements zapcore.ReflectedEncoder. It writes the value's JSON into
-// a pooled buffer, then writes that JSON as one JSON string, so the entry
-// gains a single string field. A value json cannot handle (cycles, channels,
-// functions) falls back to Go syntax rather than failing the whole entry.
+// a pooled buffer. A scalar is then written as it is; an object or an array is
+// written as one JSON string, so the entry gains a single string field. A
+// value json cannot handle (cycles, channels, functions) falls back to Go
+// syntax, as a string too, rather than failing the whole entry.
 //
-// Both passes leave <, > and & as written. HTML escaping exists to keep JSON
+// Every pass leaves <, > and & as written. HTML escaping exists to keep JSON
 // safe inside an HTML document, and a log entry is never rendered as one: it
 // is consumed by log stores and by people reading them. The only effect here
 // would be turning those three characters into six-character escapes, and they
 // appear densely in exactly the payloads worth reading back — third-party
-// error pages, URLs and query strings. Escaping has to be off on both passes:
-// the second one re-escapes the characters the first one left alone, so
-// disabling it on the value pass by itself changes nothing.
+// error pages, URLs and query strings. Escaping has to be off on both passes
+// of an object or an array: the second one re-escapes the characters the
+// first one left alone, so disabling it on the value pass by itself changes
+// nothing.
 func (e stringifyReflectedEncoder) Encode(value any) error {
 	buf, _ := reflectedValueBuffers.Get().(*bytes.Buffer)
 	defer releaseReflectedValueBuffer(buf)
@@ -557,6 +563,10 @@ func (e stringifyReflectedEncoder) Encode(value any) error {
 	if err := newVerbatimJSONEncoder(buf).Encode(value); err != nil {
 		buf.Reset()
 		fmt.Fprintf(buf, "%#v", value)
+	} else if first := buf.Bytes()[0]; first != '{' && first != '[' {
+		// zapcore trims the newline Encode terminates the JSON with.
+		_, err = e.w.Write(buf.Bytes())
+		return err
 	}
 
 	// Encode terminates its output with a newline, which must not travel into
