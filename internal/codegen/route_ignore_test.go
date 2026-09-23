@@ -17,11 +17,10 @@ import (
 // TestResolveRoutesIgnoresDefaultEndpointActions verifies that route rules
 // disable exactly the default-endpoint actions they match. Like every case in
 // this file, it parses its models from source instead of building a
-// dsl.Design literal: dsl.Design.Range (via the unexported rangeAction
-// helper) dereferences every action pointer unconditionally (e.g.
-// d.Delete.Enabled), so an action field a hand-built literal leaves nil
-// panics, and only dsl.Parse, which codegen.FindModels runs, initializes all
-// thirteen of them.
+// dsl.Design literal: dsl.Design.Range dereferences every action pointer
+// unconditionally (e.g. d.Delete.Enabled), so an action field a hand-built
+// literal leaves nil panics, and only dsl.Parse, which codegen.FindModels
+// runs, initializes all thirteen of them.
 func TestResolveRoutesIgnoresDefaultEndpointActions(t *testing.T) {
 	models := findModels(t, map[string]string{filepath.Join("model", "iam", "admin", "users.go"): `package admin
 

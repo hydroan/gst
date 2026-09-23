@@ -1287,12 +1287,6 @@ func newSessionTestAccount(t *testing.T) sessionTestAccount {
 	return account
 }
 
-func loginSession(t *testing.T, username, password string) string {
-	t.Helper()
-
-	return loginSessionIDFromCookie(t, username, password)
-}
-
 func sessionLoginRoot(t *testing.T) string {
 	t.Helper()
 
@@ -1303,7 +1297,7 @@ func sessionLoginRoot(t *testing.T) string {
 	return sessionID
 }
 
-func loginSessionIDFromCookie(t *testing.T, username, password string) string {
+func loginSession(t *testing.T, username, password string) string {
 	t.Helper()
 
 	cli, err := client.New(baseURL)

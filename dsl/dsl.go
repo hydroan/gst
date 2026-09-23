@@ -72,7 +72,9 @@
 package dsl
 
 import (
+	"maps"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"github.com/hydroan/gst/consts"
@@ -505,20 +507,72 @@ type Design struct {
 }
 
 // Range iterates over all enabled actions in the Design and calls the provided function
-// for each one. The function receives the endpoint, action for each enabled action.
+// for each one, with the route the action is registered under. Nothing is called for a
+// nil or disabled Design, or for a nil function.
 //
 // Parameters:
-//   - fn: Callback function that receives (endpoint, action) for each enabled action
+//   - fn: Callback function that receives (route, action) for each enabled action
 //
-// The iteration order is fixed: Create, Delete, Update, Patch, List, Import,
-// Export, SSE, Get, CreateMany, DeleteMany, UpdateMany, PatchMany.
+// The Design's own actions come first, under its endpoint, in a fixed order: Create,
+// Delete, Update, Patch, List, Import, Export, SSE, Get, CreateMany, DeleteMany,
+// UpdateMany, PatchMany. The actions declared with Route follow, route by route in
+// sorted order, each route's actions in that same order.
 //
 // Example:
 //
 //	design.Range(func(route string, action *Action) {
 //		fmt.Printf("Generating %s for %s\n", action.Phase.MethodName(), route)
 //	})
-func (d *Design) Range(fn func(route string, action *Action)) { rangeAction(d, fn) }
+func (d *Design) Range(fn func(route string, action *Action)) {
+	if d == nil || fn == nil || !d.Enabled {
+		return
+	}
+
+	if d.Create.Enabled {
+		fn(d.Endpoint, d.Create)
+	}
+	if d.Delete.Enabled {
+		fn(d.Endpoint, d.Delete)
+	}
+	if d.Update.Enabled {
+		fn(d.Endpoint, d.Update)
+	}
+	if d.Patch.Enabled {
+		fn(d.Endpoint, d.Patch)
+	}
+	if d.List.Enabled {
+		fn(d.Endpoint, d.List)
+	}
+	if d.Import.Enabled {
+		fn(d.Endpoint, d.Import)
+	}
+	if d.Export.Enabled {
+		fn(d.Endpoint, d.Export)
+	}
+	if d.SSE.Enabled {
+		fn(d.Endpoint, d.SSE)
+	}
+	if d.Get.Enabled {
+		fn(d.Endpoint, d.Get)
+	}
+	if d.CreateMany.Enabled {
+		fn(d.Endpoint, d.CreateMany)
+	}
+	if d.DeleteMany.Enabled {
+		fn(d.Endpoint, d.DeleteMany)
+	}
+	if d.UpdateMany.Enabled {
+		fn(d.Endpoint, d.UpdateMany)
+	}
+	if d.PatchMany.Enabled {
+		fn(d.Endpoint, d.PatchMany)
+	}
+
+	// Sort route keys to ensure deterministic iteration order.
+	for _, route := range slices.Sorted(maps.Keys(d.routes)) {
+		emitRouteActions(route, d.routes[route], fn)
+	}
+}
 
 // Action represents the configuration for a specific API operation.
 // Each operation (Create, Update, Delete, etc.) has its own Action configuration.
