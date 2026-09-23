@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -13,6 +14,7 @@ import (
 	"github.com/hydroan/gst/internal/ggconfig"
 	"github.com/hydroan/gst/internal/ggconst"
 	"github.com/hydroan/gst/internal/gghelper"
+	"github.com/hydroan/gst/internal/ggprune"
 )
 
 // writeSignupModelFixture writes a Signup model under projectDir/model/account
@@ -111,9 +113,10 @@ func TestRouteIgnoresKeepServiceFilesForPrune(t *testing.T) {
 		t.Fatalf("KeptServiceDirs = %v, want %q kept", result.KeptServiceDirs, filepath.Dir(signupServiceFile))
 	}
 
-	// The ignored action drops out of the expected registration set...
-	if expected := currentServiceFiles(allModels); len(expected) != 0 {
-		t.Fatalf("currentServiceFiles = %v, want empty after ignore", expected)
+	// The ignored action drops out of the expected registration set, so
+	// without the kept set its file would be planned for deletion...
+	if plan := ggprune.PlanFiles([]string{signupServiceFile}, allModels, nil, ggconfig.PruneConfig{}); !slices.Equal(plan.Delete, []string{signupServiceFile}) {
+		t.Fatalf("PlanFiles().Delete = %v, want %q after ignore", plan.Delete, signupServiceFile)
 	}
 
 	// ...but pruneServiceFiles must keep the file on disk.

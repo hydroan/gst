@@ -1,0 +1,148 @@
+// Package ggprune works out what gg prune deletes from a project's service
+// directory, and deletes it: the service files of disabled actions, the
+// unmanaged files of service directories no model owns, and the directories
+// that leaves empty. It never deletes what the gst.yaml prune.ignore entries
+// cover. Asking before deleting and printing what happened stay with the gg
+// command.
+package ggprune
+
+import (
+	"os"
+	"path/filepath"
+	"sort"
+	"strings"
+
+	"github.com/hydroan/gst/dsl"
+	"github.com/hydroan/gst/internal/codegen/gen"
+	"github.com/hydroan/gst/internal/ggconfig"
+	"github.com/hydroan/gst/internal/ggconst"
+	"github.com/hydroan/gst/internal/gghelper"
+)
+
+// ScanServiceFiles lists the service files under serviceDir that gg manages:
+// the standard phase files such as create.go and list.go, and any other .go
+// file embedding service.Base[...], which a DSL Filename("x") produces. Test
+// files and the paths the project's Git ignore rules exclude are left out. A
+// walk error ends the scan, and the files found before it come back with it.
+func ScanServiceFiles(serviceDir string, ignore gghelper.ProjectIgnore) ([]string, error) {
+	var files []string
+
+	// Check if service directory exists
+	if _, err := os.Stat(serviceDir); os.IsNotExist(err) {
+		return files, nil
+	}
+
+	// Walk through the service directory
+	err := ignore.Walk(serviceDir, func(path string, info os.FileInfo) error {
+		if !info.IsDir() && isManagedServiceFile(path) {
+			files = append(files, path)
+		}
+		return nil
+	})
+	return files, err
+}
+
+// FilePlan is what prune intends for the service files of disabled actions.
+type FilePlan struct {
+	// Delete lists the files to delete, in the order they were scanned.
+	Delete []string
+
+	// Ignored lists the files a gst.yaml prune.ignore entry keeps.
+	Ignored []string
+}
+
+// PlanFiles works out which existing service files prune deletes: the ones no
+// enabled action of models expects any more, except the ones in kept, which
+// belong to gst.yaml-ignored actions and must stay on disk, and the ones a
+// prune.ignore entry in protect covers, which it lists as ignored instead.
+func PlanFiles(existing []string, models []*gen.ModelInfo, kept map[string]bool, protect ggconfig.PruneConfig) FilePlan {
+	// Get list of service files that should currently exist
+	currentFiles := currentServiceFiles(models)
+
+	// Find files to delete (exist in old list but not in current list)
+	filesToDelete := make([]string, 0)
+	for _, oldFile := range existing {
+		if !currentFiles[oldFile] && !kept[oldFile] {
+			filesToDelete = append(filesToDelete, oldFile)
+		}
+	}
+
+	// Keep the files gst.yaml prune.ignore protects
+	filesToDelete, ignoredFiles := filterIgnoredFiles(filesToDelete, protect)
+	return FilePlan{Delete: filesToDelete, Ignored: ignoredFiles}
+}
+
+// filterIgnoredFiles splits files into the ones prune may delete and the ones
+// a gst.yaml prune.ignore entry in protect covers.
+func filterIgnoredFiles(files []string, protect ggconfig.PruneConfig) (filtered []string, ignored []string) {
+	for _, file := range files {
+		if protect.Ignores(file) {
+			ignored = append(ignored, file)
+		} else {
+			filtered = append(filtered, file)
+		}
+	}
+	return filtered, ignored
+}
+
+func currentServiceFiles(allModels []*gen.ModelInfo) map[string]bool {
+	current := make(map[string]bool)
+	for _, m := range allModels {
+		m.Design.Range(func(route string, act *dsl.Action) {
+			if act.Enabled && act.Service {
+				target := gen.ServiceTarget(m, act, ggconst.DirModel, ggconst.DirService)
+				current[target.FilePath] = true
+			}
+		})
+	}
+	return current
+}
+
+// RemoveFiles deletes paths in order and reports each one to report, with the
+// error when it could not be deleted; a failure does not stop the rest.
+func RemoveFiles(paths []string, report func(path string, err error)) {
+	for _, path := range paths {
+		report(path, os.Remove(path))
+	}
+}
+
+// RemoveEmptyDirs removes the empty directories below rootDir, deepest first,
+// keeping those a gst.yaml prune.ignore entry in protect covers, and reports
+// each one it removes to report.
+func RemoveEmptyDirs(rootDir string, protect ggconfig.PruneConfig, ignore gghelper.ProjectIgnore, report func(dir string)) {
+	dirs := make([]string, 0)
+	_ = ignore.Walk(rootDir, func(path string, info os.FileInfo) error {
+		if path == rootDir || !info.IsDir() || protect.Ignores(path) {
+			return nil
+		}
+
+		dirs = append(dirs, path)
+		return nil
+	})
+
+	sort.Slice(dirs, func(i, j int) bool {
+		return directoryDepth(rootDir, dirs[i]) > directoryDepth(rootDir, dirs[j])
+	})
+
+	for _, dir := range dirs {
+		entries, err := os.ReadDir(dir)
+		if err != nil {
+			continue
+		}
+
+		if len(entries) == 0 {
+			// #nosec G122 -- path is under known project root (rootDir); we only remove empty dirs in codegen
+			if err := os.Remove(dir); err == nil {
+				report(dir)
+			}
+		}
+	}
+}
+
+func directoryDepth(rootDir, path string) int {
+	rel, err := filepath.Rel(rootDir, path)
+	if err != nil || rel == "." {
+		return 0
+	}
+	return strings.Count(rel, string(filepath.Separator)) + 1
+}

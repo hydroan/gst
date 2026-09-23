@@ -1,4 +1,4 @@
-package main
+package ggprune
 
 import (
 	"path/filepath"

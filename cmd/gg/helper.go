@@ -2,7 +2,6 @@ package main
 
 import (
 	"os"
-	"strings"
 
 	"github.com/hydroan/gst/internal/clioutput"
 	"github.com/hydroan/gst/internal/ggconfig"
@@ -16,19 +15,13 @@ import (
 // a word.
 func loadProjectConfig() (*ggconfig.Config, error) {
 	for _, name := range ggconfig.UnreadFiles(".") {
-		if isLegacyPruneSettings(name) {
+		if ggconfig.IsLegacyPruneSettings(name) {
 			clioutput.Warn("", "gg no longer reads %s: move its prune.ignore and prune.orphan_ignore entries into %s under prune.ignore, written as paths (directory prefixes, not regular expressions)", name, ggconfig.FileName)
 			continue
 		}
 		clioutput.Warn("", "gg reads only %s, not %s: rename it, or merge it into %s when both exist", ggconfig.FileName, name, ggconfig.FileName)
 	}
 	return ggconfig.Load(".")
-}
-
-// isLegacyPruneSettings reports whether name is the prune settings file of
-// earlier gg releases, .gg.yaml or .gg.yml.
-func isLegacyPruneSettings(name string) bool {
-	return strings.HasPrefix(name, ".gg.")
 }
 
 func checkErr(err error) {
