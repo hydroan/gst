@@ -135,7 +135,7 @@ func TestGenerateWritesNothingWhenNoRouteDeclaresAType(t *testing.T) {
 }
 
 // typescriptImage is the Node.js image the compiler runs in, and
-// typescriptVersion the compiler release it installs.
+// typescriptVersion the compiler release installed into it.
 const (
 	typescriptImage   = "node:22-alpine"
 	typescriptVersion = "5.9.2"
@@ -145,6 +145,10 @@ const (
 // that uses them, under the compiler configurations frontends commonly build
 // with: a strict bundler setup, native Node.js modules, a loose CommonJS setup,
 // and isolated declaration emit.
+//
+// The compiler runs in an image testcontainers builds from typescriptImage
+// with typescriptVersion installed, and keeps: Docker caches the build, so
+// only the first run on a machine downloads the compiler.
 func TestGeneratedFilesCompile(t *testing.T) {
 	files, err := generateFixture(t, sampleRoot)
 	require.NoError(t, err)
@@ -165,11 +169,20 @@ func TestGeneratedFilesCompile(t *testing.T) {
 			FileMode:          0o644,
 		})
 	}
-	script := "npm install --silent --no-audit --no-fund --prefix /opt/tsc typescript@" + typescriptVersion +
-		` && cd /work && for config in tsconfig.*.json; do echo "tsc -p $config" && /opt/tsc/node_modules/.bin/tsc -p "$config" || exit 1; done`
+	buildDir := t.TempDir()
+	dockerfile := "FROM " + typescriptImage + "\n" +
+		"RUN npm install --global --silent --no-audit --no-fund typescript@" + typescriptVersion + "\n"
+	require.NoError(t, os.WriteFile(filepath.Join(buildDir, "Dockerfile"), []byte(dockerfile), 0o600))
+	script := `cd /work && for config in tsconfig.*.json; do echo "tsc -p $config" && tsc -p "$config" || exit 1; done`
 
 	ctx := t.Context()
-	compiler, err := testcontainers.Run(ctx, typescriptImage,
+	compiler, err := testcontainers.Run(ctx, "",
+		testcontainers.WithDockerfile(testcontainers.FromDockerfile{
+			Context:   buildDir,
+			Repo:      "gst-test-typescript",
+			Tag:       typescriptVersion,
+			KeepImage: true,
+		}),
 		testcontainers.WithFiles(containerFiles...),
 		testcontainers.WithCmd("sh", "-c", script),
 		testcontainers.WithWaitStrategy(wait.ForExit().WithExitTimeout(5*time.Minute)),
