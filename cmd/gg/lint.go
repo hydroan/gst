@@ -3,16 +3,17 @@ package main
 import (
 	"os"
 	"os/exec"
-	"path/filepath"
-	"strings"
 
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/internal/clioutput"
 	"github.com/spf13/cobra"
 )
 
+// golangciLintPackage and golangciLintVersion name the golangci-lint gg lint
+// runs. The version is the one the framework lints itself with, the
+// golangci-lint module go.mod requires, which a test keeps it equal to; the
+// configuration gg new writes is written against it.
 const (
-	golangciLintBinary  = "golangci-lint"
 	golangciLintPackage = "github.com/golangci/golangci-lint/v2/cmd/golangci-lint"
 	golangciLintVersion = "v2.13.1"
 )
@@ -20,106 +21,28 @@ const (
 var lintCmd = &cobra.Command{
 	Use:   "lint",
 	Short: "run golangci-lint",
-	Long:  "Run golangci-lint for the current project, installing it first when it is missing.",
+	Long:  "Run golangci-lint over the current project, at the version the framework pins.",
 	Args:  cobra.NoArgs,
 	Run: func(cmd *cobra.Command, args []string) {
 		lintRun()
 	},
 }
 
-type golangciLintRunner interface {
-	LookPath(file string) (string, error)
-	Run(name string, args ...string) error
-	Env(name string) string
-}
+// lintRun runs the pinned golangci-lint through go run, which builds it apart
+// from the project's module and caches the executable: nothing is installed,
+// and whatever golangci-lint PATH holds plays no part. The first run builds
+// it, later ones reuse the cached executable. golangci-lint finds the project's
+// .golangci.yml by walking up from the working directory it runs in.
+func lintRun() {
+	target := golangciLintPackage + "@" + golangciLintVersion
+	clioutput.Section("Run golangci-lint")
+	clioutput.Command("go run %s run ./...", target)
 
-type osGolangciLintRunner struct{}
-
-func (osGolangciLintRunner) LookPath(file string) (string, error) {
-	return exec.LookPath(file)
-}
-
-func (osGolangciLintRunner) Run(name string, args ...string) error {
-	cmd := exec.Command(name, args...)
-	if cwd, err := os.Getwd(); err == nil {
-		cmd.Dir = cwd
-		cmd.Env = envWithPWD(cwd)
-	}
+	cmd := exec.Command("go", "run", target, "run", "./...")
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
-	return cmd.Run()
-}
-
-func (osGolangciLintRunner) Env(name string) string {
-	if value := os.Getenv(name); len(value) > 0 {
-		return value
-	}
-	if name != "GOBIN" && name != "GOPATH" {
-		return ""
-	}
-
-	output, err := exec.Command("go", "env", name).Output()
-	if err != nil {
-		return ""
-	}
-	return strings.TrimSpace(string(output))
-}
-
-func lintRun() {
-	if err := runGolangciLint(osGolangciLintRunner{}); err != nil {
-		clioutput.Error("", "%v", err)
+	if err := cmd.Run(); err != nil {
+		clioutput.Error("", "%v", errors.Wrap(err, "golangci-lint failed"))
 		os.Exit(1)
 	}
-}
-
-func runGolangciLint(runner golangciLintRunner) error {
-	path, err := runner.LookPath(golangciLintBinary)
-	if err != nil {
-		if err = installGolangciLint(runner); err != nil {
-			return err
-		}
-		path = installedGolangciLintPath(runner)
-	}
-
-	clioutput.Section("Run golangci-lint")
-	clioutput.Command("%s run ./...", golangciLintBinary)
-	if err = runner.Run(path, "run", "./..."); err != nil {
-		return errors.Wrap(err, "golangci-lint failed")
-	}
-	return nil
-}
-
-func installGolangciLint(runner golangciLintRunner) error {
-	clioutput.Section("Install golangci-lint")
-	clioutput.Command("go install %s", golangciLintInstallTarget())
-	if err := runner.Run("go", "install", golangciLintInstallTarget()); err != nil {
-		return errors.Wrap(err, "failed to install golangci-lint")
-	}
-	return nil
-}
-
-func golangciLintInstallTarget() string {
-	return golangciLintPackage + "@" + golangciLintVersion
-}
-
-func installedGolangciLintPath(runner golangciLintRunner) string {
-	if gobin := runner.Env("GOBIN"); len(gobin) > 0 {
-		return filepath.Join(gobin, golangciLintBinary)
-	}
-	if gopath := runner.Env("GOPATH"); len(gopath) > 0 {
-		return filepath.Join(gopath, "bin", golangciLintBinary)
-	}
-	return golangciLintBinary
-}
-
-func envWithPWD(cwd string) []string {
-	env := os.Environ()
-	pwd := "PWD=" + cwd
-	for i, value := range env {
-		if strings.HasPrefix(value, "PWD=") {
-			env[i] = pwd
-			return env
-		}
-	}
-	return append(env, pwd)
 }
