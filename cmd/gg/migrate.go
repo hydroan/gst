@@ -18,11 +18,9 @@ import (
 )
 
 var migrateCmd = &cobra.Command{
-	Use:           "migrate",
-	Short:         "Run database migrations",
-	Long:          "Generate and execute database migration code based on current models",
-	SilenceUsage:  true,
-	SilenceErrors: true,
+	Use:   "migrate",
+	Short: "Run database migrations",
+	Long:  "Generate and execute database migration code based on current models",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		// 1. Get module name
 		moduleName, err := gghelper.ModulePath()
@@ -35,12 +33,10 @@ var migrateCmd = &cobra.Command{
 }
 
 var migrateSchemaCmd = &cobra.Command{
-	Use:           "schema [path]",
-	Short:         "Print schema SQL for registered models",
-	Long:          "Print target schema SQL for all registered models, or only registered models declared in a file or directory",
-	Args:          cobra.MaximumNArgs(1),
-	SilenceUsage:  true,
-	SilenceErrors: true,
+	Use:   "schema [path]",
+	Short: "Print schema SQL for registered models",
+	Long:  "Print target schema SQL for all registered models, or only registered models declared in a file or directory",
+	Args:  cobra.MaximumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		moduleName, err := gghelper.ModulePath()
 		if err != nil {

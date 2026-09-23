@@ -39,9 +39,37 @@ func TestFrameworkRootGuardAllowsProjectCommandsOutsideFrameworkRoot(t *testing.
 
 	// The guard is asked directly: executing the command would also run the
 	// generation it stands for, against a project that has nothing to generate.
-	if err := rejectFrameworkRootCommand(tsCmd, nil); err != nil {
+	t.Cleanup(func() { tsCmd.SilenceUsage = false })
+	if err := startCommand(tsCmd, nil); err != nil {
 		t.Fatalf("expected project command to run outside the gst framework root: %v", err)
 	}
+}
+
+// TestCommandErrorsLeaveThePrintingToMain pins that cobra prints nothing for a
+// command that fails while it runs, since main prints the error once, and
+// only the usage for a command line gg cannot run, which the usage explains.
+func TestCommandErrorsLeaveThePrintingToMain(t *testing.T) {
+	writeGoMod(t, t.TempDir(), "example.com/app")
+
+	t.Run("error while the command runs", func(t *testing.T) {
+		out, err := executeRootCommand(t, "module", "add", "../sample")
+		if err == nil || !strings.Contains(err.Error(), "accepts a module name, not a path") {
+			t.Fatalf("gg module add ../sample error = %v, want the path rejected", err)
+		}
+		if out != "" {
+			t.Fatalf("a command failing while it runs printed %q through cobra, want nothing: main prints the error", out)
+		}
+	})
+
+	t.Run("command line gg cannot run", func(t *testing.T) {
+		out, err := executeRootCommand(t, "module", "add")
+		if err == nil {
+			t.Fatal("gg module add without a name succeeded, want the missing argument reported")
+		}
+		if !strings.Contains(out, "Usage:") || strings.Contains(out, err.Error()) {
+			t.Fatalf("a command line gg cannot run printed %q through cobra, want the usage alone: main prints the error", out)
+		}
+	})
 }
 
 func writeGoMod(t *testing.T, dir, modulePath string) {
@@ -53,6 +81,10 @@ func writeGoMod(t *testing.T, dir, modulePath string) {
 	t.Chdir(dir)
 }
 
+// executeRootCommand runs gg with args and returns what cobra printed. The
+// command that ran gets its usage back afterwards: running a command silences
+// its usage for the rest of the process, which one test would leak into the
+// next.
 func executeRootCommand(t *testing.T, args ...string) (string, error) {
 	t.Helper()
 
@@ -60,13 +92,14 @@ func executeRootCommand(t *testing.T, args ...string) (string, error) {
 	rootCmd.SetOut(&out)
 	rootCmd.SetErr(&out)
 	rootCmd.SetArgs(args)
-	rootCmd.SilenceErrors = true
-	rootCmd.SilenceUsage = true
 
-	err := rootCmd.Execute()
+	cmd, err := rootCmd.ExecuteC()
 
 	rootCmd.SetArgs(nil)
-	rootCmd.SilenceErrors = false
-	rootCmd.SilenceUsage = false
+	rootCmd.SetOut(nil)
+	rootCmd.SetErr(nil)
+	if cmd != nil {
+		cmd.SilenceUsage = false
+	}
 	return out.String(), err
 }

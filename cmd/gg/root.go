@@ -14,11 +14,14 @@ var (
 )
 
 var rootCmd = &cobra.Command{
-	Use:               "gg",
-	Short:             "gst code generator",
-	Long:              "gst code generator",
-	Version:           "1.0.0",
-	PersistentPreRunE: rejectFrameworkRootCommand,
+	Use:     "gg",
+	Short:   "gst code generator",
+	Long:    "gst code generator",
+	Version: "1.0.0",
+	// main prints a failed command's error, once and in gg's own style;
+	// cobra prints none of it.
+	SilenceErrors:     true,
+	PersistentPreRunE: startCommand,
 }
 
 func init() {
@@ -43,19 +46,15 @@ func init() {
 	)
 }
 
-func rejectFrameworkRootCommand(cmd *cobra.Command, args []string) error {
-	if isMetadataCommand(cmd) {
-		return nil
-	}
-	if gghelper.IsFrameworkProject(".") {
+// startCommand runs before every command, once cobra has parsed the command
+// line. An error from here on comes from running the command, which its usage
+// would not explain, so cobra prints the usage only for a command line gg
+// cannot run. Project commands stay out of the framework repository root;
+// help, which only describes commands, runs anywhere.
+func startCommand(cmd *cobra.Command, _ []string) error {
+	cmd.SilenceUsage = true
+	if cmd.Name() != "help" && gghelper.IsFrameworkProject(".") {
 		return errors.New("gg commands cannot run in the gst framework repository root")
 	}
 	return nil
-}
-
-func isMetadataCommand(cmd *cobra.Command) bool {
-	if cmd == nil {
-		return false
-	}
-	return cmd.Name() == "help"
 }
