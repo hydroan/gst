@@ -10,6 +10,7 @@ import (
 	"github.com/hydroan/gst/bootstrap"
 	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/internal/testutil/testcontainer"
+	pkgzap "github.com/hydroan/gst/logger/zap"
 )
 
 // Server declares what a test package needs before its tests can run. Every
@@ -132,6 +133,11 @@ func (s Server) prepare() (release func(), afterMigrate func(), err error) {
 		return release, afterMigrate, errors.Wrap(err, "failed to create the test log directory")
 	}
 	releases = append(releases, func() {
+		// The log writers are stopped first. They hold entries back for up to
+		// a second, and a file writer opens its file on its first write,
+		// creating the directory when it is missing, so a write arriving after
+		// the removal would recreate the directory and leave it behind.
+		pkgzap.Clean()
 		if removeErr := os.RemoveAll(logDir); removeErr != nil {
 			reportReleaseFailure("log directory", removeErr)
 		}

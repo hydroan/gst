@@ -35,7 +35,12 @@ func runTests(m *testing.M) int {
 	if err != nil {
 		panic(err)
 	}
-	defer func() { _ = os.RemoveAll(logDir) }()
+	defer func() {
+		// Stopping the log writers first keeps a write arriving after the
+		// removal from recreating the directory.
+		zaplogger.Clean()
+		_ = os.RemoveAll(logDir)
+	}()
 	config.App.Logger.Output = config.LoggerOutputFile
 	config.App.Logger.Dir = logDir
 	config.App.Logger.File = "global.log"

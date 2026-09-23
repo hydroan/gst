@@ -18,6 +18,7 @@ import (
 	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/internal/lifecycle"
 	"github.com/hydroan/gst/internal/router"
+	pkgzap "github.com/hydroan/gst/logger/zap"
 	"github.com/stretchr/testify/require"
 )
 
@@ -31,6 +32,9 @@ func TestMain(m *testing.M) {
 	bootstrapLogDir = dir
 
 	code := m.Run()
+	// Stopping the log writers first keeps a write arriving after the removal
+	// from recreating the directory.
+	pkgzap.Clean()
 	_ = os.RemoveAll(dir)
 	os.Exit(code)
 }

@@ -54,7 +54,12 @@ func runTests(m *testing.M) int {
 	if err != nil {
 		panic(err)
 	}
-	defer func() { _ = os.RemoveAll(logDir) }()
+	defer func() {
+		// Stopping the log writers first keeps a write arriving after the
+		// removal from recreating the directory.
+		zap.Clean()
+		_ = os.RemoveAll(logDir)
+	}()
 	os.Setenv(config.LOGGER_OUTPUT, string(config.LoggerOutputFile))
 	os.Setenv(config.LOGGER_DIR, logDir)
 	os.Setenv(config.LOGGER_FILE, "global.log")
