@@ -181,11 +181,13 @@ func newGenProject(t *testing.T) string {
 // them alike. It runs go vet rather than go build: building links the
 // project's main package against the whole framework, which costs seconds per
 // project and proves nothing about the sources that type-checking them does
-// not.
+// not. -trimpath keeps the project's temporary directory out of what the build
+// cache keys on, so a rerun reuses what the previous run compiled instead of
+// storing another copy of it.
 func requireProjectCompiles(t *testing.T) {
 	t.Helper()
 
-	output, err := exec.Command("go", "vet", "-mod=mod", "./...").CombinedOutput()
+	output, err := exec.Command("go", "vet", "-trimpath", "-mod=mod", "./...").CombinedOutput()
 	require.NoError(t, err, "go vet:\n%s", output)
 }
 
