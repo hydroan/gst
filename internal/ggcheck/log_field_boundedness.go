@@ -46,20 +46,13 @@ func checkLogFieldBoundedness(ignore gghelper.ProjectIgnore) []string {
 	}
 
 	walkErr := ignore.Walk(".", func(path string, info os.FileInfo) error {
-		base := filepath.Base(path)
 		if info.IsDir() {
-			if path == "." {
-				return nil
-			}
-			if strings.HasPrefix(base, ".") || base == "vendor" || base == "testdata" {
-				return filepath.SkipDir
-			}
-			if moduleOwnedPath(owned, ggconst.DirModel, path) || moduleOwnedPath(owned, ggconst.DirService, path) {
+			if excludedDir(".", path) || moduleOwnedPath(owned, ggconst.DirModel, path) || moduleOwnedPath(owned, ggconst.DirService, path) {
 				return filepath.SkipDir
 			}
 			return nil
 		}
-		if !strings.HasSuffix(base, ".go") || isGeneratedFileName(path) {
+		if !strings.HasSuffix(path, ".go") || isGeneratedFileName(path) {
 			return nil
 		}
 		violations = append(violations, checkFileLogFieldBoundedness(path)...)

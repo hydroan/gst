@@ -111,7 +111,7 @@ func scope(string) {}
 	assertViolationContains(t, violations, filepath.Join("helper", "dot.go"), "zap.Namespace must not be called")
 }
 
-func TestLogFieldBoundednessSkipsCopiedModulesAndGeneratedFiles(t *testing.T) {
+func TestLogFieldBoundednessSkipsCopiedModulesNestedModulesAndGeneratedFiles(t *testing.T) {
 	projectDir := t.TempDir()
 	t.Chdir(projectDir)
 	writeCheckProjectGoMod(t, projectDir)
@@ -149,6 +149,17 @@ func (generated) MarshalLogObject(enc zapcore.ObjectEncoder) error { return nil 
 type Record struct {
 	Name string
 }
+`)
+	// A directory holding its own go.mod is another module's code, left out
+	// like in every other check that walks the whole project.
+	writeCheckFile(t, filepath.Join(projectDir, "tools", "go.mod"), "module example.com/tools\n\ngo 1.27\n")
+	writeCheckFile(t, filepath.Join(projectDir, "tools", "trace.go"), `package tools
+
+import "go.uber.org/zap/zapcore"
+
+type span struct{}
+
+func (span) MarshalLogObject(enc zapcore.ObjectEncoder) error { return nil }
 `)
 
 	violations := runCheck(ggcheck.LogFieldBoundedness)
