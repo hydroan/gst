@@ -16,8 +16,8 @@ import (
 
 // maxForwardingLead is how many statements a function may run before it
 // forwards to a function nothing else uses, and still be a shell to merge with
-// that function.
-const maxForwardingLead = 2
+// that function; thinLead says which statements qualify.
+const maxForwardingLead = 1
 
 // forwarding is a thin forwarding function the check reports.
 type forwarding struct {
@@ -38,7 +38,8 @@ type forwarding struct {
 //     single use, which can call the other function itself;
 //   - the function it forwards to is unexported, declared in the same package
 //     and used by nothing else, so its body can move into the forwarding
-//     function, which may run up to maxForwardingLead statements first.
+//     function, which may first run a statement of its own as long as that
+//     is straight-line work (see thinLead).
 //
 // Only uses inside the package are counted, tests included, which is why only
 // unexported functions are judged. Left alone are a method whose name an
@@ -131,13 +132,13 @@ func forwardingIn(root string, p *packages.Package) ([]forwarding, error) {
 			}
 			toUses := uses[to]
 			switch {
-			case lead == 0 && judged(fn) && len(uses[fn]) == 1:
+			case len(lead) == 0 && judged(fn) && len(uses[fn]) == 1:
 				found = append(found, forwarding{
 					pos: p.Fset.Position(d.Name.Pos()),
 					message: fmt.Sprintf("%s '%s' at %s only forwards to %s and has one use, at %s: call %s there instead",
 						kind, funcName(p, fn), at(d.Name.Pos()), funcName(p, to), at(uses[fn][0]), funcName(p, to)),
 				})
-			case lead <= maxForwardingLead && to.Pkg() == p.Types && judged(to) &&
+			case thinLead(lead) && to.Pkg() == p.Types && judged(to) &&
 				!generated[p.Fset.Position(to.Pos()).Filename] &&
 				len(toUses) == 1 && d.Pos() <= toUses[0] && toUses[0] < d.End():
 				found = append(found, forwarding{
@@ -151,16 +152,16 @@ func forwardingIn(root string, p *packages.Package) ([]forwarding, error) {
 	return found, nil
 }
 
-// forwardedTo reports the function d forwards to, and how many statements run
+// forwardedTo reports the function d forwards to, and the statements d runs
 // before it does. d forwards when its last statement calls that function with
 // d's own parameters, unchanged and in order, and gives back what the call
 // returns, and the call takes and returns exactly the types d does, so taking
 // d away changes no conversion. A method may also pass its receiver, as the
 // receiver of the call or its first argument.
-func forwardedTo(p *packages.Package, d *ast.FuncDecl, fn *types.Func) (*types.Func, int, bool) {
+func forwardedTo(p *packages.Package, d *ast.FuncDecl, fn *types.Func) (*types.Func, []ast.Stmt, bool) {
 	stmts := d.Body.List
 	if len(stmts) == 0 {
-		return nil, 0, false
+		return nil, nil, false
 	}
 	sig := fn.Signature()
 	var call *ast.CallExpr
@@ -175,12 +176,12 @@ func forwardedTo(p *packages.Package, d *ast.FuncDecl, fn *types.Func) (*types.F
 		}
 	}
 	if call == nil {
-		return nil, 0, false
+		return nil, nil, false
 	}
 	recv := sig.Recv()
 	to, onRecv := callee(p, call.Fun, recv)
 	if to == nil || to.Origin() == fn {
-		return nil, 0, false
+		return nil, nil, false
 	}
 
 	// want holds the parameter types the call has to take.
@@ -191,12 +192,12 @@ func forwardedTo(p *packages.Package, d *ast.FuncDecl, fn *types.Func) (*types.F
 		args = args[1:]
 	}
 	if len(args) != sig.Params().Len() {
-		return nil, 0, false
+		return nil, nil, false
 	}
 	for i, arg := range args {
 		param := sig.Params().At(i)
 		if !usesVar(p, arg, param) {
-			return nil, 0, false
+			return nil, nil, false
 		}
 		want = append(want, param.Type())
 	}
@@ -204,17 +205,50 @@ func forwardedTo(p *packages.Package, d *ast.FuncDecl, fn *types.Func) (*types.F
 	called, ok := p.TypesInfo.TypeOf(call.Fun).(*types.Signature)
 	if !ok || called.Variadic() != sig.Variadic() || call.Ellipsis.IsValid() != sig.Variadic() ||
 		called.Params().Len() != len(want) || !types.Identical(called.Results(), sig.Results()) {
-		return nil, 0, false
+		return nil, nil, false
 	}
 	for i, t := range want {
 		if !types.Identical(called.Params().At(i).Type(), t) {
-			return nil, 0, false
+			return nil, nil, false
 		}
 	}
 	if onRecv && !types.Identical(to.Signature().Recv().Type(), recv.Type()) {
-		return nil, 0, false
+		return nil, nil, false
 	}
-	return to.Origin(), len(stmts) - 1, true
+	return to.Origin(), stmts[:len(stmts)-1], true
+}
+
+// thinLead reports whether the statements a function runs before it forwards
+// leave it a thin shell around the function it forwards to: no more than
+// maxForwardingLead of them, each straight-line work, which is an assignment,
+// an increment or decrement, or a plain call, with no function literal inside.
+// A branch, a loop or a closure is work of its own, which the function it
+// forwards to does not need to absorb.
+func thinLead(lead []ast.Stmt) bool {
+	if len(lead) > maxForwardingLead {
+		return false
+	}
+	for _, s := range lead {
+		switch s := s.(type) {
+		case *ast.AssignStmt, *ast.IncDecStmt:
+		case *ast.ExprStmt:
+			if _, ok := ast.Unparen(s.X).(*ast.CallExpr); !ok {
+				return false
+			}
+		default:
+			return false
+		}
+		closure := false
+		ast.Inspect(s, func(n ast.Node) bool {
+			_, isLiteral := n.(*ast.FuncLit)
+			closure = closure || isLiteral
+			return !closure
+		})
+		if closure {
+			return false
+		}
+	}
+	return true
 }
 
 // callee returns the function or method fun names, and whether it is a method

@@ -1,5 +1,5 @@
-// Package longlead has a function that runs three statements before it
-// forwards, too many to count as a shell around the function it forwards to.
+// Package longlead has a function that runs two statements before it forwards,
+// one more than a shell around the function it forwards to may.
 package longlead
 
 // Sample counts how often it is opened and closed.
@@ -13,7 +13,6 @@ type Sample struct {
 func Open(s *Sample, name string) error {
 	s.opened++
 	s.closed = 0
-	s.name = ""
 	return open(s, name)
 }
 

@@ -11,15 +11,17 @@ import (
 // to a function of another package (single), to a variadic one (variadic), to
 // another method of the receiver (method), to a function taking the receiver
 // (recvarg), and from an external test (exttest). Two forward to a function
-// nothing else uses: right away (merged), and after two statements of their
-// own (lead). Nothing is reported where the forwarding function is exported
-// and the other one has more uses (exported), where the forwarding function
-// has a second use (multiuse), in an internal test (testuse) or in a file the
-// build leaves out (tagged), where an interface of the package declares the
-// method (sealed), where the forwarding function is generated (generated),
-// where a type changes on the way (converted), where the parameters are not
-// passed on unchanged and in order (adapter), and where three statements run
-// before the forwarding (longlead).
+// nothing else uses: right away (merged), and after one straight-line
+// statement of their own (lead). Nothing is reported where the forwarding
+// function is exported and the other one has more uses (exported), where the
+// forwarding function has a second use (multiuse), in an internal test
+// (testuse) or in a file the build leaves out (tagged), where an interface of
+// the package declares the method (sealed), where the forwarding function is
+// generated (generated), where a type changes on the way (converted), where
+// the parameters are not passed on unchanged and in order (adapter), and where
+// more than a straight-line statement runs before the forwarding: two of them
+// (longlead), a branch (branch), or a statement carrying a function literal
+// (closure).
 func TestCheckForwarding(t *testing.T) {
 	root, pkgs := loadFixture(t, "testdata/forwarding/module")
 	violations, err := checkForwarding(root, pkgs)
