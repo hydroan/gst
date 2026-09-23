@@ -73,7 +73,7 @@ func setupPostgres() (func() error, error) {
 // second instance for cross-instance behavior. The returned function
 // terminates the container.
 func SetupStandalonePostgres(database, username, password string) (config.Postgres, func() error, error) {
-	prepareContainerRuntime()
+	muteContainerLog()
 	ctx := context.Background()
 
 	c, err := postgres.Run(
@@ -111,7 +111,7 @@ func SetupStandalonePostgres(database, username, password string) (config.Postgr
 // setupDedicatedPostgres starts a postgres container of its own and points
 // the framework at it. The returned function terminates that container.
 func setupDedicatedPostgres() (func() error, error) {
-	prepareContainerRuntime()
+	muteContainerLog()
 	ctx := context.Background()
 
 	c, err := postgres.Run(
@@ -152,7 +152,7 @@ func setupDedicatedPostgres() (func() error, error) {
 // test binary. The returned function drops that database; the container
 // stays.
 func setupSharedPostgres() (func() error, error) {
-	prepareContainerRuntime()
+	muteContainerLog()
 	ctx := context.Background()
 	containerName := sharedContainerName(postgresImage, postgresSharedArgs...)
 
@@ -171,7 +171,7 @@ func setupSharedPostgres() (func() error, error) {
 			// as ready after logging readiness twice and after the port is
 			// served.
 			postgres.BasicWaitStrategies(),
-			testcontainers.WithReuseByName(containerName),
+			reuseAcrossRuns(containerName),
 		)
 		if err != nil {
 			return errors.Wrap(err, "failed to start the shared postgres container")

@@ -9,7 +9,6 @@ import (
 	_ "github.com/ClickHouse/clickhouse-go/v2"
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/config"
-	"github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/modules/clickhouse"
 )
 
@@ -53,7 +52,7 @@ func SetupClickhouse() (config.Clickhouse, func() error, error) {
 // setupDedicatedClickhouse starts a clickhouse container of its own. The
 // returned function terminates that container.
 func setupDedicatedClickhouse() (config.Clickhouse, func() error, error) {
-	prepareContainerRuntime()
+	muteContainerLog()
 	ctx := context.Background()
 
 	c, err := clickhouse.Run(
@@ -83,7 +82,7 @@ func setupDedicatedClickhouse() (config.Clickhouse, func() error, error) {
 // this test binary. The returned function drops that database; the container
 // stays.
 func setupSharedClickhouse() (config.Clickhouse, func() error, error) {
-	prepareContainerRuntime()
+	muteContainerLog()
 	ctx := context.Background()
 	containerName := sharedContainerName(clickhouseImage)
 
@@ -98,7 +97,7 @@ func setupSharedClickhouse() (config.Clickhouse, func() error, error) {
 			ctx, clickhouseImage,
 			clickhouse.WithUsername(clickhouseUsername),
 			clickhouse.WithPassword(clickhousePassword),
-			testcontainers.WithReuseByName(containerName),
+			reuseAcrossRuns(containerName),
 		)
 		if err != nil {
 			return errors.Wrap(err, "failed to start the shared clickhouse container")

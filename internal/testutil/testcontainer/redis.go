@@ -50,7 +50,7 @@ func SetupRedis() (func() error, error) {
 // setupDedicatedRedis starts a redis container of its own and points the
 // framework at it. The returned function terminates that container.
 func setupDedicatedRedis() (func() error, error) {
-	prepareContainerRuntime()
+	muteContainerLog()
 	ctx := context.Background()
 
 	c, err := redis.Run(ctx, redisImage)
@@ -81,7 +81,7 @@ func setupDedicatedRedis() (func() error, error) {
 // binary. The returned function flushes that database, which also clears its
 // lease; the container stays.
 func setupSharedRedis() (func() error, error) {
-	prepareContainerRuntime()
+	muteContainerLog()
 	ctx := context.Background()
 	containerName := sharedContainerName(redisImage, redisSharedArgs...)
 
@@ -94,7 +94,7 @@ func setupSharedRedis() (func() error, error) {
 		c, err := redis.Run(
 			ctx, redisImage,
 			testcontainers.WithCmdArgs(redisSharedArgs...),
-			testcontainers.WithReuseByName(containerName),
+			reuseAcrossRuns(containerName),
 		)
 		if err != nil {
 			return errors.Wrap(err, "failed to start the shared redis container")

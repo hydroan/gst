@@ -1,3 +1,17 @@
+// Package testcontainer prepares the services the framework's tests run
+// against, in containers started through testcontainers-go.
+//
+// What testcontainers-go provides is used as it is: a container started for
+// one test binary alone is the library's to create, wait for and clean up,
+// its reaper included, and nothing here duplicates any of that. Everything
+// this package builds on top exists for one reason only, reuse: the mysql,
+// postgres, redis, clickhouse and minio containers are shared by every test
+// binary and outlive every run to keep the tests fast, which the library does
+// not provide. Their fixed names, the isolation slot every binary claims
+// inside them, the cleanup of slots whose binary is gone and keeping them out
+// of the reaper's reach are this package's own for that reason alone. A
+// container that is not reused takes none of it, and a need the library meets
+// is met through the library, never through a mechanism of this package's own.
 package testcontainer
 
 import (
@@ -12,24 +26,24 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
-	"sync"
 	"syscall"
 	"time"
 
 	"github.com/cockroachdb/errors"
 	"github.com/gofrs/flock"
+	"github.com/moby/moby/api/types/container"
+	"github.com/testcontainers/testcontainers-go"
 )
 
 // Shared containers.
 //
-// By default the mysql and redis setups attach every test binary to one
-// fixed-name container per image version instead of starting a container per
-// package. The container is the shared layer; isolation moves one level down,
-// where it is much cheaper: every binary gets a database of its own inside
-// the shared mysql container and a redis database index of its own inside the
-// shared redis container. Releasing drops that database or flushes that index
-// but never terminates the container, so later runs start against a warm
-// instance.
+// By default the mysql, postgres, redis, clickhouse and minio setups attach
+// every test binary to one fixed-name container per image version instead of
+// starting a container per package. The container is the shared layer;
+// isolation moves one level down, where it is much cheaper: every binary gets
+// a slot of its own inside the shared container, a database, a redis database
+// index or a bucket. Releasing drops that slot but never terminates the
+// container, so later runs start against a warm instance.
 //
 // The shared containers survive on purpose; removing one is a manual
 // `docker rm -f <name>`. A tuning change in a container command line needs no
@@ -52,30 +66,27 @@ func dedicatedContainersRequested() bool {
 	return err == nil && dedicated
 }
 
-// envReaperDisabled is the switch testcontainers-go reads to skip its reaper
-// (ryuk) entirely.
-const envReaperDisabled = "TESTCONTAINERS_RYUK_DISABLED"
-
-var disableReaperOnce sync.Once
-
-// prepareContainerRuntime is the first step of every container setup. It
-// mutes the testcontainers logging and, unless dedicated containers were
-// requested, turns the reaper off for the whole process.
+// reuseAcrossRuns attaches to the shared container named name, creating it
+// when it does not exist yet, and keeps it out of the reaper's reach.
 //
-// The reaper must stay away from shared containers: a reused container keeps
-// the session label of whichever process created it, and the reaper tears it
-// down moments after that process disconnects, pulling the container from
-// under every other binary still running against it. Disabling the reaper is
-// process-wide, so in shared mode even a dedicated container of another
-// service loses its crash cleanup and relies on the release function alone; a
-// binary killed hard may leak it. The escape hatch restores full reaper
-// behavior.
-func prepareContainerRuntime() {
-	muteContainerLog()
-	if !dedicatedContainersRequested() {
-		disableReaperOnce.Do(func() {
-			os.Setenv(envReaperDisabled, "true")
-		})
+// The reaper removes every container carrying the labels of its session once
+// the test binaries of that session are gone, and testcontainers gives a
+// reused container those labels like any other: the container would go with
+// the run that created it, pulled from under every binary of another run
+// still using it. Stripping the labels at creation is what lets the reaper
+// stay on for everything else, so every dedicated container keeps its crash
+// cleanup. The labels come from testcontainers.GenericLabels, the library's
+// own account of what the reaper matches, not from a copy of their names.
+func reuseAcrossRuns(name string) testcontainers.CustomizeRequestOption {
+	return func(req *testcontainers.GenericContainerRequest) error {
+		if err := testcontainers.WithReuseByName(name)(req); err != nil {
+			return err
+		}
+		return testcontainers.WithConfigModifier(func(config *container.Config) {
+			for key := range testcontainers.GenericLabels() {
+				delete(config.Labels, key)
+			}
+		})(req)
 	}
 }
 

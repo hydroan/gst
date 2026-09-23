@@ -80,7 +80,7 @@ func setupMySQL() (func() error, func(), error) {
 // setupDedicatedMySQL starts a mysql container of its own and points the
 // framework at it. The returned function terminates that container.
 func setupDedicatedMySQL() (func() error, error) {
-	prepareContainerRuntime()
+	muteContainerLog()
 	ctx := context.Background()
 
 	c, err := mysql.Run(
@@ -120,7 +120,7 @@ func setupDedicatedMySQL() (func() error, error) {
 // instance for cross-instance behavior. The returned function terminates
 // the container.
 func SetupStandaloneMySQL(database, username, password string) (config.MySQL, func() error, error) {
-	prepareContainerRuntime()
+	muteContainerLog()
 	ctx := context.Background()
 
 	options := []testcontainers.ContainerCustomizer{
@@ -161,7 +161,7 @@ func SetupStandaloneMySQL(database, username, password string) (config.MySQL, fu
 // returned function drops that database and the second publishes the template,
 // see prepareSchemaTemplate; the container stays either way.
 func setupSharedMySQL() (func() error, func(), error) {
-	prepareContainerRuntime()
+	muteContainerLog()
 	ctx := context.Background()
 	containerName := sharedContainerName(mysqlImage, mysqlSharedArgs...)
 
@@ -177,7 +177,7 @@ func setupSharedMySQL() (func() error, func(), error) {
 			mysql.WithUsername(mysqlRootUsername),
 			mysql.WithPassword(mysqlPassword),
 			testcontainers.WithCmdArgs(mysqlSharedArgs...),
-			testcontainers.WithReuseByName(containerName),
+			reuseAcrossRuns(containerName),
 		)
 		if err != nil {
 			return errors.Wrap(err, "failed to start the shared mysql container")

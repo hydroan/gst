@@ -19,9 +19,11 @@ const kafkaImage = "confluentinc/confluent-local:7.5.0"
 // no server-side namespace a shared container could hand out per test binary,
 // so isolation would take a topic-prefix contract imposed on business code,
 // which is not the framework's call to make. A container per binary keeps
-// topics and consumer groups apart by construction.
+// topics and consumer groups apart by construction. Not being reused, it is
+// left to testcontainers alone: should the binary die before calling the
+// returned function, the reaper removes the container.
 func SetupKafka() (func() error, error) {
-	prepareContainerRuntime()
+	muteContainerLog()
 	ctx := context.Background()
 
 	c, err := kafka.Run(ctx, kafkaImage)

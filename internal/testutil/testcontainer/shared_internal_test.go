@@ -15,6 +15,8 @@ import (
 	"github.com/hydroan/gst/config"
 	goredis "github.com/redis/go-redis/v9"
 	"github.com/stretchr/testify/require"
+	"github.com/testcontainers/testcontainers-go"
+	"github.com/testcontainers/testcontainers-go/modules/redis"
 )
 
 func TestDedicatedContainersRequested(t *testing.T) {
@@ -77,6 +79,27 @@ func TestSharedContainerName(t *testing.T) {
 				"image %q", tt.image)
 		}
 	})
+}
+
+func TestReuseAcrossRunsKeepsTheContainerFromTheReaper(t *testing.T) {
+	muteContainerLog()
+
+	// A probe name of this binary's own keeps the test away from the real
+	// shared redis container, which other binaries are using.
+	shared, err := redis.Run(t.Context(), redisImage,
+		reuseAcrossRuns(fmt.Sprintf("gst-test-reaper-probe-%d", os.Getpid())))
+	testcontainers.CleanupContainer(t, shared)
+	require.NoError(t, err)
+	dedicated, err := redis.Run(t.Context(), redisImage)
+	testcontainers.CleanupContainer(t, dedicated)
+	require.NoError(t, err)
+
+	sharedLabels := containerLabels(t, shared)
+	dedicatedLabels := containerLabels(t, dedicated)
+	for key, value := range testcontainers.GenericLabels() {
+		require.Equal(t, value, dedicatedLabels[key], "a dedicated container is the reaper's to clean up")
+		require.NotContains(t, sharedLabels, key, "a shared container must carry none of the labels the reaper matches")
+	}
 }
 
 func TestWithSharedContainerLock(t *testing.T) {
@@ -296,4 +319,13 @@ func sharedDatabaseListed(t *testing.T, admin *sql.DB, d sharedSQLDialect, name 
 	}
 	require.NoError(t, rows.Err())
 	return false
+}
+
+// containerLabels returns the labels the container runtime holds for c.
+func containerLabels(t *testing.T, c testcontainers.Container) map[string]string {
+	t.Helper()
+
+	inspect, err := c.Inspect(t.Context())
+	require.NoError(t, err)
+	return inspect.Config.Labels
 }

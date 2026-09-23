@@ -8,7 +8,6 @@ import (
 	"github.com/hydroan/gst/config"
 	miniogo "github.com/minio/minio-go/v7"
 	"github.com/minio/minio-go/v7/pkg/credentials"
-	"github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/modules/minio"
 )
 
@@ -34,7 +33,7 @@ func SetupMinio() (func() error, error) {
 // setupDedicatedMinio starts a minio container of its own and points the
 // framework at it. The returned function terminates that container.
 func setupDedicatedMinio() (func() error, error) {
-	prepareContainerRuntime()
+	muteContainerLog()
 	ctx := context.Background()
 
 	c, err := minio.Run(ctx, minioImage)
@@ -64,7 +63,7 @@ func setupDedicatedMinio() (func() error, error) {
 // it is not running yet, and creates the bucket of this test binary. The
 // returned function removes the buckets of the binary; the container stays.
 func setupSharedMinio() (func() error, error) {
-	prepareContainerRuntime()
+	muteContainerLog()
 	ctx := context.Background()
 	containerName := sharedContainerName(minioImage)
 
@@ -74,7 +73,7 @@ func setupSharedMinio() (func() error, error) {
 		bucket                   string
 	)
 	err := withSharedContainerLock(containerName, func() error {
-		c, err := minio.Run(ctx, minioImage, testcontainers.WithReuseByName(containerName))
+		c, err := minio.Run(ctx, minioImage, reuseAcrossRuns(containerName))
 		if err != nil {
 			return errors.Wrap(err, "failed to start the shared minio container")
 		}
