@@ -847,7 +847,7 @@ func init() {
 | `gg gen` | 根据 `model` DSL 生成注册文件和 service action 文件 |
 | `gg gen --prune` | 生成后联动清理废弃 service action 文件 |
 | `gg gen ts` | 生成接口收发类型的 TypeScript 声明到 `generated/typescript/`，供前端复制使用 |
-| `gg module copy <name>` | 将内置模块复制为业务项目本地源码，并删除框架源已移除的过时 model/service 文件（`_test.go` 与生成文件除外） |
+| `gg module copy <name>` | 将内置模块复制为业务项目本地源码，并删除框架源已移除的过时 model/service 文件（`_test.go` 与生成文件除外）；`gg module` 各子命令的完整规则见 [cmd/gg/MODULE.md](cmd/gg/MODULE.md) |
 | `gg check` | 检查业务项目结构、命名、依赖边界和 tag 约束 |
 | `gg prune` | 只扫描并清理废弃 service action 文件 |
 | `gg routes` | 按 model 层级打印当前生成的接口路径 |

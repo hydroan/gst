@@ -53,9 +53,11 @@
 //	        v
 //	print module.json postNotes
 //
-// Write statuses: CREATE is a new file, UPDATE overwrote a differing
-// preexisting file (only reachable with --force), SKIP left an identical file
-// untouched, DELETE removed a stale file.
+// Write statuses: CREATE is a new file, UPDATE overwrote a differing file —
+// one that existed before the copy only with --force, or the action service
+// shell the copy-time gg gen just generated, which is why a first copy reports
+// its action service files as UPDATE — SKIP left an identical file untouched,
+// DELETE removed a stale file.
 //
 // Run does not roll back: a failure after the first write or delete leaves the
 // partial copy in place and the command prints the manual cleanup path.
@@ -69,8 +71,8 @@
 //
 //	validate <name>: a bare catalog name, no paths
 //	require ./go.mod, read the project module path
-//	locate the framework root (./internal/gst, then ".", then parents;
-//	a root is a directory whose go.mod declares module github.com/hydroan/gst)
+//	resolve the framework source through the project's module graph
+//	(go list -m github.com/hydroan/gst, downloading it once if missing)
 //	require module/<name>/, internal/model/<name>/, internal/service/<name>/
 //	load and validate module/<name>/module.json
 //	refuse a module that is still add-registered
@@ -142,6 +144,11 @@
 //     copied through their DSL actions only.
 //   - middleware: manifest-declared middleware copies, see "Middleware copy
 //     rules".
+//   - requiredAssembly: the calls a copied module needs the project to make,
+//     each an import path, an exported function and the reason. Copy
+//     reproduces routes, models and middleware but not the rest of the
+//     module's Register body, so gg check's module assembly check holds the
+//     project's non-test code to these calls.
 //   - postNotes: free-form lines printed after a successful copy, for the
 //     manual follow-up steps the copy cannot automate.
 //
@@ -250,7 +257,8 @@
 //     non-test). The target is always the project middleware directory with
 //     the same filename; target paths are not configurable.
 //   - handler must be a Go identifier declared as a top-level function of
-//     that name in the source file.
+//     that name in the source file, taking no arguments: the registration
+//     calls it as Handler().
 //   - scope selects the registration call: "global" wires
 //     middleware.Register(Handler()), "auth" wires
 //     middleware.RegisterAuth(Handler()).

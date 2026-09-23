@@ -67,8 +67,8 @@ func (p *CopyPlan) resolveMiddleware(manifest []moduleCopyMiddlewareManifest) ([
 	middleware := make([]moduleCopyMiddleware, 0, len(manifest))
 	for _, item := range manifest {
 		// The manifest stores framework-root relative paths so module.json
-		// remains stable no matter whether copy runs from gst itself or from a
-		// consumer project with internal/gst symlinked in.
+		// remains stable wherever the framework source resolves: the module
+		// cache, a replace directory, or the framework repository itself.
 		sourcePath := filepath.Join(p.FrameworkRoot, filepath.FromSlash(item.SourceFile))
 		targetPath := filepath.Join(p.TargetMiddlewareDir, filepath.Base(item.SourceFile))
 		if err := requireMiddlewareSourceFile(sourcePath, item.Handler); err != nil {
