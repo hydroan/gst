@@ -24,6 +24,7 @@ import (
 	"github.com/hydroan/gst/internal/codegen/gen"
 	"github.com/hydroan/gst/internal/ggconst"
 	"github.com/hydroan/gst/internal/gghelper"
+	"golang.org/x/mod/modfile"
 )
 
 // columnInfo is one generated column reference, as reported by the inspection
@@ -632,8 +633,13 @@ func removeOrphanColumnFiles(dir string, wanted map[string]struct{}) ([]string, 
 	return removed, err
 }
 
-// moduleRequiresGst reports whether the project's go.mod depends on the
-// framework module.
+// moduleRequiresGst reports whether the project's go.mod requires the
+// framework module. "require github.com/hydroan/gst v1.0.0" does; a comment
+// naming the framework, a module path extending it such as
+// github.com/hydroan/gst-demo, and a requirement on such a module do not. A
+// project without go.mod requires nothing. A directive newer than this build
+// knows is skipped, so a newer Go release cannot break gg gen here; a
+// statement it knows but cannot read is an error.
 func moduleRequiresGst() (bool, error) {
 	content, err := os.ReadFile("go.mod")
 	if os.IsNotExist(err) {
@@ -642,7 +648,16 @@ func moduleRequiresGst() (bool, error) {
 	if err != nil {
 		return false, errors.Wrap(err, "read go.mod")
 	}
-	return strings.Contains(string(content), ggconst.ImportPathGst), nil
+	file, err := modfile.ParseLax("go.mod", content, nil)
+	if err != nil {
+		return false, errors.Wrap(err, "parse go.mod")
+	}
+	for _, requirement := range file.Require {
+		if requirement.Mod.Path == ggconst.ImportPathGst {
+			return true, nil
+		}
+	}
+	return false, nil
 }
 
 // columnsCacheKey hashes everything that can change the resolved columns:
