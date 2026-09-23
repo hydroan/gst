@@ -102,8 +102,12 @@ func TestMigrateSchemaProgramReadsTheModelsItsSourceDeclares(t *testing.T) {
 // from. Below a directory, every Go file that is not a test, a model package
 // named generated among them, and none a walk over the project's code leaves
 // out: hidden, vendor and testdata directories and nested modules. A Go file
-// named on its own is read alone.
+// named on its own is read alone. Symbolic links are not followed, as no walk
+// over the project's code follows them: a linked directory below the source
+// adds nothing, and a source that is itself a link holds no Go file.
 func TestMigrateSourceFiles(t *testing.T) {
+	outside := t.TempDir()
+	writeProjectFile(t, filepath.Join(outside, "linked.go"), "package linked\n")
 	t.Chdir(t.TempDir())
 	for path, content := range map[string]string{
 		"model/record.go":           "package model\n",
@@ -116,6 +120,14 @@ func TestMigrateSourceFiles(t *testing.T) {
 		"model/nested/nested.go":    "package nested\n",
 	} {
 		writeProjectFile(t, filepath.FromSlash(path), content)
+	}
+	for link, target := range map[string]string{
+		filepath.Join("model", "linked"): outside,
+		"model-link":                     ggconst.DirModel,
+	} {
+		if err := os.Symlink(target, link); err != nil {
+			t.Fatal(err)
+		}
 	}
 
 	files, err := migrateSourceFiles(ggconst.DirModel)
@@ -134,6 +146,11 @@ func TestMigrateSourceFiles(t *testing.T) {
 	}
 	if !slices.Equal(files, []string{single}) {
 		t.Fatalf("migrateSourceFiles(%q) = %q, want the file alone", single, files)
+	}
+
+	files, err = migrateSourceFiles("model-link")
+	if err == nil || !strings.Contains(err.Error(), "no Go model files found under model-link") {
+		t.Fatalf("migrateSourceFiles(%q) = %q, %v, want no Go model files found", "model-link", files, err)
 	}
 }
 
