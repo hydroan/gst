@@ -5,7 +5,6 @@ package ggconfig
 
 import (
 	"bytes"
-	"go/token"
 	"io"
 	"os"
 	"path/filepath"
@@ -84,369 +83,6 @@ func (c PruneConfig) Ignores(path string) bool {
 	})
 }
 
-// RouteIgnoreRules is the parsed gen.routes.ignore mapping, flattened into
-// one RouteRule per (method, path) pair.
-type RouteIgnoreRules []RouteRule
-
-// RouteRule is a single parsed (method, path) ignore entry.
-type RouteRule struct {
-	// Method is the upper-cased HTTP method.
-	Method string
-
-	// Segments is the normalized route path split into segments. Parameter
-	// segments keep their ":name" form but match positionally by shape.
-	Segments []string
-
-	// Raw preserves the original entry for error and log output.
-	Raw string
-
-	// From restricts the rule to actions declared by models whose file path
-	// lives under this directory prefix (e.g. "model/iam"). Empty means the
-	// rule applies to every model declaring a matching route. It lets a
-	// project ignore a framework module's route while re-declaring the same
-	// route in its own model directory.
-	From string
-}
-
-// allowedRuleMethods lists the HTTP methods the generated routes can use.
-var allowedRuleMethods = map[string]struct{}{
-	"GET":    {},
-	"POST":   {},
-	"PUT":    {},
-	"PATCH":  {},
-	"DELETE": {},
-}
-
-// UnmarshalYAML parses the path-to-methods mapping form of gen.routes.ignore:
-//
-//	ignore:
-//	  /api/signup: [POST]
-//	  /api/iam/admin/users/:id: [GET, DELETE]
-//	  /api/iam/admin/users:
-//	    methods: [GET]
-//	    from: model/iam
-//
-// The path is written once and every listed method becomes one RouteRule.
-// The object form adds "from", restricting the rule to models declared under
-// that directory so a project can re-declare the same route elsewhere.
-// Path keys are deduplicated with parameter names collapsed, so the same
-// route split across several keys is rejected instead of silently merged.
-func (r *RouteIgnoreRules) UnmarshalYAML(value *yaml.Node) error {
-	if value.Kind != yaml.MappingNode {
-		return errors.New("gen.routes.ignore must be a mapping of route path to HTTP method list")
-	}
-
-	rules := make([]RouteRule, 0, len(value.Content)/2)
-	seenPaths := make(map[string]struct{}, len(value.Content)/2)
-	for i := 0; i+1 < len(value.Content); i += 2 {
-		var path string
-		if err := value.Content[i].Decode(&path); err != nil {
-			return errors.Wrap(err, "route path must be a string")
-		}
-		methods, from, err := decodeIgnoreRuleValue(path, value.Content[i+1])
-		if err != nil {
-			return err
-		}
-
-		pathRules := make([]RouteRule, 0, len(methods))
-		for _, method := range methods {
-			rule, err := ParseRouteRule(method + " " + path)
-			if err != nil {
-				return err
-			}
-			rule.From = from
-			pathRules = append(pathRules, rule)
-		}
-
-		pathKey := collapsedPathKey(pathRules[0].Segments)
-		if _, ok := seenPaths[pathKey]; ok {
-			return errors.Newf("duplicate route path %q: merge its methods into one entry", path)
-		}
-		seenPaths[pathKey] = struct{}{}
-		rules = append(rules, pathRules...)
-	}
-
-	*r = rules
-	return nil
-}
-
-// decodeIgnoreRuleValue decodes one ignore entry value: either a plain
-// method list, or a mapping with "methods" and an optional "from" directory
-// prefix. Unknown mapping keys are rejected to keep gst.yaml parsing strict.
-func decodeIgnoreRuleValue(path string, value *yaml.Node) ([]string, string, error) {
-	var methods []string
-	var from string
-	switch value.Kind {
-	case yaml.SequenceNode:
-		if err := value.Decode(&methods); err != nil {
-			return nil, "", errors.Wrapf(err, "methods of route %q must be a list of strings", path)
-		}
-	case yaml.MappingNode:
-		fromSet := false
-		for i := 0; i+1 < len(value.Content); i += 2 {
-			var key string
-			if err := value.Content[i].Decode(&key); err != nil {
-				return nil, "", errors.Wrapf(err, "invalid key in route %q", path)
-			}
-			switch key {
-			case "methods":
-				if err := value.Content[i+1].Decode(&methods); err != nil {
-					return nil, "", errors.Wrapf(err, "methods of route %q must be a list of strings", path)
-				}
-			case "from":
-				if err := value.Content[i+1].Decode(&from); err != nil {
-					return nil, "", errors.Wrapf(err, "from of route %q must be a string", path)
-				}
-				fromSet = true
-			default:
-				return nil, "", errors.Newf("route %q has unknown field %q, want methods/from", path, key)
-			}
-		}
-		if fromSet {
-			normalized, err := normalizeFromDir(from)
-			if err != nil {
-				return nil, "", errors.Wrapf(err, "route %q", path)
-			}
-			from = normalized
-		}
-	default:
-		return nil, "", errors.Newf("route %q must map to a method list or a {methods, from} object", path)
-	}
-
-	if len(methods) == 0 {
-		return nil, "", errors.Newf("route %q lists no methods", path)
-	}
-	return methods, from, nil
-}
-
-// normalizeFromDir cleans and validates a "from" directory prefix of an
-// ignore entry. It must be a relative directory such as "model/iam".
-func normalizeFromDir(from string) (string, error) {
-	cleaned, ok := cleanRelativePath(from)
-	switch {
-	case cleaned == "":
-		return "", errors.New("empty from; drop the field to match all models")
-	case !ok:
-		return "", errors.Newf("invalid from %q: want a relative directory like \"model/iam\"", cleaned)
-	}
-	return cleaned, nil
-}
-
-// cleanRelativePath trims the spaces and slashes around p and returns what
-// remains when it is a clean relative path that stays inside the project:
-// " /model/iam/ " gives "model/iam", while "", "model//iam", "./model" and
-// "../model" are rejected. A rejected path comes back trimmed, for the
-// caller's error message.
-func cleanRelativePath(p string) (string, bool) {
-	p = strings.Trim(strings.TrimSpace(p), "/")
-	cleaned := filepath.ToSlash(filepath.Clean(p))
-	if p == "" || cleaned != p || strings.HasPrefix(cleaned, "..") {
-		return p, false
-	}
-	return cleaned, true
-}
-
-// MatchesSource reports whether the rule applies to an action declared in
-// the given model file. Rules without a From prefix apply to every model.
-func (r RouteRule) MatchesSource(modelFilePath string) bool {
-	return underPath(r.From, modelFilePath)
-}
-
-// underPath reports whether path is prefix or lies below it, comparing whole
-// path elements: under "model/iam", "model/iam" and "model/iam/user.go" are,
-// while "model/iamx/user.go" is not. An empty prefix holds every path. The
-// from field of the ignore rules and the prune.ignore entries match through
-// it alike.
-func underPath(prefix, path string) bool {
-	if prefix == "" {
-		return true
-	}
-	path = filepath.ToSlash(path)
-	return path == prefix || strings.HasPrefix(path, prefix+"/")
-}
-
-// ParseRouteRule parses a "METHOD /api/path" entry into a RouteRule.
-func ParseRouteRule(raw string) (RouteRule, error) {
-	fields := strings.Fields(raw)
-	if len(fields) != 2 {
-		return RouteRule{}, errors.Newf("invalid route rule %q: want format \"METHOD /api/path\"", raw)
-	}
-
-	method := strings.ToUpper(fields[0])
-	if _, ok := allowedRuleMethods[method]; !ok {
-		return RouteRule{}, errors.Newf("invalid route rule %q: unsupported method %q", raw, fields[0])
-	}
-
-	if !strings.HasPrefix(fields[1], "/") {
-		return RouteRule{}, errors.Newf("invalid route rule %q: path must start with \"/\"", raw)
-	}
-	segments := NormalizeRoutePath(fields[1])
-	if len(segments) == 0 {
-		return RouteRule{}, errors.Newf("invalid route rule %q: empty path", raw)
-	}
-	if slices.Contains(segments, "") {
-		return RouteRule{}, errors.Newf("invalid route rule %q: empty path segment", raw)
-	}
-
-	return RouteRule{Method: method, Segments: segments, Raw: raw}, nil
-}
-
-// Match reports whether the rule matches the given HTTP method and route
-// path. The route path is normalized the same way as the rule path, and
-// parameter segments (":name" or "{name}") match positionally regardless
-// of the parameter name.
-func (r RouteRule) Match(method, routePath string) bool {
-	if r.Method != strings.ToUpper(method) {
-		return false
-	}
-
-	segments := NormalizeRoutePath(routePath)
-	if len(segments) != len(r.Segments) {
-		return false
-	}
-	for i, want := range r.Segments {
-		got := segments[i]
-		wantParam := strings.HasPrefix(want, ":")
-		gotParam := strings.HasPrefix(got, ":")
-		if wantParam != gotParam {
-			return false
-		}
-		if !wantParam && want != got {
-			return false
-		}
-	}
-	return true
-}
-
-// NormalizeRoutePath splits a route path into normalized segments: the
-// "/api" prefix and surrounding slashes are stripped, and "{name}"
-// parameter segments are converted to the ":name" form. It returns nil
-// when no segments remain.
-//
-// The "api" prefix strip is applied to rule paths and generated route
-// paths alike, which assumes no generated endpoint has a literal "api"
-// first segment (generated routes never carry the "/api" prefix; the
-// runtime router group adds it).
-func NormalizeRoutePath(path string) []string {
-	path = strings.Trim(strings.TrimSpace(path), "/")
-	if path == "api" {
-		return nil
-	}
-	path = strings.TrimPrefix(path, "api/")
-	if path == "" {
-		return nil
-	}
-
-	segments := strings.Split(path, "/")
-	for i, segment := range segments {
-		if strings.HasPrefix(segment, "{") && strings.HasSuffix(segment, "}") {
-			segments[i] = ":" + strings.TrimSuffix(strings.TrimPrefix(segment, "{"), "}")
-		}
-	}
-	return segments
-}
-
-// ModelIgnoreRules is the parsed gen.models.ignore mapping, one ModelRule
-// per model name entry.
-type ModelIgnoreRules []ModelRule
-
-// ModelRule is a single parsed model registration ignore entry.
-type ModelRule struct {
-	// Name is the Go struct name of the model, e.g. "Profile".
-	Name string
-
-	// From restricts the rule to models whose file path lives under this
-	// directory prefix (e.g. "model/iam"). Empty means the rule applies to
-	// every model with a matching name. It protects a project's own model
-	// of the same name declared elsewhere.
-	From string
-
-	// Raw preserves the original entry for error and log output.
-	Raw string
-}
-
-// MatchesSource reports whether the rule applies to a model declared in
-// the given model file. Rules without a From prefix apply to every model.
-func (r ModelRule) MatchesSource(modelFilePath string) bool {
-	return underPath(r.From, modelFilePath)
-}
-
-// UnmarshalYAML parses the model-name mapping form of gen.models.ignore:
-//
-//	ignore:
-//	  Profile:
-//	    from: model/iam
-//	  Widget:
-//
-// Each key is the Go struct name of a model whose generated model.Register
-// call gg gen must skip. The optional object value adds "from", restricting
-// the rule to models declared under that directory so a project's own model
-// of the same name elsewhere keeps registering.
-func (r *ModelIgnoreRules) UnmarshalYAML(value *yaml.Node) error {
-	if value.Kind != yaml.MappingNode {
-		return errors.New("gen.models.ignore must be a mapping of model name to an optional {from} object")
-	}
-
-	rules := make([]ModelRule, 0, len(value.Content)/2)
-	seenNames := make(map[string]struct{}, len(value.Content)/2)
-	for i := 0; i+1 < len(value.Content); i += 2 {
-		var name string
-		if err := value.Content[i].Decode(&name); err != nil {
-			return errors.Wrap(err, "model name must be a string")
-		}
-		if !token.IsIdentifier(name) || !token.IsExported(name) {
-			return errors.Newf("model %q is not an exported Go identifier", name)
-		}
-		if _, ok := seenNames[name]; ok {
-			return errors.Newf("duplicate model %q", name)
-		}
-		seenNames[name] = struct{}{}
-
-		from, err := decodeModelIgnoreRuleValue(name, value.Content[i+1])
-		if err != nil {
-			return err
-		}
-		rules = append(rules, ModelRule{Name: name, From: from, Raw: name})
-	}
-
-	*r = rules
-	return nil
-}
-
-// decodeModelIgnoreRuleValue decodes one ignore entry value: either empty
-// (no restriction) or a mapping with an optional "from" directory prefix.
-// Unknown mapping keys are rejected to keep gst.yaml parsing strict.
-func decodeModelIgnoreRuleValue(name string, value *yaml.Node) (string, error) {
-	if value.Kind == yaml.ScalarNode && value.Tag == "!!null" {
-		return "", nil
-	}
-	if value.Kind != yaml.MappingNode {
-		return "", errors.Newf("model %q must map to an optional {from} object", name)
-	}
-
-	var from string
-	for i := 0; i+1 < len(value.Content); i += 2 {
-		var key string
-		if err := value.Content[i].Decode(&key); err != nil {
-			return "", errors.Wrapf(err, "invalid key in model %q", name)
-		}
-		switch key {
-		case "from":
-			if err := value.Content[i+1].Decode(&from); err != nil {
-				return "", errors.Wrapf(err, "from of model %q must be a string", name)
-			}
-			normalized, err := normalizeFromDir(from)
-			if err != nil {
-				return "", errors.Wrapf(err, "model %q", name)
-			}
-			from = normalized
-		default:
-			return "", errors.Newf("model %q has unknown field %q, want from", name, key)
-		}
-	}
-	return from, nil
-}
-
 // Load reads the gst.yaml file from dir. A missing file is not an error
 // and yields a configuration with only defaults, so projects without a
 // gst.yaml keep the current gg behavior.
@@ -469,13 +105,35 @@ func Load(dir string) (*Config, error) {
 	if cfg.Version != currentVersion {
 		return nil, errors.Newf("%s: unsupported version %d, want %d", path, cfg.Version, currentVersion)
 	}
-	if err := validateIgnoreRules(cfg.Gen.Routes.Ignore); err != nil {
+	if err := validateRouteIgnoreRules(cfg.Gen.Routes.Ignore); err != nil {
 		return nil, errors.Wrapf(err, "%s: gen.routes.ignore", path)
 	}
 	if err := validatePruneIgnore(&cfg.Prune); err != nil {
 		return nil, errors.Wrapf(err, "%s: prune.ignore", path)
 	}
 	return cfg, nil
+}
+
+// validatePruneIgnore cleans every prune.ignore entry in place and rejects an
+// entry that is not a clean relative path, lies outside service/, the only
+// directory gg prune deletes from, or repeats another entry.
+func validatePruneIgnore(c *PruneConfig) error {
+	seen := make(map[string]bool, len(c.Ignore))
+	for i, entry := range c.Ignore {
+		cleaned, ok := cleanRelativePath(entry)
+		if !ok {
+			return errors.Newf("entry %q: want a relative path like \"%s/sample\"", entry, ggconst.DirService)
+		}
+		if !underPath(ggconst.DirService, cleaned) {
+			return errors.Newf("entry %q is outside %s/, the only directory gg prune deletes from", entry, ggconst.DirService)
+		}
+		if seen[cleaned] {
+			return errors.Newf("entry %q is listed twice", entry)
+		}
+		seen[cleaned] = true
+		c.Ignore[i] = cleaned
+	}
+	return nil
 }
 
 // legacyPruneSettingsFiles held the prune settings of earlier gg releases,
@@ -506,62 +164,42 @@ func IsLegacyPruneSettings(name string) bool {
 	return slices.Contains(legacyPruneSettingsFiles, name)
 }
 
-// validateIgnoreRules rejects duplicate ignore rules. Duplicates are
-// compared by normalized method and path so that formatting variants of
-// the same route are still reported.
-func validateIgnoreRules(rules []RouteRule) error {
-	seen := make(map[string]struct{}, len(rules))
-	for _, rule := range rules {
-		key := rule.dedupKey()
-		if _, ok := seen[key]; ok {
-			return errors.Newf("duplicate rule %q", rule.Raw)
-		}
-		seen[key] = struct{}{}
+// normalizeFromDir cleans and validates a "from" directory prefix of an
+// ignore entry. It must be a relative directory such as "model/iam".
+func normalizeFromDir(from string) (string, error) {
+	cleaned, ok := cleanRelativePath(from)
+	switch {
+	case cleaned == "":
+		return "", errors.New("empty from; drop the field to match all models")
+	case !ok:
+		return "", errors.Newf("invalid from %q: want a relative directory like \"model/iam\"", cleaned)
 	}
-	return nil
+	return cleaned, nil
 }
 
-// validatePruneIgnore cleans every prune.ignore entry in place and rejects an
-// entry that is not a clean relative path, lies outside service/, the only
-// directory gg prune deletes from, or repeats another entry.
-func validatePruneIgnore(c *PruneConfig) error {
-	seen := make(map[string]bool, len(c.Ignore))
-	for i, entry := range c.Ignore {
-		cleaned, ok := cleanRelativePath(entry)
-		if !ok {
-			return errors.Newf("entry %q: want a relative path like \"%s/sample\"", entry, ggconst.DirService)
-		}
-		if !underPath(ggconst.DirService, cleaned) {
-			return errors.Newf("entry %q is outside %s/, the only directory gg prune deletes from", entry, ggconst.DirService)
-		}
-		if seen[cleaned] {
-			return errors.Newf("entry %q is listed twice", entry)
-		}
-		seen[cleaned] = true
-		c.Ignore[i] = cleaned
+// cleanRelativePath trims the spaces and slashes around p and returns what
+// remains when it is a clean relative path that stays inside the project:
+// " /model/iam/ " gives "model/iam", while "", "model//iam", "./model" and
+// "../model" are rejected. A rejected path comes back trimmed, for the
+// caller's error message.
+func cleanRelativePath(p string) (string, bool) {
+	p = strings.Trim(strings.TrimSpace(p), "/")
+	cleaned := filepath.ToSlash(filepath.Clean(p))
+	if p == "" || cleaned != p || strings.HasPrefix(cleaned, "..") {
+		return p, false
 	}
-	return nil
+	return cleaned, true
 }
 
-// dedupKey returns the rule identity used for duplicate detection: the HTTP
-// method plus the parameter-name-collapsed path.
-func (r RouteRule) dedupKey() string {
-	return r.Method + " " + collapsedPathKey(r.Segments)
-}
-
-// collapsedPathKey returns the path identity with parameter segments
-// collapsed to ":", matching the parameter-name-insensitive Match semantics:
-// paths differing only in parameter names target the same routes. Segments
-// are always non-empty here: ParseRouteRule rejects empty segments before a
-// RouteRule is constructed.
-func collapsedPathKey(ruleSegments []string) string {
-	segments := make([]string, len(ruleSegments))
-	for i, segment := range ruleSegments {
-		if strings.HasPrefix(segment, ":") {
-			segments[i] = ":"
-		} else {
-			segments[i] = segment
-		}
+// underPath reports whether path is prefix or lies below it, comparing whole
+// path elements: under "model/iam", "model/iam" and "model/iam/user.go" are,
+// while "model/iamx/user.go" is not. An empty prefix holds every path. The
+// from field of the ignore rules and the prune.ignore entries match through
+// it alike.
+func underPath(prefix, path string) bool {
+	if prefix == "" {
+		return true
 	}
-	return "/" + strings.Join(segments, "/")
+	path = filepath.ToSlash(path)
+	return path == prefix || strings.HasPrefix(path, prefix+"/")
 }
