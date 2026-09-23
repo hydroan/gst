@@ -7,6 +7,7 @@ import (
 	"github.com/hydroan/gst"
 	modelemail "github.com/hydroan/gst/internal/model/email"
 	"github.com/hydroan/gst/service"
+	"go.uber.org/zap"
 )
 
 // ChangeConfirmService handles the token confirmation step that finalizes a
@@ -49,13 +50,13 @@ func (s *ChangeConfirmService) Create(ctx *gst.ServiceContext, req *modelemail.C
 	user, err := gateway.GetByID(ctx, flow.UserID)
 	if err != nil {
 		if errors.Is(err, ErrAccountGatewayNotConfigured) {
-			log.Error("email account gateway is not configured", err)
+			log.Errorz("email account gateway is not configured", zap.Error(err))
 			return nil, newAccountGatewayNotConfiguredServiceError(err)
 		}
 		return nil, service.NewErrorWithCause(http.StatusInternalServerError, "failed to load email change confirmation account", err)
 	}
 	if err = validAccountSnapshot(user, flow.UserID); err != nil {
-		log.Error("email account gateway returned invalid email change confirmation account", err)
+		log.Errorz("email account gateway returned invalid email change confirmation account", zap.Error(err))
 		return nil, newAccountGatewayInvalidAccountServiceError(err)
 	}
 
@@ -77,7 +78,7 @@ func (s *ChangeConfirmService) Create(ctx *gst.ServiceContext, req *modelemail.C
 	existingUser, err := gateway.FindByEmail(ctx, normalizeEmailScope(flow.NewEmail))
 	if err != nil {
 		if errors.Is(err, ErrAccountGatewayNotConfigured) {
-			log.Error("email account gateway is not configured", err)
+			log.Errorz("email account gateway is not configured", zap.Error(err))
 			return nil, newAccountGatewayNotConfiguredServiceError(err)
 		}
 		if !errors.Is(err, ErrAccountNotFound) {
@@ -93,7 +94,7 @@ func (s *ChangeConfirmService) Create(ctx *gst.ServiceContext, req *modelemail.C
 
 	if err = gateway.ApplyEmailChange(ctx, user.ID, flow.NewEmail, emailNow()); err != nil {
 		if errors.Is(err, ErrAccountGatewayNotConfigured) {
-			log.Error("email account gateway is not configured", err)
+			log.Errorz("email account gateway is not configured", zap.Error(err))
 			return nil, newAccountGatewayNotConfiguredServiceError(err)
 		}
 		return nil, service.NewErrorWithCause(http.StatusInternalServerError, "failed to update email change state", err)

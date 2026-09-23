@@ -12,6 +12,7 @@ import (
 	"github.com/hydroan/gst/model"
 	"github.com/hydroan/gst/service"
 	"github.com/mssola/useragent"
+	"go.uber.org/zap"
 )
 
 // LogoutService handles logout requests for the current authenticated session.
@@ -25,7 +26,7 @@ func (l *LogoutService) Create(ctx *gst.ServiceContext, req *model.Empty) (rsp *
 
 	sessionID, err := serviceiamsession.CookieSessionID(ctx)
 	if err != nil {
-		log.Error("failed to get session_id from cookie", err)
+		log.Errorz("failed to get session_id from cookie", zap.Error(err))
 		serviceiamsession.ClearCookie(ctx)
 		return &modeliamaccount.LogoutRsp{Msg: "logout successful"}, nil // Return success even if no session
 	}

@@ -8,6 +8,7 @@ import (
 	"github.com/hydroan/gst"
 	modelemail "github.com/hydroan/gst/internal/model/email"
 	"github.com/hydroan/gst/service"
+	"go.uber.org/zap"
 )
 
 // ChangeRequestService handles authenticated requests that start the email
@@ -23,17 +24,17 @@ func (s *ChangeRequestService) Create(ctx *gst.ServiceContext, req *modelemail.C
 	user, newEmail, rsp, err := prepareEmailChangeRequest(ctx, req.NewEmail)
 	if err != nil || user == nil {
 		if err != nil {
-			log.Error("failed to prepare email change request", err)
+			log.Errorz("failed to prepare email change request", zap.Error(err))
 		}
 		return rsp, err
 	}
 
 	if err = verifyEmailChangePassword(ctx, user.ID, req.CurrentPassword); err != nil {
-		log.Error("failed to verify email change password", err)
+		log.Errorz("failed to verify email change password", zap.Error(err))
 		return nil, err
 	}
 	if err = startEmailChangeFlow(ctx, user, newEmail, true); err != nil {
-		log.Error("failed to start email change flow", err)
+		log.Errorz("failed to start email change flow", zap.Error(err))
 		return nil, err
 	}
 

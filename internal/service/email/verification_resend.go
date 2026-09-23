@@ -8,6 +8,7 @@ import (
 	modelemail "github.com/hydroan/gst/internal/model/email"
 	"github.com/hydroan/gst/model"
 	"github.com/hydroan/gst/service"
+	"go.uber.org/zap"
 )
 
 // VerificationResendService handles public requests that resend verification
@@ -40,7 +41,7 @@ func (s *VerificationResendService) Create(ctx *gst.ServiceContext, req *modelem
 			return rsp, nil
 		}
 		if errors.Is(err, ErrAccountGatewayNotConfigured) {
-			log.Error("email account gateway is not configured", err)
+			log.Errorz("email account gateway is not configured", zap.Error(err))
 			return nil, newAccountGatewayNotConfiguredServiceError(err)
 		}
 		return nil, service.NewErrorWithCause(http.StatusInternalServerError, "failed to load verification resend account", err)

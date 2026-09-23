@@ -13,6 +13,7 @@ import (
 	"github.com/hydroan/gst/internal/service/iam/adminauth"
 	serviceiamsession "github.com/hydroan/gst/internal/service/iam/session"
 	"github.com/hydroan/gst/service"
+	"go.uber.org/zap"
 )
 
 // Column references for the narrow writes below; module sources carry no
@@ -118,6 +119,6 @@ func revokeSessionsForStatus(ctx *gst.ServiceContext, log gst.Logger, status mod
 		return
 	}
 	if err := serviceiamsession.Store.DeleteUserSessions(ctx, targetUserID); err != nil {
-		log.Warn("failed to revoke sessions after user status change", err)
+		log.Warnz("failed to revoke sessions after user status change", zap.Error(err))
 	}
 }

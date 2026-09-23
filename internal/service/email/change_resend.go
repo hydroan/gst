@@ -8,6 +8,7 @@ import (
 	"github.com/hydroan/gst"
 	modelemail "github.com/hydroan/gst/internal/model/email"
 	"github.com/hydroan/gst/service"
+	"go.uber.org/zap"
 )
 
 // ChangeResendService handles authenticated requests that resend confirmation
@@ -27,19 +28,19 @@ func (s *ChangeResendService) Create(ctx *gst.ServiceContext, req *modelemail.Ch
 	user, err := currentAccountGateway().GetByID(ctx, ctx.UserID())
 	if err != nil {
 		if errors.Is(err, ErrAccountGatewayNotConfigured) {
-			log.Error("email account gateway is not configured", err)
+			log.Errorz("email account gateway is not configured", zap.Error(err))
 			return nil, newAccountGatewayNotConfiguredServiceError(err)
 		}
 		return nil, service.NewErrorWithCause(http.StatusInternalServerError, "failed to load current account", err)
 	}
 	if err = validAccountSnapshot(user, ctx.UserID()); err != nil {
-		log.Error("email account gateway returned invalid email change resend account", err)
+		log.Errorz("email account gateway returned invalid email change resend account", zap.Error(err))
 		return nil, newAccountGatewayInvalidAccountServiceError(err)
 	}
 
 	newEmail := normalizeEmailScope(req.NewEmail)
 	if err = validateEmailChangeTarget(ctx, user, newEmail); err != nil {
-		log.Error("failed to validate email change resend target", err)
+		log.Errorz("failed to validate email change resend target", zap.Error(err))
 		return nil, err
 	}
 

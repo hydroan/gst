@@ -9,6 +9,7 @@ import (
 	modelemail "github.com/hydroan/gst/internal/model/email"
 	"github.com/hydroan/gst/model"
 	"github.com/hydroan/gst/service"
+	"go.uber.org/zap"
 )
 
 // VerificationConfirmService handles the token confirmation step that finalizes
@@ -40,13 +41,13 @@ func (s *VerificationConfirmService) Create(ctx *gst.ServiceContext, req *modele
 	user, err := gateway.GetByID(ctx, flow.UserID)
 	if err != nil {
 		if errors.Is(err, ErrAccountGatewayNotConfigured) {
-			log.Error("email account gateway is not configured", err)
+			log.Errorz("email account gateway is not configured", zap.Error(err))
 			return nil, newAccountGatewayNotConfiguredServiceError(err)
 		}
 		return nil, service.NewErrorWithCause(http.StatusInternalServerError, "failed to load verification account", err)
 	}
 	if err = validAccountSnapshot(user, flow.UserID); err != nil {
-		log.Error("email account gateway returned invalid verification account", err)
+		log.Errorz("email account gateway returned invalid verification account", zap.Error(err))
 		return nil, newAccountGatewayInvalidAccountServiceError(err)
 	}
 	if normalizeAccountEmail(user.Email) != normalizeEmailScope(flow.Email) {
@@ -64,7 +65,7 @@ func (s *VerificationConfirmService) Create(ctx *gst.ServiceContext, req *modele
 
 	if err = gateway.MarkEmailVerified(ctx, user.ID, emailNow()); err != nil {
 		if errors.Is(err, ErrAccountGatewayNotConfigured) {
-			log.Error("email account gateway is not configured", err)
+			log.Errorz("email account gateway is not configured", zap.Error(err))
 			return nil, newAccountGatewayNotConfiguredServiceError(err)
 		}
 		return nil, service.NewErrorWithCause(http.StatusInternalServerError, "failed to update email verification state", err)

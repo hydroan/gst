@@ -3,11 +3,15 @@ package serviceemail
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"net/http"
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
 	"github.com/cockroachdb/errors"
+	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/consts"
 	modelemail "github.com/hydroan/gst/internal/model/email"
 	"github.com/hydroan/gst/internal/requestctx"
@@ -326,15 +330,33 @@ func TestVerificationRequestCreateReturnsProviderConfigurationError(t *testing.T
 	t.Cleanup(func() {
 		SetAccountGateway(nil)
 	})
+	// The service logs to a file under a scratch directory, read back once
+	// the logger is flushed.
+	logDir := t.TempDir()
+	original := config.App
+	config.App = new(config.Config)
+	config.App.Logger.Dir = logDir
+	t.Cleanup(func() { config.App = original })
+	log := loggerzap.New("service.log")
 
 	svc := &VerificationRequestService{}
-	svc.Logger = loggerzap.New("")
+	svc.Logger = log
 	ctx := types.NewServiceContext(nil, nil, consts.PHASE_CREATE)
 
 	_, err := svc.Create(ctx, &modelemail.VerificationRequestReq{Email: "user@example.com"})
 
 	requireServiceError(t, err, 500, "Email account gateway is not configured")
 	require.ErrorIs(t, err, ErrAccountGatewayNotConfigured)
+
+	// The entry states the failure in its message and carries the cause in a
+	// field of its own.
+	require.NoError(t, log.ZapLogger().Sync())
+	data, err := os.ReadFile(filepath.Join(logDir, "service.log"))
+	require.NoError(t, err)
+	var entry map[string]any
+	require.NoError(t, json.Unmarshal(data, &entry))
+	require.Equal(t, "email account gateway is not configured", entry["msg"])
+	require.Equal(t, ErrAccountGatewayNotConfigured.Error(), entry["error"])
 }
 
 func TestVerificationRequestCreate(t *testing.T) {
@@ -355,7 +377,7 @@ func TestVerificationRequestCreate(t *testing.T) {
 	})
 
 	svc := &VerificationRequestService{}
-	svc.Logger = loggerzap.New("")
+	svc.Logger = loggerzap.Fallback("service")
 	ctx := types.NewServiceContext(nil, nil, consts.PHASE_CREATE)
 
 	rsp, err := svc.Create(ctx, &modelemail.VerificationRequestReq{Email: " USER@example.com "})
@@ -385,7 +407,7 @@ func TestVerificationRequestCreateVerifiedAccount(t *testing.T) {
 	})
 
 	svc := &VerificationRequestService{}
-	svc.Logger = loggerzap.New("")
+	svc.Logger = loggerzap.Fallback("service")
 	ctx := types.NewServiceContext(nil, nil, consts.PHASE_CREATE)
 
 	rsp, err := svc.Create(ctx, &modelemail.VerificationRequestReq{Email: "user@example.com"})
@@ -413,7 +435,7 @@ func TestVerificationRequestCreateUnknownAccount(t *testing.T) {
 	})
 
 	svc := &VerificationRequestService{}
-	svc.Logger = loggerzap.New("")
+	svc.Logger = loggerzap.Fallback("service")
 	ctx := types.NewServiceContext(nil, nil, consts.PHASE_CREATE)
 
 	rsp, err := svc.Create(ctx, &modelemail.VerificationRequestReq{Email: "user@example.com"})
@@ -441,7 +463,7 @@ func TestVerificationResendCreate(t *testing.T) {
 	})
 
 	svc := &VerificationResendService{}
-	svc.Logger = loggerzap.New("")
+	svc.Logger = loggerzap.Fallback("service")
 	ctx := types.NewServiceContext(nil, nil, consts.PHASE_CREATE)
 
 	rsp, err := svc.Create(ctx, &modelemail.VerificationResendReq{Email: "user@example.com"})
@@ -470,7 +492,7 @@ func TestVerificationResendCreateUnknownAccount(t *testing.T) {
 	})
 
 	svc := &VerificationResendService{}
-	svc.Logger = loggerzap.New("")
+	svc.Logger = loggerzap.Fallback("service")
 	ctx := types.NewServiceContext(nil, nil, consts.PHASE_CREATE)
 
 	rsp, err := svc.Create(ctx, &modelemail.VerificationResendReq{Email: "user@example.com"})
@@ -506,7 +528,7 @@ func TestVerificationResendCreateThrottled(t *testing.T) {
 	require.NoError(t, err)
 
 	svc := &VerificationResendService{}
-	svc.Logger = loggerzap.New("")
+	svc.Logger = loggerzap.Fallback("service")
 	ctx := types.NewServiceContext(nil, nil, consts.PHASE_CREATE)
 
 	rsp, err := svc.Create(ctx, &modelemail.VerificationResendReq{Email: "user@example.com"})
@@ -549,7 +571,7 @@ func TestVerificationConfirmCreate(t *testing.T) {
 	})
 
 	svc := &VerificationConfirmService{}
-	svc.Logger = loggerzap.New("")
+	svc.Logger = loggerzap.Fallback("service")
 	ctx := types.NewServiceContext(nil, nil, consts.PHASE_CREATE)
 
 	rsp, err := svc.Create(ctx, &modelemail.VerificationConfirmReq{Token: token})
@@ -570,7 +592,7 @@ func TestVerificationConfirmCreateInvalidToken(t *testing.T) {
 	t.Cleanup(restore)
 
 	svc := &VerificationConfirmService{}
-	svc.Logger = loggerzap.New("")
+	svc.Logger = loggerzap.Fallback("service")
 	ctx := types.NewServiceContext(nil, nil, consts.PHASE_CREATE)
 
 	rsp, err := svc.Create(ctx, &modelemail.VerificationConfirmReq{Token: "missing"})
@@ -608,7 +630,7 @@ func TestVerificationConfirmCreateAlreadyVerified(t *testing.T) {
 	})
 
 	svc := &VerificationConfirmService{}
-	svc.Logger = loggerzap.New("")
+	svc.Logger = loggerzap.Fallback("service")
 	ctx := types.NewServiceContext(nil, nil, consts.PHASE_CREATE)
 
 	rsp, err := svc.Create(ctx, &modelemail.VerificationConfirmReq{Token: token})
@@ -644,7 +666,7 @@ func TestChangeRequestCreate(t *testing.T) {
 	})
 
 	svc := &ChangeRequestService{}
-	svc.Logger = loggerzap.New("")
+	svc.Logger = loggerzap.Fallback("service")
 	ctx := newEmailServiceContext("user-change-1")
 
 	rsp, err := svc.Create(ctx, &modelemail.ChangeRequestReq{
@@ -686,7 +708,7 @@ func TestChangeRequestCreateEmailAlreadyUsed(t *testing.T) {
 	})
 
 	svc := &ChangeRequestService{}
-	svc.Logger = loggerzap.New("")
+	svc.Logger = loggerzap.Fallback("service")
 	ctx := newEmailServiceContext("user-change-2")
 
 	_, err := svc.Create(ctx, &modelemail.ChangeRequestReq{
@@ -721,7 +743,7 @@ func TestChangeResendCreate(t *testing.T) {
 	})
 
 	svc := &ChangeResendService{}
-	svc.Logger = loggerzap.New("")
+	svc.Logger = loggerzap.Fallback("service")
 	ctx := newEmailServiceContext("user-change-3")
 
 	rsp, err := svc.Create(ctx, &modelemail.ChangeResendReq{NewEmail: "new@example.com"})
@@ -762,7 +784,7 @@ func TestChangeResendCreateThrottled(t *testing.T) {
 	require.NoError(t, err)
 
 	svc := &ChangeResendService{}
-	svc.Logger = loggerzap.New("")
+	svc.Logger = loggerzap.Fallback("service")
 	ctx := newEmailServiceContext("user-change-4")
 
 	rsp, err := svc.Create(ctx, &modelemail.ChangeResendReq{NewEmail: "new@example.com"})
@@ -813,7 +835,7 @@ func TestChangeConfirmCreate(t *testing.T) {
 	})
 
 	svc := &ChangeConfirmService{}
-	svc.Logger = loggerzap.New("")
+	svc.Logger = loggerzap.Fallback("service")
 	ctx := types.NewServiceContext(nil, nil, consts.PHASE_CREATE)
 
 	rsp, err := svc.Create(ctx, &modelemail.ChangeConfirmReq{Token: token})
@@ -865,7 +887,7 @@ func TestChangeConfirmCreateCanceled(t *testing.T) {
 	})
 
 	svc := &ChangeConfirmService{}
-	svc.Logger = loggerzap.New("")
+	svc.Logger = loggerzap.Fallback("service")
 	ctx := types.NewServiceContext(nil, nil, consts.PHASE_CREATE)
 
 	rsp, err := svc.Create(ctx, &modelemail.ChangeConfirmReq{Token: token})
@@ -903,7 +925,7 @@ func TestChangeCancelCreate(t *testing.T) {
 	})
 
 	svc := &ChangeCancelService{}
-	svc.Logger = loggerzap.New("")
+	svc.Logger = loggerzap.Fallback("service")
 	ctx := types.NewServiceContext(nil, nil, consts.PHASE_CREATE)
 
 	rsp, err := svc.Create(ctx, &modelemail.ChangeCancelReq{Token: token})
@@ -948,7 +970,7 @@ func TestChangeRequestCreateClearsCancellationMarker(t *testing.T) {
 	})
 
 	svc := &ChangeRequestService{}
-	svc.Logger = loggerzap.New("")
+	svc.Logger = loggerzap.Fallback("service")
 	ctx := newEmailServiceContext("user-change-8")
 
 	rsp, err := svc.Create(ctx, &modelemail.ChangeRequestReq{
@@ -981,7 +1003,7 @@ func TestPasswordResetRequestCreate(t *testing.T) {
 	})
 
 	svc := &PasswordResetRequestService{}
-	svc.Logger = loggerzap.New("")
+	svc.Logger = loggerzap.Fallback("service")
 	ctx := types.NewServiceContext(nil, nil, consts.PHASE_CREATE)
 
 	rsp, err := svc.Create(ctx, &modelemail.PasswordResetRequestReq{Email: " USER@example.com "})
@@ -1011,7 +1033,7 @@ func TestPasswordResetRequestCreateUnknownAccount(t *testing.T) {
 	})
 
 	svc := &PasswordResetRequestService{}
-	svc.Logger = loggerzap.New("")
+	svc.Logger = loggerzap.Fallback("service")
 	ctx := types.NewServiceContext(nil, nil, consts.PHASE_CREATE)
 
 	rsp, err := svc.Create(ctx, &modelemail.PasswordResetRequestReq{Email: "user@example.com"})
@@ -1061,7 +1083,7 @@ func TestPasswordResetConfirmCreate(t *testing.T) {
 	})
 
 	svc := &PasswordResetConfirmService{}
-	svc.Logger = loggerzap.New("")
+	svc.Logger = loggerzap.Fallback("service")
 	ctx := types.NewServiceContext(nil, nil, consts.PHASE_CREATE)
 
 	rsp, err := svc.Create(ctx, &modelemail.PasswordResetConfirmReq{
@@ -1089,7 +1111,7 @@ func TestPasswordResetConfirmCreateInvalidToken(t *testing.T) {
 	t.Cleanup(restore)
 
 	svc := &PasswordResetConfirmService{}
-	svc.Logger = loggerzap.New("")
+	svc.Logger = loggerzap.Fallback("service")
 	ctx := types.NewServiceContext(nil, nil, consts.PHASE_CREATE)
 
 	rsp, err := svc.Create(ctx, &modelemail.PasswordResetConfirmReq{

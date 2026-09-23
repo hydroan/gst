@@ -7,6 +7,7 @@ import (
 	"github.com/hydroan/gst"
 	modelemail "github.com/hydroan/gst/internal/model/email"
 	"github.com/hydroan/gst/service"
+	"go.uber.org/zap"
 )
 
 // ChangeCancelService handles the token cancellation step that revokes a
@@ -37,13 +38,13 @@ func (s *ChangeCancelService) Create(ctx *gst.ServiceContext, req *modelemail.Ch
 	user, err := currentAccountGateway().GetByID(ctx, flow.UserID)
 	if err != nil {
 		if errors.Is(err, ErrAccountGatewayNotConfigured) {
-			log.Error("email account gateway is not configured", err)
+			log.Errorz("email account gateway is not configured", zap.Error(err))
 			return nil, newAccountGatewayNotConfiguredServiceError(err)
 		}
 		return nil, service.NewErrorWithCause(http.StatusInternalServerError, "failed to load email change cancellation account", err)
 	}
 	if err = validAccountSnapshot(user, flow.UserID); err != nil {
-		log.Error("email account gateway returned invalid email change cancellation account", err)
+		log.Errorz("email account gateway returned invalid email change cancellation account", zap.Error(err))
 		return nil, newAccountGatewayInvalidAccountServiceError(err)
 	}
 
