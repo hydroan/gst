@@ -1,4 +1,11 @@
-package main
+// Package columns generates the typed column references of a project's
+// models, so filters name columns through the compiler instead of through
+// string literals. Every model file gets a generated file of the same name
+// declaring a <Model>Cols var per model it declares: model/sample/record.go,
+// declaring Record, gets model/sample/record.gen.go with RecordCols. The
+// columns come from gorm's own schema parser, run by a program compiled
+// inside the project's module against the project's real model types.
+package columns
 
 import (
 	"crypto/sha256"
@@ -14,7 +21,6 @@ import (
 
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/consts"
-	"github.com/hydroan/gst/internal/clioutput"
 	"github.com/hydroan/gst/internal/codegen/gen"
 	"github.com/hydroan/gst/internal/ggconst"
 	"github.com/hydroan/gst/internal/gghelper"
@@ -285,21 +291,35 @@ func buildColumnsProgram(module string, models []*gen.ModelInfo) string {
 	return strings.ReplaceAll(program, "{{UNREGISTERED_MODELS}}", entries.String())
 }
 
-// generateColumnFiles writes one .gen.go file per model source file and
-// removes the generated files whose source is gone. Generated files are
-// framework-owned for their whole life cycle: projects never create, edit, or
-// clean them up.
-func generateColumnFiles(module string, modelDir string, models []*gen.ModelInfo, ignore gghelper.ProjectIgnore, quiet bool) error {
+// Result lists the column files a Generate run changed on disk.
+type Result struct {
+	// Written lists the files written because they were missing or their
+	// content changed; a file that is already current is not rewritten.
+	Written []string
+
+	// Removed lists the generated files removed because their model source is
+	// gone.
+	Removed []string
+}
+
+// Generate writes one .gen.go file per model source file and removes the
+// generated files whose source is gone, and returns the files it wrote and
+// removed. Generated files are framework-owned for their whole life cycle:
+// projects never create, edit, or clean them up. When it fails, the result
+// still lists what it wrote and removed before the failure.
+func Generate(module string, modelDir string, models []*gen.ModelInfo, ignore gghelper.ProjectIgnore) (Result, error) {
+	var result Result
+
 	// Resolving columns compiles a program that imports the project's models,
 	// which only works once the project depends on the framework. A project
 	// that does not cannot hold column references either, so there is nothing
 	// to generate yet.
 	dependsOnGst, err := moduleRequiresGst()
 	if err != nil {
-		return err
+		return result, err
 	}
 	if !dependsOnGst {
-		return nil
+		return result, nil
 	}
 
 	program := buildColumnsProgram(module, models)
@@ -310,7 +330,7 @@ func generateColumnFiles(module string, modelDir string, models []*gen.ModelInfo
 	// entirely and a miss is unavoidable work.
 	cacheKey, err := columnsCacheKey(program, modelDir, ignore)
 	if err != nil {
-		return err
+		return result, err
 	}
 	resolved, cached := readColumnsCache(cacheKey)
 	if !cached {
@@ -319,13 +339,13 @@ func generateColumnFiles(module string, modelDir string, models []*gen.ModelInfo
 		// generation and leaves out the handwritten code that reads it.
 		overlay, overlayErr := columnInspectionOverlay(module, modelDir, models, ignore)
 		if overlayErr != nil {
-			return overlayErr
+			return result, overlayErr
 		}
 		if resolved, err = inspectColumns(program, overlay); err != nil {
-			return err
+			return result, err
 		}
 		if err = writeColumnsCache(cacheKey, resolved); err != nil {
-			return err
+			return result, err
 		}
 	}
 
@@ -345,14 +365,19 @@ func generateColumnFiles(module string, modelDir string, models []*gen.ModelInfo
 		wanted[target] = struct{}{}
 		content, renderErr := renderColumnsFile(module, entries[0].PkgName, file, entries)
 		if renderErr != nil {
-			return renderErr
+			return result, renderErr
 		}
-		if writeErr := writeGeneratedFileIfChanged(target, content, quiet); writeErr != nil {
-			return writeErr
+		written, writeErr := writeGeneratedFileIfChanged(target, content)
+		if writeErr != nil {
+			return result, writeErr
+		}
+		if written {
+			result.Written = append(result.Written, target)
 		}
 	}
 
-	return removeOrphanColumnFiles(modelDir, wanted, quiet)
+	result.Removed, err = removeOrphanColumnFiles(modelDir, wanted)
+	return result, err
 }
 
 // groupColumnsByFile matches resolved models to the source files that declare
@@ -545,22 +570,20 @@ func columnRefLiteral(model string, col columnInfo) string {
 }
 
 // writeGeneratedFileIfChanged writes content only when it differs from what is
-// on disk, so an unchanged model does not churn file timestamps.
-func writeGeneratedFileIfChanged(path string, content string, quiet bool) error {
+// on disk, so an unchanged model does not churn file timestamps, and reports
+// whether it wrote.
+func writeGeneratedFileIfChanged(path string, content string) (bool, error) {
 	existing, err := os.ReadFile(path)
 	if err == nil && string(existing) == content {
-		return nil
+		return false, nil
 	}
 	if err != nil && !os.IsNotExist(err) {
-		return errors.Wrapf(err, "read %s", path)
+		return false, errors.Wrapf(err, "read %s", path)
 	}
 	if err = os.WriteFile(path, []byte(content), ggconst.FileModeGenerated); err != nil {
-		return errors.Wrapf(err, "write %s", path)
+		return false, errors.Wrapf(err, "write %s", path)
 	}
-	if !quiet {
-		clioutput.Success("GENERATE", "%s", path)
-	}
-	return nil
+	return true, nil
 }
 
 // isColumnFileCandidate reports whether path can be a generated column file
@@ -576,10 +599,12 @@ func isColumnFileCandidate(path string) bool {
 
 // removeOrphanColumnFiles deletes generated column files whose model source no
 // longer declares any model, which happens when a model is deleted, renamed,
-// or moved to another file. Only files carrying the generated header are
-// removed, so a hand-written file is reported instead of destroyed.
-func removeOrphanColumnFiles(dir string, wanted map[string]struct{}, quiet bool) error {
-	return filepath.WalkDir(dir, func(path string, entry fs.DirEntry, walkErr error) error {
+// or moved to another file, and returns the files it deleted. Only files
+// carrying the generated header are removed, so a hand-written file is
+// reported instead of destroyed.
+func removeOrphanColumnFiles(dir string, wanted map[string]struct{}) ([]string, error) {
+	var removed []string
+	err := filepath.WalkDir(dir, func(path string, entry fs.DirEntry, walkErr error) error {
 		if walkErr != nil {
 			return walkErr
 		}
@@ -601,11 +626,10 @@ func removeOrphanColumnFiles(dir string, wanted map[string]struct{}, quiet bool)
 		if err = os.Remove(path); err != nil {
 			return errors.Wrapf(err, "remove orphan generated file %s", path)
 		}
-		if !quiet {
-			clioutput.Success("REMOVE", "%s (model source is gone)", path)
-		}
+		removed = append(removed, path)
 		return nil
 	})
+	return removed, err
 }
 
 // moduleRequiresGst reports whether the project's go.mod depends on the
@@ -785,7 +809,7 @@ func inspectColumns(program string, overlay map[string]string) ([]modelColumns, 
 	}
 	defer os.Remove(resultPath)
 
-	inspector := projectProgram{Content: strings.ReplaceAll(program, "{{OUTPUT}}", resultPath), Overlay: overlay}
+	inspector := gghelper.ProjectProgram{Content: strings.ReplaceAll(program, "{{OUTPUT}}", resultPath), Overlay: overlay}
 	if err = inspector.Run(); err != nil {
 		return nil, errors.Wrap(err, "inspect model columns")
 	}

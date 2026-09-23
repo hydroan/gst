@@ -14,6 +14,7 @@ import (
 	"github.com/hydroan/gst/internal/clioutput"
 	"github.com/hydroan/gst/internal/codegen"
 	"github.com/hydroan/gst/internal/codegen/gen"
+	"github.com/hydroan/gst/internal/codegen/gen/columns"
 	pkgnew "github.com/hydroan/gst/internal/codegen/new"
 	"github.com/hydroan/gst/internal/ggconfig"
 	"github.com/hydroan/gst/internal/ggconst"
@@ -236,7 +237,16 @@ func genRunWithOptions(opts genRunOptions) error {
 
 	// Generate the typed column references of every model, so filters can
 	// name columns through the compiler instead of through string literals.
-	if genErr := generateColumnFiles(module, ggconst.DirModel, allModels, ignore, opts.Quiet); genErr != nil {
+	columnFiles, genErr := columns.Generate(module, ggconst.DirModel, allModels, ignore)
+	if !opts.Quiet {
+		for _, path := range columnFiles.Written {
+			clioutput.Success("GENERATE", "%s", path)
+		}
+		for _, path := range columnFiles.Removed {
+			clioutput.Success("REMOVE", "%s (model source is gone)", path)
+		}
+	}
+	if genErr != nil {
 		return genErr
 	}
 
@@ -394,7 +404,7 @@ func scanModels(quiet bool, ignore gghelper.ProjectIgnore) (scannedModels, error
 
 	// Model ignores run after route ignores so the live-action warning sees
 	// the final enabled-action set.
-	modelIgnores := applyModelIgnores(allModels, projectCfg.Gen.Models.Ignore)
+	modelIgnores := codegen.ApplyModelIgnores(allModels, projectCfg.Gen.Models.Ignore)
 	if !quiet && len(modelIgnores.Matches) > 0 {
 		clioutput.Section("Ignore Models")
 		for _, match := range modelIgnores.Matches {

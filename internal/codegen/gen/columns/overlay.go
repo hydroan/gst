@@ -1,4 +1,4 @@
-package main
+package columns
 
 import (
 	"bytes"
@@ -279,7 +279,7 @@ func leaveOutColumnDependents(files *columnInspectionFiles) (map[string]string, 
 	// referred to by, which need not match the last element of its path, and
 	// the names a dot import brings into scope. The scan knows both for model
 	// packages; the go command reports the rest in one run.
-	listed, err := listProjectPackages(d.unknownImports(affected))
+	listed, err := gghelper.ListProjectPackages(d.unknownImports(affected))
 	if err != nil {
 		return nil, err
 	}
@@ -417,7 +417,7 @@ func (d *columnDependents) unknownImports(affected []*columnInspectionSource) []
 
 // rewrite returns the content src compiles with once its left-out
 // declarations are gone.
-func (d *columnDependents) rewrite(src *columnInspectionSource, listed map[string]listedPackage) string {
+func (d *columnDependents) rewrite(src *columnInspectionSource, listed map[string]gghelper.ListedPackage) string {
 	tokenFile := d.files.fset.File(src.file.Package)
 	var edits []sourceEdit
 	for _, decl := range src.file.Decls {
@@ -523,7 +523,7 @@ func (d *columnDependents) remainingNamesOf(src *columnInspectionSource) remaini
 // importUsed reports whether the code a file keeps still uses an import. An
 // import whose names cannot be resolved counts as used, leaving the compiler
 // to judge it.
-func (d *columnDependents) importUsed(spec *ast.ImportSpec, remaining remainingNames, listed map[string]listedPackage) bool {
+func (d *columnDependents) importUsed(spec *ast.ImportSpec, remaining remainingNames, listed map[string]gghelper.ListedPackage) bool {
 	path, err := strconv.Unquote(spec.Path.Value)
 	if err != nil || path == "C" {
 		return true
@@ -552,7 +552,7 @@ func (d *columnDependents) importUsed(spec *ast.ImportSpec, remaining remainingN
 
 // packageName returns the name a plain import of path is referred to by, or
 // "" when it cannot be resolved.
-func (d *columnDependents) packageName(path string, listed map[string]listedPackage) string {
+func (d *columnDependents) packageName(path string, listed map[string]gghelper.ListedPackage) string {
 	if names := d.files.packageNames[path]; len(names) == 1 {
 		return names[0]
 	}
@@ -561,7 +561,7 @@ func (d *columnDependents) packageName(path string, listed map[string]listedPack
 
 // exportedNames returns the names a dot import of path brings into scope, or
 // nil when they cannot be read.
-func (d *columnDependents) exportedNames(path string, listed map[string]listedPackage) map[string]bool {
+func (d *columnDependents) exportedNames(path string, listed map[string]gghelper.ListedPackage) map[string]bool {
 	if exported, cached := d.exports[path]; cached {
 		return exported
 	}
@@ -583,7 +583,7 @@ func (d *columnDependents) exportedNames(path string, listed map[string]listedPa
 // packageFiles returns the parsed files of the package at path: the scanned
 // sources of a model package, or the files the go command selected for any
 // other package.
-func (d *columnDependents) packageFiles(path string, listed map[string]listedPackage) ([]*ast.File, bool) {
+func (d *columnDependents) packageFiles(path string, listed map[string]gghelper.ListedPackage) ([]*ast.File, bool) {
 	if _, isModelPackage := d.files.packageNames[path]; isModelPackage {
 		var files []*ast.File
 		for _, src := range d.files.sources {

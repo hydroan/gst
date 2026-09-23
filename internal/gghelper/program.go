@@ -1,4 +1,4 @@
-package main
+package gghelper
 
 import (
 	"bytes"
@@ -9,13 +9,15 @@ import (
 	"os/exec"
 	"path/filepath"
 	"sort"
+
+	"github.com/cockroachdb/errors"
 )
 
-// projectProgram is a temporary Go program compiled against the project's own
+// ProjectProgram is a temporary Go program compiled against the project's own
 // module. Running inside the project module is what lets it import the
 // project's packages and observe what they register at runtime, which no
 // amount of static analysis in gg itself can reproduce.
-type projectProgram struct {
+type ProjectProgram struct {
 	// Content is the program source.
 	Content string
 
@@ -38,16 +40,16 @@ type projectProgram struct {
 
 // Run compiles and runs the program. Stderr always goes to the terminal, so
 // build and runtime failures stay visible regardless of how stdout is wired.
-func (p projectProgram) Run() error {
+func (p ProjectProgram) Run() error {
 	tempDir, err := os.MkdirTemp("", "gg-run-*")
 	if err != nil {
-		return fmt.Errorf("failed to create temporary program directory: %w", err)
+		return errors.Wrap(err, "failed to create temporary program directory")
 	}
 	defer os.RemoveAll(tempDir)
 
 	runnerFile := filepath.Join(tempDir, "main.go")
 	if err = os.WriteFile(runnerFile, []byte(p.Content), 0o600); err != nil {
-		return fmt.Errorf("failed to write temporary program: %w", err)
+		return errors.Wrap(err, "failed to write temporary program")
 	}
 
 	// The program is built against a copy of the project's module files, so it
@@ -79,7 +81,7 @@ func (p projectProgram) Run() error {
 		runCmd.Stdin = os.Stdin
 	}
 	if err = runCmd.Run(); err != nil {
-		return fmt.Errorf("failed to run generated program: %w", err)
+		return errors.Wrap(err, "failed to run generated program")
 	}
 	return nil
 }
@@ -97,12 +99,12 @@ func writeOverlayFile(dir string, overlay map[string]string) (string, error) {
 	for i, path := range paths {
 		abs, err := filepath.Abs(path)
 		if err != nil {
-			return "", fmt.Errorf("failed to resolve overlay path %s: %w", path, err)
+			return "", errors.Wrapf(err, "failed to resolve overlay path %s", path)
 		}
 		replacement := filepath.Join(dir, fmt.Sprintf("overlay_%d.go", i))
 		// #nosec G703 -- the replacement is created under an os.MkdirTemp-owned directory.
 		if err = os.WriteFile(replacement, []byte(overlay[path]), 0o600); err != nil {
-			return "", fmt.Errorf("failed to write overlay replacement for %s: %w", path, err)
+			return "", errors.Wrapf(err, "failed to write overlay replacement for %s", path)
 		}
 		replace[abs] = replacement
 	}
@@ -111,12 +113,12 @@ func writeOverlayFile(dir string, overlay map[string]string) (string, error) {
 		Replace map[string]string `json:"Replace"`
 	}{Replace: replace})
 	if err != nil {
-		return "", fmt.Errorf("failed to encode overlay file: %w", err)
+		return "", errors.Wrap(err, "failed to encode overlay file")
 	}
 	overlayFile := filepath.Join(dir, "overlay.json")
 	// #nosec G703 -- the overlay file is created under the same temp directory.
 	if err = os.WriteFile(overlayFile, encoded, 0o600); err != nil {
-		return "", fmt.Errorf("failed to write overlay file: %w", err)
+		return "", errors.Wrap(err, "failed to write overlay file")
 	}
 	return overlayFile, nil
 }
@@ -129,29 +131,29 @@ func writeOverlayFile(dir string, overlay map[string]string) (string, error) {
 func writeTemporaryModFiles(dir string) (string, error) {
 	goMod, err := os.ReadFile("go.mod")
 	if err != nil {
-		return "", fmt.Errorf("failed to read go.mod: %w", err)
+		return "", errors.Wrap(err, "failed to read go.mod")
 	}
 	modFile := filepath.Join(dir, "run.mod")
 	// #nosec G703 -- modFile is created under an os.MkdirTemp-owned directory.
 	if err = os.WriteFile(modFile, goMod, 0o600); err != nil {
-		return "", fmt.Errorf("failed to write temporary run.mod: %w", err)
+		return "", errors.Wrap(err, "failed to write temporary run.mod")
 	}
 	goSum, err := os.ReadFile("go.sum")
 	if err != nil && !os.IsNotExist(err) {
-		return "", fmt.Errorf("failed to read go.sum: %w", err)
+		return "", errors.Wrap(err, "failed to read go.sum")
 	}
 	if goSum != nil {
 		// #nosec G703 -- the sum file is created under the same temp directory.
 		if err = os.WriteFile(filepath.Join(dir, "run.sum"), goSum, 0o600); err != nil {
-			return "", fmt.Errorf("failed to write temporary run.sum: %w", err)
+			return "", errors.Wrap(err, "failed to write temporary run.sum")
 		}
 	}
 	return modFile, nil
 }
 
-// listedPackage is the part of the go command's report on a package that gg
+// ListedPackage is the part of the go command's report on a package that gg
 // reads.
-type listedPackage struct {
+type ListedPackage struct {
 	ImportPath string   `json:"ImportPath"`
 	Name       string   `json:"Name"`
 	Dir        string   `json:"Dir"`
@@ -159,19 +161,19 @@ type listedPackage struct {
 	CgoFiles   []string `json:"CgoFiles"`
 }
 
-// listProjectPackages reports the packages behind import paths as the
-// project's module resolves them. Like projectProgram, it points the go
+// ListProjectPackages reports the packages behind import paths as the
+// project's module resolves them. Like ProjectProgram, it points the go
 // command at copies of the module files, so resolving a path the project does
 // not require yet never edits the project's go.mod or go.sum. A path the go
 // command cannot load comes back without a name.
-func listProjectPackages(paths []string) (map[string]listedPackage, error) {
-	listed := make(map[string]listedPackage, len(paths))
+func ListProjectPackages(paths []string) (map[string]ListedPackage, error) {
+	listed := make(map[string]ListedPackage, len(paths))
 	if len(paths) == 0 {
 		return listed, nil
 	}
 	tempDir, err := os.MkdirTemp("", "gg-list-*")
 	if err != nil {
-		return nil, fmt.Errorf("failed to create temporary list directory: %w", err)
+		return nil, errors.Wrap(err, "failed to create temporary list directory")
 	}
 	defer os.RemoveAll(tempDir)
 
@@ -188,12 +190,12 @@ func listProjectPackages(paths []string) (map[string]listedPackage, error) {
 	listCmd.Stdout = &stdout
 	listCmd.Stderr = os.Stderr
 	if err = listCmd.Run(); err != nil {
-		return nil, fmt.Errorf("failed to list packages: %w", err)
+		return nil, errors.Wrap(err, "failed to list packages")
 	}
 	for decoder := json.NewDecoder(&stdout); decoder.More(); {
-		var pkg listedPackage
+		var pkg ListedPackage
 		if err = decoder.Decode(&pkg); err != nil {
-			return nil, fmt.Errorf("failed to decode the package list: %w", err)
+			return nil, errors.Wrap(err, "failed to decode the package list")
 		}
 		listed[pkg.ImportPath] = pkg
 	}

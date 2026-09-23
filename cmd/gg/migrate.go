@@ -129,7 +129,7 @@ func runGeneratedMigrateProgram(content string, section string, message string) 
 
 	// Migration prints its own progress and prompts for confirmation, so its
 	// output and input stay connected to the terminal.
-	return projectProgram{Content: content, Stdout: os.Stdout, Interactive: true}.Run()
+	return gghelper.ProjectProgram{Content: content, Stdout: os.Stdout, Interactive: true}.Run()
 }
 
 const migrateTemplate = `package main

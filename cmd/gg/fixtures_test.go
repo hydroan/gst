@@ -7,6 +7,8 @@ import (
 	"slices"
 	"strings"
 	"testing"
+
+	"github.com/hydroan/gst/internal/codegen/gen/columns"
 )
 
 func writeProjectFile(t *testing.T, path string, content string) {
@@ -133,7 +135,7 @@ func newGenProject(t *testing.T) string {
 	cleanOrphans = false
 
 	writeProjectGoModAgainstRealFramework(t, projectDir)
-	cacheDir, err := columnsCacheDir()
+	cacheDir, err := columns.CacheDir()
 	if err != nil {
 		t.Fatal(err)
 	}

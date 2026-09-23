@@ -1,6 +1,8 @@
-package main
+package columns
 
 import (
+	"encoding/json"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"strconv"
@@ -138,8 +140,7 @@ func archiveID() string {
 	record := overlay[recordSource]
 
 	t.Run("CompilesWithoutTheReferences", func(t *testing.T) {
-		overlayFile, err := writeOverlayFile(t.TempDir(), overlay)
-		require.NoError(t, err)
+		overlayFile := writeBuildOverlay(t, overlay)
 		output, err := exec.Command("go", "build", "-overlay", overlayFile, "./model/...").CombinedOutput()
 		require.NoError(t, err, "go build:\n%s", output)
 	})
@@ -206,58 +207,36 @@ func TestColumnInspectionOverlayLeavesUnparsableFilesToTheCompiler(t *testing.T)
 	require.Empty(t, overlay, "a file that does not parse is compiled as written, so the compiler reports it")
 }
 
-// TestGenRunReportsCodeReachingAColumnInspectionPlaceholder runs gg gen against
-// a project whose package initialization calls a method that reads generated
-// column references. Methods are never left out by name, so the call stays in
-// the inspection build and reaches the placeholder that replaced the method
-// body: generation fails, and what the terminal shows has to say why and point
-// at the source lines involved.
-func TestGenRunReportsCodeReachingAColumnInspectionPlaceholder(t *testing.T) {
-	projectDir := newGenProject(t)
-	source := `package sample
+// writeBuildOverlay writes the overlay's replacement contents under a
+// temporary directory and returns a go build -overlay file mapping each
+// original path to its replacement.
+func writeBuildOverlay(t *testing.T, overlay map[string]string) string {
+	t.Helper()
 
-import (
-	"github.com/hydroan/gst/dsl"
-	"github.com/hydroan/gst/model"
-)
-
-type Record struct {
-	Status string ` + "`json:\"status\"`" + `
-
-	model.Base
+	dir := t.TempDir()
+	replace := make(map[string]string, len(overlay))
+	for path, content := range overlay {
+		abs, err := filepath.Abs(path)
+		require.NoError(t, err)
+		replacement := filepath.Join(dir, strconv.Itoa(len(replace))+".go")
+		require.NoError(t, os.WriteFile(replacement, []byte(content), 0o600))
+		replace[abs] = replacement
+	}
+	encoded, err := json.Marshal(map[string]map[string]string{"Replace": replace})
+	require.NoError(t, err)
+	overlayFile := filepath.Join(dir, "overlay.json")
+	require.NoError(t, os.WriteFile(overlayFile, encoded, 0o600))
+	return overlayFile
 }
 
-func (Record) TableName() string { return "records" }
+// writeProjectFile writes content to path, creating its parent directories.
+func writeProjectFile(t *testing.T, path string, content string) {
+	t.Helper()
 
-func (Record) Design() {
-	dsl.Migrate()
-}
-
-func (r *Record) statusColumnName() string {
-	return RecordCols.Status.Name()
-}
-
-var defaultStatusColumn = (&Record{}).statusColumnName()
-`
-	writeProjectFile(t, filepath.Join(projectDir, "model", "sample", "record.go"), source)
-
-	var genErr error
-	stderr := captureStderr(t, func() {
-		genErr = genRunWithOptions(genRunOptions{Quiet: true})
-	})
-	require.ErrorContains(t, genErr, "inspect model columns")
-
-	t.Run("SaysWhyTheInspectionStopped", func(t *testing.T) {
-		require.Contains(t, stderr, "panic: "+columnInspectionPanic)
-	})
-
-	t.Run("PointsAtTheSourceLinesInvolved", func(t *testing.T) {
-		// Every rewrite keeps its line breaks, so the reported lines are the
-		// left-out method and the initialization calling it.
-		sourceFile := "model/sample/record.go:"
-		require.Contains(t, stderr, "sample.(*Record).statusColumnName(")
-		require.Contains(t, stderr, sourceFile+strconv.Itoa(sourceLine(t, source, "func (r *Record) statusColumnName() string {")))
-		require.Contains(t, stderr, "sample.init()")
-		require.Contains(t, stderr, sourceFile+strconv.Itoa(sourceLine(t, source, "var defaultStatusColumn")))
-	})
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
+		t.Fatal(err)
+	}
 }

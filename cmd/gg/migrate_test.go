@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/hydroan/gst/internal/ggconst"
+	"github.com/hydroan/gst/internal/gghelper"
 )
 
 // The migration program's model set is whatever the linked packages
@@ -84,7 +85,7 @@ func TestMigrateSchemaProgramReadsTheTablesModulesRegister(t *testing.T) {
 	}
 
 	var out bytes.Buffer
-	program := projectProgram{Content: buildMigrateSchemaProgram("tmpapp", ""), Stdout: &out}
+	program := gghelper.ProjectProgram{Content: buildMigrateSchemaProgram("tmpapp", ""), Stdout: &out}
 	if err := program.Run(); err != nil {
 		t.Fatalf("expected the migration schema program to run, got %v\n%s", err, out.String())
 	}
