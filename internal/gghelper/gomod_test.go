@@ -119,3 +119,51 @@ func TestIsFrameworkProject(t *testing.T) {
 		}
 	})
 }
+
+func TestRequiresFramework(t *testing.T) {
+	tests := []struct {
+		name  string
+		goMod string
+		want  bool
+	}{
+		{name: "requires the framework", goMod: "module example.com/app\n\ngo 1.27\n\nrequire github.com/hydroan/gst v1.0.0\n", want: true},
+		{name: "requires the framework next to a directive gg does not know", goMod: "module example.com/app\n\ngo 1.27\n\nnewdirective value\n\nrequire github.com/hydroan/gst v1.0.0\n", want: true},
+		{name: "names the framework only in a comment", goMod: "// Started from github.com/hydroan/gst.\nmodule example.com/app\n\ngo 1.27\n", want: false},
+		{name: "declares a module path extending the framework path", goMod: "module github.com/hydroan/gst-demo\n\ngo 1.27\n", want: false},
+		{name: "requires a module whose path extends the framework path", goMod: "module example.com/app\n\ngo 1.27\n\nrequire github.com/hydroan/gst-extras v1.0.0\n", want: false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			dir := t.TempDir()
+			if err := os.WriteFile(filepath.Join(dir, "go.mod"), []byte(tt.goMod), 0o600); err != nil {
+				t.Fatal(err)
+			}
+
+			got, err := gghelper.RequiresFramework(dir)
+			if err != nil {
+				t.Fatalf("RequiresFramework() error = %v", err)
+			}
+			if got != tt.want {
+				t.Fatalf("RequiresFramework() = %t, want %t", got, tt.want)
+			}
+		})
+	}
+
+	t.Run("without a go.mod", func(t *testing.T) {
+		got, err := gghelper.RequiresFramework(t.TempDir())
+		if err != nil || got {
+			t.Fatalf("RequiresFramework() = %t, %v, want false without a go.mod", got, err)
+		}
+	})
+
+	t.Run("rejects a go.mod that does not parse", func(t *testing.T) {
+		dir := t.TempDir()
+		if err := os.WriteFile(filepath.Join(dir, "go.mod"), []byte("module example.com/app\n\nrequire github.com/hydroan/gst\n"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+
+		if _, err := gghelper.RequiresFramework(dir); err == nil {
+			t.Fatal("RequiresFramework() error = nil, want the parse failure")
+		}
+	})
+}

@@ -6,9 +6,9 @@
 package gghelper
 
 import (
-	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/internal/ggconst"
@@ -22,7 +22,7 @@ import (
 func ModulePath() (string, error) {
 	content, err := os.ReadFile("go.mod")
 	if err != nil {
-		return "", fmt.Errorf("failed to read go.mod: %w", err)
+		return "", errors.Wrap(err, "failed to read go.mod")
 	}
 
 	modulePath := modfile.ModulePath(content)
@@ -40,4 +40,29 @@ func IsFrameworkProject(projectDir string) bool {
 		return false
 	}
 	return modfile.ModulePath(content) == ggconst.ImportPathGst
+}
+
+// RequiresFramework reports whether the go.mod in projectDir requires the gst
+// framework module. "require github.com/hydroan/gst v1.0.0" does; a comment
+// naming the framework, a module path extending it such as
+// github.com/hydroan/gst-demo, and a requirement on such a module do not. A
+// project without go.mod requires nothing. A directive newer than this build
+// knows is skipped, so a newer Go release cannot break gg here; a statement it
+// knows but cannot read is an error.
+func RequiresFramework(projectDir string) (bool, error) {
+	path := filepath.Join(projectDir, "go.mod")
+	content, err := os.ReadFile(path)
+	if os.IsNotExist(err) {
+		return false, nil
+	}
+	if err != nil {
+		return false, errors.Wrap(err, "failed to read go.mod")
+	}
+	file, err := modfile.ParseLax(path, content, nil)
+	if err != nil {
+		return false, errors.Wrap(err, "failed to parse go.mod")
+	}
+	return slices.ContainsFunc(file.Require, func(require *modfile.Require) bool {
+		return require.Mod.Path == ggconst.ImportPathGst
+	}), nil
 }
