@@ -54,7 +54,7 @@ partition "第 2 步：空目录" {
 partition "第 3 步：孤儿目录" {
   :从活代码出发顺着 import 找
   还有人在用的目录;
-  if (项目里的目录都读得了？) then (是)
+  if (项目里的代码都读得了？) then (是)
     :有的话列出 Service Helper Directories Kept;
     :找出孤儿目录和其中 gg 不认得的文件;
     if (有孤儿目录？) then (有)
@@ -118,10 +118,10 @@ stop
 
 1. 从 `go.mod` 读出模块路径。项目里没有 `model/` 目录时报错退出。
 2. 读 gst.yaml。读之前，项目根目录下有 `.gg.yaml`、`.gg.yml`、`.gst.yaml`、`.gst.yml`、`gst.yml` 中的哪个，就对哪个打印一条警告：gg 不读它们。
-3. 扫描 `model/` 下的 model，读的文件和 `gg gen` 相同：跳过被 Git 忽略的文件、`vendor` 和 `testdata` 目录、测试文件、以 `_` 开头的文件。一个 model 都没找到时打印 `No models found, pruning service files only` 并照常往下走，这时所有 gg 管的 service 文件都会进待删清单。
+3. 扫描 `model/` 下的 model，读的文件和 `gg gen` 相同：跳过被 Git 忽略的文件，隐藏目录、`vendor`、`testdata`、自带 `go.mod` 的子目录，测试文件，以 `_` 开头的文件。一个 model 都没找到时打印 `No models found, pruning service files only` 并照常往下走，这时所有 gg 管的 service 文件都会进待删清单。
 4. 列出 `service/` 下现有的 gg 管的 service 文件，跳过被 Git 忽略的。扫描中途出错只打印警告，用已经扫到的文件继续。
 
-读不出模块路径、gst.yaml 写错（包括 `prune.ignore` 不合规）、model 文件解析失败时，`gg prune` 以 panic 退出，什么都不删。
+读不出模块路径、gst.yaml 写错（包括 `prune.ignore` 不合规）、model 文件解析失败时，`gg prune` 打印错误并以失败退出，什么都不删。
 
 `gg prune` 不应用 gst.yaml 的 `gen.routes.ignore`：被屏蔽的 action 在这里仍算启用，它的 service 文件是当前应有的，所在目录属于 model。结果和 `gg gen --prune` 保留它们一样。
 
@@ -147,10 +147,11 @@ stop
 
 ### 3.1 找出还有活代码在用的目录
 
-**活代码**指项目里所有的 `.go` 文件，包括测试文件，但下面这些不算：
+**活代码**指项目里所有的 `.go` 文件，包括测试文件和带构建约束（如 `//go:build ignore`）的文件，但下面这些不算：
 
 - gg 生成的 `.gen.go` 文件。它们跟着 model 走：删掉 model 后直接跑 `gg prune` 时，`service/service.gen.go` 还没重新生成，仍然 import 着被删 model 的目录，这个 import 不算数。
 - 隐藏目录、`vendor`、`testdata`、自带 `go.mod` 的子目录里的文件，以及被 Git 忽略的文件。gg check 遍历项目时跳过的也是这些。
+- 只能通过符号链接到达的目录里的文件：遍历不跟符号链接走，和 gg check、`go` 命令的 `./...` 一样。
 - 孤儿候选目录里的文件。
 
 孤儿候选目录里的文件满足下面任一条件时，仍然算活代码，因为 prune 不会删它们：
@@ -159,11 +160,15 @@ stop
 - 所在目录被活代码 import 了，或者在这样的目录里面；
 - 所在目录是被 import 的目录与 `service/` 之间的中间层。
 
-找法：看活代码 import 了哪些 `<模块路径>/service/...` 下的包。被 import 的是孤儿候选目录时，保留这个目录，它和它的子目录、它上面各层中间层目录里的文件都变成活代码，接着看它们又 import 了什么，直到找不出新的目录。孤儿候选目录之间的 import 不算数：一个没人用的目录 import 了另一个，两个都还是孤儿。
+找法：看活代码 import 了哪些 `<模块路径>/service/...` 下的包。被 import 的是孤儿候选目录时，保留这个目录，它和它的子目录、它上面各层中间层目录里的文件都变成活代码，接着看它们又 import 了什么，直到找不出新的目录。
+
+- 孤儿候选目录之间的 import 不算数：一个没人用的目录 import 了另一个，两个都还是孤儿。
+- import 了一个磁盘上已经不存在的 service 目录，什么都不保留。
+- 文件的 import 部分写错、解析到一半出错时，出错之前已经读到的 import 仍然算数，宁可多留。
 
 找到的目录列在 `Service Helper Directories Kept` 下面，每行标注 `(imported by live project code)`。
 
-项目里有目录读不了（比如权限不够）时，gg 没法确认那里的代码 import 了什么，所以不判定孤儿：打印警告 `failed to trace which service directories live code imports, so orphan service directories are not checked: ...`，第 3 步到此结束，什么都不删。
+项目里有目录或文件读不了（比如权限不够）时，gg 没法确认那里的代码 import 了什么，所以不判定孤儿：打印警告 `failed to trace which service directories live code imports, so orphan service directories are not checked: ...`，第 3 步到此结束，什么都不删。
 
 ### 3.2 找出孤儿目录
 

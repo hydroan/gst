@@ -955,6 +955,9 @@ prune:
 - `gg` 只读取 `gst.yaml`，项目里如果还有 `.gg.yaml`、`gst.yml` 这类同类
   文件，会输出 warning 提示它们不会被读取。
 
+prune 删什么、不删什么、按什么顺序删、哪一步会先问你，完整规则见
+[cmd/gg/PRUNE.md](cmd/gg/PRUNE.md)。
+
 ## 示例
 
 当前仓库的 `examples/demo` 是推荐阅读的完整业务项目示例：
@@ -1077,7 +1080,7 @@ Pod 端口，Ingress 只转发写进规则的路径——**只转发 `/api` 前�
 ### 为什么删除 action 后 service 文件还在？
 
 `gg gen` 默认保留已有 service 文件，避免误删手写业务代码。确认旧文件不再需要后
-运行 `gg prune`，或使用 `gg gen --prune`。
+运行 `gg prune`，或使用 `gg gen --prune`，清理规则见 [cmd/gg/PRUNE.md](cmd/gg/PRUNE.md)。
 
 ### 为什么测试跑完后 gst-test-mysql-8-4 这些容器还在运行？
 
