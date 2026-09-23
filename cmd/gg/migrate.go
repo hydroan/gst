@@ -2,11 +2,14 @@ package main
 
 import (
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 
+	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/consts"
 	"github.com/hydroan/gst/internal/clioutput"
 	"github.com/hydroan/gst/internal/ggconst"
@@ -46,9 +49,13 @@ var migrateSchemaCmd = &cobra.Command{
 
 		source := ""
 		if len(args) > 0 {
-			source = args[0]
+			source = strings.TrimSpace(args[0])
 		}
-		return runMigrateSchemaProgram(buildMigrateSchemaProgram(moduleName, source))
+		files, err := migrateSourceFiles(source)
+		if err != nil {
+			return err
+		}
+		return runMigrateSchemaProgram(buildMigrateSchemaProgram(moduleName, source, files))
 	},
 }
 
@@ -64,14 +71,18 @@ func init() {
 }
 
 func buildMigrateProgram(moduleName string) string {
-	return buildMigrateProgramForMode(moduleName, false, "")
+	return buildMigrateProgramForMode(moduleName, false, "", nil)
 }
 
-func buildMigrateSchemaProgram(moduleName string, source string) string {
-	return buildMigrateProgramForMode(moduleName, true, source)
+func buildMigrateSchemaProgram(moduleName string, source string, sourceFiles []string) string {
+	return buildMigrateProgramForMode(moduleName, true, source, sourceFiles)
 }
 
-func buildMigrateProgramForMode(moduleName string, schemaOnly bool, schemaSource string) string {
+func buildMigrateProgramForMode(moduleName string, schemaOnly bool, schemaSource string, schemaSourceFiles []string) string {
+	quotedFiles := make([]string, len(schemaSourceFiles))
+	for i, file := range schemaSourceFiles {
+		quotedFiles[i] = strconv.Quote(file)
+	}
 	content := migrateTemplate
 	content = strings.ReplaceAll(content, "{{PROJECT_IMPORTS}}", migrateProjectImports(moduleName))
 	content = strings.ReplaceAll(content, "{{MODULE}}", moduleName)
@@ -79,6 +90,7 @@ func buildMigrateProgramForMode(moduleName string, schemaOnly bool, schemaSource
 	content = strings.ReplaceAll(content, "{{YES}}", strconv.FormatBool(migrateYes))
 	content = strings.ReplaceAll(content, "{{SCHEMA_ONLY}}", strconv.FormatBool(schemaOnly))
 	content = strings.ReplaceAll(content, "{{SCHEMA_SOURCE}}", strconv.Quote(schemaSource))
+	content = strings.ReplaceAll(content, "{{SCHEMA_SOURCE_FILES}}", "[]string{"+strings.Join(quotedFiles, ", ")+"}")
 	return fmt.Sprintf("%s\n\n%s", consts.CodeGeneratedComment(), content)
 }
 
@@ -119,6 +131,57 @@ func runMigrateProgram(content string) error {
 	return runGeneratedMigrateProgram(content, "Migration", "Preparing migration...")
 }
 
+// migrateSourceFiles lists the Go files gg migrate schema reads model types
+// from: source itself when it names a Go file, or else the Go files below it
+// that are not tests, walked by the rules a walk over the project's code
+// follows (gghelper.ExcludedDir). For model it lists model/record.go and
+// model/sample/item.go, and leaves out model/record_test.go and every file of
+// model/testdata. An empty source lists nothing: the schema covers every
+// registered model.
+func migrateSourceFiles(source string) ([]string, error) {
+	if source == "" {
+		return nil, nil
+	}
+	isSource := func(path string) bool {
+		return strings.HasSuffix(path, ggconst.ExtensionGo) && !strings.HasSuffix(path, ggconst.PatternTestFile)
+	}
+	info, err := os.Stat(source)
+	if err != nil {
+		return nil, errors.Wrapf(err, "failed to inspect model source %s", source)
+	}
+	if !info.IsDir() {
+		if !isSource(source) {
+			return nil, errors.Newf("model source must be a Go file or directory: %s", source)
+		}
+		return []string{source}, nil
+	}
+
+	var files []string
+	err = filepath.WalkDir(source, func(path string, entry fs.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		if entry.IsDir() {
+			if gghelper.ExcludedDir(source, path) {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if isSource(path) {
+			files = append(files, path)
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, errors.Wrapf(err, "failed to walk model source %s", source)
+	}
+	if len(files) == 0 {
+		return nil, errors.Newf("no Go model files found under %s", source)
+	}
+	sort.Strings(files)
+	return files, nil
+}
+
 func runMigrateSchemaProgram(content string) error {
 	return runGeneratedMigrateProgram(content, "Migration Schema", "Preparing schema dump...")
 }
@@ -140,11 +203,9 @@ import (
 	"go/ast"
 	"go/parser"
 	"go/token"
-	"io/fs"
 	"os"
 	"path/filepath"
 	"reflect"
-	"sort"
 	"strings"
 
 {{PROJECT_IMPORTS}}
@@ -164,6 +225,10 @@ const migrateYes = {{YES}}
 const migrateModule = "{{MODULE}}"
 const migrateSchemaOnly = {{SCHEMA_ONLY}}
 const migrateSchemaSource = {{SCHEMA_SOURCE}}
+
+// migrateSchemaSourceFiles are the Go files under migrateSchemaSource, as gg
+// listed them.
+var migrateSchemaSourceFiles = {{SCHEMA_SOURCE_FILES}}
 
 func main() {
 	// Load the configuration and initialize the router and modules, with
@@ -273,7 +338,7 @@ type modelTypeKey struct {
 
 func runSchemaDump(models []any) error {
 	var err error
-	models, err = filterModelsBySource(models, migrateSchemaSource)
+	models, err = filterModelsBySource(models, migrateSchemaSource, migrateSchemaSourceFiles)
 	if err != nil {
 		return err
 	}
@@ -289,13 +354,12 @@ func runSchemaDump(models []any) error {
 	return nil
 }
 
-func filterModelsBySource(models []any, source string) ([]any, error) {
-	source = strings.TrimSpace(source)
+func filterModelsBySource(models []any, source string, files []string) ([]any, error) {
 	if source == "" {
 		return models, nil
 	}
 
-	targetTypes, err := collectSourceModelTypes(source)
+	targetTypes, err := collectSourceModelTypes(source, files)
 	if err != nil {
 		return nil, err
 	}
@@ -333,44 +397,7 @@ func modelKey(model any) (modelTypeKey, bool) {
 	}, true
 }
 
-func collectSourceModelTypes(source string) (map[modelTypeKey]struct{}, error) {
-	info, err := os.Stat(source)
-	if err != nil {
-		return nil, fmt.Errorf("failed to inspect model source %s: %w", source, err)
-	}
-
-	var files []string
-	if info.IsDir() {
-		err = filepath.WalkDir(source, func(path string, entry fs.DirEntry, walkErr error) error {
-			if walkErr != nil {
-				return walkErr
-			}
-			if entry.IsDir() {
-				switch entry.Name() {
-				case ".git", "generated", "vendor":
-					return filepath.SkipDir
-				}
-				return nil
-			}
-			if isGoModelSource(path) {
-				files = append(files, path)
-			}
-			return nil
-		})
-		if err != nil {
-			return nil, fmt.Errorf("failed to walk model source %s: %w", source, err)
-		}
-	} else {
-		if !isGoModelSource(source) {
-			return nil, fmt.Errorf("model source must be a Go file or directory: %s", source)
-		}
-		files = append(files, source)
-	}
-	sort.Strings(files)
-	if len(files) == 0 {
-		return nil, fmt.Errorf("no Go model files found under %s", source)
-	}
-
+func collectSourceModelTypes(source string, files []string) (map[modelTypeKey]struct{}, error) {
 	targetTypes := make(map[modelTypeKey]struct{})
 	for _, file := range files {
 		if err := collectFileModelTypes(file, targetTypes); err != nil {
@@ -381,10 +408,6 @@ func collectSourceModelTypes(source string) (map[modelTypeKey]struct{}, error) {
 		return nil, fmt.Errorf("no model type declarations found under %s", source)
 	}
 	return targetTypes, nil
-}
-
-func isGoModelSource(path string) bool {
-	return strings.HasSuffix(path, ".go") && !strings.HasSuffix(path, "_test.go")
 }
 
 func collectFileModelTypes(filename string, targetTypes map[modelTypeKey]struct{}) error {

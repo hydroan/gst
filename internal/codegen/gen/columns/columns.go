@@ -640,7 +640,9 @@ func removeOrphanColumnFiles(dir string, wanted map[string]struct{}) ([]string, 
 //   - the inspection program, including the module it targets;
 //   - the module requirements, which pin the framework and gorm versions;
 //   - the content of every model source file, since the models are what carry
-//     the columns.
+//     the columns: the Go files under the model directory but for tests and
+//     generated files, walked by the rules a walk over the project's code
+//     follows (the Git ignore rules and gghelper.ExcludedDir).
 //
 // File paths are deliberately excluded: renaming or moving a model file does
 // not change a single column, and which file a model belongs to is resolved
@@ -672,8 +674,7 @@ func columnsCacheKey(program string, modelDir string, ignore gghelper.ProjectIgn
 	fileDigests := make([]string, 0)
 	err = ignore.Walk(modelDir, func(path string, info os.FileInfo) error {
 		if info.IsDir() {
-			switch info.Name() {
-			case ".git", "generated", "vendor":
+			if gghelper.ExcludedDir(modelDir, path) {
 				return filepath.SkipDir
 			}
 			return nil

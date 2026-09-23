@@ -102,7 +102,8 @@ func TestExtractAPIDocsDeterministicOrder(t *testing.T) {
 
 // TestExtractAPIDocsSkipsFilesOutsideCodeGeneration checks the files the
 // extraction leaves out: test files, files whose names start with "_", files
-// in vendor and testdata directories, and the file names excludes lists.
+// in hidden, vendor and testdata directories and in directories holding a
+// go.mod of their own, and the file names excludes lists.
 func TestExtractAPIDocsSkipsFilesOutsideCodeGeneration(t *testing.T) {
 	entries, err := codegen.ExtractAPIDocs("example.com/proj", "testdata/apidocmodel", gghelper.NewProjectIgnore(), []string{"excluded.go"})
 	if err != nil {
@@ -112,8 +113,10 @@ func TestExtractAPIDocsSkipsFilesOutsideCodeGeneration(t *testing.T) {
 	skipped := map[string]string{
 		"example.com/proj/testdata/apidocmodel.InTestFile":       "test files",
 		"example.com/proj/testdata/apidocmodel.Ignored":          `files with the "_" prefix`,
+		"example.com/proj/testdata/apidocmodel/.cache.Cached":    "hidden directories",
 		"example.com/proj/testdata/apidocmodel/vendor.Vendored":  "vendor directories",
 		"example.com/proj/testdata/apidocmodel/testdata.Fixture": "testdata directories",
+		"example.com/proj/testdata/apidocmodel/nested.Nested":    "directories holding a go.mod of their own",
 		"example.com/proj/testdata/apidocmodel.Excluded":         "the files excludes lists",
 	}
 	for _, entry := range entries.Structs {

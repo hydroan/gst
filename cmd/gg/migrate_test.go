@@ -7,6 +7,7 @@ import (
 	"go/token"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -38,7 +39,7 @@ func TestMigrateProgramLinksWhatMainLinks(t *testing.T) {
 	}
 	t.Chdir(projectDir)
 
-	program := buildMigrateProgramForMode("sample", false, "")
+	program := buildMigrateProgramForMode("sample", false, "", nil)
 
 	for _, dir := range ggconst.ProjectImportDirs {
 		want := fmt.Sprintf("_ %q", "sample/"+dir)
@@ -71,10 +72,80 @@ func TestMigrateProgramLinksWhatMainLinks(t *testing.T) {
 // No build of this repository compiles the program's source, so this is also
 // what pins that it still compiles against the framework.
 func TestMigrateSchemaProgramReadsTheTablesModulesRegister(t *testing.T) {
+	newMigrateSampleProject(t)
+
+	out := runMigrateSchemaProgramForTest(t, "", nil)
+
+	if !strings.Contains(out, "CREATE TABLE `samples`") {
+		t.Fatalf("expected the schema dump to create the table the module registers, got:\n%s", out)
+	}
+}
+
+// With a source, the program dumps the registered models declared in the
+// files gg listed under it: here the module package, which declares the
+// model it registers.
+func TestMigrateSchemaProgramReadsTheModelsItsSourceDeclares(t *testing.T) {
+	newMigrateSampleProject(t)
+	files, err := migrateSourceFiles(ggconst.DirModule)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	out := runMigrateSchemaProgramForTest(t, ggconst.DirModule, files)
+
+	if !strings.Contains(out, "CREATE TABLE `samples`") {
+		t.Fatalf("expected the schema dump to create the table of the model the source declares, got:\n%s", out)
+	}
+}
+
+// TestMigrateSourceFiles pins the files gg migrate schema reads model types
+// from. Below a directory, every Go file that is not a test, a model package
+// named generated among them, and none a walk over the project's code leaves
+// out: hidden, vendor and testdata directories and nested modules. A Go file
+// named on its own is read alone.
+func TestMigrateSourceFiles(t *testing.T) {
+	t.Chdir(t.TempDir())
+	for path, content := range map[string]string{
+		"model/record.go":           "package model\n",
+		"model/record_test.go":      "package model\n",
+		"model/generated/sample.go": "package generated\n",
+		"model/.cache/cached.go":    "package cached\n",
+		"model/vendor/lib/lib.go":   "package lib\n",
+		"model/testdata/fixture.go": "package fixture\n",
+		"model/nested/go.mod":       "module example.com/nested\n",
+		"model/nested/nested.go":    "package nested\n",
+	} {
+		writeProjectFile(t, filepath.FromSlash(path), content)
+	}
+
+	files, err := migrateSourceFiles(ggconst.DirModel)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{filepath.Join("model", "generated", "sample.go"), filepath.Join("model", "record.go")}
+	if !slices.Equal(files, want) {
+		t.Fatalf("migrateSourceFiles(%q) = %q, want %q", ggconst.DirModel, files, want)
+	}
+
+	single := filepath.Join("model", "record.go")
+	files, err = migrateSourceFiles(single)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Equal(files, []string{single}) {
+		t.Fatalf("migrateSourceFiles(%q) = %q, want the file alone", single, files)
+	}
+}
+
+// newMigrateSampleProject creates a project for the migration program tests
+// whose module package registers migrateSampleModule's model, and pins the
+// dialect the dump is rendered in: the program reads the environment, so a
+// DATABASE_TYPE set where the tests run cannot change what the assertions
+// read.
+func newMigrateSampleProject(t *testing.T) {
+	t.Helper()
+
 	projectDir := newGenProject(t)
-	// The dump is rendered in the dialect the configuration names, and the
-	// program reads the environment: pin the default, so a DATABASE_TYPE set
-	// where the tests run cannot change what the assertion reads.
 	t.Setenv("DATABASE_TYPE", "sqlite")
 	for _, dir := range ggconst.ProjectImportDirs {
 		content := "package " + dir + "\n"
@@ -83,15 +154,20 @@ func TestMigrateSchemaProgramReadsTheTablesModulesRegister(t *testing.T) {
 		}
 		writeProjectFile(t, filepath.Join(projectDir, dir, dir+".go"), content)
 	}
+}
+
+// runMigrateSchemaProgramForTest builds the schema program for source and the
+// files listed under it, runs it in the working directory and returns what it
+// printed.
+func runMigrateSchemaProgramForTest(t *testing.T, source string, files []string) string {
+	t.Helper()
 
 	var out bytes.Buffer
-	program := gghelper.ProjectProgram{Content: buildMigrateSchemaProgram("tmpapp", ""), Stdout: &out}
+	program := gghelper.ProjectProgram{Content: buildMigrateSchemaProgram("tmpapp", source, files), Stdout: &out}
 	if err := program.Run(); err != nil {
 		t.Fatalf("expected the migration schema program to run, got %v\n%s", err, out.String())
 	}
-	if !strings.Contains(out.String(), "CREATE TABLE `samples`") {
-		t.Fatalf("expected the schema dump to create the table the module registers, got:\n%s", out.String())
-	}
+	return out.String()
 }
 
 // migrateSampleModule is the module package of a project that registers one

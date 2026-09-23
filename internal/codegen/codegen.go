@@ -15,7 +15,8 @@ import (
 
 // walkModelFiles walks modelDir and invokes fn for every Go source file that
 // participates in code generation: it skips the paths the project's Git
-// ignore rules exclude, vendor and testdata directories, test files, ignored
+// ignore rules exclude, the directories gghelper.ExcludedDir names (hidden,
+// vendor and testdata directories and nested modules), test files, ignored
 // files (whose names start with "_") and the file names excludes lists. Under
 // model it visits model/sample/record.go, and skips model/sample/record_test.go,
 // model/sample/_draft.go and every file of model/sample/testdata.
@@ -24,9 +25,8 @@ import (
 // through the same walk, so the check and the generator read the same files.
 func walkModelFiles(modelDir string, ignore gghelper.ProjectIgnore, excludes []string, fn func(path string) error) error {
 	return ignore.Walk(modelDir, func(path string, info os.FileInfo) error {
-		base := filepath.Base(path)
 		if info.IsDir() {
-			if path != modelDir && (base == ggconst.DirVendor || base == ggconst.DirTestData) {
+			if gghelper.ExcludedDir(modelDir, path) {
 				return filepath.SkipDir
 			}
 			return nil
