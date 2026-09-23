@@ -153,21 +153,6 @@ func New(cfg config.Elasticsearch) (*elasticsearch.Client, error) {
 	return cli, nil
 }
 
-// // _ensureConnection checks the connection and reconnects if necessary
-// func _ensureConnection() {
-// 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
-// 	logger.Elastic.Info("check elasticsearch connection")
-// 	defer cancel()
-// 	if _, err := client.Ping(client.Ping.WithContext(ctx)); err != nil {
-// 		logger.Elastic.Warnf("elasticsearch connection maybe broken, try to reconnect: %v", err)
-// 		if newClient, err := elasticsearch.NewClient(esCfg); err != nil {
-// 			logger.Elastic.Error("reconnect to elasticsearch error: %v", err)
-// 		} else {
-// 			client = newClient
-// 		}
-// 	}
-// }
-
 // _check will check the client and return an error if it's nil or invalid.
 func _check() error {
 	if client == nil {
