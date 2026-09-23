@@ -151,7 +151,10 @@ var periodicReloadRunning atomic.Bool
 
 // startPeriodicReload reconciles the in-memory policy set with storage every
 // reloadInterval, for as long as the process runs. Init starts it and lets it
-// run for the process's life; the returned stop exists for tests.
+// run for the process's life; the returned stop exists for tests, and returns
+// only once the loop has ended — after the reload under way, if any, and
+// before another could start — so a test that tears the policy state down
+// behind it cannot be overtaken by one more tick.
 //
 // The target is resolved anew through RBAC on every tick rather than captured
 // once, so the loop reconciles whatever policy state is currently installed
@@ -166,8 +169,10 @@ func startPeriodicReload() (stop func()) {
 		return func() {}
 	}
 	done := make(chan struct{})
+	ended := make(chan struct{})
 	var stopOnce sync.Once
 	go func() {
+		defer close(ended)
 		defer periodicReloadRunning.Store(false)
 		ticker := time.NewTicker(reloadInterval)
 		defer ticker.Stop()
@@ -176,6 +181,13 @@ func startPeriodicReload() (stop func()) {
 			case <-done:
 				return
 			case <-ticker.C:
+				// select picks at random among the cases that are ready, so a
+				// tick can be picked over a stop that is already due.
+				select {
+				case <-done:
+					return
+				default:
+				}
 				r, ok := RBAC().(*rbac)
 				if !ok {
 					continue
@@ -189,7 +201,10 @@ func startPeriodicReload() (stop func()) {
 			}
 		}
 	}()
-	return func() { stopOnce.Do(func() { close(done) }) }
+	return func() {
+		stopOnce.Do(func() { close(done) })
+		<-ended
+	}
 }
 
 // reloadRetryInterval is how long a diverged process waits between its attempts

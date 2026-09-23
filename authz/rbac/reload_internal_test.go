@@ -163,6 +163,57 @@ func TestPeriodicReloadReconcilesWithStorage(t *testing.T) {
 	assert.Equal(t, storedRules(t, store), memoryRules(t, r))
 }
 
+// TestPeriodicReloadStopWaitsForTheLoopToEnd covers what a test relies on when
+// it tears the policy state down after stopping the schedule: once stop has
+// returned, no reload of the loop is still waiting to run. A reload that
+// outlived its test would read a dropped table, or the policy set the next
+// test installed without a store.
+func TestPeriodicReloadStopWaitsForTheLoopToEnd(t *testing.T) {
+	prev := reloadInterval
+	reloadInterval = time.Millisecond
+	t.Cleanup(func() { reloadInterval = prev })
+
+	_, store := storedRBAC(t, "policy_periodic_stop")
+	policyMu.Lock()
+	policyStore = store
+	policyMu.Unlock()
+
+	stop := startPeriodicReload()
+	t.Cleanup(stop)
+
+	// Hold the policy lock until the loop's next reload is waiting for it. A
+	// writer waiting on the lock turns every new reader away, which is what
+	// the probe detects.
+	policyMu.RLock()
+	require.Eventually(t, func() bool {
+		if policyMu.TryRLock() {
+			policyMu.RUnlock()
+			return false
+		}
+		return true
+	}, 5*time.Second, time.Millisecond, "the loop's next reload has to be waiting for the policy lock")
+
+	stopped := make(chan struct{})
+	go func() {
+		stop()
+		close(stopped)
+	}()
+	select {
+	case <-stopped:
+		policyMu.RUnlock()
+		t.Fatal("stop returned while a reload of the loop was still waiting to run")
+	case <-time.After(50 * time.Millisecond):
+	}
+	policyMu.RUnlock()
+
+	select {
+	case <-stopped:
+	case <-time.After(5 * time.Second):
+		t.Fatal("stop has to return once the reload it waited for is done")
+	}
+	assert.False(t, periodicReloadRunning.Load(), "the loop has to have ended by the time stop returns")
+}
+
 // TestPolicyDivergenceIsPublished covers the state a process enters when the
 // reload that had to succeed did not. Nothing else can see it: the write is
 // already durable, the request that made it has returned, and comparing stored
@@ -172,8 +223,20 @@ func TestPolicyDivergenceIsPublished(t *testing.T) {
 	// Each case sets the state it needs rather than inheriting it, so that any
 	// one of them can be run on its own.
 	t.Run("a recovery that cannot reload says so", func(t *testing.T) {
+		// The failed recovery schedules a retry, and the cleanup waits for it to
+		// end: a retry outliving the case would keep the one retry slot of the
+		// process, so a later recovery here would schedule none. The shortened
+		// interval lets it notice the cleared divergence at once.
+		prev := reloadRetryInterval
+		reloadRetryInterval = time.Millisecond
+		t.Cleanup(func() { reloadRetryInterval = prev })
 		publishPolicyDivergence(false)
-		t.Cleanup(func() { publishPolicyDivergence(false) })
+		t.Cleanup(func() {
+			publishPolicyDivergence(false)
+			require.Eventually(t, func() bool {
+				return !reloadRetryRunning.Load()
+			}, 5*time.Second, time.Millisecond, "the retry has to end once the divergence is cleared")
+		})
 
 		store := newPolicyTable(t, "policy_divergence_failing")
 		failing := &failLoadAdapter{adapter: store}
