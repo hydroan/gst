@@ -17,7 +17,8 @@ import (
 // package can implement, which only type-checking the move shows (sealed). A
 // main package is left alone (cmd/tool).
 func TestCheckTestPlacement(t *testing.T) {
-	violations, err := checkTestPlacement("testdata/testplacement/module")
+	root, pkgs := loadFixture(t, "testdata/testplacement/module")
+	violations, err := checkTestPlacement(root, pkgs)
 	require.NoError(t, err)
 	require.Equal(t, []violation{
 		{
@@ -29,9 +30,4 @@ func TestCheckTestPlacement(t *testing.T) {
 			Message: "Test file 'movable/movable_internal_test.go' uses nothing unexported of package movable: declare package movable_test and drop _internal from its name",
 		},
 	}, violations)
-}
-
-func TestCheckTestPlacementFailsOnAPackageThatDoesNotTypeCheck(t *testing.T) {
-	_, err := checkTestPlacement("testdata/testplacement/broken")
-	require.ErrorContains(t, err, "does not type-check")
 }

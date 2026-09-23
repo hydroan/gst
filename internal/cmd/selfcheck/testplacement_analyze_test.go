@@ -1,33 +1,29 @@
 package main
 
 import (
-	"path/filepath"
 	"sort"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 )
 
-// TestCandidates pins the static pass on its own, over the fixture module of
-// TestCheckTestPlacement. checkTestPlacement confirms every candidate by
-// type-checking it, so a static rule gone wrong would not change what
-// checkTestPlacement reports; it would only send more files to that far slower
-// confirmation, and the static pass is what keeps the check fast on a tree
-// with nothing to report. Only two files get past it: the one
+// TestExternalCandidates pins the static pass on its own, over the fixture
+// module of TestCheckTestPlacement. checkTestPlacement confirms every
+// candidate by type-checking it, so a static rule gone wrong would not change
+// what checkTestPlacement reports; it would only send more files to that far
+// slower confirmation, and the static pass is what keeps the check fast on a
+// tree with nothing to report. Only two files get past it: the one
 // checkTestPlacement reports (movable) and the one only the confirmation stops
 // (sealed).
-func TestCandidates(t *testing.T) {
-	root, err := filepath.Abs("testdata/testplacement/module")
-	require.NoError(t, err)
-	pkgs, err := load(root, nil, "./...")
-	require.NoError(t, err)
+func TestExternalCandidates(t *testing.T) {
+	root, pkgs := loadFixture(t, "testdata/testplacement/module")
 
 	var got []string
 	for _, p := range pkgs {
 		if !isInternalTestVariant(p) || p.Name == "main" {
 			continue
 		}
-		for _, f := range candidates(analyze(p)) {
+		for _, f := range externalCandidates(analyzeTestFiles(p)) {
 			got = append(got, relative(root, f.path))
 		}
 	}

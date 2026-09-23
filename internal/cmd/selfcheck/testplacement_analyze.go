@@ -29,9 +29,9 @@ type testFile struct {
 	qualify []int
 }
 
-// analyze runs the static pass over the test files of p, an internal test
-// variant.
-func analyze(p *packages.Package) map[string]*testFile {
+// analyzeTestFiles runs the static pass over the test files of p, an internal
+// test variant.
+func analyzeTestFiles(p *packages.Package) map[string]*testFile {
 	files := make(map[string]*testFile)
 	for i, syntax := range p.Syntax {
 		path := p.CompiledGoFiles[i]
@@ -45,13 +45,13 @@ func analyze(p *packages.Package) map[string]*testFile {
 		}
 	}
 	for _, f := range files {
-		inspect(p, f)
+		inspectTestFile(p, f)
 	}
 	return files
 }
 
-// inspect records in f what ties it to the package p it tests.
-func inspect(p *packages.Package, f *testFile) {
+// inspectTestFile records in f what ties it to the package p it tests.
+func inspectTestFile(p *packages.Package, f *testFile) {
 	declaredIn := func(obj types.Object) string { return p.Fset.Position(obj.Pos()).Filename }
 
 	for _, decl := range f.syntax.Decls {
@@ -134,10 +134,10 @@ func unkeyedWithUnexportedFields(p *packages.Package, lit *ast.CompositeLit) boo
 	return false
 }
 
-// candidates returns the files named as internal tests that the static pass
-// finds movable: blocked by nothing, and moving together with every test file
-// they use and every test file that uses them.
-func candidates(files map[string]*testFile) []*testFile {
+// externalCandidates returns the files named as internal tests that the static
+// pass finds movable: blocked by nothing, and moving together with every test
+// file they use and every test file that uses them.
+func externalCandidates(files map[string]*testFile) []*testFile {
 	users := make(map[string]map[string]bool)
 	movable := make(map[string]bool)
 	for path, f := range files {

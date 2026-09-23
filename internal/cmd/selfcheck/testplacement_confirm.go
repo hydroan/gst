@@ -47,7 +47,7 @@ func compilesExternally(root string, p *packages.Package, files []*testFile) (bo
 	for _, f := range files {
 		src, err := os.ReadFile(f.path)
 		if err != nil {
-			return false, errors.Wrapf(err, "testplacement: read %s", f.path)
+			return false, errors.Wrapf(err, "read %s", f.path)
 		}
 		overlay[f.path] = asExternal(src, f, p.Name, p.PkgPath)
 	}
