@@ -99,16 +99,21 @@ import _ "tmpapp/service/iam/adminauth"
 // a test file, the service root and a directory above a model's own or above
 // a kept helper's, and what prune.ignore keeps, down to a single file inside
 // an orphan. Deleting the directory would break the build, or the tests for a
-// test file.
+// test file. A file a build constraint leaves out counts too, and so do the
+// imports read before a file stops parsing: prune errs on the side of keeping.
 func TestFindOrphanDirsKeepsHelperDirsImportedByLiveCode(t *testing.T) {
 	importers := []struct {
 		name    string
 		path    string
 		pkg     string
+		header  string
+		tail    string
 		protect []string
 		extra   map[string]string
 	}{
 		{name: "cronjob", path: filepath.Join("cronjob", "cleanup.go"), pkg: "cronjob"},
+		{name: "file a build constraint leaves out", path: filepath.Join("cronjob", "tool.go"), pkg: "main", header: "//go:build ignore\n\n"},
+		{name: "file whose imports stop parsing", path: filepath.Join("cronjob", "broken.go"), pkg: "cronjob", tail: "\nimport \"unterminated\n"},
 		{name: "nested package", path: filepath.Join("internal", "task", "run.go"), pkg: "task"},
 		{name: "project root", path: "wire.go", pkg: "main"},
 		{name: "test file", path: filepath.Join("cronjob", "cleanup_test.go"), pkg: "cronjob"},
@@ -138,7 +143,7 @@ func TestFindOrphanDirsKeepsHelperDirsImportedByLiveCode(t *testing.T) {
 			for path, content := range importer.extra {
 				writeProjectFile(t, path, content)
 			}
-			writeProjectFile(t, importer.path, "package "+importer.pkg+"\n\nimport _ \"tmpapp/service/helper\"\n")
+			writeProjectFile(t, importer.path, importer.header+"package "+importer.pkg+"\n\nimport _ \"tmpapp/service/helper\"\n"+importer.tail)
 
 			orphans, keptHelpers := findOrphanDirs(t, []*gen.ModelInfo{helperImportModel()}, nil, ggconfig.PruneConfig{Ignore: importer.protect})
 
@@ -196,32 +201,75 @@ func TestFindOrphanDirsIgnoresImportsFromCodeThatIsNotLive(t *testing.T) {
 	}
 }
 
-// TestFindOrphanDirsFailsOnAnUnreadableDirectory pins that orphan detection
-// fails instead of guessing when part of the project cannot be read: an
-// import in the unread part might be all that keeps a directory.
-func TestFindOrphanDirsFailsOnAnUnreadableDirectory(t *testing.T) {
+// TestFindOrphanDirsFailsOnUnreadableCode pins that orphan detection fails
+// instead of guessing when part of the project cannot be read, a directory or
+// a single file: an import in the unread part might be all that keeps a
+// directory.
+func TestFindOrphanDirsFailsOnUnreadableCode(t *testing.T) {
 	if os.Geteuid() == 0 {
-		t.Skip("root reads a directory whatever its permissions")
+		t.Skip("root reads a directory or a file whatever its permissions")
 	}
+	for _, locked := range []string{"data", filepath.Join("cronjob", "job.go")} {
+		t.Run(locked, func(t *testing.T) {
+			setupHelperImportProject(t)
+			writeProjectFile(t, filepath.Join("data", "job.go"), "package data\n\nimport _ \"tmpapp/service/helper\"\n")
+			writeProjectFile(t, filepath.Join("cronjob", "job.go"), "package cronjob\n\nimport _ \"tmpapp/service/helper\"\n")
+			path, err := filepath.Abs(locked)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err = os.Chmod(path, 0o000); err != nil {
+				t.Fatal(err)
+			}
+			// Give the permission back before the temporary directory is removed.
+			t.Cleanup(func() { _ = os.Chmod(path, 0o755) })
+
+			orphans, keptHelpers, err := ggprune.FindOrphanDirs([]*gen.ModelInfo{helperImportModel()}, nil, "tmpapp", ggconfig.PruneConfig{}, gghelper.NewProjectIgnore())
+
+			if err == nil {
+				t.Fatalf("FindOrphanDirs() error = nil, want one for the unreadable %s", locked)
+			}
+			if len(orphans) != 0 || len(keptHelpers) != 0 {
+				t.Fatalf("FindOrphanDirs() = %#v, %#v, want no directories alongside the error", orphans, keptHelpers)
+			}
+		})
+	}
+}
+
+// TestFindOrphanDirsStaysOutOfSymlinkedDirectories pins that the walk for live
+// code does not follow a symbolic link to a directory, as gg check's walks
+// and the go command's ./... pattern do not: code reached only through one
+// vouches for nothing.
+func TestFindOrphanDirsStaysOutOfSymlinkedDirectories(t *testing.T) {
+	outside := t.TempDir()
+	writeProjectFile(t, filepath.Join(outside, "job.go"), "package job\n\nimport _ \"tmpapp/service/helper\"\n")
 	setupHelperImportProject(t)
-	writeProjectFile(t, filepath.Join("data", "job.go"), "package data\n\nimport _ \"tmpapp/service/helper\"\n")
-	locked, err := filepath.Abs("data")
-	if err != nil {
+	if err := os.Symlink(outside, "linked"); err != nil {
 		t.Fatal(err)
 	}
-	if err = os.Chmod(locked, 0o000); err != nil {
-		t.Fatal(err)
-	}
-	// Give the permission back before the temporary directory is removed.
-	t.Cleanup(func() { _ = os.Chmod(locked, 0o755) })
 
-	orphans, keptHelpers, err := ggprune.FindOrphanDirs([]*gen.ModelInfo{helperImportModel()}, nil, "tmpapp", ggconfig.PruneConfig{}, gghelper.NewProjectIgnore())
+	orphans, keptHelpers := findOrphanDirs(t, []*gen.ModelInfo{helperImportModel()}, nil, ggconfig.PruneConfig{})
 
-	if err == nil {
-		t.Fatal("FindOrphanDirs() error = nil, want one for the unreadable data directory")
+	wantDir := filepath.Join("service", "helper")
+	if !slices.ContainsFunc(orphans, func(orphan ggprune.OrphanDir) bool { return orphan.Path == wantDir }) {
+		t.Fatalf("orphans = %#v, want %q among them", orphans, wantDir)
 	}
-	if len(orphans) != 0 || len(keptHelpers) != 0 {
-		t.Fatalf("FindOrphanDirs() = %#v, %#v, want no directories alongside the error", orphans, keptHelpers)
+	if len(keptHelpers) != 0 {
+		t.Fatalf("code behind a symbolic link should keep nothing, got %#v", keptHelpers)
+	}
+}
+
+// TestFindOrphanDirsKeepsNothingForAMissingImport pins that an import of a
+// service package no directory on disk holds keeps nothing: there is nothing
+// to keep.
+func TestFindOrphanDirsKeepsNothingForAMissingImport(t *testing.T) {
+	setupHelperImportProject(t)
+	writeProjectFile(t, filepath.Join("cronjob", "cleanup.go"), "package cronjob\n\nimport _ \"tmpapp/service/missing\"\n")
+
+	_, keptHelpers := findOrphanDirs(t, []*gen.ModelInfo{helperImportModel()}, nil, ggconfig.PruneConfig{})
+
+	if len(keptHelpers) != 0 {
+		t.Fatalf("keptHelpers = %#v, want none for an import of a missing directory", keptHelpers)
 	}
 }
 
