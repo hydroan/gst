@@ -552,14 +552,17 @@ func CopyAuth() any {
 }
 
 // TestOrphanMiddlewareFiles pins which middleware files a removed copied
-// module left behind: the files carrying the ownership marker of a module that
-// has no model directory. A module whose model directory exists is still
-// copied, and a file without the marker, like the registration file, is never
-// one of them.
+// module left behind: the files carrying the ownership marker of a module with
+// no model directory, where a plain file of the module's name does not count.
+// A module whose model directory exists is still copied, and a file without
+// the marker, like the registration file, is never one of them. When it cannot
+// look for a module's model directory, it fails rather than call the module
+// removed.
 func TestOrphanMiddlewareFiles(t *testing.T) {
 	t.Chdir(t.TempDir())
 	for name, content := range map[string]string{
 		"removed_auth.go": moduleCopyMiddlewareMarker("removed") + "\n\npackage middleware\n",
+		"stray_auth.go":   moduleCopyMiddlewareMarker("stray") + "\n\npackage middleware\n",
 		"kept_auth.go":    moduleCopyMiddlewareMarker("kept") + "\n\npackage middleware\n",
 		"project.go":      "package middleware\n",
 		"middleware.go":   moduleCopyMiddlewareMarker("removed") + "\n\npackage middleware\n",
@@ -575,12 +578,18 @@ func TestOrphanMiddlewareFiles(t *testing.T) {
 	if err := os.MkdirAll(filepath.Join("model", "kept"), 0o755); err != nil {
 		t.Fatal(err)
 	}
+	if err := os.WriteFile(filepath.Join("model", "stray"), nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
 
 	orphans, err := OrphanMiddlewareFiles("middleware", "model")
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := []OrphanMiddleware{{Path: filepath.Join("middleware", "removed_auth.go"), Module: "removed"}}
+	want := []OrphanMiddleware{
+		{Path: filepath.Join("middleware", "removed_auth.go"), Module: "removed"},
+		{Path: filepath.Join("middleware", "stray_auth.go"), Module: "stray"},
+	}
 	if !slices.Equal(orphans, want) {
 		t.Fatalf("OrphanMiddlewareFiles() = %+v, want %+v", orphans, want)
 	}
@@ -588,6 +597,25 @@ func TestOrphanMiddlewareFiles(t *testing.T) {
 	if orphans, err = OrphanMiddlewareFiles("absent", "model"); err != nil || len(orphans) != 0 {
 		t.Fatalf("OrphanMiddlewareFiles() without a middleware directory = %+v, %v, want nothing", orphans, err)
 	}
+
+	t.Run("model directory it cannot look into", func(t *testing.T) {
+		if os.Geteuid() == 0 {
+			t.Skip("root looks into a directory whatever its permissions")
+		}
+		modelDir, err := filepath.Abs("model")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err = os.Chmod(modelDir, 0o000); err != nil {
+			t.Fatal(err)
+		}
+		// Give the permission back before the temporary directory is removed.
+		t.Cleanup(func() { _ = os.Chmod(modelDir, 0o755) })
+
+		if orphans, err := OrphanMiddlewareFiles("middleware", "model"); err == nil {
+			t.Fatalf("OrphanMiddlewareFiles() = %+v, want an error: a module it cannot look for is not a removed one", orphans)
+		}
+	})
 }
 
 // TestRemoveMiddlewareFiles pins that deleting middleware files takes their

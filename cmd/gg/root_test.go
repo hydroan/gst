@@ -46,8 +46,9 @@ func TestFrameworkRootGuardAllowsProjectCommandsOutsideFrameworkRoot(t *testing.
 }
 
 // TestCommandErrorsLeaveThePrintingToMain pins that cobra prints nothing for a
-// command that fails while it runs, since main prints the error once, and
-// only the usage for a command line gg cannot run, which the usage explains.
+// command that fails while it runs, or for a command gg does not have, whose
+// error carries cobra's suggestions: main prints the error once. For a
+// command line gg cannot run, cobra prints only the usage, which explains it.
 func TestCommandErrorsLeaveThePrintingToMain(t *testing.T) {
 	writeGoMod(t, t.TempDir(), "example.com/app")
 
@@ -58,6 +59,16 @@ func TestCommandErrorsLeaveThePrintingToMain(t *testing.T) {
 		}
 		if out != "" {
 			t.Fatalf("a command failing while it runs printed %q through cobra, want nothing: main prints the error", out)
+		}
+	})
+
+	t.Run("command gg does not have", func(t *testing.T) {
+		out, err := executeRootCommand(t, "modul")
+		if err == nil || !strings.Contains(err.Error(), `unknown command "modul"`) || !strings.Contains(err.Error(), "Did you mean this?\n\tmodule") {
+			t.Fatalf("gg modul error = %v, want the unknown command reported with module suggested", err)
+		}
+		if out != "" {
+			t.Fatalf("a command gg does not have printed %q through cobra, want nothing: main prints the error, suggestion included", out)
 		}
 	})
 
