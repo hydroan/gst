@@ -498,3 +498,11 @@ func TestUnreadFiles(t *testing.T) {
 		t.Fatalf("UnreadFiles() = %q for an empty directory, want none", got)
 	}
 }
+
+func TestIsLegacyPruneSettings(t *testing.T) {
+	for name, want := range map[string]bool{".gg.yaml": true, ".gg.yml": true, ".gst.yaml": false, "gst.yml": false} {
+		if got := ggconfig.IsLegacyPruneSettings(name); got != want {
+			t.Errorf("IsLegacyPruneSettings(%q) = %t, want %t", name, got, want)
+		}
+	}
+}

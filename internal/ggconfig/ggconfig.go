@@ -478,10 +478,13 @@ func Load(dir string) (*Config, error) {
 	return cfg, nil
 }
 
-// unreadFileNames are the files gg finds next to gst.yaml but never reads:
-// .gg.yaml and .gg.yml held the prune settings of earlier gg releases, and
-// the others are names gst.yaml is easily mistaken for.
-var unreadFileNames = []string{".gg.yaml", ".gg.yml", ".gst.yaml", ".gst.yml", "gst.yml"}
+// legacyPruneSettingsFiles held the prune settings of earlier gg releases,
+// which the prune section of gst.yaml replaces.
+var legacyPruneSettingsFiles = []string{".gg.yaml", ".gg.yml"}
+
+// unreadFileNames are the files gg finds next to gst.yaml but never reads: the
+// legacy prune settings files, and names gst.yaml is easily mistaken for.
+var unreadFileNames = append(slices.Clone(legacyPruneSettingsFiles), ".gst.yaml", ".gst.yml", "gst.yml")
 
 // UnreadFiles returns the files in dir that look like gg configuration but
 // that gg does not read, for the command to warn about: a project holding
@@ -494,6 +497,13 @@ func UnreadFiles(dir string) []string {
 		}
 	}
 	return unread
+}
+
+// IsLegacyPruneSettings reports whether name, as UnreadFiles returns it, is
+// the prune settings file of earlier gg releases: ".gg.yaml" is, "gst.yml"
+// is not.
+func IsLegacyPruneSettings(name string) bool {
+	return slices.Contains(legacyPruneSettingsFiles, name)
 }
 
 // validateIgnoreRules rejects duplicate ignore rules. Duplicates are
