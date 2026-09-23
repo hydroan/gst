@@ -102,9 +102,11 @@ func TestMigrateSchemaProgramReadsTheModelsItsSourceDeclares(t *testing.T) {
 // from. Below a directory, every Go file that is not a test, a model package
 // named generated among them, and none a walk over the project's code leaves
 // out: hidden, vendor and testdata directories and nested modules. A Go file
-// named on its own is read alone. Symbolic links are not followed, as no walk
-// over the project's code follows them: a linked directory below the source
-// adds nothing, and a source that is itself a link holds no Go file.
+// named on its own is read alone. A link to a directory is not followed, as no
+// walk over the project's code follows one: a linked directory below the
+// source adds nothing, and a source that is itself such a link holds no Go
+// file. A link to a Go file is read as that file, below the source or named on
+// its own, the way gg gen reads it.
 func TestMigrateSourceFiles(t *testing.T) {
 	outside := t.TempDir()
 	writeProjectFile(t, filepath.Join(outside, "linked.go"), "package linked\n")
@@ -122,8 +124,10 @@ func TestMigrateSourceFiles(t *testing.T) {
 		writeProjectFile(t, filepath.FromSlash(path), content)
 	}
 	for link, target := range map[string]string{
-		filepath.Join("model", "linked"): outside,
-		"model-link":                     ggconst.DirModel,
+		filepath.Join("model", "linked"):   outside,
+		filepath.Join("model", "alias.go"): filepath.Join(outside, "linked.go"),
+		"model-link":                       ggconst.DirModel,
+		"record-link.go":                   filepath.Join("model", "record.go"),
 	} {
 		if err := os.Symlink(target, link); err != nil {
 			t.Fatal(err)
@@ -134,7 +138,7 @@ func TestMigrateSourceFiles(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := []string{filepath.Join("model", "generated", "sample.go"), filepath.Join("model", "record.go")}
+	want := []string{filepath.Join("model", "alias.go"), filepath.Join("model", "generated", "sample.go"), filepath.Join("model", "record.go")}
 	if !slices.Equal(files, want) {
 		t.Fatalf("migrateSourceFiles(%q) = %q, want %q", ggconst.DirModel, files, want)
 	}
@@ -151,6 +155,14 @@ func TestMigrateSourceFiles(t *testing.T) {
 	files, err = migrateSourceFiles("model-link")
 	if err == nil || !strings.Contains(err.Error(), "no Go model files found under model-link") {
 		t.Fatalf("migrateSourceFiles(%q) = %q, %v, want no Go model files found", "model-link", files, err)
+	}
+
+	files, err = migrateSourceFiles("record-link.go")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Equal(files, []string{"record-link.go"}) {
+		t.Fatalf("migrateSourceFiles(%q) = %q, want the linked file alone", "record-link.go", files)
 	}
 }
 
