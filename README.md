@@ -37,10 +37,24 @@ cp config.ini.example config.ini
 
 `gg new` 会使用 module path 的最后一段创建项目目录，例如上面的目录名是
 `myapp`。它会生成基础目录、`main.go`、`config.ini.example`，并执行
-`go mod tidy` 和 `git init`。
+`go mod tidy` 和 `git init`；项目已经在某个 git 仓库里（例如克隆下来的仓库，或大
+仓库里的子目录）时跳过 `git init`，不建嵌套仓库。
+
+已经有项目目录（例如刚克隆下来的空仓库）时，进入该目录，在 module path 后面加
+`.`，项目会直接生成在当前目录；当前目录名必须与 module path 的最后一段一致：
+
+```bash
+cd myapp
+gg new github.com/example/myapp .
+```
+
+无论哪种写法，目标目录里只要已经有 `gg new` 要生成的目录或文件（如 `model/`、
+`main.go`、`.gitignore`、`go.mod`），就报错退出，不写入任何文件；`README.md`、
+`.git` 这类其他内容原样保留。
 
 如果 `go mod tidy` 因网络、代理、本地 Go 缓存权限等原因失败，已生成的项目文件
-通常仍保留在项目目录中。进入项目后修复环境并重新执行：
+通常仍保留在项目目录中。进入项目后修复环境并重新执行下面的命令；项目已经在 git
+仓库里时，省略 `git init`：
 
 ```bash
 go mod tidy
