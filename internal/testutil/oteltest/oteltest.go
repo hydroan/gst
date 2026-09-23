@@ -42,8 +42,10 @@ func WithEndpoint(endpoint string) Option {
 // Enable turns tracing on for the rest of the test. Only config.App.OTEL is
 // replaced, so whatever else the test package configured — the database its
 // TestMain connected, the redis handle — stays intact. The otel logger is
-// silenced, the tracer provider is reinitialized, and all of it is restored
-// when the test ends.
+// swapped for the fallback one, whose entries — the export failures to the
+// unreachable endpoint among them — go to the global stream, or nowhere in a
+// process that never ran the logger Init. The tracer provider is
+// reinitialized, and all of it is restored when the test ends.
 //
 // The handles a test package connects during bootstrap carry no
 // instrumentation, tracing being configured off at that point, and the flag
@@ -77,7 +79,7 @@ func Enable(t *testing.T, opts ...Option) {
 	})
 
 	originalLogger := logger.OTEL
-	logger.OTEL = pkgzap.New("/dev/null")
+	logger.OTEL = pkgzap.Fallback("otel")
 	t.Cleanup(func() {
 		logger.OTEL = originalLogger
 	})
