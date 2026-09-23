@@ -9,7 +9,6 @@ import (
 	"slices"
 	"strings"
 
-	gitignore "github.com/go-git/go-git/v5/plumbing/format/gitignore"
 	"github.com/hydroan/gst/dsl"
 	"github.com/hydroan/gst/internal/ggconst"
 	"github.com/hydroan/gst/internal/gghelper"
@@ -23,14 +22,14 @@ var ModelFileBoundaries = Check{
 }
 
 // checkModelFileBoundaries checks that each model file contains at most one model struct.
-func checkModelFileBoundaries(ignore gitignore.Matcher) []string {
+func checkModelFileBoundaries(ignore gghelper.ProjectIgnore) []string {
 	var violations []string
 
 	if _, err := os.Stat(ggconst.DirModel); os.IsNotExist(err) {
 		return violations
 	}
 
-	err := walkProjectDir(ggconst.DirModel, ignore, func(path string, info os.FileInfo) error {
+	err := ignore.Walk(ggconst.DirModel, func(path string, info os.FileInfo) error {
 		if info.IsDir() || !strings.HasSuffix(path, ".go") || strings.Contains(path, "_test.go") {
 			return nil
 		}

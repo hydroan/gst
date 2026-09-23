@@ -10,7 +10,6 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/go-git/go-git/v5/plumbing/format/gitignore"
 	"github.com/hydroan/gst/internal/ggconst"
 	"github.com/hydroan/gst/internal/gghelper"
 	"github.com/hydroan/gst/internal/goast"
@@ -37,7 +36,7 @@ var ModelTableNameDeclaration = Check{
 // declarations and methods aggregate per directory before matching. Model
 // subtrees owned by copyable framework modules are skipped, since copied
 // module code is owned by the framework repository.
-func checkModelTableNameDeclaration(ignore gitignore.Matcher) []string {
+func checkModelTableNameDeclaration(ignore gghelper.ProjectIgnore) []string {
 	if _, err := os.Stat(ggconst.DirModel); os.IsNotExist(err) {
 		return nil
 	}
@@ -62,7 +61,7 @@ func checkModelTableNameDeclaration(ignore gitignore.Matcher) []string {
 	methodKey := func(dir, receiver string) string { return dir + "\x00" + receiver }
 
 	var violations []string
-	walkErr := walkProjectDir(ggconst.DirModel, ignore, func(path string, info os.FileInfo) error {
+	walkErr := ignore.Walk(ggconst.DirModel, func(path string, info os.FileInfo) error {
 		if info.IsDir() {
 			if moduleOwnedPath(owned, ggconst.DirModel, path) {
 				return filepath.SkipDir

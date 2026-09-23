@@ -10,7 +10,6 @@ import (
 	"slices"
 	"strings"
 
-	gitignore "github.com/go-git/go-git/v5/plumbing/format/gitignore"
 	"github.com/hydroan/gst/internal/gghelper"
 	"github.com/hydroan/gst/internal/goast"
 )
@@ -39,10 +38,10 @@ var TransactionClosureContext = Check{
 // context.WithTimeout: a context derived from the closure's own passes, since
 // it still carries the transaction. Anything else — a call result, a selector
 // expression — is left alone.
-func checkTransactionClosureContext(ignore gitignore.Matcher) []string {
+func checkTransactionClosureContext(ignore gghelper.ProjectIgnore) []string {
 	var violations []string
 
-	err := walkProjectDir(".", ignore, func(path string, info os.FileInfo) error {
+	err := ignore.Walk(".", func(path string, info os.FileInfo) error {
 		if info.IsDir() {
 			if path == "." {
 				return nil

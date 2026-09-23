@@ -11,7 +11,6 @@ import (
 	"strconv"
 	"strings"
 
-	gitignore "github.com/go-git/go-git/v5/plumbing/format/gitignore"
 	"github.com/hydroan/gst/internal/gghelper"
 	"github.com/hydroan/gst/internal/goast"
 )
@@ -65,7 +64,7 @@ var ServiceErrorDiscipline = Check{
 // a type switch variable, fails closed at the call, and so does a type of
 // another package or an interface, whose method bodies the checker cannot
 // see.
-func checkServiceErrorDiscipline(ignore gitignore.Matcher) []string {
+func checkServiceErrorDiscipline(ignore gghelper.ProjectIgnore) []string {
 	modulePath, err := gghelper.ModulePath()
 	if err != nil {
 		return []string{fmt.Sprintf("reading the module path: %v", err)}
@@ -78,7 +77,7 @@ func checkServiceErrorDiscipline(ignore gitignore.Matcher) []string {
 		pkgVarTypes:  map[string]map[string]string{},
 		packageNames: map[string]string{},
 	}
-	err = walkProjectDir(".", ignore, func(path string, info os.FileInfo) error {
+	err = ignore.Walk(".", func(path string, info os.FileInfo) error {
 		if info.IsDir() {
 			if path == "." {
 				return nil

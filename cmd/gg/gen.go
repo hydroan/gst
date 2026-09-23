@@ -87,7 +87,8 @@ func genRunWithOptions(opts genRunOptions) error {
 		}
 	}
 
-	scanned, err := scanModels(opts.Quiet)
+	ignore := gghelper.NewProjectIgnore()
+	scanned, err := scanModels(opts.Quiet, ignore)
 	if err != nil {
 		return err
 	}
@@ -96,7 +97,7 @@ func genRunWithOptions(opts genRunOptions) error {
 	// Record old service files list (if prune option is enabled)
 	var oldServiceFiles []string
 	if prune {
-		oldServiceFiles = scanExistingServiceFiles(ggconst.DirService)
+		oldServiceFiles = scanExistingServiceFiles(ggconst.DirService, ignore)
 	}
 
 	if !opts.Quiet {
@@ -203,7 +204,7 @@ func genRunWithOptions(opts genRunOptions) error {
 	// generate model/apidoc.gen.go, which registers struct and field doc comments
 	// so the OpenAPI document keeps schema descriptions in binaries deployed
 	// without Go source files.
-	docEntries, err := codegen.ExtractAPIDocs(module, ggconst.DirModel, nil)
+	docEntries, err := codegen.ExtractAPIDocs(module, ggconst.DirModel, ignore, nil)
 	if err != nil {
 		return errors.Wrap(err, "extract api docs")
 	}
@@ -235,7 +236,7 @@ func genRunWithOptions(opts genRunOptions) error {
 
 	// Generate the typed column references of every model, so filters can
 	// name columns through the compiler instead of through string literals.
-	if genErr := generateColumnFiles(module, ggconst.DirModel, allModels, opts.Quiet); genErr != nil {
+	if genErr := generateColumnFiles(module, ggconst.DirModel, allModels, ignore, opts.Quiet); genErr != nil {
 		return genErr
 	}
 
@@ -339,7 +340,7 @@ func genRunWithOptions(opts genRunOptions) error {
 	// Prune disabled service files
 	// ============================================================
 	if prune {
-		pruneServiceFiles(oldServiceFiles, allModels, ignoreResult.KeptServiceFiles, ignoreResult.KeptServiceDirs)
+		pruneServiceFiles(oldServiceFiles, allModels, ignoreResult.KeptServiceFiles, ignoreResult.KeptServiceDirs, ignore)
 	}
 
 	// ============================================================
@@ -366,7 +367,7 @@ type scannedModels struct {
 // the actions, so a matched action behaves exactly like an action that was
 // never declared. gg gen and gg gen ts both start from here, which keeps the
 // TypeScript declarations on the routes the generated router registers.
-func scanModels(quiet bool) (scannedModels, error) {
+func scanModels(quiet bool, ignore gghelper.ProjectIgnore) (scannedModels, error) {
 	if !gghelper.FileExists(ggconst.DirModel) {
 		return scannedModels{}, fmt.Errorf("model dir not found: %s", ggconst.DirModel)
 	}
@@ -374,7 +375,7 @@ func scanModels(quiet bool) (scannedModels, error) {
 	if !quiet {
 		clioutput.Section("Scan Models")
 	}
-	allModels, err := codegen.FindModels(module, ggconst.DirModel)
+	allModels, err := codegen.FindModels(module, ggconst.DirModel, ignore)
 	if err != nil {
 		return scannedModels{}, err
 	}

@@ -11,12 +11,13 @@ import (
 	"github.com/hydroan/gst/internal/clioutput"
 	"github.com/hydroan/gst/internal/codegen/gen"
 	"github.com/hydroan/gst/internal/ggconst"
+	"github.com/hydroan/gst/internal/gghelper"
 )
 
 // scanExistingServiceFiles scans existing service files in the service directory.
 // It includes standard phase filenames (e.g., create.go, list.go) and any other .go file
 // that embeds service.Base[...] (per-action handlers), such as DSL Filename("x") outputs.
-func scanExistingServiceFiles(serviceDir string) []string {
+func scanExistingServiceFiles(serviceDir string, ignore gghelper.ProjectIgnore) []string {
 	var files []string
 
 	// Check if service directory exists
@@ -27,10 +28,7 @@ func scanExistingServiceFiles(serviceDir string) []string {
 	validPhases := validServicePhaseFiles()
 
 	// Walk through the service directory
-	err := filepath.Walk(serviceDir, func(path string, info os.FileInfo, err error) error {
-		if err != nil {
-			return err
-		}
+	err := ignore.Walk(serviceDir, func(path string, info os.FileInfo) error {
 		if !info.IsDir() && strings.HasSuffix(path, ".go") {
 			fileName := filepath.Base(path)
 			if strings.HasSuffix(fileName, "_test.go") {
@@ -84,7 +82,7 @@ func filterIgnoredFiles(files []string, ignorePatterns []string) (filtered []str
 // to gst.yaml-ignored actions: they no longer appear in the generated
 // registrations but must stay on disk, so they are never deletion candidates.
 // keptDirs protects their directories from orphan cleanup; both may be nil.
-func pruneServiceFiles(oldServiceFiles []string, allModels []*gen.ModelInfo, keptFiles, keptDirs map[string]bool) {
+func pruneServiceFiles(oldServiceFiles []string, allModels []*gen.ModelInfo, keptFiles, keptDirs map[string]bool, ignore gghelper.ProjectIgnore) {
 	// Get list of service files that should currently exist
 	currentFiles := currentServiceFiles(allModels)
 
@@ -118,8 +116,8 @@ func pruneServiceFiles(oldServiceFiles []string, allModels []*gen.ModelInfo, kep
 			clioutput.Success("", "No disabled service files to prune")
 		}
 		// Still check for empty directories even if no files to delete
-		removeEmptyDirectories(ggconst.DirService)
-		handleOrphanServiceDirs(allModels, keptDirs, module)
+		removeEmptyDirectories(ggconst.DirService, ignore)
+		handleOrphanServiceDirs(allModels, keptDirs, module, ignore)
 		return
 	}
 
@@ -150,8 +148,8 @@ func pruneServiceFiles(oldServiceFiles []string, allModels []*gen.ModelInfo, kep
 	}
 
 	// Remove empty directories after deleting files
-	removeEmptyDirectories(ggconst.DirService)
-	handleOrphanServiceDirs(allModels, keptDirs, module)
+	removeEmptyDirectories(ggconst.DirService, ignore)
+	handleOrphanServiceDirs(allModels, keptDirs, module, ignore)
 }
 
 func currentServiceFiles(allModels []*gen.ModelInfo) map[string]bool {
@@ -168,14 +166,9 @@ func currentServiceFiles(allModels []*gen.ModelInfo) map[string]bool {
 }
 
 // removeEmptyDirectories removes empty child directories below the given root directory.
-func removeEmptyDirectories(rootDir string) {
+func removeEmptyDirectories(rootDir string, ignore gghelper.ProjectIgnore) {
 	dirs := make([]string, 0)
-	_ = filepath.Walk(rootDir, func(path string, info os.FileInfo, err error) error {
-		if err != nil {
-			//nolint:nilerr
-			return nil // Continue walking even if there's an error
-		}
-
+	_ = ignore.Walk(rootDir, func(path string, info os.FileInfo) error {
 		if path == rootDir || !info.IsDir() {
 			return nil
 		}

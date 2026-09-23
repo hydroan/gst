@@ -17,6 +17,7 @@ import (
 	"github.com/hydroan/gst/internal/clioutput"
 	"github.com/hydroan/gst/internal/codegen/gen"
 	"github.com/hydroan/gst/internal/ggconst"
+	"github.com/hydroan/gst/internal/gghelper"
 )
 
 // columnInfo is one generated column reference, as reported by the inspection
@@ -288,7 +289,7 @@ func buildColumnsProgram(module string, models []*gen.ModelInfo) string {
 // removes the generated files whose source is gone. Generated files are
 // framework-owned for their whole life cycle: projects never create, edit, or
 // clean them up.
-func generateColumnFiles(module string, modelDir string, models []*gen.ModelInfo, quiet bool) error {
+func generateColumnFiles(module string, modelDir string, models []*gen.ModelInfo, ignore gghelper.ProjectIgnore, quiet bool) error {
 	// Resolving columns compiles a program that imports the project's models,
 	// which only works once the project depends on the framework. A project
 	// that does not cannot hold column references either, so there is nothing
@@ -307,7 +308,7 @@ func generateColumnFiles(module string, modelDir string, models []*gen.ModelInfo
 	// otherwise be paid on every gg gen even when nothing that affects columns
 	// changed. The cache key covers every such input, so a hit skips the build
 	// entirely and a miss is unavoidable work.
-	cacheKey, err := columnsCacheKey(program, modelDir)
+	cacheKey, err := columnsCacheKey(program, modelDir, ignore)
 	if err != nil {
 		return err
 	}
@@ -316,7 +317,7 @@ func generateColumnFiles(module string, modelDir string, models []*gen.ModelInfo
 		// The inspection build compiles the model packages before this run
 		// writes their column references, so it stubs out the previous
 		// generation and leaves out the handwritten code that reads it.
-		overlay, overlayErr := columnInspectionOverlay(module, modelDir, models)
+		overlay, overlayErr := columnInspectionOverlay(module, modelDir, models, ignore)
 		if overlayErr != nil {
 			return overlayErr
 		}
@@ -641,7 +642,7 @@ func moduleRequiresGst() (bool, error) {
 // Model files are the project's declared home for those types; if a stale
 // result is ever suspected, deleting the cache directory forces a fresh
 // inspection.
-func columnsCacheKey(program string, modelDir string) (string, error) {
+func columnsCacheKey(program string, modelDir string, ignore gghelper.ProjectIgnore) (string, error) {
 	digest := sha256.New()
 	digest.Write([]byte(program))
 
@@ -658,12 +659,9 @@ func columnsCacheKey(program string, modelDir string) (string, error) {
 	digest.Write(goMod)
 
 	fileDigests := make([]string, 0)
-	err = filepath.WalkDir(modelDir, func(path string, entry fs.DirEntry, walkErr error) error {
-		if walkErr != nil {
-			return walkErr
-		}
-		if entry.IsDir() {
-			switch entry.Name() {
+	err = ignore.Walk(modelDir, func(path string, info os.FileInfo) error {
+		if info.IsDir() {
+			switch info.Name() {
 			case ".git", "generated", "vendor":
 				return filepath.SkipDir
 			}
@@ -674,7 +672,7 @@ func columnsCacheKey(program string, modelDir string) (string, error) {
 			strings.HasSuffix(path, ggconst.SuffixGenGo) {
 			return nil
 		}
-		content, readErr := os.ReadFile(path) //nolint:gosec // path comes from walking the project's model directory.
+		content, readErr := os.ReadFile(path)
 		if readErr != nil {
 			return readErr
 		}

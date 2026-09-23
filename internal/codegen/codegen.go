@@ -1,7 +1,7 @@
 package codegen
 
 import (
-	"io/fs"
+	"os"
 	"path/filepath"
 	"slices"
 	"sort"
@@ -9,26 +9,26 @@ import (
 
 	"github.com/hydroan/gst/internal/codegen/gen"
 	"github.com/hydroan/gst/internal/ggconst"
+	"github.com/hydroan/gst/internal/gghelper"
 	"github.com/hydroan/gst/internal/structdoc"
 )
 
 // walkModelFiles walks modelDir and invokes fn for every Go source file that
-// participates in code generation, skipping vendor/testdata directories,
-// test files, ignored files (whose names start with "_") and the file names
-// excludes lists. Under model it visits model/sample/record.go, and skips
-// model/sample/record_test.go, model/sample/_draft.go and every file of
-// model/sample/testdata.
-func walkModelFiles(modelDir string, excludes []string, fn func(path string) error) error {
-	return filepath.Walk(modelDir, func(path string, info fs.FileInfo, err error) error {
-		if err != nil {
-			return err
-		}
-
+// participates in code generation: it skips the paths the project's Git
+// ignore rules exclude, vendor and testdata directories, test files, ignored
+// files (whose names start with "_") and the file names excludes lists. Under
+// model it visits model/sample/record.go, and skips model/sample/record_test.go,
+// model/sample/_draft.go and every file of model/sample/testdata.
+//
+// WalkModelFiles exports it: gg check holds the model files to the DSL rules
+// through the same walk, so the check and the generator read the same files.
+func walkModelFiles(modelDir string, ignore gghelper.ProjectIgnore, excludes []string, fn func(path string) error) error {
+	return ignore.Walk(modelDir, func(path string, info os.FileInfo) error {
 		base := filepath.Base(path)
-		if path != modelDir && (base == ggconst.DirVendor || base == ggconst.DirTestData) {
-			return filepath.SkipDir
-		}
 		if info.IsDir() {
+			if path != modelDir && (base == ggconst.DirVendor || base == ggconst.DirTestData) {
+				return filepath.SkipDir
+			}
 			return nil
 		}
 		if !strings.HasSuffix(info.Name(), ggconst.ExtensionGo) ||
@@ -42,14 +42,21 @@ func walkModelFiles(modelDir string, excludes []string, fn func(path string) err
 	})
 }
 
+// WalkModelFiles invokes fn for every model file that participates in code
+// generation (see walkModelFiles), so the checks read the same files the
+// generator does.
+func WalkModelFiles(modelDir string, ignore gghelper.ProjectIgnore, fn func(path string) error) error {
+	return walkModelFiles(modelDir, ignore, nil, fn)
+}
+
 // FindModels returns the models declared by the Go files under modelDir that
 // participate in code generation (see walkModelFiles), each carrying the path
 // of its model file (see gen.FindModels). A file that fails to parse or
 // declares an invalid DSL fails the whole call.
-func FindModels(module, modelDir string) ([]*gen.ModelInfo, error) {
+func FindModels(module, modelDir string, ignore gghelper.ProjectIgnore) ([]*gen.ModelInfo, error) {
 	allModels := make([]*gen.ModelInfo, 0)
 
-	if err := walkModelFiles(modelDir, nil, func(path string) error {
+	if err := walkModelFiles(modelDir, ignore, nil, func(path string) error {
 		models, err := gen.FindModels(module, modelDir, path)
 		if err != nil {
 			return err
@@ -74,12 +81,12 @@ func FindModels(module, modelDir string) ([]*gen.ModelInfo, error) {
 // merged, so a type Status declared in status.go gathers the values its
 // constants in values.go declare. The returned entries are sorted by package
 // path and type name so generated output stays deterministic.
-func ExtractAPIDocs(module, modelDir string, excludes []string) (gen.APIDocEntries, error) {
+func ExtractAPIDocs(module, modelDir string, ignore gghelper.ProjectIgnore, excludes []string) (gen.APIDocEntries, error) {
 	var entries gen.APIDocEntries
 	enumByKey := make(map[string]*gen.EnumDocEntry)
 	enumKeys := make([]string, 0)
 
-	if err := walkModelFiles(modelDir, excludes, func(path string) error {
+	if err := walkModelFiles(modelDir, ignore, excludes, func(path string) error {
 		docs, err := structdoc.ParseFileDocs(path)
 		if err != nil {
 			return err

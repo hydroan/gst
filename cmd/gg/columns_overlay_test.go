@@ -10,6 +10,7 @@ import (
 	"github.com/hydroan/gst/consts"
 	"github.com/hydroan/gst/internal/codegen/gen"
 	"github.com/hydroan/gst/internal/ggconst"
+	"github.com/hydroan/gst/internal/gghelper"
 	"github.com/stretchr/testify/require"
 )
 
@@ -21,7 +22,7 @@ func TestColumnInspectionOverlayStubsGeneratedColumnFiles(t *testing.T) {
 	writeProjectFile(t, filepath.Join("model", ggconst.FileModelGen), consts.CodeGeneratedComment()+"\n\npackage model\n")
 	writeProjectFile(t, filepath.Join("model", "sample", "record.go"), "package sample\n\ntype Record struct{}\n")
 
-	overlay, err := columnInspectionOverlay("tmpapp", "model", nil)
+	overlay, err := columnInspectionOverlay("tmpapp", "model", nil, gghelper.NewProjectIgnore())
 	require.NoError(t, err)
 
 	// Only the framework-owned column file collapses to its package clause:
@@ -132,7 +133,7 @@ func archiveID() string {
 		ModelFileDir: filepath.Join("model", "sample"), ModelFilePath: recordSource,
 	}}
 
-	overlay, err := columnInspectionOverlay("tmpapp", "model", models)
+	overlay, err := columnInspectionOverlay("tmpapp", "model", models, gghelper.NewProjectIgnore())
 	require.NoError(t, err)
 	record := overlay[recordSource]
 
@@ -200,7 +201,7 @@ func TestColumnInspectionOverlayLeavesUnparsableFilesToTheCompiler(t *testing.T)
 		ModelFileDir: filepath.Join("model", "sample"),
 	}}
 
-	overlay, err := columnInspectionOverlay("tmpapp", "model", models)
+	overlay, err := columnInspectionOverlay("tmpapp", "model", models, gghelper.NewProjectIgnore())
 	require.NoError(t, err)
 	require.Empty(t, overlay, "a file that does not parse is compiled as written, so the compiler reports it")
 }

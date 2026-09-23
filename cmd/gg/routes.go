@@ -126,7 +126,7 @@ func parseModelRoutesFromProject(routerFile, modelRoot string) ([]modelRoute, er
 		return nil, errors.Newf("router file not found: %s. Please run 'gg gen' first", routerFile)
 	}
 
-	modelSources, err := scanModelSources(modelRoot)
+	modelSources, err := scanModelSources(modelRoot, gghelper.NewProjectIgnore())
 	if err != nil {
 		return nil, err
 	}
@@ -201,7 +201,7 @@ func isRouterRegisterCall(call *ast.CallExpr) bool {
 	return ok && ident.Name == "router"
 }
 
-func scanModelSources(modelRoot string) (map[string]string, error) {
+func scanModelSources(modelRoot string, ignore gghelper.ProjectIgnore) (map[string]string, error) {
 	sources := make(map[string]string)
 	typeOnly := make(map[string]string)
 	duplicates := make(map[string]bool)
@@ -211,11 +211,8 @@ func scanModelSources(modelRoot string) (map[string]string, error) {
 	}
 
 	sourceBase := filepath.Dir(modelRoot)
-	err := filepath.WalkDir(modelRoot, func(path string, entry os.DirEntry, err error) error {
-		if err != nil {
-			return err
-		}
-		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".go") || strings.HasSuffix(entry.Name(), "_test.go") {
+	err := ignore.Walk(modelRoot, func(path string, info os.FileInfo) error {
+		if info.IsDir() || !strings.HasSuffix(info.Name(), ".go") || strings.HasSuffix(info.Name(), "_test.go") {
 			return nil
 		}
 

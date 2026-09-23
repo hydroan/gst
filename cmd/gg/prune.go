@@ -20,6 +20,7 @@ var pruneCmd = &cobra.Command{
 }
 
 func pruneRun() {
+	ignore := gghelper.NewProjectIgnore()
 	if len(module) == 0 {
 		var err error
 		module, err = gghelper.ModulePath()
@@ -33,7 +34,7 @@ func pruneRun() {
 
 	// Scan all models
 	clioutput.Section("Scan Models")
-	allModels, err := codegen.FindModels(module, ggconst.DirModel)
+	allModels, err := codegen.FindModels(module, ggconst.DirModel, ignore)
 	checkErr(err)
 	if len(allModels) == 0 {
 		clioutput.Item("", "No models found, pruning service files only")
@@ -46,11 +47,11 @@ func pruneRun() {
 	// enabled makes prune treat the file as expected without extra bookkeeping.
 
 	// Scan existing service files
-	oldServiceFiles := scanExistingServiceFiles(ggconst.DirService)
+	oldServiceFiles := scanExistingServiceFiles(ggconst.DirService, ignore)
 
 	// Prune disabled service files
 	clioutput.Section("Prune Disabled Service Files")
-	pruneServiceFiles(oldServiceFiles, allModels, nil, nil)
+	pruneServiceFiles(oldServiceFiles, allModels, nil, nil, ignore)
 
 	clioutput.Done("Code pruning completed successfully!")
 }

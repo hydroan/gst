@@ -9,7 +9,6 @@ import (
 	"path/filepath"
 	"strings"
 
-	gitignore "github.com/go-git/go-git/v5/plumbing/format/gitignore"
 	"github.com/hydroan/gst/internal/ggconst"
 	"github.com/hydroan/gst/internal/gghelper"
 	"github.com/hydroan/gst/internal/goast"
@@ -39,14 +38,14 @@ var ColumnReferenceMinting = Check{
 // modules, whose code is owned by the framework repository. Test files are
 // checked like any other file: a test that mints a reference by hand stops
 // noticing a renamed column just as production code does.
-func checkColumnReferenceMinting(ignore gitignore.Matcher) []string {
+func checkColumnReferenceMinting(ignore gghelper.ProjectIgnore) []string {
 	owned, err := copyableModuleOwners()
 	if err != nil {
 		return []string{fmt.Sprintf("listing copyable framework modules: %v", err)}
 	}
 
 	var violations []string
-	walkErr := walkProjectDir(".", ignore, func(path string, info os.FileInfo) error {
+	walkErr := ignore.Walk(".", func(path string, info os.FileInfo) error {
 		if info.IsDir() {
 			if path == "." {
 				return nil

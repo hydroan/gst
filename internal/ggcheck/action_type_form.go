@@ -11,7 +11,6 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/go-git/go-git/v5/plumbing/format/gitignore"
 	"github.com/hydroan/gst/dsl"
 	"github.com/hydroan/gst/internal/ggconst"
 	"github.com/hydroan/gst/internal/gghelper"
@@ -34,7 +33,7 @@ var ActionTypeForm = Check{
 // be an interface with methods, which no request body decodes into, named by
 // value or through a pointer; a Result is only encoded, so any interface
 // serves there.
-func checkActionTypeForm(ignore gitignore.Matcher) []string {
+func checkActionTypeForm(ignore gghelper.ProjectIgnore) []string {
 	var violations []string
 
 	if _, err := os.Stat(ggconst.DirModel); os.IsNotExist(err) {
@@ -45,7 +44,7 @@ func checkActionTypeForm(ignore gitignore.Matcher) []string {
 	// different file of the package that references them.
 	var packageDirs []string
 	packageFiles := make(map[string][]string)
-	err := walkProjectDir(ggconst.DirModel, ignore, func(path string, info os.FileInfo) error {
+	err := ignore.Walk(ggconst.DirModel, func(path string, info os.FileInfo) error {
 		if info.IsDir() || !strings.HasSuffix(path, ".go") || strings.HasSuffix(path, "_test.go") {
 			return nil
 		}

@@ -11,7 +11,6 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/go-git/go-git/v5/plumbing/format/gitignore"
 	"github.com/hydroan/gst/internal/ggconst"
 	"github.com/hydroan/gst/internal/gghelper"
 )
@@ -40,7 +39,7 @@ var GormTagIndexBan = Check{
 // the framework base structs themselves. Model subtrees owned by copyable
 // framework modules are skipped, since copied module code is owned by the
 // framework repository.
-func checkGormTagIndexBan(ignore gitignore.Matcher) []string {
+func checkGormTagIndexBan(ignore gghelper.ProjectIgnore) []string {
 	if _, err := os.Stat(ggconst.DirModel); os.IsNotExist(err) {
 		return nil
 	}
@@ -51,7 +50,7 @@ func checkGormTagIndexBan(ignore gitignore.Matcher) []string {
 	}
 
 	var violations []string
-	walkErr := walkProjectDir(ggconst.DirModel, ignore, func(path string, info os.FileInfo) error {
+	walkErr := ignore.Walk(ggconst.DirModel, func(path string, info os.FileInfo) error {
 		if info.IsDir() {
 			if moduleOwnedPath(owned, ggconst.DirModel, path) {
 				return filepath.SkipDir

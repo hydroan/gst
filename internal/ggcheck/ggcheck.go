@@ -6,16 +6,13 @@
 // Every check lives in a file of its own, named after the check: the file
 // dsl_design_rules.go declares the DSL design rules Check, its name and rule,
 // the function finding its violations and the helpers no other check uses.
-// Helpers several checks share are grouped by purpose in project_files.go,
-// copied_modules.go, dsl_action_types.go and framework_packages.go, and each
-// test file pairs with the file it tests. TestEveryCheckIsDeclaredInAFileNamedAfterIt
+// Helpers several checks share live in helper.go, which holds no check, and
+// each test file pairs with the file it tests. TestEveryCheckIsDeclaredInAFileNamedAfterIt
 // holds the layout: gathering several checks into one file, or naming a
 // check's file otherwise, fails it.
 package ggcheck
 
-import (
-	gitignore "github.com/go-git/go-git/v5/plumbing/format/gitignore"
-)
+import "github.com/hydroan/gst/internal/gghelper"
 
 // Check is one rule gg check holds a project to.
 type Check struct {
@@ -24,7 +21,7 @@ type Check struct {
 	// Rule states the rule, as the help of gg check lists it.
 	Rule string
 
-	run func(ignore gitignore.Matcher) []string
+	run func(ignore gghelper.ProjectIgnore) []string
 }
 
 // Result is what one check found in the project.
@@ -42,7 +39,7 @@ type Result struct {
 func Run(checks []Check) []Result {
 	// One matcher serves every check: building it scans the whole worktree
 	// for ignore files, which is too expensive to repeat per check.
-	ignore := newProjectIgnoreMatcher()
+	ignore := gghelper.NewProjectIgnore()
 	results := make([]Result, 0, len(checks))
 	for _, check := range checks {
 		results = append(results, Result{Name: check.Name, Violations: check.run(ignore)})

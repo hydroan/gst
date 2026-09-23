@@ -5,12 +5,11 @@ import (
 	"go/parser"
 	"go/token"
 	"os"
-	"path/filepath"
-	"strings"
 
-	gitignore "github.com/go-git/go-git/v5/plumbing/format/gitignore"
 	"github.com/hydroan/gst/dsl"
+	"github.com/hydroan/gst/internal/codegen"
 	"github.com/hydroan/gst/internal/ggconst"
+	"github.com/hydroan/gst/internal/gghelper"
 )
 
 // DSLDesignRules runs the Design() validation that gates gg gen over every
@@ -24,27 +23,16 @@ var DSLDesignRules = Check{
 // checkDSLDesignRules runs DSL Design() validation on every model file, so keyword
 // placement and generation-semantic violations fail gg check with the same
 // rules that block gg gen.
-func checkDSLDesignRules(ignore gitignore.Matcher) []string {
+func checkDSLDesignRules(ignore gghelper.ProjectIgnore) []string {
 	var violations []string
 
 	if _, err := os.Stat(ggconst.DirModel); os.IsNotExist(err) {
 		return violations
 	}
 
-	err := walkProjectDir(ggconst.DirModel, ignore, func(path string, info os.FileInfo) error {
-		base := filepath.Base(path)
-		if info.IsDir() {
-			if path != ggconst.DirModel && (base == "vendor" || base == "testdata") {
-				return filepath.SkipDir
-			}
-			return nil
-		}
-		if !strings.HasSuffix(base, ".go") ||
-			strings.HasSuffix(base, "_test.go") ||
-			strings.HasPrefix(base, "_") {
-			return nil
-		}
-
+	// The generator's own walk decides which model files take part, so a file
+	// gg gen reads is a file this check validates, and nothing else is.
+	err := codegen.WalkModelFiles(ggconst.DirModel, ignore, func(path string) error {
 		fset := token.NewFileSet()
 		file, parseErr := parser.ParseFile(fset, path, nil, parser.ParseComments)
 		if parseErr != nil {

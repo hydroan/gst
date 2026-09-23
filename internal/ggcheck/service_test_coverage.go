@@ -6,7 +6,6 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/go-git/go-git/v5/plumbing/format/gitignore"
 	"github.com/hydroan/gst/dsl"
 	"github.com/hydroan/gst/internal/codegen"
 	"github.com/hydroan/gst/internal/codegen/gen"
@@ -31,7 +30,7 @@ var ServiceTestCoverage = Check{
 // not generated yet are not reported. Service subtrees owned by copyable
 // framework modules are skipped: copied module code is tested inside the
 // framework repository and stays unmodified in projects.
-func checkServiceTestCoverage(ignore gitignore.Matcher) []string {
+func checkServiceTestCoverage(ignore gghelper.ProjectIgnore) []string {
 	var violations []string
 
 	if _, err := os.Stat(ggconst.DirModel); os.IsNotExist(err) {
@@ -50,7 +49,7 @@ func checkServiceTestCoverage(ignore gitignore.Matcher) []string {
 	if err != nil {
 		return append(violations, fmt.Sprintf("reading the module path: %v", err))
 	}
-	allModels, err := codegen.FindModels(modulePath, ggconst.DirModel)
+	allModels, err := codegen.FindModels(modulePath, ggconst.DirModel, ignore)
 	if err != nil {
 		return append(violations, fmt.Sprintf("scanning model designs: %v", err))
 	}
@@ -62,7 +61,7 @@ func checkServiceTestCoverage(ignore gitignore.Matcher) []string {
 
 	seen := make(map[string]bool)
 	for _, m := range allModels {
-		if isIgnoredProjectPath(ignore, m.ModelFilePath, false) {
+		if ignore.Ignores(m.ModelFilePath, false) {
 			continue
 		}
 		m.Design.Range(func(_ string, act *dsl.Action) {
@@ -75,7 +74,7 @@ func checkServiceTestCoverage(ignore gitignore.Matcher) []string {
 			}
 			seen[target.FilePath] = true
 
-			if moduleOwnedPath(owned, ggconst.DirService, target.FilePath) || isIgnoredProjectPath(ignore, target.FilePath, false) {
+			if moduleOwnedPath(owned, ggconst.DirService, target.FilePath) || ignore.Ignores(target.FilePath, false) {
 				return
 			}
 			// A service file that does not exist yet is gg gen's business:

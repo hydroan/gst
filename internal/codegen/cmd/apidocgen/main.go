@@ -16,6 +16,7 @@ import (
 	"github.com/hydroan/gst/internal/codegen"
 	"github.com/hydroan/gst/internal/codegen/gen"
 	"github.com/hydroan/gst/internal/ggconst"
+	"github.com/hydroan/gst/internal/gghelper"
 )
 
 const (
@@ -54,7 +55,7 @@ func main() {
 // both go through this function, so the two can never disagree about what the
 // file should contain.
 func buildModelRegistryAPIDoc() (string, error) {
-	entries, err := codegen.ExtractAPIDocs(ggconst.ImportPathGst, modelRegistryPkgDir, []string{ggconst.FileAPIDocGen})
+	entries, err := codegen.ExtractAPIDocs(ggconst.ImportPathGst, modelRegistryPkgDir, gghelper.NewProjectIgnore(), []string{ggconst.FileAPIDocGen})
 	if err != nil {
 		return "", errors.Wrapf(err, "extract %s api docs", modelRegistryPkgDir)
 	}

@@ -2,11 +2,14 @@ package codegen_test
 
 import (
 	"fmt"
+	"os"
+	"path/filepath"
 	"slices"
 	"testing"
 
 	"github.com/hydroan/gst/internal/codegen"
 	"github.com/hydroan/gst/internal/codegen/gen"
+	"github.com/hydroan/gst/internal/gghelper"
 )
 
 func TestExtractAPIDocsStructs(t *testing.T) {
@@ -101,7 +104,7 @@ func TestExtractAPIDocsDeterministicOrder(t *testing.T) {
 // extraction leaves out: test files, files whose names start with "_", files
 // in vendor and testdata directories, and the file names excludes lists.
 func TestExtractAPIDocsSkipsFilesOutsideCodeGeneration(t *testing.T) {
-	entries, err := codegen.ExtractAPIDocs("example.com/proj", "testdata/apidocmodel", []string{"excluded.go"})
+	entries, err := codegen.ExtractAPIDocs("example.com/proj", "testdata/apidocmodel", gghelper.NewProjectIgnore(), []string{"excluded.go"})
 	if err != nil {
 		t.Fatalf("ExtractAPIDocs() error = %v", err)
 	}
@@ -136,7 +139,7 @@ func TestExtractAPIDocsSkipsFilesOutsideCodeGeneration(t *testing.T) {
 // database model Record of the root package and the model Item of its
 // sample package, each with the path of its model file.
 func TestFindModels(t *testing.T) {
-	models, err := codegen.FindModels("example.com/proj", "testdata/findmodel")
+	models, err := codegen.FindModels("example.com/proj", "testdata/findmodel", gghelper.NewProjectIgnore())
 	if err != nil {
 		t.Fatalf("FindModels() error = %v", err)
 	}
@@ -160,9 +163,93 @@ func TestFindModels(t *testing.T) {
 func extractTestAPIDocs(t *testing.T) gen.APIDocEntries {
 	t.Helper()
 
-	entries, err := codegen.ExtractAPIDocs("example.com/proj", "testdata/apidocmodel", nil)
+	entries, err := codegen.ExtractAPIDocs("example.com/proj", "testdata/apidocmodel", gghelper.NewProjectIgnore(), nil)
 	if err != nil {
 		t.Fatalf("ExtractAPIDocs() error = %v", err)
 	}
 	return entries
+}
+
+// TestFindModelsWalksPastAFileNamedVendor pins that only a vendor or testdata
+// directory prunes the walk: a file of that name must not hide the model files
+// that sort after it.
+func TestFindModelsWalksPastAFileNamedVendor(t *testing.T) {
+	dir := t.TempDir()
+	t.Chdir(dir)
+	modelDir := "model"
+	if err := os.MkdirAll(modelDir, 0o750); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(modelDir, "vendor"), []byte("not a directory\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(modelDir, "zz_record.go"), []byte(`package model
+
+import (
+	"github.com/hydroan/gst/dsl"
+	"github.com/hydroan/gst/model"
+)
+
+type Record struct {
+	model.Base
+}
+
+func (Record) Design() {
+	dsl.Endpoint("records")
+	dsl.List(func() {})
+}
+`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	models, err := codegen.FindModels("example.com/app", modelDir, gghelper.NewProjectIgnore())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if len(models) != 1 || models[0].ModelName != "Record" {
+		t.Fatalf("FindModels() found %d models, want the Record declared after the file named vendor", len(models))
+	}
+}
+
+// TestFindModelsSkipsGitIgnoredModelFiles pins that generation reads the model
+// files gg check reads: a model file the project's Git ignore rules exclude
+// takes part in neither.
+func TestFindModelsSkipsGitIgnoredModelFiles(t *testing.T) {
+	dir := t.TempDir()
+	t.Chdir(dir)
+	modelDir := "model"
+	if err := os.MkdirAll(modelDir, 0o750); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(".gitignore", []byte("model/scratch.go\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(modelDir, "scratch.go"), []byte(`package model
+
+import (
+	"github.com/hydroan/gst/dsl"
+	"github.com/hydroan/gst/model"
+)
+
+type Scratch struct {
+	model.Base
+}
+
+func (Scratch) Design() {
+	dsl.Endpoint("scratches")
+	dsl.List(func() {})
+}
+`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	models, err := codegen.FindModels("example.com/app", modelDir, gghelper.NewProjectIgnore())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if len(models) != 0 {
+		t.Fatalf("FindModels() found %d models, want none: the only model file is Git ignored", len(models))
+	}
 }

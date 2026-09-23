@@ -12,8 +12,8 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/go-git/go-git/v5/plumbing/format/gitignore"
 	"github.com/hydroan/gst/internal/ggconst"
+	"github.com/hydroan/gst/internal/gghelper"
 	"github.com/hydroan/gst/internal/ggmodule"
 	"github.com/hydroan/gst/internal/goast"
 )
@@ -39,7 +39,7 @@ var ModuleAssembly = Check{
 // registrations happen to import it, which is exactly the accident this check
 // exists to prevent. Test files are skipped for the same reason — wiring that
 // only runs under go test does not arm the binary.
-func checkModuleAssembly(ignore gitignore.Matcher) []string {
+func checkModuleAssembly(ignore gghelper.ProjectIgnore) []string {
 	// Cheapest first: a name whose model subtree is absent was never copied,
 	// so a project that copied nothing reads no manifest and walks nothing.
 	names, err := ggmodule.CopyableModuleNames()
@@ -73,7 +73,7 @@ func checkModuleAssembly(ignore gitignore.Matcher) []string {
 	}
 	satisfied := make(map[string]bool, len(pending))
 
-	walkErr := walkProjectDir(".", ignore, func(path string, info os.FileInfo) error {
+	walkErr := ignore.Walk(".", func(path string, info os.FileInfo) error {
 		if info.IsDir() {
 			if moduleOwnedPath(owned, ggconst.DirModel, path) || moduleOwnedPath(owned, ggconst.DirService, path) {
 				return filepath.SkipDir

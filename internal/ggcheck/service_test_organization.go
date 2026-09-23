@@ -9,7 +9,6 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/go-git/go-git/v5/plumbing/format/gitignore"
 	"github.com/hydroan/gst/internal/ggconst"
 	"github.com/hydroan/gst/internal/gghelper"
 )
@@ -31,7 +30,7 @@ var ServiceTestOrganization = Check{
 // their own belong in the test file of a related source file, so pairing
 // stays the only shape. Service subtrees owned by copyable framework modules
 // are skipped like in checkServiceTestCoverage.
-func checkServiceTestOrganization(ignore gitignore.Matcher) []string {
+func checkServiceTestOrganization(ignore gghelper.ProjectIgnore) []string {
 	var violations []string
 
 	if _, err := os.Stat(ggconst.DirService); os.IsNotExist(err) {
@@ -43,7 +42,7 @@ func checkServiceTestOrganization(ignore gitignore.Matcher) []string {
 		return append(violations, fmt.Sprintf("listing copyable framework modules: %v", err))
 	}
 
-	walkErr := walkProjectDir(ggconst.DirService, ignore, func(path string, info os.FileInfo) error {
+	walkErr := ignore.Walk(ggconst.DirService, func(path string, info os.FileInfo) error {
 		if info.IsDir() {
 			if path != ggconst.DirService && moduleOwnedPath(owned, ggconst.DirService, path) {
 				return filepath.SkipDir

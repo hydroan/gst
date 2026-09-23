@@ -7,7 +7,6 @@ import (
 	"slices"
 	"strings"
 
-	gitignore "github.com/go-git/go-git/v5/plumbing/format/gitignore"
 	"github.com/hydroan/gst/internal/ggconst"
 	"github.com/hydroan/gst/internal/gghelper"
 	"golang.org/x/mod/modfile"
@@ -22,7 +21,7 @@ var DirectoryRestrictions = Check{
 }
 
 // checkDirectoryRestrictions checks if only allowed directories exist in the project
-func checkDirectoryRestrictions(ignore gitignore.Matcher) []string {
+func checkDirectoryRestrictions(ignore gghelper.ProjectIgnore) []string {
 	projectDir := "."
 	var violations []string
 
@@ -100,7 +99,7 @@ func checkDirectoryRestrictions(ignore gitignore.Matcher) []string {
 		if strings.HasPrefix(dirName, ".") {
 			continue
 		}
-		if isIgnoredProjectPath(ignore, dirName, true) {
+		if ignore.Ignores(dirName, true) {
 			continue
 		}
 

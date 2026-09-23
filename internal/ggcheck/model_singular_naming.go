@@ -7,8 +7,8 @@ import (
 	"strings"
 
 	"github.com/gertd/go-pluralize"
-	gitignore "github.com/go-git/go-git/v5/plumbing/format/gitignore"
 	"github.com/hydroan/gst/internal/ggconst"
+	"github.com/hydroan/gst/internal/gghelper"
 )
 
 // ModelSingularNaming keeps model directory and file names singular.
@@ -20,7 +20,7 @@ var ModelSingularNaming = Check{
 
 // checkModelSingularNaming checks that model directories and files use
 // singular names.
-func checkModelSingularNaming(ignore gitignore.Matcher) []string {
+func checkModelSingularNaming(ignore gghelper.ProjectIgnore) []string {
 	var violations []string
 
 	if _, err := os.Stat(ggconst.DirModel); os.IsNotExist(err) {
@@ -64,7 +64,7 @@ func checkModelSingularNaming(ignore gitignore.Matcher) []string {
 
 	client := pluralize.NewClient()
 
-	err := walkProjectDir(ggconst.DirModel, ignore, func(path string, info os.FileInfo) error {
+	err := ignore.Walk(ggconst.DirModel, func(path string, info os.FileInfo) error {
 		// Get relative path from model directory
 		relPath, err := filepath.Rel(ggconst.DirModel, path)
 		if err != nil {

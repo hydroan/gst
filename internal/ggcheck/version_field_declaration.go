@@ -12,7 +12,6 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/go-git/go-git/v5/plumbing/format/gitignore"
 	"github.com/hydroan/gst/dsl"
 	"github.com/hydroan/gst/internal/ggconst"
 	"github.com/hydroan/gst/internal/gghelper"
@@ -49,7 +48,7 @@ var VersionFieldDeclaration = Check{
 // subtrees owned by copyable framework modules are skipped, as in the model
 // table name and gorm tag index checks: copied module code is checked inside
 // the framework.
-func checkVersionFieldDeclaration(ignore gitignore.Matcher) []string {
+func checkVersionFieldDeclaration(ignore gghelper.ProjectIgnore) []string {
 	findings, err := collectVersionFieldFindings(ignore)
 	if err != nil {
 		return []string{err.Error()}
@@ -114,7 +113,7 @@ func checkVersionFieldDeclaration(ignore gitignore.Matcher) []string {
 // fields of DSL action types, package by package: a Design method may
 // reference a type declared in a sibling file, so files are grouped per
 // directory the same way the json tag naming check groups them.
-func collectActionTypeVersionFindings(ignore gitignore.Matcher) ([]actionTypeVersionFinding, error) {
+func collectActionTypeVersionFindings(ignore gghelper.ProjectIgnore) ([]actionTypeVersionFinding, error) {
 	if _, err := os.Stat(ggconst.DirModel); os.IsNotExist(err) {
 		return nil, nil
 	}
@@ -126,7 +125,7 @@ func collectActionTypeVersionFindings(ignore gitignore.Matcher) ([]actionTypeVer
 
 	var packageDirs []string
 	packageFiles := make(map[string][]string)
-	walkErr := walkProjectDir(ggconst.DirModel, ignore, func(path string, info os.FileInfo) error {
+	walkErr := ignore.Walk(ggconst.DirModel, func(path string, info os.FileInfo) error {
 		if info.IsDir() {
 			if moduleOwnedPath(owned, ggconst.DirModel, path) {
 				return filepath.SkipDir
@@ -160,12 +159,12 @@ func collectActionTypeVersionFindings(ignore gitignore.Matcher) ([]actionTypeVer
 // declarations gg gen heals by filling their tags in. Paths the project's Git
 // ignore rules ignore are left out.
 func VersionFieldFindings() ([]VersionFieldFinding, error) {
-	return collectVersionFieldFindings(newProjectIgnoreMatcher())
+	return collectVersionFieldFindings(gghelper.NewProjectIgnore())
 }
 
 // collectVersionFieldFindings walks the model directory and gathers every
 // deviating model.Version declaration, in walk order.
-func collectVersionFieldFindings(ignore gitignore.Matcher) ([]VersionFieldFinding, error) {
+func collectVersionFieldFindings(ignore gghelper.ProjectIgnore) ([]VersionFieldFinding, error) {
 	if _, err := os.Stat(ggconst.DirModel); os.IsNotExist(err) {
 		return nil, nil
 	}
@@ -176,7 +175,7 @@ func collectVersionFieldFindings(ignore gitignore.Matcher) ([]VersionFieldFindin
 	}
 
 	var findings []VersionFieldFinding
-	walkErr := walkProjectDir(ggconst.DirModel, ignore, func(path string, info os.FileInfo) error {
+	walkErr := ignore.Walk(ggconst.DirModel, func(path string, info os.FileInfo) error {
 		if info.IsDir() {
 			if moduleOwnedPath(owned, ggconst.DirModel, path) {
 				return filepath.SkipDir

@@ -10,7 +10,6 @@ import (
 	"slices"
 	"strings"
 
-	gitignore "github.com/go-git/go-git/v5/plumbing/format/gitignore"
 	"github.com/hydroan/gst/internal/gghelper"
 	"github.com/hydroan/gst/internal/goast"
 )
@@ -66,10 +65,10 @@ var DatabaseChainTermination = Check{
 // GORM session, so storing the chain value in a variable and running
 // operations later is incorrect usage; each independent operation must start
 // with its own database.Database call.
-func checkDatabaseChainTermination(ignore gitignore.Matcher) []string {
+func checkDatabaseChainTermination(ignore gghelper.ProjectIgnore) []string {
 	var violations []string
 
-	err := walkProjectDir(".", ignore, func(path string, info os.FileInfo) error {
+	err := ignore.Walk(".", func(path string, info os.FileInfo) error {
 		if info.IsDir() {
 			if path == "." {
 				return nil

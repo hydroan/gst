@@ -9,7 +9,6 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/go-git/go-git/v5/plumbing/format/gitignore"
 	"github.com/hydroan/gst/internal/ggconst"
 	"github.com/hydroan/gst/internal/gghelper"
 	"github.com/hydroan/gst/internal/goast"
@@ -38,7 +37,7 @@ var LogFieldBoundedness = Check{
 // project including test files; model and service subtrees owned by copyable
 // framework modules are skipped, since copied module code is owned by the
 // framework repository.
-func checkLogFieldBoundedness(ignore gitignore.Matcher) []string {
+func checkLogFieldBoundedness(ignore gghelper.ProjectIgnore) []string {
 	var violations []string
 
 	owned, err := copyableModuleOwners()
@@ -46,7 +45,7 @@ func checkLogFieldBoundedness(ignore gitignore.Matcher) []string {
 		return append(violations, fmt.Sprintf("listing copyable framework modules: %v", err))
 	}
 
-	walkErr := walkProjectDir(".", ignore, func(path string, info os.FileInfo) error {
+	walkErr := ignore.Walk(".", func(path string, info os.FileInfo) error {
 		base := filepath.Base(path)
 		if info.IsDir() {
 			if path == "." {

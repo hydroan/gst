@@ -5,8 +5,8 @@ import (
 	"os"
 	"strings"
 
-	gitignore "github.com/go-git/go-git/v5/plumbing/format/gitignore"
 	"github.com/hydroan/gst/internal/ggconst"
+	"github.com/hydroan/gst/internal/gghelper"
 )
 
 // ModelFileNameHyphens keeps hyphens out of model file names.
@@ -18,14 +18,14 @@ var ModelFileNameHyphens = Check{
 
 // checkModelFileNameHyphens checks that model file names separate words with
 // underscores rather than hyphens.
-func checkModelFileNameHyphens(ignore gitignore.Matcher) []string {
+func checkModelFileNameHyphens(ignore gghelper.ProjectIgnore) []string {
 	var violations []string
 
 	if _, err := os.Stat(ggconst.DirModel); os.IsNotExist(err) {
 		return violations
 	}
 
-	err := walkProjectDir(ggconst.DirModel, ignore, func(path string, info os.FileInfo) error {
+	err := ignore.Walk(ggconst.DirModel, func(path string, info os.FileInfo) error {
 		if info.IsDir() || !strings.HasSuffix(path, ".go") || strings.Contains(path, "_test.go") || isGeneratedFileName(path) {
 			return nil
 		}

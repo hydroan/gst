@@ -8,7 +8,6 @@ import (
 	"os"
 	"strings"
 
-	gitignore "github.com/go-git/go-git/v5/plumbing/format/gitignore"
 	"github.com/hydroan/gst/internal/ggconst"
 	"github.com/hydroan/gst/internal/gghelper"
 	"github.com/hydroan/gst/internal/goast"
@@ -22,14 +21,14 @@ var ServiceFileBoundaries = Check{
 }
 
 // checkServiceFileBoundaries checks that each service file contains at most one service struct.
-func checkServiceFileBoundaries(ignore gitignore.Matcher) []string {
+func checkServiceFileBoundaries(ignore gghelper.ProjectIgnore) []string {
 	var violations []string
 
 	if _, err := os.Stat(ggconst.DirService); os.IsNotExist(err) {
 		return violations
 	}
 
-	err := walkProjectDir(ggconst.DirService, ignore, func(path string, info os.FileInfo) error {
+	err := ignore.Walk(ggconst.DirService, func(path string, info os.FileInfo) error {
 		if info.IsDir() || !strings.HasSuffix(path, ".go") || strings.Contains(path, "_test.go") {
 			return nil
 		}

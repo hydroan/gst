@@ -11,6 +11,7 @@ import (
 	"github.com/hydroan/gst/internal/codegen"
 	"github.com/hydroan/gst/internal/codegen/gen"
 	"github.com/hydroan/gst/internal/ggconfig"
+	"github.com/hydroan/gst/internal/gghelper"
 )
 
 // TestResolveRoutesIgnoresDefaultEndpointActions verifies that route rules
@@ -261,7 +262,7 @@ func findModels(t *testing.T, sources map[string]string) []*gen.ModelInfo {
 	}
 	t.Chdir(projectDir)
 
-	models, err := codegen.FindModels("tmpapp", "model")
+	models, err := codegen.FindModels("tmpapp", "model", gghelper.NewProjectIgnore())
 	if err != nil {
 		t.Fatal(err)
 	}

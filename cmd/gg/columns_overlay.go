@@ -6,7 +6,6 @@ import (
 	"go/ast"
 	"go/parser"
 	"go/token"
-	"io/fs"
 	"maps"
 	"os"
 	"path/filepath"
@@ -18,6 +17,7 @@ import (
 	"github.com/hydroan/gst/consts"
 	"github.com/hydroan/gst/internal/codegen/gen"
 	"github.com/hydroan/gst/internal/ggconst"
+	"github.com/hydroan/gst/internal/gghelper"
 )
 
 // columnInspectionPanic is what the inspection reports when it runs code that
@@ -60,8 +60,8 @@ const columnInspectionPlaceholder = `panic("` + columnInspectionPanic + `")`
 // a package-level var or an init function calling a left-out method reaches
 // its placeholder. Only the model directory is rewritten, the same scope the
 // inspection cache key covers.
-func columnInspectionOverlay(module string, modelDir string, models []*gen.ModelInfo) (map[string]string, error) {
-	files, err := scanColumnInspectionFiles(module, modelDir)
+func columnInspectionOverlay(module string, modelDir string, models []*gen.ModelInfo, ignore gghelper.ProjectIgnore) (map[string]string, error) {
+	files, err := scanColumnInspectionFiles(module, modelDir, ignore)
 	if err != nil {
 		return nil, err
 	}
@@ -115,20 +115,17 @@ type columnInspectionSource struct {
 // from the model directory. Tests are skipped, since the inspection program
 // does not build them, and so are the directories and files the go command
 // ignores.
-func scanColumnInspectionFiles(module string, modelDir string) (*columnInspectionFiles, error) {
+func scanColumnInspectionFiles(module string, modelDir string, ignore gghelper.ProjectIgnore) (*columnInspectionFiles, error) {
 	files := &columnInspectionFiles{
 		fset:         token.NewFileSet(),
 		stubs:        make(map[string]string),
 		packageNames: make(map[string][]string),
 		omitted:      make(map[string]map[string]bool),
 	}
-	err := filepath.WalkDir(modelDir, func(path string, entry fs.DirEntry, walkErr error) error {
-		if walkErr != nil {
-			return walkErr
-		}
-		name := entry.Name()
+	err := ignore.Walk(modelDir, func(path string, info os.FileInfo) error {
+		name := info.Name()
 		ignored := strings.HasPrefix(name, ".") || strings.HasPrefix(name, "_")
-		if entry.IsDir() {
+		if info.IsDir() {
 			if path != modelDir && (ignored || name == "testdata") {
 				return filepath.SkipDir
 			}
@@ -137,7 +134,7 @@ func scanColumnInspectionFiles(module string, modelDir string) (*columnInspectio
 		if ignored || !strings.HasSuffix(name, ggconst.ExtensionGo) || strings.HasSuffix(name, ggconst.PatternTestFile) {
 			return nil
 		}
-		content, readErr := os.ReadFile(path) //nolint:gosec // path comes from the model directory walk.
+		content, readErr := os.ReadFile(path)
 		if readErr != nil {
 			return errors.Wrapf(readErr, "read %s", path)
 		}

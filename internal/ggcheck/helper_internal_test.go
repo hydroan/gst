@@ -60,3 +60,35 @@ func frameworkRepoRoot(t *testing.T) string {
 	}
 	return filepath.Dir(filepath.Dir(filepath.Dir(file)))
 }
+
+// TestModuleOwnedPath pins which paths count as owned by a copied framework
+// module: only what lies under a subtree named after one of them, and never
+// the root itself or a path outside it.
+func TestModuleOwnedPath(t *testing.T) {
+	owned := map[string]bool{"iam": true}
+	tests := []struct {
+		name string
+		root string
+		path string
+		want bool
+	}{
+		{name: "file under a copied module", root: "model", path: filepath.Join("model", "iam", "user.go"), want: true},
+		{name: "the module subtree itself", root: "model", path: filepath.Join("model", "iam"), want: true},
+		{name: "file of another subtree", root: "model", path: filepath.Join("model", "record", "record.go")},
+		{name: "the root itself", root: "model", path: "model"},
+		{name: "path outside the root", root: "model", path: filepath.Join("service", "iam", "login.go")},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := moduleOwnedPath(owned, tt.root, tt.path); got != tt.want {
+				t.Fatalf("moduleOwnedPath(%q, %q) = %t, want %t", tt.root, tt.path, got, tt.want)
+			}
+		})
+	}
+
+	t.Run("no copied module", func(t *testing.T) {
+		if moduleOwnedPath(nil, "model", filepath.Join("model", "iam", "user.go")) {
+			t.Fatal("moduleOwnedPath() = true without a copied module")
+		}
+	})
+}

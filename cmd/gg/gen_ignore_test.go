@@ -13,6 +13,7 @@ import (
 	"github.com/hydroan/gst/internal/codegen/gen"
 	"github.com/hydroan/gst/internal/ggconfig"
 	"github.com/hydroan/gst/internal/ggconst"
+	"github.com/hydroan/gst/internal/gghelper"
 )
 
 // migratingModelSource declares a table-backed model with one List action,
@@ -152,7 +153,7 @@ func (User) Design() {
 }
 `)
 	t.Chdir(projectDir)
-	models, err := codegen.FindModels("tmpapp", "model")
+	models, err := codegen.FindModels("tmpapp", "model", gghelper.NewProjectIgnore())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -258,7 +259,7 @@ func TestRouteIgnoresKeepServiceFilesForPrune(t *testing.T) {
 	t.Chdir(projectDir)
 	writeSignupModelFixture(t, projectDir)
 
-	allModels, err := codegen.FindModels("tmpapp", ggconst.DirModel)
+	allModels, err := codegen.FindModels("tmpapp", ggconst.DirModel, gghelper.NewProjectIgnore())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -310,7 +311,7 @@ func TestRouteIgnoresKeepServiceFilesForPrune(t *testing.T) {
 	if err := os.WriteFile(signupServiceFile, []byte("package account\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	pruneServiceFiles([]string{signupServiceFile}, allModels, result.KeptServiceFiles, result.KeptServiceDirs)
+	pruneServiceFiles([]string{signupServiceFile}, allModels, result.KeptServiceFiles, result.KeptServiceDirs, gghelper.NewProjectIgnore())
 	if _, err := os.Stat(signupServiceFile); err != nil {
 		t.Fatalf("ignored action's service file should survive prune: %v", err)
 	}
@@ -412,7 +413,7 @@ func findModelsFromSource(t *testing.T, pkgDir, filename, source string) []*gen.
 
 	t.Chdir(projectDir)
 
-	allModels, err := codegen.FindModels("tmpapp", "model")
+	allModels, err := codegen.FindModels("tmpapp", "model", gghelper.NewProjectIgnore())
 	if err != nil {
 		t.Fatal(err)
 	}

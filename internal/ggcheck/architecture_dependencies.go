@@ -9,7 +9,6 @@ import (
 	"slices"
 	"strings"
 
-	gitignore "github.com/go-git/go-git/v5/plumbing/format/gitignore"
 	"github.com/hydroan/gst/internal/ggconst"
 	"github.com/hydroan/gst/internal/gghelper"
 	"golang.org/x/text/cases"
@@ -25,7 +24,7 @@ var ArchitectureDependencies = Check{
 }
 
 // checkArchitectureDependencies performs architecture dependency checks.
-func checkArchitectureDependencies(ignore gitignore.Matcher) []string {
+func checkArchitectureDependencies(ignore gghelper.ProjectIgnore) []string {
 	//nolint:prealloc
 	var violations []string
 	modulePath, err := gghelper.ModulePath()
@@ -49,14 +48,14 @@ func checkArchitectureDependencies(ignore gitignore.Matcher) []string {
 }
 
 // checkServiceDependencies checks if service code calls other service code
-func checkServiceDependencies(modulePath string, ignore gitignore.Matcher) []string {
+func checkServiceDependencies(modulePath string, ignore gghelper.ProjectIgnore) []string {
 	var violations []string
 
 	if _, err := os.Stat(ggconst.DirService); os.IsNotExist(err) {
 		return violations
 	}
 
-	err := walkProjectDir(ggconst.DirService, ignore, func(path string, _ os.FileInfo) error {
+	err := ignore.Walk(ggconst.DirService, func(path string, _ os.FileInfo) error {
 		if !strings.HasSuffix(path, ".go") || strings.Contains(path, "_test.go") {
 			return nil
 		}
@@ -81,14 +80,14 @@ func checkServiceDependencies(modulePath string, ignore gitignore.Matcher) []str
 }
 
 // checkDAODependencies checks if DAO code calls upper-layer code.
-func checkDAODependencies(modulePath string, ignore gitignore.Matcher) []string {
+func checkDAODependencies(modulePath string, ignore gghelper.ProjectIgnore) []string {
 	var violations []string
 
 	if _, err := os.Stat(ggconst.DirDAO); os.IsNotExist(err) {
 		return violations
 	}
 
-	err := walkProjectDir(ggconst.DirDAO, ignore, func(path string, _ os.FileInfo) error {
+	err := ignore.Walk(ggconst.DirDAO, func(path string, _ os.FileInfo) error {
 		if !strings.HasSuffix(path, ".go") || strings.Contains(path, "_test.go") {
 			return nil
 		}
@@ -106,14 +105,14 @@ func checkDAODependencies(modulePath string, ignore gitignore.Matcher) []string 
 }
 
 // checkModelDependencies checks if model code calls upper-layer or data-access code.
-func checkModelDependencies(modulePath string, ignore gitignore.Matcher) []string {
+func checkModelDependencies(modulePath string, ignore gghelper.ProjectIgnore) []string {
 	var violations []string
 
 	if _, err := os.Stat(ggconst.DirModel); os.IsNotExist(err) {
 		return violations
 	}
 
-	err := walkProjectDir(ggconst.DirModel, ignore, func(path string, _ os.FileInfo) error {
+	err := ignore.Walk(ggconst.DirModel, func(path string, _ os.FileInfo) error {
 		if !strings.HasSuffix(path, ".go") || strings.Contains(path, "_test.go") {
 			return nil
 		}

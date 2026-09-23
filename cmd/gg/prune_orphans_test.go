@@ -8,6 +8,7 @@ import (
 	"github.com/hydroan/gst/consts"
 	"github.com/hydroan/gst/dsl"
 	"github.com/hydroan/gst/internal/codegen/gen"
+	"github.com/hydroan/gst/internal/gghelper"
 )
 
 func TestCollectOrphanServiceDirsKeepsImportedHelperDirs(t *testing.T) {
@@ -20,7 +21,7 @@ import _ "tmpapp/service/adminauth"
 	writeOrphanPruneFile(t, filepath.Join("service", "adminauth", "adminauth.go"), `package adminauth
 `)
 
-	orphans, keptHelpers := collectOrphanServiceDirs([]*gen.ModelInfo{orphanPruneModel()}, nil, "tmpapp")
+	orphans, keptHelpers := collectOrphanServiceDirs([]*gen.ModelInfo{orphanPruneModel()}, nil, "tmpapp", gghelper.NewProjectIgnore())
 
 	if len(orphans) != 0 {
 		t.Fatalf("imported helper dir should not be an orphan, got %#v", orphans)
@@ -49,7 +50,7 @@ import _ "tmpapp/service/helperb"
 	writeOrphanPruneFile(t, filepath.Join("service", "helperb", "helperb.go"), `package helperb
 `)
 
-	orphans, keptHelpers := collectOrphanServiceDirs([]*gen.ModelInfo{orphanPruneModel()}, nil, "tmpapp")
+	orphans, keptHelpers := collectOrphanServiceDirs([]*gen.ModelInfo{orphanPruneModel()}, nil, "tmpapp", gghelper.NewProjectIgnore())
 
 	if len(orphans) != 0 {
 		t.Fatalf("transitively imported helper dirs should not be orphans, got %#v", orphans)
@@ -78,7 +79,7 @@ import _ "tmpapp/service/iam/adminauth"
 `)
 
 	keptDirs := map[string]bool{filepath.Join("service", "iam", "user"): true}
-	orphans, keptHelpers := collectOrphanServiceDirs(nil, keptDirs, "tmpapp")
+	orphans, keptHelpers := collectOrphanServiceDirs(nil, keptDirs, "tmpapp", gghelper.NewProjectIgnore())
 
 	if len(orphans) != 0 {
 		t.Fatalf("helper dir imported by kept service files should not be an orphan, got %#v", orphans)
@@ -97,7 +98,7 @@ func TestCollectOrphanServiceDirsFlagsUnreferencedDirs(t *testing.T) {
 	writeOrphanPruneFile(t, filepath.Join("service", "leftover", "leftover.go"), `package leftover
 `)
 
-	orphans, keptHelpers := collectOrphanServiceDirs([]*gen.ModelInfo{orphanPruneModel()}, nil, "tmpapp")
+	orphans, keptHelpers := collectOrphanServiceDirs([]*gen.ModelInfo{orphanPruneModel()}, nil, "tmpapp", gghelper.NewProjectIgnore())
 
 	wantDir := filepath.Join("service", "leftover")
 	if len(orphans) != 1 || orphans[0].Path != wantDir {

@@ -11,7 +11,6 @@ import (
 	"slices"
 	"strings"
 
-	gitignore "github.com/go-git/go-git/v5/plumbing/format/gitignore"
 	"github.com/hydroan/gst/dsl"
 	"github.com/hydroan/gst/internal/ggconst"
 	"github.com/hydroan/gst/internal/gghelper"
@@ -28,7 +27,7 @@ var JSONTagNaming = Check{
 // checkJSONTagNaming checks that json tags declared under the model directory
 // use snake_case naming. It covers model structs and the explicit DSL Payload
 // and Result types referenced by Design methods.
-func checkJSONTagNaming(ignore gitignore.Matcher) []string {
+func checkJSONTagNaming(ignore gghelper.ProjectIgnore) []string {
 	var violations []string
 
 	if _, err := os.Stat(ggconst.DirModel); os.IsNotExist(err) {
@@ -39,7 +38,7 @@ func checkJSONTagNaming(ignore gitignore.Matcher) []string {
 	// be declared in a different file of the package that references it.
 	var packageDirs []string
 	packageFiles := make(map[string][]string)
-	err := walkProjectDir(ggconst.DirModel, ignore, func(path string, info os.FileInfo) error {
+	err := ignore.Walk(ggconst.DirModel, func(path string, info os.FileInfo) error {
 		// Skip directories and non-Go files
 		if info.IsDir() || !strings.HasSuffix(path, ".go") {
 			return nil
