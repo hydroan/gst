@@ -4,7 +4,6 @@ import (
 	"go/parser"
 	"go/token"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -517,8 +516,7 @@ func Init() error {
 				require.Equal(t, want, string(got), file)
 			}
 
-			output, err := exec.Command("go", "build", "-mod=mod", "./...").CombinedOutput()
-			require.NoError(t, err, "go build:\n%s", output)
+			requireProjectCompiles(t)
 		})
 	}
 }
@@ -728,8 +726,7 @@ func (i *Creator) Create(ctx *gst.ServiceContext, req *io.Item) (rsp *io.Item, e
 			require.NoError(t, genRunWithOptions(genRunOptions{Quiet: true}))
 			requireServiceFiles()
 
-			output, err := exec.Command("go", "build", "-mod=mod", "./...").CombinedOutput()
-			require.NoError(t, err, "go build:\n%s", output)
+			requireProjectCompiles(t)
 		})
 	}
 }
@@ -843,6 +840,5 @@ func (i *Creator) Create(ctx *gst.ServiceContext, req *v2.Item) (rsp *v2.Item, e
 	require.NoError(t, err)
 	require.Equal(t, source, string(got))
 
-	output, err := exec.Command("go", "build", "-mod=mod", "./...").CombinedOutput()
-	require.NoError(t, err, "go build:\n%s", output)
+	requireProjectCompiles(t)
 }

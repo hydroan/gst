@@ -2,7 +2,6 @@ package main
 
 import (
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strconv"
 	"testing"
@@ -122,8 +121,7 @@ func (i *Item) DeleteBefore(ctx context.Context) error {
 	require.Contains(t, string(itemColumns), "var ItemCols = struct")
 
 	// The written references satisfy the handwritten readers.
-	output, err := exec.Command("go", "build", "-mod=mod", "./...").CombinedOutput()
-	require.NoError(t, err, "go build:\n%s", output)
+	requireProjectCompiles(t)
 
 	// Second run: the previous column files are stubbed out of the inspection
 	// build, which has to resolve the same columns again. Dropping the cached
@@ -170,10 +168,9 @@ func (Rule) Design() {
 	require.NoError(t, err)
 	require.Contains(t, string(columnFile), `gst.NewColumn[*Rule, gst.Permission]("permission")`)
 
-	// The project only builds when every import the generated file carries is
-	// one it can reach.
-	output, err := exec.Command("go", "build", "-mod=mod", "./...").CombinedOutput()
-	require.NoError(t, err, "go build:\n%s", output)
+	// The project only compiles when every import the generated file carries
+	// is one it can reach.
+	requireProjectCompiles(t)
 }
 
 // TestGenRunReportsCodeReachingAColumnInspectionPlaceholder runs gg gen against

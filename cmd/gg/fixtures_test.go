@@ -2,13 +2,17 @@ package main
 
 import (
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
 	"slices"
 	"strings"
+	"sync"
 	"testing"
 
+	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/internal/codegen/gen/columns"
+	"github.com/stretchr/testify/require"
 )
 
 func writeProjectFile(t *testing.T, path string, content string) {
@@ -78,33 +82,57 @@ func writeProjectGoModAgainstRealFramework(t *testing.T, projectDir string) {
 	recordFrameworkSources(t, root)
 }
 
-// recordFrameworkSources reads the framework's Go sources under root. The
-// programs these fixtures build compile against those sources in a child go
-// command, which go test does not see as an input of the test; reading them
-// here does, so a change to the framework reruns the test instead of replaying
-// a cached result that no longer holds.
+// frameworkSourcesRecorded makes recordFrameworkSources record the sources
+// once per test binary: go test keeps what a binary read for its whole run,
+// and the framework does not change under a running test.
+var (
+	frameworkSourcesRecorded sync.Once
+	frameworkSourcesErr      error
+)
+
+// recordFrameworkSources records the framework's Go sources under root as
+// inputs of the test. The programs these fixtures build compile against those
+// sources in a child go command, which go test does not see as an input of
+// the test; recording them here does, so a change to the framework reruns the
+// test instead of replaying a cached result that no longer holds.
+//
+// What gets recorded is what a build of the framework depends on and nothing
+// else: every package directory is stat'ed, which notices a file added to it
+// or removed from it, and every file the package compiles or embeds is read.
+// No directory is listed. go test hashes a listed directory by the name, size
+// and modification time of every entry, so listing the repository root would
+// take every git operation, which touches .git, for a framework change and
+// cost the package its test cache. The packages come from go list in a child
+// process, whose reads go test does not record.
 func recordFrameworkSources(t *testing.T, root string) {
 	t.Helper()
 
-	err := filepath.WalkDir(root, func(path string, entry os.DirEntry, err error) error {
+	frameworkSourcesRecorded.Do(func() {
+		list := exec.Command("go", "list", "-e", "-f",
+			`{{.Dir}}{{range .GoFiles}}{{"\t"}}{{.}}{{end}}{{range .CgoFiles}}{{"\t"}}{{.}}{{end}}{{range .EmbedFiles}}{{"\t"}}{{.}}{{end}}`,
+			"./...")
+		list.Dir = root
+		output, err := list.Output()
 		if err != nil {
-			return err
+			frameworkSourcesErr = errors.Wrap(err, "list the framework packages")
+			return
 		}
-		if entry.IsDir() {
-			name := entry.Name()
-			if path != root && (name == "examples" || name == "testdata" || strings.HasPrefix(name, ".") || strings.HasPrefix(name, "_")) {
-				return filepath.SkipDir
+		for line := range strings.Lines(string(output)) {
+			fields := strings.Split(strings.TrimSuffix(line, "\n"), "\t")
+			if _, err := os.Stat(fields[0]); err != nil {
+				frameworkSourcesErr = err
+				return
 			}
-			return nil
+			for _, name := range fields[1:] {
+				if _, err := os.ReadFile(filepath.Join(fields[0], name)); err != nil {
+					frameworkSourcesErr = err
+					return
+				}
+			}
 		}
-		if !strings.HasSuffix(path, ".go") || strings.HasSuffix(path, "_test.go") {
-			return nil
-		}
-		_, readErr := os.ReadFile(path)
-		return readErr
 	})
-	if err != nil {
-		t.Fatal(err)
+	if frameworkSourcesErr != nil {
+		t.Fatal(frameworkSourcesErr)
 	}
 }
 
@@ -145,6 +173,19 @@ func newGenProject(t *testing.T) string {
 		}
 	})
 	return projectDir
+}
+
+// requireProjectCompiles type-checks every package of the project in the
+// working directory, the generated sources and the handwritten code reading
+// them alike. It runs go vet rather than go build: building links the
+// project's main package against the whole framework, which costs seconds per
+// project and proves nothing about the sources that type-checking them does
+// not.
+func requireProjectCompiles(t *testing.T) {
+	t.Helper()
+
+	output, err := exec.Command("go", "vet", "-mod=mod", "./...").CombinedOutput()
+	require.NoError(t, err, "go vet:\n%s", output)
 }
 
 // frameworkRepoRoot returns the absolute path of this repository's root.
