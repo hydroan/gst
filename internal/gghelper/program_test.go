@@ -36,6 +36,21 @@ func TestProjectProgramRunsAgainstTheProjectModuleWithOverlay(t *testing.T) {
 	require.Equal(t, goMod, string(content))
 }
 
+func TestProjectProgramPassesItsArguments(t *testing.T) {
+	t.Chdir(t.TempDir())
+	writeProjectFile(t, "go.mod", "module tmpapp\n\ngo 1.27\n")
+
+	var out bytes.Buffer
+	program := gghelper.ProjectProgram{
+		Content: "package main\n\nimport (\n\t\"fmt\"\n\t\"os\"\n\t\"strings\"\n)\n\nfunc main() { fmt.Print(strings.Join(os.Args[1:], \",\")) }\n",
+		Stdout:  &out,
+		Args:    []string{"sample", "with space"},
+	}
+	require.NoError(t, program.Run())
+
+	require.Equal(t, "sample,with space", out.String())
+}
+
 func TestListProjectPackagesLeavesModuleFilesUntouched(t *testing.T) {
 	t.Chdir(t.TempDir())
 	goMod := "module tmpapp\n\ngo 1.27\n\nreplace example.com/dep => ./dep\n"

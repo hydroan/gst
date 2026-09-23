@@ -67,12 +67,12 @@ func TestBuildColumnsProgram(t *testing.T) {
 	t.Run("ProducesParseableSource", func(t *testing.T) {
 		_, err := parser.ParseFile(token.NewFileSet(), "main.go", program, 0)
 		require.NoError(t, err)
-		// The builder owns three placeholders; {{OUTPUT}} stays for
-		// inspectColumns to fill on each run.
-		require.NotContains(t, program, "{{MODULE}}")
-		require.NotContains(t, program, "{{UNREGISTERED_IMPORTS}}")
-		require.NotContains(t, program, "{{UNREGISTERED_MODELS}}")
-		require.Contains(t, program, "{{OUTPUT}}")
+		// The builder fills every placeholder, and the program takes the one
+		// value that differs from run to run, the result path, as its
+		// argument: a source holding it would be linked and cached anew on
+		// every run instead of reusing the program Go already built.
+		require.NotContains(t, program, "{{")
+		require.Contains(t, program, "os.WriteFile(os.Args[1], encoded, 0o600)")
 	})
 
 	t.Run("IsDeterministic", func(t *testing.T) {

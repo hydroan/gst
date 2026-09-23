@@ -36,7 +36,8 @@ type modelColumns struct {
 // project models' columns as JSON. It runs inside the project module, so it
 // resolves exactly the columns the framework resolves at runtime.
 // buildColumnsProgram fills {{MODULE}} and the unregistered-model
-// placeholders; {{OUTPUT}} is filled per run.
+// placeholders. The result path, which differs on every run, reaches the
+// program as its argument, so the source stays the same between runs.
 const columnsProgram = `package main
 
 import (
@@ -123,7 +124,7 @@ func main() {
 	}
 	// The result travels through a file: initialization writes to stdout, so
 	// stdout is not a reliable data channel.
-	if err = os.WriteFile("{{OUTPUT}}", encoded, 0o600); err != nil {
+	if err = os.WriteFile(os.Args[1], encoded, 0o600); err != nil {
 		fail(err)
 	}
 }
@@ -324,7 +325,7 @@ func inspectColumns(program string, overlay map[string]string) ([]modelColumns, 
 	}
 	defer os.Remove(resultPath)
 
-	inspector := gghelper.ProjectProgram{Content: strings.ReplaceAll(program, "{{OUTPUT}}", resultPath), Overlay: overlay}
+	inspector := gghelper.ProjectProgram{Content: program, Args: []string{resultPath}, Overlay: overlay}
 	if err = inspector.Run(); err != nil {
 		return nil, errors.Wrap(err, "inspect model columns")
 	}

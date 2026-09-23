@@ -21,6 +21,12 @@ type ProjectProgram struct {
 	// Content is the program source.
 	Content string
 
+	// Args are the program's command-line arguments. A value that differs from
+	// run to run, such as the path of a temporary file, belongs here rather
+	// than in Content: the build is keyed on the source, so a source that
+	// changes on every run is linked again and cached anew on every run.
+	Args []string
+
 	// Stdout receives the program's standard output. A nil value discards it,
 	// which is the right choice for a program whose result travels through a
 	// file: framework initialization also writes to stdout, so stdout is not a
@@ -64,7 +70,12 @@ func (p ProjectProgram) Run() error {
 	if stdout == nil {
 		stdout = io.Discard
 	}
-	args := []string{"run", "-mod=mod", "-modfile", modFile}
+	// -trimpath keeps the temporary directory out of what the build is keyed
+	// on. The build cache also keeps what go run links, and without it every
+	// run looks like a new program there: each one is linked again and stored
+	// as another copy that nothing reuses. With it, the same inputs reuse the
+	// program already built.
+	args := []string{"run", "-trimpath", "-mod=mod", "-modfile", modFile}
 	if len(p.Overlay) > 0 {
 		overlayFile, overlayErr := writeOverlayFile(tempDir, p.Overlay)
 		if overlayErr != nil {
@@ -74,7 +85,7 @@ func (p ProjectProgram) Run() error {
 	}
 	// #nosec G204 -- every argument is either a literal flag or a path gg
 	// itself created under the os.MkdirTemp-owned directory.
-	runCmd := exec.Command("go", append(args, runnerFile)...)
+	runCmd := exec.Command("go", append(append(args, runnerFile), p.Args...)...)
 	runCmd.Stdout = stdout
 	runCmd.Stderr = os.Stderr
 	if p.Interactive {
