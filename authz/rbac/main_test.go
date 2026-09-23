@@ -16,12 +16,27 @@ import (
 // the in-memory set pair it with nullStorage and never write a row, so all it
 // has to do for them is begin and commit.
 func TestMain(m *testing.M) {
+	os.Exit(runTests(m))
+}
+
+// runTests wires the loggers and the database. os.Exit in TestMain would skip
+// the deferred removal of the log directory, hence the wrapper.
+func runTests(m *testing.M) int {
 	// Opening a transaction logs through logger.Database, and a failed in-memory
 	// update logs through logger.Authz. Both are nil until the loggers are wired.
 	// The process runs no config.Init, so the output is set here: file mode
-	// keeps the logs out of the test output.
+	// keeps the logs out of the test output, and a log directory of its own
+	// keeps them out of the package source tree: log files written there change
+	// with every run, which go's test cache takes for changed source in every
+	// test that reads or lists that tree.
+	logDir, err := os.MkdirTemp("", "gst_logs_")
+	if err != nil {
+		panic(err)
+	}
+	defer func() { _ = os.RemoveAll(logDir) }()
 	config.App.Logger.Output = config.LoggerOutputFile
-	if err := zaplogger.Init(); err != nil {
+	config.App.Logger.Dir = logDir
+	if err = zaplogger.Init(); err != nil {
 		panic(err)
 	}
 	db, err := gorm.Open(sqlite.Open("file::memory:?cache=shared"), &gorm.Config{TranslateError: true})
@@ -31,5 +46,5 @@ func TestMain(m *testing.M) {
 	// Assigned rather than installed through dbruntime.InitDatabase, which also
 	// starts the table builder. Tests needing a table create it themselves.
 	dbruntime.DB = db
-	os.Exit(m.Run())
+	return m.Run()
 }
