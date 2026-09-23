@@ -16,6 +16,8 @@ import (
 	"github.com/spf13/cobra"
 )
 
+// pruneCmd is gg prune; PRUNE.md next to this file lays out what it deletes,
+// what it keeps and the order it goes in.
 var pruneCmd = &cobra.Command{
 	Use:   "prune",
 	Short: "clean unused service files",
@@ -173,9 +175,14 @@ func removeEmptyServiceDirs(protect ggconfig.PruneConfig, ignore gghelper.Projec
 }
 
 // handleOrphanServiceDirs reports or cleans service directories no model
-// owns; see ggprune.FindOrphanDirs for the ownership rules.
+// owns; see ggprune.FindOrphanDirs for the ownership rules. When the project
+// cannot be read in full, it warns and leaves every directory alone.
 func handleOrphanServiceDirs(allModels []*gen.ModelInfo, keptDirs map[string]bool, modulePath string, protect ggconfig.PruneConfig, ignore gghelper.ProjectIgnore) {
-	orphans, keptHelpers := ggprune.FindOrphanDirs(allModels, keptDirs, modulePath, protect, ignore)
+	orphans, keptHelpers, err := ggprune.FindOrphanDirs(allModels, keptDirs, modulePath, protect, ignore)
+	if err != nil {
+		clioutput.Warn("", "failed to trace which service directories live code imports, so orphan service directories are not checked: %v", err)
+		return
+	}
 	reportKeptServiceHelperDirs(keptHelpers)
 	if len(orphans) == 0 {
 		return
@@ -206,14 +213,14 @@ func reportOrphanServiceDirs(section string, orphans []ggprune.OrphanDir) {
 }
 
 // reportKeptServiceHelperDirs explains why unmanaged helper directories
-// survived orphan cleanup: live service code still imports them.
+// survived orphan cleanup: live project code still imports them.
 func reportKeptServiceHelperDirs(keptHelpers []ggprune.OrphanDir) {
 	if len(keptHelpers) == 0 {
 		return
 	}
 	clioutput.Section("Service Helper Directories Kept")
 	for _, helper := range keptHelpers {
-		clioutput.Item("", "%s (imported by live service files)", helper.Path)
+		clioutput.Item("", "%s (imported by live project code)", helper.Path)
 	}
 }
 

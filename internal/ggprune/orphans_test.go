@@ -3,6 +3,7 @@ package ggprune_test
 import (
 	"os"
 	"path/filepath"
+	"slices"
 	"testing"
 
 	"github.com/hydroan/gst/consts"
@@ -23,7 +24,7 @@ import _ "tmpapp/service/adminauth"
 	writeProjectFile(t, filepath.Join("service", "adminauth", "adminauth.go"), `package adminauth
 `)
 
-	orphans, keptHelpers := ggprune.FindOrphanDirs([]*gen.ModelInfo{orphanPruneModel()}, nil, "tmpapp", ggconfig.PruneConfig{}, gghelper.NewProjectIgnore())
+	orphans, keptHelpers := findOrphanDirs(t, []*gen.ModelInfo{orphanPruneModel()}, nil, ggconfig.PruneConfig{})
 
 	if len(orphans) != 0 {
 		t.Fatalf("imported helper dir should not be an orphan, got %#v", orphans)
@@ -52,7 +53,7 @@ import _ "tmpapp/service/helperb"
 	writeProjectFile(t, filepath.Join("service", "helperb", "helperb.go"), `package helperb
 `)
 
-	orphans, keptHelpers := ggprune.FindOrphanDirs([]*gen.ModelInfo{orphanPruneModel()}, nil, "tmpapp", ggconfig.PruneConfig{}, gghelper.NewProjectIgnore())
+	orphans, keptHelpers := findOrphanDirs(t, []*gen.ModelInfo{orphanPruneModel()}, nil, ggconfig.PruneConfig{})
 
 	if len(orphans) != 0 {
 		t.Fatalf("transitively imported helper dirs should not be orphans, got %#v", orphans)
@@ -81,7 +82,7 @@ import _ "tmpapp/service/iam/adminauth"
 `)
 
 	keptDirs := map[string]bool{filepath.Join("service", "iam", "user"): true}
-	orphans, keptHelpers := ggprune.FindOrphanDirs(nil, keptDirs, "tmpapp", ggconfig.PruneConfig{}, gghelper.NewProjectIgnore())
+	orphans, keptHelpers := findOrphanDirs(t, nil, keptDirs, ggconfig.PruneConfig{})
 
 	if len(orphans) != 0 {
 		t.Fatalf("helper dir imported by kept service files should not be an orphan, got %#v", orphans)
@@ -89,6 +90,138 @@ import _ "tmpapp/service/iam/adminauth"
 	wantDir := filepath.Join("service", "iam", "adminauth")
 	if len(keptHelpers) != 1 || keptHelpers[0].Path != wantDir {
 		t.Fatalf("keptHelpers = %#v, want single dir %q", keptHelpers, wantDir)
+	}
+}
+
+// TestFindOrphanDirsKeepsHelperDirsImportedByLiveCode pins that any live
+// code of the project vouches for the service directory it imports, not only
+// the code of the directories models own: code outside the service directory,
+// a test file, the service root and a directory above a model's own or above
+// a kept helper's, and what prune.ignore keeps, down to a single file inside
+// an orphan. Deleting the directory would break the build, or the tests for a
+// test file.
+func TestFindOrphanDirsKeepsHelperDirsImportedByLiveCode(t *testing.T) {
+	importers := []struct {
+		name    string
+		path    string
+		pkg     string
+		protect []string
+		extra   map[string]string
+	}{
+		{name: "cronjob", path: filepath.Join("cronjob", "cleanup.go"), pkg: "cronjob"},
+		{name: "nested package", path: filepath.Join("internal", "task", "run.go"), pkg: "task"},
+		{name: "project root", path: "wire.go", pkg: "main"},
+		{name: "test file", path: filepath.Join("cronjob", "cleanup_test.go"), pkg: "cronjob"},
+		{name: "service root", path: filepath.Join("service", "hooks.go"), pkg: "service"},
+		{name: "directory above a model's", path: filepath.Join("service", "authz", "common.go"), pkg: "authz"},
+		{
+			name: "directory above a kept helper's",
+			path: filepath.Join("service", "legacy", "legacy.go"),
+			pkg:  "legacy",
+			extra: map[string]string{
+				filepath.Join("cronjob", "cleanup.go"):                "package cronjob\n\nimport _ \"tmpapp/service/legacy/util\"\n",
+				filepath.Join("service", "legacy", "util", "util.go"): "package util\n",
+			},
+		},
+		{name: "directory prune.ignore covers", path: filepath.Join("service", "legacy", "legacy.go"), pkg: "legacy", protect: []string{"service/legacy"}},
+		{
+			name:    "file prune.ignore covers in an orphan",
+			path:    filepath.Join("service", "legacy", "kept.go"),
+			pkg:     "legacy",
+			protect: []string{"service/legacy/kept.go"},
+			extra:   map[string]string{filepath.Join("service", "legacy", "util.go"): "package legacy\n"},
+		},
+	}
+	for _, importer := range importers {
+		t.Run(importer.name, func(t *testing.T) {
+			setupHelperImportProject(t)
+			for path, content := range importer.extra {
+				writeProjectFile(t, path, content)
+			}
+			writeProjectFile(t, importer.path, "package "+importer.pkg+"\n\nimport _ \"tmpapp/service/helper\"\n")
+
+			orphans, keptHelpers := findOrphanDirs(t, []*gen.ModelInfo{helperImportModel()}, nil, ggconfig.PruneConfig{Ignore: importer.protect})
+
+			wantDir := filepath.Join("service", "helper")
+			if slices.ContainsFunc(orphans, func(orphan ggprune.OrphanDir) bool { return orphan.Path == wantDir }) {
+				t.Fatalf("helper dir imported by %s should not be an orphan, got %#v", importer.path, orphans)
+			}
+			if !slices.ContainsFunc(keptHelpers, func(helper ggprune.OrphanDir) bool { return helper.Path == wantDir }) {
+				t.Fatalf("keptHelpers = %#v, want %q among them", keptHelpers, wantDir)
+			}
+		})
+	}
+}
+
+// TestFindOrphanDirsIgnoresImportsFromCodeThatIsNotLive pins what vouches for
+// nothing: the code gg's walks over the project leave out, as gg check's do
+// (testdata, vendor, hidden and Git ignored directories, nested modules); a
+// .gen.go file, whose imports follow the models it was generated from, so a
+// stale service.gen.go keeps nothing a deleted model left behind; and a
+// directory no model owns, or a leftover would keep the helper it imports.
+func TestFindOrphanDirsIgnoresImportsFromCodeThatIsNotLive(t *testing.T) {
+	importers := []struct {
+		name  string
+		path  string
+		pkg   string
+		extra map[string]string
+	}{
+		{name: "testdata", path: filepath.Join("testdata", "fixture.go"), pkg: "fixture"},
+		{name: "testdata in a model's service directory", path: filepath.Join("service", "authz", "role", "testdata", "fixture.go"), pkg: "fixture"},
+		{name: "vendor", path: filepath.Join("vendor", "example.com", "lib", "lib.go"), pkg: "lib"},
+		{name: "hidden directory", path: filepath.Join(".cache", "copy.go"), pkg: "cached"},
+		{name: "Git ignored directory", path: filepath.Join("scratch", "try.go"), pkg: "scratch", extra: map[string]string{".gitignore": "scratch/\n"}},
+		{name: "nested module", path: filepath.Join("tools", "main.go"), pkg: "main", extra: map[string]string{filepath.Join("tools", "go.mod"): "module tmpapp/tools\n\ngo 1.26\n"}},
+		{name: "generated file", path: filepath.Join("service", "service.gen.go"), pkg: "service"},
+		{name: "directory no model owns", path: filepath.Join("service", "leftover", "leftover.go"), pkg: "leftover"},
+	}
+	for _, importer := range importers {
+		t.Run(importer.name, func(t *testing.T) {
+			setupHelperImportProject(t)
+			for path, content := range importer.extra {
+				writeProjectFile(t, path, content)
+			}
+			writeProjectFile(t, importer.path, "package "+importer.pkg+"\n\nimport _ \"tmpapp/service/helper\"\n")
+
+			orphans, keptHelpers := findOrphanDirs(t, []*gen.ModelInfo{helperImportModel()}, nil, ggconfig.PruneConfig{})
+
+			wantDir := filepath.Join("service", "helper")
+			if !slices.ContainsFunc(orphans, func(orphan ggprune.OrphanDir) bool { return orphan.Path == wantDir }) {
+				t.Fatalf("orphans = %#v, want %q among them", orphans, wantDir)
+			}
+			if len(keptHelpers) != 0 {
+				t.Fatalf("an import from %s should keep nothing, got %#v", importer.path, keptHelpers)
+			}
+		})
+	}
+}
+
+// TestFindOrphanDirsFailsOnAnUnreadableDirectory pins that orphan detection
+// fails instead of guessing when part of the project cannot be read: an
+// import in the unread part might be all that keeps a directory.
+func TestFindOrphanDirsFailsOnAnUnreadableDirectory(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("root reads a directory whatever its permissions")
+	}
+	setupHelperImportProject(t)
+	writeProjectFile(t, filepath.Join("data", "job.go"), "package data\n\nimport _ \"tmpapp/service/helper\"\n")
+	locked, err := filepath.Abs("data")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = os.Chmod(locked, 0o000); err != nil {
+		t.Fatal(err)
+	}
+	// Give the permission back before the temporary directory is removed.
+	t.Cleanup(func() { _ = os.Chmod(locked, 0o755) })
+
+	orphans, keptHelpers, err := ggprune.FindOrphanDirs([]*gen.ModelInfo{helperImportModel()}, nil, "tmpapp", ggconfig.PruneConfig{}, gghelper.NewProjectIgnore())
+
+	if err == nil {
+		t.Fatal("FindOrphanDirs() error = nil, want one for the unreadable data directory")
+	}
+	if len(orphans) != 0 || len(keptHelpers) != 0 {
+		t.Fatalf("FindOrphanDirs() = %#v, %#v, want no directories alongside the error", orphans, keptHelpers)
 	}
 }
 
@@ -100,7 +233,7 @@ func TestFindOrphanDirsFlagsUnreferencedDirs(t *testing.T) {
 	writeProjectFile(t, filepath.Join("service", "leftover", "leftover.go"), `package leftover
 `)
 
-	orphans, keptHelpers := ggprune.FindOrphanDirs([]*gen.ModelInfo{orphanPruneModel()}, nil, "tmpapp", ggconfig.PruneConfig{}, gghelper.NewProjectIgnore())
+	orphans, keptHelpers := findOrphanDirs(t, []*gen.ModelInfo{orphanPruneModel()}, nil, ggconfig.PruneConfig{})
 
 	wantDir := filepath.Join("service", "leftover")
 	if len(orphans) != 1 || orphans[0].Path != wantDir {
@@ -128,7 +261,7 @@ func TestFindOrphanDirsLeavesOutWhatPruneIgnoreCovers(t *testing.T) {
 	writeProjectFile(t, filepath.Join("service", "legacy", "util.go"), "package legacy\n")
 	protect := ggconfig.PruneConfig{Ignore: []string{"service/kept", "service/legacy/helper.go"}}
 
-	orphans, _ := ggprune.FindOrphanDirs([]*gen.ModelInfo{orphanPruneModel()}, nil, "tmpapp", protect, gghelper.NewProjectIgnore())
+	orphans, _ := findOrphanDirs(t, []*gen.ModelInfo{orphanPruneModel()}, nil, protect)
 
 	wantDir := filepath.Join("service", "legacy")
 	if len(orphans) != 1 || orphans[0].Path != wantDir {
@@ -149,6 +282,29 @@ func setupOrphanPruneProject(t *testing.T) {
 	t.Chdir(projectDir)
 
 	writeProjectFile(t, "go.mod", "module tmpapp\n\ngo 1.26\n")
+}
+
+// findOrphanDirs runs ggprune.FindOrphanDirs over the test project, whose
+// module is tmpapp, failing the test on an error.
+func findOrphanDirs(t *testing.T, models []*gen.ModelInfo, keptDirs map[string]bool, protect ggconfig.PruneConfig) (orphans, keptHelpers []ggprune.OrphanDir) {
+	t.Helper()
+
+	orphans, keptHelpers, err := ggprune.FindOrphanDirs(models, keptDirs, "tmpapp", protect, gghelper.NewProjectIgnore())
+	if err != nil {
+		t.Fatal(err)
+	}
+	return orphans, keptHelpers
+}
+
+// setupHelperImportProject moves the test into a project where the model of
+// helperImportModel owns service/authz/role and no model owns service/helper,
+// for the test to import it from somewhere.
+func setupHelperImportProject(t *testing.T) {
+	t.Helper()
+
+	setupOrphanPruneProject(t)
+	writeProjectFile(t, filepath.Join("service", "authz", "role", "role.go"), "package role\n")
+	writeProjectFile(t, filepath.Join("service", "helper", "helper.go"), "package helper\n")
 }
 
 // writeProjectFile writes content to path, creating its parent directories.
@@ -198,4 +354,13 @@ func orphanPruneModel() *gen.ModelInfo {
 			SSE:        disabled(consts.PHASE_SSE),
 		},
 	}
+}
+
+// helperImportModel returns the model of orphanPruneModel with its service
+// file one level down, in service/authz/role, so that service/authz lies
+// between the service root and the directory the model owns.
+func helperImportModel() *gen.ModelInfo {
+	m := orphanPruneModel()
+	m.Design.Create.Flatten = false
+	return m
 }

@@ -3,7 +3,8 @@
 // unmanaged files of service directories no model owns, and the directories
 // that leaves empty. It never deletes what the gst.yaml prune.ignore entries
 // cover. Asking before deleting and printing what happened stay with the gg
-// command.
+// command. cmd/gg/PRUNE.md lays out the whole cleanup, step by step, with
+// flowcharts.
 package ggprune
 
 import (
@@ -131,7 +132,8 @@ func RemoveEmptyDirs(rootDir string, protect ggconfig.PruneConfig, ignore gghelp
 		}
 
 		if len(entries) == 0 {
-			// #nosec G122 -- path is under known project root (rootDir); we only remove empty dirs in codegen
+			// #nosec G122 -- dir comes from walking rootDir, and only a
+			// directory found empty reaches here.
 			if err := os.Remove(dir); err == nil {
 				report(dir)
 			}

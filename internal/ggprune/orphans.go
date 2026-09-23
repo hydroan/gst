@@ -10,6 +10,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/consts"
 	"github.com/hydroan/gst/dsl"
 	"github.com/hydroan/gst/internal/codegen/gen"
@@ -25,7 +26,7 @@ type serviceDirSet struct {
 
 // OrphanDir is a service directory no model owns, with the unmanaged files in
 // it: the files cleaning it deletes, or, for a helper directory kept because
-// live service code imports it, the files it holds.
+// live project code imports it, the files it holds.
 type OrphanDir struct {
 	Path  string
 	Files []string
@@ -202,10 +203,12 @@ func isManagedServiceFile(path string) bool {
 
 // FindOrphanDirs resolves service directory ownership and returns
 // the orphan directories plus the helper directories kept because live
-// service code still imports them. Directories in keptDirs hold service files
+// project code still imports them. Directories in keptDirs hold service files
 // of gst.yaml-ignored actions and are treated as owned; keptDirs may be nil.
 // What the gst.yaml prune.ignore entries in protect cover is never an orphan.
-func FindOrphanDirs(allModels []*gen.ModelInfo, keptDirs map[string]bool, modulePath string, protect ggconfig.PruneConfig, ignore gghelper.ProjectIgnore) (orphans, keptHelpers []OrphanDir) {
+// It returns an error, and no directories, when part of the project cannot be
+// read: an import it could not see might be all that keeps a directory.
+func FindOrphanDirs(allModels []*gen.ModelInfo, keptDirs map[string]bool, modulePath string, protect ggconfig.PruneConfig, ignore gghelper.ProjectIgnore) (orphans, keptHelpers []OrphanDir, err error) {
 	currentDirs := currentServiceDirs(allModels)
 	for dir := range keptDirs {
 		currentDirs.ModelDirs = append(currentDirs.ModelDirs, dir)
@@ -213,7 +216,10 @@ func FindOrphanDirs(allModels []*gen.ModelInfo, keptDirs map[string]bool, module
 	}
 	sort.Strings(currentDirs.ModelDirs)
 
-	helperDirs := importedServiceHelperDirs(currentDirs, modulePath, ignore)
+	helperDirs, err := importedServiceHelperDirs(currentDirs, modulePath, protect, ignore)
+	if err != nil {
+		return nil, nil, err
+	}
 	keptHelpers = make([]OrphanDir, 0, len(helperDirs))
 	for _, dir := range helperDirs {
 		keptHelpers = append(keptHelpers, OrphanDir{
@@ -226,30 +232,36 @@ func FindOrphanDirs(allModels []*gen.ModelInfo, keptDirs map[string]bool, module
 	sort.Strings(currentDirs.ModelDirs)
 
 	orphans = scanOrphanServiceDirs(currentDirs, protect, ignore)
-	return orphans, keptHelpers
+	return orphans, keptHelpers, nil
 }
 
-// importedServiceHelperDirs returns service directories that no model action
-// owns but live service code under the owned directories still imports,
-// directly or transitively. modulePath is the project's, which the command
-// read before generating. Module copy installs such shared helper packages
-// (for example iam/adminauth); deleting them would break the build, so orphan
-// cleanup must treat them as owned.
-func importedServiceHelperDirs(currentDirs serviceDirSet, modulePath string, ignore gghelper.ProjectIgnore) []string {
+// importedServiceHelperDirs returns the service directories no model action
+// owns but live project code still imports, directly or transitively.
+// modulePath is the project's, which the command read before generating.
+// Module copy installs such shared helper packages (for example
+// iam/adminauth), and a cronjob or a middleware may import one as well;
+// deleting them would break the build, so orphan cleanup must treat them as
+// owned.
+//
+// Live code is every Go file of the project, test files included, but for the
+// .gen.go files gg generates, whose imports follow the models they were
+// generated from, and the files of the service directories no model owns. A
+// file of such a directory turns live once live code imports the directory,
+// once it sits right in a directory between an imported one and the service
+// root, which orphan cleanup leaves alone, or when a gst.yaml prune.ignore
+// entry in protect covers it: prune deletes none of them. So a stale
+// service/service.gen.go keeps nothing a deleted model left behind, and a
+// leftover keeps nothing it imports. What the project's code walks leave out
+// holds no live code: the directories gghelper.ExcludedDir names and the
+// paths the Git ignore rules exclude.
+func importedServiceHelperDirs(currentDirs serviceDirSet, modulePath string, protect ggconfig.PruneConfig, ignore gghelper.ProjectIgnore) ([]string, error) {
 	importPrefix := modulePath + "/" + filepath.ToSlash(filepath.Clean(ggconst.DirService))
+	serviceRoot := filepath.Clean(ggconst.DirService)
 
 	helperDirs := make([]string, 0)
 	helperDirSet := make(map[string]bool)
-	scanned := make(map[string]bool)
-	scanQueue := make([]string, 0, len(currentDirs.ModelDirs))
-	for _, dir := range currentDirs.ModelDirs {
-		if !scanned[dir] {
-			scanned[dir] = true
-			scanQueue = append(scanQueue, dir)
-		}
-	}
-
-	ownedOrDiscovered := func(dir string) bool {
+	helperAncestors := make(map[string]bool)
+	owned := func(dir string) bool {
 		if currentDirs.KnownDirs[dir] || helperDirSet[dir] {
 			return true
 		}
@@ -258,35 +270,73 @@ func importedServiceHelperDirs(currentDirs serviceDirSet, modulePath string, ign
 		}
 		return isUnderCurrentModelServiceDir(dir, helperDirs)
 	}
+	live := func(path string) bool {
+		if strings.HasSuffix(path, ggconst.SuffixGenGo) {
+			return false
+		}
+		dir := filepath.Dir(path)
+		return !isPathInsideDir(dir, serviceRoot) || owned(dir) || helperAncestors[dir] || protect.Ignores(path)
+	}
 
-	for len(scanQueue) > 0 {
-		current := scanQueue[0]
-		scanQueue = scanQueue[1:]
-		for _, dir := range importedServiceDirsUnderDir(current, importPrefix, ignore) {
-			if ownedOrDiscovered(dir) || scanned[dir] {
-				continue
+	queue, err := importedServiceDirsUnderDir(".", importPrefix, live, ignore)
+	if err != nil {
+		return nil, err
+	}
+	for len(queue) > 0 {
+		dir := queue[0]
+		queue = queue[1:]
+		if owned(dir) {
+			continue
+		}
+		helperDirSet[dir] = true
+		helperDirs = append(helperDirs, dir)
+		imported, err := importedServiceDirsUnderDir(dir, importPrefix, live, ignore)
+		if err != nil {
+			return nil, err
+		}
+		queue = append(queue, imported...)
+
+		// The files right in the directories between the helper and the
+		// service root turn live with it; the walk below each directory reads
+		// only those, its subdirectories being settled on their own.
+		for parent := filepath.Dir(dir); !owned(parent) && !helperAncestors[parent]; parent = filepath.Dir(parent) {
+			helperAncestors[parent] = true
+			imported, err := importedServiceDirsUnderDir(parent, importPrefix, func(path string) bool {
+				return filepath.Dir(path) == parent && live(path)
+			}, ignore)
+			if err != nil {
+				return nil, err
 			}
-			helperDirSet[dir] = true
-			helperDirs = append(helperDirs, dir)
-			scanned[dir] = true
-			scanQueue = append(scanQueue, dir)
+			queue = append(queue, imported...)
 		}
 	}
 
 	sort.Strings(helperDirs)
-	return helperDirs
+	return helperDirs, nil
 }
 
-// importedServiceDirsUnderDir parses the imports of every Go file under dir
-// and returns the service directories referenced through project-local
-// service imports. Files that fail to parse are skipped.
-func importedServiceDirsUnderDir(dir string, importPrefix string, ignore gghelper.ProjectIgnore) []string {
+// importedServiceDirsUnderDir parses the imports of the Go files under dir
+// that live accepts and returns the service directories referenced through
+// project-local service imports. It walks dir the way gg walks the project's
+// code, leaving out what gghelper.ExcludedDir names; a dir that does not exist
+// imports nothing, and any other walk error comes back. Files that fail to
+// parse are skipped.
+func importedServiceDirsUnderDir(dir string, importPrefix string, live func(path string) bool, ignore gghelper.ProjectIgnore) ([]string, error) {
 	dirs := make([]string, 0)
+	if !gghelper.FileExists(dir) {
+		return dirs, nil
+	}
 	seen := make(map[string]bool)
 	fset := token.NewFileSet()
 
-	_ = ignore.Walk(dir, func(path string, info os.FileInfo) error {
-		if info.IsDir() || !strings.HasSuffix(path, ".go") {
+	err := ignore.Walk(dir, func(path string, info os.FileInfo) error {
+		if info.IsDir() {
+			if gghelper.ExcludedDir(dir, path) {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if !strings.HasSuffix(path, ".go") || !live(path) {
 			return nil
 		}
 		file, err := parser.ParseFile(fset, path, nil, parser.ImportsOnly)
@@ -308,9 +358,12 @@ func importedServiceDirsUnderDir(dir string, importPrefix string, ignore gghelpe
 		}
 		return nil
 	})
+	if err != nil {
+		return nil, errors.Wrapf(err, "read the Go files under %s", dir)
+	}
 
 	sort.Strings(dirs)
-	return dirs
+	return dirs, nil
 }
 
 // serviceDirForImport maps a project-local service import path to the service
