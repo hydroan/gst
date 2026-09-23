@@ -110,12 +110,12 @@ testplacement:
 # DIALECT_PACKAGES must behave the same on every supported dialect -- the
 # database package, and the capabilities built on its leases -- so their
 # suites run once per dialect: the full run already covers MySQL (their
-# TestMain default), and the remaining dialects repeat them through
-# GST_TEST_DATABASE, a variable that TestMain reads on its own -- the public
-# testutil knows nothing about it. Those repeat runs carry -count=1 on purpose:
-# TestMain reads the variable before m.Run installs the test log, so go's test
-# cache never records it, and without -count=1 every dialect would replay the
-# cached MySQL result and the matrix would silently stop running.
+# TestMain default), and the remaining dialects repeat them under the build
+# tag naming the dialect, which only internal/testutil reads -- the public
+# testutil knows nothing about it. A tag makes each dialect a test binary of
+# its own, so go's test cache keeps a result per dialect and replays each one
+# only while nothing its suite depends on has changed (see
+# testutil.DatabaseUnderTest).
 # Every run carries the race detector, through TEST_FLAGS. The framework runs
 # the concurrency a project relies on -- renewal goroutines, campaign loops,
 # scheduler loops, component and lifecycle startup -- and a data race there
@@ -137,9 +137,9 @@ test:
 	@echo "Running unit tests (the per-dialect suites run against mysql here)..."
 	go test $(TEST_FLAGS) ./...
 	@echo "Running the per-dialect suites against postgres..."
-	GST_TEST_DATABASE=postgres go test -count=1 $(TEST_FLAGS) $(DIALECT_PACKAGES)
+	go test $(TEST_FLAGS) -tags gsttest_postgres $(DIALECT_PACKAGES)
 	@echo "Running the per-dialect suites against sqlite..."
-	GST_TEST_DATABASE=sqlite go test -count=1 $(TEST_FLAGS) $(DIALECT_PACKAGES)
+	go test $(TEST_FLAGS) -tags gsttest_sqlite $(DIALECT_PACKAGES)
 	@echo "Running example project tests..."
 	go -C examples/demo test $(TEST_FLAGS) ./...
 	go -C examples/cluster test $(TEST_FLAGS) ./...
@@ -149,9 +149,9 @@ testv:
 	@echo "Running unit tests with verbose output (the per-dialect suites run against mysql here)..."
 	go test $(TEST_FLAGS) -v ./...
 	@echo "Running the per-dialect suites against postgres with verbose output..."
-	GST_TEST_DATABASE=postgres go test -count=1 $(TEST_FLAGS) -v $(DIALECT_PACKAGES)
+	go test $(TEST_FLAGS) -v -tags gsttest_postgres $(DIALECT_PACKAGES)
 	@echo "Running the per-dialect suites against sqlite with verbose output..."
-	GST_TEST_DATABASE=sqlite go test -count=1 $(TEST_FLAGS) -v $(DIALECT_PACKAGES)
+	go test $(TEST_FLAGS) -v -tags gsttest_sqlite $(DIALECT_PACKAGES)
 	@echo "Running example project tests with verbose output..."
 	go -C examples/demo test $(TEST_FLAGS) -v ./...
 	go -C examples/cluster test $(TEST_FLAGS) -v ./...

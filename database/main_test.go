@@ -8,8 +8,9 @@ import (
 )
 
 // TestMain runs the suite against the dialect under test — MySQL, the
-// framework's primary dialect, unless GST_TEST_DATABASE names another; the
-// Makefile test target repeats the package once per dialect. Every test in
+// framework's primary dialect, unless a build tag names another (see
+// testutil.DatabaseUnderTest); the Makefile test target repeats the package
+// once per dialect. Every test in
 // this package must either behave identically across dialects or branch on
 // config.App.Database.Type where a per-dialect contract differs (the Upsert
 // collision test is the pattern). A dialect broken by an open bug takes a
