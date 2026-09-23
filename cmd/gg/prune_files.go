@@ -10,6 +10,7 @@ import (
 	"github.com/hydroan/gst/dsl"
 	"github.com/hydroan/gst/internal/clioutput"
 	"github.com/hydroan/gst/internal/codegen/gen"
+	"github.com/hydroan/gst/internal/ggconfig"
 	"github.com/hydroan/gst/internal/ggconst"
 	"github.com/hydroan/gst/internal/gghelper"
 )
@@ -50,39 +51,50 @@ func scanExistingServiceFiles(serviceDir string, ignore gghelper.ProjectIgnore) 
 	return files
 }
 
-// filterIgnoredFiles filters out files that match any ignore pattern.
-// Supports both string matching (contains) and regex matching.
-// Returns filtered files and ignored files.
-func filterIgnoredFiles(files []string, ignorePatterns []string) (filtered []string, ignored []string) {
-	if len(ignorePatterns) == 0 {
-		return files, []string{}
-	}
-
+// filterIgnoredFiles splits files into the ones prune may delete and the ones
+// a gst.yaml prune.ignore entry in protect covers.
+func filterIgnoredFiles(files []string, protect ggconfig.PruneConfig) (filtered []string, ignored []string) {
 	for _, file := range files {
-		shouldIgnore := false
-
-		for _, pattern := range ignorePatterns {
-			if matchesPrunePattern(file, pattern) {
-				shouldIgnore = true
-				break
-			}
-		}
-
-		if shouldIgnore {
+		if protect.Ignores(file) {
 			ignored = append(ignored, file)
 		} else {
 			filtered = append(filtered, file)
 		}
 	}
-
 	return filtered, ignored
+}
+
+// warnMissingPruneIgnore warns about the gst.yaml prune.ignore entries naming
+// no file or directory, usually left behind by a rename; like the other
+// gst.yaml warnings, it does not stop the run.
+func warnMissingPruneIgnore(protect ggconfig.PruneConfig) {
+	for _, entry := range protect.Ignore {
+		if _, err := os.Stat(entry); os.IsNotExist(err) {
+			clioutput.Warn("", "gst.yaml prune.ignore entry %q names no file or directory", entry)
+		}
+	}
+}
+
+// remindUnreadPruneSettings repeats, right before prune asks to delete, that
+// an old .gg.yaml protects nothing: the warning printed when gst.yaml was
+// read may have scrolled away by then.
+func remindUnreadPruneSettings() {
+	for _, name := range ggconfig.UnreadFiles(".") {
+		if isLegacyPruneSettings(name) {
+			clioutput.Warn("", "%s is not read, so the paths it lists are not protected here; move them into %s under prune.ignore", name, ggconfig.FileName)
+		}
+	}
 }
 
 // pruneServiceFiles prunes disabled service files. Files in keptFiles belong
 // to gst.yaml-ignored actions: they no longer appear in the generated
 // registrations but must stay on disk, so they are never deletion candidates.
 // keptDirs protects their directories from orphan cleanup; both may be nil.
-func pruneServiceFiles(oldServiceFiles []string, allModels []*gen.ModelInfo, keptFiles, keptDirs map[string]bool, ignore gghelper.ProjectIgnore) {
+// The paths the gst.yaml prune.ignore entries in protect cover are never
+// deleted: not as disabled files, not as orphans, not as empty directories.
+func pruneServiceFiles(oldServiceFiles []string, allModels []*gen.ModelInfo, keptFiles, keptDirs map[string]bool, protect ggconfig.PruneConfig, ignore gghelper.ProjectIgnore) {
+	warnMissingPruneIgnore(protect)
+
 	// Get list of service files that should currently exist
 	currentFiles := currentServiceFiles(allModels)
 
@@ -94,12 +106,8 @@ func pruneServiceFiles(oldServiceFiles []string, allModels []*gen.ModelInfo, kep
 		}
 	}
 
-	// Apply ignore patterns from config
-	ignorePatterns := getPruneIgnorePatterns()
-	var ignoredFiles []string
-	if len(ignorePatterns) > 0 {
-		filesToDelete, ignoredFiles = filterIgnoredFiles(filesToDelete, ignorePatterns)
-	}
+	// Keep the files gst.yaml prune.ignore protects
+	filesToDelete, ignoredFiles := filterIgnoredFiles(filesToDelete, protect)
 
 	// Display ignored files if any
 	if len(ignoredFiles) > 0 {
@@ -116,8 +124,8 @@ func pruneServiceFiles(oldServiceFiles []string, allModels []*gen.ModelInfo, kep
 			clioutput.Success("", "No disabled service files to prune")
 		}
 		// Still check for empty directories even if no files to delete
-		removeEmptyDirectories(ggconst.DirService, ignore)
-		handleOrphanServiceDirs(allModels, keptDirs, module, ignore)
+		removeEmptyDirectories(ggconst.DirService, protect, ignore)
+		handleOrphanServiceDirs(allModels, keptDirs, module, protect, ignore)
 		return
 	}
 
@@ -128,6 +136,7 @@ func pruneServiceFiles(oldServiceFiles []string, allModels []*gen.ModelInfo, kep
 	}
 
 	// Ask user for confirmation
+	remindUnreadPruneSettings()
 	clioutput.Prompt("Do you want to delete these files? (y/N): ")
 	var response string
 	_, _ = fmt.Scanln(&response)
@@ -148,8 +157,8 @@ func pruneServiceFiles(oldServiceFiles []string, allModels []*gen.ModelInfo, kep
 	}
 
 	// Remove empty directories after deleting files
-	removeEmptyDirectories(ggconst.DirService, ignore)
-	handleOrphanServiceDirs(allModels, keptDirs, module, ignore)
+	removeEmptyDirectories(ggconst.DirService, protect, ignore)
+	handleOrphanServiceDirs(allModels, keptDirs, module, protect, ignore)
 }
 
 func currentServiceFiles(allModels []*gen.ModelInfo) map[string]bool {
@@ -165,11 +174,12 @@ func currentServiceFiles(allModels []*gen.ModelInfo) map[string]bool {
 	return current
 }
 
-// removeEmptyDirectories removes empty child directories below the given root directory.
-func removeEmptyDirectories(rootDir string, ignore gghelper.ProjectIgnore) {
+// removeEmptyDirectories removes the empty directories below rootDir, deepest
+// first, keeping those a gst.yaml prune.ignore entry in protect covers.
+func removeEmptyDirectories(rootDir string, protect ggconfig.PruneConfig, ignore gghelper.ProjectIgnore) {
 	dirs := make([]string, 0)
 	_ = ignore.Walk(rootDir, func(path string, info os.FileInfo) error {
-		if path == rootDir || !info.IsDir() {
+		if path == rootDir || !info.IsDir() || protect.Ignores(path) {
 			return nil
 		}
 

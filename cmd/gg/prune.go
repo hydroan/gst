@@ -32,6 +32,9 @@ func pruneRun() {
 		os.Exit(1)
 	}
 
+	projectCfg, err := loadProjectConfig()
+	checkErr(err)
+
 	// Scan all models
 	clioutput.Section("Scan Models")
 	allModels, err := codegen.FindModels(module, ggconst.DirModel, ignore)
@@ -51,7 +54,7 @@ func pruneRun() {
 
 	// Prune disabled service files
 	clioutput.Section("Prune Disabled Service Files")
-	pruneServiceFiles(oldServiceFiles, allModels, nil, nil, ignore)
+	pruneServiceFiles(oldServiceFiles, allModels, nil, nil, projectCfg.Prune, ignore)
 
 	clioutput.Done("Code pruning completed successfully!")
 }

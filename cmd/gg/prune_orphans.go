@@ -6,7 +6,7 @@ import (
 	"go/token"
 	"os"
 	"path/filepath"
-	"regexp"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -15,6 +15,7 @@ import (
 	"github.com/hydroan/gst/dsl"
 	"github.com/hydroan/gst/internal/clioutput"
 	"github.com/hydroan/gst/internal/codegen/gen"
+	"github.com/hydroan/gst/internal/ggconfig"
 	"github.com/hydroan/gst/internal/ggconst"
 	"github.com/hydroan/gst/internal/gghelper"
 )
@@ -47,13 +48,6 @@ func validServicePhaseFiles() map[string]bool {
 		consts.PHASE_EXPORT.Filename():      true,
 		consts.PHASE_SSE.Filename():         true,
 	}
-}
-
-func matchesPrunePattern(path string, pattern string) bool {
-	if matched, err := regexp.MatchString(pattern, path); err == nil && matched {
-		return true
-	}
-	return strings.Contains(path, pattern)
 }
 
 func currentServiceDirs(allModels []*gen.ModelInfo) serviceDirSet {
@@ -100,7 +94,7 @@ func addServiceDirAncestors(knownDirs map[string]bool, dir string) {
 	}
 }
 
-func scanOrphanServiceDirs(currentDirs serviceDirSet, ignorePatterns []string, ignore gghelper.ProjectIgnore) []orphanServiceDir {
+func scanOrphanServiceDirs(currentDirs serviceDirSet, protect ggconfig.PruneConfig, ignore gghelper.ProjectIgnore) []orphanServiceDir {
 	root := filepath.Clean(ggconst.DirService)
 	dirs := make([]string, 0)
 
@@ -130,11 +124,14 @@ func scanOrphanServiceDirs(currentDirs serviceDirSet, ignorePatterns []string, i
 		if currentDirs.KnownDirs[dir] || isUnderCurrentModelServiceDir(dir, currentDirs.ModelDirs) || isUnderOrphanServiceDir(dir, orphans) {
 			continue
 		}
-		if ignoredByPrunePatterns(dir, ignorePatterns) {
+		if protect.Ignores(dir) {
 			continue
 		}
 
-		files := unmanagedFilesUnderDir(dir, ignore)
+		// A file prune.ignore covers stays out of the orphan's files, so
+		// cleaning the orphan leaves it, and a directory whose unmanaged
+		// files are all covered is no orphan at all.
+		files := slices.DeleteFunc(unmanagedFilesUnderDir(dir, ignore), protect.Ignores)
 		if len(files) == 0 {
 			continue
 		}
@@ -146,15 +143,6 @@ func scanOrphanServiceDirs(currentDirs serviceDirSet, ignorePatterns []string, i
 	}
 
 	return orphans
-}
-
-func ignoredByPrunePatterns(path string, patterns []string) bool {
-	for _, pattern := range patterns {
-		if matchesPrunePattern(path, pattern) {
-			return true
-		}
-	}
-	return false
 }
 
 func isUnderCurrentModelServiceDir(dir string, modelDirs []string) bool {
@@ -217,7 +205,8 @@ func isManagedServiceFile(path string) bool {
 // the orphan directories plus the helper directories kept because live
 // service code still imports them. Directories in keptDirs hold service files
 // of gst.yaml-ignored actions and are treated as owned; keptDirs may be nil.
-func collectOrphanServiceDirs(allModels []*gen.ModelInfo, keptDirs map[string]bool, modulePath string, ignore gghelper.ProjectIgnore) (orphans, keptHelpers []orphanServiceDir) {
+// What the gst.yaml prune.ignore entries in protect cover is never an orphan.
+func collectOrphanServiceDirs(allModels []*gen.ModelInfo, keptDirs map[string]bool, modulePath string, protect ggconfig.PruneConfig, ignore gghelper.ProjectIgnore) (orphans, keptHelpers []orphanServiceDir) {
 	currentDirs := currentServiceDirs(allModels)
 	for dir := range keptDirs {
 		currentDirs.ModelDirs = append(currentDirs.ModelDirs, dir)
@@ -237,7 +226,7 @@ func collectOrphanServiceDirs(allModels []*gen.ModelInfo, keptDirs map[string]bo
 	}
 	sort.Strings(currentDirs.ModelDirs)
 
-	orphans = scanOrphanServiceDirs(currentDirs, getPruneOrphanIgnorePatterns(), ignore)
+	orphans = scanOrphanServiceDirs(currentDirs, protect, ignore)
 	return orphans, keptHelpers
 }
 
@@ -337,8 +326,8 @@ func serviceDirForImport(importPath string, importPrefix string) (string, bool) 
 
 // handleOrphanServiceDirs reports or cleans service directories no model
 // owns; see collectOrphanServiceDirs for the ownership rules.
-func handleOrphanServiceDirs(allModels []*gen.ModelInfo, keptDirs map[string]bool, modulePath string, ignore gghelper.ProjectIgnore) {
-	orphans, keptHelpers := collectOrphanServiceDirs(allModels, keptDirs, modulePath, ignore)
+func handleOrphanServiceDirs(allModels []*gen.ModelInfo, keptDirs map[string]bool, modulePath string, protect ggconfig.PruneConfig, ignore gghelper.ProjectIgnore) {
+	orphans, keptHelpers := collectOrphanServiceDirs(allModels, keptDirs, modulePath, protect, ignore)
 	reportKeptServiceHelperDirs(keptHelpers)
 	if len(orphans) == 0 {
 		return
@@ -346,11 +335,12 @@ func handleOrphanServiceDirs(allModels []*gen.ModelInfo, keptDirs map[string]boo
 
 	if cleanOrphans {
 		reportOrphanServiceDirs("Unmanaged Orphan Service Directories", orphans)
+		remindUnreadPruneSettings()
 		if !confirmCleanOrphanServiceDirs() {
 			clioutput.Item("", "Orphan service directory cleanup canceled")
 			return
 		}
-		cleanOrphanServiceDirs(orphans, ignore)
+		cleanOrphanServiceDirs(orphans, protect, ignore)
 		return
 	}
 
@@ -391,7 +381,7 @@ func confirmCleanOrphanServiceDirs() bool {
 	return strings.TrimSpace(response) == cleanOrphansConfirmation
 }
 
-func cleanOrphanServiceDirs(orphans []orphanServiceDir, ignore gghelper.ProjectIgnore) {
+func cleanOrphanServiceDirs(orphans []orphanServiceDir, protect ggconfig.PruneConfig, ignore gghelper.ProjectIgnore) {
 	for _, orphan := range orphans {
 		for _, file := range orphan.Files {
 			if err := os.Remove(file); err != nil {
@@ -401,5 +391,5 @@ func cleanOrphanServiceDirs(orphans []orphanServiceDir, ignore gghelper.ProjectI
 			}
 		}
 	}
-	removeEmptyDirectories(ggconst.DirService, ignore)
+	removeEmptyDirectories(ggconst.DirService, protect, ignore)
 }

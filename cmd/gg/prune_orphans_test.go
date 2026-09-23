@@ -8,6 +8,7 @@ import (
 	"github.com/hydroan/gst/consts"
 	"github.com/hydroan/gst/dsl"
 	"github.com/hydroan/gst/internal/codegen/gen"
+	"github.com/hydroan/gst/internal/ggconfig"
 	"github.com/hydroan/gst/internal/gghelper"
 )
 
@@ -21,7 +22,7 @@ import _ "tmpapp/service/adminauth"
 	writeOrphanPruneFile(t, filepath.Join("service", "adminauth", "adminauth.go"), `package adminauth
 `)
 
-	orphans, keptHelpers := collectOrphanServiceDirs([]*gen.ModelInfo{orphanPruneModel()}, nil, "tmpapp", gghelper.NewProjectIgnore())
+	orphans, keptHelpers := collectOrphanServiceDirs([]*gen.ModelInfo{orphanPruneModel()}, nil, "tmpapp", ggconfig.PruneConfig{}, gghelper.NewProjectIgnore())
 
 	if len(orphans) != 0 {
 		t.Fatalf("imported helper dir should not be an orphan, got %#v", orphans)
@@ -50,7 +51,7 @@ import _ "tmpapp/service/helperb"
 	writeOrphanPruneFile(t, filepath.Join("service", "helperb", "helperb.go"), `package helperb
 `)
 
-	orphans, keptHelpers := collectOrphanServiceDirs([]*gen.ModelInfo{orphanPruneModel()}, nil, "tmpapp", gghelper.NewProjectIgnore())
+	orphans, keptHelpers := collectOrphanServiceDirs([]*gen.ModelInfo{orphanPruneModel()}, nil, "tmpapp", ggconfig.PruneConfig{}, gghelper.NewProjectIgnore())
 
 	if len(orphans) != 0 {
 		t.Fatalf("transitively imported helper dirs should not be orphans, got %#v", orphans)
@@ -79,7 +80,7 @@ import _ "tmpapp/service/iam/adminauth"
 `)
 
 	keptDirs := map[string]bool{filepath.Join("service", "iam", "user"): true}
-	orphans, keptHelpers := collectOrphanServiceDirs(nil, keptDirs, "tmpapp", gghelper.NewProjectIgnore())
+	orphans, keptHelpers := collectOrphanServiceDirs(nil, keptDirs, "tmpapp", ggconfig.PruneConfig{}, gghelper.NewProjectIgnore())
 
 	if len(orphans) != 0 {
 		t.Fatalf("helper dir imported by kept service files should not be an orphan, got %#v", orphans)
@@ -98,7 +99,7 @@ func TestCollectOrphanServiceDirsFlagsUnreferencedDirs(t *testing.T) {
 	writeOrphanPruneFile(t, filepath.Join("service", "leftover", "leftover.go"), `package leftover
 `)
 
-	orphans, keptHelpers := collectOrphanServiceDirs([]*gen.ModelInfo{orphanPruneModel()}, nil, "tmpapp", gghelper.NewProjectIgnore())
+	orphans, keptHelpers := collectOrphanServiceDirs([]*gen.ModelInfo{orphanPruneModel()}, nil, "tmpapp", ggconfig.PruneConfig{}, gghelper.NewProjectIgnore())
 
 	wantDir := filepath.Join("service", "leftover")
 	if len(orphans) != 1 || orphans[0].Path != wantDir {
@@ -110,6 +111,31 @@ func TestCollectOrphanServiceDirsFlagsUnreferencedDirs(t *testing.T) {
 	}
 	if len(keptHelpers) != 0 {
 		t.Fatalf("unreferenced dir should not be reported as kept helper, got %#v", keptHelpers)
+	}
+}
+
+// TestCollectOrphanServiceDirsLeavesOutWhatPruneIgnoreCovers pins that a
+// gst.yaml prune.ignore entry keeps what it covers out of orphan cleanup: a
+// covered directory is no orphan, and a covered file inside an orphan stays
+// out of the files cleaning the orphan deletes.
+func TestCollectOrphanServiceDirsLeavesOutWhatPruneIgnoreCovers(t *testing.T) {
+	setupOrphanPruneProject(t)
+
+	writeOrphanPruneFile(t, filepath.Join("service", "authz", "role.go"), "package authz\n")
+	writeOrphanPruneFile(t, filepath.Join("service", "kept", "kept.go"), "package kept\n")
+	writeOrphanPruneFile(t, filepath.Join("service", "legacy", "helper.go"), "package legacy\n")
+	writeOrphanPruneFile(t, filepath.Join("service", "legacy", "util.go"), "package legacy\n")
+	protect := ggconfig.PruneConfig{Ignore: []string{"service/kept", "service/legacy/helper.go"}}
+
+	orphans, _ := collectOrphanServiceDirs([]*gen.ModelInfo{orphanPruneModel()}, nil, "tmpapp", protect, gghelper.NewProjectIgnore())
+
+	wantDir := filepath.Join("service", "legacy")
+	if len(orphans) != 1 || orphans[0].Path != wantDir {
+		t.Fatalf("orphans = %#v, want single dir %q", orphans, wantDir)
+	}
+	wantFile := filepath.Join(wantDir, "util.go")
+	if len(orphans[0].Files) != 1 || orphans[0].Files[0] != wantFile {
+		t.Fatalf("orphans[0].Files = %#v, want [%s]", orphans[0].Files, wantFile)
 	}
 }
 

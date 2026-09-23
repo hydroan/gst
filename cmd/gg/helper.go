@@ -2,11 +2,34 @@ package main
 
 import (
 	"os"
+	"strings"
 
 	"github.com/hydroan/gst/internal/clioutput"
+	"github.com/hydroan/gst/internal/ggconfig"
 	"github.com/hydroan/gst/internal/ggconst"
 	"github.com/hydroan/gst/internal/gghelper"
 )
+
+// loadProjectConfig reads gst.yaml from the project in the working directory,
+// after warning about each file next to it that looks like gg configuration
+// but is not read, so a setting written into one of them is not lost without
+// a word.
+func loadProjectConfig() (*ggconfig.Config, error) {
+	for _, name := range ggconfig.UnreadFiles(".") {
+		if isLegacyPruneSettings(name) {
+			clioutput.Warn("", "gg no longer reads %s: move its prune.ignore and prune.orphan_ignore entries into %s under prune.ignore, written as paths (directory prefixes, not regular expressions)", name, ggconfig.FileName)
+			continue
+		}
+		clioutput.Warn("", "gg reads only %s, not %s: rename it, or merge it into %s when both exist", ggconfig.FileName, name, ggconfig.FileName)
+	}
+	return ggconfig.Load(".")
+}
+
+// isLegacyPruneSettings reports whether name is the prune settings file of
+// earlier gg releases, .gg.yaml or .gg.yml.
+func isLegacyPruneSettings(name string) bool {
+	return strings.HasPrefix(name, ".gg.")
+}
 
 func checkErr(err error) {
 	if err == nil {

@@ -123,7 +123,7 @@ func TestRouteIgnoresKeepServiceFilesForPrune(t *testing.T) {
 	if err := os.WriteFile(signupServiceFile, []byte("package account\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	pruneServiceFiles([]string{signupServiceFile}, allModels, result.KeptServiceFiles, result.KeptServiceDirs, gghelper.NewProjectIgnore())
+	pruneServiceFiles([]string{signupServiceFile}, allModels, result.KeptServiceFiles, result.KeptServiceDirs, ggconfig.PruneConfig{}, gghelper.NewProjectIgnore())
 	if _, err := os.Stat(signupServiceFile); err != nil {
 		t.Fatalf("ignored action's service file should survive prune: %v", err)
 	}
@@ -213,4 +213,45 @@ func collectActions(design *dsl.Design) []*dsl.Action {
 		actions = append(actions, act)
 	})
 	return actions
+}
+
+// TestGenRunWarnsAboutConfigFilesItDoesNotRead pins that gg gen names every
+// file next to gst.yaml that looks like gg configuration but is not read, so a
+// setting written into one of them is not lost without a word.
+func TestGenRunWarnsAboutConfigFilesItDoesNotRead(t *testing.T) {
+	projectDir := newGenProject(t)
+	writeProjectFile(t, filepath.Join(projectDir, "model", "sample", "record.go"), `package sample
+
+import (
+	"github.com/hydroan/gst/dsl"
+	"github.com/hydroan/gst/model"
+)
+
+type Record struct {
+	Name string `+"`json:\"name\"`"+`
+
+	model.Base
+}
+
+func (Record) TableName() string { return "records" }
+
+func (Record) Design() {
+	dsl.Migrate()
+}
+`)
+	writeProjectFile(t, filepath.Join(projectDir, ".gg.yaml"), "prune:\n  ignore:\n    - service/sample\n")
+	writeProjectFile(t, filepath.Join(projectDir, "gst.yml"), "version: 1\n")
+
+	var genErr error
+	stdout := captureStdout(t, func() {
+		genErr = genRunWithOptions(genRunOptions{Quiet: true})
+	})
+	if genErr != nil {
+		t.Fatal(genErr)
+	}
+	for _, want := range []string{"gg no longer reads .gg.yaml", "gg reads only gst.yaml, not gst.yml"} {
+		if !strings.Contains(stdout, want) {
+			t.Errorf("output lacks %q:\n%s", want, stdout)
+		}
+	}
 }

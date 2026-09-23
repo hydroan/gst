@@ -350,7 +350,7 @@ func genRunWithOptions(opts genRunOptions) error {
 	// Prune disabled service files
 	// ============================================================
 	if prune {
-		pruneServiceFiles(oldServiceFiles, allModels, ignoreResult.KeptServiceFiles, ignoreResult.KeptServiceDirs, ignore)
+		pruneServiceFiles(oldServiceFiles, allModels, ignoreResult.KeptServiceFiles, ignoreResult.KeptServiceDirs, scanned.pruneConfig, ignore)
 	}
 
 	// ============================================================
@@ -369,6 +369,8 @@ type scannedModels struct {
 	// routeIgnores records the actions the gst.yaml route ignores disabled,
 	// with the service files pruning must keep for them.
 	routeIgnores codegen.RouteIgnoreResult
+	// pruneConfig holds the gst.yaml prune settings gg gen --prune applies.
+	pruneConfig ggconfig.PruneConfig
 }
 
 // scanModels reads the models of the model directory and resolves their
@@ -389,7 +391,7 @@ func scanModels(quiet bool, ignore gghelper.ProjectIgnore) (scannedModels, error
 	if err != nil {
 		return scannedModels{}, err
 	}
-	projectCfg, err := ggconfig.Load(".")
+	projectCfg, err := loadProjectConfig()
 	if err != nil {
 		return scannedModels{}, err
 	}
@@ -413,7 +415,7 @@ func scanModels(quiet bool, ignore gghelper.ProjectIgnore) (scannedModels, error
 	}
 	reportModelIgnoreWarnings(modelIgnores)
 
-	return scannedModels{models: allModels, routeIgnores: ignoreResult}, nil
+	return scannedModels{models: allModels, routeIgnores: ignoreResult, pruneConfig: projectCfg.Prune}, nil
 }
 
 // importQualifier returns the name a generated registration file refers to

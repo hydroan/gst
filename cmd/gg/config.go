@@ -15,7 +15,6 @@ import (
 	"github.com/hydroan/gst/config"
 	"github.com/pelletier/go-toml/v2"
 	"github.com/spf13/cobra"
-	"github.com/spf13/viper"
 	"gopkg.in/ini.v1"
 	"gopkg.in/yaml.v3"
 )
@@ -529,69 +528,4 @@ func configTagName(tag string) string {
 		return ""
 	}
 	return name
-}
-
-// GGConfig is the local configuration used by gg commands.
-type GGConfig struct {
-	Prune PruneConfig `mapstructure:"prune" yaml:"prune"`
-}
-
-// PruneConfig contains service pruning options for gg.
-type PruneConfig struct {
-	Ignore       []string `mapstructure:"ignore" yaml:"ignore"`
-	OrphanIgnore []string `mapstructure:"orphan_ignore" yaml:"orphan_ignore"`
-}
-
-var ggConfig *GGConfig
-
-// loadGGConfig reads .gg.yaml from the current project directory.
-func loadGGConfig() (*GGConfig, error) {
-	if ggConfig != nil {
-		return ggConfig, nil
-	}
-
-	v := viper.New()
-	v.SetConfigName(".gg")
-	v.SetConfigType("yaml")
-	v.AddConfigPath(".")
-
-	if err := v.ReadInConfig(); err != nil {
-		var configFileNotFoundError viper.ConfigFileNotFoundError
-		if errors.As(err, &configFileNotFoundError) {
-			ggConfig = &GGConfig{
-				Prune: PruneConfig{
-					Ignore:       []string{},
-					OrphanIgnore: []string{},
-				},
-			}
-			return ggConfig, nil
-		}
-		return nil, errors.Wrap(err, "failed to read config file")
-	}
-
-	cfg := new(GGConfig)
-	if err := v.Unmarshal(cfg); err != nil {
-		return nil, errors.Wrap(err, "failed to unmarshal config")
-	}
-
-	ggConfig = cfg
-	return ggConfig, nil
-}
-
-// getPruneIgnorePatterns returns service files ignored by gg prune.
-func getPruneIgnorePatterns() []string {
-	cfg, err := loadGGConfig()
-	if err != nil {
-		return []string{}
-	}
-	return cfg.Prune.Ignore
-}
-
-// getPruneOrphanIgnorePatterns returns orphan service directories ignored by gg prune.
-func getPruneOrphanIgnorePatterns() []string {
-	cfg, err := loadGGConfig()
-	if err != nil {
-		return []string{}
-	}
-	return cfg.Prune.OrphanIgnore
 }

@@ -13,6 +13,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/errors"
+	"github.com/hydroan/gst/internal/ggconst"
 	"gopkg.in/yaml.v3"
 )
 
@@ -30,6 +31,10 @@ type Config struct {
 
 	// Gen configures gg gen behavior.
 	Gen GenConfig `yaml:"gen"`
+
+	// Prune configures gg prune, and gg gen --prune, which prunes the same
+	// way.
+	Prune PruneConfig `yaml:"prune"`
 }
 
 // GenConfig configures gg gen behavior.
@@ -55,6 +60,28 @@ type GenModelsConfig struct {
 	// A matched model keeps its routes, services, and generated files; only
 	// its registration (and with it table creation) disappears.
 	Ignore ModelIgnoreRules `yaml:"ignore"`
+}
+
+// PruneConfig configures gg prune.
+type PruneConfig struct {
+	// Ignore lists the paths gg prune never deletes, whatever the reason it
+	// would: a disabled action's service file, a file in an orphan service
+	// directory, or a directory left empty. Each entry is a path under
+	// service/, relative to the project root, and matches by directory level,
+	// the way the from field of an ignore rule does: "service/iam" covers
+	// service/iam and everything below it but not service/iamx, and
+	// "service/record/list.go" covers that one file. Entries are plain paths:
+	// no wildcards, no regular expressions.
+	Ignore []string `yaml:"ignore"`
+}
+
+// Ignores reports whether path is an Ignore entry or lies below one. With
+// the entry "service/iam", "service/iam" and "service/iam/user/list.go" are
+// ignored, while "service/iamx/list.go" is not.
+func (c PruneConfig) Ignores(path string) bool {
+	return slices.ContainsFunc(c.Ignore, func(entry string) bool {
+		return underPath(entry, path)
+	})
 }
 
 // RouteIgnoreRules is the parsed gen.routes.ignore mapping, flattened into
@@ -195,31 +222,47 @@ func decodeIgnoreRuleValue(path string, value *yaml.Node) ([]string, string, err
 // normalizeFromDir cleans and validates a "from" directory prefix of an
 // ignore entry. It must be a relative directory such as "model/iam".
 func normalizeFromDir(from string) (string, error) {
-	from = strings.Trim(strings.TrimSpace(from), "/")
-	if from == "" {
+	cleaned, ok := cleanRelativePath(from)
+	switch {
+	case cleaned == "":
 		return "", errors.New("empty from; drop the field to match all models")
-	}
-	cleaned := filepath.ToSlash(filepath.Clean(from))
-	if cleaned != from || strings.HasPrefix(cleaned, "..") {
-		return "", errors.Newf("invalid from %q: want a relative directory like \"model/iam\"", from)
+	case !ok:
+		return "", errors.Newf("invalid from %q: want a relative directory like \"model/iam\"", cleaned)
 	}
 	return cleaned, nil
+}
+
+// cleanRelativePath trims the spaces and slashes around p and returns what
+// remains when it is a clean relative path that stays inside the project:
+// " /model/iam/ " gives "model/iam", while "", "model//iam", "./model" and
+// "../model" are rejected. A rejected path comes back trimmed, for the
+// caller's error message.
+func cleanRelativePath(p string) (string, bool) {
+	p = strings.Trim(strings.TrimSpace(p), "/")
+	cleaned := filepath.ToSlash(filepath.Clean(p))
+	if p == "" || cleaned != p || strings.HasPrefix(cleaned, "..") {
+		return p, false
+	}
+	return cleaned, true
 }
 
 // MatchesSource reports whether the rule applies to an action declared in
 // the given model file. Rules without a From prefix apply to every model.
 func (r RouteRule) MatchesSource(modelFilePath string) bool {
-	return matchesSourceDir(r.From, modelFilePath)
+	return underPath(r.From, modelFilePath)
 }
 
-// matchesSourceDir reports whether modelFilePath lives under the from
-// directory prefix. An empty from matches every path.
-func matchesSourceDir(from, modelFilePath string) bool {
-	if from == "" {
+// underPath reports whether path is prefix or lies below it, comparing whole
+// path elements: under "model/iam", "model/iam" and "model/iam/user.go" are,
+// while "model/iamx/user.go" is not. An empty prefix holds every path. The
+// from field of the ignore rules and the prune.ignore entries match through
+// it alike.
+func underPath(prefix, path string) bool {
+	if prefix == "" {
 		return true
 	}
-	modelFilePath = filepath.ToSlash(modelFilePath)
-	return modelFilePath == from || strings.HasPrefix(modelFilePath, from+"/")
+	path = filepath.ToSlash(path)
+	return path == prefix || strings.HasPrefix(path, prefix+"/")
 }
 
 // ParseRouteRule parses a "METHOD /api/path" entry into a RouteRule.
@@ -325,7 +368,7 @@ type ModelRule struct {
 // MatchesSource reports whether the rule applies to a model declared in
 // the given model file. Rules without a From prefix apply to every model.
 func (r ModelRule) MatchesSource(modelFilePath string) bool {
-	return matchesSourceDir(r.From, modelFilePath)
+	return underPath(r.From, modelFilePath)
 }
 
 // UnmarshalYAML parses the model-name mapping form of gen.models.ignore:
@@ -429,7 +472,28 @@ func Load(dir string) (*Config, error) {
 	if err := validateIgnoreRules(cfg.Gen.Routes.Ignore); err != nil {
 		return nil, errors.Wrapf(err, "%s: gen.routes.ignore", path)
 	}
+	if err := validatePruneIgnore(&cfg.Prune); err != nil {
+		return nil, errors.Wrapf(err, "%s: prune.ignore", path)
+	}
 	return cfg, nil
+}
+
+// unreadFileNames are the files gg finds next to gst.yaml but never reads:
+// .gg.yaml and .gg.yml held the prune settings of earlier gg releases, and
+// the others are names gst.yaml is easily mistaken for.
+var unreadFileNames = []string{".gg.yaml", ".gg.yml", ".gst.yaml", ".gst.yml", "gst.yml"}
+
+// UnreadFiles returns the files in dir that look like gg configuration but
+// that gg does not read, for the command to warn about: a project holding
+// .gg.yaml and gst.yml next to gst.yaml gets [".gg.yaml", "gst.yml"].
+func UnreadFiles(dir string) []string {
+	var unread []string
+	for _, name := range unreadFileNames {
+		if info, err := os.Stat(filepath.Join(dir, name)); err == nil && !info.IsDir() {
+			unread = append(unread, name)
+		}
+	}
+	return unread
 }
 
 // validateIgnoreRules rejects duplicate ignore rules. Duplicates are
@@ -443,6 +507,28 @@ func validateIgnoreRules(rules []RouteRule) error {
 			return errors.Newf("duplicate rule %q", rule.Raw)
 		}
 		seen[key] = struct{}{}
+	}
+	return nil
+}
+
+// validatePruneIgnore cleans every prune.ignore entry in place and rejects an
+// entry that is not a clean relative path, lies outside service/, the only
+// directory gg prune deletes from, or repeats another entry.
+func validatePruneIgnore(c *PruneConfig) error {
+	seen := make(map[string]bool, len(c.Ignore))
+	for i, entry := range c.Ignore {
+		cleaned, ok := cleanRelativePath(entry)
+		if !ok {
+			return errors.Newf("entry %q: want a relative path like \"%s/sample\"", entry, ggconst.DirService)
+		}
+		if !underPath(ggconst.DirService, cleaned) {
+			return errors.Newf("entry %q is outside %s/, the only directory gg prune deletes from", entry, ggconst.DirService)
+		}
+		if seen[cleaned] {
+			return errors.Newf("entry %q is listed twice", entry)
+		}
+		seen[cleaned] = true
+		c.Ignore[i] = cleaned
 	}
 	return nil
 }
