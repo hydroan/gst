@@ -24,17 +24,9 @@ func loadProjectConfig() (*ggconfig.Config, error) {
 	return ggconfig.Load(".")
 }
 
-func checkErr(err error) {
-	if err == nil {
-		return
-	}
-	panic(err)
-}
-
-func writeFileWithLog(filename string, content string) {
-	checkErr(writeGeneratedFile(filename, content, true))
-}
-
+// writeGeneratedFile writes content to filename unless the file holds it
+// already, creating the parent directory when needed, and prints CREATE,
+// UPDATE or SKIP for it when log is set.
 func writeGeneratedFile(filename string, content string, log bool) error {
 	if gghelper.FileExists(filename) {
 		oldData, err := os.ReadFile(filename)

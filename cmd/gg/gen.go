@@ -118,11 +118,7 @@ func genRunWithOptions(opts genRunOptions) error {
 	routerPkgs := make(map[string]string)
 	servicePkgs := make(map[string]string)
 	writeGenFile := func(filename string, content string) error {
-		if opts.Quiet {
-			return writeGeneratedFile(filename, content, false)
-		}
-		writeFileWithLog(filename, content)
-		return nil
+		return writeGeneratedFile(filename, content, !opts.Quiet)
 	}
 
 	for _, m := range allModels {

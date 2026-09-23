@@ -6,6 +6,7 @@ import (
 	"os"
 	"strings"
 
+	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/internal/clioutput"
 	"github.com/hydroan/gst/internal/codegen"
 	"github.com/hydroan/gst/internal/codegen/gen"
@@ -23,30 +24,42 @@ var pruneCmd = &cobra.Command{
 	Short: "clean unused service files",
 	Long:  "Clean unused service files that are no longer needed based on current model definitions",
 	Run: func(cmd *cobra.Command, args []string) {
-		pruneRun()
+		if err := pruneRun(); err != nil {
+			clioutput.Error("", "%v", err)
+			os.Exit(1)
+		}
 	},
 }
 
-func pruneRun() {
+// pruneRun prunes the project in the working directory. The errors it
+// returns stop it before it deletes anything: the module path or gst.yaml
+// could not be read, the model directory is missing, or a model file fails
+// to parse.
+func pruneRun() error {
 	ignore := gghelper.NewProjectIgnore()
 	if len(module) == 0 {
 		var err error
 		module, err = gghelper.ModulePath()
-		checkErr(err)
+		if err != nil {
+			return err
+		}
 	}
 
 	if !gghelper.FileExists(ggconst.DirModel) {
-		clioutput.Error("", "model dir not found: %s", ggconst.DirModel)
-		os.Exit(1)
+		return errors.Newf("model dir not found: %s", ggconst.DirModel)
 	}
 
 	projectCfg, err := loadProjectConfig()
-	checkErr(err)
+	if err != nil {
+		return err
+	}
 
 	// Scan all models
 	clioutput.Section("Scan Models")
 	allModels, err := codegen.FindModels(module, ggconst.DirModel, ignore)
-	checkErr(err)
+	if err != nil {
+		return err
+	}
 	if len(allModels) == 0 {
 		clioutput.Item("", "No models found, pruning service files only")
 	} else {
@@ -65,6 +78,7 @@ func pruneRun() {
 	pruneServiceFiles(oldServiceFiles, allModels, nil, nil, projectCfg.Prune, ignore)
 
 	clioutput.Done("Code pruning completed successfully!")
+	return nil
 }
 
 // existingServiceFiles lists the service files prune works from, warning

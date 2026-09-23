@@ -79,6 +79,26 @@ func TestPruneServiceFilesRemindsOfUnreadSettingsBeforeAsking(t *testing.T) {
 	}
 }
 
+// TestPruneRunStopsOnABrokenConfig pins that gg prune reports what stops it
+// before it deletes anything, here a gst.yaml prune.ignore entry outside
+// service/, as an error the command prints, not as a panic.
+func TestPruneRunStopsOnABrokenConfig(t *testing.T) {
+	newGenProject(t)
+	listFile := filepath.Join(ggconst.DirService, "record", "list.go")
+	writeProjectFile(t, filepath.Join(ggconst.DirModel, "record.go"), "package model\n")
+	writeProjectFile(t, listFile, "package record\n")
+	writeProjectFile(t, ggconfig.FileName, "version: 1\nprune:\n  ignore:\n    - model/record.go\n")
+
+	err := pruneRun()
+
+	if err == nil || !strings.Contains(err.Error(), `entry "model/record.go" is outside service/`) {
+		t.Fatalf("pruneRun() error = %v, want the prune.ignore entry outside service/ reported", err)
+	}
+	if _, statErr := os.Stat(listFile); statErr != nil {
+		t.Fatalf("a run that stops must delete nothing: %v", statErr)
+	}
+}
+
 // withStdin runs fn with os.Stdin reading input.
 func withStdin(t *testing.T, input string, fn func()) {
 	t.Helper()

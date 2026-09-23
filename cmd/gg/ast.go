@@ -2,7 +2,9 @@ package main
 
 import (
 	"fmt"
+	"os"
 
+	"github.com/hydroan/gst/internal/clioutput"
 	"github.com/hydroan/gst/internal/goast"
 	"github.com/kr/pretty"
 	"github.com/spf13/cobra"
@@ -21,7 +23,10 @@ var astdumpCmd = &cobra.Command{
 	Args:  cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 		f, dump, err := goast.Dump(args[0], nil)
-		checkErr(err)
+		if err != nil {
+			clioutput.Error("", "%v", err)
+			os.Exit(1)
+		}
 		if ispretty {
 			pretty.Println(f)
 		} else {

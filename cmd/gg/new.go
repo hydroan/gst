@@ -19,7 +19,10 @@ var newCmd = &cobra.Command{
 	Long:  "new a project",
 	Args:  cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
-		checkErr(newProject(args[0]))
+		if err := newProject(args[0]); err != nil {
+			clioutput.Error("", "%v", err)
+			os.Exit(1)
+		}
 	},
 }
 
