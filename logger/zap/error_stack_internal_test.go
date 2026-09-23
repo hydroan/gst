@@ -1,7 +1,6 @@
 package zap
 
 import (
-	"io"
 	"testing"
 
 	"github.com/cockroachdb/errors"
@@ -153,15 +152,6 @@ func BenchmarkErrorWithPlainError(b *testing.B) {
 	for b.Loop() {
 		logger.Error(plainError{})
 	}
-}
-
-func newDiscardLogger() *Logger {
-	core := zapcore.NewCore(
-		zapcore.NewJSONEncoder(zap.NewProductionEncoderConfig()),
-		zapcore.AddSync(io.Discard),
-		zapcore.ErrorLevel,
-	)
-	return &Logger{zlog: zap.New(core)}
 }
 
 func errorStackField(t *testing.T, entry observer.LoggedEntry) string {

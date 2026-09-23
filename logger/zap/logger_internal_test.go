@@ -2,10 +2,13 @@ package zap
 
 import (
 	"context"
+	"io"
+	"strings"
 	"testing"
 
 	"github.com/hydroan/gst/consts"
 	"github.com/hydroan/gst/internal/execctx"
+	"github.com/hydroan/gst/internal/instance"
 	"github.com/hydroan/gst/internal/requestctx"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
@@ -39,4 +42,55 @@ func TestContextFieldsFitTheCapacityInTheWorstCase(t *testing.T) {
 	require.Len(t, entries[0].Context, contextFieldCap,
 		"the worst case must fill the capacity exactly: a new field bumps contextFieldCap, a dropped one lowers it")
 	require.Contains(t, entries[0].ContextMap(), consts.CRONJOB, "the worst case must carry the optional identity field")
+}
+
+func BenchmarkLogger_Discard10(b *testing.B) {
+	l := newDiscardLogger()
+	msg := strings.Repeat("0", 10)
+
+	for b.Loop() {
+		l.Infoz(msg)
+	}
+}
+
+func BenchmarkLogger_Discard100(b *testing.B) {
+	l := newDiscardLogger()
+	msg := strings.Repeat("0", 100)
+
+	for b.Loop() {
+		l.Infoz(msg)
+	}
+}
+
+func BenchmarkLogger_Discard1000(b *testing.B) {
+	l := newDiscardLogger()
+	msg := strings.Repeat("0", 1000)
+
+	for b.Loop() {
+		l.Infoz(msg)
+	}
+}
+
+func BenchmarkLogger_Discard10000(b *testing.B) {
+	l := newDiscardLogger()
+	msg := strings.Repeat("0", 10000)
+
+	for b.Loop() {
+		l.Infoz(msg)
+	}
+}
+
+// newDiscardLogger builds a logger the way New does — the same encoder, level,
+// process identity and options — over a sink that drops every entry, so a
+// benchmark logging through it measures what a call costs the logger itself,
+// with no write adding to the figure. The File benchmarks in logger_test.go
+// measure the same calls through the buffered file sink.
+func newDiscardLogger() *Logger {
+	core := zapcore.NewCore(newLogEncoder(), zapcore.AddSync(io.Discard), newLogLevel())
+	return &Logger{zlog: zap.New(
+		core.With([]zapcore.Field{zap.String(consts.INSTANCE, instance.ID())}),
+		zap.AddCaller(),
+		zap.AddCallerSkip(1),
+		zap.AddStacktrace(zapcore.FatalLevel),
+	)}
 }
