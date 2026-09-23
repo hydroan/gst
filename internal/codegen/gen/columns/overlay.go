@@ -198,6 +198,17 @@ func (f *columnInspectionFiles) omit(pkg string, name string) bool {
 	return true
 }
 
+// modelImports is how one file refers to the model packages it imports.
+type modelImports struct {
+	// qualifiers maps each name the file may qualify an identifier with to
+	// the model packages it stands for. A plain import is keyed by every
+	// package name the package's sources declare.
+	qualifiers map[string][]string
+
+	// dotted lists the model packages the file imports with a dot.
+	dotted []string
+}
+
 // modelImportsOf resolves how src refers to the model packages it imports.
 func (f *columnInspectionFiles) modelImportsOf(src *columnInspectionSource) modelImports {
 	imports := modelImports{qualifiers: make(map[string][]string)}
@@ -222,17 +233,6 @@ func (f *columnInspectionFiles) modelImportsOf(src *columnInspectionSource) mode
 		}
 	}
 	return imports
-}
-
-// modelImports is how one file refers to the model packages it imports.
-type modelImports struct {
-	// qualifiers maps each name the file may qualify an identifier with to
-	// the model packages it stands for. A plain import is keyed by every
-	// package name the package's sources declare.
-	qualifiers map[string][]string
-
-	// dotted lists the model packages the file imports with a dot.
-	dotted []string
 }
 
 // columnDependents is the analysis that leaves the declarations depending on
