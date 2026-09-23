@@ -1,23 +1,22 @@
 package main
 
 import (
+	rtdebug "runtime/debug"
+
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/internal/gghelper"
 	"github.com/spf13/cobra"
 )
 
 var (
-	module       string
-	debug        bool
-	prune        bool
-	cleanOrphans bool
+	module string
+	debug  bool
 )
 
 var rootCmd = &cobra.Command{
-	Use:     "gg",
-	Short:   "gst code generator",
-	Long:    "gst code generator",
-	Version: "1.0.0",
+	Use:   "gg",
+	Short: "gst code generator",
+	Long:  "gst code generator",
 	// main prints a failed command's error, once and in gg's own style;
 	// cobra prints none of it.
 	SilenceErrors:     true,
@@ -25,21 +24,23 @@ var rootCmd = &cobra.Command{
 }
 
 func init() {
+	// gg reports the module version Go recorded when it was built: the tag it
+	// was installed at, a pseudo-version for an untagged commit, "(devel)" for
+	// a build that recorded none.
+	if info, ok := rtdebug.ReadBuildInfo(); ok {
+		rootCmd.Version = info.Main.Version
+	}
+
 	rootCmd.PersistentFlags().BoolVarP(&debug, "debug", "d", false, "enable debug logging")
-	rootCmd.PersistentFlags().BoolVar(&prune, "prune", false, "Prune disabled service action files with user confirmation")
-	rootCmd.PersistentFlags().BoolVar(&cleanOrphans, "clean-orphans", false, "After pruning, delete unmanaged files in orphan service directories and middleware left by removed copied modules")
 
 	rootCmd.AddCommand(
 		genCmd,
 		newCmd,
-		astCmd,
 		pruneCmd,
 		checkCmd,
 		lintCmd,
 		routesCmd,
 		routeTreeCmd,
-		buildCmd,
-		releaseCmd,
 		configCmd,
 		migrateCmd,
 		moduleCmd,

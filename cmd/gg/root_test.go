@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"os"
 	"path/filepath"
+	rtdebug "runtime/debug"
 	"strings"
 	"testing"
 )
@@ -83,6 +84,26 @@ func TestCommandErrorsLeaveThePrintingToMain(t *testing.T) {
 	})
 }
 
+// TestVersionReportsTheBuild pins what gg --version prints: the module
+// version Go recorded when gg was built — the tag it was installed at, a
+// pseudo-version for an untagged commit, or "(devel)" for a build that
+// recorded none, as this test binary is — never a number written into the
+// code.
+func TestVersionReportsTheBuild(t *testing.T) {
+	info, ok := rtdebug.ReadBuildInfo()
+	if !ok {
+		t.Fatal("the test binary carries no build information")
+	}
+
+	out, err := executeRootCommand(t, "--version")
+	if err != nil {
+		t.Fatalf("gg --version failed: %v", err)
+	}
+	if want := "gg version " + info.Main.Version + "\n"; out != want {
+		t.Fatalf("gg --version printed %q, want %q", out, want)
+	}
+}
+
 func writeGoMod(t *testing.T, dir, modulePath string) {
 	t.Helper()
 
@@ -93,9 +114,10 @@ func writeGoMod(t *testing.T, dir, modulePath string) {
 }
 
 // executeRootCommand runs gg with args and returns what cobra printed. The
-// command that ran gets its usage back afterwards: running a command silences
-// its usage for the rest of the process, which one test would leak into the
-// next.
+// command that ran gets its usage back afterwards, and its --help and
+// --version their defaults: running a command silences its usage and keeps
+// the flags it parsed for the rest of the process, which one test would leak
+// into the next — an earlier --help turns every later run into help.
 func executeRootCommand(t *testing.T, args ...string) (string, error) {
 	t.Helper()
 
@@ -111,6 +133,12 @@ func executeRootCommand(t *testing.T, args ...string) (string, error) {
 	rootCmd.SetErr(nil)
 	if cmd != nil {
 		cmd.SilenceUsage = false
+		for _, name := range []string{"help", "version"} {
+			if flag := cmd.Flags().Lookup(name); flag != nil {
+				_ = flag.Value.Set("false")
+				flag.Changed = false
+			}
+		}
 	}
 	return out.String(), err
 }

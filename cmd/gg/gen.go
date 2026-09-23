@@ -30,6 +30,11 @@ var genCmd = &cobra.Command{
 	},
 }
 
+func init() {
+	genCmd.Flags().BoolVar(&prune, "prune", false, "Prune disabled service action files with user confirmation")
+	genCmd.Flags().BoolVar(&cleanOrphans, "clean-orphans", false, "After pruning, delete unmanaged files in orphan service directories and middleware left by removed copied modules")
+}
+
 type genRunOptions struct {
 	Quiet bool
 	// BaselineViolations lists project check violations that already existed

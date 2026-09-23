@@ -34,6 +34,18 @@ var pruneCmd = &cobra.Command{
 	},
 }
 
+// The pruning flags. gg gen takes both: --prune prunes once the code is
+// generated. gg prune always prunes and takes --clean-orphans alone, which on
+// either command also deletes the orphan leftovers.
+var (
+	prune        bool
+	cleanOrphans bool
+)
+
+func init() {
+	pruneCmd.Flags().BoolVar(&cleanOrphans, "clean-orphans", false, "Delete unmanaged files in orphan service directories and middleware left by removed copied modules")
+}
+
 // pruneRun prunes the project in the working directory. The errors it
 // returns stop it before it deletes anything: the module path or gst.yaml
 // could not be read, the model directory is missing, or a model file fails
