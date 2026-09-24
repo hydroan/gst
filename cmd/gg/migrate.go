@@ -47,7 +47,7 @@ var migrateSchemaCmd = &cobra.Command{
 		if len(args) > 0 {
 			source = strings.TrimSpace(args[0])
 		}
-		files, err := migrateSourceFiles(source)
+		files, err := migrateSourceFiles(source, gghelper.NewProjectIgnore())
 		if err != nil {
 			return err
 		}
@@ -129,12 +129,13 @@ func runMigrateProgram(content string) error {
 
 // migrateSourceFiles lists the Go files gg migrate schema reads model types
 // from: source itself when it names a Go file, or else the Go files below it
-// that are not tests, walked by the rules a walk over the project's code
-// follows (gghelper.ExcludedDir). For model it lists model/record.go and
-// model/sample/item.go, and leaves out model/record_test.go and every file of
-// model/testdata. An empty source lists nothing: the schema covers every
-// registered model.
-func migrateSourceFiles(source string) ([]string, error) {
+// that are not tests, leaving out what the go command leaves out
+// (ignore.ExcludedByGo) but not what the project's Git ignore rules do, since
+// the user named source. For model it lists model/record.go and
+// model/sample/item.go, and leaves out model/record_test.go, model/_draft.go
+// and every file of model/testdata. An empty source lists nothing: the schema
+// covers every registered model.
+func migrateSourceFiles(source string, ignore gghelper.ProjectIgnore) ([]string, error) {
 	if source == "" {
 		return nil, nil
 	}
@@ -157,13 +158,13 @@ func migrateSourceFiles(source string) ([]string, error) {
 		if walkErr != nil {
 			return walkErr
 		}
-		if entry.IsDir() {
-			if gghelper.ExcludedDir(source, path) {
+		if path != source && ignore.ExcludedByGo(path, entry.IsDir()) {
+			if entry.IsDir() {
 				return filepath.SkipDir
 			}
 			return nil
 		}
-		if isSource(path) {
+		if !entry.IsDir() && isSource(path) {
 			files = append(files, path)
 		}
 		return nil

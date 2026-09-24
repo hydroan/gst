@@ -6,7 +6,6 @@ import (
 	"go/parser"
 	"go/token"
 	"os"
-	"path/filepath"
 	"slices"
 	"strings"
 
@@ -70,9 +69,6 @@ func checkDatabaseChainTermination(ignore gghelper.ProjectIgnore) []string {
 
 	err := ignore.Walk(".", func(path string, info os.FileInfo) error {
 		if info.IsDir() {
-			if gghelper.ExcludedDir(".", path) {
-				return filepath.SkipDir
-			}
 			return nil
 		}
 

@@ -47,7 +47,7 @@ func checkColumnReferenceMinting(ignore gghelper.ProjectIgnore) []string {
 	var violations []string
 	walkErr := ignore.Walk(".", func(path string, info os.FileInfo) error {
 		if info.IsDir() {
-			if gghelper.ExcludedDir(".", path) || moduleOwnedPath(owned, ggconst.DirModel, path) || moduleOwnedPath(owned, ggconst.DirService, path) {
+			if moduleOwnedPath(owned, ggconst.DirModel, path) || moduleOwnedPath(owned, ggconst.DirService, path) {
 				return filepath.SkipDir
 			}
 			return nil

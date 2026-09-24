@@ -79,9 +79,6 @@ func checkServiceErrorDiscipline(ignore gghelper.ProjectIgnore) []string {
 	}
 	err = ignore.Walk(".", func(path string, info os.FileInfo) error {
 		if info.IsDir() {
-			if gghelper.ExcludedDir(".", path) {
-				return filepath.SkipDir
-			}
 			return nil
 		}
 		if !strings.HasSuffix(path, ".go") || strings.HasSuffix(path, "_test.go") {

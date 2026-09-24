@@ -864,8 +864,14 @@ func init() {
 | `gg migrate` | 生成当前数据库方言的 schema，预览并按确认执行数据库迁移 |
 
 `gg check` 会检查依赖边界、model/service 文件边界、命名规范、`json` tag、
-REQ/RSP 命名和业务项目根目录结构；根目录结构检查会跳过 Git ignore 规则忽略的
-目录。`gg gen` 生成前也会执行这些检查；检查失败会停止生成。
+REQ/RSP 命名和业务项目根目录结构。`gg gen` 生成前也会执行这些检查；检查
+失败会停止生成。
+
+`gg check` 和 `gg gen` 读项目代码时，既跳过项目 Git 忽略规则排除的路径，
+也跳过 Go 工具链内置忽略的路径（`go build ./...` 同样不看的那些）：名字以
+`.` 或 `_` 开头的文件和目录、`vendor`、`testdata`、自带 `go.mod` 的子目录，
+以及 `go.mod` 里 `ignore` 声明的目录。`gg prune` 两类都不看，忽略规则只认
+`prune.ignore`，见下文。
 
 ### 生成 TypeScript 类型
 
@@ -958,6 +964,10 @@ prune:
   写到具体文件就只保护这一个文件。它不是通配符，也不是正则。
 - 列出的路径在任何情况下都不会被删：停用 action 的 service 文件、孤儿目录
   里的文件、清理后变空的目录、被删掉的复制模块留下的中间件文件都算。
+- 忽略规则里 prune 只认 `prune.ignore`：`service/` 归 gg 管，要保持干净，
+  项目的 Git 忽略规则和 Go 工具链的内置忽略对 prune 都不起作用。被 Git 忽略
+  的文件、`testdata`、以 `_` 开头的目录等和其他路径一样按规则清理，想保留就
+  写进 `prune.ignore`。
 - 不在 `service/` 或 `middleware/` 下、写法不规整或重复的条目直接报错；指向不存在路径的条目
   在 prune 时输出 warning。
 - `gg` 只读取 `gst.yaml`，项目里如果还有 `.gg.yaml`、`gst.yml` 这类同类

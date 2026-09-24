@@ -14,26 +14,21 @@ import (
 )
 
 // walkModelFiles walks modelDir and invokes fn for every Go source file that
-// participates in code generation: it skips the paths the project's Git
-// ignore rules exclude, the directories gghelper.ExcludedDir names (hidden,
-// vendor and testdata directories and nested modules), test files, ignored
-// files (whose names start with "_") and the file names excludes lists. Under
-// model it visits model/sample/record.go, and skips model/sample/record_test.go,
+// participates in code generation: it skips the paths the project ignores
+// (see gghelper.ProjectIgnore: those its Git ignore rules exclude, and those
+// the go command leaves out, such as vendor and testdata directories, nested
+// modules, and files and directories whose names begin with "." or "_"), test
+// files and the file names excludes lists. Under model it visits
+// model/sample/record.go, and skips model/sample/record_test.go,
 // model/sample/_draft.go and every file of model/sample/testdata.
 //
 // WalkModelFiles exports it: gg check holds the model files to the DSL rules
 // through the same walk, so the check and the generator read the same files.
 func walkModelFiles(modelDir string, ignore gghelper.ProjectIgnore, excludes []string, fn func(path string) error) error {
 	return ignore.Walk(modelDir, func(path string, info os.FileInfo) error {
-		if info.IsDir() {
-			if gghelper.ExcludedDir(modelDir, path) {
-				return filepath.SkipDir
-			}
-			return nil
-		}
-		if !strings.HasSuffix(info.Name(), ggconst.ExtensionGo) ||
+		if info.IsDir() ||
+			!strings.HasSuffix(info.Name(), ggconst.ExtensionGo) ||
 			strings.HasSuffix(info.Name(), ggconst.PatternTestFile) ||
-			strings.HasPrefix(info.Name(), ggconst.PrefixIgnore) ||
 			slices.Contains(excludes, info.Name()) {
 			return nil
 		}

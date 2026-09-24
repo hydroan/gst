@@ -25,7 +25,8 @@ import (
 //   - the content of every model source file, since the models are what carry
 //     the columns: the Go files under the model directory but for tests and
 //     generated files, walked by the rules a walk over the project's code
-//     follows (the Git ignore rules and gghelper.ExcludedDir).
+//     follows (gghelper.ProjectIgnore: the Git ignore rules, and what the go
+//     command leaves out).
 //
 // File paths are deliberately excluded: renaming or moving a model file does
 // not change a single column, and which file a model belongs to is resolved
@@ -56,13 +57,8 @@ func columnsCacheKey(program string, modelDir string, ignore gghelper.ProjectIgn
 
 	fileDigests := make([]string, 0)
 	err = ignore.Walk(modelDir, func(path string, info os.FileInfo) error {
-		if info.IsDir() {
-			if gghelper.ExcludedDir(modelDir, path) {
-				return filepath.SkipDir
-			}
-			return nil
-		}
-		if !strings.HasSuffix(path, ggconst.ExtensionGo) ||
+		if info.IsDir() ||
+			!strings.HasSuffix(path, ggconst.ExtensionGo) ||
 			strings.HasSuffix(path, ggconst.PatternTestFile) ||
 			strings.HasSuffix(path, ggconst.SuffixGenGo) {
 			return nil

@@ -86,7 +86,7 @@ func TestMigrateSchemaProgramReadsTheTablesModulesRegister(t *testing.T) {
 // model it registers.
 func TestMigrateSchemaProgramReadsTheModelsItsSourceDeclares(t *testing.T) {
 	newMigrateSampleProject(t)
-	files, err := migrateSourceFiles(ggconst.DirModule)
+	files, err := migrateSourceFiles(ggconst.DirModule, gghelper.NewProjectIgnore())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -100,22 +100,29 @@ func TestMigrateSchemaProgramReadsTheModelsItsSourceDeclares(t *testing.T) {
 
 // TestMigrateSourceFiles pins the files gg migrate schema reads model types
 // from. Below a directory, every Go file that is not a test, a model package
-// named generated among them, and none a walk over the project's code leaves
-// out: hidden, vendor and testdata directories and nested modules. A Go file
-// named on its own is read alone. A link to a directory is not followed, as no
-// walk over the project's code follows one: a linked directory below the
-// source adds nothing, and a source that is itself such a link holds no Go
-// file. A link to a Go file is read as that file, below the source or named on
-// its own, the way gg gen reads it.
+// named generated among them, and none the go command leaves out: files and
+// directories whose names begin with "." or "_", vendor and testdata
+// directories, nested modules, and a directory the project's go.mod ignores.
+// The project's Git ignore rules leave nothing out, the user having named the
+// source. A Go file named on its own is read alone. A link to a directory is
+// not followed, as no walk over the project's code follows one: a linked
+// directory below the source adds nothing, and a source that is itself such a
+// link holds no Go file. A link to a Go file is read as that file, below the
+// source or named on its own, the way gg gen reads it.
 func TestMigrateSourceFiles(t *testing.T) {
 	outside := t.TempDir()
 	writeProjectFile(t, filepath.Join(outside, "linked.go"), "package linked\n")
 	t.Chdir(t.TempDir())
 	for path, content := range map[string]string{
+		"go.mod":                    "module example.com/app\n\ngo 1.27\n\nignore ./model/assets\n",
+		".gitignore":                "model/generated/\n",
 		"model/record.go":           "package model\n",
 		"model/record_test.go":      "package model\n",
+		"model/_draft.go":           "package model\n",
 		"model/generated/sample.go": "package generated\n",
 		"model/.cache/cached.go":    "package cached\n",
+		"model/_old/old.go":         "package old\n",
+		"model/assets/asset.go":     "package assets\n",
 		"model/vendor/lib/lib.go":   "package lib\n",
 		"model/testdata/fixture.go": "package fixture\n",
 		"model/nested/go.mod":       "module example.com/nested\n",
@@ -134,7 +141,8 @@ func TestMigrateSourceFiles(t *testing.T) {
 		}
 	}
 
-	files, err := migrateSourceFiles(ggconst.DirModel)
+	ignore := gghelper.NewProjectIgnore()
+	files, err := migrateSourceFiles(ggconst.DirModel, ignore)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -144,7 +152,7 @@ func TestMigrateSourceFiles(t *testing.T) {
 	}
 
 	single := filepath.Join("model", "record.go")
-	files, err = migrateSourceFiles(single)
+	files, err = migrateSourceFiles(single, ignore)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -152,12 +160,12 @@ func TestMigrateSourceFiles(t *testing.T) {
 		t.Fatalf("migrateSourceFiles(%q) = %q, want the file alone", single, files)
 	}
 
-	files, err = migrateSourceFiles("model-link")
+	files, err = migrateSourceFiles("model-link", ignore)
 	if err == nil || !strings.Contains(err.Error(), "no Go model files found under model-link") {
 		t.Fatalf("migrateSourceFiles(%q) = %q, %v, want no Go model files found", "model-link", files, err)
 	}
 
-	files, err = migrateSourceFiles("record-link.go")
+	files, err = migrateSourceFiles("record-link.go", ignore)
 	if err != nil {
 		t.Fatal(err)
 	}

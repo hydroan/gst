@@ -3,7 +3,6 @@ package ggcheck
 import (
 	"fmt"
 	"os"
-	"strings"
 
 	"github.com/hydroan/gst/internal/gghelper"
 )
@@ -96,11 +95,9 @@ func checkDirectoryRestrictions(ignore gghelper.ProjectIgnore) []string {
 
 		dirName := entry.Name()
 
-		// Skip hidden directories and the ones the project's Git ignore
-		// rules exclude
-		if strings.HasPrefix(dirName, ".") {
-			continue
-		}
+		// Skip the directories the project ignores: the ones its Git ignore
+		// rules exclude, and the ones the go command leaves out, hidden
+		// directories among them
 		if ignore.Ignores(dirName, true) {
 			continue
 		}

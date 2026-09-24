@@ -6,7 +6,6 @@ import (
 	"go/parser"
 	"go/token"
 	"os"
-	"path/filepath"
 	"slices"
 	"strconv"
 	"strings"
@@ -72,9 +71,6 @@ func checkDetachedContext(ignore gghelper.ProjectIgnore) []string {
 		}
 		walkErr := ignore.Walk(dir, func(path string, info os.FileInfo) error {
 			if info.IsDir() {
-				if gghelper.ExcludedDir(dir, path) {
-					return filepath.SkipDir
-				}
 				return nil
 			}
 			if !strings.HasSuffix(path, ".go") || strings.HasSuffix(path, "_test.go") || isGeneratedFileName(path) {

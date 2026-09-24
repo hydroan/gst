@@ -27,7 +27,6 @@ const (
 const (
 	ExtensionGo     = ".go"
 	PatternTestFile = "_test.go"
-	PrefixIgnore    = "_"
 )
 
 // FileModeGenerated is the permission gg writes project files with.
