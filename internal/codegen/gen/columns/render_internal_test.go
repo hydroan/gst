@@ -57,6 +57,26 @@ var RecordCols = struct {
 `, rendered)
 }
 
+// TestRenderColumnsFileWritesAnAnonymousStructType pins that a column
+// whose type is an anonymous struct, as a serialized column's is, gets the
+// struct written out as its type argument.
+func TestRenderColumnsFileWritesAnAnonymousStructType(t *testing.T) {
+	models := []modelColumns{{
+		PkgPath: "tmpapp/model/sample",
+		PkgName: "sample",
+		Name:    "Record",
+		Columns: []columnInfo{
+			{GoName: "Meta", DBName: "meta", TypeExpr: `struct { A int "json:\"a\"" }`, TypeName: `struct { A int "json:\"a\"" }`},
+		},
+	}}
+
+	rendered, err := renderColumnsFile("tmpapp", "sample", "model/sample/record.go", models)
+
+	require.NoError(t, err)
+	require.Contains(t, rendered, "\tMeta gst.Column[struct {\n\t\tA int \"json:\\\"a\\\"\"\n\t}]\n")
+	require.Contains(t, rendered, "\tMeta: gst.NewColumn[*Record, struct {\n\t\tA int \"json:\\\"a\\\"\"\n\t}](\"meta\"),\n")
+}
+
 func TestRenderColumnsFile(t *testing.T) {
 	models := []modelColumns{{
 		PkgPath: "tmpapp/model/sample",

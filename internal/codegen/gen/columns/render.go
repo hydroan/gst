@@ -85,7 +85,8 @@ func renderColumnsFile(module string, pkgName string, source string, models []mo
 	// Standard library imports go in their own group, as gofmt convention
 	// expects. A path is standard library only when its first segment carries
 	// no dot and it does not belong to the project module, whose name may
-	// also be dotless.
+	// also be dotless; the gofumpt printing below sets a dotless project
+	// import apart from the dotted ones in the same way.
 	stdlib := make([]string, 0, len(imports))
 	external := make([]string, 0, len(imports))
 	for path := range imports {
@@ -182,7 +183,7 @@ func renderColumnsFile(module string, pkgName string, source string, models []mo
 	}
 	f.Comments = comments
 
-	rendered, err := gen.FormatNodeWithFileSet(f, fset)
+	rendered, err := gen.FormatNodeExtraWithFileSet(f, fset)
 	if err != nil {
 		return "", errors.Wrapf(err, "format generated columns for %s", source)
 	}
@@ -312,8 +313,9 @@ func gstSelector(name string) *ast.SelectorExpr {
 
 // parseTypeExpr parses a column type written as source, as the inspection
 // program reports it, into a tree without positions, so that printing it
-// among positioned nodes changes no layout: int64, []uint8, map[string]int
-// and uuid.UUID are the shapes it meets.
+// among positioned nodes changes no layout: int64, []uint8, map[string]int,
+// uuid.UUID and the anonymous struct of a serialized column are the shapes
+// it meets.
 func parseTypeExpr(text string) (ast.Expr, error) {
 	expr, err := parser.ParseExpr(text)
 	if err != nil {
@@ -344,8 +346,15 @@ func parseTypeExpr(text string) (ast.Expr, error) {
 			node.Lparen, node.Rparen = token.NoPos, token.NoPos
 		case *ast.InterfaceType:
 			node.Interface = token.NoPos
+		case *ast.StructType:
+			node.Struct = token.NoPos
+		case *ast.FuncType:
+			node.Func = token.NoPos
+		case *ast.Ellipsis:
+			node.Ellipsis = token.NoPos
 		case *ast.FieldList:
 			node.Opening, node.Closing = token.NoPos, token.NoPos
+		case *ast.Field:
 		default:
 			if unsupported == nil {
 				unsupported = n
