@@ -6,11 +6,12 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestCheckSourceFormat runs the check over a fixture module. Two calls are
-// reported: a generator under internal/codegen (render) and one under cmd/gg
-// (heal) formatting source text. Nothing is reported for the formatting path
-// itself (internal/codegen/gen/helper.go), for a package outside the
-// generators (other) or for a test file (render_test.go).
+// TestCheckSourceFormat runs the check over a fixture module. Three things
+// are reported: a generator under internal/codegen (render) and one under
+// cmd/gg (heal) formatting source text, and a generator importing
+// text/template (tmpl). Nothing is reported for the formatting path itself
+// (internal/codegen/gen/helper.go), for a package outside the generators
+// (other) or for a test file (render_test.go).
 func TestCheckSourceFormat(t *testing.T) {
 	root, pkgs := loadFixture(t, "testdata/sourceformat/module")
 	violations, err := checkSourceFormat(root, pkgs)
@@ -23,6 +24,10 @@ func TestCheckSourceFormat(t *testing.T) {
 		{
 			File:    "internal/codegen/gen/render.go",
 			Message: "Call to go/format.Source at internal/codegen/gen/render.go:7 formats source text: build the generated file as a syntax tree and print it through the one formatting path, internal/codegen/gen/helper.go",
+		},
+		{
+			File:    "internal/codegen/gen/tmpl.go",
+			Message: "Import of text/template at internal/codegen/gen/tmpl.go:3 renders generated code from a template: build the generated file as a syntax tree and print it through the one formatting path, internal/codegen/gen/helper.go",
 		},
 	}, violations)
 }

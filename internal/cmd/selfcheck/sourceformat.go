@@ -6,6 +6,7 @@ import (
 	"go/types"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 
 	"golang.org/x/tools/go/packages"
@@ -28,12 +29,17 @@ var (
 	sourceFormatHome  = filepath.Join("internal", "codegen", "gen", "helper.go")
 )
 
-// checkSourceFormat reports the calls that format source text in the code
-// generators: every call to one of sourceFormatters from a file under
-// sourceFormatScope other than sourceFormatHome. Generated Go code is built
-// as a syntax tree and printed, so a generator has no formatted text to
-// produce but through that one printing path; a call anywhere else means the
-// generator assembled its output as a string. Test files are left alone.
+// templatePackage is the package that renders text from templates, which no
+// generator imports: generated Go code is built as a syntax tree.
+const templatePackage = "text/template"
+
+// checkSourceFormat reports the code generators that assemble their output
+// as text: every call to one of sourceFormatters from a file under
+// sourceFormatScope other than sourceFormatHome, and every import of
+// templatePackage under sourceFormatScope. Generated Go code is built as a
+// syntax tree and printed, so a generator has no formatted text to produce
+// but through that one printing path, and no template to render. Test files
+// are left alone.
 func checkSourceFormat(root string, pkgs []*packages.Package) ([]violation, error) {
 	var found []violation
 	for _, p := range pkgs {
@@ -45,6 +51,15 @@ func checkSourceFormat(root string, pkgs []*packages.Package) ([]violation, erro
 			rel, err := filepath.Rel(root, path)
 			if err != nil || strings.HasSuffix(rel, "_test.go") || rel == sourceFormatHome || !inSourceFormatScope(rel) {
 				continue
+			}
+			for _, spec := range file.Imports {
+				if importPath, err := strconv.Unquote(spec.Path.Value); err == nil && importPath == templatePackage {
+					found = append(found, violation{
+						File: rel,
+						Message: fmt.Sprintf("Import of %s at %s:%d renders generated code from a template: build the generated file as a syntax tree and print it through the one formatting path, %s",
+							templatePackage, rel, p.Fset.Position(spec.Pos()).Line, sourceFormatHome),
+					})
+				}
 			}
 			ast.Inspect(file, func(n ast.Node) bool {
 				call, ok := n.(*ast.CallExpr)

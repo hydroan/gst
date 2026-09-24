@@ -27,9 +27,11 @@
 //
 // The code generators build the Go code they generate as syntax trees and
 // print them through one formatting path. A generator that formats source
-// text instead assembled its output as a string, so a call to a source text
-// formatter is reported anywhere in the generators but that one path.
-// checkSourceFormat names the formatters, the generators and the path.
+// text instead assembled its output as a string, and one that imports
+// text/template renders it from a template, so a call to a source text
+// formatter is reported anywhere in the generators but that one path, and an
+// import of text/template anywhere in them. checkSourceFormat names the
+// formatters, the generators and the path.
 package main
 
 import (
