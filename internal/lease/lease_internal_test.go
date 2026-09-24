@@ -258,29 +258,104 @@ func TestTransactionOnAnotherInstanceVerifiesAgainstThePrimary(t *testing.T) {
 	require.False(t, ran, "no statement of a transaction under a lost lease may run, on any instance")
 }
 
-// TestRenewKeepsTheLeaseBeyondItsDuration proves renewals move the expiry:
-// a holder renewing on time keeps the name for as long as it likes, and
-// every claim by another is refused meanwhile.
-func TestRenewKeepsTheLeaseBeyondItsDuration(t *testing.T) {
+// TestHoldersRenewingOnTimeKeepTheirNames proves, under the tolerant timings,
+// that a holder renewing on time keeps its name: renewals move the expiry
+// past the lease's duration, a hold outlives several deadlines, and a hold
+// keeps renewing past the end of its parent until stopped. Each proof waits
+// out a few of those timings on a name of its own and shares nothing else
+// with the others, so they wait side by side instead of one after another.
+// The test itself stays sequential: it sets the package's timing variables
+// once for all three, and the package's other tests set them too.
+func TestHoldersRenewingOnTimeKeepTheirNames(t *testing.T) { //nolint:tparallel // It sets the package's timings, which the sequential tests set too.
+	// The tolerant timings, not the fast ones: what these prove is that a
+	// holder renewing on time keeps its name, so the margin has to be wider
+	// than the machine can stall a renewing goroutine while the rest of the
+	// suite runs beside them.
 	withTolerantProtocol(t)
-	ctx := context.Background()
-	name := uniqueName(t)
 
-	holder, claimed, err := Claim(ctx, name)
-	require.NoError(t, err)
-	require.True(t, claimed)
+	// Renewals move the expiry: a holder renewing on time keeps the name for
+	// as long as it likes, and every claim by another is refused meanwhile.
+	t.Run("RenewKeepsTheLeaseBeyondItsDuration", func(t *testing.T) {
+		t.Parallel()
+		ctx := context.Background()
+		name := uniqueName(t)
 
-	// Renew across a couple of durations' worth of time, checking between
-	// renewals that no one else gets in.
-	deadline := time.Now().Add(2 * leaseDuration)
-	for time.Now().Before(deadline) {
-		require.NoError(t, holder.Renew(ctx))
-		_, claimed, err := Claim(ctx, name)
+		holder, claimed, err := Claim(ctx, name)
+		require.NoError(t, err)
+		require.True(t, claimed)
+
+		// Renew across a couple of durations' worth of time, checking between
+		// renewals that no one else gets in.
+		deadline := time.Now().Add(2 * leaseDuration)
+		for time.Now().Before(deadline) {
+			require.NoError(t, holder.Renew(ctx))
+			_, claimed, err := Claim(ctx, name)
+			require.NoError(t, err)
+			require.False(t, claimed, "a renewed lease is not free")
+			time.Sleep(renewInterval)
+		}
+		require.NoError(t, holder.Release(ctx))
+	})
+
+	// Successful renewals keep moving the deadline: the held context outlives
+	// many deadlines' worth of time, the name stays refused to everyone else,
+	// and the context ends only when the holder stops the renewals — without
+	// ErrLost.
+	t.Run("HoldKeepsTheLeaseWhileRenewalsSucceed", func(t *testing.T) {
+		t.Parallel()
+		ctx := context.Background()
+		name := uniqueName(t)
+
+		holder, claimed, err := Claim(ctx, name)
+		require.NoError(t, err)
+		require.True(t, claimed)
+
+		held, stop := Hold(ctx, holder, newHolderLog())
+		select {
+		case <-held.Done():
+			t.Fatalf("the lease ended although every renewal succeeded: %v", context.Cause(held))
+		case <-time.After(3 * localDeadline):
+		}
+		_, claimed, err = Claim(ctx, name)
 		require.NoError(t, err)
 		require.False(t, claimed, "a renewed lease is not free")
-		time.Sleep(renewInterval)
-	}
-	require.NoError(t, holder.Release(ctx))
+
+		stop()
+		awaitDone(held, t)
+		require.NotErrorIs(t, context.Cause(held), ErrLost, "stopping the renewals is not a loss")
+		require.NoError(t, holder.Release(ctx))
+	})
+
+	// The renewals outlive the parent context: parent ending tells the work
+	// to stop, and until the holder stops the renewals — once its work has
+	// returned — the name stays its own, so no other process starts the same
+	// work while this one is still winding down.
+	t.Run("HoldKeepsRenewingUntilStoppedAfterItsParentEnds", func(t *testing.T) {
+		t.Parallel()
+		ctx := context.Background()
+		name := uniqueName(t)
+
+		holder, claimed, err := Claim(ctx, name)
+		require.NoError(t, err)
+		require.True(t, claimed)
+
+		parent, cancelParent := context.WithCancel(ctx)
+		held, stop := Hold(parent, holder, newHolderLog())
+		cancelParent()
+		awaitDone(held, t)
+
+		// Long past the lease's duration, the name is still refused to others.
+		time.Sleep(2 * leaseDuration)
+		_, claimed, err = Claim(ctx, name)
+		require.NoError(t, err)
+		require.False(t, claimed, "the lease must stay renewed until the holder stops the renewals")
+
+		stop()
+		require.NoError(t, holder.Release(ctx))
+		_, claimed, err = Claim(ctx, name)
+		require.NoError(t, err)
+		require.True(t, claimed, "released once the work has returned, the name is free")
+	})
 }
 
 // TestTransactionUnderALeaseVerifiesIt proves the transaction guard: a

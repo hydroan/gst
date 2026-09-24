@@ -18,39 +18,6 @@ import (
 	gormlogger "gorm.io/gorm/logger"
 )
 
-// TestHoldKeepsTheLeaseWhileRenewalsSucceed proves successful renewals keep
-// moving the deadline: the held context outlives many deadlines' worth of
-// time, the name stays refused to everyone else, and the context ends only
-// when the holder stops the renewals — without ErrLost.
-func TestHoldKeepsTheLeaseWhileRenewalsSucceed(t *testing.T) {
-	// The tolerant timings, not the fast ones: what this proves is that a
-	// holder renewing on time keeps its name, so the margin has to be wider
-	// than the machine can stall the renewing goroutine while the rest of
-	// the suite runs beside it.
-	withTolerantProtocol(t)
-	ctx := context.Background()
-	name := uniqueName(t)
-
-	holder, claimed, err := Claim(ctx, name)
-	require.NoError(t, err)
-	require.True(t, claimed)
-
-	held, stop := Hold(ctx, holder, newHolderLog())
-	select {
-	case <-held.Done():
-		t.Fatalf("the lease ended although every renewal succeeded: %v", context.Cause(held))
-	case <-time.After(3 * localDeadline):
-	}
-	_, claimed, err = Claim(ctx, name)
-	require.NoError(t, err)
-	require.False(t, claimed, "a renewed lease is not free")
-
-	stop()
-	awaitDone(held, t)
-	require.NotErrorIs(t, context.Cause(held), ErrLost, "stopping the renewals is not a loss")
-	require.NoError(t, holder.Release(ctx))
-}
-
 // TestHoldEndsAtTheLocalDeadlineWithoutTheDatabase proves a holder that
 // cannot reach the database gives itself up once the local deadline passes
 // without a successful renewal — and not before: a single failure is not a
@@ -236,38 +203,6 @@ func TestHoldEndsWithItsParent(t *testing.T) {
 	cancelParent()
 	awaitDone(held, t)
 	require.ErrorIs(t, context.Cause(held), context.Canceled)
-}
-
-// TestHoldKeepsRenewingUntilStoppedAfterItsParentEnds proves the renewals
-// outlive the parent context: parent ending tells the work to stop, and until
-// the holder stops the renewals — once its work has returned — the name stays
-// its own, so no other process starts the same work while this one is still
-// winding down.
-func TestHoldKeepsRenewingUntilStoppedAfterItsParentEnds(t *testing.T) {
-	withTolerantProtocol(t)
-	ctx := context.Background()
-	name := uniqueName(t)
-
-	holder, claimed, err := Claim(ctx, name)
-	require.NoError(t, err)
-	require.True(t, claimed)
-
-	parent, cancelParent := context.WithCancel(ctx)
-	held, stop := Hold(parent, holder, newHolderLog())
-	cancelParent()
-	awaitDone(held, t)
-
-	// Long past the lease's duration, the name is still refused to others.
-	time.Sleep(2 * leaseDuration)
-	_, claimed, err = Claim(ctx, name)
-	require.NoError(t, err)
-	require.False(t, claimed, "the lease must stay renewed until the holder stops the renewals")
-
-	stop()
-	require.NoError(t, holder.Release(ctx))
-	_, claimed, err = Claim(ctx, name)
-	require.NoError(t, err)
-	require.True(t, claimed, "released once the work has returned, the name is free")
 }
 
 // TestHoldEndsWhenTheLeaseIsTakenAway proves the context Hold hands out
