@@ -1156,12 +1156,13 @@ Pod 端口，Ingress 只转发写进规则的路径——**只转发 `/api` 前�
 
 ### 为什么 `gg gen` 之后 `go test` 是红的？
 
-`gg gen` 每新建一个 service 文件，就在旁边生成同名的 `_test.go` 骨架（外部测试包），
-骨架里的测试用 `t.Fatal` 提示它还没被写成真正的接口测试；包里还没有 TestMain 时，再
-生成一个只声明 TestMain 的 `main_test.go`，用 `testutil.Run` 起默认的测试服务器（sqlite，
-不需要容器）。把骨架换成接口测试就不红了；需要 MySQL、Redis 或播种数据的包，在
-`main_test.go` 的 `testutil.Server` 上声明一次。这些文件生成后归项目维护，`gg gen` 不再
-改写；`gg check` 要求每个 service 文件都有配对的测试文件，删掉骨架而不写测试会被它拦下。
+`gg gen` 每新建一个 service 文件，就在旁边生成同名的 `_test.go` 骨架（外部测试包）：
+测试的第一行是一句 `t.Fatal`，下面是用框架 `client` 包按这个接口的方法、路由和请求、
+响应类型写好的示例请求；删掉第一行，示例就是一个能跑的测试，再按业务补断言。包里还没有
+TestMain 时，再生成一个只声明 TestMain 的 `main_test.go`，用 `testutil.Run` 起默认的测试
+服务器（sqlite，不需要容器）；需要 MySQL、Redis 或播种数据的包，在它的 `testutil.Server`
+上改一次。这些文件生成后归项目维护，`gg gen` 不再改写；`gg check` 要求每个由 `gg gen`
+生成的 service 文件都有配对的测试文件，删掉骨架而不写测试会被它拦下。
 
 ### 为什么删除 action 后 service 文件还在？
 
