@@ -36,9 +36,10 @@ cp config.ini.example config.ini
 ```
 
 `gg new` 会使用 module path 的最后一段创建项目目录，例如上面的目录名是
-`myapp`。它会生成基础目录、`main.go`、`config.ini.example`，并执行
-`go mod tidy` 和 `git init`；项目已经在某个 git 仓库里（例如克隆下来的仓库，或大
-仓库里的子目录）时跳过 `git init`，不建嵌套仓库。
+`myapp`。它会生成基础目录、`main.go`、`config.ini.example` 和各注册文件的空版本
+（与在空项目上执行一次 `gg gen` 的结果相同，因此第一次 `gg gen` 留到写下第一个
+model 之后），并执行 `go mod tidy` 和 `git init`；项目已经在某个 git 仓库里（例如
+克隆下来的仓库，或大仓库里的子目录）时跳过 `git init`，不建嵌套仓库。
 
 已经有项目目录（例如刚克隆下来的空仓库）时，进入该目录，在 module path 后面加
 `.`，项目会直接生成在当前目录；当前目录名必须与 module path 的最后一段一致：

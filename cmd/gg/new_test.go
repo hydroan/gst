@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"io/fs"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -190,6 +191,26 @@ func TestNewInitializesGitOnlyOutsideARepository(t *testing.T) {
 	}
 }
 
+// TestGenLeavesANewProjectUnchanged pins that a project gg new created is
+// already generated: gg gen right after it finds every registration file
+// holding what the generators produce with nothing to register, writes
+// nothing else, and the project type-checks against the framework. The first
+// gg gen a project needs is the one after its first model.
+func TestGenLeavesANewProjectUnchanged(t *testing.T) {
+	projectDir := newGenProject(t)
+	files, err := pkgnew.ProjectFiles("tmpapp")
+	require.NoError(t, err)
+	for _, file := range files {
+		writeProjectFile(t, filepath.Join(projectDir, file.Path), file.Content)
+	}
+	before := projectTree(t, projectDir)
+
+	require.NoError(t, genRunWithOptions(genRunOptions{Quiet: true}))
+
+	require.Equal(t, before, projectTree(t, projectDir))
+	requireProjectCompiles(t)
+}
+
 // stubGoModTidy makes tidying succeed without running it for the rest of the
 // test: it resolves the framework over the network, and these tests are about
 // the files gg new writes.
@@ -225,6 +246,31 @@ func requireFileContent(t *testing.T, path, content string) {
 	got, err := os.ReadFile(path)
 	require.NoError(t, err)
 	require.Equal(t, content, string(got), "content of %s", path)
+}
+
+// projectTree returns every file under dir by its path relative to dir, with
+// its content.
+func projectTree(t *testing.T, dir string) map[string]string {
+	t.Helper()
+
+	tree := make(map[string]string)
+	err := filepath.WalkDir(dir, func(path string, entry fs.DirEntry, err error) error {
+		if err != nil || entry.IsDir() {
+			return err
+		}
+		content, err := os.ReadFile(path)
+		if err != nil {
+			return err
+		}
+		rel, err := filepath.Rel(dir, path)
+		if err != nil {
+			return err
+		}
+		tree[rel] = string(content)
+		return nil
+	})
+	require.NoError(t, err)
+	return tree
 }
 
 // dirNames returns the names of the entries of dir, sorted.

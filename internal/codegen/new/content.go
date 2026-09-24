@@ -1,35 +1,6 @@
 //nolint:predeclared
 package new
 
-import (
-	"github.com/hydroan/gst/consts"
-)
-
-var modelContent = consts.CodeGeneratedComment() + `
-
-package model
-
-func init() {
-}
-`
-
-var serviceContent = consts.CodeGeneratedComment() + `
-
-package service
-
-func init() {
-}
-`
-
-var routerContent = consts.CodeGeneratedComment() + `
-
-package router
-
-func Init() error {
-	return nil
-}
-`
-
 const golangciLintContent = `version: "2"
 
 run:
