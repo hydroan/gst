@@ -1,6 +1,9 @@
 package goast
 
-import "go/token"
+import (
+	"fmt"
+	"go/token"
+)
 
 // LineSet hands out positions on successive lines of a fabricated file, for
 // the nodes of a syntax tree built from scratch that go/printer lays out by
@@ -14,27 +17,31 @@ type LineSet struct {
 	line int
 }
 
-// lineWidth is the byte length of every line of a LineSet's file.
-const lineWidth = 100
+// lineWidth is the byte length of every line of a LineSet's file, and
+// lineSetSize the size of the file, which bounds the lines it can hold.
+const (
+	lineWidth   = 100
+	lineSetSize = 1 << 30
+)
 
-// lineSetLines is how many lines a LineSet's file has.
-const lineSetLines = 1 << 12
-
-// NewLineSet adds a file of lineSetLines lines to fset and returns the
-// positions of its lines, to be printed through fset.
+// NewLineSet adds a file to fset and returns the positions of its lines, to
+// be printed through fset. The file grows a line at a time as Next is called.
 func NewLineSet(fset *token.FileSet) *LineSet {
-	file := fset.AddFile("lineset.go", -1, lineSetLines*lineWidth)
-	offsets := make([]int, lineSetLines)
-	for i := range offsets {
-		offsets[i] = i * lineWidth
-	}
-	file.SetLines(offsets)
-	return &LineSet{file: file}
+	return &LineSet{file: fset.AddFile("lineset.go", -1, lineSetSize)}
 }
 
 // Next returns a position on the line after the one returned last, the first
-// line on the first call.
+// line on the first call. It panics once the file has no room for another
+// line, rather than returning a position the file would fold onto its last
+// line and print in the wrong place.
 func (l *LineSet) Next() token.Pos {
+	offset := l.line * lineWidth
+	if offset+lineWidth > lineSetSize {
+		panic(fmt.Sprintf("goast: LineSet has no room for line %d", l.line+1))
+	}
+	if l.line > 0 {
+		l.file.AddLine(offset)
+	}
 	l.line++
-	return l.file.Pos((l.line - 1) * lineWidth)
+	return l.file.Pos(offset)
 }
