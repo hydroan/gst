@@ -169,7 +169,7 @@ README.md 面向使用 gst 框架的后端开发者，应保持简洁并聚焦�
 1. 在 gst 仓库执行 `make install` 安装 `gg` 命令。
 2. 使用 `gg new myproject` 创建后端项目。
 3. 在业务项目中修改或新增 `model` 文件，例如 `model/user.go`、`model/archive/document.go`。
-4. 修改 model 的 DSL 后执行 `gg gen` 生成 `main.go`、`model/model.gen.go`、`model/apidoc.gen.go`、`service/service.gen.go`、`router/router.gen.go` 等注册代码。
+4. 修改 model 的 DSL 后执行 `gg gen` 生成 `main.go`、`model/model.gen.go`、`model/apidoc.gen.go`、`service/service.gen.go`、`router/router.gen.go` 等注册代码；新建的 service 文件旁会同时生成同名 `_test.go` 骨架，包内没有 TestMain 时连同 `main_test.go`。
 5. 在对应的 `service` 文件中实现业务逻辑和复杂 hook。
 6. 如果 model 的 `Design()` 中声明了 `Migrate()`，该 model 也是数据库模型；数据库字段变化后使用 `gg migrate --dry-run` 预览迁移，再用 `gg migrate` 按确认执行 schema 迁移。
 7. 服务启动后会自动生成 Swagger 文档，访问路径是 `/docs/index.html`。
@@ -179,6 +179,7 @@ README.md 面向使用 gst 框架的后端开发者，应保持简洁并聚焦�
 - `main.go` 和所有 `.gen.go` 文件（`model/model.gen.go`、`model/apidoc.gen.go`、`service/service.gen.go`、`router/router.gen.go` 等）由 `gg gen` 生成，主要负责导入包和注册 model、service、router 以及 Swagger 文档使用的注释。除非明确要修改生成器，否则不要手写这些文件。
 - `model/**/*.go` 是接口和数据模型声明层。这里定义结构体字段、轻量级 model hook、`Design()` DSL、`Migrate()`、`Endpoint()`、`Param()`、`Route()`、`Payload()`、`Result()`、`Public()` 等接口行为。
 - `service/**/*.go` 是业务实现层。这里实现 `Create`、`Delete`、`Update`、`Patch`、`List`、`Get`、`DeleteMany` 等方法，以及 `CreateBefore`、`ListAfter`、`Filter`、`FilterRaw` 等复杂 hook。
+- `service/**/*_test.go` 是接口测试：`gg gen` 随新 service 文件生成骨架（外部测试包，`t.Fatal` 提示待替换），生成后归项目维护，`gg gen` 不再改写。
 - `module/` 用来注册内置或自定义模块，例如 `iam.Register(...)`。
 - `configx/`、`cronjob/`、`middleware/` 分别用于扩展配置、定时任务和中间件，应用入口通过空导入触发它们的 `init()`。
 

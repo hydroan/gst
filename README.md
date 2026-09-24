@@ -69,6 +69,7 @@ git init
 | --- | --- |
 | `model/**/*.go` | 声明数据结构、接口 DSL、轻量 model hook |
 | `service/**/*.go` | 实现业务逻辑、复杂 hook、查询过滤和返回补充 |
+| `service/**/*_test.go` | 与 service 文件同时由 `gg gen` 生成的测试骨架，含每个包的 `main_test.go`；生成后归项目维护，`gg gen` 不再改写 |
 | `module/` | 注册内置或自定义模块，例如 IAM |
 | `configx/` | 扩展配置 |
 | `cronjob/` | 注册定时任务（每个调度时刻整个部署只领一次，被打断的一轮再跑一次） |
@@ -91,7 +92,8 @@ git init
 
 1. 在 `model/**/*.go` 中声明资源模型或动作模型。
 2. 每次修改 DSL 后运行 `gg gen`。
-3. 在生成的 `service/**` 文件中实现业务逻辑或 hook。
+3. 在生成的 `service/**` 文件中实现业务逻辑或 hook，并把同名 `_test.go` 里的骨架换成接口测试
+   （骨架被换掉之前 `go test` 会失败）。
 4. 使用 `gg check` 检查项目结构和依赖边界。
 5. 删除 model 或关闭 action 后，运行 `gg prune` 或 `gg gen --prune` 清理 model
    不再需要的文件；它们只动 `service/` 和 `middleware/`。
@@ -906,7 +908,7 @@ func init() {
 
 | 命令 | 用途 |
 | --- | --- |
-| `gg gen` | 根据 `model` DSL 生成注册文件和 service action 文件 |
+| `gg gen` | 根据 `model` DSL 生成注册文件、service action 文件和它们的测试骨架 |
 | `gg gen --prune` | 生成后联动清理 model 不再需要的文件，和 `gg prune` 相同 |
 | `gg gen ts` | 生成接口收发类型的 TypeScript 声明到 `generated/typescript/`，供前端复制使用 |
 | `gg module copy <name>` | 将内置模块复制为业务项目本地源码，并删除框架源已移除的过时 model/service 文件（`_test.go` 与生成文件除外）；`gg module` 各子命令的完整规则见 [cmd/gg/MODULE.md](cmd/gg/MODULE.md) |
@@ -1151,6 +1153,15 @@ Pod 端口，Ingress 只转发写进规则的路径——**只转发 `/api` 前�
 | `/metrics` | 已被访问过的路由（gin 路由模式）及其请求数与延迟分布、缓存计数器上的数据库表名、进程内存与 CPU、构建信息 |
 | `/openapi.json` | 本服务注册的全部路由，以及每个路由的请求与响应模型 |
 | `/docs` | 同一份文档的 Swagger UI 渲染；页面资源编译进二进制，不从任何 CDN 加载脚本，离线可用 |
+
+### 为什么 `gg gen` 之后 `go test` 是红的？
+
+`gg gen` 每新建一个 service 文件，就在旁边生成同名的 `_test.go` 骨架（外部测试包），
+骨架里的测试用 `t.Fatal` 提示它还没被写成真正的接口测试；包里还没有 TestMain 时，再
+生成一个只声明 TestMain 的 `main_test.go`，用 `testutil.Run` 起默认的测试服务器（sqlite，
+不需要容器）。把骨架换成接口测试就不红了；需要 MySQL、Redis 或播种数据的包，在
+`main_test.go` 的 `testutil.Server` 上声明一次。这些文件生成后归项目维护，`gg gen` 不再
+改写；`gg check` 要求每个 service 文件都有配对的测试文件，删掉骨架而不写测试会被它拦下。
 
 ### 为什么删除 action 后 service 文件还在？
 
