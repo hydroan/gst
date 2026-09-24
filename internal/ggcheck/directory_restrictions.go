@@ -62,7 +62,6 @@ func checkDirectoryRestrictions(ignore gghelper.ProjectIgnore) []string {
 		"cmd":        true,
 		"errorx":     true,
 		"testcode":   true,
-		"testdata":   true,
 		"test":       true,
 		"docs":       true,
 		"doc":        true,

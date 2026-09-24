@@ -113,8 +113,9 @@ type columnInspectionSource struct {
 
 // scanColumnInspectionFiles reads the Go files the inspection build compiles
 // from the model directory. Tests are skipped, since the inspection program
-// does not build them, and so are the directories and files the go command
-// ignores.
+// does not build them, and so is what the project ignores (see
+// gghelper.ProjectIgnore), the directories and files the go command leaves out
+// among it.
 func scanColumnInspectionFiles(module string, modelDir string, ignore gghelper.ProjectIgnore) (*columnInspectionFiles, error) {
 	files := &columnInspectionFiles{
 		fset:         token.NewFileSet(),
@@ -124,14 +125,7 @@ func scanColumnInspectionFiles(module string, modelDir string, ignore gghelper.P
 	}
 	err := ignore.Walk(modelDir, func(path string, info os.FileInfo) error {
 		name := info.Name()
-		ignored := strings.HasPrefix(name, ".") || strings.HasPrefix(name, "_")
-		if info.IsDir() {
-			if path != modelDir && (ignored || name == "testdata") {
-				return filepath.SkipDir
-			}
-			return nil
-		}
-		if ignored || !strings.HasSuffix(name, ggconst.ExtensionGo) || strings.HasSuffix(name, ggconst.PatternTestFile) {
+		if info.IsDir() || !strings.HasSuffix(name, ggconst.ExtensionGo) || strings.HasSuffix(name, ggconst.PatternTestFile) {
 			return nil
 		}
 		content, readErr := os.ReadFile(path)
