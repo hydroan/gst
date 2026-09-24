@@ -449,6 +449,31 @@ func TestFindOrphanDirsLeavesOutWhatPruneIgnoreCovers(t *testing.T) {
 	}
 }
 
+// TestFindOrphanDirsLeavesOutWhatPruneDeletesAnyway pins that an orphan
+// directory lists none of the files prune deletes on their own, the test
+// files paired with a disabled service file among them: they are deleted
+// with that file, so listing them here would delete them twice.
+func TestFindOrphanDirsLeavesOutWhatPruneDeletesAnyway(t *testing.T) {
+	setupOrphanPruneProject(t)
+
+	writeProjectFile(t, filepath.Join("service", "authz", "role.go"), "package authz\n")
+	writeProjectFile(t, filepath.Join("service", "stale", "list.go"), "package stale\n")
+	writeProjectFile(t, filepath.Join("service", "stale", "list_test.go"), "package stale_test\n")
+	writeProjectFile(t, filepath.Join("service", "stale", "main_test.go"), "package stale_test\n")
+	deleting := []string{filepath.Join("service", "stale", "list.go"), filepath.Join("service", "stale", "list_test.go")}
+
+	orphans, _ := findOrphanDirs(t, []*gen.ModelInfo{orphanPruneModel()}, nil, ggconfig.PruneConfig{}, deleting...)
+
+	wantDir := filepath.Join("service", "stale")
+	if len(orphans) != 1 || orphans[0].Path != wantDir {
+		t.Fatalf("orphans = %#v, want single dir %q", orphans, wantDir)
+	}
+	wantFile := filepath.Join(wantDir, "main_test.go")
+	if len(orphans[0].Files) != 1 || orphans[0].Files[0] != wantFile {
+		t.Fatalf("orphans[0].Files = %#v, want [%s]", orphans[0].Files, wantFile)
+	}
+}
+
 // setupOrphanPruneProject moves the test into a temporary project root holding
 // a go.mod.
 func setupOrphanPruneProject(t *testing.T) {

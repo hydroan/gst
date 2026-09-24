@@ -25,7 +25,7 @@ import (
 var pruneCmd = &cobra.Command{
 	Use:   "prune",
 	Short: "clean what the models no longer need from service/ and middleware/",
-	Long: "Clean what the current models no longer need, asking once before deleting: the service files of disabled actions, " +
+	Long: "Clean what the current models no longer need, asking once before deleting: the service files of disabled actions with their test files, " +
 		"the unmanaged files of service directories no model owns, the middleware of removed copied modules with their register calls, " +
 		"and the directories this leaves empty. It touches service/ and middleware/ only, and gst.yaml's prune.ignore is the one way to keep a path there.",
 	Run: func(cmd *cobra.Command, args []string) {

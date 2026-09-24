@@ -160,6 +160,89 @@ func TestPruneLeftoversListsEverythingAndAsksOnce(t *testing.T) {
 	}
 }
 
+// TestPruneLeftoversDeletesThePairedTestFiles pins that a disabled service
+// file takes its test file with it, listed ahead of the question, while the
+// test files of the package's other service file and its main_test.go stay.
+func TestPruneLeftoversDeletesThePairedTestFiles(t *testing.T) {
+	t.Chdir(t.TempDir())
+	writeProjectGoMod(t, ".")
+	dir := filepath.Join(ggconst.DirService, "authz", "role")
+	currentFile := filepath.Join(dir, "role.go")
+	currentTest := filepath.Join(dir, "role_test.go")
+	mainTest := filepath.Join(dir, "main_test.go")
+	disabledFile := filepath.Join(dir, "list.go")
+	disabledTest := filepath.Join(dir, "list_test.go")
+	for _, path := range []string{currentFile, disabledFile} {
+		writeProjectFile(t, path, "package role\n")
+	}
+	for _, path := range []string{currentTest, mainTest, disabledTest} {
+		writeProjectFile(t, path, "package role_test\n")
+	}
+
+	var stdout string
+	withStdin(t, "y\n", func() {
+		stdout = captureStdout(t, func() {
+			pruneLeftovers([]string{currentFile, disabledFile}, []*gen.ModelInfo{pruneTestModel()}, nil, nil, gghelper.NewProjectIgnore(), ggconfig.PruneConfig{})
+		})
+	})
+
+	const question = "Do you want to delete these files?"
+	if i := strings.Index(stdout, disabledTest); i < 0 || i > strings.Index(stdout, question) {
+		t.Errorf("%s should be listed ahead of the question:\n%s", disabledTest, stdout)
+	}
+	for _, path := range []string{disabledFile, disabledTest} {
+		if _, err := os.Stat(path); !os.IsNotExist(err) {
+			t.Errorf("%s should be deleted, stat error = %v", path, err)
+		}
+	}
+	for _, path := range []string{currentFile, currentTest, mainTest} {
+		if _, err := os.Stat(path); err != nil {
+			t.Errorf("%s should stay: %v", path, err)
+		}
+	}
+}
+
+// TestPruneLeftoversCleansTheWholePackage pins what happens to the test
+// files of a package whose last service file goes: the paired test file is
+// listed once, with its service file, and the test files pairing with none,
+// main_test.go and fixtures_test.go, go with the orphan directory, so
+// nothing is deleted twice and the directory is removed.
+func TestPruneLeftoversCleansTheWholePackage(t *testing.T) {
+	t.Chdir(t.TempDir())
+	writeProjectGoMod(t, ".")
+	dir := filepath.Join(ggconst.DirService, "authz", "role")
+	disabledFile := filepath.Join(dir, "list.go")
+	disabledTest := filepath.Join(dir, "list_test.go")
+	mainTest := filepath.Join(dir, "main_test.go")
+	fixturesTest := filepath.Join(dir, "fixtures_test.go")
+	writeProjectFile(t, disabledFile, "package role\n")
+	for _, path := range []string{disabledTest, mainTest, fixturesTest} {
+		writeProjectFile(t, path, "package role_test\n")
+	}
+
+	var stdout string
+	withStdin(t, "y\n", func() {
+		stdout = captureStdout(t, func() {
+			pruneLeftovers([]string{disabledFile}, nil, nil, nil, gghelper.NewProjectIgnore(), ggconfig.PruneConfig{})
+		})
+	})
+
+	if n := strings.Count(stdout, disabledTest); n != 2 {
+		t.Errorf("%s listed and deleted once each, want 2 mentions, got %d:\n%s", disabledTest, n, stdout)
+	}
+	if strings.Contains(stdout, "Failed to delete") {
+		t.Errorf("nothing should fail to delete:\n%s", stdout)
+	}
+	for _, path := range []string{disabledFile, disabledTest, mainTest, fixturesTest} {
+		if _, err := os.Stat(path); !os.IsNotExist(err) {
+			t.Errorf("%s should be deleted, stat error = %v", path, err)
+		}
+	}
+	if _, err := os.Stat(dir); !os.IsNotExist(err) {
+		t.Errorf("%s should be removed once empty, stat error = %v", dir, err)
+	}
+}
+
 // TestPruneLeftoversKeepsOrphansWhenADisabledFileStays pins the guard behind
 // deleting everything in one run: a service directory can be an orphan only
 // because the disabled service file importing it goes, so when a disabled file

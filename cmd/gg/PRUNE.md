@@ -9,11 +9,11 @@
 一次清理先把要删的全部算出来，一次列给你看，你回答 `y` 才按顺序删：
 
 1. **算出待删清单**，分三类：
-   - **停用的 service 文件**：删掉 model、关掉 action，或者 action 去掉 `Service()` 之后，留在磁盘上的 service 文件；
+   - **停用的 service 文件**：删掉 model、关掉 action，或者 action 去掉 `Service()` 之后，留在磁盘上的 service 文件，连同它的配对测试文件；
    - **孤儿目录**：没有任何 model 对应、也没有活代码 import 的 service 目录，删的是其中 gg 不认得的文件；
    - **孤儿中间件文件**：`gg module copy` 写进 `middleware/`、所属模块已经被删掉的中间件文件，连同它们的注册调用。
 2. **列出并确认一次**：清单为空时只删空目录，不提问；否则按类别列出，回答 `y` 或 `yes` 才删，其他回答什么都不删。
-3. **按顺序删除**：停用的 service 文件，孤儿中间件文件和它们的注册调用，孤儿目录里的文件，最后是空目录。
+3. **按顺序删除**：停用的 service 文件及其配对测试文件，孤儿中间件文件和它们的注册调用，孤儿目录里的文件，最后是空目录。
 
 ```plantuml
 @startuml
@@ -95,6 +95,8 @@ stop
 
 其余文件都是 **gg 不认得的文件**：手写的辅助代码、测试文件、非 Go 文件等。
 
+**配对测试文件**：service 文件旁边同名的 `_test.go` 和 `_internal_test.go`，例如 `create.go` 旁的 `create_test.go`、`create_internal_test.go`。它们只跟着自己的 service 文件走：service 文件停用了，它们测的东西也没了，一起进待删清单；`main_test.go` 不和任何 service 文件配对，目录里还有别的 service 文件时它照常留下。
+
 **当前应有的 service 文件**：每个 model 里启用、并且声明了 `Service()` 的 action，各对应一个 service 文件。以 `model/sample/record.go` 为例：
 
 - `Create` 对应 `service/sample/record/create.go`；
@@ -133,7 +135,8 @@ stop
 ### 1.1 停用的 service 文件
 
 1. 现有的 gg 管的 service 文件，去掉当前应有的；`gg gen --prune` 时再去掉被路由屏蔽的 action 的 service 文件。
-2. 剩下的里面被 `prune.ignore` 覆盖的，移出清单，列在 `Files Ignored By Config` 下面。
+2. 每个停用的 service 文件后面跟上它磁盘上存在的配对测试文件。
+3. 剩下的里面被 `prune.ignore` 覆盖的，移出清单，列在 `Files Ignored By Config` 下面；配对测试文件也按同一条规则各自判断。
 
 ### 1.2 找出还有活代码在用的目录
 
@@ -207,7 +210,7 @@ stop
 ```
 
 - 孤儿目录的文件清单包含它所有子目录里 gg 不认得的文件，`testdata` 这类目录里的、被 Git 忽略的也算在内。
-- 孤儿目录里 gg 管的 service 文件不在清单里，它们是 1.1 的停用 service 文件。
+- 孤儿目录里 gg 管的 service 文件和它们的配对测试文件不在清单里，它们已经在 1.1 的清单里。
 
 ### 1.4 找出孤儿中间件文件
 
@@ -228,7 +231,7 @@ stop
 
 ## 第 3 步：按顺序删除
 
-1. **停用的 service 文件**：逐个删除，删掉的打印 `Deleted ...`，删不掉的打印 `Failed to delete ...` 并接着删后面的。
+1. **停用的 service 文件及其配对测试文件**：逐个删除，删掉的打印 `Deleted ...`，删不掉的打印 `Failed to delete ...` 并接着删后面的。
 2. **孤儿中间件文件**：逐个删掉并打印 `Deleted ...`；再从 `middleware/middleware.go` 删掉调用这些文件里函数的 `Register`、`RegisterAuth` 语句，框架 middleware 包的导入没人用了也一并删掉，打印 `Removed their register calls from middleware/middleware.go`。这一项出错时打印 `Failed to delete orphan module middleware, so orphan service directories are kept: ...`。
 3. **孤儿目录里的文件**：逐个删除，打印 `Deleted ...` 或 `Failed to delete ...`。孤儿目录是因为前两项的文件要删才成了孤儿，所以前两项有删不掉的文件时，孤儿目录全部保留；停用的 service 文件有删不掉的时打印 `Some disabled service files were not deleted, so orphan service directories are kept`。
 4. **空目录**：从最深的目录开始，删掉 `service/` 下的空目录；子目录删掉后变空的上层目录也一起删，`service/` 本身不删。每删一个打印 `Removed empty directory ...`。只有被 `prune.ignore` 覆盖的目录不删；被 Git 忽略的空目录、空的 `testdata` 目录照样删。
@@ -237,7 +240,7 @@ stop
 
 - `service/` 和 `middleware/` 以外的一切。`middleware/` 里也只删孤儿中间件文件，并从 `middleware/middleware.go` 删掉它们的注册调用。
 - `middleware/` 里没有模块复制所有权标记的文件，以及所属模块的 `model/<name>/` 还在的中间件文件。
-- 当前应有的 service 文件；`gg gen --prune` 时被路由屏蔽的 action 的 service 文件。
+- 当前应有的 service 文件和它们的配对测试文件；`gg gen --prune` 时被路由屏蔽的 action 的 service 文件。
 - 属于 model 的目录、中间层目录里 gg 不认得的文件。
 - `prune.ignore` 覆盖的路径。忽略规则里只认它：被 Git 忽略的、Go 工具链内置忽略的路径没有这层保护。
 - 1.2 保留的目录，连同它的子目录，以及它上面各层中间层目录里的文件。
@@ -251,6 +254,6 @@ stop
 | `Prune Leftovers` | 开始清理，`gg prune` 和 `gg gen --prune` 都有 |
 | `Files Ignored By Config` | 有停用的 service 文件被 `prune.ignore` 保住 |
 | `Service Helper Directories Kept` | 有被活代码 import 而保留的目录 |
-| `Disabled Service Files` | 有要删的停用 service 文件 |
+| `Disabled Service Files` | 有要删的停用 service 文件或它们的配对测试文件 |
 | `Unmanaged Orphan Service Directories` | 有孤儿目录 |
 | `Orphan Module Middleware Files` | 有孤儿中间件文件 |

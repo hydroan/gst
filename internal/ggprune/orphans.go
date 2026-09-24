@@ -62,7 +62,7 @@ func FindOrphanDirs(allModels []*gen.ModelInfo, keptDirs map[string]bool, deleti
 	}
 	sort.Strings(currentDirs.ownedDirs)
 
-	orphans = scanOrphanServiceDirs(currentDirs, protect)
+	orphans = scanOrphanServiceDirs(currentDirs, deleting, protect)
 	return orphans, keptHelpers, nil
 }
 
@@ -281,11 +281,11 @@ func serviceDirForImport(importPath string, importPrefix string) (string, bool) 
 // root, visiting the shallower directories first: a directory that is not
 // known, lies inside no owned directory and no orphan found already, is not
 // covered by a prune.ignore entry in protect, and holds unmanaged files
-// prune.ignore does not cover. Every directory is judged on its own, as prune
-// reads what it deletes whole: a testdata, vendor or hidden directory, a nested
-// module, or a directory named with a leading "_" no model owns is an orphan
-// like any other.
-func scanOrphanServiceDirs(currentDirs serviceDirSet, protect ggconfig.PruneConfig) []OrphanDir {
+// prune.ignore does not cover and deleting does not list. Every directory
+// is judged on its own, as prune reads what it deletes whole: a testdata,
+// vendor or hidden directory, a nested module, or a directory named with a
+// leading "_" no model owns is an orphan like any other.
+func scanOrphanServiceDirs(currentDirs serviceDirSet, deleting []string, protect ggconfig.PruneConfig) []OrphanDir {
 	root := filepath.Clean(ggconst.DirService)
 	dirs := make([]string, 0)
 
@@ -310,6 +310,10 @@ func scanOrphanServiceDirs(currentDirs serviceDirSet, protect ggconfig.PruneConf
 		return leftDepth < rightDepth
 	})
 
+	deleted := make(map[string]bool, len(deleting))
+	for _, file := range deleting {
+		deleted[filepath.Clean(file)] = true
+	}
 	orphans := make([]OrphanDir, 0)
 	for _, dir := range dirs {
 		if currentDirs.knownDirs[dir] || isInsideAnyDir(dir, currentDirs.ownedDirs) || isUnderOrphanServiceDir(dir, orphans) {
@@ -321,8 +325,12 @@ func scanOrphanServiceDirs(currentDirs serviceDirSet, protect ggconfig.PruneConf
 
 		// A file prune.ignore covers stays out of the orphan's files, so
 		// cleaning the orphan leaves it, and a directory whose unmanaged
-		// files are all covered is no orphan at all.
-		files := slices.DeleteFunc(unmanagedFilesUnderDir(dir), protect.Ignores)
+		// files are all covered is no orphan at all. A file prune deletes
+		// anyway, such as the test file paired with a disabled service
+		// file, stays out too, so it is deleted once.
+		files := slices.DeleteFunc(unmanagedFilesUnderDir(dir), func(file string) bool {
+			return protect.Ignores(file) || deleted[filepath.Clean(file)]
+		})
 		if len(files) == 0 {
 			continue
 		}

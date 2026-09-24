@@ -96,9 +96,11 @@ func phaseFileNames() map[string]bool {
 	}
 }
 
-// FilePlan is what prune intends for the service files of disabled actions.
+// FilePlan is what prune intends for the service files of disabled actions
+// and the test files paired with them.
 type FilePlan struct {
-	// Delete lists the files to delete, in the order they were scanned.
+	// Delete lists the files to delete, in the order they were scanned, each
+	// service file followed by its test files.
 	Delete []string
 
 	// Ignored lists the files a gst.yaml prune.ignore entry keeps.
@@ -109,21 +111,42 @@ type FilePlan struct {
 // enabled action of models expects any more, except the ones in kept, which
 // belong to gst.yaml-ignored actions and must stay on disk, and the ones a
 // prune.ignore entry in protect covers, which it lists as ignored instead.
+// The test files paired with a deleted service file, create_test.go and
+// create_internal_test.go beside create.go, go with it: once the service
+// file is gone they test nothing, and the service test organization check
+// refuses a test file without a source file. A prune.ignore entry covering
+// a test file keeps it like any other file.
 func PlanFiles(existing []string, models []*gen.ModelInfo, kept map[string]bool, protect ggconfig.PruneConfig) FilePlan {
 	// Get list of service files that should currently exist
 	currentFiles := currentServiceFiles(models)
 
-	// Find files to delete (exist in old list but not in current list)
+	// Find files to delete (exist in old list but not in current list),
+	// each followed by the test files paired with it
 	filesToDelete := make([]string, 0)
 	for _, oldFile := range existing {
 		if !currentFiles[oldFile] && !kept[oldFile] {
 			filesToDelete = append(filesToDelete, oldFile)
+			filesToDelete = append(filesToDelete, pairedTestFiles(oldFile)...)
 		}
 	}
 
 	// Keep the files gst.yaml prune.ignore protects
 	filesToDelete, ignoredFiles := filterIgnoredFiles(filesToDelete, protect)
 	return FilePlan{Delete: filesToDelete, Ignored: ignoredFiles}
+}
+
+// pairedTestFiles returns the test files on disk that pair with the service
+// file servicePath: its external form first, then its internal form, as in
+// create_test.go and create_internal_test.go for create.go.
+func pairedTestFiles(servicePath string) []string {
+	stem := strings.TrimSuffix(servicePath, ".go")
+	var tests []string
+	for _, path := range []string{stem + ggconst.PatternTestFile, stem + "_internal" + ggconst.PatternTestFile} {
+		if _, err := os.Stat(path); err == nil {
+			tests = append(tests, path)
+		}
+	}
+	return tests
 }
 
 // currentServiceFiles returns the service files the enabled Service() actions

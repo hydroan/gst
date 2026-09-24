@@ -67,6 +67,37 @@ func TestPlanFiles(t *testing.T) {
 	}
 }
 
+// TestPlanFilesDeletesThePairedTestFiles pins that the test files paired
+// with a deleted service file go with it, its external and internal forms
+// alike, while the test files of a service file that stays are untouched and
+// a prune.ignore entry keeps the test files it covers along with their
+// service file.
+func TestPlanFilesDeletesThePairedTestFiles(t *testing.T) {
+	t.Chdir(t.TempDir())
+	current := filepath.Join("service", "authz", "role.go")
+	disabled := filepath.Join("service", "authz", "list.go")
+	protected := filepath.Join("service", "legacy", "create.go")
+	for _, path := range []string{
+		current, filepath.Join("service", "authz", "role_test.go"),
+		disabled, filepath.Join("service", "authz", "list_test.go"), filepath.Join("service", "authz", "list_internal_test.go"),
+		protected, filepath.Join("service", "legacy", "create_test.go"),
+	} {
+		writeProjectFile(t, path, "package authz\n")
+	}
+	protect := ggconfig.PruneConfig{Ignore: []string{"service/legacy"}}
+
+	plan := ggprune.PlanFiles([]string{current, disabled, protected}, []*gen.ModelInfo{orphanPruneModel()}, nil, protect)
+
+	wantDelete := []string{disabled, filepath.Join("service", "authz", "list_test.go"), filepath.Join("service", "authz", "list_internal_test.go")}
+	if !slices.Equal(plan.Delete, wantDelete) {
+		t.Fatalf("Delete = %q, want the disabled file followed by its test files %q", plan.Delete, wantDelete)
+	}
+	wantIgnored := []string{protected, filepath.Join("service", "legacy", "create_test.go")}
+	if !slices.Equal(plan.Ignored, wantIgnored) {
+		t.Fatalf("Ignored = %q, want the protected file and its test file %q", plan.Ignored, wantIgnored)
+	}
+}
+
 func TestRemoveFiles(t *testing.T) {
 	t.Chdir(t.TempDir())
 	present := filepath.Join("service", "record", "list.go")

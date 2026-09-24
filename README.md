@@ -241,7 +241,7 @@ service.Base[M, REQ, RSP]
 
 - 默认资源 CRUD：当 `M`、`REQ`、`RSP` 是同一个类型时，框架会执行默认
   数据库流程，业务侧主要实现 `CreateBefore`、`CreateAfter`、`ListAfter`、
-  `Filter`、`FilterRaw` 等 hook。
+  `Filter` 等 hook。
 - 自定义动作：当 `Payload` 或 `Result` 让 `REQ`、`RSP` 不同于 `M` 时，
   框架会调用 service 的 `Create`、`List`、`Delete` 等 action 方法。
 
@@ -465,7 +465,7 @@ err := database.Select[*appmodel.Record, categoryTotal](ctx,
   或切片等），不像客户端过滤器那样退化成空结果。
 - **service 钩子里的隔离不会自动套用**。模型自己声明的行规则跟着模型走：软删除和模型嵌入的
   租户作用域对投影和 `List` 一样生效，连入的模型也在 ON 里带着。不会继承的是 `List` 时由
-  controller 跑的 service 钩子（`Filter`/`FilterRaw`）加上的业务隔离：聚合是 service 直接
+  controller 跑的 service 钩子（`Filter`）加上的业务隔离：聚合是 service 直接
   调用的，那些钩子不会执行——每个这样的条件都必须自己写进 `Where`。漏掉一个就会跨过钩子
   划的边界聚合，且没有任何迹象。
 
@@ -1005,8 +1005,9 @@ gen:
   （如登录查询用户表）不受影响。
 
 **`gg prune`（以及 `gg gen --prune`）只动 `service/` 和 `middleware/` 两个目录**，
-项目其他地方一个文件都不删、不改。它清理停用 action 的 service 文件、孤儿
-service 目录和被删掉的复制模块留下的中间件文件，要删的先一次列出、问一次再删；
+项目其他地方一个文件都不删、不改。它清理停用 action 的 service 文件连同配对的测试
+文件、孤儿 service 目录和被删掉的复制模块留下的中间件文件，要删的先一次列出、问一
+次再删；
 `prune.ignore` 列出的路径一律跳过：
 
 ```yaml
@@ -1021,8 +1022,8 @@ prune:
 - 每项是 `service/` 或 `middleware/` 下的一个路径（相对项目根目录），按目录层级匹配：
   `service/legacy` 覆盖该目录及其下全部内容，但不覆盖 `service/legacyx`；
   写到具体文件就只保护这一个文件。它不是通配符，也不是正则。
-- 列出的路径在任何情况下都不会被删：停用 action 的 service 文件、孤儿目录
-  里的文件、清理后变空的目录、被删掉的复制模块留下的中间件文件都算。
+- 列出的路径在任何情况下都不会被删：停用 action 的 service 文件及其配对测试文件、
+  孤儿目录里的文件、清理后变空的目录、被删掉的复制模块留下的中间件文件都算。
 - 要保留的路径只能写进 `prune.ignore`：`service/` 归 gg 管，要保持干净，项目
   的 Git 忽略规则和 Go 工具链的内置忽略不保护任何路径。被 Git 忽略的文件、
   `testdata`、以 `_` 开头的目录等和其他路径一样按规则清理；这些位置里的代码
