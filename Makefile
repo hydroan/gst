@@ -22,11 +22,12 @@ define install_tool_if_missing
 	fi
 endef
 
-# run_tool resolves tools installed during the current make invocation before running them.
+# run_tool resolves tools installed during the current make invocation before
+# running them, with the environment TOOL_ENV sets, empty but for test.
 define run_tool
 	@tool="$$(command -v $(1) 2>/dev/null || printf '%s' "$(GO_BIN_DIR)/$(1)")"; \
 		echo "$(1) $(2)"; \
-		"$$tool" $(2)
+		$(TOOL_ENV) "$$tool" $(2)
 endef
 
 # run_tool_in runs a resolved tool from another directory. Neither tool it
@@ -38,7 +39,7 @@ endef
 define run_tool_in
 	@tool="$$(command -v $(1) 2>/dev/null || printf '%s' "$(GO_BIN_DIR)/$(1)")"; \
 		echo "$(1) $(3) ($(2))"; \
-		cd $(2) && "$$tool" $(3)
+		cd $(2) && $(TOOL_ENV) "$$tool" $(3)
 endef
 
 # Default target
@@ -143,6 +144,15 @@ DIALECT_PACKAGES := ./database/... ./internal/lease/... ./cronjob/... ./leader/.
 TEST_FLAGS := -race -gcflags=golang.org/x/crypto/blowfish=-race=false
 TEST_OUTPUT := --format pkgname --format-hide-empty-pkg --hide-summary=skipped
 
+# go test keys a cached result on the value of each environment variable the
+# test read, and the tests read PATH: they run go and git, and the test
+# container library runs the Docker credential helper. Each shell builds its
+# PATH its own way, so the tests run with this fixed one, and runs started
+# from any terminal or agent share their cached results instead of each
+# rerunning what another ran last.
+TEST_PATH := $(shell go env GOROOT)/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin
+
+test: TOOL_ENV = PATH="$(TEST_PATH)"
 test:
 	$(call install_tool_if_missing,gotestsum,$(GOTESTSUM_VERSION),$(GOTESTSUM_PKG))
 	@echo "Running unit tests (the per-dialect suites run against mysql here)..."
