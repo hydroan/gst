@@ -30,9 +30,12 @@ var genCmd = &cobra.Command{
 	},
 }
 
+// prune is gg gen's --prune flag: once the code is generated, gg gen prunes
+// the way gg prune does.
+var prune bool
+
 func init() {
-	genCmd.Flags().BoolVar(&prune, "prune", false, "Prune disabled service action files with user confirmation")
-	genCmd.Flags().BoolVar(&cleanOrphans, "clean-orphans", false, "After pruning, delete unmanaged files in orphan service directories and middleware left by removed copied modules")
+	genCmd.Flags().BoolVar(&prune, "prune", false, "After generating, prune what the models no longer need from service/ and middleware/, asking once before deleting")
 }
 
 type genRunOptions struct {
@@ -52,10 +55,6 @@ func genRun() {
 }
 
 func genRunWithOptions(opts genRunOptions) error {
-	if cleanOrphans && !prune {
-		return errors.New("--clean-orphans requires --prune when used with gg gen")
-	}
-
 	if len(module) == 0 {
 		var err error
 		module, err = gghelper.ModulePath()
@@ -348,10 +347,10 @@ func genRunWithOptions(opts genRunOptions) error {
 	}
 
 	// ============================================================
-	// Prune disabled service files
+	// Prune what the models no longer need
 	// ============================================================
 	if prune {
-		pruneServiceFiles(oldServiceFiles, allModels, ignoreResult.KeptServiceFiles, ignoreResult.KeptServiceDirs, ignore, scanned.pruneConfig)
+		pruneLeftovers(oldServiceFiles, allModels, ignoreResult.KeptServiceFiles, ignoreResult.KeptServiceDirs, ignore, scanned.pruneConfig)
 	}
 
 	// ============================================================

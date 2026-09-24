@@ -139,7 +139,7 @@ func recordFrameworkSources(t *testing.T, root string) {
 
 // newGenProject creates a temporary project for tests that run gg gen, makes
 // it the working directory and resets the gg command globals gen reads
-// (module, prune, cleanOrphans), restoring them when the test ends. Its go.mod resolves
+// (module, prune), restoring them when the test ends. Its go.mod resolves
 // the framework to this repository, since generation compiles the column
 // inspection program against the framework for real. Generation also caches
 // that inspection under the user cache directory, keyed by project directory;
@@ -150,18 +150,15 @@ func newGenProject(t *testing.T) string {
 
 	oldModule := module
 	oldPrune := prune
-	oldCleanOrphans := cleanOrphans
 	t.Cleanup(func() {
 		module = oldModule
 		prune = oldPrune
-		cleanOrphans = oldCleanOrphans
 	})
 
 	projectDir := t.TempDir()
 	t.Chdir(projectDir)
 	module = ""
 	prune = false
-	cleanOrphans = false
 
 	writeProjectGoModAgainstRealFramework(t, projectDir)
 	cacheDir, err := columns.CacheDir()

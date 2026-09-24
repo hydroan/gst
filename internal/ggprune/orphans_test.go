@@ -186,23 +186,25 @@ func TestFindOrphanDirsKeepsHelperDirsImportedByLiveCode(t *testing.T) {
 // nothing: a .gen.go file, whose imports follow the models it was generated
 // from, so a stale service.gen.go keeps nothing a deleted model left behind; a
 // directory no model owns, or a leftover would keep the helper it imports; a
-// file orphan cleanup deletes along with the orphans, such as the middleware
-// of a removed module; and code the project ignores, which gg check and gg gen
+// file this prune deletes besides the orphans, such as the service file of a
+// disabled action or the middleware of a removed module, even in a directory
+// a model owns; and code the project ignores, which gg check and gg gen
 // do not read either: a file the project's Git ignore rules exclude or whose
 // name begins with "_", and one below testdata, vendor, a hidden or an
 // underscored directory, a nested module or a directory the go.mod ignores,
 // the testdata next to a model's service files included.
 func TestFindOrphanDirsIgnoresImportsFromCodeThatIsNotLive(t *testing.T) {
 	importers := []struct {
-		name   string
-		path   string
-		pkg    string
-		orphan bool
-		extra  map[string]string
+		name    string
+		path    string
+		pkg     string
+		deleted bool
+		extra   map[string]string
 	}{
 		{name: "generated file", path: filepath.Join("service", "service.gen.go"), pkg: "service"},
 		{name: "directory no model owns", path: filepath.Join("service", "leftover", "leftover.go"), pkg: "leftover"},
-		{name: "file orphan cleanup deletes", path: filepath.Join("middleware", "sample_auth.go"), pkg: "middleware", orphan: true},
+		{name: "middleware prune deletes", path: filepath.Join("middleware", "sample_auth.go"), pkg: "middleware", deleted: true},
+		{name: "service file prune deletes", path: filepath.Join("service", "authz", "role", "list.go"), pkg: "role", deleted: true},
 		{name: "Git ignored file", path: filepath.Join("cronjob", "local.go"), pkg: "cronjob", extra: map[string]string{".gitignore": "cronjob/local.go\n"}},
 		{name: "Git ignored directory", path: filepath.Join("scratch", "try.go"), pkg: "scratch", extra: map[string]string{".gitignore": "scratch/\n"}},
 		{name: "underscored file", path: filepath.Join("cronjob", "_old.go"), pkg: "cronjob"},
@@ -221,12 +223,12 @@ func TestFindOrphanDirsIgnoresImportsFromCodeThatIsNotLive(t *testing.T) {
 				writeProjectFile(t, path, content)
 			}
 			writeProjectFile(t, importer.path, "package "+importer.pkg+"\n\nimport _ \"tmpapp/service/helper\"\n")
-			var orphanFiles []string
-			if importer.orphan {
-				orphanFiles = append(orphanFiles, importer.path)
+			var deleting []string
+			if importer.deleted {
+				deleting = append(deleting, importer.path)
 			}
 
-			orphans, keptHelpers := findOrphanDirs(t, []*gen.ModelInfo{helperImportModel()}, nil, ggconfig.PruneConfig{}, orphanFiles...)
+			orphans, keptHelpers := findOrphanDirs(t, []*gen.ModelInfo{helperImportModel()}, nil, ggconfig.PruneConfig{}, deleting...)
 
 			wantDir := filepath.Join("service", "helper")
 			if !slices.ContainsFunc(orphans, func(orphan ggprune.OrphanDir) bool { return orphan.Path == wantDir }) {
@@ -460,12 +462,12 @@ func setupOrphanPruneProject(t *testing.T) {
 
 // findOrphanDirs runs ggprune.FindOrphanDirs over the test project, whose
 // module is tmpapp, reading it through the project's ignore rules as the test
-// left them and failing the test on an error. orphanFiles are the files orphan
-// cleanup deletes along with the orphans.
-func findOrphanDirs(t *testing.T, models []*gen.ModelInfo, keptDirs map[string]bool, protect ggconfig.PruneConfig, orphanFiles ...string) (orphans, keptHelpers []ggprune.OrphanDir) {
+// left them and failing the test on an error. deleting are the files prune
+// deletes besides the orphans' own.
+func findOrphanDirs(t *testing.T, models []*gen.ModelInfo, keptDirs map[string]bool, protect ggconfig.PruneConfig, deleting ...string) (orphans, keptHelpers []ggprune.OrphanDir) {
 	t.Helper()
 
-	orphans, keptHelpers, err := ggprune.FindOrphanDirs(models, keptDirs, orphanFiles, "tmpapp", gghelper.NewProjectIgnore(), protect)
+	orphans, keptHelpers, err := ggprune.FindOrphanDirs(models, keptDirs, deleting, "tmpapp", gghelper.NewProjectIgnore(), protect)
 	if err != nil {
 		t.Fatal(err)
 	}

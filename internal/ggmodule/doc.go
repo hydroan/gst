@@ -276,8 +276,8 @@
 // overwrite on their next copy, which upgrades them into prune management.
 // The marker also outlives the module: once the project deletes
 // model/<name>, the files carrying the module's marker are orphans
-// (OrphanMiddlewareFiles), and gg prune --clean-orphans deletes them together
-// with their register calls (RemoveMiddlewareFiles).
+// (OrphanMiddlewareFiles), and gg prune deletes them together with their
+// register calls (RemoveMiddlewareFiles).
 //
 // Registration is a reconciliation of middleware/middleware.go against the
 // manifest, scoped to the handlers this module owns (the top-level functions
@@ -334,9 +334,9 @@
 // # gg gen during copy
 //
 // Between the model writes and the service writes, the command runs the same
-// generator as gg gen with two adjustments: prune and clean-orphans stay
-// disabled, because a copy must not become a cleanup pass over user service
-// files, and project checks are scoped to a baseline snapshot taken before
+// generator as gg gen with two adjustments: prune stays disabled, because a
+// copy must not become a cleanup pass over user service files, and project
+// checks are scoped to a baseline snapshot taken before
 // the copy, so pre-existing violations in the project do not block copying an
 // unrelated module while violations introduced by the copied module still
 // fail it.

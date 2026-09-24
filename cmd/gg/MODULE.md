@@ -217,7 +217,7 @@ service 目录不是镜像复制，分两类文件。
 
 1. **写 model 文件**（`Copy Model Files`）。
 2. **删过期文件**（`Prune Stale Files`，有过期文件时才有这一段）：删过期的 model、service 文件；删过期的中间件文件，同时从 `middleware/middleware.go` 删掉调用这些文件里函数的 `Register`、`RegisterAuth` 语句，框架 middleware 包的导入没人用了也一并删掉。已经不在的文件算删过。这一步放在 `gg gen` 之前，因为过期的 model 文件还带着 DSL，`gg gen` 会照样为它生成注册代码。
-3. **运行 gg gen**：和 `gg gen` 同一套生成流程，但不打印生成文件的日志，不做 prune，也不清理孤儿目录；生成前的项目检查只拦本次 copy 新引入的违规，基线里已有的不拦。
+3. **运行 gg gen**：和 `gg gen` 同一套生成流程，但不打印生成文件的日志，不做 prune；生成前的项目检查只拦本次 copy 新引入的违规，基线里已有的不拦。
 4. **写动作 service 文件**（`Copy Service Files`）。
 5. **写辅助文件**（`Copy Helper Files`，有辅助文件时才有）。
 6. **写中间件文件**（`Copy Middleware Files`，模块声明了中间件时才有）。
@@ -311,10 +311,10 @@ stop
 copy 成功结束时，以及执行中途在写入或删除文件之后出错时，会提示：
 
 ```
-To remove copied module code, delete model/<name>, then run: gg gen --prune --clean-orphans
+To remove copied module code, delete model/<name>, then run: gg gen --prune
 ```
 
-删掉 `model/<name>/` 后，模块的动作不再存在，`gg gen --prune --clean-orphans` 会删掉对应的 service 文件和孤儿目录。这个模块复制来的中间件文件成了孤儿中间件文件，也在同一步里删掉，`middleware/middleware.go` 里它们的注册调用一并删掉。清理规则见 [PRUNE.md](PRUNE.md)。
+删掉 `model/<name>/` 后，模块的动作不再存在，`gg gen --prune` 会把对应的 service 文件、孤儿目录，以及这个模块复制来、成了孤儿的中间件文件一次列出来，你确认后一起删掉，`middleware/middleware.go` 里它们的注册调用一并删掉。清理规则见 [PRUNE.md](PRUNE.md)。
 
 ## 终端输出的段落标题
 

@@ -93,8 +93,8 @@ git init
 2. 每次修改 DSL 后运行 `gg gen`。
 3. 在生成的 `service/**` 文件中实现业务逻辑或 hook。
 4. 使用 `gg check` 检查项目结构和依赖边界。
-5. 删除 model 或关闭 action 后，运行 `gg prune` 或 `gg gen --prune` 清理废弃
-   service 文件。
+5. 删除 model 或关闭 action 后，运行 `gg prune` 或 `gg gen --prune` 清理 model
+   不再需要的文件；它们只动 `service/` 和 `middleware/`。
 
 ## 模型 DSL
 
@@ -854,11 +854,11 @@ func init() {
 | 命令 | 用途 |
 | --- | --- |
 | `gg gen` | 根据 `model` DSL 生成注册文件和 service action 文件 |
-| `gg gen --prune` | 生成后联动清理废弃 service action 文件 |
+| `gg gen --prune` | 生成后联动清理 model 不再需要的文件，和 `gg prune` 相同 |
 | `gg gen ts` | 生成接口收发类型的 TypeScript 声明到 `generated/typescript/`，供前端复制使用 |
 | `gg module copy <name>` | 将内置模块复制为业务项目本地源码，并删除框架源已移除的过时 model/service 文件（`_test.go` 与生成文件除外）；`gg module` 各子命令的完整规则见 [cmd/gg/MODULE.md](cmd/gg/MODULE.md) |
 | `gg check` | 检查业务项目结构、命名、依赖边界和 tag 约束 |
-| `gg prune` | 只扫描并清理废弃 service action 文件 |
+| `gg prune` | 清理 model 不再需要的文件，只动 `service/` 和 `middleware/`，删前问一次 |
 | `gg routes` | 按 model 层级打印当前生成的接口路径 |
 | `gg route-tree` | 按 URL 层级打印当前生成的路由树 |
 | `gg migrate` | 生成当前数据库方言的 schema，预览并按确认执行数据库迁移 |
@@ -949,8 +949,10 @@ gen:
 - 忽略不影响 model 的 `Migrate` 注册：表结构照常创建，模块内部逻辑
   （如登录查询用户表）不受影响。
 
-`gg prune`（以及 `gg gen --prune`）清理停用 action 的 service 文件、孤儿
-service 目录和被删掉的复制模块留下的中间件文件时，会跳过 `prune.ignore` 列出的路径：
+**`gg prune`（以及 `gg gen --prune`）只动 `service/` 和 `middleware/` 两个目录**，
+项目其他地方一个文件都不删、不改。它清理停用 action 的 service 文件、孤儿
+service 目录和被删掉的复制模块留下的中间件文件，要删的先一次列出、问一次再删；
+`prune.ignore` 列出的路径一律跳过：
 
 ```yaml
 version: 1
@@ -975,7 +977,7 @@ prune:
 - `gg` 只读取 `gst.yaml`，项目里如果还有 `.gg.yaml`、`gst.yml` 这类同类
   文件，会输出 warning 提示它们不会被读取。
 
-prune 删什么、不删什么、按什么顺序删、哪一步会先问你，完整规则见
+prune 删什么、不删什么、按什么顺序删、什么时候问你，完整规则见
 [cmd/gg/PRUNE.md](cmd/gg/PRUNE.md)。
 
 ## 示例

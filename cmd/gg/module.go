@@ -195,12 +195,9 @@ func runModuleCopyGen(baseline map[string]struct{}) error {
 	// sources introduce new violations, fix the framework module or the check
 	// rule instead of bypassing validation here.
 	oldPrune := prune
-	oldCleanOrphans := cleanOrphans
 	prune = false
-	cleanOrphans = false
 	defer func() {
 		prune = oldPrune
-		cleanOrphans = oldCleanOrphans
 	}()
 
 	return genRunWithOptions(genRunOptions{Quiet: true, BaselineViolations: baseline})
@@ -245,7 +242,7 @@ func printModuleCopyPlanGroup(title string, files []string) {
 }
 
 func printModuleCopyCleanup(name string) {
-	clioutput.Item("", "To remove copied module code, delete model/%s, then run: gg gen --prune --clean-orphans", name)
+	clioutput.Item("", "To remove copied module code, delete model/%s, then run: gg gen --prune", name)
 }
 
 // printModuleCopyStaleModelFiles previews the stale model files the copy

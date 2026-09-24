@@ -6,16 +6,19 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/hydroan/gst/consts"
+	"github.com/hydroan/gst/dsl"
+	"github.com/hydroan/gst/internal/codegen/gen"
 	"github.com/hydroan/gst/internal/ggconfig"
 	"github.com/hydroan/gst/internal/ggconst"
 	"github.com/hydroan/gst/internal/gghelper"
 )
 
-// TestPruneServiceFilesKeepsWhatPruneIgnoreCovers pins that prune never
+// TestPruneLeftoversKeepsWhatPruneIgnoreCovers pins that prune never
 // deletes what a gst.yaml prune.ignore entry covers: a disabled service file,
 // a whole directory of them, or a directory left empty. An entry naming
 // nothing on disk is warned about.
-func TestPruneServiceFilesKeepsWhatPruneIgnoreCovers(t *testing.T) {
+func TestPruneLeftoversKeepsWhatPruneIgnoreCovers(t *testing.T) {
 	t.Chdir(t.TempDir())
 	listFile := filepath.Join(ggconst.DirService, "record", "list.go")
 	legacyFile := filepath.Join(ggconst.DirService, "legacy", "create.go")
@@ -36,7 +39,7 @@ func TestPruneServiceFilesKeepsWhatPruneIgnoreCovers(t *testing.T) {
 	var stdout string
 	withStdin(t, "y\n", func() {
 		stdout = captureStdout(t, func() {
-			pruneServiceFiles([]string{listFile, legacyFile}, nil, nil, nil, gghelper.NewProjectIgnore(), protect)
+			pruneLeftovers([]string{listFile, legacyFile}, nil, nil, nil, gghelper.NewProjectIgnore(), protect)
 		})
 	})
 
@@ -53,10 +56,10 @@ func TestPruneServiceFilesKeepsWhatPruneIgnoreCovers(t *testing.T) {
 	}
 }
 
-// TestPruneServiceFilesRemindsOfUnreadSettingsBeforeAsking pins that with an
+// TestPruneLeftoversRemindsOfUnreadSettingsBeforeAsking pins that with an
 // old .gg.yaml next to gst.yaml, prune says right before asking to delete that
 // the paths it lists are not protected.
-func TestPruneServiceFilesRemindsOfUnreadSettingsBeforeAsking(t *testing.T) {
+func TestPruneLeftoversRemindsOfUnreadSettingsBeforeAsking(t *testing.T) {
 	t.Chdir(t.TempDir())
 	writeProjectFile(t, ".gg.yaml", "prune:\n  ignore:\n    - service/record\n")
 	listFile := filepath.Join(ggconst.DirService, "record", "list.go")
@@ -65,7 +68,7 @@ func TestPruneServiceFilesRemindsOfUnreadSettingsBeforeAsking(t *testing.T) {
 	var stdout string
 	withStdin(t, "n\n", func() {
 		stdout = captureStdout(t, func() {
-			pruneServiceFiles([]string{listFile}, nil, nil, nil, gghelper.NewProjectIgnore(), ggconfig.PruneConfig{})
+			pruneLeftovers([]string{listFile}, nil, nil, nil, gghelper.NewProjectIgnore(), ggconfig.PruneConfig{})
 		})
 	})
 
@@ -99,25 +102,82 @@ func TestPruneRunStopsOnABrokenConfig(t *testing.T) {
 	}
 }
 
-// TestPruneServiceFilesCleansUpAfterARemovedCopiedModule pins that the
-// removal path gg module copy prints, deleting model/<name> and then pruning
-// with --clean-orphans, takes the middleware the copy wrote as well: the file
-// carrying the module's ownership marker, its register calls, and the service
-// directory only that middleware imported. Without --clean-orphans they are
-// listed and kept, and a prune.ignore entry keeps the file for good, together
+// TestPruneLeftoversListsEverythingAndAsksOnce pins that prune works out all
+// it deletes before it asks, and asks once: the service file of a disabled
+// action, the directory only that file imports, an orphan because the file
+// goes, and the middleware of a removed copied module with the directory only
+// it imports are listed together ahead of the one question. Yes deletes them
+// all, together with the directories this leaves empty, and keeps the service
+// file a model still expects; any other answer deletes nothing.
+func TestPruneLeftoversListsEverythingAndAsksOnce(t *testing.T) {
+	tests := []struct {
+		name    string
+		answer  string
+		deleted bool
+	}{
+		{name: "yes", answer: "y\n", deleted: true},
+		{name: "any other answer", answer: "\n"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			middlewareFile, _, moduleHelperFile := setupRemovedModuleProject(t)
+			currentFile := filepath.Join(ggconst.DirService, "authz", "role", "role.go")
+			disabledFile := filepath.Join(ggconst.DirService, "authz", "role", "list.go")
+			helperFile := filepath.Join(ggconst.DirService, "shared", "helper", "helper.go")
+			writeProjectFile(t, currentFile, "package role\n")
+			writeProjectFile(t, disabledFile, "package role\n\nimport _ \"tmpapp/service/shared/helper\"\n")
+			writeProjectFile(t, helperFile, "package helper\n")
+
+			var stdout string
+			withStdin(t, tt.answer, func() {
+				stdout = captureStdout(t, func() {
+					pruneLeftovers([]string{currentFile, disabledFile}, []*gen.ModelInfo{pruneTestModel()}, nil, nil, gghelper.NewProjectIgnore(), ggconfig.PruneConfig{})
+				})
+			})
+
+			const question = "Do you want to delete these files?"
+			if n := strings.Count(stdout, question); n != 1 {
+				t.Fatalf("asked %d times, want once:\n%s", n, stdout)
+			}
+			leftovers := []string{disabledFile, helperFile, middlewareFile, moduleHelperFile}
+			for _, path := range leftovers {
+				if i := strings.Index(stdout, path); i < 0 || i > strings.Index(stdout, question) {
+					t.Errorf("%s should be listed ahead of the question:\n%s", path, stdout)
+				}
+			}
+			for _, path := range leftovers {
+				if _, err := os.Stat(path); os.IsNotExist(err) != tt.deleted {
+					t.Errorf("%s deleted = %t, want %t", path, os.IsNotExist(err), tt.deleted)
+				}
+			}
+			if _, err := os.Stat(currentFile); err != nil {
+				t.Errorf("%s is still expected and should stay: %v", currentFile, err)
+			}
+			if _, err := os.Stat(filepath.Join(ggconst.DirService, "shared")); os.IsNotExist(err) != tt.deleted {
+				t.Errorf("service/shared removed = %t, want %t", os.IsNotExist(err), tt.deleted)
+			}
+		})
+	}
+}
+
+// TestPruneLeftoversCleansUpAfterARemovedCopiedModule pins that the removal
+// path gg module copy prints, deleting model/<name> and then pruning, takes
+// the middleware the copy wrote as well: the file carrying the module's
+// ownership marker, its register calls, and the service directory only that
+// middleware imported. A prune.ignore entry keeps the file for good, together
 // with what it imports. Only the orphan directory's files draw the warning
-// about files gg cannot prove it owns. Any answer but the confirmation phrase
-// keeps everything, and so does a middleware file prune cannot delete or a
-// middleware directory it cannot read: the service directory is an orphan
-// only because the middleware goes.
-func TestPruneServiceFilesCleansUpAfterARemovedCopiedModule(t *testing.T) {
-	t.Run("cleaned with --clean-orphans", func(t *testing.T) {
-		middlewareFile, registrationFile, helperFile := setupRemovedModuleProject(t, true)
+// about files gg cannot prove it owns. Any answer but yes keeps everything,
+// and so does a middleware file prune cannot delete or a middleware directory
+// it cannot read: the service directory is an orphan only because the
+// middleware goes.
+func TestPruneLeftoversCleansUpAfterARemovedCopiedModule(t *testing.T) {
+	t.Run("cleaned on yes", func(t *testing.T) {
+		middlewareFile, registrationFile, helperFile := setupRemovedModuleProject(t)
 
 		var stdout string
-		withStdin(t, cleanOrphansConfirmation+"\n", func() {
+		withStdin(t, "y\n", func() {
 			stdout = captureStdout(t, func() {
-				pruneServiceFiles(nil, nil, nil, nil, gghelper.NewProjectIgnore(), ggconfig.PruneConfig{})
+				pruneLeftovers(nil, nil, nil, nil, gghelper.NewProjectIgnore(), ggconfig.PruneConfig{})
 			})
 		})
 
@@ -133,24 +193,11 @@ func TestPruneServiceFilesCleansUpAfterARemovedCopiedModule(t *testing.T) {
 		if strings.Contains(string(registration), "SampleAuth") || strings.Contains(string(registration), `"github.com/hydroan/gst/middleware"`) {
 			t.Errorf("%s still registers the deleted middleware:\n%s", registrationFile, registration)
 		}
-		if !strings.Contains(stdout, "This will delete unmanaged files that gg cannot prove it owns.") {
-			t.Errorf("output lacks the warning about the orphan directory's unmanaged files:\n%s", stdout)
-		}
-	})
-
-	t.Run("listed without --clean-orphans", func(t *testing.T) {
-		middlewareFile, registrationFile, helperFile := setupRemovedModuleProject(t, false)
-
-		stdout := captureStdout(t, func() {
-			pruneServiceFiles(nil, nil, nil, nil, gghelper.NewProjectIgnore(), ggconfig.PruneConfig{})
-		})
-
-		for _, path := range []string{middlewareFile, registrationFile, helperFile} {
-			if _, err := os.Stat(path); err != nil {
-				t.Errorf("%s should be kept without --clean-orphans: %v", path, err)
-			}
-		}
-		for _, want := range []string{"Orphan Module Middleware Files Kept", middlewareFile + " (copied with module sample, whose model/sample is gone"} {
+		for _, want := range []string{
+			"Orphan Module Middleware Files",
+			middlewareFile + " (copied with module sample, whose model/sample is gone",
+			"This will delete unmanaged files that gg cannot prove it owns.",
+		} {
 			if !strings.Contains(stdout, want) {
 				t.Errorf("output lacks %q:\n%s", want, stdout)
 			}
@@ -158,12 +205,12 @@ func TestPruneServiceFilesCleansUpAfterARemovedCopiedModule(t *testing.T) {
 	})
 
 	t.Run("kept by prune.ignore", func(t *testing.T) {
-		middlewareFile, registrationFile, helperFile := setupRemovedModuleProject(t, true)
+		middlewareFile, registrationFile, helperFile := setupRemovedModuleProject(t)
 		protect := ggconfig.PruneConfig{Ignore: []string{filepath.ToSlash(middlewareFile)}}
 
-		withStdin(t, cleanOrphansConfirmation+"\n", func() {
+		withStdin(t, "y\n", func() {
 			captureStdout(t, func() {
-				pruneServiceFiles(nil, nil, nil, nil, gghelper.NewProjectIgnore(), protect)
+				pruneLeftovers(nil, nil, nil, nil, gghelper.NewProjectIgnore(), protect)
 			})
 		})
 
@@ -182,7 +229,7 @@ func TestPruneServiceFilesCleansUpAfterARemovedCopiedModule(t *testing.T) {
 	})
 
 	t.Run("canceled", func(t *testing.T) {
-		middlewareFile, registrationFile, _ := setupRemovedModuleProject(t, true)
+		middlewareFile, registrationFile, _ := setupRemovedModuleProject(t)
 		// The module's service directory is already gone, so the marked
 		// middleware is all there is to clean.
 		if err := os.RemoveAll(filepath.Join(ggconst.DirService, "sample")); err != nil {
@@ -192,27 +239,27 @@ func TestPruneServiceFilesCleansUpAfterARemovedCopiedModule(t *testing.T) {
 		var stdout string
 		withStdin(t, "no\n", func() {
 			stdout = captureStdout(t, func() {
-				pruneServiceFiles(nil, nil, nil, nil, gghelper.NewProjectIgnore(), ggconfig.PruneConfig{})
+				pruneLeftovers(nil, nil, nil, nil, gghelper.NewProjectIgnore(), ggconfig.PruneConfig{})
 			})
 		})
 
 		if _, err := os.Stat(middlewareFile); err != nil {
-			t.Errorf("%s should be kept when the cleanup is canceled: %v", middlewareFile, err)
+			t.Errorf("%s should be kept when the deletion is canceled: %v", middlewareFile, err)
 		}
 		registration, err := os.ReadFile(registrationFile)
 		if err != nil {
 			t.Fatal(err)
 		}
 		if !strings.Contains(string(registration), "middleware.RegisterAuth(SampleAuth())") {
-			t.Errorf("%s lost a register call although the cleanup was canceled:\n%s", registrationFile, registration)
+			t.Errorf("%s lost a register call although the deletion was canceled:\n%s", registrationFile, registration)
 		}
-		if !strings.Contains(stdout, "Orphan cleanup canceled") || strings.Contains(stdout, "cannot prove it owns") {
+		if !strings.Contains(stdout, "Deletion canceled") || strings.Contains(stdout, "cannot prove it owns") {
 			t.Errorf("want the cancel reported without the warning about unmanaged files, since only marked middleware is listed:\n%s", stdout)
 		}
 	})
 
 	t.Run("kept when the middleware cannot be deleted", func(t *testing.T) {
-		middlewareFile, registrationFile, helperFile := setupRemovedModuleProject(t, true)
+		middlewareFile, registrationFile, helperFile := setupRemovedModuleProject(t)
 		// Prune reads the functions a middleware file declares before deleting
 		// it, to find their register calls; a file that stopped parsing ends
 		// the cleanup right there.
@@ -227,9 +274,9 @@ func SampleAuth() any {
 `)
 
 		var stdout string
-		withStdin(t, cleanOrphansConfirmation+"\n", func() {
+		withStdin(t, "y\n", func() {
 			stdout = captureStdout(t, func() {
-				pruneServiceFiles(nil, nil, nil, nil, gghelper.NewProjectIgnore(), ggconfig.PruneConfig{})
+				pruneLeftovers(nil, nil, nil, nil, gghelper.NewProjectIgnore(), ggconfig.PruneConfig{})
 			})
 		})
 
@@ -247,7 +294,7 @@ func SampleAuth() any {
 		if os.Geteuid() == 0 {
 			t.Skip("root reads a directory whatever its permissions")
 		}
-		middlewareFile, registrationFile, helperFile := setupRemovedModuleProject(t, true)
+		middlewareFile, registrationFile, helperFile := setupRemovedModuleProject(t)
 		dir, err := filepath.Abs(ggconst.DirMiddleware)
 		if err != nil {
 			t.Fatal(err)
@@ -259,9 +306,9 @@ func SampleAuth() any {
 		t.Cleanup(func() { _ = os.Chmod(dir, 0o755) })
 
 		var stdout string
-		withStdin(t, cleanOrphansConfirmation+"\n", func() {
+		withStdin(t, "y\n", func() {
 			stdout = captureStdout(t, func() {
-				pruneServiceFiles(nil, nil, nil, nil, gghelper.NewProjectIgnore(), ggconfig.PruneConfig{})
+				pruneLeftovers(nil, nil, nil, nil, gghelper.NewProjectIgnore(), ggconfig.PruneConfig{})
 			})
 		})
 
@@ -283,15 +330,15 @@ func SampleAuth() any {
 // copied the module sample and then deleted model/sample: the middleware the
 // copy wrote still carries the module's ownership marker, is still registered
 // in middleware/middleware.go, and imports service/sample/session, which
-// nothing else imports. clean sets --clean-orphans for the test.
-func setupRemovedModuleProject(t *testing.T, clean bool) (middlewareFile, registrationFile, helperFile string) {
+// nothing else imports.
+func setupRemovedModuleProject(t *testing.T) (middlewareFile, registrationFile, helperFile string) {
 	t.Helper()
 
-	oldModule, oldCleanOrphans := module, cleanOrphans
+	oldModule := module
 	t.Cleanup(func() {
-		module, cleanOrphans = oldModule, oldCleanOrphans
+		module = oldModule
 	})
-	module, cleanOrphans = "tmpapp", clean
+	module = "tmpapp"
 	t.Chdir(t.TempDir())
 
 	middlewareFile = filepath.Join(ggconst.DirMiddleware, "sample_auth.go")
@@ -317,6 +364,40 @@ func init() {
 `)
 	writeProjectFile(t, helperFile, "package session\n\nvar Check any\n")
 	return middlewareFile, registrationFile, helperFile
+}
+
+// pruneTestModel returns a model of module tmpapp whose only enabled action, a
+// Create, writes service/authz/role/role.go, so service/authz/role is a
+// directory a model owns and every other phase file there, list.go among
+// them, belongs to a disabled action.
+func pruneTestModel() *gen.ModelInfo {
+	disabled := func(phase consts.Phase) *dsl.Action {
+		return &dsl.Action{Phase: phase}
+	}
+	return &gen.ModelInfo{
+		ModulePath:    "tmpapp",
+		ModelPkgName:  "authz",
+		ModelName:     "Role",
+		ModelFileDir:  filepath.Join(ggconst.DirModel, "authz"),
+		ModelFilePath: filepath.Join(ggconst.DirModel, "authz", "role.go"),
+		Design: &dsl.Design{
+			Enabled:    true,
+			Endpoint:   "authz/roles",
+			Create:     &dsl.Action{Enabled: true, Service: true, Filename: "role.go", Phase: consts.PHASE_CREATE},
+			Delete:     disabled(consts.PHASE_DELETE),
+			Update:     disabled(consts.PHASE_UPDATE),
+			Patch:      disabled(consts.PHASE_PATCH),
+			List:       disabled(consts.PHASE_LIST),
+			Get:        disabled(consts.PHASE_GET),
+			CreateMany: disabled(consts.PHASE_CREATE_MANY),
+			DeleteMany: disabled(consts.PHASE_DELETE_MANY),
+			UpdateMany: disabled(consts.PHASE_UPDATE_MANY),
+			PatchMany:  disabled(consts.PHASE_PATCH_MANY),
+			Import:     disabled(consts.PHASE_IMPORT),
+			Export:     disabled(consts.PHASE_EXPORT),
+			SSE:        disabled(consts.PHASE_SSE),
+		},
+	}
 }
 
 // withStdin runs fn with os.Stdin reading input.
