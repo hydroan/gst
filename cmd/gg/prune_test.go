@@ -160,6 +160,60 @@ func TestPruneLeftoversListsEverythingAndAsksOnce(t *testing.T) {
 	}
 }
 
+// TestPruneLeftoversKeepsOrphansWhenADisabledFileStays pins the guard behind
+// deleting everything in one run: a service directory can be an orphan only
+// because the disabled service file importing it goes, so when a disabled file
+// cannot be deleted, no orphan directory is, and the output says why. The
+// middleware of a removed copied module still goes, while the directory only
+// it imported stays with the other orphans.
+func TestPruneLeftoversKeepsOrphansWhenADisabledFileStays(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("root deletes a file whatever the permissions of its directory")
+	}
+	middlewareFile, _, moduleHelperFile := setupRemovedModuleProject(t)
+	roleDir := filepath.Join(ggconst.DirService, "authz", "role")
+	currentFile := filepath.Join(roleDir, "role.go")
+	disabledFile := filepath.Join(roleDir, "list.go")
+	helperFile := filepath.Join(ggconst.DirService, "shared", "helper", "helper.go")
+	writeProjectFile(t, currentFile, "package role\n")
+	writeProjectFile(t, disabledFile, "package role\n\nimport _ \"tmpapp/service/shared/helper\"\n")
+	writeProjectFile(t, helperFile, "package helper\n")
+	// A file cannot be deleted from a directory the user may not write to.
+	dir, err := filepath.Abs(roleDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = os.Chmod(dir, 0o555); err != nil {
+		t.Fatal(err)
+	}
+	// Give the permission back before the temporary directory is removed.
+	t.Cleanup(func() { _ = os.Chmod(dir, 0o755) })
+
+	var stdout string
+	withStdin(t, "y\n", func() {
+		stdout = captureStdout(t, func() {
+			pruneLeftovers([]string{currentFile, disabledFile}, []*gen.ModelInfo{pruneTestModel()}, nil, nil, gghelper.NewProjectIgnore(), ggconfig.PruneConfig{})
+		})
+	})
+
+	for _, path := range []string{disabledFile, helperFile, moduleHelperFile} {
+		if _, err := os.Stat(path); err != nil {
+			t.Errorf("%s should be kept: %v", path, err)
+		}
+	}
+	if _, err := os.Stat(middlewareFile); !os.IsNotExist(err) {
+		t.Errorf("%s does not depend on the disabled file and should be deleted, stat error = %v", middlewareFile, err)
+	}
+	for _, want := range []string{
+		"Failed to delete " + disabledFile,
+		"Some disabled service files were not deleted, so orphan service directories are kept",
+	} {
+		if !strings.Contains(stdout, want) {
+			t.Errorf("output lacks %q:\n%s", want, stdout)
+		}
+	}
+}
+
 // TestPruneLeftoversCleansUpAfterARemovedCopiedModule pins that the removal
 // path gg module copy prints, deleting model/<name> and then pruning, takes
 // the middleware the copy wrote as well: the file carrying the module's
