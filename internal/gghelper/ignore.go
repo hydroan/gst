@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/go-git/go-billy/v5"
 	"github.com/go-git/go-billy/v5/osfs"
 	gitignore "github.com/go-git/go-git/v5/plumbing/format/gitignore"
 	"github.com/hydroan/gst/internal/ggconst"
@@ -30,11 +31,12 @@ import (
 //   - gg migrate schema reads a path the user names, so the Git rules do not
 //     apply there; below that path it leaves out what the go command leaves
 //     out, through ExcludedByGo.
-//   - gg prune, and gg gen --prune alike, finds the models through it the way
-//     gg gen does, since which models the project declares is gen's to say.
-//     Everything else it reads whole, both the files it may delete and the
-//     code that may still import a service directory: of the ignore rules,
-//     it follows gst.yaml's prune.ignore alone (see package ggprune).
+//   - gg prune, and gg gen --prune alike, reads the project's code through it
+//     as well: the models, the way gg gen does, and the code that may still
+//     import a service directory, so code the project ignores keeps none
+//     alive. What it deletes it reads whole: an ignored file there goes like
+//     any other, and gst.yaml's prune.ignore alone keeps a path (see package
+//     ggprune).
 type ProjectIgnore struct {
 	matcher gitignore.Matcher
 	// root is the absolute path of the project, against which an absolute
@@ -53,10 +55,31 @@ func NewProjectIgnore() ProjectIgnore {
 	if root, err := os.Getwd(); err == nil {
 		p.root = root
 	}
-	if patterns, err := gitignore.ReadPatterns(osfs.New("."), nil); err == nil && len(patterns) > 0 {
+	if patterns, err := gitignore.ReadPatterns(listableDirs{osfs.New(".")}, nil); err == nil && len(patterns) > 0 {
 		p.matcher = gitignore.NewMatcher(patterns)
 	}
 	return p
+}
+
+// listableDirs is the file system NewProjectIgnore reads the project's Git
+// ignore files through, where a directory that cannot be listed reads as
+// empty. go-git's ReadPatterns goes into every directory no rule of the
+// directory holding it excludes, and at the first one it cannot list gives up
+// on the whole project, the rules it has read with it; it takes no option to
+// skip such a directory. A directory gg cannot list shows gg no code either,
+// so reading it as empty hides nothing, and a walk that must go through it
+// still fails there.
+type listableDirs struct {
+	billy.Filesystem
+}
+
+// ReadDir lists the directory at path, or nothing when it cannot be listed.
+func (fs listableDirs) ReadDir(path string) ([]os.FileInfo, error) {
+	entries, err := fs.Filesystem.ReadDir(path)
+	if err != nil {
+		return nil, nil //nolint:nilerr // a directory it cannot list holds no rule gg can see
+	}
+	return entries, nil
 }
 
 // Ignores reports whether the project-relative path is ignored: the
@@ -123,20 +146,24 @@ func (p ProjectIgnore) ExcludedByGo(path string, isDir bool) bool {
 
 // Walk walks root, pruning the ignored paths (see Ignores), so fn only sees
 // paths the project keeps. Root itself is never pruned: a walk goes where its
-// caller points it. Walk errors abort the walk instead of being delegated, so
-// fn only sees paths that exist.
+// caller points it. An ignored path is pruned before any error reading it
+// counts, so an ignored directory need not be readable, such as the volume of
+// a database container; other walk errors abort the walk instead of being
+// delegated, so fn only sees paths that exist.
 func (p ProjectIgnore) Walk(root string, fn func(path string, info os.FileInfo) error) error {
 	return filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
-		if err != nil {
-			return err
-		}
 		// Every directory above path has been let through already, so the go
-		// command's rules have only path itself left to judge.
-		if path != root && (p.gitIgnores(path, info.IsDir()) || p.ExcludedByGo(path, info.IsDir())) {
+		// command's rules have only path itself left to judge. filepath.Walk
+		// reports a directory it cannot list only after trying, so the rules
+		// go first.
+		if path != root && info != nil && (p.gitIgnores(path, info.IsDir()) || p.ExcludedByGo(path, info.IsDir())) {
 			if info.IsDir() {
 				return filepath.SkipDir
 			}
 			return nil
+		}
+		if err != nil {
+			return err
 		}
 		return fn(path, info)
 	})

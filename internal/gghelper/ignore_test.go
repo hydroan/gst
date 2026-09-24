@@ -3,6 +3,7 @@ package gghelper_test
 import (
 	"os"
 	"path/filepath"
+	"slices"
 	"testing"
 
 	"github.com/hydroan/gst/internal/gghelper"
@@ -14,15 +15,7 @@ import (
 // directory being pruned whole instead of walked.
 func TestProjectIgnoreWalkPrunesIgnoredPaths(t *testing.T) {
 	t.Chdir(t.TempDir())
-	write := func(path, content string) {
-		t.Helper()
-		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-			t.Fatal(err)
-		}
-		if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
-			t.Fatal(err)
-		}
-	}
+	write := func(path, content string) { writeFile(t, path, content) }
 	write("go.mod", "module example.com/app\n\ngo 1.27\n\nignore ./model/assets\nignore node_modules\n")
 	write(".gitignore", "model/scratch.go\nmodel/tmp/\n")
 	write(filepath.Join("model", "record.go"), "package model\n")
@@ -78,6 +71,60 @@ func TestProjectIgnoreWalkFailsOnAMissingRoot(t *testing.T) {
 	}
 }
 
+// TestProjectIgnoreWalkLeavesOutIgnoredDirectoriesItCannotRead pins that the
+// walk prunes an ignored directory before reading it, so one it may not open,
+// such as the volume of a database container, fails nothing: one a Git ignore
+// rule excludes, from the directory holding the rule or from one above, one
+// the go command leaves out by its name, and one the go.mod ignores. A kept
+// directory it may not open still fails the walk.
+func TestProjectIgnoreWalkLeavesOutIgnoredDirectoriesItCannotRead(t *testing.T) {
+	tests := []struct {
+		name    string
+		files   map[string]string
+		locked  string
+		wantErr bool
+	}{
+		{name: "Git ignored", files: map[string]string{".gitignore": "data/\n"}, locked: "data"},
+		{name: "Git ignored by a rule of a directory above", files: map[string]string{".gitignore": "docker/data/\n"}, locked: filepath.Join("docker", "data")},
+		{name: "named with a leading underscore", locked: "_volume"},
+		{name: "ignored by go.mod", files: map[string]string{"go.mod": "module example.com/app\n\ngo 1.27\n\nignore ./data\n"}, locked: "data"},
+		{name: "kept", locked: "data", wantErr: true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if os.Geteuid() == 0 {
+				t.Skip("root reads a directory whatever its permissions")
+			}
+			t.Chdir(t.TempDir())
+			for path, content := range tt.files {
+				writeFile(t, path, content)
+			}
+			writeFile(t, filepath.Join(tt.locked, "db.go"), "package db\n")
+			writeFile(t, filepath.Join("model", "record.go"), "package model\n")
+			lockPath(t, tt.locked)
+
+			var seen []string
+			err := gghelper.NewProjectIgnore().Walk(".", func(path string, info os.FileInfo) error {
+				seen = append(seen, path)
+				return nil
+			})
+
+			if tt.wantErr {
+				if err == nil {
+					t.Fatalf("Walk() over a kept directory it may not open returned no error, walked %q", seen)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("Walk() error = %v, want the ignored %s left out unread", err, tt.locked)
+			}
+			if !slices.Contains(seen, filepath.Join("model", "record.go")) || slices.Contains(seen, tt.locked) {
+				t.Fatalf("walked %q, want model/record.go and not %s", seen, tt.locked)
+			}
+		})
+	}
+}
+
 // TestProjectIgnoreIgnoresWithoutRules pins that a project without ignore
 // rules ignores nothing.
 func TestProjectIgnoreIgnoresWithoutRules(t *testing.T) {
@@ -85,6 +132,24 @@ func TestProjectIgnoreIgnoresWithoutRules(t *testing.T) {
 
 	if gghelper.NewProjectIgnore().Ignores(filepath.Join("model", "record.go"), false) {
 		t.Fatal("Ignores() = true without any ignore rule")
+	}
+}
+
+// TestNewProjectIgnoreKeepsGitRulesPastDirectoriesItCannotRead pins that a
+// directory gg may not open, such as the volume of a database container, costs
+// none of the project's Git ignore rules: the rules of the other directories
+// still apply.
+func TestNewProjectIgnoreKeepsGitRulesPastDirectoriesItCannotRead(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("root reads a directory whatever its permissions")
+	}
+	t.Chdir(t.TempDir())
+	writeFile(t, ".gitignore", "scratch/\n")
+	writeFile(t, filepath.Join("_volume", "mysql", "ibdata1"), "")
+	lockPath(t, filepath.Join("_volume", "mysql"))
+
+	if !gghelper.NewProjectIgnore().Ignores(filepath.Join("scratch", "try.go"), false) {
+		t.Fatal("Ignores(scratch/try.go) = false, want the Git ignore rule of the project root to hold")
 	}
 }
 
@@ -177,4 +242,30 @@ func TestProjectIgnoreExcludedByGo(t *testing.T) {
 			}
 		})
 	}
+}
+
+// writeFile writes content to path, creating its parent directories.
+func writeFile(t *testing.T, path, content string) {
+	t.Helper()
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// lockPath takes every permission away from the file or directory at path,
+// the way a volume a container owns looks to the user, and gives it back
+// before the temporary project is removed.
+func lockPath(t *testing.T, path string) {
+	t.Helper()
+	abs, err := filepath.Abs(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = os.Chmod(abs, 0o000); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(abs, 0o755) })
 }
