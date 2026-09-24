@@ -103,7 +103,7 @@ func genRunWithOptions(opts genRunOptions) error {
 	// Record old service files list (if prune option is enabled)
 	var oldServiceFiles []string
 	if prune {
-		oldServiceFiles = existingServiceFiles(ignore)
+		oldServiceFiles = existingServiceFiles()
 	}
 
 	if !opts.Quiet {
@@ -351,7 +351,7 @@ func genRunWithOptions(opts genRunOptions) error {
 	// Prune disabled service files
 	// ============================================================
 	if prune {
-		pruneServiceFiles(oldServiceFiles, allModels, ignoreResult.KeptServiceFiles, ignoreResult.KeptServiceDirs, scanned.pruneConfig, ignore)
+		pruneServiceFiles(oldServiceFiles, allModels, ignoreResult.KeptServiceFiles, ignoreResult.KeptServiceDirs, scanned.pruneConfig)
 	}
 
 	// ============================================================

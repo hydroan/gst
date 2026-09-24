@@ -51,7 +51,6 @@ func init() {
 // could not be read, the model directory is missing, or a model file fails
 // to parse.
 func pruneRun() error {
-	ignore := gghelper.NewProjectIgnore()
 	if len(module) == 0 {
 		var err error
 		module, err = gghelper.ModulePath()
@@ -69,9 +68,10 @@ func pruneRun() error {
 		return err
 	}
 
-	// Scan all models
+	// Scan all models the way gg gen does: which models the project declares
+	// is gen's to say, and prune only works out what they leave behind.
 	clioutput.Section("Scan Models")
-	allModels, err := codegen.FindModels(module, ggconst.DirModel, ignore)
+	allModels, err := codegen.FindModels(module, ggconst.DirModel, gghelper.NewProjectIgnore())
 	if err != nil {
 		return err
 	}
@@ -86,11 +86,11 @@ func pruneRun() error {
 	// enabled makes prune treat the file as expected without extra bookkeeping.
 
 	// Scan existing service files
-	oldServiceFiles := existingServiceFiles(ignore)
+	oldServiceFiles := existingServiceFiles()
 
 	// Prune disabled service files
 	clioutput.Section("Prune Disabled Service Files")
-	pruneServiceFiles(oldServiceFiles, allModels, nil, nil, projectCfg.Prune, ignore)
+	pruneServiceFiles(oldServiceFiles, allModels, nil, nil, projectCfg.Prune)
 
 	clioutput.Done("Code pruning completed successfully!")
 	return nil
@@ -98,8 +98,8 @@ func pruneRun() error {
 
 // existingServiceFiles lists the service files prune works from, warning
 // about a scan that ended early and going on with what it found.
-func existingServiceFiles(ignore gghelper.ProjectIgnore) []string {
-	files, err := ggprune.ScanServiceFiles(ggconst.DirService, ignore)
+func existingServiceFiles() []string {
+	files, err := ggprune.ScanServiceFiles(ggconst.DirService)
 	if err != nil {
 		clioutput.Warn("", "failed to scan existing service files: %v", err)
 	}
@@ -134,7 +134,9 @@ func remindUnreadPruneSettings() {
 // keptDirs protects their directories from orphan cleanup; both may be nil.
 // The paths the gst.yaml prune.ignore entries in protect cover are never
 // deleted: not as disabled files, not as orphans, not as empty directories.
-func pruneServiceFiles(oldServiceFiles []string, allModels []*gen.ModelInfo, keptFiles, keptDirs map[string]bool, protect ggconfig.PruneConfig, ignore gghelper.ProjectIgnore) {
+// Of the ignore rules, prune follows these alone: the project's Git ignore
+// rules and the go command's ignores keep nothing (see package ggprune).
+func pruneServiceFiles(oldServiceFiles []string, allModels []*gen.ModelInfo, keptFiles, keptDirs map[string]bool, protect ggconfig.PruneConfig) {
 	warnMissingPruneIgnore(protect)
 
 	plan := ggprune.PlanFiles(oldServiceFiles, allModels, keptFiles, protect)
@@ -155,8 +157,8 @@ func pruneServiceFiles(oldServiceFiles []string, allModels []*gen.ModelInfo, kep
 			clioutput.Success("", "No disabled service files to prune")
 		}
 		// Still check for empty directories even if no files to delete
-		removeEmptyServiceDirs(protect, ignore)
-		handleOrphans(allModels, keptDirs, module, protect, ignore)
+		removeEmptyServiceDirs(protect)
+		handleOrphans(allModels, keptDirs, module, protect)
 		return
 	}
 
@@ -182,8 +184,8 @@ func pruneServiceFiles(oldServiceFiles []string, allModels []*gen.ModelInfo, kep
 	ggprune.RemoveFiles(filesToDelete, reportRemoval)
 
 	// Remove empty directories after deleting files
-	removeEmptyServiceDirs(protect, ignore)
-	handleOrphans(allModels, keptDirs, module, protect, ignore)
+	removeEmptyServiceDirs(protect)
+	handleOrphans(allModels, keptDirs, module, protect)
 }
 
 // reportRemoval prints how deleting one file went.
@@ -197,8 +199,8 @@ func reportRemoval(path string, err error) {
 
 // removeEmptyServiceDirs removes the empty directories below the service
 // directory that prune.ignore does not cover, printing each one.
-func removeEmptyServiceDirs(protect ggconfig.PruneConfig, ignore gghelper.ProjectIgnore) {
-	ggprune.RemoveEmptyDirs(ggconst.DirService, protect, ignore, func(dir string) {
+func removeEmptyServiceDirs(protect ggconfig.PruneConfig) {
+	ggprune.RemoveEmptyDirs(ggconst.DirService, protect, func(dir string) {
 		clioutput.Success("", "Removed empty directory %s", dir)
 	})
 }
@@ -208,8 +210,8 @@ func removeEmptyServiceDirs(protect ggconfig.PruneConfig, ignore gghelper.Projec
 // rules, and the middleware module copy wrote for modules the project removed,
 // see orphanModuleMiddleware. When the project cannot be read in full, it
 // warns and leaves everything alone.
-func handleOrphans(allModels []*gen.ModelInfo, keptDirs map[string]bool, modulePath string, protect ggconfig.PruneConfig, ignore gghelper.ProjectIgnore) {
-	orphanMiddleware, err := orphanModuleMiddleware(protect, ignore)
+func handleOrphans(allModels []*gen.ModelInfo, keptDirs map[string]bool, modulePath string, protect ggconfig.PruneConfig) {
+	orphanMiddleware, err := orphanModuleMiddleware(protect)
 	if err != nil {
 		clioutput.Warn("", "failed to read the middleware directory, so orphans are not checked: %v", err)
 		return
@@ -218,7 +220,7 @@ func handleOrphans(allModels []*gen.ModelInfo, keptDirs map[string]bool, moduleP
 	for _, file := range orphanMiddleware {
 		orphanFiles = append(orphanFiles, file.Path)
 	}
-	orphans, keptHelpers, err := ggprune.FindOrphanDirs(allModels, keptDirs, orphanFiles, modulePath, protect, ignore)
+	orphans, keptHelpers, err := ggprune.FindOrphanDirs(allModels, keptDirs, orphanFiles, modulePath, protect)
 	if err != nil {
 		clioutput.Warn("", "failed to trace which service directories live code imports, so orphan service directories are not checked: %v", err)
 		return
@@ -247,7 +249,7 @@ func handleOrphans(allModels []*gen.ModelInfo, keptDirs map[string]bool, moduleP
 			clioutput.Error("", "Failed to delete orphan module middleware, so orphan service directories are kept: %v", err)
 			return
 		}
-		cleanOrphanServiceDirs(orphans, protect, ignore)
+		cleanOrphanServiceDirs(orphans, protect)
 		return
 	}
 
@@ -256,17 +258,16 @@ func handleOrphans(allModels []*gen.ModelInfo, keptDirs map[string]bool, moduleP
 }
 
 // orphanModuleMiddleware lists the middleware module copy wrote for modules the
-// project removed (see ggmodule.OrphanMiddlewareFiles), but for the files
-// prune deletes none of: the ones a gst.yaml prune.ignore entry in protect
-// covers, which stay live code, and the ones the project's Git ignore rules
-// exclude.
-func orphanModuleMiddleware(protect ggconfig.PruneConfig, ignore gghelper.ProjectIgnore) ([]ggmodule.OrphanMiddleware, error) {
+// project removed (see ggmodule.OrphanMiddlewareFiles), but for the ones a
+// gst.yaml prune.ignore entry in protect covers, which stay live code; no
+// other rule keeps a file, a Git ignored one included.
+func orphanModuleMiddleware(protect ggconfig.PruneConfig) ([]ggmodule.OrphanMiddleware, error) {
 	orphans, err := ggmodule.OrphanMiddlewareFiles(ggconst.DirMiddleware, ggconst.DirModel)
 	if err != nil {
 		return nil, err
 	}
 	return slices.DeleteFunc(orphans, func(orphan ggmodule.OrphanMiddleware) bool {
-		return protect.Ignores(orphan.Path) || ignore.Ignores(orphan.Path, false)
+		return protect.Ignores(orphan.Path)
 	}), nil
 }
 
@@ -340,11 +341,11 @@ func confirmCleanOrphans() bool {
 
 // cleanOrphanServiceDirs deletes the unmanaged files of the orphan service
 // directories, and then the directories this leaves empty.
-func cleanOrphanServiceDirs(orphans []ggprune.OrphanDir, protect ggconfig.PruneConfig, ignore gghelper.ProjectIgnore) {
+func cleanOrphanServiceDirs(orphans []ggprune.OrphanDir, protect ggconfig.PruneConfig) {
 	var files []string
 	for _, orphan := range orphans {
 		files = append(files, orphan.Files...)
 	}
 	ggprune.RemoveFiles(files, reportRemoval)
-	removeEmptyServiceDirs(protect, ignore)
+	removeEmptyServiceDirs(protect)
 }

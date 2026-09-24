@@ -10,20 +10,26 @@ import (
 	"github.com/hydroan/gst/internal/codegen/gen"
 	"github.com/hydroan/gst/internal/ggconfig"
 	"github.com/hydroan/gst/internal/ggconst"
-	"github.com/hydroan/gst/internal/gghelper"
 	"github.com/hydroan/gst/internal/ggprune"
 )
 
-// TestScanServiceFilesSkipsGitIgnoredFiles pins that prune never
-// considers a service file the project's Git ignore rules exclude: gg check
-// leaves such a file alone, so prune must not delete it either.
-func TestScanServiceFilesSkipsGitIgnoredFiles(t *testing.T) {
+// TestScanServiceFilesListsWhatIgnoreRulesCover pins that prune reads the
+// service directory whole: a service file gg manages is listed when the
+// project's Git ignore rules exclude it, and when it lies below testdata or a
+// directory named with a leading "_", which the go command leaves out. Only
+// gst.yaml's prune.ignore keeps a file from prune, and it is applied after the
+// scan.
+func TestScanServiceFilesListsWhatIgnoreRulesCover(t *testing.T) {
 	projectDir := t.TempDir()
 	t.Chdir(projectDir)
 	writeProjectFile(t, ".gitignore", "service/record/list.go\n")
-	kept := filepath.Join(ggconst.DirService, "record", "create.go")
-	ignored := filepath.Join(ggconst.DirService, "record", "list.go")
-	for _, path := range []string{kept, ignored} {
+	want := []string{
+		filepath.Join(ggconst.DirService, "_old", "create.go"),
+		filepath.Join(ggconst.DirService, "record", "create.go"),
+		filepath.Join(ggconst.DirService, "record", "list.go"),
+		filepath.Join(ggconst.DirService, "record", "testdata", "update.go"),
+	}
+	for _, path := range want {
 		writeProjectFile(t, filepath.Join(projectDir, path), `package record
 
 import "github.com/hydroan/gst/service"
@@ -34,16 +40,13 @@ type Creator struct {
 `)
 	}
 
-	files, err := ggprune.ScanServiceFiles(ggconst.DirService, gghelper.NewProjectIgnore())
+	files, err := ggprune.ScanServiceFiles(ggconst.DirService)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	if slices.Contains(files, ignored) {
-		t.Fatalf("ScanServiceFiles() = %q, want the Git ignored file left out", files)
-	}
-	if !slices.Contains(files, kept) {
-		t.Fatalf("ScanServiceFiles() = %q, want it to hold %q", files, kept)
+	if !slices.Equal(files, want) {
+		t.Fatalf("ScanServiceFiles() = %q, want %q", files, want)
 	}
 }
 
@@ -87,7 +90,7 @@ func TestRemoveFiles(t *testing.T) {
 
 func TestRemoveEmptyDirs(t *testing.T) {
 	t.Chdir(t.TempDir())
-	for _, dir := range []string{filepath.Join("service", "stale", "nested"), filepath.Join("service", "placeholder")} {
+	for _, dir := range []string{filepath.Join("service", "stale", "testdata"), filepath.Join("service", "placeholder")} {
 		if err := os.MkdirAll(dir, 0o755); err != nil {
 			t.Fatal(err)
 		}
@@ -96,12 +99,13 @@ func TestRemoveEmptyDirs(t *testing.T) {
 	protect := ggconfig.PruneConfig{Ignore: []string{"service/placeholder"}}
 
 	var removed []string
-	ggprune.RemoveEmptyDirs("service", protect, gghelper.NewProjectIgnore(), func(dir string) {
+	ggprune.RemoveEmptyDirs("service", protect, func(dir string) {
 		removed = append(removed, dir)
 	})
 
-	// The deepest directory goes first, which empties its parent in turn.
-	want := []string{filepath.Join("service", "stale", "nested"), filepath.Join("service", "stale")}
+	// The deepest directory goes first, which empties its parent in turn; a
+	// testdata directory, which the go command leaves out, goes like any other.
+	want := []string{filepath.Join("service", "stale", "testdata"), filepath.Join("service", "stale")}
 	if !slices.Equal(removed, want) {
 		t.Fatalf("removed = %q, want %q", removed, want)
 	}

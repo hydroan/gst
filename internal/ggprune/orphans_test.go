@@ -12,7 +12,6 @@ import (
 	"github.com/hydroan/gst/dsl"
 	"github.com/hydroan/gst/internal/codegen/gen"
 	"github.com/hydroan/gst/internal/ggconfig"
-	"github.com/hydroan/gst/internal/gghelper"
 	"github.com/hydroan/gst/internal/ggprune"
 )
 
@@ -125,7 +124,10 @@ import _ "tmpapp/service/iam/adminauth"
 // a kept helper's, and what prune.ignore keeps, down to a single file inside
 // an orphan. Deleting the directory would break the build, or the tests for a
 // test file. A file a build constraint leaves out counts too: prune errs on the
-// side of keeping.
+// side of keeping. So does a file any ignore rule covers, as prune reads the
+// project whole and goes by no ignore rule but prune.ignore: one the project's
+// Git ignore rules exclude, and one below testdata, vendor, a hidden or an
+// underscored directory, a nested module or a directory the go.mod ignores.
 func TestFindOrphanDirsKeepsHelperDirsImportedByLiveCode(t *testing.T) {
 	importers := []struct {
 		name    string
@@ -153,6 +155,14 @@ func TestFindOrphanDirsKeepsHelperDirsImportedByLiveCode(t *testing.T) {
 			},
 		},
 		{name: "directory prune.ignore covers", path: filepath.Join("service", "legacy", "legacy.go"), pkg: "legacy", protect: []string{"service/legacy"}},
+		{name: "testdata", path: filepath.Join("testdata", "fixture.go"), pkg: "fixture"},
+		{name: "testdata in a model's service directory", path: filepath.Join("service", "authz", "role", "testdata", "fixture.go"), pkg: "fixture"},
+		{name: "vendor", path: filepath.Join("vendor", "example.com", "lib", "lib.go"), pkg: "lib"},
+		{name: "hidden directory", path: filepath.Join(".cache", "copy.go"), pkg: "cached"},
+		{name: "underscored directory", path: filepath.Join("_draft", "draft.go"), pkg: "draft"},
+		{name: "Git ignored directory", path: filepath.Join("scratch", "try.go"), pkg: "scratch", extra: map[string]string{".gitignore": "scratch/\n"}},
+		{name: "nested module", path: filepath.Join("tools", "main.go"), pkg: "main", extra: map[string]string{filepath.Join("tools", "go.mod"): "module tmpapp/tools\n\ngo 1.26\n"}},
+		{name: "directory the go.mod ignores", path: filepath.Join("web", "web.go"), pkg: "web", extra: map[string]string{"go.mod": "module tmpapp\n\ngo 1.26\n\nignore ./web\n"}},
 		{
 			name:    "file prune.ignore covers in an orphan",
 			path:    filepath.Join("service", "legacy", "kept.go"),
@@ -183,27 +193,18 @@ func TestFindOrphanDirsKeepsHelperDirsImportedByLiveCode(t *testing.T) {
 }
 
 // TestFindOrphanDirsIgnoresImportsFromCodeThatIsNotLive pins what vouches for
-// nothing: the code gg's walks over the project leave out, as gg check's do
-// (testdata, vendor, hidden and Git ignored directories, nested modules); a
-// .gen.go file, whose imports follow the models it was generated from, so a
-// stale service.gen.go keeps nothing a deleted model left behind; a directory
-// no model owns, or a leftover would keep the helper it imports; and a file
-// orphan cleanup deletes along with the orphans, such as the middleware of a
-// removed module.
+// nothing: a .gen.go file, whose imports follow the models it was generated
+// from, so a stale service.gen.go keeps nothing a deleted model left behind; a
+// directory no model owns, or a leftover would keep the helper it imports; and
+// a file orphan cleanup deletes along with the orphans, such as the middleware
+// of a removed module.
 func TestFindOrphanDirsIgnoresImportsFromCodeThatIsNotLive(t *testing.T) {
 	importers := []struct {
 		name   string
 		path   string
 		pkg    string
-		extra  map[string]string
 		orphan bool
 	}{
-		{name: "testdata", path: filepath.Join("testdata", "fixture.go"), pkg: "fixture"},
-		{name: "testdata in a model's service directory", path: filepath.Join("service", "authz", "role", "testdata", "fixture.go"), pkg: "fixture"},
-		{name: "vendor", path: filepath.Join("vendor", "example.com", "lib", "lib.go"), pkg: "lib"},
-		{name: "hidden directory", path: filepath.Join(".cache", "copy.go"), pkg: "cached"},
-		{name: "Git ignored directory", path: filepath.Join("scratch", "try.go"), pkg: "scratch", extra: map[string]string{".gitignore": "scratch/\n"}},
-		{name: "nested module", path: filepath.Join("tools", "main.go"), pkg: "main", extra: map[string]string{filepath.Join("tools", "go.mod"): "module tmpapp/tools\n\ngo 1.26\n"}},
 		{name: "generated file", path: filepath.Join("service", "service.gen.go"), pkg: "service"},
 		{name: "directory no model owns", path: filepath.Join("service", "leftover", "leftover.go"), pkg: "leftover"},
 		{name: "file orphan cleanup deletes", path: filepath.Join("middleware", "sample_auth.go"), pkg: "middleware", orphan: true},
@@ -211,9 +212,6 @@ func TestFindOrphanDirsIgnoresImportsFromCodeThatIsNotLive(t *testing.T) {
 	for _, importer := range importers {
 		t.Run(importer.name, func(t *testing.T) {
 			setupHelperImportProject(t)
-			for path, content := range importer.extra {
-				writeProjectFile(t, path, content)
-			}
 			writeProjectFile(t, importer.path, "package "+importer.pkg+"\n\nimport _ \"tmpapp/service/helper\"\n")
 			var orphanFiles []string
 			if importer.orphan {
@@ -273,7 +271,7 @@ func TestFindOrphanDirsFailsOnImportsItCannotRead(t *testing.T) {
 				t.Cleanup(func() { _ = os.Chmod(path, 0o755) })
 			}
 
-			orphans, keptHelpers, err := ggprune.FindOrphanDirs([]*gen.ModelInfo{helperImportModel()}, nil, nil, "tmpapp", ggconfig.PruneConfig{}, gghelper.NewProjectIgnore())
+			orphans, keptHelpers, err := ggprune.FindOrphanDirs([]*gen.ModelInfo{helperImportModel()}, nil, nil, "tmpapp", ggconfig.PruneConfig{})
 
 			if err == nil || !strings.Contains(err.Error(), tt.want) {
 				t.Fatalf("FindOrphanDirs() error = %v, want one naming %s", err, tt.want)
@@ -322,23 +320,27 @@ func TestFindOrphanDirsKeepsNothingForAMissingImport(t *testing.T) {
 	}
 }
 
-// TestFindOrphanDirsJudgesExcludedDirectoriesWithTheirParent pins that the
-// directories a walk over the project's code leaves out, hidden, vendor and
-// testdata directories and nested modules, are never orphans on their own:
-// they go with the directory holding them. Below a directory orphan cleanup
-// leaves alone they stay, as the testdata a test next to them reads must;
-// below an orphan they are cleaned with it.
-func TestFindOrphanDirsJudgesExcludedDirectoriesWithTheirParent(t *testing.T) {
+// TestFindOrphanDirsJudgesEveryDirectoryOnItsOwn pins that prune judges a
+// directory the go command or the project's Git ignore rules leave out like
+// any other: a hidden, underscored, vendor or testdata directory, a nested
+// module, and a Git ignored directory no model owns are orphans, even right
+// below a directory orphan cleanup leaves alone, such as the testdata next to
+// the tests of service/authz. Only prune.ignore would keep them. Below an
+// orphan they are cleaned with it.
+func TestFindOrphanDirsJudgesEveryDirectoryOnItsOwn(t *testing.T) {
 	setupHelperImportProject(t)
 	for path, content := range map[string]string{
 		filepath.Join("service", "authz", "common_test.go"):                "package authz\n",
 		filepath.Join("service", "authz", "testdata", "input.json"):        "{}\n",
 		filepath.Join("service", ".cache", "state.json"):                   "{}\n",
+		filepath.Join("service", "_old", "old.go"):                         "package old\n",
 		filepath.Join("service", "vendor", "example.com", "lib", "lib.go"): "package lib\n",
 		filepath.Join("service", "tools", "go.mod"):                        "module tmpapp/service/tools\n\ngo 1.26\n",
 		filepath.Join("service", "tools", "main.go"):                       "package main\n",
 		filepath.Join("service", "legacy", "legacy.go"):                    "package legacy\n",
 		filepath.Join("service", "legacy", "testdata", "input.json"):       "{}\n",
+		".gitignore": "service/scratch/\n",
+		filepath.Join("service", "scratch", "try.go"): "package scratch\n",
 	} {
 		writeProjectFile(t, path, content)
 	}
@@ -346,8 +348,14 @@ func TestFindOrphanDirsJudgesExcludedDirectoriesWithTheirParent(t *testing.T) {
 	orphans, _ := findOrphanDirs(t, []*gen.ModelInfo{helperImportModel()}, nil, ggconfig.PruneConfig{})
 
 	want := []ggprune.OrphanDir{
+		{Path: filepath.Join("service", ".cache"), Files: []string{filepath.Join("service", ".cache", "state.json")}},
+		{Path: filepath.Join("service", "_old"), Files: []string{filepath.Join("service", "_old", "old.go")}},
 		{Path: filepath.Join("service", "helper"), Files: []string{filepath.Join("service", "helper", "helper.go")}},
 		{Path: filepath.Join("service", "legacy"), Files: []string{filepath.Join("service", "legacy", "legacy.go"), filepath.Join("service", "legacy", "testdata", "input.json")}},
+		{Path: filepath.Join("service", "scratch"), Files: []string{filepath.Join("service", "scratch", "try.go")}},
+		{Path: filepath.Join("service", "tools"), Files: []string{filepath.Join("service", "tools", "go.mod"), filepath.Join("service", "tools", "main.go")}},
+		{Path: filepath.Join("service", "vendor"), Files: []string{filepath.Join("service", "vendor", "example.com", "lib", "lib.go")}},
+		{Path: filepath.Join("service", "authz", "testdata"), Files: []string{filepath.Join("service", "authz", "testdata", "input.json")}},
 	}
 	if !reflect.DeepEqual(orphans, want) {
 		t.Fatalf("orphans = %#v, want %#v", orphans, want)
@@ -396,7 +404,7 @@ func setupOrphanPruneProject(t *testing.T) {
 func findOrphanDirs(t *testing.T, models []*gen.ModelInfo, keptDirs map[string]bool, protect ggconfig.PruneConfig, orphanFiles ...string) (orphans, keptHelpers []ggprune.OrphanDir) {
 	t.Helper()
 
-	orphans, keptHelpers, err := ggprune.FindOrphanDirs(models, keptDirs, orphanFiles, "tmpapp", protect, gghelper.NewProjectIgnore())
+	orphans, keptHelpers, err := ggprune.FindOrphanDirs(models, keptDirs, orphanFiles, "tmpapp", protect)
 	if err != nil {
 		t.Fatal(err)
 	}

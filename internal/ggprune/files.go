@@ -1,10 +1,18 @@
 // Package ggprune works out what gg prune deletes from a project's service
 // directory, and deletes it: the service files of disabled actions, the
 // unmanaged files of service directories no model owns, and the directories
-// that leaves empty. It never deletes what the gst.yaml prune.ignore entries
-// cover. Asking before deleting and printing what happened stay with the gg
-// command. cmd/gg/PRUNE.md lays out the whole cleanup, step by step, with
-// flowcharts.
+// that leaves empty. Asking before deleting and printing what happened stay
+// with the gg command. cmd/gg/PRUNE.md lays out the whole cleanup, step by
+// step, with flowcharts.
+//
+// Of the ignore rules, prune goes by gst.yaml's prune.ignore alone. The
+// service directory belongs to gg and is kept clean: a file there that
+// nothing needs is litter even when the project's Git ignore rules or the go
+// command's ignores (testdata, vendor, names beginning with "." or "_",
+// nested modules, the directories go.mod ignores) cover it. So prune reads
+// the directory whole, and prune.ignore is the one way to keep a path on
+// purpose. gg check and gg gen, which read the project's code, go by both
+// instead (see gghelper.ProjectIgnore).
 package ggprune
 
 import (
@@ -18,15 +26,15 @@ import (
 	"github.com/hydroan/gst/internal/codegen/gen"
 	"github.com/hydroan/gst/internal/ggconfig"
 	"github.com/hydroan/gst/internal/ggconst"
-	"github.com/hydroan/gst/internal/gghelper"
 )
 
 // ScanServiceFiles lists the service files under serviceDir that gg manages:
 // the standard phase files such as create.go and list.go, and any other .go
-// file embedding service.Base[...], which a DSL Filename("x") produces. Test
-// files and the paths the project's Git ignore rules exclude are left out. A
-// walk error ends the scan, and the files found before it come back with it.
-func ScanServiceFiles(serviceDir string, ignore gghelper.ProjectIgnore) ([]string, error) {
+// file embedding service.Base[...], which a DSL Filename("x") produces. Only
+// test files are left out; a file the project's Git ignore rules or the go
+// command ignore is listed like any other. A walk error ends the scan, and the
+// files found before it come back with it.
+func ScanServiceFiles(serviceDir string) ([]string, error) {
 	var files []string
 
 	// Check if service directory exists
@@ -35,7 +43,10 @@ func ScanServiceFiles(serviceDir string, ignore gghelper.ProjectIgnore) ([]strin
 	}
 
 	// Walk through the service directory
-	err := ignore.Walk(serviceDir, func(path string, info os.FileInfo) error {
+	err := filepath.Walk(serviceDir, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
 		if !info.IsDir() && isManagedServiceFile(path) {
 			files = append(files, path)
 		}
@@ -151,10 +162,15 @@ func RemoveFiles(paths []string, report func(path string, err error)) {
 
 // RemoveEmptyDirs removes the empty directories below rootDir, deepest first,
 // keeping those a gst.yaml prune.ignore entry in protect covers, and reports
-// each one it removes to report.
-func RemoveEmptyDirs(rootDir string, protect ggconfig.PruneConfig, ignore gghelper.ProjectIgnore, report func(dir string)) {
+// each one it removes to report. Nothing else keeps a directory: an empty
+// testdata directory, or one the project's Git ignore rules exclude, is
+// removed like any other.
+func RemoveEmptyDirs(rootDir string, protect ggconfig.PruneConfig, report func(dir string)) {
 	dirs := make([]string, 0)
-	_ = ignore.Walk(rootDir, func(path string, info os.FileInfo) error {
+	_ = filepath.Walk(rootDir, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
 		if path == rootDir || !info.IsDir() || protect.Ignores(path) {
 			return nil
 		}

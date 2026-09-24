@@ -126,7 +126,7 @@ func TestRouteIgnoresKeepServiceFilesForPrune(t *testing.T) {
 	if err := os.WriteFile(signupServiceFile, []byte("package account\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	pruneServiceFiles([]string{signupServiceFile}, allModels, result.KeptServiceFiles, result.KeptServiceDirs, ggconfig.PruneConfig{}, gghelper.NewProjectIgnore())
+	pruneServiceFiles([]string{signupServiceFile}, allModels, result.KeptServiceFiles, result.KeptServiceDirs, ggconfig.PruneConfig{})
 	if _, err := os.Stat(signupServiceFile); err != nil {
 		t.Fatalf("ignored action's service file should survive prune: %v", err)
 	}

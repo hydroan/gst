@@ -2,6 +2,8 @@
 
 `gg prune` 和 `gg gen --prune` 清理项目 `service/` 目录里不再需要的文件，以及被删掉的复制模块留在 `middleware/` 里的中间件文件。本文说明它们删什么、不删什么、按什么顺序删、哪一步会先问你。除了这些中间件文件和它们在 `middleware/middleware.go` 里的注册调用，`service/` 以外一个文件都不删。
 
+**忽略规则只认 `prune.ignore`**：`service/` 归 gg 管，要保持干净，放在里面的东西被 Git 忽略也好、被 Go 工具链忽略也好，用不上的照样是垃圾。所以 prune 读整个 `service/`（找活代码时读整个项目），项目的 Git 忽略规则和 Go 工具链的内置忽略（名字以 `.` 或 `_` 开头的文件和目录、`vendor`、`testdata`、自带 `go.mod` 的子目录、`go.mod` 里 `ignore` 的目录）都不起作用，想保留的路径写进 gst.yaml 的 `prune.ignore`。`gg check` 和 `gg gen` 读的是项目代码，两类规则都遵守。
+
 ## 总览
 
 清理分三步，按顺序进行：
@@ -111,7 +113,7 @@ stop
 
 **中间层目录**：`service/` 与属于 model 的目录之间的各级目录，包括 `service/` 本身。例如 `service/sample/record` 属于 model 时，`service/sample` 和 `service/` 都是中间层目录。
 
-**孤儿候选目录**：`service/` 下既不属于 model、也不在属于 model 的目录里面、也不是中间层的目录。隐藏目录、`vendor`、`testdata`、自带 `go.mod` 的子目录不单独当候选，跟着所在的目录走：所在目录是孤儿时随它一起清理，否则原样保留。
+**孤儿候选目录**：`service/` 下既不属于 model、也不在属于 model 的目录里面、也不是中间层的目录。隐藏目录、`_` 开头的目录、`vendor`、`testdata`、自带 `go.mod` 的子目录和被 Git 忽略的目录也一样按这条判断。
 
 **孤儿中间件文件**：`middleware/` 下带着 `gg module copy` 所有权标记（第一行是 `// Managed by gg module copy (module <name>). ...`），而项目里已经没有 `model/<name>/` 目录的文件，也就是被删掉的复制模块留下的中间件。`middleware/middleware.go` 永远不算。所有权标记见 [MODULE.md](MODULE.md)。
 
@@ -123,8 +125,8 @@ stop
 
 1. 从 `go.mod` 读出模块路径。项目里没有 `model/` 目录时报错退出。
 2. 读 gst.yaml。读之前，项目根目录下有 `.gg.yaml`、`.gg.yml`、`.gst.yaml`、`.gst.yml`、`gst.yml` 中的哪个，就对哪个打印一条警告：gg 不读它们。
-3. 扫描 `model/` 下的 model，读的文件和 `gg gen` 相同：跳过被 Git 忽略的文件，隐藏目录、`vendor`、`testdata`、自带 `go.mod` 的子目录，测试文件，以 `_` 开头的文件。一个 model 都没找到时打印 `No models found, pruning service files only` 并照常往下走，这时所有 gg 管的 service 文件都会进待删清单。
-4. 列出 `service/` 下现有的 gg 管的 service 文件，跳过被 Git 忽略的。扫描中途出错只打印警告，用已经扫到的文件继续。
+3. 扫描 `model/` 下的 model，读的文件和 `gg gen` 相同：跳过被 Git 忽略的、Go 工具链内置忽略的（见开头）和测试文件。项目有哪些 model 由 `gg gen` 说了算，prune 只处理它们留下的东西。一个 model 都没找到时打印 `No models found, pruning service files only` 并照常往下走，这时所有 gg 管的 service 文件都会进待删清单。
+4. 列出 `service/` 下现有的 gg 管的 service 文件，不跳过任何目录：被 Git 忽略的、`testdata` 或 `_` 开头目录里的都算。扫描中途出错只打印警告，用已经扫到的文件继续。
 
 读不出模块路径、gst.yaml 写错（包括 `prune.ignore` 不合规）、model 文件解析失败时，`gg prune` 打印错误并以失败退出，什么都不删。
 
@@ -146,16 +148,15 @@ stop
 
 - 从最深的目录开始，删掉 `service/` 下的空目录；子目录删掉后变空的上层目录也一起删。`service/` 本身不删。
 - 不询问，每删一个打印 `Removed empty directory ...`。
-- 不删：被 `prune.ignore` 覆盖的目录；被 Git 忽略的目录；里面还有被 Git 忽略的文件的目录，它不算空。
+- 只有被 `prune.ignore` 覆盖的目录不删；被 Git 忽略的空目录、空的 `testdata` 目录照样删。
 
 ## 第 3 步：处理孤儿目录
 
 ### 3.1 找出还有活代码在用的目录
 
-**活代码**指项目里所有的 `.go` 文件，包括测试文件和带构建约束（如 `//go:build ignore`）的文件，但下面这些不算：
+**活代码**指项目里所有的 `.go` 文件，包括测试文件、带构建约束（如 `//go:build ignore`）的文件，以及被 Git 忽略的文件和 Go 工具链内置忽略的目录（`testdata`、`vendor`、`_` 开头的目录等）里的文件，但下面这些不算：
 
 - gg 生成的 `.gen.go` 文件。它们跟着 model 走：删掉 model 后直接跑 `gg prune` 时，`service/service.gen.go` 还没重新生成，仍然 import 着被删 model 的目录，这个 import 不算数。
-- 隐藏目录、`vendor`、`testdata`、自带 `go.mod` 的子目录里的文件，以及被 Git 忽略的文件。gg check 遍历项目时跳过的也是这些。
 - 只能通过符号链接到达的目录里的文件：遍历不跟符号链接走，和 gg check、`go` 命令的 `./...` 一样。
 - 孤儿候选目录里的文件。
 - 孤儿中间件文件：它们在 3.4 和孤儿目录一起删掉，只有它们 import 的 service 目录也就跟着成了孤儿。
@@ -177,7 +178,7 @@ stop
 
 ### 3.2 找出孤儿目录
 
-按从浅到深的顺序，逐个检查 `service/` 下的目录；隐藏目录、`vendor`、`testdata`、自带 `go.mod` 的子目录连同它们下面的目录都不单独检查：
+按从浅到深的顺序，逐个检查 `service/` 下的每个目录，隐藏目录、`_` 开头的目录、`vendor`、`testdata`、自带 `go.mod` 的子目录和被 Git 忽略的目录也不例外：
 
 ```plantuml
 @startuml
@@ -222,13 +223,13 @@ stop
 @enduml
 ```
 
-- 孤儿目录的文件清单包含它所有子目录里 gg 不认得的文件，`testdata` 这类目录里的也算在内，跳过被 Git 忽略的。
+- 孤儿目录的文件清单包含它所有子目录里 gg 不认得的文件，`testdata` 这类目录里的、被 Git 忽略的也算在内。
 - 孤儿目录里 gg 管的 service 文件不在清单里，它们归第 1 步处理。
 
 ### 3.3 找出孤儿中间件文件
 
 - 逐个检查 `middleware/` 下直接放着的 Go 文件，子目录、测试文件和 `middleware/middleware.go` 不看。带着模块复制所有权标记、而项目里没有对应 `model/<name>/` 目录的，是孤儿中间件文件。
-- 被 `prune.ignore` 覆盖的、被 Git 忽略的不算：它们不删，被 `prune.ignore` 覆盖的仍是活代码。
+- 被 `prune.ignore` 覆盖的不算：它不删，仍是活代码。被 Git 忽略的照样算。
 - 想留下某个孤儿中间件文件，可以把它写进 `prune.ignore`，或者删掉它第一行的所有权标记，让它变成项目自己的文件。
 
 ### 3.4 列出或删除
@@ -247,11 +248,9 @@ stop
 
 - `service/` 以外的文件和目录，孤儿中间件文件和它们的注册调用除外。
 - `middleware/` 里没有模块复制所有权标记的文件，以及所属模块的 `model/<name>/` 还在的中间件文件。
-- 被 Git 忽略的文件和目录。
 - 当前应有的 service 文件；`gg gen --prune` 时被路由屏蔽的 action 的 service 文件。
 - 属于 model 的目录、中间层目录里 gg 不认得的文件。
-- 孤儿目录以外的隐藏目录、`vendor`、`testdata`、自带 `go.mod` 的子目录。
-- `prune.ignore` 覆盖的路径，三步都不删。
+- `prune.ignore` 覆盖的路径，三步都不删。忽略规则里只认它：被 Git 忽略的、Go 工具链内置忽略的路径没有这层保护。
 - 3.1 保留的目录，连同它的子目录，以及它上面各层中间层目录里的文件。
 - 第 1 步没有回答 `y` 或 `yes` 时，一切。
 

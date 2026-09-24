@@ -65,12 +65,15 @@ type GenModelsConfig struct {
 type PruneConfig struct {
 	// Ignore lists the paths gg prune never deletes, whatever the reason it
 	// would: a disabled action's service file, a file in an orphan service
-	// directory, a directory left empty, or the middleware of a removed copied
-	// module. Each entry is a path under service/ or middleware/, relative to
-	// the project root, and matches by directory level, the way the from field
-	// of an ignore rule does: "service/iam" covers service/iam and everything
-	// below it but not service/iamx, and "service/record/list.go" covers that
-	// one file. Entries are plain paths: no wildcards, no regular expressions.
+	// directory, a directory left empty, or the middleware of a removed
+	// copied module. It is the only ignore rule gg prune goes by: the
+	// project's Git ignore rules and the go command's ignores, which gg check
+	// and gg gen follow, keep nothing from it. Each entry is a path under
+	// service/ or middleware/, relative to the project root, and matches by
+	// directory level, the way the from field of an ignore rule does:
+	// "service/iam" covers service/iam and everything below it but not
+	// service/iamx, and "service/record/list.go" covers that one file.
+	// Entries are plain paths: no wildcards, no regular expressions.
 	Ignore []string `yaml:"ignore"`
 }
 
