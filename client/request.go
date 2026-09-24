@@ -11,6 +11,10 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/errors"
+	"github.com/hydroan/gst/consts"
+	"github.com/hydroan/gst/internal/execctx"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/propagation"
 )
 
 // Do sends one request on ctx and parses the response envelope. It is the
@@ -21,6 +25,13 @@ import (
 // Its deadline and its cancellation end the request, the reading of the
 // response included, and the request then fails with the context's error. A
 // nil ctx is refused.
+//
+// The request carries the trace ctx belongs to: the W3C trace context of the
+// span open on it, and the framework's own X-Trace-ID header with the trace
+// id the work runs under — a request's, a cron round's, a leader tenure's.
+// The upstream continues that trace, so its access log, its statement
+// comments and the trace_id of its answer all name the caller's trace id. A
+// context that belongs to no trace sends neither header.
 func (c *Client) Do(ctx context.Context, method, path string, payload any, opts ...RequestOption) (*Envelope, error) {
 	req, err := c.newRequest(ctx, method, path, payload, opts)
 	if err != nil {
@@ -31,7 +42,7 @@ func (c *Client) Do(ctx context.Context, method, path string, payload any, opts 
 
 // newRequest builds the HTTP request on ctx: URL from the service address
 // plus path and encoded query parameters, body from payload, headers and
-// credentials from the client.
+// credentials from the client, and the trace headers of ctx.
 func (c *Client) newRequest(ctx context.Context, method, path string, payload any, opts []RequestOption) (*http.Request, error) {
 	encoded, err := newRequestConfig(opts).encode()
 	if err != nil {
@@ -70,6 +81,17 @@ func (c *Client) newRequest(ctx context.Context, method, path string, payload an
 		req.Header.Set("Authorization", "Bearer "+c.token)
 	}
 	maps.Copy(req.Header, c.header)
+
+	// The trace is carried the two ways the framework's own server reads it:
+	// the W3C headers of the span open on ctx, which the propagator writes
+	// only when the caller runs with OpenTelemetry, and the framework's trace
+	// id header, which the server falls back to when the W3C headers are
+	// absent or it runs without OpenTelemetry. A context that belongs to no
+	// trace gets neither: the client invents no identity of its own.
+	otel.GetTextMapPropagator().Inject(ctx, propagation.HeaderCarrier(req.Header))
+	if traceID := execctx.FromContext(ctx).TraceID; traceID != "" {
+		req.Header.Set(consts.HEADER_TRACE_ID, traceID)
+	}
 	return req, nil
 }
 

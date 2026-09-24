@@ -9,6 +9,7 @@ import (
 
 	"github.com/hydroan/gst/client"
 	"github.com/hydroan/gst/consts"
+	"github.com/hydroan/gst/internal/execctx"
 	"github.com/hydroan/gst/internal/modelregistry"
 	"github.com/hydroan/gst/internal/router"
 	"github.com/hydroan/gst/internal/testutil"
@@ -183,4 +184,10 @@ func TestClientEnvelopeCompleteness(t *testing.T) {
 	require.NoError(t, err)
 	require.NotEmpty(t, resp.TraceID)
 	require.Zero(t, resp.Code)
+
+	// The server continues the trace the call belongs to: the trace id
+	// stamped on the context is the trace id of the answer.
+	resp, err = cli.Do(execctx.WithTraceID(t.Context(), "trace-sample"), http.MethodGet, recordPath, nil)
+	require.NoError(t, err)
+	require.Equal(t, "trace-sample", resp.TraceID)
 }

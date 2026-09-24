@@ -11,7 +11,12 @@ import (
 
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/client"
+	"github.com/hydroan/gst/consts"
+	"github.com/hydroan/gst/internal/execctx"
 	"github.com/stretchr/testify/require"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/propagation"
+	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 )
 
 // newEnvelopeServer returns a test server answering with a gst envelope and a
@@ -151,4 +156,46 @@ func TestDoRefusesNilContext(t *testing.T) {
 	var ctx context.Context
 	_, err = cli.Do(ctx, http.MethodGet, "/api/records", nil)
 	require.ErrorContains(t, err, "nil Context")
+}
+
+func TestRequestCarriesTraceOfContext(t *testing.T) {
+	srv, captured := newEnvelopeServer(t, http.StatusOK, `{"code":0}`)
+
+	cli, err := client.New(srv.URL)
+	require.NoError(t, err)
+
+	t.Run("the trace id stamped on the context", func(t *testing.T) {
+		ctx := execctx.WithTraceID(t.Context(), "trace-sample")
+		_, err := cli.Do(ctx, http.MethodGet, "/api/records", nil)
+		require.NoError(t, err)
+		require.Equal(t, "trace-sample", captured.Header.Get(consts.HEADER_TRACE_ID))
+		require.Empty(t, captured.Header.Get("traceparent"))
+	})
+
+	t.Run("the span open on the context", func(t *testing.T) {
+		// The propagator is the one the framework installs when tracing is
+		// enabled; the test process runs without tracing, so it is installed
+		// here for the span this test opens.
+		restore := otel.GetTextMapPropagator()
+		otel.SetTextMapPropagator(propagation.TraceContext{})
+		t.Cleanup(func() { otel.SetTextMapPropagator(restore) })
+		provider := sdktrace.NewTracerProvider()
+		t.Cleanup(func() { require.NoError(t, provider.Shutdown(context.Background())) })
+		ctx, span := provider.Tracer("client-test").Start(t.Context(), "caller")
+		defer span.End()
+
+		_, err := cli.Do(ctx, http.MethodGet, "/api/records", nil)
+		require.NoError(t, err)
+		traceID := span.SpanContext().TraceID().String()
+		require.Contains(t, captured.Header.Get("traceparent"), traceID)
+		// The framework header names the same trace, borrowed from the span.
+		require.Equal(t, traceID, captured.Header.Get(consts.HEADER_TRACE_ID))
+	})
+
+	t.Run("a context that belongs to no trace", func(t *testing.T) {
+		_, err := cli.Do(t.Context(), http.MethodGet, "/api/records", nil)
+		require.NoError(t, err)
+		require.Empty(t, captured.Header.Get(consts.HEADER_TRACE_ID))
+		require.Empty(t, captured.Header.Get("traceparent"))
+	})
 }

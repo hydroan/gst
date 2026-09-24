@@ -755,8 +755,9 @@ rsp, err := cli.Post[model.SampleSealRsp](ctx, "/api/samples/seal", &model.Sampl
 - 每个入口的第一个参数都是本次调用的上下文，它的截止时间和取消会结束这次请求。service 里传
   ctx 本身，不要另起 `context.Background()`；没有挂在请求上的调用（定时任务、常驻组件）传自己
   收到的 ctx。`WithTimeout` 是客户端级别的兜底上限，和 ctx 的截止时间取先到者。
-- `client.Error` 的 `TraceID` 就是上游那次请求的 trace_id，也是上游响应头 `X-Trace-ID` 的值，
-  排查时拿它去上游的访问日志里找。
+- 请求带着 ctx 所属的追踪：OTEL 开启时注入 W3C 的 `traceparent`，同时总带上框架自己的
+  `X-Trace-ID`，上游沿用这个 trace_id，它的访问日志、SQL 注释和响应里的 `trace_id` 都是调用方
+  的那一个；`client.Error` 的 `TraceID` 也是它，排查时拿一个 id 就能把整条调用链查到底。
 
 接口测试用的是同一个客户端：`testutil.Run` 启动整个应用，`client.New(testutil.BaseURL())` 发请求，
 上下文传 `t.Context()`，`testutil.DecodeResp`、`testutil.RequireError` 配合它断言，见
