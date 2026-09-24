@@ -71,9 +71,8 @@ type PruneConfig struct {
 	// ignores protect nothing, and only decide, as they do for gg check and gg
 	// gen, which code counts as still using a service directory. Each entry is
 	// a path under service/ or middleware/, relative to the project root, and
-	// matches by
-	// directory level, the way the from field of an ignore rule does:
-	// "service/iam" covers service/iam and everything below it but not
+	// matches by directory level, the way the from field of an ignore rule
+	// does: "service/iam" covers service/iam and everything below it but not
 	// service/iamx, and "service/record/list.go" covers that one file.
 	// Entries are plain paths: no wildcards, no regular expressions.
 	Ignore []string `yaml:"ignore"`
