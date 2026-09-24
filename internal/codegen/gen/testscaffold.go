@@ -397,32 +397,32 @@ func GenerateServiceTestMain(modulePath, servicePkgName string) (string, error) 
 	// of the first project import starts a line of its own, and the Server
 	// literal breaks across lines, one field per line.
 	fset := token.NewFileSet()
-	lines := newLineSet(fset)
+	lines := goast.NewLineSet(fset)
 
-	specs := []ast.Spec{importSpecAt(scaffoldImportTesting, "", lines.next())}
+	specs := []ast.Spec{importSpecAt(scaffoldImportTesting, "", lines.Next())}
 	for i, dir := range ggconst.ProjectImportDirs {
 		var doc *ast.CommentGroup
 		if i == 0 {
 			// A blank line sets the project imports apart from "testing".
-			lines.next()
+			lines.Next()
 			doc = commentGroup(
 				"// The registrations of main.go: the models, modules, services and cron",
 				"// jobs register themselves through the init of these packages.",
 			)
-			doc.List[0].Slash = lines.next()
-			doc.List[1].Slash = lines.next()
+			doc.List[0].Slash = lines.Next()
+			doc.List[1].Slash = lines.Next()
 		}
 		name := "_"
 		if dir == ggconst.DirRouter {
 			name = ""
 		}
-		spec := importSpecAt(modulePath+"/"+dir, name, lines.next())
+		spec := importSpecAt(modulePath+"/"+dir, name, lines.Next())
 		spec.Doc = doc
 		specs = append(specs, spec)
 	}
-	specs = append(specs, importSpecAt(scaffoldImportConfig, "", lines.next()), importSpecAt(scaffoldImportTestutil, "", lines.next()))
+	specs = append(specs, importSpecAt(scaffoldImportConfig, "", lines.Next()), importSpecAt(scaffoldImportTestutil, "", lines.Next()))
 
-	lbrace, databasePos, redisPos, routesPos, seedPos, rbrace := lines.next(), lines.next(), lines.next(), lines.next(), lines.next(), lines.next()
+	lbrace, databasePos, redisPos, routesPos, seedPos, rbrace := lines.Next(), lines.Next(), lines.Next(), lines.Next(), lines.Next(), lines.Next()
 	server := &ast.CompositeLit{
 		Type:   sel(ident("testutil"), "Server"),
 		Lbrace: lbrace,
@@ -486,35 +486,6 @@ func PackageDeclaresTestMain(dir string) (bool, error) {
 		}
 	}
 	return false, nil
-}
-
-// lineSet hands out positions on successive lines of a fabricated file of
-// fset, for the nodes go/printer lays out by their lines.
-type lineSet struct {
-	file *token.File
-	line int
-}
-
-// lineSetStride is the byte length of every line of a lineSet's file.
-const lineSetStride = 100
-
-// newLineSet adds a file of lineSetLines lines to fset and returns the
-// positions of its lines.
-func newLineSet(fset *token.FileSet) *lineSet {
-	const lineSetLines = 64
-	file := fset.AddFile("scaffold.go", -1, lineSetLines*lineSetStride)
-	offsets := make([]int, lineSetLines)
-	for i := range offsets {
-		offsets[i] = i * lineSetStride
-	}
-	file.SetLines(offsets)
-	return &lineSet{file: file}
-}
-
-// next returns a position on the line after the previous one.
-func (l *lineSet) next() token.Pos {
-	l.line++
-	return l.file.Pos((l.line - 1) * lineSetStride)
 }
 
 // The AST builders of the scaffolds.
