@@ -2,14 +2,19 @@ package columns
 
 import (
 	"fmt"
-	"go/format"
+	"go/ast"
+	"go/parser"
+	"go/token"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/consts"
+	"github.com/hydroan/gst/internal/codegen/gen"
 	"github.com/hydroan/gst/internal/ggconst"
+	"github.com/hydroan/gst/internal/goast"
 )
 
 // renderColumnsFile builds the generated source for one model source file: a
@@ -78,9 +83,9 @@ func renderColumnsFile(module string, pkgName string, source string, models []mo
 	}
 
 	// Standard library imports go in their own group, as gofmt convention
-	// expects; format.Source keeps groups but does not create them. A path is
-	// standard library only when its first segment carries no dot and it does
-	// not belong to the project module, whose name may also be dotless.
+	// expects. A path is standard library only when its first segment carries
+	// no dot and it does not belong to the project module, whose name may
+	// also be dotless.
 	stdlib := make([]string, 0, len(imports))
 	external := make([]string, 0, len(imports))
 	for path := range imports {
@@ -93,42 +98,95 @@ func renderColumnsFile(module string, pkgName string, source string, models []mo
 	sort.Strings(stdlib)
 	sort.Strings(external)
 
-	var buf strings.Builder
-	buf.WriteString(consts.CodeGeneratedComment())
-	fmt.Fprintf(&buf, "\n// source: %s\n\npackage %s\n\nimport (\n", filepath.ToSlash(source), pkgName)
+	// go/printer lays the file out by the positions of its nodes and
+	// comments: every node or comment that starts a line takes the next line
+	// of a fabricated file, a skipped line prints as a blank line, and a
+	// position one byte into a line stays on that line.
+	fset := token.NewFileSet()
+	lines := goast.NewLineSet(fset)
+	comments := []*ast.CommentGroup{{List: []*ast.Comment{
+		{Slash: lines.Next(), Text: consts.CodeGeneratedComment()},
+		{Slash: lines.Next(), Text: "// source: " + filepath.ToSlash(source)},
+	}}}
+	lines.Next()
+	packagePos := lines.Next()
+	f := &ast.File{
+		Package: packagePos,
+		Name:    &ast.Ident{Name: pkgName, NamePos: packagePos},
+	}
+
+	lines.Next()
+	importDecl := &ast.GenDecl{TokPos: lines.Next(), Tok: token.IMPORT}
+	importDecl.Lparen = importDecl.TokPos + 1
 	for _, path := range stdlib {
-		buf.WriteString(importSpec(imports[path], path))
+		importDecl.Specs = append(importDecl.Specs, columnsImportSpec(imports[path], path, lines.Next()))
 	}
 	if len(stdlib) > 0 && len(external) > 0 {
-		buf.WriteString("\n")
+		lines.Next()
 	}
 	for _, path := range external {
-		buf.WriteString(importSpec(imports[path], path))
+		importDecl.Specs = append(importDecl.Specs, columnsImportSpec(imports[path], path, lines.Next()))
 	}
-	buf.WriteString(")\n")
+	importDecl.Rparen = lines.Next()
+	f.Decls = append(f.Decls, importDecl)
 
 	for _, m := range models {
-		fmt.Fprintf(&buf, "\n// %s are the typed column references of %s.\n", columnVarName(m.Name), m.Name)
-		fmt.Fprintf(&buf, "var %s = struct {\n", columnVarName(m.Name))
+		lines.Next()
+		comments = append(comments, &ast.CommentGroup{List: []*ast.Comment{{
+			Slash: lines.Next(),
+			Text:  fmt.Sprintf("// %s are the typed column references of %s.", columnVarName(m.Name), m.Name),
+		}}})
+		varPos := lines.Next()
+		structType := &ast.StructType{Fields: &ast.FieldList{Opening: varPos}}
 		for _, col := range m.Columns {
-			fmt.Fprintf(&buf, "\t%s %s", col.GoName, columnRefType(col))
-			if col.TypeExpr == "" {
-				fmt.Fprintf(&buf, " // %s", col.TypeName)
+			namePos := lines.Next()
+			refType, err := columnRefType(col)
+			if err != nil {
+				return "", errors.Wrapf(err, "model %s column %q", m.Name, col.DBName)
 			}
-			buf.WriteString("\n")
+			structType.Fields.List = append(structType.Fields.List, &ast.Field{
+				Names: []*ast.Ident{{Name: col.GoName, NamePos: namePos}},
+				Type:  refType,
+			})
+			// A column whose type cannot be written as source keeps the
+			// type in a comment after the field. The printer flushes a
+			// comment once it passes the comment's position, so the type's
+			// last token is positioned ahead of the comment on the field
+			// line, well within the 100 bytes of a goast.LineSet line.
+			if col.TypeExpr == "" {
+				endColumnRefType(refType, namePos+50)
+				comments = append(comments, &ast.CommentGroup{List: []*ast.Comment{{Slash: namePos + 60, Text: "// " + col.TypeName}}})
+			}
 		}
-		buf.WriteString("}{\n")
+		structType.Fields.Closing = lines.Next()
+		literal := &ast.CompositeLit{Type: structType, Lbrace: structType.Fields.Closing + 1}
 		for _, col := range m.Columns {
-			fmt.Fprintf(&buf, "\t%s: %s,\n", col.GoName, columnRefLiteral(m.Name, col))
+			refLiteral, err := columnRefLiteral(m.Name, col)
+			if err != nil {
+				return "", errors.Wrapf(err, "model %s column %q", m.Name, col.DBName)
+			}
+			literal.Elts = append(literal.Elts, &ast.KeyValueExpr{
+				Key:   &ast.Ident{Name: col.GoName, NamePos: lines.Next()},
+				Value: refLiteral,
+			})
 		}
-		buf.WriteString("}\n")
+		literal.Rbrace = lines.Next()
+		f.Decls = append(f.Decls, &ast.GenDecl{
+			TokPos: varPos,
+			Tok:    token.VAR,
+			Specs: []ast.Spec{&ast.ValueSpec{
+				Names:  []*ast.Ident{{Name: columnVarName(m.Name), NamePos: varPos}},
+				Values: []ast.Expr{literal},
+			}},
+		})
 	}
+	f.Comments = comments
 
-	formatted, err := format.Source([]byte(buf.String()))
+	rendered, err := gen.FormatNodeWithFileSet(f, fset)
 	if err != nil {
 		return "", errors.Wrapf(err, "format generated columns for %s", source)
 	}
-	return string(formatted), nil
+	return rendered, nil
 }
 
 // isStdlibImport reports whether an import path belongs to the standard
@@ -142,20 +200,21 @@ func isStdlibImport(path string, module string) bool {
 	return !strings.Contains(strings.SplitN(path, "/", 2)[0], ".")
 }
 
-// importSpec renders one import line of a generated file. The package name is
-// written only when it cannot be inferred from the path: gofmt never spells a
-// name it can read off the last segment, and a redundant one reads as if the
-// package were called something else. A versioned path such as .../v2, or a
-// package whose name differs from its directory, keeps the name, without which
-// the generated file would not compile. In the example of renderColumnsFile,
-// the package time of the path time is written as "time", while the package
-// uuid of github.com/gofrs/uuid/v5 is written as
-// uuid "github.com/gofrs/uuid/v5".
-func importSpec(name, path string) string {
-	if name == path[strings.LastIndex(path, "/")+1:] {
-		return fmt.Sprintf("\t%q\n", path)
+// columnsImportSpec builds one import of a generated file, positioned at
+// pos. The package name is written only when it cannot be inferred from the
+// path: gofmt never spells a name it can read off the last segment, and a
+// redundant one reads as if the package were called something else. A
+// versioned path such as .../v2, or a package whose name differs from its
+// directory, keeps the name, without which the generated file would not
+// compile. In the example of renderColumnsFile, the package time of the path
+// time is written as "time", while the package uuid of
+// github.com/gofrs/uuid/v5 is written as uuid "github.com/gofrs/uuid/v5".
+func columnsImportSpec(name, path string, pos token.Pos) *ast.ImportSpec {
+	spec := &ast.ImportSpec{Path: &ast.BasicLit{Kind: token.STRING, Value: strconv.Quote(path), ValuePos: pos}}
+	if name != path[strings.LastIndex(path, "/")+1:] {
+		spec.Name = &ast.Ident{Name: name, NamePos: pos}
 	}
-	return fmt.Sprintf("\t%s %q\n", name, path)
+	return spec
 }
 
 // columnVarName returns the name of the var holding a model's generated
@@ -170,14 +229,22 @@ func columnVarName(model string) string {
 // whose type cannot be written as source, gets the plain reference. In the
 // example of renderColumnsFile, Amount gets gst.NumericColumn[int64],
 // CreatedAt gst.TimeColumn, ID gst.Column[uuid.UUID] and Tags gst.Column[any].
-func columnRefType(col columnInfo) string {
+func columnRefType(col columnInfo) (ast.Expr, error) {
 	switch {
 	case col.Time && col.TypeExpr != "":
-		return "gst.TimeColumn"
+		return gstSelector("TimeColumn"), nil
 	case col.Numeric && col.TypeExpr != "":
-		return fmt.Sprintf("gst.NumericColumn[%s]", col.TypeExpr)
+		typeArg, err := parseTypeExpr(col.TypeExpr)
+		if err != nil {
+			return nil, err
+		}
+		return &ast.IndexExpr{X: gstSelector("NumericColumn"), Index: typeArg}, nil
 	default:
-		return fmt.Sprintf("gst.Column[%s]", columnTypeParam(col))
+		typeArg, err := columnTypeParam(col)
+		if err != nil {
+			return nil, err
+		}
+		return &ast.IndexExpr{X: gstSelector("Column"), Index: typeArg}, nil
 	}
 }
 
@@ -192,22 +259,102 @@ func columnRefType(col columnInfo) string {
 // CreatedAt gst.NewTimeColumn[*Record]("created_at"), ID
 // gst.NewColumn[*Record, uuid.UUID]("id") and Tags
 // gst.NewColumn[*Record, any]("tags").
-func columnRefLiteral(model string, col columnInfo) string {
+func columnRefLiteral(model string, col columnInfo) (ast.Expr, error) {
+	modelArg := &ast.StarExpr{X: ast.NewIdent(model)}
+	dbName := &ast.BasicLit{Kind: token.STRING, Value: strconv.Quote(col.DBName)}
 	switch {
 	case col.Time && col.TypeExpr != "":
-		return fmt.Sprintf("gst.NewTimeColumn[*%s](%q)", model, col.DBName)
+		constructor := &ast.IndexExpr{X: gstSelector("NewTimeColumn"), Index: modelArg}
+		return &ast.CallExpr{Fun: constructor, Args: []ast.Expr{dbName}}, nil
 	case col.Numeric && col.TypeExpr != "":
-		return fmt.Sprintf("gst.NewNumericColumn[*%s, %s](%q)", model, col.TypeExpr, col.DBName)
+		typeArg, err := parseTypeExpr(col.TypeExpr)
+		if err != nil {
+			return nil, err
+		}
+		constructor := &ast.IndexListExpr{X: gstSelector("NewNumericColumn"), Indices: []ast.Expr{modelArg, typeArg}}
+		return &ast.CallExpr{Fun: constructor, Args: []ast.Expr{dbName}}, nil
 	default:
-		return fmt.Sprintf("gst.NewColumn[*%s, %s](%q)", model, columnTypeParam(col), col.DBName)
+		typeArg, err := columnTypeParam(col)
+		if err != nil {
+			return nil, err
+		}
+		constructor := &ast.IndexListExpr{X: gstSelector("NewColumn"), Indices: []ast.Expr{modelArg, typeArg}}
+		return &ast.CallExpr{Fun: constructor, Args: []ast.Expr{dbName}}, nil
+	}
+}
+
+// endColumnRefType positions the last token of a reference type built by
+// columnRefType at pos: the closing bracket of gst.Column[any], or the name
+// of gst.TimeColumn.
+func endColumnRefType(refType ast.Expr, pos token.Pos) {
+	switch t := refType.(type) {
+	case *ast.IndexExpr:
+		t.Rbrack = pos
+	case *ast.SelectorExpr:
+		t.Sel.NamePos = pos
 	}
 }
 
 // columnTypeParam returns the type argument for a column reference, falling
 // back to any when the column type cannot be written as source.
-func columnTypeParam(col columnInfo) string {
+func columnTypeParam(col columnInfo) (ast.Expr, error) {
 	if col.TypeExpr == "" {
-		return "any"
+		return ast.NewIdent("any"), nil
 	}
-	return col.TypeExpr
+	return parseTypeExpr(col.TypeExpr)
+}
+
+// gstSelector returns the reference to name in the gst package, as in
+// gst.Column for Column.
+func gstSelector(name string) *ast.SelectorExpr {
+	return &ast.SelectorExpr{X: ast.NewIdent("gst"), Sel: ast.NewIdent(name)}
+}
+
+// parseTypeExpr parses a column type written as source, as the inspection
+// program reports it, into a tree without positions, so that printing it
+// among positioned nodes changes no layout: int64, []uint8, map[string]int
+// and uuid.UUID are the shapes it meets.
+func parseTypeExpr(text string) (ast.Expr, error) {
+	expr, err := parser.ParseExpr(text)
+	if err != nil {
+		return nil, errors.Wrapf(err, "parse column type %q", text)
+	}
+	var unsupported ast.Node
+	ast.Inspect(expr, func(n ast.Node) bool {
+		switch node := n.(type) {
+		case nil:
+		case *ast.Ident:
+			node.NamePos = token.NoPos
+		case *ast.SelectorExpr:
+		case *ast.StarExpr:
+			node.Star = token.NoPos
+		case *ast.ArrayType:
+			node.Lbrack = token.NoPos
+		case *ast.BasicLit:
+			node.ValuePos = token.NoPos
+		case *ast.MapType:
+			node.Map = token.NoPos
+		case *ast.ChanType:
+			node.Begin, node.Arrow = token.NoPos, token.NoPos
+		case *ast.IndexExpr:
+			node.Lbrack, node.Rbrack = token.NoPos, token.NoPos
+		case *ast.IndexListExpr:
+			node.Lbrack, node.Rbrack = token.NoPos, token.NoPos
+		case *ast.ParenExpr:
+			node.Lparen, node.Rparen = token.NoPos, token.NoPos
+		case *ast.InterfaceType:
+			node.Interface = token.NoPos
+		case *ast.FieldList:
+			node.Opening, node.Closing = token.NoPos, token.NoPos
+		default:
+			if unsupported == nil {
+				unsupported = n
+			}
+		}
+		return true
+	})
+	if unsupported != nil {
+		return nil, errors.Newf("column type %q has a %T, which the generator cannot place", text, unsupported)
+	}
+	return expr, nil
 }

@@ -19,8 +19,9 @@ func TestFillVersionFieldTags(t *testing.T) {
 
 import "github.com/hydroan/gst/model"
 
+// Bare has no tag yet.
 type Bare struct {
-	Version model.Version
+	Version model.Version // trailing comment
 
 	model.Base
 }
@@ -56,9 +57,39 @@ func (Partial) TableName() string { return "partials" }
 
 	// A bare field gains the whole tag (json included); a json section
 	// without omitempty gains it in place; a missing or partial gorm section
-	// gains the missing settings. All three converge on the same full shape.
-	if got := strings.Count(source, "`json:\"version,omitempty\" gorm:\"not null;default:1\"`"); got != 3 {
-		t.Fatalf("all three fields should heal to the full tag, found %d of them in:\n%s", got, source)
+	// gains the missing settings. All three converge on the same full shape,
+	// and the comments and layout of the file stay as they were.
+	want := `package document
+
+import "github.com/hydroan/gst/model"
+
+// Bare has no tag yet.
+type Bare struct {
+	Version model.Version ` + "`json:\"version,omitempty\" gorm:\"not null;default:1\"`" + ` // trailing comment
+
+	model.Base
+}
+
+func (Bare) TableName() string { return "bares" }
+
+type Tagged struct {
+	Version model.Version ` + "`json:\"version,omitempty\" gorm:\"not null;default:1\"`" + `
+
+	model.Base
+}
+
+func (Tagged) TableName() string { return "taggeds" }
+
+type Partial struct {
+	Version model.Version ` + "`json:\"version,omitempty\" gorm:\"not null;default:1\"`" + `
+
+	model.Base
+}
+
+func (Partial) TableName() string { return "partials" }
+`
+	if source != want {
+		t.Fatalf("healed file =\n%s\nwant\n%s", source, want)
 	}
 
 	// The healed file passes the check and a second run changes nothing.

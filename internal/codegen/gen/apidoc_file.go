@@ -2,15 +2,16 @@ package gen
 
 import (
 	"fmt"
-	"go/format"
+	"go/ast"
+	"go/token"
 	"maps"
 	"slices"
 	"strconv"
-	"strings"
 
 	"github.com/hydroan/gst/apidoc"
 	"github.com/hydroan/gst/consts"
 	"github.com/hydroan/gst/internal/ggconst"
+	"github.com/hydroan/gst/internal/goast"
 )
 
 // StructDocEntry describes the doc comments of one struct extracted from a
@@ -64,70 +65,135 @@ type APIDocEntries struct {
 //		})
 //	}
 func BuildAPIDocFile(pkgName string, entries APIDocEntries) (string, error) {
-	src, err := format.Source([]byte(buildAPIDocSource(pkgName, entries)))
-	if err != nil {
-		return "", err
-	}
-	return string(src), nil
-}
+	// go/printer lays the registrations out by their positions: each field
+	// of a registered doc on a line of its own, the header comment above a
+	// blank line, so every node that starts a line takes the next line of a
+	// fabricated file.
+	fset := token.NewFileSet()
+	lines := goast.NewLineSet(fset)
 
-// buildAPIDocSource assembles the source of model/apidoc.gen.go, unformatted:
-// BuildAPIDocFile formats it.
-func buildAPIDocSource(pkgName string, entries APIDocEntries) string {
-	var b strings.Builder
-	b.WriteString(consts.CodeGeneratedComment())
-	b.WriteString("\n\n")
-	b.WriteString("package " + pkgName + "\n\n")
+	header := &ast.Comment{Slash: lines.Next(), Text: consts.CodeGeneratedComment()}
+	lines.Next()
+	packagePos := lines.Next()
+	f := &ast.File{
+		Package:  packagePos,
+		Name:     &ast.Ident{Name: pkgName, NamePos: packagePos},
+		Comments: []*ast.CommentGroup{{List: []*ast.Comment{header}}},
+	}
 
 	// If there are no entries, the init function body is empty,
 	// so we should not import any external package.
 	if len(entries.Structs) > 0 || len(entries.Enums) > 0 {
-		b.WriteString("import " + strconv.Quote(ggconst.ImportPathAPIDoc) + "\n\n")
+		lines.Next()
+		f.Decls = append(f.Decls, &ast.GenDecl{
+			TokPos: lines.Next(),
+			Tok:    token.IMPORT,
+			Specs:  []ast.Spec{importSpec(ggconst.ImportPathAPIDoc, "")},
+		})
 	}
 
-	b.WriteString("func init() {\n")
+	lines.Next()
+	body := &ast.BlockStmt{Lbrace: lines.Next()}
 	for _, entry := range entries.Structs {
-		b.WriteString("\tapidoc.Register(" + strconv.Quote(entry.PkgPath) + ", " + strconv.Quote(entry.TypeName) + ", apidoc.StructDoc{\n")
-		if entry.Doc.Comment != "" {
-			b.WriteString("\t\tComment: " + strconv.Quote(entry.Doc.Comment) + ",\n")
-		}
-		if len(entry.Doc.Fields) > 0 {
-			b.WriteString("\t\tFields: map[string]string{\n")
-			for _, name := range slices.Sorted(maps.Keys(entry.Doc.Fields)) {
-				b.WriteString("\t\t\t" + strconv.Quote(name) + ": " + strconv.Quote(entry.Doc.Fields[name]) + ",\n")
-			}
-			b.WriteString("\t\t},\n")
-		}
-		b.WriteString("\t})\n")
+		body.List = append(body.List, apidocRegisterStmt(lines, entry))
 	}
 	for _, entry := range entries.Enums {
-		b.WriteString("\tapidoc.RegisterEnum(" + strconv.Quote(entry.PkgPath) + ", " + strconv.Quote(entry.TypeName) + ", apidoc.EnumDoc{\n")
-		if entry.Doc.Comment != "" {
-			b.WriteString("\t\tComment: " + strconv.Quote(entry.Doc.Comment) + ",\n")
-		}
-		b.WriteString("\t\tValues: []apidoc.EnumValue{\n")
-		for _, value := range entry.Doc.Values {
-			b.WriteString("\t\t\t{Value: " + enumValueLiteral(value.Value))
-			if value.Comment != "" {
-				b.WriteString(", Comment: " + strconv.Quote(value.Comment))
-			}
-			b.WriteString("},\n")
-		}
-		b.WriteString("\t\t},\n")
-		b.WriteString("\t})\n")
+		body.List = append(body.List, apidocRegisterEnumStmt(lines, entry))
 	}
-	b.WriteString("}\n")
+	body.Rbrace = lines.Next()
+	f.Decls = append(f.Decls, &ast.FuncDecl{
+		Name: ast.NewIdent(ggconst.FuncInit),
+		Type: &ast.FuncType{Func: body.Lbrace, Params: &ast.FieldList{}},
+		Body: body,
+	})
 
-	return b.String()
+	return FormatNodeExtraWithFileSet(f, fset)
+}
+
+// apidocRegisterStmt builds the registration of one struct's docs, taking
+// the lines it spans from lines:
+//
+//	apidoc.Register("helloworld/model", "User", apidoc.StructDoc{
+//		Comment: "User is the user record.",
+//		Fields: map[string]string{
+//			"Name": "Name is the user name.",
+//		},
+//	})
+//
+// A struct without a comment has no Comment field, and one without
+// documented fields no Fields field.
+func apidocRegisterStmt(lines *goast.LineSet, entry StructDocEntry) ast.Stmt {
+	callPos := lines.Next()
+	doc := &ast.CompositeLit{Type: sel(ident("apidoc"), "StructDoc"), Lbrace: callPos}
+	if entry.Doc.Comment != "" {
+		doc.Elts = append(doc.Elts, keyValue("Comment", strLit(entry.Doc.Comment), lines.Next()))
+	}
+	if len(entry.Doc.Fields) > 0 {
+		fieldsPos := lines.Next()
+		fields := &ast.CompositeLit{
+			Type:   &ast.MapType{Key: ident("string"), Value: ident("string")},
+			Lbrace: fieldsPos,
+		}
+		for _, name := range slices.Sorted(maps.Keys(entry.Doc.Fields)) {
+			fields.Elts = append(fields.Elts, &ast.KeyValueExpr{
+				Key:   &ast.BasicLit{Kind: token.STRING, Value: strconv.Quote(name), ValuePos: lines.Next()},
+				Value: strLit(entry.Doc.Fields[name]),
+			})
+		}
+		fields.Rbrace = lines.Next()
+		doc.Elts = append(doc.Elts, keyValue("Fields", fields, fieldsPos))
+	}
+	doc.Rbrace = lines.Next()
+	return exprStmt(call(sel(&ast.Ident{Name: "apidoc", NamePos: callPos}, "Register"), strLit(entry.PkgPath), strLit(entry.TypeName), doc))
+}
+
+// apidocRegisterEnumStmt builds the registration of one enum's docs, taking
+// the lines it spans from lines:
+//
+//	apidoc.RegisterEnum("helloworld/model", "UserRole", apidoc.EnumDoc{
+//		Comment: "UserRole grades what a user may do.",
+//		Values: []apidoc.EnumValue{
+//			{Value: "owner", Comment: "UserRoleOwner manages the project."},
+//			{Value: "member"},
+//		},
+//	})
+//
+// An enum without a comment has no Comment field, and a value without a
+// comment no Comment element.
+func apidocRegisterEnumStmt(lines *goast.LineSet, entry EnumDocEntry) ast.Stmt {
+	callPos := lines.Next()
+	doc := &ast.CompositeLit{Type: sel(ident("apidoc"), "EnumDoc"), Lbrace: callPos}
+	if entry.Doc.Comment != "" {
+		doc.Elts = append(doc.Elts, keyValue("Comment", strLit(entry.Doc.Comment), lines.Next()))
+	}
+	valuesPos := lines.Next()
+	values := &ast.CompositeLit{
+		Type:   &ast.ArrayType{Elt: sel(ident("apidoc"), "EnumValue")},
+		Lbrace: valuesPos,
+	}
+	for _, value := range entry.Doc.Values {
+		element := &ast.CompositeLit{
+			Lbrace: lines.Next(),
+			Elts:   []ast.Expr{&ast.KeyValueExpr{Key: ident("Value"), Value: enumValueLiteral(value.Value)}},
+		}
+		if value.Comment != "" {
+			element.Elts = append(element.Elts, &ast.KeyValueExpr{Key: ident("Comment"), Value: strLit(value.Comment)})
+		}
+		values.Elts = append(values.Elts, element)
+	}
+	values.Rbrace = lines.Next()
+	doc.Elts = append(doc.Elts, keyValue("Values", values, valuesPos))
+	doc.Rbrace = lines.Next()
+	return exprStmt(call(sel(&ast.Ident{Name: "apidoc", NamePos: callPos}, "RegisterEnum"), strLit(entry.PkgPath), strLit(entry.TypeName), doc))
 }
 
 // enumValueLiteral renders one enum constant value as a Go literal, as in
 // "owner" for the string owner and 2 for the integer 2.
-func enumValueLiteral(value any) string {
+func enumValueLiteral(value any) *ast.BasicLit {
 	switch v := value.(type) {
 	case string:
-		return strconv.Quote(v)
+		return strLit(v)
 	default:
-		return fmt.Sprintf("%v", v)
+		return &ast.BasicLit{Kind: token.INT, Value: fmt.Sprintf("%v", v)}
 	}
 }

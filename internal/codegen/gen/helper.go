@@ -27,8 +27,17 @@ var formatOnlyImports = &goimports.Options{Comments: true, TabIndent: true, TabW
 // processImport set, goimports then regroups and sorts the imports, adding or
 // removing none (see formatOnlyImports).
 func FormatNode(node ast.Node, processImport ...bool) (string, error) {
+	return FormatNodeWithFileSet(node, nil, processImport...)
+}
+
+// FormatNodeWithFileSet is FormatNode printing node through fset, the
+// FileSet the positions of node refer to, which lays the node out by them;
+// a nil fset stands for a new one.
+func FormatNodeWithFileSet(node ast.Node, fset *token.FileSet, processImport ...bool) (string, error) {
 	var buf bytes.Buffer
-	fset := token.NewFileSet()
+	if fset == nil {
+		fset = token.NewFileSet()
+	}
 
 	if err := format.Node(&buf, fset, node); err != nil {
 		return "", err
