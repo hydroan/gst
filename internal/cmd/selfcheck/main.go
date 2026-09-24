@@ -22,6 +22,14 @@
 // which can call the other one itself, or the function it forwards to has no
 // other use, so the two can be one. checkForwarding spells out what counts,
 // and what the check leaves alone because it cannot count every use.
+//
+// # Source formatting
+//
+// The code generators build the Go code they generate as syntax trees and
+// print them through one formatting path. A generator that formats source
+// text instead assembled its output as a string, so a call to a source text
+// formatter is reported anywhere in the generators but that one path.
+// checkSourceFormat names the formatters, the generators and the path.
 package main
 
 import (
@@ -55,6 +63,7 @@ type check struct {
 var checks = []check{
 	{name: "testplacement", run: checkTestPlacement},
 	{name: "forwarding", run: checkForwarding},
+	{name: "sourceformat", run: checkSourceFormat},
 }
 
 func main() {
