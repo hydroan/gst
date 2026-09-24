@@ -117,7 +117,11 @@ func rewriteVersionFieldTags(path string, findings []ggcheck.VersionFieldFinding
 		if field == nil {
 			return fmt.Errorf("%s:%d: field '%s.%s' not found for the version tag rewrite", gghelper.RelativePath(path), finding.Line, finding.Struct, finding.Field)
 		}
-		field.Tag = healedVersionTag(fset, field.Tag, finding)
+		tag, err := healedVersionTag(fset, field.Tag, finding)
+		if err != nil {
+			return fmt.Errorf("%s: %w", gghelper.RelativePath(path), err)
+		}
+		field.Tag = tag
 	}
 
 	var buf bytes.Buffer
@@ -154,11 +158,12 @@ func versionField(file *ast.File, finding ggcheck.VersionFieldFinding) *ast.Fiel
 // field without a tag gets the whole literal, and a tagged field gets the
 // insertions applied inside its literal, bottom-up so earlier offsets stay
 // valid, which lands one finding's same-offset insertions in declaration
-// order.
-func healedVersionTag(fset *token.FileSet, tag *ast.BasicLit, finding ggcheck.VersionFieldFinding) *ast.BasicLit {
+// order. An insertion outside the literal is an error: the finding no longer
+// describes the file.
+func healedVersionTag(fset *token.FileSet, tag *ast.BasicLit, finding ggcheck.VersionFieldFinding) (*ast.BasicLit, error) {
 	insertions := finding.TagInsertions()
 	if tag == nil {
-		return &ast.BasicLit{Kind: token.STRING, Value: strings.TrimPrefix(insertions[0].Text, " ")}
+		return &ast.BasicLit{Kind: token.STRING, Value: strings.TrimPrefix(insertions[0].Text, " ")}, nil
 	}
 	sort.SliceStable(insertions, func(i, j int) bool { return insertions[i].Offset > insertions[j].Offset })
 	start := fset.Position(tag.ValuePos).Offset
@@ -166,9 +171,9 @@ func healedVersionTag(fset *token.FileSet, tag *ast.BasicLit, finding ggcheck.Ve
 	for _, insertion := range insertions {
 		at := insertion.Offset - start
 		if at < 0 || at > len(value) {
-			continue
+			return nil, fmt.Errorf("version tag rewrite offset out of range for %s.%s", finding.Struct, finding.Field)
 		}
 		value = value[:at] + insertion.Text + value[at:]
 	}
-	return &ast.BasicLit{Kind: token.STRING, Value: value, ValuePos: tag.ValuePos}
+	return &ast.BasicLit{Kind: token.STRING, Value: value, ValuePos: tag.ValuePos}, nil
 }
