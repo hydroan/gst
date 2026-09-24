@@ -247,6 +247,51 @@ func TestGenerateServiceTestExamples(t *testing.T) {
 			wantCode: []string{`	rsp, err := cli.Post[model.RecordItems]("/api/records/merge", model.RecordItems{})`},
 		},
 		{
+			name:    "nested_import_reads_the_parent_id",
+			info:    recordInfo,
+			target:  recordTarget("import.go"),
+			action:  recordAction(consts.PHASE_IMPORT),
+			route:   "records/:rec/items/import",
+			wantDoc: "// TestImport covers POST /api/records/:rec/items/import, served by Importer in import.go.",
+			wantCode: []string{
+				`	id := "the ID of a row the test seeded"`,
+				`	envelope, err := cli.Upload("/api/records/"+id+"/items/import", "items.csv", strings.NewReader("name\nsample\n"), nil)`,
+			},
+		},
+		{
+			name:    "nested_export_reads_the_parent_id",
+			info:    recordInfo,
+			target:  recordTarget("export.go"),
+			action:  recordAction(consts.PHASE_EXPORT),
+			route:   "records/:rec/items/export",
+			wantDoc: "// TestExport covers GET /api/records/:rec/items/export, served by Exporter in export.go.",
+			wantCode: []string{
+				`	id := "the ID of a row the test seeded"`,
+				`	attachment, err := cli.Download("/api/records/" + id + "/items/export")`,
+			},
+		},
+		{
+			name:    "nested_sse_reads_the_parent_id",
+			info:    recordInfo,
+			target:  recordTarget("sse.go"),
+			action:  recordAction(consts.PHASE_SSE),
+			route:   "records/:rec/items",
+			wantDoc: "// TestSSE covers GET /api/records/:rec/items, served by Streamer in sse.go.",
+			wantCode: []string{
+				`	id := "the ID of a row the test seeded"`,
+				`	err = cli.Stream(http.MethodGet, "/api/records/"+id+"/items", nil, func(event sse.Event) error {`,
+			},
+		},
+		{
+			name:     "delete_with_a_declared_request_sends_it",
+			info:     recordInfo,
+			target:   recordTarget("revoke.go"),
+			action:   &dsl.Action{Enabled: true, Service: true, Payload: "*RecordRevokeReq", Result: "*RecordRevokeRsp", Phase: consts.PHASE_DELETE, Filename: "revoke"},
+			route:    "records/revoke",
+			wantDoc:  "// TestRevoke covers DELETE /api/records/revoke, served by Revoke in revoke.go.",
+			wantCode: []string{`	rsp, err := cli.Delete[model.RecordRevokeRsp]("/api/records/revoke", &model.RecordRevokeReq{})`},
+		},
+		{
 			name: "flattened_file_takes_the_package_of_its_model",
 			info: &gen.ModelInfo{
 				ModulePath:   "helloworld",

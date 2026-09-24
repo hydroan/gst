@@ -193,19 +193,22 @@ func newServiceTestExample(info *ModelInfo, action *dsl.Action, route string) *s
 		return &ast.CompositeLit{Type: modelType(typeName)}
 	}
 
+	// The request statements follow the declaration of the id placeholder
+	// when the path or the body reads it.
+	var stmts []ast.Stmt
 	path, usesID := routePathExpr(route)
 	switch action.Phase {
 	case consts.PHASE_IMPORT:
 		example.imports[scaffoldImportStrings] = ""
 		filename := strLit(filepath.Base(filepath.Dir(route)) + ".csv")
 		content := call(sel(ident("strings"), "NewReader"), strLit("name\nsample\n"))
-		example.stmts = append(example.stmts,
+		stmts = append(stmts,
 			define(idents("envelope", "err"), call(sel(ident("cli"), "Upload"), path, filename, content, ident("nil"))),
 			requireCall("NoError", ident("err")),
 			requireCall("NotNil", ident("envelope")),
 		)
 	case consts.PHASE_EXPORT:
-		example.stmts = append(example.stmts,
+		stmts = append(stmts,
 			define(idents("attachment", "err"), call(sel(ident("cli"), "Download"), path)),
 			requireCall("NoError", ident("err")),
 			requireCall("NotEmpty", sel(ident("attachment"), "Content")),
@@ -220,7 +223,7 @@ func newServiceTestExample(info *ModelInfo, action *dsl.Action, route string) *s
 			},
 			Body: &ast.BlockStmt{List: []ast.Stmt{Returns(sel(ident("client"), "ErrStopStream"))}},
 		}
-		example.stmts = append(example.stmts,
+		stmts = append(stmts,
 			&ast.AssignStmt{Lhs: []ast.Expr{ident("err")}, Tok: token.ASSIGN, Rhs: []ast.Expr{call(sel(ident("cli"), "Stream"), sel(ident("http"), "MethodGet"), path, ident("nil"), callback)}},
 			requireCall("NoError", ident("err")),
 		)
@@ -250,7 +253,14 @@ func newServiceTestExample(info *ModelInfo, action *dsl.Action, route string) *s
 			switch method := consts.HTTPVerb(action.Phase).HTTPMethod(); method {
 			case http.MethodGet:
 			case http.MethodDelete:
-				args = append(args, ident("nil"))
+				// The default Delete action reads the row from the path and
+				// takes no body; a DELETE action declaring its own request
+				// type sends it.
+				if isEmptyPayload(action.Payload) || action.Payload == "*"+info.ModelName {
+					args = append(args, ident("nil"))
+				} else {
+					args = append(args, requestBody(action.Payload))
+				}
 			default:
 				args = append(args, requestBody(action.Payload))
 			}
@@ -260,15 +270,16 @@ func newServiceTestExample(info *ModelInfo, action *dsl.Action, route string) *s
 		}
 		verb := clientVerbs[consts.HTTPVerb(action.Phase).HTTPMethod()]
 		request := &ast.CallExpr{Fun: &ast.IndexExpr{X: sel(ident("cli"), verb), Index: rspType}, Args: args}
-		if usesID {
-			example.stmts = append(example.stmts, define(idents("id"), strLit("the ID of a row the test seeded")))
-		}
-		example.stmts = append(example.stmts,
+		stmts = append(stmts,
 			define(idents("rsp", "err"), request),
 			requireCall("NoError", ident("err")),
 			requireCall("NotNil", ident("rsp")),
 		)
 	}
+	if usesID {
+		example.stmts = append(example.stmts, define(idents("id"), strLit("the ID of a row the test seeded")))
+	}
+	example.stmts = append(example.stmts, stmts...)
 	return example
 }
 

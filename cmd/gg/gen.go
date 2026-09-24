@@ -373,8 +373,9 @@ func genRunWithOptions(opts genRunOptions) error {
 }
 
 // scaffoldServiceTests writes the test scaffold of the service file target
-// locates, an action of modelInfo gg gen has just created, and main_test.go for its package
-// when no test file of the package declares TestMain yet (see
+// locates, which gg gen has just created for an action of modelInfo, and
+// main_test.go for its package when no test file of the package declares
+// TestMain yet (see
 // gen.GenerateServiceTest and gen.GenerateServiceTestMain). The service test
 // coverage check requires the test file from the next run on, so the run
 // that creates the service file creates its test as well. A test file the

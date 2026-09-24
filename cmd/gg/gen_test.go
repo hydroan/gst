@@ -1126,6 +1126,38 @@ func (Notice) Design() {
 }
 `)
 
+	// A nested resource: its routes carry the parameter of the parent
+	// record, which every example path reads from the id placeholder.
+	writeProjectFile(t, filepath.Join(projectDir, "model/record/item.go"), `package record
+
+import (
+	"github.com/hydroan/gst/dsl"
+	"github.com/hydroan/gst/model"
+)
+
+type Item struct {
+	model.Base
+}
+
+func (Item) TableName() string { return "record_items" }
+
+func (Item) Design() {
+	dsl.Param("item")
+	dsl.Get(func() {
+		dsl.Service()
+	})
+	dsl.Import(func() {
+		dsl.Service()
+	})
+	dsl.Export(func() {
+		dsl.Service()
+	})
+	dsl.SSE(func() {
+		dsl.Service()
+	})
+}
+`)
+
 	for run := range 2 {
 		require.NoError(t, genRunWithOptions(genRunOptions{Quiet: true}), "run %d", run)
 	}
@@ -1138,6 +1170,9 @@ func (Notice) Design() {
 	}
 	require.FileExists(t, "service/ping/list_test.go")
 	require.FileExists(t, "service/notice/sse_test.go")
+	for _, file := range []string{"get", "import", "export", "sse"} {
+		require.FileExists(t, filepath.Join("service/record/item", file+"_test.go"))
+	}
 
 	requireProjectCompiles(t)
 }
