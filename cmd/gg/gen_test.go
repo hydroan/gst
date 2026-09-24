@@ -877,20 +877,63 @@ func (Record) Design() {
 	want := map[string]string{
 		"service/record/create_test.go": `package record_test
 
-import "testing"
+import (
+	"testing"
+	"tmpapp/model"
+
+	"github.com/hydroan/gst/client"
+	"github.com/hydroan/gst/testutil"
+	"github.com/stretchr/testify/require"
+)
 
 // TestCreate covers POST /api/records, served by Creator in create.go.
+//
+// The request goes through the framework client against the test server
+// TestMain starts, so the route, the service and the database are exercised
+// together; a login is a plain cli.Post to the login route, whose session the
+// client's cookie jar keeps for the requests that follow. A rejection is
+// asserted with testutil.RequireError, and rows with the testutil.Require*
+// helpers.
 func TestCreate(t *testing.T) {
-	t.Fatal("TestCreate is a scaffold: replace it with the test of POST /api/records")
+	t.Fatal("TestCreate is a scaffold: delete this line and finish the test below")
+
+	cli, err := client.New(testutil.BaseURL())
+	require.NoError(t, err)
+
+	rsp, err := cli.Post[model.Record]("/api/records", &model.Record{})
+	require.NoError(t, err)
+	require.NotNil(t, rsp)
 }
 `,
 		"service/record/get_test.go": `package record_test
 
-import "testing"
+import (
+	"testing"
+	"tmpapp/model"
+
+	"github.com/hydroan/gst/client"
+	"github.com/hydroan/gst/testutil"
+	"github.com/stretchr/testify/require"
+)
 
 // TestGet covers GET /api/records/:rec, served by Getter in get.go.
+//
+// The request goes through the framework client against the test server
+// TestMain starts, so the route, the service and the database are exercised
+// together; a login is a plain cli.Post to the login route, whose session the
+// client's cookie jar keeps for the requests that follow. A rejection is
+// asserted with testutil.RequireError, and rows with the testutil.Require*
+// helpers.
 func TestGet(t *testing.T) {
-	t.Fatal("TestGet is a scaffold: replace it with the test of GET /api/records/:rec")
+	t.Fatal("TestGet is a scaffold: delete this line and finish the test below")
+
+	cli, err := client.New(testutil.BaseURL())
+	require.NoError(t, err)
+
+	id := "the ID of a row the test seeded"
+	rsp, err := cli.Get[model.Record]("/api/records/" + id)
+	require.NoError(t, err)
+	require.NotNil(t, rsp)
 }
 `,
 		"service/record/main_test.go": `package record_test
@@ -911,15 +954,25 @@ import (
 	"tmpapp/router"
 	_ "tmpapp/service"
 
+	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/testutil"
 )
 
 // TestMain starts the test server of this package the way main.go starts the
-// application. Declare what the tests need on the Server, such as Database
-// or Redis.
+// application: the framework bootstraps against the backing services the
+// Server declares, which come up in containers of their own, the routes are
+// registered, and the server serves the tests until they are done. Database
+// is the database the tests run against: config.DBSqlite needs no container,
+// config.DBMySQL and config.DBPostgres run in one. Redis serves the modules
+// that keep sessions or cache entries in it. Seed plants baseline rows
+// through database.Database before the server serves, such as the account
+// the tests log in with.
 func TestMain(m *testing.M) {
 	testutil.Run(m, testutil.Server{
-		Routes: router.Init,
+		Database: config.DBSqlite,
+		Redis:    false,
+		Routes:   router.Init,
+		Seed:     func() error { return nil },
 	})
 }
 `,
@@ -937,6 +990,154 @@ func TestMain(m *testing.M) {
 	}
 	// The List action declares no service, so nothing is scaffolded for it.
 	require.NoFileExists(t, "service/record/list_test.go")
+
+	requireProjectCompiles(t)
+}
+
+// TestGenRunScaffoldsCompileForEveryAction type-checks the example request
+// every action shape is scaffolded with against the framework it targets: a
+// database model with every default action, a Filename action with struct
+// types and one with slice types, an Empty model whose List declares its
+// result, and a streaming model. A framework change that breaks an example,
+// such as a client signature, fails here rather than in a project.
+func TestGenRunScaffoldsCompileForEveryAction(t *testing.T) {
+	projectDir := newGenProject(t)
+	writeProjectFile(t, filepath.Join(projectDir, "model/record.go"), `package model
+
+import (
+	"github.com/hydroan/gst/dsl"
+	"github.com/hydroan/gst/model"
+)
+
+type Record struct {
+	Name string `+"`"+`json:"name"`+"`"+`
+
+	model.Base
+}
+
+func (Record) TableName() string { return "records" }
+
+type RecordArchiveReq struct {
+	Reason string `+"`"+`json:"reason"`+"`"+`
+}
+
+type RecordArchiveRsp struct {
+	Archived bool `+"`"+`json:"archived"`+"`"+`
+}
+
+type RecordMergeReq []*Record
+
+type RecordMergeRsp []*Record
+
+func (Record) Design() {
+	dsl.Migrate()
+	dsl.Param("rec")
+	dsl.Create(func() {
+		dsl.Service()
+	})
+	dsl.Delete(func() {
+		dsl.Service()
+	})
+	dsl.Update(func() {
+		dsl.Service()
+	})
+	dsl.Patch(func() {
+		dsl.Service()
+	})
+	dsl.List(func() {
+		dsl.Service()
+	})
+	dsl.Get(func() {
+		dsl.Service()
+	})
+	dsl.CreateMany(func() {
+		dsl.Service()
+	})
+	dsl.DeleteMany(func() {
+		dsl.Service()
+	})
+	dsl.UpdateMany(func() {
+		dsl.Service()
+	})
+	dsl.PatchMany(func() {
+		dsl.Service()
+	})
+	dsl.Import(func() {
+		dsl.Service()
+	})
+	dsl.Export(func() {
+		dsl.Service()
+	})
+	dsl.Route("/archive", func() {
+		dsl.Create(func() {
+			dsl.Service()
+			dsl.Filename("archive")
+			dsl.Payload[*RecordArchiveReq]()
+			dsl.Result[*RecordArchiveRsp]()
+		})
+	})
+	dsl.Route("/merge", func() {
+		dsl.Create(func() {
+			dsl.Service()
+			dsl.Filename("merge")
+			dsl.Payload[RecordMergeReq]()
+			dsl.Result[RecordMergeRsp]()
+		})
+	})
+}
+`)
+	writeProjectFile(t, filepath.Join(projectDir, "model/ping.go"), `package model
+
+import (
+	"github.com/hydroan/gst/dsl"
+	"github.com/hydroan/gst/model"
+)
+
+type Ping struct {
+	model.Empty
+}
+
+type PingListRsp struct {
+	Message string `+"`"+`json:"message"`+"`"+`
+}
+
+func (Ping) Design() {
+	dsl.List(func() {
+		dsl.Service()
+		dsl.Result[*PingListRsp]()
+	})
+}
+`)
+	writeProjectFile(t, filepath.Join(projectDir, "model/notice.go"), `package model
+
+import (
+	"github.com/hydroan/gst/dsl"
+	"github.com/hydroan/gst/model"
+)
+
+type Notice struct {
+	model.Empty
+}
+
+func (Notice) Design() {
+	dsl.SSE(func() {
+		dsl.Service()
+	})
+}
+`)
+
+	for run := range 2 {
+		require.NoError(t, genRunWithOptions(genRunOptions{Quiet: true}), "run %d", run)
+	}
+	for _, file := range []string{
+		"create", "delete", "update", "patch", "list", "get",
+		"create_many", "delete_many", "update_many", "patch_many",
+		"import", "export", "archive", "merge",
+	} {
+		require.FileExists(t, filepath.Join("service/record", file+"_test.go"))
+	}
+	require.FileExists(t, "service/ping/list_test.go")
+	require.FileExists(t, "service/notice/sse_test.go")
 
 	requireProjectCompiles(t)
 }

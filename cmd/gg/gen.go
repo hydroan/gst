@@ -325,7 +325,7 @@ func genRunWithOptions(opts genRunOptions) error {
 			if err := os.WriteFile(safePath, []byte(code), ggconst.FileModeGenerated); err != nil {
 				return err
 			}
-			if err := scaffoldServiceTests(target, action, route, opts.Quiet); err != nil {
+			if err := scaffoldServiceTests(modelInfo, target, action, route, opts.Quiet); err != nil {
 				return err
 			}
 		}
@@ -373,14 +373,14 @@ func genRunWithOptions(opts genRunOptions) error {
 }
 
 // scaffoldServiceTests writes the test scaffold of the service file target
-// locates, which gg gen has just created, and main_test.go for its package
+// locates, an action of modelInfo gg gen has just created, and main_test.go for its package
 // when no test file of the package declares TestMain yet (see
 // gen.GenerateServiceTest and gen.GenerateServiceTestMain). The service test
 // coverage check requires the test file from the next run on, so the run
 // that creates the service file creates its test as well. A test file the
 // project already has, in its external or internal form, is kept as it is,
 // and so is a main_test.go that exists already.
-func scaffoldServiceTests(target gen.ServiceTargetInfo, action *dsl.Action, route string, quiet bool) error {
+func scaffoldServiceTests(modelInfo *gen.ModelInfo, target gen.ServiceTargetInfo, action *dsl.Action, route string, quiet bool) error {
 	stem := strings.TrimSuffix(target.FilePath, ".go")
 	if gghelper.FileExists(stem+ggconst.PatternTestFile) || gghelper.FileExists(stem+"_internal"+ggconst.PatternTestFile) {
 		return nil
@@ -401,7 +401,7 @@ func scaffoldServiceTests(target gen.ServiceTargetInfo, action *dsl.Action, rout
 		}
 	}
 
-	code, err := gen.GenerateServiceTest(target, action, route)
+	code, err := gen.GenerateServiceTest(modelInfo, target, action, route)
 	if err != nil {
 		return err
 	}
