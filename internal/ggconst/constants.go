@@ -56,6 +56,10 @@ const (
 	FileMain = "main.go"
 )
 
+// FileMainTest names the test file gg check reserves for a package's
+// TestMain: it declares TestMain and nothing else.
+const FileMainTest = "main_test.go"
+
 // Directory names. The project directories are spelled here alone: gg reads
 // and writes them, and ProjectImportDirs below lists the ones a generated
 // main.go imports.

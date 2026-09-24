@@ -2,8 +2,6 @@ package goast_test
 
 import (
 	"go/ast"
-	"go/parser"
-	"go/token"
 	"testing"
 
 	"github.com/hydroan/gst/internal/goast"
@@ -58,9 +56,5 @@ func TestIsBuiltinError(t *testing.T) {
 func receiverOf(t *testing.T, src string) *ast.FieldList {
 	t.Helper()
 
-	file, err := parser.ParseFile(token.NewFileSet(), "sample.go", "package sample\n\n"+src+"\n", 0)
-	require.NoError(t, err)
-	fn, ok := file.Decls[0].(*ast.FuncDecl)
-	require.True(t, ok)
-	return fn.Recv
+	return funcDeclOf(t, src).Recv
 }
