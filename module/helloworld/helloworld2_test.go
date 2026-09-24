@@ -105,31 +105,31 @@ func TestHelloworld2Module(t *testing.T) {
 
 			switch tt.name {
 			case "create":
-				hw, err = cli.Post[helloworld.Helloworld2](helloworld2Path, res1)
+				hw, err = cli.Post[helloworld.Helloworld2](t.Context(), helloworld2Path, res1)
 				require.NoError(t, err)
 				check1(t, tt, hw)
 
 			case "delete":
 				createHelloworld2TestRecord(t, cli, res1)
-				hw, err = cli.Delete[helloworld.Helloworld2](helloworld2Path+"/"+id, nil)
+				hw, err = cli.Delete[helloworld.Helloworld2](t.Context(), helloworld2Path+"/"+id, nil)
 				require.NoError(t, err)
 				check1(t, tt, hw)
 
 			case "update":
 				createHelloworld2TestRecord(t, cli, res1)
-				hw, err = cli.Put[helloworld.Helloworld2](helloworld2Path+"/"+id, res1)
+				hw, err = cli.Put[helloworld.Helloworld2](t.Context(), helloworld2Path+"/"+id, res1)
 				require.NoError(t, err)
 				check1(t, tt, hw)
 
 			case "patch":
 				createHelloworld2TestRecord(t, cli, res1)
-				hw, err = cli.Patch[helloworld.Helloworld2](helloworld2Path+"/"+id, res1)
+				hw, err = cli.Patch[helloworld.Helloworld2](t.Context(), helloworld2Path+"/"+id, res1)
 				require.NoError(t, err)
 				check1(t, tt, hw)
 
 			case "list":
 				createHelloworld2TestRecord(t, cli, res1)
-				list, listErr := cli.Get[client.ListResult[*helloworld.Helloworld2]](helloworld2Path)
+				list, listErr := cli.Get[client.ListResult[*helloworld.Helloworld2]](t.Context(), helloworld2Path)
 				require.NoError(t, listErr)
 
 				item := findHelloworld2TestRecord(list.Items, id)
@@ -138,38 +138,38 @@ func TestHelloworld2Module(t *testing.T) {
 
 			case "get":
 				createHelloworld2TestRecord(t, cli, res1)
-				hw, err = cli.Get[helloworld.Helloworld2](helloworld2Path + "/" + id)
+				hw, err = cli.Get[helloworld.Helloworld2](t.Context(), helloworld2Path+"/"+id)
 				require.NoError(t, err)
 				check1(t, tt, hw)
 
 			case "create_many":
-				batch, err = cli.Post[helloworld2BatchRsp](helloworld2Path+"/batch", client.BatchItems([]*helloworld.Helloworld2{res1, res2}))
+				batch, err = cli.Post[helloworld2BatchRsp](t.Context(), helloworld2Path+"/batch", client.BatchItems([]*helloworld.Helloworld2{res1, res2}))
 				require.NoError(t, err)
 				check2(t, tt, batch)
 
 			case "delete_many":
 				createHelloworld2TestRecord(t, cli, res1)
 				createHelloworld2TestRecord(t, cli, res2)
-				_, err = cli.Delete[helloworld2BatchRsp](helloworld2Path+"/batch", client.BatchIDs([]string{id, id2}))
+				_, err = cli.Delete[helloworld2BatchRsp](t.Context(), helloworld2Path+"/batch", client.BatchIDs([]string{id, id2}))
 				require.NoError(t, err)
 				// A batch delete answers with no data: what shows it worked is
 				// that neither record can be read any more.
 				for _, deleted := range []string{id, id2} {
-					_, getErr := cli.Get[helloworld.Helloworld2](helloworld2Path + "/" + deleted)
+					_, getErr := cli.Get[helloworld.Helloworld2](t.Context(), helloworld2Path+"/"+deleted)
 					testutil.RequireError(t, getErr, http.StatusNotFound)
 				}
 
 			case "update_many":
 				createHelloworld2TestRecord(t, cli, res1)
 				createHelloworld2TestRecord(t, cli, res2)
-				batch, err = cli.Put[helloworld2BatchRsp](helloworld2Path+"/batch", client.BatchItems([]*helloworld.Helloworld2{res1, res2}))
+				batch, err = cli.Put[helloworld2BatchRsp](t.Context(), helloworld2Path+"/batch", client.BatchItems([]*helloworld.Helloworld2{res1, res2}))
 				require.NoError(t, err)
 				check2(t, tt, batch)
 
 			case "patch_many":
 				createHelloworld2TestRecord(t, cli, res1)
 				createHelloworld2TestRecord(t, cli, res2)
-				batch, err = cli.Patch[helloworld2BatchRsp](helloworld2Path+"/batch", client.BatchItems([]*helloworld.Helloworld2{res1, res2}))
+				batch, err = cli.Patch[helloworld2BatchRsp](t.Context(), helloworld2Path+"/batch", client.BatchItems([]*helloworld.Helloworld2{res1, res2}))
 				require.NoError(t, err)
 				check2(t, tt, batch)
 
@@ -185,7 +185,7 @@ func TestHelloworld2Module(t *testing.T) {
 				if tt.name == "patch_many_item_without_id" {
 					other, status = new(helloworld.Helloworld2), http.StatusBadRequest
 				}
-				_, err = cli.Patch[helloworld2BatchRsp](helloworld2Path+"/batch", client.BatchItems([]*helloworld.Helloworld2{res1, other}))
+				_, err = cli.Patch[helloworld2BatchRsp](t.Context(), helloworld2Path+"/batch", client.BatchItems([]*helloworld.Helloworld2{res1, other}))
 				testutil.RequireError(t, err, status)
 				stored := new(helloworld.Helloworld2)
 				require.NoError(t, database.Database[*helloworld.Helloworld2](context.Background()).Get(stored, id))
@@ -203,7 +203,7 @@ func newHelloworld2TestRecord(id string) *helloworld.Helloworld2 {
 
 func createHelloworld2TestRecord(t *testing.T, cli *client.Client, record *helloworld.Helloworld2) {
 	t.Helper()
-	_, err := cli.Post[struct{}](helloworld2Path, record)
+	_, err := cli.Post[struct{}](t.Context(), helloworld2Path, record)
 	require.NoError(t, err)
 }
 

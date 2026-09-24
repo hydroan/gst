@@ -734,14 +734,15 @@ if err != nil {
 	return err
 }
 
-// 默认 List：框架的列表参数和业务过滤都走请求选项
-page, err := cli.Get[client.ListResult[model.Sample]]("/api/samples",
+// 默认 List：框架的列表参数和业务过滤都走请求选项。第一个参数是本次调用的
+// 上下文，在 service 里就传 ctx 本身：调用方请求取消、超时，上游请求跟着结束
+page, err := cli.Get[client.ListResult[model.Sample]](ctx, "/api/samples",
 	client.WithPage(1, 20),
 	client.WithQuery("status", "active"),
 )
 
 // 自定义动作：payload 对应 Payload，类型参数对应 Result
-rsp, err := cli.Post[model.SampleSealRsp]("/api/samples/seal", &model.SampleSealReq{Reason: "audit"})
+rsp, err := cli.Post[model.SampleSealRsp](ctx, "/api/samples/seal", &model.SampleSealReq{Reason: "audit"})
 ```
 
 返回值分三种情况处理：调用成功得到解码后的响应；服务端拒绝（非 2xx，或信封 `code` 非 0）
@@ -751,13 +752,15 @@ rsp, err := cli.Post[model.SampleSealRsp]("/api/samples/seal", &model.SampleSeal
 
 两条注意事项：
 
-- 请求目前用客户端自己的上下文发出，不跟随调用方请求的取消和截止时间。务必用 `WithTimeout`
-  设超时，否则一个挂住的上游会一直占着调用方的 goroutine 和连接。
+- 每个入口的第一个参数都是本次调用的上下文，它的截止时间和取消会结束这次请求。service 里传
+  ctx 本身，不要另起 `context.Background()`；没有挂在请求上的调用（定时任务、常驻组件）传自己
+  收到的 ctx。`WithTimeout` 是客户端级别的兜底上限，和 ctx 的截止时间取先到者。
 - `client.Error` 的 `TraceID` 就是上游那次请求的 trace_id，也是上游响应头 `X-Trace-ID` 的值，
   排查时拿它去上游的访问日志里找。
 
 接口测试用的是同一个客户端：`testutil.Run` 启动整个应用，`client.New(testutil.BaseURL())` 发请求，
-`testutil.DecodeResp`、`testutil.RequireError` 配合它断言，见 [examples/demo/ping_test.go](./examples/demo/ping_test.go)。
+上下文传 `t.Context()`，`testutil.DecodeResp`、`testutil.RequireError` 配合它断言，见
+[examples/demo/ping_test.go](./examples/demo/ping_test.go)。
 
 ## 配置和迁移
 

@@ -48,7 +48,7 @@ func TestWithTimeoutLeavesTheGivenHTTPClientAlone(t *testing.T) {
 			cli, err := client.New(srv.URL, tt.opts(shared)...)
 			require.NoError(t, err)
 
-			_, err = cli.Do(http.MethodGet, "/api/records", nil)
+			_, err = cli.Do(t.Context(), http.MethodGet, "/api/records", nil)
 			var netErr net.Error
 			require.True(t, errors.As(err, &netErr) && netErr.Timeout(), "want a timeout, got %v", err)
 			require.Zero(t, shared.Timeout, "the shared client keeps its own timeout")

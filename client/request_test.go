@@ -1,10 +1,13 @@
 package client_test
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/client"
@@ -34,7 +37,7 @@ func TestDoParsesSuccessEnvelope(t *testing.T) {
 	cli, err := client.New(srv.URL)
 	require.NoError(t, err)
 
-	resp, err := cli.Do(http.MethodPost, "/api/records", map[string]string{"name": "sample"},
+	resp, err := cli.Do(t.Context(), http.MethodPost, "/api/records", map[string]string{"name": "sample"},
 		client.WithQuery("kind", "sample"), client.WithPage(1, 10))
 	require.NoError(t, err)
 	require.Equal(t, 0, resp.Code)
@@ -54,7 +57,7 @@ func TestDoReturnsStructuredErrorOnRejection(t *testing.T) {
 	cli, err := client.New(srv.URL)
 	require.NoError(t, err)
 
-	_, err = cli.Do(http.MethodGet, "/api/records", nil)
+	_, err = cli.Do(t.Context(), http.MethodGet, "/api/records", nil)
 	var respErr *client.Error
 	require.True(t, errors.As(err, &respErr), "error: %v", err)
 	require.Equal(t, http.StatusForbidden, respErr.StatusCode)
@@ -70,7 +73,7 @@ func TestDoReturnsStructuredErrorOnBusinessCodeWith2xx(t *testing.T) {
 	cli, err := client.New(srv.URL)
 	require.NoError(t, err)
 
-	_, err = cli.Do(http.MethodGet, "/api/records", nil)
+	_, err = cli.Do(t.Context(), http.MethodGet, "/api/records", nil)
 	var respErr *client.Error
 	require.True(t, errors.As(err, &respErr))
 	require.Equal(t, http.StatusOK, respErr.StatusCode)
@@ -96,11 +99,11 @@ func TestClientKeepsSessionCookieAcrossRequests(t *testing.T) {
 	cli, err := client.New(srv.URL)
 	require.NoError(t, err)
 
-	resp, err := cli.Do(http.MethodPost, "/api/enter", nil)
+	resp, err := cli.Do(t.Context(), http.MethodPost, "/api/enter", nil)
 	require.NoError(t, err)
 	require.NotEmpty(t, resp.Cookies)
 
-	_, err = cli.Do(http.MethodGet, "/api/records", nil)
+	_, err = cli.Do(t.Context(), http.MethodGet, "/api/records", nil)
 	require.NoError(t, err)
 	require.Equal(t, "sample-session", gotCookie)
 }
@@ -113,9 +116,39 @@ func TestWithHeaderMergesIntoDefaultHeaders(t *testing.T) {
 	cli, err := client.New(srv.URL, client.WithHeader(header))
 	require.NoError(t, err)
 
-	_, err = cli.Do(http.MethodGet, "/api/records", nil)
+	_, err = cli.Do(t.Context(), http.MethodGet, "/api/records", nil)
 	require.NoError(t, err)
 	require.Equal(t, "https", captured.Header.Get("X-Forwarded-Proto"))
 	// Defaults set by New must survive a WithHeader merge.
 	require.Equal(t, "application/json", captured.Header.Get("Content-Type"))
+}
+
+func TestDoEndsWhenContextEnds(t *testing.T) {
+	// The handler holds its answer until the client goes away, so the only
+	// thing that can end the call is its context.
+	var disconnected atomic.Bool
+	srv := httptest.NewTestServer(t, http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
+		<-r.Context().Done()
+		disconnected.Store(true)
+	}))
+	srv.Start()
+
+	cli, err := client.New(srv.URL)
+	require.NoError(t, err)
+
+	ctx, cancel := context.WithTimeout(t.Context(), 50*time.Millisecond)
+	defer cancel()
+	_, err = cli.Do(ctx, http.MethodGet, "/api/records", nil)
+	require.ErrorIs(t, err, context.DeadlineExceeded)
+	// The server sees the call end as well: the connection is cut with it.
+	require.Eventually(t, disconnected.Load, time.Second, 10*time.Millisecond)
+}
+
+func TestDoRefusesNilContext(t *testing.T) {
+	cli, err := client.New("http://127.0.0.1:1")
+	require.NoError(t, err)
+
+	var ctx context.Context
+	_, err = cli.Do(ctx, http.MethodGet, "/api/records", nil)
+	require.ErrorContains(t, err, "nil Context")
 }

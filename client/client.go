@@ -1,7 +1,6 @@
 package client
 
 import (
-	"context"
 	"net/http"
 	"net/http/cookiejar"
 	"strings"
@@ -15,9 +14,10 @@ import (
 
 // Client is a service-level HTTP client for one gst backend: it carries the
 // base address, the connection with its cookie jar, credentials and shared
-// headers. Per-request state (path, payload, query parameters) is passed per
-// call, so one client serves every endpoint of the service and can be reused
-// across requests safely.
+// headers. Per-request state — the context the call runs under, the path,
+// the payload and the query parameters — is passed per call, so one client
+// serves every endpoint of the service and can be reused across requests
+// safely.
 type Client struct {
 	addr       string
 	httpClient *http.Client
@@ -29,7 +29,6 @@ type Client struct {
 	header http.Header
 	debug  bool
 
-	ctx    context.Context
 	logger types.Logger
 }
 
@@ -50,7 +49,6 @@ func New(addr string, opts ...Option) (*Client, error) {
 		httpClient: &http.Client{Jar: jar},
 		header:     http.Header{},
 		addr:       addr,
-		ctx:        context.Background(),
 		logger:     zap.New(""),
 	}
 	client.header.Set("User-Agent", consts.FrameworkName)

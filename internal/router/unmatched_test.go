@@ -28,7 +28,7 @@ func TestUnmatchedRequestsAnswerInTheEnvelope(t *testing.T) {
 		cli, err := client.New(baseURL)
 		require.NoError(t, err)
 
-		_, err = cli.Do(http.MethodGet, "/api/there-is-no-such-route", nil)
+		_, err = cli.Do(t.Context(), http.MethodGet, "/api/there-is-no-such-route", nil)
 		respErr := testutil.RequireError(t, err, http.StatusNotFound, "not found")
 		requireRefusalEnvelope(t, respErr.Body, "not found")
 	})

@@ -19,8 +19,10 @@
 // package must grow the matching entry in the same change; a DSL capability
 // without a client counterpart is an incomplete feature.
 //
-// API shape: every entry is a method on Client. The verbs whose result needs
-// a type parameter (Get/Post/Put/Patch/Delete) are parameterized methods, so
-// a call reads cli.Get[XxxRsp](path); entries that need no type parameter
-// (Do, Download, Upload, Stream) are plain methods.
+// API shape: every entry is a method on Client and takes the context of the
+// call first — in a service, the service context itself — whose deadline and
+// cancellation bound the request. The verbs whose result needs a type
+// parameter (Get/Post/Put/Patch/Delete) are parameterized methods, so a call
+// reads cli.Get[XxxRsp](ctx, path); entries that need no type parameter (Do,
+// Download, Upload, Stream) are plain methods.
 package client

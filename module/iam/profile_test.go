@@ -28,7 +28,7 @@ func TestProfileGet(t *testing.T) {
 	account := newProfileTestAccount(t)
 	cli := sessionClient(t, account.SessionID)
 
-	rsp, err := cli.Get[iam.ProfileGetRsp](profilePath)
+	rsp, err := cli.Get[iam.ProfileGetRsp](t.Context(), profilePath)
 	require.NoError(t, err)
 
 	require.Equal(t, account.UserID, rsp.UserID)
@@ -51,7 +51,7 @@ func TestProfilePatch(t *testing.T) {
 			"public": true,
 		}
 
-		rsp, err := cli.Patch[iam.ProfilePatchRsp](profilePath, &iam.ProfilePatchReq{
+		rsp, err := cli.Patch[iam.ProfilePatchRsp](t.Context(), profilePath, &iam.ProfilePatchReq{
 			DisplayName: &displayName,
 			Avatar:      &avatar,
 			Metadata:    metadata,
@@ -69,7 +69,7 @@ func TestProfilePatch(t *testing.T) {
 	t.Run("patch_only_requested_fields", func(t *testing.T) {
 		avatar := "https://example.com/other.png"
 
-		rsp, err := cli.Patch[iam.ProfilePatchRsp](profilePath, &iam.ProfilePatchReq{
+		rsp, err := cli.Patch[iam.ProfilePatchRsp](t.Context(), profilePath, &iam.ProfilePatchReq{
 			Avatar: &avatar,
 		})
 		require.NoError(t, err)
@@ -90,7 +90,7 @@ func TestProfilePatch(t *testing.T) {
 			"timezone": "UTC",
 		}
 
-		rsp, err := cli.Patch[iam.ProfilePatchRsp](profilePath, &iam.ProfilePatchReq{
+		rsp, err := cli.Patch[iam.ProfilePatchRsp](t.Context(), profilePath, &iam.ProfilePatchReq{
 			Metadata: metadata,
 		})
 		require.NoError(t, err)
@@ -108,7 +108,7 @@ func TestProfilePatch(t *testing.T) {
 			"locale": "zh-CN",
 		}
 
-		_, err := cli.Patch[iam.ProfilePatchRsp](profilePath, &iam.ProfilePatchReq{
+		_, err := cli.Patch[iam.ProfilePatchRsp](t.Context(), profilePath, &iam.ProfilePatchReq{
 			DisplayName: &displayName,
 			Avatar:      &avatar,
 			Metadata:    metadata,
@@ -117,7 +117,7 @@ func TestProfilePatch(t *testing.T) {
 
 		// The patch response echoes the record the handler holds in memory, so
 		// the stored row is read back through the profile route instead.
-		rsp, err := cli.Get[iam.ProfileGetRsp](profilePath)
+		rsp, err := cli.Get[iam.ProfileGetRsp](t.Context(), profilePath)
 		require.NoError(t, err)
 		require.Equal(t, displayName, rsp.DisplayName)
 		require.Equal(t, avatar, rsp.Avatar)
@@ -137,7 +137,7 @@ func newProfileTestAccount(t *testing.T) profileTestAccount {
 	cli, err := client.New(baseURL)
 	require.NoError(t, err)
 
-	rsp, err := cli.Post[iam.SignupRsp](signupPath, iam.SignupReq{
+	rsp, err := cli.Post[iam.SignupRsp](t.Context(), signupPath, iam.SignupReq{
 		Username:   account.Username,
 		Password:   account.Password,
 		RePassword: account.Password,
@@ -159,7 +159,7 @@ func profileLoginSession(t *testing.T, username, password string) string {
 	cli, err := client.New(baseURL)
 	require.NoError(t, err)
 
-	resp, err := cli.Do(http.MethodPost, loginPath, iam.LoginReq{
+	resp, err := cli.Do(t.Context(), http.MethodPost, loginPath, iam.LoginReq{
 		Username: username,
 		Password: password,
 	})

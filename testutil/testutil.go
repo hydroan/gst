@@ -20,7 +20,7 @@
 //		cli, err := client.New(baseURL)
 //		require.NoError(t, err)
 //
-//		rsp, err := cli.Get[model.PingRsp]("/api/pings")
+//		rsp, err := cli.Get[model.PingRsp](t.Context(), "/api/pings")
 //		require.NoError(t, err)
 //		require.NotNil(t, rsp)
 //	}

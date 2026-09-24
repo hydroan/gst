@@ -85,7 +85,7 @@ func TestSSERouteStreamsEvents(t *testing.T) {
 	require.NoError(t, err)
 
 	var events []sse.Event
-	err = cli.Stream(http.MethodGet, "/api/"+sseStreamRoute, nil, func(event sse.Event) error {
+	err = cli.Stream(t.Context(), http.MethodGet, "/api/"+sseStreamRoute, nil, func(event sse.Event) error {
 		events = append(events, event)
 		return nil
 	})
@@ -108,7 +108,7 @@ func TestSSEStreamStopsOnClientRequest(t *testing.T) {
 	require.NoError(t, err)
 
 	var seen int
-	err = cli.Stream(http.MethodGet, "/api/"+sseEndlessRoute, nil, func(sse.Event) error {
+	err = cli.Stream(t.Context(), http.MethodGet, "/api/"+sseEndlessRoute, nil, func(sse.Event) error {
 		seen++
 		if seen == 2 {
 			return client.ErrStopStream

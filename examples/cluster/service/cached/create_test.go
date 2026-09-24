@@ -40,12 +40,12 @@ func TestCreateCachesTheEntry(t *testing.T) {
 	cli, err := client.New(testutil.BaseURL())
 	require.NoError(t, err)
 
-	rsp, err := cli.Post[model.CachedRsp]("/api/caches", model.CachedReq{Key: "created-key", Value: "created-value"})
+	rsp, err := cli.Post[model.CachedRsp](t.Context(), "/api/caches", model.CachedReq{Key: "created-key", Value: "created-value"})
 	require.NoError(t, err)
 	require.Equal(t, "created-key", rsp.Key)
 	require.NotEmpty(t, rsp.Replica, "the reply names the replica that cached the entry")
 
-	read, err := cli.Get[model.CachedRsp]("/api/caches/created-key")
+	read, err := cli.Get[model.CachedRsp](t.Context(), "/api/caches/created-key")
 	require.NoError(t, err)
 	require.True(t, read.Found, "the entry is in the store of the replica that wrote it")
 	require.Equal(t, "created-value", read.Value)

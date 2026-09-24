@@ -2,6 +2,7 @@ package client
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"io"
 	"maps"
@@ -12,21 +13,26 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-// Do sends one request and parses the response envelope. It is the non-generic
-// floor under the verb functions: use it when the caller needs envelope
-// details such as TraceID or Cookies instead of a decoded payload.
-func (c *Client) Do(method, path string, payload any, opts ...RequestOption) (*Envelope, error) {
-	req, err := c.newRequest(method, path, payload, opts)
+// Do sends one request on ctx and parses the response envelope. It is the
+// non-generic floor under the verb functions: use it when the caller needs
+// envelope details such as TraceID or Cookies instead of a decoded payload.
+//
+// ctx is the context of the call — in a service, the service context itself.
+// Its deadline and its cancellation end the request, the reading of the
+// response included, and the request then fails with the context's error. A
+// nil ctx is refused.
+func (c *Client) Do(ctx context.Context, method, path string, payload any, opts ...RequestOption) (*Envelope, error) {
+	req, err := c.newRequest(ctx, method, path, payload, opts)
 	if err != nil {
 		return nil, err
 	}
 	return c.roundTrip(req)
 }
 
-// newRequest builds the HTTP request: URL from the service address plus path
-// and encoded query parameters, body from payload, headers and credentials
-// from the client.
-func (c *Client) newRequest(method, path string, payload any, opts []RequestOption) (*http.Request, error) {
+// newRequest builds the HTTP request on ctx: URL from the service address
+// plus path and encoded query parameters, body from payload, headers and
+// credentials from the client.
+func (c *Client) newRequest(ctx context.Context, method, path string, payload any, opts []RequestOption) (*http.Request, error) {
 	encoded, err := newRequestConfig(opts).encode()
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to encode the query parameters")
@@ -53,7 +59,7 @@ func (c *Client) newRequest(method, path string, payload any, opts []RequestOpti
 		}
 	}
 
-	req, err := http.NewRequestWithContext(c.ctx, method, url, reader)
+	req, err := http.NewRequestWithContext(ctx, method, url, reader)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to create the request")
 	}

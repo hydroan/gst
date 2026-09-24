@@ -85,25 +85,25 @@ func TestHelloworldModule(t *testing.T) {
 
 			switch tt.name {
 			case "create":
-				rsp, err = cli.Post[helloworld.Rsp](helloworldPath, req)
+				rsp, err = cli.Post[helloworld.Rsp](t.Context(), helloworldPath, req)
 			case "delete":
-				rsp, err = cli.Delete[helloworld.Rsp](helloworldPath+"/123", nil)
+				rsp, err = cli.Delete[helloworld.Rsp](t.Context(), helloworldPath+"/123", nil)
 			case "update":
-				rsp, err = cli.Put[helloworld.Rsp](helloworldPath+"/123", req)
+				rsp, err = cli.Put[helloworld.Rsp](t.Context(), helloworldPath+"/123", req)
 			case "patch":
-				rsp, err = cli.Patch[helloworld.Rsp](helloworldPath+"/123", req)
+				rsp, err = cli.Patch[helloworld.Rsp](t.Context(), helloworldPath+"/123", req)
 			case "list":
-				rsp, err = cli.Get[helloworld.Rsp](helloworldPath)
+				rsp, err = cli.Get[helloworld.Rsp](t.Context(), helloworldPath)
 			case "get":
-				rsp, err = cli.Get[helloworld.Rsp](helloworldPath + "/123")
+				rsp, err = cli.Get[helloworld.Rsp](t.Context(), helloworldPath+"/123")
 			case "create_many":
-				rsp, err = cli.Post[helloworld.Rsp](helloworldPath+"/batch", client.BatchItems([]helloworld.Req{*req}))
+				rsp, err = cli.Post[helloworld.Rsp](t.Context(), helloworldPath+"/batch", client.BatchItems([]helloworld.Req{*req}))
 			case "delete_many":
-				rsp, err = cli.Delete[helloworld.Rsp](helloworldPath+"/batch", client.BatchIDs([]string{}))
+				rsp, err = cli.Delete[helloworld.Rsp](t.Context(), helloworldPath+"/batch", client.BatchIDs([]string{}))
 			case "update_many":
-				rsp, err = cli.Put[helloworld.Rsp](helloworldPath+"/batch", client.BatchItems([]helloworld.Req{*req}))
+				rsp, err = cli.Put[helloworld.Rsp](t.Context(), helloworldPath+"/batch", client.BatchItems([]helloworld.Req{*req}))
 			case "patch_many":
-				rsp, err = cli.Patch[helloworld.Rsp](helloworldPath+"/batch", client.BatchItems([]helloworld.Req{*req}))
+				rsp, err = cli.Patch[helloworld.Rsp](t.Context(), helloworldPath+"/batch", client.BatchItems([]helloworld.Req{*req}))
 			}
 
 			require.NoError(t, err)

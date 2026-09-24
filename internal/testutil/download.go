@@ -22,7 +22,7 @@ func DownloadCSV(t *testing.T, cli *client.Client, path string, opts ...client.R
 	t.Helper()
 
 	format := []client.RequestOption{client.WithQuery(consts.QUERY_FORMAT, "csv")}
-	attachment, err := cli.Download(path, append(format, opts...)...)
+	attachment, err := cli.Download(t.Context(), path, append(format, opts...)...)
 	require.NoError(t, err)
 
 	records, err := csv.NewReader(bytes.NewReader(bytes.TrimPrefix(attachment.Content, utf8BOM))).ReadAll()
