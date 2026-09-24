@@ -111,8 +111,8 @@ func checkVersionFieldDeclaration(ignore gghelper.ProjectIgnore) []string {
 
 // VersionFieldFindings reports every model.Version declaration of a database
 // model under the model directory that deviates from the required shape, the
-// declarations gg gen heals by filling their tags in. Paths the project's Git
-// ignore rules ignore are left out.
+// declarations gg gen heals by filling their tags in. Paths the project
+// ignores (see gghelper.ProjectIgnore) are left out.
 func VersionFieldFindings() ([]VersionFieldFinding, error) {
 	return collectVersionFieldFindings(gghelper.NewProjectIgnore())
 }

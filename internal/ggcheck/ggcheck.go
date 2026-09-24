@@ -35,8 +35,8 @@ type Result struct {
 }
 
 // Run runs checks over the project in the working directory, in the order
-// given, and returns their results in the same order. Paths the project's Git
-// ignore rules ignore are left out of every check.
+// given, and returns their results in the same order. Paths the project
+// ignores (see gghelper.ProjectIgnore) are left out of every check.
 func Run(checks []Check) []Result {
 	// One matcher serves every check: building it scans the whole worktree
 	// for ignore files, which is too expensive to repeat per check.

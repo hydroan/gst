@@ -13,17 +13,28 @@ import (
 
 // ProjectIgnore is the set of paths gg leaves out when it reads the project's
 // code: the ones the project's Git ignore rules exclude, and the ones the go
-// command leaves out of a ./... pattern (see ExcludedByGo). gg check and gg
-// gen read the project through the same set, so a file the project ignores
-// takes part in neither: runtime artifacts such as the log directories a test
-// run leaves behind fail no check, and a scratch model is generated from no
-// more than it is checked. Nor do they read what the go command leaves out of
-// the project's packages: a vendored package, a testdata tree, a _draft
-// directory or a directory the project's go.mod ignores is left out of gg
-// exactly as it is left out of go build ./....
+// command leaves out of a ./... pattern (see ExcludedByGo). To gg, what the
+// project ignores is not part of its code: runtime artifacts such as the log
+// directories a test run leaves behind fail no check, a scratch model is
+// generated from no more than it is checked, and a vendored package, a
+// testdata tree, a _draft directory or a directory the project's go.mod
+// ignores is left out of gg exactly as it is left out of go build ./....
 //
-// gg prune goes by neither: of the ignore rules, it follows gst.yaml's
-// prune.ignore alone (see package ggprune).
+// Who goes by it, and how:
+//
+//   - gg check, gg gen with its ts subcommand, gg routes and gg route-tree
+//     read the project's code through Ignores and Walk, leaving out what
+//     either set of rules covers. So does apidocgen, the framework's own
+//     program that registers the struct doc comments of internal/modelregistry
+//     for the OpenAPI generator.
+//   - gg migrate schema reads a path the user names, so the Git rules do not
+//     apply there; below that path it leaves out what the go command leaves
+//     out, through ExcludedByGo.
+//   - gg prune, and gg gen --prune alike, finds the models through it the way
+//     gg gen does, since which models the project declares is gen's to say.
+//     Everything else it reads whole, both the files it may delete and the
+//     code that may still import a service directory: of the ignore rules,
+//     it follows gst.yaml's prune.ignore alone (see package ggprune).
 type ProjectIgnore struct {
 	matcher gitignore.Matcher
 	// root is the absolute path of the project, against which an absolute

@@ -867,11 +867,12 @@ func init() {
 REQ/RSP 命名和业务项目根目录结构。`gg gen` 生成前也会执行这些检查；检查
 失败会停止生成。
 
-`gg check` 和 `gg gen` 读项目代码时，既跳过项目 Git 忽略规则排除的路径，
-也跳过 Go 工具链内置忽略的路径（`go build ./...` 同样不看的那些）：名字以
-`.` 或 `_` 开头的文件和目录、`vendor`、`testdata`、自带 `go.mod` 的子目录，
-以及 `go.mod` 里 `ignore` 声明的目录。`gg prune` 两类都不看，忽略规则只认
-`prune.ignore`，见下文。
+`gg check`、`gg gen`（含 `gg gen ts`）、`gg routes` 和 `gg route-tree` 读项目
+代码时，既跳过项目 Git 忽略规则排除的路径，也跳过 Go 工具链内置忽略的路径
+（`go build ./...` 同样不看的那些）：名字以 `.` 或 `_` 开头的文件和目录、
+`vendor`、`testdata`、自带 `go.mod` 的子目录，以及 `go.mod` 里 `ignore` 声明
+的目录。`gg prune` 找 model 的方式和 `gg gen` 一样；除此之外两类都不看，忽略
+规则只认 `prune.ignore`，见下文。
 
 ### 生成 TypeScript 类型
 
