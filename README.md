@@ -706,6 +706,59 @@ err := database.Select[*appmodel.Record, recordWithTags](ctx, RecordCols.ID, tag
 框架**不做**递归 CTE，聚合能力也不向 URL 暴露：
 报表口径属于服务端契约，让客户端自选分组键等于开放一个无界扫描入口。
 
+## 调用其他 gst 服务
+
+`client` 包是调用另一个 gst 服务的官方入口，也是接口测试发请求的入口。它按 DSL 的形态设计：
+`Design()` 能声明的每种接口在这里都有对应的调用方式，响应按统一信封解析。
+
+| DSL 声明 | client 入口 |
+| --- | --- |
+| Create / Update / Patch / Delete / Get / List | `Post` / `Put` / `Patch` / `Delete` / `Get` |
+| `Payload[*XxxReq]()` | 动词方法的 payload 参数 |
+| `Result[*XxxRsp]()` | 动词方法的类型参数，从信封的 `data` 解码 |
+| `Route("xxx/:id/action")` | 方法加路径组合 |
+| 批量动作 | `BatchItems` / `BatchIDs` 构造 `/batch` 路由的请求体 |
+| `Export()` / `Import()` | `Download` / `Upload` |
+| SSE 响应 | `Stream` |
+| 分页、排序、展开、游标 | `WithPage` / `WithSortBy` / `WithExpand` / `WithCursor` |
+
+一个客户端对应一个服务，带着地址、凭据和连接复用，可以并发使用，在包变量里建一次反复用即可；
+路径、请求体和查询参数按调用传入：
+
+```go
+cli, err := client.New("http://sample-service:8080",
+	client.WithToken(token),
+	client.WithTimeout(5*time.Second),
+)
+if err != nil {
+	return err
+}
+
+// 默认 List：框架的列表参数和业务过滤都走请求选项
+page, err := cli.Get[client.ListResult[model.Sample]]("/api/samples",
+	client.WithPage(1, 20),
+	client.WithQuery("status", "active"),
+)
+
+// 自定义动作：payload 对应 Payload，类型参数对应 Result
+rsp, err := cli.Post[model.SampleSealRsp]("/api/samples/seal", &model.SampleSealReq{Reason: "audit"})
+```
+
+返回值分三种情况处理：调用成功得到解码后的响应；服务端拒绝（非 2xx，或信封 `code` 非 0）
+返回 `*client.Error`，带 HTTP 状态、业务码、消息和 `trace_id`，用 `errors.As` 取出后按状态决定
+怎么处理；连接失败、超时这类传输错误是普通 error。需要信封本身（`trace_id`、响应 cookie）时用
+`Do`。登录接口返回的 cookie 由客户端自动带到后续请求上。
+
+两条注意事项：
+
+- 请求目前用客户端自己的上下文发出，不跟随调用方请求的取消和截止时间。务必用 `WithTimeout`
+  设超时，否则一个挂住的上游会一直占着调用方的 goroutine 和连接。
+- `client.Error` 的 `TraceID` 就是上游那次请求的 trace_id，也是上游响应头 `X-Trace-ID` 的值，
+  排查时拿它去上游的访问日志里找。
+
+接口测试用的是同一个客户端：`testutil.Run` 启动整个应用，`client.New(testutil.BaseURL())` 发请求，
+`testutil.DecodeResp`、`testutil.RequireError` 配合它断言，见 [examples/demo/ping_test.go](./examples/demo/ping_test.go)。
+
 ## 配置和迁移
 
 `config.ini.example` 是新项目的默认配置模板。复制为 `config.ini` 后按环境修改。
