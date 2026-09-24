@@ -17,6 +17,7 @@ const (
 	ImportPathBootstrap = "github.com/hydroan/gst/bootstrap"
 	ImportPathUtil      = "github.com/hydroan/gst/util"
 	ImportPathAPIDoc    = "github.com/hydroan/gst/apidoc"
+	ImportPathTestutil  = "github.com/hydroan/gst/testutil"
 
 	// ImportPathIO is the standard library package the Import method of a
 	// generated service file reads its input through.

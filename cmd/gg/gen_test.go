@@ -842,3 +842,167 @@ func (i *Creator) Create(ctx *gst.ServiceContext, req *v2.Item) (rsp *v2.Item, e
 
 	requireProjectCompiles(t)
 }
+
+// TestGenRunScaffoldsServiceTests pins what gg gen writes next to a service
+// file it creates: the test scaffold of the action, and main_test.go for the
+// package's first test file, so the service test coverage check passes on
+// the very next run instead of failing it.
+func TestGenRunScaffoldsServiceTests(t *testing.T) {
+	projectDir := newGenProject(t)
+	writeProjectFile(t, filepath.Join(projectDir, "model/record.go"), `package model
+
+import (
+	"github.com/hydroan/gst/dsl"
+	"github.com/hydroan/gst/model"
+)
+
+type Record struct {
+	model.Base
+}
+
+func (Record) TableName() string { return "records" }
+
+func (Record) Design() {
+	dsl.Param("rec")
+	dsl.Create(func() {
+		dsl.Service()
+	})
+	dsl.Get(func() {
+		dsl.Service()
+	})
+	dsl.List(func() {})
+}
+`)
+
+	want := map[string]string{
+		"service/record/create_test.go": `package record_test
+
+import "testing"
+
+// TestCreate covers POST /api/records, served by Creator in create.go.
+func TestCreate(t *testing.T) {
+	t.Fatal("TestCreate is a scaffold: replace it with the test of POST /api/records")
+}
+`,
+		"service/record/get_test.go": `package record_test
+
+import "testing"
+
+// TestGet covers GET /api/records/:rec, served by Getter in get.go.
+func TestGet(t *testing.T) {
+	t.Fatal("TestGet is a scaffold: replace it with the test of GET /api/records/:rec")
+}
+`,
+		"service/record/main_test.go": `package record_test
+
+import (
+	"testing"
+
+	// The registrations of main.go: the models, modules, services and cron
+	// jobs register themselves through the init of these packages.
+	_ "tmpapp/component"
+	_ "tmpapp/configx"
+	_ "tmpapp/cronjob"
+	_ "tmpapp/leader"
+	_ "tmpapp/lock"
+	_ "tmpapp/middleware"
+	_ "tmpapp/model"
+	_ "tmpapp/module"
+	"tmpapp/router"
+	_ "tmpapp/service"
+
+	"github.com/hydroan/gst/testutil"
+)
+
+// TestMain starts the test server of this package the way main.go starts the
+// application. Declare what the tests need on the Server, such as Database
+// or Redis.
+func TestMain(m *testing.M) {
+	testutil.Run(m, testutil.Server{
+		Routes: router.Init,
+	})
+}
+`,
+	}
+
+	// The first run scaffolds the tests; the second passes the project
+	// checks the scaffolds satisfy and leaves every file as it is.
+	for run := range 2 {
+		require.NoError(t, genRunWithOptions(genRunOptions{Quiet: true}), "run %d", run)
+		for path, content := range want {
+			got, err := os.ReadFile(path)
+			require.NoError(t, err, "run %d", run)
+			require.Equal(t, content, string(got), "run %d: %s", run, path)
+		}
+	}
+	// The List action declares no service, so nothing is scaffolded for it.
+	require.NoFileExists(t, "service/record/list_test.go")
+
+	requireProjectCompiles(t)
+}
+
+// TestGenRunKeepsExistingServiceTests pins what gg gen leaves alone: a test
+// file the project already has, and a package whose TestMain lives in one of
+// its test files, which gets no main_test.go.
+func TestGenRunKeepsExistingServiceTests(t *testing.T) {
+	projectDir := newGenProject(t)
+	writeProjectFile(t, filepath.Join(projectDir, "model/record.go"), `package model
+
+import (
+	"github.com/hydroan/gst/dsl"
+	"github.com/hydroan/gst/model"
+)
+
+type Record struct {
+	model.Base
+}
+
+func (Record) TableName() string { return "records" }
+
+func (Record) Design() {
+	dsl.Create(func() {
+		dsl.Service()
+	})
+	dsl.List(func() {
+		dsl.Service()
+	})
+}
+`)
+	writeProjectFile(t, filepath.Join(projectDir, "service/record/create.go"), `package record
+
+import (
+	"tmpapp/model"
+
+	"github.com/hydroan/gst"
+	"github.com/hydroan/gst/service"
+)
+
+type Creator struct {
+	service.Base[*model.Record, *model.Record, *model.Record]
+}
+
+func (r *Creator) Create(ctx *gst.ServiceContext, req *model.Record) (rsp *model.Record, err error) {
+	return rsp, nil
+}
+`)
+	existingTest := `package record_test
+
+import "testing"
+
+func TestMain(m *testing.M) {}
+
+func TestCreate(t *testing.T) {}
+`
+	writeProjectFile(t, filepath.Join(projectDir, "service/record/create_test.go"), existingTest)
+
+	require.NoError(t, genRunWithOptions(genRunOptions{Quiet: true}))
+
+	got, err := os.ReadFile("service/record/create_test.go")
+	require.NoError(t, err)
+	require.Equal(t, existingTest, string(got))
+	require.FileExists(t, "service/record/list.go")
+	require.FileExists(t, "service/record/list_test.go")
+	require.NoFileExists(t, "service/record/main_test.go")
+
+	requireProjectCompiles(t)
+}

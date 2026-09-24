@@ -267,8 +267,13 @@ func genRunWithOptions(opts genRunOptions) error {
 	}
 
 	fset := token.NewFileSet()
-	applyFile := func(filename string, code string, action *dsl.Action, servicePkgName string, modelInfo *gen.ModelInfo) error {
-		safePath, err := pathUnderRoot(filename, ggconst.DirService)
+	// applyFile writes the service file target locates: a new file is
+	// created with its test scaffolds, an existing one has the action's
+	// declarations synced into it. route is the route the router registers
+	// the action under.
+	applyFile := func(target gen.ServiceTargetInfo, route string, code string, action *dsl.Action, modelInfo *gen.ModelInfo) error {
+		servicePkgName := target.PackageName
+		safePath, err := pathUnderRoot(target.FilePath, ggconst.DirService)
 		if err != nil {
 			return err
 		}
@@ -320,6 +325,9 @@ func genRunWithOptions(opts genRunOptions) error {
 			if err := os.WriteFile(safePath, []byte(code), ggconst.FileModeGenerated); err != nil {
 				return err
 			}
+			if err := scaffoldServiceTests(target, action, route, opts.Quiet); err != nil {
+				return err
+			}
 		}
 		return nil
 	}
@@ -338,7 +346,8 @@ func genRunWithOptions(opts genRunOptions) error {
 					applyErr = err
 					return
 				}
-				applyErr = applyFile(target.FilePath, code, act, target.PackageName, m)
+				registered, _ := codegen.RouterTargetForAction(route, m.Design, act)
+				applyErr = applyFile(target, registered, code, act, m)
 			}
 		})
 		if applyErr != nil {
@@ -361,6 +370,42 @@ func genRunWithOptions(opts genRunOptions) error {
 		clioutput.Done("Code generation completed successfully!")
 	}
 	return nil
+}
+
+// scaffoldServiceTests writes the test scaffold of the service file target
+// locates, which gg gen has just created, and main_test.go for its package
+// when no test file of the package declares TestMain yet (see
+// gen.GenerateServiceTest and gen.GenerateServiceTestMain). The service test
+// coverage check requires the test file from the next run on, so the run
+// that creates the service file creates its test as well. A test file the
+// project already has, in its external or internal form, is kept as it is,
+// and so is a main_test.go that exists already.
+func scaffoldServiceTests(target gen.ServiceTargetInfo, action *dsl.Action, route string, quiet bool) error {
+	stem := strings.TrimSuffix(target.FilePath, ".go")
+	if gghelper.FileExists(stem+ggconst.PatternTestFile) || gghelper.FileExists(stem+"_internal"+ggconst.PatternTestFile) {
+		return nil
+	}
+
+	declared, err := gen.PackageDeclaresTestMain(target.Dir)
+	if err != nil {
+		return err
+	}
+	mainTest := filepath.Join(target.Dir, ggconst.FileMainTest)
+	if !declared && !gghelper.FileExists(mainTest) {
+		var mainCode string
+		if mainCode, err = gen.GenerateServiceTestMain(module, target.PackageName); err != nil {
+			return err
+		}
+		if err = writeGeneratedFile(mainTest, mainCode, !quiet); err != nil {
+			return err
+		}
+	}
+
+	code, err := gen.GenerateServiceTest(target, action, route)
+	if err != nil {
+		return err
+	}
+	return writeGeneratedFile(stem+ggconst.PatternTestFile, code, !quiet)
 }
 
 // scannedModels is the model set code generation works from.
