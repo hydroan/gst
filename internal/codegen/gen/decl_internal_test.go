@@ -620,3 +620,37 @@ func TestServiceMethod7(t *testing.T) {
 		})
 	}
 }
+
+func TestServiceMethod8(t *testing.T) {
+	tests := []struct {
+		name           string
+		recvName       string
+		modelName      string
+		modelQualifier string
+		roleName       string
+		want           string
+	}{
+		{
+			// The example of the serviceMethod8 doc comment.
+			name:           "Filter",
+			recvName:       "u",
+			modelName:      "User",
+			modelQualifier: "model",
+			roleName:       "Lister",
+			want:           "func (u *Lister) Filter(ctx *gst.ServiceContext, user *model.User, opts gst.QueryOptions) (*model.User, gst.QueryOptions, error) {\n}",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			res := serviceMethod8(tt.recvName, tt.modelName, tt.modelQualifier, tt.roleName)
+			got, err := FormatNode(res)
+			if err != nil {
+				t.Error(err)
+				return
+			}
+			if got != tt.want {
+				t.Errorf("serviceMethod8() = \n%v\n, want \n%v\n", pretty.Sprintf("% #v", got), pretty.Sprintf("% #v", tt.want))
+			}
+		})
+	}
+}
