@@ -5,7 +5,16 @@ GOLANGCI_LINT_VERSION := $(shell go list -m -f '{{.Version}}' github.com/golangc
 GOFUMPT_VERSION := $(shell go list -m -f '{{.Version}}' mvdan.cc/gofumpt)
 GOTESTSUM_VERSION := $(shell go list -m -f '{{.Version}}' gotest.tools/gotestsum)
 GOBIN := $(shell go env GOBIN)
-GOPATH := $(shell go env GOPATH)
+# GOPATH is pinned for every go command make runs, the way TEST_PATH pins PATH
+# for the tests: gvm keeps a module cache per Go version beside its GOROOT, and
+# a shell started without gvm's GOPATH would build the same packages into a
+# second cache under ~/go. That doubles the build cache, and it splits the test
+# result cache between two environments, one of which then relinks every test
+# binary on every run. A GOROOT outside gvm keeps the GOPATH the environment
+# provides.
+GVM_GOPATH := $(subst /gos/,/pkgsets/,$(shell go env GOROOT))/global
+GOPATH := $(if $(wildcard $(GVM_GOPATH)),$(GVM_GOPATH),$(shell go env GOPATH))
+export GOPATH
 GO_BIN_DIR := $(if $(GOBIN),$(GOBIN),$(GOPATH)/bin)
 
 GOLANGCI_LINT_PKG := github.com/golangci/golangci-lint/v2/cmd/golangci-lint
