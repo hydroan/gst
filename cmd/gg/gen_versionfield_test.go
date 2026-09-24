@@ -1,6 +1,8 @@
 package main
 
 import (
+	"go/parser"
+	"go/token"
 	"os"
 	"path/filepath"
 	"strings"
@@ -155,5 +157,54 @@ func (Hidden) TableName() string { return "hiddens" }
 	err := fillVersionFieldTags(true)
 	if err == nil || !strings.Contains(err.Error(), "json:\"-\"") {
 		t.Fatalf("a hidden json field must abort generation, got %v", err)
+	}
+}
+
+// TestHealedVersionTagRejectsAnInsertionOutsideTheTag pins the error path
+// of healedVersionTag: a finding describes the file it was scanned from, so
+// applied to a file whose tag sits elsewhere, its insertions fall outside
+// the tag literal and the rewrite refuses rather than splicing blindly.
+func TestHealedVersionTagRejectsAnInsertionOutsideTheTag(t *testing.T) {
+	projectDir := t.TempDir()
+	t.Chdir(projectDir)
+	writeProjectGoMod(t, projectDir)
+	source := `package document
+
+import "github.com/hydroan/gst/model"
+
+type Tagged struct {
+	Version model.Version ` + "`json:\"version\"`" + `
+
+	model.Base
+}
+
+func (Tagged) TableName() string { return "taggeds" }
+`
+	path := filepath.Join(projectDir, "model", "document", "document.go")
+	writeProjectFile(t, path, source)
+	findings, err := ggcheck.VersionFieldFindings()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(findings) != 1 {
+		t.Fatalf("findings = %d, want the one tagged field", len(findings))
+	}
+
+	// The same file with a line added above the struct: every offset of the
+	// finding now points before the tag literal.
+	shifted := strings.Replace(source, "type Tagged struct", "// Tagged has moved down a line.\ntype Tagged struct", 1)
+	fset := token.NewFileSet()
+	file, err := parser.ParseFile(fset, path, shifted, parser.ParseComments)
+	if err != nil {
+		t.Fatal(err)
+	}
+	field := versionField(file, findings[0])
+	if field == nil {
+		t.Fatal("field Tagged.Version not found")
+	}
+
+	_, err = healedVersionTag(fset, field.Tag, findings[0])
+	if err == nil {
+		t.Fatal("healedVersionTag() should refuse an insertion outside the tag literal")
 	}
 }
