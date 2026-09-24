@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"go/ast"
 	"go/types"
-	"path/filepath"
 	"slices"
 	"strconv"
 	"strings"
@@ -25,8 +24,8 @@ var sourceFormatters = map[[2]string]bool{
 // may format source text: the printing path every generator's syntax tree
 // goes through.
 var (
-	sourceFormatScope = []string{filepath.Join("internal", "codegen"), filepath.Join("cmd", "gg")}
-	sourceFormatHome  = filepath.Join("internal", "codegen", "gen", "helper.go")
+	sourceFormatScope = []string{"internal/codegen", "cmd/gg"}
+	sourceFormatHome  = "internal/codegen/gen/helper.go"
 )
 
 // templatePackage is the package that renders text from templates, which no
@@ -47,9 +46,8 @@ func checkSourceFormat(root string, pkgs []*packages.Package) ([]violation, erro
 			continue
 		}
 		for _, file := range p.Syntax {
-			path := p.Fset.Position(file.Pos()).Filename
-			rel, err := filepath.Rel(root, path)
-			if err != nil || strings.HasSuffix(rel, "_test.go") || rel == sourceFormatHome || !inSourceFormatScope(rel) {
+			rel := relative(root, p.Fset.Position(file.Pos()).Filename)
+			if strings.HasSuffix(rel, "_test.go") || rel == sourceFormatHome || !inSourceFormatScope(rel) {
 				continue
 			}
 			for _, spec := range file.Imports {
@@ -90,11 +88,11 @@ func checkSourceFormat(root string, pkgs []*packages.Package) ([]violation, erro
 	return found, nil
 }
 
-// inSourceFormatScope reports whether rel, a path relative to the root, lies
-// under one of the sourceFormatScope directories.
+// inSourceFormatScope reports whether rel, a slash-form path relative to the
+// root, lies under one of the sourceFormatScope directories.
 func inSourceFormatScope(rel string) bool {
 	for _, dir := range sourceFormatScope {
-		if rel == dir || strings.HasPrefix(rel, dir+string(filepath.Separator)) {
+		if rel == dir || strings.HasPrefix(rel, dir+"/") {
 			return true
 		}
 	}
