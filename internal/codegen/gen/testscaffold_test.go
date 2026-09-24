@@ -69,7 +69,7 @@ func TestCreate(t *testing.T) {
 	cli, err := client.New(testutil.BaseURL())
 	require.NoError(t, err)
 
-	rsp, err := cli.Post[model.Record]("/api/records", &model.Record{})
+	rsp, err := cli.Post[model.Record](t.Context(), "/api/records", &model.Record{})
 	require.NoError(t, err)
 	require.NotNil(t, rsp)
 }
@@ -99,7 +99,7 @@ func TestGenerateServiceTestExamples(t *testing.T) {
 			wantDoc: "// TestDelete covers DELETE /api/records/:rec, served by Deleter in delete.go.",
 			wantCode: []string{
 				`	id := "the ID of a row the test seeded"`,
-				`	rsp, err := cli.Delete[model.Record]("/api/records/"+id, nil)`,
+				`	rsp, err := cli.Delete[model.Record](t.Context(), "/api/records/"+id, nil)`,
 			},
 		},
 		{
@@ -109,7 +109,7 @@ func TestGenerateServiceTestExamples(t *testing.T) {
 			action:   recordAction(consts.PHASE_UPDATE),
 			route:    "records/:rec",
 			wantDoc:  "// TestUpdate covers PUT /api/records/:rec, served by Updater in update.go.",
-			wantCode: []string{`	rsp, err := cli.Put[model.Record]("/api/records/"+id, &model.Record{})`},
+			wantCode: []string{`	rsp, err := cli.Put[model.Record](t.Context(), "/api/records/"+id, &model.Record{})`},
 		},
 		{
 			name:     "patch_patches_the_row",
@@ -118,7 +118,7 @@ func TestGenerateServiceTestExamples(t *testing.T) {
 			action:   recordAction(consts.PHASE_PATCH),
 			route:    "records/:rec",
 			wantDoc:  "// TestPatch covers PATCH /api/records/:rec, served by Patcher in patch.go.",
-			wantCode: []string{`	rsp, err := cli.Patch[model.Record]("/api/records/"+id, &model.Record{})`},
+			wantCode: []string{`	rsp, err := cli.Patch[model.Record](t.Context(), "/api/records/"+id, &model.Record{})`},
 		},
 		{
 			name:     "get_reads_the_row",
@@ -127,7 +127,7 @@ func TestGenerateServiceTestExamples(t *testing.T) {
 			action:   recordAction(consts.PHASE_GET),
 			route:    "records/:rec",
 			wantDoc:  "// TestGet covers GET /api/records/:rec, served by Getter in get.go.",
-			wantCode: []string{`	rsp, err := cli.Get[model.Record]("/api/records/" + id)`},
+			wantCode: []string{`	rsp, err := cli.Get[model.Record](t.Context(), "/api/records/"+id)`},
 		},
 		{
 			name:     "list_of_the_model_decodes_the_list_result",
@@ -136,7 +136,7 @@ func TestGenerateServiceTestExamples(t *testing.T) {
 			action:   recordAction(consts.PHASE_LIST),
 			route:    "records",
 			wantDoc:  "// TestList covers GET /api/records, served by Lister in list.go.",
-			wantCode: []string{`	rsp, err := cli.Get[client.ListResult[*model.Record]]("/api/records")`},
+			wantCode: []string{`	rsp, err := cli.Get[client.ListResult[*model.Record]](t.Context(), "/api/records")`},
 		},
 		{
 			name:     "list_with_a_result_decodes_the_result",
@@ -145,7 +145,7 @@ func TestGenerateServiceTestExamples(t *testing.T) {
 			action:   &dsl.Action{Enabled: true, Service: true, Payload: dsl.PayloadEmpty, Result: "*RecordListRsp", Phase: consts.PHASE_LIST},
 			route:    "records",
 			wantDoc:  "// TestList covers GET /api/records, served by Lister in list.go.",
-			wantCode: []string{`	rsp, err := cli.Get[model.RecordListRsp]("/api/records")`},
+			wantCode: []string{`	rsp, err := cli.Get[model.RecordListRsp](t.Context(), "/api/records")`},
 		},
 		{
 			name:     "create_many_posts_the_items",
@@ -154,7 +154,7 @@ func TestGenerateServiceTestExamples(t *testing.T) {
 			action:   recordAction(consts.PHASE_CREATE_MANY),
 			route:    "records/batch",
 			wantDoc:  "// TestCreateMany covers POST /api/records/batch, served by ManyCreator in create_many.go.",
-			wantCode: []string{`	rsp, err := cli.Post[model.Record]("/api/records/batch", client.BatchItems([]*model.Record{{}}))`},
+			wantCode: []string{`	rsp, err := cli.Post[model.Record](t.Context(), "/api/records/batch", client.BatchItems([]*model.Record{{}}))`},
 		},
 		{
 			name:     "delete_many_deletes_the_ids",
@@ -163,7 +163,7 @@ func TestGenerateServiceTestExamples(t *testing.T) {
 			action:   recordAction(consts.PHASE_DELETE_MANY),
 			route:    "records/batch",
 			wantDoc:  "// TestDeleteMany covers DELETE /api/records/batch, served by ManyDeleter in delete_many.go.",
-			wantCode: []string{`	rsp, err := cli.Delete[model.Record]("/api/records/batch", client.BatchIDs([]string{id}))`},
+			wantCode: []string{`	rsp, err := cli.Delete[model.Record](t.Context(), "/api/records/batch", client.BatchIDs([]string{id}))`},
 		},
 		{
 			name:     "update_many_puts_the_items",
@@ -172,7 +172,7 @@ func TestGenerateServiceTestExamples(t *testing.T) {
 			action:   recordAction(consts.PHASE_UPDATE_MANY),
 			route:    "records/batch",
 			wantDoc:  "// TestUpdateMany covers PUT /api/records/batch, served by ManyUpdater in update_many.go.",
-			wantCode: []string{`	rsp, err := cli.Put[model.Record]("/api/records/batch", client.BatchItems([]*model.Record{{}}))`},
+			wantCode: []string{`	rsp, err := cli.Put[model.Record](t.Context(), "/api/records/batch", client.BatchItems([]*model.Record{{}}))`},
 		},
 		{
 			name:     "patch_many_patches_the_items",
@@ -181,7 +181,7 @@ func TestGenerateServiceTestExamples(t *testing.T) {
 			action:   recordAction(consts.PHASE_PATCH_MANY),
 			route:    "records/batch",
 			wantDoc:  "// TestPatchMany covers PATCH /api/records/batch, served by ManyPatcher in patch_many.go.",
-			wantCode: []string{`	rsp, err := cli.Patch[model.Record]("/api/records/batch", client.BatchItems([]*model.Record{{}}))`},
+			wantCode: []string{`	rsp, err := cli.Patch[model.Record](t.Context(), "/api/records/batch", client.BatchItems([]*model.Record{{}}))`},
 		},
 		{
 			name:    "import_uploads_a_file",
@@ -191,7 +191,7 @@ func TestGenerateServiceTestExamples(t *testing.T) {
 			route:   "records/import",
 			wantDoc: "// TestImport covers POST /api/records/import, served by Importer in import.go.",
 			wantCode: []string{
-				`	envelope, err := cli.Upload("/api/records/import", "records.csv", strings.NewReader("name\nsample\n"), nil)`,
+				`	envelope, err := cli.Upload(t.Context(), "/api/records/import", "records.csv", strings.NewReader("name\nsample\n"), nil)`,
 				`	require.NotNil(t, envelope)`,
 			},
 		},
@@ -203,7 +203,7 @@ func TestGenerateServiceTestExamples(t *testing.T) {
 			route:   "records/export",
 			wantDoc: "// TestExport covers GET /api/records/export, served by Exporter in export.go.",
 			wantCode: []string{
-				`	attachment, err := cli.Download("/api/records/export")`,
+				`	attachment, err := cli.Download(t.Context(), "/api/records/export")`,
 				`	require.NotEmpty(t, attachment.Content)`,
 			},
 		},
@@ -215,7 +215,7 @@ func TestGenerateServiceTestExamples(t *testing.T) {
 			route:   "records",
 			wantDoc: "// TestSSE covers GET /api/records, served by Streamer in sse.go.",
 			wantCode: []string{
-				`	err = cli.Stream(http.MethodGet, "/api/records", nil, func(event sse.Event) error {`,
+				`	err = cli.Stream(t.Context(), http.MethodGet, "/api/records", nil, func(event sse.Event) error {`,
 				`		return client.ErrStopStream`,
 			},
 		},
@@ -226,7 +226,7 @@ func TestGenerateServiceTestExamples(t *testing.T) {
 			action:   &dsl.Action{Enabled: true, Service: true, Payload: "*RecordArchiveReq", Result: "*RecordArchiveRsp", Phase: consts.PHASE_CREATE, Filename: "archive"},
 			route:    "records/archive",
 			wantDoc:  "// TestArchive covers POST /api/records/archive, served by Archive in archive.go.",
-			wantCode: []string{`	rsp, err := cli.Post[model.RecordArchiveRsp]("/api/records/archive", &model.RecordArchiveReq{})`},
+			wantCode: []string{`	rsp, err := cli.Post[model.RecordArchiveRsp](t.Context(), "/api/records/archive", &model.RecordArchiveReq{})`},
 		},
 		{
 			name:     "empty_request_sends_no_body_and_empty_result_decodes_any",
@@ -235,7 +235,7 @@ func TestGenerateServiceTestExamples(t *testing.T) {
 			action:   &dsl.Action{Enabled: true, Service: true, Payload: dsl.PayloadEmpty, Result: dsl.PayloadEmpty, Phase: consts.PHASE_CREATE, Filename: "ping"},
 			route:    "records/ping",
 			wantDoc:  "// TestPing covers POST /api/records/ping, served by Ping in ping.go.",
-			wantCode: []string{`	rsp, err := cli.Post[any]("/api/records/ping", nil)`},
+			wantCode: []string{`	rsp, err := cli.Post[any](t.Context(), "/api/records/ping", nil)`},
 		},
 		{
 			name:     "value_typed_request_is_a_value_literal",
@@ -244,7 +244,7 @@ func TestGenerateServiceTestExamples(t *testing.T) {
 			action:   &dsl.Action{Enabled: true, Service: true, Payload: "RecordItems", Result: "RecordItems", Phase: consts.PHASE_CREATE, Filename: "merge"},
 			route:    "records/merge",
 			wantDoc:  "// TestMerge covers POST /api/records/merge, served by Merge in merge.go.",
-			wantCode: []string{`	rsp, err := cli.Post[model.RecordItems]("/api/records/merge", model.RecordItems{})`},
+			wantCode: []string{`	rsp, err := cli.Post[model.RecordItems](t.Context(), "/api/records/merge", model.RecordItems{})`},
 		},
 		{
 			name:    "nested_import_reads_the_parent_id",
@@ -255,7 +255,7 @@ func TestGenerateServiceTestExamples(t *testing.T) {
 			wantDoc: "// TestImport covers POST /api/records/:rec/items/import, served by Importer in import.go.",
 			wantCode: []string{
 				`	id := "the ID of a row the test seeded"`,
-				`	envelope, err := cli.Upload("/api/records/"+id+"/items/import", "items.csv", strings.NewReader("name\nsample\n"), nil)`,
+				`	envelope, err := cli.Upload(t.Context(), "/api/records/"+id+"/items/import", "items.csv", strings.NewReader("name\nsample\n"), nil)`,
 			},
 		},
 		{
@@ -267,7 +267,7 @@ func TestGenerateServiceTestExamples(t *testing.T) {
 			wantDoc: "// TestExport covers GET /api/records/:rec/items/export, served by Exporter in export.go.",
 			wantCode: []string{
 				`	id := "the ID of a row the test seeded"`,
-				`	attachment, err := cli.Download("/api/records/" + id + "/items/export")`,
+				`	attachment, err := cli.Download(t.Context(), "/api/records/"+id+"/items/export")`,
 			},
 		},
 		{
@@ -279,7 +279,7 @@ func TestGenerateServiceTestExamples(t *testing.T) {
 			wantDoc: "// TestSSE covers GET /api/records/:rec/items, served by Streamer in sse.go.",
 			wantCode: []string{
 				`	id := "the ID of a row the test seeded"`,
-				`	err = cli.Stream(http.MethodGet, "/api/records/"+id+"/items", nil, func(event sse.Event) error {`,
+				`	err = cli.Stream(t.Context(), http.MethodGet, "/api/records/"+id+"/items", nil, func(event sse.Event) error {`,
 			},
 		},
 		{
@@ -289,7 +289,7 @@ func TestGenerateServiceTestExamples(t *testing.T) {
 			action:   &dsl.Action{Enabled: true, Service: true, Payload: "*RecordRevokeReq", Result: "*RecordRevokeRsp", Phase: consts.PHASE_DELETE, Filename: "revoke"},
 			route:    "records/revoke",
 			wantDoc:  "// TestRevoke covers DELETE /api/records/revoke, served by Revoke in revoke.go.",
-			wantCode: []string{`	rsp, err := cli.Delete[model.RecordRevokeRsp]("/api/records/revoke", &model.RecordRevokeReq{})`},
+			wantCode: []string{`	rsp, err := cli.Delete[model.RecordRevokeRsp](t.Context(), "/api/records/revoke", &model.RecordRevokeReq{})`},
 		},
 		{
 			name: "flattened_file_takes_the_package_of_its_model",
@@ -305,7 +305,7 @@ func TestGenerateServiceTestExamples(t *testing.T) {
 			action:   &dsl.Action{Enabled: true, Service: true, Payload: "*DocumentSealReq", Result: "*DocumentSealRsp", Phase: consts.PHASE_CREATE, Filename: "seal", Flatten: true},
 			route:    "archive/documents/seal",
 			wantDoc:  "// TestSeal covers POST /api/archive/documents/seal, served by Seal in seal.go.",
-			wantCode: []string{"package archive_test\n", `	rsp, err := cli.Post[archive.DocumentSealRsp]("/api/archive/documents/seal", &archive.DocumentSealReq{})`},
+			wantCode: []string{"package archive_test\n", `	rsp, err := cli.Post[archive.DocumentSealRsp](t.Context(), "/api/archive/documents/seal", &archive.DocumentSealReq{})`},
 		},
 		{
 			name: "model_package_named_like_a_framework_import_is_aliased",
@@ -321,7 +321,7 @@ func TestGenerateServiceTestExamples(t *testing.T) {
 			action:   &dsl.Action{Enabled: true, Service: true, Payload: "*Session", Result: "*Session", Phase: consts.PHASE_CREATE},
 			route:    "client/sessions",
 			wantDoc:  "// TestCreate covers POST /api/client/sessions, served by Creator in create.go.",
-			wantCode: []string{`	model_client "helloworld/model/client"`, `	rsp, err := cli.Post[model_client.Session]("/api/client/sessions", &model_client.Session{})`},
+			wantCode: []string{`	model_client "helloworld/model/client"`, `	rsp, err := cli.Post[model_client.Session](t.Context(), "/api/client/sessions", &model_client.Session{})`},
 		},
 	}
 	for _, tt := range tests {

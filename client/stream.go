@@ -3,6 +3,7 @@ package client
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"io"
 	"strconv"
 	"strings"
@@ -26,17 +27,18 @@ var ErrStopStream = errors.New("stop consuming the stream")
 // Returning ErrStopStream stops it without surfacing an error.
 type StreamCallback func(event sse.Event) error
 
-// Stream sends the request and consumes the response as a Server-Sent Events
-// stream, pairing the framework's SSE responses. The stream ends when the
-// server closes the connection or the callback returns an error. A JSON
+// Stream sends the request on ctx and consumes the response as a Server-Sent
+// Events stream, pairing the framework's SSE responses. The stream ends when
+// the server closes the connection, when ctx ends — the stream then fails
+// with the context's error — or when the callback returns an error. A JSON
 // answer on a stream endpoint is parsed as the regular envelope: a rejection
 // surfaces as *Error, a success returns nil without events.
-func (c *Client) Stream(method, path string, payload any, callback StreamCallback) error {
+func (c *Client) Stream(ctx context.Context, method, path string, payload any, callback StreamCallback) error {
 	if callback == nil {
 		return errors.New("callback cannot be nil")
 	}
 
-	req, err := c.newRequest(method, path, payload, nil)
+	req, err := c.newRequest(ctx, method, path, payload, nil)
 	if err != nil {
 		return err
 	}

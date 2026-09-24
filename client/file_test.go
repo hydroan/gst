@@ -26,7 +26,7 @@ func TestDownloadReadsAttachment(t *testing.T) {
 	cli, err := client.New(srv.URL)
 	require.NoError(t, err)
 
-	attachment, err := cli.Download("/api/records/export", client.WithQuery("_format", "csv"))
+	attachment, err := cli.Download(t.Context(), "/api/records/export", client.WithQuery("_format", "csv"))
 	require.NoError(t, err)
 	require.Equal(t, "csv", gotFormat)
 	require.Equal(t, "records.csv", attachment.Name)
@@ -45,7 +45,7 @@ func TestDownloadReturnsStructuredErrorOnRejection(t *testing.T) {
 	cli, err := client.New(srv.URL)
 	require.NoError(t, err)
 
-	_, err = cli.Download("/api/records/export")
+	_, err = cli.Download(t.Context(), "/api/records/export")
 	var respErr *client.Error
 	require.True(t, errors.As(err, &respErr))
 	require.Equal(t, http.StatusForbidden, respErr.StatusCode)
@@ -85,7 +85,7 @@ func TestUploadSendsMultipartFileAndFields(t *testing.T) {
 	cli, err := client.New(srv.URL)
 	require.NoError(t, err)
 
-	resp, err := cli.Upload("/api/records/import", "records.csv",
+	resp, err := cli.Upload(t.Context(), "/api/records/import", "records.csv",
 		strings.NewReader("name\nsample\n"), map[string]string{"mode": "append"})
 	require.NoError(t, err)
 	require.NoError(t, handlerErr)

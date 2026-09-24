@@ -103,7 +103,7 @@ func TestLoginLogList(t *testing.T) {
 	t.Run("after_login", func(t *testing.T) {
 		cli := logmgmtSessionClient(t, sessionID)
 
-		list, err := cli.Get[client.ListResult[*logmgmt.LoginLog]](loginlogPath)
+		list, err := cli.Get[client.ListResult[*logmgmt.LoginLog]](t.Context(), loginlogPath)
 		require.NoError(t, err)
 
 		require.Len(t, list.Items, 1)
@@ -115,7 +115,7 @@ func TestLoginLogList(t *testing.T) {
 
 	t.Run("after_logout_and_login_again", func(t *testing.T) {
 		logoutCli := logmgmtSessionClient(t, sessionID)
-		_, err := logoutCli.Post[iam.LogoutRsp](logoutPath, nil)
+		_, err := logoutCli.Post[iam.LogoutRsp](t.Context(), logoutPath, nil)
 		require.NoError(t, err)
 
 		sessionID = loginSessionIDFromCookie(t, iam.LoginReq{
@@ -125,7 +125,7 @@ func TestLoginLogList(t *testing.T) {
 
 		cli := logmgmtSessionClient(t, sessionID)
 
-		list, err := cli.Get[client.ListResult[*logmgmt.LoginLog]](loginlogPath)
+		list, err := cli.Get[client.ListResult[*logmgmt.LoginLog]](t.Context(), loginlogPath)
 		require.NoError(t, err)
 
 		require.Len(t, list.Items, 3)
@@ -159,7 +159,7 @@ func TestOperationLogList(t *testing.T) {
 	t.Run("before_operation", func(t *testing.T) {
 		cli := logmgmtSessionClient(t, sessionID)
 
-		list, err := cli.Get[client.ListResult[*logmgmt.OperationLog]](operationlogPath,
+		list, err := cli.Get[client.ListResult[*logmgmt.OperationLog]](t.Context(), operationlogPath,
 			client.WithQuery("record_id", roleID))
 		require.NoError(t, err)
 		require.Empty(t, list.Items)
@@ -174,7 +174,7 @@ func TestOperationLogList(t *testing.T) {
 		ID:   roleID,
 		Name: roleName,
 	}
-	created, err := cli.Post[authz.Role](rolePath, createReq)
+	created, err := cli.Post[authz.Role](t.Context(), rolePath, createReq)
 	require.NoError(t, err)
 	require.NotNil(t, created)
 	require.Equal(t, createReq.Name, created.Name)
@@ -183,7 +183,7 @@ func TestOperationLogList(t *testing.T) {
 	t.Run("after_operation", func(t *testing.T) {
 		cli := logmgmtSessionClient(t, sessionID)
 
-		list, err := cli.Get[client.ListResult[*logmgmt.OperationLog]](operationlogPath,
+		list, err := cli.Get[client.ListResult[*logmgmt.OperationLog]](t.Context(), operationlogPath,
 			client.WithQuery("record_id", roleID))
 		require.NoError(t, err)
 
@@ -203,7 +203,7 @@ func signupLogmgmtTestUser(t *testing.T, username, password string) string {
 
 	cli, err := client.New(baseURL)
 	require.NoError(t, err)
-	rsp, err := cli.Post[iam.SignupRsp](signupPath, iam.SignupReq{
+	rsp, err := cli.Post[iam.SignupRsp](t.Context(), signupPath, iam.SignupReq{
 		Username:   username,
 		Password:   password,
 		RePassword: password,
@@ -237,7 +237,7 @@ func loginSessionIDFromCookie(t *testing.T, reqPayload iam.LoginReq) string {
 	cli, err := client.New(baseURL)
 	require.NoError(t, err)
 
-	apiResp, err := cli.Do(http.MethodPost, loginPath, reqPayload)
+	apiResp, err := cli.Do(t.Context(), http.MethodPost, loginPath, reqPayload)
 	require.NoError(t, err)
 
 	rsp := testutil.DecodeResp[iam.LoginRsp](t, apiResp)

@@ -84,7 +84,7 @@ var serviceTestDoc = []string{
 //		cli, err := client.New(testutil.BaseURL())
 //		require.NoError(t, err)
 //
-//		rsp, err := cli.Post[model.Record]("/api/records", &model.Record{})
+//		rsp, err := cli.Post[model.Record](t.Context(), "/api/records", &model.Record{})
 //		require.NoError(t, err)
 //		require.NotNil(t, rsp)
 //	}
@@ -148,8 +148,9 @@ type serviceTestExample struct {
 }
 
 // newServiceTestExample builds the example request of action on the model
-// info, registered under route: an item route reads the row's id from a
-// placeholder variable, a batch route sends client.BatchItems or
+// info, registered under route: every request passes t.Context() first, an
+// item route reads the row's id from a placeholder variable, a batch route
+// sends client.BatchItems or
 // client.BatchIDs, a List without a declared result decodes
 // client.ListResult, Import uploads a file, Export downloads the attachment
 // and SSE consumes the stream. The model package is imported when the
@@ -203,13 +204,13 @@ func newServiceTestExample(info *ModelInfo, action *dsl.Action, route string) *s
 		filename := strLit(filepath.Base(filepath.Dir(route)) + ".csv")
 		content := call(sel(ident("strings"), "NewReader"), strLit("name\nsample\n"))
 		stmts = append(stmts,
-			define(idents("envelope", "err"), call(sel(ident("cli"), "Upload"), path, filename, content, ident("nil"))),
+			define(idents("envelope", "err"), call(sel(ident("cli"), "Upload"), testContext(), path, filename, content, ident("nil"))),
 			requireCall("NoError", ident("err")),
 			requireCall("NotNil", ident("envelope")),
 		)
 	case consts.PHASE_EXPORT:
 		stmts = append(stmts,
-			define(idents("attachment", "err"), call(sel(ident("cli"), "Download"), path)),
+			define(idents("attachment", "err"), call(sel(ident("cli"), "Download"), testContext(), path)),
 			requireCall("NoError", ident("err")),
 			requireCall("NotEmpty", sel(ident("attachment"), "Content")),
 		)
@@ -224,11 +225,11 @@ func newServiceTestExample(info *ModelInfo, action *dsl.Action, route string) *s
 			Body: &ast.BlockStmt{List: []ast.Stmt{Returns(sel(ident("client"), "ErrStopStream"))}},
 		}
 		stmts = append(stmts,
-			&ast.AssignStmt{Lhs: []ast.Expr{ident("err")}, Tok: token.ASSIGN, Rhs: []ast.Expr{call(sel(ident("cli"), "Stream"), sel(ident("http"), "MethodGet"), path, ident("nil"), callback)}},
+			&ast.AssignStmt{Lhs: []ast.Expr{ident("err")}, Tok: token.ASSIGN, Rhs: []ast.Expr{call(sel(ident("cli"), "Stream"), testContext(), sel(ident("http"), "MethodGet"), path, ident("nil"), callback)}},
 			requireCall("NoError", ident("err")),
 		)
 	default:
-		args := []ast.Expr{path}
+		args := []ast.Expr{testContext(), path}
 		var rspType ast.Expr
 		switch action.Phase {
 		case consts.PHASE_LIST:
@@ -521,6 +522,10 @@ func concat(x, y ast.Expr) ast.Expr {
 }
 
 func exprStmt(x ast.Expr) *ast.ExprStmt { return &ast.ExprStmt{X: x} }
+
+// testContext builds the t.Context() argument every example request passes
+// first: the context of the test bounds the request.
+func testContext() *ast.CallExpr { return call(sel(ident("t"), "Context")) }
 
 // define builds the short variable declaration of lhs from rhs.
 func define(lhs []ast.Expr, rhs ast.Expr) *ast.AssignStmt {

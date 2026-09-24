@@ -900,7 +900,7 @@ func TestCreate(t *testing.T) {
 	cli, err := client.New(testutil.BaseURL())
 	require.NoError(t, err)
 
-	rsp, err := cli.Post[model.Record]("/api/records", &model.Record{})
+	rsp, err := cli.Post[model.Record](t.Context(), "/api/records", &model.Record{})
 	require.NoError(t, err)
 	require.NotNil(t, rsp)
 }
@@ -931,7 +931,7 @@ func TestGet(t *testing.T) {
 	require.NoError(t, err)
 
 	id := "the ID of a row the test seeded"
-	rsp, err := cli.Get[model.Record]("/api/records/" + id)
+	rsp, err := cli.Get[model.Record](t.Context(), "/api/records/"+id)
 	require.NoError(t, err)
 	require.NotNil(t, rsp)
 }

@@ -36,7 +36,7 @@ func TestCreateAsksTheLeaderWorkToReturn(t *testing.T) {
 	cli, err := client.New(testutil.BaseURL())
 	require.NoError(t, err)
 
-	rsp, err := cli.Post[model.StepDownRsp]("/api/step-downs", nil)
+	rsp, err := cli.Post[model.StepDownRsp](t.Context(), "/api/step-downs", nil)
 	require.NoError(t, err)
 	require.NotEmpty(t, rsp.Replica, "the reply names the replica that took the request")
 }

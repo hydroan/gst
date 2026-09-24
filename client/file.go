@@ -2,6 +2,7 @@ package client
 
 import (
 	"bytes"
+	"context"
 	"io"
 	"mime"
 	"mime/multipart"
@@ -17,11 +18,11 @@ type Attachment struct {
 	Content     []byte
 }
 
-// Download sends a GET request and reads the response as a file attachment,
-// pairing the framework's Export action. A rejection answers with the regular
-// JSON envelope and surfaces as an *Error.
-func (c *Client) Download(path string, opts ...RequestOption) (*Attachment, error) {
-	req, err := c.newRequest(http.MethodGet, path, nil, opts)
+// Download sends a GET request on ctx and reads the response as a file
+// attachment, pairing the framework's Export action. A rejection answers with
+// the regular JSON envelope and surfaces as an *Error.
+func (c *Client) Download(ctx context.Context, path string, opts ...RequestOption) (*Attachment, error) {
+	req, err := c.newRequest(ctx, http.MethodGet, path, nil, opts)
 	if err != nil {
 		return nil, err
 	}
@@ -50,9 +51,10 @@ func (c *Client) Download(path string, opts ...RequestOption) (*Attachment, erro
 	return attachment, nil
 }
 
-// Upload sends content as the multipart "file" field, pairing the framework's
-// Import action. fields are written as plain form fields next to the file.
-func (c *Client) Upload(path, filename string, content io.Reader, fields map[string]string) (*Envelope, error) {
+// Upload sends content on ctx as the multipart "file" field, pairing the
+// framework's Import action. fields are written as plain form fields next to
+// the file.
+func (c *Client) Upload(ctx context.Context, path, filename string, content io.Reader, fields map[string]string) (*Envelope, error) {
 	buf := new(bytes.Buffer)
 	writer := multipart.NewWriter(buf)
 	part, err := writer.CreateFormFile("file", filename)
@@ -71,7 +73,7 @@ func (c *Client) Upload(path, filename string, content io.Reader, fields map[str
 		return nil, errors.Wrap(err, "failed to finish the multipart body")
 	}
 
-	req, err := c.newRequest(http.MethodPost, path, buf.Bytes(), nil)
+	req, err := c.newRequest(ctx, http.MethodPost, path, buf.Bytes(), nil)
 	if err != nil {
 		return nil, err
 	}

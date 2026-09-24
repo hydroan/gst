@@ -47,7 +47,7 @@ func TestCreateRunsOnceAtATime(t *testing.T) {
 	var wg sync.WaitGroup
 	for range 2 {
 		wg.Go(func() {
-			_, postErr := cli.Post[model.RebuildRsp]("/api/rebuilds", model.RebuildReq{Seconds: 2})
+			_, postErr := cli.Post[model.RebuildRsp](t.Context(), "/api/rebuilds", model.RebuildReq{Seconds: 2})
 			results <- postErr
 		})
 	}
@@ -69,7 +69,7 @@ func TestCreateRunsOnceAtATime(t *testing.T) {
 	require.Equal(t, 1, ran, "exactly one of two concurrent rebuilds runs")
 	require.Equal(t, 1, refused, "the other is refused at once with 409")
 
-	rsp, err := cli.Post[model.RebuildRsp]("/api/rebuilds", model.RebuildReq{Seconds: 1})
+	rsp, err := cli.Post[model.RebuildRsp](t.Context(), "/api/rebuilds", model.RebuildReq{Seconds: 1})
 	require.NoError(t, err, "the lock is free again once the rebuild returned")
 	require.Equal(t, 1, rsp.Seconds)
 

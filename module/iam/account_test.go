@@ -66,7 +66,7 @@ func TestAccountLogin(t *testing.T) {
 
 		cli := accountNewClient(t)
 
-		rsp, err := cli.Post[iam.LoginRsp](loginPath, iam.LoginReq{
+		rsp, err := cli.Post[iam.LoginRsp](t.Context(), loginPath, iam.LoginReq{
 			Username: user.Username,
 			Password: user.Password,
 		})
@@ -152,7 +152,7 @@ func TestAccountLogin(t *testing.T) {
 func accountRequireLoginRejected(t *testing.T, username, password string) {
 	t.Helper()
 
-	_, err := accountNewClient(t).Post[iam.LoginRsp](loginPath, iam.LoginReq{
+	_, err := accountNewClient(t).Post[iam.LoginRsp](t.Context(), loginPath, iam.LoginReq{
 		Username: username,
 		Password: password,
 	})
@@ -167,7 +167,7 @@ func TestAccountLogout(t *testing.T) {
 	t.Run("logout", func(t *testing.T) {
 		cli := accountSessionClient(t, user.SessionID)
 
-		rsp, err := cli.Post[iam.LogoutRsp](logoutPath, nil)
+		rsp, err := cli.Post[iam.LogoutRsp](t.Context(), logoutPath, nil)
 		require.NoError(t, err)
 		require.NotEmpty(t, rsp.Msg)
 
@@ -178,7 +178,7 @@ func TestAccountLogout(t *testing.T) {
 	t.Run("unauthorized_after_logout", func(t *testing.T) {
 		cli := accountSessionClient(t, user.SessionID)
 
-		_, err := cli.Get[iam.CurrentGetRsp](currentPath)
+		_, err := cli.Get[iam.CurrentGetRsp](t.Context(), currentPath)
 		testutil.RequireError(t, err, http.StatusUnauthorized)
 	})
 
@@ -207,7 +207,7 @@ func TestAccountLogout(t *testing.T) {
 
 		cli := accountSessionClient(t, brokenIndexUser.SessionID)
 
-		_, err := cli.Post[iam.LogoutRsp](logoutPath, nil)
+		_, err := cli.Post[iam.LogoutRsp](t.Context(), logoutPath, nil)
 		testutil.RequireError(t, err, http.StatusInternalServerError, "failed to logout")
 	})
 }
@@ -235,7 +235,7 @@ func TestAccountLoginSecondFactorVerifier(t *testing.T) {
 	t.Run("verifier_rejection_blocks_login", func(t *testing.T) {
 		cli := accountNewClient(t)
 
-		_, err := cli.Post[iam.LoginRsp](loginPath, iam.LoginReq{
+		_, err := cli.Post[iam.LoginRsp](t.Context(), loginPath, iam.LoginReq{
 			Username: user.Username,
 			Password: user.Password,
 			TOTPCode: "654321",
@@ -254,7 +254,7 @@ func TestAccountLoginSecondFactorVerifier(t *testing.T) {
 		mu.Unlock()
 
 		cli := accountNewClient(t)
-		_, err := cli.Post[iam.LoginRsp](loginPath, iam.LoginReq{
+		_, err := cli.Post[iam.LoginRsp](t.Context(), loginPath, iam.LoginReq{
 			Username: user.Username,
 			Password: "wrong-password",
 		})
@@ -315,7 +315,7 @@ func TestAccountLoginObservers(t *testing.T) {
 		takeEvents()
 
 		cli := accountNewClient(t)
-		_, err := cli.Post[iam.LoginRsp](loginPath, iam.LoginReq{
+		_, err := cli.Post[iam.LoginRsp](t.Context(), loginPath, iam.LoginReq{
 			Username: user.Username,
 			Password: "wrong-password",
 		})
@@ -333,7 +333,7 @@ func TestAccountLoginObservers(t *testing.T) {
 		takeEvents()
 
 		cli := accountNewClient(t)
-		_, err := cli.Post[iam.LoginRsp](loginPath, iam.LoginReq{
+		_, err := cli.Post[iam.LoginRsp](t.Context(), loginPath, iam.LoginReq{
 			Username: "acct_login_observer_missing",
 			Password: "12345678",
 		})
@@ -351,7 +351,7 @@ func TestAccountLoginObservers(t *testing.T) {
 		takeEvents()
 
 		cli := accountSessionClient(t, user.SessionID)
-		_, err := cli.Post[iam.LogoutRsp](logoutPath, nil)
+		_, err := cli.Post[iam.LogoutRsp](t.Context(), logoutPath, nil)
 		require.NoError(t, err)
 
 		got := takeEvents()
@@ -377,7 +377,7 @@ func TestAccountChangePassword(t *testing.T) {
 
 		cli := accountSessionClient(t, invalidUser.SessionID)
 
-		_, err := cli.Post[iam.ChangePasswordRsp](changepasswordPath, iam.ChangePasswordReq{
+		_, err := cli.Post[iam.ChangePasswordRsp](t.Context(), changepasswordPath, iam.ChangePasswordReq{
 			OldPassword: "",
 			NewPassword: newPassword,
 		})
@@ -390,7 +390,7 @@ func TestAccountChangePassword(t *testing.T) {
 
 		cli := accountSessionClient(t, invalidUser.SessionID)
 
-		_, err := cli.Post[iam.ChangePasswordRsp](changepasswordPath, iam.ChangePasswordReq{
+		_, err := cli.Post[iam.ChangePasswordRsp](t.Context(), changepasswordPath, iam.ChangePasswordReq{
 			OldPassword: invalidUser.Password,
 			NewPassword: "",
 		})
@@ -403,7 +403,7 @@ func TestAccountChangePassword(t *testing.T) {
 
 		cli := accountSessionClient(t, invalidUser.SessionID)
 
-		_, err := cli.Post[iam.ChangePasswordRsp](changepasswordPath, iam.ChangePasswordReq{
+		_, err := cli.Post[iam.ChangePasswordRsp](t.Context(), changepasswordPath, iam.ChangePasswordReq{
 			OldPassword: invalidUser.Password,
 			NewPassword: "12345",
 		})
@@ -504,7 +504,7 @@ func TestAccountChangePassword(t *testing.T) {
 	t.Run("change_password", func(t *testing.T) {
 		cli := accountSessionClient(t, user.SessionID)
 
-		rsp, err := cli.Post[iam.ChangePasswordRsp](changepasswordPath, iam.ChangePasswordReq{
+		rsp, err := cli.Post[iam.ChangePasswordRsp](t.Context(), changepasswordPath, iam.ChangePasswordReq{
 			OldPassword: user.Password,
 			NewPassword: newPassword,
 		})
@@ -526,7 +526,7 @@ func TestAccountChangePassword(t *testing.T) {
 	t.Run("user_status_forbidden_without_admin_permission", func(t *testing.T) {
 		cli := accountSessionClient(t, user.SessionID)
 
-		_, err := cli.Patch[iam.AdminUserPatchRsp](adminUserPath(user.UserID), iam.AdminUserPatchReq{Status: new(modeliamuser.UserStatusActive)})
+		_, err := cli.Patch[iam.AdminUserPatchRsp](t.Context(), adminUserPath(user.UserID), iam.AdminUserPatchReq{Status: new(modeliamuser.UserStatusActive)})
 		testutil.RequireError(t, err, http.StatusForbidden, "permission denied")
 	})
 }
@@ -545,7 +545,7 @@ func TestAccountResetPassword(t *testing.T) {
 	t.Run("forbidden_without_admin_permission", func(t *testing.T) {
 		cli := accountSessionClient(t, actor.SessionID)
 
-		_, err := cli.Post[iam.ResetPasswordRsp](resetpasswordPath, iam.ResetPasswordReq{
+		_, err := cli.Post[iam.ResetPasswordRsp](t.Context(), resetpasswordPath, iam.ResetPasswordReq{
 			UserID:      victim.UserID,
 			NewPassword: resetPass,
 		})
@@ -561,7 +561,7 @@ func TestAccountResetPassword(t *testing.T) {
 	t.Run("rejects_empty_target_user_id", func(t *testing.T) {
 		cli := accountSessionClient(t, rootSessionID)
 
-		_, err := cli.Post[iam.ResetPasswordRsp](resetpasswordPath, iam.ResetPasswordReq{
+		_, err := cli.Post[iam.ResetPasswordRsp](t.Context(), resetpasswordPath, iam.ResetPasswordReq{
 			UserID:      "",
 			NewPassword: resetPass,
 		})
@@ -573,7 +573,7 @@ func TestAccountResetPassword(t *testing.T) {
 
 		cli := accountSessionClient(t, rootSessionID)
 
-		_, err := cli.Post[iam.ResetPasswordRsp](resetpasswordPath, iam.ResetPasswordReq{
+		_, err := cli.Post[iam.ResetPasswordRsp](t.Context(), resetpasswordPath, iam.ResetPasswordReq{
 			UserID:      invalidVictim.UserID,
 			NewPassword: "",
 		})
@@ -585,7 +585,7 @@ func TestAccountResetPassword(t *testing.T) {
 
 		cli := accountSessionClient(t, rootSessionID)
 
-		_, err := cli.Post[iam.ResetPasswordRsp](resetpasswordPath, iam.ResetPasswordReq{
+		_, err := cli.Post[iam.ResetPasswordRsp](t.Context(), resetpasswordPath, iam.ResetPasswordReq{
 			UserID:      invalidVictim.UserID,
 			NewPassword: "12345",
 		})
@@ -595,7 +595,7 @@ func TestAccountResetPassword(t *testing.T) {
 	t.Run("missing_target_returns_not_found", func(t *testing.T) {
 		cli := accountSessionClient(t, rootSessionID)
 
-		_, err := cli.Post[iam.ResetPasswordRsp](resetpasswordPath, iam.ResetPasswordReq{
+		_, err := cli.Post[iam.ResetPasswordRsp](t.Context(), resetpasswordPath, iam.ResetPasswordReq{
 			UserID:      "missing-reset-password-target",
 			NewPassword: resetPass,
 		})
@@ -621,7 +621,7 @@ func TestAccountResetPassword(t *testing.T) {
 
 		cli := accountSessionClient(t, rootSessionID)
 
-		_, err := cli.Post[iam.ResetPasswordRsp](resetpasswordPath, iam.ResetPasswordReq{
+		_, err := cli.Post[iam.ResetPasswordRsp](t.Context(), resetpasswordPath, iam.ResetPasswordReq{
 			UserID:      brokenIndexVictim.UserID,
 			NewPassword: resetPass,
 		})
@@ -631,7 +631,7 @@ func TestAccountResetPassword(t *testing.T) {
 	t.Run("reset_success", func(t *testing.T) {
 		cli := accountSessionClient(t, rootSessionID)
 
-		rsp, err := cli.Post[iam.ResetPasswordRsp](resetpasswordPath, iam.ResetPasswordReq{
+		rsp, err := cli.Post[iam.ResetPasswordRsp](t.Context(), resetpasswordPath, iam.ResetPasswordReq{
 			UserID:      victim.UserID,
 			NewPassword: resetPass,
 		})
@@ -645,7 +645,7 @@ func TestAccountResetPassword(t *testing.T) {
 
 		cli := accountSessionClient(t, victimSessionBeforeReset)
 
-		_, err := cli.Get[iam.CurrentGetRsp](currentPath)
+		_, err := cli.Get[iam.CurrentGetRsp](t.Context(), currentPath)
 		testutil.RequireError(t, err, http.StatusUnauthorized)
 	})
 
@@ -657,14 +657,14 @@ func TestAccountResetPassword(t *testing.T) {
 	t.Run("must_change_password_blocks_admin_user_patch", func(t *testing.T) {
 		cli := accountSessionClient(t, victimSessionAfterReset)
 
-		_, err := cli.Patch[iam.AdminUserPatchRsp](adminUserPath(victim.UserID), iam.AdminUserPatchReq{Status: new(modeliamuser.UserStatusActive)})
+		_, err := cli.Patch[iam.AdminUserPatchRsp](t.Context(), adminUserPath(victim.UserID), iam.AdminUserPatchReq{Status: new(modeliamuser.UserStatusActive)})
 		testutil.RequireError(t, err, http.StatusForbidden, "password change required")
 	})
 
 	t.Run("victim_change_password", func(t *testing.T) {
 		cli := accountSessionClient(t, victimSessionAfterReset)
 
-		rsp, err := cli.Post[iam.ChangePasswordRsp](changepasswordPath, iam.ChangePasswordReq{
+		rsp, err := cli.Post[iam.ChangePasswordRsp](t.Context(), changepasswordPath, iam.ChangePasswordReq{
 			OldPassword: resetPass,
 			NewPassword: finalPass,
 		})
@@ -675,7 +675,7 @@ func TestAccountResetPassword(t *testing.T) {
 	t.Run("victim_account_status_forbidden_without_admin_permission_after_change_password", func(t *testing.T) {
 		cli := accountSessionClient(t, victimSessionAfterReset)
 
-		_, err := cli.Patch[iam.AdminUserPatchRsp](adminUserPath(victim.UserID), iam.AdminUserPatchReq{Status: new(modeliamuser.UserStatusActive)})
+		_, err := cli.Patch[iam.AdminUserPatchRsp](t.Context(), adminUserPath(victim.UserID), iam.AdminUserPatchReq{Status: new(modeliamuser.UserStatusActive)})
 		testutil.RequireError(t, err, http.StatusForbidden, "permission denied")
 	})
 }
@@ -707,7 +707,7 @@ func accountSignupUserWithEmail(t *testing.T, prefix, password, email string) ac
 
 	cli := accountNewClient(t)
 
-	rsp, err := cli.Post[iam.SignupRsp](signupPath, iam.SignupReq{
+	rsp, err := cli.Post[iam.SignupRsp](t.Context(), signupPath, iam.SignupReq{
 		Username:   user.Username,
 		Password:   user.Password,
 		RePassword: user.Password,
@@ -776,7 +776,7 @@ func accountLoginClient(t *testing.T, username, password string) (*client.Client
 	t.Helper()
 
 	cli := accountNewClient(t)
-	resp, err := cli.Do(http.MethodPost, loginPath, iam.LoginReq{
+	resp, err := cli.Do(t.Context(), http.MethodPost, loginPath, iam.LoginReq{
 		Username: username,
 		Password: password,
 	})
@@ -797,7 +797,7 @@ func accountLoginSessionCookieOverHTTPS(t *testing.T, username, password string)
 		client.WithUserAgent(accountTestUserAgent), client.WithHeader(header))
 	require.NoError(t, err)
 
-	resp, err := cli.Do(http.MethodPost, loginPath, iam.LoginReq{
+	resp, err := cli.Do(t.Context(), http.MethodPost, loginPath, iam.LoginReq{
 		Username: username,
 		Password: password,
 	})

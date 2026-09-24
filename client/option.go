@@ -51,9 +51,11 @@ func WithLogger(logger types.Logger) Option {
 
 // WithTimeout bounds each request of the client, the reading of the response
 // included, by timeout (see http.Client.Timeout); a timeout of zero or less
-// sets none. New applies it last, to a copy of the http.Client, so the order
-// of the options does not matter and a client handed to WithHTTPClient, such
-// as a shared http.DefaultClient, keeps its own timeout.
+// sets none. It applies alongside the deadline of the context a call passes:
+// whichever ends first ends the request. New applies it last, to a copy of
+// the http.Client, so the order of the options does not matter and a client
+// handed to WithHTTPClient, such as a shared http.DefaultClient, keeps its own
+// timeout.
 func WithTimeout(timeout time.Duration) Option {
 	return func(c *Client) {
 		if timeout > 0 {

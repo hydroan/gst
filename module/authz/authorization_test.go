@@ -75,7 +75,7 @@ func newAuthorizationRole(t *testing.T, subject authorizationSubject, name strin
 func requireReaches(t *testing.T, subject authorizationSubject, route string, source consts.GrantSource) {
 	t.Helper()
 
-	_, err := subject.client.Get[client.ListResult[*authz.Role]](route)
+	_, err := subject.client.Get[client.ListResult[*authz.Role]](t.Context(), route)
 	require.NoError(t, err, "the request has to be authorized")
 
 	decision, err := rbac.RBAC().Authorize(context.Background(), tenant.Default, subject.userID, route, http.MethodGet)
@@ -90,7 +90,7 @@ func requireReaches(t *testing.T, subject authorizationSubject, route string, so
 func requireRefused(t *testing.T, subject authorizationSubject, route string, reason consts.DenyReason) {
 	t.Helper()
 
-	_, err := subject.client.Get[client.ListResult[*authz.RoleBinding]](route)
+	_, err := subject.client.Get[client.ListResult[*authz.RoleBinding]](t.Context(), route)
 	testutil.RequireError(t, err, http.StatusForbidden, "permission denied")
 
 	decision, err := rbac.RBAC().Authorize(context.Background(), tenant.Default, subject.userID, route, http.MethodGet)
@@ -199,9 +199,9 @@ func TestAuthorizationFollowsPolicyChangesWithoutReauthentication(t *testing.T) 
 			Object: deniedRoute, Action: http.MethodGet,
 		})
 
-		_, err := subject.client.Get[client.ListResult[*authz.Role]](grantedRoute)
+		_, err := subject.client.Get[client.ListResult[*authz.Role]](t.Context(), grantedRoute)
 		testutil.RequireError(t, err, http.StatusForbidden, "permission denied")
-		_, err = subject.client.Get[client.ListResult[*authz.RoleBinding]](deniedRoute)
+		_, err = subject.client.Get[client.ListResult[*authz.RoleBinding]](t.Context(), deniedRoute)
 		require.NoError(t, err, "the newly granted route has to open on the session already in flight")
 	})
 
@@ -235,12 +235,12 @@ func TestAuthorizationConvergesOnAPolicySetChangedOutsideTheProcess(t *testing.T
 		require.NoError(t, database.Database[*authz.AuthzRule](ctx).Delete(granted))
 	})
 
-	_, err := subject.client.Get[client.ListResult[*authz.RoleBinding]](deniedRoute)
+	_, err := subject.client.Get[client.ListResult[*authz.RoleBinding]](t.Context(), deniedRoute)
 	testutil.RequireError(t, err, http.StatusForbidden, "permission denied")
 
 	require.NoError(t, rbac.RBAC().ReloadPolicies(ctx))
 
-	_, err = subject.client.Get[client.ListResult[*authz.RoleBinding]](deniedRoute)
+	_, err = subject.client.Get[client.ListResult[*authz.RoleBinding]](t.Context(), deniedRoute)
 	require.NoError(t, err, "a reload has to pick up a rule this process never wrote")
 }
 

@@ -1,10 +1,12 @@
 package client_test
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/client"
@@ -26,7 +28,7 @@ func TestStreamDeliversEventsInOrder(t *testing.T) {
 	require.NoError(t, err)
 
 	var events []sse.Event
-	err = cli.Stream(http.MethodPost, "/api/records/stream", nil, func(event sse.Event) error {
+	err = cli.Stream(t.Context(), http.MethodPost, "/api/records/stream", nil, func(event sse.Event) error {
 		events = append(events, event)
 		return nil
 	})
@@ -113,7 +115,7 @@ func TestStreamParsesPerSpec(t *testing.T) {
 			require.NoError(t, err)
 
 			var events []sse.Event
-			err = cli.Stream(http.MethodGet, "/api/records/stream", nil, func(event sse.Event) error {
+			err = cli.Stream(t.Context(), http.MethodGet, "/api/records/stream", nil, func(event sse.Event) error {
 				events = append(events, event)
 				return nil
 			})
@@ -134,7 +136,7 @@ func TestStreamStopsOnCallbackError(t *testing.T) {
 	require.NoError(t, err)
 
 	var seen int
-	err = cli.Stream(http.MethodGet, "/api/records/stream", nil, func(sse.Event) error {
+	err = cli.Stream(t.Context(), http.MethodGet, "/api/records/stream", nil, func(sse.Event) error {
 		seen++
 		return errors.New("stop after the first event")
 	})
@@ -153,7 +155,7 @@ func TestStreamSurfacesEnvelopeRejection(t *testing.T) {
 	cli, err := client.New(srv.URL)
 	require.NoError(t, err)
 
-	err = cli.Stream(http.MethodPost, "/api/records/stream", nil, func(sse.Event) error { return nil })
+	err = cli.Stream(t.Context(), http.MethodPost, "/api/records/stream", nil, func(sse.Event) error { return nil })
 	var respErr *client.Error
 	require.ErrorAs(t, err, &respErr)
 	require.Equal(t, http.StatusForbidden, respErr.StatusCode)
@@ -162,5 +164,41 @@ func TestStreamSurfacesEnvelopeRejection(t *testing.T) {
 func TestStreamRequiresCallback(t *testing.T) {
 	cli, err := client.New("http://127.0.0.1:1")
 	require.NoError(t, err)
-	require.Error(t, cli.Stream(http.MethodPost, "/api/records/stream", nil, nil))
+	require.Error(t, cli.Stream(t.Context(), http.MethodPost, "/api/records/stream", nil, nil))
+}
+
+func TestStreamEndsWhenContextEnds(t *testing.T) {
+	// The handler sends one event and then keeps the stream open with
+	// heartbeats until the client goes away, so the only thing that can end
+	// the stream is its context.
+	srv := httptest.NewTestServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		fmt.Fprint(w, "data: one\n\n")
+		for {
+			if err := http.NewResponseController(w).Flush(); err != nil {
+				return
+			}
+			select {
+			case <-r.Context().Done():
+				return
+			case <-time.After(10 * time.Millisecond):
+			}
+			fmt.Fprint(w, ": ping\n\n")
+		}
+	}))
+	srv.Start()
+
+	cli, err := client.New(srv.URL)
+	require.NoError(t, err)
+
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	var seen int
+	err = cli.Stream(ctx, http.MethodGet, "/api/records/stream", nil, func(sse.Event) error {
+		seen++
+		cancel()
+		return nil
+	})
+	require.ErrorIs(t, err, context.Canceled)
+	require.Equal(t, 1, seen)
 }

@@ -36,7 +36,7 @@ func TestVersion(t *testing.T) {
 	//   +Uptime      => 1 #int64
 	//   +Timestamp   => 1772694406 #int64
 	// }
-	rsp, err := cli.Get[versionmod.VersionRsp](versionPath)
+	rsp, err := cli.Get[versionmod.VersionRsp](t.Context(), versionPath)
 	require.NoError(t, err)
 
 	require.NotEmpty(t, rsp)

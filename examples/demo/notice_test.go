@@ -20,7 +20,7 @@ func TestNoticeStream(t *testing.T) {
 	require.NoError(t, err)
 
 	var events []sse.Event
-	err = cli.Stream(http.MethodGet, noticeStreamPath, nil, func(event sse.Event) error {
+	err = cli.Stream(t.Context(), http.MethodGet, noticeStreamPath, nil, func(event sse.Event) error {
 		events = append(events, event)
 		return nil
 	})
