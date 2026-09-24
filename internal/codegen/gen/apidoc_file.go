@@ -9,7 +9,6 @@ import (
 	"strconv"
 
 	"github.com/hydroan/gst/apidoc"
-	"github.com/hydroan/gst/consts"
 	"github.com/hydroan/gst/internal/ggconst"
 	"github.com/hydroan/gst/internal/goast"
 )
@@ -66,20 +65,11 @@ type APIDocEntries struct {
 //	}
 func BuildAPIDocFile(pkgName string, entries APIDocEntries) (string, error) {
 	// go/printer lays the registrations out by their positions: each field
-	// of a registered doc on a line of its own, the header comment above a
-	// blank line, so every node that starts a line takes the next line of a
-	// fabricated file.
-	fset := token.NewFileSet()
+	// of a registered doc on a line of its own, so every node that starts a
+	// line takes the next line of the fabricated file the header started.
+	f := &ast.File{Name: ast.NewIdent(pkgName)}
+	fset := generatedHeader(f)
 	lines := goast.NewLineSet(fset)
-
-	header := &ast.Comment{Slash: lines.Next(), Text: consts.CodeGeneratedComment()}
-	lines.Next()
-	packagePos := lines.Next()
-	f := &ast.File{
-		Package:  packagePos,
-		Name:     &ast.Ident{Name: pkgName, NamePos: packagePos},
-		Comments: []*ast.CommentGroup{{List: []*ast.Comment{header}}},
-	}
 
 	// If there are no entries, the init function body is empty,
 	// so we should not import any external package.
