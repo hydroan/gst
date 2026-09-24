@@ -28,16 +28,18 @@ type OrphanDir struct {
 
 // FindOrphanDirs resolves service directory ownership and returns the orphan
 // directories plus the helper directories kept because live project code
-// still imports them. Directories in keptDirs hold service files of
-// gst.yaml-ignored actions and are treated as owned; keptDirs may be nil.
-// orphanFiles are the files outside the service directory that orphan cleanup
-// deletes along with the orphans, such as the middleware a removed module
-// left behind; what they import keeps nothing. What the gst.yaml prune.ignore
-// entries in protect cover is never an orphan. It returns an error, and no
-// directories, when the imports of part of the project cannot be read,
-// because a directory or a file cannot be opened or its imports do not parse:
-// an import it could not see might be all that keeps a directory.
-func FindOrphanDirs(allModels []*gen.ModelInfo, keptDirs map[string]bool, orphanFiles []string, modulePath string, protect ggconfig.PruneConfig) (orphans, keptHelpers []OrphanDir, err error) {
+// still imports them. It reads the project's code through ignore, as gg check
+// and gg gen do: code the project ignores keeps nothing. Directories in
+// keptDirs hold service files of gst.yaml-ignored actions and are treated as
+// owned; keptDirs may be nil. orphanFiles are the files outside the service
+// directory that orphan cleanup deletes along with the orphans, such as the
+// middleware a removed module left behind; what they import keeps nothing.
+// What the gst.yaml prune.ignore entries in protect cover is never an orphan.
+// It returns an error, and no directories, when the imports of part of the
+// code it reads cannot be read, because a directory or a file cannot be
+// opened or its imports do not parse: an import it could not see might be all
+// that keeps a directory.
+func FindOrphanDirs(allModels []*gen.ModelInfo, keptDirs map[string]bool, orphanFiles []string, modulePath string, ignore gghelper.ProjectIgnore, protect ggconfig.PruneConfig) (orphans, keptHelpers []OrphanDir, err error) {
 	currentDirs := currentServiceDirs(allModels)
 	for dir := range keptDirs {
 		currentDirs.ownedDirs = append(currentDirs.ownedDirs, dir)
@@ -45,7 +47,7 @@ func FindOrphanDirs(allModels []*gen.ModelInfo, keptDirs map[string]bool, orphan
 	}
 	sort.Strings(currentDirs.ownedDirs)
 
-	helperDirs, err := importedServiceHelperDirs(currentDirs, orphanFiles, modulePath, protect)
+	helperDirs, err := importedServiceHelperDirs(currentDirs, orphanFiles, modulePath, ignore, protect)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -138,21 +140,23 @@ func addServiceDirAncestors(knownDirs map[string]bool, dir string) {
 // deleting them would break the build, so orphan cleanup must treat them as
 // owned.
 //
-// Live code is every Go file of the project, test files and files a build
-// constraint leaves out included, but for the .gen.go files gg generates,
-// whose imports follow the models they were generated from, orphanFiles,
-// which orphan cleanup deletes, and the files of the service directories no
-// model owns. A file of such a directory turns live once live code imports the
-// directory, once it sits right in a directory between an imported one and the
-// service root, which orphan cleanup leaves alone, or when a gst.yaml
-// prune.ignore entry in protect covers it: prune deletes none of them. So a
-// stale service/service.gen.go keeps nothing a deleted model left behind, and
-// a leftover keeps nothing it imports. No ignore rule leaves a Go file out, as
-// prune reads the project whole: a file the project's Git ignore rules
-// exclude, or one below testdata or a directory named with a leading "_",
-// counts like any other. Only what a symbolic link alone leads to is not
-// read. An import of a service directory no longer on disk keeps nothing.
-func importedServiceHelperDirs(currentDirs serviceDirSet, orphanFiles []string, modulePath string, protect ggconfig.PruneConfig) ([]string, error) {
+// Live code is every Go file of the project's code, as ignore lets gg check
+// and gg gen read it, test files and files a build constraint leaves out
+// included, but for the .gen.go files gg generates, whose imports follow the
+// models they were generated from, orphanFiles, which orphan cleanup deletes,
+// and the files of the service directories no model owns. A file of such a
+// directory turns live once live code imports the directory, once it sits
+// right in a directory between an imported one and the service root, which
+// orphan cleanup leaves alone, or when a gst.yaml prune.ignore entry in
+// protect covers it: prune deletes none of them. So a stale
+// service/service.gen.go keeps nothing a deleted model left behind, and a
+// leftover keeps nothing it imports. Code the project ignores is no live code
+// either: a file its Git ignore rules exclude, or one below testdata or a
+// directory named with a leading "_", keeps no helper alive, or prune would
+// leave behind a directory it could never clean. Nor is what a symbolic link
+// alone leads to read. An import of a service directory no longer on disk
+// keeps nothing.
+func importedServiceHelperDirs(currentDirs serviceDirSet, orphanFiles []string, modulePath string, ignore gghelper.ProjectIgnore, protect ggconfig.PruneConfig) ([]string, error) {
 	importPrefix := modulePath + "/" + filepath.ToSlash(filepath.Clean(ggconst.DirService))
 	serviceRoot := filepath.Clean(ggconst.DirService)
 	deleted := make(map[string]bool, len(orphanFiles))
@@ -180,7 +184,7 @@ func importedServiceHelperDirs(currentDirs serviceDirSet, orphanFiles []string, 
 		return !isPathInsideDir(dir, serviceRoot) || owned(dir) || helperAncestors[dir] || protect.Ignores(path)
 	}
 
-	queue, err := importedServiceDirsUnderDir(".", importPrefix, live)
+	queue, err := importedServiceDirsUnderDir(".", importPrefix, ignore, live)
 	if err != nil {
 		return nil, err
 	}
@@ -193,7 +197,7 @@ func importedServiceHelperDirs(currentDirs serviceDirSet, orphanFiles []string, 
 		}
 		helperDirSet[dir] = true
 		helperDirs = append(helperDirs, dir)
-		imported, err := importedServiceDirsUnderDir(dir, importPrefix, live)
+		imported, err := importedServiceDirsUnderDir(dir, importPrefix, ignore, live)
 		if err != nil {
 			return nil, err
 		}
@@ -204,7 +208,7 @@ func importedServiceHelperDirs(currentDirs serviceDirSet, orphanFiles []string, 
 		// only those, its subdirectories being settled on their own.
 		for parent := filepath.Dir(dir); !owned(parent) && !helperAncestors[parent]; parent = filepath.Dir(parent) {
 			helperAncestors[parent] = true
-			imported, err := importedServiceDirsUnderDir(parent, importPrefix, func(path string) bool {
+			imported, err := importedServiceDirsUnderDir(parent, importPrefix, ignore, func(path string) bool {
 				return filepath.Dir(path) == parent && live(path)
 			})
 			if err != nil {
@@ -220,18 +224,16 @@ func importedServiceHelperDirs(currentDirs serviceDirSet, orphanFiles []string, 
 
 // importedServiceDirsUnderDir parses the imports of the Go files under dir
 // that live accepts and returns the service directories referenced through
-// project-local service imports. It walks dir whole, as prune reads the
-// project, and does not follow symbolic links. A directory or file that cannot
-// be read fails the walk, and so does a file whose imports do not parse.
-func importedServiceDirsUnderDir(dir string, importPrefix string, live func(path string) bool) ([]string, error) {
+// project-local service imports. It walks dir through ignore, leaving out
+// the files and directories the project ignores before reading them, and does
+// not follow symbolic links. A directory or file it reads that cannot be
+// opened fails the walk, and so does a file whose imports do not parse.
+func importedServiceDirsUnderDir(dir string, importPrefix string, ignore gghelper.ProjectIgnore, live func(path string) bool) ([]string, error) {
 	dirs := make([]string, 0)
 	seen := make(map[string]bool)
 	fset := token.NewFileSet()
 
-	err := filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
-		if err != nil {
-			return err
-		}
+	err := ignore.Walk(dir, func(path string, info os.FileInfo) error {
 		if info.IsDir() || !strings.HasSuffix(path, ".go") || !live(path) {
 			return nil
 		}
@@ -280,7 +282,7 @@ func serviceDirForImport(importPath string, importPrefix string) (string, bool) 
 // known, lies inside no owned directory and no orphan found already, is not
 // covered by a prune.ignore entry in protect, and holds unmanaged files
 // prune.ignore does not cover. Every directory is judged on its own, as prune
-// reads the project whole: a testdata, vendor or hidden directory, a nested
+// reads what it deletes whole: a testdata, vendor or hidden directory, a nested
 // module, or a directory named with a leading "_" no model owns is an orphan
 // like any other.
 func scanOrphanServiceDirs(currentDirs serviceDirSet, protect ggconfig.PruneConfig) []OrphanDir {

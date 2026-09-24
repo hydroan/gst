@@ -8,6 +8,7 @@ import (
 
 	"github.com/hydroan/gst/internal/ggconfig"
 	"github.com/hydroan/gst/internal/ggconst"
+	"github.com/hydroan/gst/internal/gghelper"
 )
 
 // TestPruneServiceFilesKeepsWhatPruneIgnoreCovers pins that prune never
@@ -35,7 +36,7 @@ func TestPruneServiceFilesKeepsWhatPruneIgnoreCovers(t *testing.T) {
 	var stdout string
 	withStdin(t, "y\n", func() {
 		stdout = captureStdout(t, func() {
-			pruneServiceFiles([]string{listFile, legacyFile}, nil, nil, nil, protect)
+			pruneServiceFiles([]string{listFile, legacyFile}, nil, nil, nil, gghelper.NewProjectIgnore(), protect)
 		})
 	})
 
@@ -64,7 +65,7 @@ func TestPruneServiceFilesRemindsOfUnreadSettingsBeforeAsking(t *testing.T) {
 	var stdout string
 	withStdin(t, "n\n", func() {
 		stdout = captureStdout(t, func() {
-			pruneServiceFiles([]string{listFile}, nil, nil, nil, ggconfig.PruneConfig{})
+			pruneServiceFiles([]string{listFile}, nil, nil, nil, gghelper.NewProjectIgnore(), ggconfig.PruneConfig{})
 		})
 	})
 
@@ -116,7 +117,7 @@ func TestPruneServiceFilesCleansUpAfterARemovedCopiedModule(t *testing.T) {
 		var stdout string
 		withStdin(t, cleanOrphansConfirmation+"\n", func() {
 			stdout = captureStdout(t, func() {
-				pruneServiceFiles(nil, nil, nil, nil, ggconfig.PruneConfig{})
+				pruneServiceFiles(nil, nil, nil, nil, gghelper.NewProjectIgnore(), ggconfig.PruneConfig{})
 			})
 		})
 
@@ -141,7 +142,7 @@ func TestPruneServiceFilesCleansUpAfterARemovedCopiedModule(t *testing.T) {
 		middlewareFile, registrationFile, helperFile := setupRemovedModuleProject(t, false)
 
 		stdout := captureStdout(t, func() {
-			pruneServiceFiles(nil, nil, nil, nil, ggconfig.PruneConfig{})
+			pruneServiceFiles(nil, nil, nil, nil, gghelper.NewProjectIgnore(), ggconfig.PruneConfig{})
 		})
 
 		for _, path := range []string{middlewareFile, registrationFile, helperFile} {
@@ -162,7 +163,7 @@ func TestPruneServiceFilesCleansUpAfterARemovedCopiedModule(t *testing.T) {
 
 		withStdin(t, cleanOrphansConfirmation+"\n", func() {
 			captureStdout(t, func() {
-				pruneServiceFiles(nil, nil, nil, nil, protect)
+				pruneServiceFiles(nil, nil, nil, nil, gghelper.NewProjectIgnore(), protect)
 			})
 		})
 
@@ -191,7 +192,7 @@ func TestPruneServiceFilesCleansUpAfterARemovedCopiedModule(t *testing.T) {
 		var stdout string
 		withStdin(t, "no\n", func() {
 			stdout = captureStdout(t, func() {
-				pruneServiceFiles(nil, nil, nil, nil, ggconfig.PruneConfig{})
+				pruneServiceFiles(nil, nil, nil, nil, gghelper.NewProjectIgnore(), ggconfig.PruneConfig{})
 			})
 		})
 
@@ -228,7 +229,7 @@ func SampleAuth() any {
 		var stdout string
 		withStdin(t, cleanOrphansConfirmation+"\n", func() {
 			stdout = captureStdout(t, func() {
-				pruneServiceFiles(nil, nil, nil, nil, ggconfig.PruneConfig{})
+				pruneServiceFiles(nil, nil, nil, nil, gghelper.NewProjectIgnore(), ggconfig.PruneConfig{})
 			})
 		})
 
@@ -260,7 +261,7 @@ func SampleAuth() any {
 		var stdout string
 		withStdin(t, cleanOrphansConfirmation+"\n", func() {
 			stdout = captureStdout(t, func() {
-				pruneServiceFiles(nil, nil, nil, nil, ggconfig.PruneConfig{})
+				pruneServiceFiles(nil, nil, nil, nil, gghelper.NewProjectIgnore(), ggconfig.PruneConfig{})
 			})
 		})
 

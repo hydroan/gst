@@ -2,7 +2,7 @@
 
 `gg prune` 和 `gg gen --prune` 清理项目 `service/` 目录里不再需要的文件，以及被删掉的复制模块留在 `middleware/` 里的中间件文件。本文说明它们删什么、不删什么、按什么顺序删、哪一步会先问你。除了这些中间件文件和它们在 `middleware/middleware.go` 里的注册调用，`service/` 以外一个文件都不删。
 
-**忽略规则只认 `prune.ignore`**：`service/` 归 gg 管，要保持干净，放在里面的东西被 Git 忽略也好、被 Go 工具链忽略也好，用不上的照样是垃圾。所以 prune 读整个 `service/`（找活代码时读整个项目），项目的 Git 忽略规则和 Go 工具链的内置忽略（名字以 `.` 或 `_` 开头的文件和目录、`vendor`、`testdata`、自带 `go.mod` 的子目录、`go.mod` 里 `ignore` 的目录）都不起作用，想保留的路径写进 gst.yaml 的 `prune.ignore`。`gg check` 和 `gg gen` 读的是项目代码，两类规则都遵守。
+**删什么只认 `prune.ignore`**：`service/` 归 gg 管，要保持干净，放在里面的东西被 Git 忽略也好、被 Go 工具链忽略也好，用不上的照样是垃圾。所以 prune 删东西时读整个 `service/`，项目的 Git 忽略规则和 Go 工具链的内置忽略（名字以 `.` 或 `_` 开头的文件和目录、`vendor`、`testdata`、自带 `go.mod` 的子目录、`go.mod` 里 `ignore` 的目录）都不保护任何路径，想保留的路径写进 gst.yaml 的 `prune.ignore`。判断某个 service 目录还有没有代码在用时，prune 和 `gg check`、`gg gen` 一样按这两类规则认项目代码：被忽略的代码不算在用，所以清理完不会留下一直删不掉的目录。
 
 ## 总览
 
@@ -154,7 +154,7 @@ stop
 
 ### 3.1 找出还有活代码在用的目录
 
-**活代码**指项目里所有的 `.go` 文件，包括测试文件、带构建约束（如 `//go:build ignore`）的文件，以及被 Git 忽略的文件和 Go 工具链内置忽略的目录（`testdata`、`vendor`、`_` 开头的目录等）里的文件，但下面这些不算：
+**活代码**指 `gg check`、`gg gen` 认的项目代码里所有的 `.go` 文件，包括测试文件和带构建约束（如 `//go:build ignore`）的文件。被 Git 忽略的文件，和 Go 工具链内置忽略的位置（`testdata`、`vendor`、`_` 开头的目录等，见开头）里的文件都不算，它们读不了或 import 写坏了也不影响这一步。另外下面这些也不算：
 
 - gg 生成的 `.gen.go` 文件。它们跟着 model 走：删掉 model 后直接跑 `gg prune` 时，`service/service.gen.go` 还没重新生成，仍然 import 着被删 model 的目录，这个 import 不算数。
 - 只能通过符号链接到达的目录里的文件：遍历不跟符号链接走，和 gg check、`go` 命令的 `./...` 一样。
