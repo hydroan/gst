@@ -667,6 +667,88 @@ func TestGenServiceMethod7(t *testing.T) {
 	}
 }
 
+func TestGenServiceMethod8(t *testing.T) {
+	tests := []struct {
+		name   string
+		info   *ModelInfo
+		action *dsl.Action
+		phase  consts.Phase
+		role   string
+		want   string
+	}{
+		{
+			// The example of the genServiceMethod8 doc comment.
+			name: "user",
+			info: &ModelInfo{
+				ModelPkgName: "model",
+				ModelName:    "User",
+				ModelVarName: "u",
+				ModulePath:   "codegen",
+				ModelFileDir: "model",
+			},
+			phase: consts.PHASE_LIST,
+			role:  "Lister",
+			want: `func (u *Lister) Filter(ctx *gst.ServiceContext, user *model.User, opts gst.QueryOptions) (*model.User, gst.QueryOptions, error) {
+	log := u.WithContext(ctx, ctx.Phase())
+	log.Info("user list filter")
+
+	return user, opts, nil
+}`,
+		},
+		{
+			// The Export action reuses the list pipeline, Filter included.
+			name: "export",
+			info: &ModelInfo{
+				ModelPkgName: "model",
+				ModelName:    "User",
+				ModelVarName: "u",
+				ModulePath:   "codegen",
+				ModelFileDir: "model",
+			},
+			phase: consts.PHASE_EXPORT,
+			role:  "Exporter",
+			want: `func (u *Exporter) Filter(ctx *gst.ServiceContext, user *model.User, opts gst.QueryOptions) (*model.User, gst.QueryOptions, error) {
+	log := u.WithContext(ctx, ctx.Phase())
+	log.Info("user export filter")
+
+	return user, opts, nil
+}`,
+		},
+		{
+			// A Filename action logs its label, like the other hooks do.
+			name: "filename",
+			info: &ModelInfo{
+				ModelPkgName: "model",
+				ModelName:    "User",
+				ModelVarName: "s",
+				ModulePath:   "codegen",
+				ModelFileDir: "model",
+			},
+			action: &dsl.Action{Filename: "search"},
+			phase:  consts.PHASE_LIST,
+			role:   "Search",
+			want: `func (s *Search) Filter(ctx *gst.ServiceContext, user *model.User, opts gst.QueryOptions) (*model.User, gst.QueryOptions, error) {
+	log := s.WithContext(ctx, ctx.Phase())
+	log.Info("user: search filter")
+
+	return user, opts, nil
+}`,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := FormatNode(genServiceMethod8(tt.info, tt.info.ModelPkgName, tt.action, tt.phase, tt.role))
+			if err != nil {
+				t.Error(err)
+				return
+			}
+			if got != tt.want {
+				t.Errorf("genServiceMethod8() = \n%v\n, want \n%v\n", pretty.Sprintf("% #v", got), pretty.Sprintf("% #v", tt.want))
+			}
+		})
+	}
+}
+
 // TestGenerateServiceCreate compares the whole service file GenerateService
 // builds for the example of its doc comment: a Create action on a database
 // model, which gets the before and after hooks.
@@ -734,6 +816,81 @@ func (u *Creator) CreateAfter(ctx *gst.ServiceContext, user *model.User) error {
 	}
 }
 
+// TestGenerateServiceList compares the whole service file GenerateService
+// builds for a List action on a database model: the List method, then the
+// hooks in the order the list controller invokes them, ListBefore, Filter
+// and ListAfter.
+func TestGenerateServiceList(t *testing.T) {
+	info := &ModelInfo{
+		ModulePath:   "helloworld",
+		ModelPkgName: "model",
+		ModelName:    "User",
+		ModelVarName: "u",
+		ModelFileDir: "model",
+		Design:       &dsl.Design{},
+	}
+	action := &dsl.Action{
+		Enabled: true,
+		Service: true,
+		Payload: "*User",
+		Result:  "*User",
+		Phase:   consts.PHASE_LIST,
+	}
+
+	file := GenerateService(info, action, consts.PHASE_LIST, "user")
+	if file == nil {
+		t.Fatal("GenerateService returned nil")
+	}
+	got, err := FormatNodeExtra(file)
+	if err != nil {
+		t.Fatalf("format generated service failed: %v", err)
+	}
+	want := `package user
+
+import (
+	"helloworld/model"
+
+	"github.com/hydroan/gst"
+	"github.com/hydroan/gst/service"
+)
+
+type Lister struct {
+	service.Base[*model.User, *model.User, *model.User]
+}
+
+func (u *Lister) List(ctx *gst.ServiceContext, req *model.User) (rsp *model.User, err error) {
+	log := u.WithContext(ctx, ctx.Phase())
+	log.Info("user list")
+
+	return rsp, nil
+}
+
+func (u *Lister) ListBefore(ctx *gst.ServiceContext, users *[]*model.User) error {
+	log := u.WithContext(ctx, ctx.Phase())
+	log.Info("user list before")
+
+	return nil
+}
+
+func (u *Lister) Filter(ctx *gst.ServiceContext, user *model.User, opts gst.QueryOptions) (*model.User, gst.QueryOptions, error) {
+	log := u.WithContext(ctx, ctx.Phase())
+	log.Info("user list filter")
+
+	return user, opts, nil
+}
+
+func (u *Lister) ListAfter(ctx *gst.ServiceContext, users *[]*model.User) error {
+	log := u.WithContext(ctx, ctx.Phase())
+	log.Info("user list after")
+
+	return nil
+}
+`
+	if got != want {
+		t.Errorf("GenerateService() =\n%s\nwant\n%s", got, want)
+	}
+}
+
 func TestGenerateServiceListEmptyPayload(t *testing.T) {
 	tests := []struct {
 		name          string
@@ -741,6 +898,7 @@ func TestGenerateServiceListEmptyPayload(t *testing.T) {
 		wantImport    string
 		wantBase      string
 		wantSignature string
+		wantFilter    string
 	}{
 		{
 			name: "sub_package_model",
@@ -755,6 +913,7 @@ func TestGenerateServiceListEmptyPayload(t *testing.T) {
 			wantImport:    "\"github.com/hydroan/gst/model\"",
 			wantBase:      "service.Base[*group.Group, *model.Empty, *group.GroupListRsp]",
 			wantSignature: "func (g *Lister) List(ctx *gst.ServiceContext, req *model.Empty) (rsp *group.GroupListRsp, err error)",
+			wantFilter:    "func (g *Lister) Filter(ctx *gst.ServiceContext, group *group.Group, opts gst.QueryOptions) (*group.Group, gst.QueryOptions, error)",
 		},
 		{
 			name: "root_model_package",
@@ -769,6 +928,7 @@ func TestGenerateServiceListEmptyPayload(t *testing.T) {
 			wantImport:    "gstmodel \"github.com/hydroan/gst/model\"",
 			wantBase:      "service.Base[*model.Group, *gstmodel.Empty, *model.GroupListRsp]",
 			wantSignature: "func (g *Lister) List(ctx *gst.ServiceContext, req *gstmodel.Empty) (rsp *model.GroupListRsp, err error)",
+			wantFilter:    "func (g *Lister) Filter(ctx *gst.ServiceContext, group *model.Group, opts gst.QueryOptions) (*model.Group, gst.QueryOptions, error)",
 		},
 	}
 	for _, tt := range tests {
@@ -788,7 +948,7 @@ func TestGenerateServiceListEmptyPayload(t *testing.T) {
 			if err != nil {
 				t.Fatalf("format generated service failed: %v", err)
 			}
-			for _, want := range []string{tt.wantImport, tt.wantBase, tt.wantSignature} {
+			for _, want := range []string{tt.wantImport, tt.wantBase, tt.wantSignature, tt.wantFilter} {
 				if !strings.Contains(got, want) {
 					t.Errorf("generated service missing %q, got:\n%s", want, got)
 				}
@@ -817,10 +977,11 @@ func TestGenerateServiceExport(t *testing.T) {
 		Phase:   consts.PHASE_EXPORT,
 	}
 
-	// The export controller invocation order: ListBefore, the service Filter
-	// hook (pass-through default, not scaffolded), ListAfter, Export.
+	// The export controller invocation order: ListBefore, Filter, ListAfter,
+	// Export.
 	hookSigsInOrder := []string{
 		"func (u *Exporter) ListBefore(ctx *gst.ServiceContext, users *[]*model.User) error",
+		"func (u *Exporter) Filter(ctx *gst.ServiceContext, user *model.User, opts gst.QueryOptions) (*model.User, gst.QueryOptions, error)",
 		"func (u *Exporter) ListAfter(ctx *gst.ServiceContext, users *[]*model.User) error",
 	}
 	exportSig := "func (u *Exporter) Export(ctx *gst.ServiceContext, users ...*model.User) (data []byte, err error)"

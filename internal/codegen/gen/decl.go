@@ -611,3 +611,68 @@ func serviceMethod7(recvName, roleName string, body ...ast.Stmt) *ast.FuncDecl {
 		},
 	}
 }
+
+// serviceMethod8 builds the declaration of a Filter hook, which takes the
+// model the query is built from and the query options and returns both,
+// with the given body. For example:
+//
+//	func (u *Lister) Filter(ctx *gst.ServiceContext, user *model.User, opts gst.QueryOptions) (*model.User, gst.QueryOptions, error) {
+//	}
+func serviceMethod8(recvName, modelName, modelQualifier, roleName string, body ...ast.Stmt) *ast.FuncDecl {
+	modelType := &ast.StarExpr{
+		X: &ast.SelectorExpr{
+			X:   ast.NewIdent(modelQualifier),
+			Sel: ast.NewIdent(modelName),
+		},
+	}
+	optionsType := &ast.SelectorExpr{
+		X:   ast.NewIdent("gst"),
+		Sel: ast.NewIdent("QueryOptions"),
+	}
+	return &ast.FuncDecl{
+		Recv: &ast.FieldList{
+			List: []*ast.Field{
+				{
+					Names: []*ast.Ident{ast.NewIdent(recvName)},
+					Type: &ast.StarExpr{
+						X: ast.NewIdent(roleName),
+					},
+				},
+			},
+		},
+		Name: ast.NewIdent("Filter"),
+		Type: &ast.FuncType{
+			Params: &ast.FieldList{
+				List: []*ast.Field{
+					{
+						Names: []*ast.Ident{ast.NewIdent("ctx")},
+						Type: &ast.StarExpr{
+							X: &ast.SelectorExpr{
+								X:   ast.NewIdent("gst"),
+								Sel: ast.NewIdent("ServiceContext"),
+							},
+						},
+					},
+					{
+						Names: []*ast.Ident{ast.NewIdent(strings.ToLower(modelName))},
+						Type:  modelType,
+					},
+					{
+						Names: []*ast.Ident{ast.NewIdent("opts")},
+						Type:  optionsType,
+					},
+				},
+			},
+			Results: &ast.FieldList{
+				List: []*ast.Field{
+					{Type: modelType},
+					{Type: optionsType},
+					{Type: ast.NewIdent("error")},
+				},
+			},
+		},
+		Body: &ast.BlockStmt{
+			List: body,
+		},
+	}
+}

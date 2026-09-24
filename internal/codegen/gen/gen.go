@@ -256,6 +256,16 @@ func serviceActionLogQuoted(modelName string, phase consts.Phase, action *dsl.Ac
 	return strconv.Quote(msg)
 }
 
+// serviceFilterLogQuoted returns the Go string literal log.Info logs in a
+// generated Filter hook: the message of serviceActionLogQuoted for the
+// action's phase followed by " filter", as in "user list filter" for the
+// List action of User, "user export filter" for its Export action and
+// "user: search filter" for a List with Filename("search").
+func serviceFilterLogQuoted(modelName string, phase consts.Phase, action *dsl.Action) string {
+	msg, _ := strconv.Unquote(serviceActionLogQuoted(modelName, phase, action))
+	return strconv.Quote(msg + " filter")
+}
+
 // genServiceMethod1 uses AST to generate CreateBefore,CreateAfter,UpdateBefore,UpdateAfter,
 // DeleteBefore,DeleteAfter,GetBefore,GetAfter,PatchBefore,PatchAfter methods. modelQualifier is
 // the name the file refers to the model package by (see serviceModelQualifier). For the model
@@ -405,6 +415,27 @@ func genServiceMethod7(info *ModelInfo, action *dsl.Action, phase consts.Phase, 
 	)
 }
 
+// genServiceMethod8 uses AST to generate the Filter hook of the List and
+// Export actions, referring to the model package by modelQualifier (see
+// genServiceMethod1). The scaffold passes the model and the options through
+// unchanged. For the model User and phase consts.PHASE_LIST it generates
+//
+//	func (u *Lister) Filter(ctx *gst.ServiceContext, user *model.User, opts gst.QueryOptions) (*model.User, gst.QueryOptions, error) {
+//		log := u.WithContext(ctx, ctx.Phase())
+//		log.Info("user list filter")
+//
+//		return user, opts, nil
+//	}
+func genServiceMethod8(info *ModelInfo, modelQualifier string, action *dsl.Action, phase consts.Phase, roleName string) *ast.FuncDecl {
+	return serviceMethod8(
+		info.ModelVarName, info.ModelName, modelQualifier, roleName,
+		StmtLogWithContext(info.ModelVarName),
+		StmtLogInfo(serviceFilterLogQuoted(info.ModelName, phase, action)),
+		EmptyLine(),
+		Returns(ast.NewIdent(strings.ToLower(info.ModelName)), ast.NewIdent("opts"), ast.NewIdent("nil")),
+	)
+}
+
 // GenerateService builds the scaffold of the action's service file in package
 // servicePkgName: the service struct named after the action's role and the
 // methods of phase. It returns nil when the action is disabled or declares no
@@ -445,8 +476,10 @@ func genServiceMethod7(info *ModelInfo, action *dsl.Action, phase consts.Phase, 
 //		return nil
 //	}
 //
-// A model without a database table, one embedding model.Empty, gets no
-// before and after hooks.
+// A List or Export action on a database model gets the Filter hook as well,
+// between ListBefore and ListAfter, the order the controllers invoke them
+// in. A model without a database table, one embedding model.Empty, gets no
+// hooks at all.
 func GenerateService(info *ModelInfo, action *dsl.Action, phase consts.Phase, servicePkgName string) *ast.File {
 	if !action.Enabled || !action.Service {
 		return nil
@@ -523,11 +556,12 @@ func GenerateService(info *ModelInfo, action *dsl.Action, phase consts.Phase, se
 			decls = append(decls, genServiceMethod1(info, qualifier, action, phase.Before(), roleName)) // generate patch before hook
 			decls = append(decls, genServiceMethod1(info, qualifier, action, phase.After(), roleName))  // generate patch after hook
 		}
-	case consts.PHASE_LIST: // List hooks use genServiceMethod2
+	case consts.PHASE_LIST: // List hooks use genServiceMethod2, Filter genServiceMethod8
 		decls = append(decls, genServiceMethod4(info, qualifier, action, action.Payload, action.Result, phase, roleName))
 		// Skip generating hooks for empty models
 		if !info.Design.IsEmpty {
 			decls = append(decls, genServiceMethod2(info, qualifier, action, phase.Before(), roleName)) // generate list before hook
+			decls = append(decls, genServiceMethod8(info, qualifier, action, phase, roleName))          // generate filter hook
 			decls = append(decls, genServiceMethod2(info, qualifier, action, phase.After(), roleName))  // generate list after hook
 		}
 	case consts.PHASE_GET:
@@ -572,11 +606,12 @@ func GenerateService(info *ModelInfo, action *dsl.Action, phase consts.Phase, se
 	case consts.PHASE_EXPORT:
 		// The export controller reuses the list pipeline before delegating to
 		// Export: it invokes ListBefore, applies the service Filter hook when
-		// building the query, then invokes ListAfter. Filter has a pass-through
-		// default, so only the Before/After hooks are scaffolded here.
+		// building the query, then invokes ListAfter, so the hooks are
+		// scaffolded in that order.
 		// Skip generating hooks for empty models
 		if !info.Design.IsEmpty {
 			decls = append(decls, genServiceMethod2(info, qualifier, action, consts.PHASE_LIST_BEFORE, roleName)) // generate list before hook
+			decls = append(decls, genServiceMethod8(info, qualifier, action, phase, roleName))                    // generate filter hook
 			decls = append(decls, genServiceMethod2(info, qualifier, action, consts.PHASE_LIST_AFTER, roleName))  // generate list after hook
 		}
 		decls = append(decls, genServiceMethod6(info, qualifier, action, phase, roleName))
