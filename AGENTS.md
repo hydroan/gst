@@ -179,7 +179,7 @@ README.md 面向使用 gst 框架的后端开发者，应保持简洁并聚焦�
 
 - `main.go` 和所有 `.gen.go` 文件（`model/model.gen.go`、`model/apidoc.gen.go`、`service/service.gen.go`、`router/router.gen.go` 等）由 `gg gen` 生成，主要负责导入包和注册 model、service、router 以及 Swagger 文档使用的注释。除非明确要修改生成器，否则不要手写这些文件。
 - `model/**/*.go` 是接口和数据模型声明层。这里定义结构体字段、轻量级 model hook、`Design()` DSL、`Migrate()`、`Endpoint()`、`Param()`、`Route()`、`Payload()`、`Result()`、`Public()` 等接口行为。
-- `service/**/*.go` 是业务实现层。这里实现 `Create`、`Delete`、`Update`、`Patch`、`List`、`Get`、`DeleteMany` 等方法，以及 `CreateBefore`、`ListAfter`、`Filter`、`FilterRaw` 等复杂 hook。
+- `service/**/*.go` 是业务实现层。这里实现 `Create`、`Delete`、`Update`、`Patch`、`List`、`Get`、`DeleteMany` 等方法，以及 `CreateBefore`、`ListAfter`、`Filter` 等复杂 hook。
 - `service/**/*_test.go` 是接口测试：`gg gen` 随新 service 文件生成骨架（外部测试包，首行 `t.Fatal`，其后是用 `client` 包写好的示例请求，删掉首行即可运行），生成后归项目维护，`gg gen` 不再改写。
 - `module/` 用来注册内置或自定义模块，例如 `iam.Register(...)`。
 - `configx/`、`cronjob/`、`middleware/` 分别用于扩展配置、定时任务和中间件，应用入口通过空导入触发它们的 `init()`。
@@ -200,7 +200,7 @@ README.md 面向使用 gst 框架的后端开发者，应保持简洁并聚焦�
 - service 类型按 phase 命名，例如 `Creator`、`Lister`、`Getter`、`Updater`、`Patcher`、`Deleter`、`ManyDeleter`。注册时在生成的 `service/service.gen.go` 中映射到 `consts.PHASE_CREATE`、`consts.PHASE_LIST` 等 phase。
 - 业务代码只使用 `service.Base` 和生成代码里的 `service.Register`；service 查找、registry map、实例注入和 logger 注入等状态由框架内部维护，不作为业务项目 API 使用。
 - 查询和写库优先使用 `database.Database[T](ctx)`，并按需要组合 `WithQuery`、`WithSelect`、`WithPagination`、`WithOrder`、`WithLimit` 等框架能力。
-- 列表过滤优先实现 `Filter(ctx, model, opts)` 或 `FilterRaw(ctx)`；返回数据补充、关联查询、字段填充等逻辑优先放在 `ListAfter`。
+- 列表过滤优先实现 `Filter(ctx, model, opts)`；返回数据补充、关联查询、字段填充等逻辑优先放在 `ListAfter`。
 - 简单字段校验、默认值、哈希计算等贴近模型生命周期的逻辑可以放在 model hook，例如 `CreateBefore`、`UpdateBefore`；复杂业务编排放在 service。
 
 #### 常见接口模式
