@@ -200,7 +200,7 @@ README.md 面向使用 gst 框架的后端开发者，应保持简洁并聚焦�
 - service 类型按 phase 命名，例如 `Creator`、`Lister`、`Getter`、`Updater`、`Patcher`、`Deleter`、`ManyDeleter`。注册时在生成的 `service/service.gen.go` 中映射到 `consts.PHASE_CREATE`、`consts.PHASE_LIST` 等 phase。
 - 业务代码只使用 `service.Base` 和生成代码里的 `service.Register`；service 查找、registry map、实例注入和 logger 注入等状态由框架内部维护，不作为业务项目 API 使用。
 - 查询和写库优先使用 `database.Database[T](ctx)`，并按需要组合 `WithQuery`、`WithSelect`、`WithPagination`、`WithOrder`、`WithLimit` 等框架能力。
-- 列表过滤优先实现 `Filter(ctx, model)` 或 `FilterRaw(ctx)`；返回数据补充、关联查询、字段填充等逻辑优先放在 `ListAfter`。
+- 列表过滤优先实现 `Filter(ctx, model, opts)` 或 `FilterRaw(ctx)`；返回数据补充、关联查询、字段填充等逻辑优先放在 `ListAfter`。
 - 简单字段校验、默认值、哈希计算等贴近模型生命周期的逻辑可以放在 model hook，例如 `CreateBefore`、`UpdateBefore`；复杂业务编排放在 service。
 
 #### 常见接口模式
