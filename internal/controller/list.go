@@ -18,10 +18,9 @@ import (
 
 // ListFactory returns a Gin handler that lists resources.
 //
-// When M, REQ, and RSP are the same type, the handler decodes query parameters
-// into M, applies service filters, runs list hooks, queries the configured
-// database handler, records an operation log, and returns the items with a total
-// count, which is omitted only when cursor pagination is used.
+// When M, REQ, and RSP are the same type, the handler runs the list flow (see
+// listFlow) and returns the items with a total count, which is omitted only
+// when cursor pagination is used.
 //
 // The automatic listing branch supports model schema fields plus framework query
 // parameters for pagination, cursor pagination, expansion, depth, ordering, and
@@ -38,17 +37,15 @@ func ListFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...*t
 		defer span.End()
 
 		log := logger.Controller.WithContext(c.Request.Context(), consts.PHASE_LIST)
-		svc := meta.service()
 
 		if !meta.typesEqual {
 			var err error
 			var rsp RSP
 			req := meta.newRequest()
+			svc := meta.service()
 
-			var serviceCtx *types.ServiceContext
 			if rsp, err = meta.traceServiceOperation(ctrlSpanCtx, consts.PHASE_LIST, func(spanCtx context.Context) (RSP, error) {
-				serviceCtx = types.NewServiceContext(c, spanCtx, consts.PHASE_LIST)
-				return svc.List(serviceCtx, req)
+				return svc.List(types.NewServiceContext(c, spanCtx, consts.PHASE_LIST), req)
 			}); err != nil {
 				log.Errorz("service operation failed", zap.Error(err))
 				handleServiceError(c, err)
@@ -62,142 +59,111 @@ func ListFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...*t
 			return
 		}
 
-		// Built only after the custom-typed branch has returned: that branch
-		// runs the service with a context of its own, so building this one
-		// earlier would extract and clone request metadata nothing reads.
-		ctx := types.NewServiceContext(c, nil, consts.PHASE_LIST)
-
-		// The request's memoized query parse, shared by every parser below and
-		// by each metadata construction of this request; the parsers only read
-		// the values.
-		query := requestctx.GinQuery(c)
-
-		// 'm' is a fresh model instance, such as: &model.User{ID: myid, Name: myname}.
-		m := meta.newModel()
-
-		var err error
-		if err = decodeListQuery(m, query); err != nil {
-			log.Errorz("parse query parameter failed", zap.Error(err))
-			JSON(c, CodeInvalidParam.WithErr(err))
-			gstotel.RecordError(span, err)
+		items, total, err := meta.listFlow(requestContext(c), ginServiceContext(c))
+		if err != nil {
+			JSON(c, failureCoder(err))
 			return
 		}
-		var filters []types.Filter
-		if filters, err = urlquery.Filters(query, m); err != nil {
-			log.Errorz("parse query parameter failed", zap.Error(err))
-			JSON(c, CodeInvalidParam.WithErr(err))
-			gstotel.RecordError(span, err)
-			return
-		}
-		present := urlquery.PresentFields(query)
-
-		var orders []types.Order
-		if orders, err = urlquery.Orders(query, m); err != nil {
-			log.Errorz("parse query parameter failed", zap.Error(err))
-			JSON(c, CodeInvalidParam.WithErr(err))
-			gstotel.RecordError(span, err)
-			return
-		}
-
-		var cursor types.Cursor
-		if cursor, err = urlquery.Cursor(query, m); err != nil {
-			log.Errorz("parse query parameter failed", zap.Error(err))
-			JSON(c, CodeInvalidParam.WithErr(err))
-			gstotel.RecordError(span, err)
-			return
-		}
-
-		if err = checkCursorOrderConflict(cursor, orders); err != nil {
-			log.Errorz("parse query parameter failed", zap.Error(err))
-			JSON(c, CodeInvalidParam.WithErr(err))
-			gstotel.RecordError(span, err)
-			return
-		}
-
-		data := make([]M, 0)
-		expands := parseExpandQuery(c, m)
-
-		// 1.Perform business logic processing before list resources.
-		var serviceCtxBefore *types.ServiceContext
-		if err = meta.traceServiceHook(ctrlSpanCtx, consts.PHASE_LIST_BEFORE, svc, func(spanCtx context.Context) error {
-			serviceCtxBefore = types.NewServiceContext(c, spanCtx, consts.PHASE_LIST_BEFORE)
-			return svc.ListBefore(serviceCtxBefore, &data)
-		}); err != nil {
-			log.Errorz("service operation failed", zap.Error(err))
-			handleServiceError(c, err)
-			gstotel.RecordError(span, err)
-			return
-		}
-		// 2.Let the service rewrite the query condition and options; the typical
-		// use is row-level data scoping. Filter runs once and the result is
-		// shared by List and Count below, so both see the same condition set.
-		queryOpts := types.QueryOptions{
-			AllowEmpty:    true,
-			PresentFields: present,
-			Filters:       filters,
-		}
-		if m, queryOpts, err = svc.Filter(ctx, m, queryOpts); err != nil {
-			log.Errorz("service operation failed", zap.Error(err))
-			handleServiceError(c, err)
-			gstotel.RecordError(span, err)
-			return
-		}
-		// 3.List resources from database.
-		if err = database.Database[M](requestContext(c)).
-			WithPagination(urlquery.Pagination(query, m)).
-			WithQuery(m, queryOpts).
-			WithCursor(cursor).
-			WithExpand(expands, orders...).
-			WithOrder(orders...).
-			List(&data); err != nil {
-			log.Errorz("database operation failed", zap.Error(err))
-			JSON(c, databaseErrorCoder(err))
-			gstotel.RecordError(span, err)
-			return
-		}
-		// 4.Perform business logic processing after list resources.
-		var serviceCtxAfter *types.ServiceContext
-		if err = meta.traceServiceHook(ctrlSpanCtx, consts.PHASE_LIST_AFTER, svc, func(spanCtx context.Context) error {
-			serviceCtxAfter = types.NewServiceContext(c, spanCtx, consts.PHASE_LIST_AFTER)
-			return svc.ListAfter(serviceCtxAfter, &data)
-		}); err != nil {
-			log.Errorz("service operation failed", zap.Error(err))
-			handleServiceError(c, err)
-			gstotel.RecordError(span, err)
-			return
-		}
-		total := new(int)
-		// NOTE: Total count is not provided when using cursor-based pagination.
-		if !cursor.Enabled() {
-			if err = database.Database[M](requestContext(c)).
-				WithQuery(m, queryOpts).
-				Count(total); err != nil {
-				log.Errorz("database operation failed", zap.Error(err))
-				JSON(c, databaseErrorCoder(err))
-				gstotel.RecordError(span, err)
-				return
-			}
-		}
-
-		// 5.record operation log to database.
-		if err = am.RecordOperation(requestContext(c), m, consts.OP_LIST,
-			func() *modellogmgmt.OperationLog {
-				return &modellogmgmt.OperationLog{
-					Model:     meta.name,
-					IP:        requestctx.GinClientIP(c),
-					User:      c.GetString(consts.CTX_USERNAME),
-					TraceID:   c.GetString(consts.TRACE_ID),
-					URI:       c.Request.RequestURI,
-					Method:    c.Request.Method,
-					UserAgent: c.Request.UserAgent(),
-				}
-			}); err != nil {
-			log.Warnz("record operation log failed", zap.Error(err))
-		}
-
 		JSON(c, CodeSuccess, gin.H{
-			"items": data,
-			"total": *total,
+			"items": items,
+			"total": total,
 		})
 	}
+}
+
+// listFlow runs the list flow: it decodes the query parameters the request
+// carries into the model's own query fields and the framework's pagination,
+// cursor, expansion, depth, ordering and field operator filters, lets the
+// service scope the query in its Filter hook, runs the list hooks around the
+// read, and records the operation. The total counts the rows the query
+// matches; under cursor pagination, which provides none, it is 0.
+func (meta *factoryMeta[M, REQ, RSP]) listFlow(ctx context.Context, newServiceContext serviceContextFunc) ([]M, int, error) {
+	log := logger.Controller.WithContext(ctx, consts.PHASE_LIST)
+	svc := meta.service()
+
+	// The request's memoized query parse, shared by every parser below; the
+	// parsers only read the values.
+	query := requestctx.QueryValues(ctx)
+
+	// 'm' is a fresh model instance, such as: &model.User{ID: myid, Name: myname}.
+	m := meta.newModel()
+
+	if err := decodeListQuery(m, query); err != nil {
+		return nil, 0, failWith(ctx, log, "parse query parameter failed", CodeInvalidParam.WithErr(err), err)
+	}
+	filters, err := urlquery.Filters(query, m)
+	if err != nil {
+		return nil, 0, failWith(ctx, log, "parse query parameter failed", CodeInvalidParam.WithErr(err), err)
+	}
+	present := urlquery.PresentFields(query)
+
+	orders, err := urlquery.Orders(query, m)
+	if err != nil {
+		return nil, 0, failWith(ctx, log, "parse query parameter failed", CodeInvalidParam.WithErr(err), err)
+	}
+
+	cursor, err := urlquery.Cursor(query, m)
+	if err != nil {
+		return nil, 0, failWith(ctx, log, "parse query parameter failed", CodeInvalidParam.WithErr(err), err)
+	}
+
+	if err = checkCursorOrderConflict(cursor, orders); err != nil {
+		return nil, 0, failWith(ctx, log, "parse query parameter failed", CodeInvalidParam.WithErr(err), err)
+	}
+
+	data := make([]M, 0)
+	expands := parseExpandQuery(query, m)
+
+	// 1.Perform business logic processing before list resources.
+	if err = meta.traceServiceHook(ctx, consts.PHASE_LIST_BEFORE, svc, func(spanCtx context.Context) error {
+		return svc.ListBefore(newServiceContext(spanCtx, consts.PHASE_LIST_BEFORE), &data)
+	}); err != nil {
+		return nil, 0, failService(ctx, log, err)
+	}
+	// 2.Let the service rewrite the query condition and options; the typical
+	// use is row-level data scoping. Filter runs once and the result is
+	// shared by List and Count below, so both see the same condition set.
+	queryOpts := types.QueryOptions{
+		AllowEmpty:    true,
+		PresentFields: present,
+		Filters:       filters,
+	}
+	if m, queryOpts, err = svc.Filter(newServiceContext(ctx, consts.PHASE_LIST), m, queryOpts); err != nil {
+		return nil, 0, failService(ctx, log, err)
+	}
+	// 3.List resources from database.
+	if err = database.Database[M](ctx).
+		WithPagination(urlquery.Pagination(query, m)).
+		WithQuery(m, queryOpts).
+		WithCursor(cursor).
+		WithExpand(expands, orders...).
+		WithOrder(orders...).
+		List(&data); err != nil {
+		return nil, 0, failDatabase(ctx, log, err)
+	}
+	// 4.Perform business logic processing after list resources.
+	if err = meta.traceServiceHook(ctx, consts.PHASE_LIST_AFTER, svc, func(spanCtx context.Context) error {
+		return svc.ListAfter(newServiceContext(spanCtx, consts.PHASE_LIST_AFTER), &data)
+	}); err != nil {
+		return nil, 0, failService(ctx, log, err)
+	}
+	var total int
+	// NOTE: Total count is not provided when using cursor-based pagination.
+	if !cursor.Enabled() {
+		if err = database.Database[M](ctx).
+			WithQuery(m, queryOpts).
+			Count(&total); err != nil {
+			return nil, 0, failDatabase(ctx, log, err)
+		}
+	}
+
+	// 5.record operation log to database.
+	if err = am.RecordOperation(ctx, m, consts.OP_LIST,
+		func() *modellogmgmt.OperationLog {
+			return operationLog(ctx, meta.name)
+		}); err != nil {
+		log.Warnz("record operation log failed", zap.Error(err))
+	}
+
+	return data, total, nil
 }

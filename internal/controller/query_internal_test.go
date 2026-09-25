@@ -266,47 +266,47 @@ func (*expandQueryTestModel) Expands() []string { return []string{"Children", "P
 func TestParseExpandQuery(t *testing.T) {
 	t.Run("DepthRepeatsSliceExpand", func(t *testing.T) {
 		c := newTestGetContext(t, "/items?_expand=Children&_depth=3")
-		require.Equal(t, []string{"Children.Children.Children"}, parseExpandQuery(c, &expandQueryTestModel{}))
+		require.Equal(t, []string{"Children.Children.Children"}, parseExpandQuery(c.Request.URL.Query(), &expandQueryTestModel{}))
 	})
 
 	t.Run("NonSliceExpandIgnoresDepth", func(t *testing.T) {
 		c := newTestGetContext(t, "/items?_expand=Parent&_depth=3")
-		require.Equal(t, []string{"Parent"}, parseExpandQuery(c, &expandQueryTestModel{}))
+		require.Equal(t, []string{"Parent"}, parseExpandQuery(c.Request.URL.Query(), &expandQueryTestModel{}))
 	})
 
 	t.Run("AllSelectsEveryModelExpand", func(t *testing.T) {
 		c := newTestGetContext(t, "/items?_expand=all")
-		require.Equal(t, []string{"Children", "Parent", "ChildItems"}, parseExpandQuery(c, &expandQueryTestModel{}))
+		require.Equal(t, []string{"Children", "Parent", "ChildItems"}, parseExpandQuery(c.Request.URL.Query(), &expandQueryTestModel{}))
 	})
 
 	t.Run("ExpandMatchesCaseInsensitively", func(t *testing.T) {
 		c := newTestGetContext(t, "/items?_expand=children")
-		require.Equal(t, []string{"Children"}, parseExpandQuery(c, &expandQueryTestModel{}))
+		require.Equal(t, []string{"Children"}, parseExpandQuery(c.Request.URL.Query(), &expandQueryTestModel{}))
 	})
 
 	t.Run("ExpandMatchesSnakeCaseName", func(t *testing.T) {
 		c := newTestGetContext(t, "/items?_expand=child_items")
-		require.Equal(t, []string{"ChildItems"}, parseExpandQuery(c, &expandQueryTestModel{}))
+		require.Equal(t, []string{"ChildItems"}, parseExpandQuery(c.Request.URL.Query(), &expandQueryTestModel{}))
 	})
 
 	t.Run("DepthAcceptsUpperBoundTen", func(t *testing.T) {
 		c := newTestGetContext(t, "/items?_expand=Children&_depth=10")
-		require.Equal(t, []string{strings.Repeat("Children.", 9) + "Children"}, parseExpandQuery(c, &expandQueryTestModel{}))
+		require.Equal(t, []string{strings.Repeat("Children.", 9) + "Children"}, parseExpandQuery(c.Request.URL.Query(), &expandQueryTestModel{}))
 	})
 
 	t.Run("UnknownExpandDropped", func(t *testing.T) {
 		c := newTestGetContext(t, "/items?_expand=Bogus")
-		require.Empty(t, parseExpandQuery(c, &expandQueryTestModel{}))
+		require.Empty(t, parseExpandQuery(c.Request.URL.Query(), &expandQueryTestModel{}))
 	})
 
 	t.Run("OutOfRangeDepthFallsBackToOne", func(t *testing.T) {
 		c := newTestGetContext(t, "/items?_expand=Children&_depth=11")
-		require.Equal(t, []string{"Children"}, parseExpandQuery(c, &expandQueryTestModel{}))
+		require.Equal(t, []string{"Children"}, parseExpandQuery(c.Request.URL.Query(), &expandQueryTestModel{}))
 	})
 
 	t.Run("NoExpandParameterReturnsNothing", func(t *testing.T) {
 		c := newTestGetContext(t, "/items")
-		require.Empty(t, parseExpandQuery(c, &expandQueryTestModel{}))
+		require.Empty(t, parseExpandQuery(c.Request.URL.Query(), &expandQueryTestModel{}))
 	})
 }
 

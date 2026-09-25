@@ -129,7 +129,7 @@ func ExportFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...
 				return
 			}
 
-			expands := parseExpandQuery(c, m)
+			expands := parseExpandQuery(query, m)
 			svcCtx := types.NewServiceContext(c, nil, consts.PHASE_EXPORT)
 			// 1.Perform business logic processing before list resources.
 			if err = meta.traceServiceHook(ctrlSpanCtx, consts.PHASE_LIST_BEFORE, svc, func(spanCtx context.Context) error {

@@ -10,7 +10,6 @@ import (
 	"github.com/hydroan/gst/consts"
 	"github.com/hydroan/gst/database"
 	modellogmgmt "github.com/hydroan/gst/internal/model/logmgmt"
-	"github.com/hydroan/gst/internal/requestctx"
 	. "github.com/hydroan/gst/internal/response"
 	"github.com/hydroan/gst/internal/types"
 	"github.com/hydroan/gst/logger"
@@ -22,39 +21,34 @@ import (
 // UpdateManyFactory returns a Gin handler that replaces multiple resources.
 //
 // When M, REQ, and RSP are the same type, the handler binds the JSON body into
-// requestData[M], runs batch update hooks, updates the items through the
-// configured database handler, records an operation log, and returns the request
-// data.
+// requestData[M], runs the batch update flow (see updateManyFlow), and
+// returns the request data.
 //
 // When REQ or RSP differs from M, the handler binds the JSON body into REQ and
 // delegates the operation to the phase service's UpdateMany method.
 func UpdateManyFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...*types.ControllerConfig[M]) gin.HandlerFunc {
 	meta := newFactoryMeta[M, REQ, RSP](routeFromConfig(cfg...), consts.PHASE_UPDATE_MANY, consts.PHASE_UPDATE_MANY_BEFORE, consts.PHASE_UPDATE_MANY_AFTER)
 	return func(c *gin.Context) {
-		var err error
-		var reqErr error
-
 		ctrlSpanCtx, span := meta.startControllerSpan(c)
 		defer span.End()
 
 		log := logger.Controller.WithContext(c.Request.Context(), consts.PHASE_UPDATE_MANY)
-		svc := meta.service()
 
 		if !meta.typesEqual {
+			var err error
 			var rsp RSP
 			req := meta.newRequest()
+			svc := meta.service()
 
-			if reqErr = bindJSONRequest(c, &req); reqErr != nil && !errors.Is(reqErr, io.EOF) {
+			if reqErr := bindJSONRequest(c, &req); reqErr != nil && !errors.Is(reqErr, io.EOF) {
 				log.Errorz("bind request body failed", zap.Error(reqErr))
 				JSON(c, CodeInvalidParam.WithErr(reqErr))
 				gstotel.RecordError(span, reqErr)
 				return
 			}
 			meta.normalizeRequest(&req)
-			var serviceCtx *types.ServiceContext
 			if rsp, err = meta.traceServiceOperation(ctrlSpanCtx, consts.PHASE_UPDATE_MANY, func(spanCtx context.Context) (RSP, error) {
-				serviceCtx = types.NewServiceContext(c, spanCtx, consts.PHASE_UPDATE_MANY)
-				return svc.UpdateMany(serviceCtx, req)
+				return svc.UpdateMany(types.NewServiceContext(c, spanCtx, consts.PHASE_UPDATE_MANY), req)
 			}); err != nil {
 				log.Errorz("service operation failed", zap.Error(err))
 				handleServiceError(c, err)
@@ -69,7 +63,7 @@ func UpdateManyFactory[M types.Model, REQ types.Request, RSP types.Response](cfg
 		}
 
 		var req requestData[M]
-		if reqErr = bindJSONRequest(c, &req); reqErr != nil && !errors.Is(reqErr, io.EOF) {
+		if reqErr := bindJSONRequest(c, &req); reqErr != nil && !errors.Is(reqErr, io.EOF) {
 			log.Errorz("bind request body failed", zap.Error(reqErr))
 			JSON(c, CodeInvalidParam.WithErr(reqErr))
 			gstotel.RecordError(span, reqErr)
@@ -77,64 +71,55 @@ func UpdateManyFactory[M types.Model, REQ types.Request, RSP types.Response](cfg
 		}
 		normalizeBatchRequest(&req)
 
-		// 1.Perform business logic processing before batch update resource.
-		var serviceCtxBefore *types.ServiceContext
-		if err = meta.traceServiceHook(ctrlSpanCtx, consts.PHASE_UPDATE_MANY_BEFORE, svc, func(spanCtx context.Context) error {
-			serviceCtxBefore = types.NewServiceContext(c, spanCtx, consts.PHASE_UPDATE_MANY_BEFORE)
-			return svc.UpdateManyBefore(serviceCtxBefore, req.Items...)
-		}); err != nil {
-			log.Errorz("service operation failed", zap.Error(err))
-			handleServiceError(c, err)
-			gstotel.RecordError(span, err)
+		if err := meta.updateManyFlow(requestContext(c), ginServiceContext(c), &req); err != nil {
+			JSON(c, failureCoder(err))
 			return
 		}
-		// 2.Batch update resource in database. Pure UPDATE with one transaction
-		// around the batch: an item without an id fails the whole request, and
-		// an item without a live row renders 404 and rolls the batch back, so
-		// the batch endpoint can never insert rows.
-		if !errors.Is(reqErr, io.EOF) {
-			if err = database.Database[M](requestContext(c)).Update(req.Items...); err != nil {
-				log.Errorz("database operation failed", zap.Error(err))
-				JSON(c, databaseErrorCoder(err))
-				gstotel.RecordError(span, err)
-				return
-			}
-		}
-		// 3.Perform business logic processing after batch update resource.
-		var serviceCtxAfter *types.ServiceContext
-		if err = meta.traceServiceHook(ctrlSpanCtx, consts.PHASE_UPDATE_MANY_AFTER, svc, func(spanCtx context.Context) error {
-			serviceCtxAfter = types.NewServiceContext(c, spanCtx, consts.PHASE_UPDATE_MANY_AFTER)
-			return svc.UpdateManyAfter(serviceCtxAfter, req.Items...)
-		}); err != nil {
-			log.Errorz("service operation failed", zap.Error(err))
-			handleServiceError(c, err)
-			gstotel.RecordError(span, err)
-			return
-		}
-
-		// 4.record operation log to database.
-		// Record, Request, and Response carry the same serialized payload on
-		// this action, so one marshal feeds all three columns.
-		m := meta.newModel()
-		if err = am.RecordOperation(requestContext(c), m, consts.OP_UPDATE_MANY,
-			func() *modellogmgmt.OperationLog {
-				record, _ := json.Marshal(req)
-				return &modellogmgmt.OperationLog{
-					Model:     meta.name,
-					Record:    util.BytesToString(record),
-					Request:   util.BytesToString(record),
-					Response:  util.BytesToString(record),
-					IP:        requestctx.GinClientIP(c),
-					User:      c.GetString(consts.CTX_USERNAME),
-					TraceID:   c.GetString(consts.TRACE_ID),
-					URI:       c.Request.RequestURI,
-					Method:    c.Request.Method,
-					UserAgent: c.Request.UserAgent(),
-				}
-			}); err != nil {
-			log.Warnz("record operation log failed", zap.Error(err))
-		}
-
 		JSON(c, CodeSuccess, req)
 	}
+}
+
+// updateManyFlow runs the batch update flow on the items of req: it runs the
+// batch update hooks around the write and records the operation. The items
+// are req's own, as the write and the hooks left them.
+func (meta *factoryMeta[M, REQ, RSP]) updateManyFlow(ctx context.Context, newServiceContext serviceContextFunc, req *requestData[M]) error {
+	log := logger.Controller.WithContext(ctx, consts.PHASE_UPDATE_MANY)
+	svc := meta.service()
+
+	// 1.Perform business logic processing before batch update resource.
+	if err := meta.traceServiceHook(ctx, consts.PHASE_UPDATE_MANY_BEFORE, svc, func(spanCtx context.Context) error {
+		return svc.UpdateManyBefore(newServiceContext(spanCtx, consts.PHASE_UPDATE_MANY_BEFORE), req.Items...)
+	}); err != nil {
+		return failService(ctx, log, err)
+	}
+	// 2.Batch update resource in database. Pure UPDATE with one transaction
+	// around the batch: an item without an id fails the whole request, and
+	// an item without a live row renders 404 and rolls the batch back, so
+	// the batch endpoint can never insert rows. A batch without items writes
+	// nothing.
+	if err := database.Database[M](ctx).Update(req.Items...); err != nil {
+		return failDatabase(ctx, log, err)
+	}
+	// 3.Perform business logic processing after batch update resource.
+	if err := meta.traceServiceHook(ctx, consts.PHASE_UPDATE_MANY_AFTER, svc, func(spanCtx context.Context) error {
+		return svc.UpdateManyAfter(newServiceContext(spanCtx, consts.PHASE_UPDATE_MANY_AFTER), req.Items...)
+	}); err != nil {
+		return failService(ctx, log, err)
+	}
+
+	// 4.record operation log to database.
+	// Record, Request, and Response carry the same serialized payload on
+	// this action, so one marshal feeds all three columns.
+	if err := am.RecordOperation(ctx, meta.newModel(), consts.OP_UPDATE_MANY,
+		func() *modellogmgmt.OperationLog {
+			record, _ := json.Marshal(req)
+			entry := operationLog(ctx, meta.name)
+			entry.Record = util.BytesToString(record)
+			entry.Request = util.BytesToString(record)
+			entry.Response = util.BytesToString(record)
+			return entry
+		}); err != nil {
+		log.Warnz("record operation log failed", zap.Error(err))
+	}
+	return nil
 }

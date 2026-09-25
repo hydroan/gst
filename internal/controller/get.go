@@ -15,15 +15,15 @@ import (
 	"github.com/hydroan/gst/logger"
 	gstotel "github.com/hydroan/gst/otel"
 	"github.com/hydroan/gst/util"
+	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
 )
 
 // GetFactory returns a Gin handler that retrieves one resource.
 //
 // When M, REQ, and RSP are the same type, the handler reads the configured route
-// parameter as the resource id, applies the expansion and depth query options,
-// runs get hooks, loads the model through the configured database handler,
-// records an operation log, and returns the model.
+// parameter as the resource id, runs the get flow (see getFlow), and returns
+// the model.
 //
 // When REQ or RSP differs from M, the handler delegates the operation to the
 // phase service's Get method with a zero-value REQ. Get handles an HTTP GET
@@ -38,17 +38,15 @@ func GetFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...*ty
 
 		reqMeta := requestctx.FromGin(c)
 		log := logger.Controller.WithContext(c.Request.Context(), consts.PHASE_GET)
-		svc := meta.service()
 
 		if !meta.typesEqual {
 			var err error
 			var rsp RSP
 			req := meta.newRequest()
+			svc := meta.service()
 
-			var serviceCtx *types.ServiceContext
 			if rsp, err = meta.traceServiceOperation(ctrlSpanCtx, consts.PHASE_GET, func(spanCtx context.Context) (RSP, error) {
-				serviceCtx = types.NewServiceContext(c, spanCtx, consts.PHASE_GET)
-				return svc.Get(serviceCtx, req)
+				return svc.Get(types.NewServiceContext(c, spanCtx, consts.PHASE_GET), req)
 			}); err != nil {
 				log.Errorz("service operation failed", zap.Error(err))
 				handleServiceError(c, err)
@@ -72,79 +70,72 @@ func GetFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...*ty
 			gstotel.RecordError(span, errors.New(missingRouteParamMsg))
 			return
 		}
-		// 'm' is a fresh model instance, such as: &model.User{ID: myid, Name: myname}.
-		m := meta.newModel()
-		// `GetBefore` hook need id.
-		if !setRouteID(m, param) {
-			// An id the model rejects cannot match any row; answer 404 before
-			// the raw value reaches SQL, where implicit string-to-integer
-			// coercion could match an unintended row.
-			log.Errorz("route id rejected by model", zap.String("id", param))
-			JSON(c, CodeNotFound)
-			return
-		}
 
-		var err error
-		expands := parseExpandQuery(c, m)
-
-		// 1.Perform business logic processing before get resource.
-		var serviceCtxBefore *types.ServiceContext
-		if err = meta.traceServiceHook(ctrlSpanCtx, consts.PHASE_GET_BEFORE, svc, func(spanCtx context.Context) error {
-			serviceCtxBefore = types.NewServiceContext(c, spanCtx, consts.PHASE_GET_BEFORE)
-			return svc.GetBefore(serviceCtxBefore, m)
-		}); err != nil {
-			log.Errorz("service operation failed", zap.Error(err))
-			handleServiceError(c, err)
-			gstotel.RecordError(span, err)
+		m, err := meta.getFlow(requestContext(c), ginServiceContext(c), param)
+		if err != nil {
+			JSON(c, failureCoder(err))
 			return
 		}
-		// 2.Get resource from database. The database layer answers existence:
-		// database.ErrRecordNotFound renders 404 instead of a generic failure.
-		if err = database.Database[M](requestContext(c)).
-			WithExpand(expands).
-			Get(m, m.GetID()); err != nil {
-			log.Errorz("database operation failed", zap.Error(err))
-			JSON(c, databaseErrorCoder(err))
-			gstotel.RecordError(span, err)
-			return
-		}
-		// 3.Perform business logic processing after get resource.
-		var serviceCtxAfter *types.ServiceContext
-		if err = meta.traceServiceHook(ctrlSpanCtx, consts.PHASE_GET_AFTER, svc, func(spanCtx context.Context) error {
-			serviceCtxAfter = types.NewServiceContext(c, spanCtx, consts.PHASE_GET_AFTER)
-			return svc.GetAfter(serviceCtxAfter, m)
-		}); err != nil {
-			log.Errorz("service operation failed", zap.Error(err))
-			handleServiceError(c, err)
-			gstotel.RecordError(span, err)
-			return
-		}
-		// A model without an id or creation time holds no stored record (a
-		// missing row already failed above with ErrRecordNotFound), so answer
-		// CodeNotFound instead of an empty resource.
-		if len(m.GetID()) == 0 || m.GetCreatedAt().Equal(time.Time{}) {
-			log.Errorz(CodeNotFound.String())
-			JSON(c, CodeNotFound)
-			gstotel.RecordError(span, errors.New(CodeNotFound.Msg()))
-			return
-		}
-
-		// 4.record operation log to database.
-		if err = am.RecordOperation(requestContext(c), m, consts.OP_GET,
-			func() *modellogmgmt.OperationLog {
-				return &modellogmgmt.OperationLog{
-					Model:     meta.name,
-					IP:        requestctx.GinClientIP(c),
-					User:      c.GetString(consts.CTX_USERNAME),
-					TraceID:   c.GetString(consts.TRACE_ID),
-					URI:       c.Request.RequestURI,
-					Method:    c.Request.Method,
-					UserAgent: c.Request.UserAgent(),
-				}
-			}); err != nil {
-			log.Warnz("record operation log failed", zap.Error(err))
-		}
-
 		JSON(c, CodeSuccess, m)
 	}
+}
+
+// getFlow runs the get flow on the record id names: it applies the expansion
+// and depth query options the request carries, runs the get hooks around the
+// read, records the operation, and returns the model. id must not be empty:
+// a UUID-keyed model mints a fresh id for an empty one (see setRouteID). An
+// id the model rejects, and a read that finds no stored record, both answer
+// CodeNotFound.
+func (meta *factoryMeta[M, REQ, RSP]) getFlow(ctx context.Context, newServiceContext serviceContextFunc, id string) (M, error) {
+	var zero M
+	log := logger.Controller.WithContext(ctx, consts.PHASE_GET)
+	svc := meta.service()
+
+	// 'm' is a fresh model instance, such as: &model.User{ID: myid, Name: myname}.
+	m := meta.newModel()
+	// `GetBefore` hook need id.
+	if !setRouteID(m, id) {
+		// An id the model rejects cannot match any row; answer 404 before
+		// the raw value reaches SQL, where implicit string-to-integer
+		// coercion could match an unintended row.
+		log.Errorz("route id rejected by model", zap.String("id", id))
+		return zero, &failure{coder: CodeNotFound}
+	}
+	expands := parseExpandQuery(requestctx.QueryValues(ctx), m)
+
+	// 1.Perform business logic processing before get resource.
+	if err := meta.traceServiceHook(ctx, consts.PHASE_GET_BEFORE, svc, func(spanCtx context.Context) error {
+		return svc.GetBefore(newServiceContext(spanCtx, consts.PHASE_GET_BEFORE), m)
+	}); err != nil {
+		return zero, failService(ctx, log, err)
+	}
+	// 2.Get resource from database. The database layer answers existence:
+	// database.ErrRecordNotFound renders 404 instead of a generic failure.
+	if err := database.Database[M](ctx).WithExpand(expands).Get(m, m.GetID()); err != nil {
+		return zero, failDatabase(ctx, log, err)
+	}
+	// 3.Perform business logic processing after get resource.
+	if err := meta.traceServiceHook(ctx, consts.PHASE_GET_AFTER, svc, func(spanCtx context.Context) error {
+		return svc.GetAfter(newServiceContext(spanCtx, consts.PHASE_GET_AFTER), m)
+	}); err != nil {
+		return zero, failService(ctx, log, err)
+	}
+	// A model without an id or creation time holds no stored record (a
+	// missing row already failed above with ErrRecordNotFound), so answer
+	// CodeNotFound instead of an empty resource.
+	if len(m.GetID()) == 0 || m.GetCreatedAt().Equal(time.Time{}) {
+		log.Errorz(CodeNotFound.String())
+		err := errors.New(CodeNotFound.Msg())
+		gstotel.RecordError(trace.SpanFromContext(ctx), err)
+		return zero, &failure{coder: CodeNotFound, err: err}
+	}
+
+	// 4.record operation log to database.
+	if err := am.RecordOperation(ctx, m, consts.OP_GET,
+		func() *modellogmgmt.OperationLog {
+			return operationLog(ctx, meta.name)
+		}); err != nil {
+		log.Warnz("record operation log failed", zap.Error(err))
+	}
+	return m, nil
 }

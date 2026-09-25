@@ -1,13 +1,13 @@
 package controller
 
 import (
+	"net/url"
 	"reflect"
 	"strconv"
 	"strings"
 	"sync"
 
 	"github.com/cockroachdb/errors"
-	"github.com/gin-gonic/gin"
 	"github.com/hydroan/gst/consts"
 	"github.com/hydroan/gst/internal/modelregistry"
 	"github.com/hydroan/gst/internal/types"
@@ -121,20 +121,21 @@ func cachedModelFieldKinds(typ reflect.Type) map[string]reflect.Kind {
 	return fieldKinds
 }
 
-// parseExpandQuery resolves the _expand and _depth query parameters against
-// the model's expandable association paths. Expand names are matched against
-// m.Expands() ignoring case and snake case punctuation, so "childItems" and
-// "child_items" both select "ChildItems"; "_expand=all" selects every
-// expandable path. _depth (clamped to [1,10], default 1) repeats slice
-// associations for recursive preloading, e.g. expand "Children" with depth 3
-// becomes "Children.Children.Children"; non-slice associations ignore depth.
-func parseExpandQuery(c *gin.Context, m types.Model) []string {
-	expandStr, ok := c.GetQuery(consts.QUERY_EXPAND)
+// parseExpandQuery resolves the _expand and _depth parameters of the parsed
+// query against the model's expandable association paths. Expand names are
+// matched against m.Expands() ignoring case and snake case punctuation, so
+// "childItems" and "child_items" both select "ChildItems"; "_expand=all"
+// selects every expandable path. _depth (clamped to [1,10], default 1)
+// repeats slice associations for recursive preloading, e.g. expand "Children"
+// with depth 3 becomes "Children.Children.Children"; non-slice associations
+// ignore depth.
+func parseExpandQuery(query url.Values, m types.Model) []string {
+	expandStr, ok := queryValue(query, consts.QUERY_EXPAND)
 	if !ok {
 		return nil
 	}
 	depth := 1
-	if depthStr, ok := c.GetQuery(consts.QUERY_DEPTH); ok {
+	if depthStr, ok := queryValue(query, consts.QUERY_DEPTH); ok {
 		depth, _ = strconv.Atoi(depthStr)
 		if depth < 1 || depth > maxExpandDepth {
 			depth = 1
@@ -176,4 +177,14 @@ func parseExpandQuery(c *gin.Context, m types.Model) []string {
 		expands = append(expands, strings.Join(t, "."))
 	}
 	return expands
+}
+
+// queryValue returns the first value of key in query and whether the key was
+// sent at all, the way gin's GetQuery answers.
+func queryValue(query url.Values, key string) (string, bool) {
+	values, ok := query[key]
+	if !ok || len(values) == 0 {
+		return "", false
+	}
+	return values[0], true
 }

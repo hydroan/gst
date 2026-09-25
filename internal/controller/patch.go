@@ -25,16 +25,9 @@ import (
 //
 // When M, REQ, and RSP are the same type, the handler reads the resource id
 // from the configured route parameter (the id carried by the body is ignored),
-// loads the existing record, copies fields present in the request body into
-// that record, sets the updater field, runs patch hooks, writes the patched
-// model through the configured database handler, and records an operation log.
-//
-// The write is the whole record the handler loaded, not only the fields the
-// body carried. Concurrent patches of one record therefore resolve as last
-// writer wins: a later patch puts back the fields an earlier one changed, even
-// when the two touched different fields, and both answer success. That is the
-// default contract of every framework update, not a defect; a model that needs
-// the stale write refused instead declares model.Version.
+// binds the JSON body into M along with the set of fields the body carried,
+// and runs the patch flow (see patchFlow), which answers with the patched
+// record.
 //
 // When REQ or RSP differs from M, the handler binds the JSON body into REQ and
 // delegates the operation to the phase service's Patch method.
@@ -48,25 +41,22 @@ func PatchFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...*
 
 		reqMeta := requestctx.FromGin(c)
 		log := logger.Controller.WithContext(c.Request.Context(), consts.PHASE_PATCH)
-		svc := meta.service()
 
 		if !meta.typesEqual {
 			var err error
-			var reqErr error
 			var rsp RSP
 			req := meta.newRequest()
+			svc := meta.service()
 
-			if reqErr = bindJSONRequest(c, &req); reqErr != nil && !errors.Is(reqErr, io.EOF) {
+			if reqErr := bindJSONRequest(c, &req); reqErr != nil && !errors.Is(reqErr, io.EOF) {
 				log.Errorz("bind request body failed", zap.Error(reqErr))
 				JSON(c, CodeInvalidParam.WithErr(reqErr))
 				gstotel.RecordError(span, reqErr)
 				return
 			}
 			meta.normalizeRequest(&req)
-			var serviceCtx *types.ServiceContext
 			if rsp, err = meta.traceServiceOperation(ctrlSpanCtx, consts.PHASE_PATCH, func(spanCtx context.Context) (RSP, error) {
-				serviceCtx = types.NewServiceContext(c, spanCtx, consts.PHASE_PATCH)
-				return svc.Patch(serviceCtx, req)
+				return svc.Patch(types.NewServiceContext(c, spanCtx, consts.PHASE_PATCH), req)
 			}); err != nil {
 				log.Errorz("service operation failed", zap.Error(err))
 				handleServiceError(c, err)
@@ -112,7 +102,7 @@ func PatchFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...*
 		if len(cfg) > 0 {
 			id = reqMeta.Param(util.Deref(cfg[0]).ParamName)
 		}
-		if err := bindJSONRequest(c, &req); err != nil {
+		if err = bindJSONRequest(c, &req); err != nil {
 			// A single-resource patch without a body patches nothing; refuse it
 			// with a stable message instead of the bare io.EOF text.
 			err = requiredBodyError(err)
@@ -128,96 +118,99 @@ func PatchFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...*
 			gstotel.RecordError(span, errors.New(missingRouteParamMsg))
 			return
 		}
-		data := make([]M, 0)
-		// 'm' is a fresh model instance, such as: &model.User{ID: myid, Name: myname}.
-		m := meta.newModel()
-		if !setRouteID(m, id) {
-			// An id the model rejects cannot match any row; answer 404 without
-			// relying on the empty-query safety net below.
-			log.Errorz("route id rejected by model", zap.String("id", id))
-			JSON(c, CodeNotFound)
-			return
-		}
 
-		// Make sure the record already exists. The read is pinned to
-		// the primary because what it reads is written straight back: the
-		// patch merges onto this row, so a replica still catching up would
-		// have the fields the request does not touch written back stale.
-		if err := database.Database[M](requestContext(c)).WithReplica(false).WithLimit(1).WithQuery(m).List(&data); err != nil {
-			log.Errorz("database operation failed", zap.Error(err))
-			JSON(c, databaseErrorCoder(err))
-			gstotel.RecordError(span, err)
+		cur, err := meta.patchFlow(requestContext(c), ginServiceContext(c), id, req, fields)
+		if err != nil {
+			JSON(c, failureCoder(err))
 			return
 		}
-		if len(data) != 1 {
-			log.Errorz("records matched by id is not exactly one", zap.Int("count", len(data)), zap.String("id", id))
-			JSON(c, CodeNotFound)
-			return
-		}
-		data[0].SetUpdatedBy(c.GetString(consts.CTX_USERNAME))
-
-		newVal := reflect.ValueOf(req).Elem()
-		oldVal := reflect.ValueOf(data[0]).Elem()
-		patchValue(log, meta.typ, oldVal, newVal, fields)
-		cur := oldVal.Addr().Interface().(M) //nolint:errcheck
-
-		// 1.Perform business logic processing before partial update resource.
-		var serviceCtxBefore *types.ServiceContext
-		if err := meta.traceServiceHook(ctrlSpanCtx, consts.PHASE_PATCH_BEFORE, svc, func(spanCtx context.Context) error {
-			serviceCtxBefore = types.NewServiceContext(c, spanCtx, consts.PHASE_PATCH_BEFORE)
-			return svc.PatchBefore(serviceCtxBefore, cur)
-		}); err != nil {
-			log.Errorz("service operation failed", zap.Error(err))
-			handleServiceError(c, err)
-			gstotel.RecordError(span, err)
-			return
-		}
-		// 2.Partial update resource in database. The record was loaded above, so
-		// ErrRecordNotFound only fires when it vanished in between; unique-key
-		// collisions from the patched values render 409.
-		if err := database.Database[M](requestContext(c)).Update(cur); err != nil {
-			log.Errorz("database operation failed", zap.Error(err))
-			JSON(c, databaseErrorCoder(err))
-			gstotel.RecordError(span, err)
-			return
-		}
-		// 3.Perform business logic processing after partial update resource.
-		var serviceCtxAfter *types.ServiceContext
-		if err := meta.traceServiceHook(ctrlSpanCtx, consts.PHASE_PATCH_AFTER, svc, func(spanCtx context.Context) error {
-			serviceCtxAfter = types.NewServiceContext(c, spanCtx, consts.PHASE_PATCH_AFTER)
-			return svc.PatchAfter(serviceCtxAfter, cur)
-		}); err != nil {
-			log.Errorz("service operation failed", zap.Error(err))
-			handleServiceError(c, err)
-			gstotel.RecordError(span, err)
-			return
-		}
-
-		// 4.record operation log to database.
-		// NOTE: We should record the `req` instead of `oldVal`, the req is `newVal`.
-		// Record and Request both carry the request payload, so one marshal
-		// feeds both columns; Response carries the resulting row instead.
-		if err := am.RecordOperation(requestContext(c), req, consts.OP_PATCH,
-			func() *modellogmgmt.OperationLog {
-				record, _ := json.Marshal(req)
-				respData, _ := json.Marshal(cur)
-				return &modellogmgmt.OperationLog{
-					Model:     meta.name,
-					RecordID:  req.GetID(),
-					Record:    util.BytesToString(record),
-					Request:   util.BytesToString(record),
-					Response:  util.BytesToString(respData),
-					IP:        requestctx.GinClientIP(c),
-					User:      c.GetString(consts.CTX_USERNAME),
-					TraceID:   c.GetString(consts.TRACE_ID),
-					URI:       c.Request.RequestURI,
-					Method:    c.Request.Method,
-					UserAgent: c.Request.UserAgent(),
-				}
-			}); err != nil {
-			log.Warnz("record operation log failed", zap.Error(err))
-		}
-
 		JSON(c, CodeSuccess, cur)
 	}
+}
+
+// patchFlow runs the patch flow on the record id names: it loads the record,
+// copies the fields of req present in the request (fields) into it, sets the
+// updater from the identity the request carries, runs the patch hooks around
+// the write, records the operation, and returns the patched record. id must
+// not be empty (see setRouteID); an id the model rejects, and one naming no
+// record, both answer CodeNotFound.
+//
+// The write is the whole record loaded, not only the fields the request
+// carried. Concurrent patches of one record therefore resolve as last writer
+// wins: a later patch puts back the fields an earlier one changed, even when
+// the two touched different fields, and both answer success. That is the
+// default contract of every framework update, not a defect; a model that
+// needs the stale write refused instead declares model.Version.
+func (meta *factoryMeta[M, REQ, RSP]) patchFlow(ctx context.Context, newServiceContext serviceContextFunc, id string, req M, fields patchFieldSet) (M, error) {
+	var zero M
+	log := logger.Controller.WithContext(ctx, consts.PHASE_PATCH)
+	svc := meta.service()
+
+	data := make([]M, 0)
+	// 'm' is a fresh model instance, such as: &model.User{ID: myid, Name: myname}.
+	m := meta.newModel()
+	if !setRouteID(m, id) {
+		// An id the model rejects cannot match any row; answer 404 without
+		// relying on the empty-query safety net below.
+		log.Errorz("route id rejected by model", zap.String("id", id))
+		return zero, &failure{coder: CodeNotFound}
+	}
+
+	// Make sure the record already exists. The read is pinned to
+	// the primary because what it reads is written straight back: the
+	// patch merges onto this row, so a replica still catching up would
+	// have the fields the request does not touch written back stale.
+	if err := database.Database[M](ctx).WithReplica(false).WithLimit(1).WithQuery(m).List(&data); err != nil {
+		return zero, failDatabase(ctx, log, err)
+	}
+	if len(data) != 1 {
+		log.Errorz("records matched by id is not exactly one", zap.Int("count", len(data)), zap.String("id", id))
+		return zero, &failure{coder: CodeNotFound}
+	}
+	data[0].SetUpdatedBy(requestctx.FromContext(ctx).Username())
+
+	newVal := reflect.ValueOf(req).Elem()
+	oldVal := reflect.ValueOf(data[0]).Elem()
+	patchValue(log, meta.typ, oldVal, newVal, fields)
+	cur := oldVal.Addr().Interface().(M) //nolint:errcheck
+
+	// 1.Perform business logic processing before partial update resource.
+	if err := meta.traceServiceHook(ctx, consts.PHASE_PATCH_BEFORE, svc, func(spanCtx context.Context) error {
+		return svc.PatchBefore(newServiceContext(spanCtx, consts.PHASE_PATCH_BEFORE), cur)
+	}); err != nil {
+		return zero, failService(ctx, log, err)
+	}
+	// 2.Partial update resource in database. The record was loaded above, so
+	// ErrRecordNotFound only fires when it vanished in between; unique-key
+	// collisions from the patched values render 409.
+	if err := database.Database[M](ctx).Update(cur); err != nil {
+		return zero, failDatabase(ctx, log, err)
+	}
+	// 3.Perform business logic processing after partial update resource.
+	if err := meta.traceServiceHook(ctx, consts.PHASE_PATCH_AFTER, svc, func(spanCtx context.Context) error {
+		return svc.PatchAfter(newServiceContext(spanCtx, consts.PHASE_PATCH_AFTER), cur)
+	}); err != nil {
+		return zero, failService(ctx, log, err)
+	}
+
+	// 4.record operation log to database.
+	// NOTE: We should record the `req` instead of `oldVal`, the req is `newVal`.
+	// Record and Request both carry the request payload, so one marshal
+	// feeds both columns; Response carries the resulting row instead. The
+	// entry names the patched record by its own id: the body need not carry
+	// one, the route named the record.
+	if err := am.RecordOperation(ctx, req, consts.OP_PATCH,
+		func() *modellogmgmt.OperationLog {
+			record, _ := json.Marshal(req)
+			respData, _ := json.Marshal(cur)
+			entry := operationLog(ctx, meta.name)
+			entry.RecordID = cur.GetID()
+			entry.Record = util.BytesToString(record)
+			entry.Request = util.BytesToString(record)
+			entry.Response = util.BytesToString(respData)
+			return entry
+		}); err != nil {
+		log.Warnz("record operation log failed", zap.Error(err))
+	}
+	return cur, nil
 }

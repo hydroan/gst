@@ -16,6 +16,7 @@ import (
 	"github.com/hydroan/gst/logger"
 	gstotel "github.com/hydroan/gst/otel"
 	"github.com/hydroan/gst/util"
+	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
 )
 
@@ -23,8 +24,7 @@ import (
 //
 // When M, REQ, and RSP are the same type, the handler reads the resource id
 // from the configured route parameter (batch deletion uses the DeleteMany
-// action instead), runs delete hooks, deletes the model through the
-// configured database handler, records an operation log, and returns a
+// action instead), runs the delete flow (see deleteFlow), and returns a
 // success response.
 //
 // When REQ or RSP differs from M, the handler binds the JSON body into REQ and
@@ -37,12 +37,12 @@ func DeleteFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...
 
 		reqMeta := requestctx.FromGin(c)
 		log := logger.Controller.WithContext(c.Request.Context(), consts.PHASE_DELETE)
-		svc := meta.service()
 
 		if !meta.typesEqual {
 			var err error
 			var rsp RSP
 			req := meta.newRequest()
+			svc := meta.service()
 
 			if reqErr := bindJSONRequest(c, &req); reqErr != nil && !errors.Is(reqErr, io.EOF) {
 				log.Errorz("bind request body failed", zap.Error(reqErr))
@@ -51,10 +51,8 @@ func DeleteFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...
 				return
 			}
 			meta.normalizeRequest(&req)
-			var serviceCtx *types.ServiceContext
 			if rsp, err = meta.traceServiceOperation(ctrlSpanCtx, consts.PHASE_DELETE, func(spanCtx context.Context) (RSP, error) {
-				serviceCtx = types.NewServiceContext(c, spanCtx, consts.PHASE_DELETE)
-				return svc.Delete(serviceCtx, req)
+				return svc.Delete(types.NewServiceContext(c, spanCtx, consts.PHASE_DELETE), req)
 			}); err != nil {
 				log.Errorz("service operation failed", zap.Error(err))
 				handleServiceError(c, err)
@@ -79,74 +77,69 @@ func DeleteFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...
 			gstotel.RecordError(span, errors.New(missingRouteParamMsg))
 			return
 		}
-		// 'm' is a fresh model instance, such as: &model.User{ID: myid, Name: myname}.
-		m := meta.newModel()
-		if !setRouteID(m, id) {
-			// An id the model rejects cannot match any row; answer 404 instead
-			// of passing an unset id to the database layer.
-			log.Errorz("route id rejected by model", zap.String("id", id))
-			JSON(c, CodeNotFound)
+
+		if err := meta.deleteFlow(requestContext(c), ginServiceContext(c), id); err != nil {
+			JSON(c, failureCoder(err))
 			return
 		}
-
-		// 1.Perform business logic processing before delete resource.
-		var serviceCtxBefore *types.ServiceContext
-		if err := meta.traceServiceHook(ctrlSpanCtx, consts.PHASE_DELETE_BEFORE, svc, func(spanCtx context.Context) error {
-			serviceCtxBefore = types.NewServiceContext(c, spanCtx, consts.PHASE_DELETE_BEFORE)
-			return svc.DeleteBefore(serviceCtxBefore, m)
-		}); err != nil {
-			log.Errorz("service operation failed", zap.Error(err))
-			handleServiceError(c, err)
-			gstotel.RecordError(span, err)
-			return
-		}
-
-		// find out the record and keep a copy for the operation log.
-		copied := meta.newModel()
-		copied.SetID(m.GetID())
-		if err := database.Database[M](requestContext(c)).WithExpand(copied.Expands()).Get(copied, m.GetID()); err != nil {
-			log.Errorz("database operation failed", zap.Error(err))
-			gstotel.RecordError(span, err)
-		}
-
-		// 2.Delete resource in database.
-		if err := database.Database[M](requestContext(c)).Delete(m); err != nil {
-			log.Errorz("database operation failed", zap.Error(err))
-			JSON(c, databaseErrorCoder(err))
-			gstotel.RecordError(span, err)
-			return
-		}
-		// 3.Perform business logic processing after delete resource.
-		var serviceCtxAfter *types.ServiceContext
-		if err := meta.traceServiceHook(ctrlSpanCtx, consts.PHASE_DELETE_AFTER, svc, func(spanCtx context.Context) error {
-			serviceCtxAfter = types.NewServiceContext(c, spanCtx, consts.PHASE_DELETE_AFTER)
-			return svc.DeleteAfter(serviceCtxAfter, m)
-		}); err != nil {
-			log.Errorz("service operation failed", zap.Error(err))
-			handleServiceError(c, err)
-			gstotel.RecordError(span, err)
-			return
-		}
-
-		// 4.record operation log to database.
-		if err := am.RecordOperation(requestContext(c), meta.newModel(), consts.OP_DELETE,
-			func() *modellogmgmt.OperationLog {
-				record, _ := json.Marshal(copied)
-				return &modellogmgmt.OperationLog{
-					Model:     meta.name,
-					RecordID:  m.GetID(),
-					Record:    util.BytesToString(record),
-					IP:        requestctx.GinClientIP(c),
-					User:      c.GetString(consts.CTX_USERNAME),
-					TraceID:   c.GetString(consts.TRACE_ID),
-					URI:       c.Request.RequestURI,
-					Method:    c.Request.Method,
-					UserAgent: c.Request.UserAgent(),
-				}
-			}); err != nil {
-			log.Warnz("record operation log failed", zap.Error(err))
-		}
-
 		JSON(c, CodeSuccess)
 	}
+}
+
+// deleteFlow runs the delete flow on the record id names: it runs the delete
+// hooks around the write, keeps a copy of the record for the operation log,
+// and records the operation. id must not be empty (see setRouteID); an id the
+// model rejects answers CodeNotFound. Whether the row is purged is the
+// model's decision (its Purge method), never the request's.
+func (meta *factoryMeta[M, REQ, RSP]) deleteFlow(ctx context.Context, newServiceContext serviceContextFunc, id string) error {
+	log := logger.Controller.WithContext(ctx, consts.PHASE_DELETE)
+	svc := meta.service()
+
+	// 'm' is a fresh model instance, such as: &model.User{ID: myid, Name: myname}.
+	m := meta.newModel()
+	if !setRouteID(m, id) {
+		// An id the model rejects cannot match any row; answer 404 instead
+		// of passing an unset id to the database layer.
+		log.Errorz("route id rejected by model", zap.String("id", id))
+		return &failure{coder: CodeNotFound}
+	}
+
+	// 1.Perform business logic processing before delete resource.
+	if err := meta.traceServiceHook(ctx, consts.PHASE_DELETE_BEFORE, svc, func(spanCtx context.Context) error {
+		return svc.DeleteBefore(newServiceContext(spanCtx, consts.PHASE_DELETE_BEFORE), m)
+	}); err != nil {
+		return failService(ctx, log, err)
+	}
+
+	// find out the record and keep a copy for the operation log.
+	copied := meta.newModel()
+	copied.SetID(m.GetID())
+	if err := database.Database[M](ctx).WithExpand(copied.Expands()).Get(copied, m.GetID()); err != nil {
+		log.Errorz("database operation failed", zap.Error(err))
+		gstotel.RecordError(trace.SpanFromContext(ctx), err)
+	}
+
+	// 2.Delete resource in database.
+	if err := database.Database[M](ctx).Delete(m); err != nil {
+		return failDatabase(ctx, log, err)
+	}
+	// 3.Perform business logic processing after delete resource.
+	if err := meta.traceServiceHook(ctx, consts.PHASE_DELETE_AFTER, svc, func(spanCtx context.Context) error {
+		return svc.DeleteAfter(newServiceContext(spanCtx, consts.PHASE_DELETE_AFTER), m)
+	}); err != nil {
+		return failService(ctx, log, err)
+	}
+
+	// 4.record operation log to database.
+	if err := am.RecordOperation(ctx, meta.newModel(), consts.OP_DELETE,
+		func() *modellogmgmt.OperationLog {
+			record, _ := json.Marshal(copied)
+			entry := operationLog(ctx, meta.name)
+			entry.RecordID = m.GetID()
+			entry.Record = util.BytesToString(record)
+			return entry
+		}); err != nil {
+		log.Warnz("record operation log failed", zap.Error(err))
+	}
+	return nil
 }

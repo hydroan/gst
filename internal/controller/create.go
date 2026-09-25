@@ -23,11 +23,10 @@ import (
 // CreateFactory returns a Gin handler that creates one resource.
 //
 // When M, REQ, and RSP are the same type, the handler binds the JSON body into
-// M, fills the creator/updater fields, runs the create hooks, writes the model
-// through the configured database handler, records an operation log, and
-// returns the created model. Creating a resource requires a body: an absent
-// one is refused, and a client wanting a resource with all defaults states
-// that intent with an explicit {} body.
+// M, runs the create flow (see createFlow), and returns the created model.
+// Creating a resource requires a body: an absent one is refused, and a client
+// wanting a resource with all defaults states that intent with an explicit {}
+// body.
 //
 // When REQ or RSP differs from M, the handler binds the JSON body into REQ and
 // delegates the operation to the phase service's Create method. Multipart form
@@ -35,17 +34,16 @@ import (
 func CreateFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...*types.ControllerConfig[M]) gin.HandlerFunc {
 	meta := newFactoryMeta[M, REQ, RSP](routeFromConfig(cfg...), consts.PHASE_CREATE, consts.PHASE_CREATE_BEFORE, consts.PHASE_CREATE_AFTER)
 	return func(c *gin.Context) {
-		var err error
-
 		ctrlSpanCtx, span := meta.startControllerSpan(c)
 		defer span.End()
 
 		log := logger.Controller.WithContext(c.Request.Context(), consts.PHASE_CREATE)
-		svc := meta.service()
 
 		if !meta.typesEqual {
+			var err error
 			var rsp RSP
 			req := meta.newRequest()
+			svc := meta.service()
 
 			// If the request content type is "multipart/form-data", then the request body is a file.
 			// We should not try to parse it as JSON.
@@ -58,10 +56,8 @@ func CreateFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...
 				}
 				meta.normalizeRequest(&req)
 			}
-			var serviceCtx *types.ServiceContext
 			if rsp, err = meta.traceServiceOperation(ctrlSpanCtx, consts.PHASE_CREATE, func(spanCtx context.Context) (RSP, error) {
-				serviceCtx = types.NewServiceContext(c, spanCtx, consts.PHASE_CREATE)
-				return svc.Create(serviceCtx, req)
+				return svc.Create(types.NewServiceContext(c, spanCtx, consts.PHASE_CREATE), req)
 			}); err != nil {
 				log.Errorz("service operation failed", zap.Error(err))
 				handleServiceError(c, err)
@@ -86,64 +82,59 @@ func CreateFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...
 			return
 		}
 		meta.normalizeModel(&req)
-		req.SetCreatedBy(c.GetString(consts.CTX_USERNAME))
-		req.SetUpdatedBy(c.GetString(consts.CTX_USERNAME))
 
-		// 1.Perform business logic processing before create resource.
-		var serviceCtxBefore *types.ServiceContext
-		if err = meta.traceServiceHook(ctrlSpanCtx, consts.PHASE_CREATE_BEFORE, svc, func(spanCtx context.Context) error {
-			serviceCtxBefore = types.NewServiceContext(c, spanCtx, consts.PHASE_CREATE_BEFORE)
-			return svc.CreateBefore(serviceCtxBefore, req)
-		}); err != nil {
-			log.Errorz("service operation failed", zap.Error(err))
-			handleServiceError(c, err)
-			gstotel.RecordError(span, err)
+		if err := meta.createFlow(requestContext(c), ginServiceContext(c), req); err != nil {
+			JSON(c, failureCoder(err))
 			return
 		}
-		// 2.Create resource in database. Create is a pure INSERT: a primary or
-		// unique key collision (including one held by a soft-deleted row)
-		// surfaces as ErrDuplicatedKey and renders 409.
-		if err = database.Database[M](requestContext(c)).WithExpand(req.Expands()).Create(req); err != nil {
-			log.Errorz("database operation failed", zap.Error(err))
-			JSON(c, databaseErrorCoder(err))
-			gstotel.RecordError(span, err)
-			return
-		}
-		// 3.Perform business logic processing after create resource
-		var serviceCtxAfter *types.ServiceContext
-		if err = meta.traceServiceHook(ctrlSpanCtx, consts.PHASE_CREATE_AFTER, svc, func(spanCtx context.Context) error {
-			serviceCtxAfter = types.NewServiceContext(c, spanCtx, consts.PHASE_CREATE_AFTER)
-			return svc.CreateAfter(serviceCtxAfter, req)
-		}); err != nil {
-			log.Errorz("service operation failed", zap.Error(err))
-			handleServiceError(c, err)
-			gstotel.RecordError(span, err)
-			return
-		}
-
-		// 4.record operation log to database.
-		// Record, Request, and Response carry the same serialized payload on
-		// this action, so one marshal feeds all three columns.
-		if err = am.RecordOperation(requestContext(c), req, consts.OP_CREATE,
-			func() *modellogmgmt.OperationLog {
-				record, _ := json.Marshal(req)
-				return &modellogmgmt.OperationLog{
-					Model:     meta.name,
-					RecordID:  req.GetID(),
-					Record:    util.BytesToString(record),
-					Request:   util.BytesToString(record),
-					Response:  util.BytesToString(record),
-					IP:        requestctx.GinClientIP(c),
-					User:      c.GetString(consts.CTX_USERNAME),
-					TraceID:   c.GetString(consts.TRACE_ID),
-					URI:       c.Request.RequestURI,
-					Method:    c.Request.Method,
-					UserAgent: c.Request.UserAgent(),
-				}
-			}); err != nil {
-			log.Warnz("record operation log failed", zap.Error(err))
-		}
-
 		JSON(c, CodeSuccess, req)
 	}
+}
+
+// createFlow runs the create flow on req: it takes the creator and updater
+// from the identity the request carries, runs the create hooks around the
+// write, and records the operation. The created model is req itself, filled
+// by the write.
+func (meta *factoryMeta[M, REQ, RSP]) createFlow(ctx context.Context, newServiceContext serviceContextFunc, req M) error {
+	log := logger.Controller.WithContext(ctx, consts.PHASE_CREATE)
+	svc := meta.service()
+	username := requestctx.FromContext(ctx).Username()
+	req.SetCreatedBy(username)
+	req.SetUpdatedBy(username)
+
+	// 1.Perform business logic processing before create resource.
+	if err := meta.traceServiceHook(ctx, consts.PHASE_CREATE_BEFORE, svc, func(spanCtx context.Context) error {
+		return svc.CreateBefore(newServiceContext(spanCtx, consts.PHASE_CREATE_BEFORE), req)
+	}); err != nil {
+		return failService(ctx, log, err)
+	}
+	// 2.Create resource in database. Create is a pure INSERT: a primary or
+	// unique key collision (including one held by a soft-deleted row)
+	// surfaces as ErrDuplicatedKey and renders 409.
+	if err := database.Database[M](ctx).WithExpand(req.Expands()).Create(req); err != nil {
+		return failDatabase(ctx, log, err)
+	}
+	// 3.Perform business logic processing after create resource
+	if err := meta.traceServiceHook(ctx, consts.PHASE_CREATE_AFTER, svc, func(spanCtx context.Context) error {
+		return svc.CreateAfter(newServiceContext(spanCtx, consts.PHASE_CREATE_AFTER), req)
+	}); err != nil {
+		return failService(ctx, log, err)
+	}
+
+	// 4.record operation log to database.
+	// Record, Request, and Response carry the same serialized payload on
+	// this action, so one marshal feeds all three columns.
+	if err := am.RecordOperation(ctx, req, consts.OP_CREATE,
+		func() *modellogmgmt.OperationLog {
+			record, _ := json.Marshal(req)
+			entry := operationLog(ctx, meta.name)
+			entry.RecordID = req.GetID()
+			entry.Record = util.BytesToString(record)
+			entry.Request = util.BytesToString(record)
+			entry.Response = util.BytesToString(record)
+			return entry
+		}); err != nil {
+		log.Warnz("record operation log failed", zap.Error(err))
+	}
+	return nil
 }

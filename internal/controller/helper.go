@@ -200,19 +200,23 @@ func requestContext(c *gin.Context) context.Context {
 	return requestctx.WithMetadata(c.Request.Context(), requestctx.FromGin(c))
 }
 
-// handleServiceError renders a service-layer failure: a service error keeps
-// the status and message it was constructed with, and anything else renders
-// the generic failure message. Internal error text — database drivers naming
-// tables and columns, third-party client output — never reaches the envelope;
-// handlers log the full error themselves before calling here.
-func handleServiceError(c *gin.Context, err error) {
+// serviceErrorCoder maps a service-layer failure to its code: a service error
+// keeps the status and message it was constructed with, and anything else
+// renders the generic failure message. Internal error text — database drivers
+// naming tables and columns, third-party client output — never reaches the
+// envelope; callers log the full error themselves before mapping it here.
+func serviceErrorCoder(err error) types.Coder {
 	var serviceErr *serviceregistry.Error
 	if errors.As(err, &serviceErr) {
-		JSON(c, serviceErr)
-		return
+		return serviceErr
 	}
+	return CodeFailure
+}
 
-	JSON(c, CodeFailure)
+// handleServiceError renders a service-layer failure through
+// serviceErrorCoder.
+func handleServiceError(c *gin.Context, err error) {
+	JSON(c, serviceErrorCoder(err))
 }
 
 // databaseErrorCoder maps database errors to their canonical API codes: a
