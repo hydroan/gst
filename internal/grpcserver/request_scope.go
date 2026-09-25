@@ -33,7 +33,7 @@ const traceIDKey = "x-trace-id"
 // with the status of a failed call as well; attaches the request metadata a
 // ServiceContext built on the context answers for, and keeps the call
 // record an authentication interceptor later adds the caller to (see
-// WithIdentity); and, once the handler returns, writes the call's entry to
+// WithCaller); and, once the handler returns, writes the call's entry to
 // the access log with the fields the HTTP entry carries, the caller as
 // established by then, the status being the code's name and, for a failed
 // call, the status message beside it.
@@ -87,8 +87,8 @@ func requestScope(ctx context.Context, req any, info *grpc.UnaryServerInfo, hand
 		fields,
 		zap.String("status", st.Code().String()),
 		zap.String(consts.CTX_METHOD, meta.Method()),
-		zap.String(consts.CTX_USERNAME, c.identity.Username),
-		zap.String(consts.CTX_USER_ID, c.identity.UserID),
+		zap.String(consts.CTX_USERNAME, c.caller.Username),
+		zap.String(consts.CTX_USER_ID, c.caller.UserID),
 		zap.String(consts.TRACE_ID, traceID),
 		zap.String(consts.CTX_ROUTE, meta.Route()),
 		zap.String(consts.CTX_PATH, meta.Path()),

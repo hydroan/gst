@@ -71,12 +71,12 @@ func TestUseAuthSkipsThePublicMethods(t *testing.T) {
 
 // TestWithIdentityNamesTheCallerDownstreamAndInTheAccessLog pins what an
 // auth interceptor establishing the caller hands on: the request metadata
-// the handler reads carries the identity beside everything it carried
+// the handler reads carries the caller beside everything it carried
 // before, and so does the call's access-log entry.
 func TestWithIdentityNamesTheCallerDownstreamAndInTheAccessLog(t *testing.T) {
 	reset(t)
 	UseAuth(func(ctx context.Context, req any, _ *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (any, error) {
-		return handler(WithIdentity(ctx, Identity{Username: "alice", UserID: "u-1", SessionID: "s-1", TenantID: "t-1"}), req)
+		return handler(WithCaller(ctx, Caller{Username: "alice", UserID: "u-1", SessionID: "s-1", TenantID: "t-1"}), req)
 	})
 	seen := make(chan observed, 1)
 	look(seen)

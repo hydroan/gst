@@ -42,7 +42,7 @@ func JwtAuth() grpc.UnaryServerInterceptor {
 		if values := md.Get("x-session-id"); len(values) > 0 {
 			sessionID = values[0]
 		}
-		return handler(WithIdentity(ctx, Identity{UserID: claims.UserID, Username: claims.Username, SessionID: sessionID}), req)
+		return handler(WithCaller(ctx, Caller{UserID: claims.UserID, Username: claims.Username, SessionID: sessionID}), req)
 	}
 }
 

@@ -34,17 +34,17 @@ func RegisterAuth(interceptors ...grpc.UnaryServerInterceptor) {
 	grpcserver.UseAuth(interceptors...)
 }
 
-// Identity is who a call is made by, as an authentication interceptor
+// Caller is who a call is made by, as an authentication interceptor
 // established it: the fields the HTTP authentication middleware sets on the
 // gin context.
-type Identity = grpcserver.Identity
+type Caller = grpcserver.Caller
 
-// WithIdentity returns ctx with identity established as the caller of the
-// call: the request metadata the service context and the flows read names
-// the caller, and so does the call's access-log entry. An authentication
+// WithCaller returns ctx with caller established as who is calling: the
+// request metadata the service context and the flows read names the
+// caller, and so does the call's access-log entry. An authentication
 // interceptor calls it once it has verified who is calling, and hands the
 // returned context on to the handler; a gRPC context cannot be written the
-// way a gin context can, which is why the identity travels this way.
-func WithIdentity(ctx context.Context, identity Identity) context.Context {
-	return grpcserver.WithIdentity(ctx, identity)
+// way a gin context can, which is why the caller travels this way.
+func WithCaller(ctx context.Context, caller Caller) context.Context {
+	return grpcserver.WithCaller(ctx, caller)
 }

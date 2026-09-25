@@ -65,10 +65,10 @@ func projectInterceptors() []grpc.UnaryServerInterceptor {
 	return chain
 }
 
-// Identity is who a call is made by, as an authentication interceptor
+// Caller is who a call is made by, as an authentication interceptor
 // established it: the fields the HTTP listener's authentication middleware
 // sets on the gin context.
-type Identity struct {
+type Caller struct {
 	Username  string
 	UserID    string
 	SessionID string
@@ -79,29 +79,29 @@ type Identity struct {
 type callRecordKey struct{}
 
 // callRecord is what requestScope knows of a call, the request metadata it
-// attached, and what the interceptors after it add, the caller's identity:
+// attached, and what the interceptors after it add, the caller:
 // the one place the access-log entry written when the call ends reads the
-// identity from, since a context cannot carry a value back up the chain.
+// caller from, since a context cannot carry a value back up the chain.
 type callRecord struct {
-	fields   requestctx.Fields
-	identity Identity
+	fields requestctx.Fields
+	caller Caller
 }
 
-// WithIdentity returns ctx with identity established as the caller: the
+// WithCaller returns ctx with caller established as who is calling: the
 // request metadata on the returned context names the caller, so the
 // ServiceContext built on it and the flows do, and the access-log entry of
 // the call names the caller as well. An authentication interceptor calls it
 // once it has verified who is calling, and hands the returned context on;
-// the public interceptor.WithIdentity forwards to it.
-func WithIdentity(ctx context.Context, identity Identity) context.Context {
+// the public interceptor.WithCaller forwards to it.
+func WithCaller(ctx context.Context, caller Caller) context.Context {
 	var fields requestctx.Fields
 	if c, ok := ctx.Value(callRecordKey{}).(*callRecord); ok {
-		c.identity = identity
+		c.caller = caller
 		fields = c.fields
 	}
-	fields.Username = identity.Username
-	fields.UserID = identity.UserID
-	fields.SessionID = identity.SessionID
-	fields.TenantID = identity.TenantID
+	fields.Username = caller.Username
+	fields.UserID = caller.UserID
+	fields.SessionID = caller.SessionID
+	fields.TenantID = caller.TenantID
 	return requestctx.WithMetadata(ctx, requestctx.New(fields))
 }
