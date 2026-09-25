@@ -441,12 +441,26 @@ type scannedModels struct {
 }
 
 // protobufFiles renders the .proto files of the models declaring GRPC()
-// (see pb.Generate) and compiles the Go files beside them (see pb.Compile),
-// the same set gg gen writes and gg prune keeps, definitions first. The
-// diagnostics of types protobuf cannot describe come back as they are, one
-// line each; any other failure is wrapped.
+// (see protobufDefinitions) and compiles the Go files beside them (see
+// pb.Compile), the set gg gen writes, definitions first.
 func protobufFiles(models []*modelinfo.Model) ([]pb.File, error) {
-	protos, err := pb.Generate(pb.Config{Dir: ".", ModulePath: module, Models: models})
+	protos, err := protobufDefinitions(models)
+	if err != nil {
+		return nil, err
+	}
+	compiled, err := pb.Compile(protos)
+	if err != nil {
+		return nil, err
+	}
+	return append(protos, compiled...), nil
+}
+
+// protobufDefinitions renders the .proto files of the models declaring
+// GRPC() (see pb.Generate), the definitions gg gen writes and gg prune
+// keeps. The diagnostics of types protobuf cannot describe come back as they
+// are, one line each; any other failure is wrapped.
+func protobufDefinitions(models []*modelinfo.Model) ([]pb.File, error) {
+	files, err := pb.Generate(pb.Config{Dir: ".", ModulePath: module, Models: models})
 	var diagnostics *pb.DiagnosticsError
 	switch {
 	case errors.As(err, &diagnostics):
@@ -454,11 +468,7 @@ func protobufFiles(models []*modelinfo.Model) ([]pb.File, error) {
 	case err != nil:
 		return nil, errors.Wrap(err, "generate the protobuf definitions")
 	}
-	compiled, err := pb.Compile(protos)
-	if err != nil {
-		return nil, errors.Wrap(err, "compile the protobuf definitions")
-	}
-	return append(protos, compiled...), nil
+	return files, nil
 }
 
 // scanModels reads the models of the model directory and resolves their

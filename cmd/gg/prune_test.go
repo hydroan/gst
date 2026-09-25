@@ -3,6 +3,7 @@ package main
 import (
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -10,6 +11,7 @@ import (
 	"github.com/hydroan/gst/dsl"
 	"github.com/hydroan/gst/internal/ggconfig"
 	"github.com/hydroan/gst/internal/ggconst"
+	"github.com/hydroan/gst/internal/gggen/pb"
 	"github.com/hydroan/gst/internal/gghelper"
 	"github.com/hydroan/gst/internal/modelinfo"
 )
@@ -65,6 +67,64 @@ func TestPruneLeftoversDeletesStalePBFiles(t *testing.T) {
 		if _, err := os.Stat(path); err != nil {
 			t.Errorf("%s should survive prune: %v", path, err)
 		}
+	}
+}
+
+// TestCompiledPBPathsNamesWhatCompileWrites holds the names prune derives
+// for the Go files to the ones the protobuf plugins actually write: a
+// definition with a service gets both files, one without gets the messages
+// file alone.
+func TestCompiledPBPathsNamesWhatCompileWrites(t *testing.T) {
+	protos := []pb.File{
+		{Path: "pb/sample.proto", Content: `syntax = "proto3";
+
+package tmpapp;
+
+option go_package = "tmpapp/pb;pb";
+
+message Sample {
+  string id = 1;
+}
+
+message GetSampleRequest {
+  string id = 1;
+}
+
+message GetSampleResponse {
+  Sample sample = 1;
+}
+
+service SampleService {
+  rpc GetSample ( GetSampleRequest ) returns ( GetSampleResponse );
+}
+`},
+		{Path: "pb/record/types.proto", Content: `syntax = "proto3";
+
+package tmpapp.record;
+
+option go_package = "tmpapp/pb/record;record";
+
+message Link {
+  string url = 1;
+}
+`},
+	}
+
+	compiled, err := pb.Compile(protos)
+	if err != nil {
+		t.Fatal(err)
+	}
+	written := make([]string, 0, len(compiled))
+	for _, f := range compiled {
+		written = append(written, f.Path)
+	}
+	derived := compiledPBPaths(protos)
+	slices.Sort(derived)
+	if !slices.Equal(derived, written) {
+		t.Fatalf("compiledPBPaths() = %v, pb.Compile wrote %v", derived, written)
+	}
+	if want := []string{"pb/record/types.pb.go", "pb/sample.pb.go", "pb/sample_grpc.pb.go"}; !slices.Equal(written, want) {
+		t.Fatalf("pb.Compile wrote %v, want %v", written, want)
 	}
 }
 

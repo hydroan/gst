@@ -129,9 +129,9 @@ stop
 2. 读 gst.yaml。读之前，项目根目录下有 `.gg.yaml`、`.gg.yml`、`.gst.yaml`、`.gst.yml`、`gst.yml` 中的哪个，就对哪个打印一条警告：gg 不读它们。
 3. 扫描 `model/` 下的 model，读的文件和 `gg gen` 相同：跳过被 Git 忽略的、Go 工具链内置忽略的（见开头）和测试文件。项目有哪些 model 由 `gg gen` 说了算，prune 只处理它们留下的东西。一个 model 都没找到时打印 `No models found, pruning service files only` 并照常往下走，这时所有 gg 管的 service 文件都会进待删清单。
 4. 列出 `service/` 下现有的 gg 管的 service 文件，不跳过任何目录：被 Git 忽略的、`testdata` 或 `_` 开头目录里的都算。扫描中途出错只打印警告，用已经扫到的文件继续。
-5. 列出 `pb/` 下现有的 `.proto`、`.pb.go`、`_grpc.pb.go` 文件，同样不跳过任何目录；再按 `gg gen` 的读法（应用 gst.yaml 的 `gen.routes.ignore` 和 `gen.models.ignore`）推导一遍当前 model 会写出哪些 `.proto`、并编出它们的 Go 文件，作为「这次 gg gen 会写出的」清单。推导或编译失败（比如某个类型 protobuf 表达不了）时打印错误并以失败退出，什么都不删。
+5. 列出 `pb/` 下现有的 `.proto`、`.pb.go`、`_grpc.pb.go` 文件，同样不跳过任何目录；再按 `gg gen` 的读法（应用 gst.yaml 的 `gen.routes.ignore` 和 `gen.models.ignore`）推导一遍当前 model 会写出哪些 `.proto`，再按插件的命名规则推出旁边的 Go 文件名（`x.proto` 对应 `x.pb.go`，声明了 service 的再加 `x_grpc.pb.go`，不真的编译），作为「这次 gg gen 会写出的」清单。推导失败（比如某个类型 protobuf 表达不了）时打印错误并以失败退出，什么都不删。
 
-读不出模块路径、gst.yaml 写错（包括 `prune.ignore` 不合规）、model 文件解析失败、`.proto` 推导或编译失败时，`gg prune` 打印错误并以失败退出，什么都不删。
+读不出模块路径、gst.yaml 写错（包括 `prune.ignore` 不合规）、model 文件解析失败、`.proto` 推导失败时，`gg prune` 打印错误并以失败退出，什么都不删。
 
 `gg prune` 对 service 文件不应用 gst.yaml 的 `gen.routes.ignore`：被屏蔽的 action 在这里仍算启用，它的 service 文件是当前应有的，所在目录属于 model。结果和 `gg gen --prune` 保留它们一样。对 `pb/` 下的文件则应用，因为它们的内容本来就是按屏蔽后的结果推导的。
 

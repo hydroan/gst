@@ -11,6 +11,7 @@ import (
 	"github.com/hydroan/gst/internal/clioutput"
 	"github.com/hydroan/gst/internal/ggconfig"
 	"github.com/hydroan/gst/internal/ggconst"
+	"github.com/hydroan/gst/internal/gggen/pb"
 	"github.com/hydroan/gst/internal/gghelper"
 	"github.com/hydroan/gst/internal/ggmodule"
 	"github.com/hydroan/gst/internal/ggprune"
@@ -114,21 +115,44 @@ func existingPBFiles() []string {
 // the current models, which prune keeps: the models are read the way gg gen
 // reads them, gst.yaml route and model ignores applied, since the files
 // reflect them (unlike a service file, which an ignored action keeps on
-// disk).
+// disk). The definitions are derived, the Go files beside them are named
+// from the definitions (see compiledPBPaths) rather than compiled: prune
+// only needs their names, and the plugins that compile them are not to be
+// run, or fetched, for that.
 func generatedPBFiles(ignore gghelper.ProjectIgnore) ([]string, error) {
 	scanned, err := scanModels(true, ignore)
 	if err != nil {
 		return nil, err
 	}
-	files, err := protobufFiles(scanned.models)
+	protos, err := protobufDefinitions(scanned.models)
 	if err != nil {
 		return nil, err
 	}
-	paths := make([]string, 0, len(files))
-	for _, f := range files {
+	paths := make([]string, 0, 3*len(protos))
+	for _, f := range protos {
 		paths = append(paths, f.Path)
 	}
-	return paths, nil
+	return append(paths, compiledPBPaths(protos)...), nil
+}
+
+// compiledPBPaths names the Go files pb.Compile writes for the definitions
+// protos, the way the protobuf plugins name them: pb/record.pb.go for
+// pb/record.proto, and pb/record_grpc.pb.go as well when the file declares a
+// service — a line reading "service Name {" at the top level, where the
+// generator prints every service. For [pb/record.proto pb/types.proto] with
+// a service in the first alone, the paths are [pb/record.pb.go
+// pb/record_grpc.pb.go pb/types.pb.go]. A test holds this to what
+// pb.Compile actually writes.
+func compiledPBPaths(protos []pb.File) []string {
+	paths := make([]string, 0, 2*len(protos))
+	for _, f := range protos {
+		base := strings.TrimSuffix(f.Path, ".proto")
+		paths = append(paths, base+".pb.go")
+		if strings.Contains(f.Content, "\nservice ") {
+			paths = append(paths, base+"_grpc.pb.go")
+		}
+	}
+	return paths
 }
 
 // warnMissingPruneIgnore warns about the gst.yaml prune.ignore entries naming
