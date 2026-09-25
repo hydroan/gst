@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"go/token"
 	"go/types"
-	"path/filepath"
 	"slices"
 	"strings"
 )
@@ -64,9 +63,7 @@ func (p *Project) Report(s Site, format string, args ...any) {
 	d := Diagnostic{Subject: s.Subject, Message: fmt.Sprintf(format, args...)}
 	if s.Pos.IsValid() {
 		d.Pos = p.fset.Position(s.Pos)
-		if rel, err := filepath.Rel(p.dir, d.Pos.Filename); err == nil && filepath.IsLocal(rel) {
-			d.Pos.Filename = rel
-		}
+		d.Pos.Filename = p.RelativeFile(d.Pos.Filename)
 	}
 	if key := d.String(); !p.reported[key] {
 		p.reported[key] = true

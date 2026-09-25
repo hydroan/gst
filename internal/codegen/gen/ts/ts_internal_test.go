@@ -19,9 +19,14 @@ import (
 
 var update = flag.Bool("update", false, "rewrite the golden files under testdata/golden")
 
-// fixtureModule is the module path the fixture packages stand in for a
-// project module under.
-const fixtureModule = "github.com/hydroan/gst/internal/codegen/gen/ts/fixture"
+// fixtureModule is the module path the fixture packages, kept beside the
+// jsonshape package both generators read shapes from, stand in for a project
+// module under; fixtureDir is where a generation run loads them from, so that
+// diagnostics name their files relative to it.
+const (
+	fixtureModule = "github.com/hydroan/gst/internal/codegen/gen/jsonshape/fixture"
+	fixtureDir    = "../jsonshape"
+)
 
 var (
 	sampleRoot   = TypeRef{PkgPath: fixtureModule + "/model/sample", Name: "Sample"}
@@ -288,7 +293,7 @@ func loadFixture(t *testing.T) *jsonshape.Project {
 // fixtureConfig configures a run over the fixture packages from roots, rooted
 // at the fixture model directory the way a project's run is rooted at its own.
 func fixtureConfig(roots ...TypeRef) Config {
-	return Config{Dir: ".", ModulePath: fixtureModule, RootPath: fixtureModule + "/model", Roots: roots}
+	return Config{Dir: fixtureDir, ModulePath: fixtureModule, RootPath: fixtureModule + "/model", Roots: roots}
 }
 
 // writeFiles writes generated files under dir.

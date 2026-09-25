@@ -61,12 +61,8 @@ func Load(cfg Config) (*Project, error) {
 	if err != nil {
 		return nil, err
 	}
-	dir, err := filepath.Abs(cfg.Dir)
-	if err != nil {
-		dir = cfg.Dir
-	}
 	p := &Project{
-		dir:      dir,
+		dir:      absoluteDir(cfg.Dir),
 		fset:     fset,
 		pkgs:     pkgs,
 		sources:  make(map[string]*sourceIndex, len(pkgs)),
@@ -77,6 +73,33 @@ func Load(cfg Config) (*Project, error) {
 		p.sources[pkgPath] = newSourceIndex(fset, pkg)
 	}
 	return p, nil
+}
+
+// absoluteDir returns dir absolute, with its symbolic links resolved, the form
+// the loader reports file names in; a dir that cannot be resolved is kept as
+// given.
+func absoluteDir(dir string) string {
+	abs, err := filepath.Abs(dir)
+	if err != nil {
+		return dir
+	}
+	if resolved, err := filepath.EvalSymlinks(abs); err == nil {
+		return resolved
+	}
+	return abs
+}
+
+// RelativeFile returns the name of file relative to the directory the
+// packages were loaded from, or file itself when it lies outside. File names
+// come from the loader, with symbolic links resolved on both sides.
+func (p *Project) RelativeFile(file string) string {
+	if resolved, err := filepath.EvalSymlinks(file); err == nil {
+		file = resolved
+	}
+	if rel, err := filepath.Rel(p.dir, file); err == nil && filepath.IsLocal(rel) {
+		return rel
+	}
+	return file
 }
 
 // Package returns the project package at pkgPath, or nil for an import path

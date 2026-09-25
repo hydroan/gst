@@ -7,8 +7,8 @@ import (
 	"encoding/json"
 	"time"
 
-	"github.com/hydroan/gst/internal/codegen/gen/ts/fixture/model/record"
-	"github.com/hydroan/gst/internal/codegen/gen/ts/fixture/pkg/notifier"
+	"github.com/hydroan/gst/internal/codegen/gen/jsonshape/fixture/model/record"
+	"github.com/hydroan/gst/internal/codegen/gen/jsonshape/fixture/pkg/notifier"
 	"github.com/hydroan/gst/internal/modelregistry"
 	"gorm.io/datatypes"
 	"gorm.io/gorm"

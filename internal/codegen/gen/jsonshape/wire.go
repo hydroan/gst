@@ -29,6 +29,9 @@ type Field struct {
 	// ViaPointer marks a key promoted through an embedded pointer, which a nil
 	// pointer drops together with every other key of the embedded struct.
 	ViaPointer bool
+	// Tag is the struct tag of the field as written, for the options other
+	// descriptions read off it, such as the pb tag numbering protobuf fields.
+	Tag string
 
 	// tagged marks a key the json tag names, which wins a tie with the keys of
 	// untagged fields at the same depth.
@@ -88,7 +91,8 @@ func (p *Project) Fields(st *types.Struct, s Site) []Field {
 				} else if !f.Exported() {
 					continue
 				}
-				tag := reflect.StructTag(lv.st.Tag(i)).Get("json")
+				structTag := lv.st.Tag(i)
+				tag := reflect.StructTag(structTag).Get("json")
 				if tag == "-" {
 					continue
 				}
@@ -105,6 +109,7 @@ func (p *Project) Fields(st *types.Struct, s Site) []Field {
 						Omit:       opts.omitEmpty || opts.omitZero,
 						Quoted:     opts.quoted && quotable(f.Type()),
 						ViaPointer: lv.viaPointer,
+						Tag:        structTag,
 						tagged:     name != "",
 						index:      index,
 					}

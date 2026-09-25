@@ -8,10 +8,10 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// fixtureModule is the module path the fixture packages of the TypeScript
-// generator stand in for a project module under; the shapes read off them
-// are the ones its golden files render.
-const fixtureModule = "github.com/hydroan/gst/internal/codegen/gen/ts/fixture"
+// fixtureModule is the module path the fixture packages stand in for a
+// project module under. They are kept here for every generator that reads
+// shapes off a project; the TypeScript golden files render these very shapes.
+const fixtureModule = "github.com/hydroan/gst/internal/codegen/gen/jsonshape/fixture"
 
 // TestLoadReadsTheShapesOfAProject pins what a loaded project answers: the
 // packages it holds, the types it declares and their doc comments, the keys a
