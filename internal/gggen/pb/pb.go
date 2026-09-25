@@ -11,6 +11,14 @@
 // protobuf cannot express is reported as a diagnostic instead of being
 // approximated, and no file is generated then.
 //
+// Two libraries stand in for protoc, so nothing needs it installed: the
+// files are written by protoprint, the one package of jhump/protoreflect
+// used, which prints the assembled descriptors as .proto source with their
+// comments and layout; they are read back by bufbuild/protocompile, a
+// protobuf compiler front end in pure Go that parses and links .proto
+// source into descriptors, here to hold a committed file's numbers and,
+// in tests, to compile the generated files the way protoc would.
+//
 // The files already under pb/ are the contract in force, what the clients
 // were built against, so a generated file replaces one only if every field
 // keeps its number and no number changes hands; the numbers and names of the

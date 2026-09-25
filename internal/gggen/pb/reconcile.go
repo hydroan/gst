@@ -45,7 +45,9 @@ func (g *generator) reconcile() {
 
 // readCommitted parses the .proto file at path on its own, imports
 // unresolved, which is all the comparison needs: the messages, their fields
-// with numbers, and what they reserve.
+// with numbers, and what they reserve. The parser is bufbuild/protocompile's,
+// the front end of a protobuf compiler in pure Go, so no protoc is needed to
+// read the file.
 func readCommitted(path string) (*descriptorpb.FileDescriptorProto, error) {
 	file, err := os.Open(path)
 	if err != nil {

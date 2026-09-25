@@ -280,6 +280,9 @@ func readProtos(t *testing.T, root string) map[string]string {
 func requireProtosCompile(t *testing.T, projectDir string, files map[string]string) {
 	t.Helper()
 
+	// bufbuild/protocompile compiles .proto source the way protoc does,
+	// parsing and linking it against the well-known types, without protoc
+	// installed: what it accepts, protoc accepts.
 	compiler := protocompile.Compiler{
 		Resolver: protocompile.WithStandardImports(&protocompile.SourceResolver{
 			ImportPaths: []string{filepath.Join(projectDir, "pb")},

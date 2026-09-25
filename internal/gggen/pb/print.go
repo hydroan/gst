@@ -66,8 +66,11 @@ func (g *generator) print() ([]File, error) {
 		}
 	}
 
-	// The printer's own layout, the one grpcurl describes services in: a
-	// blank line between elements, comments above them.
+	// protoprint turns a resolved descriptor back into .proto source, the
+	// comments recorded in SourceCodeInfo above their elements; it is the
+	// one package of jhump/protoreflect the generator uses. The printer's
+	// own layout is the one grpcurl describes services in: a blank line
+	// between elements, comments above them.
 	printer := protoprint.Printer{}
 	files := make([]File, 0, len(resolved))
 	for _, name := range slices.Sorted(maps.Keys(resolved)) {
