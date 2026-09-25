@@ -5,7 +5,6 @@ import (
 	"mime/multipart"
 	"net/http"
 	"net/url"
-	"strings"
 	"time"
 
 	"github.com/cockroachdb/errors"
@@ -28,12 +27,12 @@ type ServiceContext struct {
 	ginCtx         *gin.Context
 	responseWriter http.ResponseWriter
 
-	request   *http.Request
-	clientIP  string
-	userAgent string
-
 	phase        consts.Phase
 	requiresAuth bool // indicates whether the current API requires authentication
+
+	// rawResponseAttempted records that a service asked for a raw HTTP
+	// response while the context carried none; RawResponseAttempted reads it.
+	rawResponseAttempted bool
 }
 
 // NewServiceContext builds a ServiceContext from the Gin request, capturing
@@ -41,6 +40,11 @@ type ServiceContext struct {
 //
 // A non-nil ctx overrides the base context, which is how span tracing is
 // propagated; when ctx is nil, the request context is used when available.
+//
+// Without a Gin request (c == nil) the context answers request metadata from
+// ctx alone: a transport other than HTTP attaches requestctx.Metadata to ctx
+// before building the context, and a context built on a bare ctx reads empty
+// metadata.
 //
 // NewServiceContext always returns a non-nil *ServiceContext, even when
 // both c and ctx are nil. ServiceContext methods are also nil-receiver
@@ -64,19 +68,13 @@ func NewServiceContext(c *gin.Context, ctx context.Context, phase consts.Phase) 
 	}
 	ctx = requestctx.WithMetadata(ctx, requestctx.FromGin(c))
 
-	serviceCtx := &ServiceContext{
+	return &ServiceContext{
 		baseCtx:        ctx,
 		ginCtx:         c,
 		responseWriter: c.Writer,
 		phase:          phase,
 		requiresAuth:   c.GetBool(consts.CTX_REQUIRES_AUTH),
 	}
-	if c.Request != nil {
-		serviceCtx.request = c.Request
-		serviceCtx.clientIP = requestctx.GinClientIP(c)
-		serviceCtx.userAgent = c.Request.UserAgent()
-	}
-	return serviceCtx
 }
 
 // baseContext returns the context the ServiceContext delegates to, or the
@@ -128,53 +126,22 @@ func (sc *ServiceContext) SessionID() string       { return requestctx.FromConte
 func (sc *ServiceContext) TenantID() string { return requestctx.FromContext(sc).TenantID() }
 func (sc *ServiceContext) TraceID() string  { return execctx.FromContext(sc).TraceID }
 
-// Host returns the host the request was addressed to, or "" without a
-// request.
-func (sc *ServiceContext) Host() string {
-	if sc == nil || sc.request == nil {
-		return ""
-	}
-	return sc.request.Host
-}
-
-// ClientIP returns the client address Gin resolved for the request.
-func (sc *ServiceContext) ClientIP() string {
-	if sc == nil {
-		return ""
-	}
-	return sc.clientIP
-}
-
-// UserAgent returns the User-Agent header of the request.
-func (sc *ServiceContext) UserAgent() string {
-	if sc == nil {
-		return ""
-	}
-	return sc.userAgent
-}
-
-// IsHTTPS reports whether the request arrived over TLS, either directly or
-// as the forwarding headers of a proxy in front declare.
-func (sc *ServiceContext) IsHTTPS() bool {
-	if sc == nil || sc.request == nil {
-		return false
-	}
-	if sc.request.TLS != nil {
-		return true
-	}
-	if strings.EqualFold(strings.TrimSpace(sc.request.Header.Get("X-Forwarded-Proto")), "https") {
-		return true
-	}
-	if strings.EqualFold(strings.TrimSpace(sc.request.Header.Get("X-Forwarded-Ssl")), "on") {
-		return true
-	}
-	return strings.Contains(strings.ToLower(sc.request.Header.Get("Forwarded")), "proto=https")
-}
+// Host, ClientIP, UserAgent and IsHTTPS describe the connection the request
+// arrived on, read from the same metadata: the host the request was addressed
+// to, the client address Gin resolved (forwarding headers included), the
+// User-Agent header, and whether the request arrived over TLS, either
+// directly or as the forwarding headers of a proxy in front declare.
+func (sc *ServiceContext) Host() string      { return requestctx.FromContext(sc).Host() }
+func (sc *ServiceContext) ClientIP() string  { return requestctx.FromContext(sc).ClientIP() }
+func (sc *ServiceContext) UserAgent() string { return requestctx.FromContext(sc).UserAgent() }
+func (sc *ServiceContext) IsHTTPS() bool     { return requestctx.FromContext(sc).TLS() }
 
 // Data writes data as the response body with the given status and content
-// type. Without a response to write to it does nothing.
+// type. Without a response to write to it writes nothing and records the
+// attempt for RawResponseAttempted.
 func (sc *ServiceContext) Data(code int, contentType string, data []byte) {
 	if sc == nil || sc.ginCtx == nil {
+		sc.recordRawResponseAttempt()
 		return
 	}
 	sc.ginCtx.Data(code, contentType, data)
@@ -193,7 +160,8 @@ func (sc *ServiceContext) Data(code int, contentType string, data []byte) {
 //
 // The error is fn's own error, or the setup failure that prevented streaming
 // (reported before anything was written, so it still surfaces as a regular
-// error response).
+// error response). Without a response to stream on it records the attempt for
+// RawResponseAttempted and reports the failure.
 //
 // Example:
 //
@@ -211,18 +179,43 @@ func (sc *ServiceContext) Data(code int, contentType string, data []byte) {
 //	})
 func (sc *ServiceContext) SSE(fn func(conn *sse.Conn) error, opts ...sse.Option) error {
 	if sc == nil || sc.ginCtx == nil {
+		sc.recordRawResponseAttempt()
 		return errors.New("service context carries no HTTP response to stream on")
 	}
 	return sse.Serve(sc.ginCtx.Writer, sc.ginCtx.Request, fn, opts...)
 }
 
 // SetCookie adds cookie to the response headers. Without a response to write
-// to it does nothing.
+// to it writes nothing and records the attempt for RawResponseAttempted; a
+// nil cookie is nothing to write on any transport and records nothing.
 func (sc *ServiceContext) SetCookie(cookie *http.Cookie) {
-	if sc == nil || sc.responseWriter == nil || cookie == nil {
+	if sc == nil || cookie == nil {
+		return
+	}
+	if sc.responseWriter == nil {
+		sc.recordRawResponseAttempt()
 		return
 	}
 	http.SetCookie(sc.responseWriter, cookie)
+}
+
+// recordRawResponseAttempt marks that a service asked for a raw HTTP response
+// the context cannot write; a nil context has nothing to mark.
+func (sc *ServiceContext) recordRawResponseAttempt() {
+	if sc != nil {
+		sc.rawResponseAttempted = true
+	}
+}
+
+// RawResponseAttempted reports whether a service asked sc for a raw HTTP
+// response -- a body, a stream or a cookie -- while sc carried no HTTP
+// response to write to. The write itself is a no-op; the transport behind such
+// a context reads the flag once the service returns and refuses the request,
+// because the response the service meant to send cannot be carried. It is a
+// package function rather than a method so it stays out of the public alias
+// of ServiceContext: only the framework's transports read it.
+func RawResponseAttempted(sc *ServiceContext) bool {
+	return sc != nil && sc.rawResponseAttempted
 }
 
 // Cookie returns the value of the named request cookie.

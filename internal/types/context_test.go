@@ -1,6 +1,7 @@
 package types_test
 
 import (
+	"context"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -9,6 +10,7 @@ import (
 	"github.com/hydroan/gst/consts"
 	"github.com/hydroan/gst/internal/execctx"
 	"github.com/hydroan/gst/internal/requestctx"
+	"github.com/hydroan/gst/internal/sse"
 	"github.com/hydroan/gst/internal/types"
 	"github.com/stretchr/testify/require"
 )
@@ -75,12 +77,15 @@ func TestServiceContextRequestAccessors(t *testing.T) {
 	recorder := httptest.NewRecorder()
 	ctx, _ := gin.CreateTestContext(recorder)
 	ctx.Request = httptest.NewRequest(http.MethodGet, "https://example.com/api/users?tag=blue", nil)
+	ctx.Request.Header.Set("User-Agent", "sample-agent/1.0")
 
 	serviceCtx := types.NewServiceContext(ctx, nil, "")
 
 	require.Equal(t, http.MethodGet, serviceCtx.Method())
 	require.Equal(t, "/api/users", serviceCtx.Path())
 	require.Equal(t, "example.com", serviceCtx.Host())
+	require.Equal(t, "192.0.2.1", serviceCtx.ClientIP())
+	require.Equal(t, "sample-agent/1.0", serviceCtx.UserAgent())
 	require.True(t, serviceCtx.IsHTTPS())
 	require.Equal(t, "blue", serviceCtx.Query().Get("tag"))
 }
@@ -99,6 +104,34 @@ func TestServiceContextNilRequest(t *testing.T) {
 	require.Empty(t, serviceCtx.UserAgent())
 	require.False(t, serviceCtx.IsHTTPS())
 	require.Empty(t, serviceCtx.Query())
+}
+
+// TestServiceContextWithoutGinReadsMetadataFromContext pins the construction
+// path a transport other than HTTP uses: with no Gin request, every request
+// accessor answers from the metadata the transport attached to ctx.
+func TestServiceContextWithoutGinReadsMetadataFromContext(t *testing.T) {
+	ctx := requestctx.WithMetadata(context.Background(), requestctx.New(requestctx.Fields{
+		Route:     "/api/users/:id",
+		Path:      "/api/users/42",
+		Method:    http.MethodGet,
+		Username:  "admin",
+		ClientIP:  "203.0.113.5",
+		UserAgent: "sample-agent/1.0",
+		Host:      "example.com",
+		TLS:       true,
+	}))
+
+	serviceCtx := types.NewServiceContext(nil, ctx, consts.PHASE_GET)
+
+	require.Equal(t, consts.PHASE_GET, serviceCtx.Phase())
+	require.Equal(t, "/api/users/:id", serviceCtx.Route())
+	require.Equal(t, "/api/users/42", serviceCtx.Path())
+	require.Equal(t, http.MethodGet, serviceCtx.Method())
+	require.Equal(t, "admin", serviceCtx.Username())
+	require.Equal(t, "203.0.113.5", serviceCtx.ClientIP())
+	require.Equal(t, "sample-agent/1.0", serviceCtx.UserAgent())
+	require.Equal(t, "example.com", serviceCtx.Host())
+	require.True(t, serviceCtx.IsHTTPS())
 }
 
 func TestServiceContextResponseHelpers(t *testing.T) {
@@ -126,6 +159,55 @@ func TestServiceContextResponseHelpers(t *testing.T) {
 	require.Contains(t, setCookie, "SameSite=Lax")
 	require.Equal(t, http.StatusCreated, recorder.Code)
 	require.Equal(t, "created", recorder.Body.String())
+	require.False(t, types.RawResponseAttempted(serviceCtx), "the writes reached the HTTP response")
+}
+
+// TestRawResponseAttemptedRecordsWritesWithoutHTTP pins the flag a transport
+// other than HTTP reads once the service returns: each response writer sets it
+// when there is no HTTP response to write to, the request readers do not, and
+// a nil cookie -- nothing to write on any transport -- does not either.
+func TestRawResponseAttemptedRecordsWritesWithoutHTTP(t *testing.T) {
+	tests := []struct {
+		name string
+		call func(serviceCtx *types.ServiceContext)
+		want bool
+	}{
+		{name: "Data", call: func(serviceCtx *types.ServiceContext) {
+			serviceCtx.Data(http.StatusCreated, "text/plain", []byte("created"))
+		}, want: true},
+		{name: "SetCookie", call: func(serviceCtx *types.ServiceContext) {
+			serviceCtx.SetCookie(&http.Cookie{Name: "session_id", Value: "session-1"})
+		}, want: true},
+		{name: "SSE", call: func(serviceCtx *types.ServiceContext) {
+			_ = serviceCtx.SSE(func(*sse.Conn) error { return nil })
+		}, want: true},
+		{name: "SetCookie nil", call: func(serviceCtx *types.ServiceContext) {
+			serviceCtx.SetCookie(nil)
+		}, want: false},
+		{name: "Cookie", call: func(serviceCtx *types.ServiceContext) {
+			_, _ = serviceCtx.Cookie("session_id")
+		}, want: false},
+		{name: "PostForm", call: func(serviceCtx *types.ServiceContext) {
+			_ = serviceCtx.PostForm("name")
+		}, want: false},
+		{name: "FormFile", call: func(serviceCtx *types.ServiceContext) {
+			_, _ = serviceCtx.FormFile("file")
+		}, want: false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			serviceCtx := types.NewServiceContext(nil, nil, "")
+			require.False(t, types.RawResponseAttempted(serviceCtx))
+
+			tt.call(serviceCtx)
+
+			require.Equal(t, tt.want, types.RawResponseAttempted(serviceCtx))
+		})
+	}
+
+	var nilCtx *types.ServiceContext
+	nilCtx.Data(http.StatusCreated, "text/plain", []byte("created"))
+	require.False(t, types.RawResponseAttempted(nilCtx))
 }
 
 func TestServiceContextNilGinHelpers(t *testing.T) {
@@ -133,6 +215,7 @@ func TestServiceContextNilGinHelpers(t *testing.T) {
 
 	serviceCtx.Data(http.StatusCreated, "text/plain", []byte("created"))
 	serviceCtx.SetCookie(&http.Cookie{Name: "session_id", Value: "session-1"})
+	require.Error(t, serviceCtx.SSE(func(*sse.Conn) error { return nil }))
 
 	require.Empty(t, serviceCtx.PostForm("name"))
 
@@ -147,6 +230,7 @@ func TestServiceContextNilGinHelpers(t *testing.T) {
 	var nilCtx *types.ServiceContext
 	nilCtx.Data(http.StatusCreated, "text/plain", []byte("created"))
 	nilCtx.SetCookie(&http.Cookie{Name: "session_id", Value: "session-1"})
+	require.Error(t, nilCtx.SSE(func(*sse.Conn) error { return nil }))
 	require.Empty(t, nilCtx.PostForm("name"))
 
 	cookie, err = nilCtx.Cookie("session_id")
