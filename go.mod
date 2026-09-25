@@ -9,6 +9,8 @@ tool (
 	golang.org/x/tools/go/analysis/passes/nilness/cmd/nilness
 	golang.org/x/tools/go/analysis/passes/shadow/cmd/shadow
 	golang.org/x/tools/go/analysis/passes/stringintconv/cmd/stringintconv
+	google.golang.org/grpc/cmd/protoc-gen-go-grpc
+	google.golang.org/protobuf/cmd/protoc-gen-go
 	gotest.tools/gotestsum
 	mvdan.cc/gofumpt
 )
@@ -489,6 +491,7 @@ require (
 	golang.org/x/term v0.45.0 // indirect
 	google.golang.org/genproto/googleapis/api v0.0.0-20260819154853-08b0e4226688 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20260819154853-08b0e4226688 // indirect
+	google.golang.org/grpc/cmd/protoc-gen-go-grpc v1.6.2 // indirect
 	gopkg.in/cenkalti/backoff.v2 v2.2.1 // indirect
 	gopkg.in/inf.v0 v0.9.1 // indirect
 	gopkg.in/warnings.v0 v0.1.2 // indirect

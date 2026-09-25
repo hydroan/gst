@@ -16,8 +16,10 @@
 // used, which prints the assembled descriptors as .proto source with their
 // comments and layout; they are read back by bufbuild/protocompile, a
 // protobuf compiler front end in pure Go that parses and links .proto
-// source into descriptors, here to hold a committed file's numbers and,
-// in tests, to compile the generated files the way protoc would.
+// source into descriptors, here to hold a committed file's numbers, to
+// compile the definitions for the plugins that write the Go files beside
+// them (see Compile) and, in tests, to compile the generated files the way
+// protoc would.
 //
 // The files already under pb/ are the contract in force, what the clients
 // were built against, so a generated file replaces one only if every field
@@ -71,12 +73,14 @@ type Config struct {
 	Models []*modelinfo.Model
 }
 
-// File is one generated .proto file.
+// File is one generated file under pb/: a .proto definition, or a Go file
+// Compile made of one.
 type File struct {
 	// Path is slash-separated and relative to the project root, such as
-	// pb/archive/document.proto for the model file model/archive/document.go.
+	// pb/archive/document.proto for the model file model/archive/document.go
+	// and pb/archive/document.pb.go for the messages compiled from it.
 	Path string
-	// Content is the protobuf source of the file.
+	// Content is the source of the file.
 	Content string
 }
 

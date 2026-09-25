@@ -1,6 +1,6 @@
 # gg prune 清理逻辑
 
-**只动三个目录：`service/`、`middleware/` 和 `pb/`。** `gg prune` 和 `gg gen --prune` 清理 `service/` 里 model 不再需要的文件，被删掉的复制模块留在 `middleware/` 里的中间件文件（连同它们在 `middleware/middleware.go` 里的注册调用），以及 `pb/` 里 `gg gen` 不会再生成的 `.proto` 文件。项目的其他地方，一个文件都不删、不改。本文说明它们删什么、不删什么、按什么顺序删、在哪一步问你。
+**只动三个目录：`service/`、`middleware/` 和 `pb/`。** `gg prune` 和 `gg gen --prune` 清理 `service/` 里 model 不再需要的文件，被删掉的复制模块留在 `middleware/` 里的中间件文件（连同它们在 `middleware/middleware.go` 里的注册调用），以及 `pb/` 里 `gg gen` 不会再生成的 `.proto` 文件和由它们编出来的 `.pb.go`、`_grpc.pb.go` 文件。项目的其他地方，一个文件都不删、不改。本文说明它们删什么、不删什么、按什么顺序删、在哪一步问你。
 
 **删什么只认 `prune.ignore`**：`service/` 和 `pb/` 归 gg 管，要保持干净，放在里面的东西被 Git 忽略也好、被 Go 工具链忽略也好，用不上的照样是垃圾。所以 prune 删东西时读整个 `service/`，项目的 Git 忽略规则和 Go 工具链的内置忽略（名字以 `.` 或 `_` 开头的文件和目录、`vendor`、`testdata`、自带 `go.mod` 的子目录、`go.mod` 里 `ignore` 的目录）都不保护任何路径，想保留的路径写进 gst.yaml 的 `prune.ignore`。判断某个 service 目录还有没有代码在用时，prune 和 `gg check`、`gg gen` 一样按这两类规则认项目代码：被忽略的代码不算在用，所以清理完不会留下一直删不掉的目录。
 
@@ -12,9 +12,9 @@
    - **停用的 service 文件**：删掉 model、关掉 action，或者 action 去掉 `Service()` 之后，留在磁盘上的 service 文件，连同它的配对测试文件；
    - **孤儿目录**：没有任何 model 对应、也没有活代码 import 的 service 目录，删的是其中 gg 不认得的文件；
    - **孤儿中间件文件**：`gg module copy` 写进 `middleware/`、所属模块已经被删掉的中间件文件，连同它们的注册调用；
-   - **过期的 .proto 文件**：`pb/` 里现有、而这次 `gg gen` 不会再写出来的 `.proto` 文件，比如 model 去掉 `GRPC()`、model 被删或者 model 文件改了路径之后留下的。
+   - **过期的 protobuf 文件**：`pb/` 里现有、而这次 `gg gen` 不会再写出来的 `.proto` 文件和由它们编出来的 `.pb.go`、`_grpc.pb.go` 文件，比如 model 去掉 `GRPC()`、model 被删或者 model 文件改了路径之后留下的。
 2. **列出并确认一次**：清单为空时只删空目录，不提问；否则按类别列出，回答 `y` 或 `yes` 才删，其他回答什么都不删。
-3. **按顺序删除**：停用的 service 文件及其配对测试文件，孤儿中间件文件和它们的注册调用，孤儿目录里的文件，过期的 .proto 文件，最后是空目录。
+3. **按顺序删除**：停用的 service 文件及其配对测试文件，孤儿中间件文件和它们的注册调用，孤儿目录里的文件，过期的 protobuf 文件，最后是空目录。
 
 ```plantuml
 @startuml
@@ -32,7 +32,7 @@ start
 partition "第 0 步：准备" {
   :读模块路径和 gst.yaml，扫描 model;
   :列出现有的 gg 管的 service 文件
-  和 pb/ 下现有的 .proto 文件;
+  和 pb/ 下现有的 protobuf 文件;
   note right
     gg gen --prune 在生成代码之前列，
     列完先生成代码，再进入第 1 步
@@ -42,7 +42,7 @@ partition "第 1 步：算出待删清单" {
   :停用的 service 文件 =
   现有的 - 当前应有的 - 路由屏蔽保留的
   - prune.ignore 覆盖的;
-  :过期的 .proto 文件 =
+  :过期的 protobuf 文件 =
   现有的 - 这次 gg gen 会写出的
   - prune.ignore 覆盖的;
   if (middleware/ 和项目代码的 import 都读得出来？) then (是)
@@ -76,7 +76,7 @@ partition "第 3 步：按顺序删除" {
   else (有删不掉的)
     :孤儿目录保留; <<cancel>>
   endif
-  :删过期的 .proto 文件;
+  :删过期的 protobuf 文件;
   :删空目录;
 }
 stop
@@ -117,7 +117,7 @@ stop
 
 **孤儿中间件文件**：`middleware/` 下带着 `gg module copy` 所有权标记（第一行是 `// Managed by gg module copy (module <name>). ...`），而项目里已经没有 `model/<name>/` 目录的文件，也就是被删掉的复制模块留下的中间件。`middleware/middleware.go` 永远不算。所有权标记见 [MODULE.md](MODULE.md)。
 
-**过期的 .proto 文件**：`pb/` 下现有的 `.proto` 文件里，这次 `gg gen` 不会再写出来的那些。`gg gen` 为每个声明了 `GRPC()` 的 model 文件在 `pb/` 下写一个同路径的 `.proto`（`model/archive/document.go` 对应 `pb/archive/document.proto`），所以 model 去掉 `GRPC()`、model 文件被删或改了路径，旧文件就过期了。`.proto` 完全由 model 推导、每次 `gg gen` 重写，里面没有项目自己写的东西，这一点和 service 文件不同。
+**过期的 protobuf 文件**：`pb/` 下现有的 `.proto`、`.pb.go`、`_grpc.pb.go` 文件里，这次 `gg gen` 不会再写出来的那些。`gg gen` 为每个声明了 `GRPC()` 的 model 文件在 `pb/` 下写一个同路径的 `.proto`（`model/archive/document.go` 对应 `pb/archive/document.proto`），旁边是由它编出来的 `document.pb.go` 和 `document_grpc.pb.go`，所以 model 去掉 `GRPC()`、model 文件被删或改了路径，旧文件就过期了。这些文件完全由 model 推导、每次 `gg gen` 重写，里面没有项目自己写的东西，这一点和 service 文件不同。
 
 **prune.ignore**：gst.yaml 里的保护清单。每一项是 `service/`、`middleware/` 或 `pb/` 下的一个路径，按目录层级匹配：`service/legacy` 覆盖这个目录和它下面的全部内容，但不覆盖 `service/legacyx`；写到具体文件就只覆盖这一个文件。被覆盖的路径不会被删。写法和校验规则见 README 的[项目级配置 gst.yaml](../../README.md#项目级配置-gstyaml)。
 
@@ -129,13 +129,13 @@ stop
 2. 读 gst.yaml。读之前，项目根目录下有 `.gg.yaml`、`.gg.yml`、`.gst.yaml`、`.gst.yml`、`gst.yml` 中的哪个，就对哪个打印一条警告：gg 不读它们。
 3. 扫描 `model/` 下的 model，读的文件和 `gg gen` 相同：跳过被 Git 忽略的、Go 工具链内置忽略的（见开头）和测试文件。项目有哪些 model 由 `gg gen` 说了算，prune 只处理它们留下的东西。一个 model 都没找到时打印 `No models found, pruning service files only` 并照常往下走，这时所有 gg 管的 service 文件都会进待删清单。
 4. 列出 `service/` 下现有的 gg 管的 service 文件，不跳过任何目录：被 Git 忽略的、`testdata` 或 `_` 开头目录里的都算。扫描中途出错只打印警告，用已经扫到的文件继续。
-5. 列出 `pb/` 下现有的 `.proto` 文件，同样不跳过任何目录；再按 `gg gen` 的读法（应用 gst.yaml 的 `gen.routes.ignore` 和 `gen.models.ignore`）推导一遍当前 model 会写出哪些 `.proto`，作为「这次 gg gen 会写出的」清单。推导失败（比如某个类型 protobuf 表达不了）时打印错误并以失败退出，什么都不删。
+5. 列出 `pb/` 下现有的 `.proto`、`.pb.go`、`_grpc.pb.go` 文件，同样不跳过任何目录；再按 `gg gen` 的读法（应用 gst.yaml 的 `gen.routes.ignore` 和 `gen.models.ignore`）推导一遍当前 model 会写出哪些 `.proto`、并编出它们的 Go 文件，作为「这次 gg gen 会写出的」清单。推导或编译失败（比如某个类型 protobuf 表达不了）时打印错误并以失败退出，什么都不删。
 
-读不出模块路径、gst.yaml 写错（包括 `prune.ignore` 不合规）、model 文件解析失败、`.proto` 推导失败时，`gg prune` 打印错误并以失败退出，什么都不删。
+读不出模块路径、gst.yaml 写错（包括 `prune.ignore` 不合规）、model 文件解析失败、`.proto` 推导或编译失败时，`gg prune` 打印错误并以失败退出，什么都不删。
 
-`gg prune` 对 service 文件不应用 gst.yaml 的 `gen.routes.ignore`：被屏蔽的 action 在这里仍算启用，它的 service 文件是当前应有的，所在目录属于 model。结果和 `gg gen --prune` 保留它们一样。对 `.proto` 文件则应用，因为 `.proto` 的内容本来就是按屏蔽后的结果推导的。
+`gg prune` 对 service 文件不应用 gst.yaml 的 `gen.routes.ignore`：被屏蔽的 action 在这里仍算启用，它的 service 文件是当前应有的，所在目录属于 model。结果和 `gg gen --prune` 保留它们一样。对 `pb/` 下的文件则应用，因为它们的内容本来就是按屏蔽后的结果推导的。
 
-`gg gen --prune`：先跑项目检查，不通过就既不生成也不清理；再读 gst.yaml、扫描 model，并在生成代码之前列出现有的 gg 管的 service 文件和 `pb/` 下现有的 `.proto` 文件；然后生成代码，最后进入第 1 步，这次写出的 `.proto` 就是「会写出的」清单。所以这次生成新建的文件不会进待删清单。
+`gg gen --prune`：先跑项目检查，不通过就既不生成也不清理；再读 gst.yaml、扫描 model，并在生成代码之前列出现有的 gg 管的 service 文件和 `pb/` 下现有的 protobuf 文件；然后生成代码，最后进入第 1 步，这次写出的 `.proto` 和由它们编出来的 Go 文件就是「会写出的」清单。所以这次生成新建的文件不会进待删清单。
 
 ## 第 1 步：算出待删清单
 
@@ -227,9 +227,9 @@ stop
 - 被 `prune.ignore` 覆盖的不算：它不删，仍是活代码。被 Git 忽略的照样算。
 - 想留下某个孤儿中间件文件，可以把它写进 `prune.ignore`，或者删掉它第一行的所有权标记，让它变成项目自己的文件。
 
-### 1.5 找出过期的 .proto 文件
+### 1.5 找出过期的 protobuf 文件
 
-1. `pb/` 下现有的 `.proto` 文件，去掉这次 `gg gen` 会写出的。
+1. `pb/` 下现有的 `.proto`、`.pb.go`、`_grpc.pb.go` 文件，去掉这次 `gg gen` 会写出的。
 2. 剩下的里面被 `prune.ignore` 覆盖的，移出清单，列在 `Files Ignored By Config` 下面。
 
 ## 第 2 步：列出并确认
@@ -239,7 +239,7 @@ stop
   - `Disabled Service Files`：停用的 service 文件；
   - `Unmanaged Orphan Service Directories`：孤儿目录，每个标注 `(no current model maps to this directory)`，下面缩进列出要删的文件；
   - `Orphan Module Middleware Files`：孤儿中间件文件，每个标注 `(copied with module <name>, whose model/<name> is gone; its register calls go with it)`；
-  - `Stale Protobuf Definitions`：过期的 `.proto` 文件。
+  - `Stale Protobuf Files`：过期的 protobuf 文件。
 - 项目里有 `.gg.yaml` 或 `.gg.yml` 时，提问前再警告一次：它们不会被读取，里面列的路径在这里不受保护。
 - 有孤儿目录时再警告 `This will delete unmanaged files that gg cannot prove it owns.`：孤儿目录里是 gg 不认得的文件，可能是手写的；孤儿中间件文件带着所有权标记，用不着这句警告。
 - 然后只问一次 `Do you want to delete these files? (y/N):`。回答 `y` 或 `yes`（不分大小写）进入第 3 步；其他任何回答，包括直接回车，打印 `Deletion canceled`，**什么都不删**，空目录也不删。
@@ -249,15 +249,15 @@ stop
 1. **停用的 service 文件及其配对测试文件**：逐个删除，删掉的打印 `Deleted ...`，删不掉的打印 `Failed to delete ...` 并接着删后面的。
 2. **孤儿中间件文件**：逐个删掉并打印 `Deleted ...`；再从 `middleware/middleware.go` 删掉调用这些文件里函数的 `Register`、`RegisterAuth` 语句，框架 middleware 包的导入没人用了也一并删掉，打印 `Removed their register calls from middleware/middleware.go`。这一项出错时打印 `Failed to delete orphan module middleware, so orphan service directories are kept: ...`。
 3. **孤儿目录里的文件**：逐个删除，打印 `Deleted ...` 或 `Failed to delete ...`。孤儿目录是因为前两项的文件要删才成了孤儿，所以前两项有删不掉的文件时，孤儿目录全部保留；停用的 service 文件有删不掉的时打印 `Some disabled service files were not deleted, so orphan service directories are kept`。
-4. **过期的 .proto 文件**：逐个删除，打印 `Deleted ...` 或 `Failed to delete ...`。
+4. **过期的 protobuf 文件**：逐个删除，打印 `Deleted ...` 或 `Failed to delete ...`。
 5. **空目录**：从最深的目录开始，删掉 `service/` 和 `pb/` 下的空目录；子目录删掉后变空的上层目录也一起删，`service/` 本身不删，`pb/` 空了则连它一起删（它只由 `gg gen` 创建）。每删一个打印 `Removed empty directory ...`。只有被 `prune.ignore` 覆盖的目录不删；被 Git 忽略的空目录、空的 `testdata` 目录照样删。
 
 ## 不会被删的东西
 
-- `service/`、`middleware/` 和 `pb/` 以外的一切。`middleware/` 里也只删孤儿中间件文件，并从 `middleware/middleware.go` 删掉它们的注册调用；`pb/` 里只删 `.proto` 文件。
+- `service/`、`middleware/` 和 `pb/` 以外的一切。`middleware/` 里也只删孤儿中间件文件，并从 `middleware/middleware.go` 删掉它们的注册调用；`pb/` 里只删 `.proto`、`.pb.go`、`_grpc.pb.go` 文件。
 - `middleware/` 里没有模块复制所有权标记的文件，以及所属模块的 `model/<name>/` 还在的中间件文件。
 - 当前应有的 service 文件和它们的配对测试文件；`gg gen --prune` 时被路由屏蔽的 action 的 service 文件。
-- 这次 `gg gen` 会写出的 `.proto` 文件。
+- 这次 `gg gen` 会写出的 `.proto` 文件和由它们编出来的 Go 文件。
 - 属于 model 的目录、中间层目录里 gg 不认得的文件。
 - `prune.ignore` 覆盖的路径。忽略规则里只认它：被 Git 忽略的、Go 工具链内置忽略的路径没有这层保护。
 - 1.2 保留的目录，连同它的子目录，以及它上面各层中间层目录里的文件。
@@ -274,4 +274,4 @@ stop
 | `Disabled Service Files` | 有要删的停用 service 文件或它们的配对测试文件 |
 | `Unmanaged Orphan Service Directories` | 有孤儿目录 |
 | `Orphan Module Middleware Files` | 有孤儿中间件文件 |
-| `Stale Protobuf Definitions` | 有过期的 `.proto` 文件 |
+| `Stale Protobuf Files` | 有过期的 protobuf 文件 |

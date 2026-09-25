@@ -14,65 +14,80 @@ import (
 	"github.com/hydroan/gst/internal/modelinfo"
 )
 
-// TestPruneLeftoversDeletesStaleProtobufDefinitions pins that the .proto
-// files gg gen would not write now are listed under their own heading ahead
-// of the question, deleted on yes with the directories that leaves empty,
-// and kept when a gst.yaml prune.ignore entry covers them, listed among the
-// files ignored by config.
-func TestPruneLeftoversDeletesStaleProtobufDefinitions(t *testing.T) {
+// TestPruneLeftoversDeletesStalePBFiles pins that the files under pb/ gg gen
+// would not write now, definitions and the Go files compiled from them, are
+// listed under their own heading ahead of the question, deleted on yes with
+// the directories that leaves empty, and kept when a gst.yaml prune.ignore
+// entry covers them, listed among the files ignored by config.
+func TestPruneLeftoversDeletesStalePBFiles(t *testing.T) {
 	t.Chdir(t.TempDir())
 	current := filepath.Join(ggconst.DirPB, "record.proto")
+	currentGo := filepath.Join(ggconst.DirPB, "record.pb.go")
 	stale := filepath.Join(ggconst.DirPB, "archive", "note.proto")
+	staleGo := filepath.Join(ggconst.DirPB, "archive", "note_grpc.pb.go")
 	kept := filepath.Join(ggconst.DirPB, "legacy", "item.proto")
 	for _, path := range []string{current, stale, kept} {
 		writeProjectFile(t, path, "syntax = \"proto3\";\n")
 	}
+	// The Go files have to parse: prune reads every Go file of the project
+	// to trace which service directories live code imports.
+	writeProjectFile(t, currentGo, "package pb\n")
+	writeProjectFile(t, staleGo, "package archive\n")
 	protect := ggconfig.PruneConfig{Ignore: []string{"pb/legacy"}}
 
 	var stdout string
 	withStdin(t, "y\n", func() {
 		stdout = captureStdout(t, func() {
-			pruneLeftovers(nil, nil, nil, nil, gghelper.NewProjectIgnore(), protect, []string{current, stale, kept}, []string{"pb/record.proto"})
+			pruneLeftovers(nil, nil, nil, nil, gghelper.NewProjectIgnore(), protect, []string{current, currentGo, stale, staleGo, kept}, []string{"pb/record.proto", "pb/record.pb.go"})
 		})
 	})
 
 	const question = "Do you want to delete these files?"
-	heading := strings.Index(stdout, "Stale Protobuf Definitions")
+	heading := strings.Index(stdout, "Stale Protobuf Files")
 	if heading < 0 || heading > strings.Index(stdout, question) {
-		t.Fatalf("the stale definitions should be listed ahead of the question:\n%s", stdout)
+		t.Fatalf("the stale files should be listed ahead of the question:\n%s", stdout)
 	}
-	if i := strings.Index(stdout, stale); i < heading || i > strings.Index(stdout, question) {
-		t.Errorf("%s should be listed under the heading:\n%s", stale, stdout)
+	for _, path := range []string{stale, staleGo} {
+		if i := strings.Index(stdout, path); i < heading || i > strings.Index(stdout, question) {
+			t.Errorf("%s should be listed under the heading:\n%s", path, stdout)
+		}
+		if _, err := os.Stat(path); !os.IsNotExist(err) {
+			t.Errorf("%s should be deleted; stat error = %v", path, err)
+		}
 	}
 	if !strings.Contains(stdout[:heading], "ignore "+kept) {
 		t.Errorf("%s should be listed among the files ignored by config:\n%s", kept, stdout)
 	}
-	if _, err := os.Stat(stale); !os.IsNotExist(err) {
-		t.Errorf("%s should be deleted; stat error = %v", stale, err)
-	}
 	if _, err := os.Stat(filepath.Dir(stale)); !os.IsNotExist(err) {
 		t.Errorf("%s is left empty and should be removed; stat error = %v", filepath.Dir(stale), err)
 	}
-	for _, path := range []string{current, kept} {
+	for _, path := range []string{current, currentGo, kept} {
 		if _, err := os.Stat(path); err != nil {
 			t.Errorf("%s should survive prune: %v", path, err)
 		}
 	}
 }
 
-// TestPruneRunDeletesTheDefinitionsOfAModelNoLongerServedOverGRPC pins the
-// whole path: gg gen writes pb/note.proto for a model declaring GRPC(), and
-// once the declaration is gone gg prune lists and deletes the file, with
-// the pb directory it leaves empty.
-func TestPruneRunDeletesTheDefinitionsOfAModelNoLongerServedOverGRPC(t *testing.T) {
+// TestPruneRunDeletesTheFilesOfAModelNoLongerServedOverGRPC pins the whole
+// path: gg gen writes pb/note.proto for a model declaring GRPC(), with
+// pb/note.pb.go and pb/note_grpc.pb.go compiled from it, and once the
+// declaration is gone gg prune lists and deletes the three, with the pb
+// directory it leaves empty.
+func TestPruneRunDeletesTheFilesOfAModelNoLongerServedOverGRPC(t *testing.T) {
 	projectDir := newGenProject(t)
 	writeProtobufProject(t, projectDir, map[string]string{"model/note.go": protobufNoteModel})
 	if err := genRunWithOptions(genRunOptions{Quiet: true}); err != nil {
 		t.Fatal(err)
 	}
-	proto := filepath.Join(ggconst.DirPB, "note.proto")
-	if _, err := os.Stat(proto); err != nil {
-		t.Fatalf("gg gen should have written %s: %v", proto, err)
+	generated := []string{
+		filepath.Join(ggconst.DirPB, "note.proto"),
+		filepath.Join(ggconst.DirPB, "note.pb.go"),
+		filepath.Join(ggconst.DirPB, "note_grpc.pb.go"),
+	}
+	for _, path := range generated {
+		if _, err := os.Stat(path); err != nil {
+			t.Fatalf("gg gen should have written %s: %v", path, err)
+		}
 	}
 	writeProtobufProject(t, projectDir, map[string]string{"model/note.go": strings.Replace(protobufNoteModel, "\tdsl.GRPC()\n", "", 1)})
 
@@ -85,8 +100,10 @@ func TestPruneRunDeletesTheDefinitionsOfAModelNoLongerServedOverGRPC(t *testing.
 		})
 	})
 
-	if !strings.Contains(stdout, "Stale Protobuf Definitions") || !strings.Contains(stdout, proto) {
-		t.Errorf("prune should list %s under Stale Protobuf Definitions:\n%s", proto, stdout)
+	for _, path := range generated {
+		if !strings.Contains(stdout, "Stale Protobuf Files") || !strings.Contains(stdout, path) {
+			t.Errorf("prune should list %s under Stale Protobuf Files:\n%s", path, stdout)
+		}
 	}
 	if _, err := os.Stat(ggconst.DirPB); !os.IsNotExist(err) {
 		t.Errorf("%s should be gone with its last file; stat error = %v", ggconst.DirPB, err)

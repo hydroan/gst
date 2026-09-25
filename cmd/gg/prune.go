@@ -26,7 +26,7 @@ var pruneCmd = &cobra.Command{
 	Short: "clean what the models no longer need from service/, middleware/ and pb/",
 	Long: "Clean what the current models no longer need, asking once before deleting: the service files of disabled actions with their test files, " +
 		"the unmanaged files of service directories no model owns, the middleware of removed copied modules with their register calls, " +
-		"the protobuf definitions of models no longer served over gRPC, and the directories this leaves empty. " +
+		"the protobuf files, definitions and the Go files compiled from them, of models no longer served over gRPC, and the directories this leaves empty. " +
 		"It touches service/, middleware/ and pb/ only, and gst.yaml's prune.ignore is the one way to keep a path there.",
 	Run: func(cmd *cobra.Command, args []string) {
 		if err := pruneRun(); err != nil {
@@ -78,13 +78,13 @@ func pruneRun() error {
 
 	// Scan existing service files and protobuf definitions
 	oldServiceFiles := existingServiceFiles()
-	oldProtoFiles := existingProtoFiles()
-	generatedProtoFiles, err := generatedProtoFiles(ignore)
+	oldPBFiles := existingPBFiles()
+	generatedPBFiles, err := generatedPBFiles(ignore)
 	if err != nil {
 		return err
 	}
 
-	pruneLeftovers(oldServiceFiles, allModels, nil, nil, ignore, projectCfg.Prune, oldProtoFiles, generatedProtoFiles)
+	pruneLeftovers(oldServiceFiles, allModels, nil, nil, ignore, projectCfg.Prune, oldPBFiles, generatedPBFiles)
 
 	clioutput.Done("Code pruning completed successfully!")
 	return nil
@@ -100,27 +100,27 @@ func existingServiceFiles() []string {
 	return files
 }
 
-// existingProtoFiles lists the protobuf definitions prune works from,
-// warning about a scan that ended early and going on with what it found.
-func existingProtoFiles() []string {
-	files, err := ggprune.ScanProtoFiles(ggconst.DirPB)
+// existingPBFiles lists the files under pb/ prune works from, warning about
+// a scan that ended early and going on with what it found.
+func existingPBFiles() []string {
+	files, err := ggprune.ScanPBFiles(ggconst.DirPB)
 	if err != nil {
-		clioutput.Warn("", "failed to scan existing protobuf definitions: %v", err)
+		clioutput.Warn("", "failed to scan existing protobuf files: %v", err)
 	}
 	return files
 }
 
-// generatedProtoFiles lists the paths of the protobuf definitions gg gen
-// writes for the current models, which prune keeps: the models are read the
-// way gg gen reads them, gst.yaml route and model ignores applied, since the
-// definitions reflect them (unlike a service file, which an ignored action
-// keeps on disk).
-func generatedProtoFiles(ignore gghelper.ProjectIgnore) ([]string, error) {
+// generatedPBFiles lists the paths of the files gg gen writes under pb/ for
+// the current models, which prune keeps: the models are read the way gg gen
+// reads them, gst.yaml route and model ignores applied, since the files
+// reflect them (unlike a service file, which an ignored action keeps on
+// disk).
+func generatedPBFiles(ignore gghelper.ProjectIgnore) ([]string, error) {
 	scanned, err := scanModels(true, ignore)
 	if err != nil {
 		return nil, err
 	}
-	files, err := protobufDefinitions(scanned.models)
+	files, err := protobufFiles(scanned.models)
 	if err != nil {
 		return nil, err
 	}
@@ -157,9 +157,9 @@ func remindUnreadPruneSettings() {
 // service/, middleware/ and pb/: the service files of disabled actions among
 // oldServiceFiles, the unmanaged files of the service directories no model
 // owns, the middleware module copy wrote for modules the project removed, with
-// their register calls, the protobuf definitions among oldProtoFiles that
-// gg gen would not write now, generatedProtoFiles being the ones it writes,
-// and the directories all this leaves empty. It works everything out before
+// their register calls, the files under pb/ among oldPBFiles that gg gen
+// would not write now, generatedPBFiles being the ones it writes, and the
+// directories all this leaves empty. It works everything out before
 // it asks, so a helper directory only a disabled action's service file
 // imports goes in the same run. Files in keptFiles
 // belong to gst.yaml-ignored actions: they no longer appear in the generated
@@ -171,19 +171,19 @@ func remindUnreadPruneSettings() {
 // cover are never deleted: not as disabled files, not as orphans, not as
 // empty directories. Of the ignore rules, only those keep a path (see package
 // ggprune).
-func pruneLeftovers(oldServiceFiles []string, allModels []*modelinfo.Model, keptFiles, keptDirs map[string]bool, ignore gghelper.ProjectIgnore, protect ggconfig.PruneConfig, oldProtoFiles, generatedProtoFiles []string) {
+func pruneLeftovers(oldServiceFiles []string, allModels []*modelinfo.Model, keptFiles, keptDirs map[string]bool, ignore gghelper.ProjectIgnore, protect ggconfig.PruneConfig, oldPBFiles, generatedPBFiles []string) {
 	clioutput.Section("Prune Leftovers")
 	warnMissingPruneIgnore(protect)
 
 	plan := ggprune.PlanFiles(oldServiceFiles, allModels, keptFiles, protect)
-	protoPlan := ggprune.PlanProtoFiles(oldProtoFiles, generatedProtoFiles, protect)
+	pbPlan := ggprune.PlanPBFiles(oldPBFiles, generatedPBFiles, protect)
 	orphans, keptHelpers, orphanMiddleware := findOrphans(allModels, keptDirs, plan.Delete, ignore, protect)
-	nothingToDelete := len(plan.Delete) == 0 && len(orphans) == 0 && len(orphanMiddleware) == 0 && len(protoPlan.Delete) == 0
+	nothingToDelete := len(plan.Delete) == 0 && len(orphans) == 0 && len(orphanMiddleware) == 0 && len(pbPlan.Delete) == 0
 	if nothingToDelete {
 		clioutput.Success("", "Nothing to prune")
 		removeEmptyDirs(protect)
 	}
-	if ignored := append(slices.Clone(plan.Ignored), protoPlan.Ignored...); len(ignored) > 0 {
+	if ignored := append(slices.Clone(plan.Ignored), pbPlan.Ignored...); len(ignored) > 0 {
 		clioutput.Section("Files Ignored By Config")
 		for _, file := range ignored {
 			clioutput.Item("", "ignore %s", file)
@@ -202,9 +202,9 @@ func pruneLeftovers(oldServiceFiles []string, allModels []*modelinfo.Model, kept
 	}
 	reportOrphanServiceDirs(orphans)
 	reportOrphanMiddleware(orphanMiddleware)
-	if len(protoPlan.Delete) > 0 {
-		clioutput.Section("Stale Protobuf Definitions")
-		for _, file := range protoPlan.Delete {
+	if len(pbPlan.Delete) > 0 {
+		clioutput.Section("Stale Protobuf Files")
+		for _, file := range pbPlan.Delete {
 			clioutput.Error("", "%s", file)
 		}
 	}
@@ -223,7 +223,7 @@ func pruneLeftovers(oldServiceFiles []string, allModels []*modelinfo.Model, kept
 		return
 	}
 
-	deleteLeftovers(plan.Delete, orphans, orphanMiddleware, protoPlan.Delete, protect)
+	deleteLeftovers(plan.Delete, orphans, orphanMiddleware, pbPlan.Delete, protect)
 }
 
 // findOrphans works out the orphans prune deletes along with deleting, the

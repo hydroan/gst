@@ -103,10 +103,10 @@ func genRunWithOptions(opts genRunOptions) error {
 	// Record the service files and protobuf definitions present before
 	// generating (if prune option is enabled): the ones this run does not
 	// write again are what prune deletes.
-	var oldServiceFiles, oldProtoFiles []string
+	var oldServiceFiles, oldPBFiles []string
 	if prune {
 		oldServiceFiles = existingServiceFiles()
-		oldProtoFiles = existingProtoFiles()
+		oldPBFiles = existingPBFiles()
 	}
 
 	if !opts.Quiet {
@@ -263,16 +263,18 @@ func genRunWithOptions(opts genRunOptions) error {
 		return err
 	}
 
-	// Generate the protobuf definitions of the models served over gRPC. The
-	// model packages are type-checked for it, so this runs once their
-	// registration files above are current.
-	protoFiles, err := protobufDefinitions(allModels)
+	// Generate the protobuf definitions of the models served over gRPC and
+	// the Go files compiled from them. The model packages are type-checked
+	// for it, so this runs once their registration files above are current;
+	// the whole set is built before any of it is written, so a definition
+	// the compiler refuses leaves the files on disk as they were.
+	pbFiles, err := protobufFiles(allModels)
 	if err != nil {
 		return err
 	}
-	protoPaths := make([]string, 0, len(protoFiles))
-	for _, f := range protoFiles {
-		protoPaths = append(protoPaths, f.Path)
+	pbPaths := make([]string, 0, len(pbFiles))
+	for _, f := range pbFiles {
+		pbPaths = append(pbPaths, f.Path)
 		if err = writeGenFile(filepath.FromSlash(f.Path), f.Content); err != nil {
 			return err
 		}
@@ -378,7 +380,7 @@ func genRunWithOptions(opts genRunOptions) error {
 	// Prune what the models no longer need
 	// ============================================================
 	if prune {
-		pruneLeftovers(oldServiceFiles, allModels, ignoreResult.KeptServiceFiles, ignoreResult.KeptServiceDirs, ignore, scanned.pruneConfig, oldProtoFiles, protoPaths)
+		pruneLeftovers(oldServiceFiles, allModels, ignoreResult.KeptServiceFiles, ignoreResult.KeptServiceDirs, ignore, scanned.pruneConfig, oldPBFiles, pbPaths)
 	}
 
 	// ============================================================
@@ -438,12 +440,13 @@ type scannedModels struct {
 	pruneConfig ggconfig.PruneConfig
 }
 
-// protobufDefinitions renders the .proto files of the models declaring
-// GRPC() (see pb.Generate), the same set gg gen writes and gg prune keeps.
-// The diagnostics of types protobuf cannot describe come back as they are,
-// one line each; any other failure is wrapped.
-func protobufDefinitions(models []*modelinfo.Model) ([]pb.File, error) {
-	files, err := pb.Generate(pb.Config{Dir: ".", ModulePath: module, Models: models})
+// protobufFiles renders the .proto files of the models declaring GRPC()
+// (see pb.Generate) and compiles the Go files beside them (see pb.Compile),
+// the same set gg gen writes and gg prune keeps, definitions first. The
+// diagnostics of types protobuf cannot describe come back as they are, one
+// line each; any other failure is wrapped.
+func protobufFiles(models []*modelinfo.Model) ([]pb.File, error) {
+	protos, err := pb.Generate(pb.Config{Dir: ".", ModulePath: module, Models: models})
 	var diagnostics *pb.DiagnosticsError
 	switch {
 	case errors.As(err, &diagnostics):
@@ -451,7 +454,11 @@ func protobufDefinitions(models []*modelinfo.Model) ([]pb.File, error) {
 	case err != nil:
 		return nil, errors.Wrap(err, "generate the protobuf definitions")
 	}
-	return files, nil
+	compiled, err := pb.Compile(protos)
+	if err != nil {
+		return nil, errors.Wrap(err, "compile the protobuf definitions")
+	}
+	return append(protos, compiled...), nil
 }
 
 // scanModels reads the models of the model directory and resolves their

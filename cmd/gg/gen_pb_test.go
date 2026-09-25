@@ -4,6 +4,7 @@ import (
 	"context"
 	"flag"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -26,6 +27,10 @@ var update = flag.Bool("update", false, "rewrite the golden files under testdata
 // note.proto, and the excerpts of buildMessage, fieldTypeOf, fieldComment,
 // declareService, rpcMessages, customRequest, customResponse,
 // standardMessages, queryFields and descriptor.
+//
+// Beside every .proto the run writes the Go files the protobuf plugins
+// compile from it (see pb.Compile): the messages in note.pb.go and the
+// service in note_grpc.pb.go, and the project builds with them.
 func TestGenRunWritesTheProtobufDefinitionsOfGRPCModels(t *testing.T) {
 	projectDir := newGenProject(t)
 	writeProtobufProject(t, projectDir, map[string]string{
@@ -48,6 +53,16 @@ func TestGenRunWritesTheProtobufDefinitionsOfGRPCModels(t *testing.T) {
 	}
 	require.Equal(t, readProtos(t, golden), got)
 	requireProtosCompile(t, projectDir, got)
+
+	for path := range got {
+		base := strings.TrimSuffix(path, ".proto")
+		require.FileExists(t, filepath.Join(projectDir, "pb", filepath.FromSlash(base+".pb.go")))
+		require.FileExists(t, filepath.Join(projectDir, "pb", filepath.FromSlash(base+"_grpc.pb.go")), "every model file declares a service")
+	}
+	build := exec.Command("go", "build", "./pb/...")
+	build.Dir = projectDir
+	output, err := build.CombinedOutput()
+	require.NoError(t, err, "the generated Go files must build: %s", output)
 }
 
 // TestGenRunWritesNoProtobufDefinitionWhenAShapeCannotBeDescribed pins the
@@ -251,13 +266,13 @@ func writeProtobufProject(t *testing.T, projectDir string, files map[string]stri
 
 // readProtos reads every .proto file under root, keyed by its slash-separated
 // path relative to root, record/item.proto for the file gg gen writes to
-// pb/record/item.proto.
+// pb/record/item.proto; the Go files compiled beside them are left out.
 func readProtos(t *testing.T, root string) map[string]string {
 	t.Helper()
 
 	files := make(map[string]string)
 	require.NoError(t, filepath.WalkDir(root, func(path string, d os.DirEntry, err error) error {
-		if err != nil || d.IsDir() {
+		if err != nil || d.IsDir() || !strings.HasSuffix(path, ".proto") {
 			return err
 		}
 		content, readErr := os.ReadFile(path)
