@@ -53,6 +53,7 @@ type fieldType struct {
 // The keys are the ones the type encodes to (see jsonshape.Fields); each
 // carries the number of its pb tag, or the fixed number of a framework base
 // key, and the type of its Go type (see fieldTypeOf).
+//
 // For the model type
 //
 //	// Item belongs to a record.
@@ -230,6 +231,7 @@ func (g *generator) fieldNumber(f jsonshape.Field, base bool, s jsonshape.Site) 
 // map with a value of those, a map key of the wrong type, an interface with
 // methods, a type with encoding methods of its own, a struct from outside the
 // project.
+//
 // The fields of the Record model of the golden fixture print as follows,
 // the Go field on the left of each arrow and the protobuf field on its right:
 //

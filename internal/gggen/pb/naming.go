@@ -8,6 +8,7 @@ import (
 
 	"github.com/hydroan/gst/consts"
 	"github.com/hydroan/gst/dsl"
+	"github.com/hydroan/gst/internal/ggconst"
 	"github.com/hydroan/gst/internal/modelinfo"
 	"github.com/stoewer/go-strcase"
 )
@@ -57,20 +58,20 @@ func protoIdentifier(s string) string {
 // (see modelinfo.ModelPackageName).
 func goPackageOption(modulePath, dir string) string {
 	if dir == "." {
-		return path.Join(modulePath, dirPB) + ";" + dirPB
+		return path.Join(modulePath, ggconst.DirPB) + ";" + ggconst.DirPB
 	}
-	return path.Join(modulePath, dirPB, dir) + ";" + modelinfo.ModelPackageName(path.Base(dir))
+	return path.Join(modulePath, ggconst.DirPB, dir) + ";" + modelinfo.ModelPackageName(path.Base(dir))
 }
-
-// dirPB is the directory the definitions go to, beside the model directory.
-const dirPB = "pb"
 
 // rpcName names the rpc of an action on a route: the action name (Create,
 // DeleteMany), or the role name of an action declaring Filename (Merge for
 // Filename("merge")), then the model name, then the suffix rpcSuffix derives
 // from the route: CreateRecord, MergeItem, ListDocumentByBox. The rpc name
 // carries the model so that the message names messageName derives from it
-// read as the AIP and Buf conventions want, GetRecordRequest for GetRecord.
+// are the ones Buf's standard rules want, GetRecordRequest for GetRecord.
+// The AIPs would pluralize List and call the batch actions BatchCreate...,
+// but one rule, action then model, keeps every rpc name equal to its message
+// names without their suffix, so those forms are not followed.
 func rpcName(m *modelinfo.Model, route string, action *dsl.Action) string {
 	return rpcBase(action) + m.ModelName + rpcSuffix(m, route)
 }

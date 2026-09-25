@@ -114,6 +114,34 @@ func TestGenRunRefusesARouteParameterNamedLikeAField(t *testing.T) {
 	require.Contains(t, err.Error(), "tmpapp/model.Entry: the :page parameter of pages/:page/entries clashes with the page field of ListEntryByPageRequest; rename the parameter")
 }
 
+// TestGenRunRefusesAGRPCModelWithNothingToServe pins that a model declaring
+// GRPC() none of whose actions gRPC serves, every one disabled by
+// Enabled(false) or a gst.yaml route ignore, is reported instead of getting a
+// service without an rpc.
+func TestGenRunRefusesAGRPCModelWithNothingToServe(t *testing.T) {
+	const want = "tmpapp/model.Silent: the model declares GRPC() but none of its actions is served over gRPC, every one being disabled, ignored by gst.yaml or HTTP only; remove GRPC() or enable an action"
+
+	t.Run("disabled action", func(t *testing.T) {
+		projectDir := newGenProject(t)
+		writeProtobufProject(t, projectDir, map[string]string{"model/silent.go": protobufSilentModel})
+
+		err := genRunWithOptions(genRunOptions{Quiet: true})
+
+		require.Error(t, err)
+		require.Contains(t, err.Error(), want)
+	})
+	t.Run("ignored route", func(t *testing.T) {
+		projectDir := newGenProject(t)
+		writeProtobufProject(t, projectDir, map[string]string{"model/silent.go": protobufIgnoredModel})
+		writeProjectFile(t, filepath.Join(projectDir, "gst.yaml"), "version: 1\ngen:\n  routes:\n    ignore:\n      /api/silents: [GET]\n")
+
+		err := genRunWithOptions(genRunOptions{Quiet: true})
+
+		require.Error(t, err)
+		require.Contains(t, err.Error(), want)
+	})
+}
+
 // writeProtobufProject writes the model files of a project whose models are
 // served over gRPC. Single quotes in the sources stand for backquotes.
 func writeProtobufProject(t *testing.T, projectDir string, files map[string]string) {
@@ -494,6 +522,59 @@ func (Entry) Design() {
 	dsl.Route("/pages/:page/entries", func() {
 		dsl.List(func() {})
 	})
+}
+`
+
+// protobufSilentModel declares GRPC() and disables its one action.
+const protobufSilentModel = `package model
+
+import (
+	"github.com/hydroan/gst/dsl"
+	"github.com/hydroan/gst/model"
+)
+
+// Silent has nothing gRPC can serve.
+type Silent struct {
+	Title string 'json:"title" pb:"11"'
+
+	model.Base
+}
+
+func (Silent) TableName() string { return "silents" }
+
+func (Silent) Design() {
+	dsl.GRPC()
+	dsl.Migrate()
+	dsl.Endpoint("silents")
+	dsl.Create(func() {
+		dsl.Enabled(false)
+	})
+}
+`
+
+// protobufIgnoredModel declares GRPC() and one action a gst.yaml route
+// ignore disables.
+const protobufIgnoredModel = `package model
+
+import (
+	"github.com/hydroan/gst/dsl"
+	"github.com/hydroan/gst/model"
+)
+
+// Silent has nothing gRPC can serve.
+type Silent struct {
+	Title string 'json:"title" pb:"11"'
+
+	model.Base
+}
+
+func (Silent) TableName() string { return "silents" }
+
+func (Silent) Design() {
+	dsl.GRPC()
+	dsl.Migrate()
+	dsl.Endpoint("silents")
+	dsl.List(func() {})
 }
 `
 

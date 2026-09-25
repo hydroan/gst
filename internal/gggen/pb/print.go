@@ -7,6 +7,7 @@ import (
 
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/consts"
+	"github.com/hydroan/gst/internal/ggconst"
 	"github.com/jhump/protoreflect/v2/protoprint"
 	"google.golang.org/protobuf/reflect/protodesc"
 	"google.golang.org/protobuf/reflect/protoreflect"
@@ -74,7 +75,7 @@ func (g *generator) print() ([]File, error) {
 		if err := printer.PrintProtoFile(resolved[name], &b); err != nil {
 			return nil, errors.Wrapf(err, "print %s", name)
 		}
-		files = append(files, File{Path: dirPB + "/" + name, Content: b.String()})
+		files = append(files, File{Path: ggconst.DirPB + "/" + name, Content: b.String()})
 	}
 	return files, nil
 }
@@ -83,6 +84,7 @@ func (g *generator) print() ([]File, error) {
 // its package, its imports in sorted order, the go_package option, its
 // messages and services, and the comments recorded for them, under the
 // generated-code header.
+//
 // The file record.proto of module tmpapp, importing three well-known types,
 // opens with
 //

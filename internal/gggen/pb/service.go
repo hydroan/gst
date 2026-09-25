@@ -27,7 +27,10 @@ var httpOnlyPhases = map[consts.Phase]bool{
 // file: <Model>Service with an rpc per action of every route (see rpcName),
 // each taking and returning the messages rpcMessages resolves. The model's
 // own message is queued unless the model is virtual. Two actions resolving to
-// one rpc name are reported.
+// one rpc name are reported, and so is a model left with no action to serve,
+// every one being disabled, ignored by gst.yaml or HTTP only: its GRPC()
+// promises a service that would have no rpc.
+//
 // The Item model of the golden fixture, declaring Create and Get on its
 // endpoint items under model/record/ and two routes, gets
 //
@@ -73,10 +76,12 @@ func (g *generator) declareService(m *modelinfo.Model) {
 		return
 	}
 	routes := make(map[string]string)
+	served := 0
 	m.Design.Range(func(route string, action *dsl.Action) {
 		if httpOnlyPhases[action.Phase] {
 			return
 		}
+		served++
 		name := rpcName(m, route, action)
 		if previous, taken := routes[name]; taken {
 			g.project.Report(s, "the %s actions on routes %s and %s both become rpc %s; name one of them with Filename()", action.Phase.MethodName(), previous, route, name)
@@ -95,6 +100,10 @@ func (g *generator) declareService(m *modelinfo.Model) {
 			OutputType: new(output),
 		})
 	})
+	if served == 0 {
+		g.project.Report(s, "the model declares GRPC() but none of its actions is served over gRPC, every one being disabled, ignored by gst.yaml or HTTP only; remove GRPC() or enable an action")
+		return
+	}
 	file.addService(service, service.GetName()+" serves the actions of "+m.ModelName+" over gRPC.")
 }
 
@@ -112,6 +121,7 @@ func (g *generator) declareService(m *modelinfo.Model) {
 // a Go type share the message that type encodes to, held by their payload or
 // result fields, never a request or response. A route parameter named like
 // a field of the request is reported.
+//
 // The Create action of Item on records/:record/items gets
 //
 //	// CreateItemRequest is the request of ItemService.CreateItem.
@@ -189,6 +199,7 @@ func (g *generator) rpcMessages(m *modelinfo.Model, scope *types.Scope, model *m
 // route parameters, with the comment of each field: the query fields of a
 // List or Get action (see queryFields), the Payload of any other action as
 // the field payload, or nothing when the action declares no Payload.
+//
 // The Create action of Item on items/merge, declaring Payload[*MergeReq],
 // gets
 //
@@ -228,6 +239,7 @@ func (g *generator) customRequest(scope *types.Scope, file *protoFile, action *d
 // customResponse builds what the response of a custom action holds, with
 // the comment of its field: the Result as the field result, or nothing when
 // the action declares no Result.
+//
 // The Create action of Item on items/merge, declaring Result[*MergeRsp],
 // gets
 //
@@ -371,6 +383,7 @@ func standardMessages(m *modelinfo.Model, model *message, file *protoFile, actio
 // by the caller: List's filters, orderings, pagination, cursor and
 // expansion, with the nested Filter of the filters; Get's expansion; nothing
 // for the other phases.
+//
 // The List action of Record on records gets, its fields numbered from 1 as
 // the route has no parameter,
 //

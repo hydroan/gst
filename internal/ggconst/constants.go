@@ -76,6 +76,7 @@ const (
 	DirMiddleware = "middleware"
 	DirModel      = "model"
 	DirModule     = "module"
+	DirPB         = "pb"
 	DirRouter     = "router"
 	DirService    = "service"
 )
