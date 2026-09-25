@@ -12,14 +12,14 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/dsl"
 	"github.com/hydroan/gst/internal/clioutput"
-	"github.com/hydroan/gst/internal/codegen"
-	"github.com/hydroan/gst/internal/codegen/gen"
-	"github.com/hydroan/gst/internal/codegen/gen/columns"
-	"github.com/hydroan/gst/internal/codegen/gen/pb"
-	pkgnew "github.com/hydroan/gst/internal/codegen/new"
 	"github.com/hydroan/gst/internal/ggconfig"
 	"github.com/hydroan/gst/internal/ggconst"
+	"github.com/hydroan/gst/internal/gggen"
+	"github.com/hydroan/gst/internal/gggen/columns"
+	"github.com/hydroan/gst/internal/gggen/pb"
 	"github.com/hydroan/gst/internal/gghelper"
+	"github.com/hydroan/gst/internal/ggnew"
+	"github.com/hydroan/gst/internal/modelinfo"
 	"github.com/spf13/cobra"
 )
 
@@ -79,7 +79,7 @@ func genRunWithOptions(opts genRunOptions) error {
 	if !opts.Quiet {
 		clioutput.Section("Ensure Required Files")
 	}
-	createdFiles, err := pkgnew.EnsureFileExists()
+	createdFiles, err := ggnew.EnsureFileExists()
 	if err != nil {
 		return err
 	}
@@ -135,7 +135,7 @@ func genRunWithOptions(opts genRunOptions) error {
 
 		m.Design.Range(func(s string, a *dsl.Action) {
 			if a.Service {
-				target := gen.ServiceTarget(m, a, ggconst.DirModel, ggconst.DirService)
+				target := modelinfo.ServiceTarget(m, a, ggconst.DirModel, ggconst.DirService)
 				servicePkgs[target.ImportPath] = target.PackageName
 			}
 			routerPkgs[m.ImportPath()] = m.ModelPkgName
@@ -145,7 +145,7 @@ func genRunWithOptions(opts genRunOptions) error {
 	// A dsl.PayloadEmpty side is emitted as *model.Empty (or *gstmodel.Empty
 	// when a routed business model package is itself named "model"), so the
 	// qualifier and the import are decided once per router file.
-	gstModelPkg, gstModelNeeded := gen.RouterGstModelUse(allModels)
+	gstModelPkg, gstModelNeeded := gggen.RouterGstModelUse(allModels)
 	routerGstModelPkg := ""
 	if gstModelNeeded {
 		routerGstModelPkg = gstModelPkg
@@ -153,9 +153,9 @@ func genRunWithOptions(opts genRunOptions) error {
 	// A package whose name another import or a framework import of the same
 	// file already takes is imported under an alias, and its registrations
 	// refer to it through the alias.
-	modelAliases := gen.ModelFileAliases(modelPkgs)
-	serviceAliases := gen.ServiceFileAliases(servicePkgs)
-	routerAliases := gen.RouterFileAliases(routerPkgs, routerGstModelPkg)
+	modelAliases := gggen.ModelFileAliases(modelPkgs)
+	serviceAliases := gggen.ServiceFileAliases(servicePkgs)
+	routerAliases := gggen.RouterFileAliases(routerPkgs, routerGstModelPkg)
 
 	for _, m := range allModels {
 		if !m.Design.Enabled || !m.Design.Migrate {
@@ -165,9 +165,9 @@ func genRunWithOptions(opts genRunOptions) error {
 		// "Register[*Record]()"; any other is qualified by the name its
 		// package is imported under, as in "Register[*sample.Record]()".
 		if m.InModelRoot(ggconst.DirModel) {
-			modelStmts = append(modelStmts, gen.StmtModelRegister(m.ModelName))
+			modelStmts = append(modelStmts, gggen.StmtModelRegister(m.ModelName))
 		} else {
-			modelStmts = append(modelStmts, gen.StmtModelRegister(importQualifier(modelAliases, m.ImportPath(), m.ModelPkgName)+"."+m.ModelName))
+			modelStmts = append(modelStmts, gggen.StmtModelRegister(importQualifier(modelAliases, m.ImportPath(), m.ModelPkgName)+"."+m.ModelName))
 		}
 	}
 	for _, m := range allModels {
@@ -175,17 +175,17 @@ func genRunWithOptions(opts genRunOptions) error {
 			// Both registrations below must carry this exact route string:
 			// the service registry keys services by route and phase, so the
 			// service side and the router side share one route value.
-			route, paramName := codegen.RouterTargetForAction(route, m.Design, act)
+			route, paramName := modelinfo.RouterTargetForAction(route, m.Design, act)
 
 			if act.Service {
-				target := gen.ServiceTarget(m, act, ggconst.DirModel, ggconst.DirService)
-				serviceStmts = append(serviceStmts, gen.StmtServiceRegister(importQualifier(serviceAliases, target.ImportPath, target.PackageName)+"."+act.RoleName(), act.Phase, route))
+				target := modelinfo.ServiceTarget(m, act, ggconst.DirModel, ggconst.DirService)
+				serviceStmts = append(serviceStmts, gggen.StmtServiceRegister(importQualifier(serviceAliases, target.ImportPath, target.PackageName)+"."+act.RoleName(), act.Phase, route))
 			}
 			base := "Auth"
 			if act.Public {
 				base = "Pub"
 			}
-			routerStmts = append(routerStmts, gen.StmtRouterRegister(importQualifier(routerAliases, m.ImportPath(), m.ModelPkgName), m.ModelName, act.Payload, act.Result, gstModelPkg, base, route, paramName, act.Phase.MethodName()))
+			routerStmts = append(routerStmts, gggen.StmtRouterRegister(importQualifier(routerAliases, m.ImportPath(), m.ModelPkgName), m.ModelName, act.Payload, act.Result, gstModelPkg, base, route, paramName, act.Phase.MethodName()))
 		})
 	}
 
@@ -195,7 +195,7 @@ func genRunWithOptions(opts genRunOptions) error {
 	if !opts.Quiet {
 		clioutput.Section("Generate Files")
 	}
-	modelCode, err := gen.BuildModelFile("model", modelAliases, modelStmts...)
+	modelCode, err := gggen.BuildModelFile("model", modelAliases, modelStmts...)
 	if err != nil {
 		return errors.Wrap(err, "build model/model.gen.go")
 	}
@@ -206,11 +206,11 @@ func genRunWithOptions(opts genRunOptions) error {
 	// generate model/apidoc.gen.go, which registers struct and field doc comments
 	// so the OpenAPI document keeps schema descriptions in binaries deployed
 	// without Go source files.
-	docEntries, err := codegen.ExtractAPIDocs(module, ggconst.DirModel, ignore, nil)
+	docEntries, err := modelinfo.ExtractAPIDocs(module, ggconst.DirModel, ignore, nil)
 	if err != nil {
 		return errors.Wrap(err, "extract api docs")
 	}
-	apidocCode, err := gen.BuildAPIDocFile("model", docEntries)
+	apidocCode, err := gggen.BuildAPIDocFile("model", docEntries)
 	if err != nil {
 		return errors.Wrap(err, "build model/apidoc.gen.go")
 	}
@@ -219,7 +219,7 @@ func genRunWithOptions(opts genRunOptions) error {
 	}
 
 	// generate service/service.gen.go
-	serviceCode, err := gen.BuildServiceFile("service", serviceAliases, serviceStmts...)
+	serviceCode, err := gggen.BuildServiceFile("service", serviceAliases, serviceStmts...)
 	if err != nil {
 		return errors.Wrap(err, "build service/service.gen.go")
 	}
@@ -228,7 +228,7 @@ func genRunWithOptions(opts genRunOptions) error {
 	}
 
 	// generate router/router.gen.go
-	routerCode, err := gen.BuildRouterFile("router", routerGstModelPkg, routerAliases, routerStmts...)
+	routerCode, err := gggen.BuildRouterFile("router", routerGstModelPkg, routerAliases, routerStmts...)
 	if err != nil {
 		return errors.Wrap(err, "build router/router.gen.go")
 	}
@@ -252,7 +252,7 @@ func genRunWithOptions(opts genRunOptions) error {
 	}
 
 	// generate main.go
-	mainCode, err := gen.BuildMainFile(module)
+	mainCode, err := gggen.BuildMainFile(module)
 	if err != nil {
 		return errors.Wrap(err, "build main.go")
 	}
@@ -289,7 +289,7 @@ func genRunWithOptions(opts genRunOptions) error {
 	// created with its test scaffolds, an existing one has the action's
 	// declarations synced into it. route is the route the router registers
 	// the action under.
-	applyFile := func(target gen.ServiceTargetInfo, route string, code string, action *dsl.Action, modelInfo *gen.ModelInfo) error {
+	applyFile := func(target modelinfo.ServiceTargetInfo, route string, code string, action *dsl.Action, modelInfo *modelinfo.Model) error {
 		servicePkgName := target.PackageName
 		safePath, err := pathUnderRoot(target.FilePath, ggconst.DirService)
 		if err != nil {
@@ -308,14 +308,14 @@ func genRunWithOptions(opts genRunOptions) error {
 			}
 
 			// Apply changes and sync model imports to handle import path and package name updates
-			changed, err := gen.ApplyServiceFileWithModelSync(f, action, servicePkgName, ggconst.DirModel, modelInfo)
+			changed, err := gggen.ApplyServiceFileWithModelSync(f, action, servicePkgName, ggconst.DirModel, modelInfo)
 			if err != nil {
 				return errors.Wrapf(err, "service file %s", safePath)
 			}
 			if changed {
 				// Only reformat and write file when there are changes
 				// Use original FileSet to preserve comment positions
-				code, err = gen.FormatNodeExtraWithFileSet(f, fset)
+				code, err = gggen.FormatNodeExtraWithFileSet(f, fset)
 				if err != nil {
 					return err
 				}
@@ -356,15 +356,15 @@ func genRunWithOptions(opts genRunOptions) error {
 			if applyErr != nil {
 				return
 			}
-			target := gen.ServiceTarget(m, act, ggconst.DirModel, ggconst.DirService)
-			if file := gen.GenerateService(m, act, act.Phase, target.PackageName); file != nil {
+			target := modelinfo.ServiceTarget(m, act, ggconst.DirModel, ggconst.DirService)
+			if file := gggen.GenerateService(m, act, act.Phase, target.PackageName); file != nil {
 				fset := token.NewFileSet()
-				code, err := gen.FormatNodeExtraWithFileSet(file, fset)
+				code, err := gggen.FormatNodeExtraWithFileSet(file, fset)
 				if err != nil {
 					applyErr = err
 					return
 				}
-				registered, _ := codegen.RouterTargetForAction(route, m.Design, act)
+				registered, _ := modelinfo.RouterTargetForAction(route, m.Design, act)
 				applyErr = applyFile(target, registered, code, act, m)
 			}
 		})
@@ -394,25 +394,25 @@ func genRunWithOptions(opts genRunOptions) error {
 // locates, which gg gen has just created for an action of modelInfo, and
 // main_test.go for its package when no test file of the package declares
 // TestMain yet (see
-// gen.GenerateServiceTest and gen.GenerateServiceTestMain). The service test
+// gggen.GenerateServiceTest and gggen.GenerateServiceTestMain). The service test
 // coverage check requires the test file from the next run on, so the run
 // that creates the service file creates its test as well. A test file the
 // project already has, in its external or internal form, is kept as it is,
 // and so is a main_test.go that exists already.
-func scaffoldServiceTests(modelInfo *gen.ModelInfo, target gen.ServiceTargetInfo, action *dsl.Action, route string, quiet bool) error {
+func scaffoldServiceTests(modelInfo *modelinfo.Model, target modelinfo.ServiceTargetInfo, action *dsl.Action, route string, quiet bool) error {
 	stem := strings.TrimSuffix(target.FilePath, ".go")
 	if gghelper.FileExists(stem+ggconst.PatternTestFile) || gghelper.FileExists(stem+"_internal"+ggconst.PatternTestFile) {
 		return nil
 	}
 
-	declared, err := gen.PackageDeclaresTestMain(target.Dir)
+	declared, err := gggen.PackageDeclaresTestMain(target.Dir)
 	if err != nil {
 		return err
 	}
 	mainTest := filepath.Join(target.Dir, ggconst.FileMainTest)
 	if !declared && !gghelper.FileExists(mainTest) {
 		var mainCode string
-		if mainCode, err = gen.GenerateServiceTestMain(module, target.PackageName); err != nil {
+		if mainCode, err = gggen.GenerateServiceTestMain(module, target.PackageName); err != nil {
 			return err
 		}
 		if err = writeGeneratedFile(mainTest, mainCode, !quiet); err != nil {
@@ -420,7 +420,7 @@ func scaffoldServiceTests(modelInfo *gen.ModelInfo, target gen.ServiceTargetInfo
 		}
 	}
 
-	code, err := gen.GenerateServiceTest(modelInfo, target, action, route)
+	code, err := gggen.GenerateServiceTest(modelInfo, target, action, route)
 	if err != nil {
 		return err
 	}
@@ -429,10 +429,10 @@ func scaffoldServiceTests(modelInfo *gen.ModelInfo, target gen.ServiceTargetInfo
 
 // scannedModels is the model set code generation works from.
 type scannedModels struct {
-	models []*gen.ModelInfo
+	models []*modelinfo.Model
 	// routeIgnores records the actions the gst.yaml route ignores disabled,
 	// with the service files pruning must keep for them.
-	routeIgnores codegen.RouteIgnoreResult
+	routeIgnores modelinfo.RouteIgnoreResult
 	// pruneConfig holds the gst.yaml prune settings gg gen --prune applies.
 	pruneConfig ggconfig.PruneConfig
 }
@@ -451,7 +451,7 @@ func scanModels(quiet bool, ignore gghelper.ProjectIgnore) (scannedModels, error
 	if !quiet {
 		clioutput.Section("Scan Models")
 	}
-	allModels, err := codegen.FindModels(module, ggconst.DirModel, ignore)
+	allModels, err := modelinfo.FindModels(module, ggconst.DirModel, ignore)
 	if err != nil {
 		return scannedModels{}, err
 	}
@@ -459,7 +459,7 @@ func scanModels(quiet bool, ignore gghelper.ProjectIgnore) (scannedModels, error
 	if err != nil {
 		return scannedModels{}, err
 	}
-	ignoreResult := codegen.ResolveRoutes(allModels, projectCfg.Gen.Routes.Ignore)
+	ignoreResult := modelinfo.ResolveRoutes(allModels, projectCfg.Gen.Routes.Ignore)
 	if !quiet && len(ignoreResult.Matches) > 0 {
 		clioutput.Section("Ignore Routes")
 		for _, match := range ignoreResult.Matches {
@@ -470,7 +470,7 @@ func scanModels(quiet bool, ignore gghelper.ProjectIgnore) (scannedModels, error
 
 	// Model ignores run after route ignores so the live-action warning sees
 	// the final enabled-action set.
-	modelIgnores := codegen.ApplyModelIgnores(allModels, projectCfg.Gen.Models.Ignore)
+	modelIgnores := modelinfo.ApplyModelIgnores(allModels, projectCfg.Gen.Models.Ignore)
 	if !quiet && len(modelIgnores.Matches) > 0 {
 		clioutput.Section("Ignore Models")
 		for _, match := range modelIgnores.Matches {
@@ -487,7 +487,7 @@ func scanModels(quiet bool, ignore gghelper.ProjectIgnore) (scannedModels, error
 // comes back), about From-less rules matching models under several
 // directories, and about ignored models whose routes are still enabled.
 // Warnings are emitted even in quiet mode.
-func reportModelIgnoreWarnings(result codegen.ModelIgnoreResult) {
+func reportModelIgnoreWarnings(result modelinfo.ModelIgnoreResult) {
 	for _, rule := range result.Unmatched {
 		clioutput.Warn("", "gst.yaml model ignore rule matched no migrating model: %s", rule.Raw)
 	}
@@ -504,7 +504,7 @@ func reportModelIgnoreWarnings(result codegen.ModelIgnoreResult) {
 // silently come back) and about From-less rules matching models under
 // several directories (likely swallowing the project's own re-declaration).
 // Warnings are emitted even in quiet mode.
-func reportRouteIgnoreWarnings(result codegen.RouteIgnoreResult) {
+func reportRouteIgnoreWarnings(result modelinfo.RouteIgnoreResult) {
 	for _, rule := range result.Unmatched {
 		clioutput.Warn("", "gst.yaml ignore rule matched no route: %s", rule.Raw)
 	}

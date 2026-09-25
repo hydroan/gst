@@ -9,11 +9,11 @@ import (
 	"strings"
 
 	"github.com/hydroan/gst/dsl"
-	"github.com/hydroan/gst/internal/codegen/gen"
 	"github.com/hydroan/gst/internal/gghelper"
+	"github.com/hydroan/gst/internal/modelinfo"
 )
 
-func (p *CopyPlan) collectActions(models []*gen.ModelInfo) ([]moduleCopyAction, error) {
+func (p *CopyPlan) collectActions(models []*modelinfo.Model) ([]moduleCopyAction, error) {
 	actions := make([]moduleCopyAction, 0)
 	for _, modelInfo := range models {
 		if modelInfo.Design == nil {
@@ -63,12 +63,12 @@ func (p *CopyPlan) collectActions(models []*gen.ModelInfo) ([]moduleCopyAction, 
 // would regenerate it. The empty case is the plan a test builds by hand: it maps
 // an action straight onto <service dir>/<ServiceFilename()>, without the
 // per-model subdirectory ServiceTarget adds for non-flattened actions.
-func (p *CopyPlan) actionServicePaths(sourceModel *gen.ModelInfo, targetModel *gen.ModelInfo, action *dsl.Action) (sourcePath string, targetPath string) {
+func (p *CopyPlan) actionServicePaths(sourceModel *modelinfo.Model, targetModel *modelinfo.Model, action *dsl.Action) (sourcePath string, targetPath string) {
 	if p.FrameworkRoot == "" {
 		return filepath.Join(p.SourceServiceDir, action.ServiceFilename()), filepath.Join(p.TargetServiceDir, action.ServiceFilename())
 	}
-	sourceTarget := gen.ServiceTarget(sourceModel, action, p.frameworkModelDir(), p.frameworkServiceDir())
-	targetTarget := gen.ServiceTarget(targetModel, action, p.ModelDir, p.ServiceDir)
+	sourceTarget := modelinfo.ServiceTarget(sourceModel, action, p.frameworkModelDir(), p.frameworkServiceDir())
+	targetTarget := modelinfo.ServiceTarget(targetModel, action, p.ModelDir, p.ServiceDir)
 	return sourceTarget.FilePath, targetTarget.FilePath
 }
 

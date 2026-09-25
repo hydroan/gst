@@ -10,8 +10,8 @@ import (
 	"testing"
 
 	"github.com/hydroan/gst/consts"
-	"github.com/hydroan/gst/internal/codegen/gen"
 	"github.com/hydroan/gst/internal/ggconst"
+	"github.com/hydroan/gst/internal/gggen"
 	"github.com/stretchr/testify/require"
 )
 
@@ -30,10 +30,10 @@ func TestParseModelRoutesReadsTheRuntimeMethodOfEveryVerb(t *testing.T) {
 	want := make(map[string]string, len(phases))
 	for _, phase := range phases {
 		path := "samples/" + string(phase)
-		stmts = append(stmts, gen.StmtRouterRegister("model", "Sample", "*Sample", "*Sample", "model", "Auth", path, "", phase.MethodName()))
+		stmts = append(stmts, gggen.StmtRouterRegister("model", "Sample", "*Sample", "*Sample", "model", "Auth", path, "", phase.MethodName()))
 		want[path] = phase.ToHTTPVerb().HTTPMethod()
 	}
-	code, err := gen.BuildRouterFile("router", "model", map[string]string{"tmpapp/model": ""}, stmts...)
+	code, err := gggen.BuildRouterFile("router", "model", map[string]string{"tmpapp/model": ""}, stmts...)
 	require.NoError(t, err)
 	routerFile := filepath.Join(t.TempDir(), ggconst.FileRouterGen)
 	require.NoError(t, os.WriteFile(routerFile, []byte(code), 0o600))

@@ -9,12 +9,11 @@ import (
 	"testing"
 
 	"github.com/hydroan/gst/dsl"
-	"github.com/hydroan/gst/internal/codegen"
-	"github.com/hydroan/gst/internal/codegen/gen"
 	"github.com/hydroan/gst/internal/ggconfig"
 	"github.com/hydroan/gst/internal/ggconst"
 	"github.com/hydroan/gst/internal/gghelper"
 	"github.com/hydroan/gst/internal/ggprune"
+	"github.com/hydroan/gst/internal/modelinfo"
 )
 
 // writeSignupModelFixture writes a Signup model under projectDir/model/account
@@ -73,7 +72,7 @@ func TestRouteIgnoresKeepServiceFilesForPrune(t *testing.T) {
 	t.Chdir(projectDir)
 	writeSignupModelFixture(t, projectDir)
 
-	allModels, err := codegen.FindModels("tmpapp", ggconst.DirModel, gghelper.NewProjectIgnore())
+	allModels, err := modelinfo.FindModels("tmpapp", ggconst.DirModel, gghelper.NewProjectIgnore())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -85,14 +84,14 @@ func TestRouteIgnoresKeepServiceFilesForPrune(t *testing.T) {
 	var signupServiceFile string
 	allModels[0].Design.Range(func(route string, act *dsl.Action) {
 		if act.Service {
-			signupServiceFile = gen.ServiceTarget(allModels[0], act, ggconst.DirModel, ggconst.DirService).FilePath
+			signupServiceFile = modelinfo.ServiceTarget(allModels[0], act, ggconst.DirModel, ggconst.DirService).FilePath
 		}
 	})
 	if signupServiceFile == "" {
 		t.Fatal("fixture should declare a service-bearing action")
 	}
 
-	result := codegen.ResolveRoutes(allModels, parseRules(t, "POST /api/signup"))
+	result := modelinfo.ResolveRoutes(allModels, parseRules(t, "POST /api/signup"))
 
 	// The nested-route action is disabled and reported.
 	if len(result.Matches) != 1 {

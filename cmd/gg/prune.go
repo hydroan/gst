@@ -9,13 +9,12 @@ import (
 
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/internal/clioutput"
-	"github.com/hydroan/gst/internal/codegen"
-	"github.com/hydroan/gst/internal/codegen/gen"
 	"github.com/hydroan/gst/internal/ggconfig"
 	"github.com/hydroan/gst/internal/ggconst"
 	"github.com/hydroan/gst/internal/gghelper"
 	"github.com/hydroan/gst/internal/ggmodule"
 	"github.com/hydroan/gst/internal/ggprune"
+	"github.com/hydroan/gst/internal/modelinfo"
 	"github.com/spf13/cobra"
 )
 
@@ -62,7 +61,7 @@ func pruneRun() error {
 	// is gen's to say, and prune only works out what they leave behind.
 	clioutput.Section("Scan Models")
 	ignore := gghelper.NewProjectIgnore()
-	allModels, err := codegen.FindModels(module, ggconst.DirModel, ignore)
+	allModels, err := modelinfo.FindModels(module, ggconst.DirModel, ignore)
 	if err != nil {
 		return err
 	}
@@ -133,7 +132,7 @@ func remindUnreadPruneSettings() {
 // cover are never deleted: not as disabled files, not as orphans, not as
 // empty directories. Of the ignore rules, only those keep a path (see package
 // ggprune).
-func pruneLeftovers(oldServiceFiles []string, allModels []*gen.ModelInfo, keptFiles, keptDirs map[string]bool, ignore gghelper.ProjectIgnore, protect ggconfig.PruneConfig) {
+func pruneLeftovers(oldServiceFiles []string, allModels []*modelinfo.Model, keptFiles, keptDirs map[string]bool, ignore gghelper.ProjectIgnore, protect ggconfig.PruneConfig) {
 	clioutput.Section("Prune Leftovers")
 	warnMissingPruneIgnore(protect)
 
@@ -188,7 +187,7 @@ func pruneLeftovers(oldServiceFiles []string, allModels []*gen.ModelInfo, keptFi
 // orphanModuleMiddleware. It returns as well the helper directories kept
 // because live code imports them. When the project's code cannot be read in
 // full, it warns and finds no orphans.
-func findOrphans(allModels []*gen.ModelInfo, keptDirs map[string]bool, deleting []string, ignore gghelper.ProjectIgnore, protect ggconfig.PruneConfig) (orphans, keptHelpers []ggprune.OrphanDir, orphanMiddleware []ggmodule.OrphanMiddleware) {
+func findOrphans(allModels []*modelinfo.Model, keptDirs map[string]bool, deleting []string, ignore gghelper.ProjectIgnore, protect ggconfig.PruneConfig) (orphans, keptHelpers []ggprune.OrphanDir, orphanMiddleware []ggmodule.OrphanMiddleware) {
 	orphanMiddleware, err := orphanModuleMiddleware(protect)
 	if err != nil {
 		clioutput.Warn("", "failed to read the middleware directory, so orphans are not checked: %v", err)

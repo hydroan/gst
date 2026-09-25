@@ -1,0 +1,218 @@
+package gggen
+
+import (
+	"bytes"
+	"go/ast"
+	"go/format"
+	"go/token"
+	"maps"
+	"slices"
+	"strconv"
+	"strings"
+	"unicode"
+
+	goimports "golang.org/x/tools/imports"
+	fumpt "mvdan.cc/gofumpt/format"
+)
+
+// formatOnlyImports runs goimports as an import formatter only. Its import
+// fixing resolves unknown qualifiers by scanning the whole module cache for a
+// package that could supply them, which costs seconds per file and cannot tell
+// a package qualifier from any other selector in a single file. Every caller
+// here builds its own import set, so there is nothing left for it to fix.
+var formatOnlyImports = &goimports.Options{Comments: true, TabIndent: true, TabWidth: 8, FormatOnly: true}
+
+// FormatNode prints node as Go source in the go/format style. With
+// processImport set, goimports then regroups and sorts the imports, adding or
+// removing none (see formatOnlyImports).
+func FormatNode(node ast.Node, processImport ...bool) (string, error) {
+	var buf bytes.Buffer
+	fset := token.NewFileSet()
+
+	if err := format.Node(&buf, fset, node); err != nil {
+		return "", err
+	}
+
+	formatted, err := format.Source(buf.Bytes())
+	if err != nil {
+		return "", err
+	}
+
+	if len(processImport) > 0 && processImport[0] {
+		result, err := goimports.Process("", formatted, formatOnlyImports)
+		if err != nil {
+			return "", err
+		}
+		return string(result), nil
+	}
+
+	return string(formatted), nil
+}
+
+// FormatNodeExtra prints node like FormatNode, but in the stricter gofumpt
+// style (https://github.com/mvdan/gofumpt) with its GroupParams,
+// ClotheReturns and BalanceCalls rules. The generated registration and
+// service files are printed through it.
+func FormatNodeExtra(node ast.Node, processImport ...bool) (string, error) {
+	return FormatNodeExtraWithFileSet(node, nil, processImport...)
+}
+
+// FormatNodeExtraWithFileSet is FormatNodeExtra printing node through fset,
+// the FileSet the positions of node refer to, which lays it out by them: the
+// comments of a parsed file stay in place, and a file built from scratch
+// breaks lines where its fabricated positions say (see goast.LineSet). A nil
+// fset stands for a new one.
+func FormatNodeExtraWithFileSet(node ast.Node, fset *token.FileSet, processImport ...bool) (string, error) {
+	var buf bytes.Buffer
+	// create a new FileSet if none was provided
+	if fset == nil {
+		fset = token.NewFileSet()
+	}
+
+	if err := format.Node(&buf, fset, node); err != nil {
+		return "", err
+	}
+
+	formatted, err := fumpt.Source(buf.Bytes(), fumpt.Options{
+		LangVersion: "",
+		Extra:       fumpt.Extra{GroupParams: true, ClotheReturns: true, BalanceCalls: true},
+	})
+	if err != nil {
+		return "", err
+	}
+
+	if len(processImport) > 0 && processImport[0] {
+		var result []byte
+		if result, err = goimports.Process("", formatted, formatOnlyImports); err != nil {
+			return "", err
+		}
+		return string(result), nil
+	}
+
+	return string(formatted), nil
+}
+
+// ResolveImportConflicts picks the alias each project import of a generated
+// file needs. imports maps every import path to the name of the package it
+// declares, and reserved lists the names the file's framework imports take.
+// An import keeps its package name when no reserved name and no other import
+// claims it; otherwise it is aliased with its last two path segments joined by
+// an underscore ("svc/pkg1/user" becomes "pkg1_user"). Every import in a clash
+// is aliased, not all but one: which import kept the name would depend on the
+// others, and a new import sharing the name could take it away. An alias that
+// still clashes with another name takes one more leading segment at a time,
+// and one that runs out of segments gets a numeric suffix, so no two imports
+// share a name and none takes a framework import's. Every alias is a Go
+// identifier: characters an identifier cannot hold become underscores, and one
+// that would start with a digit gets an underscore in front. The result maps
+// each import path to its alias, or to "" when it needs none.
+//
+// For example, the service registration file reserves service and consts for
+// its framework imports, so the imports
+//
+//	"helloworld/service/account/recorditem" // package recorditem
+//	"helloworld/service/sample/item"        // package item
+//	"helloworld/service/sample/record_item" // package recorditem
+//	"helloworld/service/sample/service"     // package service
+//
+// are written as
+//
+//	account_recorditem "helloworld/service/account/recorditem"
+//	"helloworld/service/sample/item"
+//	sample_record_item "helloworld/service/sample/record_item"
+//	sample_service "helloworld/service/sample/service"
+func ResolveImportConflicts(imports map[string]string, reserved ...string) map[string]string {
+	paths := slices.Sorted(maps.Keys(imports))
+
+	claims := make(map[string]int, len(paths)+len(reserved))
+	for _, reservedName := range reserved {
+		claims[reservedName]++
+	}
+	for _, importPath := range paths {
+		claims[imports[importPath]]++
+	}
+	// depth is the number of trailing path segments an aliased import's name
+	// is built from; 0 marks an import that keeps its package name.
+	depth := make(map[string]int, len(paths))
+	for _, importPath := range paths {
+		if claims[imports[importPath]] > 1 {
+			depth[importPath] = 2
+		}
+	}
+	name := func(importPath string) string {
+		if depth[importPath] == 0 {
+			return imports[importPath]
+		}
+		return importName(importPath, depth[importPath])
+	}
+	for {
+		// A reserved name is held by a framework import, entered as "" so
+		// it counts toward a clash but never grows.
+		byName := make(map[string][]string, len(paths)+len(reserved))
+		for _, reservedName := range reserved {
+			byName[reservedName] = append(byName[reservedName], "")
+		}
+		for _, importPath := range paths {
+			n := name(importPath)
+			byName[n] = append(byName[n], importPath)
+		}
+		grown := false
+		for _, clashing := range byName {
+			if len(clashing) < 2 {
+				continue
+			}
+			for _, importPath := range clashing {
+				if depth[importPath] > 0 && depth[importPath] <= strings.Count(importPath, "/") {
+					depth[importPath]++
+					grown = true
+				}
+			}
+		}
+		if !grown {
+			break
+		}
+	}
+
+	aliases := make(map[string]string, len(paths))
+	taken := make(map[string]bool, len(paths)+len(reserved))
+	for _, reservedName := range reserved {
+		taken[reservedName] = true
+	}
+	for _, importPath := range paths {
+		if depth[importPath] == 0 {
+			aliases[importPath] = ""
+			taken[imports[importPath]] = true
+		}
+	}
+	for _, importPath := range paths {
+		if depth[importPath] == 0 {
+			continue
+		}
+		alias := name(importPath)
+		for n := 2; taken[alias]; n++ {
+			alias = name(importPath) + strconv.Itoa(n)
+		}
+		aliases[importPath] = alias
+		taken[alias] = true
+	}
+	return aliases
+}
+
+// importName joins the last depth segments of importPath with underscores, or
+// all of them when it has fewer, into a Go identifier: every character an
+// identifier cannot hold becomes an underscore, and a name that is still not
+// one, because it starts with a digit or is a keyword, gets an underscore in
+// front.
+func importName(importPath string, depth int) string {
+	segments := strings.Split(importPath, "/")
+	name := strings.Map(func(r rune) rune {
+		if r == '_' || unicode.IsLetter(r) || unicode.IsDigit(r) {
+			return r
+		}
+		return '_'
+	}, strings.Join(segments[max(len(segments)-depth, 0):], "_"))
+	if !token.IsIdentifier(name) {
+		name = "_" + name
+	}
+	return name
+}

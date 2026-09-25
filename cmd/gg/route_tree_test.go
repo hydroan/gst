@@ -5,8 +5,8 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/hydroan/gst/internal/codegen/gen"
 	"github.com/hydroan/gst/internal/ggconst"
+	"github.com/hydroan/gst/internal/gggen"
 	"github.com/stretchr/testify/require"
 )
 
@@ -15,13 +15,13 @@ import (
 // registers, with the HTTP method of each action: export and SSE routes are
 // served over GET like the rest of the reads.
 func TestParseRouteTreeFromFileReadsGeneratedRoutes(t *testing.T) {
-	code, err := gen.BuildRouterFile("router", "model", map[string]string{"tmpapp/model": ""},
-		gen.StmtRouterRegister("model", "Record", "*Record", "*Record", "model", "Auth", "records", "", "Create"),
-		gen.StmtRouterRegister("model", "Record", "*Record", "*Record", "model", "Auth", "records", "", "List"),
-		gen.StmtRouterRegister("model", "Record", "*Record", "*Record", "model", "Auth", "records/:rec", "rec", "Get"),
-		gen.StmtRouterRegister("model", "Record", "*Record", "*Record", "model", "Pub", "records/:rec", "rec", "Delete"),
-		gen.StmtRouterRegister("model", "Record", "*Record", "*Record", "model", "Auth", "records/export", "", "Export"),
-		gen.StmtRouterRegister("model", "Notice", "*Notice", "*Notice", "model", "Auth", "notices", "", "SSE"),
+	code, err := gggen.BuildRouterFile("router", "model", map[string]string{"tmpapp/model": ""},
+		gggen.StmtRouterRegister("model", "Record", "*Record", "*Record", "model", "Auth", "records", "", "Create"),
+		gggen.StmtRouterRegister("model", "Record", "*Record", "*Record", "model", "Auth", "records", "", "List"),
+		gggen.StmtRouterRegister("model", "Record", "*Record", "*Record", "model", "Auth", "records/:rec", "rec", "Get"),
+		gggen.StmtRouterRegister("model", "Record", "*Record", "*Record", "model", "Pub", "records/:rec", "rec", "Delete"),
+		gggen.StmtRouterRegister("model", "Record", "*Record", "*Record", "model", "Auth", "records/export", "", "Export"),
+		gggen.StmtRouterRegister("model", "Notice", "*Notice", "*Notice", "model", "Auth", "notices", "", "SSE"),
 	)
 	require.NoError(t, err)
 

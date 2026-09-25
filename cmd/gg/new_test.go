@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	pkgnew "github.com/hydroan/gst/internal/codegen/new"
+	"github.com/hydroan/gst/internal/ggnew"
 	"github.com/stretchr/testify/require"
 )
 
@@ -198,7 +198,7 @@ func TestNewInitializesGitOnlyOutsideARepository(t *testing.T) {
 // gg gen a project needs is the one after its first model.
 func TestGenLeavesANewProjectUnchanged(t *testing.T) {
 	projectDir := newGenProject(t)
-	files, err := pkgnew.ProjectFiles("tmpapp")
+	files, err := ggnew.ProjectFiles("tmpapp")
 	require.NoError(t, err)
 	for _, file := range files {
 		writeProjectFile(t, filepath.Join(projectDir, file.Path), file.Content)
@@ -224,7 +224,7 @@ func stubGoModTidy(t *testing.T) {
 
 // requireProjectFiles fails the test unless dir holds the project gg new
 // creates for projectName: go.mod declaring the module and every file
-// pkgnew.ProjectFiles lists, with its content.
+// ggnew.ProjectFiles lists, with its content.
 func requireProjectFiles(t *testing.T, dir, projectName string) {
 	t.Helper()
 
@@ -232,7 +232,7 @@ func requireProjectFiles(t *testing.T, dir, projectName string) {
 	require.NoError(t, err)
 	require.True(t, strings.HasPrefix(string(goMod), "module "+projectName+"\n"), "go.mod does not declare module %s:\n%s", projectName, goMod)
 
-	files, err := pkgnew.ProjectFiles(projectName)
+	files, err := ggnew.ProjectFiles(projectName)
 	require.NoError(t, err)
 	for _, file := range files {
 		requireFileContent(t, filepath.Join(dir, file.Path), file.Content)

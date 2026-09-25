@@ -12,10 +12,10 @@ import (
 
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/dsl"
-	"github.com/hydroan/gst/internal/codegen/gen"
 	"github.com/hydroan/gst/internal/ggconfig"
 	"github.com/hydroan/gst/internal/ggconst"
 	"github.com/hydroan/gst/internal/gghelper"
+	"github.com/hydroan/gst/internal/modelinfo"
 )
 
 // OrphanDir is a service directory no model owns, with the unmanaged files in
@@ -39,7 +39,7 @@ type OrphanDir struct {
 // code it reads cannot be read, because a directory or a file cannot be
 // opened or its imports do not parse: an import it could not see might be all
 // that keeps a directory.
-func FindOrphanDirs(allModels []*gen.ModelInfo, keptDirs map[string]bool, deleting []string, modulePath string, ignore gghelper.ProjectIgnore, protect ggconfig.PruneConfig) (orphans, keptHelpers []OrphanDir, err error) {
+func FindOrphanDirs(allModels []*modelinfo.Model, keptDirs map[string]bool, deleting []string, modulePath string, ignore gghelper.ProjectIgnore, protect ggconfig.PruneConfig) (orphans, keptHelpers []OrphanDir, err error) {
 	currentDirs := currentServiceDirs(allModels)
 	for dir := range keptDirs {
 		currentDirs.ownedDirs = append(currentDirs.ownedDirs, dir)
@@ -85,7 +85,7 @@ type serviceDirSet struct {
 // together with the directories above it: a Create writing
 // service/sample/record/create.go owns service/sample/record, which makes
 // service/sample/record, service/sample and service known.
-func currentServiceDirs(allModels []*gen.ModelInfo) serviceDirSet {
+func currentServiceDirs(allModels []*modelinfo.Model) serviceDirSet {
 	knownDirs := map[string]bool{
 		filepath.Clean(ggconst.DirService): true,
 	}
@@ -97,7 +97,7 @@ func currentServiceDirs(allModels []*gen.ModelInfo) serviceDirSet {
 			if !act.Enabled || !act.Service {
 				return
 			}
-			dir := filepath.Clean(gen.ServiceTarget(m, act, ggconst.DirModel, ggconst.DirService).Dir)
+			dir := filepath.Clean(modelinfo.ServiceTarget(m, act, ggconst.DirModel, ggconst.DirService).Dir)
 			if !modelDirSet[dir] {
 				modelDirSet[dir] = true
 				modelDirs = append(modelDirs, dir)

@@ -9,7 +9,7 @@ import (
 
 	"github.com/hydroan/gst/consts"
 	"github.com/hydroan/gst/dsl"
-	"github.com/hydroan/gst/internal/codegen/gen"
+	"github.com/hydroan/gst/internal/modelinfo"
 )
 
 func TestValidateModuleCommandNameRejectsPaths(t *testing.T) {
@@ -62,7 +62,7 @@ func (s *CustomService) ListAfter(ctx *gst.ServiceContext, data *[]any) error {
 		TargetModelDir:    filepath.Join("model", "copytest"),
 		TargetServiceDir:  filepath.Join("service", "copytest"),
 	}
-	modelInfo := &gen.ModelInfo{
+	modelInfo := &modelinfo.Model{
 		ModulePath:    "tmpapp",
 		ModelFileDir:  filepath.Join("model", "copytest"),
 		ModelFilePath: filepath.Join("model", "copytest", "copytest.go"),
@@ -88,7 +88,7 @@ func (s *CustomService) ListAfter(ctx *gst.ServiceContext, data *[]any) error {
 		},
 	}
 
-	actions, err := plan.collectActions([]*gen.ModelInfo{modelInfo})
+	actions, err := plan.collectActions([]*modelinfo.Model{modelInfo})
 	if err != nil {
 		t.Fatalf("collectActions() error = %v", err)
 	}
@@ -132,7 +132,7 @@ type RecordService struct {
 		TargetModelDir:    filepath.Join("model", "copytest"),
 		TargetServiceDir:  filepath.Join("service", "copytest"),
 	}
-	models := []*gen.ModelInfo{
+	models := []*modelinfo.Model{
 		{
 			ModulePath:    "tmpapp",
 			ModelFileDir:  filepath.Join("model", "copytest"),
@@ -233,7 +233,7 @@ func (s *SampleService) DeleteAfter(ctx *gst.ServiceContext, req *modelcopytest.
 		t.Fatal(err)
 	}
 
-	modelInfo := &gen.ModelInfo{
+	modelInfo := &modelinfo.Model{
 		ModulePath:    "tmpapp",
 		ModelFileDir:  filepath.Join("model", "copytest"),
 		ModelFilePath: filepath.Join("model", "copytest", "copytest.go"),
@@ -343,7 +343,7 @@ func itemPatchResult() *modelcopytest.Item {
 		t.Fatal(err)
 	}
 
-	modelInfo := &gen.ModelInfo{
+	modelInfo := &modelinfo.Model{
 		ModulePath:    "tmpapp",
 		ModelFileDir:  filepath.Join("model", "copytest"),
 		ModelFilePath: filepath.Join("model", "copytest", "item.go"),
@@ -449,7 +449,7 @@ func (s *ItemListService) List(ctx *gst.ServiceContext, req *model.Empty) (rsp *
 		t.Fatal(err)
 	}
 
-	modelInfo := &gen.ModelInfo{
+	modelInfo := &modelinfo.Model{
 		ModulePath:    "tmpapp",
 		ModelFileDir:  filepath.Join("model", "copytest"),
 		ModelFilePath: filepath.Join("model", "copytest", "item.go"),
@@ -526,7 +526,7 @@ func (s *SampleService) CreateAfter(ctx *gst.ServiceContext, req *modelcopytest.
 		t.Fatal(err)
 	}
 
-	modelInfo := &gen.ModelInfo{
+	modelInfo := &modelinfo.Model{
 		ModulePath:    "tmpapp",
 		ModelFileDir:  filepath.Join("model", "copytest"),
 		ModelFilePath: filepath.Join("model", "copytest", "sample.go"),

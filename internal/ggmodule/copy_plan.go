@@ -10,8 +10,8 @@ import (
 	"strings"
 
 	"github.com/hydroan/gst/dsl"
-	"github.com/hydroan/gst/internal/codegen/gen"
 	"github.com/hydroan/gst/internal/gghelper"
+	"github.com/hydroan/gst/internal/modelinfo"
 )
 
 const (
@@ -79,7 +79,7 @@ type moduleCopyAction struct {
 	Action     *dsl.Action
 	SourcePath string
 	TargetPath string
-	ModelInfo  *gen.ModelInfo
+	ModelInfo  *modelinfo.Model
 }
 
 // moduleCopyFile stores final target content. Conflict checks run against this

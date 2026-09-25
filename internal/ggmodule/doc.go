@@ -190,8 +190,8 @@
 //
 // Action service files carry the business logic of DSL-declared actions. For
 // every model whose Design() declares an action with Service(), the source is
-// the framework file at gen.ServiceTarget under internal/service/<name>/, and
-// the target is the same gen.ServiceTarget mapping under service/<name>/ —
+// the framework file at modelinfo.ServiceTarget under internal/service/<name>/, and
+// the target is the same modelinfo.ServiceTarget mapping under service/<name>/ —
 // exactly where a later gg gen would regenerate it. Rules:
 //
 //   - The source file must exist and declare at least one service struct (a

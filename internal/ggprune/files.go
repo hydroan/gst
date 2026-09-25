@@ -25,9 +25,10 @@ import (
 
 	"github.com/hydroan/gst/consts"
 	"github.com/hydroan/gst/dsl"
-	"github.com/hydroan/gst/internal/codegen/gen"
 	"github.com/hydroan/gst/internal/ggconfig"
 	"github.com/hydroan/gst/internal/ggconst"
+	"github.com/hydroan/gst/internal/gggen"
+	"github.com/hydroan/gst/internal/modelinfo"
 )
 
 // ScanServiceFiles lists the service files under serviceDir that gg manages:
@@ -73,7 +74,7 @@ func isManagedServiceFile(path string) bool {
 	if phaseFileNames()[fileName] {
 		return true
 	}
-	return gen.IsActionServiceSource(path)
+	return gggen.IsActionServiceSource(path)
 }
 
 // phaseFileNames returns the names of the standard phase files, create.go
@@ -116,7 +117,7 @@ type FilePlan struct {
 // file is gone they test nothing, and the service test organization check
 // refuses a test file without a source file. A prune.ignore entry covering
 // a test file keeps it like any other file.
-func PlanFiles(existing []string, models []*gen.ModelInfo, kept map[string]bool, protect ggconfig.PruneConfig) FilePlan {
+func PlanFiles(existing []string, models []*modelinfo.Model, kept map[string]bool, protect ggconfig.PruneConfig) FilePlan {
 	// Get list of service files that should currently exist
 	currentFiles := currentServiceFiles(models)
 
@@ -151,12 +152,12 @@ func pairedTestFiles(servicePath string) []string {
 
 // currentServiceFiles returns the service files the enabled Service() actions
 // of allModels expect, such as service/sample/record/create.go for a Create.
-func currentServiceFiles(allModels []*gen.ModelInfo) map[string]bool {
+func currentServiceFiles(allModels []*modelinfo.Model) map[string]bool {
 	current := make(map[string]bool)
 	for _, m := range allModels {
 		m.Design.Range(func(route string, act *dsl.Action) {
 			if act.Enabled && act.Service {
-				target := gen.ServiceTarget(m, act, ggconst.DirModel, ggconst.DirService)
+				target := modelinfo.ServiceTarget(m, act, ggconst.DirModel, ggconst.DirService)
 				current[target.FilePath] = true
 			}
 		})

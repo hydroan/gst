@@ -6,7 +6,7 @@ import (
 	"strconv"
 	"testing"
 
-	"github.com/hydroan/gst/internal/codegen/gen/columns"
+	"github.com/hydroan/gst/internal/gggen/columns"
 	"github.com/stretchr/testify/require"
 )
 

@@ -9,7 +9,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/errors"
-	"github.com/hydroan/gst/internal/codegen/gen"
+	"github.com/hydroan/gst/internal/gggen"
 	"github.com/hydroan/gst/internal/goast"
 )
 
@@ -68,7 +68,7 @@ func mergeModuleServiceSource(input moduleServiceMergeInput) ([]byte, error) {
 		return nil, err
 	}
 
-	code, err := gen.FormatNodeExtraWithFileSet(targetFile, fset, true)
+	code, err := gggen.FormatNodeExtraWithFileSet(targetFile, fset, true)
 	if err != nil {
 		return nil, err
 	}
@@ -517,7 +517,7 @@ func generateTargetServiceShell(actions []moduleCopyAction) ([]byte, error) {
 	}
 	var file *ast.File
 	for _, action := range actions {
-		next := gen.GenerateService(action.ModelInfo, action.Action, action.Action.Phase, moduleCopyServicePackageName(action))
+		next := gggen.GenerateService(action.ModelInfo, action.Action, action.Action.Phase, moduleCopyServicePackageName(action))
 		if next == nil {
 			return nil, fmt.Errorf("failed to generate service shell for %s", action.Action.ServiceFilename())
 		}
@@ -529,7 +529,7 @@ func generateTargetServiceShell(actions []moduleCopyAction) ([]byte, error) {
 		appendGeneratedServiceDecls(file, next)
 	}
 	fset := token.NewFileSet()
-	code, err := gen.FormatNodeExtraWithFileSet(file, fset, true)
+	code, err := gggen.FormatNodeExtraWithFileSet(file, fset, true)
 	if err != nil {
 		return nil, err
 	}

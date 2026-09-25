@@ -7,11 +7,10 @@ import (
 	"strings"
 
 	"github.com/hydroan/gst/dsl"
-	"github.com/hydroan/gst/internal/codegen"
-	"github.com/hydroan/gst/internal/codegen/gen"
 	"github.com/hydroan/gst/internal/ggconfig"
 	"github.com/hydroan/gst/internal/ggconst"
 	"github.com/hydroan/gst/internal/gghelper"
+	"github.com/hydroan/gst/internal/modelinfo"
 )
 
 // ServiceTestCoverage requires a test file for every service file generated
@@ -49,7 +48,7 @@ func checkServiceTestCoverage(ignore gghelper.ProjectIgnore) []string {
 	if err != nil {
 		return append(violations, fmt.Sprintf("reading the module path: %v", err))
 	}
-	allModels, err := codegen.FindModels(modulePath, ggconst.DirModel, ignore)
+	allModels, err := modelinfo.FindModels(modulePath, ggconst.DirModel, ignore)
 	if err != nil {
 		return append(violations, fmt.Sprintf("scanning model designs: %v", err))
 	}
@@ -57,7 +56,7 @@ func checkServiceTestCoverage(ignore gghelper.ProjectIgnore) []string {
 	// Route-ignored actions are disabled here for the same reason gg gen
 	// disables them: their service files stay on disk without a registered
 	// route, so no test can exercise them.
-	codegen.ResolveRoutes(allModels, cfg.Gen.Routes.Ignore)
+	modelinfo.ResolveRoutes(allModels, cfg.Gen.Routes.Ignore)
 
 	seen := make(map[string]bool)
 	for _, m := range allModels {
@@ -68,7 +67,7 @@ func checkServiceTestCoverage(ignore gghelper.ProjectIgnore) []string {
 			if !act.Enabled || !act.Service {
 				return
 			}
-			target := gen.ServiceTarget(m, act, ggconst.DirModel, ggconst.DirService)
+			target := modelinfo.ServiceTarget(m, act, ggconst.DirModel, ggconst.DirService)
 			if seen[target.FilePath] {
 				return
 			}

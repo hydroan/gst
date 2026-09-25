@@ -7,10 +7,10 @@ import (
 	"slices"
 	"testing"
 
-	"github.com/hydroan/gst/internal/codegen/gen"
 	"github.com/hydroan/gst/internal/ggconfig"
 	"github.com/hydroan/gst/internal/ggconst"
 	"github.com/hydroan/gst/internal/ggprune"
+	"github.com/hydroan/gst/internal/modelinfo"
 )
 
 // TestScanServiceFilesListsWhatIgnoreRulesCover pins that prune reads the
@@ -57,7 +57,7 @@ func TestPlanFiles(t *testing.T) {
 	protected := filepath.Join("service", "legacy", "create.go")
 	protect := ggconfig.PruneConfig{Ignore: []string{"service/legacy"}}
 
-	plan := ggprune.PlanFiles([]string{current, disabled, kept, protected}, []*gen.ModelInfo{orphanPruneModel()}, map[string]bool{kept: true}, protect)
+	plan := ggprune.PlanFiles([]string{current, disabled, kept, protected}, []*modelinfo.Model{orphanPruneModel()}, map[string]bool{kept: true}, protect)
 
 	if !slices.Equal(plan.Delete, []string{disabled}) {
 		t.Fatalf("Delete = %q, want only the file no enabled action expects", plan.Delete)
@@ -86,7 +86,7 @@ func TestPlanFilesDeletesThePairedTestFiles(t *testing.T) {
 	}
 	protect := ggconfig.PruneConfig{Ignore: []string{"service/legacy"}}
 
-	plan := ggprune.PlanFiles([]string{current, disabled, protected}, []*gen.ModelInfo{orphanPruneModel()}, nil, protect)
+	plan := ggprune.PlanFiles([]string{current, disabled, protected}, []*modelinfo.Model{orphanPruneModel()}, nil, protect)
 
 	wantDelete := []string{disabled, filepath.Join("service", "authz", "list_test.go"), filepath.Join("service", "authz", "list_internal_test.go")}
 	if !slices.Equal(plan.Delete, wantDelete) {

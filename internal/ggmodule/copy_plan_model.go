@@ -4,44 +4,27 @@ import (
 	"os"
 	pathpkg "path"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 
 	"github.com/cockroachdb/errors"
-	"github.com/hydroan/gst/internal/codegen/gen"
 	"github.com/hydroan/gst/internal/gghelper"
+	"github.com/hydroan/gst/internal/modelinfo"
 )
 
-func (p *CopyPlan) findModels() ([]*gen.ModelInfo, error) {
-	allModels := make([]*gen.ModelInfo, 0)
-	if err := filepath.Walk(p.SourceModelDir, func(path string, info os.FileInfo, err error) error {
-		if err != nil {
-			return err
-		}
-
-		if info.IsDir() {
-			if skipModuleSourceDir(p.SourceModelDir, path, info.Name()) {
-				return filepath.SkipDir
-			}
-			return nil
-		}
-		if !isGoSourceFile(info.Name()) || p.ignoredSourcePath(path) {
-			return nil
-		}
-
-		models, err := gen.FindModels(frameworkModulePath, p.SourceModelDir, path)
-		if err != nil {
-			return err
-		}
-		for _, m := range models {
-			m.ModelFilePath = path
-			allModels = append(allModels, m)
-		}
-		return nil
-	}); err != nil {
+func (p *CopyPlan) findModels() ([]*modelinfo.Model, error) {
+	// The module source is the framework's own tree, not the project's, so
+	// no Git ignore rules apply to it: the zero ProjectIgnore leaves out only
+	// what the go command does, vendor and testdata among them. The files the
+	// module keeps out of the copy drop out after the scan, by path.
+	models, err := modelinfo.FindModels(frameworkModulePath, p.SourceModelDir, gghelper.ProjectIgnore{})
+	if err != nil {
 		return nil, err
 	}
-	return allModels, nil
+	return slices.DeleteFunc(models, func(m *modelinfo.Model) bool {
+		return p.ignoredSourcePath(m.ModelFilePath)
+	}), nil
 }
 
 func (p *CopyPlan) addModelFiles() error {
@@ -142,7 +125,7 @@ func (p *CopyPlan) collectStaleModelFiles() error {
 	return nil
 }
 
-func (p *CopyPlan) targetModelInfo(source *gen.ModelInfo) (*gen.ModelInfo, error) {
+func (p *CopyPlan) targetModelInfo(source *modelinfo.Model) (*modelinfo.Model, error) {
 	// Reuse gg gen's service generator by projecting the framework model into
 	// the current project's model layout. The source model still drives action
 	// DSL; only module/package/path metadata changes.

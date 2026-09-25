@@ -7,9 +7,9 @@ import (
 	"os"
 
 	"github.com/hydroan/gst/dsl"
-	"github.com/hydroan/gst/internal/codegen"
 	"github.com/hydroan/gst/internal/ggconst"
 	"github.com/hydroan/gst/internal/gghelper"
+	"github.com/hydroan/gst/internal/modelinfo"
 )
 
 // DSLDesignRules runs the Design() validation that gates gg gen over every
@@ -32,7 +32,7 @@ func checkDSLDesignRules(ignore gghelper.ProjectIgnore) []string {
 
 	// The generator's own walk decides which model files take part, so a file
 	// gg gen reads is a file this check validates, and nothing else is.
-	err := codegen.WalkModelFiles(ggconst.DirModel, ignore, func(path string) error {
+	err := modelinfo.WalkModelFiles(ggconst.DirModel, ignore, func(path string) error {
 		fset := token.NewFileSet()
 		file, parseErr := parser.ParseFile(fset, path, nil, parser.ParseComments)
 		if parseErr != nil {

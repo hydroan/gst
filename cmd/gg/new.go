@@ -12,9 +12,9 @@ import (
 
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/internal/clioutput"
-	pkgnew "github.com/hydroan/gst/internal/codegen/new"
 	"github.com/hydroan/gst/internal/ggconst"
 	"github.com/hydroan/gst/internal/gghelper"
+	"github.com/hydroan/gst/internal/ggnew"
 	"github.com/spf13/cobra"
 )
 
@@ -43,7 +43,7 @@ and initializes a Git repository unless the project lies inside one already.`,
 // or, when inPlace, in the working directory, which must have that name. It
 // refuses a directory already holding an entry the project gets before it
 // creates anything; then it initializes the Go module, writes the files
-// pkgnew.ProjectFiles lists, tidies the dependencies and initializes a Git
+// ggnew.ProjectFiles lists, tidies the dependencies and initializes a Git
 // repository, unless the project lies inside one already.
 func newProject(projectName string, inPlace bool) error {
 	if build.IsLocalImport(projectName) || filepath.IsAbs(projectName) {
@@ -61,7 +61,7 @@ func newProject(projectName string, inPlace bool) error {
 		}
 		projectDir = "."
 	}
-	files, err := pkgnew.ProjectFiles(projectName)
+	files, err := ggnew.ProjectFiles(projectName)
 	if err != nil {
 		return err
 	}
@@ -167,7 +167,7 @@ var goModTidy = func() error {
 // dir holding go.mod and a model directory yields [go.mod model], and a dir
 // that does not exist yields none. An entry counts even as a dangling symbolic
 // link, since writing the file would follow it.
-func existingProjectEntries(dir string, files []pkgnew.ProjectFile) ([]string, error) {
+func existingProjectEntries(dir string, files []ggnew.ProjectFile) ([]string, error) {
 	entries := []string{"go.mod", "go.sum"}
 	for _, file := range files {
 		entry, _, _ := strings.Cut(file.Path, "/")

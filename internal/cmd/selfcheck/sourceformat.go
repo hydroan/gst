@@ -24,8 +24,8 @@ var sourceFormatters = map[[2]string]bool{
 // may format source text: the printing path every generator's syntax tree
 // goes through.
 var (
-	sourceFormatScope = []string{"internal/codegen", "cmd/gg"}
-	sourceFormatHome  = "internal/codegen/gen/helper.go"
+	sourceFormatScope = []string{"internal/gggen", "internal/ggnew", "cmd/gg"}
+	sourceFormatHome  = "internal/gggen/helper.go"
 )
 
 // templatePackage is the package that renders text from templates, which no

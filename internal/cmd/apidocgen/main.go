@@ -13,10 +13,10 @@ import (
 	"path/filepath"
 
 	"github.com/cockroachdb/errors"
-	"github.com/hydroan/gst/internal/codegen"
-	"github.com/hydroan/gst/internal/codegen/gen"
 	"github.com/hydroan/gst/internal/ggconst"
+	"github.com/hydroan/gst/internal/gggen"
 	"github.com/hydroan/gst/internal/gghelper"
+	"github.com/hydroan/gst/internal/modelinfo"
 )
 
 const (
@@ -55,12 +55,12 @@ func main() {
 // both go through this function, so the two can never disagree about what the
 // file should contain.
 func buildModelRegistryAPIDoc() (string, error) {
-	entries, err := codegen.ExtractAPIDocs(ggconst.ImportPathGst, modelRegistryPkgDir, gghelper.NewProjectIgnore(), []string{ggconst.FileAPIDocGen})
+	entries, err := modelinfo.ExtractAPIDocs(ggconst.ImportPathGst, modelRegistryPkgDir, gghelper.NewProjectIgnore(), []string{ggconst.FileAPIDocGen})
 	if err != nil {
 		return "", errors.Wrapf(err, "extract %s api docs", modelRegistryPkgDir)
 	}
 
-	code, err := gen.BuildAPIDocFile(modelRegistryPkgName, entries)
+	code, err := gggen.BuildAPIDocFile(modelRegistryPkgName, entries)
 	if err != nil {
 		return "", errors.Wrapf(err, "build %s api doc file", modelRegistryPkgDir)
 	}

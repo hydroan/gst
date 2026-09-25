@@ -8,10 +8,10 @@ import (
 
 	"github.com/hydroan/gst/consts"
 	"github.com/hydroan/gst/dsl"
-	"github.com/hydroan/gst/internal/codegen/gen"
 	"github.com/hydroan/gst/internal/ggconfig"
 	"github.com/hydroan/gst/internal/ggconst"
 	"github.com/hydroan/gst/internal/gghelper"
+	"github.com/hydroan/gst/internal/modelinfo"
 )
 
 // TestPruneLeftoversKeepsWhatPruneIgnoreCovers pins that prune never
@@ -131,7 +131,7 @@ func TestPruneLeftoversListsEverythingAndAsksOnce(t *testing.T) {
 			var stdout string
 			withStdin(t, tt.answer, func() {
 				stdout = captureStdout(t, func() {
-					pruneLeftovers([]string{currentFile, disabledFile}, []*gen.ModelInfo{pruneTestModel()}, nil, nil, gghelper.NewProjectIgnore(), ggconfig.PruneConfig{})
+					pruneLeftovers([]string{currentFile, disabledFile}, []*modelinfo.Model{pruneTestModel()}, nil, nil, gghelper.NewProjectIgnore(), ggconfig.PruneConfig{})
 				})
 			})
 
@@ -182,7 +182,7 @@ func TestPruneLeftoversDeletesThePairedTestFiles(t *testing.T) {
 	var stdout string
 	withStdin(t, "y\n", func() {
 		stdout = captureStdout(t, func() {
-			pruneLeftovers([]string{currentFile, disabledFile}, []*gen.ModelInfo{pruneTestModel()}, nil, nil, gghelper.NewProjectIgnore(), ggconfig.PruneConfig{})
+			pruneLeftovers([]string{currentFile, disabledFile}, []*modelinfo.Model{pruneTestModel()}, nil, nil, gghelper.NewProjectIgnore(), ggconfig.PruneConfig{})
 		})
 	})
 
@@ -275,7 +275,7 @@ func TestPruneLeftoversKeepsOrphansWhenADisabledFileStays(t *testing.T) {
 	var stdout string
 	withStdin(t, "y\n", func() {
 		stdout = captureStdout(t, func() {
-			pruneLeftovers([]string{currentFile, disabledFile}, []*gen.ModelInfo{pruneTestModel()}, nil, nil, gghelper.NewProjectIgnore(), ggconfig.PruneConfig{})
+			pruneLeftovers([]string{currentFile, disabledFile}, []*modelinfo.Model{pruneTestModel()}, nil, nil, gghelper.NewProjectIgnore(), ggconfig.PruneConfig{})
 		})
 	})
 
@@ -507,11 +507,11 @@ func init() {
 // Create, writes service/authz/role/role.go, so service/authz/role is a
 // directory a model owns and every other phase file there, list.go among
 // them, belongs to a disabled action.
-func pruneTestModel() *gen.ModelInfo {
+func pruneTestModel() *modelinfo.Model {
 	disabled := func(phase consts.Phase) *dsl.Action {
 		return &dsl.Action{Phase: phase}
 	}
-	return &gen.ModelInfo{
+	return &modelinfo.Model{
 		ModulePath:    "tmpapp",
 		ModelPkgName:  "authz",
 		ModelName:     "Role",

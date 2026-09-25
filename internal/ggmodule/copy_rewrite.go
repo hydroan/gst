@@ -13,7 +13,7 @@ import (
 	"unicode"
 
 	"github.com/cockroachdb/errors"
-	"github.com/hydroan/gst/internal/codegen/gen"
+	"github.com/hydroan/gst/internal/gggen"
 )
 
 type moduleCopyRewriteConfig struct {
@@ -68,7 +68,7 @@ func normalizeModuleCopySource(filename string, src []byte, config moduleCopyRew
 		return nil, err
 	}
 
-	code, err := gen.FormatNodeExtraWithFileSet(file, fset, true)
+	code, err := gggen.FormatNodeExtraWithFileSet(file, fset, true)
 	if err != nil {
 		return nil, err
 	}

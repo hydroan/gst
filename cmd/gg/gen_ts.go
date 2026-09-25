@@ -14,10 +14,10 @@ import (
 	"github.com/hydroan/gst/consts"
 	"github.com/hydroan/gst/dsl"
 	"github.com/hydroan/gst/internal/clioutput"
-	"github.com/hydroan/gst/internal/codegen/gen"
-	"github.com/hydroan/gst/internal/codegen/gen/ts"
 	"github.com/hydroan/gst/internal/ggconst"
+	"github.com/hydroan/gst/internal/gggen/ts"
 	"github.com/hydroan/gst/internal/gghelper"
+	"github.com/hydroan/gst/internal/modelinfo"
 	"github.com/spf13/cobra"
 )
 
@@ -70,7 +70,7 @@ func genTypeScriptRun() error {
 	// The declarations mirror the models. A project with no model directory
 	// declares no route at all, and the run then removes what an earlier one
 	// generated rather than leaving stale declarations behind.
-	var models []*gen.ModelInfo
+	var models []*modelinfo.Model
 	if gghelper.FileExists(ggconst.DirModel) {
 		scanned, err := scanModels(false, gghelper.NewProjectIgnore())
 		if err != nil {
@@ -128,7 +128,7 @@ func applicationName() (string, error) {
 // Payload and Result types of every enabled action. Import and Export move
 // files and SSE streams events, so their types never travel as JSON, and
 // *model.Empty carries no data.
-func typeScriptRoots(models []*gen.ModelInfo) []ts.TypeRef {
+func typeScriptRoots(models []*modelinfo.Model) []ts.TypeRef {
 	seen := make(map[ts.TypeRef]bool)
 	var roots []ts.TypeRef
 	for _, m := range models {
