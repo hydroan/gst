@@ -159,24 +159,12 @@ func Clean() {
 		}
 	}
 
-	// Gin logger
-	if logger.Gin != nil {
-		_ = logger.Gin.Sync()
-	}
-
-	// HTTP body logger
-	if logger.HTTPBody != nil {
-		_ = logger.HTTPBody.Sync()
-	}
-
-	// gRPC access logger
-	if logger.GRPC != nil {
-		_ = logger.GRPC.Sync()
-	}
-
-	// recovery logger
-	if logger.Recovery != nil {
-		_ = logger.Recovery.Sync()
+	// The listeners' loggers: the HTTP access and body logs, the gRPC
+	// access log and the recovery log.
+	for _, log := range []*zap.Logger{logger.Gin, logger.HTTPBody, logger.GRPC, logger.Recovery} {
+		if log != nil {
+			_ = log.Sync()
+		}
 	}
 
 	// gorm logger
