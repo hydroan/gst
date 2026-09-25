@@ -79,6 +79,10 @@ func (g *generator) generate() ([]File, error) {
 	if diags := g.project.Diagnostics(); len(diags) > 0 {
 		return nil, &DiagnosticsError{Diagnostics: diags}
 	}
+	g.reconcile()
+	if diags := g.project.Diagnostics(); len(diags) > 0 {
+		return nil, &DiagnosticsError{Diagnostics: diags}
+	}
 	return g.print()
 }
 

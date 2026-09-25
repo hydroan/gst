@@ -10,6 +10,13 @@
 // model base have fixed numbers (see BaseFieldNumbers). A type whose shape
 // protobuf cannot express is reported as a diagnostic instead of being
 // approximated, and no file is generated then.
+//
+// The files already under pb/ are the contract in force, what the clients
+// were built against, so a generated file replaces one only if every field
+// keeps its number and no number changes hands; the numbers and names of the
+// fields a model dropped stay reserved in the new file. A change that would
+// break the wire is reported, with the file to delete for accepting it on
+// purpose.
 package pb
 
 import (
@@ -75,11 +82,11 @@ type DiagnosticsError struct {
 // Error lists every diagnostic on a line of its own, under a line counting
 // them:
 //
-//	1 type(s) cannot be described in protobuf:
+//	1 problem(s) keep the protobuf definitions from being generated:
 //	  model/sample.go:12: example.com/app/model.Sample.name: field name has no pb tag; number it pb:"N" with N from 11
 func (e *DiagnosticsError) Error() string {
 	lines := make([]string, 0, len(e.Diagnostics)+1)
-	lines = append(lines, fmt.Sprintf("%d type(s) cannot be described in protobuf:", len(e.Diagnostics)))
+	lines = append(lines, fmt.Sprintf("%d problem(s) keep the protobuf definitions from being generated:", len(e.Diagnostics)))
 	for _, d := range e.Diagnostics {
 		lines = append(lines, "  "+d.String())
 	}

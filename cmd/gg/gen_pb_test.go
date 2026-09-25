@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/bufbuild/protocompile"
+	"github.com/hydroan/gst/internal/ggconst"
 	"github.com/stretchr/testify/require"
 )
 
@@ -139,6 +140,58 @@ func TestGenRunRefusesAGRPCModelWithNothingToServe(t *testing.T) {
 
 		require.Error(t, err)
 		require.Contains(t, err.Error(), want)
+	})
+}
+
+// TestGenRunHoldsTheCommittedDefinitionsToTheirNumbers pins that gg gen
+// reads the .proto already on disk as the contract in force: a field
+// changing number, or a number changing hands, is refused with the file to
+// delete named for accepting the break; the numbers and names of removed
+// fields are reserved and kept over later runs, so a new field cannot take
+// them.
+func TestGenRunHoldsTheCommittedDefinitionsToTheirNumbers(t *testing.T) {
+	projectDir := newGenProject(t)
+	writeProtobufProject(t, projectDir, map[string]string{"model/note.go": protobufNoteModel})
+	require.NoError(t, genRunWithOptions(genRunOptions{Quiet: true}))
+	proto := filepath.Join(ggconst.DirPB, "note.proto")
+
+	t.Run("a field keeps its number", func(t *testing.T) {
+		writeProtobufProject(t, projectDir, map[string]string{"model/note.go": strings.Replace(protobufNoteModel, `pb:"11"`, `pb:"13"`, 1)})
+
+		err := genRunWithOptions(genRunOptions{Quiet: true})
+
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "pb/note.proto: the field title of message Note was number 11 and is now 13; keep 11, or delete pb/note.proto to accept the break")
+	})
+	t.Run("a number is never reused", func(t *testing.T) {
+		writeProtobufProject(t, projectDir, map[string]string{"model/note.go": strings.Replace(protobufNoteModel, "Title string   'json:\"title\" pb:\"11\"'", "Caption string 'json:\"caption\" pb:\"11\"'", 1)})
+
+		err := genRunWithOptions(genRunOptions{Quiet: true})
+
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "pb/note.proto: the field caption of message Note takes number 11, which the field title held; a number is never reused, so give caption a fresh number and let 11 stay reserved, or delete pb/note.proto to accept the break")
+	})
+	t.Run("removed fields stay reserved", func(t *testing.T) {
+		withoutTags := strings.Replace(protobufNoteModel, "\tTags  []string 'json:\"tags,omitempty\" pb:\"12\" gorm:\"-\"'\n", "", 1)
+		writeProtobufProject(t, projectDir, map[string]string{"model/note.go": withoutTags})
+		require.NoError(t, genRunWithOptions(genRunOptions{Quiet: true}))
+		content, err := os.ReadFile(proto)
+		require.NoError(t, err)
+		require.Contains(t, string(content), "reserved 12;")
+		require.Contains(t, string(content), `reserved "tags";`)
+
+		// The reservation outlives the run that made it.
+		require.NoError(t, genRunWithOptions(genRunOptions{Quiet: true}))
+		again, err := os.ReadFile(proto)
+		require.NoError(t, err)
+		require.Equal(t, string(content), string(again))
+
+		writeProtobufProject(t, projectDir, map[string]string{"model/note.go": strings.Replace(withoutTags, "\tmodel.Base\n", "\tBody string 'json:\"body\" pb:\"12\"'\n\n\tmodel.Base\n", 1)})
+
+		err = genRunWithOptions(genRunOptions{Quiet: true})
+
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "pb/note.proto: the field body of message Note takes number 12, which the file reserves; give body a fresh number, or delete pb/note.proto to accept the break")
 	})
 }
 
