@@ -21,10 +21,21 @@ import (
 	"google.golang.org/grpc/status"
 )
 
-// traceIDKey is the metadata key the trace id travels under, in and out:
-// the HTTP listener's X-Trace-ID header, in the lowercase gRPC metadata
-// keeps its keys in.
-const traceIDKey = "x-trace-id"
+// The metadata keys the request scope reads, in the lowercase gRPC metadata
+// keeps its keys in: traceIDKey carries the trace id in and out, the HTTP
+// listener's X-Trace-ID header; userAgentKey and authorityKey are what the
+// User-Agent header and the request's host arrive as.
+const (
+	traceIDKey   = "x-trace-id"
+	userAgentKey = "user-agent"
+	authorityKey = ":authority"
+)
+
+// accessLogFieldCap is the most fields an access-log entry carries, the ten
+// every entry has plus the error of a failed call, so the slice is allocated
+// once per call; a test holds the worst case to it, which is what keeps it
+// honest when a field is added.
+const accessLogFieldCap = 11
 
 // requestScope gives a call what the HTTP listener's tracing and access-log
 // middleware give a request. It stamps the call's trace id on the context
@@ -54,14 +65,14 @@ func requestScope(ctx context.Context, req any, info *grpc.UnaryServerInfo, hand
 	}
 	ctx = execctx.WithTraceID(ctx, traceID)
 	address, tls := peerOf(ctx)
-	c := &callRecord{fields: requestctx.Fields{
+	c := &callRecord{method: methods[info.FullMethod], fields: requestctx.Fields{
 		Route:      info.FullMethod,
 		Path:       info.FullMethod,
 		RequestURI: info.FullMethod,
 		Method:     http.MethodPost,
 		ClientIP:   address,
-		UserAgent:  first(md, "user-agent"),
-		Host:       first(md, ":authority"),
+		UserAgent:  first(md, userAgentKey),
+		Host:       first(md, authorityKey),
 		TLS:        tls,
 	}}
 	meta := requestctx.New(c.fields)
@@ -77,10 +88,6 @@ func requestScope(ctx context.Context, req any, info *grpc.UnaryServerInfo, hand
 		// always does before Run; its other loggers drop entries too.
 		return rsp, err
 	}
-	// accessLogFieldCap must stay >= the number of fields appended below,
-	// so the slice is allocated once per call; re-check it when adding or
-	// removing a field.
-	const accessLogFieldCap = 12
 	st := statusOf(err)
 	fields := make([]zapcore.Field, 0, accessLogFieldCap)
 	fields = append(

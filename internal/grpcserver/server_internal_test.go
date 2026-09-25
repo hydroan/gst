@@ -46,7 +46,7 @@ func reset(t *testing.T) {
 	t.Helper()
 	Stop(context.Background())
 	registrations = nil
-	publicMethods = nil
+	methods = nil
 	commonInterceptors = nil
 	authInterceptors = nil
 	started.Store(false)
@@ -68,15 +68,16 @@ func observe(t *testing.T, target **zap.Logger) *observer.ObservedLogs {
 }
 
 // serve registers the service gst.test.Echo with one unary rpc per entry
-// of handlers, named by its key, and the full method names in public as
-// its public methods. Each rpc takes and answers an empty message,
-// answering with the error its handler returns, and runs the server's
-// interceptors first, the way the code the protobuf plugin generates does.
-func serve(handlers map[string]func(ctx context.Context) error, public ...string) {
-	methods := make([]grpc.MethodDesc, 0, len(handlers))
+// of handlers, named by its key, described to the server by methods the way
+// the generated registration file describes them. Each rpc takes and
+// answers an empty message, answering with the error its handler returns,
+// and runs the server's interceptors first, the way the code the protobuf
+// plugin generates does.
+func serve(handlers map[string]func(ctx context.Context) error, methods ...Method) {
+	descs := make([]grpc.MethodDesc, 0, len(handlers))
 	for name, handle := range handlers {
 		fullMethod := "/gst.test.Echo/" + name
-		methods = append(methods, grpc.MethodDesc{
+		descs = append(descs, grpc.MethodDesc{
 			MethodName: name,
 			Handler: func(_ any, ctx context.Context, dec func(any) error, interceptor grpc.UnaryServerInterceptor) (any, error) {
 				in := new(emptypb.Empty)
@@ -100,10 +101,10 @@ func serve(handlers map[string]func(ctx context.Context) error, public ...string
 		r.RegisterService(&grpc.ServiceDesc{
 			ServiceName: "gst.test.Echo",
 			HandlerType: (*any)(nil),
-			Methods:     methods,
+			Methods:     descs,
 			Metadata:    "gst/test/echo.proto",
 		}, nil)
-	}, public...)
+	}, methods...)
 }
 
 // echo registers the rpc Ping, answering an empty message with an empty

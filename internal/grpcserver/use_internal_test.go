@@ -60,7 +60,7 @@ func TestUseAuthSkipsThePublicMethods(t *testing.T) {
 	serve(map[string]func(context.Context) error{
 		"Ping": func(context.Context) error { return nil },
 		"Look": func(context.Context) error { return nil },
-	}, "/gst.test.Echo/Look")
+	}, Method{Name: "/gst.test.Echo/Look", Public: true}, Method{Name: "/gst.test.Echo/Ping"})
 	conn := dial(t, start(t), nil)
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
@@ -69,11 +69,11 @@ func TestUseAuthSkipsThePublicMethods(t *testing.T) {
 	require.Equal(t, codes.Unauthenticated, status.Code(call(ctx, conn, "Ping")))
 }
 
-// TestWithIdentityNamesTheCallerDownstreamAndInTheAccessLog pins what an
+// TestWithCallerNamesTheCallerDownstreamAndInTheAccessLog pins what an
 // auth interceptor establishing the caller hands on: the request metadata
 // the handler reads carries the caller beside everything it carried
 // before, and so does the call's access-log entry.
-func TestWithIdentityNamesTheCallerDownstreamAndInTheAccessLog(t *testing.T) {
+func TestWithCallerNamesTheCallerDownstreamAndInTheAccessLog(t *testing.T) {
 	reset(t)
 	UseAuth(func(ctx context.Context, req any, _ *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (any, error) {
 		return handler(WithCaller(ctx, Caller{Username: "alice", UserID: "u-1", SessionID: "s-1", TenantID: "t-1"}), req)
@@ -131,4 +131,37 @@ func TestUseAfterRunPanics(t *testing.T) {
 
 	require.Panics(t, func() { Use(pass) })
 	require.Panics(t, func() { UseAuth(pass) })
+}
+
+// TestRouteAndCallerOfDescribeTheCall pins what the interceptors of the
+// modules read off a call: Route answers the HTTP method and route the
+// registration described the rpc with, the ones the same action is served
+// at over HTTP, and CallerOf answers the caller an earlier interceptor
+// established; outside a call both answer nothing.
+func TestRouteAndCallerOfDescribeTheCall(t *testing.T) {
+	reset(t)
+	type seen struct {
+		httpMethod, route string
+		caller            Caller
+	}
+	got := make(chan seen, 1)
+	UseAuth(func(ctx context.Context, req any, _ *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (any, error) {
+		ctx = WithCaller(ctx, Caller{Username: "alice", UserID: "u-1"})
+		httpMethod, route := Route(ctx)
+		got <- seen{httpMethod: httpMethod, route: route, caller: CallerOf(ctx)}
+		return handler(ctx, req)
+	})
+	serve(map[string]func(context.Context) error{"Ping": func(context.Context) error { return nil }},
+		Method{Name: "/gst.test.Echo/Ping", HTTPMethod: "GET", Route: "/api/records"})
+	conn := dial(t, start(t), nil)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	require.NoError(t, call(ctx, conn, "Ping"))
+
+	require.Equal(t, seen{httpMethod: "GET", route: "/api/records", caller: Caller{Username: "alice", UserID: "u-1"}}, <-got)
+	httpMethod, route := Route(context.Background())
+	require.Empty(t, httpMethod)
+	require.Empty(t, route)
+	require.Equal(t, Caller{}, CallerOf(context.Background()))
 }

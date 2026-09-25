@@ -4,26 +4,57 @@ import (
 	"net/http"
 	"strconv"
 
+	"github.com/cockroachdb/errors"
+	"github.com/hydroan/gst/consts"
 	"github.com/hydroan/gst/internal/response"
+	"github.com/hydroan/gst/internal/serviceregistry"
 	"github.com/hydroan/gst/internal/types"
 	"google.golang.org/genproto/googleapis/rpc/errdetails"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
 
-// statusError returns the status a call answers a failure with, from the
+// The ErrorInfo detail every failure status carries: its reason, one for
+// every failure the framework answers, and the keys of its metadata, the
+// business code and HTTP status the HTTP envelope would carry; its domain is
+// the framework's name.
+const (
+	statusReason       = "SERVICE_ERROR"
+	statusDetailCode   = "code"
+	statusDetailStatus = "status"
+)
+
+// StatusError returns the status error a call answers err with: a service
+// error answers with the status and message it was constructed with, mapped
+// like any coder (see statusOfCoder); any other error answers Internal with
+// a fixed message, its text kept out of the answer the way the HTTP
+// listener keeps internal detail out of the envelope, for the caller to log
+// before mapping; nil stays nil. The public interceptor.StatusError forwards
+// to it.
+func StatusError(err error) error {
+	if err == nil {
+		return nil
+	}
+	var serviceErr *serviceregistry.Error
+	if errors.As(err, &serviceErr) {
+		return statusOfCoder(serviceErr)
+	}
+	return status.Error(codes.Internal, "internal server error")
+}
+
+// statusOfCoder returns the status a call answers a failure with, from the
 // code the HTTP listener would answer it with: the gRPC code codeOf maps
 // the HTTP status to, the message the envelope would carry, and, in an
 // ErrorInfo detail of domain "gst", the business code and HTTP status the
 // envelope would carry as well, so a client can act on any of the three.
-func statusError(coder types.Coder) error {
+func statusOfCoder(coder types.Coder) error {
 	st := status.New(codeOf(coder), coder.Msg())
 	detailed, err := st.WithDetails(&errdetails.ErrorInfo{
-		Reason: "SERVICE_ERROR",
-		Domain: "gst",
+		Reason: statusReason,
+		Domain: consts.FrameworkName,
 		Metadata: map[string]string{
-			"code":   strconv.Itoa(coder.Code()),
-			"status": strconv.Itoa(coder.Status()),
+			statusDetailCode:   strconv.Itoa(coder.Code()),
+			statusDetailStatus: strconv.Itoa(coder.Status()),
 		},
 	})
 	if err != nil {

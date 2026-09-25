@@ -34,7 +34,7 @@ func TestRegisterAuthGuardsTheServicesThroughTheServer(t *testing.T) {
 			Methods:     []grpc.MethodDesc{method("Ping"), method("Look")},
 			Metadata:    "gst/test/echo.proto",
 		}, nil)
-	}, "/gst.test.Echo/Look")
+	}, grpcserver.Method{Name: "/gst.test.Echo/Look", Public: true}, grpcserver.Method{Name: "/gst.test.Echo/Ping"})
 	conn := dial(t, startServer(t))
 	token, _, err := jwt.GenTokens("u-1", "alice")
 	require.NoError(t, err)

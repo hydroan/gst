@@ -10,15 +10,31 @@ import (
 	"google.golang.org/grpc"
 )
 
+// Method describes one rpc of a registered service the way the generated
+// registration file declares it: its full name, whether its action declares
+// Public(), and the HTTP method and route the same action is served at over
+// HTTP, which the interceptors of the modules judge a call by the way their
+// middleware judges a request.
+type Method struct {
+	// Name is the full method name, "/app.RecordService/ListRecord".
+	Name string
+	// Public marks the action as one declaring Public(): the interceptors
+	// UseAuth queued leave the method alone.
+	Public bool
+	// HTTPMethod and Route are the HTTP method and the route pattern of the
+	// same action, "GET" and "/api/records/:id".
+	HTTPMethod string
+	Route      string
+}
+
 var (
 	// commonInterceptors and authInterceptors are the interceptors Use and
 	// UseAuth queued, in order: the project's, run inside the framework's own
 	// chain on every method and on the non-public methods respectively.
 	commonInterceptors []grpc.UnaryServerInterceptor
 	authInterceptors   []grpc.UnaryServerInterceptor
-	// publicMethods are the full method names Register declared public, the
-	// ones the auth interceptors skip.
-	publicMethods map[string]bool
+	// methods are the rpcs Register described, keyed by their full name.
+	methods map[string]Method
 )
 
 // Use queues interceptors to run on every call, after the framework's own
@@ -57,7 +73,7 @@ func UseAuth(interceptors ...grpc.UnaryServerInterceptor) {
 func projectInterceptors() []grpc.UnaryServerInterceptor {
 	chain := slices.Clone(commonInterceptors)
 	guarded := selector.MatchFunc(func(_ context.Context, meta interceptors.CallMeta) bool {
-		return !publicMethods[meta.FullMethod()]
+		return !methods[meta.FullMethod()].Public
 	})
 	for _, auth := range authInterceptors {
 		chain = append(chain, selector.UnaryServerInterceptor(auth, guarded))
@@ -79,12 +95,37 @@ type Caller struct {
 type callRecordKey struct{}
 
 // callRecord is what requestScope knows of a call, the request metadata it
-// attached, and what the interceptors after it add, the caller:
-// the one place the access-log entry written when the call ends reads the
-// caller from, since a context cannot carry a value back up the chain.
+// attached and the method as registered, and what the interceptors after it
+// add, the caller: the one place the access-log entry written when the call
+// ends reads the caller from, since a context cannot carry a value back up
+// the chain.
 type callRecord struct {
 	fields requestctx.Fields
+	method Method
 	caller Caller
+}
+
+// Route returns the HTTP method and route the registration described the
+// call's rpc with, "GET" and "/api/records" for a call of ListRecord: what
+// an interceptor judging the call by the action, the way the module
+// middleware judges a request, asks for. Both are empty outside a call and
+// for a method registered without them, the health and reflection services'
+// among them. The public interceptor.Route forwards to it.
+func Route(ctx context.Context) (httpMethod, route string) {
+	if c, ok := ctx.Value(callRecordKey{}).(*callRecord); ok {
+		return c.method.HTTPMethod, c.method.Route
+	}
+	return "", ""
+}
+
+// CallerOf returns the caller WithCaller established for the call, the zero
+// Caller before one is established and outside a call. The public
+// interceptor.CallerOf forwards to it.
+func CallerOf(ctx context.Context) Caller {
+	if c, ok := ctx.Value(callRecordKey{}).(*callRecord); ok {
+		return c.caller
+	}
+	return Caller{}
 }
 
 // WithCaller returns ctx with caller established as who is calling: the

@@ -2,8 +2,10 @@
 // interceptors a project mounts on the gRPC listener. Register adds
 // interceptors to every method, RegisterAuth to the methods not declared
 // Public(), and the constructors here build the interceptors the framework
-// ships for either; the interceptors of the modules gg module copy copies
-// into a project come with them, under this directory.
+// ships for either; IAMSession and Authz are the interceptors of the iam and
+// authz modules, whose source files gg module copy copies into a project
+// serving gRPC. What an interceptor reads and establishes about a call, its
+// caller and the HTTP action it maps to, is package grpc's.
 //
 // The chain the framework runs on every call itself — request scope,
 // metrics, recovery — and the machinery that mounts registered interceptors
@@ -11,8 +13,6 @@
 package interceptor
 
 import (
-	"context"
-
 	"github.com/hydroan/gst/internal/grpcserver"
 	"google.golang.org/grpc"
 )
@@ -32,19 +32,4 @@ func Register(interceptors ...grpc.UnaryServerInterceptor) {
 // Register adds.
 func RegisterAuth(interceptors ...grpc.UnaryServerInterceptor) {
 	grpcserver.UseAuth(interceptors...)
-}
-
-// Caller is who a call is made by, as an authentication interceptor
-// established it: the fields the HTTP authentication middleware sets on the
-// gin context.
-type Caller = grpcserver.Caller
-
-// WithCaller returns ctx with caller established as who is calling: the
-// request metadata the service context and the flows read names the
-// caller, and so does the call's access-log entry. An authentication
-// interceptor calls it once it has verified who is calling, and hands the
-// returned context on to the handler; a gRPC context cannot be written the
-// way a gin context can, which is why the caller travels this way.
-func WithCaller(ctx context.Context, caller Caller) context.Context {
-	return grpcserver.WithCaller(ctx, caller)
 }

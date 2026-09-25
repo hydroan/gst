@@ -55,24 +55,23 @@ var (
 // Register queues fn to register a service on the server Run starts, the
 // way the generated pb/pb.gen.go registers the service of every model
 // declaring GRPC(): fn gets the server as a grpc.ServiceRegistrar and calls
-// the RegisterXxxServiceServer function the protobuf plugin generated. The
-// full method names in public, "/app.RecordService/ListRecord", are the
-// service's public methods, the actions declaring Public(): the
-// interceptors UseAuth queued leave them alone. It runs at package
-// initialization, before bootstrap starts the listeners; registering once
-// the server runs would serve nothing, so it panics.
-func Register(fn func(grpc.ServiceRegistrar), public ...string) {
+// the RegisterXxxServiceServer function the protobuf plugin generated, and
+// methods describe the service's rpcs (see Method): which are public and
+// what the same actions are over HTTP. It runs at package initialization,
+// before bootstrap starts the listeners; registering once the server runs
+// would serve nothing, so it panics.
+func Register(fn func(grpc.ServiceRegistrar), described ...Method) {
 	mu.Lock()
 	defer mu.Unlock()
 	if started.Load() {
 		panic("grpcserver: Register after the server started; register services at package initialization")
 	}
 	registrations = append(registrations, fn)
-	if publicMethods == nil {
-		publicMethods = make(map[string]bool, len(public))
+	if methods == nil {
+		methods = make(map[string]Method, len(described))
 	}
-	for _, method := range public {
-		publicMethods[method] = true
+	for _, m := range described {
+		methods[m.Name] = m
 	}
 }
 

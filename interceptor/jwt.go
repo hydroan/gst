@@ -2,15 +2,20 @@ package interceptor
 
 import (
 	"context"
-	"strings"
 
 	"github.com/hydroan/gst/authn/jwt"
+	gstgrpc "github.com/hydroan/gst/grpc"
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 )
+
+// sessionIDKey is the metadata the session id arrives in, the X-Session-Id
+// header of the HTTP listener, in the lowercase gRPC metadata keeps its
+// keys in.
+const sessionIDKey = "x-session-id"
 
 // JwtAuth authenticates a call from the bearer token in its authorization
 // metadata, the way middleware.JwtAuth authenticates a request from the
@@ -24,8 +29,12 @@ import (
 // it.
 func JwtAuth() grpc.UnaryServerInterceptor {
 	return func(ctx context.Context, req any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (any, error) {
-		md, _ := metadata.FromIncomingContext(ctx)
-		claims, err := parseBearer(md)
+		token, ok := gstgrpc.Bearer(ctx)
+		var claims *jwt.Claims
+		err := jwt.ErrInvalidToken
+		if ok {
+			claims, err = jwt.ParseToken(token)
+		}
 		if err == nil {
 			err = jwt.Verify(claims)
 		}
@@ -39,24 +48,9 @@ func JwtAuth() grpc.UnaryServerInterceptor {
 			return nil, status.Error(codes.Unauthenticated, "invalid token")
 		}
 		var sessionID string
-		if values := md.Get("x-session-id"); len(values) > 0 {
-			sessionID = values[0]
+		if md, _ := metadata.FromIncomingContext(ctx); len(md.Get(sessionIDKey)) > 0 {
+			sessionID = md.Get(sessionIDKey)[0]
 		}
-		return handler(WithCaller(ctx, Caller{UserID: claims.UserID, Username: claims.Username, SessionID: sessionID}), req)
+		return handler(gstgrpc.WithCaller(ctx, gstgrpc.Caller{UserID: claims.UserID, Username: claims.Username, SessionID: sessionID}), req)
 	}
-}
-
-// parseBearer parses the token the authorization metadata carries as
-// "Bearer <token>", the check jwt.ParseTokenFromHeader makes of the
-// Authorization header.
-func parseBearer(md metadata.MD) (*jwt.Claims, error) {
-	values := md.Get("authorization")
-	if len(values) == 0 {
-		return nil, jwt.ErrInvalidToken
-	}
-	scheme, token, found := strings.Cut(values[0], " ")
-	if !found || scheme != "Bearer" {
-		return nil, jwt.ErrInvalidToken
-	}
-	return jwt.ParseToken(token)
 }

@@ -84,7 +84,10 @@ func TestCallsCarryTheRequestMetadataAndTraceID(t *testing.T) {
 // one entry per call in logger.GRPC, with the fields the HTTP access log
 // carries — the status as the code's name, the method, the route and the
 // path, the caller's identity, the peer address, the user agent, the trace
-// id and the duration — and, for a failed call, the status message.
+// id and the duration — and, for a failed call, the status message, the
+// worst case, which fills accessLogFieldCap exactly: a field added without
+// bumping the capacity fails here instead of regrowing the slice on every
+// call.
 func TestCallsAreLoggedLikeHTTPRequests(t *testing.T) {
 	reset(t)
 	serve(map[string]func(context.Context) error{
@@ -118,4 +121,5 @@ func TestCallsAreLoggedLikeHTTPRequests(t *testing.T) {
 	failed := entries[1].ContextMap()
 	require.Equal(t, "NotFound", failed["status"])
 	require.Equal(t, "no such record", failed["error"])
+	require.Len(t, entries[1].Context, accessLogFieldCap, "the worst case must fill the capacity exactly: a new field bumps accessLogFieldCap")
 }
