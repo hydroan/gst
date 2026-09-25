@@ -36,7 +36,7 @@ var genCmd = &cobra.Command{
 var prune bool
 
 func init() {
-	genCmd.Flags().BoolVar(&prune, "prune", false, "After generating, prune what the models no longer need from service/ and middleware/, asking once before deleting")
+	genCmd.Flags().BoolVar(&prune, "prune", false, "After generating, prune what the models no longer need from service/, middleware/ and pb/, asking once before deleting")
 }
 
 type genRunOptions struct {
@@ -100,10 +100,13 @@ func genRunWithOptions(opts genRunOptions) error {
 	}
 	allModels, ignoreResult := scanned.models, scanned.routeIgnores
 
-	// Record old service files list (if prune option is enabled)
-	var oldServiceFiles []string
+	// Record the service files and protobuf definitions present before
+	// generating (if prune option is enabled): the ones this run does not
+	// write again are what prune deletes.
+	var oldServiceFiles, oldProtoFiles []string
 	if prune {
 		oldServiceFiles = existingServiceFiles()
+		oldProtoFiles = existingProtoFiles()
 	}
 
 	if !opts.Quiet {
@@ -263,15 +266,13 @@ func genRunWithOptions(opts genRunOptions) error {
 	// Generate the protobuf definitions of the models served over gRPC. The
 	// model packages are type-checked for it, so this runs once their
 	// registration files above are current.
-	protoFiles, err := pb.Generate(pb.Config{Dir: ".", ModulePath: module, Models: allModels})
-	var protoDiagnostics *pb.DiagnosticsError
-	switch {
-	case errors.As(err, &protoDiagnostics):
+	protoFiles, err := protobufDefinitions(allModels)
+	if err != nil {
 		return err
-	case err != nil:
-		return errors.Wrap(err, "generate the protobuf definitions")
 	}
+	protoPaths := make([]string, 0, len(protoFiles))
 	for _, f := range protoFiles {
+		protoPaths = append(protoPaths, f.Path)
 		if err = writeGenFile(filepath.FromSlash(f.Path), f.Content); err != nil {
 			return err
 		}
@@ -377,7 +378,7 @@ func genRunWithOptions(opts genRunOptions) error {
 	// Prune what the models no longer need
 	// ============================================================
 	if prune {
-		pruneLeftovers(oldServiceFiles, allModels, ignoreResult.KeptServiceFiles, ignoreResult.KeptServiceDirs, ignore, scanned.pruneConfig)
+		pruneLeftovers(oldServiceFiles, allModels, ignoreResult.KeptServiceFiles, ignoreResult.KeptServiceDirs, ignore, scanned.pruneConfig, oldProtoFiles, protoPaths)
 	}
 
 	// ============================================================
@@ -443,6 +444,22 @@ type scannedModels struct {
 // the actions, so a matched action behaves exactly like an action that was
 // never declared. gg gen and gg gen ts both start from here, which keeps the
 // TypeScript declarations on the routes the generated router registers.
+// protobufDefinitions renders the .proto files of the models declaring
+// GRPC() (see pb.Generate), the same set gg gen writes and gg prune keeps.
+// The diagnostics of types protobuf cannot describe come back as they are,
+// one line each; any other failure is wrapped.
+func protobufDefinitions(models []*modelinfo.Model) ([]pb.File, error) {
+	files, err := pb.Generate(pb.Config{Dir: ".", ModulePath: module, Models: models})
+	var diagnostics *pb.DiagnosticsError
+	switch {
+	case errors.As(err, &diagnostics):
+		return nil, err
+	case err != nil:
+		return nil, errors.Wrap(err, "generate the protobuf definitions")
+	}
+	return files, nil
+}
+
 func scanModels(quiet bool, ignore gghelper.ProjectIgnore) (scannedModels, error) {
 	if !gghelper.FileExists(ggconst.DirModel) {
 		return scannedModels{}, fmt.Errorf("model dir not found: %s", ggconst.DirModel)

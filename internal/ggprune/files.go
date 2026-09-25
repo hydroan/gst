@@ -97,8 +97,10 @@ func phaseFileNames() map[string]bool {
 	}
 }
 
-// FilePlan is what prune intends for the service files of disabled actions
-// and the test files paired with them.
+// FilePlan is what prune intends for one kind of file it manages: the
+// service files of disabled actions with the test files paired with them
+// (see PlanFiles), or the protobuf definitions gg gen would not write now
+// (see PlanProtoFiles).
 type FilePlan struct {
 	// Delete lists the files to delete, in the order they were scanned, each
 	// service file followed by its test files.

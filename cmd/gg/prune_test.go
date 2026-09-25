@@ -14,6 +14,85 @@ import (
 	"github.com/hydroan/gst/internal/modelinfo"
 )
 
+// TestPruneLeftoversDeletesStaleProtobufDefinitions pins that the .proto
+// files gg gen would not write now are listed under their own heading ahead
+// of the question, deleted on yes with the directories that leaves empty,
+// and kept when a gst.yaml prune.ignore entry covers them, listed among the
+// files ignored by config.
+func TestPruneLeftoversDeletesStaleProtobufDefinitions(t *testing.T) {
+	t.Chdir(t.TempDir())
+	current := filepath.Join(ggconst.DirPB, "record.proto")
+	stale := filepath.Join(ggconst.DirPB, "archive", "note.proto")
+	kept := filepath.Join(ggconst.DirPB, "legacy", "item.proto")
+	for _, path := range []string{current, stale, kept} {
+		writeProjectFile(t, path, "syntax = \"proto3\";\n")
+	}
+	protect := ggconfig.PruneConfig{Ignore: []string{"pb/legacy"}}
+
+	var stdout string
+	withStdin(t, "y\n", func() {
+		stdout = captureStdout(t, func() {
+			pruneLeftovers(nil, nil, nil, nil, gghelper.NewProjectIgnore(), protect, []string{current, stale, kept}, []string{"pb/record.proto"})
+		})
+	})
+
+	const question = "Do you want to delete these files?"
+	heading := strings.Index(stdout, "Stale Protobuf Definitions")
+	if heading < 0 || heading > strings.Index(stdout, question) {
+		t.Fatalf("the stale definitions should be listed ahead of the question:\n%s", stdout)
+	}
+	if i := strings.Index(stdout, stale); i < heading || i > strings.Index(stdout, question) {
+		t.Errorf("%s should be listed under the heading:\n%s", stale, stdout)
+	}
+	if !strings.Contains(stdout[:heading], "ignore "+kept) {
+		t.Errorf("%s should be listed among the files ignored by config:\n%s", kept, stdout)
+	}
+	if _, err := os.Stat(stale); !os.IsNotExist(err) {
+		t.Errorf("%s should be deleted; stat error = %v", stale, err)
+	}
+	if _, err := os.Stat(filepath.Dir(stale)); !os.IsNotExist(err) {
+		t.Errorf("%s is left empty and should be removed; stat error = %v", filepath.Dir(stale), err)
+	}
+	for _, path := range []string{current, kept} {
+		if _, err := os.Stat(path); err != nil {
+			t.Errorf("%s should survive prune: %v", path, err)
+		}
+	}
+}
+
+// TestPruneRunDeletesTheDefinitionsOfAModelNoLongerServedOverGRPC pins the
+// whole path: gg gen writes pb/note.proto for a model declaring GRPC(), and
+// once the declaration is gone gg prune lists and deletes the file, with
+// the pb directory it leaves empty.
+func TestPruneRunDeletesTheDefinitionsOfAModelNoLongerServedOverGRPC(t *testing.T) {
+	projectDir := newGenProject(t)
+	writeProtobufProject(t, projectDir, map[string]string{"model/note.go": protobufNoteModel})
+	if err := genRunWithOptions(genRunOptions{Quiet: true}); err != nil {
+		t.Fatal(err)
+	}
+	proto := filepath.Join(ggconst.DirPB, "note.proto")
+	if _, err := os.Stat(proto); err != nil {
+		t.Fatalf("gg gen should have written %s: %v", proto, err)
+	}
+	writeProtobufProject(t, projectDir, map[string]string{"model/note.go": strings.Replace(protobufNoteModel, "\tdsl.GRPC()\n", "", 1)})
+
+	var stdout string
+	withStdin(t, "y\n", func() {
+		stdout = captureStdout(t, func() {
+			if err := pruneRun(); err != nil {
+				t.Error(err)
+			}
+		})
+	})
+
+	if !strings.Contains(stdout, "Stale Protobuf Definitions") || !strings.Contains(stdout, proto) {
+		t.Errorf("prune should list %s under Stale Protobuf Definitions:\n%s", proto, stdout)
+	}
+	if _, err := os.Stat(ggconst.DirPB); !os.IsNotExist(err) {
+		t.Errorf("%s should be gone with its last file; stat error = %v", ggconst.DirPB, err)
+	}
+}
+
 // TestPruneLeftoversKeepsWhatPruneIgnoreCovers pins that prune never
 // deletes what a gst.yaml prune.ignore entry covers: a disabled service file,
 // a whole directory of them, or a directory left empty. An entry naming
@@ -39,7 +118,7 @@ func TestPruneLeftoversKeepsWhatPruneIgnoreCovers(t *testing.T) {
 	var stdout string
 	withStdin(t, "y\n", func() {
 		stdout = captureStdout(t, func() {
-			pruneLeftovers([]string{listFile, legacyFile}, nil, nil, nil, gghelper.NewProjectIgnore(), protect)
+			pruneLeftovers([]string{listFile, legacyFile}, nil, nil, nil, gghelper.NewProjectIgnore(), protect, nil, nil)
 		})
 	})
 
@@ -68,7 +147,7 @@ func TestPruneLeftoversRemindsOfUnreadSettingsBeforeAsking(t *testing.T) {
 	var stdout string
 	withStdin(t, "n\n", func() {
 		stdout = captureStdout(t, func() {
-			pruneLeftovers([]string{listFile}, nil, nil, nil, gghelper.NewProjectIgnore(), ggconfig.PruneConfig{})
+			pruneLeftovers([]string{listFile}, nil, nil, nil, gghelper.NewProjectIgnore(), ggconfig.PruneConfig{}, nil, nil)
 		})
 	})
 
@@ -131,7 +210,7 @@ func TestPruneLeftoversListsEverythingAndAsksOnce(t *testing.T) {
 			var stdout string
 			withStdin(t, tt.answer, func() {
 				stdout = captureStdout(t, func() {
-					pruneLeftovers([]string{currentFile, disabledFile}, []*modelinfo.Model{pruneTestModel()}, nil, nil, gghelper.NewProjectIgnore(), ggconfig.PruneConfig{})
+					pruneLeftovers([]string{currentFile, disabledFile}, []*modelinfo.Model{pruneTestModel()}, nil, nil, gghelper.NewProjectIgnore(), ggconfig.PruneConfig{}, nil, nil)
 				})
 			})
 
@@ -182,7 +261,7 @@ func TestPruneLeftoversDeletesThePairedTestFiles(t *testing.T) {
 	var stdout string
 	withStdin(t, "y\n", func() {
 		stdout = captureStdout(t, func() {
-			pruneLeftovers([]string{currentFile, disabledFile}, []*modelinfo.Model{pruneTestModel()}, nil, nil, gghelper.NewProjectIgnore(), ggconfig.PruneConfig{})
+			pruneLeftovers([]string{currentFile, disabledFile}, []*modelinfo.Model{pruneTestModel()}, nil, nil, gghelper.NewProjectIgnore(), ggconfig.PruneConfig{}, nil, nil)
 		})
 	})
 
@@ -223,7 +302,7 @@ func TestPruneLeftoversCleansTheWholePackage(t *testing.T) {
 	var stdout string
 	withStdin(t, "y\n", func() {
 		stdout = captureStdout(t, func() {
-			pruneLeftovers([]string{disabledFile}, nil, nil, nil, gghelper.NewProjectIgnore(), ggconfig.PruneConfig{})
+			pruneLeftovers([]string{disabledFile}, nil, nil, nil, gghelper.NewProjectIgnore(), ggconfig.PruneConfig{}, nil, nil)
 		})
 	})
 
@@ -275,7 +354,7 @@ func TestPruneLeftoversKeepsOrphansWhenADisabledFileStays(t *testing.T) {
 	var stdout string
 	withStdin(t, "y\n", func() {
 		stdout = captureStdout(t, func() {
-			pruneLeftovers([]string{currentFile, disabledFile}, []*modelinfo.Model{pruneTestModel()}, nil, nil, gghelper.NewProjectIgnore(), ggconfig.PruneConfig{})
+			pruneLeftovers([]string{currentFile, disabledFile}, []*modelinfo.Model{pruneTestModel()}, nil, nil, gghelper.NewProjectIgnore(), ggconfig.PruneConfig{}, nil, nil)
 		})
 	})
 
@@ -314,7 +393,7 @@ func TestPruneLeftoversCleansUpAfterARemovedCopiedModule(t *testing.T) {
 		var stdout string
 		withStdin(t, "y\n", func() {
 			stdout = captureStdout(t, func() {
-				pruneLeftovers(nil, nil, nil, nil, gghelper.NewProjectIgnore(), ggconfig.PruneConfig{})
+				pruneLeftovers(nil, nil, nil, nil, gghelper.NewProjectIgnore(), ggconfig.PruneConfig{}, nil, nil)
 			})
 		})
 
@@ -347,7 +426,7 @@ func TestPruneLeftoversCleansUpAfterARemovedCopiedModule(t *testing.T) {
 
 		withStdin(t, "y\n", func() {
 			captureStdout(t, func() {
-				pruneLeftovers(nil, nil, nil, nil, gghelper.NewProjectIgnore(), protect)
+				pruneLeftovers(nil, nil, nil, nil, gghelper.NewProjectIgnore(), protect, nil, nil)
 			})
 		})
 
@@ -376,7 +455,7 @@ func TestPruneLeftoversCleansUpAfterARemovedCopiedModule(t *testing.T) {
 		var stdout string
 		withStdin(t, "no\n", func() {
 			stdout = captureStdout(t, func() {
-				pruneLeftovers(nil, nil, nil, nil, gghelper.NewProjectIgnore(), ggconfig.PruneConfig{})
+				pruneLeftovers(nil, nil, nil, nil, gghelper.NewProjectIgnore(), ggconfig.PruneConfig{}, nil, nil)
 			})
 		})
 
@@ -413,7 +492,7 @@ func SampleAuth() any {
 		var stdout string
 		withStdin(t, "y\n", func() {
 			stdout = captureStdout(t, func() {
-				pruneLeftovers(nil, nil, nil, nil, gghelper.NewProjectIgnore(), ggconfig.PruneConfig{})
+				pruneLeftovers(nil, nil, nil, nil, gghelper.NewProjectIgnore(), ggconfig.PruneConfig{}, nil, nil)
 			})
 		})
 
@@ -445,7 +524,7 @@ func SampleAuth() any {
 		var stdout string
 		withStdin(t, "y\n", func() {
 			stdout = captureStdout(t, func() {
-				pruneLeftovers(nil, nil, nil, nil, gghelper.NewProjectIgnore(), ggconfig.PruneConfig{})
+				pruneLeftovers(nil, nil, nil, nil, gghelper.NewProjectIgnore(), ggconfig.PruneConfig{}, nil, nil)
 			})
 		})
 
