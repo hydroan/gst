@@ -4,6 +4,8 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
+	"slices"
 	"testing"
 
 	"github.com/gin-gonic/gin"
@@ -240,4 +242,19 @@ func TestServiceContextNilGinHelpers(t *testing.T) {
 	file, err = nilCtx.FormFile("file")
 	require.Error(t, err)
 	require.Nil(t, file)
+}
+
+// TestHTTPOnlyMethodsNameMethodsOfServiceContext pins that every name in
+// HTTPOnlyMethods is a method of ServiceContext, so the list gg check reads
+// cannot drift from the type.
+func TestHTTPOnlyMethodsNameMethodsOfServiceContext(t *testing.T) {
+	sc := reflect.TypeFor[*types.ServiceContext]()
+	for _, name := range types.HTTPOnlyMethods {
+		if _, ok := sc.MethodByName(name); !ok {
+			t.Errorf("HTTPOnlyMethods names %s, which ServiceContext does not declare", name)
+		}
+	}
+	if !slices.IsSorted(types.HTTPOnlyMethods) {
+		t.Errorf("HTTPOnlyMethods should be sorted, got %v", types.HTTPOnlyMethods)
+	}
 }

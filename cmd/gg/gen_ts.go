@@ -64,7 +64,7 @@ func genTypeScriptRun() error {
 			return err
 		}
 	}
-	if runProjectChecks(false, nil) > 0 {
+	if runProjectChecks(projectChecks, false, nil) > 0 {
 		return errors.New("project checks failed")
 	}
 	// The declarations mirror the models. A project with no model directory

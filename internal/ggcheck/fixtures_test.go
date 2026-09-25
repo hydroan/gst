@@ -3,6 +3,7 @@ package ggcheck_test
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"strings"
 	"testing"
@@ -85,4 +86,34 @@ func assertViolationContains(t *testing.T, violations []string, path, want strin
 	if !strings.Contains(matched[0], want) {
 		t.Fatalf("expected violation for %s to contain %q, got %q", path, want, matched[0])
 	}
+}
+
+// writeCheckProjectGoModAgainstRealFramework writes the fixture project's
+// go.mod and go.sum so that its packages compile against this repository:
+// the requirements and sums of the framework's own go.mod, the module
+// renamed, and a replace pointing at the repository root. A check that
+// derives the protobuf definitions loads the project's packages for real,
+// which the stub source tree of writeCheckProjectGoMod cannot satisfy. The
+// framework sources that load reads in a child go command are not inputs of
+// the test; the generator's own tests, in cmd/gg, record them.
+func writeCheckProjectGoModAgainstRealFramework(t *testing.T, projectDir string) {
+	t.Helper()
+
+	_, file, _, ok := runtime.Caller(0)
+	if !ok {
+		t.Fatal("the path of this test file is unknown")
+	}
+	root := filepath.Clean(filepath.Join(filepath.Dir(file), "..", ".."))
+	goMod, err := os.ReadFile(filepath.Join(root, "go.mod"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	content := strings.Replace(string(goMod), "module github.com/hydroan/gst\n", "module tmpapp\n", 1)
+	content += "\nrequire github.com/hydroan/gst v0.0.0-00010101000000-000000000000\n\nreplace github.com/hydroan/gst => " + root + "\n"
+	writeCheckFile(t, filepath.Join(projectDir, "go.mod"), content)
+	goSum, err := os.ReadFile(filepath.Join(root, "go.sum"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	writeCheckFile(t, filepath.Join(projectDir, "go.sum"), string(goSum))
 }

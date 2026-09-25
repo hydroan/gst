@@ -136,6 +136,14 @@ func (sc *ServiceContext) ClientIP() string  { return requestctx.FromContext(sc)
 func (sc *ServiceContext) UserAgent() string { return requestctx.FromContext(sc).UserAgent() }
 func (sc *ServiceContext) IsHTTPS() bool     { return requestctx.FromContext(sc).TLS() }
 
+// HTTPOnlyMethods names the methods of ServiceContext that only an HTTP
+// request can serve, sorted: Cookie, PostForm and FormFile read what only
+// an HTTP request carries, Data and SSE write the response themselves, and
+// SetCookie writes a response header. Over gRPC they have nothing to work
+// on, so the services of a model declaring GRPC() must not call them; gg
+// check holds them to it (its check named gRPC service context).
+var HTTPOnlyMethods = []string{"Cookie", "Data", "FormFile", "PostForm", "SSE", "SetCookie"}
+
 // Data writes data as the response body with the given status and content
 // type. Without a response to write to it writes nothing and records the
 // attempt for RawResponseAttempted.

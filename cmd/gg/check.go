@@ -46,6 +46,21 @@ var projectChecks = []ggcheck.Check{
 	ggcheck.VersionFieldDeclaration,
 	ggcheck.ModuleAssembly,
 	ggcheck.ColumnReferenceMinting,
+	ggcheck.GRPCServiceContext,
+	ggcheck.ProtobufDefinitions,
+}
+
+// generationChecks are the project checks gg gen runs before generating:
+// every one but Protobuf definitions, whose work gg gen does itself right
+// after, deriving the definitions once instead of twice.
+func generationChecks() []ggcheck.Check {
+	checks := make([]ggcheck.Check, 0, len(projectChecks))
+	for _, check := range projectChecks {
+		if check.Name != ggcheck.ProtobufDefinitions.Name {
+			checks = append(checks, check)
+		}
+	}
+	return checks
 }
 
 // projectCheckSkips closes the gg check help: what the checks leave out.
@@ -72,7 +87,7 @@ func projectCheckHelp() string {
 }
 
 func checkRun() {
-	totalViolations := runProjectChecks(false, nil)
+	totalViolations := runProjectChecks(projectChecks, false, nil)
 
 	clioutput.Section("Summary")
 	if totalViolations > 0 {
@@ -83,15 +98,16 @@ func checkRun() {
 	}
 }
 
-// runProjectChecks runs every project check, shared by gg check and gg gen.
+// runProjectChecks runs the given project checks, the full list for gg
+// check and generationChecks for gg gen.
 //
 // quiet suppresses output when the project is clean; violations always
 // print. Violations recorded in baseline are treated as pre-existing and
 // are neither counted nor printed, so callers such as module copy fail only
 // on violations introduced after the baseline snapshot. A nil baseline
 // keeps the full check behavior.
-func runProjectChecks(quiet bool, baseline map[string]struct{}) int {
-	results := filterProjectCheckResults(ggcheck.Run(projectChecks), baseline)
+func runProjectChecks(checks []ggcheck.Check, quiet bool, baseline map[string]struct{}) int {
+	results := filterProjectCheckResults(ggcheck.Run(checks), baseline)
 	total := totalProjectCheckViolations(results)
 	if !quiet || total > 0 {
 		printProjectCheckResults(results)
@@ -105,7 +121,7 @@ func runProjectChecks(quiet bool, baseline map[string]struct{}) int {
 // of pre-existing project issues.
 func collectProjectCheckBaseline() map[string]struct{} {
 	baseline := make(map[string]struct{})
-	for _, result := range ggcheck.Run(projectChecks) {
+	for _, result := range ggcheck.Run(generationChecks()) {
 		for _, violation := range result.Violations {
 			baseline[violation] = struct{}{}
 		}

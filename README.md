@@ -925,8 +925,10 @@ func init() {
 | `gg migrate` | 生成当前数据库方言的 schema，预览并按确认执行数据库迁移 |
 
 `gg check` 会检查依赖边界、model/service 文件边界、命名规范、`json` tag、
-REQ/RSP 命名和业务项目根目录结构。`gg gen` 生成前也会执行这些检查；检查
-失败会停止生成。
+REQ/RSP 命名、业务项目根目录结构，以及声明了 `GRPC()` 的 model 的 protobuf
+定义（pb tag、撞名、与 `pb/` 下已提交契约的兼容）和它们的 service 有没有调用
+只有 HTTP 才有的 ServiceContext 方法。`gg gen` 生成前也会执行这些检查（protobuf
+定义那条由生成本身完成，不重复跑）；检查失败会停止生成。
 
 `gg check`、`gg gen`（含 `gg gen ts`）、`gg routes` 和 `gg route-tree` 读项目
 代码时，跳过项目 Git 忽略规则排除的路径，也跳过 Go 工具链内置忽略的路径。
