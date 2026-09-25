@@ -33,10 +33,13 @@ var GRPCServiceContext = Check{
 // to read or response to write, so a service serving both transports must do
 // without it. The packages are the ones the actions of the model map to
 // (see modelinfo.ServiceTarget), read whole, helpers included, since a
-// service method reaches them. The analysis is syntactic like the other
-// checks: it follows the parameter object, so a local variable of the same
-// name is not mistaken for it, and it does not follow the context into a
-// variable assigned from it.
+// service method reaches them; left alone are the service files of the
+// actions gRPC does not serve (see dsl.HTTPOnlyAction), an SSE service
+// calling ctx.SSE as it must, and those of models served over HTTP alone
+// that share the package. The analysis is syntactic like the other checks:
+// it follows the parameter object, so a local variable of the same name is
+// not mistaken for it, and it does not follow the context into a variable
+// assigned from it.
 func checkGRPCServiceContext(ignore gghelper.ProjectIgnore) []string {
 	var violations []string
 	if _, err := os.Stat(ggconst.DirModel); os.IsNotExist(err) {
@@ -56,22 +59,28 @@ func checkGRPCServiceContext(ignore gghelper.ProjectIgnore) []string {
 	}
 	modelinfo.ResolveRoutes(allModels, cfg.Gen.Routes.Ignore)
 
-	// The service directories of the gRPC models, each with the model it
+	// Every action's service file, with whether gRPC serves the action, and
+	// the service directories of the gRPC models, each with the model it
 	// serves, in the order the models were found.
+	served := make(map[string]bool)
 	var dirs []string
 	owners := make(map[string]string)
 	for _, m := range allModels {
-		if m.Design == nil || !m.Design.Enabled || !m.Design.GRPC || ignore.Ignores(m.ModelFilePath, false) {
+		if m.Design == nil || !m.Design.Enabled || ignore.Ignores(m.ModelFilePath, false) {
 			continue
 		}
 		m.Design.Range(func(_ string, act *dsl.Action) {
 			if !act.Service {
 				return
 			}
-			dir := modelinfo.ServiceTarget(m, act, ggconst.DirModel, ggconst.DirService).Dir
-			if _, seen := owners[dir]; !seen {
-				dirs = append(dirs, dir)
-				owners[dir] = m.ModelName
+			target := modelinfo.ServiceTarget(m, act, ggconst.DirModel, ggconst.DirService)
+			served[target.FilePath] = m.Design.GRPC && !dsl.HTTPOnlyAction(act.Phase.MethodName())
+			if !m.Design.GRPC {
+				return
+			}
+			if _, seen := owners[target.Dir]; !seen {
+				dirs = append(dirs, target.Dir)
+				owners[target.Dir] = m.ModelName
 			}
 		})
 	}
@@ -84,6 +93,9 @@ func checkGRPCServiceContext(ignore gghelper.ProjectIgnore) []string {
 			name := entry.Name()
 			path := filepath.Join(dir, name)
 			if entry.IsDir() || !strings.HasSuffix(name, ggconst.ExtensionGo) || strings.HasSuffix(name, ggconst.PatternTestFile) || ignore.Ignores(path, false) {
+				continue
+			}
+			if grpc, action := served[path]; action && !grpc {
 				continue
 			}
 			violations = append(violations, httpOnlyCalls(path, owners[dir])...)

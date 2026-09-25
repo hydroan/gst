@@ -1741,3 +1741,18 @@ func (Record) Design() {
 	})
 }
 `
+
+// TestHTTPOnlyActionNamesTheActionsGRPCCannotServe pins the examples of the
+// HTTPOnlyAction doc comment.
+func TestHTTPOnlyActionNamesTheActionsGRPCCannotServe(t *testing.T) {
+	for _, name := range []string{"Import", "Export", "SSE"} {
+		if !dsl.HTTPOnlyAction(name) {
+			t.Errorf("HTTPOnlyAction(%q) = false, want true", name)
+		}
+	}
+	for _, name := range []string{"Create", "List", "Get", "DeleteMany"} {
+		if dsl.HTTPOnlyAction(name) {
+			t.Errorf("HTTPOnlyAction(%q) = true, want false", name)
+		}
+	}
+}

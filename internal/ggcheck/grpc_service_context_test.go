@@ -111,6 +111,69 @@ func (c *Creator) Create(ctx *gst.ServiceContext, plain *model.Plain) (*model.Pl
 }
 `)
 
+	// The SSE action of the same model is HTTP only, so its service file may
+	// call ctx.SSE; the check leaves it alone.
+	writeCheckFile(t, filepath.Join(projectDir, "model", "notice.go"), `package model
+
+import (
+	"github.com/hydroan/gst/dsl"
+	"github.com/hydroan/gst/model"
+)
+
+type Notice struct {
+	Text string `+"`"+`json:"text" pb:"11"`+"`"+`
+
+	model.Base
+}
+
+func (Notice) TableName() string { return "notices" }
+
+func (Notice) Design() {
+	dsl.GRPC()
+	dsl.Migrate()
+	dsl.Endpoint("notices")
+	dsl.Create(func() {
+		dsl.Service()
+	})
+	dsl.SSE(func() {
+		dsl.Service()
+	})
+}
+`)
+	writeCheckFile(t, filepath.Join(projectDir, "service", "notice", "sse.go"), `package notice
+
+import (
+	"github.com/hydroan/gst"
+	"github.com/hydroan/gst/service"
+	"github.com/hydroan/gst/sse"
+	"tmpapp/model"
+)
+
+type Streamer struct {
+	service.Base[*model.Notice, *model.Notice, *model.Notice]
+}
+
+func (s *Streamer) SSE(ctx *gst.ServiceContext, notice *model.Notice) error {
+	return ctx.SSE(func(conn *sse.Conn) error { return nil })
+}
+`)
+	writeCheckFile(t, filepath.Join(projectDir, "service", "notice", "create.go"), `package notice
+
+import (
+	"github.com/hydroan/gst"
+	"github.com/hydroan/gst/service"
+	"tmpapp/model"
+)
+
+type Creator struct {
+	service.Base[*model.Notice, *model.Notice, *model.Notice]
+}
+
+func (c *Creator) Create(ctx *gst.ServiceContext, notice *model.Notice) (*model.Notice, error) {
+	return notice, nil
+}
+`)
+
 	violations := runCheck(ggcheck.GRPCServiceContext)
 
 	want := []string{

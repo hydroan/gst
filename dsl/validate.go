@@ -100,6 +100,14 @@ var httpOnlyActionMethodNames = map[string]bool{
 	consts.PHASE_SSE.MethodName():    true,
 }
 
+// HTTPOnlyAction reports whether the action named name is one gRPC cannot
+// serve (see httpOnlyActionMethodNames): true for Import, Export and SSE,
+// false for Create or List. The generator leaves these actions out of a
+// model's gRPC service, and gg check leaves their service files alone.
+func HTTPOnlyAction(name string) bool {
+	return httpOnlyActionMethodNames[name]
+}
+
 var actionOnlyMethodNames = map[string]bool{
 	"Service":  true,
 	"Public":   true,

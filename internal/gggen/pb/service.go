@@ -14,15 +14,6 @@ import (
 // This file builds the service of a model: an rpc per action gRPC can serve,
 // each with a request and a response message of its own.
 
-// httpOnlyPhases are the actions gRPC does not serve: Import reads a
-// multipart upload, Export answers with a file attachment and SSE is an HTTP
-// protocol of its own.
-var httpOnlyPhases = map[consts.Phase]bool{
-	consts.PHASE_IMPORT: true,
-	consts.PHASE_EXPORT: true,
-	consts.PHASE_SSE:    true,
-}
-
 // declareService builds the service of m in the file mirroring its model
 // file: <Model>Service with an rpc per action of every route (see rpcName),
 // each taking and returning the messages rpcMessages resolves. The model's
@@ -78,7 +69,7 @@ func (g *generator) declareService(m *modelinfo.Model) {
 	routes := make(map[string]string)
 	served := 0
 	m.Design.Range(func(route string, action *dsl.Action) {
-		if httpOnlyPhases[action.Phase] {
+		if dsl.HTTPOnlyAction(action.Phase.MethodName()) {
 			return
 		}
 		served++
