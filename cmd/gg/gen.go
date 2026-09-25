@@ -438,12 +438,6 @@ type scannedModels struct {
 	pruneConfig ggconfig.PruneConfig
 }
 
-// scanModels reads the models of the model directory and resolves their
-// routes: hierarchical endpoints and parent params are applied, then the
-// gst.yaml route and model ignores. Route ignores apply before anything reads
-// the actions, so a matched action behaves exactly like an action that was
-// never declared. gg gen and gg gen ts both start from here, which keeps the
-// TypeScript declarations on the routes the generated router registers.
 // protobufDefinitions renders the .proto files of the models declaring
 // GRPC() (see pb.Generate), the same set gg gen writes and gg prune keeps.
 // The diagnostics of types protobuf cannot describe come back as they are,
@@ -460,6 +454,12 @@ func protobufDefinitions(models []*modelinfo.Model) ([]pb.File, error) {
 	return files, nil
 }
 
+// scanModels reads the models of the model directory and resolves their
+// routes: hierarchical endpoints and parent params are applied, then the
+// gst.yaml route and model ignores. Route ignores apply before anything reads
+// the actions, so a matched action behaves exactly like an action that was
+// never declared. gg gen and gg gen ts both start from here, which keeps the
+// TypeScript declarations on the routes the generated router registers.
 func scanModels(quiet bool, ignore gghelper.ProjectIgnore) (scannedModels, error) {
 	if !gghelper.FileExists(ggconst.DirModel) {
 		return scannedModels{}, fmt.Errorf("model dir not found: %s", ggconst.DirModel)

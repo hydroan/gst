@@ -50,12 +50,12 @@ gen:
 	})
 
 	t.Run("prune ignore entries are cleaned", func(t *testing.T) {
-		dir := writeConfig(t, "version: 1\nprune:\n  ignore:\n    - \" service/iam/ \"\n    - service/record/list.go\n    - middleware/sample_auth.go\n")
+		dir := writeConfig(t, "version: 1\nprune:\n  ignore:\n    - \" service/iam/ \"\n    - service/record/list.go\n    - middleware/sample_auth.go\n    - pb/legacy\n")
 		cfg, err := ggconfig.Load(dir)
 		if err != nil {
 			t.Fatalf("Load() error = %v", err)
 		}
-		want := []string{"service/iam", "service/record/list.go", "middleware/sample_auth.go"}
+		want := []string{"service/iam", "service/record/list.go", "middleware/sample_auth.go", "pb/legacy"}
 		if !slices.Equal(cfg.Prune.Ignore, want) {
 			t.Fatalf("Load().Prune.Ignore = %q, want %q", cfg.Prune.Ignore, want)
 		}
@@ -69,6 +69,7 @@ gen:
 			"empty":            "    - \"\"\n",
 			"listed twice":     "    - service/iam\n    - service/iam/\n",
 			"the service root": "    - services\n",
+			"the pb root":      "    - pbx\n",
 		} {
 			t.Run(name, func(t *testing.T) {
 				dir := writeConfig(t, "version: 1\nprune:\n  ignore:\n"+entries)

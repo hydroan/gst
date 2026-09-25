@@ -163,7 +163,8 @@ func TestPruneLeftoversRemindsOfUnreadSettingsBeforeAsking(t *testing.T) {
 
 // TestPruneRunStopsOnABrokenConfig pins that gg prune reports what stops it
 // before it deletes anything, here a gst.yaml prune.ignore entry outside
-// service/ and middleware/, as an error the command prints, not as a panic.
+// service/, middleware/ and pb/, as an error the command prints, not as a
+// panic.
 func TestPruneRunStopsOnABrokenConfig(t *testing.T) {
 	newGenProject(t)
 	listFile := filepath.Join(ggconst.DirService, "record", "list.go")

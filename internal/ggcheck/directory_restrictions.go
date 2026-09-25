@@ -46,6 +46,7 @@ func checkDirectoryRestrictions(ignore gghelper.ProjectIgnore) []string {
 		"dao":        true,
 		"provider":   true,
 		"middleware": true,
+		"pb":         true,
 		"cronjob":    true,
 		"leader":     true,
 		"lock":       true,
