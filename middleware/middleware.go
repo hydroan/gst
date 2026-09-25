@@ -13,7 +13,6 @@ package middleware
 import (
 	"github.com/gin-gonic/gin"
 	internalmiddleware "github.com/hydroan/gst/internal/middleware"
-	"go.opentelemetry.io/otel/trace"
 )
 
 // Register adds middlewares that run on every API route. Call it from an init
@@ -46,17 +45,4 @@ func RegisterAuth(middlewares ...gin.HandlerFunc) {
 // routes bypass the breaker.
 func CircuitBreaker() gin.HandlerFunc {
 	return internalmiddleware.CircuitBreaker()
-}
-
-// GetSpanFromContext returns the server span the framework's tracing opened
-// for the request or, when there is none, the span current in the request
-// context.
-func GetSpanFromContext(c *gin.Context) trace.Span {
-	return internalmiddleware.GetSpanFromContext(c)
-}
-
-// RecordError records err on the span GetSpanFromContext returns, when that
-// span is recording.
-func RecordError(c *gin.Context, err error) {
-	internalmiddleware.RecordError(c, err)
 }
