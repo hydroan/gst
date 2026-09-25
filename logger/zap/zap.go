@@ -110,6 +110,11 @@ func Init() error {
 
 	logger.Gin = NewGin("access.log")
 	logger.HTTPBody = NewGin("http_body.log")
+	logger.GRPC = NewGin("grpc.log")
+	// A panic entry is its message — the request, the panic and the stack —
+	// so the recovery log keeps the message and the level the access-log
+	// encoder leaves out.
+	logger.Recovery = NewZap("recovery.log")
 	logger.Gorm = NewGorm("gorm.log")
 
 	return nil
@@ -162,6 +167,16 @@ func Clean() {
 	// HTTP body logger
 	if logger.HTTPBody != nil {
 		_ = logger.HTTPBody.Sync()
+	}
+
+	// gRPC access logger
+	if logger.GRPC != nil {
+		_ = logger.GRPC.Sync()
+	}
+
+	// recovery logger
+	if logger.Recovery != nil {
+		_ = logger.Recovery.Sync()
 	}
 
 	// gorm logger

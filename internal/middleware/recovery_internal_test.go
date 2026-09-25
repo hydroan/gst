@@ -7,7 +7,12 @@ import (
 	"testing"
 
 	"github.com/gin-gonic/gin"
+	"github.com/hydroan/gst/consts"
+	"github.com/hydroan/gst/logger"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
+	"go.uber.org/zap/zaptest/observer"
 )
 
 // TestRecoveryWithTracingAnswersInTheEnvelope pins that a recovered panic is
@@ -42,4 +47,32 @@ func TestRecoveryWithTracingAnswersInTheEnvelope(t *testing.T) {
 	require.Equal(t, -1, *envelope.Code)
 	require.Equal(t, "internal server error", envelope.Msg)
 	require.NotNil(t, envelope.TraceID, "a refusal has to carry the trace that explains it")
+}
+
+// TestRecoveryLogsThePanicToTheRecoveryLogger pins where the chain's
+// recovery writes: logger.Recovery, the logger the gRPC listener's panics go
+// to as well, with the panic and its stack in the message and the trace id
+// of the request as a field, so one search of the file finds the panic that
+// explains a response.
+func TestRecoveryLogsThePanicToTheRecoveryLogger(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	core, logs := observer.New(zapcore.DebugLevel)
+	saved := logger.Recovery
+	logger.Recovery = zap.New(core)
+	t.Cleanup(func() { logger.Recovery = saved })
+
+	engine := gin.New()
+	engine.Use(func(c *gin.Context) { c.Set(consts.TRACE_ID, "trace-panic") }, recovery())
+	engine.GET("/panic", func(*gin.Context) { panic("boom") })
+	recorder := httptest.NewRecorder()
+	engine.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/panic", nil))
+
+	require.Equal(t, http.StatusInternalServerError, recorder.Code)
+	entries := logs.All()
+	require.Len(t, entries, 1)
+	require.Contains(t, entries[0].Message, "panic recovered")
+	require.Contains(t, entries[0].Message, "boom")
+	require.Contains(t, entries[0].Message, "GET /panic")
+	require.Contains(t, entries[0].Message, "goroutine ", "the stack of the panic")
+	require.Equal(t, "trace-panic", entries[0].ContextMap()[consts.TRACE_ID])
 }

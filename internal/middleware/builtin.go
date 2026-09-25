@@ -6,8 +6,8 @@ import "github.com/gin-gonic/gin"
 // route, in mounting order. The chain is the framework's own and is not a
 // menu: projects never mount these pieces themselves — mounting one twice
 // double-counts metrics, double-writes logs or answers CORS twice — so the
-// individual constructors are unexported and the file targets of the two
-// loggers are fixed here rather than exposed as knobs.
+// individual constructors are unexported and the loggers they write to are
+// the ones the logger package builds rather than knobs.
 //
 // Order carries the semantics: tracing and the access logger come first so
 // every refusal downstream still carries a trace id and an access-log line,
@@ -18,9 +18,9 @@ import "github.com/gin-gonic/gin"
 func Builtin() []gin.HandlerFunc {
 	return []gin.HandlerFunc{
 		tracing(),
-		accessLogger("api.log"),
+		accessLogger(),
 		bodyLogger(),
-		recovery("recovery.log"),
+		recovery(),
 		cors(),
 		routeParams(),
 		strictQuery(),

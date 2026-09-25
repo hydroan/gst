@@ -614,6 +614,38 @@ func TestEveryLoggerStampsTheProcessIdentity(t *testing.T) {
 	}
 }
 
+// TestInitBuildsTheListenerLoggers pins the loggers Init builds for the two
+// listeners, with their files created up front for a collector to tail: the
+// HTTP access log and body log, the gRPC access log, and the recovery log
+// both listeners' panics go to. The recovery log keeps the level and the
+// message of an entry: a panic entry is its message, the request, the panic
+// and the stack, which the access-log encoder would drop.
+func TestInitBuildsTheListenerLoggers(t *testing.T) {
+	dir := t.TempDir()
+	withLoggerInitConfig(t, dir, "global.log")
+	restoreGlobalLoggers(t)
+	require.NoError(t, Init())
+
+	require.NotNil(t, logger.Gin)
+	require.NotNil(t, logger.HTTPBody)
+	require.NotNil(t, logger.GRPC)
+	require.NotNil(t, logger.Recovery)
+	for _, file := range []string{"access.log", "http_body.log", "grpc.log", "recovery.log"} {
+		require.FileExists(t, filepath.Join(dir, file))
+	}
+
+	logger.Recovery.Error("[recovery] panic recovered: boom", zap.String(consts.TRACE_ID, "trace-panic"))
+	Clean()
+
+	data, err := os.ReadFile(filepath.Join(dir, "recovery.log"))
+	require.NoError(t, err)
+	var entry map[string]any
+	require.NoError(t, json.Unmarshal(data, &entry), "%q", data)
+	require.Equal(t, "ERROR", entry["level"])
+	require.Equal(t, "[recovery] panic recovered: boom", entry["msg"])
+	require.Equal(t, "trace-panic", entry[consts.TRACE_ID])
+}
+
 // TestStdoutOutputWritesEveryStreamToStdoutUnderItsName proves stdout mode
 // sends every stream, whichever constructor built its logger, to stdout with
 // the process identity and a logger field naming the stream — a fallback

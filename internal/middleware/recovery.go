@@ -11,22 +11,24 @@ import (
 
 	"github.com/cockroachdb/errors"
 	"github.com/gin-gonic/gin"
+	"github.com/hydroan/gst/consts"
 	"github.com/hydroan/gst/internal/response"
-	pkgzap "github.com/hydroan/gst/logger/zap"
+	"github.com/hydroan/gst/logger"
 	"go.opentelemetry.io/otel/attribute"
 	"go.uber.org/zap"
 )
 
 // recovery returns the recovery middleware the default router chain installs,
-// logging panics to filename.
+// logging panics to logger.Recovery, the recovery log the gRPC listener's
+// panics go to as well.
 //
-// It binds recoveryWithTracing to a file logger rather than standing a second
+// It binds recoveryWithTracing to that logger rather than standing a second
 // implementation beside it. The two had drifted: a panic handled here left the
 // request's span with no error recorded on it, logged the Authorization header
 // as it stood, and answered with a bare 500 carrying no envelope and no trace
 // id — on the one response whose reader most needs one.
-func recovery(filename string) gin.HandlerFunc {
-	return recoveryWithTracing(pkgzap.NewGin(filename), true)
+func recovery() gin.HandlerFunc {
+	return recoveryWithTracing(logger.Recovery, true)
 }
 
 // recoveryWithTracing returns a gin.HandlerFunc (middleware)
@@ -34,7 +36,7 @@ func recovery(filename string) gin.HandlerFunc {
 // All errors are logged using zap.Error().
 // stack means whether output the stack info.
 // The stack info is easy to find where the error occurs but the stack info is too large.
-func recoveryWithTracing(logger *zap.Logger, stack bool) gin.HandlerFunc {
+func recoveryWithTracing(log *zap.Logger, stack bool) gin.HandlerFunc {
 	return gin.CustomRecoveryWithWriter(nil, func(c *gin.Context, recovered any) {
 		// Record panic in tracing span
 		span := GetSpanFromContext(c)
@@ -60,7 +62,7 @@ func recoveryWithTracing(logger *zap.Logger, stack bool) gin.HandlerFunc {
 			}
 		}
 
-		if logger != nil {
+		if log != nil {
 			httpRequest, _ := httputil.DumpRequest(c.Request, false)
 			headers := strings.Split(string(httpRequest), "\r\n")
 			for idx, header := range headers {
@@ -72,16 +74,19 @@ func recoveryWithTracing(logger *zap.Logger, stack bool) gin.HandlerFunc {
 			headersToStr := strings.Join(headers, "\r\n")
 
 			// The entry timestamp is the encoder's job; a hand-rolled one in
-			// the message would be zone-less text on the host clock.
+			// the message would be zone-less text on the host clock. The trace
+			// id is a field, so one search of the file finds the panic that
+			// explains a response.
+			traceID := zap.String(consts.TRACE_ID, c.GetString(consts.TRACE_ID))
 			switch {
 			case brokenPipe:
-				logger.Error(fmt.Sprintf("%s\n%s", recovered, headersToStr))
+				log.Error(fmt.Sprintf("%s\n%s", recovered, headersToStr), traceID)
 			case stack:
-				logger.Error(fmt.Sprintf("[recovery] panic recovered:\n%s\n%s\n%s",
-					headersToStr, recovered, debug.Stack()))
+				log.Error(fmt.Sprintf("[recovery] panic recovered:\n%s\n%s\n%s",
+					headersToStr, recovered, debug.Stack()), traceID)
 			default:
-				logger.Error(fmt.Sprintf("[recovery] panic recovered:\n%s\n%s",
-					headersToStr, recovered))
+				log.Error(fmt.Sprintf("[recovery] panic recovered:\n%s\n%s",
+					headersToStr, recovered), traceID)
 			}
 		}
 
