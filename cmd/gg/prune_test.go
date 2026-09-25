@@ -76,7 +76,7 @@ func TestPruneLeftoversDeletesStalePBFiles(t *testing.T) {
 // file alone.
 func TestCompiledPBPathsNamesWhatCompileWrites(t *testing.T) {
 	protos := []pb.File{
-		{Path: "pb/sample.proto", Content: `syntax = "proto3";
+		{Path: "pb/sample.proto", Service: true, Content: `syntax = "proto3";
 
 package tmpapp;
 

@@ -82,6 +82,10 @@ type File struct {
 	Path string
 	// Content is the source of the file.
 	Content string
+	// Service reports whether a definition declares a service, which is
+	// what decides whether Compile writes a _grpc.pb.go beside it; false
+	// for a Go file.
+	Service bool
 }
 
 // DiagnosticsError is the error Generate returns when any diagnostic was

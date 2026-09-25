@@ -78,7 +78,7 @@ func (g *generator) print() ([]File, error) {
 		if err := printer.PrintProtoFile(resolved[name], &b); err != nil {
 			return nil, errors.Wrapf(err, "print %s", name)
 		}
-		files = append(files, File{Path: ggconst.DirPB + "/" + name, Content: b.String()})
+		files = append(files, File{Path: ggconst.DirPB + "/" + name, Content: b.String(), Service: len(g.files[name].services) > 0})
 	}
 	return files, nil
 }

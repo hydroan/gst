@@ -137,18 +137,16 @@ func generatedPBFiles(ignore gghelper.ProjectIgnore) ([]string, error) {
 
 // compiledPBPaths names the Go files pb.Compile writes for the definitions
 // protos, the way the protobuf plugins name them: pb/record.pb.go for
-// pb/record.proto, and pb/record_grpc.pb.go as well when the file declares a
-// service — a line reading "service Name {" at the top level, where the
-// generator prints every service. For [pb/record.proto pb/types.proto] with
-// a service in the first alone, the paths are [pb/record.pb.go
-// pb/record_grpc.pb.go pb/types.pb.go]. A test holds this to what
-// pb.Compile actually writes.
+// pb/record.proto, and pb/record_grpc.pb.go as well when the definition
+// declares a service. For [pb/record.proto pb/types.proto] with a service
+// in the first alone, the paths are [pb/record.pb.go pb/record_grpc.pb.go
+// pb/types.pb.go]. A test holds this to what pb.Compile actually writes.
 func compiledPBPaths(protos []pb.File) []string {
 	paths := make([]string, 0, 2*len(protos))
 	for _, f := range protos {
 		base := strings.TrimSuffix(f.Path, ".proto")
 		paths = append(paths, base+".pb.go")
-		if strings.Contains(f.Content, "\nservice ") {
+		if f.Service {
 			paths = append(paths, base+"_grpc.pb.go")
 		}
 	}
