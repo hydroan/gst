@@ -1598,3 +1598,146 @@ func (Record) Design() {
 	})
 }
 `
+
+// TestValidateGRPCUsage pins where GRPC() may be declared, at Design() top
+// level only, and that a model declaring it has an action gRPC can serve:
+// Import, Export and SSE are HTTP only.
+func TestValidateGRPCUsage(t *testing.T) {
+	tests := []struct {
+		name      string
+		source    string
+		wantError string
+	}{
+		{
+			name:   "grpc_with_a_served_action",
+			source: validateGRPCSource,
+		},
+		{
+			name:      "grpc_inside_an_action_block",
+			source:    validateGRPCInActionSource,
+			wantError: "GRPC() can only be used at Design() top level",
+		},
+		{
+			name:      "grpc_inside_a_route_block",
+			source:    validateGRPCInRouteSource,
+			wantError: "GRPC() can only be used at Design() top level",
+		},
+		{
+			name:      "grpc_with_http_only_actions",
+			source:    validateGRPCWithSSEOnlySource,
+			wantError: "Record declares GRPC() but no action gRPC can serve: Import, Export and SSE are HTTP only; declare another action or remove GRPC()",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			fset := token.NewFileSet()
+			file, err := parser.ParseFile(fset, "/repo/model/sample/record.go", tt.source, parser.ParseComments)
+			if err != nil {
+				t.Fatalf("parse source failed: %v", err)
+			}
+
+			errs := dsl.Validate(file, "/repo/model", "/repo/model/sample/record.go")
+			if tt.wantError == "" {
+				if len(errs) != 0 {
+					t.Fatalf("Validate returned errors: %v", errs)
+				}
+				return
+			}
+			if len(errs) == 0 {
+				t.Fatalf("Validate returned no errors, want %q", tt.wantError)
+			}
+			var got strings.Builder
+			for _, err := range errs {
+				got.WriteString(err.Error())
+				got.WriteString("\n")
+			}
+			if !strings.Contains(got.String(), tt.wantError) {
+				t.Fatalf("Validate errors = %q, want one containing %q", got.String(), tt.wantError)
+			}
+		})
+	}
+}
+
+const validateGRPCSource = `
+package sample
+
+import (
+	. "github.com/hydroan/gst/dsl"
+	"github.com/hydroan/gst/model"
+)
+
+type Record struct {
+	model.Base
+}
+
+func (Record) Design() {
+	GRPC()
+	Migrate()
+	Create(func() {})
+	SSE(func() {
+		Service()
+	})
+}
+`
+
+const validateGRPCInActionSource = `
+package sample
+
+import (
+	. "github.com/hydroan/gst/dsl"
+	"github.com/hydroan/gst/model"
+)
+
+type Record struct {
+	model.Base
+}
+
+func (Record) Design() {
+	Create(func() {
+		GRPC()
+	})
+}
+`
+
+const validateGRPCInRouteSource = `
+package sample
+
+import (
+	. "github.com/hydroan/gst/dsl"
+	"github.com/hydroan/gst/model"
+)
+
+type Record struct {
+	model.Base
+}
+
+func (Record) Design() {
+	Route("sample/records", func() {
+		GRPC()
+		List(func() {})
+	})
+}
+`
+
+const validateGRPCWithSSEOnlySource = `
+package sample
+
+import (
+	. "github.com/hydroan/gst/dsl"
+	"github.com/hydroan/gst/model"
+)
+
+type Record struct {
+	model.Empty
+}
+
+func (Record) Design() {
+	GRPC()
+	Route("sample/records/events", func() {
+		SSE(func() {
+			Service()
+		})
+	})
+}
+`

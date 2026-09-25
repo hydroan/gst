@@ -29,6 +29,7 @@ func TestParse(t *testing.T) {
 					Endpoint: "iam-user2",
 					Param:    ":user",
 					Migrate:  true,
+					GRPC:     true,
 					routes: map[string][]*Action{
 						"iam/users": {
 							// The Payload[*UserReq] declaration in testdata/user.go is

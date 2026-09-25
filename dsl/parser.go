@@ -312,6 +312,11 @@ func parseDesign(fn *ast.FuncDecl) *Design {
 			defaults.Migrate = true
 		}
 
+		// Parse "GRPC()". Declaring the marker serves the model over gRPC as well.
+		if funcName == "GRPC" && len(call.Args) == 0 {
+			defaults.GRPC = true
+		}
+
 		// The remaining DSL calls all carry at least one argument.
 		if len(call.Args) == 0 {
 			continue

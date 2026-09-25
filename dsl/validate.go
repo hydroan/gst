@@ -87,6 +87,17 @@ var designOnlyMethodNames = map[string]bool{
 	"Endpoint": true,
 	"Param":    true,
 	"Migrate":  true,
+	"GRPC":     true,
+}
+
+// httpOnlyActionMethodNames are actions gRPC cannot serve: Import reads a
+// multipart upload, Export answers with a file attachment and SSE is an HTTP
+// protocol of its own. A model declaring GRPC() needs at least one other
+// action, or its gRPC service would have nothing to serve.
+var httpOnlyActionMethodNames = map[string]bool{
+	consts.PHASE_IMPORT.MethodName(): true,
+	consts.PHASE_EXPORT.MethodName(): true,
+	consts.PHASE_SSE.MethodName():    true,
 }
 
 var actionOnlyMethodNames = map[string]bool{
@@ -186,6 +197,7 @@ func validateDesignFunc(fn *ast.FuncDecl, modelName string, rootModelFile, virtu
 	records := make([]serviceActionRecord, 0)
 	errs := make([]error, 0)
 	seenActions := make(map[string]bool)
+	grpc, grpcServable := false, false
 	for _, stmt := range fn.Body.List {
 		call := exprStmtCall(stmt)
 		if call == nil {
@@ -199,15 +211,19 @@ func validateDesignFunc(fn *ast.FuncDecl, modelName string, rootModelFile, virtu
 		switch {
 		case isActionMethod(name):
 			seenActions[name] = true
+			grpcServable = grpcServable || !httpOnlyActionMethodNames[name]
 			info, actionErrs := validateActionCall(call, name, rootModelFile, virtual, filename)
 			if record, ok := newServiceActionRecord(info, name, modelName, ""); ok {
 				records = append(records, record)
 			}
 			errs = append(errs, actionErrs...)
 		case name == "Route":
-			recs, routeErrs := validateRouteCall(call, modelName, rootModelFile, virtual, filename)
+			recs, servable, routeErrs := validateRouteCall(call, modelName, rootModelFile, virtual, filename)
 			records = append(records, recs...)
+			grpcServable = grpcServable || servable
 			errs = append(errs, routeErrs...)
+		case name == "GRPC":
+			grpc = true
 		case name == "Enabled" || designOnlyMethodNames[name]:
 			continue
 		case actionOnlyMethodNames[name]:
@@ -215,6 +231,9 @@ func validateDesignFunc(fn *ast.FuncDecl, modelName string, rootModelFile, virtu
 		}
 	}
 	errs = append(errs, validateSSEListConflict(seenActions, filename)...)
+	if grpc && !grpcServable {
+		errs = append(errs, fmt.Errorf("%s: %s declares GRPC() but no action gRPC can serve: Import, Export and SSE are HTTP only; declare another action or remove GRPC()", filename, modelName))
+	}
 	return records, errs
 }
 
@@ -229,19 +248,23 @@ func validateSSEListConflict(seenActions map[string]bool, filename string) []err
 	return nil
 }
 
-func validateRouteCall(call *ast.CallExpr, modelName string, rootModelFile, virtual bool, filename string) ([]serviceActionRecord, []error) {
+// validateRouteCall validates one Route block and reports, beside the service
+// records and errors of its actions, whether any of them is an action gRPC
+// can serve (see httpOnlyActionMethodNames).
+func validateRouteCall(call *ast.CallExpr, modelName string, rootModelFile, virtual bool, filename string) ([]serviceActionRecord, bool, []error) {
 	if len(call.Args) < 2 {
-		return nil, nil
+		return nil, false, nil
 	}
 	flit, ok := call.Args[1].(*ast.FuncLit)
 	if !ok || flit == nil || flit.Body == nil {
-		return nil, nil
+		return nil, false, nil
 	}
 
 	route := stringArgValue(call, "")
 	records := make([]serviceActionRecord, 0)
 	errs := make([]error, 0)
 	seenActions := make(map[string]bool)
+	grpcServable := false
 	for _, stmt := range flit.Body.List {
 		child := exprStmtCall(stmt)
 		if child == nil {
@@ -255,6 +278,7 @@ func validateRouteCall(call *ast.CallExpr, modelName string, rootModelFile, virt
 		switch {
 		case isActionMethod(name):
 			seenActions[name] = true
+			grpcServable = grpcServable || !httpOnlyActionMethodNames[name]
 			info, actionErrs := validateActionCall(child, name, rootModelFile, virtual, filename)
 			if record, ok := newServiceActionRecord(info, name, modelName, route); ok {
 				records = append(records, record)
@@ -271,7 +295,7 @@ func validateRouteCall(call *ast.CallExpr, modelName string, rootModelFile, virt
 		}
 	}
 	errs = append(errs, validateSSEListConflict(seenActions, filename)...)
-	return records, errs
+	return records, grpcServable, errs
 }
 
 // actionCallInfo carries the generation-relevant keywords collected from one

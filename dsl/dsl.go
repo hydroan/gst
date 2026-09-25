@@ -197,6 +197,14 @@ func Route(string, func()) {}
 // Migration is disabled by default; declaring Migrate() enables it.
 func Migrate() {}
 
+// GRPC serves the model over gRPC as well as HTTP: gg gen derives the model's
+// .proto from its Go type and its Design() and generates the gRPC service
+// beside the HTTP routes, both backed by the same service code. Declaring it
+// is enabling it; a model without it is HTTP only. It can only be used at
+// Design() top level, and needs at least one action gRPC can serve: Import,
+// Export and SSE are HTTP only.
+func GRPC() {}
+
 // Service marks the current action as requiring custom service code.
 //
 // Service is an action-scoped marker and must be used inside an action block such
@@ -480,6 +488,10 @@ type Design struct {
 	// Default: false
 	Migrate bool
 
+	// GRPC indicates whether the model is served over gRPC as well (see GRPC).
+	// Default: false
+	GRPC bool
+
 	// IsEmpty indicates if the model contains a model.Empty field.
 	// Models with model.Empty are lightweight and typically don't require migration.
 	IsEmpty bool
@@ -658,6 +670,7 @@ var methodList = []string{
 	"Param",
 	"Route",
 	"Migrate",
+	"GRPC",
 	"Service",
 	"Public",
 	"Exact",

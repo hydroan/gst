@@ -21,6 +21,8 @@ func (User) Design() {
 
 	// Migration is disabled by default; declaring Migrate() enables it.
 	Migrate()
+	// gRPC is off by default; declaring GRPC() serves the model over it too.
+	GRPC()
 	Param("user")
 
 	Route("/iam/users", func() {
