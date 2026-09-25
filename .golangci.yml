@@ -100,7 +100,7 @@ linters:
             - pkg: "github.com/pkg/errors"
               desc: "Use github.com/cockroachdb/errors instead"
         # Framework code imports the internal packages behind the public
-        # forwarding packages; the forwards serve projects (AGENTS.md, package
+        # forwarding packages; the forwards serve projects (CLAUDE.md, package
         # ownership and internal import direction). The files left out are the
         # ones written as project code: godoc examples, the module sources
         # gg module copy copies into a project (internal/model/<module> and
