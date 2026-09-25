@@ -106,6 +106,20 @@ func (Entry) Design() {
 	})
 }
 
+// TestItemParamDefaultsToID pins the examples of ItemParam: the parameter the
+// design declares, or :id.
+func TestItemParamDefaultsToID(t *testing.T) {
+	if got := codegen.ItemParam(&dsl.Design{Param: ":sample"}); got != ":sample" {
+		t.Fatalf("ItemParam(Param(\"sample\")) = %q, want %q", got, ":sample")
+	}
+	if got := codegen.ItemParam(&dsl.Design{}); got != ":id" {
+		t.Fatalf("ItemParam(no Param) = %q, want %q", got, ":id")
+	}
+	if got := codegen.ItemParam(nil); got != ":id" {
+		t.Fatalf("ItemParam(nil) = %q, want %q", got, ":id")
+	}
+}
+
 // TestRouterTargetForAction pins the examples of RouterTargetForAction: item
 // actions append the design's parameter or :id, batch, import and export
 // actions append their segment, and an Exact action keeps the route it

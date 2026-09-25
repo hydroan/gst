@@ -33,14 +33,24 @@ func ResolveRoutes(models []*gen.ModelInfo, ignores []ggconfig.RouteRule) RouteI
 	return applyRouteIgnores(models, ignores)
 }
 
+// ItemParam returns the path parameter the item actions (Get, Update, Patch,
+// Delete) of a model append to its route: the parameter its design declares,
+// :sample for Param("sample"), or :id when it declares none.
+func ItemParam(design *dsl.Design) string {
+	if design != nil && design.Param != "" {
+		return design.Param
+	}
+	return ":id"
+}
+
 // RouterTargetForAction returns the route the router registers action under,
 // given the route its design declares it on, and the name of the path
-// parameter that route ends in. An item action appends the design's parameter,
-// :id when the design declares none: the Get action of route samples with
-// Param("sample") registers samples/:sample, whose parameter is sample. A batch
-// action appends batch, Import import and Export export: the CreateMany action
-// of route samples registers samples/batch. An Exact action keeps the route it
-// declares, parameter included.
+// parameter that route ends in. An item action appends the parameter ItemParam
+// returns: the Get action of route samples with Param("sample") registers
+// samples/:sample, whose parameter is sample. A batch action appends batch,
+// Import import and Export export: the CreateMany action of route samples
+// registers samples/batch. An Exact action keeps the route it declares,
+// parameter included.
 func RouterTargetForAction(route string, design *dsl.Design, action *dsl.Action) (string, string) {
 	if action == nil {
 		return route, ""
@@ -57,11 +67,7 @@ func RouterTargetForAction(route string, design *dsl.Design, action *dsl.Action)
 	// route "tenant" with param ":id" becomes "tenant/:id"
 	switch action.Phase {
 	case consts.PHASE_DELETE, consts.PHASE_UPDATE, consts.PHASE_PATCH, consts.PHASE_GET:
-		param := ":id"
-		if design != nil && len(design.Param) > 0 {
-			param = design.Param
-		}
-		route = filepath.Join(route, param)
+		route = filepath.Join(route, ItemParam(design))
 		paramName = routerPathParamName(route)
 	case consts.PHASE_CREATE_MANY, consts.PHASE_DELETE_MANY, consts.PHASE_UPDATE_MANY, consts.PHASE_PATCH_MANY:
 		route = filepath.Join(route, "batch")

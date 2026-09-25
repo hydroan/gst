@@ -1,0 +1,125 @@
+package pb
+
+import (
+	"maps"
+	"slices"
+	"strings"
+
+	"github.com/cockroachdb/errors"
+	"github.com/hydroan/gst/consts"
+	"github.com/jhump/protoreflect/v2/protoprint"
+	"google.golang.org/protobuf/reflect/protodesc"
+	"google.golang.org/protobuf/reflect/protoreflect"
+	"google.golang.org/protobuf/reflect/protoregistry"
+	"google.golang.org/protobuf/types/descriptorpb"
+
+	// The well-known types the definitions import, registered so the
+	// descriptors resolve against them.
+	_ "google.golang.org/protobuf/types/known/fieldmaskpb"
+	_ "google.golang.org/protobuf/types/known/structpb"
+	_ "google.golang.org/protobuf/types/known/timestamppb"
+)
+
+// print assembles the descriptor of every file, checks them the way protoc
+// would and prints them as protobuf source, sorted by path.
+func (g *generator) print() ([]File, error) {
+	protos := make(map[string]*descriptorpb.FileDescriptorProto, len(g.files))
+	for name, f := range g.files {
+		protos[name] = f.descriptor()
+	}
+
+	// A file resolves once the generated files it imports have: they are
+	// resolved in that order, against the well-known types.
+	registry := new(protoregistry.Files)
+	resolver := &fileResolver{own: registry}
+	resolved := make(map[string]protoreflect.FileDescriptor, len(protos))
+	for len(resolved) < len(protos) {
+		progressed := false
+		for _, name := range slices.Sorted(maps.Keys(protos)) {
+			if _, done := resolved[name]; done {
+				continue
+			}
+			ready := true
+			for _, dep := range protos[name].GetDependency() {
+				if _, generated := protos[dep]; generated {
+					if _, done := resolved[dep]; !done {
+						ready = false
+					}
+				}
+			}
+			if !ready {
+				continue
+			}
+			fd, err := protodesc.NewFile(protos[name], resolver)
+			if err != nil {
+				return nil, errors.Wrapf(err, "assemble %s", name)
+			}
+			if err := registry.RegisterFile(fd); err != nil {
+				return nil, errors.Wrapf(err, "register %s", name)
+			}
+			resolved[name] = fd
+			progressed = true
+		}
+		if !progressed {
+			return nil, errors.New("the generated files import each other in a cycle")
+		}
+	}
+
+	// The printer's own layout, the one grpcurl describes services in: a
+	// blank line between elements, comments above them.
+	printer := protoprint.Printer{}
+	files := make([]File, 0, len(resolved))
+	for _, name := range slices.Sorted(maps.Keys(resolved)) {
+		var b strings.Builder
+		if err := printer.PrintProtoFile(resolved[name], &b); err != nil {
+			return nil, errors.Wrapf(err, "print %s", name)
+		}
+		files = append(files, File{Path: dirPB + "/" + name, Content: b.String()})
+	}
+	return files, nil
+}
+
+// descriptor assembles the FileDescriptorProto of the file: proto3 syntax,
+// its package, its imports in sorted order, the go_package option, its
+// messages and services, and the comments recorded for them, under the
+// generated-code header.
+func (f *protoFile) descriptor() *descriptorpb.FileDescriptorProto {
+	locations := append([]*descriptorpb.SourceCodeInfo_Location{{
+		Path:                    []int32{fileSyntaxTag},
+		Span:                    []int32{0, 0, 0},
+		LeadingDetachedComments: []string{commentText(strings.TrimPrefix(consts.CodeGeneratedComment(), "// "))},
+	}}, f.locations...)
+	return &descriptorpb.FileDescriptorProto{
+		Name:        new(f.name),
+		Package:     new(f.pkg),
+		Dependency:  slices.Sorted(maps.Keys(f.imports)),
+		MessageType: f.messages,
+		Service:     f.services,
+		Options:     &descriptorpb.FileOptions{GoPackage: new(f.goPackage)},
+		Syntax:      new("proto3"),
+		SourceCodeInfo: &descriptorpb.SourceCodeInfo{
+			Location: locations,
+		},
+	}
+}
+
+// fileResolver resolves the imports of a generated file: the generated files
+// resolved so far, then the well-known types the framework's protobuf
+// runtime registers.
+type fileResolver struct {
+	own *protoregistry.Files
+}
+
+func (r *fileResolver) FindFileByPath(path string) (protoreflect.FileDescriptor, error) {
+	if fd, err := r.own.FindFileByPath(path); err == nil {
+		return fd, nil
+	}
+	return protoregistry.GlobalFiles.FindFileByPath(path)
+}
+
+func (r *fileResolver) FindDescriptorByName(name protoreflect.FullName) (protoreflect.Descriptor, error) {
+	if d, err := r.own.FindDescriptorByName(name); err == nil {
+		return d, nil
+	}
+	return protoregistry.GlobalFiles.FindDescriptorByName(name)
+}

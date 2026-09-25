@@ -15,6 +15,7 @@ import (
 	"github.com/hydroan/gst/internal/codegen"
 	"github.com/hydroan/gst/internal/codegen/gen"
 	"github.com/hydroan/gst/internal/codegen/gen/columns"
+	"github.com/hydroan/gst/internal/codegen/gen/pb"
 	pkgnew "github.com/hydroan/gst/internal/codegen/new"
 	"github.com/hydroan/gst/internal/ggconfig"
 	"github.com/hydroan/gst/internal/ggconst"
@@ -255,8 +256,25 @@ func genRunWithOptions(opts genRunOptions) error {
 	if err != nil {
 		return errors.Wrap(err, "build main.go")
 	}
-	if err := writeGenFile(ggconst.FileMain, mainCode); err != nil {
+	if err = writeGenFile(ggconst.FileMain, mainCode); err != nil {
 		return err
+	}
+
+	// Generate the protobuf definitions of the models served over gRPC. The
+	// model packages are type-checked for it, so this runs once their
+	// registration files above are current.
+	protoFiles, err := pb.Generate(pb.Config{Dir: ".", ModulePath: module, Models: allModels})
+	var protoDiagnostics *pb.DiagnosticsError
+	switch {
+	case errors.As(err, &protoDiagnostics):
+		return err
+	case err != nil:
+		return errors.Wrap(err, "load the model packages for the protobuf definitions")
+	}
+	for _, f := range protoFiles {
+		if err = writeGenFile(filepath.FromSlash(f.Path), f.Content); err != nil {
+			return err
+		}
 	}
 
 	// ============================================================
