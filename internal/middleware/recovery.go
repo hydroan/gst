@@ -39,9 +39,9 @@ func recovery() gin.HandlerFunc {
 func recoveryWithTracing(log *zap.Logger, stack bool) gin.HandlerFunc {
 	return gin.CustomRecoveryWithWriter(nil, func(c *gin.Context, recovered any) {
 		// Record panic in tracing span
-		span := GetSpanFromContext(c)
+		span := requestSpan(c)
 		if span != nil && span.IsRecording() {
-			RecordError(c, fmt.Errorf("panic recovered: %v", recovered))
+			recordError(c, fmt.Errorf("panic recovered: %v", recovered))
 			span.SetAttributes(
 				attribute.Bool("error.panic", true),
 				attribute.String("error.recovered", fmt.Sprintf("%v", recovered)),

@@ -28,7 +28,7 @@ func accessLogger() gin.HandlerFunc {
 		prommetrics.HTTPRequestDuration.WithLabelValues(c.Request.Method, labelRoute, strconv.Itoa(c.Writer.Status())).Observe(time.Since(start).Seconds())
 
 		// Add tracing information to logs.
-		span := GetSpanFromContext(c)
+		span := requestSpan(c)
 		traceID := c.GetString(consts.TRACE_ID)
 		var spanID string
 		if span != nil && span.IsRecording() {

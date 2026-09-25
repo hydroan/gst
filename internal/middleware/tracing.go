@@ -216,9 +216,9 @@ func extractRequestTraceContext(ctx context.Context, header http.Header) context
 	return trace.ContextWithRemoteSpanContext(parentCtx, spanContext)
 }
 
-// GetSpanFromContext returns the server span tracing opened for the request
-// or, when there is none, the span current in the request context.
-func GetSpanFromContext(c *gin.Context) trace.Span {
+// requestSpan returns the server span tracing opened for the request or,
+// when there is none, the span current in the request context.
+func requestSpan(c *gin.Context) trace.Span {
 	if span, exists := c.Get("otel_span"); exists {
 		if otelSpan, ok := span.(trace.Span); ok {
 			return otelSpan
@@ -227,10 +227,10 @@ func GetSpanFromContext(c *gin.Context) trace.Span {
 	return trace.SpanFromContext(c.Request.Context())
 }
 
-// RecordError records err on the span GetSpanFromContext returns, when that
-// span is recording.
-func RecordError(c *gin.Context, err error) {
-	span := GetSpanFromContext(c)
+// recordError records err on the span requestSpan returns, when that span
+// is recording.
+func recordError(c *gin.Context, err error) {
+	span := requestSpan(c)
 	if span != nil && span.IsRecording() {
 		gstotel.RecordError(span, err)
 	}
