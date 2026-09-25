@@ -46,6 +46,9 @@ func reset(t *testing.T) {
 	t.Helper()
 	Stop(context.Background())
 	registrations = nil
+	publicMethods = nil
+	commonInterceptors = nil
+	authInterceptors = nil
 	started.Store(false)
 	drainTimeout = lifecycle.StopTimeout
 	config.App.GRPC = config.GRPC{Listen: "127.0.0.1", Reflection: true}
@@ -65,10 +68,11 @@ func observe(t *testing.T, target **zap.Logger) *observer.ObservedLogs {
 }
 
 // serve registers the service gst.test.Echo with one unary rpc per entry
-// of handlers, named by its key. Each takes and answers an empty message,
+// of handlers, named by its key, and the full method names in public as
+// its public methods. Each rpc takes and answers an empty message,
 // answering with the error its handler returns, and runs the server's
 // interceptors first, the way the code the protobuf plugin generates does.
-func serve(handlers map[string]func(ctx context.Context) error) {
+func serve(handlers map[string]func(ctx context.Context) error, public ...string) {
 	methods := make([]grpc.MethodDesc, 0, len(handlers))
 	for name, handle := range handlers {
 		fullMethod := "/gst.test.Echo/" + name
@@ -99,7 +103,7 @@ func serve(handlers map[string]func(ctx context.Context) error) {
 			Methods:     methods,
 			Metadata:    "gst/test/echo.proto",
 		}, nil)
-	})
+	}, public...)
 }
 
 // echo registers the rpc Ping, answering an empty message with an empty

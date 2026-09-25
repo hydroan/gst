@@ -31,9 +31,11 @@ const traceIDKey = "x-trace-id"
 // as the identity of the execution — the caller's x-trace-id, or a
 // generated one — and publishes it in the response header, which goes out
 // with the status of a failed call as well; attaches the request metadata a
-// ServiceContext built on the context answers for; and, once the handler
-// returns, writes the call's entry to the access log with the fields the
-// HTTP entry carries, the status being the code's name and, for a failed
+// ServiceContext built on the context answers for, and keeps the call
+// record an authentication interceptor later adds the caller to (see
+// WithIdentity); and, once the handler returns, writes the call's entry to
+// the access log with the fields the HTTP entry carries, the caller as
+// established by then, the status being the code's name and, for a failed
 // call, the status message beside it.
 //
 // The metadata is what the call itself says: the full method as route, path
@@ -52,7 +54,7 @@ func requestScope(ctx context.Context, req any, info *grpc.UnaryServerInfo, hand
 	}
 	ctx = execctx.WithTraceID(ctx, traceID)
 	address, tls := peerOf(ctx)
-	meta := requestctx.New(requestctx.Fields{
+	c := &callRecord{fields: requestctx.Fields{
 		Route:      info.FullMethod,
 		Path:       info.FullMethod,
 		RequestURI: info.FullMethod,
@@ -61,8 +63,9 @@ func requestScope(ctx context.Context, req any, info *grpc.UnaryServerInfo, hand
 		UserAgent:  first(md, "user-agent"),
 		Host:       first(md, ":authority"),
 		TLS:        tls,
-	})
-	ctx = requestctx.WithMetadata(ctx, meta)
+	}}
+	meta := requestctx.New(c.fields)
+	ctx = requestctx.WithMetadata(context.WithValue(ctx, callRecordKey{}, c), meta)
 	// SetHeader fails only on a context carrying no call, which the
 	// server's own contexts never are.
 	_ = grpc.SetHeader(ctx, metadata.Pairs(traceIDKey, traceID))
@@ -84,8 +87,8 @@ func requestScope(ctx context.Context, req any, info *grpc.UnaryServerInfo, hand
 		fields,
 		zap.String("status", st.Code().String()),
 		zap.String(consts.CTX_METHOD, meta.Method()),
-		zap.String(consts.CTX_USERNAME, meta.Username()),
-		zap.String(consts.CTX_USER_ID, meta.UserID()),
+		zap.String(consts.CTX_USERNAME, c.identity.Username),
+		zap.String(consts.CTX_USER_ID, c.identity.UserID),
 		zap.String(consts.TRACE_ID, traceID),
 		zap.String(consts.CTX_ROUTE, meta.Route()),
 		zap.String(consts.CTX_PATH, meta.Path()),
