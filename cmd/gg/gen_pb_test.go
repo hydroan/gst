@@ -154,6 +154,14 @@ func TestGenRunHoldsTheCommittedDefinitionsToTheirNumbers(t *testing.T) {
 	writeProtobufProject(t, projectDir, map[string]string{"model/note.go": protobufNoteModel})
 	require.NoError(t, genRunWithOptions(genRunOptions{Quiet: true}))
 	proto := filepath.Join(ggconst.DirPB, "note.proto")
+	// fresh commits the definition of the model as first written, for the
+	// runs that start from it.
+	fresh := func(t *testing.T) {
+		t.Helper()
+		writeProtobufProject(t, projectDir, map[string]string{"model/note.go": protobufNoteModel})
+		require.NoError(t, os.RemoveAll(ggconst.DirPB))
+		require.NoError(t, genRunWithOptions(genRunOptions{Quiet: true}))
+	}
 
 	t.Run("a field keeps its number", func(t *testing.T) {
 		writeProtobufProject(t, projectDir, map[string]string{"model/note.go": strings.Replace(protobufNoteModel, `pb:"11"`, `pb:"13"`, 1)})
@@ -171,7 +179,43 @@ func TestGenRunHoldsTheCommittedDefinitionsToTheirNumbers(t *testing.T) {
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "pb/note.proto: the field caption of message Note takes number 11, which the field title held; a number is never reused, so give caption a fresh number and let 11 stay reserved, or delete pb/note.proto to accept the break")
 	})
+	t.Run("a field keeps a compatible type", func(t *testing.T) {
+		// string to bytes is wire compatible; a repeated field turning
+		// singular, or a string turning integer, is not.
+		writeProtobufProject(t, projectDir, map[string]string{"model/note.go": strings.Replace(protobufNoteModel, "Title string   'json:\"title\" pb:\"11\"'", "Title []byte   'json:\"title\" pb:\"11\"'", 1)})
+		require.NoError(t, genRunWithOptions(genRunOptions{Quiet: true}))
+
+		writeProtobufProject(t, projectDir, map[string]string{"model/note.go": strings.Replace(protobufNoteModel, "Title string   'json:\"title\" pb:\"11\"'", "Title int64    'json:\"title\" pb:\"11\"'", 1)})
+		err := genRunWithOptions(genRunOptions{Quiet: true})
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "pb/note.proto: the field title of message Note was bytes and is now int64; a type change breaks the wire, so keep bytes or a type compatible with it, or delete pb/note.proto to accept the break")
+
+		writeProtobufProject(t, projectDir, map[string]string{"model/note.go": strings.Replace(protobufNoteModel, "Tags  []string 'json:\"tags,omitempty\" pb:\"12\" gorm:\"-\"'", "Tags  string   'json:\"tags,omitempty\" pb:\"12\" gorm:\"-\"'", 1)})
+		err = genRunWithOptions(genRunOptions{Quiet: true})
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "pb/note.proto: the field tags of message Note was repeated and is now singular; a cardinality change breaks the wire, so keep it repeated, or delete pb/note.proto to accept the break")
+
+		// Bytes back to string is compatible as well.
+		writeProtobufProject(t, projectDir, map[string]string{"model/note.go": protobufNoteModel})
+		require.NoError(t, genRunWithOptions(genRunOptions{Quiet: true}))
+	})
+	t.Run("a hand-written reservation up to max is honored", func(t *testing.T) {
+		fresh(t)
+		content, err := os.ReadFile(proto)
+		require.NoError(t, err)
+		require.NoError(t, os.WriteFile(proto, []byte(strings.Replace(string(content), "  repeated string tags = 12;\n}", "  repeated string tags = 12;\n\n  reserved 1000 to max;\n}", 1)), 0o600))
+		require.NoError(t, genRunWithOptions(genRunOptions{Quiet: true}))
+		kept, err := os.ReadFile(proto)
+		require.NoError(t, err)
+		require.Contains(t, string(kept), "reserved 1000 to max;")
+
+		writeProtobufProject(t, projectDir, map[string]string{"model/note.go": strings.Replace(protobufNoteModel, "\tmodel.Base\n", "\tBody string 'json:\"body\" pb:\"4000\"'\n\n\tmodel.Base\n", 1)})
+		err = genRunWithOptions(genRunOptions{Quiet: true})
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "pb/note.proto: the field body of message Note takes number 4000, which the file reserves")
+	})
 	t.Run("removed fields stay reserved", func(t *testing.T) {
+		fresh(t)
 		withoutTags := strings.Replace(protobufNoteModel, "\tTags  []string 'json:\"tags,omitempty\" pb:\"12\" gorm:\"-\"'\n", "", 1)
 		writeProtobufProject(t, projectDir, map[string]string{"model/note.go": withoutTags})
 		require.NoError(t, genRunWithOptions(genRunOptions{Quiet: true}))
