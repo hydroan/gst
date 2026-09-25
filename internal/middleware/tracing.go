@@ -226,12 +226,3 @@ func requestSpan(c *gin.Context) trace.Span {
 	}
 	return trace.SpanFromContext(c.Request.Context())
 }
-
-// recordError records err on the span requestSpan returns, when that span
-// is recording.
-func recordError(c *gin.Context, err error) {
-	span := requestSpan(c)
-	if span != nil && span.IsRecording() {
-		gstotel.RecordError(span, err)
-	}
-}

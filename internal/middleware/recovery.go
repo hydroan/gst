@@ -14,6 +14,7 @@ import (
 	"github.com/hydroan/gst/consts"
 	"github.com/hydroan/gst/internal/response"
 	"github.com/hydroan/gst/logger"
+	gstotel "github.com/hydroan/gst/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.uber.org/zap"
 )
@@ -41,7 +42,7 @@ func recoveryWithTracing(log *zap.Logger, stack bool) gin.HandlerFunc {
 		// Record panic in tracing span
 		span := requestSpan(c)
 		if span != nil && span.IsRecording() {
-			recordError(c, fmt.Errorf("panic recovered: %v", recovered))
+			gstotel.RecordError(span, fmt.Errorf("panic recovered: %v", recovered))
 			span.SetAttributes(
 				attribute.Bool("error.panic", true),
 				attribute.String("error.recovered", fmt.Sprintf("%v", recovered)),
