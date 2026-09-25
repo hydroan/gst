@@ -17,6 +17,43 @@ import (
 
 const middlewareRegistrationFilename = "middleware.go"
 
+// managedDir describes one project directory module copy manages handler
+// files in beside the project's own: the middleware directory, whose files
+// are HTTP middleware registered through the framework's middleware package,
+// and the interceptor directory, whose files are gRPC interceptors
+// registered through the framework's interceptor package. Both hold
+// module-owned files under an ownership marker and a registration file whose
+// init function registers the handlers, and both are handled by the one set
+// of functions below.
+type managedDir struct {
+	// pkg names the package of the directory and is the default alias of the
+	// framework package the registration file imports: "middleware".
+	pkg string
+	// registrationFile is the file of the directory holding the register
+	// calls: "middleware.go".
+	registrationFile string
+	// importPath is the framework package the register calls go through.
+	importPath string
+}
+
+var (
+	middlewareManagedDir  = managedDir{pkg: "middleware", registrationFile: middlewareRegistrationFilename, importPath: frameworkModulePath + "/middleware"}
+	interceptorManagedDir = managedDir{pkg: "interceptor", registrationFile: "interceptor.go", importPath: frameworkModulePath + "/interceptor"}
+)
+
+// managedDirOf returns the descriptor of the managed directory dir, told by
+// its last element, "middleware" or "interceptor", wherever the project
+// keeps it; any other directory is none module copy manages.
+func managedDirOf(dir string) (managedDir, error) {
+	switch filepath.Base(filepath.Clean(dir)) {
+	case middlewareManagedDir.pkg:
+		return middlewareManagedDir, nil
+	case interceptorManagedDir.pkg:
+		return interceptorManagedDir, nil
+	}
+	return managedDir{}, fmt.Errorf("%s is not a directory module copy manages", dir)
+}
+
 // middlewareMarkerPrefix opens the ownership marker line module copy writes at
 // the top of every copied middleware file. The middleware directory is shared
 // with project-owned handlers, so this marker is the only proof that a file
@@ -50,12 +87,12 @@ func middlewareMarkerModule(path string) (string, error) {
 	return "", nil
 }
 
-// moduleCopyMiddleware connects one manifest-declared framework middleware file
-// to the project-owned file and registration call that module copy will create.
-// Unlike action service files, a middleware file is not merged onto a generated
-// shell. The whole source file is normalized into the project middleware
-// package, which rewrites only the package clause and the copied model/service
-// imports.
+// moduleCopyMiddleware connects one manifest-declared framework middleware
+// or interceptor file to the project-owned file and registration call that
+// module copy will create. Unlike action service files, such a file is not
+// merged onto a generated shell. The whole source file is normalized into
+// the project's package of the same name, which rewrites only the package
+// clause and the copied model/service imports.
 type moduleCopyMiddleware struct {
 	SourcePath string
 	TargetPath string
@@ -63,14 +100,17 @@ type moduleCopyMiddleware struct {
 	Handler    string
 }
 
-func (p *CopyPlan) resolveMiddleware(manifest []moduleCopyMiddlewareManifest) ([]moduleCopyMiddleware, error) {
+// resolveHandlers connects the manifest-declared handler files, middleware
+// or interceptors, to their targets under targetDir, the project's
+// directory of the same kind.
+func (p *CopyPlan) resolveHandlers(manifest []moduleCopyMiddlewareManifest, targetDir string) ([]moduleCopyMiddleware, error) {
 	middleware := make([]moduleCopyMiddleware, 0, len(manifest))
 	for _, item := range manifest {
 		// The manifest stores framework-root relative paths so module.json
 		// remains stable wherever the framework source resolves: the module
 		// cache, a replace directory, or the framework repository itself.
 		sourcePath := filepath.Join(p.FrameworkRoot, filepath.FromSlash(item.SourceFile))
-		targetPath := filepath.Join(p.TargetMiddlewareDir, filepath.Base(item.SourceFile))
+		targetPath := filepath.Join(targetDir, filepath.Base(item.SourceFile))
 		if err := requireMiddlewareSourceFile(sourcePath, item.Handler); err != nil {
 			return nil, err
 		}
@@ -115,8 +155,10 @@ func requireMiddlewareSourceFile(sourcePath string, handler string) error {
 	return fmt.Errorf("source middleware file %s does not declare handler %s", sourcePath, handler)
 }
 
-func (p *CopyPlan) addMiddlewareFiles() error {
-	for _, middleware := range p.Middleware {
+// addHandlerFiles plans the copies of the handler files items, middleware
+// or interceptors, as files of kind.
+func (p *CopyPlan) addHandlerFiles(items []moduleCopyMiddleware, kind moduleCopyFileKind) error {
+	for _, middleware := range items {
 		src, err := os.ReadFile(middleware.SourcePath)
 		if err != nil {
 			return err
@@ -130,7 +172,7 @@ func (p *CopyPlan) addMiddlewareFiles() error {
 		// up as a --force overwrite that upgrades them into prune management.
 		content = append([]byte(moduleCopyMiddlewareMarker(p.Name)+"\n\n"), content...)
 		p.Files = append(p.Files, moduleCopyFile{
-			Kind:        moduleCopyFileMiddleware,
+			Kind:        kind,
 			TargetPath:  middleware.TargetPath,
 			Content:     content,
 			Preexisting: gghelper.FileExists(middleware.TargetPath),
@@ -139,68 +181,21 @@ func (p *CopyPlan) addMiddlewareFiles() error {
 	return nil
 }
 
-// collectStaleMiddlewareFiles records project middleware files this module's
-// copy marker claims but the current manifest no longer declares. Ownership
-// must be proven by the marker: the middleware directory is shared with
-// project-owned handlers and other modules' copies, so an unmarked or
-// foreign-marked file is never touched. The registration file is skipped no
-// matter what it carries — it is project infrastructure, not a copy product.
-func (p *CopyPlan) collectStaleMiddlewareFiles() error {
-	info, err := os.Stat(p.TargetMiddlewareDir)
-	if os.IsNotExist(err) {
-		return nil
-	}
+// staleHandlerFiles lists the files of the managed directory dir this
+// module's copy marker claims but the plan no longer writes, planned being
+// the targets it writes there: the ones the manifest no longer declares,
+// and, for the interceptor directory of a project that no longer serves
+// gRPC, every one. Ownership must be proven by the marker: the directory is
+// shared with project-owned handlers and other modules' copies, so an
+// unmarked or foreign-marked file is never touched. The registration file
+// is skipped no matter what it carries — it is project infrastructure, not
+// a copy product.
+func (p *CopyPlan) staleHandlerFiles(dir string, planned []string) ([]string, error) {
+	md, err := managedDirOf(dir)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	if !info.IsDir() {
-		return fmt.Errorf("%s is not a directory", p.TargetMiddlewareDir)
-	}
-
-	planned := make(map[string]bool)
-	for _, target := range p.MiddlewareTargets() {
-		planned[target] = true
-	}
-	files, err := goFilesInPackageDir(p.TargetMiddlewareDir)
-	if err != nil {
-		return err
-	}
-	stale := make([]string, 0)
-	for _, path := range files {
-		if filepath.Base(path) == middlewareRegistrationFilename || planned[path] {
-			continue
-		}
-		owner, ownerErr := middlewareMarkerModule(path)
-		if ownerErr != nil {
-			return ownerErr
-		}
-		if owner != p.Name {
-			continue
-		}
-		stale = append(stale, path)
-	}
-	p.StaleMiddlewareFiles = stale
-	return nil
-}
-
-// OrphanMiddleware is a middleware file module copy wrote for a module the
-// project no longer holds.
-type OrphanMiddleware struct {
-	// Path is the file in the project middleware directory.
-	Path string
-	// Module is the module its ownership marker names.
-	Module string
-}
-
-// OrphanMiddlewareFiles returns the middleware files module copy wrote for
-// modules the project no longer holds: the files of middlewareDir whose
-// ownership marker names a module without a directory under modelDir, which
-// is how a project removes a copied module. The registration file is never one
-// of them. With middleware/sample_auth.go marked for module sample and no
-// model/sample, it returns that file for module sample; once model/sample
-// exists again, nothing.
-func OrphanMiddlewareFiles(middlewareDir, modelDir string) ([]OrphanMiddleware, error) {
-	info, err := os.Stat(middlewareDir)
+	info, err := os.Stat(dir)
 	if os.IsNotExist(err) {
 		return nil, nil
 	}
@@ -208,16 +203,74 @@ func OrphanMiddlewareFiles(middlewareDir, modelDir string) ([]OrphanMiddleware, 
 		return nil, err
 	}
 	if !info.IsDir() {
-		return nil, fmt.Errorf("%s is not a directory", middlewareDir)
+		return nil, fmt.Errorf("%s is not a directory", dir)
 	}
 
-	files, err := goFilesInPackageDir(middlewareDir)
+	written := make(map[string]bool, len(planned))
+	for _, target := range planned {
+		written[target] = true
+	}
+	files, err := goFilesInPackageDir(dir)
 	if err != nil {
 		return nil, err
 	}
-	orphans := make([]OrphanMiddleware, 0)
+	stale := make([]string, 0)
 	for _, path := range files {
-		if filepath.Base(path) == middlewareRegistrationFilename {
+		if filepath.Base(path) == md.registrationFile || written[path] {
+			continue
+		}
+		owner, ownerErr := middlewareMarkerModule(path)
+		if ownerErr != nil {
+			return nil, ownerErr
+		}
+		if owner != p.Name {
+			continue
+		}
+		stale = append(stale, path)
+	}
+	return stale, nil
+}
+
+// OrphanManagedFile is a middleware or interceptor file module copy wrote
+// for a module the project no longer holds.
+type OrphanManagedFile struct {
+	// Path is the file in the project's middleware or interceptor directory.
+	Path string
+	// Module is the module its ownership marker names.
+	Module string
+}
+
+// OrphanManagedFiles returns the files module copy wrote into the managed
+// directory dir, the project's middleware or interceptor directory, for
+// modules the project no longer holds: the files whose ownership marker
+// names a module without a directory under modelDir, which is how a project
+// removes a copied module. The registration file is never one of them. With
+// middleware/sample_auth.go marked for module sample and no model/sample,
+// it returns that file for module sample; once model/sample exists again,
+// nothing.
+func OrphanManagedFiles(dir, modelDir string) ([]OrphanManagedFile, error) {
+	md, err := managedDirOf(dir)
+	if err != nil {
+		return nil, err
+	}
+	info, err := os.Stat(dir)
+	if os.IsNotExist(err) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	if !info.IsDir() {
+		return nil, fmt.Errorf("%s is not a directory", dir)
+	}
+
+	files, err := goFilesInPackageDir(dir)
+	if err != nil {
+		return nil, err
+	}
+	orphans := make([]OrphanManagedFile, 0)
+	for _, path := range files {
+		if filepath.Base(path) == md.registrationFile {
 			continue
 		}
 		owner, ownerErr := middlewareMarkerModule(path)
@@ -234,21 +287,21 @@ func OrphanMiddlewareFiles(middlewareDir, modelDir string) ([]OrphanMiddleware, 
 		case statErr != nil && !os.IsNotExist(statErr):
 			return nil, statErr
 		}
-		orphans = append(orphans, OrphanMiddleware{Path: path, Module: owner})
+		orphans = append(orphans, OrphanManagedFile{Path: path, Module: owner})
 	}
 	return orphans, nil
 }
 
-// middlewareHandlersOnDisk collects the top-level function names of the
-// planned middleware targets as they currently exist on disk, before the copy
-// overwrites them. A handler rename would otherwise leave its old register
+// handlersOnDisk collects the top-level function names of the planned
+// targets of items, middleware or interceptors, as they currently exist on
+// disk, before the copy overwrites them. A handler rename would otherwise leave its old register
 // call behind: the new file content no longer proves the old name belonged to
 // this module, so the proof must be taken while the old content is still
 // there. Only files carrying this module's marker count — an unmarked
 // preexisting file is not provably module-owned.
-func (e *CopyExecution) middlewareHandlersOnDisk() (map[string]bool, error) {
+func (e *CopyExecution) handlersOnDisk(items []moduleCopyMiddleware) (map[string]bool, error) {
 	handlers := make(map[string]bool)
-	for _, middleware := range e.Plan.Middleware {
+	for _, middleware := range items {
 		if !gghelper.FileExists(middleware.TargetPath) {
 			continue
 		}
@@ -270,8 +323,10 @@ func (e *CopyExecution) middlewareHandlersOnDisk() (map[string]bool, error) {
 	return handlers, nil
 }
 
-// reconcileMiddlewareRegistrations makes middleware/middleware.go agree with
-// the manifest for every handler this module owns: a register call whose
+// reconcileRegistrations makes the registration file of the managed
+// directory targetDir, middleware/middleware.go or
+// interceptor/interceptor.go, agree with the manifest for every handler of
+// items this module owns: a register call whose
 // handler is module-owned but no longer matches a declared (handler, scope)
 // pair is dropped — that is how a scope change or a handler rename retires its
 // old call — and every declared pair is ensured. The owned set is the union of
@@ -283,10 +338,9 @@ func (e *CopyExecution) middlewareHandlersOnDisk() (map[string]bool, error) {
 // explanatory comments, grouped imports, or existing init work; AST editing
 // preserves those structures while touching only the import and calls owned
 // by module copy.
-func (e *CopyExecution) reconcileMiddlewareRegistrations(obsoleteHandlers map[string]bool) (status CopyWriteStatus, path string, err error) {
-	targetDir := e.Plan.TargetMiddlewareDir
-	targetPath := filepath.Join(targetDir, middlewareRegistrationFilename)
-	fset, file, preexisting, err := parseOrCreateMiddlewareRegistrationFile(targetPath)
+func (e *CopyExecution) reconcileRegistrations(md managedDir, targetDir string, items []moduleCopyMiddleware, obsoleteHandlers map[string]bool) (status CopyWriteStatus, path string, err error) {
+	targetPath := filepath.Join(targetDir, md.registrationFile)
+	fset, file, preexisting, err := parseOrCreateRegistrationFile(targetPath, md.pkg)
 	if err != nil {
 		return "", "", err
 	}
@@ -295,8 +349,8 @@ func (e *CopyExecution) reconcileMiddlewareRegistrations(obsoleteHandlers map[st
 	for name := range obsoleteHandlers {
 		ownedHandlers[name] = true
 	}
-	expected := make(map[string]bool, len(e.Plan.Middleware))
-	for _, middleware := range e.Plan.Middleware {
+	expected := make(map[string]bool, len(items))
+	for _, middleware := range items {
 		names, namesErr := topLevelFunctionNames(middleware.TargetPath)
 		if namesErr != nil {
 			return "", "", namesErr
@@ -308,7 +362,7 @@ func (e *CopyExecution) reconcileMiddlewareRegistrations(obsoleteHandlers map[st
 	}
 
 	changed := false
-	importAlias := frameworkMiddlewareImportAlias(file)
+	importAlias := frameworkImportAlias(file, md)
 	if importAlias != "" {
 		for _, decl := range file.Decls {
 			fn, ok := decl.(*ast.FuncDecl)
@@ -329,10 +383,10 @@ func (e *CopyExecution) reconcileMiddlewareRegistrations(obsoleteHandlers map[st
 		}
 	}
 	if importAlias == "" {
-		changed = astutil.AddImport(fset, file, frameworkModulePath+"/middleware") || changed
-		importAlias = "middleware"
+		changed = astutil.AddImport(fset, file, md.importPath) || changed
+		importAlias = md.pkg
 	}
-	for _, item := range e.Plan.Middleware {
+	for _, item := range items {
 		if ensureMiddlewareRegisterCall(file, importAlias, item) {
 			changed = true
 		}
@@ -372,33 +426,38 @@ func topLevelFunctionNames(path string) ([]string, error) {
 	return names, nil
 }
 
-// RemoveMiddlewareFiles deletes paths, files of the project middleware
-// directory middlewareDir, and then drops the Register and RegisterAuth calls
-// naming their top-level functions from the registration file there, together
-// with the framework middleware import once nothing there uses it: the calls
-// would name functions the deleted files declared, and an import left without
-// a use is a compile error. Each deletion goes to report as CopyWriteDelete,
-// and the rewritten registration file as CopyWriteUpdate. A file that is
-// already gone counts as deleted, unreported. The first failure stops it.
-func RemoveMiddlewareFiles(middlewareDir string, paths []string, report func(status CopyWriteStatus, path string)) error {
+// RemoveManagedFiles deletes paths, files of the managed directory dir, the
+// project's middleware or interceptor directory, and then drops the Register
+// and RegisterAuth calls naming their top-level functions from the
+// registration file there, together with the framework import once nothing
+// there uses it: the calls would name functions the deleted files declared,
+// and an import left without a use is a compile error. Each deletion goes
+// to report as CopyWriteDelete, and the rewritten registration file as
+// CopyWriteUpdate. A file that is already gone counts as deleted,
+// unreported. The first failure stops it.
+func RemoveManagedFiles(dir string, paths []string, report func(status CopyWriteStatus, path string)) error {
+	md, err := managedDirOf(dir)
+	if err != nil {
+		return err
+	}
 	handlerNames := make(map[string]bool)
 	for _, path := range paths {
-		names, err := topLevelFunctionNames(path)
-		if err != nil {
-			return err
+		names, namesErr := topLevelFunctionNames(path)
+		if namesErr != nil {
+			return namesErr
 		}
 		for _, name := range names {
 			handlerNames[name] = true
 		}
-		safePath, removed, err := removeUnderRoot(path, middlewareDir)
-		if err != nil {
-			return err
+		safePath, removed, removeErr := removeUnderRoot(path, dir)
+		if removeErr != nil {
+			return removeErr
 		}
 		if removed {
 			report(CopyWriteDelete, safePath)
 		}
 	}
-	registration, changed, err := removeMiddlewareRegistrations(middlewareDir, handlerNames)
+	registration, changed, err := removeRegistrations(md, dir, handlerNames)
 	if err != nil || !changed {
 		return err
 	}
@@ -406,19 +465,19 @@ func RemoveMiddlewareFiles(middlewareDir string, paths []string, report func(sta
 	return nil
 }
 
-// removeMiddlewareRegistrations drops the middleware.Register and
-// middleware.RegisterAuth calls whose zero-argument handler constructors are
-// named in handlerNames from the registration file of middlewareDir, and
-// returns the file and whether it rewrote it. It edits only init functions,
-// mirrors the shape matching of ensureMiddlewareRegisterCall, and leaves the
-// registration file untouched when nothing matches. When the dropped calls
-// were the framework middleware import's last use, the import goes with them,
-// so the file still compiles.
-func removeMiddlewareRegistrations(middlewareDir string, handlerNames map[string]bool) (path string, changed bool, err error) {
+// removeRegistrations drops the Register and RegisterAuth calls, through the
+// framework package of md, whose zero-argument handler constructors are
+// named in handlerNames from the registration file of the managed directory
+// dir, and returns the file and whether it rewrote it. It edits only init
+// functions, mirrors the shape matching of ensureMiddlewareRegisterCall, and
+// leaves the registration file untouched when nothing matches. When the
+// dropped calls were the framework import's last use, the import goes with
+// them, so the file still compiles.
+func removeRegistrations(md managedDir, dir string, handlerNames map[string]bool) (path string, changed bool, err error) {
 	if len(handlerNames) == 0 {
 		return "", false, nil
 	}
-	targetPath := filepath.Join(middlewareDir, middlewareRegistrationFilename)
+	targetPath := filepath.Join(dir, md.registrationFile)
 	src, err := os.ReadFile(targetPath)
 	if os.IsNotExist(err) {
 		return "", false, nil
@@ -431,7 +490,7 @@ func removeMiddlewareRegistrations(middlewareDir string, handlerNames map[string
 	if err != nil {
 		return "", false, err
 	}
-	importAlias := frameworkMiddlewareImportAlias(file)
+	importAlias := frameworkImportAlias(file, md)
 	if importAlias == "" {
 		return "", false, nil
 	}
@@ -454,12 +513,12 @@ func removeMiddlewareRegistrations(middlewareDir string, handlerNames map[string
 	if !changed {
 		return "", false, nil
 	}
-	dropUnusedFrameworkMiddlewareImport(fset, file)
-	safePath, err := requirePathUnderRoot(targetPath, middlewareDir)
+	dropUnusedFrameworkImport(fset, file, md)
+	safePath, err := requirePathUnderRoot(targetPath, dir)
 	if err != nil {
 		return "", false, err
 	}
-	if err = writeGoFile(safePath, fset, file); err != nil { // #nosec G703 -- safePath validated under the middleware dir by requirePathUnderRoot
+	if err = writeGoFile(safePath, fset, file); err != nil { // #nosec G703 -- safePath validated under the managed dir by requirePathUnderRoot
 		return "", false, err
 	}
 	return safePath, true, nil
@@ -497,14 +556,17 @@ func parseMiddlewareRegisterCall(call *ast.CallExpr, importAlias string) (method
 	return sel.Sel.Name, handlerIdent.Name, true
 }
 
-func parseOrCreateMiddlewareRegistrationFile(path string) (*token.FileSet, *ast.File, bool, error) {
+// parseOrCreateRegistrationFile parses the registration file at path, or
+// starts one of package pkg when there is none.
+func parseOrCreateRegistrationFile(path, pkg string) (*token.FileSet, *ast.File, bool, error) {
 	fset := token.NewFileSet()
 	src, err := os.ReadFile(path)
 	if os.IsNotExist(err) {
-		// Older or hand-written projects may not have the template file. Creating
-		// a minimal package file lets the same AST path handle both new and
-		// existing projects without special string-concatenation output.
-		file, parseErr := parser.ParseFile(fset, path, []byte("package middleware\n"), parser.ParseComments)
+		// Older or hand-written projects may not have the template file, and
+		// no template writes the interceptor one. Creating a minimal package
+		// file lets the same AST path handle both new and existing projects
+		// without special string-concatenation output.
+		file, parseErr := parser.ParseFile(fset, path, []byte("package "+pkg+"\n"), parser.ParseComments)
 		return fset, file, false, parseErr
 	}
 	if err != nil {
@@ -514,31 +576,33 @@ func parseOrCreateMiddlewareRegistrationFile(path string) (*token.FileSet, *ast.
 	return fset, file, true, err
 }
 
-func frameworkMiddlewareImportAlias(file *ast.File) string {
+// frameworkImportAlias returns the name the registration file imports the
+// framework package of md under, "" when it does not import it.
+func frameworkImportAlias(file *ast.File, md managedDir) string {
 	for _, spec := range file.Imports {
 		path, err := strconv.Unquote(spec.Path.Value)
-		if err != nil || path != frameworkModulePath+"/middleware" {
+		if err != nil || path != md.importPath {
 			continue
 		}
-		// New registrations use the default middleware import. If a project
-		// already chose an alias manually, reuse it so module copy stays
-		// idempotent instead of adding a competing import for the same package.
+		// New registrations use the default import. If a project already
+		// chose an alias manually, reuse it so module copy stays idempotent
+		// instead of adding a competing import for the same package.
 		if spec.Name != nil && spec.Name.Name != "." && spec.Name.Name != "_" {
 			return spec.Name.Name
 		}
-		return "middleware"
+		return md.pkg
 	}
 	return ""
 }
 
-// dropUnusedFrameworkMiddlewareImport removes the framework middleware import
-// once no remaining code in the registration file refers to it. An import
-// left without a use is a compile error, and the registration file exists
-// only to hold register calls, so their last removal must take the import
-// too. Blank and dot imports are kept: UsesImport cannot see their use and
+// dropUnusedFrameworkImport removes the framework import of md once no
+// remaining code in the registration file refers to it. An import left
+// without a use is a compile error, and the registration file exists only
+// to hold register calls, so their last removal must take the import too.
+// Blank and dot imports are kept: UsesImport cannot see their use and
 // reports them as used.
-func dropUnusedFrameworkMiddlewareImport(fset *token.FileSet, file *ast.File) {
-	path := frameworkModulePath + "/middleware"
+func dropUnusedFrameworkImport(fset *token.FileSet, file *ast.File, md managedDir) {
+	path := md.importPath
 	if astutil.UsesImport(file, path) {
 		return
 	}

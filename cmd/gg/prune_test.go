@@ -614,7 +614,7 @@ func SampleAuth() any {
 				t.Errorf("%s should be kept when the middleware directory cannot be read: %v", path, statErr)
 			}
 		}
-		if !strings.Contains(stdout, "failed to read the middleware directory, so orphans are not checked") {
+		if !strings.Contains(stdout, "failed to read the middleware or interceptor directory, so orphans are not checked") {
 			t.Errorf("output lacks the warning about the unreadable middleware directory:\n%s", stdout)
 		}
 	})

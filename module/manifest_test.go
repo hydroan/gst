@@ -23,6 +23,7 @@ var manifestKnownKeys = map[string]bool{
 	"excludeSourceFiles": true,
 	"includeSourceFiles": true,
 	"middleware":         true,
+	"interceptors":       true,
 	"postNotes":          true,
 	"requiredAssembly":   true,
 }
@@ -42,6 +43,11 @@ type moduleManifest struct {
 			Scope      string `json:"scope"`
 			Handler    string `json:"handler"`
 		} `json:"middleware"`
+		Interceptors []struct {
+			SourceFile string `json:"sourceFile"`
+			Scope      string `json:"scope"`
+			Handler    string `json:"handler"`
+		} `json:"interceptors"`
 		RequiredAssembly []struct {
 			Import   string `json:"import"`
 			Function string `json:"function"`
@@ -92,6 +98,10 @@ func TestModuleManifestsMatchFrameworkTree(t *testing.T) {
 			for _, mw := range manifest.Copy.Middleware {
 				path := requireFrameworkFile(t, frameworkRoot, manifestPath, "middleware.sourceFile", mw.SourceFile)
 				requireExportedNiladicFunc(t, path, mw.Handler)
+			}
+			for _, ic := range manifest.Copy.Interceptors {
+				path := requireFrameworkFile(t, frameworkRoot, manifestPath, "interceptors.sourceFile", ic.SourceFile)
+				requireExportedNiladicFunc(t, path, ic.Handler)
 			}
 			for _, call := range manifest.Copy.RequiredAssembly {
 				requireFrameworkPackageFunc(t, frameworkRoot, manifestPath, call.Import, call.Function)

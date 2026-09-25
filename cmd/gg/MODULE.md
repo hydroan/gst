@@ -9,7 +9,7 @@
 | `gg module list` | 列出框架模块，以及每个模块支持哪种接入方式 | 不改任何文件 |
 | `gg module add <name>` | 在 `module/module.go` 里导入模块，并调用它的 `Register()` | `module/module.go` |
 | `gg module remove <name>` | 撤掉 `add` 写的导入和 `Register()` 调用 | `module/module.go` |
-| `gg module copy <name> [--force] [--yes]` | 把模块的 model、service、中间件源码复制进项目，并删掉模块源码里已经没有的过期文件 | `model/<name>/`、`service/<name>/`、`middleware/` 下的文件，`middleware/middleware.go`，以及 `gg gen` 重新生成的文件 |
+| `gg module copy <name> [--force] [--yes]` | 把模块的 model、service、中间件源码复制进项目，项目用 gRPC 时连同模块的 gRPC 拦截器，并删掉模块源码里已经没有的过期文件 | `model/<name>/`、`service/<name>/`、`middleware/` 下的文件，`middleware/middleware.go`，项目用 gRPC 时还有 `interceptor/` 下的文件和 `interceptor/interceptor.go`，以及 `gg gen` 重新生成的文件 |
 
 模块有两种接入方式，二选一：
 
@@ -42,13 +42,13 @@
 
 **生成文件**：`package` 语句之前有一行 `// Code generated ... DO NOT EDIT.` 的 Go 文件，例如 `gg gen` 生成的列引用文件。
 
-**所有权标记**：copy 写进 `middleware/` 的每个文件，第一行都是
+**所有权标记**：copy 写进 `middleware/` 和 `interceptor/` 的每个文件，第一行都是
 
 ```
 // Managed by gg module copy (module <name>). Removing the module removes this file.
 ```
 
-`middleware/` 里还放着项目自己的中间件和别的模块复制来的文件，只有带着本模块这行标记的文件，copy 才认作自己的，才可能删掉。整个模块被删掉之后，prune 也靠这行标记认出它留下的中间件文件，见「删除复制来的模块」。
+`middleware/`、`interceptor/` 里还放着项目自己的中间件、拦截器和别的模块复制来的文件，只有带着本模块这行标记的文件，copy 才认作自己的，才可能删掉。整个模块被删掉之后，prune 也靠这行标记认出它留下的中间件、拦截器文件，见「删除复制来的模块」。
 
 ## gg module list
 
@@ -131,6 +131,8 @@ partition "第 3 步：执行（出错不回滚）" {
   :写动作 service 文件、辅助文件;
   :写中间件文件，
   核对 middleware/middleware.go 的注册调用;
+  :项目用 gRPC 时写拦截器文件，
+  核对 interceptor/interceptor.go 的注册调用;
 }
 :打印 module.json 的 postNotes;
 stop
@@ -193,6 +195,10 @@ service 目录不是镜像复制，分两类文件。
 - 文件套用改写规则（中间件可以引用复制来的 model、service 包），再在最前面加上所有权标记。
 - **过期中间件文件**：见「过期文件」。
 
+#### 拦截器
+
+只复制 `module.json` 的 `interceptors` 里声明的文件，规则和中间件一样：源文件必须是框架 `interceptor/` 下的非测试 Go 文件，目标固定是项目 `interceptor/` 下的同名文件；`handler` 是源文件里一个不带参数的顶层函数，`scope` 为 `global` 时注册成 `interceptor.Register(<handler>())`，为 `auth` 时注册成 `interceptor.RegisterAuth(<handler>())`，写进 `interceptor/interceptor.go`；文件同样套用改写规则并加上所有权标记。只有一条不同：**只在项目至少有一个声明了 `GRPC()` 的 model 时才复制**。没有 gRPC 的项目看不到任何拦截器代码；项目后来去掉了全部 `GRPC()`，本模块以前复制来的拦截器文件就算过期文件，下次 copy 时删掉。
+
 #### 改写规则
 
 复制的每个文件都不是原样照搬：
@@ -216,7 +222,7 @@ service 目录不是镜像复制，分两类文件。
 写任何文件之前，先记下项目当前 gg check 的全部违规，作为基线。然后按顺序：
 
 1. **写 model 文件**（`Copy Model Files`）。
-2. **删过期文件**（`Prune Stale Files`，有过期文件时才有这一段）：删过期的 model、service 文件；删过期的中间件文件，同时从 `middleware/middleware.go` 删掉调用这些文件里函数的 `Register`、`RegisterAuth` 语句，框架 middleware 包的导入没人用了也一并删掉。已经不在的文件算删过。这一步放在 `gg gen` 之前，因为过期的 model 文件还带着 DSL，`gg gen` 会照样为它生成注册代码。
+2. **删过期文件**（`Prune Stale Files`，有过期文件时才有这一段）：删过期的 model、service 文件；删过期的中间件文件，同时从 `middleware/middleware.go` 删掉调用这些文件里函数的 `Register`、`RegisterAuth` 语句，框架 middleware 包的导入没人用了也一并删掉；过期的拦截器文件同理，注册调用从 `interceptor/interceptor.go` 删。已经不在的文件算删过。这一步放在 `gg gen` 之前，因为过期的 model 文件还带着 DSL，`gg gen` 会照样为它生成注册代码。
 3. **运行 gg gen**：和 `gg gen` 同一套生成流程，但不打印生成文件的日志，不做 prune；生成前的项目检查只拦本次 copy 新引入的违规，基线里已有的不拦。
 4. **写动作 service 文件**（`Copy Service Files`）。
 5. **写辅助文件**（`Copy Helper Files`，有辅助文件时才有）。
@@ -226,6 +232,8 @@ service 目录不是镜像复制，分两类文件。
    - 每个声明的组合都确保有一条注册调用。
    - 不属于本模块的 handler 的调用一律不碰。
    - 文件不存在时新建一个只有 `package middleware` 的文件；文件里已经导入了框架 middleware 包时沿用它的别名；没有任何变化时不写文件。
+8. **写拦截器文件**（`Copy Interceptor Files`，模块声明了拦截器且项目用 gRPC 时才有）。
+9. **核对拦截器注册**（`Register Interceptors`），规则同第 7 步，文件是 `interceptor/interceptor.go`，注册走框架 interceptor 包。
 
 全部成功后打印 `Done`、`Module copied successfully`、删除模块的提示（见「删除复制来的模块」），最后逐行打印 `module.json` 的 `postNotes`。
 
@@ -250,6 +258,7 @@ copy 让复制来的目录和模块源码保持一致：旧版本 copy 写过、
 
 - **`model/<name>/`、`service/<name>/`**：这两个目录镜像模块源码，这次规划不写的 Go 文件都算过期。例外：测试文件、以 `.` 开头的文件、`vendor/` 和 `testdata/` 目录下的文件，以及生成文件，永远不算过期。项目自己的代码应放在这两个目录以外。
 - **`middleware/`**：这个目录是共用的，只有带着本模块所有权标记、而 `module.json` 已经不再声明的文件才算过期；`middleware/middleware.go` 永远不算。
+- **`interceptor/`**：判断同 `middleware/`；此外项目不再有声明了 `GRPC()` 的 model 时，本模块标记的拦截器文件全部算过期；`interceptor/interceptor.go` 永远不算。
 
 ```plantuml
 @startuml
@@ -303,6 +312,7 @@ stop
 | `excludeSourceFiles` | copy 完全跳过的源文件：不复制，也不参与 model 和动作的规划。被排除的动作 service 文件，它的动作也不复制；项目里以前复制过的这类文件算过期文件。被复制的代码还引用着它时报错 | 路径安全 |
 | `includeSourceFiles` | 即使没有动作引用，也必须作为辅助文件复制的文件，给只被项目自己的装配代码调用的钩子实现用 | 必须在 `internal/service/<name>/` 下、存在、不是测试文件、没被排除、没有声明 service 结构体 |
 | `middleware` | 要复制的中间件，每项有 `sourceFile`、`scope`、`handler`，见「中间件」 | `sourceFile` 必须是 `middleware/*.go` 的非测试文件；`scope` 只能是 `global` 或 `auth`；`handler` 必须是合法的 Go 标识符，并且是源文件里一个不带参数的顶层函数 |
+| `interceptors` | 要复制的 gRPC 拦截器，每项同 `middleware`，见「拦截器」；只复制进用 gRPC 的项目 | `sourceFile` 必须是 `interceptor/*.go` 的非测试文件，其余同 `middleware` |
 | `requiredAssembly` | copy 之后项目必须自己写的调用，每项有 `import`、`function`、`reason`。gg check 的「Module assembly」检查项据此要求项目在非测试代码里调用它们 | 三个字段都不能为空；`function` 必须是导出的 Go 标识符 |
 | `postNotes` | copy 成功后逐行打印的提示，写 copy 自动化不了的后续步骤 | 去掉首尾空白，空行丢弃 |
 
@@ -314,7 +324,7 @@ copy 成功结束时，以及执行中途在写入或删除文件之后出错时
 To remove copied module code, delete model/<name>, then run: gg gen --prune
 ```
 
-删掉 `model/<name>/` 后，模块的动作不再存在，`gg gen --prune` 会把对应的 service 文件、孤儿目录，以及这个模块复制来、成了孤儿的中间件文件一次列出来，你确认后一起删掉，`middleware/middleware.go` 里它们的注册调用一并删掉。清理规则见 [PRUNE.md](PRUNE.md)。
+删掉 `model/<name>/` 后，模块的动作不再存在，`gg gen --prune` 会把对应的 service 文件、孤儿目录，以及这个模块复制来、成了孤儿的中间件、拦截器文件一次列出来，你确认后一起删掉，`middleware/middleware.go`、`interceptor/interceptor.go` 里它们的注册调用一并删掉。清理规则见 [PRUNE.md](PRUNE.md)。
 
 ## 终端输出的段落标题
 
@@ -322,11 +332,13 @@ To remove copied module code, delete model/<name>, then run: gg gen --prune
 | --- | --- |
 | `Framework Modules` | `gg module list` |
 | `Module Copy Plan` | copy 的预览，列出要写的文件 |
-| `Stale Target Model Files`、`Stale Target Service Files`、`Stale Target Middleware Files` | 预览中有对应的过期文件要删 |
+| `Stale Target Model Files`、`Stale Target Service Files`、`Stale Target Middleware Files`、`Stale Target Interceptor Files` | 预览中有对应的过期文件要删 |
 | `Copy Model Files` | 执行第 1 步 |
 | `Prune Stale Files` | 执行第 2 步，有过期文件时 |
 | `Copy Service Files` | 执行第 4 步 |
 | `Copy Helper Files` | 执行第 5 步，有辅助文件时 |
 | `Copy Middleware Files` | 执行第 6 步，模块声明了中间件时 |
 | `Register Middleware` | 执行第 7 步，模块声明了中间件时 |
+| `Copy Interceptor Files` | 执行第 8 步，模块声明了拦截器且项目用 gRPC 时 |
+| `Register Interceptors` | 执行第 9 步，同上 |
 | `Done` | copy 全部成功 |

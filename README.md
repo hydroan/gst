@@ -97,7 +97,7 @@ git init
    （骨架被换掉之前 `go test` 会失败）。
 4. 使用 `gg check` 检查项目结构和依赖边界。
 5. 删除 model 或关闭 action 后，运行 `gg prune` 或 `gg gen --prune` 清理 model
-   不再需要的文件；它们只动 `service/`、`middleware/` 和 `pb/`。
+   不再需要的文件；它们只动 `service/`、`middleware/`、`interceptor/` 和 `pb/`。
 
 ## 模型 DSL
 
@@ -917,9 +917,9 @@ func init() {
 | `gg gen` | 根据 `model` DSL 生成注册文件、service action 文件和它们的测试骨架 |
 | `gg gen --prune` | 生成后联动清理 model 不再需要的文件，和 `gg prune` 相同 |
 | `gg gen ts` | 生成接口收发类型的 TypeScript 声明到 `generated/typescript/`，供前端复制使用 |
-| `gg module copy <name>` | 将内置模块复制为业务项目本地源码，并删除框架源已移除的过时 model/service 文件（`_test.go` 与生成文件除外）；`gg module` 各子命令的完整规则见 [cmd/gg/MODULE.md](cmd/gg/MODULE.md) |
+| `gg module copy <name>` | 将内置模块复制为业务项目本地源码（model、service、中间件，项目用 gRPC 时还有模块的 gRPC 拦截器），并删除框架源已移除的过时 model/service 文件（`_test.go` 与生成文件除外）；`gg module` 各子命令的完整规则见 [cmd/gg/MODULE.md](cmd/gg/MODULE.md) |
 | `gg check` | 检查业务项目结构、命名、依赖边界和 tag 约束 |
-| `gg prune` | 清理 model 不再需要的文件，只动 `service/`、`middleware/` 和 `pb/`，删前问一次 |
+| `gg prune` | 清理 model 不再需要的文件，只动 `service/`、`middleware/`、`interceptor/` 和 `pb/`，删前问一次 |
 | `gg routes` | 按 model 层级打印当前生成的接口路径 |
 | `gg route-tree` | 按 URL 层级打印当前生成的路由树 |
 | `gg migrate` | 生成当前数据库方言的 schema，预览并按确认执行数据库迁移 |
@@ -1012,9 +1012,9 @@ gen:
 - 忽略不影响 model 的 `Migrate` 注册：表结构照常创建，模块内部逻辑
   （如登录查询用户表）不受影响。
 
-**`gg prune`（以及 `gg gen --prune`）只动 `service/`、`middleware/` 和 `pb/` 三个目录**，
+**`gg prune`（以及 `gg gen --prune`）只动 `service/`、`middleware/`、`interceptor/` 和 `pb/` 四个目录**，
 项目其他地方一个文件都不删、不改。它清理停用 action 的 service 文件连同配对的测试
-文件、孤儿 service 目录、被删掉的复制模块留下的中间件文件，以及 `pb/` 下这次
+文件、孤儿 service 目录、被删掉的复制模块留下的中间件和 gRPC 拦截器文件，以及 `pb/` 下这次
 `gg gen` 不会再写出的 `.proto` 文件和由它们编出来的 `.pb.go`、`_grpc.pb.go` 文件
 （model 去掉 `GRPC()`、model 被删或改了路径之后留下的），要删的先一次列出、问一次再删；
 `prune.ignore` 列出的路径一律跳过：
@@ -1028,17 +1028,17 @@ prune:
     - service/record/list.go   # 只保护这一个文件
 ```
 
-- 每项是 `service/`、`middleware/` 或 `pb/` 下的一个路径（相对项目根目录），按目录层级匹配：
+- 每项是 `service/`、`middleware/`、`interceptor/` 或 `pb/` 下的一个路径（相对项目根目录），按目录层级匹配：
   `service/legacy` 覆盖该目录及其下全部内容，但不覆盖 `service/legacyx`；
   写到具体文件就只保护这一个文件。它不是通配符，也不是正则。
 - 列出的路径在任何情况下都不会被删：停用 action 的 service 文件及其配对测试文件、
-  孤儿目录里的文件、清理后变空的目录、被删掉的复制模块留下的中间件文件、过期的
-  protobuf 文件都算。
+  孤儿目录里的文件、清理后变空的目录、被删掉的复制模块留下的中间件和拦截器文件、
+  过期的 protobuf 文件都算。
 - 要保留的路径只能写进 `prune.ignore`：`service/` 和 `pb/` 归 gg 管，要保持干净，项目
   的 Git 忽略规则和 Go 工具链的内置忽略不保护任何路径。被 Git 忽略的文件、
   `testdata`、以 `_` 开头的目录等和其他路径一样按规则清理；这些位置里的代码
   也不算在用 service 目录，不会让它们留下来。
-- 不在 `service/`、`middleware/` 或 `pb/` 下、写法不规整或重复的条目直接报错；指向不存在路径的条目
+- 不在 `service/`、`middleware/`、`interceptor/` 或 `pb/` 下、写法不规整或重复的条目直接报错；指向不存在路径的条目
   在 prune 时输出 warning。
 - `gg` 只读取 `gst.yaml`，项目里如果还有 `.gg.yaml`、`gst.yml` 这类同类
   文件，会输出 warning 提示它们不会被读取。

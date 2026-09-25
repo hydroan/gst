@@ -121,6 +121,8 @@ linters:
             - "!**/internal/service/**"
             - "!**/middleware/iam_session.go"
             - "!**/middleware/authz.go"
+            - "!**/interceptor/iam_session.go"
+            - "!**/interceptor/authz.go"
             - "!**/module/helloworld/**"
           deny:
             - pkg: "github.com/hydroan/gst$"

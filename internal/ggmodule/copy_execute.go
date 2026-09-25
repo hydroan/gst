@@ -2,7 +2,11 @@ package ggmodule
 
 import (
 	"fmt"
+	"go/ast"
+	"go/parser"
+	"go/token"
 	"os"
+	"path/filepath"
 
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/internal/gghelper"
@@ -40,7 +44,8 @@ type CopyExecution struct {
 // Run applies the copy in the required order: model source first, stale-file
 // prune second, gg gen third, service/helper business logic fourth, and
 // manifest-declared middleware files plus their registration in
-// middleware/middleware.go last.
+// middleware/middleware.go, and the interceptor files of a project serving
+// gRPC plus their registration in interceptor/interceptor.go, last.
 // It does not roll back partial writes or deletes; the command prints the
 // cleanup path when a failure happens after the project was touched.
 func (e *CopyExecution) Run() error {
@@ -93,31 +98,52 @@ func (e *CopyExecution) Run() error {
 	}
 
 	if len(e.Plan.Middleware) > 0 {
-		e.section("Copy Middleware Files")
-		// Snapshot module-owned handler names before the writes below replace
-		// the old file contents; reconciliation needs them to retire register
-		// calls of renamed handlers.
-		obsoleteHandlers, err := e.middlewareHandlersOnDisk()
-		if err != nil {
+		if err := e.copyHandlers("Copy Middleware Files", "Register Middleware", middlewareManagedDir, e.Plan.TargetMiddlewareDir, e.Plan.Middleware, moduleCopyFileMiddleware); err != nil {
 			return err
 		}
-		for _, file := range e.Plan.Files {
-			if file.Kind != moduleCopyFileMiddleware {
-				continue
-			}
-			if writeErr := e.write(file); writeErr != nil {
-				return writeErr
-			}
-		}
-
-		e.section("Register Middleware")
-		status, path, err := e.reconcileMiddlewareRegistrations(obsoleteHandlers)
-		if err != nil {
+	}
+	if len(e.Plan.Interceptors) > 0 {
+		if err := e.copyHandlers("Copy Interceptor Files", "Register Interceptors", interceptorManagedDir, e.Plan.TargetInterceptorDir, e.Plan.Interceptors, moduleCopyFileInterceptor); err != nil {
 			return err
 		}
-		e.file(status, path)
+		// The interceptor package may have just come into being, and main.go
+		// imports it only when it exists (see gggen.BuildMainFile), so the
+		// code is generated once more now that it does.
+		if err := e.RunGen(); err != nil {
+			return err
+		}
 	}
 
+	return nil
+}
+
+// copyHandlers writes the handler files items of kind into the managed
+// directory targetDir and reconciles their registrations there, under the
+// two section titles.
+func (e *CopyExecution) copyHandlers(copyTitle, registerTitle string, md managedDir, targetDir string, items []moduleCopyMiddleware, kind moduleCopyFileKind) error {
+	e.section(copyTitle)
+	// Snapshot module-owned handler names before the writes below replace
+	// the old file contents; reconciliation needs them to retire register
+	// calls of renamed handlers.
+	obsoleteHandlers, err := e.handlersOnDisk(items)
+	if err != nil {
+		return err
+	}
+	for _, file := range e.Plan.Files {
+		if file.Kind != kind {
+			continue
+		}
+		if writeErr := e.write(file); writeErr != nil {
+			return writeErr
+		}
+	}
+
+	e.section(registerTitle)
+	status, path, err := e.reconcileRegistrations(md, targetDir, items, obsoleteHandlers)
+	if err != nil {
+		return err
+	}
+	e.file(status, path)
 	return nil
 }
 
@@ -145,7 +171,8 @@ func (e *CopyExecution) pruneStaleFiles() error {
 	staleModelFiles := e.Plan.StaleModelTargets()
 	staleServiceFiles := e.Plan.StaleServiceTargets()
 	staleMiddlewareFiles := e.Plan.StaleMiddlewareTargets()
-	if len(staleModelFiles) == 0 && len(staleServiceFiles) == 0 && len(staleMiddlewareFiles) == 0 {
+	staleInterceptorFiles := e.Plan.StaleInterceptorTargets()
+	if len(staleModelFiles) == 0 && len(staleServiceFiles) == 0 && len(staleMiddlewareFiles) == 0 && len(staleInterceptorFiles) == 0 {
 		return nil
 	}
 
@@ -163,7 +190,59 @@ func (e *CopyExecution) pruneStaleFiles() error {
 			}
 		}
 	}
-	return RemoveMiddlewareFiles(e.Plan.TargetMiddlewareDir, staleMiddlewareFiles, e.recordPrune)
+	if len(staleMiddlewareFiles) > 0 {
+		if err := RemoveManagedFiles(e.Plan.TargetMiddlewareDir, staleMiddlewareFiles, e.recordPrune); err != nil {
+			return err
+		}
+	}
+	if len(staleInterceptorFiles) > 0 {
+		if err := RemoveManagedFiles(e.Plan.TargetInterceptorDir, staleInterceptorFiles, e.recordPrune); err != nil {
+			return err
+		}
+		if !e.Plan.ServesGRPC {
+			return e.removeEmptyRegistration(e.Plan.TargetInterceptorDir, interceptorManagedDir)
+		}
+	}
+	return nil
+}
+
+// removeEmptyRegistration deletes the registration file of the managed
+// directory dir, and the directory with it, once nothing is left there: the
+// project no longer serves gRPC, its last module interceptor is gone, and
+// the file registers nothing — so a project without gRPC holds no gRPC code
+// at all. A registration file with an import or a statement left, or any
+// other file beside it, is the project's and stays.
+func (e *CopyExecution) removeEmptyRegistration(dir string, md managedDir) error {
+	files, err := goFilesInPackageDir(dir)
+	if err != nil || len(files) != 1 || filepath.Base(files[0]) != md.registrationFile {
+		return err
+	}
+	file, err := parser.ParseFile(token.NewFileSet(), files[0], nil, parser.ParseComments)
+	if err != nil {
+		return err
+	}
+	if len(file.Imports) > 0 {
+		return nil
+	}
+	for _, decl := range file.Decls {
+		fn, ok := decl.(*ast.FuncDecl)
+		if !ok || fn.Recv != nil || fn.Name == nil || fn.Name.Name != "init" || (fn.Body != nil && len(fn.Body.List) > 0) {
+			return nil
+		}
+	}
+	safePath, removed, err := removeUnderRoot(files[0], dir)
+	if err != nil {
+		return err
+	}
+	if removed {
+		e.recordPrune(CopyWriteDelete, safePath)
+	}
+	if entries, readErr := os.ReadDir(dir); readErr == nil && len(entries) == 0 {
+		if removeErr := os.Remove(dir); removeErr == nil {
+			e.recordPrune(CopyWriteDelete, dir)
+		}
+	}
+	return nil
 }
 
 // remove deletes one stale file after the same path-traversal check writes go
@@ -207,6 +286,13 @@ func (e *CopyExecution) write(file moduleCopyFile) error {
 	}
 	if file.Kind == moduleCopyFileMiddleware {
 		safePath, err := requirePathUnderRoot(file.TargetPath, e.Plan.TargetMiddlewareDir)
+		if err != nil {
+			return err
+		}
+		file.TargetPath = safePath
+	}
+	if file.Kind == moduleCopyFileInterceptor {
+		safePath, err := requirePathUnderRoot(file.TargetPath, e.Plan.TargetInterceptorDir)
 		if err != nil {
 			return err
 		}

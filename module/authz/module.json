@@ -8,6 +8,13 @@
         "handler": "Authz"
       }
     ],
+    "interceptors": [
+      {
+        "sourceFile": "interceptor/authz.go",
+        "scope": "auth",
+        "handler": "Authz"
+      }
+    ],
     "postNotes": [
       "Copy mode registers middleware.Authz() without arguments.",
       "Copied authz reads consts.CTX_TENANT_ID from earlier middleware by default; call middleware.SetAuthzTenantResolver(...) before serving requests when the project uses another tenant source.",

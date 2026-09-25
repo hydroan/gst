@@ -7,6 +7,7 @@ import (
 	"go/token"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"github.com/cockroachdb/errors"
@@ -255,7 +256,7 @@ func genRunWithOptions(opts genRunOptions) error {
 	}
 
 	// generate main.go
-	mainCode, err := gggen.BuildMainFile(module)
+	mainCode, err := gggen.BuildMainFile(module, optionalImportDirs()...)
 	if err != nil {
 		return errors.Wrap(err, "build main.go")
 	}
@@ -438,6 +439,22 @@ type scannedModels struct {
 	routeIgnores modelinfo.RouteIgnoreResult
 	// pruneConfig holds the gst.yaml prune settings gg gen --prune applies.
 	pruneConfig ggconfig.PruneConfig
+}
+
+// optionalImportDirs lists the project packages main.go imports only when
+// they exist, beside the standard ones every project has: the interceptor
+// package, which a project serving gRPC holds its interceptors in. A
+// directory counts once it holds a Go source file; test files alone make no
+// package to import.
+func optionalImportDirs() []string {
+	var dirs []string
+	for _, dir := range []string{ggconst.DirInterceptor} {
+		files, _ := filepath.Glob(filepath.Join(dir, "*.go"))
+		if slices.ContainsFunc(files, func(path string) bool { return !strings.HasSuffix(path, "_test.go") }) {
+			dirs = append(dirs, dir)
+		}
+	}
+	return dirs
 }
 
 // protobufFiles renders the .proto files of the models declaring GRPC()

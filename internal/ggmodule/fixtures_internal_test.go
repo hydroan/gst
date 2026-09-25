@@ -134,6 +134,7 @@ type Empty struct{}
 	}
 	if err := os.WriteFile(filepath.Join(frameworkRoot, "dsl", "dsl.go"), []byte(`package dsl
 
+func GRPC() {}
 func Route(string, func()) {}
 func Create(func()) {}
 func List(func()) {}

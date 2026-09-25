@@ -225,9 +225,11 @@ func printModuleCopyPlan(plan *ggmodule.CopyPlan) {
 	printModuleCopyPlanGroup("Service files", plan.ServiceTargets())
 	printModuleCopyPlanGroup("Helper files", plan.HelperTargets())
 	printModuleCopyPlanGroup("Middleware files", plan.MiddlewareTargets())
+	printModuleCopyPlanGroup("Interceptor files", plan.InterceptorTargets())
 	printModuleCopyStaleModelFiles(plan)
 	printModuleCopyStaleServiceFiles(plan)
 	printModuleCopyStaleMiddlewareFiles(plan)
+	printModuleCopyStaleInterceptorFiles(plan)
 }
 
 func printModuleCopyPlanGroup(title string, files []string) {
@@ -296,6 +298,25 @@ func printModuleCopyStaleMiddlewareFiles(plan *ggmodule.CopyPlan) {
 		clioutput.Item("", "%s", file)
 	}
 	clioutput.Item("", "These files will be deleted together with their register calls in middleware/middleware.go, and the framework middleware import once nothing there uses it")
+}
+
+// printModuleCopyStaleInterceptorFiles previews the module-owned interceptor
+// files the copy execution will delete along with their register calls and,
+// once unused, the framework interceptor import, under the same consent
+// contract as printModuleCopyStaleModelFiles: the ones the manifest no
+// longer declares, or all of them once the project no longer serves gRPC.
+func printModuleCopyStaleInterceptorFiles(plan *ggmodule.CopyPlan) {
+	staleInterceptorFiles := plan.StaleInterceptorTargets()
+	if len(staleInterceptorFiles) == 0 {
+		return
+	}
+
+	clioutput.Section("Stale Target Interceptor Files")
+	clioutput.Warn("", "The interceptor directory contains files owned by this module's copy but no longer written by it: not declared by the module manifest, or the project no longer serves gRPC")
+	for _, file := range staleInterceptorFiles {
+		clioutput.Item("", "%s", file)
+	}
+	clioutput.Item("", "These files will be deleted together with their register calls in interceptor/interceptor.go, and the framework interceptor import once nothing there uses it")
 }
 
 func printModuleCopyPostNotes(notes []string) {

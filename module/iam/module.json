@@ -8,6 +8,13 @@
         "handler": "IAMSession"
       }
     ],
+    "interceptors": [
+      {
+        "sourceFile": "interceptor/iam_session.go",
+        "scope": "auth",
+        "handler": "IAMSession"
+      }
+    ],
     "postNotes": [
       "Copy mode registers middleware.IAMSession() without arguments.",
       "Set IAM_SESSION_EXPIRATION, for example 30m or 24h, to override the default session lifetime without editing copied code.",

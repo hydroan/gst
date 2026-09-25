@@ -120,8 +120,9 @@ func Load(dir string) (*Config, error) {
 }
 
 // validatePruneIgnore cleans every prune.ignore entry in place and rejects an
-// entry that is not a clean relative path, lies outside service/, middleware/
-// and pb/, the directories gg prune deletes from, or repeats another entry.
+// entry that is not a clean relative path, lies outside service/, middleware/,
+// interceptor/ and pb/, the directories gg prune deletes from, or repeats
+// another entry.
 func validatePruneIgnore(c *PruneConfig) error {
 	seen := make(map[string]bool, len(c.Ignore))
 	for i, entry := range c.Ignore {
@@ -129,8 +130,8 @@ func validatePruneIgnore(c *PruneConfig) error {
 		if !ok {
 			return errors.Newf("entry %q: want a relative path like \"%s/sample\"", entry, ggconst.DirService)
 		}
-		if !underPath(ggconst.DirService, cleaned) && !underPath(ggconst.DirMiddleware, cleaned) && !underPath(ggconst.DirPB, cleaned) {
-			return errors.Newf("entry %q is outside %s/, %s/ and %s/, the directories gg prune deletes from", entry, ggconst.DirService, ggconst.DirMiddleware, ggconst.DirPB)
+		if !underPath(ggconst.DirService, cleaned) && !underPath(ggconst.DirMiddleware, cleaned) && !underPath(ggconst.DirInterceptor, cleaned) && !underPath(ggconst.DirPB, cleaned) {
+			return errors.Newf("entry %q is outside %s/, %s/, %s/ and %s/, the directories gg prune deletes from", entry, ggconst.DirService, ggconst.DirMiddleware, ggconst.DirInterceptor, ggconst.DirPB)
 		}
 		if seen[cleaned] {
 			return errors.Newf("entry %q is listed twice", entry)

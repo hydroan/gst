@@ -8,7 +8,6 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/gin-gonic/gin"
 	"github.com/hydroan/gst/consts"
-	modeliamsession "github.com/hydroan/gst/internal/model/iam/session"
 	serviceiamsession "github.com/hydroan/gst/internal/service/iam/session"
 	"github.com/hydroan/gst/requestctx"
 	"github.com/hydroan/gst/response"
@@ -16,28 +15,6 @@ import (
 	"github.com/mssola/useragent"
 	"go.uber.org/zap"
 )
-
-// sessionRequiresPasswordChange reads the flag stored on the session snapshot.
-func sessionRequiresPasswordChange(session modeliamsession.Session) bool {
-	return session.MustChangePassword
-}
-
-// mustChangePasswordExempt reports whether the request may proceed while
-// MustChangePassword is true on the session.
-func mustChangePasswordExempt(method, path string) bool {
-	switch {
-	case method == http.MethodPost && path == "/api/iam/change-password":
-		return true
-	case method == http.MethodPost && path == "/api/logout":
-		return true
-	case method == http.MethodGet && path == "/api/iam/session/current":
-		return true
-	case method == http.MethodDelete && path == "/api/iam/session/current":
-		return true
-	default:
-		return false
-	}
-}
 
 // abortInvalidSession refuses the request with one fixed message and keeps the
 // reason in the log.
@@ -75,12 +52,12 @@ func IAMSession() gin.HandlerFunc {
 		// calling, and it publishes that onto the gin context only once every
 		// check below has passed.
 		ctx := requestctx.WithGinMetadata(c)
-		session, e := serviceiamsession.Store.LoadSession(ctx, sessionID)
+		current, e := serviceiamsession.Store.LoadSession(ctx, sessionID)
 		if e != nil {
 			abortInvalidSession(c, e.Error())
 			return
 		}
-		if err = serviceiamsession.ValidateSession(sessionID, session); err != nil {
+		if err = serviceiamsession.ValidateSession(sessionID, current); err != nil {
 			_, _ = serviceiamsession.Store.DeleteSession(ctx, sessionID)
 			abortInvalidSession(c, err.Error())
 			return
@@ -90,24 +67,24 @@ func IAMSession() gin.HandlerFunc {
 		ua := useragent.New(c.Request.UserAgent())
 		engineName, _ := ua.Engine()
 		browserName, _ := ua.Browser()
-		if session.OS != ua.OS() {
+		if current.OS != ua.OS() {
 			abortInvalidSession(c, "os mismatch")
 			return
 		}
-		if session.Platform != ua.Platform() {
+		if current.Platform != ua.Platform() {
 			abortInvalidSession(c, "platform mismatch")
 			return
 		}
-		if engineName != session.EngineName {
+		if engineName != current.EngineName {
 			abortInvalidSession(c, "engine mismatch")
 			return
 		}
-		if browserName != session.BrowserName {
+		if browserName != current.BrowserName {
 			abortInvalidSession(c, "browser mismatch")
 			return
 		}
 
-		if session, err = serviceiamsession.ValidateSessionUserState(ctx, session); err != nil {
+		if current, err = serviceiamsession.ValidateSessionUserState(ctx, current); err != nil {
 			_, _ = serviceiamsession.Store.DeleteSession(ctx, sessionID)
 			// A service error carries a status and a message written for the
 			// client. Anything else is an internal failure whose text belongs
@@ -121,19 +98,19 @@ func IAMSession() gin.HandlerFunc {
 			return
 		}
 
-		if sessionRequiresPasswordChange(session) && !mustChangePasswordExempt(c.Request.Method, c.Request.URL.Path) {
+		if current.MustChangePassword && !serviceiamsession.MustChangePasswordExempt(c.Request.Method, c.Request.URL.Path) {
 			response.Abort(c, http.StatusForbidden, "password change required before using this resource")
 			return
 		}
 
-		if err = serviceiamsession.Store.TouchSession(ctx, sessionID, session, time.Now()); err != nil {
+		if err = serviceiamsession.Store.TouchSession(ctx, sessionID, current, time.Now()); err != nil {
 			zap.S().Warnw("failed to touch iam session", "session_id", sessionID, "error", err)
 		}
 
-		c.Request = c.Request.WithContext(serviceiamsession.WithCurrentSession(ctx, sessionID, session))
-		c.Set(consts.CTX_USER_ID, session.UserID)
-		c.Set(consts.CTX_USERNAME, session.Username)
+		c.Request = c.Request.WithContext(serviceiamsession.WithCurrentSession(ctx, sessionID, current))
+		c.Set(consts.CTX_USER_ID, current.UserID)
+		c.Set(consts.CTX_USERNAME, current.Username)
 		c.Set(consts.CTX_SESSION_ID, sessionID)
-		c.Set(consts.CTX_TENANT_ID, session.TenantID)
+		c.Set(consts.CTX_TENANT_ID, current.TenantID)
 	}
 }

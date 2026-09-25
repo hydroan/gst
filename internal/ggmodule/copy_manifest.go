@@ -29,6 +29,10 @@ type moduleCopyManifest struct {
 	// as a login second-factor verifier or a login observer.
 	IncludeSourceFiles []string                       `json:"includeSourceFiles"`
 	Middleware         []moduleCopyMiddlewareManifest `json:"middleware"`
+	// Interceptors are the module's gRPC interceptors, declared like its
+	// middleware and copied into the project's interceptor directory, into a
+	// project serving gRPC alone: one with a model declaring GRPC().
+	Interceptors []moduleCopyMiddlewareManifest `json:"interceptors"`
 	// RequiredAssembly lists the framework calls a copied module needs the
 	// project to make, because copy reproduces routes, models and middleware
 	// but not the rest of the module's Register body. Declaring a call here
@@ -95,11 +99,16 @@ func loadModuleManifest(moduleDir string) (moduleManifest, error) {
 		return moduleManifest{}, fmt.Errorf("parse %s: %w", path, includeErr)
 	}
 	manifest.Copy.IncludeSourceFiles = includeSourceFiles
-	middleware, middlewareErr := cleanModuleCopyMiddleware(manifest.Copy.Middleware)
+	middleware, middlewareErr := cleanModuleCopyHandlers("middleware", manifest.Copy.Middleware)
 	if middlewareErr != nil {
 		return moduleManifest{}, fmt.Errorf("parse %s: %w", path, middlewareErr)
 	}
 	manifest.Copy.Middleware = middleware
+	interceptors, interceptorsErr := cleanModuleCopyHandlers("interceptors", manifest.Copy.Interceptors)
+	if interceptorsErr != nil {
+		return moduleManifest{}, fmt.Errorf("parse %s: %w", path, interceptorsErr)
+	}
+	manifest.Copy.Interceptors = interceptors
 	assembly, assemblyErr := cleanModuleCopyAssembly(manifest.Copy.RequiredAssembly)
 	if assemblyErr != nil {
 		return moduleManifest{}, fmt.Errorf("parse %s: %w", path, assemblyErr)
@@ -135,29 +144,35 @@ func cleanModuleCopySourceFiles(field string, values []string) ([]string, error)
 	return cleaned, nil
 }
 
-func cleanModuleCopyMiddleware(values []moduleCopyMiddlewareManifest) ([]moduleCopyMiddlewareManifest, error) {
+// cleanModuleCopyHandlers validates the handler entries of the manifest
+// field named field, "middleware" or "interceptors", whose source files
+// must lie in the framework directory of the same kind: middleware/*.go for
+// the middleware, interceptor/*.go for the interceptors.
+func cleanModuleCopyHandlers(field string, values []moduleCopyMiddlewareManifest) ([]moduleCopyMiddlewareManifest, error) {
+	sourceDir := map[string]string{"middleware": middlewareManagedDir.pkg, "interceptors": interceptorManagedDir.pkg}[field]
 	cleaned := make([]moduleCopyMiddlewareManifest, 0, len(values))
 	for i, value := range values {
 		sourceFile, err := cleanModuleCopyRelativePath(value.SourceFile)
 		if err != nil || sourceFile == "" {
-			return nil, fmt.Errorf("middleware[%d].sourceFile contains unsafe framework-root relative path %q", i, value.SourceFile)
+			return nil, fmt.Errorf("%s[%d].sourceFile contains unsafe framework-root relative path %q", field, i, value.SourceFile)
 		}
-		// Keep middleware copy intentionally narrow: sources must come from the
-		// framework middleware package and targets always land in the project
-		// middleware package with the same filename. That avoids hidden copy-time
-		// routing rules in copytest/register.go or arbitrary manifest target paths.
-		if pathpkg.Dir(sourceFile) != "middleware" || !strings.HasSuffix(pathpkg.Base(sourceFile), ".go") || strings.HasSuffix(pathpkg.Base(sourceFile), "_test.go") {
-			return nil, fmt.Errorf("middleware[%d].sourceFile must match middleware/*.go: %s", i, sourceFile)
+		// Keep the copy intentionally narrow: sources must come from the
+		// framework package of the kind and targets always land in the
+		// project package of the same name with the same filename. That
+		// avoids hidden copy-time routing rules in copytest/register.go or
+		// arbitrary manifest target paths.
+		if pathpkg.Dir(sourceFile) != sourceDir || !strings.HasSuffix(pathpkg.Base(sourceFile), ".go") || strings.HasSuffix(pathpkg.Base(sourceFile), "_test.go") {
+			return nil, fmt.Errorf("%s[%d].sourceFile must match %s/*.go: %s", field, i, sourceDir, sourceFile)
 		}
 
 		scope := moduleCopyMiddlewareScope(strings.TrimSpace(string(value.Scope)))
 		if scope != moduleCopyMiddlewareScopeGlobal && scope != moduleCopyMiddlewareScopeAuth {
-			return nil, fmt.Errorf("middleware[%d].scope must be %q or %q: %q", i, moduleCopyMiddlewareScopeGlobal, moduleCopyMiddlewareScopeAuth, value.Scope)
+			return nil, fmt.Errorf("%s[%d].scope must be %q or %q: %q", field, i, moduleCopyMiddlewareScopeGlobal, moduleCopyMiddlewareScopeAuth, value.Scope)
 		}
 
 		handler := strings.TrimSpace(value.Handler)
 		if !token.IsIdentifier(handler) {
-			return nil, fmt.Errorf("middleware[%d].handler must be a Go identifier: %q", i, value.Handler)
+			return nil, fmt.Errorf("%s[%d].handler must be a Go identifier: %q", field, i, value.Handler)
 		}
 
 		cleaned = append(cleaned, moduleCopyMiddlewareManifest{

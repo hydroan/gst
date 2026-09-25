@@ -15,9 +15,10 @@ import (
 )
 
 const (
-	defaultModelDir      = "model"
-	defaultServiceDir    = "service"
-	defaultMiddlewareDir = "middleware"
+	defaultModelDir       = "model"
+	defaultServiceDir     = "service"
+	defaultMiddlewareDir  = "middleware"
+	defaultInterceptorDir = "interceptor"
 )
 
 // CopyOptions configures the local-source copy workflow.
@@ -40,6 +41,7 @@ type CopyPlan struct {
 	TargetModelDir        string
 	TargetServiceDir      string
 	TargetMiddlewareDir   string
+	TargetInterceptorDir  string
 	TargetModelImportPath string
 
 	ExcludeSourceFiles []string
@@ -48,6 +50,13 @@ type CopyPlan struct {
 
 	Actions    []moduleCopyAction
 	Middleware []moduleCopyMiddleware
+	// Interceptors are the module's gRPC interceptors the copy writes into
+	// the project's interceptor directory, none unless ServesGRPC.
+	Interceptors []moduleCopyMiddleware
+	// ServesGRPC reports whether the project has a model declaring GRPC():
+	// only then does it get the module's interceptors, so a project without
+	// gRPC holds no gRPC code at all.
+	ServesGRPC bool
 	Files      []moduleCopyFile
 
 	// StaleModelFiles lists Go files already present in TargetModelDir that do
@@ -69,6 +78,10 @@ type CopyPlan struct {
 	// model/service lists, membership requires positive proof of ownership:
 	// only marker-carrying files of this module can become stale here.
 	StaleMiddlewareFiles []string
+	// StaleInterceptorFiles lists project interceptor files this module's copy
+	// marker claims but this plan does not write: ones the manifest no longer
+	// declares, or all of them once the project no longer serves gRPC.
+	StaleInterceptorFiles []string
 }
 
 // moduleCopyAction connects one DSL action to the framework service file that
@@ -95,10 +108,11 @@ type moduleCopyFile struct {
 type moduleCopyFileKind string
 
 const (
-	moduleCopyFileModel      moduleCopyFileKind = "model"
-	moduleCopyFileService    moduleCopyFileKind = "service"
-	moduleCopyFileHelper     moduleCopyFileKind = "helper"
-	moduleCopyFileMiddleware moduleCopyFileKind = "middleware"
+	moduleCopyFileModel       moduleCopyFileKind = "model"
+	moduleCopyFileService     moduleCopyFileKind = "service"
+	moduleCopyFileHelper      moduleCopyFileKind = "helper"
+	moduleCopyFileMiddleware  moduleCopyFileKind = "middleware"
+	moduleCopyFileInterceptor moduleCopyFileKind = "interceptor"
 )
 
 // BuildCopyPlan is the copy-ready preflight. It resolves framework source
@@ -136,6 +150,7 @@ func BuildCopyPlan(name string, opts CopyOptions) (*CopyPlan, error) {
 		TargetModelDir:        filepath.Join(defaultModelDir, name),
 		TargetServiceDir:      filepath.Join(defaultServiceDir, name),
 		TargetMiddlewareDir:   defaultMiddlewareDir,
+		TargetInterceptorDir:  defaultInterceptorDir,
 		TargetModelImportPath: filepath.Join(projectModule, defaultModelDir, name),
 	}
 
@@ -151,11 +166,22 @@ func BuildCopyPlan(name string, opts CopyOptions) (*CopyPlan, error) {
 	if includeErr := plan.resolveIncludeSourceFiles(manifest.Copy.IncludeSourceFiles); includeErr != nil {
 		return nil, includeErr
 	}
-	middleware, err := plan.resolveMiddleware(manifest.Copy.Middleware)
+	middleware, err := plan.resolveHandlers(manifest.Copy.Middleware, plan.TargetMiddlewareDir)
 	if err != nil {
 		return nil, err
 	}
 	plan.Middleware = middleware
+	// The interceptors go into a project serving gRPC alone; a project
+	// without gRPC gets no gRPC code to look at, and the interceptor files an
+	// earlier copy left there are stale (see staleHandlerFiles).
+	if plan.ServesGRPC, err = projectServesGRPC(projectModule); err != nil {
+		return nil, err
+	}
+	if plan.ServesGRPC {
+		if plan.Interceptors, err = plan.resolveHandlers(manifest.Copy.Interceptors, plan.TargetInterceptorDir); err != nil {
+			return nil, err
+		}
+	}
 
 	if registerErr := checkModuleNotRegistered(name); registerErr != nil {
 		return nil, registerErr
@@ -196,11 +222,17 @@ func BuildCopyPlan(name string, opts CopyOptions) (*CopyPlan, error) {
 	if staleServiceErr := plan.collectStaleServiceFiles(); staleServiceErr != nil {
 		return nil, staleServiceErr
 	}
-	if addMiddlewareErr := plan.addMiddlewareFiles(); addMiddlewareErr != nil {
+	if addMiddlewareErr := plan.addHandlerFiles(plan.Middleware, moduleCopyFileMiddleware); addMiddlewareErr != nil {
 		return nil, addMiddlewareErr
 	}
-	if staleMiddlewareErr := plan.collectStaleMiddlewareFiles(); staleMiddlewareErr != nil {
-		return nil, staleMiddlewareErr
+	if addInterceptorErr := plan.addHandlerFiles(plan.Interceptors, moduleCopyFileInterceptor); addInterceptorErr != nil {
+		return nil, addInterceptorErr
+	}
+	if plan.StaleMiddlewareFiles, err = plan.staleHandlerFiles(plan.TargetMiddlewareDir, plan.MiddlewareTargets()); err != nil {
+		return nil, err
+	}
+	if plan.StaleInterceptorFiles, err = plan.staleHandlerFiles(plan.TargetInterceptorDir, plan.InterceptorTargets()); err != nil {
+		return nil, err
 	}
 	if conflictErr := plan.checkConflicts(opts.Force); conflictErr != nil {
 		return nil, conflictErr
@@ -414,6 +446,13 @@ func (p *CopyPlan) MiddlewareTargets() []string {
 	return p.targetsByKind(moduleCopyFileMiddleware)
 }
 
+// InterceptorTargets returns manifest-declared interceptor files copied into
+// the current project's interceptor package, none unless the project serves
+// gRPC.
+func (p *CopyPlan) InterceptorTargets() []string {
+	return p.targetsByKind(moduleCopyFileInterceptor)
+}
+
 // StaleModelTargets returns current-project model files that the copy
 // execution will delete: files an older copy produced that the current
 // framework module source no longer contains. Preview and execution consume
@@ -435,6 +474,29 @@ func (p *CopyPlan) StaleServiceTargets() []string {
 // the same preview/execution contract as StaleModelTargets.
 func (p *CopyPlan) StaleMiddlewareTargets() []string {
 	return append([]string(nil), p.StaleMiddlewareFiles...)
+}
+
+// StaleInterceptorTargets returns current-project interceptor files that the
+// copy execution will delete together with their registration calls, under
+// the same preview/execution contract as StaleModelTargets.
+func (p *CopyPlan) StaleInterceptorTargets() []string {
+	return append([]string(nil), p.StaleInterceptorFiles...)
+}
+
+// projectServesGRPC reports whether the project of module path modulePath
+// has a model declaring GRPC(), read the way gg gen reads the models; a
+// project without a model directory serves none.
+func projectServesGRPC(modulePath string) (bool, error) {
+	if _, err := os.Stat(defaultModelDir); os.IsNotExist(err) {
+		return false, nil
+	}
+	models, err := modelinfo.FindModels(modulePath, defaultModelDir, gghelper.NewProjectIgnore())
+	if err != nil {
+		return false, err
+	}
+	return slices.ContainsFunc(models, func(m *modelinfo.Model) bool {
+		return m.Design != nil && m.Design.Enabled && m.Design.GRPC
+	}), nil
 }
 
 func (p *CopyPlan) targetsByKind(kind moduleCopyFileKind) []string {

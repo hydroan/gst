@@ -15,7 +15,7 @@ func TestDirectoryRestrictionsAcceptsConventionalProjectDirectories(t *testing.T
 	t.Chdir(projectDir)
 
 	writeCheckFile(t, filepath.Join(projectDir, "go.mod"), "module tmpapp\n\ngo 1.26\n\nrequire github.com/hydroan/gst v0.0.0\n")
-	for _, dir := range []string{"deploy", "scripts", "test", "hack", "charts", "pb", "sample"} {
+	for _, dir := range []string{"deploy", "scripts", "test", "hack", "charts", "pb", "interceptor", "sample"} {
 		if err := os.MkdirAll(filepath.Join(projectDir, dir), 0o755); err != nil {
 			t.Fatal(err)
 		}

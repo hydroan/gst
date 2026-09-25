@@ -223,7 +223,7 @@ func pruneLeftovers(oldServiceFiles []string, allModels []*modelinfo.Model, kept
 		}
 	}
 	reportOrphanServiceDirs(orphans)
-	reportOrphanMiddleware(orphanMiddleware)
+	reportOrphanModuleFiles(orphanMiddleware)
 	if len(pbPlan.Delete) > 0 {
 		clioutput.Section("Stale Protobuf Files")
 		for _, file := range pbPlan.Delete {
@@ -255,10 +255,10 @@ func pruneLeftovers(oldServiceFiles []string, allModels []*modelinfo.Model, kept
 // orphanModuleMiddleware. It returns as well the helper directories kept
 // because live code imports them. When the project's code cannot be read in
 // full, it warns and finds no orphans.
-func findOrphans(allModels []*modelinfo.Model, keptDirs map[string]bool, deleting []string, ignore gghelper.ProjectIgnore, protect ggconfig.PruneConfig) (orphans, keptHelpers []ggprune.OrphanDir, orphanMiddleware []ggmodule.OrphanMiddleware) {
-	orphanMiddleware, err := orphanModuleMiddleware(protect)
+func findOrphans(allModels []*modelinfo.Model, keptDirs map[string]bool, deleting []string, ignore gghelper.ProjectIgnore, protect ggconfig.PruneConfig) (orphans, keptHelpers []ggprune.OrphanDir, orphanMiddleware []ggmodule.OrphanManagedFile) {
+	orphanMiddleware, err := orphanModuleFiles(protect)
 	if err != nil {
-		clioutput.Warn("", "failed to read the middleware directory, so orphans are not checked: %v", err)
+		clioutput.Warn("", "failed to read the middleware or interceptor directory, so orphans are not checked: %v", err)
 		return nil, nil, nil
 	}
 	deleting = slices.Clone(deleting)
@@ -279,18 +279,14 @@ func findOrphans(allModels []*modelinfo.Model, keptDirs map[string]bool, deletin
 // definitions, and last the directories this leaves empty. The orphan
 // directories are orphans because the files before them go, so when one of
 // those cannot be deleted they stay.
-func deleteLeftovers(disabledFiles []string, orphans []ggprune.OrphanDir, orphanMiddleware []ggmodule.OrphanMiddleware, staleProtoFiles []string, protect ggconfig.PruneConfig) {
+func deleteLeftovers(disabledFiles []string, orphans []ggprune.OrphanDir, orphanMiddleware []ggmodule.OrphanManagedFile, staleProtoFiles []string, protect ggconfig.PruneConfig) {
 	disabledKept := false
 	ggprune.RemoveFiles(disabledFiles, func(path string, err error) {
 		disabledKept = disabledKept || err != nil
 		reportRemoval(path, err)
 	})
 	if len(orphanMiddleware) > 0 {
-		files := make([]string, 0, len(orphanMiddleware))
-		for _, file := range orphanMiddleware {
-			files = append(files, file.Path)
-		}
-		if err := cleanOrphanMiddleware(files); err != nil {
+		if err := cleanOrphanModuleFiles(orphanMiddleware); err != nil {
 			clioutput.Error("", "Failed to delete orphan module middleware, so orphan service directories are kept: %v", err)
 			orphans = nil
 		}
@@ -337,42 +333,73 @@ func removeEmptyDirs(protect ggconfig.PruneConfig) {
 	}
 }
 
-// orphanModuleMiddleware lists the middleware module copy wrote for modules the
-// project removed (see ggmodule.OrphanMiddlewareFiles), but for the ones a
-// gst.yaml prune.ignore entry in protect covers, which stay live code; no
-// other rule keeps a file, a Git ignored one included.
-func orphanModuleMiddleware(protect ggconfig.PruneConfig) ([]ggmodule.OrphanMiddleware, error) {
-	orphans, err := ggmodule.OrphanMiddlewareFiles(ggconst.DirMiddleware, ggconst.DirModel)
-	if err != nil {
-		return nil, err
+// orphanModuleFiles lists the middleware and interceptor files module copy
+// wrote for modules the project removed (see ggmodule.OrphanManagedFiles),
+// middleware first, but for the ones a gst.yaml prune.ignore entry in
+// protect covers, which stay live code; no other rule keeps a file, a Git
+// ignored one included.
+func orphanModuleFiles(protect ggconfig.PruneConfig) ([]ggmodule.OrphanManagedFile, error) {
+	var orphans []ggmodule.OrphanManagedFile
+	for _, dir := range []string{ggconst.DirMiddleware, ggconst.DirInterceptor} {
+		found, err := ggmodule.OrphanManagedFiles(dir, ggconst.DirModel)
+		if err != nil {
+			return nil, err
+		}
+		orphans = append(orphans, found...)
 	}
-	return slices.DeleteFunc(orphans, func(orphan ggmodule.OrphanMiddleware) bool {
+	return slices.DeleteFunc(orphans, func(orphan ggmodule.OrphanManagedFile) bool {
 		return protect.Ignores(orphan.Path)
 	}), nil
 }
 
-// reportOrphanMiddleware lists the orphan middleware files; each goes together
-// with its register calls.
-func reportOrphanMiddleware(orphans []ggmodule.OrphanMiddleware) {
-	if len(orphans) == 0 {
-		return
-	}
-	clioutput.Section("Orphan Module Middleware Files")
-	for _, orphan := range orphans {
-		clioutput.Item("", "%s (copied with module %s, whose %s is gone; its register calls go with it)", orphan.Path, orphan.Module, filepath.Join(ggconst.DirModel, orphan.Module))
+// reportOrphanModuleFiles lists the orphan middleware files and the orphan
+// interceptor files under a heading each; every file goes together with its
+// register calls.
+func reportOrphanModuleFiles(orphans []ggmodule.OrphanManagedFile) {
+	for _, group := range []struct{ dir, title string }{
+		{ggconst.DirMiddleware, "Orphan Module Middleware Files"},
+		{ggconst.DirInterceptor, "Orphan Module Interceptor Files"},
+	} {
+		first := true
+		for _, orphan := range orphans {
+			if filepath.Dir(orphan.Path) != group.dir {
+				continue
+			}
+			if first {
+				clioutput.Section(group.title)
+				first = false
+			}
+			clioutput.Item("", "%s (copied with module %s, whose %s is gone; its register calls go with it)", orphan.Path, orphan.Module, filepath.Join(ggconst.DirModel, orphan.Module))
+		}
 	}
 }
 
-// cleanOrphanMiddleware deletes the orphan middleware files and their register
-// calls, printing each file it changes.
-func cleanOrphanMiddleware(files []string) error {
-	return ggmodule.RemoveMiddlewareFiles(ggconst.DirMiddleware, files, func(status ggmodule.CopyWriteStatus, path string) {
-		if status == ggmodule.CopyWriteDelete {
-			clioutput.Success("", "Deleted %s", path)
-			return
+// cleanOrphanModuleFiles deletes the orphan middleware and interceptor files
+// and their register calls, directory by directory, printing each file it
+// changes.
+func cleanOrphanModuleFiles(orphans []ggmodule.OrphanManagedFile) error {
+	for _, dir := range []string{ggconst.DirMiddleware, ggconst.DirInterceptor} {
+		var files []string
+		for _, orphan := range orphans {
+			if filepath.Dir(orphan.Path) == dir {
+				files = append(files, orphan.Path)
+			}
 		}
-		clioutput.Success("", "Removed their register calls from %s", path)
-	})
+		if len(files) == 0 {
+			continue
+		}
+		err := ggmodule.RemoveManagedFiles(dir, files, func(status ggmodule.CopyWriteStatus, path string) {
+			if status == ggmodule.CopyWriteDelete {
+				clioutput.Success("", "Deleted %s", path)
+				return
+			}
+			clioutput.Success("", "Removed their register calls from %s", path)
+		})
+		if err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // reportOrphanServiceDirs lists the orphan service directories, each with the
