@@ -85,6 +85,9 @@ func TestGenRunRefusesTwoActionsBecomingOneRPC(t *testing.T) {
 	require.Contains(t, err.Error(), "tmpapp/model.Clash: the List actions on routes clashes and public/clashes both become rpc List; name one of them with Filename()")
 }
 
+// TestGenRunRefusesATypeNamedLikeAStandardMessage pins that a project type
+// reached after a standard message took its name is reported with the rpc
+// holding the name, instead of the file doubling the message.
 func TestGenRunRefusesATypeNamedLikeAStandardMessage(t *testing.T) {
 	projectDir := newGenProject(t)
 	writeProtobufProject(t, projectDir, map[string]string{"model/notice.go": protobufStandardNameModel})

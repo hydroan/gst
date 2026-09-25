@@ -269,7 +269,7 @@ func genRunWithOptions(opts genRunOptions) error {
 	case errors.As(err, &protoDiagnostics):
 		return err
 	case err != nil:
-		return errors.Wrap(err, "load the model packages for the protobuf definitions")
+		return errors.Wrap(err, "generate the protobuf definitions")
 	}
 	for _, f := range protoFiles {
 		if err = writeGenFile(filepath.FromSlash(f.Path), f.Content); err != nil {
