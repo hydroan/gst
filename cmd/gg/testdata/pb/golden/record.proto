@@ -69,29 +69,29 @@ message RecordMeta {
   int32 score = 2;
 }
 
-// CreateRecordRequest is the request of RecordService.Create.
+// CreateRecordRequest is the request of RecordService.CreateRecord.
 message CreateRecordRequest {
   // record is the Record to create.
   Record record = 1;
 }
 
-// CreateRecordResponse is the response of RecordService.Create.
+// CreateRecordResponse is the response of RecordService.CreateRecord.
 message CreateRecordResponse {
   // record is the Record created.
   Record record = 1;
 }
 
-// DeleteRecordRequest is the request of RecordService.Delete.
+// DeleteRecordRequest is the request of RecordService.DeleteRecord.
 message DeleteRecordRequest {
   // id is the id of the Record to delete.
   string id = 1;
 }
 
-// DeleteRecordResponse is the response of RecordService.Delete.
+// DeleteRecordResponse is the response of RecordService.DeleteRecord.
 message DeleteRecordResponse {
 }
 
-// UpdateRecordRequest is the request of RecordService.Update.
+// UpdateRecordRequest is the request of RecordService.UpdateRecord.
 message UpdateRecordRequest {
   // id is the id of the Record to replace.
   string id = 1;
@@ -100,13 +100,13 @@ message UpdateRecordRequest {
   Record record = 2;
 }
 
-// UpdateRecordResponse is the response of RecordService.Update.
+// UpdateRecordResponse is the response of RecordService.UpdateRecord.
 message UpdateRecordResponse {
   // record is the Record as stored.
   Record record = 1;
 }
 
-// PatchRecordRequest is the request of RecordService.Patch.
+// PatchRecordRequest is the request of RecordService.PatchRecord.
 message PatchRecordRequest {
   // id is the id of the Record to patch.
   string id = 1;
@@ -118,13 +118,13 @@ message PatchRecordRequest {
   google.protobuf.FieldMask update_mask = 3;
 }
 
-// PatchRecordResponse is the response of RecordService.Patch.
+// PatchRecordResponse is the response of RecordService.PatchRecord.
 message PatchRecordResponse {
   // record is the Record as stored.
   Record record = 1;
 }
 
-// ListRecordRequest is the request of RecordService.List.
+// ListRecordRequest is the request of RecordService.ListRecord.
 message ListRecordRequest {
   // filters is the filters to apply, each one field[op]=value of the HTTP query.
   repeated Filter filters = 1;
@@ -162,7 +162,7 @@ message ListRecordRequest {
   }
 }
 
-// ListRecordResponse is the response of RecordService.List.
+// ListRecordResponse is the response of RecordService.ListRecord.
 message ListRecordResponse {
   // items is the Record records of the page.
   repeated Record items = 1;
@@ -171,7 +171,7 @@ message ListRecordResponse {
   int64 total = 2;
 }
 
-// GetRecordRequest is the request of RecordService.Get.
+// GetRecordRequest is the request of RecordService.GetRecord.
 message GetRecordRequest {
   // id is the id of the Record.
   string id = 1;
@@ -183,47 +183,47 @@ message GetRecordRequest {
   uint32 depth = 3;
 }
 
-// GetRecordResponse is the response of RecordService.Get.
+// GetRecordResponse is the response of RecordService.GetRecord.
 message GetRecordResponse {
   // record is the Record found.
   Record record = 1;
 }
 
-// CreateManyRecordRequest is the request of RecordService.CreateMany.
+// CreateManyRecordRequest is the request of RecordService.CreateManyRecord.
 message CreateManyRecordRequest {
   // items is the Record records to write.
   repeated Record items = 1;
 }
 
-// CreateManyRecordResponse is the response of RecordService.CreateMany.
+// CreateManyRecordResponse is the response of RecordService.CreateManyRecord.
 message CreateManyRecordResponse {
   // items is the Record records as stored.
   repeated Record items = 1;
 }
 
-// DeleteManyRecordRequest is the request of RecordService.DeleteMany.
+// DeleteManyRecordRequest is the request of RecordService.DeleteManyRecord.
 message DeleteManyRecordRequest {
   // ids is the ids of the Record records to delete.
   repeated string ids = 1;
 }
 
-// DeleteManyRecordResponse is the response of RecordService.DeleteMany.
+// DeleteManyRecordResponse is the response of RecordService.DeleteManyRecord.
 message DeleteManyRecordResponse {
 }
 
-// UpdateManyRecordRequest is the request of RecordService.UpdateMany.
+// UpdateManyRecordRequest is the request of RecordService.UpdateManyRecord.
 message UpdateManyRecordRequest {
   // items is the Record records to write.
   repeated Record items = 1;
 }
 
-// UpdateManyRecordResponse is the response of RecordService.UpdateMany.
+// UpdateManyRecordResponse is the response of RecordService.UpdateManyRecord.
 message UpdateManyRecordResponse {
   // items is the Record records as stored.
   repeated Record items = 1;
 }
 
-// PatchManyRecordRequest is the request of RecordService.PatchMany.
+// PatchManyRecordRequest is the request of RecordService.PatchManyRecord.
 message PatchManyRecordRequest {
   // items is the patches, each naming the Record it applies to by its id.
   repeated Item items = 1;
@@ -235,40 +235,43 @@ message PatchManyRecordRequest {
   }
 }
 
-// PatchManyRecordResponse is the response of RecordService.PatchMany.
+// PatchManyRecordResponse is the response of RecordService.PatchManyRecord.
 message PatchManyRecordResponse {
   // items is the Record records as stored.
   repeated Record items = 1;
 }
 
-// ListRecordByOwnerRequest is the request of RecordService.ListByOwner.
+// ListRecordByOwnerRequest is the request of RecordService.ListRecordByOwner.
 message ListRecordByOwnerRequest {
+  // owner is the :owner parameter of owners/:owner/records.
+  string owner = 1;
+
   // filters is the filters to apply, each one field[op]=value of the HTTP query.
-  repeated Filter filters = 1;
+  repeated Filter filters = 2;
 
   // sort_by is the orderings, as the _sort_by query parameter names them.
-  repeated string sort_by = 2;
+  repeated string sort_by = 3;
 
   // page is the page to list, as the _page query parameter.
-  uint32 page = 3;
+  uint32 page = 4;
 
   // size is the page size, as the _size query parameter.
-  uint32 size = 4;
+  uint32 size = 5;
 
   // cursor_field is the cursor column, as the _cursor_field query parameter.
-  string cursor_field = 5;
+  string cursor_field = 6;
 
   // cursor_value is the cursor position, as the _cursor_value query parameter.
-  string cursor_value = 6;
+  string cursor_value = 7;
 
   // cursor_next is whether to list past the cursor, as the _cursor_next query parameter.
-  bool cursor_next = 7;
+  bool cursor_next = 8;
 
   // expand is the associations to expand, as the _expand query parameter names them.
-  repeated string expand = 8;
+  repeated string expand = 9;
 
   // depth is the depth of the expansion, as the _depth query parameter.
-  uint32 depth = 9;
+  uint32 depth = 10;
 
   message Filter {
     string field = 1;
@@ -279,7 +282,7 @@ message ListRecordByOwnerRequest {
   }
 }
 
-// ListRecordByOwnerResponse is the response of RecordService.ListByOwner.
+// ListRecordByOwnerResponse is the response of RecordService.ListRecordByOwner.
 message ListRecordByOwnerResponse {
   // items is the Record records of the page.
   repeated Record items = 1;
@@ -290,36 +293,36 @@ message ListRecordByOwnerResponse {
 
 // RecordService serves the actions of Record over gRPC.
 service RecordService {
-  // Create is the Create action of Record on records.
-  rpc Create ( CreateRecordRequest ) returns ( CreateRecordResponse );
+  // CreateRecord is the Create action of Record on records.
+  rpc CreateRecord ( CreateRecordRequest ) returns ( CreateRecordResponse );
 
-  // Delete is the Delete action of Record on records.
-  rpc Delete ( DeleteRecordRequest ) returns ( DeleteRecordResponse );
+  // DeleteRecord is the Delete action of Record on records.
+  rpc DeleteRecord ( DeleteRecordRequest ) returns ( DeleteRecordResponse );
 
-  // Update is the Update action of Record on records.
-  rpc Update ( UpdateRecordRequest ) returns ( UpdateRecordResponse );
+  // UpdateRecord is the Update action of Record on records.
+  rpc UpdateRecord ( UpdateRecordRequest ) returns ( UpdateRecordResponse );
 
-  // Patch is the Patch action of Record on records.
-  rpc Patch ( PatchRecordRequest ) returns ( PatchRecordResponse );
+  // PatchRecord is the Patch action of Record on records.
+  rpc PatchRecord ( PatchRecordRequest ) returns ( PatchRecordResponse );
 
-  // List is the List action of Record on records.
-  rpc List ( ListRecordRequest ) returns ( ListRecordResponse );
+  // ListRecord is the List action of Record on records.
+  rpc ListRecord ( ListRecordRequest ) returns ( ListRecordResponse );
 
-  // Get is the Get action of Record on records.
-  rpc Get ( GetRecordRequest ) returns ( GetRecordResponse );
+  // GetRecord is the Get action of Record on records.
+  rpc GetRecord ( GetRecordRequest ) returns ( GetRecordResponse );
 
-  // CreateMany is the CreateMany action of Record on records.
-  rpc CreateMany ( CreateManyRecordRequest ) returns ( CreateManyRecordResponse );
+  // CreateManyRecord is the CreateMany action of Record on records.
+  rpc CreateManyRecord ( CreateManyRecordRequest ) returns ( CreateManyRecordResponse );
 
-  // DeleteMany is the DeleteMany action of Record on records.
-  rpc DeleteMany ( DeleteManyRecordRequest ) returns ( DeleteManyRecordResponse );
+  // DeleteManyRecord is the DeleteMany action of Record on records.
+  rpc DeleteManyRecord ( DeleteManyRecordRequest ) returns ( DeleteManyRecordResponse );
 
-  // UpdateMany is the UpdateMany action of Record on records.
-  rpc UpdateMany ( UpdateManyRecordRequest ) returns ( UpdateManyRecordResponse );
+  // UpdateManyRecord is the UpdateMany action of Record on records.
+  rpc UpdateManyRecord ( UpdateManyRecordRequest ) returns ( UpdateManyRecordResponse );
 
-  // PatchMany is the PatchMany action of Record on records.
-  rpc PatchMany ( PatchManyRecordRequest ) returns ( PatchManyRecordResponse );
+  // PatchManyRecord is the PatchMany action of Record on records.
+  rpc PatchManyRecord ( PatchManyRecordRequest ) returns ( PatchManyRecordResponse );
 
-  // ListByOwner is the List action of Record on owners/:owner/records.
-  rpc ListByOwner ( ListRecordByOwnerRequest ) returns ( ListRecordByOwnerResponse );
+  // ListRecordByOwner is the List action of Record on owners/:owner/records.
+  rpc ListRecordByOwner ( ListRecordByOwnerRequest ) returns ( ListRecordByOwnerResponse );
 }

@@ -140,19 +140,19 @@ func (e *DiagnosticsError) Error() string {
 //	  repeated string tags = 12;
 //	}
 //
-//	// CreateNoteRequest is the request of NoteService.Create.
+//	// CreateNoteRequest is the request of NoteService.CreateNote.
 //	message CreateNoteRequest {
 //	  // note is the Note to create.
 //	  Note note = 1;
 //	}
 //
-//	// CreateNoteResponse is the response of NoteService.Create.
+//	// CreateNoteResponse is the response of NoteService.CreateNote.
 //	message CreateNoteResponse {
 //	  // note is the Note created.
 //	  Note note = 1;
 //	}
 //
-//	// GetNoteRequest is the request of NoteService.Get.
+//	// GetNoteRequest is the request of NoteService.GetNote.
 //	message GetNoteRequest {
 //	  // id is the id of the Note.
 //	  string id = 1;
@@ -164,7 +164,7 @@ func (e *DiagnosticsError) Error() string {
 //	  uint32 depth = 3;
 //	}
 //
-//	// GetNoteResponse is the response of NoteService.Get.
+//	// GetNoteResponse is the response of NoteService.GetNote.
 //	message GetNoteResponse {
 //	  // note is the Note found.
 //	  Note note = 1;
@@ -172,11 +172,11 @@ func (e *DiagnosticsError) Error() string {
 //
 //	// NoteService serves the actions of Note over gRPC.
 //	service NoteService {
-//	  // Create is the Create action of Note on notes.
-//	  rpc Create ( CreateNoteRequest ) returns ( CreateNoteResponse );
+//	  // CreateNote is the Create action of Note on notes.
+//	  rpc CreateNote ( CreateNoteRequest ) returns ( CreateNoteResponse );
 //
-//	  // Get is the Get action of Note on notes.
-//	  rpc Get ( GetNoteRequest ) returns ( GetNoteResponse );
+//	  // GetNote is the Get action of Note on notes.
+//	  rpc GetNote ( GetNoteRequest ) returns ( GetNoteResponse );
 //	}
 func Generate(cfg Config) ([]File, error) {
 	models := make([]*modelinfo.Model, 0)

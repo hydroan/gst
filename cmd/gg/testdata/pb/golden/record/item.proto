@@ -32,46 +32,67 @@ message Link {
   string title = 2;
 }
 
-// CreateItemRequest is the request of ItemService.Create.
+// CreateItemRequest is the request of ItemService.CreateItem.
 message CreateItemRequest {
+  // record is the :record parameter of records/:record/items.
+  string record = 1;
+
   // item is the Item to create.
-  Item item = 1;
+  Item item = 2;
 }
 
-// CreateItemResponse is the response of ItemService.Create.
+// CreateItemResponse is the response of ItemService.CreateItem.
 message CreateItemResponse {
   // item is the Item created.
   Item item = 1;
 }
 
-// GetItemRequest is the request of ItemService.Get.
+// GetItemRequest is the request of ItemService.GetItem.
 message GetItemRequest {
+  // record is the :record parameter of records/:record/items/:id.
+  string record = 1;
+
   // id is the id of the Item.
-  string id = 1;
+  string id = 2;
 
   // expand is the associations to expand, as the _expand query parameter names them.
-  repeated string expand = 2;
+  repeated string expand = 3;
 
   // depth is the depth of the expansion, as the _depth query parameter.
-  uint32 depth = 3;
+  uint32 depth = 4;
 }
 
-// GetItemResponse is the response of ItemService.Get.
+// GetItemResponse is the response of ItemService.GetItem.
 message GetItemResponse {
   // item is the Item found.
   Item item = 1;
 }
 
-// SealItemRequest is the request of ItemService.Seal.
+// SealItemRequest is the request of ItemService.SealItem.
 message SealItemRequest {
+  // id is the id of the Item.
+  string id = 1;
+
   // item is the Item to create.
-  Item item = 1;
+  Item item = 2;
 }
 
-// SealItemResponse is the response of ItemService.Seal.
+// SealItemResponse is the response of ItemService.SealItem.
 message SealItemResponse {
   // item is the Item created.
   Item item = 1;
+}
+
+// MergeItemRequest is the request of ItemService.MergeItem.
+message MergeItemRequest {
+  // payload is the MergeReq the action takes.
+  MergeReq payload = 1;
+}
+
+// MergeItemResponse is the response of ItemService.MergeItem.
+message MergeItemResponse {
+  // result is the MergeRsp the action answers with.
+  MergeRsp result = 1;
 }
 
 // MergeReq asks to merge items into one.
@@ -86,15 +107,15 @@ message MergeRsp {
 
 // ItemService serves the actions of Item over gRPC.
 service ItemService {
-  // Create is the Create action of Item on records/:record/items.
-  rpc Create ( CreateItemRequest ) returns ( CreateItemResponse );
+  // CreateItem is the Create action of Item on records/:record/items.
+  rpc CreateItem ( CreateItemRequest ) returns ( CreateItemResponse );
 
-  // Get is the Get action of Item on records/:record/items.
-  rpc Get ( GetItemRequest ) returns ( GetItemResponse );
+  // GetItem is the Get action of Item on records/:record/items.
+  rpc GetItem ( GetItemRequest ) returns ( GetItemResponse );
 
-  // Seal is the Create action of Item on items/:id/seal.
-  rpc Seal ( SealItemRequest ) returns ( SealItemResponse );
+  // SealItem is the Create action of Item on items/:id/seal.
+  rpc SealItem ( SealItemRequest ) returns ( SealItemResponse );
 
-  // Merge is the Create action of Item on items/merge.
-  rpc Merge ( MergeReq ) returns ( MergeRsp );
+  // MergeItem is the Create action of Item on items/merge.
+  rpc MergeItem ( MergeItemRequest ) returns ( MergeItemResponse );
 }

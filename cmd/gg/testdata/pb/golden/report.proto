@@ -6,8 +6,19 @@ package tmpapp;
 
 option go_package = "tmpapp/pb;pb";
 
-// GetReportRequest is the empty request of ReportService.Get.
+// GetReportRequest is the request of ReportService.GetReport.
 message GetReportRequest {
+  // expand is the associations to expand, as the _expand query parameter names them.
+  repeated string expand = 1;
+
+  // depth is the depth of the expansion, as the _depth query parameter.
+  uint32 depth = 2;
+}
+
+// GetReportResponse is the response of ReportService.GetReport.
+message GetReportResponse {
+  // result is the ReportRsp the action answers with.
+  ReportRsp result = 1;
 }
 
 // ReportRsp is a summary.
@@ -17,6 +28,6 @@ message ReportRsp {
 
 // ReportService serves the actions of Report over gRPC.
 service ReportService {
-  // Get is the Get action of Report on reports/summary.
-  rpc Get ( GetReportRequest ) returns ( ReportRsp );
+  // GetReport is the Get action of Report on reports/summary.
+  rpc GetReport ( GetReportRequest ) returns ( GetReportResponse );
 }

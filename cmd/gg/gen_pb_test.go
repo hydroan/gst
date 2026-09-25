@@ -20,8 +20,11 @@ var update = flag.Bool("update", false, "rewrite the golden files under testdata
 // under pb/, mirroring the model directory, with the model's message, the
 // messages of its standard actions, the Go types of its custom actions and
 // its service; a model without GRPC() gets no file. The files are compiled
-// the way protoc compiles them as well. They carry the example of the
-// pb.Generate doc comment.
+// the way protoc compiles them as well. They hold, byte for byte, the
+// examples the doc comments of the pb package show: pb.Generate's whole
+// note.proto, and the excerpts of buildMessage, fieldTypeOf, fieldComment,
+// declareService, rpcMessages, customRequest, customResponse,
+// standardMessages, queryFields and descriptor.
 func TestGenRunWritesTheProtobufDefinitionsOfGRPCModels(t *testing.T) {
 	projectDir := newGenProject(t)
 	writeProtobufProject(t, projectDir, map[string]string{
@@ -82,7 +85,7 @@ func TestGenRunRefusesTwoActionsBecomingOneRPC(t *testing.T) {
 	err := genRunWithOptions(genRunOptions{Quiet: true})
 
 	require.Error(t, err)
-	require.Contains(t, err.Error(), "tmpapp/model.Clash: the List actions on routes clashes and public/clashes both become rpc List; name one of them with Filename()")
+	require.Contains(t, err.Error(), "tmpapp/model.Clash: the List actions on routes clashes and public/clashes both become rpc ListClash; name one of them with Filename()")
 }
 
 // TestGenRunRefusesATypeNamedLikeAStandardMessage pins that a project type
@@ -95,7 +98,20 @@ func TestGenRunRefusesATypeNamedLikeAStandardMessage(t *testing.T) {
 	err := genRunWithOptions(genRunOptions{Quiet: true})
 
 	require.Error(t, err)
-	require.Contains(t, err.Error(), "tmpapp/model.CreateNoticeRequest: the message CreateNoticeRequest clashes with the rpc NoticeService.Create; rename the type")
+	require.Contains(t, err.Error(), "tmpapp/model.CreateNoticeRequest: the message CreateNoticeRequest clashes with the rpc NoticeService.CreateNotice; rename the type")
+}
+
+// TestGenRunRefusesARouteParameterNamedLikeAField pins that a route parameter
+// whose name a request message already uses for a field of its own is
+// reported: the parameter would have no field to travel in.
+func TestGenRunRefusesARouteParameterNamedLikeAField(t *testing.T) {
+	projectDir := newGenProject(t)
+	writeProtobufProject(t, projectDir, map[string]string{"model/entry.go": protobufParamClashModel})
+
+	err := genRunWithOptions(genRunOptions{Quiet: true})
+
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "tmpapp/model.Entry: the :page parameter of pages/:page/entries clashes with the page field of ListEntryByPageRequest; rename the parameter")
 }
 
 // writeProtobufProject writes the model files of a project whose models are
@@ -450,6 +466,34 @@ type EchoRsp struct {
 // NoticeService.Create.
 type CreateNoticeRequest struct {
 	Title string 'json:"title" pb:"1"'
+}
+`
+
+// protobufParamClashModel lists entries under a route whose parameter is
+// named like a field of every List request.
+const protobufParamClashModel = `package model
+
+import (
+	"github.com/hydroan/gst/dsl"
+	"github.com/hydroan/gst/model"
+)
+
+// Entry is listed by page.
+type Entry struct {
+	Title string 'json:"title" pb:"11"'
+
+	model.Base
+}
+
+func (Entry) TableName() string { return "entries" }
+
+func (Entry) Design() {
+	dsl.GRPC()
+	dsl.Migrate()
+	dsl.Endpoint("entries")
+	dsl.Route("/pages/:page/entries", func() {
+		dsl.List(func() {})
+	})
 }
 `
 

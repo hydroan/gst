@@ -6,6 +6,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/hydroan/gst/consts"
 	"github.com/hydroan/gst/dsl"
 	"github.com/hydroan/gst/internal/modelinfo"
 	"github.com/stoewer/go-strcase"
@@ -66,9 +67,12 @@ const dirPB = "pb"
 
 // rpcName names the rpc of an action on a route: the action name (Create,
 // DeleteMany), or the role name of an action declaring Filename (Merge for
-// Filename("merge")), followed by the suffix rpcSuffix derives from the route.
+// Filename("merge")), then the model name, then the suffix rpcSuffix derives
+// from the route: CreateRecord, MergeItem, ListDocumentByBox. The rpc name
+// carries the model so that the message names messageName derives from it
+// read as the AIP and Buf conventions want, GetRecordRequest for GetRecord.
 func rpcName(m *modelinfo.Model, route string, action *dsl.Action) string {
-	return rpcBase(action) + rpcSuffix(m, route)
+	return rpcBase(action) + m.ModelName + rpcSuffix(m, route)
 }
 
 // rpcBase is the name of the action itself, Filename aside (see rpcName).
@@ -116,12 +120,63 @@ func routeParams(route string) []string {
 	return params
 }
 
-// standardMessageName names the request or response message of the rpc of an
-// action: the action name, the model name, the route suffix, then Request or
-// Response, as in CreateRecordRequest, ListDocumentByBoxRequest and
-// MergeEntryResponse.
-func standardMessageName(m *modelinfo.Model, route string, action *dsl.Action, kind string) string {
-	return rpcBase(action) + m.ModelName + rpcSuffix(m, route) + kind
+// messageName names the request or response message of an rpc: the rpc name
+// followed by kind, Request or Response, as in CreateRecordRequest,
+// ListDocumentByBoxRequest and MergeEntryResponse. Every rpc owns its two
+// messages, however alike another rpc's, so that one of them can grow without
+// touching the other.
+func messageName(m *modelinfo.Model, route string, action *dsl.Action, kind string) string {
+	return rpcName(m, route, action) + kind
+}
+
+// requestParam is a route parameter as the request message of an rpc carries
+// it: param as the route writes it, name the string field holding it, and
+// the comment of the field.
+type requestParam struct {
+	param   string
+	name    string
+	comment string
+}
+
+// requestParams lists the parameters of the route the router registers the
+// action under (see modelinfo.RouterTargetForAction), in route order, as the
+// leading fields of the rpc's request message: gRPC has no path to read them
+// from. The model's own item parameter, :id when the design declares no
+// Param, becomes the field id, "the id of the Item", "the id of the Item to
+// delete" for its Delete action; every other parameter becomes a field named
+// after itself, record for :record and box_id for :box-id, "the :record
+// parameter of records/:record/items". The Get action of Item on
+// records/:record/items, registered on records/:record/items/:id, carries
+// record and id; its Create carries record alone; a Delete of Document,
+// registered on archive/documents/:document for Param("document"), carries
+// id; DeleteMany, registered on archive/documents/batch, carries nothing.
+func requestParams(m *modelinfo.Model, route string, action *dsl.Action) []requestParam {
+	registered, _ := modelinfo.RouterTargetForAction(route, m.Design, action)
+	own := strings.TrimPrefix(modelinfo.ItemParam(m.Design), ":")
+	var params []requestParam
+	for _, param := range routeParams(registered) {
+		if param == own {
+			params = append(params, requestParam{param: param, name: "id", comment: "the id of the " + m.ModelName + ownParamPurpose(action.Phase)})
+			continue
+		}
+		params = append(params, requestParam{param: param, name: protoIdentifier(param), comment: "the :" + param + " parameter of " + registered})
+	}
+	return params
+}
+
+// ownParamPurpose is what the item actions do to the record the id names,
+// appended to the comment of the id field: " to delete", " to replace",
+// " to patch", and nothing for the others.
+func ownParamPurpose(phase consts.Phase) string {
+	switch phase {
+	case consts.PHASE_DELETE:
+		return " to delete"
+	case consts.PHASE_UPDATE:
+		return " to replace"
+	case consts.PHASE_PATCH:
+		return " to patch"
+	}
+	return ""
 }
 
 // modelFieldName names the field carrying the model in a standard message:

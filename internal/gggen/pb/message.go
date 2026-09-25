@@ -53,6 +53,34 @@ type fieldType struct {
 // The keys are the ones the type encodes to (see jsonshape.Fields); each
 // carries the number of its pb tag, or the fixed number of a framework base
 // key, and the type of its Go type (see fieldTypeOf).
+// For the model type
+//
+//	// Item belongs to a record.
+//	type Item struct {
+//		Content string `json:"content" pb:"11"`
+//		Links   []Link `json:"links,omitempty" pb:"12" gorm:"-"`
+//
+//		model.Base
+//	}
+//
+// the file gets, printed,
+//
+//	// Item belongs to a record.
+//	message Item {
+//	  string id = 1;
+//
+//	  string created_by = 2;
+//
+//	  string updated_by = 3;
+//
+//	  google.protobuf.Timestamp created_at = 4;
+//
+//	  google.protobuf.Timestamp updated_at = 5;
+//
+//	  string content = 11;
+//
+//	  repeated Link links = 12;
+//	}
 func (g *generator) buildMessage(obj *types.TypeName) {
 	m := g.messages[obj]
 	s := jsonshape.Site{Subject: obj.Pkg().Path() + "." + obj.Name(), Pos: obj.Pos()}
@@ -202,6 +230,25 @@ func (g *generator) fieldNumber(f jsonshape.Field, base bool, s jsonshape.Site) 
 // map with a value of those, a map key of the wrong type, an interface with
 // methods, a type with encoding methods of its own, a struct from outside the
 // project.
+// The fields of the Record model of the golden fixture print as follows,
+// the Go field on the left of each arrow and the protobuf field on its right:
+//
+//	Status  RecordStatus      -> string status = 12;
+//	Summary *string           -> optional string summary = 13;
+//	Tags    []string          -> repeated string tags = 14;
+//	Labels  map[string]string -> map<string, string> labels = 15;
+//	Count   int               -> int64 count = 16;
+//	Ratio   float64           -> double ratio = 17;
+//	Enabled bool              -> bool enabled = 18;
+//	Payload []byte            -> bytes payload = 19;
+//	Raw     json.RawMessage   -> google.protobuf.Value raw = 20;
+//	Extra   map[string]any    -> google.protobuf.Struct extra = 21;
+//	Due     time.Time         -> google.protobuf.Timestamp due = 22;
+//	Meta    RecordMeta        -> RecordMeta meta = 23;
+//	Window  struct{...}       -> Window window = 24;
+//
+// the last with message Window nested in Record, holding the fields of the
+// struct.
 func (g *generator) fieldTypeOf(t types.Type, file *protoFile, parent *descriptorpb.DescriptorProto, prefix []int32, key string, s jsonshape.Site) (fieldType, bool) {
 	t = types.Unalias(t)
 	if p, ok := t.(*types.Pointer); ok {
@@ -416,7 +463,11 @@ func scalarKind(b *types.Basic) (descriptorpb.FieldDescriptorProto_Type, bool) {
 //
 // A bit set lists its constants under "Any bitwise combination of:", and an
 // enum none of whose constants is the zero value notes that an unset value
-// is the zero value.
+// is the zero value: the Status field of the golden Record, without a doc
+// comment, gets
+//
+//	Values: "active", "archived".
+//	Unset, the field holds the zero value "".
 func fieldComment(doc string, e *jsonshape.Enum) string {
 	if e == nil {
 		return doc
