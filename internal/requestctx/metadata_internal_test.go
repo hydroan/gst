@@ -48,6 +48,7 @@ func TestFromGinExtractsRequestFields(t *testing.T) {
 	// The raw query keeps key order and escaping exactly as sent, which
 	// re-encoding the parsed values would not.
 	require.Equal(t, "tag=blue&tag=green&range=a[gte]", meta.RawQuery())
+	require.Equal(t, "/api/users/42?tag=blue&tag=green&range=a[gte]", meta.RequestURI())
 	require.Equal(t, "192.0.2.10", meta.ClientIP())
 	require.Equal(t, "sample-agent/1.0", meta.UserAgent())
 	require.Equal(t, "example.com", meta.Host())
@@ -329,11 +330,12 @@ func TestMetadataContextRoundTrip(t *testing.T) {
 		Query: map[string][]string{
 			"tag": {"blue", "green"},
 		},
-		RawQuery:  "tag=blue&tag=green",
-		ClientIP:  "203.0.113.5",
-		UserAgent: "sample-agent/1.0",
-		Host:      "example.com",
-		TLS:       true,
+		RawQuery:   "tag=blue&tag=green",
+		RequestURI: "/api/users/42?tag=blue&tag=green",
+		ClientIP:   "203.0.113.5",
+		UserAgent:  "sample-agent/1.0",
+		Host:       "example.com",
+		TLS:        true,
 	})
 
 	ctx := WithMetadata(context.Background(), meta)
@@ -347,6 +349,7 @@ func TestMetadataContextRoundTrip(t *testing.T) {
 	require.Equal(t, "42", got.Param("id"))
 	require.Equal(t, []string{"blue", "green"}, got.Query()["tag"])
 	require.Equal(t, "tag=blue&tag=green", got.RawQuery())
+	require.Equal(t, "/api/users/42?tag=blue&tag=green", got.RequestURI())
 	require.Equal(t, "203.0.113.5", got.ClientIP())
 	require.Equal(t, "sample-agent/1.0", got.UserAgent())
 	require.Equal(t, "example.com", got.Host())

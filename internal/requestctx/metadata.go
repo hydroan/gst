@@ -26,20 +26,21 @@ import (
 // request on demand, so that a context built without an HTTP request -- one a
 // transport other than HTTP constructs -- answers for them all the same.
 type Metadata struct {
-	route     string
-	path      string
-	method    string
-	username  string
-	userID    string
-	sessionID string
-	tenantID  string
-	params    map[string]string
-	query     url.Values
-	rawQuery  string
-	clientIP  string
-	userAgent string
-	host      string
-	tls       bool
+	route      string
+	path       string
+	method     string
+	username   string
+	userID     string
+	sessionID  string
+	tenantID   string
+	params     map[string]string
+	query      url.Values
+	rawQuery   string
+	requestURI string
+	clientIP   string
+	userAgent  string
+	host       string
+	tls        bool
 }
 
 // Fields contains request metadata fields for non-gin callers and tests.
@@ -47,39 +48,41 @@ type Metadata struct {
 // RawQuery is optional: when it is empty and Query is not, New re-encodes
 // Query to fill it.
 type Fields struct {
-	Route     string
-	Path      string
-	Method    string
-	Username  string
-	UserID    string
-	SessionID string
-	TenantID  string
-	Params    map[string]string
-	Query     url.Values
-	RawQuery  string
-	ClientIP  string
-	UserAgent string
-	Host      string
-	TLS       bool
+	Route      string
+	Path       string
+	Method     string
+	Username   string
+	UserID     string
+	SessionID  string
+	TenantID   string
+	Params     map[string]string
+	Query      url.Values
+	RawQuery   string
+	RequestURI string
+	ClientIP   string
+	UserAgent  string
+	Host       string
+	TLS        bool
 }
 
 // New creates Metadata from explicit fields.
 func New(fields Fields) Metadata {
 	return Metadata{
-		route:     fields.Route,
-		path:      fields.Path,
-		method:    fields.Method,
-		username:  fields.Username,
-		userID:    fields.UserID,
-		sessionID: fields.SessionID,
-		tenantID:  fields.TenantID,
-		params:    cloneStringMap(fields.Params),
-		query:     cloneURLValues(fields.Query),
-		rawQuery:  rawQueryOf(fields.RawQuery, fields.Query),
-		clientIP:  fields.ClientIP,
-		userAgent: fields.UserAgent,
-		host:      fields.Host,
-		tls:       fields.TLS,
+		route:      fields.Route,
+		path:       fields.Path,
+		method:     fields.Method,
+		username:   fields.Username,
+		userID:     fields.UserID,
+		sessionID:  fields.SessionID,
+		tenantID:   fields.TenantID,
+		params:     cloneStringMap(fields.Params),
+		query:      cloneURLValues(fields.Query),
+		rawQuery:   rawQueryOf(fields.RawQuery, fields.Query),
+		requestURI: fields.RequestURI,
+		clientIP:   fields.ClientIP,
+		userAgent:  fields.UserAgent,
+		host:       fields.Host,
+		tls:        fields.TLS,
 	}
 }
 
@@ -109,9 +112,10 @@ func FromGin(c *gin.Context) Metadata {
 		return Metadata{}
 	}
 
-	var method, path, rawQuery string
+	var method, path, rawQuery, requestURI string
 	if c.Request != nil {
 		method = c.Request.Method
+		requestURI = c.Request.RequestURI
 		if c.Request.URL != nil {
 			path = c.Request.URL.Path
 			rawQuery = c.Request.URL.RawQuery
@@ -120,20 +124,21 @@ func FromGin(c *gin.Context) Metadata {
 	conn := ginConnection(c)
 
 	return Metadata{
-		route:     c.FullPath(),
-		path:      path,
-		method:    method,
-		username:  c.GetString(consts.CTX_USERNAME),
-		userID:    c.GetString(consts.CTX_USER_ID),
-		sessionID: c.GetString(consts.CTX_SESSION_ID),
-		tenantID:  c.GetString(consts.CTX_TENANT_ID),
-		params:    ginParams(c),
-		query:     GinQuery(c),
-		rawQuery:  rawQuery,
-		clientIP:  conn.clientIP,
-		userAgent: conn.userAgent,
-		host:      conn.host,
-		tls:       conn.tls,
+		route:      c.FullPath(),
+		path:       path,
+		method:     method,
+		username:   c.GetString(consts.CTX_USERNAME),
+		userID:     c.GetString(consts.CTX_USER_ID),
+		sessionID:  c.GetString(consts.CTX_SESSION_ID),
+		tenantID:   c.GetString(consts.CTX_TENANT_ID),
+		params:     ginParams(c),
+		query:      GinQuery(c),
+		rawQuery:   rawQuery,
+		requestURI: requestURI,
+		clientIP:   conn.clientIP,
+		userAgent:  conn.userAgent,
+		host:       conn.host,
+		tls:        conn.tls,
 	}
 }
 
@@ -341,6 +346,12 @@ func (m Metadata) Query() url.Values         { return cloneURLValues(m.query) }
 // entries. One raw string keeps the mapping at exactly one field, and keeps
 // what was actually sent visible instead of a normalized reconstruction.
 func (m Metadata) RawQuery() string { return m.rawQuery }
+
+// RequestURI returns the request target as the client sent it, path and query
+// string together and undecoded ("/api/users/42?tag=blue"). Path and RawQuery
+// are its two parsed halves; this is the request line's own text, which the
+// operation log keeps.
+func (m Metadata) RequestURI() string { return m.requestURI }
 
 type metadataContextKey struct{}
 
