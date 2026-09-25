@@ -18,7 +18,11 @@ import (
 
 	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/internal/lifecycle"
+	"github.com/hydroan/gst/logger"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
+	"go.uber.org/zap/zaptest/observer"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials"
@@ -32,7 +36,12 @@ import (
 // The tests share the package's state, so they reset it and run one at a
 // time.
 
-// reset clears what a previous test registered or started.
+// accessLog and recoveryLog record what the server logs during a test, in
+// place of the file loggers Init builds.
+var accessLog, recoveryLog *observer.ObservedLogs
+
+// reset clears what a previous test registered or started, and points the
+// server's loggers at fresh recorders.
 func reset(t *testing.T) {
 	t.Helper()
 	Stop(context.Background())
@@ -40,35 +49,72 @@ func reset(t *testing.T) {
 	started.Store(false)
 	drainTimeout = lifecycle.StopTimeout
 	config.App.GRPC = config.GRPC{Listen: "127.0.0.1", Reflection: true}
+	accessLog = observe(t, &logger.GRPC)
+	recoveryLog = observe(t, &logger.Recovery)
 }
 
-// echo registers the unary rpc /gst.test.Echo/Ping, answering an empty
-// message with an empty message. A call sends on entered when it begins,
-// and, given release, holds until release is closed.
-func echo(entered chan<- struct{}, release <-chan struct{}) {
+// observe swaps *target for a logger recording into the returned recorder
+// until the test ends.
+func observe(t *testing.T, target **zap.Logger) *observer.ObservedLogs {
+	t.Helper()
+	core, logs := observer.New(zapcore.DebugLevel)
+	saved := *target
+	*target = zap.New(core)
+	t.Cleanup(func() { *target = saved })
+	return logs
+}
+
+// serve registers the service gst.test.Echo with one unary rpc per entry
+// of handlers, named by its key. Each takes and answers an empty message,
+// answering with the error its handler returns, and runs the server's
+// interceptors first, the way the code the protobuf plugin generates does.
+func serve(handlers map[string]func(ctx context.Context) error) {
+	methods := make([]grpc.MethodDesc, 0, len(handlers))
+	for name, handle := range handlers {
+		fullMethod := "/gst.test.Echo/" + name
+		methods = append(methods, grpc.MethodDesc{
+			MethodName: name,
+			Handler: func(_ any, ctx context.Context, dec func(any) error, interceptor grpc.UnaryServerInterceptor) (any, error) {
+				in := new(emptypb.Empty)
+				if err := dec(in); err != nil {
+					return nil, err
+				}
+				handler := func(ctx context.Context, _ any) (any, error) {
+					if err := handle(ctx); err != nil {
+						return nil, err
+					}
+					return &emptypb.Empty{}, nil
+				}
+				if interceptor == nil {
+					return handler(ctx, in)
+				}
+				return interceptor(ctx, in, &grpc.UnaryServerInfo{FullMethod: fullMethod}, handler)
+			},
+		})
+	}
 	Register(func(r grpc.ServiceRegistrar) {
 		r.RegisterService(&grpc.ServiceDesc{
 			ServiceName: "gst.test.Echo",
 			HandlerType: (*any)(nil),
-			Methods: []grpc.MethodDesc{{
-				MethodName: "Ping",
-				Handler: func(_ any, _ context.Context, dec func(any) error, _ grpc.UnaryServerInterceptor) (any, error) {
-					in := new(emptypb.Empty)
-					if err := dec(in); err != nil {
-						return nil, err
-					}
-					if entered != nil {
-						entered <- struct{}{}
-					}
-					if release != nil {
-						<-release
-					}
-					return &emptypb.Empty{}, nil
-				},
-			}},
-			Metadata: "gst/test/echo.proto",
+			Methods:     methods,
+			Metadata:    "gst/test/echo.proto",
 		}, nil)
 	})
+}
+
+// echo registers the rpc Ping, answering an empty message with an empty
+// message. A call sends on entered when it begins, and, given release,
+// holds until release is closed.
+func echo(entered chan<- struct{}, release <-chan struct{}) {
+	serve(map[string]func(context.Context) error{"Ping": func(context.Context) error {
+		if entered != nil {
+			entered <- struct{}{}
+		}
+		if release != nil {
+			<-release
+		}
+		return nil
+	}})
 }
 
 // start runs Run in a goroutine and returns the address the listener
@@ -104,9 +150,9 @@ func dial(t *testing.T, addr string, creds credentials.TransportCredentials) *gr
 	return conn
 }
 
-// ping calls /gst.test.Echo/Ping over conn.
-func ping(ctx context.Context, conn *grpc.ClientConn) error {
-	return conn.Invoke(ctx, "/gst.test.Echo/Ping", &emptypb.Empty{}, &emptypb.Empty{})
+// call invokes the rpc name of gst.test.Echo over conn.
+func call(ctx context.Context, conn *grpc.ClientConn, name string, opts ...grpc.CallOption) error {
+	return conn.Invoke(ctx, "/gst.test.Echo/"+name, &emptypb.Empty{}, &emptypb.Empty{}, opts...)
 }
 
 // healthOf checks the server's overall health over conn.
@@ -166,7 +212,7 @@ func TestRunServesTheRegisteredServicesWithHealthAndReflection(t *testing.T) {
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	require.NoError(t, ping(ctx, conn))
+	require.NoError(t, call(ctx, conn, "Ping"))
 	require.Equal(t, grpc_health_v1.HealthCheckResponse_SERVING, healthOf(t, conn))
 	names, err := services(t, conn)
 	require.NoError(t, err)
@@ -176,7 +222,7 @@ func TestRunServesTheRegisteredServicesWithHealthAndReflection(t *testing.T) {
 	Drain()
 
 	require.Equal(t, grpc_health_v1.HealthCheckResponse_NOT_SERVING, healthOf(t, conn))
-	require.NoError(t, ping(ctx, conn), "draining fails readiness, the service itself keeps answering")
+	require.NoError(t, call(ctx, conn, "Ping"), "draining fails readiness, the service itself keeps answering")
 }
 
 // TestRunLeavesReflectionOutWhenDisabled pins the reflection switch.
@@ -199,13 +245,12 @@ func TestStopCutsTheCallsItsDrainLeftRunning(t *testing.T) {
 	reset(t)
 	entered := make(chan struct{}, 1)
 	release := make(chan struct{})
-	t.Cleanup(func() { close(release) })
 	echo(entered, release)
 	conn := dial(t, start(t), nil)
 	drainTimeout = 200 * time.Millisecond
 
 	result := make(chan error, 1)
-	go func() { result <- ping(context.Background(), conn) }()
+	go func() { result <- call(context.Background(), conn, "Ping") }()
 	<-entered
 
 	begin := time.Now()
@@ -219,25 +264,32 @@ func TestStopCutsTheCallsItsDrainLeftRunning(t *testing.T) {
 	case <-time.After(5 * time.Second):
 		t.Fatal("the cut call did not end")
 	}
+	// The handler the cut left running ends on its own once released, and
+	// its access-log entry is the last thing it writes; the test outlives it.
+	close(release)
+	require.Eventually(t, func() bool { return accessLog.Len() == 1 }, 5*time.Second, 10*time.Millisecond)
 }
 
 // TestRunServesTLSWhenEnabled pins that with tls_enabled the listener speaks
-// TLS with the configured certificate: a TLS client is answered, a
-// plaintext one is not.
+// TLS with the configured certificate: a TLS client is answered and its
+// calls report TLS, a plaintext one is not.
 func TestRunServesTLSWhenEnabled(t *testing.T) {
 	reset(t)
 	config.App.GRPC.TLSEnabled = true
 	config.App.GRPC.CertFile, config.App.GRPC.KeyFile = selfSigned(t)
-	echo(nil, nil)
+	seen := make(chan observed, 1)
+	look(seen)
 	addr := start(t)
 
 	secure := dial(t, addr, credentials.NewTLS(&tls.Config{InsecureSkipVerify: true})) // a self-signed test certificate
 	require.Equal(t, grpc_health_v1.HealthCheckResponse_SERVING, healthOf(t, secure))
-
-	plain := dial(t, addr, nil)
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	require.Error(t, ping(ctx, plain))
+	require.NoError(t, call(ctx, secure, "Look"))
+	require.True(t, (<-seen).meta.TLS())
+
+	plain := dial(t, addr, nil)
+	require.Error(t, call(ctx, plain, "Look"))
 }
 
 // TestRegisterAfterRunPanics pins that a service registered once the

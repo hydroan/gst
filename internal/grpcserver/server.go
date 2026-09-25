@@ -80,8 +80,11 @@ func Run() error {
 		log.Debugw("grpc server not started: no service registered")
 		return nil
 	}
+	if err := registerServerMetrics(); err != nil {
+		return err
+	}
 	cfg := config.App.GRPC
-	opts := []grpc.ServerOption{grpc.KeepaliveParams(keepalive.ServerParameters{Time: cfg.KeepaliveTime, Timeout: cfg.KeepaliveTimeout})}
+	opts := append(interceptors(), grpc.KeepaliveParams(keepalive.ServerParameters{Time: cfg.KeepaliveTime, Timeout: cfg.KeepaliveTimeout}))
 	if cfg.TLSEnabled {
 		creds, err := credentials.NewServerTLSFromFile(cfg.CertFile, cfg.KeyFile)
 		if err != nil {
@@ -101,6 +104,9 @@ func Run() error {
 	if cfg.Reflection {
 		reflection.Register(srv)
 	}
+	// Every method's series exist from the start, at zero, so a dashboard
+	// finds them before the first call.
+	serverMetrics.InitializeMetrics(srv)
 
 	addr := net.JoinHostPort(cfg.Listen, strconv.Itoa(cfg.Port))
 	lis, err := net.Listen("tcp", addr)
