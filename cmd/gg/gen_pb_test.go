@@ -85,6 +85,16 @@ func TestGenRunRefusesTwoActionsBecomingOneRPC(t *testing.T) {
 	require.Contains(t, err.Error(), "tmpapp/model.Clash: the List actions on routes clashes and public/clashes both become rpc List; name one of them with Filename()")
 }
 
+func TestGenRunRefusesATypeNamedLikeAStandardMessage(t *testing.T) {
+	projectDir := newGenProject(t)
+	writeProtobufProject(t, projectDir, map[string]string{"model/notice.go": protobufStandardNameModel})
+
+	err := genRunWithOptions(genRunOptions{Quiet: true})
+
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "tmpapp/model.CreateNoticeRequest: the message CreateNoticeRequest clashes with the rpc NoticeService.Create; rename the type")
+}
+
 // writeProtobufProject writes the model files of a project whose models are
 // served over gRPC. Single quotes in the sources stand for backquotes.
 func writeProtobufProject(t *testing.T, projectDir string, files map[string]string) {
@@ -388,6 +398,55 @@ func (Rejected) Design() {
 	dsl.Migrate()
 	dsl.Endpoint("rejected")
 	dsl.Create(func() {})
+}
+`
+
+// protobufStandardNameModel reaches a project type named like the request
+// message of a standard action after that message took the name.
+const protobufStandardNameModel = `package model
+
+import (
+	"github.com/hydroan/gst/dsl"
+	"github.com/hydroan/gst/model"
+)
+
+// Notice is created over gRPC.
+type Notice struct {
+	Title string 'json:"title" pb:"11"'
+
+	model.Base
+}
+
+func (Notice) TableName() string { return "notices" }
+
+func (Notice) Design() {
+	dsl.GRPC()
+	dsl.Migrate()
+	dsl.Endpoint("notices")
+	dsl.Create(func() {})
+	dsl.Route("notices/echo", func() {
+		dsl.Create(func() {
+			dsl.Filename("echo")
+			dsl.Payload[*EchoReq]()
+			dsl.Result[*EchoRsp]()
+		})
+	})
+}
+
+// EchoReq carries the draft to echo.
+type EchoReq struct {
+	Draft CreateNoticeRequest 'json:"draft" pb:"1"'
+}
+
+// EchoRsp answers with the draft.
+type EchoRsp struct {
+	Draft CreateNoticeRequest 'json:"draft" pb:"1"'
+}
+
+// CreateNoticeRequest is a project type named like the request message of
+// NoticeService.Create.
+type CreateNoticeRequest struct {
+	Title string 'json:"title" pb:"1"'
 }
 `
 

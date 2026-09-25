@@ -52,8 +52,8 @@ func (g *generator) declareService(m *gen.ModelInfo) {
 	}
 
 	service := &descriptorpb.ServiceDescriptorProto{Name: new(m.ModelName + "Service")}
-	if !file.claim(service.GetName(), "the service of "+m.ModelName) {
-		g.project.Report(s, "the service %s clashes with a type of the same name; rename the type", service.GetName())
+	if holder, ok := file.claim(service.GetName(), "the service of "+m.ModelName); !ok {
+		g.project.Report(s, "the service %s clashes with %s; rename the type", service.GetName(), holder)
 		return
 	}
 	routes := make(map[string]string)
@@ -114,8 +114,8 @@ func (g *generator) rpcMessages(m *gen.ModelInfo, scope *types.Scope, model *mes
 func (g *generator) customMessage(m *gen.ModelInfo, scope *types.Scope, file *protoFile, route string, action *dsl.Action, typeName, kind string, s jsonshape.Site) (string, bool) {
 	if typeName == "" || typeName == dsl.PayloadEmpty {
 		name := standardMessageName(m, route, action, kind)
-		if !file.claim(name, "the rpc "+rpcName(m, route, action)) {
-			g.project.Report(s, "the message %s clashes with a type of the same name; rename the type", name)
+		if holder, ok := file.claim(name, "the rpc "+m.ModelName+"Service."+rpcName(m, route, action)); !ok {
+			g.project.Report(s, "the message %s clashes with %s; rename the type", name, holder)
 			return "", false
 		}
 		file.addMessage(&descriptorpb.DescriptorProto{Name: new(name)},
@@ -243,8 +243,8 @@ func (g *generator) standardMessages(m *gen.ModelInfo, model *message, file *pro
 	request.Name = new(requestName)
 	response.Name = new(responseName)
 	for _, name := range []string{requestName, responseName} {
-		if !file.claim(name, "the rpc "+rpc) {
-			g.project.Report(jsonshape.Site{Subject: m.ImportPath() + "." + m.ModelName}, "the message %s clashes with a type of the same name; rename the type", name)
+		if holder, ok := file.claim(name, "the rpc "+rpc); !ok {
+			g.project.Report(jsonshape.Site{Subject: m.ImportPath() + "." + m.ModelName}, "the message %s clashes with %s; rename the type", name, holder)
 			return "", "", false
 		}
 	}

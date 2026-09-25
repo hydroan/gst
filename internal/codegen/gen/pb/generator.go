@@ -101,7 +101,10 @@ func (g *generator) messageOf(obj *types.TypeName) *message {
 	}
 	file := g.fileOf(obj)
 	m := &message{obj: obj, file: file, name: obj.Name()}
-	file.claim(obj.Name(), "the type "+obj.Pkg().Path()+"."+obj.Name())
+	if holder, ok := file.claim(obj.Name(), "the type "+obj.Pkg().Path()+"."+obj.Name()); !ok {
+		g.project.Report(jsonshape.Site{Subject: obj.Pkg().Path() + "." + obj.Name(), Pos: obj.Pos()},
+			"the message %s clashes with %s; rename the type", obj.Name(), holder)
+	}
 	g.messages[obj] = m
 	g.queue = append(g.queue, obj)
 	return m
@@ -136,15 +139,16 @@ func (g *generator) file(name string) *protoFile {
 	return f
 }
 
-// claim records that name is declared in the file by owner, and reports a
-// second declaration of the same name.
-func (f *protoFile) claim(name, owner string) bool {
+// claim records name as owner's, the type or rpc the name stands for ("the
+// type app/model.Item", "the rpc ItemService.Create"), and reports whether the
+// name is free or already owner's. A name another owner holds stays theirs,
+// and claim returns that holder for the diagnostic naming the clash.
+func (f *protoFile) claim(name, owner string) (holder string, ok bool) {
 	if previous, taken := f.names[name]; taken {
-		// The file is what the reader sees the clash in, so it is the subject.
-		return previous == owner
+		return previous, previous == owner
 	}
 	f.names[name] = owner
-	return true
+	return owner, true
 }
 
 // addMessage appends a message to the file under its leading comment.
@@ -195,8 +199,10 @@ func (f *protoFile) comment(path []int32, text string) {
 }
 
 // commentText renders text the way protoc records a comment, a space before
-// every line and a newline after it: "Title is the display title.\n" for the
-// one-line doc, " Title is the display title.\n *\n" for a doc of two lines.
+// every line and a newline after it, a blank line kept bare: " Title is the
+// display title.\n" for the one-line doc "Title is the display title.", and
+// " Title is the display title.\n\n Two lines.\n" for the two-paragraph doc
+// "Title is the display title.\n\nTwo lines.\n".
 func commentText(text string) string {
 	lines := strings.Split(strings.TrimRight(text, "\n"), "\n")
 	var b strings.Builder
