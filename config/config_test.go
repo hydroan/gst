@@ -276,6 +276,28 @@ func TestInitDefaultsToInMemorySqliteWithoutConfigFile(t *testing.T) {
 	assert.False(t, config.App.Database.AutoMigrate)
 }
 
+// TestInitDefaultsTheGRPCListener pins the defaults of the grpc section: port
+// 9090 on every interface, reflection on, plaintext, keepalive left to
+// grpc-go; and that the environment overrides them like any other section.
+func TestInitDefaultsTheGRPCListener(t *testing.T) {
+	clearConfigEnvForTest(t)
+	t.Chdir(t.TempDir())
+	config.SetConfigFile("")
+
+	if err := config.Init(); err != nil {
+		t.Fatal(err)
+	}
+	assert.Equal(t, config.GRPC{Port: 9090, Reflection: true}, config.App.GRPC)
+
+	t.Setenv(config.GRPC_PORT, "9999")
+	t.Setenv(config.GRPC_REFLECTION, "false")
+	t.Setenv(config.GRPC_KEEPALIVE_TIME, "30s")
+	if err := config.Init(); err != nil {
+		t.Fatal(err)
+	}
+	assert.Equal(t, config.GRPC{Port: 9999, KeepaliveTime: 30 * time.Second}, config.App.GRPC)
+}
+
 // Sample is a registered section read from the file and its default tags.
 type Sample struct {
 	AppID     string `json:"app_id" mapstructure:"app_id" default:"myappid"`

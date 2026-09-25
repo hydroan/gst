@@ -32,6 +32,7 @@ import (
 	"github.com/hydroan/gst/debug/statsviz"
 	"github.com/hydroan/gst/internal/controller"
 	"github.com/hydroan/gst/internal/dbruntime"
+	"github.com/hydroan/gst/internal/grpcserver"
 	"github.com/hydroan/gst/internal/lifecycle"
 	"github.com/hydroan/gst/internal/middleware"
 	"github.com/hydroan/gst/internal/router"
@@ -272,6 +273,7 @@ func Run() (err error) {
 
 	startup.RegisterGo(
 		router.Run,
+		grpcserver.Run,
 		statsviz.Run,
 		debugpprof.Run,
 		gops.Run,
@@ -280,6 +282,7 @@ func Run() (err error) {
 	// The servers drain what they may, and not at all once the process
 	// fails now.
 	registerCleanup(func() { router.Stop(lifecycle.FailedNow()) })
+	registerCleanup(func() { grpcserver.Stop(lifecycle.FailedNow()) })
 	registerCleanup(func() { statsviz.Stop(lifecycle.FailedNow()) })
 	registerCleanup(func() { debugpprof.Stop(lifecycle.FailedNow()) })
 	registerCleanup(gops.Stop)
@@ -298,11 +301,13 @@ func Run() (err error) {
 		lifecycle.AbandonWaits(errors.Newf("shutdown hurried by a second %s", sig))
 	}()
 
-	// Either way the process leaves the same way: stop answering readiness
-	// before anything is torn down, cancel the process context so the
-	// components stop taking on new work, then hold there for the
-	// configured window. Teardown starts when it elapses.
+	// Either way the process leaves the same way: stop answering readiness,
+	// on the HTTP probe and the gRPC health service alike, before anything
+	// is torn down, cancel the process context so the components stop
+	// taking on new work, then hold there for the configured window.
+	// Teardown starts when it elapses.
 	controller.Probe.Drain()
+	grpcserver.Drain()
 	cancelProcess()
 	awaitDrain()
 	return err

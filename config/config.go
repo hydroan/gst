@@ -71,6 +71,7 @@ import (
 type Config struct {
 	AppInfo       `json:"app" mapstructure:"app" ini:"app" yaml:"app"`
 	Server        `json:"server" mapstructure:"server" ini:"server" yaml:"server"`
+	GRPC          `json:"grpc" mapstructure:"grpc" ini:"grpc" yaml:"grpc"`
 	Cache         `json:"cache" mapstructure:"cache" ini:"cache" yaml:"cache"`
 	Middleware    `json:"middleware" mapstructure:"middleware" ini:"middleware" yaml:"middleware"`
 	Auth          `json:"auth" mapstructure:"auth" ini:"auth" yaml:"auth"`
@@ -104,6 +105,7 @@ type Config struct {
 func (c *Config) setDefault(v *viper.Viper) {
 	c.AppInfo.setDefault(v)
 	c.Server.setDefault(v)
+	c.GRPC.setDefault(v)
 	c.Cache.setDefault(v)
 	c.Middleware.setDefault(v)
 	c.Auth.setDefault(v)
