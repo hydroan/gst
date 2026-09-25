@@ -3,7 +3,9 @@ package requestctx
 import (
 	"context"
 	"maps"
+	"net/http"
 	"net/url"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 	"github.com/hydroan/gst/consts"
@@ -18,6 +20,11 @@ import (
 // requests must use the route; the path only locates one of them. The method
 // is the request verb, which separates the actions one route pattern serves
 // and neither of the other two distinguishes.
+//
+// The client address, user agent, host and TLS flag describe the connection
+// the request arrived on. They are carried here rather than read off the HTTP
+// request on demand, so that a context built without an HTTP request -- one a
+// transport other than HTTP constructs -- answers for them all the same.
 type Metadata struct {
 	route     string
 	path      string
@@ -29,6 +36,10 @@ type Metadata struct {
 	params    map[string]string
 	query     url.Values
 	rawQuery  string
+	clientIP  string
+	userAgent string
+	host      string
+	tls       bool
 }
 
 // Fields contains request metadata fields for non-gin callers and tests.
@@ -46,6 +57,10 @@ type Fields struct {
 	Params    map[string]string
 	Query     url.Values
 	RawQuery  string
+	ClientIP  string
+	UserAgent string
+	Host      string
+	TLS       bool
 }
 
 // New creates Metadata from explicit fields.
@@ -61,6 +76,10 @@ func New(fields Fields) Metadata {
 		params:    cloneStringMap(fields.Params),
 		query:     cloneURLValues(fields.Query),
 		rawQuery:  rawQueryOf(fields.RawQuery, fields.Query),
+		clientIP:  fields.ClientIP,
+		userAgent: fields.UserAgent,
+		host:      fields.Host,
+		tls:       fields.TLS,
 	}
 }
 
@@ -74,8 +93,9 @@ func New(fields Fields) Metadata {
 //
 // Metadata is constructed several times per request — the controller span,
 // every service context, and every database handle each build one — so the
-// expensive parts, parsing the query string and building the route parameter
-// map, are memoized on the gin context by GinQuery and ginParams.
+// expensive parts, parsing the query string, building the route parameter map
+// and resolving the connection fields, are memoized on the gin context by
+// GinQuery, ginParams and ginConnection.
 // Identity fields are deliberately read fresh on every call: they are cheap
 // context lookups, and re-reading them keeps a construction that runs before
 // the identity middleware from freezing empty identity into the constructions
@@ -97,6 +117,7 @@ func FromGin(c *gin.Context) Metadata {
 			rawQuery = c.Request.URL.RawQuery
 		}
 	}
+	conn := ginConnection(c)
 
 	return Metadata{
 		route:     c.FullPath(),
@@ -109,6 +130,10 @@ func FromGin(c *gin.Context) Metadata {
 		params:    ginParams(c),
 		query:     GinQuery(c),
 		rawQuery:  rawQuery,
+		clientIP:  conn.clientIP,
+		userAgent: conn.userAgent,
+		host:      conn.host,
+		tls:       conn.tls,
 	}
 }
 
@@ -209,12 +234,21 @@ func ginParams(c *gin.Context) map[string]string {
 	return params
 }
 
-// ginClientIPKey keys the request's resolved client address on the gin context.
-const ginClientIPKey = "gst/requestctx/client_ip"
+// ginConnectionKey keys the request's resolved connection fields on the gin
+// context.
+const ginConnectionKey = "gst/requestctx/connection"
 
-// GinClientIP returns the client address gin resolved for the request,
-// resolving it on the first call and reusing that result for the rest of the
-// request.
+// connection holds the fields describing the connection a request arrived on,
+// resolved once per request by ginConnection.
+type connection struct {
+	clientIP  string
+	userAgent string
+	host      string
+	tls       bool
+}
+
+// ginConnection returns the connection fields of the request, resolving them
+// on the first call and reusing that result for the rest of the request.
 //
 // gin.Context.ClientIP re-resolves the address on every call: it splits the
 // host off RemoteAddr, parses it into a net.IP, matches that against the
@@ -222,24 +256,50 @@ const ginClientIPKey = "gst/requestctx/client_ip"
 // time. The answer derives from the connection, the forwarding headers and the
 // engine's trusted proxies, none of which change for the lifetime of a
 // request, so the memo is correct no matter where in the middleware chain the
-// first call happens.
-func GinClientIP(c *gin.Context) string {
+// first call happens. The user agent, host and TLS flag are header and field
+// reads, cheap on their own but repeated by every construction of the
+// request's metadata, so they ride along in the same memo.
+func ginConnection(c *gin.Context) connection {
 	if c == nil {
-		return ""
+		return connection{}
 	}
-	if cached, ok := c.Get(ginClientIPKey); ok {
-		if ip, ok := cached.(string); ok {
-			return ip
+	if cached, ok := c.Get(ginConnectionKey); ok {
+		if conn, ok := cached.(connection); ok {
+			return conn
 		}
 	}
-	// ClientIP dereferences the request; without one there is no address to
-	// resolve and nothing worth memoizing.
+	// ClientIP dereferences the request; without one there is no connection
+	// to describe and nothing worth memoizing.
 	if c.Request == nil {
-		return ""
+		return connection{}
 	}
-	ip := c.ClientIP()
-	c.Set(ginClientIPKey, ip)
-	return ip
+	conn := connection{
+		clientIP:  c.ClientIP(),
+		userAgent: c.Request.UserAgent(),
+		host:      c.Request.Host,
+		tls:       requestTLS(c.Request),
+	}
+	c.Set(ginConnectionKey, conn)
+	return conn
+}
+
+// GinClientIP returns the client address gin resolved for the request,
+// forwarding headers included, from the request's memoized connection fields.
+func GinClientIP(c *gin.Context) string { return ginConnection(c).clientIP }
+
+// requestTLS reports whether r arrived over TLS, either directly or as the
+// forwarding headers of a proxy in front declare.
+func requestTLS(r *http.Request) bool {
+	if r.TLS != nil {
+		return true
+	}
+	if strings.EqualFold(strings.TrimSpace(r.Header.Get("X-Forwarded-Proto")), "https") {
+		return true
+	}
+	if strings.EqualFold(strings.TrimSpace(r.Header.Get("X-Forwarded-Ssl")), "on") {
+		return true
+	}
+	return strings.Contains(strings.ToLower(r.Header.Get("Forwarded")), "proto=https")
 }
 
 func (m Metadata) Route() string     { return m.route }
@@ -249,6 +309,16 @@ func (m Metadata) Username() string  { return m.username }
 func (m Metadata) UserID() string    { return m.userID }
 func (m Metadata) SessionID() string { return m.sessionID }
 func (m Metadata) TenantID() string  { return m.tenantID }
+
+// ClientIP, UserAgent, Host and TLS describe the connection the request
+// arrived on: the client address gin resolved, forwarding headers included;
+// the User-Agent header; the host the request was addressed to; and whether it
+// arrived over TLS, directly or as the forwarding headers of a proxy in front
+// declare.
+func (m Metadata) ClientIP() string  { return m.clientIP }
+func (m Metadata) UserAgent() string { return m.userAgent }
+func (m Metadata) Host() string      { return m.host }
+func (m Metadata) TLS() bool         { return m.tls }
 
 func (m Metadata) Param(key string) string {
 	if m.params == nil {

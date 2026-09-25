@@ -2,6 +2,7 @@ package requestctx
 
 import (
 	"context"
+	"maps"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -29,7 +30,11 @@ func TestFromGinExtractsRequestFields(t *testing.T) {
 
 		meta = FromGin(ctx)
 	})
-	router.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/api/users/42?tag=blue&tag=green&range=a[gte]", nil))
+	request := httptest.NewRequest(http.MethodGet, "/api/users/42?tag=blue&tag=green&range=a[gte]", nil)
+	request.RemoteAddr = "192.0.2.10:54321"
+	request.Header.Set("User-Agent", "sample-agent/1.0")
+	request.Header.Set("X-Forwarded-Proto", "https")
+	router.ServeHTTP(httptest.NewRecorder(), request)
 
 	require.Equal(t, "/api/users/:id", meta.Route())
 	require.Equal(t, "/api/users/42", meta.Path())
@@ -43,6 +48,40 @@ func TestFromGinExtractsRequestFields(t *testing.T) {
 	// The raw query keeps key order and escaping exactly as sent, which
 	// re-encoding the parsed values would not.
 	require.Equal(t, "tag=blue&tag=green&range=a[gte]", meta.RawQuery())
+	require.Equal(t, "192.0.2.10", meta.ClientIP())
+	require.Equal(t, "sample-agent/1.0", meta.UserAgent())
+	require.Equal(t, "example.com", meta.Host())
+	require.True(t, meta.TLS(), "the proxy in front declared TLS")
+}
+
+// TestFromGinReadsTLSFromConnectionOrProxyHeaders pins where the TLS flag
+// comes from: the connection itself, or the headers a proxy terminating TLS in
+// front sets, spelled in any case and with surrounding spaces.
+func TestFromGinReadsTLSFromConnectionOrProxyHeaders(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	tests := []struct {
+		name   string
+		target string
+		header http.Header
+		want   bool
+	}{
+		{name: "plain connection", target: "http://example.com/api/records", want: false},
+		{name: "tls connection", target: "https://example.com/api/records", want: true},
+		{name: "x-forwarded-proto https", target: "http://example.com/api/records", header: http.Header{"X-Forwarded-Proto": {" HTTPS "}}, want: true},
+		{name: "x-forwarded-proto http", target: "http://example.com/api/records", header: http.Header{"X-Forwarded-Proto": {"http"}}, want: false},
+		{name: "x-forwarded-ssl on", target: "http://example.com/api/records", header: http.Header{"X-Forwarded-Ssl": {"on"}}, want: true},
+		{name: "forwarded proto https", target: "http://example.com/api/records", header: http.Header{"Forwarded": {"for=203.0.113.5;proto=HTTPS"}}, want: true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
+			ctx.Request = httptest.NewRequest(http.MethodGet, tt.target, nil)
+			maps.Copy(ctx.Request.Header, tt.header)
+
+			require.Equal(t, tt.want, FromGin(ctx).TLS())
+		})
+	}
 }
 
 func TestMetadataRawQueryFallsBackToEncodedQuery(t *testing.T) {
@@ -225,41 +264,51 @@ func TestFromGinSharesTheMemoizedParams(t *testing.T) {
 	require.True(t, ran, "the assertions live in the handler, so it must have run")
 }
 
-// TestGinClientIPMemoizesTheResolvedAddress pins what the memo is for: gin
-// resolves the address once, forwarding headers included, and every later call
-// of one request reads that answer instead of resolving it again.
-func TestGinClientIPMemoizesTheResolvedAddress(t *testing.T) {
+// TestGinConnectionMemoizesTheResolvedFields pins what the memo is for: gin
+// resolves the address once, forwarding headers included, the other connection
+// fields are read alongside it, and every later call of one request reads that
+// answer instead of resolving it again.
+func TestGinConnectionMemoizesTheResolvedFields(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
 	ginCtx, _ := gin.CreateTestContext(httptest.NewRecorder())
 	ginCtx.Request = httptest.NewRequest(http.MethodGet, "/api/records", nil)
 	ginCtx.Request.RemoteAddr = "192.0.2.10:54321"
 	ginCtx.Request.Header.Set("X-Forwarded-For", "203.0.113.5")
+	ginCtx.Request.Header.Set("X-Forwarded-Proto", "https")
+	ginCtx.Request.Header.Set("User-Agent", "sample-agent/1.0")
 
 	require.Equal(t, "203.0.113.5", GinClientIP(ginCtx),
 		"the resolution must be gin's own, forwarding headers included")
 
-	stored, ok := ginCtx.Get(ginClientIPKey)
-	require.True(t, ok, "the resolved address must be memoized for the rest of the request")
-	require.Equal(t, "203.0.113.5", stored)
+	stored, ok := ginCtx.Get(ginConnectionKey)
+	require.True(t, ok, "the resolved fields must be memoized for the rest of the request")
+	require.Equal(t, connection{
+		clientIP:  "203.0.113.5",
+		userAgent: "sample-agent/1.0",
+		host:      "example.com",
+		tls:       true,
+	}, stored)
 
-	// Rewriting what the address was resolved from proves the second call
+	// Rewriting what the fields were resolved from proves the second call
 	// reuses the stored answer rather than resolving again.
 	ginCtx.Request.Header.Set("X-Forwarded-For", "198.51.100.7")
+	ginCtx.Request.Header.Set("User-Agent", "other-agent/2.0")
 	require.Equal(t, "203.0.113.5", GinClientIP(ginCtx))
+	require.Equal(t, "sample-agent/1.0", FromGin(ginCtx).UserAgent())
 }
 
-// TestGinClientIPWithoutRequestMemoizesNothing pins the construction paths that
-// have no request behind them: they read an empty address and leave the memo
-// untouched, so a later call that does have a request still resolves one.
-func TestGinClientIPWithoutRequestMemoizesNothing(t *testing.T) {
+// TestGinConnectionWithoutRequestMemoizesNothing pins the construction paths
+// that have no request behind them: they read empty fields and leave the memo
+// untouched, so a later call that does have a request still resolves them.
+func TestGinConnectionWithoutRequestMemoizesNothing(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
 	require.Empty(t, GinClientIP(nil))
 
 	ginCtx, _ := gin.CreateTestContext(httptest.NewRecorder())
 	require.Empty(t, GinClientIP(ginCtx))
-	_, stored := ginCtx.Get(ginClientIPKey)
+	_, stored := ginCtx.Get(ginConnectionKey)
 	require.False(t, stored, "without a request there is nothing to memoize")
 
 	ginCtx.Request = httptest.NewRequest(http.MethodGet, "/api/records", nil)
@@ -280,7 +329,11 @@ func TestMetadataContextRoundTrip(t *testing.T) {
 		Query: map[string][]string{
 			"tag": {"blue", "green"},
 		},
-		RawQuery: "tag=blue&tag=green",
+		RawQuery:  "tag=blue&tag=green",
+		ClientIP:  "203.0.113.5",
+		UserAgent: "sample-agent/1.0",
+		Host:      "example.com",
+		TLS:       true,
 	})
 
 	ctx := WithMetadata(context.Background(), meta)
@@ -294,4 +347,8 @@ func TestMetadataContextRoundTrip(t *testing.T) {
 	require.Equal(t, "42", got.Param("id"))
 	require.Equal(t, []string{"blue", "green"}, got.Query()["tag"])
 	require.Equal(t, "tag=blue&tag=green", got.RawQuery())
+	require.Equal(t, "203.0.113.5", got.ClientIP())
+	require.Equal(t, "sample-agent/1.0", got.UserAgent())
+	require.Equal(t, "example.com", got.Host())
+	require.True(t, got.TLS())
 }
