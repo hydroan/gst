@@ -5,11 +5,13 @@ import (
 	"go/types"
 	"strconv"
 	"strings"
+
+	"github.com/hydroan/gst/internal/codegen/gen/jsonshape"
 )
 
-// enumType describes a named string or integer type of the project whose
-// package declares constants of it. Its JSON values are those constants, and
-// the zero value of a variable never assigned one.
+// enumType is the rendering of an enum type of the project (see
+// jsonshape.Enum): its constants as TypeScript literals, and the literal of
+// its zero value when no constant has it.
 type enumType struct {
 	values []enumValue
 	// bitwise marks a bit set: a constant built with a bitwise operator means
@@ -25,8 +27,8 @@ type enumValue struct {
 	doc     string
 }
 
-// enumOf returns the enum description of obj, or nil when obj is not an enum
-// type.
+// enumOf returns the rendering of obj as an enum type, or nil when obj is not
+// an enum type.
 func (g *generator) enumOf(obj *types.TypeName) *enumType {
 	if e, ok := g.enums[obj]; ok {
 		return e
@@ -36,39 +38,25 @@ func (g *generator) enumOf(obj *types.TypeName) *enumType {
 	return e
 }
 
-// buildEnum describes obj as an enum type, or returns nil when it is none.
+// buildEnum renders the enum description of obj, or returns nil when it has
+// none. A constant a JavaScript number cannot hold exactly is reported and
+// left out.
 func (g *generator) buildEnum(obj *types.TypeName) *enumType {
-	if obj.IsAlias() || obj.Pkg() == nil {
+	shape := g.project.Enum(obj)
+	if shape == nil {
 		return nil
 	}
-	source := g.sources[obj.Pkg().Path()]
-	basic, isBasic := obj.Type().Underlying().(*types.Basic)
-	if source == nil || !isBasic || basic.Info()&(types.IsString|types.IsInteger) == 0 {
-		return nil
-	}
-	constants := source.constants[obj]
-	if len(constants) == 0 {
-		return nil
-	}
-	e := &enumType{}
-	seen := make(map[string]bool)
-	coversZero := false
-	for _, c := range constants {
-		e.bitwise = e.bitwise || c.bitwise
-		literal, zero, ok := g.constantLiteral(c.obj)
+	e := &enumType{bitwise: shape.Bitwise}
+	for _, v := range shape.Values {
+		literal, ok := g.constantLiteral(v.Const)
 		if !ok {
 			continue
 		}
-		coversZero = coversZero || zero
-		if seen[literal] {
-			continue
-		}
-		seen[literal] = true
-		e.values = append(e.values, enumValue{literal: literal, doc: c.doc})
+		e.values = append(e.values, enumValue{literal: literal, doc: v.Doc})
 	}
-	if !coversZero {
+	if !shape.CoversZero {
 		e.zero = "0"
-		if basic.Info()&types.IsString != 0 {
+		if basic, ok := obj.Type().Underlying().(*types.Basic); ok && basic.Info()&types.IsString != 0 {
 			e.zero = `""`
 		}
 	}
@@ -78,26 +66,24 @@ func (g *generator) buildEnum(obj *types.TypeName) *enumType {
 // maxSafeInteger is the largest integer a JavaScript number holds exactly.
 const maxSafeInteger = 1<<53 - 1
 
-// constantLiteral renders the value of c as a TypeScript literal and reports
-// whether it is the zero value: "active" for the string constant active, ""
-// and zero for the empty string, 1 for the integer 1. An integer a JavaScript
-// number cannot hold exactly is reported, and yields no literal.
-func (g *generator) constantLiteral(c *types.Const) (literal string, zero, ok bool) {
+// constantLiteral renders the value of c as a TypeScript literal: "active"
+// for the string constant active, 1 for the integer 1. An integer a
+// JavaScript number cannot hold exactly is reported, and yields no literal.
+func (g *generator) constantLiteral(c *types.Const) (string, bool) {
 	val := c.Val()
 	switch val.Kind() {
 	case constant.String:
-		s := constant.StringVal(val)
-		return quoteString(s), s == "", true
+		return quoteString(constant.StringVal(val)), true
 	case constant.Int:
 		v, exact := constant.Int64Val(val)
 		if !exact || v > maxSafeInteger || v < -maxSafeInteger {
-			g.report(site{subject: c.Pkg().Path() + "." + c.Name(), pos: c.Pos()},
+			g.project.Report(jsonshape.Site{Subject: c.Pkg().Path() + "." + c.Name(), Pos: c.Pos()},
 				"the value %s is not exactly representable as a JavaScript number", val.ExactString())
-			return "", false, false
+			return "", false
 		}
-		return strconv.FormatInt(v, 10), v == 0, true
+		return strconv.FormatInt(v, 10), true
 	default:
-		return "", false, false
+		return "", false
 	}
 }
 
@@ -166,32 +152,11 @@ func (g *generator) enumZero(t types.Type) string {
 		t = types.Unalias(p.Elem())
 	}
 	n, ok := t.(*types.Named)
-	if !ok || !g.declares(n.Obj()) {
+	if !ok || !g.project.Declares(n.Obj()) {
 		return ""
 	}
 	if e := g.enumOf(n.Obj()); e != nil && !e.bitwise {
 		return e.zero
 	}
 	return ""
-}
-
-// checkForeignConstants reports constants of an enum type declared outside the
-// type's package. The declaration of the type lists the constants of its own
-// package only, so such a constant could send a value the declaration refuses.
-func (g *generator) checkForeignConstants() {
-	for obj, e := range g.enums {
-		if e == nil {
-			continue
-		}
-		for pkgPath, source := range g.sources {
-			if pkgPath == obj.Pkg().Path() {
-				continue
-			}
-			for _, c := range source.constants[obj] {
-				g.report(site{subject: pkgPath + "." + c.obj.Name(), pos: c.obj.Pos()},
-					"the constant has type %s.%s but is declared in another package, so the declaration of %s does not list its value; declare it next to its type",
-					obj.Pkg().Path(), obj.Name(), obj.Name())
-			}
-		}
-	}
 }

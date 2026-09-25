@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/hydroan/gst/internal/codegen/gen/jsonshape"
 	"github.com/hydroan/gst/internal/codegen/gen/ts/fixture/model/record"
 	"github.com/hydroan/gst/internal/codegen/gen/ts/fixture/model/sample"
 	"github.com/stretchr/testify/require"
@@ -65,24 +66,24 @@ type declaredProperty struct {
 func declaredProperties(t *testing.T, g *generator, ref TypeRef) map[string]declaredProperty {
 	t.Helper()
 
-	obj := g.pkgs[ref.PkgPath].Types.Scope().Lookup(ref.Name)
+	obj := g.project.Package(ref.PkgPath).Types.Scope().Lookup(ref.Name)
 	require.NotNil(t, obj)
 	st, ok := obj.Type().Underlying().(*types.Struct)
 	require.True(t, ok)
 
-	s := site{subject: ref.PkgPath + "." + ref.Name}
+	s := jsonshape.Site{Subject: ref.PkgPath + "." + ref.Name}
 	ctx := &fileContext{pkgPath: ref.PkgPath, imports: make(map[string]bool)}
 	properties := make(map[string]declaredProperty)
-	for _, f := range g.jsonFields(st, s) {
+	for _, f := range g.project.Fields(st, s) {
 		text := g.property(f, ctx, s)
 		name, value, _ := strings.Cut(text, ": ")
-		properties[f.key] = declaredProperty{
+		properties[f.Key] = declaredProperty{
 			text:     text,
 			optional: strings.HasSuffix(name, "?"),
 			nullable: strings.HasSuffix(value, " | null") || value == "unknown",
 		}
 	}
-	require.Empty(t, g.diags)
+	require.Empty(t, g.project.Diagnostics())
 	return properties
 }
 

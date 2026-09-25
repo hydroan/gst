@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/hydroan/gst/consts"
+	"github.com/hydroan/gst/internal/codegen/gen/jsonshape"
 )
 
 // This file holds the layout of the output: the file the declarations of each
@@ -48,14 +49,14 @@ func (g *generator) files() []File {
 	for _, pkgPath := range slices.Sorted(maps.Keys(byPackage)) {
 		file := g.filePath(pkgPath)
 		if owner, taken := owners[file]; taken {
-			g.report(site{subject: pkgPath}, "the package would be written to %s, which %s takes already; rename the package", file, owner)
+			g.project.Report(jsonshape.Site{Subject: pkgPath}, "the package would be written to %s, which %s takes already; rename the package", file, owner)
 			continue
 		}
 		owners[file] = pkgPath
 
 		decls := byPackage[pkgPath]
 		slices.SortFunc(decls, func(a, b *declaration) int {
-			return comparePositions(g.fset, a.obj.Pos(), b.obj.Pos())
+			return jsonshape.ComparePositions(g.project.FileSet(), a.obj.Pos(), b.obj.Pos())
 		})
 		imports := make(map[string]bool)
 		for _, d := range decls {
@@ -71,7 +72,7 @@ func (g *generator) files() []File {
 		for _, imported := range slices.Sorted(maps.Keys(imports)) {
 			alias := g.importAlias(imported)
 			if other, clash := aliases[alias]; clash && other != imported {
-				g.report(site{subject: imported}, "the package and %s are both imported as %s; rename one of them", other, alias)
+				g.project.Report(jsonshape.Site{Subject: imported}, "the package and %s are both imported as %s; rename one of them", other, alias)
 			}
 			aliases[alias] = imported
 			fmt.Fprintf(&b, "import type * as %s from %s;\n", alias, quoteString(relativeImport(file, g.filePath(imported))))

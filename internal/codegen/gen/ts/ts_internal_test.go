@@ -8,10 +8,10 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"sync"
 	"testing"
 	"time"
 
+	"github.com/hydroan/gst/internal/codegen/gen/jsonshape"
 	"github.com/stretchr/testify/require"
 	"github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/wait"
@@ -268,11 +268,6 @@ export function statusOf(sample: Sample): Status | "" {
 }
 `
 
-// fixtureLoad type-checks the fixture packages once per test binary.
-var fixtureLoad = sync.OnceValues(func() (*loaded, error) {
-	return load(fixtureConfig(sampleRoot, rejectedRoot))
-})
-
 // generateFixture renders the fixture declarations reachable from roots.
 func generateFixture(t *testing.T, roots ...TypeRef) ([]File, error) {
 	t.Helper()
@@ -280,13 +275,14 @@ func generateFixture(t *testing.T, roots ...TypeRef) ([]File, error) {
 	return newGenerator(fixtureConfig(roots...), loadFixture(t)).generate()
 }
 
-// loadFixture returns the type-checked fixture packages.
-func loadFixture(t *testing.T) *loaded {
+// loadFixture type-checks the fixture packages for one generation run: a
+// project serves one run, whose diagnostics it collects.
+func loadFixture(t *testing.T) *jsonshape.Project {
 	t.Helper()
 
-	l, err := fixtureLoad()
+	project, err := jsonshape.Load(fixtureConfig(sampleRoot, rejectedRoot).shapeConfig())
 	require.NoError(t, err)
-	return l
+	return project
 }
 
 // fixtureConfig configures a run over the fixture packages from roots, rooted

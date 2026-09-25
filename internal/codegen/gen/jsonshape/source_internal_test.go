@@ -1,4 +1,4 @@
-package ts
+package jsonshape
 
 import (
 	"go/ast"
@@ -42,8 +42,8 @@ func TestComparePositionsOrdersByFileThenOffset(t *testing.T) {
 	first := fset.AddFile("a.go", -1, 100)
 	second := fset.AddFile("b.go", -1, 100)
 
-	require.Negative(t, comparePositions(fset, first.Pos(10), first.Pos(20)))
-	require.Positive(t, comparePositions(fset, first.Pos(20), first.Pos(10)))
-	require.Negative(t, comparePositions(fset, first.Pos(90), second.Pos(0)))
-	require.Zero(t, comparePositions(fset, first.Pos(5), first.Pos(5)))
+	require.Negative(t, ComparePositions(fset, first.Pos(10), first.Pos(20)))
+	require.Positive(t, ComparePositions(fset, first.Pos(20), first.Pos(10)))
+	require.Negative(t, ComparePositions(fset, first.Pos(90), second.Pos(0)))
+	require.Zero(t, ComparePositions(fset, first.Pos(5), first.Pos(5)))
 }

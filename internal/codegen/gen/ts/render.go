@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"go/types"
 	"strings"
+
+	"github.com/hydroan/gst/internal/codegen/gen/jsonshape"
 )
 
 // render renders the declaration of a project type under its doc comment: an
@@ -29,42 +31,42 @@ import (
 //	export type Records = ($record.Record | null)[] | null;
 func (g *generator) render(obj *types.TypeName) *declaration {
 	ctx := &fileContext{pkgPath: obj.Pkg().Path(), imports: make(map[string]bool)}
-	s := site{subject: obj.Pkg().Path() + "." + obj.Name(), pos: obj.Pos()}
+	s := jsonshape.Site{Subject: obj.Pkg().Path() + "." + obj.Name(), Pos: obj.Pos()}
 	d := &declaration{obj: obj, imports: ctx.imports}
 	if reservedTypeNames[obj.Name()] {
-		g.report(s, "%s is reserved in TypeScript and cannot name a type; rename the Go type", obj.Name())
+		g.project.Report(s, "%s is reserved in TypeScript and cannot name a type; rename the Go type", obj.Name())
 	}
-	doc := g.sources[ctx.pkgPath].typeDocs[obj]
+	doc := g.project.TypeDoc(obj)
 
 	var b strings.Builder
 	switch t := obj.Type().(type) {
 	case *types.Alias:
 		if t.TypeParams().Len() > 0 {
-			g.report(s, "generic type aliases are not supported; declare an alias for each instantiation the API uses")
+			g.project.Report(s, "generic type aliases are not supported; declare an alias for each instantiation the API uses")
 			return d
 		}
 		body := g.expr(t.Rhs(), ctx, s)
 		// An alias of a slice, map or pointer holds nil like a named type of
 		// one does; an alias of a declared project type leaves that to the
 		// declaration it refers to.
-		if nullable(t.Rhs()) && !g.refersToDeclaration(t.Rhs()) {
+		if jsonshape.Nullable(t.Rhs()) && !g.refersToDeclaration(t.Rhs()) {
 			body += " | null"
 		}
 		writeDoc(&b, "", doc)
 		fmt.Fprintf(&b, "export type %s = %s;\n", obj.Name(), body)
 	case *types.Named:
 		if t.TypeParams().Len() > 0 {
-			g.report(s, "generic types of the project are not supported; declare a non-generic type for each instantiation the API uses")
+			g.project.Report(s, "generic types of the project are not supported; declare a non-generic type for each instantiation the API uses")
 			return d
 		}
-		if method := g.method(t, marshalMethods); method != "" {
-			g.report(s, "the type declares %s, so its JSON shape is decided by code the generator cannot read; drop the method or use a type without one", method)
+		if method := g.project.MarshalMethod(t); method != "" {
+			g.project.Report(s, "the type declares %s, so its JSON shape is decided by code the generator cannot read; drop the method or use a type without one", method)
 			return d
 		}
 		switch u := t.Underlying().(type) {
 		case *types.Struct:
 			writeDoc(&b, "", doc)
-			g.writeInterface(&b, obj.Name(), g.jsonFields(u, s), ctx, s)
+			g.writeInterface(&b, obj.Name(), g.project.Fields(u, s), ctx, s)
 		case *types.Basic:
 			if e := g.enumOf(obj); e != nil {
 				writeDoc(&b, "", enumDoc(doc, e))
@@ -77,7 +79,7 @@ func (g *generator) render(obj *types.TypeName) *declaration {
 			// A nil slice, map or pointer is a value of the type itself, which
 			// encodes as null wherever the type is used.
 			body := g.structural(u, ctx, s)
-			if nullable(u) {
+			if jsonshape.Nullable(u) {
 				body += " | null"
 			}
 			writeDoc(&b, "", doc)
@@ -99,38 +101,16 @@ func (g *generator) render(obj *types.TypeName) *declaration {
 //
 // A struct without keys gets the single member [key: string]: never, which
 // admits the empty object alone.
-func (g *generator) writeInterface(b *strings.Builder, name string, fields []jsonField, ctx *fileContext, s site) {
+func (g *generator) writeInterface(b *strings.Builder, name string, fields []jsonshape.Field, ctx *fileContext, s jsonshape.Site) {
 	fmt.Fprintf(b, "export interface %s {\n", name)
 	if len(fields) == 0 {
 		b.WriteString("  [key: string]: never;\n")
 	}
 	for _, f := range fields {
-		writeDoc(b, "  ", g.fieldDoc(f.field))
-		fmt.Fprintf(b, "  %s;\n", g.property(f, ctx, g.fieldSite(s, f.key, f.field)))
+		writeDoc(b, "  ", g.project.FieldDoc(f.Var))
+		fmt.Fprintf(b, "  %s;\n", g.property(f, ctx, g.project.FieldSite(s, f.Key, f.Var)))
 	}
 	b.WriteString("}\n")
-}
-
-// fieldDoc returns the doc comment of a project struct field.
-func (g *generator) fieldDoc(v *types.Var) string {
-	if v.Pkg() == nil {
-		return ""
-	}
-	if source := g.sources[v.Pkg().Path()]; source != nil {
-		return source.fieldDocs[v]
-	}
-	return ""
-}
-
-// fieldSite locates a field of the type at s. The field's own position is
-// used when the project declares it; a field of a type from outside the
-// project is reported where the project uses that type.
-func (g *generator) fieldSite(s site, name string, f *types.Var) site {
-	pos := s.pos
-	if f.Pkg() != nil && g.sources[f.Pkg().Path()] != nil {
-		pos = f.Pos()
-	}
-	return site{subject: s.subject + "." + name, pos: pos}
 }
 
 // property renders the property of one key. It is optional when the key may
@@ -153,28 +133,28 @@ func (g *generator) fieldSite(s site, name string, f *types.Var) site {
 //	count: string
 //	status: Status | ""
 //	retired?: Status
-func (g *generator) property(f jsonField, ctx *fileContext, s site) string {
-	t := f.field.Type()
+func (g *generator) property(f jsonshape.Field, ctx *fileContext, s jsonshape.Site) string {
+	t := f.Var.Type()
 	var value string
-	if f.quoted {
+	if f.Quoted {
 		value = "string"
 	} else {
 		value = g.expr(t, ctx, s)
 		// An omitted zero value never reaches the client, unless the field is a
 		// pointer: a non-nil pointer to the zero value is not omitted.
 		_, isPointer := types.Unalias(t).Underlying().(*types.Pointer)
-		if zero := g.enumZero(t); zero != "" && (!f.omit || isPointer) {
+		if zero := g.enumZero(t); zero != "" && (!f.Omit || isPointer) {
 			value += " | " + zero
 		}
 	}
-	if nullable(t) {
+	if jsonshape.Nullable(t) {
 		value += " | null"
 	}
 	optional := ""
-	if f.omit || f.viaPointer || nilable(t) {
+	if f.Omit || f.ViaPointer || jsonshape.Nilable(t) {
 		optional = "?"
 	}
-	return propertyName(f.key) + optional + ": " + value
+	return propertyName(f.Key) + optional + ": " + value
 }
 
 // expr renders the TypeScript type of a value of t that is not null: Status
@@ -183,36 +163,36 @@ func (g *generator) property(f jsonField, ctx *fileContext, s site) string {
 // type from outside the project, which is spelled out where it is used.
 // Whether null or the zero value of an enum may stand in for the value is
 // decided where the value is used.
-func (g *generator) expr(t types.Type, ctx *fileContext, s site) string {
+func (g *generator) expr(t types.Type, ctx *fileContext, s jsonshape.Site) string {
 	switch tt := t.(type) {
 	case *types.Alias:
-		if g.declares(tt.Obj()) {
+		if g.project.Declares(tt.Obj()) {
 			if tt.TypeArgs().Len() > 0 {
-				g.report(s, "the generic alias %s is not supported; declare an alias for each instantiation the API uses", tt)
+				g.project.Report(s, "the generic alias %s is not supported; declare an alias for each instantiation the API uses", tt)
 				return "unknown"
 			}
 			return g.ref(tt.Obj(), ctx)
 		}
 		return g.expr(types.Unalias(tt), ctx, s)
 	case *types.Named:
-		if kind, ok := builtinOf(tt); ok {
+		if kind, ok := jsonshape.BuiltinOf(tt); ok {
 			return g.builtin(kind, tt, ctx, s)
 		}
-		if g.declares(tt.Obj()) {
+		if g.project.Declares(tt.Obj()) {
 			if tt.TypeArgs().Len() > 0 {
-				g.report(s, "the generic type %s of the project is not supported; declare a non-generic type for each instantiation the API uses", tt)
+				g.project.Report(s, "the generic type %s of the project is not supported; declare a non-generic type for each instantiation the API uses", tt)
 				return "unknown"
 			}
 			return g.ref(tt.Obj(), ctx)
 		}
-		if method := g.method(tt, marshalMethods); method != "" {
-			g.report(s, "type %s declares %s, so its JSON shape is decided by code the generator cannot read; use a type without the method", tt, method)
+		if method := g.project.MarshalMethod(tt); method != "" {
+			g.project.Report(s, "type %s declares %s, so its JSON shape is decided by code the generator cannot read; use a type without the method", tt, method)
 			return "unknown"
 		}
 		if _, isStruct := tt.Underlying().(*types.Struct); isStruct {
 			key := types.TypeString(tt, nil)
 			if g.inlining[key] {
-				g.report(s, "type %s refers to itself and is declared outside the project, so it cannot be spelled out inline; use a project type instead", tt)
+				g.project.Report(s, "type %s refers to itself and is declared outside the project, so it cannot be spelled out inline; use a project type instead", tt)
 				return "unknown"
 			}
 			g.inlining[key] = true
@@ -229,10 +209,10 @@ func (g *generator) expr(t types.Type, ctx *fileContext, s site) string {
 func (g *generator) refersToDeclaration(t types.Type) bool {
 	switch tt := t.(type) {
 	case *types.Alias:
-		return g.declares(tt.Obj())
+		return g.project.Declares(tt.Obj())
 	case *types.Named:
-		_, isBuiltin := builtinOf(tt)
-		return !isBuiltin && g.declares(tt.Obj())
+		_, isBuiltin := jsonshape.BuiltinOf(tt)
+		return !isBuiltin && g.project.Declares(tt.Obj())
 	default:
 		return false
 	}
@@ -254,15 +234,15 @@ func (g *generator) ref(obj *types.TypeName, ctx *fileContext) string {
 // { [key: string]: unknown } for datatypes.JSONMap, unknown for
 // json.RawMessage, and what the type argument renders as for
 // datatypes.JSONType, as Options for datatypes.JSONType[*Options].
-func (g *generator) builtin(kind builtinKind, n *types.Named, ctx *fileContext, s site) string {
+func (g *generator) builtin(kind jsonshape.Builtin, n *types.Named, ctx *fileContext, s jsonshape.Site) string {
 	switch kind {
-	case builtinString, builtinNullableString:
+	case jsonshape.BuiltinString, jsonshape.BuiltinNullableString:
 		return "string"
-	case builtinNumber:
+	case jsonshape.BuiltinNumber:
 		return "number"
-	case builtinObject:
+	case jsonshape.BuiltinObject:
 		return "{ [key: string]: unknown }"
-	case builtinWrapper:
+	case jsonshape.BuiltinWrapper:
 		arg := n.TypeArgs().At(0)
 		value := g.expr(arg, ctx, s)
 		if zero := g.enumZero(arg); zero != "" {
@@ -279,7 +259,7 @@ func (g *generator) builtin(kind builtinKind, n *types.Named, ctx *fileContext, 
 // map[int]float64, ($record.Record | null)[] for []*record.Record, and
 // { from: string; to?: string } for an unnamed struct of the keys from and
 // to,omitempty.
-func (g *generator) structural(t types.Type, ctx *fileContext, s site) string {
+func (g *generator) structural(t types.Type, ctx *fileContext, s jsonshape.Site) string {
 	switch u := t.(type) {
 	case *types.Basic:
 		info := u.Info()
@@ -291,40 +271,40 @@ func (g *generator) structural(t types.Type, ctx *fileContext, s site) string {
 		case info&(types.IsInteger|types.IsFloat) != 0:
 			return "number"
 		}
-		g.report(s, "%s values have no JSON encoding", u)
+		g.project.Report(s, "%s values have no JSON encoding", u)
 		return "unknown"
 	case *types.Pointer:
 		return g.expr(u.Elem(), ctx, s)
 	case *types.Slice:
-		if g.isByteSlice(u) {
+		if g.project.IsByteSlice(u) {
 			return "string"
 		}
 		return arrayOf(g.value(u.Elem(), ctx, s))
 	case *types.Array:
 		return arrayOf(g.value(u.Elem(), ctx, s))
 	case *types.Map:
-		g.checkMapKey(u.Key(), s)
+		g.project.CheckMapKey(u.Key(), s)
 		return "{ [key: string]: " + g.value(u.Elem(), ctx, s) + " }"
 	case *types.Struct:
-		fields := g.jsonFields(u, s)
+		fields := g.project.Fields(u, s)
 		if len(fields) == 0 {
 			return "{ [key: string]: never }"
 		}
 		properties := make([]string, len(fields))
 		for i, f := range fields {
-			properties[i] = g.property(f, ctx, g.fieldSite(s, f.key, f.field))
+			properties[i] = g.property(f, ctx, g.project.FieldSite(s, f.Key, f.Var))
 		}
 		return "{ " + strings.Join(properties, "; ") + " }"
 	case *types.Interface:
 		if u.Empty() {
 			return "unknown"
 		}
-		g.report(s, "an interface with methods has no JSON shape of its own, the dynamic type decides it; use a concrete type")
+		g.project.Report(s, "an interface with methods has no JSON shape of its own, the dynamic type decides it; use a concrete type")
 		return "unknown"
 	case *types.Named, *types.Alias:
 		return g.expr(u, ctx, s)
 	default:
-		g.report(s, "%s values have no JSON encoding", t)
+		g.project.Report(s, "%s values have no JSON encoding", t)
 		return "unknown"
 	}
 }
@@ -332,12 +312,12 @@ func (g *generator) structural(t types.Type, ctx *fileContext, s site) string {
 // value renders a value position: the type, the zero value of an enum no
 // constant covers, and null when a value of t may encode as null, as in
 // Status | "" for an element of []Status.
-func (g *generator) value(t types.Type, ctx *fileContext, s site) string {
+func (g *generator) value(t types.Type, ctx *fileContext, s jsonshape.Site) string {
 	value := g.expr(t, ctx, s)
 	if zero := g.enumZero(t); zero != "" {
 		value += " | " + zero
 	}
-	if nullable(t) {
+	if jsonshape.Nullable(t) {
 		value += " | null"
 	}
 	return value

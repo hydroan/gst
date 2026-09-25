@@ -1,4 +1,4 @@
-package ts
+package jsonshape
 
 import (
 	"go/token"
@@ -10,31 +10,24 @@ import (
 	"golang.org/x/tools/go/packages"
 )
 
-// loaded holds the project packages generation reads, type-checked from
-// source together with their syntax: declarations take their doc comments and
-// enum constants from it. The packages outside the project are read from
-// compiled export data.
-type loaded struct {
-	fset *token.FileSet
-	pkgs map[string]*packages.Package
-}
-
 // load type-checks the project packages the root packages reach, in two
-// passes. The first lists the import graph only, to find which project
-// packages are reachable; the second type-checks just those from source.
-// Loading the whole graph from source instead would parse and check every
-// dependency, the framework and the standard library included.
-func load(cfg Config) (*loaded, error) {
-	roots := make([]string, 0, len(cfg.Roots))
-	for _, ref := range cfg.Roots {
-		roots = append(roots, ref.PkgPath)
-	}
+// passes, and returns them keyed by import path together with the file set
+// they were parsed into. The first pass lists the import graph only, to find
+// which project packages are reachable; the second type-checks just those
+// from source, together with their syntax: declarations take their doc
+// comments and enum constants from it. The packages outside the project are
+// read from compiled export data. Loading the whole graph from source instead
+// would parse and check every dependency, the framework and the standard
+// library included.
+func load(cfg Config) (*token.FileSet, map[string]*packages.Package, error) {
+	roots := slices.Clone(cfg.Roots)
 	slices.Sort(roots)
 	roots = slices.Compact(roots)
 
-	result := &loaded{fset: token.NewFileSet(), pkgs: make(map[string]*packages.Package)}
+	fset := token.NewFileSet()
+	pkgs := make(map[string]*packages.Package)
 	if len(roots) == 0 {
-		return result, nil
+		return fset, pkgs, nil
 	}
 
 	// A go.work above the project would pull every workspace module into the
@@ -46,10 +39,10 @@ func load(cfg Config) (*loaded, error) {
 		Env:  env,
 	}, roots...)
 	if err != nil {
-		return nil, errors.Wrap(err, "list packages")
+		return nil, nil, errors.Wrap(err, "list packages")
 	}
 	if err = packageErrors(graph); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	var project []string
 	packages.Visit(graph, nil, func(pkg *packages.Package) {
@@ -64,18 +57,18 @@ func load(cfg Config) (*loaded, error) {
 			packages.NeedSyntax | packages.NeedTypes | packages.NeedTypesInfo,
 		Dir:  cfg.Dir,
 		Env:  env,
-		Fset: result.fset,
+		Fset: fset,
 	}, project...)
 	if err != nil {
-		return nil, errors.Wrap(err, "load packages")
+		return nil, nil, errors.Wrap(err, "load packages")
 	}
 	if err = packageErrors(typed); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	for _, pkg := range typed {
-		result.pkgs[pkg.PkgPath] = pkg
+		pkgs[pkg.PkgPath] = pkg
 	}
-	return result, nil
+	return fset, pkgs, nil
 }
 
 // packageErrors reports the errors of the loaded packages and their

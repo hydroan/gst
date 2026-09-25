@@ -16,8 +16,9 @@ package ts
 
 import (
 	"fmt"
-	"go/token"
 	"strings"
+
+	"github.com/hydroan/gst/internal/codegen/gen/jsonshape"
 )
 
 // Config describes one generation run.
@@ -60,30 +61,8 @@ type File struct {
 }
 
 // Diagnostic reports a Go type or field whose JSON shape the generator cannot
-// describe.
-type Diagnostic struct {
-	// Pos is where the project declares the subject, or uses the type from
-	// outside the project a field belongs to. It is invalid for a subject
-	// without a place of its own, such as a whole package.
-	Pos token.Position
-	// Subject is the Go path of the type or field, such as
-	// example.com/app/model/sample.Sample.status.
-	Subject string
-	// Message tells why the subject cannot be described, and what to change.
-	Message string
-}
-
-// String renders the diagnostic as "file:line: subject: message", as in
-//
-//	model/sample/sample.go:12: example.com/app/model/sample.class: class is reserved in TypeScript and cannot name a type; rename the Go type
-//
-// or as "subject: message" for a diagnostic without a position.
-func (d Diagnostic) String() string {
-	if d.Pos.IsValid() {
-		return fmt.Sprintf("%s:%d: %s: %s", d.Pos.Filename, d.Pos.Line, d.Subject, d.Message)
-	}
-	return d.Subject + ": " + d.Message
-}
+// describe, as jsonshape reports it.
+type Diagnostic = jsonshape.Diagnostic
 
 // DiagnosticsError is the error Generate returns when any diagnostic was
 // reported. No file is generated then: a partial set would hand the frontend
@@ -152,9 +131,19 @@ func (e *DiagnosticsError) Error() string {
 //	 */
 //	export type State = 0 | 1;
 func Generate(cfg Config) ([]File, error) {
-	pkgs, err := load(cfg)
+	project, err := jsonshape.Load(cfg.shapeConfig())
 	if err != nil {
 		return nil, err
 	}
-	return newGenerator(cfg, pkgs).generate()
+	return newGenerator(cfg, project).generate()
+}
+
+// shapeConfig returns the load of the run: the packages the roots are
+// declared in, type-checked from the project directory.
+func (cfg Config) shapeConfig() jsonshape.Config {
+	roots := make([]string, 0, len(cfg.Roots))
+	for _, ref := range cfg.Roots {
+		roots = append(roots, ref.PkgPath)
+	}
+	return jsonshape.Config{Dir: cfg.Dir, ModulePath: cfg.ModulePath, Roots: roots}
 }

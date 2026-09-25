@@ -1,4 +1,4 @@
-package ts
+package jsonshape
 
 import (
 	"cmp"
@@ -12,7 +12,7 @@ import (
 	"golang.org/x/tools/go/packages"
 )
 
-// sourceIndex holds what generation reads from the syntax of a project
+// sourceIndex holds what a description reads from the syntax of a project
 // package: doc comments, and the constants declared with each named type. Doc
 // comments are picked the way the OpenAPI document picks them, so a type is
 // described the same in both.
@@ -61,7 +61,7 @@ func newSourceIndex(fset *token.FileSet, pkg *packages.Package) *sourceIndex {
 	}
 	for _, constants := range idx.constants {
 		slices.SortFunc(constants, func(a, b typedConstant) int {
-			return comparePositions(fset, a.obj.Pos(), b.obj.Pos())
+			return ComparePositions(fset, a.obj.Pos(), b.obj.Pos())
 		})
 	}
 	return idx
@@ -159,10 +159,10 @@ func commentText(groups ...*ast.CommentGroup) string {
 	return ""
 }
 
-// comparePositions orders two positions by file name and offset. Pos values
-// alone do not order positions of different files: the loader adds files to
-// the file set in whatever order it parses them.
-func comparePositions(fset *token.FileSet, a, b token.Pos) int {
+// ComparePositions orders two positions of fset by file name and offset. Pos
+// values alone do not order positions of different files: the loader adds
+// files to the file set in whatever order it parses them.
+func ComparePositions(fset *token.FileSet, a, b token.Pos) int {
 	pa, pb := fset.Position(a), fset.Position(b)
 	return cmp.Or(strings.Compare(pa.Filename, pb.Filename), cmp.Compare(pa.Offset, pb.Offset))
 }
