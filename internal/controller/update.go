@@ -112,7 +112,7 @@ func UpdateCall[M types.Model](route string) func(ctx context.Context, params ma
 		defer c.end()
 		meta.normalizeModel(&m)
 		if err := validateRequest(m); err != nil {
-			return zero, c.invalid(err)
+			return zero, c.invalidMessage(err)
 		}
 		if id == "" {
 			return zero, c.missingID()

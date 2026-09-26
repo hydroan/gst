@@ -71,7 +71,7 @@ func TestCreateCallCreatesTheRecordForTheCaller(t *testing.T) {
 	t.Run("a message failing validation is refused", func(t *testing.T) {
 		_, err := invoke(t, conn, "ValidatedCreate", map[string]any{"record": map[string]any{}})
 
-		requireStatus(t, err, codes.InvalidArgument, "invalid request body")
+		requireStatus(t, err, codes.InvalidArgument, "invalid request message")
 	})
 
 	t.Run("a before hook refusal creates nothing", func(t *testing.T) {
@@ -108,7 +108,7 @@ func TestGetCallAnswersTheRecordOrNotFound(t *testing.T) {
 
 	t.Run("no id at all", func(t *testing.T) {
 		_, err := invoke(t, conn, "Get", map[string]any{})
-		requireStatus(t, err, codes.InvalidArgument, "not found router param")
+		requireStatus(t, err, codes.InvalidArgument, "id is required")
 	})
 }
 
@@ -201,27 +201,40 @@ func TestUpdateCallReplacesTheRecord(t *testing.T) {
 }
 
 // TestPatchCallAppliesTheMaskedFields pins the patch call: only the fields
-// the mask names are copied onto the stored record, an empty mask changes
-// nothing, a versioned record patched without its version is refused, and
-// an id no record carries answers NotFound.
+// the mask names are copied onto the stored record, the others the message
+// carries staying as stored; a mask naming nothing, or naming what no patch
+// applies, is refused; a versioned record patched without its version is
+// refused; and an id no record carries answers NotFound.
 func TestPatchCallAppliesTheMaskedFields(t *testing.T) {
 	conn := sampleServer(t)
 	record := createSample(t, "call-patch")
 
 	patched, err := invoke(t, conn, "Patch", map[string]any{
-		"id": record.GetID(), "record": map[string]any{"name": "call-patched"}, "mask": []string{"name"},
+		"id": record.GetID(), "record": map[string]any{"name": "call-patched", "note": "unmasked"}, "mask": []string{"name"},
 	})
 	require.NoError(t, err)
 	require.Equal(t, "call-patched", patched["name"])
-	requireSampleName(t, record.GetID(), "call-patched")
+	stored := loadSample(t, record.GetID())
+	require.Equal(t, "call-patched", stored.Name)
+	require.Empty(t, stored.Note, "a field the mask does not name stays as stored")
 
-	t.Run("a field the mask does not name stays", func(t *testing.T) {
-		_, err := invoke(t, conn, "Patch", map[string]any{
-			"id": record.GetID(), "record": map[string]any{"name": "call-unmasked"}, "mask": []string{},
+	for _, tt := range []struct {
+		name    string
+		mask    []string
+		message string
+	}{
+		{name: "a mask naming nothing", mask: []string{}, message: "update_mask must name at least one field"},
+		{name: "a mask naming a base field", mask: []string{"id"}, message: `update_mask names "id", which is no field a patch applies`},
+		{name: "a mask naming a field the model lacks", mask: []string{"missing"}, message: `update_mask names "missing", which is no field a patch applies`},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := invoke(t, conn, "Patch", map[string]any{
+				"id": record.GetID(), "record": map[string]any{"name": "call-unmasked"}, "mask": tt.mask,
+			})
+			requireStatus(t, err, codes.InvalidArgument, tt.message)
+			requireSampleName(t, record.GetID(), "call-patched")
 		})
-		require.NoError(t, err)
-		requireSampleName(t, record.GetID(), "call-patched")
-	})
+	}
 
 	t.Run("a versioned record without its version", func(t *testing.T) {
 		_, err := invoke(t, conn, "VersionedPatch", map[string]any{
@@ -255,9 +268,10 @@ func TestDeleteCallDeletesTheRecord(t *testing.T) {
 }
 
 // TestBatchCallsWriteAllOrNothing pins the four batch calls: the items are
-// created, replaced, patched under their masks and deleted as one batch, a
-// hook's refusal writes nothing, and a delete naming an empty id is refused
-// before anything is deleted.
+// created, replaced, patched under their masks and deleted as one batch; a
+// hook's refusal writes nothing; an item failing its binding tags refuses
+// the batch; a batch patch carries one mask per item; and a delete naming
+// an empty id is refused before anything is deleted.
 func TestBatchCallsWriteAllOrNothing(t *testing.T) {
 	conn := sampleServer(t)
 	prefix := uniqueName("call-batch")
@@ -276,13 +290,32 @@ func TestBatchCallsWriteAllOrNothing(t *testing.T) {
 	requireSampleName(t, createdIDs[0], prefix+"-a2")
 
 	patched, err := invoke(t, conn, "PatchMany", map[string]any{
-		"items": []map[string]any{{"id": createdIDs[0], "name": prefix + "-a3"}, {"id": createdIDs[1], "name": prefix + "-b3"}},
-		"masks": [][]string{{"name"}, {}},
+		"items": []map[string]any{{"id": createdIDs[0], "name": prefix + "-a3"}, {"id": createdIDs[1], "name": prefix + "-b3", "note": "masked"}},
+		"masks": [][]string{{"name"}, {"note"}},
 	})
 	require.NoError(t, err)
 	require.Equal(t, createdIDs, ids(patched["items"]))
 	requireSampleName(t, createdIDs[0], prefix+"-a3")
-	requireSampleName(t, createdIDs[1], prefix+"-b2")
+	second := loadSample(t, createdIDs[1])
+	require.Equal(t, prefix+"-b2", second.Name, "the second mask does not name the name")
+	require.Equal(t, "masked", second.Note)
+
+	t.Run("a batch patch with fewer masks than items", func(t *testing.T) {
+		_, patchErr := invoke(t, conn, "PatchMany", map[string]any{
+			"items": []map[string]any{{"id": createdIDs[0], "name": prefix + "-a4"}, {"id": createdIDs[1], "name": prefix + "-b4"}},
+			"masks": [][]string{{"name"}},
+		})
+		requireStatus(t, patchErr, codes.InvalidArgument, "2 items carry 1 update masks; each item names the fields to apply in a mask of its own")
+		requireSampleName(t, createdIDs[0], prefix+"-a3")
+	})
+
+	t.Run("an item failing validation refuses the batch", func(t *testing.T) {
+		_, createErr := invoke(t, conn, "ValidatedCreateMany", map[string]any{"items": []map[string]any{{"name": "valid"}, {}}})
+		requireStatus(t, createErr, codes.InvalidArgument, "invalid request message")
+		var total int
+		require.NoError(t, database.Database[*validatedSample](context.Background()).WithQuery(&validatedSample{Name: "valid"}).Count(&total))
+		require.Zero(t, total)
+	})
 
 	_, err = invoke(t, conn, "DeleteMany", map[string]any{"ids": createdIDs})
 	require.NoError(t, err)
@@ -341,7 +374,7 @@ func TestServiceCallDelegatesToThePhaseService(t *testing.T) {
 
 	t.Run("a payload failing validation is refused", func(t *testing.T) {
 		_, err := invoke(t, conn, "Action", map[string]any{"payload": map[string]any{}})
-		requireStatus(t, err, codes.InvalidArgument, "invalid request body")
+		requireStatus(t, err, codes.InvalidArgument, "invalid request message")
 	})
 
 	t.Run("the service's error answers with its status", func(t *testing.T) {
@@ -491,6 +524,7 @@ func sampleHandlers() map[string]func(ctx context.Context, in map[string]any) (a
 	counterList := controller.ListCall[*sampleCounter](counterRoute)
 	versionedPatch := controller.PatchCall[*versionedSample](versionedRoute)
 	validatedCreate := controller.CreateCall[*validatedSample](validatedRoute)
+	validatedCreateMany := controller.CreateManyCall[*validatedSample](validatedRoute)
 	action := controller.ServiceCall[*sampleRecord, *sampleActionReq, *sampleActionRsp](consts.PHASE_CREATE, actionRoute)
 	actionList := controller.ServiceCall[*sampleRecord, *sampleActionReq, *sampleActionRsp](consts.PHASE_LIST, actionRoute)
 
@@ -554,6 +588,9 @@ func sampleHandlers() map[string]func(ctx context.Context, in map[string]any) (a
 		},
 		"ValidatedCreate": func(ctx context.Context, in map[string]any) (any, error) {
 			return validatedCreate(ctx, params(in), field[*validatedSample](in, "record"))
+		},
+		"ValidatedCreateMany": func(ctx context.Context, in map[string]any) (any, error) {
+			return batch(validatedCreateMany(ctx, params(in), field[[]*validatedSample](in, "items")))
 		},
 		"Action": func(ctx context.Context, in map[string]any) (any, error) {
 			return action(ctx, params(in), field[controller.Query](in, "query"), field[*sampleActionReq](in, "payload"))

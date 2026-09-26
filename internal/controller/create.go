@@ -105,7 +105,7 @@ func CreateCall[M types.Model](route string) func(ctx context.Context, params ma
 		defer c.end()
 		meta.normalizeModel(&m)
 		if err := validateRequest(m); err != nil {
-			return zero, c.invalid(err)
+			return zero, c.invalidMessage(err)
 		}
 		if err := meta.createFlow(c.ctx, c.serviceContext, m); err != nil {
 			return zero, c.fail(err)

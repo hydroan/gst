@@ -5,8 +5,6 @@ import (
 	"context"
 	"encoding/json"
 	"io"
-	"iter"
-	"maps"
 	"reflect"
 	"strings"
 	"sync"
@@ -135,22 +133,13 @@ func patchManyFieldSetsFromJSONBody(typ reflect.Type, body []byte) ([]patchField
 }
 
 func patchFieldSetFromJSONFields(typ reflect.Type, fields map[string]json.RawMessage) patchFieldSet {
-	return patchFieldSetOfKeys(typ, maps.Keys(fields), len(fields))
-}
-
-// patchFieldSetOfKeys returns the fields of typ the n JSON keys of keys name:
-// the keys of a patch body, or the paths of the update mask of a Patch rpc,
-// which names the fields as the model encodes them. A key no field encodes
-// to names nothing and is left out, the way the JSON decoder ignores an
-// unknown key.
-func patchFieldSetOfKeys(typ reflect.Type, keys iter.Seq[string], n int) patchFieldSet {
-	if n == 0 {
+	if len(fields) == 0 {
 		return patchFieldSet{}
 	}
 	jsonFields := patchJSONFieldNames(typ)
-	fieldSet := make(patchFieldSet, n)
-	for key := range keys {
-		if fieldName, ok := jsonFields[key]; ok {
+	fieldSet := make(patchFieldSet, len(fields))
+	for name := range fields {
+		if fieldName, ok := jsonFields[name]; ok {
 			fieldSet[fieldName] = struct{}{}
 		}
 	}

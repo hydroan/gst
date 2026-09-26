@@ -1,9 +1,11 @@
 package controller_test
 
 import (
+	"context"
 	"net/http"
 	"testing"
 
+	"github.com/hydroan/gst/database"
 	"github.com/hydroan/gst/internal/controller"
 	"github.com/stretchr/testify/require"
 )
@@ -22,6 +24,23 @@ func TestCreateManyWritesNothingWhenOneItemCollides(t *testing.T) {
 	require.Equal(t, http.StatusConflict, rsp.Code)
 	require.Zero(t, countSamplesNamed(t, fresh))
 	requireSampleName(t, record.GetID(), "create-many-taken")
+}
+
+// TestCreateManyRefusesAnItemFailingValidation pins that the items of a
+// batch are validated against their binding tags the way a single
+// resource's body is: the validator descends into the items, so an item
+// without its required field refuses the whole batch before anything is
+// written.
+func TestCreateManyRefusesAnItemFailingValidation(t *testing.T) {
+	rsp := serve(t, http.MethodPost, "/controller-validated-samples/batch",
+		controller.CreateManyFactory[*validatedSample, *validatedSample, *validatedSample](configFor[*validatedSample](validatedRoute)),
+		"/controller-validated-samples/batch", `{"items":[{"name":"valid"},{}]}`)
+
+	require.Equal(t, http.StatusBadRequest, rsp.Code)
+	require.Contains(t, rsp.Body.String(), `"code":1000`)
+	var total int
+	require.NoError(t, database.Database[*validatedSample](context.Background()).WithQuery(&validatedSample{Name: "valid"}).Count(&total))
+	require.Zero(t, total)
 }
 
 // TestCreateManyWritesNothingTheBeforeHookRefuses pins that a

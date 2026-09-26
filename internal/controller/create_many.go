@@ -32,8 +32,11 @@ import (
 type requestData[M types.Model] struct {
 	// IDs is the id list that should be batch delete.
 	IDs []string `json:"ids,omitempty"`
-	// Items is the resource list that should be batch create/update/partial update.
-	Items []M `json:"items,omitempty"`
+	// Items is the resource list that should be batch create/update/partial
+	// update. Each item is validated against its binding tags the way the
+	// body of a single-resource request is: the validator only descends into
+	// a slice told to dive.
+	Items []M `json:"items,omitempty" binding:"dive"`
 }
 
 // CreateManyFactory returns a Gin handler that creates multiple resources.
@@ -112,7 +115,7 @@ func CreateManyCall[M types.Model](route string) func(ctx context.Context, param
 		req := requestData[M]{Items: items}
 		normalizeBatchRequest(&req)
 		if err := validateRequest(&req); err != nil {
-			return nil, c.invalid(err)
+			return nil, c.invalidMessage(err)
 		}
 		if err := meta.createManyFlow(c.ctx, c.serviceContext, &req); err != nil {
 			return nil, c.fail(err)

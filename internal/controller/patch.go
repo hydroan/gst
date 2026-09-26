@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"io"
 	"reflect"
-	"slices"
 
 	"github.com/cockroachdb/errors"
 	"github.com/gin-gonic/gin"
@@ -133,12 +132,11 @@ func PatchFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...*
 // handler PatchFactory returns for the generated handler of a Patch rpc:
 // given the route parameters, the id the request message names the record
 // by, the values it decoded into and the paths of its update mask, which
-// name the fields to apply as the model encodes them, it validates the
-// values the way the handler validates a bound body, refuses a versioned
-// model patched without its version the way the handler does, runs the
-// patch flow (see patchFlow) and answers with the record patched, or with
-// the status the failure maps to (see call). A path no field encodes to
-// applies nothing, the way an unknown key of a body does.
+// name the fields to apply as the message names them (see maskFieldSet), it
+// validates the values the way the handler validates a bound body, refuses
+// a versioned model patched without its version the way the handler does,
+// runs the patch flow (see patchFlow) and answers with the record patched,
+// or with the status the failure maps to (see call).
 func PatchCall[M types.Model](route string) func(ctx context.Context, params map[string]string, id string, m M, paths []string) (M, error) {
 	meta := newFactoryMeta[M, M, M](route, consts.PHASE_PATCH, consts.PHASE_PATCH_BEFORE, consts.PHASE_PATCH_AFTER)
 	return func(ctx context.Context, params map[string]string, id string, m M, paths []string) (M, error) {
@@ -146,14 +144,17 @@ func PatchCall[M types.Model](route string) func(ctx context.Context, params map
 		c := meta.beginCall(ctx, params, nil)
 		defer c.end()
 		meta.normalizeModel(&m)
-		fields := patchFieldSetOfKeys(meta.typ, slices.Values(paths), len(paths))
+		fields, err := maskFieldSet(meta.typ, paths)
+		if err != nil {
+			return zero, c.invalid(err)
+		}
 		if versionField, versioned := modelregistry.VersionFieldName(m); versioned {
 			if _, ok := fields[versionField]; !ok {
 				return zero, c.refuse(databaseErrorCoder(database.ErrVersionRequired), errors.Wrapf(database.ErrVersionRequired, "patch %s without its %s", meta.name, versionField))
 			}
 		}
-		if err := validateRequest(m); err != nil {
-			return zero, c.invalid(err)
+		if err = validateRequest(m); err != nil {
+			return zero, c.invalidMessage(err)
 		}
 		if id == "" {
 			return zero, c.missingID()

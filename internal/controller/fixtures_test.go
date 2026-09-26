@@ -25,9 +25,10 @@ import (
 )
 
 // sampleRecord is the table model the handler tests read and write, keyed by
-// a string id.
+// a string id; the note is a second field for a patch to leave alone.
 type sampleRecord struct {
 	Name string `json:"name"`
+	Note string `json:"note"`
 
 	modelregistry.Query
 	modelregistry.Base
@@ -302,9 +303,15 @@ func createSample(t *testing.T, name string) *sampleRecord {
 // requireSampleName requires the stored sample id to be named name.
 func requireSampleName(t *testing.T, id, name string) {
 	t.Helper()
+	require.Equal(t, name, loadSample(t, id).Name)
+}
+
+// loadSample returns the stored sample id names.
+func loadSample(t *testing.T, id string) *sampleRecord {
+	t.Helper()
 	stored := new(sampleRecord)
 	require.NoError(t, database.Database[*sampleRecord](context.Background()).Get(stored, id))
-	require.Equal(t, name, stored.Name)
+	return stored
 }
 
 // uniqueName returns prefix followed by a suffix no earlier call returned,

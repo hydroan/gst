@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/url"
+	"reflect"
 	"slices"
 	"strconv"
 	"strings"
@@ -72,7 +73,8 @@ type Filter struct {
 // page, size, the cursor and the expansion under their parameters when set.
 // It refuses what the HTTP query could not carry: a filter given twice,
 // since the HTTP listener refuses a repeated parameter; several values
-// under an operator taking one; a member of an in holding a comma.
+// under an operator taking one; a member of an in holding a comma; and a
+// filter without a value (see Filter.value).
 func (q Query) values() (url.Values, error) {
 	values := make(url.Values)
 	for _, f := range q.Filters {
@@ -119,9 +121,13 @@ func (q Query) values() (url.Values, error) {
 // value renders the values of f as the one value of key: the members of an
 // in or notin joined by commas, so a member holding one is refused; the
 // single value of any other operator, several being what only a repeated
-// parameter would carry. No value renders as the empty value, which the
-// parsers read as not filtering, the way they read an empty parameter.
+// parameter would carry. A filter without a value filters by nothing and is
+// refused: over HTTP an empty parameter means not filtering, but a filter
+// the message spells out and leaves empty is a mistake to report.
 func (f Filter) value(key string) (string, error) {
+	if len(f.Values) == 0 {
+		return "", errors.Newf("filter %q has no value", key)
+	}
 	if f.Op == string(types.FilterOpIn) || f.Op == string(types.FilterOpNotIn) {
 		for _, v := range f.Values {
 			if strings.Contains(v, ",") {
@@ -130,14 +136,44 @@ func (f Filter) value(key string) (string, error) {
 		}
 		return strings.Join(f.Values, ","), nil
 	}
-	switch len(f.Values) {
-	case 0:
-		return "", nil
-	case 1:
-		return f.Values[0], nil
-	default:
+	if len(f.Values) > 1 {
 		return "", errors.Newf("filter %q takes one value, %d given; in and notin take several", key, len(f.Values))
 	}
+	return f.Values[0], nil
+}
+
+// The messages a call refuses a request with, where the HTTP handler's
+// wording speaks of a body or a route the call has none of.
+const (
+	// invalidMessageMsg answers a model or payload failing its binding tags;
+	// what failed stays in the log, the validator naming Go fields.
+	invalidMessageMsg = "invalid request message"
+	// missingIDMsg answers an item action whose message names no record.
+	missingIDMsg = "id is required"
+)
+
+// maskFieldSet returns the fields of typ the paths of an update mask name,
+// as the message names them, the JSON keys of the model: what a Patch rpc
+// applies of the values it carries. The mask must name at least one field,
+// a Patch applying nothing being a mistake to report rather than a
+// record to answer unchanged, and every path must name a field the patch
+// can apply: the model's own fields, not the framework's base fields, a
+// nested struct or a field the model does not have.
+func maskFieldSet(typ reflect.Type, paths []string) (patchFieldSet, error) {
+	if len(paths) == 0 {
+		return nil, errors.New("update_mask must name at least one field")
+	}
+	jsonFields := patchJSONFieldNames(typ)
+	kinds := cachedModelFieldKinds(typ)
+	fields := make(patchFieldSet, len(paths))
+	for _, path := range paths {
+		fieldName, ok := jsonFields[path]
+		if !ok || kinds[fieldName] == reflect.Struct {
+			return nil, errors.Newf("update_mask names %q, which is no field a patch applies", path)
+		}
+		fields[fieldName] = struct{}{}
+	}
+	return fields, nil
 }
 
 // call is one run of an action for an rpc: the call's context with the
@@ -200,11 +236,18 @@ func (c *call) invalid(err error) error {
 	return c.refuse(CodeInvalidParam.WithErr(err), err)
 }
 
+// invalidMessage refuses a model or payload the validator refused (err),
+// with invalidMessageMsg, the way the HTTP handler answers a bind failure
+// with a message free of Go names.
+func (c *call) invalidMessage(err error) error {
+	return c.refuse(CodeInvalidParam.WithMsg(invalidMessageMsg), err)
+}
+
 // missingID refuses a call of an item action whose message names no record,
 // the way the HTTP handler refuses a request whose route parameter is
 // absent.
 func (c *call) missingID() error {
-	return c.refuse(CodeInvalidParam.WithMsg(missingRouteParamMsg), errors.New(missingRouteParamMsg))
+	return c.refuse(CodeInvalidParam.WithMsg(missingIDMsg), errors.New(missingIDMsg))
 }
 
 // fail answers a flow's failure, which the flow logged and recorded already,
@@ -291,7 +334,7 @@ func ServiceCall[M types.Model, REQ types.Request, RSP types.Response](phase con
 		meta.normalizeRequest(&req)
 		if binds {
 			if err = validateRequest(req); err != nil {
-				return zero, c.invalid(err)
+				return zero, c.invalidMessage(err)
 			}
 		}
 		rsp, err := meta.traceServiceOperation(c.ctx, phase, func(spanCtx context.Context) (RSP, error) {

@@ -94,7 +94,7 @@ func UpdateManyCall[M types.Model](route string) func(ctx context.Context, param
 		req := requestData[M]{Items: items}
 		normalizeBatchRequest(&req)
 		if err := validateRequest(&req); err != nil {
-			return nil, c.invalid(err)
+			return nil, c.invalidMessage(err)
 		}
 		if err := meta.updateManyFlow(c.ctx, c.serviceContext, &req); err != nil {
 			return nil, c.fail(err)

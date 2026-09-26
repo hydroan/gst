@@ -65,24 +65,25 @@ func bindJSONRequest(c *gin.Context, target any) error {
 	if err = json.Unmarshal(raw, target); err != nil {
 		return clientSafeBindError(err)
 	}
-	return validateRequest(target)
+	if err = validateRequest(target); err != nil {
+		return clientSafeBindError(err)
+	}
+	return nil
 }
 
 // validateRequest checks target against its binding tags with gin's
 // validator: the check bindJSONRequest makes of a bound body and the call
 // functions make of the value a request message decoded into, so a model or
-// payload meets the same tags on both transports; a failure is client-safe
-// (see clientSafeBindError). A nil binding.Validator is gin's documented way
-// to turn validation off; gin's own binding paths nil-check it, so this does
+// payload meets the same tags on both transports. The error is the
+// validator's own, naming Go fields, for each transport to wrap in its
+// client-safe message. A nil binding.Validator is gin's documented way to
+// turn validation off; gin's own binding paths nil-check it, so this does
 // the same.
 func validateRequest(target any) error {
 	if binding.Validator == nil {
 		return nil
 	}
-	if err := binding.Validator.ValidateStruct(target); err != nil {
-		return clientSafeBindError(err)
-	}
-	return nil
+	return binding.Validator.ValidateStruct(target)
 }
 
 // requiredBodyError translates the io.EOF sentinel of an absent request body

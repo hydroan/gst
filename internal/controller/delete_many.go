@@ -94,7 +94,7 @@ func DeleteManyCall[M types.Model](route string) func(ctx context.Context, param
 		req := requestData[M]{IDs: ids}
 		normalizeBatchRequest(&req)
 		if err := validateRequest(&req); err != nil {
-			return c.invalid(err)
+			return c.invalidMessage(err)
 		}
 		if err := meta.deleteManyFlow(c.ctx, c.serviceContext, &req); err != nil {
 			return c.fail(err)

@@ -10,17 +10,15 @@ import (
 
 // TestQueryValuesRenderTheHTTPQuery pins how the query of a call becomes
 // the query string the HTTP listener parses: a filter with an operator as
-// field[op]=value, one without as the bare key, one without a value as the
-// empty parameter, the members of an in joined by commas, the orderings
-// joined under _sort_by, and the paging, cursor and expansion under their
-// parameters, each only when set.
+// field[op]=value, one without as the bare key, the members of an in joined
+// by commas, the orderings joined under _sort_by, and the paging, cursor and
+// expansion under their parameters, each only when set.
 func TestQueryValuesRenderTheHTTPQuery(t *testing.T) {
 	values, err := Query{
 		Filters: []Filter{
 			{Field: "name", Values: []string{"alice"}},
 			{Field: "age", Op: "gt", Values: []string{"20"}},
 			{Field: "status", Op: "in", Values: []string{"active", "archived"}},
-			{Field: "remark", Op: "like"},
 		},
 		SortBy:      []string{"name", "created_at desc"},
 		Page:        2,
@@ -37,7 +35,6 @@ func TestQueryValuesRenderTheHTTPQuery(t *testing.T) {
 		"name":                    {"alice"},
 		"age[gt]":                 {"20"},
 		"status[in]":              {"active,archived"},
-		"remark[like]":            {""},
 		consts.QUERY_SORT_BY:      {"name,created_at desc"},
 		consts.QUERY_PAGE:         {"2"},
 		consts.QUERY_SIZE:         {"50"},
@@ -55,8 +52,9 @@ func TestQueryValuesRenderTheHTTPQuery(t *testing.T) {
 
 // TestQueryValuesRefuseWhatTheHTTPQueryCannotCarry pins the queries refused
 // before any parsing: a filter given twice, which the HTTP listener refuses
-// as a repeated parameter; several values under an operator taking one; and
-// a member of an in holding a comma, which the HTTP parser would split.
+// as a repeated parameter; several values under an operator taking one; a
+// member of an in holding a comma, which the HTTP parser would split; and a
+// filter without a value, which filters by nothing.
 func TestQueryValuesRefuseWhatTheHTTPQueryCannotCarry(t *testing.T) {
 	for _, tt := range []struct {
 		name    string
@@ -77,6 +75,11 @@ func TestQueryValuesRefuseWhatTheHTTPQueryCannotCarry(t *testing.T) {
 			name:    "a member of an in holding a comma",
 			filters: []Filter{{Field: "name", Op: "notin", Values: []string{"a,b"}}},
 			message: `filter "name[notin]": a value cannot hold a comma, the members are joined by it`,
+		},
+		{
+			name:    "a filter without a value",
+			filters: []Filter{{Field: "remark", Op: "like"}},
+			message: `filter "remark[like]" has no value`,
 		},
 	} {
 		t.Run(tt.name, func(t *testing.T) {

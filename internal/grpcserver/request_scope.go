@@ -58,10 +58,10 @@ const accessLogFieldCap = 11
 // and request URI, POST as the method every gRPC call is on the wire, the
 // address of the peer and whether it speaks TLS, the authority the call was
 // addressed to and the user agent, and whether the method requires auth, as
-// the registration described it (see Method.Public). The forwarding headers of a proxy in
-// front are not read: the HTTP listener believes them from the peers
-// server.trusted_proxies names alone, a judgement gin makes for it and this
-// listener has no gin to make.
+// the registration described it (see Method.Public). The forwarding headers
+// of a proxy in front are not read: the HTTP listener believes them from the
+// peers server.trusted_proxies names alone, a judgement gin makes for it and
+// this listener has no gin to make.
 func requestScope(ctx context.Context, req any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (any, error) {
 	start := time.Now()
 	md, _ := metadata.FromIncomingContext(ctx)
