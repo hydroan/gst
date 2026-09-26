@@ -34,9 +34,10 @@ import (
 // code writes it, or as records/:rec. A handler finds its service by that
 // path and the phase, so the matching service.Register call names the same
 // route; generated code derives both from one design. cfg may be nil, and it
-// is copied, so one config can serve several routes. A blank route, or no
-// phases, panics: the mistake stops the start instead of leaving an endpoint
-// that answers 404.
+// is copied, so one config can serve several routes. A blank route, no
+// phases, or a phase no HTTP route serves, a hook phase such as CreateBefore
+// or Stream, panics: the mistake stops the start instead of leaving an
+// endpoint that answers 404 or registering nothing in silence.
 func Register[M types.Model, REQ types.Request, RSP types.Response](router *gin.RouterGroup, route string, cfg *types.ControllerConfig[M], phases ...consts.Phase) {
 	internalrouter.Register[M, REQ, RSP](router, route, cfg, phases...)
 }

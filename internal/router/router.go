@@ -373,8 +373,11 @@ func register[M types.Model, REQ types.Request, RSP types.Response](router *gin.
 
 	// handle serves a phase's controller under the method the phase maps to,
 	// consts.Phase.HTTPMethod: the one table gg routes, gg route-tree and
-	// gg gen's route ignore rules read the method from as well.
+	// gg gen's route ignore rules read the method from as well. The phases
+	// served are struck off, so the ones left over are the ones no handler
+	// serves.
 	handle := func(phase consts.Phase, handler gin.HandlerFunc) {
+		delete(phases, phase)
 		method := phase.HTTPMethod()
 		router.Handle(method, path, handler)
 		registerRoute(endpoint, method)
@@ -427,6 +430,17 @@ func register[M types.Model, REQ types.Request, RSP types.Response](router *gin.
 		// treatment (body capture, circuit breaking, request timeouts); the
 		// registry is how the middlewares concerned recognize them.
 		middleware.MarkStreamingRoute(consts.SSE.HTTPMethod(), endpoint)
+	}
+	// A phase no handler served is a mistake in the declaration: a hook
+	// phase, CreateBefore, or one served over gRPC alone, Stream. It panics
+	// as the process starts instead of registering nothing in silence.
+	if len(phases) > 0 {
+		names := make([]string, 0, len(phases))
+		for phase := range phases {
+			names = append(names, phase.Name())
+		}
+		sort.Strings(names)
+		panic(fmt.Sprintf("router: register of route %q: no HTTP route serves the phase %s; a hook phase runs inside its action and a Stream is served over gRPC alone", endpoint, strings.Join(names, ", ")))
 	}
 }
 
@@ -489,7 +503,7 @@ func httpMethodRank(method string) (int, bool) {
 	}
 }
 
-// buildVerbMap creates a map of allowed HTTP verbs according to the specified verbs.
+// phaseSet is the set of phases to register a route for.
 func phaseSet(phases ...consts.Phase) map[consts.Phase]bool {
 	set := make(map[consts.Phase]bool, len(phases))
 	for _, phase := range phases {

@@ -15,10 +15,11 @@ import (
 type sampleBinder interface{ Bind() }
 
 // TestRegisterPanicsOnDeclarationMistakes pins the registrations Register
-// refuses as declaration mistakes: a blank route, a route given no verbs, and
-// a request type no request body decodes into. Each panics as it registers,
-// so the mistake stops the start instead of leaving an endpoint that answers
-// 404 or refuses every request.
+// refuses as declaration mistakes: a blank route, a route given no phases, a
+// phase no HTTP route serves, a hook phase or a Stream, and a request type
+// no request body decodes into. Each panics as it registers, so the mistake
+// stops the start instead of leaving an endpoint that answers 404, refuses
+// every request or was never registered.
 func TestRegisterPanicsOnDeclarationMistakes(t *testing.T) {
 	group := gin.New().Group("")
 
@@ -27,6 +28,9 @@ func TestRegisterPanicsOnDeclarationMistakes(t *testing.T) {
 	})
 	require.PanicsWithValue(t, `router: register of route "samples" requires at least one phase`, func() {
 		router.Register[*modelregistry.Empty, *modelregistry.Empty, *modelregistry.Empty](group, "samples", nil)
+	})
+	require.PanicsWithValue(t, `router: register of route "/api/samples": no HTTP route serves the phase CreateBefore, Stream; a hook phase runs inside its action and a Stream is served over gRPC alone`, func() {
+		router.Register[*modelregistry.Empty, *modelregistry.Empty, *modelregistry.Empty](group, "samples", nil, consts.Create, consts.CreateBefore, consts.Stream)
 	})
 	require.PanicsWithValue(t, `controller: route "/api/samples/:id/bind": request type *router_test.sampleBinder is an interface with methods or a pointer to one, which no request body decodes into; declare a concrete type, or any`, func() {
 		router.Register[*modelregistry.Empty, *sampleBinder, *modelregistry.Empty](group, "samples/:id/bind", nil, consts.Create)
