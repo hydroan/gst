@@ -178,9 +178,9 @@ func ParseRouteRule(raw string) (RouteRule, error) {
 // [iam admin users :id], and "/api" gives nil.
 //
 // The "api" prefix strip is applied to rule paths and generated route
-// paths alike, which assumes no generated endpoint has a literal "api"
-// first segment (generated routes never carry the "/api" prefix; the
-// runtime router group adds it).
+// paths alike, so a rule written with or without the prefix matches the
+// generated path, which carries it (see consts.APIPath); it assumes no
+// route has a literal "api" first segment below the prefix.
 func NormalizeRoutePath(path string) []string {
 	path = strings.Trim(strings.TrimSpace(path), "/")
 	if path == "api" {
