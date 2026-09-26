@@ -201,8 +201,6 @@ func (r *inputRecorder) replay(log []byte, cwd, root string) error {
 // chdir lines move it, paths outside the framework and the chdir lines
 // themselves left alone, and a log of another shape refused.
 func TestReplayRecordsWhatTheChildReadInsideTheFramework(t *testing.T) {
-	t.Parallel()
-
 	root := filepath.Join(string(filepath.Separator), "framework")
 	cwd := filepath.Join(string(filepath.Separator), "work")
 	log := "# test log\n" +
