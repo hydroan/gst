@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"database/sql/driver"
+	"net/http"
 	"testing"
 
 	"github.com/cockroachdb/errors"
@@ -49,4 +50,27 @@ func TestRegisterDBStats(t *testing.T) {
 		}
 	}
 	require.True(t, found, "gathered metrics should carry the registered db_name label")
+}
+
+// TestInitServesTheRequestDurationHistogram pins that the latency histogram
+// the access logger observes into is registered by Init and so gathered: a
+// collector built but left off the registration list is observed into on
+// every request and served to nobody.
+func TestInitServesTheRequestDurationHistogram(t *testing.T) {
+	if err := prommetrics.Init(); err != nil {
+		// Init registers into the process-wide default registry, so a second
+		// run in one process is refused as duplicate registration; what the
+		// first run registered is still served.
+		var duplicate prometheus.AlreadyRegisteredError
+		require.ErrorAs(t, err, &duplicate)
+	}
+	prommetrics.HTTPRequestDuration.WithLabelValues(http.MethodGet, "/probe", "200").Observe(0.1)
+
+	families, err := prometheus.DefaultGatherer.Gather()
+	require.NoError(t, err)
+	names := make([]string, 0, len(families))
+	for _, family := range families {
+		names = append(names, family.GetName())
+	}
+	require.Contains(t, names, prometheus.BuildFQName(prommetrics.NAMESPACE, prommetrics.SUBSYSTEM, "http_request_duration_seconds"))
 }

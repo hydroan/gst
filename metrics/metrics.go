@@ -185,6 +185,7 @@ func Init() error {
 		State,
 		Uptime,
 		HTTPRequestsTotal,
+		HTTPRequestDuration,
 		ResponseTime,
 		ErrorRate,
 		MemoryTotal,
