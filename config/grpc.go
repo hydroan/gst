@@ -23,7 +23,7 @@ const (
 // switch off.
 type GRPC struct {
 	// Listen is the address the listener binds, every interface when empty,
-	// and Port its port, 9090 by default.
+	// and Port its port, 8081 by default, next to the HTTP listener's 8080.
 	Listen string `json:"listen" mapstructure:"listen" ini:"listen" yaml:"listen"`
 	Port   int    `json:"port" mapstructure:"port" ini:"port" yaml:"port"`
 
@@ -49,7 +49,7 @@ type GRPC struct {
 
 func (*GRPC) setDefault(v *viper.Viper) {
 	v.SetDefault("grpc.listen", "")
-	v.SetDefault("grpc.port", 9090)
+	v.SetDefault("grpc.port", 8081)
 	v.SetDefault("grpc.tls_enabled", false)
 	v.SetDefault("grpc.cert_file", "")
 	v.SetDefault("grpc.key_file", "")

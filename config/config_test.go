@@ -277,7 +277,7 @@ func TestInitDefaultsToInMemorySqliteWithoutConfigFile(t *testing.T) {
 }
 
 // TestInitDefaultsTheGRPCListener pins the defaults of the grpc section: port
-// 9090 on every interface, reflection on, plaintext, keepalive left to
+// 8081 on every interface, reflection on, plaintext, keepalive left to
 // grpc-go; and that the environment overrides them like any other section.
 func TestInitDefaultsTheGRPCListener(t *testing.T) {
 	clearConfigEnvForTest(t)
@@ -287,7 +287,7 @@ func TestInitDefaultsTheGRPCListener(t *testing.T) {
 	if err := config.Init(); err != nil {
 		t.Fatal(err)
 	}
-	assert.Equal(t, config.GRPC{Port: 9090, Reflection: true}, config.App.GRPC)
+	assert.Equal(t, config.GRPC{Port: 8081, Reflection: true}, config.App.GRPC)
 
 	t.Setenv(config.GRPC_PORT, "9999")
 	t.Setenv(config.GRPC_REFLECTION, "false")
