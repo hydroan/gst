@@ -71,6 +71,12 @@ func genRunWithOptions(opts genRunOptions) error {
 	if err := fillVersionFieldTags(opts.Quiet); err != nil {
 		return err
 	}
+	// Number the fields of the models served over gRPC that carry no pb tag,
+	// for the same reason (see fillPBTags).
+	ignore := gghelper.NewProjectIgnore()
+	if err := fillPBTags(opts.Quiet, ignore); err != nil {
+		return err
+	}
 
 	if runProjectChecks(generationChecks(), opts.Quiet, opts.BaselineViolations) > 0 {
 		return errors.New("project checks failed")
@@ -94,7 +100,6 @@ func genRunWithOptions(opts genRunOptions) error {
 		}
 	}
 
-	ignore := gghelper.NewProjectIgnore()
 	scanned, err := scanModels(opts.Quiet, ignore)
 	if err != nil {
 		return err

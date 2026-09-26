@@ -137,7 +137,7 @@ func (g *generator) buildMessage(obj *types.TypeName) {
 		g.project.Report(s, "the type declares %s, so its JSON shape is decided by code the generator cannot read; drop the method or use a type without one", method)
 		return
 	}
-	desc, conv := g.messageOfStruct(m.name, goCamelCase(m.name), st, m.file, s, []int32{fileMessagesTag, int32Index(len(m.file.messages))})
+	desc, conv := g.messageOfStruct(m.name, goCamelCase(m.name), m.name, st, m.file, s, []int32{fileMessagesTag, int32Index(len(m.file.messages))})
 	m.conv = conv
 	m.file.typed = append(m.file.typed, m)
 	m.file.addMessage(desc, g.project.TypeDoc(obj))
@@ -153,49 +153,91 @@ type numberedField struct {
 }
 
 // messageOfStruct builds the descriptor of the message named name, goName
-// in Go, for the struct st, whose fields are declared in file, at the source
-// path prefix the comments of its fields are recorded under, and the
-// conversion of the message. The fields are listed by number, so the
-// framework's base keys come first. A key promoted through an embedded
-// pointer is reported: the handlers read and write every field of a message
-// as a field of the struct, which a nil pointer would have them leave out
-// or allocate.
-func (g *generator) messageOfStruct(name, goName string, st *types.Struct, file *protoFile, s jsonshape.Site, prefix []int32) (*descriptorpb.DescriptorProto, *conversion) {
+// in Go and protoName below the file (Record, Record.Window), for the struct
+// st, whose fields are declared in file, at the source path prefix the
+// comments of its fields are recorded under, and the conversion of the
+// message. The fields are listed by number, so the framework's base keys
+// come first. The tagged fields take their numbers first; a field without
+// a tag is then given the next number after every number in use (see
+// nextNumbers), reported with it for gg check, and listed in
+// DiagnosticsError.MissingTags for gg gen to write into its tag. A key
+// promoted through an embedded pointer is reported: the handlers read and
+// write every field of a message as a field of the struct, which a nil
+// pointer would have them leave out or allocate. So is a key promoted from
+// a struct outside the project, whose fields cannot carry pb tags.
+func (g *generator) messageOfStruct(name, goName, protoName string, st *types.Struct, file *protoFile, s jsonshape.Site, prefix []int32) (*descriptorpb.DescriptorProto, *conversion) {
 	desc := &descriptorpb.DescriptorProto{Name: new(name)}
 	g.goNames[desc] = goName
+	g.protoNames[desc] = protoName
 	fields := g.project.Fields(st, s)
 	base := false
 	for _, f := range fields {
 		base = base || isBaseField(f)
 	}
 	numbers := make(map[int32]string)
-	var numbered []numberedField
-	for _, f := range fields {
+	planned := make([]int32, len(fields)) // the number of each field, 0 for one left out
+	var untagged []int
+	for i, f := range fields {
 		fs := g.project.FieldSite(s, f.Key, f.Var)
-		if !identifier.MatchString(f.Key) {
+		switch {
+		case !identifier.MatchString(f.Key):
 			g.project.Report(fs, "the JSON key %q cannot name a protobuf field; name it with a json tag of letters, digits and underscores", f.Key)
-			continue
-		}
-		if f.ViaPointer {
+		case f.ViaPointer:
 			g.project.Report(fs, "the field is promoted through an embedded pointer, which a message has no way to leave unset; embed the struct by value")
+		case isBaseField(f):
+			planned[i] = BaseFieldNumbers[f.Key]
+			numbers[planned[i]] = f.Key
+		case f.Var.Pkg() == nil || g.project.Package(f.Var.Pkg().Path()) == nil:
+			g.project.Report(fs, "the field is promoted from a struct outside the project, whose fields cannot carry pb tags; embed a project type")
+		default:
+			tag, tagged := reflect.StructTag(f.Tag).Lookup(Tag)
+			if !tagged {
+				untagged = append(untagged, i)
+				continue
+			}
+			number := g.taggedNumber(tag, base, fs)
+			if number == 0 {
+				continue
+			}
+			if previous, taken := numbers[number]; taken {
+				g.project.Report(fs, "field number %d is already taken by %s; give each field its own number", number, previous)
+				continue
+			}
+			numbers[number] = f.Key
+			planned[i] = number
+		}
+	}
+	if len(untagged) > 0 {
+		next := g.nextNumbers(file, protoName, numbers, base)
+		for _, i := range untagged {
+			f := fields[i]
+			fs := g.project.FieldSite(s, f.Key, f.Var)
+			number, ok := next(f.Key)
+			if !ok {
+				g.project.Report(fs, "the field has no pb tag, and every field number left is one the committed %s/%s reserves; lift a reservation, or delete the file to start over", ggconst.DirPB, file.name)
+				continue
+			}
+			numbers[number] = f.Key
+			planned[i] = number
+			g.project.Report(fs, "the field has no pb tag; number it pb:%q", strconv.Itoa(int(number)))
+			position := g.project.FileSet().Position(f.Var.Pos())
+			g.missingTags = append(g.missingTags, MissingTag{Path: g.project.RelativeFile(position.Filename), Line: position.Line, Struct: protoName, Field: f.Var.Name(), Number: number})
+		}
+	}
+
+	var numbered []numberedField
+	for i, f := range fields {
+		if planned[i] == 0 {
 			continue
 		}
-		number := g.fieldNumber(f, base, fs)
-		if number == 0 {
-			continue
-		}
-		if previous, taken := numbers[number]; taken {
-			g.project.Report(fs, "field number %d is already taken by %s; give each field its own number", number, previous)
-			continue
-		}
-		numbers[number] = f.Key
+		fs := g.project.FieldSite(s, f.Key, f.Var)
 		ft, ok := g.fieldTypeOf(f.Var.Type(), file, desc, prefix, f.Key, fs)
 		if !ok {
 			continue
 		}
 		field := &descriptorpb.FieldDescriptorProto{
 			Name:   new(f.Key),
-			Number: new(number),
+			Number: new(planned[i]),
 			Label:  descriptorpb.FieldDescriptorProto_LABEL_OPTIONAL.Enum(),
 			Type:   ft.kind.Enum(),
 		}
@@ -227,6 +269,56 @@ func (g *generator) messageOfStruct(name, goName string, st *types.Struct, file 
 	return desc, conv
 }
 
+// nextNumbers returns the numbering of the fields without a pb tag of the
+// message protoName of file, given the numbers its tagged fields hold and
+// whether it embeds the framework's base: a field the committed definition
+// under pb/ already holds keeps the number it held there, and any other
+// field takes the next number after the highest one in use, in the message
+// as it is and in the committed one, skipping the numbers the committed
+// message reserves and the range 19000 to 19999 protobuf reserves. It
+// answers false once no number is left. Record, holding title = 11 and
+// tags = 12 in its committed definition and declaring title tagged 11, tags
+// untagged and a new summary untagged, numbers tags 12 and summary 13; with
+// tags dropped and 12 reserved by the committed file, summary is 13 too.
+func (g *generator) nextNumbers(file *protoFile, protoName string, numbers map[int32]string, base bool) func(key string) (int32, bool) {
+	committed := g.committedMessage(file, protoName)
+	committedNumbers := make(map[int32]bool, len(committed.GetField()))
+	committedByName := make(map[string]int32, len(committed.GetField()))
+	for _, f := range committed.GetField() {
+		committedNumbers[f.GetNumber()] = true
+		committedByName[f.GetName()] = f.GetNumber()
+	}
+	first := int32(1)
+	if base {
+		first = FirstBusinessFieldNumber
+	}
+	candidate := first - 1
+	for n := range numbers {
+		candidate = max(candidate, n)
+	}
+	for n := range committedNumbers {
+		candidate = max(candidate, n)
+	}
+	taken := func(n int32) bool {
+		_, held := numbers[n]
+		return held || committedNumbers[n] || reserves(committed.GetReservedRange(), n) || (n >= reservedRangeStart && n <= reservedRangeEnd)
+	}
+	return func(key string) (int32, bool) {
+		if n, ok := committedByName[key]; ok {
+			if _, held := numbers[n]; !held {
+				return n, true
+			}
+		}
+		for candidate < fieldMaxNumber {
+			candidate++
+			if !taken(candidate) {
+				return candidate, true
+			}
+		}
+		return 0, false
+	}
+}
+
 // isBaseField reports whether f is a key promoted from the framework's model
 // base, which carries a fixed field number.
 func isBaseField(f jsonshape.Field) bool {
@@ -234,23 +326,14 @@ func isBaseField(f jsonshape.Field) bool {
 	return fixed && f.Var.Pkg() != nil && f.Var.Pkg().Path() == modelRegistryPath
 }
 
-// fieldNumber returns the field number of f: the fixed number of a framework
-// base key, or the number its pb tag names, which must be positive, at most
-// 536870911, outside the range 19000 to 19999 protobuf reserves, and from
-// FirstBusinessFieldNumber on in a message embedding the base. A number that
-// fails these is reported and yields 0.
-func (g *generator) fieldNumber(f jsonshape.Field, base bool, s jsonshape.Site) int32 {
-	if isBaseField(f) {
-		return BaseFieldNumbers[f.Key]
-	}
+// taggedNumber returns the field number the pb tag of a field names, which
+// must be positive, at most 536870911, outside the range 19000 to 19999
+// protobuf reserves, and from FirstBusinessFieldNumber on in a message
+// embedding the base. A number that fails these is reported and yields 0.
+func (g *generator) taggedNumber(tag string, base bool, s jsonshape.Site) int32 {
 	first := int32(1)
 	if base {
 		first = FirstBusinessFieldNumber
-	}
-	tag, tagged := reflect.StructTag(f.Tag).Lookup(Tag)
-	if !tagged {
-		g.project.Report(s, "the field has no pb tag; number it pb:%q with N from %d", "N", first)
-		return 0
 	}
 	number, err := strconv.ParseInt(tag, 10, 32)
 	switch {
@@ -348,7 +431,7 @@ func (g *generator) fieldTypeOf(t types.Type, file *protoFile, parent *descripto
 		// enclosing one under the field's name, Record_Window in Go for
 		// the window field of Record.
 		name := strcase.UpperCamelCase(key)
-		nested, conv := g.messageOfStruct(name, g.goNames[parent]+"_"+goCamelCase(name), u, file, s, append(slices.Clone(prefix), messageNestedTag, int32Index(len(parent.NestedType))))
+		nested, conv := g.messageOfStruct(name, g.goNames[parent]+"_"+goCamelCase(name), g.protoNames[parent]+"."+name, u, file, s, append(slices.Clone(prefix), messageNestedTag, int32Index(len(parent.NestedType))))
 		parent.NestedType = append(parent.NestedType, nested)
 		return fieldType{kind: descriptorpb.FieldDescriptorProto_TYPE_MESSAGE, typeName: name, nested: conv}, true
 	default:

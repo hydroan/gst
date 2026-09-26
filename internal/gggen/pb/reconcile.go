@@ -26,21 +26,55 @@ import (
 func (g *generator) reconcile() {
 	for name, f := range g.files {
 		s := jsonshape.Site{Subject: ggconst.DirPB + "/" + name}
-		path := filepath.Join(g.cfg.Dir, ggconst.DirPB, filepath.FromSlash(name))
-		if _, err := os.Stat(path); os.IsNotExist(err) {
+		committed := g.committed(name)
+		switch {
+		case committed.absent:
+			continue
+		case committed.err != nil:
+			g.project.Report(s, "the committed file cannot be read: %v; fix it or delete it", committed.err)
 			continue
 		}
-		committed, err := readCommitted(path)
-		if err != nil {
-			g.project.Report(s, "the committed file cannot be read: %v; fix it or delete it", err)
-			continue
-		}
-		old := make(map[string]*descriptorpb.DescriptorProto)
-		indexMessages(committed.GetMessageType(), "", old)
 		for _, m := range f.messages {
-			g.holdMessage(s, m, "", old)
+			g.holdMessage(s, m, "", committed.messages)
 		}
 	}
+}
+
+// committedFile is a definition already under pb/ as reconcile and the
+// numbering of untagged fields read it: absent when the project holds none,
+// otherwise its messages by dotted name (see indexMessages), or what kept
+// it from being read.
+type committedFile struct {
+	absent   bool
+	messages map[string]*descriptorpb.DescriptorProto
+	err      error
+}
+
+// committed returns the committed counterpart of the file name under pb/,
+// read once.
+func (g *generator) committed(name string) committedFile {
+	if c, ok := g.committedFiles[name]; ok {
+		return c
+	}
+	var c committedFile
+	path := filepath.Join(g.cfg.Dir, ggconst.DirPB, filepath.FromSlash(name))
+	if _, err := os.Stat(path); os.IsNotExist(err) {
+		c.absent = true
+	} else if desc, err := readCommitted(path); err != nil {
+		c.err = err
+	} else {
+		c.messages = make(map[string]*descriptorpb.DescriptorProto)
+		indexMessages(desc.GetMessageType(), "", c.messages)
+	}
+	g.committedFiles[name] = c
+	return c
+}
+
+// committedMessage returns the message protoName of the committed
+// counterpart of file, nil when the project holds no such file, or no such
+// message, or the file cannot be read, which reconcile reports.
+func (g *generator) committedMessage(file *protoFile, protoName string) *descriptorpb.DescriptorProto {
+	return g.committed(file.name).messages[protoName]
 }
 
 // readCommitted parses the .proto file at path on its own, imports

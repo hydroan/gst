@@ -30,10 +30,17 @@ type generator struct {
 	messages   map[*types.TypeName]*message
 	byFullName map[string]*message
 	queue      []*types.TypeName
-	// goNames holds the Go type name of every message descriptor built,
-	// Record_Window for the message Window nested in Record, which names the
-	// messages nested further.
-	goNames map[*descriptorpb.DescriptorProto]string
+	// goNames and protoNames hold the Go type name and the dotted name below
+	// the file of every message descriptor built, Record_Window and
+	// Record.Window for the message Window nested in Record, which name the
+	// messages nested further and find the committed message to hold to.
+	goNames    map[*descriptorpb.DescriptorProto]string
+	protoNames map[*descriptorpb.DescriptorProto]string
+	// committedFiles caches the definitions already under pb/ (see committed).
+	committedFiles map[string]committedFile
+	// missingTags lists the fields numbered for want of a pb tag (see
+	// MissingTag).
+	missingTags []MissingTag
 }
 
 // message is the message of one project type: the file it is declared in,
@@ -89,14 +96,16 @@ func (f *protoFile) dir() string { return path.Dir(f.name) }
 // the models declaring GRPC().
 func newGenerator(cfg Config, project *jsonshape.Project, models []*modelinfo.Model) *generator {
 	return &generator{
-		cfg:        cfg,
-		project:    project,
-		appName:    path.Base(cfg.ModulePath),
-		models:     models,
-		files:      make(map[string]*protoFile),
-		messages:   make(map[*types.TypeName]*message),
-		byFullName: make(map[string]*message),
-		goNames:    make(map[*descriptorpb.DescriptorProto]string),
+		cfg:            cfg,
+		project:        project,
+		appName:        path.Base(cfg.ModulePath),
+		models:         models,
+		files:          make(map[string]*protoFile),
+		messages:       make(map[*types.TypeName]*message),
+		byFullName:     make(map[string]*message),
+		goNames:        make(map[*descriptorpb.DescriptorProto]string),
+		protoNames:     make(map[*descriptorpb.DescriptorProto]string),
+		committedFiles: make(map[string]committedFile),
 	}
 }
 
@@ -115,7 +124,7 @@ func (g *generator) generate() ([]File, error) {
 			"the model file %s/%s.go would get its handlers at %s/%s, the registration file; rename the file", ggconst.DirModel, ggconst.DirPB, ggconst.DirPB, ggconst.FilePBGen)
 	}
 	if diags := g.project.Diagnostics(); len(diags) > 0 {
-		return nil, &DiagnosticsError{Diagnostics: diags}
+		return nil, &DiagnosticsError{Diagnostics: diags, MissingTags: g.missingTags}
 	}
 	g.reconcile()
 	if diags := g.project.Diagnostics(); len(diags) > 0 {

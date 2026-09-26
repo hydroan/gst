@@ -11,7 +11,8 @@ import (
 // TestProtobufDefinitionsReportsWhatStopsGeneration pins that the check
 // derives the protobuf definitions the way gg gen does and reports each of
 // its diagnostics, here a field of a model declaring GRPC() without a pb
-// tag, and that a project without such a model has nothing to report.
+// tag, named with the number gg gen would give it, and that a project
+// without such a model has nothing to report.
 func TestProtobufDefinitionsReportsWhatStopsGeneration(t *testing.T) {
 	projectDir := t.TempDir()
 	t.Chdir(projectDir)
@@ -42,7 +43,7 @@ func (Note) Design() {
 
 	violations := runCheck(ggcheck.ProtobufDefinitions)
 
-	if len(violations) != 1 || !strings.Contains(violations[0], "tmpapp/model.Note.title: the field has no pb tag") {
+	if len(violations) != 1 || !strings.Contains(violations[0], "tmpapp/model.Note.title: the field has no pb tag; number it pb:\"11\"") {
 		t.Fatalf("violations = %#v, want the missing pb tag reported once", violations)
 	}
 

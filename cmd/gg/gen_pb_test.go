@@ -127,8 +127,10 @@ func TestGenRunRefusesAModelFileNamedPB(t *testing.T) {
 }
 
 // TestGenRunWritesNoProtobufDefinitionWhenAShapeCannotBeDescribed pins the
-// diagnostics of the shapes protobuf cannot express, one per field, and that
-// a failed run writes no pb/ file at all.
+// diagnostics of the shapes protobuf cannot express, one per field, that a
+// field without a pb tag is numbered instead of reported (see
+// TestGenRunNumbersTheFieldsWithoutPBTags), and that a failed run writes no
+// pb/ file at all.
 func TestGenRunWritesNoProtobufDefinitionWhenAShapeCannotBeDescribed(t *testing.T) {
 	projectDir := newGenProject(t)
 	writeProtobufProject(t, projectDir, map[string]string{"model/rejected.go": protobufRejectedModel})
@@ -136,8 +138,13 @@ func TestGenRunWritesNoProtobufDefinitionWhenAShapeCannotBeDescribed(t *testing.
 	err := genRunWithOptions(genRunOptions{Quiet: true})
 
 	require.Error(t, err)
+	// The one field without a tag is numbered rather than reported: after
+	// the numbers the tagged fields hold.
+	healed, readErr := os.ReadFile(filepath.Join(projectDir, "model", "rejected.go"))
+	require.NoError(t, readErr)
+	require.Contains(t, string(healed), "Untagged string         `json:\"untagged\" pb:\"15\"`")
+	require.NotContains(t, err.Error(), "Rejected.untagged")
 	for _, want := range []string{
-		"tmpapp/model.Rejected.untagged: the field has no pb tag; number it pb:\"N\" with N from 11",
 		"tmpapp/model.Rejected.low: the pb tag names field number 3, but 1 to 10 belong to the framework's base fields; number business fields from 11",
 		"tmpapp/model.Rejected.reserved: the pb tag names field number 19500, inside the range 19000 to 19999 protobuf reserves",
 		"tmpapp/model.Rejected.twice: field number 11 is already taken by title; give each field its own number",
@@ -151,6 +158,86 @@ func TestGenRunWritesNoProtobufDefinitionWhenAShapeCannotBeDescribed(t *testing.
 	}
 	_, statErr := os.Stat(filepath.Join(projectDir, "pb"))
 	require.True(t, os.IsNotExist(statErr), "a failed run must write no file, stat error = %v", statErr)
+}
+
+// TestGenRunNumbersTheFieldsWithoutPBTags pins that gg gen writes the pb
+// tag of every field of a gRPC model that has none, with the number the
+// generator chose: the next number after every one the tagged fields hold,
+// starting past 10 in a model embedding the base and past 0 in any other
+// struct, the nested and the referenced ones included, the file keeping its
+// layout and comments (it holds the example of the rewritePBTags doc
+// comment); and that a second run leaves the file as it is.
+func TestGenRunNumbersTheFieldsWithoutPBTags(t *testing.T) {
+	projectDir := newGenProject(t)
+	writeProtobufProject(t, projectDir, map[string]string{"model/draft.go": protobufUntaggedModel})
+
+	require.NoError(t, genRunWithOptions(genRunOptions{Quiet: true}))
+
+	healed, err := os.ReadFile(filepath.Join(projectDir, "model", "draft.go"))
+	require.NoError(t, err)
+	require.Contains(t, string(healed), strings.ReplaceAll(`type Draft struct {
+	Title  string   'json:"title" pb:"11"'
+	Body   string   'json:"body" pb:"12"'
+	Tags   []string 'json:"tags,omitempty" gorm:"-" pb:"13"' // trailing comment
+	Window struct {
+		From string 'json:"from" pb:"1"'
+		To   string 'pb:"2"'
+	} 'json:"window" gorm:"-" pb:"14"'
+	Meta DraftMeta 'json:"meta" gorm:"-" pb:"15"'
+
+	model.Base
+}`, "'", "`"))
+	// A struct without the base numbers from 1, after the highest number
+	// its tagged fields hold: no hole below it is filled, a hole being a
+	// number that may have been used.
+	require.Contains(t, string(healed), strings.ReplaceAll(`type DraftMeta struct {
+	Author string 'json:"author" pb:"6"'
+	Score  int32  'json:"score" pb:"5"'
+	Note   string 'json:"note" pb:"7"'
+}`, "'", "`"))
+	proto, err := os.ReadFile(filepath.Join(projectDir, ggconst.DirPB, "draft.proto"))
+	require.NoError(t, err)
+	require.Contains(t, string(proto), "string body = 12;")
+	require.Contains(t, string(proto), "string note = 7;")
+
+	require.NoError(t, genRunWithOptions(genRunOptions{Quiet: true}))
+	again, err := os.ReadFile(filepath.Join(projectDir, "model", "draft.go"))
+	require.NoError(t, err)
+	require.Equal(t, string(healed), string(again))
+}
+
+// TestGenRunNumbersTheFieldsWithoutPBTagsAfterTheCommittedDefinition pins
+// the numbers gg gen gives against the definition already under pb/: a
+// field the committed definition holds gets its number back, and a new
+// field never takes a number the committed definition reserves, the one of
+// a dropped field included.
+func TestGenRunNumbersTheFieldsWithoutPBTagsAfterTheCommittedDefinition(t *testing.T) {
+	projectDir := newGenProject(t)
+	writeProtobufProject(t, projectDir, map[string]string{"model/note.go": protobufNoteModel})
+	require.NoError(t, genRunWithOptions(genRunOptions{Quiet: true}))
+
+	t.Run("a committed field gets its number back", func(t *testing.T) {
+		writeProtobufProject(t, projectDir, map[string]string{"model/note.go": strings.Replace(protobufNoteModel, ` pb:"12"`, "", 1)})
+
+		require.NoError(t, genRunWithOptions(genRunOptions{Quiet: true}))
+
+		healed, err := os.ReadFile(filepath.Join(projectDir, "model", "note.go"))
+		require.NoError(t, err)
+		require.Contains(t, string(healed), "`json:\"tags,omitempty\" gorm:\"-\" pb:\"12\"`")
+	})
+	t.Run("a dropped field's number stays reserved", func(t *testing.T) {
+		withoutTags := strings.Replace(protobufNoteModel, "\tTags  []string 'json:\"tags,omitempty\" pb:\"12\" gorm:\"-\"'\n", "\tBody string 'json:\"body\"'\n", 1)
+		writeProtobufProject(t, projectDir, map[string]string{"model/note.go": withoutTags})
+
+		require.NoError(t, genRunWithOptions(genRunOptions{Quiet: true}))
+
+		healed, err := os.ReadFile(filepath.Join(projectDir, "model", "note.go"))
+		require.NoError(t, err)
+		require.Contains(t, string(healed), "`json:\"body\" pb:\"13\"`")
+		proto, err := os.ReadFile(filepath.Join(projectDir, ggconst.DirPB, "note.proto"))
+		require.NoError(t, err)
+		require.Contains(t, string(proto), "reserved 12;")
+	})
 }
 
 // TestGenRunRefusesTwoActionsBecomingOneRPC pins the refusal of two actions
@@ -1055,6 +1142,46 @@ func (Pb) Design() {
 	dsl.GRPC()
 	dsl.Migrate()
 	dsl.Endpoint("pbs")
+	dsl.Create(func() {})
+}
+`
+
+// protobufUntaggedModel declares fields without pb tags at every level:
+// the model, an unnamed struct nested in it and a referenced type.
+const protobufUntaggedModel = `package model
+
+import (
+	"github.com/hydroan/gst/dsl"
+	"github.com/hydroan/gst/model"
+)
+
+// Draft is numbered by gg gen.
+type Draft struct {
+	Title  string   'json:"title" pb:"11"'
+	Body   string   'json:"body"'
+	Tags   []string 'json:"tags,omitempty" gorm:"-"' // trailing comment
+	Window struct {
+		From string 'json:"from"'
+		To   string
+	} 'json:"window" gorm:"-"'
+	Meta DraftMeta 'json:"meta" gorm:"-"'
+
+	model.Base
+}
+
+// DraftMeta is kept beside a draft.
+type DraftMeta struct {
+	Author string 'json:"author"'
+	Score  int32  'json:"score" pb:"5"'
+	Note   string 'json:"note"'
+}
+
+func (Draft) TableName() string { return "drafts" }
+
+func (Draft) Design() {
+	dsl.GRPC()
+	dsl.Migrate()
+	dsl.Endpoint("drafts")
 	dsl.Create(func() {})
 }
 `

@@ -105,13 +105,33 @@ func (f File) Definition() bool { return strings.HasSuffix(f.Path, ".proto") }
 // without the messages it refers to.
 type DiagnosticsError struct {
 	Diagnostics []jsonshape.Diagnostic
+	// MissingTags lists the fields reported for want of a pb tag, each with
+	// the number Generate gave it; gg gen writes them into the fields' tags
+	// and generates again.
+	MissingTags []MissingTag
+}
+
+// MissingTag is a field of a message that carries no pb tag, with the
+// number Generate chose for it (see the numbering in messageOfStruct): the
+// diagnostic reporting the field names the same number.
+type MissingTag struct {
+	// Path is the file declaring the field, slash-separated and relative to
+	// the project root, model/record.go; Line is the line of the field.
+	Path string
+	Line int
+	// Struct is the dotted name of the message below its file, Record or
+	// Record.Window, and Field the Go name of the field, Title.
+	Struct string
+	Field  string
+	// Number is the field number to give the field.
+	Number int32
 }
 
 // Error lists every diagnostic on a line of its own, under a line counting
 // them:
 //
 //	1 problem(s) keep the protobuf definitions from being generated:
-//	  model/sample.go:12: example.com/app/model.Sample.name: field name has no pb tag; number it pb:"N" with N from 11
+//	  model/sample.go:12: example.com/app/model.Sample.name: the field has no pb tag; number it pb:"11"
 func (e *DiagnosticsError) Error() string {
 	lines := make([]string, 0, len(e.Diagnostics)+1)
 	lines = append(lines, fmt.Sprintf("%d problem(s) keep the protobuf definitions from being generated:", len(e.Diagnostics)))
