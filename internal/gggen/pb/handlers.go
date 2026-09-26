@@ -41,7 +41,7 @@ import (
 //		"tmpapp/model"
 //
 //		"github.com/hydroan/gst/consts"
-//		gstgrpc "github.com/hydroan/gst/grpc"
+//		"github.com/hydroan/gst/grpc"
 //		gstmodel "github.com/hydroan/gst/model"
 //	)
 //
@@ -55,11 +55,11 @@ import (
 //
 //	// The calls of the actions of Report, one per rpc of ReportService, built
 //	// once at package initialization.
-//	var getReport = gstgrpc.ServiceCall[*model.Report, *gstmodel.Empty, *model.ReportRsp](consts.PHASE_GET, "reports/summary")
+//	var getReport = grpc.ServiceCall[*model.Report, *gstmodel.Empty, *model.ReportRsp](consts.PHASE_GET, "reports/summary")
 //
 //	// GetReport serves the Get action of Report on reports/summary.
 //	func (ReportService) GetReport(ctx context.Context, req *GetReportRequest) (*GetReportResponse, error) {
-//		result, err := getReport(ctx, nil, gstgrpc.Query{Expand: req.GetExpand(), Depth: req.GetDepth()}, new(gstmodel.Empty))
+//		result, err := getReport(ctx, nil, grpc.Query{Expand: req.GetExpand(), Depth: req.GetDepth()}, new(gstmodel.Empty))
 //		if err != nil {
 //			return nil, err
 //		}
@@ -150,10 +150,10 @@ func (w *fileWriter) serviceType(service string, model *modelinfo.Model) {
 //	// The calls of the actions of Item, one per rpc of ItemService, built once
 //	// at package initialization.
 //	var (
-//		createItem = gstgrpc.CreateCall[*record.Item]("records/:record/items")
-//		getItem    = gstgrpc.GetCall[*record.Item]("records/:record/items/:id")
-//		sealItem   = gstgrpc.CreateCall[*record.Item]("items/:id/seal")
-//		mergeItem  = gstgrpc.ServiceCall[*record.Item, *record.MergeReq, *record.MergedItemRsp](consts.PHASE_CREATE, "items/merge")
+//		createItem = grpc.CreateCall[*record.Item]("records/:record/items")
+//		getItem    = grpc.GetCall[*record.Item]("records/:record/items/:id")
+//		sealItem   = grpc.CreateCall[*record.Item]("items/:id/seal")
+//		mergeItem  = grpc.ServiceCall[*record.Item, *record.MergeReq, *record.MergedItemRsp](consts.PHASE_CREATE, "items/merge")
 //	)
 func (w *fileWriter) actionCalls(service string, rpcs []*rpc) {
 	model := rpcs[0].model
@@ -162,10 +162,10 @@ func (w *fileWriter) actionCalls(service string, rpcs []*rpc) {
 		modelType := star(w.modelPkgType(model, model.ModelName))
 		var value ast.Expr
 		if r.standard {
-			value = call(index(w.gstgrpc(r.action.Phase.MethodName()+"Call"), modelType), strLit(r.registered))
+			value = call(index(w.grpc(r.action.Phase.MethodName()+"Call"), modelType), strLit(r.registered))
 		} else {
 			value = call(
-				&ast.IndexListExpr{X: w.gstgrpc("ServiceCall"), Indices: []ast.Expr{modelType, w.actionType(model, r.action.Payload), w.actionType(model, r.action.Result)}},
+				&ast.IndexListExpr{X: w.grpc("ServiceCall"), Indices: []ast.Expr{modelType, w.actionType(model, r.action.Payload), w.actionType(model, r.action.Result)}},
 				sel(w.out.imports.fixedRef(ggconst.ImportPathConsts), "PHASE_"+strings.ToUpper(string(r.action.Phase))),
 				strLit(r.registered),
 			)
@@ -229,8 +229,8 @@ func (w *fileWriter) actionType(model *modelinfo.Model, typeName string) ast.Exp
 //
 //	// ListRecord serves the List action of Record on records.
 //	func (RecordService) ListRecord(ctx context.Context, req *ListRecordRequest) (*ListRecordResponse, error) {
-//		models, total, err := listRecord(ctx, nil, gstgrpc.Query{
-//			Filters:     gstgrpc.Filters(req.GetFilters()),
+//		models, total, err := listRecord(ctx, nil, grpc.Query{
+//			Filters:     grpc.Filters(req.GetFilters()),
 //			SortBy:      req.GetSortBy(),
 //			Page:        req.GetPage(),
 //			Size:        req.GetSize(),
@@ -274,7 +274,7 @@ func (w *fileWriter) actionType(model *modelinfo.Model, typeName string) ast.Exp
 //
 //	// MergeItem serves the Create action of Item on items/merge.
 //	func (ItemService) MergeItem(ctx context.Context, req *MergeItemRequest) (*MergeItemResponse, error) {
-//		result, err := mergeItem(ctx, nil, gstgrpc.Query{}, MergeReqFromProto(req.GetPayload()))
+//		result, err := mergeItem(ctx, nil, grpc.Query{}, MergeReqFromProto(req.GetPayload()))
 //		if err != nil {
 //			return nil, err
 //		}
@@ -397,11 +397,11 @@ func (w *fileWriter) handler(r *rpc) {
 // the expansion of a Get; and the zero Query for any other phase, which
 // takes no query.
 func (w *fileWriter) query(phase consts.Phase, req func(string) ast.Expr) (ast.Expr, func(*goast.LineSet)) {
-	lit := compositeLit(w.gstgrpc("Query"))
+	lit := compositeLit(w.grpc("Query"))
 	switch phase {
 	case consts.PHASE_LIST:
 		lit.Elts = []ast.Expr{
-			keyValue("Filters", call(w.gstgrpc("Filters"), req("filters"))),
+			keyValue("Filters", call(w.grpc("Filters"), req("filters"))),
 			keyValue("SortBy", req("sort_by")),
 			keyValue("Page", req("page")),
 			keyValue("Size", req("size")),

@@ -23,12 +23,21 @@ import (
 // by.
 type Method = grpcserver.Method
 
-// Register queues fn to register a service on the listener, the way the
-// generated pb/pb.gen.go registers the service of every model declaring
-// GRPC(): fn gets the server and calls the RegisterXxxServiceServer function
-// the protobuf plugin generated, and methods describe the service's rpcs.
-// It runs at package initialization, before bootstrap starts the listeners,
-// and panics once the listener runs.
-func Register(fn func(grpc.ServiceRegistrar), methods ...Method) {
-	grpcserver.Register(fn, methods...)
+// Register queues the service server serves to be registered on the
+// listener through register, the RegisterXxxServiceServer function the
+// protobuf plugin generated for it, the way the generated pb/pb.gen.go
+// registers the service of every model declaring GRPC():
+//
+//	grpc.Register[NoteServiceServer](RegisterNoteServiceServer, NoteService{},
+//		grpc.Method{Name: NoteService_CreateNote_FullMethodName, HTTPMethod: http.MethodPost, Route: "/api/notes"},
+//		grpc.Method{Name: NoteService_GetNote_FullMethodName, HTTPMethod: http.MethodGet, Route: "/api/notes/:id"},
+//	)
+//
+// S is the server interface the plugin generated, spelled out because the
+// value registered is of the type serving it, which inference cannot tell
+// apart from the interface. methods describe the service's rpcs. It runs
+// at package initialization, before bootstrap starts the listeners, and
+// panics once the listener runs.
+func Register[S any](register func(grpc.ServiceRegistrar, S), server S, methods ...Method) {
+	grpcserver.Register(func(r grpc.ServiceRegistrar) { register(r, server) }, methods...)
 }

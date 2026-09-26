@@ -6,7 +6,7 @@ import (
 	"context"
 	"tmpapp/model"
 
-	gstgrpc "github.com/hydroan/gst/grpc"
+	"github.com/hydroan/gst/grpc"
 )
 
 // RecordService serves the rpcs of the RecordService service through the
@@ -20,17 +20,17 @@ type RecordService struct {
 // The calls of the actions of Record, one per rpc of RecordService, built
 // once at package initialization.
 var (
-	createRecord      = gstgrpc.CreateCall[*model.Record]("records")
-	deleteRecord      = gstgrpc.DeleteCall[*model.Record]("records/:record")
-	updateRecord      = gstgrpc.UpdateCall[*model.Record]("records/:record")
-	patchRecord       = gstgrpc.PatchCall[*model.Record]("records/:record")
-	listRecord        = gstgrpc.ListCall[*model.Record]("records")
-	getRecord         = gstgrpc.GetCall[*model.Record]("records/:record")
-	createManyRecord  = gstgrpc.CreateManyCall[*model.Record]("records/batch")
-	deleteManyRecord  = gstgrpc.DeleteManyCall[*model.Record]("records/batch")
-	updateManyRecord  = gstgrpc.UpdateManyCall[*model.Record]("records/batch")
-	patchManyRecord   = gstgrpc.PatchManyCall[*model.Record]("records/batch")
-	listRecordByOwner = gstgrpc.ListCall[*model.Record]("owners/:owner/records")
+	createRecord      = grpc.CreateCall[*model.Record]("records")
+	deleteRecord      = grpc.DeleteCall[*model.Record]("records/:record")
+	updateRecord      = grpc.UpdateCall[*model.Record]("records/:record")
+	patchRecord       = grpc.PatchCall[*model.Record]("records/:record")
+	listRecord        = grpc.ListCall[*model.Record]("records")
+	getRecord         = grpc.GetCall[*model.Record]("records/:record")
+	createManyRecord  = grpc.CreateManyCall[*model.Record]("records/batch")
+	deleteManyRecord  = grpc.DeleteManyCall[*model.Record]("records/batch")
+	updateManyRecord  = grpc.UpdateManyCall[*model.Record]("records/batch")
+	patchManyRecord   = grpc.PatchManyCall[*model.Record]("records/batch")
+	listRecordByOwner = grpc.ListCall[*model.Record]("owners/:owner/records")
 )
 
 // CreateRecord serves the Create action of Record on records.
@@ -70,8 +70,8 @@ func (RecordService) PatchRecord(ctx context.Context, req *PatchRecordRequest) (
 
 // ListRecord serves the List action of Record on records.
 func (RecordService) ListRecord(ctx context.Context, req *ListRecordRequest) (*ListRecordResponse, error) {
-	models, total, err := listRecord(ctx, nil, gstgrpc.Query{
-		Filters:     gstgrpc.Filters(req.GetFilters()),
+	models, total, err := listRecord(ctx, nil, grpc.Query{
+		Filters:     grpc.Filters(req.GetFilters()),
 		SortBy:      req.GetSortBy(),
 		Page:        req.GetPage(),
 		Size:        req.GetSize(),
@@ -93,7 +93,7 @@ func (RecordService) ListRecord(ctx context.Context, req *ListRecordRequest) (*L
 
 // GetRecord serves the Get action of Record on records.
 func (RecordService) GetRecord(ctx context.Context, req *GetRecordRequest) (*GetRecordResponse, error) {
-	m, err := getRecord(ctx, map[string]string{"record": req.GetId()}, req.GetId(), gstgrpc.Query{Expand: req.GetExpand(), Depth: req.GetDepth()})
+	m, err := getRecord(ctx, map[string]string{"record": req.GetId()}, req.GetId(), grpc.Query{Expand: req.GetExpand(), Depth: req.GetDepth()})
 	if err != nil {
 		return nil, err
 	}
@@ -164,8 +164,8 @@ func (RecordService) PatchManyRecord(ctx context.Context, req *PatchManyRecordRe
 // ListRecordByOwner serves the List action of Record on
 // owners/:owner/records.
 func (RecordService) ListRecordByOwner(ctx context.Context, req *ListRecordByOwnerRequest) (*ListRecordByOwnerResponse, error) {
-	models, total, err := listRecordByOwner(ctx, map[string]string{"owner": req.GetOwner()}, gstgrpc.Query{
-		Filters:     gstgrpc.Filters(req.GetFilters()),
+	models, total, err := listRecordByOwner(ctx, map[string]string{"owner": req.GetOwner()}, grpc.Query{
+		Filters:     grpc.Filters(req.GetFilters()),
 		SortBy:      req.GetSortBy(),
 		Page:        req.GetPage(),
 		Size:        req.GetSize(),
@@ -194,8 +194,8 @@ func RecordToProto(m *model.Record) *Record {
 	p.Id = m.ID
 	p.CreatedBy = m.CreatedBy
 	p.UpdatedBy = m.UpdatedBy
-	p.CreatedAt = gstgrpc.Timestamp(m.CreatedAt)
-	p.UpdatedAt = gstgrpc.Timestamp(m.UpdatedAt)
+	p.CreatedAt = grpc.Timestamp(m.CreatedAt)
+	p.UpdatedAt = grpc.Timestamp(m.UpdatedAt)
 	p.Title = m.Title
 	p.Status = string(m.Status)
 	p.Summary = m.Summary
@@ -205,9 +205,9 @@ func RecordToProto(m *model.Record) *Record {
 	p.Ratio = m.Ratio
 	p.Enabled = m.Enabled
 	p.Payload = m.Payload
-	p.Raw = gstgrpc.JSONValue(m.Raw)
-	p.Extra = gstgrpc.Struct(m.Extra)
-	p.Due = gstgrpc.Timestamp(m.Due)
+	p.Raw = grpc.JSONValue(m.Raw)
+	p.Extra = grpc.Struct(m.Extra)
+	p.Due = grpc.Timestamp(m.Due)
 	p.Meta = RecordMetaToProto(&m.Meta)
 	p.Window = new(Record_Window)
 	p.Window.From = m.Window.From
@@ -224,8 +224,8 @@ func RecordFromProto(p *Record) *model.Record {
 	m.ID = p.GetId()
 	m.CreatedBy = p.GetCreatedBy()
 	m.UpdatedBy = p.GetUpdatedBy()
-	m.CreatedAt = gstgrpc.Time(p.GetCreatedAt())
-	m.UpdatedAt = gstgrpc.Time(p.GetUpdatedAt())
+	m.CreatedAt = grpc.Time(p.GetCreatedAt())
+	m.UpdatedAt = grpc.Time(p.GetUpdatedAt())
 	m.Title = p.GetTitle()
 	m.Status = model.RecordStatus(p.GetStatus())
 	m.Summary = p.Summary
@@ -235,9 +235,9 @@ func RecordFromProto(p *Record) *model.Record {
 	m.Ratio = p.GetRatio()
 	m.Enabled = p.GetEnabled()
 	m.Payload = p.GetPayload()
-	m.Raw = gstgrpc.JSON(p.GetRaw())
-	m.Extra = gstgrpc.Map(p.GetExtra())
-	m.Due = gstgrpc.Time(p.GetDue())
+	m.Raw = grpc.JSON(p.GetRaw())
+	m.Extra = grpc.Map(p.GetExtra())
+	m.Due = grpc.Time(p.GetDue())
 	if v := p.GetMeta(); v != nil {
 		m.Meta = *RecordMetaFromProto(v)
 	}

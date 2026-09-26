@@ -29,8 +29,9 @@ var httpMethodConsts = map[string]string{
 // every model declaring GRPC() on the listener at package initialization,
 // the way router/router.gen.go registers the routes: one grpc.Register call
 // per service, definition by definition, handing over the registration
-// function the protobuf plugin generated with the type serving the service
-// (see serviceType), and describing each rpc by its full method name, the
+// function the protobuf plugin generated and the type serving the service
+// (see serviceType) under the server interface the plugin generated, and
+// describing each rpc by its full method name, the
 // constant the plugin generated for it, whether its action declares
 // Public(), and the HTTP method and route the same action is served at,
 // which the interceptors of the modules judge a call by. A service of a
@@ -48,26 +49,25 @@ var httpMethodConsts = map[string]string{
 //		"net/http"
 //		"tmpapp/pb/record"
 //
-//		gstgrpc "github.com/hydroan/gst/grpc"
-//		"google.golang.org/grpc"
+//		"github.com/hydroan/gst/grpc"
 //	)
 //
 //	func init() {
-//		gstgrpc.Register(func(s grpc.ServiceRegistrar) { RegisterNoteServiceServer(s, NoteService{}) },
-//			gstgrpc.Method{Name: NoteService_CreateNote_FullMethodName, HTTPMethod: http.MethodPost, Route: "/api/notes"},
-//			gstgrpc.Method{Name: NoteService_GetNote_FullMethodName, HTTPMethod: http.MethodGet, Route: "/api/notes/:id"},
+//		grpc.Register[NoteServiceServer](RegisterNoteServiceServer, NoteService{},
+//			grpc.Method{Name: NoteService_CreateNote_FullMethodName, HTTPMethod: http.MethodPost, Route: "/api/notes"},
+//			grpc.Method{Name: NoteService_GetNote_FullMethodName, HTTPMethod: http.MethodGet, Route: "/api/notes/:id"},
 //		)
-//		gstgrpc.Register(func(s grpc.ServiceRegistrar) { RegisterRecordServiceServer(s, RecordService{}) },
-//			gstgrpc.Method{Name: RecordService_CreateRecord_FullMethodName, HTTPMethod: http.MethodPost, Route: "/api/records"},
-//			gstgrpc.Method{Name: RecordService_DeleteRecord_FullMethodName, HTTPMethod: http.MethodDelete, Route: "/api/records/:record"},
+//		grpc.Register[RecordServiceServer](RegisterRecordServiceServer, RecordService{},
+//			grpc.Method{Name: RecordService_CreateRecord_FullMethodName, HTTPMethod: http.MethodPost, Route: "/api/records"},
+//			grpc.Method{Name: RecordService_DeleteRecord_FullMethodName, HTTPMethod: http.MethodDelete, Route: "/api/records/:record"},
 //			...
-//			gstgrpc.Method{Name: RecordService_ListRecordByOwner_FullMethodName, HTTPMethod: http.MethodGet, Route: "/api/owners/:owner/records"},
+//			grpc.Method{Name: RecordService_ListRecordByOwner_FullMethodName, HTTPMethod: http.MethodGet, Route: "/api/owners/:owner/records"},
 //		)
-//		gstgrpc.Register(func(s grpc.ServiceRegistrar) { record.RegisterItemServiceServer(s, record.ItemService{}) },
-//			gstgrpc.Method{Name: record.ItemService_CreateItem_FullMethodName, HTTPMethod: http.MethodPost, Route: "/api/records/:record/items"},
-//			gstgrpc.Method{Name: record.ItemService_GetItem_FullMethodName, HTTPMethod: http.MethodGet, Route: "/api/records/:record/items/:id"},
-//			gstgrpc.Method{Name: record.ItemService_SealItem_FullMethodName, HTTPMethod: http.MethodPost, Route: "/api/items/:id/seal"},
-//			gstgrpc.Method{Name: record.ItemService_MergeItem_FullMethodName, HTTPMethod: http.MethodPost, Route: "/api/items/merge"},
+//		grpc.Register[record.ItemServiceServer](record.RegisterItemServiceServer, record.ItemService{},
+//			grpc.Method{Name: record.ItemService_CreateItem_FullMethodName, HTTPMethod: http.MethodPost, Route: "/api/records/:record/items"},
+//			grpc.Method{Name: record.ItemService_GetItem_FullMethodName, HTTPMethod: http.MethodGet, Route: "/api/records/:record/items/:id"},
+//			grpc.Method{Name: record.ItemService_SealItem_FullMethodName, HTTPMethod: http.MethodPost, Route: "/api/items/:id/seal"},
+//			grpc.Method{Name: record.ItemService_MergeItem_FullMethodName, HTTPMethod: http.MethodPost, Route: "/api/items/merge"},
 //		)
 //		...
 //	}
@@ -95,11 +95,7 @@ func (g *generator) registrationFile() (File, error) {
 			rpcs[r.service] = append(rpcs[r.service], r)
 		}
 		for _, service := range services {
-			registrar := &ast.FuncLit{
-				Type: &ast.FuncType{Params: &ast.FieldList{List: []*ast.Field{{Names: []*ast.Ident{ident("s")}, Type: sel(out.imports.fixedRef(importPathGoogleGRPC), "ServiceRegistrar")}}}},
-				Body: block(exprStmt(call(qualify("Register"+service+"Server"), ident("s"), compositeLit(qualify(service))))),
-			}
-			args := []ast.Expr{registrar}
+			args := []ast.Expr{qualify("Register" + service + "Server"), compositeLit(qualify(service))}
 			for _, r := range rpcs[service] {
 				elts := []ast.Expr{keyValue("Name", qualify(service+"_"+r.name+"_FullMethodName"))}
 				if r.action.Public {
@@ -111,7 +107,7 @@ func (g *generator) registrationFile() (File, error) {
 				)
 				args = append(args, compositeLit(sel(out.imports.fixedRef(ggconst.ImportPathGRPC), "Method"), elts...))
 			}
-			register := call(sel(out.imports.fixedRef(ggconst.ImportPathGRPC), "Register"), args...)
+			register := call(index(sel(out.imports.fixedRef(ggconst.ImportPathGRPC), "Register"), qualify(service+"Server")), args...)
 			body = append(body, exprStmt(register))
 			calls = append(calls, register)
 		}
@@ -121,14 +117,15 @@ func (g *generator) registrationFile() (File, error) {
 		Type: &ast.FuncType{Params: &ast.FieldList{}},
 		Body: block(body...),
 	}, func(lines *goast.LineSet) {
-		// Each registration opens with its registration function on the
-		// line of the call, then one rpc per line, then the closing
-		// parenthesis on a line of its own.
+		// Each registration opens with the registration function and the
+		// server on the line of the call, then one rpc per line, then the
+		// closing parenthesis on a line of its own.
 		for _, register := range calls {
 			line := lines.Next()
 			setExprPos(register.Fun, line)
 			setExprPos(register.Args[0], line)
-			for _, arg := range register.Args[1:] {
+			setExprPos(register.Args[1], line)
+			for _, arg := range register.Args[2:] {
 				setExprPos(arg, lines.Next())
 			}
 			register.Rparen = lines.Next()

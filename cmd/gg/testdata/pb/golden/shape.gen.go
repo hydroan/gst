@@ -8,7 +8,7 @@ import (
 	"time"
 	"tmpapp/model"
 
-	gstgrpc "github.com/hydroan/gst/grpc"
+	"github.com/hydroan/gst/grpc"
 	gstmodel "github.com/hydroan/gst/model"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -27,8 +27,8 @@ type ShapeService struct {
 // The calls of the actions of Shape, one per rpc of ShapeService, built once
 // at package initialization.
 var (
-	createShape = gstgrpc.CreateCall[*model.Shape]("shapes")
-	getShape    = gstgrpc.GetCall[*model.Shape]("shapes/:id")
+	createShape = grpc.CreateCall[*model.Shape]("shapes")
+	getShape    = grpc.GetCall[*model.Shape]("shapes/:id")
 )
 
 // CreateShape serves the Create action of Shape on shapes.
@@ -42,7 +42,7 @@ func (ShapeService) CreateShape(ctx context.Context, req *CreateShapeRequest) (*
 
 // GetShape serves the Get action of Shape on shapes.
 func (ShapeService) GetShape(ctx context.Context, req *GetShapeRequest) (*GetShapeResponse, error) {
-	m, err := getShape(ctx, map[string]string{"id": req.GetId()}, req.GetId(), gstgrpc.Query{Expand: req.GetExpand(), Depth: req.GetDepth()})
+	m, err := getShape(ctx, map[string]string{"id": req.GetId()}, req.GetId(), grpc.Query{Expand: req.GetExpand(), Depth: req.GetDepth()})
 	if err != nil {
 		return nil, err
 	}
@@ -58,12 +58,12 @@ func ShapeToProto(m *model.Shape) *Shape {
 	p.Id = m.ID
 	p.CreatedBy = m.CreatedBy
 	p.UpdatedBy = m.UpdatedBy
-	p.CreatedAt = gstgrpc.Timestamp(m.CreatedAt)
-	p.UpdatedAt = gstgrpc.Timestamp(m.UpdatedAt)
-	p.Date = gstgrpc.Timestamp(time.Time(m.Date))
+	p.CreatedAt = grpc.Timestamp(m.CreatedAt)
+	p.UpdatedAt = grpc.Timestamp(m.UpdatedAt)
+	p.Date = grpc.Timestamp(time.Time(m.Date))
 	p.Clock = durationpb.New(time.Duration(m.Clock))
-	p.Doc = gstgrpc.JSONValue(m.Doc)
-	p.Attrs = gstgrpc.Struct(m.Attrs)
+	p.Doc = grpc.JSONValue(m.Doc)
+	p.Attrs = grpc.Struct(m.Attrs)
 	data := m.Options.Data()
 	p.Options = ShapeOptionsToProto(&data)
 	p.Audit = ShapeAuditToProto(&m.Audit)
@@ -109,9 +109,9 @@ func ShapeToProto(m *model.Shape) *Shape {
 		p.Note.Text = m.Note.Text
 	}
 	if m.When != nil {
-		p.When = gstgrpc.Timestamp(*m.When)
+		p.When = grpc.Timestamp(*m.When)
 	}
-	p.Any = gstgrpc.Value(m.Any)
+	p.Any = grpc.Value(m.Any)
 	p.Blob = m.Blob
 	p.Names = m.Names
 	p.Version = int64(m.Version)
@@ -134,12 +134,12 @@ func ShapeFromProto(p *Shape) *model.Shape {
 	m.ID = p.GetId()
 	m.CreatedBy = p.GetCreatedBy()
 	m.UpdatedBy = p.GetUpdatedBy()
-	m.CreatedAt = gstgrpc.Time(p.GetCreatedAt())
-	m.UpdatedAt = gstgrpc.Time(p.GetUpdatedAt())
-	m.Date = datatypes.Date(gstgrpc.Time(p.GetDate()))
+	m.CreatedAt = grpc.Time(p.GetCreatedAt())
+	m.UpdatedAt = grpc.Time(p.GetUpdatedAt())
+	m.Date = datatypes.Date(grpc.Time(p.GetDate()))
 	m.Clock = datatypes.Time(p.GetClock().AsDuration())
-	m.Doc = gstgrpc.JSON(p.GetDoc())
-	m.Attrs = gstgrpc.Map(p.GetAttrs())
+	m.Doc = grpc.JSON(p.GetDoc())
+	m.Attrs = grpc.Map(p.GetAttrs())
 	var data model.ShapeOptions
 	if v := p.GetOptions(); v != nil {
 		data = *ShapeOptionsFromProto(v)
@@ -197,7 +197,7 @@ func ShapeFromProto(p *Shape) *model.Shape {
 		m.Note.Text = v.GetText()
 	}
 	if p.GetWhen() != nil {
-		x := gstgrpc.Time(p.GetWhen())
+		x := grpc.Time(p.GetWhen())
 		m.When = &x
 	}
 	m.Any = p.GetAny().AsInterface()

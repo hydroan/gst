@@ -7,7 +7,7 @@ import (
 	"tmpapp/model"
 
 	"github.com/hydroan/gst/consts"
-	gstgrpc "github.com/hydroan/gst/grpc"
+	"github.com/hydroan/gst/grpc"
 	gstmodel "github.com/hydroan/gst/model"
 )
 
@@ -21,11 +21,11 @@ type ReportService struct {
 
 // The calls of the actions of Report, one per rpc of ReportService, built
 // once at package initialization.
-var getReport = gstgrpc.ServiceCall[*model.Report, *gstmodel.Empty, *model.ReportRsp](consts.PHASE_GET, "reports/summary")
+var getReport = grpc.ServiceCall[*model.Report, *gstmodel.Empty, *model.ReportRsp](consts.PHASE_GET, "reports/summary")
 
 // GetReport serves the Get action of Report on reports/summary.
 func (ReportService) GetReport(ctx context.Context, req *GetReportRequest) (*GetReportResponse, error) {
-	result, err := getReport(ctx, nil, gstgrpc.Query{Expand: req.GetExpand(), Depth: req.GetDepth()}, new(gstmodel.Empty))
+	result, err := getReport(ctx, nil, grpc.Query{Expand: req.GetExpand(), Depth: req.GetDepth()}, new(gstmodel.Empty))
 	if err != nil {
 		return nil, err
 	}

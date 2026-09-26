@@ -7,7 +7,7 @@ import (
 	"tmpapp/model/record"
 
 	"github.com/hydroan/gst/consts"
-	gstgrpc "github.com/hydroan/gst/grpc"
+	"github.com/hydroan/gst/grpc"
 )
 
 // ItemService serves the rpcs of the ItemService service through the actions
@@ -21,10 +21,10 @@ type ItemService struct {
 // The calls of the actions of Item, one per rpc of ItemService, built once
 // at package initialization.
 var (
-	createItem = gstgrpc.CreateCall[*record.Item]("records/:record/items")
-	getItem    = gstgrpc.GetCall[*record.Item]("records/:record/items/:id")
-	sealItem   = gstgrpc.CreateCall[*record.Item]("items/:id/seal")
-	mergeItem  = gstgrpc.ServiceCall[*record.Item, *record.MergeReq, *record.MergedItemRsp](consts.PHASE_CREATE, "items/merge")
+	createItem = grpc.CreateCall[*record.Item]("records/:record/items")
+	getItem    = grpc.GetCall[*record.Item]("records/:record/items/:id")
+	sealItem   = grpc.CreateCall[*record.Item]("items/:id/seal")
+	mergeItem  = grpc.ServiceCall[*record.Item, *record.MergeReq, *record.MergedItemRsp](consts.PHASE_CREATE, "items/merge")
 )
 
 // CreateItem serves the Create action of Item on records/:record/items.
@@ -38,7 +38,7 @@ func (ItemService) CreateItem(ctx context.Context, req *CreateItemRequest) (*Cre
 
 // GetItem serves the Get action of Item on records/:record/items.
 func (ItemService) GetItem(ctx context.Context, req *GetItemRequest) (*GetItemResponse, error) {
-	m, err := getItem(ctx, map[string]string{"record": req.GetRecord(), "id": req.GetId()}, req.GetId(), gstgrpc.Query{Expand: req.GetExpand(), Depth: req.GetDepth()})
+	m, err := getItem(ctx, map[string]string{"record": req.GetRecord(), "id": req.GetId()}, req.GetId(), grpc.Query{Expand: req.GetExpand(), Depth: req.GetDepth()})
 	if err != nil {
 		return nil, err
 	}
@@ -56,7 +56,7 @@ func (ItemService) SealItem(ctx context.Context, req *SealItemRequest) (*SealIte
 
 // MergeItem serves the Create action of Item on items/merge.
 func (ItemService) MergeItem(ctx context.Context, req *MergeItemRequest) (*MergeItemResponse, error) {
-	result, err := mergeItem(ctx, nil, gstgrpc.Query{}, MergeReqFromProto(req.GetPayload()))
+	result, err := mergeItem(ctx, nil, grpc.Query{}, MergeReqFromProto(req.GetPayload()))
 	if err != nil {
 		return nil, err
 	}
@@ -72,8 +72,8 @@ func ItemToProto(m *record.Item) *Item {
 	p.Id = m.ID
 	p.CreatedBy = m.CreatedBy
 	p.UpdatedBy = m.UpdatedBy
-	p.CreatedAt = gstgrpc.Timestamp(m.CreatedAt)
-	p.UpdatedAt = gstgrpc.Timestamp(m.UpdatedAt)
+	p.CreatedAt = grpc.Timestamp(m.CreatedAt)
+	p.UpdatedAt = grpc.Timestamp(m.UpdatedAt)
 	p.Content = m.Content
 	if m.Links != nil {
 		p.Links = make([]*Link, len(m.Links))
@@ -93,8 +93,8 @@ func ItemFromProto(p *Item) *record.Item {
 	m.ID = p.GetId()
 	m.CreatedBy = p.GetCreatedBy()
 	m.UpdatedBy = p.GetUpdatedBy()
-	m.CreatedAt = gstgrpc.Time(p.GetCreatedAt())
-	m.UpdatedAt = gstgrpc.Time(p.GetUpdatedAt())
+	m.CreatedAt = grpc.Time(p.GetCreatedAt())
+	m.UpdatedAt = grpc.Time(p.GetUpdatedAt())
 	m.Content = p.GetContent()
 	if p.GetLinks() != nil {
 		m.Links = make([]record.Link, len(p.GetLinks()))

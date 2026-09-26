@@ -291,8 +291,8 @@ func converted(typ, x ast.Expr) ast.Expr {
 	return call(&ast.ParenExpr{X: typ}, x)
 }
 
-// gstgrpc refers to the function name of the framework's grpc package.
-func (w *fileWriter) gstgrpc(name string) ast.Expr {
+// grpc refers to the function name of the framework's grpc package.
+func (w *fileWriter) grpc(name string) ast.Expr {
 	return sel(w.out.imports.fixedRef(ggconst.ImportPathGRPC), name)
 }
 
@@ -322,8 +322,8 @@ func typeKey(t types.Type) string {
 //	p.Id = m.ID
 //	p.CreatedBy = m.CreatedBy
 //	p.UpdatedBy = m.UpdatedBy
-//	p.CreatedAt = gstgrpc.Timestamp(m.CreatedAt)
-//	p.UpdatedAt = gstgrpc.Timestamp(m.UpdatedAt)
+//	p.CreatedAt = grpc.Timestamp(m.CreatedAt)
+//	p.UpdatedAt = grpc.Timestamp(m.UpdatedAt)
 //	p.Title = m.Title
 //	p.Status = string(m.Status)
 //	p.Summary = m.Summary
@@ -333,9 +333,9 @@ func typeKey(t types.Type) string {
 //	p.Ratio = m.Ratio
 //	p.Enabled = m.Enabled
 //	p.Payload = m.Payload
-//	p.Raw = gstgrpc.JSONValue(m.Raw)
-//	p.Extra = gstgrpc.Struct(m.Extra)
-//	p.Due = gstgrpc.Timestamp(m.Due)
+//	p.Raw = grpc.JSONValue(m.Raw)
+//	p.Extra = grpc.Struct(m.Extra)
+//	p.Due = grpc.Timestamp(m.Due)
 //	p.Meta = RecordMetaToProto(&m.Meta)
 //	p.Window = new(Record_Window)
 //	p.Window.From = m.Window.From
@@ -354,10 +354,10 @@ func typeKey(t types.Type) string {
 // object, JSON wrapper, struct held by value, JSON number, integer enum and
 // optional integer as
 //
-//	p.Date = gstgrpc.Timestamp(time.Time(m.Date))
+//	p.Date = grpc.Timestamp(time.Time(m.Date))
 //	p.Clock = durationpb.New(time.Duration(m.Clock))
-//	p.Doc = gstgrpc.JSONValue(m.Doc)
-//	p.Attrs = gstgrpc.Struct(m.Attrs)
+//	p.Doc = grpc.JSONValue(m.Doc)
+//	p.Attrs = grpc.Struct(m.Attrs)
 //	data := m.Options.Data()
 //	p.Options = ShapeOptionsToProto(&data)
 //	p.Audit = ShapeAuditToProto(&m.Audit)
@@ -422,9 +422,9 @@ func (w *fileWriter) toProto(dst, src ast.Expr, t types.Type, ft fieldType) []as
 
 	switch typeKey(t) {
 	case "time.Time":
-		return []ast.Stmt{assign(dst, call(w.gstgrpc("Timestamp"), src))}
+		return []ast.Stmt{assign(dst, call(w.grpc("Timestamp"), src))}
 	case "gorm.io/datatypes.Date":
-		return []ast.Stmt{assign(dst, call(w.gstgrpc("Timestamp"), call(sel(w.out.imports.fixedRef(importPathTime), "Time"), src)))}
+		return []ast.Stmt{assign(dst, call(w.grpc("Timestamp"), call(sel(w.out.imports.fixedRef(importPathTime), "Time"), src)))}
 	case "gorm.io/datatypes.Time":
 		return []ast.Stmt{assign(dst, call(sel(w.out.imports.fixedRef(importPathDurationPB), "New"), call(sel(w.out.imports.fixedRef(importPathTime), "Duration"), src)))}
 	case "gorm.io/gorm.DeletedAt":
@@ -436,9 +436,9 @@ func (w *fileWriter) toProto(dst, src ast.Expr, t types.Type, ft fieldType) []as
 		if kind, builtin := jsonshape.BuiltinOf(n); builtin {
 			switch kind {
 			case jsonshape.BuiltinAny:
-				return []ast.Stmt{assign(dst, call(w.gstgrpc("JSONValue"), src))}
+				return []ast.Stmt{assign(dst, call(w.grpc("JSONValue"), src))}
 			case jsonshape.BuiltinObject:
-				return []ast.Stmt{assign(dst, call(w.gstgrpc("Struct"), src))}
+				return []ast.Stmt{assign(dst, call(w.grpc("Struct"), src))}
 			case jsonshape.BuiltinWrapper:
 				data := w.temp("data")
 				return append([]ast.Stmt{define([]string{data}, call(sel(src, "Data")))}, w.toProto(dst, ident(data), n.TypeArgs().At(0), ft)...)
@@ -469,7 +469,7 @@ func (w *fileWriter) toProto(dst, src ast.Expr, t types.Type, ft fieldType) []as
 		}
 	case *types.Map:
 		if ft.typeName == wellKnownStruct {
-			return []ast.Stmt{assign(dst, call(w.gstgrpc("Struct"), src))}
+			return []ast.Stmt{assign(dst, call(w.grpc("Struct"), src))}
 		}
 		if assignable(t, ft, false) {
 			return []ast.Stmt{assign(dst, src)}
@@ -484,7 +484,7 @@ func (w *fileWriter) toProto(dst, src ast.Expr, t types.Type, ft fieldType) []as
 			rangeStmt(k, v, src, w.toProto(index(dst, key), ident(v), u.Elem(), *ft.mapValue)...),
 		)}
 	case *types.Interface:
-		return []ast.Stmt{assign(dst, call(w.gstgrpc("Value"), src))}
+		return []ast.Stmt{assign(dst, call(w.grpc("Value"), src))}
 	case *types.Struct:
 		return append([]ast.Stmt{assign(dst, newCall(ident(ft.nested.goName)))}, w.structToProto(dst, src, ft.nested)...)
 	}
@@ -534,8 +534,8 @@ func (w *fileWriter) fieldToProto(dst, src ast.Expr, fc fieldConversion) []ast.S
 //	m.ID = p.GetId()
 //	m.CreatedBy = p.GetCreatedBy()
 //	m.UpdatedBy = p.GetUpdatedBy()
-//	m.CreatedAt = gstgrpc.Time(p.GetCreatedAt())
-//	m.UpdatedAt = gstgrpc.Time(p.GetUpdatedAt())
+//	m.CreatedAt = grpc.Time(p.GetCreatedAt())
+//	m.UpdatedAt = grpc.Time(p.GetUpdatedAt())
 //	m.Title = p.GetTitle()
 //	m.Status = model.RecordStatus(p.GetStatus())
 //	m.Summary = p.Summary
@@ -545,9 +545,9 @@ func (w *fileWriter) fieldToProto(dst, src ast.Expr, fc fieldConversion) []ast.S
 //	m.Ratio = p.GetRatio()
 //	m.Enabled = p.GetEnabled()
 //	m.Payload = p.GetPayload()
-//	m.Raw = gstgrpc.JSON(p.GetRaw())
-//	m.Extra = gstgrpc.Map(p.GetExtra())
-//	m.Due = gstgrpc.Time(p.GetDue())
+//	m.Raw = grpc.JSON(p.GetRaw())
+//	m.Extra = grpc.Map(p.GetExtra())
+//	m.Due = grpc.Time(p.GetDue())
 //	if v := p.GetMeta(); v != nil {
 //		m.Meta = *RecordMetaFromProto(v)
 //	}
@@ -571,10 +571,10 @@ func (w *fileWriter) fieldToProto(dst, src ast.Expr, fc fieldConversion) []ast.S
 // object, JSON wrapper, struct held by value, JSON number, integer enum and
 // optional integer as
 //
-//	m.Date = datatypes.Date(gstgrpc.Time(p.GetDate()))
+//	m.Date = datatypes.Date(grpc.Time(p.GetDate()))
 //	m.Clock = datatypes.Time(p.GetClock().AsDuration())
-//	m.Doc = gstgrpc.JSON(p.GetDoc())
-//	m.Attrs = gstgrpc.Map(p.GetAttrs())
+//	m.Doc = grpc.JSON(p.GetDoc())
+//	m.Attrs = grpc.Map(p.GetAttrs())
 //	var data model.ShapeOptions
 //	if v := p.GetOptions(); v != nil {
 //		data = *ShapeOptionsFromProto(v)
@@ -599,7 +599,7 @@ func (w *fileWriter) fieldToProto(dst, src ast.Expr, fc fieldConversion) []ast.S
 //		m.Note.Text = v.GetText()
 //	}
 //	if p.GetWhen() != nil {
-//		x := gstgrpc.Time(p.GetWhen())
+//		x := grpc.Time(p.GetWhen())
 //		m.When = &x
 //	}
 func (w *fileWriter) fromProto(dst, src ast.Expr, t types.Type, ft fieldType) []ast.Stmt {
@@ -639,9 +639,9 @@ func (w *fileWriter) fromProto(dst, src ast.Expr, t types.Type, ft fieldType) []
 
 	switch typeKey(t) {
 	case "time.Time":
-		return []ast.Stmt{assign(dst, call(w.gstgrpc("Time"), src))}
+		return []ast.Stmt{assign(dst, call(w.grpc("Time"), src))}
 	case "gorm.io/datatypes.Date":
-		return []ast.Stmt{assign(dst, call(sel(w.out.imports.fixedRef(importPathDatatypes), "Date"), call(w.gstgrpc("Time"), src)))}
+		return []ast.Stmt{assign(dst, call(sel(w.out.imports.fixedRef(importPathDatatypes), "Date"), call(w.grpc("Time"), src)))}
 	case "gorm.io/datatypes.Time":
 		return []ast.Stmt{assign(dst, call(sel(w.out.imports.fixedRef(importPathDatatypes), "Time"), call(sel(src, "AsDuration"))))}
 	case "gorm.io/gorm.DeletedAt":
@@ -656,9 +656,9 @@ func (w *fileWriter) fromProto(dst, src ast.Expr, t types.Type, ft fieldType) []
 		if kind, builtin := jsonshape.BuiltinOf(n); builtin {
 			switch kind {
 			case jsonshape.BuiltinAny:
-				return []ast.Stmt{assign(dst, call(w.gstgrpc("JSON"), src))}
+				return []ast.Stmt{assign(dst, call(w.grpc("JSON"), src))}
 			case jsonshape.BuiltinObject:
-				return []ast.Stmt{assign(dst, call(w.gstgrpc("Map"), src))}
+				return []ast.Stmt{assign(dst, call(w.grpc("Map"), src))}
 			case jsonshape.BuiltinWrapper:
 				data := w.temp("data")
 				arg := n.TypeArgs().At(0)
@@ -691,7 +691,7 @@ func (w *fileWriter) fromProto(dst, src ast.Expr, t types.Type, ft fieldType) []
 			w.fromProto(index(dst, ident(i)), index(src, ident(i)), u.Elem(), elementOf(ft))...)}
 	case *types.Map:
 		if ft.typeName == wellKnownStruct {
-			return []ast.Stmt{assign(dst, call(w.gstgrpc("Map"), src))}
+			return []ast.Stmt{assign(dst, call(w.grpc("Map"), src))}
 		}
 		if assignable(t, ft, false) {
 			return []ast.Stmt{assign(dst, src)}

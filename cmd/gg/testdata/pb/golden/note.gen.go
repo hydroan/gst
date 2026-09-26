@@ -6,7 +6,7 @@ import (
 	"context"
 	"tmpapp/model"
 
-	gstgrpc "github.com/hydroan/gst/grpc"
+	"github.com/hydroan/gst/grpc"
 )
 
 // NoteService serves the rpcs of the NoteService service through the actions
@@ -20,8 +20,8 @@ type NoteService struct {
 // The calls of the actions of Note, one per rpc of NoteService, built once
 // at package initialization.
 var (
-	createNote = gstgrpc.CreateCall[*model.Note]("notes")
-	getNote    = gstgrpc.GetCall[*model.Note]("notes/:id")
+	createNote = grpc.CreateCall[*model.Note]("notes")
+	getNote    = grpc.GetCall[*model.Note]("notes/:id")
 )
 
 // CreateNote serves the Create action of Note on notes.
@@ -35,7 +35,7 @@ func (NoteService) CreateNote(ctx context.Context, req *CreateNoteRequest) (*Cre
 
 // GetNote serves the Get action of Note on notes.
 func (NoteService) GetNote(ctx context.Context, req *GetNoteRequest) (*GetNoteResponse, error) {
-	m, err := getNote(ctx, map[string]string{"id": req.GetId()}, req.GetId(), gstgrpc.Query{Expand: req.GetExpand(), Depth: req.GetDepth()})
+	m, err := getNote(ctx, map[string]string{"id": req.GetId()}, req.GetId(), grpc.Query{Expand: req.GetExpand(), Depth: req.GetDepth()})
 	if err != nil {
 		return nil, err
 	}
@@ -51,8 +51,8 @@ func NoteToProto(m *model.Note) *Note {
 	p.Id = m.ID
 	p.CreatedBy = m.CreatedBy
 	p.UpdatedBy = m.UpdatedBy
-	p.CreatedAt = gstgrpc.Timestamp(m.CreatedAt)
-	p.UpdatedAt = gstgrpc.Timestamp(m.UpdatedAt)
+	p.CreatedAt = grpc.Timestamp(m.CreatedAt)
+	p.UpdatedAt = grpc.Timestamp(m.UpdatedAt)
 	p.Title = m.Title
 	p.Tags = m.Tags
 	return p
@@ -67,8 +67,8 @@ func NoteFromProto(p *Note) *model.Note {
 	m.ID = p.GetId()
 	m.CreatedBy = p.GetCreatedBy()
 	m.UpdatedBy = p.GetUpdatedBy()
-	m.CreatedAt = gstgrpc.Time(p.GetCreatedAt())
-	m.UpdatedAt = gstgrpc.Time(p.GetUpdatedAt())
+	m.CreatedAt = grpc.Time(p.GetCreatedAt())
+	m.UpdatedAt = grpc.Time(p.GetUpdatedAt())
 	m.Title = p.GetTitle()
 	m.Tags = p.GetTags()
 	return m

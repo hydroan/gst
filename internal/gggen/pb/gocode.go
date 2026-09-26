@@ -29,16 +29,14 @@ const (
 	importPathJSON        = "encoding/json"
 	importPathHTTP        = "net/http"
 	importPathTime        = "time"
-	importPathGoogleGRPC  = "google.golang.org/grpc"
 	importPathDurationPB  = "google.golang.org/protobuf/types/known/durationpb"
 	importPathStructPB    = "google.golang.org/protobuf/types/known/structpb"
 	importPathTimestampPB = "google.golang.org/protobuf/types/known/timestamppb"
 	importPathDatatypes   = "gorm.io/datatypes"
 	importPathGorm        = "gorm.io/gorm"
 
-	// gstGRPCName is the name the generated files import the framework's
-	// grpc package under, google.golang.org/grpc keeping its own.
-	gstGRPCName  = "gstgrpc"
+	// gstModelName is the name the generated files import the framework's
+	// model package under, a project's own model package keeping its own.
 	gstModelName = "gstmodel"
 )
 
@@ -49,13 +47,12 @@ var fixedImportNames = map[string]string{
 	importPathJSON:           "",
 	importPathHTTP:           "",
 	importPathTime:           "",
-	importPathGoogleGRPC:     "",
 	importPathDurationPB:     "",
 	importPathStructPB:       "",
 	importPathTimestampPB:    "",
 	importPathDatatypes:      "",
 	importPathGorm:           "",
-	ggconst.ImportPathGRPC:   gstGRPCName,
+	ggconst.ImportPathGRPC:   "",
 	ggconst.ImportPathModel:  gstModelName,
 	ggconst.ImportPathConsts: "",
 }

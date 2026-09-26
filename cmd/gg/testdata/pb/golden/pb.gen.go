@@ -6,39 +6,38 @@ import (
 	"net/http"
 	"tmpapp/pb/record"
 
-	gstgrpc "github.com/hydroan/gst/grpc"
-	"google.golang.org/grpc"
+	"github.com/hydroan/gst/grpc"
 )
 
 func init() {
-	gstgrpc.Register(func(s grpc.ServiceRegistrar) { RegisterNoteServiceServer(s, NoteService{}) },
-		gstgrpc.Method{Name: NoteService_CreateNote_FullMethodName, HTTPMethod: http.MethodPost, Route: "/api/notes"},
-		gstgrpc.Method{Name: NoteService_GetNote_FullMethodName, HTTPMethod: http.MethodGet, Route: "/api/notes/:id"},
+	grpc.Register[NoteServiceServer](RegisterNoteServiceServer, NoteService{},
+		grpc.Method{Name: NoteService_CreateNote_FullMethodName, HTTPMethod: http.MethodPost, Route: "/api/notes"},
+		grpc.Method{Name: NoteService_GetNote_FullMethodName, HTTPMethod: http.MethodGet, Route: "/api/notes/:id"},
 	)
-	gstgrpc.Register(func(s grpc.ServiceRegistrar) { RegisterRecordServiceServer(s, RecordService{}) },
-		gstgrpc.Method{Name: RecordService_CreateRecord_FullMethodName, HTTPMethod: http.MethodPost, Route: "/api/records"},
-		gstgrpc.Method{Name: RecordService_DeleteRecord_FullMethodName, HTTPMethod: http.MethodDelete, Route: "/api/records/:record"},
-		gstgrpc.Method{Name: RecordService_UpdateRecord_FullMethodName, HTTPMethod: http.MethodPut, Route: "/api/records/:record"},
-		gstgrpc.Method{Name: RecordService_PatchRecord_FullMethodName, HTTPMethod: http.MethodPatch, Route: "/api/records/:record"},
-		gstgrpc.Method{Name: RecordService_ListRecord_FullMethodName, HTTPMethod: http.MethodGet, Route: "/api/records"},
-		gstgrpc.Method{Name: RecordService_GetRecord_FullMethodName, HTTPMethod: http.MethodGet, Route: "/api/records/:record"},
-		gstgrpc.Method{Name: RecordService_CreateManyRecord_FullMethodName, HTTPMethod: http.MethodPost, Route: "/api/records/batch"},
-		gstgrpc.Method{Name: RecordService_DeleteManyRecord_FullMethodName, HTTPMethod: http.MethodDelete, Route: "/api/records/batch"},
-		gstgrpc.Method{Name: RecordService_UpdateManyRecord_FullMethodName, HTTPMethod: http.MethodPut, Route: "/api/records/batch"},
-		gstgrpc.Method{Name: RecordService_PatchManyRecord_FullMethodName, HTTPMethod: http.MethodPatch, Route: "/api/records/batch"},
-		gstgrpc.Method{Name: RecordService_ListRecordByOwner_FullMethodName, HTTPMethod: http.MethodGet, Route: "/api/owners/:owner/records"},
+	grpc.Register[RecordServiceServer](RegisterRecordServiceServer, RecordService{},
+		grpc.Method{Name: RecordService_CreateRecord_FullMethodName, HTTPMethod: http.MethodPost, Route: "/api/records"},
+		grpc.Method{Name: RecordService_DeleteRecord_FullMethodName, HTTPMethod: http.MethodDelete, Route: "/api/records/:record"},
+		grpc.Method{Name: RecordService_UpdateRecord_FullMethodName, HTTPMethod: http.MethodPut, Route: "/api/records/:record"},
+		grpc.Method{Name: RecordService_PatchRecord_FullMethodName, HTTPMethod: http.MethodPatch, Route: "/api/records/:record"},
+		grpc.Method{Name: RecordService_ListRecord_FullMethodName, HTTPMethod: http.MethodGet, Route: "/api/records"},
+		grpc.Method{Name: RecordService_GetRecord_FullMethodName, HTTPMethod: http.MethodGet, Route: "/api/records/:record"},
+		grpc.Method{Name: RecordService_CreateManyRecord_FullMethodName, HTTPMethod: http.MethodPost, Route: "/api/records/batch"},
+		grpc.Method{Name: RecordService_DeleteManyRecord_FullMethodName, HTTPMethod: http.MethodDelete, Route: "/api/records/batch"},
+		grpc.Method{Name: RecordService_UpdateManyRecord_FullMethodName, HTTPMethod: http.MethodPut, Route: "/api/records/batch"},
+		grpc.Method{Name: RecordService_PatchManyRecord_FullMethodName, HTTPMethod: http.MethodPatch, Route: "/api/records/batch"},
+		grpc.Method{Name: RecordService_ListRecordByOwner_FullMethodName, HTTPMethod: http.MethodGet, Route: "/api/owners/:owner/records"},
 	)
-	gstgrpc.Register(func(s grpc.ServiceRegistrar) { record.RegisterItemServiceServer(s, record.ItemService{}) },
-		gstgrpc.Method{Name: record.ItemService_CreateItem_FullMethodName, HTTPMethod: http.MethodPost, Route: "/api/records/:record/items"},
-		gstgrpc.Method{Name: record.ItemService_GetItem_FullMethodName, HTTPMethod: http.MethodGet, Route: "/api/records/:record/items/:id"},
-		gstgrpc.Method{Name: record.ItemService_SealItem_FullMethodName, HTTPMethod: http.MethodPost, Route: "/api/items/:id/seal"},
-		gstgrpc.Method{Name: record.ItemService_MergeItem_FullMethodName, HTTPMethod: http.MethodPost, Route: "/api/items/merge"},
+	grpc.Register[record.ItemServiceServer](record.RegisterItemServiceServer, record.ItemService{},
+		grpc.Method{Name: record.ItemService_CreateItem_FullMethodName, HTTPMethod: http.MethodPost, Route: "/api/records/:record/items"},
+		grpc.Method{Name: record.ItemService_GetItem_FullMethodName, HTTPMethod: http.MethodGet, Route: "/api/records/:record/items/:id"},
+		grpc.Method{Name: record.ItemService_SealItem_FullMethodName, HTTPMethod: http.MethodPost, Route: "/api/items/:id/seal"},
+		grpc.Method{Name: record.ItemService_MergeItem_FullMethodName, HTTPMethod: http.MethodPost, Route: "/api/items/merge"},
 	)
-	gstgrpc.Register(func(s grpc.ServiceRegistrar) { RegisterReportServiceServer(s, ReportService{}) },
-		gstgrpc.Method{Name: ReportService_GetReport_FullMethodName, HTTPMethod: http.MethodGet, Route: "/api/reports/summary"},
+	grpc.Register[ReportServiceServer](RegisterReportServiceServer, ReportService{},
+		grpc.Method{Name: ReportService_GetReport_FullMethodName, HTTPMethod: http.MethodGet, Route: "/api/reports/summary"},
 	)
-	gstgrpc.Register(func(s grpc.ServiceRegistrar) { RegisterShapeServiceServer(s, ShapeService{}) },
-		gstgrpc.Method{Name: ShapeService_CreateShape_FullMethodName, HTTPMethod: http.MethodPost, Route: "/api/shapes"},
-		gstgrpc.Method{Name: ShapeService_GetShape_FullMethodName, HTTPMethod: http.MethodGet, Route: "/api/shapes/:id"},
+	grpc.Register[ShapeServiceServer](RegisterShapeServiceServer, ShapeService{},
+		grpc.Method{Name: ShapeService_CreateShape_FullMethodName, HTTPMethod: http.MethodPost, Route: "/api/shapes"},
+		grpc.Method{Name: ShapeService_GetShape_FullMethodName, HTTPMethod: http.MethodGet, Route: "/api/shapes/:id"},
 	)
 }
