@@ -30,18 +30,30 @@ import (
 // because it alone knows what the committed definitions reserve. Any other
 // diagnostic, and a project whose packages cannot be loaded, is left to the
 // checks to report.
-func fillPBTags(quiet bool, ignore gghelper.ProjectIgnore) error {
+//
+// It returns the files the derivation produced when it produced them
+// without a word, the common case of a project whose fields are all
+// numbered: the generation below reuses them instead of loading and type
+// checking the model packages a second time, which nothing between the two
+// changes, the model files and the tags they carry being what the
+// definitions are derived from. After a tag was written, and when the
+// derivation reported anything, it returns nil and the generation derives
+// the definitions again.
+func fillPBTags(quiet bool, ignore gghelper.ProjectIgnore) ([]pb.File, error) {
 	if !gghelper.FileExists(ggconst.DirModel) {
-		return nil
+		return nil, nil
 	}
 	scanned, err := scanModels(true, ignore)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	_, err = pb.Generate(pb.Config{Dir: ".", ModulePath: module, Models: scanned.models})
+	files, err := pb.Generate(pb.Config{Dir: ".", ModulePath: module, Models: scanned.models})
+	if err == nil {
+		return files, nil
+	}
 	var diagnostics *pb.DiagnosticsError
 	if !errors.As(err, &diagnostics) || len(diagnostics.MissingTags) == 0 {
-		return nil
+		return nil, nil
 	}
 	byPath := make(map[string][]pb.MissingTag)
 	for _, tag := range diagnostics.MissingTags {
@@ -49,7 +61,7 @@ func fillPBTags(quiet bool, ignore gghelper.ProjectIgnore) error {
 	}
 	for _, path := range slices.Sorted(maps.Keys(byPath)) {
 		if err := rewritePBTags(path, byPath[path]); err != nil {
-			return err
+			return nil, err
 		}
 		if !quiet {
 			for _, tag := range byPath[path] {
@@ -57,7 +69,7 @@ func fillPBTags(quiet bool, ignore gghelper.ProjectIgnore) error {
 			}
 		}
 	}
-	return nil
+	return nil, nil
 }
 
 // rewritePBTags writes the numbers of tags into the fields of the file at

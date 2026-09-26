@@ -72,9 +72,11 @@ func genRunWithOptions(opts genRunOptions) error {
 		return err
 	}
 	// Number the fields of the models served over gRPC that carry no pb tag,
-	// for the same reason (see fillPBTags).
+	// for the same reason (see fillPBTags); the definitions it derived on the
+	// way are the ones written below when it wrote no tag.
 	ignore := gghelper.NewProjectIgnore()
-	if err := fillPBTags(opts.Quiet, ignore); err != nil {
+	pbDerived, err := fillPBTags(opts.Quiet, ignore)
+	if err != nil {
 		return err
 	}
 
@@ -261,12 +263,12 @@ func genRunWithOptions(opts genRunOptions) error {
 	}
 
 	// Generate the protobuf definitions of the models served over gRPC, the
-	// Go files serving them and the ones compiled from them. The model
-	// packages are type-checked for it, so this runs once their registration
-	// files above are current; the whole set is built before any of it is
-	// written, so a definition the compiler refuses leaves the files on disk
-	// as they were.
-	pbFiles, err := protobufFiles(allModels)
+	// Go files serving them and the ones compiled from them, unless
+	// fillPBTags derived the definitions already. The model packages are
+	// type-checked for it, so this runs once their registration files above
+	// are current; the whole set is built before any of it is written, so a
+	// definition the compiler refuses leaves the files on disk as they were.
+	pbFiles, err := protobufFiles(allModels, pbDerived)
 	if err != nil {
 		return err
 	}
@@ -469,13 +471,17 @@ func optionalImportDirs() []string {
 }
 
 // protobufFiles renders the .proto files of the models declaring GRPC() and
-// the Go files serving them (see protobufDefinitions) and compiles the Go
-// files of the definitions (see pb.Compile), the set gg gen writes, the
-// rendered files first.
-func protobufFiles(models []*modelinfo.Model) ([]pb.File, error) {
-	generated, err := protobufDefinitions(models)
-	if err != nil {
-		return nil, err
+// the Go files serving them (see protobufDefinitions), unless derived holds
+// the ones fillPBTags rendered, and compiles the Go files of the
+// definitions (see pb.Compile), the set gg gen writes, the rendered files
+// first.
+func protobufFiles(models []*modelinfo.Model, derived []pb.File) ([]pb.File, error) {
+	generated := derived
+	if generated == nil {
+		var err error
+		if generated, err = protobufDefinitions(models); err != nil {
+			return nil, err
+		}
 	}
 	compiled, err := pb.Compile(definitionsOf(generated))
 	if err != nil {
