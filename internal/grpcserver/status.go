@@ -29,7 +29,7 @@ const (
 // like any coder (see statusOfCoder); any other error answers Internal with
 // a fixed message, its text kept out of the answer the way the HTTP
 // listener keeps internal detail out of the envelope, for the caller to log
-// before mapping; nil stays nil. The public interceptor.StatusError forwards
+// before mapping; nil stays nil. The public grpc.StatusError forwards
 // to it.
 func StatusError(err error) error {
 	if err == nil {

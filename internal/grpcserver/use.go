@@ -67,6 +67,19 @@ func UseAuth(interceptors ...grpc.UnaryServerInterceptor) {
 	authInterceptors = append(authInterceptors, interceptors...)
 }
 
+// unguardedMethods lists the registered methods not declared public, in
+// order of their names: the ones the auth interceptors guard, or would.
+func unguardedMethods() []string {
+	names := make([]string, 0, len(methods))
+	for name, m := range methods {
+		if !m.Public {
+			names = append(names, name)
+		}
+	}
+	slices.Sort(names)
+	return names
+}
+
 // projectInterceptors returns the interceptors Use and UseAuth queued, in
 // the order they run: the common ones, then the auth ones, each behind a
 // selector that leaves the public methods alone.
@@ -110,7 +123,7 @@ type callRecord struct {
 // an interceptor judging the call by the action, the way the module
 // middleware judges a request, asks for. Both are empty outside a call and
 // for a method registered without them, the health and reflection services'
-// among them. The public interceptor.Route forwards to it.
+// among them. The public grpc.Route forwards to it.
 func Route(ctx context.Context) (httpMethod, route string) {
 	if c, ok := ctx.Value(callRecordKey{}).(*callRecord); ok {
 		return c.method.HTTPMethod, c.method.Route
@@ -120,7 +133,7 @@ func Route(ctx context.Context) (httpMethod, route string) {
 
 // CallerOf returns the caller WithCaller established for the call, the zero
 // Caller before one is established and outside a call. The public
-// interceptor.CallerOf forwards to it.
+// grpc.CallerOf forwards to it.
 func CallerOf(ctx context.Context) Caller {
 	if c, ok := ctx.Value(callRecordKey{}).(*callRecord); ok {
 		return c.caller
@@ -133,7 +146,7 @@ func CallerOf(ctx context.Context) Caller {
 // ServiceContext built on it and the flows do, and the access-log entry of
 // the call names the caller as well. An authentication interceptor calls it
 // once it has verified who is calling, and hands the returned context on;
-// the public interceptor.WithCaller forwards to it.
+// the public grpc.WithCaller forwards to it.
 func WithCaller(ctx context.Context, caller Caller) context.Context {
 	var fields requestctx.Fields
 	if c, ok := ctx.Value(callRecordKey{}).(*callRecord); ok {

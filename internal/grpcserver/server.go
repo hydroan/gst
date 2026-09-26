@@ -104,6 +104,14 @@ func Run() error {
 	for _, register := range registrations {
 		register(srv)
 	}
+	// A non-public method with no auth interceptor is served to anyone. The
+	// HTTP listener does the same for a route of the authenticated group
+	// with nothing registered on it, and a project may authenticate in an
+	// interceptor registered for every method, so this is a warning and not
+	// a refusal.
+	if unguarded := unguardedMethods(); len(unguarded) > 0 && len(authInterceptors) == 0 {
+		log.Warnw("grpc server serves non-public methods with no auth interceptor registered", "methods", unguarded)
+	}
 	// The health service answers SERVING from the start and NOT_SERVING
 	// from Drain on, the readiness the HTTP probe reports; the reflection
 	// service lets grpcurl and its kind list what the server carries.

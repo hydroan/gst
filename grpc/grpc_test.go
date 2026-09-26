@@ -45,8 +45,8 @@ func TestWithCallerNamesTheCallerForTheContext(t *testing.T) {
 	require.Equal(t, "t-1", meta.TenantID())
 }
 
-// TestRouteIsEmptyOutsideACall pins that Route answers nothing for a context
-// no call runs on.
+// TestRouteIsEmptyOutsideACall pins that Route answers nothing for a
+// context no call runs on.
 func TestRouteIsEmptyOutsideACall(t *testing.T) {
 	httpMethod, route := gstgrpc.Route(context.Background())
 	require.Empty(t, httpMethod)
