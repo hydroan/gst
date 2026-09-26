@@ -29,46 +29,23 @@ import (
 // and runs the patch flow (see patchFlow), which answers with the patched
 // record.
 //
-// When REQ or RSP differs from M, the handler binds the JSON body into REQ and
-// delegates the operation to the phase service's Patch method.
+// When REQ or RSP differs from M, the handler is the phase service's (see
+// serviceHandler): its Patch method runs on the bound payload.
 func PatchFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...*types.ControllerConfig[M]) gin.HandlerFunc {
 	a := newAction[M, REQ, RSP](routeFromConfig(cfg...), consts.PHASE_PATCH, consts.PHASE_PATCH_BEFORE, consts.PHASE_PATCH_AFTER)
+	if !a.typesEqual {
+		return a.serviceHandler()
+	}
 	return func(c *gin.Context) {
 		var id string
 
-		ctrlSpanCtx, span := a.startControllerSpan(c)
+		// The span context lives on in the request context the span start
+		// rebinds, which requestContext reads for the flow.
+		_, span := a.startControllerSpan(c)
 		defer span.End()
 
 		reqMeta := requestctx.FromGin(c)
 		log := logger.Controller.WithContext(c.Request.Context(), consts.PHASE_PATCH)
-
-		if !a.typesEqual {
-			var err error
-			var rsp RSP
-			req := a.newRequest()
-			svc := a.service()
-
-			if reqErr := bindJSONRequest(c, &req); reqErr != nil && !errors.Is(reqErr, io.EOF) {
-				log.Errorz("bind request body failed", zap.Error(reqErr))
-				JSON(c, CodeInvalidParam.WithErr(reqErr))
-				gstotel.RecordError(span, reqErr)
-				return
-			}
-			a.normalizeRequest(&req)
-			if rsp, err = a.traceServiceOperation(ctrlSpanCtx, consts.PHASE_PATCH, func(spanCtx context.Context) (RSP, error) {
-				return svc.Patch(types.NewServiceContext(c, spanCtx, consts.PHASE_PATCH), req)
-			}); err != nil {
-				log.Errorz("service operation failed", zap.Error(err))
-				handleServiceError(c, err)
-				gstotel.RecordError(span, err)
-				return
-			}
-			// Check if response is already written (e.g., SSE streaming)
-			if !c.Writer.Written() {
-				JSON(c, CodeSuccess, rsp)
-			}
-			return
-		}
 
 		req := a.newModel()
 		body, err := readJSONRequestBody(c)

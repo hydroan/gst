@@ -8,11 +8,12 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestQueryValuesRenderTheHTTPQuery pins how the query of a call becomes
-// the query string the HTTP listener parses: a filter with an operator as
-// field[op]=value, one without as the bare key, the members of an in joined
-// by commas, the orderings joined under _sort_by, and the paging, cursor and
-// expansion under their parameters, each only when set.
+// TestQueryValuesRenderTheHTTPQuery pins the example of the Query.values
+// doc comment, the same query in and the same query string out: a filter
+// with an operator as field[op]=value, one without as the bare key, the
+// members of an in joined by commas, the orderings joined under _sort_by,
+// and the paging, cursor and expansion under their parameters, each only
+// when set.
 func TestQueryValuesRenderTheHTTPQuery(t *testing.T) {
 	values, err := Query{
 		Filters: []Filter{

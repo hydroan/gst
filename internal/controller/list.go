@@ -12,7 +12,6 @@ import (
 	"github.com/hydroan/gst/internal/types"
 	"github.com/hydroan/gst/internal/urlquery"
 	"github.com/hydroan/gst/logger"
-	gstotel "github.com/hydroan/gst/otel"
 	"go.uber.org/zap"
 )
 
@@ -26,38 +25,19 @@ import (
 // parameters for pagination, cursor pagination, expansion, depth, ordering, and
 // field operator filters.
 //
-// When REQ or RSP differs from M, the handler delegates the operation to the
-// phase service's List method with a zero-value REQ. List handles an HTTP GET
-// request whose body carries no semantics, so nothing is bound into REQ;
-// custom services read query parameters from ServiceContext.Query().
+// When REQ or RSP differs from M, the handler is the phase service's (see
+// serviceHandler): its List method runs on a zero-value REQ, the GET request
+// carrying no body; the service reads ServiceContext.Query().
 func ListFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...*types.ControllerConfig[M]) gin.HandlerFunc {
 	a := newAction[M, REQ, RSP](routeFromConfig(cfg...), consts.PHASE_LIST, consts.PHASE_LIST_BEFORE, consts.PHASE_LIST_AFTER)
+	if !a.typesEqual {
+		return a.serviceHandler()
+	}
 	return func(c *gin.Context) {
-		ctrlSpanCtx, span := a.startControllerSpan(c)
+		// The span context lives on in the request context the span start
+		// rebinds, which requestContext reads for the flow.
+		_, span := a.startControllerSpan(c)
 		defer span.End()
-
-		log := logger.Controller.WithContext(c.Request.Context(), consts.PHASE_LIST)
-
-		if !a.typesEqual {
-			var err error
-			var rsp RSP
-			req := a.newRequest()
-			svc := a.service()
-
-			if rsp, err = a.traceServiceOperation(ctrlSpanCtx, consts.PHASE_LIST, func(spanCtx context.Context) (RSP, error) {
-				return svc.List(types.NewServiceContext(c, spanCtx, consts.PHASE_LIST), req)
-			}); err != nil {
-				log.Errorz("service operation failed", zap.Error(err))
-				handleServiceError(c, err)
-				gstotel.RecordError(span, err)
-				return
-			}
-			// Check if response is already written (e.g., SSE streaming)
-			if !c.Writer.Written() {
-				JSON(c, CodeSuccess, rsp)
-			}
-			return
-		}
 
 		items, total, err := a.listFlow(requestContext(c), ginServiceContext(c))
 		if err != nil {

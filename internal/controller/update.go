@@ -3,7 +3,6 @@ package controller
 import (
 	"context"
 	"encoding/json"
-	"io"
 
 	"github.com/cockroachdb/errors"
 	"github.com/gin-gonic/gin"
@@ -26,44 +25,21 @@ import (
 // by the body is ignored), and runs the update flow (see updateFlow), which
 // answers with the replacement.
 //
-// When REQ or RSP differs from M, the handler binds the JSON body into REQ and
-// delegates the operation to the phase service's Update method.
+// When REQ or RSP differs from M, the handler is the phase service's (see
+// serviceHandler): its Update method runs on the bound payload.
 func UpdateFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...*types.ControllerConfig[M]) gin.HandlerFunc {
 	a := newAction[M, REQ, RSP](routeFromConfig(cfg...), consts.PHASE_UPDATE, consts.PHASE_UPDATE_BEFORE, consts.PHASE_UPDATE_AFTER)
+	if !a.typesEqual {
+		return a.serviceHandler()
+	}
 	return func(c *gin.Context) {
-		ctrlSpanCtx, span := a.startControllerSpan(c)
+		// The span context lives on in the request context the span start
+		// rebinds, which requestContext reads for the flow.
+		_, span := a.startControllerSpan(c)
 		defer span.End()
 
 		reqMeta := requestctx.FromGin(c)
 		log := logger.Controller.WithContext(c.Request.Context(), consts.PHASE_UPDATE)
-
-		if !a.typesEqual {
-			var err error
-			var rsp RSP
-			req := a.newRequest()
-			svc := a.service()
-
-			if reqErr := bindJSONRequest(c, &req); reqErr != nil && !errors.Is(reqErr, io.EOF) {
-				log.Errorz("bind request body failed", zap.Error(reqErr))
-				JSON(c, CodeInvalidParam.WithErr(reqErr))
-				gstotel.RecordError(span, reqErr)
-				return
-			}
-			a.normalizeRequest(&req)
-			if rsp, err = a.traceServiceOperation(ctrlSpanCtx, consts.PHASE_UPDATE, func(spanCtx context.Context) (RSP, error) {
-				return svc.Update(types.NewServiceContext(c, spanCtx, consts.PHASE_UPDATE), req)
-			}); err != nil {
-				log.Errorz("service operation failed", zap.Error(err))
-				handleServiceError(c, err)
-				gstotel.RecordError(span, err)
-				return
-			}
-			// Check if response is already written (e.g., SSE streaming)
-			if !c.Writer.Written() {
-				JSON(c, CodeSuccess, rsp)
-			}
-			return
-		}
 
 		req := a.newModel()
 		if reqErr := bindJSONRequest(c, &req); reqErr != nil {

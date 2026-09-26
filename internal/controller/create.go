@@ -3,10 +3,7 @@ package controller
 import (
 	"context"
 	"encoding/json"
-	"io"
-	"strings"
 
-	"github.com/cockroachdb/errors"
 	"github.com/gin-gonic/gin"
 	"github.com/hydroan/gst/consts"
 	"github.com/hydroan/gst/database"
@@ -28,48 +25,21 @@ import (
 // wanting a resource with all defaults states that intent with an explicit {}
 // body.
 //
-// When REQ or RSP differs from M, the handler binds the JSON body into REQ and
-// delegates the operation to the phase service's Create method. Multipart form
-// requests are left unbound so the service can read the request directly.
+// When REQ or RSP differs from M, the handler is the phase service's (see
+// serviceHandler): its Create method runs on the bound payload, a multipart
+// form left unbound for the service to read itself.
 func CreateFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...*types.ControllerConfig[M]) gin.HandlerFunc {
 	a := newAction[M, REQ, RSP](routeFromConfig(cfg...), consts.PHASE_CREATE, consts.PHASE_CREATE_BEFORE, consts.PHASE_CREATE_AFTER)
+	if !a.typesEqual {
+		return a.serviceHandler()
+	}
 	return func(c *gin.Context) {
-		ctrlSpanCtx, span := a.startControllerSpan(c)
+		// The span context lives on in the request context the span start
+		// rebinds, which requestContext reads for the flow.
+		_, span := a.startControllerSpan(c)
 		defer span.End()
 
 		log := logger.Controller.WithContext(c.Request.Context(), consts.PHASE_CREATE)
-
-		if !a.typesEqual {
-			var err error
-			var rsp RSP
-			req := a.newRequest()
-			svc := a.service()
-
-			// If the request content type is "multipart/form-data", then the request body is a file.
-			// We should not try to parse it as JSON.
-			if !strings.EqualFold(c.ContentType(), "multipart/form-data") {
-				if reqErr := bindJSONRequest(c, &req); reqErr != nil && !errors.Is(reqErr, io.EOF) {
-					log.Errorz("bind request body failed", zap.Error(reqErr))
-					JSON(c, CodeInvalidParam.WithErr(reqErr))
-					gstotel.RecordError(span, reqErr)
-					return
-				}
-				a.normalizeRequest(&req)
-			}
-			if rsp, err = a.traceServiceOperation(ctrlSpanCtx, consts.PHASE_CREATE, func(spanCtx context.Context) (RSP, error) {
-				return svc.Create(types.NewServiceContext(c, spanCtx, consts.PHASE_CREATE), req)
-			}); err != nil {
-				log.Errorz("service operation failed", zap.Error(err))
-				handleServiceError(c, err)
-				gstotel.RecordError(span, err)
-				return
-			}
-			// Check if response is already written (e.g., SSE streaming)
-			if !c.Writer.Written() {
-				JSON(c, CodeSuccess, rsp)
-			}
-			return
-		}
 
 		req := a.newModel()
 		if reqErr := bindJSONRequest(c, &req); reqErr != nil {

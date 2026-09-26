@@ -2,7 +2,6 @@ package controller
 
 import (
 	"context"
-	"fmt"
 	"net/url"
 	"reflect"
 	"slices"
@@ -44,70 +43,10 @@ import (
 // empty SortBy no _sort_by.
 //
 // gRPC has no URL, so what the HTTP request carries in its path and query
-// string the rpc's request message carries in its fields: the route
-// parameters first, then these. For a model Record on the route records, gg
-// gen derives (see queryFields of internal/gggen/pb)
-//
-//	message ListRecordRequest {
-//	  repeated Filter filters = 1;
-//	  repeated string sort_by = 2;
-//	  uint32 page = 3;
-//	  uint32 size = 4;
-//	  string cursor_field = 5;
-//	  string cursor_value = 6;
-//	  bool cursor_next = 7;
-//	  repeated string expand = 8;
-//	  uint32 depth = 9;
-//
-//	  message Filter {
-//	    string field = 1;
-//	    string op = 2;
-//	    repeated string values = 3;
-//	  }
-//	}
-//
-//	message GetRecordRequest {
-//	  string id = 1;
-//	  repeated string expand = 2;
-//	  uint32 depth = 3;
-//	}
-//
-// and, for a route with parameters, their string fields ahead of these,
-// record for records/:record/items. For a Record with the fields status,
-// age and name, listed over HTTP as
-//
-//	GET /api/records?status[in]=active,archived&age[gt]=20&name=alice&_sort_by=created_at desc&_page=2&_size=20
-//
-// the call of ListRecord takes the request message (in the JSON grpcurl
-// speaks)
-//
-//	{
-//	  "filters": [
-//	    {"field": "status", "op": "in", "values": ["active", "archived"]},
-//	    {"field": "age", "op": "gt", "values": ["20"]},
-//	    {"field": "name", "values": ["alice"]}
-//	  ],
-//	  "sort_by": ["created_at desc"],
-//	  "page": 2,
-//	  "size": 20
-//	}
-//
-// which the generated handler hands over as
-//
-//	Query{
-//		Filters: []Filter{
-//			{Field: "status", Op: "in", Values: []string{"active", "archived"}},
-//			{Field: "age", Op: "gt", Values: []string{"20"}},
-//			{Field: "name", Values: []string{"alice"}},
-//		},
-//		SortBy: []string{"created_at desc"},
-//		Page:   2,
-//		Size:   20,
-//	}
-//
-// and values renders back into the query string above. A Get carries only
-// the expansion: {"id": "r-1", "expand": ["children"], "depth": 2} is
-// GET /api/records/r-1?_expand=children&_depth=2.
+// string the rpc's request message carries in its fields, the route
+// parameters first, then these; the example on the public grpc.Query shows
+// one query as an HTTP request, as the messages gg gen derives, in JSON and
+// as a Query.
 type Query struct {
 	Filters     []Filter
 	SortBy      []string
@@ -440,34 +379,4 @@ func ServiceCall[M types.Model, REQ types.Request, RSP types.Response](phase con
 		}
 		return answer(c, rsp)
 	}
-}
-
-// serviceMethod returns the method of a service serving phase, the one the
-// HTTP handler of the phase delegates to when M, REQ and RSP differ. A phase
-// gRPC does not serve — the HTTP-only actions Import, Export and SSE, and the
-// hook phases — has no rpc to be called from, so it panics.
-func serviceMethod[M types.Model, REQ types.Request, RSP types.Response](phase consts.Phase) func(svc types.Service[M, REQ, RSP], sc *types.ServiceContext, req REQ) (RSP, error) {
-	switch phase {
-	case consts.PHASE_CREATE:
-		return types.Service[M, REQ, RSP].Create
-	case consts.PHASE_DELETE:
-		return types.Service[M, REQ, RSP].Delete
-	case consts.PHASE_UPDATE:
-		return types.Service[M, REQ, RSP].Update
-	case consts.PHASE_PATCH:
-		return types.Service[M, REQ, RSP].Patch
-	case consts.PHASE_LIST:
-		return types.Service[M, REQ, RSP].List
-	case consts.PHASE_GET:
-		return types.Service[M, REQ, RSP].Get
-	case consts.PHASE_CREATE_MANY:
-		return types.Service[M, REQ, RSP].CreateMany
-	case consts.PHASE_DELETE_MANY:
-		return types.Service[M, REQ, RSP].DeleteMany
-	case consts.PHASE_UPDATE_MANY:
-		return types.Service[M, REQ, RSP].UpdateMany
-	case consts.PHASE_PATCH_MANY:
-		return types.Service[M, REQ, RSP].PatchMany
-	}
-	panic(fmt.Sprintf("controller: phase %q has no rpc; ServiceCall serves the actions of a model's gRPC service", phase))
 }

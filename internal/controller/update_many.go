@@ -24,43 +24,20 @@ import (
 // requestData[M], runs the batch update flow (see updateManyFlow), and
 // returns the request data.
 //
-// When REQ or RSP differs from M, the handler binds the JSON body into REQ and
-// delegates the operation to the phase service's UpdateMany method.
+// When REQ or RSP differs from M, the handler is the phase service's (see
+// serviceHandler): its UpdateMany method runs on the bound payload.
 func UpdateManyFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...*types.ControllerConfig[M]) gin.HandlerFunc {
 	a := newAction[M, REQ, RSP](routeFromConfig(cfg...), consts.PHASE_UPDATE_MANY, consts.PHASE_UPDATE_MANY_BEFORE, consts.PHASE_UPDATE_MANY_AFTER)
+	if !a.typesEqual {
+		return a.serviceHandler()
+	}
 	return func(c *gin.Context) {
-		ctrlSpanCtx, span := a.startControllerSpan(c)
+		// The span context lives on in the request context the span start
+		// rebinds, which requestContext reads for the flow.
+		_, span := a.startControllerSpan(c)
 		defer span.End()
 
 		log := logger.Controller.WithContext(c.Request.Context(), consts.PHASE_UPDATE_MANY)
-
-		if !a.typesEqual {
-			var err error
-			var rsp RSP
-			req := a.newRequest()
-			svc := a.service()
-
-			if reqErr := bindJSONRequest(c, &req); reqErr != nil && !errors.Is(reqErr, io.EOF) {
-				log.Errorz("bind request body failed", zap.Error(reqErr))
-				JSON(c, CodeInvalidParam.WithErr(reqErr))
-				gstotel.RecordError(span, reqErr)
-				return
-			}
-			a.normalizeRequest(&req)
-			if rsp, err = a.traceServiceOperation(ctrlSpanCtx, consts.PHASE_UPDATE_MANY, func(spanCtx context.Context) (RSP, error) {
-				return svc.UpdateMany(types.NewServiceContext(c, spanCtx, consts.PHASE_UPDATE_MANY), req)
-			}); err != nil {
-				log.Errorz("service operation failed", zap.Error(err))
-				handleServiceError(c, err)
-				gstotel.RecordError(span, err)
-				return
-			}
-			// Check if response is already written (e.g., SSE streaming)
-			if !c.Writer.Written() {
-				JSON(c, CodeSuccess, rsp)
-			}
-			return
-		}
 
 		var req requestData[M]
 		if reqErr := bindJSONRequest(c, &req); reqErr != nil && !errors.Is(reqErr, io.EOF) {

@@ -25,40 +25,22 @@ import (
 // parameter as the resource id, runs the get flow (see getFlow), and returns
 // the model.
 //
-// When REQ or RSP differs from M, the handler delegates the operation to the
-// phase service's Get method with a zero-value REQ. Get handles an HTTP GET
-// request whose body carries no semantics, so nothing is bound into REQ;
-// custom services read parameters from ServiceContext.Query() and
-// ServiceContext.Param().
+// When REQ or RSP differs from M, the handler is the phase service's (see
+// serviceHandler): its Get method runs on a zero-value REQ, the GET request
+// carrying no body; the service reads ServiceContext.Query() and Param().
 func GetFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...*types.ControllerConfig[M]) gin.HandlerFunc {
 	a := newAction[M, REQ, RSP](routeFromConfig(cfg...), consts.PHASE_GET, consts.PHASE_GET_BEFORE, consts.PHASE_GET_AFTER)
+	if !a.typesEqual {
+		return a.serviceHandler()
+	}
 	return func(c *gin.Context) {
-		ctrlSpanCtx, span := a.startControllerSpan(c)
+		// The span context lives on in the request context the span start
+		// rebinds, which requestContext reads for the flow.
+		_, span := a.startControllerSpan(c)
 		defer span.End()
 
 		reqMeta := requestctx.FromGin(c)
 		log := logger.Controller.WithContext(c.Request.Context(), consts.PHASE_GET)
-
-		if !a.typesEqual {
-			var err error
-			var rsp RSP
-			req := a.newRequest()
-			svc := a.service()
-
-			if rsp, err = a.traceServiceOperation(ctrlSpanCtx, consts.PHASE_GET, func(spanCtx context.Context) (RSP, error) {
-				return svc.Get(types.NewServiceContext(c, spanCtx, consts.PHASE_GET), req)
-			}); err != nil {
-				log.Errorz("service operation failed", zap.Error(err))
-				handleServiceError(c, err)
-				gstotel.RecordError(span, err)
-				return
-			}
-			// Check if response is already written (e.g., SSE streaming)
-			if !c.Writer.Written() {
-				JSON(c, CodeSuccess, rsp)
-			}
-			return
-		}
 
 		var param string
 		if len(cfg) > 0 {
