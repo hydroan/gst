@@ -107,7 +107,6 @@ func genRunWithOptions(opts genRunOptions) error {
 		return err
 	}
 	allModels, ignoreResult := scanned.models, scanned.routeIgnores
-	reportUnservedStreams(allModels)
 
 	// Record the service files and protobuf definitions present before
 	// generating (if prune option is enabled): the ones this run does not
@@ -146,16 +145,15 @@ func genRunWithOptions(opts genRunOptions) error {
 		}
 
 		m.Design.Range(func(s string, a *dsl.Action) {
-			// A Stream action is served over gRPC alone: it registers no
-			// route, and no service either, nothing serving a stream yet.
-			if dsl.GRPCOnlyAction(a.Phase.Name()) {
-				return
-			}
 			if a.Service {
 				target := modelinfo.ServiceTarget(m, a, ggconst.DirModel, ggconst.DirService)
 				servicePkgs[target.ImportPath] = target.PackageName
 			}
-			routerPkgs[m.ImportPath()] = m.ModelPkgName
+			// A Stream action is served over gRPC alone: it registers no
+			// route.
+			if !dsl.GRPCOnlyAction(a.Phase.Name()) {
+				routerPkgs[m.ImportPath()] = m.ModelPkgName
+			}
 		})
 	}
 
@@ -189,9 +187,6 @@ func genRunWithOptions(opts genRunOptions) error {
 	}
 	for _, m := range allModels {
 		m.Design.Range(func(route string, act *dsl.Action) {
-			if dsl.GRPCOnlyAction(act.Phase.Name()) {
-				return
-			}
 			// Both registrations below must carry this exact route string:
 			// the service registry keys services by route and phase, so the
 			// service side and the router side share one route value.
@@ -200,6 +195,11 @@ func genRunWithOptions(opts genRunOptions) error {
 			if act.Service {
 				target := modelinfo.ServiceTarget(m, act, ggconst.DirModel, ggconst.DirService)
 				serviceStmts = append(serviceStmts, gggen.StmtServiceRegister(importQualifier(serviceAliases, target.ImportPath, target.PackageName)+"."+act.RoleName(), act.Phase, route))
+			}
+			// A Stream action is served over gRPC alone: its service
+			// registers, no route does.
+			if dsl.GRPCOnlyAction(act.Phase.Name()) {
+				return
 			}
 			base := "Auth"
 			if act.Public {
@@ -369,6 +369,11 @@ func genRunWithOptions(opts genRunOptions) error {
 			if err := os.WriteFile(safePath, []byte(code), ggconst.FileModeGenerated); err != nil {
 				return err
 			}
+			// The test scaffold requests the route through the HTTP client; an
+			// action served over gRPC alone has no route for it to request.
+			if dsl.GRPCOnlyAction(action.Phase.Name()) {
+				return nil
+			}
 			if err := scaffoldServiceTests(modelInfo, target, action, route, opts.Quiet); err != nil {
 				return err
 			}
@@ -379,7 +384,7 @@ func genRunWithOptions(opts genRunOptions) error {
 	var applyErr error
 	for _, m := range allModels {
 		m.Design.Range(func(route string, act *dsl.Action) {
-			if applyErr != nil || dsl.GRPCOnlyAction(act.Phase.Name()) {
+			if applyErr != nil {
 				return
 			}
 			target := modelinfo.ServiceTarget(m, act, ggconst.DirModel, ggconst.DirService)
@@ -586,21 +591,6 @@ func reportModelIgnoreWarnings(result modelinfo.ModelIgnoreResult) {
 	}
 	for _, match := range result.LiveActionModels {
 		clioutput.Warn("", "gst.yaml ignores registration of model %s (%s) but its routes stay enabled; add gen.routes.ignore entries or ensure another model owns its table", match.Model, match.File)
-	}
-}
-
-// reportUnservedStreams warns, for every Stream action, that nothing serves
-// it: its rpc is declared in the .proto, but no handler runs it, so a call
-// is answered Unimplemented by the server the protobuf plugin generated.
-// The warning keeps the gap from passing in silence. Warnings are emitted
-// even in quiet mode.
-func reportUnservedStreams(models []*modelinfo.Model) {
-	for _, m := range models {
-		m.Design.Range(func(route string, act *dsl.Action) {
-			if dsl.GRPCOnlyAction(act.Phase.Name()) {
-				clioutput.Warn("", "%s: the Stream action %s of %s on %s is declared but not served: streaming rpcs have no handler, so its rpc answers Unimplemented", m.ModelFilePath, act.RoleName(), m.ModelName, route)
-			}
-		})
 	}
 }
 

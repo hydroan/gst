@@ -13,7 +13,6 @@ import (
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 	"go.uber.org/zap/zaptest/observer"
-	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
@@ -26,12 +25,12 @@ func TestUseRunsTheProjectInterceptorsInsideTheBuiltinChain(t *testing.T) {
 	reset(t)
 	var mu sync.Mutex
 	var order []string
-	note := func(name string) grpc.UnaryServerInterceptor {
-		return func(ctx context.Context, req any, _ *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (any, error) {
+	note := func(name string) Interceptor {
+		return func(ctx context.Context) (context.Context, error) {
 			mu.Lock()
 			order = append(order, name)
 			mu.Unlock()
-			return handler(ctx, req)
+			return ctx, nil
 		}
 	}
 	UseAuth(note("auth"))
@@ -59,7 +58,7 @@ func TestUseRunsTheProjectInterceptorsInsideTheBuiltinChain(t *testing.T) {
 // group.
 func TestUseAuthSkipsThePublicMethods(t *testing.T) {
 	reset(t)
-	UseAuth(func(context.Context, any, *grpc.UnaryServerInfo, grpc.UnaryHandler) (any, error) {
+	UseAuth(func(context.Context) (context.Context, error) {
 		return nil, status.Error(codes.Unauthenticated, "no credentials")
 	})
 	serve(map[string]func(context.Context) error{
@@ -80,8 +79,8 @@ func TestUseAuthSkipsThePublicMethods(t *testing.T) {
 // before, and so does the call's access-log entry.
 func TestWithCallerNamesTheCallerDownstreamAndInTheAccessLog(t *testing.T) {
 	reset(t)
-	UseAuth(func(ctx context.Context, req any, _ *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (any, error) {
-		return handler(WithCaller(ctx, Caller{Username: "alice", UserID: "u-1", SessionID: "s-1", TenantID: "t-1"}), req)
+	UseAuth(func(ctx context.Context) (context.Context, error) {
+		return WithCaller(ctx, Caller{Username: "alice", UserID: "u-1", SessionID: "s-1", TenantID: "t-1"}), nil
 	})
 	seen := make(chan observed, 1)
 	look(seen)
@@ -110,7 +109,7 @@ func TestWithCallerNamesTheCallerDownstreamAndInTheAccessLog(t *testing.T) {
 // caller gets codes.Internal, the panic is logged and the server goes on.
 func TestAPanicInAProjectInterceptorIsRecovered(t *testing.T) {
 	reset(t)
-	Use(func(context.Context, any, *grpc.UnaryServerInfo, grpc.UnaryHandler) (any, error) { panic("boom") })
+	Use(func(context.Context) (context.Context, error) { panic("boom") })
 	echo(nil, nil)
 	conn := dial(t, start(t), nil)
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -130,9 +129,7 @@ func TestUseAfterRunPanics(t *testing.T) {
 	reset(t)
 	echo(nil, nil)
 	start(t)
-	pass := func(ctx context.Context, req any, _ *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (any, error) {
-		return handler(ctx, req)
-	}
+	pass := func(ctx context.Context) (context.Context, error) { return ctx, nil }
 
 	require.Panics(t, func() { Use(pass) })
 	require.Panics(t, func() { UseAuth(pass) })
@@ -150,11 +147,11 @@ func TestRouteAndCallerOfDescribeTheCall(t *testing.T) {
 		caller            Caller
 	}
 	got := make(chan seen, 1)
-	UseAuth(func(ctx context.Context, req any, _ *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (any, error) {
+	UseAuth(func(ctx context.Context) (context.Context, error) {
 		ctx = WithCaller(ctx, Caller{Username: "alice", UserID: "u-1"})
 		httpMethod, route := Route(ctx)
 		got <- seen{httpMethod: httpMethod, route: route, caller: CallerOf(ctx)}
-		return handler(ctx, req)
+		return ctx, nil
 	})
 	serve(map[string]func(context.Context) error{"Ping": func(context.Context) error { return nil }},
 		Method{Name: "/gst.test.Echo/Ping", HTTPMethod: "GET", Route: "/api/records"})
@@ -180,8 +177,8 @@ func TestRouteAndCallerOfDescribeTheCall(t *testing.T) {
 func TestWithParamsAttachesTheParametersOfTheCall(t *testing.T) {
 	reset(t)
 	got := make(chan requestctx.Metadata, 1)
-	UseAuth(func(ctx context.Context, req any, _ *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (any, error) {
-		return handler(WithCaller(ctx, Caller{Username: "alice", UserID: "u-1"}), req)
+	UseAuth(func(ctx context.Context) (context.Context, error) {
+		return WithCaller(ctx, Caller{Username: "alice", UserID: "u-1"}), nil
 	})
 	serve(map[string]func(context.Context) error{"Ping": func(ctx context.Context) error {
 		ctx = WithParams(ctx, map[string]string{"box": "b-1"}, url.Values{"_page": {"2"}})
@@ -233,9 +230,7 @@ func TestRunWarnsWhenNoAuthInterceptorGuardsTheNonPublicMethods(t *testing.T) {
 	t.Run("with one", func(t *testing.T) {
 		reset(t)
 		logs := warnings(t)
-		UseAuth(func(ctx context.Context, req any, _ *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (any, error) {
-			return handler(ctx, req)
-		})
+		UseAuth(func(ctx context.Context) (context.Context, error) { return ctx, nil })
 		serve(map[string]func(context.Context) error{"Ping": func(context.Context) error { return nil }}, Method{Name: "/gst.test.Echo/Ping"})
 		start(t)
 		require.Empty(t, logs.FilterMessage("grpc server serves non-public methods with no auth interceptor registered").All())

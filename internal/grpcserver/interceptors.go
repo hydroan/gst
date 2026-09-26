@@ -32,10 +32,11 @@ var (
 // turns a panic into; recovery, which covers the handler and everything
 // after it; then the interceptors the project registered (see Use and
 // UseAuth), closest to the handler, the way the HTTP listener mounts the
-// project's middleware behind its own. The stream chain carries no request
-// scope and no project interceptors: the framework serves no streaming rpc
-// of its own, the health and reflection services being the only streams,
-// so it counts and recovers them and nothing more.
+// project's middleware behind its own. The stream chain runs the same
+// stages on a stream, the rpcs of the Stream actions and the health and
+// reflection services' among them: the scope and the project's
+// interceptors run once ahead of the first message (see requestScopeStream
+// and streamOf).
 //
 // With OpenTelemetry enabled the server also carries otelgrpc's stats
 // handler, the counterpart of the HTTP listener's tracing middleware: it
@@ -50,10 +51,12 @@ var (
 func chains() []grpc.ServerOption {
 	onPanic := recovery.WithRecoveryHandlerContext(recovered)
 	unary := []grpc.UnaryServerInterceptor{requestScope, serverMetrics.UnaryServerInterceptor(), recovery.UnaryServerInterceptor(onPanic)}
-	unary = append(unary, projectInterceptors()...)
+	unary = append(unary, projectUnaryInterceptors()...)
+	stream := []grpc.StreamServerInterceptor{requestScopeStream, serverMetrics.StreamServerInterceptor(), recovery.StreamServerInterceptor(onPanic)}
+	stream = append(stream, projectStreamInterceptors()...)
 	opts := []grpc.ServerOption{
 		grpc.ChainUnaryInterceptor(unary...),
-		grpc.ChainStreamInterceptor(serverMetrics.StreamServerInterceptor(), recovery.StreamServerInterceptor(onPanic)),
+		grpc.ChainStreamInterceptor(stream...),
 	}
 	if gstotel.IsEnabled() {
 		opts = append(opts, grpc.StatsHandler(otelgrpc.NewServerHandler()))

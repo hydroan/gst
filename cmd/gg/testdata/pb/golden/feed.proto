@@ -23,6 +23,33 @@ message Feed {
   string topic = 11;
 }
 
+// TailFeedByFeedRequest is the request of FeedService.TailFeedByFeed.
+message TailFeedByFeedRequest {
+  // feed is the :feed parameter of feeds/:feed/tail.
+  string feed = 1;
+}
+
+// TailFeedByFeedResponse is the response of FeedService.TailFeedByFeed.
+message TailFeedByFeedResponse {
+  // result is the FeedEvent the action answers with.
+  FeedEvent result = 1;
+}
+
+// UploadFeedByFeedRequest is the request of FeedService.UploadFeedByFeed.
+message UploadFeedByFeedRequest {
+  // feed is the :feed parameter of feeds/:feed/upload.
+  string feed = 1;
+
+  // payload is the FeedEvent the action takes.
+  FeedEvent payload = 2;
+}
+
+// UploadFeedByFeedResponse is the response of FeedService.UploadFeedByFeed.
+message UploadFeedByFeedResponse {
+  // result is the FeedUploadRsp the action answers with.
+  FeedUploadRsp result = 1;
+}
+
 // ChatFeedRequest is the request of FeedService.ChatFeed.
 message ChatFeedRequest {
   // payload is the FeedEvent the action takes.
@@ -33,18 +60,6 @@ message ChatFeedRequest {
 message ChatFeedResponse {
   // result is the FeedEvent the action answers with.
   FeedEvent result = 1;
-}
-
-// UploadFeedRequest is the request of FeedService.UploadFeed.
-message UploadFeedRequest {
-  // payload is the FeedEvent the action takes.
-  FeedEvent payload = 1;
-}
-
-// UploadFeedResponse is the response of FeedService.UploadFeed.
-message UploadFeedResponse {
-  // result is the FeedUploadRsp the action answers with.
-  FeedUploadRsp result = 1;
 }
 
 // WatchFeedRequest is the request of FeedService.WatchFeed.
@@ -78,11 +93,14 @@ message FeedWatchReq {
 
 // FeedService serves the actions of Feed over gRPC.
 service FeedService {
+  // TailFeedByFeed is the Stream action of Feed declared on feeds/:feed/tail, served over gRPC alone.
+  rpc TailFeedByFeed ( TailFeedByFeedRequest ) returns ( stream TailFeedByFeedResponse );
+
+  // UploadFeedByFeed is the Stream action of Feed declared on feeds/:feed/upload, served over gRPC alone.
+  rpc UploadFeedByFeed ( stream UploadFeedByFeedRequest ) returns ( UploadFeedByFeedResponse );
+
   // ChatFeed is the Stream action of Feed declared on feeds/chat, served over gRPC alone.
   rpc ChatFeed ( stream ChatFeedRequest ) returns ( stream ChatFeedResponse );
-
-  // UploadFeed is the Stream action of Feed declared on feeds/upload, served over gRPC alone.
-  rpc UploadFeed ( stream UploadFeedRequest ) returns ( UploadFeedResponse );
 
   // WatchFeed is the Stream action of Feed declared on feeds/watch, served over gRPC alone.
   rpc WatchFeed ( WatchFeedRequest ) returns ( stream WatchFeedResponse );

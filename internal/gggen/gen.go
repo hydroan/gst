@@ -234,6 +234,45 @@ func genServiceMethod8(info *modelinfo.Model, modelQualifier string, action *dsl
 	)
 }
 
+// genServiceMethod9 uses AST to generate the Stream method scaffold of a
+// Stream action, referring to the model package by modelQualifier (see
+// genServiceMethod1): the method takes what the action declares (see
+// serviceMethod9) and, like the SSE scaffold, returns literal nil so the
+// generated code passes the service error discipline check; the business
+// fills in the stream. For the model Feed and a Filename("watch") Stream
+// declaring Payload[*FeedWatchReq] and StreamingResult[*FeedEvent] it
+// generates
+//
+//	func (w *Watch) Stream(ctx *gst.ServiceContext, req *model.FeedWatchReq, stream *grpc.ServerStream[*model.FeedEvent]) (err error) {
+//		log := w.WithContext(ctx, ctx.Phase())
+//		log.Info("feed: watch")
+//
+//		return nil
+//	}
+//
+// and a Filename("upload") Stream declaring StreamingPayload[*FeedEvent] and
+// Result[*FeedUploadRsp], whose method answers a response,
+//
+//	func (u *Upload) Stream(ctx *gst.ServiceContext, stream *grpc.ClientStream[*model.FeedEvent]) (rsp *model.FeedUploadRsp, err error) {
+//		log := u.WithContext(ctx, ctx.Phase())
+//		log.Info("feed: upload")
+//
+//		return rsp, nil
+//	}
+func genServiceMethod9(info *modelinfo.Model, modelQualifier string, action *dsl.Action, phase consts.Phase, roleName string) *ast.FuncDecl {
+	results := []ast.Expr{ast.NewIdent("nil")}
+	if action.StreamingPayload && !action.StreamingResult {
+		results = []ast.Expr{ast.NewIdent("rsp"), ast.NewIdent("nil")}
+	}
+	return serviceMethod9(
+		info.ModelVarName, modelQualifier, action.Payload, action.Result, action.StreamingPayload, action.StreamingResult, roleName,
+		StmtLogWithContext(info.ModelVarName),
+		StmtLogInfo(serviceActionLogQuoted(info.ModelName, phase, action)),
+		EmptyLine(),
+		Returns(results...),
+	)
+}
+
 // GenerateService builds the scaffold of the action's service file in package
 // servicePkgName: the service struct named after the action's role and the
 // methods of phase. It returns nil when the action is disabled or declares no
@@ -403,6 +442,8 @@ func GenerateService(info *modelinfo.Model, action *dsl.Action, phase consts.Pha
 		decls = append(decls, genServiceMethod5(info, qualifier, action, phase, roleName))
 	case consts.SSE:
 		decls = append(decls, genServiceMethod7(info, action, phase, roleName))
+	case consts.Stream:
+		decls = append(decls, genServiceMethod9(info, qualifier, action, phase, roleName))
 	case consts.Export:
 		// The export controller reuses the list pipeline before delegating to
 		// Export: it invokes ListBefore, applies the service Filter hook when

@@ -20,13 +20,17 @@ var pluralizeCli = pluralize.NewClient()
 // serviceScaffoldImports lists the framework packages a generated service file
 // of an action with phase imports besides the model package: the gst service
 // package its service struct embeds Base from, the gst package its methods
-// take the ServiceContext from, and io for the Reader an Import method reads.
-// The gst model package a model.Empty request or result needs is imported
+// take the ServiceContext from, io for the Reader an Import method reads,
+// and the gst grpc package the stream of a Stream method comes from. The
+// gst model package a model.Empty request or result needs is imported
 // separately (see emptyReqImport).
 func serviceScaffoldImports(phase consts.Phase) []string {
 	importPaths := []string{ggconst.ImportPathService, ggconst.ImportPathGst}
-	if phase == consts.Import {
+	switch phase {
+	case consts.Import:
 		importPaths = append(importPaths, ggconst.ImportPathIO)
+	case consts.Stream:
+		importPaths = append(importPaths, ggconst.ImportPathGRPC)
 	}
 	return importPaths
 }
@@ -675,5 +679,55 @@ func serviceMethod8(recvName, modelName, modelQualifier, roleName string, body .
 		Body: &ast.BlockStmt{
 			List: body,
 		},
+	}
+}
+
+// serviceMethod9 builds the declaration of the Stream method of a Stream
+// action, with the given body: the request and the response stream the
+// action declares, of the gst grpc package, with streamingPayload and
+// streamingResult telling which side streams (see types.ServerStreamer and
+// its kind). For the package model, a Payload FeedWatchReq streaming a Result
+// FeedEvent it builds
+//
+//	func (w *Watch) Stream(ctx *gst.ServiceContext, req *model.FeedWatchReq, stream *grpc.ServerStream[*model.FeedEvent]) (err error) {
+//	}
+//
+// a streaming Payload FeedEvent answering a Result FeedUploadRsp
+//
+//	func (u *Upload) Stream(ctx *gst.ServiceContext, stream *grpc.ClientStream[*model.FeedEvent]) (rsp *model.FeedUploadRsp, err error) {
+//	}
+//
+// and both sides streaming FeedEvent
+//
+//	func (c *Chat) Stream(ctx *gst.ServiceContext, stream *grpc.BidiStream[*model.FeedEvent, *model.FeedEvent]) (err error) {
+//	}
+func serviceMethod9(recvName, modelQualifier, reqName, rspName string, streamingPayload, streamingResult bool, roleName string, body ...ast.Stmt) *ast.FuncDecl {
+	reqExpr := actionTypeOrEmptyExpr(modelQualifier, reqName)
+	rspExpr := actionTypeOrEmptyExpr(modelQualifier, rspName)
+	grpcType := func(name string, indices ...ast.Expr) ast.Expr {
+		sel := &ast.SelectorExpr{X: ast.NewIdent("grpc"), Sel: ast.NewIdent(name)}
+		if len(indices) == 1 {
+			return &ast.StarExpr{X: &ast.IndexExpr{X: sel, Index: indices[0]}}
+		}
+		return &ast.StarExpr{X: &ast.IndexListExpr{X: sel, Indices: indices}}
+	}
+	params := []*ast.Field{{Names: []*ast.Ident{ast.NewIdent("ctx")}, Type: &ast.StarExpr{X: &ast.SelectorExpr{X: ast.NewIdent("gst"), Sel: ast.NewIdent("ServiceContext")}}}}
+	results := []*ast.Field{{Names: []*ast.Ident{ast.NewIdent("err")}, Type: ast.NewIdent("error")}}
+	switch {
+	case streamingPayload && streamingResult:
+		params = append(params, &ast.Field{Names: []*ast.Ident{ast.NewIdent("stream")}, Type: grpcType("BidiStream", reqExpr, rspExpr)})
+	case streamingPayload:
+		params = append(params, &ast.Field{Names: []*ast.Ident{ast.NewIdent("stream")}, Type: grpcType("ClientStream", reqExpr)})
+		results = append([]*ast.Field{{Names: []*ast.Ident{ast.NewIdent("rsp")}, Type: rspExpr}}, results...)
+	default:
+		params = append(params,
+			&ast.Field{Names: []*ast.Ident{ast.NewIdent("req")}, Type: reqExpr},
+			&ast.Field{Names: []*ast.Ident{ast.NewIdent("stream")}, Type: grpcType("ServerStream", rspExpr)})
+	}
+	return &ast.FuncDecl{
+		Recv: &ast.FieldList{List: []*ast.Field{{Names: []*ast.Ident{ast.NewIdent(recvName)}, Type: &ast.StarExpr{X: ast.NewIdent(roleName)}}}},
+		Name: ast.NewIdent(consts.Stream.Name()),
+		Type: &ast.FuncType{Params: &ast.FieldList{List: params}, Results: &ast.FieldList{List: results}},
+		Body: &ast.BlockStmt{List: body},
 	}
 }

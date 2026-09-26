@@ -81,6 +81,10 @@ const (
 	validatedRoute     = "controller-validated-samples"
 	observedRoute      = "controller-observed-samples"
 	actionRoute        = "controller-sample-actions"
+	watchRoute         = "controller-sample-watches"
+	uploadRoute        = "controller-sample-uploads"
+	chatRoute          = "controller-sample-chats"
+	silentRoute        = "controller-sample-silences"
 )
 
 // registerFixtureServices registers the fixture services once for the test
@@ -99,6 +103,10 @@ func registerFixtureServices() {
 	serviceregistry.Register[*sampleRecord, *sampleRecord, *sampleRecord](consts.Create, observedRoute, &observingService{})
 	serviceregistry.Register[*sampleRecord, *sampleActionReq, *sampleActionRsp](consts.Create, actionRoute, &actionService{})
 	serviceregistry.Register[*sampleRecord, *sampleActionReq, *sampleActionRsp](consts.List, actionRoute, &actionService{})
+	serviceregistry.Register[*sampleRecord, *sampleActionReq, *sampleActionRsp](consts.Stream, watchRoute, &watchService{})
+	serviceregistry.Register[*sampleRecord, *sampleActionReq, *sampleActionRsp](consts.Stream, uploadRoute, &uploadService{})
+	serviceregistry.Register[*sampleRecord, *sampleActionReq, *sampleActionRsp](consts.Stream, chatRoute, &chatService{})
+	serviceregistry.Register[*sampleRecord, *sampleActionReq, *sampleActionRsp](consts.Stream, silentRoute, &actionService{})
 }
 
 // refusedMsg is what the refusing services answer every refused request with.
@@ -229,13 +237,19 @@ const (
 	actionRefuse = "refuse"
 	actionBreak  = "break"
 	actionWrite  = "write"
+	actionHang   = "hang"
 )
+
+// actionEntered is signaled once the action service hangs in a call (see
+// actionHang), for the test canceling that call to know it is in.
+var actionEntered = make(chan struct{}, 1)
 
 // actionService serves the sample's custom action: it answers what it found
 // on the service context, refuses with a service error for actionRefuse,
-// fails with a plain error for actionBreak, and writes a raw response,
-// which only HTTP can carry, for actionWrite. Its List answers the same, for
-// the query a GET action reads.
+// fails with a plain error for actionBreak, writes a raw response, which
+// only HTTP can carry, for actionWrite, and hangs until the call ends for
+// actionHang, returning the error the context reports. Its List answers the
+// same, for the query a GET action reads.
 type actionService struct {
 	serviceregistry.Base[*sampleRecord, *sampleActionReq, *sampleActionRsp]
 }
@@ -248,6 +262,10 @@ func (*actionService) Create(sc *types.ServiceContext, req *sampleActionReq) (*s
 		return nil, errors.New("dial tcp: connection refused")
 	case actionWrite:
 		sc.Data(http.StatusOK, "text/plain", []byte("plain"))
+	case actionHang:
+		actionEntered <- struct{}{}
+		<-sc.Done()
+		return nil, sc.Err()
 	}
 	return &sampleActionRsp{Note: req.Note, observedCall: observe(sc)}, nil
 }
@@ -328,4 +346,68 @@ func countSamplesNamed(t *testing.T, name string) int {
 	require.NoError(t, database.Database[*sampleRecord](context.Background()).
 		WithQuery(&sampleRecord{Name: name}).Count(&total))
 	return total
+}
+
+// The stream fixture services, one per kind of stream, each answering what
+// it found on the service context beside its notes. watchService streams as
+// many responses as the request's note counts, numbered from 0, refusing
+// and failing for the notes the action service does; uploadService reads
+// the requests until the client is done and answers their notes joined;
+// chatService echoes each request as it comes. The silent route registers
+// the action service, which streams nothing, for the call to refuse.
+type watchService struct {
+	serviceregistry.Base[*sampleRecord, *sampleActionReq, *sampleActionRsp]
+}
+
+func (*watchService) Stream(sc *types.ServiceContext, req *sampleActionReq, stream *types.ServerStream[*sampleActionRsp]) error {
+	switch req.Note {
+	case actionRefuse:
+		return serviceregistry.NewError(http.StatusForbidden, "not yours")
+	case actionBreak:
+		return errors.New("dial tcp: connection refused")
+	}
+	count, _ := strconv.Atoi(req.Note)
+	for i := range count {
+		if err := stream.Send(&sampleActionRsp{Note: strconv.Itoa(i), observedCall: observe(sc)}); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+type uploadService struct {
+	serviceregistry.Base[*sampleRecord, *sampleActionReq, *sampleActionRsp]
+}
+
+func (*uploadService) Stream(sc *types.ServiceContext, stream *types.ClientStream[*sampleActionReq]) (*sampleActionRsp, error) {
+	var notes []string
+	for {
+		req, err := stream.Recv()
+		if errors.Is(err, io.EOF) {
+			return &sampleActionRsp{Note: strings.Join(notes, ","), observedCall: observe(sc)}, nil
+		}
+		if err != nil {
+			return nil, err
+		}
+		notes = append(notes, req.Note)
+	}
+}
+
+type chatService struct {
+	serviceregistry.Base[*sampleRecord, *sampleActionReq, *sampleActionRsp]
+}
+
+func (*chatService) Stream(sc *types.ServiceContext, stream *types.BidiStream[*sampleActionReq, *sampleActionRsp]) error {
+	for {
+		req, err := stream.Recv()
+		if errors.Is(err, io.EOF) {
+			return nil
+		}
+		if err != nil {
+			return err
+		}
+		if err := stream.Send(&sampleActionRsp{Note: "echo " + req.Note, observedCall: observe(sc)}); err != nil {
+			return err
+		}
+	}
 }

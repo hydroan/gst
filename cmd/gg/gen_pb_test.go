@@ -93,34 +93,43 @@ func TestGenRunWritesTheProtobufDefinitionsOfGRPCModels(t *testing.T) {
 	require.NoError(t, err, "the generated conversions must round-trip every value: %s", output)
 }
 
-// TestGenRunKeepsStreamActionsOffTheHTTPSide pins what gg gen makes of a
+// TestGenRunServesStreamActionsOverGRPCAlone pins what gg gen makes of a
 // model whose actions are Stream actions alone: its rpcs are derived, each
 // streaming the side it declares and described by the route it is declared
-// on rather than a path, and nothing is registered for it over HTTP, no
-// route, no service and no test scaffold, so the project builds with a
-// router file naming it nowhere; and gg gen says of every Stream that
-// nothing serves it (see reportUnservedStreams).
-func TestGenRunKeepsStreamActionsOffTheHTTPSide(t *testing.T) {
+// on rather than a path; its services register and get their files with
+// the Stream method of their kind, but no route, no test scaffold and no
+// router registration, so the project builds with a router file naming it
+// nowhere.
+func TestGenRunServesStreamActionsOverGRPCAlone(t *testing.T) {
 	projectDir := newGenProject(t)
 	writeProtobufProject(t, projectDir, map[string]string{"model/feed.go": protobufFeedModel})
 
-	var err error
-	warnings := captureStdout(t, func() { err = genRunWithOptions(genRunOptions{Quiet: true}) })
-	require.NoError(t, err)
-	require.Contains(t, warnings, "model/feed.go: the Stream action Watch of Feed on feeds/watch is declared but not served: streaming rpcs have no handler, so its rpc answers Unimplemented")
+	require.NoError(t, genRunWithOptions(genRunOptions{Quiet: true}))
 
 	proto, err := os.ReadFile(filepath.Join(projectDir, "pb", "feed.proto"))
 	require.NoError(t, err)
 	require.Contains(t, string(proto), "// WatchFeed is the Stream action of Feed declared on feeds/watch, served over gRPC alone.")
 	require.Contains(t, string(proto), "rpc WatchFeed ( WatchFeedRequest ) returns ( stream WatchFeedResponse );")
-	require.Contains(t, string(proto), "rpc UploadFeed ( stream UploadFeedRequest ) returns ( UploadFeedResponse );")
+	require.Contains(t, string(proto), "rpc UploadFeedByFeed ( stream UploadFeedByFeedRequest ) returns ( UploadFeedByFeedResponse );")
 	require.Contains(t, string(proto), "rpc ChatFeed ( stream ChatFeedRequest ) returns ( stream ChatFeedResponse );")
-	for _, path := range []string{filepath.Join(ggconst.DirRouter, ggconst.FileRouterGen), filepath.Join(ggconst.DirService, ggconst.FileServiceGen)} {
-		content, readErr := os.ReadFile(filepath.Join(projectDir, path))
-		require.NoError(t, readErr)
-		require.NotContains(t, string(content), "feeds", "%s registers nothing for a Stream", path)
+	router, err := os.ReadFile(filepath.Join(projectDir, ggconst.DirRouter, ggconst.FileRouterGen))
+	require.NoError(t, err)
+	require.NotContains(t, string(router), "feeds", "the router registers nothing for a Stream")
+	services, err := os.ReadFile(filepath.Join(projectDir, ggconst.DirService, ggconst.FileServiceGen))
+	require.NoError(t, err)
+	require.Contains(t, string(services), `service.Register[*feed.Watch](consts.Stream, "/api/feeds/watch")`)
+	require.Contains(t, string(services), `service.Register[*feed.Upload](consts.Stream, "/api/feeds/:feed/upload")`)
+	for name, signature := range map[string]string{
+		"watch":  "func (w *Watch) Stream(ctx *gst.ServiceContext, req *model.FeedWatchReq, stream *grpc.ServerStream[*model.FeedEvent]) (err error)",
+		"tail":   "func (t *Tail) Stream(ctx *gst.ServiceContext, req *gstmodel.Empty, stream *grpc.ServerStream[*model.FeedEvent]) (err error)",
+		"upload": "func (u *Upload) Stream(ctx *gst.ServiceContext, stream *grpc.ClientStream[*model.FeedEvent]) (rsp *model.FeedUploadRsp, err error)",
+		"chat":   "func (c *Chat) Stream(ctx *gst.ServiceContext, stream *grpc.BidiStream[*model.FeedEvent, *model.FeedEvent]) (err error)",
+	} {
+		code, readErr := os.ReadFile(filepath.Join(projectDir, ggconst.DirService, "feed", name+".go"))
+		require.NoError(t, readErr, name)
+		require.Contains(t, string(code), signature, name)
+		require.NoFileExists(t, filepath.Join(projectDir, ggconst.DirService, "feed", name+"_test.go"), "a Stream gets no HTTP test scaffold")
 	}
-	require.NoDirExists(t, filepath.Join(projectDir, ggconst.DirService, "feed"))
 	build := exec.Command("go", "build", "./...")
 	build.Dir = projectDir
 	output, err := build.CombinedOutput()
@@ -1176,8 +1185,9 @@ func TestShapeRoundTrips(t *testing.T) {
 `
 
 // protobufFeedModel declares the three kinds of Stream action, a server
-// stream, a client stream and a bidirectional one, on a model served over
-// gRPC alone.
+// stream (twice, one on a route with a parameter and without a Payload), a
+// client stream on a route with a parameter, and a bidirectional one, on a
+// model served over gRPC alone.
 const protobufFeedModel = `package model
 
 import (
@@ -1222,7 +1232,14 @@ func (Feed) Design() {
 			dsl.StreamingResult[*FeedEvent]()
 		})
 	})
-	dsl.Route("feeds/upload", func() {
+	dsl.Route("feeds/:feed/tail", func() {
+		dsl.Stream(func() {
+			dsl.Service()
+			dsl.Filename("tail")
+			dsl.StreamingResult[*FeedEvent]()
+		})
+	})
+	dsl.Route("feeds/:feed/upload", func() {
 		dsl.Stream(func() {
 			dsl.Service()
 			dsl.Filename("upload")

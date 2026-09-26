@@ -96,19 +96,17 @@ func (g *generator) registrationFile() (File, error) {
 		for _, service := range services {
 			args := []ast.Expr{qualify("Register" + service + "Server"), compositeLit(qualify(service))}
 			for _, r := range rpcs[service] {
-				// A streaming rpc is served by no handler, so it is
-				// described to no interceptor either.
-				if r.streaming() {
-					continue
-				}
 				elts := []ast.Expr{keyValue("Name", qualify(service+"_"+r.name+"_FullMethodName"))}
 				if r.action.Public {
 					elts = append(elts, keyValue("Public", ident("true")))
 				}
-				elts = append(elts,
-					keyValue("HTTPMethod", sel(out.imports.fixedRef(importPathHTTP), httpMethodConsts[r.action.Phase.HTTPMethod()])),
-					keyValue("Route", strLit(r.registered)),
-				)
+				// A streaming rpc, served over gRPC alone, is described by
+				// the stream word in place of an HTTP method.
+				method := ast.Expr(sel(out.imports.fixedRef(ggconst.ImportPathGRPC), "MethodStream"))
+				if !r.streaming() {
+					method = sel(out.imports.fixedRef(importPathHTTP), httpMethodConsts[r.action.Phase.HTTPMethod()])
+				}
+				elts = append(elts, keyValue("HTTPMethod", method), keyValue("Route", strLit(r.registered)))
 				args = append(args, compositeLit(sel(out.imports.fixedRef(ggconst.ImportPathGRPC), "Method"), elts...))
 			}
 			register := call(index(sel(out.imports.fixedRef(ggconst.ImportPathGRPC), "Register"), qualify(service+"Server")), args...)

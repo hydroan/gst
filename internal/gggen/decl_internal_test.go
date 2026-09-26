@@ -655,3 +655,38 @@ func TestServiceMethod8(t *testing.T) {
 		})
 	}
 }
+
+// TestServiceMethod9 pins the examples of the serviceMethod9 doc comment:
+// the Stream method of each kind of stream.
+func TestServiceMethod9(t *testing.T) {
+	tests := []struct {
+		name                              string
+		recvName, roleName, req, rsp      string
+		streamingPayload, streamingResult bool
+		want                              string
+	}{
+		{
+			"server stream", "w", "Watch", "*FeedWatchReq", "*FeedEvent", false, true,
+			"func (w *Watch) Stream(ctx *gst.ServiceContext, req *model.FeedWatchReq, stream *grpc.ServerStream[*model.FeedEvent]) (err error) {\n}",
+		},
+		{
+			"client stream", "u", "Upload", "*FeedEvent", "*FeedUploadRsp", true, false,
+			"func (u *Upload) Stream(ctx *gst.ServiceContext, stream *grpc.ClientStream[*model.FeedEvent]) (rsp *model.FeedUploadRsp, err error) {\n}",
+		},
+		{
+			"bidirectional stream", "c", "Chat", "*FeedEvent", "*FeedEvent", true, true,
+			"func (c *Chat) Stream(ctx *gst.ServiceContext, stream *grpc.BidiStream[*model.FeedEvent, *model.FeedEvent]) (err error) {\n}",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := FormatNode(serviceMethod9(tt.recvName, "model", tt.req, tt.rsp, tt.streamingPayload, tt.streamingResult, tt.roleName))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got != tt.want {
+				t.Errorf("serviceMethod9() = \n%v\n, want \n%v\n", got, tt.want)
+			}
+		})
+	}
+}

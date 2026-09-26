@@ -17,6 +17,7 @@ import (
 	gstotel "github.com/hydroan/gst/otel"
 	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
+	"google.golang.org/grpc/status"
 )
 
 // This file holds the gRPC half of the actions, the counterpart of the HTTP
@@ -260,18 +261,41 @@ func (c *call) missingID() error {
 }
 
 // fail answers a flow's failure, which the flow logged and recorded already,
-// with the status its code maps to (see failureCoder and statusOf).
+// with the status its code maps to (see failureCoder and statusOf), or with
+// the status of the call's context once the call ended (see ended).
 func (c *call) fail(err error) error {
+	if ended := c.ended(); ended != nil {
+		return ended
+	}
 	return statusOf(failureCoder(err), err)
 }
 
 // failService answers a delegated service's error the way the HTTP handler
 // does: logged and recorded on the span, then the status its code maps to
-// (see serviceErrorCoder and statusOf).
+// (see serviceErrorCoder and statusOf). A call that ended is answered with
+// the status of its context instead, the error unlogged (see ended).
 func (c *call) failService(err error) error {
+	if ended := c.ended(); ended != nil {
+		return ended
+	}
 	c.log.Errorz("service operation failed", zap.Error(err))
 	gstotel.RecordError(c.span, err)
 	return statusOf(serviceErrorCoder(err), err)
+}
+
+// ended returns the status of the call's context once the call ended, nil
+// while it goes on: Canceled once the client canceled the call, or went
+// away, DeadlineExceeded once the deadline it set passed. A call ending
+// this way is the client's doing, not a failure of the flow or the service,
+// whatever they returned then — a database access cut short, a Send or Recv
+// of a stream the client stopped — so the failure is answered as the
+// context's status, which the access log records, and not logged as a
+// failure of the server's.
+func (c *call) ended() error {
+	if err := c.ctx.Err(); err != nil {
+		return status.FromContextError(err).Err()
+	}
+	return nil
 }
 
 // finish ends a call whose flow or service returned, checking the service

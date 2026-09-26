@@ -402,3 +402,9 @@ func setExprPos(x ast.Expr, pos token.Pos) {
 		panic(fmt.Sprintf("pb: cannot position a %T", x))
 	}
 }
+
+// funcLit builds a function literal taking params, returning results and
+// running stmts.
+func funcLit(params, results []*ast.Field, stmts ...ast.Stmt) *ast.FuncLit {
+	return &ast.FuncLit{Type: &ast.FuncType{Params: &ast.FieldList{List: params}, Results: &ast.FieldList{List: results}}, Body: block(stmts...)}
+}

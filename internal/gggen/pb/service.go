@@ -236,8 +236,8 @@ type rpc struct {
 }
 
 // streaming reports whether the rpc streams a side of the call, which the
-// rpcs of a Stream action do: the handlers serve no such rpc, and the
-// registration lists none.
+// rpcs of a Stream action do: streamHandler serves them, and the
+// registration describes them by the stream word.
 func (r *rpc) streaming() bool {
 	return r.action.StreamingPayload || r.action.StreamingResult
 }

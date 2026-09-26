@@ -98,19 +98,13 @@ func (g *generator) handlerFile(f *protoFile) (File, error) {
 	}
 	for _, service := range services {
 		w.serviceType(service, rpcs[service][0].model)
-		// A streaming rpc has no call and no handler: the Unimplemented
-		// server the service type embeds answers it.
-		var unary []*rpc
+		w.actionCalls(service, rpcs[service])
 		for _, r := range rpcs[service] {
-			if !r.streaming() {
-				unary = append(unary, r)
+			if r.streaming() {
+				w.streamHandler(r)
+			} else {
+				w.handler(r)
 			}
-		}
-		if len(unary) > 0 {
-			w.actionCalls(service, unary)
-		}
-		for _, r := range unary {
-			w.handler(r)
 		}
 	}
 	for _, msg := range f.typed {
@@ -126,8 +120,8 @@ func (g *generator) handlerFile(f *protoFile) (File, error) {
 
 // serviceType declares the type serving service, the service of model: it
 // embeds the Unimplemented server the protobuf plugin generated, which
-// answers Unimplemented for any rpc added later and for the streaming rpcs,
-// which have no handler, and the handlers are its methods (see handler).
+// answers Unimplemented for any rpc added later, and the handlers are its
+// methods (see handler and streamHandler).
 //
 //	// RecordService serves the rpcs of the RecordService service through the
 //	// actions of Record: every handler decodes its request message into what the
@@ -171,9 +165,15 @@ func (w *fileWriter) actionCalls(service string, rpcs []*rpc) {
 	for _, r := range rpcs {
 		modelType := star(w.modelPkgType(model, model.ModelName))
 		var value ast.Expr
-		if r.standard {
+		switch {
+		case r.standard:
 			value = call(index(w.grpc(r.action.Phase.Name()+"Call"), modelType), strLit(r.registered))
-		} else {
+		case r.streaming():
+			value = call(
+				&ast.IndexListExpr{X: w.grpc(streamKind(r.action) + "StreamCall"), Indices: []ast.Expr{modelType, w.actionType(model, r.action.Payload), w.actionType(model, r.action.Result)}},
+				strLit(r.registered),
+			)
+		default:
 			value = call(
 				&ast.IndexListExpr{X: w.grpc("ServiceCall"), Indices: []ast.Expr{modelType, w.actionType(model, r.action.Payload), w.actionType(model, r.action.Result)}},
 				sel(w.out.imports.fixedRef(ggconst.ImportPathConsts), r.action.Phase.Name()),
@@ -189,6 +189,20 @@ func (w *fileWriter) actionCalls(service string, rpcs []*rpc) {
 // callName names the variable holding the call of the rpc r: createRecord
 // for CreateRecord.
 func callName(r *rpc) string { return lowerFirst(r.name) }
+
+// streamKind names the kind of stream of a Stream action, the prefix of the
+// call and the stream type of the framework serving it: Server for a
+// streaming result, Client for a streaming payload, Bidi for both.
+func streamKind(action *dsl.Action) string {
+	switch {
+	case action.StreamingPayload && action.StreamingResult:
+		return "Bidi"
+	case action.StreamingPayload:
+		return "Client"
+	default:
+		return "Server"
+	}
+}
 
 // modelPkgType refers to the type typeName of the package of model.
 func (w *fileWriter) modelPkgType(model *modelinfo.Model, typeName string) ast.Expr {
@@ -426,4 +440,157 @@ func (w *fileWriter) query(phase consts.Phase, req func(string) ast.Expr) (ast.E
 		lit.Elts = []ast.Expr{keyValue("Expand", req("expand")), keyValue("Depth", req("depth"))}
 	}
 	return lit, nil
+}
+
+// streamHandler builds the handler of the streaming rpc r, a method of the
+// type serving its service taking, as the protobuf plugin typed it, the
+// request message and the stream of responses of a server stream, or the
+// stream of requests and responses of a client or bidirectional one. It
+// reads the route parameters off the request message, the first message of
+// a request stream, and runs the stream call of the action (see
+// actionCalls) with functions moving the messages of the stream converted
+// to the action's types: the request the message carries as payload, each
+// response encoded into a response message; a client stream answers its
+// response with SendAndClose.
+//
+// The Feed model of the golden fixture, streaming FeedEvent messages, gets
+// for its Filename("watch") Stream on feeds/watch, a Payload with a
+// streaming Result,
+//
+//	// WatchFeed serves the Stream action of Feed declared on feeds/watch, served
+//	// over gRPC alone.
+//	func (FeedService) WatchFeed(req *WatchFeedRequest, srv FeedService_WatchFeedServer) error {
+//		return watchFeed(srv.Context(), nil, FeedWatchReqFromProto(req.GetPayload()), func(rsp *model.FeedEvent) error {
+//			return srv.Send(&WatchFeedResponse{Result: FeedEventToProto(rsp)})
+//		})
+//	}
+//
+// for its Filename("upload") Stream on feeds/:feed/upload, a streaming
+// Payload with a Result, whose first message carries the route parameter,
+//
+//	// UploadFeedByFeed serves the Stream action of Feed declared on
+//	// feeds/:feed/upload, served over gRPC alone.
+//	func (FeedService) UploadFeedByFeed(srv FeedService_UploadFeedByFeedServer) error {
+//		first, err := srv.Recv()
+//		if err != nil {
+//			return err
+//		}
+//		result, err := uploadFeedByFeed(srv.Context(), map[string]string{"feed": first.GetFeed()}, func() (*model.FeedEvent, error) {
+//			if msg := first; msg != nil {
+//				first = nil
+//				return FeedEventFromProto(msg.GetPayload()), nil
+//			}
+//			msg, recvErr := srv.Recv()
+//			if recvErr != nil {
+//				return nil, recvErr
+//			}
+//			return FeedEventFromProto(msg.GetPayload()), nil
+//		})
+//		if err != nil {
+//			return err
+//		}
+//		return srv.SendAndClose(&UploadFeedByFeedResponse{Result: FeedUploadRspToProto(result)})
+//	}
+//
+// and for its Filename("chat") Stream on feeds/chat, both sides streaming,
+//
+//	// ChatFeed serves the Stream action of Feed declared on feeds/chat, served
+//	// over gRPC alone.
+//	func (FeedService) ChatFeed(srv FeedService_ChatFeedServer) error {
+//		return chatFeed(srv.Context(), nil, func() (*model.FeedEvent, error) {
+//			msg, recvErr := srv.Recv()
+//			if recvErr != nil {
+//				return nil, recvErr
+//			}
+//			return FeedEventFromProto(msg.GetPayload()), nil
+//		}, func(rsp *model.FeedEvent) error {
+//			return srv.Send(&ChatFeedResponse{Result: FeedEventToProto(rsp)})
+//		})
+//	}
+func (w *fileWriter) streamHandler(r *rpc) {
+	w.resetTemps()
+	requestFields, responseFields := goFieldNames(r.request), goFieldNames(r.response)
+	srv, callee := ident("srv"), ident(callName(r))
+	get := func(m ast.Expr, name string) ast.Expr { return call(sel(m, "Get"+requestFields[name])) }
+	// paramsOf reads the route parameters off the request message m, nil
+	// for a route without any.
+	paramsOf := func(m ast.Expr) ast.Expr {
+		if len(r.params) == 0 {
+			return ident("nil")
+		}
+		lit := compositeLit(&ast.MapType{Key: ident("string"), Value: ident("string")})
+		for _, p := range r.params {
+			lit.Elts = append(lit.Elts, &ast.KeyValueExpr{Key: strLit(p.param), Value: get(m, p.name)})
+		}
+		return lit
+	}
+	// payloadOf decodes the payload the request message m carries, or is
+	// the empty request of an action declaring none.
+	payloadOf := func(m ast.Expr) ast.Expr {
+		if r.payload == nil {
+			return newCall(sel(w.out.imports.fixedRef(ggconst.ImportPathModel), "Empty"))
+		}
+		return call(w.conversionFunc(r.payload, "FromProto"), get(m, "payload"))
+	}
+	// responseOf encodes the response rsp into the response message, empty
+	// for an action declaring no Result.
+	responseOf := func(rsp ast.Expr) ast.Expr {
+		if r.result == nil {
+			return addr(compositeLit(ident(r.response.GetName())))
+		}
+		return addr(compositeLit(ident(r.response.GetName()), keyValue(responseFields["result"], call(w.conversionFunc(r.result, "ToProto"), rsp))))
+	}
+	reqType, rspType := w.actionType(r.model, r.action.Payload), w.actionType(r.model, r.action.Result)
+	// send is the function sending one response on the stream.
+	send := funcLit([]*ast.Field{{Names: []*ast.Ident{ident("rsp")}, Type: rspType}}, []*ast.Field{{Type: ident("error")}},
+		returns(call(sel(srv, "Send"), responseOf(ident("rsp")))))
+	// recv is the function receiving the next request off the stream, the
+	// first message first when it was read for the route parameters.
+	recv := func(withFirst bool) ast.Expr {
+		var body []ast.Stmt
+		if withFirst {
+			body = append(body, ifStmt(define([]string{"msg"}, ident("first")), notNil(ident("msg")),
+				assign(ident("first"), ident("nil")),
+				returns(payloadOf(ident("msg")), ident("nil")),
+			))
+		}
+		body = append(body,
+			define([]string{"msg", "recvErr"}, call(sel(srv, "Recv"))),
+			ifStmt(nil, notNil(ident("recvErr")), returns(ident("nil"), ident("recvErr"))),
+			returns(payloadOf(ident("msg")), ident("nil")),
+		)
+		return funcLit(nil, []*ast.Field{{Type: reqType}, {Type: ident("error")}}, body...)
+	}
+	run := func(args ...ast.Expr) ast.Expr {
+		return call(callee, append([]ast.Expr{call(sel(srv, "Context"))}, args...)...)
+	}
+	params := []*ast.Field{{Names: []*ast.Ident{srv}, Type: ident(r.service + "_" + r.name + "Server")}}
+	var body []ast.Stmt
+	switch streamKind(r.action) {
+	case "Server":
+		params = append([]*ast.Field{{Names: []*ast.Ident{ident("req")}, Type: star(ident(r.request.GetName()))}}, params...)
+		body = []ast.Stmt{returns(run(paramsOf(ident("req")), payloadOf(ident("req")), send))}
+	case "Client":
+		withFirst := len(r.params) > 0
+		if withFirst {
+			body = append(body, define([]string{"first", "err"}, call(sel(srv, "Recv"))), ifStmt(nil, notNil(ident("err")), returns(ident("err"))))
+		}
+		body = append(body,
+			define([]string{"result", "err"}, run(paramsOf(ident("first")), recv(withFirst))),
+			ifStmt(nil, notNil(ident("err")), returns(ident("err"))),
+			returns(call(sel(srv, "SendAndClose"), responseOf(ident("result")))),
+		)
+	default:
+		withFirst := len(r.params) > 0
+		if withFirst {
+			body = append(body, define([]string{"first", "err"}, call(sel(srv, "Recv"))), ifStmt(nil, notNil(ident("err")), returns(ident("err"))))
+		}
+		body = append(body, returns(run(paramsOf(ident("first")), recv(withFirst), send)))
+	}
+	w.out.add(r.name+" serves the "+r.action.Phase.Name()+" action of "+r.model.ModelName+" declared on "+r.route+", served over gRPC alone.", &ast.FuncDecl{
+		Recv: &ast.FieldList{List: []*ast.Field{{Type: ident(r.service)}}},
+		Name: ident(r.name),
+		Type: &ast.FuncType{Params: &ast.FieldList{List: params}, Results: &ast.FieldList{List: []*ast.Field{{Type: ident("error")}}}},
+		Body: block(body...),
+	}, nil)
 }

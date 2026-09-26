@@ -5,8 +5,8 @@ import (
 
 	"github.com/hydroan/gst/authn/jwt"
 	gstgrpc "github.com/hydroan/gst/grpc"
+	"github.com/hydroan/gst/internal/requestctx"
 	"go.uber.org/zap"
-	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
@@ -31,8 +31,8 @@ const (
 // therefore is not something this interceptor can do, which is the trade a
 // stateless token makes and the reason IAM's own sessions are not built on
 // it.
-func JwtAuth() grpc.UnaryServerInterceptor {
-	return func(ctx context.Context, req any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (any, error) {
+func JwtAuth() gstgrpc.Interceptor {
+	return func(ctx context.Context) (context.Context, error) {
 		token, ok := gstgrpc.Bearer(ctx)
 		var claims *jwt.Claims
 		err := jwt.ErrInvalidToken
@@ -48,13 +48,13 @@ func JwtAuth() grpc.UnaryServerInterceptor {
 			// each in its own words hands the bearer of a stolen token a probe
 			// it can read the server's checks off of, so only the log keeps
 			// the distinction.
-			zap.S().Warnw("jwt authentication rejected", "error", err.Error(), "method", info.FullMethod)
+			zap.S().Warnw("jwt authentication rejected", "error", err.Error(), "method", requestctx.FromContext(ctx).Path())
 			return nil, status.Error(codes.Unauthenticated, "invalid token")
 		}
 		var sessionID string
 		if md, _ := metadata.FromIncomingContext(ctx); len(md.Get(sessionIDKey)) > 0 {
 			sessionID = md.Get(sessionIDKey)[0]
 		}
-		return handler(gstgrpc.WithCaller(ctx, gstgrpc.Caller{UserID: claims.UserID, Username: claims.Username, SessionID: sessionID}), req)
+		return gstgrpc.WithCaller(ctx, gstgrpc.Caller{UserID: claims.UserID, Username: claims.Username, SessionID: sessionID}), nil
 	}
 }

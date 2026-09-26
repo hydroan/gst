@@ -7,7 +7,6 @@ import (
 	"github.com/hydroan/gst/authz/rbac"
 	"github.com/hydroan/gst/config"
 	gstgrpc "github.com/hydroan/gst/grpc"
-	"google.golang.org/grpc"
 )
 
 // Authz authorizes calls using RBAC, through rbac.Enforce, the one decision
@@ -27,10 +26,10 @@ import (
 // another way establishes the caller with that tenant in an interceptor of
 // its own between the authentication and this one, and never from client
 // input passed through as it stands (rbac.Enforce says why).
-func Authz() grpc.UnaryServerInterceptor {
+func Authz() gstgrpc.Interceptor {
 	os.Setenv(config.AUTH_RBAC_ENABLED, "true")
 
-	return func(ctx context.Context, req any, _ *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (any, error) {
+	return func(ctx context.Context) (context.Context, error) {
 		caller := gstgrpc.CallerOf(ctx)
 		act, obj := gstgrpc.Route(ctx)
 		subject := rbac.Subject{UserID: caller.UserID, Username: caller.Username, TenantID: caller.TenantID}
@@ -42,6 +41,6 @@ func Authz() grpc.UnaryServerInterceptor {
 			caller.TenantID = tenantID
 			ctx = gstgrpc.WithCaller(ctx, caller)
 		}
-		return handler(ctx, req)
+		return ctx, nil
 	}
 }

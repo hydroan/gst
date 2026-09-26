@@ -10,7 +10,12 @@ import (
 )
 
 func init() {
-	grpc.Register[FeedServiceServer](RegisterFeedServiceServer, FeedService{})
+	grpc.Register[FeedServiceServer](RegisterFeedServiceServer, FeedService{},
+		grpc.Method{Name: FeedService_TailFeedByFeed_FullMethodName, HTTPMethod: grpc.MethodStream, Route: "/api/feeds/:feed/tail"},
+		grpc.Method{Name: FeedService_UploadFeedByFeed_FullMethodName, HTTPMethod: grpc.MethodStream, Route: "/api/feeds/:feed/upload"},
+		grpc.Method{Name: FeedService_ChatFeed_FullMethodName, HTTPMethod: grpc.MethodStream, Route: "/api/feeds/chat"},
+		grpc.Method{Name: FeedService_WatchFeed_FullMethodName, HTTPMethod: grpc.MethodStream, Route: "/api/feeds/watch"},
+	)
 	grpc.Register[NoteServiceServer](RegisterNoteServiceServer, NoteService{},
 		grpc.Method{Name: NoteService_CreateNote_FullMethodName, HTTPMethod: http.MethodPost, Route: "/api/notes"},
 		grpc.Method{Name: NoteService_GetNote_FullMethodName, HTTPMethod: http.MethodGet, Route: "/api/notes/:id"},

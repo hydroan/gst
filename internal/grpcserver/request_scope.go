@@ -39,15 +39,17 @@ const (
 // honest when a field is added.
 const accessLogFieldCap = 11
 
-// requestScope gives a call what the HTTP listener's tracing and access-log
-// middleware give a request. It stamps the call's trace id on the context
-// as the identity of the execution — the server span's when tracing is on,
-// the span being the root the call's inner spans hang off; the caller's
-// x-trace-id otherwise, which with tracing on seeds the span's trace id the
-// way the X-Trace-ID header does over HTTP; or a generated one — and
-// publishes it in the response header, which goes out with the status of a
-// failed call as well; attaches the request metadata a ServiceContext built
-// on the context answers for, and keeps the call record an authentication
+// requestScope gives a unary call what the HTTP listener's tracing and
+// access-log middleware give a request (a stream gets the same from
+// requestScopeStream, both through enterCall and callScope.leave). It
+// stamps the call's trace id on the context as the identity of the
+// execution — the server span's when tracing is on, the span being the
+// root the call's inner spans hang off; the caller's x-trace-id otherwise,
+// which with tracing on seeds the span's trace id the way the X-Trace-ID
+// header does over HTTP; or a generated one — and publishes it in the
+// response header, which goes out with the status of a failed call as
+// well; attaches the request metadata a ServiceContext built on the
+// context answers for, and keeps the call record an authentication
 // interceptor later adds the caller to (see WithCaller); and, once the
 // handler returns, writes the call's entry to the access log with the
 // fields the HTTP entry carries, the caller as established by then, the
@@ -63,6 +65,38 @@ const accessLogFieldCap = 11
 // peers server.trusted_proxies names alone, a judgement gin makes for it and
 // this listener has no gin to make.
 func requestScope(ctx context.Context, req any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (any, error) {
+	scope := enterCall(ctx, info.FullMethod)
+	rsp, err := handler(scope.ctx, req)
+	scope.leave(err)
+	return rsp, err
+}
+
+// requestScopeStream is requestScope for a stream: the scope is entered
+// once, ahead of the first message, the handler gets the stream on the
+// scoped context, and the access-log entry is written once the stream is
+// over, with the status it ended with.
+func requestScopeStream(srv any, ss grpc.ServerStream, info *grpc.StreamServerInfo, handler grpc.StreamHandler) error {
+	scope := enterCall(ss.Context(), info.FullMethod)
+	err := handler(srv, withStreamContext(scope.ctx, ss))
+	scope.leave(err)
+	return err
+}
+
+// callScope is a call inside its request scope: the context the handler
+// runs on and what the access-log entry written when the call ends needs.
+type callScope struct {
+	ctx        context.Context
+	fullMethod string
+	record     *callRecord
+	meta       requestctx.Metadata
+	traceID    string
+	start      time.Time
+}
+
+// enterCall enters the request scope of the call of fullMethod on ctx (see
+// requestScope): the trace id, the request metadata and the call record
+// go on the context, and the trace id goes out in the response header.
+func enterCall(ctx context.Context, fullMethod string) *callScope {
 	start := time.Now()
 	md, _ := metadata.FromIncomingContext(ctx)
 	var traceID string
@@ -74,11 +108,11 @@ func requestScope(ctx context.Context, req any, info *grpc.UnaryServerInfo, hand
 	}
 	ctx = execctx.WithTraceID(ctx, traceID)
 	address, tls := peerOf(ctx)
-	method := methods[info.FullMethod]
+	method := methods[fullMethod]
 	c := &callRecord{method: method, fields: requestctx.Fields{
-		Route:        info.FullMethod,
-		Path:         info.FullMethod,
-		RequestURI:   info.FullMethod,
+		Route:        fullMethod,
+		Path:         fullMethod,
+		RequestURI:   fullMethod,
 		Method:       http.MethodPost,
 		ClientIP:     address,
 		UserAgent:    first(md, userAgentKey),
@@ -91,34 +125,35 @@ func requestScope(ctx context.Context, req any, info *grpc.UnaryServerInfo, hand
 	// SetHeader fails only on a context carrying no call, which the
 	// server's own contexts never are.
 	_ = grpc.SetHeader(ctx, metadata.Pairs(traceIDKey, traceID))
+	return &callScope{ctx: ctx, fullMethod: fullMethod, record: c, meta: meta, traceID: traceID, start: start}
+}
 
-	rsp, err := handler(ctx, req)
-
+// leave writes the access-log entry of the call, which ended with err.
+func (s *callScope) leave(err error) {
 	if logger.GRPC == nil {
 		// A process that never initialized its loggers, which bootstrap
 		// always does before Run; its other loggers drop entries too.
-		return rsp, err
+		return
 	}
 	st := statusOf(err)
 	fields := make([]zapcore.Field, 0, accessLogFieldCap)
 	fields = append(
 		fields,
 		zap.String("status", st.Code().String()),
-		zap.String(consts.CTX_METHOD, meta.Method()),
-		zap.String(consts.CTX_USERNAME, c.caller.Username),
-		zap.String(consts.CTX_USER_ID, c.caller.UserID),
-		zap.String(consts.TRACE_ID, traceID),
-		zap.String(consts.CTX_ROUTE, meta.Route()),
-		zap.String(consts.CTX_PATH, meta.Path()),
-		zap.String("ip", meta.ClientIP()),
-		zap.String("user_agent", meta.UserAgent()),
-		util.LogDuration(time.Since(start)),
+		zap.String(consts.CTX_METHOD, s.meta.Method()),
+		zap.String(consts.CTX_USERNAME, s.record.caller.Username),
+		zap.String(consts.CTX_USER_ID, s.record.caller.UserID),
+		zap.String(consts.TRACE_ID, s.traceID),
+		zap.String(consts.CTX_ROUTE, s.meta.Route()),
+		zap.String(consts.CTX_PATH, s.meta.Path()),
+		zap.String("ip", s.meta.ClientIP()),
+		zap.String("user_agent", s.meta.UserAgent()),
+		util.LogDuration(time.Since(s.start)),
 	)
 	if err != nil {
 		fields = append(fields, zap.String("error", st.Message()))
 	}
-	logger.GRPC.Info(info.FullMethod, fields...)
-	return rsp, err
+	logger.GRPC.Info(s.fullMethod, fields...)
 }
 
 // statusOf returns the status the server answers err with, the way grpc-go

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"net"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -14,9 +15,12 @@ import (
 	"github.com/hydroan/gst/internal/controller"
 	"github.com/hydroan/gst/internal/grpcserver"
 	"github.com/hydroan/gst/internal/testutil/oteltest"
+	"github.com/hydroan/gst/logger"
 	gstotel "github.com/hydroan/gst/otel"
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/otel/attribute"
+	"go.uber.org/zap"
+	"go.uber.org/zap/zaptest/observer"
 	"google.golang.org/genproto/googleapis/rpc/errdetails"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -387,6 +391,24 @@ func TestServiceCallDelegatesToThePhaseService(t *testing.T) {
 		requireStatus(t, err, codes.Internal, "internal server error")
 	})
 
+	t.Run("a canceled call is answered as canceled", func(t *testing.T) {
+		ctx, cancel := context.WithCancel(t.Context())
+		defer cancel()
+		ctx = metadata.AppendToOutgoingContext(ctx, "authorization", sampleCredential)
+		before := len(accessLog.FilterMessage("/gst.test.Samples/Action").All())
+		done := make(chan error, 1)
+		go func() {
+			done <- conn.Invoke(ctx, "/gst.test.Samples/Action", encode(map[string]any{"payload": map[string]any{"note": actionHang}}), new(structpb.Struct), grpc.WaitForReady(true))
+		}()
+		<-actionEntered
+		cancel()
+		require.Equal(t, codes.Canceled, status.Code(<-done))
+		require.Eventually(t, func() bool {
+			entries := accessLog.FilterMessage("/gst.test.Samples/Action").All()
+			return len(entries) > before && entries[len(entries)-1].ContextMap()["status"] == codes.Canceled.String()
+		}, 10*time.Second, 20*time.Millisecond, "the access log records the call as canceled, not as a failure of the service")
+	})
+
 	t.Run("a response the service tried to write answers Internal", func(t *testing.T) {
 		_, err := invoke(t, conn, "Action", map[string]any{"payload": map[string]any{"note": actionWrite}})
 		requireStatus(t, err, codes.Internal, "internal server error")
@@ -429,6 +451,9 @@ func TestCallsRunInTheControllerSpan(t *testing.T) {
 // alice as the caller of every call presenting sampleCredential.
 var (
 	sampleServerOnce sync.Once
+	// accessLog collects the gRPC access log of the sample server, the entry
+	// of every call it served, for the tests reading how a call ended.
+	accessLog        *observer.ObservedLogs
 	sampleServerAddr string
 	errSampleServer  error
 )
@@ -441,10 +466,10 @@ const sampleCredential = "Bearer alice"
 func sampleServer(t *testing.T) *grpc.ClientConn {
 	t.Helper()
 	sampleServerOnce.Do(func() {
-		grpcserver.UseAuth(func(ctx context.Context, req any, _ *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (any, error) {
+		grpcserver.UseAuth(func(ctx context.Context) (context.Context, error) {
 			md, _ := metadata.FromIncomingContext(ctx)
 			if values := md.Get("authorization"); len(values) == 1 && values[0] == sampleCredential {
-				return handler(grpcserver.WithCaller(ctx, grpcserver.Caller{Username: "alice", UserID: "u-1"}), req)
+				return grpcserver.WithCaller(ctx, grpcserver.Caller{Username: "alice", UserID: "u-1"}), nil
 			}
 			return nil, status.Error(codes.Unauthenticated, "who are you")
 		})
@@ -472,11 +497,15 @@ func sampleServer(t *testing.T) *grpc.ClientConn {
 			})
 			methods = append(methods, grpcserver.Method{Name: fullMethod, Public: name == "OpenAction"})
 		}
+		for _, name := range []string{"Watch", "Upload", "Chat", "Silence"} {
+			methods = append(methods, grpcserver.Method{Name: "/gst.test.Samples/" + name, HTTPMethod: grpcserver.MethodStream, Route: "/api/controller-sample-" + strings.ToLower(name)})
+		}
 		grpcserver.Register(func(r grpc.ServiceRegistrar) {
 			r.RegisterService(&grpc.ServiceDesc{
 				ServiceName: "gst.test.Samples",
 				HandlerType: (*any)(nil),
 				Methods:     descs,
+				Streams:     streamDescs(),
 				Metadata:    "gst/test/samples.proto",
 			}, nil)
 		}, methods...)
@@ -489,6 +518,9 @@ func sampleServer(t *testing.T) *grpc.ClientConn {
 		_ = listener.Close()
 		config.App.GRPC = config.GRPC{Listen: "127.0.0.1", Port: addr.Port}
 		sampleServerAddr = addr.String()
+		core, entries := observer.New(zap.InfoLevel)
+		logger.GRPC = zap.New(core)
+		accessLog = entries
 		go func() { _ = grpcserver.Run() }()
 	})
 	require.NoError(t, errSampleServer)

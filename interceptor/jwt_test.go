@@ -10,7 +10,6 @@ import (
 	"github.com/hydroan/gst/interceptor"
 	"github.com/hydroan/gst/internal/requestctx"
 	"github.com/stretchr/testify/require"
-	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
@@ -30,23 +29,19 @@ func withSigningKey(t *testing.T, key string) {
 
 // TestJwtAuthAdmitsABearerTokenAndNamesTheCaller pins the admitting path: a
 // call carrying a token the framework issued, as "authorization: Bearer
-// <token>", reaches the handler with the token's user as the caller in the
-// request metadata and the x-session-id metadata as the session, the fields
-// the HTTP middleware sets from the same token.
+// <token>", goes on with the token's user as the caller in the request
+// metadata and the x-session-id metadata as the session, the fields the
+// HTTP middleware sets from the same token.
 func TestJwtAuthAdmitsABearerTokenAndNamesTheCaller(t *testing.T) {
 	withSigningKey(t, "test-signing-key")
 	token, _, err := jwt.GenTokens("u-1", "alice")
 	require.NoError(t, err)
 	ctx := metadata.NewIncomingContext(context.Background(), metadata.Pairs("authorization", "Bearer "+token, "x-session-id", "s-1"))
-	var seen requestctx.Metadata
 
-	rsp, err := interceptor.JwtAuth()(ctx, "request", &grpc.UnaryServerInfo{FullMethod: "/gst.test.Echo/Ping"}, func(ctx context.Context, _ any) (any, error) {
-		seen = requestctx.FromContext(ctx)
-		return "response", nil
-	})
+	ctx, err = interceptor.JwtAuth()(ctx)
 
 	require.NoError(t, err)
-	require.Equal(t, "response", rsp)
+	seen := requestctx.FromContext(ctx)
 	require.Equal(t, "alice", seen.Username())
 	require.Equal(t, "u-1", seen.UserID())
 	require.Equal(t, "s-1", seen.SessionID())
@@ -55,8 +50,8 @@ func TestJwtAuthAdmitsABearerTokenAndNamesTheCaller(t *testing.T) {
 // TestJwtAuthRefusesWhatItCannotVerify pins the refusing path: no
 // authorization metadata, a scheme other than Bearer, a token that does not
 // parse and one signed with another key are all answered Unauthenticated
-// with one fixed message and the handler untouched; the reasons stay in the
-// log, the way the HTTP middleware keeps them from a caller probing the
+// with one fixed message and no context to go on with; the reasons stay in
+// the log, the way the HTTP middleware keeps them from a caller probing the
 // checks.
 func TestJwtAuthRefusesWhatItCannotVerify(t *testing.T) {
 	withSigningKey(t, "another-signing-key")
@@ -71,16 +66,12 @@ func TestJwtAuthRefusesWhatItCannotVerify(t *testing.T) {
 	} {
 		t.Run(name, func(t *testing.T) {
 			ctx := metadata.NewIncomingContext(context.Background(), md)
-			called := false
 
-			_, err := interceptor.JwtAuth()(ctx, nil, &grpc.UnaryServerInfo{FullMethod: "/gst.test.Echo/Ping"}, func(context.Context, any) (any, error) {
-				called = true
-				return "response", nil
-			})
+			admitted, err := interceptor.JwtAuth()(ctx)
 
 			require.Equal(t, codes.Unauthenticated, status.Code(err))
 			require.Equal(t, "invalid token", status.Convert(err).Message())
-			require.False(t, called)
+			require.Nil(t, admitted)
 		})
 	}
 }

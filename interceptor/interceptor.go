@@ -13,15 +13,15 @@
 package interceptor
 
 import (
+	gstgrpc "github.com/hydroan/gst/grpc"
 	"github.com/hydroan/gst/internal/grpcserver"
-	"google.golang.org/grpc"
 )
 
-// Register adds interceptors that run on every call, in registration order,
-// after the framework's own chain and ahead of every interceptor RegisterAuth
-// adds. Call it from an init function: the server takes the interceptors
-// registered when it starts.
-func Register(interceptors ...grpc.UnaryServerInterceptor) {
+// Register adds interceptors that run on every call, unary or stream, in
+// registration order, after the framework's own chain and ahead of every
+// interceptor RegisterAuth adds. Call it from an init function: the server
+// takes the interceptors registered when it starts.
+func Register(interceptors ...gstgrpc.Interceptor) {
 	grpcserver.Use(interceptors...)
 }
 
@@ -30,6 +30,6 @@ func Register(interceptors ...grpc.UnaryServerInterceptor) {
 // it from an init function: the server takes the interceptors registered
 // when it starts. They run in registration order, after every interceptor
 // Register adds.
-func RegisterAuth(interceptors ...grpc.UnaryServerInterceptor) {
+func RegisterAuth(interceptors ...gstgrpc.Interceptor) {
 	grpcserver.UseAuth(interceptors...)
 }

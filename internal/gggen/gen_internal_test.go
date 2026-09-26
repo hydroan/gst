@@ -458,6 +458,51 @@ func TestGenServiceMethod8(t *testing.T) {
 	}
 }
 
+// TestGenServiceMethod9 pins the examples of the genServiceMethod9 doc
+// comment: the Stream scaffold of a server stream and of a client stream.
+func TestGenServiceMethod9(t *testing.T) {
+	feed := &modelinfo.Model{ModelPkgName: "model", ModelName: "Feed", ModulePath: "codegen", ModelFileDir: "model"}
+	tests := []struct {
+		name   string
+		action *dsl.Action
+		want   string
+	}{
+		{
+			name:   "watch",
+			action: &dsl.Action{Enabled: true, Service: true, Filename: "watch", Payload: "*FeedWatchReq", Result: "*FeedEvent", StreamingResult: true, Phase: consts.Stream},
+			want: `func (w *Watch) Stream(ctx *gst.ServiceContext, req *model.FeedWatchReq, stream *grpc.ServerStream[*model.FeedEvent]) (err error) {
+	log := w.WithContext(ctx, ctx.Phase())
+	log.Info("feed: watch")
+
+	return nil
+}`,
+		},
+		{
+			name:   "upload",
+			action: &dsl.Action{Enabled: true, Service: true, Filename: "upload", Payload: "*FeedEvent", Result: "*FeedUploadRsp", StreamingPayload: true, Phase: consts.Stream},
+			want: `func (u *Upload) Stream(ctx *gst.ServiceContext, stream *grpc.ClientStream[*model.FeedEvent]) (rsp *model.FeedUploadRsp, err error) {
+	log := u.WithContext(ctx, ctx.Phase())
+	log.Info("feed: upload")
+
+	return rsp, nil
+}`,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			info := *feed
+			info.ModelVarName = strings.ToLower(tt.action.RoleName()[:1])
+			got, err := FormatNode(genServiceMethod9(&info, "model", tt.action, consts.Stream, tt.action.RoleName()))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got != tt.want {
+				t.Errorf("genServiceMethod9() = \n%v\n, want \n%v\n", got, tt.want)
+			}
+		})
+	}
+}
+
 // TestGenerateServiceCreate compares the whole service file GenerateService
 // builds for the example of its doc comment: a Create action on a database
 // model, which gets the before and after hooks.
@@ -775,6 +820,46 @@ func TestGenerateServiceSSE(t *testing.T) {
 	for _, hook := range []string{"Before", "After"} {
 		if strings.Contains(got, hook) {
 			t.Errorf("generated SSE service must not scaffold %s hooks, got:\n%s", hook, got)
+		}
+	}
+}
+
+// TestGenerateServiceStream pins the service file of a Stream action: the
+// struct embedding service.Base on the action's types, the Stream method of
+// its kind, the gst grpc import the stream comes from, and no hook.
+func TestGenerateServiceStream(t *testing.T) {
+	info := &modelinfo.Model{
+		ModulePath:   "helloworld",
+		ModelPkgName: "model",
+		ModelName:    "Feed",
+		ModelVarName: "f",
+		ModelFileDir: "model",
+		Design:       &dsl.Design{},
+	}
+	action := &dsl.Action{Enabled: true, Service: true, Filename: "chat", Payload: "*FeedEvent", Result: "*FeedEvent", StreamingPayload: true, StreamingResult: true, Phase: consts.Stream}
+
+	file := GenerateService(info, action, consts.Stream, "feed")
+	if file == nil {
+		t.Fatal("GenerateService returned nil")
+	}
+	got, err := FormatNodeExtra(file)
+	if err != nil {
+		t.Fatalf("format generated service failed: %v", err)
+	}
+
+	for _, want := range []string{
+		`"github.com/hydroan/gst/grpc"`,
+		"type Chat struct",
+		"service.Base[*model.Feed, *model.FeedEvent, *model.FeedEvent]",
+		"func (c *Chat) Stream(ctx *gst.ServiceContext, stream *grpc.BidiStream[*model.FeedEvent, *model.FeedEvent]) (err error)",
+	} {
+		if !strings.Contains(got, want) {
+			t.Errorf("generated service missing %q, got:\n%s", want, got)
+		}
+	}
+	for _, hook := range []string{"Before", "After"} {
+		if strings.Contains(got, hook) {
+			t.Errorf("generated Stream service must not scaffold %s hooks, got:\n%s", hook, got)
 		}
 	}
 }

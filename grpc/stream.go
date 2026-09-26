@@ -1,0 +1,58 @@
+package grpc
+
+import (
+	"context"
+
+	"github.com/hydroan/gst/internal/controller"
+	"github.com/hydroan/gst/internal/types"
+)
+
+// This file holds what a Stream action's service reads and writes, the
+// streams, and the calls the generated handlers of streaming rpcs run the
+// action through: ServerStreamCall, ClientStreamCall and BidiStreamCall,
+// one per kind of stream, the counterparts of ServiceCall.
+
+// ServerStream is the response stream of a Stream action declaring a
+// StreamingResult: the service's Stream method sends each response through
+// Send, which fails once the client went away or the call was canceled.
+type ServerStream[RSP types.Response] = types.ServerStream[RSP]
+
+// ClientStream is the request stream of a Stream action declaring a
+// StreamingPayload: the service's Stream method reads each request through
+// Recv, which answers io.EOF once the client finished sending.
+type ClientStream[REQ types.Request] = types.ClientStream[REQ]
+
+// BidiStream is the request and response stream of a Stream action
+// declaring both a StreamingPayload and a StreamingResult: Recv and Send
+// as on the two above, independent of each other.
+type BidiStream[REQ types.Request, RSP types.Response] = types.BidiStream[REQ, RSP]
+
+// ServerStreamCall returns the call of the Stream action on route whose
+// response is streamed: given the route parameters, the request the message
+// decoded into and the function sending one response, it runs the
+// service's Stream method with a ServerStream sending through the function
+// (see types.ServerStreamer), and answers with nil once the stream is over,
+// or with the status a failure maps to, the way ServiceCall does.
+func ServerStreamCall[M types.Model, REQ types.Request, RSP types.Response](route string) func(ctx context.Context, params map[string]string, req REQ, send func(RSP) error) error {
+	return controller.ServerStreamCall[M, REQ, RSP](route)
+}
+
+// ClientStreamCall returns the call of the Stream action on route whose
+// request is streamed: given the route parameters and the function
+// receiving the next request, io.EOF once the client finished, it runs the
+// service's Stream method with a ClientStream reading through the function
+// (see types.ClientStreamer), and answers with the response, or with the
+// status a failure maps to.
+func ClientStreamCall[M types.Model, REQ types.Request, RSP types.Response](route string) func(ctx context.Context, params map[string]string, recv func() (REQ, error)) (RSP, error) {
+	return controller.ClientStreamCall[M, REQ, RSP](route)
+}
+
+// BidiStreamCall returns the call of the Stream action on route streaming
+// both ways: given the route parameters, the function receiving the next
+// request and the function sending one response, it runs the service's
+// Stream method with a BidiStream on the two (see types.BidiStreamer), and
+// answers with nil once the stream is over, or with the status a failure
+// maps to.
+func BidiStreamCall[M types.Model, REQ types.Request, RSP types.Response](route string) func(ctx context.Context, params map[string]string, recv func() (REQ, error), send func(RSP) error) error {
+	return controller.BidiStreamCall[M, REQ, RSP](route)
+}

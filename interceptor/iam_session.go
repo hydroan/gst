@@ -5,7 +5,6 @@ import (
 
 	gstgrpc "github.com/hydroan/gst/grpc"
 	serviceiamsession "github.com/hydroan/gst/internal/service/iam/session"
-	"google.golang.org/grpc"
 	"google.golang.org/grpc/metadata"
 )
 
@@ -23,8 +22,8 @@ import (
 // the way it is refused to another browser. The admitted session's user is
 // the caller for the handler and the access log, and the session stays on
 // the context for the actions that read it.
-func IAMSession() grpc.UnaryServerInterceptor {
-	return func(ctx context.Context, req any, _ *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (any, error) {
+func IAMSession() gstgrpc.Interceptor {
+	return func(ctx context.Context) (context.Context, error) {
 		sessionID, _ := gstgrpc.Bearer(ctx)
 		md, _ := metadata.FromIncomingContext(ctx)
 		var userAgent string
@@ -39,6 +38,6 @@ func IAMSession() grpc.UnaryServerInterceptor {
 
 		ctx = serviceiamsession.WithCurrentSession(ctx, sessionID, current)
 		ctx = gstgrpc.WithCaller(ctx, gstgrpc.Caller{UserID: current.UserID, Username: current.Username, SessionID: sessionID, TenantID: current.TenantID})
-		return handler(ctx, req)
+		return ctx, nil
 	}
 }
