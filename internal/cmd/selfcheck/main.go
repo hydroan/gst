@@ -22,8 +22,9 @@
 // package, however it shapes the arguments. The check reports it where the
 // layer can go: the function has a single use, which can call the other one
 // itself, or, for a function passing its parameters on, the function it
-// forwards to has no other use, so the two can be one. checkForwarding spells out what counts, and what the check
-// leaves alone because it cannot count every use.
+// forwards to has no other use, so the two can be one. checkForwarding
+// spells out what counts, and what the check leaves alone because it cannot
+// count every use.
 //
 // # Source formatting
 //
