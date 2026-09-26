@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -80,7 +81,174 @@ func writeProjectGoModAgainstRealFramework(t *testing.T, projectDir string) {
 		t.Fatal(err)
 	}
 	writeProjectFile(t, filepath.Join(projectDir, "go.sum"), string(goSum))
-	recordFrameworkSources(t, root)
+}
+
+// The operations go test records as inputs of a test, by the names its
+// input log (-test.testlogfile) gives them: reading a variable of the
+// environment, opening a file or directory, stat'ing a path and changing
+// directory.
+const (
+	inputGetenv = "getenv"
+	inputOpen   = "open"
+	inputStat   = "stat"
+	inputChdir  = "chdir"
+)
+
+// testLogHeader is the first line of the input log go test has a test
+// binary write.
+var testLogHeader = []byte("# test log\n")
+
+// inputRecorder makes this process read what its tests depend on, so that
+// go test records the read as an input of the test and reruns the test when
+// the input changes instead of replaying a cached verdict: reading is what
+// records, go test hashing every file, directory and variable of the
+// environment the process reads. Each input is read once for the process —
+// go test hashes every line of its input log, and reading the framework's
+// sources again for every test would only lengthen the log. read does the
+// reading: readInput, outside tests of the recorder itself.
+type inputRecorder struct {
+	read func(op, name string) error
+
+	mu   sync.Mutex
+	seen map[string]bool
+}
+
+// inputs records the inputs of this process's tests.
+var inputs = &inputRecorder{read: readInput, seen: map[string]bool{}}
+
+// readInput reads what op names the way go test sees: os.Getenv, os.Open
+// and os.Stat each tell go test what they read.
+func readInput(op, name string) error {
+	switch op {
+	case inputGetenv:
+		os.Getenv(name)
+		return nil
+	case inputOpen:
+		f, err := os.Open(name)
+		if err != nil {
+			return err
+		}
+		return f.Close()
+	case inputStat:
+		_, err := os.Stat(name)
+		return err
+	}
+	return errors.Newf("input operation %q is unknown", op)
+}
+
+// record reads what op names, the first time it is asked to, and returns
+// what the read reported.
+func (r *inputRecorder) record(op, name string) error {
+	key := op + " " + name
+	r.mu.Lock()
+	seen := r.seen[key]
+	r.seen[key] = true
+	r.mu.Unlock()
+	if seen {
+		return nil
+	}
+	return r.read(op, name)
+}
+
+// replay records the inputs a child process read inside root, taking them
+// from the input log the child was told to write: a line per read, "getenv
+// NAME", "open PATH", "stat PATH" or "chdir DIR", a relative PATH being
+// relative to the child's working directory, cwd until the first chdir line
+// and the directory of the latest one after it. What the child read outside
+// root, its throwaway project above all, go test would not look at, and the
+// chdir is not replayed: this process stays where go test started it. The
+// outcome of a read is not checked, a path the child found missing being an
+// input all the same. A log of another shape is an error, so that a change
+// to the log's format fails the test instead of leaving inputs unrecorded.
+func (r *inputRecorder) replay(log []byte, cwd, root string) error {
+	rest, ok := bytes.CutPrefix(log, testLogHeader)
+	if !ok {
+		return errors.Newf("the input log does not start with %q", testLogHeader)
+	}
+	for line := range strings.Lines(string(rest)) {
+		line = strings.TrimSuffix(line, "\n")
+		if line == "" {
+			continue
+		}
+		op, name, found := strings.Cut(line, " ")
+		if !found {
+			return errors.Newf("input log line %q names nothing", line)
+		}
+		switch op {
+		case inputGetenv:
+			_ = r.record(op, name)
+		case inputChdir:
+			cwd = name
+		case inputOpen, inputStat:
+			if !filepath.IsAbs(name) {
+				name = filepath.Join(cwd, name)
+			}
+			name = filepath.Clean(name)
+			if name != root && !strings.HasPrefix(name, root+string(filepath.Separator)) {
+				continue
+			}
+			_ = r.record(op, name)
+		default:
+			return errors.Newf("input log line %q has an unknown operation", line)
+		}
+	}
+	return nil
+}
+
+// TestReplayRecordsWhatTheChildReadInsideTheFramework guards
+// inputRecorder.replay: the inputs of a child's log are read once each,
+// relative paths resolved against the child's working directory as its
+// chdir lines move it, paths outside the framework and the chdir lines
+// themselves left alone, and a log of another shape refused.
+func TestReplayRecordsWhatTheChildReadInsideTheFramework(t *testing.T) {
+	t.Parallel()
+
+	root := filepath.Join(string(filepath.Separator), "framework")
+	cwd := filepath.Join(string(filepath.Separator), "work")
+	log := "# test log\n" +
+		"getenv PATH\n" +
+		"getenv PATH\n" +
+		"open " + filepath.Join(root, "go.mod") + "\n" +
+		"stat " + root + "\n" +
+		"open " + filepath.Join(string(filepath.Separator), "elsewhere", "go.mod") + "\n" +
+		"open go.mod\n" +
+		"chdir " + filepath.Join(root, "cmd") + "\n" +
+		"open gg.go\n" +
+		"stat .\n" +
+		"chdir " + cwd + "\n" +
+		"open gg.go\n"
+	var got []string
+	recorder := &inputRecorder{
+		read: func(op, name string) error {
+			got = append(got, op+" "+name)
+			return nil
+		},
+		seen: map[string]bool{},
+	}
+
+	require.NoError(t, recorder.replay([]byte(log), cwd, root))
+	require.Equal(t, []string{
+		"getenv PATH",
+		"open " + filepath.Join(root, "go.mod"),
+		"stat " + root,
+		"open " + filepath.Join(root, "cmd", "gg.go"),
+		"stat " + filepath.Join(root, "cmd"),
+	}, got)
+
+	t.Run("reads each input once for the process", func(t *testing.T) {
+		require.NoError(t, recorder.replay([]byte(log), cwd, root))
+		require.Len(t, got, 5)
+	})
+
+	t.Run("refuses a log of another shape", func(t *testing.T) {
+		for _, log := range []string{
+			"getenv PATH\n",
+			"# test log\nreaddir " + root + "\n",
+			"# test log\nopen\n",
+		} {
+			require.Error(t, recorder.replay([]byte(log), cwd, root), "%q", log)
+		}
+	})
 }
 
 // frameworkSourcesRecorded makes recordFrameworkSources record the sources
@@ -100,7 +268,7 @@ var (
 //
 // What gets recorded is what a build of the framework depends on and nothing
 // else: every package directory is stat'ed, which notices a file added to it
-// or removed from it, and every file the package compiles or embeds is read.
+// or removed from it, and every file the package compiles or embeds is opened.
 // No directory is listed. go test hashes a listed directory by the name, size
 // and modification time of every entry, so listing the repository root would
 // take every git operation, which touches .git, for a framework change and
@@ -121,12 +289,12 @@ func recordFrameworkSources(t *testing.T, root string) {
 		}
 		for line := range strings.Lines(string(output)) {
 			fields := strings.Split(strings.TrimSuffix(line, "\n"), "\t")
-			if _, err := os.Stat(fields[0]); err != nil {
+			if err := inputs.record(inputStat, fields[0]); err != nil {
 				errFrameworkSources = err
 				return
 			}
 			for _, name := range fields[1:] {
-				if _, err := os.ReadFile(filepath.Join(fields[0], name)); err != nil {
+				if err := inputs.record(inputOpen, filepath.Join(fields[0], name)); err != nil {
 					errFrameworkSources = err
 					return
 				}
@@ -159,7 +327,8 @@ const childProjectEnv = "GG_TEST_PROJECT_CHILD"
 // against the framework for real. Generation also caches that inspection
 // under the user cache directory, keyed by project directory; nothing ever
 // reads a throwaway project's entry again, so the entry is removed when the
-// test ends.
+// test ends. A test calls newGenProject first: whatever it does before the
+// call, it does in both processes.
 func newGenProject(t *testing.T) (projectDir string, ok bool) {
 	t.Helper()
 	if os.Getenv(childProjectEnv) == "" {
@@ -199,16 +368,22 @@ func newGenProject(t *testing.T) (projectDir string, ok bool) {
 // the parent's. The child runs this test alone, in a fresh directory, with
 // the flags this run was given — a golden -update reaches it — but its own
 // -test.run, no -test.v, and none of the files go test hands the parent to
-// write, its input log and profiles among them: the child's would overwrite
-// the parent's. The test runs in parallel with the other tests taking a
-// project; the framework sources are recorded as the parent's inputs, the
-// parent being the process go test caches the result of.
+// write, profiles and coverage among them: the child's would overwrite the
+// parent's. The test runs in parallel with the other tests taking a project.
+// go test caches the verdict of the parent, the process it started, by what
+// the parent read; so the parent records the framework sources itself and,
+// once the child is done, reads what the child read inside the framework —
+// the golden files, go.mod, the module manifests, whatever a test compares
+// its project with — taking it from an input log of the child's own, at a
+// path the parent picks (see inputRecorder.replay).
 func runInChild(t *testing.T) {
 	t.Helper()
 	t.Parallel()
-	recordFrameworkSources(t, frameworkRepoRoot(t))
+	root := frameworkRepoRoot(t)
+	recordFrameworkSources(t, root)
 
-	args := []string{"-test.run=" + childRunPattern(t.Name())}
+	inputLog := filepath.Join(t.TempDir(), "testlog")
+	args := []string{"-test.run=" + childRunPattern(t.Name()), "-test.testlogfile=" + inputLog}
 	skipNext := false
 	for _, arg := range os.Args[1:] {
 		if skipNext {
@@ -230,6 +405,13 @@ func runInChild(t *testing.T) {
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		t.Fatalf("the test failed in its own process (%v):\n%s", err, childOutput(output))
+	}
+	log, err := os.ReadFile(inputLog)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := inputs.replay(log, cmd.Dir, root); err != nil {
+		t.Fatal(err)
 	}
 }
 
