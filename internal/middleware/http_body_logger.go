@@ -209,6 +209,20 @@ func (w *bodyLogWriter) capture(data []byte) {
 	_, _ = w.body.Write(data)
 }
 
+// httpBodyLogFieldCap is the most fields one body log entry carries: the
+// eleven every entry has — route, path, method, username, user id, trace id,
+// params, query, status, code and the duration, whose two keys
+// util.LogDuration renders from one inlined field — plus two for the request
+// body and three for the response body. A request body is captured whole or
+// not at all, so it carries its content and size, or its size beside the
+// truncation marker or the read error; a response body is teed from what the
+// handler writes, so it has no read error, and is cut at the size cap rather
+// than dropped, so it carries its content, its size and the truncation marker.
+// writeHTTPBodyLog sizes its field slice to it once, so the hot path never
+// regrows it; a field added to the entry bumps it, which the worst-case test
+// enforces.
+const httpBodyLogFieldCap = 16
+
 // writeHTTPBodyLog writes at most one log entry for the finished request,
 // carrying whichever captured bodies the configured modes admit. Requests
 // where neither side has content to log produce no entry at all.
@@ -233,11 +247,6 @@ func writeHTTPBodyLog(
 		return
 	}
 
-	// httpBodyLogFieldCap must stay >= the fixed fields appended below plus the
-	// four fields each body side can contribute, so the slice is allocated
-	// exactly once. Re-check it when adding or removing fields; util.LogDuration
-	// counts as one, rendering two keys from a single inlined field.
-	const httpBodyLogFieldCap = 19
 	fields := make([]zap.Field, 0, httpBodyLogFieldCap)
 	fields = append(
 		fields,

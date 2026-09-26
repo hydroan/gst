@@ -390,6 +390,39 @@ func TestHTTPBodyLoggerLogsMalformedJSONVerbatim(t *testing.T) {
 	require.Equal(t, `{"a":`, entries[0].ContextMap()["request"])
 }
 
+// TestHTTPBodyLoggerFieldsFitTheCapacityInTheWorstCase pins
+// httpBodyLogFieldCap to the entry of a request whose two bodies are both
+// logged, the response one cut at the size cap — each side carrying the most
+// fields it can, two for the request and three for the response — so a field
+// added without bumping the capacity fails here instead of regrowing the slice
+// on every logged request.
+func TestHTTPBodyLoggerFieldsFitTheCapacityInTheWorstCase(t *testing.T) {
+	logs := setupHTTPBodyLoggerTest(t, config.HTTPBodyLogger{
+		Enabled:     true,
+		LogRequest:  config.HTTPBodyLogModeAll,
+		LogResponse: config.HTTPBodyLogModeAll,
+		MaxBodySize: "4B",
+	})
+
+	router := gin.New()
+	router.Use(bodyLogger())
+	router.POST("/api/records", func(c *gin.Context) {
+		c.JSON(http.StatusOK, gin.H{"sum": 3})
+	})
+
+	w := performHTTPBodyLoggerRequest(router, "/api/records", `{}`, "application/json")
+
+	require.Equal(t, http.StatusOK, w.Code)
+	entries := logs.All()
+	require.Len(t, entries, 1)
+	require.Len(t, entries[0].Context, httpBodyLogFieldCap,
+		"the worst case must fill the capacity exactly: a new field bumps httpBodyLogFieldCap, a dropped one lowers it")
+	ctx := entries[0].ContextMap()
+	for _, key := range []string{"request", "request_size", "response", "response_size", "response_truncated"} {
+		require.Contains(t, ctx, key, "the worst case must carry every optional body field")
+	}
+}
+
 func httpBodyLogStringField(t *testing.T, ctx map[string]any, key string) string {
 	t.Helper()
 

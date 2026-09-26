@@ -15,6 +15,15 @@ import (
 	"go.uber.org/zap/zapcore"
 )
 
+// accessLogFieldCap is the most fields one access-log entry carries: the
+// eleven every request has — status, method, username, user id, trace id,
+// route, path, query, ip, user agent and the duration, whose two keys
+// util.LogDuration renders from one inlined field — plus the span id of a
+// request a recording span traces. The logger runs on every request and sizes
+// its field slice to it once, so the hot path never regrows it; a field added
+// to accessLogger bumps it, which the worst-case test enforces.
+const accessLogFieldCap = 12
+
 func accessLogger() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		start := time.Now()
@@ -41,11 +50,6 @@ func accessLogger() gin.HandlerFunc {
 			}
 		}
 
-		// accessLogFieldCap must stay >= the number of fields appended below so
-		// the slice is allocated exactly once per request; this logger runs on
-		// every request, and growing the slice costs an extra allocation and
-		// copy each time. Re-check the capacity when adding or removing fields.
-		const accessLogFieldCap = 16
 		fields := make([]zapcore.Field, 0, accessLogFieldCap)
 		fields = append(
 			fields,
@@ -66,7 +70,8 @@ func accessLogger() gin.HandlerFunc {
 		}
 
 		if len(c.Errors) > 0 {
-			// Append error field if this is an erroneous request.
+			// A request that reported errors logs one entry per error, with the
+			// error as the message and the same fields.
 			for _, e := range c.Errors.Errors() {
 				logger.Gin.Error(e, fields...)
 			}

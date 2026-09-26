@@ -100,12 +100,12 @@ const (
 	// as it starts: component, operation, model, dry_run and batch_size.
 	operationStartAttrCap = 5
 	// operationOutcomeAttrCap is the most attributes the operation span's
-	// outcome batch carries: the duration and one of record_not_found or
-	// error.
+	// outcome batch carries: the duration and one of record_not_found,
+	// canceled or error.
 	operationOutcomeAttrCap = 2
 	// operationLogFieldCap is the most fields the operation's log entry
 	// carries: model, batch_size, the duration pair, dry_run and one of
-	// record_not_found or error.
+	// record_not_found, canceled or error.
 	operationLogFieldCap = 5
 	// hookOutcomeAttrCap is the most attributes a hook span's outcome batch
 	// carries: the duration, success and error.
