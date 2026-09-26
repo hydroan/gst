@@ -57,10 +57,12 @@ var aliasPattern = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
 // selector implements types.Selector: a thin shell over a selectBuilder,
 // which is everything a select is but its result row type R. The shell
 // keeps what the compiler copies per row type small — Go compiles the
-// methods of a generic type once per distinct type argument, so a builder
-// carrying R would be compiled again, dozens of methods, for every row
-// struct a project scans into — and hands its builder to the queries
-// reading the select (see nestedOf).
+// methods of a generic type once per shape of its type arguments, and
+// while every pointer type shares one shape, which is what a model M is,
+// each row struct is a shape of its own, so a builder carrying R would be
+// compiled again, dozens of methods, for every row struct a project scans
+// into — and hands its builder to the queries reading the select (see
+// nestedOf).
 type selector[M types.Model, R any] struct {
 	b *selectBuilder[M]
 }
@@ -264,8 +266,8 @@ func (a *selectBuilder[M]) withDryRun(collector ...*[]types.SQLStatement) {
 }
 
 // scan runs the select and replaces the contents of dest, the *[]R of the
-// Select's Scan, reached through reflection here so that the scan compiles
-// once per model rather than once per row type.
+// Select's Scan, reached through reflection here so that the scan is
+// compiled for the builder's shape rather than once per row type.
 func (a *selectBuilder[M]) scan(dest any) (err error) {
 	// The options are consumed even when the select never attached: this is
 	// the terminal they, and the joined selects', were set for.
