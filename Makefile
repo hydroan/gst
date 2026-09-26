@@ -1,4 +1,4 @@
-.PHONY: check build format vet lint selfcheck test testv testvv generate fix install uninstall help
+.PHONY: check build format vet lint selfcheck test testv testvv generate fix install uninstall help buildcache
 
 # Tool versions - must match go.mod exactly
 GOLANGCI_LINT_VERSION := $(shell go list -m -f '{{.Version}}' github.com/golangci/golangci-lint/v2)
@@ -21,7 +21,7 @@ GOLANGCI_LINT_PKG := github.com/golangci/golangci-lint/v2/cmd/golangci-lint
 GOFUMPT_PKG := mvdan.cc/gofumpt
 GOTESTSUM_PKG := gotest.tools/gotestsum
 
-INSTALL_BINS := golangci-lint gofumpt gotestsum gg
+INSTALL_BINS := golangci-lint gofumpt gotestsum gg buildcache
 # install_tool_if_missing installs a Makefile-managed tool only when it is unavailable.
 define install_tool_if_missing
 	@if ! command -v $(1) >/dev/null 2>&1 && [ ! -x "$(GO_BIN_DIR)/$(1)" ]; then \
@@ -71,7 +71,8 @@ help:
 
 # Run all code quality checks
 # Order matches make install tool installation order
-check: build lint selfcheck format vet
+check: build lint selfcheck format vet buildcache
+	@"$(BUILDCACHE)" trim
 	@echo "All checks passed successfully!"
 
 # Build the project. The example modules are not built: vet type-checks each
@@ -161,18 +162,52 @@ TEST_OUTPUT := --format pkgname --format-hide-empty-pkg --hide-summary=skipped
 # rerunning what another ran last.
 TEST_PATH := $(shell go env GOROOT)/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin
 
+# The build cache helper (see internal/cmd/buildcache) keeps make test fast
+# when everything is cached: go links a cached test's binary again on every
+# run once a change the linker dropped from it moved its link key, and the
+# helper files the result under that key after each suite. It also trims the
+# cache of what went unused for two days, once a day, from the end of check
+# and test, where go's own trim keeps five days. The helper is built from
+# the tree on every run, so it is always the source's.
+BUILDCACHE := $(GO_BIN_DIR)/buildcache
+buildcache:
+	@mkdir -p "$(GO_BIN_DIR)"
+	@go build -o "$(BUILDCACHE)" ./internal/cmd/buildcache
+
+# run_test_suite runs one gotestsum suite, with the arguments after -- given,
+# records every test binary the run links and files the results under their
+# link keys afterwards, whatever the run's status, which it then reports.
+define run_test_suite
+	@tool="$$(command -v gotestsum 2>/dev/null || printf '%s' "$(GO_BIN_DIR)/gotestsum")"; \
+		record="$$(mktemp -d)"; \
+		echo "gotestsum $(TEST_OUTPUT) -- $(TEST_FLAGS) $(1)"; \
+		$(TOOL_ENV) "$$tool" $(TEST_OUTPUT) -- $(TEST_FLAGS) -toolexec "$(BUILDCACHE) record-link $$record" $(1); status=$$?; \
+		$(TOOL_ENV) "$(BUILDCACHE)" writeback "$$record"; rm -rf "$$record"; exit $$status
+endef
+
+# run_test_suite_in runs a suite from another directory, the way run_tool_in
+# does: gotestsum tests the module of the directory it runs in.
+define run_test_suite_in
+	@tool="$$(command -v gotestsum 2>/dev/null || printf '%s' "$(GO_BIN_DIR)/gotestsum")"; \
+		record="$$(mktemp -d)"; \
+		echo "gotestsum $(TEST_OUTPUT) -- $(TEST_FLAGS) $(2) ($(1))"; \
+		cd $(1) && $(TOOL_ENV) "$$tool" $(TEST_OUTPUT) -- $(TEST_FLAGS) -toolexec "$(BUILDCACHE) record-link $$record" $(2); status=$$?; \
+		$(TOOL_ENV) "$(BUILDCACHE)" writeback "$$record"; rm -rf "$$record"; exit $$status
+endef
+
 test: TOOL_ENV = PATH="$(TEST_PATH)"
-test:
+test: buildcache
 	$(call install_tool_if_missing,gotestsum,$(GOTESTSUM_VERSION),$(GOTESTSUM_PKG))
 	@echo "Running unit tests (the per-dialect suites run against mysql here)..."
-	$(call run_tool,gotestsum,$(TEST_OUTPUT) -- $(TEST_FLAGS) ./...)
+	$(call run_test_suite,./...)
 	@echo "Running the per-dialect suites against postgres..."
-	$(call run_tool,gotestsum,$(TEST_OUTPUT) -- $(TEST_FLAGS) -tags gsttest_postgres $(DIALECT_PACKAGES))
+	$(call run_test_suite,-tags gsttest_postgres $(DIALECT_PACKAGES))
 	@echo "Running the per-dialect suites against sqlite..."
-	$(call run_tool,gotestsum,$(TEST_OUTPUT) -- $(TEST_FLAGS) -tags gsttest_sqlite $(DIALECT_PACKAGES))
+	$(call run_test_suite,-tags gsttest_sqlite $(DIALECT_PACKAGES))
 	@echo "Running example project tests..."
-	$(call run_tool_in,gotestsum,examples/demo,$(TEST_OUTPUT) -- $(TEST_FLAGS) ./...)
-	$(call run_tool_in,gotestsum,examples/cluster,$(TEST_OUTPUT) -- $(TEST_FLAGS) ./...)
+	$(call run_test_suite_in,examples/demo,./...)
+	$(call run_test_suite_in,examples/cluster,./...)
+	@$(TOOL_ENV) "$(BUILDCACHE)" trim
 
 # Run unit tests with more output: testv and testvv run what test runs, with
 # the output switched to a line per test, or to what go test -v prints.
