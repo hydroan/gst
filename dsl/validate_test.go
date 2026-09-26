@@ -1744,6 +1744,418 @@ func (Record) Design() {
 
 // TestHTTPOnlyActionNamesTheActionsGRPCCannotServe pins the examples of the
 // HTTPOnlyAction doc comment.
+// TestValidateStreamUsage pins the rules of a Stream action: it streams one
+// side of the call or both, each side declared either unary or streaming,
+// it is named by Filename, implemented by Service, shaped by no Exact, and
+// only a model declaring GRPC() may declare one; no other action streams.
+func TestValidateStreamUsage(t *testing.T) {
+	tests := []struct {
+		name      string
+		source    string
+		wantError string
+	}{
+		{
+			name:   "three_kinds_of_stream",
+			source: validateStreamSource,
+		},
+		{
+			name:   "grpc_with_a_stream_alone",
+			source: validateStreamOnlySource,
+		},
+		{
+			name:      "stream_streaming_neither_side",
+			source:    validateStreamWithoutStreamingSideSource,
+			wantError: "Stream action must declare StreamingPayload or StreamingResult; a call streaming neither side is a plain action, declare it with Create",
+		},
+		{
+			name:      "stream_with_payload_and_streaming_payload",
+			source:    validateStreamBothPayloadFormsSource,
+			wantError: "Stream action declares both Payload and StreamingPayload; the request is either one message or a stream of them",
+		},
+		{
+			name:      "stream_with_result_and_streaming_result",
+			source:    validateStreamBothResultFormsSource,
+			wantError: "Stream action declares both Result and StreamingResult; the response is either one message or a stream of them",
+		},
+		{
+			name:      "stream_without_filename",
+			source:    validateStreamWithoutFilenameSource,
+			wantError: "Stream action must declare Filename(...), which names its rpc",
+		},
+		{
+			name:      "stream_without_service",
+			source:    validateStreamWithoutServiceSource,
+			wantError: "Stream action has no built-in implementation and must declare Service()",
+		},
+		{
+			name:      "stream_without_grpc",
+			source:    validateStreamWithoutGRPCSource,
+			wantError: "Record declares a Stream action but no GRPC(); a stream is served over gRPC alone, declare GRPC() or remove the Stream action",
+		},
+		{
+			name:      "streaming_result_on_create",
+			source:    validateStreamingResultOnCreateSource,
+			wantError: "Create action cannot declare StreamingResult; only a Stream action streams",
+		},
+		{
+			name:      "streaming_payload_at_the_design_top_level",
+			source:    validateStreamingPayloadTopLevelSource,
+			wantError: "StreamingPayload() can only be used inside an action block",
+		},
+		{
+			name:      "stream_with_exact",
+			source:    validateStreamWithExactSource,
+			wantError: "Stream action has no HTTP route for dsl.Exact() to shape; remove Exact()",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			fset := token.NewFileSet()
+			file, err := parser.ParseFile(fset, "/repo/model/sample/record.go", tt.source, parser.ParseComments)
+			if err != nil {
+				t.Fatalf("parse source failed: %v", err)
+			}
+
+			errs := dsl.Validate(file, "/repo/model", "/repo/model/sample/record.go")
+			if tt.wantError == "" {
+				if len(errs) != 0 {
+					t.Fatalf("Validate returned errors: %v", errs)
+				}
+				return
+			}
+			if len(errs) == 0 {
+				t.Fatalf("Validate returned no errors, want %q", tt.wantError)
+			}
+			var got strings.Builder
+			for _, err := range errs {
+				got.WriteString(err.Error())
+				got.WriteString("\n")
+			}
+			if !strings.Contains(got.String(), tt.wantError) {
+				t.Fatalf("Validate errors = %q, want one containing %q", got.String(), tt.wantError)
+			}
+		})
+	}
+}
+
+const validateStreamSource = `
+package sample
+
+import (
+	. "github.com/hydroan/gst/dsl"
+	"github.com/hydroan/gst/model"
+)
+
+type Record struct {
+	model.Base
+}
+
+type RecordWatchReq struct{}
+
+type RecordEvent struct{}
+
+type RecordUploadRsp struct{}
+
+func (Record) Design() {
+	GRPC()
+	Migrate()
+	Create(func() {})
+	Stream(func() {
+		Service()
+		Filename("tail")
+		StreamingResult[*RecordEvent]()
+	})
+	Route("records/watch", func() {
+		Stream(func() {
+			Service()
+			Filename("watch")
+			Payload[*RecordWatchReq]()
+			StreamingResult[*RecordEvent]()
+		})
+	})
+	Route("records/upload", func() {
+		Stream(func() {
+			Service()
+			Filename("upload")
+			StreamingPayload[*RecordEvent]()
+			Result[*RecordUploadRsp]()
+		})
+	})
+	Route("records/chat", func() {
+		Stream(func() {
+			Service()
+			Filename("chat")
+			StreamingPayload[*RecordEvent]()
+			StreamingResult[*RecordEvent]()
+		})
+	})
+}
+`
+
+const validateStreamOnlySource = `
+package sample
+
+import (
+	. "github.com/hydroan/gst/dsl"
+	"github.com/hydroan/gst/model"
+)
+
+type Record struct {
+	model.Base
+}
+
+type RecordEvent struct{}
+
+func (Record) Design() {
+	GRPC()
+	Stream(func() {
+		Service()
+		Filename("tail")
+		StreamingResult[*RecordEvent]()
+	})
+}
+`
+
+const validateStreamWithoutStreamingSideSource = `
+package sample
+
+import (
+	. "github.com/hydroan/gst/dsl"
+	"github.com/hydroan/gst/model"
+)
+
+type Record struct {
+	model.Base
+}
+
+type RecordWatchReq struct{}
+
+type RecordUploadRsp struct{}
+
+func (Record) Design() {
+	GRPC()
+	Stream(func() {
+		Service()
+		Filename("plain")
+		Payload[*RecordWatchReq]()
+		Result[*RecordUploadRsp]()
+	})
+}
+`
+
+const validateStreamBothPayloadFormsSource = `
+package sample
+
+import (
+	. "github.com/hydroan/gst/dsl"
+	"github.com/hydroan/gst/model"
+)
+
+type Record struct {
+	model.Base
+}
+
+type RecordWatchReq struct{}
+
+type RecordEvent struct{}
+
+func (Record) Design() {
+	GRPC()
+	Stream(func() {
+		Service()
+		Filename("upload")
+		Payload[*RecordWatchReq]()
+		StreamingPayload[*RecordEvent]()
+	})
+}
+`
+
+const validateStreamBothResultFormsSource = `
+package sample
+
+import (
+	. "github.com/hydroan/gst/dsl"
+	"github.com/hydroan/gst/model"
+)
+
+type Record struct {
+	model.Base
+}
+
+type RecordEvent struct{}
+
+type RecordUploadRsp struct{}
+
+func (Record) Design() {
+	GRPC()
+	Stream(func() {
+		Service()
+		Filename("watch")
+		StreamingResult[*RecordEvent]()
+		Result[*RecordUploadRsp]()
+	})
+}
+`
+
+const validateStreamWithoutFilenameSource = `
+package sample
+
+import (
+	. "github.com/hydroan/gst/dsl"
+	"github.com/hydroan/gst/model"
+)
+
+type Record struct {
+	model.Base
+}
+
+type RecordEvent struct{}
+
+func (Record) Design() {
+	GRPC()
+	Stream(func() {
+		Service()
+		StreamingResult[*RecordEvent]()
+	})
+}
+`
+
+const validateStreamWithoutServiceSource = `
+package sample
+
+import (
+	. "github.com/hydroan/gst/dsl"
+	"github.com/hydroan/gst/model"
+)
+
+type Record struct {
+	model.Base
+}
+
+type RecordEvent struct{}
+
+func (Record) Design() {
+	GRPC()
+	Stream(func() {
+		Filename("watch")
+		StreamingResult[*RecordEvent]()
+	})
+}
+`
+
+const validateStreamWithoutGRPCSource = `
+package sample
+
+import (
+	. "github.com/hydroan/gst/dsl"
+	"github.com/hydroan/gst/model"
+)
+
+type Record struct {
+	model.Base
+}
+
+type RecordEvent struct{}
+
+func (Record) Design() {
+	Migrate()
+	Create(func() {})
+	Route("records/watch", func() {
+		Stream(func() {
+			Service()
+			Filename("watch")
+			StreamingResult[*RecordEvent]()
+		})
+	})
+}
+`
+
+const validateStreamingResultOnCreateSource = `
+package sample
+
+import (
+	. "github.com/hydroan/gst/dsl"
+	"github.com/hydroan/gst/model"
+)
+
+type Record struct {
+	model.Base
+}
+
+type RecordEvent struct{}
+
+func (Record) Design() {
+	GRPC()
+	Create(func() {
+		Service()
+		StreamingResult[*RecordEvent]()
+	})
+}
+`
+
+const validateStreamingPayloadTopLevelSource = `
+package sample
+
+import (
+	. "github.com/hydroan/gst/dsl"
+	"github.com/hydroan/gst/model"
+)
+
+type Record struct {
+	model.Base
+}
+
+type RecordEvent struct{}
+
+func (Record) Design() {
+	GRPC()
+	StreamingPayload[*RecordEvent]()
+	Create(func() {})
+}
+`
+
+const validateStreamWithExactSource = `
+package sample
+
+import (
+	. "github.com/hydroan/gst/dsl"
+	"github.com/hydroan/gst/model"
+)
+
+type Record struct {
+	model.Base
+}
+
+type RecordEvent struct{}
+
+func (Record) Design() {
+	GRPC()
+	Route("records/watch", func() {
+		Stream(func() {
+			Service()
+			Filename("watch")
+			Exact()
+			StreamingResult[*RecordEvent]()
+		})
+	})
+}
+`
+
+// TestGRPCOnlyActionNamesTheActionsHTTPCannotServe pins the counterpart of
+// HTTPOnlyAction: Stream is served over gRPC alone, every other action over
+// HTTP.
+func TestGRPCOnlyActionNamesTheActionsHTTPCannotServe(t *testing.T) {
+	if !dsl.GRPCOnlyAction("Stream") {
+		t.Errorf("GRPCOnlyAction(%q) = false, want true", "Stream")
+	}
+	for _, name := range []string{"Create", "List", "SSE", "Import"} {
+		if dsl.GRPCOnlyAction(name) {
+			t.Errorf("GRPCOnlyAction(%q) = true, want false", name)
+		}
+	}
+}
+
 func TestHTTPOnlyActionNamesTheActionsGRPCCannotServe(t *testing.T) {
 	for _, name := range []string{"Import", "Export", "SSE"} {
 		if !dsl.HTTPOnlyAction(name) {

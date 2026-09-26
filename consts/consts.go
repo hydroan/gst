@@ -155,6 +155,8 @@ const (
 	PHASE_EXPORT Phase = export
 
 	PHASE_SSE Phase = sse
+
+	PHASE_STREAM Phase = stream
 )
 
 type Phase string
@@ -390,6 +392,7 @@ func (p Phase) Name() string {
 		PHASE_IMPORT:             "PHASE_IMPORT",
 		PHASE_EXPORT:             "PHASE_EXPORT",
 		PHASE_SSE:                "PHASE_SSE",
+		PHASE_STREAM:             "PHASE_STREAM",
 	}
 
 	if name, ok := phaseNames[p]; ok {

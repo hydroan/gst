@@ -126,8 +126,8 @@ func applicationName() (string, error) {
 
 // typeScriptRoots returns the types the routes of models exchange as JSON: the
 // Payload and Result types of every enabled action. Import and Export move
-// files and SSE streams events, so their types never travel as JSON, and
-// *model.Empty carries no data.
+// files, SSE streams events and a Stream is served over gRPC alone, so their
+// types never travel as JSON, and *model.Empty carries no data.
 func typeScriptRoots(models []*modelinfo.Model) []ts.TypeRef {
 	seen := make(map[ts.TypeRef]bool)
 	var roots []ts.TypeRef
@@ -135,7 +135,7 @@ func typeScriptRoots(models []*modelinfo.Model) []ts.TypeRef {
 		pkgPath := m.ImportPath()
 		m.Design.Range(func(_ string, action *dsl.Action) {
 			switch action.Phase {
-			case consts.PHASE_IMPORT, consts.PHASE_EXPORT, consts.PHASE_SSE:
+			case consts.PHASE_IMPORT, consts.PHASE_EXPORT, consts.PHASE_SSE, consts.PHASE_STREAM:
 				return
 			}
 			for _, typeName := range []string{action.Payload, action.Result} {

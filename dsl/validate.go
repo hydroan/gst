@@ -31,6 +31,7 @@ var actionMethodPhases = map[string]consts.Phase{
 	consts.PHASE_IMPORT.MethodName():      consts.PHASE_IMPORT,
 	consts.PHASE_EXPORT.MethodName():      consts.PHASE_EXPORT,
 	consts.PHASE_SSE.MethodName():         consts.PHASE_SSE,
+	consts.PHASE_STREAM.MethodName():      consts.PHASE_STREAM,
 }
 
 func isActionMethod(name string) bool {
@@ -74,13 +75,15 @@ var fixedContractActionSignatures = map[string]string{
 }
 
 // serviceRequiredActionMethodNames are actions whose request cannot be
-// answered without a custom service: their fixed-contract service method is
-// the whole implementation, so declaring them without Service() is a wiring
-// error caught at generation time.
+// answered without a custom service: their fixed-contract service method,
+// or the stream method of a Stream, is the whole implementation, so
+// declaring them without Service() is a wiring error caught at generation
+// time.
 var serviceRequiredActionMethodNames = map[string]bool{
 	consts.PHASE_IMPORT.MethodName(): true,
 	consts.PHASE_EXPORT.MethodName(): true,
 	consts.PHASE_SSE.MethodName():    true,
+	consts.PHASE_STREAM.MethodName(): true,
 }
 
 var designOnlyMethodNames = map[string]bool{
@@ -108,14 +111,33 @@ func HTTPOnlyAction(name string) bool {
 	return httpOnlyActionMethodNames[name]
 }
 
+// grpcOnlyActionMethodNames are actions HTTP cannot serve: a Stream carries
+// a stream of messages on one side of the call or both, which only gRPC
+// does. A model declaring one needs GRPC(), or the action would be served
+// nowhere.
+var grpcOnlyActionMethodNames = map[string]bool{
+	consts.PHASE_STREAM.MethodName(): true,
+}
+
+// GRPCOnlyAction reports whether the action named name is one HTTP cannot
+// serve (see grpcOnlyActionMethodNames): true for Stream, false for Create
+// or SSE. The generator registers no route, generates no service and
+// declares no TypeScript type for these actions, and the route ignore rules
+// of gst.yaml, written as HTTP methods and paths, never match them.
+func GRPCOnlyAction(name string) bool {
+	return grpcOnlyActionMethodNames[name]
+}
+
 var actionOnlyMethodNames = map[string]bool{
-	"Service":  true,
-	"Public":   true,
-	"Exact":    true,
-	"Filename": true,
-	"Payload":  true,
-	"Result":   true,
-	"Flatten":  true,
+	"Service":          true,
+	"Public":           true,
+	"Exact":            true,
+	"Filename":         true,
+	"Payload":          true,
+	"Result":           true,
+	"Flatten":          true,
+	"StreamingPayload": true,
+	"StreamingResult":  true,
 }
 
 // Validate checks DSL keyword placement and generation semantics for one model file.
@@ -205,7 +227,7 @@ func validateDesignFunc(fn *ast.FuncDecl, modelName string, rootModelFile, virtu
 	records := make([]serviceActionRecord, 0)
 	errs := make([]error, 0)
 	seenActions := make(map[string]bool)
-	grpc, grpcServable := false, false
+	grpc, grpcServable, grpcOnly := false, false, false
 	for _, stmt := range fn.Body.List {
 		call := exprStmtCall(stmt)
 		if call == nil {
@@ -220,15 +242,17 @@ func validateDesignFunc(fn *ast.FuncDecl, modelName string, rootModelFile, virtu
 		case isActionMethod(name):
 			seenActions[name] = true
 			grpcServable = grpcServable || !httpOnlyActionMethodNames[name]
+			grpcOnly = grpcOnly || grpcOnlyActionMethodNames[name]
 			info, actionErrs := validateActionCall(call, name, rootModelFile, virtual, filename)
 			if record, ok := newServiceActionRecord(info, name, modelName, ""); ok {
 				records = append(records, record)
 			}
 			errs = append(errs, actionErrs...)
 		case name == "Route":
-			recs, servable, routeErrs := validateRouteCall(call, modelName, rootModelFile, virtual, filename)
+			recs, servable, only, routeErrs := validateRouteCall(call, modelName, rootModelFile, virtual, filename)
 			records = append(records, recs...)
 			grpcServable = grpcServable || servable
+			grpcOnly = grpcOnly || only
 			errs = append(errs, routeErrs...)
 		case name == "GRPC":
 			grpc = true
@@ -241,6 +265,9 @@ func validateDesignFunc(fn *ast.FuncDecl, modelName string, rootModelFile, virtu
 	errs = append(errs, validateSSEListConflict(seenActions, filename)...)
 	if grpc && !grpcServable {
 		errs = append(errs, fmt.Errorf("%s: %s declares GRPC() but no action gRPC can serve: Import, Export and SSE are HTTP only; declare another action or remove GRPC()", filename, modelName))
+	}
+	if grpcOnly && !grpc {
+		errs = append(errs, fmt.Errorf("%s: %s declares a Stream action but no GRPC(); a stream is served over gRPC alone, declare GRPC() or remove the Stream action", filename, modelName))
 	}
 	return records, errs
 }
@@ -258,21 +285,21 @@ func validateSSEListConflict(seenActions map[string]bool, filename string) []err
 
 // validateRouteCall validates one Route block and reports, beside the service
 // records and errors of its actions, whether any of them is an action gRPC
-// can serve (see httpOnlyActionMethodNames).
-func validateRouteCall(call *ast.CallExpr, modelName string, rootModelFile, virtual bool, filename string) ([]serviceActionRecord, bool, []error) {
+// can serve (see httpOnlyActionMethodNames) and whether any is one only
+// gRPC can serve (see grpcOnlyActionMethodNames).
+func validateRouteCall(call *ast.CallExpr, modelName string, rootModelFile, virtual bool, filename string) (records []serviceActionRecord, grpcServable, grpcOnly bool, errs []error) {
 	if len(call.Args) < 2 {
-		return nil, false, nil
+		return nil, false, false, nil
 	}
 	flit, ok := call.Args[1].(*ast.FuncLit)
 	if !ok || flit == nil || flit.Body == nil {
-		return nil, false, nil
+		return nil, false, false, nil
 	}
 
 	route := stringArgValue(call, "")
-	records := make([]serviceActionRecord, 0)
-	errs := make([]error, 0)
+	records = make([]serviceActionRecord, 0)
+	errs = make([]error, 0)
 	seenActions := make(map[string]bool)
-	grpcServable := false
 	for _, stmt := range flit.Body.List {
 		child := exprStmtCall(stmt)
 		if child == nil {
@@ -287,6 +314,7 @@ func validateRouteCall(call *ast.CallExpr, modelName string, rootModelFile, virt
 		case isActionMethod(name):
 			seenActions[name] = true
 			grpcServable = grpcServable || !httpOnlyActionMethodNames[name]
+			grpcOnly = grpcOnly || grpcOnlyActionMethodNames[name]
 			info, actionErrs := validateActionCall(child, name, rootModelFile, virtual, filename)
 			if record, ok := newServiceActionRecord(info, name, modelName, route); ok {
 				records = append(records, record)
@@ -303,19 +331,21 @@ func validateRouteCall(call *ast.CallExpr, modelName string, rootModelFile, virt
 		}
 	}
 	errs = append(errs, validateSSEListConflict(seenActions, filename)...)
-	return records, grpcServable, errs
+	return records, grpcServable, grpcOnly, errs
 }
 
 // actionCallInfo carries the generation-relevant keywords collected from one
 // action block, so callers can derive facts such as the service filename
 // without re-walking the block.
 type actionCallInfo struct {
-	service  bool
-	filename string
-	flatten  bool
-	exact    bool
-	payload  bool
-	result   bool
+	service          bool
+	filename         string
+	flatten          bool
+	exact            bool
+	payload          bool
+	result           bool
+	streamingPayload bool
+	streamingResult  bool
 }
 
 func validateActionCall(call *ast.CallExpr, actionName string, rootModelFile, virtual bool, filename string) (actionCallInfo, []error) {
@@ -352,6 +382,10 @@ func validateActionCall(call *ast.CallExpr, actionName string, rootModelFile, vi
 			info.payload = true
 		case name == "Result":
 			info.result = true
+		case name == "StreamingPayload":
+			info.streamingPayload = true
+		case name == "StreamingResult":
+			info.streamingResult = true
 		case name == "Enabled" || name == "Public":
 			continue
 		case isActionMethod(name):
@@ -407,6 +441,34 @@ func validateActionCall(call *ast.CallExpr, actionName string, rootModelFile, vi
 	// route that can only answer "not implemented".
 	if serviceRequiredActionMethodNames[actionName] && !info.service {
 		errs = append(errs, fmt.Errorf("%s: %s action has no built-in implementation and must declare Service()", filename, actionName))
+	}
+	// A Stream streams one side of the call or both, and each side is
+	// either one message or a stream of them; its rpc is named after its
+	// Filename, there being no default role name for it, and it has no HTTP
+	// route for Exact to shape. No other action streams.
+	if !grpcOnlyActionMethodNames[actionName] {
+		if info.streamingPayload {
+			errs = append(errs, fmt.Errorf("%s: %s action cannot declare StreamingPayload; only a Stream action streams", filename, actionName))
+		}
+		if info.streamingResult {
+			errs = append(errs, fmt.Errorf("%s: %s action cannot declare StreamingResult; only a Stream action streams", filename, actionName))
+		}
+		return info, errs
+	}
+	if !info.streamingPayload && !info.streamingResult {
+		errs = append(errs, fmt.Errorf("%s: %s action must declare StreamingPayload or StreamingResult; a call streaming neither side is a plain action, declare it with Create", filename, actionName))
+	}
+	if info.payload && info.streamingPayload {
+		errs = append(errs, fmt.Errorf("%s: %s action declares both Payload and StreamingPayload; the request is either one message or a stream of them", filename, actionName))
+	}
+	if info.result && info.streamingResult {
+		errs = append(errs, fmt.Errorf("%s: %s action declares both Result and StreamingResult; the response is either one message or a stream of them", filename, actionName))
+	}
+	if info.filename == "" {
+		errs = append(errs, fmt.Errorf("%s: %s action must declare Filename(...), which names its rpc", filename, actionName))
+	}
+	if info.exact {
+		errs = append(errs, fmt.Errorf("%s: %s action has no HTTP route for dsl.Exact() to shape; remove Exact()", filename, actionName))
 	}
 
 	return info, errs

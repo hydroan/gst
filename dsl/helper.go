@@ -18,6 +18,7 @@ var routePhaseOrder = []consts.Phase{
 	consts.PHASE_IMPORT,
 	consts.PHASE_EXPORT,
 	consts.PHASE_SSE,
+	consts.PHASE_STREAM,
 	consts.PHASE_GET,
 	consts.PHASE_CREATE_MANY,
 	consts.PHASE_DELETE_MANY,

@@ -135,6 +135,7 @@ func TestFindModelsInFile(t *testing.T) {
 						Import:     &dsl.Action{Payload: "*User", Result: "*User"},
 						Export:     &dsl.Action{Payload: "*User", Result: "*User"},
 						SSE:        &dsl.Action{Payload: "*User", Result: "*User"},
+						Stream:     &dsl.Action{Payload: "*User", Result: "*User"},
 					},
 				},
 				{
@@ -161,6 +162,7 @@ func TestFindModelsInFile(t *testing.T) {
 						Import:     &dsl.Action{Payload: "*Group", Result: "*Group"},
 						Export:     &dsl.Action{Payload: "*Group", Result: "*Group"},
 						SSE:        &dsl.Action{Payload: "*Group", Result: "*Group"},
+						Stream:     &dsl.Action{Payload: "*Group", Result: "*Group"},
 					},
 				},
 				{
@@ -187,6 +189,7 @@ func TestFindModelsInFile(t *testing.T) {
 						Import:     &dsl.Action{Payload: "*Device", Result: "*Device"},
 						Export:     &dsl.Action{Payload: "*Device", Result: "*Device"},
 						SSE:        &dsl.Action{Payload: "*Device", Result: "*Device"},
+						Stream:     &dsl.Action{Payload: "*Device", Result: "*Device"},
 					},
 				},
 			},
@@ -221,6 +224,7 @@ func TestFindModelsInFile(t *testing.T) {
 						Import:     &dsl.Action{Payload: "*User", Result: "*User"},
 						Export:     &dsl.Action{Payload: "*User", Result: "*User"},
 						SSE:        &dsl.Action{Payload: "*User", Result: "*User"},
+						Stream:     &dsl.Action{Payload: "*User", Result: "*User"},
 					},
 				},
 				{
@@ -247,6 +251,7 @@ func TestFindModelsInFile(t *testing.T) {
 						Import:     &dsl.Action{Payload: "*Group", Result: "*Group"},
 						Export:     &dsl.Action{Payload: "*Group", Result: "*Group"},
 						SSE:        &dsl.Action{Payload: "*Group", Result: "*Group"},
+						Stream:     &dsl.Action{Payload: "*Group", Result: "*Group"},
 					},
 				},
 				{
@@ -273,6 +278,7 @@ func TestFindModelsInFile(t *testing.T) {
 						Import:     &dsl.Action{Payload: "*Device", Result: "*Device"},
 						Export:     &dsl.Action{Payload: "*Device", Result: "*Device"},
 						SSE:        &dsl.Action{Payload: "*Device", Result: "*Device"},
+						Stream:     &dsl.Action{Payload: "*Device", Result: "*Device"},
 					},
 				},
 			},

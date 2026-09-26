@@ -10,6 +10,7 @@ import (
 )
 
 func init() {
+	grpc.Register[FeedServiceServer](RegisterFeedServiceServer, FeedService{})
 	grpc.Register[NoteServiceServer](RegisterNoteServiceServer, NoteService{},
 		grpc.Method{Name: NoteService_CreateNote_FullMethodName, HTTPMethod: http.MethodPost, Route: "/api/notes"},
 		grpc.Method{Name: NoteService_GetNote_FullMethodName, HTTPMethod: http.MethodGet, Route: "/api/notes/:id"},

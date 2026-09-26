@@ -39,4 +39,6 @@ const (
 	export  = "export"
 
 	sse = "sse"
+
+	stream = "stream"
 )

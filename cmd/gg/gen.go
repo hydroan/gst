@@ -145,6 +145,11 @@ func genRunWithOptions(opts genRunOptions) error {
 		}
 
 		m.Design.Range(func(s string, a *dsl.Action) {
+			// A Stream action is served over gRPC alone: it registers no
+			// route, and no service either, nothing serving a stream yet.
+			if dsl.GRPCOnlyAction(a.Phase.MethodName()) {
+				return
+			}
 			if a.Service {
 				target := modelinfo.ServiceTarget(m, a, ggconst.DirModel, ggconst.DirService)
 				servicePkgs[target.ImportPath] = target.PackageName
@@ -183,6 +188,9 @@ func genRunWithOptions(opts genRunOptions) error {
 	}
 	for _, m := range allModels {
 		m.Design.Range(func(route string, act *dsl.Action) {
+			if dsl.GRPCOnlyAction(act.Phase.MethodName()) {
+				return
+			}
 			// Both registrations below must carry this exact route string:
 			// the service registry keys services by route and phase, so the
 			// service side and the router side share one route value.
@@ -370,7 +378,7 @@ func genRunWithOptions(opts genRunOptions) error {
 	var applyErr error
 	for _, m := range allModels {
 		m.Design.Range(func(route string, act *dsl.Action) {
-			if applyErr != nil {
+			if applyErr != nil || dsl.GRPCOnlyAction(act.Phase.MethodName()) {
 				return
 			}
 			target := modelinfo.ServiceTarget(m, act, ggconst.DirModel, ggconst.DirService)

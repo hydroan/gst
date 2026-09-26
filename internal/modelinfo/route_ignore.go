@@ -65,6 +65,11 @@ func applyRouteIgnores(allModels []*Model, rules []ggconfig.RouteRule) RouteIgno
 	matchedDirs := make([]map[string]bool, len(rules))
 	for _, m := range allModels {
 		m.Design.Range(func(route string, act *dsl.Action) {
+			// The rules name HTTP methods and paths; an action served over
+			// gRPC alone has neither.
+			if dsl.GRPCOnlyAction(act.Phase.MethodName()) {
+				return
+			}
 			finalRoute, _ := RouterTargetForAction(route, m.Design, act)
 			method := act.Phase.ToHTTPVerb().HTTPMethod()
 			for i, rule := range rules {

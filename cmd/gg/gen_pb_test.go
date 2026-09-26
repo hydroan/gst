@@ -47,6 +47,7 @@ func TestGenRunWritesTheProtobufDefinitionsOfGRPCModels(t *testing.T) {
 		"model/plain.go":       protobufPlainModel,
 		"model/note.go":        protobufNoteModel,
 		"model/shape.go":       protobufShapeModel,
+		"model/feed.go":        protobufFeedModel,
 	})
 
 	require.NoError(t, genRunWithOptions(genRunOptions{Quiet: true}))
@@ -90,6 +91,34 @@ func TestGenRunWritesTheProtobufDefinitionsOfGRPCModels(t *testing.T) {
 	test.Dir = projectDir
 	output, err = test.CombinedOutput()
 	require.NoError(t, err, "the generated conversions must round-trip every value: %s", output)
+}
+
+// TestGenRunKeepsStreamActionsOffTheHTTPSide pins what gg gen makes of a
+// model whose actions are Stream actions alone: its rpcs are derived, each
+// streaming the side it declares, and nothing is registered for it over
+// HTTP, no route, no service and no test scaffold, so the project builds
+// with a router file naming it nowhere.
+func TestGenRunKeepsStreamActionsOffTheHTTPSide(t *testing.T) {
+	projectDir := newGenProject(t)
+	writeProtobufProject(t, projectDir, map[string]string{"model/feed.go": protobufFeedModel})
+
+	require.NoError(t, genRunWithOptions(genRunOptions{Quiet: true}))
+
+	proto, err := os.ReadFile(filepath.Join(projectDir, "pb", "feed.proto"))
+	require.NoError(t, err)
+	require.Contains(t, string(proto), "rpc WatchFeed ( WatchFeedRequest ) returns ( stream WatchFeedResponse );")
+	require.Contains(t, string(proto), "rpc UploadFeed ( stream UploadFeedRequest ) returns ( UploadFeedResponse );")
+	require.Contains(t, string(proto), "rpc ChatFeed ( stream ChatFeedRequest ) returns ( stream ChatFeedResponse );")
+	for _, path := range []string{filepath.Join(ggconst.DirRouter, ggconst.FileRouterGen), filepath.Join(ggconst.DirService, ggconst.FileServiceGen)} {
+		content, readErr := os.ReadFile(filepath.Join(projectDir, path))
+		require.NoError(t, readErr)
+		require.NotContains(t, string(content), "feeds", "%s registers nothing for a Stream", path)
+	}
+	require.NoDirExists(t, filepath.Join(projectDir, ggconst.DirService, "feed"))
+	build := exec.Command("go", "build", "./...")
+	build.Dir = projectDir
+	output, err := build.CombinedOutput()
+	require.NoError(t, err, "the project must build: %s", output)
 }
 
 // TestGenRunImportsThePBPackageWhileServingGRPC pins that main.go imports
@@ -1137,6 +1166,72 @@ func TestShapeRoundTrips(t *testing.T) {
 	require.Nil(t, empty.Weights)
 	require.Nil(t, empty.Raw)
 	require.True(t, time.Time(empty.Date).IsZero())
+}
+`
+
+// protobufFeedModel declares the three kinds of Stream action, a server
+// stream, a client stream and a bidirectional one, on a model served over
+// gRPC alone.
+const protobufFeedModel = `package model
+
+import (
+	"github.com/hydroan/gst/dsl"
+	"github.com/hydroan/gst/model"
+)
+
+// Feed is a topic events are published on.
+type Feed struct {
+	Topic string 'json:"topic" pb:"11"'
+
+	model.Base
+}
+
+// FeedWatchReq names the topic to watch.
+type FeedWatchReq struct {
+	Topic string 'json:"topic" pb:"1"'
+}
+
+// FeedEvent is one event of a feed.
+type FeedEvent struct {
+	Seq  int64  'json:"seq" pb:"1"'
+	Body string 'json:"body" pb:"2"'
+}
+
+// FeedUploadRsp counts the events a client streamed in.
+type FeedUploadRsp struct {
+	Accepted int64 'json:"accepted" pb:"1"'
+}
+
+func (Feed) TableName() string { return "feeds" }
+
+func (Feed) Design() {
+	dsl.GRPC()
+	dsl.Migrate()
+	dsl.Endpoint("feeds")
+	dsl.Route("feeds/watch", func() {
+		dsl.Stream(func() {
+			dsl.Service()
+			dsl.Filename("watch")
+			dsl.Payload[*FeedWatchReq]()
+			dsl.StreamingResult[*FeedEvent]()
+		})
+	})
+	dsl.Route("feeds/upload", func() {
+		dsl.Stream(func() {
+			dsl.Service()
+			dsl.Filename("upload")
+			dsl.StreamingPayload[*FeedEvent]()
+			dsl.Result[*FeedUploadRsp]()
+		})
+	})
+	dsl.Route("feeds/chat", func() {
+		dsl.Stream(func() {
+			dsl.Service()
+			dsl.Filename("chat")
+			dsl.StreamingPayload[*FeedEvent]()
+			dsl.StreamingResult[*FeedEvent]()
+		})
+	})
 }
 `
 

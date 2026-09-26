@@ -202,7 +202,8 @@ func Migrate() {}
 // beside the HTTP routes, both backed by the same service code. Declaring it
 // is enabling it; a model without it is HTTP only. It can only be used at
 // Design() top level, and needs at least one action gRPC can serve: Import,
-// Export and SSE are HTTP only.
+// Export and SSE are HTTP only. A Stream action is served over gRPC alone
+// and needs it.
 func GRPC() {}
 
 // Service marks the current action as requiring custom service code.
@@ -419,6 +420,46 @@ func Export(func()) {}
 // register the GET route path itself.
 func SSE(func()) {}
 
+// Stream defines a streaming operation, served over gRPC alone: one side of
+// the call, or both, is a stream of messages rather than one message. The
+// block declares the unary side with Payload or Result and the streaming
+// side with StreamingPayload or StreamingResult, at least one side
+// streaming: Payload with StreamingResult is a server stream,
+// StreamingPayload with Result a client stream, and both streaming a
+// bidirectional stream. A side declared neither way is *model.Empty.
+//
+// Stream must declare Service(), there being no built-in implementation, and
+// Filename(...), which names its rpc (see Filename); it must not declare
+// Exact(), having no HTTP route. It needs GRPC() on the model: HTTP carries
+// no stream, so a Stream of a model without GRPC() would be served nowhere,
+// and it is rejected. A Stream registers no HTTP route and appears in no
+// OpenAPI document.
+//
+// Example, a server stream of the events of a feed on the route
+// feeds/watch:
+//
+//	Route("feeds/watch", func() {
+//	    Stream(func() {
+//	        Service()
+//	        Filename("watch")
+//	        Payload[*FeedWatchReq]()
+//	        StreamingResult[*FeedEvent]()
+//	    })
+//	})
+func Stream(func()) {}
+
+// StreamingPayload declares the request side of a Stream action as a stream
+// of T, one message per value the client sends. Example:
+// StreamingPayload[*FeedEvent](). It can only be used inside a Stream block,
+// which then cannot declare Payload as well.
+func StreamingPayload[T any]() {}
+
+// StreamingResult declares the response side of a Stream action as a stream
+// of T, one message per value the service sends. Example:
+// StreamingResult[*FeedEvent](). It can only be used inside a Stream block,
+// which then cannot declare Result as well.
+func StreamingResult[T any]() {}
+
 // Design represents the complete API design configuration for a model.
 // It contains global settings and individual action configurations.
 // This struct is populated by parsing the model's Design() method.
@@ -515,7 +556,8 @@ type Design struct {
 	Export *Action // Export operation configuration
 
 	// Streaming operations
-	SSE *Action // Server-Sent Events streaming operation configuration
+	SSE    *Action // Server-Sent Events streaming operation configuration
+	Stream *Action // gRPC streaming operation configuration (see Stream)
 }
 
 // Range iterates over all enabled actions in the Design and calls the provided function
@@ -526,9 +568,9 @@ type Design struct {
 //   - fn: Callback function that receives (route, action) for each enabled action
 //
 // The Design's own actions come first, under its endpoint, in a fixed order: Create,
-// Delete, Update, Patch, List, Import, Export, SSE, Get, CreateMany, DeleteMany,
-// UpdateMany, PatchMany. The actions declared with Route follow, route by route in
-// sorted order, each route's actions in that same order.
+// Delete, Update, Patch, List, Import, Export, SSE, Stream, Get, CreateMany,
+// DeleteMany, UpdateMany, PatchMany. The actions declared with Route follow, route
+// by route in sorted order, each route's actions in that same order.
 //
 // Example:
 //
@@ -563,6 +605,9 @@ func (d *Design) Range(fn func(route string, action *Action)) {
 	}
 	if d.SSE.Enabled {
 		fn(d.Endpoint, d.SSE)
+	}
+	if d.Stream.Enabled {
+		fn(d.Endpoint, d.Stream)
 	}
 	if d.Get.Enabled {
 		fn(d.Endpoint, d.Get)
@@ -619,6 +664,14 @@ type Action struct {
 	// This determines the structure of outgoing response data.
 	// Example: "*User", "UserResponse", "[]User"
 	Result string
+
+	// StreamingPayload marks the Payload of a Stream action as what each
+	// message of the request stream carries, declared with
+	// StreamingPayload; StreamingResult marks the Result of a Stream action
+	// as what each message of the response stream carries, declared with
+	// StreamingResult. Both are false for any other action.
+	StreamingPayload bool
+	StreamingResult  bool
 
 	// Filename specifies a custom filename (without extension) for the generated service file.
 	// When set, it overrides the default filename derived from the Phase.
@@ -678,6 +731,8 @@ var methodList = []string{
 	"Result",
 	"Filename",
 	"Flatten",
+	"StreamingPayload",
+	"StreamingResult",
 
 	consts.PHASE_CREATE.MethodName(),
 	consts.PHASE_DELETE.MethodName(),
@@ -695,4 +750,5 @@ var methodList = []string{
 	consts.PHASE_EXPORT.MethodName(),
 
 	consts.PHASE_SSE.MethodName(),
+	consts.PHASE_STREAM.MethodName(),
 }

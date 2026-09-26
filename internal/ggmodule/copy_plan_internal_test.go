@@ -85,6 +85,7 @@ func (s *CustomService) ListAfter(ctx *gst.ServiceContext, data *[]any) error {
 			Import:     &dsl.Action{},
 			Export:     &dsl.Action{},
 			SSE:        &dsl.Action{},
+			Stream:     &dsl.Action{},
 		},
 	}
 
@@ -156,6 +157,7 @@ type RecordService struct {
 				Import:     &dsl.Action{},
 				Export:     &dsl.Action{},
 				SSE:        &dsl.Action{},
+				Stream:     &dsl.Action{},
 			},
 		},
 		{
@@ -181,6 +183,7 @@ type RecordService struct {
 				Import:     &dsl.Action{},
 				Export:     &dsl.Action{},
 				SSE:        &dsl.Action{},
+				Stream:     &dsl.Action{},
 			},
 		},
 	}

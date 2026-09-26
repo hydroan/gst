@@ -85,11 +85,21 @@ func (g *generator) declareService(m *modelinfo.Model) {
 		}
 		file.comment([]int32{fileServicesTag, int32Index(len(file.services)), serviceMethodsTag, int32Index(len(service.Method))},
 			name+" is the "+action.Phase.MethodName()+" action of "+m.ModelName+" on "+consts.APIPath(route)+".")
-		service.Method = append(service.Method, &descriptorpb.MethodDescriptorProto{
+		method := &descriptorpb.MethodDescriptorProto{
 			Name:       new(name),
 			InputType:  new("." + file.pkg + "." + r.request.GetName()),
 			OutputType: new("." + file.pkg + "." + r.response.GetName()),
-		})
+		}
+		// A Stream action streams the side it declares streaming: the rpc
+		// takes a stream of its request message, returns a stream of its
+		// response message, or both.
+		if action.StreamingPayload {
+			method.ClientStreaming = new(true)
+		}
+		if action.StreamingResult {
+			method.ServerStreaming = new(true)
+		}
+		service.Method = append(service.Method, method)
 		file.rpcs = append(file.rpcs, r)
 	})
 	if served == 0 {
@@ -109,8 +119,10 @@ func (g *generator) declareService(m *modelinfo.Model) {
 // it the same; for any other custom action, its Payload as the field
 // payload. The response of a standard action is standardMessages' one; a
 // custom action's holds its Result as the field result, or nothing when the
-// action declares none. Every rpc owns its two messages: two actions sharing
-// a Go type share the message that type encodes to, held by their payload or
+// action declares none. A Stream action is a custom one whatever it
+// declares, its Payload and Result being what each message of a streamed
+// side carries. Every rpc owns its two messages: two actions sharing a Go
+// type share the message that type encodes to, held by their payload or
 // result fields, never a request or response. A route parameter named like
 // a field of the request is reported.
 //
@@ -137,7 +149,7 @@ func (g *generator) rpcMessages(m *modelinfo.Model, scope *types.Scope, model *m
 	var request, response *descriptorpb.DescriptorProto
 	var requestFields, responseFields []string
 	self := "*" + m.ModelName
-	if action.Payload == self && action.Result == self {
+	if action.Payload == self && action.Result == self && action.Phase != consts.PHASE_STREAM {
 		if model == nil {
 			g.project.Report(s, "the %s action of the virtual model %s has no message to carry; declare Payload and Result", action.Phase.MethodName(), m.ModelName)
 			return nil, false
@@ -216,6 +228,13 @@ type rpc struct {
 	payload, result *message
 	// request and response are the messages of the rpc.
 	request, response *descriptorpb.DescriptorProto
+}
+
+// streaming reports whether the rpc streams a side of the call, which the
+// rpcs of a Stream action do: the handlers serve no such rpc, and the
+// registration lists none.
+func (r *rpc) streaming() bool {
+	return r.action.StreamingPayload || r.action.StreamingResult
 }
 
 // customRequest builds what the request of a custom action holds after the

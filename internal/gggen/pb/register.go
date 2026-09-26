@@ -97,6 +97,11 @@ func (g *generator) registrationFile() (File, error) {
 		for _, service := range services {
 			args := []ast.Expr{qualify("Register" + service + "Server"), compositeLit(qualify(service))}
 			for _, r := range rpcs[service] {
+				// A streaming rpc is served by no handler, so it is
+				// described to no interceptor either.
+				if r.streaming() {
+					continue
+				}
 				elts := []ast.Expr{keyValue("Name", qualify(service+"_"+r.name+"_FullMethodName"))}
 				if r.action.Public {
 					elts = append(elts, keyValue("Public", ident("true")))
@@ -125,6 +130,12 @@ func (g *generator) registrationFile() (File, error) {
 			setExprPos(register.Fun, line)
 			setExprPos(register.Args[0], line)
 			setExprPos(register.Args[1], line)
+			if len(register.Args) == 2 {
+				// A service without a method described, its rpcs all
+				// streaming, closes on the same line.
+				register.Rparen = line
+				continue
+			}
 			for _, arg := range register.Args[2:] {
 				setExprPos(arg, lines.Next())
 			}

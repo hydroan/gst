@@ -58,6 +58,7 @@ func TestParse(t *testing.T) {
 					Import:     &Action{Enabled: false, Service: false, Public: false, Payload: "*User", Result: "*User"},
 					Export:     &Action{Enabled: false, Service: false, Public: false, Payload: "*User", Result: "*User"},
 					SSE:        &Action{Enabled: false, Service: false, Public: false, Payload: "*User", Result: "*User"},
+					Stream:     &Action{Enabled: false, Service: false, Public: false, Payload: "*User", Result: "*User"},
 				},
 			},
 		},
@@ -83,6 +84,7 @@ func TestParse(t *testing.T) {
 					Import:     &Action{Enabled: false, Service: false, Public: false, Payload: "*User2", Result: "*User2"},
 					Export:     &Action{Enabled: false, Service: false, Public: false, Payload: "*User2", Result: "*User2"},
 					SSE:        &Action{Enabled: false, Service: false, Public: false, Payload: "*User2", Result: "*User2"},
+					Stream:     &Action{Enabled: false, Service: false, Public: false, Payload: "*User2", Result: "*User2"},
 				},
 			},
 		},
@@ -107,6 +109,7 @@ func TestParse(t *testing.T) {
 					Import:     &Action{Enabled: false, Service: false, Public: false, Payload: "*User3", Result: "*User3"},
 					Export:     &Action{Enabled: false, Service: false, Public: false, Payload: "*User3", Result: "*User3"},
 					SSE:        &Action{Enabled: false, Service: false, Public: false, Payload: "*User3", Result: "*User3"},
+					Stream:     &Action{Enabled: false, Service: false, Public: false, Payload: "*User3", Result: "*User3"},
 				},
 				"User4": {
 					Enabled:    true,
@@ -125,6 +128,7 @@ func TestParse(t *testing.T) {
 					Import:     &Action{Enabled: false, Service: false, Public: false, Payload: "*User4", Result: "*User4"},
 					Export:     &Action{Enabled: false, Service: false, Public: false, Payload: "*User4", Result: "*User4"},
 					SSE:        &Action{Enabled: false, Service: false, Public: false, Payload: "*User4", Result: "*User4"},
+					Stream:     &Action{Enabled: false, Service: false, Public: false, Payload: "*User4", Result: "*User4"},
 				},
 			},
 		},
@@ -154,6 +158,7 @@ func TestParse(t *testing.T) {
 					Import:     &Action{Enabled: false, Service: false, Public: false, Payload: "*User5", Result: "*User5"},
 					Export:     &Action{Enabled: false, Service: false, Public: false, Payload: "*User5", Result: "*User5"},
 					SSE:        &Action{Enabled: false, Service: false, Public: false, Payload: "*User5", Result: "*User5"},
+					Stream:     &Action{Enabled: false, Service: false, Public: false, Payload: "*User5", Result: "*User5"},
 				},
 			},
 		},
@@ -179,6 +184,7 @@ func TestParse(t *testing.T) {
 					Import:     &Action{Enabled: false, Service: false, Public: false, Payload: "*User6", Result: "*User6"},
 					Export:     &Action{Enabled: false, Service: false, Public: false, Payload: "*User6", Result: "*User6"},
 					SSE:        &Action{Enabled: false, Service: false, Public: false, Payload: "*User6", Result: "*User6"},
+					Stream:     &Action{Enabled: false, Service: false, Public: false, Payload: "*User6", Result: "*User6"},
 				},
 			},
 		},
@@ -204,6 +210,7 @@ func TestParse(t *testing.T) {
 					Import:     &Action{Enabled: false, Service: false, Public: false, Payload: "*User8", Result: "*User8"},
 					Export:     &Action{Enabled: false, Service: false, Public: false, Payload: "*User8", Result: "*User8"},
 					SSE:        &Action{Enabled: false, Service: false, Public: false, Payload: "*User8", Result: "*User8"},
+					Stream:     &Action{Enabled: false, Service: false, Public: false, Payload: "*User8", Result: "*User8"},
 				},
 				"SampleRecord": {
 					Enabled:    true,
@@ -223,6 +230,7 @@ func TestParse(t *testing.T) {
 					Import:     &Action{Enabled: false, Service: false, Public: false, Payload: "*SampleRecord", Result: "*SampleRecord"},
 					Export:     &Action{Enabled: false, Service: false, Public: false, Payload: "*SampleRecord", Result: "*SampleRecord"},
 					SSE:        &Action{Enabled: false, Service: false, Public: false, Payload: "*SampleRecord", Result: "*SampleRecord"},
+					Stream:     &Action{Enabled: false, Service: false, Public: false, Payload: "*SampleRecord", Result: "*SampleRecord"},
 				},
 			},
 		},
@@ -1266,5 +1274,94 @@ type Sample struct {
 				t.Errorf("IsModelEmpty() = %v, want %v", modelEmpties, tt.want)
 			}
 		})
+	}
+}
+
+// streamSource declares the three kinds of Stream of a Feed model on routes
+// and a fourth at the top level of its Design.
+const streamSource = `package model
+
+import (
+	. "github.com/hydroan/gst/dsl"
+	"github.com/hydroan/gst/model"
+)
+
+type Feed struct {
+	model.Base
+}
+
+type FeedWatchReq struct{}
+
+type FeedEvent struct{}
+
+type FeedUploadRsp struct{}
+
+func (Feed) Design() {
+	GRPC()
+	Endpoint("feeds")
+	Stream(func() {
+		Service()
+		Filename("tail")
+		StreamingResult[*FeedEvent]()
+	})
+	Route("feeds/watch", func() {
+		Stream(func() {
+			Service()
+			Filename("watch")
+			Payload[*FeedWatchReq]()
+			StreamingResult[*FeedEvent]()
+		})
+	})
+	Route("feeds/upload", func() {
+		Stream(func() {
+			Service()
+			Filename("upload")
+			StreamingPayload[*FeedEvent]()
+			Result[*FeedUploadRsp]()
+		})
+	})
+	Route("feeds/chat", func() {
+		Stream(func() {
+			Service()
+			Filename("chat")
+			StreamingPayload[*FeedEvent]()
+			StreamingResult[*FeedEvent]()
+		})
+	})
+}
+`
+
+// TestParseStreamActions pins how a Stream block parses: the type a
+// StreamingPayload or StreamingResult names lands in Payload or Result with
+// that side marked streaming, a side declared with Payload or Result is not
+// marked, and a side declared neither way defaults to PayloadEmpty.
+func TestParseStreamActions(t *testing.T) {
+	fset := token.NewFileSet()
+	file, err := parser.ParseFile(fset, "feed.go", streamSource, parser.ParseComments)
+	if err != nil {
+		t.Fatalf("parse source failed: %v", err)
+	}
+	design := Parse(file)["Feed"]
+	if design == nil {
+		t.Fatal("Feed was not parsed")
+	}
+
+	want := map[string]*Action{
+		"feeds/watch":  {Enabled: true, Service: true, Filename: "watch", Payload: "*FeedWatchReq", Result: "*FeedEvent", StreamingResult: true, Phase: consts.PHASE_STREAM},
+		"feeds/upload": {Enabled: true, Service: true, Filename: "upload", Payload: "*FeedEvent", Result: "*FeedUploadRsp", StreamingPayload: true, Phase: consts.PHASE_STREAM},
+		"feeds/chat":   {Enabled: true, Service: true, Filename: "chat", Payload: "*FeedEvent", Result: "*FeedEvent", StreamingPayload: true, StreamingResult: true, Phase: consts.PHASE_STREAM},
+	}
+	for route, w := range want {
+		actions := design.routes[route]
+		if len(actions) != 1 {
+			t.Fatalf("route %s parsed %d actions, want 1", route, len(actions))
+		}
+		if !reflect.DeepEqual(actions[0], w) {
+			t.Errorf("route %s: %s", route, pretty.Diff(w, actions[0]))
+		}
+	}
+	top := &Action{Enabled: true, Service: true, Filename: "tail", Payload: PayloadEmpty, Result: "*FeedEvent", StreamingResult: true, Phase: consts.PHASE_STREAM}
+	if !reflect.DeepEqual(design.Stream, top) {
+		t.Errorf("top-level Stream: %s", pretty.Diff(top, design.Stream))
 	}
 }

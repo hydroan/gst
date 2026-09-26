@@ -112,6 +112,9 @@ func Parse(file *ast.File) map[string]*Design {
 		if design.SSE == nil {
 			design.SSE = &Action{Payload: starName(name), Result: starName(name)}
 		}
+		if design.Stream == nil {
+			design.Stream = &Action{Payload: starName(name), Result: starName(name)}
+		}
 
 		initDefaultAction(name, design.Create)
 		initDefaultAction(name, design.Delete)
@@ -126,6 +129,7 @@ func Parse(file *ast.File) map[string]*Design {
 		initDefaultAction(name, design.Import)
 		initDefaultAction(name, design.Export)
 		initDefaultAction(name, design.SSE)
+		initDefaultAction(name, design.Stream)
 		for _, actions := range design.routes {
 			for _, action := range actions {
 				initDefaultAction(name, action)
@@ -436,6 +440,9 @@ func parseDesign(fn *ast.FuncDecl) *Design {
 						if act, e := parseAction(consts.PHASE_SSE, funName_, call_.Args[0]); e {
 							defaults.routes[route] = append(defaults.routes[route], act)
 						}
+						if act, e := parseAction(consts.PHASE_STREAM, funName_, call_.Args[0]); e {
+							defaults.routes[route] = append(defaults.routes[route], act)
+						}
 					}
 				}
 			}
@@ -480,6 +487,9 @@ func parseDesign(fn *ast.FuncDecl) *Design {
 		if act, e := parseAction(consts.PHASE_SSE, funcName, call.Args[0]); e {
 			defaults.SSE = act
 		}
+		if act, e := parseAction(consts.PHASE_STREAM, funcName, call.Args[0]); e {
+			defaults.Stream = act
+		}
 
 	}
 
@@ -507,6 +517,9 @@ func parseDesign(fn *ast.FuncDecl) *Design {
 //   - Filename("name"): Sets a custom filename for the generated service file
 //   - Payload[Type]: Sets the request payload type
 //   - Result[Type]: Sets the response result type
+//   - StreamingPayload[Type], StreamingResult[Type]: In a Stream block, set the
+//     type each message of the request or response stream carries and mark
+//     that side as streaming
 //
 // Example usage in DSL:
 //
@@ -524,6 +537,7 @@ func parseAction(phase consts.Phase, funcName string, expr ast.Expr) (*Action, b
 	var exact bool      // default to false
 	var filename string // default to ""
 	var flatten bool    // default to false
+	var streamingPayload, streamingResult bool
 
 	if phase.MethodName() != funcName {
 		return nil, false
@@ -677,12 +691,17 @@ func parseAction(phase consts.Phase, funcName string, expr ast.Expr) (*Action, b
 						isPayload = true
 					case "Result":
 						isResult = true
+					case "StreamingPayload":
+						isPayload, streamingPayload = phase == consts.PHASE_STREAM, phase == consts.PHASE_STREAM
+					case "StreamingResult":
+						isResult, streamingResult = phase == consts.PHASE_STREAM, phase == consts.PHASE_STREAM
 					}
 					// List and Get handle HTTP GET requests without a request
-					// body, and Import and Export delegate to fixed service
+					// body, Import and Export delegate to fixed service
 					// method signatures that never bind Payload or Result
-					// types. Declarations invalid for the phase are rejected
-					// by Validate and discarded here so downstream code never
+					// types, and only a Stream action streams a side.
+					// Declarations invalid for the phase are rejected by
+					// Validate and discarded here so downstream code never
 					// sees them.
 					if isPayload && !isGetVerbPhase(phase) && !isFixedContractPhase(phase) {
 						if ident, ok := indexExpr.Index.(*ast.Ident); ok && ident != nil { // Payload[User]
@@ -708,15 +727,17 @@ func parseAction(phase consts.Phase, funcName string, expr ast.Expr) (*Action, b
 	}
 
 	return &Action{
-		Payload:  payload,
-		Result:   result,
-		Enabled:  enabled,
-		Service:  service,
-		Public:   public,
-		Exact:    exact,
-		Filename: filename,
-		Flatten:  flatten,
-		Phase:    phase,
+		Payload:          payload,
+		Result:           result,
+		StreamingPayload: streamingPayload,
+		StreamingResult:  streamingResult,
+		Enabled:          enabled,
+		Service:          service,
+		Public:           public,
+		Exact:            exact,
+		Filename:         filename,
+		Flatten:          flatten,
+		Phase:            phase,
 	}, true
 }
 

@@ -98,8 +98,18 @@ func (g *generator) handlerFile(f *protoFile) (File, error) {
 	}
 	for _, service := range services {
 		w.serviceType(service, rpcs[service][0].model)
-		w.actionCalls(service, rpcs[service])
+		// A streaming rpc has no call and no handler: the Unimplemented
+		// server the service type embeds answers it.
+		var unary []*rpc
 		for _, r := range rpcs[service] {
+			if !r.streaming() {
+				unary = append(unary, r)
+			}
+		}
+		if len(unary) > 0 {
+			w.actionCalls(service, unary)
+		}
+		for _, r := range unary {
 			w.handler(r)
 		}
 	}
@@ -116,8 +126,8 @@ func (g *generator) handlerFile(f *protoFile) (File, error) {
 
 // serviceType declares the type serving service, the service of model: it
 // embeds the Unimplemented server the protobuf plugin generated, which
-// answers Unimplemented for any rpc added later, and the handlers are its
-// methods (see handler).
+// answers Unimplemented for any rpc added later and for the streaming rpcs,
+// which have no handler, and the handlers are its methods (see handler).
 //
 //	// RecordService serves the rpcs of the RecordService service through the
 //	// actions of Record: every handler decodes its request message into what the

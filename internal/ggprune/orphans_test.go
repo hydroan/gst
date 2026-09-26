@@ -571,6 +571,7 @@ func orphanPruneModel() *modelinfo.Model {
 			Import:     disabled(consts.PHASE_IMPORT),
 			Export:     disabled(consts.PHASE_EXPORT),
 			SSE:        disabled(consts.PHASE_SSE),
+			Stream:     disabled(consts.PHASE_STREAM),
 		},
 	}
 }
