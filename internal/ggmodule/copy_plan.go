@@ -9,7 +9,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/hydroan/gst/dsl"
+	"github.com/hydroan/gst/internal/dsl"
 	"github.com/hydroan/gst/internal/gghelper"
 	"github.com/hydroan/gst/internal/modelinfo"
 )

@@ -6,7 +6,7 @@ import (
 	"go/token"
 	"os"
 
-	"github.com/hydroan/gst/dsl"
+	"github.com/hydroan/gst/internal/dsl"
 	"github.com/hydroan/gst/internal/ggconst"
 	"github.com/hydroan/gst/internal/gghelper"
 	"github.com/hydroan/gst/internal/modelinfo"

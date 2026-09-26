@@ -8,7 +8,7 @@ import (
 	"testing"
 
 	"github.com/hydroan/gst/consts"
-	"github.com/hydroan/gst/dsl"
+	"github.com/hydroan/gst/internal/dsl"
 )
 
 func TestApplyServiceMethod4PointerConversion(t *testing.T) {

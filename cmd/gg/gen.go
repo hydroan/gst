@@ -11,8 +11,8 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/errors"
-	"github.com/hydroan/gst/dsl"
 	"github.com/hydroan/gst/internal/clioutput"
+	"github.com/hydroan/gst/internal/dsl"
 	"github.com/hydroan/gst/internal/ggconfig"
 	"github.com/hydroan/gst/internal/ggconst"
 	"github.com/hydroan/gst/internal/gggen"
@@ -107,6 +107,7 @@ func genRunWithOptions(opts genRunOptions) error {
 		return err
 	}
 	allModels, ignoreResult := scanned.models, scanned.routeIgnores
+	reportUnservedStreams(allModels)
 
 	// Record the service files and protobuf definitions present before
 	// generating (if prune option is enabled): the ones this run does not
@@ -585,6 +586,21 @@ func reportModelIgnoreWarnings(result modelinfo.ModelIgnoreResult) {
 	}
 	for _, match := range result.LiveActionModels {
 		clioutput.Warn("", "gst.yaml ignores registration of model %s (%s) but its routes stay enabled; add gen.routes.ignore entries or ensure another model owns its table", match.Model, match.File)
+	}
+}
+
+// reportUnservedStreams warns, for every Stream action, that nothing serves
+// it: its rpc is declared in the .proto, but no handler runs it, so a call
+// is answered Unimplemented by the server the protobuf plugin generated.
+// The warning keeps the gap from passing in silence. Warnings are emitted
+// even in quiet mode.
+func reportUnservedStreams(models []*modelinfo.Model) {
+	for _, m := range models {
+		m.Design.Range(func(route string, act *dsl.Action) {
+			if dsl.GRPCOnlyAction(act.Phase.MethodName()) {
+				clioutput.Warn("", "%s: the Stream action %s of %s on %s is declared but not served: streaming rpcs have no handler, so its rpc answers Unimplemented", m.ModelFilePath, act.RoleName(), m.ModelName, route)
+			}
+		})
 	}
 }
 

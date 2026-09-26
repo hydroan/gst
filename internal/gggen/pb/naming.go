@@ -7,7 +7,7 @@ import (
 	"strings"
 
 	"github.com/hydroan/gst/consts"
-	"github.com/hydroan/gst/dsl"
+	"github.com/hydroan/gst/internal/dsl"
 	"github.com/hydroan/gst/internal/ggconst"
 	"github.com/hydroan/gst/internal/modelinfo"
 	"github.com/stoewer/go-strcase"
@@ -154,6 +154,12 @@ type requestParam struct {
 // /api/archive/documents/batch, carries nothing.
 func requestParams(m *modelinfo.Model, route string, action *dsl.Action) []requestParam {
 	registered, _ := modelinfo.RouterTargetForAction(route, m.Design, action)
+	// The route of a Stream action is no path a request reaches: its
+	// parameters are named by the route as declared.
+	named := registered
+	if dsl.GRPCOnlyAction(action.Phase.MethodName()) {
+		named = route
+	}
 	own := strings.TrimPrefix(modelinfo.ItemParam(m.Design), ":")
 	var params []requestParam
 	for _, param := range routeParams(registered) {
@@ -161,7 +167,7 @@ func requestParams(m *modelinfo.Model, route string, action *dsl.Action) []reque
 			params = append(params, requestParam{param: param, name: "id", comment: "the id of the " + m.ModelName + ownParamPurpose(action.Phase)})
 			continue
 		}
-		params = append(params, requestParam{param: param, name: protoIdentifier(param), comment: "the :" + param + " parameter of " + registered})
+		params = append(params, requestParam{param: param, name: protoIdentifier(param), comment: "the :" + param + " parameter of " + named})
 	}
 	return params
 }

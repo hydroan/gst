@@ -95,17 +95,23 @@ func TestGenRunWritesTheProtobufDefinitionsOfGRPCModels(t *testing.T) {
 
 // TestGenRunKeepsStreamActionsOffTheHTTPSide pins what gg gen makes of a
 // model whose actions are Stream actions alone: its rpcs are derived, each
-// streaming the side it declares, and nothing is registered for it over
-// HTTP, no route, no service and no test scaffold, so the project builds
-// with a router file naming it nowhere.
+// streaming the side it declares and described by the route it is declared
+// on rather than a path, and nothing is registered for it over HTTP, no
+// route, no service and no test scaffold, so the project builds with a
+// router file naming it nowhere; and gg gen says of every Stream that
+// nothing serves it (see reportUnservedStreams).
 func TestGenRunKeepsStreamActionsOffTheHTTPSide(t *testing.T) {
 	projectDir := newGenProject(t)
 	writeProtobufProject(t, projectDir, map[string]string{"model/feed.go": protobufFeedModel})
 
-	require.NoError(t, genRunWithOptions(genRunOptions{Quiet: true}))
+	var err error
+	warnings := captureStdout(t, func() { err = genRunWithOptions(genRunOptions{Quiet: true}) })
+	require.NoError(t, err)
+	require.Contains(t, warnings, "model/feed.go: the Stream action Watch of Feed on feeds/watch is declared but not served: streaming rpcs have no handler, so its rpc answers Unimplemented")
 
 	proto, err := os.ReadFile(filepath.Join(projectDir, "pb", "feed.proto"))
 	require.NoError(t, err)
+	require.Contains(t, string(proto), "// WatchFeed is the Stream action of Feed declared on feeds/watch, served over gRPC alone.")
 	require.Contains(t, string(proto), "rpc WatchFeed ( WatchFeedRequest ) returns ( stream WatchFeedResponse );")
 	require.Contains(t, string(proto), "rpc UploadFeed ( stream UploadFeedRequest ) returns ( UploadFeedResponse );")
 	require.Contains(t, string(proto), "rpc ChatFeed ( stream ChatFeedRequest ) returns ( stream ChatFeedResponse );")

@@ -6,7 +6,7 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/hydroan/gst/dsl"
+	"github.com/hydroan/gst/internal/dsl"
 	"github.com/kr/pretty"
 )
 

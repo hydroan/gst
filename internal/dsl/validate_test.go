@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/hydroan/gst/dsl"
+	"github.com/hydroan/gst/internal/dsl"
 )
 
 func TestValidateFlattenUsage(t *testing.T) {

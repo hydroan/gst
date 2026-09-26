@@ -12,7 +12,7 @@ import (
 	"strings"
 
 	"github.com/hydroan/gst/consts"
-	"github.com/hydroan/gst/dsl"
+	"github.com/hydroan/gst/internal/dsl"
 	"github.com/hydroan/gst/internal/modelinfo"
 	"github.com/stoewer/go-strcase"
 )

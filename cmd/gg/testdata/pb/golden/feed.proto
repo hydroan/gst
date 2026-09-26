@@ -78,12 +78,12 @@ message FeedWatchReq {
 
 // FeedService serves the actions of Feed over gRPC.
 service FeedService {
-  // ChatFeed is the Stream action of Feed on /api/feeds/chat.
+  // ChatFeed is the Stream action of Feed declared on feeds/chat, served over gRPC alone.
   rpc ChatFeed ( stream ChatFeedRequest ) returns ( stream ChatFeedResponse );
 
-  // UploadFeed is the Stream action of Feed on /api/feeds/upload.
+  // UploadFeed is the Stream action of Feed declared on feeds/upload, served over gRPC alone.
   rpc UploadFeed ( stream UploadFeedRequest ) returns ( UploadFeedResponse );
 
-  // WatchFeed is the Stream action of Feed on /api/feeds/watch.
+  // WatchFeed is the Stream action of Feed declared on feeds/watch, served over gRPC alone.
   rpc WatchFeed ( WatchFeedRequest ) returns ( stream WatchFeedResponse );
 }

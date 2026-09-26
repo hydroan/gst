@@ -3,7 +3,7 @@ package modelinfo
 import (
 	"sort"
 
-	"github.com/hydroan/gst/dsl"
+	"github.com/hydroan/gst/internal/dsl"
 	"github.com/hydroan/gst/internal/ggconfig"
 )
 

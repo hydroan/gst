@@ -4,7 +4,7 @@ import (
 	"testing"
 
 	"github.com/hydroan/gst/consts"
-	"github.com/hydroan/gst/dsl"
+	"github.com/hydroan/gst/internal/dsl"
 )
 
 func TestAction_RoleName(t *testing.T) {

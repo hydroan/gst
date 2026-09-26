@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/hydroan/gst/dsl"
+	"github.com/hydroan/gst/internal/dsl"
 	"github.com/hydroan/gst/internal/modelinfo"
 	"github.com/stretchr/testify/require"
 )

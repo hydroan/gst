@@ -124,9 +124,12 @@ linters:
             - "!**/interceptor/iam_session.go"
             - "!**/interceptor/authz.go"
             - "!**/module/helloworld/**"
+            - "!**/module/version/version.go"
           deny:
             - pkg: "github.com/hydroan/gst$"
               desc: "framework code imports github.com/hydroan/gst/internal/types"
+            - pkg: "github.com/hydroan/gst/dsl$"
+              desc: "framework code imports github.com/hydroan/gst/internal/dsl; the public package holds the keywords model files call"
             - pkg: "github.com/hydroan/gst/model$"
               desc: "framework code imports github.com/hydroan/gst/internal/modelregistry"
             - pkg: "github.com/hydroan/gst/service$"

@@ -5,7 +5,7 @@ import (
 	"strings"
 
 	"github.com/hydroan/gst/consts"
-	"github.com/hydroan/gst/dsl"
+	"github.com/hydroan/gst/internal/dsl"
 	"github.com/hydroan/gst/internal/gggen/jsonshape"
 	"github.com/hydroan/gst/internal/modelinfo"
 	"google.golang.org/protobuf/types/descriptorpb"
@@ -83,8 +83,13 @@ func (g *generator) declareService(m *modelinfo.Model) {
 		if !ok {
 			return
 		}
-		file.comment([]int32{fileServicesTag, int32Index(len(file.services)), serviceMethodsTag, int32Index(len(service.Method))},
-			name+" is the "+action.Phase.MethodName()+" action of "+m.ModelName+" on "+consts.APIPath(route)+".")
+		// A Stream action is served over gRPC alone: its route names it and
+		// tells it from the other actions, but is no path a request reaches.
+		comment := name + " is the " + action.Phase.MethodName() + " action of " + m.ModelName + " on " + consts.APIPath(route) + "."
+		if dsl.GRPCOnlyAction(action.Phase.MethodName()) {
+			comment = name + " is the " + action.Phase.MethodName() + " action of " + m.ModelName + " declared on " + route + ", served over gRPC alone."
+		}
+		file.comment([]int32{fileServicesTag, int32Index(len(file.services)), serviceMethodsTag, int32Index(len(service.Method))}, comment)
 		method := &descriptorpb.MethodDescriptorProto{
 			Name:       new(name),
 			InputType:  new("." + file.pkg + "." + r.request.GetName()),

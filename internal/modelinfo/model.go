@@ -9,7 +9,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/errors"
-	"github.com/hydroan/gst/dsl"
+	"github.com/hydroan/gst/internal/dsl"
 )
 
 // Model stores model information

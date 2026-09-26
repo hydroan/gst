@@ -69,16 +69,17 @@
 // Model Types:
 //   - Models with model.Base: Full-featured models with database persistence
 //   - Models with model.Empty: Lightweight models without database migration
+//
+// The keywords do nothing when called: gg gen reads a model's Design()
+// as source and derives the routes, services and messages from it (see the
+// internal dsl package of the framework), so a Design() runs no code.
+// Each keyword forwards to its declaration in that package, which is what
+// the parser knows; the documentation of the keywords is here, where the
+// projects read it.
 package dsl
 
 import (
-	"maps"
-	"path/filepath"
-	"slices"
-	"strings"
-
-	"github.com/hydroan/gst/consts"
-	"github.com/stoewer/go-strcase"
+	internaldsl "github.com/hydroan/gst/internal/dsl"
 )
 
 // Enabled controls whether API generation is enabled.
@@ -89,14 +90,14 @@ import (
 //  2. When used in action configuration functions (e.g., Create, Update, List, Get),
 //     it controls whether the declared action should be generated.
 //     Default: true for declared actions; actions that are not declared remain disabled.
-func Enabled(bool) {}
+func Enabled(enabled bool) { internaldsl.Enabled(enabled) }
 
 // Endpoint sets a custom endpoint path for the model's API routes.
 // If not specified, defaults to the pluralized snake_case form of the model name,
 // e.g. "sample_records" for a SampleRecord model.
 // Leading slashes are automatically removed and forward slashes are replaced with hyphens.
 // Example: Endpoint("users") for a User model, Endpoint("/iam/users") becomes "iam-users"
-func Endpoint(string) {}
+func Endpoint(path string) { internaldsl.Endpoint(path) }
 
 // Param defines a path parameter for dynamic routing in RESTful APIs.
 // It adds a URL parameter segment to the endpoint, enabling hierarchical resource access.
@@ -120,7 +121,7 @@ func Endpoint(string) {}
 //
 // The parameter creates RESTful nested resource patterns, enabling hierarchical API designs
 // where child resources are scoped under parent resources through URL path parameters.
-func Param(string) {}
+func Param(name string) { internaldsl.Param(name) }
 
 // Route defines an alternative API route for the model beyond the default hierarchical route.
 // This allows a resource to be accessible through multiple API endpoints, providing flexibility
@@ -190,12 +191,12 @@ func Param(string) {}
 //   - /api/samples/:sample/items (default hierarchical route)
 //   - /api/items and /api/items/:item (additional global route)
 //   - /api/archive/items and /api/archive/items/:item (additional archive route)
-func Route(string, func()) {}
+func Route(path string, fn func()) { internaldsl.Route(path, fn) }
 
 // Migrate marks the model as a database model that requires schema migration.
 // When declared, the model's table structure will be created/updated in the database.
 // Migration is disabled by default; declaring Migrate() enables it.
-func Migrate() {}
+func Migrate() { internaldsl.Migrate() }
 
 // GRPC serves the model over gRPC as well as HTTP: gg gen derives the model's
 // .proto from its Go type and its Design() and generates the gRPC service
@@ -204,7 +205,7 @@ func Migrate() {}
 // Design() top level, and needs at least one action gRPC can serve: Import,
 // Export and SSE are HTTP only. A Stream action is served over gRPC alone
 // and needs it.
-func GRPC() {}
+func GRPC() { internaldsl.GRPC() }
 
 // Service marks the current action as requiring custom service code.
 //
@@ -216,7 +217,7 @@ func GRPC() {}
 // marker only controls service generation and registration for the current
 // action; it does not change Payload, Result, Public, Exact, Filename, Flatten,
 // Enabled, or route generation semantics.
-func Service() {}
+func Service() { internaldsl.Service() }
 
 // Filename specifies a custom filename (without extension) for the generated service file.
 // When used inside an action configuration function (e.g., Create, Update), it overrides the
@@ -252,7 +253,7 @@ func Service() {}
 //	        Filename("restore")  // generates service/sample/item/restore.go
 //	    })
 //	})
-func Filename(string) {}
+func Filename(name string) { internaldsl.Filename(name) }
 
 // Flatten changes the service output layout for the current action.
 //
@@ -282,7 +283,7 @@ func Filename(string) {}
 // Flatten is only valid for model files under model/<package>/<file>.go. Root model files
 // such as model/user.go cannot be flattened because service/ is reserved for generated
 // registration code and should not contain business service files.
-func Flatten() {}
+func Flatten() { internaldsl.Flatten() }
 
 // Public marks the current action as publicly accessible.
 //
@@ -294,7 +295,7 @@ func Flatten() {}
 // Omit Public() for authenticated APIs. The default is intentionally protected:
 // actions are registered on the authenticated router unless they explicitly opt
 // in to public access.
-func Public() {}
+func Public() { internaldsl.Public() }
 
 // Exact marks the current action route as exact.
 //
@@ -311,13 +312,7 @@ func Public() {}
 // resource id from the route parameter only. An Exact route without an id
 // segment must declare Payload/Result so the action is delegated to a custom
 // service method instead of the built-in controller.
-func Exact() {}
-
-// PayloadEmpty is the Action.Payload value assigned to List and Get actions
-// that declare Result. These actions handle HTTP GET requests without a
-// request body, so code generation uses the non-persistent *model.Empty as
-// the request type instead of the model type.
-const PayloadEmpty = "*model.Empty"
+func Exact() { internaldsl.Exact() }
 
 // Payload specifies the request payload type for the current action.
 // The type parameter T defines the structure of incoming request data.
@@ -328,7 +323,7 @@ const PayloadEmpty = "*model.Empty"
 // Result only and read query parameters from ServiceContext.Query().
 // Payload must not be declared on Import and Export actions either: they
 // delegate to fixed service method signatures that never bind a request type.
-func Payload[T any]() {}
+func Payload[T any]() { internaldsl.Payload[T]() }
 
 // Result specifies the response result type for the current action.
 // The type parameter T defines the structure of outgoing response data.
@@ -336,25 +331,25 @@ func Payload[T any]() {}
 //
 // Result must not be declared on Import and Export actions: they delegate to
 // fixed service method signatures that never bind a response type.
-func Result[T any]() {}
+func Result[T any]() { internaldsl.Result[T]() }
 
 // Create defines the configuration for the create operation.
 // The function parameter allows setting Enabled, Service, Public, Payload, and Result.
 // Declaring the action enables it by default.
 // Example: Create(func() { Payload[CreateUserRequest](); Result[*User]() })
-func Create(func()) {}
+func Create(fn func()) { internaldsl.Create(fn) }
 
 // Delete defines the configuration for the delete operation.
 // Typically used for soft or hard deletion of single records.
-func Delete(func()) {}
+func Delete(fn func()) { internaldsl.Delete(fn) }
 
 // Update defines the configuration for the update operation.
 // Used for full record updates, replacing all fields.
-func Update(func()) {}
+func Update(fn func()) { internaldsl.Update(fn) }
 
 // Patch defines the configuration for the patch operation.
 // Used for partial record updates, modifying only specified fields.
-func Patch(func()) {}
+func Patch(fn func()) { internaldsl.Patch(fn) }
 
 // List defines the configuration for the list operation.
 // Used for retrieving multiple records with optional filtering and pagination.
@@ -362,7 +357,7 @@ func Patch(func()) {}
 // List handles an HTTP GET request and must not declare Payload. Declaring
 // Result delegates the action to a custom service method whose request type
 // is generated as *model.Empty; filters are read from ServiceContext.Query().
-func List(func()) {}
+func List(fn func()) { internaldsl.List(fn) }
 
 // Get defines the configuration for the get operation.
 // Used for retrieving a single record by identifier.
@@ -371,23 +366,23 @@ func List(func()) {}
 // Result delegates the action to a custom service method whose request type
 // is generated as *model.Empty; parameters are read from ServiceContext.Query()
 // and ServiceContext.Param().
-func Get(func()) {}
+func Get(fn func()) { internaldsl.Get(fn) }
 
 // CreateMany defines the configuration for batch create operations.
 // Allows creating multiple records in a single request.
-func CreateMany(func()) {}
+func CreateMany(fn func()) { internaldsl.CreateMany(fn) }
 
 // DeleteMany defines the configuration for batch delete operations.
 // Allows deleting multiple records in a single request.
-func DeleteMany(func()) {}
+func DeleteMany(fn func()) { internaldsl.DeleteMany(fn) }
 
 // UpdateMany defines the configuration for batch update operations.
 // Allows updating multiple records in a single request.
-func UpdateMany(func()) {}
+func UpdateMany(fn func()) { internaldsl.UpdateMany(fn) }
 
 // PatchMany defines the configuration for batch patch operations.
 // Allows partially updating multiple records in a single request.
-func PatchMany(func()) {}
+func PatchMany(fn func()) { internaldsl.PatchMany(fn) }
 
 // Import defines the configuration for data import operations.
 // Used for bulk data ingestion from external sources.
@@ -395,7 +390,7 @@ func PatchMany(func()) {}
 // Import must not declare Payload or Result: the controller reads the
 // uploaded multipart form file, delegates to the fixed service method
 // Import(ctx, io.Reader) ([]M, error), and responds with a bare status code.
-func Import(func()) {}
+func Import(fn func()) { internaldsl.Import(fn) }
 
 // Export defines the configuration for data export operations.
 // Used for bulk data extraction to external formats.
@@ -404,7 +399,7 @@ func Import(func()) {}
 // request whose filters come from query parameters, and the controller writes
 // the bytes returned by the fixed service method
 // Export(ctx, ...M) ([]byte, error) as a file attachment.
-func Export(func()) {}
+func Export(fn func()) { internaldsl.Export(fn) }
 
 // SSE defines the configuration for a Server-Sent Events streaming operation.
 // The route handles an HTTP GET request whose response is a long-lived
@@ -418,7 +413,7 @@ func Export(func()) {}
 // parameters are read from ServiceContext.Query(), and the response is the
 // event stream itself. An SSE action cannot share a route with List, as both
 // register the GET route path itself.
-func SSE(func()) {}
+func SSE(fn func()) { internaldsl.SSE(fn) }
 
 // Stream defines a streaming operation, served over gRPC alone: one side of
 // the call, or both, is a stream of messages rather than one message. The
@@ -446,309 +441,16 @@ func SSE(func()) {}
 //	        StreamingResult[*FeedEvent]()
 //	    })
 //	})
-func Stream(func()) {}
+func Stream(fn func()) { internaldsl.Stream(fn) }
 
 // StreamingPayload declares the request side of a Stream action as a stream
 // of T, one message per value the client sends. Example:
 // StreamingPayload[*FeedEvent](). It can only be used inside a Stream block,
 // which then cannot declare Payload as well.
-func StreamingPayload[T any]() {}
+func StreamingPayload[T any]() { internaldsl.StreamingPayload[T]() }
 
 // StreamingResult declares the response side of a Stream action as a stream
 // of T, one message per value the service sends. Example:
 // StreamingResult[*FeedEvent](). It can only be used inside a Stream block,
 // which then cannot declare Result as well.
-func StreamingResult[T any]() {}
-
-// Design represents the complete API design configuration for a model.
-// It contains global settings and individual action configurations.
-// This struct is populated by parsing the model's Design() method.
-type Design struct {
-	// Enabled indicates whether API generation is enabled for this model.
-	// Default: true
-	Enabled bool
-
-	// Endpoint specifies the URL path segment for this model's API routes.
-	// Defaults to the pluralized snake_case form of the model name.
-	// Used by the router to construct API endpoints.
-	Endpoint string
-
-	// Param contains the path parameter name for dynamic routing.
-	// The parameter will be inserted as ":param" in the generated route paths.
-	// Parameters are automatically propagated to child resources in nested structures,
-	// allowing parent resource parameters to be inherited by child endpoints.
-	//
-	// Usage Examples:
-	//   - Param("user") generates routes like /api/users/:user
-	//   - Param("item") generates routes like /api/samples/items/:item
-	//   - Param("entry") generates routes like /api/samples/items/entries/:entry
-	//
-	// Parameter Propagation:
-	// In hierarchical models (sample -> item -> entry), parent parameters are
-	// automatically propagated: /api/samples/:sample/items/:item/entries/:entry
-	//
-	// Default: "" (no parameter)
-	Param string
-
-	// routes contains alternative API routes for this model beyond the default hierarchical route.
-	// Each route allows the resource to be accessible through alternative API endpoints,
-	// providing flexibility for different access patterns and use cases.
-	//
-	// Map Structure:
-	//   - Key: Route path string (e.g., "items", "archive/items", "public/items")
-	//   - Value: Slice of Action configurations for operations enabled on this route
-	//
-	// Route Examples:
-	//   - "items" creates /api/items and /api/items/:param (if Param is defined)
-	//   - "archive/items" creates /api/archive/items and /api/archive/items/:param
-	//   - "public/items" creates /api/public/items and /api/public/items/:param
-	//
-	// Action Configuration:
-	// Each route can have different operations enabled. For example:
-	//   - Route "items" might only enable List and Get operations
-	//   - Route "admin/items" might enable all CRUD operations
-	//   - Route "public/items" might only enable List operation
-	//
-	// Multiple routes can be defined by calling Route() multiple times in Design().
-	// Each alternative route can have its own set of enabled operations and configurations.
-	//
-	// Usage in Design():
-	//   Route("/archive/items", func() {
-	//       List(func() {})
-	//       Get(func() { Service() })
-	//   })
-	//
-	// This populates routes["archive/items"] (the leading slash is removed) with
-	// List and Get Action configurations.
-	//
-	// Default: nil (no alternative routes)
-	routes map[string][]*Action
-
-	// Migrate indicates whether database migration should be performed.
-	// When true, the model's table structure will be created/updated.
-	// Default: false
-	Migrate bool
-
-	// GRPC indicates whether the model is served over gRPC as well (see GRPC).
-	// Default: false
-	GRPC bool
-
-	// IsEmpty indicates if the model contains a model.Empty field.
-	// Models with model.Empty are lightweight and typically don't require migration.
-	IsEmpty bool
-
-	// Single record operations
-	Create *Action // Create operation configuration
-	Delete *Action // Delete operation configuration
-	Update *Action // Update operation configuration (full replacement)
-	Patch  *Action // Patch operation configuration (partial update)
-	List   *Action // List operation configuration (retrieve multiple)
-	Get    *Action // Get operation configuration (retrieve single)
-
-	// Batch operations
-	CreateMany *Action // Batch create operation configuration
-	DeleteMany *Action // Batch delete operation configuration
-	UpdateMany *Action // Batch update operation configuration
-	PatchMany  *Action // Batch patch operation configuration
-
-	// Data transfer operations
-	Import *Action // Import operation configuration
-	Export *Action // Export operation configuration
-
-	// Streaming operations
-	SSE    *Action // Server-Sent Events streaming operation configuration
-	Stream *Action // gRPC streaming operation configuration (see Stream)
-}
-
-// Range iterates over all enabled actions in the Design and calls the provided function
-// for each one, with the route the action is registered under. Nothing is called for a
-// nil or disabled Design, or for a nil function.
-//
-// Parameters:
-//   - fn: Callback function that receives (route, action) for each enabled action
-//
-// The Design's own actions come first, under its endpoint, in a fixed order: Create,
-// Delete, Update, Patch, List, Import, Export, SSE, Stream, Get, CreateMany,
-// DeleteMany, UpdateMany, PatchMany. The actions declared with Route follow, route
-// by route in sorted order, each route's actions in that same order.
-//
-// Example:
-//
-//	design.Range(func(route string, action *Action) {
-//		fmt.Printf("Generating %s for %s\n", action.Phase.MethodName(), route)
-//	})
-func (d *Design) Range(fn func(route string, action *Action)) {
-	if d == nil || fn == nil || !d.Enabled {
-		return
-	}
-
-	if d.Create.Enabled {
-		fn(d.Endpoint, d.Create)
-	}
-	if d.Delete.Enabled {
-		fn(d.Endpoint, d.Delete)
-	}
-	if d.Update.Enabled {
-		fn(d.Endpoint, d.Update)
-	}
-	if d.Patch.Enabled {
-		fn(d.Endpoint, d.Patch)
-	}
-	if d.List.Enabled {
-		fn(d.Endpoint, d.List)
-	}
-	if d.Import.Enabled {
-		fn(d.Endpoint, d.Import)
-	}
-	if d.Export.Enabled {
-		fn(d.Endpoint, d.Export)
-	}
-	if d.SSE.Enabled {
-		fn(d.Endpoint, d.SSE)
-	}
-	if d.Stream.Enabled {
-		fn(d.Endpoint, d.Stream)
-	}
-	if d.Get.Enabled {
-		fn(d.Endpoint, d.Get)
-	}
-	if d.CreateMany.Enabled {
-		fn(d.Endpoint, d.CreateMany)
-	}
-	if d.DeleteMany.Enabled {
-		fn(d.Endpoint, d.DeleteMany)
-	}
-	if d.UpdateMany.Enabled {
-		fn(d.Endpoint, d.UpdateMany)
-	}
-	if d.PatchMany.Enabled {
-		fn(d.Endpoint, d.PatchMany)
-	}
-
-	// Sort route keys to ensure deterministic iteration order.
-	for _, route := range slices.Sorted(maps.Keys(d.routes)) {
-		emitRouteActions(route, d.routes[route], fn)
-	}
-}
-
-// Action represents the configuration for a specific API operation.
-// Each operation (Create, Update, Delete, etc.) has its own Action configuration.
-type Action struct {
-	// Enabled indicates whether this specific action should be generated.
-	// Declared actions default to true; actions not declared in Design are disabled.
-	Enabled bool
-
-	// Service indicates whether custom service code should be generated and
-	// registered for this action. It is true only when the action's DSL block
-	// contains Service().
-	// Default: false
-	Service bool
-
-	// Public indicates whether this action is registered on the public router.
-	// It is true only when the action's DSL block contains Public().
-	// Default: false, meaning the action requires authentication.
-	Public bool
-
-	// Exact indicates whether this action uses the route exactly as declared.
-	// It is true only when the action's DSL block contains Exact().
-	// Default: false, meaning the action uses the normal phase route pattern.
-	Exact bool
-
-	// Payload specifies the type name for the request payload.
-	// This determines the structure of incoming request data.
-	// Example: "CreateUserRequest", "*User", "User"
-	// List and Get actions that declare Result carry PayloadEmpty here.
-	Payload string
-
-	// Result specifies the type name for the response result.
-	// This determines the structure of outgoing response data.
-	// Example: "*User", "UserResponse", "[]User"
-	Result string
-
-	// StreamingPayload marks the Payload of a Stream action as what each
-	// message of the request stream carries, declared with
-	// StreamingPayload; StreamingResult marks the Result of a Stream action
-	// as what each message of the response stream carries, declared with
-	// StreamingResult. Both are false for any other action.
-	StreamingPayload bool
-	StreamingResult  bool
-
-	// Filename specifies a custom filename (without extension) for the generated service file.
-	// When set, it overrides the default filename derived from the Phase.
-	// For example, Filename="archive" generates "archive.go" instead of "create.go".
-	// Default: "" (uses Phase-based filename)
-	Filename string
-
-	// Flatten indicates whether the generated service file should be written directly
-	// into the service package that mirrors the current model package.
-	// It only affects service output layout and requires Service() plus Filename(...).
-	Flatten bool
-
-	// The phase of the action
-	// not part of DSL, just used to identify the current Action.
-	Phase consts.Phase
-}
-
-// RoleName returns the struct name for the generated service file.
-// If Filename is set, it extracts the base name (stripping any directory prefix
-// and file extension) and converts it to UpperCamelCase.
-// For example, Filename("archive") returns "Archive", Filename("a/b/item_archive.rs") returns "ItemArchive".
-// Otherwise, it falls back to Phase.RoleName() (e.g., "Creator", "Updater", "Deleter").
-func (a *Action) RoleName() string {
-	if len(a.Filename) > 0 {
-		name := filepath.Base(a.Filename)
-		name = strings.TrimSuffix(name, filepath.Ext(name))
-		return strcase.UpperCamelCase(name)
-	}
-	return a.Phase.RoleName()
-}
-
-// ServiceFilename returns the filename for the generated service file.
-// If Filename is set, it extracts the base name (stripping any directory prefix
-// and file extension), converts it to lowercase, and appends ".go".
-// For example, "a/b/c.rs" becomes "c.go", "Archive" becomes "archive.go".
-// Otherwise, it falls back to the lowercase Phase name + ".go".
-func (a *Action) ServiceFilename() string {
-	if len(a.Filename) > 0 {
-		name := filepath.Base(a.Filename)
-		name = strings.TrimSuffix(name, filepath.Ext(name))
-		return strings.ToLower(name) + ".go"
-	}
-	return strings.ToLower(string(a.Phase)) + ".go"
-}
-
-var methodList = []string{
-	"Enabled",
-	"Endpoint",
-	"Param",
-	"Route",
-	"Migrate",
-	"GRPC",
-	"Service",
-	"Public",
-	"Exact",
-	"Payload",
-	"Result",
-	"Filename",
-	"Flatten",
-	"StreamingPayload",
-	"StreamingResult",
-
-	consts.PHASE_CREATE.MethodName(),
-	consts.PHASE_DELETE.MethodName(),
-	consts.PHASE_UPDATE.MethodName(),
-	consts.PHASE_PATCH.MethodName(),
-	consts.PHASE_LIST.MethodName(),
-	consts.PHASE_GET.MethodName(),
-
-	consts.PHASE_CREATE_MANY.MethodName(),
-	consts.PHASE_DELETE_MANY.MethodName(),
-	consts.PHASE_UPDATE_MANY.MethodName(),
-	consts.PHASE_PATCH_MANY.MethodName(),
-
-	consts.PHASE_IMPORT.MethodName(),
-	consts.PHASE_EXPORT.MethodName(),
-
-	consts.PHASE_SSE.MethodName(),
-	consts.PHASE_STREAM.MethodName(),
-}
+func StreamingResult[T any]() { internaldsl.StreamingResult[T]() }

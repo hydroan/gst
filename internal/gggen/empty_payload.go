@@ -5,7 +5,7 @@ import (
 	"go/ast"
 	"go/token"
 
-	"github.com/hydroan/gst/dsl"
+	"github.com/hydroan/gst/internal/dsl"
 	"github.com/hydroan/gst/internal/ggconst"
 	"github.com/hydroan/gst/internal/goast"
 	"github.com/hydroan/gst/internal/modelinfo"
