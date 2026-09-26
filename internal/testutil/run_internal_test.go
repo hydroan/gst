@@ -33,6 +33,28 @@ func TestServerPreparesClickhouse(t *testing.T) {
 	require.NoError(t, conn.Close())
 }
 
+func TestServerPreparesMinio(t *testing.T) {
+	for _, key := range []string{config.MINIO_ENDPOINT, config.MINIO_BUCKET, config.MINIO_ENABLED} {
+		t.Setenv(key, "")
+		require.NoError(t, os.Unsetenv(key))
+	}
+
+	release, _, err := Server{Minio: true}.prepare()
+	t.Cleanup(release)
+	require.NoError(t, err)
+
+	// The prepared bucket lands in the environment the way the other
+	// services do, which is where the bootstrap config picks it up.
+	endpoint := os.Getenv(config.MINIO_ENDPOINT)
+	require.NotEmpty(t, endpoint)
+	require.NotEmpty(t, os.Getenv(config.MINIO_BUCKET))
+	require.Equal(t, "true", os.Getenv(config.MINIO_ENABLED))
+
+	conn, err := net.DialTimeout("tcp", endpoint, 5*time.Second)
+	require.NoError(t, err)
+	require.NoError(t, conn.Close())
+}
+
 func TestServerPreparesKafka(t *testing.T) {
 	for _, key := range []string{config.KAFKA_BROKERS, config.KAFKA_ENABLED} {
 		t.Setenv(key, "")

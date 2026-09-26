@@ -27,7 +27,8 @@
 //
 // A login is a plain client.Post: the client's cookie jar holds the session
 // cookie, so every later request through the same client is authenticated.
-// Rejections are asserted with RequireError.
+// Rejections are asserted with RequireError. A project serving gRPC dials
+// GRPCTarget with the client the protobuf plugin generated.
 //
 // Database state is asserted with the Require* family, which reads rows back
 // through the framework query chain and fails the test when the state does
@@ -72,6 +73,16 @@ func BaseURL() string {
 // per test binary, so an endpoint can be declared as a package-level variable.
 func URL(path string) string {
 	return testutil.URL(path)
+}
+
+// GRPCTarget returns the address of the test server's gRPC listener, the
+// target a grpc.NewClient takes. The port is picked per test binary, so the
+// target can be declared as a package-level variable. The listener comes up
+// only when the test binary registers the project's gRPC services: import
+// the project's pb package the way main.go does, `_ "myapp/pb"`, next to the
+// other project imports of the file declaring TestMain.
+func GRPCTarget() string {
+	return testutil.GRPCTarget()
 }
 
 // DecodeResp asserts that resp carries a successful envelope and returns the

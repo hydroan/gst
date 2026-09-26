@@ -9,44 +9,52 @@ import (
 	"github.com/hydroan/gst/config"
 )
 
-// serverPort is the port the test server listens on. It is picked when the
-// package loads, before any package-level URL is built, so that a test can
-// declare its endpoints as package-level variables.
-var serverPort = mustFreeLocalPort()
+// serverPort and grpcPort are the ports the test server's HTTP and gRPC
+// listeners take. They are picked when the package loads, before any
+// package-level URL is built, so that a test can declare its endpoints as
+// package-level variables, and picked together, so that the kernel cannot
+// hand the same port out twice.
+var serverPort, grpcPort = mustFreeLocalPorts()
 
 // listenOnFreePort configures the HTTP server to listen on the port URL
-// resolves to.
+// resolves to, and the gRPC server on the one GRPCTarget resolves to.
 func listenOnFreePort() {
 	os.Setenv(config.SERVER_LISTEN, "127.0.0.1")
 	os.Setenv(config.SERVER_PORT, strconv.Itoa(serverPort))
+	os.Setenv(config.GRPC_LISTEN, "127.0.0.1")
+	os.Setenv(config.GRPC_PORT, strconv.Itoa(grpcPort))
 }
 
-func mustFreeLocalPort() int {
-	port, err := freeLocalPort()
+func mustFreeLocalPorts() (server, grpc int) {
+	ports, err := freeLocalPorts(2)
 	if err != nil {
 		panic(err)
 	}
-	return port
+	return ports[0], ports[1]
 }
 
-// freeLocalPort asks the kernel for an unused port by binding to port zero and
-// closing again. The port is then free for the test server to take.
-func freeLocalPort() (int, error) {
-	l, err := net.Listen("tcp", "127.0.0.1:0")
-	if err != nil {
-		return 0, err
-	}
-
-	addr, ok := l.Addr().(*net.TCPAddr)
-	if !ok {
-		if err := l.Close(); err != nil {
-			return 0, err
+// freeLocalPorts asks the kernel for n unused ports by binding to port zero
+// n times, holding every listener until all are bound so that no port comes
+// back twice, and closing them again. The ports are then free for the test
+// server to take.
+func freeLocalPorts(n int) (ports []int, err error) {
+	listeners := make([]net.Listener, 0, n)
+	defer func() {
+		for _, l := range listeners {
+			err = errors.CombineErrors(err, l.Close())
 		}
-		return 0, errors.Newf("unexpected listener address type %T", l.Addr())
+	}()
+	for range n {
+		l, listenErr := net.Listen("tcp", "127.0.0.1:0")
+		if listenErr != nil {
+			return nil, listenErr
+		}
+		listeners = append(listeners, l)
+		addr, ok := l.Addr().(*net.TCPAddr)
+		if !ok {
+			return nil, errors.Newf("unexpected listener address type %T", l.Addr())
+		}
+		ports = append(ports, addr.Port)
 	}
-	port := addr.Port
-	if err := l.Close(); err != nil {
-		return 0, err
-	}
-	return port, nil
+	return ports, nil
 }

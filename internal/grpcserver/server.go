@@ -75,6 +75,15 @@ func Register(fn func(grpc.ServiceRegistrar), described ...Method) {
 	}
 }
 
+// HasServices reports whether a service was registered: Run opens the
+// listener only then, which is what a test harness waiting for the listener
+// needs to know.
+func HasServices() bool {
+	mu.Lock()
+	defer mu.Unlock()
+	return len(registrations) > 0
+}
+
 // Run serves the registered services on the address config.App.GRPC names
 // until Stop. With no service registered it returns at once and opens no
 // listener. Like router.Run it is one of bootstrap's long-running

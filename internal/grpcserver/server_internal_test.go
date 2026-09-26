@@ -206,6 +206,16 @@ func TestRunOpensNoListenerWithoutAService(t *testing.T) {
 	Stop(context.Background())
 }
 
+// TestHasServicesReportsARegistration guards HasServices, what a test
+// harness reads to know whether Run will open a listener at all.
+func TestHasServicesReportsARegistration(t *testing.T) {
+	reset(t)
+	require.False(t, HasServices())
+
+	serve(map[string]func(ctx context.Context) error{"Ping": func(context.Context) error { return nil }})
+	require.True(t, HasServices())
+}
+
 // TestRunServesTheRegisteredServicesWithHealthAndReflection pins what the
 // listener carries: the registered service, the standard health service
 // answering SERVING until Drain turns it to NOT_SERVING, and the reflection

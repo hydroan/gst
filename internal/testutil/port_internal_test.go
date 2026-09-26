@@ -9,13 +9,18 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestListenOnFreePortConfiguresLocalEphemeralPort(t *testing.T) {
-	t.Setenv(config.SERVER_LISTEN, "")
-	t.Setenv(config.SERVER_PORT, "")
+func TestListenOnFreePortConfiguresLocalEphemeralPorts(t *testing.T) {
+	for _, key := range []string{config.SERVER_LISTEN, config.SERVER_PORT, config.GRPC_LISTEN, config.GRPC_PORT} {
+		t.Setenv(key, "")
+	}
 
 	listenOnFreePort()
 
 	require.Positive(t, serverPort)
+	require.Positive(t, grpcPort)
+	require.NotEqual(t, serverPort, grpcPort)
 	require.Equal(t, "127.0.0.1", os.Getenv(config.SERVER_LISTEN))
 	require.Equal(t, strconv.Itoa(serverPort), os.Getenv(config.SERVER_PORT))
+	require.Equal(t, "127.0.0.1", os.Getenv(config.GRPC_LISTEN))
+	require.Equal(t, strconv.Itoa(grpcPort), os.Getenv(config.GRPC_PORT))
 }

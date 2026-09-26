@@ -8,6 +8,7 @@ import (
 
 	"github.com/hydroan/gst/bootstrap"
 	"github.com/hydroan/gst/config"
+	"github.com/hydroan/gst/internal/grpcserver"
 	"github.com/hydroan/gst/internal/testutil/testcontainer"
 	"github.com/hydroan/gst/internal/testutil/testlog"
 )
@@ -34,6 +35,10 @@ type Server struct {
 	// it. Tests reach it through config.App.Kafka or the provider.
 	Kafka bool
 
+	// Minio prepares a minio bucket and points the framework provider at
+	// it. Tests reach it through config.App.Minio or the provider.
+	Minio bool
+
 	// Register registers the modules under test. It runs before the framework
 	// bootstraps, which is where module registration belongs. Registration
 	// mirrors the framework's Register style and reports nothing.
@@ -53,8 +58,11 @@ type Server struct {
 }
 
 // Run prepares what s declares, starts the test server, runs the tests and
-// releases everything afterwards. It is the whole body of a test package's
-// TestMain:
+// releases everything afterwards. The server listens for HTTP at BaseURL
+// and, when the test binary registered gRPC services — a project's
+// generated pb package registers them when imported, the way main.go
+// imports it — for gRPC at GRPCTarget. It is the whole body of a test
+// package's TestMain:
 //
 //	func TestMain(m *testing.M) {
 //		testutil.Run(m, testutil.Server{
@@ -106,6 +114,11 @@ func run(m *testing.M, s Server) int {
 		}
 	}()
 	mustWaitForServer()
+	// The gRPC listener comes up beside the HTTP one only when a service
+	// was registered; without one the framework opens none.
+	if grpcserver.HasServices() {
+		mustWaitForGRPC()
+	}
 
 	return m.Run()
 }
@@ -116,7 +129,7 @@ func run(m *testing.M, s Server) int {
 // succeed, so the returned function undoes whatever was already prepared even
 // when a later step fails.
 func (s Server) prepare() (release func(), afterMigrate func(), err error) {
-	releases := make([]func(), 0, 5)
+	releases := make([]func(), 0, 6)
 	release = func() {
 		for _, done := range slices.Backward(releases) {
 			done()
@@ -188,6 +201,18 @@ func (s Server) prepare() (release func(), afterMigrate func(), err error) {
 		releases = append(releases, func() {
 			if releaseErr := cleanBroker(); releaseErr != nil {
 				reportReleaseFailure("kafka", releaseErr)
+			}
+		})
+	}
+
+	if s.Minio {
+		cleanBucket, err := testcontainer.SetupMinio()
+		if err != nil {
+			return release, afterMigrate, err
+		}
+		releases = append(releases, func() {
+			if releaseErr := cleanBucket(); releaseErr != nil {
+				reportReleaseFailure("minio", releaseErr)
 			}
 		})
 	}

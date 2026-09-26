@@ -5,8 +5,11 @@ import (
 	"testing"
 
 	"github.com/hydroan/gst/database"
+	"github.com/hydroan/gst/internal/grpcserver"
 	"github.com/hydroan/gst/internal/modelregistry"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/grpc"
+	"google.golang.org/protobuf/types/known/emptypb"
 )
 
 // SampleRecord is the neutral database model the assertion helpers are tested
@@ -37,4 +40,35 @@ func createSampleRecord(t *testing.T, name, tag string) *SampleRecord {
 		require.NoError(t, database.Database[*SampleRecord](ctx).WithPurge(true).Delete(record))
 	})
 	return record
+}
+
+// probeMethod is the one rpc of the probe gRPC service the test server
+// serves: gst.test.Probe/Ping, public, answering an empty message.
+const probeMethod = "/gst.test.Probe/Ping"
+
+// registerProbeService registers the probe service with the gRPC server the
+// way a project's generated pb/pb.gen.go registers its services, so that
+// Run brings the gRPC listener up for this test binary: its one rpc runs
+// the server's interceptors first, the way the code the protobuf plugin
+// generates does, and answers an empty message.
+func registerProbeService() {
+	ping := grpc.MethodDesc{
+		MethodName: "Ping",
+		Handler: func(_ any, ctx context.Context, dec func(any) error, unary grpc.UnaryServerInterceptor) (any, error) {
+			in := new(emptypb.Empty)
+			if err := dec(in); err != nil {
+				return nil, err
+			}
+			handler := func(context.Context, any) (any, error) { return &emptypb.Empty{}, nil }
+			return unary(ctx, in, &grpc.UnaryServerInfo{FullMethod: probeMethod}, handler)
+		},
+	}
+	grpcserver.Register(func(r grpc.ServiceRegistrar) {
+		r.RegisterService(&grpc.ServiceDesc{
+			ServiceName: "gst.test.Probe",
+			HandlerType: (*any)(nil),
+			Methods:     []grpc.MethodDesc{ping},
+			Metadata:    "gst/test/probe.proto",
+		}, nil)
+	}, grpcserver.Method{Name: probeMethod, Public: true})
 }
