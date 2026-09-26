@@ -183,11 +183,11 @@ func TestParseRouteRule(t *testing.T) {
 			wantMethod   string
 			wantSegments []string
 		}{
-			{"POST /api/signup", "POST", []string{"signup"}},
-			{"get /api/iam/admin/users", "GET", []string{"iam", "admin", "users"}},
-			{"GET /api/iam/admin/users/:id", "GET", []string{"iam", "admin", "users", ":id"}},
-			{"GET /api/iam/admin/users/{id}", "GET", []string{"iam", "admin", "users", ":id"}},
-			{"DELETE /samples/", "DELETE", []string{"samples"}},
+			{"POST /api/signup", "POST", []string{"api", "signup"}},
+			{"get /api/iam/admin/users", "GET", []string{"api", "iam", "admin", "users"}},
+			{"GET /api/iam/admin/users/:id", "GET", []string{"api", "iam", "admin", "users", ":id"}},
+			{"GET /api/iam/admin/users/{id}", "GET", []string{"api", "iam", "admin", "users", ":id"}},
+			{"DELETE /samples/", "DELETE", []string{"api", "samples"}},
 		}
 		for _, tt := range tests {
 			rule, err := ggconfig.ParseRouteRule(tt.raw)
@@ -229,10 +229,10 @@ func TestNormalizeRoutePath(t *testing.T) {
 		path string
 		want []string
 	}{
-		{"/api/iam/admin/users/:id", []string{"iam", "admin", "users", ":id"}},
-		{"iam/admin/users", []string{"iam", "admin", "users"}},
-		{"/signup/", []string{"signup"}},
-		{"{group}/items", []string{":group", "items"}},
+		{"/api/iam/admin/users/:id", []string{"api", "iam", "admin", "users", ":id"}},
+		{"iam/admin/users", []string{"api", "iam", "admin", "users"}},
+		{"/signup/", []string{"api", "signup"}},
+		{"{group}/items", []string{"api", ":group", "items"}},
 		{"/api", nil},
 		{"", nil},
 	}

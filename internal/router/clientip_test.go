@@ -14,7 +14,7 @@ import (
 const clientIPRoute = "/client-ip"
 
 func registerClientIPRoute() {
-	router.Pub().GET(clientIPRoute, func(c *gin.Context) {
+	router.Pub().GET(consts.APIPath(clientIPRoute), func(c *gin.Context) {
 		c.String(http.StatusOK, c.ClientIP())
 	})
 }
@@ -25,7 +25,7 @@ func registerClientIPRoute() {
 // connected from. Everything keyed on the client address — rate limits, audit
 // records, session records, the access log — rests on this.
 func TestClientIPIgnoresForgedForwardingHeaders(t *testing.T) {
-	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, baseURL+consts.APIPathPrefix+clientIPRoute, nil)
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, baseURL+consts.APIPath(clientIPRoute), nil)
 	require.NoError(t, err)
 	req.Header.Set("X-Forwarded-For", "203.0.113.9")
 	req.Header.Set("X-Real-IP", "198.51.100.4")

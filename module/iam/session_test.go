@@ -32,13 +32,12 @@ const (
 	sessionsPath      = "/api/iam/sessions"
 	adminSessionsPath = "/api/iam/admin/sessions"
 
-	// requestMetadataProbeGroupRoute is the probe registered behind the session
-	// middleware; see registerRequestMetadataProbe. The authenticated group
-	// carries the API path prefix, so requestMetadataProbeRoute is the pattern
-	// the middleware reports and requestMetadataProbePath the concrete path.
-	requestMetadataProbeGroupRoute = "/probe/request-metadata/:id"
-	requestMetadataProbeRoute      = consts.APIPathPrefix + requestMetadataProbeGroupRoute
-	requestMetadataProbePath       = consts.APIPathPrefix + "/probe/request-metadata/item-1"
+	// requestMetadataProbeRoute is the pattern of the probe registered behind
+	// the session middleware, the route the middleware reports, and
+	// requestMetadataProbePath a concrete path of it; see
+	// registerRequestMetadataProbe.
+	requestMetadataProbeRoute = "/api/probe/request-metadata/:id"
+	requestMetadataProbePath  = "/api/probe/request-metadata/item-1"
 )
 
 func adminUserSessionsPath(userID string) string {
@@ -1144,7 +1143,7 @@ type requestMetadataProbeRsp struct {
 // route rather than a module route so that the assertions describe the
 // middleware alone instead of whatever a real endpoint does with the context.
 func registerRequestMetadataProbe() error {
-	router.Auth().GET(requestMetadataProbeGroupRoute, func(c *gin.Context) {
+	router.Auth().GET(requestMetadataProbeRoute, func(c *gin.Context) {
 		meta := requestctx.FromContext(c.Request.Context())
 		internalresponse.JSON(c, internalresponse.CodeSuccess, requestMetadataProbeRsp{
 			Route:    meta.Route(),

@@ -16,12 +16,12 @@ import (
 // served over GET like the rest of the reads.
 func TestParseRouteTreeFromFileReadsGeneratedRoutes(t *testing.T) {
 	code, err := gggen.BuildRouterFile("router", "model", map[string]string{"tmpapp/model": ""},
-		gggen.StmtRouterRegister("model", "Record", "*Record", "*Record", "model", "Auth", "records", "", "Create"),
-		gggen.StmtRouterRegister("model", "Record", "*Record", "*Record", "model", "Auth", "records", "", "List"),
-		gggen.StmtRouterRegister("model", "Record", "*Record", "*Record", "model", "Auth", "records/:rec", "rec", "Get"),
-		gggen.StmtRouterRegister("model", "Record", "*Record", "*Record", "model", "Pub", "records/:rec", "rec", "Delete"),
-		gggen.StmtRouterRegister("model", "Record", "*Record", "*Record", "model", "Auth", "records/export", "", "Export"),
-		gggen.StmtRouterRegister("model", "Notice", "*Notice", "*Notice", "model", "Auth", "notices", "", "SSE"),
+		gggen.StmtRouterRegister("model", "Record", "*Record", "*Record", "model", "Auth", "/api/records", "", "Create"),
+		gggen.StmtRouterRegister("model", "Record", "*Record", "*Record", "model", "Auth", "/api/records", "", "List"),
+		gggen.StmtRouterRegister("model", "Record", "*Record", "*Record", "model", "Auth", "/api/records/:rec", "rec", "Get"),
+		gggen.StmtRouterRegister("model", "Record", "*Record", "*Record", "model", "Pub", "/api/records/:rec", "rec", "Delete"),
+		gggen.StmtRouterRegister("model", "Record", "*Record", "*Record", "model", "Auth", "/api/records/export", "", "Export"),
+		gggen.StmtRouterRegister("model", "Notice", "*Notice", "*Notice", "model", "Auth", "/api/notices", "", "SSE"),
 	)
 	require.NoError(t, err)
 
@@ -33,9 +33,9 @@ func TestParseRouteTreeFromFileReadsGeneratedRoutes(t *testing.T) {
 	routes, err := parseRouteTreeFromFile()
 	require.NoError(t, err)
 	require.Equal(t, map[string][]string{
-		"records":        {"POST", "GET"},
-		"records/:rec":   {"GET", "DELETE"},
-		"records/export": {"GET"},
-		"notices":        {"GET"},
+		"/api/records":        {"POST", "GET"},
+		"/api/records/:rec":   {"GET", "DELETE"},
+		"/api/records/export": {"GET"},
+		"/api/notices":        {"GET"},
 	}, routes)
 }

@@ -200,10 +200,13 @@ func Init() error {
 	// underneath it.
 	root.GET("/docs/*any", ginSwagger.WrapHandler(swaggerFiles.Handler, ginSwagger.URL("/openapi.json")))
 
-	base := root.Group(consts.APIPathPrefix)
-	auth = base.Group("")
+	// The groups hang off the root: a route registers by the path it is
+	// served at, prefix included (see consts.APIPath), so no group adds
+	// one. Auth runs the authentication middleware the project registers,
+	// Pub does not.
+	auth = root.Group("")
 	auth.Use(middleware.AuthMarker())
-	pub = base.Group("")
+	pub = root.Group("")
 	middleware.SetApplyHandlers(
 		func(mid gin.HandlerFunc) {
 			if started.Load() == 0 {
@@ -333,11 +336,12 @@ func Stop(abandon context.Context) {
 // route parameter registry and the OpenAPI document; the public
 // router.Register forwards to it and documents the contract.
 //
-// The path the route is served at, consts.APIPath of it, is stamped into the
-// controller config so the handlers resolve the matching phase service
-// through the registry key the path makes; the corresponding
-// service.Register call names the same route. The config is shallow-copied
-// first, keeping a caller-shared config safe for reuse across routes.
+// The path the route is served at, consts.APIPath of it, is what registers
+// on the group, and it is stamped into the controller config so the
+// handlers resolve the matching phase service through the registry key the
+// path makes; the corresponding service.Register call names the same route.
+// The config is shallow-copied first, keeping a caller-shared config safe
+// for reuse across routes.
 func Register[M types.Model, REQ types.Request, RSP types.Response](router *gin.RouterGroup, route string, cfg *types.ControllerConfig[M], verbs ...consts.HTTPVerb) {
 	// A registration that can register nothing is a mistake in the
 	// declaration: it panics as the process starts, the way the service
@@ -354,8 +358,7 @@ func Register[M types.Model, REQ types.Request, RSP types.Response](router *gin.
 		routed = *cfg
 	}
 	routed.Route = consts.APIPath(route)
-	// The group carries the prefix; the path registered on it is the rest.
-	register[M, REQ, RSP](router, strings.TrimPrefix(routed.Route, consts.APIPathPrefix), buildVerbMap(verbs...), &routed)
+	register[M, REQ, RSP](router, routed.Route, buildVerbMap(verbs...), &routed)
 }
 
 func register[M types.Model, REQ types.Request, RSP types.Response](router *gin.RouterGroup, path string, verbMap map[consts.HTTPVerb]bool, cfg ...*types.ControllerConfig[M]) {

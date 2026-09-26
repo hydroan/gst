@@ -177,9 +177,9 @@ func modelRouteFromCall(call *ast.CallExpr, modelSources map[string]string) (mod
 		Rsp:    rsp,
 		Source: lookupModelSource(modelSources, model),
 		Scope:  routeScope(call.Args[0]),
-		// The registration carries the path the route is served at; the
-		// listing prints paths below the prefix it names once.
-		Path: strings.TrimPrefix(consts.APIPath(path), consts.APIPathPrefix+"/"),
+		// The registration carries the path the route is served at, which
+		// the listing prints as it is.
+		Path: consts.APIPath(path),
 		// The last argument names the verb the way gg gen writes it,
 		// consts.<Phase.MethodName()> such as consts.CreateMany; the route
 		// is served under the method the framework router registers that
@@ -308,7 +308,6 @@ func printModelRoutes(w io.Writer, routes []modelRoute, opts modelRoutesPrintOpt
 	opts.color = opts.color || routeColorEnabled(w)
 
 	fmt.Fprintf(w, "%s %s\n", routeText(opts.color, clioutput.StyleInfo, "%s", clioutput.SymbolSection), routeText(opts.color, clioutput.StyleBold, "Model Routes"))
-	fmt.Fprintf(w, "  %s base: %s\n", routeText(opts.color, clioutput.StyleMuted, "%s", clioutput.SymbolItem), consts.APIPathPrefix)
 	fmt.Fprintf(w, "  %s models: %d, routes: %d, public: %d, auth: %d\n", routeText(opts.color, clioutput.StyleMuted, "%s", clioutput.SymbolItem), countRouteModels(routes), len(routes), countRouteScope(routes, "public"), countRouteScope(routes, "auth"))
 	if opts.Filter != "" {
 		fmt.Fprintf(w, "  %s filter: %s\n", routeText(opts.color, clioutput.StyleMuted, "%s", clioutput.SymbolItem), opts.Filter)
@@ -330,7 +329,6 @@ func printRouterRoutes(w io.Writer, routes []modelRoute, opts modelRoutesPrintOp
 	opts.color = opts.color || routeColorEnabled(w)
 
 	fmt.Fprintf(w, "%s %s\n", routeText(opts.color, clioutput.StyleInfo, "%s", clioutput.SymbolSection), routeText(opts.color, clioutput.StyleBold, "Router Routes"))
-	fmt.Fprintf(w, "  %s base: %s\n", routeText(opts.color, clioutput.StyleMuted, "%s", clioutput.SymbolItem), consts.APIPathPrefix)
 	fmt.Fprintf(w, "  %s models: %d, routes: %d, public: %d, auth: %d\n", routeText(opts.color, clioutput.StyleMuted, "%s", clioutput.SymbolItem), countRouteModels(routes), len(routes), countRouteScope(routes, "public"), countRouteScope(routes, "auth"))
 	if opts.Filter != "" {
 		fmt.Fprintf(w, "  %s filter: %s\n", routeText(opts.color, clioutput.StyleMuted, "%s", clioutput.SymbolItem), opts.Filter)
@@ -500,7 +498,7 @@ func printRouteLines(w io.Writer, routes []modelRoute, prefix string, opts model
 			routeConnector = "└─"
 			routeChildPrefix = prefix + "   "
 		}
-		fmt.Fprintf(w, "%s%s %s /%s", prefix, routeConnector, routeMethodColumn(route.Method, opts.color), route.Path)
+		fmt.Fprintf(w, "%s%s %s %s", prefix, routeConnector, routeMethodColumn(route.Method, opts.color), route.Path)
 		if !opts.Detail {
 			fmt.Fprintln(w)
 			continue

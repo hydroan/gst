@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/errors"
+	"github.com/hydroan/gst/consts"
 	"gopkg.in/yaml.v3"
 )
 
@@ -171,23 +172,16 @@ func ParseRouteRule(raw string) (RouteRule, error) {
 	return RouteRule{Method: method, Segments: segments, Raw: raw}, nil
 }
 
-// NormalizeRoutePath splits a route path into normalized segments: the
-// "/api" prefix and surrounding slashes are stripped, and "{name}"
-// parameter segments are converted to the ":name" form. It returns nil
-// when no segments remain: "/api/iam/admin/users/{id}/" gives
-// [iam admin users :id], and "/api" gives nil.
-//
-// The "api" prefix strip is applied to rule paths and generated route
-// paths alike, so a rule written with or without the prefix matches the
-// generated path, which carries it (see consts.APIPath); it assumes no
-// route has a literal "api" first segment below the prefix.
+// NormalizeRoutePath splits a route path into the segments of the path it
+// is served at, consts.APIPath of it, a "{name}" parameter segment
+// converted to the ":name" form, so a rule written with or without the
+// prefix and the generated path, which carries it, split alike:
+// "/api/iam/admin/users/{id}/" and "iam/admin/users/{id}" both give
+// [api iam admin users :id]. The root of the prefix, "/api" and "" alike,
+// names no route and gives nil.
 func NormalizeRoutePath(path string) []string {
-	path = strings.Trim(strings.TrimSpace(path), "/")
-	if path == "api" {
-		return nil
-	}
-	path = strings.TrimPrefix(path, "api/")
-	if path == "" {
+	path = strings.Trim(consts.APIPath(strings.TrimSpace(path)), "/")
+	if path == strings.Trim(consts.APIPath(""), "/") {
 		return nil
 	}
 

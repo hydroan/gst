@@ -20,7 +20,7 @@ type sampleBinder interface{ Bind() }
 // so the mistake stops the start instead of leaving an endpoint that answers
 // 404 or refuses every request.
 func TestRegisterPanicsOnDeclarationMistakes(t *testing.T) {
-	group := gin.New().Group(consts.APIPathPrefix)
+	group := gin.New().Group("")
 
 	require.PanicsWithValue(t, "router: register requires a non-empty route", func() {
 		router.Register[*modelregistry.Empty, *modelregistry.Empty, *modelregistry.Empty](group, "  ", nil, consts.Create, consts.List)
@@ -39,7 +39,7 @@ func TestRegisterPanicsOnDeclarationMistakes(t *testing.T) {
 // the method, and Routes records it.
 func TestRegisterServesEveryVerbUnderItsMethod(t *testing.T) {
 	engine := gin.New()
-	group := engine.Group(consts.APIPathPrefix)
+	group := engine.Group("")
 	verbs := []consts.HTTPVerb{
 		consts.Create, consts.Delete, consts.Update, consts.Patch, consts.List, consts.Get,
 		consts.CreateMany, consts.DeleteMany, consts.UpdateMany, consts.PatchMany,
@@ -55,7 +55,7 @@ func TestRegisterServesEveryVerbUnderItsMethod(t *testing.T) {
 	}
 	recorded := router.Routes()
 	for _, verb := range verbs {
-		path := consts.APIPathPrefix + "/verb-methods/" + string(verb)
+		path := consts.APIPath("verb-methods/" + string(verb))
 		require.Equal(t, verb.HTTPMethod(), served[path], "verb %s", verb)
 		require.Equal(t, []string{verb.HTTPMethod()}, recorded[path], "verb %s", verb)
 	}

@@ -40,16 +40,19 @@ func Register[M types.Model, REQ types.Request, RSP types.Response](router *gin.
 	internalrouter.Register[M, REQ, RSP](router, route, cfg, verbs...)
 }
 
-// Auth returns the route group, under the API prefix, whose routes run the
-// middleware registered with middleware.RegisterAuth. It is nil until the
+// Auth returns the route group whose routes run the middleware registered
+// with middleware.RegisterAuth. A route registers on it by the path it is
+// served at, /api/records: Register spells the path for a route, and a
+// handler put on the group directly names it itself. It is nil until the
 // framework has bootstrapped.
 func Auth() *gin.RouterGroup {
 	return internalrouter.Auth()
 }
 
-// Pub returns the route group, under the API prefix, for public routes: the
-// middleware registered with middleware.RegisterAuth does not run on them.
-// It is nil until the framework has bootstrapped.
+// Pub returns the route group of the public routes, the ones the middleware
+// registered with middleware.RegisterAuth does not run on; routes register
+// on it by their path the way they do on Auth. It is nil until the
+// framework has bootstrapped.
 func Pub() *gin.RouterGroup {
 	return internalrouter.Pub()
 }

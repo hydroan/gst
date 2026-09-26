@@ -85,7 +85,7 @@ func runLosingALeaseToWorkThatWillNotStop(t *testing.T) {
 
 	claimed, _ := registerStubbornWork(t)
 	inFlight := make(chan struct{})
-	router.Pub().GET("/sample-in-flight", func(*gin.Context) {
+	router.Pub().GET("/api/sample-in-flight", func(*gin.Context) {
 		close(inFlight)
 		select {}
 	})

@@ -11,22 +11,26 @@ import (
 
 const FrameworkName = "gst"
 
-// APIPathPrefix is the base group all business API routes are mounted under.
-// It lives here rather than in router because middleware must match concrete
-// request paths against it, and router already imports middleware.
-const APIPathPrefix = "/api"
+// apiPathPrefix is the base every business API route is served under. It
+// leaves this package only through APIPath, the one place it is added.
+const apiPathPrefix = "/api"
 
-// APIPath returns the path a route is served at under APIPathPrefix:
-// /api/records/:id for records/:id, and for /records/:id, api/records/:id
-// and /api/records/:id alike, a leading or trailing slash and a prefix
-// already written dropped first. It is the one rule of the path of a route:
-// gg gen writes every route by it, the router serves and the service
-// registry keys routes by it, so a route may be written with or without the
-// prefix and names the same path either way.
+// APIPath returns the path a route is served at, the route under the API
+// prefix: /api/records/:id for records/:id, and for /records/:id,
+// api/records/:id and /api/records/:id alike, since a leading or trailing
+// slash and a prefix already written are dropped first; a blank route, or
+// the prefix alone, names the root of the prefix, /api/. It is the one rule
+// of the path of a route and the only place the prefix is added, and
+// nothing takes it off again: gg gen writes every route by it, the router
+// registers, the service registry keys and the modules register routes by
+// it, and the gg commands list routes as it spells them. A route may thus
+// be written with or without the prefix and names the same path either way.
 func APIPath(route string) string {
 	route = strings.Trim(route, "/")
-	route = strings.TrimPrefix(route, strings.TrimPrefix(APIPathPrefix, "/")+"/")
-	return APIPathPrefix + "/" + route
+	if prefix := strings.TrimPrefix(apiPathPrefix, "/"); route == prefix || strings.HasPrefix(route, prefix+"/") {
+		route = strings.TrimPrefix(strings.TrimPrefix(route, prefix), "/")
+	}
+	return apiPathPrefix + "/" + route
 }
 
 func CodeGeneratedComment() string {

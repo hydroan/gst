@@ -6,7 +6,6 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 
 	"github.com/hydroan/gst/consts"
@@ -29,7 +28,7 @@ func TestParseModelRoutesReadsTheRuntimeMethodOfEveryVerb(t *testing.T) {
 	stmts := make([]ast.Stmt, 0, len(phases))
 	want := make(map[string]string, len(phases))
 	for _, phase := range phases {
-		path := "samples/" + string(phase)
+		path := consts.APIPath("samples/" + string(phase))
 		stmts = append(stmts, gggen.StmtRouterRegister("model", "Sample", "*Sample", "*Sample", "model", "Auth", path, "", phase.MethodName()))
 		want[path] = phase.ToHTTPVerb().HTTPMethod()
 	}
@@ -47,12 +46,12 @@ func TestParseModelRoutesReadsTheRuntimeMethodOfEveryVerb(t *testing.T) {
 	require.Equal(t, want, got)
 }
 
-// TestRoutesHeaderShowsAPIBasePath verifies both route views print the shared
-// API mount prefix in their summary header, so the relative paths listed below
-// it are unambiguous about where they are actually mounted.
-func TestRoutesHeaderShowsAPIBasePath(t *testing.T) {
+// TestRoutesListEveryRouteByItsFullPath verifies both route views print each
+// route by the path it is served at, prefix included, with no base line the
+// paths would have to be read against.
+func TestRoutesListEveryRouteByItsFullPath(t *testing.T) {
 	routes := []modelRoute{
-		{Model: "*sample.Record", Source: "sample/record.go", Path: "samples", Method: "GET", Phase: "List", Scope: "auth"},
+		{Model: "*sample.Record", Source: "sample/record.go", Path: "/api/samples", Method: "GET", Phase: "List", Scope: "auth"},
 	}
 	views := []struct {
 		name  string
@@ -61,14 +60,13 @@ func TestRoutesHeaderShowsAPIBasePath(t *testing.T) {
 		{"router", printRouterRoutes},
 		{"model", printModelRoutes},
 	}
-	want := "base: " + consts.APIPathPrefix
 	for _, view := range views {
 		t.Run(view.name, func(t *testing.T) {
 			var buf bytes.Buffer
 			view.print(&buf, routes, modelRoutesPrintOptions{})
-			if got := buf.String(); !strings.Contains(got, want) {
-				t.Errorf("%s view header missing %q\n%s", view.name, want, got)
-			}
+			got := buf.String()
+			require.Contains(t, got, " /api/samples\n")
+			require.NotContains(t, got, "base:")
 		})
 	}
 }
