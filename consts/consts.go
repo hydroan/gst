@@ -170,10 +170,10 @@ type Phase string
 // service method serving it: the value in UpperCamelCase, SSE kept as the
 // initialism. Generated code refers to a phase by it. Examples:
 //
-//	Create        -> "Create"
-//	CreateBefore  -> "CreateBefore"
-//	UpdateMany    -> "UpdateMany"
-//	SSE           -> "SSE"
+//	Create       -> "Create"
+//	CreateBefore -> "CreateBefore"
+//	UpdateMany   -> "UpdateMany"
+//	SSE          -> "SSE"
 func (p Phase) Name() string {
 	if p == SSE {
 		return "SSE"
@@ -184,9 +184,9 @@ func (p Phase) Name() string {
 // Filename returns the Phase generated filename converted to lower case format.
 // Example:
 //
-//	Create         -> "create.go"
-//	CreateBefore  -> "create.go"
-//	UpdateMany    -> "update_many.go"
+//	Create       -> "create.go"
+//	CreateBefore -> "create.go"
+//	UpdateMany   -> "update_many.go"
 func (p Phase) Filename() string {
 	return string(p.action()) + ".go"
 }
@@ -214,10 +214,10 @@ func (p Phase) hook() bool {
 //
 // Examples:
 //
-//	Create             -> "Creator"
-//	CreateBefore      -> "Creator"
-//	UpdateMany        -> "ManyUpdater"
-//	UpdateManyAfter  -> "ManyUpdater"
+//	Create          -> "Creator"
+//	CreateBefore    -> "Creator"
+//	UpdateMany      -> "ManyUpdater"
+//	UpdateManyAfter -> "ManyUpdater"
 func (p Phase) RoleName() string {
 	s := string(p.action())
 	isMany := strings.HasSuffix(s, "_many")
