@@ -145,7 +145,10 @@ message Link {
 // gg prune lists and deletes the five, with the pb directory it leaves
 // empty.
 func TestPruneRunDeletesTheFilesOfAModelNoLongerServedOverGRPC(t *testing.T) {
-	projectDir := newGenProject(t)
+	projectDir, ok := newGenProject(t)
+	if !ok {
+		return
+	}
 	writeProtobufProject(t, projectDir, map[string]string{"model/note.go": protobufNoteModel})
 	if err := genRunWithOptions(genRunOptions{Quiet: true}); err != nil {
 		t.Fatal(err)
@@ -256,7 +259,9 @@ func TestPruneLeftoversRemindsOfUnreadSettingsBeforeAsking(t *testing.T) {
 // service/, middleware/ and pb/, as an error the command prints, not as a
 // panic.
 func TestPruneRunStopsOnABrokenConfig(t *testing.T) {
-	newGenProject(t)
+	if _, ok := newGenProject(t); !ok {
+		return
+	}
 	listFile := filepath.Join(ggconst.DirService, "record", "list.go")
 	writeProjectFile(t, filepath.Join(ggconst.DirModel, "record.go"), "package model\n")
 	writeProjectFile(t, listFile, "package record\n")

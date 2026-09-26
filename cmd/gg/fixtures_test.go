@@ -4,6 +4,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"slices"
 	"strings"
@@ -137,16 +138,34 @@ func recordFrameworkSources(t *testing.T, root string) {
 	}
 }
 
-// newGenProject creates a temporary project for tests that run gg gen, makes
-// it the working directory and resets the gg command globals gen reads
-// (module, prune), restoring them when the test ends. Its go.mod resolves
-// the framework to this repository, since generation compiles the column
-// inspection program against the framework for real. Generation also caches
-// that inspection under the user cache directory, keyed by project directory;
-// nothing ever reads a throwaway project's entry again, so the entry is removed
-// when the test ends.
-func newGenProject(t *testing.T) string {
+// childProjectEnv marks the process running one test in a project of its
+// own; see newGenProject.
+const childProjectEnv = "GG_TEST_PROJECT_CHILD"
+
+// newGenProject gives a test that runs gg a fresh project, and a process of
+// its own to run in. gg works in the current directory, the project root,
+// and a test that changes the directory of its process cannot run in
+// parallel with the others (see testing.T.Chdir); with dozens of tests each
+// generating, compiling and inspecting a project, running them one after
+// the other is what makes this package the slowest of the framework's. So
+// the test binary runs each of these tests again in a child process of its
+// own: in the parent, newGenProject starts the child (see runInChild),
+// relays its verdict and returns ok false, on which the test returns at
+// once; in the child, told apart by childProjectEnv, it creates the project,
+// makes it the working directory and resets the gg command globals gen
+// reads (module, prune), restoring them when the test ends, and returns the
+// directory with ok true. The project's go.mod resolves the framework to
+// this repository, since generation compiles the column inspection program
+// against the framework for real. Generation also caches that inspection
+// under the user cache directory, keyed by project directory; nothing ever
+// reads a throwaway project's entry again, so the entry is removed when the
+// test ends.
+func newGenProject(t *testing.T) (projectDir string, ok bool) {
 	t.Helper()
+	if os.Getenv(childProjectEnv) == "" {
+		runInChild(t)
+		return "", false
+	}
 
 	oldModule := module
 	oldPrune := prune
@@ -155,7 +174,7 @@ func newGenProject(t *testing.T) string {
 		prune = oldPrune
 	})
 
-	projectDir := t.TempDir()
+	projectDir = t.TempDir()
 	t.Chdir(projectDir)
 	module = ""
 	prune = false
@@ -170,7 +189,70 @@ func newGenProject(t *testing.T) string {
 			t.Error(removeErr)
 		}
 	})
-	return projectDir
+	return projectDir, true
+}
+
+// runInChild runs the calling test, its subtests included, in a child
+// process of this test binary and relays the outcome: the test fails with
+// the child's output when the child fails, each line marked so that go
+// test's reading of the output never takes the child's own test lines for
+// the parent's. The child runs this test alone, in a fresh directory, with
+// the flags this run was given — a golden -update reaches it — but its own
+// -test.run, no -test.v, and none of the files go test hands the parent to
+// write, its input log and profiles among them: the child's would overwrite
+// the parent's. The test runs in parallel with the other tests taking a
+// project; the framework sources are recorded as the parent's inputs, the
+// parent being the process go test caches the result of.
+func runInChild(t *testing.T) {
+	t.Helper()
+	t.Parallel()
+	recordFrameworkSources(t, frameworkRepoRoot(t))
+
+	args := []string{"-test.run=" + childRunPattern(t.Name())}
+	skipNext := false
+	for _, arg := range os.Args[1:] {
+		if skipNext {
+			skipNext = false
+			continue
+		}
+		flag, _, joined := strings.Cut(arg, "=")
+		switch flag {
+		case "-test.run", "-test.v", "-test.testlogfile", "-test.coverprofile", "-test.gocoverdir", "-test.outputdir",
+			"-test.cpuprofile", "-test.memprofile", "-test.blockprofile", "-test.mutexprofile", "-test.trace":
+			skipNext = !joined
+			continue
+		}
+		args = append(args, arg)
+	}
+	cmd := exec.Command(os.Args[0], args...)
+	cmd.Dir = t.TempDir()
+	cmd.Env = append(os.Environ(), childProjectEnv+"=1")
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("the test failed in its own process (%v):\n%s", err, childOutput(output))
+	}
+}
+
+// childRunPattern returns the -test.run pattern selecting the test name and
+// nothing else: every element anchored and quoted, "TestX/a_b" giving
+// "^TestX$/^a_b$".
+func childRunPattern(name string) string {
+	elements := strings.Split(name, "/")
+	for i, element := range elements {
+		elements[i] = "^" + regexp.QuoteMeta(element) + "$"
+	}
+	return strings.Join(elements, "/")
+}
+
+// childOutput marks every line of a child's output, so that a "--- FAIL" or
+// "=== RUN" line of the child reads as output of the parent's test to go
+// test, not as a test line of its own.
+func childOutput(output []byte) string {
+	lines := strings.Split(strings.TrimRight(string(output), "\n"), "\n")
+	for i, line := range lines {
+		lines[i] = "| " + line
+	}
+	return strings.Join(lines, "\n")
 }
 
 // requireProjectCompiles type-checks every package of the project in the

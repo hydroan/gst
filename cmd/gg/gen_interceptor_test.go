@@ -14,7 +14,10 @@ import (
 // registers its interceptors, exactly when the package exists: a project
 // without one, the ordinary HTTP project, keeps its main.go as it is.
 func TestGenRunImportsTheInterceptorPackageWhenPresent(t *testing.T) {
-	projectDir := newGenProject(t)
+	projectDir, ok := newGenProject(t)
+	if !ok {
+		return
+	}
 	writeProtobufProject(t, projectDir, map[string]string{"model/note.go": protobufNoteModel})
 	interceptorFile := filepath.Join(projectDir, ggconst.DirInterceptor, "interceptor.go")
 	writeProjectFile(t, interceptorFile, "package interceptor\n")

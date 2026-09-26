@@ -18,7 +18,10 @@ import (
 // and then with the previous generation stubbed out; the references the run
 // writes must then satisfy the same code in the project's own build.
 func TestGenRunGeneratesColumnsReadByHandwrittenModelCode(t *testing.T) {
-	projectDir := newGenProject(t)
+	projectDir, ok := newGenProject(t)
+	if !ok {
+		return
+	}
 	writeProjectFile(t, filepath.Join(projectDir, "model", "sample", "record.go"), `package sample
 
 import (
@@ -141,7 +144,10 @@ func (i *Item) DeleteBefore(ctx context.Context) error {
 // generated reference names the type the way the model source does, under the
 // import path a business project can reach.
 func TestGenRunReferencesFrameworkTypesThroughTheRootPackage(t *testing.T) {
-	projectDir := newGenProject(t)
+	projectDir, ok := newGenProject(t)
+	if !ok {
+		return
+	}
 	writeProjectFile(t, filepath.Join(projectDir, "model", "sample", "rule.go"), `package sample
 
 import (
@@ -180,7 +186,10 @@ func (Rule) Design() {
 // body: generation fails, and what the terminal shows has to say why and point
 // at the source lines involved.
 func TestGenRunReportsCodeReachingAColumnInspectionPlaceholder(t *testing.T) {
-	projectDir := newGenProject(t)
+	projectDir, ok := newGenProject(t)
+	if !ok {
+		return
+	}
 	source := `package sample
 
 import (
@@ -234,7 +243,10 @@ var defaultStatusColumn = (&Record{}).statusColumnName()
 // hand-written file carries the generated suffix. The run fails, but the files
 // it already wrote are still reported, and the hand-written file is kept.
 func TestGenRunReportsColumnFilesWrittenBeforeAFailure(t *testing.T) {
-	projectDir := newGenProject(t)
+	projectDir, ok := newGenProject(t)
+	if !ok {
+		return
+	}
 	writeProjectFile(t, filepath.Join(projectDir, "model", "sample", "record.go"), `package sample
 
 import (

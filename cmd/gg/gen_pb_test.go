@@ -39,7 +39,10 @@ var update = flag.Bool("update", false, "rewrite the golden files under testdata
 // service in note_grpc.pb.go, and the project builds with them; main.go
 // imports the pb package for the registration.
 func TestGenRunWritesTheProtobufDefinitionsOfGRPCModels(t *testing.T) {
-	projectDir := newGenProject(t)
+	projectDir, ok := newGenProject(t)
+	if !ok {
+		return
+	}
 	writeProtobufProject(t, projectDir, map[string]string{
 		"model/record.go":      protobufRecordModel,
 		"model/record/item.go": protobufItemModel,
@@ -101,7 +104,10 @@ func TestGenRunWritesTheProtobufDefinitionsOfGRPCModels(t *testing.T) {
 // router registration, so the project builds with a router file naming it
 // nowhere.
 func TestGenRunServesStreamActionsOverGRPCAlone(t *testing.T) {
-	projectDir := newGenProject(t)
+	projectDir, ok := newGenProject(t)
+	if !ok {
+		return
+	}
 	writeProtobufProject(t, projectDir, map[string]string{"model/feed.go": protobufFeedModel})
 
 	require.NoError(t, genRunWithOptions(genRunOptions{Quiet: true}))
@@ -142,7 +148,10 @@ func TestGenRunServesStreamActionsOverGRPCAlone(t *testing.T) {
 // import goes with it, whether or not the stale files under pb/ were
 // pruned.
 func TestGenRunImportsThePBPackageWhileServingGRPC(t *testing.T) {
-	projectDir := newGenProject(t)
+	projectDir, ok := newGenProject(t)
+	if !ok {
+		return
+	}
 	writeProtobufProject(t, projectDir, map[string]string{"model/note.go": protobufNoteModel})
 
 	require.NoError(t, genRunWithOptions(genRunOptions{Quiet: true}))
@@ -161,7 +170,10 @@ func TestGenRunImportsThePBPackageWhileServingGRPC(t *testing.T) {
 // TestGenRunRefusesAModelFileNamedPB pins that a model file named pb.go is
 // reported: its handlers file would be pb/pb.gen.go, the registration file.
 func TestGenRunRefusesAModelFileNamedPB(t *testing.T) {
-	projectDir := newGenProject(t)
+	projectDir, ok := newGenProject(t)
+	if !ok {
+		return
+	}
 	writeProtobufProject(t, projectDir, map[string]string{"model/pb.go": protobufPBFileModel})
 
 	err := genRunWithOptions(genRunOptions{Quiet: true})
@@ -176,7 +188,10 @@ func TestGenRunRefusesAModelFileNamedPB(t *testing.T) {
 // TestGenRunNumbersTheFieldsWithoutPBTags), and that a failed run writes no
 // pb/ file at all.
 func TestGenRunWritesNoProtobufDefinitionWhenAShapeCannotBeDescribed(t *testing.T) {
-	projectDir := newGenProject(t)
+	projectDir, ok := newGenProject(t)
+	if !ok {
+		return
+	}
 	writeProtobufProject(t, projectDir, map[string]string{"model/rejected.go": protobufRejectedModel})
 
 	err := genRunWithOptions(genRunOptions{Quiet: true})
@@ -212,7 +227,10 @@ func TestGenRunWritesNoProtobufDefinitionWhenAShapeCannotBeDescribed(t *testing.
 // layout and comments (it holds the example of the rewritePBTags doc
 // comment); and that a second run leaves the file as it is.
 func TestGenRunNumbersTheFieldsWithoutPBTags(t *testing.T) {
-	projectDir := newGenProject(t)
+	projectDir, ok := newGenProject(t)
+	if !ok {
+		return
+	}
 	writeProtobufProject(t, projectDir, map[string]string{"model/draft.go": protobufUntaggedModel})
 
 	require.NoError(t, genRunWithOptions(genRunOptions{Quiet: true}))
@@ -256,7 +274,10 @@ func TestGenRunNumbersTheFieldsWithoutPBTags(t *testing.T) {
 // field never takes a number the committed definition reserves, the one of
 // a dropped field included.
 func TestGenRunNumbersTheFieldsWithoutPBTagsAfterTheCommittedDefinition(t *testing.T) {
-	projectDir := newGenProject(t)
+	projectDir, ok := newGenProject(t)
+	if !ok {
+		return
+	}
 	writeProtobufProject(t, projectDir, map[string]string{"model/note.go": protobufNoteModel})
 	require.NoError(t, genRunWithOptions(genRunOptions{Quiet: true}))
 
@@ -288,7 +309,10 @@ func TestGenRunNumbersTheFieldsWithoutPBTagsAfterTheCommittedDefinition(t *testi
 // of one model that would become one rpc: the same action on two routes that
 // add no path parameter of their own.
 func TestGenRunRefusesTwoActionsBecomingOneRPC(t *testing.T) {
-	projectDir := newGenProject(t)
+	projectDir, ok := newGenProject(t)
+	if !ok {
+		return
+	}
 	writeProtobufProject(t, projectDir, map[string]string{"model/clash.go": protobufClashModel})
 
 	err := genRunWithOptions(genRunOptions{Quiet: true})
@@ -301,7 +325,10 @@ func TestGenRunRefusesTwoActionsBecomingOneRPC(t *testing.T) {
 // reached after a standard message took its name is reported with the rpc
 // holding the name, instead of the file doubling the message.
 func TestGenRunRefusesATypeNamedLikeAStandardMessage(t *testing.T) {
-	projectDir := newGenProject(t)
+	projectDir, ok := newGenProject(t)
+	if !ok {
+		return
+	}
 	writeProtobufProject(t, projectDir, map[string]string{"model/notice.go": protobufStandardNameModel})
 
 	err := genRunWithOptions(genRunOptions{Quiet: true})
@@ -314,7 +341,10 @@ func TestGenRunRefusesATypeNamedLikeAStandardMessage(t *testing.T) {
 // whose name a request message already uses for a field of its own is
 // reported: the parameter would have no field to travel in.
 func TestGenRunRefusesARouteParameterNamedLikeAField(t *testing.T) {
-	projectDir := newGenProject(t)
+	projectDir, ok := newGenProject(t)
+	if !ok {
+		return
+	}
 	writeProtobufProject(t, projectDir, map[string]string{"model/entry.go": protobufParamClashModel})
 
 	err := genRunWithOptions(genRunOptions{Quiet: true})
@@ -331,7 +361,10 @@ func TestGenRunRefusesAGRPCModelWithNothingToServe(t *testing.T) {
 	const want = "tmpapp/model.Silent: the model declares GRPC() but none of its actions is served over gRPC, every one being disabled, ignored by gst.yaml or HTTP only; remove GRPC() or enable an action"
 
 	t.Run("disabled action", func(t *testing.T) {
-		projectDir := newGenProject(t)
+		projectDir, ok := newGenProject(t)
+		if !ok {
+			return
+		}
 		writeProtobufProject(t, projectDir, map[string]string{"model/silent.go": protobufSilentModel})
 
 		err := genRunWithOptions(genRunOptions{Quiet: true})
@@ -340,7 +373,10 @@ func TestGenRunRefusesAGRPCModelWithNothingToServe(t *testing.T) {
 		require.Contains(t, err.Error(), want)
 	})
 	t.Run("ignored route", func(t *testing.T) {
-		projectDir := newGenProject(t)
+		projectDir, ok := newGenProject(t)
+		if !ok {
+			return
+		}
 		writeProtobufProject(t, projectDir, map[string]string{"model/silent.go": protobufIgnoredModel})
 		writeProjectFile(t, filepath.Join(projectDir, "gst.yaml"), "version: 1\ngen:\n  routes:\n    ignore:\n      /api/silents: [GET]\n")
 
@@ -358,7 +394,10 @@ func TestGenRunRefusesAGRPCModelWithNothingToServe(t *testing.T) {
 // fields are reserved and kept over later runs, so a new field cannot take
 // them.
 func TestGenRunHoldsTheCommittedDefinitionsToTheirNumbers(t *testing.T) {
-	projectDir := newGenProject(t)
+	projectDir, ok := newGenProject(t)
+	if !ok {
+		return
+	}
 	writeProtobufProject(t, projectDir, map[string]string{"model/note.go": protobufNoteModel})
 	require.NoError(t, genRunWithOptions(genRunOptions{Quiet: true}))
 	proto := filepath.Join(ggconst.DirPB, "note.proto")

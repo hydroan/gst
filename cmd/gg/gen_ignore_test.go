@@ -137,7 +137,10 @@ func TestRouteIgnoresKeepServiceFilesForPrune(t *testing.T) {
 // router/router.gen.go reflects that ignore (kept action registered, ignored
 // action absent).
 func TestGenRunAppliesRouteIgnoresFromGstYAML(t *testing.T) {
-	projectDir := newGenProject(t)
+	projectDir, ok := newGenProject(t)
+	if !ok {
+		return
+	}
 	if err := os.WriteFile(filepath.Join(projectDir, "gst.yaml"), []byte(`version: 1
 gen:
   routes:
@@ -221,7 +224,10 @@ func collectActions(design *dsl.Design) []*dsl.Action {
 // file next to gst.yaml that looks like gg configuration but is not read, so a
 // setting written into one of them is not lost without a word.
 func TestGenRunWarnsAboutConfigFilesItDoesNotRead(t *testing.T) {
-	projectDir := newGenProject(t)
+	projectDir, ok := newGenProject(t)
+	if !ok {
+		return
+	}
 	writeProjectFile(t, filepath.Join(projectDir, "model", "sample", "record.go"), `package sample
 
 import (

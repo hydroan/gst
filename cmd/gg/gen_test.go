@@ -504,7 +504,10 @@ func Init() error {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			projectDir := newGenProject(t)
+			projectDir, ok := newGenProject(t)
+			if !ok {
+				return
+			}
 			for path, content := range tt.files {
 				writeProjectFile(t, filepath.Join(projectDir, path), content)
 			}
@@ -700,7 +703,10 @@ func (i *Creator) Create(ctx *gst.ServiceContext, req *io.Item) (rsp *io.Item, e
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			projectDir := newGenProject(t)
+			projectDir, ok := newGenProject(t)
+			if !ok {
+				return
+			}
 			for path, content := range tt.files {
 				writeProjectFile(t, filepath.Join(projectDir, path), content)
 			}
@@ -738,7 +744,10 @@ func (i *Creator) Create(ctx *gst.ServiceContext, req *io.Item) (rsp *io.Item, e
 // name means, so gg gen stops with an error telling how to fix the file, and
 // leaves the file as it is.
 func TestGenRunRejectsServiceFileImportingTwoPackagesUnderOneName(t *testing.T) {
-	projectDir := newGenProject(t)
+	projectDir, ok := newGenProject(t)
+	if !ok {
+		return
+	}
 	writeProjectFile(t, filepath.Join(projectDir, "model/service/item.go"), `package service
 
 import (
@@ -792,7 +801,10 @@ func (i *Creator) Create(ctx *gst.ServiceContext, req *service.Item) (rsp *servi
 // name of its model package, although the module declares package xxhash.
 // The file builds, and gg gen leaves it as it is.
 func TestGenRunKeepsServiceFileImportingAVersionedModule(t *testing.T) {
-	projectDir := newGenProject(t)
+	projectDir, ok := newGenProject(t)
+	if !ok {
+		return
+	}
 	writeProjectFile(t, filepath.Join(projectDir, "model/api/v2/item.go"), `package v2
 
 import (
@@ -848,7 +860,10 @@ func (i *Creator) Create(ctx *gst.ServiceContext, req *v2.Item) (rsp *v2.Item, e
 // package's first test file, so the service test coverage check passes on
 // the very next run instead of failing it.
 func TestGenRunScaffoldsServiceTests(t *testing.T) {
-	projectDir := newGenProject(t)
+	projectDir, ok := newGenProject(t)
+	if !ok {
+		return
+	}
 	writeProjectFile(t, filepath.Join(projectDir, "model/record.go"), `package model
 
 import (
@@ -1001,7 +1016,10 @@ func TestMain(m *testing.M) {
 // result, and a streaming model. A framework change that breaks an example,
 // such as a client signature, fails here rather than in a project.
 func TestGenRunScaffoldsCompileForEveryAction(t *testing.T) {
-	projectDir := newGenProject(t)
+	projectDir, ok := newGenProject(t)
+	if !ok {
+		return
+	}
 	writeProjectFile(t, filepath.Join(projectDir, "model/record.go"), `package model
 
 import (
@@ -1181,7 +1199,10 @@ func (Item) Design() {
 // file the project already has, and a package whose TestMain lives in one of
 // its test files, which gets no main_test.go.
 func TestGenRunKeepsExistingServiceTests(t *testing.T) {
-	projectDir := newGenProject(t)
+	projectDir, ok := newGenProject(t)
+	if !ok {
+		return
+	}
 	writeProjectFile(t, filepath.Join(projectDir, "model/record.go"), `package model
 
 import (

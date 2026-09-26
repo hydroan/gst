@@ -218,7 +218,10 @@ func CopyAuth() any {
 }
 
 func TestRunModuleCopyGenAllowsPreexistingProjectCheckViolations(t *testing.T) {
-	projectDir := newGenProject(t)
+	projectDir, ok := newGenProject(t)
+	if !ok {
+		return
+	}
 	writePluralModelFile(t, projectDir, "session", "sessions.go", "Session2", "copytest/sessions")
 
 	baseline := collectProjectCheckBaseline()
@@ -240,7 +243,10 @@ func TestRunModuleCopyGenAllowsPreexistingProjectCheckViolations(t *testing.T) {
 }
 
 func TestRunModuleCopyGenFailsOnNewProjectCheckViolations(t *testing.T) {
-	projectDir := newGenProject(t)
+	projectDir, ok := newGenProject(t)
+	if !ok {
+		return
+	}
 	writePluralModelFile(t, projectDir, "session", "sessions.go", "Session2", "copytest/sessions")
 
 	baseline := collectProjectCheckBaseline()

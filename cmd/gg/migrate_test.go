@@ -72,7 +72,9 @@ func TestMigrateProgramLinksWhatMainLinks(t *testing.T) {
 // No build of this repository compiles the program's source, so this is also
 // what pins that it still compiles against the framework.
 func TestMigrateSchemaProgramReadsTheTablesModulesRegister(t *testing.T) {
-	newMigrateSampleProject(t)
+	if !newMigrateSampleProject(t) {
+		return
+	}
 
 	out := runMigrateSchemaProgramForTest(t, "", nil)
 
@@ -85,7 +87,9 @@ func TestMigrateSchemaProgramReadsTheTablesModulesRegister(t *testing.T) {
 // files gg listed under it: here the module package, which declares the
 // model it registers.
 func TestMigrateSchemaProgramReadsTheModelsItsSourceDeclares(t *testing.T) {
-	newMigrateSampleProject(t)
+	if !newMigrateSampleProject(t) {
+		return
+	}
 	files, err := migrateSourceFiles(ggconst.DirModule, gghelper.NewProjectIgnore())
 	if err != nil {
 		t.Fatal(err)
@@ -178,11 +182,14 @@ func TestMigrateSourceFiles(t *testing.T) {
 // whose module package registers migrateSampleModule's model, and pins the
 // dialect the dump is rendered in: the program reads the environment, so a
 // DATABASE_TYPE set where the tests run cannot change what the assertions
-// read.
-func newMigrateSampleProject(t *testing.T) {
+// read. It reports whether the test goes on, the way newGenProject does.
+func newMigrateSampleProject(t *testing.T) bool {
 	t.Helper()
 
-	projectDir := newGenProject(t)
+	projectDir, ok := newGenProject(t)
+	if !ok {
+		return false
+	}
 	t.Setenv("DATABASE_TYPE", "sqlite")
 	for _, dir := range ggconst.ProjectImportDirs {
 		content := "package " + dir + "\n"
@@ -191,6 +198,7 @@ func newMigrateSampleProject(t *testing.T) {
 		}
 		writeProjectFile(t, filepath.Join(projectDir, dir, dir+".go"), content)
 	}
+	return true
 }
 
 // runMigrateSchemaProgramForTest builds the schema program for source and the

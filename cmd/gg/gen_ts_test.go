@@ -10,7 +10,10 @@ import (
 )
 
 func TestGenTypeScriptRunWritesTheDeclarationsOfTheRoutes(t *testing.T) {
-	projectDir := newGenProject(t)
+	projectDir, ok := newGenProject(t)
+	if !ok {
+		return
+	}
 	writeTypeScriptProject(t, projectDir, typeScriptSampleModel)
 
 	runGenTypeScript(t)
@@ -40,7 +43,10 @@ func TestGenTypeScriptRunWritesTheDeclarationsOfTheRoutes(t *testing.T) {
 }
 
 func TestGenTypeScriptRunReplacesTheFilesOfAnEarlierRun(t *testing.T) {
-	projectDir := newGenProject(t)
+	projectDir, ok := newGenProject(t)
+	if !ok {
+		return
+	}
 	writeTypeScriptProject(t, projectDir, typeScriptSampleModel)
 	runGenTypeScript(t)
 
@@ -70,7 +76,10 @@ func TestGenTypeScriptRunReplacesTheFilesOfAnEarlierRun(t *testing.T) {
 }
 
 func TestGenTypeScriptRunRefusesToOverwriteAFileItDidNotGenerate(t *testing.T) {
-	projectDir := newGenProject(t)
+	projectDir, ok := newGenProject(t)
+	if !ok {
+		return
+	}
 	writeTypeScriptProject(t, projectDir, typeScriptSampleModel)
 	target := filepath.Join(projectDir, "generated", "typescript", "gst.ts")
 	const handwritten = "export type Handwritten = string;\n"
@@ -92,7 +101,10 @@ func TestGenTypeScriptRunRefusesToOverwriteAFileItDidNotGenerate(t *testing.T) {
 }
 
 func TestGenTypeScriptRunWritesNothingWhenATypeCannotBeDescribed(t *testing.T) {
-	projectDir := newGenProject(t)
+	projectDir, ok := newGenProject(t)
+	if !ok {
+		return
+	}
 	rejected := strings.Replace(typeScriptSampleModel, `Reason string 'json:"reason"'`, `Updates chan int 'json:"updates"'`, 1)
 	writeTypeScriptProject(t, projectDir, rejected)
 
@@ -108,7 +120,10 @@ func TestGenTypeScriptRunWritesNothingWhenATypeCannotBeDescribed(t *testing.T) {
 }
 
 func TestGenTypeScriptRunNamesThePreludeAfterTheApplication(t *testing.T) {
-	projectDir := newGenProject(t)
+	projectDir, ok := newGenProject(t)
+	if !ok {
+		return
+	}
 	writeTypeScriptProject(t, projectDir, typeScriptSampleModel)
 	writeProjectFile(t, filepath.Join(projectDir, "config.ini"), "[app]\nname = shop\n")
 
@@ -120,7 +135,10 @@ func TestGenTypeScriptRunNamesThePreludeAfterTheApplication(t *testing.T) {
 }
 
 func TestGenTypeScriptRunClearsTheOutputWhenTheModelsAreGone(t *testing.T) {
-	projectDir := newGenProject(t)
+	projectDir, ok := newGenProject(t)
+	if !ok {
+		return
+	}
 	writeTypeScriptProject(t, projectDir, typeScriptSampleModel)
 	runGenTypeScript(t)
 

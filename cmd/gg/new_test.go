@@ -197,7 +197,10 @@ func TestNewInitializesGitOnlyOutsideARepository(t *testing.T) {
 // nothing else, and the project type-checks against the framework. The first
 // gg gen a project needs is the one after its first model.
 func TestGenLeavesANewProjectUnchanged(t *testing.T) {
-	projectDir := newGenProject(t)
+	projectDir, ok := newGenProject(t)
+	if !ok {
+		return
+	}
 	files, err := ggnew.ProjectFiles("tmpapp")
 	require.NoError(t, err)
 	for _, file := range files {
