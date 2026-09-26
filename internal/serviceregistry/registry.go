@@ -70,12 +70,17 @@ func Register[M types.Model, REQ types.Request, RSP types.Response](phase consts
 // Key returns the registry key of the route and phase: the path the route
 // is served at (see consts.APIPath) and the phase, so registration and
 // resolution agree however either side spells the route, with or without
-// the prefix or stray whitespace.
+// the prefix or stray whitespace. A blank route, which Register refuses,
+// keys no service, not even one registered on the root of the prefix: the
+// key of a handler built without a route resolves none.
 //
 // The key deliberately carries no type information: Go type aliases collapse
 // distinct request/response declarations into one type, so a type-derived key
 // cannot tell two actions apart. The route is unique per action by HTTP
 // routing rules, which makes route plus phase a collision-free identity.
 func Key(phase consts.Phase, route string) string {
-	return consts.APIPath(strings.TrimSpace(route)) + "|" + string(phase)
+	if route = strings.TrimSpace(route); route != "" {
+		route = consts.APIPath(route)
+	}
+	return route + "|" + string(phase)
 }

@@ -51,12 +51,12 @@ type phaseSpan struct {
 // newAction builds the action of the primary phase on route, the one the
 // handler or call is registered under, whose served path keys the service
 // registry lookup together with the phase (see serviceregistry.Key); an
-// empty route resolves no
-// service, degrading to the no-op default service. hookPhases lists the
-// additional service hook phases the action traces (for example the
-// before/after phases of a CRUD operation), so their span names are
-// precomputed as well. It panics, naming route, when REQ is an interface with
-// methods or a pointer to one, a request type no request body decodes into.
+// empty route resolves no service, degrading to the no-op default service.
+// hookPhases lists the additional service hook phases the action traces
+// (for example the before/after phases of a CRUD operation), so their span
+// names are precomputed as well. It panics, naming route, when REQ is an
+// interface with methods or a pointer to one, a request type no request
+// body decodes into.
 func newAction[M types.Model, REQ types.Request, RSP types.Response](route string, phase consts.Phase, hookPhases ...consts.Phase) *action[M, REQ, RSP] {
 	typ := reflect.TypeOf(*new(M)).Elem()
 	name := typ.Name()

@@ -37,6 +37,23 @@ func TestRegisterAndResolve(t *testing.T) {
 	require.NotNil(t, registered.Logger)
 }
 
+// TestKeyOfABlankRouteResolvesNoService pins what the controller relies on
+// for a handler built without a route: its key names no service, not even
+// one registered on the root of the API prefix, the path a blank route
+// would otherwise be served at.
+func TestKeyOfABlankRouteResolvesNoService(t *testing.T) {
+	type svc struct {
+		serviceregistry.Base[*testUser, *testUser, *testUser]
+	}
+
+	phase := newPhase("test_blank_route_key")
+	serviceregistry.Register[*testUser, *testUser, *testUser](phase, "/", &svc{})
+	resolved := serviceregistry.Resolve[*testUser, *testUser, *testUser](serviceregistry.Key(phase, ""))
+
+	_, ok := resolved.(*serviceregistry.Base[*testUser, *testUser, *testUser])
+	require.True(t, ok)
+}
+
 func TestResolveReturnsBaseWhenServiceMissing(t *testing.T) {
 	key := serviceregistry.Key(consts.Phase("test_missing_service"), "samples")
 	resolved := serviceregistry.Resolve[*testUser, *testUser, *testUser](key)
