@@ -11,7 +11,6 @@ import (
 	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/consts"
 	gstgrpc "github.com/hydroan/gst/grpc"
-	"github.com/hydroan/gst/interceptor"
 	"github.com/hydroan/gst/internal/grpcserver"
 	"github.com/hydroan/gst/internal/types"
 	"github.com/hydroan/gst/module/iam"
@@ -84,11 +83,11 @@ var (
 const grpcUserAgent = "grpc-go/" + grpc.Version
 
 // grpcAuthzProbe returns a connection to the probe listener, starting it on
-// first use behind IAMSession and Authz.
+// first use behind the session and authorization interceptors iam.Register
+// and authz.Register mounted.
 func grpcAuthzProbe(t *testing.T) *grpc.ClientConn {
 	t.Helper()
 	grpcAuthzProbeOnce.Do(func() {
-		interceptor.RegisterAuth(interceptor.IAMSession(), interceptor.Authz())
 		handle := func(name string) grpc.MethodDesc {
 			return grpc.MethodDesc{
 				MethodName: name,

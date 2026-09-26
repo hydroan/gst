@@ -2,6 +2,8 @@ package authz
 
 import (
 	"github.com/hydroan/gst/consts"
+	"github.com/hydroan/gst/interceptor"
+	"github.com/hydroan/gst/internal/grpcserver"
 	internalmiddleware "github.com/hydroan/gst/internal/middleware"
 	"github.com/hydroan/gst/internal/modelregistry"
 	"github.com/hydroan/gst/middleware"
@@ -39,9 +41,14 @@ import (
 // Middleware:
 //   - Authz
 //
+// Interceptor:
+//   - Authz on the gRPC listener, for the methods not declared Public(), so a
+//     project serving gRPC mounts nothing of its own
+//
 // Register this module after the middleware that establishes the authenticated
 // subject. With the built-in IAM module, call iam.Register before authz.Register
-// so IAMSession runs before Authz and writes CTX_USER_ID for RBAC.
+// so IAMSession runs before Authz and writes CTX_USER_ID for RBAC; the
+// interceptors run in the same order on the gRPC listener.
 //
 // The request tenant is read from CTX_TENANT_ID, which IAMSession fills from
 // the session; a deployment whose tenant arrives another way registers its own
@@ -55,6 +62,10 @@ func Register() {
 	// Registering Authz before IAMSession makes authenticated requests look
 	// anonymous and returns "permission denied" before session cookies are read.
 	internalmiddleware.RegisterAuth(middleware.Authz())
+	// The gRPC listener decides the same way, behind the session
+	// interceptor iam.Register mounted; with no gRPC service registered the
+	// interceptor never runs.
+	grpcserver.UseAuth(interceptor.Authz())
 
 	module.Use[
 		*Role,

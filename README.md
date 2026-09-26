@@ -855,7 +855,9 @@ func init() {
 }
 ```
 
-应用入口会空导入 `module`，因此 `init()` 会在启动阶段执行。默认账号属于业务数据，框架不代为创建；
+应用入口会空导入 `module`，因此 `init()` 会在启动阶段执行。`iam.Register()` 把会话中间件挂到
+HTTP、把会话拦截器挂到 gRPC，`authz.Register()` 对授权做同样的事（先注册 iam 再注册 authz），
+项目声明了 `GRPC()` 也不用再挂一遍。默认账号属于业务数据，框架不代为创建；
 需要时由项目在启动钩子（如 `router.OnRoutesReady`）里通过标准数据库链写入，做法见
 `examples/demo/module/module.go` 的注释。
 

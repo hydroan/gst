@@ -169,6 +169,23 @@ linters:
           deny:
             - pkg: "github.com/hydroan/gst/middleware$"
               desc: "framework code imports github.com/hydroan/gst/internal/middleware; only the handlers a module registers come from the public package"
+        # The same rule for the public interceptor package, the gRPC
+        # counterpart of middleware: the interceptors a module mounts are
+        # source files gg module copy carries into a project, so they live in
+        # the public package, while the mounting call goes through
+        # internal/grpcserver. The package's external tests, and the copy
+        # test reading the module interceptors, are left out as above.
+        interceptor-forwarder:
+          files:
+            - "$all"
+            - "!**/interceptor/interceptor_test.go"
+            - "!**/interceptor/jwt_test.go"
+            - "!**/internal/ggmodule/copy_interceptor_internal_test.go"
+            - "!**/module/iam/register.go"
+            - "!**/module/authz/register.go"
+          deny:
+            - pkg: "github.com/hydroan/gst/interceptor$"
+              desc: "framework code imports github.com/hydroan/gst/internal/grpcserver; only the interceptors a module mounts come from the public package"
         # Only the gg command prints. The packages it runs return what they
         # found, or report progress through callbacks the command passes, and
         # the command decides how that shows.

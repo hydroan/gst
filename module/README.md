@@ -42,6 +42,7 @@
 - 该实现文件如果不服务任何路由，必须写进 `module.json` 的 `includeSourceFiles`，否则 copy 不会带上它。
 - copy 路径必须执行的装配调用写进 `module.json` 的 `requiredAssembly`，`gg check` 会强制项目做出该调用；`postNotes` 只保留机器检查不了的接入步骤。
 - 中间件实现必须放在框架 `middleware/<file>.go` 并导出零参构造函数，`Register()` 调用它完成注册，同一文件和 handler 写进 `module.json` 的 `middleware`；实现写在 `module/<name>` 内部会让它只在 add 路径生效。
+- gRPC 拦截器同理：实现放在框架 `interceptor/<file>.go` 并导出零参构造函数，`Register()` 经 `internal/grpcserver` 挂载（项目没注册 gRPC 服务时它不会运行），同一文件和 handler 写进 `module.json` 的 `interceptors`；copy 只在项目声明了 `GRPC()` 时复制它们。
 
 
 
@@ -112,5 +113,6 @@
 - `middleware[].sourceFile` 只能指向 framework `middleware/*.go` 源文件，目标固定复制到项目 `middleware/` 下的同名文件。
 - `middleware[].scope` 只能是 `global` 或 `auth`，分别对应 `middleware.Register(...)` 和 `middleware.RegisterAuth(...)`。
 - `middleware[].handler` 是 `sourceFile` 中返回 gin handler 的零参函数名，例如 `Authz`。
+- `interceptors[]` 形状同 `middleware[]`：`sourceFile` 指向框架 `interceptor/*.go`，复制到项目 `interceptor/` 下的同名文件，`scope` 对应 `interceptor.Register(...)` 和 `interceptor.RegisterAuth(...)`，`handler` 是返回 `grpc.Interceptor` 的零参函数名；项目没有 `GRPC()` 模型时不复制。
 - `requiredAssembly[]` 声明项目必须做出的装配调用，字段为 `import`（包全路径）、`function`（导出函数名）和 `reason`（缺失后果），由 `gg check` 强制。
 - `postNotes` 只在复制成功后输出，用于提示项目侧必须补齐、且机器检查不了的 adapter、配置或初始化步骤。

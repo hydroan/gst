@@ -12,7 +12,6 @@ import (
 	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/database"
 	gstgrpc "github.com/hydroan/gst/grpc"
-	"github.com/hydroan/gst/interceptor"
 	"github.com/hydroan/gst/internal/grpcserver"
 	modeliamaccount "github.com/hydroan/gst/internal/model/iam/account"
 	serviceiamsession "github.com/hydroan/gst/internal/service/iam/session"
@@ -111,11 +110,10 @@ var (
 const grpcUserAgent = "grpc-go/" + grpc.Version
 
 // grpcProbe returns a connection to the probe listener, starting it on
-// first use behind IAMSession.
+// first use behind the session interceptor iam.Register mounted.
 func grpcProbe(t *testing.T) *grpc.ClientConn {
 	t.Helper()
 	grpcProbeOnce.Do(func() {
-		interceptor.RegisterAuth(interceptor.IAMSession())
 		handle := func(name string) grpc.MethodDesc {
 			return grpc.MethodDesc{
 				MethodName: name,

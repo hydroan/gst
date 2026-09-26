@@ -8,6 +8,8 @@ import (
 	"github.com/hydroan/gst/config"
 
 	"github.com/hydroan/gst/consts"
+	"github.com/hydroan/gst/interceptor"
+	"github.com/hydroan/gst/internal/grpcserver"
 	internalmiddleware "github.com/hydroan/gst/internal/middleware"
 	modeliamaccount "github.com/hydroan/gst/internal/model/iam/account"
 	modeliamprofile "github.com/hydroan/gst/internal/model/iam/profile"
@@ -58,6 +60,10 @@ import (
 // Middleware:
 //   - IAMSession for protected IAM routes and session-aware APIs
 //
+// Interceptor:
+//   - IAMSession on the gRPC listener, for the methods not declared Public(),
+//     so a project serving gRPC mounts nothing of its own
+//
 // Configuration:
 //   - IAM_SESSION_EXPIRATION sets the session lifetime; it defaults to 8 hours.
 //     It is read at registration so an unparseable value fails startup rather
@@ -78,6 +84,9 @@ func Register() {
 
 	// Register auth middleware before protected routes so auth handlers are attached deterministically.
 	internalmiddleware.RegisterAuth(middleware.IAMSession())
+	// The gRPC listener checks the session the same way; with no gRPC
+	// service registered the interceptor never runs.
+	grpcserver.UseAuth(interceptor.IAMSession())
 
 	// TODO: throttle POST /api/login by client IP. The route is public, so the
 	// limiter registers with Register (global scope), not RegisterAuth. For
