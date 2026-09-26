@@ -30,18 +30,18 @@ import (
 // When REQ or RSP differs from M, the handler binds the JSON body into REQ and
 // delegates the operation to the phase service's PatchMany method.
 func PatchManyFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...*types.ControllerConfig[M]) gin.HandlerFunc {
-	meta := newFactoryMeta[M, REQ, RSP](routeFromConfig(cfg...), consts.PHASE_PATCH_MANY, consts.PHASE_PATCH_MANY_BEFORE, consts.PHASE_PATCH_MANY_AFTER)
+	a := newAction[M, REQ, RSP](routeFromConfig(cfg...), consts.PHASE_PATCH_MANY, consts.PHASE_PATCH_MANY_BEFORE, consts.PHASE_PATCH_MANY_AFTER)
 	return func(c *gin.Context) {
-		ctrlSpanCtx, span := meta.startControllerSpan(c)
+		ctrlSpanCtx, span := a.startControllerSpan(c)
 		defer span.End()
 
 		log := logger.Controller.WithContext(c.Request.Context(), consts.PHASE_PATCH_MANY)
 
-		if !meta.typesEqual {
+		if !a.typesEqual {
 			var err error
 			var rsp RSP
-			req := meta.newRequest()
-			svc := meta.service()
+			req := a.newRequest()
+			svc := a.service()
 
 			if reqErr := bindJSONRequest(c, &req); reqErr != nil && !errors.Is(reqErr, io.EOF) {
 				log.Errorz("bind request body failed", zap.Error(reqErr))
@@ -49,8 +49,8 @@ func PatchManyFactory[M types.Model, REQ types.Request, RSP types.Response](cfg 
 				gstotel.RecordError(span, reqErr)
 				return
 			}
-			meta.normalizeRequest(&req)
-			if rsp, err = meta.traceServiceOperation(ctrlSpanCtx, consts.PHASE_PATCH_MANY, func(spanCtx context.Context) (RSP, error) {
+			a.normalizeRequest(&req)
+			if rsp, err = a.traceServiceOperation(ctrlSpanCtx, consts.PHASE_PATCH_MANY, func(spanCtx context.Context) (RSP, error) {
 				return svc.PatchMany(types.NewServiceContext(c, spanCtx, consts.PHASE_PATCH_MANY), req)
 			}); err != nil {
 				log.Errorz("service operation failed", zap.Error(err))
@@ -73,7 +73,7 @@ func PatchManyFactory[M types.Model, REQ types.Request, RSP types.Response](cfg 
 			gstotel.RecordError(span, err)
 			return
 		}
-		fieldSets, fieldErr := patchManyFieldSetsFromJSONBody(meta.typ, body)
+		fieldSets, fieldErr := patchManyFieldSetsFromJSONBody(a.typ, body)
 		if fieldErr != nil && !errors.Is(fieldErr, io.EOF) {
 			log.Errorz("bind request body failed", zap.Error(fieldErr))
 			JSON(c, CodeInvalidParam.WithErr(fieldErr))
@@ -91,7 +91,7 @@ func PatchManyFactory[M types.Model, REQ types.Request, RSP types.Response](cfg 
 		// the single-resource patch; failing the whole batch up front keeps
 		// the all-or-nothing shape a defective request deserves. See
 		// modelregistry.Version.
-		if versionField, versioned := modelregistry.VersionFieldName(meta.newModel()); versioned {
+		if versionField, versioned := modelregistry.VersionFieldName(a.newModel()); versioned {
 			for i := range req.Items {
 				itemFields := patchFieldSet{}
 				if i < len(fieldSets) {
@@ -107,7 +107,7 @@ func PatchManyFactory[M types.Model, REQ types.Request, RSP types.Response](cfg 
 			}
 		}
 
-		rsp, err := meta.patchManyFlow(requestContext(c), ginServiceContext(c), &req, fieldSets)
+		rsp, err := a.patchManyFlow(requestContext(c), ginServiceContext(c), &req, fieldSets)
 		if err != nil {
 			JSON(c, failureCoder(err))
 			return
@@ -126,9 +126,9 @@ func PatchManyFactory[M types.Model, REQ types.Request, RSP types.Response](cfg 
 // patchManyFlow) and answers with the records patched, or with the status
 // the failure maps to (see call).
 func PatchManyCall[M types.Model](route string) func(ctx context.Context, params map[string]string, items []M, paths [][]string) ([]M, error) {
-	meta := newFactoryMeta[M, M, M](route, consts.PHASE_PATCH_MANY, consts.PHASE_PATCH_MANY_BEFORE, consts.PHASE_PATCH_MANY_AFTER)
+	a := newAction[M, M, M](route, consts.PHASE_PATCH_MANY, consts.PHASE_PATCH_MANY_BEFORE, consts.PHASE_PATCH_MANY_AFTER)
 	return func(ctx context.Context, params map[string]string, items []M, paths [][]string) ([]M, error) {
-		c := meta.beginCall(ctx, params, nil)
+		c := a.beginCall(ctx, params, nil)
 		defer c.end()
 		req := requestData[M]{Items: items}
 		normalizeBatchRequest(&req)
@@ -137,23 +137,23 @@ func PatchManyCall[M types.Model](route string) func(ctx context.Context, params
 		}
 		fieldSets := make([]patchFieldSet, len(paths))
 		for i, itemPaths := range paths {
-			fields, err := maskFieldSet(meta.typ, itemPaths)
+			fields, err := maskFieldSet(a.typ, itemPaths)
 			if err != nil {
 				return nil, c.invalid(errors.Wrapf(err, "item %d", i))
 			}
 			fieldSets[i] = fields
 		}
-		if versionField, versioned := modelregistry.VersionFieldName(meta.newModel()); versioned {
+		if versionField, versioned := modelregistry.VersionFieldName(a.newModel()); versioned {
 			for i, itemFields := range fieldSets {
 				if _, ok := itemFields[versionField]; !ok {
-					return nil, c.refuse(databaseErrorCoder(database.ErrVersionRequired), errors.Wrapf(database.ErrVersionRequired, "patch many %s item %d without its %s", meta.name, i, versionField))
+					return nil, c.refuse(databaseErrorCoder(database.ErrVersionRequired), errors.Wrapf(database.ErrVersionRequired, "patch many %s item %d without its %s", a.name, i, versionField))
 				}
 			}
 		}
 		if err := validateRequest(&req); err != nil {
 			return nil, c.invalidMessage(err)
 		}
-		rsp, err := meta.patchManyFlow(c.ctx, c.serviceContext, &req, fieldSets)
+		rsp, err := a.patchManyFlow(c.ctx, c.serviceContext, &req, fieldSets)
 		if err != nil {
 			return nil, c.fail(err)
 		}
@@ -176,10 +176,10 @@ func PatchManyCall[M types.Model](route string) func(ctx context.Context, params
 // exactly as in patchFlow: a later patch puts back the fields an earlier one
 // changed, even different ones, and both answer success. A model that needs
 // the stale write refused instead declares model.Version.
-func (meta *factoryMeta[M, REQ, RSP]) patchManyFlow(ctx context.Context, newServiceContext serviceContextFunc, req *requestData[M], fieldSets []patchFieldSet) (requestData[M], error) {
+func (a *action[M, REQ, RSP]) patchManyFlow(ctx context.Context, newServiceContext serviceContextFunc, req *requestData[M], fieldSets []patchFieldSet) (requestData[M], error) {
 	var zero requestData[M]
 	log := logger.Controller.WithContext(ctx, consts.PHASE_PATCH_MANY)
-	svc := meta.service()
+	svc := a.service()
 
 	var shouldUpdates []M
 	for i, m := range req.Items {
@@ -187,11 +187,11 @@ func (meta *factoryMeta[M, REQ, RSP]) patchManyFlow(ctx context.Context, newServ
 		// refused before any record is read. Setting an empty id on a
 		// UUID-keyed model would mint a fresh one instead.
 		if len(m.GetID()) == 0 {
-			err := errors.Wrapf(database.ErrIDRequired, "patch many %s item %d", meta.name, i)
+			err := errors.Wrapf(database.ErrIDRequired, "patch many %s item %d", a.name, i)
 			return zero, failWith(ctx, log, "batch patch item without its id", databaseErrorCoder(err), err)
 		}
 		var results []M
-		v := meta.newModel()
+		v := a.newModel()
 		v.SetID(m.GetID())
 		// Pinned to the primary: the row read here is merged with the
 		// patch and written straight back, so a stale one would write
@@ -200,7 +200,7 @@ func (meta *factoryMeta[M, REQ, RSP]) patchManyFlow(ctx context.Context, newServ
 			return zero, failDatabase(ctx, log, err)
 		}
 		if len(results) != 1 || len(results[0].GetID()) == 0 {
-			err := errors.Wrapf(database.ErrRecordNotFound, "patch many %s id=%s", meta.name, m.GetID())
+			err := errors.Wrapf(database.ErrRecordNotFound, "patch many %s id=%s", a.name, m.GetID())
 			return zero, failWith(ctx, log, "partial update resource not found", databaseErrorCoder(err), err)
 		}
 		oldVal, newVal := reflect.ValueOf(results[0]).Elem(), reflect.ValueOf(m).Elem()
@@ -208,12 +208,12 @@ func (meta *factoryMeta[M, REQ, RSP]) patchManyFlow(ctx context.Context, newServ
 		if i < len(fieldSets) {
 			fields = fieldSets[i]
 		}
-		patchValue(log, meta.typ, oldVal, newVal, fields)
+		patchValue(log, a.typ, oldVal, newVal, fields)
 		shouldUpdates = append(shouldUpdates, oldVal.Addr().Interface().(M)) //nolint:errcheck
 	}
 
 	// 1.Perform business logic processing before batch patch resource.
-	if err := meta.traceServiceHook(ctx, consts.PHASE_PATCH_MANY_BEFORE, svc, func(spanCtx context.Context) error {
+	if err := a.traceServiceHook(ctx, consts.PHASE_PATCH_MANY_BEFORE, svc, func(spanCtx context.Context) error {
 		return svc.PatchManyBefore(newServiceContext(spanCtx, consts.PHASE_PATCH_MANY_BEFORE), shouldUpdates...)
 	}); err != nil {
 		return zero, failService(ctx, log, err)
@@ -227,7 +227,7 @@ func (meta *factoryMeta[M, REQ, RSP]) patchManyFlow(ctx context.Context, newServ
 		return zero, failDatabase(ctx, log, err)
 	}
 	// 3.Perform business logic processing after batch patch resource.
-	if err := meta.traceServiceHook(ctx, consts.PHASE_PATCH_MANY_AFTER, svc, func(spanCtx context.Context) error {
+	if err := a.traceServiceHook(ctx, consts.PHASE_PATCH_MANY_AFTER, svc, func(spanCtx context.Context) error {
 		return svc.PatchManyAfter(newServiceContext(spanCtx, consts.PHASE_PATCH_MANY_AFTER), shouldUpdates...)
 	}); err != nil {
 		return zero, failService(ctx, log, err)
@@ -242,11 +242,11 @@ func (meta *factoryMeta[M, REQ, RSP]) patchManyFlow(ctx context.Context, newServ
 	// NOTE: We should record the `req` instead of `oldVal`, the req is `newVal`.
 	// Record and Request both carry the request payload, so one marshal
 	// feeds both columns; Response carries the patched records instead.
-	if err := am.RecordOperation(ctx, meta.newModel(), consts.OP_PATCH_MANY,
+	if err := am.RecordOperation(ctx, a.newModel(), consts.OP_PATCH_MANY,
 		func() *modellogmgmt.OperationLog {
 			record, _ := json.Marshal(req)
 			respData, _ := json.Marshal(rsp)
-			entry := operationLog(ctx, meta.name)
+			entry := operationLog(ctx, a.name)
 			entry.Record = util.BytesToString(record)
 			entry.Request = util.BytesToString(record)
 			entry.Response = util.BytesToString(respData)

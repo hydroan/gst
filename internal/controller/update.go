@@ -29,19 +29,19 @@ import (
 // When REQ or RSP differs from M, the handler binds the JSON body into REQ and
 // delegates the operation to the phase service's Update method.
 func UpdateFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...*types.ControllerConfig[M]) gin.HandlerFunc {
-	meta := newFactoryMeta[M, REQ, RSP](routeFromConfig(cfg...), consts.PHASE_UPDATE, consts.PHASE_UPDATE_BEFORE, consts.PHASE_UPDATE_AFTER)
+	a := newAction[M, REQ, RSP](routeFromConfig(cfg...), consts.PHASE_UPDATE, consts.PHASE_UPDATE_BEFORE, consts.PHASE_UPDATE_AFTER)
 	return func(c *gin.Context) {
-		ctrlSpanCtx, span := meta.startControllerSpan(c)
+		ctrlSpanCtx, span := a.startControllerSpan(c)
 		defer span.End()
 
 		reqMeta := requestctx.FromGin(c)
 		log := logger.Controller.WithContext(c.Request.Context(), consts.PHASE_UPDATE)
 
-		if !meta.typesEqual {
+		if !a.typesEqual {
 			var err error
 			var rsp RSP
-			req := meta.newRequest()
-			svc := meta.service()
+			req := a.newRequest()
+			svc := a.service()
 
 			if reqErr := bindJSONRequest(c, &req); reqErr != nil && !errors.Is(reqErr, io.EOF) {
 				log.Errorz("bind request body failed", zap.Error(reqErr))
@@ -49,8 +49,8 @@ func UpdateFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...
 				gstotel.RecordError(span, reqErr)
 				return
 			}
-			meta.normalizeRequest(&req)
-			if rsp, err = meta.traceServiceOperation(ctrlSpanCtx, consts.PHASE_UPDATE, func(spanCtx context.Context) (RSP, error) {
+			a.normalizeRequest(&req)
+			if rsp, err = a.traceServiceOperation(ctrlSpanCtx, consts.PHASE_UPDATE, func(spanCtx context.Context) (RSP, error) {
 				return svc.Update(types.NewServiceContext(c, spanCtx, consts.PHASE_UPDATE), req)
 			}); err != nil {
 				log.Errorz("service operation failed", zap.Error(err))
@@ -65,7 +65,7 @@ func UpdateFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...
 			return
 		}
 
-		req := meta.newModel()
+		req := a.newModel()
 		if reqErr := bindJSONRequest(c, &req); reqErr != nil {
 			// A full update replaces the resource, so an absent body is refused
 			// rather than tolerated as "nothing to change".
@@ -75,7 +75,7 @@ func UpdateFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...
 			gstotel.RecordError(span, reqErr)
 			return
 		}
-		meta.normalizeModel(&req)
+		a.normalizeModel(&req)
 
 		// The resource id comes from the configured route parameter only.
 		var id string
@@ -89,7 +89,7 @@ func UpdateFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...
 			return
 		}
 
-		if err := meta.updateFlow(requestContext(c), ginServiceContext(c), id, req); err != nil {
+		if err := a.updateFlow(requestContext(c), ginServiceContext(c), id, req); err != nil {
 			JSON(c, failureCoder(err))
 			return
 		}
@@ -105,19 +105,19 @@ func UpdateFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...
 // updateFlow) and answers with the replacement as stored, or with the
 // status the failure maps to (see call).
 func UpdateCall[M types.Model](route string) func(ctx context.Context, params map[string]string, id string, m M) (M, error) {
-	meta := newFactoryMeta[M, M, M](route, consts.PHASE_UPDATE, consts.PHASE_UPDATE_BEFORE, consts.PHASE_UPDATE_AFTER)
+	a := newAction[M, M, M](route, consts.PHASE_UPDATE, consts.PHASE_UPDATE_BEFORE, consts.PHASE_UPDATE_AFTER)
 	return func(ctx context.Context, params map[string]string, id string, m M) (M, error) {
 		var zero M
-		c := meta.beginCall(ctx, params, nil)
+		c := a.beginCall(ctx, params, nil)
 		defer c.end()
-		meta.normalizeModel(&m)
+		a.normalizeModel(&m)
 		if err := validateRequest(m); err != nil {
 			return zero, c.invalidMessage(err)
 		}
 		if id == "" {
 			return zero, c.missingID()
 		}
-		if err := meta.updateFlow(c.ctx, c.serviceContext, id, m); err != nil {
+		if err := a.updateFlow(c.ctx, c.serviceContext, id, m); err != nil {
 			return zero, c.fail(err)
 		}
 		return answer(c, m)
@@ -136,12 +136,12 @@ func UpdateCall[M types.Model](route string) func(ctx context.Context, params ma
 // replacement answered. The id req carries is replaced by id, which must not
 // be empty (see setRouteID); an id the model rejects answers CodeNotFound
 // without touching the database.
-func (meta *factoryMeta[M, REQ, RSP]) updateFlow(ctx context.Context, newServiceContext serviceContextFunc, id string, req M) error {
+func (a *action[M, REQ, RSP]) updateFlow(ctx context.Context, newServiceContext serviceContextFunc, id string, req M) error {
 	log := logger.Controller.WithContext(ctx, consts.PHASE_UPDATE)
-	svc := meta.service()
+	svc := a.service()
 
 	// 'm' is a fresh model instance, such as: &model.User{ID: myid}.
-	m := meta.newModel()
+	m := a.newModel()
 	if !setRouteID(m, id) {
 		// An id the model rejects cannot match any row; answer 404 without
 		// touching the database.
@@ -152,7 +152,7 @@ func (meta *factoryMeta[M, REQ, RSP]) updateFlow(ctx context.Context, newService
 	req.SetUpdatedBy(requestctx.FromContext(ctx).Username()) // set updated_by to current user
 
 	// 1.Perform business logic processing before update resource.
-	if err := meta.traceServiceHook(ctx, consts.PHASE_UPDATE_BEFORE, svc, func(spanCtx context.Context) error {
+	if err := a.traceServiceHook(ctx, consts.PHASE_UPDATE_BEFORE, svc, func(spanCtx context.Context) error {
 		return svc.UpdateBefore(newServiceContext(spanCtx, consts.PHASE_UPDATE_BEFORE), req)
 	}); err != nil {
 		return failService(ctx, log, err)
@@ -163,7 +163,7 @@ func (meta *factoryMeta[M, REQ, RSP]) updateFlow(ctx context.Context, newService
 		return failDatabase(ctx, log, err)
 	}
 	// 3.Perform business logic processing after update resource.
-	if err := meta.traceServiceHook(ctx, consts.PHASE_UPDATE_AFTER, svc, func(spanCtx context.Context) error {
+	if err := a.traceServiceHook(ctx, consts.PHASE_UPDATE_AFTER, svc, func(spanCtx context.Context) error {
 		return svc.UpdateAfter(newServiceContext(spanCtx, consts.PHASE_UPDATE_AFTER), req)
 	}); err != nil {
 		return failService(ctx, log, err)
@@ -174,7 +174,7 @@ func (meta *factoryMeta[M, REQ, RSP]) updateFlow(ctx context.Context, newService
 	// response keeps req so values populated by service hooks (including
 	// non-persistent fields) survive. On a reload failure keep req as is:
 	// the update itself already committed.
-	reloaded := meta.newModel()
+	reloaded := a.newModel()
 	if reloadErr := database.Database[M](ctx).Get(reloaded, id); reloadErr != nil {
 		log.Warnz("reload audit columns failed", zap.Error(reloadErr))
 	} else {
@@ -188,7 +188,7 @@ func (meta *factoryMeta[M, REQ, RSP]) updateFlow(ctx context.Context, newService
 	if err := am.RecordOperation(ctx, req, consts.OP_UPDATE,
 		func() *modellogmgmt.OperationLog {
 			record, _ := json.Marshal(req)
-			entry := operationLog(ctx, meta.name)
+			entry := operationLog(ctx, a.name)
 			entry.RecordID = req.GetID()
 			entry.Record = util.BytesToString(record)
 			entry.Request = util.BytesToString(record)

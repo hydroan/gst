@@ -129,9 +129,9 @@ func clientSafeBindError(err error) error {
 // normalizeRequest restores req to the zero-value instance when a JSON null
 // body left it nil — indistinguishable from an empty body for the service —
 // and compacts nil slice elements away.
-func (meta *factoryMeta[M, REQ, RSP]) normalizeRequest(req *REQ) {
-	if meta.reqKind == reflect.Pointer && reflect.ValueOf(*req).IsNil() {
-		*req = meta.newRequest()
+func (a *action[M, REQ, RSP]) normalizeRequest(req *REQ) {
+	if a.reqKind == reflect.Pointer && reflect.ValueOf(*req).IsNil() {
+		*req = a.newRequest()
 	}
 	compactNilSliceElements(reflect.ValueOf(req))
 }
@@ -140,9 +140,9 @@ func (meta *factoryMeta[M, REQ, RSP]) normalizeRequest(req *REQ) {
 // handlers that bind the request body straight into the model type. Model
 // types are pointers by construction, so only the nil restore and the slice
 // compaction apply.
-func (meta *factoryMeta[M, REQ, RSP]) normalizeModel(m *M) {
+func (a *action[M, REQ, RSP]) normalizeModel(m *M) {
 	if reflect.ValueOf(*m).IsNil() {
-		*m = meta.newModel()
+		*m = a.newModel()
 	}
 	compactNilSliceElements(reflect.ValueOf(m))
 }

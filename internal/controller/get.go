@@ -31,21 +31,21 @@ import (
 // custom services read parameters from ServiceContext.Query() and
 // ServiceContext.Param().
 func GetFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...*types.ControllerConfig[M]) gin.HandlerFunc {
-	meta := newFactoryMeta[M, REQ, RSP](routeFromConfig(cfg...), consts.PHASE_GET, consts.PHASE_GET_BEFORE, consts.PHASE_GET_AFTER)
+	a := newAction[M, REQ, RSP](routeFromConfig(cfg...), consts.PHASE_GET, consts.PHASE_GET_BEFORE, consts.PHASE_GET_AFTER)
 	return func(c *gin.Context) {
-		ctrlSpanCtx, span := meta.startControllerSpan(c)
+		ctrlSpanCtx, span := a.startControllerSpan(c)
 		defer span.End()
 
 		reqMeta := requestctx.FromGin(c)
 		log := logger.Controller.WithContext(c.Request.Context(), consts.PHASE_GET)
 
-		if !meta.typesEqual {
+		if !a.typesEqual {
 			var err error
 			var rsp RSP
-			req := meta.newRequest()
-			svc := meta.service()
+			req := a.newRequest()
+			svc := a.service()
 
-			if rsp, err = meta.traceServiceOperation(ctrlSpanCtx, consts.PHASE_GET, func(spanCtx context.Context) (RSP, error) {
+			if rsp, err = a.traceServiceOperation(ctrlSpanCtx, consts.PHASE_GET, func(spanCtx context.Context) (RSP, error) {
 				return svc.Get(types.NewServiceContext(c, spanCtx, consts.PHASE_GET), req)
 			}); err != nil {
 				log.Errorz("service operation failed", zap.Error(err))
@@ -71,7 +71,7 @@ func GetFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...*ty
 			return
 		}
 
-		m, err := meta.getFlow(requestContext(c), ginServiceContext(c), param)
+		m, err := a.getFlow(requestContext(c), ginServiceContext(c), param)
 		if err != nil {
 			JSON(c, failureCoder(err))
 			return
@@ -88,10 +88,10 @@ func GetFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...*ty
 // naming no record is refused the way a request missing its route parameter
 // is.
 func GetCall[M types.Model](route string) func(ctx context.Context, params map[string]string, id string, query Query) (M, error) {
-	meta := newFactoryMeta[M, M, M](route, consts.PHASE_GET, consts.PHASE_GET_BEFORE, consts.PHASE_GET_AFTER)
+	a := newAction[M, M, M](route, consts.PHASE_GET, consts.PHASE_GET_BEFORE, consts.PHASE_GET_AFTER)
 	return func(ctx context.Context, params map[string]string, id string, query Query) (M, error) {
 		var zero M
-		c, err := meta.beginQueryCall(ctx, params, query)
+		c, err := a.beginQueryCall(ctx, params, query)
 		defer c.end()
 		if err != nil {
 			return zero, c.invalid(err)
@@ -99,7 +99,7 @@ func GetCall[M types.Model](route string) func(ctx context.Context, params map[s
 		if id == "" {
 			return zero, c.missingID()
 		}
-		m, err := meta.getFlow(c.ctx, c.serviceContext, id)
+		m, err := a.getFlow(c.ctx, c.serviceContext, id)
 		if err != nil {
 			return zero, c.fail(err)
 		}
@@ -113,13 +113,13 @@ func GetCall[M types.Model](route string) func(ctx context.Context, params map[s
 // a UUID-keyed model mints a fresh id for an empty one (see setRouteID). An
 // id the model rejects, and a read that finds no stored record, both answer
 // CodeNotFound.
-func (meta *factoryMeta[M, REQ, RSP]) getFlow(ctx context.Context, newServiceContext serviceContextFunc, id string) (M, error) {
+func (a *action[M, REQ, RSP]) getFlow(ctx context.Context, newServiceContext serviceContextFunc, id string) (M, error) {
 	var zero M
 	log := logger.Controller.WithContext(ctx, consts.PHASE_GET)
-	svc := meta.service()
+	svc := a.service()
 
 	// 'm' is a fresh model instance, such as: &model.User{ID: myid, Name: myname}.
-	m := meta.newModel()
+	m := a.newModel()
 	// `GetBefore` hook need id.
 	if !setRouteID(m, id) {
 		// An id the model rejects cannot match any row; answer 404 before
@@ -131,7 +131,7 @@ func (meta *factoryMeta[M, REQ, RSP]) getFlow(ctx context.Context, newServiceCon
 	expands := parseExpandQuery(requestctx.QueryValues(ctx), m)
 
 	// 1.Perform business logic processing before get resource.
-	if err := meta.traceServiceHook(ctx, consts.PHASE_GET_BEFORE, svc, func(spanCtx context.Context) error {
+	if err := a.traceServiceHook(ctx, consts.PHASE_GET_BEFORE, svc, func(spanCtx context.Context) error {
 		return svc.GetBefore(newServiceContext(spanCtx, consts.PHASE_GET_BEFORE), m)
 	}); err != nil {
 		return zero, failService(ctx, log, err)
@@ -142,7 +142,7 @@ func (meta *factoryMeta[M, REQ, RSP]) getFlow(ctx context.Context, newServiceCon
 		return zero, failDatabase(ctx, log, err)
 	}
 	// 3.Perform business logic processing after get resource.
-	if err := meta.traceServiceHook(ctx, consts.PHASE_GET_AFTER, svc, func(spanCtx context.Context) error {
+	if err := a.traceServiceHook(ctx, consts.PHASE_GET_AFTER, svc, func(spanCtx context.Context) error {
 		return svc.GetAfter(newServiceContext(spanCtx, consts.PHASE_GET_AFTER), m)
 	}); err != nil {
 		return zero, failService(ctx, log, err)
@@ -160,7 +160,7 @@ func (meta *factoryMeta[M, REQ, RSP]) getFlow(ctx context.Context, newServiceCon
 	// 4.record operation log to database.
 	if err := am.RecordOperation(ctx, m, consts.OP_GET,
 		func() *modellogmgmt.OperationLog {
-			return operationLog(ctx, meta.name)
+			return operationLog(ctx, a.name)
 		}); err != nil {
 		log.Warnz("record operation log failed", zap.Error(err))
 	}

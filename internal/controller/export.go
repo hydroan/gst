@@ -66,16 +66,16 @@ func exportAttachment(format string) (filename, contentType string) {
 // and query options, delegates byte generation to the phase service's Export
 // method, and writes the result as an attachment.
 func ExportFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...*types.ControllerConfig[M]) gin.HandlerFunc {
-	meta := newFactoryMeta[M, REQ, RSP](routeFromConfig(cfg...), consts.PHASE_EXPORT, consts.PHASE_LIST_BEFORE, consts.PHASE_LIST_AFTER)
+	a := newAction[M, REQ, RSP](routeFromConfig(cfg...), consts.PHASE_EXPORT, consts.PHASE_LIST_BEFORE, consts.PHASE_LIST_AFTER)
 	return func(c *gin.Context) {
-		ctrlSpanCtx, span := meta.startControllerSpan(c)
+		ctrlSpanCtx, span := a.startControllerSpan(c)
 		defer span.End()
 
 		log := logger.Controller.WithContext(c.Request.Context(), consts.PHASE_EXPORT)
 
 		// 'm' is a fresh model instance, such as: &model.User{ID: myid, Name: myname}.
-		m := meta.newModel()
-		svc := meta.service()
+		m := a.newModel()
+		svc := a.service()
 
 		// A virtual resource has no table behind it, so the controller-side
 		// listing below would query a table that does not exist. Its service
@@ -132,7 +132,7 @@ func ExportFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...
 			expands := parseExpandQuery(query, m)
 			svcCtx := types.NewServiceContext(c, nil, consts.PHASE_EXPORT)
 			// 1.Perform business logic processing before list resources.
-			if err = meta.traceServiceHook(ctrlSpanCtx, consts.PHASE_LIST_BEFORE, svc, func(spanCtx context.Context) error {
+			if err = a.traceServiceHook(ctrlSpanCtx, consts.PHASE_LIST_BEFORE, svc, func(spanCtx context.Context) error {
 				return svc.ListBefore(types.NewServiceContext(c, spanCtx, consts.PHASE_EXPORT), &data)
 			}); err != nil {
 				log.Errorz("service operation failed", zap.Error(err))
@@ -169,7 +169,7 @@ func ExportFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...
 				return
 			}
 			// 4.Perform business logic processing after list resources.
-			if err = meta.traceServiceHook(ctrlSpanCtx, consts.PHASE_LIST_AFTER, svc, func(spanCtx context.Context) error {
+			if err = a.traceServiceHook(ctrlSpanCtx, consts.PHASE_LIST_AFTER, svc, func(spanCtx context.Context) error {
 				return svc.ListAfter(types.NewServiceContext(c, spanCtx, consts.PHASE_EXPORT), &data)
 			}); err != nil {
 				log.Errorz("service operation failed", zap.Error(err))
@@ -179,7 +179,7 @@ func ExportFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...
 			}
 		}
 		// 5.Export
-		exported, err := meta.traceServiceExport(ctrlSpanCtx, consts.PHASE_EXPORT, func(spanCtx context.Context) ([]byte, error) {
+		exported, err := a.traceServiceExport(ctrlSpanCtx, consts.PHASE_EXPORT, func(spanCtx context.Context) ([]byte, error) {
 			return svc.Export(types.NewServiceContext(c, spanCtx, consts.PHASE_EXPORT), data...)
 		})
 		if err != nil {

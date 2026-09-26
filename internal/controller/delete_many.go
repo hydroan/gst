@@ -28,18 +28,18 @@ import (
 // When REQ or RSP differs from M, the handler binds the JSON body into REQ and
 // delegates the operation to the phase service's DeleteMany method.
 func DeleteManyFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...*types.ControllerConfig[M]) gin.HandlerFunc {
-	meta := newFactoryMeta[M, REQ, RSP](routeFromConfig(cfg...), consts.PHASE_DELETE_MANY, consts.PHASE_DELETE_MANY_BEFORE, consts.PHASE_DELETE_MANY_AFTER)
+	a := newAction[M, REQ, RSP](routeFromConfig(cfg...), consts.PHASE_DELETE_MANY, consts.PHASE_DELETE_MANY_BEFORE, consts.PHASE_DELETE_MANY_AFTER)
 	return func(c *gin.Context) {
-		ctrlSpanCtx, span := meta.startControllerSpan(c)
+		ctrlSpanCtx, span := a.startControllerSpan(c)
 		defer span.End()
 
 		log := logger.Controller.WithContext(c.Request.Context(), consts.PHASE_DELETE_MANY)
 
-		if !meta.typesEqual {
+		if !a.typesEqual {
 			var err error
 			var rsp RSP
-			req := meta.newRequest()
-			svc := meta.service()
+			req := a.newRequest()
+			svc := a.service()
 
 			if reqErr := bindJSONRequest(c, &req); reqErr != nil && !errors.Is(reqErr, io.EOF) {
 				log.Errorz("bind request body failed", zap.Error(reqErr))
@@ -47,8 +47,8 @@ func DeleteManyFactory[M types.Model, REQ types.Request, RSP types.Response](cfg
 				gstotel.RecordError(span, reqErr)
 				return
 			}
-			meta.normalizeRequest(&req)
-			if rsp, err = meta.traceServiceOperation(ctrlSpanCtx, consts.PHASE_DELETE_MANY, func(spanCtx context.Context) (RSP, error) {
+			a.normalizeRequest(&req)
+			if rsp, err = a.traceServiceOperation(ctrlSpanCtx, consts.PHASE_DELETE_MANY, func(spanCtx context.Context) (RSP, error) {
 				return svc.DeleteMany(types.NewServiceContext(c, spanCtx, consts.PHASE_DELETE_MANY), req)
 			}); err != nil {
 				log.Errorz("service operation failed", zap.Error(err))
@@ -72,7 +72,7 @@ func DeleteManyFactory[M types.Model, REQ types.Request, RSP types.Response](cfg
 		}
 		normalizeBatchRequest(&req)
 
-		if err := meta.deleteManyFlow(requestContext(c), ginServiceContext(c), &req); err != nil {
+		if err := a.deleteManyFlow(requestContext(c), ginServiceContext(c), &req); err != nil {
 			JSON(c, failureCoder(err))
 			return
 		}
@@ -87,16 +87,16 @@ func DeleteManyFactory[M types.Model, REQ types.Request, RSP types.Response](cfg
 // validates a bound body, runs the batch delete flow (see deleteManyFlow)
 // and answers nothing, or the status the failure maps to (see call).
 func DeleteManyCall[M types.Model](route string) func(ctx context.Context, params map[string]string, ids []string) error {
-	meta := newFactoryMeta[M, M, M](route, consts.PHASE_DELETE_MANY, consts.PHASE_DELETE_MANY_BEFORE, consts.PHASE_DELETE_MANY_AFTER)
+	a := newAction[M, M, M](route, consts.PHASE_DELETE_MANY, consts.PHASE_DELETE_MANY_BEFORE, consts.PHASE_DELETE_MANY_AFTER)
 	return func(ctx context.Context, params map[string]string, ids []string) error {
-		c := meta.beginCall(ctx, params, nil)
+		c := a.beginCall(ctx, params, nil)
 		defer c.end()
 		req := requestData[M]{IDs: ids}
 		normalizeBatchRequest(&req)
 		if err := validateRequest(&req); err != nil {
 			return c.invalidMessage(err)
 		}
-		if err := meta.deleteManyFlow(c.ctx, c.serviceContext, &req); err != nil {
+		if err := a.deleteManyFlow(c.ctx, c.serviceContext, &req); err != nil {
 			return c.fail(err)
 		}
 		return c.finish()
@@ -110,9 +110,9 @@ func DeleteManyCall[M types.Model](route string) func(ctx context.Context, param
 // anything is deleted; an id the model rejects is skipped, which keeps the
 // batch idempotent. Whether the rows are purged is the model's decision (its
 // Purge method), never the request's.
-func (meta *factoryMeta[M, REQ, RSP]) deleteManyFlow(ctx context.Context, newServiceContext serviceContextFunc, req *requestData[M]) error {
+func (a *action[M, REQ, RSP]) deleteManyFlow(ctx context.Context, newServiceContext serviceContextFunc, req *requestData[M]) error {
 	log := logger.Controller.WithContext(ctx, consts.PHASE_DELETE_MANY)
-	svc := meta.service()
+	svc := a.service()
 
 	// 1.Perform business logic processing before batch delete resources.
 	req.Items = make([]M, 0, len(req.IDs))
@@ -122,10 +122,10 @@ func (meta *factoryMeta[M, REQ, RSP]) deleteManyFlow(ctx context.Context, newSer
 		// Setting an empty one on a UUID-keyed model would mint a fresh
 		// id instead. Any other id is used as sent, never trimmed.
 		if strings.TrimSpace(id) == "" {
-			err := errors.Wrapf(database.ErrIDRequired, "delete many %s", meta.name)
+			err := errors.Wrapf(database.ErrIDRequired, "delete many %s", a.name)
 			return failWith(ctx, log, "batch delete with an empty id", databaseErrorCoder(err), err)
 		}
-		m := meta.newModel()
+		m := a.newModel()
 		if !setRouteID(m, id) {
 			// An id the model rejects cannot match any row; skip it to keep
 			// batch delete idempotent instead of failing the whole batch.
@@ -134,7 +134,7 @@ func (meta *factoryMeta[M, REQ, RSP]) deleteManyFlow(ctx context.Context, newSer
 		}
 		req.Items = append(req.Items, m)
 	}
-	if err := meta.traceServiceHook(ctx, consts.PHASE_DELETE_MANY_BEFORE, svc, func(spanCtx context.Context) error {
+	if err := a.traceServiceHook(ctx, consts.PHASE_DELETE_MANY_BEFORE, svc, func(spanCtx context.Context) error {
 		return svc.DeleteManyBefore(newServiceContext(spanCtx, consts.PHASE_DELETE_MANY_BEFORE), req.Items...)
 	}); err != nil {
 		return failService(ctx, log, err)
@@ -145,17 +145,17 @@ func (meta *factoryMeta[M, REQ, RSP]) deleteManyFlow(ctx context.Context, newSer
 		return failDatabase(ctx, log, err)
 	}
 	// 3.Perform business logic processing after batch delete resources.
-	if err := meta.traceServiceHook(ctx, consts.PHASE_DELETE_MANY_AFTER, svc, func(spanCtx context.Context) error {
+	if err := a.traceServiceHook(ctx, consts.PHASE_DELETE_MANY_AFTER, svc, func(spanCtx context.Context) error {
 		return svc.DeleteManyAfter(newServiceContext(spanCtx, consts.PHASE_DELETE_MANY_AFTER), req.Items...)
 	}); err != nil {
 		return failService(ctx, log, err)
 	}
 
 	// 4.record operation log to database.
-	if err := am.RecordOperation(ctx, meta.newModel(), consts.OP_DELETE_MANY,
+	if err := am.RecordOperation(ctx, a.newModel(), consts.OP_DELETE_MANY,
 		func() *modellogmgmt.OperationLog {
 			record, _ := json.Marshal(req)
-			entry := operationLog(ctx, meta.name)
+			entry := operationLog(ctx, a.name)
 			entry.Record = util.BytesToString(record)
 			return entry
 		}); err != nil {

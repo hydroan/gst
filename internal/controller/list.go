@@ -31,20 +31,20 @@ import (
 // request whose body carries no semantics, so nothing is bound into REQ;
 // custom services read query parameters from ServiceContext.Query().
 func ListFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...*types.ControllerConfig[M]) gin.HandlerFunc {
-	meta := newFactoryMeta[M, REQ, RSP](routeFromConfig(cfg...), consts.PHASE_LIST, consts.PHASE_LIST_BEFORE, consts.PHASE_LIST_AFTER)
+	a := newAction[M, REQ, RSP](routeFromConfig(cfg...), consts.PHASE_LIST, consts.PHASE_LIST_BEFORE, consts.PHASE_LIST_AFTER)
 	return func(c *gin.Context) {
-		ctrlSpanCtx, span := meta.startControllerSpan(c)
+		ctrlSpanCtx, span := a.startControllerSpan(c)
 		defer span.End()
 
 		log := logger.Controller.WithContext(c.Request.Context(), consts.PHASE_LIST)
 
-		if !meta.typesEqual {
+		if !a.typesEqual {
 			var err error
 			var rsp RSP
-			req := meta.newRequest()
-			svc := meta.service()
+			req := a.newRequest()
+			svc := a.service()
 
-			if rsp, err = meta.traceServiceOperation(ctrlSpanCtx, consts.PHASE_LIST, func(spanCtx context.Context) (RSP, error) {
+			if rsp, err = a.traceServiceOperation(ctrlSpanCtx, consts.PHASE_LIST, func(spanCtx context.Context) (RSP, error) {
 				return svc.List(types.NewServiceContext(c, spanCtx, consts.PHASE_LIST), req)
 			}); err != nil {
 				log.Errorz("service operation failed", zap.Error(err))
@@ -59,7 +59,7 @@ func ListFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...*t
 			return
 		}
 
-		items, total, err := meta.listFlow(requestContext(c), ginServiceContext(c))
+		items, total, err := a.listFlow(requestContext(c), ginServiceContext(c))
 		if err != nil {
 			JSON(c, failureCoder(err))
 			return
@@ -78,14 +78,14 @@ func ListFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...*t
 // Query) and answers with the items and the total, or with the status the
 // failure maps to (see call).
 func ListCall[M types.Model](route string) func(ctx context.Context, params map[string]string, query Query) ([]M, int, error) {
-	meta := newFactoryMeta[M, M, M](route, consts.PHASE_LIST, consts.PHASE_LIST_BEFORE, consts.PHASE_LIST_AFTER)
+	a := newAction[M, M, M](route, consts.PHASE_LIST, consts.PHASE_LIST_BEFORE, consts.PHASE_LIST_AFTER)
 	return func(ctx context.Context, params map[string]string, query Query) ([]M, int, error) {
-		c, err := meta.beginQueryCall(ctx, params, query)
+		c, err := a.beginQueryCall(ctx, params, query)
 		defer c.end()
 		if err != nil {
 			return nil, 0, c.invalid(err)
 		}
-		items, total, err := meta.listFlow(c.ctx, c.serviceContext)
+		items, total, err := a.listFlow(c.ctx, c.serviceContext)
 		if err != nil {
 			return nil, 0, c.fail(err)
 		}
@@ -102,16 +102,16 @@ func ListCall[M types.Model](route string) func(ctx context.Context, params map[
 // service scope the query in its Filter hook, runs the list hooks around the
 // read, and records the operation. The total counts the rows the query
 // matches; under cursor pagination, which provides none, it is 0.
-func (meta *factoryMeta[M, REQ, RSP]) listFlow(ctx context.Context, newServiceContext serviceContextFunc) ([]M, int, error) {
+func (a *action[M, REQ, RSP]) listFlow(ctx context.Context, newServiceContext serviceContextFunc) ([]M, int, error) {
 	log := logger.Controller.WithContext(ctx, consts.PHASE_LIST)
-	svc := meta.service()
+	svc := a.service()
 
 	// The request's memoized query parse, shared by every parser below; the
 	// parsers only read the values.
 	query := requestctx.QueryValues(ctx)
 
 	// 'm' is a fresh model instance, such as: &model.User{ID: myid, Name: myname}.
-	m := meta.newModel()
+	m := a.newModel()
 
 	if err := decodeListQuery(m, query); err != nil {
 		return nil, 0, failWith(ctx, log, "parse query parameter failed", CodeInvalidParam.WithErr(err), err)
@@ -140,7 +140,7 @@ func (meta *factoryMeta[M, REQ, RSP]) listFlow(ctx context.Context, newServiceCo
 	expands := parseExpandQuery(query, m)
 
 	// 1.Perform business logic processing before list resources.
-	if err = meta.traceServiceHook(ctx, consts.PHASE_LIST_BEFORE, svc, func(spanCtx context.Context) error {
+	if err = a.traceServiceHook(ctx, consts.PHASE_LIST_BEFORE, svc, func(spanCtx context.Context) error {
 		return svc.ListBefore(newServiceContext(spanCtx, consts.PHASE_LIST_BEFORE), &data)
 	}); err != nil {
 		return nil, 0, failService(ctx, log, err)
@@ -167,7 +167,7 @@ func (meta *factoryMeta[M, REQ, RSP]) listFlow(ctx context.Context, newServiceCo
 		return nil, 0, failDatabase(ctx, log, err)
 	}
 	// 4.Perform business logic processing after list resources.
-	if err = meta.traceServiceHook(ctx, consts.PHASE_LIST_AFTER, svc, func(spanCtx context.Context) error {
+	if err = a.traceServiceHook(ctx, consts.PHASE_LIST_AFTER, svc, func(spanCtx context.Context) error {
 		return svc.ListAfter(newServiceContext(spanCtx, consts.PHASE_LIST_AFTER), &data)
 	}); err != nil {
 		return nil, 0, failService(ctx, log, err)
@@ -185,7 +185,7 @@ func (meta *factoryMeta[M, REQ, RSP]) listFlow(ctx context.Context, newServiceCo
 	// 5.record operation log to database.
 	if err = am.RecordOperation(ctx, m, consts.OP_LIST,
 		func() *modellogmgmt.OperationLog {
-			return operationLog(ctx, meta.name)
+			return operationLog(ctx, a.name)
 		}); err != nil {
 		log.Warnz("record operation log failed", zap.Error(err))
 	}

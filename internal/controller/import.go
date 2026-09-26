@@ -26,9 +26,9 @@ import (
 // an ID is created (unique-key collisions fail with 409). Both writes share
 // one transaction, so an import is all-or-nothing.
 func ImportFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...*types.ControllerConfig[M]) gin.HandlerFunc {
-	meta := newFactoryMeta[M, REQ, RSP](routeFromConfig(cfg...), consts.PHASE_IMPORT)
+	a := newAction[M, REQ, RSP](routeFromConfig(cfg...), consts.PHASE_IMPORT)
 	return func(c *gin.Context) {
-		ctrlSpanCtx, span := meta.startControllerSpan(c)
+		ctrlSpanCtx, span := a.startControllerSpan(c)
 		defer span.End()
 
 		log := logger.Controller.WithContext(c.Request.Context(), consts.PHASE_IMPORT)
@@ -63,8 +63,8 @@ func ImportFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...
 			gstotel.RecordError(span, err)
 			return
 		}
-		ml, err := meta.traceServiceImport(ctrlSpanCtx, consts.PHASE_IMPORT, func(spanCtx context.Context) ([]M, error) {
-			return meta.service().
+		ml, err := a.traceServiceImport(ctrlSpanCtx, consts.PHASE_IMPORT, func(spanCtx context.Context) ([]M, error) {
+			return a.service().
 				Import(types.NewServiceContext(c, spanCtx, consts.PHASE_IMPORT), buf)
 		})
 		if err != nil {

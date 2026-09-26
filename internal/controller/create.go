@@ -32,18 +32,18 @@ import (
 // delegates the operation to the phase service's Create method. Multipart form
 // requests are left unbound so the service can read the request directly.
 func CreateFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...*types.ControllerConfig[M]) gin.HandlerFunc {
-	meta := newFactoryMeta[M, REQ, RSP](routeFromConfig(cfg...), consts.PHASE_CREATE, consts.PHASE_CREATE_BEFORE, consts.PHASE_CREATE_AFTER)
+	a := newAction[M, REQ, RSP](routeFromConfig(cfg...), consts.PHASE_CREATE, consts.PHASE_CREATE_BEFORE, consts.PHASE_CREATE_AFTER)
 	return func(c *gin.Context) {
-		ctrlSpanCtx, span := meta.startControllerSpan(c)
+		ctrlSpanCtx, span := a.startControllerSpan(c)
 		defer span.End()
 
 		log := logger.Controller.WithContext(c.Request.Context(), consts.PHASE_CREATE)
 
-		if !meta.typesEqual {
+		if !a.typesEqual {
 			var err error
 			var rsp RSP
-			req := meta.newRequest()
-			svc := meta.service()
+			req := a.newRequest()
+			svc := a.service()
 
 			// If the request content type is "multipart/form-data", then the request body is a file.
 			// We should not try to parse it as JSON.
@@ -54,9 +54,9 @@ func CreateFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...
 					gstotel.RecordError(span, reqErr)
 					return
 				}
-				meta.normalizeRequest(&req)
+				a.normalizeRequest(&req)
 			}
-			if rsp, err = meta.traceServiceOperation(ctrlSpanCtx, consts.PHASE_CREATE, func(spanCtx context.Context) (RSP, error) {
+			if rsp, err = a.traceServiceOperation(ctrlSpanCtx, consts.PHASE_CREATE, func(spanCtx context.Context) (RSP, error) {
 				return svc.Create(types.NewServiceContext(c, spanCtx, consts.PHASE_CREATE), req)
 			}); err != nil {
 				log.Errorz("service operation failed", zap.Error(err))
@@ -71,7 +71,7 @@ func CreateFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...
 			return
 		}
 
-		req := meta.newModel()
+		req := a.newModel()
 		if reqErr := bindJSONRequest(c, &req); reqErr != nil {
 			// Creating a resource requires a body, so an absent one is refused
 			// rather than answered as a success that wrote nothing.
@@ -81,9 +81,9 @@ func CreateFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...
 			gstotel.RecordError(span, reqErr)
 			return
 		}
-		meta.normalizeModel(&req)
+		a.normalizeModel(&req)
 
-		if err := meta.createFlow(requestContext(c), ginServiceContext(c), req); err != nil {
+		if err := a.createFlow(requestContext(c), ginServiceContext(c), req); err != nil {
 			JSON(c, failureCoder(err))
 			return
 		}
@@ -98,16 +98,16 @@ func CreateFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...
 // runs the create flow (see createFlow) and answers with the model created,
 // or with the status the failure maps to (see call).
 func CreateCall[M types.Model](route string) func(ctx context.Context, params map[string]string, m M) (M, error) {
-	meta := newFactoryMeta[M, M, M](route, consts.PHASE_CREATE, consts.PHASE_CREATE_BEFORE, consts.PHASE_CREATE_AFTER)
+	a := newAction[M, M, M](route, consts.PHASE_CREATE, consts.PHASE_CREATE_BEFORE, consts.PHASE_CREATE_AFTER)
 	return func(ctx context.Context, params map[string]string, m M) (M, error) {
 		var zero M
-		c := meta.beginCall(ctx, params, nil)
+		c := a.beginCall(ctx, params, nil)
 		defer c.end()
-		meta.normalizeModel(&m)
+		a.normalizeModel(&m)
 		if err := validateRequest(m); err != nil {
 			return zero, c.invalidMessage(err)
 		}
-		if err := meta.createFlow(c.ctx, c.serviceContext, m); err != nil {
+		if err := a.createFlow(c.ctx, c.serviceContext, m); err != nil {
 			return zero, c.fail(err)
 		}
 		return answer(c, m)
@@ -118,15 +118,15 @@ func CreateCall[M types.Model](route string) func(ctx context.Context, params ma
 // from the identity the request carries, runs the create hooks around the
 // write, and records the operation. The created model is req itself, filled
 // by the write.
-func (meta *factoryMeta[M, REQ, RSP]) createFlow(ctx context.Context, newServiceContext serviceContextFunc, req M) error {
+func (a *action[M, REQ, RSP]) createFlow(ctx context.Context, newServiceContext serviceContextFunc, req M) error {
 	log := logger.Controller.WithContext(ctx, consts.PHASE_CREATE)
-	svc := meta.service()
+	svc := a.service()
 	username := requestctx.FromContext(ctx).Username()
 	req.SetCreatedBy(username)
 	req.SetUpdatedBy(username)
 
 	// 1.Perform business logic processing before create resource.
-	if err := meta.traceServiceHook(ctx, consts.PHASE_CREATE_BEFORE, svc, func(spanCtx context.Context) error {
+	if err := a.traceServiceHook(ctx, consts.PHASE_CREATE_BEFORE, svc, func(spanCtx context.Context) error {
 		return svc.CreateBefore(newServiceContext(spanCtx, consts.PHASE_CREATE_BEFORE), req)
 	}); err != nil {
 		return failService(ctx, log, err)
@@ -138,7 +138,7 @@ func (meta *factoryMeta[M, REQ, RSP]) createFlow(ctx context.Context, newService
 		return failDatabase(ctx, log, err)
 	}
 	// 3.Perform business logic processing after create resource
-	if err := meta.traceServiceHook(ctx, consts.PHASE_CREATE_AFTER, svc, func(spanCtx context.Context) error {
+	if err := a.traceServiceHook(ctx, consts.PHASE_CREATE_AFTER, svc, func(spanCtx context.Context) error {
 		return svc.CreateAfter(newServiceContext(spanCtx, consts.PHASE_CREATE_AFTER), req)
 	}); err != nil {
 		return failService(ctx, log, err)
@@ -150,7 +150,7 @@ func (meta *factoryMeta[M, REQ, RSP]) createFlow(ctx context.Context, newService
 	if err := am.RecordOperation(ctx, req, consts.OP_CREATE,
 		func() *modellogmgmt.OperationLog {
 			record, _ := json.Marshal(req)
-			entry := operationLog(ctx, meta.name)
+			entry := operationLog(ctx, a.name)
 			entry.RecordID = req.GetID()
 			entry.Record = util.BytesToString(record)
 			entry.Request = util.BytesToString(record)

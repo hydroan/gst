@@ -45,11 +45,11 @@ func plainServiceContext(ctx context.Context, phase consts.Phase) *types.Service
 // request metadata, and takes the audit identity of the record from that
 // metadata.
 func TestCreateFlowRunsOnRequestMetadataAlone(t *testing.T) {
-	meta := newFactoryMeta[*flowSample, *flowSample, *flowSample]("flow-samples", consts.PHASE_CREATE, consts.PHASE_CREATE_BEFORE, consts.PHASE_CREATE_AFTER)
+	a := newAction[*flowSample, *flowSample, *flowSample]("flow-samples", consts.PHASE_CREATE, consts.PHASE_CREATE_BEFORE, consts.PHASE_CREATE_AFTER)
 	ctx := requestctx.WithMetadata(context.Background(), requestctx.New(requestctx.Fields{Username: "flow-user"}))
 	record := &flowSample{Name: "created by the flow"}
 
-	require.NoError(t, meta.createFlow(ctx, plainServiceContext, record))
+	require.NoError(t, a.createFlow(ctx, plainServiceContext, record))
 
 	require.NotEmpty(t, record.GetID())
 	require.Equal(t, "flow-user", record.GetCreatedBy())
@@ -60,10 +60,10 @@ func TestCreateFlowRunsOnRequestMetadataAlone(t *testing.T) {
 // cannot serve: the error carries the canonical code the transport answers
 // with, CodeNotFound here for an id naming no record.
 func TestGetFlowAnswersNotFoundAsACode(t *testing.T) {
-	meta := newFactoryMeta[*flowSample, *flowSample, *flowSample]("flow-samples", consts.PHASE_GET, consts.PHASE_GET_BEFORE, consts.PHASE_GET_AFTER)
+	a := newAction[*flowSample, *flowSample, *flowSample]("flow-samples", consts.PHASE_GET, consts.PHASE_GET_BEFORE, consts.PHASE_GET_AFTER)
 	ctx := requestctx.WithMetadata(context.Background(), requestctx.New(requestctx.Fields{}))
 
-	_, err := meta.getFlow(ctx, plainServiceContext, "missing")
+	_, err := a.getFlow(ctx, plainServiceContext, "missing")
 
 	require.Error(t, err)
 	require.Equal(t, response.CodeNotFound, failureCoder(err))
@@ -79,19 +79,19 @@ func TestPatchFlowRecordsTheRecordIDInTheOperationLog(t *testing.T) {
 	am = auditmanager.New(&config.Audit{Enabled: true})
 	t.Cleanup(func() { am = previous })
 
-	meta := newFactoryMeta[*flowSample, *flowSample, *flowSample]("flow-samples", consts.PHASE_PATCH, consts.PHASE_PATCH_BEFORE, consts.PHASE_PATCH_AFTER)
+	a := newAction[*flowSample, *flowSample, *flowSample]("flow-samples", consts.PHASE_PATCH, consts.PHASE_PATCH_BEFORE, consts.PHASE_PATCH_AFTER)
 	ctx := requestctx.WithMetadata(context.Background(), requestctx.New(requestctx.Fields{Username: "flow-user"}))
 	record := &flowSample{Name: "before the patch"}
 	require.NoError(t, database.Database[*flowSample](ctx).Create(record))
 
 	name := "after the patch " + strconv.FormatInt(time.Now().UnixNano(), 36)
-	patched, err := meta.patchFlow(ctx, plainServiceContext, record.GetID(), &flowSample{Name: name}, patchFieldSet{"Name": {}})
+	patched, err := a.patchFlow(ctx, plainServiceContext, record.GetID(), &flowSample{Name: name}, patchFieldSet{"Name": {}})
 	require.NoError(t, err)
 	require.Equal(t, name, patched.Name)
 
 	var entries []*modellogmgmt.OperationLog
 	require.NoError(t, database.Database[*modellogmgmt.OperationLog](ctx).
-		WithQuery(&modellogmgmt.OperationLog{Model: meta.name, OP: consts.OP_PATCH}).List(&entries))
+		WithQuery(&modellogmgmt.OperationLog{Model: a.name, OP: consts.OP_PATCH}).List(&entries))
 	entries = slices.DeleteFunc(entries, func(entry *modellogmgmt.OperationLog) bool { return !strings.Contains(entry.Request, name) })
 	require.Len(t, entries, 1)
 	require.Equal(t, record.GetID(), entries[0].RecordID)

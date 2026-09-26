@@ -32,21 +32,21 @@ import (
 // When REQ or RSP differs from M, the handler binds the JSON body into REQ and
 // delegates the operation to the phase service's Patch method.
 func PatchFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...*types.ControllerConfig[M]) gin.HandlerFunc {
-	meta := newFactoryMeta[M, REQ, RSP](routeFromConfig(cfg...), consts.PHASE_PATCH, consts.PHASE_PATCH_BEFORE, consts.PHASE_PATCH_AFTER)
+	a := newAction[M, REQ, RSP](routeFromConfig(cfg...), consts.PHASE_PATCH, consts.PHASE_PATCH_BEFORE, consts.PHASE_PATCH_AFTER)
 	return func(c *gin.Context) {
 		var id string
 
-		ctrlSpanCtx, span := meta.startControllerSpan(c)
+		ctrlSpanCtx, span := a.startControllerSpan(c)
 		defer span.End()
 
 		reqMeta := requestctx.FromGin(c)
 		log := logger.Controller.WithContext(c.Request.Context(), consts.PHASE_PATCH)
 
-		if !meta.typesEqual {
+		if !a.typesEqual {
 			var err error
 			var rsp RSP
-			req := meta.newRequest()
-			svc := meta.service()
+			req := a.newRequest()
+			svc := a.service()
 
 			if reqErr := bindJSONRequest(c, &req); reqErr != nil && !errors.Is(reqErr, io.EOF) {
 				log.Errorz("bind request body failed", zap.Error(reqErr))
@@ -54,8 +54,8 @@ func PatchFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...*
 				gstotel.RecordError(span, reqErr)
 				return
 			}
-			meta.normalizeRequest(&req)
-			if rsp, err = meta.traceServiceOperation(ctrlSpanCtx, consts.PHASE_PATCH, func(spanCtx context.Context) (RSP, error) {
+			a.normalizeRequest(&req)
+			if rsp, err = a.traceServiceOperation(ctrlSpanCtx, consts.PHASE_PATCH, func(spanCtx context.Context) (RSP, error) {
 				return svc.Patch(types.NewServiceContext(c, spanCtx, consts.PHASE_PATCH), req)
 			}); err != nil {
 				log.Errorz("service operation failed", zap.Error(err))
@@ -70,7 +70,7 @@ func PatchFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...*
 			return
 		}
 
-		req := meta.newModel()
+		req := a.newModel()
 		body, err := readJSONRequestBody(c)
 		if err != nil {
 			log.Errorz("bind request body failed", zap.Error(err))
@@ -78,7 +78,7 @@ func PatchFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...*
 			gstotel.RecordError(span, err)
 			return
 		}
-		fields, err := patchFieldSetFromJSONBody(meta.typ, body)
+		fields, err := patchFieldSetFromJSONBody(a.typ, body)
 		if err != nil && !errors.Is(err, io.EOF) {
 			log.Errorz("bind request body failed", zap.Error(err))
 			JSON(c, CodeInvalidParam.WithErr(err))
@@ -111,7 +111,7 @@ func PatchFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...*
 			gstotel.RecordError(span, err)
 			return
 		}
-		meta.normalizeModel(&req)
+		a.normalizeModel(&req)
 		if len(id) == 0 {
 			log.Errorz(missingRouteParamMsg)
 			JSON(c, CodeInvalidParam.WithMsg(missingRouteParamMsg))
@@ -119,7 +119,7 @@ func PatchFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...*
 			return
 		}
 
-		cur, err := meta.patchFlow(requestContext(c), ginServiceContext(c), id, req, fields)
+		cur, err := a.patchFlow(requestContext(c), ginServiceContext(c), id, req, fields)
 		if err != nil {
 			JSON(c, failureCoder(err))
 			return
@@ -138,19 +138,19 @@ func PatchFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...*
 // runs the patch flow (see patchFlow) and answers with the record patched,
 // or with the status the failure maps to (see call).
 func PatchCall[M types.Model](route string) func(ctx context.Context, params map[string]string, id string, m M, paths []string) (M, error) {
-	meta := newFactoryMeta[M, M, M](route, consts.PHASE_PATCH, consts.PHASE_PATCH_BEFORE, consts.PHASE_PATCH_AFTER)
+	a := newAction[M, M, M](route, consts.PHASE_PATCH, consts.PHASE_PATCH_BEFORE, consts.PHASE_PATCH_AFTER)
 	return func(ctx context.Context, params map[string]string, id string, m M, paths []string) (M, error) {
 		var zero M
-		c := meta.beginCall(ctx, params, nil)
+		c := a.beginCall(ctx, params, nil)
 		defer c.end()
-		meta.normalizeModel(&m)
-		fields, err := maskFieldSet(meta.typ, paths)
+		a.normalizeModel(&m)
+		fields, err := maskFieldSet(a.typ, paths)
 		if err != nil {
 			return zero, c.invalid(err)
 		}
 		if versionField, versioned := modelregistry.VersionFieldName(m); versioned {
 			if _, ok := fields[versionField]; !ok {
-				return zero, c.refuse(databaseErrorCoder(database.ErrVersionRequired), errors.Wrapf(database.ErrVersionRequired, "patch %s without its %s", meta.name, versionField))
+				return zero, c.refuse(databaseErrorCoder(database.ErrVersionRequired), errors.Wrapf(database.ErrVersionRequired, "patch %s without its %s", a.name, versionField))
 			}
 		}
 		if err = validateRequest(m); err != nil {
@@ -159,7 +159,7 @@ func PatchCall[M types.Model](route string) func(ctx context.Context, params map
 		if id == "" {
 			return zero, c.missingID()
 		}
-		cur, err := meta.patchFlow(c.ctx, c.serviceContext, id, m, fields)
+		cur, err := a.patchFlow(c.ctx, c.serviceContext, id, m, fields)
 		if err != nil {
 			return zero, c.fail(err)
 		}
@@ -180,14 +180,14 @@ func PatchCall[M types.Model](route string) func(ctx context.Context, params map
 // the two touched different fields, and both answer success. That is the
 // default contract of every framework update, not a defect; a model that
 // needs the stale write refused instead declares model.Version.
-func (meta *factoryMeta[M, REQ, RSP]) patchFlow(ctx context.Context, newServiceContext serviceContextFunc, id string, req M, fields patchFieldSet) (M, error) {
+func (a *action[M, REQ, RSP]) patchFlow(ctx context.Context, newServiceContext serviceContextFunc, id string, req M, fields patchFieldSet) (M, error) {
 	var zero M
 	log := logger.Controller.WithContext(ctx, consts.PHASE_PATCH)
-	svc := meta.service()
+	svc := a.service()
 
 	data := make([]M, 0)
 	// 'm' is a fresh model instance, such as: &model.User{ID: myid, Name: myname}.
-	m := meta.newModel()
+	m := a.newModel()
 	if !setRouteID(m, id) {
 		// An id the model rejects cannot match any row; answer 404 without
 		// relying on the empty-query safety net below.
@@ -210,11 +210,11 @@ func (meta *factoryMeta[M, REQ, RSP]) patchFlow(ctx context.Context, newServiceC
 
 	newVal := reflect.ValueOf(req).Elem()
 	oldVal := reflect.ValueOf(data[0]).Elem()
-	patchValue(log, meta.typ, oldVal, newVal, fields)
+	patchValue(log, a.typ, oldVal, newVal, fields)
 	cur := oldVal.Addr().Interface().(M) //nolint:errcheck
 
 	// 1.Perform business logic processing before partial update resource.
-	if err := meta.traceServiceHook(ctx, consts.PHASE_PATCH_BEFORE, svc, func(spanCtx context.Context) error {
+	if err := a.traceServiceHook(ctx, consts.PHASE_PATCH_BEFORE, svc, func(spanCtx context.Context) error {
 		return svc.PatchBefore(newServiceContext(spanCtx, consts.PHASE_PATCH_BEFORE), cur)
 	}); err != nil {
 		return zero, failService(ctx, log, err)
@@ -226,7 +226,7 @@ func (meta *factoryMeta[M, REQ, RSP]) patchFlow(ctx context.Context, newServiceC
 		return zero, failDatabase(ctx, log, err)
 	}
 	// 3.Perform business logic processing after partial update resource.
-	if err := meta.traceServiceHook(ctx, consts.PHASE_PATCH_AFTER, svc, func(spanCtx context.Context) error {
+	if err := a.traceServiceHook(ctx, consts.PHASE_PATCH_AFTER, svc, func(spanCtx context.Context) error {
 		return svc.PatchAfter(newServiceContext(spanCtx, consts.PHASE_PATCH_AFTER), cur)
 	}); err != nil {
 		return zero, failService(ctx, log, err)
@@ -242,7 +242,7 @@ func (meta *factoryMeta[M, REQ, RSP]) patchFlow(ctx context.Context, newServiceC
 		func() *modellogmgmt.OperationLog {
 			record, _ := json.Marshal(req)
 			respData, _ := json.Marshal(cur)
-			entry := operationLog(ctx, meta.name)
+			entry := operationLog(ctx, a.name)
 			entry.RecordID = cur.GetID()
 			entry.Record = util.BytesToString(record)
 			entry.Request = util.BytesToString(record)

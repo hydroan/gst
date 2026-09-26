@@ -30,19 +30,19 @@ import (
 // When REQ or RSP differs from M, the handler binds the JSON body into REQ and
 // delegates the operation to the phase service's Delete method.
 func DeleteFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...*types.ControllerConfig[M]) gin.HandlerFunc {
-	meta := newFactoryMeta[M, REQ, RSP](routeFromConfig(cfg...), consts.PHASE_DELETE, consts.PHASE_DELETE_BEFORE, consts.PHASE_DELETE_AFTER)
+	a := newAction[M, REQ, RSP](routeFromConfig(cfg...), consts.PHASE_DELETE, consts.PHASE_DELETE_BEFORE, consts.PHASE_DELETE_AFTER)
 	return func(c *gin.Context) {
-		ctrlSpanCtx, span := meta.startControllerSpan(c)
+		ctrlSpanCtx, span := a.startControllerSpan(c)
 		defer span.End()
 
 		reqMeta := requestctx.FromGin(c)
 		log := logger.Controller.WithContext(c.Request.Context(), consts.PHASE_DELETE)
 
-		if !meta.typesEqual {
+		if !a.typesEqual {
 			var err error
 			var rsp RSP
-			req := meta.newRequest()
-			svc := meta.service()
+			req := a.newRequest()
+			svc := a.service()
 
 			if reqErr := bindJSONRequest(c, &req); reqErr != nil && !errors.Is(reqErr, io.EOF) {
 				log.Errorz("bind request body failed", zap.Error(reqErr))
@@ -50,8 +50,8 @@ func DeleteFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...
 				gstotel.RecordError(span, reqErr)
 				return
 			}
-			meta.normalizeRequest(&req)
-			if rsp, err = meta.traceServiceOperation(ctrlSpanCtx, consts.PHASE_DELETE, func(spanCtx context.Context) (RSP, error) {
+			a.normalizeRequest(&req)
+			if rsp, err = a.traceServiceOperation(ctrlSpanCtx, consts.PHASE_DELETE, func(spanCtx context.Context) (RSP, error) {
 				return svc.Delete(types.NewServiceContext(c, spanCtx, consts.PHASE_DELETE), req)
 			}); err != nil {
 				log.Errorz("service operation failed", zap.Error(err))
@@ -78,7 +78,7 @@ func DeleteFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...
 			return
 		}
 
-		if err := meta.deleteFlow(requestContext(c), ginServiceContext(c), id); err != nil {
+		if err := a.deleteFlow(requestContext(c), ginServiceContext(c), id); err != nil {
 			JSON(c, failureCoder(err))
 			return
 		}
@@ -92,14 +92,14 @@ func DeleteFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...
 // record by, it runs the delete flow (see deleteFlow) and answers nothing,
 // or the status the failure maps to (see call).
 func DeleteCall[M types.Model](route string) func(ctx context.Context, params map[string]string, id string) error {
-	meta := newFactoryMeta[M, M, M](route, consts.PHASE_DELETE, consts.PHASE_DELETE_BEFORE, consts.PHASE_DELETE_AFTER)
+	a := newAction[M, M, M](route, consts.PHASE_DELETE, consts.PHASE_DELETE_BEFORE, consts.PHASE_DELETE_AFTER)
 	return func(ctx context.Context, params map[string]string, id string) error {
-		c := meta.beginCall(ctx, params, nil)
+		c := a.beginCall(ctx, params, nil)
 		defer c.end()
 		if id == "" {
 			return c.missingID()
 		}
-		if err := meta.deleteFlow(c.ctx, c.serviceContext, id); err != nil {
+		if err := a.deleteFlow(c.ctx, c.serviceContext, id); err != nil {
 			return c.fail(err)
 		}
 		return c.finish()
@@ -111,12 +111,12 @@ func DeleteCall[M types.Model](route string) func(ctx context.Context, params ma
 // and records the operation. id must not be empty (see setRouteID); an id the
 // model rejects answers CodeNotFound. Whether the row is purged is the
 // model's decision (its Purge method), never the request's.
-func (meta *factoryMeta[M, REQ, RSP]) deleteFlow(ctx context.Context, newServiceContext serviceContextFunc, id string) error {
+func (a *action[M, REQ, RSP]) deleteFlow(ctx context.Context, newServiceContext serviceContextFunc, id string) error {
 	log := logger.Controller.WithContext(ctx, consts.PHASE_DELETE)
-	svc := meta.service()
+	svc := a.service()
 
 	// 'm' is a fresh model instance, such as: &model.User{ID: myid, Name: myname}.
-	m := meta.newModel()
+	m := a.newModel()
 	if !setRouteID(m, id) {
 		// An id the model rejects cannot match any row; answer 404 instead
 		// of passing an unset id to the database layer.
@@ -125,14 +125,14 @@ func (meta *factoryMeta[M, REQ, RSP]) deleteFlow(ctx context.Context, newService
 	}
 
 	// 1.Perform business logic processing before delete resource.
-	if err := meta.traceServiceHook(ctx, consts.PHASE_DELETE_BEFORE, svc, func(spanCtx context.Context) error {
+	if err := a.traceServiceHook(ctx, consts.PHASE_DELETE_BEFORE, svc, func(spanCtx context.Context) error {
 		return svc.DeleteBefore(newServiceContext(spanCtx, consts.PHASE_DELETE_BEFORE), m)
 	}); err != nil {
 		return failService(ctx, log, err)
 	}
 
 	// find out the record and keep a copy for the operation log.
-	copied := meta.newModel()
+	copied := a.newModel()
 	copied.SetID(m.GetID())
 	if err := database.Database[M](ctx).WithExpand(copied.Expands()).Get(copied, m.GetID()); err != nil {
 		log.Errorz("database operation failed", zap.Error(err))
@@ -144,17 +144,17 @@ func (meta *factoryMeta[M, REQ, RSP]) deleteFlow(ctx context.Context, newService
 		return failDatabase(ctx, log, err)
 	}
 	// 3.Perform business logic processing after delete resource.
-	if err := meta.traceServiceHook(ctx, consts.PHASE_DELETE_AFTER, svc, func(spanCtx context.Context) error {
+	if err := a.traceServiceHook(ctx, consts.PHASE_DELETE_AFTER, svc, func(spanCtx context.Context) error {
 		return svc.DeleteAfter(newServiceContext(spanCtx, consts.PHASE_DELETE_AFTER), m)
 	}); err != nil {
 		return failService(ctx, log, err)
 	}
 
 	// 4.record operation log to database.
-	if err := am.RecordOperation(ctx, meta.newModel(), consts.OP_DELETE,
+	if err := am.RecordOperation(ctx, a.newModel(), consts.OP_DELETE,
 		func() *modellogmgmt.OperationLog {
 			record, _ := json.Marshal(copied)
-			entry := operationLog(ctx, meta.name)
+			entry := operationLog(ctx, a.name)
 			entry.RecordID = m.GetID()
 			entry.Record = util.BytesToString(record)
 			return entry

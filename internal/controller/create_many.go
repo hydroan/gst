@@ -48,18 +48,18 @@ type requestData[M types.Model] struct {
 // When REQ or RSP differs from M, the handler binds the JSON body into REQ and
 // delegates the operation to the phase service's CreateMany method.
 func CreateManyFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...*types.ControllerConfig[M]) gin.HandlerFunc {
-	meta := newFactoryMeta[M, REQ, RSP](routeFromConfig(cfg...), consts.PHASE_CREATE_MANY, consts.PHASE_CREATE_MANY_BEFORE, consts.PHASE_CREATE_MANY_AFTER)
+	a := newAction[M, REQ, RSP](routeFromConfig(cfg...), consts.PHASE_CREATE_MANY, consts.PHASE_CREATE_MANY_BEFORE, consts.PHASE_CREATE_MANY_AFTER)
 	return func(c *gin.Context) {
-		ctrlSpanCtx, span := meta.startControllerSpan(c)
+		ctrlSpanCtx, span := a.startControllerSpan(c)
 		defer span.End()
 
 		log := logger.Controller.WithContext(c.Request.Context(), consts.PHASE_CREATE_MANY)
 
-		if !meta.typesEqual {
+		if !a.typesEqual {
 			var err error
 			var rsp RSP
-			req := meta.newRequest()
-			svc := meta.service()
+			req := a.newRequest()
+			svc := a.service()
 
 			if reqErr := bindJSONRequest(c, &req); reqErr != nil && !errors.Is(reqErr, io.EOF) {
 				log.Errorz("bind request body failed", zap.Error(reqErr))
@@ -67,8 +67,8 @@ func CreateManyFactory[M types.Model, REQ types.Request, RSP types.Response](cfg
 				gstotel.RecordError(span, reqErr)
 				return
 			}
-			meta.normalizeRequest(&req)
-			if rsp, err = meta.traceServiceOperation(ctrlSpanCtx, consts.PHASE_CREATE_MANY, func(spanCtx context.Context) (RSP, error) {
+			a.normalizeRequest(&req)
+			if rsp, err = a.traceServiceOperation(ctrlSpanCtx, consts.PHASE_CREATE_MANY, func(spanCtx context.Context) (RSP, error) {
 				return svc.CreateMany(types.NewServiceContext(c, spanCtx, consts.PHASE_CREATE_MANY), req)
 			}); err != nil {
 				log.Errorz("service operation failed", zap.Error(err))
@@ -92,7 +92,7 @@ func CreateManyFactory[M types.Model, REQ types.Request, RSP types.Response](cfg
 		}
 		normalizeBatchRequest(&req)
 
-		if err := meta.createManyFlow(requestContext(c), ginServiceContext(c), &req); err != nil {
+		if err := a.createManyFlow(requestContext(c), ginServiceContext(c), &req); err != nil {
 			JSON(c, failureCoder(err))
 			return
 		}
@@ -108,16 +108,16 @@ func CreateManyFactory[M types.Model, REQ types.Request, RSP types.Response](cfg
 // and answers with the items created, or with the status the failure maps
 // to (see call).
 func CreateManyCall[M types.Model](route string) func(ctx context.Context, params map[string]string, items []M) ([]M, error) {
-	meta := newFactoryMeta[M, M, M](route, consts.PHASE_CREATE_MANY, consts.PHASE_CREATE_MANY_BEFORE, consts.PHASE_CREATE_MANY_AFTER)
+	a := newAction[M, M, M](route, consts.PHASE_CREATE_MANY, consts.PHASE_CREATE_MANY_BEFORE, consts.PHASE_CREATE_MANY_AFTER)
 	return func(ctx context.Context, params map[string]string, items []M) ([]M, error) {
-		c := meta.beginCall(ctx, params, nil)
+		c := a.beginCall(ctx, params, nil)
 		defer c.end()
 		req := requestData[M]{Items: items}
 		normalizeBatchRequest(&req)
 		if err := validateRequest(&req); err != nil {
 			return nil, c.invalidMessage(err)
 		}
-		if err := meta.createManyFlow(c.ctx, c.serviceContext, &req); err != nil {
+		if err := a.createManyFlow(c.ctx, c.serviceContext, &req); err != nil {
 			return nil, c.fail(err)
 		}
 		return answer(c, req.Items)
@@ -128,10 +128,10 @@ func CreateManyCall[M types.Model](route string) func(ctx context.Context, param
 // creator and updater of every item from the identity the request carries,
 // runs the batch create hooks around the write, and records the operation.
 // The items are req's own, filled by the write.
-func (meta *factoryMeta[M, REQ, RSP]) createManyFlow(ctx context.Context, newServiceContext serviceContextFunc, req *requestData[M]) error {
+func (a *action[M, REQ, RSP]) createManyFlow(ctx context.Context, newServiceContext serviceContextFunc, req *requestData[M]) error {
 	log := logger.Controller.WithContext(ctx, consts.PHASE_CREATE_MANY)
-	svc := meta.service()
-	val := meta.newModel()
+	svc := a.service()
+	val := a.newModel()
 	username := requestctx.FromContext(ctx).Username()
 	for _, m := range req.Items {
 		m.SetCreatedBy(username)
@@ -139,7 +139,7 @@ func (meta *factoryMeta[M, REQ, RSP]) createManyFlow(ctx context.Context, newSer
 	}
 
 	// 1.Perform business logic processing before batch create resource.
-	if err := meta.traceServiceHook(ctx, consts.PHASE_CREATE_MANY_BEFORE, svc, func(spanCtx context.Context) error {
+	if err := a.traceServiceHook(ctx, consts.PHASE_CREATE_MANY_BEFORE, svc, func(spanCtx context.Context) error {
 		return svc.CreateManyBefore(newServiceContext(spanCtx, consts.PHASE_CREATE_MANY_BEFORE), req.Items...)
 	}); err != nil {
 		return failService(ctx, log, err)
@@ -152,7 +152,7 @@ func (meta *factoryMeta[M, REQ, RSP]) createManyFlow(ctx context.Context, newSer
 		return failDatabase(ctx, log, err)
 	}
 	// 3.Perform business logic processing after batch create resource
-	if err := meta.traceServiceHook(ctx, consts.PHASE_CREATE_MANY_AFTER, svc, func(spanCtx context.Context) error {
+	if err := a.traceServiceHook(ctx, consts.PHASE_CREATE_MANY_AFTER, svc, func(spanCtx context.Context) error {
 		return svc.CreateManyAfter(newServiceContext(spanCtx, consts.PHASE_CREATE_MANY_AFTER), req.Items...)
 	}); err != nil {
 		return failService(ctx, log, err)
@@ -164,7 +164,7 @@ func (meta *factoryMeta[M, REQ, RSP]) createManyFlow(ctx context.Context, newSer
 	if err := am.RecordOperation(ctx, val, consts.OP_CREATE_MANY,
 		func() *modellogmgmt.OperationLog {
 			record, _ := json.Marshal(req)
-			entry := operationLog(ctx, meta.name)
+			entry := operationLog(ctx, a.name)
 			entry.Record = util.BytesToString(record)
 			entry.Request = util.BytesToString(record)
 			entry.Response = util.BytesToString(record)

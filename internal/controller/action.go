@@ -17,14 +17,18 @@ import (
 	"go.opentelemetry.io/otel/trace"
 )
 
-// factoryMeta caches the type-derived values a factory handler needs on every
-// request: reflection results, canonical span names, and the service registry
-// key. Every XxxFactory builds one instance at route-registration time and
-// shares it with all requests through the returned closure. All fields are
-// read-only after construction, so concurrent requests can safely share one
-// instance; request-scoped mutable state (model and request instances) is
-// still created per request via newModel and newRequest.
-type factoryMeta[M types.Model, REQ types.Request, RSP types.Response] struct {
+// action is one action of a model on a route as the framework serves it,
+// over HTTP and over gRPC alike: the type-derived values a handler or call
+// needs on every request — reflection results, canonical span names, the
+// service registry key — and, as its methods, the flows the action runs and
+// the glue of each transport around them. Every XxxFactory builds one
+// instance at route-registration time and every XxxCall one as the call
+// function is built, each shared with all requests through the returned
+// closure. All fields are read-only after construction, so concurrent
+// requests can safely share one instance; request-scoped mutable state
+// (model and request instances) is still created per request via newModel
+// and newRequest.
+type action[M types.Model, REQ types.Request, RSP types.Response] struct {
 	typ        reflect.Type // struct type underlying M
 	name       string       // struct name of M, recorded in span attributes and logs
 	fullName   string       // fully qualified struct name of M, used as log object key
@@ -45,15 +49,15 @@ type phaseSpan struct {
 	operation string // phase method name recorded in span attributes
 }
 
-// newFactoryMeta builds the shared metadata for a factory handling the primary
-// phase. route is the raw route string the handler is registered under and
-// keys the service registry lookup together with the phase; an empty route
-// resolves no service, degrading to the no-op default service. hookPhases
-// lists the additional service hook phases the handler traces (for example
-// the before/after phases of a CRUD operation), so their span names are
+// newAction builds the action of the primary phase on route, the raw route
+// string the handler or call is registered under, which keys the service
+// registry lookup together with the phase; an empty route resolves no
+// service, degrading to the no-op default service. hookPhases lists the
+// additional service hook phases the action traces (for example the
+// before/after phases of a CRUD operation), so their span names are
 // precomputed as well. It panics, naming route, when REQ is an interface with
 // methods or a pointer to one, a request type no request body decodes into.
-func newFactoryMeta[M types.Model, REQ types.Request, RSP types.Response](route string, phase consts.Phase, hookPhases ...consts.Phase) *factoryMeta[M, REQ, RSP] {
+func newAction[M types.Model, REQ types.Request, RSP types.Response](route string, phase consts.Phase, hookPhases ...consts.Phase) *action[M, REQ, RSP] {
 	typ := reflect.TypeOf(*new(M)).Elem()
 	name := typ.Name()
 
@@ -76,7 +80,7 @@ func newFactoryMeta[M types.Model, REQ types.Request, RSP types.Response](route 
 		serviceSpans[hookPhase] = newPhaseSpan("service", name, hookPhase)
 	}
 
-	return &factoryMeta[M, REQ, RSP]{
+	return &action[M, REQ, RSP]{
 		typ:            typ,
 		name:           name,
 		fullName:       typ.String(),
@@ -98,33 +102,33 @@ func newPhaseSpan(component, modelName string, phase consts.Phase) phaseSpan {
 }
 
 // serviceSpan returns the precomputed service span of the phase, falling back
-// to on-the-fly construction for phases not declared at meta construction so a
-// missing declaration degrades to the old per-request cost instead of a wrong
-// span name.
-func (meta *factoryMeta[M, REQ, RSP]) serviceSpan(phase consts.Phase) phaseSpan {
-	if span, ok := meta.serviceSpans[phase]; ok {
+// to on-the-fly construction for phases not declared when the action was
+// built, so a missing declaration degrades to the old per-request cost
+// instead of a wrong span name.
+func (a *action[M, REQ, RSP]) serviceSpan(phase consts.Phase) phaseSpan {
+	if span, ok := a.serviceSpans[phase]; ok {
 		return span
 	}
-	return newPhaseSpan("service", meta.name, phase)
+	return newPhaseSpan("service", a.name, phase)
 }
 
 // newModel returns a fresh model instance for one request. The instance is
-// request-scoped mutable state and must never be cached on the meta.
-func (meta *factoryMeta[M, REQ, RSP]) newModel() M {
-	return reflect.New(meta.typ).Interface().(M) //nolint:errcheck
+// request-scoped mutable state and must never be cached on the action.
+func (a *action[M, REQ, RSP]) newModel() M {
+	return reflect.New(a.typ).Interface().(M) //nolint:errcheck
 }
 
 // newRequest returns the zero request value the delegation branch binds the
 // request body into, preserving the construction rules for struct and pointer
 // request types. Types that are neither struct nor pointer keep the plain zero
 // value.
-func (meta *factoryMeta[M, REQ, RSP]) newRequest() REQ {
+func (a *action[M, REQ, RSP]) newRequest() REQ {
 	var req REQ
-	switch meta.reqKind {
+	switch a.reqKind {
 	case reflect.Struct:
-		req = reflect.New(meta.reqTyp).Elem().Interface().(REQ) //nolint:errcheck
+		req = reflect.New(a.reqTyp).Elem().Interface().(REQ) //nolint:errcheck
 	case reflect.Pointer:
-		req = reflect.New(meta.reqTyp).Interface().(REQ) //nolint:errcheck
+		req = reflect.New(a.reqTyp).Interface().(REQ) //nolint:errcheck
 	}
 	return req
 }
@@ -132,15 +136,15 @@ func (meta *factoryMeta[M, REQ, RSP]) newRequest() REQ {
 // service resolves the phase service from the registry using the precomputed
 // key. Resolution stays per request so services registered after route
 // registration are still picked up.
-func (meta *factoryMeta[M, REQ, RSP]) service() types.Service[M, REQ, RSP] {
-	return serviceregistry.Resolve[M, REQ, RSP](meta.svcKey)
+func (a *action[M, REQ, RSP]) service() types.Service[M, REQ, RSP] {
+	return serviceregistry.Resolve[M, REQ, RSP](a.svcKey)
 }
 
 // startControllerSpan starts the span for the controller operation of the
 // request c serves (see startSpan) and rebinds the request context so
 // downstream layers nest under it.
-func (meta *factoryMeta[M, REQ, RSP]) startControllerSpan(c *gin.Context) (context.Context, trace.Span) {
-	spanCtx, span := meta.startSpan(c.Request.Context(), c.Request.Method, c.FullPath())
+func (a *action[M, REQ, RSP]) startControllerSpan(c *gin.Context) (context.Context, trace.Span) {
+	spanCtx, span := a.startSpan(c.Request.Context(), c.Request.Method, c.FullPath())
 
 	// Update request context with new span context
 	c.Request = c.Request.WithContext(requestctx.WithMetadata(spanCtx, requestctx.FromGin(c)))
@@ -152,8 +156,8 @@ func (meta *factoryMeta[M, REQ, RSP]) startControllerSpan(c *gin.Context) (conte
 // root span ctx carries, described by the method and path the transport
 // serves the action at: the HTTP method and route of a request, POST and the
 // full method of a call. The caller ends the span.
-func (meta *factoryMeta[M, REQ, RSP]) startSpan(ctx context.Context, method, path string) (context.Context, trace.Span) {
-	spanCtx, span := gstotel.StartSpan(gstotel.RequestRootContext(ctx), meta.controllerSpan.name)
+func (a *action[M, REQ, RSP]) startSpan(ctx context.Context, method, path string) (context.Context, trace.Span) {
+	spanCtx, span := gstotel.StartSpan(gstotel.RequestRootContext(ctx), a.controllerSpan.name)
 
 	// Attributes are built as typed values and submitted in one call, the same
 	// shape the tracing middleware uses. Passing them as map[string]any instead
@@ -163,8 +167,8 @@ func (meta *factoryMeta[M, REQ, RSP]) startSpan(ctx context.Context, method, pat
 	if gstotel.IsSpanRecording(span) {
 		span.SetAttributes(
 			attribute.String("component", "controller"),
-			attribute.String("controller.operation", meta.controllerSpan.operation),
-			attribute.String("controller.model", meta.name),
+			attribute.String("controller.operation", a.controllerSpan.operation),
+			attribute.String("controller.model", a.name),
 			attribute.String("controller.method", method),
 			attribute.String("controller.path", path),
 		)
@@ -177,30 +181,30 @@ func (meta *factoryMeta[M, REQ, RSP]) startSpan(ctx context.Context, method, pat
 // the service does not override is the framework base's no-op: it still runs,
 // so the hook sequence stays the same for every service, but it has nothing
 // worth timing and gets no span.
-func (meta *factoryMeta[M, REQ, RSP]) traceServiceHook(parentCtx context.Context, phase consts.Phase, svc types.Service[M, REQ, RSP], fn func(context.Context) error) error {
-	span := meta.serviceSpan(phase)
+func (a *action[M, REQ, RSP]) traceServiceHook(parentCtx context.Context, phase consts.Phase, svc types.Service[M, REQ, RSP], fn func(context.Context) error) error {
+	span := a.serviceSpan(phase)
 	if !gstotel.IsEnabled() || !serviceregistry.OverridesHook(svc, span.operation) {
 		return fn(parentCtx)
 	}
-	_, err := traceServiceCall[struct{}](parentCtx, span, meta.name, func(spanCtx context.Context) (struct{}, error) {
+	_, err := traceServiceCall[struct{}](parentCtx, span, a.name, func(spanCtx context.Context) (struct{}, error) {
 		return struct{}{}, fn(spanCtx)
 	})
 	return err
 }
 
 // traceServiceOperation traces a delegated service operation returning RSP.
-func (meta *factoryMeta[M, REQ, RSP]) traceServiceOperation(parentCtx context.Context, phase consts.Phase, fn func(context.Context) (RSP, error)) (RSP, error) {
-	return traceServiceCall(parentCtx, meta.serviceSpan(phase), meta.name, fn)
+func (a *action[M, REQ, RSP]) traceServiceOperation(parentCtx context.Context, phase consts.Phase, fn func(context.Context) (RSP, error)) (RSP, error) {
+	return traceServiceCall(parentCtx, a.serviceSpan(phase), a.name, fn)
 }
 
 // traceServiceExport traces the service export operation.
-func (meta *factoryMeta[M, REQ, RSP]) traceServiceExport(parentCtx context.Context, phase consts.Phase, fn func(context.Context) ([]byte, error)) ([]byte, error) {
-	return traceServiceCall(parentCtx, meta.serviceSpan(phase), meta.name, fn)
+func (a *action[M, REQ, RSP]) traceServiceExport(parentCtx context.Context, phase consts.Phase, fn func(context.Context) ([]byte, error)) ([]byte, error) {
+	return traceServiceCall(parentCtx, a.serviceSpan(phase), a.name, fn)
 }
 
 // traceServiceImport traces the service import operation.
-func (meta *factoryMeta[M, REQ, RSP]) traceServiceImport(parentCtx context.Context, phase consts.Phase, fn func(context.Context) ([]M, error)) ([]M, error) {
-	return traceServiceCall(parentCtx, meta.serviceSpan(phase), meta.name, fn)
+func (a *action[M, REQ, RSP]) traceServiceImport(parentCtx context.Context, phase consts.Phase, fn func(context.Context) ([]M, error)) ([]M, error) {
+	return traceServiceCall(parentCtx, a.serviceSpan(phase), a.name, fn)
 }
 
 // traceServiceCall runs fn inside a service span and records duration, success,

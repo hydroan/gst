@@ -109,12 +109,12 @@ func (*factoryListBeforeService) ListBefore(*types.ServiceContext, *[]*factoryRo
 func TestTraceServiceHookSpansOnlyOverriddenHooks(t *testing.T) {
 	oteltest.Enable(t)
 	recorder := oteltest.Record(t)
-	meta := newFactoryMeta[*factoryRouteModel, *factoryRouteModel, *factoryRouteModel]("samples", consts.PHASE_LIST, consts.PHASE_LIST_BEFORE, consts.PHASE_LIST_AFTER)
+	a := newAction[*factoryRouteModel, *factoryRouteModel, *factoryRouteModel]("samples", consts.PHASE_LIST, consts.PHASE_LIST_BEFORE, consts.PHASE_LIST_AFTER)
 
 	t.Run("the_default_service_exports_no_hook_span", func(t *testing.T) {
 		svc := serviceregistry.Resolve[*factoryRouteModel, *factoryRouteModel, *factoryRouteModel]("samples/unregistered")
 		data := make([]*factoryRouteModel, 0)
-		require.NoError(t, meta.traceServiceHook(context.Background(), consts.PHASE_LIST_BEFORE, svc, func(ctx context.Context) error {
+		require.NoError(t, a.traceServiceHook(context.Background(), consts.PHASE_LIST_BEFORE, svc, func(ctx context.Context) error {
 			return svc.ListBefore(types.NewServiceContext(nil, ctx, consts.PHASE_LIST_BEFORE), &data)
 		}))
 		require.NotContains(t, oteltest.EndedNames(recorder), "service.FactoryRouteModel.ListBefore")
@@ -123,10 +123,10 @@ func TestTraceServiceHookSpansOnlyOverriddenHooks(t *testing.T) {
 	t.Run("an_overridden_hook_gets_a_span_and_its_no-op_partner_does_not", func(t *testing.T) {
 		svc := &factoryListBeforeService{}
 		data := make([]*factoryRouteModel, 0)
-		require.NoError(t, meta.traceServiceHook(context.Background(), consts.PHASE_LIST_BEFORE, svc, func(ctx context.Context) error {
+		require.NoError(t, a.traceServiceHook(context.Background(), consts.PHASE_LIST_BEFORE, svc, func(ctx context.Context) error {
 			return svc.ListBefore(types.NewServiceContext(nil, ctx, consts.PHASE_LIST_BEFORE), &data)
 		}))
-		require.NoError(t, meta.traceServiceHook(context.Background(), consts.PHASE_LIST_AFTER, svc, func(ctx context.Context) error {
+		require.NoError(t, a.traceServiceHook(context.Background(), consts.PHASE_LIST_AFTER, svc, func(ctx context.Context) error {
 			return svc.ListAfter(types.NewServiceContext(nil, ctx, consts.PHASE_LIST_AFTER), &data)
 		}))
 		names := oteltest.EndedNames(recorder)

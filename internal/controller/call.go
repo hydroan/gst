@@ -42,6 +42,72 @@ import (
 // with the same messages. The zero value of a field is the parameter not
 // sent, proto3 having no presence for scalars: a Page of 0 is no _page, an
 // empty SortBy no _sort_by.
+//
+// gRPC has no URL, so what the HTTP request carries in its path and query
+// string the rpc's request message carries in its fields: the route
+// parameters first, then these. For a model Record on the route records, gg
+// gen derives (see queryFields of internal/gggen/pb)
+//
+//	message ListRecordRequest {
+//	  repeated Filter filters = 1;
+//	  repeated string sort_by = 2;
+//	  uint32 page = 3;
+//	  uint32 size = 4;
+//	  string cursor_field = 5;
+//	  string cursor_value = 6;
+//	  bool cursor_next = 7;
+//	  repeated string expand = 8;
+//	  uint32 depth = 9;
+//
+//	  message Filter {
+//	    string field = 1;
+//	    string op = 2;
+//	    repeated string values = 3;
+//	  }
+//	}
+//
+//	message GetRecordRequest {
+//	  string id = 1;
+//	  repeated string expand = 2;
+//	  uint32 depth = 3;
+//	}
+//
+// and, for a route with parameters, their string fields ahead of these,
+// record for records/:record/items. For a Record with the fields status,
+// age and name, listed over HTTP as
+//
+//	GET /api/records?status[in]=active,archived&age[gt]=20&name=alice&_sort_by=created_at desc&_page=2&_size=20
+//
+// the call of ListRecord takes the request message (in the JSON grpcurl
+// speaks)
+//
+//	{
+//	  "filters": [
+//	    {"field": "status", "op": "in", "values": ["active", "archived"]},
+//	    {"field": "age", "op": "gt", "values": ["20"]},
+//	    {"field": "name", "values": ["alice"]}
+//	  ],
+//	  "sort_by": ["created_at desc"],
+//	  "page": 2,
+//	  "size": 20
+//	}
+//
+// which the generated handler hands over as
+//
+//	Query{
+//		Filters: []Filter{
+//			{Field: "status", Op: "in", Values: []string{"active", "archived"}},
+//			{Field: "age", Op: "gt", Values: []string{"20"}},
+//			{Field: "name", Values: []string{"alice"}},
+//		},
+//		SortBy: []string{"created_at desc"},
+//		Page:   2,
+//		Size:   20,
+//	}
+//
+// and values renders back into the query string above. A Get carries only
+// the expansion: {"id": "r-1", "expand": ["children"], "depth": 2} is
+// GET /api/records/r-1?_expand=children&_depth=2.
 type Query struct {
 	Filters     []Filter
 	SortBy      []string
@@ -56,8 +122,10 @@ type Query struct {
 
 // Filter is one filter of a Query: Field names a column by its query name,
 // Op is an operator of types.FilterOp and Values its value, several for in
-// and notin. With an operator it is the field[op]=value of the HTTP query;
-// with none it is the bare key, field=value, the equality on the model's own
+// and notin, which take a list where the HTTP query takes a comma-separated
+// one. With an operator it is the field[op]=value of the HTTP query,
+// {Field: "age", Op: "gt", Values: []string{"20"}} being age[gt]=20; with
+// none it is the bare key, field=value, the equality on the model's own
 // field every model answers, while the operators need the model to declare
 // model.Query, exactly as over HTTP.
 type Filter struct {
@@ -75,6 +143,28 @@ type Filter struct {
 // since the HTTP listener refuses a repeated parameter; several values
 // under an operator taking one; a member of an in holding a comma; and a
 // filter without a value (see Filter.value).
+//
+// The query
+//
+//	Query{
+//		Filters: []Filter{
+//			{Field: "name", Values: []string{"alice"}},
+//			{Field: "age", Op: "gt", Values: []string{"20"}},
+//			{Field: "status", Op: "in", Values: []string{"active", "archived"}},
+//		},
+//		SortBy:      []string{"name", "created_at desc"},
+//		Page:        2,
+//		Size:        50,
+//		CursorField: "id",
+//		CursorValue: "r-1",
+//		CursorNext:  true,
+//		Expand:      []string{"children", "parent"},
+//		Depth:       3,
+//	}
+//
+// renders, written as a query string, as
+//
+//	name=alice&age[gt]=20&status[in]=active,archived&_sort_by=name,created_at desc&_page=2&_size=50&_cursor_field=id&_cursor_value=r-1&_cursor_next=true&_expand=children,parent&_depth=3
 func (q Query) values() (url.Values, error) {
 	values := make(url.Values)
 	for _, f := range q.Filters {
@@ -124,6 +214,11 @@ func (q Query) values() (url.Values, error) {
 // parameter would carry. A filter without a value filters by nothing and is
 // refused: over HTTP an empty parameter means not filtering, but a filter
 // the message spells out and leaves empty is a mistake to report.
+//
+// TODO: accept a member of an in or notin holding a comma. The parsers read
+// the HTTP spelling of the list, members joined by commas, so the call has
+// to spell it that way too; accepting any string takes a second input form
+// of urlquery that is handed the members as a slice.
 func (f Filter) value(key string) (string, error) {
 	if len(f.Values) == 0 {
 		return "", errors.Newf("filter %q has no value", key)
@@ -192,11 +287,11 @@ type call struct {
 // the HTTP handler starts one on the request, described by what the call
 // carries for the method and path, POST and the full method; the caller
 // ends the span through end.
-func (meta *factoryMeta[M, REQ, RSP]) beginCall(ctx context.Context, params map[string]string, query url.Values) *call {
+func (a *action[M, REQ, RSP]) beginCall(ctx context.Context, params map[string]string, query url.Values) *call {
 	ctx = grpcserver.WithParams(ctx, params, query)
 	reqMeta := requestctx.FromContext(ctx)
-	spanCtx, span := meta.startSpan(ctx, reqMeta.Method(), reqMeta.Route())
-	return &call{ctx: spanCtx, span: span, log: logger.Controller.WithContext(ctx, meta.phase)}
+	spanCtx, span := a.startSpan(ctx, reqMeta.Method(), reqMeta.Route())
+	return &call{ctx: spanCtx, span: span, log: logger.Controller.WithContext(ctx, a.phase)}
 }
 
 // beginQueryCall is beginCall for an action reading a query, a List or a
@@ -204,9 +299,9 @@ func (meta *factoryMeta[M, REQ, RSP]) beginCall(ctx context.Context, params map[
 // and attached with the parameters. A query the HTTP listener could not
 // carry is reported once the call began, so the caller refuses it on the
 // call, its span recording the refusal.
-func (meta *factoryMeta[M, REQ, RSP]) beginQueryCall(ctx context.Context, params map[string]string, query Query) (*call, error) {
+func (a *action[M, REQ, RSP]) beginQueryCall(ctx context.Context, params map[string]string, query Query) (*call, error) {
 	values, err := query.values()
-	return meta.beginCall(ctx, params, values), err
+	return a.beginCall(ctx, params, values), err
 }
 
 // serviceContext is the serviceContextFunc of the call: its service
@@ -322,23 +417,23 @@ func answer[T any](c *call, result T) (T, error) {
 // here, as the route registers.
 func ServiceCall[M types.Model, REQ types.Request, RSP types.Response](phase consts.Phase, route string) func(ctx context.Context, params map[string]string, query Query, req REQ) (RSP, error) {
 	invoke := serviceMethod[M, REQ, RSP](phase)
-	meta := newFactoryMeta[M, REQ, RSP](route, phase)
+	a := newAction[M, REQ, RSP](route, phase)
 	binds := phase != consts.PHASE_LIST && phase != consts.PHASE_GET
 	return func(ctx context.Context, params map[string]string, query Query, req REQ) (RSP, error) {
 		var zero RSP
-		c, err := meta.beginQueryCall(ctx, params, query)
+		c, err := a.beginQueryCall(ctx, params, query)
 		defer c.end()
 		if err != nil {
 			return zero, c.invalid(err)
 		}
-		meta.normalizeRequest(&req)
+		a.normalizeRequest(&req)
 		if binds {
 			if err = validateRequest(req); err != nil {
 				return zero, c.invalidMessage(err)
 			}
 		}
-		rsp, err := meta.traceServiceOperation(c.ctx, phase, func(spanCtx context.Context) (RSP, error) {
-			return invoke(meta.service(), c.serviceContext(spanCtx, phase), req)
+		rsp, err := a.traceServiceOperation(c.ctx, phase, func(spanCtx context.Context) (RSP, error) {
+			return invoke(a.service(), c.serviceContext(spanCtx, phase), req)
 		})
 		if err != nil {
 			return zero, c.failService(err)
