@@ -88,7 +88,7 @@ func (db *database[M]) Create(objs ...M) (err error) {
 	if db.dialect() == dialectClickHouse {
 		return db.clickhouseCreate(objs)
 	}
-	done, span := db.trace(consts.PHASE_CREATE, len(objs))
+	done, span := db.trace(consts.Create, len(objs))
 	defer func() { done(err) }()
 
 	batchSize := defaultBatchSize
@@ -112,7 +112,7 @@ func (db *database[M]) Create(objs ...M) (err error) {
 	write := func() error {
 		// Invoke model hook: CreateBefore for the entire batch.
 		if !db.noHook {
-			if err = traceModelHook[M](db.ctx, consts.PHASE_CREATE_BEFORE, span, func(spanCtx context.Context) error {
+			if err = traceModelHook[M](db.ctx, consts.CreateBefore, span, func(spanCtx context.Context) error {
 				for i := range objs {
 					if err = objs[i].CreateBefore(spanCtx); err != nil {
 						return err
@@ -149,7 +149,7 @@ func (db *database[M]) Create(objs ...M) (err error) {
 		}
 		// Invoke model hook: CreateAfter for the entire batch.
 		if !db.noHook {
-			if err = traceModelHook[M](db.ctx, consts.PHASE_CREATE_AFTER, span, func(spanCtx context.Context) error {
+			if err = traceModelHook[M](db.ctx, consts.CreateAfter, span, func(spanCtx context.Context) error {
 				for i := range objs {
 					if err = objs[i].CreateAfter(spanCtx); err != nil {
 						return err
@@ -229,7 +229,7 @@ func (db *database[M]) Delete(objs ...M) (err error) {
 	if db.dialect() == dialectClickHouse {
 		return db.clickhouseDelete(objs)
 	}
-	done, span := db.trace(consts.PHASE_DELETE, len(objs))
+	done, span := db.trace(consts.Delete, len(objs))
 	defer func() { done(err) }()
 
 	batchSize := defaultDeleteBatchSize
@@ -290,7 +290,7 @@ func (db *database[M]) Delete(objs ...M) (err error) {
 	write := func() error {
 		// Invoke model hook: DeleteBefore.
 		if !db.noHook {
-			if err = traceModelHook[M](db.ctx, consts.PHASE_DELETE_BEFORE, span, func(spanCtx context.Context) error {
+			if err = traceModelHook[M](db.ctx, consts.DeleteBefore, span, func(spanCtx context.Context) error {
 				for i := range objs {
 					if err = objs[i].DeleteBefore(spanCtx); err != nil {
 						return err
@@ -350,7 +350,7 @@ func (db *database[M]) Delete(objs ...M) (err error) {
 		}
 		// Invoke model hook: DeleteAfter.
 		if !db.noHook {
-			if err = traceModelHook[M](db.ctx, consts.PHASE_DELETE_AFTER, span, func(spanCtx context.Context) error {
+			if err = traceModelHook[M](db.ctx, consts.DeleteAfter, span, func(spanCtx context.Context) error {
 				for i := range objs {
 					if err = objs[i].DeleteAfter(spanCtx); err != nil {
 						return err
@@ -463,7 +463,7 @@ func (db *database[M]) Update(objs ...M) (err error) {
 	if db.dialect() == dialectClickHouse {
 		return db.clickhouseUpdate(objs)
 	}
-	done, span := db.trace(consts.PHASE_UPDATE, len(objs))
+	done, span := db.trace(consts.Update, len(objs))
 	defer func() { done(err) }()
 
 	tableName := db.m.TableName()
@@ -505,7 +505,7 @@ func (db *database[M]) Update(objs ...M) (err error) {
 	write := func() error {
 		// Invoke model hook: UpdateBefore.
 		if !db.noHook {
-			if err = traceModelHook[M](db.ctx, consts.PHASE_UPDATE_BEFORE, span, func(spanCtx context.Context) error {
+			if err = traceModelHook[M](db.ctx, consts.UpdateBefore, span, func(spanCtx context.Context) error {
 				for i := range objs {
 					if err = objs[i].UpdateBefore(spanCtx); err != nil {
 						return err
@@ -544,7 +544,7 @@ func (db *database[M]) Update(objs ...M) (err error) {
 		}
 		// Invoke model hook: UpdateAfter.
 		if !db.noHook {
-			if err = traceModelHook[M](db.ctx, consts.PHASE_UPDATE_AFTER, span, func(spanCtx context.Context) error {
+			if err = traceModelHook[M](db.ctx, consts.UpdateAfter, span, func(spanCtx context.Context) error {
 				for i := range objs {
 					if err = objs[i].UpdateAfter(spanCtx); err != nil {
 						return err

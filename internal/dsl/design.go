@@ -138,7 +138,7 @@ type Design struct {
 // Example:
 //
 //	design.Range(func(route string, action *Action) {
-//		fmt.Printf("Generating %s for %s\n", action.Phase.MethodName(), route)
+//		fmt.Printf("Generating %s for %s\n", action.Phase.Name(), route)
 //	})
 func (d *Design) Range(fn func(route string, action *Action)) {
 	if d == nil || fn == nil || !d.Enabled {
@@ -297,21 +297,21 @@ var methodList = []string{
 	"StreamingPayload",
 	"StreamingResult",
 
-	consts.PHASE_CREATE.MethodName(),
-	consts.PHASE_DELETE.MethodName(),
-	consts.PHASE_UPDATE.MethodName(),
-	consts.PHASE_PATCH.MethodName(),
-	consts.PHASE_LIST.MethodName(),
-	consts.PHASE_GET.MethodName(),
+	consts.Create.Name(),
+	consts.Delete.Name(),
+	consts.Update.Name(),
+	consts.Patch.Name(),
+	consts.List.Name(),
+	consts.Get.Name(),
 
-	consts.PHASE_CREATE_MANY.MethodName(),
-	consts.PHASE_DELETE_MANY.MethodName(),
-	consts.PHASE_UPDATE_MANY.MethodName(),
-	consts.PHASE_PATCH_MANY.MethodName(),
+	consts.CreateMany.Name(),
+	consts.DeleteMany.Name(),
+	consts.UpdateMany.Name(),
+	consts.PatchMany.Name(),
 
-	consts.PHASE_IMPORT.MethodName(),
-	consts.PHASE_EXPORT.MethodName(),
+	consts.Import.Name(),
+	consts.Export.Name(),
 
-	consts.PHASE_SSE.MethodName(),
-	consts.PHASE_STREAM.MethodName(),
+	consts.SSE.Name(),
+	consts.Stream.Name(),
 }

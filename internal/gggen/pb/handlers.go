@@ -55,7 +55,7 @@ import (
 //
 //	// The calls of the actions of Report, one per rpc of ReportService, built
 //	// once at package initialization.
-//	var getReport = grpc.ServiceCall[*model.Report, *gstmodel.Empty, *model.ReportRsp](consts.PHASE_GET, "/api/reports/summary")
+//	var getReport = grpc.ServiceCall[*model.Report, *gstmodel.Empty, *model.ReportRsp](consts.Get, "/api/reports/summary")
 //
 //	// GetReport serves the Get action of Report on /api/reports/summary.
 //	func (ReportService) GetReport(ctx context.Context, req *GetReportRequest) (*GetReportResponse, error) {
@@ -163,7 +163,7 @@ func (w *fileWriter) serviceType(service string, model *modelinfo.Model) {
 //		createItem = grpc.CreateCall[*record.Item]("/api/records/:record/items")
 //		getItem    = grpc.GetCall[*record.Item]("/api/records/:record/items/:id")
 //		sealItem   = grpc.CreateCall[*record.Item]("/api/items/:id/seal")
-//		mergeItem  = grpc.ServiceCall[*record.Item, *record.MergeReq, *record.MergedItemRsp](consts.PHASE_CREATE, "/api/items/merge")
+//		mergeItem  = grpc.ServiceCall[*record.Item, *record.MergeReq, *record.MergedItemRsp](consts.Create, "/api/items/merge")
 //	)
 func (w *fileWriter) actionCalls(service string, rpcs []*rpc) {
 	model := rpcs[0].model
@@ -172,11 +172,11 @@ func (w *fileWriter) actionCalls(service string, rpcs []*rpc) {
 		modelType := star(w.modelPkgType(model, model.ModelName))
 		var value ast.Expr
 		if r.standard {
-			value = call(index(w.grpc(r.action.Phase.MethodName()+"Call"), modelType), strLit(r.registered))
+			value = call(index(w.grpc(r.action.Phase.Name()+"Call"), modelType), strLit(r.registered))
 		} else {
 			value = call(
 				&ast.IndexListExpr{X: w.grpc("ServiceCall"), Indices: []ast.Expr{modelType, w.actionType(model, r.action.Payload), w.actionType(model, r.action.Result)}},
-				sel(w.out.imports.fixedRef(ggconst.ImportPathConsts), "PHASE_"+strings.ToUpper(string(r.action.Phase))),
+				sel(w.out.imports.fixedRef(ggconst.ImportPathConsts), r.action.Phase.Name()),
 				strLit(r.registered),
 			)
 		}
@@ -341,24 +341,24 @@ func (w *fileWriter) handler(r *rpc) {
 			}
 		}
 		switch r.action.Phase {
-		case consts.PHASE_CREATE:
+		case consts.Create:
 			body = single(params, fromProto(req(x)))
-		case consts.PHASE_GET:
+		case consts.Get:
 			body = single(params, id, query)
-		case consts.PHASE_UPDATE:
+		case consts.Update:
 			body = single(params, id, fromProto(req(x)))
-		case consts.PHASE_PATCH:
+		case consts.Patch:
 			body = single(params, id, fromProto(req(x)), call(sel(req("update_mask"), "GetPaths")))
-		case consts.PHASE_DELETE:
+		case consts.Delete:
 			body = []ast.Stmt{ifStmt(define([]string{"err"}, run(params, id)), notNil(ident("err")), returns(ident("nil"), ident("err"))), respond()}
-		case consts.PHASE_LIST:
+		case consts.List:
 			body = append([]ast.Stmt{define([]string{"models", "total", "err"}, run(params, query)), failing()}, itemsOf("models")...)
 			body = append(body, respond(keyValue(responseFields["items"], ident("items")), keyValue(responseFields["total"], call(ident("int64"), ident("total")))))
-		case consts.PHASE_CREATE_MANY, consts.PHASE_UPDATE_MANY:
+		case consts.CreateMany, consts.UpdateMany:
 			body = append(modelsOf(func(item ast.Expr) ast.Expr { return item }), define([]string{"stored", "err"}, run(params, ident("models"))), failing())
 			body = append(body, itemsOf("stored")...)
 			body = append(body, respond(keyValue(responseFields["items"], ident("items"))))
-		case consts.PHASE_PATCH_MANY:
+		case consts.PatchMany:
 			itemFields := goFieldNames(r.request.GetNestedType()[0])
 			masks := define([]string{"masks"}, makeCall(&ast.ArrayType{Elt: &ast.ArrayType{Elt: ident("string")}}, lenCall(req("items"))))
 			models := modelsOf(func(item ast.Expr) ast.Expr { return call(sel(item, "Get"+itemFields[x])) },
@@ -366,7 +366,7 @@ func (w *fileWriter) handler(r *rpc) {
 			body = append([]ast.Stmt{models[0], masks, models[1]}, define([]string{"stored", "err"}, run(params, ident("models"), ident("masks"))), failing())
 			body = append(body, itemsOf("stored")...)
 			body = append(body, respond(keyValue(responseFields["items"], ident("items"))))
-		case consts.PHASE_DELETE_MANY:
+		case consts.DeleteMany:
 			body = []ast.Stmt{ifStmt(define([]string{"err"}, run(params, req("ids"))), notNil(ident("err")), returns(ident("nil"), ident("err"))), respond()}
 		}
 	} else {
@@ -387,7 +387,7 @@ func (w *fileWriter) handler(r *rpc) {
 		}
 	}
 
-	w.out.add(r.name+" serves the "+r.action.Phase.MethodName()+" action of "+r.model.ModelName+" on "+consts.APIPath(r.route)+".", &ast.FuncDecl{
+	w.out.add(r.name+" serves the "+r.action.Phase.Name()+" action of "+r.model.ModelName+" on "+consts.APIPath(r.route)+".", &ast.FuncDecl{
 		Recv: &ast.FieldList{List: []*ast.Field{{Type: ident(r.service)}}},
 		Name: ident(r.name),
 		Type: &ast.FuncType{
@@ -409,7 +409,7 @@ func (w *fileWriter) handler(r *rpc) {
 func (w *fileWriter) query(phase consts.Phase, req func(string) ast.Expr) (ast.Expr, func(*goast.LineSet)) {
 	lit := compositeLit(w.grpc("Query"))
 	switch phase {
-	case consts.PHASE_LIST:
+	case consts.List:
 		lit.Elts = []ast.Expr{
 			keyValue("Filters", call(w.grpc("Filters"), req("filters"))),
 			keyValue("SortBy", req("sort_by")),
@@ -422,7 +422,7 @@ func (w *fileWriter) query(phase consts.Phase, req func(string) ast.Expr) (ast.E
 			keyValue("Depth", req("depth")),
 		}
 		return lit, func(lines *goast.LineSet) { layoutLiteral(lit, lines) }
-	case consts.PHASE_GET:
+	case consts.Get:
 		lit.Elts = []ast.Expr{keyValue("Expand", req("expand")), keyValue("Depth", req("depth"))}
 	}
 	return lit, nil

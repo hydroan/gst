@@ -88,17 +88,17 @@ const (
 // phase, which registering per test would attempt under -count.
 func registerFixtureServices() {
 	for _, phase := range []consts.Phase{
-		consts.PHASE_CREATE, consts.PHASE_DELETE, consts.PHASE_UPDATE, consts.PHASE_PATCH, consts.PHASE_LIST,
-		consts.PHASE_CREATE_MANY, consts.PHASE_DELETE_MANY, consts.PHASE_UPDATE_MANY,
+		consts.Create, consts.Delete, consts.Update, consts.Patch, consts.List,
+		consts.CreateMany, consts.DeleteMany, consts.UpdateMany,
 	} {
 		serviceregistry.Register[*sampleRecord, *sampleRecord, *sampleRecord](phase, refusalRoute, &refusingService{})
 	}
-	serviceregistry.Register[*sampleRecord, *sampleRecord, *sampleRecord](consts.PHASE_LIST, filterRefusalRoute, &filterRefusingService{})
-	serviceregistry.Register[*sampleRecord, *sampleRecord, *sampleRecord](consts.PHASE_IMPORT, importRoute, &importingService{})
-	serviceregistry.Register[*sampleRecord, *sampleRecord, *sampleRecord](consts.PHASE_IMPORT, refusedImportRoute, &refusingService{})
-	serviceregistry.Register[*sampleRecord, *sampleRecord, *sampleRecord](consts.PHASE_CREATE, observedRoute, &observingService{})
-	serviceregistry.Register[*sampleRecord, *sampleActionReq, *sampleActionRsp](consts.PHASE_CREATE, actionRoute, &actionService{})
-	serviceregistry.Register[*sampleRecord, *sampleActionReq, *sampleActionRsp](consts.PHASE_LIST, actionRoute, &actionService{})
+	serviceregistry.Register[*sampleRecord, *sampleRecord, *sampleRecord](consts.List, filterRefusalRoute, &filterRefusingService{})
+	serviceregistry.Register[*sampleRecord, *sampleRecord, *sampleRecord](consts.Import, importRoute, &importingService{})
+	serviceregistry.Register[*sampleRecord, *sampleRecord, *sampleRecord](consts.Import, refusedImportRoute, &refusingService{})
+	serviceregistry.Register[*sampleRecord, *sampleRecord, *sampleRecord](consts.Create, observedRoute, &observingService{})
+	serviceregistry.Register[*sampleRecord, *sampleActionReq, *sampleActionRsp](consts.Create, actionRoute, &actionService{})
+	serviceregistry.Register[*sampleRecord, *sampleActionReq, *sampleActionRsp](consts.List, actionRoute, &actionService{})
 }
 
 // refusedMsg is what the refusing services answer every refused request with.

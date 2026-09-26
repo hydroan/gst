@@ -18,20 +18,20 @@ import (
 // both as the action keyword set and as the phase lookup for generation
 // facts derived from an action call, such as the service filename.
 var actionMethodPhases = map[string]consts.Phase{
-	consts.PHASE_CREATE.MethodName():      consts.PHASE_CREATE,
-	consts.PHASE_DELETE.MethodName():      consts.PHASE_DELETE,
-	consts.PHASE_UPDATE.MethodName():      consts.PHASE_UPDATE,
-	consts.PHASE_PATCH.MethodName():       consts.PHASE_PATCH,
-	consts.PHASE_LIST.MethodName():        consts.PHASE_LIST,
-	consts.PHASE_GET.MethodName():         consts.PHASE_GET,
-	consts.PHASE_CREATE_MANY.MethodName(): consts.PHASE_CREATE_MANY,
-	consts.PHASE_DELETE_MANY.MethodName(): consts.PHASE_DELETE_MANY,
-	consts.PHASE_UPDATE_MANY.MethodName(): consts.PHASE_UPDATE_MANY,
-	consts.PHASE_PATCH_MANY.MethodName():  consts.PHASE_PATCH_MANY,
-	consts.PHASE_IMPORT.MethodName():      consts.PHASE_IMPORT,
-	consts.PHASE_EXPORT.MethodName():      consts.PHASE_EXPORT,
-	consts.PHASE_SSE.MethodName():         consts.PHASE_SSE,
-	consts.PHASE_STREAM.MethodName():      consts.PHASE_STREAM,
+	consts.Create.Name():     consts.Create,
+	consts.Delete.Name():     consts.Delete,
+	consts.Update.Name():     consts.Update,
+	consts.Patch.Name():      consts.Patch,
+	consts.List.Name():       consts.List,
+	consts.Get.Name():        consts.Get,
+	consts.CreateMany.Name(): consts.CreateMany,
+	consts.DeleteMany.Name(): consts.DeleteMany,
+	consts.UpdateMany.Name(): consts.UpdateMany,
+	consts.PatchMany.Name():  consts.PatchMany,
+	consts.Import.Name():     consts.Import,
+	consts.Export.Name():     consts.Export,
+	consts.SSE.Name():        consts.SSE,
+	consts.Stream.Name():     consts.Stream,
 }
 
 func isActionMethod(name string) bool {
@@ -46,18 +46,18 @@ func isActionMethod(name string) bool {
 // alone for the GET-verb Get action); otherwise the generated route can never
 // resolve a resource id.
 var routeIDActionMethodNames = map[string]bool{
-	consts.PHASE_DELETE.MethodName(): true,
-	consts.PHASE_UPDATE.MethodName(): true,
-	consts.PHASE_PATCH.MethodName():  true,
-	consts.PHASE_GET.MethodName():    true,
+	consts.Delete.Name(): true,
+	consts.Update.Name(): true,
+	consts.Patch.Name():  true,
+	consts.Get.Name():    true,
 }
 
 // getVerbActionMethodNames are actions whose generated routes handle HTTP GET
 // requests. A GET request carries no request body, so these actions must not
 // declare Payload; custom services read filters from ServiceContext.Query().
 var getVerbActionMethodNames = map[string]bool{
-	consts.PHASE_LIST.MethodName(): true,
-	consts.PHASE_GET.MethodName():  true,
+	consts.List.Name(): true,
+	consts.Get.Name():  true,
 }
 
 // fixedContractActionSignatures are actions whose service methods have fixed
@@ -69,9 +69,9 @@ var getVerbActionMethodNames = map[string]bool{
 // controller handles an HTTP GET request whose response is the event stream
 // the service opens through ServiceContext.SSE.
 var fixedContractActionSignatures = map[string]string{
-	consts.PHASE_IMPORT.MethodName(): "Import(ctx, io.Reader) ([]M, error)",
-	consts.PHASE_EXPORT.MethodName(): "Export(ctx, ...M) ([]byte, error)",
-	consts.PHASE_SSE.MethodName():    "SSE(ctx) error",
+	consts.Import.Name(): "Import(ctx, io.Reader) ([]M, error)",
+	consts.Export.Name(): "Export(ctx, ...M) ([]byte, error)",
+	consts.SSE.Name():    "SSE(ctx) error",
 }
 
 // serviceRequiredActionMethodNames are actions whose request cannot be
@@ -80,10 +80,10 @@ var fixedContractActionSignatures = map[string]string{
 // declaring them without Service() is a wiring error caught at generation
 // time.
 var serviceRequiredActionMethodNames = map[string]bool{
-	consts.PHASE_IMPORT.MethodName(): true,
-	consts.PHASE_EXPORT.MethodName(): true,
-	consts.PHASE_SSE.MethodName():    true,
-	consts.PHASE_STREAM.MethodName(): true,
+	consts.Import.Name(): true,
+	consts.Export.Name(): true,
+	consts.SSE.Name():    true,
+	consts.Stream.Name(): true,
 }
 
 var designOnlyMethodNames = map[string]bool{
@@ -98,9 +98,9 @@ var designOnlyMethodNames = map[string]bool{
 // protocol of its own. A model declaring GRPC() needs at least one other
 // action, or its gRPC service would have nothing to serve.
 var httpOnlyActionMethodNames = map[string]bool{
-	consts.PHASE_IMPORT.MethodName(): true,
-	consts.PHASE_EXPORT.MethodName(): true,
-	consts.PHASE_SSE.MethodName():    true,
+	consts.Import.Name(): true,
+	consts.Export.Name(): true,
+	consts.SSE.Name():    true,
 }
 
 // HTTPOnlyAction reports whether the action named name is one gRPC cannot
@@ -116,7 +116,7 @@ func HTTPOnlyAction(name string) bool {
 // does. A model declaring one needs GRPC(), or the action would be served
 // nowhere.
 var grpcOnlyActionMethodNames = map[string]bool{
-	consts.PHASE_STREAM.MethodName(): true,
+	consts.Stream.Name(): true,
 }
 
 // GRPCOnlyAction reports whether the action named name is one HTTP cannot
@@ -277,7 +277,7 @@ func validateDesignFunc(fn *ast.FuncDecl, modelName string, rootModelFile, virtu
 // the duplicate at startup. Rejecting the design at generation time reports
 // the mistake where it was made.
 func validateSSEListConflict(seenActions map[string]bool, filename string) []error {
-	if seenActions[consts.PHASE_SSE.MethodName()] && seenActions[consts.PHASE_LIST.MethodName()] {
+	if seenActions[consts.SSE.Name()] && seenActions[consts.List.Name()] {
 		return []error{fmt.Errorf("%s: SSE and List cannot share one route: both register the GET route path itself", filename)}
 	}
 	return nil
@@ -432,7 +432,7 @@ func validateActionCall(call *ast.CallExpr, actionName string, rootModelFile, vi
 	// selects from the model table; a virtual model has none, so the request
 	// could only fail at runtime. The Export action is exempt: its controller
 	// skips the table phases for virtual models and delegates to the service.
-	if virtual && actionName == consts.PHASE_LIST.MethodName() && !info.result {
+	if virtual && actionName == consts.List.Name() && !info.result {
 		errs = append(errs, fmt.Errorf("%s: %s action on a virtual model relies on the built-in list controller, but a virtual model has no table to list from; declare Result with a custom service method", filename, actionName))
 	}
 	// These actions have no built-in implementation able to answer a request

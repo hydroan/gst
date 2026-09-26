@@ -112,9 +112,9 @@ func StmtModelRegister(modelName string) *ast.ExprStmt {
 
 // StmtServiceRegister builds the registration of a service in
 // service.gen.go. serviceImport is the service type as the file refers to
-// it: for user.Creator, consts.PHASE_CREATE and /api/users it builds
+// it: for user.Creator, consts.Create and /api/users it builds
 //
-//	service.Register[*user.Creator](consts.PHASE_CREATE, "/api/users")
+//	service.Register[*user.Creator](consts.Create, "/api/users")
 //
 // The route argument is the path the route is served at, the same string
 // the matching StmtRouterRegister statement carries, because the service

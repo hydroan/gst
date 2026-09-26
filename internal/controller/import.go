@@ -39,12 +39,12 @@ const missingUploadFileMsg = "upload file is required"
 // an ID is created (unique-key collisions fail with 409). Both writes share
 // one transaction, so an import is all-or-nothing.
 func ImportHandler[M types.Model, REQ types.Request, RSP types.Response](cfg ...*types.ControllerConfig[M]) gin.HandlerFunc {
-	a := newAction[M, REQ, RSP](routeFromConfig(cfg...), consts.PHASE_IMPORT)
+	a := newAction[M, REQ, RSP](routeFromConfig(cfg...), consts.Import)
 	return func(c *gin.Context) {
 		ctrlSpanCtx, span := a.startControllerSpan(c)
 		defer span.End()
 
-		log := logger.Controller.WithContext(c.Request.Context(), consts.PHASE_IMPORT)
+		log := logger.Controller.WithContext(c.Request.Context(), consts.Import)
 		// NOTE: the form field name is "file", it must be agreed on with the frontend.
 		file, err := c.FormFile("file")
 		if err != nil {
@@ -76,9 +76,9 @@ func ImportHandler[M types.Model, REQ types.Request, RSP types.Response](cfg ...
 			gstotel.RecordError(span, err)
 			return
 		}
-		ml, err := traceServiceCall(ctrlSpanCtx, a.serviceSpan(consts.PHASE_IMPORT), a.name, func(spanCtx context.Context) ([]M, error) {
+		ml, err := traceServiceCall(ctrlSpanCtx, a.serviceSpan(consts.Import), a.name, func(spanCtx context.Context) ([]M, error) {
 			return a.service().
-				Import(types.NewServiceContext(c, spanCtx, consts.PHASE_IMPORT), buf)
+				Import(types.NewServiceContext(c, spanCtx, consts.Import), buf)
 		})
 		if err != nil {
 			log.Errorz("service operation failed", zap.Error(err))

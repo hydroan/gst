@@ -13,9 +13,9 @@ type Lister struct {
 }
 
 func (t *Lister) ListBefore(ctx *gst.ServiceContext, probes *[]*model.TraceProbe) error {
-	return traceServiceHook(t.Logger, ctx, consts.PHASE_LIST_BEFORE, nil, traceProbeListLen(probes))
+	return traceServiceHook(t.Logger, ctx, consts.ListBefore, nil, traceProbeListLen(probes))
 }
 
 func (t *Lister) ListAfter(ctx *gst.ServiceContext, probes *[]*model.TraceProbe) error {
-	return traceServiceHook(t.Logger, ctx, consts.PHASE_LIST_AFTER, nil, traceProbeListLen(probes))
+	return traceServiceHook(t.Logger, ctx, consts.ListAfter, nil, traceProbeListLen(probes))
 }

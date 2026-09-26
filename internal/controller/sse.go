@@ -35,7 +35,7 @@ import (
 // error envelope, while an error after streaming began can only be logged,
 // because the response is already on the wire.
 func SSEHandler[M types.Model, REQ types.Request, RSP types.Response](cfg ...*types.ControllerConfig[M]) gin.HandlerFunc {
-	a := newAction[M, REQ, RSP](routeFromConfig(cfg...), consts.PHASE_SSE)
+	a := newAction[M, REQ, RSP](routeFromConfig(cfg...), consts.SSE)
 	return func(c *gin.Context) {
 		stream, stopStream := sse.StreamContext(c.Request.Context())
 		defer stopStream()
@@ -44,13 +44,13 @@ func SSEHandler[M types.Model, REQ types.Request, RSP types.Response](cfg ...*ty
 		ctrlSpanCtx, span := a.startControllerSpan(c)
 		defer span.End()
 
-		log := logger.Controller.WithContext(c.Request.Context(), consts.PHASE_SSE)
+		log := logger.Controller.WithContext(c.Request.Context(), consts.SSE)
 		svc := a.service()
 		// ended keeps what the service returned when that was nothing but the
 		// stream's context ending, away from the service span and the log.
 		var ended error
-		err := a.traceServiceHook(ctrlSpanCtx, consts.PHASE_SSE, svc, func(spanCtx context.Context) error {
-			err := svc.SSE(types.NewServiceContext(c, spanCtx, consts.PHASE_SSE))
+		err := a.traceServiceHook(ctrlSpanCtx, consts.SSE, svc, func(spanCtx context.Context) error {
+			err := svc.SSE(types.NewServiceContext(c, spanCtx, consts.SSE))
 			if lifecycle.Interrupted(stream, err) {
 				ended = err
 				return nil

@@ -32,10 +32,10 @@ func Register() {
 	authn.SetLoginSecondFactorVerifier(servicemfa.LoginSecondFactorVerifier)
 	modelregistry.Register[*modelmfa.TOTPDevice]()
 
-	module.Use(module.NewWrapper("mfa/totp/bind", "id", false, &servicemfa.TOTPBindService{}), module.CRUD(consts.PHASE_CREATE))
-	module.Use(module.NewWrapper("mfa/totp/confirm", "id", false, &servicemfa.TOTPConfirmService{}), module.CRUD(consts.PHASE_CREATE))
-	module.Use(module.NewWrapper("mfa/totp/status", "id", false, &servicemfa.TOTPStatusService{}), module.CRUD(consts.PHASE_LIST))
-	module.Use(module.NewWrapper("mfa/totp/unbind", "id", false, &servicemfa.TOTPUnbindService{}), module.CRUD(consts.PHASE_CREATE))
-	module.Use(module.NewWrapper("mfa/admin/users/:id/totp", "id", false, &servicemfa.AdminTOTPStatusService{}), module.Exact(consts.PHASE_GET))
-	module.Use(module.NewWrapper("mfa/admin/users/:id/totp", "id", false, &servicemfa.AdminTOTPResetService{}), module.Exact(consts.PHASE_DELETE))
+	module.Use(module.NewWrapper("mfa/totp/bind", "id", false, &servicemfa.TOTPBindService{}), module.CRUD(consts.Create))
+	module.Use(module.NewWrapper("mfa/totp/confirm", "id", false, &servicemfa.TOTPConfirmService{}), module.CRUD(consts.Create))
+	module.Use(module.NewWrapper("mfa/totp/status", "id", false, &servicemfa.TOTPStatusService{}), module.CRUD(consts.List))
+	module.Use(module.NewWrapper("mfa/totp/unbind", "id", false, &servicemfa.TOTPUnbindService{}), module.CRUD(consts.Create))
+	module.Use(module.NewWrapper("mfa/admin/users/:id/totp", "id", false, &servicemfa.AdminTOTPStatusService{}), module.Exact(consts.Get))
+	module.Use(module.NewWrapper("mfa/admin/users/:id/totp", "id", false, &servicemfa.AdminTOTPResetService{}), module.Exact(consts.Delete))
 }

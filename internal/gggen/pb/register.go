@@ -7,7 +7,6 @@ import (
 	"slices"
 
 	"github.com/cockroachdb/errors"
-	"github.com/hydroan/gst/consts"
 	"github.com/hydroan/gst/internal/ggconst"
 	"github.com/hydroan/gst/internal/goast"
 )
@@ -107,7 +106,7 @@ func (g *generator) registrationFile() (File, error) {
 					elts = append(elts, keyValue("Public", ident("true")))
 				}
 				elts = append(elts,
-					keyValue("HTTPMethod", sel(out.imports.fixedRef(importPathHTTP), httpMethodConsts[consts.HTTPVerb(r.action.Phase).HTTPMethod()])),
+					keyValue("HTTPMethod", sel(out.imports.fixedRef(importPathHTTP), httpMethodConsts[r.action.Phase.HTTPMethod()])),
 					keyValue("Route", strLit(r.registered)),
 				)
 				args = append(args, compositeLit(sel(out.imports.fixedRef(ggconst.ImportPathGRPC), "Method"), elts...))

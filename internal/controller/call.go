@@ -315,7 +315,7 @@ func answer[T any](c *call, result T) (T, error) {
 func ServiceCall[M types.Model, REQ types.Request, RSP types.Response](phase consts.Phase, route string) func(ctx context.Context, params map[string]string, query Query, req REQ) (RSP, error) {
 	invoke := serviceMethod[M, REQ, RSP](phase)
 	a := newAction[M, REQ, RSP](route, phase)
-	binds := phase != consts.PHASE_LIST && phase != consts.PHASE_GET
+	binds := phase != consts.List && phase != consts.Get
 	return func(ctx context.Context, params map[string]string, query Query, req REQ) (RSP, error) {
 		var zero RSP
 		c, err := a.beginQueryCall(ctx, params, query)

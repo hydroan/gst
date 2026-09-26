@@ -75,5 +75,5 @@ func newSessionServiceContext(baseCtx context.Context, t *testing.T, sessionID s
 		Value: sessionID,
 	})
 
-	return types.NewServiceContext(ginCtx, nil, consts.PHASE_GET)
+	return types.NewServiceContext(ginCtx, nil, consts.Get)
 }

@@ -12,9 +12,9 @@ import (
 )
 
 func init() {
-	service.Register[*cached.Creator](consts.PHASE_CREATE, "/api/caches")
-	service.Register[*cached.Deleter](consts.PHASE_DELETE, "/api/caches/:id")
-	service.Register[*cached.Getter](consts.PHASE_GET, "/api/caches/:id")
-	service.Register[*rebuild.Creator](consts.PHASE_CREATE, "/api/rebuilds")
-	service.Register[*stepdown.Creator](consts.PHASE_CREATE, "/api/step-downs")
+	service.Register[*cached.Creator](consts.Create, "/api/caches")
+	service.Register[*cached.Deleter](consts.Delete, "/api/caches/:id")
+	service.Register[*cached.Getter](consts.Get, "/api/caches/:id")
+	service.Register[*rebuild.Creator](consts.Create, "/api/rebuilds")
+	service.Register[*stepdown.Creator](consts.Create, "/api/step-downs")
 }

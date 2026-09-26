@@ -13,9 +13,9 @@ type Updater struct {
 }
 
 func (t *Updater) UpdateBefore(ctx *gst.ServiceContext, probe *model.TraceProbe) error {
-	return traceServiceHook(t.Logger, ctx, consts.PHASE_UPDATE_BEFORE, probe, 0)
+	return traceServiceHook(t.Logger, ctx, consts.UpdateBefore, probe, 0)
 }
 
 func (t *Updater) UpdateAfter(ctx *gst.ServiceContext, probe *model.TraceProbe) error {
-	return traceServiceHook(t.Logger, ctx, consts.PHASE_UPDATE_AFTER, probe, 0)
+	return traceServiceHook(t.Logger, ctx, consts.UpdateAfter, probe, 0)
 }

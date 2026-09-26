@@ -57,7 +57,7 @@ func traceServiceHook(log gst.Logger, ctx *gst.ServiceContext, phase consts.Phas
 func traceProbeServiceFields(probe *model.TraceProbe, phase consts.Phase, total int, itemCount int) []zap.Field {
 	fields := []zap.Field{
 		zap.String("component", "service_hook"),
-		zap.String("hook", phase.MethodName()),
+		zap.String("hook", phase.Name()),
 		zap.Int("total", total),
 		zap.Int("item_count", itemCount),
 	}

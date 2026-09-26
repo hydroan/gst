@@ -95,8 +95,8 @@ func newAction[M types.Model, REQ types.Request, RSP types.Response](route strin
 
 func newPhaseSpan(component, modelName string, phase consts.Phase) phaseSpan {
 	return phaseSpan{
-		name:      gstotel.FrameworkSpanName(component, modelName, phase.MethodName()),
-		operation: phase.MethodName(),
+		name:      gstotel.FrameworkSpanName(component, modelName, phase.Name()),
+		operation: phase.Name(),
 	}
 }
 

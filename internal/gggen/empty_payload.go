@@ -40,7 +40,7 @@ func RouterGstModelUse(models []*modelinfo.Model) (pkgName string, needed bool) 
 		m.Design.Range(func(_ string, act *dsl.Action) {
 			// A Stream action registers no route: the router file names
 			// none of its types.
-			if dsl.GRPCOnlyAction(act.Phase.MethodName()) {
+			if dsl.GRPCOnlyAction(act.Phase.Name()) {
 				return
 			}
 			routed = true

@@ -11,8 +11,8 @@ import (
 )
 
 func TestIsServiceMethod1(t *testing.T) {
-	fn1 := serviceMethod1("u", "User", "model", consts.PHASE_CREATE_BEFORE, "Creator")
-	fn2 := serviceMethod2("u", "User", "model", consts.PHASE_LIST_BEFORE, "Lister")
+	fn1 := serviceMethod1("u", "User", "model", consts.CreateBefore, "Creator")
+	fn2 := serviceMethod2("u", "User", "model", consts.ListBefore, "Lister")
 	if !isServiceMethod1(fn1) {
 		t.Fatalf("expected isServiceMethod1 to return true for ServiceMethod1-generated func")
 	}
@@ -22,8 +22,8 @@ func TestIsServiceMethod1(t *testing.T) {
 }
 
 func TestIsServiceMethod2(t *testing.T) {
-	fn := serviceMethod2("u", "User", "model", consts.PHASE_LIST_BEFORE, "Lister")
-	fnNeg := serviceMethod3("u", "User", "model", consts.PHASE_CREATE_MANY_BEFORE, "ManyCreator")
+	fn := serviceMethod2("u", "User", "model", consts.ListBefore, "Lister")
+	fnNeg := serviceMethod3("u", "User", "model", consts.CreateManyBefore, "ManyCreator")
 	if !isServiceMethod2(fn) {
 		t.Fatalf("expected isServiceMethod2 to return true for ServiceMethod2-generated func")
 	}
@@ -33,8 +33,8 @@ func TestIsServiceMethod2(t *testing.T) {
 }
 
 func TestIsServiceMethod3(t *testing.T) {
-	fn := serviceMethod3("u", "User", "model", consts.PHASE_CREATE_MANY_BEFORE, "ManyCreator")
-	fnNeg := serviceMethod1("u", "User", "model", consts.PHASE_CREATE_BEFORE, "Creator")
+	fn := serviceMethod3("u", "User", "model", consts.CreateManyBefore, "ManyCreator")
+	fnNeg := serviceMethod1("u", "User", "model", consts.CreateBefore, "Creator")
 	if !isServiceMethod3(fn) {
 		t.Fatalf("expected isServiceMethod3 to return true for ServiceMethod3-generated func")
 	}
@@ -44,8 +44,8 @@ func TestIsServiceMethod3(t *testing.T) {
 }
 
 func TestIsServiceMethod4(t *testing.T) {
-	fn := serviceMethod4("u", "model", "*UserReq", "*UserRsp", consts.PHASE_CREATE, "Creator")
-	fnNeg := serviceMethod3("u", "User", "model", consts.PHASE_CREATE_MANY_BEFORE, "ManyCreator")
+	fn := serviceMethod4("u", "model", "*UserReq", "*UserRsp", consts.Create, "Creator")
+	fnNeg := serviceMethod3("u", "User", "model", consts.CreateManyBefore, "ManyCreator")
 	if !isServiceMethod4(fn) {
 		t.Fatalf("expected isServiceMethod4 to return true for ServiceMethod4-generated func")
 	}
@@ -61,7 +61,7 @@ func TestIsServiceType(t *testing.T) {
 
 	// Positive case: types transcribes the bare payload and result names as value
 	// types, so the struct embeds service.Base[*model.User, model.User, model.User]
-	gd := types("model", "User", "User", "User", consts.PHASE_CREATE.RoleName())
+	gd := types("model", "User", "User", "User", consts.Create.RoleName())
 	if len(gd.Specs) == 0 {
 		t.Fatalf("types() returned no specs")
 	}

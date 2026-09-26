@@ -13,9 +13,9 @@ type Patcher struct {
 }
 
 func (t *Patcher) PatchBefore(ctx *gst.ServiceContext, probe *model.TraceProbe) error {
-	return traceServiceHook(t.Logger, ctx, consts.PHASE_PATCH_BEFORE, probe, 0)
+	return traceServiceHook(t.Logger, ctx, consts.PatchBefore, probe, 0)
 }
 
 func (t *Patcher) PatchAfter(ctx *gst.ServiceContext, probe *model.TraceProbe) error {
-	return traceServiceHook(t.Logger, ctx, consts.PHASE_PATCH_AFTER, probe, 0)
+	return traceServiceHook(t.Logger, ctx, consts.PatchAfter, probe, 0)
 }

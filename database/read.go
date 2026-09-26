@@ -73,7 +73,7 @@ func (db *database[M]) List(dest *[]M) (err error) {
 	if err = db.rejectReplicaReadTarget(); err != nil {
 		return err
 	}
-	done, span := db.trace(consts.PHASE_LIST)
+	done, span := db.trace(consts.List)
 	defer func() { done(err) }()
 	if dest == nil {
 		return ErrNilDest
@@ -88,7 +88,7 @@ func (db *database[M]) List(dest *[]M) (err error) {
 	}
 	// Invoke model hook: ListBefore.
 	if !db.noHook {
-		if err = traceModelHook[M](db.ctx, consts.PHASE_LIST_BEFORE, span, func(spanCtx context.Context) error {
+		if err = traceModelHook[M](db.ctx, consts.ListBefore, span, func(spanCtx context.Context) error {
 			for i := range *dest {
 				if !nilModel((*dest)[i]) {
 					if err = (*dest)[i].ListBefore(spanCtx); err != nil {
@@ -116,7 +116,7 @@ func (db *database[M]) List(dest *[]M) (err error) {
 
 	// Invoke model hook: ListAfter()
 	if !db.noHook {
-		if err = traceModelHook[M](db.ctx, consts.PHASE_LIST_AFTER, span, func(spanCtx context.Context) error {
+		if err = traceModelHook[M](db.ctx, consts.ListAfter, span, func(spanCtx context.Context) error {
 			for i := range *dest {
 				if !nilModel((*dest)[i]) {
 					if err = (*dest)[i].ListAfter(spanCtx); err != nil {
@@ -178,7 +178,7 @@ func (db *database[M]) Get(dest M, id string) (err error) {
 	if err = db.rejectReplicaReadTarget(); err != nil {
 		return err
 	}
-	done, span := db.trace(consts.PHASE_GET)
+	done, span := db.trace(consts.Get)
 	defer func() { done(err) }()
 
 	db.applySelect()
@@ -192,7 +192,7 @@ func (db *database[M]) Get(dest M, id string) (err error) {
 	}
 	// Invoke model hook: GetBefore.
 	if !db.noHook {
-		if err = traceModelHook[M](db.ctx, consts.PHASE_GET_BEFORE, span, func(spanCtx context.Context) error {
+		if err = traceModelHook[M](db.ctx, consts.GetBefore, span, func(spanCtx context.Context) error {
 			return dest.GetBefore(spanCtx)
 		}); err != nil {
 			return err
@@ -211,7 +211,7 @@ func (db *database[M]) Get(dest M, id string) (err error) {
 	}
 	// Invoke model hook: GetAfter.
 	if !db.noHook {
-		if err = traceModelHook[M](db.ctx, consts.PHASE_GET_AFTER, span, func(spanCtx context.Context) error {
+		if err = traceModelHook[M](db.ctx, consts.GetAfter, span, func(spanCtx context.Context) error {
 			return dest.GetAfter(spanCtx)
 		}); err != nil {
 			return err
@@ -314,7 +314,7 @@ func (db *database[M]) First(dest M) (err error) {
 	}
 	// Invoke model hook: GetBefore
 	if !db.noHook {
-		if err = traceModelHook[M](db.ctx, consts.PHASE_GET_BEFORE, span, func(spanCtx context.Context) error {
+		if err = traceModelHook[M](db.ctx, consts.GetBefore, span, func(spanCtx context.Context) error {
 			return dest.GetBefore(spanCtx)
 		}); err != nil {
 			return err
@@ -325,7 +325,7 @@ func (db *database[M]) First(dest M) (err error) {
 	}
 	// Invoke model hook: GetAfter
 	if !db.noHook {
-		if err = traceModelHook[M](db.ctx, consts.PHASE_GET_AFTER, span, func(spanCtx context.Context) error {
+		if err = traceModelHook[M](db.ctx, consts.GetAfter, span, func(spanCtx context.Context) error {
 			return dest.GetAfter(spanCtx)
 		}); err != nil {
 			return err
@@ -379,7 +379,7 @@ func (db *database[M]) Last(dest M) (err error) {
 	}
 	// Invoke model hook: GetBefore.
 	if !db.noHook {
-		if err = traceModelHook[M](db.ctx, consts.PHASE_GET_BEFORE, span, func(spanCtx context.Context) error {
+		if err = traceModelHook[M](db.ctx, consts.GetBefore, span, func(spanCtx context.Context) error {
 			return dest.GetBefore(spanCtx)
 		}); err != nil {
 			return err
@@ -390,7 +390,7 @@ func (db *database[M]) Last(dest M) (err error) {
 	}
 	// Invoke model hook: GetAfter
 	if !db.noHook {
-		if err = traceModelHook[M](db.ctx, consts.PHASE_GET_AFTER, span, func(spanCtx context.Context) error {
+		if err = traceModelHook[M](db.ctx, consts.GetAfter, span, func(spanCtx context.Context) error {
 			return dest.GetAfter(spanCtx)
 		}); err != nil {
 			return err
@@ -444,7 +444,7 @@ func (db *database[M]) Take(dest M) (err error) {
 	}
 	// Invoke model hook: GetBefore.
 	if !db.noHook {
-		if err = traceModelHook[M](db.ctx, consts.PHASE_GET_BEFORE, span, func(spanCtx context.Context) error {
+		if err = traceModelHook[M](db.ctx, consts.GetBefore, span, func(spanCtx context.Context) error {
 			return dest.GetBefore(spanCtx)
 		}); err != nil {
 			return err
@@ -455,7 +455,7 @@ func (db *database[M]) Take(dest M) (err error) {
 	}
 	// Invoke model hook: GetAfter.
 	if !db.noHook {
-		if err = traceModelHook[M](db.ctx, consts.PHASE_GET_AFTER, span, func(spanCtx context.Context) error {
+		if err = traceModelHook[M](db.ctx, consts.GetAfter, span, func(spanCtx context.Context) error {
 			return dest.GetAfter(spanCtx)
 		}); err != nil {
 			return err

@@ -21,7 +21,7 @@ var (
 
 // Set records one registered route for the OpenAPI document. It is the only
 // entry point route registration uses.
-func Set[M types.Model, REQ types.Request, RSP types.Response](path string, authRequired bool, verb consts.HTTPVerb) {
+func Set[M types.Model, REQ types.Request, RSP types.Response](path string, authRequired bool, verb consts.Phase) {
 	pendingMu.Lock()
 	defer pendingMu.Unlock()
 
@@ -59,7 +59,7 @@ func build() {
 // Route registration goes through Set, which queues this call until the first
 // request asks for the document; this package's own tests call set directly to
 // exercise the generation.
-func set[M types.Model, REQ types.Request, RSP types.Response](path string, authRequired bool, verb ...consts.HTTPVerb) {
+func set[M types.Model, REQ types.Request, RSP types.Response](path string, authRequired bool, verb ...consts.Phase) {
 	path = convertColonParamsToBraces(path)
 
 	docMutex.Lock()
@@ -123,13 +123,13 @@ func set[M types.Model, REQ types.Request, RSP types.Response](path string, auth
 	docMutex.Unlock()
 }
 
-func buildVerbs(verbs ...consts.HTTPVerb) []consts.HTTPVerb {
-	verbMap := make(map[consts.HTTPVerb]bool)
+func buildVerbs(verbs ...consts.Phase) []consts.Phase {
+	verbMap := make(map[consts.Phase]bool)
 	for _, verb := range verbs {
 		verbMap[verb] = true
 	}
 
-	vs := make([]consts.HTTPVerb, 0, len(verbMap))
+	vs := make([]consts.Phase, 0, len(verbMap))
 	for verb := range verbMap {
 		vs = append(vs, verb)
 	}

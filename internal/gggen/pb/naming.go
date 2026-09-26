@@ -81,7 +81,7 @@ func rpcBase(action *dsl.Action) string {
 	if action.Filename != "" {
 		return action.RoleName()
 	}
-	return action.Phase.MethodName()
+	return action.Phase.Name()
 }
 
 // rpcSuffix distinguishes the rpcs of one action declared on several routes
@@ -157,7 +157,7 @@ func requestParams(m *modelinfo.Model, route string, action *dsl.Action) []reque
 	// The route of a Stream action is no path a request reaches: its
 	// parameters are named by the route as declared.
 	named := registered
-	if dsl.GRPCOnlyAction(action.Phase.MethodName()) {
+	if dsl.GRPCOnlyAction(action.Phase.Name()) {
 		named = route
 	}
 	own := strings.TrimPrefix(modelinfo.ItemParam(m.Design), ":")
@@ -177,11 +177,11 @@ func requestParams(m *modelinfo.Model, route string, action *dsl.Action) []reque
 // " to patch", and nothing for the others.
 func ownParamPurpose(phase consts.Phase) string {
 	switch phase {
-	case consts.PHASE_DELETE:
+	case consts.Delete:
 		return " to delete"
-	case consts.PHASE_UPDATE:
+	case consts.Update:
 		return " to replace"
-	case consts.PHASE_PATCH:
+	case consts.Patch:
 		return " to patch"
 	}
 	return ""

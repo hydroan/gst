@@ -29,7 +29,7 @@ import (
 // serviceHandler): its Get method runs on a zero-value REQ, the GET request
 // carrying no body; the service reads ServiceContext.Query() and Param().
 func GetHandler[M types.Model, REQ types.Request, RSP types.Response](cfg ...*types.ControllerConfig[M]) gin.HandlerFunc {
-	a := newAction[M, REQ, RSP](routeFromConfig(cfg...), consts.PHASE_GET, consts.PHASE_GET_BEFORE, consts.PHASE_GET_AFTER)
+	a := newAction[M, REQ, RSP](routeFromConfig(cfg...), consts.Get, consts.GetBefore, consts.GetAfter)
 	if !a.typesEqual {
 		return a.serviceHandler()
 	}
@@ -40,7 +40,7 @@ func GetHandler[M types.Model, REQ types.Request, RSP types.Response](cfg ...*ty
 		defer span.End()
 
 		reqMeta := requestctx.FromGin(c)
-		log := logger.Controller.WithContext(c.Request.Context(), consts.PHASE_GET)
+		log := logger.Controller.WithContext(c.Request.Context(), consts.Get)
 
 		var param string
 		if len(cfg) > 0 {
@@ -70,7 +70,7 @@ func GetHandler[M types.Model, REQ types.Request, RSP types.Response](cfg ...*ty
 // naming no record is refused the way a request missing its route parameter
 // is.
 func GetCall[M types.Model](route string) func(ctx context.Context, params map[string]string, id string, query Query) (M, error) {
-	a := newAction[M, M, M](route, consts.PHASE_GET, consts.PHASE_GET_BEFORE, consts.PHASE_GET_AFTER)
+	a := newAction[M, M, M](route, consts.Get, consts.GetBefore, consts.GetAfter)
 	return func(ctx context.Context, params map[string]string, id string, query Query) (M, error) {
 		var zero M
 		c, err := a.beginQueryCall(ctx, params, query)
@@ -97,7 +97,7 @@ func GetCall[M types.Model](route string) func(ctx context.Context, params map[s
 // CodeNotFound.
 func (a *action[M, REQ, RSP]) getFlow(ctx context.Context, newServiceContext serviceContextFunc, id string) (M, error) {
 	var zero M
-	log := logger.Controller.WithContext(ctx, consts.PHASE_GET)
+	log := logger.Controller.WithContext(ctx, consts.Get)
 	svc := a.service()
 
 	// 'm' is a fresh model instance, such as: &model.User{ID: myid, Name: myname}.
@@ -113,8 +113,8 @@ func (a *action[M, REQ, RSP]) getFlow(ctx context.Context, newServiceContext ser
 	expands := parseExpandQuery(requestctx.QueryValues(ctx), m)
 
 	// 1.Perform business logic processing before get resource.
-	if err := a.traceServiceHook(ctx, consts.PHASE_GET_BEFORE, svc, func(spanCtx context.Context) error {
-		return svc.GetBefore(newServiceContext(spanCtx, consts.PHASE_GET_BEFORE), m)
+	if err := a.traceServiceHook(ctx, consts.GetBefore, svc, func(spanCtx context.Context) error {
+		return svc.GetBefore(newServiceContext(spanCtx, consts.GetBefore), m)
 	}); err != nil {
 		return zero, failService(ctx, log, err)
 	}
@@ -124,8 +124,8 @@ func (a *action[M, REQ, RSP]) getFlow(ctx context.Context, newServiceContext ser
 		return zero, failDatabase(ctx, log, err)
 	}
 	// 3.Perform business logic processing after get resource.
-	if err := a.traceServiceHook(ctx, consts.PHASE_GET_AFTER, svc, func(spanCtx context.Context) error {
-		return svc.GetAfter(newServiceContext(spanCtx, consts.PHASE_GET_AFTER), m)
+	if err := a.traceServiceHook(ctx, consts.GetAfter, svc, func(spanCtx context.Context) error {
+		return svc.GetAfter(newServiceContext(spanCtx, consts.GetAfter), m)
 	}); err != nil {
 		return zero, failService(ctx, log, err)
 	}

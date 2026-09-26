@@ -33,23 +33,23 @@ func TestRegisterResolvesAPointerInstance(t *testing.T) {
 
 	t.Run("base by pointer", func(t *testing.T) {
 		route := newRoute("samples/pointer")
-		service.Register[*base](consts.PHASE_CREATE, route)
-		requireResolvesTo[base](t, consts.PHASE_CREATE, route)
+		service.Register[*base](consts.Create, route)
+		requireResolvesTo[base](t, consts.Create, route)
 	})
 	t.Run("base by value", func(t *testing.T) {
 		route := newRoute("samples/struct")
-		service.Register[base](consts.PHASE_CREATE, route)
-		requireResolvesTo[base](t, consts.PHASE_CREATE, route)
+		service.Register[base](consts.Create, route)
+		requireResolvesTo[base](t, consts.Create, route)
 	})
 	t.Run("canonical struct by pointer", func(t *testing.T) {
 		route := newRoute("records/pointer")
-		service.Register[*canonical](consts.PHASE_CREATE, route)
-		requireResolvesTo[canonical](t, consts.PHASE_CREATE, route)
+		service.Register[*canonical](consts.Create, route)
+		requireResolvesTo[canonical](t, consts.Create, route)
 	})
 	t.Run("canonical struct by value", func(t *testing.T) {
 		route := newRoute("records/struct")
-		service.Register[canonical](consts.PHASE_CREATE, route)
-		requireResolvesTo[canonical](t, consts.PHASE_CREATE, route)
+		service.Register[canonical](consts.Create, route)
+		requireResolvesTo[canonical](t, consts.Create, route)
 	})
 }
 
@@ -60,9 +60,9 @@ func TestRegisterPanicsOnAnInterfaceType(t *testing.T) {
 	type contract = types.Service[*testUser, *testUser, *testUser]
 
 	want := fmt.Sprintf("service: register of route %q phase %q requires a concrete service type, not the interface %s",
-		"samples/interface", consts.PHASE_CREATE, reflect.TypeFor[contract]())
+		"samples/interface", consts.Create, reflect.TypeFor[contract]())
 	require.PanicsWithValue(t, want, func() {
-		service.Register[contract](consts.PHASE_CREATE, "samples/interface")
+		service.Register[contract](consts.Create, "samples/interface")
 	})
 }
 
@@ -88,16 +88,16 @@ func TestRegisterInjectsTheServiceLogger(t *testing.T) {
 		service.Base[*testUser, *testUser, *testUser]
 	}
 	samples, records := newRoute("samples/service"), newRoute("records/service")
-	service.Register[*base](consts.PHASE_CREATE, samples)
-	service.Register[*base](consts.PHASE_DELETE, samples)
-	service.Register[*canonical](consts.PHASE_CREATE, records)
+	service.Register[*base](consts.Create, samples)
+	service.Register[*base](consts.Delete, samples)
+	service.Register[*canonical](consts.Create, records)
 
-	for _, phase := range []consts.Phase{consts.PHASE_CREATE, consts.PHASE_DELETE} {
+	for _, phase := range []consts.Phase{consts.Create, consts.Delete} {
 		s, ok := serviceregistry.Resolve[*testUser, *testUser, *testUser](serviceregistry.Key(phase, samples)).(*base)
 		require.True(t, ok)
 		require.NotNil(t, s.Logger, "phase %s", phase)
 	}
-	s, ok := serviceregistry.Resolve[*testUser, *testUser, *testUser](serviceregistry.Key(consts.PHASE_CREATE, records)).(*canonical)
+	s, ok := serviceregistry.Resolve[*testUser, *testUser, *testUser](serviceregistry.Key(consts.Create, records)).(*canonical)
 	require.True(t, ok)
 	require.NotNil(t, s.Logger)
 }

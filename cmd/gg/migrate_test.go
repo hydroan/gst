@@ -231,6 +231,6 @@ type SampleService struct {
 }
 
 func init() {
-	gstmodule.Use(gstmodule.NewWrapper[*Sample, *Sample, *Sample]("samples", "id", false, &SampleService{}), gstmodule.CRUD(consts.PHASE_LIST))
+	gstmodule.Use(gstmodule.NewWrapper[*Sample, *Sample, *Sample]("samples", "id", false, &SampleService{}), gstmodule.CRUD(consts.List))
 }
 `

@@ -10,12 +10,12 @@ import (
 )
 
 func init() {
-	service.Register[*bench.Create](consts.PHASE_CREATE, "bench/create")
-	service.Register[*bench.Delete](consts.PHASE_DELETE, "bench/delete/:id")
-	service.Register[*bench.Get](consts.PHASE_GET, "bench/get")
-	service.Register[*bench.Lister](consts.PHASE_LIST, "bench/list")
-	service.Register[*bench.List2](consts.PHASE_LIST, "bench/list2")
-	service.Register[*bench.Ping](consts.PHASE_LIST, "bench/ping")
-	service.Register[*bench.Update](consts.PHASE_UPDATE, "bench/update/:id")
-	service.Register[*bench.Updatebyid](consts.PHASE_PATCH, "bench/updatebyid/:id")
+	service.Register[*bench.Create](consts.Create, "/api/bench/create")
+	service.Register[*bench.Delete](consts.Delete, "/api/bench/delete/:id")
+	service.Register[*bench.Get](consts.Get, "/api/bench/get")
+	service.Register[*bench.Lister](consts.List, "/api/bench/list")
+	service.Register[*bench.List2](consts.List, "/api/bench/list2")
+	service.Register[*bench.Ping](consts.List, "/api/bench/ping")
+	service.Register[*bench.Update](consts.Update, "/api/bench/update/:id")
+	service.Register[*bench.Updatebyid](consts.Patch, "/api/bench/updatebyid/:id")
 }

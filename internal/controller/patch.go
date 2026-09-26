@@ -32,7 +32,7 @@ import (
 // When REQ or RSP differs from M, the handler is the phase service's (see
 // serviceHandler): its Patch method runs on the bound payload.
 func PatchHandler[M types.Model, REQ types.Request, RSP types.Response](cfg ...*types.ControllerConfig[M]) gin.HandlerFunc {
-	a := newAction[M, REQ, RSP](routeFromConfig(cfg...), consts.PHASE_PATCH, consts.PHASE_PATCH_BEFORE, consts.PHASE_PATCH_AFTER)
+	a := newAction[M, REQ, RSP](routeFromConfig(cfg...), consts.Patch, consts.PatchBefore, consts.PatchAfter)
 	if !a.typesEqual {
 		return a.serviceHandler()
 	}
@@ -45,7 +45,7 @@ func PatchHandler[M types.Model, REQ types.Request, RSP types.Response](cfg ...*
 		defer span.End()
 
 		reqMeta := requestctx.FromGin(c)
-		log := logger.Controller.WithContext(c.Request.Context(), consts.PHASE_PATCH)
+		log := logger.Controller.WithContext(c.Request.Context(), consts.Patch)
 
 		req := a.newModel()
 		body, err := readJSONRequestBody(c)
@@ -115,7 +115,7 @@ func PatchHandler[M types.Model, REQ types.Request, RSP types.Response](cfg ...*
 // runs the patch flow (see patchFlow) and answers with the record patched,
 // or with the status the failure maps to (see call).
 func PatchCall[M types.Model](route string) func(ctx context.Context, params map[string]string, id string, m M, paths []string) (M, error) {
-	a := newAction[M, M, M](route, consts.PHASE_PATCH, consts.PHASE_PATCH_BEFORE, consts.PHASE_PATCH_AFTER)
+	a := newAction[M, M, M](route, consts.Patch, consts.PatchBefore, consts.PatchAfter)
 	return func(ctx context.Context, params map[string]string, id string, m M, paths []string) (M, error) {
 		var zero M
 		c := a.beginCall(ctx, params, nil)
@@ -159,7 +159,7 @@ func PatchCall[M types.Model](route string) func(ctx context.Context, params map
 // needs the stale write refused instead declares model.Version.
 func (a *action[M, REQ, RSP]) patchFlow(ctx context.Context, newServiceContext serviceContextFunc, id string, req M, fields patchFieldSet) (M, error) {
 	var zero M
-	log := logger.Controller.WithContext(ctx, consts.PHASE_PATCH)
+	log := logger.Controller.WithContext(ctx, consts.Patch)
 	svc := a.service()
 
 	data := make([]M, 0)
@@ -191,8 +191,8 @@ func (a *action[M, REQ, RSP]) patchFlow(ctx context.Context, newServiceContext s
 	cur := oldVal.Addr().Interface().(M) //nolint:errcheck
 
 	// 1.Perform business logic processing before partial update resource.
-	if err := a.traceServiceHook(ctx, consts.PHASE_PATCH_BEFORE, svc, func(spanCtx context.Context) error {
-		return svc.PatchBefore(newServiceContext(spanCtx, consts.PHASE_PATCH_BEFORE), cur)
+	if err := a.traceServiceHook(ctx, consts.PatchBefore, svc, func(spanCtx context.Context) error {
+		return svc.PatchBefore(newServiceContext(spanCtx, consts.PatchBefore), cur)
 	}); err != nil {
 		return zero, failService(ctx, log, err)
 	}
@@ -203,8 +203,8 @@ func (a *action[M, REQ, RSP]) patchFlow(ctx context.Context, newServiceContext s
 		return zero, failDatabase(ctx, log, err)
 	}
 	// 3.Perform business logic processing after partial update resource.
-	if err := a.traceServiceHook(ctx, consts.PHASE_PATCH_AFTER, svc, func(spanCtx context.Context) error {
-		return svc.PatchAfter(newServiceContext(spanCtx, consts.PHASE_PATCH_AFTER), cur)
+	if err := a.traceServiceHook(ctx, consts.PatchAfter, svc, func(spanCtx context.Context) error {
+		return svc.PatchAfter(newServiceContext(spanCtx, consts.PatchAfter), cur)
 	}); err != nil {
 		return zero, failService(ctx, log, err)
 	}

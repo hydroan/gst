@@ -13,9 +13,9 @@ type Getter struct {
 }
 
 func (t *Getter) GetBefore(ctx *gst.ServiceContext, probe *model.TraceProbe) error {
-	return traceServiceHook(t.Logger, ctx, consts.PHASE_GET_BEFORE, probe, 0)
+	return traceServiceHook(t.Logger, ctx, consts.GetBefore, probe, 0)
 }
 
 func (t *Getter) GetAfter(ctx *gst.ServiceContext, probe *model.TraceProbe) error {
-	return traceServiceHook(t.Logger, ctx, consts.PHASE_GET_AFTER, probe, 0)
+	return traceServiceHook(t.Logger, ctx, consts.GetAfter, probe, 0)
 }

@@ -69,14 +69,14 @@ func RouterTargetForAction(route string, design *dsl.Design, action *dsl.Action)
 	// route "tenant" with param ":tenant" becomes "tenant/:tenant"
 	// route "tenant" with param ":id" becomes "tenant/:id"
 	switch action.Phase {
-	case consts.PHASE_DELETE, consts.PHASE_UPDATE, consts.PHASE_PATCH, consts.PHASE_GET:
+	case consts.Delete, consts.Update, consts.Patch, consts.Get:
 		route = filepath.Join(route, ItemParam(design))
 		paramName = routerPathParamName(route)
-	case consts.PHASE_CREATE_MANY, consts.PHASE_DELETE_MANY, consts.PHASE_UPDATE_MANY, consts.PHASE_PATCH_MANY:
+	case consts.CreateMany, consts.DeleteMany, consts.UpdateMany, consts.PatchMany:
 		route = filepath.Join(route, "batch")
-	case consts.PHASE_IMPORT:
+	case consts.Import:
 		route = filepath.Join(route, "import")
-	case consts.PHASE_EXPORT:
+	case consts.Export:
 		route = filepath.Join(route, "export")
 	}
 

@@ -525,8 +525,8 @@ func sampleHandlers() map[string]func(ctx context.Context, in map[string]any) (a
 	versionedPatch := controller.PatchCall[*versionedSample](versionedRoute)
 	validatedCreate := controller.CreateCall[*validatedSample](validatedRoute)
 	validatedCreateMany := controller.CreateManyCall[*validatedSample](validatedRoute)
-	action := controller.ServiceCall[*sampleRecord, *sampleActionReq, *sampleActionRsp](consts.PHASE_CREATE, actionRoute)
-	actionList := controller.ServiceCall[*sampleRecord, *sampleActionReq, *sampleActionRsp](consts.PHASE_LIST, actionRoute)
+	action := controller.ServiceCall[*sampleRecord, *sampleActionReq, *sampleActionRsp](consts.Create, actionRoute)
+	actionList := controller.ServiceCall[*sampleRecord, *sampleActionReq, *sampleActionRsp](consts.List, actionRoute)
 
 	return map[string]func(ctx context.Context, in map[string]any) (any, error){
 		"Create": func(ctx context.Context, in map[string]any) (any, error) {

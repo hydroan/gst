@@ -28,7 +28,7 @@ import (
 // When REQ or RSP differs from M, the handler is the phase service's (see
 // serviceHandler): its Update method runs on the bound payload.
 func UpdateHandler[M types.Model, REQ types.Request, RSP types.Response](cfg ...*types.ControllerConfig[M]) gin.HandlerFunc {
-	a := newAction[M, REQ, RSP](routeFromConfig(cfg...), consts.PHASE_UPDATE, consts.PHASE_UPDATE_BEFORE, consts.PHASE_UPDATE_AFTER)
+	a := newAction[M, REQ, RSP](routeFromConfig(cfg...), consts.Update, consts.UpdateBefore, consts.UpdateAfter)
 	if !a.typesEqual {
 		return a.serviceHandler()
 	}
@@ -39,7 +39,7 @@ func UpdateHandler[M types.Model, REQ types.Request, RSP types.Response](cfg ...
 		defer span.End()
 
 		reqMeta := requestctx.FromGin(c)
-		log := logger.Controller.WithContext(c.Request.Context(), consts.PHASE_UPDATE)
+		log := logger.Controller.WithContext(c.Request.Context(), consts.Update)
 
 		req := a.newModel()
 		if reqErr := bindJSONRequest(c, &req); reqErr != nil {
@@ -81,7 +81,7 @@ func UpdateHandler[M types.Model, REQ types.Request, RSP types.Response](cfg ...
 // updateFlow) and answers with the replacement as stored, or with the
 // status the failure maps to (see call).
 func UpdateCall[M types.Model](route string) func(ctx context.Context, params map[string]string, id string, m M) (M, error) {
-	a := newAction[M, M, M](route, consts.PHASE_UPDATE, consts.PHASE_UPDATE_BEFORE, consts.PHASE_UPDATE_AFTER)
+	a := newAction[M, M, M](route, consts.Update, consts.UpdateBefore, consts.UpdateAfter)
 	return func(ctx context.Context, params map[string]string, id string, m M) (M, error) {
 		var zero M
 		c := a.beginCall(ctx, params, nil)
@@ -113,7 +113,7 @@ func UpdateCall[M types.Model](route string) func(ctx context.Context, params ma
 // be empty (see setID); an id the model rejects answers CodeNotFound
 // without touching the database.
 func (a *action[M, REQ, RSP]) updateFlow(ctx context.Context, newServiceContext serviceContextFunc, id string, req M) error {
-	log := logger.Controller.WithContext(ctx, consts.PHASE_UPDATE)
+	log := logger.Controller.WithContext(ctx, consts.Update)
 	svc := a.service()
 
 	// 'm' is a fresh model instance, such as: &model.User{ID: myid}.
@@ -128,8 +128,8 @@ func (a *action[M, REQ, RSP]) updateFlow(ctx context.Context, newServiceContext 
 	req.SetUpdatedBy(requestctx.FromContext(ctx).Username()) // set updated_by to current user
 
 	// 1.Perform business logic processing before update resource.
-	if err := a.traceServiceHook(ctx, consts.PHASE_UPDATE_BEFORE, svc, func(spanCtx context.Context) error {
-		return svc.UpdateBefore(newServiceContext(spanCtx, consts.PHASE_UPDATE_BEFORE), req)
+	if err := a.traceServiceHook(ctx, consts.UpdateBefore, svc, func(spanCtx context.Context) error {
+		return svc.UpdateBefore(newServiceContext(spanCtx, consts.UpdateBefore), req)
 	}); err != nil {
 		return failService(ctx, log, err)
 	}
@@ -139,8 +139,8 @@ func (a *action[M, REQ, RSP]) updateFlow(ctx context.Context, newServiceContext 
 		return failDatabase(ctx, log, err)
 	}
 	// 3.Perform business logic processing after update resource.
-	if err := a.traceServiceHook(ctx, consts.PHASE_UPDATE_AFTER, svc, func(spanCtx context.Context) error {
-		return svc.UpdateAfter(newServiceContext(spanCtx, consts.PHASE_UPDATE_AFTER), req)
+	if err := a.traceServiceHook(ctx, consts.UpdateAfter, svc, func(spanCtx context.Context) error {
+		return svc.UpdateAfter(newServiceContext(spanCtx, consts.UpdateAfter), req)
 	}); err != nil {
 		return failService(ctx, log, err)
 	}

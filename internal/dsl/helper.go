@@ -10,20 +10,20 @@ import (
 )
 
 var routePhaseOrder = []consts.Phase{
-	consts.PHASE_CREATE,
-	consts.PHASE_DELETE,
-	consts.PHASE_UPDATE,
-	consts.PHASE_PATCH,
-	consts.PHASE_LIST,
-	consts.PHASE_IMPORT,
-	consts.PHASE_EXPORT,
-	consts.PHASE_SSE,
-	consts.PHASE_STREAM,
-	consts.PHASE_GET,
-	consts.PHASE_CREATE_MANY,
-	consts.PHASE_DELETE_MANY,
-	consts.PHASE_UPDATE_MANY,
-	consts.PHASE_PATCH_MANY,
+	consts.Create,
+	consts.Delete,
+	consts.Update,
+	consts.Patch,
+	consts.List,
+	consts.Import,
+	consts.Export,
+	consts.SSE,
+	consts.Stream,
+	consts.Get,
+	consts.CreateMany,
+	consts.DeleteMany,
+	consts.UpdateMany,
+	consts.PatchMany,
 }
 
 func emitRouteActions(route string, actions []*Action, fn func(string, *Action)) {

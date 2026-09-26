@@ -45,7 +45,7 @@ func plainServiceContext(ctx context.Context, phase consts.Phase) *types.Service
 // request metadata, and takes the audit identity of the record from that
 // metadata.
 func TestCreateFlowRunsOnRequestMetadataAlone(t *testing.T) {
-	a := newAction[*flowSample, *flowSample, *flowSample]("flow-samples", consts.PHASE_CREATE, consts.PHASE_CREATE_BEFORE, consts.PHASE_CREATE_AFTER)
+	a := newAction[*flowSample, *flowSample, *flowSample]("flow-samples", consts.Create, consts.CreateBefore, consts.CreateAfter)
 	ctx := requestctx.WithMetadata(context.Background(), requestctx.New(requestctx.Fields{Username: "flow-user"}))
 	record := &flowSample{Name: "created by the flow"}
 
@@ -60,7 +60,7 @@ func TestCreateFlowRunsOnRequestMetadataAlone(t *testing.T) {
 // cannot serve: the error carries the canonical code the transport answers
 // with, CodeNotFound here for an id naming no record.
 func TestGetFlowAnswersNotFoundAsACode(t *testing.T) {
-	a := newAction[*flowSample, *flowSample, *flowSample]("flow-samples", consts.PHASE_GET, consts.PHASE_GET_BEFORE, consts.PHASE_GET_AFTER)
+	a := newAction[*flowSample, *flowSample, *flowSample]("flow-samples", consts.Get, consts.GetBefore, consts.GetAfter)
 	ctx := requestctx.WithMetadata(context.Background(), requestctx.New(requestctx.Fields{}))
 
 	_, err := a.getFlow(ctx, plainServiceContext, "missing")
@@ -79,7 +79,7 @@ func TestPatchFlowRecordsTheRecordIDInTheOperationLog(t *testing.T) {
 	audit = auditmanager.New(&config.Audit{Enabled: true})
 	t.Cleanup(func() { audit = previous })
 
-	a := newAction[*flowSample, *flowSample, *flowSample]("flow-samples", consts.PHASE_PATCH, consts.PHASE_PATCH_BEFORE, consts.PHASE_PATCH_AFTER)
+	a := newAction[*flowSample, *flowSample, *flowSample]("flow-samples", consts.Patch, consts.PatchBefore, consts.PatchAfter)
 	ctx := requestctx.WithMetadata(context.Background(), requestctx.New(requestctx.Fields{Username: "flow-user"}))
 	record := &flowSample{Name: "before the patch"}
 	require.NoError(t, database.Database[*flowSample](ctx).Create(record))

@@ -392,7 +392,7 @@ func newNormalizeProbeEngine(t *testing.T, route string) *gin.Engine {
 	t.Helper()
 	gin.SetMode(gin.TestMode)
 
-	registerTestService[*normalizeProbeModel, *normalizeProbeReq, *normalizeProbeRsp](consts.PHASE_CREATE, route, &normalizeProbeService{})
+	registerTestService[*normalizeProbeModel, *normalizeProbeReq, *normalizeProbeRsp](consts.Create, route, &normalizeProbeService{})
 	engine := gin.New()
 	engine.POST("/"+route, CreateHandler[*normalizeProbeModel, *normalizeProbeReq, *normalizeProbeRsp](&types.ControllerConfig[*normalizeProbeModel]{Route: route}))
 	return engine

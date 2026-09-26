@@ -193,15 +193,15 @@ func TestStmtServiceRegister(t *testing.T) {
 			name:       "user",
 			structName: "user.Creator",
 			route:      "/api/users",
-			phase:      consts.PHASE_CREATE,
-			want:       `service.Register[*user.Creator](consts.PHASE_CREATE, "/api/users")`,
+			phase:      consts.Create,
+			want:       `service.Register[*user.Creator](consts.Create, "/api/users")`,
 		},
 		{
 			name:       "group",
 			structName: "group.Updater",
 			route:      "/api/groups/:id",
-			phase:      consts.PHASE_UPDATE,
-			want:       `service.Register[*group.Updater](consts.PHASE_UPDATE, "/api/groups/:id")`,
+			phase:      consts.Update,
+			want:       `service.Register[*group.Updater](consts.Update, "/api/groups/:id")`,
 		},
 	}
 	for _, tt := range tests {

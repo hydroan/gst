@@ -67,11 +67,11 @@ func applyRouteIgnores(allModels []*Model, rules []ggconfig.RouteRule) RouteIgno
 		m.Design.Range(func(route string, act *dsl.Action) {
 			// The rules name HTTP methods and paths; an action served over
 			// gRPC alone has neither.
-			if dsl.GRPCOnlyAction(act.Phase.MethodName()) {
+			if dsl.GRPCOnlyAction(act.Phase.Name()) {
 				return
 			}
 			finalRoute, _ := RouterTargetForAction(route, m.Design, act)
-			method := act.Phase.ToHTTPVerb().HTTPMethod()
+			method := act.Phase.HTTPMethod()
 			for i, rule := range rules {
 				if !rule.Match(method, finalRoute) || !rule.MatchesSource(m.ModelFilePath) {
 					continue

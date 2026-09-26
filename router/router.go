@@ -17,10 +17,11 @@ import (
 	"github.com/hydroan/gst/internal/types"
 )
 
-// Register registers route on router for each of verbs. router is the route
-// group the route belongs to: Auth, whose routes run the middleware
-// registered with middleware.RegisterAuth, or Pub, whose routes do not. Each
-// verb is served by the framework's handler for it, under its HTTP method:
+// Register registers route on router for each of phases, the actions to
+// serve on it. router is the route group the route belongs to: Auth, whose
+// routes run the middleware registered with middleware.RegisterAuth, or Pub,
+// whose routes do not. Each phase is served by the framework's handler for
+// it, under its HTTP method (see consts.Phase.HTTPMethod):
 //
 //   - POST: Create, CreateMany, Import
 //   - DELETE: Delete, DeleteMany
@@ -34,10 +35,10 @@ import (
 // path and the phase, so the matching service.Register call names the same
 // route; generated code derives both from one design. cfg may be nil, and it
 // is copied, so one config can serve several routes. A blank route, or no
-// verbs, panics: the mistake stops the start instead of leaving an endpoint
+// phases, panics: the mistake stops the start instead of leaving an endpoint
 // that answers 404.
-func Register[M types.Model, REQ types.Request, RSP types.Response](router *gin.RouterGroup, route string, cfg *types.ControllerConfig[M], verbs ...consts.HTTPVerb) {
-	internalrouter.Register[M, REQ, RSP](router, route, cfg, verbs...)
+func Register[M types.Model, REQ types.Request, RSP types.Response](router *gin.RouterGroup, route string, cfg *types.ControllerConfig[M], phases ...consts.Phase) {
+	internalrouter.Register[M, REQ, RSP](router, route, cfg, phases...)
 }
 
 // Auth returns the route group whose routes run the middleware registered

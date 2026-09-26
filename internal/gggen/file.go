@@ -186,8 +186,8 @@ func BuildModelFile(pkgName string, aliases map[string]string, stmts ...ast.Stmt
 //	)
 //
 //	func init() {
-//		service.Register[*group.Updater](consts.PHASE_UPDATE, "groups/:id")
-//		service.Register[*user.Creator](consts.PHASE_CREATE, "users")
+//		service.Register[*group.Updater](consts.Update, "groups/:id")
+//		service.Register[*user.Creator](consts.Create, "users")
 //	}
 func BuildServiceFile(pkgName string, aliases map[string]string, stmts ...ast.Stmt) (string, error) {
 	body := make([]ast.Stmt, 0, len(stmts))

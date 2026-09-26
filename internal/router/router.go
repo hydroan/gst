@@ -331,8 +331,8 @@ func Stop(abandon context.Context) {
 	server = nil
 }
 
-// Register registers route on the router group for each of verbs, each served
-// by the controller handler of that verb, and records it for Routes, the
+// Register registers route on the router group for each of phases, each
+// served by the controller handler of that phase, and records it for Routes, the
 // route parameter registry and the OpenAPI document; the public
 // router.Register forwards to it and documents the contract.
 //
@@ -342,7 +342,7 @@ func Stop(abandon context.Context) {
 // path makes; the corresponding service.Register call names the same route.
 // The config is shallow-copied first, keeping a caller-shared config safe
 // for reuse across routes.
-func Register[M types.Model, REQ types.Request, RSP types.Response](router *gin.RouterGroup, route string, cfg *types.ControllerConfig[M], verbs ...consts.HTTPVerb) {
+func Register[M types.Model, REQ types.Request, RSP types.Response](router *gin.RouterGroup, route string, cfg *types.ControllerConfig[M], phases ...consts.Phase) {
 	// A registration that can register nothing is a mistake in the
 	// declaration: it panics as the process starts, the way the service
 	// registry does for a blank route, instead of leaving an endpoint that
@@ -350,18 +350,18 @@ func Register[M types.Model, REQ types.Request, RSP types.Response](router *gin.
 	if strings.TrimSpace(route) == "" {
 		panic("router: register requires a non-empty route")
 	}
-	if len(verbs) == 0 {
-		panic(fmt.Sprintf("router: register of route %q requires at least one verb", route))
+	if len(phases) == 0 {
+		panic(fmt.Sprintf("router: register of route %q requires at least one phase", route))
 	}
 	routed := types.ControllerConfig[M]{}
 	if cfg != nil {
 		routed = *cfg
 	}
 	routed.Route = consts.APIPath(route)
-	register[M, REQ, RSP](router, routed.Route, buildVerbMap(verbs...), &routed)
+	register[M, REQ, RSP](router, routed.Route, phaseSet(phases...), &routed)
 }
 
-func register[M types.Model, REQ types.Request, RSP types.Response](router *gin.RouterGroup, path string, verbMap map[consts.HTTPVerb]bool, cfg ...*types.ControllerConfig[M]) {
+func register[M types.Model, REQ types.Request, RSP types.Response](router *gin.RouterGroup, path string, phases map[consts.Phase]bool, cfg ...*types.ControllerConfig[M]) {
 	mu.Lock()
 	defer mu.Unlock()
 
@@ -371,57 +371,57 @@ func register[M types.Model, REQ types.Request, RSP types.Response](router *gin.
 	// authentication, which is the safe default for custom sub groups.
 	authRequired := router != pub
 
-	// handle serves a verb's controller under the method the verb maps to,
-	// consts.HTTPVerb.HTTPMethod: the one table gg routes, gg route-tree and
+	// handle serves a phase's controller under the method the phase maps to,
+	// consts.Phase.HTTPMethod: the one table gg routes, gg route-tree and
 	// gg gen's route ignore rules read the method from as well.
-	handle := func(verb consts.HTTPVerb, handler gin.HandlerFunc) {
-		method := verb.HTTPMethod()
+	handle := func(phase consts.Phase, handler gin.HandlerFunc) {
+		method := phase.HTTPMethod()
 		router.Handle(method, path, handler)
 		registerRoute(endpoint, method)
 		middleware.RouteManager.Add(endpoint)
-		openapigen.Set[M, REQ, RSP](endpoint, authRequired, verb)
+		openapigen.Set[M, REQ, RSP](endpoint, authRequired, phase)
 	}
 
-	if verbMap[consts.Create] {
+	if phases[consts.Create] {
 		handle(consts.Create, controller.CreateHandler[M, REQ, RSP](cfg...))
 	}
-	if verbMap[consts.Delete] {
+	if phases[consts.Delete] {
 		handle(consts.Delete, controller.DeleteHandler[M, REQ, RSP](cfg...))
 	}
-	if verbMap[consts.Update] {
+	if phases[consts.Update] {
 		handle(consts.Update, controller.UpdateHandler[M, REQ, RSP](cfg...))
 	}
-	if verbMap[consts.Patch] {
+	if phases[consts.Patch] {
 		handle(consts.Patch, controller.PatchHandler[M, REQ, RSP](cfg...))
 	}
-	if verbMap[consts.List] {
+	if phases[consts.List] {
 		handle(consts.List, controller.ListHandler[M, REQ, RSP](cfg...))
 	}
-	if verbMap[consts.Get] {
+	if phases[consts.Get] {
 		handle(consts.Get, controller.GetHandler[M, REQ, RSP](cfg...))
 	}
 
-	if verbMap[consts.CreateMany] {
+	if phases[consts.CreateMany] {
 		handle(consts.CreateMany, controller.CreateManyHandler[M, REQ, RSP](cfg...))
 	}
-	if verbMap[consts.DeleteMany] {
+	if phases[consts.DeleteMany] {
 		handle(consts.DeleteMany, controller.DeleteManyHandler[M, REQ, RSP](cfg...))
 	}
-	if verbMap[consts.UpdateMany] {
+	if phases[consts.UpdateMany] {
 		handle(consts.UpdateMany, controller.UpdateManyHandler[M, REQ, RSP](cfg...))
 	}
-	if verbMap[consts.PatchMany] {
+	if phases[consts.PatchMany] {
 		handle(consts.PatchMany, controller.PatchManyHandler[M, REQ, RSP](cfg...))
 	}
 
-	if verbMap[consts.Import] {
+	if phases[consts.Import] {
 		handle(consts.Import, controller.ImportHandler[M, REQ, RSP](cfg...))
 	}
-	if verbMap[consts.Export] {
+	if phases[consts.Export] {
 		handle(consts.Export, controller.ExportHandler[M, REQ, RSP](cfg...))
 	}
 
-	if verbMap[consts.SSE] {
+	if phases[consts.SSE] {
 		handle(consts.SSE, controller.SSEHandler[M, REQ, RSP](cfg...))
 		// Streaming responses are exempt from request-scoped response
 		// treatment (body capture, circuit breaking, request timeouts); the
@@ -490,10 +490,10 @@ func httpMethodRank(method string) (int, bool) {
 }
 
 // buildVerbMap creates a map of allowed HTTP verbs according to the specified verbs.
-func buildVerbMap(verbs ...consts.HTTPVerb) map[consts.HTTPVerb]bool {
-	verbMap := make(map[consts.HTTPVerb]bool, len(verbs))
-	for _, verb := range verbs {
-		verbMap[verb] = true
+func phaseSet(phases ...consts.Phase) map[consts.Phase]bool {
+	set := make(map[consts.Phase]bool, len(phases))
+	for _, phase := range phases {
+		set[phase] = true
 	}
-	return verbMap
+	return set
 }

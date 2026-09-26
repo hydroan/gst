@@ -74,7 +74,7 @@ func checkGRPCServiceContext(ignore gghelper.ProjectIgnore) []string {
 				return
 			}
 			target := modelinfo.ServiceTarget(m, act, ggconst.DirModel, ggconst.DirService)
-			served[target.FilePath] = m.Design.GRPC && !dsl.HTTPOnlyAction(act.Phase.MethodName())
+			served[target.FilePath] = m.Design.GRPC && !dsl.HTTPOnlyAction(act.Phase.Name())
 			if !m.Design.GRPC {
 				return
 			}

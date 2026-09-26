@@ -30,7 +30,7 @@ import (
 // When REQ or RSP differs from M, the handler is the phase service's (see
 // serviceHandler): its PatchMany method runs on the bound payload.
 func PatchManyHandler[M types.Model, REQ types.Request, RSP types.Response](cfg ...*types.ControllerConfig[M]) gin.HandlerFunc {
-	a := newAction[M, REQ, RSP](routeFromConfig(cfg...), consts.PHASE_PATCH_MANY, consts.PHASE_PATCH_MANY_BEFORE, consts.PHASE_PATCH_MANY_AFTER)
+	a := newAction[M, REQ, RSP](routeFromConfig(cfg...), consts.PatchMany, consts.PatchManyBefore, consts.PatchManyAfter)
 	if !a.typesEqual {
 		return a.serviceHandler()
 	}
@@ -40,7 +40,7 @@ func PatchManyHandler[M types.Model, REQ types.Request, RSP types.Response](cfg 
 		_, span := a.startControllerSpan(c)
 		defer span.End()
 
-		log := logger.Controller.WithContext(c.Request.Context(), consts.PHASE_PATCH_MANY)
+		log := logger.Controller.WithContext(c.Request.Context(), consts.PatchMany)
 
 		var req batch[M]
 		body, err := readJSONRequestBody(c)
@@ -103,7 +103,7 @@ func PatchManyHandler[M types.Model, REQ types.Request, RSP types.Response](cfg 
 // patchManyFlow) and answers with the records patched, or with the status
 // the failure maps to (see call).
 func PatchManyCall[M types.Model](route string) func(ctx context.Context, params map[string]string, items []M, paths [][]string) ([]M, error) {
-	a := newAction[M, M, M](route, consts.PHASE_PATCH_MANY, consts.PHASE_PATCH_MANY_BEFORE, consts.PHASE_PATCH_MANY_AFTER)
+	a := newAction[M, M, M](route, consts.PatchMany, consts.PatchManyBefore, consts.PatchManyAfter)
 	return func(ctx context.Context, params map[string]string, items []M, paths [][]string) ([]M, error) {
 		c := a.beginCall(ctx, params, nil)
 		defer c.end()
@@ -155,7 +155,7 @@ func PatchManyCall[M types.Model](route string) func(ctx context.Context, params
 // the stale write refused instead declares model.Version.
 func (a *action[M, REQ, RSP]) patchManyFlow(ctx context.Context, newServiceContext serviceContextFunc, req *batch[M], fieldSets []patchFieldSet) (batch[M], error) {
 	var zero batch[M]
-	log := logger.Controller.WithContext(ctx, consts.PHASE_PATCH_MANY)
+	log := logger.Controller.WithContext(ctx, consts.PatchMany)
 	svc := a.service()
 
 	var shouldUpdates []M
@@ -190,8 +190,8 @@ func (a *action[M, REQ, RSP]) patchManyFlow(ctx context.Context, newServiceConte
 	}
 
 	// 1.Perform business logic processing before batch patch resource.
-	if err := a.traceServiceHook(ctx, consts.PHASE_PATCH_MANY_BEFORE, svc, func(spanCtx context.Context) error {
-		return svc.PatchManyBefore(newServiceContext(spanCtx, consts.PHASE_PATCH_MANY_BEFORE), shouldUpdates...)
+	if err := a.traceServiceHook(ctx, consts.PatchManyBefore, svc, func(spanCtx context.Context) error {
+		return svc.PatchManyBefore(newServiceContext(spanCtx, consts.PatchManyBefore), shouldUpdates...)
 	}); err != nil {
 		return zero, failService(ctx, log, err)
 	}
@@ -204,8 +204,8 @@ func (a *action[M, REQ, RSP]) patchManyFlow(ctx context.Context, newServiceConte
 		return zero, failDatabase(ctx, log, err)
 	}
 	// 3.Perform business logic processing after batch patch resource.
-	if err := a.traceServiceHook(ctx, consts.PHASE_PATCH_MANY_AFTER, svc, func(spanCtx context.Context) error {
-		return svc.PatchManyAfter(newServiceContext(spanCtx, consts.PHASE_PATCH_MANY_AFTER), shouldUpdates...)
+	if err := a.traceServiceHook(ctx, consts.PatchManyAfter, svc, func(spanCtx context.Context) error {
+		return svc.PatchManyAfter(newServiceContext(spanCtx, consts.PatchManyAfter), shouldUpdates...)
 	}); err != nil {
 		return zero, failService(ctx, log, err)
 	}

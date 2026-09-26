@@ -45,16 +45,16 @@ func Register() {
 		*Rsp](
 		&Module{},
 		module.CRUD(
-			consts.PHASE_CREATE,
-			consts.PHASE_DELETE,
-			consts.PHASE_UPDATE,
-			consts.PHASE_PATCH,
-			consts.PHASE_LIST,
-			consts.PHASE_GET,
-			consts.PHASE_CREATE_MANY,
-			consts.PHASE_DELETE_MANY,
-			consts.PHASE_UPDATE_MANY,
-			consts.PHASE_PATCH_MANY,
+			consts.Create,
+			consts.Delete,
+			consts.Update,
+			consts.Patch,
+			consts.List,
+			consts.Get,
+			consts.CreateMany,
+			consts.DeleteMany,
+			consts.UpdateMany,
+			consts.PatchMany,
 		),
 	)
 
@@ -64,16 +64,16 @@ func Register() {
 		*Helloworld2](
 		&Module2{},
 		module.CRUD(
-			consts.PHASE_CREATE,
-			consts.PHASE_DELETE,
-			consts.PHASE_UPDATE,
-			consts.PHASE_PATCH,
-			consts.PHASE_LIST,
-			consts.PHASE_GET,
-			consts.PHASE_CREATE_MANY,
-			consts.PHASE_DELETE_MANY,
-			consts.PHASE_UPDATE_MANY,
-			consts.PHASE_PATCH_MANY,
+			consts.Create,
+			consts.Delete,
+			consts.Update,
+			consts.Patch,
+			consts.List,
+			consts.Get,
+			consts.CreateMany,
+			consts.DeleteMany,
+			consts.UpdateMany,
+			consts.PatchMany,
 		),
 	)
 }

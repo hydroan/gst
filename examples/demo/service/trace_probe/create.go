@@ -13,9 +13,9 @@ type Creator struct {
 }
 
 func (t *Creator) CreateBefore(ctx *gst.ServiceContext, probe *model.TraceProbe) error {
-	return traceServiceHook(t.Logger, ctx, consts.PHASE_CREATE_BEFORE, probe, 0)
+	return traceServiceHook(t.Logger, ctx, consts.CreateBefore, probe, 0)
 }
 
 func (t *Creator) CreateAfter(ctx *gst.ServiceContext, probe *model.TraceProbe) error {
-	return traceServiceHook(t.Logger, ctx, consts.PHASE_CREATE_AFTER, probe, 0)
+	return traceServiceHook(t.Logger, ctx, consts.CreateAfter, probe, 0)
 }

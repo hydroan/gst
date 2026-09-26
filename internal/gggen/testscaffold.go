@@ -97,7 +97,7 @@ var serviceTestDoc = []string{
 // downloads the attachment and SSE consumes the stream.
 func GenerateServiceTest(info *modelinfo.Model, target modelinfo.ServiceTargetInfo, action *dsl.Action, route string) (string, error) {
 	name := serviceTestName(action)
-	method := consts.HTTPVerb(action.Phase).HTTPMethod()
+	method := action.Phase.HTTPMethod()
 	doc := append([]string{
 		fmt.Sprintf("// %s covers %s %s, served by %s in %s.", name, method, route, action.RoleName(), filepath.Base(target.FilePath)),
 	}, serviceTestDoc...)
@@ -135,7 +135,7 @@ func serviceTestName(action *dsl.Action) string {
 	if len(action.Filename) > 0 {
 		return "Test" + action.RoleName()
 	}
-	return "Test" + action.Phase.MethodName()
+	return "Test" + action.Phase.Name()
 }
 
 // serviceTestExample is the example request of a service test scaffold: the
@@ -200,7 +200,7 @@ func newServiceTestExample(info *modelinfo.Model, action *dsl.Action, route stri
 	var stmts []ast.Stmt
 	path, usesID := routePathExpr(route)
 	switch action.Phase {
-	case consts.PHASE_IMPORT:
+	case consts.Import:
 		example.imports[scaffoldImportStrings] = ""
 		filename := strLit(filepath.Base(filepath.Dir(route)) + ".csv")
 		content := call(sel(ident("strings"), "NewReader"), strLit("name\nsample\n"))
@@ -209,13 +209,13 @@ func newServiceTestExample(info *modelinfo.Model, action *dsl.Action, route stri
 			requireCall("NoError", ident("err")),
 			requireCall("NotNil", ident("envelope")),
 		)
-	case consts.PHASE_EXPORT:
+	case consts.Export:
 		stmts = append(stmts,
 			define(idents("attachment", "err"), call(sel(ident("cli"), "Download"), testContext(), path)),
 			requireCall("NoError", ident("err")),
 			requireCall("NotEmpty", sel(ident("attachment"), "Content")),
 		)
-	case consts.PHASE_SSE:
+	case consts.SSE:
 		example.imports[scaffoldImportHTTP] = ""
 		example.imports[scaffoldImportSSE] = ""
 		callback := &ast.FuncLit{
@@ -233,7 +233,7 @@ func newServiceTestExample(info *modelinfo.Model, action *dsl.Action, route stri
 		args := []ast.Expr{testContext(), path}
 		var rspType ast.Expr
 		switch action.Phase {
-		case consts.PHASE_LIST:
+		case consts.List:
 			// The example sends no query parameter: pagination and the
 			// other query capabilities are opted into per model, and a
 			// parameter the model did not opt into is rejected.
@@ -244,15 +244,15 @@ func newServiceTestExample(info *modelinfo.Model, action *dsl.Action, route stri
 			} else {
 				rspType = &ast.IndexExpr{X: sel(ident("client"), "ListResult"), Index: modelType(action.Result)}
 			}
-		case consts.PHASE_CREATE_MANY, consts.PHASE_UPDATE_MANY, consts.PHASE_PATCH_MANY:
+		case consts.CreateMany, consts.UpdateMany, consts.PatchMany:
 			items := &ast.CompositeLit{Type: &ast.ArrayType{Elt: modelType(action.Payload)}, Elts: []ast.Expr{&ast.CompositeLit{}}}
 			args = append(args, call(sel(ident("client"), "BatchItems"), items))
-		case consts.PHASE_DELETE_MANY:
+		case consts.DeleteMany:
 			usesID = true
 			ids := &ast.CompositeLit{Type: &ast.ArrayType{Elt: ident("string")}, Elts: []ast.Expr{ident("id")}}
 			args = append(args, call(sel(ident("client"), "BatchIDs"), ids))
 		default:
-			switch method := consts.HTTPVerb(action.Phase).HTTPMethod(); method {
+			switch method := action.Phase.HTTPMethod(); method {
 			case http.MethodGet:
 			case http.MethodDelete:
 				// The default Delete action reads the row from the path and
@@ -270,7 +270,7 @@ func newServiceTestExample(info *modelinfo.Model, action *dsl.Action, route stri
 		if rspType == nil {
 			rspType = valueType(action.Result)
 		}
-		verb := clientVerbs[consts.HTTPVerb(action.Phase).HTTPMethod()]
+		verb := clientVerbs[action.Phase.HTTPMethod()]
 		request := &ast.CallExpr{Fun: &ast.IndexExpr{X: sel(ident("cli"), verb), Index: rspType}, Args: args}
 		stmts = append(stmts,
 			define(idents("rsp", "err"), request),

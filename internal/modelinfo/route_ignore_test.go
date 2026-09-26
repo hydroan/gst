@@ -57,8 +57,8 @@ func (User) Design() {
 	}
 	// The surviving action set is exactly the Create action.
 	remaining := collectActions(design)
-	if len(remaining) != 1 || remaining[0].Phase != consts.PHASE_CREATE {
-		t.Fatalf("remaining actions = %v, want only PHASE_CREATE", remainingPhases(remaining))
+	if len(remaining) != 1 || remaining[0].Phase != consts.Create {
+		t.Fatalf("remaining actions = %v, want only Create", remainingPhases(remaining))
 	}
 }
 
@@ -101,8 +101,8 @@ func (Notice) Design() {
 		t.Fatalf("Unmatched = %v, want empty", result.Unmatched)
 	}
 	remaining := collectActions(design)
-	if len(remaining) != 1 || remaining[0].Phase != consts.PHASE_CREATE {
-		t.Fatalf("remaining actions = %v, want only PHASE_CREATE", remainingPhases(remaining))
+	if len(remaining) != 1 || remaining[0].Phase != consts.Create {
+		t.Fatalf("remaining actions = %v, want only Create", remainingPhases(remaining))
 	}
 }
 

@@ -181,10 +181,10 @@ func modelRouteFromCall(call *ast.CallExpr, modelSources map[string]string) (mod
 		// the listing prints as it is.
 		Path: consts.APIPath(path),
 		// The last argument names the verb the way gg gen writes it,
-		// consts.<Phase.MethodName()> such as consts.CreateMany; the route
+		// consts.<Phase.Name()> such as consts.CreateMany; the route
 		// is served under the method the framework router registers that
 		// verb by.
-		Method: consts.HTTPVerb(strcase.SnakeCase(phase)).HTTPMethod(),
+		Method: consts.Phase(strcase.SnakeCase(phase)).HTTPMethod(),
 		Phase:  phase,
 		Param:  routeParamName(call.Args[2]),
 	}, true

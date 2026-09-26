@@ -81,19 +81,19 @@ func isManagedServiceFile(path string) bool {
 // through sse.go.
 func phaseFileNames() map[string]bool {
 	return map[string]bool{
-		consts.PHASE_CREATE.Filename():      true,
-		consts.PHASE_DELETE.Filename():      true,
-		consts.PHASE_UPDATE.Filename():      true,
-		consts.PHASE_PATCH.Filename():       true,
-		consts.PHASE_LIST.Filename():        true,
-		consts.PHASE_GET.Filename():         true,
-		consts.PHASE_CREATE_MANY.Filename(): true,
-		consts.PHASE_DELETE_MANY.Filename(): true,
-		consts.PHASE_UPDATE_MANY.Filename(): true,
-		consts.PHASE_PATCH_MANY.Filename():  true,
-		consts.PHASE_IMPORT.Filename():      true,
-		consts.PHASE_EXPORT.Filename():      true,
-		consts.PHASE_SSE.Filename():         true,
+		consts.Create.Filename():     true,
+		consts.Delete.Filename():     true,
+		consts.Update.Filename():     true,
+		consts.Patch.Filename():      true,
+		consts.List.Filename():       true,
+		consts.Get.Filename():        true,
+		consts.CreateMany.Filename(): true,
+		consts.DeleteMany.Filename(): true,
+		consts.UpdateMany.Filename(): true,
+		consts.PatchMany.Filename():  true,
+		consts.Import.Filename():     true,
+		consts.Export.Filename():     true,
+		consts.SSE.Filename():        true,
 	}
 }
 

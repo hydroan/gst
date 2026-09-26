@@ -25,7 +25,7 @@ func TestRegisterPanicsOnDeclarationMistakes(t *testing.T) {
 	require.PanicsWithValue(t, "router: register requires a non-empty route", func() {
 		router.Register[*modelregistry.Empty, *modelregistry.Empty, *modelregistry.Empty](group, "  ", nil, consts.Create, consts.List)
 	})
-	require.PanicsWithValue(t, `router: register of route "samples" requires at least one verb`, func() {
+	require.PanicsWithValue(t, `router: register of route "samples" requires at least one phase`, func() {
 		router.Register[*modelregistry.Empty, *modelregistry.Empty, *modelregistry.Empty](group, "samples", nil)
 	})
 	require.PanicsWithValue(t, `controller: route "/api/samples/:id/bind": request type *router_test.sampleBinder is an interface with methods or a pointer to one, which no request body decodes into; declare a concrete type, or any`, func() {
@@ -34,13 +34,13 @@ func TestRegisterPanicsOnDeclarationMistakes(t *testing.T) {
 }
 
 // TestRegisterServesEveryVerbUnderItsMethod pins the method the router serves
-// each verb under to consts.HTTPVerb.HTTPMethod, the table gg routes, gg
+// each verb under to consts.Phase.HTTPMethod, the table gg routes, gg
 // route-tree and gg gen's route ignore rules read as well: the engine routes
 // the method, and Routes records it.
 func TestRegisterServesEveryVerbUnderItsMethod(t *testing.T) {
 	engine := gin.New()
 	group := engine.Group("")
-	verbs := []consts.HTTPVerb{
+	verbs := []consts.Phase{
 		consts.Create, consts.Delete, consts.Update, consts.Patch, consts.List, consts.Get,
 		consts.CreateMany, consts.DeleteMany, consts.UpdateMany, consts.PatchMany,
 		consts.Import, consts.Export, consts.SSE,

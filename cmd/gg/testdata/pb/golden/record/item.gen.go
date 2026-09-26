@@ -24,7 +24,7 @@ var (
 	createItem = grpc.CreateCall[*record.Item]("/api/records/:record/items")
 	getItem    = grpc.GetCall[*record.Item]("/api/records/:record/items/:id")
 	sealItem   = grpc.CreateCall[*record.Item]("/api/items/:id/seal")
-	mergeItem  = grpc.ServiceCall[*record.Item, *record.MergeReq, *record.MergedItemRsp](consts.PHASE_CREATE, "/api/items/merge")
+	mergeItem  = grpc.ServiceCall[*record.Item, *record.MergeReq, *record.MergedItemRsp](consts.Create, "/api/items/merge")
 )
 
 // CreateItem serves the Create action of Item on /api/records/:record/items.

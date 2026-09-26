@@ -25,7 +25,7 @@ var pluralizeCli = pluralize.NewClient()
 // separately (see emptyReqImport).
 func serviceScaffoldImports(phase consts.Phase) []string {
 	importPaths := []string{ggconst.ImportPathService, ggconst.ImportPathGst}
-	if phase == consts.PHASE_IMPORT {
+	if phase == consts.Import {
 		importPaths = append(importPaths, ggconst.ImportPathIO)
 	}
 	return importPaths
@@ -220,7 +220,7 @@ func serviceMethod1(recvName, modelName, modelQualifier string, phase consts.Pha
 				},
 			},
 		},
-		Name: ast.NewIdent(phase.MethodName()),
+		Name: ast.NewIdent(phase.Name()),
 		Type: &ast.FuncType{
 			Params: &ast.FieldList{
 				List: []*ast.Field{
@@ -275,7 +275,7 @@ func serviceMethod2(recvName, modelName, modelQualifier string, phase consts.Pha
 				},
 			},
 		},
-		Name: ast.NewIdent(phase.MethodName()),
+		Name: ast.NewIdent(phase.Name()),
 		Type: &ast.FuncType{
 			Params: &ast.FieldList{
 				List: []*ast.Field{
@@ -334,7 +334,7 @@ func serviceMethod3(recvName, modelName, modelQualifier string, phase consts.Pha
 				},
 			},
 		},
-		Name: ast.NewIdent(phase.MethodName()),
+		Name: ast.NewIdent(phase.Name()),
 		Type: &ast.FuncType{
 			Params: &ast.FieldList{
 				List: []*ast.Field{
@@ -397,7 +397,7 @@ func serviceMethod4(recvName, modelQualifier, reqName, rspName string, phase con
 				},
 			},
 		},
-		Name: ast.NewIdent(phase.MethodName()),
+		Name: ast.NewIdent(phase.Name()),
 		Type: &ast.FuncType{
 			Params: &ast.FieldList{
 				List: []*ast.Field{

@@ -29,7 +29,7 @@ import (
 // serviceHandler): its Create method runs on the bound payload, a multipart
 // form left unbound for the service to read itself.
 func CreateHandler[M types.Model, REQ types.Request, RSP types.Response](cfg ...*types.ControllerConfig[M]) gin.HandlerFunc {
-	a := newAction[M, REQ, RSP](routeFromConfig(cfg...), consts.PHASE_CREATE, consts.PHASE_CREATE_BEFORE, consts.PHASE_CREATE_AFTER)
+	a := newAction[M, REQ, RSP](routeFromConfig(cfg...), consts.Create, consts.CreateBefore, consts.CreateAfter)
 	if !a.typesEqual {
 		return a.serviceHandler()
 	}
@@ -39,7 +39,7 @@ func CreateHandler[M types.Model, REQ types.Request, RSP types.Response](cfg ...
 		_, span := a.startControllerSpan(c)
 		defer span.End()
 
-		log := logger.Controller.WithContext(c.Request.Context(), consts.PHASE_CREATE)
+		log := logger.Controller.WithContext(c.Request.Context(), consts.Create)
 
 		req := a.newModel()
 		if reqErr := bindJSONRequest(c, &req); reqErr != nil {
@@ -68,7 +68,7 @@ func CreateHandler[M types.Model, REQ types.Request, RSP types.Response](cfg ...
 // runs the create flow (see createFlow) and answers with the model created,
 // or with the status the failure maps to (see call).
 func CreateCall[M types.Model](route string) func(ctx context.Context, params map[string]string, m M) (M, error) {
-	a := newAction[M, M, M](route, consts.PHASE_CREATE, consts.PHASE_CREATE_BEFORE, consts.PHASE_CREATE_AFTER)
+	a := newAction[M, M, M](route, consts.Create, consts.CreateBefore, consts.CreateAfter)
 	return func(ctx context.Context, params map[string]string, m M) (M, error) {
 		var zero M
 		c := a.beginCall(ctx, params, nil)
@@ -89,15 +89,15 @@ func CreateCall[M types.Model](route string) func(ctx context.Context, params ma
 // write, and records the operation. The created model is req itself, filled
 // by the write.
 func (a *action[M, REQ, RSP]) createFlow(ctx context.Context, newServiceContext serviceContextFunc, req M) error {
-	log := logger.Controller.WithContext(ctx, consts.PHASE_CREATE)
+	log := logger.Controller.WithContext(ctx, consts.Create)
 	svc := a.service()
 	username := requestctx.FromContext(ctx).Username()
 	req.SetCreatedBy(username)
 	req.SetUpdatedBy(username)
 
 	// 1.Perform business logic processing before create resource.
-	if err := a.traceServiceHook(ctx, consts.PHASE_CREATE_BEFORE, svc, func(spanCtx context.Context) error {
-		return svc.CreateBefore(newServiceContext(spanCtx, consts.PHASE_CREATE_BEFORE), req)
+	if err := a.traceServiceHook(ctx, consts.CreateBefore, svc, func(spanCtx context.Context) error {
+		return svc.CreateBefore(newServiceContext(spanCtx, consts.CreateBefore), req)
 	}); err != nil {
 		return failService(ctx, log, err)
 	}
@@ -108,8 +108,8 @@ func (a *action[M, REQ, RSP]) createFlow(ctx context.Context, newServiceContext 
 		return failDatabase(ctx, log, err)
 	}
 	// 3.Perform business logic processing after create resource
-	if err := a.traceServiceHook(ctx, consts.PHASE_CREATE_AFTER, svc, func(spanCtx context.Context) error {
-		return svc.CreateAfter(newServiceContext(spanCtx, consts.PHASE_CREATE_AFTER), req)
+	if err := a.traceServiceHook(ctx, consts.CreateAfter, svc, func(spanCtx context.Context) error {
+		return svc.CreateAfter(newServiceContext(spanCtx, consts.CreateAfter), req)
 	}); err != nil {
 		return failService(ctx, log, err)
 	}

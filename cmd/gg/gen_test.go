@@ -88,8 +88,8 @@ import (
 )
 
 func init() {
-	service.Register[*item.Creator](consts.PHASE_CREATE, "/api/sample/items")
-	service.Register[*sample_service.Creator](consts.PHASE_CREATE, "/api/sample/services")
+	service.Register[*item.Creator](consts.Create, "/api/sample/items")
+	service.Register[*sample_service.Creator](consts.Create, "/api/sample/services")
 }
 `,
 			},
@@ -171,9 +171,9 @@ import (
 )
 
 func init() {
-	service.Register[*account_recorditem.Creator](consts.PHASE_CREATE, "/api/account/record-items")
-	service.Register[*item.Creator](consts.PHASE_CREATE, "/api/sample/items")
-	service.Register[*sample_record_item.Creator](consts.PHASE_CREATE, "/api/sample/record-items")
+	service.Register[*account_recorditem.Creator](consts.Create, "/api/account/record-items")
+	service.Register[*item.Creator](consts.Create, "/api/sample/items")
+	service.Register[*sample_record_item.Creator](consts.Create, "/api/sample/record-items")
 }
 `,
 			},

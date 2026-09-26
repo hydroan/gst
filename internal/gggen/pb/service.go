@@ -69,13 +69,13 @@ func (g *generator) declareService(m *modelinfo.Model) {
 	routes := make(map[string]string)
 	served := 0
 	m.Design.Range(func(route string, action *dsl.Action) {
-		if dsl.HTTPOnlyAction(action.Phase.MethodName()) {
+		if dsl.HTTPOnlyAction(action.Phase.Name()) {
 			return
 		}
 		served++
 		name := rpcName(m, route, action)
 		if previous, taken := routes[name]; taken {
-			g.project.Report(s, "the %s actions on routes %s and %s both become rpc %s; name one of them with Filename()", action.Phase.MethodName(), previous, route, name)
+			g.project.Report(s, "the %s actions on routes %s and %s both become rpc %s; name one of them with Filename()", action.Phase.Name(), previous, route, name)
 			return
 		}
 		routes[name] = route
@@ -85,9 +85,9 @@ func (g *generator) declareService(m *modelinfo.Model) {
 		}
 		// A Stream action is served over gRPC alone: its route names it and
 		// tells it from the other actions, but is no path a request reaches.
-		comment := name + " is the " + action.Phase.MethodName() + " action of " + m.ModelName + " on " + consts.APIPath(route) + "."
-		if dsl.GRPCOnlyAction(action.Phase.MethodName()) {
-			comment = name + " is the " + action.Phase.MethodName() + " action of " + m.ModelName + " declared on " + route + ", served over gRPC alone."
+		comment := name + " is the " + action.Phase.Name() + " action of " + m.ModelName + " on " + consts.APIPath(route) + "."
+		if dsl.GRPCOnlyAction(action.Phase.Name()) {
+			comment = name + " is the " + action.Phase.Name() + " action of " + m.ModelName + " declared on " + route + ", served over gRPC alone."
 		}
 		file.comment([]int32{fileServicesTag, int32Index(len(file.services)), serviceMethodsTag, int32Index(len(service.Method))}, comment)
 		method := &descriptorpb.MethodDescriptorProto{
@@ -154,9 +154,9 @@ func (g *generator) rpcMessages(m *modelinfo.Model, scope *types.Scope, model *m
 	var request, response *descriptorpb.DescriptorProto
 	var requestFields, responseFields []string
 	self := "*" + m.ModelName
-	if action.Payload == self && action.Result == self && action.Phase != consts.PHASE_STREAM {
+	if action.Payload == self && action.Result == self && action.Phase != consts.Stream {
 		if model == nil {
-			g.project.Report(s, "the %s action of the virtual model %s has no message to carry; declare Payload and Result", action.Phase.MethodName(), m.ModelName)
+			g.project.Report(s, "the %s action of the virtual model %s has no message to carry; declare Payload and Result", action.Phase.Name(), m.ModelName)
 			return nil, false
 		}
 		r.standard, r.message = true, model
@@ -267,7 +267,7 @@ func (r *rpc) streaming() bool {
 //	  uint32 depth = 2;
 //	}
 func (g *generator) customRequest(scope *types.Scope, file *protoFile, action *dsl.Action, s jsonshape.Site) (*descriptorpb.DescriptorProto, []string, *message, bool) {
-	if action.Phase == consts.PHASE_LIST || action.Phase == consts.PHASE_GET {
+	if action.Phase == consts.List || action.Phase == consts.Get {
 		fields, comments, nested := queryFields(action.Phase)
 		request := newMessage(fields...)
 		request.NestedType = nested
@@ -312,13 +312,13 @@ func (g *generator) customResponse(scope *types.Scope, file *protoFile, action *
 func (g *generator) typeMessage(scope *types.Scope, file *protoFile, action *dsl.Action, typeName string, s jsonshape.Site) (*message, bool) {
 	obj, ok := scope.Lookup(strings.TrimPrefix(typeName, "*")).(*types.TypeName)
 	if !ok {
-		g.project.Report(s, "the %s action declares the type %s, which the model's package does not declare", action.Phase.MethodName(), typeName)
+		g.project.Report(s, "the %s action declares the type %s, which the model's package does not declare", action.Phase.Name(), typeName)
 		return nil, false
 	}
 	if obj.IsAlias() {
 		named, isNamed := types.Unalias(obj.Type()).(*types.Named)
 		if !isNamed {
-			g.project.Report(s, "the %s action declares %s, an alias of %s, which is not a named type; declare a struct type", action.Phase.MethodName(), typeName, types.Unalias(obj.Type()))
+			g.project.Report(s, "the %s action declares %s, an alias of %s, which is not a named type; declare a struct type", action.Phase.Name(), typeName, types.Unalias(obj.Type()))
 			return nil, false
 		}
 		obj = named.Obj()
@@ -371,44 +371,44 @@ func (g *generator) typeMessage(scope *types.Scope, file *protoFile, action *dsl
 func standardMessages(m *modelinfo.Model, model *message, file *protoFile, action *dsl.Action) (request *descriptorpb.DescriptorProto, requestFields []string, response *descriptorpb.DescriptorProto, responseFields []string) {
 	x := modelFieldName(m)
 	switch action.Phase {
-	case consts.PHASE_CREATE:
+	case consts.Create:
 		request = newMessage(modelField(x, 0, model))
 		requestFields = append(requestFields, "the "+m.ModelName+" to create")
 		response = newMessage(modelField(x, 0, model))
 		responseFields = append(responseFields, "the "+m.ModelName+" created")
-	case consts.PHASE_GET:
+	case consts.Get:
 		fields, comments, _ := queryFields(action.Phase)
 		request = newMessage(fields...)
 		requestFields = append(requestFields, comments...)
 		response = newMessage(modelField(x, 0, model))
 		responseFields = append(responseFields, "the "+m.ModelName+" found")
-	case consts.PHASE_UPDATE:
+	case consts.Update:
 		request = newMessage(modelField(x, 0, model))
 		requestFields = append(requestFields, "the replacement")
 		response = newMessage(modelField(x, 0, model))
 		responseFields = append(responseFields, "the "+m.ModelName+" as stored")
-	case consts.PHASE_PATCH:
+	case consts.Patch:
 		file.importOf(fieldMaskProto)
 		request = newMessage(modelField(x, 0, model), messageField("update_mask", 0, wellKnownFieldMask))
 		requestFields = append(requestFields, "the values to apply", "the fields of "+x+" to apply, named as the message names them")
 		response = newMessage(modelField(x, 0, model))
 		responseFields = append(responseFields, "the "+m.ModelName+" as stored")
-	case consts.PHASE_DELETE:
+	case consts.Delete:
 		request = newMessage()
 		response = newMessage()
-	case consts.PHASE_LIST:
+	case consts.List:
 		fields, comments, nested := queryFields(action.Phase)
 		request = newMessage(fields...)
 		request.NestedType = nested
 		requestFields = append(requestFields, comments...)
 		response = newMessage(repeatedMessageField("items", model.fullName()), scalarField("total", 0, descriptorpb.FieldDescriptorProto_TYPE_INT64))
 		responseFields = append(responseFields, "the "+m.ModelName+" records of the page", "the number of records the filters match, 0 under cursor pagination")
-	case consts.PHASE_CREATE_MANY, consts.PHASE_UPDATE_MANY:
+	case consts.CreateMany, consts.UpdateMany:
 		request = newMessage(repeatedMessageField("items", model.fullName()))
 		requestFields = append(requestFields, "the "+m.ModelName+" records to write")
 		response = newMessage(repeatedMessageField("items", model.fullName()))
 		responseFields = append(responseFields, "the "+m.ModelName+" records as stored")
-	case consts.PHASE_PATCH_MANY:
+	case consts.PatchMany:
 		file.importOf(fieldMaskProto)
 		item := newMessage(modelField(x, 1, model), messageField("update_mask", 2, wellKnownFieldMask))
 		item.Name = new("Item")
@@ -417,7 +417,7 @@ func standardMessages(m *modelinfo.Model, model *message, file *protoFile, actio
 		requestFields = append(requestFields, "the patches, each naming the "+m.ModelName+" it applies to by its id")
 		response = newMessage(repeatedMessageField("items", model.fullName()))
 		responseFields = append(responseFields, "the "+m.ModelName+" records as stored")
-	case consts.PHASE_DELETE_MANY:
+	case consts.DeleteMany:
 		request = newMessage(repeatedStringField("ids", 0))
 		requestFields = append(requestFields, "the ids of the "+m.ModelName+" records to delete")
 		response = newMessage()
@@ -481,9 +481,9 @@ func queryFields(phase consts.Phase) (fields []*descriptorpb.FieldDescriptorProt
 		"the depth of the expansion, as the _depth query parameter",
 	}
 	switch phase {
-	case consts.PHASE_GET:
+	case consts.Get:
 		return expansion, expansionComments, nil
-	case consts.PHASE_LIST:
+	case consts.List:
 		filter := newMessage(stringField("field", 1), stringField("op", 2), repeatedStringField("values", 3))
 		filter.Name = new("Filter")
 		fields = append([]*descriptorpb.FieldDescriptorProto{

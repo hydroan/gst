@@ -29,7 +29,7 @@ import (
 // When REQ or RSP differs from M, the handler is the phase service's (see
 // serviceHandler): its Delete method runs on the bound payload.
 func DeleteHandler[M types.Model, REQ types.Request, RSP types.Response](cfg ...*types.ControllerConfig[M]) gin.HandlerFunc {
-	a := newAction[M, REQ, RSP](routeFromConfig(cfg...), consts.PHASE_DELETE, consts.PHASE_DELETE_BEFORE, consts.PHASE_DELETE_AFTER)
+	a := newAction[M, REQ, RSP](routeFromConfig(cfg...), consts.Delete, consts.DeleteBefore, consts.DeleteAfter)
 	if !a.typesEqual {
 		return a.serviceHandler()
 	}
@@ -40,7 +40,7 @@ func DeleteHandler[M types.Model, REQ types.Request, RSP types.Response](cfg ...
 		defer span.End()
 
 		reqMeta := requestctx.FromGin(c)
-		log := logger.Controller.WithContext(c.Request.Context(), consts.PHASE_DELETE)
+		log := logger.Controller.WithContext(c.Request.Context(), consts.Delete)
 
 		// The resource id comes from the configured route parameter only.
 		var id string
@@ -68,7 +68,7 @@ func DeleteHandler[M types.Model, REQ types.Request, RSP types.Response](cfg ...
 // record by, it runs the delete flow (see deleteFlow) and answers nothing,
 // or the status the failure maps to (see call).
 func DeleteCall[M types.Model](route string) func(ctx context.Context, params map[string]string, id string) error {
-	a := newAction[M, M, M](route, consts.PHASE_DELETE, consts.PHASE_DELETE_BEFORE, consts.PHASE_DELETE_AFTER)
+	a := newAction[M, M, M](route, consts.Delete, consts.DeleteBefore, consts.DeleteAfter)
 	return func(ctx context.Context, params map[string]string, id string) error {
 		c := a.beginCall(ctx, params, nil)
 		defer c.end()
@@ -88,7 +88,7 @@ func DeleteCall[M types.Model](route string) func(ctx context.Context, params ma
 // model rejects answers CodeNotFound. Whether the row is purged is the
 // model's decision (its Purge method), never the request's.
 func (a *action[M, REQ, RSP]) deleteFlow(ctx context.Context, newServiceContext serviceContextFunc, id string) error {
-	log := logger.Controller.WithContext(ctx, consts.PHASE_DELETE)
+	log := logger.Controller.WithContext(ctx, consts.Delete)
 	svc := a.service()
 
 	// 'm' is a fresh model instance, such as: &model.User{ID: myid, Name: myname}.
@@ -101,8 +101,8 @@ func (a *action[M, REQ, RSP]) deleteFlow(ctx context.Context, newServiceContext 
 	}
 
 	// 1.Perform business logic processing before delete resource.
-	if err := a.traceServiceHook(ctx, consts.PHASE_DELETE_BEFORE, svc, func(spanCtx context.Context) error {
-		return svc.DeleteBefore(newServiceContext(spanCtx, consts.PHASE_DELETE_BEFORE), m)
+	if err := a.traceServiceHook(ctx, consts.DeleteBefore, svc, func(spanCtx context.Context) error {
+		return svc.DeleteBefore(newServiceContext(spanCtx, consts.DeleteBefore), m)
 	}); err != nil {
 		return failService(ctx, log, err)
 	}
@@ -120,8 +120,8 @@ func (a *action[M, REQ, RSP]) deleteFlow(ctx context.Context, newServiceContext 
 		return failDatabase(ctx, log, err)
 	}
 	// 3.Perform business logic processing after delete resource.
-	if err := a.traceServiceHook(ctx, consts.PHASE_DELETE_AFTER, svc, func(spanCtx context.Context) error {
-		return svc.DeleteAfter(newServiceContext(spanCtx, consts.PHASE_DELETE_AFTER), m)
+	if err := a.traceServiceHook(ctx, consts.DeleteAfter, svc, func(spanCtx context.Context) error {
+		return svc.DeleteAfter(newServiceContext(spanCtx, consts.DeleteAfter), m)
 	}); err != nil {
 		return failService(ctx, log, err)
 	}

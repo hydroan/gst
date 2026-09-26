@@ -59,50 +59,50 @@ func (TraceProbe) Indexes() []model.Index {
 }
 
 func (t *TraceProbe) CreateBefore(ctx context.Context) error {
-	return t.traceModelHook(ctx, consts.PHASE_CREATE_BEFORE)
+	return t.traceModelHook(ctx, consts.CreateBefore)
 }
 
 func (t *TraceProbe) CreateAfter(ctx context.Context) error {
-	return t.traceModelHook(ctx, consts.PHASE_CREATE_AFTER)
+	return t.traceModelHook(ctx, consts.CreateAfter)
 }
 
 func (t *TraceProbe) DeleteBefore(ctx context.Context) error {
-	return t.traceModelHook(ctx, consts.PHASE_DELETE_BEFORE)
+	return t.traceModelHook(ctx, consts.DeleteBefore)
 }
 
 func (t *TraceProbe) DeleteAfter(ctx context.Context) error {
-	return t.traceModelHook(ctx, consts.PHASE_DELETE_AFTER)
+	return t.traceModelHook(ctx, consts.DeleteAfter)
 }
 
 func (t *TraceProbe) UpdateBefore(ctx context.Context) error {
-	return t.traceModelHook(ctx, consts.PHASE_UPDATE_BEFORE)
+	return t.traceModelHook(ctx, consts.UpdateBefore)
 }
 
 func (t *TraceProbe) UpdateAfter(ctx context.Context) error {
-	return t.traceModelHook(ctx, consts.PHASE_UPDATE_AFTER)
+	return t.traceModelHook(ctx, consts.UpdateAfter)
 }
 
 func (t *TraceProbe) ListBefore(ctx context.Context) error {
-	return t.traceModelHook(ctx, consts.PHASE_LIST_BEFORE)
+	return t.traceModelHook(ctx, consts.ListBefore)
 }
 
 func (t *TraceProbe) ListAfter(ctx context.Context) error {
-	return t.traceModelHook(ctx, consts.PHASE_LIST_AFTER)
+	return t.traceModelHook(ctx, consts.ListAfter)
 }
 
 func (t *TraceProbe) GetBefore(ctx context.Context) error {
-	return t.traceModelHook(ctx, consts.PHASE_GET_BEFORE)
+	return t.traceModelHook(ctx, consts.GetBefore)
 }
 
 func (t *TraceProbe) GetAfter(ctx context.Context) error {
-	return t.traceModelHook(ctx, consts.PHASE_GET_AFTER)
+	return t.traceModelHook(ctx, consts.GetAfter)
 }
 
 func (t *TraceProbe) traceModelHook(ctx context.Context, phase consts.Phase) error {
 	var total int
 	err := database.Database[*TraceProbe](ctx).Count(&total)
 	if t != nil {
-		t.Hook = phase.MethodName()
+		t.Hook = phase.Name()
 		t.HookCount = total
 	}
 
@@ -121,7 +121,7 @@ func (t *TraceProbe) traceModelHook(ctx context.Context, phase consts.Phase) err
 func traceProbeLogFields(t *TraceProbe, phase consts.Phase, total int) []zap.Field {
 	fields := []zap.Field{
 		zap.String("component", "model_hook"),
-		zap.String("hook", phase.MethodName()),
+		zap.String("hook", phase.Name()),
 		zap.Int("total", total),
 	}
 	if t != nil {

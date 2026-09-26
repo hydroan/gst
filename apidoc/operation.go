@@ -17,7 +17,7 @@ type Operation struct {
 	// Path is the route path, eg. "/api/groups/{id}/disable".
 	Path string
 	// Verb is the framework action verb, eg. consts.Create.
-	Verb consts.HTTPVerb
+	Verb consts.Phase
 	// CustomTypes reports whether the operation declares its own request and
 	// response types instead of reusing the model (custom action routes do,
 	// default CRUD routes do not).
@@ -166,7 +166,7 @@ func isParamSegment(segment string) bool {
 
 // verbDisplay renders the framework verb as a summary token, eg. "Create",
 // "Batch Create" for the *_many verbs, or "Stream" for the SSE verb.
-func verbDisplay(verb consts.HTTPVerb) string {
+func verbDisplay(verb consts.Phase) string {
 	if verb == consts.SSE {
 		return "Stream"
 	}

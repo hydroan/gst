@@ -71,8 +71,8 @@ func (s *handlerStopService) Create(*types.ServiceContext, *handlerRouteReq) (*h
 func TestCreateHandlerDispatchesActionServiceByRoute(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
-	registerTestService[*handlerRouteModel, *handlerRouteReq, *handlerRouteRsp](consts.PHASE_CREATE, "samples/:id/start", &handlerStartService{})
-	registerTestService[*handlerRouteModel, *handlerRouteReq, *handlerRouteRsp](consts.PHASE_CREATE, "samples/:id/stop", &handlerStopService{})
+	registerTestService[*handlerRouteModel, *handlerRouteReq, *handlerRouteRsp](consts.Create, "samples/:id/start", &handlerStartService{})
+	registerTestService[*handlerRouteModel, *handlerRouteReq, *handlerRouteRsp](consts.Create, "samples/:id/stop", &handlerStopService{})
 
 	engine := gin.New()
 	engine.POST("/samples/:id/start", CreateHandler[*handlerRouteModel, *handlerRouteReq, *handlerRouteRsp](&types.ControllerConfig[*handlerRouteModel]{Route: "samples/:id/start"}))
@@ -109,13 +109,13 @@ func (*handlerListBeforeService) ListBefore(*types.ServiceContext, *[]*handlerRo
 func TestTraceServiceHookSpansOnlyOverriddenHooks(t *testing.T) {
 	oteltest.Enable(t)
 	recorder := oteltest.Record(t)
-	a := newAction[*handlerRouteModel, *handlerRouteModel, *handlerRouteModel]("samples", consts.PHASE_LIST, consts.PHASE_LIST_BEFORE, consts.PHASE_LIST_AFTER)
+	a := newAction[*handlerRouteModel, *handlerRouteModel, *handlerRouteModel]("samples", consts.List, consts.ListBefore, consts.ListAfter)
 
 	t.Run("the_default_service_exports_no_hook_span", func(t *testing.T) {
 		svc := serviceregistry.Resolve[*handlerRouteModel, *handlerRouteModel, *handlerRouteModel]("samples/unregistered")
 		data := make([]*handlerRouteModel, 0)
-		require.NoError(t, a.traceServiceHook(context.Background(), consts.PHASE_LIST_BEFORE, svc, func(ctx context.Context) error {
-			return svc.ListBefore(types.NewServiceContext(nil, ctx, consts.PHASE_LIST_BEFORE), &data)
+		require.NoError(t, a.traceServiceHook(context.Background(), consts.ListBefore, svc, func(ctx context.Context) error {
+			return svc.ListBefore(types.NewServiceContext(nil, ctx, consts.ListBefore), &data)
 		}))
 		require.NotContains(t, oteltest.EndedNames(recorder), "service.HandlerRouteModel.ListBefore")
 	})
@@ -123,11 +123,11 @@ func TestTraceServiceHookSpansOnlyOverriddenHooks(t *testing.T) {
 	t.Run("an_overridden_hook_gets_a_span_and_its_no-op_partner_does_not", func(t *testing.T) {
 		svc := &handlerListBeforeService{}
 		data := make([]*handlerRouteModel, 0)
-		require.NoError(t, a.traceServiceHook(context.Background(), consts.PHASE_LIST_BEFORE, svc, func(ctx context.Context) error {
-			return svc.ListBefore(types.NewServiceContext(nil, ctx, consts.PHASE_LIST_BEFORE), &data)
+		require.NoError(t, a.traceServiceHook(context.Background(), consts.ListBefore, svc, func(ctx context.Context) error {
+			return svc.ListBefore(types.NewServiceContext(nil, ctx, consts.ListBefore), &data)
 		}))
-		require.NoError(t, a.traceServiceHook(context.Background(), consts.PHASE_LIST_AFTER, svc, func(ctx context.Context) error {
-			return svc.ListAfter(types.NewServiceContext(nil, ctx, consts.PHASE_LIST_AFTER), &data)
+		require.NoError(t, a.traceServiceHook(context.Background(), consts.ListAfter, svc, func(ctx context.Context) error {
+			return svc.ListAfter(types.NewServiceContext(nil, ctx, consts.ListAfter), &data)
 		}))
 		names := oteltest.EndedNames(recorder)
 		require.Contains(t, names, "service.HandlerRouteModel.ListBefore")

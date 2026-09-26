@@ -16,9 +16,9 @@
 //	module.Use[*User, *UserReq, *UserRsp](
 //	    &UserModule{},
 //	    module.CRUD(
-//	        consts.PHASE_CREATE,
-//	        consts.PHASE_LIST,
-//	        consts.PHASE_GET,
+//	        consts.Create,
+//	        consts.List,
+//	        consts.Get,
 //	    ),
 //	)
 //
@@ -156,7 +156,7 @@ func Use[M types.Model, REQ types.Request, RSP types.Response](mod types.Module[
 					registerCRUDRouter(mod, route, param, p)
 				case useRouteModeExact:
 					serviceregistry.Register[M, REQ, RSP](p, route, mod.Service())
-					registerRouter(mod, route, nil, p.ToHTTPVerb())
+					registerRouter(mod, route, nil, p)
 				}
 			}
 		}
@@ -198,9 +198,9 @@ func registersModel(options []UseOption) bool {
 // from this route, so they must share this single mapping.
 func crudRoute(route, param string, phase consts.Phase) string {
 	switch phase {
-	case consts.PHASE_DELETE, consts.PHASE_UPDATE, consts.PHASE_PATCH, consts.PHASE_GET:
+	case consts.Delete, consts.Update, consts.Patch, consts.Get:
 		return fmt.Sprintf("%s/:%s", route, param)
-	case consts.PHASE_CREATE_MANY, consts.PHASE_DELETE_MANY, consts.PHASE_UPDATE_MANY, consts.PHASE_PATCH_MANY:
+	case consts.CreateMany, consts.DeleteMany, consts.UpdateMany, consts.PatchMany:
 		return route + "/batch"
 	default:
 		return route
@@ -210,32 +210,32 @@ func crudRoute(route, param string, phase consts.Phase) string {
 func registerCRUDRouter[M types.Model, REQ types.Request, RSP types.Response](mod types.Module[M, REQ, RSP], route, param string, phase consts.Phase) {
 	target := crudRoute(route, param, phase)
 	switch phase {
-	case consts.PHASE_CREATE:
+	case consts.Create:
 		registerRouter(mod, target, nil, consts.Create)
-	case consts.PHASE_DELETE:
+	case consts.Delete:
 		registerRouter(mod, target, &types.ControllerConfig[M]{ParamName: param}, consts.Delete)
-	case consts.PHASE_UPDATE:
+	case consts.Update:
 		registerRouter(mod, target, &types.ControllerConfig[M]{ParamName: param}, consts.Update)
-	case consts.PHASE_PATCH:
+	case consts.Patch:
 		registerRouter(mod, target, &types.ControllerConfig[M]{ParamName: param}, consts.Patch)
-	case consts.PHASE_LIST:
+	case consts.List:
 		registerRouter(mod, target, nil, consts.List)
-	case consts.PHASE_GET:
+	case consts.Get:
 		registerRouter(mod, target, &types.ControllerConfig[M]{ParamName: param}, consts.Get)
-	case consts.PHASE_CREATE_MANY:
+	case consts.CreateMany:
 		registerRouter(mod, target, nil, consts.CreateMany)
-	case consts.PHASE_DELETE_MANY:
+	case consts.DeleteMany:
 		registerRouter(mod, target, nil, consts.DeleteMany)
-	case consts.PHASE_UPDATE_MANY:
+	case consts.UpdateMany:
 		registerRouter(mod, target, nil, consts.UpdateMany)
-	case consts.PHASE_PATCH_MANY:
+	case consts.PatchMany:
 		registerRouter(mod, target, nil, consts.PatchMany)
 	}
 }
 
 // registerRouter registers an HTTP route with the appropriate router based on mod.Pub().
 // If mod.Pub() returns true, registers with public router; otherwise with authenticated router.
-func registerRouter[M types.Model, REQ types.Request, RSP types.Response](mod types.Module[M, REQ, RSP], route string, cfg *types.ControllerConfig[M], verb consts.HTTPVerb) {
+func registerRouter[M types.Model, REQ types.Request, RSP types.Response](mod types.Module[M, REQ, RSP], route string, cfg *types.ControllerConfig[M], verb consts.Phase) {
 	if mod.Pub() {
 		// Register with public router - no authentication required
 		router.Register[M, REQ, RSP](router.Pub(), route, cfg, verb)

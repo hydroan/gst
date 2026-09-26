@@ -53,8 +53,8 @@ func Register() {
 		*LoginLog](
 		&LoginLogModule{},
 		module.CRUD(
-			consts.PHASE_LIST,
-			consts.PHASE_GET,
+			consts.List,
+			consts.Get,
 		),
 	)
 
@@ -64,8 +64,8 @@ func Register() {
 		*OperationLog](
 		&OperationLogModule{},
 		module.CRUD(
-			consts.PHASE_LIST,
-			consts.PHASE_GET,
+			consts.List,
+			consts.Get,
 		),
 	)
 

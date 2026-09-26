@@ -29,7 +29,7 @@ import (
 // serviceHandler): its List method runs on a zero-value REQ, the GET request
 // carrying no body; the service reads ServiceContext.Query().
 func ListHandler[M types.Model, REQ types.Request, RSP types.Response](cfg ...*types.ControllerConfig[M]) gin.HandlerFunc {
-	a := newAction[M, REQ, RSP](routeFromConfig(cfg...), consts.PHASE_LIST, consts.PHASE_LIST_BEFORE, consts.PHASE_LIST_AFTER)
+	a := newAction[M, REQ, RSP](routeFromConfig(cfg...), consts.List, consts.ListBefore, consts.ListAfter)
 	if !a.typesEqual {
 		return a.serviceHandler()
 	}
@@ -58,7 +58,7 @@ func ListHandler[M types.Model, REQ types.Request, RSP types.Response](cfg ...*t
 // Query) and answers with the items and the total, or with the status the
 // failure maps to (see call).
 func ListCall[M types.Model](route string) func(ctx context.Context, params map[string]string, query Query) ([]M, int, error) {
-	a := newAction[M, M, M](route, consts.PHASE_LIST, consts.PHASE_LIST_BEFORE, consts.PHASE_LIST_AFTER)
+	a := newAction[M, M, M](route, consts.List, consts.ListBefore, consts.ListAfter)
 	return func(ctx context.Context, params map[string]string, query Query) ([]M, int, error) {
 		c, err := a.beginQueryCall(ctx, params, query)
 		defer c.end()
@@ -83,7 +83,7 @@ func ListCall[M types.Model](route string) func(ctx context.Context, params map[
 // read, and records the operation. The total counts the rows the query
 // matches; under cursor pagination, which provides none, it is 0.
 func (a *action[M, REQ, RSP]) listFlow(ctx context.Context, newServiceContext serviceContextFunc) ([]M, int, error) {
-	log := logger.Controller.WithContext(ctx, consts.PHASE_LIST)
+	log := logger.Controller.WithContext(ctx, consts.List)
 	svc := a.service()
 
 	// The request's memoized query parse, shared by every parser below; the
@@ -120,8 +120,8 @@ func (a *action[M, REQ, RSP]) listFlow(ctx context.Context, newServiceContext se
 	expands := parseExpandQuery(query, m)
 
 	// 1.Perform business logic processing before list resources.
-	if err = a.traceServiceHook(ctx, consts.PHASE_LIST_BEFORE, svc, func(spanCtx context.Context) error {
-		return svc.ListBefore(newServiceContext(spanCtx, consts.PHASE_LIST_BEFORE), &data)
+	if err = a.traceServiceHook(ctx, consts.ListBefore, svc, func(spanCtx context.Context) error {
+		return svc.ListBefore(newServiceContext(spanCtx, consts.ListBefore), &data)
 	}); err != nil {
 		return nil, 0, failService(ctx, log, err)
 	}
@@ -133,7 +133,7 @@ func (a *action[M, REQ, RSP]) listFlow(ctx context.Context, newServiceContext se
 		PresentFields: present,
 		Filters:       filters,
 	}
-	if m, queryOpts, err = svc.Filter(newServiceContext(ctx, consts.PHASE_LIST), m, queryOpts); err != nil {
+	if m, queryOpts, err = svc.Filter(newServiceContext(ctx, consts.List), m, queryOpts); err != nil {
 		return nil, 0, failService(ctx, log, err)
 	}
 	// 3.List resources from database.
@@ -147,8 +147,8 @@ func (a *action[M, REQ, RSP]) listFlow(ctx context.Context, newServiceContext se
 		return nil, 0, failDatabase(ctx, log, err)
 	}
 	// 4.Perform business logic processing after list resources.
-	if err = a.traceServiceHook(ctx, consts.PHASE_LIST_AFTER, svc, func(spanCtx context.Context) error {
-		return svc.ListAfter(newServiceContext(spanCtx, consts.PHASE_LIST_AFTER), &data)
+	if err = a.traceServiceHook(ctx, consts.ListAfter, svc, func(spanCtx context.Context) error {
+		return svc.ListAfter(newServiceContext(spanCtx, consts.ListAfter), &data)
 	}); err != nil {
 		return nil, 0, failService(ctx, log, err)
 	}

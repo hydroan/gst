@@ -71,9 +71,9 @@ func TestServiceContextQueryAccessorReturnsCopy(t *testing.T) {
 }
 
 func TestNewServiceContextStoresPhase(t *testing.T) {
-	serviceCtx := types.NewServiceContext(nil, nil, consts.PHASE_LIST)
+	serviceCtx := types.NewServiceContext(nil, nil, consts.List)
 
-	require.Equal(t, consts.PHASE_LIST, serviceCtx.Phase())
+	require.Equal(t, consts.List, serviceCtx.Phase())
 }
 
 func TestServiceContextRequestAccessors(t *testing.T) {
@@ -126,9 +126,9 @@ func TestServiceContextWithoutGinReadsMetadataFromContext(t *testing.T) {
 		RequiresAuth: true,
 	}))
 
-	serviceCtx := types.NewServiceContext(nil, ctx, consts.PHASE_GET)
+	serviceCtx := types.NewServiceContext(nil, ctx, consts.Get)
 
-	require.Equal(t, consts.PHASE_GET, serviceCtx.Phase())
+	require.Equal(t, consts.Get, serviceCtx.Phase())
 	require.Equal(t, "/api/users/:id", serviceCtx.Route())
 	require.Equal(t, "/api/users/42", serviceCtx.Path())
 	require.Equal(t, http.MethodGet, serviceCtx.Method())

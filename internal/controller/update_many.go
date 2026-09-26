@@ -27,7 +27,7 @@ import (
 // When REQ or RSP differs from M, the handler is the phase service's (see
 // serviceHandler): its UpdateMany method runs on the bound payload.
 func UpdateManyHandler[M types.Model, REQ types.Request, RSP types.Response](cfg ...*types.ControllerConfig[M]) gin.HandlerFunc {
-	a := newAction[M, REQ, RSP](routeFromConfig(cfg...), consts.PHASE_UPDATE_MANY, consts.PHASE_UPDATE_MANY_BEFORE, consts.PHASE_UPDATE_MANY_AFTER)
+	a := newAction[M, REQ, RSP](routeFromConfig(cfg...), consts.UpdateMany, consts.UpdateManyBefore, consts.UpdateManyAfter)
 	if !a.typesEqual {
 		return a.serviceHandler()
 	}
@@ -37,7 +37,7 @@ func UpdateManyHandler[M types.Model, REQ types.Request, RSP types.Response](cfg
 		_, span := a.startControllerSpan(c)
 		defer span.End()
 
-		log := logger.Controller.WithContext(c.Request.Context(), consts.PHASE_UPDATE_MANY)
+		log := logger.Controller.WithContext(c.Request.Context(), consts.UpdateMany)
 
 		var req batch[M]
 		if reqErr := bindJSONRequest(c, &req); reqErr != nil && !errors.Is(reqErr, io.EOF) {
@@ -64,7 +64,7 @@ func UpdateManyHandler[M types.Model, REQ types.Request, RSP types.Response](cfg
 // and answers with the items as stored, or with the status the failure maps
 // to (see call).
 func UpdateManyCall[M types.Model](route string) func(ctx context.Context, params map[string]string, items []M) ([]M, error) {
-	a := newAction[M, M, M](route, consts.PHASE_UPDATE_MANY, consts.PHASE_UPDATE_MANY_BEFORE, consts.PHASE_UPDATE_MANY_AFTER)
+	a := newAction[M, M, M](route, consts.UpdateMany, consts.UpdateManyBefore, consts.UpdateManyAfter)
 	return func(ctx context.Context, params map[string]string, items []M) ([]M, error) {
 		c := a.beginCall(ctx, params, nil)
 		defer c.end()
@@ -84,12 +84,12 @@ func UpdateManyCall[M types.Model](route string) func(ctx context.Context, param
 // batch update hooks around the write and records the operation. The items
 // are req's own, as the write and the hooks left them.
 func (a *action[M, REQ, RSP]) updateManyFlow(ctx context.Context, newServiceContext serviceContextFunc, req *batch[M]) error {
-	log := logger.Controller.WithContext(ctx, consts.PHASE_UPDATE_MANY)
+	log := logger.Controller.WithContext(ctx, consts.UpdateMany)
 	svc := a.service()
 
 	// 1.Perform business logic processing before batch update resource.
-	if err := a.traceServiceHook(ctx, consts.PHASE_UPDATE_MANY_BEFORE, svc, func(spanCtx context.Context) error {
-		return svc.UpdateManyBefore(newServiceContext(spanCtx, consts.PHASE_UPDATE_MANY_BEFORE), req.Items...)
+	if err := a.traceServiceHook(ctx, consts.UpdateManyBefore, svc, func(spanCtx context.Context) error {
+		return svc.UpdateManyBefore(newServiceContext(spanCtx, consts.UpdateManyBefore), req.Items...)
 	}); err != nil {
 		return failService(ctx, log, err)
 	}
@@ -102,8 +102,8 @@ func (a *action[M, REQ, RSP]) updateManyFlow(ctx context.Context, newServiceCont
 		return failDatabase(ctx, log, err)
 	}
 	// 3.Perform business logic processing after batch update resource.
-	if err := a.traceServiceHook(ctx, consts.PHASE_UPDATE_MANY_AFTER, svc, func(spanCtx context.Context) error {
-		return svc.UpdateManyAfter(newServiceContext(spanCtx, consts.PHASE_UPDATE_MANY_AFTER), req.Items...)
+	if err := a.traceServiceHook(ctx, consts.UpdateManyAfter, svc, func(spanCtx context.Context) error {
+		return svc.UpdateManyAfter(newServiceContext(spanCtx, consts.UpdateManyAfter), req.Items...)
 	}); err != nil {
 		return failService(ctx, log, err)
 	}

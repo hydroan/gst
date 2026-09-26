@@ -43,7 +43,7 @@ func TestApplyServiceFile(t *testing.T) {
 				Enabled: true,
 				Payload: "*UserReq",
 				Result:  "*UserRsp",
-				Phase:   consts.PHASE_CREATE,
+				Phase:   consts.Create,
 			},
 			servicePkgName: "service",
 			want: `package service
@@ -85,7 +85,7 @@ func (u *user) CreateAfter(ctx *gst.ServiceContext, user *model.User) error {
 				Enabled: true,
 				Payload: "*User",
 				Result:  "*User",
-				Phase:   consts.PHASE_CREATE,
+				Phase:   consts.Create,
 			},
 			servicePkgName: "service",
 			want: `package service
@@ -129,7 +129,7 @@ func (u *user) CreateAfter(ctx *gst.ServiceContext, user *model.User) error {
 				Enabled: true,
 				Payload: "UserReq",
 				Result:  "UserRsp",
-				Phase:   consts.PHASE_CREATE,
+				Phase:   consts.Create,
 			},
 			servicePkgName: "service",
 			want: `package service
@@ -187,7 +187,7 @@ func (u *user) Create(ctx *gst.ServiceContext, req *model.User) (rsp *model.User
 				Enabled: true,
 				Payload: "*User",
 				Result:  "*User",
-				Phase:   consts.PHASE_CREATE,
+				Phase:   consts.Create,
 			},
 			servicePkgName: "account",
 			want: `package account
@@ -247,7 +247,7 @@ func (c *Creator) CreateAfter(ctx *gst.ServiceContext, record *sample.Record) er
 				Payload:  "*Record",
 				Result:   "*Record",
 				Filename: "archive",
-				Phase:    consts.PHASE_CREATE,
+				Phase:    consts.Create,
 			},
 			servicePkgName: "record",
 			want: `package record
@@ -308,7 +308,7 @@ func (c *Creator) Create(ctx *gst.ServiceContext, req *sample.Record) (rsp *samp
 				Payload:  "*RecordReq",
 				Result:   "*RecordRsp",
 				Filename: "archive",
-				Phase:    consts.PHASE_CREATE,
+				Phase:    consts.Create,
 			},
 			servicePkgName: "record",
 			want: `package record
@@ -356,7 +356,7 @@ func (c *Creator) Create(ctx *gst.ServiceContext, req *sample.Record) (rsp *samp
 				Enabled: true,
 				Payload: "*Record",
 				Result:  "*Record",
-				Phase:   consts.PHASE_CREATE,
+				Phase:   consts.Create,
 			},
 			servicePkgName: "record",
 			want: `package record
@@ -405,7 +405,7 @@ func (a *Archive) Create(ctx *gst.ServiceContext, req *sample.Record) (rsp *samp
 				Payload:  "*Record",
 				Result:   "*Record",
 				Filename: "archive",
-				Phase:    consts.PHASE_CREATE,
+				Phase:    consts.Create,
 			},
 			servicePkgName: "record",
 			want: `package record
@@ -468,7 +468,7 @@ func (r *Archive) CreateAfter(ctx *gst.ServiceContext, record *sample.Record) er
 				Payload:  "*RecordReq",
 				Result:   "*RecordRsp",
 				Filename: "archive",
-				Phase:    consts.PHASE_CREATE,
+				Phase:    consts.Create,
 			},
 			servicePkgName: "record",
 			want: `package record
@@ -526,7 +526,7 @@ func (s *sampleItem) Create(ctx *gst.ServiceContext, req *model.SampleItem) (rsp
 				Enabled: true,
 				Payload: "*SampleItem",
 				Result:  "*SampleItem",
-				Phase:   consts.PHASE_CREATE,
+				Phase:   consts.Create,
 			},
 			servicePkgName: "sampleitem",
 			want: `package sampleitem
@@ -553,7 +553,7 @@ func (s *sampleItem) Create(ctx *gst.ServiceContext, req *model.SampleItem) (rsp
 			// (ctx *gst.ServiceContext, req *pkg.Req) (*pkg.X, error) shape as the real
 			// Patch action method, so it was mistaken for the action method and rewritten
 			// in place, corrupting its return type and breaking the build. applyServiceMethod4
-			// must only rewrite the function whose name matches action.Phase.MethodName().
+			// must only rewrite the function whose name matches action.Phase.Name().
 			name: "does_not_rewrite_non_action_function_with_same_shape",
 			code: `package samplerecord
 
@@ -580,7 +580,7 @@ func (r *Patcher) validate(ctx *gst.ServiceContext, req *group.SampleRecordPatch
 				Enabled: true,
 				Payload: "*SampleRecordPatchReq",
 				Result:  "*SampleRecordPatchRsp",
-				Phase:   consts.PHASE_PATCH,
+				Phase:   consts.Patch,
 			},
 			servicePkgName: "samplerecord",
 			want: `package samplerecord
@@ -660,7 +660,7 @@ func (g *Lister) List(ctx *gst.ServiceContext, req *group.GroupListReq) (rsp *gr
 				Service: true,
 				Payload: dsl.PayloadEmpty,
 				Result:  "*GroupListRsp",
-				Phase:   consts.PHASE_LIST,
+				Phase:   consts.List,
 			},
 			servicePkgName: "group",
 			wantContains: []string{
@@ -694,7 +694,7 @@ func (g *Lister) List(ctx *gst.ServiceContext, req *model.Empty) (rsp *group.Gro
 				Service: true,
 				Payload: "*Group",
 				Result:  "*Group",
-				Phase:   consts.PHASE_LIST,
+				Phase:   consts.List,
 			},
 			servicePkgName: "group",
 			wantContains: []string{
@@ -729,7 +729,7 @@ func (u *Getter) Get(ctx *gst.ServiceContext, req *model.UserGetReq) (rsp *model
 				Service: true,
 				Payload: dsl.PayloadEmpty,
 				Result:  "*UserGetRsp",
-				Phase:   consts.PHASE_GET,
+				Phase:   consts.Get,
 			},
 			servicePkgName: "user",
 			wantContains: []string{
@@ -763,7 +763,7 @@ func (g *Lister) List(ctx *gst.ServiceContext, req *model.Empty) (rsp *group.Gro
 				Service: true,
 				Payload: dsl.PayloadEmpty,
 				Result:  "*GroupListRsp",
-				Phase:   consts.PHASE_LIST,
+				Phase:   consts.List,
 			},
 			servicePkgName: "group",
 			wantContains: []string{
@@ -843,7 +843,7 @@ func (u *Creator) Create(ctx *gst.ServiceContext, req *identity.UserReq) (rsp *i
 				Enabled: true,
 				Payload: "*UserReq",
 				Result:  "*UserRsp",
-				Phase:   consts.PHASE_CREATE,
+				Phase:   consts.Create,
 			},
 			servicePkgName: "user",
 			modelInfo: &modelinfo.Model{
@@ -894,7 +894,7 @@ func (u *Creator) Create(ctx *gst.ServiceContext, req *auth.UserReq) (rsp *auth.
 				Enabled: true,
 				Payload: "*UserReq",
 				Result:  "*UserRsp",
-				Phase:   consts.PHASE_CREATE,
+				Phase:   consts.Create,
 			},
 			servicePkgName: "user",
 			modelInfo: &modelinfo.Model{
@@ -944,7 +944,7 @@ func (u *Creator) Create(ctx *gst.ServiceContext, req *oldpkg.UserReq) (rsp *old
 				Enabled: true,
 				Payload: "*UserReq",
 				Result:  "*UserRsp",
-				Phase:   consts.PHASE_CREATE,
+				Phase:   consts.Create,
 			},
 			servicePkgName: "user",
 			modelInfo: &modelinfo.Model{
@@ -996,7 +996,7 @@ func (r *Lister) List(ctx *gst.ServiceContext, req *archive.Record) (rsp *archiv
 				Enabled: true,
 				Payload: "*Record",
 				Result:  "*Record",
-				Phase:   consts.PHASE_LIST,
+				Phase:   consts.List,
 			},
 			servicePkgName: "record",
 			modelInfo: &modelinfo.Model{
@@ -1052,7 +1052,7 @@ func (p *Ping) Get(ctx *gst.ServiceContext, req *sample.Record) (rsp *sample.Pin
 				// action, so this case exercises only the stale model type
 				// sync and not the role name restoration.
 				Filename: "ping",
-				Phase:    consts.PHASE_GET,
+				Phase:    consts.Get,
 			},
 			servicePkgName: "sample",
 			modelInfo: &modelinfo.Model{
@@ -1104,7 +1104,7 @@ func (u *Creator) Create(ctx *gst.ServiceContext, req *model_service.UserReq) (r
 				Enabled: true,
 				Payload: "*UserReq",
 				Result:  "*UserRsp",
-				Phase:   consts.PHASE_CREATE,
+				Phase:   consts.Create,
 			},
 			servicePkgName: "user",
 			modelInfo: &modelinfo.Model{
@@ -1156,7 +1156,7 @@ func (u *Creator) Create(ctx *gst.ServiceContext, req *sample.UserReq) (rsp *sam
 				Enabled: true,
 				Payload: "*UserReq",
 				Result:  "*UserRsp",
-				Phase:   consts.PHASE_CREATE,
+				Phase:   consts.Create,
 			},
 			servicePkgName: "user",
 			modelInfo: &modelinfo.Model{
@@ -1206,7 +1206,7 @@ func (u *Creator) Create(ctx *gst.ServiceContext, req *model_service.UserReq) (r
 				Enabled: true,
 				Payload: "*UserReq",
 				Result:  "*UserRsp",
-				Phase:   consts.PHASE_CREATE,
+				Phase:   consts.Create,
 			},
 			servicePkgName: "user",
 			modelInfo: &modelinfo.Model{
@@ -1259,7 +1259,7 @@ func (u *Creator) Create(ctx *gst.ServiceContext, req *service.UserReq) (rsp *se
 				Enabled: true,
 				Payload: "*UserReq",
 				Result:  "*UserRsp",
-				Phase:   consts.PHASE_CREATE,
+				Phase:   consts.Create,
 			},
 			servicePkgName: "user",
 			modelInfo: &modelinfo.Model{
@@ -1308,7 +1308,7 @@ func (u *Creator) Create(ctx *gst.ServiceContext, req *service.UserReq) (rsp *se
 				Enabled: true,
 				Payload: "*UserReq",
 				Result:  "*UserRsp",
-				Phase:   consts.PHASE_CREATE,
+				Phase:   consts.Create,
 			},
 			servicePkgName: "user",
 			modelInfo: &modelinfo.Model{
@@ -1360,7 +1360,7 @@ func (i *Creator) Create(ctx *gst.ServiceContext, req *v2.Item) (rsp *v2.Item, e
 				Enabled: true,
 				Payload: "*Item",
 				Result:  "*Item",
-				Phase:   consts.PHASE_CREATE,
+				Phase:   consts.Create,
 			},
 			servicePkgName: "item",
 			modelInfo: &modelinfo.Model{
@@ -1416,7 +1416,7 @@ func (i *Creator) Create(ctx *gst.ServiceContext, req *v2.Item) (rsp *v2.Item, e
 				Enabled: true,
 				Payload: "*Item",
 				Result:  "*Item",
-				Phase:   consts.PHASE_CREATE,
+				Phase:   consts.Create,
 			},
 			servicePkgName: "item",
 			modelInfo: &modelinfo.Model{
@@ -1470,7 +1470,7 @@ func (i *Creator) Create(ctx *gst.ServiceContext, req *recorditem.Item) (rsp *re
 				Enabled: true,
 				Payload: "*Item",
 				Result:  "*Item",
-				Phase:   consts.PHASE_CREATE,
+				Phase:   consts.Create,
 			},
 			servicePkgName: "item",
 			modelInfo: &modelinfo.Model{
@@ -1523,7 +1523,7 @@ func (u *Creator) Create(ctx *gstfw.ServiceContext, req *gst.UserReq) (rsp *gst.
 				Enabled: true,
 				Payload: "*UserReq",
 				Result:  "*UserRsp",
-				Phase:   consts.PHASE_CREATE,
+				Phase:   consts.Create,
 			},
 			servicePkgName: "user",
 			modelInfo: &modelinfo.Model{
@@ -1590,7 +1590,7 @@ func TestApplyServiceFileWithModelSyncForcesCanonicalServiceStruct(t *testing.T)
 		Service: true,
 		Payload: "*User",
 		Result:  "*User",
-		Phase:   consts.PHASE_EXPORT,
+		Phase:   consts.Export,
 	}
 
 	tests := []struct {
@@ -1800,7 +1800,7 @@ func (c *Creator) Create(ctx *gst.ServiceContext, req *model.User) (rsp *model.U
 				Payload:  "*User",
 				Result:   "*User",
 				Filename: "archive",
-				Phase:    consts.PHASE_CREATE,
+				Phase:    consts.Create,
 			},
 			wantChanged: true,
 			wantContains: []string{

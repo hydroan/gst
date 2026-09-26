@@ -13,9 +13,9 @@ type Deleter struct {
 }
 
 func (t *Deleter) DeleteBefore(ctx *gst.ServiceContext, probe *model.TraceProbe) error {
-	return traceServiceHook(t.Logger, ctx, consts.PHASE_DELETE_BEFORE, probe, 0)
+	return traceServiceHook(t.Logger, ctx, consts.DeleteBefore, probe, 0)
 }
 
 func (t *Deleter) DeleteAfter(ctx *gst.ServiceContext, probe *model.TraceProbe) error {
-	return traceServiceHook(t.Logger, ctx, consts.PHASE_DELETE_AFTER, probe, 0)
+	return traceServiceHook(t.Logger, ctx, consts.DeleteAfter, probe, 0)
 }

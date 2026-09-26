@@ -32,7 +32,7 @@ import (
 // itself, streaming or sending a file.
 func (a *action[M, REQ, RSP]) serviceHandler() gin.HandlerFunc {
 	invoke := serviceMethod[M, REQ, RSP](a.phase)
-	binds := a.phase != consts.PHASE_LIST && a.phase != consts.PHASE_GET
+	binds := a.phase != consts.List && a.phase != consts.Get
 	return func(c *gin.Context) {
 		ctrlSpanCtx, span := a.startControllerSpan(c)
 		defer span.End()
@@ -43,7 +43,7 @@ func (a *action[M, REQ, RSP]) serviceHandler() gin.HandlerFunc {
 
 		// A Create sent as a multipart form carries a file, not JSON: the
 		// service reads the form itself.
-		form := a.phase == consts.PHASE_CREATE && strings.EqualFold(c.ContentType(), "multipart/form-data")
+		form := a.phase == consts.Create && strings.EqualFold(c.ContentType(), "multipart/form-data")
 		if binds && !form {
 			if reqErr := bindJSONRequest(c, &req); reqErr != nil && !errors.Is(reqErr, io.EOF) {
 				log.Errorz("bind request body failed", zap.Error(reqErr))
@@ -75,25 +75,25 @@ func (a *action[M, REQ, RSP]) serviceHandler() gin.HandlerFunc {
 // Export and SSE, and the hook phases — has neither, so it panics.
 func serviceMethod[M types.Model, REQ types.Request, RSP types.Response](phase consts.Phase) func(svc types.Service[M, REQ, RSP], sc *types.ServiceContext, req REQ) (RSP, error) {
 	switch phase {
-	case consts.PHASE_CREATE:
+	case consts.Create:
 		return types.Service[M, REQ, RSP].Create
-	case consts.PHASE_DELETE:
+	case consts.Delete:
 		return types.Service[M, REQ, RSP].Delete
-	case consts.PHASE_UPDATE:
+	case consts.Update:
 		return types.Service[M, REQ, RSP].Update
-	case consts.PHASE_PATCH:
+	case consts.Patch:
 		return types.Service[M, REQ, RSP].Patch
-	case consts.PHASE_LIST:
+	case consts.List:
 		return types.Service[M, REQ, RSP].List
-	case consts.PHASE_GET:
+	case consts.Get:
 		return types.Service[M, REQ, RSP].Get
-	case consts.PHASE_CREATE_MANY:
+	case consts.CreateMany:
 		return types.Service[M, REQ, RSP].CreateMany
-	case consts.PHASE_DELETE_MANY:
+	case consts.DeleteMany:
 		return types.Service[M, REQ, RSP].DeleteMany
-	case consts.PHASE_UPDATE_MANY:
+	case consts.UpdateMany:
 		return types.Service[M, REQ, RSP].UpdateMany
-	case consts.PHASE_PATCH_MANY:
+	case consts.PatchMany:
 		return types.Service[M, REQ, RSP].PatchMany
 	}
 	panic(fmt.Sprintf("controller: phase %q has no rpc; ServiceCall serves the actions of a model's gRPC service", phase))

@@ -48,7 +48,7 @@ type batch[M types.Model] struct {
 // When REQ or RSP differs from M, the handler is the phase service's (see
 // serviceHandler): its CreateMany method runs on the bound payload.
 func CreateManyHandler[M types.Model, REQ types.Request, RSP types.Response](cfg ...*types.ControllerConfig[M]) gin.HandlerFunc {
-	a := newAction[M, REQ, RSP](routeFromConfig(cfg...), consts.PHASE_CREATE_MANY, consts.PHASE_CREATE_MANY_BEFORE, consts.PHASE_CREATE_MANY_AFTER)
+	a := newAction[M, REQ, RSP](routeFromConfig(cfg...), consts.CreateMany, consts.CreateManyBefore, consts.CreateManyAfter)
 	if !a.typesEqual {
 		return a.serviceHandler()
 	}
@@ -58,7 +58,7 @@ func CreateManyHandler[M types.Model, REQ types.Request, RSP types.Response](cfg
 		_, span := a.startControllerSpan(c)
 		defer span.End()
 
-		log := logger.Controller.WithContext(c.Request.Context(), consts.PHASE_CREATE_MANY)
+		log := logger.Controller.WithContext(c.Request.Context(), consts.CreateMany)
 
 		var req batch[M]
 		if reqErr := bindJSONRequest(c, &req); reqErr != nil && !errors.Is(reqErr, io.EOF) {
@@ -85,7 +85,7 @@ func CreateManyHandler[M types.Model, REQ types.Request, RSP types.Response](cfg
 // and answers with the items created, or with the status the failure maps
 // to (see call).
 func CreateManyCall[M types.Model](route string) func(ctx context.Context, params map[string]string, items []M) ([]M, error) {
-	a := newAction[M, M, M](route, consts.PHASE_CREATE_MANY, consts.PHASE_CREATE_MANY_BEFORE, consts.PHASE_CREATE_MANY_AFTER)
+	a := newAction[M, M, M](route, consts.CreateMany, consts.CreateManyBefore, consts.CreateManyAfter)
 	return func(ctx context.Context, params map[string]string, items []M) ([]M, error) {
 		c := a.beginCall(ctx, params, nil)
 		defer c.end()
@@ -106,7 +106,7 @@ func CreateManyCall[M types.Model](route string) func(ctx context.Context, param
 // runs the batch create hooks around the write, and records the operation.
 // The items are req's own, filled by the write.
 func (a *action[M, REQ, RSP]) createManyFlow(ctx context.Context, newServiceContext serviceContextFunc, req *batch[M]) error {
-	log := logger.Controller.WithContext(ctx, consts.PHASE_CREATE_MANY)
+	log := logger.Controller.WithContext(ctx, consts.CreateMany)
 	svc := a.service()
 	val := a.newModel()
 	username := requestctx.FromContext(ctx).Username()
@@ -116,8 +116,8 @@ func (a *action[M, REQ, RSP]) createManyFlow(ctx context.Context, newServiceCont
 	}
 
 	// 1.Perform business logic processing before batch create resource.
-	if err := a.traceServiceHook(ctx, consts.PHASE_CREATE_MANY_BEFORE, svc, func(spanCtx context.Context) error {
-		return svc.CreateManyBefore(newServiceContext(spanCtx, consts.PHASE_CREATE_MANY_BEFORE), req.Items...)
+	if err := a.traceServiceHook(ctx, consts.CreateManyBefore, svc, func(spanCtx context.Context) error {
+		return svc.CreateManyBefore(newServiceContext(spanCtx, consts.CreateManyBefore), req.Items...)
 	}); err != nil {
 		return failService(ctx, log, err)
 	}
@@ -129,8 +129,8 @@ func (a *action[M, REQ, RSP]) createManyFlow(ctx context.Context, newServiceCont
 		return failDatabase(ctx, log, err)
 	}
 	// 3.Perform business logic processing after batch create resource
-	if err := a.traceServiceHook(ctx, consts.PHASE_CREATE_MANY_AFTER, svc, func(spanCtx context.Context) error {
-		return svc.CreateManyAfter(newServiceContext(spanCtx, consts.PHASE_CREATE_MANY_AFTER), req.Items...)
+	if err := a.traceServiceHook(ctx, consts.CreateManyAfter, svc, func(spanCtx context.Context) error {
+		return svc.CreateManyAfter(newServiceContext(spanCtx, consts.CreateManyAfter), req.Items...)
 	}); err != nil {
 		return failService(ctx, log, err)
 	}

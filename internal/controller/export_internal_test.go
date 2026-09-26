@@ -127,7 +127,7 @@ func TestExportHandlerVirtualModelSkipsListing(t *testing.T) {
 	const route = "test/export_virtual_samples/export"
 	svc := exportVirtualSampleSvc
 	svc.gotModels = 0
-	registerTestService[*exportVirtualSample, *exportVirtualSample, *exportVirtualSample](consts.PHASE_EXPORT, route, svc)
+	registerTestService[*exportVirtualSample, *exportVirtualSample, *exportVirtualSample](consts.Export, route, svc)
 
 	rec := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(rec)
@@ -181,7 +181,7 @@ func TestExportHandlerKeepsFormatParamFromModelBind(t *testing.T) {
 	const route = "test/export_format_samples/export"
 	svc := exportFormatSampleSvc
 	svc.filterReached = false
-	registerTestService[*exportFormatSample, *exportFormatSample, *exportFormatSample](consts.PHASE_EXPORT, route, svc)
+	registerTestService[*exportFormatSample, *exportFormatSample, *exportFormatSample](consts.Export, route, svc)
 
 	rec := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(rec)

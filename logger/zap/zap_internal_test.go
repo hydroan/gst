@@ -494,13 +494,13 @@ func TestWithContextAddsMetadataFields(t *testing.T) {
 	})
 	ctx := execctx.WithTraceID(requestctx.WithMetadata(context.Background(), meta), "trace-1")
 
-	log.WithContext(ctx, consts.PHASE_LIST).Infoz("database request")
+	log.WithContext(ctx, consts.List).Infoz("database request")
 
 	entries := logs.All()
 	require.Len(t, entries, 1)
 
 	fields := entries[0].ContextMap()
-	require.Equal(t, string(consts.PHASE_LIST), fields[consts.PHASE])
+	require.Equal(t, string(consts.List), fields[consts.PHASE])
 	require.Equal(t, "/api/users/:id", fields[consts.CTX_ROUTE])
 	require.Equal(t, "/api/users/42", fields[consts.CTX_PATH])
 	require.Equal(t, http.MethodGet, fields[consts.CTX_METHOD])
@@ -519,7 +519,7 @@ func TestWithContextAddsCronjobField(t *testing.T) {
 	log := &Logger{zlog: zap.New(core)}
 	ctx := execctx.WithCronjob(context.Background(), "sample_job", "trace-cron")
 
-	log.WithContext(ctx, consts.PHASE_LIST).Infoz("round request")
+	log.WithContext(ctx, consts.List).Infoz("round request")
 
 	entries := logs.All()
 	require.Len(t, entries, 1)

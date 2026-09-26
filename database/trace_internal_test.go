@@ -35,7 +35,7 @@ func TestOperationSpanAttributesFitTheCapacityInTheWorstCase(t *testing.T) {
 	recorder := oteltest.Record(t)
 
 	db := &database[*traceSample]{ins: DB(), ctx: context.Background()}
-	done, _ := db.traceAs("TraceSample", consts.PHASE_CREATE, 3)
+	done, _ := db.traceAs("TraceSample", consts.Create, 3)
 	done(errors.New("sample failure"))
 
 	span := oteltest.EndedNamed(t, recorder, "database.TraceSample.Create")
@@ -87,7 +87,7 @@ func TestHookSpanAttributesFitTheCapacityInTheWorstCase(t *testing.T) {
 	recorder := oteltest.Record(t)
 
 	ctx, parent := gstotel.StartSpan(context.Background(), "sample.parent")
-	err := traceModelHook[*traceSample](ctx, consts.PHASE_CREATE_BEFORE, parent, func(context.Context) error {
+	err := traceModelHook[*traceSample](ctx, consts.CreateBefore, parent, func(context.Context) error {
 		return errors.New("sample hook failure")
 	})
 	parent.End()

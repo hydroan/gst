@@ -248,7 +248,7 @@ func interfaceDeclaresMethods(expr ast.Expr, typeExprs map[string]ast.Expr, seen
 func checkActionTypePair(relPath string, action *dsl.Action, resolve func(string) actionTypeKind) []string {
 	var violations []string
 
-	actionName := action.Phase.MethodName()
+	actionName := action.Phase.Name()
 	sideEmpty := func(raw string) bool {
 		if raw == dsl.PayloadEmpty {
 			return true

@@ -28,7 +28,7 @@ func TestImports(t *testing.T) {
 			modulePath:     "codegen",
 			modelFileDir:   "model",
 			modelQualifier: "model",
-			phase:          consts.PHASE_CREATE,
+			phase:          consts.Create,
 			want: `import (
 	"codegen/model"
 	"github.com/hydroan/gst/service"
@@ -40,7 +40,7 @@ func TestImports(t *testing.T) {
 			modulePath:     "codegen",
 			modelFileDir:   "model/group",
 			modelQualifier: "group",
-			phase:          consts.PHASE_CREATE,
+			phase:          consts.Create,
 			otherPkgs:      []string{"github.com/hydroan/gst/model"},
 			want: `import (
 	"codegen/model/group"
@@ -54,7 +54,7 @@ func TestImports(t *testing.T) {
 			modulePath:     "codegen",
 			modelFileDir:   "model",
 			modelQualifier: "model",
-			phase:          consts.PHASE_CREATE,
+			phase:          consts.Create,
 			otherPkgs:      []string{"gstmodel github.com/hydroan/gst/model"},
 			want: `import (
 	"codegen/model"
@@ -70,7 +70,7 @@ func TestImports(t *testing.T) {
 			modulePath:     "codegen",
 			modelFileDir:   "model/record_item",
 			modelQualifier: "recorditem",
-			phase:          consts.PHASE_CREATE,
+			phase:          consts.Create,
 			want: `import (
 	recorditem "codegen/model/record_item"
 	"github.com/hydroan/gst/service"
@@ -84,7 +84,7 @@ func TestImports(t *testing.T) {
 			modulePath:     "codegen",
 			modelFileDir:   "model/service",
 			modelQualifier: "model_service",
-			phase:          consts.PHASE_CREATE,
+			phase:          consts.Create,
 			want: `import (
 	model_service "codegen/model/service"
 	"github.com/hydroan/gst/service"
@@ -99,7 +99,7 @@ func TestImports(t *testing.T) {
 			modulePath:     "helloworld",
 			modelFileDir:   "model/io",
 			modelQualifier: "model_io",
-			phase:          consts.PHASE_IMPORT,
+			phase:          consts.Import,
 			want: `import (
 	model_io "helloworld/model/io"
 	"github.com/hydroan/gst/service"
@@ -134,7 +134,7 @@ func TestServiceModelQualifier(t *testing.T) {
 			name:         "package_name_no_framework_import_takes",
 			modelFileDir: "model/sample",
 			modelPkgName: "sample",
-			phase:        consts.PHASE_CREATE,
+			phase:        consts.Create,
 			want:         "sample",
 		},
 		{
@@ -143,7 +143,7 @@ func TestServiceModelQualifier(t *testing.T) {
 			name:         "root_model_package",
 			modelFileDir: "model",
 			modelPkgName: "model",
-			phase:        consts.PHASE_LIST,
+			phase:        consts.List,
 			want:         "model",
 		},
 		{
@@ -151,28 +151,28 @@ func TestServiceModelQualifier(t *testing.T) {
 			name:         "package_named_service",
 			modelFileDir: "model/service",
 			modelPkgName: "service",
-			phase:        consts.PHASE_CREATE,
+			phase:        consts.Create,
 			want:         "model_service",
 		},
 		{
 			name:         "nested_package_named_service",
 			modelFileDir: "model/sample/service",
 			modelPkgName: "service",
-			phase:        consts.PHASE_CREATE,
+			phase:        consts.Create,
 			want:         "sample_service",
 		},
 		{
 			name:         "package_named_gst",
 			modelFileDir: "model/gst",
 			modelPkgName: "gst",
-			phase:        consts.PHASE_GET,
+			phase:        consts.Get,
 			want:         "model_gst",
 		},
 		{
 			name:         "package_named_io_in_an_import_action",
 			modelFileDir: "model/io",
 			modelPkgName: "io",
-			phase:        consts.PHASE_IMPORT,
+			phase:        consts.Import,
 			want:         "model_io",
 		},
 		{
@@ -180,7 +180,7 @@ func TestServiceModelQualifier(t *testing.T) {
 			name:         "package_named_io_in_any_other_action",
 			modelFileDir: "model/io",
 			modelPkgName: "io",
-			phase:        consts.PHASE_CREATE,
+			phase:        consts.Create,
 			want:         "io",
 		},
 	}
@@ -210,7 +210,7 @@ func TestTypes(t *testing.T) {
 			modelName:    "User",
 			reqName:      "*User",
 			rspName:      "*User",
-			phase:        consts.PHASE_CREATE,
+			phase:        consts.Create,
 			want: `type Creator struct {
 	service.Base[*model.User, *model.User, *model.User]
 }`,
@@ -222,7 +222,7 @@ func TestTypes(t *testing.T) {
 			modelName:    "User",
 			reqName:      "*UserReq",
 			rspName:      "*UserRsp",
-			phase:        consts.PHASE_UPDATE,
+			phase:        consts.Update,
 			want: `type Updater struct {
 	service.Base[*model_service.User, *model_service.UserReq, *model_service.UserRsp]
 }`,
@@ -235,7 +235,7 @@ func TestTypes(t *testing.T) {
 			modelName:    "User",
 			reqName:      "UserReq",
 			rspName:      "UserRsp",
-			phase:        consts.PHASE_UPDATE,
+			phase:        consts.Update,
 			want: `type Updater struct {
 	service.Base[*model.User, model.UserReq, model.UserRsp]
 }`,
@@ -247,7 +247,7 @@ func TestTypes(t *testing.T) {
 			modelName:    "User",
 			reqName:      "*UserReq",
 			rspName:      "*UserRsp",
-			phase:        consts.PHASE_UPDATE,
+			phase:        consts.Update,
 			want: `type Updater struct {
 	service.Base[*model.User, *model.UserReq, *model.UserRsp]
 }`,
@@ -258,7 +258,7 @@ func TestTypes(t *testing.T) {
 			modelName:    "Group",
 			reqName:      dsl.PayloadEmpty,
 			rspName:      "*GroupListRsp",
-			phase:        consts.PHASE_LIST,
+			phase:        consts.List,
 			want: `type Lister struct {
 	service.Base[*group.Group, *model.Empty, *group.GroupListRsp]
 }`,
@@ -269,7 +269,7 @@ func TestTypes(t *testing.T) {
 			modelName:    "User",
 			reqName:      dsl.PayloadEmpty,
 			rspName:      "*UserListRsp",
-			phase:        consts.PHASE_LIST,
+			phase:        consts.List,
 			want: `type Lister struct {
 	service.Base[*model.User, *gstmodel.Empty, *model.UserListRsp]
 }`,
@@ -280,7 +280,7 @@ func TestTypes(t *testing.T) {
 			modelName:    "Group",
 			reqName:      "*GroupCreateReq",
 			rspName:      dsl.PayloadEmpty,
-			phase:        consts.PHASE_CREATE,
+			phase:        consts.Create,
 			want: `type Creator struct {
 	service.Base[*group.Group, *group.GroupCreateReq, *model.Empty]
 }`,
@@ -291,7 +291,7 @@ func TestTypes(t *testing.T) {
 			modelName:    "User",
 			reqName:      "*UserCreateReq",
 			rspName:      dsl.PayloadEmpty,
-			phase:        consts.PHASE_CREATE,
+			phase:        consts.Create,
 			want: `type Creator struct {
 	service.Base[*model.User, *model.UserCreateReq, *gstmodel.Empty]
 }`,
@@ -329,7 +329,7 @@ func TestServiceMethod1(t *testing.T) {
 			recvName:     "u",
 			modelName:    "User",
 			modelPkgName: "model",
-			phase:        consts.PHASE_CREATE_BEFORE,
+			phase:        consts.CreateBefore,
 			want:         "func (u *Creator) CreateBefore(ctx *gst.ServiceContext, user *model.User) error {\n}",
 		},
 		{
@@ -337,7 +337,7 @@ func TestServiceMethod1(t *testing.T) {
 			recvName:     "g",
 			modelName:    "Group",
 			modelPkgName: "model_auth",
-			phase:        consts.PHASE_UPDATE_AFTER,
+			phase:        consts.UpdateAfter,
 			want:         "func (g *Updater) UpdateAfter(ctx *gst.ServiceContext, group *model_auth.Group) error {\n}",
 		},
 	}
@@ -370,7 +370,7 @@ func TestServiceMethod2(t *testing.T) {
 			recvName:     "u",
 			modelName:    "User",
 			modelPkgName: "model",
-			phase:        consts.PHASE_LIST_BEFORE,
+			phase:        consts.ListBefore,
 			want:         "func (u *Lister) ListBefore(ctx *gst.ServiceContext, users *[]*model.User) error {\n}",
 		},
 		{
@@ -378,7 +378,7 @@ func TestServiceMethod2(t *testing.T) {
 			recvName:     "g",
 			modelName:    "Group",
 			modelPkgName: "model_auth",
-			phase:        consts.PHASE_LIST_AFTER,
+			phase:        consts.ListAfter,
 			want:         "func (g *Lister) ListAfter(ctx *gst.ServiceContext, groups *[]*model_auth.Group) error {\n}",
 		},
 	}
@@ -412,7 +412,7 @@ func TestServiceMethod3(t *testing.T) {
 			recvName:     "u",
 			modelName:    "User",
 			modelPkgName: "model",
-			phase:        consts.PHASE_CREATE_MANY_BEFORE,
+			phase:        consts.CreateManyBefore,
 			want:         "func (u *ManyCreator) CreateManyBefore(ctx *gst.ServiceContext, users ...*model.User) error {\n}",
 		},
 		{
@@ -420,7 +420,7 @@ func TestServiceMethod3(t *testing.T) {
 			recvName:     "g",
 			modelName:    "Group",
 			modelPkgName: "model_auth",
-			phase:        consts.PHASE_UPDATE_MANY_BEFORE,
+			phase:        consts.UpdateManyBefore,
 			want:         "func (g *ManyUpdater) UpdateManyBefore(ctx *gst.ServiceContext, groups ...*model_auth.Group) error {\n}",
 		},
 	}
@@ -456,7 +456,7 @@ func TestServiceMethod4(t *testing.T) {
 			modelPkgName: "model",
 			reqName:      "*User",
 			rspName:      "*User",
-			phase:        consts.PHASE_CREATE,
+			phase:        consts.Create,
 			want:         "func (u *Creator) Create(ctx *gst.ServiceContext, req *model.User) (rsp *model.User, err error) {\n}",
 		},
 		{
@@ -467,7 +467,7 @@ func TestServiceMethod4(t *testing.T) {
 			modelPkgName: "model",
 			reqName:      "GroupRequest",
 			rspName:      "GroupResponse",
-			phase:        consts.PHASE_UPDATE,
+			phase:        consts.Update,
 			want:         "func (g *Updater) Update(ctx *gst.ServiceContext, req model.GroupRequest) (rsp model.GroupResponse, err error) {\n}",
 		},
 		{
@@ -476,7 +476,7 @@ func TestServiceMethod4(t *testing.T) {
 			modelPkgName: "model",
 			reqName:      "*GroupRequest",
 			rspName:      "*GroupResponse",
-			phase:        consts.PHASE_UPDATE,
+			phase:        consts.Update,
 			want:         "func (g *Updater) Update(ctx *gst.ServiceContext, req *model.GroupRequest) (rsp *model.GroupResponse, err error) {\n}",
 		},
 		{
@@ -485,7 +485,7 @@ func TestServiceMethod4(t *testing.T) {
 			modelPkgName: "group",
 			reqName:      dsl.PayloadEmpty,
 			rspName:      "*GroupListRsp",
-			phase:        consts.PHASE_LIST,
+			phase:        consts.List,
 			want:         "func (g *Lister) List(ctx *gst.ServiceContext, req *model.Empty) (rsp *group.GroupListRsp, err error) {\n}",
 		},
 		{
@@ -494,7 +494,7 @@ func TestServiceMethod4(t *testing.T) {
 			modelPkgName: "model",
 			reqName:      dsl.PayloadEmpty,
 			rspName:      "*UserGetRsp",
-			phase:        consts.PHASE_GET,
+			phase:        consts.Get,
 			want:         "func (u *Getter) Get(ctx *gst.ServiceContext, req *gstmodel.Empty) (rsp *model.UserGetRsp, err error) {\n}",
 		},
 		{
@@ -503,7 +503,7 @@ func TestServiceMethod4(t *testing.T) {
 			modelPkgName: "group",
 			reqName:      "*GroupCreateReq",
 			rspName:      dsl.PayloadEmpty,
-			phase:        consts.PHASE_CREATE,
+			phase:        consts.Create,
 			want:         "func (g *Creator) Create(ctx *gst.ServiceContext, req *group.GroupCreateReq) (rsp *model.Empty, err error) {\n}",
 		},
 	}
@@ -538,7 +538,7 @@ func TestServiceMethod5(t *testing.T) {
 			recvName:     "a",
 			modelName:    "Sample",
 			modelPkgName: "model",
-			phase:        consts.PHASE_IMPORT,
+			phase:        consts.Import,
 			want:         "func (a *Importer) Import(ctx *gst.ServiceContext, reader io.Reader) (samples []*model.Sample, err error) {\n}",
 		},
 	}
@@ -573,7 +573,7 @@ func TestServiceMethod6(t *testing.T) {
 			recvName:     "a",
 			modelName:    "Sample",
 			modelPkgName: "model",
-			phase:        consts.PHASE_EXPORT,
+			phase:        consts.Export,
 			want:         "func (a *Exporter) Export(ctx *gst.ServiceContext, samples ...*model.Sample) (data []byte, err error) {\n}",
 		},
 	}
@@ -603,7 +603,7 @@ func TestServiceMethod7(t *testing.T) {
 			// The example of the serviceMethod7 doc comment.
 			name:     "SSE",
 			recvName: "a",
-			phase:    consts.PHASE_SSE,
+			phase:    consts.SSE,
 			want:     "func (a *Streamer) SSE(ctx *gst.ServiceContext) (err error) {\n}",
 		},
 	}

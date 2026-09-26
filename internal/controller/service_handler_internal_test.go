@@ -54,7 +54,7 @@ func (*payloadService) List(_ *types.ServiceContext, req *payloadReq) (*payloadR
 func TestServiceHandlerBindsWhatTheActionReads(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	const route = "payloads"
-	for _, phase := range []consts.Phase{consts.PHASE_CREATE, consts.PHASE_GET, consts.PHASE_LIST} {
+	for _, phase := range []consts.Phase{consts.Create, consts.Get, consts.List} {
 		registerTestService[*handlerRouteModel, *payloadReq, *payloadRsp](phase, route, &payloadService{})
 	}
 	cfg := &types.ControllerConfig[*handlerRouteModel]{Route: route, ParamName: "id"}

@@ -16,10 +16,10 @@ func TestDesignRangeOrderDefaultRoute(t *testing.T) {
 	})
 
 	want := []consts.Phase{
-		consts.PHASE_LIST,
-		consts.PHASE_IMPORT,
-		consts.PHASE_EXPORT,
-		consts.PHASE_GET,
+		consts.List,
+		consts.Import,
+		consts.Export,
+		consts.Get,
 	}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("unexpected action order: got %v want %v", got, want)
@@ -37,10 +37,10 @@ func TestDesignRangeOrderCustomRoute(t *testing.T) {
 	})
 
 	want := []consts.Phase{
-		consts.PHASE_LIST,
-		consts.PHASE_IMPORT,
-		consts.PHASE_EXPORT,
-		consts.PHASE_GET,
+		consts.List,
+		consts.Import,
+		consts.Export,
+		consts.Get,
 	}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("unexpected route action order: got %v want %v", got, want)

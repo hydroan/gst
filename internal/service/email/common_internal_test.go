@@ -38,7 +38,7 @@ func newEmailServiceContext(userID string) *types.ServiceContext {
 	baseCtx := requestctx.WithMetadata(context.Background(), requestctx.New(requestctx.Fields{
 		UserID: userID,
 	}))
-	return types.NewServiceContext(nil, baseCtx, consts.PHASE_CREATE)
+	return types.NewServiceContext(nil, baseCtx, consts.Create)
 }
 
 func (c *testCache[T]) Get(_ context.Context, key string) (T, error) {
@@ -341,7 +341,7 @@ func TestVerificationRequestCreateReturnsProviderConfigurationError(t *testing.T
 
 	svc := &VerificationRequestService{}
 	svc.Logger = log
-	ctx := types.NewServiceContext(nil, nil, consts.PHASE_CREATE)
+	ctx := types.NewServiceContext(nil, nil, consts.Create)
 
 	_, err := svc.Create(ctx, &modelemail.VerificationRequestReq{Email: "user@example.com"})
 
@@ -378,7 +378,7 @@ func TestVerificationRequestCreate(t *testing.T) {
 
 	svc := &VerificationRequestService{}
 	svc.Logger = loggerzap.Fallback("service")
-	ctx := types.NewServiceContext(nil, nil, consts.PHASE_CREATE)
+	ctx := types.NewServiceContext(nil, nil, consts.Create)
 
 	rsp, err := svc.Create(ctx, &modelemail.VerificationRequestReq{Email: " USER@example.com "})
 	require.NoError(t, err)
@@ -408,7 +408,7 @@ func TestVerificationRequestCreateVerifiedAccount(t *testing.T) {
 
 	svc := &VerificationRequestService{}
 	svc.Logger = loggerzap.Fallback("service")
-	ctx := types.NewServiceContext(nil, nil, consts.PHASE_CREATE)
+	ctx := types.NewServiceContext(nil, nil, consts.Create)
 
 	rsp, err := svc.Create(ctx, &modelemail.VerificationRequestReq{Email: "user@example.com"})
 	require.NoError(t, err)
@@ -436,7 +436,7 @@ func TestVerificationRequestCreateUnknownAccount(t *testing.T) {
 
 	svc := &VerificationRequestService{}
 	svc.Logger = loggerzap.Fallback("service")
-	ctx := types.NewServiceContext(nil, nil, consts.PHASE_CREATE)
+	ctx := types.NewServiceContext(nil, nil, consts.Create)
 
 	rsp, err := svc.Create(ctx, &modelemail.VerificationRequestReq{Email: "user@example.com"})
 	require.NoError(t, err)
@@ -464,7 +464,7 @@ func TestVerificationResendCreate(t *testing.T) {
 
 	svc := &VerificationResendService{}
 	svc.Logger = loggerzap.Fallback("service")
-	ctx := types.NewServiceContext(nil, nil, consts.PHASE_CREATE)
+	ctx := types.NewServiceContext(nil, nil, consts.Create)
 
 	rsp, err := svc.Create(ctx, &modelemail.VerificationResendReq{Email: "user@example.com"})
 	require.NoError(t, err)
@@ -493,7 +493,7 @@ func TestVerificationResendCreateUnknownAccount(t *testing.T) {
 
 	svc := &VerificationResendService{}
 	svc.Logger = loggerzap.Fallback("service")
-	ctx := types.NewServiceContext(nil, nil, consts.PHASE_CREATE)
+	ctx := types.NewServiceContext(nil, nil, consts.Create)
 
 	rsp, err := svc.Create(ctx, &modelemail.VerificationResendReq{Email: "user@example.com"})
 	require.NoError(t, err)
@@ -529,7 +529,7 @@ func TestVerificationResendCreateThrottled(t *testing.T) {
 
 	svc := &VerificationResendService{}
 	svc.Logger = loggerzap.Fallback("service")
-	ctx := types.NewServiceContext(nil, nil, consts.PHASE_CREATE)
+	ctx := types.NewServiceContext(nil, nil, consts.Create)
 
 	rsp, err := svc.Create(ctx, &modelemail.VerificationResendReq{Email: "user@example.com"})
 	require.NoError(t, err)
@@ -572,7 +572,7 @@ func TestVerificationConfirmCreate(t *testing.T) {
 
 	svc := &VerificationConfirmService{}
 	svc.Logger = loggerzap.Fallback("service")
-	ctx := types.NewServiceContext(nil, nil, consts.PHASE_CREATE)
+	ctx := types.NewServiceContext(nil, nil, consts.Create)
 
 	rsp, err := svc.Create(ctx, &modelemail.VerificationConfirmReq{Token: token})
 	require.NoError(t, err)
@@ -593,7 +593,7 @@ func TestVerificationConfirmCreateInvalidToken(t *testing.T) {
 
 	svc := &VerificationConfirmService{}
 	svc.Logger = loggerzap.Fallback("service")
-	ctx := types.NewServiceContext(nil, nil, consts.PHASE_CREATE)
+	ctx := types.NewServiceContext(nil, nil, consts.Create)
 
 	rsp, err := svc.Create(ctx, &modelemail.VerificationConfirmReq{Token: "missing"})
 	require.NoError(t, err)
@@ -631,7 +631,7 @@ func TestVerificationConfirmCreateAlreadyVerified(t *testing.T) {
 
 	svc := &VerificationConfirmService{}
 	svc.Logger = loggerzap.Fallback("service")
-	ctx := types.NewServiceContext(nil, nil, consts.PHASE_CREATE)
+	ctx := types.NewServiceContext(nil, nil, consts.Create)
 
 	rsp, err := svc.Create(ctx, &modelemail.VerificationConfirmReq{Token: token})
 	require.NoError(t, err)
@@ -836,7 +836,7 @@ func TestChangeConfirmCreate(t *testing.T) {
 
 	svc := &ChangeConfirmService{}
 	svc.Logger = loggerzap.Fallback("service")
-	ctx := types.NewServiceContext(nil, nil, consts.PHASE_CREATE)
+	ctx := types.NewServiceContext(nil, nil, consts.Create)
 
 	rsp, err := svc.Create(ctx, &modelemail.ChangeConfirmReq{Token: token})
 	require.NoError(t, err)
@@ -888,7 +888,7 @@ func TestChangeConfirmCreateCanceled(t *testing.T) {
 
 	svc := &ChangeConfirmService{}
 	svc.Logger = loggerzap.Fallback("service")
-	ctx := types.NewServiceContext(nil, nil, consts.PHASE_CREATE)
+	ctx := types.NewServiceContext(nil, nil, consts.Create)
 
 	rsp, err := svc.Create(ctx, &modelemail.ChangeConfirmReq{Token: token})
 	require.NoError(t, err)
@@ -926,7 +926,7 @@ func TestChangeCancelCreate(t *testing.T) {
 
 	svc := &ChangeCancelService{}
 	svc.Logger = loggerzap.Fallback("service")
-	ctx := types.NewServiceContext(nil, nil, consts.PHASE_CREATE)
+	ctx := types.NewServiceContext(nil, nil, consts.Create)
 
 	rsp, err := svc.Create(ctx, &modelemail.ChangeCancelReq{Token: token})
 	require.NoError(t, err)
@@ -1004,7 +1004,7 @@ func TestPasswordResetRequestCreate(t *testing.T) {
 
 	svc := &PasswordResetRequestService{}
 	svc.Logger = loggerzap.Fallback("service")
-	ctx := types.NewServiceContext(nil, nil, consts.PHASE_CREATE)
+	ctx := types.NewServiceContext(nil, nil, consts.Create)
 
 	rsp, err := svc.Create(ctx, &modelemail.PasswordResetRequestReq{Email: " USER@example.com "})
 	require.NoError(t, err)
@@ -1034,7 +1034,7 @@ func TestPasswordResetRequestCreateUnknownAccount(t *testing.T) {
 
 	svc := &PasswordResetRequestService{}
 	svc.Logger = loggerzap.Fallback("service")
-	ctx := types.NewServiceContext(nil, nil, consts.PHASE_CREATE)
+	ctx := types.NewServiceContext(nil, nil, consts.Create)
 
 	rsp, err := svc.Create(ctx, &modelemail.PasswordResetRequestReq{Email: "user@example.com"})
 	require.NoError(t, err)
@@ -1084,7 +1084,7 @@ func TestPasswordResetConfirmCreate(t *testing.T) {
 
 	svc := &PasswordResetConfirmService{}
 	svc.Logger = loggerzap.Fallback("service")
-	ctx := types.NewServiceContext(nil, nil, consts.PHASE_CREATE)
+	ctx := types.NewServiceContext(nil, nil, consts.Create)
 
 	rsp, err := svc.Create(ctx, &modelemail.PasswordResetConfirmReq{
 		Token:       token,
@@ -1112,7 +1112,7 @@ func TestPasswordResetConfirmCreateInvalidToken(t *testing.T) {
 
 	svc := &PasswordResetConfirmService{}
 	svc.Logger = loggerzap.Fallback("service")
-	ctx := types.NewServiceContext(nil, nil, consts.PHASE_CREATE)
+	ctx := types.NewServiceContext(nil, nil, consts.Create)
 
 	rsp, err := svc.Create(ctx, &modelemail.PasswordResetConfirmReq{
 		Token:       "missing",

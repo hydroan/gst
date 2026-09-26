@@ -28,7 +28,7 @@ import (
 // When REQ or RSP differs from M, the handler is the phase service's (see
 // serviceHandler): its DeleteMany method runs on the bound payload.
 func DeleteManyHandler[M types.Model, REQ types.Request, RSP types.Response](cfg ...*types.ControllerConfig[M]) gin.HandlerFunc {
-	a := newAction[M, REQ, RSP](routeFromConfig(cfg...), consts.PHASE_DELETE_MANY, consts.PHASE_DELETE_MANY_BEFORE, consts.PHASE_DELETE_MANY_AFTER)
+	a := newAction[M, REQ, RSP](routeFromConfig(cfg...), consts.DeleteMany, consts.DeleteManyBefore, consts.DeleteManyAfter)
 	if !a.typesEqual {
 		return a.serviceHandler()
 	}
@@ -38,7 +38,7 @@ func DeleteManyHandler[M types.Model, REQ types.Request, RSP types.Response](cfg
 		_, span := a.startControllerSpan(c)
 		defer span.End()
 
-		log := logger.Controller.WithContext(c.Request.Context(), consts.PHASE_DELETE_MANY)
+		log := logger.Controller.WithContext(c.Request.Context(), consts.DeleteMany)
 
 		var req batch[M]
 		if reqErr := bindJSONRequest(c, &req); reqErr != nil && !errors.Is(reqErr, io.EOF) {
@@ -64,7 +64,7 @@ func DeleteManyHandler[M types.Model, REQ types.Request, RSP types.Response](cfg
 // validates a bound body, runs the batch delete flow (see deleteManyFlow)
 // and answers nothing, or the status the failure maps to (see call).
 func DeleteManyCall[M types.Model](route string) func(ctx context.Context, params map[string]string, ids []string) error {
-	a := newAction[M, M, M](route, consts.PHASE_DELETE_MANY, consts.PHASE_DELETE_MANY_BEFORE, consts.PHASE_DELETE_MANY_AFTER)
+	a := newAction[M, M, M](route, consts.DeleteMany, consts.DeleteManyBefore, consts.DeleteManyAfter)
 	return func(ctx context.Context, params map[string]string, ids []string) error {
 		c := a.beginCall(ctx, params, nil)
 		defer c.end()
@@ -88,7 +88,7 @@ func DeleteManyCall[M types.Model](route string) func(ctx context.Context, param
 // batch idempotent. Whether the rows are purged is the model's decision (its
 // Purge method), never the request's.
 func (a *action[M, REQ, RSP]) deleteManyFlow(ctx context.Context, newServiceContext serviceContextFunc, req *batch[M]) error {
-	log := logger.Controller.WithContext(ctx, consts.PHASE_DELETE_MANY)
+	log := logger.Controller.WithContext(ctx, consts.DeleteMany)
 	svc := a.service()
 
 	// 1.Perform business logic processing before batch delete resources.
@@ -111,8 +111,8 @@ func (a *action[M, REQ, RSP]) deleteManyFlow(ctx context.Context, newServiceCont
 		}
 		req.Items = append(req.Items, m)
 	}
-	if err := a.traceServiceHook(ctx, consts.PHASE_DELETE_MANY_BEFORE, svc, func(spanCtx context.Context) error {
-		return svc.DeleteManyBefore(newServiceContext(spanCtx, consts.PHASE_DELETE_MANY_BEFORE), req.Items...)
+	if err := a.traceServiceHook(ctx, consts.DeleteManyBefore, svc, func(spanCtx context.Context) error {
+		return svc.DeleteManyBefore(newServiceContext(spanCtx, consts.DeleteManyBefore), req.Items...)
 	}); err != nil {
 		return failService(ctx, log, err)
 	}
@@ -122,8 +122,8 @@ func (a *action[M, REQ, RSP]) deleteManyFlow(ctx context.Context, newServiceCont
 		return failDatabase(ctx, log, err)
 	}
 	// 3.Perform business logic processing after batch delete resources.
-	if err := a.traceServiceHook(ctx, consts.PHASE_DELETE_MANY_AFTER, svc, func(spanCtx context.Context) error {
-		return svc.DeleteManyAfter(newServiceContext(spanCtx, consts.PHASE_DELETE_MANY_AFTER), req.Items...)
+	if err := a.traceServiceHook(ctx, consts.DeleteManyAfter, svc, func(spanCtx context.Context) error {
+		return svc.DeleteManyAfter(newServiceContext(spanCtx, consts.DeleteManyAfter), req.Items...)
 	}); err != nil {
 		return failService(ctx, log, err)
 	}

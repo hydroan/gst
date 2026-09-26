@@ -182,7 +182,7 @@ func initDefaultAction(modelName string, action *Action) {
 // isGetVerbPhase reports whether the phase's generated route handles an HTTP
 // GET request, which carries no request body.
 func isGetVerbPhase(phase consts.Phase) bool {
-	return phase == consts.PHASE_LIST || phase == consts.PHASE_GET
+	return phase == consts.List || phase == consts.Get
 }
 
 // isFixedContractPhase reports whether the phase delegates to a fixed service
@@ -191,7 +191,7 @@ func isGetVerbPhase(phase consts.Phase) bool {
 // Import(ctx, io.Reader) and the Export controller writes the bytes returned
 // by Export(ctx, ...M) as a file attachment.
 func isFixedContractPhase(phase consts.Phase) bool {
-	return phase == consts.PHASE_IMPORT || phase == consts.PHASE_EXPORT
+	return phase == consts.Import || phase == consts.Export
 }
 
 // parse analyzes an AST file to find all models and their Design method declarations.
@@ -401,46 +401,46 @@ func parseDesign(fn *ast.FuncDecl) *Design {
 							continue
 						}
 
-						if act, e := parseAction(consts.PHASE_CREATE, funName_, call_.Args[0]); e {
+						if act, e := parseAction(consts.Create, funName_, call_.Args[0]); e {
 							defaults.routes[route] = append(defaults.routes[route], act)
 						}
-						if act, e := parseAction(consts.PHASE_DELETE, funName_, call_.Args[0]); e {
+						if act, e := parseAction(consts.Delete, funName_, call_.Args[0]); e {
 							defaults.routes[route] = append(defaults.routes[route], act)
 						}
-						if act, e := parseAction(consts.PHASE_UPDATE, funName_, call_.Args[0]); e {
+						if act, e := parseAction(consts.Update, funName_, call_.Args[0]); e {
 							defaults.routes[route] = append(defaults.routes[route], act)
 						}
-						if act, e := parseAction(consts.PHASE_PATCH, funName_, call_.Args[0]); e {
+						if act, e := parseAction(consts.Patch, funName_, call_.Args[0]); e {
 							defaults.routes[route] = append(defaults.routes[route], act)
 						}
-						if act, e := parseAction(consts.PHASE_LIST, funName_, call_.Args[0]); e {
+						if act, e := parseAction(consts.List, funName_, call_.Args[0]); e {
 							defaults.routes[route] = append(defaults.routes[route], act)
 						}
-						if act, e := parseAction(consts.PHASE_GET, funName_, call_.Args[0]); e {
+						if act, e := parseAction(consts.Get, funName_, call_.Args[0]); e {
 							defaults.routes[route] = append(defaults.routes[route], act)
 						}
-						if act, e := parseAction(consts.PHASE_CREATE_MANY, funName_, call_.Args[0]); e {
+						if act, e := parseAction(consts.CreateMany, funName_, call_.Args[0]); e {
 							defaults.routes[route] = append(defaults.routes[route], act)
 						}
-						if act, e := parseAction(consts.PHASE_DELETE_MANY, funName_, call_.Args[0]); e {
+						if act, e := parseAction(consts.DeleteMany, funName_, call_.Args[0]); e {
 							defaults.routes[route] = append(defaults.routes[route], act)
 						}
-						if act, e := parseAction(consts.PHASE_UPDATE_MANY, funName_, call_.Args[0]); e {
+						if act, e := parseAction(consts.UpdateMany, funName_, call_.Args[0]); e {
 							defaults.routes[route] = append(defaults.routes[route], act)
 						}
-						if act, e := parseAction(consts.PHASE_PATCH_MANY, funName_, call_.Args[0]); e {
+						if act, e := parseAction(consts.PatchMany, funName_, call_.Args[0]); e {
 							defaults.routes[route] = append(defaults.routes[route], act)
 						}
-						if act, e := parseAction(consts.PHASE_IMPORT, funName_, call_.Args[0]); e {
+						if act, e := parseAction(consts.Import, funName_, call_.Args[0]); e {
 							defaults.routes[route] = append(defaults.routes[route], act)
 						}
-						if act, e := parseAction(consts.PHASE_EXPORT, funName_, call_.Args[0]); e {
+						if act, e := parseAction(consts.Export, funName_, call_.Args[0]); e {
 							defaults.routes[route] = append(defaults.routes[route], act)
 						}
-						if act, e := parseAction(consts.PHASE_SSE, funName_, call_.Args[0]); e {
+						if act, e := parseAction(consts.SSE, funName_, call_.Args[0]); e {
 							defaults.routes[route] = append(defaults.routes[route], act)
 						}
-						if act, e := parseAction(consts.PHASE_STREAM, funName_, call_.Args[0]); e {
+						if act, e := parseAction(consts.Stream, funName_, call_.Args[0]); e {
 							defaults.routes[route] = append(defaults.routes[route], act)
 						}
 					}
@@ -448,46 +448,46 @@ func parseDesign(fn *ast.FuncDecl) *Design {
 			}
 		}
 
-		if act, e := parseAction(consts.PHASE_CREATE, funcName, call.Args[0]); e {
+		if act, e := parseAction(consts.Create, funcName, call.Args[0]); e {
 			defaults.Create = act
 		}
-		if act, e := parseAction(consts.PHASE_DELETE, funcName, call.Args[0]); e {
+		if act, e := parseAction(consts.Delete, funcName, call.Args[0]); e {
 			defaults.Delete = act
 		}
-		if act, e := parseAction(consts.PHASE_UPDATE, funcName, call.Args[0]); e {
+		if act, e := parseAction(consts.Update, funcName, call.Args[0]); e {
 			defaults.Update = act
 		}
-		if act, e := parseAction(consts.PHASE_PATCH, funcName, call.Args[0]); e {
+		if act, e := parseAction(consts.Patch, funcName, call.Args[0]); e {
 			defaults.Patch = act
 		}
-		if act, e := parseAction(consts.PHASE_LIST, funcName, call.Args[0]); e {
+		if act, e := parseAction(consts.List, funcName, call.Args[0]); e {
 			defaults.List = act
 		}
-		if act, e := parseAction(consts.PHASE_GET, funcName, call.Args[0]); e {
+		if act, e := parseAction(consts.Get, funcName, call.Args[0]); e {
 			defaults.Get = act
 		}
-		if act, e := parseAction(consts.PHASE_CREATE_MANY, funcName, call.Args[0]); e {
+		if act, e := parseAction(consts.CreateMany, funcName, call.Args[0]); e {
 			defaults.CreateMany = act
 		}
-		if act, e := parseAction(consts.PHASE_DELETE_MANY, funcName, call.Args[0]); e {
+		if act, e := parseAction(consts.DeleteMany, funcName, call.Args[0]); e {
 			defaults.DeleteMany = act
 		}
-		if act, e := parseAction(consts.PHASE_UPDATE_MANY, funcName, call.Args[0]); e {
+		if act, e := parseAction(consts.UpdateMany, funcName, call.Args[0]); e {
 			defaults.UpdateMany = act
 		}
-		if act, e := parseAction(consts.PHASE_PATCH_MANY, funcName, call.Args[0]); e {
+		if act, e := parseAction(consts.PatchMany, funcName, call.Args[0]); e {
 			defaults.PatchMany = act
 		}
-		if act, e := parseAction(consts.PHASE_IMPORT, funcName, call.Args[0]); e {
+		if act, e := parseAction(consts.Import, funcName, call.Args[0]); e {
 			defaults.Import = act
 		}
-		if act, e := parseAction(consts.PHASE_EXPORT, funcName, call.Args[0]); e {
+		if act, e := parseAction(consts.Export, funcName, call.Args[0]); e {
 			defaults.Export = act
 		}
-		if act, e := parseAction(consts.PHASE_SSE, funcName, call.Args[0]); e {
+		if act, e := parseAction(consts.SSE, funcName, call.Args[0]); e {
 			defaults.SSE = act
 		}
-		if act, e := parseAction(consts.PHASE_STREAM, funcName, call.Args[0]); e {
+		if act, e := parseAction(consts.Stream, funcName, call.Args[0]); e {
 			defaults.Stream = act
 		}
 
@@ -501,7 +501,7 @@ func parseDesign(fn *ast.FuncDecl) *Design {
 // from the function literal passed to action methods like Create(), Update(), etc.
 //
 // Parameters:
-//   - phase: The expected phase to match (e.g., consts.PHASE_CREATE, consts.PHASE_LIST)
+//   - phase: The expected phase to match (e.g., consts.Create, consts.List)
 //   - funcName: The actual function name being called
 //   - args: The function call arguments, expected to contain a function literal
 //
@@ -539,7 +539,7 @@ func parseAction(phase consts.Phase, funcName string, expr ast.Expr) (*Action, b
 	var flatten bool    // default to false
 	var streamingPayload, streamingResult bool
 
-	if phase.MethodName() != funcName {
+	if phase.Name() != funcName {
 		return nil, false
 	}
 	flit, ok := expr.(*ast.FuncLit)
@@ -692,9 +692,9 @@ func parseAction(phase consts.Phase, funcName string, expr ast.Expr) (*Action, b
 					case "Result":
 						isResult = true
 					case "StreamingPayload":
-						isPayload, streamingPayload = phase == consts.PHASE_STREAM, phase == consts.PHASE_STREAM
+						isPayload, streamingPayload = phase == consts.Stream, phase == consts.Stream
 					case "StreamingResult":
-						isResult, streamingResult = phase == consts.PHASE_STREAM, phase == consts.PHASE_STREAM
+						isResult, streamingResult = phase == consts.Stream, phase == consts.Stream
 					}
 					// List and Get handle HTTP GET requests without a request
 					// body, Import and Export delegate to fixed service

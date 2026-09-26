@@ -34,8 +34,8 @@ func TestCallFunctionsAreBuiltForAModelAndRoute(t *testing.T) {
 	require.NotNil(t, gstgrpc.UpdateManyCall[*sampleModel]("samples"))
 	require.NotNil(t, gstgrpc.PatchManyCall[*sampleModel]("samples"))
 	require.NotNil(t, gstgrpc.DeleteManyCall[*sampleModel]("samples"))
-	require.NotNil(t, gstgrpc.ServiceCall[*sampleModel, *sampleModel, *sampleModel](consts.PHASE_CREATE, "samples/seal"))
+	require.NotNil(t, gstgrpc.ServiceCall[*sampleModel, *sampleModel, *sampleModel](consts.Create, "samples/seal"))
 	require.PanicsWithValue(t, `controller: phase "sse" has no rpc; ServiceCall serves the actions of a model's gRPC service`, func() {
-		gstgrpc.ServiceCall[*sampleModel, *sampleModel, *sampleModel](consts.PHASE_SSE, "samples")
+		gstgrpc.ServiceCall[*sampleModel, *sampleModel, *sampleModel](consts.SSE, "samples")
 	})
 }

@@ -15,16 +15,16 @@ func TestCRUDRoute(t *testing.T) {
 		phase consts.Phase
 		want  string
 	}{
-		{consts.PHASE_CREATE, "samples"},
-		{consts.PHASE_LIST, "samples"},
-		{consts.PHASE_DELETE, "samples/:id"},
-		{consts.PHASE_UPDATE, "samples/:id"},
-		{consts.PHASE_PATCH, "samples/:id"},
-		{consts.PHASE_GET, "samples/:id"},
-		{consts.PHASE_CREATE_MANY, "samples/batch"},
-		{consts.PHASE_DELETE_MANY, "samples/batch"},
-		{consts.PHASE_UPDATE_MANY, "samples/batch"},
-		{consts.PHASE_PATCH_MANY, "samples/batch"},
+		{consts.Create, "samples"},
+		{consts.List, "samples"},
+		{consts.Delete, "samples/:id"},
+		{consts.Update, "samples/:id"},
+		{consts.Patch, "samples/:id"},
+		{consts.Get, "samples/:id"},
+		{consts.CreateMany, "samples/batch"},
+		{consts.DeleteMany, "samples/batch"},
+		{consts.UpdateMany, "samples/batch"},
+		{consts.PatchMany, "samples/batch"},
 	}
 	for _, c := range cases {
 		require.Equal(t, c.want, crudRoute("samples", "id", c.phase), "phase %s", c.phase)

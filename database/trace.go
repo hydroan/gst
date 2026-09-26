@@ -21,7 +21,7 @@ import (
 // Phases of database-layer operations that have no controller counterpart in
 // consts. Values follow the consts.Phase snake_case convention so the log
 // phase field stays uniform across every log source; span names derive their
-// UpperCamelCase form via Phase.MethodName.
+// UpperCamelCase form via Phase.Name.
 const (
 	phaseUpsert        consts.Phase = "upsert"
 	phaseCount         consts.Phase = "count"
@@ -46,7 +46,7 @@ const (
 //
 // Parameters:
 //   - phase: Operation phase for logging and tracing identification
-//     (consts.PHASE_CREATE, consts.PHASE_LIST, phaseUpsert, etc.)
+//     (consts.Create, consts.List, phaseUpsert, etc.)
 //   - batch: Optional batch size for batch operations (used for span attributes and logging)
 //
 // Returns a function that accepts an error and completes the operation tracing and logging.
@@ -73,7 +73,7 @@ const (
 //
 // Usage Pattern:
 //
-//	done, _ := db.trace(consts.PHASE_CREATE, len(models))
+//	done, _ := db.trace(consts.Create, len(models))
 //	defer func() { done(err) }()
 //
 // The closure is load-bearing: a plain `defer done(err)` evaluates err where
@@ -126,7 +126,7 @@ func (db *database[M]) traceAs(modelName string, phase consts.Phase, batch ...in
 	ctx := db.ctx
 	var span trace.Span
 	if gstotel.IsEnabled() && ctx != nil {
-		spanName := gstotel.FrameworkSpanName("database", modelName, phase.MethodName())
+		spanName := gstotel.FrameworkSpanName("database", modelName, phase.Name())
 		ctx, span = gstotel.StartSpan(ctx, spanName)
 		db.ctx = ctx
 
@@ -142,7 +142,7 @@ func (db *database[M]) traceAs(modelName string, phase consts.Phase, batch ...in
 			attrs = append(
 				attrs,
 				attribute.String("component", "database"),
-				attribute.String("database.operation", phase.MethodName()),
+				attribute.String("database.operation", phase.Name()),
 				attribute.String("database.model", modelName),
 				attribute.Bool("database.dry_run", db.dryRun),
 			)
@@ -252,7 +252,7 @@ func operationLogFields(modelName string, batch int, duration time.Duration, dry
 //
 // Parameters:
 //   - ctx: Database context the hook runs under; nil falls back to context.Background
-//   - phase: Hook phase (consts.PHASE_CREATE_BEFORE, ...), naming the span "model.{Model}.{Hook}"
+//   - phase: Hook phase (consts.CreateBefore, ...), naming the span "model.{Model}.{Hook}"
 //   - parentSpan: Database operation span the hook span nests under
 //   - fn: Hook invocation, receiving the context that carries the hook span
 //
@@ -273,7 +273,7 @@ func traceModelHook[M types.Model](ctx context.Context, phase consts.Phase, pare
 
 	modelName := reflect.TypeOf(*new(M)).Elem().Name()
 	// Use a structured gst span name under the database span for hook execution.
-	spanName := gstotel.FrameworkSpanName("model", modelName, phase.MethodName())
+	spanName := gstotel.FrameworkSpanName("model", modelName, phase.Name())
 	parentCtx := trace.ContextWithSpan(hookCtx, parentSpan)
 	childCtx, span := gstotel.StartSpan(parentCtx, spanName)
 	defer span.End()
@@ -285,7 +285,7 @@ func traceModelHook[M types.Model](ctx context.Context, phase consts.Phase, pare
 		span.SetAttributes(
 			attribute.String("component", "model"),
 			attribute.String("model.model", modelName),
-			attribute.String("model.phase", phase.MethodName()),
+			attribute.String("model.phase", phase.Name()),
 		)
 
 		// Record start time

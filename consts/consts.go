@@ -116,62 +116,66 @@ const (
 	TAG_QUERY = "query"
 )
 
+// The phases of an action: the action itself, Create and its kind, Import,
+// Export, SSE and Stream, and, for the CRUD and batch actions, the hooks run
+// before and after it, CreateBefore and CreateAfter. The value is the snake
+// case name the service registry keys by and the logs carry.
 const (
-	PHASE_CREATE Phase = create
-	PHASE_DELETE Phase = delete_
-	PHASE_UPDATE Phase = update
-	PHASE_PATCH  Phase = patch
-	PHASE_LIST   Phase = list
-	PHASE_GET    Phase = get
+	Create Phase = create
+	Delete Phase = delete_
+	Update Phase = update
+	Patch  Phase = patch
+	List   Phase = list
+	Get    Phase = get
 
-	PHASE_CREATE_MANY Phase = create_many
-	PHASE_DELETE_MANY Phase = delete_many
-	PHASE_UPDATE_MANY Phase = update_many
-	PHASE_PATCH_MANY  Phase = patch_many
+	CreateMany Phase = create_many
+	DeleteMany Phase = delete_many
+	UpdateMany Phase = update_many
+	PatchMany  Phase = patch_many
 
-	PHASE_CREATE_BEFORE Phase = create_before
-	PHASE_CREATE_AFTER  Phase = create_after
-	PHASE_DELETE_BEFORE Phase = delete_before
-	PHASE_DELETE_AFTER  Phase = delete_after
-	PHASE_UPDATE_BEFORE Phase = update_before
-	PHASE_UPDATE_AFTER  Phase = update_after
-	PHASE_PATCH_BEFORE  Phase = patch_before
-	PHASE_PATCH_AFTER   Phase = patch_after
-	PHASE_LIST_BEFORE   Phase = list_before
-	PHASE_LIST_AFTER    Phase = list_after
-	PHASE_GET_BEFORE    Phase = get_before
-	PHASE_GET_AFTER     Phase = get_after
+	CreateBefore Phase = create_before
+	CreateAfter  Phase = create_after
+	DeleteBefore Phase = delete_before
+	DeleteAfter  Phase = delete_after
+	UpdateBefore Phase = update_before
+	UpdateAfter  Phase = update_after
+	PatchBefore  Phase = patch_before
+	PatchAfter   Phase = patch_after
+	ListBefore   Phase = list_before
+	ListAfter    Phase = list_after
+	GetBefore    Phase = get_before
+	GetAfter     Phase = get_after
 
-	PHASE_CREATE_MANY_BEFORE Phase = create_many_before
-	PHASE_CREATE_MANY_AFTER  Phase = create_many_after
-	PHASE_DELETE_MANY_BEFORE Phase = delete_many_before
-	PHASE_DELETE_MANY_AFTER  Phase = delete_many_after
-	PHASE_UPDATE_MANY_BEFORE Phase = update_many_before
-	PHASE_UPDATE_MANY_AFTER  Phase = update_many_after
-	PHASE_PATCH_MANY_BEFORE  Phase = patch_many_before
-	PHASE_PATCH_MANY_AFTER   Phase = patch_many_after
+	CreateManyBefore Phase = create_many_before
+	CreateManyAfter  Phase = create_many_after
+	DeleteManyBefore Phase = delete_many_before
+	DeleteManyAfter  Phase = delete_many_after
+	UpdateManyBefore Phase = update_many_before
+	UpdateManyAfter  Phase = update_many_after
+	PatchManyBefore  Phase = patch_many_before
+	PatchManyAfter   Phase = patch_many_after
 
-	PHASE_IMPORT Phase = import_
-	PHASE_EXPORT Phase = export
+	Import Phase = import_
+	Export Phase = export
 
-	PHASE_SSE Phase = sse
+	SSE Phase = sse
 
-	PHASE_STREAM Phase = stream
+	Stream Phase = stream
 )
 
 type Phase string
 
-// MethodName returns the Phase string converted to UpperCamelCase format.
-// PHASE_SSE maps to the fully capitalized initialism instead of the camel
-// case form, matching the DSL keyword and the service method name.
-// Example:
+// Name returns the name of the phase, the identifier its constant is
+// declared with, which is the DSL keyword declaring the action and the
+// service method serving it: the value in UpperCamelCase, SSE kept as the
+// initialism. Generated code refers to a phase by it. Examples:
 //
-//	PHASE_CREATE         -> "Create"
-//	PHASE_CREATE_BEFORE  -> "CreateBefore"
-//	PHASE_UPDATE_MANY    -> "UpdateMany"
-//	PHASE_SSE            -> "SSE"
-func (p Phase) MethodName() string {
-	if p == PHASE_SSE {
+//	Create        -> "Create"
+//	CreateBefore  -> "CreateBefore"
+//	UpdateMany    -> "UpdateMany"
+//	SSE           -> "SSE"
+func (p Phase) Name() string {
+	if p == SSE {
 		return "SSE"
 	}
 	return strcase.UpperCamelCase(string(p))
@@ -180,18 +184,25 @@ func (p Phase) MethodName() string {
 // Filename returns the Phase generated filename converted to lower case format.
 // Example:
 //
-//	PHASE_CREATE         -> "create.go"
-//	PHASE_CREATE_BEFORE  -> "create.go"
-//	PHASE_UPDATE_MANY    -> "update_many.go"
+//	Create         -> "create.go"
+//	CreateBefore  -> "create.go"
+//	UpdateMany    -> "update_many.go"
 func (p Phase) Filename() string {
-	s := string(p)
+	return string(p.action()) + ".go"
+}
 
-	// strip the _before / _after suffix
-	s = strings.TrimSuffix(s, "_before")
-	s = strings.TrimSuffix(s, "_after")
+// action returns the phase of the action p belongs to: p itself for an
+// action phase, the action of a hook phase, Create for CreateBefore and
+// CreateMany for CreateManyAfter.
+func (p Phase) action() Phase {
+	s := strings.TrimSuffix(string(p), "_before")
+	return Phase(strings.TrimSuffix(s, "_after"))
+}
 
-	// lower case it and append the .go extension
-	return strings.ToLower(s) + ".go"
+// hook reports whether p is a hook phase, one run before or after its
+// action.
+func (p Phase) hook() bool {
+	return p.action() != p
 }
 
 // RoleName returns the associated role name for the Phase in human-readable form.
@@ -203,26 +214,17 @@ func (p Phase) Filename() string {
 //
 // Examples:
 //
-//	PHASE_CREATE             -> "Creator"
-//	PHASE_CREATE_BEFORE      -> "Creator"
-//	PHASE_UPDATE_MANY        -> "ManyUpdater"
-//	PHASE_UPDATE_MANY_AFTER  -> "ManyUpdater"
+//	Create             -> "Creator"
+//	CreateBefore      -> "Creator"
+//	UpdateMany        -> "ManyUpdater"
+//	UpdateManyAfter  -> "ManyUpdater"
 func (p Phase) RoleName() string {
-	s := string(p)
-
-	isMany := strings.Contains(s, "_many")
+	s := string(p.action())
+	isMany := strings.HasSuffix(s, "_many")
 	s = strings.TrimSuffix(s, "_many")
 
-	s = strings.TrimSuffix(s, "_before")
-	s = strings.TrimSuffix(s, "_after")
-
-	parts := strings.Split(s, "_")
-	if len(parts) == 0 {
-		return ""
-	}
-
 	var role string
-	switch parts[0] {
+	switch s {
 	case create:
 		role = "Creator"
 	case update:
@@ -254,12 +256,10 @@ func (p Phase) RoleName() string {
 // Before returns the corresponding "_before" Phase for CRUD or ManyCRUD operations.
 // If the current Phase already contains "_before" or "_after", or is not CRUD/MANYCRUD, it returns itself without modification.
 func (p Phase) Before() Phase {
-	s := string(p)
-
-	// Already contains _before or _after → no change
-	if strings.Contains(s, "_before") || strings.Contains(s, "_after") {
+	if p.hook() {
 		return p
 	}
+	s := string(p)
 
 	// Only handle standard CRUD actions
 	parts := strings.Split(s, "_")
@@ -282,12 +282,10 @@ func (p Phase) Before() Phase {
 // After returns the corresponding "_after" Phase for CRUD or ManyCRUD operations.
 // If the current Phase already contains "_before" or "_after", or is not CRUD/MANYCRUD, it returns itself without modification.
 func (p Phase) After() Phase {
-	s := string(p)
-
-	// Already contains _before or _after → no change
-	if strings.Contains(s, "_before") || strings.Contains(s, "_after") {
+	if p.hook() {
 		return p
 	}
+	s := string(p)
 
 	// Only handle standard CRUD actions
 	parts := strings.Split(s, "_")
@@ -307,133 +305,16 @@ func (p Phase) After() Phase {
 	}
 }
 
-// ToHTTPVerb maps the Phase to the corresponding HTTPVerb.
-// Non-CRUD or unsupported phases return an empty string HTTPVerb.
-//
-// Examples:
-//
-//	PHASE_CREATE             -> Create
-//	PHASE_CREATE_BEFORE      -> Create
-//	PHASE_CREATE_MANY_AFTER  -> CreateMany
-func (p Phase) ToHTTPVerb() HTTPVerb {
-	s := string(p)
-
-	// Normalize: remove _before/_after suffix
-	s = strings.TrimSuffix(s, "_before")
-	s = strings.TrimSuffix(s, "_after")
-
-	switch s {
-	case create:
-		return Create
-	case delete_:
-		return Delete
-	case update:
-		return Update
-	case patch:
-		return Patch
-	case list:
-		return List
-	case get:
-		return Get
-
-	case create_many:
-		return CreateMany
-	case delete_many:
-		return DeleteMany
-	case update_many:
-		return UpdateMany
-	case patch_many:
-		return PatchMany
-
-	case export:
-		return Export
-	case import_:
-		return Import
-	case sse:
-		return SSE
-	default:
-		return HTTPVerb("")
-	}
-}
-
-// Name returns the identifier the Phase constant is declared with, for example PHASE_CREATE_MANY.
-func (p Phase) Name() string {
-	phaseNames := map[Phase]string{
-		PHASE_CREATE:             "PHASE_CREATE",
-		PHASE_DELETE:             "PHASE_DELETE",
-		PHASE_UPDATE:             "PHASE_UPDATE",
-		PHASE_PATCH:              "PHASE_PATCH",
-		PHASE_LIST:               "PHASE_LIST",
-		PHASE_GET:                "PHASE_GET",
-		PHASE_CREATE_MANY:        "PHASE_CREATE_MANY",
-		PHASE_DELETE_MANY:        "PHASE_DELETE_MANY",
-		PHASE_UPDATE_MANY:        "PHASE_UPDATE_MANY",
-		PHASE_PATCH_MANY:         "PHASE_PATCH_MANY",
-		PHASE_CREATE_BEFORE:      "PHASE_CREATE_BEFORE",
-		PHASE_CREATE_AFTER:       "PHASE_CREATE_AFTER",
-		PHASE_DELETE_BEFORE:      "PHASE_DELETE_BEFORE",
-		PHASE_DELETE_AFTER:       "PHASE_DELETE_AFTER",
-		PHASE_UPDATE_BEFORE:      "PHASE_UPDATE_BEFORE",
-		PHASE_UPDATE_AFTER:       "PHASE_UPDATE_AFTER",
-		PHASE_PATCH_BEFORE:       "PHASE_PATCH_BEFORE",
-		PHASE_PATCH_AFTER:        "PHASE_PATCH_AFTER",
-		PHASE_LIST_BEFORE:        "PHASE_LIST_BEFORE",
-		PHASE_LIST_AFTER:         "PHASE_LIST_AFTER",
-		PHASE_GET_BEFORE:         "PHASE_GET_BEFORE",
-		PHASE_GET_AFTER:          "PHASE_GET_AFTER",
-		PHASE_CREATE_MANY_BEFORE: "PHASE_CREATE_MANY_BEFORE",
-		PHASE_CREATE_MANY_AFTER:  "PHASE_CREATE_MANY_AFTER",
-		PHASE_DELETE_MANY_BEFORE: "PHASE_DELETE_MANY_BEFORE",
-		PHASE_DELETE_MANY_AFTER:  "PHASE_DELETE_MANY_AFTER",
-		PHASE_UPDATE_MANY_BEFORE: "PHASE_UPDATE_MANY_BEFORE",
-		PHASE_UPDATE_MANY_AFTER:  "PHASE_UPDATE_MANY_AFTER",
-		PHASE_PATCH_MANY_BEFORE:  "PHASE_PATCH_MANY_BEFORE",
-		PHASE_PATCH_MANY_AFTER:   "PHASE_PATCH_MANY_AFTER",
-		PHASE_IMPORT:             "PHASE_IMPORT",
-		PHASE_EXPORT:             "PHASE_EXPORT",
-		PHASE_SSE:                "PHASE_SSE",
-		PHASE_STREAM:             "PHASE_STREAM",
-	}
-
-	if name, ok := phaseNames[p]; ok {
-		return name
-	}
-	return "UNKNOWN_PHASE"
-}
-
-const (
-	Create HTTPVerb = create  // POST /resource
-	Delete HTTPVerb = delete_ // DELETE /resource, DELETE /resource/:id
-	Update HTTPVerb = update  // PUT /resource, PUT /resource/:id
-	Patch  HTTPVerb = patch   // PATCH /resource, PATCH /resource/:id
-	List   HTTPVerb = list    // GET /resource
-	Get    HTTPVerb = get     // GET /resource/:id
-
-	CreateMany HTTPVerb = create_many // POST /resource/batch
-	DeleteMany HTTPVerb = delete_many // DELETE /resource/batch
-	UpdateMany HTTPVerb = update_many // PUT /resource/batch
-	PatchMany  HTTPVerb = patch_many  // PATCH /resource/batch
-
-	Export HTTPVerb = export  // GET /resource/export
-	Import HTTPVerb = import_ // POST /resource/import
-
-	SSE HTTPVerb = sse // GET /resource, streaming Server-Sent Events response
-)
-
-// HTTPVerb represents the supported HTTP operations for a resource
-type HTTPVerb string
-
-func (v HTTPVerb) String() string {
-	return strings.ReplaceAll(string(v), "_", " ")
-}
-
-// HTTPMethod returns the HTTP request method of the route registered for the
-// verb, eg. Create, CreateMany and Import all map to "POST", and List, Get,
-// Export and SSE to "GET". Unknown verbs return an empty string. It is the
-// one table of verb methods: the framework router registers routes by it,
-// and gg reads route methods from it.
-func (v HTTPVerb) HTTPMethod() string {
-	switch v {
+// HTTPMethod returns the HTTP method of the route the phase's action is
+// registered under, a hook phase answering for its action: Create,
+// CreateMany, Import and CreateBefore map to "POST", Delete and DeleteMany
+// to "DELETE", Update and UpdateMany to "PUT", Patch and PatchMany to
+// "PATCH", and List, Get, Export and SSE to "GET". Stream, served over gRPC
+// alone, and any other phase map to "". It is the one table of methods: the
+// framework router registers routes by it, and gg reads route methods from
+// it.
+func (p Phase) HTTPMethod() string {
+	switch p.action() {
 	case Create, CreateMany, Import:
 		return http.MethodPost
 	case Delete, DeleteMany:

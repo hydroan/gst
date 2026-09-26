@@ -61,23 +61,23 @@ const (
 // position. It is the set the detection tracks; a phase outside it is not a
 // model hook, and OverridesHook fails closed on it.
 var hookPhases = [hookCount]consts.Phase{
-	hookCreateBefore: consts.PHASE_CREATE_BEFORE,
-	hookCreateAfter:  consts.PHASE_CREATE_AFTER,
-	hookDeleteBefore: consts.PHASE_DELETE_BEFORE,
-	hookDeleteAfter:  consts.PHASE_DELETE_AFTER,
-	hookUpdateBefore: consts.PHASE_UPDATE_BEFORE,
-	hookUpdateAfter:  consts.PHASE_UPDATE_AFTER,
-	hookListBefore:   consts.PHASE_LIST_BEFORE,
-	hookListAfter:    consts.PHASE_LIST_AFTER,
-	hookGetBefore:    consts.PHASE_GET_BEFORE,
-	hookGetAfter:     consts.PHASE_GET_AFTER,
+	hookCreateBefore: consts.CreateBefore,
+	hookCreateAfter:  consts.CreateAfter,
+	hookDeleteBefore: consts.DeleteBefore,
+	hookDeleteAfter:  consts.DeleteAfter,
+	hookUpdateBefore: consts.UpdateBefore,
+	hookUpdateAfter:  consts.UpdateAfter,
+	hookListBefore:   consts.ListBefore,
+	hookListAfter:    consts.ListAfter,
+	hookGetBefore:    consts.GetBefore,
+	hookGetAfter:     consts.GetAfter,
 }
 
 // hookMethodNames holds the Go method name of each hook phase, derived once
 // at initialization so the detection never repeats the case conversion.
 var hookMethodNames = func() (names [hookCount]string) {
 	for i, phase := range hookPhases {
-		names[i] = phase.MethodName()
+		names[i] = phase.Name()
 	}
 	return names
 }()

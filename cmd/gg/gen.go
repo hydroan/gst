@@ -148,7 +148,7 @@ func genRunWithOptions(opts genRunOptions) error {
 		m.Design.Range(func(s string, a *dsl.Action) {
 			// A Stream action is served over gRPC alone: it registers no
 			// route, and no service either, nothing serving a stream yet.
-			if dsl.GRPCOnlyAction(a.Phase.MethodName()) {
+			if dsl.GRPCOnlyAction(a.Phase.Name()) {
 				return
 			}
 			if a.Service {
@@ -189,7 +189,7 @@ func genRunWithOptions(opts genRunOptions) error {
 	}
 	for _, m := range allModels {
 		m.Design.Range(func(route string, act *dsl.Action) {
-			if dsl.GRPCOnlyAction(act.Phase.MethodName()) {
+			if dsl.GRPCOnlyAction(act.Phase.Name()) {
 				return
 			}
 			// Both registrations below must carry this exact route string:
@@ -205,7 +205,7 @@ func genRunWithOptions(opts genRunOptions) error {
 			if act.Public {
 				base = "Pub"
 			}
-			routerStmts = append(routerStmts, gggen.StmtRouterRegister(importQualifier(routerAliases, m.ImportPath(), m.ModelPkgName), m.ModelName, act.Payload, act.Result, gstModelPkg, base, route, paramName, act.Phase.MethodName()))
+			routerStmts = append(routerStmts, gggen.StmtRouterRegister(importQualifier(routerAliases, m.ImportPath(), m.ModelPkgName), m.ModelName, act.Payload, act.Result, gstModelPkg, base, route, paramName, act.Phase.Name()))
 		})
 	}
 
@@ -379,7 +379,7 @@ func genRunWithOptions(opts genRunOptions) error {
 	var applyErr error
 	for _, m := range allModels {
 		m.Design.Range(func(route string, act *dsl.Action) {
-			if applyErr != nil || dsl.GRPCOnlyAction(act.Phase.MethodName()) {
+			if applyErr != nil || dsl.GRPCOnlyAction(act.Phase.Name()) {
 				return
 			}
 			target := modelinfo.ServiceTarget(m, act, ggconst.DirModel, ggconst.DirService)
@@ -597,7 +597,7 @@ func reportModelIgnoreWarnings(result modelinfo.ModelIgnoreResult) {
 func reportUnservedStreams(models []*modelinfo.Model) {
 	for _, m := range models {
 		m.Design.Range(func(route string, act *dsl.Action) {
-			if dsl.GRPCOnlyAction(act.Phase.MethodName()) {
+			if dsl.GRPCOnlyAction(act.Phase.Name()) {
 				clioutput.Warn("", "%s: the Stream action %s of %s on %s is declared but not served: streaming rpcs have no handler, so its rpc answers Unimplemented", m.ModelFilePath, act.RoleName(), m.ModelName, route)
 			}
 		})

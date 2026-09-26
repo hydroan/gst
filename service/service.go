@@ -45,7 +45,7 @@ type Base[M types.Model, REQ types.Request, RSP types.Response] = serviceregistr
 //	}
 //
 //	func init() {
-//	    service.Register[*myService](consts.PHASE_CREATE, "/api/samples")
+//	    service.Register[*myService](consts.Create, "/api/samples")
 //	}
 //
 // Logger initialization:

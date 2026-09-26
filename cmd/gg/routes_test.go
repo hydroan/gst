@@ -17,20 +17,20 @@ import (
 // TestParseModelRoutesReadsTheRuntimeMethodOfEveryVerb builds a router file
 // the way gg gen writes router/router.gen.go, one route per action phase, and
 // reads each route back under the method the framework router registers the
-// verb by, consts.HTTPVerb.HTTPMethod (see the router's own test of that).
+// verb by, consts.Phase.HTTPMethod (see the router's own test of that).
 func TestParseModelRoutesReadsTheRuntimeMethodOfEveryVerb(t *testing.T) {
 	phases := []consts.Phase{
-		consts.PHASE_CREATE, consts.PHASE_DELETE, consts.PHASE_UPDATE, consts.PHASE_PATCH,
-		consts.PHASE_LIST, consts.PHASE_GET,
-		consts.PHASE_CREATE_MANY, consts.PHASE_DELETE_MANY, consts.PHASE_UPDATE_MANY, consts.PHASE_PATCH_MANY,
-		consts.PHASE_IMPORT, consts.PHASE_EXPORT, consts.PHASE_SSE,
+		consts.Create, consts.Delete, consts.Update, consts.Patch,
+		consts.List, consts.Get,
+		consts.CreateMany, consts.DeleteMany, consts.UpdateMany, consts.PatchMany,
+		consts.Import, consts.Export, consts.SSE,
 	}
 	stmts := make([]ast.Stmt, 0, len(phases))
 	want := make(map[string]string, len(phases))
 	for _, phase := range phases {
 		path := consts.APIPath("samples/" + string(phase))
-		stmts = append(stmts, gggen.StmtRouterRegister("model", "Sample", "*Sample", "*Sample", "model", "Auth", path, "", phase.MethodName()))
-		want[path] = phase.ToHTTPVerb().HTTPMethod()
+		stmts = append(stmts, gggen.StmtRouterRegister("model", "Sample", "*Sample", "*Sample", "model", "Auth", path, "", phase.Name()))
+		want[path] = phase.HTTPMethod()
 	}
 	code, err := gggen.BuildRouterFile("router", "model", map[string]string{"tmpapp/model": ""}, stmts...)
 	require.NoError(t, err)

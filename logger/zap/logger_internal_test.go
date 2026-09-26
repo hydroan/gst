@@ -35,7 +35,7 @@ func TestContextFieldsFitTheCapacityInTheWorstCase(t *testing.T) {
 		RawQuery: "page=1",
 	}))
 	ctx = execctx.WithCronjob(ctx, "sample_job", "trace-worst")
-	l.WithContext(ctx, consts.PHASE_LIST).Infoz("sample entry")
+	l.WithContext(ctx, consts.List).Infoz("sample entry")
 
 	entries := logs.All()
 	require.Len(t, entries, 1)

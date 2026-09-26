@@ -35,21 +35,21 @@ func TestParse(t *testing.T) {
 							// The Payload[*UserReq] declaration in testdata/user.go is
 							// discarded: List handles an HTTP GET request, so declaring
 							// Result fixes the request type to PayloadEmpty.
-							{Enabled: true, Service: true, Payload: PayloadEmpty, Result: "*UserRsp", Phase: consts.PHASE_LIST},
-							{Enabled: true, Service: true, Payload: "*User", Result: "*User", Phase: consts.PHASE_GET},
+							{Enabled: true, Service: true, Payload: PayloadEmpty, Result: "*UserRsp", Phase: consts.List},
+							{Enabled: true, Service: true, Payload: "*User", Result: "*User", Phase: consts.Get},
 						},
 						"tenant/users": {
-							{Enabled: true, Service: false, Payload: "*UserReq", Result: "*User", Phase: consts.PHASE_CREATE},
-							{Enabled: true, Service: false, Payload: "*User", Result: "*User", Phase: consts.PHASE_UPDATE},
-							{Enabled: true, Service: false, Payload: "*User", Result: "*User", Phase: consts.PHASE_PATCH},
-							{Enabled: true, Service: false, Payload: "*User", Result: "*User", Phase: consts.PHASE_CREATE_MANY},
+							{Enabled: true, Service: false, Payload: "*UserReq", Result: "*User", Phase: consts.Create},
+							{Enabled: true, Service: false, Payload: "*User", Result: "*User", Phase: consts.Update},
+							{Enabled: true, Service: false, Payload: "*User", Result: "*User", Phase: consts.Patch},
+							{Enabled: true, Service: false, Payload: "*User", Result: "*User", Phase: consts.CreateMany},
 						},
 					},
-					Create:     &Action{Enabled: true, Service: true, Public: true, Payload: "User", Result: "*User", Phase: consts.PHASE_CREATE},
-					Delete:     &Action{Enabled: true, Service: false, Public: false, Payload: "*User", Result: "*User", Phase: consts.PHASE_DELETE},
-					Update:     &Action{Enabled: false, Service: false, Public: false, Payload: "*User", Result: "User", Phase: consts.PHASE_UPDATE},
+					Create:     &Action{Enabled: true, Service: true, Public: true, Payload: "User", Result: "*User", Phase: consts.Create},
+					Delete:     &Action{Enabled: true, Service: false, Public: false, Payload: "*User", Result: "*User", Phase: consts.Delete},
+					Update:     &Action{Enabled: false, Service: false, Public: false, Payload: "*User", Result: "User", Phase: consts.Update},
 					Patch:      &Action{Enabled: false, Service: false, Public: false, Payload: "*User", Result: "*User"},
-					List:       &Action{Enabled: true, Service: false, Public: false, Payload: "*User", Result: "*User", Phase: consts.PHASE_LIST},
+					List:       &Action{Enabled: true, Service: false, Public: false, Payload: "*User", Result: "*User", Phase: consts.List},
 					Get:        &Action{Enabled: false, Service: false, Public: false, Payload: "*User", Result: "*User"},
 					CreateMany: &Action{Enabled: false, Service: false, Public: false, Payload: "*User", Result: "*User"},
 					DeleteMany: &Action{Enabled: false, Service: false, Public: false, Payload: "*User", Result: "*User"},
@@ -71,10 +71,10 @@ func TestParse(t *testing.T) {
 					Endpoint:   "user2s",
 					Param:      ":user",
 					Migrate:    false,
-					Create:     &Action{Enabled: true, Service: false, Public: false, Payload: "User2", Result: "*User3", Phase: consts.PHASE_CREATE},
+					Create:     &Action{Enabled: true, Service: false, Public: false, Payload: "User2", Result: "*User3", Phase: consts.Create},
 					Delete:     &Action{Enabled: false, Service: false, Public: false, Payload: "*User2", Result: "*User2"},
 					Update:     &Action{Enabled: false, Service: false, Public: false, Payload: "*User2", Result: "*User2"},
-					Patch:      &Action{Enabled: true, Service: false, Public: false, Payload: "*User", Result: "User", Phase: consts.PHASE_PATCH},
+					Patch:      &Action{Enabled: true, Service: false, Public: false, Payload: "*User", Result: "User", Phase: consts.Patch},
 					List:       &Action{Enabled: false, Service: false, Public: false, Payload: "*User2", Result: "*User2"},
 					Get:        &Action{Enabled: false, Service: false, Public: false, Payload: "*User2", Result: "*User2"},
 					CreateMany: &Action{Enabled: false, Service: false, Public: false, Payload: "*User2", Result: "*User2"},
@@ -96,9 +96,9 @@ func TestParse(t *testing.T) {
 					Enabled:    true,
 					Endpoint:   "user",
 					Migrate:    false,
-					Create:     &Action{Enabled: false, Service: false, Public: false, Payload: "User", Result: "*User", Phase: consts.PHASE_CREATE},
+					Create:     &Action{Enabled: false, Service: false, Public: false, Payload: "User", Result: "*User", Phase: consts.Create},
 					Delete:     &Action{Enabled: false, Service: false, Public: false, Payload: "*User3", Result: "*User3"},
-					Update:     &Action{Enabled: true, Service: false, Public: false, Payload: "*User", Result: "User", Phase: consts.PHASE_UPDATE},
+					Update:     &Action{Enabled: true, Service: false, Public: false, Payload: "*User", Result: "User", Phase: consts.Update},
 					Patch:      &Action{Enabled: false, Service: false, Public: false, Payload: "*User3", Result: "*User3"},
 					List:       &Action{Enabled: false, Service: false, Public: false, Payload: "*User3", Result: "*User3"},
 					Get:        &Action{Enabled: false, Service: false, Public: false, Payload: "*User3", Result: "*User3"},
@@ -115,9 +115,9 @@ func TestParse(t *testing.T) {
 					Enabled:    true,
 					Endpoint:   "user4s",
 					Migrate:    false,
-					Create:     &Action{Enabled: true, Service: false, Public: false, Payload: "User", Result: "*User", Phase: consts.PHASE_CREATE},
+					Create:     &Action{Enabled: true, Service: false, Public: false, Payload: "User", Result: "*User", Phase: consts.Create},
 					Delete:     &Action{Enabled: false, Service: false, Public: false, Payload: "*User4", Result: "*User4"},
-					Update:     &Action{Enabled: false, Service: false, Public: false, Payload: "*User", Result: "User", Phase: consts.PHASE_UPDATE},
+					Update:     &Action{Enabled: false, Service: false, Public: false, Payload: "*User", Result: "User", Phase: consts.Update},
 					Patch:      &Action{Enabled: false, Service: false, Public: false, Payload: "*User4", Result: "*User4"},
 					List:       &Action{Enabled: false, Service: false, Public: false, Payload: "*User4", Result: "*User4"},
 					Get:        &Action{Enabled: false, Service: false, Public: false, Payload: "*User4", Result: "*User4"},
@@ -416,7 +416,7 @@ func TestParseFlatten(t *testing.T) {
 
 	var got *Action
 	design.Range(func(route string, act *Action) {
-		if route == "authz/roles" && act.Phase == consts.PHASE_CREATE {
+		if route == "authz/roles" && act.Phase == consts.Create {
 			got = act
 		}
 	})
@@ -436,7 +436,7 @@ func TestParseExact(t *testing.T) {
 
 	var got *Action
 	design.Range(func(route string, act *Action) {
-		if route == "iam/admin/users/:id/sessions" && act.Phase == consts.PHASE_DELETE {
+		if route == "iam/admin/users/:id/sessions" && act.Phase == consts.Delete {
 			got = act
 		}
 	})
@@ -1347,9 +1347,9 @@ func TestParseStreamActions(t *testing.T) {
 	}
 
 	want := map[string]*Action{
-		"feeds/watch":  {Enabled: true, Service: true, Filename: "watch", Payload: "*FeedWatchReq", Result: "*FeedEvent", StreamingResult: true, Phase: consts.PHASE_STREAM},
-		"feeds/upload": {Enabled: true, Service: true, Filename: "upload", Payload: "*FeedEvent", Result: "*FeedUploadRsp", StreamingPayload: true, Phase: consts.PHASE_STREAM},
-		"feeds/chat":   {Enabled: true, Service: true, Filename: "chat", Payload: "*FeedEvent", Result: "*FeedEvent", StreamingPayload: true, StreamingResult: true, Phase: consts.PHASE_STREAM},
+		"feeds/watch":  {Enabled: true, Service: true, Filename: "watch", Payload: "*FeedWatchReq", Result: "*FeedEvent", StreamingResult: true, Phase: consts.Stream},
+		"feeds/upload": {Enabled: true, Service: true, Filename: "upload", Payload: "*FeedEvent", Result: "*FeedUploadRsp", StreamingPayload: true, Phase: consts.Stream},
+		"feeds/chat":   {Enabled: true, Service: true, Filename: "chat", Payload: "*FeedEvent", Result: "*FeedEvent", StreamingPayload: true, StreamingResult: true, Phase: consts.Stream},
 	}
 	for route, w := range want {
 		actions := design.routes[route]
@@ -1360,7 +1360,7 @@ func TestParseStreamActions(t *testing.T) {
 			t.Errorf("route %s: %s", route, pretty.Diff(w, actions[0]))
 		}
 	}
-	top := &Action{Enabled: true, Service: true, Filename: "tail", Payload: PayloadEmpty, Result: "*FeedEvent", StreamingResult: true, Phase: consts.PHASE_STREAM}
+	top := &Action{Enabled: true, Service: true, Filename: "tail", Payload: PayloadEmpty, Result: "*FeedEvent", StreamingResult: true, Phase: consts.Stream}
 	if !reflect.DeepEqual(design.Stream, top) {
 		t.Errorf("top-level Stream: %s", pretty.Diff(top, design.Stream))
 	}

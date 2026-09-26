@@ -33,20 +33,20 @@ func TestHumanizeDSLFilename(t *testing.T) {
 func TestServiceActionLogQuoted(t *testing.T) {
 	t.Parallel()
 	act := &dsl.Action{Filename: "archive_sample_items"}
-	if got := serviceActionLogQuoted("Record", consts.PHASE_CREATE, act); got != `"record: archive sample items"` {
+	if got := serviceActionLogQuoted("Record", consts.Create, act); got != `"record: archive sample items"` {
 		t.Fatalf("main create: got %s", got)
 	}
-	if got := serviceActionLogQuoted("Record", consts.PHASE_CREATE_BEFORE, act); got != `"record: archive sample items before"` {
+	if got := serviceActionLogQuoted("Record", consts.CreateBefore, act); got != `"record: archive sample items before"` {
 		t.Fatalf("before hook: got %s", got)
 	}
-	if got := serviceActionLogQuoted("Record", consts.PHASE_CREATE_AFTER, act); got != `"record: archive sample items after"` {
+	if got := serviceActionLogQuoted("Record", consts.CreateAfter, act); got != `"record: archive sample items after"` {
 		t.Fatalf("after hook: got %s", got)
 	}
 	act2 := &dsl.Action{Filename: "archive-sample-items"}
-	if got := serviceActionLogQuoted("Record", consts.PHASE_CREATE, act2); got != `"record: archive sample items"` {
+	if got := serviceActionLogQuoted("Record", consts.Create, act2); got != `"record: archive sample items"` {
 		t.Fatalf("hyphen filename: got %s", got)
 	}
-	if got := serviceActionLogQuoted("User", consts.PHASE_CREATE, nil); got != `"user create"` {
+	if got := serviceActionLogQuoted("User", consts.Create, nil); got != `"user create"` {
 		t.Fatalf("no Filename: got %s", got)
 	}
 }
@@ -68,7 +68,7 @@ func TestGenServiceMethod1(t *testing.T) {
 				ModulePath:   "codegen",
 				ModelFileDir: "/tmp/model",
 			},
-			phase: consts.PHASE_CREATE_BEFORE,
+			phase: consts.CreateBefore,
 			want: `func (u *Creator) CreateBefore(ctx *gst.ServiceContext, user *model.User) error {
 	log := u.WithContext(ctx, ctx.Phase())
 	log.Info("user create before")
@@ -108,7 +108,7 @@ func TestGenServiceMethod2(t *testing.T) {
 				ModulePath:   "codegen",
 				ModelFileDir: "/tmp/model",
 			},
-			phase: consts.PHASE_LIST_BEFORE,
+			phase: consts.ListBefore,
 			want: `func (u *Lister) ListBefore(ctx *gst.ServiceContext, users *[]*model.User) error {
 	log := u.WithContext(ctx, ctx.Phase())
 	log.Info("user list before")
@@ -148,7 +148,7 @@ func TestGenServiceMethod3(t *testing.T) {
 				ModulePath:   "codegen",
 				ModelFileDir: "/tmp/model",
 			},
-			phase: consts.PHASE_CREATE_MANY_BEFORE,
+			phase: consts.CreateManyBefore,
 			want: `func (u *ManyCreator) CreateManyBefore(ctx *gst.ServiceContext, users ...*model.User) error {
 	log := u.WithContext(ctx, ctx.Phase())
 	log.Info("user create many before")
@@ -192,7 +192,7 @@ func TestGenServiceMethod4(t *testing.T) {
 			},
 			reqName: "*User",
 			rspName: "*User",
-			phase:   consts.PHASE_CREATE,
+			phase:   consts.Create,
 			want: `func (u *Creator) Create(ctx *gst.ServiceContext, req *model.User) (rsp *model.User, err error) {
 	log := u.WithContext(ctx, ctx.Phase())
 	log.Info("user create")
@@ -213,7 +213,7 @@ func TestGenServiceMethod4(t *testing.T) {
 			},
 			reqName: "GroupRequest",
 			rspName: "GroupResponse",
-			phase:   consts.PHASE_UPDATE,
+			phase:   consts.Update,
 			want: `func (g *Updater) Update(ctx *gst.ServiceContext, req model.GroupRequest) (rsp model.GroupResponse, err error) {
 	log := g.WithContext(ctx, ctx.Phase())
 	log.Info("group update")
@@ -232,7 +232,7 @@ func TestGenServiceMethod4(t *testing.T) {
 			},
 			reqName: "*GroupRequest",
 			rspName: "*GroupResponse",
-			phase:   consts.PHASE_UPDATE,
+			phase:   consts.Update,
 			want: `func (g *Updater) Update(ctx *gst.ServiceContext, req *model.GroupRequest) (rsp *model.GroupResponse, err error) {
 	log := g.WithContext(ctx, ctx.Phase())
 	log.Info("group update")
@@ -273,7 +273,7 @@ func TestGenServiceMethod5(t *testing.T) {
 				ModulePath:   "codegen",
 				ModelFileDir: "/tmp/model",
 			},
-			phase: consts.PHASE_IMPORT,
+			phase: consts.Import,
 			want: `func (u *Importer) Import(ctx *gst.ServiceContext, reader io.Reader) (users []*model.User, err error) {
 	log := u.WithContext(ctx, ctx.Phase())
 	log.Info("user import")
@@ -313,7 +313,7 @@ func TestGenServiceMethod6(t *testing.T) {
 				ModulePath:   "codegen",
 				ModelFileDir: "/tmp/model",
 			},
-			phase: consts.PHASE_EXPORT,
+			phase: consts.Export,
 			want: `func (u *Exporter) Export(ctx *gst.ServiceContext, users ...*model.User) (data []byte, err error) {
 	log := u.WithContext(ctx, ctx.Phase())
 	log.Info("user export")
@@ -353,7 +353,7 @@ func TestGenServiceMethod7(t *testing.T) {
 				ModulePath:   "codegen",
 				ModelFileDir: "model",
 			},
-			phase: consts.PHASE_SSE,
+			phase: consts.SSE,
 			want: `func (u *Streamer) SSE(ctx *gst.ServiceContext) (err error) {
 	log := u.WithContext(ctx, ctx.Phase())
 	log.Info("user sse")
@@ -395,7 +395,7 @@ func TestGenServiceMethod8(t *testing.T) {
 				ModulePath:   "codegen",
 				ModelFileDir: "model",
 			},
-			phase: consts.PHASE_LIST,
+			phase: consts.List,
 			role:  "Lister",
 			want: `func (u *Lister) Filter(ctx *gst.ServiceContext, user *model.User, opts gst.QueryOptions) (*model.User, gst.QueryOptions, error) {
 	log := u.WithContext(ctx, ctx.Phase())
@@ -414,7 +414,7 @@ func TestGenServiceMethod8(t *testing.T) {
 				ModulePath:   "codegen",
 				ModelFileDir: "model",
 			},
-			phase: consts.PHASE_EXPORT,
+			phase: consts.Export,
 			role:  "Exporter",
 			want: `func (u *Exporter) Filter(ctx *gst.ServiceContext, user *model.User, opts gst.QueryOptions) (*model.User, gst.QueryOptions, error) {
 	log := u.WithContext(ctx, ctx.Phase())
@@ -434,7 +434,7 @@ func TestGenServiceMethod8(t *testing.T) {
 				ModelFileDir: "model",
 			},
 			action: &dsl.Action{Filename: "search"},
-			phase:  consts.PHASE_LIST,
+			phase:  consts.List,
 			role:   "Search",
 			want: `func (s *Search) Filter(ctx *gst.ServiceContext, user *model.User, opts gst.QueryOptions) (*model.User, gst.QueryOptions, error) {
 	log := s.WithContext(ctx, ctx.Phase())
@@ -475,10 +475,10 @@ func TestGenerateServiceCreate(t *testing.T) {
 		Service: true,
 		Payload: "*User",
 		Result:  "*User",
-		Phase:   consts.PHASE_CREATE,
+		Phase:   consts.Create,
 	}
 
-	file := GenerateService(info, action, consts.PHASE_CREATE, "user")
+	file := GenerateService(info, action, consts.Create, "user")
 	if file == nil {
 		t.Fatal("GenerateService returned nil")
 	}
@@ -543,10 +543,10 @@ func TestGenerateServiceList(t *testing.T) {
 		Service: true,
 		Payload: "*User",
 		Result:  "*User",
-		Phase:   consts.PHASE_LIST,
+		Phase:   consts.List,
 	}
 
-	file := GenerateService(info, action, consts.PHASE_LIST, "user")
+	file := GenerateService(info, action, consts.List, "user")
 	if file == nil {
 		t.Fatal("GenerateService returned nil")
 	}
@@ -647,9 +647,9 @@ func TestGenerateServiceListEmptyPayload(t *testing.T) {
 				Service: true,
 				Payload: dsl.PayloadEmpty,
 				Result:  "*" + tt.info.ModelName + "ListRsp",
-				Phase:   consts.PHASE_LIST,
+				Phase:   consts.List,
 			}
-			file := GenerateService(tt.info, action, consts.PHASE_LIST, "group")
+			file := GenerateService(tt.info, action, consts.List, "group")
 			if file == nil {
 				t.Fatal("GenerateService returned nil")
 			}
@@ -683,7 +683,7 @@ func TestGenerateServiceExport(t *testing.T) {
 		Service: true,
 		Payload: "*User",
 		Result:  "*User",
-		Phase:   consts.PHASE_EXPORT,
+		Phase:   consts.Export,
 	}
 
 	// The export controller invocation order: ListBefore, Filter, ListAfter,
@@ -696,7 +696,7 @@ func TestGenerateServiceExport(t *testing.T) {
 	exportSig := "func (u *Exporter) Export(ctx *gst.ServiceContext, users ...*model.User) (data []byte, err error)"
 
 	t.Run("non-empty_model_generates_list_hooks_in_controller_invocation_order", func(t *testing.T) {
-		file := GenerateService(newInfo(false), action, consts.PHASE_EXPORT, "user")
+		file := GenerateService(newInfo(false), action, consts.Export, "user")
 		if file == nil {
 			t.Fatal("GenerateService returned nil")
 		}
@@ -718,7 +718,7 @@ func TestGenerateServiceExport(t *testing.T) {
 	})
 
 	t.Run("empty_model_generates_Export_only", func(t *testing.T) {
-		file := GenerateService(newInfo(true), action, consts.PHASE_EXPORT, "user")
+		file := GenerateService(newInfo(true), action, consts.Export, "user")
 		if file == nil {
 			t.Fatal("GenerateService returned nil")
 		}
@@ -752,10 +752,10 @@ func TestGenerateServiceSSE(t *testing.T) {
 		Service: true,
 		Payload: "*User",
 		Result:  "*User",
-		Phase:   consts.PHASE_SSE,
+		Phase:   consts.SSE,
 	}
 
-	file := GenerateService(info, action, consts.PHASE_SSE, "user")
+	file := GenerateService(info, action, consts.SSE, "user")
 	if file == nil {
 		t.Fatal("GenerateService returned nil")
 	}

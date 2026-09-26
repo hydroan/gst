@@ -258,7 +258,7 @@ func applyServiceMethod3(fn *ast.FuncDecl, action *dsl.Action) bool { return fal
 // validation helper with the same (ctx *gst.ServiceContext, req *pkg.Req) (*pkg.X, error)
 // shape as Patch, was mistaken for the action method and had its return type rewritten to
 // *sample.RecordPatchRsp, corrupting the function body and breaking the build. Requiring
-// fn.Name to equal action.Phase.MethodName() (e.g. "Patch") ensures only the actual action
+// fn.Name to equal action.Phase.Name() (e.g. "Patch") ensures only the actual action
 // method for the current DSL phase is ever rewritten.
 func applyServiceMethod4(fn *ast.FuncDecl, action *dsl.Action, modelPkg string) bool {
 	if fn == nil || action == nil || fn.Name == nil {
@@ -269,7 +269,7 @@ func applyServiceMethod4(fn *ast.FuncDecl, action *dsl.Action, modelPkg string) 
 		return false
 	}
 
-	if fn.Name.Name != action.Phase.MethodName() {
+	if fn.Name.Name != action.Phase.Name() {
 		return false
 	}
 

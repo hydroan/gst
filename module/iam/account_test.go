@@ -430,7 +430,7 @@ func TestAccountChangePassword(t *testing.T) {
 			http.MethodPost,
 			"/api/iam/change-password",
 			syncFailUser.SessionID,
-			consts.PHASE_CREATE,
+			consts.Create,
 		)
 		require.NoError(t, redis.Set(t.Context(), accountSessionDataKey(t, syncFailUser.SessionID), "not-a-session", time.Hour))
 
@@ -482,7 +482,7 @@ func TestAccountChangePassword(t *testing.T) {
 			http.MethodPost,
 			"/api/iam/change-password",
 			revokeFailUser.SessionID,
-			consts.PHASE_CREATE,
+			consts.Create,
 		)
 		svc := &serviceiamaccount.ChangePasswordService{}
 		svc.Logger = loggerzap.Fallback("service")

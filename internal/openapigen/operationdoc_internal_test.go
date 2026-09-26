@@ -11,7 +11,7 @@ import (
 func TestOperationIDDerivesFromPath(t *testing.T) {
 	tests := []struct {
 		path string
-		op   consts.HTTPVerb
+		op   consts.Phase
 		want string
 	}{
 		{"/api/sample/records/{id}", consts.Patch, "sample_records_patch"},
