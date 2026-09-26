@@ -27,10 +27,78 @@ import (
 // List, the expansion of a Get. The call functions read it exactly as the
 // HTTP listener reads the query string, so both transports refuse the same
 // requests; the zero value of a field is the parameter not sent.
+//
+// gRPC has no URL, so what an HTTP request carries in its path and query
+// string the request message carries in its fields, the route parameters
+// first and these after them. For a model Record on the route records, gg
+// gen derives
+//
+//	message ListRecordRequest {
+//	  repeated Filter filters = 1;
+//	  repeated string sort_by = 2;
+//	  uint32 page = 3;
+//	  uint32 size = 4;
+//	  string cursor_field = 5;
+//	  string cursor_value = 6;
+//	  bool cursor_next = 7;
+//	  repeated string expand = 8;
+//	  uint32 depth = 9;
+//
+//	  message Filter {
+//	    string field = 1;
+//	    string op = 2;
+//	    repeated string values = 3;
+//	  }
+//	}
+//
+//	message GetRecordRequest {
+//	  string id = 1;
+//	  repeated string expand = 2;
+//	  uint32 depth = 3;
+//	}
+//
+// and, for a route with parameters, their string fields ahead of these,
+// record for records/:record/items. Listing a Record with the fields
+// status, age and name over HTTP as
+//
+//	GET /api/records?status[in]=active,archived&age[gt]=20&name=alice&_sort_by=created_at desc&_page=2&_size=20
+//
+// is calling ListRecord with the request message (in the JSON grpcurl
+// speaks)
+//
+//	{
+//	  "filters": [
+//	    {"field": "status", "op": "in", "values": ["active", "archived"]},
+//	    {"field": "age", "op": "gt", "values": ["20"]},
+//	    {"field": "name", "values": ["alice"]}
+//	  ],
+//	  "sort_by": ["created_at desc"],
+//	  "page": 2,
+//	  "size": 20
+//	}
+//
+// which the generated handler hands the call as
+//
+//	Query{
+//		Filters: []Filter{
+//			{Field: "status", Op: "in", Values: []string{"active", "archived"}},
+//			{Field: "age", Op: "gt", Values: []string{"20"}},
+//			{Field: "name", Values: []string{"alice"}},
+//		},
+//		SortBy: []string{"created_at desc"},
+//		Page:   2,
+//		Size:   20,
+//	}
+//
+// A Get carries only the expansion: {"id": "r-1", "expand": ["children"],
+// "depth": 2} is GET /api/records/r-1?_expand=children&_depth=2.
 type Query = controller.Query
 
-// Filter is one filter of a Query, the field[op]=value of the HTTP query;
-// without an operator it is the bare key, field=value.
+// Filter is one filter of a Query: with an operator the field[op]=value of
+// the HTTP query, {Field: "age", Op: "gt", Values: []string{"20"}} being
+// age[gt]=20; without one the bare key, field=value. The in and notin
+// operators take their members as the list Values is, where the HTTP query
+// takes them comma-separated.
 type Filter = controller.Filter
 
 // CreateCall returns the create call of M on route: given the route
