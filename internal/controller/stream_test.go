@@ -229,3 +229,22 @@ func TestBidiStreamCallStreamsBothWays(t *testing.T) {
 	_, err := recvResponse(stream)
 	require.ErrorIs(t, err, io.EOF, "the stream ends once the client is done")
 }
+
+// TestFirstMessageRefusesAStreamEndedBeforeIt pins FirstMessage, what a
+// generated handler reads the first message of a request stream through:
+// the message when there is one, InvalidArgument naming the missing route
+// parameters when the client ended the stream before sending any, and the
+// stream's error as it is otherwise.
+func TestFirstMessageRefusesAStreamEndedBeforeIt(t *testing.T) {
+	first, err := controller.FirstMessage(func() (string, error) { return "params", nil })
+	require.NoError(t, err)
+	require.Equal(t, "params", first)
+
+	_, err = controller.FirstMessage(func() (string, error) { return "", io.EOF })
+	st := status.Convert(err)
+	require.Equal(t, codes.InvalidArgument, st.Code())
+	require.Equal(t, "the stream ended before its first message, which carries the route parameters", st.Message())
+
+	_, err = controller.FirstMessage(func() (string, error) { return "", status.Error(codes.Canceled, "context canceled") })
+	require.Equal(t, codes.Canceled, status.Code(err))
+}

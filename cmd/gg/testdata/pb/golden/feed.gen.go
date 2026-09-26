@@ -37,7 +37,7 @@ func (FeedService) TailFeedByFeed(req *TailFeedByFeedRequest, srv FeedService_Ta
 // UploadFeedByFeed serves the Stream action of Feed declared on
 // feeds/:feed/upload, served over gRPC alone.
 func (FeedService) UploadFeedByFeed(srv FeedService_UploadFeedByFeedServer) error {
-	first, err := srv.Recv()
+	first, err := grpc.FirstMessage(srv.Recv)
 	if err != nil {
 		return err
 	}

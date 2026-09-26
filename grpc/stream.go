@@ -10,7 +10,8 @@ import (
 // This file holds what a Stream action's service reads and writes, the
 // streams, and the calls the generated handlers of streaming rpcs run the
 // action through: ServerStreamCall, ClientStreamCall and BidiStreamCall,
-// one per kind of stream, the counterparts of ServiceCall.
+// one per kind of stream, the counterparts of ServiceCall, and FirstMessage,
+// which a handler reads the route parameters of a request stream through.
 
 // ServerStream is the response stream of a Stream action declaring a
 // StreamingResult: the service's Stream method sends each response through
@@ -26,6 +27,16 @@ type ClientStream[REQ types.Request] = types.ClientStream[REQ]
 // declaring both a StreamingPayload and a StreamingResult: Recv and Send
 // as on the two above, independent of each other.
 type BidiStream[REQ types.Request, RSP types.Response] = types.BidiStream[REQ, RSP]
+
+// FirstMessage returns the first message of a request stream read through
+// recv, the Recv of the stream the plugin generated: what the generated
+// handler of a client or bidirectional stream on a route with parameters
+// reads ahead of the call, the parameters being carried by that message. A
+// stream the client ended before sending one is refused with
+// InvalidArgument; any other error of recv is returned as it is.
+func FirstMessage[T any](recv func() (T, error)) (T, error) {
+	return controller.FirstMessage(recv)
+}
 
 // ServerStreamCall returns the call of the Stream action on route whose
 // response is streamed: given the route parameters, the request the message

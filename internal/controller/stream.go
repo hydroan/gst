@@ -3,7 +3,9 @@ package controller
 import (
 	"context"
 	"fmt"
+	"io"
 
+	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/consts"
 	"github.com/hydroan/gst/internal/types"
 	gstotel "github.com/hydroan/gst/otel"
@@ -118,6 +120,26 @@ func BidiStreamCall[M types.Model, REQ types.Request, RSP types.Response](route 
 		}
 		return c.finish()
 	}
+}
+
+// firstMessageMsg is the message a stream the client ended before its
+// first message is refused with (see FirstMessage).
+const firstMessageMsg = "the stream ended before its first message, which carries the route parameters"
+
+// FirstMessage returns the first message of a request stream read through
+// recv, the Recv of the transport's stream: what the generated handler of a
+// client or bidirectional stream on a route with parameters reads ahead of
+// the call, the parameters being carried by that message. A stream the
+// client ended before sending one (io.EOF) is refused with InvalidArgument
+// and firstMessageMsg — the client broke the contract, and the transport's
+// own answer to the EOF, Unknown, would say nothing of why — and any other
+// error is returned as it is. The public grpc.FirstMessage forwards to it.
+func FirstMessage[T any](recv func() (T, error)) (T, error) {
+	first, err := recv()
+	if errors.Is(err, io.EOF) {
+		return first, status.Error(codes.InvalidArgument, firstMessageMsg)
+	}
+	return first, err
 }
 
 // requests reads the requests of a request stream through the function the

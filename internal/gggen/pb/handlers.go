@@ -471,7 +471,7 @@ func (w *fileWriter) query(phase consts.Phase, req func(string) ast.Expr) (ast.E
 //	// UploadFeedByFeed serves the Stream action of Feed declared on
 //	// feeds/:feed/upload, served over gRPC alone.
 //	func (FeedService) UploadFeedByFeed(srv FeedService_UploadFeedByFeedServer) error {
-//		first, err := srv.Recv()
+//		first, err := grpc.FirstMessage(srv.Recv)
 //		if err != nil {
 //			return err
 //		}
@@ -573,7 +573,7 @@ func (w *fileWriter) streamHandler(r *rpc) {
 	case "Client":
 		withFirst := len(r.params) > 0
 		if withFirst {
-			body = append(body, define([]string{"first", "err"}, call(sel(srv, "Recv"))), ifStmt(nil, notNil(ident("err")), returns(ident("err"))))
+			body = append(body, define([]string{"first", "err"}, call(w.grpc("FirstMessage"), sel(srv, "Recv"))), ifStmt(nil, notNil(ident("err")), returns(ident("err"))))
 		}
 		body = append(body,
 			define([]string{"result", "err"}, run(paramsOf(ident("first")), recv(withFirst))),
@@ -583,7 +583,7 @@ func (w *fileWriter) streamHandler(r *rpc) {
 	default:
 		withFirst := len(r.params) > 0
 		if withFirst {
-			body = append(body, define([]string{"first", "err"}, call(sel(srv, "Recv"))), ifStmt(nil, notNil(ident("err")), returns(ident("err"))))
+			body = append(body, define([]string{"first", "err"}, call(w.grpc("FirstMessage"), sel(srv, "Recv"))), ifStmt(nil, notNil(ident("err")), returns(ident("err"))))
 		}
 		body = append(body, returns(run(paramsOf(ident("first")), recv(withFirst), send)))
 	}
