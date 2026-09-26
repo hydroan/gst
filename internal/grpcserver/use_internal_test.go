@@ -14,6 +14,7 @@ import (
 	"go.uber.org/zap/zapcore"
 	"go.uber.org/zap/zaptest/observer"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/health/grpc_health_v1"
 	"google.golang.org/grpc/status"
 )
 
@@ -70,6 +71,33 @@ func TestUseAuthSkipsThePublicMethods(t *testing.T) {
 	defer cancel()
 
 	require.NoError(t, call(ctx, conn, "Look"), "a public method needs no credentials")
+	require.Equal(t, codes.Unauthenticated, status.Code(call(ctx, conn, "Ping")))
+}
+
+// TestUseAuthLeavesTheServersOwnServicesAlone pins that the interceptors
+// UseAuth queued guard the project's methods alone: with one refusing every
+// call, the health service still answers a check and a watch, the
+// reflection service still lists the services, and the project's method is
+// refused.
+func TestUseAuthLeavesTheServersOwnServicesAlone(t *testing.T) {
+	reset(t)
+	UseAuth(func(context.Context) (context.Context, error) {
+		return nil, status.Error(codes.Unauthenticated, "no credentials")
+	})
+	serve(map[string]func(context.Context) error{"Ping": func(context.Context) error { return nil }}, Method{Name: "/gst.test.Echo/Ping"})
+	conn := dial(t, start(t), nil)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	require.Equal(t, grpc_health_v1.HealthCheckResponse_SERVING, healthOf(t, conn))
+	watch, err := grpc_health_v1.NewHealthClient(conn).Watch(ctx, &grpc_health_v1.HealthCheckRequest{})
+	require.NoError(t, err)
+	first, err := watch.Recv()
+	require.NoError(t, err, "the health watch, a stream, takes no credentials either")
+	require.Equal(t, grpc_health_v1.HealthCheckResponse_SERVING, first.GetStatus())
+	names, err := services(t, conn)
+	require.NoError(t, err)
+	require.Contains(t, names, "gst.test.Echo")
 	require.Equal(t, codes.Unauthenticated, status.Code(call(ctx, conn, "Ping")))
 }
 

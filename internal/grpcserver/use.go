@@ -10,6 +10,9 @@ import (
 	"github.com/grpc-ecosystem/go-grpc-middleware/v2/interceptors/selector"
 	"github.com/hydroan/gst/internal/requestctx"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/health/grpc_health_v1"
+	"google.golang.org/grpc/reflection/grpc_reflection_v1"
+	"google.golang.org/grpc/reflection/grpc_reflection_v1alpha"
 )
 
 // Method describes one rpc of a registered service the way the generated
@@ -26,7 +29,8 @@ type Method struct {
 	// HTTPMethod and Route are the HTTP method and the route pattern of the
 	// same action, "GET" and "/api/records/:id"; for the rpc of a Stream
 	// action, served over gRPC alone, HTTPMethod is MethodStream and Route
-	// the route the action is declared on.
+	// the path the action is declared at, "/api/feeds/watch", which nothing
+	// serves over HTTP.
 	HTTPMethod string
 	Route      string
 }
@@ -102,10 +106,25 @@ func unguardedMethods() []string {
 	return names
 }
 
+// ownServices are the services the server registers for itself (see Run),
+// the health service and the reflection service in its two versions, which
+// the auth interceptors leave alone: they are the framework's, not the
+// project's actions, and the callers of either present no credentials — a
+// Kubernetes gRPC probe or a balancer checking the health service, grpcurl
+// listing the services through reflection — the way the HTTP listener's
+// probes take no authentication. Reflection exposes the schema alone, what
+// the committed .proto files carry; [grpc] reflection turns it off where
+// that is too much.
+var ownServices = map[string]bool{
+	grpc_health_v1.Health_ServiceDesc.ServiceName:                    true,
+	grpc_reflection_v1.ServerReflection_ServiceDesc.ServiceName:      true,
+	grpc_reflection_v1alpha.ServerReflection_ServiceDesc.ServiceName: true,
+}
+
 // guarded matches the calls the auth interceptors run on: those to a
-// method not declared public.
+// method not declared public, the server's own services aside.
 var guarded = selector.MatchFunc(func(_ context.Context, meta interceptors.CallMeta) bool {
-	return !methods[meta.FullMethod()].Public
+	return !ownServices[meta.Service] && !methods[meta.FullMethod()].Public
 })
 
 // projectUnaryInterceptors returns the interceptors Use and UseAuth queued
