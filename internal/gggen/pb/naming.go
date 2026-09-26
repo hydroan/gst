@@ -146,11 +146,12 @@ type requestParam struct {
 // Param, becomes the field id, "the id of the Item", "the id of the Item to
 // delete" for its Delete action; every other parameter becomes a field named
 // after itself, record for :record and box_id for :box-id, "the :record
-// parameter of records/:record/items". The Get action of Item on
-// records/:record/items, registered on records/:record/items/:id, carries
-// record and id; its Create carries record alone; a Delete of Document,
-// registered on archive/documents/:document for Param("document"), carries
-// id; DeleteMany, registered on archive/documents/batch, carries nothing.
+// parameter of /api/records/:record/items". The Get action of Item on
+// records/:record/items, registered on /api/records/:record/items/:id,
+// carries record and id; its Create carries record alone; a Delete of
+// Document, registered on /api/archive/documents/:document for
+// Param("document"), carries id; DeleteMany, registered on
+// /api/archive/documents/batch, carries nothing.
 func requestParams(m *modelinfo.Model, route string, action *dsl.Action) []requestParam {
 	registered, _ := modelinfo.RouterTargetForAction(route, m.Design, action)
 	own := strings.TrimPrefix(modelinfo.ItemParam(m.Design), ":")

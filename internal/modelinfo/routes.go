@@ -42,15 +42,19 @@ func ItemParam(design *dsl.Design) string {
 	return ":id"
 }
 
-// RouterTargetForAction returns the route the router registers action under,
+// RouterTargetForAction returns the path the router registers action at,
 // given the route its design declares it on, and the name of the path
-// parameter that route ends in. An item action appends the parameter ItemParam
-// returns: the Get action of route samples with Param("sample") registers
-// samples/:sample, whose parameter is sample. A batch action appends batch,
-// Import import and Export export: the CreateMany action of route samples
-// registers samples/batch. An Exact action keeps the route it declares,
-// parameter included.
+// parameter that path ends in. The path is the route under the API prefix
+// (see consts.APIPath), so every generated file spells a route the way it
+// is served. An item action appends the parameter ItemParam returns: the Get
+// action of route samples with Param("sample") registers /api/samples/:sample,
+// whose parameter is sample. A batch action appends batch, Import import and
+// Export export: the CreateMany action of route samples registers
+// /api/samples/batch. An Exact action keeps the route it declares, parameter
+// included: /api/iam/admin/users/:id/sessions, whose parameter is id, for
+// iam/admin/users/:id/sessions.
 func RouterTargetForAction(route string, design *dsl.Design, action *dsl.Action) (string, string) {
+	route = consts.APIPath(route)
 	if action == nil {
 		return route, ""
 	}

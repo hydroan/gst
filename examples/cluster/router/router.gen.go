@@ -13,12 +13,12 @@ import (
 )
 
 func Init() error {
-	router.Register[*model.Cached, *model.CachedReq, *model.CachedRsp](router.Auth(), "caches", &gst.ControllerConfig[*model.Cached]{}, consts.Create)
-	router.Register[*model.Cached, *gstmodel.Empty, *model.CachedRsp](router.Auth(), "caches/:id", &gst.ControllerConfig[*model.Cached]{ParamName: "id"}, consts.Delete)
-	router.Register[*model.Cached, *gstmodel.Empty, *model.CachedRsp](router.Auth(), "caches/:id", &gst.ControllerConfig[*model.Cached]{ParamName: "id"}, consts.Get)
-	router.Register[*model.CounterStep, *model.CounterStep, *model.CounterStep](router.Auth(), "counter_steps", &gst.ControllerConfig[*model.CounterStep]{}, consts.List)
-	router.Register[*model.Rebuild, *model.RebuildReq, *model.RebuildRsp](router.Auth(), "rebuilds", &gst.ControllerConfig[*model.Rebuild]{}, consts.Create)
-	router.Register[*model.Run, *model.Run, *model.Run](router.Auth(), "runs", &gst.ControllerConfig[*model.Run]{}, consts.List)
-	router.Register[*model.StepDown, *gstmodel.Empty, *model.StepDownRsp](router.Auth(), "step-downs", &gst.ControllerConfig[*model.StepDown]{}, consts.Create)
+	router.Register[*model.Cached, *model.CachedReq, *model.CachedRsp](router.Auth(), "/api/caches", &gst.ControllerConfig[*model.Cached]{}, consts.Create)
+	router.Register[*model.Cached, *gstmodel.Empty, *model.CachedRsp](router.Auth(), "/api/caches/:id", &gst.ControllerConfig[*model.Cached]{ParamName: "id"}, consts.Delete)
+	router.Register[*model.Cached, *gstmodel.Empty, *model.CachedRsp](router.Auth(), "/api/caches/:id", &gst.ControllerConfig[*model.Cached]{ParamName: "id"}, consts.Get)
+	router.Register[*model.CounterStep, *model.CounterStep, *model.CounterStep](router.Auth(), "/api/counter_steps", &gst.ControllerConfig[*model.CounterStep]{}, consts.List)
+	router.Register[*model.Rebuild, *model.RebuildReq, *model.RebuildRsp](router.Auth(), "/api/rebuilds", &gst.ControllerConfig[*model.Rebuild]{}, consts.Create)
+	router.Register[*model.Run, *model.Run, *model.Run](router.Auth(), "/api/runs", &gst.ControllerConfig[*model.Run]{}, consts.List)
+	router.Register[*model.StepDown, *gstmodel.Empty, *model.StepDownRsp](router.Auth(), "/api/step-downs", &gst.ControllerConfig[*model.StepDown]{}, consts.Create)
 	return nil
 }

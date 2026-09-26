@@ -55,9 +55,9 @@ import (
 //
 //	// The calls of the actions of Report, one per rpc of ReportService, built
 //	// once at package initialization.
-//	var getReport = grpc.ServiceCall[*model.Report, *gstmodel.Empty, *model.ReportRsp](consts.PHASE_GET, "reports/summary")
+//	var getReport = grpc.ServiceCall[*model.Report, *gstmodel.Empty, *model.ReportRsp](consts.PHASE_GET, "/api/reports/summary")
 //
-//	// GetReport serves the Get action of Report on reports/summary.
+//	// GetReport serves the Get action of Report on /api/reports/summary.
 //	func (ReportService) GetReport(ctx context.Context, req *GetReportRequest) (*GetReportResponse, error) {
 //		result, err := getReport(ctx, nil, grpc.Query{Expand: req.GetExpand(), Depth: req.GetDepth()}, new(gstmodel.Empty))
 //		if err != nil {
@@ -150,10 +150,10 @@ func (w *fileWriter) serviceType(service string, model *modelinfo.Model) {
 //	// The calls of the actions of Item, one per rpc of ItemService, built once
 //	// at package initialization.
 //	var (
-//		createItem = grpc.CreateCall[*record.Item]("records/:record/items")
-//		getItem    = grpc.GetCall[*record.Item]("records/:record/items/:id")
-//		sealItem   = grpc.CreateCall[*record.Item]("items/:id/seal")
-//		mergeItem  = grpc.ServiceCall[*record.Item, *record.MergeReq, *record.MergedItemRsp](consts.PHASE_CREATE, "items/merge")
+//		createItem = grpc.CreateCall[*record.Item]("/api/records/:record/items")
+//		getItem    = grpc.GetCall[*record.Item]("/api/records/:record/items/:id")
+//		sealItem   = grpc.CreateCall[*record.Item]("/api/items/:id/seal")
+//		mergeItem  = grpc.ServiceCall[*record.Item, *record.MergeReq, *record.MergedItemRsp](consts.PHASE_CREATE, "/api/items/merge")
 //	)
 func (w *fileWriter) actionCalls(service string, rpcs []*rpc) {
 	model := rpcs[0].model
@@ -209,7 +209,7 @@ func (w *fileWriter) actionType(model *modelinfo.Model, typeName string) ast.Exp
 // The rpcs of the Record model of the golden fixture on records, with the
 // parameter record, get, among others,
 //
-//	// CreateRecord serves the Create action of Record on records.
+//	// CreateRecord serves the Create action of Record on /api/records.
 //	func (RecordService) CreateRecord(ctx context.Context, req *CreateRecordRequest) (*CreateRecordResponse, error) {
 //		m, err := createRecord(ctx, nil, RecordFromProto(req.GetRecord()))
 //		if err != nil {
@@ -218,7 +218,7 @@ func (w *fileWriter) actionType(model *modelinfo.Model, typeName string) ast.Exp
 //		return &CreateRecordResponse{Record: RecordToProto(m)}, nil
 //	}
 //
-//	// PatchRecord serves the Patch action of Record on records.
+//	// PatchRecord serves the Patch action of Record on /api/records.
 //	func (RecordService) PatchRecord(ctx context.Context, req *PatchRecordRequest) (*PatchRecordResponse, error) {
 //		m, err := patchRecord(ctx, map[string]string{"record": req.GetId()}, req.GetId(), RecordFromProto(req.GetRecord()), req.GetUpdateMask().GetPaths())
 //		if err != nil {
@@ -227,7 +227,7 @@ func (w *fileWriter) actionType(model *modelinfo.Model, typeName string) ast.Exp
 //		return &PatchRecordResponse{Record: RecordToProto(m)}, nil
 //	}
 //
-//	// ListRecord serves the List action of Record on records.
+//	// ListRecord serves the List action of Record on /api/records.
 //	func (RecordService) ListRecord(ctx context.Context, req *ListRecordRequest) (*ListRecordResponse, error) {
 //		models, total, err := listRecord(ctx, nil, grpc.Query{
 //			Filters:     grpc.Filters(req.GetFilters()),
@@ -250,7 +250,7 @@ func (w *fileWriter) actionType(model *modelinfo.Model, typeName string) ast.Exp
 //		return &ListRecordResponse{Items: items, Total: int64(total)}, nil
 //	}
 //
-//	// PatchManyRecord serves the PatchMany action of Record on records.
+//	// PatchManyRecord serves the PatchMany action of Record on /api/records.
 //	func (RecordService) PatchManyRecord(ctx context.Context, req *PatchManyRecordRequest) (*PatchManyRecordResponse, error) {
 //		models := make([]*model.Record, len(req.GetItems()))
 //		masks := make([][]string, len(req.GetItems()))
@@ -272,7 +272,7 @@ func (w *fileWriter) actionType(model *modelinfo.Model, typeName string) ast.Exp
 // and the Filename("merge") Create of Item on items/merge, taking a MergeReq
 // as its payload and answering a MergedItemRsp,
 //
-//	// MergeItem serves the Create action of Item on items/merge.
+//	// MergeItem serves the Create action of Item on /api/items/merge.
 //	func (ItemService) MergeItem(ctx context.Context, req *MergeItemRequest) (*MergeItemResponse, error) {
 //		result, err := mergeItem(ctx, nil, grpc.Query{}, MergeReqFromProto(req.GetPayload()))
 //		if err != nil {
@@ -377,7 +377,7 @@ func (w *fileWriter) handler(r *rpc) {
 		}
 	}
 
-	w.out.add(r.name+" serves the "+r.action.Phase.MethodName()+" action of "+r.model.ModelName+" on "+r.route+".", &ast.FuncDecl{
+	w.out.add(r.name+" serves the "+r.action.Phase.MethodName()+" action of "+r.model.ModelName+" on "+consts.APIPath(r.route)+".", &ast.FuncDecl{
 		Recv: &ast.FieldList{List: []*ast.Field{{Type: ident(r.service)}}},
 		Name: ident(r.name),
 		Type: &ast.FuncType{

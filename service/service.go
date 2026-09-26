@@ -24,10 +24,12 @@ type Base[M types.Model, REQ types.Request, RSP types.Response] = serviceregistr
 // generated service code. Framework internals handle service lookup and concrete
 // instance registration through an internal registry.
 //
-// The route must be the same raw route string the matching router.Register
-// call uses, because the registry keys services by route and phase. Generated
-// code guarantees the match by deriving both registrations from one design;
-// keep hand-written registrations aligned the same way. Hook services (whose
+// The route names the one the matching router.Register call registers,
+// spelled either way consts.APIPath accepts, /api/samples or samples,
+// because the registry keys services by the path the route is served at
+// and the phase. Generated code writes the path and guarantees the match by
+// deriving both registrations from one design; keep hand-written
+// registrations aligned the same way. Hook services (whose
 // model, request, and response types are identical) register with their route
 // all the same. Registering two services under one route and phase panics at
 // startup instead of silently overwriting the first one, and so does an
@@ -43,7 +45,7 @@ type Base[M types.Model, REQ types.Request, RSP types.Response] = serviceregistr
 //	}
 //
 //	func init() {
-//	    service.Register[*myService](consts.PHASE_CREATE, "samples")
+//	    service.Register[*myService](consts.PHASE_CREATE, "/api/samples")
 //	}
 //
 // Logger initialization:

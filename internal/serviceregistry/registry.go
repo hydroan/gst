@@ -21,10 +21,10 @@ var errNotFoundService = errors.New("no service instance matches the given route
 
 // Register registers a concrete service instance for the route and phase.
 //
-// The route must be the exact raw route string the HTTP layer registers the
-// matching handler under, because Key derives the registry key from it and
-// the controller handlers resolve services through that key. An empty route
-// panics.
+// The route names the one the HTTP layer registers the matching handler
+// under, spelled either way consts.APIPath accepts, because Key derives the
+// registry key from the path the route is served at and the controller
+// handlers resolve services through that key. An empty route panics.
 //
 // Registering a second service under one route and phase panics: a silent
 // overwrite would dispatch requests to the wrong service, which is exactly
@@ -67,14 +67,15 @@ func Register[M types.Model, REQ types.Request, RSP types.Response](phase consts
 	services[key] = stored
 }
 
-// Key returns the registry key of the route and phase. The route is trimmed
-// so registration and resolution agree even when one side carries stray
-// whitespace.
+// Key returns the registry key of the route and phase: the path the route
+// is served at (see consts.APIPath) and the phase, so registration and
+// resolution agree however either side spells the route, with or without
+// the prefix or stray whitespace.
 //
 // The key deliberately carries no type information: Go type aliases collapse
 // distinct request/response declarations into one type, so a type-derived key
 // cannot tell two actions apart. The route is unique per action by HTTP
 // routing rules, which makes route plus phase a collision-free identity.
 func Key(phase consts.Phase, route string) string {
-	return strings.TrimSpace(route) + "|" + string(phase)
+	return consts.APIPath(strings.TrimSpace(route)) + "|" + string(phase)
 }

@@ -133,10 +133,9 @@ func Use[M types.Model, REQ types.Request, RSP types.Response](mod types.Module[
 			modelregistry.Register[M]()
 		}
 
-		route := mod.Route()
-		route = strings.TrimPrefix(route, "/")
-		route = strings.TrimPrefix(route, "api/")
-		route = strings.TrimPrefix(route, "/")
+		// The route registers by the path it is served at, however the
+		// module spells it; see consts.APIPath.
+		route := consts.APIPath(mod.Route())
 
 		param := mod.Param()
 		param = strings.TrimFunc(param, func(r rune) bool {
@@ -148,9 +147,9 @@ func Use[M types.Model, REQ types.Request, RSP types.Response](mod types.Module[
 
 		for _, option := range options {
 			for _, p := range option.phases {
-				// The service registers under the same raw route string the
-				// router handler uses, because the registry keys services by
-				// route and phase.
+				// The service registers under the same path the router
+				// handler is registered at, because the registry keys
+				// services by path and phase.
 				switch option.mode {
 				case useRouteModeCRUD:
 					serviceregistry.Register[M, REQ, RSP](p, crudRoute(route, param, p), mod.Service())

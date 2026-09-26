@@ -11,9 +11,10 @@ import (
 // This file holds the call functions the generated handlers of a model's
 // rpcs run the actions through: one per standard action, CreateCall and its
 // kind, and ServiceCall for an action with a payload or result of its own.
-// Each returns the call of M's action on route, the raw route the generated
-// router registers the action under, built once at package initialization
-// and shared by every call. Given the route parameters the request message
+// Each returns the call of M's action on route, the path the generated
+// router registers the action at, /api/records/:rec as router.gen.go and
+// service.gen.go spell it, built once at package initialization and shared
+// by every call. Given the route parameters the request message
 // carries, keyed as the route names them, and what else it decoded — the
 // id, the model, the items, the update mask, the query — a call validates
 // the input the way the HTTP handler validates a bound body, runs the very

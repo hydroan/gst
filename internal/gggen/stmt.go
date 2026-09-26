@@ -112,13 +112,14 @@ func StmtModelRegister(modelName string) *ast.ExprStmt {
 
 // StmtServiceRegister builds the registration of a service in
 // service.gen.go. serviceImport is the service type as the file refers to
-// it: for user.Creator, consts.PHASE_CREATE and the route users it builds
+// it: for user.Creator, consts.PHASE_CREATE and the route /api/users it
+// builds
 //
-//	service.Register[*user.Creator](consts.PHASE_CREATE, "users")
+//	service.Register[*user.Creator](consts.PHASE_CREATE, "/api/users")
 //
-// The route argument must be the same raw route string the matching
-// StmtRouterRegister statement carries, because the service registry keys
-// services by route and phase.
+// The route argument is the path the route is served at, the same string
+// the matching StmtRouterRegister statement carries, because the service
+// registry keys services by path and phase.
 func StmtServiceRegister(serviceImport string, phase consts.Phase, route string) *ast.ExprStmt {
 	return &ast.ExprStmt{
 		X: &ast.CallExpr{
@@ -150,15 +151,15 @@ func StmtServiceRegister(serviceImport string, phase consts.Phase, route string)
 // rspName qualified by modelPkgName, the qualifier the file refers to the
 // model package by. For example, it builds
 //
-//	router.Register[*model.Group, *model.Group, *model.Group](router.Auth(), "group", &gst.ControllerConfig[*model.Group]{}, consts.Create)
-//	router.Register[*model.Group, *gstmodel.Empty, *model.GroupListRsp](router.Auth(), "groups", &gst.ControllerConfig[*model.Group]{}, consts.List)
-//	router.Register[*group.Group, *group.Group, *group.Group](router.Auth(), "groups/:id", &gst.ControllerConfig[*group.Group]{ParamName: "id"}, consts.Get)
+//	router.Register[*model.Group, *model.Group, *model.Group](router.Auth(), "/api/groups", &gst.ControllerConfig[*model.Group]{}, consts.Create)
+//	router.Register[*model.Group, *gstmodel.Empty, *model.GroupListRsp](router.Auth(), "/api/groups", &gst.ControllerConfig[*model.Group]{}, consts.List)
+//	router.Register[*group.Group, *group.Group, *group.Group](router.Auth(), "/api/groups/:id", &gst.ControllerConfig[*group.Group]{ParamName: "id"}, consts.Get)
 //
 // A dsl.PayloadEmpty side becomes *model.Empty under gstModelPkg, the
 // qualifier the router file uses for model.Empty, resolved once per file by
 // RouterGstModelUse. routerGroup names the router group accessor ("Auth" or
-// "Pub"), route is the raw route string, shared verbatim with the matching
-// StmtServiceRegister statement, paramName is the route parameter the
+// "Pub"), route is the path the route is served at, shared verbatim with the
+// matching StmtServiceRegister statement, paramName is the route parameter the
 // controller reads the resource id from, "" for none, and verb names the
 // consts value of the action, such as Create.
 func StmtRouterRegister(modelPkgName, modelName, reqName, rspName, gstModelPkg string, routerGroup string, route string, paramName string, verb string) *ast.ExprStmt {

@@ -48,9 +48,10 @@ type phaseSpan struct {
 	operation string // phase method name recorded in span attributes
 }
 
-// newAction builds the action of the primary phase on route, the raw route
-// string the handler or call is registered under, which keys the service
-// registry lookup together with the phase; an empty route resolves no
+// newAction builds the action of the primary phase on route, the one the
+// handler or call is registered under, whose served path keys the service
+// registry lookup together with the phase (see serviceregistry.Key); an
+// empty route resolves no
 // service, degrading to the no-op default service. hookPhases lists the
 // additional service hook phases the action traces (for example the
 // before/after phases of a CRUD operation), so their span names are

@@ -21,9 +21,9 @@ type ReportService struct {
 
 // The calls of the actions of Report, one per rpc of ReportService, built
 // once at package initialization.
-var getReport = grpc.ServiceCall[*model.Report, *gstmodel.Empty, *model.ReportRsp](consts.PHASE_GET, "reports/summary")
+var getReport = grpc.ServiceCall[*model.Report, *gstmodel.Empty, *model.ReportRsp](consts.PHASE_GET, "/api/reports/summary")
 
-// GetReport serves the Get action of Report on reports/summary.
+// GetReport serves the Get action of Report on /api/reports/summary.
 func (ReportService) GetReport(ctx context.Context, req *GetReportRequest) (*GetReportResponse, error) {
 	result, err := getReport(ctx, nil, grpc.Query{Expand: req.GetExpand(), Depth: req.GetDepth()}, new(gstmodel.Empty))
 	if err != nil {

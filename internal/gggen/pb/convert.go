@@ -389,7 +389,7 @@ func typeKey(t types.Type) string {
 //			p.Spans[i] = new(Shape_Spans)
 //			p.Spans[i].From = int64(v.From)
 //			p.Spans[i].To = int64(v.To)
-//	}
+//		}
 //	}
 func (w *fileWriter) toProto(dst, src ast.Expr, t types.Type, ft fieldType) []ast.Stmt {
 	t = types.Unalias(t)
@@ -402,7 +402,7 @@ func (w *fileWriter) toProto(dst, src ast.Expr, t types.Type, ft fieldType) []as
 			body := append([]ast.Stmt{assign(dst, newCall(ident(ft.nested.goName)))}, w.structToProto(dst, src, ft.nested)...)
 			return []ast.Stmt{ifNotNil(src, body...)}
 		}
-		if ft.kind != descriptorpb.FieldDescriptorProto_TYPE_MESSAGE {
+		if _, scalar := elem.Underlying().(*types.Basic); scalar && ft.kind != descriptorpb.FieldDescriptorProto_TYPE_MESSAGE {
 			// A pointer to a scalar: the optional field it maps to holds
 			// the pointer itself when the types agree; a repeated one
 			// holds the value pointed to.
@@ -415,8 +415,8 @@ func (w *fileWriter) toProto(dst, src ast.Expr, t types.Type, ft fieldType) []as
 			}
 			return []ast.Stmt{ifNotNil(src, assign(dst, w.encoded(elem, ft, star(src))))}
 		}
-		// A pointer to a time, a JSON value, a slice or a map: what it points
-		// to encodes when there is anything.
+		// A pointer to a time, a JSON value, a slice, an array or a map:
+		// what it points to encodes when there is anything.
 		return []ast.Stmt{ifNotNil(src, w.toProto(dst, star(src), elem, ft)...)}
 	}
 
@@ -617,7 +617,11 @@ func (w *fileWriter) fromProto(dst, src ast.Expr, t types.Type, ft fieldType) []
 				return append([]ast.Stmt{assign(dst, newCall(w.goType(p.Elem())))}, w.structFromProto(dst, v, ft.nested)...)
 			})}
 		}
-		if ft.kind != descriptorpb.FieldDescriptorProto_TYPE_MESSAGE {
+		if _, scalar := elem.Underlying().(*types.Basic); scalar && ft.kind != descriptorpb.FieldDescriptorProto_TYPE_MESSAGE {
+			// A pointer to a scalar: the pointer of the optional field it
+			// maps to when the types agree, otherwise a pointer to the
+			// decoded value, of the optional field when it is set, of the
+			// element or value the pointer is when it is one.
 			if ft.optional && assignable(t, ft, false) {
 				return []ast.Stmt{assign(dst, src)}
 			}
@@ -627,13 +631,13 @@ func (w *fileWriter) fromProto(dst, src ast.Expr, t types.Type, ft fieldType) []
 			}
 			return []ast.Stmt{define([]string{x}, w.decoded(p.Elem(), ft, src)), assign(dst, addr(ident(x)))}
 		}
+		// A pointer to a time, a JSON value, a slice, an array or a map: a
+		// pointer to the decoded value when the field is set, nil otherwise,
+		// the way a slice or a map stays nil for an unset field. The value
+		// is declared inside the guard, so the fields of a struct share the
+		// name.
 		x := w.temp("x")
 		body := append(w.declared(x, p.Elem(), w.fromProto(ident(x), src, p.Elem(), ft)), assign(dst, addr(ident(x))))
-		if ft.repeated {
-			// A repeated field has no unset: the slice or map it decodes
-			// into is always there to point to.
-			return body
-		}
 		return []ast.Stmt{ifNotNil(src, body...)}
 	}
 

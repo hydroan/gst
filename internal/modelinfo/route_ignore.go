@@ -5,6 +5,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/hydroan/gst/consts"
 	"github.com/hydroan/gst/dsl"
 	"github.com/hydroan/gst/internal/ggconfig"
 	"github.com/hydroan/gst/internal/ggconst"
@@ -84,7 +85,7 @@ func applyRouteIgnores(allModels []*Model, rules []ggconfig.RouteRule) RouteIgno
 				matchedDirs[i][ModelRootDir(m.ModelFilePath)] = true
 				result.Matches = append(result.Matches, RouteIgnoreMatch{
 					Method: method,
-					Path:   "/api/" + strings.Join(ggconfig.NormalizeRoutePath(finalRoute), "/"),
+					Path:   consts.APIPath(strings.Join(ggconfig.NormalizeRoutePath(finalRoute), "/")),
 					Model:  m.ModelName,
 				})
 				break

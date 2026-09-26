@@ -192,16 +192,16 @@ func TestStmtServiceRegister(t *testing.T) {
 			// The example of the StmtServiceRegister doc comment.
 			name:       "user",
 			structName: "user.Creator",
-			route:      "users",
+			route:      "/api/users",
 			phase:      consts.PHASE_CREATE,
-			want:       `service.Register[*user.Creator](consts.PHASE_CREATE, "users")`,
+			want:       `service.Register[*user.Creator](consts.PHASE_CREATE, "/api/users")`,
 		},
 		{
 			name:       "group",
 			structName: "group.Updater",
-			route:      "groups/:id",
+			route:      "/api/groups/:id",
 			phase:      consts.PHASE_UPDATE,
-			want:       `service.Register[*group.Updater](consts.PHASE_UPDATE, "groups/:id")`,
+			want:       `service.Register[*group.Updater](consts.PHASE_UPDATE, "/api/groups/:id")`,
 		},
 	}
 	for _, tt := range tests {
@@ -242,9 +242,9 @@ func TestStmtRouterRegister(t *testing.T) {
 			rspName:      "*Group",
 			gstModelPkg:  "model",
 			routerGroup:  "Auth",
-			route:        "group",
+			route:        "/api/group",
 			verb:         "Create",
-			want:         `router.Register[*model.Group, *model.Group, *model.Group](router.Auth(), "group", &gst.ControllerConfig[*model.Group]{}, consts.Create)`,
+			want:         `router.Register[*model.Group, *model.Group, *model.Group](router.Auth(), "/api/group", &gst.ControllerConfig[*model.Group]{}, consts.Create)`,
 		},
 		{
 			// Bare action type names (the declared form of slice and map
@@ -256,9 +256,9 @@ func TestStmtRouterRegister(t *testing.T) {
 			rspName:      "GroupResponse",
 			gstModelPkg:  "model",
 			routerGroup:  "Auth",
-			route:        "group2",
+			route:        "/api/group2",
 			verb:         "Update",
-			want:         `router.Register[*pkgmodel.Group, pkgmodel.GroupRequest, pkgmodel.GroupResponse](router.Auth(), "group2", &gst.ControllerConfig[*pkgmodel.Group]{}, consts.Update)`,
+			want:         `router.Register[*pkgmodel.Group, pkgmodel.GroupRequest, pkgmodel.GroupResponse](router.Auth(), "/api/group2", &gst.ControllerConfig[*pkgmodel.Group]{}, consts.Update)`,
 		},
 		{
 			name:         "starred_names_in_pub_group",
@@ -268,9 +268,9 @@ func TestStmtRouterRegister(t *testing.T) {
 			rspName:      "*GroupResponse",
 			gstModelPkg:  "model",
 			routerGroup:  "Pub",
-			route:        "login",
+			route:        "/api/login",
 			verb:         "Update",
-			want:         `router.Register[*pkgmodel.Group, *pkgmodel.GroupRequest, *pkgmodel.GroupResponse](router.Pub(), "login", &gst.ControllerConfig[*pkgmodel.Group]{}, consts.Update)`,
+			want:         `router.Register[*pkgmodel.Group, *pkgmodel.GroupRequest, *pkgmodel.GroupResponse](router.Pub(), "/api/login", &gst.ControllerConfig[*pkgmodel.Group]{}, consts.Update)`,
 		},
 		{
 			name:         "list_with_empty_payload",
@@ -280,9 +280,9 @@ func TestStmtRouterRegister(t *testing.T) {
 			rspName:      "*GroupListRsp",
 			gstModelPkg:  "model",
 			routerGroup:  "Auth",
-			route:        "groups",
+			route:        "/api/groups",
 			verb:         "List",
-			want:         `router.Register[*group.Group, *model.Empty, *group.GroupListRsp](router.Auth(), "groups", &gst.ControllerConfig[*group.Group]{}, consts.List)`,
+			want:         `router.Register[*group.Group, *model.Empty, *group.GroupListRsp](router.Auth(), "/api/groups", &gst.ControllerConfig[*group.Group]{}, consts.List)`,
 		},
 		{
 			name:         "create_with_empty_result",
@@ -292,9 +292,9 @@ func TestStmtRouterRegister(t *testing.T) {
 			rspName:      dsl.PayloadEmpty,
 			gstModelPkg:  "model",
 			routerGroup:  "Auth",
-			route:        "groups",
+			route:        "/api/groups",
 			verb:         "Create",
-			want:         `router.Register[*group.Group, *group.GroupCreateReq, *model.Empty](router.Auth(), "groups", &gst.ControllerConfig[*group.Group]{}, consts.Create)`,
+			want:         `router.Register[*group.Group, *group.GroupCreateReq, *model.Empty](router.Auth(), "/api/groups", &gst.ControllerConfig[*group.Group]{}, consts.Create)`,
 		},
 		{
 			// A project routing a root model package keeps the gstmodel
@@ -308,9 +308,9 @@ func TestStmtRouterRegister(t *testing.T) {
 			rspName:      "*GroupListRsp",
 			gstModelPkg:  "gstmodel",
 			routerGroup:  "Auth",
-			route:        "groups",
+			route:        "/api/groups",
 			verb:         "List",
-			want:         `router.Register[*model.Group, *gstmodel.Empty, *model.GroupListRsp](router.Auth(), "groups", &gst.ControllerConfig[*model.Group]{}, consts.List)`,
+			want:         `router.Register[*model.Group, *gstmodel.Empty, *model.GroupListRsp](router.Auth(), "/api/groups", &gst.ControllerConfig[*model.Group]{}, consts.List)`,
 		},
 		{
 			// A route ending in a path parameter names it in the controller
@@ -322,10 +322,10 @@ func TestStmtRouterRegister(t *testing.T) {
 			rspName:      "*Group",
 			gstModelPkg:  "model",
 			routerGroup:  "Auth",
-			route:        "groups/:id",
+			route:        "/api/groups/:id",
 			paramName:    "id",
 			verb:         "Get",
-			want:         `router.Register[*group.Group, *group.Group, *group.Group](router.Auth(), "groups/:id", &gst.ControllerConfig[*group.Group]{ParamName: "id"}, consts.Get)`,
+			want:         `router.Register[*group.Group, *group.Group, *group.Group](router.Auth(), "/api/groups/:id", &gst.ControllerConfig[*group.Group]{ParamName: "id"}, consts.Get)`,
 		},
 	}
 	for _, tt := range tests {

@@ -34,7 +34,7 @@ message Link {
 
 // CreateItemRequest is the request of ItemService.CreateItem.
 message CreateItemRequest {
-  // record is the :record parameter of records/:record/items.
+  // record is the :record parameter of /api/records/:record/items.
   string record = 1;
 
   // item is the Item to create.
@@ -49,7 +49,7 @@ message CreateItemResponse {
 
 // GetItemRequest is the request of ItemService.GetItem.
 message GetItemRequest {
-  // record is the :record parameter of records/:record/items/:id.
+  // record is the :record parameter of /api/records/:record/items/:id.
   string record = 1;
 
   // id is the id of the Item.
@@ -107,15 +107,15 @@ message MergeRsp {
 
 // ItemService serves the actions of Item over gRPC.
 service ItemService {
-  // CreateItem is the Create action of Item on records/:record/items.
+  // CreateItem is the Create action of Item on /api/records/:record/items.
   rpc CreateItem ( CreateItemRequest ) returns ( CreateItemResponse );
 
-  // GetItem is the Get action of Item on records/:record/items.
+  // GetItem is the Get action of Item on /api/records/:record/items.
   rpc GetItem ( GetItemRequest ) returns ( GetItemResponse );
 
-  // SealItem is the Create action of Item on items/:id/seal.
+  // SealItem is the Create action of Item on /api/items/:id/seal.
   rpc SealItem ( SealItemRequest ) returns ( SealItemResponse );
 
-  // MergeItem is the Create action of Item on items/merge.
+  // MergeItem is the Create action of Item on /api/items/merge.
   rpc MergeItem ( MergeItemRequest ) returns ( MergeItemResponse );
 }

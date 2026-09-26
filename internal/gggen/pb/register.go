@@ -31,11 +31,11 @@ var httpMethodConsts = map[string]string{
 // per service, definition by definition, handing over the registration
 // function the protobuf plugin generated and the type serving the service
 // (see serviceType) under the server interface the plugin generated, and
-// describing each rpc by its full method name, the
-// constant the plugin generated for it, whether its action declares
-// Public(), and the HTTP method and route the same action is served at,
-// which the interceptors of the modules judge a call by. A service of a
-// package under pb/ is registered through an import of the package.
+// describing each rpc by its full method name, the constant the plugin
+// generated for it, whether its action declares Public(), and the HTTP
+// method and route the same action is served at, which the interceptors of
+// the modules judge a call by. A service of a package under pb/ is
+// registered through an import of the package.
 //
 // The golden fixture, whose Note and Record models are declared in model/
 // and whose Item model in model/record/, gets, the Report and Shape services
@@ -103,7 +103,7 @@ func (g *generator) registrationFile() (File, error) {
 				}
 				elts = append(elts,
 					keyValue("HTTPMethod", sel(out.imports.fixedRef(importPathHTTP), httpMethodConsts[consts.HTTPVerb(r.action.Phase).HTTPMethod()])),
-					keyValue("Route", strLit(consts.APIPath(r.registered))),
+					keyValue("Route", strLit(r.registered)),
 				)
 				args = append(args, compositeLit(sel(out.imports.fixedRef(ggconst.ImportPathGRPC), "Method"), elts...))
 			}

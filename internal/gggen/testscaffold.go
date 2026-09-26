@@ -99,7 +99,7 @@ func GenerateServiceTest(info *modelinfo.Model, target modelinfo.ServiceTargetIn
 	name := serviceTestName(action)
 	method := consts.HTTPVerb(action.Phase).HTTPMethod()
 	doc := append([]string{
-		fmt.Sprintf("// %s covers %s %s/%s, served by %s in %s.", name, method, consts.APIPathPrefix, route, action.RoleName(), filepath.Base(target.FilePath)),
+		fmt.Sprintf("// %s covers %s %s, served by %s in %s.", name, method, route, action.RoleName(), filepath.Base(target.FilePath)),
 	}, serviceTestDoc...)
 
 	example := newServiceTestExample(info, action, route)
@@ -310,13 +310,14 @@ func (e *serviceTestExample) importSpecs() []ast.Spec {
 	return specs
 }
 
-// routePathExpr builds the path of route under the API prefix, reading each
-// parameter segment from the id variable: "/api/records" for records,
-// "/api/records/" + id for records/:rec, and "/api/records/" + id + "/items"
-// for records/:rec/items. usesID reports whether the path reads id.
+// routePathExpr builds the path of route, the one the router registers the
+// action at, reading each parameter segment from the id variable:
+// "/api/records" for /api/records, "/api/records/" + id for
+// /api/records/:rec, and "/api/records/" + id + "/items" for
+// /api/records/:rec/items. usesID reports whether the path reads id.
 func routePathExpr(route string) (expr ast.Expr, usesID bool) {
-	literal := consts.APIPathPrefix
-	for segment := range strings.SplitSeq(route, "/") {
+	literal := ""
+	for segment := range strings.SplitSeq(strings.TrimPrefix(route, "/"), "/") {
 		if !strings.HasPrefix(segment, ":") {
 			literal += "/" + segment
 			continue

@@ -75,6 +75,16 @@ message Shape {
 
   repeated string words = 33;
 
+  // Aliases, Corners, Weights and Raw are pointers to slices, to a map
+  // and to bytes.
+  repeated string aliases = 34;
+
+  repeated ShapePoint corners = 35;
+
+  map<string, int32> weights = 36;
+
+  optional bytes raw = 37;
+
   message Spans {
     int64 from = 1;
 
@@ -140,9 +150,9 @@ message GetShapeResponse {
 
 // ShapeService serves the actions of Shape over gRPC.
 service ShapeService {
-  // CreateShape is the Create action of Shape on shapes.
+  // CreateShape is the Create action of Shape on /api/shapes.
   rpc CreateShape ( CreateShapeRequest ) returns ( CreateShapeResponse );
 
-  // GetShape is the Get action of Shape on shapes.
+  // GetShape is the Get action of Shape on /api/shapes.
   rpc GetShape ( GetShapeRequest ) returns ( GetShapeResponse );
 }

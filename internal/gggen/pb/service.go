@@ -27,16 +27,16 @@ import (
 //
 //	// ItemService serves the actions of Item over gRPC.
 //	service ItemService {
-//	  // CreateItem is the Create action of Item on records/:record/items.
+//	  // CreateItem is the Create action of Item on /api/records/:record/items.
 //	  rpc CreateItem ( CreateItemRequest ) returns ( CreateItemResponse );
 //
-//	  // GetItem is the Get action of Item on records/:record/items.
+//	  // GetItem is the Get action of Item on /api/records/:record/items.
 //	  rpc GetItem ( GetItemRequest ) returns ( GetItemResponse );
 //
-//	  // SealItem is the Create action of Item on items/:id/seal.
+//	  // SealItem is the Create action of Item on /api/items/:id/seal.
 //	  rpc SealItem ( SealItemRequest ) returns ( SealItemResponse );
 //
-//	  // MergeItem is the Create action of Item on items/merge.
+//	  // MergeItem is the Create action of Item on /api/items/merge.
 //	  rpc MergeItem ( MergeItemRequest ) returns ( MergeItemResponse );
 //	}
 func (g *generator) declareService(m *modelinfo.Model) {
@@ -84,7 +84,7 @@ func (g *generator) declareService(m *modelinfo.Model) {
 			return
 		}
 		file.comment([]int32{fileServicesTag, int32Index(len(file.services)), serviceMethodsTag, int32Index(len(service.Method))},
-			name+" is the "+action.Phase.MethodName()+" action of "+m.ModelName+" on "+route+".")
+			name+" is the "+action.Phase.MethodName()+" action of "+m.ModelName+" on "+consts.APIPath(route)+".")
 		service.Method = append(service.Method, &descriptorpb.MethodDescriptorProto{
 			Name:       new(name),
 			InputType:  new("." + file.pkg + "." + r.request.GetName()),
@@ -118,7 +118,7 @@ func (g *generator) declareService(m *modelinfo.Model) {
 //
 //	// CreateItemRequest is the request of ItemService.CreateItem.
 //	message CreateItemRequest {
-//	  // record is the :record parameter of records/:record/items.
+//	  // record is the :record parameter of /api/records/:record/items.
 //	  string record = 1;
 //
 //	  // item is the Item to create.

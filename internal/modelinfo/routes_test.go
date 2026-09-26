@@ -134,13 +134,13 @@ func TestRouterTargetForAction(t *testing.T) {
 		wantRoute string
 		wantParam string
 	}{
-		{name: "item action with a declared parameter", route: "samples", param: ":sample", phase: consts.PHASE_GET, wantRoute: "samples/:sample", wantParam: "sample"},
-		{name: "item action without a declared parameter", route: "samples", phase: consts.PHASE_GET, wantRoute: "samples/:id", wantParam: "id"},
-		{name: "collection action", route: "samples", param: ":sample", phase: consts.PHASE_LIST, wantRoute: "samples"},
-		{name: "batch action", route: "samples", phase: consts.PHASE_CREATE_MANY, wantRoute: "samples/batch"},
-		{name: "import action", route: "samples", phase: consts.PHASE_IMPORT, wantRoute: "samples/import"},
-		{name: "export action", route: "samples", phase: consts.PHASE_EXPORT, wantRoute: "samples/export"},
-		{name: "exact action", route: "iam/admin/users/:id/sessions", param: ":id", phase: consts.PHASE_DELETE, exact: true, wantRoute: "iam/admin/users/:id/sessions", wantParam: "id"},
+		{name: "item action with a declared parameter", route: "samples", param: ":sample", phase: consts.PHASE_GET, wantRoute: "/api/samples/:sample", wantParam: "sample"},
+		{name: "item action without a declared parameter", route: "samples", phase: consts.PHASE_GET, wantRoute: "/api/samples/:id", wantParam: "id"},
+		{name: "collection action", route: "samples", param: ":sample", phase: consts.PHASE_LIST, wantRoute: "/api/samples"},
+		{name: "batch action", route: "samples", phase: consts.PHASE_CREATE_MANY, wantRoute: "/api/samples/batch"},
+		{name: "import action", route: "samples", phase: consts.PHASE_IMPORT, wantRoute: "/api/samples/import"},
+		{name: "export action", route: "samples", phase: consts.PHASE_EXPORT, wantRoute: "/api/samples/export"},
+		{name: "exact action", route: "iam/admin/users/:id/sessions", param: ":id", phase: consts.PHASE_DELETE, exact: true, wantRoute: "/api/iam/admin/users/:id/sessions", wantParam: "id"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

@@ -27,11 +27,11 @@ type ShapeService struct {
 // The calls of the actions of Shape, one per rpc of ShapeService, built once
 // at package initialization.
 var (
-	createShape = grpc.CreateCall[*model.Shape]("shapes")
-	getShape    = grpc.GetCall[*model.Shape]("shapes/:id")
+	createShape = grpc.CreateCall[*model.Shape]("/api/shapes")
+	getShape    = grpc.GetCall[*model.Shape]("/api/shapes/:id")
 )
 
-// CreateShape serves the Create action of Shape on shapes.
+// CreateShape serves the Create action of Shape on /api/shapes.
 func (ShapeService) CreateShape(ctx context.Context, req *CreateShapeRequest) (*CreateShapeResponse, error) {
 	m, err := createShape(ctx, nil, ShapeFromProto(req.GetShape()))
 	if err != nil {
@@ -40,7 +40,7 @@ func (ShapeService) CreateShape(ctx context.Context, req *CreateShapeRequest) (*
 	return &CreateShapeResponse{Shape: ShapeToProto(m)}, nil
 }
 
-// GetShape serves the Get action of Shape on shapes.
+// GetShape serves the Get action of Shape on /api/shapes.
 func (ShapeService) GetShape(ctx context.Context, req *GetShapeRequest) (*GetShapeResponse, error) {
 	m, err := getShape(ctx, map[string]string{"id": req.GetId()}, req.GetId(), grpc.Query{Expand: req.GetExpand(), Depth: req.GetDepth()})
 	if err != nil {
@@ -122,6 +122,23 @@ func ShapeToProto(m *model.Shape) *Shape {
 		}
 	}
 	p.Words = m.Words
+	if m.Aliases != nil {
+		p.Aliases = *m.Aliases
+	}
+	if m.Corners != nil {
+		if *m.Corners != nil {
+			p.Corners = make([]*ShapePoint, len(*m.Corners))
+			for i, v := range *m.Corners {
+				p.Corners[i] = ShapePointToProto(&v)
+			}
+		}
+	}
+	if m.Weights != nil {
+		p.Weights = *m.Weights
+	}
+	if m.Raw != nil {
+		p.Raw = *m.Raw
+	}
 	return p
 }
 
@@ -213,6 +230,30 @@ func ShapeFromProto(p *Shape) *model.Shape {
 		}
 	}
 	m.Words = p.GetWords()
+	if p.GetAliases() != nil {
+		x := p.GetAliases()
+		m.Aliases = &x
+	}
+	if p.GetCorners() != nil {
+		var x []model.ShapePoint
+		if p.GetCorners() != nil {
+			x = make([]model.ShapePoint, len(p.GetCorners()))
+			for i, v := range p.GetCorners() {
+				if v != nil {
+					x[i] = *ShapePointFromProto(v)
+				}
+			}
+		}
+		m.Corners = &x
+	}
+	if p.GetWeights() != nil {
+		x := p.GetWeights()
+		m.Weights = &x
+	}
+	if p.Raw != nil {
+		x := p.Raw
+		m.Raw = &x
+	}
 	return m
 }
 

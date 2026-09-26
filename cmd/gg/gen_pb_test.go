@@ -276,7 +276,7 @@ func TestGenRunRefusesARouteParameterNamedLikeAField(t *testing.T) {
 	err := genRunWithOptions(genRunOptions{Quiet: true})
 
 	require.Error(t, err)
-	require.Contains(t, err.Error(), "tmpapp/model.Entry: the :page parameter of pages/:page/entries clashes with the page field of ListEntryByPageRequest; rename the parameter")
+	require.Contains(t, err.Error(), "tmpapp/model.Entry: the :page parameter of /api/pages/:page/entries clashes with the page field of ListEntryByPageRequest; rename the parameter")
 }
 
 // TestGenRunRefusesAGRPCModelWithNothingToServe pins that a model declaring
@@ -884,8 +884,9 @@ func (Clash) Design() {
 // integer enum, an optional integer, a pointer to a struct, a slice of
 // pointers, an array, maps of scalars and of structs, a slice of and a
 // pointer to an unnamed struct, an optional time, any value, bytes, a named
-// slice, the framework's version type, an alias of an internal type, and
-// gorm's JSON slices of structs and of strings.
+// slice, the framework's version type, an alias of an internal type, gorm's
+// JSON slices of structs and of strings, and pointers to a slice of
+// strings, to a slice of structs, to a map and to bytes.
 const protobufShapeModel = `package model
 
 import (
@@ -931,6 +932,12 @@ type Shape struct {
 	// Steps and Words are the JSON slices of gorm, of structs and of strings.
 	Steps datatypes.JSONSlice[ShapePoint] 'json:"steps,omitempty" pb:"32"'
 	Words datatypes.JSONSlice[string]     'json:"words,omitempty" pb:"33"'
+	// Aliases, Corners, Weights and Raw are pointers to slices, to a map
+	// and to bytes.
+	Aliases *[]string         'json:"aliases,omitempty" pb:"34" gorm:"-"'
+	Corners *[]ShapePoint     'json:"corners,omitempty" pb:"35" gorm:"-"'
+	Weights *map[string]int32 'json:"weights,omitempty" pb:"36" gorm:"-"'
+	Raw     *[]byte           'json:"raw,omitempty" pb:"37" gorm:"-"'
 
 	model.Base
 }
@@ -1079,6 +1086,10 @@ func TestShapeRoundTrips(t *testing.T) {
 		Version: 3,
 		Steps:   datatypes.JSONSlice[model.ShapePoint]{{X: 5, Y: 6}},
 		Words:   datatypes.JSONSlice[string]{"w"},
+		Aliases: &[]string{"a"},
+		Corners: &[]model.ShapePoint{{X: 7, Y: 8}},
+		Weights: &map[string]int32{"w": 1},
+		Raw:     &[]byte{9},
 	}
 	in.Spans = append(in.Spans, struct {
 		From int 'json:"from" pb:"1"'
@@ -1105,6 +1116,10 @@ func TestShapeRoundTrips(t *testing.T) {
 	require.Equal(t, int64(3), msg.GetVersion())
 	require.Equal(t, int32(6), msg.GetSteps()[0].GetY())
 	require.Equal(t, []string{"w"}, msg.GetWords())
+	require.Equal(t, []string{"a"}, msg.GetAliases())
+	require.Equal(t, int32(8), msg.GetCorners()[0].GetY())
+	require.Equal(t, int32(1), msg.GetWeights()["w"])
+	require.Equal(t, []byte{9}, msg.GetRaw())
 
 	out := pb.ShapeFromProto(msg)
 	require.JSONEq(t, string(in.Doc), string(out.Doc))
@@ -1117,6 +1132,10 @@ func TestShapeRoundTrips(t *testing.T) {
 	require.Nil(t, empty.When)
 	require.Nil(t, empty.Note)
 	require.Nil(t, empty.Any)
+	require.Nil(t, empty.Aliases)
+	require.Nil(t, empty.Corners)
+	require.Nil(t, empty.Weights)
+	require.Nil(t, empty.Raw)
 	require.True(t, time.Time(empty.Date).IsZero())
 }
 `

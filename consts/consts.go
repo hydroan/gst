@@ -16,15 +16,16 @@ const FrameworkName = "gst"
 // request paths against it, and router already imports middleware.
 const APIPathPrefix = "/api"
 
-// APIPath returns the path a route is served at under APIPathPrefix, a
-// leading prefix, a leading slash and a trailing slash dropped from the
-// route: /api/records/:id for records/:id, /records/:id and /api/records/:id
-// alike. It is the one rule of the path of a route: the router registers
-// routes by it, and gg describes the routes of the rpcs it generates by it.
+// APIPath returns the path a route is served at under APIPathPrefix:
+// /api/records/:id for records/:id, and for /records/:id, api/records/:id
+// and /api/records/:id alike, a leading or trailing slash and a prefix
+// already written dropped first. It is the one rule of the path of a route:
+// gg gen writes every route by it, the router serves and the service
+// registry keys routes by it, so a route may be written with or without the
+// prefix and names the same path either way.
 func APIPath(route string) string {
-	route = strings.TrimPrefix(route, APIPathPrefix+"/")
-	route = strings.TrimPrefix(route, "/")
-	route = strings.TrimSuffix(route, "/")
+	route = strings.Trim(route, "/")
+	route = strings.TrimPrefix(route, strings.TrimPrefix(APIPathPrefix, "/")+"/")
 	return APIPathPrefix + "/" + route
 }
 

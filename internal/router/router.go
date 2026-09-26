@@ -333,11 +333,11 @@ func Stop(abandon context.Context) {
 // route parameter registry and the OpenAPI document; the public
 // router.Register forwards to it and documents the contract.
 //
-// The raw route string is stamped into the controller config so the handlers can
-// resolve the matching phase service through the route-derived registry key;
-// it must therefore equal the route passed to the corresponding
-// service.Register call. The config is shallow-copied first, keeping a
-// caller-shared config safe for reuse across routes.
+// The path the route is served at, consts.APIPath of it, is stamped into the
+// controller config so the handlers resolve the matching phase service
+// through the registry key the path makes; the corresponding
+// service.Register call names the same route. The config is shallow-copied
+// first, keeping a caller-shared config safe for reuse across routes.
 func Register[M types.Model, REQ types.Request, RSP types.Response](router *gin.RouterGroup, route string, cfg *types.ControllerConfig[M], verbs ...consts.HTTPVerb) {
 	// A registration that can register nothing is a mistake in the
 	// declaration: it panics as the process starts, the way the service
@@ -353,10 +353,9 @@ func Register[M types.Model, REQ types.Request, RSP types.Response](router *gin.
 	if cfg != nil {
 		routed = *cfg
 	}
-	routed.Route = route
-	// The group carries the prefix; the path registered on it is the rest
-	// of consts.APIPath, the one rule of the path of a route.
-	register[M, REQ, RSP](router, strings.TrimPrefix(consts.APIPath(route), consts.APIPathPrefix), buildVerbMap(verbs...), &routed)
+	routed.Route = consts.APIPath(route)
+	// The group carries the prefix; the path registered on it is the rest.
+	register[M, REQ, RSP](router, strings.TrimPrefix(routed.Route, consts.APIPathPrefix), buildVerbMap(verbs...), &routed)
 }
 
 func register[M types.Model, REQ types.Request, RSP types.Response](router *gin.RouterGroup, path string, verbMap map[consts.HTTPVerb]bool, cfg ...*types.ControllerConfig[M]) {

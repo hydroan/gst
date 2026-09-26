@@ -28,11 +28,11 @@ import (
 //   - PATCH: Patch, PatchMany
 //   - GET: List, Get, Export, SSE
 //
-// The route is registered as written, under the API prefix: "records/:rec"
-// serves /api/records/:rec, and a route that already starts with "/api/" is
-// not prefixed twice. It must equal the route of the matching
-// service.Register call, because a handler finds its service by route and
-// phase; generated code derives both from one design. cfg may be nil, and it
+// The route is served at the path consts.APIPath spells for it:
+// /api/records/:rec whether written as /api/records/:rec, the way generated
+// code writes it, or as records/:rec. A handler finds its service by that
+// path and the phase, so the matching service.Register call names the same
+// route; generated code derives both from one design. cfg may be nil, and it
 // is copied, so one config can serve several routes. A blank route, or no
 // verbs, panics: the mistake stops the start instead of leaving an endpoint
 // that answers 404.

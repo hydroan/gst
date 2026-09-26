@@ -59,16 +59,16 @@ func TestRequestParamsCarryEveryParameterOfTheRegisteredRoute(t *testing.T) {
 	document := &modelinfo.Model{ModelName: "Document", Design: &dsl.Design{Endpoint: "archive/documents", Param: ":document"}}
 
 	require.Equal(t, []requestParam{
-		{param: "record", name: "record", comment: "the :record parameter of records/:record/items/:id"},
+		{param: "record", name: "record", comment: "the :record parameter of /api/records/:record/items/:id"},
 		{param: "id", name: "id", comment: "the id of the Item"},
 	}, requestParams(item, "records/:record/items", &dsl.Action{Phase: consts.PHASE_GET}))
-	require.Equal(t, []requestParam{{param: "record", name: "record", comment: "the :record parameter of records/:record/items"}},
+	require.Equal(t, []requestParam{{param: "record", name: "record", comment: "the :record parameter of /api/records/:record/items"}},
 		requestParams(item, "records/:record/items", &dsl.Action{Phase: consts.PHASE_CREATE}))
 	require.Equal(t, []requestParam{{param: "id", name: "id", comment: "the id of the Item"}},
 		requestParams(item, "items/:id/seal", &dsl.Action{Phase: consts.PHASE_CREATE, Filename: "seal"}))
 	require.Equal(t, []requestParam{{param: "document", name: "id", comment: "the id of the Document to delete"}},
 		requestParams(document, "archive/documents", &dsl.Action{Phase: consts.PHASE_DELETE}))
-	require.Equal(t, []requestParam{{param: "box-id", name: "box_id", comment: "the :box-id parameter of archive/boxes/:box-id/documents"}},
+	require.Equal(t, []requestParam{{param: "box-id", name: "box_id", comment: "the :box-id parameter of /api/archive/boxes/:box-id/documents"}},
 		requestParams(document, "archive/boxes/:box-id/documents", &dsl.Action{Phase: consts.PHASE_LIST}))
 	require.Empty(t, requestParams(document, "archive/documents", &dsl.Action{Phase: consts.PHASE_DELETE_MANY}))
 }

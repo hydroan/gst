@@ -177,7 +177,9 @@ func modelRouteFromCall(call *ast.CallExpr, modelSources map[string]string) (mod
 		Rsp:    rsp,
 		Source: lookupModelSource(modelSources, model),
 		Scope:  routeScope(call.Args[0]),
-		Path:   path,
+		// The registration carries the path the route is served at; the
+		// listing prints paths below the prefix it names once.
+		Path: strings.TrimPrefix(consts.APIPath(path), consts.APIPathPrefix+"/"),
 		// The last argument names the verb the way gg gen writes it,
 		// consts.<Phase.MethodName()> such as consts.CreateMany; the route
 		// is served under the method the framework router registers that

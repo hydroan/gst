@@ -88,8 +88,8 @@ import (
 )
 
 func init() {
-	service.Register[*item.Creator](consts.PHASE_CREATE, "sample/items")
-	service.Register[*sample_service.Creator](consts.PHASE_CREATE, "sample/services")
+	service.Register[*item.Creator](consts.PHASE_CREATE, "/api/sample/items")
+	service.Register[*sample_service.Creator](consts.PHASE_CREATE, "/api/sample/services")
 }
 `,
 			},
@@ -171,9 +171,9 @@ import (
 )
 
 func init() {
-	service.Register[*account_recorditem.Creator](consts.PHASE_CREATE, "account/record-items")
-	service.Register[*item.Creator](consts.PHASE_CREATE, "sample/items")
-	service.Register[*sample_record_item.Creator](consts.PHASE_CREATE, "sample/record-items")
+	service.Register[*account_recorditem.Creator](consts.PHASE_CREATE, "/api/account/record-items")
+	service.Register[*item.Creator](consts.PHASE_CREATE, "/api/sample/items")
+	service.Register[*sample_record_item.Creator](consts.PHASE_CREATE, "/api/sample/record-items")
 }
 `,
 			},
@@ -393,9 +393,9 @@ import (
 )
 
 func Init() error {
-	router.Register[*model_gst.Item, *model_gst.Item, *model_gst.Item](router.Auth(), "gst/items", &gst.ControllerConfig[*model_gst.Item]{}, consts.Create)
-	router.Register[*model_router.Entry, *model_router.Entry, *model_router.Entry](router.Auth(), "router/entries", &gst.ControllerConfig[*model_router.Entry]{}, consts.Create)
-	router.Register[*sample.Record, *sample.Record, *sample.Record](router.Auth(), "sample/records", &gst.ControllerConfig[*sample.Record]{}, consts.Create)
+	router.Register[*model_gst.Item, *model_gst.Item, *model_gst.Item](router.Auth(), "/api/gst/items", &gst.ControllerConfig[*model_gst.Item]{}, consts.Create)
+	router.Register[*model_router.Entry, *model_router.Entry, *model_router.Entry](router.Auth(), "/api/router/entries", &gst.ControllerConfig[*model_router.Entry]{}, consts.Create)
+	router.Register[*sample.Record, *sample.Record, *sample.Record](router.Auth(), "/api/sample/records", &gst.ControllerConfig[*sample.Record]{}, consts.Create)
 	return nil
 }
 `,
@@ -493,9 +493,9 @@ import (
 )
 
 func Init() error {
-	router.Register[*tmpapp_model.Record, *gstmodel.Empty, *tmpapp_model.RecordListRsp](router.Auth(), "records", &gst.ControllerConfig[*tmpapp_model.Record]{}, consts.List)
-	router.Register[*sample.Entry, *sample.Entry, *sample.Entry](router.Auth(), "sample/entries", &gst.ControllerConfig[*sample.Entry]{}, consts.Create)
-	router.Register[*sample_model.Item, *sample_model.Item, *sample_model.Item](router.Auth(), "sample/model/items", &gst.ControllerConfig[*sample_model.Item]{}, consts.Create)
+	router.Register[*tmpapp_model.Record, *gstmodel.Empty, *tmpapp_model.RecordListRsp](router.Auth(), "/api/records", &gst.ControllerConfig[*tmpapp_model.Record]{}, consts.List)
+	router.Register[*sample.Entry, *sample.Entry, *sample.Entry](router.Auth(), "/api/sample/entries", &gst.ControllerConfig[*sample.Entry]{}, consts.Create)
+	router.Register[*sample_model.Item, *sample_model.Item, *sample_model.Item](router.Auth(), "/api/sample/model/items", &gst.ControllerConfig[*sample_model.Item]{}, consts.Create)
 	return nil
 }
 `,

@@ -28,7 +28,7 @@ func TestRegisterPanicsOnDeclarationMistakes(t *testing.T) {
 	require.PanicsWithValue(t, `router: register of route "samples" requires at least one verb`, func() {
 		router.Register[*modelregistry.Empty, *modelregistry.Empty, *modelregistry.Empty](group, "samples", nil)
 	})
-	require.PanicsWithValue(t, `controller: route "samples/:id/bind": request type *router_test.sampleBinder is an interface with methods or a pointer to one, which no request body decodes into; declare a concrete type, or any`, func() {
+	require.PanicsWithValue(t, `controller: route "/api/samples/:id/bind": request type *router_test.sampleBinder is an interface with methods or a pointer to one, which no request body decodes into; declare a concrete type, or any`, func() {
 		router.Register[*modelregistry.Empty, *sampleBinder, *modelregistry.Empty](group, "samples/:id/bind", nil, consts.Create)
 	})
 }

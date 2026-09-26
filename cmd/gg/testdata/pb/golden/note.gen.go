@@ -20,11 +20,11 @@ type NoteService struct {
 // The calls of the actions of Note, one per rpc of NoteService, built once
 // at package initialization.
 var (
-	createNote = grpc.CreateCall[*model.Note]("notes")
-	getNote    = grpc.GetCall[*model.Note]("notes/:id")
+	createNote = grpc.CreateCall[*model.Note]("/api/notes")
+	getNote    = grpc.GetCall[*model.Note]("/api/notes/:id")
 )
 
-// CreateNote serves the Create action of Note on notes.
+// CreateNote serves the Create action of Note on /api/notes.
 func (NoteService) CreateNote(ctx context.Context, req *CreateNoteRequest) (*CreateNoteResponse, error) {
 	m, err := createNote(ctx, nil, NoteFromProto(req.GetNote()))
 	if err != nil {
@@ -33,7 +33,7 @@ func (NoteService) CreateNote(ctx context.Context, req *CreateNoteRequest) (*Cre
 	return &CreateNoteResponse{Note: NoteToProto(m)}, nil
 }
 
-// GetNote serves the Get action of Note on notes.
+// GetNote serves the Get action of Note on /api/notes.
 func (NoteService) GetNote(ctx context.Context, req *GetNoteRequest) (*GetNoteResponse, error) {
 	m, err := getNote(ctx, map[string]string{"id": req.GetId()}, req.GetId(), grpc.Query{Expand: req.GetExpand(), Depth: req.GetDepth()})
 	if err != nil {

@@ -120,11 +120,11 @@ type Module[M Model, REQ Request, RSP Response] interface {
 type ControllerConfig[M Model] struct {
 	// ParamName names the route parameter that carries the resource ID.
 	ParamName string
-	// Route is the raw route string the handler is registered under. The
-	// controller handlers derive the service registry key from it, so it must match the
-	// route passed to the corresponding service.Register call. router.Register
-	// fills it in automatically; an empty route resolves no service and the
-	// handler falls back to the no-op default service.
+	// Route is the path the handler is registered at, /api/records/:rec, as
+	// consts.APIPath spells it. The controller handlers derive the service
+	// registry key from it, the key the corresponding service.Register call
+	// registers under. router.Register fills it in; an empty route resolves
+	// no service and the handler falls back to the no-op default service.
 	Route string
 }
 

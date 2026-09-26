@@ -21,13 +21,13 @@ type ItemService struct {
 // The calls of the actions of Item, one per rpc of ItemService, built once
 // at package initialization.
 var (
-	createItem = grpc.CreateCall[*record.Item]("records/:record/items")
-	getItem    = grpc.GetCall[*record.Item]("records/:record/items/:id")
-	sealItem   = grpc.CreateCall[*record.Item]("items/:id/seal")
-	mergeItem  = grpc.ServiceCall[*record.Item, *record.MergeReq, *record.MergedItemRsp](consts.PHASE_CREATE, "items/merge")
+	createItem = grpc.CreateCall[*record.Item]("/api/records/:record/items")
+	getItem    = grpc.GetCall[*record.Item]("/api/records/:record/items/:id")
+	sealItem   = grpc.CreateCall[*record.Item]("/api/items/:id/seal")
+	mergeItem  = grpc.ServiceCall[*record.Item, *record.MergeReq, *record.MergedItemRsp](consts.PHASE_CREATE, "/api/items/merge")
 )
 
-// CreateItem serves the Create action of Item on records/:record/items.
+// CreateItem serves the Create action of Item on /api/records/:record/items.
 func (ItemService) CreateItem(ctx context.Context, req *CreateItemRequest) (*CreateItemResponse, error) {
 	m, err := createItem(ctx, map[string]string{"record": req.GetRecord()}, ItemFromProto(req.GetItem()))
 	if err != nil {
@@ -36,7 +36,7 @@ func (ItemService) CreateItem(ctx context.Context, req *CreateItemRequest) (*Cre
 	return &CreateItemResponse{Item: ItemToProto(m)}, nil
 }
 
-// GetItem serves the Get action of Item on records/:record/items.
+// GetItem serves the Get action of Item on /api/records/:record/items.
 func (ItemService) GetItem(ctx context.Context, req *GetItemRequest) (*GetItemResponse, error) {
 	m, err := getItem(ctx, map[string]string{"record": req.GetRecord(), "id": req.GetId()}, req.GetId(), grpc.Query{Expand: req.GetExpand(), Depth: req.GetDepth()})
 	if err != nil {
@@ -45,7 +45,7 @@ func (ItemService) GetItem(ctx context.Context, req *GetItemRequest) (*GetItemRe
 	return &GetItemResponse{Item: ItemToProto(m)}, nil
 }
 
-// SealItem serves the Create action of Item on items/:id/seal.
+// SealItem serves the Create action of Item on /api/items/:id/seal.
 func (ItemService) SealItem(ctx context.Context, req *SealItemRequest) (*SealItemResponse, error) {
 	m, err := sealItem(ctx, map[string]string{"id": req.GetId()}, ItemFromProto(req.GetItem()))
 	if err != nil {
@@ -54,7 +54,7 @@ func (ItemService) SealItem(ctx context.Context, req *SealItemRequest) (*SealIte
 	return &SealItemResponse{Item: ItemToProto(m)}, nil
 }
 
-// MergeItem serves the Create action of Item on items/merge.
+// MergeItem serves the Create action of Item on /api/items/merge.
 func (ItemService) MergeItem(ctx context.Context, req *MergeItemRequest) (*MergeItemResponse, error) {
 	result, err := mergeItem(ctx, nil, grpc.Query{}, MergeReqFromProto(req.GetPayload()))
 	if err != nil {
