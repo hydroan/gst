@@ -19,16 +19,15 @@ var _ context.Context = (*ServiceContext)(nil)
 
 // ServiceContext is the per-request context the framework hands to every
 // service method. It implements context.Context by delegating to the request
-// context, exposes request metadata (route, params, user identity, trace),
-// and carries the response helpers a service needs without touching Gin
-// directly.
+// context, exposes request metadata (route, params, user identity, trace,
+// whether the action requires authentication), and carries the response
+// helpers a service needs without touching Gin directly.
 type ServiceContext struct {
 	baseCtx        context.Context
 	ginCtx         *gin.Context
 	responseWriter http.ResponseWriter
 
-	phase        consts.Phase
-	requiresAuth bool // indicates whether the current API requires authentication
+	phase consts.Phase
 
 	// rawResponseAttempted records that a service asked for a raw HTTP
 	// response while the context carried none; RawResponseAttempted reads it.
@@ -73,7 +72,6 @@ func NewServiceContext(c *gin.Context, ctx context.Context, phase consts.Phase) 
 		ginCtx:         c,
 		responseWriter: c.Writer,
 		phase:          phase,
-		requiresAuth:   c.GetBool(consts.CTX_REQUIRES_AUTH),
 	}
 }
 
@@ -101,17 +99,11 @@ func (sc *ServiceContext) Phase() consts.Phase {
 	return sc.phase
 }
 
-// RequiresAuth returns whether the current API requires authentication.
-func (sc *ServiceContext) RequiresAuth() bool {
-	if sc == nil {
-		return false
-	}
-	return sc.requiresAuth
-}
-
-// Query, Param, Route, Path, Method, Username, UserID and SessionID read the
-// request metadata captured when the context was built. Query returns a copy,
-// so mutating the result never changes what a later read sees.
+// Query, Param, Route, Path, Method, Username, UserID, SessionID and
+// RequiresAuth read the request metadata captured when the context was
+// built. Query returns a copy, so mutating the result never changes what a
+// later read sees; RequiresAuth answers whether the action requires
+// authentication, as the transport marked the request or the call.
 func (sc *ServiceContext) Query() url.Values       { return requestctx.FromContext(sc).Query() }
 func (sc *ServiceContext) Param(key string) string { return requestctx.FromContext(sc).Param(key) }
 func (sc *ServiceContext) Route() string           { return requestctx.FromContext(sc).Route() }
@@ -120,6 +112,7 @@ func (sc *ServiceContext) Method() string          { return requestctx.FromConte
 func (sc *ServiceContext) Username() string        { return requestctx.FromContext(sc).Username() }
 func (sc *ServiceContext) UserID() string          { return requestctx.FromContext(sc).UserID() }
 func (sc *ServiceContext) SessionID() string       { return requestctx.FromContext(sc).SessionID() }
+func (sc *ServiceContext) RequiresAuth() bool      { return requestctx.FromContext(sc).RequiresAuth() }
 
 // TenantID reads the tenant the request was authenticated into, and TraceID
 // the trace id of the execution the context belongs to.

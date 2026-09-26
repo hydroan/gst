@@ -27,6 +27,7 @@ func TestServiceContextCarriesRequestMetadata(t *testing.T) {
 		ctx.Set(consts.CTX_USERNAME, "admin")
 		ctx.Set(consts.CTX_USER_ID, "user-1")
 		ctx.Set(consts.CTX_TENANT_ID, "tenant-1")
+		ctx.Set(consts.CTX_REQUIRES_AUTH, true)
 		ctx.Request = ctx.Request.WithContext(execctx.WithTraceID(ctx.Request.Context(), "trace-1"))
 
 		serviceCtx = types.NewServiceContext(ctx, nil, "")
@@ -39,6 +40,7 @@ func TestServiceContextCarriesRequestMetadata(t *testing.T) {
 	require.Equal(t, "user-1", serviceCtx.UserID())
 	require.Equal(t, "tenant-1", serviceCtx.TenantID())
 	require.Equal(t, "trace-1", serviceCtx.TraceID())
+	require.True(t, serviceCtx.RequiresAuth(), "the auth marker declared the route authenticated")
 	require.Equal(t, "42", meta.Param("id"))
 	require.Equal(t, []string{"blue"}, meta.Query()["tag"])
 }
@@ -113,14 +115,15 @@ func TestServiceContextNilRequest(t *testing.T) {
 // accessor answers from the metadata the transport attached to ctx.
 func TestServiceContextWithoutGinReadsMetadataFromContext(t *testing.T) {
 	ctx := requestctx.WithMetadata(context.Background(), requestctx.New(requestctx.Fields{
-		Route:     "/api/users/:id",
-		Path:      "/api/users/42",
-		Method:    http.MethodGet,
-		Username:  "admin",
-		ClientIP:  "203.0.113.5",
-		UserAgent: "sample-agent/1.0",
-		Host:      "example.com",
-		TLS:       true,
+		Route:        "/api/users/:id",
+		Path:         "/api/users/42",
+		Method:       http.MethodGet,
+		Username:     "admin",
+		ClientIP:     "203.0.113.5",
+		UserAgent:    "sample-agent/1.0",
+		Host:         "example.com",
+		TLS:          true,
+		RequiresAuth: true,
 	}))
 
 	serviceCtx := types.NewServiceContext(nil, ctx, consts.PHASE_GET)
@@ -134,6 +137,7 @@ func TestServiceContextWithoutGinReadsMetadataFromContext(t *testing.T) {
 	require.Equal(t, "sample-agent/1.0", serviceCtx.UserAgent())
 	require.Equal(t, "example.com", serviceCtx.Host())
 	require.True(t, serviceCtx.IsHTTPS())
+	require.True(t, serviceCtx.RequiresAuth(), "the metadata declared the action authenticated")
 }
 
 func TestServiceContextResponseHelpers(t *testing.T) {

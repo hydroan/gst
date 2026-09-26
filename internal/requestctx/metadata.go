@@ -24,7 +24,10 @@ import (
 // The client address, user agent, host and TLS flag describe the connection
 // the request arrived on. They are carried here rather than read off the HTTP
 // request on demand, so that a context built without an HTTP request -- one a
-// transport other than HTTP constructs -- answers for them all the same.
+// transport other than HTTP constructs -- answers for them all the same. So
+// is whether the action requires authentication, which the HTTP listener
+// marks on the gin context and another transport knows from its own
+// registration.
 type Metadata struct {
 	route      string
 	path       string
@@ -41,6 +44,8 @@ type Metadata struct {
 	userAgent  string
 	host       string
 	tls        bool
+
+	requiresAuth bool
 }
 
 // Fields contains request metadata fields for non-gin callers and tests.
@@ -63,6 +68,8 @@ type Fields struct {
 	UserAgent  string
 	Host       string
 	TLS        bool
+
+	RequiresAuth bool
 }
 
 // New creates Metadata from explicit fields.
@@ -83,6 +90,8 @@ func New(fields Fields) Metadata {
 		userAgent:  fields.UserAgent,
 		host:       fields.Host,
 		tls:        fields.TLS,
+
+		requiresAuth: fields.RequiresAuth,
 	}
 }
 
@@ -99,7 +108,8 @@ func New(fields Fields) Metadata {
 // expensive parts, parsing the query string, building the route parameter map
 // and resolving the connection fields, are memoized on the gin context by
 // GinQuery, ginParams and ginConnection.
-// Identity fields are deliberately read fresh on every call: they are cheap
+// Identity fields are deliberately read fresh on every call, and so is the
+// authentication requirement the auth marker middleware sets: they are cheap
 // context lookups, and re-reading them keeps a construction that runs before
 // the identity middleware from freezing empty identity into the constructions
 // that follow it.
@@ -139,6 +149,8 @@ func FromGin(c *gin.Context) Metadata {
 		userAgent:  conn.userAgent,
 		host:       conn.host,
 		tls:        conn.tls,
+
+		requiresAuth: c.GetBool(consts.CTX_REQUIRES_AUTH),
 	}
 }
 
@@ -324,6 +336,12 @@ func (m Metadata) ClientIP() string  { return m.clientIP }
 func (m Metadata) UserAgent() string { return m.userAgent }
 func (m Metadata) Host() string      { return m.host }
 func (m Metadata) TLS() bool         { return m.tls }
+
+// RequiresAuth reports whether the action the request is for requires
+// authentication: over HTTP a route outside the public group, which the auth
+// marker middleware flags on the gin context; over gRPC a method not
+// described as public. It is what ServiceContext.RequiresAuth answers.
+func (m Metadata) RequiresAuth() bool { return m.requiresAuth }
 
 func (m Metadata) Param(key string) string {
 	if m.params == nil {

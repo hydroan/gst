@@ -27,6 +27,7 @@ func TestFromGinExtractsRequestFields(t *testing.T) {
 		ctx.Set(consts.CTX_USER_ID, "user-1")
 		ctx.Set(consts.CTX_SESSION_ID, "session-1")
 		ctx.Set(consts.CTX_TENANT_ID, "tenant-1")
+		ctx.Set(consts.CTX_REQUIRES_AUTH, true)
 
 		meta = FromGin(ctx)
 	})
@@ -53,6 +54,7 @@ func TestFromGinExtractsRequestFields(t *testing.T) {
 	require.Equal(t, "sample-agent/1.0", meta.UserAgent())
 	require.Equal(t, "example.com", meta.Host())
 	require.True(t, meta.TLS(), "the proxy in front declared TLS")
+	require.True(t, meta.RequiresAuth(), "the auth marker declared the route authenticated")
 }
 
 // TestFromGinReadsTLSFromConnectionOrProxyHeaders pins where the TLS flag
@@ -330,12 +332,13 @@ func TestMetadataContextRoundTrip(t *testing.T) {
 		Query: map[string][]string{
 			"tag": {"blue", "green"},
 		},
-		RawQuery:   "tag=blue&tag=green",
-		RequestURI: "/api/users/42?tag=blue&tag=green",
-		ClientIP:   "203.0.113.5",
-		UserAgent:  "sample-agent/1.0",
-		Host:       "example.com",
-		TLS:        true,
+		RawQuery:     "tag=blue&tag=green",
+		RequestURI:   "/api/users/42?tag=blue&tag=green",
+		ClientIP:     "203.0.113.5",
+		UserAgent:    "sample-agent/1.0",
+		Host:         "example.com",
+		TLS:          true,
+		RequiresAuth: true,
 	})
 
 	ctx := WithMetadata(context.Background(), meta)
@@ -354,4 +357,5 @@ func TestMetadataContextRoundTrip(t *testing.T) {
 	require.Equal(t, "sample-agent/1.0", got.UserAgent())
 	require.Equal(t, "example.com", got.Host())
 	require.True(t, got.TLS())
+	require.True(t, got.RequiresAuth())
 }
