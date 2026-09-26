@@ -17,20 +17,27 @@ import (
 var update = flag.Bool("update", false, "rewrite the golden files under testdata")
 
 // TestGenRunWritesTheProtobufDefinitionsOfGRPCModels holds the .proto files
-// gg gen writes for the models declaring GRPC() against testdata/pb/golden;
-// run it with -update to rewrite them. There is one file per model file
-// under pb/, mirroring the model directory, with the model's message, the
-// messages of its standard actions, the Go types of its custom actions and
-// its service; a model without GRPC() gets no file. The files are compiled
-// the way protoc compiles them as well. They hold, byte for byte, the
-// examples the doc comments of the pb package show: pb.Generate's whole
-// note.proto, and the excerpts of buildMessage, fieldTypeOf, fieldComment,
-// declareService, rpcMessages, customRequest, customResponse,
-// standardMessages, queryFields and descriptor.
+// gg gen writes for the models declaring GRPC(), and the Go files it writes
+// beside them, against testdata/pb/golden; run it with -update to rewrite
+// them. There is one .proto per model file under pb/, mirroring the model
+// directory, with the model's message, the messages of its standard
+// actions, the Go types of its custom actions and its service; beside it a
+// .gen.go with the type serving the service, the calls of its actions, the
+// handlers of its rpcs and the conversions of its messages; and pb/pb.gen.go
+// registering every service. A model without GRPC() gets no file. The
+// definitions are compiled the way protoc compiles them as well. The files
+// hold, byte for byte, the examples the doc comments of the pb package
+// show: pb.Generate's whole note.proto, the excerpts of buildMessage,
+// fieldTypeOf, fieldComment, declareService, rpcMessages, customRequest,
+// customResponse, standardMessages, queryFields and descriptor; the whole
+// report.gen.go of handlerFile, the excerpts of serviceType, actionCalls,
+// handler, toProto, fromProto and conversionFuncs; and the pb.gen.go of
+// registrationFile.
 //
 // Beside every .proto the run writes the Go files the protobuf plugins
 // compile from it (see pb.Compile): the messages in note.pb.go and the
-// service in note_grpc.pb.go, and the project builds with them.
+// service in note_grpc.pb.go, and the project builds with them; main.go
+// imports the pb package for the registration.
 func TestGenRunWritesTheProtobufDefinitionsOfGRPCModels(t *testing.T) {
 	projectDir := newGenProject(t)
 	writeProtobufProject(t, projectDir, map[string]string{
@@ -39,11 +46,12 @@ func TestGenRunWritesTheProtobufDefinitionsOfGRPCModels(t *testing.T) {
 		"model/report.go":      protobufReportModel,
 		"model/plain.go":       protobufPlainModel,
 		"model/note.go":        protobufNoteModel,
+		"model/shape.go":       protobufShapeModel,
 	})
 
 	require.NoError(t, genRunWithOptions(genRunOptions{Quiet: true}))
 
-	got := readProtos(t, filepath.Join(projectDir, "pb"))
+	got := readGenerated(t, filepath.Join(projectDir, "pb"))
 	golden := filepath.Join(frameworkRepoRoot(t), "cmd", "gg", "testdata", "pb", "golden")
 	if *update {
 		require.NoError(t, os.RemoveAll(golden))
@@ -51,18 +59,71 @@ func TestGenRunWritesTheProtobufDefinitionsOfGRPCModels(t *testing.T) {
 			writeProjectFile(t, filepath.Join(golden, filepath.FromSlash(path)), content)
 		}
 	}
-	require.Equal(t, readProtos(t, golden), got)
-	requireProtosCompile(t, projectDir, got)
+	require.Equal(t, readGenerated(t, golden), got)
+	protos := make(map[string]string)
+	for path, content := range got {
+		if strings.HasSuffix(path, ".proto") {
+			protos[path] = content
+		}
+	}
+	requireProtosCompile(t, projectDir, protos)
 
-	for path := range got {
+	for path := range protos {
 		base := strings.TrimSuffix(path, ".proto")
 		require.FileExists(t, filepath.Join(projectDir, "pb", filepath.FromSlash(base+".pb.go")))
 		require.FileExists(t, filepath.Join(projectDir, "pb", filepath.FromSlash(base+"_grpc.pb.go")), "every model file declares a service")
+		require.Contains(t, got, base+ggconst.SuffixGenGo, "every definition gets its handlers file")
 	}
+	require.Contains(t, got, ggconst.FilePBGen)
+	mainCode, err := os.ReadFile(filepath.Join(projectDir, ggconst.FileMain))
+	require.NoError(t, err)
+	require.Contains(t, string(mainCode), `_ "tmpapp/pb"`)
 	build := exec.Command("go", "build", "./pb/...")
 	build.Dir = projectDir
 	output, err := build.CombinedOutput()
 	require.NoError(t, err, "the generated Go files must build: %s", output)
+
+	// The conversions run for real: a value of every kind of field goes
+	// through its message and comes back as it went in.
+	writeProtobufProject(t, projectDir, map[string]string{"pb/convert_test.go": protobufConversionTest})
+	test := exec.Command("go", "test", "-trimpath", "./pb/")
+	test.Dir = projectDir
+	output, err = test.CombinedOutput()
+	require.NoError(t, err, "the generated conversions must round-trip every value: %s", output)
+}
+
+// TestGenRunImportsThePBPackageWhileServingGRPC pins that main.go imports
+// the pb package, for the init function registering the services, exactly
+// while a model declares GRPC(): once the last declaration is gone the
+// import goes with it, whether or not the stale files under pb/ were
+// pruned.
+func TestGenRunImportsThePBPackageWhileServingGRPC(t *testing.T) {
+	projectDir := newGenProject(t)
+	writeProtobufProject(t, projectDir, map[string]string{"model/note.go": protobufNoteModel})
+
+	require.NoError(t, genRunWithOptions(genRunOptions{Quiet: true}))
+	mainCode, err := os.ReadFile(filepath.Join(projectDir, ggconst.FileMain))
+	require.NoError(t, err)
+	require.Contains(t, string(mainCode), `_ "tmpapp/pb"`)
+
+	writeProtobufProject(t, projectDir, map[string]string{"model/note.go": strings.Replace(protobufNoteModel, "\tdsl.GRPC()\n", "", 1)})
+	require.NoError(t, genRunWithOptions(genRunOptions{Quiet: true}))
+	mainCode, err = os.ReadFile(filepath.Join(projectDir, ggconst.FileMain))
+	require.NoError(t, err)
+	require.NotContains(t, string(mainCode), "tmpapp/pb", "without a model served over gRPC main.go must not import the package")
+	require.FileExists(t, filepath.Join(projectDir, ggconst.DirPB, ggconst.FilePBGen), "the stale files stay until pruned")
+}
+
+// TestGenRunRefusesAModelFileNamedPB pins that a model file named pb.go is
+// reported: its handlers file would be pb/pb.gen.go, the registration file.
+func TestGenRunRefusesAModelFileNamedPB(t *testing.T) {
+	projectDir := newGenProject(t)
+	writeProtobufProject(t, projectDir, map[string]string{"model/pb.go": protobufPBFileModel})
+
+	err := genRunWithOptions(genRunOptions{Quiet: true})
+
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "pb/pb.proto: the model file model/pb.go would get its handlers at pb/pb.gen.go, the registration file; rename the file")
 }
 
 // TestGenRunWritesNoProtobufDefinitionWhenAShapeCannotBeDescribed pins the
@@ -84,6 +145,7 @@ func TestGenRunWritesNoProtobufDefinitionWhenAShapeCannotBeDescribed(t *testing.
 		"tmpapp/model.Rejected.speaker: an interface with methods has no protobuf type, the dynamic type decides it; use a concrete type",
 		"tmpapp/model.Rejected.comment: type database/sql.NullString is declared outside the project, so its fields cannot carry pb tags; use a project type",
 		"tmpapp/model.Rejected.word: the pb tag \"eleven\" is not a field number; write the number alone, as in pb:\"11\"",
+		"tmpapp/model.Rejected.note: the field is promoted through an embedded pointer, which a message has no way to leave unset; embed the struct by value",
 	} {
 		require.Contains(t, err.Error(), want)
 	}
@@ -264,15 +326,16 @@ func writeProtobufProject(t *testing.T, projectDir string, files map[string]stri
 	}
 }
 
-// readProtos reads every .proto file under root, keyed by its slash-separated
-// path relative to root, record/item.proto for the file gg gen writes to
-// pb/record/item.proto; the Go files compiled beside them are left out.
-func readProtos(t *testing.T, root string) map[string]string {
+// readGenerated reads every .proto and .gen.go file under root, the files
+// gg gen writes itself, keyed by its slash-separated path relative to root,
+// record/item.proto for the file gg gen writes to pb/record/item.proto; the
+// Go files the plugins compile beside them are left out.
+func readGenerated(t *testing.T, root string) map[string]string {
 	t.Helper()
 
 	files := make(map[string]string)
 	require.NoError(t, filepath.WalkDir(root, func(path string, d os.DirEntry, err error) error {
-		if err != nil || d.IsDir() || !strings.HasSuffix(path, ".proto") {
+		if err != nil || d.IsDir() || (!strings.HasSuffix(path, ".proto") && !strings.HasSuffix(path, ggconst.SuffixGenGo)) {
 			return err
 		}
 		content, readErr := os.ReadFile(path)
@@ -544,8 +607,14 @@ type Rejected struct {
 	Voice    Speaker        'json:"speaker" pb:"13" gorm:"-"'
 	Comment  sql.NullString 'json:"comment" pb:"14"'
 	Word     string         'json:"word" pb:"eleven"'
+	*RejectedExtra
 
 	model.Base
+}
+
+// RejectedExtra is embedded through a pointer.
+type RejectedExtra struct {
+	Note string 'json:"note" pb:"15"'
 }
 
 // Speaker is an interface with methods.
@@ -719,5 +788,273 @@ func (Clash) Design() {
 			dsl.Public()
 		})
 	})
+}
+`
+
+// protobufShapeModel carries one field of every kind the handlers convert
+// beyond the ones of the Record model: gorm's date, time of day, JSON
+// document, JSON map and JSON wrapper, a soft-delete time, a JSON number, an
+// integer enum, an optional integer, a pointer to a struct, a slice of
+// pointers, an array, maps of scalars and of structs, a slice of and a
+// pointer to an unnamed struct, an optional time, any value, bytes, a named
+// slice, the framework's version type, an alias of an internal type, and
+// gorm's JSON slices of structs and of strings.
+const protobufShapeModel = `package model
+
+import (
+	"encoding/json"
+	"time"
+
+	"github.com/hydroan/gst/dsl"
+	"github.com/hydroan/gst/model"
+	"gorm.io/datatypes"
+	"gorm.io/gorm"
+)
+
+// Shape carries one field of every kind the handlers convert.
+type Shape struct {
+	Date    datatypes.Date                   'json:"date" pb:"11"'
+	Clock   datatypes.Time                   'json:"clock" pb:"12"'
+	Doc     datatypes.JSON                   'json:"doc,omitempty" pb:"13"'
+	Attrs   datatypes.JSONMap                'json:"attrs,omitempty" pb:"14"'
+	Options datatypes.JSONType[ShapeOptions] 'json:"options" pb:"15"'
+	Audit   ShapeAudit                       'json:"audit" pb:"16" gorm:"-"'
+	Amount  json.Number                      'json:"amount" pb:"17"'
+	Level   ShapeLevel                       'json:"level" pb:"18"'
+	Score   *int                             'json:"score,omitempty" pb:"19"'
+	Owner   *ShapeOwner                      'json:"owner,omitempty" pb:"20" gorm:"-"'
+	Points  []*ShapePoint                    'json:"points,omitempty" pb:"21" gorm:"-"'
+	Grid    [2]int32                         'json:"grid" pb:"22" gorm:"-"'
+	Scores  map[string]int                   'json:"scores,omitempty" pb:"23" gorm:"-"'
+	ByCode  map[int32]ShapePoint             'json:"by_code,omitempty" pb:"24" gorm:"-"'
+	Spans   []struct {
+		From int 'json:"from" pb:"1"'
+		To   int 'json:"to" pb:"2"'
+	} 'json:"spans,omitempty" pb:"25" gorm:"-"'
+	Note *struct {
+		Text string 'json:"text" pb:"1"'
+	} 'json:"note,omitempty" pb:"26" gorm:"-"'
+	When  *time.Time 'json:"when,omitempty" pb:"27"'
+	Any   any        'json:"any,omitempty" pb:"28" gorm:"-"'
+	Blob  []byte     'json:"blob,omitempty" pb:"29"'
+	Names ShapeNames 'json:"names,omitempty" pb:"30" gorm:"-"'
+	// Version is an alias the framework declares for a type of an internal
+	// package, which the handlers spell by the alias.
+	Version model.Version 'json:"version,omitempty" gorm:"not null;default:1" pb:"31"'
+	// Steps and Words are the JSON slices of gorm, of structs and of strings.
+	Steps datatypes.JSONSlice[ShapePoint] 'json:"steps,omitempty" pb:"32"'
+	Words datatypes.JSONSlice[string]     'json:"words,omitempty" pb:"33"'
+
+	model.Base
+}
+
+// ShapeOptions is kept as a JSON document.
+type ShapeOptions struct {
+	Color string 'json:"color" pb:"1"'
+}
+
+// ShapeAudit records when a shape was removed.
+type ShapeAudit struct {
+	Removed gorm.DeletedAt 'json:"removed" pb:"1"'
+}
+
+// ShapeLevel grades a shape.
+type ShapeLevel int
+
+const (
+	ShapeLevelLow  ShapeLevel = 1
+	ShapeLevelHigh ShapeLevel = 2
+)
+
+// ShapeOwner owns a shape.
+type ShapeOwner struct {
+	Name string 'json:"name" pb:"1"'
+}
+
+// ShapePoint is a corner of a shape.
+type ShapePoint struct {
+	X int32 'json:"x" pb:"1"'
+	Y int32 'json:"y" pb:"2"'
+}
+
+// ShapeNames lists the names of a shape.
+type ShapeNames []string
+
+func (Shape) TableName() string { return "shapes" }
+
+func (Shape) Design() {
+	dsl.GRPC()
+	dsl.Migrate()
+	dsl.Endpoint("shapes")
+	dsl.Create(func() {})
+	dsl.Get(func() {})
+}
+`
+
+// protobufConversionTest is the test the golden project runs against its
+// generated conversions: every kind of field of the Record, Item and Shape
+// models goes through its message and comes back as it went in, the unset
+// values staying unset.
+const protobufConversionTest = `package pb_test
+
+import (
+	"encoding/json"
+	"testing"
+	"time"
+
+	"tmpapp/model"
+	"tmpapp/model/record"
+	"tmpapp/pb"
+	pbrecord "tmpapp/pb/record"
+
+	"github.com/stretchr/testify/require"
+	"gorm.io/datatypes"
+	"gorm.io/gorm"
+)
+
+func TestRecordRoundTrips(t *testing.T) {
+	at := time.Date(2026, 9, 26, 8, 0, 0, 0, time.UTC)
+	summary := "short"
+	in := &model.Record{
+		Title:   "title",
+		Status:  model.RecordStatusActive,
+		Summary: &summary,
+		Tags:    []string{"a", "b"},
+		Labels:  map[string]string{"k": "v"},
+		Count:   3,
+		Ratio:   1.5,
+		Enabled: true,
+		Payload: []byte("bytes"),
+		Raw:     json.RawMessage('{"n":1}'),
+		Extra:   map[string]any{"ok": true, "list": []any{"x"}},
+		Due:     at,
+		Meta:    model.RecordMeta{Author: "author", Score: 2},
+	}
+	in.Window.From, in.Window.To = "from", "to"
+	in.ID, in.CreatedBy, in.CreatedAt = "r-1", "u-1", at
+
+	msg := pb.RecordToProto(in)
+	require.Equal(t, "r-1", msg.GetId())
+	require.Equal(t, "active", msg.GetStatus())
+	require.Equal(t, int64(3), msg.GetCount())
+	require.Equal(t, at, msg.GetCreatedAt().AsTime())
+	require.Nil(t, msg.UpdatedAt, "the zero time is unset")
+	require.Equal(t, "from", msg.GetWindow().GetFrom())
+	require.Equal(t, int32(2), msg.GetMeta().GetScore())
+
+	out := pb.RecordFromProto(msg)
+	require.JSONEq(t, string(in.Raw), string(out.Raw))
+	in.Raw, out.Raw = nil, nil
+	require.Equal(t, in, out)
+
+	require.Nil(t, pb.RecordToProto(nil))
+	require.Nil(t, pb.RecordFromProto(nil))
+	require.Equal(t, &model.Record{}, pb.RecordFromProto(&pb.Record{}), "an empty message decodes into the zero value")
+}
+
+func TestItemLinksRoundTrip(t *testing.T) {
+	in := &record.Item{Content: "c", Links: []record.Link{{URL: "https://a", Title: "A"}, {URL: "https://b"}}}
+
+	msg := pbrecord.ItemToProto(in)
+	require.Len(t, msg.GetLinks(), 2)
+	require.Equal(t, "https://b", msg.GetLinks()[1].GetUrl())
+	require.Equal(t, in, pbrecord.ItemFromProto(msg))
+	require.Nil(t, pbrecord.ItemFromProto(&pbrecord.Item{}).Links, "no links stay no links")
+
+	merged := pbrecord.MergeRspToProto(&record.MergeRsp{Item: in})
+	require.Equal(t, "c", merged.GetItem().GetContent())
+	require.Nil(t, pbrecord.MergeRspToProto(&record.MergeRsp{}).Item)
+}
+
+func TestShapeRoundTrips(t *testing.T) {
+	day := time.Date(2026, 9, 26, 0, 0, 0, 0, time.UTC)
+	when := day.Add(time.Hour)
+	score := 7
+	in := &model.Shape{
+		Date:    datatypes.Date(day),
+		Clock:   datatypes.Time(90 * time.Minute),
+		Doc:     datatypes.JSON('{"a":[1,2]}'),
+		Attrs:   datatypes.JSONMap{"deep": map[string]any{"x": float64(1)}},
+		Options: datatypes.NewJSONType(model.ShapeOptions{Color: "red"}),
+		Audit:   model.ShapeAudit{Removed: gorm.DeletedAt{Time: when, Valid: true}},
+		Amount:  json.Number("12.50"),
+		Level:   model.ShapeLevelHigh,
+		Score:   &score,
+		Owner:   &model.ShapeOwner{Name: "owner"},
+		Points:  []*model.ShapePoint{{X: 1, Y: 2}, nil},
+		Grid:    [2]int32{4, 5},
+		Scores:  map[string]int{"a": 1},
+		ByCode:  map[int32]model.ShapePoint{3: {X: 3, Y: 4}},
+		When:    &when,
+		Any:     map[string]any{"n": float64(2)},
+		Blob:    []byte{1, 2},
+		Names:   model.ShapeNames{"n1"},
+		Version: 3,
+		Steps:   datatypes.JSONSlice[model.ShapePoint]{{X: 5, Y: 6}},
+		Words:   datatypes.JSONSlice[string]{"w"},
+	}
+	in.Spans = append(in.Spans, struct {
+		From int 'json:"from" pb:"1"'
+		To   int 'json:"to" pb:"2"'
+	}{From: 1, To: 2})
+	in.Note = &struct {
+		Text string 'json:"text" pb:"1"'
+	}{Text: "note"}
+
+	msg := pb.ShapeToProto(in)
+	require.Equal(t, day, msg.GetDate().AsTime())
+	require.Equal(t, 90*time.Minute, msg.GetClock().AsDuration())
+	require.Equal(t, "red", msg.GetOptions().GetColor())
+	require.Equal(t, when, msg.GetAudit().GetRemoved().AsTime())
+	require.Equal(t, "12.50", msg.GetAmount())
+	require.Equal(t, int64(2), msg.GetLevel())
+	require.Equal(t, int64(7), msg.GetScore())
+	require.Equal(t, []int32{4, 5}, msg.GetGrid())
+	require.Equal(t, int64(1), msg.GetScores()["a"])
+	require.Equal(t, int32(4), msg.GetByCode()[3].GetY())
+	require.Equal(t, int64(2), msg.GetSpans()[0].GetTo())
+	require.Equal(t, "note", msg.GetNote().GetText())
+	require.Nil(t, msg.GetPoints()[1], "a nil element stays nil")
+	require.Equal(t, int64(3), msg.GetVersion())
+	require.Equal(t, int32(6), msg.GetSteps()[0].GetY())
+	require.Equal(t, []string{"w"}, msg.GetWords())
+
+	out := pb.ShapeFromProto(msg)
+	require.JSONEq(t, string(in.Doc), string(out.Doc))
+	in.Doc, out.Doc = nil, nil
+	require.Equal(t, in, out)
+
+	empty := pb.ShapeFromProto(&pb.Shape{})
+	require.False(t, empty.Audit.Removed.Valid)
+	require.Nil(t, empty.Score)
+	require.Nil(t, empty.When)
+	require.Nil(t, empty.Note)
+	require.Nil(t, empty.Any)
+	require.True(t, time.Time(empty.Date).IsZero())
+}
+`
+
+// protobufPBFileModel is a model declared in a file named pb.go.
+const protobufPBFileModel = `package model
+
+import (
+	"github.com/hydroan/gst/dsl"
+	"github.com/hydroan/gst/model"
+)
+
+// Pb is declared in pb.go.
+type Pb struct {
+	Title string 'json:"title" pb:"11"'
+
+	model.Base
+}
+
+func (Pb) TableName() string { return "pbs" }
+
+func (Pb) Design() {
+	dsl.GRPC()
+	dsl.Migrate()
+	dsl.Endpoint("pbs")
+	dsl.Create(func() {})
 }
 `

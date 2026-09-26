@@ -115,35 +115,40 @@ func existingPBFiles() []string {
 // the current models, which prune keeps: the models are read the way gg gen
 // reads them, gst.yaml route and model ignores applied, since the files
 // reflect them (unlike a service file, which an ignored action keeps on
-// disk). The definitions are derived, the Go files beside them are named
-// from the definitions (see compiledPBPaths) rather than compiled: prune
-// only needs their names, and the plugins that compile them are not to be
-// run, or fetched, for that.
+// disk). The definitions and the Go files serving them are derived, the Go
+// files compiled from the definitions are named from them (see
+// compiledPBPaths) rather than compiled: prune only needs their names, and
+// the plugins that compile them are not to be run, or fetched, for that.
 func generatedPBFiles(ignore gghelper.ProjectIgnore) ([]string, error) {
 	scanned, err := scanModels(true, ignore)
 	if err != nil {
 		return nil, err
 	}
-	protos, err := protobufDefinitions(scanned.models)
+	generated, err := protobufDefinitions(scanned.models)
 	if err != nil {
 		return nil, err
 	}
-	paths := make([]string, 0, 3*len(protos))
-	for _, f := range protos {
+	paths := make([]string, 0, 3*len(generated))
+	for _, f := range generated {
 		paths = append(paths, f.Path)
 	}
-	return append(paths, compiledPBPaths(protos)...), nil
+	return append(paths, compiledPBPaths(generated)...), nil
 }
 
 // compiledPBPaths names the Go files pb.Compile writes for the definitions
-// protos, the way the protobuf plugins name them: pb/record.pb.go for
+// among files, the way the protobuf plugins name them: pb/record.pb.go for
 // pb/record.proto, and pb/record_grpc.pb.go as well when the definition
-// declares a service. For [pb/record.proto pb/types.proto] with a service
-// in the first alone, the paths are [pb/record.pb.go pb/record_grpc.pb.go
-// pb/types.pb.go]. A test holds this to what pb.Compile actually writes.
-func compiledPBPaths(protos []pb.File) []string {
-	paths := make([]string, 0, 2*len(protos))
-	for _, f := range protos {
+// declares a service; the Go files among files, pb/record.gen.go, name
+// nothing. For [pb/record.gen.go pb/record.proto pb/types.proto] with a
+// service in the definition of record alone, the paths are
+// [pb/record.pb.go pb/record_grpc.pb.go pb/types.pb.go]. A test holds this
+// to what pb.Compile actually writes.
+func compiledPBPaths(files []pb.File) []string {
+	paths := make([]string, 0, 2*len(files))
+	for _, f := range files {
+		if !f.Definition() {
+			continue
+		}
 		base := strings.TrimSuffix(f.Path, ".proto")
 		paths = append(paths, base+".pb.go")
 		if f.Service {

@@ -85,13 +85,13 @@ func importSpecs(frameworkImports []string, aliases map[string]string) []ast.Spe
 	return specs
 }
 
-// generatedHeader puts the generated-code header above the package clause of
+// GeneratedHeader puts the generated-code header above the package clause of
 // f, a blank line between the two, and returns the FileSet f is printed
 // through: the header comment takes the first line of a fabricated file and
 // the package clause the third, so go/printer lays them out that way. A
 // comment right above the clause would be the package's doc, and a project's
 // own package doc beside it a second one.
-func generatedHeader(f *ast.File) *token.FileSet {
+func GeneratedHeader(f *ast.File) *token.FileSet {
 	fset := token.NewFileSet()
 	lines := goast.NewLineSet(fset)
 	f.Comments = []*ast.CommentGroup{{List: []*ast.Comment{{Slash: lines.Next(), Text: consts.CodeGeneratedComment()}}}}
@@ -152,7 +152,7 @@ func BuildModelFile(pkgName string, aliases map[string]string, stmts ...ast.Stmt
 		},
 	}
 
-	fset := generatedHeader(f)
+	fset := GeneratedHeader(f)
 
 	// Without stmts the init function body is empty, so the file imports no
 	// package.
@@ -216,7 +216,7 @@ func BuildServiceFile(pkgName string, aliases map[string]string, stmts ...ast.St
 		},
 	}
 
-	fset := generatedHeader(f)
+	fset := GeneratedHeader(f)
 
 	// Without stmts the init function body is empty, so the file imports no
 	// package.
@@ -314,7 +314,7 @@ func BuildRouterFile(pkgName, gstModelPkg string, aliases map[string]string, stm
 		},
 	}
 
-	fset := generatedHeader(f)
+	fset := GeneratedHeader(f)
 
 	// Without stmts the Init function only returns nil, so the file imports
 	// no package.
@@ -435,7 +435,7 @@ func BuildMainFile(projectName string, extraDirs ...string) (string, error) {
 		},
 	}
 
-	fset := generatedHeader(f)
+	fset := GeneratedHeader(f)
 
 	return FormatNodeExtraWithFileSet(f, fset, false)
 }

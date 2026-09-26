@@ -11,16 +11,18 @@ import (
 )
 
 // TestScanPBFilesListsTheGeneratedFilesWhole pins that prune reads the pb
-// directory whole: every .proto and .pb.go file under it is listed, one the
-// project's Git ignore rules exclude and one below a directory named with a
-// leading "_" included, other files are not, and a missing directory lists
-// nothing.
+// directory whole: every .proto, .gen.go and .pb.go file under it is listed,
+// one the project's Git ignore rules exclude and one below a directory named
+// with a leading "_" included, other files are not, and a missing directory
+// lists nothing.
 func TestScanPBFilesListsTheGeneratedFilesWhole(t *testing.T) {
 	projectDir := t.TempDir()
 	t.Chdir(projectDir)
 	writeProjectFile(t, ".gitignore", "pb/record/item.proto\n")
 	want := []string{
 		filepath.Join(ggconst.DirPB, "_old", "draft.proto"),
+		filepath.Join(ggconst.DirPB, ggconst.FilePBGen),
+		filepath.Join(ggconst.DirPB, "record.gen.go"),
 		filepath.Join(ggconst.DirPB, "record.pb.go"),
 		filepath.Join(ggconst.DirPB, "record.proto"),
 		filepath.Join(ggconst.DirPB, "record", "item.proto"),
@@ -57,13 +59,14 @@ func TestPlanPBFilesDeletesWhatGenWouldNotWrite(t *testing.T) {
 	currentItem := filepath.Join(ggconst.DirPB, "record", "item.proto")
 	stale := filepath.Join(ggconst.DirPB, "note.proto")
 	staleGo := filepath.Join(ggconst.DirPB, "note_grpc.pb.go")
+	staleHandlers := filepath.Join(ggconst.DirPB, "note.gen.go")
 	kept := filepath.Join(ggconst.DirPB, "legacy", "item.proto")
 	protect := ggconfig.PruneConfig{Ignore: []string{"pb/legacy"}}
 
-	plan := ggprune.PlanPBFiles([]string{current, stale, kept, currentItem, currentGo, staleGo}, []string{"pb/record.proto", "pb/record/item.proto", "pb/record.pb.go"}, protect)
+	plan := ggprune.PlanPBFiles([]string{current, stale, kept, currentItem, currentGo, staleGo, staleHandlers}, []string{"pb/record.proto", "pb/record/item.proto", "pb/record.pb.go"}, protect)
 
-	if !slices.Equal(plan.Delete, []string{stale, staleGo}) {
-		t.Errorf("Delete = %v, want %v", plan.Delete, []string{stale, staleGo})
+	if !slices.Equal(plan.Delete, []string{stale, staleGo, staleHandlers}) {
+		t.Errorf("Delete = %v, want %v", plan.Delete, []string{stale, staleGo, staleHandlers})
 	}
 	if !slices.Equal(plan.Ignored, []string{kept}) {
 		t.Errorf("Ignored = %v, want %v", plan.Ignored, []string{kept})

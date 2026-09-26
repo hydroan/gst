@@ -255,20 +255,12 @@ func genRunWithOptions(opts genRunOptions) error {
 		return genErr
 	}
 
-	// generate main.go
-	mainCode, err := gggen.BuildMainFile(module, optionalImportDirs()...)
-	if err != nil {
-		return errors.Wrap(err, "build main.go")
-	}
-	if err = writeGenFile(ggconst.FileMain, mainCode); err != nil {
-		return err
-	}
-
-	// Generate the protobuf definitions of the models served over gRPC and
-	// the Go files compiled from them. The model packages are type-checked
-	// for it, so this runs once their registration files above are current;
-	// the whole set is built before any of it is written, so a definition
-	// the compiler refuses leaves the files on disk as they were.
+	// Generate the protobuf definitions of the models served over gRPC, the
+	// Go files serving them and the ones compiled from them. The model
+	// packages are type-checked for it, so this runs once their registration
+	// files above are current; the whole set is built before any of it is
+	// written, so a definition the compiler refuses leaves the files on disk
+	// as they were.
 	pbFiles, err := protobufFiles(allModels)
 	if err != nil {
 		return err
@@ -279,6 +271,20 @@ func genRunWithOptions(opts genRunOptions) error {
 		if err = writeGenFile(filepath.FromSlash(f.Path), f.Content); err != nil {
 			return err
 		}
+	}
+
+	// generate main.go, which imports the pb package for the registration
+	// of the services exactly when this run wrote it.
+	extraDirs := optionalImportDirs()
+	if len(pbFiles) > 0 {
+		extraDirs = append(extraDirs, ggconst.DirPB)
+	}
+	mainCode, err := gggen.BuildMainFile(module, extraDirs...)
+	if err != nil {
+		return errors.Wrap(err, "build main.go")
+	}
+	if err = writeGenFile(ggconst.FileMain, mainCode); err != nil {
+		return err
 	}
 
 	// ============================================================
@@ -457,25 +463,38 @@ func optionalImportDirs() []string {
 	return dirs
 }
 
-// protobufFiles renders the .proto files of the models declaring GRPC()
-// (see protobufDefinitions) and compiles the Go files beside them (see
-// pb.Compile), the set gg gen writes, definitions first.
+// protobufFiles renders the .proto files of the models declaring GRPC() and
+// the Go files serving them (see protobufDefinitions) and compiles the Go
+// files of the definitions (see pb.Compile), the set gg gen writes, the
+// rendered files first.
 func protobufFiles(models []*modelinfo.Model) ([]pb.File, error) {
-	protos, err := protobufDefinitions(models)
+	generated, err := protobufDefinitions(models)
 	if err != nil {
 		return nil, err
 	}
-	compiled, err := pb.Compile(protos)
+	compiled, err := pb.Compile(definitionsOf(generated))
 	if err != nil {
 		return nil, err
 	}
-	return append(protos, compiled...), nil
+	return append(generated, compiled...), nil
+}
+
+// definitionsOf picks the .proto files out of the files pb.Generate wrote.
+func definitionsOf(files []pb.File) []pb.File {
+	var definitions []pb.File
+	for _, f := range files {
+		if f.Definition() {
+			definitions = append(definitions, f)
+		}
+	}
+	return definitions
 }
 
 // protobufDefinitions renders the .proto files of the models declaring
-// GRPC() (see pb.Generate), the definitions gg gen writes and gg prune
-// keeps. The diagnostics of types protobuf cannot describe come back as they
-// are, one line each; any other failure is wrapped.
+// GRPC() and the Go files serving them (see pb.Generate), the files gg gen
+// writes itself and gg prune keeps. The diagnostics of types protobuf cannot
+// describe come back as they are, one line each; any other failure is
+// wrapped.
 func protobufDefinitions(models []*modelinfo.Model) ([]pb.File, error) {
 	files, err := pb.Generate(pb.Config{Dir: ".", ModulePath: module, Models: models})
 	var diagnostics *pb.DiagnosticsError

@@ -79,7 +79,7 @@ func (g *generator) declareService(m *modelinfo.Model) {
 			return
 		}
 		routes[name] = route
-		input, output, ok := g.rpcMessages(m, pkg.Types.Scope(), model, file, route, action, s)
+		r, ok := g.rpcMessages(m, pkg.Types.Scope(), model, file, route, action, s)
 		if !ok {
 			return
 		}
@@ -87,9 +87,10 @@ func (g *generator) declareService(m *modelinfo.Model) {
 			name+" is the "+action.Phase.MethodName()+" action of "+m.ModelName+" on "+route+".")
 		service.Method = append(service.Method, &descriptorpb.MethodDescriptorProto{
 			Name:       new(name),
-			InputType:  new(input),
-			OutputType: new(output),
+			InputType:  new("." + file.pkg + "." + r.request.GetName()),
+			OutputType: new("." + file.pkg + "." + r.response.GetName()),
 		})
+		file.rpcs = append(file.rpcs, r)
 	})
 	if served == 0 {
 		g.project.Report(s, "the model declares GRPC() but none of its actions is served over gRPC, every one being disabled, ignored by gst.yaml or HTTP only; remove GRPC() or enable an action")
@@ -129,44 +130,46 @@ func (g *generator) declareService(m *modelinfo.Model) {
 //	  // item is the Item created.
 //	  Item item = 1;
 //	}
-func (g *generator) rpcMessages(m *modelinfo.Model, scope *types.Scope, model *message, file *protoFile, route string, action *dsl.Action, s jsonshape.Site) (string, string, bool) {
-	rpc := m.ModelName + "Service." + rpcName(m, route, action)
+func (g *generator) rpcMessages(m *modelinfo.Model, scope *types.Scope, model *message, file *protoFile, route string, action *dsl.Action, s jsonshape.Site) (*rpc, bool) {
+	r := &rpc{name: rpcName(m, route, action), service: m.ModelName + "Service", model: m, action: action, route: route}
+	r.registered, r.param = modelinfo.RouterTargetForAction(route, m.Design, action)
+	qualified := r.service + "." + r.name
 	var request, response *descriptorpb.DescriptorProto
 	var requestFields, responseFields []string
 	self := "*" + m.ModelName
 	if action.Payload == self && action.Result == self {
 		if model == nil {
 			g.project.Report(s, "the %s action of the virtual model %s has no message to carry; declare Payload and Result", action.Phase.MethodName(), m.ModelName)
-			return "", "", false
+			return nil, false
 		}
+		r.standard, r.message = true, model
 		request, requestFields, response, responseFields = standardMessages(m, model, file, action)
 	} else {
 		var ok bool
-		if request, requestFields, ok = g.customRequest(scope, file, action, s); !ok {
-			return "", "", false
+		if request, requestFields, r.payload, ok = g.customRequest(scope, file, action, s); !ok {
+			return nil, false
 		}
-		if response, responseFields, ok = g.customResponse(scope, file, action, s); !ok {
-			return "", "", false
+		if response, responseFields, r.result, ok = g.customResponse(scope, file, action, s); !ok {
+			return nil, false
 		}
 	}
 
 	requestName := messageName(m, route, action, "Request")
 	responseName := messageName(m, route, action, "Response")
-	params := requestParams(m, route, action)
-	fields := make([]*descriptorpb.FieldDescriptorProto, 0, len(params)+len(request.Field))
-	comments := make([]string, 0, len(params)+len(requestFields))
-	for _, param := range params {
+	r.params = requestParams(m, route, action)
+	fields := make([]*descriptorpb.FieldDescriptorProto, 0, len(r.params)+len(request.Field))
+	comments := make([]string, 0, len(r.params)+len(requestFields))
+	for _, param := range r.params {
 		fields = append(fields, stringField(param.name, 0))
 		comments = append(comments, param.comment)
 	}
 	request.Field = append(fields, request.Field...)
 	requestFields = append(comments, requestFields...)
-	for i, param := range params {
+	for i, param := range r.params {
 		for _, field := range request.Field[i+1:] {
 			if field.GetName() == param.name {
-				registered, _ := modelinfo.RouterTargetForAction(route, m.Design, action)
-				g.project.Report(s, "the :%s parameter of %s clashes with the %s field of %s; rename the parameter", param.param, registered, param.name, requestName)
-				return "", "", false
+				g.project.Report(s, "the :%s parameter of %s clashes with the %s field of %s; rename the parameter", param.param, r.registered, param.name, requestName)
+				return nil, false
 			}
 		}
 	}
@@ -176,14 +179,43 @@ func (g *generator) rpcMessages(m *modelinfo.Model, scope *types.Scope, model *m
 	request.Name = new(requestName)
 	response.Name = new(responseName)
 	for _, name := range []string{requestName, responseName} {
-		if holder, ok := file.claim(name, "the rpc "+rpc); !ok {
+		if holder, ok := file.claim(name, "the rpc "+qualified); !ok {
 			g.project.Report(s, "the message %s clashes with %s; rename the type", name, holder)
-			return "", "", false
+			return nil, false
 		}
 	}
-	g.addRPCMessage(file, request, requestName+" is the request of "+rpc+".", requestFields)
-	g.addRPCMessage(file, response, responseName+" is the response of "+rpc+".", responseFields)
-	return "." + file.pkg + "." + requestName, "." + file.pkg + "." + responseName, true
+	g.addRPCMessage(file, request, requestName+" is the request of "+qualified+".", requestFields)
+	g.addRPCMessage(file, response, responseName+" is the response of "+qualified+".", responseFields)
+	r.request, r.response = request, response
+	return r, true
+}
+
+// rpc is one rpc of a service as the generated handler serves it (see
+// handlers.go): the action it runs, the route the action's call is built on
+// and the messages it converts.
+type rpc struct {
+	name    string // CreateItem
+	service string // ItemService
+	model   *modelinfo.Model
+	action  *dsl.Action
+	route   string // the route the action is declared on, records/:record/items
+	// registered is the route the router registers the action under,
+	// records/:record/items/:id for its Get, the route the call is built on
+	// and the service registry keys the service by; param is the parameter
+	// that route ends in, id, which names the record an item action reads
+	// (the DSL refuses an item action on a route without one).
+	registered string
+	param      string
+	params     []requestParam
+	// standard marks an action run through the call of the model,
+	// CreateCall and its kind, on message, the model's; a custom action,
+	// one declaring a Payload or Result of its own, runs through
+	// ServiceCall on payload and result, either nil for a side not declared.
+	standard        bool
+	message         *message
+	payload, result *message
+	// request and response are the messages of the rpc.
+	request, response *descriptorpb.DescriptorProto
 }
 
 // customRequest builds what the request of a custom action holds after the
@@ -210,21 +242,21 @@ func (g *generator) rpcMessages(m *modelinfo.Model, scope *types.Scope, model *m
 //	  // depth is the depth of the expansion, as the _depth query parameter.
 //	  uint32 depth = 2;
 //	}
-func (g *generator) customRequest(scope *types.Scope, file *protoFile, action *dsl.Action, s jsonshape.Site) (*descriptorpb.DescriptorProto, []string, bool) {
+func (g *generator) customRequest(scope *types.Scope, file *protoFile, action *dsl.Action, s jsonshape.Site) (*descriptorpb.DescriptorProto, []string, *message, bool) {
 	if action.Phase == consts.PHASE_LIST || action.Phase == consts.PHASE_GET {
 		fields, comments, nested := queryFields(action.Phase)
 		request := newMessage(fields...)
 		request.NestedType = nested
-		return request, comments, true
+		return request, comments, nil, true
 	}
 	if action.Payload == "" || action.Payload == dsl.PayloadEmpty {
-		return newMessage(), nil, true
+		return newMessage(), nil, nil, true
 	}
 	msg, ok := g.typeMessage(scope, file, action, action.Payload, s)
 	if !ok {
-		return nil, nil, false
+		return nil, nil, nil, false
 	}
-	return newMessage(messageField("payload", 0, msg.fullName())), []string{"the " + msg.name + " the action takes"}, true
+	return newMessage(messageField("payload", 0, msg.fullName())), []string{"the " + msg.name + " the action takes"}, msg, true
 }
 
 // customResponse builds what the response of a custom action holds, with
@@ -239,15 +271,15 @@ func (g *generator) customRequest(scope *types.Scope, file *protoFile, action *d
 //	  // result is the MergeRsp the action answers with.
 //	  MergeRsp result = 1;
 //	}
-func (g *generator) customResponse(scope *types.Scope, file *protoFile, action *dsl.Action, s jsonshape.Site) (*descriptorpb.DescriptorProto, []string, bool) {
+func (g *generator) customResponse(scope *types.Scope, file *protoFile, action *dsl.Action, s jsonshape.Site) (*descriptorpb.DescriptorProto, []string, *message, bool) {
 	if action.Result == "" || action.Result == dsl.PayloadEmpty {
-		return newMessage(), nil, true
+		return newMessage(), nil, nil, true
 	}
 	msg, ok := g.typeMessage(scope, file, action, action.Result, s)
 	if !ok {
-		return nil, nil, false
+		return nil, nil, nil, false
 	}
-	return newMessage(messageField("result", 0, msg.fullName())), []string{"the " + msg.name + " the action answers with"}, true
+	return newMessage(messageField("result", 0, msg.fullName())), []string{"the " + msg.name + " the action answers with"}, msg, true
 }
 
 // typeMessage resolves the message of the Go type a Payload or Result names,

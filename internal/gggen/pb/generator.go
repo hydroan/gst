@@ -2,8 +2,10 @@ package pb
 
 import (
 	"go/types"
+	"maps"
 	"path"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"github.com/hydroan/gst/internal/ggconst"
@@ -23,17 +25,24 @@ type generator struct {
 	files map[string]*protoFile // the files built so far, keyed by their name relative to pb/
 	// messages holds an entry for every project type given a message so far;
 	// the entry is filled when the type is queued and its fields are built
-	// when it is dequeued.
-	messages map[*types.TypeName]*message
-	queue    []*types.TypeName
+	// when it is dequeued. byFullName holds the same entries by the name a
+	// field type refers to the message by.
+	messages   map[*types.TypeName]*message
+	byFullName map[string]*message
+	queue      []*types.TypeName
+	// goNames holds the Go type name of every message descriptor built,
+	// Record_Window for the message Window nested in Record, which names the
+	// messages nested further.
+	goNames map[*descriptorpb.DescriptorProto]string
 }
 
-// message is the message of one project type: the file it is declared in and
-// its name there.
+// message is the message of one project type: the file it is declared in,
+// its name there and its conversion, filled when its fields are built.
 type message struct {
 	obj  *types.TypeName
 	file *protoFile
 	name string // the message name, Sample
+	conv *conversion
 }
 
 // fullName is the fully-qualified reference to the message, as a field type
@@ -42,7 +51,8 @@ func (m *message) fullName() string { return "." + m.file.pkg + "." + m.name }
 
 // protoFile is one .proto file being built: the descriptor of its package,
 // imports and options, and the messages and services it declares together
-// with their comments.
+// with their comments; and what the Go file generated beside it serves, the
+// rpcs of its services and the project types its messages convert.
 type protoFile struct {
 	name      string // the file name relative to pb/, archive/document.proto
 	pkg       string // the protobuf package, app.archive
@@ -54,28 +64,56 @@ type protoFile struct {
 	// names are the message names declared so far, to refuse a second
 	// declaration of one.
 	names map[string]string // message name -> what declared it
+	typed []*message        // the messages of project types, in order
+	rpcs  []*rpc            // the rpcs of the services, in order
 }
+
+// goImportPath and goPackageName are the two halves of the go_package
+// option: the import path of the Go package the file's messages are
+// compiled into and the name of that package.
+func (f *protoFile) goImportPath() string {
+	importPath, _, _ := strings.Cut(f.goPackage, ";")
+	return importPath
+}
+
+func (f *protoFile) goPackageName() string {
+	_, name, _ := strings.Cut(f.goPackage, ";")
+	return name
+}
+
+// dir is the directory of the file relative to pb/, "." for the root, which
+// decides the Go package the file and the ones beside it belong to.
+func (f *protoFile) dir() string { return path.Dir(f.name) }
 
 // newGenerator prepares a generation run of cfg over the loaded project for
 // the models declaring GRPC().
 func newGenerator(cfg Config, project *jsonshape.Project, models []*modelinfo.Model) *generator {
 	return &generator{
-		cfg:      cfg,
-		project:  project,
-		appName:  path.Base(cfg.ModulePath),
-		models:   models,
-		files:    make(map[string]*protoFile),
-		messages: make(map[*types.TypeName]*message),
+		cfg:        cfg,
+		project:    project,
+		appName:    path.Base(cfg.ModulePath),
+		models:     models,
+		files:      make(map[string]*protoFile),
+		messages:   make(map[*types.TypeName]*message),
+		byFullName: make(map[string]*message),
+		goNames:    make(map[*descriptorpb.DescriptorProto]string),
 	}
 }
 
 // generate declares the service of every model, builds the messages they
-// reach and prints the files, or reports every diagnostic found on the way.
+// reach and prints the files, the definitions and the Go files serving
+// them, or reports every diagnostic found on the way.
 func (g *generator) generate() ([]File, error) {
 	for _, m := range g.models {
 		g.declareService(m)
 	}
 	g.buildQueued()
+	// The handlers of a definition go beside it under the same name, and
+	// pb/pb.gen.go is the registration file's.
+	if _, taken := g.files[ggconst.DirPB+".proto"]; taken {
+		g.project.Report(jsonshape.Site{Subject: ggconst.DirPB + "/" + ggconst.DirPB + ".proto"},
+			"the model file %s/%s.go would get its handlers at %s/%s, the registration file; rename the file", ggconst.DirModel, ggconst.DirPB, ggconst.DirPB, ggconst.FilePBGen)
+	}
 	if diags := g.project.Diagnostics(); len(diags) > 0 {
 		return nil, &DiagnosticsError{Diagnostics: diags}
 	}
@@ -83,7 +121,24 @@ func (g *generator) generate() ([]File, error) {
 	if diags := g.project.Diagnostics(); len(diags) > 0 {
 		return nil, &DiagnosticsError{Diagnostics: diags}
 	}
-	return g.print()
+	files, err := g.print()
+	if err != nil {
+		return nil, err
+	}
+	for _, name := range slices.Sorted(maps.Keys(g.files)) {
+		var handlers File
+		if handlers, err = g.handlerFile(g.files[name]); err != nil {
+			return nil, err
+		}
+		files = append(files, handlers)
+	}
+	registration, err := g.registrationFile()
+	if err != nil {
+		return nil, err
+	}
+	files = append(files, registration)
+	slices.SortFunc(files, func(a, b File) int { return strings.Compare(a.Path, b.Path) })
+	return files, nil
 }
 
 // buildQueued builds the fields of every queued message, and of the messages
@@ -110,6 +165,7 @@ func (g *generator) messageOf(obj *types.TypeName) *message {
 			"the message %s clashes with %s; rename the type", obj.Name(), holder)
 	}
 	g.messages[obj] = m
+	g.byFullName[m.fullName()] = m
 	g.queue = append(g.queue, obj)
 	return m
 }

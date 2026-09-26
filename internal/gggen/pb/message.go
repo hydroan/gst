@@ -22,14 +22,26 @@ import (
 // The well-known types the mapping refers to, and the files declaring them.
 const (
 	wellKnownTimestamp = ".google.protobuf.Timestamp"
+	wellKnownDuration  = ".google.protobuf.Duration"
 	wellKnownValue     = ".google.protobuf.Value"
 	wellKnownStruct    = ".google.protobuf.Struct"
 	wellKnownFieldMask = ".google.protobuf.FieldMask"
 
 	timestampProto = "google/protobuf/timestamp.proto"
+	durationProto  = "google/protobuf/duration.proto"
 	structProto    = "google/protobuf/struct.proto"
 	fieldMaskProto = "google/protobuf/field_mask.proto"
 )
+
+// The Go types mapped to a well-known time type, keyed by package path and
+// name: an instant to Timestamp, gorm's date to a Timestamp at the start of
+// the day, and gorm's time of day, a duration since midnight, to Duration.
+var timeTypes = map[string]struct{ typeName, proto string }{
+	"time.Time":              {wellKnownTimestamp, timestampProto},
+	"gorm.io/datatypes.Date": {wellKnownTimestamp, timestampProto},
+	"gorm.io/datatypes.Time": {wellKnownDuration, durationProto},
+	"gorm.io/gorm.DeletedAt": {wellKnownTimestamp, timestampProto},
+}
 
 // modelRegistryPath is the package declaring the framework's model base, whose
 // promoted keys carry the fixed field numbers of BaseFieldNumbers.
@@ -42,11 +54,34 @@ type fieldType struct {
 	repeated bool
 	optional bool // proto3 presence for a scalar held through a pointer
 	// mapEntry is the synthetic entry message of a map field, nested in the
-	// enclosing message.
+	// enclosing message; mapKey and mapValue are the types of its key and
+	// its value.
 	mapEntry *descriptorpb.DescriptorProto
+	mapKey   descriptorpb.FieldDescriptorProto_Type
+	mapValue *fieldType
 	// enum lists the values of a project enum, appended to the comment of
 	// the field.
 	enum *jsonshape.Enum
+	// nested is the conversion of the message of an anonymous struct, the
+	// field's own or the one its elements or values are.
+	nested *conversion
+}
+
+// conversion describes the message of a Go struct type field by field, what
+// the conversion functions of the generated handlers file are made of (see
+// convert.go): the Go name of the message and, for every field of the
+// message, the Go struct field it carries.
+type conversion struct {
+	goName string // the Go type name of the message, Record or Record_Window
+	fields []fieldConversion
+}
+
+// fieldConversion is one field of a conversion: the Go struct field it
+// carries, its protobuf type and its Go name in the message.
+type fieldConversion struct {
+	field  jsonshape.Field
+	ft     fieldType
+	goName string
 }
 
 // buildMessage fills the message of obj with the fields of its struct type.
@@ -102,22 +137,32 @@ func (g *generator) buildMessage(obj *types.TypeName) {
 		g.project.Report(s, "the type declares %s, so its JSON shape is decided by code the generator cannot read; drop the method or use a type without one", method)
 		return
 	}
-	desc := g.messageOfStruct(m.name, st, m.file, s, []int32{fileMessagesTag, int32Index(len(m.file.messages))})
+	desc, conv := g.messageOfStruct(m.name, goCamelCase(m.name), st, m.file, s, []int32{fileMessagesTag, int32Index(len(m.file.messages))})
+	m.conv = conv
+	m.file.typed = append(m.file.typed, m)
 	m.file.addMessage(desc, g.project.TypeDoc(obj))
 }
 
-// numberedField is a field of a message being built, with its comment.
+// numberedField is a field of a message being built, with its comment and
+// its conversion, the Go name of the latter filled once the fields are in
+// order.
 type numberedField struct {
-	field   *descriptorpb.FieldDescriptorProto
-	comment string
+	field      *descriptorpb.FieldDescriptorProto
+	comment    string
+	conversion fieldConversion
 }
 
-// messageOfStruct builds the descriptor of the message named name for the
-// struct st, whose fields are declared in file, at the source path prefix
-// the comments of its fields are recorded under. The fields are listed by
-// number, so the framework's base keys come first.
-func (g *generator) messageOfStruct(name string, st *types.Struct, file *protoFile, s jsonshape.Site, prefix []int32) *descriptorpb.DescriptorProto {
+// messageOfStruct builds the descriptor of the message named name, goName
+// in Go, for the struct st, whose fields are declared in file, at the source
+// path prefix the comments of its fields are recorded under, and the
+// conversion of the message. The fields are listed by number, so the
+// framework's base keys come first. A key promoted through an embedded
+// pointer is reported: the handlers read and write every field of a message
+// as a field of the struct, which a nil pointer would have them leave out
+// or allocate.
+func (g *generator) messageOfStruct(name, goName string, st *types.Struct, file *protoFile, s jsonshape.Site, prefix []int32) (*descriptorpb.DescriptorProto, *conversion) {
 	desc := &descriptorpb.DescriptorProto{Name: new(name)}
+	g.goNames[desc] = goName
 	fields := g.project.Fields(st, s)
 	base := false
 	for _, f := range fields {
@@ -129,6 +174,10 @@ func (g *generator) messageOfStruct(name string, st *types.Struct, file *protoFi
 		fs := g.project.FieldSite(s, f.Key, f.Var)
 		if !identifier.MatchString(f.Key) {
 			g.project.Report(fs, "the JSON key %q cannot name a protobuf field; name it with a json tag of letters, digits and underscores", f.Key)
+			continue
+		}
+		if f.ViaPointer {
+			g.project.Report(fs, "the field is promoted through an embedded pointer, which a message has no way to leave unset; embed the struct by value")
 			continue
 		}
 		number := g.fieldNumber(f, base, fs)
@@ -162,14 +211,20 @@ func (g *generator) messageOfStruct(name string, st *types.Struct, file *protoFi
 			field.OneofIndex = new(int32Index(len(desc.OneofDecl)))
 			desc.OneofDecl = append(desc.OneofDecl, &descriptorpb.OneofDescriptorProto{Name: new(syntheticOneofPrefix + f.Key)})
 		}
-		numbered = append(numbered, numberedField{field: field, comment: fieldComment(g.project.FieldDoc(f.Var), ft.enum)})
+		numbered = append(numbered, numberedField{field: field, comment: fieldComment(g.project.FieldDoc(f.Var), ft.enum), conversion: fieldConversion{field: f, ft: ft}})
 	}
 	slices.SortStableFunc(numbered, func(a, b numberedField) int { return cmp.Compare(a.field.GetNumber(), b.field.GetNumber()) })
 	for i, nf := range numbered {
 		file.comment(append(slices.Clone(prefix), messageFieldsTag, int32Index(i)), nf.comment)
 		desc.Field = append(desc.Field, nf.field)
 	}
-	return desc
+	conv := &conversion{goName: goName, fields: make([]fieldConversion, 0, len(numbered))}
+	goFields := goFieldNames(desc)
+	for _, nf := range numbered {
+		nf.conversion.goName = goFields[nf.field.GetName()]
+		conv.fields = append(conv.fields, nf.conversion)
+	}
+	return desc, conv
 }
 
 // isBaseField reports whether f is a key promoted from the framework's model
@@ -220,11 +275,13 @@ func (g *generator) fieldNumber(f jsonshape.Field, base bool, s jsonshape.Site) 
 // fieldTypeOf maps the Go type t of a field to its protobuf type: bool to
 // bool, string to string, int and int64 to int64, the smaller integers to
 // int32, unsigned ones to uint64 and uint32, float32 to float and float64 to
-// double; time.Time to google.protobuf.Timestamp; a project enum to its
-// underlying string or integer type; a JSON document (any, json.RawMessage,
-// datatypes.JSON) to google.protobuf.Value and a JSON object
-// (map[string]any, datatypes.JSONMap) to google.protobuf.Struct; []byte to
-// bytes, a slice or array to repeated, a map to map; a pointer to the type it
+// double; time.Time, datatypes.Date and gorm.DeletedAt to
+// google.protobuf.Timestamp and datatypes.Time to google.protobuf.Duration
+// (see timeTypes); a project enum to its underlying string or integer type;
+// a JSON document (any, json.RawMessage, datatypes.JSON) to
+// google.protobuf.Value and a JSON object (map[string]any,
+// datatypes.JSONMap) to google.protobuf.Struct; []byte to bytes, a slice or
+// array to repeated, a map to map; a pointer to the type it
 // points to, optional when that is a scalar; a project struct to its message
 // (queued to be built) and an unnamed struct to a message nested in parent
 // under the field's name. Anything else is reported: a nested slice or map, a
@@ -288,11 +345,12 @@ func (g *generator) fieldTypeOf(t types.Type, file *protoFile, parent *descripto
 		return fieldType{}, false
 	case *types.Struct:
 		// An unnamed struct becomes a message of its own, nested in the
-		// enclosing one under the field's name.
+		// enclosing one under the field's name, Record_Window in Go for
+		// the window field of Record.
 		name := strcase.UpperCamelCase(key)
-		nested := g.messageOfStruct(name, u, file, s, append(slices.Clone(prefix), messageNestedTag, int32Index(len(parent.NestedType))))
+		nested, conv := g.messageOfStruct(name, g.goNames[parent]+"_"+goCamelCase(name), u, file, s, append(slices.Clone(prefix), messageNestedTag, int32Index(len(parent.NestedType))))
 		parent.NestedType = append(parent.NestedType, nested)
-		return fieldType{kind: descriptorpb.FieldDescriptorProto_TYPE_MESSAGE, typeName: name}, true
+		return fieldType{kind: descriptorpb.FieldDescriptorProto_TYPE_MESSAGE, typeName: name, nested: conv}, true
 	default:
 		g.project.Report(s, "%s values have no protobuf type", t)
 		return fieldType{}, false
@@ -302,9 +360,11 @@ func (g *generator) fieldTypeOf(t types.Type, file *protoFile, parent *descripto
 // namedFieldType maps a named type (see fieldTypeOf).
 func (g *generator) namedFieldType(n *types.Named, file *protoFile, parent *descriptorpb.DescriptorProto, prefix []int32, key string, s jsonshape.Site) (fieldType, bool) {
 	obj := n.Obj()
-	if obj.Pkg() != nil && obj.Pkg().Path() == "time" && obj.Name() == "Time" {
-		file.importOf(timestampProto)
-		return fieldType{kind: descriptorpb.FieldDescriptorProto_TYPE_MESSAGE, typeName: wellKnownTimestamp}, true
+	if obj.Pkg() != nil {
+		if wellKnown, ok := timeTypes[obj.Pkg().Path()+"."+obj.Name()]; ok {
+			file.importOf(wellKnown.proto)
+			return fieldType{kind: descriptorpb.FieldDescriptorProto_TYPE_MESSAGE, typeName: wellKnown.typeName}, true
+		}
 	}
 	if kind, ok := jsonshape.BuiltinOf(n); ok {
 		return g.builtinFieldType(kind, n, file, parent, prefix, key, s)
@@ -346,14 +406,13 @@ func (g *generator) namedFieldType(n *types.Named, file *protoFile, parent *desc
 	}
 }
 
-// builtinFieldType maps a type of jsonshape's builtin table: a JSON string to
-// string, a JSON number to string as well (json.Number keeps digits a double
-// would not), raw JSON to google.protobuf.Value, a JSON object to
-// google.protobuf.Struct, a nullable time (gorm.DeletedAt) to
-// google.protobuf.Timestamp, and a wrapper to the type it wraps.
+// builtinFieldType maps a type of jsonshape's builtin table other than the
+// time types (see timeTypes): a JSON number to string (json.Number keeps
+// digits a double would not), raw JSON to google.protobuf.Value, a JSON
+// object to google.protobuf.Struct, and a wrapper to the type it wraps.
 func (g *generator) builtinFieldType(kind jsonshape.Builtin, n *types.Named, file *protoFile, parent *descriptorpb.DescriptorProto, prefix []int32, key string, s jsonshape.Site) (fieldType, bool) {
 	switch kind {
-	case jsonshape.BuiltinString, jsonshape.BuiltinNumber:
+	case jsonshape.BuiltinNumber:
 		return fieldType{kind: descriptorpb.FieldDescriptorProto_TYPE_STRING}, true
 	case jsonshape.BuiltinAny:
 		file.importOf(structProto)
@@ -361,9 +420,6 @@ func (g *generator) builtinFieldType(kind jsonshape.Builtin, n *types.Named, fil
 	case jsonshape.BuiltinObject:
 		file.importOf(structProto)
 		return fieldType{kind: descriptorpb.FieldDescriptorProto_TYPE_MESSAGE, typeName: wellKnownStruct}, true
-	case jsonshape.BuiltinNullableString:
-		file.importOf(timestampProto)
-		return fieldType{kind: descriptorpb.FieldDescriptorProto_TYPE_MESSAGE, typeName: wellKnownTimestamp}, true
 	case jsonshape.BuiltinWrapper:
 		return g.fieldTypeOf(n.TypeArgs().At(0), file, parent, prefix, key, s)
 	default:
@@ -425,7 +481,7 @@ func (g *generator) mapOf(m *types.Map, file *protoFile, parent *descriptorpb.De
 		entry.Field[1].TypeName = new(value.typeName)
 	}
 	parent.NestedType = append(parent.NestedType, entry)
-	return fieldType{kind: descriptorpb.FieldDescriptorProto_TYPE_MESSAGE, typeName: entry.GetName(), repeated: true, mapEntry: entry}, true
+	return fieldType{kind: descriptorpb.FieldDescriptorProto_TYPE_MESSAGE, typeName: entry.GetName(), repeated: true, mapEntry: entry, mapKey: keyKind, mapValue: &value, nested: value.nested}, true
 }
 
 // scalarKind maps a basic Go type to its protobuf scalar: bool to bool,

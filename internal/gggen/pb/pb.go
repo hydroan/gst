@@ -1,7 +1,12 @@
 // Package pb generates the protobuf definitions of a gst project's gRPC
-// services: for every model whose Design declares GRPC(), the messages its Go
-// types encode to and the service exposing its actions, printed as .proto
-// files that mirror the model directory under pb/.
+// services and the Go files serving them: for every model whose Design
+// declares GRPC(), the messages its Go types encode to and the service
+// exposing its actions, printed as .proto files that mirror the model
+// directory under pb/; beside each, a .gen.go with the type serving the
+// service, the calls of its actions, the handlers of its rpcs and the
+// conversions between the messages and the Go types (see handlerFile); and
+// pb/pb.gen.go registering every service on the listener (see
+// registrationFile).
 //
 // The definitions are derived, never written by hand. Field shapes come from
 // jsonshape, the same reading of the Go types the TypeScript declarations
@@ -73,12 +78,15 @@ type Config struct {
 	Models []*modelinfo.Model
 }
 
-// File is one generated file under pb/: a .proto definition, or a Go file
-// Compile made of one.
+// File is one generated file under pb/: a .proto definition, the Go file
+// Generate writes beside it with the handlers of its services and the
+// conversions of its messages, the registration file, or a Go file Compile
+// made of a definition.
 type File struct {
 	// Path is slash-separated and relative to the project root, such as
-	// pb/archive/document.proto for the model file model/archive/document.go
-	// and pb/archive/document.pb.go for the messages compiled from it.
+	// pb/archive/document.proto for the model file model/archive/document.go,
+	// pb/archive/document.gen.go for its handlers and
+	// pb/archive/document.pb.go for the messages compiled from it.
 	Path string
 	// Content is the source of the file.
 	Content string
@@ -87,6 +95,10 @@ type File struct {
 	// for a Go file.
 	Service bool
 }
+
+// Definition reports whether the file is a .proto definition, the kind
+// Compile compiles, rather than a Go file.
+func (f File) Definition() bool { return strings.HasSuffix(f.Path, ".proto") }
 
 // DiagnosticsError is the error Generate returns when any diagnostic was
 // reported. No file is generated then: a partial set would leave a service
@@ -111,8 +123,10 @@ func (e *DiagnosticsError) Error() string {
 
 // Generate loads the packages of the models declaring GRPC() and renders the
 // protobuf definitions of their services and of every project type those
-// reach, one .proto file per Go file the types are declared in, sorted by
-// path. Models declaring no GRPC() produce no file at all.
+// reach, one .proto file per Go file the types are declared in, with the Go
+// file serving each definition beside it and the registration file, sorted
+// by path (see File.Definition for telling the two kinds apart). Models
+// declaring no GRPC() produce no file at all.
 //
 // For example, the model file model/note.go of module tmpapp declaring
 //

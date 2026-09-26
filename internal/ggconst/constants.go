@@ -17,6 +17,7 @@ const (
 	ImportPathBootstrap = "github.com/hydroan/gst/bootstrap"
 	ImportPathUtil      = "github.com/hydroan/gst/util"
 	ImportPathAPIDoc    = "github.com/hydroan/gst/apidoc"
+	ImportPathGRPC      = "github.com/hydroan/gst/grpc"
 
 	// ImportPathIO is the standard library package the Import method of a
 	// generated service file reads its input through.
@@ -51,6 +52,8 @@ const (
 	FileAPIDocGen  = "apidoc" + SuffixGenGo
 	FileServiceGen = "service" + SuffixGenGo
 	FileRouterGen  = "router" + SuffixGenGo
+	// FilePBGen registers the gRPC services of a project, under DirPB.
+	FilePBGen = "pb" + SuffixGenGo
 	// FileMain keeps its conventional name: main.go is the entry point every
 	// Go toolchain and IDE expects.
 	FileMain = "main.go"

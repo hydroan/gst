@@ -45,7 +45,7 @@ func BuildAPIDocFile(pkgName string, entries modelinfo.APIDocEntries) (string, e
 	// of a registered doc on a line of its own, so every node that starts a
 	// line takes the next line of the fabricated file the header started.
 	f := &ast.File{Name: ast.NewIdent(pkgName)}
-	fset := generatedHeader(f)
+	fset := GeneratedHeader(f)
 	lines := goast.NewLineSet(fset)
 
 	// If there are no entries, the init function body is empty,
