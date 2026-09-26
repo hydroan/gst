@@ -79,6 +79,30 @@ func UpdateManyFactory[M types.Model, REQ types.Request, RSP types.Response](cfg
 	}
 }
 
+// UpdateManyCall returns the batch update call of M on route, the
+// counterpart of the handler UpdateManyFactory returns for the generated
+// handler of an UpdateMany rpc: given the route parameters and the items the
+// request message decoded into, it validates the batch the way the handler
+// validates a bound body, runs the batch update flow (see updateManyFlow)
+// and answers with the items as stored, or with the status the failure maps
+// to (see call).
+func UpdateManyCall[M types.Model](route string) func(ctx context.Context, params map[string]string, items []M) ([]M, error) {
+	meta := newFactoryMeta[M, M, M](route, consts.PHASE_UPDATE_MANY, consts.PHASE_UPDATE_MANY_BEFORE, consts.PHASE_UPDATE_MANY_AFTER)
+	return func(ctx context.Context, params map[string]string, items []M) ([]M, error) {
+		c := meta.beginCall(ctx, params, nil)
+		defer c.end()
+		req := requestData[M]{Items: items}
+		normalizeBatchRequest(&req)
+		if err := validateRequest(&req); err != nil {
+			return nil, c.invalid(err)
+		}
+		if err := meta.updateManyFlow(c.ctx, c.serviceContext, &req); err != nil {
+			return nil, c.fail(err)
+		}
+		return answer(c, req.Items)
+	}
+}
+
 // updateManyFlow runs the batch update flow on the items of req: it runs the
 // batch update hooks around the write and records the operation. The items
 // are req's own, as the write and the hooks left them.

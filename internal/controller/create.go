@@ -91,6 +91,29 @@ func CreateFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...
 	}
 }
 
+// CreateCall returns the create call of M on route, the counterpart of the
+// handler CreateFactory returns for the generated handler of a Create rpc:
+// given the route parameters and the model the request message decoded
+// into, it validates the model the way the handler validates a bound body,
+// runs the create flow (see createFlow) and answers with the model created,
+// or with the status the failure maps to (see call).
+func CreateCall[M types.Model](route string) func(ctx context.Context, params map[string]string, m M) (M, error) {
+	meta := newFactoryMeta[M, M, M](route, consts.PHASE_CREATE, consts.PHASE_CREATE_BEFORE, consts.PHASE_CREATE_AFTER)
+	return func(ctx context.Context, params map[string]string, m M) (M, error) {
+		var zero M
+		c := meta.beginCall(ctx, params, nil)
+		defer c.end()
+		meta.normalizeModel(&m)
+		if err := validateRequest(m); err != nil {
+			return zero, c.invalid(err)
+		}
+		if err := meta.createFlow(c.ctx, c.serviceContext, m); err != nil {
+			return zero, c.fail(err)
+		}
+		return answer(c, m)
+	}
+}
+
 // createFlow runs the create flow on req: it takes the creator and updater
 // from the identity the request carries, runs the create hooks around the
 // write, and records the operation. The created model is req itself, filled

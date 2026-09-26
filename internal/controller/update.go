@@ -97,6 +97,33 @@ func UpdateFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...
 	}
 }
 
+// UpdateCall returns the update call of M on route, the counterpart of the
+// handler UpdateFactory returns for the generated handler of an Update rpc:
+// given the route parameters, the id the request message names the record
+// by and the replacement it decoded into, it validates the replacement the
+// way the handler validates a bound body, runs the update flow (see
+// updateFlow) and answers with the replacement as stored, or with the
+// status the failure maps to (see call).
+func UpdateCall[M types.Model](route string) func(ctx context.Context, params map[string]string, id string, m M) (M, error) {
+	meta := newFactoryMeta[M, M, M](route, consts.PHASE_UPDATE, consts.PHASE_UPDATE_BEFORE, consts.PHASE_UPDATE_AFTER)
+	return func(ctx context.Context, params map[string]string, id string, m M) (M, error) {
+		var zero M
+		c := meta.beginCall(ctx, params, nil)
+		defer c.end()
+		meta.normalizeModel(&m)
+		if err := validateRequest(m); err != nil {
+			return zero, c.invalid(err)
+		}
+		if id == "" {
+			return zero, c.missingID()
+		}
+		if err := meta.updateFlow(c.ctx, c.serviceContext, id, m); err != nil {
+			return zero, c.fail(err)
+		}
+		return answer(c, m)
+	}
+}
+
 // updateFlow runs the update flow, replacing the record id names with req: it
 // sets the updater from the identity the request carries, runs the update
 // hooks around the write, and records the operation. Existence is enforced by

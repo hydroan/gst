@@ -80,6 +80,33 @@ func GetFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...*ty
 	}
 }
 
+// GetCall returns the get call of M on route, the counterpart of the handler
+// GetFactory returns for the generated handler of a Get rpc: given the route
+// parameters, the id the request message names the record by and its
+// expansion query, it runs the get flow (see getFlow) and answers with the
+// model, or with the status the failure maps to (see call); a message
+// naming no record is refused the way a request missing its route parameter
+// is.
+func GetCall[M types.Model](route string) func(ctx context.Context, params map[string]string, id string, query Query) (M, error) {
+	meta := newFactoryMeta[M, M, M](route, consts.PHASE_GET, consts.PHASE_GET_BEFORE, consts.PHASE_GET_AFTER)
+	return func(ctx context.Context, params map[string]string, id string, query Query) (M, error) {
+		var zero M
+		c, err := meta.beginQueryCall(ctx, params, query)
+		defer c.end()
+		if err != nil {
+			return zero, c.invalid(err)
+		}
+		if id == "" {
+			return zero, c.missingID()
+		}
+		m, err := meta.getFlow(c.ctx, c.serviceContext, id)
+		if err != nil {
+			return zero, c.fail(err)
+		}
+		return answer(c, m)
+	}
+}
+
 // getFlow runs the get flow on the record id names: it applies the expansion
 // and depth query options the request carries, runs the get hooks around the
 // read, records the operation, and returns the model. id must not be empty:

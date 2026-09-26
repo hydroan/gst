@@ -2,11 +2,13 @@ package grpcserver
 
 import (
 	"context"
+	"net/url"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/hydroan/gst/consts"
+	"github.com/hydroan/gst/internal/requestctx"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
@@ -167,6 +169,42 @@ func TestRouteAndCallerOfDescribeTheCall(t *testing.T) {
 	require.Empty(t, httpMethod)
 	require.Empty(t, route)
 	require.Equal(t, Caller{}, CallerOf(context.Background()))
+}
+
+// TestWithParamsAttachesTheParametersOfTheCall pins what the call functions
+// of the controller attach to a call: the route parameters and the query the
+// request message carried, answered by the request metadata the way a
+// request's are, beside what the call already carried, the method as route
+// and the caller an interceptor established; outside a call the metadata
+// answers the parameters alone.
+func TestWithParamsAttachesTheParametersOfTheCall(t *testing.T) {
+	reset(t)
+	got := make(chan requestctx.Metadata, 1)
+	UseAuth(func(ctx context.Context, req any, _ *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (any, error) {
+		return handler(WithCaller(ctx, Caller{Username: "alice", UserID: "u-1"}), req)
+	})
+	serve(map[string]func(context.Context) error{"Ping": func(ctx context.Context) error {
+		ctx = WithParams(ctx, map[string]string{"box": "b-1"}, url.Values{"_page": {"2"}})
+		got <- requestctx.FromContext(ctx)
+		return nil
+	}}, Method{Name: "/gst.test.Echo/Ping"})
+	conn := dial(t, start(t), nil)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	require.NoError(t, call(ctx, conn, "Ping"))
+
+	meta := <-got
+	require.Equal(t, "b-1", meta.Param("box"))
+	require.Equal(t, url.Values{"_page": {"2"}}, meta.Query())
+	require.Equal(t, "/gst.test.Echo/Ping", meta.Route())
+	require.Equal(t, "alice", meta.Username())
+	require.Equal(t, "u-1", meta.UserID())
+	require.True(t, meta.RequiresAuth())
+
+	outside := requestctx.FromContext(WithParams(context.Background(), map[string]string{"box": "b-2"}, nil))
+	require.Equal(t, "b-2", outside.Param("box"))
+	require.Empty(t, outside.Username())
 }
 
 // TestRunWarnsWhenNoAuthInterceptorGuardsTheNonPublicMethods pins the

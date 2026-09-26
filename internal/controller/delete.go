@@ -86,6 +86,26 @@ func DeleteFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...
 	}
 }
 
+// DeleteCall returns the delete call of M on route, the counterpart of the
+// handler DeleteFactory returns for the generated handler of a Delete rpc:
+// given the route parameters and the id the request message names the
+// record by, it runs the delete flow (see deleteFlow) and answers nothing,
+// or the status the failure maps to (see call).
+func DeleteCall[M types.Model](route string) func(ctx context.Context, params map[string]string, id string) error {
+	meta := newFactoryMeta[M, M, M](route, consts.PHASE_DELETE, consts.PHASE_DELETE_BEFORE, consts.PHASE_DELETE_AFTER)
+	return func(ctx context.Context, params map[string]string, id string) error {
+		c := meta.beginCall(ctx, params, nil)
+		defer c.end()
+		if id == "" {
+			return c.missingID()
+		}
+		if err := meta.deleteFlow(c.ctx, c.serviceContext, id); err != nil {
+			return c.fail(err)
+		}
+		return c.finish()
+	}
+}
+
 // deleteFlow runs the delete flow on the record id names: it runs the delete
 // hooks around the write, keeps a copy of the record for the operation log,
 // and records the operation. id must not be empty (see setRouteID); an id the

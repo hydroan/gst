@@ -49,7 +49,7 @@ func TestStatusOfCoderMapsTheAnswerToTheCode(t *testing.T) {
 		{"stale object", response.CodeStaleObject, codes.Aborted},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			st := status.Convert(statusOfCoder(tc.coder))
+			st := status.Convert(StatusOfCoder(tc.coder))
 
 			require.Equal(t, tc.want, st.Code())
 			require.Equal(t, tc.coder.Msg(), st.Message())

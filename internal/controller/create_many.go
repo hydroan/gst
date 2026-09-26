@@ -97,6 +97,30 @@ func CreateManyFactory[M types.Model, REQ types.Request, RSP types.Response](cfg
 	}
 }
 
+// CreateManyCall returns the batch create call of M on route, the
+// counterpart of the handler CreateManyFactory returns for the generated
+// handler of a CreateMany rpc: given the route parameters and the items the
+// request message decoded into, it validates the batch the way the handler
+// validates a bound body, runs the batch create flow (see createManyFlow)
+// and answers with the items created, or with the status the failure maps
+// to (see call).
+func CreateManyCall[M types.Model](route string) func(ctx context.Context, params map[string]string, items []M) ([]M, error) {
+	meta := newFactoryMeta[M, M, M](route, consts.PHASE_CREATE_MANY, consts.PHASE_CREATE_MANY_BEFORE, consts.PHASE_CREATE_MANY_AFTER)
+	return func(ctx context.Context, params map[string]string, items []M) ([]M, error) {
+		c := meta.beginCall(ctx, params, nil)
+		defer c.end()
+		req := requestData[M]{Items: items}
+		normalizeBatchRequest(&req)
+		if err := validateRequest(&req); err != nil {
+			return nil, c.invalid(err)
+		}
+		if err := meta.createManyFlow(c.ctx, c.serviceContext, &req); err != nil {
+			return nil, c.fail(err)
+		}
+		return answer(c, req.Items)
+	}
+}
+
 // createManyFlow runs the batch create flow on the items of req: it takes the
 // creator and updater of every item from the identity the request carries,
 // runs the batch create hooks around the write, and records the operation.

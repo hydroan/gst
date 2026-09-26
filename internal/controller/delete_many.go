@@ -80,6 +80,29 @@ func DeleteManyFactory[M types.Model, REQ types.Request, RSP types.Response](cfg
 	}
 }
 
+// DeleteManyCall returns the batch delete call of M on route, the
+// counterpart of the handler DeleteManyFactory returns for the generated
+// handler of a DeleteMany rpc: given the route parameters and the ids the
+// request message carries, it validates the batch the way the handler
+// validates a bound body, runs the batch delete flow (see deleteManyFlow)
+// and answers nothing, or the status the failure maps to (see call).
+func DeleteManyCall[M types.Model](route string) func(ctx context.Context, params map[string]string, ids []string) error {
+	meta := newFactoryMeta[M, M, M](route, consts.PHASE_DELETE_MANY, consts.PHASE_DELETE_MANY_BEFORE, consts.PHASE_DELETE_MANY_AFTER)
+	return func(ctx context.Context, params map[string]string, ids []string) error {
+		c := meta.beginCall(ctx, params, nil)
+		defer c.end()
+		req := requestData[M]{IDs: ids}
+		normalizeBatchRequest(&req)
+		if err := validateRequest(&req); err != nil {
+			return c.invalid(err)
+		}
+		if err := meta.deleteManyFlow(c.ctx, c.serviceContext, &req); err != nil {
+			return c.fail(err)
+		}
+		return c.finish()
+	}
+}
+
 // deleteManyFlow runs the batch delete flow on the ids of req: it converts
 // them into model instances, which become the items of req, runs the batch
 // delete hooks around the write, and records the operation. An empty id, or

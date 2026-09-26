@@ -26,7 +26,7 @@ const (
 
 // StatusError returns the status error a call answers err with: a service
 // error answers with the status and message it was constructed with, mapped
-// like any coder (see statusOfCoder); any other error answers Internal with
+// like any coder (see StatusOfCoder); any other error answers Internal with
 // a fixed message, its text kept out of the answer the way the HTTP
 // listener keeps internal detail out of the envelope, for the caller to log
 // before mapping; nil stays nil. The public grpc.StatusError forwards
@@ -37,17 +37,18 @@ func StatusError(err error) error {
 	}
 	var serviceErr *serviceregistry.Error
 	if errors.As(err, &serviceErr) {
-		return statusOfCoder(serviceErr)
+		return StatusOfCoder(serviceErr)
 	}
 	return status.Error(codes.Internal, "internal server error")
 }
 
-// statusOfCoder returns the status a call answers a failure with, from the
+// StatusOfCoder returns the status a call answers a failure with, from the
 // code the HTTP listener would answer it with: the gRPC code codeOf maps
 // the HTTP status to, the message the envelope would carry, and, in an
 // ErrorInfo detail of domain "gst", the business code and HTTP status the
 // envelope would carry as well, so a client can act on any of the three.
-func statusOfCoder(coder types.Coder) error {
+// The call functions of the controller answer a flow's failure through it.
+func StatusOfCoder(coder types.Coder) error {
 	st := status.New(codeOf(coder), coder.Msg())
 	detailed, err := st.WithDetails(&errdetails.ErrorInfo{
 		Reason: statusReason,

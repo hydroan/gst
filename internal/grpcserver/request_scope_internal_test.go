@@ -63,6 +63,7 @@ func TestCallsCarryTheRequestMetadataAndTraceID(t *testing.T) {
 		require.Equal(t, addr, got.meta.Host())
 		require.Contains(t, got.meta.UserAgent(), "grpc-go/")
 		require.False(t, got.meta.TLS())
+		require.True(t, got.meta.RequiresAuth(), "a method not described public requires auth")
 		require.Equal(t, "trace-1", got.identity.TraceID)
 		require.Equal(t, []string{"trace-1"}, header.Get("x-trace-id"))
 	})
@@ -78,6 +79,30 @@ func TestCallsCarryTheRequestMetadataAndTraceID(t *testing.T) {
 		require.NotEmpty(t, got.identity.TraceID)
 		require.Equal(t, []string{got.identity.TraceID}, header.Get("x-trace-id"))
 	})
+}
+
+// TestCallsCarryWhetherTheirMethodRequiresAuth pins the RequiresAuth of the
+// request metadata, the answer a ServiceContext built on the call gives: a
+// method the registration described as public does not require auth, any
+// other does, the way the routes outside the HTTP listener's public group
+// do.
+func TestCallsCarryWhetherTheirMethodRequiresAuth(t *testing.T) {
+	reset(t)
+	seen := make(chan bool, 1)
+	report := func(ctx context.Context) error {
+		seen <- requestctx.FromContext(ctx).RequiresAuth()
+		return nil
+	}
+	serve(map[string]func(context.Context) error{"Look": report, "Open": report},
+		Method{Name: "/gst.test.Echo/Look"}, Method{Name: "/gst.test.Echo/Open", Public: true})
+	conn := dial(t, start(t), nil)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	require.NoError(t, call(ctx, conn, "Look"))
+	require.True(t, <-seen)
+	require.NoError(t, call(ctx, conn, "Open"))
+	require.False(t, <-seen)
 }
 
 // TestCallsAreLoggedLikeHTTPRequests pins the access log entry of a call:

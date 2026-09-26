@@ -6,11 +6,14 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strconv"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/errors"
 	"github.com/gin-gonic/gin"
 	"github.com/hydroan/gst/consts"
 	"github.com/hydroan/gst/database"
@@ -53,6 +56,16 @@ type versionedSample struct {
 
 func (versionedSample) TableName() string { return "controller_versioned_samples" }
 
+// validatedSample declares its name required, so a call's message is
+// validated the way a request body is.
+type validatedSample struct {
+	Name string `json:"name" binding:"required"`
+
+	modelregistry.Base
+}
+
+func (validatedSample) TableName() string { return "controller_validated_samples" }
+
 // The routes the fixture services are registered under. A factory mounted
 // with one of them as its config route resolves that route's service; any
 // other route resolves none and runs on the framework's default service.
@@ -64,6 +77,9 @@ const (
 	refusedImportRoute = "controller-refused-imports"
 	counterRoute       = "controller-counters"
 	versionedRoute     = "controller-versioned-samples"
+	validatedRoute     = "controller-validated-samples"
+	observedRoute      = "controller-observed-samples"
+	actionRoute        = "controller-sample-actions"
 )
 
 // registerFixtureServices registers the fixture services once for the test
@@ -79,6 +95,9 @@ func registerFixtureServices() {
 	serviceregistry.Register[*sampleRecord, *sampleRecord, *sampleRecord](consts.PHASE_LIST, filterRefusalRoute, &filterRefusingService{})
 	serviceregistry.Register[*sampleRecord, *sampleRecord, *sampleRecord](consts.PHASE_IMPORT, importRoute, &importingService{})
 	serviceregistry.Register[*sampleRecord, *sampleRecord, *sampleRecord](consts.PHASE_IMPORT, refusedImportRoute, &refusingService{})
+	serviceregistry.Register[*sampleRecord, *sampleRecord, *sampleRecord](consts.PHASE_CREATE, observedRoute, &observingService{})
+	serviceregistry.Register[*sampleRecord, *sampleActionReq, *sampleActionRsp](consts.PHASE_CREATE, actionRoute, &actionService{})
+	serviceregistry.Register[*sampleRecord, *sampleActionReq, *sampleActionRsp](consts.PHASE_LIST, actionRoute, &actionService{})
 }
 
 // refusedMsg is what the refusing services answer every refused request with.
@@ -144,6 +163,96 @@ func (*importingService) Import(_ *types.ServiceContext, r io.Reader) ([]*sample
 		return nil, serviceregistry.NewError(http.StatusBadRequest, "malformed sample file")
 	}
 	return records, nil
+}
+
+// observedCall is what a service saw on its service context: the box route
+// parameter, the caller, the method and route the request or call carried,
+// and whether the action requires authentication.
+type observedCall struct {
+	Box          string
+	Username     string
+	Method       string
+	Route        string
+	RequiresAuth bool
+	Query        url.Values
+}
+
+// observe reads what sc answers into an observedCall.
+func observe(sc *types.ServiceContext) observedCall {
+	return observedCall{
+		Box:          sc.Param("box"),
+		Username:     sc.Username(),
+		Method:       sc.Method(),
+		Route:        sc.Route(),
+		RequiresAuth: sc.RequiresAuth(),
+		Query:        sc.Query(),
+	}
+}
+
+// The call the observing service's hook saw last, for the tests to read
+// back what a flow's hooks find on their service context.
+var (
+	observedMu   sync.Mutex
+	lastObserved observedCall
+)
+
+// observingService records what its CreateBefore hook finds on the service
+// context, the way a hook reads the request it runs for.
+type observingService struct {
+	serviceregistry.Base[*sampleRecord, *sampleRecord, *sampleRecord]
+}
+
+func (*observingService) CreateBefore(sc *types.ServiceContext, _ *sampleRecord) error {
+	observedMu.Lock()
+	defer observedMu.Unlock()
+	lastObserved = observe(sc)
+	return nil
+}
+
+// sampleActionReq and sampleActionRsp are the payload and result of the
+// sample's custom action, what a service declaring Payload and Result of its
+// own takes and answers; the note is required, so the payload is validated
+// like any request body.
+type (
+	sampleActionReq struct {
+		Note string `json:"note" binding:"required"`
+	}
+	sampleActionRsp struct {
+		Note string
+		observedCall
+	}
+)
+
+// The notes that make the action service misbehave on purpose.
+const (
+	actionRefuse = "refuse"
+	actionBreak  = "break"
+	actionWrite  = "write"
+)
+
+// actionService serves the sample's custom action: it answers what it found
+// on the service context, refuses with a service error for actionRefuse,
+// fails with a plain error for actionBreak, and writes a raw response,
+// which only HTTP can carry, for actionWrite. Its List answers the same, for
+// the query a GET action reads.
+type actionService struct {
+	serviceregistry.Base[*sampleRecord, *sampleActionReq, *sampleActionRsp]
+}
+
+func (*actionService) Create(sc *types.ServiceContext, req *sampleActionReq) (*sampleActionRsp, error) {
+	switch req.Note {
+	case actionRefuse:
+		return nil, serviceregistry.NewError(http.StatusForbidden, "not yours")
+	case actionBreak:
+		return nil, errors.New("dial tcp: connection refused")
+	case actionWrite:
+		sc.Data(http.StatusOK, "text/plain", []byte("plain"))
+	}
+	return &sampleActionRsp{Note: req.Note, observedCall: observe(sc)}, nil
+}
+
+func (*actionService) List(sc *types.ServiceContext, req *sampleActionReq) (*sampleActionRsp, error) {
+	return &sampleActionRsp{Note: req.Note, observedCall: observe(sc)}, nil
 }
 
 // configFor is the controller config a factory is mounted with: the route

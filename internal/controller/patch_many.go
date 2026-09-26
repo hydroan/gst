@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"io"
 	"reflect"
+	"slices"
 
 	"github.com/cockroachdb/errors"
 	"github.com/gin-gonic/gin"
@@ -113,6 +114,48 @@ func PatchManyFactory[M types.Model, REQ types.Request, RSP types.Response](cfg 
 			return
 		}
 		JSON(c, CodeSuccess, rsp)
+	}
+}
+
+// PatchManyCall returns the batch patch call of M on route, the counterpart
+// of the handler PatchManyFactory returns for the generated handler of a
+// PatchMany rpc: given the route parameters, the items the request message
+// decoded into and the paths of each item's update mask, in order, it
+// validates the batch the way the handler validates a bound body, refuses a
+// versioned model whose item carries no version the way the handler does,
+// runs the batch patch flow (see patchManyFlow) and answers with the records
+// patched, or with the status the failure maps to (see call). An item past
+// the end of paths carries no mask and applies nothing.
+func PatchManyCall[M types.Model](route string) func(ctx context.Context, params map[string]string, items []M, paths [][]string) ([]M, error) {
+	meta := newFactoryMeta[M, M, M](route, consts.PHASE_PATCH_MANY, consts.PHASE_PATCH_MANY_BEFORE, consts.PHASE_PATCH_MANY_AFTER)
+	return func(ctx context.Context, params map[string]string, items []M, paths [][]string) ([]M, error) {
+		c := meta.beginCall(ctx, params, nil)
+		defer c.end()
+		req := requestData[M]{Items: items}
+		normalizeBatchRequest(&req)
+		fieldSets := make([]patchFieldSet, len(paths))
+		for i, itemPaths := range paths {
+			fieldSets[i] = patchFieldSetOfKeys(meta.typ, slices.Values(itemPaths), len(itemPaths))
+		}
+		if versionField, versioned := modelregistry.VersionFieldName(meta.newModel()); versioned {
+			for i := range req.Items {
+				itemFields := patchFieldSet{}
+				if i < len(fieldSets) {
+					itemFields = fieldSets[i]
+				}
+				if _, ok := itemFields[versionField]; !ok {
+					return nil, c.refuse(databaseErrorCoder(database.ErrVersionRequired), errors.Wrapf(database.ErrVersionRequired, "patch many %s item %d without its %s", meta.name, i, versionField))
+				}
+			}
+		}
+		if err := validateRequest(&req); err != nil {
+			return nil, c.invalid(err)
+		}
+		rsp, err := meta.patchManyFlow(c.ctx, c.serviceContext, &req, fieldSets)
+		if err != nil {
+			return nil, c.fail(err)
+		}
+		return answer(c, rsp.Items)
 	}
 }
 
