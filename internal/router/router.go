@@ -354,7 +354,9 @@ func Register[M types.Model, REQ types.Request, RSP types.Response](router *gin.
 		routed = *cfg
 	}
 	routed.Route = route
-	register[M, REQ, RSP](router, buildPath(route), buildVerbMap(verbs...), &routed)
+	// The group carries the prefix; the path registered on it is the rest
+	// of consts.APIPath, the one rule of the path of a route.
+	register[M, REQ, RSP](router, strings.TrimPrefix(consts.APIPath(route), consts.APIPathPrefix), buildVerbMap(verbs...), &routed)
 }
 
 func register[M types.Model, REQ types.Request, RSP types.Response](router *gin.RouterGroup, path string, verbMap map[consts.HTTPVerb]bool, cfg ...*types.ControllerConfig[M]) {
@@ -483,14 +485,6 @@ func httpMethodRank(method string) (int, bool) {
 	default:
 		return 0, false
 	}
-}
-
-// buildPath normalizes the API path.
-func buildPath(path string) string {
-	path = strings.TrimPrefix(path, consts.APIPathPrefix+"/") // remove the '/api/' base prefix
-	path = strings.TrimPrefix(path, "/")                      // trim left "/"
-	path = strings.TrimSuffix(path, "/")                      // trim right "/"
-	return "/" + path
 }
 
 // buildVerbMap creates a map of allowed HTTP verbs according to the specified verbs.
