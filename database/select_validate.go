@@ -29,7 +29,7 @@ import (
 // the projection's shape. The mode says whether the projection is read on its
 // own or as a member of a union, which changes two rules: a member may be a
 // plain projection of columns, and it carries no ordering or paging.
-func (a *selector[M, R]) validate(mode buildMode) (projectionShape, error) {
+func (a *selectBuilder[M]) validate(mode buildMode) (projectionShape, error) {
 	shape := projectionShape{}
 	if len(a.terms) == 0 {
 		return shape, ErrEmptyProjection
@@ -253,7 +253,7 @@ func valueKindOf(v reflect.Value) valueKind {
 // columns they exist on, a time bucket and a literal are text, and every
 // other term yields what its column stores. A joined select's term is
 // classified by the select that projects it, which is out of reach here.
-func (a *selector[M, R]) termKind(t types.Term, shape projectionShape) valueKind {
+func (a *selectBuilder[M]) termKind(t types.Term, shape projectionShape) valueKind {
 	if _, derived := a.derivedOf(t, shape); derived {
 		return kindUnknown
 	}
@@ -287,7 +287,7 @@ func (a *selector[M, R]) termKind(t types.Term, shape projectionShape) valueKind
 // validateOrdering checks one ordering of the select: a term order must name a
 // projected term, a column order a projected column or group key, so the
 // output can never be sorted by something it does not carry.
-func (a *selector[M, R]) validateOrdering(o types.Ordering, shape projectionShape) error {
+func (a *selectBuilder[M]) validateOrdering(o types.Ordering, shape projectionShape) error {
 	switch o := o.(type) {
 	case types.TermOrder:
 		if !types.TermOrderDirectionOf(o).Valid() {
@@ -316,7 +316,7 @@ func (a *selector[M, R]) validateOrdering(o types.Ordering, shape projectionShap
 // carries none and names the queried model's column, as a plain name does
 // everywhere else, never whichever table's column happens to be projected
 // first.
-func (a *selector[M, R]) selectedColumn(table, column, main string) (types.Term, bool) {
+func (a *selectBuilder[M]) selectedColumn(table, column, main string) (types.Term, bool) {
 	if len(table) == 0 {
 		table = main
 	}
@@ -334,7 +334,7 @@ func (a *selector[M, R]) selectedColumn(table, column, main string) (types.Term,
 
 // selectedColumnTerm is selectedColumn for a column validation has already
 // matched.
-func (a *selector[M, R]) selectedColumnTerm(table, column, main string) types.Term {
+func (a *selectBuilder[M]) selectedColumnTerm(table, column, main string) types.Term {
 	term, _ := a.selectedColumn(table, column, main)
 	return term
 }
@@ -344,7 +344,7 @@ func (a *selector[M, R]) selectedColumnTerm(table, column, main string) types.Te
 // a term built from a generated column reference cannot reach a function its
 // type rejects, because the reference does not carry the method, while a
 // reference minted by hand names whatever type its author chose.
-func (a *selector[M, R]) validateTerm(t types.Term, shape projectionShape) error {
+func (a *selectBuilder[M]) validateTerm(t types.Term, shape projectionShape) error {
 	// The renderer composes SQL from these constants, so a value from outside
 	// the closed set would reach the statement as text.
 	if !types.TermFnOf(t).Valid() {
@@ -403,8 +403,8 @@ func (a *selector[M, R]) validateTerm(t types.Term, shape projectionShape) error
 // unmatched field at its zero value and drops an unmatched column, so without
 // this check a renamed alias shows up as a column of zeros on a report rather
 // than as an error.
-func (a *selector[M, R]) validateResultRow(aliases map[string]struct{}, shape projectionShape) ([]string, error) {
-	typ, fields, err := resultRowFields[R]()
+func (a *selectBuilder[M]) validateResultRow(aliases map[string]struct{}, shape projectionShape) ([]string, error) {
+	typ, fields, err := resultRowFields(a.row)
 	if err != nil {
 		return nil, err
 	}
@@ -441,11 +441,11 @@ func (a *selector[M, R]) validateResultRow(aliases map[string]struct{}, shape pr
 	return order, nil
 }
 
-// resultRowFields resolves the result row type R to its struct type and its
+// resultRowFields resolves the result row type to its struct type and its
 // fields in declaration order, the order a union member's SELECT list
 // follows. A pointer row type is read through.
-func resultRowFields[R any]() (reflect.Type, []modelschema.Column, error) {
-	typ := reflect.TypeFor[R]()
+func resultRowFields(row reflect.Type) (reflect.Type, []modelschema.Column, error) {
+	typ := row
 	for typ.Kind() == reflect.Pointer {
 		typ = typ.Elem()
 	}
@@ -470,7 +470,7 @@ func resultRowFields[R any]() (reflect.Type, []modelschema.Column, error) {
 // filter by an expression the projection never selected. The alias is
 // compared as projected, so a term spelled without one is the term under
 // its default.
-func (a *selector[M, R]) isSelected(t types.Term) bool {
+func (a *selectBuilder[M]) isSelected(t types.Term) bool {
 	t = t.As(termAlias(t))
 	for _, selected := range a.terms {
 		selected = selected.As(termAlias(selected))
@@ -499,7 +499,7 @@ func (a *selector[M, R]) isSelected(t types.Term) bool {
 // condition or a nullable source column can leave AVG, MIN or MAX empty;
 // LAG and LEAD are NULL on the first and last row of every partition; and a
 // plain column is as nullable as the column it projects.
-func (a *selector[M, R]) nullableAliases(shape projectionShape) map[string]string {
+func (a *selectBuilder[M]) nullableAliases(shape projectionShape) map[string]string {
 	grouped := len(shape.keys) > 0
 	nullable := make(map[string]string)
 	proven := a.notNullColumns()
@@ -564,7 +564,7 @@ func (a *selector[M, R]) nullableAliases(shape projectionShape) map[string]strin
 // so a row whose column is NULL fails it. A condition AND-ed at the top
 // level, or inside an AND group, holds of every row read; one inside an OR
 // group need not, and a subquery says nothing of the row's own columns.
-func (a *selector[M, R]) notNullColumns() map[string]bool {
+func (a *selectBuilder[M]) notNullColumns() map[string]bool {
 	proven := make(map[string]bool)
 	var walk func(filters []types.Filter)
 	walk = func(filters []types.Filter) {

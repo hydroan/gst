@@ -26,7 +26,7 @@ var (
 
 // groupClauses adds the GROUP BY derived from the group keys and the HAVING
 // conditions to the statement.
-func (a *selector[M, R]) groupClauses(tx *gorm.DB, shape projectionShape) (*gorm.DB, error) {
+func (a *selectBuilder[M]) groupClauses(tx *gorm.DB, shape projectionShape) (*gorm.DB, error) {
 	// Group keys and HAVING render the full expression rather than the output
 	// alias. An output alias is accepted in GROUP BY and HAVING by MySQL, SQLite
 	// and ClickHouse but rejected in HAVING by PostgreSQL, and re-rendering
@@ -72,7 +72,7 @@ func (a *selector[M, R]) groupClauses(tx *gorm.DB, shape projectionShape) (*gorm
 
 // keyExpr renders a group key or plain column: the column itself, or its time
 // bucket.
-func (a *selector[M, R]) keyExpr(t types.Term, shape projectionShape) string {
+func (a *selectBuilder[M]) keyExpr(t types.Term, shape projectionShape) string {
 	if jt, derived := a.derivedOf(t, shape); derived {
 		return a.derivedExpr(jt, t)
 	}
@@ -86,7 +86,7 @@ func (a *selector[M, R]) keyExpr(t types.Term, shape projectionShape) string {
 // functionExpr renders the function call of a measure or window function
 // without its window and without the COALESCE a SUM takes, which the caller
 // adds around the complete expression; coalesce reports whether it must.
-func (a *selector[M, R]) functionExpr(t types.Term, shape projectionShape) (sql string, args []any, coalesce bool, err error) {
+func (a *selectBuilder[M]) functionExpr(t types.Term, shape projectionShape) (sql string, args []any, coalesce bool, err error) {
 	column := a.columnExpr(types.TermTableOf(t), types.TermColumnOf(t), shape)
 	cond, condErr := a.db.renderFilters(types.TermConditionsOf(t), false, a.whereScope(shape))
 	if condErr != nil {
@@ -139,7 +139,7 @@ func (a *selector[M, R]) functionExpr(t types.Term, shape projectionShape) (sql 
 // restricts a measure, a bucket only truncates a group key. Both were
 // previously dropped without a word, which is how a report ends up silently
 // counting the wrong rows.
-func (a *selector[M, R]) validateGrouping(t types.Term) error {
+func (a *selectBuilder[M]) validateGrouping(t types.Term) error {
 	if !t.IsMeasure() && len(types.TermConditionsOf(t)) > 0 {
 		return errors.Wrapf(ErrConditionOnGroupKey, "%q", termAlias(t))
 	}
@@ -152,7 +152,7 @@ func (a *selector[M, R]) validateGrouping(t types.Term) error {
 // validateColumnClass checks that the column's type accepts what the term
 // applies to it: SUM and AVG need a numeric column, a time bucket a time
 // column.
-func (a *selector[M, R]) validateColumnClass(t types.Term, column modelschema.Column) error {
+func (a *selectBuilder[M]) validateColumnClass(t types.Term, column modelschema.Column) error {
 	class := modelschema.ClassifyColumn(column.Type)
 	switch {
 	case types.TermFnOf(t) == types.FnSum || types.TermFnOf(t) == types.FnAvg:
@@ -178,7 +178,7 @@ func (a *selector[M, R]) validateColumnClass(t types.Term, column modelschema.Co
 // and every condition names a measure the projection declares, not a window
 // over it, which is computed after HAVING and filtered by Qualify, and
 // compares against a value SQL can order.
-func (a *selector[M, R]) validateHaving(shape projectionShape) error {
+func (a *selectBuilder[M]) validateHaving(shape projectionShape) error {
 	if !shape.grouped && len(a.havings) > 0 {
 		return ErrHavingWithoutGroups
 	}

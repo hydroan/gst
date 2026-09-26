@@ -88,7 +88,7 @@ func unionFor[R any](ctx context.Context, base *gorm.DB, branches []types.Select
 	// so the terminal consumes their dry-run options whatever the outcome;
 	// the first failure is the union's.
 	for i, b := range branches {
-		member, ok := b.(nestedSelect)
+		member, ok := nestedOf(b)
 		if !ok {
 			if u.err == nil {
 				u.err = errors.Wrapf(ErrUnionBranch, "branch %d is a %T", i, b)
@@ -203,7 +203,7 @@ func (u *union[R]) Scan(dest *[]R) (err error) {
 		return u.chain.collectSQL(dryRunSession(tx).Find(dest))
 	}
 	*dest = (*dest)[:0]
-	return scanRowsInto(tx, dest)
+	return scanRowsInto(tx, dest, reflect.TypeFor[R]())
 }
 
 // Count reports how many rows the branches produce together. It adds up the
@@ -310,7 +310,7 @@ func (u *union[R]) build(mode buildMode) (*gorm.DB, error) {
 // the result row and a term ordering names a term some branch projects. The
 // branches validate themselves when they are rendered.
 func (u *union[R]) validate() error {
-	typ, fields, err := resultRowFields[R]()
+	typ, fields, err := resultRowFields(reflect.TypeFor[R]())
 	if err != nil {
 		return err
 	}

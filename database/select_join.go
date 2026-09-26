@@ -83,7 +83,7 @@ type derivedInfo struct {
 // row. The tables read before a join are the queried model's and the joins
 // declared ahead of it, which is what lets a chain of joins read through one
 // another.
-func (a *selector[M, R]) resolveJoins(shape *projectionShape) error {
+func (a *selectBuilder[M]) resolveJoins(shape *projectionShape) error {
 	if len(a.joins) == 0 {
 		return nil
 	}
@@ -160,7 +160,7 @@ func (a *selector[M, R]) resolveJoins(shape *projectionShape) error {
 
 // resolveModelJoin reads a joined model: its table, columns and soft-delete
 // column, and the keys it is unique on.
-func (a *selector[M, R]) resolveModelJoin(mj types.ModelJoin) (*joinedTable, [][]string, error) {
+func (a *selectBuilder[M]) resolveModelJoin(mj types.ModelJoin) (*joinedTable, [][]string, error) {
 	// A joined select needs no constraint, its group keys make it unique;
 	// a joined model is proved on a constraint, which ClickHouse does not
 	// carry.
@@ -199,8 +199,8 @@ func (a *selector[M, R]) resolveModelJoin(mj types.ModelJoin) (*joinedTable, [][
 // is the whole set of its group keys. The derived table is read under alias;
 // its columns, for the ON and the query's filters, are the model columns the
 // group keys read, each renamed to the alias the key projects under.
-func (a *selector[M, R]) resolveSelectJoin(sj types.SelectJoin, alias string) (*joinedTable, [][]string, error) {
-	sub, ok := sj.Select.(nestedSelect)
+func (a *selectBuilder[M]) resolveSelectJoin(sj types.SelectJoin, alias string) (*joinedTable, [][]string, error) {
+	sub, ok := nestedOf(sj.Select)
 	if !ok {
 		return nil, nil, errors.Wrapf(ErrJoinSource, "joined select is a %T, not a select this package built", sj.Select)
 	}
@@ -483,7 +483,7 @@ func columnsByName(columns []modelschema.Column) map[string]modelschema.Column {
 // same way; a joined model is no statement's model, so they are written
 // here. A joined select is rendered as a derived table, its own statement
 // bound into the join.
-func (a *selector[M, R]) joinClauses(tx *gorm.DB, shape projectionShape) (*gorm.DB, error) {
+func (a *selectBuilder[M]) joinClauses(tx *gorm.DB, shape projectionShape) (*gorm.DB, error) {
 	before := map[string]tableInfo{shape.main: shape.mainInfo}
 	for _, jt := range shape.joins {
 		expr, err := a.db.renderFilters(jt.on, false, a.joinScope(jt, before))
@@ -523,7 +523,7 @@ func (a *selector[M, R]) joinClauses(tx *gorm.DB, shape projectionShape) (*gorm.
 // source is the scope's own table, read under its alias and, for a derived
 // table, through the names its keys project under, and the tables read
 // before it are the ones a predicate may tie to or name.
-func (a *selector[M, R]) joinScope(jt *joinedTable, before map[string]tableInfo) filterScope {
+func (a *selectBuilder[M]) joinScope(jt *joinedTable, before map[string]tableInfo) filterScope {
 	return filterScope{
 		qualify:     jt.alias,
 		table:       jt.table,
@@ -541,7 +541,7 @@ func (a *selector[M, R]) joinScope(jt *joinedTable, before map[string]tableInfo)
 // projects: the query passes the select's own terms, so a match is the whole
 // term, the way isSelected matches. Each is a column of that select's
 // derived table.
-func (a *selector[M, R]) derivedTerms(shape projectionShape) (map[string]*joinedTable, error) {
+func (a *selectBuilder[M]) derivedTerms(shape projectionShape) (map[string]*joinedTable, error) {
 	derived := make(map[string]*joinedTable)
 	for _, jt := range shape.joins {
 		if jt.sub == nil {
@@ -576,7 +576,7 @@ func (a *selector[M, R]) derivedTerms(shape projectionShape) (map[string]*joined
 // ownTerm reports whether the query could compute a term itself: it carries
 // no table, as a plain Count or a constant does, or the table of the queried
 // model or of a model the query joins.
-func (a *selector[M, R]) ownTerm(t types.Term) bool {
+func (a *selectBuilder[M]) ownTerm(t types.Term) bool {
 	if len(types.TermTableOf(t)) == 0 || types.TermTableOf(t) == a.db.outerTableName() {
 		return true
 	}
@@ -629,7 +629,7 @@ var (
 // finds the candidate and the whole term confirms it: another term of the
 // query may carry the same alias — the tie breaker a window is completed
 // with reads under the primary key's name — and it is not the select's.
-func (a *selector[M, R]) derivedOf(t types.Term, shape projectionShape) (*joinedTable, bool) {
+func (a *selectBuilder[M]) derivedOf(t types.Term, shape projectionShape) (*joinedTable, bool) {
 	jt, ok := shape.derived[termAlias(t)]
 	if !ok || !jt.sub.isSelected(t) {
 		return nil, false
@@ -651,13 +651,13 @@ func (s projectionShape) tableOf(t types.Term) string {
 // needs to know to refuse a row-level read. A term under its default alias
 // that the query could compute itself is not read through; derivedTerms
 // refuses it.
-func (a *selector[M, R]) readsDerived(t types.Term) bool {
+func (a *selectBuilder[M]) readsDerived(t types.Term) bool {
 	for _, source := range a.joins {
 		sj, ok := source.(types.SelectJoin)
 		if !ok {
 			continue
 		}
-		if sub, ok := sj.Select.(nestedSelect); ok && sub.isSelected(t) && (!a.ownTerm(t) || !defaultAlias(t)) {
+		if sub, ok := nestedOf(sj.Select); ok && sub.isSelected(t) && (!a.ownTerm(t) || !defaultAlias(t)) {
 			return true
 		}
 	}
@@ -670,7 +670,7 @@ func (a *selector[M, R]) readsDerived(t types.Term) bool {
 // the projection groups by the columns the select is joined on, so that the
 // derived row, hence the term, is constant within a group, which is checked
 // before the keys are added.
-func (a *selector[M, R]) groupDerivedTerms(shape *projectionShape) error {
+func (a *selectBuilder[M]) groupDerivedTerms(shape *projectionShape) error {
 	if !shape.grouped || len(shape.derived) == 0 {
 		return nil
 	}
@@ -727,7 +727,7 @@ func keyAliasOf(jt *joinedTable, column string) (string, bool) {
 // matched with its table. A joined select's key term proves the column of
 // that select alone: a term of the same table read through another select
 // names that select's derived column, not this source's.
-func (a *selector[M, R]) groupsBy(table, column string, shape projectionShape) bool {
+func (a *selectBuilder[M]) groupsBy(table, column string, shape projectionShape) bool {
 	for _, key := range shape.keys {
 		// A joined select's measure is a group key under its alias, not under
 		// the column it measured; only the select's own key term names that
@@ -744,7 +744,7 @@ func (a *selector[M, R]) groupsBy(table, column string, shape projectionShape) b
 
 // derivedExpr renders a term a joined select projects: the derived table's
 // column of the term's alias.
-func (a *selector[M, R]) derivedExpr(jt *joinedTable, t types.Term) string {
+func (a *selectBuilder[M]) derivedExpr(jt *joinedTable, t types.Term) string {
 	return a.db.quoteTableColumn(jt.alias, termAlias(t))
 }
 
@@ -754,7 +754,7 @@ func (a *selector[M, R]) derivedExpr(jt *joinedTable, t types.Term) string {
 // columns are listed in either case: a select's predicates are written by
 // service code, so a column the model does not have is a mistake the build
 // reports rather than the database.
-func (a *selector[M, R]) whereScope(shape projectionShape) filterScope {
+func (a *selectBuilder[M]) whereScope(shape projectionShape) filterScope {
 	scope := a.db.outerScope()
 	scope.columns = shape.mainInfo.columns
 	if len(shape.joins) == 0 {
@@ -770,7 +770,7 @@ func (a *selector[M, R]) whereScope(shape projectionShape) filterScope {
 // when it carries that model's table, and nowhere otherwise — a reference of
 // another model may well name a column the queried model also has, which is
 // valid SQL over the wrong table, so the table is checked before the name.
-func (a *selector[M, R]) columnOf(table, column string, shape projectionShape) (modelschema.Column, error) {
+func (a *selectBuilder[M]) columnOf(table, column string, shape projectionShape) (modelschema.Column, error) {
 	columns := shape.columns
 	if len(table) > 0 && table != shape.main {
 		jt, ok := shape.joined[table]
@@ -793,7 +793,7 @@ func (a *selector[M, R]) columnOf(table, column string, shape projectionShape) (
 // which keeps every select without a join rendering as it always has, and
 // qualified by its table when the select joins, the term's own or the
 // queried model's, under the name that table is read by.
-func (a *selector[M, R]) columnExpr(table, column string, shape projectionShape) string {
+func (a *selectBuilder[M]) columnExpr(table, column string, shape projectionShape) string {
 	if len(shape.joins) == 0 {
 		return a.db.quoteIdent(column)
 	}

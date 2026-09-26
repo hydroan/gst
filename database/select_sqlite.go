@@ -33,10 +33,10 @@ var (
 	valuerType          = reflect.TypeFor[driver.Valuer]()
 )
 
-// scanRowsInto runs the terminal scan of tx into dest, through the time
-// mirror when the dialect needs one.
-func scanRowsInto[R any](tx *gorm.DB, dest *[]R) error {
-	mirrorType, ok := scanMirrorType[R](tx)
+// scanRowsInto runs the terminal scan of tx into dest, a *[]R for the row
+// type rowType, through the time mirror when the dialect needs one.
+func scanRowsInto(tx *gorm.DB, dest any, rowType reflect.Type) error {
+	mirrorType, ok := scanMirrorType(tx, rowType)
 	if !ok {
 		// First-hand exit of a stack-less GORM/driver error; see the
 		// error-stack contract in doc.go. WithStack passes nil through.
@@ -48,17 +48,18 @@ func scanRowsInto[R any](tx *gorm.DB, dest *[]R) error {
 		return errors.WithStack(err)
 	}
 	mirrored := rows.Elem()
+	slice := reflect.ValueOf(dest).Elem()
 	for i := range mirrored.Len() {
-		var row R
-		copyMirrorRow(mirrored.Index(i), rowStruct(reflect.ValueOf(&row).Elem()))
-		*dest = append(*dest, row)
+		row := reflect.New(slice.Type().Elem()).Elem()
+		copyMirrorRow(mirrored.Index(i), rowStruct(row))
+		slice.Set(reflect.Append(slice, row))
 	}
 	return nil
 }
 
-// scanRowInto is the one-row variant of scanRowsInto.
-func scanRowInto[R any](tx *gorm.DB, dest *R) error {
-	mirrorType, ok := scanMirrorType[R](tx)
+// scanRowInto is the one-row variant of scanRowsInto, dest being a *R.
+func scanRowInto(tx *gorm.DB, dest any, rowType reflect.Type) error {
+	mirrorType, ok := scanMirrorType(tx, rowType)
 	if !ok {
 		return errors.WithStack(tx.Scan(dest).Error)
 	}
@@ -71,16 +72,16 @@ func scanRowInto[R any](tx *gorm.DB, dest *R) error {
 	return nil
 }
 
-// scanMirrorType returns the stand-in type for R when the scan needs one,
-// which is only the case on sqlite: every other dialect delivers time values
-// already parsed. A pointer row type is mirrored through its struct, and an
-// embedded struct through its fields, the shapes the result row is validated
-// through.
-func scanMirrorType[R any](tx *gorm.DB) (reflect.Type, bool) {
+// scanMirrorType returns the stand-in type for the row type when the scan
+// needs one, which is only the case on sqlite: every other dialect delivers
+// time values already parsed. A pointer row type is mirrored through its
+// struct, and an embedded struct through its fields, the shapes the result
+// row is validated through.
+func scanMirrorType(tx *gorm.DB, rowType reflect.Type) (reflect.Type, bool) {
 	if tx.Dialector.Name() != sqliteDialectName {
 		return nil, false
 	}
-	typ := reflect.TypeFor[R]()
+	typ := rowType
 	for typ.Kind() == reflect.Pointer {
 		typ = typ.Elem()
 	}

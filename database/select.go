@@ -3,6 +3,7 @@ package database
 import (
 	"context"
 	"fmt"
+	"reflect"
 	"regexp"
 	"strings"
 
@@ -13,11 +14,12 @@ import (
 	"gorm.io/gorm/clause"
 )
 
-// The select builder: the specification a Select call assembles, its
-// terminals, and the shape the renderer and the validator agree on. The
-// grouped side — measures, group keys, HAVING — lives in select_group.go, the
-// window side in select_window.go, the constants in select_literal.go, and
-// the side a union reads in union.go.
+// The select: the shell implementing types.Selector, and the builder behind
+// it — the specification a Select call assembles, its terminals, and the
+// shape the renderer and the validator agree on. The grouped side —
+// measures, group keys, HAVING — lives in select_group.go, the window side
+// in select_window.go, the constants in select_literal.go, and the side a
+// union reads in union.go.
 
 // Errors reported while a select is built. They all fail fast: a projection
 // is written by service code, not parsed from a request, so a mistake in it is
@@ -52,13 +54,28 @@ var (
 // identifier instead of being quoted and hoped for.
 var aliasPattern = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
 
-// selector implements types.Selector by borrowing the Database chain for
-// everything an analytical read shares with a plain one: the transaction
-// carried by the context, identifier quoting, the filter renderer, tracing and
-// SQL collection.
+// selector implements types.Selector: a thin shell over a selectBuilder,
+// which is everything a select is but its result row type R. The shell
+// keeps what the compiler copies per row type small — Go compiles the
+// methods of a generic type once per distinct type argument, so a builder
+// carrying R would be compiled again, dozens of methods, for every row
+// struct a project scans into — and hands its builder to the queries
+// reading the select (see nestedOf).
 type selector[M types.Model, R any] struct {
+	b *selectBuilder[M]
+}
+
+// selectBuilder is a select without its result row type: the specification
+// a Select call assembles, the validator and the renderer, and the side
+// other queries read (see nestedSelect). It borrows the Database chain for
+// everything an analytical read shares with a plain one: the transaction
+// carried by the context, identifier quoting, the filter renderer, tracing
+// and SQL collection. Of the row type it keeps row, which is all the
+// validation and the scan need.
+type selectBuilder[M types.Model] struct {
 	db  *database[M]
-	err error // set when the chain could not be attached; surfaced by the terminal
+	err error        // set when the chain could not be attached; surfaced by the terminal
+	row reflect.Type // the result row type R of the Select
 
 	// The options live here rather than on the shared chain because reset()
 	// clears the chain's copies before the terminal reads them. They hold for
@@ -99,9 +116,9 @@ func Select[M types.Model, R any](ctx context.Context, exprs ...types.Expr) type
 	if !ok {
 		// Unreachable while Database returns the concrete chain, but swallowing
 		// it would surface later as a nil dereference far from the cause.
-		return &selector[M, R]{err: ErrSelectorUnusable}
+		return &selector[M, R]{b: &selectBuilder[M]{err: ErrSelectorUnusable}}
 	}
-	return &selector[M, R]{db: inner, terms: termsOf(exprs)}
+	return &selector[M, R]{b: &selectBuilder[M]{db: inner, terms: termsOf(exprs), row: reflect.TypeFor[R]()}}
 }
 
 // SelectOn is Select on an application-held database instance. See
@@ -112,9 +129,9 @@ func SelectOn[M types.Model, R any](ctx context.Context, instance *gorm.DB, expr
 		// Unreachable while DatabaseOn returns the concrete chain, but
 		// swallowing it would surface later as a nil dereference far from
 		// the cause.
-		return &selector[M, R]{err: ErrSelectorUnusable}
+		return &selector[M, R]{b: &selectBuilder[M]{err: ErrSelectorUnusable}}
 	}
-	return &selector[M, R]{db: inner, terms: termsOf(exprs)}
+	return &selector[M, R]{b: &selectBuilder[M]{db: inner, terms: termsOf(exprs), row: reflect.TypeFor[R]()}}
 }
 
 // termsOf turns the projection expressions into terms: a column reference
@@ -127,83 +144,129 @@ func termsOf(exprs []types.Expr) []types.Term {
 	return terms
 }
 
+// The shell's methods: each is the types.Selector method of its name on
+// the builder, the chain ones returning the shell for the next call.
+
 func (a *selector[M, R]) Where(filters ...types.Filter) types.Selector[M, R] {
-	a.filters = append(a.filters, filters...)
+	a.b.where(filters...)
 	return a
 }
 
 func (a *selector[M, R]) Join(sources ...types.JoinSource) types.Selector[M, R] {
-	a.joins = append(a.joins, sources...)
+	a.b.join(sources...)
 	return a
 }
 
 func (a *selector[M, R]) Having(conditions ...types.TermCondition) types.Selector[M, R] {
-	a.havings = append(a.havings, conditions...)
+	a.b.having(conditions...)
 	return a
 }
 
 func (a *selector[M, R]) Qualify(conditions ...types.TermCondition) types.Selector[M, R] {
-	a.qualifies = append(a.qualifies, conditions...)
+	a.b.qualify(conditions...)
 	return a
 }
 
 func (a *selector[M, R]) OrderBy(orders ...types.Ordering) types.Selector[M, R] {
-	a.orders = append(a.orders, orders...)
+	a.b.orderBy(orders...)
 	return a
 }
 
-// Limit caps the number of result rows, read from the first: a Limit after a
-// Page drops the page's skip. A non-positive limit means no limit, matching
-// Database.WithLimit: the two would otherwise read the same and mean
-// opposite things.
 func (a *selector[M, R]) Limit(n int) types.Selector[M, R] {
+	a.b.setLimit(n)
+	return a
+}
+
+func (a *selector[M, R]) Page(page, size int) types.Selector[M, R] {
+	a.b.setPage(page, size)
+	return a
+}
+
+func (a *selector[M, R]) WithDryRun(collector ...*[]types.SQLStatement) types.Selector[M, R] {
+	a.b.withDryRun(collector...)
+	return a
+}
+
+func (a *selector[M, R]) Scan(dest *[]R) error { return a.b.scan(dest) }
+
+func (a *selector[M, R]) ScanOne(dest *R) error { return a.b.scanOne(dest) }
+
+func (a *selector[M, R]) Count(count *int) error { return a.b.count(count) }
+
+// nested hands the builder to a query reading the select; see nestedOf.
+func (a *selector[M, R]) nested() nestedSelect { return a.b }
+
+func (a *selectBuilder[M]) where(filters ...types.Filter) {
+	a.filters = append(a.filters, filters...)
+}
+
+func (a *selectBuilder[M]) join(sources ...types.JoinSource) {
+	a.joins = append(a.joins, sources...)
+}
+
+func (a *selectBuilder[M]) having(conditions ...types.TermCondition) {
+	a.havings = append(a.havings, conditions...)
+}
+
+func (a *selectBuilder[M]) qualify(conditions ...types.TermCondition) {
+	a.qualifies = append(a.qualifies, conditions...)
+}
+
+func (a *selectBuilder[M]) orderBy(orders ...types.Ordering) {
+	a.orders = append(a.orders, orders...)
+}
+
+// setLimit caps the number of result rows, read from the first: a Limit
+// after a Page drops the page's skip. A non-positive limit means no limit,
+// matching Database.WithLimit: the two would otherwise read the same and
+// mean opposite things.
+func (a *selectBuilder[M]) setLimit(n int) {
 	a.offset = 0
 	if n <= 0 {
 		a.limit, a.hasLimit = 0, false
-		return a
+		return
 	}
 	a.limit, a.hasLimit = n, true
-	return a
 }
 
-// Page keeps one page of the result rows: the limit is the page's size and
-// the offset the rows of the pages before it. A page below 1 is the first,
-// so a request's page passes straight through; a size below 1 pages
+// setPage keeps one page of the result rows: the limit is the page's size
+// and the offset the rows of the pages before it. A page below 1 is the
+// first, so a request's page passes straight through; a size below 1 pages
 // nothing, as Limit caps nothing then. An OFFSET never stands without a
 // LIMIT, which MySQL would refuse: the two are set together here or not at
 // all.
-func (a *selector[M, R]) Page(page, size int) types.Selector[M, R] {
+func (a *selectBuilder[M]) setPage(page, size int) {
 	if size <= 0 {
 		a.limit, a.offset, a.hasLimit = 0, 0, false
-		return a
+		return
 	}
 	if page < 1 {
 		page = 1
 	}
 	a.limit, a.offset, a.hasLimit = size, (page-1)*size, true
-	return a
 }
 
 // The option methods never touch the chain, so they stay safe on a selector
 // that failed to attach: the error surfaces at the terminal instead of as a nil
 // dereference partway through building the query.
 
-func (a *selector[M, R]) WithDryRun(collector ...*[]types.SQLStatement) types.Selector[M, R] {
+func (a *selectBuilder[M]) withDryRun(collector ...*[]types.SQLStatement) {
 	a.dryRun = true
 	if len(collector) > 0 {
 		if collector[0] == nil {
 			if a.err == nil {
 				a.err = ErrNilSQLBuilder
 			}
-			return a
+			return
 		}
 		a.statements = collector[0]
 	}
-	return a
 }
 
-// Scan runs the select and replaces the contents of dest.
-func (a *selector[M, R]) Scan(dest *[]R) (err error) {
+// scan runs the select and replaces the contents of dest, the *[]R of the
+// Select's Scan, reached through reflection here so that the scan compiles
+// once per model rather than once per row type.
+func (a *selectBuilder[M]) scan(dest any) (err error) {
 	// The options are consumed even when the select never attached: this is
 	// the terminal they, and the joined selects', were set for.
 	defer a.consumeDryRun()
@@ -211,7 +274,7 @@ func (a *selector[M, R]) Scan(dest *[]R) (err error) {
 		return a.err
 	}
 	defer a.db.reset()
-	if dest == nil {
+	if reflect.ValueOf(dest).IsNil() {
 		return ErrNilDest
 	}
 	if err = a.db.prepare(); err != nil {
@@ -233,19 +296,20 @@ func (a *selector[M, R]) Scan(dest *[]R) (err error) {
 	// gorm keeps the existing elements when a Scan returns no rows, so a reused
 	// destination would still hold the previous result. List documents that a
 	// read replaces the destination; an aggregate read behaves the same.
-	*dest = (*dest)[:0]
-	return scanRowsInto(tx, dest)
+	reflect.ValueOf(dest).Elem().SetLen(0)
+	return scanRowsInto(tx, dest, a.row)
 }
 
-// ScanOne runs an ungrouped aggregation, which always produces exactly one
-// row, and fills dest with it.
-func (a *selector[M, R]) ScanOne(dest *R) (err error) {
+// scanOne runs an ungrouped aggregation, which always produces exactly one
+// row, and fills dest with it, the *R of the Select's ScanOne, reached the
+// way scan reaches its destination.
+func (a *selectBuilder[M]) scanOne(dest any) (err error) {
 	defer a.consumeDryRun()
 	if a.err != nil {
 		return a.err
 	}
 	defer a.db.reset()
-	if dest == nil {
+	if reflect.ValueOf(dest).IsNil() {
 		return ErrNilDest
 	}
 	if err = a.db.prepare(); err != nil {
@@ -279,19 +343,18 @@ func (a *selector[M, R]) ScanOne(dest *R) (err error) {
 	if a.db.dryRun {
 		return a.db.collectSQL(dryRunSession(tx).Find(dest))
 	}
-	var zero R
-	*dest = zero
-	return scanRowInto(tx, dest)
+	reflect.ValueOf(dest).Elem().SetZero()
+	return scanRowInto(tx, dest, a.row)
 }
 
-// Count reports how many rows the select produces: the groups of a grouped
+// count reports how many rows the select produces: the groups of a grouped
 // projection, the rows of a row-level one, after Having and Qualify. The
 // count runs over the select as a derived table, because COUNT(*) beside a
 // GROUP BY counts the rows of each group instead of the groups themselves.
 // OrderBy, Limit and Offset set on the selector are ignored here: none of them
 // changes how many rows exist, so pagination prepared for Scan can never skew
 // the count.
-func (a *selector[M, R]) Count(count *int) (err error) {
+func (a *selectBuilder[M]) count(count *int) (err error) {
 	defer a.consumeDryRun()
 	if a.err != nil {
 		return a.err
@@ -392,7 +455,7 @@ type projectionShape struct {
 
 // build validates the projection and assembles the query in the shape the
 // mode asks for.
-func (a *selector[M, R]) build(mode buildMode) (*gorm.DB, error) {
+func (a *selectBuilder[M]) build(mode buildMode) (*gorm.DB, error) {
 	shape, err := a.validate(mode)
 	if err != nil {
 		return nil, err
@@ -512,7 +575,7 @@ func (a *selector[M, R]) build(mode buildMode) (*gorm.DB, error) {
 // orderedTerm resolves one ordering of the select to the projected term it
 // sorts by and the direction it sorts in. validate has checked that the term
 // is selected, so the lookup cannot miss here.
-func (a *selector[M, R]) orderedTerm(o types.Ordering, shape projectionShape) (types.Term, types.OrderDirection) {
+func (a *selectBuilder[M]) orderedTerm(o types.Ordering, shape projectionShape) (types.Term, types.OrderDirection) {
 	switch o := o.(type) {
 	case types.TermOrder:
 		return types.TermOrderTermOf(o), orderDirection(types.TermOrderDirectionOf(o))
@@ -561,7 +624,7 @@ func compareOperator(op types.CompareOp) string {
 // after a dry run executes for real. The selects joined as derived tables
 // are consumed with it, whether or not the terminal reached them: their
 // terminal is this one.
-func (a *selector[M, R]) consumeDryRun() {
+func (a *selectBuilder[M]) consumeDryRun() {
 	a.dryRun = false
 	a.statements = nil
 	if a.consuming {
@@ -571,7 +634,7 @@ func (a *selector[M, R]) consumeDryRun() {
 	defer func() { a.consuming = false }()
 	for _, source := range a.joins {
 		if sj, ok := source.(types.SelectJoin); ok {
-			if sub, ok := sj.Select.(nestedSelect); ok {
+			if sub, ok := nestedOf(sj.Select); ok {
 				sub.consumeDryRun()
 			}
 		}
@@ -606,7 +669,7 @@ func termAlias(t types.Term) string {
 // placeholders bind. A conditional measure carries its predicate as a nested
 // expression, so the filter renderer stays the only place predicates are
 // built; a windowed term carries its window after the function.
-func (a *selector[M, R]) termExpr(t types.Term, shape projectionShape) (string, []any, error) {
+func (a *selectBuilder[M]) termExpr(t types.Term, shape projectionShape) (string, []any, error) {
 	if jt, derived := a.derivedOf(t, shape); derived {
 		return a.derivedExpr(jt, t), nil, nil
 	}
@@ -638,7 +701,7 @@ func (a *selector[M, R]) termExpr(t types.Term, shape projectionShape) (string, 
 
 // columnKey names a column of the query by table and column, an empty
 // table meaning the queried one.
-func (a *selector[M, R]) columnKey(table, column string) string {
+func (a *selectBuilder[M]) columnKey(table, column string) string {
 	if len(table) == 0 {
 		table = a.db.outerTableName()
 	}
@@ -648,6 +711,6 @@ func (a *selector[M, R]) columnKey(table, column string) string {
 // session returns a statement-free handle onto the same connection. It keeps
 // the context and any transaction the chain joined, and drops only the clauses
 // a previous terminal left behind.
-func (a *selector[M, R]) session() *gorm.DB {
+func (a *selectBuilder[M]) session() *gorm.DB {
 	return a.db.ins.Session(&gorm.Session{NewDB: true})
 }

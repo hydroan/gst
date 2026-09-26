@@ -17,10 +17,12 @@ import (
 // (operationChain), each with the implementations behind it. Unions and
 // joined selects both go through them.
 
-// nestedSelect is the side of a selector another query reads: a union its
-// branches, a join its joined selects. *selector implements it for every
-// model type, which is what lets those queries take selects over different
-// models: the assertion to this interface names no M or R.
+// nestedSelect is the side of a select another query reads: a union its
+// branches, a join its joined selects. *selectBuilder implements it for
+// every model type, which is what lets those queries take selects over
+// different models: the interface names no M or R. The queries hold the
+// selects as the shells Select returned, which hand out their builders
+// through nestedOf.
 type nestedSelect interface {
 	// attachError is the error the select's entry point recorded, if any.
 	attachError() error
@@ -77,15 +79,27 @@ func (db *database[M]) freshSession() *gorm.DB {
 	return db.ins.Session(&gorm.Session{NewDB: true})
 }
 
-// The methods below are the side of a selector another query reads; see
-// nestedSelect. They exist on every instantiation, which is what lets a union
-// or a join take selects over different models.
+// nestedOf returns the nested side of a select this package built, false
+// for anything else: a select reaches the query reading it as the
+// types.Selector or types.SelectBranch value Select returned, the shell,
+// which hands out its builder here.
+func nestedOf(v any) (nestedSelect, bool) {
+	shell, ok := v.(interface{ nested() nestedSelect })
+	if !ok {
+		return nil, false
+	}
+	return shell.nested(), true
+}
 
-func (a *selector[M, R]) attachError() error { return a.err }
+// The methods below are the side of a select another query reads; see
+// nestedSelect. They exist on every model type's builder, which is what lets
+// a union or a join take selects over different models.
 
-func (a *selector[M, R]) baseHandle() *gorm.DB { return a.db.base }
+func (a *selectBuilder[M]) attachError() error { return a.err }
 
-func (a *selector[M, R]) chainFor(ctx context.Context, base *gorm.DB) operationChain {
+func (a *selectBuilder[M]) baseHandle() *gorm.DB { return a.db.base }
+
+func (a *selectBuilder[M]) chainFor(ctx context.Context, base *gorm.DB) operationChain {
 	chain, ok := databaseFor[M](ctx, base).(*database[M])
 	if !ok {
 		return nil
@@ -93,7 +107,7 @@ func (a *selector[M, R]) chainFor(ctx context.Context, base *gorm.DB) operationC
 	return chain
 }
 
-func (a *selector[M, R]) projectsAs(t types.Term) (string, bool) {
+func (a *selectBuilder[M]) projectsAs(t types.Term) (string, bool) {
 	t = types.TermBase(t)
 	for _, selected := range a.terms {
 		if reflect.DeepEqual(types.TermBase(selected), t) {
@@ -107,7 +121,7 @@ func (a *selector[M, R]) projectsAs(t types.Term) (string, bool) {
 // capped as the union pushed down. The chain is prepared here because no
 // terminal of the selector runs: the union's terminal does. The pushdown is
 // set on a copy so the caller's selector stays the specification it wrote.
-func (a *selector[M, R]) buildBranch(mode buildMode, orders []aliasOrder, limit int) (*gorm.DB, error) {
+func (a *selectBuilder[M]) buildBranch(mode buildMode, orders []aliasOrder, limit int) (*gorm.DB, error) {
 	if err := a.db.prepare(); err != nil {
 		return nil, err
 	}
@@ -119,7 +133,7 @@ func (a *selector[M, R]) buildBranch(mode buildMode, orders []aliasOrder, limit 
 // termsInResultOrder returns the projection's terms in the order of the
 // result row's fields. validate has matched the aliases against the fields
 // in both directions, so every field has exactly one term here.
-func (a *selector[M, R]) termsInResultOrder(shape projectionShape) []types.Term {
+func (a *selectBuilder[M]) termsInResultOrder(shape projectionShape) []types.Term {
 	byAlias := make(map[string]types.Term, len(a.terms))
 	for _, t := range a.terms {
 		byAlias[termAlias(t)] = t
@@ -135,7 +149,7 @@ func (a *selector[M, R]) termsInResultOrder(shape projectionShape) []types.Term 
 // query joining it reads: its model's table, its group keys, the aliases it
 // projects and the ones that can come back NULL. The chain is prepared here
 // because no terminal of the selector runs.
-func (a *selector[M, R]) describe() (derivedInfo, error) {
+func (a *selectBuilder[M]) describe() (derivedInfo, error) {
 	// A select joined into itself, directly or through the selects it
 	// joins, would describe itself without end.
 	if a.describing {

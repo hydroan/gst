@@ -41,7 +41,7 @@ const qualifiedAlias = "q"
 // the per-group sums, the count of groups, the largest of the group maxima.
 // validateWindow keeps AVG out, whose nesting would answer an average of
 // averages.
-func (a *selector[M, R]) windowExpr(t types.Term, sql string, args []any, shape projectionShape) (string, []any, error) {
+func (a *selectBuilder[M]) windowExpr(t types.Term, sql string, args []any, shape projectionShape) (string, []any, error) {
 	if shape.grouped && isAggregateFn(types.TermFnOf(t)) {
 		sql = string(types.TermFnOf(t)) + "(" + sql + ")"
 	}
@@ -60,7 +60,7 @@ func (a *selector[M, R]) windowExpr(t types.Term, sql string, args []any, shape 
 // select without Qualify is handed back as it is. The wrap is the statement
 // now, so it is the wrap that carries the operation's comment, once, and
 // build leaves the inner select bare; a member of a union carries none.
-func (a *selector[M, R]) qualifyWrap(tx *gorm.DB, mode buildMode) *gorm.DB {
+func (a *selectBuilder[M]) qualifyWrap(tx *gorm.DB, mode buildMode) *gorm.DB {
 	if len(a.qualifies) == 0 {
 		return tx
 	}
@@ -80,7 +80,7 @@ func (a *selector[M, R]) qualifyWrap(tx *gorm.DB, mode buildMode) *gorm.DB {
 
 // validateQualify checks the Qualify conditions: every one names a window
 // term the projection declares and compares against a value SQL can order.
-func (a *selector[M, R]) validateQualify(shape projectionShape) error {
+func (a *selectBuilder[M]) validateQualify(shape projectionShape) error {
 	for _, q := range a.qualifies {
 		if !a.isSelected(types.TermConditionTermOf(q)) || !types.TermConditionTermOf(q).IsWindowed() {
 			return errors.Wrapf(ErrQualifyTermNotWindow, "%q", termAlias(types.TermConditionTermOf(q)))
@@ -105,7 +105,7 @@ func (a *selector[M, R]) validateQualify(shape projectionShape) error {
 // current row, under which rows sorting equal all show the total of the
 // whole tie instead of stepping through it. ROWS up to the current row steps,
 // and with the tie breaker the steps are stable.
-func (a *selector[M, R]) overExpr(t types.Term, shape projectionShape) (string, []any, error) {
+func (a *selectBuilder[M]) overExpr(t types.Term, shape projectionShape) (string, []any, error) {
 	parts := make([]string, 0, 3)
 	if len(types.WindowPartitionOf(*types.TermWindowOf(t))) > 0 {
 		keys := make([]string, 0, len(types.WindowPartitionOf(*types.TermWindowOf(t))))
@@ -147,7 +147,7 @@ func (a *selector[M, R]) overExpr(t types.Term, shape projectionShape) (string, 
 // projection the projection's own group key, so the partition and the GROUP BY
 // spell the expression identically; in a row-level projection the key as
 // given.
-func (a *selector[M, R]) windowKey(key types.Term, shape projectionShape) types.Term {
+func (a *selectBuilder[M]) windowKey(key types.Term, shape projectionShape) types.Term {
 	if !shape.grouped {
 		return key
 	}
@@ -162,7 +162,7 @@ func (a *selector[M, R]) windowKey(key types.Term, shape projectionShape) types.
 // windowOrderExpr renders one ordering of a window: a column as the column, a
 // term as its full expression, never as an alias, which no dialect accepts
 // inside OVER.
-func (a *selector[M, R]) windowOrderExpr(o types.Ordering, shape projectionShape) (string, []any, types.OrderDirection, error) {
+func (a *selectBuilder[M]) windowOrderExpr(o types.Ordering, shape projectionShape) (string, []any, types.OrderDirection, error) {
 	switch o := o.(type) {
 	case types.Order:
 		if shape.grouped {
@@ -187,7 +187,7 @@ func (a *selector[M, R]) windowOrderExpr(o types.Ordering, shape projectionShape
 // a breaker would turn every tie into distinct ranks. A model without the
 // framework's primary key column gets none either, which leaves the window
 // as the caller ordered it.
-func (a *selector[M, R]) tieBreakers(t types.Term, shape projectionShape) []types.Term {
+func (a *selectBuilder[M]) tieBreakers(t types.Term, shape projectionShape) []types.Term {
 	if types.TermFnOf(t) == types.FnRank || types.TermFnOf(t) == types.FnDenseRank {
 		return nil
 	}
@@ -228,7 +228,7 @@ func isWindowFn(fn types.TermFn) bool {
 // window have one, a key is never windowed, and the window's partition keys
 // and orders name what they may — the queried model's columns in a row-level
 // projection, the projection's own keys and terms in a grouped one.
-func (a *selector[M, R]) validateWindow(t types.Term, shape projectionShape) error {
+func (a *selectBuilder[M]) validateWindow(t types.Term, shape projectionShape) error {
 	if !t.IsWindowed() {
 		if isWindowFn(types.TermFnOf(t)) {
 			return errors.Wrapf(ErrWindowFnWithoutWindow, "%q", termAlias(t))
@@ -330,7 +330,7 @@ func (a *selector[M, R]) validateWindow(t types.Term, shape projectionShape) err
 // the wrong one would partition by a column the caller never named. A
 // joined select's term is a group key under its own alias, not under the
 // column its measure read, so only the term itself names it.
-func (a *selector[M, R]) groupKey(key types.Term, shape projectionShape) (types.Term, bool) {
+func (a *selectBuilder[M]) groupKey(key types.Term, shape projectionShape) (types.Term, bool) {
 	for _, k := range shape.keys {
 		if _, derived := a.derivedOf(k, shape); derived {
 			if reflect.DeepEqual(k, key) {
@@ -347,7 +347,7 @@ func (a *selector[M, R]) groupKey(key types.Term, shape projectionShape) (types.
 
 // groupKeysClause spells what the projection groups by, for an error
 // message, so the caller sees what a window may partition or order by.
-func (a *selector[M, R]) groupKeysClause(shape projectionShape) string {
+func (a *selectBuilder[M]) groupKeysClause(shape projectionShape) string {
 	if len(shape.keys) == 0 {
 		return "the projection declares no group key"
 	}
@@ -361,7 +361,7 @@ func (a *selector[M, R]) groupKeysClause(shape projectionShape) string {
 // validateRowLevelKey checks a partition key of a row-level window against
 // the tables the select reads: the column must exist on its table, and a
 // bucket must sit on a time column, exactly as a group key would be checked.
-func (a *selector[M, R]) validateRowLevelKey(key types.Term, shape projectionShape) error {
+func (a *selectBuilder[M]) validateRowLevelKey(key types.Term, shape projectionShape) error {
 	column, err := a.columnOf(types.TermTableOf(key), types.TermColumnOf(key), shape)
 	if err != nil {
 		return err
