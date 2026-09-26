@@ -1297,10 +1297,10 @@ func sessionLoginRoot(t *testing.T) string {
 	return sessionID
 }
 
-func loginSession(t *testing.T, username, password string) string {
+func loginSession(t *testing.T, username, password string, options ...client.Option) string {
 	t.Helper()
 
-	cli, err := client.New(baseURL)
+	cli, err := client.New(baseURL, options...)
 	require.NoError(t, err)
 
 	apiResp, err := cli.Do(t.Context(), http.MethodPost, loginPath, iam.LoginReq{

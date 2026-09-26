@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/hydroan/gst/client"
 	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/database"
 	gstgrpc "github.com/hydroan/gst/grpc"
@@ -27,14 +28,15 @@ import (
 // TestIAMSessionInterceptor pins the gRPC counterpart of the session
 // middleware on a real listener: a call names its session as
 // "authorization: Bearer <session id>", and the interceptor admits a live
-// session with the session's user as the caller, refuses a missing or
-// unknown one with the fixed messages the middleware answers, leaves a
-// public method alone, and, while the session requires a password change,
-// admits only the actions a user needs to change it.
+// session established presenting the user agent the client calls with, with
+// the session's user as the caller, refuses a missing or unknown one and one
+// established from another client with the fixed messages the middleware
+// answers, leaves a public method alone, and, while the session requires a
+// password change, admits only the actions a user needs to change it.
 func TestIAMSessionInterceptor(t *testing.T) {
 	conn := grpcProbe(t)
 	account := newSessionTestAccount(t)
-	sessionID := loginSession(t, account.Username, account.Password)
+	sessionID := loginSession(t, account.Username, account.Password, client.WithUserAgent(grpcUserAgent))
 	t.Cleanup(func() {
 		require.NoError(t, serviceiamsession.Store.DeleteUserSessions(context.Background(), account.UserID))
 	})
@@ -47,6 +49,16 @@ func TestIAMSessionInterceptor(t *testing.T) {
 
 	t.Run("with an unknown session", func(t *testing.T) {
 		err := probeCall(t, conn, "Look", strings.Repeat("0", 64))
+		require.Equal(t, codes.Unauthenticated, status.Code(err))
+		require.Equal(t, "session invalid", status.Convert(err).Message())
+	})
+
+	t.Run("with a session established from another client", func(t *testing.T) {
+		// A session is bound to the device it was established from over
+		// either listener, so a browser's session is no good to a gRPC
+		// client, the way it is no good to another browser.
+		elsewhere := loginSession(t, account.Username, account.Password, client.WithUserAgent("Mozilla/5.0 (Macintosh; Intel Mac OS X 14_0) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36"))
+		err := probeCall(t, conn, "Look", elsewhere)
 		require.Equal(t, codes.Unauthenticated, status.Code(err))
 		require.Equal(t, "session invalid", status.Convert(err).Message())
 	})
@@ -92,6 +104,11 @@ var (
 	grpcProbeMu     sync.Mutex
 	grpcProbeCaller gstgrpc.Caller
 )
+
+// grpcUserAgent is the user agent grpc-go presents for the probe's calls: a
+// session a call names has to have been established presenting it, the way
+// a request's session has to have been established from its browser.
+const grpcUserAgent = "grpc-go/" + grpc.Version
 
 // grpcProbe returns a connection to the probe listener, starting it on
 // first use behind IAMSession.

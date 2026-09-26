@@ -659,3 +659,66 @@ func TestRemoveManagedFiles(t *testing.T) {
 		t.Fatalf("the register call of the deleted middleware and its import should be gone:\n%s", code)
 	}
 }
+
+// TestBuildCopyPlanIncludesTheHelpersAMiddlewareReaches pins that what a
+// middleware reaches for in the module's service packages is copied along
+// whether or not an action reaches it too: the copied middleware compiles in
+// the project only with the files declaring what it uses, here the helper
+// declaring CopyAuthMarker and the file that helper reaches in turn.
+func TestBuildCopyPlanIncludesTheHelpersAMiddlewareReaches(t *testing.T) {
+	projectDir := newModuleCopyPlanProject(t)
+	frameworkRoot := filepath.Join(projectDir, "internal", "gst")
+	manifest := []byte(`{
+		"copy": {
+			"middleware": [
+				{"sourceFile": "middleware/copy_auth.go", "scope": "auth", "handler": "CopyAuth"}
+			]
+		}
+	}`)
+	writeCopyTestModuleSource(t, projectDir, manifest)
+	if err := os.MkdirAll(filepath.Join(frameworkRoot, "middleware"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(frameworkRoot, "middleware", "copy_auth.go"), []byte(`package middleware
+
+import servicecopytest "github.com/hydroan/gst/internal/service/copytest"
+
+func CopyAuth() any {
+	return servicecopytest.CopyAuthMarker()
+}
+`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	sourceServiceDir := filepath.Join(frameworkRoot, "internal", "service", "copytest")
+	if err := os.WriteFile(filepath.Join(sourceServiceDir, "auth_helper.go"), []byte(`package servicecopytest
+
+func CopyAuthMarker() string {
+	return authMarker
+}
+`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(sourceServiceDir, "auth_marker.go"), []byte(`package servicecopytest
+
+const authMarker = "auth"
+`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	t.Chdir(projectDir)
+
+	plan, err := BuildCopyPlan("copytest", CopyOptions{})
+	if err != nil {
+		t.Fatalf("BuildCopyPlan() error = %v", err)
+	}
+
+	helpers := plan.HelperTargets()
+	for _, want := range []string{
+		filepath.Join("service", "copytest", "auth_helper.go"),
+		filepath.Join("service", "copytest", "auth_marker.go"),
+	} {
+		if !slices.Contains(helpers, want) {
+			t.Fatalf("HelperTargets() = %v, want %s, which the middleware reaches", helpers, want)
+		}
+	}
+}

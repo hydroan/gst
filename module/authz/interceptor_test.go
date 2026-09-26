@@ -14,6 +14,7 @@ import (
 	"github.com/hydroan/gst/interceptor"
 	"github.com/hydroan/gst/internal/grpcserver"
 	"github.com/hydroan/gst/internal/types"
+	"github.com/hydroan/gst/module/iam"
 	"github.com/hydroan/gst/tenant"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
@@ -34,7 +35,10 @@ import (
 // subject reaches everything.
 func TestAuthzInterceptor(t *testing.T) {
 	conn := grpcAuthzProbe(t)
-	subject := newAuthorizationSubject(t, "grpc_authorization")
+	// The sessions are established presenting the user agent grpc-go
+	// presents, the device the session interceptor holds a call to.
+	userID, sessionID := authzSignupAndLoginUserWithUserAgent(t, authzTestUsername("grpc_authorization"), "12345678", grpcUserAgent)
+	subject := authorizationSubject{userID: userID, sessionID: sessionID}
 
 	t.Run("without a session", func(t *testing.T) {
 		require.Equal(t, codes.Unauthenticated, status.Code(authzProbeCall(t, conn, "Look", "")))
@@ -56,7 +60,7 @@ func TestAuthzInterceptor(t *testing.T) {
 	})
 
 	t.Run("as root", func(t *testing.T) {
-		rootSessionID := authzAdminSessionID(t)
+		rootSessionID := loginSessionIDFromCookieWithUserAgent(t, iam.LoginReq{Username: rootUsername, Password: rootPassword}, grpcUserAgent)
 		require.NoError(t, authzProbeCall(t, conn, "Deny", rootSessionID))
 		require.Equal(t, consts.AUTHZ_USER_ROOT, authzProbeLastCaller(t).UserID)
 	})
@@ -74,6 +78,10 @@ var (
 	grpcAuthzProbeMu     sync.Mutex
 	grpcAuthzProbeCaller gstgrpc.Caller
 )
+
+// grpcUserAgent is the user agent grpc-go presents for the probe's calls: a
+// session a call names has to have been established presenting it.
+const grpcUserAgent = "grpc-go/" + grpc.Version
 
 // grpcAuthzProbe returns a connection to the probe listener, starting it on
 // first use behind IAMSession and Authz.

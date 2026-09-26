@@ -197,3 +197,41 @@ func requireFrameworkPackageFunc(t *testing.T, frameworkRoot, manifestPath, impo
 	}
 	t.Fatalf("%s requiredAssembly names %s.%s, which the package does not declare", manifestPath, importPath, name)
 }
+
+// TestModuleHandlersMatchAcrossTransports pins that a module offering both a
+// middleware and an interceptor offers them as one pair: the same handler
+// names in the same order, in files of the same name, so what the HTTP
+// listener gets under a name the gRPC listener gets under the same, from a
+// file found at the same place.
+func TestModuleHandlersMatchAcrossTransports(t *testing.T) {
+	entries, err := os.ReadDir(".")
+	require.NoError(t, err)
+	paired := 0
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+		manifestPath := filepath.Join(entry.Name(), moduleManifestFilename)
+		raw, readErr := os.ReadFile(manifestPath)
+		if os.IsNotExist(readErr) {
+			continue
+		}
+		require.NoError(t, readErr)
+		var manifest moduleManifest
+		require.NoError(t, json.Unmarshal(raw, &manifest), "%s is not valid JSON", manifestPath)
+		if len(manifest.Copy.Middleware) == 0 || len(manifest.Copy.Interceptors) == 0 {
+			continue
+		}
+		paired++
+		t.Run(entry.Name(), func(t *testing.T) {
+			require.Len(t, manifest.Copy.Interceptors, len(manifest.Copy.Middleware), "%s: one interceptor per middleware", manifestPath)
+			for i, mw := range manifest.Copy.Middleware {
+				ic := manifest.Copy.Interceptors[i]
+				require.Equal(t, mw.Handler, ic.Handler, "%s: the interceptor of %s is named like it", manifestPath, mw.Handler)
+				require.Equal(t, mw.Scope, ic.Scope, "%s: the interceptor of %s is registered like it", manifestPath, mw.Handler)
+				require.Equal(t, filepath.Base(mw.SourceFile), filepath.Base(ic.SourceFile), "%s: the interceptor of %s lives in a file of the same name", manifestPath, mw.Handler)
+			}
+		})
+	}
+	require.Positive(t, paired, "the iam and authz modules offer both")
+}

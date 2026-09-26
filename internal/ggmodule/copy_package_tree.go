@@ -3,10 +3,12 @@ package ggmodule
 import (
 	"fmt"
 	"go/ast"
+	"go/parser"
 	"go/token"
 	"go/types"
 	"path/filepath"
 	"sort"
+	"strconv"
 
 	"golang.org/x/tools/go/packages"
 )
@@ -23,6 +25,10 @@ type moduleCopyPackageTree struct {
 	// tree to its syntax and owning package. Membership in this map is the
 	// tree-membership test for reference targets.
 	files map[string]moduleCopyTreeFile
+	// packages maps the import path of every package in the tree to the
+	// package, which is how a file outside the tree importing one is read
+	// (see referencedByImporter).
+	packages map[string]*packages.Package
 }
 
 type moduleCopyTreeFile struct {
@@ -49,8 +55,9 @@ func loadModuleCopyPackageTree(root string) (*moduleCopyPackageTree, error) {
 		return nil, fmt.Errorf("failed to load module source packages under %s", root)
 	}
 
-	tree := &moduleCopyPackageTree{fset: fset, files: make(map[string]moduleCopyTreeFile)}
+	tree := &moduleCopyPackageTree{fset: fset, files: make(map[string]moduleCopyTreeFile), packages: make(map[string]*packages.Package, len(pkgs))}
 	for _, pkg := range pkgs {
+		tree.packages[pkg.PkgPath] = pkg
 		for idx, file := range pkg.CompiledGoFiles {
 			if !isGoSourceFile(filepath.Base(file)) || idx >= len(pkg.Syntax) {
 				continue
@@ -101,12 +108,70 @@ func (t *moduleCopyPackageTree) referencedTreeFiles(path string) []string {
 		}
 		return true
 	})
-	referenced := make([]string, 0, len(seen))
-	for declFile := range seen {
-		referenced = append(referenced, declFile)
+	return sortedPaths(seen)
+}
+
+// referencedByImporter returns the tree files declaring the package-level
+// objects that the Go file at path uses through its imports of tree
+// packages, sorted for determinism. The file is one outside the tree, a
+// middleware or interceptor of the module, so it is not type-checked with
+// it: it is parsed alone, and a use is a selector on the name an import of
+// a tree package goes by in the file, resolved in that package's scope. A
+// file importing no tree package uses nothing of it.
+func (t *moduleCopyPackageTree) referencedByImporter(path string) ([]string, error) {
+	file, err := parser.ParseFile(token.NewFileSet(), path, nil, parser.SkipObjectResolution)
+	if err != nil {
+		return nil, err
 	}
-	sort.Strings(referenced)
-	return referenced
+	imported := make(map[string]*packages.Package)
+	for _, imp := range file.Imports {
+		importPath, unquoteErr := strconv.Unquote(imp.Path.Value)
+		if unquoteErr != nil {
+			continue
+		}
+		pkg, ok := t.packages[importPath]
+		if !ok {
+			continue
+		}
+		name := pkg.Name
+		if imp.Name != nil {
+			name = imp.Name.Name
+		}
+		imported[name] = pkg
+	}
+	if len(imported) == 0 {
+		return nil, nil
+	}
+	seen := make(map[string]bool)
+	ast.Inspect(file, func(node ast.Node) bool {
+		selector, ok := node.(*ast.SelectorExpr)
+		if !ok {
+			return true
+		}
+		ident, ok := selector.X.(*ast.Ident)
+		if !ok {
+			return true
+		}
+		pkg, ok := imported[ident.Name]
+		if !ok {
+			return true
+		}
+		if declFile := t.declFile(pkg.Types.Scope().Lookup(selector.Sel.Name)); declFile != "" {
+			seen[declFile] = true
+		}
+		return true
+	})
+	return sortedPaths(seen), nil
+}
+
+// sortedPaths returns the paths of set, sorted.
+func sortedPaths(set map[string]bool) []string {
+	paths := make([]string, 0, len(set))
+	for path := range set {
+		paths = append(paths, path)
+	}
+	sort.Strings(paths)
+	return paths
 }
 
 // filesInDir returns the tree files that sit directly in dir, sorted.

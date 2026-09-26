@@ -2,6 +2,8 @@ package ggmodule
 
 import (
 	"go/ast"
+	"go/parser"
+	"go/token"
 	"path/filepath"
 	"sort"
 	"strconv"
@@ -21,6 +23,12 @@ type moduleServiceClosureConfig struct {
 	// actionFiles are the canonical action service sources the plan already
 	// copies through DSL actions; references into them need no helper copy.
 	actionFiles map[string]bool
+	// handlerFiles are the module's middleware and interceptor sources the
+	// plan copies, files outside the tree whose references into it seed the
+	// walk the way the action files' do: what a handler reaches for in the
+	// service packages has to be copied along, or the copied handler does
+	// not compile.
+	handlerFiles []string
 	// isExcluded reports whether a canonical path is manifest-excluded.
 	isExcluded func(string) bool
 	// describe renders a canonical path for error messages.
@@ -45,6 +53,10 @@ type moduleServiceClosureConfig struct {
 // by the manifest and files declaring a service struct, which are skipped
 // rather than reported because a package-level import proves no need for any
 // single file.
+//
+// The handler files are read through their imports of tree packages (see
+// referencedByImporter) rather than walked: they are copied by their own
+// channel and belong to packages the tree does not type-check.
 func moduleServiceHelperClosure(seeds []string, config moduleServiceClosureConfig) ([]string, error) {
 	tree, err := loadModuleCopyPackageTree(config.serviceRoot)
 	if err != nil {
@@ -73,6 +85,39 @@ func moduleServiceHelperClosure(seeds []string, config moduleServiceClosureConfi
 		helpers = append(helpers, path)
 		queue = append(queue, path)
 	}
+	// admit adds declFile, which the file at from references, under the two
+	// rules above, unless the copy carries it already.
+	admit := func(from, declFile string) error {
+		if selected[declFile] || config.actionFiles[declFile] {
+			return nil
+		}
+		if config.isExcluded(declFile) {
+			return errors.Newf(
+				"module copy: %s references %s, which excludeSourceFiles skips; remove the exclusion or the references",
+				config.describe(from), config.describe(declFile),
+			)
+		}
+		if len(serviceStructNames(tree.files[declFile].syntax)) > 0 {
+			return errors.Newf(
+				"module copy: %s references %s, which declares a service struct but is copied by no DSL action; move the shared code into a helper file",
+				config.describe(from), config.describe(declFile),
+			)
+		}
+		addHelper(declFile)
+		return nil
+	}
+
+	for _, handler := range config.handlerFiles {
+		referenced, referencedErr := tree.referencedByImporter(handler)
+		if referencedErr != nil {
+			return nil, referencedErr
+		}
+		for _, declFile := range referenced {
+			if admitErr := admit(handler, declFile); admitErr != nil {
+				return nil, admitErr
+			}
+		}
+	}
 
 	for len(queue) > 0 {
 		current := queue[0]
@@ -83,22 +128,9 @@ func moduleServiceHelperClosure(seeds []string, config moduleServiceClosureConfi
 		}
 
 		for _, declFile := range tree.referencedTreeFiles(current) {
-			if selected[declFile] || config.actionFiles[declFile] {
-				continue
+			if admitErr := admit(current, declFile); admitErr != nil {
+				return nil, admitErr
 			}
-			if config.isExcluded(declFile) {
-				return nil, errors.Newf(
-					"module copy: %s references %s, which excludeSourceFiles skips; remove the exclusion or the references",
-					config.describe(current), config.describe(declFile),
-				)
-			}
-			if len(serviceStructNames(tree.files[declFile].syntax)) > 0 {
-				return nil, errors.Newf(
-					"module copy: %s references %s, which declares a service struct but is copied by no DSL action; move the shared code into a helper file",
-					config.describe(current), config.describe(declFile),
-				)
-			}
-			addHelper(declFile)
 		}
 
 		for _, dir := range blankImportTreeDirs(file.syntax, config) {
@@ -130,7 +162,7 @@ func blankImportTreeDirs(file *ast.File, config moduleServiceClosureConfig) []st
 		if err != nil {
 			continue
 		}
-		if importPath != config.importPrefix && !strings.HasPrefix(importPath, config.importPrefix+"/") {
+		if !importsTree(importPath, config.importPrefix) {
 			continue
 		}
 		suffix := strings.TrimPrefix(strings.TrimPrefix(importPath, config.importPrefix), "/")
@@ -141,4 +173,29 @@ func blankImportTreeDirs(file *ast.File, config moduleServiceClosureConfig) []st
 		dirs = append(dirs, dir)
 	}
 	return dirs
+}
+
+// importsTree reports whether importPath names the tree at importPrefix or
+// a package under it.
+func importsTree(importPath, importPrefix string) bool {
+	return importPath == importPrefix || strings.HasPrefix(importPath, importPrefix+"/")
+}
+
+// fileImportsTree reports whether the Go file at path imports a package of
+// the tree at importPrefix, reading its imports alone.
+func fileImportsTree(path, importPrefix string) (bool, error) {
+	file, err := parser.ParseFile(token.NewFileSet(), path, nil, parser.ImportsOnly)
+	if err != nil {
+		return false, err
+	}
+	for _, imp := range file.Imports {
+		importPath, unquoteErr := strconv.Unquote(imp.Path.Value)
+		if unquoteErr != nil {
+			continue
+		}
+		if importsTree(importPath, importPrefix) {
+			return true, nil
+		}
+	}
+	return false, nil
 }

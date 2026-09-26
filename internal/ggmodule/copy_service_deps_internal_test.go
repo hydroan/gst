@@ -383,3 +383,66 @@ func sharedHelper() string {
 `)
 	return sourceServiceDir
 }
+
+// TestModuleServiceHelperClosureSeedsFromHandlerFiles pins that a helper no
+// action reaches is still copied when a middleware or interceptor of the
+// module reaches it: the handler is outside the tree, so its uses are read
+// through its imports of tree packages.
+func TestModuleServiceHelperClosureSeedsFromHandlerFiles(t *testing.T) {
+	dir := t.TempDir()
+	write := func(name string, content string) {
+		t.Helper()
+		if err := os.WriteFile(filepath.Join(dir, name), []byte(content), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	write("go.mod", "module example.com/source\n\ngo 1.26\n")
+	write("action.go", `package source
+
+func Action() string {
+	return "action"
+}
+`)
+	write("authenticate.go", `package source
+
+func Authenticate() string {
+	return authenticated
+}
+`)
+	write("authenticated.go", `package source
+
+const authenticated = "reached through Authenticate"
+`)
+	write("unused.go", `package source
+
+const unusedValue = "kept out"
+`)
+	handlerDir := t.TempDir()
+	handler := filepath.Join(handlerDir, "session.go")
+	if err := os.WriteFile(handler, []byte(`package middleware
+
+import servicesource "example.com/source"
+
+func Session() string {
+	return servicesource.Authenticate()
+}
+`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	seeds, config := testServiceClosureConfig(t, dir, filepath.Join(dir, "action.go"))
+	config.handlerFiles = []string{handler}
+	got, err := moduleServiceHelperClosure(seeds, config)
+	if err != nil {
+		t.Fatalf("moduleServiceHelperClosure() error = %v", err)
+	}
+
+	names := make([]string, 0, len(got))
+	for _, file := range got {
+		names = append(names, filepath.Base(file))
+	}
+	if strings.Join(names, ",") != "authenticate.go,authenticated.go" {
+		t.Fatalf("moduleServiceHelperClosure() = %v, want authenticate.go, the file the handler reaches, and authenticated.go, which it reaches through it", got)
+	}
+}

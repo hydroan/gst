@@ -92,9 +92,11 @@ func requireServiceSourceFile(action moduleCopyAction) error {
 
 // collectHelperDependencyFiles resolves the helper files this copy must carry:
 // the type-informed closure over the module service tree, seeded by the action
-// service files and the manifest includeSourceFiles. See
-// moduleServiceHelperClosure for the walk and its guard rules.
+// service files, the manifest includeSourceFiles and what the handler files
+// the copy writes reach for in the tree. See moduleServiceHelperClosure for
+// the walk and its guard rules.
 func (p *CopyPlan) collectHelperDependencyFiles(actions []moduleCopyAction) ([]string, error) {
+	importPrefix := frameworkModulePath + "/internal/service/" + p.Name
 	actionFiles := make(map[string]bool)
 	seeds := make([]string, 0)
 	for _, sourcePath := range actionSourcePaths(actions) {
@@ -116,20 +118,43 @@ func (p *CopyPlan) collectHelperDependencyFiles(actions []moduleCopyAction) ([]s
 			seeds = append(seeds, clean)
 		}
 	}
-	// No action and no include sources means a middleware-only module: there
-	// is nothing to discover, and the service tree may hold no loadable
-	// package at all.
-	if len(seeds) == 0 {
+	handlerFiles, err := p.handlerFilesImporting(importPrefix)
+	if err != nil {
+		return nil, err
+	}
+	// No action, no include source and no handler reaching into the service
+	// tree means a middleware-only module: there is nothing to discover, and
+	// the service tree may hold no loadable package at all.
+	if len(seeds) == 0 && len(handlerFiles) == 0 {
 		return nil, nil
 	}
 
 	return moduleServiceHelperClosure(seeds, moduleServiceClosureConfig{
 		serviceRoot:  p.SourceServiceDir,
-		importPrefix: frameworkModulePath + "/internal/service/" + p.Name,
+		importPrefix: importPrefix,
 		actionFiles:  actionFiles,
+		handlerFiles: handlerFiles,
 		isExcluded:   p.canonicalIgnoredSourcePath,
 		describe:     p.describeFrameworkPath,
 	})
+}
+
+// handlerFilesImporting returns the handler sources this copy writes, the
+// middleware and the interceptors, that import a package of the module's
+// service tree at importPrefix: the ones whose references seed the helper
+// closure.
+func (p *CopyPlan) handlerFilesImporting(importPrefix string) ([]string, error) {
+	files := make([]string, 0, len(p.Middleware)+len(p.Interceptors))
+	for _, handler := range slices.Concat(p.Middleware, p.Interceptors) {
+		imports, err := fileImportsTree(handler.SourcePath, importPrefix)
+		if err != nil {
+			return nil, err
+		}
+		if imports {
+			files = append(files, handler.SourcePath)
+		}
+	}
+	return files, nil
 }
 
 func (p *CopyPlan) addServiceFiles(helperFiles []string) error {
