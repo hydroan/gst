@@ -13,4 +13,4 @@ func Sorted(names []string) string {
 	return joined(names)
 }
 
-func joined(names []string) string { return strings.Join(names, ", ") }
+func joined(names []string) string { return "(" + strings.Join(names, ", ") + ")" }

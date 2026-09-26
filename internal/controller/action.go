@@ -197,16 +197,6 @@ func (a *action[M, REQ, RSP]) traceServiceOperation(parentCtx context.Context, p
 	return traceServiceCall(parentCtx, a.serviceSpan(phase), a.name, fn)
 }
 
-// traceServiceExport traces the service export operation.
-func (a *action[M, REQ, RSP]) traceServiceExport(parentCtx context.Context, phase consts.Phase, fn func(context.Context) ([]byte, error)) ([]byte, error) {
-	return traceServiceCall(parentCtx, a.serviceSpan(phase), a.name, fn)
-}
-
-// traceServiceImport traces the service import operation.
-func (a *action[M, REQ, RSP]) traceServiceImport(parentCtx context.Context, phase consts.Phase, fn func(context.Context) ([]M, error)) ([]M, error) {
-	return traceServiceCall(parentCtx, a.serviceSpan(phase), a.name, fn)
-}
-
 // traceServiceCall runs fn inside a service span and records duration, success,
 // and error attributes. It is the shared core of the traceService* methods; the
 // span attribute keys keep the historical "hook." prefix for every service call

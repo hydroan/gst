@@ -300,10 +300,12 @@ func GenerateService(info *modelinfo.Model, action *dsl.Action, phase consts.Pha
 
 	otherPkgs := []string{}
 	// A dsl.PayloadEmpty request or result type references model.Empty from
-	// the gst model package, so the generated file needs its import (aliased
-	// when the file refers to the business model package as "model").
+	// the gst model package, so the generated file needs its import, the
+	// imports() entry "gstmodel github.com/hydroan/gst/model" when the file
+	// refers to the business model package as "model" and the bare path
+	// otherwise (see emptyReqPkgName).
 	if isEmptyPayload(action.Payload) || isEmptyPayload(action.Result) {
-		otherPkgs = append(otherPkgs, emptyReqImport(qualifier))
+		otherPkgs = append(otherPkgs, GstModelImportEntry(emptyReqPkgName(qualifier)))
 	}
 
 	decls := []ast.Decl{

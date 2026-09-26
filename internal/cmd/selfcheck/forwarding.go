@@ -41,6 +41,13 @@ type forwarding struct {
 //     function, which may first run a statement of its own as long as that
 //     is straight-line work (see thinLead).
 //
+// A function that only wraps one call of a function of its own package,
+// shaping the arguments however it likes (see wrappedCall), is reported the
+// same way in the first case: with a single use, it is that call written
+// away from its site, and the package has two names for one job. A wrapper
+// of another package's function is left alone: the constant it fixes, the
+// suffix a name test passes to strings.HasSuffix, is what its name says.
+//
 // Only uses inside the package are counted, tests included, which is why only
 // unexported functions are judged. Left alone are a method whose name an
 // interface of its package declares, since a call through the interface is a
@@ -122,13 +129,20 @@ func forwardingIn(root string, p *packages.Package) ([]forwarding, error) {
 			if !ok {
 				continue
 			}
-			to, lead, ok := forwardedTo(p, d, fn)
-			if !ok {
-				continue
-			}
 			kind := "Function"
 			if fn.Signature().Recv() != nil {
 				kind = "Method"
+			}
+			to, lead, ok := forwardedTo(p, d, fn)
+			if !ok {
+				if to, ok = wrappedCall(p, d, fn); ok && judged(fn) && len(uses[fn]) == 1 {
+					found = append(found, forwarding{
+						pos: p.Fset.Position(d.Name.Pos()),
+						message: fmt.Sprintf("%s '%s' at %s only wraps a call of %s and has one use, at %s: write the call there instead",
+							kind, funcName(p, fn), at(d.Name.Pos()), funcName(p, to), at(uses[fn][0])),
+					})
+				}
+				continue
 			}
 			toUses := uses[to]
 			switch {
@@ -216,6 +230,51 @@ func forwardedTo(p *packages.Package, d *ast.FuncDecl, fn *types.Func) (*types.F
 		return nil, nil, false
 	}
 	return to.Origin(), stmts[:len(stmts)-1], true
+}
+
+// wrappedCall reports the function of d's own package d wraps: the one call
+// d's body consists of, returned, or run alone by a function without
+// results, whatever its arguments and however they are shaped from d's
+// parameters. Where forwardedTo asks for the parameters passed on unchanged,
+// this asks nothing of them; it does ask that no function literal be among
+// the arguments, a closure being work of its own the way thinLead treats it,
+// and that the callee be declared in the package, a wrapper of another
+// package's function naming what it fixes. The callee is what callee
+// recognizes: a function or a method of the receiver, not a conversion, a
+// builtin or a function value.
+func wrappedCall(p *packages.Package, d *ast.FuncDecl, fn *types.Func) (*types.Func, bool) {
+	if len(d.Body.List) != 1 {
+		return nil, false
+	}
+	sig := fn.Signature()
+	var call *ast.CallExpr
+	switch s := d.Body.List[0].(type) {
+	case *ast.ReturnStmt:
+		if len(s.Results) == 1 {
+			call, _ = ast.Unparen(s.Results[0]).(*ast.CallExpr)
+		}
+	case *ast.ExprStmt:
+		if sig.Results().Len() == 0 {
+			call, _ = ast.Unparen(s.X).(*ast.CallExpr)
+		}
+	}
+	if call == nil {
+		return nil, false
+	}
+	to, _ := callee(p, call.Fun, sig.Recv())
+	if to == nil || to.Origin() == fn || to.Pkg() != p.Types {
+		return nil, false
+	}
+	closure := false
+	ast.Inspect(call, func(n ast.Node) bool {
+		_, isLiteral := n.(*ast.FuncLit)
+		closure = closure || isLiteral
+		return !closure
+	})
+	if closure {
+		return nil, false
+	}
+	return to.Origin(), true
 }
 
 // thinLead reports whether the statements a function runs before it forwards

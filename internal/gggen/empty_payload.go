@@ -74,14 +74,6 @@ func emptyReqPkgName(modelQualifier string) string {
 	return gstModelPkgName
 }
 
-// emptyReqImport returns the imports() entry ("path" or "alias path") that
-// makes the emptyReqPkgName qualifier resolvable in a generated service file:
-// "gstmodel github.com/hydroan/gst/model" for model, and
-// "github.com/hydroan/gst/model" for any other modelQualifier.
-func emptyReqImport(modelQualifier string) string {
-	return GstModelImportEntry(emptyReqPkgName(modelQualifier))
-}
-
 // emptyReqExpr builds the *<pkgName>.Empty type expression that generated
 // code uses as the type of a dsl.PayloadEmpty request or result: for
 // gstmodel it builds *gstmodel.Empty.

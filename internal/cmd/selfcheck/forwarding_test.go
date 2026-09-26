@@ -7,18 +7,21 @@ import (
 )
 
 // TestCheckForwarding runs the check over a fixture module with one package
-// per case. Seven functions are reported. Five only forward and have one use:
+// per case. Eight functions are reported. Five only forward and have one use:
 // to a function of another package (single), to a variadic one (variadic), to
 // another method of the receiver (method), to a function taking the receiver
 // (recvarg), and from an external test (exttest). Two forward to a function
 // nothing else uses: right away (merged), and after one straight-line
-// statement of their own (lead). Nothing is reported where the forwarding
+// statement of their own (lead). One wraps one call of a function of its own
+// package, shaping the arguments, and has one use (adapter's pair). Nothing
+// is reported where the wrapped call is another package's (adapter's join),
+// where the forwarding
 // function is exported and the other one has more uses (exported), where the
 // forwarding function has a second use (multiuse), in an internal test
 // (testuse) or in a file the build leaves out (tagged), where an interface of
 // the package declares the method (sealed), where the forwarding function is
 // generated (generated), where a type changes on the way (converted), where
-// the parameters are not passed on unchanged and in order (adapter), and where
+// the one call a function wraps takes a function literal (funclit), and where
 // more than a straight-line statement runs before the forwarding: two of them
 // (longlead), a branch (branch), or a statement carrying a function literal
 // (closure).
@@ -27,6 +30,10 @@ func TestCheckForwarding(t *testing.T) {
 	violations, err := checkForwarding(root, pkgs)
 	require.NoError(t, err)
 	require.Equal(t, []violation{
+		{
+			File:    "adapter/adapter.go",
+			Message: "Function 'pair' at adapter/adapter.go:17 only wraps a call of concat and has one use, at adapter/adapter.go:15: write the call there instead",
+		},
 		{
 			File:    "exttest/exttest_test.go",
 			Message: "Function 'newSample' at exttest/exttest_test.go:15 only forwards to exttest.New and has one use, at exttest/exttest_test.go:10: call exttest.New there instead",

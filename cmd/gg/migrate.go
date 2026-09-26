@@ -28,7 +28,7 @@ var migrateCmd = &cobra.Command{
 			return fmt.Errorf("failed to get module path: %w", err)
 		}
 
-		return runMigrateProgram(buildMigrateProgram(moduleName))
+		return runGeneratedMigrateProgram(buildMigrateProgramForMode(moduleName, false, "", nil), "Migration", "Preparing migration...")
 	},
 }
 
@@ -51,7 +51,7 @@ var migrateSchemaCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		return runMigrateSchemaProgram(buildMigrateSchemaProgram(moduleName, source, files))
+		return runGeneratedMigrateProgram(buildMigrateSchemaProgram(moduleName, source, files), "Migration Schema", "Preparing schema dump...")
 	},
 }
 
@@ -64,10 +64,6 @@ func init() {
 	migrateCmd.Flags().BoolVar(&migrateDryRun, "dry-run", false, "Preview migration SQL without applying changes")
 	migrateCmd.Flags().BoolVar(&migrateYes, "yes", false, "Apply migration without prompting for confirmation")
 	migrateCmd.AddCommand(migrateSchemaCmd)
-}
-
-func buildMigrateProgram(moduleName string) string {
-	return buildMigrateProgramForMode(moduleName, false, "", nil)
 }
 
 func buildMigrateSchemaProgram(moduleName string, source string, sourceFiles []string) string {
@@ -123,10 +119,6 @@ func hasGoSources(dir string) bool {
 	return false
 }
 
-func runMigrateProgram(content string) error {
-	return runGeneratedMigrateProgram(content, "Migration", "Preparing migration...")
-}
-
 // migrateSourceFiles lists the Go files gg migrate schema reads model types
 // from: source itself when it names a Go file, or else the Go files below it
 // that are not tests, leaving out what the go command leaves out
@@ -177,10 +169,6 @@ func migrateSourceFiles(source string, ignore gghelper.ProjectIgnore) ([]string,
 	}
 	sort.Strings(files)
 	return files, nil
-}
-
-func runMigrateSchemaProgram(content string) error {
-	return runGeneratedMigrateProgram(content, "Migration Schema", "Preparing schema dump...")
 }
 
 func runGeneratedMigrateProgram(content string, section string, message string) error {

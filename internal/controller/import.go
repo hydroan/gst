@@ -63,7 +63,7 @@ func ImportFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...
 			gstotel.RecordError(span, err)
 			return
 		}
-		ml, err := a.traceServiceImport(ctrlSpanCtx, consts.PHASE_IMPORT, func(spanCtx context.Context) ([]M, error) {
+		ml, err := traceServiceCall(ctrlSpanCtx, a.serviceSpan(consts.PHASE_IMPORT), a.name, func(spanCtx context.Context) ([]M, error) {
 			return a.service().
 				Import(types.NewServiceContext(c, spanCtx, consts.PHASE_IMPORT), buf)
 		})

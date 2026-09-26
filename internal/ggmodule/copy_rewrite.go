@@ -135,7 +135,7 @@ func rewriteModuleCopyFile(file *ast.File, config moduleCopyRewriteConfig, inclu
 		if rewrite.keepSpecialName {
 			newName = rewrite.oldName
 		} else if usedNames[rewrite.desiredName] || (desiredCounts[rewrite.desiredName] > 1 && !preferredUnaliased[i]) {
-			newName = moduleCopyImportAlias(rewrite.kind, rewrite.desiredName)
+			newName = sanitizeModuleCopyIdentifier(string(rewrite.kind) + rewrite.desiredName)
 		}
 		for usedNames[newName] && newName != rewrite.oldName {
 			newName += "x"
@@ -234,10 +234,6 @@ func importLocalName(imp *ast.ImportSpec, importPath string) string {
 		return imp.Name.Name
 	}
 	return pathpkg.Base(importPath)
-}
-
-func moduleCopyImportAlias(kind moduleCopyImportKind, packageName string) string {
-	return sanitizeModuleCopyIdentifier(string(kind) + packageName)
 }
 
 func sanitizeModuleCopyIdentifier(value string) string {

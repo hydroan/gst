@@ -179,7 +179,7 @@ func ExportFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...
 			}
 		}
 		// 5.Export
-		exported, err := a.traceServiceExport(ctrlSpanCtx, consts.PHASE_EXPORT, func(spanCtx context.Context) ([]byte, error) {
+		exported, err := traceServiceCall(ctrlSpanCtx, a.serviceSpan(consts.PHASE_EXPORT), a.name, func(spanCtx context.Context) ([]byte, error) {
 			return svc.Export(types.NewServiceContext(c, spanCtx, consts.PHASE_EXPORT), data...)
 		})
 		if err != nil {

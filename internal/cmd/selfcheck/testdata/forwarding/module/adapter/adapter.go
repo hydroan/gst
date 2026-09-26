@@ -1,5 +1,7 @@
 // Package adapter has functions that call another with something other than
-// their own parameters, unchanged and in order.
+// their own parameters, unchanged and in order: each wraps one call, shaping
+// its arguments, and has one use. One wraps a function of another package,
+// the other a function of its own.
 package adapter
 
 import "strings"
