@@ -55,7 +55,9 @@ func TestRegisterDBStats(t *testing.T) {
 // TestInitServesTheRequestDurationHistogram pins that the latency histogram
 // the access logger observes into is registered by Init and so gathered: a
 // collector built but left off the registration list is observed into on
-// every request and served to nobody.
+// every request and served to nobody. The name it is gathered under pins
+// the naming of every metric, gst_backend_<name>, with the underscores
+// Prometheus joins the parts with and no others.
 func TestInitServesTheRequestDurationHistogram(t *testing.T) {
 	if err := prommetrics.Init(); err != nil {
 		// Init registers into the process-wide default registry, so a second
@@ -72,5 +74,5 @@ func TestInitServesTheRequestDurationHistogram(t *testing.T) {
 	for _, family := range families {
 		names = append(names, family.GetName())
 	}
-	require.Contains(t, names, prometheus.BuildFQName(prommetrics.NAMESPACE, prommetrics.SUBSYSTEM, "http_request_duration_seconds"))
+	require.Contains(t, names, "gst_backend_http_request_duration_seconds")
 }

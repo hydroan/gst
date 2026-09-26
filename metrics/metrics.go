@@ -12,9 +12,12 @@ import (
 	"go.uber.org/multierr"
 )
 
+// NAMESPACE and SUBSYSTEM prefix every metric of the framework; Prometheus
+// joins them and the name with underscores, so a metric of the backend is
+// named gst_backend_<name> and one of the process gst_process_<name>.
 const (
-	NAMESPACE = "gst_"
-	SUBSYSTEM = "backend_"
+	NAMESPACE = "gst"
+	SUBSYSTEM = "backend"
 )
 
 var (
