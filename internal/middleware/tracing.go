@@ -2,9 +2,7 @@ package middleware
 
 import (
 	"context"
-	"net/http"
 	"strconv"
-	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -53,8 +51,10 @@ func tracing() gin.HandlerFunc {
 				spanName = c.Request.Method + " " + c.Request.URL.Path
 			}
 
-			// Extract upstream trace context before starting the server span.
-			parentCtx := extractRequestTraceContext(c.Request.Context(), c.Request.Header)
+			// Extract the upstream trace context before starting the server
+			// span: the W3C headers, or the framework's own trace id header
+			// when they carry none (see the propagators otel.Init installs).
+			parentCtx := otel.GetTextMapPropagator().Extract(c.Request.Context(), propagation.HeaderCarrier(c.Request.Header))
 
 			// Start new span
 			ctx, span = gstotel.StartSpan(parentCtx, spanName, trace.WithSpanKind(trace.SpanKindServer))
@@ -180,40 +180,6 @@ func tracing() gin.HandlerFunc {
 		// remain here.
 		c.Next()
 	}
-}
-
-func extractRequestTraceContext(ctx context.Context, header http.Header) context.Context {
-	parentCtx := otel.GetTextMapPropagator().Extract(ctx, propagation.HeaderCarrier(header))
-	if trace.SpanContextFromContext(parentCtx).IsValid() {
-		return parentCtx
-	}
-
-	traceIDValue := strings.TrimSpace(header.Get(consts.HEADER_TRACE_ID))
-	if len(traceIDValue) == 0 {
-		return parentCtx
-	}
-
-	traceID, err := trace.TraceIDFromHex(traceIDValue)
-	if err != nil {
-		return parentCtx
-	}
-
-	spanIDValue := strings.TrimSpace(header.Get(consts.HEADER_SPAN_ID))
-	if len(spanIDValue) == 0 {
-		spanIDValue = "0000000000000001"
-	}
-	spanID, err := trace.SpanIDFromHex(spanIDValue)
-	if err != nil {
-		spanID = trace.SpanID{0, 0, 0, 0, 0, 0, 0, 1}
-	}
-
-	spanContext := trace.NewSpanContext(trace.SpanContextConfig{
-		TraceID:    traceID,
-		SpanID:     spanID,
-		TraceFlags: trace.FlagsSampled,
-		Remote:     true,
-	})
-	return trace.ContextWithRemoteSpanContext(parentCtx, spanContext)
 }
 
 // requestSpan returns the server span tracing opened for the request or,

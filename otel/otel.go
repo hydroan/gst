@@ -140,9 +140,12 @@ func Init() error {
 	otel.SetTracerProvider(tp)
 
 	// Set global propagator
+	// The trace id header comes last: it only speaks when the W3C headers
+	// carried no trace context (see traceIDHeaderPropagator).
 	otel.SetTextMapPropagator(propagation.NewCompositeTextMapPropagator(
 		propagation.TraceContext{},
 		propagation.Baggage{},
+		traceIDHeaderPropagator{},
 	))
 
 	// Create tracer
