@@ -6,7 +6,9 @@ import (
 	"github.com/cockroachdb/errors"
 	grpcprom "github.com/grpc-ecosystem/go-grpc-middleware/providers/prometheus"
 	"github.com/grpc-ecosystem/go-grpc-middleware/v2/interceptors/recovery"
+	gstotel "github.com/hydroan/gst/otel"
 	"github.com/prometheus/client_golang/prometheus"
+	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
 	"google.golang.org/grpc"
 )
 
@@ -34,12 +36,27 @@ var (
 // scope and no project interceptors: the framework serves no streaming rpc
 // of its own, the health and reflection services being the only streams,
 // so it counts and recovers them and nothing more.
+//
+// With OpenTelemetry enabled the server also carries otelgrpc's stats
+// handler, the counterpart of the HTTP listener's tracing middleware: it
+// opens the server span of every call, unary or stream, at the transport
+// layer ahead of the chains, from the trace context the call's metadata
+// carries through the propagators otel.Init installed, names it by the full
+// method, records the rpc attributes of the semantic conventions and the
+// status the call ended with, and ends it after the response went out. The
+// request scope reads the span for the call's trace id (see requestScope).
+// The handler records no message events: the HTTP span carries no body
+// events either.
 func chains() []grpc.ServerOption {
 	onPanic := recovery.WithRecoveryHandlerContext(recovered)
 	unary := []grpc.UnaryServerInterceptor{requestScope, serverMetrics.UnaryServerInterceptor(), recovery.UnaryServerInterceptor(onPanic)}
 	unary = append(unary, projectInterceptors()...)
-	return []grpc.ServerOption{
+	opts := []grpc.ServerOption{
 		grpc.ChainUnaryInterceptor(unary...),
 		grpc.ChainStreamInterceptor(serverMetrics.StreamServerInterceptor(), recovery.StreamServerInterceptor(onPanic)),
 	}
+	if gstotel.IsEnabled() {
+		opts = append(opts, grpc.StatsHandler(otelgrpc.NewServerHandler()))
+	}
+	return opts
 }

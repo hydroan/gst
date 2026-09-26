@@ -10,7 +10,9 @@ import (
 	"github.com/hydroan/gst/internal/execctx"
 	"github.com/hydroan/gst/internal/requestctx"
 	"github.com/hydroan/gst/logger"
+	gstotel "github.com/hydroan/gst/otel"
 	"github.com/hydroan/gst/util"
+	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 	"google.golang.org/grpc"
@@ -39,15 +41,18 @@ const accessLogFieldCap = 11
 
 // requestScope gives a call what the HTTP listener's tracing and access-log
 // middleware give a request. It stamps the call's trace id on the context
-// as the identity of the execution — the caller's x-trace-id, or a
-// generated one — and publishes it in the response header, which goes out
-// with the status of a failed call as well; attaches the request metadata a
-// ServiceContext built on the context answers for, and keeps the call
-// record an authentication interceptor later adds the caller to (see
-// WithCaller); and, once the handler returns, writes the call's entry to
-// the access log with the fields the HTTP entry carries, the caller as
-// established by then, the status being the code's name and, for a failed
-// call, the status message beside it.
+// as the identity of the execution — the server span's when tracing is on,
+// the span being the root the call's inner spans hang off; the caller's
+// x-trace-id otherwise, which with tracing on seeds the span's trace id the
+// way the X-Trace-ID header does over HTTP; or a generated one — and
+// publishes it in the response header, which goes out with the status of a
+// failed call as well; attaches the request metadata a ServiceContext built
+// on the context answers for, and keeps the call record an authentication
+// interceptor later adds the caller to (see WithCaller); and, once the
+// handler returns, writes the call's entry to the access log with the
+// fields the HTTP entry carries, the caller as established by then, the
+// status being the code's name and, for a failed call, the status message
+// beside it.
 //
 // The metadata is what the call itself says: the full method as route, path
 // and request URI, POST as the method every gRPC call is on the wire, the
@@ -59,8 +64,11 @@ const accessLogFieldCap = 11
 func requestScope(ctx context.Context, req any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (any, error) {
 	start := time.Now()
 	md, _ := metadata.FromIncomingContext(ctx)
-	traceID := first(md, traceIDKey)
-	if traceID == "" {
+	var traceID string
+	if sc := trace.SpanContextFromContext(ctx); sc.HasTraceID() {
+		traceID = sc.TraceID().String()
+		ctx = gstotel.ContextWithRequestRootSpan(ctx)
+	} else if traceID = first(md, traceIDKey); traceID == "" {
 		traceID = util.SpanID()
 	}
 	ctx = execctx.WithTraceID(ctx, traceID)
