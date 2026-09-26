@@ -147,9 +147,9 @@ func (a *action[M, REQ, RSP]) normalizeModel(m *M) {
 	compactNilSliceElements(reflect.ValueOf(m))
 }
 
-// normalizeBatchRequest compacts nil entries out of the bound batch payload
+// normalizeBatch compacts nil entries out of the bound batch payload
 // so the shared batch pipeline never dereferences a nil item.
-func normalizeBatchRequest[M types.Model](req *requestData[M]) {
+func normalizeBatch[M types.Model](req *batch[M]) {
 	compactNilSliceElements(reflect.ValueOf(req))
 }
 

@@ -25,7 +25,7 @@ func TestUpdateManyWritesNothingWhenOneRecordIsMissing(t *testing.T) {
 			record := createSample(t, "update-many-kept-"+tt.name)
 
 			rsp := serve(t, http.MethodPut, "/controller-samples/batch",
-				controller.UpdateManyFactory[*sampleRecord, *sampleRecord, *sampleRecord](configFor[*sampleRecord](sampleRoute)),
+				controller.UpdateManyHandler[*sampleRecord, *sampleRecord, *sampleRecord](configFor[*sampleRecord](sampleRoute)),
 				"/controller-samples/batch", `{"items":[{"id":"`+record.GetID()+`","name":"update-many-renamed"},{"id":"`+tt.id+`","name":"update-many-other"}]}`)
 
 			require.Equal(t, http.StatusNotFound, rsp.Code)
@@ -40,7 +40,7 @@ func TestUpdateManyWritesNothingTheBeforeHookRefuses(t *testing.T) {
 	record := createSample(t, "update-many-refused")
 
 	rsp := serve(t, http.MethodPut, "/controller-refusals/batch",
-		controller.UpdateManyFactory[*sampleRecord, *sampleRecord, *sampleRecord](configFor[*sampleRecord](refusalRoute)),
+		controller.UpdateManyHandler[*sampleRecord, *sampleRecord, *sampleRecord](configFor[*sampleRecord](refusalRoute)),
 		"/controller-refusals/batch", `{"items":[{"id":"`+record.GetID()+`","name":"update-many-renamed"}]}`)
 
 	require.Equal(t, http.StatusConflict, rsp.Code)
@@ -55,7 +55,7 @@ func TestUpdateManyRefusesAnItemWithoutAnID(t *testing.T) {
 	record := createSample(t, "update-many-identified")
 
 	rsp := serve(t, http.MethodPut, "/controller-samples/batch",
-		controller.UpdateManyFactory[*sampleRecord, *sampleRecord, *sampleRecord](configFor[*sampleRecord](sampleRoute)),
+		controller.UpdateManyHandler[*sampleRecord, *sampleRecord, *sampleRecord](configFor[*sampleRecord](sampleRoute)),
 		"/controller-samples/batch", `{"items":[{"id":"`+record.GetID()+`","name":"update-many-renamed"},{"name":"update-many-other"}]}`)
 
 	require.Equal(t, http.StatusBadRequest, rsp.Code)

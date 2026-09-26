@@ -119,7 +119,7 @@ func (s *exportVirtualSampleService) Export(_ *types.ServiceContext, ms ...*expo
 	return []byte("name\nsample\n"), nil
 }
 
-func TestExportFactoryVirtualModelSkipsListing(t *testing.T) {
+func TestExportHandlerVirtualModelSkipsListing(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
 	// A virtual model has no table, so the handler must never reach the
@@ -133,7 +133,7 @@ func TestExportFactoryVirtualModelSkipsListing(t *testing.T) {
 	c, _ := gin.CreateTestContext(rec)
 	c.Request = httptest.NewRequest(http.MethodGet, "/api/"+route+"?name=sample", nil)
 
-	handler := ExportFactory[*exportVirtualSample, *exportVirtualSample, *exportVirtualSample](
+	handler := ExportHandler[*exportVirtualSample, *exportVirtualSample, *exportVirtualSample](
 		&types.ControllerConfig[*exportVirtualSample]{Route: route},
 	)
 	handler(c)
@@ -175,7 +175,7 @@ func (s *exportFormatSampleService) Filter(_ *types.ServiceContext, m *exportFor
 	return m, opts, errors.New("stop before the database stage")
 }
 
-func TestExportFactoryKeepsFormatParamFromModelBind(t *testing.T) {
+func TestExportHandlerKeepsFormatParamFromModelBind(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
 	const route = "test/export_format_samples/export"
@@ -187,7 +187,7 @@ func TestExportFactoryKeepsFormatParamFromModelBind(t *testing.T) {
 	c, _ := gin.CreateTestContext(rec)
 	c.Request = httptest.NewRequest(http.MethodGet, "/api/"+route+"?name=sample&_format=csv", nil)
 
-	handler := ExportFactory[*exportFormatSample, *exportFormatSample, *exportFormatSample](
+	handler := ExportHandler[*exportFormatSample, *exportFormatSample, *exportFormatSample](
 		&types.ControllerConfig[*exportFormatSample]{Route: route},
 	)
 	handler(c)

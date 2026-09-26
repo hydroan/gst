@@ -15,7 +15,7 @@ func TestDeleteManyKeepsTheRecordsTheBeforeHookRefuses(t *testing.T) {
 	record := createSample(t, "delete-many-refused")
 
 	rsp := serve(t, http.MethodDelete, "/controller-refusals/batch",
-		controller.DeleteManyFactory[*sampleRecord, *sampleRecord, *sampleRecord](configFor[*sampleRecord](refusalRoute)),
+		controller.DeleteManyHandler[*sampleRecord, *sampleRecord, *sampleRecord](configFor[*sampleRecord](refusalRoute)),
 		"/controller-refusals/batch", `{"ids":["`+record.GetID()+`"]}`)
 
 	require.Equal(t, http.StatusConflict, rsp.Code)
@@ -39,7 +39,7 @@ func TestDeleteManyRefusesAnEmptyOrBlankID(t *testing.T) {
 			record := createSample(t, "delete-many-identified-"+tt.name)
 
 			rsp := serve(t, http.MethodDelete, "/controller-samples/batch",
-				controller.DeleteManyFactory[*sampleRecord, *sampleRecord, *sampleRecord](configFor[*sampleRecord](sampleRoute)),
+				controller.DeleteManyHandler[*sampleRecord, *sampleRecord, *sampleRecord](configFor[*sampleRecord](sampleRoute)),
 				"/controller-samples/batch", `{"ids":["`+record.GetID()+`","`+tt.id+`"]}`)
 
 			require.Equal(t, http.StatusBadRequest, rsp.Code)

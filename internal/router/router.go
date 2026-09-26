@@ -329,11 +329,11 @@ func Stop(abandon context.Context) {
 }
 
 // Register registers route on the router group for each of verbs, each served
-// by the controller factory of that verb, and records it for Routes, the
+// by the controller handler of that verb, and records it for Routes, the
 // route parameter registry and the OpenAPI document; the public
 // router.Register forwards to it and documents the contract.
 //
-// The raw route string is stamped into the controller config so factories can
+// The raw route string is stamped into the controller config so the handlers can
 // resolve the matching phase service through the route-derived registry key;
 // it must therefore equal the route passed to the corresponding
 // service.Register call. The config is shallow-copied first, keeping a
@@ -379,46 +379,46 @@ func register[M types.Model, REQ types.Request, RSP types.Response](router *gin.
 	}
 
 	if verbMap[consts.Create] {
-		handle(consts.Create, controller.CreateFactory[M, REQ, RSP](cfg...))
+		handle(consts.Create, controller.CreateHandler[M, REQ, RSP](cfg...))
 	}
 	if verbMap[consts.Delete] {
-		handle(consts.Delete, controller.DeleteFactory[M, REQ, RSP](cfg...))
+		handle(consts.Delete, controller.DeleteHandler[M, REQ, RSP](cfg...))
 	}
 	if verbMap[consts.Update] {
-		handle(consts.Update, controller.UpdateFactory[M, REQ, RSP](cfg...))
+		handle(consts.Update, controller.UpdateHandler[M, REQ, RSP](cfg...))
 	}
 	if verbMap[consts.Patch] {
-		handle(consts.Patch, controller.PatchFactory[M, REQ, RSP](cfg...))
+		handle(consts.Patch, controller.PatchHandler[M, REQ, RSP](cfg...))
 	}
 	if verbMap[consts.List] {
-		handle(consts.List, controller.ListFactory[M, REQ, RSP](cfg...))
+		handle(consts.List, controller.ListHandler[M, REQ, RSP](cfg...))
 	}
 	if verbMap[consts.Get] {
-		handle(consts.Get, controller.GetFactory[M, REQ, RSP](cfg...))
+		handle(consts.Get, controller.GetHandler[M, REQ, RSP](cfg...))
 	}
 
 	if verbMap[consts.CreateMany] {
-		handle(consts.CreateMany, controller.CreateManyFactory[M, REQ, RSP](cfg...))
+		handle(consts.CreateMany, controller.CreateManyHandler[M, REQ, RSP](cfg...))
 	}
 	if verbMap[consts.DeleteMany] {
-		handle(consts.DeleteMany, controller.DeleteManyFactory[M, REQ, RSP](cfg...))
+		handle(consts.DeleteMany, controller.DeleteManyHandler[M, REQ, RSP](cfg...))
 	}
 	if verbMap[consts.UpdateMany] {
-		handle(consts.UpdateMany, controller.UpdateManyFactory[M, REQ, RSP](cfg...))
+		handle(consts.UpdateMany, controller.UpdateManyHandler[M, REQ, RSP](cfg...))
 	}
 	if verbMap[consts.PatchMany] {
-		handle(consts.PatchMany, controller.PatchManyFactory[M, REQ, RSP](cfg...))
+		handle(consts.PatchMany, controller.PatchManyHandler[M, REQ, RSP](cfg...))
 	}
 
 	if verbMap[consts.Import] {
-		handle(consts.Import, controller.ImportFactory[M, REQ, RSP](cfg...))
+		handle(consts.Import, controller.ImportHandler[M, REQ, RSP](cfg...))
 	}
 	if verbMap[consts.Export] {
-		handle(consts.Export, controller.ExportFactory[M, REQ, RSP](cfg...))
+		handle(consts.Export, controller.ExportHandler[M, REQ, RSP](cfg...))
 	}
 
 	if verbMap[consts.SSE] {
-		handle(consts.SSE, controller.SSEFactory[M, REQ, RSP](cfg...))
+		handle(consts.SSE, controller.SSEHandler[M, REQ, RSP](cfg...))
 		// Streaming responses are exempt from request-scoped response
 		// treatment (body capture, circuit breaking, request timeouts); the
 		// registry is how the middlewares concerned recognize them.

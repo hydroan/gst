@@ -20,16 +20,16 @@ import (
 	"go.uber.org/zap"
 )
 
-// PatchManyFactory returns a Gin handler that partially updates multiple resources.
+// PatchManyHandler returns a Gin handler that partially updates multiple resources.
 //
 // When M, REQ, and RSP are the same type, the handler binds the JSON body into
-// requestData[M] along with the set of fields each item carried, and runs the
+// batch[M] along with the set of fields each item carried, and runs the
 // batch patch flow (see patchManyFlow), which answers with the patched
 // records.
 //
 // When REQ or RSP differs from M, the handler is the phase service's (see
 // serviceHandler): its PatchMany method runs on the bound payload.
-func PatchManyFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...*types.ControllerConfig[M]) gin.HandlerFunc {
+func PatchManyHandler[M types.Model, REQ types.Request, RSP types.Response](cfg ...*types.ControllerConfig[M]) gin.HandlerFunc {
 	a := newAction[M, REQ, RSP](routeFromConfig(cfg...), consts.PHASE_PATCH_MANY, consts.PHASE_PATCH_MANY_BEFORE, consts.PHASE_PATCH_MANY_AFTER)
 	if !a.typesEqual {
 		return a.serviceHandler()
@@ -42,7 +42,7 @@ func PatchManyFactory[M types.Model, REQ types.Request, RSP types.Response](cfg 
 
 		log := logger.Controller.WithContext(c.Request.Context(), consts.PHASE_PATCH_MANY)
 
-		var req requestData[M]
+		var req batch[M]
 		body, err := readJSONRequestBody(c)
 		if err != nil {
 			log.Errorz("bind request body failed", zap.Error(err))
@@ -63,7 +63,7 @@ func PatchManyFactory[M types.Model, REQ types.Request, RSP types.Response](cfg 
 			gstotel.RecordError(span, reqErr)
 			return
 		}
-		normalizeBatchRequest(&req)
+		normalizeBatch(&req)
 		// A versioned model must carry a version on every item, exactly like
 		// the single-resource patch; failing the whole batch up front keeps
 		// the all-or-nothing shape a defective request deserves. See
@@ -94,7 +94,7 @@ func PatchManyFactory[M types.Model, REQ types.Request, RSP types.Response](cfg 
 }
 
 // PatchManyCall returns the batch patch call of M on route, the counterpart
-// of the handler PatchManyFactory returns for the generated handler of a
+// of the handler PatchManyHandler returns for the generated handler of a
 // PatchMany rpc: given the route parameters, the items the request message
 // decoded into and the paths of each item's update mask, one mask per item
 // in order (see maskFieldSet), it validates the batch the way the handler
@@ -107,8 +107,8 @@ func PatchManyCall[M types.Model](route string) func(ctx context.Context, params
 	return func(ctx context.Context, params map[string]string, items []M, paths [][]string) ([]M, error) {
 		c := a.beginCall(ctx, params, nil)
 		defer c.end()
-		req := requestData[M]{Items: items}
-		normalizeBatchRequest(&req)
+		req := batch[M]{Items: items}
+		normalizeBatch(&req)
 		if len(paths) != len(req.Items) {
 			return nil, c.invalid(errors.Newf("%d items carry %d update masks; each item names the fields to apply in a mask of its own", len(req.Items), len(paths)))
 		}
@@ -153,8 +153,8 @@ func PatchManyCall[M types.Model](route string) func(ctx context.Context, params
 // exactly as in patchFlow: a later patch puts back the fields an earlier one
 // changed, even different ones, and both answer success. A model that needs
 // the stale write refused instead declares model.Version.
-func (a *action[M, REQ, RSP]) patchManyFlow(ctx context.Context, newServiceContext serviceContextFunc, req *requestData[M], fieldSets []patchFieldSet) (requestData[M], error) {
-	var zero requestData[M]
+func (a *action[M, REQ, RSP]) patchManyFlow(ctx context.Context, newServiceContext serviceContextFunc, req *batch[M], fieldSets []patchFieldSet) (batch[M], error) {
+	var zero batch[M]
 	log := logger.Controller.WithContext(ctx, consts.PHASE_PATCH_MANY)
 	svc := a.service()
 
@@ -185,7 +185,7 @@ func (a *action[M, REQ, RSP]) patchManyFlow(ctx context.Context, newServiceConte
 		if i < len(fieldSets) {
 			fields = fieldSets[i]
 		}
-		patchValue(log, a.typ, oldVal, newVal, fields)
+		applyPatch(log, a.typ, oldVal, newVal, fields)
 		shouldUpdates = append(shouldUpdates, oldVal.Addr().Interface().(M)) //nolint:errcheck
 	}
 
@@ -219,7 +219,7 @@ func (a *action[M, REQ, RSP]) patchManyFlow(ctx context.Context, newServiceConte
 	// NOTE: We should record the `req` instead of `oldVal`, the req is `newVal`.
 	// Record and Request both carry the request payload, so one marshal
 	// feeds both columns; Response carries the patched records instead.
-	if err := am.RecordOperation(ctx, a.newModel(), consts.OP_PATCH_MANY,
+	if err := audit.RecordOperation(ctx, a.newModel(), consts.OP_PATCH_MANY,
 		func() *modellogmgmt.OperationLog {
 			record, _ := json.Marshal(req)
 			respData, _ := json.Marshal(rsp)

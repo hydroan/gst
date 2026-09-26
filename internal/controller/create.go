@@ -17,7 +17,7 @@ import (
 	"go.uber.org/zap"
 )
 
-// CreateFactory returns a Gin handler that creates one resource.
+// CreateHandler returns a Gin handler that creates one resource.
 //
 // When M, REQ, and RSP are the same type, the handler binds the JSON body into
 // M, runs the create flow (see createFlow), and returns the created model.
@@ -28,7 +28,7 @@ import (
 // When REQ or RSP differs from M, the handler is the phase service's (see
 // serviceHandler): its Create method runs on the bound payload, a multipart
 // form left unbound for the service to read itself.
-func CreateFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...*types.ControllerConfig[M]) gin.HandlerFunc {
+func CreateHandler[M types.Model, REQ types.Request, RSP types.Response](cfg ...*types.ControllerConfig[M]) gin.HandlerFunc {
 	a := newAction[M, REQ, RSP](routeFromConfig(cfg...), consts.PHASE_CREATE, consts.PHASE_CREATE_BEFORE, consts.PHASE_CREATE_AFTER)
 	if !a.typesEqual {
 		return a.serviceHandler()
@@ -62,7 +62,7 @@ func CreateFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...
 }
 
 // CreateCall returns the create call of M on route, the counterpart of the
-// handler CreateFactory returns for the generated handler of a Create rpc:
+// handler CreateHandler returns for the generated handler of a Create rpc:
 // given the route parameters and the model the request message decoded
 // into, it validates the model the way the handler validates a bound body,
 // runs the create flow (see createFlow) and answers with the model created,
@@ -117,7 +117,7 @@ func (a *action[M, REQ, RSP]) createFlow(ctx context.Context, newServiceContext 
 	// 4.record operation log to database.
 	// Record, Request, and Response carry the same serialized payload on
 	// this action, so one marshal feeds all three columns.
-	if err := am.RecordOperation(ctx, req, consts.OP_CREATE,
+	if err := audit.RecordOperation(ctx, req, consts.OP_CREATE,
 		func() *modellogmgmt.OperationLog {
 			record, _ := json.Marshal(req)
 			entry := operationLog(ctx, a.name)

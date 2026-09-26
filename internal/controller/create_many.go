@@ -19,7 +19,7 @@ import (
 	"go.uber.org/zap"
 )
 
-// requestData is the body of a batch request: the items to create, update or
+// batch is the body of a batch request: the items to create, update or
 // patch, or the ids to delete.
 //
 // TODO: decide whether a batch update or patch may skip the items whose
@@ -29,7 +29,7 @@ import (
 //
 // TODO: decide whether a batch delete may accept an empty id instead of
 // refusing the request, switched on by a member of this body beside ids.
-type requestData[M types.Model] struct {
+type batch[M types.Model] struct {
 	// IDs is the id list that should be batch delete.
 	IDs []string `json:"ids,omitempty"`
 	// Items is the resource list that should be batch create/update/partial
@@ -39,15 +39,15 @@ type requestData[M types.Model] struct {
 	Items []M `json:"items,omitempty" binding:"dive"`
 }
 
-// CreateManyFactory returns a Gin handler that creates multiple resources.
+// CreateManyHandler returns a Gin handler that creates multiple resources.
 //
 // When M, REQ, and RSP are the same type, the handler binds the JSON body into
-// requestData[M], runs the batch create flow (see createManyFlow), and
+// batch[M], runs the batch create flow (see createManyFlow), and
 // returns the request data.
 //
 // When REQ or RSP differs from M, the handler is the phase service's (see
 // serviceHandler): its CreateMany method runs on the bound payload.
-func CreateManyFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...*types.ControllerConfig[M]) gin.HandlerFunc {
+func CreateManyHandler[M types.Model, REQ types.Request, RSP types.Response](cfg ...*types.ControllerConfig[M]) gin.HandlerFunc {
 	a := newAction[M, REQ, RSP](routeFromConfig(cfg...), consts.PHASE_CREATE_MANY, consts.PHASE_CREATE_MANY_BEFORE, consts.PHASE_CREATE_MANY_AFTER)
 	if !a.typesEqual {
 		return a.serviceHandler()
@@ -60,14 +60,14 @@ func CreateManyFactory[M types.Model, REQ types.Request, RSP types.Response](cfg
 
 		log := logger.Controller.WithContext(c.Request.Context(), consts.PHASE_CREATE_MANY)
 
-		var req requestData[M]
+		var req batch[M]
 		if reqErr := bindJSONRequest(c, &req); reqErr != nil && !errors.Is(reqErr, io.EOF) {
 			log.Errorz("bind request body failed", zap.Error(reqErr))
 			JSON(c, CodeInvalidParam.WithErr(reqErr))
 			gstotel.RecordError(span, reqErr)
 			return
 		}
-		normalizeBatchRequest(&req)
+		normalizeBatch(&req)
 
 		if err := a.createManyFlow(requestContext(c), ginServiceContext(c), &req); err != nil {
 			JSON(c, failureCoder(err))
@@ -78,7 +78,7 @@ func CreateManyFactory[M types.Model, REQ types.Request, RSP types.Response](cfg
 }
 
 // CreateManyCall returns the batch create call of M on route, the
-// counterpart of the handler CreateManyFactory returns for the generated
+// counterpart of the handler CreateManyHandler returns for the generated
 // handler of a CreateMany rpc: given the route parameters and the items the
 // request message decoded into, it validates the batch the way the handler
 // validates a bound body, runs the batch create flow (see createManyFlow)
@@ -89,8 +89,8 @@ func CreateManyCall[M types.Model](route string) func(ctx context.Context, param
 	return func(ctx context.Context, params map[string]string, items []M) ([]M, error) {
 		c := a.beginCall(ctx, params, nil)
 		defer c.end()
-		req := requestData[M]{Items: items}
-		normalizeBatchRequest(&req)
+		req := batch[M]{Items: items}
+		normalizeBatch(&req)
 		if err := validateRequest(&req); err != nil {
 			return nil, c.invalidMessage(err)
 		}
@@ -105,7 +105,7 @@ func CreateManyCall[M types.Model](route string) func(ctx context.Context, param
 // creator and updater of every item from the identity the request carries,
 // runs the batch create hooks around the write, and records the operation.
 // The items are req's own, filled by the write.
-func (a *action[M, REQ, RSP]) createManyFlow(ctx context.Context, newServiceContext serviceContextFunc, req *requestData[M]) error {
+func (a *action[M, REQ, RSP]) createManyFlow(ctx context.Context, newServiceContext serviceContextFunc, req *batch[M]) error {
 	log := logger.Controller.WithContext(ctx, consts.PHASE_CREATE_MANY)
 	svc := a.service()
 	val := a.newModel()
@@ -138,7 +138,7 @@ func (a *action[M, REQ, RSP]) createManyFlow(ctx context.Context, newServiceCont
 	// 4.record operation log to database.
 	// Record, Request, and Response carry the same serialized payload on
 	// this action, so one marshal feeds all three columns.
-	if err := am.RecordOperation(ctx, val, consts.OP_CREATE_MANY,
+	if err := audit.RecordOperation(ctx, val, consts.OP_CREATE_MANY,
 		func() *modellogmgmt.OperationLog {
 			record, _ := json.Marshal(req)
 			entry := operationLog(ctx, a.name)

@@ -16,16 +16,29 @@ import (
 	"go.uber.org/zap"
 )
 
-// ImportFactory returns a Gin handler that imports resources from an uploaded file.
+// MaxImportSize is the largest upload an import accepts, 5 MiB.
+const MaxImportSize = 5 * 1024 * 1024
+
+// tooLargeFileMsg answers an upload over MaxImportSize. It is carried as a
+// message under CodeInvalidParam rather than as a code of its own, for the same
+// reason as missingRouteParamMsg.
+const tooLargeFileMsg = "too large file"
+
+// missingUploadFileMsg answers an import request whose multipart form carries
+// no "file" field, keeping the multipart reader's own error text out of the
+// response for the same reason bind failures render stable messages.
+const missingUploadFileMsg = "upload file is required"
+
+// ImportHandler returns a Gin handler that imports resources from an uploaded file.
 //
 // The handler reads the multipart form file named "file", rejects files larger
-// than MAX_IMPORT_SIZE, passes the file content to the phase service's Import
+// than MaxImportSize, passes the file content to the phase service's Import
 // method, and fills creator/updater fields on the returned models. Rows are
 // then written by explicit intent instead of an upsert: a row carrying an ID
 // replaces that existing record (missing IDs fail with 404), and a row without
 // an ID is created (unique-key collisions fail with 409). Both writes share
 // one transaction, so an import is all-or-nothing.
-func ImportFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...*types.ControllerConfig[M]) gin.HandlerFunc {
+func ImportHandler[M types.Model, REQ types.Request, RSP types.Response](cfg ...*types.ControllerConfig[M]) gin.HandlerFunc {
 	a := newAction[M, REQ, RSP](routeFromConfig(cfg...), consts.PHASE_IMPORT)
 	return func(c *gin.Context) {
 		ctrlSpanCtx, span := a.startControllerSpan(c)
@@ -41,7 +54,7 @@ func ImportFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...
 			return
 		}
 		// check file size.
-		if file.Size > int64(MAX_IMPORT_SIZE) {
+		if file.Size > int64(MaxImportSize) {
 			log.Errorz(tooLargeFileMsg)
 			JSON(c, CodeInvalidParam.WithMsg(tooLargeFileMsg))
 			gstotel.RecordError(span, errors.New(tooLargeFileMsg))

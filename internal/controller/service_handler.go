@@ -17,7 +17,8 @@ import (
 )
 
 // This file holds the handler of an action served by its phase service's
-// method: the one the factories return when M, REQ and RSP differ, an
+// method: the one CreateHandler and its kind return when M, REQ and RSP
+// differ, an
 // action declaring a Payload or Result of its own having no flow of the
 // framework's, the service doing the work. Its gRPC counterpart is
 // ServiceCall (see call.go); serviceMethod is what both dispatch through.

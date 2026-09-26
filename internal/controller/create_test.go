@@ -14,7 +14,7 @@ func TestCreateWritesNothingTheBeforeHookRefuses(t *testing.T) {
 	name := uniqueName("create-refused")
 
 	rsp := serve(t, http.MethodPost, "/controller-refusals",
-		controller.CreateFactory[*sampleRecord, *sampleRecord, *sampleRecord](configFor[*sampleRecord](refusalRoute)),
+		controller.CreateHandler[*sampleRecord, *sampleRecord, *sampleRecord](configFor[*sampleRecord](refusalRoute)),
 		"/controller-refusals", `{"name":"`+name+`"}`)
 
 	require.Equal(t, http.StatusConflict, rsp.Code)
@@ -28,7 +28,7 @@ func TestCreateAnswersConflictForATakenID(t *testing.T) {
 	record := createSample(t, "create-taken")
 
 	rsp := serve(t, http.MethodPost, "/controller-samples",
-		controller.CreateFactory[*sampleRecord, *sampleRecord, *sampleRecord](configFor[*sampleRecord](sampleRoute)),
+		controller.CreateHandler[*sampleRecord, *sampleRecord, *sampleRecord](configFor[*sampleRecord](sampleRoute)),
 		"/controller-samples", `{"id":"`+record.GetID()+`","name":"create-other"}`)
 
 	require.Equal(t, http.StatusConflict, rsp.Code)

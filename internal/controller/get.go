@@ -19,7 +19,7 @@ import (
 	"go.uber.org/zap"
 )
 
-// GetFactory returns a Gin handler that retrieves one resource.
+// GetHandler returns a Gin handler that retrieves one resource.
 //
 // When M, REQ, and RSP are the same type, the handler reads the configured route
 // parameter as the resource id, runs the get flow (see getFlow), and returns
@@ -28,7 +28,7 @@ import (
 // When REQ or RSP differs from M, the handler is the phase service's (see
 // serviceHandler): its Get method runs on a zero-value REQ, the GET request
 // carrying no body; the service reads ServiceContext.Query() and Param().
-func GetFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...*types.ControllerConfig[M]) gin.HandlerFunc {
+func GetHandler[M types.Model, REQ types.Request, RSP types.Response](cfg ...*types.ControllerConfig[M]) gin.HandlerFunc {
 	a := newAction[M, REQ, RSP](routeFromConfig(cfg...), consts.PHASE_GET, consts.PHASE_GET_BEFORE, consts.PHASE_GET_AFTER)
 	if !a.typesEqual {
 		return a.serviceHandler()
@@ -63,7 +63,7 @@ func GetFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...*ty
 }
 
 // GetCall returns the get call of M on route, the counterpart of the handler
-// GetFactory returns for the generated handler of a Get rpc: given the route
+// GetHandler returns for the generated handler of a Get rpc: given the route
 // parameters, the id the request message names the record by and its
 // expansion query, it runs the get flow (see getFlow) and answers with the
 // model, or with the status the failure maps to (see call); a message
@@ -92,7 +92,7 @@ func GetCall[M types.Model](route string) func(ctx context.Context, params map[s
 // getFlow runs the get flow on the record id names: it applies the expansion
 // and depth query options the request carries, runs the get hooks around the
 // read, records the operation, and returns the model. id must not be empty:
-// a UUID-keyed model mints a fresh id for an empty one (see setRouteID). An
+// a UUID-keyed model mints a fresh id for an empty one (see setID). An
 // id the model rejects, and a read that finds no stored record, both answer
 // CodeNotFound.
 func (a *action[M, REQ, RSP]) getFlow(ctx context.Context, newServiceContext serviceContextFunc, id string) (M, error) {
@@ -103,7 +103,7 @@ func (a *action[M, REQ, RSP]) getFlow(ctx context.Context, newServiceContext ser
 	// 'm' is a fresh model instance, such as: &model.User{ID: myid, Name: myname}.
 	m := a.newModel()
 	// `GetBefore` hook need id.
-	if !setRouteID(m, id) {
+	if !setID(m, id) {
 		// An id the model rejects cannot match any row; answer 404 before
 		// the raw value reaches SQL, where implicit string-to-integer
 		// coercion could match an unintended row.
@@ -140,7 +140,7 @@ func (a *action[M, REQ, RSP]) getFlow(ctx context.Context, newServiceContext ser
 	}
 
 	// 4.record operation log to database.
-	if err := am.RecordOperation(ctx, m, consts.OP_GET,
+	if err := audit.RecordOperation(ctx, m, consts.OP_GET,
 		func() *modellogmgmt.OperationLog {
 			return operationLog(ctx, a.name)
 		}); err != nil {

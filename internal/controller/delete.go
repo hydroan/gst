@@ -19,7 +19,7 @@ import (
 	"go.uber.org/zap"
 )
 
-// DeleteFactory returns a Gin handler that deletes one resource.
+// DeleteHandler returns a Gin handler that deletes one resource.
 //
 // When M, REQ, and RSP are the same type, the handler reads the resource id
 // from the configured route parameter (batch deletion uses the DeleteMany
@@ -28,7 +28,7 @@ import (
 //
 // When REQ or RSP differs from M, the handler is the phase service's (see
 // serviceHandler): its Delete method runs on the bound payload.
-func DeleteFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...*types.ControllerConfig[M]) gin.HandlerFunc {
+func DeleteHandler[M types.Model, REQ types.Request, RSP types.Response](cfg ...*types.ControllerConfig[M]) gin.HandlerFunc {
 	a := newAction[M, REQ, RSP](routeFromConfig(cfg...), consts.PHASE_DELETE, consts.PHASE_DELETE_BEFORE, consts.PHASE_DELETE_AFTER)
 	if !a.typesEqual {
 		return a.serviceHandler()
@@ -63,7 +63,7 @@ func DeleteFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...
 }
 
 // DeleteCall returns the delete call of M on route, the counterpart of the
-// handler DeleteFactory returns for the generated handler of a Delete rpc:
+// handler DeleteHandler returns for the generated handler of a Delete rpc:
 // given the route parameters and the id the request message names the
 // record by, it runs the delete flow (see deleteFlow) and answers nothing,
 // or the status the failure maps to (see call).
@@ -84,7 +84,7 @@ func DeleteCall[M types.Model](route string) func(ctx context.Context, params ma
 
 // deleteFlow runs the delete flow on the record id names: it runs the delete
 // hooks around the write, keeps a copy of the record for the operation log,
-// and records the operation. id must not be empty (see setRouteID); an id the
+// and records the operation. id must not be empty (see setID); an id the
 // model rejects answers CodeNotFound. Whether the row is purged is the
 // model's decision (its Purge method), never the request's.
 func (a *action[M, REQ, RSP]) deleteFlow(ctx context.Context, newServiceContext serviceContextFunc, id string) error {
@@ -93,7 +93,7 @@ func (a *action[M, REQ, RSP]) deleteFlow(ctx context.Context, newServiceContext 
 
 	// 'm' is a fresh model instance, such as: &model.User{ID: myid, Name: myname}.
 	m := a.newModel()
-	if !setRouteID(m, id) {
+	if !setID(m, id) {
 		// An id the model rejects cannot match any row; answer 404 instead
 		// of passing an unset id to the database layer.
 		log.Errorz("route id rejected by model", zap.String("id", id))
@@ -127,7 +127,7 @@ func (a *action[M, REQ, RSP]) deleteFlow(ctx context.Context, newServiceContext 
 	}
 
 	// 4.record operation log to database.
-	if err := am.RecordOperation(ctx, a.newModel(), consts.OP_DELETE,
+	if err := audit.RecordOperation(ctx, a.newModel(), consts.OP_DELETE,
 		func() *modellogmgmt.OperationLog {
 			record, _ := json.Marshal(copied)
 			entry := operationLog(ctx, a.name)

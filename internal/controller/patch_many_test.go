@@ -15,7 +15,7 @@ import (
 // Loading the record first would answer 404 instead.
 func TestPatchManyReportsAMissingVersionBeforeAMissingRecord(t *testing.T) {
 	rsp := serve(t, http.MethodPatch, "/controller-versioned-samples/batch",
-		controller.PatchManyFactory[*versionedSample, *versionedSample, *versionedSample](),
+		controller.PatchManyHandler[*versionedSample, *versionedSample, *versionedSample](),
 		"/controller-versioned-samples/batch", `{"items":[{"id":"missing","name":"renamed"}]}`)
 
 	require.Equal(t, http.StatusBadRequest, rsp.Code)
@@ -39,7 +39,7 @@ func TestPatchManyWritesNothingWhenOneRecordIsMissing(t *testing.T) {
 			record := createSample(t, "patch-many-kept-"+tt.name)
 
 			rsp := serve(t, http.MethodPatch, "/controller-samples/batch",
-				controller.PatchManyFactory[*sampleRecord, *sampleRecord, *sampleRecord](configFor[*sampleRecord](sampleRoute)),
+				controller.PatchManyHandler[*sampleRecord, *sampleRecord, *sampleRecord](configFor[*sampleRecord](sampleRoute)),
 				"/controller-samples/batch", `{"items":[{"id":"`+record.GetID()+`","name":"patch-many-renamed"},{"id":"`+tt.id+`","name":"patch-many-other"}]}`)
 
 			require.Equal(t, http.StatusNotFound, rsp.Code)
@@ -55,7 +55,7 @@ func TestPatchManyRefusesAnItemWithoutAnID(t *testing.T) {
 	record := createSample(t, "patch-many-identified")
 
 	rsp := serve(t, http.MethodPatch, "/controller-samples/batch",
-		controller.PatchManyFactory[*sampleRecord, *sampleRecord, *sampleRecord](configFor[*sampleRecord](sampleRoute)),
+		controller.PatchManyHandler[*sampleRecord, *sampleRecord, *sampleRecord](configFor[*sampleRecord](sampleRoute)),
 		"/controller-samples/batch", `{"items":[{"id":"`+record.GetID()+`","name":"patch-many-renamed"},{"name":"patch-many-other"}]}`)
 
 	require.Equal(t, http.StatusBadRequest, rsp.Code)

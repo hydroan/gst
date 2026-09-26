@@ -20,7 +20,7 @@ func BenchmarkRegistryKey(b *testing.B) {
 }
 
 // BenchmarkResolve measures the per-request cost when the key is built once
-// up front, which is how controller factories resolve services.
+// up front, which is how the controller handlers resolve services.
 func BenchmarkResolve(b *testing.B) {
 	key := serviceregistry.Key(consts.PHASE_CREATE, "samples")
 	for b.Loop() {

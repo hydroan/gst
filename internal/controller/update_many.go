@@ -18,15 +18,15 @@ import (
 	"go.uber.org/zap"
 )
 
-// UpdateManyFactory returns a Gin handler that replaces multiple resources.
+// UpdateManyHandler returns a Gin handler that replaces multiple resources.
 //
 // When M, REQ, and RSP are the same type, the handler binds the JSON body into
-// requestData[M], runs the batch update flow (see updateManyFlow), and
+// batch[M], runs the batch update flow (see updateManyFlow), and
 // returns the request data.
 //
 // When REQ or RSP differs from M, the handler is the phase service's (see
 // serviceHandler): its UpdateMany method runs on the bound payload.
-func UpdateManyFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...*types.ControllerConfig[M]) gin.HandlerFunc {
+func UpdateManyHandler[M types.Model, REQ types.Request, RSP types.Response](cfg ...*types.ControllerConfig[M]) gin.HandlerFunc {
 	a := newAction[M, REQ, RSP](routeFromConfig(cfg...), consts.PHASE_UPDATE_MANY, consts.PHASE_UPDATE_MANY_BEFORE, consts.PHASE_UPDATE_MANY_AFTER)
 	if !a.typesEqual {
 		return a.serviceHandler()
@@ -39,14 +39,14 @@ func UpdateManyFactory[M types.Model, REQ types.Request, RSP types.Response](cfg
 
 		log := logger.Controller.WithContext(c.Request.Context(), consts.PHASE_UPDATE_MANY)
 
-		var req requestData[M]
+		var req batch[M]
 		if reqErr := bindJSONRequest(c, &req); reqErr != nil && !errors.Is(reqErr, io.EOF) {
 			log.Errorz("bind request body failed", zap.Error(reqErr))
 			JSON(c, CodeInvalidParam.WithErr(reqErr))
 			gstotel.RecordError(span, reqErr)
 			return
 		}
-		normalizeBatchRequest(&req)
+		normalizeBatch(&req)
 
 		if err := a.updateManyFlow(requestContext(c), ginServiceContext(c), &req); err != nil {
 			JSON(c, failureCoder(err))
@@ -57,7 +57,7 @@ func UpdateManyFactory[M types.Model, REQ types.Request, RSP types.Response](cfg
 }
 
 // UpdateManyCall returns the batch update call of M on route, the
-// counterpart of the handler UpdateManyFactory returns for the generated
+// counterpart of the handler UpdateManyHandler returns for the generated
 // handler of an UpdateMany rpc: given the route parameters and the items the
 // request message decoded into, it validates the batch the way the handler
 // validates a bound body, runs the batch update flow (see updateManyFlow)
@@ -68,8 +68,8 @@ func UpdateManyCall[M types.Model](route string) func(ctx context.Context, param
 	return func(ctx context.Context, params map[string]string, items []M) ([]M, error) {
 		c := a.beginCall(ctx, params, nil)
 		defer c.end()
-		req := requestData[M]{Items: items}
-		normalizeBatchRequest(&req)
+		req := batch[M]{Items: items}
+		normalizeBatch(&req)
 		if err := validateRequest(&req); err != nil {
 			return nil, c.invalidMessage(err)
 		}
@@ -83,7 +83,7 @@ func UpdateManyCall[M types.Model](route string) func(ctx context.Context, param
 // updateManyFlow runs the batch update flow on the items of req: it runs the
 // batch update hooks around the write and records the operation. The items
 // are req's own, as the write and the hooks left them.
-func (a *action[M, REQ, RSP]) updateManyFlow(ctx context.Context, newServiceContext serviceContextFunc, req *requestData[M]) error {
+func (a *action[M, REQ, RSP]) updateManyFlow(ctx context.Context, newServiceContext serviceContextFunc, req *batch[M]) error {
 	log := logger.Controller.WithContext(ctx, consts.PHASE_UPDATE_MANY)
 	svc := a.service()
 
@@ -111,7 +111,7 @@ func (a *action[M, REQ, RSP]) updateManyFlow(ctx context.Context, newServiceCont
 	// 4.record operation log to database.
 	// Record, Request, and Response carry the same serialized payload on
 	// this action, so one marshal feeds all three columns.
-	if err := am.RecordOperation(ctx, a.newModel(), consts.OP_UPDATE_MANY,
+	if err := audit.RecordOperation(ctx, a.newModel(), consts.OP_UPDATE_MANY,
 		func() *modellogmgmt.OperationLog {
 			record, _ := json.Marshal(req)
 			entry := operationLog(ctx, a.name)

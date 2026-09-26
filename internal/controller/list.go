@@ -15,7 +15,7 @@ import (
 	"go.uber.org/zap"
 )
 
-// ListFactory returns a Gin handler that lists resources.
+// ListHandler returns a Gin handler that lists resources.
 //
 // When M, REQ, and RSP are the same type, the handler runs the list flow (see
 // listFlow) and returns the items with a total count, which is omitted only
@@ -28,7 +28,7 @@ import (
 // When REQ or RSP differs from M, the handler is the phase service's (see
 // serviceHandler): its List method runs on a zero-value REQ, the GET request
 // carrying no body; the service reads ServiceContext.Query().
-func ListFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...*types.ControllerConfig[M]) gin.HandlerFunc {
+func ListHandler[M types.Model, REQ types.Request, RSP types.Response](cfg ...*types.ControllerConfig[M]) gin.HandlerFunc {
 	a := newAction[M, REQ, RSP](routeFromConfig(cfg...), consts.PHASE_LIST, consts.PHASE_LIST_BEFORE, consts.PHASE_LIST_AFTER)
 	if !a.typesEqual {
 		return a.serviceHandler()
@@ -52,7 +52,7 @@ func ListFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...*t
 }
 
 // ListCall returns the list call of M on route, the counterpart of the
-// handler ListFactory returns for the generated handler of a List rpc: given
+// handler ListHandler returns for the generated handler of a List rpc: given
 // the route parameters and the query the request message carries, it runs
 // the list flow (see listFlow) on the query rendered as the HTTP one (see
 // Query) and answers with the items and the total, or with the status the
@@ -163,7 +163,7 @@ func (a *action[M, REQ, RSP]) listFlow(ctx context.Context, newServiceContext se
 	}
 
 	// 5.record operation log to database.
-	if err = am.RecordOperation(ctx, m, consts.OP_LIST,
+	if err = audit.RecordOperation(ctx, m, consts.OP_LIST,
 		func() *modellogmgmt.OperationLog {
 			return operationLog(ctx, a.name)
 		}); err != nil {

@@ -14,7 +14,7 @@ import (
 func TestUpdateAnswersNotFound(t *testing.T) {
 	t.Run("an id no record carries", func(t *testing.T) {
 		rsp := serve(t, http.MethodPut, "/controller-samples/:id",
-			controller.UpdateFactory[*sampleRecord, *sampleRecord, *sampleRecord](configFor[*sampleRecord](sampleRoute)),
+			controller.UpdateHandler[*sampleRecord, *sampleRecord, *sampleRecord](configFor[*sampleRecord](sampleRoute)),
 			"/controller-samples/missing", `{"name":"renamed"}`)
 
 		require.Equal(t, http.StatusNotFound, rsp.Code)
@@ -22,7 +22,7 @@ func TestUpdateAnswersNotFound(t *testing.T) {
 
 	t.Run("an id the integer key cannot hold", func(t *testing.T) {
 		rsp := serve(t, http.MethodPut, "/controller-counters/:id",
-			controller.UpdateFactory[*sampleCounter, *sampleCounter, *sampleCounter](configFor[*sampleCounter](counterRoute)),
+			controller.UpdateHandler[*sampleCounter, *sampleCounter, *sampleCounter](configFor[*sampleCounter](counterRoute)),
 			"/controller-counters/first", `{"name":"renamed"}`)
 
 		require.Equal(t, http.StatusNotFound, rsp.Code)
@@ -35,7 +35,7 @@ func TestUpdateKeepsTheRecordTheBeforeHookRefuses(t *testing.T) {
 	record := createSample(t, "update-refused")
 
 	rsp := serve(t, http.MethodPut, "/controller-refusals/:id",
-		controller.UpdateFactory[*sampleRecord, *sampleRecord, *sampleRecord](configFor[*sampleRecord](refusalRoute)),
+		controller.UpdateHandler[*sampleRecord, *sampleRecord, *sampleRecord](configFor[*sampleRecord](refusalRoute)),
 		"/controller-refusals/"+record.GetID(), `{"name":"renamed"}`)
 
 	require.Equal(t, http.StatusConflict, rsp.Code)

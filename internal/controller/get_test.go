@@ -14,7 +14,7 @@ import (
 func TestGetAnswersNotFound(t *testing.T) {
 	t.Run("an id no record carries", func(t *testing.T) {
 		rsp := serve(t, http.MethodGet, "/controller-samples/:id",
-			controller.GetFactory[*sampleRecord, *sampleRecord, *sampleRecord](configFor[*sampleRecord](sampleRoute)),
+			controller.GetHandler[*sampleRecord, *sampleRecord, *sampleRecord](configFor[*sampleRecord](sampleRoute)),
 			"/controller-samples/missing", "")
 
 		require.Equal(t, http.StatusNotFound, rsp.Code)
@@ -22,7 +22,7 @@ func TestGetAnswersNotFound(t *testing.T) {
 
 	t.Run("an id the integer key cannot hold", func(t *testing.T) {
 		rsp := serve(t, http.MethodGet, "/controller-counters/:id",
-			controller.GetFactory[*sampleCounter, *sampleCounter, *sampleCounter](configFor[*sampleCounter](counterRoute)),
+			controller.GetHandler[*sampleCounter, *sampleCounter, *sampleCounter](configFor[*sampleCounter](counterRoute)),
 			"/controller-counters/first", "")
 
 		require.Equal(t, http.StatusNotFound, rsp.Code)

@@ -21,7 +21,7 @@ import (
 	"go.uber.org/zap"
 )
 
-// PatchFactory returns a Gin handler that partially updates one resource.
+// PatchHandler returns a Gin handler that partially updates one resource.
 //
 // When M, REQ, and RSP are the same type, the handler reads the resource id
 // from the configured route parameter (the id carried by the body is ignored),
@@ -31,7 +31,7 @@ import (
 //
 // When REQ or RSP differs from M, the handler is the phase service's (see
 // serviceHandler): its Patch method runs on the bound payload.
-func PatchFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...*types.ControllerConfig[M]) gin.HandlerFunc {
+func PatchHandler[M types.Model, REQ types.Request, RSP types.Response](cfg ...*types.ControllerConfig[M]) gin.HandlerFunc {
 	a := newAction[M, REQ, RSP](routeFromConfig(cfg...), consts.PHASE_PATCH, consts.PHASE_PATCH_BEFORE, consts.PHASE_PATCH_AFTER)
 	if !a.typesEqual {
 		return a.serviceHandler()
@@ -106,7 +106,7 @@ func PatchFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...*
 }
 
 // PatchCall returns the patch call of M on route, the counterpart of the
-// handler PatchFactory returns for the generated handler of a Patch rpc:
+// handler PatchHandler returns for the generated handler of a Patch rpc:
 // given the route parameters, the id the request message names the record
 // by, the values it decoded into and the paths of its update mask, which
 // name the fields to apply as the message names them (see maskFieldSet), it
@@ -148,7 +148,7 @@ func PatchCall[M types.Model](route string) func(ctx context.Context, params map
 // copies the fields of req present in the request (fields) into it, sets the
 // updater from the identity the request carries, runs the patch hooks around
 // the write, records the operation, and returns the patched record. id must
-// not be empty (see setRouteID); an id the model rejects, and one naming no
+// not be empty (see setID); an id the model rejects, and one naming no
 // record, both answer CodeNotFound.
 //
 // The write is the whole record loaded, not only the fields the request
@@ -165,7 +165,7 @@ func (a *action[M, REQ, RSP]) patchFlow(ctx context.Context, newServiceContext s
 	data := make([]M, 0)
 	// 'm' is a fresh model instance, such as: &model.User{ID: myid, Name: myname}.
 	m := a.newModel()
-	if !setRouteID(m, id) {
+	if !setID(m, id) {
 		// An id the model rejects cannot match any row; answer 404 without
 		// relying on the empty-query safety net below.
 		log.Errorz("route id rejected by model", zap.String("id", id))
@@ -187,7 +187,7 @@ func (a *action[M, REQ, RSP]) patchFlow(ctx context.Context, newServiceContext s
 
 	newVal := reflect.ValueOf(req).Elem()
 	oldVal := reflect.ValueOf(data[0]).Elem()
-	patchValue(log, a.typ, oldVal, newVal, fields)
+	applyPatch(log, a.typ, oldVal, newVal, fields)
 	cur := oldVal.Addr().Interface().(M) //nolint:errcheck
 
 	// 1.Perform business logic processing before partial update resource.
@@ -215,7 +215,7 @@ func (a *action[M, REQ, RSP]) patchFlow(ctx context.Context, newServiceContext s
 	// feeds both columns; Response carries the resulting row instead. The
 	// entry names the patched record by its own id: the body need not carry
 	// one, the route named the record.
-	if err := am.RecordOperation(ctx, req, consts.OP_PATCH,
+	if err := audit.RecordOperation(ctx, req, consts.OP_PATCH,
 		func() *modellogmgmt.OperationLog {
 			record, _ := json.Marshal(req)
 			respData, _ := json.Marshal(cur)

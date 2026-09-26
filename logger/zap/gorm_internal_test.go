@@ -52,7 +52,7 @@ func TestFrameworkSQLFramePredicate(t *testing.T) {
 		{"github.com/hydroan/gst/database.withWriteTransaction.func1", true},
 		{"github.com/hydroan/gst/database/sqlite.New", true},
 		{"github.com/hydroan/gst/dao.QueryModelsMapWithOptions", true},
-		{"github.com/hydroan/gst/internal/controller.ListFactory.func1", false},
+		{"github.com/hydroan/gst/internal/controller.ListHandler.func1", false},
 		{"github.com/hydroan/gst/model.(*Sample).CreateAfter", false},
 		{"example.com/app/service/report.latestEntry", false},
 		{"testing.tRunner", false},

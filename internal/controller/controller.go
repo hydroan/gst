@@ -1,8 +1,14 @@
-// Package controller contains framework-owned HTTP handlers for registered routes.
+// Package controller serves the actions of the registered routes on both
+// transports: over HTTP through the handlers the router mounts (CreateHandler
+// and its kind), over gRPC through the call functions the generated pb
+// package runs (CreateCall and its kind). An action is one flow — the
+// service hooks, the database access, the operation log — with a binding
+// and an answer per transport around it.
 //
-// Application code should register routes through package router or generated
-// code. Keeping controller internal prevents external projects from depending on
-// handler factories or mutating controller-owned audit state directly.
+// Application code registers routes through package router or the generated
+// code and services through package service. Keeping controller internal
+// keeps projects from depending on the handlers or the calls directly, or
+// from touching the audit state the package owns.
 package controller
 
 import (
@@ -16,7 +22,7 @@ import (
 
 var (
 	// Global audit manager instance.
-	am *auditmanager.AuditManager
+	audit *auditmanager.AuditManager
 
 	initMu      sync.Mutex
 	initialized bool
@@ -34,7 +40,7 @@ func Init() (err error) {
 		return nil
 	}
 
-	am = auditmanager.New(&config.App.Audit)
+	audit = auditmanager.New(&config.App.Audit)
 
 	initialized = true
 

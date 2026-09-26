@@ -32,51 +32,51 @@ func registerTestService[M types.Model, REQ types.Request, RSP types.Response](p
 	}
 }
 
-// factoryRouteModel is the model fixture the controller factory tests share:
+// handlerRouteModel is the model fixture the handler tests share:
 // the route-dispatch and hook-tracing tests here, and the SSE test.
-type factoryRouteModel struct {
+type handlerRouteModel struct {
 	modelregistry.Base
 }
 
-// factoryRouteReq and factoryRouteRsp are shared by both action services
+// handlerRouteReq and handlerRouteRsp are shared by both action services
 // below, mirroring how type aliases collapse distinct request and response
 // declarations into one type.
-type factoryRouteReq struct {
+type handlerRouteReq struct {
 	Name string `json:"name"`
 }
 
-type factoryRouteRsp struct {
+type handlerRouteRsp struct {
 	Source string `json:"source"`
 }
 
-type factoryStartService struct {
-	serviceregistry.Base[*factoryRouteModel, *factoryRouteReq, *factoryRouteRsp]
+type handlerStartService struct {
+	serviceregistry.Base[*handlerRouteModel, *handlerRouteReq, *handlerRouteRsp]
 }
 
-func (s *factoryStartService) Create(*types.ServiceContext, *factoryRouteReq) (*factoryRouteRsp, error) {
-	return &factoryRouteRsp{Source: "start"}, nil
+func (s *handlerStartService) Create(*types.ServiceContext, *handlerRouteReq) (*handlerRouteRsp, error) {
+	return &handlerRouteRsp{Source: "start"}, nil
 }
 
-type factoryStopService struct {
-	serviceregistry.Base[*factoryRouteModel, *factoryRouteReq, *factoryRouteRsp]
+type handlerStopService struct {
+	serviceregistry.Base[*handlerRouteModel, *handlerRouteReq, *handlerRouteRsp]
 }
 
-func (s *factoryStopService) Create(*types.ServiceContext, *factoryRouteReq) (*factoryRouteRsp, error) {
-	return &factoryRouteRsp{Source: "stop"}, nil
+func (s *handlerStopService) Create(*types.ServiceContext, *handlerRouteReq) (*handlerRouteRsp, error) {
+	return &handlerRouteRsp{Source: "stop"}, nil
 }
 
-// TestCreateFactoryDispatchesActionServiceByRoute guards the route-derived
+// TestCreateHandlerDispatchesActionServiceByRoute guards the route-derived
 // dispatch: two action services sharing one model/request/response type tuple
 // must each receive the requests of their own route.
-func TestCreateFactoryDispatchesActionServiceByRoute(t *testing.T) {
+func TestCreateHandlerDispatchesActionServiceByRoute(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
-	registerTestService[*factoryRouteModel, *factoryRouteReq, *factoryRouteRsp](consts.PHASE_CREATE, "samples/:id/start", &factoryStartService{})
-	registerTestService[*factoryRouteModel, *factoryRouteReq, *factoryRouteRsp](consts.PHASE_CREATE, "samples/:id/stop", &factoryStopService{})
+	registerTestService[*handlerRouteModel, *handlerRouteReq, *handlerRouteRsp](consts.PHASE_CREATE, "samples/:id/start", &handlerStartService{})
+	registerTestService[*handlerRouteModel, *handlerRouteReq, *handlerRouteRsp](consts.PHASE_CREATE, "samples/:id/stop", &handlerStopService{})
 
 	engine := gin.New()
-	engine.POST("/samples/:id/start", CreateFactory[*factoryRouteModel, *factoryRouteReq, *factoryRouteRsp](&types.ControllerConfig[*factoryRouteModel]{Route: "samples/:id/start"}))
-	engine.POST("/samples/:id/stop", CreateFactory[*factoryRouteModel, *factoryRouteReq, *factoryRouteRsp](&types.ControllerConfig[*factoryRouteModel]{Route: "samples/:id/stop"}))
+	engine.POST("/samples/:id/start", CreateHandler[*handlerRouteModel, *handlerRouteReq, *handlerRouteRsp](&types.ControllerConfig[*handlerRouteModel]{Route: "samples/:id/start"}))
+	engine.POST("/samples/:id/stop", CreateHandler[*handlerRouteModel, *handlerRouteReq, *handlerRouteRsp](&types.ControllerConfig[*handlerRouteModel]{Route: "samples/:id/stop"}))
 
 	for route, want := range map[string]string{
 		"/samples/1/start": "start",
@@ -92,13 +92,13 @@ func TestCreateFactoryDispatchesActionServiceByRoute(t *testing.T) {
 	}
 }
 
-// factoryListBeforeService overrides one list hook and leaves the other to the
+// handlerListBeforeService overrides one list hook and leaves the other to the
 // framework base.
-type factoryListBeforeService struct {
-	serviceregistry.Base[*factoryRouteModel, *factoryRouteModel, *factoryRouteModel]
+type handlerListBeforeService struct {
+	serviceregistry.Base[*handlerRouteModel, *handlerRouteModel, *handlerRouteModel]
 }
 
-func (*factoryListBeforeService) ListBefore(*types.ServiceContext, *[]*factoryRouteModel) error {
+func (*handlerListBeforeService) ListBefore(*types.ServiceContext, *[]*handlerRouteModel) error {
 	return nil
 }
 
@@ -109,20 +109,20 @@ func (*factoryListBeforeService) ListBefore(*types.ServiceContext, *[]*factoryRo
 func TestTraceServiceHookSpansOnlyOverriddenHooks(t *testing.T) {
 	oteltest.Enable(t)
 	recorder := oteltest.Record(t)
-	a := newAction[*factoryRouteModel, *factoryRouteModel, *factoryRouteModel]("samples", consts.PHASE_LIST, consts.PHASE_LIST_BEFORE, consts.PHASE_LIST_AFTER)
+	a := newAction[*handlerRouteModel, *handlerRouteModel, *handlerRouteModel]("samples", consts.PHASE_LIST, consts.PHASE_LIST_BEFORE, consts.PHASE_LIST_AFTER)
 
 	t.Run("the_default_service_exports_no_hook_span", func(t *testing.T) {
-		svc := serviceregistry.Resolve[*factoryRouteModel, *factoryRouteModel, *factoryRouteModel]("samples/unregistered")
-		data := make([]*factoryRouteModel, 0)
+		svc := serviceregistry.Resolve[*handlerRouteModel, *handlerRouteModel, *handlerRouteModel]("samples/unregistered")
+		data := make([]*handlerRouteModel, 0)
 		require.NoError(t, a.traceServiceHook(context.Background(), consts.PHASE_LIST_BEFORE, svc, func(ctx context.Context) error {
 			return svc.ListBefore(types.NewServiceContext(nil, ctx, consts.PHASE_LIST_BEFORE), &data)
 		}))
-		require.NotContains(t, oteltest.EndedNames(recorder), "service.FactoryRouteModel.ListBefore")
+		require.NotContains(t, oteltest.EndedNames(recorder), "service.HandlerRouteModel.ListBefore")
 	})
 
 	t.Run("an_overridden_hook_gets_a_span_and_its_no-op_partner_does_not", func(t *testing.T) {
-		svc := &factoryListBeforeService{}
-		data := make([]*factoryRouteModel, 0)
+		svc := &handlerListBeforeService{}
+		data := make([]*handlerRouteModel, 0)
 		require.NoError(t, a.traceServiceHook(context.Background(), consts.PHASE_LIST_BEFORE, svc, func(ctx context.Context) error {
 			return svc.ListBefore(types.NewServiceContext(nil, ctx, consts.PHASE_LIST_BEFORE), &data)
 		}))
@@ -130,7 +130,7 @@ func TestTraceServiceHookSpansOnlyOverriddenHooks(t *testing.T) {
 			return svc.ListAfter(types.NewServiceContext(nil, ctx, consts.PHASE_LIST_AFTER), &data)
 		}))
 		names := oteltest.EndedNames(recorder)
-		require.Contains(t, names, "service.FactoryRouteModel.ListBefore")
-		require.NotContains(t, names, "service.FactoryRouteModel.ListAfter")
+		require.Contains(t, names, "service.HandlerRouteModel.ListBefore")
+		require.NotContains(t, names, "service.HandlerRouteModel.ListAfter")
 	})
 }

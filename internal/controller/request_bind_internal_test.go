@@ -59,10 +59,10 @@ func (s *normalizeProbeService) Create(_ *types.ServiceContext, req *normalizePr
 	return rsp, nil
 }
 
-// TestCreateFactoryRestoresNullBodyRequest guards the nil-request contract: a
+// TestCreateHandlerRestoresNullBodyRequest guards the nil-request contract: a
 // literal JSON null body unmarshals into a nil pointer without any binding
 // error, and the service must still receive a usable zero-value request.
-func TestCreateFactoryRestoresNullBodyRequest(t *testing.T) {
+func TestCreateHandlerRestoresNullBodyRequest(t *testing.T) {
 	engine := newNormalizeProbeEngine(t, "normalize-null-body-probes")
 
 	recorder := httptest.NewRecorder()
@@ -75,10 +75,10 @@ func TestCreateFactoryRestoresNullBodyRequest(t *testing.T) {
 		"a JSON null body must reach the service as a zero-value request, not nil")
 }
 
-// TestCreateFactoryCompactsNullSliceEntries guards the nil-element contract:
+// TestCreateHandlerCompactsNullSliceEntries guards the nil-element contract:
 // null entries inside a JSON array must be compacted away before the request
 // reaches the service.
-func TestCreateFactoryCompactsNullSliceEntries(t *testing.T) {
+func TestCreateHandlerCompactsNullSliceEntries(t *testing.T) {
 	engine := newNormalizeProbeEngine(t, "normalize-null-item-probes")
 
 	recorder := httptest.NewRecorder()
@@ -94,12 +94,12 @@ func TestCreateFactoryCompactsNullSliceEntries(t *testing.T) {
 		"the service must never observe a nil slice element")
 }
 
-// TestCreateFactoryRejectsTrailingContentAfterJSONBody pins where a request
+// TestCreateHandlerRejectsTrailingContentAfterJSONBody pins where a request
 // body ends: it must be one JSON value and nothing after it. Reading the body
 // as a stream stops at the first value and drops whatever follows, so a second
 // document — or the tail of a retry appended to the first — would bind as if
 // the body had been clean.
-func TestCreateFactoryRejectsTrailingContentAfterJSONBody(t *testing.T) {
+func TestCreateHandlerRejectsTrailingContentAfterJSONBody(t *testing.T) {
 	engine := newNormalizeProbeEngine(t, "normalize-trailing-content-probes")
 
 	recorder := httptest.NewRecorder()
@@ -112,10 +112,10 @@ func TestCreateFactoryRejectsTrailingContentAfterJSONBody(t *testing.T) {
 		"a body carrying more than one JSON value must be refused, not bound from the first one")
 }
 
-// TestCreateFactoryAcceptsTrailingWhitespace keeps the rule above from
+// TestCreateHandlerAcceptsTrailingWhitespace keeps the rule above from
 // overreaching: whitespace after the body is not content, and bodies written
 // with a trailing newline are ordinary.
-func TestCreateFactoryAcceptsTrailingWhitespace(t *testing.T) {
+func TestCreateHandlerAcceptsTrailingWhitespace(t *testing.T) {
 	engine := newNormalizeProbeEngine(t, "normalize-trailing-space-probes")
 
 	recorder := httptest.NewRecorder()
@@ -128,11 +128,11 @@ func TestCreateFactoryAcceptsTrailingWhitespace(t *testing.T) {
 	require.Contains(t, recorder.Body.String(), `"item_count":1`)
 }
 
-// TestCreateFactoryBindFailureNamesOffendingField pins the response envelope
+// TestCreateHandlerBindFailureNamesOffendingField pins the response envelope
 // of a type-mismatch bind failure: a stable message naming the offending field
 // through its JSON path, never the decoder's own text with Go struct and
 // package internals.
-func TestCreateFactoryBindFailureNamesOffendingField(t *testing.T) {
+func TestCreateHandlerBindFailureNamesOffendingField(t *testing.T) {
 	engine := newNormalizeProbeEngine(t, "bind-error-field-probes")
 
 	recorder := httptest.NewRecorder()
@@ -145,10 +145,10 @@ func TestCreateFactoryBindFailureNamesOffendingField(t *testing.T) {
 		"a bind failure must render the stable client-safe message, not the raw decoder error")
 }
 
-// TestCreateFactoryBindFailureOnMalformedJSON pins the response envelope of a
+// TestCreateHandlerBindFailureOnMalformedJSON pins the response envelope of a
 // syntactically broken body: the generic not-valid-JSON message, with the
 // decoder's position details kept for logs only.
-func TestCreateFactoryBindFailureOnMalformedJSON(t *testing.T) {
+func TestCreateHandlerBindFailureOnMalformedJSON(t *testing.T) {
 	engine := newNormalizeProbeEngine(t, "bind-error-syntax-probes")
 
 	recorder := httptest.NewRecorder()
@@ -161,17 +161,17 @@ func TestCreateFactoryBindFailureOnMalformedJSON(t *testing.T) {
 		"a malformed body must render the stable client-safe message, not the raw decoder error")
 }
 
-// TestCreateFactoryRequiresBodyOnModelPath pins the model-path create
+// TestCreateHandlerRequiresBodyOnModelPath pins the model-path create
 // contract: creating a resource requires a body, so an absent one renders the
 // stable required-body rejection instead of a success without a row. The
 // delegation path keeps tolerating an empty body — action endpoints without a
-// payload live there, pinned by TestCreateFactoryRestoresNullBodyRequest.
-func TestCreateFactoryRequiresBodyOnModelPath(t *testing.T) {
+// payload live there, pinned by TestCreateHandlerRestoresNullBodyRequest.
+func TestCreateHandlerRequiresBodyOnModelPath(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
 	engine := gin.New()
 	engine.POST("/required-body-create-probes",
-		CreateFactory[*normalizeProbeModel, *normalizeProbeModel, *normalizeProbeModel]())
+		CreateHandler[*normalizeProbeModel, *normalizeProbeModel, *normalizeProbeModel]())
 
 	recorder := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodPost, "/required-body-create-probes", nil)
@@ -184,15 +184,15 @@ func TestCreateFactoryRequiresBodyOnModelPath(t *testing.T) {
 		"an absent body must be refused, not answered as an empty success")
 }
 
-// TestUpdateFactoryRequiresBody pins the model-path full update contract: an
+// TestUpdateHandlerRequiresBody pins the model-path full update contract: an
 // absent request body renders the stable required-body message instead of the
 // bare io.EOF text.
-func TestUpdateFactoryRequiresBody(t *testing.T) {
+func TestUpdateHandlerRequiresBody(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
 	engine := gin.New()
 	engine.PUT("/required-body-probes/:id",
-		UpdateFactory[*normalizeProbeModel, *normalizeProbeModel, *normalizeProbeModel](
+		UpdateHandler[*normalizeProbeModel, *normalizeProbeModel, *normalizeProbeModel](
 			&types.ControllerConfig[*normalizeProbeModel]{Route: "required-body-probes", ParamName: "id"},
 		))
 
@@ -207,17 +207,17 @@ func TestUpdateFactoryRequiresBody(t *testing.T) {
 		"an absent body must render the stable message, not the bare io.EOF text")
 }
 
-// TestDeleteManyFactoryBindFailureRendersClientSafeMessage pins the model-path
+// TestDeleteManyHandlerBindFailureRendersClientSafeMessage pins the model-path
 // batch-delete bind failure to the ordinary invalid-parameter envelope. The
 // rendered error must be the bind error itself: this handler once passed a
 // separate, still-nil error variable into the envelope, turning every bind
 // failure into a nil-dereference panic instead of a 400.
-func TestDeleteManyFactoryBindFailureRendersClientSafeMessage(t *testing.T) {
+func TestDeleteManyHandlerBindFailureRendersClientSafeMessage(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
 	engine := gin.New()
 	engine.DELETE("/bind-error-delete-probes/batch",
-		DeleteManyFactory[*normalizeProbeModel, *normalizeProbeModel, *normalizeProbeModel]())
+		DeleteManyHandler[*normalizeProbeModel, *normalizeProbeModel, *normalizeProbeModel]())
 
 	recorder := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodDelete, "/bind-error-delete-probes/batch", strings.NewReader(`{"ids":3}`))
@@ -229,16 +229,16 @@ func TestDeleteManyFactoryBindFailureRendersClientSafeMessage(t *testing.T) {
 	require.Contains(t, recorder.Body.String(), `"msg":"invalid value for field 'ids'"`)
 }
 
-// TestUpdateManyFactoryBindFailureRendersInvalidParamCode pins the error code
+// TestUpdateManyHandlerBindFailureRendersInvalidParamCode pins the error code
 // of a model-path bind failure: every bind failure classifies as invalid
 // parameters, aligning the batch and patch handlers with the create/update
 // single-resource ones.
-func TestUpdateManyFactoryBindFailureRendersInvalidParamCode(t *testing.T) {
+func TestUpdateManyHandlerBindFailureRendersInvalidParamCode(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
 	engine := gin.New()
 	engine.PUT("/bind-error-code-probes/batch",
-		UpdateManyFactory[*normalizeProbeModel, *normalizeProbeModel, *normalizeProbeModel]())
+		UpdateManyHandler[*normalizeProbeModel, *normalizeProbeModel, *normalizeProbeModel]())
 
 	recorder := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodPut, "/bind-error-code-probes/batch", strings.NewReader(`{"items":3}`))
@@ -394,6 +394,6 @@ func newNormalizeProbeEngine(t *testing.T, route string) *gin.Engine {
 
 	registerTestService[*normalizeProbeModel, *normalizeProbeReq, *normalizeProbeRsp](consts.PHASE_CREATE, route, &normalizeProbeService{})
 	engine := gin.New()
-	engine.POST("/"+route, CreateFactory[*normalizeProbeModel, *normalizeProbeReq, *normalizeProbeRsp](&types.ControllerConfig[*normalizeProbeModel]{Route: route}))
+	engine.POST("/"+route, CreateHandler[*normalizeProbeModel, *normalizeProbeReq, *normalizeProbeRsp](&types.ControllerConfig[*normalizeProbeModel]{Route: route}))
 	return engine
 }

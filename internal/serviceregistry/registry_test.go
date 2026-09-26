@@ -45,7 +45,7 @@ func TestResolveReturnsBaseWhenServiceMissing(t *testing.T) {
 	require.True(t, ok)
 }
 
-// TestResolveSeesLateRegistration guards the contract controller factories
+// TestResolveSeesLateRegistration guards the contract the controller handlers
 // rely on: the key may be built before the service is registered, and
 // per-request resolution through that key must still find the service.
 func TestResolveSeesLateRegistration(t *testing.T) {
@@ -117,7 +117,7 @@ func TestRegisterPanicsOnEmptyRoute(t *testing.T) {
 
 // TestResolveReturnsBaseOnTypeMismatch covers the wiring-bug path opened by
 // the type-free key: a hand-written registration can disagree with the
-// resolving factory's type parameters, and the mismatch must degrade to the
+// resolving handler's type parameters, and the mismatch must degrade to the
 // no-op Base instead of panicking mid-request.
 func TestResolveReturnsBaseOnTypeMismatch(t *testing.T) {
 	type svc struct {

@@ -18,7 +18,7 @@ import (
 	"go.uber.org/zap"
 )
 
-// UpdateFactory returns a Gin handler that replaces one resource.
+// UpdateHandler returns a Gin handler that replaces one resource.
 //
 // When M, REQ, and RSP are the same type, the handler binds the JSON body into
 // M, reads the resource id from the configured route parameter (the id carried
@@ -27,7 +27,7 @@ import (
 //
 // When REQ or RSP differs from M, the handler is the phase service's (see
 // serviceHandler): its Update method runs on the bound payload.
-func UpdateFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...*types.ControllerConfig[M]) gin.HandlerFunc {
+func UpdateHandler[M types.Model, REQ types.Request, RSP types.Response](cfg ...*types.ControllerConfig[M]) gin.HandlerFunc {
 	a := newAction[M, REQ, RSP](routeFromConfig(cfg...), consts.PHASE_UPDATE, consts.PHASE_UPDATE_BEFORE, consts.PHASE_UPDATE_AFTER)
 	if !a.typesEqual {
 		return a.serviceHandler()
@@ -74,7 +74,7 @@ func UpdateFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...
 }
 
 // UpdateCall returns the update call of M on route, the counterpart of the
-// handler UpdateFactory returns for the generated handler of an Update rpc:
+// handler UpdateHandler returns for the generated handler of an Update rpc:
 // given the route parameters, the id the request message names the record
 // by and the replacement it decoded into, it validates the replacement the
 // way the handler validates a bound body, runs the update flow (see
@@ -110,7 +110,7 @@ func UpdateCall[M types.Model](route string) func(ctx context.Context, params ma
 // creation audit columns (created_at/created_by) from the persisted row,
 // keeping the rest of req intact so hook-populated fields survive; req is the
 // replacement answered. The id req carries is replaced by id, which must not
-// be empty (see setRouteID); an id the model rejects answers CodeNotFound
+// be empty (see setID); an id the model rejects answers CodeNotFound
 // without touching the database.
 func (a *action[M, REQ, RSP]) updateFlow(ctx context.Context, newServiceContext serviceContextFunc, id string, req M) error {
 	log := logger.Controller.WithContext(ctx, consts.PHASE_UPDATE)
@@ -118,7 +118,7 @@ func (a *action[M, REQ, RSP]) updateFlow(ctx context.Context, newServiceContext 
 
 	// 'm' is a fresh model instance, such as: &model.User{ID: myid}.
 	m := a.newModel()
-	if !setRouteID(m, id) {
+	if !setID(m, id) {
 		// An id the model rejects cannot match any row; answer 404 without
 		// touching the database.
 		log.Errorz("route id rejected by model", zap.String("id", id))
@@ -161,7 +161,7 @@ func (a *action[M, REQ, RSP]) updateFlow(ctx context.Context, newServiceContext 
 	// 4.record operation log to database.
 	// Record, Request, and Response carry the same serialized payload on
 	// this action, so one marshal feeds all three columns.
-	if err := am.RecordOperation(ctx, req, consts.OP_UPDATE,
+	if err := audit.RecordOperation(ctx, req, consts.OP_UPDATE,
 		func() *modellogmgmt.OperationLog {
 			record, _ := json.Marshal(req)
 			entry := operationLog(ctx, a.name)

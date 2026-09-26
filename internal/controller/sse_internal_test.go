@@ -22,7 +22,7 @@ import (
 // sseSampleService streams until its context ends and returns that ending,
 // wrapped the way service code wraps an error.
 type sseSampleService struct {
-	serviceregistry.Base[*factoryRouteModel, *factoryRouteModel, *factoryRouteModel]
+	serviceregistry.Base[*handlerRouteModel, *handlerRouteModel, *handlerRouteModel]
 }
 
 func (*sseSampleService) SSE(ctx *types.ServiceContext) error {
@@ -30,19 +30,19 @@ func (*sseSampleService) SSE(ctx *types.ServiceContext) error {
 	return errors.Wrap(ctx.Err(), "sample stream")
 }
 
-// TestSSEFactoryRecordsAStreamEndedByShutdownAsInterrupted proves the server
+// TestSSEHandlerRecordsAStreamEndedByShutdownAsInterrupted proves the server
 // shutting down ends an SSE request through its context, and that a stream
 // ending that way is recorded as how it ended rather than as a failure: the
 // controller span carries an interrupted event naming the shutdown, and
 // neither span is marked as failed although the service returned the ending.
-func TestSSEFactoryRecordsAStreamEndedByShutdownAsInterrupted(t *testing.T) {
+func TestSSEHandlerRecordsAStreamEndedByShutdownAsInterrupted(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	oteltest.Enable(t)
 	recorder := oteltest.Record(t)
 
-	registerTestService[*factoryRouteModel, *factoryRouteModel, *factoryRouteModel](consts.PHASE_SSE, "samples/stream", &sseSampleService{})
+	registerTestService[*handlerRouteModel, *handlerRouteModel, *handlerRouteModel](consts.PHASE_SSE, "samples/stream", &sseSampleService{})
 	engine := gin.New()
-	engine.GET("/samples/stream", SSEFactory[*factoryRouteModel, *factoryRouteModel, *factoryRouteModel](&types.ControllerConfig[*factoryRouteModel]{Route: "samples/stream"}))
+	engine.GET("/samples/stream", SSEHandler[*handlerRouteModel, *handlerRouteModel, *handlerRouteModel](&types.ControllerConfig[*handlerRouteModel]{Route: "samples/stream"}))
 
 	shutdown, beginShutdown := context.WithCancel(t.Context())
 	req := httptest.NewRequestWithContext(sse.WithServerShutdown(t.Context(), shutdown), http.MethodGet, "/samples/stream", nil)
@@ -58,10 +58,10 @@ func TestSSEFactoryRecordsAStreamEndedByShutdownAsInterrupted(t *testing.T) {
 		t.Fatal("the request must end when the server shuts down")
 	}
 
-	controllerSpan := oteltest.EndedNamed(t, recorder, "controller.FactoryRouteModel.SSE")
+	controllerSpan := oteltest.EndedNamed(t, recorder, "controller.HandlerRouteModel.SSE")
 	require.Equal(t, []string{"server shutting down"}, eventReasons(controllerSpan, "interrupted"))
 	require.Equal(t, codes.Unset, controllerSpan.Status().Code, "a stream ended by the shutdown is not a failure")
-	serviceSpan := oteltest.EndedNamed(t, recorder, "service.FactoryRouteModel.SSE")
+	serviceSpan := oteltest.EndedNamed(t, recorder, "service.HandlerRouteModel.SSE")
 	require.Equal(t, codes.Unset, serviceSpan.Status().Code, "nor is it one on the service span")
 }
 

@@ -3,7 +3,6 @@ package controller
 import (
 	"context"
 	"net/url"
-	"reflect"
 	"slices"
 	"strconv"
 	"strings"
@@ -20,8 +19,8 @@ import (
 	"go.uber.org/zap"
 )
 
-// This file holds the gRPC half of the handlers, the counterpart of the
-// factories for the services the generated pb package registers. An HTTP
+// This file holds the gRPC half of the actions, the counterpart of the HTTP
+// handlers for the services the generated pb package registers. An HTTP
 // handler binds the body and the route parameters of a request, runs the
 // flow and writes its answer in the envelope; the call function of an rpc
 // (see CreateCall and its kind, and ServiceCall) takes what the generated
@@ -186,30 +185,6 @@ const (
 	missingIDMsg = "id is required"
 )
 
-// maskFieldSet returns the fields of typ the paths of an update mask name,
-// as the message names them, the JSON keys of the model: what a Patch rpc
-// applies of the values it carries. The mask must name at least one field,
-// a Patch applying nothing being a mistake to report rather than a
-// record to answer unchanged, and every path must name a field the patch
-// can apply: the model's own fields, not the framework's base fields, a
-// nested struct or a field the model does not have.
-func maskFieldSet(typ reflect.Type, paths []string) (patchFieldSet, error) {
-	if len(paths) == 0 {
-		return nil, errors.New("update_mask must name at least one field")
-	}
-	jsonFields := patchJSONFieldNames(typ)
-	kinds := cachedModelFieldKinds(typ)
-	fields := make(patchFieldSet, len(paths))
-	for _, path := range paths {
-		fieldName, ok := jsonFields[path]
-		if !ok || kinds[fieldName] == reflect.Struct {
-			return nil, errors.Newf("update_mask names %q, which is no field a patch applies", path)
-		}
-		fields[fieldName] = struct{}{}
-	}
-	return fields, nil
-}
-
 // call is one run of an action for an rpc: the call's context with the
 // parameters attached and the controller span started, the span, the log of
 // the action, and the service contexts built for the hooks and the service,
@@ -299,23 +274,6 @@ func (c *call) failService(err error) error {
 	return statusOf(serviceErrorCoder(err), err)
 }
 
-// statusOf returns the status a call answers err with, the failure of a flow
-// or a service, from the code the HTTP listener would answer it with: the
-// code's mapping (see grpcserver.StatusOfCoder) for every failure the
-// listener recognizes — a refusal, a missing record, a conflict, a service
-// error with a status of its own — and Internal with a fixed message for the
-// generic failure, the one the listener answers a failure it did not
-// recognize with, an unknown database error or a plain error of a hook or
-// service: a failure of the server's own is the server's, not, as the HTTP
-// envelope has it, the client's, and its text stays out of the answer the
-// way grpcserver.StatusError keeps it out.
-func statusOf(coder types.Coder, err error) error {
-	if coder == CodeFailure {
-		return grpcserver.StatusError(err)
-	}
-	return grpcserver.StatusOfCoder(coder)
-}
-
 // finish ends a call whose flow or service returned, checking the service
 // contexts it built: a service that asked one of them for a raw HTTP
 // response — a body, a stream, a cookie — believes it answered, and the call
@@ -345,7 +303,7 @@ func answer[T any](c *call, result T) (T, error) {
 // ServiceCall returns the call of the phase service's method for the action
 // of phase on route, for the generated handler of the rpc of an action
 // declaring a Payload or Result of its own: the counterpart of the
-// delegation the factories make when M, REQ and RSP differ. Given the route
+// handler serviceHandler returns when M, REQ and RSP differ. Given the route
 // parameters, the query of a List or Get, and the payload the request
 // message decoded into, the call validates the payload the way the handler
 // validates a bound body — not for a List or Get, whose HTTP request binds

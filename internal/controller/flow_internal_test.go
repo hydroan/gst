@@ -75,9 +75,9 @@ func TestGetFlowAnswersNotFoundAsACode(t *testing.T) {
 // taking the id from the body would leave the entry without one.
 func TestPatchFlowRecordsTheRecordIDInTheOperationLog(t *testing.T) {
 	require.NoError(t, database.DB().AutoMigrate(&modellogmgmt.OperationLog{}))
-	previous := am
-	am = auditmanager.New(&config.Audit{Enabled: true})
-	t.Cleanup(func() { am = previous })
+	previous := audit
+	audit = auditmanager.New(&config.Audit{Enabled: true})
+	t.Cleanup(func() { audit = previous })
 
 	a := newAction[*flowSample, *flowSample, *flowSample]("flow-samples", consts.PHASE_PATCH, consts.PHASE_PATCH_BEFORE, consts.PHASE_PATCH_AFTER)
 	ctx := requestctx.WithMetadata(context.Background(), requestctx.New(requestctx.Fields{Username: "flow-user"}))

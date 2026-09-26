@@ -23,7 +23,7 @@ var errNotFoundService = errors.New("no service instance matches the given route
 //
 // The route must be the exact raw route string the HTTP layer registers the
 // matching handler under, because Key derives the registry key from it and
-// controller factories resolve services through that key. An empty route
+// the controller handlers resolve services through that key. An empty route
 // panics.
 //
 // Registering a second service under one route and phase panics: a silent

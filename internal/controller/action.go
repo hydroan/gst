@@ -21,7 +21,7 @@ import (
 // over HTTP and over gRPC alike: the type-derived values a handler or call
 // needs on every request — reflection results, canonical span names, the
 // service registry key — and, as its methods, the flows the action runs and
-// the glue of each transport around them. Every XxxFactory builds one
+// the glue of each transport around them. Every XxxHandler builds one
 // instance at route-registration time and every XxxCall one as the call
 // function is built, each shared with all requests through the returned
 // closure. All fields are read-only after construction, so concurrent
@@ -31,15 +31,14 @@ import (
 type action[M types.Model, REQ types.Request, RSP types.Response] struct {
 	typ        reflect.Type // struct type underlying M
 	name       string       // struct name of M, recorded in span attributes and logs
-	fullName   string       // fully qualified struct name of M, used as log object key
 	typesEqual bool         // whether M, REQ, and RSP are the same type
 	phase      consts.Phase // the primary phase, the one the handler or call serves
-	svcKey     string       // service registry key, resolved per request via serviceregistry.Resolve
+	serviceKey string       // service registry key, resolved per request via serviceregistry.Resolve
 
 	reqKind reflect.Kind // original kind of REQ before pointer dereferencing
 	reqTyp  reflect.Type // struct type underlying REQ, used to build zero requests
 
-	controllerSpan phaseSpan                  // controller span of the factory's primary phase
+	controllerSpan phaseSpan                  // controller span of the action's primary phase
 	serviceSpans   map[consts.Phase]phaseSpan // service span names keyed by phase
 }
 
@@ -83,10 +82,9 @@ func newAction[M types.Model, REQ types.Request, RSP types.Response](route strin
 	return &action[M, REQ, RSP]{
 		typ:            typ,
 		name:           name,
-		fullName:       typ.String(),
 		typesEqual:     modelregistry.AreTypesEqual[M, REQ, RSP](),
 		phase:          phase,
-		svcKey:         serviceregistry.Key(phase, route),
+		serviceKey:     serviceregistry.Key(phase, route),
 		reqKind:        reqKind,
 		reqTyp:         reqTyp,
 		controllerSpan: newPhaseSpan("controller", name, phase),
@@ -137,7 +135,7 @@ func (a *action[M, REQ, RSP]) newRequest() REQ {
 // key. Resolution stays per request so services registered after route
 // registration are still picked up.
 func (a *action[M, REQ, RSP]) service() types.Service[M, REQ, RSP] {
-	return serviceregistry.Resolve[M, REQ, RSP](a.svcKey)
+	return serviceregistry.Resolve[M, REQ, RSP](a.serviceKey)
 }
 
 // startControllerSpan starts the span for the controller operation of the

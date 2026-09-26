@@ -13,9 +13,9 @@ import (
 )
 
 // TestImportRefusesARequestWithoutItsFile pins the 400 of an import whose
-// form carries no file, and of one whose file is over MAX_IMPORT_SIZE.
+// form carries no file, and of one whose file is over MaxImportSize.
 func TestImportRefusesARequestWithoutItsFile(t *testing.T) {
-	handler := controller.ImportFactory[*sampleRecord, *sampleRecord, *sampleRecord](configFor[*sampleRecord](importRoute))
+	handler := controller.ImportHandler[*sampleRecord, *sampleRecord, *sampleRecord](configFor[*sampleRecord](importRoute))
 
 	t.Run("no file", func(t *testing.T) {
 		rsp := serve(t, http.MethodPost, "/controller-imports/import", handler, "/controller-imports/import", "")
@@ -25,7 +25,7 @@ func TestImportRefusesARequestWithoutItsFile(t *testing.T) {
 	})
 
 	t.Run("a file over the limit", func(t *testing.T) {
-		rsp := upload(t, handler, bytes.Repeat([]byte(" "), controller.MAX_IMPORT_SIZE+1))
+		rsp := upload(t, handler, bytes.Repeat([]byte(" "), controller.MaxImportSize+1))
 
 		require.Equal(t, http.StatusBadRequest, rsp.Code)
 		require.Contains(t, rsp.Body.String(), "too large file")
@@ -39,7 +39,7 @@ func TestImportCreatesAndReplacesByID(t *testing.T) {
 	record := createSample(t, "import-stored")
 	created := uniqueName("import-created")
 
-	rsp := upload(t, controller.ImportFactory[*sampleRecord, *sampleRecord, *sampleRecord](configFor[*sampleRecord](importRoute)),
+	rsp := upload(t, controller.ImportHandler[*sampleRecord, *sampleRecord, *sampleRecord](configFor[*sampleRecord](importRoute)),
 		[]byte(`[{"name":"`+created+`"},{"id":"`+record.GetID()+`","name":"import-replaced"}]`))
 
 	require.Equal(t, http.StatusOK, rsp.Code, rsp.Body.String())
@@ -53,7 +53,7 @@ func TestImportCreatesAndReplacesByID(t *testing.T) {
 func TestImportWritesNothingWhenARowNamesAMissingRecord(t *testing.T) {
 	orphan := uniqueName("import-orphan")
 
-	rsp := upload(t, controller.ImportFactory[*sampleRecord, *sampleRecord, *sampleRecord](configFor[*sampleRecord](importRoute)),
+	rsp := upload(t, controller.ImportHandler[*sampleRecord, *sampleRecord, *sampleRecord](configFor[*sampleRecord](importRoute)),
 		[]byte(`[{"name":"`+orphan+`"},{"id":"missing","name":"import-other"}]`))
 
 	require.Equal(t, http.StatusNotFound, rsp.Code)
@@ -65,7 +65,7 @@ func TestImportWritesNothingWhenARowNamesAMissingRecord(t *testing.T) {
 func TestImportAnswersTheServiceRefusal(t *testing.T) {
 	name := uniqueName("import-refused")
 
-	rsp := upload(t, controller.ImportFactory[*sampleRecord, *sampleRecord, *sampleRecord](configFor[*sampleRecord](refusedImportRoute)),
+	rsp := upload(t, controller.ImportHandler[*sampleRecord, *sampleRecord, *sampleRecord](configFor[*sampleRecord](refusedImportRoute)),
 		[]byte(`[{"name":"`+name+`"}]`))
 
 	require.Equal(t, http.StatusConflict, rsp.Code)

@@ -14,7 +14,7 @@ import (
 func TestPatchAnswersNotFound(t *testing.T) {
 	t.Run("an id no record carries", func(t *testing.T) {
 		rsp := serve(t, http.MethodPatch, "/controller-samples/:id",
-			controller.PatchFactory[*sampleRecord, *sampleRecord, *sampleRecord](configFor[*sampleRecord](sampleRoute)),
+			controller.PatchHandler[*sampleRecord, *sampleRecord, *sampleRecord](configFor[*sampleRecord](sampleRoute)),
 			"/controller-samples/missing", `{"name":"renamed"}`)
 
 		require.Equal(t, http.StatusNotFound, rsp.Code)
@@ -22,7 +22,7 @@ func TestPatchAnswersNotFound(t *testing.T) {
 
 	t.Run("an id the integer key cannot hold", func(t *testing.T) {
 		rsp := serve(t, http.MethodPatch, "/controller-counters/:id",
-			controller.PatchFactory[*sampleCounter, *sampleCounter, *sampleCounter](configFor[*sampleCounter](counterRoute)),
+			controller.PatchHandler[*sampleCounter, *sampleCounter, *sampleCounter](configFor[*sampleCounter](counterRoute)),
 			"/controller-counters/first", `{"name":"renamed"}`)
 
 		require.Equal(t, http.StatusNotFound, rsp.Code)
@@ -34,7 +34,7 @@ func TestPatchAnswersNotFound(t *testing.T) {
 // check the row against itself.
 func TestPatchRefusesAVersionedRecordWithoutItsVersion(t *testing.T) {
 	rsp := serve(t, http.MethodPatch, "/controller-versioned-samples/:id",
-		controller.PatchFactory[*versionedSample, *versionedSample, *versionedSample](configFor[*versionedSample](versionedRoute)),
+		controller.PatchHandler[*versionedSample, *versionedSample, *versionedSample](configFor[*versionedSample](versionedRoute)),
 		"/controller-versioned-samples/missing", `{"name":"renamed"}`)
 
 	require.Equal(t, http.StatusBadRequest, rsp.Code)
@@ -47,7 +47,7 @@ func TestPatchKeepsTheRecordTheBeforeHookRefuses(t *testing.T) {
 	record := createSample(t, "patch-refused")
 
 	rsp := serve(t, http.MethodPatch, "/controller-refusals/:id",
-		controller.PatchFactory[*sampleRecord, *sampleRecord, *sampleRecord](configFor[*sampleRecord](refusalRoute)),
+		controller.PatchHandler[*sampleRecord, *sampleRecord, *sampleRecord](configFor[*sampleRecord](refusalRoute)),
 		"/controller-refusals/"+record.GetID(), `{"name":"renamed"}`)
 
 	require.Equal(t, http.StatusConflict, rsp.Code)

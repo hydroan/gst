@@ -9,7 +9,7 @@ import (
 
 // TestMain brings the framework up on its default database with the fixture
 // tables and services registered, so the handler tests read and write real
-// rows through the factories they mount.
+// rows through the handlers they mount.
 func TestMain(m *testing.M) {
 	testutil.Run(m, testutil.Server{
 		Register: func() {

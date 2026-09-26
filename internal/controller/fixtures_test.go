@@ -67,7 +67,7 @@ type validatedSample struct {
 
 func (validatedSample) TableName() string { return "controller_validated_samples" }
 
-// The routes the fixture services are registered under. A factory mounted
+// The routes the fixture services are registered under. A handler mounted
 // with one of them as its config route resolves that route's service; any
 // other route resolves none and runs on the framework's default service.
 const (
@@ -256,7 +256,7 @@ func (*actionService) List(sc *types.ServiceContext, req *sampleActionReq) (*sam
 	return &sampleActionRsp{Note: req.Note, observedCall: observe(sc)}, nil
 }
 
-// configFor is the controller config a factory is mounted with: the route
+// configFor is the controller config a handler is mounted with: the route
 // the service registry resolves the phase service by, and the id parameter
 // of the single-resource paths.
 func configFor[M types.Model](route string) *types.ControllerConfig[M] {

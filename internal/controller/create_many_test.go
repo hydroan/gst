@@ -18,7 +18,7 @@ func TestCreateManyWritesNothingWhenOneItemCollides(t *testing.T) {
 	fresh := uniqueName("create-many-fresh")
 
 	rsp := serve(t, http.MethodPost, "/controller-samples/batch",
-		controller.CreateManyFactory[*sampleRecord, *sampleRecord, *sampleRecord](configFor[*sampleRecord](sampleRoute)),
+		controller.CreateManyHandler[*sampleRecord, *sampleRecord, *sampleRecord](configFor[*sampleRecord](sampleRoute)),
 		"/controller-samples/batch", `{"items":[{"name":"`+fresh+`"},{"id":"`+record.GetID()+`","name":"create-many-other"}]}`)
 
 	require.Equal(t, http.StatusConflict, rsp.Code)
@@ -33,7 +33,7 @@ func TestCreateManyWritesNothingWhenOneItemCollides(t *testing.T) {
 // written.
 func TestCreateManyRefusesAnItemFailingValidation(t *testing.T) {
 	rsp := serve(t, http.MethodPost, "/controller-validated-samples/batch",
-		controller.CreateManyFactory[*validatedSample, *validatedSample, *validatedSample](configFor[*validatedSample](validatedRoute)),
+		controller.CreateManyHandler[*validatedSample, *validatedSample, *validatedSample](configFor[*validatedSample](validatedRoute)),
 		"/controller-validated-samples/batch", `{"items":[{"name":"valid"},{}]}`)
 
 	require.Equal(t, http.StatusBadRequest, rsp.Code)
@@ -50,7 +50,7 @@ func TestCreateManyWritesNothingTheBeforeHookRefuses(t *testing.T) {
 	name := uniqueName("create-many-refused")
 
 	rsp := serve(t, http.MethodPost, "/controller-refusals/batch",
-		controller.CreateManyFactory[*sampleRecord, *sampleRecord, *sampleRecord](configFor[*sampleRecord](refusalRoute)),
+		controller.CreateManyHandler[*sampleRecord, *sampleRecord, *sampleRecord](configFor[*sampleRecord](refusalRoute)),
 		"/controller-refusals/batch", `{"items":[{"name":"`+name+`"}]}`)
 
 	require.Equal(t, http.StatusConflict, rsp.Code)
@@ -65,7 +65,7 @@ func TestCreateManyIgnoresMembersTheBatchDoesNotDeclare(t *testing.T) {
 	name := uniqueName("create-many-optioned")
 
 	rsp := serve(t, http.MethodPost, "/controller-samples/batch",
-		controller.CreateManyFactory[*sampleRecord, *sampleRecord, *sampleRecord](configFor[*sampleRecord](sampleRoute)),
+		controller.CreateManyHandler[*sampleRecord, *sampleRecord, *sampleRecord](configFor[*sampleRecord](sampleRoute)),
 		"/controller-samples/batch", `{"items":[{"name":"`+name+`"}],"options":{"atomic":true}}`)
 
 	require.Equal(t, http.StatusOK, rsp.Code, rsp.Body.String())

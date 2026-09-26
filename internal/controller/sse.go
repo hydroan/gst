@@ -17,7 +17,7 @@ import (
 	"go.uber.org/zap"
 )
 
-// SSEFactory returns a Gin handler that streams Server-Sent Events.
+// SSEHandler returns a Gin handler that streams Server-Sent Events.
 //
 // The action always delegates to the phase service's SSE method, which opens
 // the stream through ServiceContext.SSE and blocks until it is over; there is
@@ -34,7 +34,7 @@ import (
 // written. A setup failure before the stream opened is answered as a regular
 // error envelope, while an error after streaming began can only be logged,
 // because the response is already on the wire.
-func SSEFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...*types.ControllerConfig[M]) gin.HandlerFunc {
+func SSEHandler[M types.Model, REQ types.Request, RSP types.Response](cfg ...*types.ControllerConfig[M]) gin.HandlerFunc {
 	a := newAction[M, REQ, RSP](routeFromConfig(cfg...), consts.PHASE_SSE)
 	return func(c *gin.Context) {
 		stream, stopStream := sse.StreamContext(c.Request.Context())

@@ -12,8 +12,8 @@ import (
 // query parameters the model cannot answer, each refused before any row is
 // read.
 func TestListRefusesMalformedQueryParameters(t *testing.T) {
-	samples := controller.ListFactory[*sampleRecord, *sampleRecord, *sampleRecord](configFor[*sampleRecord](sampleRoute))
-	counters := controller.ListFactory[*sampleCounter, *sampleCounter, *sampleCounter](configFor[*sampleCounter](counterRoute))
+	samples := controller.ListHandler[*sampleRecord, *sampleRecord, *sampleRecord](configFor[*sampleRecord](sampleRoute))
+	counters := controller.ListHandler[*sampleCounter, *sampleCounter, *sampleCounter](configFor[*sampleCounter](counterRoute))
 
 	for _, tt := range []struct {
 		name   string
@@ -51,7 +51,7 @@ func TestListAnswersAHookRefusal(t *testing.T) {
 	for _, route := range []string{refusalRoute, filterRefusalRoute} {
 		t.Run(route, func(t *testing.T) {
 			rsp := serve(t, http.MethodGet, "/"+route,
-				controller.ListFactory[*sampleRecord, *sampleRecord, *sampleRecord](configFor[*sampleRecord](route)),
+				controller.ListHandler[*sampleRecord, *sampleRecord, *sampleRecord](configFor[*sampleRecord](route)),
 				"/"+route, "")
 
 			require.Equal(t, http.StatusConflict, rsp.Code)

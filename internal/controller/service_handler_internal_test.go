@@ -30,7 +30,7 @@ type (
 // payloadService answers every action with the note it was given, so a test
 // reads back what the handler bound.
 type payloadService struct {
-	serviceregistry.Base[*factoryRouteModel, *payloadReq, *payloadRsp]
+	serviceregistry.Base[*handlerRouteModel, *payloadReq, *payloadRsp]
 }
 
 func (*payloadService) Create(_ *types.ServiceContext, req *payloadReq) (*payloadRsp, error) {
@@ -55,13 +55,13 @@ func TestServiceHandlerBindsWhatTheActionReads(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	const route = "payloads"
 	for _, phase := range []consts.Phase{consts.PHASE_CREATE, consts.PHASE_GET, consts.PHASE_LIST} {
-		registerTestService[*factoryRouteModel, *payloadReq, *payloadRsp](phase, route, &payloadService{})
+		registerTestService[*handlerRouteModel, *payloadReq, *payloadRsp](phase, route, &payloadService{})
 	}
-	cfg := &types.ControllerConfig[*factoryRouteModel]{Route: route, ParamName: "id"}
+	cfg := &types.ControllerConfig[*handlerRouteModel]{Route: route, ParamName: "id"}
 	engine := gin.New()
-	engine.POST("/payloads", CreateFactory[*factoryRouteModel, *payloadReq, *payloadRsp](cfg))
-	engine.GET("/payloads/:id", GetFactory[*factoryRouteModel, *payloadReq, *payloadRsp](cfg))
-	engine.GET("/payloads", ListFactory[*factoryRouteModel, *payloadReq, *payloadRsp](cfg))
+	engine.POST("/payloads", CreateHandler[*handlerRouteModel, *payloadReq, *payloadRsp](cfg))
+	engine.GET("/payloads/:id", GetHandler[*handlerRouteModel, *payloadReq, *payloadRsp](cfg))
+	engine.GET("/payloads", ListHandler[*handlerRouteModel, *payloadReq, *payloadRsp](cfg))
 
 	form := new(bytes.Buffer)
 	writer := multipart.NewWriter(form)
