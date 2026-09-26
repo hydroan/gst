@@ -57,6 +57,7 @@ gst 是强约定框架（Apple 风格），不是自由框架（Windows 风格�
    1. gg 生成 Go 代码一律 go/ast 拼装、go/printer 打印，禁止字符串拼接和 text/template；注释挂在节点 Doc 上，排版靠节点位置，不做字符串后处理。
    2. 生成产物的函数，不论产物是 Go 代码还是 .proto、TypeScript 这类文本，注释都要写出它对一个具体输入实际生成的内容，并由一条输入相同的测试用例逐字守住（用例注释标明它守住哪些函数的例子，整份文件的黄金测试可以同时守住多个函数）；推导名字、路径、别名这类规则函数，注释给出具体的输入和输出。
 7. 静态检查的分工：gst 自身的规则由 make check 挂载的检查器强制；业务项目的规则由 gg check 强制，gg check 只检查业务项目，不检查框架自身。
+8. 预分配的容量和字面量。为避免热路径重复分配而预留的容量（make 的第三个参数、属性批的上限等）必须是常量，并由一条测试用最坏情况钉住「恰好填满」，多加一个元素就红；协议名、键名、域名这类标识用常量，不写字面量，已有常量的直接用。
 
 ### 时间基的唯一权威：UTC
 
@@ -184,7 +185,7 @@ README.md 面向使用 gst 框架的后端开发者，应保持简洁并聚焦�
 - `service/**/*.go` 是业务实现层。这里实现 `Create`、`Delete`、`Update`、`Patch`、`List`、`Get`、`DeleteMany` 等方法，以及 `CreateBefore`、`ListAfter`、`Filter` 等复杂 hook。
 - `service/**/*_test.go` 是接口测试：`gg gen` 随新 service 文件生成骨架（外部测试包，首行 `t.Fatal`，其后是用 `client` 包写好的示例请求，删掉首行即可运行），生成后归项目维护，`gg gen` 不再改写。
 - `module/` 用来注册内置或自定义模块，例如 `iam.Register(...)`。
-- `configx/`、`cronjob/`、`middleware/` 分别用于扩展配置、定时任务和中间件，应用入口通过空导入触发它们的 `init()`。
+- `configx/`、`cronjob/`、`middleware/` 分别用于扩展配置、定时任务和中间件，应用入口通过空导入触发它们的 `init()`；`interceptor/` 只在项目声明了 GRPC() 时存在，放 gRPC 拦截器，同样由空导入触发。
 
 #### model 设计规则
 
