@@ -60,7 +60,7 @@ func TestWritebackFilesTheResultUnderTheLinkKey(t *testing.T) {
 // buildTool builds the command under test into a temporary directory.
 func buildTool(t *testing.T) string {
 	t.Helper()
-	tool := filepath.Join(t.TempDir(), "buildcache")
+	tool := filepath.Join(t.TempDir(), "testcachefix")
 	cmd := exec.Command("go", "build", "-o", tool, ".")
 	out, err := cmd.CombinedOutput()
 	require.NoError(t, err, "%s", out)

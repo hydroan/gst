@@ -1,4 +1,4 @@
-.PHONY: check build format vet lint selfcheck test testv testvv generate fix install uninstall help buildcache
+.PHONY: check build format vet lint selfcheck test testv testvv generate fix install uninstall help testcachefix
 
 # Tool versions - must match go.mod exactly
 GOLANGCI_LINT_VERSION := $(shell go list -m -f '{{.Version}}' github.com/golangci/golangci-lint/v2)
@@ -21,7 +21,7 @@ GOLANGCI_LINT_PKG := github.com/golangci/golangci-lint/v2/cmd/golangci-lint
 GOFUMPT_PKG := mvdan.cc/gofumpt
 GOTESTSUM_PKG := gotest.tools/gotestsum
 
-INSTALL_BINS := golangci-lint gofumpt gotestsum gg buildcache
+INSTALL_BINS := golangci-lint gofumpt gotestsum gg testcachefix
 # install_tool_if_missing installs a Makefile-managed tool only when it is unavailable.
 define install_tool_if_missing
 	@if ! command -v $(1) >/dev/null 2>&1 && [ ! -x "$(GO_BIN_DIR)/$(1)" ]; then \
@@ -71,8 +71,7 @@ help:
 
 # Run all code quality checks
 # Order matches make install tool installation order
-check: build lint selfcheck format vet buildcache
-	@"$(BUILDCACHE)" trim
+check: build lint selfcheck format vet
 	@echo "All checks passed successfully!"
 
 # Build the project. The example modules are not built: vet type-checks each
@@ -162,17 +161,16 @@ TEST_OUTPUT := --format pkgname --format-hide-empty-pkg --hide-summary=skipped
 # rerunning what another ran last.
 TEST_PATH := $(shell go env GOROOT)/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin
 
-# The build cache helper (see internal/cmd/buildcache) keeps make test fast
+# The build cache helper (see internal/cmd/testcachefix) keeps make test fast
 # when everything is cached: go links a cached test's binary again on every
 # run once a change the linker dropped from it moved its link key, and the
-# helper files the result under that key after each suite. It also trims the
-# cache of what went unused for two days, once a day, from the end of check
-# and test, where go's own trim keeps five days. The helper is built from
-# the tree on every run, so it is always the source's.
-BUILDCACHE := $(GO_BIN_DIR)/buildcache
-buildcache:
+# helper files the result under that key after each suite. It adds to the
+# cache and never removes from it, since the cache is the machine's. The
+# helper is built from the tree on every run, so it is always the source's.
+TESTCACHEFIX := $(GO_BIN_DIR)/testcachefix
+testcachefix:
 	@mkdir -p "$(GO_BIN_DIR)"
-	@go build -o "$(BUILDCACHE)" ./internal/cmd/buildcache
+	@go build -o "$(TESTCACHEFIX)" ./internal/cmd/testcachefix
 
 # run_test_suite runs one gotestsum suite, with the arguments after -- given,
 # records every test binary the run links and files the results under their
@@ -181,8 +179,8 @@ define run_test_suite
 	@tool="$$(command -v gotestsum 2>/dev/null || printf '%s' "$(GO_BIN_DIR)/gotestsum")"; \
 		record="$$(mktemp -d)"; \
 		echo "gotestsum $(TEST_OUTPUT) -- $(TEST_FLAGS) $(1)"; \
-		$(TOOL_ENV) "$$tool" $(TEST_OUTPUT) -- $(TEST_FLAGS) -toolexec "$(BUILDCACHE) record-link $$record" $(1); status=$$?; \
-		$(TOOL_ENV) "$(BUILDCACHE)" writeback "$$record"; rm -rf "$$record"; exit $$status
+		$(TOOL_ENV) "$$tool" $(TEST_OUTPUT) -- $(TEST_FLAGS) -toolexec "$(TESTCACHEFIX) record-link $$record" $(1); status=$$?; \
+		$(TOOL_ENV) "$(TESTCACHEFIX)" writeback "$$record"; rm -rf "$$record"; exit $$status
 endef
 
 # run_test_suite_in runs a suite from another directory, the way run_tool_in
@@ -191,12 +189,12 @@ define run_test_suite_in
 	@tool="$$(command -v gotestsum 2>/dev/null || printf '%s' "$(GO_BIN_DIR)/gotestsum")"; \
 		record="$$(mktemp -d)"; \
 		echo "gotestsum $(TEST_OUTPUT) -- $(TEST_FLAGS) $(2) ($(1))"; \
-		cd $(1) && $(TOOL_ENV) "$$tool" $(TEST_OUTPUT) -- $(TEST_FLAGS) -toolexec "$(BUILDCACHE) record-link $$record" $(2); status=$$?; \
-		$(TOOL_ENV) "$(BUILDCACHE)" writeback "$$record"; rm -rf "$$record"; exit $$status
+		cd $(1) && $(TOOL_ENV) "$$tool" $(TEST_OUTPUT) -- $(TEST_FLAGS) -toolexec "$(TESTCACHEFIX) record-link $$record" $(2); status=$$?; \
+		$(TOOL_ENV) "$(TESTCACHEFIX)" writeback "$$record"; rm -rf "$$record"; exit $$status
 endef
 
 test: TOOL_ENV = PATH="$(TEST_PATH)"
-test: buildcache
+test: testcachefix
 	$(call install_tool_if_missing,gotestsum,$(GOTESTSUM_VERSION),$(GOTESTSUM_PKG))
 	@echo "Running unit tests (the per-dialect suites run against mysql here)..."
 	$(call run_test_suite,./...)
@@ -207,7 +205,6 @@ test: buildcache
 	@echo "Running example project tests..."
 	$(call run_test_suite_in,examples/demo,./...)
 	$(call run_test_suite_in,examples/cluster,./...)
-	@$(TOOL_ENV) "$(BUILDCACHE)" trim
 
 # Run unit tests with more output: testv and testvv run what test runs, with
 # the output switched to a line per test, or to what go test -v prints.
