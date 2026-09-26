@@ -14,6 +14,7 @@ import (
 	"github.com/hydroan/gst/internal/execctx"
 	"github.com/hydroan/gst/internal/testutil/oteltest"
 	"github.com/stretchr/testify/require"
+	"go.opentelemetry.io/otel/attribute"
 	oteltrace "go.opentelemetry.io/otel/trace"
 )
 
@@ -145,11 +146,19 @@ func TestTracingSpanAttributesFitTheCapacityInTheWorstCase(t *testing.T) {
 	require.Equal(t, http.StatusInternalServerError, w.Code)
 
 	span := oteltest.EndedNamed(t, recorder, "POST /api/samples")
-	// The error batch adds one attribute per error and re-sets the error flag
-	// the response batch already carries; a span keeps one value per key.
+	// Each batch is pinned by the count under its own keys, so one batch
+	// growing past its capacity is not hidden by the other shrinking. The
+	// error batch adds one attribute per error and re-sets the error flag the
+	// response batch already carries; a span keeps one value per key.
 	const errorsReported = 2
-	require.Len(t, span.Attributes(), requestSpanAttrCap+responseSpanAttrCap+errorsReported,
-		"the worst case must fill both batches exactly: a new attribute bumps requestSpanAttrCap or responseSpanAttrCap")
+	batches := oteltest.AttributesByKey(t, span.Attributes(),
+		[]attribute.Key{"http.method", "http.url", "http.scheme", "http.host", "http.target", "http.route", "http.user_agent", "http.remote_addr", "http.request.content_type", "http.request.content_length"},
+		[]attribute.Key{"http.status_code", "http.response.size", "http.response.content_type", "http.duration_ms", "error"},
+		[]attribute.Key{"error.0", "error.1"},
+	)
+	require.Len(t, batches[0], requestSpanAttrCap, "the worst case must fill the request batch exactly: a new attribute bumps requestSpanAttrCap")
+	require.Len(t, batches[1], responseSpanAttrCap, "the worst case must fill the response batch exactly: a new attribute bumps responseSpanAttrCap")
+	require.Len(t, batches[2], errorsReported, "one attribute per error the handler reported")
 }
 
 // setupTracingTest enables real tracing for one middleware test and puts gin

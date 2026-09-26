@@ -16,6 +16,7 @@ import (
 	gstotel "github.com/hydroan/gst/otel"
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"go.opentelemetry.io/otel/sdk/trace/tracetest"
 )
@@ -124,4 +125,28 @@ func EndedNamed(t *testing.T, recorder *tracetest.SpanRecorder, name string) sdk
 	}
 	require.FailNow(t, "no ended span named "+name)
 	return nil
+}
+
+// AttributesByKey partitions the attributes of a span into one slice per
+// key set, in the order the sets are given, and fails on an attribute no set
+// names. A span carries the batches its code submitted merged, one value per
+// key, so the count under a batch's keys is what pins the batch's capacity;
+// a key a batch starts to set is added to its set here, which is what keeps
+// the sets telling the batches apart.
+func AttributesByKey(t *testing.T, attrs []attribute.KeyValue, sets ...[]attribute.Key) [][]attribute.KeyValue {
+	t.Helper()
+	batches := make([][]attribute.KeyValue, len(sets))
+next:
+	for _, attr := range attrs {
+		for i, set := range sets {
+			for _, key := range set {
+				if attr.Key == key {
+					batches[i] = append(batches[i], attr)
+					continue next
+				}
+			}
+		}
+		require.FailNow(t, "attribute "+string(attr.Key)+" belongs to no known batch; add its key to the batch's set")
+	}
+	return batches
 }

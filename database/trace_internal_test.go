@@ -11,6 +11,7 @@ import (
 	"github.com/hydroan/gst/internal/testutil/oteltest"
 	gstotel "github.com/hydroan/gst/otel"
 	"github.com/stretchr/testify/require"
+	"go.opentelemetry.io/otel/attribute"
 )
 
 // traceSample is a model for the tracing helpers alone: never registered and
@@ -38,8 +39,14 @@ func TestOperationSpanAttributesFitTheCapacityInTheWorstCase(t *testing.T) {
 	done(errors.New("sample failure"))
 
 	span := oteltest.EndedNamed(t, recorder, "database.TraceSample.Create")
-	require.Len(t, span.Attributes(), operationStartAttrCap+operationOutcomeAttrCap,
-		"the worst case must fill both batches exactly: a new attribute bumps operationStartAttrCap or operationOutcomeAttrCap")
+	// Each batch is pinned by the count under its own keys, so one batch
+	// growing past its capacity is not hidden by the other shrinking.
+	batches := oteltest.AttributesByKey(t, span.Attributes(),
+		[]attribute.Key{"component", "database.operation", "database.model", "database.dry_run", "database.batch_size"},
+		[]attribute.Key{"database.duration_ms", "database.record_not_found", "database.canceled", "error"},
+	)
+	require.Len(t, batches[0], operationStartAttrCap, "the worst case must fill the start batch exactly: a new attribute bumps operationStartAttrCap")
+	require.Len(t, batches[1], operationOutcomeAttrCap, "the worst case must fill the outcome batch exactly: a new attribute bumps operationOutcomeAttrCap")
 }
 
 // TestOperationLogFieldsFitTheCapacityInTheWorstCase pins operationLogFieldCap
