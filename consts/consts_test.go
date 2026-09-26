@@ -168,8 +168,8 @@ func TestPhase_BeforeAfter(t *testing.T) {
 
 // TestPhase_HTTPMethod pins the one table of HTTP methods (see
 // Phase.HTTPMethod): every action phase maps to the method its route is
-// registered under, a hook phase answers for its action, and Stream, served
-// over gRPC alone, maps to no method, like any unknown phase.
+// registered under, and a hook phase, Stream, served over gRPC alone, and
+// any unknown phase map to no method.
 func TestPhase_HTTPMethod(t *testing.T) {
 	tests := []struct {
 		name  string
@@ -188,12 +188,10 @@ func TestPhase_HTTPMethod(t *testing.T) {
 		{"update_many", consts.UpdateMany, http.MethodPut},
 		{"patch_many", consts.PatchMany, http.MethodPatch},
 
-		{"create_before", consts.CreateBefore, http.MethodPost},
-		{"delete_after", consts.DeleteAfter, http.MethodDelete},
-		{"update_many_before", consts.UpdateManyBefore, http.MethodPut},
-		{"patch_many_after", consts.PatchManyAfter, http.MethodPatch},
-		{"list_before", consts.ListBefore, http.MethodGet},
-		{"get_after", consts.GetAfter, http.MethodGet},
+		{"create_before", consts.CreateBefore, ""},
+		{"delete_after", consts.DeleteAfter, ""},
+		{"update_many_before", consts.UpdateManyBefore, ""},
+		{"patch_many_after", consts.PatchManyAfter, ""},
 
 		{"import", consts.Import, http.MethodPost},
 		{"export", consts.Export, http.MethodGet},

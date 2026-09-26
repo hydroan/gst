@@ -305,16 +305,16 @@ func (p Phase) After() Phase {
 	}
 }
 
-// HTTPMethod returns the HTTP method of the route the phase's action is
-// registered under, a hook phase answering for its action: Create,
-// CreateMany, Import and CreateBefore map to "POST", Delete and DeleteMany
+// HTTPMethod returns the HTTP method of the route the phase is registered
+// under: Create, CreateMany and Import map to "POST", Delete and DeleteMany
 // to "DELETE", Update and UpdateMany to "PUT", Patch and PatchMany to
-// "PATCH", and List, Get, Export and SSE to "GET". Stream, served over gRPC
-// alone, and any other phase map to "". It is the one table of methods: the
-// framework router registers routes by it, and gg reads route methods from
-// it.
+// "PATCH", and List, Get, Export and SSE to "GET". A hook phase, run inside
+// its action rather than under a route of its own, Stream, served over gRPC
+// alone, and any other phase map to "", which is how the router tells the
+// phases it can serve. It is the one table of methods: the framework router
+// registers routes by it, and gg reads route methods from it.
 func (p Phase) HTTPMethod() string {
-	switch p.action() {
+	switch p {
 	case Create, CreateMany, Import:
 		return http.MethodPost
 	case Delete, DeleteMany:
