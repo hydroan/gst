@@ -244,8 +244,8 @@ func (Entry) Design() {
 `grpc.health.v1.Health`，进程在服务时答 SERVING，收到停机信号后和 `/-/readyz` 同时变成 NOT_SERVING，
 排空窗口过后监听才关闭；以及反射服务。认证在 `interceptor/` 里挂，和 `middleware/` 一一对应：
 `interceptor.RegisterAuth(interceptor.IAMSession())` 之后，每个没声明 `Public()` 的 rpc 都要在
-`authorization` 元数据里带 `Bearer <会话 id>`，健康与反射服务不经过项目的拦截器。多副本下的用法和核对
-步骤见 [examples/cluster](./examples/cluster/README.md) 的「gRPC 与认证」一章。
+`authorization` 元数据里带 `Bearer <会话 id>`；健康与反射服务不经过项目的认证拦截器（`RegisterAuth` 挂的那些），
+`Register` 挂的通用拦截器对它们照样生效。多副本下的用法和核对步骤见 [examples/cluster](./examples/cluster/README.md) 的「gRPC 与认证」一章。
 
 ## 业务 Service
 
@@ -1196,7 +1196,7 @@ Pod 端口，Ingress 只转发写进规则的路径——**只转发 `/api` 前�
 | `/metrics` | 已被访问过的路由（gin 路由模式）及其请求数与延迟分布、缓存计数器上的数据库表名、进程内存与 CPU、构建信息 |
 | `/openapi.json` | 本服务注册的全部路由，以及每个路由的请求与响应模型 |
 | `/docs` | 同一份文档的 Swagger UI 渲染；页面资源编译进二进制，不从任何 CDN 加载脚本，离线可用 |
-| gRPC 的 `grpc.health.v1.Health` 与反射服务 | 进程是否在服务，以及注册了哪些服务和消息；不经过项目的拦截器 |
+| gRPC 的 `grpc.health.v1.Health` 与反射服务 | 进程是否在服务，以及注册了哪些服务和消息；不经过项目的认证拦截器，`Register` 挂的通用拦截器照样经过 |
 
 ### 为什么 `gg gen` 之后 `go test` 是红的？
 
