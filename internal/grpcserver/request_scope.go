@@ -56,14 +56,21 @@ const accessLogFieldCap = 11
 // status being the code's name and, for a failed call, the status message
 // beside it.
 //
-// The metadata is what the call itself says: the full method as route, path
-// and request URI, POST as the method every gRPC call is on the wire, the
-// address of the peer and whether it speaks TLS, the authority the call was
-// addressed to and the user agent, and whether the method requires auth, as
-// the registration described it (see Method.Public). The forwarding headers
-// of a proxy in front are not read: the HTTP listener believes them from the
-// peers server.trusted_proxies names alone, a judgement gin makes for it and
-// this listener has no gin to make.
+// The metadata names the action the call runs the way the HTTP listener
+// names a request's: the route and HTTP method the registration described
+// the rpc with, /api/records/:id and GET, STREAM for a Stream action (see
+// Method), so a hook, a log or a span reads the same route and method
+// whichever listener served the action; the full method as path and
+// request URI, the call's target on the wire the way a request's path is;
+// the address of the peer and whether it speaks TLS, the authority the call
+// was addressed to and the user agent; and whether the method requires
+// auth, as the registration described it (see Method.Public). A method the
+// registration described with no action, the health and reflection
+// services' among them, keeps the full method as its route and POST, the
+// method every gRPC call is on the wire, as its method. The forwarding
+// headers of a proxy in front are not read: the HTTP listener believes them
+// from the peers server.trusted_proxies names alone, a judgement gin makes
+// for it and this listener has no gin to make.
 func requestScope(ctx context.Context, req any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (any, error) {
 	scope := enterCall(ctx, info.FullMethod)
 	rsp, err := handler(scope.ctx, req)
@@ -109,11 +116,18 @@ func enterCall(ctx context.Context, fullMethod string) *callScope {
 	ctx = execctx.WithTraceID(ctx, traceID)
 	address, tls := peerOf(ctx)
 	method := methods[fullMethod]
+	route, httpMethod := fullMethod, http.MethodPost
+	if method.Route != "" {
+		route = method.Route
+	}
+	if method.HTTPMethod != "" {
+		httpMethod = method.HTTPMethod
+	}
 	c := &callRecord{method: method, fields: requestctx.Fields{
-		Route:        fullMethod,
+		Route:        route,
 		Path:         fullMethod,
 		RequestURI:   fullMethod,
-		Method:       http.MethodPost,
+		Method:       httpMethod,
 		ClientIP:     address,
 		UserAgent:    first(md, userAgentKey),
 		Host:         first(md, authorityKey),

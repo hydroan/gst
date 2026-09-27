@@ -152,9 +152,9 @@ func (a *action[M, REQ, RSP]) startControllerSpan(c *gin.Context) (context.Conte
 }
 
 // startSpan starts the span for the controller operation under the request
-// root span ctx carries, described by the method and path the transport
-// serves the action at: the HTTP method and route of a request, POST and the
-// full method of a call. The caller ends the span.
+// root span ctx carries, described by the method and route the action is
+// served at, the same two for a request and for a call, as the registration
+// described the call's action. The caller ends the span.
 func (a *action[M, REQ, RSP]) startSpan(ctx context.Context, method, path string) (context.Context, trace.Span) {
 	spanCtx, span := gstotel.StartSpan(gstotel.RequestRootContext(ctx), a.controllerSpan.name)
 

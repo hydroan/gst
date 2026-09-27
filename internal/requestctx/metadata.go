@@ -21,6 +21,13 @@ import (
 // is the request verb, which separates the actions one route pattern serves
 // and neither of the other two distinguishes.
 //
+// A call over gRPC carries the same three: the route and method are the
+// ones the registration described the call's action with, the route and
+// HTTP method the action is served at over HTTP (STREAM for a Stream
+// action), and the path is the full method of the call, its target on the
+// wire, as is the request URI. A call whose method the registration did not
+// describe carries the full method as its route and POST as its method.
+//
 // The client address, user agent, host and TLS flag describe the connection
 // the request arrived on. They are carried here rather than read off the HTTP
 // request on demand, so that a context built without an HTTP request -- one a

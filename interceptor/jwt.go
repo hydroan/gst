@@ -44,7 +44,8 @@ func JwtAuth() gstgrpc.Interceptor {
 			// each in its own words hands the bearer of a stolen token a probe
 			// it can read the server's checks off of, so only the log keeps
 			// the distinction.
-			zap.S().Warnw("jwt authentication rejected", "error", err.Error(), "method", requestctx.FromContext(ctx).Path())
+			meta := requestctx.FromContext(ctx)
+			zap.S().Warnw("jwt authentication rejected", "error", err.Error(), "path", meta.Path(), "method", meta.Method())
 			return nil, status.Error(codes.Unauthenticated, "invalid token")
 		}
 		var sessionID string

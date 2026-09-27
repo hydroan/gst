@@ -223,9 +223,9 @@ type call struct {
 
 // beginCall attaches params and query to ctx as the parameters of the call
 // (see grpcserver.WithParams) and starts the controller span on it, the way
-// the HTTP handler starts one on the request, described by what the call
-// carries for the method and path, POST and the full method; the caller
-// ends the span through end. A route parameter left empty is reported once
+// the HTTP handler starts one on the request, described by the method and
+// route the call carries, the action's as the registration described it;
+// the caller ends the span through end. A route parameter left empty is reported once
 // the call began, so the caller refuses it on the call, its span recording
 // the refusal: over HTTP no route matches an empty segment, while a message
 // may leave the field empty, and a service scoping its work by the

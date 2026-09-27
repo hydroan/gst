@@ -51,7 +51,8 @@ const (
 	// of one endpoint together, the path pins down a single request. Log
 	// aggregation and alerting must key on the route, never on the path.
 	// CTX_METHOD names the request verb, which separates the actions one
-	// route pattern serves.
+	// route pattern serves. A gRPC call carries the route and verb of the
+	// action its rpc stands for, and the full method as its path.
 	CTX_ROUTE         = "route"
 	CTX_PATH          = "path"
 	CTX_METHOD        = "method"

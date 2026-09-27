@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"net"
+	"net/http"
 	"strings"
 	"sync"
 	"testing"
@@ -69,8 +70,8 @@ func TestCreateCallCreatesTheRecordForTheCaller(t *testing.T) {
 		defer observedMu.Unlock()
 		require.Equal(t, "b-1", lastObserved.Box)
 		require.Equal(t, "alice", lastObserved.Username)
-		require.Equal(t, "POST", lastObserved.Method)
-		require.Equal(t, "/gst.test.Samples/ObservedCreate", lastObserved.Route)
+		require.Equal(t, http.MethodPost, lastObserved.Method)
+		require.Equal(t, "/api/controller-sample-observedcreate", lastObserved.Route, "the route of the action, not the full method")
 		require.True(t, lastObserved.RequiresAuth)
 	})
 
@@ -420,13 +421,14 @@ func TestServiceCallDelegatesToThePhaseService(t *testing.T) {
 	require.Equal(t, "hello", result["Note"])
 	require.Equal(t, "b-2", result["Box"])
 	require.Equal(t, "alice", result["Username"])
-	require.Equal(t, "POST", result["Method"])
-	require.Equal(t, "/gst.test.Samples/Action", result["Route"])
+	require.Equal(t, http.MethodPost, result["Method"])
+	require.Equal(t, "/api/controller-sample-action", result["Route"], "the route of the action, not the full method")
 	require.Equal(t, true, result["RequiresAuth"])
 
 	t.Run("a List reads the query", func(t *testing.T) {
 		result, err := invoke(t, conn, "ActionList", map[string]any{"query": map[string]any{"Page": 2, "Expand": []string{"children"}}})
 		require.NoError(t, err)
+		require.Equal(t, http.MethodGet, result["Method"], "the method of the action, not the POST every call is on the wire")
 		require.Equal(t, map[string]any{"_page": []any{"2"}, "_expand": []any{"children"}}, result["Query"])
 	})
 
@@ -478,8 +480,8 @@ func TestServiceCallDelegatesToThePhaseService(t *testing.T) {
 
 // TestCallsRunInTheControllerSpan pins the spans a call runs in: the
 // controller span of the action, named and attributed the way a request's
-// is, POST and the full method standing for the method and path, and the
-// service span of a delegated action inside it.
+// is, by the method and route of the action as the registration described
+// it, and the service span of a delegated action inside it.
 func TestCallsRunInTheControllerSpan(t *testing.T) {
 	conn := sampleServer(t)
 	oteltest.Enable(t)
@@ -496,8 +498,8 @@ func TestCallsRunInTheControllerSpan(t *testing.T) {
 		attribute.String("component", "controller"),
 		attribute.String("controller.operation", "Get"),
 		attribute.String("controller.model", "sampleRecord"),
-		attribute.String("controller.method", "POST"),
-		attribute.String("controller.path", "/gst.test.Samples/Get"),
+		attribute.String("controller.method", http.MethodGet),
+		attribute.String("controller.path", "/api/controller-sample-get"),
 	}, got.Attributes())
 	service := oteltest.EndedNamed(t, recorder, gstotel.FrameworkSpanName("service", "sampleRecord", "Create"))
 	controllerSpan := oteltest.EndedNamed(t, recorder, gstotel.FrameworkSpanName("controller", "sampleRecord", "Create"))
@@ -556,7 +558,15 @@ func sampleServer(t *testing.T) *grpc.ClientConn {
 					return interceptor(ctx, in, &grpc.UnaryServerInfo{FullMethod: fullMethod}, handler)
 				},
 			})
-			methods = append(methods, grpcserver.Method{Name: fullMethod, Public: name == "OpenAction"})
+			// Every rpc is described with the HTTP action it stands for, the
+			// way the generated registration describes one: a route named
+			// after the rpc and the method of its kind, so that what a hook
+			// reads for the route and method is the action's.
+			httpMethod := http.MethodPost
+			if strings.Contains(name, "List") || strings.Contains(name, "Get") {
+				httpMethod = http.MethodGet
+			}
+			methods = append(methods, grpcserver.Method{Name: fullMethod, Public: name == "OpenAction", HTTPMethod: httpMethod, Route: "/api/controller-sample-" + strings.ToLower(name)})
 		}
 		for _, name := range []string{"Watch", "Upload", "Chat", "Silence"} {
 			methods = append(methods, grpcserver.Method{Name: "/gst.test.Samples/" + name, HTTPMethod: grpcserver.MethodStream, Route: "/api/controller-sample-" + strings.ToLower(name)})

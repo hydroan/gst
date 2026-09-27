@@ -103,7 +103,12 @@ func (sc *ServiceContext) Phase() consts.Phase {
 // RequiresAuth read the request metadata captured when the context was
 // built. Query returns a copy, so mutating the result never changes what a
 // later read sees; RequiresAuth answers whether the action requires
-// authentication, as the transport marked the request or the call.
+// authentication, as the transport marked the request or the call. Over
+// gRPC, Route and Method name the action the way the registration described
+// it, the route and HTTP method it is served at over HTTP, Path is the full
+// method of the call, and Query is empty for every action but a List or a
+// Get, whose query the request message carries: the input of any other
+// action travels in its payload.
 func (sc *ServiceContext) Query() url.Values       { return requestctx.FromContext(sc).Query() }
 func (sc *ServiceContext) Param(key string) string { return requestctx.FromContext(sc).Param(key) }
 func (sc *ServiceContext) Route() string           { return requestctx.FromContext(sc).Route() }

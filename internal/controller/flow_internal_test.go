@@ -2,6 +2,7 @@ package controller
 
 import (
 	"context"
+	"net/http"
 	"slices"
 	"strconv"
 	"strings"
@@ -67,6 +68,38 @@ func TestGetFlowAnswersNotFoundAsACode(t *testing.T) {
 
 	require.Error(t, err)
 	require.Equal(t, response.CodeNotFound, failureCoder(err))
+}
+
+// TestFlowRecordsTheRequestMethodAndURIInTheOperationLog pins that the
+// operation log entry of a flow names the request by the method and URI of
+// the request metadata as the transport filled them: over gRPC the action's
+// HTTP method and the full method of the call, PATCH and
+// /app.FlowSampleService/PatchFlowSample for a patch, so an entry reads the
+// same whichever listener served the action.
+func TestFlowRecordsTheRequestMethodAndURIInTheOperationLog(t *testing.T) {
+	require.NoError(t, database.DB().AutoMigrate(&modellogmgmt.OperationLog{}))
+	previous := audit
+	audit = auditmanager.New(&config.Audit{Enabled: true})
+	t.Cleanup(func() { audit = previous })
+
+	a := newAction[*flowSample, *flowSample, *flowSample]("flow-samples", consts.Patch, consts.PatchBefore, consts.PatchAfter)
+	ctx := requestctx.WithMetadata(context.Background(), requestctx.New(requestctx.Fields{
+		Username: "flow-user", Method: http.MethodPatch, RequestURI: "/app.FlowSampleService/PatchFlowSample",
+	}))
+	record := &flowSample{Name: "before the logged patch"}
+	require.NoError(t, database.Database[*flowSample](ctx).Create(record))
+
+	name := "after the logged patch " + strconv.FormatInt(time.Now().UnixNano(), 36)
+	_, err := a.patchFlow(ctx, plainServiceContext, record.GetID(), &flowSample{Name: name}, patchFieldSet{"Name": {}})
+	require.NoError(t, err)
+
+	var entries []*modellogmgmt.OperationLog
+	require.NoError(t, database.Database[*modellogmgmt.OperationLog](ctx).
+		WithQuery(&modellogmgmt.OperationLog{Model: a.name, OP: consts.OP_PATCH}).List(&entries))
+	entries = slices.DeleteFunc(entries, func(entry *modellogmgmt.OperationLog) bool { return !strings.Contains(entry.Request, name) })
+	require.Len(t, entries, 1)
+	require.Equal(t, http.MethodPatch, entries[0].Method)
+	require.Equal(t, "/app.FlowSampleService/PatchFlowSample", entries[0].URI)
 }
 
 // TestPatchFlowRecordsTheRecordIDInTheOperationLog pins which id the audit

@@ -50,12 +50,12 @@ gst · HTTP 与 gRPC 两条传输线
     <div class="arch-arrow">▼</div>
     <div class="arch-layer stage">
       <div class="arch-layer-title">⑥ 共用流程 · internal/controller</div>
-      <div class="arch-box lane shared"><b>十个 CRUD 流程（create.go … delete_many.go、flow.go）</b><ul><li>模型钩子（CreateBefore …）与 service 钩子（Filter、ListAfter …）按同一顺序跑，事务与审计在这一层。</li><li><code>types.ServiceContext</code> 与传输无关，元数据来自 <code>requestctx.Metadata</code>：ClientIP、UserAgent、Host、TLS、Route、Path、Method、RequiresAuth；gRPC 侧 Method 固定 POST、Path 是 FullMethod。</li><li>校验单点：binding tag 整体校验；Patch / PatchMany 只校验被点名的字段（HTTP 按 body 键，gRPC 按 update_mask）；批量逐条校验。</li><li>数据库经 <code>database.Database[T](ctx)</code>，列名只来自 gorm schema。</li></ul></div>
+      <div class="arch-box lane shared"><b>十个 CRUD 流程（create.go … delete_many.go、flow.go）</b><ul><li>模型钩子（CreateBefore …）与 service 钩子（Filter、ListAfter …）按同一顺序跑，事务与审计在这一层。</li><li><code>types.ServiceContext</code> 与传输无关，元数据来自 <code>requestctx.Metadata</code>：ClientIP、UserAgent、Host、TLS、Route、Path、Method、RequiresAuth；gRPC 侧 Route、Method 取注册时描述的该动作的路由与 HTTP 方法（流式为 STREAM），Path、RequestURI 是 FullMethod，非 List/Get 动作的 Query 为空。</li><li>校验单点：binding tag 整体校验；Patch / PatchMany 只校验被点名的字段（HTTP 按 body 键，gRPC 按 update_mask）；批量逐条校验。</li><li>数据库经 <code>database.Database[T](ctx)</code>，列名只来自 gorm schema。</li></ul></div>
     </div>
     <div class="arch-arrow">▼</div>
     <div class="arch-layer stage">
       <div class="arch-layer-title">⑦ service · 业务代码只写一份</div>
-      <div class="arch-box lane shared"><b>service.Base[M, REQ, RSP] 与 Service("name") 的结构体</b><ul><li>标准动作：嵌 <code>service.Base</code>，按需覆盖钩子；自定义动作：<code>Create(ctx, req) (rsp, error)</code> 这类方法。</li><li>流式动作：<code>Stream(ctx, req, stream)</code> 三种签名之一，只在 gRPC 上被调用。</li><li>HTTP 独有的动作：SSE 的 <code>SSE(ctx) error</code>、Import 的 <code>Import(ctx, reader)</code>、Export 的 <code>Export(ctx, models…)</code> 只在 HTTP 上被调用。模型声明了 GRPC() 时，这三种动作以外的 service 用了 <code>ctx.SSE</code>、<code>FormFile</code>、<code>Data</code> 这类 HTTP 专属方法，gg check 会拦，因为 gRPC 上没有这些东西；没声明 GRPC() 的模型不受此限。</li><li>service 代码不 import gin 与 grpc；还能感知到传输的只剩 ServiceContext 元数据的取值（gRPC 上 Method 是 POST、Path 是 FullMethod）。</li></ul></div>
+      <div class="arch-box lane shared"><b>service.Base[M, REQ, RSP] 与 Service("name") 的结构体</b><ul><li>标准动作：嵌 <code>service.Base</code>，按需覆盖钩子；自定义动作：<code>Create(ctx, req) (rsp, error)</code> 这类方法。</li><li>流式动作：<code>Stream(ctx, req, stream)</code> 三种签名之一，只在 gRPC 上被调用。</li><li>HTTP 独有的动作：SSE 的 <code>SSE(ctx) error</code>、Import 的 <code>Import(ctx, reader)</code>、Export 的 <code>Export(ctx, models…)</code> 只在 HTTP 上被调用。模型声明了 GRPC() 时，这三种动作以外的 service 用了 <code>ctx.SSE</code>、<code>FormFile</code>、<code>Data</code> 这类 HTTP 专属方法，gg check 会拦，因为 gRPC 上没有这些东西；没声明 GRPC() 的模型不受此限。</li><li>service 代码不 import gin 与 grpc；还能感知到传输的只剩 ServiceContext 元数据的取值（gRPC 上 Path 与 RequestURI 是 FullMethod，非 List/Get 动作的 Query 为空）。</li></ul></div>
     </div>
   </div>
 </div>

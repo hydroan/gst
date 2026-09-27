@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/hydroan/gst/internal/controller"
+	"github.com/hydroan/gst/internal/grpcserver"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -119,7 +120,8 @@ func TestServerStreamCallStreamsTheResponses(t *testing.T) {
 		require.Equal(t, string(rune('0'+i)), rsp["Note"])
 		require.Equal(t, "alice", rsp["Username"])
 		require.Equal(t, "b-3", rsp["Box"])
-		require.Equal(t, "/gst.test.Samples/Watch", rsp["Route"])
+		require.Equal(t, "/api/controller-sample-watch", rsp["Route"], "the route of the action, not the full method")
+		require.Equal(t, grpcserver.MethodStream, rsp["Method"])
 		require.Equal(t, true, rsp["RequiresAuth"])
 	}
 	_, err := recvResponse(stream)

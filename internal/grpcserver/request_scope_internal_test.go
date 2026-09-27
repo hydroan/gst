@@ -33,12 +33,14 @@ func look(seen chan<- observed) {
 
 // TestCallsCarryTheRequestMetadataAndTraceID pins what a handler finds on
 // its context, the facts an HTTP handler finds on its request context: the
-// request metadata — the full method as route, path and request URI, POST
-// as the method every gRPC call is on the wire, the peer's address, the
-// authority the call was addressed to, the user agent, no TLS on a
-// plaintext listener — and the trace id, the caller's x-trace-id when it
-// sent one and a generated one otherwise, published back in the response
-// header either way.
+// request metadata — for a method the registration described with no
+// action, the full method as route, path and request URI and POST as the
+// method every gRPC call is on the wire (a method described with its action
+// carries the action's, see TestCallsDescribedByAnActionCarryItsRouteAndMethod),
+// the peer's address, the authority the call was addressed to, the user
+// agent, no TLS on a plaintext listener — and the trace id, the caller's
+// x-trace-id when it sent one and a generated one otherwise, published
+// back in the response header either way.
 func TestCallsCarryTheRequestMetadataAndTraceID(t *testing.T) {
 	reset(t)
 	seen := make(chan observed, 1)
@@ -79,6 +81,40 @@ func TestCallsCarryTheRequestMetadataAndTraceID(t *testing.T) {
 		require.NotEmpty(t, got.identity.TraceID)
 		require.Equal(t, []string{got.identity.TraceID}, header.Get("x-trace-id"))
 	})
+}
+
+// TestCallsDescribedByAnActionCarryItsRouteAndMethod pins the metadata of a
+// call whose rpc the registration described with an HTTP action, the way
+// the generated registration describes every rpc: the route and method are
+// the action's, /api/records/:id and GET, what a hook, a log or a span
+// reads whichever listener served the action; the path and request URI
+// stay the full method, the call's target on the wire; and the access-log
+// entry names the route and method the same way. A Stream action carries
+// STREAM as its method.
+func TestCallsDescribedByAnActionCarryItsRouteAndMethod(t *testing.T) {
+	reset(t)
+	seen := make(chan observed, 1)
+	serve(map[string]func(context.Context) error{"Look": func(ctx context.Context) error {
+		seen <- observed{meta: requestctx.FromContext(ctx), identity: execctx.FromContext(ctx)}
+		return nil
+	}}, Method{Name: "/gst.test.Echo/Look", HTTPMethod: http.MethodGet, Route: "/api/records/:id"})
+	conn := dial(t, start(t), nil)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	require.NoError(t, call(ctx, conn, "Look"))
+
+	got := <-seen
+	require.Equal(t, "/api/records/:id", got.meta.Route())
+	require.Equal(t, http.MethodGet, got.meta.Method())
+	require.Equal(t, "/gst.test.Echo/Look", got.meta.Path())
+	require.Equal(t, "/gst.test.Echo/Look", got.meta.RequestURI())
+	entries := accessLog.All()
+	require.Len(t, entries, 1)
+	fields := entries[0].ContextMap()
+	require.Equal(t, "/api/records/:id", fields[consts.CTX_ROUTE])
+	require.Equal(t, http.MethodGet, fields[consts.CTX_METHOD])
+	require.Equal(t, "/gst.test.Echo/Look", fields[consts.CTX_PATH])
 }
 
 // TestCallsCarryWhetherTheirMethodRequiresAuth pins the RequiresAuth of the
