@@ -25,10 +25,9 @@ type SignupRsp struct {
 func (Signup) Design() {
 	Route("/signup", func() {
 		Create(func() {
-			Service()
-			Flatten()
 			Public()
-			Filename("signup.go")
+			Flatten()
+			Service("signup")
 			Payload[*SignupReq]()
 			Result[*SignupRsp]()
 		})

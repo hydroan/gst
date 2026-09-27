@@ -147,8 +147,8 @@ func (w *fileWriter) serviceType(service string, model *modelinfo.Model) {
 // payload or result of its own, on its phase and route.
 //
 // The Item model of the golden fixture, with its two standard actions on
-// records/:record/items, a Filename("seal") Create on items/:id/seal and a
-// Filename("merge") Create on items/merge taking a MergeReq and answering a
+// records/:record/items, a Service("seal") Create on items/:id/seal and a
+// Service("merge") Create on items/merge taking a MergeReq and answering a
 // MergedItemRsp, gets
 //
 //	// The calls of the actions of Item, one per rpc of ItemService, built once
@@ -293,7 +293,7 @@ func (w *fileWriter) actionType(model *modelinfo.Model, typeName string) ast.Exp
 //		return &PatchManyRecordResponse{Items: items}, nil
 //	}
 //
-// and the Filename("merge") Create of Item on items/merge, taking a MergeReq
+// and the Service("merge") Create of Item on items/merge, taking a MergeReq
 // as its payload and answering a MergedItemRsp,
 //
 //	// MergeItem serves the Create action of Item on /api/items/merge.
@@ -454,7 +454,7 @@ func (w *fileWriter) query(phase consts.Phase, req func(string) ast.Expr) (ast.E
 // response with SendAndClose.
 //
 // The Feed model of the golden fixture, streaming FeedEvent messages, gets
-// for its Filename("watch") Stream on feeds/watch, a Payload with a
+// for its Service("watch") Stream on feeds/watch, a Payload with a
 // streaming Result,
 //
 //	// WatchFeed serves the Stream action of Feed declared on feeds/watch, served
@@ -465,7 +465,7 @@ func (w *fileWriter) query(phase consts.Phase, req func(string) ast.Expr) (ast.E
 //		})
 //	}
 //
-// for its Filename("upload") Stream on feeds/:feed/upload, a streaming
+// for its Service("upload") Stream on feeds/:feed/upload, a streaming
 // Payload with a Result, whose first message carries the route parameter,
 //
 //	// UploadFeedByFeed serves the Stream action of Feed declared on
@@ -492,7 +492,7 @@ func (w *fileWriter) query(phase consts.Phase, req func(string) ast.Expr) (ast.E
 //		return srv.SendAndClose(&UploadFeedByFeedResponse{Result: FeedUploadRspToProto(result)})
 //	}
 //
-// and for its Filename("chat") Stream on feeds/chat, both sides streaming,
+// and for its Service("chat") Stream on feeds/chat, both sides streaming,
 //
 //	// ChatFeed serves the Stream action of Feed declared on feeds/chat, served
 //	// over gRPC alone.

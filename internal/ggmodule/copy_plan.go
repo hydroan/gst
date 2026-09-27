@@ -495,7 +495,7 @@ func projectServesGRPC(modulePath string) (bool, error) {
 		return false, err
 	}
 	return slices.ContainsFunc(models, func(m *modelinfo.Model) bool {
-		return m.Design != nil && m.Design.Enabled && m.Design.GRPC
+		return m.Design != nil && m.Design.GRPC
 	}), nil
 }
 

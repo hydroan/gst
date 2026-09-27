@@ -70,13 +70,12 @@ func (s *CustomService) ListAfter(ctx *gst.ServiceContext, data *[]any) error {
 		ModelName:     "CopyTest",
 		ModelVarName:  "c",
 		Design: &dsl.Design{
-			Enabled:    true,
 			Endpoint:   "copytest",
-			Create:     &dsl.Action{Enabled: true, Phase: consts.Create},
+			Create:     &dsl.Action{Phase: consts.Create},
 			Delete:     &dsl.Action{},
 			Update:     &dsl.Action{},
 			Patch:      &dsl.Action{},
-			List:       &dsl.Action{Enabled: true, Service: true, Filename: "custom.go", Phase: consts.List},
+			List:       &dsl.Action{Service: true, ServiceName: "custom", Phase: consts.List},
 			Get:        &dsl.Action{},
 			CreateMany: &dsl.Action{},
 			DeleteMany: &dsl.Action{},
@@ -142,9 +141,8 @@ type RecordService struct {
 			ModelName:     "Sample",
 			ModelVarName:  "s",
 			Design: &dsl.Design{
-				Enabled:    true,
 				Endpoint:   "samples",
-				Create:     &dsl.Action{Enabled: true, Service: true, Filename: "sample.go", Phase: consts.Create},
+				Create:     &dsl.Action{Service: true, ServiceName: "sample", Phase: consts.Create},
 				Delete:     &dsl.Action{},
 				Update:     &dsl.Action{},
 				Patch:      &dsl.Action{},
@@ -168,13 +166,12 @@ type RecordService struct {
 			ModelName:     "Record",
 			ModelVarName:  "r",
 			Design: &dsl.Design{
-				Enabled:    true,
 				Endpoint:   "records",
 				Create:     &dsl.Action{},
 				Delete:     &dsl.Action{},
 				Update:     &dsl.Action{},
 				Patch:      &dsl.Action{},
-				List:       &dsl.Action{Enabled: true, Service: true, Filename: "record.go", Phase: consts.List},
+				List:       &dsl.Action{Service: true, ServiceName: "record", Phase: consts.List},
 				Get:        &dsl.Action{},
 				CreateMany: &dsl.Action{},
 				DeleteMany: &dsl.Action{},
@@ -243,23 +240,21 @@ func (s *SampleService) DeleteAfter(ctx *gst.ServiceContext, req *modelcopytest.
 		ModelPkgName:  "copytest",
 		ModelName:     "CopyTest",
 		ModelVarName:  "c",
-		Design:        &dsl.Design{Enabled: true},
+		Design:        &dsl.Design{},
 	}
 	createAction := &dsl.Action{
-		Enabled:  true,
-		Service:  true,
-		Filename: "sample.go",
-		Payload:  "*CopyTest",
-		Result:   "*CopyTest",
-		Phase:    consts.Create,
+		Service:     true,
+		ServiceName: "sample",
+		Payload:     "*CopyTest",
+		Result:      "*CopyTest",
+		Phase:       consts.Create,
 	}
 	deleteAction := &dsl.Action{
-		Enabled:  true,
-		Service:  true,
-		Filename: "sample.go",
-		Payload:  "*CopyTest",
-		Result:   "*CopyTest",
-		Phase:    consts.Delete,
+		Service:     true,
+		ServiceName: "sample",
+		Payload:     "*CopyTest",
+		Result:      "*CopyTest",
+		Phase:       consts.Delete,
 	}
 	plan := &CopyPlan{
 		Name:                  "copytest",
@@ -353,25 +348,23 @@ func itemPatchResult() *modelcopytest.Item {
 		ModelPkgName:  "copytest",
 		ModelName:     "Item",
 		ModelVarName:  "i",
-		Design:        &dsl.Design{Enabled: true},
+		Design:        &dsl.Design{},
 	}
 	getAction := &dsl.Action{
-		Enabled:  true,
-		Service:  true,
-		Filename: "item.go",
-		Flatten:  true,
-		Payload:  "*ItemGetReq",
-		Result:   "*ItemGetRsp",
-		Phase:    consts.Get,
+		Service:     true,
+		ServiceName: "item",
+		Flatten:     true,
+		Payload:     "*ItemGetReq",
+		Result:      "*ItemGetRsp",
+		Phase:       consts.Get,
 	}
 	patchAction := &dsl.Action{
-		Enabled:  true,
-		Service:  true,
-		Filename: "item.go",
-		Flatten:  true,
-		Payload:  "*ItemPatchReq",
-		Result:   "*ItemPatchRsp",
-		Phase:    consts.Patch,
+		Service:     true,
+		ServiceName: "item",
+		Flatten:     true,
+		Payload:     "*ItemPatchReq",
+		Result:      "*ItemPatchRsp",
+		Phase:       consts.Patch,
 	}
 	plan := &CopyPlan{
 		Name:                  "copytest",
@@ -459,10 +452,9 @@ func (s *ItemListService) List(ctx *gst.ServiceContext, req *model.Empty) (rsp *
 		ModelPkgName:  "copytest",
 		ModelName:     "Item",
 		ModelVarName:  "i",
-		Design:        &dsl.Design{Enabled: true},
+		Design:        &dsl.Design{},
 	}
 	listAction := &dsl.Action{
-		Enabled: true,
 		Service: true,
 		Payload: dsl.PayloadEmpty,
 		Result:  "*ItemListRsp",
@@ -536,16 +528,15 @@ func (s *SampleService) CreateAfter(ctx *gst.ServiceContext, req *modelcopytest.
 		ModelPkgName:  "copytest",
 		ModelName:     "Sample",
 		ModelVarName:  "s",
-		Design:        &dsl.Design{Enabled: true},
+		Design:        &dsl.Design{},
 	}
 	createAction := &dsl.Action{
-		Enabled:  true,
-		Service:  true,
-		Filename: "sample.go",
-		Flatten:  true,
-		Payload:  "*Sample",
-		Result:   "*Sample",
-		Phase:    consts.Create,
+		Service:     true,
+		ServiceName: "sample",
+		Flatten:     true,
+		Payload:     "*Sample",
+		Result:      "*Sample",
+		Phase:       consts.Create,
 	}
 	plan := &CopyPlan{
 		Name:                  "copytest",
@@ -879,8 +870,7 @@ func TestBuildCopyPlanIgnoresFrameworkRootRelativeFiles(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(frameworkRoot, "dsl", "dsl.go"), []byte(`package dsl
 
 func Create(func()) {}
-func Service(...bool) {}
-func Filename(string) {}
+func Service(...string) {}
 `), 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -923,8 +913,7 @@ type Ignored struct {
 
 func (Ignored) Design() {
 	dsl.Create(func() {
-		dsl.Service()
-		dsl.Filename("missing.go")
+		dsl.Service("missing")
 	})
 }
 `), 0o600); err != nil {
@@ -975,8 +964,7 @@ type Entry struct {
 func (Entry) Design() {
 	dsl.Route("copytest/entry", func() {
 		dsl.Create(func() {
-			dsl.Service()
-			dsl.Filename("create.go")
+			dsl.Service("create")
 		})
 	})
 }

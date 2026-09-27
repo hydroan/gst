@@ -31,21 +31,18 @@ type AdminSessionDeleteRsp struct{}
 func (AdminSession) Design() {
 	Route("/iam/admin/sessions", func() {
 		List(func() {
-			Service()
 			Flatten()
-			Filename("admin_session_list.go")
+			Service("admin_session_list")
 			Result[*AdminSessionListRsp]()
 		})
 		Get(func() {
-			Service()
 			Flatten()
-			Filename("admin_session_get.go")
+			Service("admin_session_get")
 			Result[*AdminSessionGetRsp]()
 		})
 		Delete(func() {
-			Service()
 			Flatten()
-			Filename("admin_session_delete.go")
+			Service("admin_session_delete")
 			Payload[*AdminSessionDeleteReq]()
 			Result[*AdminSessionDeleteRsp]()
 		})

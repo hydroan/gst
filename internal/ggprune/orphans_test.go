@@ -540,9 +540,6 @@ func writeProjectFile(t *testing.T, path string, content string) {
 // orphanPruneModel returns a model whose only enabled action targets
 // service/authz, mirroring a project-owned service directory.
 func orphanPruneModel() *modelinfo.Model {
-	disabled := func(phase consts.Phase) *dsl.Action {
-		return &dsl.Action{Phase: phase}
-	}
 	return &modelinfo.Model{
 		ModulePath:    "tmpapp",
 		ModelPkgName:  "authz",
@@ -550,28 +547,13 @@ func orphanPruneModel() *modelinfo.Model {
 		ModelFileDir:  filepath.Join("model", "authz"),
 		ModelFilePath: filepath.Join("model", "authz", "role.go"),
 		Design: &dsl.Design{
-			Enabled:  true,
 			Endpoint: "authz/roles",
 			Create: &dsl.Action{
-				Enabled:  true,
-				Service:  true,
-				Filename: "role.go",
-				Flatten:  true,
-				Phase:    consts.Create,
+				Service:     true,
+				ServiceName: "role",
+				Flatten:     true,
+				Phase:       consts.Create,
 			},
-			Delete:     disabled(consts.Delete),
-			Update:     disabled(consts.Update),
-			Patch:      disabled(consts.Patch),
-			List:       disabled(consts.List),
-			Get:        disabled(consts.Get),
-			CreateMany: disabled(consts.CreateMany),
-			DeleteMany: disabled(consts.DeleteMany),
-			UpdateMany: disabled(consts.UpdateMany),
-			PatchMany:  disabled(consts.PatchMany),
-			Import:     disabled(consts.Import),
-			Export:     disabled(consts.Export),
-			SSE:        disabled(consts.SSE),
-			Stream:     disabled(consts.Stream),
 		},
 	}
 }

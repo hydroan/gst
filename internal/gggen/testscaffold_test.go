@@ -36,7 +36,7 @@ func recordTarget(filename string) modelinfo.ServiceTargetInfo {
 // recordAction is a default action of Record: dsl.Parse defaults both action
 // types to the starred model name.
 func recordAction(phase consts.Phase) *dsl.Action {
-	return &dsl.Action{Enabled: true, Service: true, Payload: "*Record", Result: "*Record", Phase: phase}
+	return &dsl.Action{Service: true, Payload: "*Record", Result: "*Record", Phase: phase}
 }
 
 // TestGenerateServiceTest compares the whole file GenerateServiceTest builds
@@ -78,9 +78,6 @@ func TestCreate(t *testing.T) {
 	require.Equal(t, want, got)
 }
 
-// TestGenerateServiceTestExamples pins the example request of every action
-// shape: the verb picks the client call, the route and its parameter the
-// path, and the action types the request and response types.
 // feedInfo is the model Feed of the root model package of helloworld, an
 // action model serving streams over gRPC; feedTarget locates one of its
 // service files.
@@ -98,6 +95,9 @@ func feedTarget(file string) modelinfo.ServiceTargetInfo {
 	return modelinfo.ServiceTargetInfo{Dir: "service/feed", FilePath: "service/feed/" + file, ImportPath: "helloworld/service/feed", PackageName: "feed"}
 }
 
+// TestGenerateServiceTestExamples pins the example request of every action
+// shape: the verb picks the client call, the route and its parameter the
+// path, and the action types the request and response types.
 func TestGenerateServiceTestExamples(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -160,7 +160,7 @@ func TestGenerateServiceTestExamples(t *testing.T) {
 			name:     "list_with_a_result_decodes_the_result",
 			info:     recordInfo,
 			target:   recordTarget("list.go"),
-			action:   &dsl.Action{Enabled: true, Service: true, Payload: dsl.PayloadEmpty, Result: "*RecordListRsp", Phase: consts.List},
+			action:   &dsl.Action{Service: true, Payload: dsl.PayloadEmpty, Result: "*RecordListRsp", Phase: consts.List},
 			route:    "/api/records",
 			wantDoc:  "// TestList covers GET /api/records, served by Lister in list.go.",
 			wantCode: []string{`	rsp, err := cli.Get[model.RecordListRsp](t.Context(), "/api/records")`},
@@ -241,7 +241,7 @@ func TestGenerateServiceTestExamples(t *testing.T) {
 			name:     "filename_action_is_named_after_its_file_and_typed_by_the_dsl",
 			info:     recordInfo,
 			target:   recordTarget("archive.go"),
-			action:   &dsl.Action{Enabled: true, Service: true, Payload: "*RecordArchiveReq", Result: "*RecordArchiveRsp", Phase: consts.Create, Filename: "archive"},
+			action:   &dsl.Action{Service: true, Payload: "*RecordArchiveReq", Result: "*RecordArchiveRsp", Phase: consts.Create, ServiceName: "archive"},
 			route:    "/api/records/archive",
 			wantDoc:  "// TestArchive covers POST /api/records/archive, served by Archive in archive.go.",
 			wantCode: []string{`	rsp, err := cli.Post[model.RecordArchiveRsp](t.Context(), "/api/records/archive", &model.RecordArchiveReq{})`},
@@ -250,7 +250,7 @@ func TestGenerateServiceTestExamples(t *testing.T) {
 			name:     "empty_request_sends_no_body_and_empty_result_decodes_any",
 			info:     recordInfo,
 			target:   recordTarget("ping.go"),
-			action:   &dsl.Action{Enabled: true, Service: true, Payload: dsl.PayloadEmpty, Result: dsl.PayloadEmpty, Phase: consts.Create, Filename: "ping"},
+			action:   &dsl.Action{Service: true, Payload: dsl.PayloadEmpty, Result: dsl.PayloadEmpty, Phase: consts.Create, ServiceName: "ping"},
 			route:    "/api/records/ping",
 			wantDoc:  "// TestPing covers POST /api/records/ping, served by Ping in ping.go.",
 			wantCode: []string{`	rsp, err := cli.Post[any](t.Context(), "/api/records/ping", nil)`},
@@ -259,7 +259,7 @@ func TestGenerateServiceTestExamples(t *testing.T) {
 			name:     "value_typed_request_is_a_value_literal",
 			info:     recordInfo,
 			target:   recordTarget("merge.go"),
-			action:   &dsl.Action{Enabled: true, Service: true, Payload: "RecordItems", Result: "RecordItems", Phase: consts.Create, Filename: "merge"},
+			action:   &dsl.Action{Service: true, Payload: "RecordItems", Result: "RecordItems", Phase: consts.Create, ServiceName: "merge"},
 			route:    "/api/records/merge",
 			wantDoc:  "// TestMerge covers POST /api/records/merge, served by Merge in merge.go.",
 			wantCode: []string{`	rsp, err := cli.Post[model.RecordItems](t.Context(), "/api/records/merge", model.RecordItems{})`},
@@ -304,7 +304,7 @@ func TestGenerateServiceTestExamples(t *testing.T) {
 			name:     "delete_with_a_declared_request_sends_it",
 			info:     recordInfo,
 			target:   recordTarget("revoke.go"),
-			action:   &dsl.Action{Enabled: true, Service: true, Payload: "*RecordRevokeReq", Result: "*RecordRevokeRsp", Phase: consts.Delete, Filename: "revoke"},
+			action:   &dsl.Action{Service: true, Payload: "*RecordRevokeReq", Result: "*RecordRevokeRsp", Phase: consts.Delete, ServiceName: "revoke"},
 			route:    "/api/records/revoke",
 			wantDoc:  "// TestRevoke covers DELETE /api/records/revoke, served by Revoke in revoke.go.",
 			wantCode: []string{`	rsp, err := cli.Delete[model.RecordRevokeRsp](t.Context(), "/api/records/revoke", &model.RecordRevokeReq{})`},
@@ -320,7 +320,7 @@ func TestGenerateServiceTestExamples(t *testing.T) {
 				Design:       &dsl.Design{},
 			},
 			target:   modelinfo.ServiceTargetInfo{Dir: "service/archive", FilePath: "service/archive/seal.go", ImportPath: "helloworld/service/archive", PackageName: "archive"},
-			action:   &dsl.Action{Enabled: true, Service: true, Payload: "*DocumentSealReq", Result: "*DocumentSealRsp", Phase: consts.Create, Filename: "seal", Flatten: true},
+			action:   &dsl.Action{Service: true, Payload: "*DocumentSealReq", Result: "*DocumentSealRsp", Phase: consts.Create, ServiceName: "seal", Flatten: true},
 			route:    "/api/archive/documents/seal",
 			wantDoc:  "// TestSeal covers POST /api/archive/documents/seal, served by Seal in seal.go.",
 			wantCode: []string{"package archive_test\n", `	rsp, err := cli.Post[archive.DocumentSealRsp](t.Context(), "/api/archive/documents/seal", &archive.DocumentSealReq{})`},
@@ -336,7 +336,7 @@ func TestGenerateServiceTestExamples(t *testing.T) {
 				Design:       &dsl.Design{},
 			},
 			target:   modelinfo.ServiceTargetInfo{Dir: "service/client/session", FilePath: "service/client/session/create.go", ImportPath: "helloworld/service/client/session", PackageName: "session"},
-			action:   &dsl.Action{Enabled: true, Service: true, Payload: "*Session", Result: "*Session", Phase: consts.Create},
+			action:   &dsl.Action{Service: true, Payload: "*Session", Result: "*Session", Phase: consts.Create},
 			route:    "/api/client/sessions",
 			wantDoc:  "// TestCreate covers POST /api/client/sessions, served by Creator in create.go.",
 			wantCode: []string{`	model_client "helloworld/model/client"`, `	rsp, err := cli.Post[model_client.Session](t.Context(), "/api/client/sessions", &model_client.Session{})`},
@@ -345,7 +345,7 @@ func TestGenerateServiceTestExamples(t *testing.T) {
 			name:    "server_stream_reads_the_first_answer",
 			info:    feedInfo,
 			target:  feedTarget("watch.go"),
-			action:  &dsl.Action{Enabled: true, Service: true, Payload: "*FeedWatchReq", Result: "*FeedEvent", StreamingResult: true, Phase: consts.Stream, Filename: "watch"},
+			action:  &dsl.Action{Service: true, Payload: "*FeedWatchReq", Result: "*FeedEvent", StreamingResult: true, Phase: consts.Stream, ServiceName: "watch"},
 			route:   "/api/feeds/watch",
 			wantDoc: "// TestWatch covers the WatchFeed rpc, served by Watch in watch.go.",
 			wantCode: []string{
@@ -364,7 +364,7 @@ func TestGenerateServiceTestExamples(t *testing.T) {
 			name:    "client_stream_sends_then_closes_and_reads",
 			info:    feedInfo,
 			target:  feedTarget("upload.go"),
-			action:  &dsl.Action{Enabled: true, Service: true, Payload: "*FeedEvent", Result: "*FeedUploadRsp", StreamingPayload: true, Phase: consts.Stream, Filename: "upload"},
+			action:  &dsl.Action{Service: true, Payload: "*FeedEvent", Result: "*FeedUploadRsp", StreamingPayload: true, Phase: consts.Stream, ServiceName: "upload"},
 			route:   "/api/feeds/:feed/upload",
 			wantDoc: "// TestUpload covers the UploadFeedByFeed rpc, served by Upload in upload.go.",
 			wantCode: []string{
@@ -377,7 +377,7 @@ func TestGenerateServiceTestExamples(t *testing.T) {
 			name:    "bidirectional_stream_sends_reads_and_closes_its_side",
 			info:    feedInfo,
 			target:  feedTarget("chat.go"),
-			action:  &dsl.Action{Enabled: true, Service: true, Payload: "*FeedEvent", Result: "*FeedEvent", StreamingPayload: true, StreamingResult: true, Phase: consts.Stream, Filename: "chat"},
+			action:  &dsl.Action{Service: true, Payload: "*FeedEvent", Result: "*FeedEvent", StreamingPayload: true, StreamingResult: true, Phase: consts.Stream, ServiceName: "chat"},
 			route:   "/api/feeds/chat",
 			wantDoc: "// TestChat covers the ChatFeed rpc, served by Chat in chat.go.",
 			wantCode: []string{
@@ -399,7 +399,7 @@ func TestGenerateServiceTestExamples(t *testing.T) {
 				Design:        &dsl.Design{Endpoint: "stream/feeds"},
 			},
 			target:   modelinfo.ServiceTargetInfo{Dir: "service/stream/feed", FilePath: "service/stream/feed/watch.go", ImportPath: "helloworld/service/stream/feed", PackageName: "feed"},
-			action:   &dsl.Action{Enabled: true, Service: true, Payload: "*FeedWatchReq", Result: "*FeedEvent", StreamingResult: true, Phase: consts.Stream, Filename: "watch"},
+			action:   &dsl.Action{Service: true, Payload: "*FeedWatchReq", Result: "*FeedEvent", StreamingResult: true, Phase: consts.Stream, ServiceName: "watch"},
 			route:    "/api/stream/feeds/watch",
 			wantDoc:  "// TestWatch covers the WatchFeed rpc, served by Watch in watch.go.",
 			wantCode: []string{`	pb_stream "helloworld/pb/stream"`, `	client := pb_stream.NewFeedServiceClient(conn)`},

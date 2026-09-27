@@ -97,7 +97,7 @@ stop
 **gg 管的 service 文件**：`service/` 下满足下面任一条件的 `.go` 文件，测试文件（`_test.go`）除外。
 
 - 文件名是 13 个标准动作文件名之一：`create.go`、`delete.go`、`update.go`、`patch.go`、`list.go`、`get.go`、`create_many.go`、`delete_many.go`、`update_many.go`、`patch_many.go`、`import.go`、`export.go`、`sse.go`。
-- 文件里有结构体嵌入了 gg 生成的那种 `service.Base[M, REQ, RSP]`，三个类型参数都带包名，例如 `service.Base[*model.Record, *model.RecordReq, *model.RecordRsp]`。DSL 用 `Filename(...)` 改了文件名的 service 文件靠这一条认出来。
+- 文件里有结构体嵌入了 gg 生成的那种 `service.Base[M, REQ, RSP]`，三个类型参数都带包名，例如 `service.Base[*model.Record, *model.RecordReq, *model.RecordRsp]`。DSL 用 `Service("name")` 起了名的 service 文件靠这一条认出来。
 
 其余文件都是 **gg 不认得的文件**：手写的辅助代码、测试文件、非 Go 文件等。
 
@@ -106,7 +106,7 @@ stop
 **当前应有的 service 文件**：每个 model 里启用、并且声明了 `Service()` 的 action，各对应一个 service 文件。以 `model/sample/record.go` 为例：
 
 - `Create` 对应 `service/sample/record/create.go`；
-- 加了 `Filename("archive")` 时对应 `service/sample/record/archive.go`；
+- 写成 `Service("archive")` 时对应 `service/sample/record/archive.go`；
 - 再加 `Flatten()` 时对应 `service/sample/archive.go`。
 
 **属于 model 的目录**：当前应有的 service 文件所在的目录。`gg gen --prune` 时，被 gst.yaml `gen.routes.ignore` 屏蔽的 action，其 service 文件所在的目录也算。

@@ -26,9 +26,8 @@ type TOTPConfirmRsp struct {
 func (TOTPConfirm) Design() {
 	Route("mfa/totp/confirm", func() {
 		Create(func() {
-			Service()
 			Flatten()
-			Filename("totp_confirm.go")
+			Service("totp_confirm")
 			Payload[*TOTPConfirmReq]()
 			Result[*TOTPConfirmRsp]()
 		})

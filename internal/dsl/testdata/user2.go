@@ -13,8 +13,6 @@ type User2 struct {
 }
 
 func (User2) Design() {
-	// Default to true.
-	dsl.Enabled(false)
 	dsl.Param("{user}")
 
 	// Default Endpoint is the pluralized snake_case form of the model name.
@@ -28,14 +26,12 @@ func (User2) Design() {
 
 	// Custom update partial action request "Payload" and response "Result".
 	dsl.Patch(func() {
-		dsl.Enabled(true)
 		dsl.Payload[*User]()
 		dsl.Result[User]()
 	})
 
 	// Invalid design.
 	dsl.Patch2(func() {
-		dsl.Enabled(false)
 		dsl.Payload[*User]()
 		dsl.Result[User]()
 	})

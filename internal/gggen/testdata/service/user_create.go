@@ -3,8 +3,8 @@ package service
 import (
 	"helloworld/model"
 
-	"github.com/hydroan/gst/service"
 	"github.com/hydroan/gst"
+	"github.com/hydroan/gst/service"
 )
 
 type user struct {

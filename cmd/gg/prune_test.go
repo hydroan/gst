@@ -693,9 +693,8 @@ func pruneTestModel() *modelinfo.Model {
 		ModelFileDir:  filepath.Join(ggconst.DirModel, "authz"),
 		ModelFilePath: filepath.Join(ggconst.DirModel, "authz", "role.go"),
 		Design: &dsl.Design{
-			Enabled:    true,
 			Endpoint:   "authz/roles",
-			Create:     &dsl.Action{Enabled: true, Service: true, Filename: "role.go", Phase: consts.Create},
+			Create:     &dsl.Action{Service: true, ServiceName: "role", Phase: consts.Create},
 			Delete:     disabled(consts.Delete),
 			Update:     disabled(consts.Update),
 			Patch:      disabled(consts.Patch),

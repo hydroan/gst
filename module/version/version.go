@@ -34,9 +34,8 @@ type Version struct {
 func (Version) Design() {
 	Route("version", func() {
 		List(func() {
-			Enabled(true)
-			Service()
 			Public() // Allow public access for version checking
+			Service()
 			Result[*VersionRsp]()
 		})
 	})

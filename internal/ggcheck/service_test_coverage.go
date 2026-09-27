@@ -64,7 +64,7 @@ func checkServiceTestCoverage(ignore gghelper.ProjectIgnore) []string {
 			continue
 		}
 		m.Design.Range(func(_ string, act *dsl.Action) {
-			if !act.Enabled || !act.Service {
+			if !act.Service {
 				return
 			}
 			target := modelinfo.ServiceTarget(m, act, ggconst.DirModel, ggconst.DirService)

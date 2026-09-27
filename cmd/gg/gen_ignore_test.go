@@ -17,7 +17,7 @@ import (
 )
 
 // writeSignupModelFixture writes a Signup model under projectDir/model/account
-// whose Create action declares Service() with Filename("signup.go") on a
+// whose Create action declares Service("signup") on a
 // nested "/signup" route, the shape of a module-copied framework action.
 func writeSignupModelFixture(t *testing.T, projectDir string) {
 	t.Helper()
@@ -43,9 +43,8 @@ type SignupRsp struct {
 func (Signup) Design() {
 	dsl.Route("/signup", func() {
 		dsl.Create(func() {
-			dsl.Service()
 			dsl.Public()
-			dsl.Filename("signup.go")
+			dsl.Service("signup")
 			dsl.Payload[*SignupReq]()
 			dsl.Result[*SignupRsp]()
 		})

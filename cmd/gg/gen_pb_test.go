@@ -323,7 +323,7 @@ func TestGenRunRefusesTwoActionsBecomingOneRPC(t *testing.T) {
 	err := genRunWithOptions(genRunOptions{Quiet: true})
 
 	require.Error(t, err)
-	require.Contains(t, err.Error(), "tmpapp/model.Clash: the List actions on routes clashes and public/clashes both become rpc ListClash; name one of them with Filename()")
+	require.Contains(t, err.Error(), "tmpapp/model.Clash: the List actions on routes clashes and public/clashes both become rpc ListClash; name one of them with Service(\"name\")")
 }
 
 // TestGenRunRefusesATypeNamedLikeAStandardMessage pins that a project type
@@ -359,37 +359,20 @@ func TestGenRunRefusesARouteParameterNamedLikeAField(t *testing.T) {
 }
 
 // TestGenRunRefusesAGRPCModelWithNothingToServe pins that a model declaring
-// GRPC() none of whose actions gRPC serves, every one disabled by
-// Enabled(false) or a gst.yaml route ignore, is reported instead of getting a
-// service without an rpc.
+// GRPC() none of whose actions gRPC serves, every one ignored by gst.yaml or
+// HTTP only, is reported instead of getting a service without an rpc.
 func TestGenRunRefusesAGRPCModelWithNothingToServe(t *testing.T) {
-	const want = "tmpapp/model.Silent: the model declares GRPC() but none of its actions is served over gRPC, every one being disabled, ignored by gst.yaml or HTTP only; remove GRPC() or enable an action"
+	projectDir, ok := newGenProject(t)
+	if !ok {
+		return
+	}
+	writeProtobufProject(t, projectDir, map[string]string{"model/silent.go": protobufIgnoredModel})
+	writeProjectFile(t, filepath.Join(projectDir, "gst.yaml"), "version: 1\ngen:\n  routes:\n    ignore:\n      /api/silents: [GET]\n")
 
-	t.Run("disabled action", func(t *testing.T) {
-		projectDir, ok := newGenProject(t)
-		if !ok {
-			return
-		}
-		writeProtobufProject(t, projectDir, map[string]string{"model/silent.go": protobufSilentModel})
+	err := genRunWithOptions(genRunOptions{Quiet: true})
 
-		err := genRunWithOptions(genRunOptions{Quiet: true})
-
-		require.Error(t, err)
-		require.Contains(t, err.Error(), want)
-	})
-	t.Run("ignored route", func(t *testing.T) {
-		projectDir, ok := newGenProject(t)
-		if !ok {
-			return
-		}
-		writeProtobufProject(t, projectDir, map[string]string{"model/silent.go": protobufIgnoredModel})
-		writeProjectFile(t, filepath.Join(projectDir, "gst.yaml"), "version: 1\ngen:\n  routes:\n    ignore:\n      /api/silents: [GET]\n")
-
-		err := genRunWithOptions(genRunOptions{Quiet: true})
-
-		require.Error(t, err)
-		require.Contains(t, err.Error(), want)
-	})
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "tmpapp/model.Silent: the model declares GRPC() but none of its actions is served over gRPC, every one being ignored by gst.yaml or HTTP only; remove GRPC() or declare an action gRPC serves")
 }
 
 // TestGenRunHoldsTheCommittedDefinitionsToTheirNumbers pins that gg gen
@@ -667,15 +650,14 @@ func (Item) Design() {
 	dsl.Get(func() {})
 	dsl.Route("items/merge", func() {
 		dsl.Create(func() {
-			dsl.Filename("merge")
-			dsl.Service()
+			dsl.Service("merge")
 			dsl.Payload[*MergeReq]()
 			dsl.Result[*MergedItemRsp]()
 		})
 	})
 	dsl.Route("items/:id/seal", func() {
 		dsl.Create(func() {
-			dsl.Filename("seal")
+			dsl.Service("seal")
 		})
 	})
 }
@@ -832,7 +814,7 @@ func (Notice) Design() {
 	dsl.Create(func() {})
 	dsl.Route("notices/echo", func() {
 		dsl.Create(func() {
-			dsl.Filename("echo")
+			dsl.Service("echo")
 			dsl.Payload[*EchoReq]()
 			dsl.Result[*EchoRsp]()
 		})
@@ -880,33 +862,6 @@ func (Entry) Design() {
 	dsl.Endpoint("entries")
 	dsl.Route("/pages/:page/entries", func() {
 		dsl.List(func() {})
-	})
-}
-`
-
-// protobufSilentModel declares GRPC() and disables its one action.
-const protobufSilentModel = `package model
-
-import (
-	"github.com/hydroan/gst/dsl"
-	"github.com/hydroan/gst/model"
-)
-
-// Silent has nothing gRPC can serve.
-type Silent struct {
-	Title string 'json:"title" pb:"11"'
-
-	model.Base
-}
-
-func (Silent) TableName() string { return "silents" }
-
-func (Silent) Design() {
-	dsl.GRPC()
-	dsl.Migrate()
-	dsl.Endpoint("silents")
-	dsl.Create(func() {
-		dsl.Enabled(false)
 	})
 }
 `
@@ -1105,7 +1060,6 @@ func TestRecordRoundTrips(t *testing.T) {
 		Labels:  map[string]string{"k": "v"},
 		Count:   3,
 		Ratio:   1.5,
-		Enabled: true,
 		Payload: []byte("bytes"),
 		Raw:     json.RawMessage('{"n":1}'),
 		Extra:   map[string]any{"ok": true, "list": []any{"x"}},
@@ -1270,31 +1224,27 @@ func (Feed) Design() {
 	dsl.Endpoint("feeds")
 	dsl.Route("feeds/watch", func() {
 		dsl.Stream(func() {
-			dsl.Service()
-			dsl.Filename("watch")
+			dsl.Service("watch")
 			dsl.Payload[*FeedWatchReq]()
 			dsl.StreamingResult[*FeedEvent]()
 		})
 	})
 	dsl.Route("feeds/:feed/tail", func() {
 		dsl.Stream(func() {
-			dsl.Service()
-			dsl.Filename("tail")
+			dsl.Service("tail")
 			dsl.StreamingResult[*FeedEvent]()
 		})
 	})
 	dsl.Route("feeds/:feed/upload", func() {
 		dsl.Stream(func() {
-			dsl.Service()
-			dsl.Filename("upload")
+			dsl.Service("upload")
 			dsl.StreamingPayload[*FeedEvent]()
 			dsl.Result[*FeedUploadRsp]()
 		})
 	})
 	dsl.Route("feeds/chat", func() {
 		dsl.Stream(func() {
-			dsl.Service()
-			dsl.Filename("chat")
+			dsl.Service("chat")
 			dsl.StreamingPayload[*FeedEvent]()
 			dsl.StreamingResult[*FeedEvent]()
 		})

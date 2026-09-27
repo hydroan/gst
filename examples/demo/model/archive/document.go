@@ -61,8 +61,7 @@ func (Document) Design() {
 	})
 	Route("archive/boxes/:box_id/documents", func() {
 		List(func() {
-			Service()
-			Filename("list_by_box")
+			Service("list_by_box")
 		})
 	})
 }

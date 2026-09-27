@@ -37,32 +37,28 @@ type SessionDeleteAllRsp struct{}
 func (Session2) Design() {
 	Route("/iam/sessions", func() {
 		List(func() {
-			Service()
 			Flatten()
-			Filename("session_list.go")
+			Service("session_list")
 			Result[*SessionListRsp]()
 		})
 
 		Get(func() {
-			Service()
 			Flatten()
-			Filename("session_get.go")
+			Service("session_get")
 			Result[*SessionGetRsp]()
 		})
 
 		Delete(func() {
-			Service()
 			Flatten()
-			Filename("session_delete.go")
+			Service("session_delete")
 			Payload[*SessionDeleteReq]()
 			Result[*SessionDeleteRsp]()
 		})
 
 		Delete(func() {
-			Service()
 			Flatten()
 			Exact()
-			Filename("session_delete_all.go")
+			Service("session_delete_all")
 			Payload[*SessionDeleteAllReq]()
 			Result[*SessionDeleteAllRsp]()
 		})

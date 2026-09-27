@@ -10,29 +10,9 @@ import (
 	"github.com/kr/pretty"
 )
 
-func TestHumanizeDSLFilename(t *testing.T) {
-	t.Parallel()
-	tests := []struct {
-		in   string
-		want string
-	}{
-		{"archive_sample_items", "archive sample items"},
-		{"archive-sample-items", "archive sample items"},
-		{"path/to/foo_bar-baz", "foo bar baz"},
-	}
-	for _, tt := range tests {
-		t.Run(tt.in, func(t *testing.T) {
-			t.Parallel()
-			if got := humanizeDSLFilename(tt.in); got != tt.want {
-				t.Fatalf("humanizeDSLFilename(%q) = %q, want %q", tt.in, got, tt.want)
-			}
-		})
-	}
-}
-
 func TestServiceActionLogQuoted(t *testing.T) {
 	t.Parallel()
-	act := &dsl.Action{Filename: "archive_sample_items"}
+	act := &dsl.Action{ServiceName: "archive_sample_items"}
 	if got := serviceActionLogQuoted("Record", consts.Create, act); got != `"record: archive sample items"` {
 		t.Fatalf("main create: got %s", got)
 	}
@@ -42,12 +22,8 @@ func TestServiceActionLogQuoted(t *testing.T) {
 	if got := serviceActionLogQuoted("Record", consts.CreateAfter, act); got != `"record: archive sample items after"` {
 		t.Fatalf("after hook: got %s", got)
 	}
-	act2 := &dsl.Action{Filename: "archive-sample-items"}
-	if got := serviceActionLogQuoted("Record", consts.Create, act2); got != `"record: archive sample items"` {
-		t.Fatalf("hyphen filename: got %s", got)
-	}
 	if got := serviceActionLogQuoted("User", consts.Create, nil); got != `"user create"` {
-		t.Fatalf("no Filename: got %s", got)
+		t.Fatalf("no ServiceName: got %s", got)
 	}
 }
 
@@ -433,7 +409,7 @@ func TestGenServiceMethod8(t *testing.T) {
 				ModulePath:   "codegen",
 				ModelFileDir: "model",
 			},
-			action: &dsl.Action{Filename: "search"},
+			action: &dsl.Action{ServiceName: "search"},
 			phase:  consts.List,
 			role:   "Search",
 			want: `func (s *Search) Filter(ctx *gst.ServiceContext, user *model.User, opts gst.QueryOptions) (*model.User, gst.QueryOptions, error) {
@@ -469,7 +445,7 @@ func TestGenServiceMethod9(t *testing.T) {
 	}{
 		{
 			name:   "watch",
-			action: &dsl.Action{Enabled: true, Service: true, Filename: "watch", Payload: "*FeedWatchReq", Result: "*FeedEvent", StreamingResult: true, Phase: consts.Stream},
+			action: &dsl.Action{Service: true, ServiceName: "watch", Payload: "*FeedWatchReq", Result: "*FeedEvent", StreamingResult: true, Phase: consts.Stream},
 			want: `func (w *Watch) Stream(ctx *gst.ServiceContext, req *model.FeedWatchReq, stream *grpc.ServerStream[*model.FeedEvent]) (err error) {
 	log := w.WithContext(ctx, ctx.Phase())
 	log.Info("feed: watch")
@@ -479,7 +455,7 @@ func TestGenServiceMethod9(t *testing.T) {
 		},
 		{
 			name:   "upload",
-			action: &dsl.Action{Enabled: true, Service: true, Filename: "upload", Payload: "*FeedEvent", Result: "*FeedUploadRsp", StreamingPayload: true, Phase: consts.Stream},
+			action: &dsl.Action{Service: true, ServiceName: "upload", Payload: "*FeedEvent", Result: "*FeedUploadRsp", StreamingPayload: true, Phase: consts.Stream},
 			want: `func (u *Upload) Stream(ctx *gst.ServiceContext, stream *grpc.ClientStream[*model.FeedEvent]) (rsp *model.FeedUploadRsp, err error) {
 	log := u.WithContext(ctx, ctx.Phase())
 	log.Info("feed: upload")
@@ -516,7 +492,6 @@ func TestGenerateServiceCreate(t *testing.T) {
 		Design:       &dsl.Design{},
 	}
 	action := &dsl.Action{
-		Enabled: true,
 		Service: true,
 		Payload: "*User",
 		Result:  "*User",
@@ -584,7 +559,6 @@ func TestGenerateServiceList(t *testing.T) {
 		Design:       &dsl.Design{},
 	}
 	action := &dsl.Action{
-		Enabled: true,
 		Service: true,
 		Payload: "*User",
 		Result:  "*User",
@@ -688,7 +662,6 @@ func TestGenerateServiceListEmptyPayload(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			action := &dsl.Action{
-				Enabled: true,
 				Service: true,
 				Payload: dsl.PayloadEmpty,
 				Result:  "*" + tt.info.ModelName + "ListRsp",
@@ -724,7 +697,6 @@ func TestGenerateServiceExport(t *testing.T) {
 	}
 	// dsl.Parse defaults an action's Payload/Result to the starred model name.
 	action := &dsl.Action{
-		Enabled: true,
 		Service: true,
 		Payload: "*User",
 		Result:  "*User",
@@ -793,7 +765,6 @@ func TestGenerateServiceSSE(t *testing.T) {
 	}
 	// dsl.Parse defaults an action's Payload/Result to the starred model name.
 	action := &dsl.Action{
-		Enabled: true,
 		Service: true,
 		Payload: "*User",
 		Result:  "*User",
@@ -836,7 +807,7 @@ func TestGenerateServiceStream(t *testing.T) {
 		ModelFileDir: "model",
 		Design:       &dsl.Design{},
 	}
-	action := &dsl.Action{Enabled: true, Service: true, Filename: "chat", Payload: "*FeedEvent", Result: "*FeedEvent", StreamingPayload: true, StreamingResult: true, Phase: consts.Stream}
+	action := &dsl.Action{Service: true, ServiceName: "chat", Payload: "*FeedEvent", Result: "*FeedEvent", StreamingPayload: true, StreamingResult: true, Phase: consts.Stream}
 
 	file := GenerateService(info, action, consts.Stream, "feed")
 	if file == nil {

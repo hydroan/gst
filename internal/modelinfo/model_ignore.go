@@ -57,7 +57,7 @@ func ApplyModelIgnores(allModels []*Model, rules []ggconfig.ModelRule) ModelIgno
 			// A model that never registers (action-only or virtual) gains
 			// nothing from the rule; leaving it unmatched surfaces the rule
 			// as stale instead of silently succeeding.
-			if !m.Design.Enabled || !m.Design.Migrate {
+			if !m.Design.Migrate {
 				continue
 			}
 

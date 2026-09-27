@@ -6,9 +6,6 @@ package dsl
 // keyword to its declaration here and documents what it declares; methodList
 // (see design.go) is how the parser knows them by name.
 
-// Enabled is the Enabled keyword; the public dsl.Enabled forwards to it.
-func Enabled(bool) {}
-
 // Endpoint is the Endpoint keyword; the public dsl.Endpoint forwards to it.
 func Endpoint(string) {}
 
@@ -25,10 +22,7 @@ func Migrate() {}
 func GRPC() {}
 
 // Service is the Service keyword; the public dsl.Service forwards to it.
-func Service() {}
-
-// Filename is the Filename keyword; the public dsl.Filename forwards to it.
-func Filename(string) {}
+func Service(...string) {}
 
 // Flatten is the Flatten keyword; the public dsl.Flatten forwards to it.
 func Flatten() {}

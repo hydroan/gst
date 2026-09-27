@@ -181,9 +181,8 @@ type UserListRsp struct {
 func (Admin) Design() {
 	dsl.Route("iam/admin/users", func() {
 		dsl.List(func() {
-			dsl.Service()
 			dsl.Flatten()
-			dsl.Filename("user_list.go")
+			dsl.Service("user_list")
 			dsl.Result[*UserListRsp]()
 		})
 	})

@@ -86,9 +86,8 @@ func (Menu) Design() {
 		dsl.Update(func() {})
 		dsl.Patch(func() {})
 		dsl.List(func() {
-			dsl.Service()
 			dsl.Flatten()
-			dsl.Filename("menu.go")
+			dsl.Service("menu")
 		})
 		dsl.Get(func() {})
 	})

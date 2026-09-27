@@ -89,7 +89,7 @@ func ServiceOutputRel(modelFilePath, modelDir string) string {
 // Create action on the model Role of model/authz/role.go goes to
 // service/authz/role/create.go, in package role. With Flatten the file lives
 // in the directory of the model package itself and takes its package name:
-// with Filename("role.go") too, the same action goes to service/authz/role.go,
+// with Service("role") too, the same action goes to service/authz/role.go,
 // in package authz.
 func ServiceTarget(m *Model, action *dsl.Action, modelDir, serviceDir string) ServiceTargetInfo {
 	rel := ServiceOutputRel(m.ModelFilePath, modelDir)

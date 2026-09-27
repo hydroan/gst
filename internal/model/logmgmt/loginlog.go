@@ -43,10 +43,8 @@ func (LoginLog) Design() {
 	// the same endpoints instead of a diverging default prefix.
 	Route("log/loginlog", func() {
 		List(func() {
-			Enabled(true)
 		})
 		Get(func() {
-			Enabled(true)
 		})
 	})
 }

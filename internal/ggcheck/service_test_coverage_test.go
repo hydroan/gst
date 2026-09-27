@@ -33,8 +33,7 @@ func (Record) Design() {
 	dsl.List(func() {})
 	dsl.Route("/parse", func() {
 		dsl.Create(func() {
-			dsl.Service()
-			dsl.Filename("parse")
+			dsl.Service("parse")
 		})
 	})
 }
@@ -60,9 +59,8 @@ type Item struct {
 func (Item) Design() {
 	dsl.Route("/parse", func() {
 		dsl.Create(func() {
-			dsl.Service()
-			dsl.Filename("flat")
 			dsl.Flatten()
+			dsl.Service("flat")
 		})
 	})
 }
@@ -167,8 +165,7 @@ func (Record) Design() {
 	})
 	dsl.Route("/parse", func() {
 		dsl.Create(func() {
-			dsl.Service()
-			dsl.Filename("parse")
+			dsl.Service("parse")
 		})
 	})
 }

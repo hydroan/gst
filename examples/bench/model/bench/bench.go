@@ -68,43 +68,39 @@ func (Bench) Design() {
 
 	Route("bench/ping", func() {
 		List(func() {
-			Service()
-			Filename("ping.go")
 			Public()
+			Service("ping")
 			Result[*PingRsp]()
 		})
 	})
 
 	Route("bench/get", func() {
 		Get(func() {
-			Service()
 			Public()
 			Exact()
-			Filename("get.go")
+			Service("get")
 			Result[*GetRsp]()
 		})
 	})
 
 	Route("bench/list", func() {
 		List(func() {
-			Service()
 			Public()
+			Service()
 		})
 	})
 	Route("bench/list2", func() {
 		List(func() {
-			Service()
 			Public()
-			Filename("list2.go")
+			Service("list2")
 			Result[*ListRsp]()
 		})
 	})
 
 	Route("bench/create", func() {
 		Create(func() {
-			Service()
 			Public()
-			Filename("create.go")
+			Service("create")
 			Payload[*CreateReq]()
 			Result[*CreateRsp]()
 		})
@@ -112,26 +108,23 @@ func (Bench) Design() {
 
 	Route("bench/update", func() {
 		Update(func() {
-			Service()
 			Public()
-			Filename("update.go")
+			Service("update")
 			Payload[*UpdateReq]()
 			Result[*UpdateRsp]()
 		})
 	})
 	Route("bench/delete", func() {
 		Delete(func() {
-			Service()
 			Public()
-			Filename("delete.go")
+			Service("delete")
 			Result[*DeleteRsp]()
 		})
 	})
 	Route("bench/updatebyid", func() {
 		Patch(func() {
-			Service()
 			Public()
-			Filename("updatebyid.go")
+			Service("updatebyid")
 			Payload[*UpdateByIDReq]()
 			Result[*UpdateByIDRsp]()
 		})

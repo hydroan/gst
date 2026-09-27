@@ -96,28 +96,24 @@ func (User) Design() {
 
 	Route("/iam/admin/users", func() {
 		Create(func() {
-			Service()
 			Flatten()
-			Filename("create.go")
+			Service("create")
 			Payload[*AdminUserCreateReq]()
 			Result[*AdminUserCreateRsp]()
 		})
 		List(func() {
-			Service()
 			Flatten()
-			Filename("list.go")
+			Service("list")
 			Result[*AdminUserListRsp]()
 		})
 		Get(func() {
-			Service()
 			Flatten()
-			Filename("get.go")
+			Service("get")
 			Result[*AdminUserGetRsp]()
 		})
 		Patch(func() {
-			Service()
 			Flatten()
-			Filename("patch.go")
+			Service("patch")
 			Payload[*AdminUserPatchReq]()
 			Result[*AdminUserPatchRsp]()
 		})

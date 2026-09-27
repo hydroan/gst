@@ -19,14 +19,14 @@ func TestRPCNameJoinsActionModelAndRouteParameters(t *testing.T) {
 	require.Equal(t, "ListDocument", modelinfo.RPCName(document, "archive/documents", list))
 	require.Equal(t, "ListDocumentByBox", modelinfo.RPCName(document, "archive/boxes/:box/documents", list))
 	require.Equal(t, "ListDocumentByBoxAndShelf", modelinfo.RPCName(document, "archive/boxes/:box/shelves/{shelf}/documents", list))
-	require.Equal(t, "MergeDocument", modelinfo.RPCName(document, "archive/documents/merge", &dsl.Action{Phase: consts.Create, Filename: "merge"}))
+	require.Equal(t, "MergeDocument", modelinfo.RPCName(document, "archive/documents/merge", &dsl.Action{Phase: consts.Create, ServiceName: "merge"}))
 
 	// A nested model's own parameters are those of its endpoint and its
 	// item parameter, :id when it declares none.
 	item := &modelinfo.Model{ModelName: "Item", Design: &dsl.Design{Endpoint: "records/:record/items"}}
 	require.Equal(t, "DeleteManyItem", modelinfo.RPCName(item, "records/:record/items", &dsl.Action{Phase: consts.DeleteMany}))
-	require.Equal(t, "SealItem", modelinfo.RPCName(item, "items/:id/seal", &dsl.Action{Phase: consts.Create, Filename: "seal"}))
-	require.Equal(t, "SealItemByOwner", modelinfo.RPCName(item, "owners/:owner/items/:id/seal", &dsl.Action{Phase: consts.Create, Filename: "seal"}))
+	require.Equal(t, "SealItem", modelinfo.RPCName(item, "items/:id/seal", &dsl.Action{Phase: consts.Create, ServiceName: "seal"}))
+	require.Equal(t, "SealItemByOwner", modelinfo.RPCName(item, "owners/:owner/items/:id/seal", &dsl.Action{Phase: consts.Create, ServiceName: "seal"}))
 }
 
 // TestRouteParamsReadsBothParameterForms pins the example of the RouteParams

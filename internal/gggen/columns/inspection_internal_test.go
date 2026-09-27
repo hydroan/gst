@@ -14,25 +14,21 @@ import (
 func TestBuildColumnsProgram(t *testing.T) {
 	registered := &modelinfo.Model{
 		ModulePath: "tmpapp", ModelPkgName: "sample", ModelName: "Record",
-		ModelFileDir: "model/sample", Design: &dsl.Design{Enabled: true, Migrate: true},
+		ModelFileDir: "model/sample", Design: &dsl.Design{Migrate: true},
 	}
 	summary := &modelinfo.Model{
 		ModulePath: "tmpapp", ModelPkgName: "report", ModelName: "Summary",
-		ModelFileDir: "model/report", Design: &dsl.Design{Enabled: true},
+		ModelFileDir: "model/report", Design: &dsl.Design{},
 	}
 	trend := &modelinfo.Model{
 		ModulePath: "tmpapp", ModelPkgName: "report", ModelName: "Trend",
-		ModelFileDir: "model/report", Design: &dsl.Design{Enabled: true},
-	}
-	disabled := &modelinfo.Model{
-		ModulePath: "tmpapp", ModelPkgName: "draft", ModelName: "Draft",
-		ModelFileDir: "model/draft", Design: &dsl.Design{Enabled: false},
+		ModelFileDir: "model/report", Design: &dsl.Design{},
 	}
 	note := &modelinfo.Model{
 		ModulePath: "tmpapp", ModelPkgName: "model", ModelName: "Note",
-		ModelFileDir: "model", Design: &dsl.Design{Enabled: true},
+		ModelFileDir: "model", Design: &dsl.Design{},
 	}
-	all := []*modelinfo.Model{registered, summary, trend, disabled, note}
+	all := []*modelinfo.Model{registered, summary, trend, note}
 
 	program := buildColumnsProgram("tmpapp", all)
 
@@ -56,12 +52,10 @@ func TestBuildColumnsProgram(t *testing.T) {
 		require.Contains(t, program, "&vm0.Note{},")
 	})
 
-	t.Run("LeavesRegisteredAndDisabledModelsToTheRegistry", func(t *testing.T) {
-		// A migrated model arrives through model.RegisteredModels and a
-		// disabled Design is not part of the API; enumerating either would
-		// resurrect it behind the registry's back.
+	t.Run("LeavesRegisteredModelsToTheRegistry", func(t *testing.T) {
+		// A migrated model arrives through model.RegisteredModels; enumerating
+		// it as well would list it twice behind the registry's back.
 		require.NotContains(t, program, "model/sample")
-		require.NotContains(t, program, "model/draft")
 	})
 
 	t.Run("ProducesParseableSource", func(t *testing.T) {
@@ -94,13 +88,13 @@ func TestBuildColumnsProgramInspectsIgnoredModelsUnconditionally(t *testing.T) {
 	ignored := &modelinfo.Model{
 		ModulePath: "tmpapp", ModelPkgName: "user", ModelName: "User",
 		ModelFileDir: "model/iam/user", ModelFilePath: "model/iam/user/user.go",
-		Design:          &dsl.Design{Enabled: true, Migrate: false},
+		Design:          &dsl.Design{Migrate: false},
 		RegisterIgnored: true,
 	}
 	virtual := &modelinfo.Model{
 		ModulePath: "tmpapp", ModelPkgName: "report", ModelName: "Summary",
 		ModelFileDir: "model/report", ModelFilePath: "model/report/summary.go",
-		Design: &dsl.Design{Enabled: true, Migrate: false},
+		Design: &dsl.Design{Migrate: false},
 	}
 
 	program := buildColumnsProgram("tmpapp", []*modelinfo.Model{ignored, virtual})

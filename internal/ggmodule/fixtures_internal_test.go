@@ -139,8 +139,7 @@ func Route(string, func()) {}
 func Create(func()) {}
 func List(func()) {}
 func Get(func()) {}
-func Service(...bool) {}
-func Filename(string) {}
+func Service(...string) {}
 func Result[T any]() {}
 `), 0o600); err != nil {
 		t.Fatal(err)
@@ -173,17 +172,14 @@ type CopyTestListRsp struct{}
 func (CopyTest) Design() {
 	dsl.Route("copytest", func() {
 		dsl.Create(func() {
-			dsl.Service()
-			dsl.Filename("create.go")
+			dsl.Service("create")
 		})
 		dsl.List(func() {
-			dsl.Service()
-			dsl.Filename("list.go")
+			dsl.Service("list")
 			dsl.Result[*CopyTestListRsp]()
 		})
 		dsl.Get(func() {
-			dsl.Service()
-			dsl.Filename("get.go")
+			dsl.Service("get")
 		})
 	})
 }

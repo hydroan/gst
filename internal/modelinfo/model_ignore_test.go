@@ -107,9 +107,8 @@ type ProbeListRsp struct {
 func (Probe) Design() {
 	dsl.Route("probes", func() {
 		dsl.List(func() {
-			dsl.Service()
 			dsl.Flatten()
-			dsl.Filename("probe_list.go")
+			dsl.Service("probe_list")
 			dsl.Result[*ProbeListRsp]()
 		})
 	})

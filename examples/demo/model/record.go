@@ -71,15 +71,13 @@ func (Record) Design() {
 
 	Route("records/summary", func() {
 		List(func() {
-			Service()
-			Filename("summary")
+			Service("summary")
 			Result[*RecordSummaryRsp]()
 		})
 	})
 	Route("records/search", func() {
 		List(func() {
-			Service()
-			Filename("search")
+			Service("search")
 			Result[*RecordSearchRsp]()
 		})
 	})

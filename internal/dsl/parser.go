@@ -35,7 +35,7 @@ var pluralizeCli = pluralize.NewClient()
 //	}
 //
 // The parser supports various DSL patterns:
-//   - Global settings: Enabled(), Endpoint("path"), Migrate()
+//   - Global settings: Endpoint("path"), Migrate()
 //   - Action configuration: Create(func() { Payload[Type](); Result[Type]() })
 //   - Service and visibility: Service(), Public()
 func Parse(file *ast.File) map[string]*Design {
@@ -61,10 +61,9 @@ func Parse(file *ast.File) map[string]*Design {
 		m[name] = design
 	}
 
-	// Set default values for Design.
-	// Declared actions default to enabled when parsed by parseAction.
-	// Missing actions are initialized here and remain disabled by default.
-	// Service defaults to false for both declared and missing actions.
+	// Set default values for Design: the endpoint, and the request and
+	// response types of the declared actions. An action a Design does not
+	// declare stays nil; Range visits the declared ones.
 	for name, design := range m {
 		// Default endpoint is the pluralized snake_case form of the model name,
 		// matching the RESTful convention and the default table naming,
@@ -73,68 +72,9 @@ func Parse(file *ast.File) map[string]*Design {
 			design.Endpoint = strcase.SnakeCase(pluralizeCli.Plural(name))
 		}
 
-		if design.Create == nil {
-			design.Create = &Action{Payload: starName(name), Result: starName(name)}
-		}
-		if design.Delete == nil {
-			design.Delete = &Action{Payload: starName(name), Result: starName(name)}
-		}
-		if design.Update == nil {
-			design.Update = &Action{Payload: starName(name), Result: starName(name)}
-		}
-		if design.Patch == nil {
-			design.Patch = &Action{Payload: starName(name), Result: starName(name)}
-		}
-		if design.List == nil {
-			design.List = &Action{Payload: starName(name), Result: starName(name)}
-		}
-		if design.Get == nil {
-			design.Get = &Action{Payload: starName(name), Result: starName(name)}
-		}
-		if design.CreateMany == nil {
-			design.CreateMany = &Action{Payload: starName(name), Result: starName(name)}
-		}
-		if design.DeleteMany == nil {
-			design.DeleteMany = &Action{Payload: starName(name), Result: starName(name)}
-		}
-		if design.UpdateMany == nil {
-			design.UpdateMany = &Action{Payload: starName(name), Result: starName(name)}
-		}
-		if design.PatchMany == nil {
-			design.PatchMany = &Action{Payload: starName(name), Result: starName(name)}
-		}
-		if design.Import == nil {
-			design.Import = &Action{Payload: starName(name), Result: starName(name)}
-		}
-		if design.Export == nil {
-			design.Export = &Action{Payload: starName(name), Result: starName(name)}
-		}
-		if design.SSE == nil {
-			design.SSE = &Action{Payload: starName(name), Result: starName(name)}
-		}
-		if design.Stream == nil {
-			design.Stream = &Action{Payload: starName(name), Result: starName(name)}
-		}
-
-		initDefaultAction(name, design.Create)
-		initDefaultAction(name, design.Delete)
-		initDefaultAction(name, design.Update)
-		initDefaultAction(name, design.Patch)
-		initDefaultAction(name, design.List)
-		initDefaultAction(name, design.Get)
-		initDefaultAction(name, design.CreateMany)
-		initDefaultAction(name, design.DeleteMany)
-		initDefaultAction(name, design.UpdateMany)
-		initDefaultAction(name, design.PatchMany)
-		initDefaultAction(name, design.Import)
-		initDefaultAction(name, design.Export)
-		initDefaultAction(name, design.SSE)
-		initDefaultAction(name, design.Stream)
-		for _, actions := range design.routes {
-			for _, action := range actions {
-				initDefaultAction(name, action)
-			}
-		}
+		design.Range(func(_ string, action *Action) {
+			initDefaultAction(name, action)
+		})
 
 		m[name] = design
 	}
@@ -142,7 +82,7 @@ func Parse(file *ast.File) map[string]*Design {
 	return m
 }
 
-// initDefaultAction initializes default payload and result values for an enabled action.
+// initDefaultAction initializes default payload and result values for a declared action.
 //
 // With neither side declared both default to the pointer type of the model
 // name (e.g., "*User" for model "User"), which keeps the built-in CRUD
@@ -158,13 +98,7 @@ func Parse(file *ast.File) map[string]*Design {
 // Parameters:
 //   - modelName: The name of the model (e.g., "User")
 //   - action: The action to initialize defaults for
-//
-// This function only modifies enabled actions. For disabled actions, the Payload
-// and Result fields remain unchanged.
 func initDefaultAction(modelName string, action *Action) {
-	if !action.Enabled {
-		return
-	}
 	if isGetVerbPhase(action.Phase) && len(action.Result) > 0 {
 		action.Payload = PayloadEmpty
 	}
@@ -264,7 +198,7 @@ func parse(file *ast.File) (map[string]*ast.FuncDecl, map[string]*ast.FuncDecl) 
 }
 
 // parseDesign parses a Design method's AST declaration and extracts the DSL configuration.
-// It analyzes the function body to find DSL calls like Enabled(), Endpoint(), Migrate(),
+// It analyzes the function body to find DSL calls like Endpoint(), Migrate(),
 // and action configurations like Create(func() { Payload[Type](); Result[Type]() }).
 //
 // Parameters:
@@ -273,10 +207,10 @@ func parse(file *ast.File) (map[string]*ast.FuncDecl, map[string]*ast.FuncDecl) 
 // Returns:
 //   - *Design: The parsed design configuration with default values applied
 //
-// If fn is nil or has no body, returns a default Design with Enabled=true and Migrate=false.
+// If fn is nil or has no body, returns a default Design, with Migrate=false.
 // The parser recognizes various DSL patterns and converts them into the Design structure.
 func parseDesign(fn *ast.FuncDecl) *Design {
-	defaults := &Design{Enabled: true, Migrate: false}
+	defaults := &Design{}
 	// model don't have "Design" method, so returns the default design values.
 	if fn == nil || fn.Body == nil || len(fn.Body.List) == 0 {
 		return defaults
@@ -324,13 +258,6 @@ func parseDesign(fn *ast.FuncDecl) *Design {
 		// The remaining DSL calls all carry at least one argument.
 		if len(call.Args) == 0 {
 			continue
-		}
-
-		// Parse "Enabled()".
-		if funcName == "Enabled" && len(call.Args) == 1 {
-			if arg, ok := call.Args[0].(*ast.Ident); ok && arg != nil {
-				defaults.Enabled = arg.Name == "true"
-			}
 		}
 
 		// Parse "Endpoint()".
@@ -497,7 +424,7 @@ func parseDesign(fn *ast.FuncDecl) *Design {
 }
 
 // parseAction parses DSL configuration from an action function's body.
-// It extracts Payload, Result types and configuration flags (Enabled, Service, Public)
+// It extracts Payload, Result types and configuration flags (Service, Public)
 // from the function literal passed to action methods like Create(), Update(), etc.
 //
 // Parameters:
@@ -510,11 +437,10 @@ func parseDesign(fn *ast.FuncDecl) *Design {
 //   - bool: true if parsing was successful, false otherwise
 //
 // The function parses DSL calls within the action function body:
-//   - Enabled(true/false): Sets whether the action is enabled. Declared actions default to enabled.
-//   - Service(): Marks the action for custom service generation and registration
+//   - Service(), Service("name"): Marks the action for custom service generation
+//     and registration, named after the phase or after name
 //   - Public(): Marks the API endpoint as public
 //   - Exact(): Registers the action route exactly as declared
-//   - Filename("name"): Sets a custom filename for the generated service file
 //   - Payload[Type]: Sets the request payload type
 //   - Result[Type]: Sets the response result type
 //   - StreamingPayload[Type], StreamingResult[Type]: In a Stream block, set the
@@ -531,12 +457,11 @@ func parseDesign(fn *ast.FuncDecl) *Design {
 func parseAction(phase consts.Phase, funcName string, expr ast.Expr) (*Action, bool) {
 	var payload string
 	var result string
-	enabled := true     // declared actions are enabled by default
-	var service bool    // default to false
-	var public bool     // default to false
-	var exact bool      // default to false
-	var filename string // default to ""
-	var flatten bool    // default to false
+	var service bool       // default to false
+	var serviceName string // default to ""
+	var public bool        // default to false
+	var exact bool         // default to false
+	var flatten bool       // default to false
 	var streamingPayload, streamingResult bool
 
 	if phase.Name() != funcName {
@@ -554,28 +479,7 @@ func parseAction(phase consts.Phase, funcName string, expr ast.Expr) (*Action, b
 		if expr, ok := stmt.(*ast.ExprStmt); ok && expr != nil {
 			if call, ok := expr.X.(*ast.CallExpr); ok && call != nil && call.Fun != nil {
 
-				// Parse Enabled(true)/Enabled(false)
-				var isEnabledCall bool
-				switch fun := call.Fun.(type) {
-				case *ast.Ident:
-					// anonymous import: Enabled(true)
-					if fun != nil && fun.Name == "Enabled" {
-						isEnabledCall = true
-					}
-				case *ast.SelectorExpr:
-					// non-anonymous import: dsl.Enabled(true)
-					if fun != nil && fun.Sel != nil && fun.Sel.Name == "Enabled" {
-						isEnabledCall = true
-					}
-				}
-				if isEnabledCall && len(call.Args) > 0 && call.Args[0] != nil {
-					if identExpr, ok := call.Args[0].(*ast.Ident); ok && identExpr != nil {
-						// check the argument of Enabled() is true.
-						enabled = identExpr.Name == "true"
-					}
-				}
-
-				// Parse Service().
+				// Parse Service() and Service("name").
 				var isServiceCall bool
 				switch fun := call.Fun.(type) {
 				case *ast.Ident:
@@ -589,8 +493,13 @@ func parseAction(phase consts.Phase, funcName string, expr ast.Expr) (*Action, b
 						isServiceCall = true
 					}
 				}
-				if isServiceCall && len(call.Args) == 0 {
+				if isServiceCall {
 					service = true
+					if len(call.Args) == 1 {
+						if value, ok := stringLiteral(call.Args[0]); ok {
+							serviceName = value
+						}
+					}
 				}
 
 				// Parse Public().
@@ -629,26 +538,6 @@ func parseAction(phase consts.Phase, funcName string, expr ast.Expr) (*Action, b
 
 				if isExactCall && len(call.Args) == 0 {
 					exact = true
-				}
-
-				// Parse Filename("archive").
-				var isFilenameCall bool
-				switch fun := call.Fun.(type) {
-				case *ast.Ident:
-					// anonymous import: Filename("archive")
-					if fun != nil && fun.Name == "Filename" {
-						isFilenameCall = true
-					}
-				case *ast.SelectorExpr:
-					// non-anonymous import: dsl.Filename("archive")
-					if fun != nil && fun.Sel != nil && fun.Sel.Name == "Filename" {
-						isFilenameCall = true
-					}
-				}
-				if isFilenameCall && len(call.Args) > 0 && call.Args[0] != nil {
-					if value, ok := stringLiteral(call.Args[0]); ok {
-						filename = value
-					}
 				}
 
 				// Parse Flatten()
@@ -731,11 +620,10 @@ func parseAction(phase consts.Phase, funcName string, expr ast.Expr) (*Action, b
 		Result:           result,
 		StreamingPayload: streamingPayload,
 		StreamingResult:  streamingResult,
-		Enabled:          enabled,
 		Service:          service,
+		ServiceName:      serviceName,
 		Public:           public,
 		Exact:            exact,
-		Filename:         filename,
 		Flatten:          flatten,
 		Phase:            phase,
 	}, true

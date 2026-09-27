@@ -26,9 +26,8 @@ type TOTPDeviceInfo struct {
 func (TOTPStatus) Design() {
 	Route("mfa/totp/status", func() {
 		List(func() {
-			Service()
 			Flatten()
-			Filename("totp_status.go")
+			Service("totp_status")
 			Result[*TOTPStatusRsp]()
 		})
 	})

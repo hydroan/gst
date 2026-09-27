@@ -75,7 +75,7 @@ func (g *generator) declareService(m *modelinfo.Model) {
 		served++
 		name := modelinfo.RPCName(m, route, action)
 		if previous, taken := routes[name]; taken {
-			g.project.Report(s, "the %s actions on routes %s and %s both become rpc %s; name one of them with Filename()", action.Phase.Name(), previous, route, name)
+			g.project.Report(s, "the %s actions on routes %s and %s both become rpc %s; name one of them with Service(\"name\")", action.Phase.Name(), previous, route, name)
 			return
 		}
 		routes[name] = route
@@ -108,7 +108,7 @@ func (g *generator) declareService(m *modelinfo.Model) {
 		file.rpcs = append(file.rpcs, r)
 	})
 	if served == 0 {
-		g.project.Report(s, "the model declares GRPC() but none of its actions is served over gRPC, every one being disabled, ignored by gst.yaml or HTTP only; remove GRPC() or enable an action")
+		g.project.Report(s, "the model declares GRPC() but none of its actions is served over gRPC, every one being ignored by gst.yaml or HTTP only; remove GRPC() or declare an action gRPC serves")
 		return
 	}
 	file.addService(service, service.GetName()+" serves the actions of "+m.ModelName+" over gRPC.")

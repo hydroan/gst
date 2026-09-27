@@ -20,9 +20,8 @@ type ResetPasswordRsp struct {
 func (ResetPassword) Design() {
 	Route("/iam/reset-password", func() {
 		Create(func() {
-			Service()
 			Flatten()
-			Filename("reset_password.go")
+			Service("reset_password")
 			Payload[*ResetPasswordReq]()
 			Result[*ResetPasswordRsp]()
 		})

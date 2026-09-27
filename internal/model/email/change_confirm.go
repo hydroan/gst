@@ -27,9 +27,8 @@ type ChangeConfirm struct {
 func (ChangeConfirm) Design() {
 	Route("/iam/email/change-confirm", func() {
 		Create(func() {
-			Service()
 			Flatten()
-			Filename("change_confirm.go")
+			Service("change_confirm")
 			Payload[*ChangeConfirmReq]()
 			Result[*ChangeConfirmRsp]()
 		})

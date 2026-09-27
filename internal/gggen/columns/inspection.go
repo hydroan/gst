@@ -234,7 +234,7 @@ func buildColumnsProgram(module string, models []*modelinfo.Model) string {
 		switch {
 		case m.RegisterIgnored:
 			ignored = append(ignored, m)
-		case m.Design.Enabled && !m.Design.Migrate:
+		case !m.Design.Migrate:
 			unregistered = append(unregistered, m)
 		}
 	}

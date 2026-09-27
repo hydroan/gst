@@ -64,6 +64,9 @@ func applyRouteIgnores(allModels []*Model, rules []ggconfig.RouteRule) RouteIgno
 	matched := make([]bool, len(rules))
 	matchedDirs := make([]map[string]bool, len(rules))
 	for _, m := range allModels {
+		// The matched actions are dropped once Range is over: Drop is not
+		// for use inside its callback.
+		dropped := make([]*dsl.Action, 0)
 		m.Design.Range(func(route string, act *dsl.Action) {
 			// The rules name HTTP methods and paths; an action served over
 			// gRPC alone has neither.
@@ -81,7 +84,7 @@ func applyRouteIgnores(allModels []*Model, rules []ggconfig.RouteRule) RouteIgno
 					result.KeptServiceFiles[target.FilePath] = true
 					result.KeptServiceDirs[filepath.Clean(target.Dir)] = true
 				}
-				act.Enabled = false
+				dropped = append(dropped, act)
 				matched[i] = true
 				if matchedDirs[i] == nil {
 					matchedDirs[i] = make(map[string]bool)
@@ -95,6 +98,9 @@ func applyRouteIgnores(allModels []*Model, rules []ggconfig.RouteRule) RouteIgno
 				break
 			}
 		})
+		for _, act := range dropped {
+			m.Design.Drop(act)
+		}
 	}
 
 	for i, rule := range rules {

@@ -41,10 +41,8 @@ func (OperationLog) Design() {
 	// the same endpoints instead of a diverging default prefix.
 	Route("log/operationlog", func() {
 		List(func() {
-			Enabled(true)
 		})
 		Get(func() {
-			Enabled(true)
 		})
 	})
 }

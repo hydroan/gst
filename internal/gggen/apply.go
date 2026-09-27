@@ -28,7 +28,7 @@ import (
 //  3. Renames receiver variable names and all references in method bodies
 //     (e.g., "c" → "a", c.WithContext → a.WithContext)
 func applyServiceRoleName(file *ast.File, action *dsl.Action) bool {
-	if file == nil || action == nil || len(action.Filename) == 0 {
+	if file == nil || action == nil || action.ServiceName == "" {
 		return false
 	}
 
@@ -468,15 +468,15 @@ func forceCanonicalServiceStruct(file *ast.File, action *dsl.Action, modelInfo *
 			ensureModelImportSpec(file, modelInfo.ImportPath(), qualifier)
 			return true
 		}
-		// With Filename set, a well-formed service struct under another name
-		// is out of rewrite scope: it belongs to the applyServiceRoleName
+		// With the service named, a well-formed service struct under another
+		// name is out of rewrite scope: it belongs to the applyServiceRoleName
 		// rename path, and module-copied services legitimately use their own
 		// struct names (they register manually instead of through generated
 		// registration code).
-		if len(action.Filename) > 0 {
+		if action.ServiceName != "" {
 			return false
 		}
-		// Without Filename no rename path covers the struct, yet the
+		// Without a name no rename path covers the struct, yet the
 		// generated registration code references the phase role name, so a
 		// renamed struct is restored to the canonical name. Receiver
 		// variable names are generation defaults, not framework assets, and

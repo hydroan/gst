@@ -42,7 +42,7 @@ func TestRequestParamsCarryEveryParameterOfTheRegisteredRoute(t *testing.T) {
 	require.Equal(t, []requestParam{{param: "record", name: "record", comment: "the :record parameter of /api/records/:record/items"}},
 		requestParams(item, "records/:record/items", &dsl.Action{Phase: consts.Create}))
 	require.Equal(t, []requestParam{{param: "id", name: "id", comment: "the id of the Item"}},
-		requestParams(item, "items/:id/seal", &dsl.Action{Phase: consts.Create, Filename: "seal"}))
+		requestParams(item, "items/:id/seal", &dsl.Action{Phase: consts.Create, ServiceName: "seal"}))
 	require.Equal(t, []requestParam{{param: "document", name: "id", comment: "the id of the Document to delete"}},
 		requestParams(document, "archive/documents", &dsl.Action{Phase: consts.Delete}))
 	require.Equal(t, []requestParam{{param: "box-id", name: "box_id", comment: "the :box-id parameter of /api/archive/boxes/:box-id/documents"}},
@@ -59,7 +59,7 @@ func TestMessageNameIsTheRPCNameAndTheKind(t *testing.T) {
 
 	require.Equal(t, "CreateRecordRequest", messageName(record, "records", &dsl.Action{Phase: consts.Create}, "Request"))
 	require.Equal(t, "ListDocumentByBoxRequest", messageName(document, "archive/boxes/:box/documents", &dsl.Action{Phase: consts.List}, "Request"))
-	require.Equal(t, "MergeEntryResponse", messageName(entry, "entries/merge", &dsl.Action{Phase: consts.Create, Filename: "merge"}, "Response"))
+	require.Equal(t, "MergeEntryResponse", messageName(entry, "entries/merge", &dsl.Action{Phase: consts.Create, ServiceName: "merge"}, "Response"))
 }
 
 // TestModelFieldNameIsTheModelInSnakeCase pins the examples of the

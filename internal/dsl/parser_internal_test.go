@@ -25,7 +25,6 @@ func TestParse(t *testing.T) {
 			code: userSource,
 			want: map[string]*Design{
 				"User": {
-					Enabled:  true,
 					Endpoint: "iam-user2",
 					Param:    ":user",
 					Migrate:  true,
@@ -35,30 +34,20 @@ func TestParse(t *testing.T) {
 							// The Payload[*UserReq] declaration in testdata/user.go is
 							// discarded: List handles an HTTP GET request, so declaring
 							// Result fixes the request type to PayloadEmpty.
-							{Enabled: true, Service: true, Payload: PayloadEmpty, Result: "*UserRsp", Phase: consts.List},
-							{Enabled: true, Service: true, Payload: "*User", Result: "*User", Phase: consts.Get},
+							{Service: true, Payload: PayloadEmpty, Result: "*UserRsp", Phase: consts.List},
+							{Service: true, Payload: "*User", Result: "*User", Phase: consts.Get},
 						},
 						"tenant/users": {
-							{Enabled: true, Service: false, Payload: "*UserReq", Result: "*User", Phase: consts.Create},
-							{Enabled: true, Service: false, Payload: "*User", Result: "*User", Phase: consts.Update},
-							{Enabled: true, Service: false, Payload: "*User", Result: "*User", Phase: consts.Patch},
-							{Enabled: true, Service: false, Payload: "*User", Result: "*User", Phase: consts.CreateMany},
+							{Service: false, Payload: "*UserReq", Result: "*User", Phase: consts.Create},
+							{Service: false, Payload: "*User", Result: "*User", Phase: consts.Update},
+							{Service: false, Payload: "*User", Result: "*User", Phase: consts.Patch},
+							{Service: false, Payload: "*User", Result: "*User", Phase: consts.CreateMany},
 						},
 					},
-					Create:     &Action{Enabled: true, Service: true, Public: true, Payload: "User", Result: "*User", Phase: consts.Create},
-					Delete:     &Action{Enabled: true, Service: false, Public: false, Payload: "*User", Result: "*User", Phase: consts.Delete},
-					Update:     &Action{Enabled: false, Service: false, Public: false, Payload: "*User", Result: "User", Phase: consts.Update},
-					Patch:      &Action{Enabled: false, Service: false, Public: false, Payload: "*User", Result: "*User"},
-					List:       &Action{Enabled: true, Service: false, Public: false, Payload: "*User", Result: "*User", Phase: consts.List},
-					Get:        &Action{Enabled: false, Service: false, Public: false, Payload: "*User", Result: "*User"},
-					CreateMany: &Action{Enabled: false, Service: false, Public: false, Payload: "*User", Result: "*User"},
-					DeleteMany: &Action{Enabled: false, Service: false, Public: false, Payload: "*User", Result: "*User"},
-					UpdateMany: &Action{Enabled: false, Service: false, Public: false, Payload: "*User", Result: "*User"},
-					PatchMany:  &Action{Enabled: false, Service: false, Public: false, Payload: "*User", Result: "*User"},
-					Import:     &Action{Enabled: false, Service: false, Public: false, Payload: "*User", Result: "*User"},
-					Export:     &Action{Enabled: false, Service: false, Public: false, Payload: "*User", Result: "*User"},
-					SSE:        &Action{Enabled: false, Service: false, Public: false, Payload: "*User", Result: "*User"},
-					Stream:     &Action{Enabled: false, Service: false, Public: false, Payload: "*User", Result: "*User"},
+					Create: &Action{Service: true, Public: true, Payload: "User", Result: "*User", Phase: consts.Create},
+					Delete: &Action{Service: false, Public: false, Payload: "*User", Result: "*User", Phase: consts.Delete},
+					List:   &Action{Service: false, Public: false, Payload: "*User", Result: "*User", Phase: consts.List},
+					Update: &Action{Service: false, Public: false, Payload: "*User", Result: "User", Phase: consts.Update},
 				},
 			},
 		},
@@ -67,24 +56,11 @@ func TestParse(t *testing.T) {
 			code: user2Source,
 			want: map[string]*Design{
 				"User2": {
-					Enabled:    false,
-					Endpoint:   "user2s",
-					Param:      ":user",
-					Migrate:    false,
-					Create:     &Action{Enabled: true, Service: false, Public: false, Payload: "User2", Result: "*User3", Phase: consts.Create},
-					Delete:     &Action{Enabled: false, Service: false, Public: false, Payload: "*User2", Result: "*User2"},
-					Update:     &Action{Enabled: false, Service: false, Public: false, Payload: "*User2", Result: "*User2"},
-					Patch:      &Action{Enabled: true, Service: false, Public: false, Payload: "*User", Result: "User", Phase: consts.Patch},
-					List:       &Action{Enabled: false, Service: false, Public: false, Payload: "*User2", Result: "*User2"},
-					Get:        &Action{Enabled: false, Service: false, Public: false, Payload: "*User2", Result: "*User2"},
-					CreateMany: &Action{Enabled: false, Service: false, Public: false, Payload: "*User2", Result: "*User2"},
-					DeleteMany: &Action{Enabled: false, Service: false, Public: false, Payload: "*User2", Result: "*User2"},
-					UpdateMany: &Action{Enabled: false, Service: false, Public: false, Payload: "*User2", Result: "*User2"},
-					PatchMany:  &Action{Enabled: false, Service: false, Public: false, Payload: "*User2", Result: "*User2"},
-					Import:     &Action{Enabled: false, Service: false, Public: false, Payload: "*User2", Result: "*User2"},
-					Export:     &Action{Enabled: false, Service: false, Public: false, Payload: "*User2", Result: "*User2"},
-					SSE:        &Action{Enabled: false, Service: false, Public: false, Payload: "*User2", Result: "*User2"},
-					Stream:     &Action{Enabled: false, Service: false, Public: false, Payload: "*User2", Result: "*User2"},
+					Endpoint: "user2s",
+					Param:    ":user",
+					Migrate:  false,
+					Create:   &Action{Service: false, Public: false, Payload: "User2", Result: "*User3", Phase: consts.Create},
+					Patch:    &Action{Service: false, Public: false, Payload: "*User", Result: "User", Phase: consts.Patch},
 				},
 			},
 		},
@@ -93,42 +69,16 @@ func TestParse(t *testing.T) {
 			code: user3And4Source,
 			want: map[string]*Design{
 				"User3": {
-					Enabled:    true,
-					Endpoint:   "user",
-					Migrate:    false,
-					Create:     &Action{Enabled: false, Service: false, Public: false, Payload: "User", Result: "*User", Phase: consts.Create},
-					Delete:     &Action{Enabled: false, Service: false, Public: false, Payload: "*User3", Result: "*User3"},
-					Update:     &Action{Enabled: true, Service: false, Public: false, Payload: "*User", Result: "User", Phase: consts.Update},
-					Patch:      &Action{Enabled: false, Service: false, Public: false, Payload: "*User3", Result: "*User3"},
-					List:       &Action{Enabled: false, Service: false, Public: false, Payload: "*User3", Result: "*User3"},
-					Get:        &Action{Enabled: false, Service: false, Public: false, Payload: "*User3", Result: "*User3"},
-					CreateMany: &Action{Enabled: false, Service: false, Public: false, Payload: "*User3", Result: "*User3"},
-					DeleteMany: &Action{Enabled: false, Service: false, Public: false, Payload: "*User3", Result: "*User3"},
-					UpdateMany: &Action{Enabled: false, Service: false, Public: false, Payload: "*User3", Result: "*User3"},
-					PatchMany:  &Action{Enabled: false, Service: false, Public: false, Payload: "*User3", Result: "*User3"},
-					Import:     &Action{Enabled: false, Service: false, Public: false, Payload: "*User3", Result: "*User3"},
-					Export:     &Action{Enabled: false, Service: false, Public: false, Payload: "*User3", Result: "*User3"},
-					SSE:        &Action{Enabled: false, Service: false, Public: false, Payload: "*User3", Result: "*User3"},
-					Stream:     &Action{Enabled: false, Service: false, Public: false, Payload: "*User3", Result: "*User3"},
+					Endpoint: "user",
+					Migrate:  false,
+					Create:   &Action{Service: false, Public: false, Payload: "User", Result: "*User", Phase: consts.Create},
+					Update:   &Action{Service: false, Public: false, Payload: "*User", Result: "User", Phase: consts.Update},
 				},
 				"User4": {
-					Enabled:    true,
-					Endpoint:   "user4s",
-					Migrate:    false,
-					Create:     &Action{Enabled: true, Service: false, Public: false, Payload: "User", Result: "*User", Phase: consts.Create},
-					Delete:     &Action{Enabled: false, Service: false, Public: false, Payload: "*User4", Result: "*User4"},
-					Update:     &Action{Enabled: false, Service: false, Public: false, Payload: "*User", Result: "User", Phase: consts.Update},
-					Patch:      &Action{Enabled: false, Service: false, Public: false, Payload: "*User4", Result: "*User4"},
-					List:       &Action{Enabled: false, Service: false, Public: false, Payload: "*User4", Result: "*User4"},
-					Get:        &Action{Enabled: false, Service: false, Public: false, Payload: "*User4", Result: "*User4"},
-					CreateMany: &Action{Enabled: false, Service: false, Public: false, Payload: "*User4", Result: "*User4"},
-					DeleteMany: &Action{Enabled: false, Service: false, Public: false, Payload: "*User4", Result: "*User4"},
-					UpdateMany: &Action{Enabled: false, Service: false, Public: false, Payload: "*User4", Result: "*User4"},
-					PatchMany:  &Action{Enabled: false, Service: false, Public: false, Payload: "*User4", Result: "*User4"},
-					Import:     &Action{Enabled: false, Service: false, Public: false, Payload: "*User4", Result: "*User4"},
-					Export:     &Action{Enabled: false, Service: false, Public: false, Payload: "*User4", Result: "*User4"},
-					SSE:        &Action{Enabled: false, Service: false, Public: false, Payload: "*User4", Result: "*User4"},
-					Stream:     &Action{Enabled: false, Service: false, Public: false, Payload: "*User4", Result: "*User4"},
+					Endpoint: "user4s",
+					Migrate:  false,
+					Create:   &Action{Service: false, Public: false, Payload: "User", Result: "*User", Phase: consts.Create},
+					Update:   &Action{Service: false, Public: false, Payload: "*User", Result: "User", Phase: consts.Update},
 				},
 			},
 		},
@@ -142,23 +92,8 @@ func TestParse(t *testing.T) {
 			code: user5Source,
 			want: map[string]*Design{
 				"User5": {
-					Enabled:    true,
-					Endpoint:   "user5s",
-					Migrate:    false,
-					Create:     &Action{Enabled: false, Service: false, Public: false, Payload: "*User5", Result: "*User5"},
-					Delete:     &Action{Enabled: false, Service: false, Public: false, Payload: "*User5", Result: "*User5"},
-					Update:     &Action{Enabled: false, Service: false, Public: false, Payload: "*User5", Result: "*User5"},
-					Patch:      &Action{Enabled: false, Service: false, Public: false, Payload: "*User5", Result: "*User5"},
-					List:       &Action{Enabled: false, Service: false, Public: false, Payload: "*User5", Result: "*User5"},
-					Get:        &Action{Enabled: false, Service: false, Public: false, Payload: "*User5", Result: "*User5"},
-					CreateMany: &Action{Enabled: false, Service: false, Public: false, Payload: "*User5", Result: "*User5"},
-					DeleteMany: &Action{Enabled: false, Service: false, Public: false, Payload: "*User5", Result: "*User5"},
-					UpdateMany: &Action{Enabled: false, Service: false, Public: false, Payload: "*User5", Result: "*User5"},
-					PatchMany:  &Action{Enabled: false, Service: false, Public: false, Payload: "*User5", Result: "*User5"},
-					Import:     &Action{Enabled: false, Service: false, Public: false, Payload: "*User5", Result: "*User5"},
-					Export:     &Action{Enabled: false, Service: false, Public: false, Payload: "*User5", Result: "*User5"},
-					SSE:        &Action{Enabled: false, Service: false, Public: false, Payload: "*User5", Result: "*User5"},
-					Stream:     &Action{Enabled: false, Service: false, Public: false, Payload: "*User5", Result: "*User5"},
+					Endpoint: "user5s",
+					Migrate:  false,
 				},
 			},
 		},
@@ -167,24 +102,9 @@ func TestParse(t *testing.T) {
 			code: user6And7Source,
 			want: map[string]*Design{
 				"User6": {
-					Enabled:    true,
-					Endpoint:   "user6s",
-					Migrate:    false,
-					IsEmpty:    true,
-					Create:     &Action{Enabled: false, Service: false, Public: false, Payload: "*User6", Result: "*User6"},
-					Delete:     &Action{Enabled: false, Service: false, Public: false, Payload: "*User6", Result: "*User6"},
-					Update:     &Action{Enabled: false, Service: false, Public: false, Payload: "*User6", Result: "*User6"},
-					Patch:      &Action{Enabled: false, Service: false, Public: false, Payload: "*User6", Result: "*User6"},
-					List:       &Action{Enabled: false, Service: false, Public: false, Payload: "*User6", Result: "*User6"},
-					Get:        &Action{Enabled: false, Service: false, Public: false, Payload: "*User6", Result: "*User6"},
-					CreateMany: &Action{Enabled: false, Service: false, Public: false, Payload: "*User6", Result: "*User6"},
-					DeleteMany: &Action{Enabled: false, Service: false, Public: false, Payload: "*User6", Result: "*User6"},
-					UpdateMany: &Action{Enabled: false, Service: false, Public: false, Payload: "*User6", Result: "*User6"},
-					PatchMany:  &Action{Enabled: false, Service: false, Public: false, Payload: "*User6", Result: "*User6"},
-					Import:     &Action{Enabled: false, Service: false, Public: false, Payload: "*User6", Result: "*User6"},
-					Export:     &Action{Enabled: false, Service: false, Public: false, Payload: "*User6", Result: "*User6"},
-					SSE:        &Action{Enabled: false, Service: false, Public: false, Payload: "*User6", Result: "*User6"},
-					Stream:     &Action{Enabled: false, Service: false, Public: false, Payload: "*User6", Result: "*User6"},
+					Endpoint: "user6s",
+					Migrate:  false,
+					IsEmpty:  true,
 				},
 			},
 		},
@@ -193,44 +113,14 @@ func TestParse(t *testing.T) {
 			code: user8And9Source,
 			want: map[string]*Design{
 				"User8": {
-					Enabled:    true,
-					Endpoint:   "user8s",
-					Migrate:    false,
-					IsEmpty:    true,
-					Create:     &Action{Enabled: false, Service: false, Public: false, Payload: "*User8", Result: "*User8"},
-					Delete:     &Action{Enabled: false, Service: false, Public: false, Payload: "*User8", Result: "*User8"},
-					Update:     &Action{Enabled: false, Service: false, Public: false, Payload: "*User8", Result: "*User8"},
-					Patch:      &Action{Enabled: false, Service: false, Public: false, Payload: "*User8", Result: "*User8"},
-					List:       &Action{Enabled: false, Service: false, Public: false, Payload: "*User8", Result: "*User8"},
-					Get:        &Action{Enabled: false, Service: false, Public: false, Payload: "*User8", Result: "*User8"},
-					CreateMany: &Action{Enabled: false, Service: false, Public: false, Payload: "*User8", Result: "*User8"},
-					DeleteMany: &Action{Enabled: false, Service: false, Public: false, Payload: "*User8", Result: "*User8"},
-					UpdateMany: &Action{Enabled: false, Service: false, Public: false, Payload: "*User8", Result: "*User8"},
-					PatchMany:  &Action{Enabled: false, Service: false, Public: false, Payload: "*User8", Result: "*User8"},
-					Import:     &Action{Enabled: false, Service: false, Public: false, Payload: "*User8", Result: "*User8"},
-					Export:     &Action{Enabled: false, Service: false, Public: false, Payload: "*User8", Result: "*User8"},
-					SSE:        &Action{Enabled: false, Service: false, Public: false, Payload: "*User8", Result: "*User8"},
-					Stream:     &Action{Enabled: false, Service: false, Public: false, Payload: "*User8", Result: "*User8"},
+					Endpoint: "user8s",
+					Migrate:  false,
+					IsEmpty:  true,
 				},
 				"SampleRecord": {
-					Enabled:    true,
-					Endpoint:   "sample_records",
-					Migrate:    false,
-					IsEmpty:    true,
-					Create:     &Action{Enabled: false, Service: false, Public: false, Payload: "*SampleRecord", Result: "*SampleRecord"},
-					Delete:     &Action{Enabled: false, Service: false, Public: false, Payload: "*SampleRecord", Result: "*SampleRecord"},
-					Update:     &Action{Enabled: false, Service: false, Public: false, Payload: "*SampleRecord", Result: "*SampleRecord"},
-					Patch:      &Action{Enabled: false, Service: false, Public: false, Payload: "*SampleRecord", Result: "*SampleRecord"},
-					List:       &Action{Enabled: false, Service: false, Public: false, Payload: "*SampleRecord", Result: "*SampleRecord"},
-					Get:        &Action{Enabled: false, Service: false, Public: false, Payload: "*SampleRecord", Result: "*SampleRecord"},
-					CreateMany: &Action{Enabled: false, Service: false, Public: false, Payload: "*SampleRecord", Result: "*SampleRecord"},
-					DeleteMany: &Action{Enabled: false, Service: false, Public: false, Payload: "*SampleRecord", Result: "*SampleRecord"},
-					UpdateMany: &Action{Enabled: false, Service: false, Public: false, Payload: "*SampleRecord", Result: "*SampleRecord"},
-					PatchMany:  &Action{Enabled: false, Service: false, Public: false, Payload: "*SampleRecord", Result: "*SampleRecord"},
-					Import:     &Action{Enabled: false, Service: false, Public: false, Payload: "*SampleRecord", Result: "*SampleRecord"},
-					Export:     &Action{Enabled: false, Service: false, Public: false, Payload: "*SampleRecord", Result: "*SampleRecord"},
-					SSE:        &Action{Enabled: false, Service: false, Public: false, Payload: "*SampleRecord", Result: "*SampleRecord"},
-					Stream:     &Action{Enabled: false, Service: false, Public: false, Payload: "*SampleRecord", Result: "*SampleRecord"},
+					Endpoint: "sample_records",
+					Migrate:  false,
+					IsEmpty:  true,
 				},
 			},
 		},
@@ -272,8 +162,8 @@ func TestParse(t *testing.T) {
 	}
 }
 
-func TestParseFilename(t *testing.T) {
-	design := parseDesignFromSource(t, filenameSource, "Record")
+func TestParseServiceName(t *testing.T) {
+	design := parseDesignFromSource(t, serviceNameSource, "Record")
 
 	// Collect actions by route path
 	routeActions := make(map[string]*Action)
@@ -285,13 +175,13 @@ func TestParseFilename(t *testing.T) {
 		t.Fatalf("expected 2 route actions, got %d", len(routeActions))
 	}
 
-	// Route: record/archive with Filename("archive")
+	// Route: record/archive with Service("archive")
 	archiveAct, ok := routeActions["record/archive"]
 	if !ok {
 		t.Fatal("expected route 'record/archive' not found")
 	}
-	if archiveAct.Filename != "archive" {
-		t.Errorf("expected Filename 'archive', got %q", archiveAct.Filename)
+	if archiveAct.ServiceName != "archive" {
+		t.Errorf("expected ServiceName 'archive', got %q", archiveAct.ServiceName)
 	}
 	if archiveAct.ServiceFilename() != "archive.go" {
 		t.Errorf("expected ServiceFilename 'archive.go', got %q", archiveAct.ServiceFilename())
@@ -300,13 +190,13 @@ func TestParseFilename(t *testing.T) {
 		t.Errorf("expected RoleName 'Archive', got %q", archiveAct.RoleName())
 	}
 
-	// Route: record/restore with Filename("restore")
+	// Route: record/restore with Service("restore")
 	restoreAct, ok := routeActions["record/restore"]
 	if !ok {
 		t.Fatal("expected route 'record/restore' not found")
 	}
-	if restoreAct.Filename != "restore" {
-		t.Errorf("expected Filename 'restore', got %q", restoreAct.Filename)
+	if restoreAct.ServiceName != "restore" {
+		t.Errorf("expected ServiceName 'restore', got %q", restoreAct.ServiceName)
 	}
 	if restoreAct.ServiceFilename() != "restore.go" {
 		t.Errorf("expected ServiceFilename 'restore.go', got %q", restoreAct.ServiceFilename())
@@ -335,8 +225,8 @@ func TestParseDecodesStringArguments(t *testing.T) {
 	if !ok {
 		t.Fatalf("expected route 'sample/records/archive', got %v", slices.Sorted(maps.Keys(routeActions)))
 	}
-	if archiveAct.Filename != "archive" {
-		t.Errorf("expected Filename 'archive', got %q", archiveAct.Filename)
+	if archiveAct.ServiceName != "archive" {
+		t.Errorf("expected ServiceName 'archive', got %q", archiveAct.ServiceName)
 	}
 }
 
@@ -356,8 +246,7 @@ func (Record) Design() {
 	Param(` + "`rec`" + `)
 	Route("sample\u002frecords/archive", func() {
 		Create(func() {
-			Service()
-			Filename("\x61rchive")
+			Service("\x61rchive")
 		})
 	})
 }
@@ -399,12 +288,12 @@ func TestStringLiteral(t *testing.T) {
 	}
 }
 
-func TestParseFilenameDefault(t *testing.T) {
-	design := parseDesignFromSource(t, filenameDefaultSource, "SimpleModel")
+func TestParseServiceNameDefault(t *testing.T) {
+	design := parseDesignFromSource(t, serviceNameDefaultSource, "SimpleModel")
 
-	// Test that action without Filename uses Phase-based filename
-	if design.Create.Filename != "" {
-		t.Errorf("expected empty Filename, got %q", design.Create.Filename)
+	// An action naming no service takes the file name of its phase.
+	if design.Create.ServiceName != "" {
+		t.Errorf("expected empty ServiceName, got %q", design.Create.ServiceName)
 	}
 	if design.Create.ServiceFilename() != "create.go" {
 		t.Errorf("expected ServiceFilename 'create.go', got %q", design.Create.ServiceFilename())
@@ -426,8 +315,8 @@ func TestParseFlatten(t *testing.T) {
 	if !got.Flatten {
 		t.Fatal("expected Flatten to be parsed on the action")
 	}
-	if got.Filename != "role.go" {
-		t.Fatalf("Filename = %q, want role.go", got.Filename)
+	if got.ServiceName != "role" {
+		t.Fatalf("ServiceName = %q, want role", got.ServiceName)
 	}
 }
 
@@ -449,7 +338,7 @@ func TestParseExact(t *testing.T) {
 	}
 }
 
-const filenameSource = `
+const serviceNameSource = `
 package model
 
 import (
@@ -465,22 +354,18 @@ func (Record) Design() {
 	Migrate()
 	Route("/record/archive", func() {
 		Create(func() {
-			Enabled(true)
-			Service()
-			Filename("archive")
+			Service("archive")
 		})
 	})
 	Route("/record/restore", func() {
 		Create(func() {
-			Enabled(true)
-			Service()
-			Filename("restore")
+			Service("restore")
 		})
 	})
 }
 `
 
-const filenameDefaultSource = `
+const serviceNameDefaultSource = `
 package model
 
 import (
@@ -494,7 +379,6 @@ type SimpleModel struct {
 
 func (SimpleModel) Design() {
 	Create(func() {
-		Enabled(true)
 		Service()
 	})
 }
@@ -515,9 +399,8 @@ type Role struct {
 func (Role) Design() {
 	Route("authz/roles", func() {
 		Create(func() {
-			Service()
-			Filename("role.go")
 			Flatten()
+			Service("role")
 		})
 	})
 }
@@ -547,32 +430,32 @@ func (AdminUserSession) Design() {
 }
 `
 
-func TestParseDeclaredActionDefaultEnabled(t *testing.T) {
-	design := parseDesignFromSource(t, declaredActionDefaultEnabledSource, "DeclaredDefault")
+// TestParseLeavesUndeclaredActionsNil pins that a Design carries only the
+// actions it declares: an action block, empty or not, makes the action, an
+// action without a block stays nil, and Range visits the declared ones
+// alone, on the default route and in a Route alike.
+func TestParseLeavesUndeclaredActionsNil(t *testing.T) {
+	design := parseDesignFromSource(t, declaredActionsSource, "DeclaredDefault")
 
-	if !design.List.Enabled {
-		t.Fatal("declared default-route action should be enabled by default")
+	if design.List == nil || design.Update == nil {
+		t.Fatalf("declared default-route actions should be present, got List %v and Update %v", design.List, design.Update)
 	}
-	if design.Get.Enabled {
-		t.Fatal("undeclared action should remain disabled")
-	}
-	if design.Update.Enabled {
-		t.Fatal("declared action with Enabled(false) should be disabled")
+	if design.Get != nil {
+		t.Fatal("undeclared action should stay nil")
 	}
 
 	actions := design.routes["custom/defaults"]
 	if len(actions) != 2 {
 		t.Fatalf("custom route actions = %d, want 2", len(actions))
 	}
-	if !actions[0].Enabled {
-		t.Fatal("declared custom-route action should be enabled by default")
-	}
-	if actions[1].Enabled {
-		t.Fatal("declared custom-route action with Enabled(false) should be disabled")
+	visited := 0
+	design.Range(func(string, *Action) { visited++ })
+	if visited != 4 {
+		t.Fatalf("Range visited %d actions, want the 4 declared", visited)
 	}
 }
 
-const declaredActionDefaultEnabledSource = `
+const declaredActionsSource = `
 package model
 
 import (
@@ -586,14 +469,10 @@ type DeclaredDefault struct {
 
 func (DeclaredDefault) Design() {
 	List(func() {})
-	Update(func() {
-		Enabled(false)
-	})
+	Update(func() {})
 	Route("/custom/defaults", func() {
 		Create(func() {})
-		Delete(func() {
-			Enabled(false)
-		})
+		Delete(func() {})
 	})
 }
 `
@@ -1300,30 +1179,26 @@ func (Feed) Design() {
 	GRPC()
 	Endpoint("feeds")
 	Stream(func() {
-		Service()
-		Filename("tail")
+		Service("tail")
 		StreamingResult[*FeedEvent]()
 	})
 	Route("feeds/watch", func() {
 		Stream(func() {
-			Service()
-			Filename("watch")
+			Service("watch")
 			Payload[*FeedWatchReq]()
 			StreamingResult[*FeedEvent]()
 		})
 	})
 	Route("feeds/upload", func() {
 		Stream(func() {
-			Service()
-			Filename("upload")
+			Service("upload")
 			StreamingPayload[*FeedEvent]()
 			Result[*FeedUploadRsp]()
 		})
 	})
 	Route("feeds/chat", func() {
 		Stream(func() {
-			Service()
-			Filename("chat")
+			Service("chat")
 			StreamingPayload[*FeedEvent]()
 			StreamingResult[*FeedEvent]()
 		})
@@ -1347,9 +1222,9 @@ func TestParseStreamActions(t *testing.T) {
 	}
 
 	want := map[string]*Action{
-		"feeds/watch":  {Enabled: true, Service: true, Filename: "watch", Payload: "*FeedWatchReq", Result: "*FeedEvent", StreamingResult: true, Phase: consts.Stream},
-		"feeds/upload": {Enabled: true, Service: true, Filename: "upload", Payload: "*FeedEvent", Result: "*FeedUploadRsp", StreamingPayload: true, Phase: consts.Stream},
-		"feeds/chat":   {Enabled: true, Service: true, Filename: "chat", Payload: "*FeedEvent", Result: "*FeedEvent", StreamingPayload: true, StreamingResult: true, Phase: consts.Stream},
+		"feeds/watch":  {Service: true, ServiceName: "watch", Payload: "*FeedWatchReq", Result: "*FeedEvent", StreamingResult: true, Phase: consts.Stream},
+		"feeds/upload": {Service: true, ServiceName: "upload", Payload: "*FeedEvent", Result: "*FeedUploadRsp", StreamingPayload: true, Phase: consts.Stream},
+		"feeds/chat":   {Service: true, ServiceName: "chat", Payload: "*FeedEvent", Result: "*FeedEvent", StreamingPayload: true, StreamingResult: true, Phase: consts.Stream},
 	}
 	for route, w := range want {
 		actions := design.routes[route]
@@ -1360,7 +1235,7 @@ func TestParseStreamActions(t *testing.T) {
 			t.Errorf("route %s: %s", route, pretty.Diff(w, actions[0]))
 		}
 	}
-	top := &Action{Enabled: true, Service: true, Filename: "tail", Payload: PayloadEmpty, Result: "*FeedEvent", StreamingResult: true, Phase: consts.Stream}
+	top := &Action{Service: true, ServiceName: "tail", Payload: PayloadEmpty, Result: "*FeedEvent", StreamingResult: true, Phase: consts.Stream}
 	if !reflect.DeepEqual(design.Stream, top) {
 		t.Errorf("top-level Stream: %s", pretty.Diff(top, design.Stream))
 	}

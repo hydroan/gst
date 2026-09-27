@@ -32,7 +32,6 @@ func (u *Creator) Create(ctx *gst.ServiceContext, req *model.User) (rsp *model.U
 	return rsp, nil
 }`,
 			action: &dsl.Action{
-				Enabled: true,
 				Payload: "UserReq",
 				Result:  "UserRsp",
 				Phase:   consts.Create,
@@ -52,7 +51,6 @@ func (u *Creator) Create(ctx *gst.ServiceContext, req model.User) (rsp model.Use
 	return rsp, nil
 }`,
 			action: &dsl.Action{
-				Enabled: true,
 				Payload: "*UserReq",
 				Result:  "*UserRsp",
 				Phase:   consts.Create,
@@ -72,7 +70,6 @@ func (u *Creator) Create(ctx *gst.ServiceContext, req *model.User) (rsp *model.U
 	return rsp, nil
 }`,
 			action: &dsl.Action{
-				Enabled: true,
 				Payload: "*UserReq",
 				Result:  "*UserRsp",
 				Phase:   consts.Create,
@@ -92,7 +89,6 @@ func (u *Creator) Create(ctx *gst.ServiceContext, req model.User) (rsp model.Use
 	return rsp, nil
 }`,
 			action: &dsl.Action{
-				Enabled: true,
 				Payload: "UserReq",
 				Result:  "UserRsp",
 				Phase:   consts.Create,
@@ -152,7 +148,6 @@ func (g *Lister) List(ctx *gst.ServiceContext, req *group.GroupListReq) (rsp *gr
 	return rsp, nil
 }`,
 			action: &dsl.Action{
-				Enabled: true,
 				Payload: dsl.PayloadEmpty,
 				Result:  "*GroupListRsp",
 				Phase:   consts.List,
@@ -175,7 +170,6 @@ func (g *Lister) List(ctx *gst.ServiceContext, req *model.Empty) (rsp *group.Gro
 	return rsp, nil
 }`,
 			action: &dsl.Action{
-				Enabled: true,
 				Payload: "*Group",
 				Result:  "*GroupListRsp",
 				Phase:   consts.List,
@@ -196,7 +190,6 @@ func (u *Getter) Get(ctx *gst.ServiceContext, req *model.UserGetReq) (rsp *model
 	return rsp, nil
 }`,
 			action: &dsl.Action{
-				Enabled: true,
 				Payload: dsl.PayloadEmpty,
 				Result:  "*UserGetRsp",
 				Phase:   consts.Get,
@@ -217,7 +210,6 @@ func (g *Creator) Create(ctx *gst.ServiceContext, req *group.GroupCreateReq) (rs
 	return rsp, nil
 }`,
 			action: &dsl.Action{
-				Enabled: true,
 				Payload: "*GroupCreateReq",
 				Result:  dsl.PayloadEmpty,
 				Phase:   consts.Create,
@@ -274,7 +266,6 @@ type user struct {
 	service.Base[*model.User, *model.User, *model.User]
 }`,
 			action: &dsl.Action{
-				Enabled: true,
 				Payload: "UserReq",
 				Result:  "UserRsp",
 			},
@@ -293,7 +284,6 @@ type user struct {
 	service.Base[*model.User, model.User, model.User]
 }`,
 			action: &dsl.Action{
-				Enabled: true,
 				Payload: "*UserReq",
 				Result:  "*UserRsp",
 			},
@@ -312,7 +302,6 @@ type user struct {
 	service.Base[*model.User, *model.User, *model.User]
 }`,
 			action: &dsl.Action{
-				Enabled: true,
 				Payload: "*UserReq",
 				Result:  "*UserRsp",
 			},
@@ -331,7 +320,6 @@ type user struct {
 	service.Base[*model.User, model.User, model.User]
 }`,
 			action: &dsl.Action{
-				Enabled: true,
 				Payload: "UserReq",
 				Result:  "UserRsp",
 			},
@@ -350,7 +338,6 @@ type user struct {
 	service.Base[*model.User, *model.User, model.User]
 }`,
 			action: &dsl.Action{
-				Enabled: true,
 				Payload: "UserReq",
 				Result:  "*UserRsp",
 			},

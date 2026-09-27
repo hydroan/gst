@@ -1088,16 +1088,14 @@ func (Record) Design() {
 	})
 	dsl.Route("/archive", func() {
 		dsl.Create(func() {
-			dsl.Service()
-			dsl.Filename("archive")
+			dsl.Service("archive")
 			dsl.Payload[*RecordArchiveReq]()
 			dsl.Result[*RecordArchiveRsp]()
 		})
 	})
 	dsl.Route("/merge", func() {
 		dsl.Create(func() {
-			dsl.Service()
-			dsl.Filename("merge")
+			dsl.Service("merge")
 			dsl.Payload[RecordMergeReq]()
 			dsl.Result[RecordMergeRsp]()
 		})

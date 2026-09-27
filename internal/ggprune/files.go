@@ -152,13 +152,13 @@ func pairedTestFiles(servicePath string) []string {
 	return tests
 }
 
-// currentServiceFiles returns the service files the enabled Service() actions
-// of allModels expect, such as service/sample/record/create.go for a Create.
+// currentServiceFiles returns the service files the Service() actions of
+// allModels expect, such as service/sample/record/create.go for a Create.
 func currentServiceFiles(allModels []*modelinfo.Model) map[string]bool {
 	current := make(map[string]bool)
 	for _, m := range allModels {
 		m.Design.Range(func(route string, act *dsl.Action) {
-			if act.Enabled && act.Service {
+			if act.Service {
 				target := modelinfo.ServiceTarget(m, act, ggconst.DirModel, ggconst.DirService)
 				current[target.FilePath] = true
 			}

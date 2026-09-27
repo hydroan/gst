@@ -39,19 +39,17 @@ func (Profile) Design() {
 	Migrate()
 	Route("/iam/profile", func() {
 		Get(func() {
-			Service()
 			Flatten()
-			Filename("get.go")
 			Exact()
+			Service("get")
 			Result[*ProfileGetRsp]()
 		})
 	})
 	Route("/iam/profile", func() {
 		Patch(func() {
-			Service()
 			Flatten()
-			Filename("patch.go")
 			Exact()
+			Service("patch")
 			Payload[*ProfilePatchReq]()
 			Result[*ProfilePatchRsp]()
 		})

@@ -33,7 +33,7 @@ gst 的入门示例：一个用 `gg new` 生成、按框架推荐写法补齐的
 
 | 关键字 | 文件 |
 | --- | --- |
-| `Migrate` `Endpoint` `Param` `Create` `Delete` `Update` `Patch` `List` `Get` `Route` `Service` `Filename` `Result` | `model/record.go` |
+| `Migrate` `Endpoint` `Param` `Create` `Delete` `Update` `Patch` `List` `Get` `Route` `Service` `Result` | `model/record.go` |
 | 只建表、不出接口（只写 `Migrate()`） | `model/audit.go` |
 | 嵌套资源、`CreateMany` `DeleteMany` `UpdateMany` `PatchMany` | `model/record/item.go` |
 | 自定义路由、`Import` `Export` | `model/archive/document.go` |

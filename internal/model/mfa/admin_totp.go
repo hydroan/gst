@@ -19,17 +19,15 @@ type AdminTOTPResetRsp struct {
 func (AdminTOTP) Design() {
 	Route("mfa/admin/users/:id/totp", func() {
 		Get(func() {
-			Service()
 			Flatten()
 			Exact()
-			Filename("admin_totp_status.go")
+			Service("admin_totp_status")
 			Result[*TOTPStatusRsp]()
 		})
 		Delete(func() {
-			Service()
 			Flatten()
 			Exact()
-			Filename("admin_totp_reset.go")
+			Service("admin_totp_reset")
 			Result[*AdminTOTPResetRsp]()
 		})
 	})

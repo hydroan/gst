@@ -37,14 +37,12 @@ func flattenPruneModel() *modelinfo.Model {
 		ModelFileDir:  filepath.Join(ggconst.DirModel, "authz"),
 		ModelFilePath: filepath.Join(ggconst.DirModel, "authz", "role.go"),
 		Design: &dsl.Design{
-			Enabled:  true,
 			Endpoint: "authz/roles",
 			Create: &dsl.Action{
-				Enabled:  true,
-				Service:  true,
-				Filename: "role.go",
-				Flatten:  true,
-				Phase:    consts.Create,
+				Service:     true,
+				ServiceName: "role",
+				Flatten:     true,
+				Phase:       consts.Create,
 			},
 			Delete:     disabled(consts.Delete),
 			Update:     disabled(consts.Update),

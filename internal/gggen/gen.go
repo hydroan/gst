@@ -7,7 +7,6 @@ package gggen
 import (
 	"fmt"
 	"go/ast"
-	"path/filepath"
 	"strconv"
 	"strings"
 
@@ -17,27 +16,18 @@ import (
 	"github.com/stoewer/go-strcase"
 )
 
-// humanizeDSLFilename turns a DSL Filename() value into a space-separated label: underscores
-// and hyphens become spaces; consecutive whitespace is collapsed. It returns
-// "archive sample items" for archive_sample_items and "export report" for export-report.go.
-func humanizeDSLFilename(filename string) string {
-	name := filepath.Base(filename)
-	name = strings.TrimSuffix(name, filepath.Ext(name))
-	s := strings.ReplaceAll(name, "_", " ")
-	s = strings.ReplaceAll(s, "-", " ")
-	return strings.Join(strings.Fields(s), " ")
-}
-
 // serviceActionLogQuoted returns a Go string literal (as used in ast.BasicLit.Value) for
 // log.Info in generated service methods: "{model} {phase}", as in
-// "user create" and "user create before". When action.Filename is set, uses
-// "{model}: {humanized filename}" with optional hook suffix (before/after/filter/...),
-// as in "user: archive before" for Filename("archive").
+// "user create" and "user create before". When the action names its service, uses
+// "{model}: {name}" with the underscores of the name as spaces and an optional
+// hook suffix (before/after/filter/...), as in "user: archive before" for
+// Service("archive") and "record: archive sample items" for
+// Service("archive_sample_items").
 func serviceActionLogQuoted(modelName string, phase consts.Phase, action *dsl.Action) string {
 	modelLower := strings.ToLower(modelName)
 	phaseSnake := strings.ReplaceAll(strcase.SnakeCase(phase.Name()), "_", " ")
-	if action != nil && len(action.Filename) > 0 {
-		label := humanizeDSLFilename(action.Filename)
+	if action != nil && action.ServiceName != "" {
+		label := strings.ReplaceAll(action.ServiceName, "_", " ")
 		ps := string(phase)
 		var msg string
 		switch {
@@ -58,7 +48,7 @@ func serviceActionLogQuoted(modelName string, phase consts.Phase, action *dsl.Ac
 // generated Filter hook: the message of serviceActionLogQuoted for the
 // action's phase followed by " filter", as in "user list filter" for the
 // List action of User, "user export filter" for its Export action and
-// "user: search filter" for a List with Filename("search").
+// "user: search filter" for a List with Service("search").
 func serviceFilterLogQuoted(modelName string, phase consts.Phase, action *dsl.Action) string {
 	msg, _ := strconv.Unquote(serviceActionLogQuoted(modelName, phase, action))
 	return strconv.Quote(msg + " filter")
@@ -239,7 +229,7 @@ func genServiceMethod8(info *modelinfo.Model, modelQualifier string, action *dsl
 // genServiceMethod1): the method takes what the action declares (see
 // serviceMethod9) and, like the SSE scaffold, returns literal nil so the
 // generated code passes the service error discipline check; the business
-// fills in the stream. For the model Feed and a Filename("watch") Stream
+// fills in the stream. For the model Feed and a Service("watch") Stream
 // declaring Payload[*FeedWatchReq] and StreamingResult[*FeedEvent] it
 // generates
 //
@@ -250,7 +240,7 @@ func genServiceMethod8(info *modelinfo.Model, modelQualifier string, action *dsl
 //		return nil
 //	}
 //
-// and a Filename("upload") Stream declaring StreamingPayload[*FeedEvent] and
+// and a Service("upload") Stream declaring StreamingPayload[*FeedEvent] and
 // Result[*FeedUploadRsp], whose method answers a response,
 //
 //	func (u *Upload) Stream(ctx *gst.ServiceContext, stream *grpc.ClientStream[*model.FeedEvent]) (rsp *model.FeedUploadRsp, err error) {
@@ -318,15 +308,15 @@ func genServiceMethod9(info *modelinfo.Model, modelQualifier string, action *dsl
 // in. A model without a database table, one embedding model.Empty, gets no
 // hooks at all.
 func GenerateService(info *modelinfo.Model, action *dsl.Action, phase consts.Phase, servicePkgName string) *ast.File {
-	if !action.Enabled || !action.Service {
+	if !action.Service {
 		return nil
 	}
 
 	roleName := action.RoleName()
 
-	// When Filename is set, derive the receiver variable name from RoleName
+	// When the service is named, derive the receiver variable name from RoleName
 	// (e.g., Archive → "a") instead of the model name (e.g., Record → "r").
-	if len(action.Filename) > 0 && len(roleName) > 0 {
+	if action.ServiceName != "" && len(roleName) > 0 {
 		copied := *info
 		copied.ModelVarName = strings.ToLower(roleName[:1])
 		info = &copied

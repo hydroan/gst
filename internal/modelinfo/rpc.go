@@ -17,8 +17,8 @@ import (
 // the stubs with them, and the test scaffolds call the rpcs by them.
 
 // RPCName names the rpc of an action on a route: the action name (Create,
-// DeleteMany), or the role name of an action declaring Filename (Merge for
-// Filename("merge")), then the model name, then the suffix rpcSuffix derives
+// DeleteMany), or the role name of an action naming its service (Merge for
+// Service("merge")), then the model name, then the suffix rpcSuffix derives
 // from the route: CreateRecord, MergeItem, ListDocumentByBox. The rpc name
 // carries the model so that the message names the pb generator derives from
 // it are the ones Buf's standard rules want, GetRecordRequest for GetRecord.
@@ -29,9 +29,9 @@ func RPCName(m *Model, route string, action *dsl.Action) string {
 	return rpcBase(action) + m.ModelName + rpcSuffix(m, route)
 }
 
-// rpcBase is the name of the action itself, Filename aside (see RPCName).
+// rpcBase is the name of the action itself, the service name aside (see RPCName).
 func rpcBase(action *dsl.Action) string {
-	if action.Filename != "" {
+	if action.ServiceName != "" {
 		return action.RoleName()
 	}
 	return action.Phase.Name()

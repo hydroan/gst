@@ -66,7 +66,7 @@ func checkGRPCServiceContext(ignore gghelper.ProjectIgnore) []string {
 	var dirs []string
 	owners := make(map[string]string)
 	for _, m := range allModels {
-		if m.Design == nil || !m.Design.Enabled || ignore.Ignores(m.ModelFilePath, false) {
+		if m.Design == nil || ignore.Ignores(m.ModelFilePath, false) {
 			continue
 		}
 		m.Design.Range(func(_ string, act *dsl.Action) {

@@ -38,24 +38,21 @@ func (Feed) Design() {
 	Route("board/feeds/watch", func() {
 		Stream(func() {
 			Public()
-			Service()
-			Filename("watch")
+			Service("watch")
 			Payload[*FeedWatchReq]()
 			StreamingResult[*FeedEvent]()
 		})
 	})
 	Route("board/feeds/upload", func() {
 		Stream(func() {
-			Service()
-			Filename("upload")
+			Service("upload")
 			StreamingPayload[*FeedEvent]()
 			Result[*FeedUploadRsp]()
 		})
 	})
 	Route("board/feeds/chat", func() {
 		Stream(func() {
-			Service()
-			Filename("chat")
+			Service("chat")
 			StreamingPayload[*FeedEvent]()
 			StreamingResult[*FeedEvent]()
 		})

@@ -197,8 +197,7 @@ type EntryMergeRsp struct {
 func (Entry) Design() {
 	Route("/entries/merge", func() {
 		Create(func() {
-			Filename("merge")
-			Service()
+			Service("merge")
 			Payload[*EntryMergeReq]()
 			Result[*EntryMergeRsp]()
 		})
@@ -207,8 +206,9 @@ func (Entry) Design() {
 ```
 
 这个接口会生成 `POST /api/entries/merge`，并生成
-`service/tool/entry/merge.go`。`Filename("merge")` 用于避免同一个 model 内多
-个 `Create` action 都生成 `create.go`。
+`service/tool/entry/merge.go`。`Service("merge")` 给动作起名：service 文件叫
+`merge.go`、service 类型叫 `Merge`，模型声明了 `GRPC()` 时 rpc 也叫这个名，
+避免同一个 model 内多个 `Create` action 都生成 `create.go`。
 
 ### 路由和可见性
 
@@ -222,9 +222,10 @@ func (Entry) Design() {
   查询参数通过 `ctx.Query()`、路径参数通过 `ctx.Param()` 读取。
 - `Import`、`Export` 的 service 方法签名固定（`Import(ctx, io.Reader)` 读上传文件、
   `Export(ctx, ...M)` 返回附件字节），禁止声明 `Payload[T]()` 和 `Result[T]()`。
-- `Service()` 表示当前 action 需要生成并注册业务 service。
+- `Service()` 表示当前 action 需要生成并注册业务 service；`Service("merge")`
+  同时给它起名，service 文件、service 类型和 rpc 都用这个名。
 - 只声明 `Create(func(){})`、`List(func(){})` 等 action 就会启用对应接口；
-  `Enabled(false)` 主要用于显式关闭已声明 action。
+  不需要的接口不声明即可。
 
 ### gRPC
 
@@ -1075,7 +1076,7 @@ prune 删什么、不删什么、按什么顺序删、什么时候问你，完�
 - [嵌套资源与批量动作：Item](./examples/demo/model/record/item.go)
 - [自定义路由、Import 与 Export：Document](./examples/demo/model/archive/document.go)
 - [Exact 与 provider：附件](./examples/demo/model/archive/document/attachment.go)
-- [Filename 与 Flatten：工具类动作](./examples/demo/model/tool/entry.go)
+- [Service("name") 与 Flatten：工具类动作](./examples/demo/model/tool/entry.go)
 - [公开动作：Ping](./examples/demo/model/ping.go)
 - [SSE：Notice](./examples/demo/model/notice.go)
 - [gRPC 模型：Note](./examples/demo/model/board/note.go)
@@ -1127,7 +1128,7 @@ action 是自定义动作时再开启 `Service()`。
 
 `Endpoint` 是资源默认路径；`Route` 是额外路径或完全自定义路径。同一个 model 可以
 同时声明默认资源路由和多个额外 `Route`。如果多个 `Route` 中有相同 phase 的
-service，比如多个 `Create`，应使用 `Filename(...)` 避免生成文件冲突。
+service，比如多个 `Create`，应各自 `Service("name")` 起名，避免生成文件冲突。
 
 ### 生成文件可以手改吗？
 

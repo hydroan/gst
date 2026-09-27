@@ -24,10 +24,9 @@ type VerificationConfirm struct {
 func (VerificationConfirm) Design() {
 	Route("/iam/email/verification-confirm", func() {
 		Create(func() {
-			Service()
-			Flatten()
 			Public()
-			Filename("verification_confirm.go")
+			Flatten()
+			Service("verification_confirm")
 			Payload[*VerificationConfirmReq]()
 			Result[*VerificationConfirmRsp]()
 		})

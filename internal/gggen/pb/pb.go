@@ -238,7 +238,7 @@ func (e *DiagnosticsError) Error() string {
 func Generate(cfg Config) ([]File, error) {
 	models := make([]*modelinfo.Model, 0)
 	for _, m := range cfg.Models {
-		if m.Design != nil && m.Design.Enabled && m.Design.GRPC {
+		if m.Design != nil && m.Design.GRPC {
 			models = append(models, m)
 		}
 	}

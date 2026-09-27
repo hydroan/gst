@@ -140,7 +140,7 @@ func genRunWithOptions(opts genRunOptions) error {
 	for _, m := range allModels {
 		// The model registration file belongs to the root model package; a
 		// model anywhere else is registered through an import of its package.
-		if m.Design.Enabled && m.Design.Migrate && !m.InModelRoot(ggconst.DirModel) {
+		if m.Design.Migrate && !m.InModelRoot(ggconst.DirModel) {
 			modelPkgs[m.ImportPath()] = m.ModelPkgName
 		}
 
@@ -173,7 +173,7 @@ func genRunWithOptions(opts genRunOptions) error {
 	routerAliases := gggen.RouterFileAliases(routerPkgs, routerGstModelPkg)
 
 	for _, m := range allModels {
-		if !m.Design.Enabled || !m.Design.Migrate {
+		if !m.Design.Migrate {
 			continue
 		}
 		// A model in the root model package registers unqualified, as in

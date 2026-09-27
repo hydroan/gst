@@ -79,10 +79,9 @@ func TestServiceTarget(t *testing.T) {
 		{
 			name: "default_nested_service_target",
 			action: &dsl.Action{
-				Enabled:  true,
-				Service:  true,
-				Filename: "role.go",
-				Phase:    consts.Create,
+				Service:     true,
+				ServiceName: "role",
+				Phase:       consts.Create,
 			},
 			wantFile:   filepath.Join("repo", "service", "authz", "role", "role.go"),
 			wantImport: "github.com/acme/app/repo/service/authz/role",
@@ -91,11 +90,10 @@ func TestServiceTarget(t *testing.T) {
 		{
 			name: "flatten_service_target",
 			action: &dsl.Action{
-				Enabled:  true,
-				Service:  true,
-				Filename: "role.go",
-				Flatten:  true,
-				Phase:    consts.Create,
+				Service:     true,
+				ServiceName: "role",
+				Flatten:     true,
+				Phase:       consts.Create,
 			},
 			wantFile:   filepath.Join("repo", "service", "authz", "role.go"),
 			wantImport: "github.com/acme/app/repo/service/authz",

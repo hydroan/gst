@@ -16,9 +16,8 @@ type LogoutRsp struct {
 func (Logout) Design() {
 	Route("/logout", func() {
 		Create(func() {
-			Service()
 			Flatten()
-			Filename("logout.go")
+			Service("logout")
 			Result[*LogoutRsp]()
 		})
 	})

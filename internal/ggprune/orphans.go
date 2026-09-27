@@ -94,7 +94,7 @@ func currentServiceDirs(allModels []*modelinfo.Model) serviceDirSet {
 
 	for _, m := range allModels {
 		m.Design.Range(func(route string, act *dsl.Action) {
-			if !act.Enabled || !act.Service {
+			if !act.Service {
 				return
 			}
 			dir := filepath.Clean(modelinfo.ServiceTarget(m, act, ggconst.DirModel, ggconst.DirService).Dir)

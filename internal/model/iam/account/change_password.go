@@ -20,9 +20,8 @@ type ChangePasswordRsp struct {
 func (ChangePassword) Design() {
 	Route("/iam/change-password", func() {
 		Create(func() {
-			Service()
 			Flatten()
-			Filename("change_password.go")
+			Service("change_password")
 			Payload[*ChangePasswordReq]()
 			Result[*ChangePasswordRsp]()
 		})

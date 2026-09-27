@@ -33,9 +33,8 @@ type EntryMergeRsp struct {
 func (Entry) Design() {
 	Route("entries/merge", func() {
 		Create(func() {
-			Service()
-			Filename("merge")
 			Flatten()
+			Service("merge")
 			Payload[*EntryMergeReq]()
 			Result[*EntryMergeRsp]()
 		})

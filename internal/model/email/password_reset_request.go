@@ -26,10 +26,9 @@ type PasswordResetRequest struct {
 func (PasswordResetRequest) Design() {
 	Route("/iam/email/password-reset-request", func() {
 		Create(func() {
-			Service()
-			Flatten()
 			Public()
-			Filename("password_reset_request.go")
+			Flatten()
+			Service("password_reset_request")
 			Payload[*PasswordResetRequestReq]()
 			Result[*PasswordResetRequestRsp]()
 		})

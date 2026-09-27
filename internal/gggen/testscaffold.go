@@ -113,7 +113,7 @@ var serviceStreamTestDoc = []string{
 // downloads the attachment and SSE consumes the stream. A Stream action,
 // served over gRPC alone, is called through the client the protobuf plugin
 // generated, on a connection to testutil.GRPCTarget: for the Stream action
-// declaring Filename("watch"), Payload and StreamingResult on the model Feed
+// declaring Service("watch"), Payload and StreamingResult on the model Feed
 // of the root model package, whose rpc is WatchFeed, the test reads
 //
 //	// TestWatch covers the WatchFeed rpc, served by Watch in watch.go.
@@ -181,10 +181,10 @@ func GenerateServiceTest(info *modelinfo.Model, target modelinfo.ServiceTargetIn
 
 // serviceTestName returns the name of the test scaffolded for action: Test
 // followed by the method name of its phase, as in TestDeleteMany for a
-// DeleteMany action, or by the role name of a Filename action, as in
-// TestArchive for Filename("archive").
+// DeleteMany action, or by the role name of a named service, as in
+// TestArchive for Service("archive").
 func serviceTestName(action *dsl.Action) string {
-	if len(action.Filename) > 0 {
+	if action.ServiceName != "" {
 		return "Test" + action.RoleName()
 	}
 	return "Test" + action.Phase.Name()

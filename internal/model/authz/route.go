@@ -13,9 +13,8 @@ type Routes struct {
 func (Routes) Design() {
 	dsl.Route("authz/routes", func() {
 		dsl.List(func() {
-			dsl.Service()
 			dsl.Flatten()
-			dsl.Filename("routes.go")
+			dsl.Service("routes")
 			dsl.Result[*RoutesRsp]()
 		})
 	})

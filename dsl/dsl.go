@@ -14,17 +14,14 @@
 //	}
 //
 //	func (User) Design() {
-//		// Enable API generation (default: true)
-//		Enabled(true)
+//		// Enable database migration (default: disabled)
+//		Migrate()
 //
 //		// Set custom endpoint (default: pluralized snake_case model name)
 //		Endpoint("users")
 //
 //		// Add path parameter for dynamic routing
 //		Param("user")  // Creates routes like /api/users/:user
-//
-//		// Enable database migration (default: disabled)
-//		Migrate()
 //
 //		// Define alternative routes for different access patterns
 //		Route("public/users", func() {
@@ -47,15 +44,14 @@
 //		Get(func() {})
 //	}
 //
-// Custom Service Filenames:
+// Naming a service:
 //
 // When multiple Route definitions share the same operation type (e.g., both use Create),
-// use Filename to specify distinct service filenames:
+// give Service a name, which names the service file, its type and its rpc:
 //
 //	Route("/items/archive", func() {
 //		Create(func() {
-//			Service()
-//			Filename("archive")  // generates archive.go instead of create.go
+//			Service("archive")  // generates archive.go instead of create.go
 //		})
 //	})
 //
@@ -81,16 +77,6 @@ package dsl
 import (
 	internaldsl "github.com/hydroan/gst/internal/dsl"
 )
-
-// Enabled controls whether API generation is enabled.
-// It has two usage scenarios:
-//  1. When used in Design() method, it controls whether API generation is enabled for the entire model.
-//     When set to false, no API code will be generated for this model.
-//     Default: true
-//  2. When used in action configuration functions (e.g., Create, Update, List, Get),
-//     it controls whether the declared action should be generated.
-//     Default: true for declared actions; actions that are not declared remain disabled.
-func Enabled(enabled bool) { internaldsl.Enabled(enabled) }
 
 // Endpoint sets a custom endpoint path for the model's API routes.
 // If not specified, defaults to the pluralized snake_case form of the model name,
@@ -207,59 +193,51 @@ func Migrate() { internaldsl.Migrate() }
 // and needs it.
 func GRPC() { internaldsl.GRPC() }
 
-// Service marks the current action as requiring custom service code.
+// Service marks the current action as requiring custom service code, and
+// names it.
 //
 // Service is an action-scoped marker and must be used inside an action block such
 // as Create, List, or Get. Calling Service() tells gg gen to generate and
-// register a service implementation for that action.
+// register a service implementation for that action, named after the
+// action: Create generates create.go declaring Creator, List generates
+// list.go declaring Lister.
 //
-// Omit Service() when the framework default controller behavior is enough. This
-// marker only controls service generation and registration for the current
-// action; it does not change Payload, Result, Public, Exact, Filename, Flatten,
-// Enabled, or route generation semantics.
-func Service() { internaldsl.Service() }
-
-// Filename specifies a custom filename (without extension) for the generated service file.
-// When used inside an action configuration function (e.g., Create, Update), it overrides the
-// default filename derived from the operation phase (e.g., "create", "list").
-// Generated service log.Info messages use "{model}: {label}" where label is derived from this
-// value: path base, underscores and hyphens replaced by spaces, whitespace collapsed.
+// Service("name") names the service instead: a bare name of letters, digits
+// and underscores, which names the generated file (name.go), the service type
+// (its UpperCamelCase form) and, for a model declaring GRPC(), the rpc (the
+// type name followed by the model name, MergeEntry for Service("merge") on
+// Entry). Name the service when a model declares the same action on several
+// routes, since two actions named after one phase would fight over one file,
+// and for a custom action whose name says what it does; a Stream action
+// always names its service, there being no default name for its rpc.
+// Generated service log.Info messages use "{model}: {label}", label being the
+// name with underscores and hyphens replaced by spaces.
 //
-// Background:
-// By default, the generated service filename is derived from the operation phase name
-// (e.g., Create generates "create.go", List generates "list.go"). When a model defines
-// multiple Route with the same operation type, such as two routes both using Create,
-// they share a single service file "create.go" because the filename is solely determined
-// by the phase. This leads to the second route's generated code overwriting the first.
-// Filename allows each action to specify a distinct output filename, ensuring that
-// each route's service logic is generated into its own dedicated file.
-//
-// Default: "" (uses the lowercase phase name as filename, e.g., "create.go", "list.go")
-//
-// Example:
-//
-//	// Without Filename, both routes of a model declared in model/sample/item.go
-//	// would generate service/sample/item/create.go, causing a conflict. With
-//	// Filename, they produce separate files:
+//	// Both routes of a model declared in model/sample/item.go declare
+//	// Create; named, they generate service/sample/item/archive.go and
+//	// service/sample/item/restore.go instead of one create.go:
 //	Route("/items/archive", func() {
 //	    Create(func() {
-//	        Service()
-//	        Filename("archive")  // generates service/sample/item/archive.go
+//	        Service("archive")
 //	    })
 //	})
 //	Route("/items/restore", func() {
 //	    Create(func() {
-//	        Service()
-//	        Filename("restore")  // generates service/sample/item/restore.go
+//	        Service("restore")
 //	    })
 //	})
-func Filename(name string) { internaldsl.Filename(name) }
+//
+// Omit Service when the framework default controller behavior is enough. This
+// marker only controls service generation and registration for the current
+// action; it does not change Payload, Result, Public, Exact, Flatten or route
+// generation semantics.
+func Service(name ...string) { internaldsl.Service(name...) }
 
 // Flatten changes the service output layout for the current action.
 //
 // By default, gg treats each model file as its own service package:
 //
-//	model/authz/role.go + Filename("role.go")
+//	model/authz/role.go + Service("role")
 //	  -> service/authz/role/role.go
 //	  -> package role
 //
@@ -267,7 +245,7 @@ func Filename(name string) { internaldsl.Filename(name) }
 // action service is generated in the service package that mirrors the current model
 // package:
 //
-//	model/authz/role.go + Filename("role.go") + Flatten()
+//	model/authz/role.go + Service("role") + Flatten()
 //	  -> service/authz/role.go
 //	  -> package authz
 //
@@ -276,9 +254,9 @@ func Filename(name string) { internaldsl.Filename(name) }
 // For example, model/authz/role.go cannot generate into service/mfa or service/authz2.
 //
 // Flatten only affects service generation. It does not change routes, model registration,
-// payload/result types, or Filename's meaning. Filename still controls only the generated
-// file basename and service struct name. gg requires Flatten to be used with an explicit
-// Filename(...) and Service() in the same action.
+// payload/result types, or the service's name, which still controls only the generated
+// file basename and service struct name. gg requires Flatten to be used with a named
+// Service("name") in the same action.
 //
 // Flatten is only valid for model files under model/<package>/<file>.go. Root model files
 // such as model/user.go cannot be flattened because service/ is reserved for generated
@@ -305,8 +283,8 @@ func Public() { internaldsl.Public() }
 // suffix such as "/:id", "/batch", "/import", or "/export" for that action.
 //
 // Omit Exact() for normal CRUD-style route generation. Exact does not change
-// Param, Public, Service, Payload, Result, Filename, Flatten, or any other DSL
-// keyword; it only controls the current action's generated router path.
+// Param, Public, Service, Payload, Result, Flatten, or any other DSL keyword;
+// it only controls the current action's generated router path.
 //
 // Note that the built-in Delete, Update, and Patch controllers read the
 // resource id from the route parameter only. An Exact route without an id
@@ -334,8 +312,8 @@ func Payload[T any]() { internaldsl.Payload[T]() }
 func Result[T any]() { internaldsl.Result[T]() }
 
 // Create defines the configuration for the create operation.
-// The function parameter allows setting Enabled, Service, Public, Payload, and Result.
-// Declaring the action enables it by default.
+// The function parameter allows setting Service, Public, Payload, and Result.
+// Declaring the action enables it.
 // Example: Create(func() { Payload[CreateUserRequest](); Result[*User]() })
 func Create(fn func()) { internaldsl.Create(fn) }
 
@@ -423,9 +401,9 @@ func SSE(fn func()) { internaldsl.SSE(fn) }
 // StreamingPayload with Result a client stream, and both streaming a
 // bidirectional stream. A side declared neither way is *model.Empty.
 //
-// Stream must declare Service(), there being no built-in implementation, and
-// Filename(...), which names its rpc (see Filename); it must not declare
-// Exact(), having no HTTP route. It needs GRPC() on the model: HTTP carries
+// Stream must declare a named Service("name"), there being no built-in
+// implementation and the name naming its rpc (see Service); it must not
+// declare Exact(), having no HTTP route. It needs GRPC() on the model: HTTP carries
 // no stream, so a Stream of a model without GRPC() would be served nowhere,
 // and it is rejected. A Stream registers no HTTP route and appears in no
 // OpenAPI document.
@@ -435,8 +413,7 @@ func SSE(fn func()) { internaldsl.SSE(fn) }
 //
 //	Route("feeds/watch", func() {
 //	    Stream(func() {
-//	        Service()
-//	        Filename("watch")
+//	        Service("watch")
 //	        Payload[*FeedWatchReq]()
 //	        StreamingResult[*FeedEvent]()
 //	    })

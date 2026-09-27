@@ -62,16 +62,12 @@ type OrderSample struct {
 func (OrderSample) Design() {
 	Endpoint("sample/records")
 	Get(func() {
-		Enabled(true)
 	})
 	Export(func() {
-		Enabled(true)
 	})
 	Import(func() {
-		Enabled(true)
 	})
 	List(func() {
-		Enabled(true)
 	})
 }
 `
@@ -91,16 +87,12 @@ type RouteSample struct {
 func (RouteSample) Design() {
 	Route("/sample/records", func() {
 		Get(func() {
-			Enabled(true)
 		})
 		Export(func() {
-			Enabled(true)
 		})
 		Import(func() {
-			Enabled(true)
 		})
 		List(func() {
-			Enabled(true)
 		})
 	})
 }

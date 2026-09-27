@@ -31,9 +31,8 @@ type TOTPUnbindRsp struct {
 func (TOTPUnbind) Design() {
 	Route("mfa/totp/unbind", func() {
 		Create(func() {
-			Service()
 			Flatten()
-			Filename("totp_unbind.go")
+			Service("totp_unbind")
 			Payload[*TOTPUnbindReq]()
 			Result[*TOTPUnbindRsp]()
 		})

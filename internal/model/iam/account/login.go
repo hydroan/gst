@@ -23,10 +23,9 @@ type LoginRsp = modeliamsession.AuthenticatedSessionRsp
 func (Login) Design() {
 	Route("/login", func() {
 		Create(func() {
-			Service()
-			Flatten()
 			Public()
-			Filename("login.go")
+			Flatten()
+			Service("login")
 			Payload[*LoginReq]()
 			Result[*LoginRsp]()
 		})

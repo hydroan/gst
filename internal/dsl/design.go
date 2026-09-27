@@ -9,7 +9,6 @@ package dsl
 
 import (
 	"maps"
-	"path/filepath"
 	"slices"
 	"strings"
 
@@ -27,10 +26,6 @@ const PayloadEmpty = "*model.Empty"
 // It contains global settings and individual action configurations.
 // This struct is populated by parsing the model's Design() method.
 type Design struct {
-	// Enabled indicates whether API generation is enabled for this model.
-	// Default: true
-	Enabled bool
-
 	// Endpoint specifies the URL path segment for this model's API routes.
 	// Defaults to the pluralized snake_case form of the model name.
 	// Used by the router to construct API endpoints.
@@ -123,12 +118,12 @@ type Design struct {
 	Stream *Action // gRPC streaming operation configuration (see Stream)
 }
 
-// Range iterates over all enabled actions in the Design and calls the provided function
+// Range iterates over the actions the Design declares and calls the provided function
 // for each one, with the route the action is registered under. Nothing is called for a
-// nil or disabled Design, or for a nil function.
+// nil Design or a nil function.
 //
 // Parameters:
-//   - fn: Callback function that receives (route, action) for each enabled action
+//   - fn: Callback function that receives (route, action) for each declared action
 //
 // The Design's own actions come first, under its endpoint, in a fixed order: Create,
 // Delete, Update, Patch, List, Import, Export, SSE, Stream, Get, CreateMany,
@@ -141,51 +136,14 @@ type Design struct {
 //		fmt.Printf("Generating %s for %s\n", action.Phase.Name(), route)
 //	})
 func (d *Design) Range(fn func(route string, action *Action)) {
-	if d == nil || fn == nil || !d.Enabled {
+	if d == nil || fn == nil {
 		return
 	}
 
-	if d.Create.Enabled {
-		fn(d.Endpoint, d.Create)
-	}
-	if d.Delete.Enabled {
-		fn(d.Endpoint, d.Delete)
-	}
-	if d.Update.Enabled {
-		fn(d.Endpoint, d.Update)
-	}
-	if d.Patch.Enabled {
-		fn(d.Endpoint, d.Patch)
-	}
-	if d.List.Enabled {
-		fn(d.Endpoint, d.List)
-	}
-	if d.Import.Enabled {
-		fn(d.Endpoint, d.Import)
-	}
-	if d.Export.Enabled {
-		fn(d.Endpoint, d.Export)
-	}
-	if d.SSE.Enabled {
-		fn(d.Endpoint, d.SSE)
-	}
-	if d.Stream.Enabled {
-		fn(d.Endpoint, d.Stream)
-	}
-	if d.Get.Enabled {
-		fn(d.Endpoint, d.Get)
-	}
-	if d.CreateMany.Enabled {
-		fn(d.Endpoint, d.CreateMany)
-	}
-	if d.DeleteMany.Enabled {
-		fn(d.Endpoint, d.DeleteMany)
-	}
-	if d.UpdateMany.Enabled {
-		fn(d.Endpoint, d.UpdateMany)
-	}
-	if d.PatchMany.Enabled {
-		fn(d.Endpoint, d.PatchMany)
+	for _, action := range d.ownActions() {
+		if action != nil {
+			fn(d.Endpoint, action)
+		}
 	}
 
 	// Sort route keys to ensure deterministic iteration order.
@@ -194,16 +152,44 @@ func (d *Design) Range(fn func(route string, action *Action)) {
 	}
 }
 
+// ownActions returns the slots of the actions declared on the Design's own
+// endpoint, in the order Range emits them; a slot is nil for an action the
+// Design does not declare.
+func (d *Design) ownActions() []*Action {
+	return []*Action{d.Create, d.Delete, d.Update, d.Patch, d.List, d.Import, d.Export, d.SSE, d.Stream, d.Get, d.CreateMany, d.DeleteMany, d.UpdateMany, d.PatchMany}
+}
+
+// Drop removes the action from the Design, whichever route it is declared
+// on: what a gst.yaml route ignore rule does to the action it matches, so
+// that nothing is generated for it from then on. An action the Design does
+// not hold is left alone. Drop is not for use inside the callback of Range.
+func (d *Design) Drop(target *Action) {
+	if d == nil || target == nil {
+		return
+	}
+	for _, slot := range []**Action{&d.Create, &d.Delete, &d.Update, &d.Patch, &d.List, &d.Import, &d.Export, &d.SSE, &d.Stream, &d.Get, &d.CreateMany, &d.DeleteMany, &d.UpdateMany, &d.PatchMany} {
+		if *slot == target {
+			*slot = nil
+			return
+		}
+	}
+	for route, actions := range d.routes {
+		if i := slices.Index(actions, target); i >= 0 {
+			d.routes[route] = slices.Delete(actions, i, i+1)
+			if len(d.routes[route]) == 0 {
+				delete(d.routes, route)
+			}
+			return
+		}
+	}
+}
+
 // Action represents the configuration for a specific API operation.
 // Each operation (Create, Update, Delete, etc.) has its own Action configuration.
 type Action struct {
-	// Enabled indicates whether this specific action should be generated.
-	// Declared actions default to true; actions not declared in Design are disabled.
-	Enabled bool
-
 	// Service indicates whether custom service code should be generated and
 	// registered for this action. It is true only when the action's DSL block
-	// contains Service().
+	// contains Service() or Service("name").
 	// Default: false
 	Service bool
 
@@ -236,15 +222,15 @@ type Action struct {
 	StreamingPayload bool
 	StreamingResult  bool
 
-	// Filename specifies a custom filename (without extension) for the generated service file.
-	// When set, it overrides the default filename derived from the Phase.
-	// For example, Filename="archive" generates "archive.go" instead of "create.go".
-	// Default: "" (uses Phase-based filename)
-	Filename string
+	// ServiceName is the name Service("name") gives the action: the generated
+	// service file is name.go, the service type its UpperCamelCase form, and
+	// the rpc of a model declaring GRPC() that form followed by the model
+	// name. Empty for Service(), which names them after the Phase.
+	ServiceName string
 
 	// Flatten indicates whether the generated service file should be written directly
 	// into the service package that mirrors the current model package.
-	// It only affects service output layout and requires Service() plus Filename(...).
+	// It only affects service output layout and requires Service("name").
 	Flatten bool
 
 	// The phase of the action
@@ -252,36 +238,29 @@ type Action struct {
 	Phase consts.Phase
 }
 
-// RoleName returns the struct name for the generated service file.
-// If Filename is set, it extracts the base name (stripping any directory prefix
-// and file extension) and converts it to UpperCamelCase.
-// For example, Filename("archive") returns "Archive", Filename("a/b/item_archive.rs") returns "ItemArchive".
-// Otherwise, it falls back to Phase.RoleName() (e.g., "Creator", "Updater", "Deleter").
+// RoleName returns the struct name of the generated service: the
+// UpperCamelCase form of the ServiceName, Archive for Service("archive") and
+// ItemArchive for Service("item_archive"), or Phase.RoleName() for
+// Service(), Creator for Create.
 func (a *Action) RoleName() string {
-	if len(a.Filename) > 0 {
-		name := filepath.Base(a.Filename)
-		name = strings.TrimSuffix(name, filepath.Ext(name))
-		return strcase.UpperCamelCase(name)
+	if a.ServiceName != "" {
+		return strcase.UpperCamelCase(a.ServiceName)
 	}
 	return a.Phase.RoleName()
 }
 
-// ServiceFilename returns the filename for the generated service file.
-// If Filename is set, it extracts the base name (stripping any directory prefix
-// and file extension), converts it to lowercase, and appends ".go".
-// For example, "a/b/c.rs" becomes "c.go", "Archive" becomes "archive.go".
-// Otherwise, it falls back to the lowercase Phase name + ".go".
+// ServiceFilename returns the name of the generated service file: the
+// ServiceName in lower case plus .go, archive.go for Service("archive") and
+// Service("Archive") alike, or the lower case Phase plus .go for Service(),
+// create.go for Create.
 func (a *Action) ServiceFilename() string {
-	if len(a.Filename) > 0 {
-		name := filepath.Base(a.Filename)
-		name = strings.TrimSuffix(name, filepath.Ext(name))
-		return strings.ToLower(name) + ".go"
+	if a.ServiceName != "" {
+		return strings.ToLower(a.ServiceName) + ".go"
 	}
 	return strings.ToLower(string(a.Phase)) + ".go"
 }
 
 var methodList = []string{
-	"Enabled",
 	"Endpoint",
 	"Param",
 	"Route",
@@ -292,7 +271,6 @@ var methodList = []string{
 	"Exact",
 	"Payload",
 	"Result",
-	"Filename",
 	"Flatten",
 	"StreamingPayload",
 	"StreamingResult",

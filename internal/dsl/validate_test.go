@@ -44,11 +44,11 @@ func TestValidateFlattenUsage(t *testing.T) {
 			wantError: "Flatten() can only be used inside an action block",
 		},
 		{
-			name:      "flatten_missing_filename",
-			source:    validateFlattenMissingFilenameSource,
+			name:      "flatten_without_service_name",
+			source:    validateFlattenWithoutServiceNameSource,
 			modelDir:  "/repo/model",
 			filename:  "/repo/model/authz/role.go",
-			wantError: "missing Filename",
+			wantError: "names no service",
 		},
 		{
 			name:      "flatten_without_service",
@@ -111,9 +111,8 @@ type Role struct {
 func (Role) Design() {
 	Route("authz/roles", func() {
 		Create(func() {
-			Service()
-			Filename("role.go")
 			Flatten()
+			Service("role")
 		})
 	})
 }
@@ -133,9 +132,8 @@ type Role struct {
 
 func (Role) Design() {
 	Create(func() {
-		Service()
-		Filename("role.go")
 		Flatten()
+		Service("role")
 	})
 }
 `
@@ -155,9 +153,8 @@ type Role struct {
 func (Role) Design() {
 	dsl.Route("authz/roles", func() {
 		dsl.Create(func() {
-			dsl.Service()
-			dsl.Filename("role.go")
 			dsl.Flatten()
+			dsl.Service("role")
 		})
 	})
 }
@@ -180,7 +177,7 @@ func (Role) Design() {
 }
 `
 
-const validateFlattenMissingFilenameSource = `
+const validateFlattenWithoutServiceNameSource = `
 package authz
 
 import (
@@ -214,7 +211,6 @@ type Role struct {
 
 func (Role) Design() {
 	Create(func() {
-		Filename("role.go")
 		Flatten()
 	})
 }
@@ -607,7 +603,7 @@ func TestValidateImportExportPayloadResultUsage(t *testing.T) {
 		},
 		{
 			name:      "import_and_export_without_service",
-			source:    validateEnabledOnlyImportExportSource,
+			source:    validateImportExportWithoutServiceSource,
 			modelDir:  "/repo/model",
 			filename:  "/repo/model/sample/record.go",
 			wantError: "action has no built-in implementation and must declare Service()",
@@ -726,7 +722,7 @@ func (Record) Design() {
 }
 `
 
-const validateEnabledOnlyImportExportSource = `
+const validateImportExportWithoutServiceSource = `
 package sample
 
 import (
@@ -740,10 +736,8 @@ type Record struct {
 
 func (Record) Design() {
 	Import(func() {
-		Enabled(true)
 	})
 	Export(func() {
-		Enabled(true)
 	})
 }
 `
@@ -798,7 +792,7 @@ func TestValidateServiceFilenameCollision(t *testing.T) {
 		},
 		{
 			name:     "action_without_service_does_not_generate_a_file",
-			source:   validateSharedFilenameWithoutServiceSource,
+			source:   validateActionsWithoutServiceSource,
 			modelDir: "/repo/model",
 			filename: "/repo/model/sample/record.go",
 		},
@@ -849,16 +843,14 @@ type Record struct {
 func (Record) Design() {
 	Route("sample/detail", func() {
 		Get(func() {
-			Service()
 			Exact()
-			Filename("shared.go")
+			Service("shared")
 			Result[*DetailGetRsp]()
 		})
 	})
 	Route("sample/list", func() {
 		List(func() {
-			Service()
-			Filename("shared.go")
+			Service("shared")
 			Result[*RecordListRsp]()
 		})
 	})
@@ -883,8 +875,7 @@ func (Record) Design() {
 	})
 	Route("sample/detail", func() {
 		Patch(func() {
-			Service()
-			Filename("get.go")
+			Service("get")
 			Payload[*DetailPatchReq]()
 			Result[*DetailPatchRsp]()
 		})
@@ -936,16 +927,14 @@ type Record struct {
 func (Record) Design() {
 	Route("sample/archive", func() {
 		Create(func() {
-			Service()
-			Filename("shared.go")
 			Flatten()
+			Service("shared")
 		})
 	})
 	Route("sample/restore", func() {
 		Update(func() {
-			Service()
-			Filename("shared.go")
 			Flatten()
+			Service("shared")
 		})
 	})
 }
@@ -966,15 +955,13 @@ type Record struct {
 func (Record) Design() {
 	Route("sample/archive", func() {
 		Create(func() {
-			Service()
-			Filename("shared.go")
 			Flatten()
+			Service("shared")
 		})
 	})
 	Route("sample/restore", func() {
 		Update(func() {
-			Service()
-			Filename("shared.go")
+			Service("shared")
 		})
 	})
 }
@@ -995,23 +982,21 @@ type Record struct {
 func (Record) Design() {
 	Route("sample/detail", func() {
 		Get(func() {
-			Service()
 			Exact()
-			Filename("detail.go")
+			Service("detail")
 			Result[*DetailGetRsp]()
 		})
 	})
 	Route("sample/list", func() {
 		List(func() {
-			Service()
-			Filename("list.go")
+			Service("list")
 			Result[*RecordListRsp]()
 		})
 	})
 }
 `
 
-const validateSharedFilenameWithoutServiceSource = `
+const validateActionsWithoutServiceSource = `
 package sample
 
 import (
@@ -1025,17 +1010,10 @@ type Record struct {
 
 func (Record) Design() {
 	Route("sample/detail", func() {
-		Get(func() {
-			Service()
-			Exact()
-			Filename("shared.go")
-			Result[*DetailGetRsp]()
-		})
+		Get(func() {})
 	})
 	Route("sample/list", func() {
-		List(func() {
-			Filename("shared.go")
-		})
+		Get(func() {})
 	})
 }
 `
@@ -1778,9 +1756,9 @@ func TestValidateStreamUsage(t *testing.T) {
 			wantError: "Stream action declares both Result and StreamingResult; the response is either one message or a stream of them",
 		},
 		{
-			name:      "stream_without_filename",
-			source:    validateStreamWithoutFilenameSource,
-			wantError: "Stream action must declare Filename(...), which names its rpc",
+			name:      "stream_without_service_name",
+			source:    validateStreamWithoutServiceNameSource,
+			wantError: `Stream action must name its service, Service("name"), which names its rpc`,
 		},
 		{
 			name:      "stream_without_service",
@@ -1862,30 +1840,26 @@ func (Record) Design() {
 	Migrate()
 	Create(func() {})
 	Stream(func() {
-		Service()
-		Filename("tail")
+		Service("tail")
 		StreamingResult[*RecordEvent]()
 	})
 	Route("records/watch", func() {
 		Stream(func() {
-			Service()
-			Filename("watch")
+			Service("watch")
 			Payload[*RecordWatchReq]()
 			StreamingResult[*RecordEvent]()
 		})
 	})
 	Route("records/upload", func() {
 		Stream(func() {
-			Service()
-			Filename("upload")
+			Service("upload")
 			StreamingPayload[*RecordEvent]()
 			Result[*RecordUploadRsp]()
 		})
 	})
 	Route("records/chat", func() {
 		Stream(func() {
-			Service()
-			Filename("chat")
+			Service("chat")
 			StreamingPayload[*RecordEvent]()
 			StreamingResult[*RecordEvent]()
 		})
@@ -1910,8 +1884,7 @@ type RecordEvent struct{}
 func (Record) Design() {
 	GRPC()
 	Stream(func() {
-		Service()
-		Filename("tail")
+		Service("tail")
 		StreamingResult[*RecordEvent]()
 	})
 }
@@ -1936,8 +1909,7 @@ type RecordUploadRsp struct{}
 func (Record) Design() {
 	GRPC()
 	Stream(func() {
-		Service()
-		Filename("plain")
+		Service("plain")
 		Payload[*RecordWatchReq]()
 		Result[*RecordUploadRsp]()
 	})
@@ -1963,8 +1935,7 @@ type RecordEvent struct{}
 func (Record) Design() {
 	GRPC()
 	Stream(func() {
-		Service()
-		Filename("upload")
+		Service("upload")
 		Payload[*RecordWatchReq]()
 		StreamingPayload[*RecordEvent]()
 	})
@@ -1990,15 +1961,14 @@ type RecordUploadRsp struct{}
 func (Record) Design() {
 	GRPC()
 	Stream(func() {
-		Service()
-		Filename("watch")
+		Service("watch")
 		StreamingResult[*RecordEvent]()
 		Result[*RecordUploadRsp]()
 	})
 }
 `
 
-const validateStreamWithoutFilenameSource = `
+const validateStreamWithoutServiceNameSource = `
 package sample
 
 import (
@@ -2038,7 +2008,6 @@ type RecordEvent struct{}
 func (Record) Design() {
 	GRPC()
 	Stream(func() {
-		Filename("watch")
 		StreamingResult[*RecordEvent]()
 	})
 }
@@ -2063,8 +2032,7 @@ func (Record) Design() {
 	Create(func() {})
 	Route("records/watch", func() {
 		Stream(func() {
-			Service()
-			Filename("watch")
+			Service("watch")
 			StreamingResult[*RecordEvent]()
 		})
 	})
@@ -2133,9 +2101,8 @@ func (Record) Design() {
 	GRPC()
 	Route("records/watch", func() {
 		Stream(func() {
-			Service()
-			Filename("watch")
 			Exact()
+			Service("watch")
 			StreamingResult[*RecordEvent]()
 		})
 	})
@@ -2168,3 +2135,509 @@ func TestHTTPOnlyActionNamesTheActionsGRPCCannotServe(t *testing.T) {
 		}
 	}
 }
+
+func TestValidateServiceName(t *testing.T) {
+	tests := []struct {
+		name      string
+		source    string
+		wantError string
+	}{
+		{
+			name:   "bare_name",
+			source: validateServiceBareNameSource,
+		},
+		{
+			name:      "file_name",
+			source:    validateServiceFileNameSource,
+			wantError: `Create action names its service "archive.go"; a service name is letters, digits and underscores, naming the service file, its type and its rpc: Service("archive")`,
+		},
+		{
+			name:      "path",
+			source:    validateServicePathNameSource,
+			wantError: `Create action names its service "sample/record/archive.go"; a service name is letters, digits and underscores, naming the service file, its type and its rpc: Service("archive")`,
+		},
+		{
+			name:      "two_arguments",
+			source:    validateServiceTwoArgumentsSource,
+			wantError: "Create action calls Service with 2 arguments; Service takes one at most, the name of the service",
+		},
+		{
+			name:      "constant_argument",
+			source:    validateServiceConstantArgumentSource,
+			wantError: `Create action names its service with something other than a string literal; write Service("name")`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			fset := token.NewFileSet()
+			file, err := parser.ParseFile(fset, "/repo/model/sample/record.go", tt.source, parser.ParseComments)
+			if err != nil {
+				t.Fatalf("parse source failed: %v", err)
+			}
+
+			errs := dsl.Validate(file, "/repo/model", "/repo/model/sample/record.go")
+			if tt.wantError == "" {
+				if len(errs) != 0 {
+					t.Fatalf("Validate returned errors: %v", errs)
+				}
+				return
+			}
+			if len(errs) == 0 {
+				t.Fatalf("Validate returned no errors, want %q", tt.wantError)
+			}
+			var got strings.Builder
+			for _, err := range errs {
+				got.WriteString(err.Error())
+				got.WriteString("\n")
+			}
+			if !strings.Contains(got.String(), tt.wantError) {
+				t.Fatalf("Validate errors = %q, want one containing %q", got.String(), tt.wantError)
+			}
+		})
+	}
+}
+
+const validateServiceBareNameSource = `
+package sample
+
+import (
+	. "github.com/hydroan/gst/dsl"
+	"github.com/hydroan/gst/model"
+)
+
+type Record struct {
+	model.Base
+}
+
+func (Record) Design() {
+	Route("sample/archive", func() {
+		Create(func() {
+			Service("item_archive")
+		})
+	})
+}
+`
+
+const validateServiceFileNameSource = `
+package sample
+
+import (
+	. "github.com/hydroan/gst/dsl"
+	"github.com/hydroan/gst/model"
+)
+
+type Record struct {
+	model.Base
+}
+
+func (Record) Design() {
+	Route("sample/archive", func() {
+		Create(func() {
+			Service("archive.go")
+		})
+	})
+}
+`
+
+const validateServicePathNameSource = `
+package sample
+
+import (
+	. "github.com/hydroan/gst/dsl"
+	"github.com/hydroan/gst/model"
+)
+
+type Record struct {
+	model.Base
+}
+
+func (Record) Design() {
+	Route("sample/archive", func() {
+		Create(func() {
+			Service("sample/record/archive.go")
+		})
+	})
+}
+`
+
+const validateServiceTwoArgumentsSource = `
+package sample
+
+import (
+	. "github.com/hydroan/gst/dsl"
+	"github.com/hydroan/gst/model"
+)
+
+type Record struct {
+	model.Base
+}
+
+func (Record) Design() {
+	Route("sample/archive", func() {
+		Create(func() {
+			Service("archive", "restore")
+		})
+	})
+}
+`
+
+const validateServiceConstantArgumentSource = `
+package sample
+
+import (
+	. "github.com/hydroan/gst/dsl"
+	"github.com/hydroan/gst/model"
+)
+
+const archiveService = "archive"
+
+type Record struct {
+	model.Base
+}
+
+func (Record) Design() {
+	Route("sample/archive", func() {
+		Create(func() {
+			Service(archiveService)
+		})
+	})
+}
+`
+
+func TestValidateActionBlockMustBeAFunctionLiteral(t *testing.T) {
+	tests := []struct {
+		name      string
+		source    string
+		wantError string
+	}{
+		{
+			name:      "nil_action_block",
+			source:    validateNilActionBlockSource,
+			wantError: "Create takes a function literal, Create(func() {...}); a call passing anything else, nil included, declares no action: delete it or write the block",
+		},
+		{
+			name:      "named_function_as_action_block",
+			source:    validateNamedActionBlockSource,
+			wantError: "Create takes a function literal",
+		},
+		{
+			name:      "nil_action_block_in_a_route",
+			source:    validateNilActionBlockInRouteSource,
+			wantError: "Create takes a function literal",
+		},
+		{
+			name:      "nil_route_block",
+			source:    validateNilRouteBlockSource,
+			wantError: `Route takes a function literal, Route("path", func() {...}); a call passing anything else, nil included, declares no route: delete it or write the block`,
+		},
+		{
+			name:      "named_function_as_route_block",
+			source:    validateNamedRouteBlockSource,
+			wantError: "Route takes a function literal",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			fset := token.NewFileSet()
+			file, err := parser.ParseFile(fset, "/repo/model/sample/record.go", tt.source, parser.ParseComments)
+			if err != nil {
+				t.Fatalf("parse source failed: %v", err)
+			}
+
+			errs := dsl.Validate(file, "/repo/model", "/repo/model/sample/record.go")
+			if len(errs) == 0 {
+				t.Fatalf("Validate returned no errors, want %q", tt.wantError)
+			}
+			var got strings.Builder
+			for _, err := range errs {
+				got.WriteString(err.Error())
+				got.WriteString("\n")
+			}
+			if !strings.Contains(got.String(), tt.wantError) {
+				t.Fatalf("Validate errors = %q, want one containing %q", got.String(), tt.wantError)
+			}
+		})
+	}
+}
+
+const validateNilActionBlockSource = `
+package sample
+
+import (
+	. "github.com/hydroan/gst/dsl"
+	"github.com/hydroan/gst/model"
+)
+
+type Record struct {
+	model.Base
+}
+
+func (Record) Design() {
+	Create(nil)
+}
+`
+
+const validateNamedActionBlockSource = `
+package sample
+
+import (
+	. "github.com/hydroan/gst/dsl"
+	"github.com/hydroan/gst/model"
+)
+
+type Record struct {
+	model.Base
+}
+
+func createBlock() {
+	Service()
+}
+
+func (Record) Design() {
+	Create(createBlock)
+}
+`
+
+const validateNilActionBlockInRouteSource = `
+package sample
+
+import (
+	. "github.com/hydroan/gst/dsl"
+	"github.com/hydroan/gst/model"
+)
+
+type Record struct {
+	model.Base
+}
+
+func (Record) Design() {
+	Route("sample/archive", func() {
+		Create(nil)
+	})
+}
+`
+
+const validateNilRouteBlockSource = `
+package sample
+
+import (
+	. "github.com/hydroan/gst/dsl"
+	"github.com/hydroan/gst/model"
+)
+
+type Record struct {
+	model.Base
+}
+
+func (Record) Design() {
+	Route("sample/archive", nil)
+}
+`
+
+const validateNamedRouteBlockSource = `
+package sample
+
+import (
+	. "github.com/hydroan/gst/dsl"
+	"github.com/hydroan/gst/model"
+)
+
+type Record struct {
+	model.Base
+}
+
+func archiveRoute() {
+	Create(func() {})
+}
+
+func (Record) Design() {
+	Route("sample/archive", archiveRoute)
+}
+`
+
+func TestValidateDesignReadsKeywordsAlone(t *testing.T) {
+	tests := []struct {
+		name      string
+		source    string
+		wantError string
+	}{
+		{
+			name:      "call_of_a_builtin_at_the_design_top_level",
+			source:    validateBuiltinCallInDesignSource,
+			wantError: `Design() of Record reads DSL keywords alone; delete println("x")`,
+		},
+		{
+			name:      "call_of_a_helper_at_the_design_top_level",
+			source:    validateHelperCallInDesignSource,
+			wantError: "Design() of Record reads DSL keywords alone; delete declareRoutes()",
+		},
+		{
+			name:      "call_of_another_package_at_the_design_top_level",
+			source:    validatePackageCallInDesignSource,
+			wantError: "Design() of Record reads DSL keywords alone; delete time.Sleep(0)",
+		},
+		{
+			name:      "assignment_at_the_design_top_level",
+			source:    validateAssignmentInDesignSource,
+			wantError: "Design() of Record reads DSL keywords alone; delete _ = 1",
+		},
+		{
+			name:      "call_of_a_builtin_in_a_route",
+			source:    validateBuiltinCallInRouteSource,
+			wantError: `the Route("sample/archive") block of Record reads DSL keywords alone; delete println("x")`,
+		},
+		{
+			name:      "call_of_a_builtin_in_an_action",
+			source:    validateBuiltinCallInActionSource,
+			wantError: `the Create block reads DSL keywords alone; delete println("x")`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			fset := token.NewFileSet()
+			file, err := parser.ParseFile(fset, "/repo/model/sample/record.go", tt.source, parser.ParseComments)
+			if err != nil {
+				t.Fatalf("parse source failed: %v", err)
+			}
+
+			errs := dsl.Validate(file, "/repo/model", "/repo/model/sample/record.go")
+			if len(errs) == 0 {
+				t.Fatalf("Validate returned no errors, want %q", tt.wantError)
+			}
+			var got strings.Builder
+			for _, err := range errs {
+				got.WriteString(err.Error())
+				got.WriteString("\n")
+			}
+			if !strings.Contains(got.String(), tt.wantError) {
+				t.Fatalf("Validate errors = %q, want one containing %q", got.String(), tt.wantError)
+			}
+		})
+	}
+}
+
+const validateBuiltinCallInDesignSource = `
+package sample
+
+import (
+	. "github.com/hydroan/gst/dsl"
+	"github.com/hydroan/gst/model"
+)
+
+type Record struct {
+	model.Base
+}
+
+func (Record) Design() {
+	Migrate()
+	println("x")
+	Create(func() {})
+}
+`
+
+const validateHelperCallInDesignSource = `
+package sample
+
+import (
+	. "github.com/hydroan/gst/dsl"
+	"github.com/hydroan/gst/model"
+)
+
+type Record struct {
+	model.Base
+}
+
+func declareRoutes() {
+	Route("sample/archive", func() {
+		Create(func() {})
+	})
+}
+
+func (Record) Design() {
+	Migrate()
+	declareRoutes()
+}
+`
+
+const validatePackageCallInDesignSource = `
+package sample
+
+import (
+	"time"
+
+	. "github.com/hydroan/gst/dsl"
+	"github.com/hydroan/gst/model"
+)
+
+type Record struct {
+	model.Base
+}
+
+func (Record) Design() {
+	Migrate()
+	time.Sleep(0)
+	Create(func() {})
+}
+`
+
+const validateAssignmentInDesignSource = `
+package sample
+
+import (
+	. "github.com/hydroan/gst/dsl"
+	"github.com/hydroan/gst/model"
+)
+
+type Record struct {
+	model.Base
+}
+
+func (Record) Design() {
+	Migrate()
+	_ = 1
+	Create(func() {})
+}
+`
+
+const validateBuiltinCallInRouteSource = `
+package sample
+
+import (
+	. "github.com/hydroan/gst/dsl"
+	"github.com/hydroan/gst/model"
+)
+
+type Record struct {
+	model.Base
+}
+
+func (Record) Design() {
+	Route("sample/archive", func() {
+		println("x")
+		Create(func() {})
+	})
+}
+`
+
+const validateBuiltinCallInActionSource = `
+package sample
+
+import (
+	. "github.com/hydroan/gst/dsl"
+	"github.com/hydroan/gst/model"
+)
+
+type Record struct {
+	model.Base
+}
+
+func (Record) Design() {
+	Create(func() {
+		println("x")
+		Service()
+	})
+}
+`

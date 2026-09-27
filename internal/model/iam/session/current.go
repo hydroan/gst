@@ -21,17 +21,15 @@ type CurrentDeleteRsp struct{}
 func (Current) Design() {
 	Route("/iam/session/current", func() {
 		Get(func() {
-			Service()
 			Flatten()
 			Exact()
-			Filename("current_get.go")
+			Service("current_get")
 			Result[*CurrentGetRsp]()
 		})
 		Delete(func() {
-			Service()
 			Flatten()
 			Exact()
-			Filename("current_delete.go")
+			Service("current_delete")
 			Payload[*CurrentDeleteReq]()
 			Result[*CurrentDeleteRsp]()
 		})

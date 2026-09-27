@@ -53,8 +53,7 @@ func (Note) Design() {
 
 	Route("board/notes/:id/publish", func() {
 		Create(func() {
-			Service()
-			Filename("publish")
+			Service("publish")
 			Payload[*NotePublishReq]()
 			Result[*NotePublishRsp]()
 		})

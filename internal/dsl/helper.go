@@ -32,7 +32,7 @@ func emitRouteActions(route string, actions []*Action, fn func(string, *Action))
 	}
 	for _, phase := range routePhaseOrder {
 		for _, action := range actions {
-			if action == nil || !action.Enabled || action.Phase != phase {
+			if action == nil || action.Phase != phase {
 				continue
 			}
 			fn(route, action)
