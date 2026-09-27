@@ -39,6 +39,51 @@ func isServiceMethod1(fn *ast.FuncDecl) bool {
 	return true
 }
 
+// isServiceMethod9 checks whether a function declaration matches the shape
+// genServiceMethod9 generates through serviceMethod9, any of its three
+// kinds:
+//
+//	func (r *recv) Stream(ctx *gst.ServiceContext, req <T>, stream *grpc.ServerStream[<T>]) error
+//	func (r *recv) Stream(ctx *gst.ServiceContext, stream *grpc.ClientStream[<T>]) (<T>, error)
+//	func (r *recv) Stream(ctx *gst.ServiceContext, stream *grpc.BidiStream[<T>, <T>]) error
+//
+// that is, a method named Stream taking the service context first and a
+// pointer to a stream of the grpc package last.
+func isServiceMethod9(fn *ast.FuncDecl) bool {
+	if fn == nil || fn.Recv == nil || fn.Name == nil || fn.Name.Name != "Stream" || fn.Type == nil || fn.Type.Params == nil || fn.Type.Results == nil {
+		return false
+	}
+	if !goast.IsPointerReceiver(fn.Recv) {
+		return false
+	}
+	params := fn.Type.Params.List
+	if len(params) < 2 || len(params) > 3 || !isServiceContextParam(params[0]) {
+		return false
+	}
+	star, ok := params[len(params)-1].Type.(*ast.StarExpr)
+	if !ok {
+		return false
+	}
+	var generic ast.Expr
+	switch x := star.X.(type) {
+	case *ast.IndexExpr:
+		generic = x.X
+	case *ast.IndexListExpr:
+		generic = x.X
+	default:
+		return false
+	}
+	sel, ok := generic.(*ast.SelectorExpr)
+	if !ok || sel.Sel == nil {
+		return false
+	}
+	pkg, ok := sel.X.(*ast.Ident)
+	if !ok || pkg.Name != "grpc" {
+		return false
+	}
+	return slices.Contains([]string{"ServerStream", "ClientStream", "BidiStream"}, sel.Sel.Name)
+}
+
 // isServiceMethod2 checks whether a function declaration matches the shape
 // genServiceMethod2 generates through serviceMethod2, which is:
 //

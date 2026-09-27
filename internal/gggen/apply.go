@@ -3,6 +3,7 @@ package gggen
 import (
 	"fmt"
 	"go/ast"
+	"go/printer"
 	"go/token"
 	"path"
 	"slices"
@@ -216,6 +217,9 @@ func applyServiceFile(file *ast.File, action *dsl.Action, servicePkgName, correc
 					changed = true
 				}
 			}
+			if applyServiceMethod9(funcDecl, action, serviceModelPackageName(file)) {
+				changed = true
+			}
 		}
 	}
 
@@ -299,6 +303,68 @@ func applyServiceMethod4(fn *ast.FuncDecl, action *dsl.Action, modelPkg string) 
 	}
 
 	return changed
+}
+
+// applyServiceMethod9 rewrites the signature of the Stream method of a
+// Stream action to what the action declares (see serviceMethod9): the kind
+// of stream and the types it carries follow the DSL, so a Stream declared
+// on the server side alone and later made bidirectional gets the
+// BidiStream parameter and loses the request, the body left alone; a
+// signature carrying the same types already, whatever it names its
+// parameters and results, is left as it is. Only the method named Stream of
+// the Stream phase is rewritten (see applyServiceMethod4 on why the name
+// matters), and only one of the shape isServiceMethod9 recognizes.
+func applyServiceMethod9(fn *ast.FuncDecl, action *dsl.Action, modelPkg string) bool {
+	if fn == nil || action == nil || action.Phase != consts.Stream || !isServiceMethod9(fn) {
+		return false
+	}
+	recv := fn.Recv.List[0]
+	recvName := ""
+	if len(recv.Names) > 0 {
+		recvName = recv.Names[0].Name
+	}
+	roleName := ""
+	if star, ok := recv.Type.(*ast.StarExpr); ok {
+		if id, ok := star.X.(*ast.Ident); ok {
+			roleName = id.Name
+		}
+	}
+	want := serviceMethod9(recvName, modelPkg, action.Payload, action.Result, action.StreamingPayload, action.StreamingResult, roleName).Type
+	if signatureTypes(fn.Type) == signatureTypes(want) {
+		return false
+	}
+	// The new signature takes the place of the old one in the file, so the
+	// printer keeps the body's layout, its blank lines included.
+	want.Func = fn.Type.Func
+	want.Params.Opening, want.Params.Closing = fn.Type.Params.Opening, fn.Type.Params.Closing
+	if fn.Type.Results != nil {
+		want.Results.Opening, want.Results.Closing = fn.Type.Results.Opening, fn.Type.Results.Closing
+	}
+	fn.Type = want
+	return true
+}
+
+// signatureTypes prints the parameter and result types of a function type,
+// names left out, for comparing two signatures by what they carry.
+func signatureTypes(t *ast.FuncType) string {
+	var b strings.Builder
+	for _, list := range []*ast.FieldList{t.Params, t.Results} {
+		b.WriteString("(")
+		if list != nil {
+			for _, field := range list.List {
+				// A field declaring several names, a, b T, carries its type
+				// once per name.
+				for range max(len(field.Names), 1) {
+					if err := printer.Fprint(&b, token.NewFileSet(), field.Type); err != nil {
+						return ""
+					}
+					b.WriteString(",")
+				}
+			}
+		}
+		b.WriteString(")")
+	}
+	return b.String()
 }
 
 // applyTypeRef rewrites a *pkg.Type or pkg.Type expression to reference

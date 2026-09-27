@@ -13,6 +13,7 @@ import (
 	"github.com/hydroan/gst/internal/gggen"
 	"github.com/hydroan/gst/internal/modelinfo"
 	"github.com/kr/pretty"
+	"github.com/stretchr/testify/require"
 )
 
 var dataServiceUserCreate string
@@ -614,6 +615,68 @@ func (r *Patcher) validate(ctx *gst.ServiceContext, req *group.SampleRecordPatch
 			}
 		})
 	}
+}
+
+// TestApplyServiceFileFollowsTheStreamKind pins that the Stream method of a
+// Stream action follows the DSL: declared on the server side alone and
+// later made bidirectional, it takes the BidiStream and loses the request,
+// its body left alone, and a signature already matching is left as it is.
+func TestApplyServiceFileFollowsTheStreamKind(t *testing.T) {
+	code := `package feed
+
+import (
+	"helloworld/model"
+
+	"github.com/hydroan/gst"
+	"github.com/hydroan/gst/grpc"
+	"github.com/hydroan/gst/service"
+)
+
+type Watch struct {
+	service.Base[*model.Feed, *model.FeedWatchReq, *model.FeedEvent]
+}
+
+func (w *Watch) Stream(ctx *gst.ServiceContext, req *model.FeedWatchReq, stream *grpc.ServerStream[*model.FeedEvent]) (err error) {
+	log := w.WithContext(ctx, ctx.Phase())
+	log.Info("feed: watch")
+
+	return nil
+}
+`
+	action := &dsl.Action{ServiceName: "watch", Payload: "*FeedEvent", Result: "*FeedEvent", StreamingPayload: true, StreamingResult: true, Phase: consts.Stream}
+	fset := token.NewFileSet()
+	file, err := parser.ParseFile(fset, "", code, parser.ParseComments)
+	require.NoError(t, err)
+
+	require.True(t, gggen.ApplyServiceFile(file, action, "feed"))
+	got, err := gggen.FormatNodeExtraWithFileSet(file, fset)
+	require.NoError(t, err)
+	require.Contains(t, got, "service.Base[*model.Feed, *model.FeedEvent, *model.FeedEvent]")
+	require.Contains(t, got, "func (w *Watch) Stream(ctx *gst.ServiceContext, stream *grpc.BidiStream[*model.FeedEvent, *model.FeedEvent]) (err error) {\n\tlog := w.WithContext(ctx, ctx.Phase())\n\tlog.Info(\"feed: watch\")\n\n\treturn nil\n}")
+	require.False(t, gggen.ApplyServiceFile(file, action, "feed"), "a matching signature is left alone")
+
+	named := `package feed
+
+import (
+	"helloworld/model"
+
+	"github.com/hydroan/gst"
+	"github.com/hydroan/gst/grpc"
+	"github.com/hydroan/gst/service"
+)
+
+type Upload struct {
+	service.Base[*model.Feed, *model.FeedEvent, *model.FeedUploadRsp]
+}
+
+func (u *Upload) Stream(ctx *gst.ServiceContext, events *grpc.ClientStream[*model.FeedEvent]) (*model.FeedUploadRsp, error) {
+	return nil, nil
+}
+`
+	file, err = parser.ParseFile(fset, "", named, parser.ParseComments)
+	require.NoError(t, err)
+	upload := &dsl.Action{ServiceName: "upload", Payload: "*FeedEvent", Result: "*FeedUploadRsp", StreamingPayload: true, Phase: consts.Stream}
+	require.False(t, gggen.ApplyServiceFile(file, upload, "feed"), "the same types under other names are left alone")
 }
 
 func TestApplyServiceFileEmptyPayload(t *testing.T) {
