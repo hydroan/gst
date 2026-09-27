@@ -679,6 +679,41 @@ func (u *Upload) Stream(ctx *gst.ServiceContext, events *grpc.ClientStream[*mode
 	require.False(t, gggen.ApplyServiceFile(file, upload, "feed"), "the same types under other names are left alone")
 }
 
+// TestApplyServiceFileKeepsTheStreamParameterNames pins that the Stream
+// method keeps the names its body uses while the kind of stream stays: a
+// Result renamed changes the type of the stream parameter alone, the
+// parameters named as their author named them and an unnamed result left
+// so, the way a plain action method keeps its names.
+func TestApplyServiceFileKeepsTheStreamParameterNames(t *testing.T) {
+	code := `package feed
+
+import (
+	"helloworld/model"
+
+	"github.com/hydroan/gst"
+	"github.com/hydroan/gst/grpc"
+	"github.com/hydroan/gst/service"
+)
+
+type Watch struct {
+	service.Base[*model.Feed, *model.FeedWatchReq, *model.FeedEvent]
+}
+
+func (w *Watch) Stream(ctx *gst.ServiceContext, r *model.FeedWatchReq, s *grpc.ServerStream[*model.FeedEvent]) error {
+	return s.Send(nil)
+}
+`
+	action := &dsl.Action{ServiceName: "watch", Payload: "*FeedWatchReq", Result: "*FeedTick", StreamingResult: true, Phase: consts.Stream}
+	fset := token.NewFileSet()
+	file, err := parser.ParseFile(fset, "", code, parser.ParseComments)
+	require.NoError(t, err)
+
+	require.True(t, gggen.ApplyServiceFile(file, action, "feed"))
+	got, err := gggen.FormatNodeExtraWithFileSet(file, fset)
+	require.NoError(t, err)
+	require.Contains(t, got, "func (w *Watch) Stream(ctx *gst.ServiceContext, r *model.FeedWatchReq, s *grpc.ServerStream[*model.FeedTick]) error {\n\treturn s.Send(nil)\n}")
+}
+
 func TestApplyServiceFileEmptyPayload(t *testing.T) {
 	tests := []struct {
 		name           string

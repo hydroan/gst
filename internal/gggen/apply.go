@@ -307,13 +307,17 @@ func applyServiceMethod4(fn *ast.FuncDecl, action *dsl.Action, modelPkg string) 
 
 // applyServiceMethod9 rewrites the signature of the Stream method of a
 // Stream action to what the action declares (see serviceMethod9): the kind
-// of stream and the types it carries follow the DSL, so a Stream declared
-// on the server side alone and later made bidirectional gets the
-// BidiStream parameter and loses the request, the body left alone; a
-// signature carrying the same types already, whatever it names its
-// parameters and results, is left as it is. Only the method named Stream of
-// the Stream phase is rewritten (see applyServiceMethod4 on why the name
-// matters), and only one of the shape isServiceMethod9 recognizes.
+// of stream and the types it carries follow the DSL. A signature carrying
+// the same types already, whatever it names its parameters and results, is
+// left as it is. The kind unchanged, a Result renamed say, the parameters
+// and results keep the names the body uses and only their types change,
+// the way applyServiceMethod4 rewrites a plain method, so a body reading
+// s.Recv() keeps compiling. The kind changed, a Stream declared on the
+// server side alone and later made bidirectional, the signature is
+// rewritten whole: it gets the BidiStream parameter and loses the request,
+// the body left alone. Only the method named Stream of the Stream phase is
+// rewritten (see applyServiceMethod4 on why the name matters), and only one
+// of the shape isServiceMethod9 recognizes.
 func applyServiceMethod9(fn *ast.FuncDecl, action *dsl.Action, modelPkg string) bool {
 	if fn == nil || action == nil || action.Phase != consts.Stream || !isServiceMethod9(fn) {
 		return false
@@ -333,6 +337,15 @@ func applyServiceMethod9(fn *ast.FuncDecl, action *dsl.Action, modelPkg string) 
 	if signatureTypes(fn.Type) == signatureTypes(want) {
 		return false
 	}
+	if sameStreamKind(fn.Type, want) {
+		for i, field := range want.Params.List {
+			fn.Type.Params.List[i].Type = field.Type
+		}
+		for i, field := range want.Results.List {
+			fn.Type.Results.List[i].Type = field.Type
+		}
+		return true
+	}
 	// The new signature takes the place of the old one in the file, so the
 	// printer keeps the body's layout, its blank lines included.
 	want.Func = fn.Type.Func
@@ -341,6 +354,25 @@ func applyServiceMethod9(fn *ast.FuncDecl, action *dsl.Action, modelPkg string) 
 		want.Results.Opening, want.Results.Closing = fn.Type.Results.Opening, fn.Type.Results.Closing
 	}
 	fn.Type = want
+	return true
+}
+
+// sameStreamKind reports whether have has the shape of want, the Stream
+// method of one kind of stream: as many fields on each side, each declaring
+// one name at most, so that every type can be swapped under the name the
+// body uses. A field declaring several names, a, b T, carries one type for
+// both, and a signature without results has the shape of no kind.
+func sameStreamKind(have, want *ast.FuncType) bool {
+	for _, lists := range [][2]*ast.FieldList{{have.Params, want.Params}, {have.Results, want.Results}} {
+		if lists[0] == nil || lists[1] == nil || len(lists[0].List) != len(lists[1].List) {
+			return false
+		}
+		for _, field := range lists[0].List {
+			if len(field.Names) > 1 {
+				return false
+			}
+		}
+	}
 	return true
 }
 
