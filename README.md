@@ -245,7 +245,9 @@ func (Entry) Design() {
 排空窗口过后监听才关闭；以及反射服务。认证在 `interceptor/` 里挂，和 `middleware/` 一一对应：
 `interceptor.RegisterAuth(interceptor.IAMSession())` 之后，每个没声明 `Public()` 的 rpc 都要在
 `authorization` 元数据里带 `Bearer <会话 id>`；健康与反射服务不经过项目的认证拦截器（`RegisterAuth` 挂的那些），
-`Register` 挂的通用拦截器对它们照样生效。多副本下的用法和核对步骤见 [examples/cluster](./examples/cluster/README.md) 的「gRPC 与认证」一章。
+`Register` 挂的通用拦截器对它们照样生效。多副本下的用法和核对步骤见 [examples/cluster](./examples/cluster/README.md) 的「gRPC 与认证」一章；
+两条传输线怎么从声明、生成、注册、链路一路接到同一份 service 代码，见 [TRANSPORTS.md](TRANSPORTS.md)：它只画架构全景，
+不展开细节，细节以本文各节和代码为准。
 
 ## 业务 Service
 
