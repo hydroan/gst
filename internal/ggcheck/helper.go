@@ -69,20 +69,22 @@ func dslActionTypeCall(expr ast.Expr) (string, ast.Expr, bool) {
 	return "", nil, false
 }
 
-// dslActionTypeName returns the DSL function name for Payload or Result.
+// dslActionTypeName returns the DSL function name of an action type
+// keyword: Payload, Result, StreamingPayload or StreamingResult.
 func dslActionTypeName(expr ast.Expr) (string, bool) {
 	switch x := expr.(type) {
 	case *ast.Ident:
-		if x.Name == "Payload" || x.Name == "Result" {
-			return x.Name, true
-		}
+		return x.Name, actionTypeKeywords[x.Name]
 	case *ast.SelectorExpr:
-		if x.Sel != nil && (x.Sel.Name == "Payload" || x.Sel.Name == "Result") {
-			return x.Sel.Name, true
+		if x.Sel != nil {
+			return x.Sel.Name, actionTypeKeywords[x.Sel.Name]
 		}
 	}
 	return "", false
 }
+
+// actionTypeKeywords are the DSL keywords taking an action type argument.
+var actionTypeKeywords = map[string]bool{"Payload": true, "Result": true, "StreamingPayload": true, "StreamingResult": true}
 
 // localActionTypeName resolves a DSL type argument to a type name declared in
 // the same package. Pointer forms are unwrapped; qualified names from other

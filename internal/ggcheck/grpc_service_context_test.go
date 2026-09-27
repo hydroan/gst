@@ -11,9 +11,9 @@ import (
 // TestGRPCServiceContextFlagsHTTPOnlyCalls pins that the service packages of
 // a model declaring GRPC() are held to the ServiceContext methods both
 // transports serve: a call to one HTTP alone serves is reported at its line,
-// from a service method or a helper of the package alike, under the name
-// the function gives the context, while a service of a model served over
-// HTTP only may call anything.
+// from a service method or a helper it reaches alike, under the name the
+// function gives the context, while a service of a model served over HTTP
+// only, an SSE service and a helper only that reaches may call anything.
 func TestGRPCServiceContextFlagsHTTPOnlyCalls(t *testing.T) {
 	projectDir := t.TempDir()
 	t.Chdir(projectDir)
@@ -82,6 +82,7 @@ type Creator struct {
 func (c *Creator) Create(ctx *gst.ServiceContext, group *model.Group) (*model.Group, error) {
 	_ = ctx.Param("id")
 	ctx.SetCookie(&http.Cookie{Name: "seen"})
+	reply(ctx, nil)
 	return group, nil
 }
 `)
@@ -154,6 +155,19 @@ type Streamer struct {
 }
 
 func (s *Streamer) SSE(ctx *gst.ServiceContext, notice *model.Notice) error {
+	return render(ctx)
+}
+`)
+	// A helper only the SSE service reaches may call ctx.SSE like it: no
+	// gRPC call gets there.
+	writeCheckFile(t, filepath.Join(projectDir, "service", "notice", "render.go"), `package notice
+
+import (
+	"github.com/hydroan/gst"
+	"github.com/hydroan/gst/sse"
+)
+
+func render(ctx *gst.ServiceContext) error {
 	return ctx.SSE(func(conn *sse.Conn) error { return nil })
 }
 `)

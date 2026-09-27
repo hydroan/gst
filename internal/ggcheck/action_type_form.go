@@ -257,12 +257,21 @@ func checkActionTypePair(relPath string, action *dsl.Action, resolve func(string
 	}
 	bothEmpty := sideEmpty(action.Payload) && sideEmpty(action.Result)
 
+	// A Stream action declares a streaming side as StreamingPayload or
+	// StreamingResult, and is told so.
+	payloadKind, resultKind := "Payload", "Result"
+	if action.StreamingPayload {
+		payloadKind = "StreamingPayload"
+	}
+	if action.StreamingResult {
+		resultKind = "StreamingResult"
+	}
 	sides := []struct {
 		kind string
 		raw  string
 	}{
-		{kind: "Payload", raw: action.Payload},
-		{kind: "Result", raw: action.Result},
+		{kind: payloadKind, raw: action.Payload},
+		{kind: resultKind, raw: action.Result},
 	}
 	for _, side := range sides {
 		kind, raw := side.kind, side.raw

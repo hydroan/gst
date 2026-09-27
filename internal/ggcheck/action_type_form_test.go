@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/hydroan/gst/internal/ggcheck"
+	"github.com/stretchr/testify/require"
 )
 
 func TestActionTypeFormStructAndSliceForms(t *testing.T) {
@@ -63,6 +64,43 @@ type SamplePatchRsp = []*Sample
 	if !strings.Contains(joined, "Patch action declares Result[*SamplePatchRsp] with the pointer form; a slice or map action type must use the value form Result[SamplePatchRsp]") {
 		t.Fatalf("expected pointer-form slice violation, got %#v", violations)
 	}
+}
+
+// TestActionTypeFormCoversTheStreamingSides pins that StreamingPayload and
+// StreamingResult are held to the same forms as Payload and Result, and are
+// named as themselves in the violation.
+func TestActionTypeFormCoversTheStreamingSides(t *testing.T) {
+	projectDir := t.TempDir()
+	t.Chdir(projectDir)
+
+	writeCheckFile(t, filepath.Join(projectDir, "model", "sample", "sample.go"), `package sample
+
+import (
+	. "github.com/hydroan/gst/dsl"
+	"github.com/hydroan/gst/model"
+)
+
+type Sample struct {
+	model.Base
+}
+
+func (Sample) Design() {
+	GRPC()
+	Stream(func() {
+		Service("watch")
+		StreamingResult[SampleWatchRsp]()
+	})
+}
+
+type SampleWatchRsp struct {
+	Name string `+"`json:\"name\"`"+`
+}
+`)
+
+	violations := runCheck(ggcheck.ActionTypeForm)
+
+	require.Len(t, violations, 1, "%#v", violations)
+	require.Contains(t, violations[0], "Stream action declares StreamingResult[SampleWatchRsp] with the value form; a struct action type must use the pointer form StreamingResult[*SampleWatchRsp]")
 }
 
 func TestActionTypeFormEmptyStructPairRule(t *testing.T) {

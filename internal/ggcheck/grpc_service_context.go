@@ -32,14 +32,15 @@ var GRPCServiceContext = Check{
 // parameter declared *gst.ServiceContext: over gRPC the call has no request
 // to read or response to write, so a service serving both transports must do
 // without it. The packages are the ones the actions of the model map to
-// (see modelinfo.ServiceTarget), read whole, helpers included, since a
-// service method reaches them; left alone are the service files of the
-// actions gRPC does not serve (see dsl.HTTPOnlyAction), an SSE service
-// calling ctx.SSE as it must, and those of models served over HTTP alone
-// that share the package. The analysis is syntactic like the other checks:
-// it follows the parameter object, so a local variable of the same name is
-// not mistaken for it, and it does not follow the context into a variable
-// assigned from it.
+// (see modelinfo.ServiceTarget), the helpers a service method reaches
+// included (see httpOnlyCallsReached); left alone are the service files of
+// the actions gRPC does not serve (see dsl.HTTPOnlyAction), an SSE service
+// calling ctx.SSE as it must, the helpers only those reach, and the files of
+// models served over HTTP alone that share the package. The analysis is
+// syntactic like the other checks: it follows the parameter object, so a
+// local variable of the same name is not mistaken for it, it does not
+// follow the context into a variable assigned from it, and it reaches a
+// helper by the name it is called by.
 func checkGRPCServiceContext(ignore gghelper.ProjectIgnore) []string {
 	var violations []string
 	if _, err := os.Stat(ggconst.DirModel); os.IsNotExist(err) {
@@ -85,62 +86,128 @@ func checkGRPCServiceContext(ignore gghelper.ProjectIgnore) []string {
 		})
 	}
 	for _, dir := range dirs {
-		entries, err := os.ReadDir(dir)
-		if err != nil {
+		violations = append(violations, httpOnlyCallsReached(dir, owners[dir], served, ignore)...)
+	}
+	return violations
+}
+
+// packageFunc is a top-level function or method of a service package, with
+// the file it is declared in.
+type packageFunc struct {
+	path     string
+	fset     *token.FileSet
+	decl     *ast.FuncDecl
+	gstNames goast.PackageNames
+}
+
+// httpOnlyCallsReached lists the calls of the HTTP-only methods in the
+// functions of the service package at dir a gRPC call reaches, each as a
+// violation naming the model that owns the package, in file and source
+// order: the functions of the service files of the actions gRPC serves,
+// served[path] being true, and every function of the package those call,
+// directly or through others, by name. A helper only the service of an SSE
+// or an Export action calls may use what only HTTP serves, as that service
+// may itself (see checkGRPCServiceContext); one nothing calls is left
+// alone too. A file that fails to parse is reported as one violation.
+func httpOnlyCallsReached(dir, model string, served map[string]bool, ignore gghelper.ProjectIgnore) []string {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return nil
+	}
+	var funcs []packageFunc
+	var violations []string
+	for _, entry := range entries {
+		name := entry.Name()
+		path := filepath.Join(dir, name)
+		if entry.IsDir() || !strings.HasSuffix(name, ggconst.ExtensionGo) || strings.HasSuffix(name, ggconst.PatternTestFile) || ignore.Ignores(path, false) {
 			continue
 		}
-		for _, entry := range entries {
-			name := entry.Name()
-			path := filepath.Join(dir, name)
-			if entry.IsDir() || !strings.HasSuffix(name, ggconst.ExtensionGo) || strings.HasSuffix(name, ggconst.PatternTestFile) || ignore.Ignores(path, false) {
-				continue
+		fset := token.NewFileSet()
+		file, err := parser.ParseFile(fset, path, nil, 0)
+		if err != nil {
+			violations = append(violations, fmt.Sprintf("%s: %v", path, err))
+			continue
+		}
+		gstNames := goast.ImportedNames(file, gstImportPath, "gst")
+		for _, decl := range file.Decls {
+			if fn, ok := decl.(*ast.FuncDecl); ok && fn.Body != nil {
+				funcs = append(funcs, packageFunc{path: path, fset: fset, decl: fn, gstNames: gstNames})
 			}
-			if grpc, action := served[path]; action && !grpc {
-				continue
+		}
+	}
+
+	// The functions a gRPC call reaches: those of the served action files,
+	// then whatever they call, by the name of the function or method.
+	byName := make(map[string][]int, len(funcs))
+	for i, f := range funcs {
+		byName[f.decl.Name.Name] = append(byName[f.decl.Name.Name], i)
+	}
+	reached := make([]bool, len(funcs))
+	var queue []int
+	for i, f := range funcs {
+		if grpc, action := served[f.path]; action && grpc {
+			reached[i] = true
+			queue = append(queue, i)
+		}
+	}
+	for len(queue) > 0 {
+		i := queue[0]
+		queue = queue[1:]
+		ast.Inspect(funcs[i].decl.Body, func(n ast.Node) bool {
+			call, ok := n.(*ast.CallExpr)
+			if !ok {
+				return true
 			}
-			violations = append(violations, httpOnlyCalls(path, owners[dir])...)
+			var name string
+			switch fun := call.Fun.(type) {
+			case *ast.Ident:
+				name = fun.Name
+			case *ast.SelectorExpr:
+				name = fun.Sel.Name
+			}
+			for _, j := range byName[name] {
+				if !reached[j] {
+					reached[j] = true
+					queue = append(queue, j)
+				}
+			}
+			return true
+		})
+	}
+
+	for i, f := range funcs {
+		if reached[i] {
+			violations = append(violations, httpOnlyCalls(f, model)...)
 		}
 	}
 	return violations
 }
 
-// httpOnlyCalls lists the calls of the HTTP-only methods in the file at
-// path, each as a violation naming the model that owns the package, in
-// source order. A file that fails to parse is reported as one violation.
-func httpOnlyCalls(path, model string) []string {
-	fset := token.NewFileSet()
-	file, err := parser.ParseFile(fset, path, nil, 0)
-	if err != nil {
-		return []string{fmt.Sprintf("%s: %v", path, err)}
+// httpOnlyCalls lists the calls of the HTTP-only methods in the function f,
+// each as a violation naming the model that owns the package, in source
+// order.
+func httpOnlyCalls(f packageFunc, model string) []string {
+	params := serviceContextParams(f.decl, f.gstNames)
+	if len(params) == 0 {
+		return nil
 	}
-	gstNames := goast.ImportedNames(file, gstImportPath, "gst")
 	var violations []string
-	for _, decl := range file.Decls {
-		fn, ok := decl.(*ast.FuncDecl)
-		if !ok || fn.Body == nil {
-			continue
-		}
-		params := serviceContextParams(fn, gstNames)
-		if len(params) == 0 {
-			continue
-		}
-		ast.Inspect(fn.Body, func(n ast.Node) bool {
-			call, ok := n.(*ast.CallExpr)
-			if !ok {
-				return true
-			}
-			sel, ok := call.Fun.(*ast.SelectorExpr)
-			if !ok {
-				return true
-			}
-			ident, ok := sel.X.(*ast.Ident)
-			if !ok || !params[svcErrDeclObj(ident)] || !slices.Contains(types.HTTPOnlyMethods, sel.Sel.Name) {
-				return true
-			}
-			violations = append(violations, fmt.Sprintf("%s:%d: calls %s.%s, which only HTTP serves; the model %s is served over gRPC as well, so keep its services to what both transports provide",
-				filepath.ToSlash(path), fset.Position(call.Pos()).Line, ident.Name, sel.Sel.Name, model))
+	ast.Inspect(f.decl.Body, func(n ast.Node) bool {
+		call, ok := n.(*ast.CallExpr)
+		if !ok {
 			return true
-		})
-	}
+		}
+		sel, ok := call.Fun.(*ast.SelectorExpr)
+		if !ok {
+			return true
+		}
+		ident, ok := sel.X.(*ast.Ident)
+		if !ok || !params[svcErrDeclObj(ident)] || !slices.Contains(types.HTTPOnlyMethods, sel.Sel.Name) {
+			return true
+		}
+		violations = append(violations, fmt.Sprintf("%s:%d: calls %s.%s, which only HTTP serves; the model %s is served over gRPC as well, so keep its services to what both transports provide",
+			filepath.ToSlash(f.path), f.fset.Position(call.Pos()).Line, ident.Name, sel.Sel.Name, model))
+		return true
+	})
 	return violations
 }
