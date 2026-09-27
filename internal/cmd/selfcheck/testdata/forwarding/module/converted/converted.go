@@ -27,4 +27,4 @@ func (s Sample) String() string { return s.Name }
 // Describe describes s.
 func Describe(s Sample) string { return describe(s) }
 
-func describe(v fmt.Stringer) string { return v.String() }
+func describe(v fmt.Stringer) string { return "described " + v.String() }

@@ -41,24 +41,24 @@ type forwarding struct {
 //     function, which may first run a statement of its own as long as that
 //     is straight-line work (see thinLead).
 //
-// A function that only wraps one call of a function of its own package,
-// shaping the arguments however it likes (see wrappedCall), is reported the
-// same way in the first case: with a single use, it is that call written
-// away from its site, and the package has two names for one job. The check
-// stops at the package boundary on purpose: a one-line wrapper of another
-// package's function usually names the constant it fixes, the suffix a name
-// test passes to strings.HasSuffix, and reporting those would trade a name
-// for a bare literal at every use. The price is that a single-use wrapper
-// fixing nothing worth a name, strings.ReplaceAll(name, "_", " ") under a
-// name of its own, passes too and is inlined by review, not by this check.
-// Widening the check means judging every such wrapper in the tree at once,
-// not carving out exceptions one by one.
+// A function that only wraps one call written on one line, of a function of
+// any package or of a method of any value, shaping the arguments however it
+// likes (see wrappedCall), is reported the same way in the first case: with
+// a single use, it is that call written away from its site, and the package
+// has two names for one job, a name test's strings.HasSuffix(name, ".gen.go")
+// under a name of its own as much as a call of its own package. The suffix
+// such a wrapper fixes is worth a constant where it is worth a name at all;
+// the wrapper is not. A call its author laid out over several lines is one
+// set out to be read on its own, a client built from a dozen commented
+// options, and the function's name is its heading: it is left alone.
 //
 // Only uses inside the package are counted, tests included, which is why only
 // unexported functions are judged. Left alone are a method whose name an
 // interface of its package declares, since a call through the interface is a
-// use the check cannot count; a function whose name appears in a file the
-// build leaves out; and anything declared in a generated file.
+// use the check cannot count; a method several types of the package declare
+// alike, its name being the convention the types share the way an interface
+// would spell it out (see familyMethods); a function whose name appears in a
+// file the build leaves out; and anything declared in a generated file.
 func checkForwarding(root string, pkgs []*packages.Package) ([]violation, error) {
 	withTests := make(map[string]bool)
 	for _, p := range pkgs {
@@ -103,6 +103,7 @@ func forwardingIn(root string, p *packages.Package) ([]forwarding, error) {
 		return nil, err
 	}
 	viaInterface := interfaceMethods(p)
+	family := familyMethods(p)
 	generated := make(map[string]bool)
 	for i, f := range p.Syntax {
 		if ast.IsGenerated(f) {
@@ -114,7 +115,7 @@ func forwardingIn(root string, p *packages.Package) ([]forwarding, error) {
 		if fn.Exported() || ignored[fn.Name()] {
 			return false
 		}
-		return fn.Signature().Recv() == nil || !viaInterface[fn.Name()]
+		return fn.Signature().Recv() == nil || (!viaInterface[fn.Name()] && !family[methodKey(fn)])
 	}
 	at := func(pos token.Pos) string {
 		position := p.Fset.Position(pos)
@@ -238,16 +239,18 @@ func forwardedTo(p *packages.Package, d *ast.FuncDecl, fn *types.Func) (*types.F
 	return to.Origin(), stmts[:len(stmts)-1], true
 }
 
-// wrappedCall reports the function of d's own package d wraps: the one call
-// d's body consists of, returned, or run alone by a function without
-// results, whatever its arguments and however they are shaped from d's
-// parameters. Where forwardedTo asks for the parameters passed on unchanged,
-// this asks nothing of them; it does ask that no function literal be among
-// the arguments, a closure being work of its own the way thinLead treats it,
-// and that the callee be declared in the package, a wrapper of another
-// package's function naming what it fixes. The callee is what callee
-// recognizes: a function or a method of the receiver, not a conversion, a
-// builtin or a function value.
+// wrappedCall reports the function d wraps: the one call d's body consists
+// of, returned, or run alone by a function without results, whatever its
+// arguments and however they are shaped from d's parameters. Where
+// forwardedTo asks for the parameters passed on unchanged, this asks nothing
+// of them; it does ask that no function literal be among the arguments, a
+// closure being work of its own the way thinLead treats it, and that the
+// call be written on one line, one laid out over several being a unit its
+// author meant to be read under the function's name (see checkForwarding).
+// The callee is
+// any function or method named by the call, of d's package or another, a
+// method of the receiver or of any other value (see calledFunc), not a
+// conversion, a builtin or a function value.
 func wrappedCall(p *packages.Package, d *ast.FuncDecl, fn *types.Func) (*types.Func, bool) {
 	if len(d.Body.List) != 1 {
 		return nil, false
@@ -264,11 +267,11 @@ func wrappedCall(p *packages.Package, d *ast.FuncDecl, fn *types.Func) (*types.F
 			call, _ = ast.Unparen(s.X).(*ast.CallExpr)
 		}
 	}
-	if call == nil {
+	if call == nil || p.Fset.Position(call.Pos()).Line != p.Fset.Position(call.End()).Line {
 		return nil, false
 	}
-	to, _ := callee(p, call.Fun, sig.Recv())
-	if to == nil || to.Origin() == fn || to.Pkg() != p.Types {
+	to := calledFunc(p, call.Fun)
+	if to == nil || to.Origin() == fn {
 		return nil, false
 	}
 	closure := false
@@ -350,6 +353,24 @@ func callee(p *packages.Package, fun ast.Expr, recv *types.Var) (*types.Func, bo
 	return nil, false
 }
 
+// calledFunc returns the function or method fun names, of any package and,
+// for a method, of any value: what wrappedCall counts as a call. It returns
+// nil for a conversion, a builtin, a function value or an instantiation
+// spelled out in the call, which callee returns nil for too.
+func calledFunc(p *packages.Package, fun ast.Expr) *types.Func {
+	var id *ast.Ident
+	switch fun := ast.Unparen(fun).(type) {
+	case *ast.Ident:
+		id = fun
+	case *ast.SelectorExpr:
+		id = fun.Sel
+	default:
+		return nil
+	}
+	fn, _ := p.TypesInfo.Uses[id].(*types.Func)
+	return fn
+}
+
 // usesVar reports whether e is nothing but a use of v.
 func usesVar(p *packages.Package, e ast.Expr, v *types.Var) bool {
 	id, ok := ast.Unparen(e).(*ast.Ident)
@@ -372,6 +393,45 @@ func interfaceMethods(p *packages.Package) map[string]bool {
 		}
 	}
 	return names
+}
+
+// familyMethods returns the keys (see methodKey) of the methods several
+// types of p declare alike, the configuration sections each carrying a
+// setDefault of their own for the one caller running them in turn: the
+// name is the convention the types follow, what an interface would declare
+// had one been written, and each type's version is that convention kept,
+// not a call written away from its site.
+func familyMethods(p *packages.Package) map[string]bool {
+	holders := make(map[string]map[*types.TypeName]bool)
+	for _, obj := range p.TypesInfo.Defs {
+		fn, ok := obj.(*types.Func)
+		if !ok || fn.Signature().Recv() == nil {
+			continue
+		}
+		named, ok := derefNamed(fn.Signature().Recv().Type())
+		if !ok {
+			continue
+		}
+		key := methodKey(fn)
+		if holders[key] == nil {
+			holders[key] = make(map[*types.TypeName]bool)
+		}
+		holders[key][named.Obj()] = true
+	}
+	family := make(map[string]bool)
+	for key, declaring := range holders {
+		if len(declaring) > 1 {
+			family[key] = true
+		}
+	}
+	return family
+}
+
+// methodKey names a method by its name and its signature, the receiver
+// aside, "setDefault func(v *viper.Viper)": what the versions of one method
+// on several types share.
+func methodKey(fn *types.Func) string {
+	return fn.Name() + " " + fn.Signature().String()
 }
 
 // ignoredNames returns every identifier in the Go files of p's directory that
