@@ -26,13 +26,14 @@ var update = flag.Bool("update", false, "rewrite the golden files under testdata
 // handlers of its rpcs and the conversions of its messages; and pb/pb.gen.go
 // registering every service. A model without GRPC() gets no file. The
 // definitions are compiled the way protoc compiles them as well. The files
-// hold, byte for byte, the examples the doc comments of the pb package
-// show: pb.Generate's whole note.proto, the excerpts of buildMessage,
+// are where the examples in the doc comments of the pb package come from:
+// pb.Generate's whole note.proto, the excerpts of buildMessage,
 // fieldTypeOf, fieldComment, declareService, rpcMessages, customRequest,
 // customResponse, standardMessages, queryFields and descriptor; the whole
 // report.gen.go of handlerFile, the excerpts of serviceType, actionCalls,
 // handler, toProto, fromProto and conversionFuncs; and the pb.gen.go of
-// registrationFile.
+// registrationFile. Nothing compares the two: a change here is a change to
+// those examples, to carry over by hand.
 //
 // Beside every .proto the run writes the Go files the protobuf plugins
 // compile from it (see pb.Compile): the messages in note.pb.go and the
@@ -187,11 +188,92 @@ func TestGenRunRefusesAModelFileNamedPB(t *testing.T) {
 	require.Contains(t, err.Error(), "pb/pb.proto: the model file model/pb.go would get its handlers at pb/pb.gen.go, the registration file; rename the file")
 }
 
+// TestGenRunRefusesAModelFileNamedLikeAPluginOutput pins that a model file
+// ending in _grpc is refused: the protobuf plugin writes the service of
+// record.proto to record_grpc.pb.go, where the messages of record_grpc.proto
+// would go too.
+func TestGenRunRefusesAModelFileNamedLikeAPluginOutput(t *testing.T) {
+	projectDir, ok := newGenProject(t)
+	if !ok {
+		return
+	}
+	writeProtobufProject(t, projectDir, map[string]string{"model/record_grpc.go": protobufPBFileModel})
+
+	err := genRunWithOptions(genRunOptions{Quiet: true})
+
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "pb/record_grpc.proto: the model file model/record_grpc.go ends in _grpc, the suffix of the service file the protobuf plugin writes for model/record.go; rename the file")
+}
+
+// TestGenRunRefusesNumberingFieldsSharingADeclaration pins that fields
+// declared together, X, Y int32, are not numbered: one tag would number
+// both alike, so the run stops with the file as it was, naming them.
+func TestGenRunRefusesNumberingFieldsSharingADeclaration(t *testing.T) {
+	projectDir, ok := newGenProject(t)
+	if !ok {
+		return
+	}
+	writeProtobufProject(t, projectDir, map[string]string{"model/spot.go": protobufSharedDeclarationModel})
+
+	err := genRunWithOptions(genRunOptions{Quiet: true})
+
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "model/spot.go:10: X, Y share one declaration, which one pb tag would number alike; declare each field on a line of its own, then run gg gen again")
+	kept, readErr := os.ReadFile(filepath.Join(projectDir, "model", "spot.go"))
+	require.NoError(t, readErr)
+	require.NotContains(t, string(kept), "pb:\"")
+}
+
+// TestGenRunRefusesNumberingAFieldTheMessagesDisagreeOn pins that a field of
+// a struct embedded in two models, which the two messages would number
+// differently, is not numbered: the run stops naming both numbers, since
+// the one a message leaves free may be taken in the other.
+func TestGenRunRefusesNumberingAFieldTheMessagesDisagreeOn(t *testing.T) {
+	projectDir, ok := newGenProject(t)
+	if !ok {
+		return
+	}
+	writeProtobufProject(t, projectDir, map[string]string{
+		"model/audit.go":  protobufSharedEmbeddedAudit,
+		"model/note.go":   protobufSharedEmbeddedNote,
+		"model/record.go": protobufSharedEmbeddedRecord,
+	})
+
+	err := genRunWithOptions(genRunOptions{Quiet: true})
+
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "model/audit.go:5: Reviewer is embedded in messages that would number it ")
+	require.Contains(t, err.Error(), "; number it by hand with a pb tag each of them leaves free")
+	kept, readErr := os.ReadFile(filepath.Join(projectDir, "model", "audit.go"))
+	require.NoError(t, readErr)
+	require.NotContains(t, string(kept), "pb:\"")
+}
+
+// TestGenRunNamesTheFilesImportingEachOther pins the report of two model
+// files whose types refer to each other, which the definitions cannot
+// import in a cycle: both files are named, with the way out.
+func TestGenRunNamesTheFilesImportingEachOther(t *testing.T) {
+	projectDir, ok := newGenProject(t)
+	if !ok {
+		return
+	}
+	writeProtobufProject(t, projectDir, map[string]string{
+		"model/user.go":  protobufCycleUserModel,
+		"model/group.go": protobufCycleGroupModel,
+	})
+
+	err := genRunWithOptions(genRunOptions{Quiet: true})
+
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "the generated files group.proto and user.proto import each other in a cycle: a type of one Go file refers to a type of the other and back; keep the types referring to each other in one Go file")
+}
+
 // TestGenRunWritesNoProtobufDefinitionWhenAShapeCannotBeDescribed pins the
 // diagnostics of the shapes protobuf cannot express, one per field, that a
 // field without a pb tag is numbered instead of reported (see
 // TestGenRunNumbersTheFieldsWithoutPBTags), and that a failed run writes no
-// pb/ file at all.
+// file at all, the registration files included: the run stops on the
+// diagnostics before anything is written.
 func TestGenRunWritesNoProtobufDefinitionWhenAShapeCannotBeDescribed(t *testing.T) {
 	projectDir, ok := newGenProject(t)
 	if !ok {
@@ -206,7 +288,7 @@ func TestGenRunWritesNoProtobufDefinitionWhenAShapeCannotBeDescribed(t *testing.
 	// the numbers the tagged fields hold.
 	healed, readErr := os.ReadFile(filepath.Join(projectDir, "model", "rejected.go"))
 	require.NoError(t, readErr)
-	require.Contains(t, string(healed), "Untagged string         `json:\"untagged\" pb:\"15\"`")
+	require.Contains(t, string(healed), "Untagged string            `json:\"untagged\" pb:\"16\"`")
 	require.NotContains(t, err.Error(), "Rejected.untagged")
 	for _, want := range []string{
 		"tmpapp/model.Rejected.low: the pb tag names field number 3, but 1 to 10 belong to the framework's base fields; number business fields from 11",
@@ -217,11 +299,14 @@ func TestGenRunWritesNoProtobufDefinitionWhenAShapeCannotBeDescribed(t *testing.
 		"tmpapp/model.Rejected.comment: type database/sql.NullString is declared outside the project, so its fields cannot carry pb tags; use a project type",
 		"tmpapp/model.Rejected.word: the pb tag \"eleven\" is not a field number; write the number alone, as in pb:\"11\"",
 		"tmpapp/model.Rejected.note: the field is promoted through an embedded pointer, which a message has no way to leave unset; embed the struct by value",
+		"tmpapp/model.Rejected.limits: a map of pointers has no protobuf type, a map value is never unset; use a map of values",
 	} {
 		require.Contains(t, err.Error(), want)
 	}
-	_, statErr := os.Stat(filepath.Join(projectDir, "pb"))
-	require.True(t, os.IsNotExist(statErr), "a failed run must write no file, stat error = %v", statErr)
+	for _, path := range []string{"pb", filepath.Join("model", "model.gen.go"), filepath.Join("service", "service.gen.go")} {
+		_, statErr := os.Stat(filepath.Join(projectDir, path))
+		require.True(t, os.IsNotExist(statErr), "a failed run must write no file, %s: stat error = %v", path, statErr)
+	}
 }
 
 // TestGenRunNumbersTheFieldsWithoutPBTags pins that gg gen writes the pb
@@ -764,6 +849,7 @@ type Rejected struct {
 	Voice    Speaker        'json:"speaker" pb:"13" gorm:"-"'
 	Comment  sql.NullString 'json:"comment" pb:"14"'
 	Word     string         'json:"word" pb:"eleven"'
+	Limits   map[string]*int32 'json:"limits" pb:"15" gorm:"-"'
 	*RejectedExtra
 
 	model.Base
@@ -981,8 +1067,22 @@ type Shape struct {
 	Corners *[]ShapePoint     'json:"corners,omitempty" pb:"35" gorm:"-"'
 	Weights *map[string]int32 'json:"weights,omitempty" pb:"36" gorm:"-"'
 	Raw     *[]byte           'json:"raw,omitempty" pb:"37" gorm:"-"'
+	// RawDoc, Extra and Meta are pointers to JSON types, declared as
+	// themselves when decoded.
+	RawDoc *json.RawMessage   'json:"raw_doc,omitempty" pb:"38" gorm:"-"'
+	Extra  *datatypes.JSON    'json:"extra,omitempty" pb:"39" gorm:"-"'
+	Meta   *datatypes.JSONMap 'json:"meta,omitempty" pb:"40" gorm:"-"'
+	// Name shadows the Name of the embedded ShapeMeta, which keeps its own
+	// key and is selected by its path.
+	Name string 'json:"name" pb:"41"'
+	ShapeMeta
 
 	model.Base
+}
+
+// ShapeMeta is embedded in Shape, its Name shadowed by the shape's own.
+type ShapeMeta struct {
+	Name string 'json:"meta_name" pb:"42" gorm:"-"'
 }
 
 // ShapeOptions is kept as a JSON document.
@@ -1107,6 +1207,9 @@ func TestShapeRoundTrips(t *testing.T) {
 	day := time.Date(2026, 9, 26, 0, 0, 0, 0, time.UTC)
 	when := day.Add(time.Hour)
 	score := 7
+	rawDoc := json.RawMessage('{"b":1}')
+	extra := datatypes.JSON('{"c":2}')
+	meta := datatypes.JSONMap{"m": float64(1)}
 	in := &model.Shape{
 		Date:    datatypes.Date(day),
 		Clock:   datatypes.Time(90 * time.Minute),
@@ -1133,6 +1236,11 @@ func TestShapeRoundTrips(t *testing.T) {
 		Corners: &[]model.ShapePoint{{X: 7, Y: 8}},
 		Weights: &map[string]int32{"w": 1},
 		Raw:     &[]byte{9},
+		RawDoc:  &rawDoc,
+		Extra:   &extra,
+		Meta:    &meta,
+		Name:    "outer",
+		ShapeMeta: model.ShapeMeta{Name: "inner"},
 	}
 	in.Spans = append(in.Spans, struct {
 		From int 'json:"from" pb:"1"'
@@ -1163,10 +1271,16 @@ func TestShapeRoundTrips(t *testing.T) {
 	require.Equal(t, int32(8), msg.GetCorners()[0].GetY())
 	require.Equal(t, int32(1), msg.GetWeights()["w"])
 	require.Equal(t, []byte{9}, msg.GetRaw())
+	require.Equal(t, "outer", msg.GetName())
+	require.Equal(t, "inner", msg.GetMetaName())
 
 	out := pb.ShapeFromProto(msg)
 	require.JSONEq(t, string(in.Doc), string(out.Doc))
+	require.JSONEq(t, string(*in.RawDoc), string(*out.RawDoc))
+	require.JSONEq(t, string(*in.Extra), string(*out.Extra))
 	in.Doc, out.Doc = nil, nil
+	in.RawDoc, out.RawDoc = nil, nil
+	in.Extra, out.Extra = nil, nil
 	require.Equal(t, in, out)
 
 	empty := pb.ShapeFromProto(&pb.Shape{})
@@ -1179,6 +1293,9 @@ func TestShapeRoundTrips(t *testing.T) {
 	require.Nil(t, empty.Corners)
 	require.Nil(t, empty.Weights)
 	require.Nil(t, empty.Raw)
+	require.Nil(t, empty.RawDoc)
+	require.Nil(t, empty.Extra)
+	require.Nil(t, empty.Meta)
 	require.True(t, time.Time(empty.Date).IsZero())
 }
 `
@@ -1254,6 +1371,146 @@ func (Feed) Design() {
 `
 
 // protobufPBFileModel is a model declared in a file named pb.go.
+// protobufSharedDeclarationModel declares two fields together without a
+// pb tag.
+const protobufSharedDeclarationModel = `package model
+
+import (
+	"github.com/hydroan/gst/dsl"
+	"github.com/hydroan/gst/model"
+)
+
+// Spot has two coordinates declared together.
+type Spot struct {
+	X, Y int32
+
+	model.Base
+}
+
+func (Spot) TableName() string { return "spots" }
+
+func (Spot) Design() {
+	dsl.GRPC()
+	dsl.Migrate()
+	dsl.Endpoint("spots")
+	dsl.Create(func() {})
+}
+`
+
+// protobufSharedEmbeddedAudit, Note and Record embed one struct without a
+// pb tag on its field in two models whose tagged fields end at different
+// numbers.
+const protobufSharedEmbeddedAudit = `package model
+
+// Audit is embedded in Note and Record.
+type Audit struct {
+	Reviewer string 'json:"reviewer"'
+}
+`
+
+const protobufSharedEmbeddedNote = `package model
+
+import (
+	"github.com/hydroan/gst/dsl"
+	"github.com/hydroan/gst/model"
+)
+
+// Note is a note.
+type Note struct {
+	Title string 'json:"title" pb:"11"'
+	Body  string 'json:"body" pb:"12"'
+	Audit
+
+	model.Base
+}
+
+func (Note) TableName() string { return "notes" }
+
+func (Note) Design() {
+	dsl.GRPC()
+	dsl.Migrate()
+	dsl.Endpoint("notes")
+	dsl.Create(func() {})
+}
+`
+
+const protobufSharedEmbeddedRecord = `package model
+
+import (
+	"github.com/hydroan/gst/dsl"
+	"github.com/hydroan/gst/model"
+)
+
+// Record is a record.
+type Record struct {
+	Title string 'json:"title" pb:"11"'
+	Audit
+
+	model.Base
+}
+
+func (Record) TableName() string { return "records" }
+
+func (Record) Design() {
+	dsl.GRPC()
+	dsl.Migrate()
+	dsl.Endpoint("records")
+	dsl.Create(func() {})
+}
+`
+
+// protobufCycleUserModel and protobufCycleGroupModel refer to each other
+// across two files.
+const protobufCycleUserModel = `package model
+
+import (
+	"github.com/hydroan/gst/dsl"
+	"github.com/hydroan/gst/model"
+)
+
+// User belongs to groups.
+type User struct {
+	Name   string  'json:"name" pb:"11"'
+	Groups []Group 'json:"groups" pb:"12" gorm:"-"'
+
+	model.Base
+}
+
+func (User) TableName() string { return "users" }
+
+func (User) Design() {
+	dsl.GRPC()
+	dsl.Migrate()
+	dsl.Endpoint("users")
+	dsl.Create(func() {})
+}
+`
+
+const protobufCycleGroupModel = `package model
+
+import (
+	"github.com/hydroan/gst/dsl"
+	"github.com/hydroan/gst/model"
+)
+
+// Group is owned by a user.
+type Group struct {
+	Title string 'json:"title" pb:"11"'
+	Owner *User  'json:"owner" pb:"12" gorm:"-"'
+
+	model.Base
+}
+
+func (Group) TableName() string { return "groups" }
+
+func (Group) Design() {
+	dsl.GRPC()
+	dsl.Migrate()
+	dsl.Endpoint("groups")
+	dsl.Create(func() {})
+}
+`
+
 const protobufPBFileModel = `package model
 
 import (

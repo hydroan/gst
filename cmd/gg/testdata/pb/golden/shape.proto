@@ -85,6 +85,20 @@ message Shape {
 
   optional bytes raw = 37;
 
+  // RawDoc, Extra and Meta are pointers to JSON types, declared as
+  // themselves when decoded.
+  google.protobuf.Value raw_doc = 38;
+
+  google.protobuf.Value extra = 39;
+
+  google.protobuf.Struct meta = 40;
+
+  // Name shadows the Name of the embedded ShapeMeta, which keeps its own
+  // key and is selected by its path.
+  string name = 41;
+
+  string meta_name = 42;
+
   message Spans {
     int64 from = 1;
 

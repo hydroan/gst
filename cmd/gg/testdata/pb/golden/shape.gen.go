@@ -139,6 +139,17 @@ func ShapeToProto(m *model.Shape) *Shape {
 	if m.Raw != nil {
 		p.Raw = *m.Raw
 	}
+	if m.RawDoc != nil {
+		p.RawDoc = grpc.JSONValue(*m.RawDoc)
+	}
+	if m.Extra != nil {
+		p.Extra = grpc.JSONValue(*m.Extra)
+	}
+	if m.Meta != nil {
+		p.Meta = grpc.Struct(*m.Meta)
+	}
+	p.Name = m.Name
+	p.MetaName = m.ShapeMeta.Name
 	return p
 }
 
@@ -254,6 +265,23 @@ func ShapeFromProto(p *Shape) *model.Shape {
 		x := p.Raw
 		m.Raw = &x
 	}
+	if p.GetRawDoc() != nil {
+		var x json.RawMessage
+		x = grpc.JSON(p.GetRawDoc())
+		m.RawDoc = &x
+	}
+	if p.GetExtra() != nil {
+		var x datatypes.JSON
+		x = grpc.JSON(p.GetExtra())
+		m.Extra = &x
+	}
+	if p.GetMeta() != nil {
+		var x datatypes.JSONMap
+		x = grpc.Map(p.GetMeta())
+		m.Meta = &x
+	}
+	m.Name = p.GetName()
+	m.ShapeMeta.Name = p.GetMetaName()
 	return m
 }
 

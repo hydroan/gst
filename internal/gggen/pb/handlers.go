@@ -274,7 +274,8 @@ func (w *fileWriter) actionType(model *modelinfo.Model, typeName string) ast.Exp
 //		return &ListRecordResponse{Items: items, Total: int64(total)}, nil
 //	}
 //
-//	// PatchManyRecord serves the PatchMany action of Record on /api/records/batch.
+//	// PatchManyRecord serves the PatchMany action of Record on
+//	// /api/records/batch.
 //	func (RecordService) PatchManyRecord(ctx context.Context, req *PatchManyRecordRequest) (*PatchManyRecordResponse, error) {
 //		models := make([]*model.Record, len(req.GetItems()))
 //		masks := make([][]string, len(req.GetItems()))

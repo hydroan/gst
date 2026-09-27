@@ -28,17 +28,16 @@ import (
 // gg gen sees it and keeps them from then on, and the definitions check
 // passes the very command that fixes them. The generator picks the numbers
 // because it alone knows what the committed definitions reserve. Any other
-// diagnostic, and a project whose packages cannot be loaded, is left to the
-// checks to report.
+// diagnostic stops the run here, before a file is written, so that a model
+// the generator refuses leaves the project as it was; a project whose
+// packages cannot be loaded is left to the checks to report.
 //
-// It returns the files the derivation produced when it produced them
-// without a word, the common case of a project whose fields are all
-// numbered: the generation below reuses them instead of loading and type
-// checking the model packages a second time, which nothing between the two
-// changes, the model files and the tags they carry being what the
-// definitions are derived from. After a tag was written, and when the
-// derivation reported anything, it returns nil and the generation derives
-// the definitions again.
+// It returns the files the derivation produced: the generation below
+// reuses them instead of loading and type checking the model packages a
+// second time, which nothing between the two changes, the model files and
+// the tags they carry being what the definitions are derived from. After a
+// tag was written the definitions are derived again, from the files as
+// they now are, and what that derivation reports stops the run too.
 func fillPBTags(quiet bool, ignore gghelper.ProjectIgnore) ([]pb.File, error) {
 	if !gghelper.FileExists(ggconst.DirModel) {
 		return nil, nil
@@ -52,11 +51,18 @@ func fillPBTags(quiet bool, ignore gghelper.ProjectIgnore) ([]pb.File, error) {
 		return files, nil
 	}
 	var diagnostics *pb.DiagnosticsError
-	if !errors.As(err, &diagnostics) || len(diagnostics.MissingTags) == 0 {
+	if !errors.As(err, &diagnostics) {
 		return nil, nil
 	}
+	if len(diagnostics.MissingTags) == 0 {
+		return nil, err
+	}
+	tags, err := oneTagPerField(diagnostics.MissingTags)
+	if err != nil {
+		return nil, err
+	}
 	byPath := make(map[string][]pb.MissingTag)
-	for _, tag := range diagnostics.MissingTags {
+	for _, tag := range tags {
 		byPath[tag.Path] = append(byPath[tag.Path], tag)
 	}
 	for _, path := range slices.Sorted(maps.Keys(byPath)) {
@@ -69,14 +75,45 @@ func fillPBTags(quiet bool, ignore gghelper.ProjectIgnore) ([]pb.File, error) {
 			}
 		}
 	}
-	return nil, nil
+	return pb.Generate(pb.Config{Dir: ".", ModulePath: module, Models: scanned.models})
+}
+
+// oneTagPerField returns tags with the ones numbering a field several
+// times, once per message embedding its struct, folded into one: the field
+// gets the number when the messages agree on it, and the run fails when
+// they do not, since a number one message leaves free may be taken in
+// another, so the field has to be numbered by hand.
+func oneTagPerField(tags []pb.MissingTag) ([]pb.MissingTag, error) {
+	type field struct {
+		path string
+		line int
+		name string
+	}
+	folded := make([]pb.MissingTag, 0, len(tags))
+	seen := make(map[field]int)
+	for _, tag := range tags {
+		key := field{tag.Path, tag.Line, tag.Field}
+		at, ok := seen[key]
+		if !ok {
+			seen[key] = len(folded)
+			folded = append(folded, tag)
+			continue
+		}
+		if folded[at].Number != tag.Number {
+			return nil, errors.Newf("%s:%d: %s is embedded in messages that would number it %d and %d; number it by hand with a pb tag each of them leaves free",
+				tag.Path, tag.Line, tag.Field, folded[at].Number, tag.Number)
+		}
+	}
+	return folded, nil
 }
 
 // rewritePBTags writes the numbers of tags into the fields of the file at
 // path: it parses the file, finds every field by its line and name, adds
 // pb:"N" to its tag (see withPBTag) and prints the file back through
-// go/format, which keeps its comments and layout. For the tags numbering
-// Body 12, Tags 13, Window 14, From 1 and To 2 in
+// go/format, which keeps its comments and layout. A field sharing its
+// declaration with another, X, Y int32, is refused, since one tag would
+// number both. For the tags numbering Body 12, Tags 13, Window 14, From 1
+// and To 2 in
 //
 //	type Draft struct {
 //		Title  string   `json:"title" pb:"11"`
@@ -121,6 +158,13 @@ func rewritePBTags(path string, tags []pb.MissingTag) error {
 		field := fieldAtLine(fset, file, tag.Line, tag.Field)
 		if field == nil {
 			return fmt.Errorf("%s:%d: field %s of %s not found for the pb tag rewrite", path, tag.Line, tag.Field, tag.Struct)
+		}
+		if len(field.Names) > 1 {
+			names := make([]string, 0, len(field.Names))
+			for _, id := range field.Names {
+				names = append(names, id.Name)
+			}
+			return fmt.Errorf("%s:%d: %s share one declaration, which one pb tag would number alike; declare each field on a line of its own, then run gg gen again", path, tag.Line, strings.Join(names, ", "))
 		}
 		field.Tag = withPBTag(field.Tag, tag.Number)
 	}

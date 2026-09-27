@@ -521,7 +521,15 @@ func (w *fileWriter) structToProto(dst, src ast.Expr, conv *conversion) []ast.St
 // fieldToProto encodes the field fc of the struct src into the field of its
 // message dst.
 func (w *fileWriter) fieldToProto(dst, src ast.Expr, fc fieldConversion) []ast.Stmt {
-	return w.toProto(sel(dst, fc.goName), sel(src, fc.field.Var.Name()), fc.field.Var.Type(), fc.ft)
+	return w.toProto(sel(dst, fc.goName), selPath(src, fc.path), fc.field.Var.Type(), fc.ft)
+}
+
+// selPath selects the field at path from x, m.Audit.Name for Audit, Name.
+func selPath(x ast.Expr, path []string) ast.Expr {
+	for _, name := range path {
+		x = sel(x, name)
+	}
+	return x
 }
 
 // fromProto returns the statements decoding src, the value of a message
@@ -719,8 +727,20 @@ func (w *fileWriter) fromProto(dst, src ast.Expr, t types.Type, ft fieldType) []
 
 // declared returns the statements declaring the variable name of type t and
 // running stmts, which assign it: x := expr when stmts is that one
-// assignment, var x T followed by stmts otherwise.
+// assignment, var x T followed by stmts otherwise. A named JSON type over a
+// slice or a map, a json.RawMessage or a datatypes.JSONMap, is declared as
+// itself even then: the grpc helpers decoding it answer its underlying
+// type, and x := would declare x as that.
 func (w *fileWriter) declared(name string, t types.Type, stmts []ast.Stmt) []ast.Stmt {
+	if n, ok := types.Unalias(t).(*types.Named); ok {
+		if _, builtin := jsonshape.BuiltinOf(n); builtin {
+			switch n.Underlying().(type) {
+			case *types.Slice, *types.Map:
+				decl := &ast.DeclStmt{Decl: &ast.GenDecl{Tok: token.VAR, Specs: []ast.Spec{&ast.ValueSpec{Names: []*ast.Ident{ident(name)}, Type: w.goType(t)}}}}
+				return append([]ast.Stmt{decl}, stmts...)
+			}
+		}
+	}
 	if len(stmts) == 1 {
 		if a, ok := stmts[0].(*ast.AssignStmt); ok && a.Tok == token.ASSIGN && len(a.Lhs) == 1 {
 			if id, ok := a.Lhs[0].(*ast.Ident); ok && id.Name == name {
@@ -761,7 +781,7 @@ func (w *fileWriter) fieldFromProto(dst, src ast.Expr, fc fieldConversion) []ast
 	if fc.ft.optional {
 		value = sel(src, fc.goName)
 	}
-	return w.fromProto(sel(dst, fc.field.Var.Name()), value, fc.field.Var.Type(), fc.ft)
+	return w.fromProto(selPath(dst, fc.path), value, fc.field.Var.Type(), fc.ft)
 }
 
 // conversionFuncs builds the two conversion functions of the message of

@@ -63,7 +63,15 @@ func (g *generator) print() ([]File, error) {
 			progressed = true
 		}
 		if !progressed {
-			return nil, errors.New("the generated files import each other in a cycle")
+			// The files left are the ones waiting on each other.
+			left := make([]string, 0, len(protos)-len(resolved))
+			for name := range protos {
+				if _, done := resolved[name]; !done {
+					left = append(left, name)
+				}
+			}
+			slices.Sort(left)
+			return nil, errors.Newf("the generated files %s import each other in a cycle: a type of one Go file refers to a type of the other and back; keep the types referring to each other in one Go file", strings.Join(left, " and "))
 		}
 	}
 

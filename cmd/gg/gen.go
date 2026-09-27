@@ -37,7 +37,7 @@ var genCmd = &cobra.Command{
 var prune bool
 
 func init() {
-	genCmd.Flags().BoolVar(&prune, "prune", false, "After generating, prune what the models no longer need from service/, middleware/ and pb/, asking once before deleting")
+	genCmd.Flags().BoolVar(&prune, "prune", false, "After generating, prune what the models no longer need from service/, middleware/, interceptor/ and pb/, asking once before deleting")
 }
 
 type genRunOptions struct {
@@ -557,7 +557,12 @@ func scanModels(quiet bool, ignore gghelper.ProjectIgnore) (scannedModels, error
 			clioutput.Item("IGNORE", "%s %s (%s)", match.Method, match.Path, match.Model)
 		}
 	}
-	reportRouteIgnoreWarnings(ignoreResult)
+	// The warnings keep quiet with the rest of the scan: fillPBTags scans
+	// quietly before the scan that reports, which would otherwise print
+	// each warning twice.
+	if !quiet {
+		reportRouteIgnoreWarnings(ignoreResult)
+	}
 
 	// Model ignores run after route ignores so the live-action warning sees
 	// the final enabled-action set.
@@ -568,7 +573,9 @@ func scanModels(quiet bool, ignore gghelper.ProjectIgnore) (scannedModels, error
 			clioutput.Item("IGNORE", "model %s (%s)", match.Model, match.File)
 		}
 	}
-	reportModelIgnoreWarnings(modelIgnores)
+	if !quiet {
+		reportModelIgnoreWarnings(modelIgnores)
+	}
 
 	return scannedModels{models: allModels, routeIgnores: ignoreResult, pruneConfig: projectCfg.Prune}, nil
 }

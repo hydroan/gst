@@ -82,6 +82,36 @@ type fieldConversion struct {
 	field  jsonshape.Field
 	ft     fieldType
 	goName string
+	// path selects the field from a value of the struct, the embedded
+	// structs it is promoted through first (see fieldPath).
+	path []string
+}
+
+// fieldPath returns the names selecting the field v from a value of the
+// struct s, the embedded structs it is promoted through first: Audit, Name
+// for the Name of an embedded Audit, Name alone for a field of s itself.
+// The generated conversions select a promoted field by its path when its
+// name alone would select a field of the same name declared nearer the
+// surface, which shadows it in Go while both keep their JSON keys.
+func fieldPath(s *types.Struct, v *types.Var) []string {
+	for f := range s.Fields() {
+		if f == v {
+			return []string{f.Name()}
+		}
+		if !f.Embedded() {
+			continue
+		}
+		t := types.Unalias(f.Type())
+		if p, ok := t.(*types.Pointer); ok {
+			t = types.Unalias(p.Elem())
+		}
+		if inner, ok := t.Underlying().(*types.Struct); ok {
+			if path := fieldPath(inner, v); path != nil {
+				return append([]string{f.Name()}, path...)
+			}
+		}
+	}
+	return nil
 }
 
 // buildMessage fills the message of obj with the fields of its struct type.
@@ -253,7 +283,14 @@ func (g *generator) messageOfStruct(name, goName, protoName string, st *types.St
 			field.OneofIndex = new(int32Index(len(desc.OneofDecl)))
 			desc.OneofDecl = append(desc.OneofDecl, &descriptorpb.OneofDescriptorProto{Name: new(syntheticOneofPrefix + f.Key)})
 		}
-		numbered = append(numbered, numberedField{field: field, comment: fieldComment(g.project.FieldDoc(f.Var), ft.enum), conversion: fieldConversion{field: f, ft: ft}})
+		// The field's name selects it unless Go resolves the name to another
+		// field, one declared nearer the surface with the same name, or to
+		// none, two embedded structs promoting it alike: then its path does.
+		path := []string{f.Var.Name()}
+		if obj, _, _ := types.LookupFieldOrMethod(st, true, f.Var.Pkg(), f.Var.Name()); obj != f.Var {
+			path = fieldPath(st, f.Var)
+		}
+		numbered = append(numbered, numberedField{field: field, comment: fieldComment(g.project.FieldDoc(f.Var), ft.enum), conversion: fieldConversion{field: f, ft: ft, path: path}})
 	}
 	slices.SortStableFunc(numbered, func(a, b numberedField) int { return cmp.Compare(a.field.GetNumber(), b.field.GetNumber()) })
 	for i, nf := range numbered {
@@ -544,6 +581,10 @@ func (g *generator) mapOf(m *types.Map, file *protoFile, parent *descriptorpb.De
 		return fieldType{}, false
 	}
 	keyKind, _ := scalarKind(keyBasic)
+	if _, pointer := types.Unalias(m.Elem()).(*types.Pointer); pointer {
+		g.project.Report(s, "a map of pointers has no protobuf type, a map value is never unset; use a map of values")
+		return fieldType{}, false
+	}
 	value, ok := g.fieldTypeOf(m.Elem(), file, parent, prefix, key, s)
 	if !ok {
 		return fieldType{}, false
@@ -553,7 +594,7 @@ func (g *generator) mapOf(m *types.Map, file *protoFile, parent *descriptorpb.De
 		return fieldType{}, false
 	}
 	entry := &descriptorpb.DescriptorProto{
-		Name:    new(strcase.UpperCamelCase(key) + "Entry"),
+		Name:    new(mapEntryName(key)),
 		Options: &descriptorpb.MessageOptions{MapEntry: new(true)},
 		Field: []*descriptorpb.FieldDescriptorProto{
 			{Name: new("key"), Number: new(int32(1)), Label: descriptorpb.FieldDescriptorProto_LABEL_OPTIONAL.Enum(), Type: keyKind.Enum()},
@@ -565,6 +606,33 @@ func (g *generator) mapOf(m *types.Map, file *protoFile, parent *descriptorpb.De
 	}
 	parent.NestedType = append(parent.NestedType, entry)
 	return fieldType{kind: descriptorpb.FieldDescriptorProto_TYPE_MESSAGE, typeName: entry.GetName(), repeated: true, mapEntry: entry, mapKey: keyKind, mapValue: &value, nested: value.nested}, true
+}
+
+// mapEntryName returns the name protoc gives the entry message of the map
+// field named key, which protodesc holds the descriptor to: the first
+// letter and every letter after an underscore upper-cased, the underscores
+// dropped, the other characters kept as they are, and Entry appended.
+// headers gives HeadersEntry, http_headers HttpHeadersEntry, HTTPHeaders
+// HTTPHeadersEntry and userIDList UserIDListEntry.
+func mapEntryName(key string) string {
+	var b strings.Builder
+	capitalize := true
+	for _, r := range key {
+		switch {
+		case r == '_':
+			capitalize = true
+		case capitalize:
+			if r >= 'a' && r <= 'z' {
+				r -= 'a' - 'A'
+			}
+			b.WriteRune(r)
+			capitalize = false
+		default:
+			b.WriteRune(r)
+		}
+	}
+	b.WriteString("Entry")
+	return b.String()
 }
 
 // scalarKind maps a basic Go type to its protobuf scalar: bool to bool,

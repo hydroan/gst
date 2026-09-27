@@ -37,8 +37,7 @@ func protoPackage(app, dir string) string {
 
 // protoIdentifier makes s a protobuf identifier: every character one cannot
 // hold becomes _, and a leading digit gets one in front. It returns
-// http_client for http-client and _v2 for v2 is not touched, while 2fa gives
-// _2fa.
+// http_client for http-client and _2fa for 2fa, and leaves v2 as it is.
 func protoIdentifier(s string) string {
 	s = nonIdentifier.ReplaceAllString(s, "_")
 	if s == "" || (s[0] >= '0' && s[0] <= '9') {

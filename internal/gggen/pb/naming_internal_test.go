@@ -75,3 +75,17 @@ func TestCommentTextRecordsCommentsLikeProtoc(t *testing.T) {
 	require.Equal(t, " Title is the display title.\n", commentText("Title is the display title."))
 	require.Equal(t, " Title is the display title.\n\n Two lines.\n", commentText("Title is the display title.\n\nTwo lines.\n"))
 }
+
+// TestMapEntryNameFollowsProtoc pins the examples of the mapEntryName doc
+// comment: the name protoc gives a map field's entry message, which the
+// descriptor is held to.
+func TestMapEntryNameFollowsProtoc(t *testing.T) {
+	for key, want := range map[string]string{
+		"headers":      "HeadersEntry",
+		"http_headers": "HttpHeadersEntry",
+		"HTTPHeaders":  "HTTPHeadersEntry",
+		"userIDList":   "UserIDListEntry",
+	} {
+		require.Equal(t, want, mapEntryName(key), key)
+	}
+}

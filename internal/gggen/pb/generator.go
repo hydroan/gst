@@ -123,6 +123,14 @@ func (g *generator) generate() ([]File, error) {
 		g.project.Report(jsonshape.Site{Subject: ggconst.DirPB + "/" + ggconst.DirPB + ".proto"},
 			"the model file %s/%s.go would get its handlers at %s/%s, the registration file; rename the file", ggconst.DirModel, ggconst.DirPB, ggconst.DirPB, ggconst.FilePBGen)
 	}
+	// The plugin writes the service of x.proto to x_grpc.pb.go, where the
+	// messages of x_grpc.proto would go too.
+	for _, name := range slices.Sorted(maps.Keys(g.files)) {
+		if stem, ok := strings.CutSuffix(name, "_grpc.proto"); ok {
+			g.project.Report(jsonshape.Site{Subject: ggconst.DirPB + "/" + name},
+				"the model file %s/%s_grpc.go ends in _grpc, the suffix of the service file the protobuf plugin writes for %s/%s.go; rename the file", ggconst.DirModel, stem, ggconst.DirModel, stem)
+		}
+	}
 	if diags := g.project.Diagnostics(); len(diags) > 0 {
 		return nil, &DiagnosticsError{Diagnostics: diags, MissingTags: g.missingTags}
 	}
