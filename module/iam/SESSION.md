@@ -11,21 +11,20 @@ Redis 在这里不是缓存而是存储：没有它谁也认证不了，所以 `
 
 ## 存储归属
 
-```mermaid
-%%{init: {"flowchart": {"wrappingWidth": 460}}}%%
-flowchart TB
-    subgraph DB["MySQL · 持久身份"]
-        T["users · password_credentials · email_identities · profiles"]
-    end
-    subgraph SVC["IAM"]
-        S["IAMSession 中间件 + service 层 —— 会话键的唯一读写方"]
-    end
-    subgraph RDS["Redis · 会话运行时"]
-        K["session:data · index:user / index:all / index:seen · user:state · login:failure"]
-    end
-
-    DB -- "读身份与凭证，每请求最多一次" --> SVC
-    SVC -- "会话的全部读写" --> RDS
+```plantuml
+@startuml
+database "MySQL · 持久身份" as DB {
+  rectangle "users · password_credentials\nemail_identities · profiles" as T
+}
+node "IAM" as SVC {
+  rectangle "IAMSession 中间件 + service 层\n会话键的唯一读写方" as S
+}
+database "Redis · 会话运行时" as RDS {
+  rectangle "session:data · index:user / index:all / index:seen\nuser:state · login:failure" as K
+}
+T -down-> S : 读身份与凭证，每请求最多一次
+S -down-> K : 会话的全部读写
+@enduml
 ```
 
 会话在 MySQL 里没有任何一行记录。唯一横跨两边的事实是 `MustChangePassword`：它同时存在于数据库的凭证行、
@@ -77,27 +76,28 @@ Redis 能让整个键过期，却**永远不能让 ZSET 的单个成员过期**�
 
 ## 登录
 
-```mermaid
-sequenceDiagram
-    autonumber
-    participant C as 客户端
-    participant L as LoginService
-    participant DB as MySQL
-    participant R as Redis
-    participant O as authn 观察者
+```plantuml
+@startuml
+autonumber
+participant "客户端" as C
+participant "LoginService" as L
+database "MySQL" as DB
+database "Redis" as R
+participant "authn 观察者" as O
 
-    C->>L: POST /api/login
-    L->>DB: SELECT users, password_credentials
-    Note over L,R: status 检查 → 锁定检查<br/>（GET login:failure）→ bcrypt 比对
-    L->>L: RBAC 系统角色 + 租户成员校验
-    L->>L: authn 二次因子闸门
-    L->>R: SET data:sid = 快照, TTL = 会话寿命
-    L->>R: ZADD index:user / index:all / index:seen
-    L->>R: EXPIRE 三个索引
-    Note over L,R: 任一步失败 → DEL 快照<br/>并清掉三个索引成员
-    L->>R: DEL login:failure:username
-    L-->>C: Set-Cookie session_id + 会话快照
-    L->>O: NotifyLogin succeeded
+C -> L : POST /api/login
+L -> DB : SELECT users, password_credentials
+note over L, R : status 检查 → 锁定检查（GET login:failure）→ bcrypt 比对
+L -> L : RBAC 系统角色 + 租户成员校验
+L -> L : authn 二次因子闸门
+L -> R : SET data:sid = 快照, TTL = 会话寿命
+L -> R : ZADD index:user / index:all / index:seen
+L -> R : EXPIRE 三个索引
+note over L, R : 任一步失败 → DEL 快照并清掉三个索引成员
+L -> R : DEL login:failure:username
+L --> C : Set-Cookie session_id + 会话快照
+L -> O : NotifyLogin succeeded
+@enduml
 ```
 
 会话的创建不是一次原子写：快照 `SET` 之后还有三次 `ZADD` 和三次 `EXPIRE`。任何一步失败都会把已经写下的
@@ -111,25 +111,50 @@ sequenceDiagram
 
 ## 每个已认证请求
 
-```mermaid
-flowchart TD
-    B{"Cookie session_id"} -- 缺失 --> X1["401 no session"]
-    B -- 存在 --> C["GET data:sid"]
-    C --> D{"快照命中"}
-    D -- 否 --> X2["401 session invalid"]
-    D -- 是 --> E{"Validate 通过"}
-    E -- "否 · 先 DEL 快照与索引" --> X2
-    E -- 是 --> G{"UA 绑定一致"}
-    G -- 否 --> X2
-    G -- 是 --> H{"user:state 命中"}
-    H -- 否 --> I["回查 MySQL 并写缓存"]
-    H -- 是 --> K{"status"}
-    I --> K
-    K -- "inactive / locked" --> Y["DEL 快照 · 403 禁用或锁定"]
-    K -- active --> L{"须改密码"}
-    L -- "是 · 非豁免路由" --> Z["403 需先改密码"]
-    L -- 否 --> M["Touch：距上次满 30s 才前移 LastSeenAt"]
-    M --> N["写入 ctx 并放行"]
+```plantuml
+@startuml
+start
+if (Cookie session_id?) then (缺失)
+  :401 no session;
+  end
+else (存在)
+endif
+:GET data:sid;
+if (快照命中?) then (否)
+  :401 session invalid;
+  end
+else (是)
+endif
+if (Validate 通过?) then (否)
+  :DEL 快照与索引;
+  :401 session invalid;
+  end
+else (是)
+endif
+if (UA 绑定一致?) then (否)
+  :401 session invalid;
+  end
+else (是)
+endif
+if (user:state 命中?) then (否)
+  :回查 MySQL 并写缓存;
+else (是)
+endif
+if (status) then (inactive / locked)
+  :DEL 快照;
+  :403 禁用或锁定;
+  end
+else (active)
+endif
+if (须改密码 且 非豁免路由?) then (是)
+  :403 需先改密码;
+  end
+else (否)
+endif
+:Touch：距上次满 30s 才前移 LastSeenAt;
+:写入 ctx 并放行;
+stop
+@enduml
 ```
 
 `Validate` 只校验快照本身四件事：id 与快照一致、user_id 非空、`ExpiresAt` 非零、未过期。
@@ -147,21 +172,22 @@ flowchart TD
 
 ## 会话状态
 
-```mermaid
-stateDiagram-v2
-    direction LR
-    state "不存在" as NONE
-    state "活跃" as ACT
-    state "悬垂索引" as STALE
-    state "已清除" as GONE
+```plantuml
+@startuml
+left to right direction
+state "不存在" as NONE
+state "活跃" as ACT
+state "悬垂索引" as STALE
+state "已清除" as GONE
 
-    [*] --> NONE
-    NONE --> ACT: 登录 SET + 三次 ZADD
-    ACT --> ACT: Touch 前移 LastSeenAt
-    ACT --> GONE: 登出 / 吊销 / 禁用 / 改密
-    ACT --> STALE: TTL 到期
-    STALE --> GONE: 惰性剪枝
-    GONE --> [*]
+[*] --> NONE
+NONE --> ACT : 登录 SET + 三次 ZADD
+ACT --> ACT : Touch 前移 LastSeenAt
+ACT --> GONE : 登出 / 吊销 / 禁用 / 改密
+ACT --> STALE : TTL 到期
+STALE --> GONE : 惰性剪枝
+GONE --> [*]
+@enduml
 ```
 
 **快照存在，会话就可用。** 吊销是删键，过期是 TTL 到期——两者都没有留下可命名的状态，
@@ -177,19 +203,35 @@ stateDiagram-v2
 
 所以每个已认证请求都要重新确认这两件事——数据源是 MySQL，两次查询，而这个缓存就挡在这两次查询前面。
 
-```mermaid
-flowchart TB
-    R1["ValidateSessionUserState<br/>每个已认证请求调用一次"] --> R2{"GET user:state:uid"}
-    R2 -- 命中 --> R4["取 status 与 must_change_password"]
-    R2 -- 未命中 --> R3["SELECT users + password_credentials"]
-    R3 --> R6{"两行都还在"}
-    R6 -- 否 --> R7["401 session invalid"]
-    R6 -- 是 --> R5["SET user:state TTL 30s"]
-    R5 --> R4
-    R4 --> R8["回填 MustChangePassword<br/>按 status 放行或 403"]
-
-    KILL["失效触发 · 全部是显式调用<br/>PATCH 用户状态 · 管理员重置密码 · 自助改密码<br/>删除某用户全部会话 · 邮件找回密码确认"]
-    KILL -. "DEL user:state:uid" .-> R2
+```plantuml
+@startuml
+start
+:ValidateSessionUserState
+每个已认证请求调用一次;
+note right
+  失效触发 · 全部是显式调用，DEL user:state:uid
+  ----
+  PATCH 用户状态
+  管理员重置密码
+  自助改密码
+  删除某用户全部会话
+  邮件找回密码确认
+end note
+if (GET user:state:uid) then (命中)
+else (未命中)
+  :SELECT users + password_credentials;
+  if (两行都还在?) then (否)
+    :401 session invalid;
+    end
+  else (是)
+    :SET user:state TTL 30s;
+  endif
+endif
+:取 status 与 must_change_password;
+:回填 MustChangePassword
+按 status 放行或 403;
+stop
+@enduml
 ```
 
 「两行都还在」这一步意味着：**删掉一个用户会立刻废掉他的全部会话**，不依赖任何显式失效调用。
@@ -198,20 +240,31 @@ flowchart TB
 
 ## 惰性剪枝
 
-```mermaid
-flowchart TD
-    T1["列出我的会话"] --> P1
-    T3["批量吊销某用户会话"] --> P1
-    T2["管理员列出全部会话"] --> P2
-    P1["剪 index:user<br/>cutoff = now"]
-    P2["剪 index:all<br/>cutoff = now"]
-    P1 --> Q["逐个读快照并校验<br/>快照不在则再清一次索引"]
-    P2 --> Q
-
-    T4["登录"] --> P4
-    T5["Touch 每 30s 一次"] --> P4
-    T6["在线窗口查询"] --> P4
-    P4["剪 index:seen<br/>cutoff = now − 寿命 − 30s"]
+```plantuml
+@startuml
+package "按 ExpiresAt 剪" {
+  rectangle "列出我的会话" as T1
+  rectangle "批量吊销某用户会话" as T3
+  rectangle "管理员列出全部会话" as T2
+  rectangle "剪 index:user\ncutoff = now" as P1
+  rectangle "剪 index:all\ncutoff = now" as P2
+  rectangle "逐个读快照并校验\n快照不在则再清一次索引" as Q
+}
+package "按 LastSeenAt 剪" {
+  rectangle "登录" as T4
+  rectangle "Touch 每 30s 一次" as T5
+  rectangle "在线窗口查询" as T6
+  rectangle "剪 index:seen\ncutoff = now − 寿命 − 30s" as P4
+}
+T1 --> P1
+T3 --> P1
+T2 --> P2
+P1 --> Q
+P2 --> Q
+T4 --> P4
+T5 --> P4
+T6 --> P4
+@enduml
 ```
 
 `index:user` 与 `index:all` 按 **ExpiresAt** 剪，`index:seen` 按 **LastSeenAt** 剪——

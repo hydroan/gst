@@ -1,4 +1,4 @@
-# Email Module Interfaces
+# 邮箱模块接口
 
 本文档汇总独立 `module/email` 模块提供的 email 相关接口，并按当前实现说明请求入口、请求/响应字段、令牌流转、节流控制与最终状态变化。
 
@@ -30,19 +30,22 @@
 
 ## 总体关系图
 
-```mermaid
-flowchart TD
-    A[Client] --> B[Email Request Endpoint]
-    B --> C[Normalize Input]
-    C --> D[Throttle Check]
-    D --> E[Issue Flow Token]
-    E --> F[Store Flow State In Cache]
-    F --> G[Dispatch Email]
-    G --> H[User Opens Email Link Or Submits Token]
-    H --> I[Email Confirm Or Cancel Endpoint]
-    I --> J[Load And Consume Token]
-    J --> K[Validate Current Account State]
-    K --> L[Apply Domain Change Or Return Result]
+```plantuml
+@startuml
+start
+:客户端调用一个申请类接口;
+:归一化输入;
+:节流检查;
+:签发流程 token;
+:把流程状态写入缓存;
+:发送邮件;
+:用户打开邮件链接或提交 token;
+:确认或取消接口;
+:读取并消费 token;
+:校验账号当前状态;
+:应用变更或返回结果;
+stop
+@enduml
 ```
 
 ## 邮箱验证流程
@@ -55,29 +58,30 @@ flowchart TD
 
 ### 流程图
 
-```mermaid
-sequenceDiagram
-    participant Client
-    participant API as Verification API
-    participant Cache as Flow Cache
-    participant Mail as Mail Sender
-    participant Account as AccountGateway
+```plantuml
+@startuml
+participant "客户端" as Client
+participant "邮箱验证接口" as API
+participant "流程缓存" as Cache
+participant "邮件发送" as Mail
+participant "AccountGateway" as Account
 
-    Client->>API: POST verification-request / resend(email)
-    API->>API: Normalize email and apply throttle
-    API->>Account: Lookup active unverified account by email
-    alt Eligible account
-        API->>Cache: Store verification flow token
-        API->>Mail: Send verification email
-        Mail-->>Client: Email with verification token
-    else Unknown, verified, inactive, or throttled
-        API-->>Client: Generic accepted message
-    end
-    Client->>API: POST verification-confirm(token)
-    API->>Cache: Load and consume token
-    API->>Account: Load account snapshot and verify current email
-    API->>Account: Mark email as verified
-    API-->>Client: Verification result
+Client -> API : POST verification-request / resend（email）
+API -> API : 归一化邮箱并做节流
+API -> Account : 按邮箱查找 active 且未验证的账号
+alt 账号符合条件
+  API -> Cache : 保存验证流程 token
+  API -> Mail : 发送验证邮件
+  Mail --> Client : 带验证 token 的邮件
+else 账号未知、已验证、非 active 或被节流
+  API --> Client : 通用的 accepted 消息
+end
+Client -> API : POST verification-confirm（token）
+API -> Cache : 读取并消费 token
+API -> Account : 读取账号快照并核对当前邮箱
+API -> Account : 标记邮箱已验证
+API --> Client : 验证结果
+@enduml
 ```
 
 ## 密码重置流程
@@ -89,30 +93,31 @@ sequenceDiagram
 
 ### 流程图
 
-```mermaid
-sequenceDiagram
-    participant Client
-    participant API as Password Reset API
-    participant Cache as Flow Cache
-    participant Mail as Mail Sender
-    participant Account as AccountGateway
-    participant Session as Session Adapter
+```plantuml
+@startuml
+participant "客户端" as Client
+participant "密码重置接口" as API
+participant "流程缓存" as Cache
+participant "邮件发送" as Mail
+participant "AccountGateway" as Account
+participant "会话适配器" as Session
 
-    Client->>API: POST password-reset-request(email)
-    API->>API: Normalize email and reserve throttle
-    API->>Account: Lookup active account by email
-    alt Eligible account
-        API->>Cache: Store reset token and flow state
-        API->>Mail: Send password reset email
-    else Unknown, ineligible, or throttled account
-        API->>API: Return generic accepted message
-    end
-    Client->>API: POST password-reset-confirm(token, new_password)
-    API->>Cache: Load and consume reset token
-    API->>Account: Load account snapshot and verify current email
-    API->>Account: Update password through gateway
-    API->>Session: Invalidate active sessions
-    API-->>Client: Password reset result
+Client -> API : POST password-reset-request（email）
+API -> API : 归一化邮箱并占用节流额度
+API -> Account : 按邮箱查找 active 账号
+alt 账号符合条件
+  API -> Cache : 保存 reset token 与流程状态
+  API -> Mail : 发送密码重置邮件
+else 账号未知、不符合条件或被节流
+  API --> Client : 通用的 accepted 消息
+end
+Client -> API : POST password-reset-confirm（token, new_password）
+API -> Cache : 读取并消费 reset token
+API -> Account : 读取账号快照并核对当前邮箱
+API -> Account : 通过网关更新密码
+API -> Session : 失效已有会话
+API --> Client : 密码重置结果
+@enduml
 ```
 
 ## 邮箱变更流程
@@ -126,35 +131,36 @@ sequenceDiagram
 
 ### 流程图
 
-```mermaid
-sequenceDiagram
-    participant Client
-    participant API as Email Change API
-    participant Cache as Flow Cache
-    participant Mail as Mail Sender
-    participant Account as AccountGateway
+```plantuml
+@startuml
+participant "客户端" as Client
+participant "邮箱变更接口" as API
+participant "流程缓存" as Cache
+participant "邮件发送" as Mail
+participant "AccountGateway" as Account
 
-    Client->>API: POST change-request(new_email, current_password)
-    API->>API: Validate authenticated account snapshot, target email, password, and throttle
-    API->>Cache: Store confirm token
-    API->>Cache: Store cancel token
-    API->>Mail: Send confirm email to new address
-    API->>Mail: Send cancel email to old address
-    Client->>API: POST change-resend(new_email)
-    API->>API: Re-check account, target email, and resend throttle
-    API->>Cache: Store new confirm token
-    API->>Mail: Resend confirm email to new address
-    alt Confirm path
-        Client->>API: POST change-confirm(token)
-        API->>Cache: Load and consume confirm token
-        API->>Cache: Check cancellation marker
-        API->>Account: Change email to new address
-    else Cancel path
-        Client->>API: POST change-cancel(token)
-        API->>Cache: Load and consume cancel token
-        API->>Cache: Store cancellation marker
-    end
-    API-->>Client: Final operation result
+Client -> API : POST change-request（new_email, current_password）
+API -> API : 校验已登录账号的快照、目标邮箱、密码与节流
+API -> Cache : 保存确认 token
+API -> Cache : 保存取消 token
+API -> Mail : 向新邮箱发送确认邮件
+API -> Mail : 向旧邮箱发送取消邮件
+Client -> API : POST change-resend（new_email）
+API -> API : 重新校验账号、目标邮箱与 resend 节流
+API -> Cache : 保存新的确认 token
+API -> Mail : 向新邮箱重发确认邮件
+alt 确认路径
+  Client -> API : POST change-confirm（token）
+  API -> Cache : 读取并消费确认 token
+  API -> Cache : 检查 cancellation marker
+  API -> Account : 把账号邮箱换成新地址
+else 取消路径
+  Client -> API : POST change-cancel（token）
+  API -> Cache : 读取并消费取消 token
+  API -> Cache : 写入 cancellation marker
+end
+API --> Client : 最终操作结果
+@enduml
 ```
 
 ## 关键安全约束
