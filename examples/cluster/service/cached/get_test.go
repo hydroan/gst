@@ -20,15 +20,15 @@ func TestGetAnswersWhatThisReplicaHolds(t *testing.T) {
 	t.Run("over HTTP", func(t *testing.T) {
 		cli := testsupport.Login(t).Client
 
-		missing, err := cli.Get[model.CachedRsp](ctx, "/api/caches/never-written-key")
+		missing, err := cli.Get[model.CachedGetRsp](ctx, "/api/caches/never-written-key")
 		require.NoError(t, err)
 		require.False(t, missing.Found, "a key this replica never received reads as missing")
 		require.Empty(t, missing.Value)
 
-		_, err = cli.Post[model.CachedRsp](ctx, "/api/caches", model.CachedReq{Key: "read-key", Value: "read-value"})
+		_, err = cli.Post[model.CachedCreateRsp](ctx, "/api/caches", model.CachedReq{Key: "read-key", Value: "read-value"})
 		require.NoError(t, err)
 
-		read, err := cli.Get[model.CachedRsp](ctx, "/api/caches/read-key")
+		read, err := cli.Get[model.CachedGetRsp](ctx, "/api/caches/read-key")
 		require.NoError(t, err)
 		require.True(t, read.Found)
 		require.Equal(t, "read-value", read.Value)

@@ -8,6 +8,18 @@ func init() {
 	apidoc.Register("cluster/model", "Cached", apidoc.StructDoc{
 		Comment: "Cached is an entry of the replicated cache every replica keeps: written on\nthe replica that answers the request, read back from the local store of\nwhichever replica answers the next one. It is what makes the propagation\nbetween replicas observable from outside — the store itself is process\nmemory, with no shared tier behind it.",
 	})
+	apidoc.Register("cluster/model", "CachedCreateRsp", apidoc.StructDoc{
+		Comment: "CachedCreateRsp reports which replica wrote the entry and what it wrote.",
+	})
+	apidoc.Register("cluster/model", "CachedDeleteRsp", apidoc.StructDoc{
+		Comment: "CachedDeleteRsp reports which replica removed the entry.",
+	})
+	apidoc.Register("cluster/model", "CachedExchangeRsp", apidoc.StructDoc{
+		Comment: "CachedExchangeRsp answers one key of an exchange stream: which replica\nanswered and what its own store holds for the key.",
+	})
+	apidoc.Register("cluster/model", "CachedGetRsp", apidoc.StructDoc{
+		Comment: "CachedGetRsp reports which replica answered and what its own store holds\nfor the key, so a client reading every replica in turn sees the\npropagation.",
+	})
 	apidoc.Register("cluster/model", "CachedKeyReq", apidoc.StructDoc{
 		Comment: "CachedKeyReq names an entry to look up.",
 	})
@@ -16,9 +28,6 @@ func init() {
 	})
 	apidoc.Register("cluster/model", "CachedReq", apidoc.StructDoc{
 		Comment: "CachedReq is the entry to write: the key it is filed under and the value\nevery other replica must end up holding for it.",
-	})
-	apidoc.Register("cluster/model", "CachedRsp", apidoc.StructDoc{
-		Comment: "CachedRsp reports which replica answered and what its own store holds for\nthe key, so a client reading every replica in turn sees the propagation.",
 	})
 	apidoc.Register("cluster/model", "CounterStep", apidoc.StructDoc{
 		Comment: "CounterStep is one number of the counter the leader work keeps: every second\nthe leader appends the next number, in a transaction under its lease. Seq is\nunique, so no number is written twice, and Tenure names the leadership that\nwrote it: the numbers of one tenure form one unbroken run, and the runs\nfollow each other, unless two leaderships ever wrote at the same time. The\ncounter lives in the database, so a replica taking the leadership over\ncontinues from the last number.",

@@ -72,8 +72,8 @@ func (x *CreateCachedRequest) GetPayload() *CachedReq {
 // CreateCachedResponse is the response of CachedService.CreateCached.
 type CreateCachedResponse struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// result is the CachedRsp the action answers with.
-	Result        *CachedRsp `protobuf:"bytes,1,opt,name=result,proto3" json:"result,omitempty"`
+	// result is the CachedCreateRsp the action answers with.
+	Result        *CachedCreateRsp `protobuf:"bytes,1,opt,name=result,proto3" json:"result,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -108,7 +108,7 @@ func (*CreateCachedResponse) Descriptor() ([]byte, []int) {
 	return file_cached_proto_rawDescGZIP(), []int{1}
 }
 
-func (x *CreateCachedResponse) GetResult() *CachedRsp {
+func (x *CreateCachedResponse) GetResult() *CachedCreateRsp {
 	if x != nil {
 		return x.Result
 	}
@@ -164,8 +164,8 @@ func (x *DeleteCachedRequest) GetId() string {
 // DeleteCachedResponse is the response of CachedService.DeleteCached.
 type DeleteCachedResponse struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// result is the CachedRsp the action answers with.
-	Result        *CachedRsp `protobuf:"bytes,1,opt,name=result,proto3" json:"result,omitempty"`
+	// result is the CachedDeleteRsp the action answers with.
+	Result        *CachedDeleteRsp `protobuf:"bytes,1,opt,name=result,proto3" json:"result,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -200,7 +200,7 @@ func (*DeleteCachedResponse) Descriptor() ([]byte, []int) {
 	return file_cached_proto_rawDescGZIP(), []int{3}
 }
 
-func (x *DeleteCachedResponse) GetResult() *CachedRsp {
+func (x *DeleteCachedResponse) GetResult() *CachedDeleteRsp {
 	if x != nil {
 		return x.Result
 	}
@@ -274,8 +274,8 @@ func (x *GetCachedRequest) GetDepth() uint32 {
 // GetCachedResponse is the response of CachedService.GetCached.
 type GetCachedResponse struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// result is the CachedRsp the action answers with.
-	Result        *CachedRsp `protobuf:"bytes,1,opt,name=result,proto3" json:"result,omitempty"`
+	// result is the CachedGetRsp the action answers with.
+	Result        *CachedGetRsp `protobuf:"bytes,1,opt,name=result,proto3" json:"result,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -310,7 +310,7 @@ func (*GetCachedResponse) Descriptor() ([]byte, []int) {
 	return file_cached_proto_rawDescGZIP(), []int{5}
 }
 
-func (x *GetCachedResponse) GetResult() *CachedRsp {
+func (x *GetCachedResponse) GetResult() *CachedGetRsp {
 	if x != nil {
 		return x.Result
 	}
@@ -366,8 +366,8 @@ func (x *ExchangeCachedRequest) GetPayload() *CachedKeyReq {
 // ExchangeCachedResponse is the response of CachedService.ExchangeCached.
 type ExchangeCachedResponse struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// result is the CachedRsp the action answers with.
-	Result        *CachedRsp `protobuf:"bytes,1,opt,name=result,proto3" json:"result,omitempty"`
+	// result is the CachedExchangeRsp the action answers with.
+	Result        *CachedExchangeRsp `protobuf:"bytes,1,opt,name=result,proto3" json:"result,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -402,7 +402,7 @@ func (*ExchangeCachedResponse) Descriptor() ([]byte, []int) {
 	return file_cached_proto_rawDescGZIP(), []int{7}
 }
 
-func (x *ExchangeCachedResponse) GetResult() *CachedRsp {
+func (x *ExchangeCachedResponse) GetResult() *CachedExchangeRsp {
 	if x != nil {
 		return x.Result
 	}
@@ -555,9 +555,8 @@ func (x *CachedReq) GetValue() string {
 	return ""
 }
 
-// CachedRsp reports which replica answered and what its own store holds for
-// the key, so a client reading every replica in turn sees the propagation.
-type CachedRsp struct {
+// CachedCreateRsp reports which replica wrote the entry and what it wrote.
+type CachedCreateRsp struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Replica       string                 `protobuf:"bytes,1,opt,name=replica,proto3" json:"replica,omitempty"`
 	Key           string                 `protobuf:"bytes,2,opt,name=key,proto3" json:"key,omitempty"`
@@ -567,20 +566,20 @@ type CachedRsp struct {
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *CachedRsp) Reset() {
-	*x = CachedRsp{}
+func (x *CachedCreateRsp) Reset() {
+	*x = CachedCreateRsp{}
 	mi := &file_cached_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *CachedRsp) String() string {
+func (x *CachedCreateRsp) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*CachedRsp) ProtoMessage() {}
+func (*CachedCreateRsp) ProtoMessage() {}
 
-func (x *CachedRsp) ProtoReflect() protoreflect.Message {
+func (x *CachedCreateRsp) ProtoReflect() protoreflect.Message {
 	mi := &file_cached_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -592,33 +591,157 @@ func (x *CachedRsp) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use CachedRsp.ProtoReflect.Descriptor instead.
-func (*CachedRsp) Descriptor() ([]byte, []int) {
+// Deprecated: Use CachedCreateRsp.ProtoReflect.Descriptor instead.
+func (*CachedCreateRsp) Descriptor() ([]byte, []int) {
 	return file_cached_proto_rawDescGZIP(), []int{11}
 }
 
-func (x *CachedRsp) GetReplica() string {
+func (x *CachedCreateRsp) GetReplica() string {
 	if x != nil {
 		return x.Replica
 	}
 	return ""
 }
 
-func (x *CachedRsp) GetKey() string {
+func (x *CachedCreateRsp) GetKey() string {
 	if x != nil {
 		return x.Key
 	}
 	return ""
 }
 
-func (x *CachedRsp) GetValue() string {
+func (x *CachedCreateRsp) GetValue() string {
 	if x != nil {
 		return x.Value
 	}
 	return ""
 }
 
-func (x *CachedRsp) GetFound() bool {
+func (x *CachedCreateRsp) GetFound() bool {
+	if x != nil {
+		return x.Found
+	}
+	return false
+}
+
+// CachedDeleteRsp reports which replica removed the entry.
+type CachedDeleteRsp struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Replica       string                 `protobuf:"bytes,1,opt,name=replica,proto3" json:"replica,omitempty"`
+	Key           string                 `protobuf:"bytes,2,opt,name=key,proto3" json:"key,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CachedDeleteRsp) Reset() {
+	*x = CachedDeleteRsp{}
+	mi := &file_cached_proto_msgTypes[12]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CachedDeleteRsp) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CachedDeleteRsp) ProtoMessage() {}
+
+func (x *CachedDeleteRsp) ProtoReflect() protoreflect.Message {
+	mi := &file_cached_proto_msgTypes[12]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CachedDeleteRsp.ProtoReflect.Descriptor instead.
+func (*CachedDeleteRsp) Descriptor() ([]byte, []int) {
+	return file_cached_proto_rawDescGZIP(), []int{12}
+}
+
+func (x *CachedDeleteRsp) GetReplica() string {
+	if x != nil {
+		return x.Replica
+	}
+	return ""
+}
+
+func (x *CachedDeleteRsp) GetKey() string {
+	if x != nil {
+		return x.Key
+	}
+	return ""
+}
+
+// CachedGetRsp reports which replica answered and what its own store holds
+// for the key, so a client reading every replica in turn sees the
+// propagation.
+type CachedGetRsp struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Replica       string                 `protobuf:"bytes,1,opt,name=replica,proto3" json:"replica,omitempty"`
+	Key           string                 `protobuf:"bytes,2,opt,name=key,proto3" json:"key,omitempty"`
+	Value         string                 `protobuf:"bytes,3,opt,name=value,proto3" json:"value,omitempty"`
+	Found         bool                   `protobuf:"varint,4,opt,name=found,proto3" json:"found,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CachedGetRsp) Reset() {
+	*x = CachedGetRsp{}
+	mi := &file_cached_proto_msgTypes[13]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CachedGetRsp) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CachedGetRsp) ProtoMessage() {}
+
+func (x *CachedGetRsp) ProtoReflect() protoreflect.Message {
+	mi := &file_cached_proto_msgTypes[13]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CachedGetRsp.ProtoReflect.Descriptor instead.
+func (*CachedGetRsp) Descriptor() ([]byte, []int) {
+	return file_cached_proto_rawDescGZIP(), []int{13}
+}
+
+func (x *CachedGetRsp) GetReplica() string {
+	if x != nil {
+		return x.Replica
+	}
+	return ""
+}
+
+func (x *CachedGetRsp) GetKey() string {
+	if x != nil {
+		return x.Key
+	}
+	return ""
+}
+
+func (x *CachedGetRsp) GetValue() string {
+	if x != nil {
+		return x.Value
+	}
+	return ""
+}
+
+func (x *CachedGetRsp) GetFound() bool {
 	if x != nil {
 		return x.Found
 	}
@@ -635,7 +758,7 @@ type CachedKeyReq struct {
 
 func (x *CachedKeyReq) Reset() {
 	*x = CachedKeyReq{}
-	mi := &file_cached_proto_msgTypes[12]
+	mi := &file_cached_proto_msgTypes[14]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -647,7 +770,7 @@ func (x *CachedKeyReq) String() string {
 func (*CachedKeyReq) ProtoMessage() {}
 
 func (x *CachedKeyReq) ProtoReflect() protoreflect.Message {
-	mi := &file_cached_proto_msgTypes[12]
+	mi := &file_cached_proto_msgTypes[14]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -660,7 +783,7 @@ func (x *CachedKeyReq) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CachedKeyReq.ProtoReflect.Descriptor instead.
 func (*CachedKeyReq) Descriptor() ([]byte, []int) {
-	return file_cached_proto_rawDescGZIP(), []int{12}
+	return file_cached_proto_rawDescGZIP(), []int{14}
 }
 
 func (x *CachedKeyReq) GetKey() string {
@@ -668,6 +791,76 @@ func (x *CachedKeyReq) GetKey() string {
 		return x.Key
 	}
 	return ""
+}
+
+// CachedExchangeRsp answers one key of an exchange stream: which replica
+// answered and what its own store holds for the key.
+type CachedExchangeRsp struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Replica       string                 `protobuf:"bytes,1,opt,name=replica,proto3" json:"replica,omitempty"`
+	Key           string                 `protobuf:"bytes,2,opt,name=key,proto3" json:"key,omitempty"`
+	Value         string                 `protobuf:"bytes,3,opt,name=value,proto3" json:"value,omitempty"`
+	Found         bool                   `protobuf:"varint,4,opt,name=found,proto3" json:"found,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CachedExchangeRsp) Reset() {
+	*x = CachedExchangeRsp{}
+	mi := &file_cached_proto_msgTypes[15]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CachedExchangeRsp) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CachedExchangeRsp) ProtoMessage() {}
+
+func (x *CachedExchangeRsp) ProtoReflect() protoreflect.Message {
+	mi := &file_cached_proto_msgTypes[15]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CachedExchangeRsp.ProtoReflect.Descriptor instead.
+func (*CachedExchangeRsp) Descriptor() ([]byte, []int) {
+	return file_cached_proto_rawDescGZIP(), []int{15}
+}
+
+func (x *CachedExchangeRsp) GetReplica() string {
+	if x != nil {
+		return x.Replica
+	}
+	return ""
+}
+
+func (x *CachedExchangeRsp) GetKey() string {
+	if x != nil {
+		return x.Key
+	}
+	return ""
+}
+
+func (x *CachedExchangeRsp) GetValue() string {
+	if x != nil {
+		return x.Value
+	}
+	return ""
+}
+
+func (x *CachedExchangeRsp) GetFound() bool {
+	if x != nil {
+		return x.Found
+	}
+	return false
 }
 
 // CachedLoadRsp reports how many entries a load stream wrote and which
@@ -682,7 +875,7 @@ type CachedLoadRsp struct {
 
 func (x *CachedLoadRsp) Reset() {
 	*x = CachedLoadRsp{}
-	mi := &file_cached_proto_msgTypes[13]
+	mi := &file_cached_proto_msgTypes[16]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -694,7 +887,7 @@ func (x *CachedLoadRsp) String() string {
 func (*CachedLoadRsp) ProtoMessage() {}
 
 func (x *CachedLoadRsp) ProtoReflect() protoreflect.Message {
-	mi := &file_cached_proto_msgTypes[13]
+	mi := &file_cached_proto_msgTypes[16]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -707,7 +900,7 @@ func (x *CachedLoadRsp) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CachedLoadRsp.ProtoReflect.Descriptor instead.
 func (*CachedLoadRsp) Descriptor() ([]byte, []int) {
-	return file_cached_proto_rawDescGZIP(), []int{13}
+	return file_cached_proto_rawDescGZIP(), []int{16}
 }
 
 func (x *CachedLoadRsp) GetReplica() string {
@@ -730,37 +923,50 @@ const file_cached_proto_rawDesc = "" +
 	"\n" +
 	"\fcached.proto\x12\acluster\"C\n" +
 	"\x13CreateCachedRequest\x12,\n" +
-	"\apayload\x18\x01 \x01(\v2\x12.cluster.CachedReqR\apayload\"B\n" +
-	"\x14CreateCachedResponse\x12*\n" +
-	"\x06result\x18\x01 \x01(\v2\x12.cluster.CachedRspR\x06result\"%\n" +
+	"\apayload\x18\x01 \x01(\v2\x12.cluster.CachedReqR\apayload\"H\n" +
+	"\x14CreateCachedResponse\x120\n" +
+	"\x06result\x18\x01 \x01(\v2\x18.cluster.CachedCreateRspR\x06result\"%\n" +
 	"\x13DeleteCachedRequest\x12\x0e\n" +
-	"\x02id\x18\x01 \x01(\tR\x02id\"B\n" +
-	"\x14DeleteCachedResponse\x12*\n" +
-	"\x06result\x18\x01 \x01(\v2\x12.cluster.CachedRspR\x06result\"P\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\"H\n" +
+	"\x14DeleteCachedResponse\x120\n" +
+	"\x06result\x18\x01 \x01(\v2\x18.cluster.CachedDeleteRspR\x06result\"P\n" +
 	"\x10GetCachedRequest\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x16\n" +
 	"\x06expand\x18\x02 \x03(\tR\x06expand\x12\x14\n" +
-	"\x05depth\x18\x03 \x01(\rR\x05depth\"?\n" +
-	"\x11GetCachedResponse\x12*\n" +
-	"\x06result\x18\x01 \x01(\v2\x12.cluster.CachedRspR\x06result\"H\n" +
+	"\x05depth\x18\x03 \x01(\rR\x05depth\"B\n" +
+	"\x11GetCachedResponse\x12-\n" +
+	"\x06result\x18\x01 \x01(\v2\x15.cluster.CachedGetRspR\x06result\"H\n" +
 	"\x15ExchangeCachedRequest\x12/\n" +
-	"\apayload\x18\x01 \x01(\v2\x15.cluster.CachedKeyReqR\apayload\"D\n" +
-	"\x16ExchangeCachedResponse\x12*\n" +
-	"\x06result\x18\x01 \x01(\v2\x12.cluster.CachedRspR\x06result\"A\n" +
+	"\apayload\x18\x01 \x01(\v2\x15.cluster.CachedKeyReqR\apayload\"L\n" +
+	"\x16ExchangeCachedResponse\x122\n" +
+	"\x06result\x18\x01 \x01(\v2\x1a.cluster.CachedExchangeRspR\x06result\"A\n" +
 	"\x11LoadCachedRequest\x12,\n" +
 	"\apayload\x18\x01 \x01(\v2\x12.cluster.CachedReqR\apayload\"D\n" +
 	"\x12LoadCachedResponse\x12.\n" +
 	"\x06result\x18\x01 \x01(\v2\x16.cluster.CachedLoadRspR\x06result\"3\n" +
 	"\tCachedReq\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value\"c\n" +
-	"\tCachedRsp\x12\x18\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value\"i\n" +
+	"\x0fCachedCreateRsp\x12\x18\n" +
+	"\areplica\x18\x01 \x01(\tR\areplica\x12\x10\n" +
+	"\x03key\x18\x02 \x01(\tR\x03key\x12\x14\n" +
+	"\x05value\x18\x03 \x01(\tR\x05value\x12\x14\n" +
+	"\x05found\x18\x04 \x01(\bR\x05found\"=\n" +
+	"\x0fCachedDeleteRsp\x12\x18\n" +
+	"\areplica\x18\x01 \x01(\tR\areplica\x12\x10\n" +
+	"\x03key\x18\x02 \x01(\tR\x03key\"f\n" +
+	"\fCachedGetRsp\x12\x18\n" +
 	"\areplica\x18\x01 \x01(\tR\areplica\x12\x10\n" +
 	"\x03key\x18\x02 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x03 \x01(\tR\x05value\x12\x14\n" +
 	"\x05found\x18\x04 \x01(\bR\x05found\" \n" +
 	"\fCachedKeyReq\x12\x10\n" +
-	"\x03key\x18\x01 \x01(\tR\x03key\"?\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\"k\n" +
+	"\x11CachedExchangeRsp\x12\x18\n" +
+	"\areplica\x18\x01 \x01(\tR\areplica\x12\x10\n" +
+	"\x03key\x18\x02 \x01(\tR\x03key\x12\x14\n" +
+	"\x05value\x18\x03 \x01(\tR\x05value\x12\x14\n" +
+	"\x05found\x18\x04 \x01(\bR\x05found\"?\n" +
 	"\rCachedLoadRsp\x12\x18\n" +
 	"\areplica\x18\x01 \x01(\tR\areplica\x12\x14\n" +
 	"\x05count\x18\x02 \x01(\x03R\x05count2\x8d\x03\n" +
@@ -784,7 +990,7 @@ func file_cached_proto_rawDescGZIP() []byte {
 	return file_cached_proto_rawDescData
 }
 
-var file_cached_proto_msgTypes = make([]protoimpl.MessageInfo, 14)
+var file_cached_proto_msgTypes = make([]protoimpl.MessageInfo, 17)
 var file_cached_proto_goTypes = []any{
 	(*CreateCachedRequest)(nil),    // 0: cluster.CreateCachedRequest
 	(*CreateCachedResponse)(nil),   // 1: cluster.CreateCachedResponse
@@ -797,19 +1003,22 @@ var file_cached_proto_goTypes = []any{
 	(*LoadCachedRequest)(nil),      // 8: cluster.LoadCachedRequest
 	(*LoadCachedResponse)(nil),     // 9: cluster.LoadCachedResponse
 	(*CachedReq)(nil),              // 10: cluster.CachedReq
-	(*CachedRsp)(nil),              // 11: cluster.CachedRsp
-	(*CachedKeyReq)(nil),           // 12: cluster.CachedKeyReq
-	(*CachedLoadRsp)(nil),          // 13: cluster.CachedLoadRsp
+	(*CachedCreateRsp)(nil),        // 11: cluster.CachedCreateRsp
+	(*CachedDeleteRsp)(nil),        // 12: cluster.CachedDeleteRsp
+	(*CachedGetRsp)(nil),           // 13: cluster.CachedGetRsp
+	(*CachedKeyReq)(nil),           // 14: cluster.CachedKeyReq
+	(*CachedExchangeRsp)(nil),      // 15: cluster.CachedExchangeRsp
+	(*CachedLoadRsp)(nil),          // 16: cluster.CachedLoadRsp
 }
 var file_cached_proto_depIdxs = []int32{
 	10, // 0: cluster.CreateCachedRequest.payload:type_name -> cluster.CachedReq
-	11, // 1: cluster.CreateCachedResponse.result:type_name -> cluster.CachedRsp
-	11, // 2: cluster.DeleteCachedResponse.result:type_name -> cluster.CachedRsp
-	11, // 3: cluster.GetCachedResponse.result:type_name -> cluster.CachedRsp
-	12, // 4: cluster.ExchangeCachedRequest.payload:type_name -> cluster.CachedKeyReq
-	11, // 5: cluster.ExchangeCachedResponse.result:type_name -> cluster.CachedRsp
+	11, // 1: cluster.CreateCachedResponse.result:type_name -> cluster.CachedCreateRsp
+	12, // 2: cluster.DeleteCachedResponse.result:type_name -> cluster.CachedDeleteRsp
+	13, // 3: cluster.GetCachedResponse.result:type_name -> cluster.CachedGetRsp
+	14, // 4: cluster.ExchangeCachedRequest.payload:type_name -> cluster.CachedKeyReq
+	15, // 5: cluster.ExchangeCachedResponse.result:type_name -> cluster.CachedExchangeRsp
 	10, // 6: cluster.LoadCachedRequest.payload:type_name -> cluster.CachedReq
-	13, // 7: cluster.LoadCachedResponse.result:type_name -> cluster.CachedLoadRsp
+	16, // 7: cluster.LoadCachedResponse.result:type_name -> cluster.CachedLoadRsp
 	0,  // 8: cluster.CachedService.CreateCached:input_type -> cluster.CreateCachedRequest
 	2,  // 9: cluster.CachedService.DeleteCached:input_type -> cluster.DeleteCachedRequest
 	4,  // 10: cluster.CachedService.GetCached:input_type -> cluster.GetCachedRequest
@@ -838,7 +1047,7 @@ func file_cached_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_cached_proto_rawDesc), len(file_cached_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   14,
+			NumMessages:   17,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

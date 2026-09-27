@@ -13,9 +13,9 @@ import (
 )
 
 func Init() error {
-	router.Register[*model.Cached, *model.CachedReq, *model.CachedRsp](router.Auth(), "/api/caches", &gst.ControllerConfig[*model.Cached]{}, consts.Create)
-	router.Register[*model.Cached, *gstmodel.Empty, *model.CachedRsp](router.Auth(), "/api/caches/:id", &gst.ControllerConfig[*model.Cached]{ParamName: "id"}, consts.Delete)
-	router.Register[*model.Cached, *gstmodel.Empty, *model.CachedRsp](router.Auth(), "/api/caches/:id", &gst.ControllerConfig[*model.Cached]{ParamName: "id"}, consts.Get)
+	router.Register[*model.Cached, *model.CachedReq, *model.CachedCreateRsp](router.Auth(), "/api/caches", &gst.ControllerConfig[*model.Cached]{}, consts.Create)
+	router.Register[*model.Cached, *gstmodel.Empty, *model.CachedDeleteRsp](router.Auth(), "/api/caches/:id", &gst.ControllerConfig[*model.Cached]{ParamName: "id"}, consts.Delete)
+	router.Register[*model.Cached, *gstmodel.Empty, *model.CachedGetRsp](router.Auth(), "/api/caches/:id", &gst.ControllerConfig[*model.Cached]{ParamName: "id"}, consts.Get)
 	router.Register[*model.CounterStep, *model.CounterStep, *model.CounterStep](router.Auth(), "/api/counter_steps", &gst.ControllerConfig[*model.CounterStep]{}, consts.List)
 	router.Register[*model.Flag, *model.Flag, *model.Flag](router.Auth(), "/api/flags", &gst.ControllerConfig[*model.Flag]{}, consts.Create)
 	router.Register[*model.Flag, *model.Flag, *model.Flag](router.Auth(), "/api/flags/:id", &gst.ControllerConfig[*model.Flag]{ParamName: "id"}, consts.Delete)

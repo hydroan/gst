@@ -18,12 +18,12 @@ import (
 // for each what this replica's own store holds, for as long as the client
 // keeps asking.
 type Exchange struct {
-	service.Base[*model.Cached, *model.CachedKeyReq, *model.CachedRsp]
+	service.Base[*model.Cached, *model.CachedKeyReq, *model.CachedExchangeRsp]
 }
 
 // Stream answers every key until the client closes its side, which Recv
 // reports as io.EOF; returning then ends the stream.
-func (e *Exchange) Stream(ctx *gst.ServiceContext, stream *grpc.BidiStream[*model.CachedKeyReq, *model.CachedRsp]) error {
+func (e *Exchange) Stream(ctx *gst.ServiceContext, stream *grpc.BidiStream[*model.CachedKeyReq, *model.CachedExchangeRsp]) (err error) {
 	for {
 		req, err := stream.Recv()
 		if errors.Is(err, io.EOF) {
@@ -36,7 +36,7 @@ func (e *Exchange) Stream(ctx *gst.ServiceContext, stream *grpc.BidiStream[*mode
 		if err != nil {
 			return service.NewErrorWithCause(http.StatusInternalServerError, "the entry was not read", err)
 		}
-		if err := stream.Send(&model.CachedRsp{Replica: helper.Replica(), Key: req.Key, Value: value, Found: found}); err != nil {
+		if err := stream.Send(&model.CachedExchangeRsp{Replica: helper.Replica(), Key: req.Key, Value: value, Found: found}); err != nil {
 			return service.NewErrorWithCause(http.StatusInternalServerError, "failed to send the entry", err)
 		}
 	}

@@ -14,8 +14,8 @@ message CreateCachedRequest {
 
 // CreateCachedResponse is the response of CachedService.CreateCached.
 message CreateCachedResponse {
-  // result is the CachedRsp the action answers with.
-  CachedRsp result = 1;
+  // result is the CachedCreateRsp the action answers with.
+  CachedCreateRsp result = 1;
 }
 
 // DeleteCachedRequest is the request of CachedService.DeleteCached.
@@ -26,8 +26,8 @@ message DeleteCachedRequest {
 
 // DeleteCachedResponse is the response of CachedService.DeleteCached.
 message DeleteCachedResponse {
-  // result is the CachedRsp the action answers with.
-  CachedRsp result = 1;
+  // result is the CachedDeleteRsp the action answers with.
+  CachedDeleteRsp result = 1;
 }
 
 // GetCachedRequest is the request of CachedService.GetCached.
@@ -44,8 +44,8 @@ message GetCachedRequest {
 
 // GetCachedResponse is the response of CachedService.GetCached.
 message GetCachedResponse {
-  // result is the CachedRsp the action answers with.
-  CachedRsp result = 1;
+  // result is the CachedGetRsp the action answers with.
+  CachedGetRsp result = 1;
 }
 
 // ExchangeCachedRequest is the request of CachedService.ExchangeCached.
@@ -56,8 +56,8 @@ message ExchangeCachedRequest {
 
 // ExchangeCachedResponse is the response of CachedService.ExchangeCached.
 message ExchangeCachedResponse {
-  // result is the CachedRsp the action answers with.
-  CachedRsp result = 1;
+  // result is the CachedExchangeRsp the action answers with.
+  CachedExchangeRsp result = 1;
 }
 
 // LoadCachedRequest is the request of CachedService.LoadCached.
@@ -80,9 +80,28 @@ message CachedReq {
   string value = 2;
 }
 
-// CachedRsp reports which replica answered and what its own store holds for
-// the key, so a client reading every replica in turn sees the propagation.
-message CachedRsp {
+// CachedCreateRsp reports which replica wrote the entry and what it wrote.
+message CachedCreateRsp {
+  string replica = 1;
+
+  string key = 2;
+
+  string value = 3;
+
+  bool found = 4;
+}
+
+// CachedDeleteRsp reports which replica removed the entry.
+message CachedDeleteRsp {
+  string replica = 1;
+
+  string key = 2;
+}
+
+// CachedGetRsp reports which replica answered and what its own store holds
+// for the key, so a client reading every replica in turn sees the
+// propagation.
+message CachedGetRsp {
   string replica = 1;
 
   string key = 2;
@@ -95,6 +114,18 @@ message CachedRsp {
 // CachedKeyReq names an entry to look up.
 message CachedKeyReq {
   string key = 1;
+}
+
+// CachedExchangeRsp answers one key of an exchange stream: which replica
+// answered and what its own store holds for the key.
+message CachedExchangeRsp {
+  string replica = 1;
+
+  string key = 2;
+
+  string value = 3;
+
+  bool found = 4;
 }
 
 // CachedLoadRsp reports how many entries a load stream wrote and which

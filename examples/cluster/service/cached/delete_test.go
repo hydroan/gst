@@ -20,14 +20,14 @@ func TestDeleteRemovesTheEntry(t *testing.T) {
 	t.Run("over HTTP", func(t *testing.T) {
 		cli := testsupport.Login(t).Client
 
-		_, err := cli.Post[model.CachedRsp](ctx, "/api/caches", model.CachedReq{Key: "deleted-key", Value: "deleted-value"})
+		_, err := cli.Post[model.CachedCreateRsp](ctx, "/api/caches", model.CachedReq{Key: "deleted-key", Value: "deleted-value"})
 		require.NoError(t, err)
 
-		removed, err := cli.Delete[model.CachedRsp](ctx, "/api/caches/deleted-key", nil)
+		removed, err := cli.Delete[model.CachedDeleteRsp](ctx, "/api/caches/deleted-key", nil)
 		require.NoError(t, err)
 		require.Equal(t, "deleted-key", removed.Key)
 
-		read, err := cli.Get[model.CachedRsp](ctx, "/api/caches/deleted-key")
+		read, err := cli.Get[model.CachedGetRsp](ctx, "/api/caches/deleted-key")
 		require.NoError(t, err)
 		require.False(t, read.Found, "the entry is gone from the store of the replica that removed it")
 	})

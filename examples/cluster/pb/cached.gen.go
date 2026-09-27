@@ -22,10 +22,10 @@ type CachedService struct {
 // The calls of the actions of Cached, one per rpc of CachedService, built
 // once at package initialization.
 var (
-	createCached   = grpc.ServiceCall[*model.Cached, *model.CachedReq, *model.CachedRsp](consts.Create, "/api/caches")
-	deleteCached   = grpc.ServiceCall[*model.Cached, *gstmodel.Empty, *model.CachedRsp](consts.Delete, "/api/caches/:id")
-	getCached      = grpc.ServiceCall[*model.Cached, *gstmodel.Empty, *model.CachedRsp](consts.Get, "/api/caches/:id")
-	exchangeCached = grpc.BidiStreamCall[*model.Cached, *model.CachedKeyReq, *model.CachedRsp]("/api/caches/exchange")
+	createCached   = grpc.ServiceCall[*model.Cached, *model.CachedReq, *model.CachedCreateRsp](consts.Create, "/api/caches")
+	deleteCached   = grpc.ServiceCall[*model.Cached, *gstmodel.Empty, *model.CachedDeleteRsp](consts.Delete, "/api/caches/:id")
+	getCached      = grpc.ServiceCall[*model.Cached, *gstmodel.Empty, *model.CachedGetRsp](consts.Get, "/api/caches/:id")
+	exchangeCached = grpc.BidiStreamCall[*model.Cached, *model.CachedKeyReq, *model.CachedExchangeRsp]("/api/caches/exchange")
 	loadCached     = grpc.ClientStreamCall[*model.Cached, *model.CachedReq, *model.CachedLoadRsp]("/api/caches/load")
 )
 
@@ -35,7 +35,7 @@ func (CachedService) CreateCached(ctx context.Context, req *CreateCachedRequest)
 	if err != nil {
 		return nil, err
 	}
-	return &CreateCachedResponse{Result: CachedRspToProto(result)}, nil
+	return &CreateCachedResponse{Result: CachedCreateRspToProto(result)}, nil
 }
 
 // DeleteCached serves the Delete action of Cached on /api/caches/:id.
@@ -44,7 +44,7 @@ func (CachedService) DeleteCached(ctx context.Context, req *DeleteCachedRequest)
 	if err != nil {
 		return nil, err
 	}
-	return &DeleteCachedResponse{Result: CachedRspToProto(result)}, nil
+	return &DeleteCachedResponse{Result: CachedDeleteRspToProto(result)}, nil
 }
 
 // GetCached serves the Get action of Cached on /api/caches/:id.
@@ -53,7 +53,7 @@ func (CachedService) GetCached(ctx context.Context, req *GetCachedRequest) (*Get
 	if err != nil {
 		return nil, err
 	}
-	return &GetCachedResponse{Result: CachedRspToProto(result)}, nil
+	return &GetCachedResponse{Result: CachedGetRspToProto(result)}, nil
 }
 
 // ExchangeCached serves the Stream action of Cached declared on
@@ -65,8 +65,8 @@ func (CachedService) ExchangeCached(srv CachedService_ExchangeCachedServer) erro
 			return nil, recvErr
 		}
 		return CachedKeyReqFromProto(msg.GetPayload()), nil
-	}, func(rsp *model.CachedRsp) error {
-		return srv.Send(&ExchangeCachedResponse{Result: CachedRspToProto(rsp)})
+	}, func(rsp *model.CachedExchangeRsp) error {
+		return srv.Send(&ExchangeCachedResponse{Result: CachedExchangeRspToProto(rsp)})
 	})
 }
 
@@ -109,13 +109,13 @@ func CachedReqFromProto(p *CachedReq) *model.CachedReq {
 	return m
 }
 
-// CachedRspToProto encodes CachedRsp values into their message, nil into
-// nil.
-func CachedRspToProto(m *model.CachedRsp) *CachedRsp {
+// CachedCreateRspToProto encodes CachedCreateRsp values into their message,
+// nil into nil.
+func CachedCreateRspToProto(m *model.CachedCreateRsp) *CachedCreateRsp {
 	if m == nil {
 		return nil
 	}
-	p := new(CachedRsp)
+	p := new(CachedCreateRsp)
 	p.Replica = m.Replica
 	p.Key = m.Key
 	p.Value = m.Value
@@ -123,12 +123,65 @@ func CachedRspToProto(m *model.CachedRsp) *CachedRsp {
 	return p
 }
 
-// CachedRspFromProto decodes CachedRsp messages into values, nil into nil.
-func CachedRspFromProto(p *CachedRsp) *model.CachedRsp {
+// CachedCreateRspFromProto decodes CachedCreateRsp messages into values, nil
+// into nil.
+func CachedCreateRspFromProto(p *CachedCreateRsp) *model.CachedCreateRsp {
 	if p == nil {
 		return nil
 	}
-	m := new(model.CachedRsp)
+	m := new(model.CachedCreateRsp)
+	m.Replica = p.GetReplica()
+	m.Key = p.GetKey()
+	m.Value = p.GetValue()
+	m.Found = p.GetFound()
+	return m
+}
+
+// CachedDeleteRspToProto encodes CachedDeleteRsp values into their message,
+// nil into nil.
+func CachedDeleteRspToProto(m *model.CachedDeleteRsp) *CachedDeleteRsp {
+	if m == nil {
+		return nil
+	}
+	p := new(CachedDeleteRsp)
+	p.Replica = m.Replica
+	p.Key = m.Key
+	return p
+}
+
+// CachedDeleteRspFromProto decodes CachedDeleteRsp messages into values, nil
+// into nil.
+func CachedDeleteRspFromProto(p *CachedDeleteRsp) *model.CachedDeleteRsp {
+	if p == nil {
+		return nil
+	}
+	m := new(model.CachedDeleteRsp)
+	m.Replica = p.GetReplica()
+	m.Key = p.GetKey()
+	return m
+}
+
+// CachedGetRspToProto encodes CachedGetRsp values into their message, nil
+// into nil.
+func CachedGetRspToProto(m *model.CachedGetRsp) *CachedGetRsp {
+	if m == nil {
+		return nil
+	}
+	p := new(CachedGetRsp)
+	p.Replica = m.Replica
+	p.Key = m.Key
+	p.Value = m.Value
+	p.Found = m.Found
+	return p
+}
+
+// CachedGetRspFromProto decodes CachedGetRsp messages into values, nil into
+// nil.
+func CachedGetRspFromProto(p *CachedGetRsp) *model.CachedGetRsp {
+	if p == nil {
+		return nil
+	}
+	m := new(model.CachedGetRsp)
 	m.Replica = p.GetReplica()
 	m.Key = p.GetKey()
 	m.Value = p.GetValue()
@@ -155,6 +208,34 @@ func CachedKeyReqFromProto(p *CachedKeyReq) *model.CachedKeyReq {
 	}
 	m := new(model.CachedKeyReq)
 	m.Key = p.GetKey()
+	return m
+}
+
+// CachedExchangeRspToProto encodes CachedExchangeRsp values into their
+// message, nil into nil.
+func CachedExchangeRspToProto(m *model.CachedExchangeRsp) *CachedExchangeRsp {
+	if m == nil {
+		return nil
+	}
+	p := new(CachedExchangeRsp)
+	p.Replica = m.Replica
+	p.Key = m.Key
+	p.Value = m.Value
+	p.Found = m.Found
+	return p
+}
+
+// CachedExchangeRspFromProto decodes CachedExchangeRsp messages into values,
+// nil into nil.
+func CachedExchangeRspFromProto(p *CachedExchangeRsp) *model.CachedExchangeRsp {
+	if p == nil {
+		return nil
+	}
+	m := new(model.CachedExchangeRsp)
+	m.Replica = p.GetReplica()
+	m.Key = p.GetKey()
+	m.Value = p.GetValue()
+	m.Found = p.GetFound()
 	return m
 }
 
