@@ -2,12 +2,14 @@ package authz_test
 
 import (
 	"context"
+	"io"
 	"net"
 	"net/http"
 	"sync"
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/consts"
 	gstgrpc "github.com/hydroan/gst/grpc"
@@ -35,7 +37,9 @@ import (
 // action and nothing else, and the root subject reaches everything. On a
 // route with a parameter, a policy naming the template grants the call, one
 // spelling the parameter the gin way, :thing, matches nothing, and one
-// naming a concrete path grants an HTTP request alone.
+// naming a concrete path grants an HTTP request alone. A Stream action is
+// granted by the STREAM word on the template of its route, an HTTP method
+// granting it nothing.
 func TestAuthzInterceptor(t *testing.T) {
 	conn := grpcAuthzProbe(t)
 	// The sessions are established presenting the user agent grpc-go
@@ -89,14 +93,35 @@ func TestAuthzInterceptor(t *testing.T) {
 			})
 		}
 	})
+
+	t.Run("on a stream action", func(t *testing.T) {
+		for _, tt := range []struct {
+			name   string
+			user   string
+			action string
+			code   codes.Code
+		}{
+			{name: "the STREAM word grants the stream", user: "grpc_tail_stream", action: gstgrpc.MethodStream, code: codes.OK},
+			{name: "an HTTP method grants nothing", user: "grpc_tail_get", action: http.MethodGet, code: codes.PermissionDenied},
+		} {
+			t.Run(tt.name, func(t *testing.T) {
+				tailer := authorizationSubject{}
+				tailer.userID, tailer.sessionID = authzSignupAndLoginUserWithUserAgent(t, authzTestUsername(tt.user), "12345678", grpcUserAgent)
+				roleID := newAuthorizationRole(t, tailer, tt.user)
+				authzGrantTenantPolicy(t, tenant.Default, roleID, types.Permission{Object: "/api/probe-things/{thing}/tail", Action: tt.action})
+
+				require.Equal(t, tt.code, status.Code(authzProbeStream(t, conn, tailer.sessionID)))
+			})
+		}
+	})
 }
 
 // The probe service stands for a project's gRPC service behind the module's
 // interceptors: gst.test.Probe with Look served at GET grantedRoute and Deny
 // at GET deniedRoute, the two routes the HTTP cases grant and refuse, and
-// Peek at GET probeThingRoute, a route with a parameter. One listener
-// serves the whole test binary, the server's registrations being made
-// once.
+// Peek at GET probeThingRoute, a route with a parameter, and Tail, a Stream
+// action at probeTailRoute. One listener serves the whole test binary, the
+// server's registrations being made once.
 var (
 	grpcAuthzProbeOnce   sync.Once
 	grpcAuthzProbeAddr   string
@@ -111,7 +136,8 @@ const grpcUserAgent = "grpc-go/" + grpc.Version
 
 // probeThingRoute is the route with a parameter the probe's Peek is served
 // at, as a registration writes it; probeTailRoute is the route of the
-// probe's Tail, a Stream action, which the route list carries under STREAM.
+// probe's Tail, a Stream action, which a policy grants by the STREAM word on
+// the route's template.
 const (
 	probeThingRoute = "/api/probe-things/:thing"
 	probeTailRoute  = "/api/probe-things/:thing/tail"
@@ -146,7 +172,20 @@ func grpcAuthzProbe(t *testing.T) *grpc.ClientConn {
 				ServiceName: "gst.test.Probe",
 				HandlerType: (*any)(nil),
 				Methods:     []grpc.MethodDesc{handle("Look"), handle("Deny"), handle("Peek")},
-				Metadata:    "gst/test/probe.proto",
+				Streams: []grpc.StreamDesc{{
+					StreamName:    "Tail",
+					ServerStreams: true,
+					Handler: func(_ any, ss grpc.ServerStream) error {
+						if err := ss.RecvMsg(new(emptypb.Empty)); err != nil {
+							return err
+						}
+						grpcAuthzProbeMu.Lock()
+						grpcAuthzProbeCaller = gstgrpc.CallerOf(ss.Context())
+						grpcAuthzProbeMu.Unlock()
+						return ss.SendMsg(&emptypb.Empty{})
+					},
+				}},
+				Metadata: "gst/test/probe.proto",
 			}, nil)
 		},
 			grpcserver.Method{Name: "/gst.test.Probe/Look", HTTPMethod: http.MethodGet, Route: grantedRoute},
@@ -182,6 +221,29 @@ func authzProbeCall(t *testing.T, conn *grpc.ClientConn, name, sessionID string)
 		ctx = metadata.AppendToOutgoingContext(ctx, "authorization", "Bearer "+sessionID)
 	}
 	return conn.Invoke(ctx, "/gst.test.Probe/"+name, &emptypb.Empty{}, &emptypb.Empty{}, grpc.WaitForReady(true))
+}
+
+// authzProbeStream opens the probe's Tail stream naming sessionID as the
+// call's session, sends its one request and returns the error the answer
+// ends with, the refusal of a stream arriving with its first response.
+func authzProbeStream(t *testing.T, conn *grpc.ClientConn, sessionID string) error {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(t.Context(), 20*time.Second)
+	defer cancel()
+	ctx = metadata.AppendToOutgoingContext(ctx, "authorization", "Bearer "+sessionID)
+	stream, err := conn.NewStream(ctx, &grpc.StreamDesc{StreamName: "Tail", ServerStreams: true}, "/gst.test.Probe/Tail", grpc.WaitForReady(true))
+	if err != nil {
+		return err
+	}
+	// A refused stream may already be over by the time the request goes
+	// out, which SendMsg reports as io.EOF; the status is read back.
+	if err := stream.SendMsg(&emptypb.Empty{}); err != nil && !errors.Is(err, io.EOF) {
+		return err
+	}
+	if err := stream.CloseSend(); err != nil {
+		return err
+	}
+	return stream.RecvMsg(&emptypb.Empty{})
 }
 
 // authzProbeLastCaller returns the caller the probe handler saw on its last
