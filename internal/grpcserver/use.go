@@ -23,9 +23,6 @@ import (
 type Method struct {
 	// Name is the full method name, "/app.RecordService/ListRecord".
 	Name string
-	// Public marks the action as one declaring Public(): the interceptors
-	// UseAuth queued leave the method alone.
-	Public bool
 	// HTTPMethod and Route are the HTTP method and the route pattern of the
 	// same action, "GET" and "/api/records/:id"; for the rpc of a Stream
 	// action, served over gRPC alone, HTTPMethod is MethodStream and Route
@@ -33,6 +30,9 @@ type Method struct {
 	// serves over HTTP.
 	HTTPMethod string
 	Route      string
+	// Public marks the action as one declaring Public(): the interceptors
+	// UseAuth queued leave the method alone.
+	Public bool
 }
 
 // MethodStream is what the registration describes the rpc of a Stream

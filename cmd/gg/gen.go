@@ -369,12 +369,7 @@ func genRunWithOptions(opts genRunOptions) error {
 			if err := os.WriteFile(safePath, []byte(code), ggconst.FileModeGenerated); err != nil {
 				return err
 			}
-			// The test scaffold requests the route through the HTTP client; an
-			// action served over gRPC alone has no route for it to request.
-			if dsl.GRPCOnlyAction(action.Phase.Name()) {
-				return nil
-			}
-			if err := scaffoldServiceTests(modelInfo, target, action, route, opts.Quiet); err != nil {
+			if err := scaffoldServiceTests(modelInfo, target, action, route, extraDirs, opts.Quiet); err != nil {
 				return err
 			}
 		}
@@ -424,13 +419,14 @@ func genRunWithOptions(opts genRunOptions) error {
 // scaffoldServiceTests writes the test scaffold of the service file target
 // locates, which gg gen has just created for an action of modelInfo, and
 // main_test.go for its package when no test file of the package declares
-// TestMain yet (see
-// gggen.GenerateServiceTest and gggen.GenerateServiceTestMain). The service test
-// coverage check requires the test file from the next run on, so the run
-// that creates the service file creates its test as well. A test file the
-// project already has, in its external or internal form, is kept as it is,
-// and so is a main_test.go that exists already.
-func scaffoldServiceTests(modelInfo *modelinfo.Model, target modelinfo.ServiceTargetInfo, action *dsl.Action, route string, quiet bool) error {
+// TestMain yet (see gggen.GenerateServiceTest and
+// gggen.GenerateServiceTestMain); extraDirs are the optional project
+// packages main.go imports, which TestMain imports the same way. The
+// service test coverage check requires the test file from the next run on,
+// so the run that creates the service file creates its test as well. A test
+// file the project already has, in its external or internal form, is kept
+// as it is, and so is a main_test.go that exists already.
+func scaffoldServiceTests(modelInfo *modelinfo.Model, target modelinfo.ServiceTargetInfo, action *dsl.Action, route string, extraDirs []string, quiet bool) error {
 	stem := strings.TrimSuffix(target.FilePath, ".go")
 	if gghelper.FileExists(stem+ggconst.PatternTestFile) || gghelper.FileExists(stem+"_internal"+ggconst.PatternTestFile) {
 		return nil
@@ -443,7 +439,7 @@ func scaffoldServiceTests(modelInfo *modelinfo.Model, target modelinfo.ServiceTa
 	mainTest := filepath.Join(target.Dir, ggconst.FileMainTest)
 	if !declared && !gghelper.FileExists(mainTest) {
 		var mainCode string
-		if mainCode, err = gggen.GenerateServiceTestMain(module, target.PackageName); err != nil {
+		if mainCode, err = gggen.GenerateServiceTestMain(module, target.PackageName, extraDirs...); err != nil {
 			return err
 		}
 		if err = writeGeneratedFile(mainTest, mainCode, !quiet); err != nil {

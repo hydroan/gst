@@ -27,29 +27,6 @@ func TestGoPackageOptionMirrorsTheDirectoryUnderPB(t *testing.T) {
 	require.Equal(t, "example.com/app/pb/record_item;recorditem", goPackageOption("example.com/app", "record_item"))
 }
 
-// TestRPCNameJoinsActionModelAndRouteParameters pins the examples of the
-// rpcName and rpcSuffix doc comments: the action name, or the role name of an
-// action declaring Filename, then the model name, then the parameters a route
-// adds to the model's own.
-func TestRPCNameJoinsActionModelAndRouteParameters(t *testing.T) {
-	document := &modelinfo.Model{ModelName: "Document", Design: &dsl.Design{Endpoint: "archive/documents", Param: ":document"}}
-	list := &dsl.Action{Phase: consts.List}
-
-	require.Equal(t, "ListDocument", rpcName(document, "archive/documents", list))
-	require.Equal(t, "ListDocumentByBox", rpcName(document, "archive/boxes/:box/documents", list))
-	require.Equal(t, "ListDocumentByBoxAndShelf", rpcName(document, "archive/boxes/:box/shelves/{shelf}/documents", list))
-	require.Equal(t, "MergeDocument", rpcName(document, "archive/documents/merge", &dsl.Action{Phase: consts.Create, Filename: "merge"}))
-
-	// A parameter the model's own route carries, propagated from a parent
-	// resource, is not an addition.
-	item := &modelinfo.Model{ModelName: "Item", Design: &dsl.Design{Endpoint: "records/:record/items"}}
-	require.Equal(t, "DeleteManyItem", rpcName(item, "records/:record/items", &dsl.Action{Phase: consts.DeleteMany}))
-
-	// Nor is :id, the parameter of a model declaring no Param.
-	require.Equal(t, "SealItem", rpcName(item, "items/:id/seal", &dsl.Action{Phase: consts.Create, Filename: "seal"}))
-	require.Equal(t, "SealItemByOwner", rpcName(item, "owners/:owner/items/:id/seal", &dsl.Action{Phase: consts.Create, Filename: "seal"}))
-}
-
 // TestRequestParamsCarryEveryParameterOfTheRegisteredRoute pins the examples
 // of the requestParams doc comment: one string field per parameter of the
 // route the router registers the action under, in route order, the model's

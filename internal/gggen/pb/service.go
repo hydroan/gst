@@ -73,7 +73,7 @@ func (g *generator) declareService(m *modelinfo.Model) {
 			return
 		}
 		served++
-		name := rpcName(m, route, action)
+		name := modelinfo.RPCName(m, route, action)
 		if previous, taken := routes[name]; taken {
 			g.project.Report(s, "the %s actions on routes %s and %s both become rpc %s; name one of them with Filename()", action.Phase.Name(), previous, route, name)
 			return
@@ -148,7 +148,7 @@ func (g *generator) declareService(m *modelinfo.Model) {
 //	  Item item = 1;
 //	}
 func (g *generator) rpcMessages(m *modelinfo.Model, scope *types.Scope, model *message, file *protoFile, route string, action *dsl.Action, s jsonshape.Site) (*rpc, bool) {
-	r := &rpc{name: rpcName(m, route, action), service: m.ModelName + "Service", model: m, action: action, route: route}
+	r := &rpc{name: modelinfo.RPCName(m, route, action), service: m.ModelName + "Service", model: m, action: action, route: route}
 	r.registered, r.param = modelinfo.RouterTargetForAction(route, m.Design, action)
 	qualified := r.service + "." + r.name
 	var request, response *descriptorpb.DescriptorProto

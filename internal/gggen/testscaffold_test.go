@@ -81,6 +81,23 @@ func TestCreate(t *testing.T) {
 // TestGenerateServiceTestExamples pins the example request of every action
 // shape: the verb picks the client call, the route and its parameter the
 // path, and the action types the request and response types.
+// feedInfo is the model Feed of the root model package of helloworld, an
+// action model serving streams over gRPC; feedTarget locates one of its
+// service files.
+var feedInfo = &modelinfo.Model{
+	ModulePath:    "helloworld",
+	ModelPkgName:  "model",
+	ModelName:     "Feed",
+	ModelVarName:  "f",
+	ModelFileDir:  "model",
+	ModelFilePath: "model/feed.go",
+	Design:        &dsl.Design{Endpoint: "feeds"},
+}
+
+func feedTarget(file string) modelinfo.ServiceTargetInfo {
+	return modelinfo.ServiceTargetInfo{Dir: "service/feed", FilePath: "service/feed/" + file, ImportPath: "helloworld/service/feed", PackageName: "feed"}
+}
+
 func TestGenerateServiceTestExamples(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -324,6 +341,69 @@ func TestGenerateServiceTestExamples(t *testing.T) {
 			wantDoc:  "// TestCreate covers POST /api/client/sessions, served by Creator in create.go.",
 			wantCode: []string{`	model_client "helloworld/model/client"`, `	rsp, err := cli.Post[model_client.Session](t.Context(), "/api/client/sessions", &model_client.Session{})`},
 		},
+		{
+			name:    "server_stream_reads_the_first_answer",
+			info:    feedInfo,
+			target:  feedTarget("watch.go"),
+			action:  &dsl.Action{Enabled: true, Service: true, Payload: "*FeedWatchReq", Result: "*FeedEvent", StreamingResult: true, Phase: consts.Stream, Filename: "watch"},
+			route:   "/api/feeds/watch",
+			wantDoc: "// TestWatch covers the WatchFeed rpc, served by Watch in watch.go.",
+			wantCode: []string{
+				`	"helloworld/pb"`,
+				`	"google.golang.org/grpc"`,
+				`	"google.golang.org/grpc/credentials/insecure"`,
+				`	conn, err := grpc.NewClient(testutil.GRPCTarget(), grpc.WithTransportCredentials(insecure.NewCredentials()))`,
+				`	t.Cleanup(func() {`,
+				`		_ = conn.Close()`,
+				`	client := pb.NewFeedServiceClient(conn)`,
+				`	stream, err := client.WatchFeed(t.Context(), &pb.WatchFeedRequest{})`,
+				`	rsp, err := stream.Recv()`,
+			},
+		},
+		{
+			name:    "client_stream_sends_then_closes_and_reads",
+			info:    feedInfo,
+			target:  feedTarget("upload.go"),
+			action:  &dsl.Action{Enabled: true, Service: true, Payload: "*FeedEvent", Result: "*FeedUploadRsp", StreamingPayload: true, Phase: consts.Stream, Filename: "upload"},
+			route:   "/api/feeds/:feed/upload",
+			wantDoc: "// TestUpload covers the UploadFeedByFeed rpc, served by Upload in upload.go.",
+			wantCode: []string{
+				`	stream, err := client.UploadFeedByFeed(t.Context())`,
+				`	require.NoError(t, stream.Send(&pb.UploadFeedByFeedRequest{}))`,
+				`	rsp, err := stream.CloseAndRecv()`,
+			},
+		},
+		{
+			name:    "bidirectional_stream_sends_reads_and_closes_its_side",
+			info:    feedInfo,
+			target:  feedTarget("chat.go"),
+			action:  &dsl.Action{Enabled: true, Service: true, Payload: "*FeedEvent", Result: "*FeedEvent", StreamingPayload: true, StreamingResult: true, Phase: consts.Stream, Filename: "chat"},
+			route:   "/api/feeds/chat",
+			wantDoc: "// TestChat covers the ChatFeed rpc, served by Chat in chat.go.",
+			wantCode: []string{
+				`	stream, err := client.ChatFeed(t.Context())`,
+				`	require.NoError(t, stream.Send(&pb.ChatFeedRequest{}))`,
+				`	rsp, err := stream.Recv()`,
+				`	require.NoError(t, stream.CloseSend())`,
+			},
+		},
+		{
+			name: "stubs_package_named_like_a_scaffold_variable_is_aliased",
+			info: &modelinfo.Model{
+				ModulePath:    "helloworld",
+				ModelPkgName:  "stream",
+				ModelName:     "Feed",
+				ModelVarName:  "f",
+				ModelFileDir:  "model/stream",
+				ModelFilePath: "model/stream/feed.go",
+				Design:        &dsl.Design{Endpoint: "stream/feeds"},
+			},
+			target:   modelinfo.ServiceTargetInfo{Dir: "service/stream/feed", FilePath: "service/stream/feed/watch.go", ImportPath: "helloworld/service/stream/feed", PackageName: "feed"},
+			action:   &dsl.Action{Enabled: true, Service: true, Payload: "*FeedWatchReq", Result: "*FeedEvent", StreamingResult: true, Phase: consts.Stream, Filename: "watch"},
+			route:    "/api/stream/feeds/watch",
+			wantDoc:  "// TestWatch covers the WatchFeed rpc, served by Watch in watch.go.",
+			wantCode: []string{`	pb_stream "helloworld/pb/stream"`, `	client := pb_stream.NewFeedServiceClient(conn)`},
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -384,6 +464,13 @@ func TestMain(m *testing.M) {
 }
 `
 	require.Equal(t, want, got)
+
+	t.Run("imports the optional packages main.go imports", func(t *testing.T) {
+		got, err := gggen.GenerateServiceTestMain("helloworld", "record", "interceptor", "pb")
+		require.NoError(t, err)
+		require.Contains(t, got, "\t_ \"helloworld/cronjob\"\n\t_ \"helloworld/interceptor\"\n\t_ \"helloworld/leader\"\n")
+		require.Contains(t, got, "\t_ \"helloworld/module\"\n\t_ \"helloworld/pb\"\n\t\"helloworld/router\"\n")
+	})
 }
 
 // TestPackageDeclaresTestMain pins where PackageDeclaresTestMain looks for a

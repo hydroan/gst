@@ -32,14 +32,18 @@ const (
 	scaffoldImportSSE      = "github.com/hydroan/gst/sse"
 	scaffoldImportTestutil = "github.com/hydroan/gst/testutil"
 	scaffoldImportRequire  = "github.com/stretchr/testify/require"
+	scaffoldImportGRPC     = "google.golang.org/grpc"
+	scaffoldImportInsecure = "google.golang.org/grpc/credentials/insecure"
 )
 
-// scaffoldImportNames lists the names the imports above take in a scaffold,
-// which the model package of the project must not take too.
-var scaffoldImportNames = []string{"testing", "strings", "http", "client", "config", "sse", "testutil", "require"}
+// scaffoldImportNames lists the names the imports above take in a scaffold
+// and the variables its statements declare, which a package the scaffold
+// imports for the example must not take too.
+var scaffoldImportNames = []string{"testing", "strings", "http", "client", "config", "sse", "testutil", "require", "grpc", "insecure", "conn", "stream", "rsp", "err", "id"}
 
-// serviceTestDoc is the part of every service test scaffold's doc comment
-// that tells how the test is written, after the line naming the route.
+// serviceTestDoc is the part of the test scaffold's doc comment of an action
+// served over HTTP that tells how the test is written, after the line
+// naming the route.
 var serviceTestDoc = []string{
 	"//",
 	"// The request goes through the framework client against the test server",
@@ -48,6 +52,18 @@ var serviceTestDoc = []string{
 	"// client's cookie jar keeps for the requests that follow. A rejection is",
 	"// asserted with testutil.RequireError, and rows with the testutil.Require*",
 	"// helpers.",
+}
+
+// serviceStreamTestDoc is serviceTestDoc's counterpart for a Stream action,
+// served over gRPC alone.
+var serviceStreamTestDoc = []string{
+	"//",
+	"// The call goes through a grpc-go client against the gRPC listener of the",
+	"// test server TestMain starts, so the rpc, the service and the database are",
+	"// exercised together; a call to a method not declared Public() names its",
+	"// session in the authorization metadata, \"Bearer <session id>\", established",
+	"// by a login presenting the client's user agent. A refusal is asserted on",
+	"// its status code, and rows with the testutil.Require* helpers.",
 }
 
 // GenerateServiceTest builds the test scaffold gg gen writes next to the
@@ -94,22 +110,58 @@ var serviceTestDoc = []string{
 // function: an item route reads the row's id from a placeholder variable, a
 // batch route sends client.BatchItems or client.BatchIDs, a List without a
 // declared result decodes client.ListResult, Import uploads a file, Export
-// downloads the attachment and SSE consumes the stream.
+// downloads the attachment and SSE consumes the stream. A Stream action,
+// served over gRPC alone, is called through the client the protobuf plugin
+// generated, on a connection to testutil.GRPCTarget: for the Stream action
+// declaring Filename("watch"), Payload and StreamingResult on the model Feed
+// of the root model package, whose rpc is WatchFeed, the test reads
+//
+//	// TestWatch covers the WatchFeed rpc, served by Watch in watch.go.
+//	//
+//	// The call goes through a grpc-go client against the gRPC listener of the
+//	// test server TestMain starts, so the rpc, the service and the database are
+//	// exercised together; a call to a method not declared Public() names its
+//	// session in the authorization metadata, "Bearer <session id>", established
+//	// by a login presenting the client's user agent. A refusal is asserted on
+//	// its status code, and rows with the testutil.Require* helpers.
+//	func TestWatch(t *testing.T) {
+//		t.Fatal("TestWatch is a scaffold: delete this line and finish the test below")
+//
+//		conn, err := grpc.NewClient(testutil.GRPCTarget(), grpc.WithTransportCredentials(insecure.NewCredentials()))
+//		require.NoError(t, err)
+//		t.Cleanup(func() {
+//			_ = conn.Close()
+//		})
+//		client := pb.NewFeedServiceClient(conn)
+//
+//		stream, err := client.WatchFeed(t.Context(), &pb.WatchFeedRequest{})
+//		require.NoError(t, err)
+//		rsp, err := stream.Recv()
+//		require.NoError(t, err)
+//		require.NotNil(t, rsp)
+//	}
+//
+// and a client stream sends a request then reads the answer with
+// CloseAndRecv, a bidirectional one sends, reads and closes its side.
 func GenerateServiceTest(info *modelinfo.Model, target modelinfo.ServiceTargetInfo, action *dsl.Action, route string) (string, error) {
 	name := serviceTestName(action)
-	method := action.Phase.HTTPMethod()
+	served := fmt.Sprintf("%s %s", action.Phase.HTTPMethod(), route)
+	how := serviceTestDoc
+	if action.Phase == consts.Stream {
+		served = fmt.Sprintf("the %s rpc", modelinfo.RPCName(info, route, action))
+		how = serviceStreamTestDoc
+	}
 	doc := append([]string{
-		fmt.Sprintf("// %s covers %s %s, served by %s in %s.", name, method, route, action.RoleName(), filepath.Base(target.FilePath)),
-	}, serviceTestDoc...)
+		fmt.Sprintf("// %s covers %s, served by %s in %s.", name, served, action.RoleName(), filepath.Base(target.FilePath)),
+	}, how...)
 
 	example := newServiceTestExample(info, action, route)
 	body := []ast.Stmt{
 		exprStmt(call(sel(ident("t"), "Fatal"), strLit(name+" is a scaffold: delete this line and finish the test below"))),
 		EmptyLine(),
-		define(idents("cli", "err"), call(sel(ident("client"), "New"), call(sel(ident("testutil"), "BaseURL")))),
-		requireCall("NoError", ident("err")),
-		EmptyLine(),
 	}
+	body = append(body, example.setup...)
+	body = append(body, EmptyLine())
 	body = append(body, example.stmts...)
 
 	file := &ast.File{
@@ -139,9 +191,11 @@ func serviceTestName(action *dsl.Action) string {
 }
 
 // serviceTestExample is the example request of a service test scaffold: the
-// statements following the client construction, and the packages they
-// import beyond the ones every scaffold imports.
+// statements constructing the client the request goes through, the request
+// itself, and the packages they import beyond the ones every scaffold
+// imports.
 type serviceTestExample struct {
+	setup []ast.Stmt
 	stmts []ast.Stmt
 	// imports maps the import path of each extra package to the name it is
 	// imported under, "" for its package name.
@@ -154,11 +208,21 @@ type serviceTestExample struct {
 // sends client.BatchItems or
 // client.BatchIDs, a List without a declared result decodes
 // client.ListResult, Import uploads a file, Export downloads the attachment
-// and SSE consumes the stream. The model package is imported when the
-// example refers to it, under an alias when its name is one a scaffold
-// import takes.
+// and SSE consumes the stream, all through the framework client; a Stream
+// calls its rpc through a grpc-go client, see newStreamTestExample. The
+// model package is imported when the example refers to it, under an alias
+// when its name is one a scaffold import takes.
 func newServiceTestExample(info *modelinfo.Model, action *dsl.Action, route string) *serviceTestExample {
-	example := &serviceTestExample{imports: map[string]string{}}
+	if action.Phase == consts.Stream {
+		return newStreamTestExample(info, action, route)
+	}
+	example := &serviceTestExample{
+		setup: []ast.Stmt{
+			define(idents("cli", "err"), call(sel(ident("client"), "New"), call(sel(ident("testutil"), "BaseURL")))),
+			requireCall("NoError", ident("err")),
+		},
+		imports: map[string]string{scaffoldImportClient: ""},
+	}
 	modelImportPath := info.ImportPath()
 	modelQualifier := info.ModelPkgName
 	if alias := ResolveImportConflicts(map[string]string{modelImportPath: info.ModelPkgName}, scaffoldImportNames...)[modelImportPath]; alias != "" {
@@ -285,6 +349,69 @@ func newServiceTestExample(info *modelinfo.Model, action *dsl.Action, route stri
 	return example
 }
 
+// newStreamTestExample builds the example call of a Stream action, served
+// over gRPC alone: a connection to the test server's gRPC listener, the
+// client the protobuf plugin generated for the model's service, and the
+// call of the rpc in the shape of its streaming — a server stream sends
+// the request and reads the first answer, a client stream sends a request
+// and reads the answer with CloseAndRecv, a bidirectional stream sends,
+// reads and closes its side. The stubs' package is imported under an alias
+// when its name is one the scaffold takes.
+func newStreamTestExample(info *modelinfo.Model, action *dsl.Action, route string) *serviceTestExample {
+	pbImportPath, pbName := modelinfo.PBPackage(info.ModulePath, info.PBDir())
+	example := &serviceTestExample{imports: map[string]string{scaffoldImportGRPC: "", scaffoldImportInsecure: ""}}
+	qualifier := pbName
+	if alias := ResolveImportConflicts(map[string]string{pbImportPath: pbName}, scaffoldImportNames...)[pbImportPath]; alias != "" {
+		qualifier = alias
+	}
+	example.imports[pbImportPath] = ""
+	if qualifier != pbName {
+		example.imports[pbImportPath] = qualifier
+	}
+
+	rpc := modelinfo.RPCName(info, route, action)
+	request := &ast.UnaryExpr{Op: token.AND, X: &ast.CompositeLit{Type: sel(ident(qualifier), rpc+"Request")}}
+	example.setup = []ast.Stmt{
+		define(idents("conn", "err"), call(sel(ident("grpc"), "NewClient"), call(sel(ident("testutil"), "GRPCTarget")), call(sel(ident("grpc"), "WithTransportCredentials"), call(sel(ident("insecure"), "NewCredentials"))))),
+		requireCall("NoError", ident("err")),
+		exprStmt(call(sel(ident("t"), "Cleanup"), &ast.FuncLit{
+			Type: &ast.FuncType{Params: &ast.FieldList{}},
+			Body: &ast.BlockStmt{List: []ast.Stmt{&ast.AssignStmt{Lhs: []ast.Expr{ident("_")}, Tok: token.ASSIGN, Rhs: []ast.Expr{call(sel(ident("conn"), "Close"))}}}},
+		})),
+		define(idents("client"), call(sel(ident(qualifier), "New"+info.ModelName+"ServiceClient"), ident("conn"))),
+	}
+	switch {
+	case action.StreamingPayload && action.StreamingResult:
+		example.stmts = []ast.Stmt{
+			define(idents("stream", "err"), call(sel(ident("client"), rpc), testContext())),
+			requireCall("NoError", ident("err")),
+			requireCall("NoError", call(sel(ident("stream"), "Send"), request)),
+			define(idents("rsp", "err"), call(sel(ident("stream"), "Recv"))),
+			requireCall("NoError", ident("err")),
+			requireCall("NotNil", ident("rsp")),
+			requireCall("NoError", call(sel(ident("stream"), "CloseSend"))),
+		}
+	case action.StreamingPayload:
+		example.stmts = []ast.Stmt{
+			define(idents("stream", "err"), call(sel(ident("client"), rpc), testContext())),
+			requireCall("NoError", ident("err")),
+			requireCall("NoError", call(sel(ident("stream"), "Send"), request)),
+			define(idents("rsp", "err"), call(sel(ident("stream"), "CloseAndRecv"))),
+			requireCall("NoError", ident("err")),
+			requireCall("NotNil", ident("rsp")),
+		}
+	default:
+		example.stmts = []ast.Stmt{
+			define(idents("stream", "err"), call(sel(ident("client"), rpc), testContext(), request)),
+			requireCall("NoError", ident("err")),
+			define(idents("rsp", "err"), call(sel(ident("stream"), "Recv"))),
+			requireCall("NoError", ident("err")),
+			requireCall("NotNil", ident("rsp")),
+		}
+	}
+	return example
+}
+
 // clientVerbs names the client method sending each HTTP method.
 var clientVerbs = map[string]string{
 	http.MethodGet:    "Get",
@@ -295,12 +422,11 @@ var clientVerbs = map[string]string{
 }
 
 // importSpecs returns the import specs of a service test scaffold: the
-// packages every scaffold imports and the extra ones of the example, in an
-// order the formatter regroups and sorts.
+// packages every scaffold imports and the ones of the example, in an order
+// the formatter regroups and sorts.
 func (e *serviceTestExample) importSpecs() []ast.Spec {
 	specs := []ast.Spec{
 		importSpec(scaffoldImportTesting, ""),
-		importSpec(scaffoldImportClient, ""),
 		importSpec(scaffoldImportTestutil, ""),
 		importSpec(scaffoldImportRequire, ""),
 	}
@@ -393,7 +519,7 @@ var serviceTestMainDoc = []string{
 //			Seed:     func() error { return nil },
 //		})
 //	}
-func GenerateServiceTestMain(modulePath, servicePkgName string) (string, error) {
+func GenerateServiceTestMain(modulePath, servicePkgName string, extraDirs ...string) (string, error) {
 	// go/printer lays comments and composite literal elements out by their
 	// source positions, so the import group and the Server literal take
 	// positions on successive lines of a fabricated file: the doc comment
@@ -403,7 +529,7 @@ func GenerateServiceTestMain(modulePath, servicePkgName string) (string, error) 
 	lines := goast.NewLineSet(fset)
 
 	specs := []ast.Spec{importSpecAt(scaffoldImportTesting, "", lines.Next())}
-	for i, dir := range ggconst.ProjectImportDirs {
+	for i, dir := range slices.Sorted(slices.Values(slices.Concat(ggconst.ProjectImportDirs, extraDirs))) {
 		var doc *ast.CommentGroup
 		if i == 0 {
 			// A blank line sets the project imports apart from "testing".

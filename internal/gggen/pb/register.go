@@ -31,9 +31,9 @@ var httpMethodConsts = map[string]string{
 // function the protobuf plugin generated and the type serving the service
 // (see serviceType) under the server interface the plugin generated, and
 // describing each rpc by its full method name, the constant the plugin
-// generated for it, whether its action declares Public(), and the HTTP
-// method and route the same action is served at, which the interceptors of
-// the modules judge a call by. A service of a package under pb/ is
+// generated for it, the HTTP method and route the same action is served
+// at, which the interceptors of the modules judge a call by, and whether
+// its action declares Public(). A service of a package under pb/ is
 // registered through an import of the package.
 //
 // The golden fixture, whose Note and Record models are declared in model/
@@ -97,9 +97,6 @@ func (g *generator) registrationFile() (File, error) {
 			args := []ast.Expr{qualify("Register" + service + "Server"), compositeLit(qualify(service))}
 			for _, r := range rpcs[service] {
 				elts := []ast.Expr{keyValue("Name", qualify(service+"_"+r.name+"_FullMethodName"))}
-				if r.action.Public {
-					elts = append(elts, keyValue("Public", ident("true")))
-				}
 				// A streaming rpc, served over gRPC alone, is described by
 				// the stream word in place of an HTTP method.
 				method := ast.Expr(sel(out.imports.fixedRef(ggconst.ImportPathGRPC), "MethodStream"))
@@ -107,6 +104,9 @@ func (g *generator) registrationFile() (File, error) {
 					method = sel(out.imports.fixedRef(importPathHTTP), httpMethodConsts[r.action.Phase.HTTPMethod()])
 				}
 				elts = append(elts, keyValue("HTTPMethod", method), keyValue("Route", strLit(r.registered)))
+				if r.action.Public {
+					elts = append(elts, keyValue("Public", ident("true")))
+				}
 				args = append(args, compositeLit(sel(out.imports.fixedRef(ggconst.ImportPathGRPC), "Method"), elts...))
 			}
 			register := call(index(sel(out.imports.fixedRef(ggconst.ImportPathGRPC), "Register"), qualify(service+"Server")), args...)

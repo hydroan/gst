@@ -100,9 +100,9 @@ func TestGenRunWritesTheProtobufDefinitionsOfGRPCModels(t *testing.T) {
 // model whose actions are Stream actions alone: its rpcs are derived, each
 // streaming the side it declares and described by the route it is declared
 // on rather than a path; its services register and get their files with
-// the Stream method of their kind, but no route, no test scaffold and no
-// router registration, so the project builds with a router file naming it
-// nowhere.
+// the Stream method of their kind and a gRPC test scaffold, but no route
+// and no router registration, so the project builds with a router file
+// naming it nowhere.
 func TestGenRunServesStreamActionsOverGRPCAlone(t *testing.T) {
 	projectDir, ok := newGenProject(t)
 	if !ok {
@@ -134,12 +134,17 @@ func TestGenRunServesStreamActionsOverGRPCAlone(t *testing.T) {
 		code, readErr := os.ReadFile(filepath.Join(projectDir, ggconst.DirService, "feed", name+".go"))
 		require.NoError(t, readErr, name)
 		require.Contains(t, string(code), signature, name)
-		require.NoFileExists(t, filepath.Join(projectDir, ggconst.DirService, "feed", name+"_test.go"), "a Stream gets no HTTP test scaffold")
 	}
-	build := exec.Command("go", "build", "./...")
-	build.Dir = projectDir
-	output, err := build.CombinedOutput()
-	require.NoError(t, err, "the project must build: %s", output)
+	scaffold, err := os.ReadFile(filepath.Join(projectDir, ggconst.DirService, "feed", "upload_test.go"))
+	require.NoError(t, err)
+	require.Contains(t, string(scaffold), "// TestUpload covers the UploadFeedByFeed rpc, served by Upload in upload.go.")
+	require.Contains(t, string(scaffold), "client := pb.NewFeedServiceClient(conn)")
+	require.Contains(t, string(scaffold), "rsp, err := stream.CloseAndRecv()")
+	mainTest, err := os.ReadFile(filepath.Join(projectDir, ggconst.DirService, "feed", ggconst.FileMainTest))
+	require.NoError(t, err)
+	require.Contains(t, string(mainTest), `_ "tmpapp/pb"`, "TestMain registers the gRPC services the way main.go does")
+	// go vet compiles the test files, the scaffolds among them.
+	requireProjectCompiles(t)
 }
 
 // TestGenRunImportsThePBPackageWhileServingGRPC pins that main.go imports
