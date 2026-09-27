@@ -21,11 +21,11 @@ var (
 
 // Set records one registered route for the OpenAPI document. It is the only
 // entry point route registration uses.
-func Set[M types.Model, REQ types.Request, RSP types.Response](path string, authRequired bool, verb consts.Phase) {
+func Set[M types.Model, REQ types.Request, RSP types.Response](path string, authRequired bool, phase consts.Phase) {
 	pendingMu.Lock()
 	defer pendingMu.Unlock()
 
-	pending = append(pending, func() { set[M, REQ, RSP](path, authRequired, verb) })
+	pending = append(pending, func() { set[M, REQ, RSP](path, authRequired, phase) })
 }
 
 // build turns the routes Set recorded into document entries, and refreshes the
@@ -51,7 +51,7 @@ func build() {
 	docMutex.Unlock()
 }
 
-// set registers the OpenAPI document entries for the given path and verbs.
+// set registers the OpenAPI document entries for the given path and phases.
 // authRequired reports whether the route sits behind the authenticated route
 // group; public routes are documented with an empty security requirement so
 // they override the document-level security.
@@ -59,7 +59,7 @@ func build() {
 // Route registration goes through Set, which queues this call until the first
 // request asks for the document; this package's own tests call set directly to
 // exercise the generation.
-func set[M types.Model, REQ types.Request, RSP types.Response](path string, authRequired bool, verb ...consts.Phase) {
+func set[M types.Model, REQ types.Request, RSP types.Response](path string, authRequired bool, phases ...consts.Phase) {
 	path = convertColonParamsToBraces(path)
 
 	docMutex.Lock()
@@ -70,9 +70,9 @@ func set[M types.Model, REQ types.Request, RSP types.Response](path string, auth
 	}
 	docMutex.Unlock()
 
-	for _, verb := range buildVerbs(verb...) {
+	for _, phase := range uniquePhases(phases...) {
 		var op *openapi3.Operation
-		switch verb {
+		switch phase {
 		case consts.Create:
 			setCreate[M, REQ, RSP](path, pathItem)
 			op = pathItem.Post
@@ -123,17 +123,18 @@ func set[M types.Model, REQ types.Request, RSP types.Response](path string, auth
 	docMutex.Unlock()
 }
 
-func buildVerbs(verbs ...consts.Phase) []consts.Phase {
-	verbMap := make(map[consts.Phase]bool)
-	for _, verb := range verbs {
-		verbMap[verb] = true
+// uniquePhases returns phases with the repeated ones folded, in no set order.
+func uniquePhases(phases ...consts.Phase) []consts.Phase {
+	seen := make(map[consts.Phase]bool)
+	for _, phase := range phases {
+		seen[phase] = true
 	}
 
-	vs := make([]consts.Phase, 0, len(verbMap))
-	for verb := range verbMap {
-		vs = append(vs, verb)
+	unique := make([]consts.Phase, 0, len(seen))
+	for phase := range seen {
+		unique = append(unique, phase)
 	}
-	return vs
+	return unique
 }
 
 // convertColonParamsToBraces converts path parameters from :param to {param}.

@@ -235,12 +235,12 @@ func registerCRUDRouter[M types.Model, REQ types.Request, RSP types.Response](mo
 
 // registerRouter registers an HTTP route with the appropriate router based on mod.Pub().
 // If mod.Pub() returns true, registers with public router; otherwise with authenticated router.
-func registerRouter[M types.Model, REQ types.Request, RSP types.Response](mod types.Module[M, REQ, RSP], route string, cfg *types.ControllerConfig[M], verb consts.Phase) {
+func registerRouter[M types.Model, REQ types.Request, RSP types.Response](mod types.Module[M, REQ, RSP], route string, cfg *types.ControllerConfig[M], phase consts.Phase) {
 	if mod.Pub() {
 		// Register with public router - no authentication required
-		router.Register[M, REQ, RSP](router.Pub(), route, cfg, verb)
+		router.Register[M, REQ, RSP](router.Pub(), route, cfg, phase)
 	} else {
 		// Register with authenticated router - authentication/authorization required
-		router.Register[M, REQ, RSP](router.Auth(), route, cfg, verb)
+		router.Register[M, REQ, RSP](router.Auth(), route, cfg, phase)
 	}
 }
