@@ -10,10 +10,14 @@ import (
 	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/consts"
 	"github.com/hydroan/gst/database"
+	"github.com/hydroan/gst/interceptor"
+	"github.com/hydroan/gst/internal/grpcserver"
+	internalmiddleware "github.com/hydroan/gst/internal/middleware"
 	modeliamaccount "github.com/hydroan/gst/internal/model/iam/account"
 	modeliamuser "github.com/hydroan/gst/internal/model/iam/user"
 	serviceiamaccount "github.com/hydroan/gst/internal/service/iam/account"
 	"github.com/hydroan/gst/internal/testutil"
+	"github.com/hydroan/gst/middleware"
 	"github.com/hydroan/gst/module/iam"
 	"github.com/stretchr/testify/require"
 )
@@ -54,9 +58,15 @@ func TestMain(m *testing.M) {
 	testutil.Run(m, testutil.Server{
 		Database: config.DBMySQL,
 		Redis:    true,
-		Register: func() { iam.Register() },
-		Routes:   registerRequestMetadataProbe,
-		Seed:     seedRootAccount,
+		Register: func() {
+			iam.Register()
+			// The session check, mounted the way a project mounts it, on
+			// both listeners.
+			internalmiddleware.RegisterAuth(middleware.IAMSession())
+			grpcserver.UseAuth(interceptor.IAMSession())
+		},
+		Routes: registerRequestMetadataProbe,
+		Seed:   seedRootAccount,
 	})
 }
 

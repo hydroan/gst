@@ -16,7 +16,9 @@ import (
 	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/consts"
 	"github.com/hydroan/gst/database"
-	"github.com/hydroan/gst/internal/middleware"
+	"github.com/hydroan/gst/interceptor"
+	"github.com/hydroan/gst/internal/grpcserver"
+	internalmiddleware "github.com/hydroan/gst/internal/middleware"
 	modelauthz "github.com/hydroan/gst/internal/model/authz"
 	modeliamaccount "github.com/hydroan/gst/internal/model/iam/account"
 	modeliamuser "github.com/hydroan/gst/internal/model/iam/user"
@@ -24,6 +26,7 @@ import (
 	serviceiamsession "github.com/hydroan/gst/internal/service/iam/session"
 	"github.com/hydroan/gst/internal/testutil"
 	"github.com/hydroan/gst/internal/types"
+	"github.com/hydroan/gst/middleware"
 	"github.com/hydroan/gst/module/authz"
 	"github.com/hydroan/gst/module/iam"
 	"github.com/hydroan/gst/tenant"
@@ -62,17 +65,23 @@ func TestMain(m *testing.M) {
 		Redis:    true,
 		Register: func() {
 			iam.Register()
+			// The session check and the authorization, mounted the way a
+			// project mounts them, on both listeners, in that order.
+			internalmiddleware.RegisterAuth(middleware.IAMSession())
+			grpcserver.UseAuth(interceptor.IAMSession())
 			// The request tenant's one source is CTX_TENANT_ID, written by
 			// trusted middleware ahead of Authz. The tests stand in for a
 			// trusted gateway: registered after IAMSession, this overwrites the
 			// session's tenant with the header's whenever one is sent.
-			middleware.RegisterAuth(func(c *gin.Context) {
+			internalmiddleware.RegisterAuth(func(c *gin.Context) {
 				if tenantID := strings.TrimSpace(c.GetHeader(tenantHeader)); tenantID != "" {
 					c.Set(consts.CTX_TENANT_ID, tenantID)
 				}
 				c.Next()
 			})
 			authz.Register()
+			internalmiddleware.RegisterAuth(middleware.Authz())
+			grpcserver.UseAuth(interceptor.Authz())
 		},
 		Seed: seedBaseline,
 	})

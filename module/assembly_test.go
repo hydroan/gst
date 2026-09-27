@@ -7,7 +7,6 @@ import (
 	"go/token"
 	"os"
 	"path/filepath"
-	"sort"
 	"strconv"
 	"strings"
 	"testing"
@@ -111,32 +110,19 @@ func TestCopyableModuleServicesInstallNoHookFromInit(t *testing.T) {
 	}
 }
 
-// TestModuleMiddlewareRegistrationsMatchManifest pins add/copy parity for
-// middleware: the add path mounts what Register calls, the copy path mounts
-// what module.json declares, and a project must end up with the same handlers
-// either way.
-//
-// Both directions are checked. A registration missing from the manifest is
-// add-only and silently absent after a copy; a manifest entry nothing registers
-// is copy-only and silently absent after an add.
-func TestModuleMiddlewareRegistrationsMatchManifest(t *testing.T) {
-	for name, manifest := range copyableModuleManifests(t) {
+// TestModuleRegistersMountNoMiddleware pins add/copy parity for middleware:
+// the project mounts the handlers module.json declares itself, in the order
+// it wants, on the add path as on the copy path, so Register mounts none —
+// a registration in Register would mount the handler a second time behind
+// the project's on the add path, and be absent on the copy path.
+func TestModuleRegistersMountNoMiddleware(t *testing.T) {
+	for name := range copyableModuleManifests(t) {
 		t.Run(name, func(t *testing.T) {
-			declared := make([]string, 0, len(manifest.Copy.Middleware))
-			for _, mw := range manifest.Copy.Middleware {
-				declared = append(declared, mw.Scope+":"+mw.Handler)
-			}
-
-			registered := make([]string, 0, len(declared))
+			registered := make([]string, 0)
 			for _, file := range parseModulePackage(t, name) {
 				registered = append(registered, middlewareRegistrations(t, name, file)...)
 			}
-
-			sort.Strings(declared)
-			sort.Strings(registered)
-			require.Equal(t, declared, registered,
-				"module %s registers %v but module.json declares %v; add and copy must mount the same middleware",
-				name, registered, declared)
+			require.Empty(t, registered, "module %s mounts %v from Register; the project mounts the middleware module.json declares", name, registered)
 		})
 	}
 }

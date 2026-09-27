@@ -8,9 +8,6 @@ import (
 	"github.com/hydroan/gst/config"
 
 	"github.com/hydroan/gst/consts"
-	"github.com/hydroan/gst/interceptor"
-	"github.com/hydroan/gst/internal/grpcserver"
-	internalmiddleware "github.com/hydroan/gst/internal/middleware"
 	modeliamaccount "github.com/hydroan/gst/internal/model/iam/account"
 	modeliamprofile "github.com/hydroan/gst/internal/model/iam/profile"
 	modeliamuser "github.com/hydroan/gst/internal/model/iam/user"
@@ -20,7 +17,6 @@ import (
 	serviceiamprofile "github.com/hydroan/gst/internal/service/iam/profile"
 	serviceiamsession "github.com/hydroan/gst/internal/service/iam/session"
 	serviceiamuser "github.com/hydroan/gst/internal/service/iam/user"
-	"github.com/hydroan/gst/middleware"
 	"github.com/hydroan/gst/module"
 )
 
@@ -57,12 +53,18 @@ import (
 //   - GET    /api/iam/profile
 //   - PATCH  /api/iam/profile
 //
-// Middleware:
-//   - IAMSession for protected IAM routes and session-aware APIs
+// Middleware and interceptor: Register mounts none. The project mounts the
+// session check itself, middleware.IAMSession() in its middleware package
+// with middleware.RegisterAuth and, when it serves gRPC,
+// interceptor.IAMSession() in its interceptor package with
+// interceptor.RegisterAuth — the way a project that copied the module does
+// — ahead of whatever else of its own reads the caller: the authenticated
+// chains run in registration order.
 //
-// Interceptor:
-//   - IAMSession on the gRPC listener, for the methods not declared Public(),
-//     so a project serving gRPC mounts nothing of its own
+// TODO: a project that mounts no auth middleware serves every route of the
+// authenticated group to anyone, and the HTTP listener does not even warn
+// (the gRPC listener warns, see grpcserver.Run). Refuse to start when
+// routes need authentication and nothing authenticates.
 //
 // Configuration:
 //   - IAM_SESSION_EXPIRATION sets the session lifetime; it defaults to 8 hours.
@@ -81,12 +83,6 @@ func Register() {
 	// Resolve once during registration so invalid environment configuration
 	// fails during startup rather than at the first login.
 	_ = serviceiamsession.GetSessionExpiration()
-
-	// Register auth middleware before protected routes so auth handlers are attached deterministically.
-	internalmiddleware.RegisterAuth(middleware.IAMSession())
-	// The gRPC listener checks the session the same way; with no gRPC
-	// service registered the interceptor never runs.
-	grpcserver.UseAuth(interceptor.IAMSession())
 
 	// TODO: throttle POST /api/login by client IP. The route is public, so the
 	// limiter registers with Register (global scope), not RegisterAuth. For

@@ -18,11 +18,13 @@ import (
 	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/consts"
 	"github.com/hydroan/gst/database"
+	internalmiddleware "github.com/hydroan/gst/internal/middleware"
 	modeliamaccount "github.com/hydroan/gst/internal/model/iam/account"
 	modeliamuser "github.com/hydroan/gst/internal/model/iam/user"
 	modelmfa "github.com/hydroan/gst/internal/model/mfa"
 	serviceiamaccount "github.com/hydroan/gst/internal/service/iam/account"
 	"github.com/hydroan/gst/internal/testutil"
+	"github.com/hydroan/gst/middleware"
 	"github.com/hydroan/gst/module/iam"
 	"github.com/hydroan/gst/module/mfa"
 	"github.com/hydroan/gst/redis"
@@ -63,6 +65,7 @@ func TestMain(m *testing.M) {
 		Redis:    true,
 		Register: func() {
 			iam.Register()
+			internalmiddleware.RegisterAuth(middleware.IAMSession())
 			mfa.Register()
 		},
 		Seed: seedRootAccount,

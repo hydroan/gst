@@ -146,12 +146,12 @@ linters:
               desc: "framework code imports github.com/hydroan/gst/internal/router"
             - pkg: "github.com/hydroan/gst/modelschema$"
               desc: "framework code imports github.com/hydroan/gst/internal/modelschema"
-        # The same rule for the public middleware package, which the
-        # registration packages of copyable modules also import: the handler
-        # they register is a middleware source file gg module copy carries into
-        # a project, so it lives in the public package, while the registration
-        # call goes through internal/middleware. The package's external tests
-        # are left out as above.
+        # The same rule for the public middleware package: the handlers of
+        # the copyable modules are middleware source files gg module copy
+        # carries into a project, so they live in the public package, and a
+        # project mounts them itself. The package's external tests, and the
+        # module tests mounting them as a project does, are left out as
+        # above.
         middleware-forwarder:
           files:
             - "$all"
@@ -161,28 +161,27 @@ linters:
             - "!**/middleware/timeout_test.go"
             - "!**/internal/model/**"
             - "!**/internal/service/**"
-            - "!**/middleware/iam_session.go"
-            - "!**/middleware/authz.go"
             - "!**/module/helloworld/**"
-            - "!**/module/iam/register.go"
-            - "!**/module/authz/register.go"
+            - "!**/module/iam/register_test.go"
+            - "!**/module/authz/register_test.go"
+            - "!**/module/logmgmt/register_test.go"
+            - "!**/module/mfa/register_test.go"
           deny:
             - pkg: "github.com/hydroan/gst/middleware$"
-              desc: "framework code imports github.com/hydroan/gst/internal/middleware; only the handlers a module registers come from the public package"
+              desc: "framework code imports github.com/hydroan/gst/internal/middleware; only the handlers of the modules come from the public package, mounted by the project"
         # The same rule for the public interceptor package, the gRPC
-        # counterpart of middleware: the interceptors a module mounts are
+        # counterpart of middleware: the interceptors of the modules are
         # source files gg module copy carries into a project, so they live in
-        # the public package, while the mounting call goes through
-        # internal/grpcserver. The package's external tests, and the copy
-        # test reading the module interceptors, are left out as above.
+        # the public package, and a project mounts them itself. The package's
+        # external tests and the module tests mounting them as a project does
+        # are left out.
         interceptor-forwarder:
           files:
             - "$all"
             - "!**/interceptor/interceptor_test.go"
             - "!**/interceptor/jwt_test.go"
-            - "!**/internal/ggmodule/copy_interceptor_internal_test.go"
-            - "!**/module/iam/register.go"
-            - "!**/module/authz/register.go"
+            - "!**/module/iam/register_test.go"
+            - "!**/module/authz/register_test.go"
           deny:
             - pkg: "github.com/hydroan/gst/interceptor$"
               desc: "framework code imports github.com/hydroan/gst/internal/grpcserver; only the interceptors a module mounts come from the public package"

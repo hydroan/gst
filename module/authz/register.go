@@ -2,11 +2,7 @@ package authz
 
 import (
 	"github.com/hydroan/gst/consts"
-	"github.com/hydroan/gst/interceptor"
-	"github.com/hydroan/gst/internal/grpcserver"
-	internalmiddleware "github.com/hydroan/gst/internal/middleware"
 	"github.com/hydroan/gst/internal/modelregistry"
-	"github.com/hydroan/gst/middleware"
 	"github.com/hydroan/gst/module"
 )
 
@@ -38,17 +34,14 @@ import (
 //   - GET    /api/authz/menus
 //   - GET    /api/authz/menus/:id
 //
-// Middleware:
-//   - Authz
-//
-// Interceptor:
-//   - Authz on the gRPC listener, for the methods not declared Public(), so a
-//     project serving gRPC mounts nothing of its own
-//
-// Register this module after the middleware that establishes the authenticated
-// subject. With the built-in IAM module, call iam.Register before authz.Register
-// so IAMSession runs before Authz and writes CTX_USER_ID for RBAC; the
-// interceptors run in the same order on the gRPC listener.
+// Middleware and interceptor: Register mounts none. The project mounts the
+// authorization itself, middleware.Authz() with middleware.RegisterAuth after
+// the middleware that establishes the authenticated subject, middleware.IAMSession()
+// with the built-in IAM module, so that Authz reads the CTX_USER_ID the
+// session check wrote; and, when it serves gRPC, interceptor.Authz() after
+// interceptor.IAMSession() with interceptor.RegisterAuth. Mounted ahead of the
+// authentication, Authz sees every request as anonymous and refuses it with
+// "permission denied".
 //
 // The request tenant is read from CTX_TENANT_ID, which IAMSession fills from
 // the session; a deployment whose tenant arrives another way registers its own
@@ -57,15 +50,6 @@ func Register() {
 	// Register AuthzRule explicitly because the policy adapter manages this
 	// table instead of a public CRUD module.
 	modelregistry.Register[*AuthzRule]()
-
-	// Register Authz after the authentication middleware that writes CTX_USER_ID.
-	// Registering Authz before IAMSession makes authenticated requests look
-	// anonymous and returns "permission denied" before session cookies are read.
-	internalmiddleware.RegisterAuth(middleware.Authz())
-	// The gRPC listener decides the same way, behind the session
-	// interceptor iam.Register mounted; with no gRPC service registered the
-	// interceptor never runs.
-	grpcserver.UseAuth(interceptor.Authz())
 
 	module.Use[
 		*Role,
