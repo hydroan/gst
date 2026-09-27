@@ -36,6 +36,7 @@ func init() {
 	grpc.Register[record.ItemServiceServer](record.RegisterItemServiceServer, record.ItemService{},
 		grpc.Method{Name: record.ItemService_CreateItem_FullMethodName, HTTPMethod: http.MethodPost, Route: "/api/records/:record/items"},
 		grpc.Method{Name: record.ItemService_GetItem_FullMethodName, HTTPMethod: http.MethodGet, Route: "/api/records/:record/items/:id"},
+		grpc.Method{Name: record.ItemService_PatchManyItem_FullMethodName, HTTPMethod: http.MethodPatch, Route: "/api/records/:record/items/batch"},
 		grpc.Method{Name: record.ItemService_SealItem_FullMethodName, HTTPMethod: http.MethodPost, Route: "/api/items/:id/seal"},
 		grpc.Method{Name: record.ItemService_MergeItem_FullMethodName, HTTPMethod: http.MethodPost, Route: "/api/items/merge"},
 	)

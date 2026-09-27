@@ -21,10 +21,11 @@ type ItemService struct {
 // The calls of the actions of Item, one per rpc of ItemService, built once
 // at package initialization.
 var (
-	createItem = grpc.CreateCall[*record.Item]("/api/records/:record/items")
-	getItem    = grpc.GetCall[*record.Item]("/api/records/:record/items/:id")
-	sealItem   = grpc.CreateCall[*record.Item]("/api/items/:id/seal")
-	mergeItem  = grpc.ServiceCall[*record.Item, *record.MergeReq, *record.MergedItemRsp](consts.Create, "/api/items/merge")
+	createItem    = grpc.CreateCall[*record.Item]("/api/records/:record/items")
+	getItem       = grpc.GetCall[*record.Item]("/api/records/:record/items/:id")
+	patchManyItem = grpc.PatchManyCall[*record.Item]("/api/records/:record/items/batch")
+	sealItem      = grpc.CreateCall[*record.Item]("/api/items/:id/seal")
+	mergeItem     = grpc.ServiceCall[*record.Item, *record.MergeReq, *record.MergedItemRsp](consts.Create, "/api/items/merge")
 )
 
 // CreateItem serves the Create action of Item on /api/records/:record/items.
@@ -43,6 +44,31 @@ func (ItemService) GetItem(ctx context.Context, req *GetItemRequest) (*GetItemRe
 		return nil, err
 	}
 	return &GetItemResponse{Item: ItemToProto(m)}, nil
+}
+
+// PatchManyItem serves the PatchMany action of Item on
+// /api/records/:record/items/batch.
+func (ItemService) PatchManyItem(ctx context.Context, req *PatchManyItemRequest) (*PatchManyItemResponse, error) {
+	params := map[string]string{"record": req.GetRecord()}
+	models := make([]*record.Item, len(req.GetItems()))
+	masks := make([][]string, len(req.GetItems()))
+	for i, item := range req.GetItems() {
+		m, err := grpc.PatchItem(i, params, map[string]string{"record": item.GetRecord()}, item.GetId(), ItemFromProto(item.GetItem()))
+		if err != nil {
+			return nil, err
+		}
+		models[i] = m
+		masks[i] = item.GetUpdateMask().GetPaths()
+	}
+	stored, err := patchManyItem(ctx, params, models, masks)
+	if err != nil {
+		return nil, err
+	}
+	items := make([]*Item, len(stored))
+	for i, m := range stored {
+		items[i] = ItemToProto(m)
+	}
+	return &PatchManyItemResponse{Items: items}, nil
 }
 
 // SealItem serves the Create action of Item on /api/items/:id/seal.

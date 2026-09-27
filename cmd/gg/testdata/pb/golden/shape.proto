@@ -54,9 +54,9 @@ message Shape {
 
   map<int32, ShapePoint> by_code = 24;
 
-  repeated Spans spans = 25;
+  repeated ShapeSpans spans = 25;
 
-  Note note = 26;
+  ShapeNote note = 26;
 
   google.protobuf.Timestamp when = 27;
 
@@ -99,15 +99,29 @@ message Shape {
 
   string meta_name = 42;
 
-  message Spans {
-    int64 from = 1;
+  // Frame refers to the named type Window while the unnamed struct of the
+  // window field becomes a message of its own, named after the field:
+  // declared beside Shape rather than inside it, it shadows nothing.
+  Window frame = 43;
 
-    int64 to = 2;
-  }
+  ShapeWindow window = 44;
+}
 
-  message Note {
-    string text = 1;
-  }
+// ShapeSpans is the message of the spans field of Shape.
+message ShapeSpans {
+  int64 from = 1;
+
+  int64 to = 2;
+}
+
+// ShapeNote is the message of the note field of Shape.
+message ShapeNote {
+  string text = 1;
+}
+
+// ShapeWindow is the message of the window field of Shape.
+message ShapeWindow {
+  int32 width = 1;
 }
 
 // ShapeOptions is kept as a JSON document.
@@ -130,6 +144,12 @@ message ShapePoint {
   int32 x = 1;
 
   int32 y = 2;
+}
+
+// Window is a named type a field of Shape refers to beside the unnamed
+// struct field of the same name.
+message Window {
+  int32 width = 1;
 }
 
 // CreateShapeRequest is the request of ShapeService.CreateShape.

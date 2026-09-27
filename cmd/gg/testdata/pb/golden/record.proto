@@ -53,13 +53,14 @@ message Record {
 
   RecordMeta meta = 23;
 
-  Window window = 24;
+  RecordWindow window = 24;
+}
 
-  message Window {
-    string from = 1;
+// RecordWindow is the message of the window field of Record.
+message RecordWindow {
+  string from = 1;
 
-    string to = 2;
-  }
+  string to = 2;
 }
 
 // RecordMeta is kept beside a record.
@@ -106,7 +107,7 @@ message UpdateRecordResponse {
   Record record = 1;
 }
 
-// PatchRecordRequest is the request of RecordService.PatchRecord.
+// PatchRecordRequest is the request of RecordService.PatchRecord and an item of RecordService.PatchManyRecord.
 message PatchRecordRequest {
   // id is the id of the Record to patch.
   string id = 1;
@@ -225,14 +226,8 @@ message UpdateManyRecordResponse {
 
 // PatchManyRecordRequest is the request of RecordService.PatchManyRecord.
 message PatchManyRecordRequest {
-  // items is the patches, each naming the Record it applies to by its id.
-  repeated Item items = 1;
-
-  message Item {
-    Record record = 1;
-
-    google.protobuf.FieldMask update_mask = 2;
-  }
+  // items is the patches, each a PatchRecordRequest naming the Record it applies to by its id.
+  repeated PatchRecordRequest items = 1;
 }
 
 // PatchManyRecordResponse is the response of RecordService.PatchManyRecord.

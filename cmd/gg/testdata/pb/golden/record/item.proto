@@ -4,6 +4,8 @@ syntax = "proto3";
 
 package tmpapp.record;
 
+import "google/protobuf/field_mask.proto";
+
 import "google/protobuf/timestamp.proto";
 
 option go_package = "tmpapp/pb/record;record";
@@ -68,6 +70,21 @@ message GetItemResponse {
   Item item = 1;
 }
 
+// PatchManyItemRequest is the request of ItemService.PatchManyItem.
+message PatchManyItemRequest {
+  // record is the :record parameter of /api/records/:record/items/batch.
+  string record = 1;
+
+  // items is the patches, each a PatchItemRequest naming the Item it applies to by its id.
+  repeated PatchItemRequest items = 2;
+}
+
+// PatchManyItemResponse is the response of ItemService.PatchManyItem.
+message PatchManyItemResponse {
+  // items is the Item records as stored.
+  repeated Item items = 1;
+}
+
 // SealItemRequest is the request of ItemService.SealItem.
 message SealItemRequest {
   // id is the id of the Item.
@@ -95,6 +112,21 @@ message MergeItemResponse {
   MergeRsp result = 1;
 }
 
+// PatchItemRequest is an item of ItemService.PatchManyItem: a patch of one Item.
+message PatchItemRequest {
+  // record is the :record parameter of /api/records/:record/items/:id.
+  string record = 1;
+
+  // id is the id of the Item to patch.
+  string id = 2;
+
+  // item is the values to apply.
+  Item item = 3;
+
+  // update_mask is the fields of item to apply, named as the message names them.
+  google.protobuf.FieldMask update_mask = 4;
+}
+
 // MergeReq asks to merge items into one.
 message MergeReq {
   repeated string ids = 1;
@@ -112,6 +144,9 @@ service ItemService {
 
   // GetItem is the Get action of Item on /api/records/:record/items/:id.
   rpc GetItem ( GetItemRequest ) returns ( GetItemResponse );
+
+  // PatchManyItem is the PatchMany action of Item on /api/records/:record/items/batch.
+  rpc PatchManyItem ( PatchManyItemRequest ) returns ( PatchManyItemResponse );
 
   // SealItem is the Create action of Item on /api/items/:id/seal.
   rpc SealItem ( SealItemRequest ) returns ( SealItemResponse );

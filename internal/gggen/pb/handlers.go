@@ -231,7 +231,8 @@ func (w *fileWriter) actionType(model *modelinfo.Model, typeName string) ast.Exp
 // call answered.
 //
 // The rpcs of the Record model of the golden fixture on records, with the
-// parameter record, get, among others,
+// parameter record, and the PatchMany of the Item model under
+// records/:record get, among others,
 //
 //	// CreateRecord serves the Create action of Record on /api/records.
 //	func (RecordService) CreateRecord(ctx context.Context, req *CreateRecordRequest) (*CreateRecordResponse, error) {
@@ -274,24 +275,29 @@ func (w *fileWriter) actionType(model *modelinfo.Model, typeName string) ast.Exp
 //		return &ListRecordResponse{Items: items, Total: int64(total)}, nil
 //	}
 //
-//	// PatchManyRecord serves the PatchMany action of Record on
-//	// /api/records/batch.
-//	func (RecordService) PatchManyRecord(ctx context.Context, req *PatchManyRecordRequest) (*PatchManyRecordResponse, error) {
-//		models := make([]*model.Record, len(req.GetItems()))
+//	// PatchManyItem serves the PatchMany action of Item on
+//	// /api/records/:record/items/batch.
+//	func (ItemService) PatchManyItem(ctx context.Context, req *PatchManyItemRequest) (*PatchManyItemResponse, error) {
+//		params := map[string]string{"record": req.GetRecord()}
+//		models := make([]*record.Item, len(req.GetItems()))
 //		masks := make([][]string, len(req.GetItems()))
 //		for i, item := range req.GetItems() {
-//			models[i] = RecordFromProto(item.GetRecord())
+//			m, err := grpc.PatchItem(i, params, map[string]string{"record": item.GetRecord()}, item.GetId(), ItemFromProto(item.GetItem()))
+//			if err != nil {
+//				return nil, err
+//			}
+//			models[i] = m
 //			masks[i] = item.GetUpdateMask().GetPaths()
 //		}
-//		stored, err := patchManyRecord(ctx, nil, models, masks)
+//		stored, err := patchManyItem(ctx, params, models, masks)
 //		if err != nil {
 //			return nil, err
 //		}
-//		items := make([]*Record, len(stored))
+//		items := make([]*Item, len(stored))
 //		for i, m := range stored {
-//			items[i] = RecordToProto(m)
+//			items[i] = ItemToProto(m)
 //		}
-//		return &PatchManyRecordResponse{Items: items}, nil
+//		return &PatchManyItemResponse{Items: items}, nil
 //	}
 //
 // and the Service("merge") Create of Item on items/merge, taking a MergeReq
@@ -374,11 +380,32 @@ func (w *fileWriter) handler(r *rpc) {
 			body = append(body, itemsOf("stored")...)
 			body = append(body, respond(keyValue(responseFields["items"], ident("items"))))
 		case consts.PatchMany:
-			itemFields := goFieldNames(r.request.GetNestedType()[0])
-			masks := define([]string{"masks"}, makeCall(&ast.ArrayType{Elt: &ast.ArrayType{Elt: ident("string")}}, lenCall(req("items"))))
-			models := modelsOf(func(item ast.Expr) ast.Expr { return call(sel(item, "Get"+itemFields[x])) },
-				assign(index(ident("masks"), ident("i")), call(sel(call(sel(ident("item"), "Get"+itemFields["update_mask"])), "GetPaths"))))
-			body = append([]ast.Stmt{models[0], masks, models[1]}, define([]string{"stored", "err"}, run(params, ident("models"), ident("masks"))), failing())
+			// The items are the requests of the model's Patch (see
+			// standardMessages), each readied through PatchItem: its id
+			// names the record and its parameters must agree with the
+			// request's, which the handler names once when there are any.
+			itemsField := r.request.Field[len(r.request.Field)-1]
+			itemFields := goFieldNames(w.file.messageNamed(strings.TrimPrefix(itemsField.GetTypeName(), "."+w.file.pkg+".")))
+			itemParams := ast.Expr(ident("nil"))
+			if len(r.params) > 0 {
+				body = append(body, define([]string{"params"}, params))
+				params = ident("params")
+				lit := compositeLit(&ast.MapType{Key: ident("string"), Value: ident("string")})
+				for _, p := range r.params {
+					lit.Elts = append(lit.Elts, &ast.KeyValueExpr{Key: strLit(p.param), Value: call(sel(ident("item"), "Get"+itemFields[p.name]))})
+				}
+				itemParams = lit
+			}
+			body = append(body,
+				define([]string{"models"}, makeCall(&ast.ArrayType{Elt: star(w.modelPkgType(r.model, r.model.ModelName))}, lenCall(req("items")))),
+				define([]string{"masks"}, makeCall(&ast.ArrayType{Elt: &ast.ArrayType{Elt: ident("string")}}, lenCall(req("items")))),
+				rangeStmt("i", "item", req("items"),
+					define([]string{"m", "err"}, call(w.grpc("PatchItem"), ident("i"), params, itemParams, call(sel(ident("item"), "Get"+itemFields["id"])), fromProto(call(sel(ident("item"), "Get"+itemFields[x]))))),
+					failing(),
+					assign(index(ident("models"), ident("i")), ident("m")),
+					assign(index(ident("masks"), ident("i")), call(sel(call(sel(ident("item"), "Get"+itemFields["update_mask"])), "GetPaths"))),
+				),
+				define([]string{"stored", "err"}, run(params, ident("models"), ident("masks"))), failing())
 			body = append(body, itemsOf("stored")...)
 			body = append(body, respond(keyValue(responseFields["items"], ident("items"))))
 		case consts.DeleteMany:

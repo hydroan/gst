@@ -89,6 +89,12 @@ func (g *generator) print() ([]File, error) {
 		}
 		files = append(files, File{Path: ggconst.DirPB + "/" + name, Content: b.String(), Service: len(g.files[name].services) > 0})
 	}
+	// The printer writes the relative name of every type, which a nested
+	// message of that name would shadow (see readBack): a printed file
+	// meaning anything but the descriptor never reaches the disk.
+	if err := readBack(files, resolved); err != nil {
+		return nil, err
+	}
 	return files, nil
 }
 

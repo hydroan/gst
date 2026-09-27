@@ -97,15 +97,15 @@ func ShapeToProto(m *model.Shape) *Shape {
 		}
 	}
 	if m.Spans != nil {
-		p.Spans = make([]*Shape_Spans, len(m.Spans))
+		p.Spans = make([]*ShapeSpans, len(m.Spans))
 		for i, v := range m.Spans {
-			p.Spans[i] = new(Shape_Spans)
+			p.Spans[i] = new(ShapeSpans)
 			p.Spans[i].From = int64(v.From)
 			p.Spans[i].To = int64(v.To)
 		}
 	}
 	if m.Note != nil {
-		p.Note = new(Shape_Note)
+		p.Note = new(ShapeNote)
 		p.Note.Text = m.Note.Text
 	}
 	if m.When != nil {
@@ -150,6 +150,9 @@ func ShapeToProto(m *model.Shape) *Shape {
 	}
 	p.Name = m.Name
 	p.MetaName = m.ShapeMeta.Name
+	p.Frame = WindowToProto(&m.Frame)
+	p.Window = new(ShapeWindow)
+	p.Window.Width = m.Window.Width
 	return p
 }
 
@@ -282,6 +285,12 @@ func ShapeFromProto(p *Shape) *model.Shape {
 	}
 	m.Name = p.GetName()
 	m.ShapeMeta.Name = p.GetMetaName()
+	if v := p.GetFrame(); v != nil {
+		m.Frame = *WindowFromProto(v)
+	}
+	if v := p.GetWindow(); v != nil {
+		m.Window.Width = v.GetWidth()
+	}
 	return m
 }
 
@@ -373,5 +382,25 @@ func ShapePointFromProto(p *ShapePoint) *model.ShapePoint {
 	m := new(model.ShapePoint)
 	m.X = p.GetX()
 	m.Y = p.GetY()
+	return m
+}
+
+// WindowToProto encodes Window values into their message, nil into nil.
+func WindowToProto(m *model.Window) *Window {
+	if m == nil {
+		return nil
+	}
+	p := new(Window)
+	p.Width = m.Width
+	return p
+}
+
+// WindowFromProto decodes Window messages into values, nil into nil.
+func WindowFromProto(p *Window) *model.Window {
+	if p == nil {
+		return nil
+	}
+	m := new(model.Window)
+	m.Width = p.GetWidth()
 	return m
 }

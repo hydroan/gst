@@ -178,8 +178,9 @@ var wellKnownGoTypes = map[string]struct{ importPath, name string }{
 // protoType spells the Go type of a message field of protobuf type ft, or
 // of one element of it when elem is set: string for a string, *string for
 // an optional one, []string for a repeated one, map<string, int64> as
-// map[string]int64, a message as a pointer to its Go type, *Record_Window
-// for the nested Window and *timestamppb.Timestamp for a Timestamp.
+// map[string]int64, a message as a pointer to its Go type, *RecordWindow
+// for the message of the window field and *timestamppb.Timestamp for a
+// Timestamp.
 func (w *fileWriter) protoType(ft fieldType, elem bool) ast.Expr {
 	if ft.mapEntry != nil {
 		return &ast.MapType{Key: ident(scalarGoType(ft.mapKey)), Value: w.protoType(*ft.mapValue, false)}
@@ -313,7 +314,7 @@ func typeKey(t types.Type) string {
 // Timestamp through grpc.Timestamp, a duration a Duration, raw JSON a Value
 // through grpc.JSONValue, any value a Value through grpc.Value, a JSON object
 // a Struct through grpc.Struct; a project struct converts through its
-// XToProto, an unnamed one field by field into its nested message; a slice
+// XToProto, an unnamed one field by field into its own message; a slice
 // or a map of any of these converts element by element, and a pointer to
 // one converts when it is not nil.
 //
@@ -337,7 +338,7 @@ func typeKey(t types.Type) string {
 //	p.Extra = grpc.Struct(m.Extra)
 //	p.Due = grpc.Timestamp(m.Due)
 //	p.Meta = RecordMetaToProto(&m.Meta)
-//	p.Window = new(Record_Window)
+//	p.Window = new(RecordWindow)
 //	p.Window.From = m.Window.From
 //	p.Window.To = m.Window.To
 //

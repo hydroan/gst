@@ -151,7 +151,11 @@ func (RecordService) PatchManyRecord(ctx context.Context, req *PatchManyRecordRe
 	models := make([]*model.Record, len(req.GetItems()))
 	masks := make([][]string, len(req.GetItems()))
 	for i, item := range req.GetItems() {
-		models[i] = RecordFromProto(item.GetRecord())
+		m, err := grpc.PatchItem(i, nil, nil, item.GetId(), RecordFromProto(item.GetRecord()))
+		if err != nil {
+			return nil, err
+		}
+		models[i] = m
 		masks[i] = item.GetUpdateMask().GetPaths()
 	}
 	stored, err := patchManyRecord(ctx, nil, models, masks)
@@ -213,7 +217,7 @@ func RecordToProto(m *model.Record) *Record {
 	p.Extra = grpc.Struct(m.Extra)
 	p.Due = grpc.Timestamp(m.Due)
 	p.Meta = RecordMetaToProto(&m.Meta)
-	p.Window = new(Record_Window)
+	p.Window = new(RecordWindow)
 	p.Window.From = m.Window.From
 	p.Window.To = m.Window.To
 	return p

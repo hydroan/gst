@@ -101,7 +101,8 @@ func readCommitted(path string) (*descriptorpb.FileDescriptorProto, error) {
 }
 
 // indexMessages maps every message of messages, and of their nested
-// messages, by its dotted name below the file: Record, Record.Window.
+// messages, by its dotted name below the file: Record, and Record.Window
+// for a message a committed file nests in Record.
 func indexMessages(messages []*descriptorpb.DescriptorProto, parent string, index map[string]*descriptorpb.DescriptorProto) {
 	for _, m := range messages {
 		name := m.GetName()

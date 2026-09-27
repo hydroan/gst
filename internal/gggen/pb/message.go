@@ -72,7 +72,7 @@ type fieldType struct {
 // convert.go): the Go name of the message and, for every field of the
 // message, the Go struct field it carries.
 type conversion struct {
-	goName string // the Go type name of the message, Record or Record_Window
+	goName string // the Go type name of the message, Record or RecordWindow
 	fields []fieldConversion
 }
 
@@ -167,10 +167,8 @@ func (g *generator) buildMessage(obj *types.TypeName) {
 		g.project.Report(s, "the type declares %s, so its JSON shape is decided by code the generator cannot read; drop the method or use a type without one", method)
 		return
 	}
-	desc, conv := g.messageOfStruct(m.name, goCamelCase(m.name), m.name, st, m.file, s, []int32{fileMessagesTag, int32Index(len(m.file.messages))})
-	m.conv = conv
+	m.conv = g.messageOfStruct(m.name, g.project.TypeDoc(obj), st, m.file, s)
 	m.file.typed = append(m.file.typed, m)
-	m.file.addMessage(desc, g.project.TypeDoc(obj))
 }
 
 // numberedField is a field of a message being built, with its comment and
@@ -182,12 +180,13 @@ type numberedField struct {
 	conversion fieldConversion
 }
 
-// messageOfStruct builds the descriptor of the message named name, goName
-// in Go and protoName below the file (Record, Record.Window), for the struct
-// st, whose fields are declared in file, at the source path prefix the
-// comments of its fields are recorded under, and the conversion of the
-// message. The fields are listed by number, so the framework's base keys
-// come first. The tagged fields take their numbers first; a field without
+// messageOfStruct adds the message named name to file under comment, the
+// descriptor of the struct st, whose fields are declared in file, and
+// returns the conversion of the message. Every message is a top-level one
+// of its file, the message of an unnamed struct field included (see
+// fieldTypeOf), so the message takes its place in the file before its fields
+// are built and the messages of those fields follow it. The fields are
+// listed by number, so the framework's base keys come first. The tagged fields take their numbers first; a field without
 // a tag is then given the next number after every number in use (see
 // nextNumbers), reported with it for gg check, and listed in
 // DiagnosticsError.MissingTags for gg gen to write into its tag. A key
@@ -195,10 +194,13 @@ type numberedField struct {
 // write every field of a message as a field of the struct, which a nil
 // pointer would have them leave out or allocate. So is a key promoted from
 // a struct outside the project, whose fields cannot carry pb tags.
-func (g *generator) messageOfStruct(name, goName, protoName string, st *types.Struct, file *protoFile, s jsonshape.Site, prefix []int32) (*descriptorpb.DescriptorProto, *conversion) {
+func (g *generator) messageOfStruct(name, comment string, st *types.Struct, file *protoFile, s jsonshape.Site) *conversion {
 	desc := &descriptorpb.DescriptorProto{Name: new(name)}
+	goName, protoName := goCamelCase(name), name
 	g.goNames[desc] = goName
 	g.protoNames[desc] = protoName
+	prefix := []int32{fileMessagesTag, int32Index(len(file.messages))}
+	file.addMessage(desc, comment)
 	fields := g.project.Fields(st, s)
 	base := false
 	for _, f := range fields {
@@ -261,7 +263,7 @@ func (g *generator) messageOfStruct(name, goName, protoName string, st *types.St
 			continue
 		}
 		fs := g.project.FieldSite(s, f.Key, f.Var)
-		ft, ok := g.fieldTypeOf(f.Var.Type(), file, desc, prefix, f.Key, fs)
+		ft, ok := g.fieldTypeOf(f.Var.Type(), file, desc, f.Key, fs)
 		if !ok {
 			continue
 		}
@@ -303,7 +305,7 @@ func (g *generator) messageOfStruct(name, goName, protoName string, st *types.St
 		nf.conversion.goName = goFields[nf.field.GetName()]
 		conv.fields = append(conv.fields, nf.conversion)
 	}
-	return desc, conv
+	return conv
 }
 
 // nextNumbers returns the numbering of the fields without a pb tag of the
@@ -403,11 +405,12 @@ func (g *generator) taggedNumber(tag string, base bool, s jsonshape.Site) int32 
 // datatypes.JSONMap) to google.protobuf.Struct; []byte to bytes, a slice or
 // array to repeated, a map to map; a pointer to the type it
 // points to, optional when that is a scalar; a project struct to its message
-// (queued to be built) and an unnamed struct to a message nested in parent
-// under the field's name. Anything else is reported: a nested slice or map, a
-// map with a value of those, a map key of the wrong type, an interface with
-// methods, a type with encoding methods of its own, a struct from outside the
-// project.
+// (queued to be built) and an unnamed struct to a message of its own beside
+// parent, named after parent and the field. Anything else is reported: a
+// nested slice or map, a map with a value of those, a map key of the wrong
+// type, an interface with methods, a type with encoding methods of its own,
+// a struct from outside the project, an unnamed struct whose message name a
+// type of the file already takes.
 //
 // The fields of the Record model of the golden fixture print as follows,
 // the Go field on the left of each arrow and the protobuf field on its right:
@@ -424,14 +427,14 @@ func (g *generator) taggedNumber(tag string, base bool, s jsonshape.Site) int32 
 //	Extra   map[string]any    -> google.protobuf.Struct extra = 21;
 //	Due     time.Time         -> google.protobuf.Timestamp due = 22;
 //	Meta    RecordMeta        -> RecordMeta meta = 23;
-//	Window  struct{...}       -> Window window = 24;
+//	Window  struct{...}       -> RecordWindow window = 24;
 //
-// the last with message Window nested in Record, holding the fields of the
-// struct.
-func (g *generator) fieldTypeOf(t types.Type, file *protoFile, parent *descriptorpb.DescriptorProto, prefix []int32, key string, s jsonshape.Site) (fieldType, bool) {
+// the last with the message RecordWindow declared after Record, holding the
+// fields of the struct.
+func (g *generator) fieldTypeOf(t types.Type, file *protoFile, parent *descriptorpb.DescriptorProto, key string, s jsonshape.Site) (fieldType, bool) {
 	t = types.Unalias(t)
 	if p, ok := t.(*types.Pointer); ok {
-		ft, ok := g.fieldTypeOf(types.Unalias(p.Elem()), file, parent, prefix, key, s)
+		ft, ok := g.fieldTypeOf(types.Unalias(p.Elem()), file, parent, key, s)
 		if ok && ft.kind != descriptorpb.FieldDescriptorProto_TYPE_MESSAGE && !ft.repeated {
 			ft.optional = true
 		}
@@ -439,7 +442,7 @@ func (g *generator) fieldTypeOf(t types.Type, file *protoFile, parent *descripto
 	}
 	switch u := t.(type) {
 	case *types.Named:
-		return g.namedFieldType(u, file, parent, prefix, key, s)
+		return g.namedFieldType(u, file, parent, key, s)
 	case *types.Basic:
 		kind, ok := scalarKind(u)
 		if !ok {
@@ -451,11 +454,11 @@ func (g *generator) fieldTypeOf(t types.Type, file *protoFile, parent *descripto
 		if g.project.IsByteSlice(u) {
 			return fieldType{kind: descriptorpb.FieldDescriptorProto_TYPE_BYTES}, true
 		}
-		return g.repeatedOf(u.Elem(), file, parent, prefix, key, s)
+		return g.repeatedOf(u.Elem(), file, parent, key, s)
 	case *types.Array:
-		return g.repeatedOf(u.Elem(), file, parent, prefix, key, s)
+		return g.repeatedOf(u.Elem(), file, parent, key, s)
 	case *types.Map:
-		return g.mapOf(u, file, parent, prefix, key, s)
+		return g.mapOf(u, file, parent, key, s)
 	case *types.Interface:
 		if u.Empty() {
 			file.importOf(structProto)
@@ -464,13 +467,20 @@ func (g *generator) fieldTypeOf(t types.Type, file *protoFile, parent *descripto
 		g.project.Report(s, "an interface with methods has no protobuf type, the dynamic type decides it; use a concrete type")
 		return fieldType{}, false
 	case *types.Struct:
-		// An unnamed struct becomes a message of its own, nested in the
-		// enclosing one under the field's name, Record_Window in Go for
-		// the window field of Record.
-		name := strcase.UpperCamelCase(key)
-		nested, conv := g.messageOfStruct(name, g.goNames[parent]+"_"+goCamelCase(name), g.protoNames[parent]+"."+name, u, file, s, append(slices.Clone(prefix), messageNestedTag, int32Index(len(parent.NestedType))))
-		parent.NestedType = append(parent.NestedType, nested)
-		return fieldType{kind: descriptorpb.FieldDescriptorProto_TYPE_MESSAGE, typeName: name, nested: conv}, true
+		// An unnamed struct becomes a message of its own beside the
+		// enclosing one, named after both: RecordWindow, RecordWindow in Go
+		// too, for the window field of Record. Nested in the enclosing
+		// message under the field's name, it would shadow a top-level
+		// message of that name for every field of the enclosing one, the
+		// relative names the printed file writes being resolved from the
+		// inside out.
+		name := g.protoNames[parent] + strcase.UpperCamelCase(key)
+		if holder, ok := file.claim(name, "the "+key+" field of "+g.protoNames[parent]); !ok {
+			g.project.Report(s, "the unnamed struct of the field becomes the message %s, which clashes with %s; name the field or the type differently", name, holder)
+			return fieldType{}, false
+		}
+		conv := g.messageOfStruct(name, name+" is the message of the "+key+" field of "+g.protoNames[parent]+".", u, file, s)
+		return fieldType{kind: descriptorpb.FieldDescriptorProto_TYPE_MESSAGE, typeName: "." + file.pkg + "." + name, nested: conv}, true
 	default:
 		g.project.Report(s, "%s values have no protobuf type", t)
 		return fieldType{}, false
@@ -478,7 +488,7 @@ func (g *generator) fieldTypeOf(t types.Type, file *protoFile, parent *descripto
 }
 
 // namedFieldType maps a named type (see fieldTypeOf).
-func (g *generator) namedFieldType(n *types.Named, file *protoFile, parent *descriptorpb.DescriptorProto, prefix []int32, key string, s jsonshape.Site) (fieldType, bool) {
+func (g *generator) namedFieldType(n *types.Named, file *protoFile, parent *descriptorpb.DescriptorProto, key string, s jsonshape.Site) (fieldType, bool) {
 	obj := n.Obj()
 	if obj.Pkg() != nil {
 		if wellKnown, ok := timeTypes[obj.Pkg().Path()+"."+obj.Name()]; ok {
@@ -487,7 +497,7 @@ func (g *generator) namedFieldType(n *types.Named, file *protoFile, parent *desc
 		}
 	}
 	if kind, ok := jsonshape.BuiltinOf(n); ok {
-		return g.builtinFieldType(kind, n, file, parent, prefix, key, s)
+		return g.builtinFieldType(kind, n, file, parent, key, s)
 	}
 	if g.project.Declares(obj) {
 		if n.TypeArgs().Len() > 0 {
@@ -510,7 +520,7 @@ func (g *generator) namedFieldType(n *types.Named, file *protoFile, parent *desc
 		default:
 			// A named slice, map or basic type encodes as its underlying
 			// type, which is what the field holds.
-			return g.fieldTypeOf(n.Underlying(), file, parent, prefix, key, s)
+			return g.fieldTypeOf(n.Underlying(), file, parent, key, s)
 		}
 	}
 	if method := g.project.MarshalMethod(n); method != "" {
@@ -522,7 +532,7 @@ func (g *generator) namedFieldType(n *types.Named, file *protoFile, parent *desc
 		g.project.Report(s, "type %s is declared outside the project, so its fields cannot carry pb tags; use a project type", n)
 		return fieldType{}, false
 	default:
-		return g.fieldTypeOf(n.Underlying(), file, parent, prefix, key, s)
+		return g.fieldTypeOf(n.Underlying(), file, parent, key, s)
 	}
 }
 
@@ -530,7 +540,7 @@ func (g *generator) namedFieldType(n *types.Named, file *protoFile, parent *desc
 // time types (see timeTypes): a JSON number to string (json.Number keeps
 // digits a double would not), raw JSON to google.protobuf.Value, a JSON
 // object to google.protobuf.Struct, and a wrapper to the type it wraps.
-func (g *generator) builtinFieldType(kind jsonshape.Builtin, n *types.Named, file *protoFile, parent *descriptorpb.DescriptorProto, prefix []int32, key string, s jsonshape.Site) (fieldType, bool) {
+func (g *generator) builtinFieldType(kind jsonshape.Builtin, n *types.Named, file *protoFile, parent *descriptorpb.DescriptorProto, key string, s jsonshape.Site) (fieldType, bool) {
 	switch kind {
 	case jsonshape.BuiltinNumber:
 		return fieldType{kind: descriptorpb.FieldDescriptorProto_TYPE_STRING}, true
@@ -541,7 +551,7 @@ func (g *generator) builtinFieldType(kind jsonshape.Builtin, n *types.Named, fil
 		file.importOf(structProto)
 		return fieldType{kind: descriptorpb.FieldDescriptorProto_TYPE_MESSAGE, typeName: wellKnownStruct}, true
 	case jsonshape.BuiltinWrapper:
-		return g.fieldTypeOf(n.TypeArgs().At(0), file, parent, prefix, key, s)
+		return g.fieldTypeOf(n.TypeArgs().At(0), file, parent, key, s)
 	default:
 		g.project.Report(s, "%s values have no protobuf type", n)
 		return fieldType{}, false
@@ -551,8 +561,8 @@ func (g *generator) builtinFieldType(kind jsonshape.Builtin, n *types.Named, fil
 // repeatedOf maps a slice or array of elem: repeated of the element's type,
 // which must be a scalar or a message, since protobuf has no repeated of
 // repeated or of map.
-func (g *generator) repeatedOf(elem types.Type, file *protoFile, parent *descriptorpb.DescriptorProto, prefix []int32, key string, s jsonshape.Site) (fieldType, bool) {
-	ft, ok := g.fieldTypeOf(elem, file, parent, prefix, key, s)
+func (g *generator) repeatedOf(elem types.Type, file *protoFile, parent *descriptorpb.DescriptorProto, key string, s jsonshape.Site) (fieldType, bool) {
+	ft, ok := g.fieldTypeOf(elem, file, parent, key, s)
 	if !ok {
 		return fieldType{}, false
 	}
@@ -568,7 +578,7 @@ func (g *generator) repeatedOf(elem types.Type, file *protoFile, parent *descrip
 // mapOf maps a Go map: a JSON object of any values becomes
 // google.protobuf.Struct, any other map a protobuf map whose key is a string
 // or integer type and whose value is a scalar or a message.
-func (g *generator) mapOf(m *types.Map, file *protoFile, parent *descriptorpb.DescriptorProto, prefix []int32, key string, s jsonshape.Site) (fieldType, bool) {
+func (g *generator) mapOf(m *types.Map, file *protoFile, parent *descriptorpb.DescriptorProto, key string, s jsonshape.Site) (fieldType, bool) {
 	keyBasic, keyOK := types.Unalias(m.Key()).Underlying().(*types.Basic)
 	if keyOK && keyBasic.Info()&types.IsString != 0 {
 		if elem, ok := types.Unalias(m.Elem()).Underlying().(*types.Interface); ok && elem.Empty() {
@@ -585,7 +595,7 @@ func (g *generator) mapOf(m *types.Map, file *protoFile, parent *descriptorpb.De
 		g.project.Report(s, "a map of pointers has no protobuf type, a map value is never unset; use a map of values")
 		return fieldType{}, false
 	}
-	value, ok := g.fieldTypeOf(m.Elem(), file, parent, prefix, key, s)
+	value, ok := g.fieldTypeOf(m.Elem(), file, parent, key, s)
 	if !ok {
 		return fieldType{}, false
 	}

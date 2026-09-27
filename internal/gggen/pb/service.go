@@ -2,6 +2,8 @@ package pb
 
 import (
 	"go/types"
+	"maps"
+	"slices"
 	"strings"
 
 	"github.com/hydroan/gst/consts"
@@ -66,6 +68,23 @@ func (g *generator) declareService(m *modelinfo.Model) {
 		g.project.Report(s, "the service %s clashes with %s; rename the type", service.GetName(), holder)
 		return
 	}
+	// The standard PatchMany of a route lists its items by the request of
+	// the route's standard Patch (see standardMessages), built for it when
+	// the model declares no Patch there (see patchRequest); a Patch
+	// declaring a Payload or Result of its own has a request of another
+	// shape, which the items cannot be.
+	batches := make(map[string]string) // route -> the qualified rpc of its standard PatchMany
+	patches := make(map[string]*dsl.Action)
+	m.Design.Range(func(route string, action *dsl.Action) {
+		switch {
+		case dsl.HTTPOnlyAction(action.Phase.Name()):
+		case action.Phase == consts.PatchMany && standardAction(m, action):
+			batches[route] = m.ModelName + "Service." + modelinfo.RPCName(m, route, action)
+		case action.Phase == consts.Patch:
+			patches[route] = action
+		}
+	})
+
 	routes := make(map[string]string)
 	served := 0
 	m.Design.Range(func(route string, action *dsl.Action) {
@@ -79,7 +98,11 @@ func (g *generator) declareService(m *modelinfo.Model) {
 			return
 		}
 		routes[name] = route
-		r, ok := g.rpcMessages(m, pkg.Types.Scope(), model, file, route, action, s)
+		itemOf := ""
+		if action.Phase == consts.Patch && standardAction(m, action) {
+			itemOf = batches[route]
+		}
+		r, ok := g.rpcMessages(m, pkg.Types.Scope(), model, file, route, action, itemOf, s)
 		if !ok {
 			return
 		}
@@ -111,7 +134,25 @@ func (g *generator) declareService(m *modelinfo.Model) {
 		g.project.Report(s, "the model declares GRPC() but none of its actions is served over gRPC, every one being ignored by gst.yaml or HTTP only; remove GRPC() or declare an action gRPC serves")
 		return
 	}
+	for _, route := range slices.Sorted(maps.Keys(batches)) {
+		patch, declared := patches[route]
+		switch {
+		case !declared:
+			g.patchRequest(m, model, file, route, batches[route], s)
+		case !standardAction(m, patch):
+			g.project.Report(s, "the PatchMany action on %s lists the requests of the Patch action as its items, but the Patch action there declares a Payload or Result of its own; declare the PatchMany action with a Payload and Result of its own as well", route)
+		}
+	}
 	file.addService(service, service.GetName()+" serves the actions of "+m.ModelName+" over gRPC.")
+}
+
+// standardAction reports whether an action of m is a standard one, taking
+// and answering the model itself, run through the call of its kind
+// (CreateCall and its kind); a Stream action is a custom one whatever it
+// declares.
+func standardAction(m *modelinfo.Model, action *dsl.Action) bool {
+	self := "*" + m.ModelName
+	return action.Payload == self && action.Result == self && action.Phase != consts.Stream
 }
 
 // rpcMessages builds the request and response messages of an action in file
@@ -128,8 +169,11 @@ func (g *generator) declareService(m *modelinfo.Model) {
 // declares, its Payload and Result being what each message of a streamed
 // side carries. Every rpc owns its two messages: two actions sharing a Go
 // type share the message that type encodes to, held by their payload or
-// result fields, never a request or response. A route parameter named like
-// a field of the request is reported.
+// result fields, never a request or response, but for the items of a
+// standard PatchMany, the requests of the route's Patch (see
+// standardMessages): itemOf, the qualified rpc of that PatchMany, is named
+// in the comment of the Patch's request. A route parameter named like a
+// field of the request is reported (see addRequest).
 //
 // The Create action of Item on records/:record/items gets
 //
@@ -147,20 +191,19 @@ func (g *generator) declareService(m *modelinfo.Model) {
 //	  // item is the Item created.
 //	  Item item = 1;
 //	}
-func (g *generator) rpcMessages(m *modelinfo.Model, scope *types.Scope, model *message, file *protoFile, route string, action *dsl.Action, s jsonshape.Site) (*rpc, bool) {
+func (g *generator) rpcMessages(m *modelinfo.Model, scope *types.Scope, model *message, file *protoFile, route string, action *dsl.Action, itemOf string, s jsonshape.Site) (*rpc, bool) {
 	r := &rpc{name: modelinfo.RPCName(m, route, action), service: m.ModelName + "Service", model: m, action: action, route: route}
 	r.registered, r.param = modelinfo.RouterTargetForAction(route, m.Design, action)
 	qualified := r.service + "." + r.name
 	var request, response *descriptorpb.DescriptorProto
 	var requestFields, responseFields []string
-	self := "*" + m.ModelName
-	if action.Payload == self && action.Result == self && action.Phase != consts.Stream {
+	if standardAction(m, action) {
 		if model == nil {
 			g.project.Report(s, "the %s action of the virtual model %s has no message to carry; declare Payload and Result", action.Phase.Name(), m.ModelName)
 			return nil, false
 		}
 		r.standard, r.message = true, model
-		request, requestFields, response, responseFields = standardMessages(m, model, file, action)
+		request, requestFields, response, responseFields = standardMessages(m, model, file, route, action)
 	} else {
 		var ok bool
 		if request, requestFields, r.payload, ok = g.customRequest(scope, file, action, s); !ok {
@@ -173,38 +216,94 @@ func (g *generator) rpcMessages(m *modelinfo.Model, scope *types.Scope, model *m
 
 	requestName := messageName(m, route, action, "Request")
 	responseName := messageName(m, route, action, "Response")
-	r.params = requestParams(m, route, action)
-	fields := make([]*descriptorpb.FieldDescriptorProto, 0, len(r.params)+len(request.Field))
-	comments := make([]string, 0, len(r.params)+len(requestFields))
-	for _, param := range r.params {
+	comment := requestName + " is the request of " + qualified + "."
+	if itemOf != "" {
+		comment = requestName + " is the request of " + qualified + " and an item of " + itemOf + "."
+	}
+	params, ok := g.addRequest(m, file, route, action, request, requestFields, requestName, comment, "the rpc "+qualified, s)
+	if !ok {
+		return nil, false
+	}
+	r.params = params
+	numberInOrder(response)
+	response.Name = new(responseName)
+	if holder, ok := file.claim(responseName, "the rpc "+qualified); !ok {
+		g.project.Report(s, "the message %s clashes with %s; rename the type", responseName, holder)
+		return nil, false
+	}
+	g.addRPCMessage(file, response, responseName+" is the response of "+qualified+".", responseFields)
+	r.request, r.response = request, response
+	return r, true
+}
+
+// addRequest completes the request message of an rpc, or the item message
+// a standard PatchMany lists (see patchRequest), and adds it to file: the
+// parameters of the route (see requestParams) go first, before what request
+// holds, a parameter named like a field of the request being reported; the
+// fields are numbered in order; the message takes name, claimed for owner,
+// and comment, with the comment of each field. It returns the parameters.
+func (g *generator) addRequest(m *modelinfo.Model, file *protoFile, route string, action *dsl.Action, request *descriptorpb.DescriptorProto, requestFields []string, name, comment, owner string, s jsonshape.Site) ([]requestParam, bool) {
+	params := requestParams(m, route, action)
+	fields := make([]*descriptorpb.FieldDescriptorProto, 0, len(params)+len(request.Field))
+	comments := make([]string, 0, len(params)+len(requestFields))
+	for _, param := range params {
 		fields = append(fields, stringField(param.name, 0))
 		comments = append(comments, param.comment)
 	}
 	request.Field = append(fields, request.Field...)
 	requestFields = append(comments, requestFields...)
-	for i, param := range r.params {
+	registered, _ := modelinfo.RouterTargetForAction(route, m.Design, action)
+	for i, param := range params {
 		for _, field := range request.Field[i+1:] {
 			if field.GetName() == param.name {
-				g.project.Report(s, "the :%s parameter of %s clashes with the %s field of %s; rename the parameter", param.param, r.registered, param.name, requestName)
+				g.project.Report(s, "the :%s parameter of %s clashes with the %s field of %s; rename the parameter", param.param, registered, param.name, name)
 				return nil, false
 			}
 		}
 	}
 	numberInOrder(request)
-	numberInOrder(response)
-
-	request.Name = new(requestName)
-	response.Name = new(responseName)
-	for _, name := range []string{requestName, responseName} {
-		if holder, ok := file.claim(name, "the rpc "+qualified); !ok {
-			g.project.Report(s, "the message %s clashes with %s; rename the type", name, holder)
-			return nil, false
-		}
+	request.Name = new(name)
+	if holder, ok := file.claim(name, owner); !ok {
+		g.project.Report(s, "the message %s clashes with %s; rename the type", name, holder)
+		return nil, false
 	}
-	g.addRPCMessage(file, request, requestName+" is the request of "+qualified+".", requestFields)
-	g.addRPCMessage(file, response, responseName+" is the response of "+qualified+".", responseFields)
-	r.request, r.response = request, response
-	return r, true
+	g.addRPCMessage(file, request, comment, requestFields)
+	return params, true
+}
+
+// patchAction is the standard Patch of m, taking and answering the model:
+// the action the items of its standard PatchMany are the requests of.
+func patchAction(m *modelinfo.Model) *dsl.Action {
+	return &dsl.Action{Phase: consts.Patch, Payload: "*" + m.ModelName, Result: "*" + m.ModelName}
+}
+
+// patchRequest builds the request message of the standard Patch of m on
+// route when m declares no Patch there, for the standard PatchMany of the
+// route, the rpc batch, to list its items by (see standardMessages): the
+// message the Patch would get, commented as the item it is.
+//
+// The Item model of the golden fixture, declaring PatchMany and no Patch on
+// its endpoint items under records/:record, gets
+//
+//	// PatchItemRequest is an item of ItemService.PatchManyItem: a patch of one Item.
+//	message PatchItemRequest {
+//	  // record is the :record parameter of /api/records/:record/items/:id.
+//	  string record = 1;
+//
+//	  // id is the id of the Item to patch.
+//	  string id = 2;
+//
+//	  // item is the values to apply.
+//	  Item item = 3;
+//
+//	  // update_mask is the fields of item to apply, named as the message names them.
+//	  google.protobuf.FieldMask update_mask = 4;
+//	}
+func (g *generator) patchRequest(m *modelinfo.Model, model *message, file *protoFile, route, batch string, s jsonshape.Site) {
+	action := patchAction(m)
+	request, requestFields, _, _ := standardMessages(m, model, file, route, action)
+	name := messageName(m, route, action, "Request")
+	g.addRequest(m, file, route, action, request, requestFields, name, name+" is an item of "+batch+": a patch of one "+m.ModelName+".", "the items of "+batch, s)
 }
 
 // rpc is one rpc of a service as the generated handler serves it (see
@@ -344,8 +443,9 @@ func (g *generator) typeMessage(scope *types.Scope, file *protoFile, action *dsl
 //	            with the nested Filter { string field = 1; string op = 2; repeated string values = 3; }
 //	CreateMany, UpdateMany:
 //	            ...Request { repeated X items; }                       ...Response { repeated X items; }
-//	PatchMany:  ...Request { repeated Item items; }                    ...Response { repeated X items; }
-//	            with the nested Item { X x = 1; FieldMask update_mask = 2; }
+//	PatchMany:  ...Request { repeated Patch<X>Request items; }          ...Response { repeated X items; }
+//	            with Patch<X>Request the request of the route's Patch, an item naming the record by its id
+//	            (see patchRequest for a model declaring no Patch there)
 //	DeleteMany: ...Request { repeated string ids; }                    ...Response {}
 //
 // So the Get action of a Record declaring Param("record"), its id put first
@@ -368,30 +468,30 @@ func (g *generator) typeMessage(scope *types.Scope, file *protoFile, action *dsl
 //	  // record is the Record found.
 //	  Record record = 1;
 //	}
-func standardMessages(m *modelinfo.Model, model *message, file *protoFile, action *dsl.Action) (request *descriptorpb.DescriptorProto, requestFields []string, response *descriptorpb.DescriptorProto, responseFields []string) {
+func standardMessages(m *modelinfo.Model, model *message, file *protoFile, route string, action *dsl.Action) (request *descriptorpb.DescriptorProto, requestFields []string, response *descriptorpb.DescriptorProto, responseFields []string) {
 	x := modelFieldName(m)
 	switch action.Phase {
 	case consts.Create:
-		request = newMessage(modelField(x, 0, model))
+		request = newMessage(modelField(x, model))
 		requestFields = append(requestFields, "the "+m.ModelName+" to create")
-		response = newMessage(modelField(x, 0, model))
+		response = newMessage(modelField(x, model))
 		responseFields = append(responseFields, "the "+m.ModelName+" created")
 	case consts.Get:
 		fields, comments, _ := queryFields(action.Phase)
 		request = newMessage(fields...)
 		requestFields = append(requestFields, comments...)
-		response = newMessage(modelField(x, 0, model))
+		response = newMessage(modelField(x, model))
 		responseFields = append(responseFields, "the "+m.ModelName+" found")
 	case consts.Update:
-		request = newMessage(modelField(x, 0, model))
+		request = newMessage(modelField(x, model))
 		requestFields = append(requestFields, "the replacement")
-		response = newMessage(modelField(x, 0, model))
+		response = newMessage(modelField(x, model))
 		responseFields = append(responseFields, "the "+m.ModelName+" as stored")
 	case consts.Patch:
 		file.importOf(fieldMaskProto)
-		request = newMessage(modelField(x, 0, model), messageField("update_mask", 0, wellKnownFieldMask))
+		request = newMessage(modelField(x, model), messageField("update_mask", 0, wellKnownFieldMask))
 		requestFields = append(requestFields, "the values to apply", "the fields of "+x+" to apply, named as the message names them")
-		response = newMessage(modelField(x, 0, model))
+		response = newMessage(modelField(x, model))
 		responseFields = append(responseFields, "the "+m.ModelName+" as stored")
 	case consts.Delete:
 		request = newMessage()
@@ -409,12 +509,9 @@ func standardMessages(m *modelinfo.Model, model *message, file *protoFile, actio
 		response = newMessage(repeatedMessageField("items", model.fullName()))
 		responseFields = append(responseFields, "the "+m.ModelName+" records as stored")
 	case consts.PatchMany:
-		file.importOf(fieldMaskProto)
-		item := newMessage(modelField(x, 1, model), messageField("update_mask", 2, wellKnownFieldMask))
-		item.Name = new("Item")
-		request = newMessage(repeatedMessageField("items", "Item"))
-		request.NestedType = append(request.NestedType, item)
-		requestFields = append(requestFields, "the patches, each naming the "+m.ModelName+" it applies to by its id")
+		item := messageName(m, route, patchAction(m), "Request")
+		request = newMessage(repeatedMessageField("items", "."+file.pkg+"."+item))
+		requestFields = append(requestFields, "the patches, each a "+item+" naming the "+m.ModelName+" it applies to by its id")
 		response = newMessage(repeatedMessageField("items", model.fullName()))
 		responseFields = append(responseFields, "the "+m.ModelName+" records as stored")
 	case consts.DeleteMany:
@@ -570,7 +667,8 @@ func repeatedMessageField(name string, typeName string) *descriptorpb.FieldDescr
 	return field
 }
 
-// modelField returns the singular field carrying the model's message.
-func modelField(name string, number int32, model *message) *descriptorpb.FieldDescriptorProto {
-	return messageField(name, number, model.fullName())
+// modelField returns the singular field carrying the model's message, to be
+// numbered by numberInOrder.
+func modelField(name string, model *message) *descriptorpb.FieldDescriptorProto {
+	return messageField(name, 0, model.fullName())
 }

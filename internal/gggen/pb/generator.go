@@ -30,10 +30,10 @@ type generator struct {
 	messages   map[*types.TypeName]*message
 	byFullName map[string]*message
 	queue      []*types.TypeName
-	// goNames and protoNames hold the Go type name and the dotted name below
-	// the file of every message descriptor built, Record_Window and
-	// Record.Window for the message Window nested in Record, which name the
-	// messages nested further and find the committed message to hold to.
+	// goNames and protoNames hold the Go type name and the name in the file
+	// of every message descriptor built, RecordWindow both for the message
+	// of the window field of Record, which name the messages of the unnamed
+	// struct fields below and find the committed message to hold to.
 	goNames    map[*descriptorpb.DescriptorProto]string
 	protoNames map[*descriptorpb.DescriptorProto]string
 	// committedFiles caches the definitions already under pb/ (see committed).
@@ -234,6 +234,17 @@ func (f *protoFile) addMessage(m *descriptorpb.DescriptorProto, comment string) 
 	f.messages = append(f.messages, m)
 }
 
+// messageNamed returns the top-level message of the file named name, nil
+// when the file declares none.
+func (f *protoFile) messageNamed(name string) *descriptorpb.DescriptorProto {
+	for _, m := range f.messages {
+		if m.GetName() == name {
+			return m
+		}
+	}
+	return nil
+}
+
 // addService appends a service to the file under its leading comment.
 func (f *protoFile) addService(s *descriptorpb.ServiceDescriptorProto, comment string) {
 	f.comment([]int32{fileServicesTag, int32Index(len(f.services))}, comment)
@@ -247,7 +258,6 @@ const (
 	fileMessagesTag      int32 = 4
 	fileServicesTag      int32 = 6
 	messageFieldsTag     int32 = 2
-	messageNestedTag     int32 = 3
 	serviceMethodsTag    int32 = 2
 	fieldMaxNumber       int32 = 536870911
 	reservedRangeStart   int32 = 19000

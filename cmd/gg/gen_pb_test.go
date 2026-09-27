@@ -427,6 +427,23 @@ func TestGenRunRefusesATypeNamedLikeAStandardMessage(t *testing.T) {
 	require.Contains(t, err.Error(), "tmpapp/model.CreateNoticeRequest: the message CreateNoticeRequest clashes with the rpc NoticeService.CreateNotice; rename the type")
 }
 
+// TestGenRunRefusesAnUnnamedStructNamedLikeAType pins that the message of an
+// unnamed struct field, named after the enclosing message and the field,
+// is reported when a type of the file already takes that name: two messages
+// cannot share it.
+func TestGenRunRefusesAnUnnamedStructNamedLikeAType(t *testing.T) {
+	projectDir, ok := newGenProject(t)
+	if !ok {
+		return
+	}
+	writeProtobufProject(t, projectDir, map[string]string{"model/box.go": protobufUnnamedClashModel})
+
+	err := genRunWithOptions(genRunOptions{Quiet: true})
+
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "tmpapp/model.Box.lid: the unnamed struct of the field becomes the message BoxLid, which clashes with the type tmpapp/model.BoxLid; name the field or the type differently")
+}
+
 // TestGenRunRefusesARouteParameterNamedLikeAField pins that a route parameter
 // whose name a request message already uses for a field of its own is
 // reported: the parameter would have no field to travel in.
@@ -733,6 +750,7 @@ func (Item) Design() {
 	dsl.Endpoint("items")
 	dsl.Create(func() {})
 	dsl.Get(func() {})
+	dsl.PatchMany(func() {})
 	dsl.Route("items/merge", func() {
 		dsl.Create(func() {
 			dsl.Service("merge")
@@ -924,6 +942,41 @@ type CreateNoticeRequest struct {
 }
 `
 
+// protobufUnnamedClashModel declares a Box whose unnamed struct field lid
+// would become the message BoxLid, the name of the type its cover field
+// refers to.
+const protobufUnnamedClashModel = `package model
+
+import (
+	"github.com/hydroan/gst/dsl"
+	"github.com/hydroan/gst/model"
+)
+
+// Box has a cover and a lid.
+type Box struct {
+	Cover BoxLid 'json:"cover" pb:"11" gorm:"-"'
+	Lid   struct {
+		Open bool 'json:"open" pb:"1"'
+	} 'json:"lid" pb:"12" gorm:"-"'
+
+	model.Base
+}
+
+// BoxLid is named like the message the lid field would get.
+type BoxLid struct {
+	Open bool 'json:"open" pb:"1"'
+}
+
+func (Box) TableName() string { return "boxes" }
+
+func (Box) Design() {
+	dsl.GRPC()
+	dsl.Migrate()
+	dsl.Endpoint("boxes")
+	dsl.Create(func() {})
+}
+`
+
 // protobufParamClashModel lists entries under a route whose parameter is
 // named like a field of every List request.
 const protobufParamClashModel = `package model
@@ -1076,8 +1129,21 @@ type Shape struct {
 	// key and is selected by its path.
 	Name string 'json:"name" pb:"41"'
 	ShapeMeta
+	// Frame refers to the named type Window while the unnamed struct of the
+	// window field becomes a message of its own, named after the field:
+	// declared beside Shape rather than inside it, it shadows nothing.
+	Frame  Window 'json:"frame" pb:"43" gorm:"-"'
+	Window struct {
+		Width int32 'json:"width" pb:"1"'
+	} 'json:"window" pb:"44" gorm:"-"'
 
 	model.Base
+}
+
+// Window is a named type a field of Shape refers to beside the unnamed
+// struct field of the same name.
+type Window struct {
+	Width int32 'json:"width" pb:"1"'
 }
 
 // ShapeMeta is embedded in Shape, its Name shadowed by the shape's own.
@@ -1241,7 +1307,11 @@ func TestShapeRoundTrips(t *testing.T) {
 		Meta:    &meta,
 		Name:    "outer",
 		ShapeMeta: model.ShapeMeta{Name: "inner"},
+		Frame:   model.Window{Width: 3},
 	}
+	in.Window = struct {
+		Width int32 'json:"width" pb:"1"'
+	}{Width: 4}
 	in.Spans = append(in.Spans, struct {
 		From int 'json:"from" pb:"1"'
 		To   int 'json:"to" pb:"2"'
@@ -1273,6 +1343,8 @@ func TestShapeRoundTrips(t *testing.T) {
 	require.Equal(t, []byte{9}, msg.GetRaw())
 	require.Equal(t, "outer", msg.GetName())
 	require.Equal(t, "inner", msg.GetMetaName())
+	require.Equal(t, int32(3), msg.GetFrame().GetWidth(), "frame is the named type Window")
+	require.Equal(t, int32(4), msg.GetWindow().GetWidth(), "window is the message of the unnamed struct")
 
 	out := pb.ShapeFromProto(msg)
 	require.JSONEq(t, string(in.Doc), string(out.Doc))

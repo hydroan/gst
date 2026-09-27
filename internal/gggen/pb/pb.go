@@ -119,8 +119,9 @@ type MissingTag struct {
 	// the project root, model/record.go; Line is the line of the field.
 	Path string
 	Line int
-	// Struct is the dotted name of the message below its file, Record or
-	// Record.Window, and Field the Go name of the field, Title.
+	// Struct is the name of the message in its file, Record or RecordWindow
+	// for the message of an unnamed struct field, and Field the Go name of
+	// the field, Title.
 	Struct string
 	Field  string
 	// Number is the field number to give the field.
