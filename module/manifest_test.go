@@ -6,6 +6,7 @@ import (
 	"go/parser"
 	"go/token"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -98,10 +99,12 @@ func TestModuleManifestsMatchFrameworkTree(t *testing.T) {
 			for _, mw := range manifest.Copy.Middleware {
 				path := requireFrameworkFile(t, frameworkRoot, manifestPath, "middleware.sourceFile", mw.SourceFile)
 				requireExportedNiladicFunc(t, path, mw.Handler)
+				requireCompilesAlone(t, frameworkRoot, path)
 			}
 			for _, ic := range manifest.Copy.Interceptors {
 				path := requireFrameworkFile(t, frameworkRoot, manifestPath, "interceptors.sourceFile", ic.SourceFile)
 				requireExportedNiladicFunc(t, path, ic.Handler)
+				requireCompilesAlone(t, frameworkRoot, path)
 			}
 			for _, call := range manifest.Copy.RequiredAssembly {
 				requireFrameworkPackageFunc(t, frameworkRoot, manifestPath, call.Import, call.Function)
@@ -109,6 +112,37 @@ func TestModuleManifestsMatchFrameworkTree(t *testing.T) {
 		})
 	}
 	require.Positive(t, checked, "no module manifest was found to validate")
+}
+
+// requireCompilesAlone pins that the file at path compiles on its own, the
+// way gg module copy copies it into a project: as the one file of a package
+// in a module of its own that requires the framework at frameworkRoot. A
+// declaration the file takes from a sibling file of the framework's package
+// fails here rather than in the project's build.
+func requireCompilesAlone(t *testing.T, frameworkRoot, path string) {
+	t.Helper()
+
+	root, err := filepath.Abs(frameworkRoot)
+	require.NoError(t, err)
+	dir := t.TempDir()
+	// The module path stays under the framework's, so the file may import
+	// the framework's internal packages the way module sources do.
+	goMod := "module github.com/hydroan/gst/copycheck\n\ngo 1.27\n\nrequire github.com/hydroan/gst v0.0.0\n\nreplace github.com/hydroan/gst => " + root + "\n"
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "go.mod"), []byte(goMod), 0o600))
+	goSum, err := os.ReadFile(filepath.Join(root, "go.sum"))
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "go.sum"), goSum, 0o600))
+	pkgDir := filepath.Join(dir, filepath.Base(filepath.Dir(path)))
+	require.NoError(t, os.MkdirAll(pkgDir, 0o750))
+	source, err := os.ReadFile(path)
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(filepath.Join(pkgDir, filepath.Base(path)), source, 0o600))
+
+	build := exec.Command("go", "build", "-o", os.DevNull, "./...")
+	build.Dir = dir
+	build.Env = append(os.Environ(), "GOWORK=off", "GOFLAGS=-mod=mod")
+	out, err := build.CombinedOutput()
+	require.NoError(t, err, "%s does not compile on its own:\n%s", path, out)
 }
 
 // requireKnownManifestKeys fails when the manifest carries a "copy" key this

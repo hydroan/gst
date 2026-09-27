@@ -8,6 +8,12 @@ import (
 	"google.golang.org/grpc/metadata"
 )
 
+// userAgentKey is the metadata the User-Agent header arrives as, in the
+// lowercase gRPC metadata keeps its keys in. It is declared here rather than
+// beside sessionIDKey because gg module copy copies this file alone into a
+// project, where it must compile on its own.
+const userAgentKey = "user-agent"
+
 // IAMSession authenticates a call from the IAM session it names as
 // "authorization: Bearer <session id>", through
 // serviceiamsession.Authenticate, the one path middleware.IAMSession takes
@@ -21,7 +27,8 @@ import (
 // client that sets none of its own, and a browser's session is refused here
 // the way it is refused to another browser. The admitted session's user is
 // the caller for the handler and the access log, and the session stays on
-// the context for the actions that read it.
+// the context for the actions that read it through
+// serviceiamsession.CurrentSession.
 func IAMSession() gstgrpc.Interceptor {
 	return func(ctx context.Context) (context.Context, error) {
 		sessionID, _ := gstgrpc.Bearer(ctx)

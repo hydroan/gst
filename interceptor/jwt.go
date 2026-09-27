@@ -12,14 +12,10 @@ import (
 	"google.golang.org/grpc/status"
 )
 
-// The metadata the interceptors read beside the credential, in the
-// lowercase gRPC metadata keeps its keys in: sessionIDKey carries the
-// session id JwtAuth pairs with a token, the X-Session-Id header of the
-// HTTP listener, and userAgentKey what the User-Agent header arrives as.
-const (
-	sessionIDKey = "x-session-id"
-	userAgentKey = "user-agent"
-)
+// sessionIDKey is the metadata carrying the session id JwtAuth pairs with a
+// token, the X-Session-Id header of the HTTP listener, in the lowercase gRPC
+// metadata keeps its keys in.
+const sessionIDKey = "x-session-id"
 
 // JwtAuth authenticates a call from the bearer token in its authorization
 // metadata, the way middleware.JwtAuth authenticates a request from the
