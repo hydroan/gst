@@ -15,11 +15,12 @@ import (
 // descriptor names: the printer writes relative names, which protobuf
 // resolves from the inside out, so a message nested in the one holding a
 // field would shadow a top-level message of its name for that field. The
-// generator declares no such message any more (every message is a top-level
-// one of its file, and the items of a PatchMany are the requests of a
-// Patch), so this is the check that keeps it so: a printed file meaning
-// anything but the descriptor is reported, field or rpc by name, with the
-// message shadowing the one meant.
+// generator declares no such message any more: every message is a top-level
+// one of its file, the items of a PatchMany are the requests of a Patch, and
+// the one message still nested, the Filter of a List request, holds strings
+// alone and refers to no message. This is the check that keeps it so: a
+// printed file meaning anything but the descriptor is reported, field or rpc
+// by name, with the message shadowing the one meant.
 func readBack(files []File, want map[string]protoreflect.FileDescriptor) error {
 	sources := make(map[string]string, len(files))
 	names := make([]string, 0, len(files))

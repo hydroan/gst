@@ -186,9 +186,10 @@ type numberedField struct {
 // of its file, the message of an unnamed struct field included (see
 // fieldTypeOf), so the message takes its place in the file before its fields
 // are built and the messages of those fields follow it. The fields are
-// listed by number, so the framework's base keys come first. The tagged fields take their numbers first; a field without
-// a tag is then given the next number after every number in use (see
-// nextNumbers), reported with it for gg check, and listed in
+// listed by number, so the framework's base keys come first. The tagged
+// fields take their numbers first; a field without a tag is then given the
+// next number after every number in use (see nextNumbers), reported with it
+// for gg check, and listed in
 // DiagnosticsError.MissingTags for gg gen to write into its tag. A key
 // promoted through an embedded pointer is reported: the handlers read and
 // write every field of a message as a field of the struct, which a nil
