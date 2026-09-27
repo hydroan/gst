@@ -10,7 +10,7 @@ import (
 // both, which HTTP cannot, so a model declaring one needs GRPC(). WatchFeed
 // answers one request with a stream of events, UploadFeed takes a stream of
 // events and answers once, ChatFeed streams both ways. A Stream action names
-// its rpc with Filename and always has service code, in service/board/feed;
+// its rpc with Service("name") and always has service code, in service/board/feed;
 // the router registers nothing for it.
 type Feed struct {
 	model.Empty

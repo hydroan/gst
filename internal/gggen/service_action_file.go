@@ -9,7 +9,7 @@ import (
 
 // IsActionServiceSource reports whether the Go source file at path contains a type that embeds
 // service.Base with three type parameters, matching gg-generated per-action service files
-// (including those with a custom DSL Filename). It returns false on read/parse errors.
+// (including those the DSL names with Service("name")). It returns false on read/parse errors.
 func IsActionServiceSource(path string) bool {
 	src, err := os.ReadFile(path)
 	if err != nil {

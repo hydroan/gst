@@ -19,7 +19,7 @@ import (
 
 // applyServiceRoleName renames the service struct type and all associated receiver
 // types and variable names to match the action's RoleName.
-// This is needed when Filename is set, causing the struct name to differ from the
+// This is needed when the action names its service, causing the struct name to differ from the
 // default Phase-based name (e.g., "Creator" → "Archive").
 //
 // It performs three updates:
@@ -136,7 +136,7 @@ func findServiceTypeName(file *ast.File) string {
 
 // ApplyServiceFile brings an existing service file in line with action: the
 // package clause with servicePkgName, the service struct and its receivers
-// with the role name of an action declaring a Filename, the type parameters of
+// with the role name of an action naming its service, the type parameters of
 // the service.Base embedding and the request and result types of the action
 // method with the action's Payload and Result, and the gst model import with
 // whether a model.Empty request or result needs it. For example, once the
@@ -175,7 +175,7 @@ func applyServiceFile(file *ast.File, action *dsl.Action, servicePkgName, correc
 		changed = true
 	}
 
-	// Rename service struct type and receiver names when Filename is set
+	// Rename service struct type and receiver names when the action names its service
 	if applyServiceRoleName(file, action) {
 		changed = true
 	}
@@ -444,8 +444,8 @@ func applyServiceTypeParam(indexListExpr *ast.IndexListExpr, paramIndex int, tar
 // with interior comments (embedding another service is forbidden, and the
 // framework injects the logger only through the direct service.Base
 // embedding), a struct renamed away from the role name is renamed back when
-// the action declares no Filename (with Filename set the
-// applyServiceRoleName rename path owns the name), and a deleted struct is
+// the action names no service (with a name set the applyServiceRoleName
+// rename path owns the struct name), and a deleted struct is
 // regenerated so gg gen always converges on a registrable service struct.
 // It reports whether the file was modified.
 func forceCanonicalServiceStruct(file *ast.File, action *dsl.Action, modelInfo *modelinfo.Model) bool {

@@ -6,7 +6,7 @@ import (
 )
 
 // Entry is a utility action with no table: merging key/value pairs, at
-// POST /api/entries/merge. Filename names the service file after the action
+// POST /api/entries/merge. Service("merge") names the service file after the action
 // rather than the phase, and Flatten puts it in the package of the model's
 // directory, service/tool/merge.go in package tool, instead of a package of
 // the model file's own.

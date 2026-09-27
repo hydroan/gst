@@ -8,7 +8,7 @@ import (
 )
 
 // ListByBox hooks the framework's own List on the box route,
-// /api/archive/boxes/:box_id/documents: the route declares Filename, since
+// /api/archive/boxes/:box_id/documents: the route names the service, since
 // the documents route has a List of its own.
 type ListByBox struct {
 	service.Base[*archive.Document, *archive.Document, *archive.Document]

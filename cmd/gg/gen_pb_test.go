@@ -1060,6 +1060,7 @@ func TestRecordRoundTrips(t *testing.T) {
 		Labels:  map[string]string{"k": "v"},
 		Count:   3,
 		Ratio:   1.5,
+		Enabled: true,
 		Payload: []byte("bytes"),
 		Raw:     json.RawMessage('{"n":1}'),
 		Extra:   map[string]any{"ok": true, "list": []any{"x"}},

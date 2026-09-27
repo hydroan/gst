@@ -33,7 +33,7 @@ import (
 
 // ScanServiceFiles lists the service files under serviceDir that gg manages:
 // the standard phase files such as create.go and list.go, and any other .go
-// file embedding service.Base[...], which a DSL Filename("x") produces. Only
+// file embedding service.Base[...], which a DSL Service("x") produces. Only
 // test files are left out; a file the project's Git ignore rules or the go
 // command ignore is listed like any other. A walk error ends the scan, and the
 // files found before it come back with it.

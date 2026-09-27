@@ -1028,7 +1028,7 @@ func (p *Ping) Get(ctx *gst.ServiceContext, req *sample.Record) (rsp *sample.Pin
 			action: &dsl.Action{
 				Payload: "*Record",
 				Result:  "*PingRsp",
-				// Filename keeps the struct name "Ping" canonical for the
+				// The service name keeps the struct name "Ping" canonical for the
 				// action, so this case exercises only the stale model type
 				// sync and not the role name restoration.
 				ServiceName: "ping",
@@ -1709,7 +1709,7 @@ func (e *Exporter) Export(ctx *gst.ServiceContext, users ...*model.User) (data [
 			},
 		},
 		{
-			// A hand edit renamed the struct of a Filename-less action away
+			// A hand edit renamed the struct of an action naming no service away
 			// from the phase role name. No rename path covers this case, yet
 			// the generated registration code still references the role name,
 			// so the struct and its method receivers are restored to the
@@ -1744,9 +1744,9 @@ func (x *Mangled) Export(ctx *gst.ServiceContext, users ...*model.User) (data []
 			wantAbsent: []string{"Mangled"},
 		},
 		{
-			// With Filename set, a canonical struct still carrying the old role
+			// With a service name set, a canonical struct still carrying the old role
 			// name belongs to the rename path, not the force-rewrite path.
-			name: "skips_rewrite_when_filename_rename_applies",
+			name: "skips_rewrite_when_service_name_rename_applies",
 			code: `package user
 
 import (

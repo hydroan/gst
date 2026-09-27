@@ -1011,7 +1011,7 @@ func TestMain(m *testing.M) {
 
 // TestGenRunScaffoldsCompileForEveryAction type-checks the example request
 // every action shape is scaffolded with against the framework it targets: a
-// database model with every default action, a Filename action with struct
+// database model with every default action, a named-service action with struct
 // types and one with slice types, an Empty model whose List declares its
 // result, and a streaming model. A framework change that breaks an example,
 // such as a client signature, fails here rather than in a project.

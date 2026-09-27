@@ -11,7 +11,7 @@ import (
 
 // TestRPCNameJoinsActionModelAndRouteParameters pins the examples of the
 // RPCName and rpcSuffix doc comments: the action name, or the role name of
-// an action declaring Filename, then the model name, then the parameters a
+// an action naming its service, then the model name, then the parameters a
 // route adds to the model's own.
 func TestRPCNameJoinsActionModelAndRouteParameters(t *testing.T) {
 	document := &modelinfo.Model{ModelName: "Document", Design: &dsl.Design{Endpoint: "archive/documents", Param: ":document"}}

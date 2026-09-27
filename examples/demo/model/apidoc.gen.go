@@ -46,7 +46,7 @@ func init() {
 		Comment: "AttachmentRsp describes the file kept, content included when read back.",
 	})
 	apidoc.Register("demo/model/board", "Feed", apidoc.StructDoc{
-		Comment: "Feed is the streaming half of the gRPC example, served over gRPC alone: a\nStream action carries a stream of messages on one side of the call or on\nboth, which HTTP cannot, so a model declaring one needs GRPC(). WatchFeed\nanswers one request with a stream of events, UploadFeed takes a stream of\nevents and answers once, ChatFeed streams both ways. A Stream action names\nits rpc with Filename and always has service code, in service/board/feed;\nthe router registers nothing for it.",
+		Comment: "Feed is the streaming half of the gRPC example, served over gRPC alone: a\nStream action carries a stream of messages on one side of the call or on\nboth, which HTTP cannot, so a model declaring one needs GRPC(). WatchFeed\nanswers one request with a stream of events, UploadFeed takes a stream of\nevents and answers once, ChatFeed streams both ways. A Stream action names\nits rpc with Service(\"name\") and always has service code, in service/board/feed;\nthe router registers nothing for it.",
 	})
 	apidoc.Register("demo/model/board", "FeedEvent", apidoc.StructDoc{
 		Comment: "FeedEvent is one event of a feed.",
@@ -70,7 +70,7 @@ func init() {
 		Comment: "Item is a child resource of Record: model/record/item.go sits in the\ndirectory named after model/record.go, so its routes nest under the\nparent's, /api/records/:record/items. The nesting is the URL's; what the\nparent means to an item is the service's: Create takes the parent from\nthe route and List keeps to it, in service/record/item, while the other\nactions are the framework's own. The batch actions, declared on a route\nof their own, take and answer lists of items at /api/items/batch.",
 	})
 	apidoc.Register("demo/model/tool", "Entry", apidoc.StructDoc{
-		Comment: "Entry is a utility action with no table: merging key/value pairs, at\nPOST /api/entries/merge. Filename names the service file after the action\nrather than the phase, and Flatten puts it in the package of the model's\ndirectory, service/tool/merge.go in package tool, instead of a package of\nthe model file's own.",
+		Comment: "Entry is a utility action with no table: merging key/value pairs, at\nPOST /api/entries/merge. Service(\"merge\") names the service file after the action\nrather than the phase, and Flatten puts it in the package of the model's\ndirectory, service/tool/merge.go in package tool, instead of a package of\nthe model file's own.",
 	})
 	apidoc.Register("demo/model/tool", "EntryMergeReq", apidoc.StructDoc{
 		Comment: "EntryMergeReq is the pairs to merge.",

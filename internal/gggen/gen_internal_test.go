@@ -400,8 +400,8 @@ func TestGenServiceMethod8(t *testing.T) {
 }`,
 		},
 		{
-			// A Filename action logs its label, like the other hooks do.
-			name: "filename",
+			// An action naming its service logs its label, like the other hooks do.
+			name: "named_service",
 			info: &modelinfo.Model{
 				ModelPkgName: "model",
 				ModelName:    "User",

@@ -1724,7 +1724,7 @@ func (Record) Design() {
 // HTTPOnlyAction doc comment.
 // TestValidateStreamUsage pins the rules of a Stream action: it streams one
 // side of the call or both, each side declared either unary or streaming,
-// it is named by Filename, implemented by Service, shaped by no Exact, and
+// it is named by Service("name"), shaped by no Exact, and
 // only a model declaring GRPC() may declare one; no other action streams.
 func TestValidateStreamUsage(t *testing.T) {
 	tests := []struct {
