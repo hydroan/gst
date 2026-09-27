@@ -197,7 +197,7 @@ service 目录不是镜像复制，分两类文件。
 
 #### 拦截器
 
-只复制 `module.json` 的 `interceptors` 里声明的文件，规则和中间件一样：源文件必须是框架 `interceptor/` 下的非测试 Go 文件，目标固定是项目 `interceptor/` 下的同名文件；`handler` 是源文件里一个不带参数的顶层函数，`scope` 为 `global` 时注册成 `interceptor.Register(<handler>())`，为 `auth` 时注册成 `interceptor.RegisterAuth(<handler>())`，写进 `interceptor/interceptor.go`；文件同样套用改写规则并加上所有权标记。只有一条不同：**只在项目至少有一个声明了 `GRPC()` 的 model 时才复制**。没有 gRPC 的项目看不到任何拦截器代码；项目后来去掉了全部 `GRPC()`，本模块以前复制来的拦截器文件就算过期文件，下次 copy 时删掉。
+只复制 `module.json` 的 `interceptors` 里声明的文件，规则和中间件一样：源文件必须是框架 `interceptor/` 下的非测试 Go 文件，目标固定是项目 `interceptor/` 下的同名文件；`handler` 是源文件里一个不带参数的顶层函数，`scope` 为 `global` 时注册成 `interceptor.Register(<handler>())`，为 `auth` 时注册成 `interceptor.RegisterAuth(<handler>())`，写进 `interceptor/interceptor.go`；文件同样套用改写规则并加上所有权标记。只有一条不同：**只在项目至少有一个声明了 `GRPC()` 的 model 时才复制**。没有 gRPC 的项目看不到任何拦截器代码；项目后来才给 model 加上 `GRPC()` 的，要再跑一次 `gg module copy <name>` 才有拦截器，没人替它补；项目后来去掉了全部 `GRPC()`，本模块以前复制来的拦截器文件就算过期文件，下次 copy 时删掉。
 
 #### 改写规则
 

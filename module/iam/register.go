@@ -20,7 +20,7 @@ import (
 	"github.com/hydroan/gst/module"
 )
 
-// Register registers IAM models, API routes, and middleware.
+// Register registers IAM models and API routes.
 //
 // API Routes:
 //
@@ -70,8 +70,6 @@ import (
 //   - IAM_SESSION_EXPIRATION sets the session lifetime; it defaults to 8 hours.
 //     It is read at registration so an unparseable value fails startup rather
 //     than the first login.
-//
-// NOTE: Register IAM modules before authz modules because authz middleware depends on IAMSession.
 func Register() {
 	// Sessions live only in Redis, so a deployment without it cannot
 	// authenticate anyone. Refusing at startup states that in the one place a

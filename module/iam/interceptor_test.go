@@ -110,7 +110,7 @@ var (
 const grpcUserAgent = "grpc-go/" + grpc.Version
 
 // grpcProbe returns a connection to the probe listener, starting it on
-// first use behind the session interceptor iam.Register mounted.
+// first use behind the session interceptor TestMain mounted.
 func grpcProbe(t *testing.T) *grpc.ClientConn {
 	t.Helper()
 	grpcProbeOnce.Do(func() {

@@ -142,9 +142,10 @@ func (m *Menu) UpdateBefore(ctx context.Context) error {
 // write itself, where every path to it converges. Reads stay as they are:
 // which menus a subject sees is decided per tenant by role bindings.
 //
-// A write with no subject behind it is not refused. Authorization rejects
-// anonymous requests before any handler runs, so no subject means no request:
-// seeding, a job, framework code — the deployment's own hand.
+// A write with no subject behind it is not refused. With the session check
+// mounted ahead of the menus (see iam.Register), an anonymous request never
+// reaches them, so no subject means no request: seeding, a job, framework
+// code — the deployment's own hand.
 func errIfMenuWriteForbidden(ctx context.Context) error {
 	subject := strings.TrimSpace(gst.RequestUserID(ctx))
 	if subject == "" {

@@ -83,8 +83,8 @@ var (
 const grpcUserAgent = "grpc-go/" + grpc.Version
 
 // grpcAuthzProbe returns a connection to the probe listener, starting it on
-// first use behind the session and authorization interceptors iam.Register
-// and authz.Register mounted.
+// first use behind the session and authorization interceptors TestMain
+// mounted.
 func grpcAuthzProbe(t *testing.T) *grpc.ClientConn {
 	t.Helper()
 	grpcAuthzProbeOnce.Do(func() {

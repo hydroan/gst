@@ -6,7 +6,7 @@ import (
 	"github.com/hydroan/gst/module"
 )
 
-// Register registers RBAC authorization modules and middleware.
+// Register registers RBAC authorization modules.
 //
 // Modules:
 //   - Role

@@ -249,9 +249,9 @@ func (sc *ServiceContext) FormFile(name string) (*multipart.FileHeader, error) {
 // It exists for code that receives a plain context and still has to know who
 // is acting — a model hook guarding an operation, like tenant.From for a model
 // deriving its key. An empty answer means machinery rather than a person:
-// seeding, a scheduled job, framework code. Inside a request it cannot be
-// empty, because authorization refuses anonymous requests before any handler
-// runs.
+// seeding, a scheduled job, framework code; or a request nothing
+// authenticated, a public action's or one of a project that mounts no
+// session check (see iam.Register).
 func RequestUserID(ctx context.Context) string {
 	return requestctx.FromContext(ctx).UserID()
 }
