@@ -9,6 +9,7 @@ import (
 	"sync"
 
 	"github.com/cockroachdb/errors"
+	"github.com/hydroan/gst/consts"
 	"github.com/hydroan/gst/internal/types"
 	"go.uber.org/zap"
 )
@@ -25,8 +26,10 @@ type patchFieldSet map[string]struct{}
 
 // applyPatch copies the fields of newVal that fieldSets name — every field
 // when none is given — onto oldVal, the record as stored: the model's own
-// fields only, the framework's base fields and any other struct-kind field
-// being left alone, and each copy logged before it is made.
+// fields only, the framework's base fields, a primary key the model declares
+// itself and any other struct-kind field being left alone, and each copy
+// logged before it is made. The primary key names the record patched, so a
+// patch never moves it to another record.
 func applyPatch(log types.Logger, typ reflect.Type, oldVal reflect.Value, newVal reflect.Value, fieldSets ...patchFieldSet) {
 	var fields patchFieldSet
 	if len(fieldSets) > 0 {
@@ -39,6 +42,9 @@ func applyPatch(log types.Logger, typ reflect.Type, oldVal reflect.Value, newVal
 			if _, ok := fields[field.Name]; !ok {
 				continue
 			}
+		}
+		if field.Name == consts.FIELD_ID {
+			continue
 		}
 		if field.Type.Kind() == reflect.Struct { // skip update base model.
 			// Base and AutoBase contain framework-managed fields and should not
@@ -140,8 +146,8 @@ func patchFieldSetFromJSONFields(typ reflect.Type, fields map[string]json.RawMes
 // applies of the values it carries. The mask must name at least one field,
 // a Patch applying nothing being a mistake to report rather than a
 // record to answer unchanged, and every path must name a field the patch
-// can apply: the model's own fields, not the framework's base fields, a
-// nested struct or a field the model does not have.
+// can apply: the model's own fields, not the framework's base fields, the
+// primary key, a nested struct or a field the model does not have.
 func maskFieldSet(typ reflect.Type, paths []string) (patchFieldSet, error) {
 	if len(paths) == 0 {
 		return nil, errors.New("update_mask must name at least one field")
@@ -165,14 +171,16 @@ func maskFieldSet(typ reflect.Type, paths []string) (patchFieldSet, error) {
 var patchJSONFieldNamesCache sync.Map // reflect.Type -> map[string]string
 
 // patchJSONFieldNames returns the Go field name of typ each JSON key names,
-// computing the mapping on the first call for the type and caching it.
+// computing the mapping on the first call for the type and caching it. A
+// primary key the model declares itself names nothing: it is the record
+// patched, not a field of the patch (see applyPatch).
 func patchJSONFieldNames(typ reflect.Type) map[string]string {
 	if cached, ok := patchJSONFieldNamesCache.Load(typ); ok {
 		return cached.(map[string]string) //nolint:errcheck
 	}
 	fields := make(map[string]string, typ.NumField())
 	for field := range typ.Fields() {
-		if field.PkgPath != "" && !field.Anonymous {
+		if field.PkgPath != "" && !field.Anonymous || field.Name == consts.FIELD_ID {
 			continue
 		}
 		name, ok := patchJSONFieldName(field)

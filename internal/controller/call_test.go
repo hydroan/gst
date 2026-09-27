@@ -221,6 +221,16 @@ func TestUpdateCallReplacesTheRecord(t *testing.T) {
 	_, err = invoke(t, conn, "Update", map[string]any{"id": record.GetID()})
 	requireStatus(t, err, codes.InvalidArgument, "record is required")
 	requireSampleName(t, record.GetID(), "call-updated")
+
+	t.Run("a record naming another id is written under the id of the call", func(t *testing.T) {
+		other := createSample(t, "call-update-other")
+
+		updated, err := invoke(t, conn, "Update", map[string]any{"id": record.GetID(), "record": map[string]any{"id": other.GetID(), "name": "call-moved"}})
+		require.NoError(t, err)
+		require.Equal(t, record.GetID(), updated["id"])
+		requireSampleName(t, record.GetID(), "call-moved")
+		requireSampleName(t, other.GetID(), "call-update-other")
+	})
 }
 
 // TestPatchCallAppliesTheMaskedFields pins the patch call: only the fields

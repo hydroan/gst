@@ -29,6 +29,23 @@ func TestUpdateAnswersNotFound(t *testing.T) {
 	})
 }
 
+// TestUpdateWritesTheRecordTheRouteNames pins that the id of the route names
+// the record an update replaces: an id the body carries moves the update to
+// no other record, and the record answered carries the route's id.
+func TestUpdateWritesTheRecordTheRouteNames(t *testing.T) {
+	target := createSample(t, "update-target")
+	other := createSample(t, "update-other")
+
+	rsp := serve(t, http.MethodPut, "/controller-samples/:id",
+		controller.UpdateHandler[*sampleRecord, *sampleRecord, *sampleRecord](configFor[*sampleRecord](sampleRoute)),
+		"/controller-samples/"+target.GetID(), `{"id":"`+other.GetID()+`","name":"update-renamed"}`)
+
+	require.Equal(t, http.StatusOK, rsp.Code)
+	require.Contains(t, rsp.Body.String(), `"id":"`+target.GetID()+`"`)
+	requireSampleName(t, target.GetID(), "update-renamed")
+	requireSampleName(t, other.GetID(), "update-other")
+}
+
 // TestUpdateKeepsTheRecordTheBeforeHookRefuses pins that an UpdateBefore
 // refusal answers with the hook's error and writes nothing.
 func TestUpdateKeepsTheRecordTheBeforeHookRefuses(t *testing.T) {

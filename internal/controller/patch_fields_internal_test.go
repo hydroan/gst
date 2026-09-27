@@ -19,6 +19,33 @@ type patchFieldsRecord struct {
 	Enabled bool   `json:"enabled"`
 }
 
+// patchFieldsKeyedRecord declares its primary key itself, the way a model
+// shadowing model.Base.ID does.
+type patchFieldsKeyedRecord struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
+}
+
+// TestPatchFieldSetsLeaveThePrimaryKeyOut pins that no patch applies the
+// primary key, which names the record patched and moves it nowhere: a body
+// key naming it names no field, and a mask path naming it is refused.
+func TestPatchFieldSetsLeaveThePrimaryKeyOut(t *testing.T) {
+	typ := reflect.TypeFor[patchFieldsKeyedRecord]()
+
+	fields, err := patchFieldSetFromJSONBody(typ, []byte(`{"id":"other","name":"renamed"}`))
+	require.NoError(t, err)
+	require.Equal(t, patchFieldSet{"Name": {}}, fields)
+
+	_, err = maskFieldSet(typ, []string{"id"})
+	require.EqualError(t, err, `update_mask names "id", which is no field a patch applies`)
+
+	oldRecord := &patchFieldsKeyedRecord{ID: "kept", Name: "before"}
+	newRecord := &patchFieldsKeyedRecord{ID: "other", Name: "after"}
+	applyPatch(nopControllerLogger{}, typ, reflect.ValueOf(oldRecord).Elem(), reflect.ValueOf(newRecord).Elem())
+	require.Equal(t, "kept", oldRecord.ID)
+	require.Equal(t, "after", oldRecord.Name)
+}
+
 func TestApplyPatchAppliesExplicitZeroValues(t *testing.T) {
 	typ := reflect.TypeFor[patchFieldsRecord]()
 	oldRecord := &patchFieldsRecord{

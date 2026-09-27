@@ -117,8 +117,10 @@ func UpdateCall[M types.Model](route string) func(ctx context.Context, params ma
 // creation audit columns (created_at/created_by) from the persisted row,
 // keeping the rest of req intact so hook-populated fields survive; req is the
 // replacement answered. The id req carries is replaced by id, which must not
-// be empty (see setID); an id the model rejects answers CodeNotFound
-// without touching the database.
+// be empty (see setID): SetID keeps an id already set, so the one the body
+// carries is cleared first, or the replacement would land on the record it
+// names; an id the model rejects answers CodeNotFound without touching the
+// database.
 func (a *action[M, REQ, RSP]) updateFlow(ctx context.Context, newServiceContext serviceContextFunc, id string, req M) error {
 	log := logger.Controller.WithContext(ctx, consts.Update)
 	svc := a.service()
@@ -131,6 +133,7 @@ func (a *action[M, REQ, RSP]) updateFlow(ctx context.Context, newServiceContext 
 		log.Errorz("route id rejected by model", zap.String("id", id))
 		return &failure{coder: CodeNotFound}
 	}
+	req.ClearID()
 	req.SetID(id)
 	req.SetUpdatedBy(requestctx.FromContext(ctx).Username()) // set updated_by to current user
 
