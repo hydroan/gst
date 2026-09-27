@@ -25,7 +25,7 @@ gst · HTTP 与 gRPC 两条传输线
     <div class="lane-head"><div class="http">HTTP 线</div><div class="shared">两边共用</div><div class="grpc">gRPC 线</div></div>
     <div class="arch-layer stage">
       <div class="arch-layer-title">① 声明 · 开发者写 model</div>
-      <div class="arch-box lane shared"><b>model/**/*.go：结构体 + Design()</b><ul><li>字段带 <code>json</code>、<code>gorm</code>、<code>pb</code> 三种 tag；<code>pb</code> 是 gRPC 字段号，Base 字段固定占 1–10，业务字段从 11 起，缺号由 gg gen 补上。</li><li><code>Design()</code> 顶层：<code>Migrate()</code>、<code>GRPC()</code>、<code>Endpoint()</code>、<code>Param()</code>、<code>Route()</code>；动作块 Create / Get / List / Update / Patch / Delete 及四个 Many、Import / Export / SSE、Stream。</li><li>块内关键字：<code>Public()</code>、<code>Exact()</code>、<code>Flatten()</code>、<code>Service()</code> 或 <code>Service("name")</code>、<code>Payload[T]()</code>、<code>Result[T]()</code>、<code>StreamingPayload[T]()</code>、<code>StreamingResult[T]()</code>。</li><li><code>internal/dsl</code> 在 gg 阶段解析并校验：非函数字面量的块、非关键字语句、流式动作没开 GRPC()、Service 名撞车，都在生成前报错。</li></ul></div>
+      <div class="arch-box lane shared"><b>model/**/*.go：结构体 + Design()</b><ul><li>字段带 <code>json</code>、<code>gorm</code>、<code>pb</code> 三种 tag；<code>pb</code> 是 gRPC 字段号，Base 字段固定占 1–10，业务字段从 11 起，缺号由 gg gen 补上。</li><li><code>Design()</code> 顶层：<code>Migrate()</code>、<code>GRPC()</code>、<code>Endpoint()</code>、<code>Param()</code>、<code>Route()</code>；动作块 Create / Get / List / Update / Patch / Delete 及四个 Many、Import / Export / SSE、Stream。</li><li>块内关键字：<code>Public()</code>、<code>Exact()</code>、<code>Flatten()</code>、<code>Service()</code> 或 <code>Service("name")</code>、<code>Payload[T]()</code>、<code>Result[T]()</code>、<code>StreamingPayload[T]()</code>、<code>StreamingResult[T]()</code>。</li><li><code>internal/dsl</code> 在 gg 阶段解析并校验：非函数字面量的块、非关键字语句、流式动作没开 GRPC()、Service 文件名撞车，都在生成前报错。</li></ul></div>
     </div>
     <div class="arch-arrow">▼</div>
     <div class="arch-layer stage">
@@ -35,7 +35,7 @@ gst · HTTP 与 gRPC 两条传输线
     <div class="arch-arrow">▼</div>
     <div class="arch-layer stage">
       <div class="arch-layer-title">③ 注册 · 进程 init，两边写进同一张服务表</div>
-      <div class="arch-grid arch-grid-3"><div class="arch-box lane http"><b>router.Register → gin 路由</b><ul><li>每个 phase 一个 <code>controller.XxxHandler</code>（CreateHandler … DeleteManyHandler、Import / Export / SSE）。</li><li>Public 路由挂根组，其余挂认证组。</li></ul></div><div class="arch-box lane shared"><b>注册表与模块</b><ul><li>服务注册表（<code>internal/serviceregistry</code>）按 route|phase 存 service，重复注册 panic。</li><li>模型注册表；模块 <code>iam.Register()</code>、<code>authz.Register()</code> 只注册模型与路由。</li><li>项目在 <code>middleware/middleware.go</code>、<code>interceptor/interceptor.go</code> 里显式挂认证检查。</li></ul></div><div class="arch-box lane grpc"><b>pb.gen.go → grpc.Register</b><ul><li><code>grpc.Register[S](RegisterXServiceServer, XService{}, grpc.Method{Name, HTTPMethod, Route, Public}…)</code>。</li><li><code>grpcserver</code> 记下每个 rpc 对应的 HTTP 动作与 <code>/api/…</code> 路由，供鉴权与日志用。</li></ul></div></div>
+      <div class="arch-grid arch-grid-3"><div class="arch-box lane http"><b>router.Register → gin 路由</b><ul><li>每个 phase 一个 <code>controller.XxxHandler</code>（CreateHandler … DeleteManyHandler、Import / Export / SSE）。</li><li>Public 路由挂公开组，其余挂认证组；两个组都直接挂在根上，路由串自带 <code>/api</code>。</li></ul></div><div class="arch-box lane shared"><b>注册表与模块</b><ul><li>服务注册表（<code>internal/serviceregistry</code>）按 route|phase 存 service，重复注册 panic。</li><li>模型注册表；模块 <code>iam.Register()</code>、<code>authz.Register()</code> 只注册模型与路由。</li><li>项目在 <code>middleware/middleware.go</code>、<code>interceptor/interceptor.go</code> 里显式挂认证检查。</li></ul></div><div class="arch-box lane grpc"><b>pb.gen.go → grpc.Register</b><ul><li><code>grpc.Register[S](RegisterXServiceServer, XService{}, grpc.Method{Name, HTTPMethod, Route, Public}…)</code>。</li><li><code>grpcserver</code> 记下每个 rpc 对应的 HTTP 动作与 <code>/api/…</code> 路由，供鉴权与日志用。</li></ul></div></div>
     </div>
     <div class="arch-arrow">▼</div>
     <div class="arch-layer stage">
@@ -55,7 +55,7 @@ gst · HTTP 与 gRPC 两条传输线
     <div class="arch-arrow">▼</div>
     <div class="arch-layer stage">
       <div class="arch-layer-title">⑦ service · 业务代码只写一份</div>
-      <div class="arch-box lane shared"><b>service.Base[M, REQ, RSP] 与 Service("name") 的结构体</b><ul><li>标准动作：嵌 <code>service.Base</code>，按需覆盖钩子；自定义动作：<code>Create(ctx, req) (rsp, error)</code> 这类方法。</li><li>流式动作：<code>Stream(ctx, req, stream)</code> 三种签名之一，只在 gRPC 上被调用。</li><li>service 代码不 import gin 与 grpc；还能感知到传输的只剩 ServiceContext 元数据的取值（gRPC 上 Method 是 POST、Path 是 FullMethod）。</li></ul></div>
+      <div class="arch-box lane shared"><b>service.Base[M, REQ, RSP] 与 Service("name") 的结构体</b><ul><li>标准动作：嵌 <code>service.Base</code>，按需覆盖钩子；自定义动作：<code>Create(ctx, req) (rsp, error)</code> 这类方法。</li><li>流式动作：<code>Stream(ctx, req, stream)</code> 三种签名之一，只在 gRPC 上被调用。</li><li>HTTP 独有的动作：SSE 的 <code>SSE(ctx) error</code>、Import 的 <code>Import(ctx, reader)</code>、Export 的 <code>Export(ctx, models…)</code> 只在 HTTP 上被调用，也只有它们能用 <code>ctx.SSE</code>、<code>FormFile</code>、<code>Data</code> 这类 HTTP 专属方法；其他动作的 service 用了，gg check 会拦。</li><li>service 代码不 import gin 与 grpc；还能感知到传输的只剩 ServiceContext 元数据的取值（gRPC 上 Method 是 POST、Path 是 FullMethod）。</li></ul></div>
     </div>
   </div>
 </div>
@@ -159,7 +159,7 @@ handler --> client : RecordToProto；失败映射成 status 加 ErrorInfo
 | JWT | `middleware.JwtAuth()` | `interceptor.JwtAuth()`，拒绝一律 Unauthenticated | jwt 包解析与校验 |
 | 授权 | `middleware.Authz()`，obj 是请求的具体路径（`/api/records/42`）、act 是 HTTP 方法 | `interceptor.Authz()`，obj 是注册时记下的路由模式（`/api/records/:id`）、act 是该 rpc 对应的 HTTP 方法，流式动作是 STREAM | `rbac.Enforce(ctx, Subject, obj, act)`，策略只有 HTTP 那一份 |
 | 调用者 | gin 上下文里的用户 | `grpc.WithCaller / CallerOf`，写进访问日志 | `execctx` 里的身份与 trace id |
-| 失败的形状 | JSON 错误体，状态码取 `service.Error` 的 status | status code 加 `ErrorInfo{Reason: SERVICE_ERROR, Domain: gst, Metadata: code, status}` | `service.NewError / NewErrorWithCause`，没有业务状态码 |
+| 失败的形状 | JSON 错误体，状态码取 `service.Error` 的 status | `service.Error` 映射成 status code 加 `ErrorInfo{Reason: SERVICE_ERROR, Domain: gst, Metadata: code, status}`；框架自己的拒绝（Internal、Unimplemented、Canceled、JwtAuth 的 Unauthenticated）只有 status | `service.NewError / NewErrorWithCause`，没有业务状态码 |
 
 HTTP 状态到 gRPC status 的映射（`grpcserver.StatusOfCoder`）：
 
@@ -170,7 +170,7 @@ HTTP 状态到 gRPC status 的映射（`grpcserver.StatusOfCoder`）：
 
 ## 5. 动作承载矩阵
 
-规则一句话：动作在能承载它的每种传输上都提供；只有一种传输能承载的，只在那一种上提供，并且写进生成产物（.proto 文件头写明只走 HTTP 的动作，路由与接口文档写明只走 gRPC 的动作）。
+规则一句话：动作在能承载它的每种传输上都提供；只有一种传输能承载的，只在那一种上提供。Import / Export / SSE 不进 .proto；Stream 不进 router.gen.go、service.gen.go 和接口文档，它在 .proto 里的 rpc 注释写着 served over gRPC alone。
 
 | 动作 | HTTP | gRPC（模型声明了 GRPC()） | 说明 |
 |---|:---:|:---:|---|

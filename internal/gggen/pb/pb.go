@@ -232,7 +232,7 @@ func (e *DiagnosticsError) Error() string {
 //	  // CreateNote is the Create action of Note on /api/notes.
 //	  rpc CreateNote ( CreateNoteRequest ) returns ( CreateNoteResponse );
 //
-//	  // GetNote is the Get action of Note on /api/notes.
+//	  // GetNote is the Get action of Note on /api/notes/:id.
 //	  rpc GetNote ( GetNoteRequest ) returns ( GetNoteResponse );
 //	}
 func Generate(cfg Config) ([]File, error) {
