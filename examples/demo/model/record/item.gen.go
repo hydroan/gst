@@ -19,7 +19,6 @@ var ItemCols = struct {
 	RecordID  gst.Column[string]
 	UpdatedAt gst.TimeColumn
 	UpdatedBy gst.Column[string]
-	UserID    gst.Column[string]
 }{
 	Content:   gst.NewColumn[*Item, string]("content"),
 	CreatedAt: gst.NewTimeColumn[*Item]("created_at"),
@@ -30,5 +29,4 @@ var ItemCols = struct {
 	RecordID:  gst.NewColumn[*Item, string]("record_id"),
 	UpdatedAt: gst.NewTimeColumn[*Item]("updated_at"),
 	UpdatedBy: gst.NewColumn[*Item, string]("updated_by"),
-	UserID:    gst.NewColumn[*Item, string]("user_id"),
 }

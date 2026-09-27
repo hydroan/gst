@@ -4,6 +4,7 @@ package model
 
 import (
 	"demo/model/archive"
+	"demo/model/board"
 	"demo/model/record"
 
 	"github.com/hydroan/gst/model"
@@ -11,7 +12,8 @@ import (
 
 func init() {
 	model.Register[*archive.Document]()
+	model.Register[*Audit]()
+	model.Register[*board.Note]()
 	model.Register[*record.Item]()
 	model.Register[*Record]()
-	model.Register[*TraceProbe]()
 }

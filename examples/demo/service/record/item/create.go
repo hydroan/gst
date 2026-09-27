@@ -7,24 +7,14 @@ import (
 	"github.com/hydroan/gst/service"
 )
 
+// Creator hooks the framework's own Create of an item.
 type Creator struct {
 	service.Base[*record.Item, *record.Item, *record.Item]
 }
 
-func (m *Creator) Create(ctx *gst.ServiceContext, req *record.Item) (rsp *record.Item, err error) {
-	log := m.WithContext(ctx, ctx.Phase())
-	log.Info("item create")
-	return rsp, nil
-}
-
-func (m *Creator) CreateBefore(ctx *gst.ServiceContext, item *record.Item) error {
-	log := m.WithContext(ctx, ctx.Phase())
-	log.Info("item create before")
-	return nil
-}
-
-func (m *Creator) CreateAfter(ctx *gst.ServiceContext, item *record.Item) error {
-	log := m.WithContext(ctx, ctx.Phase())
-	log.Info("item create after")
+// CreateBefore takes the parent from the route, /api/records/:record/items:
+// the route's parameters are read with ctx.Param.
+func (i *Creator) CreateBefore(ctx *gst.ServiceContext, item *record.Item) error {
+	item.RecordID = ctx.Param("record")
 	return nil
 }

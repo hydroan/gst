@@ -1,36 +1,21 @@
 package ping
 
 import (
+	"demo/component"
 	"demo/model"
 
 	"github.com/hydroan/gst"
-	"github.com/hydroan/gst/database"
 	gstmodel "github.com/hydroan/gst/model"
-	"github.com/hydroan/gst/module/iam"
 	"github.com/hydroan/gst/service"
 )
 
+// Lister answers the ping: a custom action, since the model's request and
+// response types differ, so the framework calls List and does nothing of
+// its own.
 type Lister struct {
 	service.Base[*model.Ping, *gstmodel.Empty, *model.PingRsp]
 }
 
-func (p *Lister) List(ctx *gst.ServiceContext, req *gstmodel.Empty) (rsp *model.PingRsp, err error) {
-	users := make([]*iam.User, 0)
-	n := new(int)
-	// _ = database.Database[*iam.User](ctx).WithDryRun().List(&users)
-	// _ = database.Database[*iam.User](ctx).WithDryRun().Count(n)
-
-	_ = database.Database[*iam.User](ctx).List(&users)
-	_ = database.Database[*iam.User](ctx).Count(n)
-
-	// sqls := make([]gst.SQLStatement, 0)
-	//
-	// _ = database.Database[*iam.User](ctx).WithDryRun(&sqls).WithQuery(&iam.User{Username: "test"}).List(&users)
-	// pretty.Println(sqls)
-	// _ = database.Database[*iam.User](ctx).WithDryRun(&sqls).Count(n)
-	// pretty.Println(sqls)
-
-	return &model.PingRsp{
-		Msg: "pong",
-	}, nil
+func (p *Lister) List(*gst.ServiceContext, *gstmodel.Empty) (*model.PingRsp, error) {
+	return &model.PingRsp{Msg: "pong", Records: component.RecordCount()}, nil
 }

@@ -18,9 +18,7 @@ var DocumentCols = struct {
 	DeletedAt gst.Column[gorm.DeletedAt]
 	Format    gst.Column[DocumentFormat]
 	ID        gst.Column[string]
-	Label     gst.Column[string]
 	Name      gst.Column[string]
-	Sealed    gst.Column[bool]
 	Size      gst.NumericColumn[int]
 	UpdatedAt gst.TimeColumn
 	UpdatedBy gst.Column[string]
@@ -33,9 +31,7 @@ var DocumentCols = struct {
 	DeletedAt: gst.NewColumn[*Document, gorm.DeletedAt]("deleted_at"),
 	Format:    gst.NewColumn[*Document, DocumentFormat]("format"),
 	ID:        gst.NewColumn[*Document, string]("id"),
-	Label:     gst.NewColumn[*Document, string]("label"),
 	Name:      gst.NewColumn[*Document, string]("name"),
-	Sealed:    gst.NewColumn[*Document, bool]("sealed"),
 	Size:      gst.NewNumericColumn[*Document, int]("size"),
 	UpdatedAt: gst.NewTimeColumn[*Document]("updated_at"),
 	UpdatedBy: gst.NewColumn[*Document, string]("updated_by"),

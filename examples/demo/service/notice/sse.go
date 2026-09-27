@@ -1,29 +1,30 @@
 package notice
 
 import (
+	"demo/configx"
 	"demo/model"
 
 	"github.com/hydroan/gst"
+	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/service"
 	"github.com/hydroan/gst/sse"
 )
 
+// Streamer serves the notice stream.
 type Streamer struct {
 	service.Base[*model.Notice, *model.Notice, *model.Notice]
 }
 
-// SSE streams three demo events and ends the stream. A real feed would block
-// on an event source instead — subscribe to an sse.Hub, forward events until
-// conn.Context() is done — see the gst sse package documentation for that
-// shape. Heartbeat comment frames are sent automatically while the stream is
-// open, so an event-quiet connection stays alive on its own.
-func (n *Streamer) SSE(ctx *gst.ServiceContext) (err error) {
-	log := n.WithContext(ctx, ctx.Phase())
-	log.Info("notice sse")
-
+// SSE sends as many events as the [notice] section configures, under the
+// event name it configures, then returns, which ends the stream. A feed
+// that never ends blocks on its source instead and sends until
+// conn.Context() is done, which is when the client has gone; heartbeats
+// keep an idle connection alive on their own.
+func (n *Streamer) SSE(ctx *gst.ServiceContext) error {
+	cfg := config.Get[configx.Notice]()
 	return ctx.SSE(func(conn *sse.Conn) error {
-		for i := 1; i <= 3; i++ {
-			if err := conn.Send(sse.Event{Event: "notice", Data: i}); err != nil {
+		for i := 1; i <= cfg.Count; i++ {
+			if err := conn.Send(sse.Event{Event: cfg.Event, Data: i}); err != nil {
 				return err
 			}
 		}

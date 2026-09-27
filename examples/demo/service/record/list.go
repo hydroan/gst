@@ -7,24 +7,24 @@ import (
 	"github.com/hydroan/gst/service"
 )
 
+// Lister hooks the framework's own List.
 type Lister struct {
 	service.Base[*model.Record, *model.Record, *model.Record]
 }
 
-func (c *Lister) List(ctx *gst.ServiceContext, req *model.Record) (rsp *model.Record, err error) {
-	log := c.WithContext(ctx, ctx.Phase())
-	log.Info("record list")
-	return rsp, nil
+// Filter keeps a list to the caller's own records: record carries the
+// conditions the query parameters set, and the owner is added to them
+// whatever the client asked for.
+func (r *Lister) Filter(ctx *gst.ServiceContext, record *model.Record, opts gst.QueryOptions) (*model.Record, gst.QueryOptions, error) {
+	record.UserID = ctx.UserID()
+	return record, opts, nil
 }
 
-func (c *Lister) ListBefore(ctx *gst.ServiceContext, records *[]*model.Record) error {
-	log := c.WithContext(ctx, ctx.Phase())
-	log.Info("record list before")
-	return nil
-}
-
-func (c *Lister) ListAfter(ctx *gst.ServiceContext, records *[]*model.Record) error {
-	log := c.WithContext(ctx, ctx.Phase())
-	log.Info("record list after")
+// ListAfter fills the owner's name in for the client, the rows being the
+// caller's own.
+func (r *Lister) ListAfter(ctx *gst.ServiceContext, records *[]*model.Record) error {
+	for _, record := range *records {
+		record.Username = ctx.Username()
+	}
 	return nil
 }

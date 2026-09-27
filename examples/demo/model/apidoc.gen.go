@@ -5,76 +5,101 @@ package model
 import "github.com/hydroan/gst/apidoc"
 
 func init() {
+	apidoc.Register("demo/model", "Audit", apidoc.StructDoc{
+		Comment: "Audit is one row per change to a record, written by the record hooks: a\ntable with no API of its own, so its design declares Migrate and no\naction, and no route is generated for it. The job in cronjob purges the\nold rows.",
+	})
 	apidoc.Register("demo/model", "Notice", apidoc.StructDoc{
-		Comment: "Notice is a virtual resource demonstrating the SSE streaming action: the\nroute serves a long-lived text/event-stream that a browser consumes through\nan EventSource, or a Go caller through client.Stream.",
+		Comment: "Notice is a stream of server-sent events: a long-lived GET response a\nbrowser reads through an EventSource, or a Go program through\nclient.Stream. SSE always delegates to service code, which opens the\nstream and decides what to send; how many events a stream carries here is\nconfiguration, see configx.Notice. GET /api/notices.",
+	})
+	apidoc.Register("demo/model", "Ping", apidoc.StructDoc{
+		Comment: "Ping is the smallest model there is: an action with no table behind it,\nanswered by service code, open to anyone. GET /api/pings.",
+	})
+	apidoc.Register("demo/model", "PingRsp", apidoc.StructDoc{
+		Comment: "PingRsp is what a ping answers: a word, and the record count the\nrecord_count component keeps.",
 	})
 	apidoc.Register("demo/model", "Record", apidoc.StructDoc{
-		Comment: "Record demonstrates a database-backed resource with custom service hooks.",
+		Comment: "Record is a table-backed resource with the standard actions on\n/api/records and /api/records/:record. Delete, Update, Patch and Get are\nthe framework's own; Create and List declare Service() for the hooks in\nservice/record, which stamp the owner, write the audit trail and keep a\nlist to the caller's own records. Embedding model.Query lets a list take\nthe framework's query parameters: field[op]=value filters such as\ntype[in]=text,image, _sort_by, _page and _size, and cursor pagination.\nThe summary route counts the records by type in service code of its own,\nand the search route is a custom List reading those parameters itself.",
 		Fields: map[string]string{
-			"Username": "Username is returned to clients and is not stored in the database.",
+			"UserID":   "UserID is the owner, taken from the session when the record is created.",
+			"Username": "Username is the owner's name, filled in for the client; not a column.",
 		},
 	})
-	apidoc.Register("demo/model", "TraceProbe", apidoc.StructDoc{
-		Comment: "TraceProbe exercises standard CRUD context propagation through service,\ndatabase, GORM, and model hooks.",
+	apidoc.Register("demo/model", "RecordSearchRsp", apidoc.StructDoc{
+		Comment: "RecordSearchRsp is a page of the caller's records and how many match.",
+	})
+	apidoc.Register("demo/model", "RecordSummaryRsp", apidoc.StructDoc{
+		Comment: "RecordSummaryRsp counts the caller's records, in all and by type.",
 	})
 	apidoc.Register("demo/model/archive", "Document", apidoc.StructDoc{
-		Comment: "Document demonstrates a database resource with custom routes and model hooks.",
+		Comment: "Document is a table-backed resource served on routes it declares itself:\n/api/archive/documents and, for the documents of one box,\n/api/archive/boxes/:box_id/documents, a second List whose service hook\nkeeps the list to the box of the route. Its checks and derived fields are\nmodel hooks, which run inside the framework's transaction whichever\naction writes the row. CSV import and export delegate to service code\nwith fixed signatures, at /api/archive/documents/import and\n/api/archive/documents/export.",
+		Fields: map[string]string{
+			"Size": "Size and Checksum derive from Content in the hooks.",
+		},
 	})
-	apidoc.Register("demo/model/archive/document", "Seal", apidoc.StructDoc{
-		Comment: "Seal demonstrates a custom action model for a document.",
+	apidoc.Register("demo/model/archive/document", "Attachment", apidoc.StructDoc{
+		Comment: "Attachment is the one file kept beside a document, in object storage: an\naction model on a route under the document. Get is declared Exact so the\nroute stays /api/archive/documents/:document/attachment instead of gaining\nan id of its own. The service in service/archive/document/attachment\nreaches MinIO through the framework's provider.",
 	})
-	apidoc.Register("demo/model/archive/document", "SealReq", apidoc.StructDoc{
-		Comment: "SealReq is the request for sealing a document payload.",
+	apidoc.Register("demo/model/archive/document", "AttachmentReq", apidoc.StructDoc{
+		Comment: "AttachmentReq is the file to keep.",
 	})
-	apidoc.Register("demo/model/archive/document", "SealRsp", apidoc.StructDoc{
-		Comment: "SealRsp is the response returned after sealing a document.",
+	apidoc.Register("demo/model/archive/document", "AttachmentRsp", apidoc.StructDoc{
+		Comment: "AttachmentRsp describes the file kept, content included when read back.",
 	})
-	apidoc.Register("demo/model/auth", "Login", apidoc.StructDoc{
-		Comment: "Login demonstrates a public action that is not backed by a database table.",
+	apidoc.Register("demo/model/board", "Feed", apidoc.StructDoc{
+		Comment: "Feed is the streaming half of the gRPC example, served over gRPC alone: a\nStream action carries a stream of messages on one side of the call or on\nboth, which HTTP cannot, so a model declaring one needs GRPC(). WatchFeed\nanswers one request with a stream of events, UploadFeed takes a stream of\nevents and answers once, ChatFeed streams both ways. A Stream action names\nits rpc with Filename and always has service code, in service/board/feed;\nthe router registers nothing for it.",
 	})
-	apidoc.Register("demo/model/auth", "LoginRsp", apidoc.StructDoc{
-		Comment: "LoginRsp contains the URL a client should open to start authentication.",
+	apidoc.Register("demo/model/board", "FeedEvent", apidoc.StructDoc{
+		Comment: "FeedEvent is one event of a feed.",
+	})
+	apidoc.Register("demo/model/board", "FeedUploadRsp", apidoc.StructDoc{
+		Comment: "FeedUploadRsp counts the events a client streamed in.",
+	})
+	apidoc.Register("demo/model/board", "FeedWatchReq", apidoc.StructDoc{
+		Comment: "FeedWatchReq names the topic to watch.",
+	})
+	apidoc.Register("demo/model/board", "Note", apidoc.StructDoc{
+		Comment: "Note is served over gRPC as well as HTTP: GRPC() has gg gen derive\npb/board/note.proto from this type and the actions below, compile it and\ngenerate the gRPC service beside the HTTP routes, both driven by the same\nservice code. Every field carries a pb tag numbering it in the message;\nthe fields of model.Base take 1 to 10, so a model's own start at 11. The\nstandard actions become the rpcs CreateNote, GetNote, ListNote and so on,\nand the publish action PublishNote; over HTTP they are /api/board/notes.",
+	})
+	apidoc.Register("demo/model/board", "NotePublishReq", apidoc.StructDoc{
+		Comment: "NotePublishReq names the channel a note is published to.",
+	})
+	apidoc.Register("demo/model/board", "NotePublishRsp", apidoc.StructDoc{
+		Comment: "NotePublishRsp reports a publication.",
 	})
 	apidoc.Register("demo/model/record", "Item", apidoc.StructDoc{
-		Comment: "Item demonstrates a child resource with nested routes and batch actions.",
-	})
-	apidoc.Register("demo/model/record", "ItemLink", apidoc.StructDoc{
-		Comment: "ItemLink describes an external reference attached to an item.",
+		Comment: "Item is a child resource of Record: model/record/item.go sits in the\ndirectory named after model/record.go, so its routes nest under the\nparent's, /api/records/:record/items. The nesting is the URL's; what the\nparent means to an item is the service's: Create takes the parent from\nthe route and List keeps to it, in service/record/item, while the other\nactions are the framework's own. The batch actions, declared on a route\nof their own, take and answer lists of items at /api/items/batch.",
 	})
 	apidoc.Register("demo/model/tool", "Entry", apidoc.StructDoc{
-		Comment: "Entry is a non-database action model.",
+		Comment: "Entry is a utility action with no table: merging key/value pairs, at\nPOST /api/entries/merge. Filename names the service file after the action\nrather than the phase, and Flatten puts it in the package of the model's\ndirectory, service/tool/merge.go in package tool, instead of a package of\nthe model file's own.",
 	})
 	apidoc.Register("demo/model/tool", "EntryMergeReq", apidoc.StructDoc{
-		Comment: "EntryMergeReq is the request for merging entries.",
+		Comment: "EntryMergeReq is the pairs to merge.",
 	})
 	apidoc.Register("demo/model/tool", "EntryMergeRsp", apidoc.StructDoc{
-		Comment: "EntryMergeRsp is the response returned after merging.",
+		Comment: "EntryMergeRsp is the pairs merged by key.",
 	})
 	apidoc.Register("demo/model/tool", "EntryPair", apidoc.StructDoc{
-		Comment: "EntryPair is one key/value pair submitted for merging.",
+		Comment: "EntryPair is one key/value pair.",
 	})
 	apidoc.RegisterEnum("demo/model", "RecordType", apidoc.EnumDoc{
-		Comment: "RecordType identifies the content type handled by a record.",
+		Comment: "RecordType tells what a record holds.",
 		Values: []apidoc.EnumValue{
 			{Value: "text"},
 			{Value: "image"},
 		},
 	})
 	apidoc.RegisterEnum("demo/model/archive", "DocumentFormat", apidoc.EnumDoc{
-		Comment: "DocumentFormat identifies the expected syntax of a document.",
+		Comment: "DocumentFormat is the syntax a document's content is in.",
 		Values: []apidoc.EnumValue{
 			{Value: "text"},
-			{Value: "json"},
-			{Value: "yaml"},
 			{Value: "markdown"},
 		},
 	})
 	apidoc.RegisterEnum("demo/model/record", "ItemKind", apidoc.EnumDoc{
-		Comment: "ItemKind identifies the kind of an item.",
+		Comment: "ItemKind tells where an item came from.",
 		Values: []apidoc.EnumValue{
 			{Value: "input"},
 			{Value: "output"},
-			{Value: "system"},
 		},
 	})
 }

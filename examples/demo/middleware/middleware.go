@@ -1,22 +1,14 @@
+// Package middleware registers the application's HTTP middleware, each of
+// its own in a file of its own: middleware.Register applies to every API
+// route, middleware.RegisterAuth to the routes behind authentication only,
+// and both run their middleware in registration order. The session check
+// of the iam module is mounted here too, ahead of what reads the caller it
+// establishes.
 package middleware
 
-import (
-	"github.com/gin-gonic/gin"
-	"github.com/hydroan/gst/middleware"
-)
+import "github.com/hydroan/gst/middleware"
 
 func init() {
-	middleware.Register(Middleware1, Middleware2, Middleware3)
-}
-
-func Middleware1(c *gin.Context) {
-	c.Set("name", "middleware1")
-}
-
-func Middleware2(c *gin.Context) {
-	c.Set("name", "middleware2")
-}
-
-func Middleware3(c *gin.Context) {
-	c.Set("name", "middleware3")
+	middleware.Register(noStore)
+	middleware.RegisterAuth(middleware.IAMSession(), actor)
 }

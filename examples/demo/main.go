@@ -6,11 +6,13 @@ import (
 	_ "demo/component"
 	_ "demo/configx"
 	_ "demo/cronjob"
+	_ "demo/interceptor"
 	_ "demo/leader"
 	_ "demo/lock"
 	_ "demo/middleware"
 	_ "demo/model"
 	_ "demo/module"
+	_ "demo/pb"
 	"demo/router"
 	_ "demo/service"
 

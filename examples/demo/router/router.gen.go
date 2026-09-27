@@ -6,7 +6,7 @@ import (
 	"demo/model"
 	"demo/model/archive"
 	"demo/model/archive/document"
-	"demo/model/auth"
+	"demo/model/board"
 	"demo/model/record"
 	"demo/model/tool"
 
@@ -18,32 +18,44 @@ import (
 )
 
 func Init() error {
-	router.Register[*document.Seal, *document.SealReq, *document.SealRsp](router.Auth(), "/api/archive/documents/seal", &gst.ControllerConfig[*document.Seal]{}, consts.Create)
-	router.Register[*archive.Document, *archive.Document, *archive.Document](router.Auth(), "/api/archive/boxes/:box/documents", &gst.ControllerConfig[*archive.Document]{}, consts.List)
+	router.Register[*document.Attachment, *document.AttachmentReq, *document.AttachmentRsp](router.Auth(), "/api/archive/documents/:document/attachment", &gst.ControllerConfig[*document.Attachment]{}, consts.Create)
+	router.Register[*document.Attachment, *gstmodel.Empty, *document.AttachmentRsp](router.Auth(), "/api/archive/documents/:document/attachment", &gst.ControllerConfig[*document.Attachment]{ParamName: "document"}, consts.Get)
+	router.Register[*archive.Document, *archive.Document, *archive.Document](router.Auth(), "/api/archive/boxes/:box_id/documents", &gst.ControllerConfig[*archive.Document]{}, consts.List)
 	router.Register[*archive.Document, *archive.Document, *archive.Document](router.Auth(), "/api/archive/documents", &gst.ControllerConfig[*archive.Document]{}, consts.Create)
+	router.Register[*archive.Document, *archive.Document, *archive.Document](router.Auth(), "/api/archive/documents/:document", &gst.ControllerConfig[*archive.Document]{ParamName: "document"}, consts.Delete)
 	router.Register[*archive.Document, *archive.Document, *archive.Document](router.Auth(), "/api/archive/documents/:document", &gst.ControllerConfig[*archive.Document]{ParamName: "document"}, consts.Update)
 	router.Register[*archive.Document, *archive.Document, *archive.Document](router.Auth(), "/api/archive/documents/:document", &gst.ControllerConfig[*archive.Document]{ParamName: "document"}, consts.Patch)
 	router.Register[*archive.Document, *archive.Document, *archive.Document](router.Auth(), "/api/archive/documents", &gst.ControllerConfig[*archive.Document]{}, consts.List)
+	router.Register[*archive.Document, *archive.Document, *archive.Document](router.Auth(), "/api/archive/documents/import", &gst.ControllerConfig[*archive.Document]{}, consts.Import)
+	router.Register[*archive.Document, *archive.Document, *archive.Document](router.Auth(), "/api/archive/documents/export", &gst.ControllerConfig[*archive.Document]{}, consts.Export)
 	router.Register[*archive.Document, *archive.Document, *archive.Document](router.Auth(), "/api/archive/documents/:document", &gst.ControllerConfig[*archive.Document]{ParamName: "document"}, consts.Get)
-	router.Register[*auth.Login, *gstmodel.Empty, *auth.LoginRsp](router.Pub(), "/api/auth/login", &gst.ControllerConfig[*auth.Login]{}, consts.List)
+	router.Register[*board.Note, *board.Note, *board.Note](router.Auth(), "/api/board/notes", &gst.ControllerConfig[*board.Note]{}, consts.Create)
+	router.Register[*board.Note, *board.Note, *board.Note](router.Auth(), "/api/board/notes/:id", &gst.ControllerConfig[*board.Note]{ParamName: "id"}, consts.Delete)
+	router.Register[*board.Note, *board.Note, *board.Note](router.Auth(), "/api/board/notes/:id", &gst.ControllerConfig[*board.Note]{ParamName: "id"}, consts.Update)
+	router.Register[*board.Note, *board.Note, *board.Note](router.Auth(), "/api/board/notes/:id", &gst.ControllerConfig[*board.Note]{ParamName: "id"}, consts.Patch)
+	router.Register[*board.Note, *board.Note, *board.Note](router.Auth(), "/api/board/notes", &gst.ControllerConfig[*board.Note]{}, consts.List)
+	router.Register[*board.Note, *board.Note, *board.Note](router.Auth(), "/api/board/notes/:id", &gst.ControllerConfig[*board.Note]{ParamName: "id"}, consts.Get)
+	router.Register[*board.Note, *board.NotePublishReq, *board.NotePublishRsp](router.Auth(), "/api/board/notes/:id/publish", &gst.ControllerConfig[*board.Note]{}, consts.Create)
 	router.Register[*model.Notice, *model.Notice, *model.Notice](router.Pub(), "/api/notices", &gst.ControllerConfig[*model.Notice]{}, consts.SSE)
 	router.Register[*model.Ping, *gstmodel.Empty, *model.PingRsp](router.Pub(), "/api/pings", &gst.ControllerConfig[*model.Ping]{}, consts.List)
-	router.Register[*record.Item, *record.Item, *record.Item](router.Auth(), "/api/records/:rec/items", &gst.ControllerConfig[*record.Item]{}, consts.Create)
-	router.Register[*record.Item, *record.Item, *record.Item](router.Auth(), "/api/records/:rec/items/:id", &gst.ControllerConfig[*record.Item]{ParamName: "id"}, consts.Patch)
-	router.Register[*record.Item, *record.Item, *record.Item](router.Auth(), "/api/records/:rec/items", &gst.ControllerConfig[*record.Item]{}, consts.List)
-	router.Register[*record.Item, *record.Item, *record.Item](router.Auth(), "/api/records/:rec/items/:id", &gst.ControllerConfig[*record.Item]{ParamName: "id"}, consts.Get)
+	router.Register[*record.Item, *record.Item, *record.Item](router.Auth(), "/api/records/:record/items", &gst.ControllerConfig[*record.Item]{}, consts.Create)
+	router.Register[*record.Item, *record.Item, *record.Item](router.Auth(), "/api/records/:record/items/:id", &gst.ControllerConfig[*record.Item]{ParamName: "id"}, consts.Delete)
+	router.Register[*record.Item, *record.Item, *record.Item](router.Auth(), "/api/records/:record/items/:id", &gst.ControllerConfig[*record.Item]{ParamName: "id"}, consts.Update)
+	router.Register[*record.Item, *record.Item, *record.Item](router.Auth(), "/api/records/:record/items/:id", &gst.ControllerConfig[*record.Item]{ParamName: "id"}, consts.Patch)
+	router.Register[*record.Item, *record.Item, *record.Item](router.Auth(), "/api/records/:record/items", &gst.ControllerConfig[*record.Item]{}, consts.List)
+	router.Register[*record.Item, *record.Item, *record.Item](router.Auth(), "/api/records/:record/items/:id", &gst.ControllerConfig[*record.Item]{ParamName: "id"}, consts.Get)
+	router.Register[*record.Item, *record.Item, *record.Item](router.Auth(), "/api/items/batch", &gst.ControllerConfig[*record.Item]{}, consts.CreateMany)
 	router.Register[*record.Item, *record.Item, *record.Item](router.Auth(), "/api/items/batch", &gst.ControllerConfig[*record.Item]{}, consts.DeleteMany)
+	router.Register[*record.Item, *record.Item, *record.Item](router.Auth(), "/api/items/batch", &gst.ControllerConfig[*record.Item]{}, consts.UpdateMany)
+	router.Register[*record.Item, *record.Item, *record.Item](router.Auth(), "/api/items/batch", &gst.ControllerConfig[*record.Item]{}, consts.PatchMany)
 	router.Register[*model.Record, *model.Record, *model.Record](router.Auth(), "/api/records", &gst.ControllerConfig[*model.Record]{}, consts.Create)
-	router.Register[*model.Record, *model.Record, *model.Record](router.Auth(), "/api/records/:rec", &gst.ControllerConfig[*model.Record]{ParamName: "rec"}, consts.Delete)
-	router.Register[*model.Record, *model.Record, *model.Record](router.Auth(), "/api/records/:rec", &gst.ControllerConfig[*model.Record]{ParamName: "rec"}, consts.Patch)
+	router.Register[*model.Record, *model.Record, *model.Record](router.Auth(), "/api/records/:record", &gst.ControllerConfig[*model.Record]{ParamName: "record"}, consts.Delete)
+	router.Register[*model.Record, *model.Record, *model.Record](router.Auth(), "/api/records/:record", &gst.ControllerConfig[*model.Record]{ParamName: "record"}, consts.Update)
+	router.Register[*model.Record, *model.Record, *model.Record](router.Auth(), "/api/records/:record", &gst.ControllerConfig[*model.Record]{ParamName: "record"}, consts.Patch)
 	router.Register[*model.Record, *model.Record, *model.Record](router.Auth(), "/api/records", &gst.ControllerConfig[*model.Record]{}, consts.List)
-	router.Register[*model.Record, *model.Record, *model.Record](router.Auth(), "/api/records/:rec", &gst.ControllerConfig[*model.Record]{ParamName: "rec"}, consts.Get)
+	router.Register[*model.Record, *model.Record, *model.Record](router.Auth(), "/api/records/:record", &gst.ControllerConfig[*model.Record]{ParamName: "record"}, consts.Get)
+	router.Register[*model.Record, *gstmodel.Empty, *model.RecordSearchRsp](router.Auth(), "/api/records/search", &gst.ControllerConfig[*model.Record]{}, consts.List)
+	router.Register[*model.Record, *gstmodel.Empty, *model.RecordSummaryRsp](router.Auth(), "/api/records/summary", &gst.ControllerConfig[*model.Record]{}, consts.List)
 	router.Register[*tool.Entry, *tool.EntryMergeReq, *tool.EntryMergeRsp](router.Auth(), "/api/entries/merge", &gst.ControllerConfig[*tool.Entry]{}, consts.Create)
-	router.Register[*model.TraceProbe, *model.TraceProbe, *model.TraceProbe](router.Auth(), "/api/trace-probes", &gst.ControllerConfig[*model.TraceProbe]{}, consts.Create)
-	router.Register[*model.TraceProbe, *model.TraceProbe, *model.TraceProbe](router.Auth(), "/api/trace-probes/:trace_probe", &gst.ControllerConfig[*model.TraceProbe]{ParamName: "trace_probe"}, consts.Delete)
-	router.Register[*model.TraceProbe, *model.TraceProbe, *model.TraceProbe](router.Auth(), "/api/trace-probes/:trace_probe", &gst.ControllerConfig[*model.TraceProbe]{ParamName: "trace_probe"}, consts.Update)
-	router.Register[*model.TraceProbe, *model.TraceProbe, *model.TraceProbe](router.Auth(), "/api/trace-probes/:trace_probe", &gst.ControllerConfig[*model.TraceProbe]{ParamName: "trace_probe"}, consts.Patch)
-	router.Register[*model.TraceProbe, *model.TraceProbe, *model.TraceProbe](router.Auth(), "/api/trace-probes", &gst.ControllerConfig[*model.TraceProbe]{}, consts.List)
-	router.Register[*model.TraceProbe, *model.TraceProbe, *model.TraceProbe](router.Auth(), "/api/trace-probes/:trace_probe", &gst.ControllerConfig[*model.TraceProbe]{ParamName: "trace_probe"}, consts.Get)
 	return nil
 }

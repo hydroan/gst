@@ -5,28 +5,25 @@ import (
 	"github.com/hydroan/gst/model"
 )
 
-// ItemKind identifies the kind of an item.
+// ItemKind tells where an item came from.
 type ItemKind string
 
 const (
 	ItemKindInput  ItemKind = "input"
 	ItemKindOutput ItemKind = "output"
-	ItemKindSystem ItemKind = "system"
 )
 
-// ItemLink describes an external reference attached to an item.
-type ItemLink struct {
-	URL   string `json:"url"`
-	Title string `json:"title,omitempty"`
-}
-
-// Item demonstrates a child resource with nested routes and batch actions.
+// Item is a child resource of Record: model/record/item.go sits in the
+// directory named after model/record.go, so its routes nest under the
+// parent's, /api/records/:record/items. The nesting is the URL's; what the
+// parent means to an item is the service's: Create takes the parent from
+// the route and List keeps to it, in service/record/item, while the other
+// actions are the framework's own. The batch actions, declared on a route
+// of their own, take and answer lists of items at /api/items/batch.
 type Item struct {
-	UserID   string     `json:"user_id" query:"user_id"`
-	RecordID string     `json:"record_id" query:"record_id"`
-	Kind     ItemKind   `json:"kind" query:"kind"`
-	Content  string     `json:"content" gorm:"type:text"`
-	Links    []ItemLink `json:"links,omitempty" gorm:"-"`
+	RecordID string   `json:"record_id" query:"record_id"`
+	Kind     ItemKind `json:"kind" query:"kind"`
+	Content  string   `json:"content" gorm:"type:text"`
 
 	model.Base
 }
@@ -40,6 +37,8 @@ func (Item) Design() {
 	Create(func() {
 		Service()
 	})
+	Delete(func() {})
+	Update(func() {})
 	Patch(func() {})
 	List(func() {
 		Service()
@@ -47,10 +46,9 @@ func (Item) Design() {
 	Get(func() {})
 
 	Route("items", func() {
-		DeleteMany(func() {
-			Service()
-		})
+		CreateMany(func() {})
+		DeleteMany(func() {})
+		UpdateMany(func() {})
+		PatchMany(func() {})
 	})
 }
-
-func (Item) Purge() bool { return true }

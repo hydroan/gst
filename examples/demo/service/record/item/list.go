@@ -7,24 +7,13 @@ import (
 	"github.com/hydroan/gst/service"
 )
 
+// Lister hooks the framework's own List of items.
 type Lister struct {
 	service.Base[*record.Item, *record.Item, *record.Item]
 }
 
-func (m *Lister) List(ctx *gst.ServiceContext, req *record.Item) (rsp *record.Item, err error) {
-	log := m.WithContext(ctx, ctx.Phase())
-	log.Info("item list")
-	return rsp, nil
-}
-
-func (m *Lister) ListBefore(ctx *gst.ServiceContext, items *[]*record.Item) error {
-	log := m.WithContext(ctx, ctx.Phase())
-	log.Info("item list before")
-	return nil
-}
-
-func (m *Lister) ListAfter(ctx *gst.ServiceContext, items *[]*record.Item) error {
-	log := m.WithContext(ctx, ctx.Phase())
-	log.Info("item list after")
-	return nil
+// Filter keeps the list to the items of the parent the route names.
+func (i *Lister) Filter(ctx *gst.ServiceContext, item *record.Item, opts gst.QueryOptions) (*record.Item, gst.QueryOptions, error) {
+	item.RecordID = ctx.Param("record")
+	return item, opts, nil
 }

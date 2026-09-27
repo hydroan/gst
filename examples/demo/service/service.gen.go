@@ -4,39 +4,37 @@ package service
 
 import (
 	"demo/service/archive/document"
-	"demo/service/archive/document/seal"
-	"demo/service/auth/login"
+	"demo/service/archive/document/attachment"
+	"demo/service/board/feed"
+	"demo/service/board/note"
 	"demo/service/notice"
 	"demo/service/ping"
 	"demo/service/record"
 	"demo/service/record/item"
-	"demo/service/tool/entry"
-	"demo/service/trace_probe"
+	"demo/service/tool"
 
 	"github.com/hydroan/gst/consts"
 	"github.com/hydroan/gst/service"
 )
 
 func init() {
-	service.Register[*seal.Creator](consts.Create, "/api/archive/documents/seal")
-	service.Register[*document.Creator](consts.Create, "/api/archive/documents")
-	service.Register[*document.Updater](consts.Update, "/api/archive/documents/:document")
-	service.Register[*document.Lister](consts.List, "/api/archive/documents")
-	service.Register[*login.Login](consts.List, "/api/auth/login")
+	service.Register[*attachment.Creator](consts.Create, "/api/archive/documents/:document/attachment")
+	service.Register[*attachment.Getter](consts.Get, "/api/archive/documents/:document/attachment")
+	service.Register[*document.ListByBox](consts.List, "/api/archive/boxes/:box_id/documents")
+	service.Register[*document.Importer](consts.Import, "/api/archive/documents/import")
+	service.Register[*document.Exporter](consts.Export, "/api/archive/documents/export")
+	service.Register[*feed.Chat](consts.Stream, "/api/board/feeds/chat")
+	service.Register[*feed.Upload](consts.Stream, "/api/board/feeds/upload")
+	service.Register[*feed.Watch](consts.Stream, "/api/board/feeds/watch")
+	service.Register[*note.Creator](consts.Create, "/api/board/notes")
+	service.Register[*note.Publish](consts.Create, "/api/board/notes/:id/publish")
 	service.Register[*notice.Streamer](consts.SSE, "/api/notices")
 	service.Register[*ping.Lister](consts.List, "/api/pings")
-	service.Register[*item.Creator](consts.Create, "/api/records/:rec/items")
-	service.Register[*item.Lister](consts.List, "/api/records/:rec/items")
-	service.Register[*item.ManyDeleter](consts.DeleteMany, "/api/items/batch")
+	service.Register[*item.Creator](consts.Create, "/api/records/:record/items")
+	service.Register[*item.Lister](consts.List, "/api/records/:record/items")
 	service.Register[*record.Creator](consts.Create, "/api/records")
-	service.Register[*record.Deleter](consts.Delete, "/api/records/:rec")
-	service.Register[*record.Patcher](consts.Patch, "/api/records/:rec")
 	service.Register[*record.Lister](consts.List, "/api/records")
-	service.Register[*entry.Merge](consts.Create, "/api/entries/merge")
-	service.Register[*traceprobe.Creator](consts.Create, "/api/trace-probes")
-	service.Register[*traceprobe.Deleter](consts.Delete, "/api/trace-probes/:trace_probe")
-	service.Register[*traceprobe.Updater](consts.Update, "/api/trace-probes/:trace_probe")
-	service.Register[*traceprobe.Patcher](consts.Patch, "/api/trace-probes/:trace_probe")
-	service.Register[*traceprobe.Lister](consts.List, "/api/trace-probes")
-	service.Register[*traceprobe.Getter](consts.Get, "/api/trace-probes/:trace_probe")
+	service.Register[*record.Search](consts.List, "/api/records/search")
+	service.Register[*record.Summary](consts.List, "/api/records/summary")
+	service.Register[*tool.Merge](consts.Create, "/api/entries/merge")
 }
