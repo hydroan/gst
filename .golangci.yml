@@ -184,7 +184,7 @@ linters:
             - "!**/module/authz/register_test.go"
           deny:
             - pkg: "github.com/hydroan/gst/interceptor$"
-              desc: "framework code imports github.com/hydroan/gst/internal/grpcserver; only the interceptors a module mounts come from the public package"
+              desc: "framework code imports github.com/hydroan/gst/internal/grpcserver; only the interceptors of the modules come from the public package, mounted by the project"
         # Only the gg command prints. The packages it runs return what they
         # found, or report progress through callbacks the command passes, and
         # the command decides how that shows.

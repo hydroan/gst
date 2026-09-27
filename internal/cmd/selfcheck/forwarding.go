@@ -44,9 +44,15 @@ type forwarding struct {
 // A function that only wraps one call of a function of its own package,
 // shaping the arguments however it likes (see wrappedCall), is reported the
 // same way in the first case: with a single use, it is that call written
-// away from its site, and the package has two names for one job. A wrapper
-// of another package's function is left alone: the constant it fixes, the
-// suffix a name test passes to strings.HasSuffix, is what its name says.
+// away from its site, and the package has two names for one job. The check
+// stops at the package boundary on purpose: a one-line wrapper of another
+// package's function usually names the constant it fixes, the suffix a name
+// test passes to strings.HasSuffix, and reporting those would trade a name
+// for a bare literal at every use. The price is that a single-use wrapper
+// fixing nothing worth a name, strings.ReplaceAll(name, "_", " ") under a
+// name of its own, passes too and is inlined by review, not by this check.
+// Widening the check means judging every such wrapper in the tree at once,
+// not carving out exceptions one by one.
 //
 // Only uses inside the package are counted, tests included, which is why only
 // unexported functions are judged. Left alone are a method whose name an
