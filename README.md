@@ -242,7 +242,7 @@ func (Entry) Design() {
 （默认开，`grpcurl` 能直接列出服务）、`keepalive_time`、`keepalive_timeout`（默认取 grpc-go 自己的值）。
 没有模型声明 `GRPC()` 的项目不开这个端口。监听上还有两个框架自带的服务：标准的健康服务
 `grpc.health.v1.Health`，进程在服务时答 SERVING，收到停机信号后和 `/-/readyz` 同时变成 NOT_SERVING，
-排空窗口过后监听才关闭；以及反射服务。认证在 `interceptor/` 里挂，和 `middleware/` 一一对应：
+停机延迟过后两个监听一起关闭，在途的流在那一刻以 Unavailable 结束、客户端据此换副本重连，一元调用照常排空；以及反射服务。认证在 `interceptor/` 里挂，和 `middleware/` 一一对应：
 `interceptor.RegisterAuth(interceptor.IAMSession())` 之后，每个没声明 `Public()` 的 rpc 都要在
 `authorization` 元数据里带 `Bearer <会话 id>`；会话绑定登录时的 User-Agent，程序要拿会话调 gRPC，登录时得带和 gRPC 客户端
 一样的 User-Agent（grpc-go 默认是 `grpc-go/<版本>`），浏览器登录的会话在 gRPC 上会被拒；健康与反射服务不经过项目的认证拦截器（`RegisterAuth` 挂的那些），

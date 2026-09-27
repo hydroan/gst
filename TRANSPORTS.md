@@ -198,7 +198,7 @@ HTTP 状态到 gRPC status 的映射（`grpcserver.StatusOfCoder`）：
 - 服务端流：`Stream(ctx *gst.ServiceContext, req REQ, stream *grpc.ServerStream[RSP]) error`。
 - 客户端流：`Stream(ctx, stream *grpc.ClientStream[REQ]) (RSP, error)`，对方发完 Recv 答 io.EOF。
 - 双向流：`Stream(ctx, stream *grpc.BidiStream[REQ, RSP]) error`。
-- ctx 取消即流结束：客户端停掉 watch 答 Canceled，不算错误。
+- ctx 取消即流结束：客户端停掉 watch 答 Canceled，不算错误；进程停机时流的 ctx 同样结束，调用答 Unavailable「the server is shutting down」，客户端据此换副本重连（一元调用照常排空）。
 
 ```plantuml
 @startuml
@@ -229,7 +229,7 @@ loop 直到 ctx 结束或 service 返回
   call --> client : 一条响应
 end
 svc --> call : nil 或错误
-call --> client : OK，或映射后的 status；取消答 Canceled
+call --> client : OK，或映射后的 status；取消答 Canceled，停机答 Unavailable
 @enduml
 ```
 
@@ -239,7 +239,7 @@ call --> client : OK，或映射后的 status；取消答 Canceled
 
 - bootstrap 顺序：配置 → 日志 → 数据库与 redis 等 → `router.Init()`（内建链、路由、模块）→ `RegisterGo(router.Run, grpcserver.Run)`。
 - gRPC 监听只在有注册服务时启动；启动时若有非 Public 方法却没挂鉴权拦截器，打一条 Warn。
-- 停机：`controller.Probe.Drain()` 让 `/-/readyz` 答 503，`grpcserver.Drain()` 让 health 答 NOT_SERVING，等 shutdown_delay 过去，再按注册的逆序一个接一个跑 cleanup：先 `grpcserver.Stop`（GracefulStop 等在途调用，超时强制），后 `router.Stop`。
+- 停机：`controller.Probe.Drain()` 让 `/-/readyz` 答 503，`grpcserver.Drain()` 让 health 答 NOT_SERVING，等 shutdown_delay 过去，再跑 cleanup：`router.Stop` 与 `grpcserver.Stop` 并发、共用一个 30 秒窗口（HTTP 等在途请求、SSE 流即刻结束；gRPC 的 GracefulStop 等一元调用、在途流的 ctx 即刻结束并答 Unavailable，窗口用完强制断开），之后组件在自己的 30 秒窗口里停。
 - 多副本下客户端靠这两个探针切走流量；k8s 的 readinessProbe 打 HTTP，gRPC 的 native health probe 打 health 服务。
 
 观测两边对齐：

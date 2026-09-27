@@ -8,14 +8,16 @@
 #     SERVER_SHUTDOWN_DELAY later, the time the endpoints need to stop sending
 #     requests to a terminating pod; the gRPC health service answers
 #     NOT_SERVING from the same moment, so a gRPC client checking it stops
-#     sending too;
+#     sending too, and a gRPC stream still open ends as the listeners close,
+#     answered Unavailable, so its client resumes on another pod;
 #   - the gRPC listener is a second port, grpc, behind the same Service; a
 #     client inside the cluster connects to the headless Service cluster-grpc,
 #     which resolves to the pods themselves, so that its connections spread
 #     over the replicas instead of all landing on the one a ClusterIP picked;
 #   - terminationGracePeriodSeconds outlasts the framework's whole shutdown at
 #     its longest — the drain window, then up to 30 seconds for the HTTP
-#     connections, up to 30 seconds for the work in flight, and up to 5
+#     connections and the gRPC calls in flight, the two listeners draining
+#     side by side, up to 30 seconds for the work in flight, and up to 5
 #     seconds each for the tracing exporter and the debug endpoints when they
 #     are on — so a pod is not killed while its work winds down: the work's
 #     context ends as shutdown begins, a lease is given back once its work

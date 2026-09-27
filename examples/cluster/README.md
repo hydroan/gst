@@ -448,9 +448,9 @@ for i in $(seq 1 12); do
 done
 ```
 
-删 Pod 的那一刻，EndpointSlice 里这个地址就被标成 `ready: false`、`terminating: true`：地址还在，但 Service 不再往它上面转发新请求；就绪探针失败后（这里最多 2 秒），`serving` 也变成 `false`。进程收到 SIGTERM，`/-/readyz` 立刻变成 503；`SERVER_SHUTDOWN_DELAY`（这里是 5 秒）过后监听才关闭，给沿途的负载均衡留出发现它下线的时间。正在跑的一轮任务在收到 SIGTERM 时就被取消，返回后交还租约，进程才退出。
+删 Pod 的那一刻，EndpointSlice 里这个地址就被标成 `ready: false`、`terminating: true`：地址还在，但 Service 不再往它上面转发新请求；就绪探针失败后（这里最多 2 秒），`serving` 也变成 `false`。进程收到 SIGTERM，`/-/readyz` 立刻变成 503；`SERVER_SHUTDOWN_DELAY`（这里是 5 秒）过后两个监听一起关闭（HTTP 与 gRPC 同时排空），给沿途的负载均衡留出发现它下线的时间。正在跑的一轮任务在收到 SIGTERM 时就被取消，返回后交还租约，进程才退出。
 
-框架停机最长是：5 秒排空，加最多 30 秒等 HTTP 连接，加最多 30 秒等在途任务；开了链路追踪和调试端点（pprof、statsviz）的部署，关闭它们再各加最多 5 秒，合计 80 秒。所以 `terminationGracePeriodSeconds` 设成 90 秒，盖过最坏情况。示例里的任务几秒就返回，实际停机要短得多。
+框架停机最长是：5 秒排空，加最多 30 秒等 HTTP 与 gRPC 的在途请求（两个监听同时排空；在途的 gRPC 流在停机开始时就以 Unavailable 结束，不占这 30 秒），加最多 30 秒等在途任务；开了链路追踪和调试端点（pprof、statsviz）的部署，关闭它们再各加最多 5 秒，合计 80 秒。所以 `terminationGracePeriodSeconds` 设成 90 秒，盖过最坏情况。示例里的任务几秒就返回，实际停机要短得多。
 
 #### 6.4 催一把：第二个信号
 
@@ -569,7 +569,7 @@ LAST=$(grep '"seq"' watch.out | tail -1 | tr -dc '0-9')
 timeout 3 rpc "$(pods | sed -n 1p)" -v -d "{\"payload\":{\"after\":$LAST}}" localhost:8081 cluster.CounterStepService/WatchCounterStep | grep -E 'x-served-by|"seq"|"replica"'
 ```
 
-流从 A 上一个数字一个数字地推，滚动更新停掉 A 时流以 `Unavailable` 结束，消息里带着服务端的 `goaway ... graceful_stop`：停机时框架先让健康服务说 NOT_SERVING，再优雅地关掉在途的流。客户端拿上次看到的数字向任意一个新副本要 `after` 之后的，紧接着的数字就来了，`replica` 里写的是此刻的 leader，`x-served-by` 写的是答话的副本，两者不必是同一个。
+流从 A 上一个数字一个数字地推，滚动更新停掉 A 时流以 `Unavailable` 结束，消息是 `the server is shutting down`：停机时框架先让健康服务说 NOT_SERVING，延迟过后关监听、结束在途的流并等一元调用排空。客户端拿上次看到的数字向任意一个新副本要 `after` 之后的，紧接着的数字就来了，`replica` 里写的是此刻的 leader，`x-served-by` 写的是答话的副本，两者不必是同一个。
 
 #### 7.6 停机时健康服务先说 NOT_SERVING
 
