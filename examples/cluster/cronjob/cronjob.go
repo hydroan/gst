@@ -16,7 +16,7 @@ import (
 
 func init() {
 	cronjob.Register(tick, "@every 10s", "tick")
-	cronjob.RegisterPerInstance(localTick, "@every 10s", "local-tick")
+	cronjob.RegisterPerInstance(localTick, "@every 10s", "local_tick")
 	cronjob.Register(slow, "@every 30s", "slow")
 }
 
@@ -30,7 +30,7 @@ func tick(ctx context.Context) error {
 // localTick runs on every replica: the runs show one round every 10 seconds
 // per replica.
 func localTick(ctx context.Context) error {
-	return round(ctx, "local-tick", nil)
+	return round(ctx, "local_tick", nil)
 }
 
 // slow runs longer than the 15 seconds a lease lasts, so the round keeps the

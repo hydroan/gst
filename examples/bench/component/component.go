@@ -33,7 +33,7 @@
 //	}
 //
 //	func init() {
-//		component.Register(consumeEvents, "event-consumer")
+//		component.Register(consumeEvents, "event_consumer")
 //	}
 package component
 

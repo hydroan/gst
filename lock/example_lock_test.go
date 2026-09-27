@@ -15,7 +15,7 @@ import (
 
 // rebuildReport is declared the way a project declares a lock: once, in a
 // package variable of its lock package.
-var rebuildReport = lock.New("rebuild-report")
+var rebuildReport = lock.New("rebuild_report")
 
 // ExampleNew declares a lock. Declarations belong in package variables: the
 // locks are checked as the process starts — every name one the lease table can
@@ -24,10 +24,10 @@ var rebuildReport = lock.New("rebuild-report")
 // its work is triggered:
 //
 //	// Panics once the process has started.
-//	err := lock.New("rebuild-report").TryRun(ctx, rebuildReportRows)
+//	err := lock.New("rebuild_report").TryRun(ctx, rebuildReportRows)
 func ExampleNew() {
 	fmt.Println(rebuildReport.Name())
-	// Output: rebuild-report
+	// Output: rebuild_report
 }
 
 // ExampleLock_TryRun runs work a request triggers under its lock. The try

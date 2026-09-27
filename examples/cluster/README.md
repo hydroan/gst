@@ -8,7 +8,7 @@
 
 | 文件 | 演示什么 |
 | --- | --- |
-| `cronjob/cronjob.go`、`configx/jobs.go` | `tick`：每 10 秒一轮，全部署只领一次；`local-tick`：每个副本各跑；`slow`：一轮跑 `JOBS_SLOW_SECONDS` 秒（默认 20），比 15 秒的租约长，靠续期保住；把它调到大于 30 秒，`slow` 就会跑过自己的下一个时刻 |
+| `cronjob/cronjob.go`、`configx/jobs.go` | `tick`：每 10 秒一轮，全部署只领一次；`local_tick`：每个副本各跑；`slow`：一轮跑 `JOBS_SLOW_SECONDS` 秒（默认 20），比 15 秒的租约长，靠续期保住；把它调到大于 30 秒，`slow` 就会跑过自己的下一个时刻 |
 | `leader/leader.go`、`service/step_down/` | 常驻任务 `counter`：每秒在事务里给计数器追加下一个数字，并记下是哪一任写的；接手的副本从库里最后一个数字接着数。`POST /api/step-downs` 让当前副本的 leader 工作自己返回，用来看「工作提前返回」时框架怎么处理 |
 | `lock/lock.go`、`dao/rebuild.go`、`service/rebuild/` | `POST /api/rebuilds` 在锁 `rebuild` 下跑，同时来第二个请求立刻 409；带 `"in_transaction":true` 则演示事务里拿锁被框架拒掉 |
 | `dao/cache.go`、`component/cache.go`、`service/cached/` | 复制缓存：每个副本在开始服务之前打开缓存，`POST /api/caches` 写一条、`GET /api/caches/:key` 只读本副本自己的那份、`DELETE /api/caches/:key` 删一条 |
@@ -76,7 +76,7 @@ SELECT MAX(seq) - MIN(seq) + 1 - COUNT(*) AS missing FROM counter_steps;
 -- 同一个共享定时任务、同一把锁，跑完的运行在时间上互不重叠。
 SELECT a.name, a.replica, a.created_at, a.ended_at, b.replica, b.created_at, b.ended_at
   FROM runs a JOIN runs b
-    ON a.kind = b.kind AND a.name = b.name AND a.id < b.id AND a.name <> 'local-tick'
+    ON a.kind = b.kind AND a.name = b.name AND a.id < b.id AND a.name <> 'local_tick'
    AND a.ended_at IS NOT NULL AND b.ended_at IS NOT NULL
    AND a.created_at < b.ended_at AND b.created_at < a.ended_at;
 SQL
@@ -87,7 +87,7 @@ SQL
 每个调度时刻只领一次，看采集下来的日志。每一轮结束时 `cronjob` 那一路记一条带 `trace_id` 和调度时刻 `at` 的结果（`finished cronjob`、`cronjob interrupted` 等）；再跑的一轮带 `"rerun":true`，启动补跑的带 `"catch_up":true`。同一个共享任务、同一个 `at`、同样的 `rerun`，只该有一条，下面应该什么都不输出：
 
 ```bash
-logs '.logger == "cronjob" and .trace_id != null and .name != "local-tick"' | jq -r '[.name, .at, (.rerun // false)] | @tsv' | sort | uniq -d
+logs '.logger == "cronjob" and .trace_id != null and .name != "local_tick"' | jq -r '[.name, .at, (.rerun // false)] | @tsv' | sort | uniq -d
 ```
 
 最后数一数记了哪些 WARN 和 ERROR：
@@ -117,10 +117,10 @@ logs '.level == "WARN" or .level == "ERROR"' | jq -r '[.level, .logger, .msg] | 
 
 ```bash
 curl -s 'localhost:8080/api/runs?kind=cron&name=tick&_sort_by=created_at%20desc&_size=10' | jq '.data.items'
-curl -s 'localhost:8080/api/runs?kind=cron&name=local-tick&_sort_by=created_at%20desc&_size=10' | jq '.data.items'
+curl -s 'localhost:8080/api/runs?kind=cron&name=local_tick&_sort_by=created_at%20desc&_size=10' | jq '.data.items'
 ```
 
-`tick` 每 10 秒一行，`replica` 每次可能不同，哪个副本先抢到就由谁跑；`local-tick` 每 10 秒三行，每个副本一行。`slow` 每 30 秒跑 20 秒，期间租约表里 `cron:slow` 的 `expires_at_ms` 每 2 秒往后挪一次，这就是续期。
+`tick` 每 10 秒一行，`replica` 每次可能不同，哪个副本先抢到就由谁跑；`local_tick` 每 10 秒三行，每个副本一行。`slow` 每 30 秒跑 20 秒，期间租约表里 `cron:slow` 的 `expires_at_ms` 每 2 秒往后挪一次，这就是续期。
 
 **1.2 一轮被打断：优雅停机与进程崩溃**
 

@@ -43,7 +43,7 @@
 //	}
 //
 //	func init() {
-//		leader.Register(relayOutbox, "outbox-relay")
+//		leader.Register(relayOutbox, "outbox_relay")
 //	}
 package leader
 

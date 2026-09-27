@@ -318,7 +318,7 @@ const componentContent = `// Package component registers the application's long-
 //	}
 //
 //	func init() {
-//		component.Register(consumeEvents, "event-consumer")
+//		component.Register(consumeEvents, "event_consumer")
 //	}
 package component
 
@@ -391,7 +391,7 @@ const cronjobContent = `// Package cronjob registers the application's scheduled
 //	func cleanup(ctx context.Context) error { return nil }
 //
 //	func init() {
-//		cronjob.Register(cleanup, "0 0 2 * * *", "daily-cleanup")
+//		cronjob.Register(cleanup, "0 0 2 * * *", "daily_cleanup")
 //	}
 package cronjob
 
@@ -445,7 +445,7 @@ const leaderContent = `// Package leader registers the application's leader work
 //	}
 //
 //	func init() {
-//		leader.Register(relayOutbox, "outbox-relay")
+//		leader.Register(relayOutbox, "outbox_relay")
 //	}
 package leader
 
@@ -492,7 +492,7 @@ const lockContent = `// Package lock declares the application's locks: one for e
 //		"github.com/hydroan/gst/lock"
 //	)
 //
-//	var rebuildReport = lock.New("rebuild-report")
+//	var rebuildReport = lock.New("rebuild_report")
 //
 //	func rebuild(ctx context.Context) error {
 //		err := rebuildReport.TryRun(ctx, rebuildReportRows)

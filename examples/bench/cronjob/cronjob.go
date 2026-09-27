@@ -62,7 +62,7 @@
 //	func cleanup(ctx context.Context) error { return nil }
 //
 //	func init() {
-//		cronjob.Register(cleanup, "0 0 2 * * *", "daily-cleanup")
+//		cronjob.Register(cleanup, "0 0 2 * * *", "daily_cleanup")
 //	}
 package cronjob
 

@@ -95,7 +95,7 @@ func ExampleRegister_outboxRelay() {
 			case <-time.After(time.Second):
 			}
 		}
-	}, "outbox-relay")
+	}, "outbox_relay")
 }
 
 // ExampleRegister_resume carries a long scan across leaders. The work starts
@@ -208,7 +208,7 @@ func ExampleRegister_kafkaConsumer() {
 				}
 			}
 		}
-	}, "event-consumer")
+	}, "event_consumer")
 }
 
 // ExampleRegister_returning shows what each way out of the work means. The

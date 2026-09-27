@@ -36,7 +36,7 @@
 //		"github.com/hydroan/gst/lock"
 //	)
 //
-//	var rebuildReport = lock.New("rebuild-report")
+//	var rebuildReport = lock.New("rebuild_report")
 //
 //	func rebuild(ctx context.Context) error {
 //		err := rebuildReport.TryRun(ctx, rebuildReportRows)
