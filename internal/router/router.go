@@ -372,7 +372,11 @@ func Register[M types.Model, REQ types.Request, RSP types.Response](router *gin.
 		panic(fmt.Sprintf("router: register of route %q: no HTTP route serves the phase %s; a hook phase runs inside its action and a Stream is served over gRPC alone", consts.APIPath(route), strings.Join(unserved, ", ")))
 	}
 	routed.Route = consts.APIPath(route)
-	register[M, REQ, RSP](router, routed.Route, phaseSet(phases...), &routed)
+	set := make(map[consts.Phase]bool, len(phases))
+	for _, phase := range phases {
+		set[phase] = true
+	}
+	register[M, REQ, RSP](router, routed.Route, set, &routed)
 }
 
 func register[M types.Model, REQ types.Request, RSP types.Response](router *gin.RouterGroup, path string, phases map[consts.Phase]bool, cfg ...*types.ControllerConfig[M]) {
@@ -501,13 +505,4 @@ func httpMethodRank(method string) (int, bool) {
 	default:
 		return 0, false
 	}
-}
-
-// phaseSet is the set of phases to register a route for.
-func phaseSet(phases ...consts.Phase) map[consts.Phase]bool {
-	set := make(map[consts.Phase]bool, len(phases))
-	for _, phase := range phases {
-		set[phase] = true
-	}
-	return set
 }

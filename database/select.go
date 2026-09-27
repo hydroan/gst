@@ -150,27 +150,27 @@ func termsOf(exprs []types.Expr) []types.Term {
 // the builder, the chain ones returning the shell for the next call.
 
 func (a *selector[M, R]) Where(filters ...types.Filter) types.Selector[M, R] {
-	a.b.where(filters...)
+	a.b.filters = append(a.b.filters, filters...)
 	return a
 }
 
 func (a *selector[M, R]) Join(sources ...types.JoinSource) types.Selector[M, R] {
-	a.b.join(sources...)
+	a.b.joins = append(a.b.joins, sources...)
 	return a
 }
 
 func (a *selector[M, R]) Having(conditions ...types.TermCondition) types.Selector[M, R] {
-	a.b.having(conditions...)
+	a.b.havings = append(a.b.havings, conditions...)
 	return a
 }
 
 func (a *selector[M, R]) Qualify(conditions ...types.TermCondition) types.Selector[M, R] {
-	a.b.qualify(conditions...)
+	a.b.qualifies = append(a.b.qualifies, conditions...)
 	return a
 }
 
 func (a *selector[M, R]) OrderBy(orders ...types.Ordering) types.Selector[M, R] {
-	a.b.orderBy(orders...)
+	a.b.orders = append(a.b.orders, orders...)
 	return a
 }
 
@@ -197,26 +197,6 @@ func (a *selector[M, R]) Count(count *int) error { return a.b.count(count) }
 
 // nested hands the builder to a query reading the select; see nestedOf.
 func (a *selector[M, R]) nested() nestedSelect { return a.b }
-
-func (a *selectBuilder[M]) where(filters ...types.Filter) {
-	a.filters = append(a.filters, filters...)
-}
-
-func (a *selectBuilder[M]) join(sources ...types.JoinSource) {
-	a.joins = append(a.joins, sources...)
-}
-
-func (a *selectBuilder[M]) having(conditions ...types.TermCondition) {
-	a.havings = append(a.havings, conditions...)
-}
-
-func (a *selectBuilder[M]) qualify(conditions ...types.TermCondition) {
-	a.qualifies = append(a.qualifies, conditions...)
-}
-
-func (a *selectBuilder[M]) orderBy(orders ...types.Ordering) {
-	a.orders = append(a.orders, orders...)
-}
 
 // setLimit caps the number of result rows, read from the first: a Limit
 // after a Page drops the page's skip. A non-positive limit means no limit,
