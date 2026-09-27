@@ -21,14 +21,14 @@ import (
 
 // pruneCmd is gg prune; PRUNE.md next to this file lays out what it deletes,
 // what it keeps and the order it goes in. It deletes from service/,
-// middleware/ and pb/ alone.
+// middleware/, interceptor/ and pb/ alone.
 var pruneCmd = &cobra.Command{
 	Use:   "prune",
-	Short: "clean what the models no longer need from service/, middleware/ and pb/",
+	Short: "clean what the models no longer need from service/, middleware/, interceptor/ and pb/",
 	Long: "Clean what the current models no longer need, asking once before deleting: the service files of disabled actions with their test files, " +
-		"the unmanaged files of service directories no model owns, the middleware of removed copied modules with their register calls, " +
+		"the unmanaged files of service directories no model owns, the middleware and interceptors of removed copied modules with their register calls, " +
 		"the protobuf files, definitions and the Go files compiled from them, of models no longer served over gRPC, and the directories this leaves empty. " +
-		"It touches service/, middleware/ and pb/ only, and gst.yaml's prune.ignore is the one way to keep a path there.",
+		"It touches service/, middleware/, interceptor/ and pb/ only, and gst.yaml's prune.ignore is the one way to keep a path there.",
 	Run: func(cmd *cobra.Command, args []string) {
 		if err := pruneRun(); err != nil {
 			clioutput.Error("", "%v", err)
@@ -181,10 +181,11 @@ func remindUnreadPruneSettings() {
 }
 
 // pruneLeftovers deletes, after asking once, what the models leave behind in
-// service/, middleware/ and pb/: the service files of disabled actions among
-// oldServiceFiles, the unmanaged files of the service directories no model
-// owns, the middleware module copy wrote for modules the project removed, with
-// their register calls, the files under pb/ among oldPBFiles that gg gen
+// service/, middleware/, interceptor/ and pb/: the service files of disabled
+// actions among oldServiceFiles, the unmanaged files of the service
+// directories no model owns, the middleware and interceptors module copy
+// wrote for modules the project removed, with their register calls, the
+// files under pb/ among oldPBFiles that gg gen
 // would not write now, generatedPBFiles being the ones it writes, and the
 // directories all this leaves empty. It works everything out before
 // it asks, so a helper directory only a disabled action's service file

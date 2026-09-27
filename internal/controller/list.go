@@ -18,8 +18,8 @@ import (
 // ListHandler returns a Gin handler that lists resources.
 //
 // When M, REQ, and RSP are the same type, the handler runs the list flow (see
-// listFlow) and returns the items with a total count, which is omitted only
-// when cursor pagination is used.
+// listFlow) and returns the items with a total count, zero under cursor
+// pagination, which counts nothing.
 //
 // The automatic listing branch supports model schema fields plus framework query
 // parameters for pagination, cursor pagination, expansion, depth, ordering, and

@@ -41,9 +41,9 @@ func FirstMessage[T any](recv func() (T, error)) (T, error) {
 // ServerStreamCall returns the call of the Stream action on route whose
 // response is streamed: given the route parameters, the request the message
 // decoded into and the function sending one response, it runs the
-// service's Stream method with a ServerStream sending through the function
-// (see types.ServerStreamer), and answers with nil once the stream is over,
-// or with the status a failure maps to, the way ServiceCall does.
+// service's Stream method with a ServerStream sending through the function,
+// and answers with nil once the stream is over, or with the status a failure
+// maps to, the way ServiceCall does.
 func ServerStreamCall[M types.Model, REQ types.Request, RSP types.Response](route string) func(ctx context.Context, params map[string]string, req REQ, send func(RSP) error) error {
 	return controller.ServerStreamCall[M, REQ, RSP](route)
 }
@@ -51,9 +51,8 @@ func ServerStreamCall[M types.Model, REQ types.Request, RSP types.Response](rout
 // ClientStreamCall returns the call of the Stream action on route whose
 // request is streamed: given the route parameters and the function
 // receiving the next request, io.EOF once the client finished, it runs the
-// service's Stream method with a ClientStream reading through the function
-// (see types.ClientStreamer), and answers with the response, or with the
-// status a failure maps to.
+// service's Stream method with a ClientStream reading through the function,
+// and answers with the response, or with the status a failure maps to.
 func ClientStreamCall[M types.Model, REQ types.Request, RSP types.Response](route string) func(ctx context.Context, params map[string]string, recv func() (REQ, error)) (RSP, error) {
 	return controller.ClientStreamCall[M, REQ, RSP](route)
 }
@@ -61,9 +60,8 @@ func ClientStreamCall[M types.Model, REQ types.Request, RSP types.Response](rout
 // BidiStreamCall returns the call of the Stream action on route streaming
 // both ways: given the route parameters, the function receiving the next
 // request and the function sending one response, it runs the service's
-// Stream method with a BidiStream on the two (see types.BidiStreamer), and
-// answers with nil once the stream is over, or with the status a failure
-// maps to.
+// Stream method with a BidiStream on the two, and answers with nil once the
+// stream is over, or with the status a failure maps to.
 func BidiStreamCall[M types.Model, REQ types.Request, RSP types.Response](route string) func(ctx context.Context, params map[string]string, recv func() (REQ, error), send func(RSP) error) error {
 	return controller.BidiStreamCall[M, REQ, RSP](route)
 }

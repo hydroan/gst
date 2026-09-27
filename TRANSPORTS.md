@@ -55,7 +55,7 @@ gst · HTTP 与 gRPC 两条传输线
     <div class="arch-arrow">▼</div>
     <div class="arch-layer stage">
       <div class="arch-layer-title">⑦ service · 业务代码只写一份</div>
-      <div class="arch-box lane shared"><b>service.Base[M, REQ, RSP] 与 Service("name") 的结构体</b><ul><li>标准动作：嵌 <code>service.Base</code>，按需覆盖钩子；自定义动作：<code>Create(ctx, req) (rsp, error)</code> 这类方法。</li><li>流式动作：<code>Stream(ctx, req, stream)</code> 三种签名之一，只在 gRPC 上被调用。</li><li>HTTP 独有的动作：SSE 的 <code>SSE(ctx) error</code>、Import 的 <code>Import(ctx, reader)</code>、Export 的 <code>Export(ctx, models…)</code> 只在 HTTP 上被调用，也只有它们能用 <code>ctx.SSE</code>、<code>FormFile</code>、<code>Data</code> 这类 HTTP 专属方法；其他动作的 service 用了，gg check 会拦。</li><li>service 代码不 import gin 与 grpc；还能感知到传输的只剩 ServiceContext 元数据的取值（gRPC 上 Method 是 POST、Path 是 FullMethod）。</li></ul></div>
+      <div class="arch-box lane shared"><b>service.Base[M, REQ, RSP] 与 Service("name") 的结构体</b><ul><li>标准动作：嵌 <code>service.Base</code>，按需覆盖钩子；自定义动作：<code>Create(ctx, req) (rsp, error)</code> 这类方法。</li><li>流式动作：<code>Stream(ctx, req, stream)</code> 三种签名之一，只在 gRPC 上被调用。</li><li>HTTP 独有的动作：SSE 的 <code>SSE(ctx) error</code>、Import 的 <code>Import(ctx, reader)</code>、Export 的 <code>Export(ctx, models…)</code> 只在 HTTP 上被调用。模型声明了 GRPC() 时，这三种动作以外的 service 用了 <code>ctx.SSE</code>、<code>FormFile</code>、<code>Data</code> 这类 HTTP 专属方法，gg check 会拦，因为 gRPC 上没有这些东西；没声明 GRPC() 的模型不受此限。</li><li>service 代码不 import gin 与 grpc；还能感知到传输的只剩 ServiceContext 元数据的取值（gRPC 上 Method 是 POST、Path 是 FullMethod）。</li></ul></div>
     </div>
   </div>
 </div>

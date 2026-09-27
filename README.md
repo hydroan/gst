@@ -232,8 +232,8 @@ func (Entry) Design() {
 模型顶层声明 `GRPC()`，它就同时走 gRPC：`gg gen` 从 Go 类型和 `Design()` 推导 `.proto`，进程内
 编译出 `pb/` 下的 Go 代码，并在 gRPC 服务上注册和 HTTP 路由相同的动作，业务代码只写 `service/` 那一份。
 字段用 `pb` tag 给消息编号（`pb:"11"`，框架的 `model.Base` 字段占 1 到 10），缺的 `gg gen` 会补上。
-只在 gRPC 上有的是流：自定义动作里用 `Stream(func(){...})` 声明，一侧写 `Payload`/`Result`、
-另一侧写 `StreamingPayload`/`StreamingResult`，service 方法收发 `grpc.ServerStream`、`ClientStream`
+只在 gRPC 上有的是流：自定义动作里用 `Stream(func(){...})` 声明，流的那一侧写 `StreamingPayload`/`StreamingResult`，
+另一侧写 `Payload`/`Result`，两侧都流就是双向流，service 方法收发 `grpc.ServerStream`、`ClientStream`
 或 `BidiStream`。测试里 `testutil.GRPCTarget()` 给出测试服务器的 gRPC 地址。完整示例见
 [examples/demo/model/board](./examples/demo/model/board)。
 
@@ -244,7 +244,8 @@ func (Entry) Design() {
 `grpc.health.v1.Health`，进程在服务时答 SERVING，收到停机信号后和 `/-/readyz` 同时变成 NOT_SERVING，
 排空窗口过后监听才关闭；以及反射服务。认证在 `interceptor/` 里挂，和 `middleware/` 一一对应：
 `interceptor.RegisterAuth(interceptor.IAMSession())` 之后，每个没声明 `Public()` 的 rpc 都要在
-`authorization` 元数据里带 `Bearer <会话 id>`；健康与反射服务不经过项目的认证拦截器（`RegisterAuth` 挂的那些），
+`authorization` 元数据里带 `Bearer <会话 id>`；会话绑定登录时的 User-Agent，程序要拿会话调 gRPC，登录时得带和 gRPC 客户端
+一样的 User-Agent（grpc-go 默认是 `grpc-go/<版本>`），浏览器登录的会话在 gRPC 上会被拒；健康与反射服务不经过项目的认证拦截器（`RegisterAuth` 挂的那些），
 `Register` 挂的通用拦截器对它们照样生效。多副本下的用法和核对步骤见 [examples/cluster](./examples/cluster/README.md) 的「gRPC 与认证」一章；
 两条传输线怎么从声明、生成、注册、链路一路接到同一份 service 代码，见 [TRANSPORTS.md](TRANSPORTS.md)：它只画架构全景，
 不展开细节，细节以本文各节和代码为准。
@@ -1195,7 +1196,7 @@ Pod 端口，Ingress 只转发写进规则的路径——**只转发 `/api` 前�
 | 端点 | 暴露什么 |
 | --- | --- |
 | `/-/healthz`、`/-/readyz` | 进程是否存活、是否正在停机，此外没有别的 |
-| `/metrics` | 已被访问过的路由（gin 路由模式）及其请求数与延迟分布、缓存计数器上的数据库表名、进程内存与 CPU、构建信息 |
+| `/metrics` | 已被访问过的路由（gin 路由模式）及其请求数与延迟分布、缓存计数器上的数据库表名、进程内存与 CPU、构建信息；框架自己的指标名以 `gst_backend_` 开头，gRPC 的是 grpc-go 生态默认的 `grpc_server_` |
 | `/openapi.json` | 本服务注册的全部路由，以及每个路由的请求与响应模型 |
 | `/docs` | 同一份文档的 Swagger UI 渲染；页面资源编译进二进制，不从任何 CDN 加载脚本，离线可用 |
 | gRPC 的 `grpc.health.v1.Health` 与反射服务 | 进程是否在服务，以及注册了哪些服务和消息；不经过项目的认证拦截器，`Register` 挂的通用拦截器照样经过 |

@@ -14,10 +14,11 @@ import (
 	"google.golang.org/grpc/status"
 )
 
-// The ErrorInfo detail every failure status carries: its reason, one for
-// every failure the framework answers, and the keys of its metadata, the
-// business code and HTTP status the HTTP envelope would carry; its domain is
-// the framework's name.
+// The ErrorInfo detail a status mapped from a service error carries (see
+// StatusOfCoder; the framework's own refusals, an Internal for an unknown
+// error among them, carry none): its reason, one for every failure a
+// service answers, and the keys of its metadata, the business code and HTTP
+// status the HTTP envelope would carry; its domain is the framework's name.
 const (
 	statusReason       = "SERVICE_ERROR"
 	statusDetailCode   = "code"

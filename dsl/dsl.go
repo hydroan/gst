@@ -33,7 +33,7 @@
 //		Create(func() {
 //			Service() // Generate service code
 //			// Omit Public() for authenticated APIs.
-//			Payload[CreateUserRequest]()
+//			Payload[*CreateUserRequest]()
 //			Result[*User]()
 //		})
 //
@@ -59,8 +59,9 @@
 //   - Create, Update, Delete, Patch: Single record operations
 //   - CreateMany, UpdateMany, DeleteMany, PatchMany: Batch operations
 //   - List, Get: Read operations
-//   - Import, Export: Data transfer operations
-//   - SSE: Server-Sent Events streaming operations
+//   - Import, Export: Data transfer operations, HTTP only
+//   - SSE: Server-Sent Events streaming operations, HTTP only
+//   - Stream: gRPC streaming operations, on a model declaring GRPC()
 //
 // Model Types:
 //   - Models with model.Base: Full-featured models with database persistence
@@ -211,7 +212,7 @@ func GRPC() { internaldsl.GRPC() }
 // and for a custom action whose name says what it does; a Stream action
 // always names its service, there being no default name for its rpc.
 // Generated service log.Info messages use "{model}: {label}", label being the
-// name with underscores and hyphens replaced by spaces.
+// name with underscores replaced by spaces.
 //
 //	// Both routes of a model declared in model/sample/item.go declare
 //	// Create; named, they generate service/sample/item/archive.go and
@@ -294,7 +295,7 @@ func Exact() { internaldsl.Exact() }
 
 // Payload specifies the request payload type for the current action.
 // The type parameter T defines the structure of incoming request data.
-// Example: Payload[CreateUserRequest]() or Payload[*User]()
+// Example: Payload[*CreateUserRequest]() or Payload[*User]()
 //
 // Payload must not be declared on List and Get actions: they handle HTTP GET
 // requests, which carry no request body. Custom List/Get services declare
@@ -314,7 +315,7 @@ func Result[T any]() { internaldsl.Result[T]() }
 // Create defines the configuration for the create operation.
 // The function parameter allows setting Service, Public, Payload, and Result.
 // Declaring the action enables it.
-// Example: Create(func() { Payload[CreateUserRequest](); Result[*User]() })
+// Example: Create(func() { Payload[*CreateUserRequest](); Result[*User]() })
 func Create(fn func()) { internaldsl.Create(fn) }
 
 // Delete defines the configuration for the delete operation.

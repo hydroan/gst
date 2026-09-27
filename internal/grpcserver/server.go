@@ -45,9 +45,10 @@ var (
 	// seam, nothing in the framework sets it.
 	listened func(net.Addr)
 
-	// drainTimeout bounds how long Stop waits for the calls in flight, the
-	// shutdown's one window shared with the HTTP listener, the components
-	// and the providers. A variable so a test can play the bound out in
+	// drainTimeout bounds how long Stop waits for the calls in flight: a
+	// window of its own, the shutdown stopping this listener, then the HTTP
+	// one, then the components in turn (see bootstrap), each within the
+	// same bound. A variable so a test can play the bound out in
 	// milliseconds.
 	drainTimeout = lifecycle.StopTimeout
 )
