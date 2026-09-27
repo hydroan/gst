@@ -36,6 +36,10 @@
 //	}
 package middleware
 
+import "github.com/hydroan/gst/middleware"
+
 func init() {
-	// TODO: register your custom middlewares here.
+	// The session check of the iam module: every API route not declared
+	// Public() names a session or is refused.
+	middleware.RegisterAuth(middleware.IAMSession())
 }

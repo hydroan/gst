@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # Brings the example up on the current kubectl context: builds the image,
 # applies the manifests under deploy/k8s — the gst-cluster namespace, one
-# MySQL, one Kafka broker and three replicas — and waits until every pod is
-# ready. The image is built from the repository root, since the example's
+# MySQL, one redis, one Kafka broker and three replicas — and waits until
+# every pod is ready. The image is built from the repository root, since the example's
 # go.mod points at the framework sources beside it. A cluster that cannot see the local Docker
 # images (kind, minikube) needs the image loaded first; see the README.
 #
@@ -19,6 +19,7 @@ if [ -n "$existing" ]; then
   kubectl -n gst-cluster rollout restart deployment/cluster
 fi
 kubectl -n gst-cluster rollout status statefulset/mysql --timeout=300s
+kubectl -n gst-cluster rollout status statefulset/redis --timeout=300s
 kubectl -n gst-cluster rollout status statefulset/kafka --timeout=300s
 kubectl -n gst-cluster rollout status deployment/cluster --timeout=300s
 kubectl -n gst-cluster get pods

@@ -21,10 +21,10 @@ type Run struct {
 	// so a scenario can page through the runs and read the latest first.
 	model.Query
 
-	Kind    string     `json:"kind" query:"kind" gorm:"size:16;not null"`        // "cron" or "lock"
-	Name    string     `json:"name" query:"name" gorm:"size:64;not null"`        // the job or the lock
-	Replica string     `json:"replica" query:"replica" gorm:"size:191;not null"` // the replica that ran it, see helper.Replica
-	EndedAt *time.Time `json:"ended_at"`                                         // when the work ran to its end; nil while it runs or once it was cut short
+	Kind    string     `json:"kind" query:"kind" gorm:"size:16;not null" pb:"11"`        // "cron" or "lock"
+	Name    string     `json:"name" query:"name" gorm:"size:64;not null" pb:"12"`        // the job or the lock
+	Replica string     `json:"replica" query:"replica" gorm:"size:191;not null" pb:"13"` // the replica that ran it, see helper.Replica
+	EndedAt *time.Time `json:"ended_at" pb:"14"`                                         // when the work ran to its end; nil while it runs or once it was cut short
 }
 
 func (Run) TableName() string { return "runs" }
@@ -36,8 +36,10 @@ func (Run) Indexes() []model.Index {
 }
 
 func (Run) Design() {
+	GRPC()
 	Migrate()
 	Endpoint("runs")
 
-	List(func() {})
+	List(func() {
+	})
 }

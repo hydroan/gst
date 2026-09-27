@@ -16,12 +16,19 @@ type CounterStep struct {
 	model.Base
 	model.Query
 
-	Seq     int64  `json:"seq" query:"seq" gorm:"not null"`
-	Tenure  string `json:"tenure" query:"tenure" gorm:"size:32;not null"`    // one id per leadership, drawn as it starts
-	Replica string `json:"replica" query:"replica" gorm:"size:191;not null"` // the replica that led, see helper.Replica
+	Seq     int64  `json:"seq" query:"seq" gorm:"not null" pb:"11"`
+	Tenure  string `json:"tenure" query:"tenure" gorm:"size:32;not null" pb:"12"`    // one id per leadership, drawn as it starts
+	Replica string `json:"replica" query:"replica" gorm:"size:191;not null" pb:"13"` // the replica that led, see helper.Replica
 }
 
 func (CounterStep) TableName() string { return "counter_steps" }
+
+// CounterStepWatchReq says where a watch starts: the numbers after Seq are
+// streamed, so a client that lost its stream resumes from the last number it
+// saw.
+type CounterStepWatchReq struct {
+	After int64 `json:"after" pb:"1"`
+}
 
 func (CounterStep) Purge() bool { return true }
 
@@ -30,8 +37,22 @@ func (CounterStep) Indexes() []model.Index {
 }
 
 func (CounterStep) Design() {
+	GRPC()
 	Migrate()
 	Endpoint("counter_steps")
 
-	List(func() {})
+	List(func() {
+	})
+
+	// WatchCounterStep streams the numbers as the leader writes them: one
+	// request in, numbers out until the client hangs up. Any replica can
+	// serve it, the counter being in the database, so a client cut off by a
+	// rolling update reconnects to another replica and resumes.
+	Route("counter_steps/watch", func() {
+		Stream(func() {
+			Service("watch")
+			Payload[*CounterStepWatchReq]()
+			StreamingResult[*CounterStep]()
+		})
+	})
 }

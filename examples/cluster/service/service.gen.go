@@ -4,6 +4,8 @@ package service
 
 import (
 	"cluster/service/cached"
+	"cluster/service/counter_step"
+	"cluster/service/flag"
 	"cluster/service/rebuild"
 	"cluster/service/step_down"
 
@@ -15,6 +17,10 @@ func init() {
 	service.Register[*cached.Creator](consts.Create, "/api/caches")
 	service.Register[*cached.Deleter](consts.Delete, "/api/caches/:id")
 	service.Register[*cached.Getter](consts.Get, "/api/caches/:id")
+	service.Register[*cached.Exchange](consts.Stream, "/api/caches/exchange")
+	service.Register[*cached.Load](consts.Stream, "/api/caches/load")
+	service.Register[*counterstep.Watch](consts.Stream, "/api/counter_steps/watch")
+	service.Register[*flag.Creator](consts.Create, "/api/flags")
 	service.Register[*rebuild.Creator](consts.Create, "/api/rebuilds")
 	service.Register[*stepdown.Creator](consts.Create, "/api/step-downs")
 }

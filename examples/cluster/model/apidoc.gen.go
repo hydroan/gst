@@ -8,6 +8,12 @@ func init() {
 	apidoc.Register("cluster/model", "Cached", apidoc.StructDoc{
 		Comment: "Cached is an entry of the replicated cache every replica keeps: written on\nthe replica that answers the request, read back from the local store of\nwhichever replica answers the next one. It is what makes the propagation\nbetween replicas observable from outside — the store itself is process\nmemory, with no shared tier behind it.",
 	})
+	apidoc.Register("cluster/model", "CachedKeyReq", apidoc.StructDoc{
+		Comment: "CachedKeyReq names an entry to look up.",
+	})
+	apidoc.Register("cluster/model", "CachedLoadRsp", apidoc.StructDoc{
+		Comment: "CachedLoadRsp reports how many entries a load stream wrote and which\nreplica took them in.",
+	})
 	apidoc.Register("cluster/model", "CachedReq", apidoc.StructDoc{
 		Comment: "CachedReq is the entry to write: the key it is filed under and the value\nevery other replica must end up holding for it.",
 	})
@@ -19,6 +25,15 @@ func init() {
 		Fields: map[string]string{
 			"Replica": "the replica that led, see helper.Replica",
 			"Tenure":  "one id per leadership, drawn as it starts",
+		},
+	})
+	apidoc.Register("cluster/model", "CounterStepWatchReq", apidoc.StructDoc{
+		Comment: "CounterStepWatchReq says where a watch starts: the numbers after Seq are\nstreamed, so a client that lost its stream resumes from the last number it\nsaw.",
+	})
+	apidoc.Register("cluster/model", "Flag", apidoc.StructDoc{
+		Comment: "Flag is a switch every replica reads from the shared database: turned on or\noff through any replica, over HTTP or gRPC, it is what all of them see from\nthen on. It declares the whole standard set of actions, the batch ones\nincluded, so every standard rpc has a table behind it in this project. The\nCreate hook in service/flag checks the name and fills in the percent of a\nflag turned on without one: a binding tag would apply to a patch too, which\ncarries only the fields it changes.",
+		Fields: map[string]string{
+			"Percent": "the share of traffic the flag applies to, 0 to 100",
 		},
 	})
 	apidoc.Register("cluster/model", "Rebuild", apidoc.StructDoc{

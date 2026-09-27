@@ -11,11 +11,15 @@
 | `cronjob/cronjob.go`、`configx/jobs.go` | `tick`：每 10 秒一轮，全部署只领一次；`local_tick`：每个副本各跑；`slow`：一轮跑 `JOBS_SLOW_SECONDS` 秒（默认 20），比 15 秒的租约长，靠续期保住；把它调到大于 30 秒，`slow` 就会跑过自己的下一个时刻 |
 | `leader/leader.go`、`service/step_down/` | 常驻任务 `counter`：每秒在事务里给计数器追加下一个数字，并记下是哪一任写的；接手的副本从库里最后一个数字接着数。`POST /api/step-downs` 让当前副本的 leader 工作自己返回，用来看「工作提前返回」时框架怎么处理 |
 | `lock/lock.go`、`dao/rebuild.go`、`service/rebuild/` | `POST /api/rebuilds` 在锁 `rebuild` 下跑，同时来第二个请求立刻 409；带 `"in_transaction":true` 则演示事务里拿锁被框架拒掉 |
-| `dao/cache.go`、`component/cache.go`、`service/cached/` | 复制缓存：每个副本在开始服务之前打开缓存，`POST /api/caches` 写一条、`GET /api/caches/:key` 只读本副本自己的那份、`DELETE /api/caches/:key` 删一条 |
-| `model/run.go`、`dao/run.go` | 每一轮定时任务、每一次锁下的运行：开始时记一行，跑完时补上结束时间，都写在工作自己的事务里；被打断的没有结束时间。`GET /api/runs` |
-| `model/counter_step.go` | 计数器的每个数字，和写它的那一任、那个副本。`GET /api/counter_steps` |
-| `Dockerfile` | 镜像：以非 root 用户运行，配置全部来自环境变量；PID 1 是 tini，方便从 Pod 里给进程发信号 |
-| `deploy/k8s/` | 纯 YAML 清单：命名空间（强制 restricted 安全标准）、MySQL、单 broker Kafka（KRaft，给复制缓存广播用）、三副本 Deployment（探针、资源、只读根文件系统、停机宽限、滚动更新策略）、Service、PodDisruptionBudget |
+| `dao/cache.go`、`component/cache.go`、`service/cached/` | 复制缓存：每个副本在开始服务之前打开缓存，`POST /api/caches` 写一条、`GET /api/caches/:key` 只读本副本自己的那份、`DELETE /api/caches/:key` 删一条；这三个动作也是 gRPC 的 `CreateCached`、`GetCached`、`DeleteCached`，另有两条只在 gRPC 上有的流：`LoadCached` 客户端流一次灌一批，`ExchangeCached` 双向流逐个键问本副本的值 |
+| `model/run.go`、`dao/run.go` | 每一轮定时任务、每一次锁下的运行：开始时记一行，跑完时补上结束时间，都写在工作自己的事务里；被打断的没有结束时间。`GET /api/runs`，也是 gRPC 的 `ListRun` |
+| `model/counter_step.go`、`service/counter_step/` | 计数器的每个数字，和写它的那一任、那个副本。`GET /api/counter_steps`；`WatchCounterStep` 服务端流从某个数字之后一直推送，哪个副本都能服务，被切断的客户端换个副本从上次的数字接着读 |
+| `model/flag.go`、`service/flag/` | 功能开关，全部署共用一张表：十个标准动作全开，含批量和 Patch，HTTP 的 `/api/flags` 和 gRPC 的 `CreateFlag`、`PatchFlag`、`CreateManyFlag` 等一一对应，Create 钩子给没写 percent 的开关补成 100，两种传输都经过它 |
+| `module/module.go`、`middleware/middleware.go`、`interceptor/interceptor.go` | iam 模块的注册、登录和会话；会话检查在 HTTP 上挂 `middleware.IAMSession()`、在 gRPC 上挂 `interceptor.IAMSession()`，会话存在 Redis 里，三个副本共用，在哪个副本登录都算数 |
+| `interceptor/served_by.go` | 项目自己的 gRPC 拦截器：每个调用的响应头带 `x-served-by`，写的是答话的副本，和行里的 `replica` 对得上 |
+| `pb/` | `gg gen` 从声明了 `GRPC()` 的模型推导的 `.proto` 和 Go 代码，提交进仓库 |
+| `Dockerfile` | 镜像：以非 root 用户运行，配置全部来自环境变量；PID 1 是 tini，方便从 Pod 里给进程发信号；带 curl 和 grpcurl，场景里在 Pod 里调本副本或集群内地址 |
+| `deploy/k8s/` | 纯 YAML 清单：命名空间（强制 restricted 安全标准）、MySQL、Redis、单 broker Kafka（KRaft，给复制缓存广播用）、三副本 Deployment（探针、资源、只读根文件系统、停机宽限、滚动更新策略）、Service（HTTP 与 gRPC 两个端口）、集群内 gRPC 客户端用的 headless Service `cluster-grpc`、PodDisruptionBudget |
 | `scripts/up.sh`、`scripts/down.sh` | 构建镜像、apply 清单、等就绪；整套删掉 |
 | `scripts/collect-logs.sh` | 把每个副本、每一代容器的日志存到本地，供事后核对 |
 
@@ -58,6 +62,19 @@ holder() {
   i=$(echo "SELECT instance FROM gst_leases WHERE name = '$1' AND expires_at_ms > UNIX_TIMESTAMP() * 1000 + MICROSECOND(NOW(3)) DIV 1000 $2" | sqlv)
   [ -n "$i" ] && echo "${i%-*}"
 }
+# 业务接口都在 iam 模块的会话检查之后：HTTP 带 cookie，gRPC 带 authorization 元数据。会话绑定登录时的
+# User-Agent，框架只比对它的前两个名字；grpcurl 自报 grpcurl/<版本> grpc-go/<版本>，所以登录也用这个 UA。
+UA='grpcurl/1.0 grpc-go/1.0'
+# login POD：在 POD 上注册账号 carol（已注册会报错，忽略）并登录，会话 id 放进 $SESSION。
+login() {
+  kubectl -n $NS exec "$1" -c cluster -- curl -s -X POST localhost:8080/api/signup -H 'content-type: application/json' -d '{"username":"carol","password":"12345678","re_password":"12345678"}' >/dev/null
+  SESSION=$(kubectl -n $NS exec "$1" -c cluster -- curl -s -c - -A "$UA" -X POST localhost:8080/api/login -H 'content-type: application/json' -d '{"username":"carol","password":"12345678"}' | awk '$6 == "session_id" {print $7}')
+}
+# api 路径 [curl 参数...]：经端口转发调 HTTP 接口，带上会话。
+api() { local path=$1; shift; curl -s -A "$UA" -b "session_id=$SESSION" -H 'content-type: application/json' "localhost:8080$path" "$@"; echo; }
+# rpc POD 参数...：在 POD 里用镜像自带的 grpcurl 调 gRPC，带上会话；地址 localhost:8081 是这个副本自己，cluster-grpc:8081 是集群内的地址。
+rpc() { local p=$1; shift; kubectl -n $NS exec -i "$p" -c cluster -- grpcurl -plaintext -H "authorization: Bearer $SESSION" "$@"; }
+login "$(pods | sed -n 1p)"
 ```
 
 ## 核对
@@ -103,9 +120,14 @@ logs '.level == "WARN" or .level == "ERROR"' | jq -r '[.level, .logger, .msg] | 
 - 认领没答上来时的 `cronjob could not claim its instant, trying again`，以及重试到下一个时刻还没成的 `cronjob could not claim its instant`；
 - 一轮跑过下一个时刻时的 `cronjob round is still running at its next instant`；
 - 事务被数据库拖住超过 5 秒时的 `transaction held its connection for a long time`；
-- 锁被占时接口返回 409，controller 那一路照例记一条 ERROR `service operation failed`（`a rebuild is already running`）。
+- 锁被占时接口返回 409，controller 那一路照例记一条 ERROR `service operation failed`（`a rebuild is already running`）；经 gRPC 抢锁被拒的一样记这条，调用方看到的是 `AlreadyExists`。
+- 会话无效的调用：`iam session rejected`（WARN，`reason` 写明原因，Redis 连不上时是连接错误）；没带会话的调用不记 WARN，只在 gRPC 访问日志里记 `Unauthenticated`。
 
-除此之外的 WARN、ERROR 都值得查清楚。
+除此之外的 WARN、ERROR 都值得查清楚。gRPC 的每个调用在 `grpc` 那一路记一条，`status` 是 gRPC 状态名、`path` 是 rpc 全名；没成功的都在这里：
+
+```bash
+logs '.logger == "grpc" and .status != "OK"' | jq -r '[.status, .path, .error] | @tsv' | sort | uniq -c
+```
 
 ## 场景
 
@@ -113,16 +135,16 @@ logs '.level == "WARN" or .level == "ERROR"' | jq -r '[.level, .logger, .msg] | 
 
 ### 一、定时任务
 
-**1.1 每个时刻，全部署只领一次**
+#### 1.1 每个时刻，全部署只领一次
 
 ```bash
-curl -s 'localhost:8080/api/runs?kind=cron&name=tick&_sort_by=created_at%20desc&_size=10' | jq '.data.items'
-curl -s 'localhost:8080/api/runs?kind=cron&name=local_tick&_sort_by=created_at%20desc&_size=10' | jq '.data.items'
+api '/api/runs?kind=cron&name=tick&_sort_by=created_at%20desc&_size=10' | jq '.data.items'
+api '/api/runs?kind=cron&name=local_tick&_sort_by=created_at%20desc&_size=10' | jq '.data.items'
 ```
 
 `tick` 每 10 秒一行，`replica` 每次可能不同，哪个副本先抢到就由谁跑；`local_tick` 每 10 秒三行，每个副本一行。`slow` 每 30 秒跑 20 秒，期间租约表里 `cron:slow` 的 `expires_at_ms` 每 2 秒往后挪一次，这就是续期。
 
-**1.2 一轮被打断：优雅停机与进程崩溃**
+#### 1.2 一轮被打断：优雅停机与进程崩溃
 
 等 `slow` 跑起来，删掉正在跑它的 Pod：
 
@@ -152,7 +174,7 @@ logs '.logger == "cronjob" and .name == "slow" and .trace_id != null' | jq -c '{
 
 `kubectl delete pod --force --grace-period=0` 模拟不了崩溃：kubelet 照样先给进程发 SIGTERM，进程会正常停机、交还租约。要走崩溃这条路，只能像上面这样直接杀进程。
 
-**1.3 认领那一下失败，时刻不能丢**
+#### 1.3 认领那一下失败，时刻不能丢
 
 ```bash
 # 在一个 tick 时刻（每 10 秒）前后把租约表移走 4 秒。
@@ -166,7 +188,7 @@ logs '.logger == "cronjob" and .name == "tick"' | jq -c '{ts, level, msg, at}' |
 
 窗口里的那个时刻必须照样跑完：日志里先是每个副本一条 `cronjob could not claim its instant, trying again`，每 2 秒再试一次，表放回来之后出现这个时刻的 `finished cronjob`。认领是这一轮唯一的机会——没人领过的时刻只在「还没有更晚的轮次记下它」之前才补得回来——所以第一次失败就放弃等于整轮丢掉。
 
-**1.4 一轮跑过下一个时刻，要当场说**
+#### 1.4 一轮跑过下一个时刻，要当场说
 
 ```bash
 kubectl -n $NS patch configmap cluster --type merge -p '{"data":{"JOBS_SLOW_SECONDS":"40"}}'
@@ -180,7 +202,7 @@ kubectl -n $NS rollout restart deployment/cluster
 
 40 秒的一轮跨过了 30 秒的下一个时刻：那个时刻到点时就有一条 `cronjob round is still running at its next instant`，带 `overrun`（跑过了几个时刻）；轮次结束后才有原来那条 `cronjob skipped instants`。跑超时的那一轮把这个任务的租约一直占着，全部署都不会有第二个副本接上，所以它必须在还卡着的时候就出声，而不是等它返回——万一它永远不返回。
 
-**1.5 整个部署停机：只补最近一个时刻**
+#### 1.5 整个部署停机：只补最近一个时刻
 
 ```bash
 kubectl -n $NS scale deployment/cluster --replicas=0
@@ -213,7 +235,7 @@ kubectl -n $NS scale deployment/cluster --replicas=3
 
 ### 二、选主
 
-**2.1 接手：优雅停机与崩溃**
+#### 2.1 接手：优雅停机与崩溃
 
 ```bash
 P=$(holder leader:counter)
@@ -225,7 +247,7 @@ until N=$(holder leader:counter) && [ "$N" != "$P" ]; do sleep 0.5; done; echo "
 
 把 `delete pod` 换成 `kubectl -n $NS exec "$P" -c cluster -- pkill -KILL -x cluster`，就是崩溃：没有交还这一步，要等租约到期再加一次竞选，最多约 21 秒接手。两种情况做完都跑一遍「核对」，计数器的各任首尾相接、互不交错。
 
-**2.2 冻住的旧 leader 写不进去**
+#### 2.2 冻住的旧 leader 写不进去
 
 ```bash
 P=$(holder leader:counter)
@@ -238,11 +260,11 @@ kubectl -n $NS logs "$P" -c cluster | grep '"logger":"leader"' | tail -3
 
 冻住超过 15 秒，租约在数据库里到期，别的副本当选。旧 leader 恢复时，本地截止时间早就过了，它的 ctx 立刻结束，这一任记 `leader stepped down`，`reason: lease lost`。就算它抢在发现之前又发出一个事务，事务的第一条语句也会核对租约，发现租约不是自己的，整个事务一条都不执行；这时这一任记成 `leader stepped down with error`，`reason: work returned`，错误里是 `lease lost`。不管是哪种情况，跑「核对」都看不到两任交错写。
 
-**2.3 工作自己返回：名字交还，几秒后重新竞选**
+#### 2.3 工作自己返回：名字交还，几秒后重新竞选
 
 ```bash
 P=$(holder leader:counter)
-kubectl -n $NS exec "$P" -c cluster -- curl -s -X POST localhost:8080/api/step-downs; echo
+kubectl -n $NS exec "$P" -c cluster -- curl -s -A "$UA" -b "session_id=$SESSION" -X POST localhost:8080/api/step-downs; echo
 sleep 12
 logs '.logger == "leader"' | jq -c '{ts, msg, reason, err, instance}' | tail -4
 holder leader:counter
@@ -254,12 +276,12 @@ holder leader:counter
 
 ### 三、锁
 
-**3.1 同一件事同一时刻只做一次**
+#### 3.1 同一件事同一时刻只做一次
 
 ```bash
 P1=$(pods | sed -n 1p)
 P2=$(pods | sed -n 2p)
-rebuild() { kubectl -n $NS exec "$1" -c cluster -- curl -s -w ' HTTP=%{http_code}\n' -X POST localhost:8080/api/rebuilds -H 'content-type: application/json' -d "{\"seconds\":$2}"; }
+rebuild() { kubectl -n $NS exec "$1" -c cluster -- curl -s -A "$UA" -b "session_id=$SESSION" -w ' HTTP=%{http_code}\n' -X POST localhost:8080/api/rebuilds -H 'content-type: application/json' -d "{\"seconds\":$2}"; }
 rebuild "$P1" 5 &
 rebuild "$P2" 5
 wait $!
@@ -271,18 +293,18 @@ wait $!
 
 持锁的进程被冻住：跑重建时 `pkill -STOP` 冻住它，超过 15 秒后，别的 Pod 就能拿到锁跑完。被冻住的进程恢复后，它那次请求得到 500 "the rebuild did not finish"，那次运行也没有 `ended_at`。请求等过了服务端的写超时（默认 15 秒）的，客户端收不到这个响应，只在服务端的访问日志里看得到。
 
-**3.2 事务里拿锁：直接拒**
+#### 3.2 事务里拿锁：直接拒
 
 ```bash
 P=$(pods | sed -n 1p)
-kubectl -n $NS exec "$P" -c cluster -- curl -s -w ' HTTP=%{http_code}\n' -X POST localhost:8080/api/rebuilds -H 'content-type: application/json' -d '{"seconds":1,"in_transaction":true}'
+kubectl -n $NS exec "$P" -c cluster -- curl -s -A "$UA" -b "session_id=$SESSION" -w ' HTTP=%{http_code}\n' -X POST localhost:8080/api/rebuilds -H 'content-type: application/json' -d '{"seconds":1,"in_transaction":true}'
 ```
 
 返回 400 "a lock cannot be taken inside a transaction"，而且那次重建一步都没跑（`/api/runs` 里不会多出记录）。原因是顺序反了：锁在工作返回时就交还，而那时外层事务还没提交，下一个拿到锁的副本会在这个副本尚未写入的数据上开工。正确写法是先拿锁，再在工作里开事务。
 
 ### 四、租约与数据库
 
-**4.1 数据库卡住 25 秒**
+#### 4.1 数据库卡住 25 秒
 
 用全局读锁把所有写入卡住：
 
@@ -292,7 +314,7 @@ kubectl -n $NS exec mysql-0 -c mysql -- sh -c 'MYSQL_PWD="$MYSQL_ROOT_PASSWORD" 
 
 续期语句一条条超时，记 `lease renewal failed`。连续 10 秒续不上，各持有者自己停手：leader 记 `leader stepped down`（`reason: lease lost`），正在跑的定时任务记 `cronjob interrupted`（`reason: lease lost`）。读锁一放开，各项工作按规则恢复：被打断的一轮再跑一次（或者因为下一个时刻已经开始而放弃），新的 leader 当选。整个过程没有一个副本重启。
 
-**4.2 mysqld 重启**
+#### 4.2 mysqld 重启
 
 ```bash
 kubectl -n $NS exec mysql-0 -c mysql -- sh -c 'MYSQL_PWD="$MYSQL_ROOT_PASSWORD" mysqladmin -uroot shutdown'
@@ -300,7 +322,7 @@ kubectl -n $NS exec mysql-0 -c mysql -- sh -c 'MYSQL_PWD="$MYSQL_ROOT_PASSWORD" 
 
 mysqld 一退出，容器跟着重启，这条命令就以 `command terminated with exit code 137` 结束，这是正常的。日志里会有 `Server shutdown in progress`、`invalid connection`、`connection refused` 这些真实的数据库错误。leader 的事务如果在核对租约时断了连接，这一任记 `leader stepped down with error`，然后重新竞选；数据库回来之后，等租约到期就有新 leader。应用副本同样不重启。两个场景做完都跑一遍「核对」。
 
-**4.3 租约丢了要说明为什么**
+#### 4.3 租约丢了要说明为什么
 
 ```bash
 until P=$(holder cron:slow "AND unfinished_slot_ms = slot_ms AND unfinished_slot_ms <> 0"); do sleep 1; done
@@ -318,12 +340,12 @@ kubectl -n $NS logs "$P" -c cluster --since=60s | jq -r 'select(.msg == "lease l
 这一组三步连着做，用的是同一套小工具。缓存只在进程内存里，没有共享存储层，所以「读」只读被问的那个副本自己那份——某个副本没收到事件，这里就看得出来。
 
 ```bash
-cput() { kubectl -n $NS exec "$1" -c cluster -- curl -s -X POST localhost:8080/api/caches -H 'content-type: application/json' -d "{\"key\":\"$2\",\"value\":\"$3\"}"; echo; }
-cget() { kubectl -n $NS exec "$1" -c cluster -- curl -s "localhost:8080/api/caches/$2"; echo; }
-cdel() { kubectl -n $NS exec "$1" -c cluster -- curl -s -X DELETE "localhost:8080/api/caches/$2"; echo; }
+cput() { kubectl -n $NS exec "$1" -c cluster -- curl -s -A "$UA" -b "session_id=$SESSION" -X POST localhost:8080/api/caches -H 'content-type: application/json' -d "{\"key\":\"$2\",\"value\":\"$3\"}"; echo; }
+cget() { kubectl -n $NS exec "$1" -c cluster -- curl -s -A "$UA" -b "session_id=$SESSION" "localhost:8080/api/caches/$2"; echo; }
+cdel() { kubectl -n $NS exec "$1" -c cluster -- curl -s -A "$UA" -b "session_id=$SESSION" -X DELETE "localhost:8080/api/caches/$2"; echo; }
 ```
 
-**5.1 写进去、删掉，其余副本都跟上**
+#### 5.1 写进去、删掉，其余副本都跟上
 
 ```bash
 P1=$(pods | sed -n 1p)
@@ -337,7 +359,7 @@ for p in $(pods); do cget "$p" color; done
 
 第一轮每个副本都回 `"found":true,"value":"blue"`，`replica` 各不相同——写只发生在 `$P1`，其余两个是从 Kafka 事件里应用的。删除之后第二轮每个副本都回 `"found":false`。
 
-**5.2 新起的副本不是聋的**
+#### 5.2 新起的副本不是聋的
 
 ```bash
 kubectl -n $NS scale deployment/cluster --replicas=4
@@ -354,7 +376,7 @@ kubectl -n $NS scale deployment/cluster --replicas=3
 
 新副本必须回 `"found":true`。要点在于「打开缓存」这个调用本身会等到消费组把分区分给它才返回（最多 5 秒）：消费者从主题末尾开始读，分配之前发布的事件位移比起点还早，永远补不回来，而消费组首次再均衡默认就要等 3 秒。所以拿到缓存句柄的代码一定不是聋的——区别只在这 3 秒等在哪里。示例用启动组件提前打开，等待就发生在启动阶段（和监听并行，不阻塞就绪）；不提前打开的项目，这次等待会落在第一个用到缓存的请求上。
 
-**5.3 Kafka 断掉：各写各的，恢复后自己接上**
+#### 5.3 Kafka 断掉：各写各的，恢复后自己接上
 
 ```bash
 kubectl -n $NS scale statefulset/kafka --replicas=0
@@ -382,7 +404,7 @@ Kafka 回来以后（这里的 broker 用临时卷，Pod 删掉数据就没了�
 
 ### 六、启动与部署
 
-**6.1 多副本同时对空库建表**
+#### 6.1 多副本同时对空库建表
 
 ```bash
 kubectl -n $NS scale deployment/cluster --replicas=0
@@ -397,7 +419,7 @@ logs ".ts >= \"$SINCE\" and .msg == \"database table ready\"" | jq -r '[.instanc
 
 三个副本对着同一个空库一起启动，谁也没崩：框架用数据库自己的锁（MySQL `GET_LOCK`）让它们轮流准备表，后到的副本看到表已经在，只补差异。`SHOW TABLES` 里每张表只有一张，`database table ready` 每个副本每张表各记一条——三个副本都记，说明后到的两个确实检查过，而不是跳过了。表少的时候轮流得很快，看不到等锁的日志；表多、播种慢的项目里，排在后面的副本会记 `still waiting for the startup lock held by another process`。
 
-**6.2 连接池只有一条连接，启动就得失败**
+#### 6.2 连接池只有一条连接，启动就得失败
 
 ```bash
 kubectl -n $NS patch configmap cluster --type merge -p '{"data":{"DATABASE_MAX_OPEN_CONNS":"1"}}'
@@ -411,7 +433,7 @@ kubectl -n $NS rollout restart deployment/cluster
 
 新副本必须起不来，并且说清楚：`the migrate lock needs a connection of its own: raise database.max_open_conns to at least 2`。启动锁要占一条连接，池子只有一条就锁不住；这时候照常启动的话，所有副本会同时建表、同时播种，而日志里一个字都不会提。
 
-**6.3 优雅停机：先摘流量再关**
+#### 6.3 优雅停机：先摘流量再关
 
 ```bash
 kubectl -n $NS rollout status deployment/cluster
@@ -430,7 +452,7 @@ done
 
 框架停机最长是：5 秒排空，加最多 30 秒等 HTTP 连接，加最多 30 秒等在途任务；开了链路追踪和调试端点（pprof、statsviz）的部署，关闭它们再各加最多 5 秒，合计 80 秒。所以 `terminationGracePeriodSeconds` 设成 90 秒，盖过最坏情况。示例里的任务几秒就返回，实际停机要短得多。
 
-**6.4 催一把：第二个信号**
+#### 6.4 催一把：第二个信号
 
 ```bash
 kubectl -n $NS patch configmap cluster --type merge -p '{"data":{"SERVER_SHUTDOWN_DELAY":"60s"}}'
@@ -452,7 +474,7 @@ kubectl -n $NS rollout status deployment/cluster --timeout=300s
 
 框架接管的信号只有 SIGINT 和 SIGTERM 这两个编排器会送的。SIGQUIT 留给 Go 运行时：`pkill -QUIT -x cluster` 打印全部 goroutine 的栈再退出，是看一个卡住的进程卡在哪的办法，框架接管了它就没了。
 
-**6.5 滚动更新：工作不断**
+#### 6.5 滚动更新：工作不断
 
 ```bash
 kubectl -n $NS rollout restart deployment/cluster
@@ -460,6 +482,130 @@ kubectl -n $NS rollout status deployment/cluster
 ```
 
 Deployment 的滚动策略是 `maxSurge: 1`、`maxUnavailable: 0`：新 Pod 就绪之后才停旧 Pod，全程保持三个副本在服务。`tick` 每 10 秒照常一轮；leader 随着旧 Pod 停机在副本之间接力；被停机打断的 `slow` 由别的副本再跑一次。其余副本一直在领时刻，新起的副本没有要补跑的，日志里不该出现 `"catch_up":true`。PodDisruptionBudget 管不到滚动更新，它限制的是节点排空（drain）这类主动驱逐，保证那种时候至少留两个副本。端口转发连着的 Pod 被替换时会断开，重新开一个即可。
+
+#### 6.6 少了依赖，启动就得失败
+
+```bash
+kubectl -n $NS patch configmap cluster --type merge -p '{"data":{"REDIS_ENABLED":"false"}}'
+kubectl -n $NS rollout restart deployment/cluster
+sleep 20; kubectl -n $NS get pods -l app.kubernetes.io/name=cluster --sort-by=.metadata.creationTimestamp
+kubectl -n $NS logs "$(kubectl -n $NS get pods -l app.kubernetes.io/name=cluster --sort-by=.metadata.creationTimestamp -o jsonpath='{.items[-1].metadata.name}')" -c cluster | grep -o 'module iam requires redis[^"]*' | head -1
+kubectl -n $NS get deployment cluster
+kubectl -n $NS patch configmap cluster --type merge -p '{"data":{"REDIS_ENABLED":"true"}}'
+kubectl -n $NS rollout restart deployment/cluster
+kubectl -n $NS rollout status deployment/cluster --timeout=300s
+```
+
+iam 模块把会话放在 Redis 里，Redis 没开它就没法认证任何人，所以注册时直接拒绝启动：新起的副本在日志里留一行 `module iam requires redis: set REDIS_ENABLED=true or the redis.enabled config key` 就退出，`CrashLoopBackOff`。滚动更新卡在第一个新副本上，三个旧副本照常服务，`kubectl get deployment` 里 `AVAILABLE` 一直是 3：配置错了只会挡住发布，不会放倒在跑的。改回来再滚一次就好。
+
+### 七、gRPC 与认证
+
+声明了 `GRPC()` 的模型在 8081 端口上以 gRPC 提供同样的动作，业务代码只有 `service/` 那一份；iam 模块的会话检查在两个监听上各挂一次，同一个会话两边都认。下面每个场景都指名副本：`pods` 列出的前三个记为 A、B、C，会话在 A 上登录。
+
+```bash
+A=$(pods | sed -n 1p); B=$(pods | sed -n 2p); C=$(pods | sed -n 3p)
+login "$A"
+```
+
+#### 7.1 在哪个副本登录都算数
+
+```bash
+rpc "$B" localhost:8081 list
+rpc "$B" -v -d '{"flag":{"name":"dark_mode","on":true}}' localhost:8081 cluster.FlagService/CreateFlag | grep -E 'x-served-by|"name"|"percent"'
+kubectl -n $NS exec "$C" -c cluster -- grpcurl -plaintext -d '{"flag":{"name":"night_mode"}}' localhost:8081 cluster.FlagService/CreateFlag
+```
+
+`list` 靠反射列出六个业务服务，外加框架自带的健康服务和反射服务。会话是在 A 上登录的，B 照样认：它答 `x-served-by: <B>:8080`，开关的 `percent` 是 100，Create 钩子在 gRPC 这条路上一样跑。C 上不带会话的那次被拒，`Unauthenticated: no session`；会话检查在业务代码之前，service 根本没被调用。
+
+#### 7.2 一张表、两种传输、三个副本
+
+```bash
+rpc "$C" -d '{"filters":[{"field":"name","values":["dark_mode"]}]}' localhost:8081 cluster.FlagService/ListFlag
+api '/api/flags?name=dark_mode' | jq '.data.items[0]'
+ID=$(rpc "$C" -d '{"filters":[{"field":"name","values":["dark_mode"]}]}' localhost:8081 cluster.FlagService/ListFlag | jq -r '.items[0].id')
+rpc "$A" -d "{\"id\":\"$ID\",\"flag\":{\"percent\":10},\"update_mask\":{\"paths\":[\"percent\"]}}" localhost:8081 cluster.FlagService/PatchFlag
+rpc "$A" -d "{\"id\":\"$ID\",\"flag\":{\"percent\":10}}" localhost:8081 cluster.FlagService/PatchFlag
+rpc "$C" -d "{\"id\":\"$ID\"}" localhost:8081 cluster.FlagService/DeleteFlag
+rpc "$B" -d "{\"id\":\"$ID\"}" localhost:8081 cluster.FlagService/GetFlag
+```
+
+B 上建的开关，C 上经 gRPC、随便哪个副本经 HTTP 都读得到同一行，`created_by` 是 carol。gRPC 的列表请求就是 HTTP 的查询串换了个形状：`filters` 里的 `field`、`op`、`values` 对应 `field[op]=value`，`sort_by`、`page`、`size` 对应 `_sort_by`、`_page`、`_size`。Patch 只改 `update_mask` 点名的字段，`on` 还是 true；不给 mask 直接拒绝，`InvalidArgument: update_mask must name at least one field`。C 上删掉之后 B 上再取，`NotFound`。
+
+#### 7.3 复制缓存走流
+
+```bash
+printf '%s\n' '{"payload":{"key":"greeting","value":"hello"}}' '{"payload":{"key":"farewell","value":"bye"}}' | rpc "$A" -d @ localhost:8081 cluster.CachedService/LoadCached
+sleep 2
+rpc "$B" -d '{"id":"greeting"}' localhost:8081 cluster.CachedService/GetCached
+printf '%s\n' '{"payload":{"key":"farewell"}}' '{"payload":{"key":"unknown"}}' | rpc "$C" -d @ localhost:8081 cluster.CachedService/ExchangeCached
+rpc "$B" -d '{"id":"greeting"}' localhost:8081 cluster.CachedService/DeleteCached
+sleep 2
+rpc "$A" -d '{"id":"greeting"}' localhost:8081 cluster.CachedService/GetCached
+```
+
+客户端流一次灌两条，A 答 `count: 2`；两秒后 B 的本地存储里已经有了 `greeting`，C 的双向流每问一个键答一条，`farewell` 有、`unknown` 没有（没有 `found`）。B 上删掉，A 上也没了：走 gRPC 写进去的条目和走 HTTP 的一样在副本之间传播。
+
+#### 7.4 锁和 leader 也认 gRPC
+
+```bash
+rpc "$A" -d '{"payload":{"seconds":3}}' localhost:8081 cluster.RebuildService/CreateRebuild & W=$!
+rpc "$B" -d '{"payload":{"seconds":3}}' localhost:8081 cluster.RebuildService/CreateRebuild
+wait $W
+rpc "$C" -d '{"filters":[{"field":"kind","values":["lock"]}],"sort_by":["created_at desc"]}' localhost:8081 cluster.RunService/ListRun | jq '.items[0], .total'
+L=$(holder leader:counter); rpc "$L" -d '{}' localhost:8081 cluster.StepDownService/CreateStepDown
+sleep 8; holder leader:counter
+```
+
+A、B 同时抢同一把锁，一个跑了，另一个当场被拒：HTTP 上的 409 在 gRPC 上是 `AlreadyExists: a rebuild is already running`，controller 日志里同样一条 ERROR。跑完的那次在 `runs` 里记着是哪个副本、`ended_at` 已填。正持有 `leader:counter` 的副本收到 `CreateStepDown` 答 `asked: true`，几秒后租约到了别的副本手里。
+
+#### 7.5 流被滚动更新切断，换个副本接着读
+
+```bash
+kubectl -n $NS exec "$A" -c cluster -- grpcurl -plaintext -H "authorization: Bearer $SESSION" -d '{"payload":{"after":0}}' localhost:8081 cluster.CounterStepService/WatchCounterStep > watch.out & W=$!
+sleep 3; kubectl -n $NS rollout restart deployment/cluster; wait $W
+grep '"seq"' watch.out | tail -1; grep -E 'Code|Message' watch.out
+kubectl -n $NS rollout status deployment/cluster --timeout=240s
+LAST=$(grep '"seq"' watch.out | tail -1 | tr -dc '0-9')
+timeout 3 rpc "$(pods | sed -n 1p)" -v -d "{\"payload\":{\"after\":$LAST}}" localhost:8081 cluster.CounterStepService/WatchCounterStep | grep -E 'x-served-by|"seq"|"replica"'
+```
+
+流从 A 上一个数字一个数字地推，滚动更新停掉 A 时流以 `Unavailable` 结束，消息里带着服务端的 `goaway ... graceful_stop`：停机时框架先让健康服务说 NOT_SERVING，再优雅地关掉在途的流。客户端拿上次看到的数字向任意一个新副本要 `after` 之后的，紧接着的数字就来了，`replica` 里写的是此刻的 leader，`x-served-by` 写的是答话的副本，两者不必是同一个。
+
+#### 7.6 停机时健康服务先说 NOT_SERVING
+
+```bash
+P1=$(pods | sed -n 1p)
+kubectl -n $NS exec "$P1" -c cluster -- grpcurl -plaintext localhost:8081 grpc.health.v1.Health/Check
+kubectl -n $NS delete pod "$P1" --wait=false
+for i in 1 2 3 4 5 6 7 8; do sleep 0.6; kubectl -n $NS exec "$P1" -c cluster -- grpcurl -plaintext -max-time 1 localhost:8081 grpc.health.v1.Health/Check 2>&1 | tr -d ' \n'; echo; done
+kubectl -n $NS rollout status deployment/cluster --timeout=240s
+```
+
+删 Pod 之前答 `SERVING`；进程一收到 SIGTERM 就答 `NOT_SERVING`，和 `/-/readyz` 变 503 是同一个时刻，`SERVER_SHUTDOWN_DELAY` 的 5 秒里一直如此，之后监听关闭、连接被拒。拿健康服务做探针或让客户端自己检查，都能在监听关闭之前把流量挪开。
+
+#### 7.7 集群内的地址
+
+```bash
+P1=$(pods | sed -n 1p)
+kubectl -n $NS exec "$P1" -c cluster -- getent hosts cluster-grpc
+for i in 1 2 3 4 5 6; do rpc "$P1" -v -d '{"size":1}' cluster-grpc:8081 cluster.FlagService/ListFlag 2>&1 | grep x-served-by; done | sort | uniq -c
+```
+
+`cluster-grpc` 是 headless Service，解析出来就是三个 Pod 的地址，六次连接落在了不同的副本上。集群内的 gRPC 客户端要走这个名字：一条 gRPC 连接是长连接，经 ClusterIP 的 `cluster` 连上哪个副本就一直是它；用 grpc-go 的客户端连 `dns:///cluster-grpc.gst-cluster.svc:8081` 并配上 `round_robin`，每个调用才会轮到不同的副本。
+
+#### 7.8 会话在 Redis 里：重启还在，重建就没了
+
+```bash
+A=$(pods | sed -n 1p); login "$A"
+rpc "$A" -d '{"flag":{"name":"beta_banner"}}' localhost:8081 cluster.FlagService/CreateFlag | grep name
+kubectl -n $NS exec redis-0 -- redis-cli shutdown
+for i in 1 2 3 4 5 6; do sleep 0.5; rpc "$A" -d '{"size":1}' localhost:8081 cluster.FlagService/ListFlag 2>&1 | grep -E 'Code|total'; done
+kubectl -n $NS delete pod redis-0; kubectl -n $NS rollout status statefulset/redis --timeout=120s
+rpc "$A" -d '{"size":1}' localhost:8081 cluster.FlagService/ListFlag
+login "$A"; rpc "$A" -d '{"size":1}' localhost:8081 cluster.FlagService/ListFlag | grep total
+```
+
+`shutdown` 让 Redis 落盘后退出，容器一两秒内重启，六次探测里落在这个窗口的那一两次被拒：`Unauthenticated: session invalid`，日志里 `iam session rejected` 的 `reason` 才说明是 Redis 连不上（`lookup redis ... no such host`，Pod 没就绪时 headless 名字解析不到）——会话存储不可达按拒绝处理，客户端看到的是 401，不是 5xx；重启快得没被探测碰上也正常。Redis 回来后原会话照用，数据落过盘。删掉 `redis-0` 则临时卷一起没了，会话也没了，再调就是 `Unauthenticated`，重新登录即可：会话丢失只是一次登录的事，副本自己不受影响。
 
 ## 正式环境
 

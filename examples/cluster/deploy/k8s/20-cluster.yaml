@@ -4,9 +4,15 @@
 #   - the instance id the framework stamps on every log line and writes into
 #     gst_leases.instance starts with the pod name — the host name, plus a
 #     random suffix per start — so a lease names the pod holding it;
-#   - /-/readyz turns 503 the moment shutdown begins and the listener closes
+#   - /-/readyz turns 503 the moment shutdown begins and the listeners close
 #     SERVER_SHUTDOWN_DELAY later, the time the endpoints need to stop sending
-#     requests to a terminating pod;
+#     requests to a terminating pod; the gRPC health service answers
+#     NOT_SERVING from the same moment, so a gRPC client checking it stops
+#     sending too;
+#   - the gRPC listener is a second port, grpc, behind the same Service; a
+#     client inside the cluster connects to the headless Service cluster-grpc,
+#     which resolves to the pods themselves, so that its connections spread
+#     over the replicas instead of all landing on the one a ClusterIP picked;
 #   - terminationGracePeriodSeconds outlasts the framework's whole shutdown at
 #     its longest — the drain window, then up to 30 seconds for the HTTP
 #     connections, up to 30 seconds for the work in flight, and up to 5
@@ -41,7 +47,11 @@ data:
   MYSQL_DATABASE: cluster
   MYSQL_USERNAME: cluster
   SERVER_PORT: "8080"
+  GRPC_PORT: "8081"
   SERVER_SHUTDOWN_DELAY: 5s
+  # The iam module keeps the sessions in redis, shared by every replica.
+  REDIS_ENABLED: "true"
+  REDIS_ADDR: redis:6379
   LOGGER_OUTPUT: stdout
   # The replicated cache broadcasts its writes through kafka; every replica
   # opens its cache before it starts serving.
@@ -99,13 +109,13 @@ spec:
       #       matchLabels:
       #         app.kubernetes.io/name: cluster
       initContainers:
-        # The framework fails the start when the database cannot be reached,
-        # which is right for a deployment — the replica is restarted — but on
-        # a first apply MySQL comes up beside the replicas, and waiting for its
-        # port keeps that first start free of restarts.
-        - name: wait-for-mysql
+        # The framework fails the start when the database or redis cannot be
+        # reached, which is right for a deployment — the replica is restarted
+        # — but on a first apply they come up beside the replicas, and waiting
+        # for their ports keeps that first start free of restarts.
+        - name: wait-for-backends
           image: busybox:1.36
-          command: ["sh", "-c", "until nc -z mysql 3306; do sleep 1; done"]
+          command: ["sh", "-c", "until nc -z mysql 3306 && nc -z redis 6379; do sleep 1; done"]
           resources:
             requests:
               cpu: 10m
@@ -138,6 +148,8 @@ spec:
           ports:
             - name: http
               containerPort: 8080
+            - name: grpc
+              containerPort: 8081
           resources:
             requests:
               cpu: 100m
@@ -196,6 +208,32 @@ spec:
     - name: http
       port: 8080
       targetPort: http
+    - name: grpc
+      port: 8081
+      targetPort: grpc
+---
+# The gRPC address for clients inside the cluster: headless, so the name
+# resolves to every ready pod and a client connecting to
+# dns:///cluster-grpc.gst-cluster.svc:8081 with round_robin balancing spreads
+# its calls over the replicas. A gRPC connection is long-lived, so through the
+# ClusterIP above every call of one client would land on one pod.
+apiVersion: v1
+kind: Service
+metadata:
+  name: cluster-grpc
+  namespace: gst-cluster
+  labels:
+    app.kubernetes.io/name: cluster
+    app.kubernetes.io/component: server
+    app.kubernetes.io/part-of: gst-cluster
+spec:
+  clusterIP: None
+  selector:
+    app.kubernetes.io/name: cluster
+  ports:
+    - name: grpc
+      port: 8081
+      targetPort: grpc
 ---
 # Keeps two replicas up through voluntary disruptions — a node drain, an
 # eviction. A rolling update follows the Deployment's strategy instead.

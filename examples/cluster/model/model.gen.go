@@ -6,5 +6,6 @@ import "github.com/hydroan/gst/model"
 
 func init() {
 	model.Register[*CounterStep]()
+	model.Register[*Flag]()
 	model.Register[*Run]()
 }

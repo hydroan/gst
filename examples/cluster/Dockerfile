@@ -11,7 +11,8 @@ COPY . .
 WORKDIR /src/examples/cluster
 RUN --mount=type=cache,target=/go/pkg/mod \
     --mount=type=cache,target=/root/.cache/go-build \
-    go build -o /out/cluster .
+    go build -o /out/cluster . \
+    && go install github.com/fullstorydev/grpcurl/cmd/grpcurl@v1.9.3
 
 # The sqlite driver the framework links is cgo, so the binary needs libc: a
 # slim image of the build image's Debian release carries it, with the CA
@@ -19,14 +20,17 @@ RUN --mount=type=cache,target=/go/pkg/mod \
 # from inside the pod reaches the process — the README's scenarios freeze a
 # replica with SIGSTOP and kill one with SIGKILL, both of which PID 1 itself
 # would ignore — and procps provides the pkill that sends them; curl calls the
-# endpoints from inside a pod. The process runs as the unprivileged user the
-# manifests name and takes its whole configuration from the environment.
+# endpoints from inside a pod, and grpcurl calls the rpcs from inside one,
+# naming the replica to call or the address every replica answers on. The
+# process runs as the unprivileged user the manifests name and takes its
+# whole configuration from the environment.
 FROM debian:trixie-slim
 RUN apt-get update \
     && apt-get install -y --no-install-recommends ca-certificates curl procps tini \
     && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
 COPY --from=build /out/cluster /app/cluster
+COPY --from=build /go/bin/grpcurl /usr/local/bin/grpcurl
 USER 65532:65532
-EXPOSE 8080
+EXPOSE 8080 8081
 ENTRYPOINT ["/usr/bin/tini", "--", "/app/cluster"]

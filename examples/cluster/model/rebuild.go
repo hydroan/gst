@@ -15,17 +15,19 @@ type Rebuild struct {
 // request while it runs and see that one refused. InTransaction asks for the
 // lock to be taken from inside a transaction, which the framework refuses.
 type RebuildReq struct {
-	Seconds       int  `json:"seconds"`
-	InTransaction bool `json:"in_transaction"`
+	Seconds       int  `json:"seconds" pb:"1"`
+	InTransaction bool `json:"in_transaction" pb:"2"`
 }
 
 // RebuildRsp reports which replica ran the rebuild and for how long.
 type RebuildRsp struct {
-	Replica string `json:"replica"`
-	Seconds int    `json:"seconds"`
+	Replica string `json:"replica" pb:"1"`
+	Seconds int    `json:"seconds" pb:"2"`
 }
 
 func (Rebuild) Design() {
+	GRPC()
+
 	Route("/rebuilds", func() {
 		Create(func() {
 			Service()

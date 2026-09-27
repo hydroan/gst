@@ -6,11 +6,13 @@ import (
 	_ "cluster/component"
 	_ "cluster/configx"
 	_ "cluster/cronjob"
+	_ "cluster/interceptor"
 	_ "cluster/leader"
 	_ "cluster/lock"
 	_ "cluster/middleware"
 	_ "cluster/model"
 	_ "cluster/module"
+	_ "cluster/pb"
 	"cluster/router"
 	_ "cluster/service"
 

@@ -1,13 +1,12 @@
-// Package module assembles the application's business modules.
-//
-// Call each module's Register function in init below: built-in gst modules
-// such as github.com/hydroan/gst/module/iam, and your own. For your own
-// resources, create one subpackage per resource under module/ and expose a
-// Register function that wires model, service and routes via module.Use.
-//
-// See github.com/hydroan/gst/module/helloworld for a complete example.
+// Package module assembles the application's modules: the built-in iam
+// module, which serves signup, login and sessions. Its session check is
+// mounted in middleware for the HTTP routes and in interceptor for the rpcs;
+// the sessions live in redis, which every replica shares, so a session
+// established on one replica is good on all of them.
 package module
 
+import "github.com/hydroan/gst/module/iam"
+
 func init() {
-	// TODO: call your module Register functions here.
+	iam.Register()
 }

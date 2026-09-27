@@ -6,6 +6,8 @@ require (
 	github.com/cockroachdb/errors v1.14.0
 	github.com/hydroan/gst v0.0.0-00010101000000-000000000000
 	github.com/stretchr/testify v1.12.1
+	google.golang.org/grpc v1.83.2
+	google.golang.org/protobuf v1.36.12
 	gorm.io/gorm v1.31.2
 )
 
@@ -78,6 +80,7 @@ require (
 	github.com/goccy/go-yaml v1.19.2 // indirect
 	github.com/gofrs/flock v0.13.0 // indirect
 	github.com/gogo/protobuf v1.3.2 // indirect
+	github.com/golang-jwt/jwt/v5 v5.3.1 // indirect
 	github.com/google/go-querystring v1.2.0 // indirect
 	github.com/google/gops v0.3.29 // indirect
 	github.com/google/uuid v1.6.0 // indirect
@@ -216,8 +219,6 @@ require (
 	golang.org/x/tools v0.49.0 // indirect
 	google.golang.org/genproto/googleapis/api v0.0.0-20260819154853-08b0e4226688 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20260825221802-da73d73af1c5 // indirect
-	google.golang.org/grpc v1.83.2 // indirect
-	google.golang.org/protobuf v1.36.12 // indirect
 	gopkg.in/ini.v1 v1.67.3 // indirect
 	gopkg.in/natefinch/lumberjack.v2 v2.2.1 // indirect
 	gopkg.in/yaml.v2 v2.4.0 // indirect

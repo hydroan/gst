@@ -17,20 +17,34 @@ type Cached struct {
 // CachedReq is the entry to write: the key it is filed under and the value
 // every other replica must end up holding for it.
 type CachedReq struct {
-	Key   string `json:"key"`
-	Value string `json:"value"`
+	Key   string `json:"key" pb:"1"`
+	Value string `json:"value" pb:"2"`
+}
+
+// CachedKeyReq names an entry to look up.
+type CachedKeyReq struct {
+	Key string `json:"key" pb:"1"`
+}
+
+// CachedLoadRsp reports how many entries a load stream wrote and which
+// replica took them in.
+type CachedLoadRsp struct {
+	Replica string `json:"replica" pb:"1"`
+	Count   int64  `json:"count" pb:"2"`
 }
 
 // CachedRsp reports which replica answered and what its own store holds for
 // the key, so a client reading every replica in turn sees the propagation.
 type CachedRsp struct {
-	Replica string `json:"replica"`
-	Key     string `json:"key"`
-	Value   string `json:"value"`
-	Found   bool   `json:"found"`
+	Replica string `json:"replica" pb:"1"`
+	Key     string `json:"key" pb:"2"`
+	Value   string `json:"value" pb:"3"`
+	Found   bool   `json:"found" pb:"4"`
 }
 
 func (Cached) Design() {
+	GRPC()
+
 	Route("/caches", func() {
 		Create(func() {
 			Service()
@@ -44,6 +58,25 @@ func (Cached) Design() {
 		Delete(func() {
 			Service()
 			Result[*CachedRsp]()
+		})
+	})
+
+	// LoadCached takes a stream of entries and answers once, with the count:
+	// a client stream. ExchangeCached takes keys and answers each with what
+	// this replica holds, for as long as the client keeps asking: a stream
+	// both ways.
+	Route("caches/load", func() {
+		Stream(func() {
+			Service("load")
+			StreamingPayload[*CachedReq]()
+			Result[*CachedLoadRsp]()
+		})
+	})
+	Route("caches/exchange", func() {
+		Stream(func() {
+			Service("exchange")
+			StreamingPayload[*CachedKeyReq]()
+			StreamingResult[*CachedRsp]()
 		})
 	})
 }
