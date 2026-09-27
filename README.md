@@ -234,9 +234,18 @@ func (Entry) Design() {
 字段用 `pb` tag 给消息编号（`pb:"11"`，框架的 `model.Base` 字段占 1 到 10），缺的 `gg gen` 会补上。
 只在 gRPC 上有的是流：自定义动作里用 `Stream(func(){...})` 声明，一侧写 `Payload`/`Result`、
 另一侧写 `StreamingPayload`/`StreamingResult`，service 方法收发 `grpc.ServerStream`、`ClientStream`
-或 `BidiStream`。监听端口在 `[grpc]` 节配置（默认 8081），反射默认开着，`grpcurl` 能直接列出服务；
-测试里 `testutil.GRPCTarget()` 给出测试服务器的 gRPC 地址。完整示例见
+或 `BidiStream`。测试里 `testutil.GRPCTarget()` 给出测试服务器的 gRPC 地址。完整示例见
 [examples/demo/model/board](./examples/demo/model/board)。
+
+监听在 `[grpc]` 节配置，环境变量是 `GRPC_PORT` 这样的写法：`listen`、`port`（默认 8081，挨着 HTTP 的 8080）、
+`tls_enabled`、`cert_file`、`key_file`（默认明文，和 HTTP 监听一样交给前面的入口终止 TLS）、`reflection`
+（默认开，`grpcurl` 能直接列出服务）、`keepalive_time`、`keepalive_timeout`（默认取 grpc-go 自己的值）。
+没有模型声明 `GRPC()` 的项目不开这个端口。监听上还有两个框架自带的服务：标准的健康服务
+`grpc.health.v1.Health`，进程在服务时答 SERVING，收到停机信号后和 `/-/readyz` 同时变成 NOT_SERVING，
+排空窗口过后监听才关闭；以及反射服务。认证在 `interceptor/` 里挂，和 `middleware/` 一一对应：
+`interceptor.RegisterAuth(interceptor.IAMSession())` 之后，每个没声明 `Public()` 的 rpc 都要在
+`authorization` 元数据里带 `Bearer <会话 id>`，健康与反射服务不经过项目的拦截器。多副本下的用法和核对
+步骤见 [examples/cluster](./examples/cluster/README.md) 的「gRPC 与认证」一章。
 
 ## 业务 Service
 
@@ -1173,8 +1182,8 @@ gg routes --scope pub
 
 ### 运维端点不做认证
 
-`/-/healthz`、`/-/readyz`、`/metrics`、`/openapi.json`、`/docs/*` 这一类端点不是业务接口，
-不走 `/api` 那套认证，框架也不为它们提供口令——框架发行的默认口令保护不了任何东西，只会让人
+`/-/healthz`、`/-/readyz`、`/metrics`、`/openapi.json`、`/docs/*` 这一类端点，以及 gRPC 监听上的
+健康与反射服务，不是业务接口，不走 `/api` 那套认证，框架也不为它们提供口令——框架发行的默认口令保护不了任何东西，只会让人
 误以为这里有防护。
 
 保护它们是部署的事。在 Kubernetes 下这件事由拓扑决定，而不是由配置决定：指标抓取直接访问
@@ -1187,6 +1196,7 @@ Pod 端口，Ingress 只转发写进规则的路径——**只转发 `/api` 前�
 | `/metrics` | 已被访问过的路由（gin 路由模式）及其请求数与延迟分布、缓存计数器上的数据库表名、进程内存与 CPU、构建信息 |
 | `/openapi.json` | 本服务注册的全部路由，以及每个路由的请求与响应模型 |
 | `/docs` | 同一份文档的 Swagger UI 渲染；页面资源编译进二进制，不从任何 CDN 加载脚本，离线可用 |
+| gRPC 的 `grpc.health.v1.Health` 与反射服务 | 进程是否在服务，以及注册了哪些服务和消息；不经过项目的拦截器 |
 
 ### 为什么 `gg gen` 之后 `go test` 是红的？
 
