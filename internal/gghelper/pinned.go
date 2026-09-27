@@ -48,7 +48,7 @@ func PinnedCommand(module, version, pkg string, args ...string) (*exec.Cmd, erro
 	if err = lock.Lock(); err != nil {
 		return nil, errors.Wrapf(err, "lock the module directory of %s@%s", module, version)
 	}
-	defer lock.Unlock()
+	defer func() { _ = lock.Unlock() }()
 	if err = writePinnedModFile(dir, module, version, toolchain); err != nil {
 		return nil, err
 	}

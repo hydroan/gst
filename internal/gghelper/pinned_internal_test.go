@@ -92,11 +92,11 @@ func TestPinnedCommandBuildsWithTheGoCommandAtHand(t *testing.T) {
 	t.Cleanup(func() { userCacheDir = original })
 	const module, pkg = "google.golang.org/protobuf", "google.golang.org/protobuf/cmd/protoc-gen-go"
 	version := requiredVersion(t, module)
-	real, err := exec.LookPath("go")
+	goCommand, err := exec.LookPath("go")
 	require.NoError(t, err)
 	older := olderGoVersion(t, goVersion(t))
 	bin := t.TempDir()
-	script := "#!/bin/sh\nif [ \"$1\" = env ] && [ \"$2\" = GOVERSION ]; then echo " + older + "; exit 0; fi\nexec \"" + real + "\" \"$@\"\n"
+	script := "#!/bin/sh\nif [ \"$1\" = env ] && [ \"$2\" = GOVERSION ]; then echo " + older + "; exit 0; fi\nexec \"" + goCommand + "\" \"$@\"\n"
 	require.NoError(t, os.WriteFile(filepath.Join(bin, "go"), []byte(script), 0o700)) // #nosec G306 -- the script stands in for the go command and must be executable
 	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
 
