@@ -247,10 +247,9 @@ func forwardedTo(p *packages.Package, d *ast.FuncDecl, fn *types.Func) (*types.F
 // closure being work of its own the way thinLead treats it, and that the
 // call be written on one line, one laid out over several being a unit its
 // author meant to be read under the function's name (see checkForwarding).
-// The callee is
-// any function or method named by the call, of d's package or another, a
-// method of the receiver or of any other value (see calledFunc), not a
-// conversion, a builtin or a function value.
+// The callee is any function or method named by the call, of d's package or
+// another, a method of the receiver or of any other value (see calledFunc),
+// not a conversion, a builtin or a function value.
 func wrappedCall(p *packages.Package, d *ast.FuncDecl, fn *types.Func) (*types.Func, bool) {
 	if len(d.Body.List) != 1 {
 		return nil, false

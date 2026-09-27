@@ -20,13 +20,13 @@ import (
 // (exported), where the forwarding function has a second use (multiuse), in
 // an internal test (testuse) or in a file the build leaves out (tagged),
 // where an interface of the package declares the method (sealed) or several
-// types of the package declare it alike (family), where the
-// forwarding function is generated (generated), where a type changes on the
-// way (converted), where the one call a function wraps takes a function
-// literal (funclit) or is laid out over several lines (multiline), and
-// where more than a straight-line statement runs
-// before the forwarding: two of them (longlead), a branch (branch), or a
-// statement carrying a function literal (closure).
+// types of the package declare it alike (family), where the forwarding
+// function is generated (generated), where a type changes on the way
+// (converted), where the one call a function wraps takes a function literal
+// (funclit) or is laid out over several lines (multiline), and where more
+// than a straight-line statement runs before the forwarding: two of them
+// (longlead), a branch (branch), or a statement carrying a function literal
+// (closure).
 func TestCheckForwarding(t *testing.T) {
 	root, pkgs := loadFixture(t, "testdata/forwarding/module")
 	violations, err := checkForwarding(root, pkgs)
