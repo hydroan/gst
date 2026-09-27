@@ -146,7 +146,11 @@ func (FlagService) PatchManyFlag(ctx context.Context, req *PatchManyFlagRequest)
 	models := make([]*model.Flag, len(req.GetItems()))
 	masks := make([][]string, len(req.GetItems()))
 	for i, item := range req.GetItems() {
-		models[i] = FlagFromProto(item.GetFlag())
+		m, err := grpc.PatchItem(i, nil, nil, item.GetId(), FlagFromProto(item.GetFlag()))
+		if err != nil {
+			return nil, err
+		}
+		models[i] = m
 		masks[i] = item.GetUpdateMask().GetPaths()
 	}
 	stored, err := patchManyFlag(ctx, nil, models, masks)

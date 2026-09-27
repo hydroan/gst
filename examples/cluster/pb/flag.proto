@@ -75,7 +75,7 @@ message UpdateFlagResponse {
   Flag flag = 1;
 }
 
-// PatchFlagRequest is the request of FlagService.PatchFlag.
+// PatchFlagRequest is the request of FlagService.PatchFlag and an item of FlagService.PatchManyFlag.
 message PatchFlagRequest {
   // id is the id of the Flag to patch.
   string id = 1;
@@ -194,14 +194,8 @@ message UpdateManyFlagResponse {
 
 // PatchManyFlagRequest is the request of FlagService.PatchManyFlag.
 message PatchManyFlagRequest {
-  // items is the patches, each naming the Flag it applies to by its id.
-  repeated Item items = 1;
-
-  message Item {
-    Flag flag = 1;
-
-    google.protobuf.FieldMask update_mask = 2;
-  }
+  // items is the patches, each a PatchFlagRequest naming the Flag it applies to by its id.
+  repeated PatchFlagRequest items = 1;
 }
 
 // PatchManyFlagResponse is the response of FlagService.PatchManyFlag.

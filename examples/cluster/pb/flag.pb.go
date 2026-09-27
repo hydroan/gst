@@ -417,7 +417,7 @@ func (x *UpdateFlagResponse) GetFlag() *Flag {
 	return nil
 }
 
-// PatchFlagRequest is the request of FlagService.PatchFlag.
+// PatchFlagRequest is the request of FlagService.PatchFlag and an item of FlagService.PatchManyFlag.
 type PatchFlagRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// id is the id of the Flag to patch.
@@ -1080,8 +1080,8 @@ func (x *UpdateManyFlagResponse) GetItems() []*Flag {
 // PatchManyFlagRequest is the request of FlagService.PatchManyFlag.
 type PatchManyFlagRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// items is the patches, each naming the Flag it applies to by its id.
-	Items         []*PatchManyFlagRequest_Item `protobuf:"bytes,1,rep,name=items,proto3" json:"items,omitempty"`
+	// items is the patches, each a PatchFlagRequest naming the Flag it applies to by its id.
+	Items         []*PatchFlagRequest `protobuf:"bytes,1,rep,name=items,proto3" json:"items,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1116,7 +1116,7 @@ func (*PatchManyFlagRequest) Descriptor() ([]byte, []int) {
 	return file_flag_proto_rawDescGZIP(), []int{19}
 }
 
-func (x *PatchManyFlagRequest) GetItems() []*PatchManyFlagRequest_Item {
+func (x *PatchManyFlagRequest) GetItems() []*PatchFlagRequest {
 	if x != nil {
 		return x.Items
 	}
@@ -1229,58 +1229,6 @@ func (x *ListFlagRequest_Filter) GetValues() []string {
 	return nil
 }
 
-type PatchManyFlagRequest_Item struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Flag          *Flag                  `protobuf:"bytes,1,opt,name=flag,proto3" json:"flag,omitempty"`
-	UpdateMask    *fieldmaskpb.FieldMask `protobuf:"bytes,2,opt,name=update_mask,json=updateMask,proto3" json:"update_mask,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *PatchManyFlagRequest_Item) Reset() {
-	*x = PatchManyFlagRequest_Item{}
-	mi := &file_flag_proto_msgTypes[22]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *PatchManyFlagRequest_Item) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*PatchManyFlagRequest_Item) ProtoMessage() {}
-
-func (x *PatchManyFlagRequest_Item) ProtoReflect() protoreflect.Message {
-	mi := &file_flag_proto_msgTypes[22]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use PatchManyFlagRequest_Item.ProtoReflect.Descriptor instead.
-func (*PatchManyFlagRequest_Item) Descriptor() ([]byte, []int) {
-	return file_flag_proto_rawDescGZIP(), []int{19, 0}
-}
-
-func (x *PatchManyFlagRequest_Item) GetFlag() *Flag {
-	if x != nil {
-		return x.Flag
-	}
-	return nil
-}
-
-func (x *PatchManyFlagRequest_Item) GetUpdateMask() *fieldmaskpb.FieldMask {
-	if x != nil {
-		return x.UpdateMask
-	}
-	return nil
-}
-
 var File_flag_proto protoreflect.FileDescriptor
 
 const file_flag_proto_rawDesc = "" +
@@ -1354,13 +1302,9 @@ const file_flag_proto_rawDesc = "" +
 	"\x15UpdateManyFlagRequest\x12#\n" +
 	"\x05items\x18\x01 \x03(\v2\r.cluster.FlagR\x05items\"=\n" +
 	"\x16UpdateManyFlagResponse\x12#\n" +
-	"\x05items\x18\x01 \x03(\v2\r.cluster.FlagR\x05items\"\xb8\x01\n" +
-	"\x14PatchManyFlagRequest\x128\n" +
-	"\x05items\x18\x01 \x03(\v2\".cluster.PatchManyFlagRequest.ItemR\x05items\x1af\n" +
-	"\x04Item\x12!\n" +
-	"\x04flag\x18\x01 \x01(\v2\r.cluster.FlagR\x04flag\x12;\n" +
-	"\vupdate_mask\x18\x02 \x01(\v2\x1a.google.protobuf.FieldMaskR\n" +
-	"updateMask\"<\n" +
+	"\x05items\x18\x01 \x03(\v2\r.cluster.FlagR\x05items\"G\n" +
+	"\x14PatchManyFlagRequest\x12/\n" +
+	"\x05items\x18\x01 \x03(\v2\x19.cluster.PatchFlagRequestR\x05items\"<\n" +
 	"\x15PatchManyFlagResponse\x12#\n" +
 	"\x05items\x18\x01 \x03(\v2\r.cluster.FlagR\x05items2\xee\x05\n" +
 	"\vFlagService\x12E\n" +
@@ -1390,43 +1334,42 @@ func file_flag_proto_rawDescGZIP() []byte {
 	return file_flag_proto_rawDescData
 }
 
-var file_flag_proto_msgTypes = make([]protoimpl.MessageInfo, 23)
+var file_flag_proto_msgTypes = make([]protoimpl.MessageInfo, 22)
 var file_flag_proto_goTypes = []any{
-	(*Flag)(nil),                      // 0: cluster.Flag
-	(*CreateFlagRequest)(nil),         // 1: cluster.CreateFlagRequest
-	(*CreateFlagResponse)(nil),        // 2: cluster.CreateFlagResponse
-	(*DeleteFlagRequest)(nil),         // 3: cluster.DeleteFlagRequest
-	(*DeleteFlagResponse)(nil),        // 4: cluster.DeleteFlagResponse
-	(*UpdateFlagRequest)(nil),         // 5: cluster.UpdateFlagRequest
-	(*UpdateFlagResponse)(nil),        // 6: cluster.UpdateFlagResponse
-	(*PatchFlagRequest)(nil),          // 7: cluster.PatchFlagRequest
-	(*PatchFlagResponse)(nil),         // 8: cluster.PatchFlagResponse
-	(*ListFlagRequest)(nil),           // 9: cluster.ListFlagRequest
-	(*ListFlagResponse)(nil),          // 10: cluster.ListFlagResponse
-	(*GetFlagRequest)(nil),            // 11: cluster.GetFlagRequest
-	(*GetFlagResponse)(nil),           // 12: cluster.GetFlagResponse
-	(*CreateManyFlagRequest)(nil),     // 13: cluster.CreateManyFlagRequest
-	(*CreateManyFlagResponse)(nil),    // 14: cluster.CreateManyFlagResponse
-	(*DeleteManyFlagRequest)(nil),     // 15: cluster.DeleteManyFlagRequest
-	(*DeleteManyFlagResponse)(nil),    // 16: cluster.DeleteManyFlagResponse
-	(*UpdateManyFlagRequest)(nil),     // 17: cluster.UpdateManyFlagRequest
-	(*UpdateManyFlagResponse)(nil),    // 18: cluster.UpdateManyFlagResponse
-	(*PatchManyFlagRequest)(nil),      // 19: cluster.PatchManyFlagRequest
-	(*PatchManyFlagResponse)(nil),     // 20: cluster.PatchManyFlagResponse
-	(*ListFlagRequest_Filter)(nil),    // 21: cluster.ListFlagRequest.Filter
-	(*PatchManyFlagRequest_Item)(nil), // 22: cluster.PatchManyFlagRequest.Item
-	(*timestamppb.Timestamp)(nil),     // 23: google.protobuf.Timestamp
-	(*fieldmaskpb.FieldMask)(nil),     // 24: google.protobuf.FieldMask
+	(*Flag)(nil),                   // 0: cluster.Flag
+	(*CreateFlagRequest)(nil),      // 1: cluster.CreateFlagRequest
+	(*CreateFlagResponse)(nil),     // 2: cluster.CreateFlagResponse
+	(*DeleteFlagRequest)(nil),      // 3: cluster.DeleteFlagRequest
+	(*DeleteFlagResponse)(nil),     // 4: cluster.DeleteFlagResponse
+	(*UpdateFlagRequest)(nil),      // 5: cluster.UpdateFlagRequest
+	(*UpdateFlagResponse)(nil),     // 6: cluster.UpdateFlagResponse
+	(*PatchFlagRequest)(nil),       // 7: cluster.PatchFlagRequest
+	(*PatchFlagResponse)(nil),      // 8: cluster.PatchFlagResponse
+	(*ListFlagRequest)(nil),        // 9: cluster.ListFlagRequest
+	(*ListFlagResponse)(nil),       // 10: cluster.ListFlagResponse
+	(*GetFlagRequest)(nil),         // 11: cluster.GetFlagRequest
+	(*GetFlagResponse)(nil),        // 12: cluster.GetFlagResponse
+	(*CreateManyFlagRequest)(nil),  // 13: cluster.CreateManyFlagRequest
+	(*CreateManyFlagResponse)(nil), // 14: cluster.CreateManyFlagResponse
+	(*DeleteManyFlagRequest)(nil),  // 15: cluster.DeleteManyFlagRequest
+	(*DeleteManyFlagResponse)(nil), // 16: cluster.DeleteManyFlagResponse
+	(*UpdateManyFlagRequest)(nil),  // 17: cluster.UpdateManyFlagRequest
+	(*UpdateManyFlagResponse)(nil), // 18: cluster.UpdateManyFlagResponse
+	(*PatchManyFlagRequest)(nil),   // 19: cluster.PatchManyFlagRequest
+	(*PatchManyFlagResponse)(nil),  // 20: cluster.PatchManyFlagResponse
+	(*ListFlagRequest_Filter)(nil), // 21: cluster.ListFlagRequest.Filter
+	(*timestamppb.Timestamp)(nil),  // 22: google.protobuf.Timestamp
+	(*fieldmaskpb.FieldMask)(nil),  // 23: google.protobuf.FieldMask
 }
 var file_flag_proto_depIdxs = []int32{
-	23, // 0: cluster.Flag.created_at:type_name -> google.protobuf.Timestamp
-	23, // 1: cluster.Flag.updated_at:type_name -> google.protobuf.Timestamp
+	22, // 0: cluster.Flag.created_at:type_name -> google.protobuf.Timestamp
+	22, // 1: cluster.Flag.updated_at:type_name -> google.protobuf.Timestamp
 	0,  // 2: cluster.CreateFlagRequest.flag:type_name -> cluster.Flag
 	0,  // 3: cluster.CreateFlagResponse.flag:type_name -> cluster.Flag
 	0,  // 4: cluster.UpdateFlagRequest.flag:type_name -> cluster.Flag
 	0,  // 5: cluster.UpdateFlagResponse.flag:type_name -> cluster.Flag
 	0,  // 6: cluster.PatchFlagRequest.flag:type_name -> cluster.Flag
-	24, // 7: cluster.PatchFlagRequest.update_mask:type_name -> google.protobuf.FieldMask
+	23, // 7: cluster.PatchFlagRequest.update_mask:type_name -> google.protobuf.FieldMask
 	0,  // 8: cluster.PatchFlagResponse.flag:type_name -> cluster.Flag
 	21, // 9: cluster.ListFlagRequest.filters:type_name -> cluster.ListFlagRequest.Filter
 	0,  // 10: cluster.ListFlagResponse.items:type_name -> cluster.Flag
@@ -1435,35 +1378,33 @@ var file_flag_proto_depIdxs = []int32{
 	0,  // 13: cluster.CreateManyFlagResponse.items:type_name -> cluster.Flag
 	0,  // 14: cluster.UpdateManyFlagRequest.items:type_name -> cluster.Flag
 	0,  // 15: cluster.UpdateManyFlagResponse.items:type_name -> cluster.Flag
-	22, // 16: cluster.PatchManyFlagRequest.items:type_name -> cluster.PatchManyFlagRequest.Item
+	7,  // 16: cluster.PatchManyFlagRequest.items:type_name -> cluster.PatchFlagRequest
 	0,  // 17: cluster.PatchManyFlagResponse.items:type_name -> cluster.Flag
-	0,  // 18: cluster.PatchManyFlagRequest.Item.flag:type_name -> cluster.Flag
-	24, // 19: cluster.PatchManyFlagRequest.Item.update_mask:type_name -> google.protobuf.FieldMask
-	1,  // 20: cluster.FlagService.CreateFlag:input_type -> cluster.CreateFlagRequest
-	3,  // 21: cluster.FlagService.DeleteFlag:input_type -> cluster.DeleteFlagRequest
-	5,  // 22: cluster.FlagService.UpdateFlag:input_type -> cluster.UpdateFlagRequest
-	7,  // 23: cluster.FlagService.PatchFlag:input_type -> cluster.PatchFlagRequest
-	9,  // 24: cluster.FlagService.ListFlag:input_type -> cluster.ListFlagRequest
-	11, // 25: cluster.FlagService.GetFlag:input_type -> cluster.GetFlagRequest
-	13, // 26: cluster.FlagService.CreateManyFlag:input_type -> cluster.CreateManyFlagRequest
-	15, // 27: cluster.FlagService.DeleteManyFlag:input_type -> cluster.DeleteManyFlagRequest
-	17, // 28: cluster.FlagService.UpdateManyFlag:input_type -> cluster.UpdateManyFlagRequest
-	19, // 29: cluster.FlagService.PatchManyFlag:input_type -> cluster.PatchManyFlagRequest
-	2,  // 30: cluster.FlagService.CreateFlag:output_type -> cluster.CreateFlagResponse
-	4,  // 31: cluster.FlagService.DeleteFlag:output_type -> cluster.DeleteFlagResponse
-	6,  // 32: cluster.FlagService.UpdateFlag:output_type -> cluster.UpdateFlagResponse
-	8,  // 33: cluster.FlagService.PatchFlag:output_type -> cluster.PatchFlagResponse
-	10, // 34: cluster.FlagService.ListFlag:output_type -> cluster.ListFlagResponse
-	12, // 35: cluster.FlagService.GetFlag:output_type -> cluster.GetFlagResponse
-	14, // 36: cluster.FlagService.CreateManyFlag:output_type -> cluster.CreateManyFlagResponse
-	16, // 37: cluster.FlagService.DeleteManyFlag:output_type -> cluster.DeleteManyFlagResponse
-	18, // 38: cluster.FlagService.UpdateManyFlag:output_type -> cluster.UpdateManyFlagResponse
-	20, // 39: cluster.FlagService.PatchManyFlag:output_type -> cluster.PatchManyFlagResponse
-	30, // [30:40] is the sub-list for method output_type
-	20, // [20:30] is the sub-list for method input_type
-	20, // [20:20] is the sub-list for extension type_name
-	20, // [20:20] is the sub-list for extension extendee
-	0,  // [0:20] is the sub-list for field type_name
+	1,  // 18: cluster.FlagService.CreateFlag:input_type -> cluster.CreateFlagRequest
+	3,  // 19: cluster.FlagService.DeleteFlag:input_type -> cluster.DeleteFlagRequest
+	5,  // 20: cluster.FlagService.UpdateFlag:input_type -> cluster.UpdateFlagRequest
+	7,  // 21: cluster.FlagService.PatchFlag:input_type -> cluster.PatchFlagRequest
+	9,  // 22: cluster.FlagService.ListFlag:input_type -> cluster.ListFlagRequest
+	11, // 23: cluster.FlagService.GetFlag:input_type -> cluster.GetFlagRequest
+	13, // 24: cluster.FlagService.CreateManyFlag:input_type -> cluster.CreateManyFlagRequest
+	15, // 25: cluster.FlagService.DeleteManyFlag:input_type -> cluster.DeleteManyFlagRequest
+	17, // 26: cluster.FlagService.UpdateManyFlag:input_type -> cluster.UpdateManyFlagRequest
+	19, // 27: cluster.FlagService.PatchManyFlag:input_type -> cluster.PatchManyFlagRequest
+	2,  // 28: cluster.FlagService.CreateFlag:output_type -> cluster.CreateFlagResponse
+	4,  // 29: cluster.FlagService.DeleteFlag:output_type -> cluster.DeleteFlagResponse
+	6,  // 30: cluster.FlagService.UpdateFlag:output_type -> cluster.UpdateFlagResponse
+	8,  // 31: cluster.FlagService.PatchFlag:output_type -> cluster.PatchFlagResponse
+	10, // 32: cluster.FlagService.ListFlag:output_type -> cluster.ListFlagResponse
+	12, // 33: cluster.FlagService.GetFlag:output_type -> cluster.GetFlagResponse
+	14, // 34: cluster.FlagService.CreateManyFlag:output_type -> cluster.CreateManyFlagResponse
+	16, // 35: cluster.FlagService.DeleteManyFlag:output_type -> cluster.DeleteManyFlagResponse
+	18, // 36: cluster.FlagService.UpdateManyFlag:output_type -> cluster.UpdateManyFlagResponse
+	20, // 37: cluster.FlagService.PatchManyFlag:output_type -> cluster.PatchManyFlagResponse
+	28, // [28:38] is the sub-list for method output_type
+	18, // [18:28] is the sub-list for method input_type
+	18, // [18:18] is the sub-list for extension type_name
+	18, // [18:18] is the sub-list for extension extendee
+	0,  // [0:18] is the sub-list for field type_name
 }
 
 func init() { file_flag_proto_init() }
@@ -1477,7 +1418,7 @@ func file_flag_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_flag_proto_rawDesc), len(file_flag_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   23,
+			NumMessages:   22,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

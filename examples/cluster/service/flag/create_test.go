@@ -211,9 +211,9 @@ func TestBatch(t *testing.T) {
 		require.True(t, item.GetOn())
 	}
 
-	patched, err := flags.PatchManyFlag(ctx, &pb.PatchManyFlagRequest{Items: []*pb.PatchManyFlagRequest_Item{
-		{Flag: &pb.Flag{Id: ids[0], Percent: 50}, UpdateMask: &fieldmaskpb.FieldMask{Paths: []string{"percent"}}},
-		{Flag: &pb.Flag{Id: ids[1], Percent: 60}, UpdateMask: &fieldmaskpb.FieldMask{Paths: []string{"percent"}}},
+	patched, err := flags.PatchManyFlag(ctx, &pb.PatchManyFlagRequest{Items: []*pb.PatchFlagRequest{
+		{Id: ids[0], Flag: &pb.Flag{Percent: 50}, UpdateMask: &fieldmaskpb.FieldMask{Paths: []string{"percent"}}},
+		{Id: ids[1], Flag: &pb.Flag{Percent: 60}, UpdateMask: &fieldmaskpb.FieldMask{Paths: []string{"percent"}}},
 	}})
 	require.NoError(t, err)
 	require.Len(t, patched.GetItems(), 2)
