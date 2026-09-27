@@ -35,7 +35,8 @@ type batch[M types.Model] struct {
 	// Items is the resource list that should be batch create/update/partial
 	// update. Each item is validated against its binding tags the way the
 	// body of a single-resource request is: the validator only descends into
-	// a slice told to dive.
+	// a slice told to dive. A batch patch validates each item on the fields
+	// it names instead, see validatePatchFields.
 	Items []M `json:"items,omitempty" binding:"dive"`
 }
 

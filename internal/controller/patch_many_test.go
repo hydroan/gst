@@ -1,9 +1,11 @@
 package controller_test
 
 import (
+	"context"
 	"net/http"
 	"testing"
 
+	"github.com/hydroan/gst/database"
 	"github.com/hydroan/gst/internal/controller"
 	"github.com/stretchr/testify/require"
 )
@@ -20,6 +22,22 @@ func TestPatchManyReportsAMissingVersionBeforeAMissingRecord(t *testing.T) {
 
 	require.Equal(t, http.StatusBadRequest, rsp.Code)
 	require.Contains(t, rsp.Body.String(), `"code":1000`)
+}
+
+// TestPatchManyValidatesTheFieldsEachItemNames pins that a batch patch
+// checks each item against the binding tags of the fields it names and no
+// other: an item leaving the required name out passes, one naming it empty
+// refuses the batch.
+func TestPatchManyValidatesTheFieldsEachItemNames(t *testing.T) {
+	record := &validatedSample{Name: "validated-batch-patch"}
+	require.NoError(t, database.Database[*validatedSample](context.Background()).Create(record))
+	handler := controller.PatchManyHandler[*validatedSample, *validatedSample, *validatedSample](configFor[*validatedSample](validatedRoute))
+
+	rsp := serve(t, http.MethodPatch, "/controller-validated-samples/batch", handler, "/controller-validated-samples/batch", `{"items":[{"id":"`+record.GetID()+`","note":"only the note"}]}`)
+	require.Equal(t, http.StatusOK, rsp.Code, rsp.Body.String())
+
+	rsp = serve(t, http.MethodPatch, "/controller-validated-samples/batch", handler, "/controller-validated-samples/batch", `{"items":[{"id":"`+record.GetID()+`","name":""}]}`)
+	require.Equal(t, http.StatusBadRequest, rsp.Code)
 }
 
 // TestPatchManyWritesNothingWhenOneRecordIsMissing pins that a batch patch

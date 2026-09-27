@@ -4,12 +4,15 @@ import (
 	"bytes"
 	"encoding/json"
 	"io"
+	"maps"
 	"net/http"
 	"reflect"
+	"slices"
 
 	"github.com/cockroachdb/errors"
 	"github.com/gin-gonic/gin"
 	"github.com/gin-gonic/gin/binding"
+	"github.com/go-playground/validator/v10"
 	"github.com/hydroan/gst/internal/serviceregistry"
 	"github.com/hydroan/gst/internal/types"
 )
@@ -28,7 +31,22 @@ import (
 // jsonNull is the literal JSON null body treated as "no body".
 var jsonNull = []byte("null")
 
-// bindJSONRequest binds the JSON request body into target. A body that is
+// bindJSONRequest decodes the JSON request body into target (see
+// decodeJSONRequest) and validates it against its binding tags (see
+// validateRequest): what every handler binding a body does, but the patch
+// handlers, which validate the fields the body names alone once they know
+// which (see validatePatchFields).
+func bindJSONRequest(c *gin.Context, target any) error {
+	if err := decodeJSONRequest(c, target); err != nil {
+		return err
+	}
+	if err := validateRequest(target); err != nil {
+		return clientSafeBindError(err)
+	}
+	return nil
+}
+
+// decodeJSONRequest decodes the JSON request body into target. A body that is
 // empty or a literal JSON null carries no request data, so both report io.EOF
 // — the sentinel the handlers already tolerate for empty bodies. This also
 // keeps the null body away from gin's validator, which panics on the nil
@@ -41,10 +59,10 @@ var jsonNull = []byte("null")
 // whatever JSON codec gin was built with: the codecs gin's jsoniter, go_json
 // and sonic build tags select decode differently, the framework's wire
 // contract is the encoding/json one, and clientSafeBindError translates
-// encoding/json's error types. Validation still goes through gin's validator,
-// so a bound request is checked exactly as gin would check it. The body is put
-// back either way — reading it here must not stop anything downstream from
-// reading it again.
+// encoding/json's error types. Validation is the caller's, through gin's
+// validator (see validateRequest and validatePatchFields), so a bound request
+// is checked exactly as gin would check it. The body is put back either way —
+// reading it here must not stop anything downstream from reading it again.
 //
 // Decoding whole bytes also ends the body where the body ends: a streaming
 // decoder stops at the first JSON value and silently drops whatever follows,
@@ -52,7 +70,7 @@ var jsonNull = []byte("null")
 // One knob does not carry over: gin's EnableDecoderUseNumber and
 // EnableDecoderDisallowUnknownFields configure the streaming decoder only, so
 // they never apply here.
-func bindJSONRequest(c *gin.Context, target any) error {
+func decodeJSONRequest(c *gin.Context, target any) error {
 	raw, err := c.GetRawData()
 	if err != nil {
 		return err
@@ -61,11 +79,7 @@ func bindJSONRequest(c *gin.Context, target any) error {
 		return io.EOF
 	}
 	c.Request.Body = io.NopCloser(bytes.NewReader(raw))
-
 	if err = json.Unmarshal(raw, target); err != nil {
-		return clientSafeBindError(err)
-	}
-	if err = validateRequest(target); err != nil {
 		return clientSafeBindError(err)
 	}
 	return nil
@@ -84,6 +98,25 @@ func validateRequest(target any) error {
 		return nil
 	}
 	return binding.Validator.ValidateStruct(target)
+}
+
+// validatePatchFields checks target against the binding tags of the fields
+// that fields names and of no other, with gin's validator: a patch carries
+// the fields it changes, so a tag on a field it leaves out, required above
+// all, is not its to meet, on either transport. The names are the Go field
+// names patchFieldSet keys by, which is how the validator names the fields
+// of the struct itself. Nothing named validates nothing. A validator other
+// than go-playground's cannot be asked for a part of the struct and checks
+// the whole; nil turns validation off, see validateRequest.
+func validatePatchFields(target any, fields patchFieldSet) error {
+	if binding.Validator == nil || len(fields) == 0 {
+		return nil
+	}
+	engine, ok := binding.Validator.Engine().(*validator.Validate)
+	if !ok {
+		return binding.Validator.ValidateStruct(target)
+	}
+	return engine.StructPartial(target, slices.Sorted(maps.Keys(fields))...)
 }
 
 // requiredBodyError translates the io.EOF sentinel of an absent request body

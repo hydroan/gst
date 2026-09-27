@@ -255,6 +255,28 @@ func TestPatchCallAppliesTheMaskedFields(t *testing.T) {
 	})
 }
 
+// TestPatchCallValidatesTheMaskedFieldsAlone pins that a patch call checks
+// the binding tags of the fields its mask names and no other, in the single
+// and the batch call alike: a mask leaving the required name out passes,
+// one naming the name with an empty value is refused.
+func TestPatchCallValidatesTheMaskedFieldsAlone(t *testing.T) {
+	conn := sampleServer(t)
+	created, err := invoke(t, conn, "ValidatedCreate", map[string]any{"record": map[string]any{"name": "validated-patch"}})
+	require.NoError(t, err)
+	id, _ := created["id"].(string)
+	require.NotEmpty(t, id)
+
+	_, err = invoke(t, conn, "ValidatedPatch", map[string]any{"id": id, "record": map[string]any{"note": "only the note"}, "mask": []string{"note"}})
+	require.NoError(t, err, "a mask leaving the required name out has nothing to meet")
+	_, err = invoke(t, conn, "ValidatedPatch", map[string]any{"id": id, "record": map[string]any{"name": ""}, "mask": []string{"name"}})
+	requireStatus(t, err, codes.InvalidArgument, "invalid request message")
+
+	_, err = invoke(t, conn, "ValidatedPatchMany", map[string]any{"items": []map[string]any{{"id": id, "note": "batch note"}}, "masks": [][]string{{"note"}}})
+	require.NoError(t, err)
+	_, err = invoke(t, conn, "ValidatedPatchMany", map[string]any{"items": []map[string]any{{"id": id, "name": ""}}, "masks": [][]string{{"name"}}})
+	requireStatus(t, err, codes.InvalidArgument, "invalid request message")
+}
+
 // TestDeleteCallDeletesTheRecord pins the delete call: the record the id
 // names is gone afterwards, and a hook's refusal keeps it.
 func TestDeleteCallDeletesTheRecord(t *testing.T) {
@@ -557,6 +579,8 @@ func sampleHandlers() map[string]func(ctx context.Context, in map[string]any) (a
 	versionedPatch := controller.PatchCall[*versionedSample](versionedRoute)
 	validatedCreate := controller.CreateCall[*validatedSample](validatedRoute)
 	validatedCreateMany := controller.CreateManyCall[*validatedSample](validatedRoute)
+	validatedPatch := controller.PatchCall[*validatedSample](validatedRoute)
+	validatedPatchMany := controller.PatchManyCall[*validatedSample](validatedRoute)
 	action := controller.ServiceCall[*sampleRecord, *sampleActionReq, *sampleActionRsp](consts.Create, actionRoute)
 	actionList := controller.ServiceCall[*sampleRecord, *sampleActionReq, *sampleActionRsp](consts.List, actionRoute)
 
@@ -623,6 +647,12 @@ func sampleHandlers() map[string]func(ctx context.Context, in map[string]any) (a
 		},
 		"ValidatedCreateMany": func(ctx context.Context, in map[string]any) (any, error) {
 			return batch(validatedCreateMany(ctx, params(in), field[[]*validatedSample](in, "items")))
+		},
+		"ValidatedPatch": func(ctx context.Context, in map[string]any) (any, error) {
+			return validatedPatch(ctx, params(in), field[string](in, "id"), field[*validatedSample](in, "record"), field[[]string](in, "mask"))
+		},
+		"ValidatedPatchMany": func(ctx context.Context, in map[string]any) (any, error) {
+			return batch(validatedPatchMany(ctx, params(in), field[[]*validatedSample](in, "items"), field[[][]string](in, "masks")))
 		},
 		"Action": func(ctx context.Context, in map[string]any) (any, error) {
 			return action(ctx, params(in), field[controller.Query](in, "query"), field[*sampleActionReq](in, "payload"))

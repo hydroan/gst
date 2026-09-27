@@ -79,10 +79,17 @@ func PatchHandler[M types.Model, REQ types.Request, RSP types.Response](cfg ...*
 		if len(cfg) > 0 {
 			id = reqMeta.Param(util.Deref(cfg[0]).ParamName)
 		}
-		if err = bindJSONRequest(c, &req); err != nil {
+		if err = decodeJSONRequest(c, &req); err != nil {
 			// A single-resource patch without a body patches nothing; refuse it
 			// with a stable message instead of the bare io.EOF text.
 			err = requiredBodyError(err)
+			log.Errorz("bind request body failed", zap.Error(err))
+			JSON(c, CodeInvalidParam.WithErr(err))
+			gstotel.RecordError(span, err)
+			return
+		}
+		if err = validatePatchFields(req, fields); err != nil {
+			err = clientSafeBindError(err)
 			log.Errorz("bind request body failed", zap.Error(err))
 			JSON(c, CodeInvalidParam.WithErr(err))
 			gstotel.RecordError(span, err)
@@ -110,8 +117,9 @@ func PatchHandler[M types.Model, REQ types.Request, RSP types.Response](cfg ...*
 // given the route parameters, the id the request message names the record
 // by, the values it decoded into and the paths of its update mask, which
 // name the fields to apply as the message names them (see maskFieldSet), it
-// validates the values the way the handler validates a bound body, refuses
-// a versioned model patched without its version the way the handler does,
+// validates the fields the mask names the way the handler validates the
+// fields a body names (see validatePatchFields), refuses a versioned model
+// patched without its version the way the handler does,
 // runs the patch flow (see patchFlow) and answers with the record patched,
 // or with the status the failure maps to (see call).
 func PatchCall[M types.Model](route string) func(ctx context.Context, params map[string]string, id string, m M, paths []string) (M, error) {
@@ -130,7 +138,7 @@ func PatchCall[M types.Model](route string) func(ctx context.Context, params map
 				return zero, c.refuse(databaseErrorCoder(database.ErrVersionRequired), errors.Wrapf(database.ErrVersionRequired, "patch %s without its %s", a.name, versionField))
 			}
 		}
-		if err = validateRequest(m); err != nil {
+		if err = validatePatchFields(m, fields); err != nil {
 			return zero, c.invalidMessage(err)
 		}
 		if id == "" {

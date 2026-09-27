@@ -58,9 +58,11 @@ type versionedSample struct {
 func (versionedSample) TableName() string { return "controller_versioned_samples" }
 
 // validatedSample declares its name required, so a call's message is
-// validated the way a request body is.
+// validated the way a request body is; the note carries no tag, so a patch
+// naming the note alone has nothing to meet.
 type validatedSample struct {
 	Name string `json:"name" binding:"required"`
+	Note string `json:"note"`
 
 	modelregistry.Base
 }

@@ -57,7 +57,7 @@ func PatchManyHandler[M types.Model, REQ types.Request, RSP types.Response](cfg 
 			gstotel.RecordError(span, fieldErr)
 			return
 		}
-		if reqErr := bindJSONRequest(c, &req); reqErr != nil && !errors.Is(reqErr, io.EOF) {
+		if reqErr := decodeJSONRequest(c, &req); reqErr != nil && !errors.Is(reqErr, io.EOF) {
 			log.Errorz("bind request body failed", zap.Error(reqErr))
 			JSON(c, CodeInvalidParam.WithErr(reqErr))
 			gstotel.RecordError(span, reqErr)
@@ -67,20 +67,27 @@ func PatchManyHandler[M types.Model, REQ types.Request, RSP types.Response](cfg 
 		// A versioned model must carry a version on every item, exactly like
 		// the single-resource patch; failing the whole batch up front keeps
 		// the all-or-nothing shape a defective request deserves. See
-		// modelregistry.Version.
-		if versionField, versioned := modelregistry.VersionFieldName(a.newModel()); versioned {
-			for i := range req.Items {
-				itemFields := patchFieldSet{}
-				if i < len(fieldSets) {
-					itemFields = fieldSets[i]
-				}
-				if _, ok := itemFields[versionField]; !ok {
-					log.Errorz("versioned model patched without its version",
-						zap.Int("item", i), zap.String("field", versionField))
-					JSON(c, databaseErrorCoder(database.ErrVersionRequired))
-					gstotel.RecordError(span, database.ErrVersionRequired)
-					return
-				}
+		// modelregistry.Version. Each item is then validated on the fields it
+		// names, like the single-resource patch too.
+		versionField, versioned := modelregistry.VersionFieldName(a.newModel())
+		for i, item := range req.Items {
+			itemFields := patchFieldSet{}
+			if i < len(fieldSets) {
+				itemFields = fieldSets[i]
+			}
+			if _, ok := itemFields[versionField]; versioned && !ok {
+				log.Errorz("versioned model patched without its version",
+					zap.Int("item", i), zap.String("field", versionField))
+				JSON(c, databaseErrorCoder(database.ErrVersionRequired))
+				gstotel.RecordError(span, database.ErrVersionRequired)
+				return
+			}
+			if fieldErr := validatePatchFields(item, itemFields); fieldErr != nil {
+				fieldErr = clientSafeBindError(fieldErr)
+				log.Errorz("bind request body failed", zap.Error(fieldErr))
+				JSON(c, CodeInvalidParam.WithErr(fieldErr))
+				gstotel.RecordError(span, fieldErr)
+				return
 			}
 		}
 
@@ -97,8 +104,9 @@ func PatchManyHandler[M types.Model, REQ types.Request, RSP types.Response](cfg 
 // of the handler PatchManyHandler returns for the generated handler of a
 // PatchMany rpc: given the route parameters, the items the request message
 // decoded into and the paths of each item's update mask, one mask per item
-// in order (see maskFieldSet), it validates the batch the way the handler
-// validates a bound body, refuses a versioned model whose item carries no
+// in order (see maskFieldSet), it validates each item on the fields its mask
+// names the way the handler validates the fields each item names (see
+// validatePatchFields), refuses a versioned model whose item carries no
 // version the way the handler does, runs the batch patch flow (see
 // patchManyFlow) and answers with the records patched, or with the status
 // the failure maps to (see call).
@@ -127,8 +135,10 @@ func PatchManyCall[M types.Model](route string) func(ctx context.Context, params
 				}
 			}
 		}
-		if err := validateRequest(&req); err != nil {
-			return nil, c.invalidMessage(err)
+		for i, item := range req.Items {
+			if err := validatePatchFields(item, fieldSets[i]); err != nil {
+				return nil, c.invalidMessage(errors.Wrapf(err, "item %d", i))
+			}
 		}
 		rsp, err := a.patchManyFlow(c.ctx, c.serviceContext, &req, fieldSets)
 		if err != nil {

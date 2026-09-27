@@ -1,9 +1,11 @@
 package controller_test
 
 import (
+	"context"
 	"net/http"
 	"testing"
 
+	"github.com/hydroan/gst/database"
 	"github.com/hydroan/gst/internal/controller"
 	"github.com/stretchr/testify/require"
 )
@@ -39,6 +41,21 @@ func TestPatchRefusesAVersionedRecordWithoutItsVersion(t *testing.T) {
 
 	require.Equal(t, http.StatusBadRequest, rsp.Code)
 	require.Contains(t, rsp.Body.String(), `"code":1000`)
+}
+
+// TestPatchValidatesTheFieldsTheBodyNames pins that a patch is checked
+// against the binding tags of the fields its body names and no other: a body
+// leaving the required name out passes, one naming it empty is refused.
+func TestPatchValidatesTheFieldsTheBodyNames(t *testing.T) {
+	record := &validatedSample{Name: "validated-patch"}
+	require.NoError(t, database.Database[*validatedSample](context.Background()).Create(record))
+	handler := controller.PatchHandler[*validatedSample, *validatedSample, *validatedSample](configFor[*validatedSample](validatedRoute))
+
+	rsp := serve(t, http.MethodPatch, "/controller-validated-samples/:id", handler, "/controller-validated-samples/"+record.GetID(), `{"note":"only the note"}`)
+	require.Equal(t, http.StatusOK, rsp.Code, rsp.Body.String())
+
+	rsp = serve(t, http.MethodPatch, "/controller-validated-samples/:id", handler, "/controller-validated-samples/"+record.GetID(), `{"name":""}`)
+	require.Equal(t, http.StatusBadRequest, rsp.Code)
 }
 
 // TestPatchKeepsTheRecordTheBeforeHookRefuses pins that a PatchBefore
