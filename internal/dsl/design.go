@@ -2,9 +2,10 @@
 // keywords of the public dsl package: Parse turns a model file into the
 // Design of each of its models, Validate reports the declarations the
 // generator cannot honor, and Design and Action are what gg gen, gg check
-// and the generators consume. The keywords stay in the public package, a
-// project's model files being their one caller; the parser knows them by
-// name (see methodList).
+// and the generators consume. The keywords are declared here (see
+// keywords.go) and forwarded by the public dsl package, a project's model
+// files being their one caller; the parser knows them by name (see
+// methodList).
 package dsl
 
 import (

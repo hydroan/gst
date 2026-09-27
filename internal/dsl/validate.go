@@ -175,7 +175,7 @@ func Validate(file *ast.File, modelDir string, filename string) []error {
 		records = append(records, recs...)
 		errs = append(errs, designErrs...)
 	}
-	errs = append(errs, validateServiceFilenameCollisions(records, filename)...)
+	errs = append(errs, validateServiceCollisions(records, filename)...)
 	return errs
 }
 
@@ -237,12 +237,15 @@ func validateDesignFunc(fn *ast.FuncDecl, modelName string, rootModelFile, virtu
 	for _, stmt := range fn.Body.List {
 		call, name, ok := keywordCall(stmt)
 		if !ok {
-			errs = append(errs, fmt.Errorf("%s: Design() of %s reads DSL keywords alone; delete %s", filename, modelName, stmtSource(stmt)))
+			errs = append(errs, fmt.Errorf("%s: Design() of %s reads DSL keywords alone; delete %s", filename, modelName, nodeSource(stmt)))
 			continue
 		}
 
 		switch {
 		case isActionMethod(name):
+			if seenActions[name] {
+				errs = append(errs, fmt.Errorf("%s: %s declares %s twice at Design() top level; declare an action once", filename, modelName, name))
+			}
 			seenActions[name] = true
 			grpcServable = grpcServable || !httpOnlyActionMethodNames[name]
 			grpcOnly = grpcOnly || grpcOnlyActionMethodNames[name]
@@ -314,10 +317,19 @@ func validateRouteCall(call *ast.CallExpr, modelName string, rootModelFile, virt
 	records = make([]serviceActionRecord, 0)
 	errs = make([]error, 0)
 	seenActions := make(map[string]bool)
+	// An action is declared once per route and form: an Exact() action
+	// serves the route path itself, the other the item under it, so a
+	// Delete of each is two endpoints, while two of one form would register
+	// the same route twice.
+	type form struct {
+		name  string
+		exact bool
+	}
+	seenForms := make(map[form]bool)
 	for _, stmt := range flit.Body.List {
 		child, name, ok := keywordCall(stmt)
 		if !ok {
-			errs = append(errs, fmt.Errorf("%s: the Route(%q) block of %s reads DSL keywords alone; delete %s", filename, route, modelName, stmtSource(stmt)))
+			errs = append(errs, fmt.Errorf("%s: the Route(%q) block of %s reads DSL keywords alone; delete %s", filename, route, modelName, nodeSource(stmt)))
 			continue
 		}
 
@@ -327,6 +339,10 @@ func validateRouteCall(call *ast.CallExpr, modelName string, rootModelFile, virt
 			grpcServable = grpcServable || !httpOnlyActionMethodNames[name]
 			grpcOnly = grpcOnly || grpcOnlyActionMethodNames[name]
 			info, actionErrs := validateActionCall(child, name, rootModelFile, virtual, filename)
+			if seenForms[form{name, info.exact}] {
+				errs = append(errs, fmt.Errorf("%s: the Route(%q) block of %s declares %s twice; declare an action once per route, an Exact() one and one without at most", filename, route, modelName, name))
+			}
+			seenForms[form{name, info.exact}] = true
 			if record, ok := newServiceActionRecord(info, name, modelName, route); ok {
 				records = append(records, record)
 			}
@@ -368,7 +384,7 @@ func validateActionCall(call *ast.CallExpr, actionName string, rootModelFile, vi
 	for _, stmt := range flit.Body.List {
 		child, name, ok := keywordCall(stmt)
 		if !ok {
-			errs = append(errs, fmt.Errorf("%s: the %s block reads DSL keywords alone; delete %s", filename, actionName, stmtSource(stmt)))
+			errs = append(errs, fmt.Errorf("%s: the %s block reads DSL keywords alone; delete %s", filename, actionName, nodeSource(stmt)))
 			continue
 		}
 
@@ -380,14 +396,20 @@ func validateActionCall(call *ast.CallExpr, actionName string, rootModelFile, vi
 			info.flatten = true
 		case name == "Exact":
 			info.exact = true
-		case name == "Payload":
-			info.payload = true
-		case name == "Result":
-			info.result = true
-		case name == "StreamingPayload":
-			info.streamingPayload = true
-		case name == "StreamingResult":
-			info.streamingResult = true
+		case name == "Payload", name == "Result", name == "StreamingPayload", name == "StreamingResult":
+			switch name {
+			case "Payload":
+				info.payload = true
+			case "Result":
+				info.result = true
+			case "StreamingPayload":
+				info.streamingPayload = true
+			case "StreamingResult":
+				info.streamingResult = true
+			}
+			if arg, ok := actionTypeArgument(child); ok && !modelPackageType(arg) {
+				errs = append(errs, fmt.Errorf("%s: %s action declares %s[%s]; Payload, Result, StreamingPayload and StreamingResult name a type of the model package, T or *T", filename, actionName, name, nodeSource(arg)))
+			}
 		case name == "Public":
 			continue
 		case isActionMethod(name):
@@ -484,6 +506,7 @@ type serviceActionRecord struct {
 	action   string // action method name, e.g. "Get"
 	flatten  bool   // Flatten writes into the package service dir instead of the model file dir
 	filename string // generated service filename, e.g. "list.go"
+	role     string // generated service type name, e.g. "Lister"
 }
 
 // newServiceActionRecord builds the generation record of one action call. It
@@ -499,39 +522,30 @@ func newServiceActionRecord(info actionCallInfo, actionName, modelName, route st
 		action:   actionName,
 		flatten:  info.flatten,
 		filename: action.ServiceFilename(),
+		role:     action.RoleName(),
 	}, true
 }
 
-// validateServiceFilenameCollisions rejects two Service actions generating
-// the same service file. gg gen derives both the target file and the service
-// struct name from the service name, so colliding actions fight over one struct: the
-// first action creates it and every later action force-syncs the
-// service.Base type parameters to its own Payload/Result, leaving a hybrid
-// declaration that satisfies neither service registration. All models in one
-// file share one service dir, so records are grouped per file; Flatten
-// actions write into the package service dir instead and therefore only
-// collide with other Flatten actions.
-func validateServiceFilenameCollisions(records []serviceActionRecord, filename string) []error {
-	type fileKey struct {
+// validateServiceCollisions rejects two Service actions generating the same
+// service file, or the same service type in one service directory. gg gen
+// derives both from the service name, so colliding actions fight over one
+// struct: the first action creates it and every later action force-syncs
+// the service.Base type parameters to its own Payload/Result, leaving a
+// hybrid declaration that satisfies neither service registration, or, in
+// two files, a type declared twice that does not compile. Two files collide
+// when their names lower-case alike, Service("Archive") and
+// Service("archive"); two types when their names camel-case alike,
+// Service("item_archive") and Service("itemArchive"), or Service() on Create
+// and Service("creator") on another action, whose files differ. All models
+// in one file share one service dir, so records are grouped per file;
+// Flatten actions write into the package service dir instead and therefore
+// only collide with other Flatten actions.
+func validateServiceCollisions(records []serviceActionRecord, filename string) []error {
+	type key struct {
 		flatten bool
 		name    string
 	}
-	groups := make(map[fileKey][]serviceActionRecord)
-	keys := make([]fileKey, 0)
-	for _, record := range records {
-		key := fileKey{flatten: record.flatten, name: record.filename}
-		if _, ok := groups[key]; !ok {
-			keys = append(keys, key)
-		}
-		groups[key] = append(groups[key], record)
-	}
-
-	errs := make([]error, 0)
-	for _, key := range keys {
-		group := groups[key]
-		if len(group) < 2 {
-			continue
-		}
+	describe := func(group []serviceActionRecord) string {
 		descs := make([]string, 0, len(group))
 		for _, record := range group {
 			desc := fmt.Sprintf("%s on %s", record.action, record.model)
@@ -540,7 +554,36 @@ func validateServiceFilenameCollisions(records []serviceActionRecord, filename s
 			}
 			descs = append(descs, desc)
 		}
-		errs = append(errs, fmt.Errorf("%s: service file %q is generated by multiple actions: %s; give each Service action a distinct name, Service(\"name\")", filename, key.name, strings.Join(descs, ", ")))
+		return strings.Join(descs, ", ")
+	}
+	collisions := func(keyOf func(serviceActionRecord) key) ([]key, map[key][]serviceActionRecord) {
+		groups := make(map[key][]serviceActionRecord)
+		keys := make([]key, 0)
+		for _, record := range records {
+			k := keyOf(record)
+			if _, ok := groups[k]; !ok {
+				keys = append(keys, k)
+			}
+			groups[k] = append(groups[k], record)
+		}
+		return keys, groups
+	}
+
+	errs := make([]error, 0)
+	keys, files := collisions(func(r serviceActionRecord) key { return key{flatten: r.flatten, name: r.filename} })
+	for _, k := range keys {
+		if group := files[k]; len(group) > 1 {
+			errs = append(errs, fmt.Errorf("%s: service file %q is generated by multiple actions: %s; give each Service action a distinct name, Service(\"name\")", filename, k.name, describe(group)))
+		}
+	}
+	keys, roles := collisions(func(r serviceActionRecord) key { return key{flatten: r.flatten, name: r.role} })
+	for _, k := range keys {
+		group := roles[k]
+		if len(group) < 2 || len(files[key{flatten: k.flatten, name: group[0].filename}]) == len(group) {
+			// One file: the file collision above reports it.
+			continue
+		}
+		errs = append(errs, fmt.Errorf("%s: service type %q is generated by multiple actions: %s; give each Service action a distinct name, Service(\"name\")", filename, k.name, describe(group)))
 	}
 	return errs
 }
@@ -563,11 +606,11 @@ func keywordCall(stmt ast.Stmt) (call *ast.CallExpr, name string, ok bool) {
 	return call, name, ok && is(name)
 }
 
-// stmtSource spells a statement the way the source does, on one line, for
+// nodeSource spells a statement the way the source does, on one line, for
 // a report that names what to delete: println("x") or _ = 1.
-func stmtSource(stmt ast.Stmt) string {
+func nodeSource(node ast.Node) string {
 	var buf strings.Builder
-	if err := printer.Fprint(&buf, token.NewFileSet(), stmt); err != nil {
+	if err := printer.Fprint(&buf, token.NewFileSet(), node); err != nil {
 		return "the statement"
 	}
 	return strings.Join(strings.Fields(buf.String()), " ")
@@ -617,8 +660,59 @@ func validateServiceName(call *ast.CallExpr, actionName, filename string, info *
 		suggestion := strings.TrimSuffix(filepath.Base(value), filepath.Ext(value))
 		return []error{fmt.Errorf("%s: %s action names its service %q; a service name is letters, digits and underscores, naming the service file, its type and its rpc: Service(%q)", filename, actionName, value, suggestion)}
 	}
+	lower := strings.ToLower(value)
+	if strings.HasSuffix(lower, "_test") {
+		return []error{fmt.Errorf("%s: %s action names its service %q; a name ending in _test names a test file, choose another name", filename, actionName, value)}
+	}
+	if i := strings.LastIndex(lower, "_"); i >= 0 {
+		if suffix := lower[i+1:]; knownOS[suffix] || knownArch[suffix] {
+			return []error{fmt.Errorf("%s: %s action names its service %q; a name ending in _%s names a file built for that platform alone, choose another name", filename, actionName, value, suffix)}
+		}
+	}
 	info.serviceName = value
 	return nil
+}
+
+// The operating systems and architectures the go command reads as the
+// suffix of a file name, _windows.go or _amd64.go, which then builds for
+// that platform alone; the go command keeps the lists in an internal
+// package, so validateServiceName repeats them.
+var (
+	knownOS = map[string]bool{
+		"aix": true, "android": true, "darwin": true, "dragonfly": true, "freebsd": true, "hurd": true, "illumos": true, "ios": true, "js": true,
+		"linux": true, "nacl": true, "netbsd": true, "openbsd": true, "plan9": true, "solaris": true, "wasip1": true, "windows": true, "zos": true,
+	}
+	knownArch = map[string]bool{
+		"386": true, "amd64": true, "amd64p32": true, "arm": true, "armbe": true, "arm64": true, "arm64be": true, "loong64": true,
+		"mips": true, "mipsle": true, "mips64": true, "mips64le": true, "mips64p32": true, "mips64p32le": true, "ppc": true, "ppc64": true, "ppc64le": true,
+		"riscv": true, "riscv64": true, "s390": true, "s390x": true, "sparc": true, "sparc64": true, "wasm": true,
+	}
+)
+
+// actionTypeArgument returns the type argument of an instantiated action
+// type keyword, Payload[*T]() or Result[T](), and false for a call carrying
+// none.
+func actionTypeArgument(call *ast.CallExpr) (ast.Expr, bool) {
+	switch fun := call.Fun.(type) {
+	case *ast.IndexExpr:
+		return fun.Index, true
+	case *ast.IndexListExpr:
+		if len(fun.Indices) == 1 {
+			return fun.Indices[0], true
+		}
+	}
+	return nil, false
+}
+
+// modelPackageType reports whether expr names a type of the model package,
+// T or *T: the parser reads those alone (see parse), so any other form, a
+// type of another package or a slice, would declare nothing.
+func modelPackageType(expr ast.Expr) bool {
+	if star, ok := expr.(*ast.StarExpr); ok {
+		expr = star.X
+	}
+	_, ok := expr.(*ast.Ident)
+	return ok
 }
 
 func stringArgValue(call *ast.CallExpr, current string) string {
