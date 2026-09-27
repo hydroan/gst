@@ -70,8 +70,11 @@ func DeleteHandler[M types.Model, REQ types.Request, RSP types.Response](cfg ...
 func DeleteCall[M types.Model](route string) func(ctx context.Context, params map[string]string, id string) error {
 	a := newAction[M, M, M](route, consts.Delete, consts.DeleteBefore, consts.DeleteAfter)
 	return func(ctx context.Context, params map[string]string, id string) error {
-		c := a.beginCall(ctx, params, nil)
+		c, err := a.beginCall(ctx, params, nil)
 		defer c.end()
+		if err != nil {
+			return c.invalid(err)
+		}
 		if id == "" {
 			return c.missingID()
 		}

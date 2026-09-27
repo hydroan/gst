@@ -43,17 +43,20 @@ import (
 func ServerStreamCall[M types.Model, REQ types.Request, RSP types.Response](route string) func(ctx context.Context, params map[string]string, req REQ, send func(RSP) error) error {
 	a := newAction[M, REQ, RSP](route, consts.Stream)
 	return func(ctx context.Context, params map[string]string, req REQ, send func(RSP) error) error {
-		c := a.beginCall(ctx, params, nil)
+		c, err := a.beginCall(ctx, params, nil)
 		defer c.end()
+		if err != nil {
+			return c.invalid(err)
+		}
 		svc, ok := a.service().(types.ServerStreamer[REQ, RSP])
 		if !ok {
 			return a.unimplemented(c, route)
 		}
 		a.normalizeRequest(&req)
-		if err := validateRequest(req); err != nil {
+		if err = validateRequest(req); err != nil {
 			return c.invalidMessage(err)
 		}
-		_, err := a.traceServiceOperation(c.ctx, consts.Stream, func(spanCtx context.Context) (RSP, error) {
+		_, err = a.traceServiceOperation(c.ctx, consts.Stream, func(spanCtx context.Context) (RSP, error) {
 			var zero RSP
 			return zero, svc.Stream(c.serviceContext(spanCtx, consts.Stream), req, types.NewServerStream(send))
 		})
@@ -73,8 +76,11 @@ func ClientStreamCall[M types.Model, REQ types.Request, RSP types.Response](rout
 	a := newAction[M, REQ, RSP](route, consts.Stream)
 	return func(ctx context.Context, params map[string]string, recv func() (REQ, error)) (RSP, error) {
 		var zero RSP
-		c := a.beginCall(ctx, params, nil)
+		c, err := a.beginCall(ctx, params, nil)
 		defer c.end()
+		if err != nil {
+			return zero, c.invalid(err)
+		}
 		svc, ok := a.service().(types.ClientStreamer[REQ, RSP])
 		if !ok {
 			return zero, a.unimplemented(c, route)
@@ -101,14 +107,17 @@ func ClientStreamCall[M types.Model, REQ types.Request, RSP types.Response](rout
 func BidiStreamCall[M types.Model, REQ types.Request, RSP types.Response](route string) func(ctx context.Context, params map[string]string, recv func() (REQ, error), send func(RSP) error) error {
 	a := newAction[M, REQ, RSP](route, consts.Stream)
 	return func(ctx context.Context, params map[string]string, recv func() (REQ, error), send func(RSP) error) error {
-		c := a.beginCall(ctx, params, nil)
+		c, err := a.beginCall(ctx, params, nil)
 		defer c.end()
+		if err != nil {
+			return c.invalid(err)
+		}
 		svc, ok := a.service().(types.BidiStreamer[REQ, RSP])
 		if !ok {
 			return a.unimplemented(c, route)
 		}
 		in := a.requests(c, recv)
-		_, err := a.traceServiceOperation(c.ctx, consts.Stream, func(spanCtx context.Context) (RSP, error) {
+		_, err = a.traceServiceOperation(c.ctx, consts.Stream, func(spanCtx context.Context) (RSP, error) {
 			var zero RSP
 			return zero, svc.Stream(c.serviceContext(spanCtx, consts.Stream), types.NewBidiStream(in.recv, send))
 		})
@@ -124,7 +133,11 @@ func BidiStreamCall[M types.Model, REQ types.Request, RSP types.Response](route 
 
 // firstMessageMsg is the message a stream the client ended before its
 // first message is refused with (see FirstMessage).
-const firstMessageMsg = "the stream ended before its first message, which carries the route parameters"
+const (
+	firstMessageMsg = "the stream ended before its first message, which carries the route parameters"
+	// unimplementedMsg answers a Stream call nothing serves; see unimplemented.
+	unimplementedMsg = "the Stream action is served by no Stream method of its kind"
+)
 
 // FirstMessage returns the first message of a request stream read through
 // recv, the Recv of the transport's stream: what the generated handler of a
@@ -173,11 +186,12 @@ func (a *action[M, REQ, RSP]) requests(c *call, recv func() (REQ, error)) *reque
 // unimplemented answers a Stream call whose service, the one registered for
 // the route and the Stream phase, has no Stream method of the kind the
 // action declares — the service file was not generated, or its method was
-// changed — with Unimplemented, logged and recorded on the span: the
-// transport's own refusal of a call nothing serves.
+// changed — with Unimplemented and unimplementedMsg: the transport's own
+// refusal of a call nothing serves. Which action, on which route, is for
+// the log and the span, like the cause of any other internal failure.
 func (a *action[M, REQ, RSP]) unimplemented(c *call, route string) error {
 	err := fmt.Errorf("the Stream action of %s on %s is served by no Stream method of its kind; gg gen declares the method in the service file", a.name, route)
 	c.log.Errorz("service operation failed", zap.Error(err))
 	gstotel.RecordError(c.span, err)
-	return status.Error(codes.Unimplemented, err.Error())
+	return status.Error(codes.Unimplemented, unimplementedMsg)
 }

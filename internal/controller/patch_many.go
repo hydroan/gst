@@ -113,8 +113,16 @@ func PatchManyHandler[M types.Model, REQ types.Request, RSP types.Response](cfg 
 func PatchManyCall[M types.Model](route string) func(ctx context.Context, params map[string]string, items []M, paths [][]string) ([]M, error) {
 	a := newAction[M, M, M](route, consts.PatchMany, consts.PatchManyBefore, consts.PatchManyAfter)
 	return func(ctx context.Context, params map[string]string, items []M, paths [][]string) ([]M, error) {
-		c := a.beginCall(ctx, params, nil)
+		c, err := a.beginCall(ctx, params, nil)
 		defer c.end()
+		if err != nil {
+			return nil, c.invalid(err)
+		}
+		for i, item := range items {
+			if reflect.ValueOf(item).IsNil() {
+				return nil, c.invalid(errors.Newf("item %d carries no record", i))
+			}
+		}
 		req := batch[M]{Items: items}
 		normalizeBatch(&req)
 		if len(paths) != len(req.Items) {
@@ -122,9 +130,9 @@ func PatchManyCall[M types.Model](route string) func(ctx context.Context, params
 		}
 		fieldSets := make([]patchFieldSet, len(paths))
 		for i, itemPaths := range paths {
-			fields, err := maskFieldSet(a.typ, itemPaths)
-			if err != nil {
-				return nil, c.invalid(errors.Wrapf(err, "item %d", i))
+			fields, maskErr := maskFieldSet(a.typ, itemPaths)
+			if maskErr != nil {
+				return nil, c.invalid(errors.Wrapf(maskErr, "item %d", i))
 			}
 			fieldSets[i] = fields
 		}
@@ -136,7 +144,7 @@ func PatchManyCall[M types.Model](route string) func(ctx context.Context, params
 			}
 		}
 		for i, item := range req.Items {
-			if err := validatePatchFields(item, fieldSets[i]); err != nil {
+			if err = validatePatchFields(item, fieldSets[i]); err != nil {
 				return nil, c.invalidMessage(errors.Wrapf(err, "item %d", i))
 			}
 		}

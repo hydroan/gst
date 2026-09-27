@@ -54,37 +54,64 @@ func TestQueryValuesRenderTheHTTPQuery(t *testing.T) {
 // TestQueryValuesRefuseWhatTheHTTPQueryCannotCarry pins the queries refused
 // before any parsing: a filter given twice, which the HTTP listener refuses
 // as a repeated parameter; several values under an operator taking one; a
-// member of an in holding a comma, which the HTTP parser would split; and a
-// filter without a value, which filters by nothing.
+// member of an in holding a comma, which the HTTP parser would split; a
+// filter without a value, or with an empty one, which filters by nothing;
+// a field named like the framework's own parameters; and a sort or expand
+// member holding a comma, which the HTTP parser would split too.
 func TestQueryValuesRefuseWhatTheHTTPQueryCannotCarry(t *testing.T) {
 	for _, tt := range []struct {
 		name    string
-		filters []Filter
+		query   Query
 		message string
 	}{
 		{
 			name:    "a filter given twice",
-			filters: []Filter{{Field: "name", Op: "eq", Values: []string{"a"}}, {Field: "name", Op: "eq", Values: []string{"b"}}},
+			query:   Query{Filters: []Filter{{Field: "name", Op: "eq", Values: []string{"a"}}, {Field: "name", Op: "eq", Values: []string{"b"}}}},
 			message: `filter "name[eq]" is given twice`,
 		},
 		{
 			name:    "several values under an operator taking one",
-			filters: []Filter{{Field: "name", Values: []string{"a", "b"}}},
+			query:   Query{Filters: []Filter{{Field: "name", Values: []string{"a", "b"}}}},
 			message: `filter "name" takes one value, 2 given; in and notin take several`,
 		},
 		{
 			name:    "a member of an in holding a comma",
-			filters: []Filter{{Field: "name", Op: "notin", Values: []string{"a,b"}}},
+			query:   Query{Filters: []Filter{{Field: "name", Op: "notin", Values: []string{"a,b"}}}},
 			message: `filter "name[notin]": a value cannot hold a comma, the members are joined by it`,
 		},
 		{
 			name:    "a filter without a value",
-			filters: []Filter{{Field: "remark", Op: "like"}},
+			query:   Query{Filters: []Filter{{Field: "remark", Op: "like"}}},
 			message: `filter "remark[like]" has no value`,
+		},
+		{
+			name:    "a filter with an empty value",
+			query:   Query{Filters: []Filter{{Field: "name", Values: []string{""}}}},
+			message: `filter "name" has an empty value`,
+		},
+		{
+			name:    "a filter named like a framework parameter",
+			query:   Query{Filters: []Filter{{Field: "_page", Values: []string{"2"}}}},
+			message: `filter "_page": a field cannot start with an underscore, the framework's own parameters do`,
+		},
+		{
+			name:    "a filter without a field",
+			query:   Query{Filters: []Filter{{Values: []string{"a"}}}},
+			message: `filter "": a field is required`,
+		},
+		{
+			name:    "a sort member holding a comma",
+			query:   Query{SortBy: []string{"name,created_at"}},
+			message: `sort_by: a member cannot hold a comma, the members are joined by it`,
+		},
+		{
+			name:    "an expand member holding a comma",
+			query:   Query{Expand: []string{"children,parent"}},
+			message: `expand: a member cannot hold a comma, the members are joined by it`,
 		},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
-			_, err := Query{Filters: tt.filters}.values()
+			_, err := tt.query.values()
 			require.EqualError(t, err, tt.message)
 		})
 	}

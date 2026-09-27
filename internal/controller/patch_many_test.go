@@ -40,6 +40,20 @@ func TestPatchManyValidatesTheFieldsEachItemNames(t *testing.T) {
 	require.Equal(t, http.StatusBadRequest, rsp.Code)
 }
 
+// TestPatchManyDropsANullItemWithItsFieldSet pins that a null item of a
+// batch patch is dropped together with its field set: the item after it is
+// patched on the fields it names itself, not on the null's empty set.
+func TestPatchManyDropsANullItemWithItsFieldSet(t *testing.T) {
+	record := createSample(t, "patch-many-after-null")
+
+	rsp := serve(t, http.MethodPatch, "/controller-samples/batch",
+		controller.PatchManyHandler[*sampleRecord, *sampleRecord, *sampleRecord](configFor[*sampleRecord](sampleRoute)),
+		"/controller-samples/batch", `{"items":[null,{"id":"`+record.GetID()+`","name":"patch-many-renamed-after-null"}]}`)
+
+	require.Equal(t, http.StatusOK, rsp.Code, rsp.Body.String())
+	requireSampleName(t, record.GetID(), "patch-many-renamed-after-null")
+}
+
 // TestPatchManyWritesNothingWhenOneRecordIsMissing pins that a batch patch
 // is all or nothing: an item naming a record that does not exist — an unknown
 // id, or one of whitespace alone, used as sent — fails the batch with 404,

@@ -66,8 +66,11 @@ func UpdateManyHandler[M types.Model, REQ types.Request, RSP types.Response](cfg
 func UpdateManyCall[M types.Model](route string) func(ctx context.Context, params map[string]string, items []M) ([]M, error) {
 	a := newAction[M, M, M](route, consts.UpdateMany, consts.UpdateManyBefore, consts.UpdateManyAfter)
 	return func(ctx context.Context, params map[string]string, items []M) ([]M, error) {
-		c := a.beginCall(ctx, params, nil)
+		c, err := a.beginCall(ctx, params, nil)
 		defer c.end()
+		if err != nil {
+			return nil, c.invalid(err)
+		}
 		req := batch[M]{Items: items}
 		normalizeBatch(&req)
 		if err := validateRequest(&req); err != nil {

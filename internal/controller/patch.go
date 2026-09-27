@@ -126,8 +126,11 @@ func PatchCall[M types.Model](route string) func(ctx context.Context, params map
 	a := newAction[M, M, M](route, consts.Patch, consts.PatchBefore, consts.PatchAfter)
 	return func(ctx context.Context, params map[string]string, id string, m M, paths []string) (M, error) {
 		var zero M
-		c := a.beginCall(ctx, params, nil)
+		c, err := a.beginCall(ctx, params, nil)
 		defer c.end()
+		if err != nil {
+			return zero, c.invalid(err)
+		}
 		a.normalizeModel(&m)
 		fields, err := maskFieldSet(a.typ, paths)
 		if err != nil {

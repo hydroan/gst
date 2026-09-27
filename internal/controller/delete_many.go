@@ -66,8 +66,11 @@ func DeleteManyHandler[M types.Model, REQ types.Request, RSP types.Response](cfg
 func DeleteManyCall[M types.Model](route string) func(ctx context.Context, params map[string]string, ids []string) error {
 	a := newAction[M, M, M](route, consts.DeleteMany, consts.DeleteManyBefore, consts.DeleteManyAfter)
 	return func(ctx context.Context, params map[string]string, ids []string) error {
-		c := a.beginCall(ctx, params, nil)
+		c, err := a.beginCall(ctx, params, nil)
 		defer c.end()
+		if err != nil {
+			return c.invalid(err)
+		}
 		req := batch[M]{IDs: ids}
 		normalizeBatch(&req)
 		if err := validateRequest(&req); err != nil {

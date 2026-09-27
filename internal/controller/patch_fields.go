@@ -96,13 +96,23 @@ func patchManyFieldSetsFromJSONBody(typ reflect.Type, body []byte) ([]patchField
 		return nil, io.EOF
 	}
 	var req struct {
-		Items []map[string]json.RawMessage `json:"items"`
+		Items []json.RawMessage `json:"items"`
 	}
 	if err := json.Unmarshal(body, &req); err != nil {
 		return nil, clientSafeBindError(err)
 	}
+	// A null item is dropped by the decoding of the batch (see
+	// normalizeBatch), so it gets no field set either, keeping the sets
+	// beside the items that remain.
 	fieldSets := make([]patchFieldSet, 0, len(req.Items))
-	for _, item := range req.Items {
+	for _, raw := range req.Items {
+		if bytes.Equal(bytes.TrimSpace(raw), []byte("null")) {
+			continue
+		}
+		var item map[string]json.RawMessage
+		if err := json.Unmarshal(raw, &item); err != nil {
+			return nil, clientSafeBindError(err)
+		}
 		fieldSets = append(fieldSets, patchFieldSetFromJSONFields(typ, item))
 	}
 	return fieldSets, nil

@@ -2,6 +2,7 @@ package controller
 
 import (
 	"context"
+	"maps"
 	"net/url"
 	"slices"
 	"strconv"
@@ -111,6 +112,12 @@ func (q Query) values() (url.Values, error) {
 		if f.Op != "" {
 			key = f.Field + "[" + f.Op + "]"
 		}
+		if f.Field == "" {
+			return nil, errors.Newf("filter %q: a field is required", key)
+		}
+		if strings.HasPrefix(f.Field, "_") {
+			return nil, errors.Newf("filter %q: a field cannot start with an underscore, the framework's own parameters do", key)
+		}
 		if _, given := values[key]; given {
 			return nil, errors.Newf("filter %q is given twice", key)
 		}
@@ -119,6 +126,16 @@ func (q Query) values() (url.Values, error) {
 			return nil, err
 		}
 		values[key] = []string{value}
+	}
+	for _, list := range []struct {
+		name    string
+		members []string
+	}{{"sort_by", q.SortBy}, {"expand", q.Expand}} {
+		for _, member := range list.members {
+			if strings.Contains(member, ",") {
+				return nil, errors.Newf("%s: a member cannot hold a comma, the members are joined by it", list.name)
+			}
+		}
 	}
 	if len(q.SortBy) > 0 {
 		values.Set(consts.QUERY_SORT_BY, strings.Join(q.SortBy, ","))
@@ -150,9 +167,10 @@ func (q Query) values() (url.Values, error) {
 // value renders the values of f as the one value of key: the members of an
 // in or notin joined by commas, so a member holding one is refused; the
 // single value of any other operator, several being what only a repeated
-// parameter would carry. A filter without a value filters by nothing and is
-// refused: over HTTP an empty parameter means not filtering, but a filter
-// the message spells out and leaves empty is a mistake to report.
+// parameter would carry. A filter without a value, or with an empty one,
+// filters by nothing and is refused: over HTTP an empty parameter means not
+// filtering, but a filter the message spells out and leaves empty is a
+// mistake to report.
 //
 // TODO: accept a member of an in or notin holding a comma. The parsers read
 // the HTTP spelling of the list, members joined by commas, so the call has
@@ -161,6 +179,9 @@ func (q Query) values() (url.Values, error) {
 func (f Filter) value(key string) (string, error) {
 	if len(f.Values) == 0 {
 		return "", errors.Newf("filter %q has no value", key)
+	}
+	if slices.Contains(f.Values, "") {
+		return "", errors.Newf("filter %q has an empty value", key)
 	}
 	if f.Op == string(types.FilterOpIn) || f.Op == string(types.FilterOpNotIn) {
 		for _, v := range f.Values {
@@ -184,6 +205,9 @@ const (
 	invalidMessageMsg = "invalid request message"
 	// missingIDMsg answers an item action whose message names no record.
 	missingIDMsg = "id is required"
+	// missingRecordMsg answers a Create or Update whose message carries no
+	// record, and names the item of a batch patch carrying none.
+	missingRecordMsg = "record is required"
 )
 
 // call is one run of an action for an rpc: the call's context with the
@@ -201,22 +225,36 @@ type call struct {
 // (see grpcserver.WithParams) and starts the controller span on it, the way
 // the HTTP handler starts one on the request, described by what the call
 // carries for the method and path, POST and the full method; the caller
-// ends the span through end.
-func (a *action[M, REQ, RSP]) beginCall(ctx context.Context, params map[string]string, query url.Values) *call {
+// ends the span through end. A route parameter left empty is reported once
+// the call began, so the caller refuses it on the call, its span recording
+// the refusal: over HTTP no route matches an empty segment, while a message
+// may leave the field empty, and a service scoping its work by the
+// parameter would then scope it by nothing.
+func (a *action[M, REQ, RSP]) beginCall(ctx context.Context, params map[string]string, query url.Values) (*call, error) {
 	ctx = grpcserver.WithParams(ctx, params, query)
 	reqMeta := requestctx.FromContext(ctx)
 	spanCtx, span := a.startSpan(ctx, reqMeta.Method(), reqMeta.Route())
-	return &call{ctx: spanCtx, span: span, log: logger.Controller.WithContext(ctx, a.phase)}
+	c := &call{ctx: spanCtx, span: span, log: logger.Controller.WithContext(ctx, a.phase)}
+	for _, name := range slices.Sorted(maps.Keys(params)) {
+		if params[name] == "" {
+			return c, errors.Newf("route parameter %q is required", name)
+		}
+	}
+	return c, nil
 }
 
 // beginQueryCall is beginCall for an action reading a query, a List or a
 // Get: the query is rendered as the HTTP query string (see Query.values)
 // and attached with the parameters. A query the HTTP listener could not
-// carry is reported once the call began, so the caller refuses it on the
-// call, its span recording the refusal.
+// carry is reported once the call began, like an empty parameter, so the
+// caller refuses it on the call.
 func (a *action[M, REQ, RSP]) beginQueryCall(ctx context.Context, params map[string]string, query Query) (*call, error) {
-	values, err := query.values()
-	return a.beginCall(ctx, params, values), err
+	values, queryErr := query.values()
+	c, err := a.beginCall(ctx, params, values)
+	if err != nil {
+		return c, err
+	}
+	return c, queryErr
 }
 
 // serviceContext is the serviceContextFunc of the call: its service
@@ -258,6 +296,13 @@ func (c *call) invalidMessage(err error) error {
 // absent.
 func (c *call) missingID() error {
 	return c.refuse(CodeInvalidParam.WithMsg(missingIDMsg), errors.New(missingIDMsg))
+}
+
+// missingRecord refuses a call whose message carries no record, the way the
+// HTTP handler refuses a request without a body: an absent record would
+// create a zero one or replace the stored one by it.
+func (c *call) missingRecord() error {
+	return c.refuse(CodeInvalidParam.WithMsg(missingRecordMsg), errors.New(missingRecordMsg))
 }
 
 // fail answers a flow's failure, which the flow logged and recorded already,

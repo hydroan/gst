@@ -3,6 +3,7 @@ package controller
 import (
 	"context"
 	"encoding/json"
+	"reflect"
 
 	"github.com/cockroachdb/errors"
 	"github.com/gin-gonic/gin"
@@ -84,8 +85,14 @@ func UpdateCall[M types.Model](route string) func(ctx context.Context, params ma
 	a := newAction[M, M, M](route, consts.Update, consts.UpdateBefore, consts.UpdateAfter)
 	return func(ctx context.Context, params map[string]string, id string, m M) (M, error) {
 		var zero M
-		c := a.beginCall(ctx, params, nil)
+		c, err := a.beginCall(ctx, params, nil)
 		defer c.end()
+		if err != nil {
+			return zero, c.invalid(err)
+		}
+		if reflect.ValueOf(m).IsNil() {
+			return zero, c.missingRecord()
+		}
 		a.normalizeModel(&m)
 		if err := validateRequest(m); err != nil {
 			return zero, c.invalidMessage(err)

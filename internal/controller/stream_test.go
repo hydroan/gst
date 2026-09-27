@@ -161,7 +161,7 @@ func TestServerStreamCallStreamsTheResponses(t *testing.T) {
 		_, err := recvResponse(stream)
 		st := status.Convert(err)
 		require.Equal(t, codes.Unimplemented, st.Code())
-		require.Equal(t, "the Stream action of sampleRecord on controller-sample-silences is served by no Stream method of its kind; gg gen declares the method in the service file", st.Message())
+		require.Equal(t, "the Stream action is served by no Stream method of its kind", st.Message())
 	})
 
 	t.Run("a client canceling the stream ends it as canceled", func(t *testing.T) {

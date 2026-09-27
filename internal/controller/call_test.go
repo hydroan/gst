@@ -42,7 +42,9 @@ import (
 // interceptor named, and answers it as stored; what the hooks find on their
 // service context is what an HTTP request's hooks find; a message failing
 // the binding tags is refused the way a body is; a hook's refusal answers
-// with the hook's status and creates nothing.
+// with the hook's status and creates nothing; a message carrying no record
+// is refused the way an absent body is; and a route parameter left empty is
+// refused before anything runs.
 func TestCreateCallCreatesTheRecordForTheCaller(t *testing.T) {
 	conn := sampleServer(t)
 	name := uniqueName("call-create")
@@ -84,6 +86,18 @@ func TestCreateCallCreatesTheRecordForTheCaller(t *testing.T) {
 		_, err := invoke(t, conn, "RefusedCreate", map[string]any{"record": map[string]any{"name": name}})
 
 		requireStatus(t, err, codes.AlreadyExists, refusedMsg)
+		require.Zero(t, countSamplesNamed(t, name))
+	})
+
+	t.Run("a message carrying no record is refused", func(t *testing.T) {
+		_, err := invoke(t, conn, "Create", map[string]any{})
+		requireStatus(t, err, codes.InvalidArgument, "record is required")
+	})
+
+	t.Run("an empty route parameter is refused", func(t *testing.T) {
+		name := uniqueName("call-empty-param")
+		_, err := invoke(t, conn, "Create", map[string]any{"params": map[string]string{"parent": ""}, "record": map[string]any{"name": name}})
+		requireStatus(t, err, codes.InvalidArgument, `route parameter "parent" is required`)
 		require.Zero(t, countSamplesNamed(t, name))
 	})
 }
@@ -188,8 +202,9 @@ func TestListCallListsLikeTheHTTPQuery(t *testing.T) {
 }
 
 // TestUpdateCallReplacesTheRecord pins the update call: the record the id
-// names is replaced by the message's, its creation audit kept, and an id no
-// record carries answers NotFound.
+// names is replaced by the message's, its creation audit kept; an id no
+// record carries answers NotFound; and a message carrying no record is
+// refused, the record left as stored rather than replaced by a zero one.
 func TestUpdateCallReplacesTheRecord(t *testing.T) {
 	conn := sampleServer(t)
 	record := createSample(t, "call-update")
@@ -202,6 +217,10 @@ func TestUpdateCallReplacesTheRecord(t *testing.T) {
 
 	_, err = invoke(t, conn, "Update", map[string]any{"id": "missing", "record": map[string]any{"name": "call-updated"}})
 	requireStatus(t, err, codes.NotFound, "")
+
+	_, err = invoke(t, conn, "Update", map[string]any{"id": record.GetID()})
+	requireStatus(t, err, codes.InvalidArgument, "record is required")
+	requireSampleName(t, record.GetID(), "call-updated")
 }
 
 // TestPatchCallAppliesTheMaskedFields pins the patch call: only the fields
@@ -296,8 +315,9 @@ func TestDeleteCallDeletesTheRecord(t *testing.T) {
 // TestBatchCallsWriteAllOrNothing pins the four batch calls: the items are
 // created, replaced, patched under their masks and deleted as one batch; a
 // hook's refusal writes nothing; an item failing its binding tags refuses
-// the batch; a batch patch carries one mask per item; and a delete naming
-// an empty id is refused before anything is deleted.
+// the batch; a batch patch carries one mask per item and a record in every
+// item; and a delete naming an empty id is refused before anything is
+// deleted.
 func TestBatchCallsWriteAllOrNothing(t *testing.T) {
 	conn := sampleServer(t)
 	prefix := uniqueName("call-batch")
@@ -332,6 +352,15 @@ func TestBatchCallsWriteAllOrNothing(t *testing.T) {
 			"masks": [][]string{{"name"}},
 		})
 		requireStatus(t, patchErr, codes.InvalidArgument, "2 items carry 1 update masks; each item names the fields to apply in a mask of its own")
+		requireSampleName(t, createdIDs[0], prefix+"-a3")
+	})
+
+	t.Run("a batch patch with an item carrying no record", func(t *testing.T) {
+		_, patchErr := invoke(t, conn, "PatchMany", map[string]any{
+			"items": []any{map[string]any{"id": createdIDs[0], "name": prefix + "-a4"}, nil},
+			"masks": [][]string{{"name"}, {"name"}},
+		})
+		requireStatus(t, patchErr, codes.InvalidArgument, "item 1 carries no record")
 		requireSampleName(t, createdIDs[0], prefix+"-a3")
 	})
 
