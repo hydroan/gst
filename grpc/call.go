@@ -154,6 +154,18 @@ func UpdateManyCall[M types.Model](route string) func(ctx context.Context, param
 	return controller.UpdateManyCall[M](route)
 }
 
+// PatchItem readies the record of the item at index i of a batch patch,
+// what the generated handler of a PatchMany rpc reads each item through,
+// an item being the request of a single Patch: the item names its record by
+// id, which the record may leave out or repeat but not contradict, and the
+// route parameters it carries, keyed as the request's params are, may be
+// left empty or repeat the request's. An item naming no id or contradicting
+// the request is refused with InvalidArgument; an item carrying no record
+// is answered as it is, for PatchManyCall to refuse.
+func PatchItem[M types.Model](i int, params, itemParams map[string]string, id string, m M) (M, error) {
+	return controller.PatchItem(i, params, itemParams, id, m)
+}
+
 // PatchManyCall returns the batch patch call of M on route: given the route
 // parameters, the items and the paths of each item's update mask, in order,
 // it answers with the records patched.

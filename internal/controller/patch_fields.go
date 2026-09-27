@@ -180,7 +180,7 @@ func patchJSONFieldNames(typ reflect.Type) map[string]string {
 	}
 	fields := make(map[string]string, typ.NumField())
 	for field := range typ.Fields() {
-		if field.PkgPath != "" && !field.Anonymous || field.Name == consts.FIELD_ID {
+		if (field.PkgPath != "" && !field.Anonymous) || field.Name == consts.FIELD_ID {
 			continue
 		}
 		name, ok := patchJSONFieldName(field)

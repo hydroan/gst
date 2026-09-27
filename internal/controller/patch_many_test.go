@@ -8,7 +8,48 @@ import (
 	"github.com/hydroan/gst/database"
 	"github.com/hydroan/gst/internal/controller"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/grpc/codes"
 )
+
+// TestPatchItemReadiesTheRecordOfABatchItem pins PatchItem, what the
+// generated handler of a PatchMany rpc reads each item through: the item
+// names its record by id, which a record carrying no id takes and one
+// carrying the same id keeps; a record naming another id, an item naming no
+// id and an item whose route parameter contradicts the request's are
+// refused with InvalidArgument; a parameter the item leaves empty is the
+// request's; and an item carrying no record is left to the call to refuse.
+func TestPatchItemReadiesTheRecordOfABatchItem(t *testing.T) {
+	readied, err := controller.PatchItem(0, nil, nil, "r1", &sampleRecord{Name: "named"})
+	require.NoError(t, err)
+	require.Equal(t, "r1", readied.GetID())
+	require.Equal(t, "named", readied.Name)
+
+	same := &sampleRecord{}
+	same.SetID("r1")
+	readied, err = controller.PatchItem(0, nil, nil, "r1", same)
+	require.NoError(t, err)
+	require.Equal(t, "r1", readied.GetID())
+
+	other := &sampleRecord{}
+	other.SetID("r2")
+	_, err = controller.PatchItem(1, nil, nil, "r1", other)
+	requireStatus(t, err, codes.InvalidArgument, "item 1 names the record r1 but carries the record r2")
+
+	_, err = controller.PatchItem(2, nil, nil, "", &sampleRecord{})
+	requireStatus(t, err, codes.InvalidArgument, "item 2 names no id")
+
+	_, err = controller.PatchItem(3, map[string]string{"record": "a"}, map[string]string{"record": "b"}, "r1", &sampleRecord{})
+	requireStatus(t, err, codes.InvalidArgument, `item 3 names the record parameter "b", the request names "a"`)
+
+	readied, err = controller.PatchItem(4, map[string]string{"record": "a"}, map[string]string{"record": ""}, "r1", &sampleRecord{})
+	require.NoError(t, err)
+	require.Equal(t, "r1", readied.GetID())
+
+	var absent *sampleRecord
+	readied, err = controller.PatchItem(5, nil, nil, "r1", absent)
+	require.NoError(t, err)
+	require.Nil(t, readied)
+}
 
 // TestPatchManyReportsAMissingVersionBeforeAMissingRecord pins which failure
 // a batch patch of a versioned model reports for an item that carries no
