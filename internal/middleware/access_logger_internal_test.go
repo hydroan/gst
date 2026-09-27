@@ -5,6 +5,8 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/cockroachdb/errors"
+
 	"github.com/gin-gonic/gin"
 	"github.com/hydroan/gst/logger"
 	prommetrics "github.com/hydroan/gst/metrics"
@@ -16,9 +18,10 @@ import (
 )
 
 // TestAccessLoggerFieldsFitTheCapacityInTheWorstCase pins accessLogFieldCap
-// to the entry of a request a recording span traces — the span id, the one
-// optional field, present — so a field added to accessLogger without bumping
-// the capacity fails here instead of regrowing the slice on every request.
+// to the entry of a request a recording span traces that reported an error
+// — the span id and the error, the two optional fields, present — so a field
+// added to accessLogger without bumping the capacity fails here instead of
+// regrowing the slice on every request.
 func TestAccessLoggerFieldsFitTheCapacityInTheWorstCase(t *testing.T) {
 	setupTracingTest(t)
 
@@ -40,7 +43,10 @@ func TestAccessLoggerFieldsFitTheCapacityInTheWorstCase(t *testing.T) {
 
 	router := gin.New()
 	router.Use(tracing(), accessLogger())
-	router.GET("/api/ping", func(c *gin.Context) { c.Status(http.StatusNoContent) })
+	router.GET("/api/ping", func(c *gin.Context) {
+		_ = c.Error(errors.New("probe failed"))
+		c.Status(http.StatusNoContent)
+	})
 
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/api/ping?page=1", nil))
@@ -51,4 +57,5 @@ func TestAccessLoggerFieldsFitTheCapacityInTheWorstCase(t *testing.T) {
 	require.Len(t, entries[0].Context, accessLogFieldCap,
 		"the worst case must fill the capacity exactly: a new field bumps accessLogFieldCap, a dropped one lowers it")
 	require.Contains(t, entries[0].ContextMap(), "span_id", "the worst case must carry the optional span id")
+	require.Equal(t, "probe failed", entries[0].ContextMap()["error"], "the error the request reported travels in a field of its own")
 }

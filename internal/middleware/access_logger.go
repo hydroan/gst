@@ -19,10 +19,11 @@ import (
 // eleven every request has — status, method, username, user id, trace id,
 // route, path, query, ip, user agent and the duration, whose two keys
 // util.LogDuration renders from one inlined field — plus the span id of a
-// request a recording span traces. The logger runs on every request and sizes
-// its field slice to it once, so the hot path never regrows it; a field added
-// to accessLogger bumps it, which the worst-case test enforces.
-const accessLogFieldCap = 12
+// request a recording span traces, plus the error of a request that
+// reported one. The logger runs on every request and sizes its field slice
+// to it once, so the hot path never regrows it; a field added to
+// accessLogger bumps it, which the worst-case test enforces.
+const accessLogFieldCap = 13
 
 func accessLogger() gin.HandlerFunc {
 	return func(c *gin.Context) {
@@ -70,10 +71,13 @@ func accessLogger() gin.HandlerFunc {
 		}
 
 		if len(c.Errors) > 0 {
-			// A request that reported errors logs one entry per error, with the
-			// error as the message and the same fields.
+			// A request that reported errors logs one entry per error, the
+			// error in a field of its own, like the gRPC access log's: the
+			// encoder of logger.Gin drops the message (see logger.NewGin).
+			// The field takes the last slot of the capacity, so each entry
+			// overwrites the previous one's.
 			for _, e := range c.Errors.Errors() {
-				logger.Gin.Error(e, fields...)
+				logger.Gin.Error(e, append(fields, zap.String("error", e))...)
 			}
 		} else {
 			logger.Gin.Info(path, fields...)
