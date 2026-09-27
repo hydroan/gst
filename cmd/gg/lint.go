@@ -30,11 +30,11 @@ var lintCmd = &cobra.Command{
 }
 
 // lintRun runs the pinned golangci-lint through gghelper.PinnedCommand,
-// which builds it apart from the project's module and caches the executable:
+// which builds it apart from the project's module and keeps the program:
 // nothing is installed, whatever golangci-lint PATH holds plays no part, the
-// first run downloads and builds it and later ones need neither the network
-// nor a build. golangci-lint runs in the project directory, where it finds
-// the project's .golangci.yml.
+// first run downloads and builds it and later ones find it built, network or
+// not. golangci-lint runs in the project directory, where it finds the
+// project's .golangci.yml, with the environment gg lint itself got.
 func lintRun() {
 	clioutput.Section("Run golangci-lint " + golangciLintVersion)
 	clioutput.Command("golangci-lint run ./...")

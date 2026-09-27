@@ -125,19 +125,24 @@ message Sample {
 	require.ErrorContains(t, err, "Missing")
 }
 
-// TestRunPluginRunsWithoutTheNetwork pins that the plugins run from the
-// module cache alone once they are in it: with the module proxy switched
-// off, an empty request still gets its empty answer from protoc-gen-go and
-// protoc-gen-go-grpc alike. go run pkg@version would ask the proxy about
-// the module first and fail here.
+// TestRunPluginRunsWithoutTheNetwork pins that the plugins need the network
+// once: after a first run, with the network as it is, has downloaded and
+// built them, the module proxy is switched off and an empty request still
+// gets its empty answer from protoc-gen-go and protoc-gen-go-grpc alike. go
+// run pkg@version would ask the proxy about the module first and fail here.
 func TestRunPluginRunsWithoutTheNetwork(t *testing.T) {
-	t.Setenv("GOPROXY", "off")
-	for _, plugin := range []struct{ module, version, pkg string }{
-		{protocGenGoModule, protocGenGoVersion, protocGenGoPackage},
-		{protocGenGoGRPCModule, protocGenGoGRPCVersion, protocGenGoGRPCPackage},
-	} {
-		files, err := runPlugin(plugin.module, plugin.version, plugin.pkg, &pluginpb.CodeGeneratorRequest{})
-		require.NoError(t, err, plugin.pkg)
-		require.Empty(t, files)
+	run := func() {
+		t.Helper()
+		for _, plugin := range []struct{ module, version, pkg string }{
+			{protocGenGoModule, protocGenGoVersion, protocGenGoPackage},
+			{protocGenGoGRPCModule, protocGenGoGRPCVersion, protocGenGoGRPCPackage},
+		} {
+			files, err := runPlugin(plugin.module, plugin.version, plugin.pkg, &pluginpb.CodeGeneratorRequest{})
+			require.NoError(t, err, plugin.pkg)
+			require.Empty(t, files)
+		}
 	}
+	run()
+	t.Setenv("GOPROXY", "off")
+	run()
 }
