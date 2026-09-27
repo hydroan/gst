@@ -1442,7 +1442,6 @@ func (Feed) Design() {
 }
 `
 
-// protobufPBFileModel is a model declared in a file named pb.go.
 // protobufSharedDeclarationModel declares two fields together without a
 // pb tag.
 const protobufSharedDeclarationModel = `package model
@@ -1583,6 +1582,7 @@ func (Group) Design() {
 }
 `
 
+// protobufPBFileModel is a model declared in a file named pb.go.
 const protobufPBFileModel = `package model
 
 import (

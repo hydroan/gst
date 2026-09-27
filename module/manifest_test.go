@@ -12,6 +12,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	"golang.org/x/mod/modfile"
 )
 
 // moduleManifestFilename is the copy contract each copyable module declares.
@@ -126,8 +127,13 @@ func requireCompilesAlone(t *testing.T, frameworkRoot, path string) {
 	require.NoError(t, err)
 	dir := t.TempDir()
 	// The module path stays under the framework's, so the file may import
-	// the framework's internal packages the way module sources do.
-	goMod := "module github.com/hydroan/gst/copycheck\n\ngo 1.27\n\nrequire github.com/hydroan/gst v0.0.0\n\nreplace github.com/hydroan/gst => " + root + "\n"
+	// the framework's internal packages the way module sources do; the Go
+	// version is the framework's own, read from its go.mod.
+	frameworkMod, err := os.ReadFile(filepath.Join(root, "go.mod"))
+	require.NoError(t, err)
+	parsed, err := modfile.ParseLax("go.mod", frameworkMod, nil)
+	require.NoError(t, err)
+	goMod := "module github.com/hydroan/gst/copycheck\n\ngo " + parsed.Go.Version + "\n\nrequire github.com/hydroan/gst v0.0.0\n\nreplace github.com/hydroan/gst => " + root + "\n"
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "go.mod"), []byte(goMod), 0o600))
 	goSum, err := os.ReadFile(filepath.Join(root, "go.sum"))
 	require.NoError(t, err)
