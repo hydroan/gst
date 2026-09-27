@@ -884,7 +884,8 @@ func init() {
 应用入口会空导入 `module`，因此 `init()` 会在启动阶段执行。`Register()` 只注册模型和路由，
 会话检查由项目自己挂：`middleware/middleware.go` 里 `middleware.RegisterAuth(middleware.IAMSession())`，
 声明了 `GRPC()` 的项目再在 `interceptor/interceptor.go` 里 `interceptor.RegisterAuth(interceptor.IAMSession())`；
-用 authz 模块时 `middleware.Authz()`、`interceptor.Authz()` 挂在它们之后（认证链按注册顺序跑），
+用 authz 模块时 `middleware.Authz()`、`interceptor.Authz()` 挂在它们之后（认证链按注册顺序跑）；策略对象按路由清单的写法写，
+`/api/records/{id}`、`/api/records/*` 或静态路径两条线一致，写具体路径（`/api/records/42`）的只对 HTTP 生效，`:id` 这种写法哪边都不命中，
 项目自己要读当前用户的中间件也排在会话检查之后。默认账号属于业务数据，框架不代为创建：
 需要时由项目在启动钩子（如 `router.OnRoutesReady`）里通过标准数据库链写入，或者像
 `examples/demo` 的测试那样走公开的 `POST /api/signup` 注册。

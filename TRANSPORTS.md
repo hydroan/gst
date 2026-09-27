@@ -157,7 +157,7 @@ handler --> client : RecordToProto；失败映射成 status 加 ErrorInfo
 | 凭证 | IAMSession 读会话 Cookie，JwtAuth 读 `Authorization: Bearer` 头 | 两者都读 metadata `authorization: Bearer …`，经 `grpc.Bearer(ctx)` 取；会话经 gRPC 使用时登录的 user-agent 要和 gRPC 客户端一致，设备绑定按它比对 | |
 | 会话认证 | `middleware.IAMSession()` | `interceptor.IAMSession()` | `serviceiamsession.Authenticate(ctx, sessionID, userAgent, method, path)`：加载、校验、设备绑定按 user-agent 比对、用户状态、改密豁免、续期 |
 | JWT | `middleware.JwtAuth()` | `interceptor.JwtAuth()`，拒绝一律 Unauthenticated | jwt 包解析与校验 |
-| 授权 | `middleware.Authz()`，obj 是请求的具体路径（`/api/records/42`）、act 是 HTTP 方法 | `interceptor.Authz()`，obj 是注册时记下的路由模式（`/api/records/:id`）、act 是该 rpc 对应的 HTTP 方法，流式动作是 STREAM | `rbac.Enforce(ctx, Subject, obj, act)`，策略只有 HTTP 那一份 |
+| 授权 | `middleware.Authz()`，obj 是请求的具体路径（`/api/records/42`）、act 是 HTTP 方法 | `interceptor.Authz()`，obj 是路由模板（`/api/records/{id}`，拦截器把注册时记下的路由写成路由清单的写法）、act 是该 rpc 对应的 HTTP 方法，流式动作是 STREAM | `rbac.Enforce(ctx, Subject, obj, act)`，策略只有一份：写 `{id}`、`/*` 或静态路径的两边一致，写具体段的只在 HTTP 生效，写 `:id` 字面的两边都不命中 |
 | 调用者 | gin 上下文里的用户 | `grpc.WithCaller / CallerOf`，写进访问日志 | `execctx` 里的身份与 trace id |
 | 失败的形状 | JSON 错误体，状态码取 `service.Error` 的 status | `service.Error` 映射成 status code 加 `ErrorInfo{Reason: SERVICE_ERROR, Domain: gst, Metadata: code, status}`；框架自己的拒绝（Internal、Unimplemented、Canceled、JwtAuth 的 Unauthenticated）只有 status | `service.NewError / NewErrorWithCause`，没有业务状态码 |
 
@@ -189,7 +189,7 @@ HTTP 状态到 gRPC status 的映射（`grpcserver.StatusOfCoder`）：
 - `Stream(func(){ Service("watch"); Payload[*Req](); StreamingResult[*Rsp]() })`：Payload / Result 写一问一答的一侧，Streaming 版写流的一侧，至少一侧是流，三种组合都支持。
 - .proto：`rpc WatchFeed (WatchFeedRequest) returns (stream WatchFeedResponse)`；请求消息开头仍是路由参数。
 - `x.gen.go`：服务端流把 `srv.Send` 交给流程；客户端流与双向流先用 `grpc.FirstMessage(srv.Recv)` 读首条消息取路由参数，再把它当第一条交回。
-- authz：act 是 `STREAM`，obj 是声明的 `/api/…` 路径。
+- authz：act 是 `STREAM`，obj 是声明的 `/api/…` 路径的模板（`/api/records/{id}/tail`）；`GET /api/authz/routes` 只列 HTTP 路由，流式动作的策略按这个写法手写。
 
 运行时与 service 签名：
 

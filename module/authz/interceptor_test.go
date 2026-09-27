@@ -27,11 +27,15 @@ import (
 // TestAuthzInterceptor pins the gRPC counterpart of the authorization
 // middleware on a real listener, behind the session interceptor the way the
 // middleware runs behind IAMSession: a call is judged by the HTTP method and
-// route its action is served at, so the policy set is one for both
-// listeners. A call without a session is refused before any decision, a
-// subject holding no role is refused with the middleware's message, a role
-// carrying the permission reaches the action and nothing else, and the root
-// subject reaches everything.
+// the route template of its action, the route with every parameter written
+// {name} the way the route list spells it, so a policy written for the
+// route list decides for both listeners. A call without a session is
+// refused before any decision, a subject holding no role is refused with
+// the middleware's message, a role carrying the permission reaches the
+// action and nothing else, and the root subject reaches everything. On a
+// route with a parameter, a policy naming the template grants the call, one
+// spelling the parameter the gin way, :thing, matches nothing, and one
+// naming a concrete path grants an HTTP request alone.
 func TestAuthzInterceptor(t *testing.T) {
 	conn := grpcAuthzProbe(t)
 	// The sessions are established presenting the user agent grpc-go
@@ -63,13 +67,36 @@ func TestAuthzInterceptor(t *testing.T) {
 		require.NoError(t, authzProbeCall(t, conn, "Deny", rootSessionID))
 		require.Equal(t, consts.AUTHZ_USER_ROOT, authzProbeLastCaller(t).UserID)
 	})
+
+	t.Run("on a route with a parameter", func(t *testing.T) {
+		for _, tt := range []struct {
+			name   string
+			user   string
+			object string
+			code   codes.Code
+		}{
+			{name: "the template grants the call", user: "grpc_peek_template", object: "/api/probe-things/{thing}", code: codes.OK},
+			{name: "the gin spelling of the parameter matches nothing", user: "grpc_peek_gin", object: "/api/probe-things/:thing", code: codes.PermissionDenied},
+			{name: "a concrete path grants an HTTP request alone", user: "grpc_peek_concrete", object: "/api/probe-things/42", code: codes.PermissionDenied},
+		} {
+			t.Run(tt.name, func(t *testing.T) {
+				peeker := authorizationSubject{}
+				peeker.userID, peeker.sessionID = authzSignupAndLoginUserWithUserAgent(t, authzTestUsername(tt.user), "12345678", grpcUserAgent)
+				roleID := newAuthorizationRole(t, peeker, tt.user)
+				authzGrantTenantPolicy(t, tenant.Default, roleID, types.Permission{Object: tt.object, Action: http.MethodGet})
+
+				require.Equal(t, tt.code, status.Code(authzProbeCall(t, conn, "Peek", peeker.sessionID)))
+			})
+		}
+	})
 }
 
 // The probe service stands for a project's gRPC service behind the module's
 // interceptors: gst.test.Probe with Look served at GET grantedRoute and Deny
-// at GET deniedRoute, the two routes the HTTP cases grant and refuse. One
-// listener serves the whole test binary, the server's registrations being
-// made once.
+// at GET deniedRoute, the two routes the HTTP cases grant and refuse, and
+// Peek at GET probeThingRoute, a route with a parameter. One listener
+// serves the whole test binary, the server's registrations being made
+// once.
 var (
 	grpcAuthzProbeOnce   sync.Once
 	grpcAuthzProbeAddr   string
@@ -81,6 +108,14 @@ var (
 // grpcUserAgent is the user agent grpc-go presents for the probe's calls: a
 // session a call names has to have been established presenting it.
 const grpcUserAgent = "grpc-go/" + grpc.Version
+
+// probeThingRoute is the route with a parameter the probe's Peek is served
+// at, as a registration writes it; probeTailRoute is the route of the
+// probe's Tail, a Stream action, which the route list carries under STREAM.
+const (
+	probeThingRoute = "/api/probe-things/:thing"
+	probeTailRoute  = "/api/probe-things/:thing/tail"
+)
 
 // grpcAuthzProbe returns a connection to the probe listener, starting it on
 // first use behind the session and authorization interceptors TestMain
@@ -110,12 +145,14 @@ func grpcAuthzProbe(t *testing.T) *grpc.ClientConn {
 			r.RegisterService(&grpc.ServiceDesc{
 				ServiceName: "gst.test.Probe",
 				HandlerType: (*any)(nil),
-				Methods:     []grpc.MethodDesc{handle("Look"), handle("Deny")},
+				Methods:     []grpc.MethodDesc{handle("Look"), handle("Deny"), handle("Peek")},
 				Metadata:    "gst/test/probe.proto",
 			}, nil)
 		},
 			grpcserver.Method{Name: "/gst.test.Probe/Look", HTTPMethod: http.MethodGet, Route: grantedRoute},
 			grpcserver.Method{Name: "/gst.test.Probe/Deny", HTTPMethod: http.MethodGet, Route: deniedRoute},
+			grpcserver.Method{Name: "/gst.test.Probe/Peek", HTTPMethod: http.MethodGet, Route: probeThingRoute},
+			grpcserver.Method{Name: "/gst.test.Probe/Tail", HTTPMethod: grpcserver.MethodStream, Route: probeTailRoute},
 		)
 		listener, err := net.Listen("tcp", "127.0.0.1:0")
 		if err != nil {

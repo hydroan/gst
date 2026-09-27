@@ -96,9 +96,9 @@ func Enforce(ctx context.Context, subject Subject, obj, act string) (context.Con
 // matched_rule carries the policy row and is present only when a policy is
 // what allowed the request. It is worth recording next to obj because the
 // two differ: obj is what the listener judges, the request's concrete path
-// over HTTP and the route pattern the rpc is registered under over gRPC (see
-// interceptor.Authz), while the rule holds the pattern that matched it, such
-// as /api/things/{id}.
+// over HTTP and the template of the route the rpc is registered under over
+// gRPC, /api/things/{id} (see interceptor.Authz), while the rule holds the
+// pattern that matched it, such as /api/things/{id} or /api/things/*.
 func logGrant(ctx context.Context, subject Subject, tenantID, sub, obj, act string, source consts.GrantSource, matchedRule []string, elapsed time.Duration) {
 	if logger.Authz == nil {
 		return
