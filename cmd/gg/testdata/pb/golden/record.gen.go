@@ -42,7 +42,7 @@ func (RecordService) CreateRecord(ctx context.Context, req *CreateRecordRequest)
 	return &CreateRecordResponse{Record: RecordToProto(m)}, nil
 }
 
-// DeleteRecord serves the Delete action of Record on /api/records.
+// DeleteRecord serves the Delete action of Record on /api/records/:record.
 func (RecordService) DeleteRecord(ctx context.Context, req *DeleteRecordRequest) (*DeleteRecordResponse, error) {
 	if err := deleteRecord(ctx, map[string]string{"record": req.GetId()}, req.GetId()); err != nil {
 		return nil, err
@@ -50,7 +50,7 @@ func (RecordService) DeleteRecord(ctx context.Context, req *DeleteRecordRequest)
 	return &DeleteRecordResponse{}, nil
 }
 
-// UpdateRecord serves the Update action of Record on /api/records.
+// UpdateRecord serves the Update action of Record on /api/records/:record.
 func (RecordService) UpdateRecord(ctx context.Context, req *UpdateRecordRequest) (*UpdateRecordResponse, error) {
 	m, err := updateRecord(ctx, map[string]string{"record": req.GetId()}, req.GetId(), RecordFromProto(req.GetRecord()))
 	if err != nil {
@@ -59,7 +59,7 @@ func (RecordService) UpdateRecord(ctx context.Context, req *UpdateRecordRequest)
 	return &UpdateRecordResponse{Record: RecordToProto(m)}, nil
 }
 
-// PatchRecord serves the Patch action of Record on /api/records.
+// PatchRecord serves the Patch action of Record on /api/records/:record.
 func (RecordService) PatchRecord(ctx context.Context, req *PatchRecordRequest) (*PatchRecordResponse, error) {
 	m, err := patchRecord(ctx, map[string]string{"record": req.GetId()}, req.GetId(), RecordFromProto(req.GetRecord()), req.GetUpdateMask().GetPaths())
 	if err != nil {
@@ -91,7 +91,7 @@ func (RecordService) ListRecord(ctx context.Context, req *ListRecordRequest) (*L
 	return &ListRecordResponse{Items: items, Total: int64(total)}, nil
 }
 
-// GetRecord serves the Get action of Record on /api/records.
+// GetRecord serves the Get action of Record on /api/records/:record.
 func (RecordService) GetRecord(ctx context.Context, req *GetRecordRequest) (*GetRecordResponse, error) {
 	m, err := getRecord(ctx, map[string]string{"record": req.GetId()}, req.GetId(), grpc.Query{Expand: req.GetExpand(), Depth: req.GetDepth()})
 	if err != nil {
@@ -100,7 +100,8 @@ func (RecordService) GetRecord(ctx context.Context, req *GetRecordRequest) (*Get
 	return &GetRecordResponse{Record: RecordToProto(m)}, nil
 }
 
-// CreateManyRecord serves the CreateMany action of Record on /api/records.
+// CreateManyRecord serves the CreateMany action of Record on
+// /api/records/batch.
 func (RecordService) CreateManyRecord(ctx context.Context, req *CreateManyRecordRequest) (*CreateManyRecordResponse, error) {
 	models := make([]*model.Record, len(req.GetItems()))
 	for i, item := range req.GetItems() {
@@ -117,7 +118,8 @@ func (RecordService) CreateManyRecord(ctx context.Context, req *CreateManyRecord
 	return &CreateManyRecordResponse{Items: items}, nil
 }
 
-// DeleteManyRecord serves the DeleteMany action of Record on /api/records.
+// DeleteManyRecord serves the DeleteMany action of Record on
+// /api/records/batch.
 func (RecordService) DeleteManyRecord(ctx context.Context, req *DeleteManyRecordRequest) (*DeleteManyRecordResponse, error) {
 	if err := deleteManyRecord(ctx, nil, req.GetIds()); err != nil {
 		return nil, err
@@ -125,7 +127,8 @@ func (RecordService) DeleteManyRecord(ctx context.Context, req *DeleteManyRecord
 	return &DeleteManyRecordResponse{}, nil
 }
 
-// UpdateManyRecord serves the UpdateMany action of Record on /api/records.
+// UpdateManyRecord serves the UpdateMany action of Record on
+// /api/records/batch.
 func (RecordService) UpdateManyRecord(ctx context.Context, req *UpdateManyRecordRequest) (*UpdateManyRecordResponse, error) {
 	models := make([]*model.Record, len(req.GetItems()))
 	for i, item := range req.GetItems() {
@@ -142,7 +145,8 @@ func (RecordService) UpdateManyRecord(ctx context.Context, req *UpdateManyRecord
 	return &UpdateManyRecordResponse{Items: items}, nil
 }
 
-// PatchManyRecord serves the PatchMany action of Record on /api/records.
+// PatchManyRecord serves the PatchMany action of Record on
+// /api/records/batch.
 func (RecordService) PatchManyRecord(ctx context.Context, req *PatchManyRecordRequest) (*PatchManyRecordResponse, error) {
 	models := make([]*model.Record, len(req.GetItems()))
 	masks := make([][]string, len(req.GetItems()))

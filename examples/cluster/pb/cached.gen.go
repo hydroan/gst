@@ -38,7 +38,7 @@ func (CachedService) CreateCached(ctx context.Context, req *CreateCachedRequest)
 	return &CreateCachedResponse{Result: CachedRspToProto(result)}, nil
 }
 
-// DeleteCached serves the Delete action of Cached on /api/caches.
+// DeleteCached serves the Delete action of Cached on /api/caches/:id.
 func (CachedService) DeleteCached(ctx context.Context, req *DeleteCachedRequest) (*DeleteCachedResponse, error) {
 	result, err := deleteCached(ctx, map[string]string{"id": req.GetId()}, grpc.Query{}, new(gstmodel.Empty))
 	if err != nil {
@@ -47,7 +47,7 @@ func (CachedService) DeleteCached(ctx context.Context, req *DeleteCachedRequest)
 	return &DeleteCachedResponse{Result: CachedRspToProto(result)}, nil
 }
 
-// GetCached serves the Get action of Cached on /api/caches.
+// GetCached serves the Get action of Cached on /api/caches/:id.
 func (CachedService) GetCached(ctx context.Context, req *GetCachedRequest) (*GetCachedResponse, error) {
 	result, err := getCached(ctx, map[string]string{"id": req.GetId()}, grpc.Query{Expand: req.GetExpand(), Depth: req.GetDepth()}, new(gstmodel.Empty))
 	if err != nil {

@@ -40,7 +40,7 @@ func (ShapeService) CreateShape(ctx context.Context, req *CreateShapeRequest) (*
 	return &CreateShapeResponse{Shape: ShapeToProto(m)}, nil
 }
 
-// GetShape serves the Get action of Shape on /api/shapes.
+// GetShape serves the Get action of Shape on /api/shapes/:id.
 func (ShapeService) GetShape(ctx context.Context, req *GetShapeRequest) (*GetShapeResponse, error) {
 	m, err := getShape(ctx, map[string]string{"id": req.GetId()}, req.GetId(), grpc.Query{Expand: req.GetExpand(), Depth: req.GetDepth()})
 	if err != nil {

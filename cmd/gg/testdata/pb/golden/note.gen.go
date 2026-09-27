@@ -33,7 +33,7 @@ func (NoteService) CreateNote(ctx context.Context, req *CreateNoteRequest) (*Cre
 	return &CreateNoteResponse{Note: NoteToProto(m)}, nil
 }
 
-// GetNote serves the Get action of Note on /api/notes.
+// GetNote serves the Get action of Note on /api/notes/:id.
 func (NoteService) GetNote(ctx context.Context, req *GetNoteRequest) (*GetNoteResponse, error) {
 	m, err := getNote(ctx, map[string]string{"id": req.GetId()}, req.GetId(), grpc.Query{Expand: req.GetExpand(), Depth: req.GetDepth()})
 	if err != nil {

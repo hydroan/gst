@@ -36,7 +36,7 @@ func (ItemService) CreateItem(ctx context.Context, req *CreateItemRequest) (*Cre
 	return &CreateItemResponse{Item: ItemToProto(m)}, nil
 }
 
-// GetItem serves the Get action of Item on /api/records/:record/items.
+// GetItem serves the Get action of Item on /api/records/:record/items/:id.
 func (ItemService) GetItem(ctx context.Context, req *GetItemRequest) (*GetItemResponse, error) {
 	m, err := getItem(ctx, map[string]string{"record": req.GetRecord(), "id": req.GetId()}, req.GetId(), grpc.Query{Expand: req.GetExpand(), Depth: req.GetDepth()})
 	if err != nil {

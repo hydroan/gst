@@ -39,7 +39,7 @@ func (NoteService) CreateNote(ctx context.Context, req *CreateNoteRequest) (*Cre
 	return &CreateNoteResponse{Note: NoteToProto(m)}, nil
 }
 
-// DeleteNote serves the Delete action of Note on /api/board/notes.
+// DeleteNote serves the Delete action of Note on /api/board/notes/:id.
 func (NoteService) DeleteNote(ctx context.Context, req *DeleteNoteRequest) (*DeleteNoteResponse, error) {
 	if err := deleteNote(ctx, map[string]string{"id": req.GetId()}, req.GetId()); err != nil {
 		return nil, err
@@ -47,7 +47,7 @@ func (NoteService) DeleteNote(ctx context.Context, req *DeleteNoteRequest) (*Del
 	return &DeleteNoteResponse{}, nil
 }
 
-// UpdateNote serves the Update action of Note on /api/board/notes.
+// UpdateNote serves the Update action of Note on /api/board/notes/:id.
 func (NoteService) UpdateNote(ctx context.Context, req *UpdateNoteRequest) (*UpdateNoteResponse, error) {
 	m, err := updateNote(ctx, map[string]string{"id": req.GetId()}, req.GetId(), NoteFromProto(req.GetNote()))
 	if err != nil {
@@ -56,7 +56,7 @@ func (NoteService) UpdateNote(ctx context.Context, req *UpdateNoteRequest) (*Upd
 	return &UpdateNoteResponse{Note: NoteToProto(m)}, nil
 }
 
-// PatchNote serves the Patch action of Note on /api/board/notes.
+// PatchNote serves the Patch action of Note on /api/board/notes/:id.
 func (NoteService) PatchNote(ctx context.Context, req *PatchNoteRequest) (*PatchNoteResponse, error) {
 	m, err := patchNote(ctx, map[string]string{"id": req.GetId()}, req.GetId(), NoteFromProto(req.GetNote()), req.GetUpdateMask().GetPaths())
 	if err != nil {
@@ -88,7 +88,7 @@ func (NoteService) ListNote(ctx context.Context, req *ListNoteRequest) (*ListNot
 	return &ListNoteResponse{Items: items, Total: int64(total)}, nil
 }
 
-// GetNote serves the Get action of Note on /api/board/notes.
+// GetNote serves the Get action of Note on /api/board/notes/:id.
 func (NoteService) GetNote(ctx context.Context, req *GetNoteRequest) (*GetNoteResponse, error) {
 	m, err := getNote(ctx, map[string]string{"id": req.GetId()}, req.GetId(), grpc.Query{Expand: req.GetExpand(), Depth: req.GetDepth()})
 	if err != nil {

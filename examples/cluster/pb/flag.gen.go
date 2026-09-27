@@ -41,7 +41,7 @@ func (FlagService) CreateFlag(ctx context.Context, req *CreateFlagRequest) (*Cre
 	return &CreateFlagResponse{Flag: FlagToProto(m)}, nil
 }
 
-// DeleteFlag serves the Delete action of Flag on /api/flags.
+// DeleteFlag serves the Delete action of Flag on /api/flags/:id.
 func (FlagService) DeleteFlag(ctx context.Context, req *DeleteFlagRequest) (*DeleteFlagResponse, error) {
 	if err := deleteFlag(ctx, map[string]string{"id": req.GetId()}, req.GetId()); err != nil {
 		return nil, err
@@ -49,7 +49,7 @@ func (FlagService) DeleteFlag(ctx context.Context, req *DeleteFlagRequest) (*Del
 	return &DeleteFlagResponse{}, nil
 }
 
-// UpdateFlag serves the Update action of Flag on /api/flags.
+// UpdateFlag serves the Update action of Flag on /api/flags/:id.
 func (FlagService) UpdateFlag(ctx context.Context, req *UpdateFlagRequest) (*UpdateFlagResponse, error) {
 	m, err := updateFlag(ctx, map[string]string{"id": req.GetId()}, req.GetId(), FlagFromProto(req.GetFlag()))
 	if err != nil {
@@ -58,7 +58,7 @@ func (FlagService) UpdateFlag(ctx context.Context, req *UpdateFlagRequest) (*Upd
 	return &UpdateFlagResponse{Flag: FlagToProto(m)}, nil
 }
 
-// PatchFlag serves the Patch action of Flag on /api/flags.
+// PatchFlag serves the Patch action of Flag on /api/flags/:id.
 func (FlagService) PatchFlag(ctx context.Context, req *PatchFlagRequest) (*PatchFlagResponse, error) {
 	m, err := patchFlag(ctx, map[string]string{"id": req.GetId()}, req.GetId(), FlagFromProto(req.GetFlag()), req.GetUpdateMask().GetPaths())
 	if err != nil {
@@ -90,7 +90,7 @@ func (FlagService) ListFlag(ctx context.Context, req *ListFlagRequest) (*ListFla
 	return &ListFlagResponse{Items: items, Total: int64(total)}, nil
 }
 
-// GetFlag serves the Get action of Flag on /api/flags.
+// GetFlag serves the Get action of Flag on /api/flags/:id.
 func (FlagService) GetFlag(ctx context.Context, req *GetFlagRequest) (*GetFlagResponse, error) {
 	m, err := getFlag(ctx, map[string]string{"id": req.GetId()}, req.GetId(), grpc.Query{Expand: req.GetExpand(), Depth: req.GetDepth()})
 	if err != nil {
@@ -99,7 +99,7 @@ func (FlagService) GetFlag(ctx context.Context, req *GetFlagRequest) (*GetFlagRe
 	return &GetFlagResponse{Flag: FlagToProto(m)}, nil
 }
 
-// CreateManyFlag serves the CreateMany action of Flag on /api/flags.
+// CreateManyFlag serves the CreateMany action of Flag on /api/flags/batch.
 func (FlagService) CreateManyFlag(ctx context.Context, req *CreateManyFlagRequest) (*CreateManyFlagResponse, error) {
 	models := make([]*model.Flag, len(req.GetItems()))
 	for i, item := range req.GetItems() {
@@ -116,7 +116,7 @@ func (FlagService) CreateManyFlag(ctx context.Context, req *CreateManyFlagReques
 	return &CreateManyFlagResponse{Items: items}, nil
 }
 
-// DeleteManyFlag serves the DeleteMany action of Flag on /api/flags.
+// DeleteManyFlag serves the DeleteMany action of Flag on /api/flags/batch.
 func (FlagService) DeleteManyFlag(ctx context.Context, req *DeleteManyFlagRequest) (*DeleteManyFlagResponse, error) {
 	if err := deleteManyFlag(ctx, nil, req.GetIds()); err != nil {
 		return nil, err
@@ -124,7 +124,7 @@ func (FlagService) DeleteManyFlag(ctx context.Context, req *DeleteManyFlagReques
 	return &DeleteManyFlagResponse{}, nil
 }
 
-// UpdateManyFlag serves the UpdateMany action of Flag on /api/flags.
+// UpdateManyFlag serves the UpdateMany action of Flag on /api/flags/batch.
 func (FlagService) UpdateManyFlag(ctx context.Context, req *UpdateManyFlagRequest) (*UpdateManyFlagResponse, error) {
 	models := make([]*model.Flag, len(req.GetItems()))
 	for i, item := range req.GetItems() {
@@ -141,7 +141,7 @@ func (FlagService) UpdateManyFlag(ctx context.Context, req *UpdateManyFlagReques
 	return &UpdateManyFlagResponse{Items: items}, nil
 }
 
-// PatchManyFlag serves the PatchMany action of Flag on /api/flags.
+// PatchManyFlag serves the PatchMany action of Flag on /api/flags/batch.
 func (FlagService) PatchManyFlag(ctx context.Context, req *PatchManyFlagRequest) (*PatchManyFlagResponse, error) {
 	models := make([]*model.Flag, len(req.GetItems()))
 	masks := make([][]string, len(req.GetItems()))

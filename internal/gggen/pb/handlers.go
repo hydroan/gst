@@ -242,7 +242,7 @@ func (w *fileWriter) actionType(model *modelinfo.Model, typeName string) ast.Exp
 //		return &CreateRecordResponse{Record: RecordToProto(m)}, nil
 //	}
 //
-//	// PatchRecord serves the Patch action of Record on /api/records.
+//	// PatchRecord serves the Patch action of Record on /api/records/:record.
 //	func (RecordService) PatchRecord(ctx context.Context, req *PatchRecordRequest) (*PatchRecordResponse, error) {
 //		m, err := patchRecord(ctx, map[string]string{"record": req.GetId()}, req.GetId(), RecordFromProto(req.GetRecord()), req.GetUpdateMask().GetPaths())
 //		if err != nil {
@@ -274,7 +274,7 @@ func (w *fileWriter) actionType(model *modelinfo.Model, typeName string) ast.Exp
 //		return &ListRecordResponse{Items: items, Total: int64(total)}, nil
 //	}
 //
-//	// PatchManyRecord serves the PatchMany action of Record on /api/records.
+//	// PatchManyRecord serves the PatchMany action of Record on /api/records/batch.
 //	func (RecordService) PatchManyRecord(ctx context.Context, req *PatchManyRecordRequest) (*PatchManyRecordResponse, error) {
 //		models := make([]*model.Record, len(req.GetItems()))
 //		masks := make([][]string, len(req.GetItems()))
@@ -401,7 +401,7 @@ func (w *fileWriter) handler(r *rpc) {
 		}
 	}
 
-	w.out.add(r.name+" serves the "+r.action.Phase.Name()+" action of "+r.model.ModelName+" on "+consts.APIPath(r.route)+".", &ast.FuncDecl{
+	w.out.add(r.name+" serves the "+r.action.Phase.Name()+" action of "+r.model.ModelName+" on "+consts.APIPath(r.registered)+".", &ast.FuncDecl{
 		Recv: &ast.FieldList{List: []*ast.Field{{Type: ident(r.service)}}},
 		Name: ident(r.name),
 		Type: &ast.FuncType{
