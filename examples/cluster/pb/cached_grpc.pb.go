@@ -36,9 +36,9 @@ const (
 type CachedServiceClient interface {
 	// CreateCached is the Create action of Cached on /api/caches.
 	CreateCached(ctx context.Context, in *CreateCachedRequest, opts ...grpc.CallOption) (*CreateCachedResponse, error)
-	// DeleteCached is the Delete action of Cached on /api/caches.
+	// DeleteCached is the Delete action of Cached on /api/caches/:id.
 	DeleteCached(ctx context.Context, in *DeleteCachedRequest, opts ...grpc.CallOption) (*DeleteCachedResponse, error)
-	// GetCached is the Get action of Cached on /api/caches.
+	// GetCached is the Get action of Cached on /api/caches/:id.
 	GetCached(ctx context.Context, in *GetCachedRequest, opts ...grpc.CallOption) (*GetCachedResponse, error)
 	// ExchangeCached is the Stream action of Cached declared on caches/exchange, served over gRPC alone.
 	ExchangeCached(ctx context.Context, opts ...grpc.CallOption) (grpc.BidiStreamingClient[ExchangeCachedRequest, ExchangeCachedResponse], error)
@@ -118,9 +118,9 @@ type CachedService_LoadCachedClient = grpc.ClientStreamingClient[LoadCachedReque
 type CachedServiceServer interface {
 	// CreateCached is the Create action of Cached on /api/caches.
 	CreateCached(context.Context, *CreateCachedRequest) (*CreateCachedResponse, error)
-	// DeleteCached is the Delete action of Cached on /api/caches.
+	// DeleteCached is the Delete action of Cached on /api/caches/:id.
 	DeleteCached(context.Context, *DeleteCachedRequest) (*DeleteCachedResponse, error)
-	// GetCached is the Get action of Cached on /api/caches.
+	// GetCached is the Get action of Cached on /api/caches/:id.
 	GetCached(context.Context, *GetCachedRequest) (*GetCachedResponse, error)
 	// ExchangeCached is the Stream action of Cached declared on caches/exchange, served over gRPC alone.
 	ExchangeCached(grpc.BidiStreamingServer[ExchangeCachedRequest, ExchangeCachedResponse]) error

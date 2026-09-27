@@ -110,10 +110,10 @@ service CachedService {
   // CreateCached is the Create action of Cached on /api/caches.
   rpc CreateCached ( CreateCachedRequest ) returns ( CreateCachedResponse );
 
-  // DeleteCached is the Delete action of Cached on /api/caches.
+  // DeleteCached is the Delete action of Cached on /api/caches/:id.
   rpc DeleteCached ( DeleteCachedRequest ) returns ( DeleteCachedResponse );
 
-  // GetCached is the Get action of Cached on /api/caches.
+  // GetCached is the Get action of Cached on /api/caches/:id.
   rpc GetCached ( GetCachedRequest ) returns ( GetCachedResponse );
 
   // ExchangeCached is the Stream action of Cached declared on caches/exchange, served over gRPC alone.

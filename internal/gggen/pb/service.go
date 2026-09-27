@@ -30,7 +30,7 @@ import (
 //	  // CreateItem is the Create action of Item on /api/records/:record/items.
 //	  rpc CreateItem ( CreateItemRequest ) returns ( CreateItemResponse );
 //
-//	  // GetItem is the Get action of Item on /api/records/:record/items.
+//	  // GetItem is the Get action of Item on /api/records/:record/items/:id.
 //	  rpc GetItem ( GetItemRequest ) returns ( GetItemResponse );
 //
 //	  // SealItem is the Create action of Item on /api/items/:id/seal.
@@ -85,7 +85,7 @@ func (g *generator) declareService(m *modelinfo.Model) {
 		}
 		// A Stream action is served over gRPC alone: its route names it and
 		// tells it from the other actions, but is no path a request reaches.
-		comment := name + " is the " + action.Phase.Name() + " action of " + m.ModelName + " on " + consts.APIPath(route) + "."
+		comment := name + " is the " + action.Phase.Name() + " action of " + m.ModelName + " on " + consts.APIPath(r.registered) + "."
 		if dsl.GRPCOnlyAction(action.Phase.Name()) {
 			comment = name + " is the " + action.Phase.Name() + " action of " + m.ModelName + " declared on " + route + ", served over gRPC alone."
 		}

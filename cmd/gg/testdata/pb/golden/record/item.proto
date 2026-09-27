@@ -110,7 +110,7 @@ service ItemService {
   // CreateItem is the Create action of Item on /api/records/:record/items.
   rpc CreateItem ( CreateItemRequest ) returns ( CreateItemResponse );
 
-  // GetItem is the Get action of Item on /api/records/:record/items.
+  // GetItem is the Get action of Item on /api/records/:record/items/:id.
   rpc GetItem ( GetItemRequest ) returns ( GetItemResponse );
 
   // SealItem is the Create action of Item on /api/items/:id/seal.

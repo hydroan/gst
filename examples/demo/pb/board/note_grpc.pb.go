@@ -38,15 +38,15 @@ const (
 type NoteServiceClient interface {
 	// CreateNote is the Create action of Note on /api/board/notes.
 	CreateNote(ctx context.Context, in *CreateNoteRequest, opts ...grpc.CallOption) (*CreateNoteResponse, error)
-	// DeleteNote is the Delete action of Note on /api/board/notes.
+	// DeleteNote is the Delete action of Note on /api/board/notes/:id.
 	DeleteNote(ctx context.Context, in *DeleteNoteRequest, opts ...grpc.CallOption) (*DeleteNoteResponse, error)
-	// UpdateNote is the Update action of Note on /api/board/notes.
+	// UpdateNote is the Update action of Note on /api/board/notes/:id.
 	UpdateNote(ctx context.Context, in *UpdateNoteRequest, opts ...grpc.CallOption) (*UpdateNoteResponse, error)
-	// PatchNote is the Patch action of Note on /api/board/notes.
+	// PatchNote is the Patch action of Note on /api/board/notes/:id.
 	PatchNote(ctx context.Context, in *PatchNoteRequest, opts ...grpc.CallOption) (*PatchNoteResponse, error)
 	// ListNote is the List action of Note on /api/board/notes.
 	ListNote(ctx context.Context, in *ListNoteRequest, opts ...grpc.CallOption) (*ListNoteResponse, error)
-	// GetNote is the Get action of Note on /api/board/notes.
+	// GetNote is the Get action of Note on /api/board/notes/:id.
 	GetNote(ctx context.Context, in *GetNoteRequest, opts ...grpc.CallOption) (*GetNoteResponse, error)
 	// PublishNote is the Create action of Note on /api/board/notes/:id/publish.
 	PublishNote(ctx context.Context, in *PublishNoteRequest, opts ...grpc.CallOption) (*PublishNoteResponse, error)
@@ -138,15 +138,15 @@ func (c *noteServiceClient) PublishNote(ctx context.Context, in *PublishNoteRequ
 type NoteServiceServer interface {
 	// CreateNote is the Create action of Note on /api/board/notes.
 	CreateNote(context.Context, *CreateNoteRequest) (*CreateNoteResponse, error)
-	// DeleteNote is the Delete action of Note on /api/board/notes.
+	// DeleteNote is the Delete action of Note on /api/board/notes/:id.
 	DeleteNote(context.Context, *DeleteNoteRequest) (*DeleteNoteResponse, error)
-	// UpdateNote is the Update action of Note on /api/board/notes.
+	// UpdateNote is the Update action of Note on /api/board/notes/:id.
 	UpdateNote(context.Context, *UpdateNoteRequest) (*UpdateNoteResponse, error)
-	// PatchNote is the Patch action of Note on /api/board/notes.
+	// PatchNote is the Patch action of Note on /api/board/notes/:id.
 	PatchNote(context.Context, *PatchNoteRequest) (*PatchNoteResponse, error)
 	// ListNote is the List action of Note on /api/board/notes.
 	ListNote(context.Context, *ListNoteRequest) (*ListNoteResponse, error)
-	// GetNote is the Get action of Note on /api/board/notes.
+	// GetNote is the Get action of Note on /api/board/notes/:id.
 	GetNote(context.Context, *GetNoteRequest) (*GetNoteResponse, error)
 	// PublishNote is the Create action of Note on /api/board/notes/:id/publish.
 	PublishNote(context.Context, *PublishNoteRequest) (*PublishNoteResponse, error)

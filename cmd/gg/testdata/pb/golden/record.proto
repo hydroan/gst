@@ -296,31 +296,31 @@ service RecordService {
   // CreateRecord is the Create action of Record on /api/records.
   rpc CreateRecord ( CreateRecordRequest ) returns ( CreateRecordResponse );
 
-  // DeleteRecord is the Delete action of Record on /api/records.
+  // DeleteRecord is the Delete action of Record on /api/records/:record.
   rpc DeleteRecord ( DeleteRecordRequest ) returns ( DeleteRecordResponse );
 
-  // UpdateRecord is the Update action of Record on /api/records.
+  // UpdateRecord is the Update action of Record on /api/records/:record.
   rpc UpdateRecord ( UpdateRecordRequest ) returns ( UpdateRecordResponse );
 
-  // PatchRecord is the Patch action of Record on /api/records.
+  // PatchRecord is the Patch action of Record on /api/records/:record.
   rpc PatchRecord ( PatchRecordRequest ) returns ( PatchRecordResponse );
 
   // ListRecord is the List action of Record on /api/records.
   rpc ListRecord ( ListRecordRequest ) returns ( ListRecordResponse );
 
-  // GetRecord is the Get action of Record on /api/records.
+  // GetRecord is the Get action of Record on /api/records/:record.
   rpc GetRecord ( GetRecordRequest ) returns ( GetRecordResponse );
 
-  // CreateManyRecord is the CreateMany action of Record on /api/records.
+  // CreateManyRecord is the CreateMany action of Record on /api/records/batch.
   rpc CreateManyRecord ( CreateManyRecordRequest ) returns ( CreateManyRecordResponse );
 
-  // DeleteManyRecord is the DeleteMany action of Record on /api/records.
+  // DeleteManyRecord is the DeleteMany action of Record on /api/records/batch.
   rpc DeleteManyRecord ( DeleteManyRecordRequest ) returns ( DeleteManyRecordResponse );
 
-  // UpdateManyRecord is the UpdateMany action of Record on /api/records.
+  // UpdateManyRecord is the UpdateMany action of Record on /api/records/batch.
   rpc UpdateManyRecord ( UpdateManyRecordRequest ) returns ( UpdateManyRecordResponse );
 
-  // PatchManyRecord is the PatchMany action of Record on /api/records.
+  // PatchManyRecord is the PatchMany action of Record on /api/records/batch.
   rpc PatchManyRecord ( PatchManyRecordRequest ) returns ( PatchManyRecordResponse );
 
   // ListRecordByOwner is the List action of Record on /api/owners/:owner/records.

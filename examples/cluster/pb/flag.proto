@@ -215,30 +215,30 @@ service FlagService {
   // CreateFlag is the Create action of Flag on /api/flags.
   rpc CreateFlag ( CreateFlagRequest ) returns ( CreateFlagResponse );
 
-  // DeleteFlag is the Delete action of Flag on /api/flags.
+  // DeleteFlag is the Delete action of Flag on /api/flags/:id.
   rpc DeleteFlag ( DeleteFlagRequest ) returns ( DeleteFlagResponse );
 
-  // UpdateFlag is the Update action of Flag on /api/flags.
+  // UpdateFlag is the Update action of Flag on /api/flags/:id.
   rpc UpdateFlag ( UpdateFlagRequest ) returns ( UpdateFlagResponse );
 
-  // PatchFlag is the Patch action of Flag on /api/flags.
+  // PatchFlag is the Patch action of Flag on /api/flags/:id.
   rpc PatchFlag ( PatchFlagRequest ) returns ( PatchFlagResponse );
 
   // ListFlag is the List action of Flag on /api/flags.
   rpc ListFlag ( ListFlagRequest ) returns ( ListFlagResponse );
 
-  // GetFlag is the Get action of Flag on /api/flags.
+  // GetFlag is the Get action of Flag on /api/flags/:id.
   rpc GetFlag ( GetFlagRequest ) returns ( GetFlagResponse );
 
-  // CreateManyFlag is the CreateMany action of Flag on /api/flags.
+  // CreateManyFlag is the CreateMany action of Flag on /api/flags/batch.
   rpc CreateManyFlag ( CreateManyFlagRequest ) returns ( CreateManyFlagResponse );
 
-  // DeleteManyFlag is the DeleteMany action of Flag on /api/flags.
+  // DeleteManyFlag is the DeleteMany action of Flag on /api/flags/batch.
   rpc DeleteManyFlag ( DeleteManyFlagRequest ) returns ( DeleteManyFlagResponse );
 
-  // UpdateManyFlag is the UpdateMany action of Flag on /api/flags.
+  // UpdateManyFlag is the UpdateMany action of Flag on /api/flags/batch.
   rpc UpdateManyFlag ( UpdateManyFlagRequest ) returns ( UpdateManyFlagResponse );
 
-  // PatchManyFlag is the PatchMany action of Flag on /api/flags.
+  // PatchManyFlag is the PatchMany action of Flag on /api/flags/batch.
   rpc PatchManyFlag ( PatchManyFlagRequest ) returns ( PatchManyFlagResponse );
 }

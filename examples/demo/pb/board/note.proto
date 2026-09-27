@@ -191,19 +191,19 @@ service NoteService {
   // CreateNote is the Create action of Note on /api/board/notes.
   rpc CreateNote ( CreateNoteRequest ) returns ( CreateNoteResponse );
 
-  // DeleteNote is the Delete action of Note on /api/board/notes.
+  // DeleteNote is the Delete action of Note on /api/board/notes/:id.
   rpc DeleteNote ( DeleteNoteRequest ) returns ( DeleteNoteResponse );
 
-  // UpdateNote is the Update action of Note on /api/board/notes.
+  // UpdateNote is the Update action of Note on /api/board/notes/:id.
   rpc UpdateNote ( UpdateNoteRequest ) returns ( UpdateNoteResponse );
 
-  // PatchNote is the Patch action of Note on /api/board/notes.
+  // PatchNote is the Patch action of Note on /api/board/notes/:id.
   rpc PatchNote ( PatchNoteRequest ) returns ( PatchNoteResponse );
 
   // ListNote is the List action of Note on /api/board/notes.
   rpc ListNote ( ListNoteRequest ) returns ( ListNoteResponse );
 
-  // GetNote is the Get action of Note on /api/board/notes.
+  // GetNote is the Get action of Note on /api/board/notes/:id.
   rpc GetNote ( GetNoteRequest ) returns ( GetNoteResponse );
 
   // PublishNote is the Create action of Note on /api/board/notes/:id/publish.

@@ -153,6 +153,6 @@ service ShapeService {
   // CreateShape is the Create action of Shape on /api/shapes.
   rpc CreateShape ( CreateShapeRequest ) returns ( CreateShapeResponse );
 
-  // GetShape is the Get action of Shape on /api/shapes.
+  // GetShape is the Get action of Shape on /api/shapes/:id.
   rpc GetShape ( GetShapeRequest ) returns ( GetShapeResponse );
 }

@@ -41,23 +41,23 @@ const (
 type FlagServiceClient interface {
 	// CreateFlag is the Create action of Flag on /api/flags.
 	CreateFlag(ctx context.Context, in *CreateFlagRequest, opts ...grpc.CallOption) (*CreateFlagResponse, error)
-	// DeleteFlag is the Delete action of Flag on /api/flags.
+	// DeleteFlag is the Delete action of Flag on /api/flags/:id.
 	DeleteFlag(ctx context.Context, in *DeleteFlagRequest, opts ...grpc.CallOption) (*DeleteFlagResponse, error)
-	// UpdateFlag is the Update action of Flag on /api/flags.
+	// UpdateFlag is the Update action of Flag on /api/flags/:id.
 	UpdateFlag(ctx context.Context, in *UpdateFlagRequest, opts ...grpc.CallOption) (*UpdateFlagResponse, error)
-	// PatchFlag is the Patch action of Flag on /api/flags.
+	// PatchFlag is the Patch action of Flag on /api/flags/:id.
 	PatchFlag(ctx context.Context, in *PatchFlagRequest, opts ...grpc.CallOption) (*PatchFlagResponse, error)
 	// ListFlag is the List action of Flag on /api/flags.
 	ListFlag(ctx context.Context, in *ListFlagRequest, opts ...grpc.CallOption) (*ListFlagResponse, error)
-	// GetFlag is the Get action of Flag on /api/flags.
+	// GetFlag is the Get action of Flag on /api/flags/:id.
 	GetFlag(ctx context.Context, in *GetFlagRequest, opts ...grpc.CallOption) (*GetFlagResponse, error)
-	// CreateManyFlag is the CreateMany action of Flag on /api/flags.
+	// CreateManyFlag is the CreateMany action of Flag on /api/flags/batch.
 	CreateManyFlag(ctx context.Context, in *CreateManyFlagRequest, opts ...grpc.CallOption) (*CreateManyFlagResponse, error)
-	// DeleteManyFlag is the DeleteMany action of Flag on /api/flags.
+	// DeleteManyFlag is the DeleteMany action of Flag on /api/flags/batch.
 	DeleteManyFlag(ctx context.Context, in *DeleteManyFlagRequest, opts ...grpc.CallOption) (*DeleteManyFlagResponse, error)
-	// UpdateManyFlag is the UpdateMany action of Flag on /api/flags.
+	// UpdateManyFlag is the UpdateMany action of Flag on /api/flags/batch.
 	UpdateManyFlag(ctx context.Context, in *UpdateManyFlagRequest, opts ...grpc.CallOption) (*UpdateManyFlagResponse, error)
-	// PatchManyFlag is the PatchMany action of Flag on /api/flags.
+	// PatchManyFlag is the PatchMany action of Flag on /api/flags/batch.
 	PatchManyFlag(ctx context.Context, in *PatchManyFlagRequest, opts ...grpc.CallOption) (*PatchManyFlagResponse, error)
 }
 
@@ -177,23 +177,23 @@ func (c *flagServiceClient) PatchManyFlag(ctx context.Context, in *PatchManyFlag
 type FlagServiceServer interface {
 	// CreateFlag is the Create action of Flag on /api/flags.
 	CreateFlag(context.Context, *CreateFlagRequest) (*CreateFlagResponse, error)
-	// DeleteFlag is the Delete action of Flag on /api/flags.
+	// DeleteFlag is the Delete action of Flag on /api/flags/:id.
 	DeleteFlag(context.Context, *DeleteFlagRequest) (*DeleteFlagResponse, error)
-	// UpdateFlag is the Update action of Flag on /api/flags.
+	// UpdateFlag is the Update action of Flag on /api/flags/:id.
 	UpdateFlag(context.Context, *UpdateFlagRequest) (*UpdateFlagResponse, error)
-	// PatchFlag is the Patch action of Flag on /api/flags.
+	// PatchFlag is the Patch action of Flag on /api/flags/:id.
 	PatchFlag(context.Context, *PatchFlagRequest) (*PatchFlagResponse, error)
 	// ListFlag is the List action of Flag on /api/flags.
 	ListFlag(context.Context, *ListFlagRequest) (*ListFlagResponse, error)
-	// GetFlag is the Get action of Flag on /api/flags.
+	// GetFlag is the Get action of Flag on /api/flags/:id.
 	GetFlag(context.Context, *GetFlagRequest) (*GetFlagResponse, error)
-	// CreateManyFlag is the CreateMany action of Flag on /api/flags.
+	// CreateManyFlag is the CreateMany action of Flag on /api/flags/batch.
 	CreateManyFlag(context.Context, *CreateManyFlagRequest) (*CreateManyFlagResponse, error)
-	// DeleteManyFlag is the DeleteMany action of Flag on /api/flags.
+	// DeleteManyFlag is the DeleteMany action of Flag on /api/flags/batch.
 	DeleteManyFlag(context.Context, *DeleteManyFlagRequest) (*DeleteManyFlagResponse, error)
-	// UpdateManyFlag is the UpdateMany action of Flag on /api/flags.
+	// UpdateManyFlag is the UpdateMany action of Flag on /api/flags/batch.
 	UpdateManyFlag(context.Context, *UpdateManyFlagRequest) (*UpdateManyFlagResponse, error)
-	// PatchManyFlag is the PatchMany action of Flag on /api/flags.
+	// PatchManyFlag is the PatchMany action of Flag on /api/flags/batch.
 	PatchManyFlag(context.Context, *PatchManyFlagRequest) (*PatchManyFlagResponse, error)
 	mustEmbedUnimplementedFlagServiceServer()
 }
