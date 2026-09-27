@@ -218,9 +218,9 @@ func Run() (err error) {
 	}()
 	// The providers Bootstrap started are stopped on every way out of Run,
 	// the ways that fail before the components start included. Registered
-	// first, so that LIFO runs it right after the HTTP drain: in-flight
-	// jobs finish while the connections they may be using are still open,
-	// and the providers close after their last user.
+	// first, so that LIFO runs it right after the listeners' drain:
+	// in-flight jobs finish while the connections they may be using are
+	// still open, and the providers close after their last user.
 	registerCleanup(stopLifecycle)
 
 	// Final pre-server drain for modules registered after Bootstrap but
@@ -280,9 +280,9 @@ func Run() (err error) {
 	)
 
 	// The servers drain what they may, and not at all once the process
-	// fails now.
-	registerCleanup(func() { router.Stop(lifecycle.FailedNow()) })
-	registerCleanup(func() { grpcserver.Stop(lifecycle.FailedNow()) })
+	// fails now: the two listeners side by side, within one window (see
+	// stopTogether).
+	registerCleanup(func() { stopTogether(lifecycle.FailedNow(), router.Stop, grpcserver.Stop) })
 	registerCleanup(func() { statsviz.Stop(lifecycle.FailedNow()) })
 	registerCleanup(func() { debugpprof.Stop(lifecycle.FailedNow()) })
 	registerCleanup(gops.Stop)

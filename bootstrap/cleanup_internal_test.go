@@ -1,6 +1,7 @@
 package bootstrap
 
 import (
+	"context"
 	"net/http"
 	"os"
 	"os/exec"
@@ -43,6 +44,33 @@ func TestCleanupsRunSeriallyInReverseOrder(t *testing.T) {
 
 	require.Equal(t, []int{2, 1, 0}, order, "cleanups must run in reverse registration order")
 	require.EqualValues(t, 1, maxActive, "cleanups must never overlap")
+}
+
+// TestStopTogetherDrainsTheListenersWithinOneWindow pins stopTogether, what
+// the listeners are stopped through: the stops run side by side, each on a
+// context bounded by the one window all of them share, and a stop that
+// panics is reported the way a cleanup's panic is, holding the others up
+// no longer.
+func TestStopTogetherDrainsTheListenersWithinOneWindow(t *testing.T) {
+	type bound struct {
+		deadline time.Time
+		ok       bool
+	}
+	bounds := make(chan bound, 2)
+	stop := func(ctx context.Context) {
+		deadline, ok := ctx.Deadline()
+		bounds <- bound{deadline: deadline, ok: ok}
+		time.Sleep(300 * time.Millisecond)
+	}
+
+	begin := time.Now()
+	stopTogether(context.Background(), stop, stop, func(context.Context) { panic("a listener that fails to stop") })
+
+	require.Less(t, time.Since(begin), 500*time.Millisecond, "the stops must run side by side, not one after the other")
+	first, second := <-bounds, <-bounds
+	require.True(t, first.ok && second.ok, "every stop runs within the window")
+	require.Equal(t, first.deadline, second.deadline, "the stops share one deadline")
+	require.WithinDuration(t, begin.Add(lifecycle.StopTimeout), first.deadline, time.Second)
 }
 
 // hangingTeardownHelper marks the child process that runs Run for

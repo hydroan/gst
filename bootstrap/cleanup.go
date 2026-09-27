@@ -81,6 +81,24 @@ func runSafe(cleanup func()) {
 	cleanup()
 }
 
+// stopTogether runs the stops side by side, each on abandon bounded by the
+// one window of lifecycle.StopTimeout all of them share, and returns once
+// every one returned: the HTTP listener and the gRPC one stop accepting
+// connections at the same moment and drain what is in flight within the
+// same bound, so the shutdown's budget counts the window once, not once per
+// listener, and a client of one listener is not kept waiting for the
+// other's drain. A stop that panics is reported the way a cleanup's panic
+// is (see runSafe) and holds the others up no longer.
+func stopTogether(abandon context.Context, stops ...func(context.Context)) {
+	ctx, cancel := context.WithTimeout(abandon, lifecycle.StopTimeout)
+	defer cancel()
+	var wg sync.WaitGroup
+	for _, stop := range stops {
+		wg.Go(func() { runSafe(func() { stop(ctx) }) })
+	}
+	wg.Wait()
+}
+
 // closeComponent adapts a client's Close to a cleanup, logging the returned
 // error centrally so shutdown always continues and the clients do not
 // implement their own logging.

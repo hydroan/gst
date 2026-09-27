@@ -300,11 +300,12 @@ func newServer(addr string, handler http.Handler) *http.Server {
 func Auth() *gin.RouterGroup { return auth }
 func Pub() *gin.RouterGroup  { return pub }
 
-// drainTimeout bounds how long Stop waits for the requests in flight. It is
-// the shutdown's one window, shared with what the components and the
-// providers are stopped within, so the whole teardown is a budget an
-// orchestrator's grace can be set against. A variable so a test can play the
-// bound out in milliseconds.
+// drainTimeout bounds how long Stop waits for the requests in flight: the
+// window the shutdown stops this listener and the gRPC one within, side by
+// side (see bootstrap), the components and the providers getting a window
+// of their own after it, so the whole teardown is a budget an orchestrator's
+// grace can be set against. A variable so a test can play the bound out in
+// milliseconds.
 var drainTimeout = lifecycle.StopTimeout
 
 // Stop shuts the server down: it stops accepting connections and waits for
