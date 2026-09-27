@@ -7,6 +7,7 @@ import (
 	"demo/model/archive"
 	"demo/model/archive/document"
 
+	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst"
 	"github.com/hydroan/gst/database"
 	"github.com/hydroan/gst/provider/minio"
@@ -25,7 +26,10 @@ type Creator struct {
 func (a *Creator) Create(ctx *gst.ServiceContext, req *document.AttachmentReq) (*document.AttachmentRsp, error) {
 	documentID := ctx.Param("document")
 	if err := database.Database[*archive.Document](ctx).Get(new(archive.Document), documentID); err != nil {
-		return nil, service.NewErrorWithCause(http.StatusNotFound, "document not found", err)
+		if errors.Is(err, database.ErrRecordNotFound) {
+			return nil, service.NewErrorWithCause(http.StatusNotFound, "document not found", err)
+		}
+		return nil, service.NewErrorWithCause(http.StatusInternalServerError, "failed to load the document", err)
 	}
 	info, err := minio.Put(ctx, attachmentKey(documentID), strings.NewReader(req.Content), &minio.PutOptions{
 		ContentType: "text/plain",

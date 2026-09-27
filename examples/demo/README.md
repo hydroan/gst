@@ -8,7 +8,7 @@ gst 的入门示例：一个用 `gg new` 生成、按框架推荐写法补齐的
 
 | 路径 | 内容 |
 | --- | --- |
-| `model/` | 模型与接口声明（DSL）。根目录和 `record/`、`archive/`、`tool/` 是 HTTP 示例；`board/` 是 gRPC 示例，模型声明了 `GRPC()`，同时也走 HTTP |
+| `model/` | 模型与接口声明（DSL）。根目录和 `record/`、`archive/`、`tool/` 是 HTTP 示例；`board/` 是 gRPC 示例，模型声明了 `GRPC()`，标准动作同时也走 HTTP，Stream 动作只走 gRPC |
 | `service/` | 业务实现和它的测试，目录镜像 `model/`；只有声明了 `Service()` 的动作才有文件 |
 | `pb/` | `gg gen` 从 `model/board/` 推导的 `.proto` 和 Go 代码，提交进仓库 |
 | `configx/` `cronjob/` `component/` `middleware/` `interceptor/` `module/` | 扩展点：每一项一个文件，在各自的 `xxx.go` 的 `init()` 里注册 |

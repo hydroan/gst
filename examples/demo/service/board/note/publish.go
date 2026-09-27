@@ -6,6 +6,7 @@ import (
 
 	"demo/model/board"
 
+	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst"
 	"github.com/hydroan/gst/database"
 	"github.com/hydroan/gst/service"
@@ -26,7 +27,10 @@ func (p *Publish) Create(ctx *gst.ServiceContext, req *board.NotePublishReq) (*b
 	}
 	note := new(board.Note)
 	if err := database.Database[*board.Note](ctx).Get(note, ctx.Param("id")); err != nil {
-		return nil, service.NewErrorWithCause(http.StatusNotFound, "note not found", err)
+		if errors.Is(err, database.ErrRecordNotFound) {
+			return nil, service.NewErrorWithCause(http.StatusNotFound, "note not found", err)
+		}
+		return nil, service.NewErrorWithCause(http.StatusInternalServerError, "failed to load the note", err)
 	}
 	now := time.Now().UTC().Truncate(time.Millisecond)
 	note.Published = true
