@@ -3,7 +3,6 @@ package pb
 import (
 	"bytes"
 	"context"
-	"os/exec"
 	"path"
 	"slices"
 	"strings"
@@ -11,6 +10,7 @@ import (
 	"github.com/bufbuild/protocompile"
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/internal/ggconst"
+	"github.com/hydroan/gst/internal/gghelper"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/reflect/protodesc"
 	"google.golang.org/protobuf/reflect/protoreflect"
@@ -21,13 +21,16 @@ import (
 // The two protobuf plugins Compile drives, at the versions the framework's
 // go.mod requires of the modules providing them, which a test keeps them
 // equal to: protoc-gen-go writes the messages of a file, protoc-gen-go-grpc
-// its service. They run through go run, the way gg lint runs golangci-lint:
-// built apart from the project's module and cached, so nothing is installed
-// and the project's go.mod names nothing for them, and the Go files match
-// the protobuf and grpc runtimes the project gets through the framework.
+// its service. They run through gghelper.PinnedCommand, the way gg lint
+// runs golangci-lint: built apart from the project's module and cached, so
+// nothing is installed and the project's go.mod names nothing for them, and
+// the Go files match the protobuf and grpc runtimes the project gets through
+// the framework.
 const (
+	protocGenGoModule      = "google.golang.org/protobuf"
 	protocGenGoPackage     = "google.golang.org/protobuf/cmd/protoc-gen-go"
 	protocGenGoVersion     = "v1.36.12"
+	protocGenGoGRPCModule  = "google.golang.org/grpc/cmd/protoc-gen-go-grpc"
 	protocGenGoGRPCPackage = "google.golang.org/grpc/cmd/protoc-gen-go-grpc"
 	protocGenGoGRPCVersion = "v1.6.2"
 )
@@ -96,11 +99,11 @@ func Compile(protos []File) ([]File, error) {
 	}
 
 	var files []File
-	for _, plugin := range []struct{ pkg, version string }{
-		{protocGenGoPackage, protocGenGoVersion},
-		{protocGenGoGRPCPackage, protocGenGoGRPCVersion},
+	for _, plugin := range []struct{ module, version, pkg string }{
+		{protocGenGoModule, protocGenGoVersion, protocGenGoPackage},
+		{protocGenGoGRPCModule, protocGenGoGRPCVersion, protocGenGoGRPCPackage},
 	} {
-		generated, err := runPlugin(plugin.pkg+"@"+plugin.version, request)
+		generated, err := runPlugin(plugin.module, plugin.version, plugin.pkg, request)
 		if err != nil {
 			return nil, err
 		}
@@ -110,15 +113,19 @@ func Compile(protos []File) ([]File, error) {
 	return files, nil
 }
 
-// runPlugin runs the plugin target, a package at a version, through go run,
-// hands it request on its standard input the way protoc does and returns
-// the files it answers with, under pb/.
-func runPlugin(target string, request *pluginpb.CodeGeneratorRequest) ([]File, error) {
+// runPlugin runs the plugin pkg, of the module named by module, at version
+// (see gghelper.PinnedCommand), hands it request on its standard input the
+// way protoc does and returns the files it answers with, under pb/.
+func runPlugin(module, version, pkg string, request *pluginpb.CodeGeneratorRequest) ([]File, error) {
 	input, err := proto.Marshal(request)
 	if err != nil {
 		return nil, errors.Wrap(err, "encode the plugin request")
 	}
-	cmd := exec.Command("go", "run", target)
+	target := pkg + "@" + version
+	cmd, err := gghelper.PinnedCommand(module, version, pkg)
+	if err != nil {
+		return nil, err
+	}
 	cmd.Stdin = bytes.NewReader(input)
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout, cmd.Stderr = &stdout, &stderr
