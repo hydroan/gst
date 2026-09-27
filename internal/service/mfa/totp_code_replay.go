@@ -14,6 +14,10 @@ import (
 // until it can no longer validate anyway.
 const totpCodeReplayTTL = 2 * time.Minute
 
+// totpCodeReplayKeyPrefix opens the one-time-use marker key of a validated
+// code, followed by the user and the code.
+const totpCodeReplayKeyPrefix = "mfa:totp:used"
+
 var errTOTPCodeReplayed = errors.New("TOTP code already used")
 
 // markTOTPCodeUsed consumes one successfully validated TOTP code.
@@ -24,7 +28,8 @@ var errTOTPCodeReplayed = errors.New("TOTP code already used")
 // marker store is authoritative: when it is unreachable the code is rejected
 // instead of silently accepted (fail closed).
 func markTOTPCodeUsed(ctx context.Context, userID, code string) error {
-	ok, err := redis.SetNX(ctx, totpCodeReplayKey(userID, code), "1", totpCodeReplayTTL)
+	key := strings.Join([]string{totpCodeReplayKeyPrefix, strings.TrimSpace(userID), strings.TrimSpace(code)}, ":")
+	ok, err := redis.SetNX(ctx, key, "1", totpCodeReplayTTL)
 	if err != nil {
 		return errors.Wrap(err, "mark TOTP code used")
 	}
@@ -32,9 +37,4 @@ func markTOTPCodeUsed(ctx context.Context, userID, code string) error {
 		return errTOTPCodeReplayed
 	}
 	return nil
-}
-
-// totpCodeReplayKey builds the one-time-use marker key for a validated code.
-func totpCodeReplayKey(userID, code string) string {
-	return strings.Join([]string{"mfa:totp:used", strings.TrimSpace(userID), strings.TrimSpace(code)}, ":")
 }

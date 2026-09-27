@@ -85,10 +85,11 @@ func ProjectFiles(projectName string) ([]ProjectFile, error) {
 	if err != nil {
 		return nil, err
 	}
+	appName := filepath.Base(projectName)
 	return append(files,
 		ProjectFile{Path: ggconst.FileMain, Content: mainFile},
 		ProjectFile{Path: ".gitignore", Content: gitignoreContent},
-		ProjectFile{Path: "config.ini.example", Content: templateConfig(filepath.Base(projectName))},
+		ProjectFile{Path: "config.ini.example", Content: fmt.Sprintf(configTemplate, appName, appName)},
 	), nil
 }
 
@@ -117,10 +118,9 @@ func EnsureFileExists() ([]string, error) {
 	return created, nil
 }
 
-// templateConfig renders the config.ini.example of a new project whose
-// application is named appName.
-func templateConfig(appName string) string {
-	return fmt.Sprintf(`[app]
+// configTemplate is the config.ini.example of a new project, its application
+// name filled in twice: as the [app] name and as the redis namespace.
+const configTemplate = `[app]
 name = %s
 description = A Go application built with gst framework
 
@@ -173,5 +173,4 @@ addr = 127.0.0.1:6379
 db = 0
 password =
 namespace = %s
-`, appName, appName)
-}
+`

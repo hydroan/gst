@@ -108,7 +108,8 @@ func checkModuleNotRegistered(name string) error {
 			}
 			continue
 		}
-		aliases[importPathBase(path)] = true
+		alias := filepath.Base(filepath.ToSlash(path))
+		aliases[alias] = true
 	}
 	if len(aliases) == 0 {
 		return nil
@@ -137,10 +138,6 @@ func checkModuleNotRegistered(name string) error {
 		return fmt.Errorf("framework module %s is already registered; remove it before copying local source", name)
 	}
 	return nil
-}
-
-func importPathBase(path string) string {
-	return filepath.Base(filepath.ToSlash(path))
 }
 
 // ensureRegisterCall appends the framework registration to module/module.go.

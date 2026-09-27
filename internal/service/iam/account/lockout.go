@@ -46,13 +46,6 @@ func recordLoginFailure(ctx *gst.ServiceContext, username string) {
 	serviceiamsession.Store.RecordLoginFailure(ctx, username, loginFailureWindow())
 }
 
-// clearLoginFailures forgets an account's failed attempts after it proves the
-// password, so a user who eventually gets it right starts from zero rather than
-// one attempt short of a lockout.
-func clearLoginFailures(ctx *gst.ServiceContext, username string) {
-	serviceiamsession.Store.ClearLoginFailures(ctx, username)
-}
-
 // loginFailureLimit is how many consecutive failures lock an account, read from
 // IAM_LOGIN_FAILURE_LIMIT and defaulting to 5.
 func loginFailureLimit() int64 {

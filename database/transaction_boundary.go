@@ -62,10 +62,6 @@ func (b *transactionBoundary) run(ctx context.Context) error {
 // the innermost, which is the transaction the caller is actually writing in.
 type boundaryContextKey struct{}
 
-func contextWithBoundary(ctx context.Context, boundary *transactionBoundary) context.Context {
-	return context.WithValue(ctx, boundaryContextKey{}, boundary)
-}
-
 func boundaryFromContext(ctx context.Context) (*transactionBoundary, bool) {
 	if ctx == nil {
 		return nil, false
@@ -99,7 +95,9 @@ func withTransactionBoundary(
 ) error {
 	boundary := new(transactionBoundary)
 	if err := ins.Transaction(func(tx *gorm.DB) error {
-		return fn(contextWithBoundary(dbruntime.WithTx(ctx, tx, base), boundary), tx)
+		txCtx := dbruntime.WithTx(ctx, tx, base)
+		txCtx = context.WithValue(txCtx, boundaryContextKey{}, boundary)
+		return fn(txCtx, tx)
 	}); err != nil {
 		// A context that ends while its transaction is open has the standard
 		// library roll the transaction back, and the commit after that

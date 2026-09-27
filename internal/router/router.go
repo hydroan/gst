@@ -71,7 +71,8 @@ func Routes() map[string][]string {
 	snapshot := routesSnapshot()
 	result := make(map[string][]string, len(snapshot))
 	for endpoint, methods := range snapshot {
-		result[normalizeRoutePath(endpoint)] = sortedHTTPMethods(methods)
+		template := ginParamPattern.ReplaceAllString(endpoint, `{$1}`)
+		result[template] = sortedHTTPMethods(methods)
 	}
 	return result
 }
@@ -454,10 +455,6 @@ func registerRoute(endpoint, method string) {
 	defer routeMu.Unlock()
 
 	routes[endpoint] = append(routes[endpoint], method)
-}
-
-func normalizeRoutePath(endpoint string) string {
-	return ginParamPattern.ReplaceAllString(endpoint, `{$1}`)
 }
 
 func sortedHTTPMethods(methods []string) []string {

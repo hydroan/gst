@@ -91,7 +91,18 @@ func renderComment(pairs []commentPair) string {
 		if len(pairs[i].value) == 0 {
 			continue
 		}
-		pairs[i].value = encodeCommentValue(pairs[i].value)
+		// The value is rendered the way the sqlcommenter convention requires:
+		// percent-encoded, spaces included. url.QueryEscape reserves exactly
+		// the RFC 3986 unreserved set, which covers the convention's escaping
+		// and leaves a value unable to close the comment ("*" becomes "%2A",
+		// so "*/" cannot form) or to break out of its quotes ("'" becomes
+		// "%27"). Its single departure is the form-urlencoded space, rendered
+		// as "+" where the convention wants "%20". Rewriting that back is
+		// unambiguous: a literal plus is already encoded as "%2B", so no "+"
+		// the escape produces means anything but a space, and a consumer
+		// percent-decoding the value recovers it exactly.
+		escaped := url.QueryEscape(pairs[i].value)
+		pairs[i].value = strings.ReplaceAll(escaped, "+", "%20")
 		// key='value' plus the comma that separates it from the next pair.
 		size += len(pairs[i].key) + len("=''") + len(pairs[i].value) + 1
 	}
@@ -140,21 +151,6 @@ func (db *database[M]) annotate(tx *gorm.DB) *gorm.DB {
 		return tx
 	}
 	return tx.Clauses(&db.comment)
-}
-
-// encodeCommentValue renders one value the way the sqlcommenter convention
-// requires: percent-encoded, spaces included.
-//
-// url.QueryEscape reserves exactly the RFC 3986 unreserved set, which covers
-// the convention's escaping and leaves a value unable to close the comment
-// ("*" becomes "%2A", so "*/" cannot form) or to break out of its quotes
-// ("'" becomes "%27"). Its single departure is the form-urlencoded space,
-// rendered as "+" where the convention wants "%20". Rewriting that back is
-// unambiguous: a literal plus is already encoded as "%2B", so no "+" the
-// escape produces means anything but a space, and a consumer
-// percent-decoding the value recovers it exactly.
-func encodeCommentValue(value string) string {
-	return strings.ReplaceAll(url.QueryEscape(value), "+", "%20")
 }
 
 // statementComment attaches one chain's comment to whichever statement verb

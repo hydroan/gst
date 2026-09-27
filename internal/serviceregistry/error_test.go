@@ -1,7 +1,9 @@
 package serviceregistry_test
 
 import (
+	"fmt"
 	"net/http"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -58,43 +60,37 @@ func TestNewErrorWithCauseIncludesCauseInErrorButNotMsg(t *testing.T) {
 }
 
 func TestNewErrorCapturesStackTraceAtConstructionSite(t *testing.T) {
-	err := newSampleStackError()
+	err := serviceregistry.NewError(http.StatusConflict, "sample record missing")
 
 	stackTrace := errorstack.Origin(err)
 	require.NotEmpty(t, stackTrace)
 
-	// The innermost frame must be the construction site, not the
+	// The innermost frame must be the construction site, this test, not the
 	// framework-internal constructor chain.
 	lines := strings.Split(stackTrace, "\n")
 	require.GreaterOrEqual(t, len(lines), 2)
-	require.Contains(t, lines[0], "newSampleStackError")
+	require.Contains(t, lines[0], "TestNewErrorCapturesStackTraceAtConstructionSite")
 	require.Contains(t, lines[1], "error_test.go")
 }
 
 func TestNewErrorWithCauseStackTracePrefersCauseOrigin(t *testing.T) {
-	err := serviceregistry.NewErrorWithCause(http.StatusInternalServerError, "failed to load record", newSampleStackCause())
+	_, _, line, ok := runtime.Caller(0)
+	require.True(t, ok)
+	cause := errors.New("sample cause failure") // two lines below the lookup
+	err := serviceregistry.NewErrorWithCause(http.StatusInternalServerError, "failed to load record", cause)
 
 	stackTrace := errorstack.Origin(err)
 	require.NotEmpty(t, stackTrace)
 
-	// The cause carries its own stack trace, which is deeper than the one
-	// captured by NewErrorWithCause, so it wins as the reported origin.
+	// The cause carries its own stack trace, the innermost in the chain, so
+	// its construction site is the reported origin rather than the one
+	// NewErrorWithCause captured on the line after it.
 	lines := strings.Split(stackTrace, "\n")
-	require.Contains(t, lines[0], "newSampleStackCause")
+	require.GreaterOrEqual(t, len(lines), 2)
+	require.Contains(t, lines[0], "TestNewErrorWithCauseStackTracePrefersCauseOrigin")
+	require.True(t, strings.HasSuffix(lines[1], fmt.Sprintf("error_test.go:%d", line+2)), lines[1])
 }
 
 func TestErrorStackTraceOnNilReceiverIsEmpty(t *testing.T) {
 	require.Nil(t, (*serviceregistry.Error)(nil).StackTrace())
-}
-
-// newSampleStackError constructs a service error inside a dedicated helper,
-// so tests can assert the captured stack points at this construction site.
-func newSampleStackError() *serviceregistry.Error {
-	return serviceregistry.NewError(http.StatusConflict, "sample record missing")
-}
-
-// newSampleStackCause creates a cause error with its own embedded stack
-// trace, deeper than the service error construction site.
-func newSampleStackCause() error {
-	return errors.New("sample cause failure")
 }

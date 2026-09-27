@@ -230,6 +230,9 @@ func TestSelectScansEmbeddedRowFields(t *testing.T) {
 	require.Equal(t, time.Date(2024, 1, 10, 8, 0, 0, 0, time.UTC), markedRows[0].First.UTC())
 	require.Equal(t, "failed", markedRows[0].lower())
 	require.Equal(t, "done", markedRows[0].RowKind.String())
+	// gamma has one status only, so its highest is its lowest.
+	require.Equal(t, "done", markedRows[2].lower())
+	require.Equal(t, "done", markedRows[2].RowKind.String())
 }
 
 func TestSelectWhereReusesFilters(t *testing.T) {

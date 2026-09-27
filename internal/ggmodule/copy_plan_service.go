@@ -67,7 +67,9 @@ func (p *CopyPlan) actionServicePaths(sourceModel *modelinfo.Model, targetModel 
 	if p.FrameworkRoot == "" {
 		return filepath.Join(p.SourceServiceDir, action.ServiceFilename()), filepath.Join(p.TargetServiceDir, action.ServiceFilename())
 	}
-	sourceTarget := modelinfo.ServiceTarget(sourceModel, action, p.frameworkModelDir(), p.frameworkServiceDir())
+	modelDir := filepath.Join(p.FrameworkRoot, "internal", "model")
+	serviceDir := filepath.Join(p.FrameworkRoot, "internal", "service")
+	sourceTarget := modelinfo.ServiceTarget(sourceModel, action, modelDir, serviceDir)
 	targetTarget := modelinfo.ServiceTarget(targetModel, action, p.ModelDir, p.ServiceDir)
 	return sourceTarget.FilePath, targetTarget.FilePath
 }
@@ -254,14 +256,6 @@ func actionSourcePaths(actions []moduleCopyAction) []string {
 	}
 	sort.Strings(paths)
 	return paths
-}
-
-func (p *CopyPlan) frameworkModelDir() string {
-	return filepath.Join(p.FrameworkRoot, "internal", "model")
-}
-
-func (p *CopyPlan) frameworkServiceDir() string {
-	return filepath.Join(p.FrameworkRoot, "internal", "service")
 }
 
 func (p *CopyPlan) targetServicePath(sourcePath string) (string, error) {

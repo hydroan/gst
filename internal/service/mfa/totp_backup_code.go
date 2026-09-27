@@ -85,12 +85,6 @@ func hashTOTPBackupCode(secret, normalizedCode string) string {
 	return hex.EncodeToString(mac.Sum(nil))
 }
 
-// matchTOTPBackupCode reports whether a normalized recovery code matches one
-// stored digest, in constant time.
-func matchTOTPBackupCode(secret, normalizedCode, storedHash string) bool {
-	return hmac.Equal([]byte(hashTOTPBackupCode(secret, normalizedCode)), []byte(storedHash))
-}
-
 // consumeTOTPBackupCode verifies and removes one recovery code for the user.
 //
 // It opens a transaction, locks the user's active devices, compares the
@@ -129,8 +123,10 @@ func consumeTOTPBackupCodeInTx(ctx context.Context, userID, code string, now tim
 	}
 
 	for _, device := range devices {
+		digest := hashTOTPBackupCode(device.Secret, normalizedCode)
 		for i, hash := range device.BackupCodeHashes {
-			if !matchTOTPBackupCode(device.Secret, normalizedCode, hash) {
+			// Compared in constant time.
+			if !hmac.Equal([]byte(digest), []byte(hash)) {
 				continue
 			}
 
@@ -174,7 +170,7 @@ func normalizeTOTPBackupCode(code string) (string, error) {
 		return "", errTOTPBackupCodeInvalid
 	}
 	for _, r := range code {
-		if !isTOTPBackupCodeChar(r) {
+		if !strings.ContainsRune(totpBackupCodeAlphabet, r) {
 			return "", errTOTPBackupCodeInvalid
 		}
 	}
@@ -192,9 +188,4 @@ func formatTOTPBackupCode(code string) string {
 		b.WriteRune(r)
 	}
 	return b.String()
-}
-
-// isTOTPBackupCodeChar reports whether r belongs to the recovery-code alphabet.
-func isTOTPBackupCodeChar(r rune) bool {
-	return strings.ContainsRune(totpBackupCodeAlphabet, r)
 }

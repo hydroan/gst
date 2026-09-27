@@ -159,7 +159,10 @@ func (s *SchemaDumper) Dump(driver config.DBType, dst ...any) (string, error) {
 
 	for _, stmt := range statements {
 		sql := normalizeSchemaSQL(driver, stmt.SQL)
-		if shouldAnnotateSchemaStatement(sql) {
+		// Only a CREATE TABLE opens a model's section of the schema, the one
+		// place the annotation belongs.
+		createsTable := strings.HasPrefix(strings.ToUpper(strings.TrimSpace(sql)), "CREATE TABLE")
+		if createsTable {
 			sb.WriteString("-- Model: " + stmt.ModelName + "\n")
 		}
 		sb.WriteString(sqlfmt.Format(sql) + ";\n")
@@ -260,12 +263,6 @@ func requireExplicitTableName(model any) error {
 		return errors.Newf("model %T must declare an explicit table name by overriding TableName", model)
 	}
 	return nil
-}
-
-// shouldAnnotateSchemaStatement reports whether the statement opens a model's
-// section of the schema, which is the only place the annotation belongs.
-func shouldAnnotateSchemaStatement(sql string) bool {
-	return strings.HasPrefix(strings.ToUpper(strings.TrimSpace(sql)), "CREATE TABLE")
 }
 
 // dumperLogger collects the statements gorm's dry-run migrator produces

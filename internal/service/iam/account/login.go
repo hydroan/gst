@@ -165,7 +165,10 @@ func (l *LoginService) Create(ctx *gst.ServiceContext, req *modeliamaccount.Logi
 		return nil, service.NewErrorWithCause(http.StatusInternalServerError, "failed to track user session", err)
 	}
 
-	clearLoginFailures(ctx, targetUser.Username)
+	// The account's failed attempts are forgotten once it proves the
+	// password, so a user who eventually gets it right starts from zero
+	// rather than one attempt short of a lockout.
+	serviceiamsession.Store.ClearLoginFailures(ctx, targetUser.Username)
 
 	serviceiamsession.SetCookie(ctx, sessionID, expire)
 

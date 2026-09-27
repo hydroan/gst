@@ -28,7 +28,9 @@ func checkTestPlacement(root string, pkgs []*packages.Package) ([]violation, err
 	var violations []violation
 	for _, p := range pkgs {
 		switch {
-		case isExternalTest(p):
+		// The external test package, the one whose files declare package
+		// <name>_test.
+		case strings.HasSuffix(p.PkgPath, "_test"):
 			for _, path := range p.CompiledGoFiles {
 				if strings.HasSuffix(path, internalTestSuffix) {
 					file := relative(root, path)
@@ -54,12 +56,6 @@ func checkTestPlacement(root string, pkgs []*packages.Package) ([]violation, err
 	}
 	sort.Slice(violations, func(i, j int) bool { return violations[i].File < violations[j].File })
 	return violations, nil
-}
-
-// isExternalTest reports whether p is an external test package, the one whose
-// files declare package <name>_test.
-func isExternalTest(p *packages.Package) bool {
-	return strings.HasSuffix(p.PkgPath, "_test")
 }
 
 // The static pass: what a test file uses of its package, read from the syntax
