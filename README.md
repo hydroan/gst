@@ -78,6 +78,8 @@ git init
 | `lock/` | 声明锁（一件事同一时刻只做一次） |
 | `component/` | 注册常驻组件（每个副本各跑一份、跑到进程结束） |
 | `middleware/` | 注册中间件 |
+| `interceptor/` | 注册 gRPC 拦截器；只有声明了 `GRPC()` 模型的项目才有 |
+| `pb/` | 由 `gg gen` 从声明了 `GRPC()` 的模型推导的 `.proto` 和 Go 代码，提交进仓库 |
 | `router/router.gen.go` | 由 `gg gen` 生成的路由注册文件 |
 | `model/model.gen.go` | 由 `gg gen` 生成的模型注册文件 |
 | `model/apidoc.gen.go` | 由 `gg gen` 生成的注释与枚举注册文件，让 Swagger 文档在无源码的部署环境仍带字段说明和枚举值 |
@@ -223,6 +225,17 @@ func (Entry) Design() {
 - `Service()` 表示当前 action 需要生成并注册业务 service。
 - 只声明 `Create(func(){})`、`List(func(){})` 等 action 就会启用对应接口；
   `Enabled(false)` 主要用于显式关闭已声明 action。
+
+### gRPC
+
+模型顶层声明 `GRPC()`，它就同时走 gRPC：`gg gen` 从 Go 类型和 `Design()` 推导 `.proto`，进程内
+编译出 `pb/` 下的 Go 代码，并在 gRPC 服务上注册和 HTTP 路由相同的动作，业务代码只写 `service/` 那一份。
+字段用 `pb` tag 给消息编号（`pb:"11"`，框架的 `model.Base` 字段占 1 到 10），缺的 `gg gen` 会补上。
+只在 gRPC 上有的是流：自定义动作里用 `Stream(func(){...})` 声明，一侧写 `Payload`/`Result`、
+另一侧写 `StreamingPayload`/`StreamingResult`，service 方法收发 `grpc.ServerStream`、`ClientStream`
+或 `BidiStream`。监听端口在 `[grpc]` 节配置（默认 8081），反射默认开着，`grpcurl` 能直接列出服务；
+测试里 `testutil.GRPCTarget()` 给出测试服务器的 gRPC 地址。完整示例见
+[examples/demo/model/board](./examples/demo/model/board)。
 
 ## 业务 Service
 
@@ -765,7 +778,7 @@ rsp, err := cli.Post[model.SampleSealRsp](ctx, "/api/samples/seal", &model.Sampl
 
 接口测试用的是同一个客户端：`testutil.Run` 启动整个应用，`client.New(testutil.BaseURL())` 发请求，
 上下文传 `t.Context()`，`testutil.DecodeResp`、`testutil.RequireError` 配合它断言，见
-[examples/demo/ping_test.go](./examples/demo/ping_test.go)。
+[examples/demo/service/ping/list_test.go](./examples/demo/service/ping/list_test.go)。
 
 ## 配置和迁移
 
@@ -855,11 +868,13 @@ func init() {
 }
 ```
 
-应用入口会空导入 `module`，因此 `init()` 会在启动阶段执行。`iam.Register()` 把会话中间件挂到
-HTTP、把会话拦截器挂到 gRPC，`authz.Register()` 对授权做同样的事（先注册 iam 再注册 authz），
-项目声明了 `GRPC()` 也不用再挂一遍。默认账号属于业务数据，框架不代为创建；
-需要时由项目在启动钩子（如 `router.OnRoutesReady`）里通过标准数据库链写入，做法见
-`examples/demo/module/module.go` 的注释。
+应用入口会空导入 `module`，因此 `init()` 会在启动阶段执行。`Register()` 只注册模型和路由，
+会话检查由项目自己挂：`middleware/middleware.go` 里 `middleware.RegisterAuth(middleware.IAMSession())`，
+声明了 `GRPC()` 的项目再在 `interceptor/interceptor.go` 里 `interceptor.RegisterAuth(interceptor.IAMSession())`；
+用 authz 模块时 `middleware.Authz()`、`interceptor.Authz()` 挂在它们之后（认证链按注册顺序跑），
+项目自己要读当前用户的中间件也排在会话检查之后。默认账号属于业务数据，框架不代为创建：
+需要时由项目在启动钩子（如 `router.OnRoutesReady`）里通过标准数据库链写入，或者像
+`examples/demo` 的测试那样走公开的 `POST /api/signup` 注册。
 
 ## 多副本部署
 
@@ -1052,18 +1067,23 @@ prune 删什么、不删什么、按什么顺序删、什么时候问你，完�
 
 当前仓库的 `examples/demo` 是推荐阅读的完整业务项目示例：
 
+- [demo 的 README：工作流、关键字对照表、扩展点](./examples/demo/README.md)
 - [应用入口](./examples/demo/main.go)
 - [模块注册](./examples/demo/module/module.go)
 - [资源模型：Record](./examples/demo/model/record.go)
-- [嵌套资源模型：Item](./examples/demo/model/record/item.go)
-- [自定义路由资源模型：Document](./examples/demo/model/archive/document.go)
-- [公开动作模型：Login](./examples/demo/model/auth/login.go)
-- [自定义动作模型：工具类动作](./examples/demo/model/tool/entry.go)
-- [自定义动作模型：文档封存](./examples/demo/model/archive/document/seal.go)
+- [只建表不出接口的模型：Audit](./examples/demo/model/audit.go)
+- [嵌套资源与批量动作：Item](./examples/demo/model/record/item.go)
+- [自定义路由、Import 与 Export：Document](./examples/demo/model/archive/document.go)
+- [Exact 与 provider：附件](./examples/demo/model/archive/document/attachment.go)
+- [Filename 与 Flatten：工具类动作](./examples/demo/model/tool/entry.go)
+- [公开动作：Ping](./examples/demo/model/ping.go)
+- [SSE：Notice](./examples/demo/model/notice.go)
+- [gRPC 模型：Note](./examples/demo/model/board/note.go)
+- [gRPC 流：Feed](./examples/demo/model/board/feed.go)
 - [资源 service hook](./examples/demo/service/record/create.go)
-- [自定义动作 service](./examples/demo/service/tool/entry/merge.go)
-- [生成的路由注册](./examples/demo/router/router.gen.go)
-- [生成的 service 注册](./examples/demo/service/service.gen.go)
+- [自定义动作 service](./examples/demo/service/tool/merge.go)
+- [生成的路由注册](./examples/demo/router/router.gen.go)、[service 注册](./examples/demo/service/service.gen.go)、[gRPC 注册](./examples/demo/pb/pb.gen.go)
+- 扩展点：[configx](./examples/demo/configx)、[cronjob](./examples/demo/cronjob)、[component](./examples/demo/component)、[middleware](./examples/demo/middleware)、[interceptor](./examples/demo/interceptor)
 
 `examples/bench` 是压测专用项目（由 `gg new` 生成），提供 [BENCHMARK.md](./BENCHMARK.md) 中全部压测接口。
 
@@ -1171,7 +1191,8 @@ Pod 端口，Ingress 只转发写进规则的路径——**只转发 `/api` 前�
 
 `gg gen` 每新建一个 service 文件，就在旁边生成同名的 `_test.go` 骨架（外部测试包）：
 测试的第一行是一句 `t.Fatal`，下面是用框架 `client` 包按这个接口的方法、路由和请求、
-响应类型写好的示例请求；删掉第一行，示例就是一个能跑的测试，再按业务补断言。包里还没有
+响应类型写好的示例请求（流式动作则是用生成的 gRPC 客户端调它的 rpc）；删掉第一行，
+示例就是一个能跑的测试，再按业务补断言。包里还没有
 TestMain 时，再生成一个只声明 TestMain 的 `main_test.go`，用 `testutil.Run` 起默认的测试
 服务器（sqlite，不需要容器）；需要 MySQL、Redis 或播种数据的包，在它的 `testutil.Server`
 上改一次。骨架引用 testify，新项目第一次生成骨架后先跑一次 `go mod tidy`。这些文件生成后
