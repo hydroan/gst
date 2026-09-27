@@ -32,7 +32,9 @@ import (
 // which the generated service file declares; a call finding none answers
 // Unimplemented. A stream ends the way the client ends it as well: once the
 // call's context is canceled or past its deadline, whatever the service
-// returns answers the context's status (see call.ended).
+// returns answers the context's status (see call.ended); a stream the
+// listener's stop ended the same way is answered Unavailable by the
+// listener in its place (see grpcserver).
 
 // ServerStreamCall returns the call of the Stream action on route whose
 // response is streamed: given the route parameters, the request the message

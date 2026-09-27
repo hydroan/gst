@@ -331,7 +331,9 @@ func (c *call) failService(err error) error {
 // ended returns the status of the call's context once the call ended, nil
 // while it goes on: Canceled once the client canceled the call, or went
 // away, DeadlineExceeded once the deadline it set passed. A call ending
-// this way is the client's doing, not a failure of the flow or the service,
+// this way is the client's doing, or the listener's stop, which answers a
+// stream it ended Unavailable in this status's place (see grpcserver), not
+// a failure of the flow or the service,
 // whatever they returned then — a database access cut short, a Send or Recv
 // of a stream the client stopped — so the failure is answered as the
 // context's status, which the access log records, and not logged as a

@@ -1,6 +1,7 @@
 package grpcserver
 
 import (
+	"context"
 	"sync"
 
 	"github.com/cockroachdb/errors"
@@ -36,7 +37,9 @@ var (
 // stages on a stream, the rpcs of the Stream actions and the health and
 // reflection services' among them: the scope and the project's
 // interceptors run once ahead of the first message (see requestScopeStream
-// and streamOf).
+// and streamOf); innermost, the stream gets the context that ends when the
+// server begins to stop, stopping, and the stop's answer (see
+// streamShutdown).
 //
 // With OpenTelemetry enabled the server also carries otelgrpc's stats
 // handler, the counterpart of the HTTP listener's tracing middleware: it
@@ -48,12 +51,13 @@ var (
 // request scope reads the span for the call's trace id (see requestScope).
 // The handler records no message events: the HTTP span carries no body
 // events either.
-func chains() []grpc.ServerOption {
+func chains(stopping context.Context) []grpc.ServerOption {
 	onPanic := recovery.WithRecoveryHandlerContext(recovered)
 	unary := []grpc.UnaryServerInterceptor{requestScope, serverMetrics.UnaryServerInterceptor(), recovery.UnaryServerInterceptor(onPanic)}
 	unary = append(unary, projectUnaryInterceptors()...)
 	stream := []grpc.StreamServerInterceptor{requestScopeStream, serverMetrics.StreamServerInterceptor(), recovery.StreamServerInterceptor(onPanic)}
 	stream = append(stream, projectStreamInterceptors()...)
+	stream = append(stream, streamShutdown(stopping))
 	opts := []grpc.ServerOption{
 		grpc.ChainUnaryInterceptor(unary...),
 		grpc.ChainStreamInterceptor(stream...),

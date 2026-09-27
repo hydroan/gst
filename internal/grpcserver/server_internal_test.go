@@ -74,6 +74,19 @@ func observe(t *testing.T, target **zap.Logger) *observer.ObservedLogs {
 // and runs the server's interceptors first, the way the code the protobuf
 // plugin generates does.
 func serve(handlers map[string]func(ctx context.Context) error, methods ...Method) {
+	serveWith(handlers, nil, methods...)
+}
+
+// serveWith is serve with the streaming rpcs of gst.test.Echo as well, each
+// named by streams and served by the handler of its desc, a client stream,
+// a server stream or both as the desc says; the server runs them through
+// the stream chain itself.
+func serveWith(handlers map[string]func(ctx context.Context) error, streams map[string]grpc.StreamDesc, methods ...Method) {
+	streamDescs := make([]grpc.StreamDesc, 0, len(streams))
+	for name, desc := range streams {
+		desc.StreamName = name
+		streamDescs = append(streamDescs, desc)
+	}
 	descs := make([]grpc.MethodDesc, 0, len(handlers))
 	for name, handle := range handlers {
 		fullMethod := "/gst.test.Echo/" + name
@@ -102,6 +115,7 @@ func serve(handlers map[string]func(ctx context.Context) error, methods ...Metho
 			ServiceName: "gst.test.Echo",
 			HandlerType: (*any)(nil),
 			Methods:     descs,
+			Streams:     streamDescs,
 			Metadata:    "gst/test/echo.proto",
 		}, nil)
 	}, methods...)
@@ -283,6 +297,114 @@ func TestStopCutsTheCallsItsDrainLeftRunning(t *testing.T) {
 	// its access-log entry is the last thing it writes; the test outlives it.
 	close(release)
 	require.Eventually(t, func() bool { return accessLog.Len() == 1 }, 5*time.Second, 10*time.Millisecond)
+}
+
+// TestStopEndsTheStreamsAsTheUnaryCallsDrain pins what Stop does to the
+// calls in flight: a unary call runs to completion within the window, while
+// a stream ends the moment the stop begins, its context ending with the
+// shutdown and the stream answered Unavailable, "the server is shutting
+// down", so the client resumes on another replica: a server stream or a
+// bidirectional one whose handler returned nil or Canceled once its context
+// ended, the health service's Watch among them. A client stream that
+// answered before its context ended keeps its answer: a response already
+// built is not thrown away for a retry that would repeat its writes. Stop
+// returns once the unary call drained, well within the window, and the
+// access log records the streams as Unavailable.
+func TestStopEndsTheStreamsAsTheUnaryCallsDrain(t *testing.T) {
+	reset(t)
+	entered := make(chan struct{}, 8)
+	release := make(chan struct{})
+	ended := func(ss grpc.ServerStream) {
+		entered <- struct{}{}
+		<-ss.Context().Done()
+	}
+	streams := map[string]grpc.StreamDesc{
+		"Watch": {ServerStreams: true, Handler: func(_ any, ss grpc.ServerStream) error {
+			ended(ss)
+			return nil
+		}},
+		"Chat": {ServerStreams: true, ClientStreams: true, Handler: func(_ any, ss grpc.ServerStream) error {
+			ended(ss)
+			return status.FromContextError(ss.Context().Err()).Err()
+		}},
+		"Upload": {ClientStreams: true, Handler: func(_ any, ss grpc.ServerStream) error {
+			ended(ss)
+			return ss.SendMsg(&emptypb.Empty{})
+		}},
+	}
+	serveWith(map[string]func(context.Context) error{"Ping": func(context.Context) error {
+		entered <- struct{}{}
+		<-release
+		return nil
+	}}, streams)
+	conn := dial(t, start(t), nil)
+	drainTimeout = 5 * time.Second
+
+	open := func(name string) grpc.ClientStream {
+		desc := streams[name]
+		cs, err := conn.NewStream(context.Background(), &grpc.StreamDesc{StreamName: name, ServerStreams: desc.ServerStreams, ClientStreams: desc.ClientStreams}, "/gst.test.Echo/"+name)
+		require.NoError(t, err)
+		require.NoError(t, cs.SendMsg(&emptypb.Empty{}))
+		return cs
+	}
+	watching, chatting, uploading := open("Watch"), open("Chat"), open("Upload")
+	require.NoError(t, watching.CloseSend())
+	watchingHealth, err := grpc_health_v1.NewHealthClient(conn).Watch(context.Background(), &grpc_health_v1.HealthCheckRequest{})
+	require.NoError(t, err)
+	_, err = watchingHealth.Recv()
+	require.NoError(t, err, "the health watch answers the status first")
+	unary := make(chan error, 1)
+	go func() { unary <- call(context.Background(), conn, "Ping") }()
+	for range 4 {
+		<-entered
+	}
+
+	stopped := make(chan struct{})
+	begin := time.Now()
+	go func() {
+		Stop(context.Background())
+		close(stopped)
+	}()
+
+	requireShutDown := func(name string, recv func() error) {
+		t.Helper()
+		errs := make(chan error, 1)
+		go func() { errs <- recv() }()
+		select {
+		case err := <-errs:
+			require.Equal(t, codes.Unavailable, status.Code(err), "%s: %v", name, err)
+			require.Equal(t, shutdownMsg, status.Convert(err).Message(), name)
+		case <-time.After(5 * time.Second):
+			t.Fatalf("the %s stream did not end when the stop began", name)
+		}
+	}
+	requireShutDown("Watch", func() error { return watching.RecvMsg(&emptypb.Empty{}) })
+	requireShutDown("Chat", func() error { return chatting.RecvMsg(&emptypb.Empty{}) })
+	requireShutDown("health Watch", func() error { _, err := watchingHealth.Recv(); return err })
+	require.NoError(t, uploading.CloseSend())
+	require.NoError(t, uploading.RecvMsg(&emptypb.Empty{}), "a client stream that answered keeps its answer")
+	select {
+	case <-stopped:
+		t.Fatal("Stop returned before the unary call drained")
+	default:
+	}
+	close(release)
+	require.NoError(t, <-unary, "a unary call drains to completion")
+	select {
+	case <-stopped:
+	case <-time.After(5 * time.Second):
+		t.Fatal("Stop did not return once the calls drained")
+	}
+	require.Less(t, time.Since(begin), drainTimeout, "Stop waited for no window to run out")
+	require.Eventually(t, func() bool {
+		unavailable := 0
+		for _, entry := range accessLog.All() {
+			if entry.ContextMap()["status"] == codes.Unavailable.String() {
+				unavailable++
+			}
+		}
+		return unavailable == 3
+	}, 5*time.Second, 10*time.Millisecond, "the streams the stop ended are logged as Unavailable")
 }
 
 // TestRunServesTLSWhenEnabled pins that with tls_enabled the listener speaks

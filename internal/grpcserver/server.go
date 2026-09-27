@@ -1,7 +1,8 @@
 // Package grpcserver serves the gRPC services of the models declaring
 // GRPC(), on a listener of its own beside the HTTP one and on the same
 // lifecycle: bootstrap starts it with the other listeners, drains it with
-// the readiness probe and stops it within the shutdown's window. The
+// the readiness probe and stops it side by side with the HTTP listener
+// within the shutdown's window, its streams ending as the stop begins. The
 // services are the ones the generated pb/pb.gen.go registers (see Register);
 // with none registered the listener never opens, so a project without
 // gRPC has no port to expose and nothing to switch off.
@@ -40,16 +41,18 @@ var (
 	// healthServer answers the standard health checks on server; Drain
 	// turns it to NOT_SERVING.
 	healthServer *health.Server
+	// beginStop ends the context every stream of server watches, the moment
+	// Stop begins (see streamShutdown); nil before Run and after Stop.
+	beginStop context.CancelFunc
 
 	// listened, when set, is told the address the listener bound; a test
 	// seam, nothing in the framework sets it.
 	listened func(net.Addr)
 
-	// drainTimeout bounds how long Stop waits for the calls in flight: a
-	// window of its own, the shutdown stopping this listener, then the HTTP
-	// one, then the components in turn (see bootstrap), each within the
-	// same bound. A variable so a test can play the bound out in
-	// milliseconds.
+	// drainTimeout bounds how long Stop waits for the calls in flight: the
+	// window the shutdown stops this listener and the HTTP one within, side
+	// by side (see bootstrap), the components getting a window of their own
+	// after it. A variable so a test can play the bound out in milliseconds.
 	drainTimeout = lifecycle.StopTimeout
 )
 
@@ -102,11 +105,18 @@ func Run() error {
 		return err
 	}
 	cfg := config.App.GRPC
-	opts := append(chains(), grpc.KeepaliveParams(keepalive.ServerParameters{Time: cfg.KeepaliveTime, Timeout: cfg.KeepaliveTimeout}))
+	// The streams of the server watch stopping, which Stop ends; a Run
+	// that fails before serving ends it itself.
+	stopping, stop := context.WithCancel(context.Background())
+	failed := func(err error) error {
+		stop()
+		return err
+	}
+	opts := append(chains(stopping), grpc.KeepaliveParams(keepalive.ServerParameters{Time: cfg.KeepaliveTime, Timeout: cfg.KeepaliveTimeout}))
 	if cfg.TLSEnabled {
 		creds, err := credentials.NewServerTLSFromFile(cfg.CertFile, cfg.KeyFile)
 		if err != nil {
-			return errors.Wrap(err, "load the grpc server certificate")
+			return failed(errors.Wrap(err, "load the grpc server certificate"))
 		}
 		opts = append(opts, grpc.Creds(creds))
 	}
@@ -137,9 +147,10 @@ func Run() error {
 	addr := net.JoinHostPort(cfg.Listen, strconv.Itoa(cfg.Port))
 	lis, err := net.Listen("tcp", addr)
 	if err != nil {
-		return errors.Wrapf(err, "listen on %s for grpc", addr)
+		return failed(errors.Wrapf(err, "listen on %s for grpc", addr))
 	}
 	server = srv
+	beginStop = stop
 	started.Store(true)
 	if listened != nil {
 		listened(lis.Addr())
@@ -169,17 +180,19 @@ func Drain() {
 	}
 }
 
-// Stop shuts the server down: it stops accepting connections and waits for
-// the calls in flight, for up to drainTimeout and no longer than abandon
-// lasts — not at all when it has already ended, for a process that must not
-// wait on anything, see lifecycle.FailNow. The connections a drain cut
-// short are closed, their calls ended with an error, rather than left to
-// run past the teardown of what they use; a handler that ignores its
-// context's cancellation is then left to end on its own, the way an HTTP
-// handler is after Close. Neither wait holds Stop past the bound: grpc's
-// GracefulStop waits for every handler while holding the server's lock, so
-// a handler that never returns would hold a forced Stop behind that lock
-// too, and the forced stop therefore runs on a goroutine of its own.
+// Stop shuts the server down: it stops accepting connections, ends every
+// stream's context so the stream is answered Unavailable and its client
+// resumes elsewhere (see streamShutdown), and waits for the unary calls in
+// flight, for up to drainTimeout and no longer than abandon lasts — not at
+// all when it has already ended, for a process that must not wait on
+// anything, see lifecycle.FailNow. The connections a drain cut short are
+// closed, their calls ended with an error, rather than left to run past the
+// teardown of what they use; a handler that ignores its context's
+// cancellation is then left to end on its own, the way an HTTP handler is
+// after Close. Neither wait holds Stop past the bound: grpc's GracefulStop
+// waits for every handler while holding the server's lock, so a handler
+// that never returns would hold a forced Stop behind that lock too, and the
+// forced stop therefore runs on a goroutine of its own.
 func Stop(abandon context.Context) {
 	mu.Lock()
 	defer mu.Unlock()
@@ -196,6 +209,7 @@ func Stop(abandon context.Context) {
 		srv.GracefulStop()
 		close(drained)
 	}()
+	beginStop()
 	select {
 	case <-drained:
 		log.Infow("grpc server shutdown completed")
@@ -205,4 +219,5 @@ func Stop(abandon context.Context) {
 	}
 	server = nil
 	healthServer = nil
+	beginStop = nil
 }
