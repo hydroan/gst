@@ -71,6 +71,15 @@ func MustChangePasswordExempt(method, path string) bool {
 func CurrentSession(ctx *gst.ServiceContext) (string, modeliamsession.Session, error) {
 	sessionID, err := CookieSessionID(ctx)
 	if err != nil {
+		// A call without a cookie, a gRPC call, carries the session its
+		// interceptor admitted on the context (see WithCurrentSession).
+		if cachedSessionID, sessionData, ok := currentSessionFromContext(ctx); ok {
+			if err = ValidateSession(cachedSessionID, sessionData); err != nil {
+				_, _ = Store.DeleteSession(ctx, cachedSessionID)
+				return "", modeliamsession.Session{}, service.NewErrorWithCause(http.StatusUnauthorized, "session invalid", err)
+			}
+			return cachedSessionID, sessionData, nil
+		}
 		return "", modeliamsession.Session{}, err
 	}
 

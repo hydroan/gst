@@ -34,6 +34,30 @@ func TestCurrentSessionUsesRequestCache(t *testing.T) {
 	require.Equal(t, session, gotSession)
 }
 
+// TestCurrentSessionReadsTheContextWithoutACookie pins that a call without
+// a cookie to read, a gRPC call whose interceptor put the session it
+// admitted on the context, gets that session: the actions reading the
+// current session serve both listeners.
+func TestCurrentSessionReadsTheContextWithoutACookie(t *testing.T) {
+	now := time.Now().UTC()
+	sessionID := "context-session"
+	session := modeliamsession.Session{
+		ID:        sessionID,
+		UserID:    "user-1",
+		IssuedAt:  now.Add(-time.Minute),
+		ExpiresAt: now.Add(time.Hour),
+	}
+	ctx := serviceiamsession.WithCurrentSession(t.Context(), sessionID, session)
+
+	gotSessionID, gotSession, err := serviceiamsession.CurrentSession(types.NewServiceContext(nil, ctx, consts.Get))
+	require.NoError(t, err)
+	require.Equal(t, sessionID, gotSessionID)
+	require.Equal(t, session, gotSession)
+
+	_, _, err = serviceiamsession.CurrentSession(types.NewServiceContext(nil, t.Context(), consts.Get))
+	require.Error(t, err, "a call carrying no session at all is refused")
+}
+
 func TestCurrentSessionIgnoresMismatchedRequestCache(t *testing.T) {
 	clearSessions(t)
 
