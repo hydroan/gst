@@ -21,7 +21,7 @@ type Queue[E any] struct {
 }
 
 // New creates and returns a priority queue with the given comprarison function and options.
-// The provided options can be used to configures the priority queue property.
+// The provided options configure the properties of the priority queue.
 // For example:
 //   - WithSafe(): creates a thread-safe priority queue.
 //   - WithMaxPriority(): creates a priority queue where higher value has higher priority.

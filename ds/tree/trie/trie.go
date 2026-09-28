@@ -71,7 +71,7 @@ func (t *Trie[K, V]) Root() *Node[K, V] { return t.root }
 
 // Put inserts or updates a keys-value pair into the trie.
 // Returns true if the key was inserted,
-// false if the key already exists and value wa updated.
+// false if the key already exists and value was updated.
 func (t *Trie[K, V]) Put(keys []K, val V) bool {
 	if t.safe {
 		t.mu.Lock()

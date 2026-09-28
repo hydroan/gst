@@ -16,7 +16,7 @@ import (
 func loadProjectConfig() (*ggconfig.Config, error) {
 	for _, name := range ggconfig.UnreadFiles(".") {
 		if ggconfig.IsLegacyPruneSettings(name) {
-			clioutput.Warn("", "gg no longer reads %s: move its prune.ignore and prune.orphan_ignore entries into %s under prune.ignore, written as paths (directory prefixes, not regular expressions)", name, ggconfig.FileName)
+			clioutput.Warn("", "gg does not read %s: move its prune.ignore and prune.orphan_ignore entries into %s under prune.ignore, written as paths (directory prefixes, not regular expressions)", name, ggconfig.FileName)
 			continue
 		}
 		clioutput.Warn("", "gg reads only %s, not %s: rename it, or merge it into %s when both exist", ggconfig.FileName, name, ggconfig.FileName)

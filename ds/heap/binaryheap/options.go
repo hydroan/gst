@@ -4,7 +4,7 @@ import (
 	"sync"
 )
 
-// Option is a function type that can be used to configures properties of a binary heap.
+// Option is a function type that configures a property of a binary heap.
 type Option[T any] func(*Heap[T]) error
 
 // WithSafe return a Option to configure a binary heap to be thread-safe.

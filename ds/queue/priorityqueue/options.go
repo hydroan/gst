@@ -2,10 +2,10 @@ package priorityqueue
 
 import "sync"
 
-// Option is a function type that can be used to configures properties of a priority queue..
+// Option is a function type that configures a property of a priority queue.
 type Option[E any] func(q *Queue[E]) error
 
-// WithSafe creates a Option to configures a priority queue to be thread-safe.
+// WithSafe creates an Option that configures a priority queue to be thread-safe.
 func WithSafe[E any]() Option[E] {
 	return func(q *Queue[E]) error {
 		q.safe = true

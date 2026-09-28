@@ -13,7 +13,7 @@ Elasticsearch 布尔查询（Bool Query）说明
    - 作用：文档必须匹配这些条件，类似 "AND"
    - 特点：影响文档的相关性得分
    - 计分：参与计算文档的相关性得分
-   - 示例：必须是直聊 AND 必须包含某关键字
+   - 示例：必须是私信 AND 必须包含某关键字
           must: [
               { "term": { "chat_type.keyword": "direct" } },
               { "match": { "message_text": "hello" } }
@@ -61,14 +61,14 @@ Elasticsearch 布尔查询（Bool Query）说明
 4. 排除条件用 must_not：优化搜索结果
 
 常见组合示例：
-1. 直聊消息搜索：
-   - must：消息类型为直聊
+1. 私信消息搜索：
+   - must：消息类型为私信
    - should：发送者是A或接收者是A
    - filter：时间范围
    - must_not：排除系统消息
 
-2. 群聊消息搜索：
-   - must：消息类型为群聊
+2. 群组消息搜索：
+   - must：消息类型为群组
    - must：群ID匹配
    - should：包含关键词
    - filter：时间范围

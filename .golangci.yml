@@ -248,7 +248,7 @@ linters:
 
     govet:
       # shadow and nilness are not part of the default go vet analyzer set;
-      # they replace the standalone shadow/nilness binaries previously run by make.
+      # make runs them through golangci-lint rather than as standalone binaries.
       enable:
         - shadow
         - nilness

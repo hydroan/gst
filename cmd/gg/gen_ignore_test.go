@@ -256,7 +256,7 @@ func (Record) Design() {
 	if genErr != nil {
 		t.Fatal(genErr)
 	}
-	for _, want := range []string{"gg no longer reads .gg.yaml", "gg reads only gst.yaml, not gst.yml"} {
+	for _, want := range []string{"gg does not read .gg.yaml", "gg reads only gst.yaml, not gst.yml"} {
 		if !strings.Contains(stdout, want) {
 			t.Errorf("output lacks %q:\n%s", want, stdout)
 		}

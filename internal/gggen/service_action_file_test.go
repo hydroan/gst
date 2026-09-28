@@ -58,8 +58,8 @@ func {`), 0o600)
 		t.Fatal("expected broken parse to return false")
 	}
 
-	legacy := filepath.Join("testdata", "service", "user_create.go")
-	if !gggen.IsActionServiceSource(legacy) {
+	actionSource := filepath.Join("testdata", "service", "user_create.go")
+	if !gggen.IsActionServiceSource(actionSource) {
 		t.Fatal("expected testdata service file to be recognized")
 	}
 }
