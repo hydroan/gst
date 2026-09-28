@@ -40,7 +40,7 @@ gst · HTTP 与 gRPC 两条传输线
     <div class="arch-arrow">▼</div>
     <div class="arch-layer stage">
       <div class="arch-layer-title">④ 监听与链 · bootstrap 起两个监听</div>
-      <div class="arch-grid arch-grid-3"><div class="arch-box lane http"><b>gin，[server] 默认 8080</b><ul><li>内建链 <code>middleware.Builtin()</code>：tracing → accessLogger → bodyLogger → recovery → cors → routeParams → strictQuery。</li><li>再挂 <code>middleware.Register</code> 的通用中间件；认证组再挂 <code>middleware.RegisterAuth</code> 的（JwtAuth / IAMSession / Authz）。</li></ul></div><div class="arch-box lane shared"><b>bootstrap</b><ul><li><code>router.Init()</code> 装好路由后 <code>RegisterGo(router.Run, grpcserver.Run)</code> 并行起监听。</li><li>logger、metrics、otel、database、redis 两边共用同一份初始化。</li></ul></div><div class="arch-box lane grpc"><b>grpc.NewServer，[grpc] 默认 8081</b><ul><li>一元链与流链同序：requestScope → 指标 → recovery → <code>interceptor.Register</code> 的通用拦截器 → <code>interceptor.RegisterAuth</code> 的鉴权拦截器（Public 方法与 health、reflection 不经过）。</li><li>OTEL 开着时加 otelgrpc stats handler；health 服务、反射（可关）、keepalive、TLS。</li><li>没有注册任何服务就不开监听。</li></ul></div></div>
+      <div class="arch-grid arch-grid-3"><div class="arch-box lane http"><b>gin，[server] 默认 8080</b><ul><li>内建链 <code>middleware.Builtin()</code>：tracing → accessLogger → bodyLogger → recovery → cors → routeParams → strictQuery。</li><li>再挂 <code>middleware.Register</code> 的通用中间件；认证组再挂 <code>middleware.RegisterAuth</code> 的（JwtAuth / IAMSession / Authz）。</li></ul></div><div class="arch-box lane shared"><b>bootstrap</b><ul><li><code>router.Init()</code> 装好路由后 <code>RegisterGo(router.Run, grpcserver.Run)</code> 并行起监听。</li><li>logger、metrics、otel、database、redis 两边共用同一份初始化。</li></ul></div><div class="arch-box lane grpc"><b>grpc.NewServer，[grpc] 默认 8081</b><ul><li>一元链与流链同序：requestScope → 指标 → recovery → <code>interceptor.Register</code> 的通用拦截器 → <code>interceptor.RegisterAuth</code> 的鉴权拦截器（Public 方法与 health、reflection 不经过）。</li><li>OTEL 开着时加 otelgrpc stats handler；health 服务（整体与每个服务）、反射（可关）、keepalive 与 ping 策略、连接寿命、消息上限、TLS。</li><li>没有注册任何服务就不开监听。</li></ul></div></div>
     </div>
     <div class="arch-arrow">▼</div>
     <div class="arch-layer stage">
@@ -240,7 +240,7 @@ call --> client : OK，或映射后的 status；取消答 Canceled，停机答 U
 - bootstrap 顺序：配置 → 日志 → 数据库与 redis 等 → `router.Init()`（内建链、路由、模块）→ `RegisterGo(router.Run, grpcserver.Run)`。
 - gRPC 监听只在有注册服务时启动；启动时若有非 Public 方法却没挂鉴权拦截器，打一条 Warn。
 - 停机：`controller.Probe.Drain()` 让 `/-/readyz` 答 503，`grpcserver.Drain()` 让 health 答 NOT_SERVING，等 shutdown_delay 过去，再跑 cleanup：`router.Stop` 与 `grpcserver.Stop` 并发、共用一个 30 秒窗口（HTTP 等在途请求、SSE 流即刻结束；gRPC 的 GracefulStop 等一元调用、在途流的 ctx 即刻结束并答 Unavailable，窗口用完强制断开），之后组件在自己的 30 秒窗口里停。
-- 多副本下客户端靠这两个探针切走流量；k8s 的 readinessProbe 打 HTTP，gRPC 的 native health probe 打 health 服务。
+- 多副本下客户端靠这两个探针切走流量；k8s 的 readinessProbe 打 HTTP，gRPC 的 native health probe 打 health 服务，可指名一个服务。
 
 观测两边对齐：
 

@@ -10,12 +10,14 @@ package grpcserver
 
 import (
 	"context"
+	"math"
 	"net"
 	"strconv"
 	"sync"
 	"sync/atomic"
 
 	"github.com/cockroachdb/errors"
+	"github.com/dustin/go-humanize"
 	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/internal/lifecycle"
 	"go.uber.org/zap"
@@ -38,8 +40,9 @@ var (
 	started atomic.Bool
 	// server is the running server, nil before Run and after Stop.
 	server *grpc.Server
-	// healthServer answers the standard health checks on server; Drain
-	// turns it to NOT_SERVING.
+	// healthServer answers the standard health checks on server, for the
+	// process and for each service the server carries; Drain turns every
+	// status to NOT_SERVING.
 	healthServer *health.Server
 	// beginStop ends the context every stream of server watches, the moment
 	// Stop begins (see streamShutdown); nil before Run and after Stop.
@@ -113,7 +116,33 @@ func Run() error {
 		stop()
 		return err
 	}
-	opts := append(chains(stopping), grpc.KeepaliveParams(keepalive.ServerParameters{Time: cfg.KeepaliveTime, Timeout: cfg.KeepaliveTimeout}))
+	// The keys of the grpc section are grpc-go's own parameters, handed
+	// over as they are: zero where unset, which grpc-go fills with its own
+	// defaults.
+	opts := append(chains(stopping),
+		grpc.KeepaliveParams(keepalive.ServerParameters{
+			Time:                  cfg.KeepaliveTime,
+			Timeout:               cfg.KeepaliveTimeout,
+			MaxConnectionAge:      cfg.MaxConnectionAge,
+			MaxConnectionAgeGrace: cfg.MaxConnectionAgeGrace,
+		}),
+		grpc.KeepaliveEnforcementPolicy(keepalive.EnforcementPolicy{
+			MinTime:             cfg.KeepaliveMinTime,
+			PermitWithoutStream: cfg.KeepalivePermitWithoutStream,
+		}),
+	)
+	if cfg.MaxRecvMsgSize != "" {
+		size, err := humanize.ParseBytes(cfg.MaxRecvMsgSize)
+		if err != nil {
+			return failed(errors.Wrapf(err, "parse grpc.max_recv_msg_size %q", cfg.MaxRecvMsgSize))
+		}
+		// A message's length is a 32-bit field of the wire, and no message
+		// at all would fit under zero.
+		if size == 0 || size > math.MaxInt32 {
+			return failed(errors.Newf("grpc.max_recv_msg_size %q is not between 1 byte and %s", cfg.MaxRecvMsgSize, humanize.IBytes(math.MaxInt32)))
+		}
+		opts = append(opts, grpc.MaxRecvMsgSize(int(size)))
+	}
 	if cfg.TLSEnabled {
 		creds, err := credentials.NewServerTLSFromFile(cfg.CertFile, cfg.KeyFile)
 		if err != nil {
@@ -134,12 +163,18 @@ func Run() error {
 		log.Warnw("grpc server serves non-public methods with no auth interceptor registered", "methods", unguarded)
 	}
 	// The health service answers SERVING from the start and NOT_SERVING
-	// from Drain on, the readiness the HTTP probe reports; the reflection
-	// service lets grpcurl and its kind list what the server carries.
+	// from Drain on, the readiness the HTTP probe reports, for the process
+	// and for each service the server carries by name, so that a probe
+	// naming a service, the way a Kubernetes gRPC probe may, is answered;
+	// the reflection service lets grpcurl and its kind list what the server
+	// carries.
 	healthServer = health.NewServer()
 	grpc_health_v1.RegisterHealthServer(srv, healthServer)
 	if cfg.Reflection {
 		reflection.Register(srv)
+	}
+	for name := range srv.GetServiceInfo() {
+		healthServer.SetServingStatus(name, grpc_health_v1.HealthCheckResponse_SERVING)
 	}
 	// Every method's series exist from the start, at zero, so a dashboard
 	// finds them before the first call.
@@ -169,10 +204,11 @@ func Run() error {
 	return nil
 }
 
-// Drain turns the health service to NOT_SERVING, so a balancer checking it
-// stops sending traffic here, the way controller.Probe.Drain fails the HTTP
-// readiness probe; the services keep answering what still arrives. Bootstrap
-// calls both when the process is told to stop, ahead of the shutdown delay.
+// Drain turns the health service to NOT_SERVING, for the process and every
+// service it names, so a balancer checking it stops sending traffic here,
+// the way controller.Probe.Drain fails the HTTP readiness probe; the
+// services keep answering what still arrives. Bootstrap calls both when the
+// process is told to stop, ahead of the shutdown delay.
 func Drain() {
 	mu.Lock()
 	defer mu.Unlock()

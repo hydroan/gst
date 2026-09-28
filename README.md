@@ -239,9 +239,15 @@ func (Entry) Design() {
 
 监听在 `[grpc]` 节配置，环境变量是 `GRPC_PORT` 这样的写法：`listen`、`port`（默认 8081，挨着 HTTP 的 8080）、
 `tls_enabled`、`cert_file`、`key_file`（默认明文，和 HTTP 监听一样交给前面的入口终止 TLS）、`reflection`
-（默认开，`grpcurl` 能直接列出服务）、`keepalive_time`、`keepalive_timeout`（默认取 grpc-go 自己的值）。
+（默认开，`grpcurl` 能直接列出服务）。其余键就是 grpc-go 的服务端参数，不填就用 grpc-go 自己的默认值：
+`keepalive_time`、`keepalive_timeout`（服务端多久没动静就 ping 客户端、等多久没回音就断开，默认 2 小时、20 秒）；
+`keepalive_min_time`、`keepalive_permit_without_stream`（客户端两次 ping 最少隔多久、没有调用时能不能 ping，默认 5 分钟、不能，
+ping 得更勤的客户端会被 `too_many_pings` 断开，客户端的 keepalive 要照这两个值配）；`max_connection_age`、`max_connection_age_grace`
+（一条连接活多久就让客户端重连、在途的调用再宽限多久，默认不限；经 Kubernetes Service 这类按连接分流的入口，长连接不换就一直落在老副本上，靠它换到新副本）；
+`max_recv_msg_size`（收多大的消息，写 `8MB` 这样带单位的值，默认 4MB，更大的消息答 ResourceExhausted）。
 没有模型声明 `GRPC()` 的项目不开这个端口。监听上还有两个框架自带的服务：标准的健康服务
 `grpc.health.v1.Health`，进程在服务时答 SERVING，收到停机信号后和 `/-/readyz` 同时变成 NOT_SERVING，
+每个服务按全名也各报一份、和整体同起同落，Kubernetes 的 gRPC 探针指名 `service` 时问的就是它；
 停机延迟过后两个监听一起关闭，在途的流在那一刻以 Unavailable 结束、客户端据此换副本重连，一元调用照常排空；以及反射服务。认证在 `interceptor/` 里挂，和 `middleware/` 一一对应：
 `interceptor.RegisterAuth(interceptor.IAMSession())` 之后，每个没声明 `Public()` 的 rpc 都要在
 `authorization` 元数据里带 `Bearer <会话 id>`；会话绑定登录时的 User-Agent，程序要拿会话调 gRPC，登录时得带和 gRPC 客户端
@@ -1200,7 +1206,7 @@ Pod 端口，Ingress 只转发写进规则的路径——**只转发 `/api` 前�
 | `/metrics` | 已被访问过的路由（gin 路由模式）及其请求数与延迟分布、缓存计数器上的数据库表名、进程内存与 CPU、构建信息；框架自己的指标名以 `gst_backend_` 开头，gRPC 的是 grpc-go 生态默认的 `grpc_server_` |
 | `/openapi.json` | 本服务注册的全部路由，以及每个路由的请求与响应模型 |
 | `/docs` | 同一份文档的 Swagger UI 渲染；页面资源编译进二进制，不从任何 CDN 加载脚本，离线可用 |
-| gRPC 的 `grpc.health.v1.Health` 与反射服务 | 进程是否在服务，以及注册了哪些服务和消息；不经过项目的认证拦截器，`Register` 挂的通用拦截器照样经过 |
+| gRPC 的 `grpc.health.v1.Health` 与反射服务 | 进程和每个服务是否在服务，以及注册了哪些服务和消息；不经过项目的认证拦截器，`Register` 挂的通用拦截器照样经过 |
 
 ### 为什么 `gg gen` 之后 `go test` 是红的？
 

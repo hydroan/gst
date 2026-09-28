@@ -9,6 +9,7 @@ import (
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/pem"
+	"io"
 	"math/big"
 	"net"
 	"os"
@@ -23,6 +24,7 @@ import (
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 	"go.uber.org/zap/zaptest/observer"
+	"golang.org/x/net/http2"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials"
@@ -31,6 +33,7 @@ import (
 	"google.golang.org/grpc/reflection/grpc_reflection_v1"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/emptypb"
+	"google.golang.org/protobuf/types/known/wrapperspb"
 )
 
 // The tests share the package's state, so they reset it and run one at a
@@ -174,12 +177,13 @@ func call(ctx context.Context, conn *grpc.ClientConn, name string, opts ...grpc.
 	return conn.Invoke(ctx, "/gst.test.Echo/"+name, &emptypb.Empty{}, &emptypb.Empty{}, opts...)
 }
 
-// healthOf checks the server's overall health over conn.
-func healthOf(t *testing.T, conn *grpc.ClientConn) grpc_health_v1.HealthCheckResponse_ServingStatus {
+// healthOf checks the health of service over conn, the server's overall
+// health when service is empty.
+func healthOf(t *testing.T, conn *grpc.ClientConn, service string) grpc_health_v1.HealthCheckResponse_ServingStatus {
 	t.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	rsp, err := grpc_health_v1.NewHealthClient(conn).Check(ctx, &grpc_health_v1.HealthCheckRequest{})
+	rsp, err := grpc_health_v1.NewHealthClient(conn).Check(ctx, &grpc_health_v1.HealthCheckRequest{Service: service})
 	require.NoError(t, err)
 	return rsp.GetStatus()
 }
@@ -207,6 +211,42 @@ func services(t *testing.T, conn *grpc.ClientConn) ([]string, error) {
 	return names, nil
 }
 
+// http2Conn opens a raw HTTP/2 connection to addr, the client preface and
+// an empty SETTINGS frame sent, and returns the framer reading and writing
+// it, for a test driving what a gRPC client keeps out of sight: the pings
+// it sends, the GOAWAY frames it gets and the connection closing under it.
+// The connection has ten seconds to live, so a frame that never comes
+// fails the test with a deadline error instead of holding it.
+func http2Conn(t *testing.T, addr string) *http2.Framer {
+	t.Helper()
+	conn, err := net.Dial("tcp", addr)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = conn.Close() })
+	require.NoError(t, conn.SetDeadline(time.Now().Add(10*time.Second)))
+	_, err = io.WriteString(conn, http2.ClientPreface)
+	require.NoError(t, err)
+	framer := http2.NewFramer(conn, conn)
+	require.NoError(t, framer.WriteSettings())
+	return framer
+}
+
+// nextFrameOf reads frames from framer until one of type T arrives and
+// returns it, failing the test on a GOAWAY frame arriving first, which
+// says the server ended the connection instead.
+func nextFrameOf[T http2.Frame](t *testing.T, framer *http2.Framer) T {
+	t.Helper()
+	for {
+		frame, err := framer.ReadFrame()
+		require.NoError(t, err)
+		if f, ok := frame.(T); ok {
+			return f
+		}
+		if goAway, ok := frame.(*http2.GoAwayFrame); ok {
+			t.Fatalf("the server went away, %s, before a %T arrived", goAway.DebugData(), *new(T))
+		}
+	}
+}
+
 // TestRunOpensNoListenerWithoutAService pins that a process registering no
 // gRPC service exposes no port: Run returns at once, having listened on
 // nothing, and Stop has nothing to stop.
@@ -232,8 +272,10 @@ func TestHasServicesReportsARegistration(t *testing.T) {
 
 // TestRunServesTheRegisteredServicesWithHealthAndReflection pins what the
 // listener carries: the registered service, the standard health service
-// answering SERVING until Drain turns it to NOT_SERVING, and the reflection
-// service listing them all.
+// answering SERVING for the process and for each service the server
+// carries by name, NOT_FOUND for a name it does not, until Drain turns
+// every status to NOT_SERVING, and the reflection service listing them
+// all.
 func TestRunServesTheRegisteredServicesWithHealthAndReflection(t *testing.T) {
 	reset(t)
 	echo(nil, nil)
@@ -242,7 +284,10 @@ func TestRunServesTheRegisteredServicesWithHealthAndReflection(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	require.NoError(t, call(ctx, conn, "Ping"))
-	require.Equal(t, grpc_health_v1.HealthCheckResponse_SERVING, healthOf(t, conn))
+	require.Equal(t, grpc_health_v1.HealthCheckResponse_SERVING, healthOf(t, conn, ""))
+	require.Equal(t, grpc_health_v1.HealthCheckResponse_SERVING, healthOf(t, conn, "gst.test.Echo"), "a probe may ask for one service by name")
+	_, err := grpc_health_v1.NewHealthClient(conn).Check(ctx, &grpc_health_v1.HealthCheckRequest{Service: "gst.test.Nowhere"})
+	require.Equal(t, codes.NotFound, status.Code(err))
 	names, err := services(t, conn)
 	require.NoError(t, err)
 	require.Contains(t, names, "gst.test.Echo")
@@ -250,7 +295,8 @@ func TestRunServesTheRegisteredServicesWithHealthAndReflection(t *testing.T) {
 
 	Drain()
 
-	require.Equal(t, grpc_health_v1.HealthCheckResponse_NOT_SERVING, healthOf(t, conn))
+	require.Equal(t, grpc_health_v1.HealthCheckResponse_NOT_SERVING, healthOf(t, conn, ""))
+	require.Equal(t, grpc_health_v1.HealthCheckResponse_NOT_SERVING, healthOf(t, conn, "gst.test.Echo"))
 	require.NoError(t, call(ctx, conn, "Ping"), "draining fails readiness, the service itself keeps answering")
 }
 
@@ -419,7 +465,7 @@ func TestRunServesTLSWhenEnabled(t *testing.T) {
 	addr := start(t)
 
 	secure := dial(t, addr, credentials.NewTLS(&tls.Config{InsecureSkipVerify: true})) // a self-signed test certificate
-	require.Equal(t, grpc_health_v1.HealthCheckResponse_SERVING, healthOf(t, secure))
+	require.Equal(t, grpc_health_v1.HealthCheckResponse_SERVING, healthOf(t, secure, ""))
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	require.NoError(t, call(ctx, secure, "Look"))
@@ -454,6 +500,129 @@ func TestRunFailsOnAnAddressItCannotBind(t *testing.T) {
 	echo(nil, nil)
 
 	require.Error(t, Run())
+}
+
+// TestRunLimitsTheMessagesItReceivesToMaxRecvMsgSize pins the
+// max_recv_msg_size key: a message above it is refused with
+// ResourceExhausted, and with the key unset grpc-go's own limit of 4MB
+// holds. Ping ignores what its message carries, so the message may be
+// 2KB of bytes.
+func TestRunLimitsTheMessagesItReceivesToMaxRecvMsgSize(t *testing.T) {
+	oversized := &wrapperspb.BytesValue{Value: make([]byte, 2048)}
+	t.Run("unset, grpc-go's 4MB holds", func(t *testing.T) {
+		reset(t)
+		echo(nil, nil)
+		conn := dial(t, start(t), nil)
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+
+		require.NoError(t, conn.Invoke(ctx, "/gst.test.Echo/Ping", oversized, &emptypb.Empty{}))
+	})
+	t.Run("1KB refuses a 2KB message", func(t *testing.T) {
+		reset(t)
+		config.App.GRPC.MaxRecvMsgSize = "1KB"
+		echo(nil, nil)
+		conn := dial(t, start(t), nil)
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+
+		err := conn.Invoke(ctx, "/gst.test.Echo/Ping", oversized, &emptypb.Empty{})
+		require.Equal(t, codes.ResourceExhausted, status.Code(err))
+		require.NoError(t, call(ctx, conn, "Ping"), "an empty message is within the limit")
+	})
+}
+
+// TestRunRefusesAMaxRecvMsgSizeItCannotApply pins that a max_recv_msg_size
+// the listener cannot apply, not a size, nothing, or more than a message
+// may carry, is an error Run reports before it opens the listener, which
+// brings the process down the way a port it cannot bind does, rather than
+// a limit quietly left at grpc-go's own.
+func TestRunRefusesAMaxRecvMsgSizeItCannotApply(t *testing.T) {
+	for _, size := range []string{"lots", "0", "3GB"} {
+		t.Run(size, func(t *testing.T) {
+			reset(t)
+			config.App.GRPC.MaxRecvMsgSize = size
+			echo(nil, nil)
+			opened := make(chan net.Addr, 1)
+			listened = func(addr net.Addr) { opened <- addr }
+			t.Cleanup(func() { listened = nil })
+			t.Cleanup(func() { Stop(context.Background()) })
+			errs := make(chan error, 1)
+			go func() { errs <- Run() }()
+
+			select {
+			case err := <-errs:
+				require.ErrorContains(t, err, "grpc.max_recv_msg_size")
+			case <-opened:
+				t.Fatal("the listener opened with a size it cannot apply")
+			}
+		})
+	}
+}
+
+// TestRunClosesAConnectionPastItsMaxConnectionAge pins the
+// max_connection_age and max_connection_age_grace keys: a connection
+// older than the age is told to go away, max_age the reason, and closed
+// once the grace has passed. A raw HTTP/2 connection shows both, where a
+// gRPC client would quietly reconnect.
+func TestRunClosesAConnectionPastItsMaxConnectionAge(t *testing.T) {
+	reset(t)
+	config.App.GRPC.MaxConnectionAge = 50 * time.Millisecond
+	config.App.GRPC.MaxConnectionAgeGrace = 50 * time.Millisecond
+	echo(nil, nil)
+	framer := http2Conn(t, start(t))
+
+	goAway := nextFrameOf[*http2.GoAwayFrame](t, framer)
+	require.Equal(t, http2.ErrCodeNo, goAway.ErrCode)
+	require.Equal(t, "max_age", string(goAway.DebugData()))
+	// grpc-go closes the connection a second after the grace, the time it
+	// leaves the client to read what was sent, so that the close is a FIN
+	// and not a reset.
+	for {
+		_, err := framer.ReadFrame()
+		if err == nil {
+			continue
+		}
+		require.NotErrorIs(t, err, os.ErrDeadlineExceeded, "the server closes the connection once the grace has passed")
+		return
+	}
+}
+
+// TestRunEnforcesTheKeepalivePolicy pins the keepalive_min_time and
+// keepalive_permit_without_stream keys through the pings the policy
+// judges. With the keys unset grpc-go's own policy holds: a connection
+// with no call on it pinging again within two hours is told to go away on
+// its fourth ping, too_many_pings the reason, a strike per ping after the
+// first and three strikes ending the connection. Permitting pings with no
+// call on the connection, a millisecond apart at least, a fifth ping is
+// answered like the four before it; the server answers a ping before it
+// judges it, so the fifth is the one that tells the policies apart.
+func TestRunEnforcesTheKeepalivePolicy(t *testing.T) {
+	t.Run("unset, grpc-go's policy ends the connection on the fourth ping", func(t *testing.T) {
+		reset(t)
+		echo(nil, nil)
+		framer := http2Conn(t, start(t))
+
+		for i := range 4 {
+			require.NoError(t, framer.WritePing(false, [8]byte{byte(i)}))
+		}
+		goAway := nextFrameOf[*http2.GoAwayFrame](t, framer)
+		require.Equal(t, http2.ErrCodeEnhanceYourCalm, goAway.ErrCode)
+		require.Equal(t, "too_many_pings", string(goAway.DebugData()))
+	})
+	t.Run("pings permitted without a call, a millisecond apart, are answered", func(t *testing.T) {
+		reset(t)
+		config.App.GRPC.KeepaliveMinTime = time.Millisecond
+		config.App.GRPC.KeepalivePermitWithoutStream = true
+		echo(nil, nil)
+		framer := http2Conn(t, start(t))
+
+		for i := range 5 {
+			time.Sleep(5 * time.Millisecond)
+			require.NoError(t, framer.WritePing(false, [8]byte{byte(i)}))
+			require.True(t, nextFrameOf[*http2.PingFrame](t, framer).IsAck())
+		}
+	})
 }
 
 // selfSigned writes a self-signed certificate and its key for 127.0.0.1

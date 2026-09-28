@@ -277,8 +277,9 @@ func TestInitDefaultsToInMemorySqliteWithoutConfigFile(t *testing.T) {
 }
 
 // TestInitDefaultsTheGRPCListener pins the defaults of the grpc section: port
-// 8081 on every interface, reflection on, plaintext, keepalive left to
-// grpc-go; and that the environment overrides them like any other section.
+// 8081 on every interface, reflection on, plaintext, keepalive, its policy,
+// the connection age and the message size left to grpc-go; and that the
+// environment overrides them like any other section.
 func TestInitDefaultsTheGRPCListener(t *testing.T) {
 	clearConfigEnvForTest(t)
 	t.Chdir(t.TempDir())
@@ -292,10 +293,23 @@ func TestInitDefaultsTheGRPCListener(t *testing.T) {
 	t.Setenv(config.GRPC_PORT, "9999")
 	t.Setenv(config.GRPC_REFLECTION, "false")
 	t.Setenv(config.GRPC_KEEPALIVE_TIME, "30s")
+	t.Setenv(config.GRPC_KEEPALIVE_MIN_TIME, "1m")
+	t.Setenv(config.GRPC_KEEPALIVE_PERMIT_WITHOUT_STREAM, "true")
+	t.Setenv(config.GRPC_MAX_CONNECTION_AGE, "5m")
+	t.Setenv(config.GRPC_MAX_CONNECTION_AGE_GRACE, "20s")
+	t.Setenv(config.GRPC_MAX_RECV_MSG_SIZE, "8MB")
 	if err := config.Init(); err != nil {
 		t.Fatal(err)
 	}
-	assert.Equal(t, config.GRPC{Port: 9999, KeepaliveTime: 30 * time.Second}, config.App.GRPC)
+	assert.Equal(t, config.GRPC{
+		Port:                         9999,
+		KeepaliveTime:                30 * time.Second,
+		KeepaliveMinTime:             time.Minute,
+		KeepalivePermitWithoutStream: true,
+		MaxConnectionAge:             5 * time.Minute,
+		MaxConnectionAgeGrace:        20 * time.Second,
+		MaxRecvMsgSize:               "8MB",
+	}, config.App.GRPC)
 }
 
 // Sample is a registered section read from the file and its default tags.

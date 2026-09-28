@@ -89,7 +89,7 @@ func TestUseAuthLeavesTheServersOwnServicesAlone(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	require.Equal(t, grpc_health_v1.HealthCheckResponse_SERVING, healthOf(t, conn))
+	require.Equal(t, grpc_health_v1.HealthCheckResponse_SERVING, healthOf(t, conn, ""))
 	watch, err := grpc_health_v1.NewHealthClient(conn).Watch(ctx, &grpc_health_v1.HealthCheckRequest{})
 	require.NoError(t, err)
 	first, err := watch.Recv()
