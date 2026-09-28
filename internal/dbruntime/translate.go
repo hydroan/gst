@@ -17,8 +17,10 @@ var ErrValueTooLong = errors.New("value too long for its column")
 // goes to the driver's translator, and through untouched when the driver
 // has none. gorm looks the translator up on the dialector (see
 // gorm.ErrorTranslator), so the wrapping is a dialector of its own,
-// forwarding the savepoints, which an embedded interface would otherwise
-// hide; the migrator is part of the interface and forwards on its own.
+// forwarding the savepoints and the driver's Apply, the settings it hands
+// gorm's configuration before gorm fills in its defaults, which an embedded
+// interface would otherwise hide; the migrator is part of the interface and
+// forwards on its own.
 func Translating(dialector gorm.Dialector, translate func(err error) error) gorm.Dialector {
 	return translatingDialector{Dialector: dialector, translate: translate}
 }
@@ -27,6 +29,13 @@ func Translating(dialector gorm.Dialector, translate func(err error) error) gorm
 type translatingDialector struct {
 	gorm.Dialector
 	translate func(err error) error
+}
+
+func (d translatingDialector) Apply(config *gorm.Config) error {
+	if applier, ok := d.Dialector.(interface{ Apply(*gorm.Config) error }); ok {
+		return applier.Apply(config)
+	}
+	return nil
 }
 
 func (d translatingDialector) Translate(err error) error {
