@@ -29,9 +29,10 @@ type ServiceContext struct {
 
 	phase consts.Phase
 
-	// rawResponseAttempted records that a service asked for a raw HTTP
-	// response while the context carried none; RawResponseAttempted reads it.
-	rawResponseAttempted bool
+	// httpOnlyMethodCalled records that a service called a method only an
+	// HTTP request can serve (see HTTPOnlyMethods) while the context carried
+	// none; HTTPOnlyMethodCalled reads it.
+	httpOnlyMethodCalled bool
 }
 
 // NewServiceContext builds a ServiceContext from the Gin request, capturing
@@ -139,15 +140,17 @@ func (sc *ServiceContext) IsHTTPS() bool     { return requestctx.FromContext(sc)
 // an HTTP request carries, Data and SSE write the response themselves, and
 // SetCookie writes a response header. Over gRPC they have nothing to work
 // on, so the services of a model declaring GRPC() must not call them; gg
-// check holds them to it (its check named gRPC service context).
+// check holds them to it (its check named gRPC service context), and a
+// call that reaches one at run time records it for HTTPOnlyMethodCalled,
+// which the transport answers as a failure once the service returns.
 var HTTPOnlyMethods = []string{"Cookie", "Data", "FormFile", "PostForm", "SSE", "SetCookie"}
 
 // Data writes data as the response body with the given status and content
 // type. Without a response to write to it writes nothing and records the
-// attempt for RawResponseAttempted.
+// call for HTTPOnlyMethodCalled.
 func (sc *ServiceContext) Data(code int, contentType string, data []byte) {
 	if sc == nil || sc.ginCtx == nil {
-		sc.recordRawResponseAttempt()
+		sc.recordHTTPOnlyMethodCall()
 		return
 	}
 	sc.ginCtx.Data(code, contentType, data)
@@ -167,7 +170,7 @@ func (sc *ServiceContext) Data(code int, contentType string, data []byte) {
 // The error is fn's own error, or the setup failure that prevented streaming
 // (reported before anything was written, so it still surfaces as a regular
 // error response). Without a response to stream on it records the attempt for
-// RawResponseAttempted and reports the failure.
+// HTTPOnlyMethodCalled and reports the failure.
 //
 // Example:
 //
@@ -185,64 +188,77 @@ func (sc *ServiceContext) Data(code int, contentType string, data []byte) {
 //	})
 func (sc *ServiceContext) SSE(fn func(conn *sse.Conn) error, opts ...sse.Option) error {
 	if sc == nil || sc.ginCtx == nil {
-		sc.recordRawResponseAttempt()
+		sc.recordHTTPOnlyMethodCall()
 		return errors.New("service context carries no HTTP response to stream on")
 	}
 	return sse.Serve(sc.ginCtx.Writer, sc.ginCtx.Request, fn, opts...)
 }
 
 // SetCookie adds cookie to the response headers. Without a response to write
-// to it writes nothing and records the attempt for RawResponseAttempted; a
+// to it writes nothing and records the call for HTTPOnlyMethodCalled; a
 // nil cookie is nothing to write on any transport and records nothing.
 func (sc *ServiceContext) SetCookie(cookie *http.Cookie) {
 	if sc == nil || cookie == nil {
 		return
 	}
 	if sc.responseWriter == nil {
-		sc.recordRawResponseAttempt()
+		sc.recordHTTPOnlyMethodCall()
 		return
 	}
 	http.SetCookie(sc.responseWriter, cookie)
 }
 
-// recordRawResponseAttempt marks that a service asked for a raw HTTP response
-// the context cannot write; a nil context has nothing to mark.
-func (sc *ServiceContext) recordRawResponseAttempt() {
+// recordHTTPOnlyMethodCall marks that a service called a method only an HTTP
+// request can serve while the context carried none; a nil context has
+// nothing to mark.
+func (sc *ServiceContext) recordHTTPOnlyMethodCall() {
 	if sc != nil {
-		sc.rawResponseAttempted = true
+		sc.httpOnlyMethodCalled = true
 	}
 }
 
-// RawResponseAttempted reports whether a service asked sc for a raw HTTP
-// response -- a body, a stream or a cookie -- while sc carried no HTTP
-// response to write to. The write itself is a no-op; the transport behind such
-// a context reads the flag once the service returns and refuses the request,
-// because the response the service meant to send cannot be carried. It is a
-// package function rather than a method so it stays out of the public alias
-// of ServiceContext: only the framework's transports read it.
-func RawResponseAttempted(sc *ServiceContext) bool {
-	return sc != nil && sc.rawResponseAttempted
+// HTTPOnlyMethodCalled reports whether a service called a method of sc only
+// an HTTP request can serve (see HTTPOnlyMethods) -- wrote a body, a stream
+// or a cookie, or read a cookie, a form value or a file -- while sc carried
+// no HTTP request or response. The call itself does nothing, answering the
+// zero value where it reads; the transport behind such a context reads the
+// flag once the service returns and refuses the request, because what the
+// service meant to send cannot be carried and what it meant to read was
+// never there. It is a package function rather than a method so it stays
+// out of the public alias of ServiceContext: only the framework's transports
+// read it.
+func HTTPOnlyMethodCalled(sc *ServiceContext) bool {
+	return sc != nil && sc.httpOnlyMethodCalled
 }
 
-// Cookie returns the value of the named request cookie.
+// Cookie returns the value of the named request cookie. Without a request
+// to read it answers an error and records the call for
+// HTTPOnlyMethodCalled.
 func (sc *ServiceContext) Cookie(name string) (string, error) {
 	if sc == nil || sc.ginCtx == nil {
+		sc.recordHTTPOnlyMethodCall()
 		return "", errors.New("service context has no gin context")
 	}
 	return sc.ginCtx.Cookie(name)
 }
 
-// PostForm returns the named value of the request's form body.
+// PostForm returns the named value of the request's form body. Without a
+// request to read it answers "" and records the call for
+// HTTPOnlyMethodCalled.
 func (sc *ServiceContext) PostForm(key string) string {
 	if sc == nil || sc.ginCtx == nil {
+		sc.recordHTTPOnlyMethodCall()
 		return ""
 	}
 	return sc.ginCtx.PostForm(key)
 }
 
-// FormFile returns the named file of the request's multipart form.
+// FormFile returns the named file of the request's multipart form. Without
+// a request to read it answers an error and records the call for
+// HTTPOnlyMethodCalled.
 func (sc *ServiceContext) FormFile(name string) (*multipart.FileHeader, error) {
 	if sc == nil || sc.ginCtx == nil {
+		sc.recordHTTPOnlyMethodCall()
 		return nil, errors.New("service context has no gin context")
 	}
 	return sc.ginCtx.FormFile(name)

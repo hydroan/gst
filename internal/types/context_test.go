@@ -165,14 +165,15 @@ func TestServiceContextResponseHelpers(t *testing.T) {
 	require.Contains(t, setCookie, "SameSite=Lax")
 	require.Equal(t, http.StatusCreated, recorder.Code)
 	require.Equal(t, "created", recorder.Body.String())
-	require.False(t, types.RawResponseAttempted(serviceCtx), "the writes reached the HTTP response")
+	require.False(t, types.HTTPOnlyMethodCalled(serviceCtx), "the writes reached the HTTP response")
 }
 
-// TestRawResponseAttemptedRecordsWritesWithoutHTTP pins the flag a transport
-// other than HTTP reads once the service returns: each response writer sets it
-// when there is no HTTP response to write to, the request readers do not, and
-// a nil cookie -- nothing to write on any transport -- does not either.
-func TestRawResponseAttemptedRecordsWritesWithoutHTTP(t *testing.T) {
+// TestHTTPOnlyMethodCalledRecordsCallsWithoutHTTP pins the flag a transport
+// other than HTTP reads once the service returns: every HTTP-only method sets
+// it when there is no HTTP request or response behind the context, the
+// readers of the request as much as the writers of the response, and a nil
+// cookie -- nothing to write on any transport -- does not.
+func TestHTTPOnlyMethodCalledRecordsCallsWithoutHTTP(t *testing.T) {
 	tests := []struct {
 		name string
 		call func(serviceCtx *types.ServiceContext)
@@ -192,28 +193,28 @@ func TestRawResponseAttemptedRecordsWritesWithoutHTTP(t *testing.T) {
 		}, want: false},
 		{name: "Cookie", call: func(serviceCtx *types.ServiceContext) {
 			_, _ = serviceCtx.Cookie("session_id")
-		}, want: false},
+		}, want: true},
 		{name: "PostForm", call: func(serviceCtx *types.ServiceContext) {
 			_ = serviceCtx.PostForm("name")
-		}, want: false},
+		}, want: true},
 		{name: "FormFile", call: func(serviceCtx *types.ServiceContext) {
 			_, _ = serviceCtx.FormFile("file")
-		}, want: false},
+		}, want: true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			serviceCtx := types.NewServiceContext(nil, nil, "")
-			require.False(t, types.RawResponseAttempted(serviceCtx))
+			require.False(t, types.HTTPOnlyMethodCalled(serviceCtx))
 
 			tt.call(serviceCtx)
 
-			require.Equal(t, tt.want, types.RawResponseAttempted(serviceCtx))
+			require.Equal(t, tt.want, types.HTTPOnlyMethodCalled(serviceCtx))
 		})
 	}
 
 	var nilCtx *types.ServiceContext
 	nilCtx.Data(http.StatusCreated, "text/plain", []byte("created"))
-	require.False(t, types.RawResponseAttempted(nilCtx))
+	require.False(t, types.HTTPOnlyMethodCalled(nilCtx))
 }
 
 func TestServiceContextNilGinHelpers(t *testing.T) {

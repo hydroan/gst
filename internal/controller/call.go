@@ -347,16 +347,17 @@ func (c *call) ended() error {
 }
 
 // finish ends a call whose flow or service returned, checking the service
-// contexts it built: a service that asked one of them for a raw HTTP
-// response — a body, a stream, a cookie — believes it answered, and the call
-// cannot carry what it wrote, so the call answers Internal and logs why (gg
-// check reports the call at generation time; this is the transport's own
-// refusal). nil otherwise.
+// contexts it built: a service that called a method of one of them only an
+// HTTP request can serve — wrote a body, a stream or a cookie it believes
+// answered, read a cookie, a form value or a file that was never there —
+// ran on what the call cannot carry, so the call answers Internal and logs
+// why, naming the methods (gg check reports the call at generation time;
+// this is the transport's own refusal). nil otherwise.
 func (c *call) finish() error {
-	if !slices.ContainsFunc(c.built, types.RawResponseAttempted) {
+	if !slices.ContainsFunc(c.built, types.HTTPOnlyMethodCalled) {
 		return nil
 	}
-	err := errors.New("the service wrote an HTTP response the call cannot carry: an action served over gRPC must not call Data, SSE or SetCookie")
+	err := errors.Newf("the service called a method of its context only an HTTP request can serve: an action served over gRPC must not call %s", strings.Join(types.HTTPOnlyMethods, ", "))
 	c.log.Errorz("service operation failed", zap.Error(err))
 	gstotel.RecordError(c.span, err)
 	return grpcserver.StatusError(err)

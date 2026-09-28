@@ -239,6 +239,7 @@ const (
 	actionRefuse = "refuse"
 	actionBreak  = "break"
 	actionWrite  = "write"
+	actionRead   = "read"
 	actionHang   = "hang"
 )
 
@@ -249,7 +250,8 @@ var actionEntered = make(chan struct{}, 1)
 // actionService serves the sample's custom action: it answers what it found
 // on the service context, refuses with a service error for actionRefuse,
 // fails with a plain error for actionBreak, writes a raw response, which
-// only HTTP can carry, for actionWrite, and hangs until the call ends for
+// only HTTP can carry, for actionWrite, reads a form value, which only an
+// HTTP request carries, for actionRead, and hangs until the call ends for
 // actionHang, returning the error the context reports. Its List answers the
 // same, for the query a GET action reads.
 type actionService struct {
@@ -264,6 +266,8 @@ func (*actionService) Create(sc *types.ServiceContext, req *sampleActionReq) (*s
 		return nil, errors.New("dial tcp: connection refused")
 	case actionWrite:
 		sc.Data(http.StatusOK, "text/plain", []byte("plain"))
+	case actionRead:
+		_ = sc.PostForm("name")
 	case actionHang:
 		actionEntered <- struct{}{}
 		<-sc.Done()

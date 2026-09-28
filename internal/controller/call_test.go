@@ -477,6 +477,11 @@ func TestServiceCallDelegatesToThePhaseService(t *testing.T) {
 		_, err := invoke(t, conn, "Action", map[string]any{"payload": map[string]any{"note": actionWrite}})
 		requireStatus(t, err, codes.Internal, serviceregistry.FailureMsg)
 	})
+
+	t.Run("a form value the service tried to read answers Internal", func(t *testing.T) {
+		_, err := invoke(t, conn, "Action", map[string]any{"payload": map[string]any{"note": actionRead}})
+		requireStatus(t, err, codes.Internal, serviceregistry.FailureMsg)
+	})
 }
 
 // TestCallsRunInTheControllerSpan pins the spans a call runs in: the
