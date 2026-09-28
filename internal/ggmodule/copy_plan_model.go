@@ -114,8 +114,8 @@ func (p *CopyPlan) requireExcludedModelFilesUnreferenced() error {
 
 // collectStaleModelFiles records target model files this copy plan will not
 // write. Model copy is a SourceModelDir -> TargetModelDir mirror, so a
-// non-exempt leftover is a stale copy from an older framework version that
-// the execution prune deletes.
+// non-exempt leftover is a stale copy an earlier copy left behind, which the
+// execution prune deletes.
 func (p *CopyPlan) collectStaleModelFiles() error {
 	stale, err := p.staleTargetFiles(p.TargetModelDir, moduleCopyFileModel)
 	if err != nil {

@@ -543,7 +543,7 @@ func TestDatabaseTypedFilterValues(t *testing.T) {
 		List(&users))
 	require.Empty(t, users, "empty slice must match nothing")
 
-	// In no longer splits comma strings: a string value fails closed.
+	// In does not split comma strings: a string value fails closed.
 	users = make([]*TestUser, 0)
 	require.NoError(t, database.Database[*TestUser](context.Background()).
 		WithQuery(nil, types.QueryOptions{
@@ -571,7 +571,7 @@ func TestDatabaseTypedFilterValues(t *testing.T) {
 	require.Empty(t, users, "nil value must fail closed")
 
 	// IsNull carries a bool: false means IS NOT NULL and matches every row
-	// of a NOT NULL column, while the legacy "1" string now fails closed.
+	// of a NOT NULL column, while a "1" string fails closed.
 	users = make([]*TestUser, 0)
 	require.NoError(t, database.Database[*TestUser](context.Background()).
 		WithQuery(nil, types.QueryOptions{

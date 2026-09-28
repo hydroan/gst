@@ -31,8 +31,8 @@ const MySQLTableOptions = "ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4
 // ensureCustomIndexes to create again: a full rebuild on every start, and a
 // moment with no unique key under the processes already running. A start
 // drops nothing the framework created: on the session a column gorm knows
-// nothing of is left alone, and one a tag declares unique is migrated as
-// before.
+// nothing of is left alone, and one a tag declares unique is migrated the way
+// gorm migrates it.
 func automigrating(handler *gorm.DB) *gorm.DB {
 	session := handler.Session(&gorm.Session{NewDB: true})
 	session.Dialector = automigrateDialector{handler.Dialector}

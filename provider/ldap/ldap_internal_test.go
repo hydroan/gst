@@ -11,8 +11,8 @@ import (
 )
 
 // TestMemberLookupFilterCompiles checks the filter GetGroupMembers reads each
-// member entry with: a presence filter the LDAP client accepts. "(uid)", the
-// form it once built, fails to compile, so every member was skipped.
+// member entry with: a presence filter the LDAP client accepts. The bare
+// "(uid)" form fails to compile, which would skip every member.
 func TestMemberLookupFilterCompiles(t *testing.T) {
 	filter := memberLookupFilter("uid")
 	require.Equal(t, "(uid=*)", filter)

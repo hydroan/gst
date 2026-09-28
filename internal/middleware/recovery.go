@@ -25,10 +25,10 @@ import (
 // panics go to as well.
 //
 // It binds recoveryWithTracing to that logger rather than standing a second
-// implementation beside it. The two had drifted: a panic handled here left the
-// request's span with no error recorded on it, logged the Authorization header
-// as it stood, and answered with a bare 500 carrying no envelope and no trace
-// id — on the one response whose reader most needs one.
+// implementation beside it: two implementations drift apart, and a drifted one
+// leaves the request's span with no error recorded on it, logs the
+// Authorization header as it stands, or answers with a bare 500 carrying no
+// envelope and no trace id — on the one response whose reader most needs one.
 func recovery() gin.HandlerFunc {
 	return recoveryWithTracing(logger.Recovery, true)
 }

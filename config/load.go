@@ -7,10 +7,9 @@ import (
 )
 
 // newViper returns a viper instance carrying the framework codec registry,
-// so every consumer decodes configuration files identically.
-//
-// Breaking change:
-// https://github.com/spf13/viper/blob/master/UPGRADE.md#breaking-hcl-java-properties-ini-removed-from-core
+// so every consumer decodes configuration files identically. viper's core
+// decodes no ini, so the registry carries the codec
+// github.com/go-viper/encoding/ini provides.
 func newViper() (*viper.Viper, error) {
 	codecRegistry := viper.NewCodecRegistry()
 	if err := codecRegistry.RegisterCodec("ini", ini.Codec{}); err != nil {

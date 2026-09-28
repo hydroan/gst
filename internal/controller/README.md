@@ -117,7 +117,7 @@ record answers 404.
 > database.Database[*model.User](ctx).Update(user)
 > ```
 
-## UpdatePartial
+## Patch
 
 The resource id comes from the route parameter only. The id carried by the
 http body is ignored. The handler loads the record, copies the fields present

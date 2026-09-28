@@ -257,13 +257,13 @@ func applyServiceMethod3(fn *ast.FuncDecl, action *dsl.Action) bool { return fal
 //
 // isServiceMethod4 only recognizes the parameter/result shape, not the function name, so a
 // hand-written helper that happens to match the same shape as the real action method must not
-// be rewritten. Incident: a Patch action's Payload/Result were changed to
-// RecordPatchReq/RecordPatchRsp and gg gen was re-run; Patcher.validate, a plain
-// validation helper with the same (ctx *gst.ServiceContext, req *pkg.Req) (*pkg.X, error)
-// shape as Patch, was mistaken for the action method and had its return type rewritten to
-// *sample.RecordPatchRsp, corrupting the function body and breaking the build. Requiring
-// fn.Name to equal action.Phase.Name() (e.g. "Patch") ensures only the actual action
-// method for the current DSL phase is ever rewritten.
+// be rewritten: once a Patch action's Payload/Result change to RecordPatchReq/RecordPatchRsp,
+// Patcher.validate, a plain validation helper with the same
+// (ctx *gst.ServiceContext, req *pkg.Req) (*pkg.X, error) shape as Patch, would otherwise be
+// taken for the action method and have its return type rewritten to *sample.RecordPatchRsp,
+// corrupting the function body and breaking the build. Requiring fn.Name to equal
+// action.Phase.Name() (e.g. "Patch") ensures only the actual action method for the current
+// DSL phase is ever rewritten.
 func applyServiceMethod4(fn *ast.FuncDecl, action *dsl.Action, modelPkg string) bool {
 	if fn == nil || action == nil || fn.Name == nil {
 		return false
@@ -718,8 +718,8 @@ func ensureModelImportSpec(file *ast.File, importPath, modelQualifier string) {
 // A file that refers to the model package by the name of a framework package
 // it imports cannot build, and nothing tells which package a reference
 // through that name means, so it is rejected before anything is rewritten.
-// An earlier gg generated such files for a model package named like a
-// framework package:
+// Such a file imports a model package named like a framework package under
+// that name:
 //
 //	import (
 //		"myproject/model/service"
@@ -765,7 +765,7 @@ func ApplyServiceFileWithModelSync(file *ast.File, action *dsl.Action, servicePk
 	// through the direct service.Base embedding.
 	changed := forceCanonicalServiceStruct(file, action, modelInfo)
 
-	// First apply the original ApplyServiceFile logic
+	// First apply the shape rules of applyServiceFile
 	correctModelName := ""
 	if modelInfo != nil {
 		correctModelName = modelInfo.ModelName

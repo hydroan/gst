@@ -140,13 +140,12 @@ func TestAuthorizeOmitsRuleForPolicylessBranches(t *testing.T) {
 	}
 }
 
-// TestAuthorizeResolvesInheritedRoleLinks pins what deciding the two role
-// branches outside the matcher must not change.
+// TestAuthorizeResolvesInheritedRoleLinks pins that the two role branches
+// decided outside the matcher reach a role the way the matcher's g function
+// does: through another role as well as directly.
 //
-// The matcher asked Casbin's g function, which resolves a subject reaching a
-// role through another role. A lookup of the grouping rules as written answers
-// no to both cases below, so a branch rebuilt that way would take away access
-// that used to be granted, and would do it silently.
+// A lookup of the grouping rules as written answers no to both cases below, so
+// a branch built that way would silently refuse access g grants.
 func TestAuthorizeResolvesInheritedRoleLinks(t *testing.T) {
 	r := newAuthorizeFixture(t)
 	ctx := context.Background()
@@ -246,8 +245,8 @@ func TestHasSystemRoleAgreesWithAuthorize(t *testing.T) {
 // TestAuthorizeRejectsSubjectsNamedAfterARole covers Casbin's self-match: its
 // role manager answers yes whenever the subject and the role are the same name,
 // which would hand tenant-wide or cross-tenant access to whoever registers
-// under that name. The matcher guarded against it with an inequality, and the
-// branches still have to.
+// under that name. The matcher guards against it with an inequality, and the
+// branches decided outside it have to as well.
 func TestAuthorizeRejectsSubjectsNamedAfterARole(t *testing.T) {
 	r := newAuthorizeFixture(t)
 	ctx := context.Background()
@@ -269,9 +268,8 @@ func TestAuthorizeRejectsSubjectsNamedAfterARole(t *testing.T) {
 
 // TestAuthorizeWithoutPoliciesAnswersTheRoleBranches covers a deployment whose
 // policy table is empty, which is what a fresh install is before any role is
-// configured. Casbin evaluates its matcher differently when there is no policy
-// to iterate, so the branches decided outside it are the only thing keeping the
-// built-in roles reachable at that point.
+// configured. The role branches are decided before any policy is consulted, so
+// they keep the built-in roles reachable at that point.
 func TestAuthorizeWithoutPoliciesAnswersTheRoleBranches(t *testing.T) {
 	r := newTestRBAC(t, 0)
 	ctx := context.Background()
@@ -308,13 +306,13 @@ func TestAuthorizeWithoutPoliciesAnswersTheRoleBranches(t *testing.T) {
 }
 
 // TestAuthorizeReadsStoredObjectsAsTemplates covers the two ways a stored
-// object used to reach past the route it names.
+// object read as a regular expression reaches past the route it names.
 //
 // An object is data: it comes from a menu route binding, or from a permission
 // an application writes. Read as a regular expression, a metacharacter in one
 // reaches routes the policy never named, and one that does not compile fails
 // every request that reaches it. Both are exercised by a single denial, which
-// evaluates the whole policy set on its way to answering no.
+// evaluates every rule of the subject's role on its way to answering no.
 func TestAuthorizeReadsStoredObjectsAsTemplates(t *testing.T) {
 	r := newAuthorizeFixture(t)
 	ctx := context.Background()

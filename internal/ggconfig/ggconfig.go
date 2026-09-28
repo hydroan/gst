@@ -142,12 +142,13 @@ func validatePruneIgnore(c *PruneConfig) error {
 	return nil
 }
 
-// legacyPruneSettingsFiles held the prune settings of earlier gg releases,
-// which the prune section of gst.yaml replaces.
+// legacyPruneSettingsFiles are prune settings files gg does not read: prune
+// settings live in the prune section of gst.yaml.
 var legacyPruneSettingsFiles = []string{".gg.yaml", ".gg.yml"}
 
 // unreadFileNames are the files gg finds next to gst.yaml but never reads: the
-// legacy prune settings files, and names gst.yaml is easily mistaken for.
+// ones legacyPruneSettingsFiles lists, and names gst.yaml is easily mistaken
+// for.
 var unreadFileNames = append(slices.Clone(legacyPruneSettingsFiles), ".gst.yaml", ".gst.yml", "gst.yml")
 
 // UnreadFiles returns the files in dir that look like gg configuration but
@@ -164,8 +165,8 @@ func UnreadFiles(dir string) []string {
 }
 
 // IsLegacyPruneSettings reports whether name, as UnreadFiles returns it, is
-// the prune settings file of earlier gg releases: ".gg.yaml" is, "gst.yml"
-// is not.
+// one of the prune settings files legacyPruneSettingsFiles lists: ".gg.yaml"
+// is, "gst.yml" is not.
 func IsLegacyPruneSettings(name string) bool {
 	return slices.Contains(legacyPruneSettingsFiles, name)
 }

@@ -272,8 +272,8 @@
 // The marker is the ownership proof behind middleware pruning: the middleware
 // directory is shared with project-owned handlers and other modules' copies,
 // so only a file carrying this module's marker may ever be deleted by this
-// module's copy. Files copied before the marker existed show up as a --force
-// overwrite on their next copy, which upgrades them into prune management.
+// module's copy. A marker-less file at a target path shows up as a --force
+// overwrite on the next copy, which brings it under prune management.
 // The marker also outlives the module: once the project deletes
 // model/<name>, the files carrying the module's marker are orphans
 // (OrphanMiddlewareFiles), and gg prune deletes them together with their

@@ -61,8 +61,8 @@ type CopyPlan struct {
 
 	// StaleModelFiles lists Go files already present in TargetModelDir that do
 	// not have a matching source file under SourceModelDir in this copy plan.
-	// They are stale copies left behind by an older framework version, and the
-	// copy execution deletes them so the target directory keeps mirroring the
+	// They are stale copies an earlier copy left behind, and the copy
+	// execution deletes them so the target directory keeps mirroring the
 	// framework module source. Test files and generated files never enter the
 	// list; see staleTargetFiles for the exemptions.
 	StaleModelFiles []string

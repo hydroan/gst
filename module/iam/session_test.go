@@ -411,15 +411,15 @@ func TestInvalidateUserSessions(t *testing.T) {
 // TestSessionRejectionsAnswerInTheEnvelope covers the shape of a refusal from
 // the session middleware, which every request in a deployment can receive.
 //
-// Two properties are asserted, and each was broken once. These refusals used to
-// answer with a bare {"error": ...}: a client reading the documented envelope
-// found no code and no trace id, so a rejection could not be told apart from a
-// malformed response, and the one identifier tying it to the server's logs was
-// absent. And the message came from whatever layer failed — a cookie naming a
-// session the cache no longer holds was answered "cache entry not found",
-// handing the storage's internal vocabulary to whoever presented an invalid
-// cookie. What a caller can act on is that the cookie is not usable; which
-// layer noticed is the deployment's business.
+// Two properties are asserted. A refusal answers in the documented envelope: a
+// bare {"error": ...} would carry no code and no trace id, so a rejection could
+// not be told apart from a malformed response, and the one identifier tying it
+// to the server's logs would be absent. And the message does not come from
+// whatever layer failed: answering a cookie naming a session the cache no
+// longer holds with "cache entry not found" would hand the storage's internal
+// vocabulary to whoever presented an invalid cookie. What a caller can act on
+// is that the cookie is not usable; which layer noticed is the deployment's
+// business.
 func TestSessionRejectionsAnswerInTheEnvelope(t *testing.T) {
 	clearSessionsAfterTest(t)
 

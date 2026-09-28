@@ -789,10 +789,9 @@ func (a *selectBuilder[M]) columnOf(table, column string, shape projectionShape)
 	return c, nil
 }
 
-// columnExpr renders a column of the select: bare when one table is read,
-// which keeps every select without a join rendering as it always has, and
-// qualified by its table when the select joins, the term's own or the
-// queried model's, under the name that table is read by.
+// columnExpr renders a column of the select: bare when one table is read, and
+// qualified by its table when the select joins, the term's own or the queried
+// model's, under the name that table is read by.
 func (a *selectBuilder[M]) columnExpr(table, column string, shape projectionShape) string {
 	if len(shape.joins) == 0 {
 		return a.db.quoteIdent(column)

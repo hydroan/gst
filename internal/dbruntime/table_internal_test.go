@@ -154,13 +154,6 @@ func (*uniqueRecord) Indexes() []modelregistry.Index {
 	return []modelregistry.Index{{Fields: []string{"Code"}, Unique: true}}
 }
 
-// TestMigrateTableLeavesTheIndexesAlone proves a process starting against a
-// table another process prepared leaves the framework's indexes as they
-// are. gorm migrates the unique constraints its tags declare, and its MySQL
-// driver takes any other single-column unique index for a leftover and
-// drops it: an index declared through Indexes() was dropped and created
-// again on every start, and a start must not drop what the framework
-// created. automigrating is what keeps gorm's hands off them.
 // TestMigrateTableCreatesMySQLTablesLikeTheMigrationDoes pins the table the
 // startup path creates against the one gg migrate creates. The collation is
 // what would diverge: a server default of utf8mb4_0900_ai_ci compares
@@ -183,6 +176,13 @@ func TestMigrateTableCreatesMySQLTablesLikeTheMigrationDoes(t *testing.T) {
 	require.Equal(t, "utf8mb4_bin", collation, "a table created at startup carries the collation gg migrate writes")
 }
 
+// TestMigrateTableLeavesTheIndexesAlone proves a process starting against a
+// table another process prepared leaves the framework's indexes as they
+// are. gorm migrates the unique constraints its tags declare, and its MySQL
+// driver takes any other single-column unique index for a leftover and
+// drops it: an index declared through Indexes() would be dropped and created
+// again on every start, and a start must not drop what the framework
+// created. automigrating is what keeps gorm's hands off them.
 func TestMigrateTableLeavesTheIndexesAlone(t *testing.T) {
 	withAutoMigrate(t, true)
 	withFastStartupLock(t)

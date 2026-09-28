@@ -390,7 +390,7 @@ const (
 	AUTHZ_USER_ROOT = "root"
 
 	// AUTHZ_ROLE_ADMIN is the tenant-scoped admin role, granted via g(subject, role, tenant).
-	// The Casbin matcher grants this role unconditional access to every object/action
+	// Authorization grants this role unconditional access to every object/action
 	// inside the tenant, bypassing explicit permission policies entirely.
 	AUTHZ_ROLE_ADMIN = "admin"
 	// AUTHZ_SYSTEM_ROLE_ROOT is the system-level super-admin role, granted via g2(subject, role)
@@ -398,8 +398,8 @@ const (
 	AUTHZ_SYSTEM_ROLE_ROOT = "system_root"
 	// AUTHZ_ROLE_AUTHENTICATED is the implicit role every authenticated subject
 	// carries. No grouping rule ever assigns it, and no role may claim it as an
-	// ID: the Casbin matcher grants policies written for it without consulting
-	// role membership or tenant, so they reach subjects that hold no role at all.
+	// ID: authorization grants policies written for it without consulting role
+	// membership or tenant, so they reach subjects that hold no role at all.
 	//
 	// Use it for routes that answer only about the caller and already narrow
 	// their result to what the caller may see. It is not "public": unauthenticated

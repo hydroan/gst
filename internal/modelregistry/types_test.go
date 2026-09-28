@@ -44,8 +44,9 @@ type CursorableUser struct {
 	modelregistry.Base
 }
 
-// markerMethodSpoofUser declares an exported method matching the historical
-// marker name. The sealed marker interfaces must not treat it as opting in.
+// markerMethodSpoofUser declares an exported QueryEnabled method, a name that
+// reads like a marker. The sealed marker interfaces must not treat it as
+// opting in.
 type markerMethodSpoofUser struct {
 	Name string `json:"name,omitempty"`
 

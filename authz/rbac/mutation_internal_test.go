@@ -12,9 +12,9 @@ import (
 )
 
 // TestMutateRejectsEmptyValues covers the case where a caller passes an empty
-// identifier. Storage and Casbin both read an empty filter field as "match
-// anything", so the mutation would delete every rule of its kind rather than
-// one, and it has to be refused before it reaches either.
+// identifier. Storage and the in-memory set both read an empty filter field as
+// "match anything", so the mutation would delete every rule of its kind rather
+// than one, and it has to be refused before it reaches either.
 //
 // A permission missing its object or its action is the same fault reached
 // through a whole-set replacement, and refusing it there matters twice over: the
@@ -137,8 +137,7 @@ func (a *failAfterAdapter) addPolicies(ctx context.Context, ptype string, rules 
 }
 
 // The removal overrides intercept the counted entry points, which are the ones
-// mutate drives; intercepting the Casbin-shaped methods would leave the writes
-// under test reaching storage through the embedded adapter.
+// mutate drives.
 func (a *failAfterAdapter) removePoliciesCount(
 	ctx context.Context, ptype string, rules [][]string,
 ) (int64, error) {
@@ -220,8 +219,7 @@ func TestMutateReloadsWhenARemovalDisagreesWithStorage(t *testing.T) {
 	})
 
 	t.Run("memory ahead of storage", func(t *testing.T) {
-		// Two assignments storage never kept: written through the enforcer,
-		// whose autosave is off.
+		// Two assignments storage never kept: seeded into memory alone.
 		for _, subject := range []string{"u3", "u4"} {
 			seed(t, tenantRoleGrouping, []string{subject, "role_b", "tenant_a"})
 		}
@@ -238,7 +236,7 @@ func TestMutateReloadsWhenARemovalDisagreesWithStorage(t *testing.T) {
 // whose memory halves run in the opposite order from their commits.
 //
 // The commit settles which write storage kept; which goroutine then reaches the
-// enforcer lock first does not, and nothing orders the two. Replaying the
+// policy write lock first does not, and nothing orders the two. Replaying the
 // older batch at that point would leave the process deciding from a permission
 // set storage has already replaced, for as long as it runs — and comparing
 // stored rules against the records they come from cannot see it, because

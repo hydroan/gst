@@ -19,8 +19,8 @@ import (
 // administrators.
 //
 // It is how an account comes into being in a deployment that does not offer
-// public signup, which is most of them: the alternative was leaving every
-// project to write its own user creation against the IAM tables.
+// public signup, which is most of them: without it every project would write
+// its own user creation against the IAM tables.
 type AdminUserCreateService struct {
 	service.Base[*modeliamuser.User, *modeliamuser.AdminUserCreateReq, *modeliamuser.AdminUserCreateRsp]
 }

@@ -539,12 +539,11 @@ func (s *sampleItem) Create(ctx *gst.ServiceContext, req *model.SampleItem) (rsp
 `,
 		},
 		{
-			// Regression test for an incident where isServiceMethod4 matched a hand-written
-			// helper by shape alone: Patcher.validate has the same
-			// (ctx *gst.ServiceContext, req *pkg.Req) (*pkg.X, error) shape as the real
-			// Patch action method, so it was mistaken for the action method and rewritten
-			// in place, corrupting its return type and breaking the build. applyServiceMethod4
-			// must only rewrite the function whose name matches action.Phase.Name().
+			// isServiceMethod4 matches a hand-written helper by shape alone: Patcher.validate
+			// has the same (ctx *gst.ServiceContext, req *pkg.Req) (*pkg.X, error) shape as
+			// the real Patch action method, and rewriting it in place would corrupt its return
+			// type and break the build. applyServiceMethod4 must only rewrite the function
+			// whose name matches action.Phase.Name().
 			name: "does_not_rewrite_non_action_function_with_same_shape",
 			code: `package samplerecord
 
@@ -1309,9 +1308,9 @@ func (u *Creator) Create(ctx *gst.ServiceContext, req *sample.UserReq) (rsp *sam
 `,
 		},
 		{
-			// An earlier gg generated this file, which imports two packages as
-			// service and cannot build; nothing tells which package a
-			// reference means, so it is rejected with the ways to fix it.
+			// This file imports two packages as service and cannot build;
+			// nothing tells which package a reference means, so it is
+			// rejected with the ways to fix it.
 			name: "reject_file_importing_two_packages_under_one_name",
 			code: `package user
 

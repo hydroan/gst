@@ -102,7 +102,7 @@ func newPhaseSpan(component, modelName string, phase consts.Phase) phaseSpan {
 
 // serviceSpan returns the precomputed service span of the phase, falling back
 // to on-the-fly construction for phases not declared when the action was
-// built, so a missing declaration degrades to the old per-request cost
+// built, so a missing declaration degrades to building the span per request
 // instead of a wrong span name.
 func (a *action[M, REQ, RSP]) serviceSpan(phase consts.Phase) phaseSpan {
 	if span, ok := a.serviceSpans[phase]; ok {
@@ -198,8 +198,8 @@ func (a *action[M, REQ, RSP]) traceServiceOperation(parentCtx context.Context, p
 
 // traceServiceCall runs fn inside a service span and records duration, success,
 // and error attributes. It is the shared core of the traceService* methods; the
-// span attribute keys keep the historical "hook." prefix for every service call
-// so existing dashboards and queries stay valid.
+// duration and success attribute keys carry the "hook." prefix for every
+// service call, the keys dashboards and queries select on.
 func traceServiceCall[T any](parentCtx context.Context, span phaseSpan, modelName string, fn func(context.Context) (T, error)) (T, error) {
 	spanCtx, s := gstotel.StartSpan(parentCtx, span.name)
 	defer s.End()

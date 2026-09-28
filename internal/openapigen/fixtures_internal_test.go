@@ -40,7 +40,7 @@ func init() {
 }
 
 type openapiEmbeddedQueryModel struct {
-	// Page is a business filter field; the bare name no longer collides with
+	// Page is a business filter field; the bare name does not collide with
 	// the framework pagination parameter, which lives in the "_" namespace.
 	Page string `json:"-" query:"page"`
 

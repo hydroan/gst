@@ -63,10 +63,9 @@ type nestedRetry struct {
 }
 
 // TestSectionDefaultsReachBehindNilPointers pins that a default tag means the
-// same wherever the field sits. The tags behind a nil pointer used to be
-// skipped for everything but a duration, so a section declaring values came
-// up with zeros and the project only found out when the empty value reached
-// whatever reads it.
+// same wherever the field sits. Skipping the tags behind a nil pointer would
+// bring a section declaring values up with zeros, and the project would only
+// find out when the empty value reached whatever reads it.
 func TestSectionDefaultsReachBehindNilPointers(t *testing.T) {
 	filename := filepath.Join(t.TempDir(), "config.ini")
 	requireWriteConfigFile(t, filename, "[app]\nname = \"sample\"\n")

@@ -305,8 +305,8 @@ func (i *TestUniqueItem) UpdateAfter(ctx context.Context) error {
 }
 
 // TestIndexerUniqueItem declares its composite unique key only through the
-// Indexes method: the struct tags carry no index at all, mirroring models
-// whose secondary indexes moved off gorm tags entirely.
+// Indexes method: the struct tags carry no index at all, the way a project
+// model declares its secondary indexes.
 type TestIndexerUniqueItem struct {
 	Code string `json:"code" gorm:"size:191"`
 	Kind string `json:"kind" gorm:"size:191"`

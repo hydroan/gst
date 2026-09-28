@@ -211,9 +211,9 @@ func driftFromRule(rule *modelauthz.AuthzRule, direction string) PolicyDrift {
 // carries surrounding space has its rules stored trimmed, and looking for them
 // untrimmed reports every one of them as orphaned and missing at once.
 //
-// Nothing reachable writes such a record any more — the tenant package trims at
-// every entry — so this stands for rows that predate it or were written around
-// the framework, which are exactly the rows a drift report exists to find.
+// Nothing reachable writes such a record — the tenant package trims at every
+// entry — so this stands for rows written around the framework, which are
+// exactly the rows a drift report exists to find.
 func reconcileTenant(id string) string {
 	if id = strings.TrimSpace(id); id != "" {
 		return id

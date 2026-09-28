@@ -16,9 +16,9 @@ import (
 // arguments, and whether it left through a panic instead of answering.
 //
 // It builds its expression with MustCompile, so a template that cannot compile
-// panics rather than reporting anything. That is the behavior pathMatch
-// replaces, and telling the two exits apart is what lets a comparison assert
-// they agree on every input rather than only on the ones that answer.
+// panics rather than reporting anything. Telling the two exits apart is what
+// lets a comparison assert that keyMatch3 and pathMatch agree on every input
+// rather than only on the ones that answer.
 func keyMatch3(path string, template string) (matched bool, panicked bool) {
 	defer func() {
 		if recover() != nil {
@@ -33,15 +33,15 @@ func keyMatch3(path string, template string) (matched bool, panicked bool) {
 //
 // Those are the templates the framework itself writes, from router.Routes and
 // from menu route bindings, and the two implementations have to agree on every
-// one of them: narrowing what a metacharacter and a greedy placeholder grant is
-// the point, and changing anything else would be a regression.
+// one of them: they part company only where keyMatch3 lets a metacharacter or
+// a greedy placeholder grant more than the template spells.
 //
 // Two things take a template outside the comparison. Everything outside a
-// placeholder and a wildcard has to be text the regexp engine would have read
-// the same way, or keyMatch3 reaches paths the template does not spell. And a
-// segment has to hold at most one placeholder: keyMatch3's placeholder pattern
-// admits a brace and matches greedily, so it reads "{a}-{b}" as one placeholder
-// and loses the text between them, which this package no longer does.
+// placeholder and a wildcard has to be text the regexp engine reads the same
+// way, or keyMatch3 reaches paths the template does not spell. And a segment
+// has to hold at most one placeholder: keyMatch3's placeholder pattern admits a
+// brace and matches greedily, so it reads "{a}-{b}" as one placeholder and
+// loses the text between them, which this package does not.
 //
 // The two forms are removed in the order keyMatch3 substitutes them: the
 // wildcard is recognized in the template as written, before removing a
@@ -95,8 +95,8 @@ func TestPathMatchMatchesTheTemplateLanguage(t *testing.T) {
 		{"a dot is a dot", "/api/a.b", "/api/a.b", true},
 		{"a dot matches nothing else", "/api/axb", "/api/a.b", false},
 		{"a bracket is a bracket", "/api/[", "/api/[", true},
-		// keyMatch3 compiled this one to an escaped dollar and matched "$",
-		// a path the template does not spell. Found by the fuzzer.
+		// keyMatch3 compiles this one to an escaped dollar and matches "$",
+		// a path the template does not spell.
 		{"a backslash is a backslash", "\\", "\\", true},
 		{"a backslash reaches nothing else", "$", "\\", false},
 	}
@@ -108,33 +108,33 @@ func TestPathMatchMatchesTheTemplateLanguage(t *testing.T) {
 			assert.Equal(t, c.matched, matched, "path %q against template %q", c.path, c.template)
 
 			// Every case here is a template the framework itself could write,
-			// so the reading must not have moved.
+			// so it has to read the way keyMatch3 reads it.
 			if sharesKeyMatch3Reading(c.template) {
 				expected, panicked := keyMatch3(c.path, c.template)
 				require.False(t, panicked, "keyMatch3 must answer for a plain template")
-				assert.Equal(t, expected, matched, "a plain template must read as it always did")
+				assert.Equal(t, expected, matched, "a plain template must read the way keyMatch3 reads it")
 			}
 		})
 	}
 }
 
-// TestPathMatchTreatsMetacharactersAsText covers what the template language
-// stopped granting.
+// TestPathMatchTreatsMetacharactersAsText covers what keyMatch3 grants and the
+// template language does not.
 //
 // keyMatch3 hands the whole template to the regexp engine, so a metacharacter
 // stored as a route's object reaches paths that route never named — and a
-// template that does not compile fails every request that reaches it, because
-// a denial evaluates the whole policy set. Neither is expressible any more.
+// template that does not compile fails every request that reaches it. Neither
+// is expressible in the template language.
 func TestPathMatchTreatsMetacharactersAsText(t *testing.T) {
 	cases := []struct {
 		name     string
 		path     string
 		template string
 	}{
-		{"wildcard regexp no longer reaches every route", "/api/authz/roles", "/api/.*"},
-		{"any-character no longer spans a segment", "/api/axb", "/api/a.b"},
-		{"alternation no longer offers a choice", "/api/b", "/api/(a|b)"},
-		{"repetition no longer applies", "/api/aaa", "/api/a+"},
+		{"wildcard regexp does not reach every route", "/api/authz/roles", "/api/.*"},
+		{"any-character does not span a segment", "/api/axb", "/api/a.b"},
+		{"alternation offers no choice", "/api/b", "/api/(a|b)"},
+		{"repetition does not apply", "/api/aaa", "/api/a+"},
 	}
 
 	for _, c := range cases {
@@ -145,7 +145,7 @@ func TestPathMatchTreatsMetacharactersAsText(t *testing.T) {
 
 			matched, err := pathMatch(c.path, c.template)
 			require.NoError(t, err)
-			assert.False(t, matched, "template %q must no longer reach %q", c.template, c.path)
+			assert.False(t, matched, "template %q must not reach %q", c.template, c.path)
 		})
 	}
 }
@@ -153,17 +153,16 @@ func TestPathMatchTreatsMetacharactersAsText(t *testing.T) {
 // TestPathMatchPlaceholderDoesNotSwallowTheTextAfterIt covers a template
 // carrying two placeholders inside one segment.
 //
-// The placeholder pattern is greedy and its body admits a brace, so it reads
-// "{a}-{b}" as a single placeholder and the "-" between them disappears from
-// the compiled expression. The template then matches any one segment rather
-// than the two parts it spells, which grants an object nobody wrote — the one
-// direction the compilation is not allowed to move in, and the one the package
-// claims it cannot: quoting can only narrow, but nothing was quoted here
-// because the text never reached the quoting step.
+// A greedy placeholder pattern whose body admits a brace reads "{a}-{b}" as a
+// single placeholder, and the "-" between them disappears from the compiled
+// expression. The template then matches any one segment rather than the two
+// parts it spells, which grants an object nobody wrote — the one direction the
+// compilation is not allowed to move in: nothing is quoted, because the text
+// never reaches the quoting step.
 //
-// keyMatch3 reads it the same way, from the same pattern. Agreeing with it is
-// not the goal where it grants more than the template spells, which is what
-// the metacharacter cases above already establish.
+// keyMatch3's placeholder pattern is that one. Agreeing with it is not the
+// goal where it grants more than the template spells, which is what the
+// metacharacter cases above already establish.
 func TestPathMatchPlaceholderDoesNotSwallowTheTextAfterIt(t *testing.T) {
 	cases := []struct {
 		name     string
@@ -186,7 +185,7 @@ func TestPathMatchPlaceholderDoesNotSwallowTheTextAfterIt(t *testing.T) {
 		})
 	}
 
-	t.Run("keyMatch3 granted what the template does not spell", func(t *testing.T) {
+	t.Run("keyMatch3 grants what the template does not spell", func(t *testing.T) {
 		allowed, panicked := keyMatch3("/api/ab", "/api/{a}-{b}")
 		require.False(t, panicked)
 		require.True(t, allowed, "this case is only interesting if keyMatch3 allowed it")
@@ -194,8 +193,8 @@ func TestPathMatchPlaceholderDoesNotSwallowTheTextAfterIt(t *testing.T) {
 }
 
 // TestPathMatchSurvivesATemplateKeyMatch3CouldNotCompile covers the other half:
-// a template that made keyMatch3 panic is now ordinary text, so it answers for
-// itself and stops taking every other decision down with it.
+// a template that makes keyMatch3 panic is ordinary text here, so it answers
+// for itself and takes no other decision down with it.
 func TestPathMatchSurvivesATemplateKeyMatch3CouldNotCompile(t *testing.T) {
 	const template = "/api/items/["
 	t.Cleanup(func() { pathTemplateCache.Delete(template) })
@@ -213,20 +212,20 @@ func TestPathMatchSurvivesATemplateKeyMatch3CouldNotCompile(t *testing.T) {
 }
 
 // FuzzPathMatchReachesOnlyWhatTheTemplateSpells pins the two properties the
-// change exists for.
+// template language rests on.
 //
 // A template that uses neither of the two forms reaches exactly one path: the
 // one it spells. That is the whole of it — whatever characters it holds, a
 // stored object cannot reach past the route it names.
 //
-// And for a template the framework itself writes, the reading must not have
-// moved at all, so it still has to agree with keyMatch3 exactly.
+// And a template the framework itself writes has to agree with keyMatch3
+// exactly.
 //
-// The comparison is deliberately not "never matches more than keyMatch3 did".
-// That is false, and the fuzzer says so: the template `\` used to compile to
-// `^\$`, an escaped dollar, and matched the path `$` — a path the template does
-// not spell and never named. Reading it as text matches `\` instead. The old
-// reading was not a smaller set, it was a different one.
+// The comparison is deliberately not "never matches more than keyMatch3".
+// That is false, and the fuzzer says so: keyMatch3 compiles the template `\`
+// to `^\$`, an escaped dollar, and matches the path `$` — a path the template
+// does not spell. Reading it as text matches `\` instead: the text reading is
+// not a subset of the regexp reading, it is a different set.
 //
 // The cached template is dropped afterwards because the cache is keyed by
 // template and bounded, in production, by the stored policy set; a fuzz run
@@ -243,13 +242,13 @@ func FuzzPathMatchReachesOnlyWhatTheTemplateSpells(f *testing.F) {
 		{"/api/名前", "/api/{name}"},
 		{"/api/xbc", "/api/.bc"},
 		{"/api/authz/roles", "/api/.*"},
-		// Both found by the fuzzer, and both about the order the two forms are
-		// recognized in rather than about matching: see sharesKeyMatch3Reading.
+		// Both are about the order the two forms are recognized in rather than
+		// about matching: see sharesKeyMatch3Reading.
 		{"\\", "\\"},
 		{"/x*", "/{0}*"},
-		// Found by the fuzzer: two placeholders in one segment stand for two
-		// parts, so the shortest path they reach is two characters long.
-		// keyMatch3 read them as one placeholder and reached this path.
+		// Two placeholders in one segment stand for two parts, so the shortest
+		// path they reach is two characters long. keyMatch3 reads them as one
+		// placeholder and reaches this path.
 		{"0", "{0}{0}"},
 	} {
 		f.Add(seed[0], seed[1])
@@ -275,7 +274,7 @@ func FuzzPathMatchReachesOnlyWhatTheTemplateSpells(f *testing.F) {
 			allowed, panicked := keyMatch3(path, template)
 			require.False(t, panicked, "keyMatch3 must answer for the plain template %q", template)
 			require.Equal(t, allowed, matched,
-				"plain template %q must read as it always did against %q", template, path)
+				"plain template %q must read the way keyMatch3 reads it against %q", template, path)
 		}
 	})
 }
@@ -297,8 +296,8 @@ func TestPathMatchReportsTemplatesItCannotCompile(t *testing.T) {
 }
 
 // TestPathMatchCompilesEachTemplateOnce covers the caching itself, for both
-// outcomes. A template reaching this function does so once per stored policy
-// per request, so recompiling either outcome is the cost the cache exists to
+// outcomes. A template reaches this function on every request that looks at
+// its rule, so recompiling either outcome is the cost the cache exists to
 // remove.
 func TestPathMatchCompilesEachTemplateOnce(t *testing.T) {
 	t.Run("usable template", func(t *testing.T) {
@@ -323,8 +322,8 @@ func TestPathMatchCompilesEachTemplateOnce(t *testing.T) {
 }
 
 // TestPathMatchIsSafeForConcurrentUse covers the read path as it actually runs:
-// every request evaluates the matcher against the same templates at once, so
-// the first compile of a template happens under contention.
+// every request in flight matches against the same templates at once, so the
+// first compile of a template happens under contention.
 func TestPathMatchIsSafeForConcurrentUse(t *testing.T) {
 	const template = "/api/concurrent/{id}"
 	t.Cleanup(func() { pathTemplateCache.Delete(template) })
@@ -382,8 +381,8 @@ func TestPathMatchFuncRejectsUnusableArguments(t *testing.T) {
 	}
 }
 
-// BenchmarkPathMatch and BenchmarkKeyMatch3 measure one matcher call, which the
-// enforcer makes once per stored policy per request.
+// BenchmarkPathMatch and BenchmarkKeyMatch3 measure one match of a path against
+// a template, under each of the two readings.
 func BenchmarkPathMatch(b *testing.B) {
 	const path, template = "/api/items/300/children/7", "/api/items/{id}/children/{child}"
 	b.Cleanup(func() { pathTemplateCache.Delete(template) })

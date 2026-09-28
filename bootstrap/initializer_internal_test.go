@@ -9,8 +9,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestGoReportsAFailureWhileSiblingsKeepRunning pins the case the process used
-// to hang on: one long-running function fails to start while another keeps
+// TestGoReportsAFailureWhileSiblingsKeepRunning pins the case that would hang
+// the process: one long-running function fails to start while another keeps
 // serving. The failure has to reach the caller at once, not after the sibling
 // that is still serving eventually returns.
 func TestGoReportsAFailureWhileSiblingsKeepRunning(t *testing.T) {

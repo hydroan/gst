@@ -219,9 +219,9 @@ func TestParseTokenFromHeader(t *testing.T) {
 // TestVerify covers what a token is checked for once its signature has already
 // been validated by the parser.
 //
-// Nothing about the caller's device takes part. An earlier version compared the
-// request's browser and operating system against a stored session, which made a
-// stateless token stateful and refused a user who had merely switched browsers.
+// Nothing about the caller's device takes part: comparing the request's browser
+// and operating system against a stored session would make a stateless token
+// stateful and refuse a user who merely switched browsers.
 func TestVerify(t *testing.T) {
 	withTokenConfig(t, time.Hour, 24*time.Hour)
 

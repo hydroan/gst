@@ -47,8 +47,7 @@ func TestAdminUserList(t *testing.T) {
 	})
 
 	// A bare field name is an exact match, and a substring is asked for with the
-	// like operator. This endpoint used to read the bare name as a substring,
-	// which is the one place in the framework where it meant that.
+	// like operator, here as on every other list.
 	t.Run("filters_by_exact_username", func(t *testing.T) {
 		cli := accountSessionClient(t, rootSessionID)
 
@@ -77,9 +76,8 @@ func TestAdminUserList(t *testing.T) {
 		require.Equal(t, fuzzyUser.UserID, list.Items[0].ID)
 	})
 
-	// Ordering is one of the general list parameters this endpoint answers to
-	// now that it parses the request the way every other list does; it used to
-	// understand a username filter and paging and nothing else.
+	// Ordering is one of the general list parameters this endpoint answers to,
+	// since it parses the request the way every other list does.
 	t.Run("orders_by_a_requested_column", func(t *testing.T) {
 		cli := accountSessionClient(t, rootSessionID)
 
@@ -423,8 +421,8 @@ func TestAdminUserCreate(t *testing.T) {
 	})
 }
 
-// TestAdminUserPatchUsername covers the field the patch route gained when the
-// per-field status route was folded into it.
+// TestAdminUserPatchUsername covers renaming a user through the admin patch
+// route, which also carries the status.
 func TestAdminUserPatchUsername(t *testing.T) {
 	rootSessionID := accountLoginRoot(t)
 	target := accountSignupUser(t, "admin_user_rename", "12345678")

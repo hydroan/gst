@@ -49,7 +49,7 @@ func LoginSecondFactorVerifier(ctx *gst.ServiceContext, userID string, factor au
 	switch {
 	case totpCode == "" && backupCode == "":
 		// authn.MsgSecondFactorRequired is a stable client contract: login UIs match
-		// it to prompt for the code, replacing the pre-login check endpoint.
+		// it to prompt for the code.
 		return service.NewError(http.StatusUnauthorized, authn.MsgSecondFactorRequired)
 	case totpCode != "" && backupCode != "":
 		return service.NewError(http.StatusBadRequest, "provide exactly one second factor")

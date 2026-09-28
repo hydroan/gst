@@ -136,9 +136,8 @@ func (a *selectBuilder[M]) functionExpr(t types.Term, shape projectionShape) (sq
 }
 
 // validateGrouping checks the group-side rules of one term: a condition only
-// restricts a measure, a bucket only truncates a group key. Both were
-// previously dropped without a word, which is how a report ends up silently
-// counting the wrong rows.
+// restricts a measure, a bucket only truncates a group key. Dropping either
+// without a word is how a report ends up silently counting the wrong rows.
 func (a *selectBuilder[M]) validateGrouping(t types.Term) error {
 	if !t.IsMeasure() && len(types.TermConditionsOf(t)) > 0 {
 		return errors.Wrapf(ErrConditionOnGroupKey, "%q", termAlias(t))

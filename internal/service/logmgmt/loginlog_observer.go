@@ -19,8 +19,8 @@ import (
 // observers multicast.
 //
 // Observers never block or fail the login itself, so a failed insert is only
-// logged. The user-agent columns keep the historical "<name> <version>" and
-// "<platform> <os>" renderings so rows stay comparable across versions.
+// logged. The user-agent columns hold the "<name> <version>" and
+// "<platform> <os>" renderings.
 func RecordLoginEvent(ctx *gst.ServiceContext, event authn.LoginEvent) {
 	entry := &modellogmgmt.LoginLog{
 		UserID:   event.UserID,

@@ -28,8 +28,7 @@ func (*document) BulkIndex(_ context.Context, indexName string, docs ...types.ES
 	for i := range docs {
 		meta := fmt.Appendf(nil, `{ "index" : { "_id" : "%s" } }%s`, docs[i].GetID(), "\n")
 		if data, err = json.Marshal(docs[i].Document()); err != nil {
-			// Wrap keeps the cause on the unwrap chain (the string
-			// concatenation it replaces dropped it) and embeds the run-time
+			// Wrap keeps the cause on the unwrap chain and embeds the run-time
 			// stack; see the error-stack contract in the database package doc.
 			err = errors.Wrap(err, "failed to marshaling document")
 			logger.Elastic.Error(err)

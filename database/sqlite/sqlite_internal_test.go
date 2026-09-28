@@ -108,11 +108,11 @@ func requireSampleRows(t *testing.T, db *gorm.DB, table string, want int64) {
 	require.Equal(t, want, count)
 }
 
-// TestBuildDSNKeepsWhatThePathAsked pins the two ways a configured path used
-// to be read wrong: a path naming memory opened as a file, which lives as
-// long as one connection and vanishes with it, and a path carrying
-// parameters of its own gaining a second question mark, which sqlite reads as
-// part of a value — the tuning after it is silently lost.
+// TestBuildDSNKeepsWhatThePathAsked pins the two ways a configured path can be
+// read wrong: a path naming memory opened as a file, which lives as long as
+// one connection and vanishes with it, and a path carrying parameters of its
+// own gaining a second question mark, which sqlite reads as part of a value —
+// the tuning after it is silently lost.
 func TestBuildDSNKeepsWhatThePathAsked(t *testing.T) {
 	for _, tc := range []struct {
 		name string

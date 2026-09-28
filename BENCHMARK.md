@@ -100,7 +100,6 @@ func main() {
 	r := gin.New()
 	r.GET("/api/bench/ping", func(c *gin.Context) {
 		c.JSON(200, envelope{
-			Code:    0,
 			Data:    pingData{Msg: "pong"},
 			Msg:     "success",
 			TraceID: "0000000000000000000000",
@@ -141,7 +140,7 @@ hey -z 30s -c 50 "http://127.0.0.1:8082/api/bench/ping"              # 压测
 
 ## With DB
 
-带 DB 压测统一使用本地 MySQL 容器：与生产同引擎（InnoDB），连接池语义真实（框架默认 `max_open_conns=100`）。sqlite 内存模式被框架钳制为单连接（shared-cache 表锁所致，WAL 不支持内存库），QPS 反映的是单连接串行化瓶颈而非框架吞吐，不再用于压测。
+带 DB 压测统一使用本地 MySQL 容器：与生产同引擎（InnoDB），连接池语义真实（框架默认 `max_open_conns=100`）。sqlite 内存模式被框架钳制为单连接（shared-cache 表锁所致，WAL 不支持内存库），QPS 反映的是单连接串行化瓶颈而非框架吞吐，不用于压测。
 
 ```bash
 # 一次性启动本地压测 MySQL（tmpfs 数据目录 + 关 binlog，压低引擎噪声）
@@ -168,7 +167,7 @@ hey -z 10s -c 50 "$BENCH_BASE_URL/api/bench/list?$Q" > /dev/null  # 热身
 hey -z 30s -c 50 "$BENCH_BASE_URL/api/bench/list?$Q"              # 压测
 ```
 
-list 必须空表压测：create 压测灌进去的行会全部命中上面的查询条件，每个请求的 count+select 两条 SQL 都变成全表扫描（MySQL 口径实测 38 万行时单请求 1.2s、两条各 ~580ms；sqlite 旧口径 100 万行时 QPS 从 1.3w 跌到 8.6）。跑过 create 后先用上面的 TRUNCATE 命令清表再测 list。
+list 必须空表压测：create 压测灌进去的行会全部命中上面的查询条件，每个请求的 count+select 两条 SQL 都变成全表扫描（MySQL 口径实测 38 万行时单请求 1.2s、两条各 ~580ms）。跑过 create 后先用上面的 TRUNCATE 命令清表再测 list。
 
 #### no dry run
 

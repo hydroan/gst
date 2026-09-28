@@ -55,7 +55,7 @@ func seed(t *testing.T, db *gorm.DB, rows map[string]string) {
 }
 
 // TestScopeNarrowsReads covers the predicate on the read path, which is the
-// whole of what a list endpoint needed and never had.
+// whole of what a list endpoint needs.
 func TestScopeNarrowsReads(t *testing.T) {
 	db := newDB(t)
 	seed(t, db, map[string]string{"a1": "alpha", "a2": "alpha", "b1": "beta"})

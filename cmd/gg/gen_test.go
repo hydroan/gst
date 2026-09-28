@@ -738,11 +738,11 @@ func (i *Creator) Create(ctx *gst.ServiceContext, req *io.Item) (rsp *io.Item, e
 }
 
 // TestGenRunRejectsServiceFileImportingTwoPackagesUnderOneName runs gg gen
-// over a service file an earlier gg generated for a model package named
-// service: it imports that package and the gst service package under the same
-// name and cannot build. Nothing tells which package a reference through the
-// name means, so gg gen stops with an error telling how to fix the file, and
-// leaves the file as it is.
+// over a service file of a model package named service that imports that
+// package and the gst service package under the same name, and so cannot
+// build. Nothing tells which package a reference through the name means, so
+// gg gen stops with an error telling how to fix the file, and leaves the file
+// as it is.
 func TestGenRunRejectsServiceFileImportingTwoPackagesUnderOneName(t *testing.T) {
 	projectDir, ok := newGenProject(t)
 	if !ok {

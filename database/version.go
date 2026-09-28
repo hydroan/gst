@@ -135,7 +135,7 @@ func (db *database[M]) versionedOnConflict(versionColumn string) (clause.OnConfl
 	// The conflict target mirrors gorm's UpdateAll default: the primary key.
 	// MySQL ignores it (ON DUPLICATE KEY UPDATE has no target syntax); on
 	// postgres and sqlite a conflict on another unique index is not caught,
-	// which is the pre-existing Save(slice) behavior, not a regression.
+	// the same as with gorm's own Save(slice).
 	for _, field := range stmt.Schema.PrimaryFields {
 		onConflict.Columns = append(onConflict.Columns, clause.Column{Name: field.DBName})
 	}

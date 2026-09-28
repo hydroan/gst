@@ -83,7 +83,7 @@ func TestResolveSeesLateRegistration(t *testing.T) {
 	require.Same(t, registered, serviceregistry.Resolve[*testUser, *testUser, *testUser](key))
 }
 
-// TestRegisterKeysByRoute guards the fix for silent overwrites: two services
+// TestRegisterKeysByRoute guards against silent overwrites: two services
 // sharing one model/request/response type tuple (as type aliases collapse
 // distinct declarations into one type) must dispatch independently when they
 // are registered under different routes.

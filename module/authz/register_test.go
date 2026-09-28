@@ -443,9 +443,9 @@ func TestAuthzRole(t *testing.T) {
 		})
 
 		t.Run("rejects_menus_that_do_not_exist", func(t *testing.T) {
-			// A dangling menu ID used to be stored as it stood while the
-			// permission sync silently expanded only the menus it could find —
-			// a role that looked configured with a slice of it missing, and
+			// A dangling menu ID stored as it stands would leave the
+			// permission sync silently expanding only the menus it can find —
+			// a role that looks configured with a slice of it missing, and
 			// nothing downstream able to see the gap.
 			_, err := cli.Post[authz.Role](t.Context(), rolePath, &authz.Role{
 				Name:    authzTestUsername("dangling_menu_role"),
@@ -482,8 +482,8 @@ func TestAuthzRole(t *testing.T) {
 			require.EqualValues(t, tenant.Default, rsp.TenantID)
 			require.Equal(t, roleName, rsp.Name)
 			roleID = rsp.ID
-			requireCasbinPolicy(t, tenant.Default, roleID, "/api/authz/roles", http.MethodGet, "allow")
-			requireNoCasbinPolicy(t, tenant.Default, roleID, "/api/authz/roles", http.MethodPost, "allow")
+			requirePolicyRule(t, tenant.Default, roleID, "/api/authz/roles", http.MethodGet, "allow")
+			requireNoPolicyRule(t, tenant.Default, roleID, "/api/authz/roles", http.MethodPost, "allow")
 		})
 
 		t.Run("get", func(t *testing.T) {
@@ -518,9 +518,9 @@ func TestAuthzRole(t *testing.T) {
 			require.Equal(t, nextName, got.Name)
 			roleName = got.Name
 
-			requireCasbinPolicy(t, tenant.Default, roleID, "/api/authz/roles", http.MethodGet, "allow")
+			requirePolicyRule(t, tenant.Default, roleID, "/api/authz/roles", http.MethodGet, "allow")
 
-			requireNoCasbinPolicy(t, tenant.Default, nextName, "/api/authz/roles", http.MethodGet, "allow")
+			requireNoPolicyRule(t, tenant.Default, nextName, "/api/authz/roles", http.MethodGet, "allow")
 		})
 
 		// An update naming another tenant cannot move the role: the tenant
@@ -549,8 +549,8 @@ func TestAuthzRole(t *testing.T) {
 			require.NoError(t, err)
 			require.EqualValues(t, tenant.Default, moved.TenantID)
 
-			requireCasbinPolicy(t, tenant.Default, roleID, "/api/authz/roles", http.MethodGet, "allow")
-			requireNoCasbinPolicy(t, "other", roleID, "/api/authz/roles", http.MethodGet, "allow")
+			requirePolicyRule(t, tenant.Default, roleID, "/api/authz/roles", http.MethodGet, "allow")
+			requireNoPolicyRule(t, "other", roleID, "/api/authz/roles", http.MethodGet, "allow")
 		})
 
 		t.Run("patch", func(t *testing.T) {
@@ -626,7 +626,7 @@ func TestAuthzRoleBinding(t *testing.T) {
 			require.Equal(t, userID, rsp.SubjectID)
 			require.Equal(t, roleID, rsp.RoleID)
 			roleBindingID = rsp.ID
-			requireCasbinGroupingPolicy(t, userID, roleID, tenant.Default)
+			requireGroupingRule(t, userID, roleID, tenant.Default)
 		})
 
 		t.Run("get", func(t *testing.T) {
@@ -1111,17 +1111,17 @@ func requireNoMenu(t *testing.T, menus []*authz.Menu, menuID string) {
 	}
 }
 
-func requireCasbinPolicy(t *testing.T, tenant, role, object, action, effect string) {
+func requirePolicyRule(t *testing.T, tenant, role, object, action, effect string) {
 	t.Helper()
 	requireAuthzRule(t, "p", tenant, role, object, action, effect)
 }
 
-func requireNoCasbinPolicy(t *testing.T, tenant, role, object, action, effect string) {
+func requireNoPolicyRule(t *testing.T, tenant, role, object, action, effect string) {
 	t.Helper()
 	requireNoAuthzRule(t, "p", tenant, role, object, action, effect)
 }
 
-func requireCasbinGroupingPolicy(t *testing.T, subject, role, tenant string) {
+func requireGroupingRule(t *testing.T, subject, role, tenant string) {
 	t.Helper()
 	requireAuthzRule(t, "g", subject, role, tenant, "", "")
 }

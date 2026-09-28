@@ -11,10 +11,10 @@ type sample struct {
 	Num  int    `json:"num"`
 }
 
-// TestInterfaceValuesRoundtrip is the regression guard for the asymmetry this
-// package exists to remove: encoding dispatched on a value's dynamic type
-// while decoding dispatched on its destination, so anything stored through an
-// interface-typed cache was written compactly and then failed to decode.
+// TestInterfaceValuesRoundtrip guards the symmetry this package exists for: an
+// encoding that dispatches on a value's dynamic type while decoding dispatches
+// on its destination writes anything stored through an interface-typed cache
+// compactly and then fails to decode it.
 func TestInterfaceValuesRoundtrip(t *testing.T) {
 	cases := []struct {
 		name  string

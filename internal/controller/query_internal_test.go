@@ -56,11 +56,11 @@ func TestDecodeListQueryGatesQueryKeys(t *testing.T) {
 			"framework keys rejected by different capability gates are still reported together")
 	})
 
-	t.Run("RetiredKeysAreRejected", func(t *testing.T) {
+	t.Run("UnknownFrameworkKeysAreRejected", func(t *testing.T) {
 		for _, key := range []string{"_or", "_index", "_select", "_no_total"} {
 			var m listQueryableTestModel
 			require.Error(t, decodeListQuery(&m, map[string][]string{key: {"true"}}),
-				"retired framework key %q no longer maps to any model field and must be reported", key)
+				"framework key %q maps to no model field and must be reported", key)
 		}
 	})
 }

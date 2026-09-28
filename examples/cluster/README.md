@@ -200,7 +200,7 @@ kubectl -n $NS patch configmap cluster --type merge -p '{"data":{"JOBS_SLOW_SECO
 kubectl -n $NS rollout restart deployment/cluster
 ```
 
-40 秒的一轮跨过了 30 秒的下一个时刻：那个时刻到点时就有一条 `cronjob round is still running at its next instant`，带 `overrun`（跑过了几个时刻）；轮次结束后才有原来那条 `cronjob skipped instants`。跑超时的那一轮把这个任务的租约一直占着，全部署都不会有第二个副本接上，所以它必须在还卡着的时候就出声，而不是等它返回——万一它永远不返回。
+40 秒的一轮跨过了 30 秒的下一个时刻：那个时刻到点时就有一条 `cronjob round is still running at its next instant`，带 `overrun`（跑过了几个时刻）；轮次结束后再记一条 `cronjob skipped instants`。跑超时的那一轮把这个任务的租约一直占着，全部署都不会有第二个副本接上，所以它必须在还卡着的时候就出声，而不是等它返回——万一它永远不返回。
 
 #### 1.5 整个部署停机：只补最近一个时刻
 

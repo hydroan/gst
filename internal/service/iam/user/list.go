@@ -67,9 +67,9 @@ func (a *AdminUserListService) List(ctx *gst.ServiceContext, _ *model.Empty) (rs
 // The parameters are parsed by the service base, which is the same parsing the
 // framework list controller does; this action only reaches for it directly
 // because declaring a Result type takes the request over from that controller.
-// Doing it by hand here instead is what previously left this endpoint with a
-// username filter and paging while every other list also answered to ordering
-// and operator filters.
+// Parsing them by hand here would leave this endpoint answering to fewer
+// parameters than every other list, which also answers to ordering and
+// operator filters.
 //
 // The count and the page are built from one query value and one set of options,
 // because a total computed from anything else describes a different result set

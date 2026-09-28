@@ -7,14 +7,13 @@ import (
 // decisionIndex is what the policy branches of a decision answer from: the
 // stored allow rules, arranged the way a request asks for them.
 //
-// The matcher in modelData remains the specification of what these lookups
-// mean, but it is no longer what executes. The engine evaluated it once per
-// stored rule, every rule in the deployment on every request, at an
-// interpreter's price per row; the index holds the same rules partitioned by
-// what the matcher's cheap comparisons would have rejected — the tenant and
-// role equalities — so a decision touches only the rules that could possibly
-// allow it: the authenticated set, and the sets of the roles the subject
-// holds. The cost of a decision follows the subject's own grant surface
+// The matcher in modelData is the specification of what these lookups mean,
+// and nothing evaluates it at run time: evaluating it costs an interpreter's
+// price per stored rule, every rule in the deployment on every request. The
+// index holds the same rules partitioned by the matcher's cheap comparisons —
+// the tenant and role equalities — so a decision touches only the rules that
+// could possibly allow it: the authenticated set, and the sets of the roles the
+// subject holds. The cost of a decision follows the subject's own grant surface
 // instead of the size of the deployment.
 //
 // Only rules whose effect is allow are held. The effect expression is
@@ -57,7 +56,8 @@ type indexedRule struct {
 var policyIndex *decisionIndex
 
 // buildDecisionIndex derives an index from the p rules set holds, in the
-// order the set holds them, which is the order the engine matched them in.
+// order the set holds them, which is the order the engine evaluating the
+// matcher matches them in.
 func buildDecisionIndex(set *policySet) *decisionIndex {
 	index := &decisionIndex{byTenantRole: make(map[string]map[string][]indexedRule)}
 
@@ -90,10 +90,10 @@ func buildDecisionIndex(set *policySet) *decisionIndex {
 // The action is compared before the template: methods are few, the comparison
 // is a handful of nanoseconds against a cached regexp's hundreds, and most
 // rules fail on it. That order also narrows what an uncompilable template can
-// break — only requests whose action reaches it — which is one step further
-// than the partitioning already went: the engine evaluated every template in
-// the deployment on every denial, so one bad row failed every request, while
-// here it fails only the requests it could have allowed.
+// break, one step past the partitioning: only requests whose tenant, role and
+// action reach it. Evaluating every template in the deployment on every
+// denial would let one bad row fail every request; here it fails only the
+// requests it could have allowed.
 func matchRules(rules []indexedRule, object string, action string) (bool, []string, error) {
 	for i := range rules {
 		if rules[i].action != action {

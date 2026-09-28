@@ -83,8 +83,9 @@ func TestSetRolePermissionsLeavesOtherRolesAlone(t *testing.T) {
 }
 
 // TestSetRolePermissionsDropsDuplicates pins the deduplication the batch insert
-// depends on. Casbin's batch add does not deduplicate within a batch, so a
-// caller repeating an entry would otherwise store the same policy twice.
+// depends on: the insert writes the batch as one statement, and a caller
+// repeating an entry would otherwise have it touch one row twice (see
+// permissionPolicies).
 func TestSetRolePermissionsDropsDuplicates(t *testing.T) {
 	r := newRolePermissionsFixture(t)
 

@@ -9,10 +9,10 @@ import (
 	"github.com/hydroan/gst/config"
 )
 
-// envRetiredDatabaseUnderTest is the environment variable that selected the
-// dialect under test before the build tags did. Nothing reads it for that any
-// more, see DatabaseUnderTest.
-const envRetiredDatabaseUnderTest = "GST_TEST_DATABASE"
+// envUnreadDatabaseUnderTest is an environment variable that does not select
+// the dialect under test, which a build tag does: DatabaseUnderTest stops the
+// run when it is set.
+const envUnreadDatabaseUnderTest = "GST_TEST_DATABASE"
 
 // DatabaseUnderTest returns the dialect a framework suite runs against:
 // MySQL, the framework's primary dialect, unless the test binary is built
@@ -35,15 +35,15 @@ const envRetiredDatabaseUnderTest = "GST_TEST_DATABASE"
 // tag selects no dialect, but the binary's build settings still carry it, so a
 // binary that fell back to MySQL while built with one returns what the tag
 // names instead, gsttest_postgre as postgre, which the test database setup
-// then rejects like every dialect it has no preparation for. The retired
+// then rejects like every dialect it has no preparation for. Setting the
 // GST_TEST_DATABASE variable panics with the tag to build with instead; since
 // go test replays a cached result without running TestMain at all, that stop
 // comes once the suite actually runs, which it does after any change to what
 // the suite tests.
 func DatabaseUnderTest() config.DBType {
-	if dialect := os.Getenv(envRetiredDatabaseUnderTest); len(dialect) > 0 {
-		panic(fmt.Sprintf("%s is no longer read, build the test with -tags gsttest_%s instead",
-			envRetiredDatabaseUnderTest, dialect))
+	if dialect := os.Getenv(envUnreadDatabaseUnderTest); len(dialect) > 0 {
+		panic(fmt.Sprintf("%s does not select the dialect, build the test with -tags gsttest_%s instead",
+			envUnreadDatabaseUnderTest, dialect))
 	}
 	if databaseUnderTest != config.DBMySQL {
 		return databaseUnderTest

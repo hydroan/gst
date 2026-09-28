@@ -409,9 +409,8 @@ func TestTOTPUnbind(t *testing.T) {
 	})
 
 	t.Run("password_is_not_accepted", func(t *testing.T) {
-		// The removed password field simply does not exist on the request
-		// anymore; a request carrying only a password counts as carrying no
-		// verification method at all.
+		// The request has no password field; a request carrying only a
+		// password counts as carrying no verification method at all.
 		_, err := cli.Do(t.Context(), http.MethodPost, unbindPath, map[string]string{
 			"device_id": deviceID,
 			"password":  account.Password,

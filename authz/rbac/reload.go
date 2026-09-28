@@ -25,14 +25,14 @@ func (r *rbac) ReloadPolicies(ctx context.Context) (err error) {
 // reload rebuilds the whole in-memory policy set from storage.
 //
 // The read is held under the write lock, which stalls every authorization in
-// the process for as long as it takes. That is deliberate, and it was arrived
-// at the other way round: reading outside the lock and installing the result
-// afterwards was tried and reverted. The applied sequence counts only the
-// batches this process wrote, so it cannot order one reload against another,
-// and two overlapping reloads each pass a check against it — leaving the slower
-// one to install its older snapshot over the newer. Storage changed by anything
-// other than this process, which is what ReloadPolicies exists for, is exactly
-// where nothing local would have moved that sequence to catch it.
+// the process for as long as it takes. That is deliberate: reading outside the
+// lock and installing the result afterwards needs something to order
+// overlapping reloads, and nothing local can. The applied sequence counts only
+// the batches this process wrote, so it cannot order one reload against
+// another, and two overlapping reloads would each pass a check against it —
+// leaving the slower one to install its older snapshot over the newer. Storage
+// changed by anything other than this process, which is what ReloadPolicies
+// exists for, is exactly where nothing local moves that sequence to catch it.
 //
 // Holding the lock also keeps the stale set from being served while its
 // replacement is read. A reload usually follows a revocation that memory

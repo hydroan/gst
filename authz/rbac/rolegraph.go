@@ -3,8 +3,8 @@ package rbac
 // roleGraph answers role reachability: who holds which role, directly or
 // through another role, per tenant for the g grouping and globally for g2.
 //
-// It replaces Casbin's role managers, and keeps their contract where the
-// package consumed it: hasLink resolves transitive membership up to
+// It keeps the contract of the Casbin role managers the matcher's g() is
+// specified against: hasLink resolves transitive membership up to
 // maxRoleHierarchy links, a self-match reports true and is guarded by the
 // caller, and directRoles answers one hop only — which is what denyReason
 // distinguishes its two answers by.
@@ -56,9 +56,9 @@ func (g *roleGraph) directRoles(grouping string, name string, domain string) []s
 }
 
 // hasLink reports whether subject reaches role through grouping, walking at
-// most maxRoleHierarchy links — the same cap Casbin's role managers were
-// built with. A subject reaching for its own name reports true, mirroring
-// the managers' self-match; every caller guards that case before asking.
+// most maxRoleHierarchy links — the same cap Casbin's role managers are built
+// with. A subject reaching for its own name reports true, mirroring the
+// managers' self-match; every caller guards that case before asking.
 func (g *roleGraph) hasLink(grouping string, subject string, role string, domain string) bool {
 	if subject == role {
 		return true

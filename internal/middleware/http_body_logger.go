@@ -69,7 +69,7 @@ func bodyLogger() gin.HandlerFunc {
 		// times the same one: a log store cannot join two files, so "which
 		// requests are slow, and what were they sent" has to be answerable from
 		// this entry alone. Every other request attribute is duplicated here for
-		// the same reason; the elapsed time was the one measure missing.
+		// the same reason.
 		//
 		// It is measured from here rather than read from whatever the access log
 		// started, which would make this middleware depend on being registered

@@ -36,10 +36,9 @@ import (
 //
 // Every remaining key must map to a decodable field, so a mistyped filter
 // name is reported instead of silently widening the result set, and every
-// offending key is reported at once. Value semantics match the streaming
-// decoder this replaced: the last value of a repeated key wins, an empty
-// value means "not filtering" and is skipped, and pointer fields are
-// allocated on demand.
+// offending key is reported at once. As for values, the last value of a
+// repeated key wins, an empty value means "not filtering" and is skipped, and
+// pointer fields are allocated on demand.
 func Decode(q url.Values, m types.Model) error {
 	plan := decodePlanOf(reflect.TypeOf(m))
 	dst := reflect.ValueOf(m).Elem()

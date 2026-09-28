@@ -30,7 +30,7 @@ type SecurityHeadersConfig struct {
 	// Options: "no-referrer", "no-referrer-when-downgrade", "origin", etc., or empty string to disable
 	ReferrerPolicy string
 
-	// PermissionsPolicy controls the Permissions-Policy header (formerly Feature-Policy)
+	// PermissionsPolicy controls the Permissions-Policy header
 	// Set to a permissions policy string to enable, or empty string to disable
 	PermissionsPolicy string
 }

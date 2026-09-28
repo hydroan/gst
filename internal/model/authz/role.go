@@ -68,11 +68,6 @@ func (r *Role) Purge() bool { return true }
 func (r *Role) TableName() string { return "roles" }
 
 // Indexes declares the uniqueness of a role name inside its tenant.
-//
-// It moved off the struct tags because the tenant column now arrives through an
-// embedded struct, and a tag on an embedded field cannot name a field beside it.
-// The columns and the uniqueness are what they were; only the generated name
-// differs, which is the framework's to choose.
 func (Role) Indexes() []model.Index {
 	return []model.Index{{Fields: []string{"TenantID", "Name"}, Unique: true}}
 }
@@ -125,8 +120,8 @@ func (r *Role) validate() error {
 }
 
 // CreateBefore validates the new role. The ID is left to the framework,
-// which assigns a UUIDv7 like every other model; clients no longer need to
-// invent role identifiers.
+// which assigns a UUIDv7 like every other model, so clients do not invent
+// role identifiers.
 func (r *Role) CreateBefore(ctx context.Context) error {
 	if err := r.validate(); err != nil {
 		return err
@@ -136,12 +131,12 @@ func (r *Role) CreateBefore(ctx context.Context) error {
 
 // validateMenuIDs refuses a menu selection naming menus that do not exist.
 //
-// A dangling ID used to be kept as it stood: the row stored it, the response
-// echoed it, and syncPermissions silently expanded only the menus it could
-// find — a role that looked configured while a slice of its permissions never
-// existed. Nothing downstream could see it either: the drift report derives
-// its expectations from the same join, so the gap never reads as drift.
-// Refusing the write is the one place the mistake is still the caller's.
+// A dangling ID kept as it stands would be stored and echoed back, while
+// syncPermissions silently expands only the menus it can find — a role that
+// looks configured while a slice of its permissions never exists. Nothing
+// downstream could see it either: the drift report derives its expectations
+// from the same join, so the gap never reads as drift. Refusing the write is
+// the one place the mistake is still the caller's.
 func (r *Role) validateMenuIDs(ctx context.Context) error {
 	if len(r.MenuIDs) == 0 {
 		return nil
@@ -234,8 +229,8 @@ func (r *Role) DeleteBefore(ctx context.Context) error {
 // locks it — so a cleanup running after this transaction has deleted that row
 // cannot interleave with one: the rebuild either committed first and its rows
 // are here to be removed, or it is waiting on the row lock and will find the
-// role gone. Run before the DELETE, the cleanup raced those rebuilds on
-// backends whose statements see only committed rows, and lost by leaving the
+// role gone. Run before the DELETE, the cleanup would race those rebuilds on
+// backends whose statements see only committed rows, and lose by leaving the
 // rebuilt rules stored for a role that no longer exists.
 func (r *Role) DeleteAfter(ctx context.Context) error {
 	// The role ID alone identifies the bindings: it is unique across tenants,
@@ -249,7 +244,7 @@ func (r *Role) DeleteAfter(ctx context.Context) error {
 		// the row back and unassigns the role one subject at a time, while
 		// RemoveRole below drops every assignment to this role in one filtered
 		// delete — so the hooks spend a read and a policy write per binding on
-		// rules the next statement removes anyway, each taking the enforcer
+		// rules the next statement removes anyway, each taking the policy
 		// write lock and leaving an after-commit action until the transaction
 		// ends.
 		//

@@ -58,8 +58,8 @@ func TestCreateManyWritesNothingTheBeforeHookRefuses(t *testing.T) {
 }
 
 // TestCreateManyIgnoresMembersTheBatchDoesNotDeclare pins that a batch
-// request carrying a member the batch body does not declare, such as the
-// options member it once had, is applied as if the member were absent.
+// request carrying a member the batch body does not declare, such as an
+// options member, is applied as if the member were absent.
 func TestCreateManyIgnoresMembersTheBatchDoesNotDeclare(t *testing.T) {
 	name := uniqueName("create-many-optioned")
 

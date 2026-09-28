@@ -46,7 +46,7 @@ func TestDatabaseCreate(t *testing.T) {
 	require.Equal(t, remarkUserCreateBefore, *u1.Remark, "u1 should have create hook result")
 
 	// Test Create - batch create multiple records. u1 already exists and Create
-	// no longer overwrites, so drop it before recreating the whole batch.
+	// does not overwrite, so drop it before recreating the whole batch.
 	require.NoError(t, database.Database[*TestUser](context.Background()).Delete(u1))
 	u1.Remark, u2.Remark, u3.Remark = nil, nil, nil // clear remark to test hook
 	require.NoError(t, database.Database[*TestUser](context.Background()).Create(ul...))

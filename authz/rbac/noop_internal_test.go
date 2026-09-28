@@ -19,7 +19,7 @@ import (
 // landed, because the records a rule is derived from are written either way: a
 // role created through the API answers success with not one policy row behind it.
 func TestRBACWithoutAPolicySetRefusesWrites(t *testing.T) {
-	r := rbacWithoutEnforcer(t)
+	r := rbacWithoutPolicies(t)
 	ctx := context.Background()
 	permissions := []types.Permission{{Object: "/api/things", Action: "GET"}}
 
@@ -49,7 +49,7 @@ func TestRBACWithoutAPolicySetRefusesWrites(t *testing.T) {
 // stores no policies, so answering them states the situation rather than hiding
 // it, and only the built-in root subject is answered otherwise.
 func TestRBACWithoutAPolicySetAnswersReads(t *testing.T) {
-	r := rbacWithoutEnforcer(t)
+	r := rbacWithoutPolicies(t)
 	ctx := context.Background()
 
 	decision, err := r.Authorize(ctx, "tenant_a", consts.AUTHZ_USER_ROOT, "/api/things", "GET")
@@ -79,13 +79,13 @@ func TestRBACWithoutAPolicySetAnswersReads(t *testing.T) {
 	assert.NoError(t, r.ReloadPolicies(ctx), "there is no in-memory policy set to rebuild")
 }
 
-// rbacWithoutEnforcer returns what RBAC answers with before Init has installed
-// an enforcer, and guards that the package is in that state at all: the enforcer
-// is a package variable, so a test installing one leaves it behind.
-func rbacWithoutEnforcer(t *testing.T) types.RBAC {
+// rbacWithoutPolicies returns what RBAC answers with before Init has installed
+// a policy set, and guards that the package is in that state at all: the policy
+// set is a package variable, so a test installing one leaves it behind.
+func rbacWithoutPolicies(t *testing.T) types.RBAC {
 	t.Helper()
 
 	r := RBAC()
-	require.IsType(t, noop{}, r, "the package still holds an enforcer installed elsewhere")
+	require.IsType(t, noop{}, r, "the package still holds a policy set installed elsewhere")
 	return r
 }

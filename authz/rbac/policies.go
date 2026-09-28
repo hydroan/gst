@@ -17,10 +17,9 @@ const policyTable = "authz_rules"
 
 // ruleTokens fixes how many values each rule kind carries: a permission is
 // (tenant, role, obj, act, eft), a tenant assignment (subject, role, tenant),
-// a system assignment (subject, role). It is what the Casbin model's
-// assertions used to declare, kept as the one table every consumer sizes and
-// validates rules against — the loader when it shapes a stored row, and the
-// set below when it refuses a kind it does not know.
+// a system assignment (subject, role). It is the one table every consumer
+// sizes and validates rules against — the loader when it shapes a stored row,
+// and the set below when it refuses a kind it does not know.
 var ruleTokens = map[string]int{
 	"p":                5,
 	tenantRoleGrouping: 3,
@@ -34,12 +33,11 @@ var rulePtypes = []string{"p", tenantRoleGrouping, systemRoleGrouping}
 // policySet is the in-memory policy store: every rule the process decides
 // from, held per kind, in insertion order, keyed by its exact values.
 //
-// It replaces the Casbin model as the container the two halves of a write
-// meet in. The properties the package depends on are the ones Casbin's
-// container had: a rule's identity is its exact bytes, adding an existing
-// rule changes nothing, removals report what actually went — which is what
-// the stored-count comparison reads — and the order rules were added in is
-// preserved, because it decides which rule a decision names.
+// It is the container the two halves of a write meet in, and the package
+// depends on four of its properties: a rule's identity is its exact bytes,
+// adding an existing rule changes nothing, removals report what actually went
+// — which is what the stored-count comparison reads — and the order rules were
+// added in is preserved, because it decides which rule a decision names.
 //
 // It is not safe for concurrent use on its own; every reader and writer holds
 // the policy lock, which is the package-wide discipline.

@@ -38,7 +38,7 @@ gen:
 		}
 	})
 
-	t.Run("legacy string entries are rejected", func(t *testing.T) {
+	t.Run("string entries are rejected", func(t *testing.T) {
 		dir := writeConfig(t, `version: 1
 gen:
   routes:

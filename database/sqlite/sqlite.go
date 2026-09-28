@@ -208,11 +208,12 @@ func anchorMemoryDatabase() error {
 // verb, the modifier and the table and returns, skipping the before- and
 // after-expressions gorm's default clause rendering places around them. The
 // framework registers the statement comment as the after-expression of every
-// verb clause (see the database package's comment.go), so on this dialect
-// alone INSERT statements went out without their trace comment while SELECT,
-// UPDATE and DELETE carried it. Dropping the driver's builder hands the clause
-// back to the default rendering, which resolves the table through the same
-// placeholder the other dialects use and handles the modifier the same way.
+// verb clause (see the database package's comment.go), so with that builder
+// in place INSERT statements on this dialect alone would go out without their
+// trace comment while SELECT, UPDATE and DELETE carry it. Dropping the
+// driver's builder hands the clause back to the default rendering, which
+// resolves the table through the same placeholder the other dialects use and
+// handles the modifier the same way.
 func restoreInsertClauseContract(db *gorm.DB) {
 	delete(db.ClauseBuilders, clause.Insert{}.Name())
 }

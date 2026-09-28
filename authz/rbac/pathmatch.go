@@ -53,13 +53,10 @@ var pathTemplateCache sync.Map
 // denial evaluates the whole policy set. Neither is something a policy asked
 // for, and neither is visible in the policy that causes it.
 //
-// The template is compiled once and kept, rather than rebuilt per call.
-// keyMatch3 rebuilds it every time, and alone among its neighbors: it reaches
-// the regexp through util.RegexMatch, which calls regexp.MatchString, while
-// keyMatch2, keyMatch4 and keyMatch5 all resolve their pattern through the
-// compiled-pattern cache that package keeps. The matcher evaluates this
-// function once per stored policy per request, so the rebuild dominated the
-// cost of a decision rather than adding to it.
+// The template is compiled once and kept, rather than rebuilt per call: a
+// decision matches the request against the template of every rule it looks
+// at, so rebuilding per call would dominate the cost of a decision rather than
+// add to it.
 func pathMatch(path string, template string) (bool, error) {
 	compiled := compilePathTemplate(template)
 	if compiled.err != nil {
@@ -87,9 +84,6 @@ func pathTemplateOf(cached any) (compiledPathTemplate, bool) {
 // and everything between them is quoted. Only the two forms the template
 // language defines survive as anything wider than the text they spell, so no
 // stored object can widen the policy it belongs to.
-//
-// Quoting can only narrow what a template matches, so a policy written while
-// the whole template was a regular expression never allows more than it did.
 func compilePathTemplate(template string) compiledPathTemplate {
 	if cached, hit := pathTemplateCache.Load(template); hit {
 		if compiled, ok := pathTemplateOf(cached); ok {
@@ -125,8 +119,8 @@ func compilePathTemplate(template string) compiledPathTemplate {
 	}
 
 	// The stored value is returned rather than the one just built, so that two
-	// callers compiling the same template concurrently still leave every
-	// matcher evaluation sharing one expression.
+	// callers compiling the same template concurrently still leave every match
+	// sharing one expression.
 	actual, _ := pathTemplateCache.LoadOrStore(template, compiled)
 	if stored, ok := pathTemplateOf(actual); ok {
 		return stored
@@ -138,8 +132,8 @@ func compilePathTemplate(template string) compiledPathTemplate {
 // leaving the wildcard as the one form that keeps a meaning of its own.
 //
 // The wildcard is recognized wherever it appears rather than only at the end,
-// because that is where keyMatch3 recognized it, and narrowing it to a suffix
-// would take away grants that are written and working.
+// because that is where keyMatch3 recognizes it, and narrowing it to a suffix
+// would take away grants stored policies hold.
 func quotePathTemplate(literal string) string {
 	spans := strings.Split(literal, "/*")
 	for i, span := range spans {

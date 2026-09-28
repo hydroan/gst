@@ -1,6 +1,6 @@
 # Authz 租户边界
 
-本文记录 `module/authz` 在多租户项目中的边界。`module/authz` 是 tenant-aware RBAC 模块：`Role`、`RoleBinding` 和 Casbin tenant domain 表达租户内权限；`Menu` 和 `Routes` 表达全局权限目录；`system_root` 表达跨 tenant 的系统级角色。
+本文记录 `module/authz` 在多租户项目中的边界。`module/authz` 是 tenant-aware RBAC 模块：`Role`、`RoleBinding` 和 RBAC 策略的 tenant 域表达租户内权限；`Menu` 和 `Routes` 表达全局权限目录；`system_root` 表达跨 tenant 的系统级角色。
 
 ## 当前接口结论
 

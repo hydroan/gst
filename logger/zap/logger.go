@@ -105,9 +105,9 @@ const contextFieldCap = 10
 // withContextFields binds the fields derived from a context — the request
 // metadata and the execution identity — to a derived logger. This runs for
 // every context-scoped logger, so all fields go through one zap With call:
-// each With call clones the logger core, and chaining several With calls here
-// used to cost three clones per call. When adding metadata fields, extend this
-// single call instead of chaining further With calls.
+// each With call clones the logger core, so chaining several With calls here
+// would cost a clone per link on every call. When adding metadata fields,
+// extend this single call instead of chaining further With calls.
 //
 // Route params stay structured because their keys come from the registered
 // routes and are therefore bounded; the query is logged as one raw string

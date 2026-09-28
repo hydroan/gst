@@ -11,9 +11,8 @@ import (
 
 // maxRoleHierarchy is how many links a subject may reach a role through,
 // mirroring the ten-level cap Casbin builds its role managers with. The
-// closure has to stop where the matcher's g() would have stopped, or a chain
-// deeper than the engine resolved would grant through the index what it
-// refused.
+// closure has to stop where the matcher's g() stops, or a chain deeper than
+// the engine resolves would grant through the index what the matcher refuses.
 const maxRoleHierarchy = 10
 
 // Authorize evaluates the request and reports which rule allowed it.
@@ -36,9 +35,9 @@ func (r *rbac) Authorize(
 	defer r.mu.RUnlock()
 
 	allowed, source, matchedRule, err := r.authorize(tenant, subject, object, action)
-	// The rule is copied out. What the engine reports is its own storage, and
-	// handing that to a caller makes every consumer of a decision one edit away
-	// from rewriting the policy set it was decided from.
+	// The rule is copied out. What the index reports is the policy set's own
+	// storage, and handing that to a caller makes every consumer of a decision
+	// one edit away from rewriting the policy set it was decided from.
 	decision := types.Decision{Allowed: allowed, Source: source, MatchedRule: slices.Clone(matchedRule)}
 	if err == nil && !allowed {
 		decision.Reason = r.denyReason(tenant, subject)
@@ -92,11 +91,11 @@ func (r *rbac) denyReason(tenant string, subject string) consts.DenyReason {
 // Only the policy branches yield a matched rule. The two above them never
 // consult a policy, so there is no row that is the reason for access.
 //
-// The policy branches answer from the decision index rather than the engine.
-// The matcher in modelData remains their specification — the differential
-// tests hold the two together — but evaluating it cost every request a scan of
-// every rule in the deployment, while the index bounds a decision by the
-// subject's own grant surface.
+// The policy branches answer from the decision index. The matcher in modelData
+// is their specification — the differential tests hold the two together — but
+// evaluating it would cost every request a scan of every rule in the
+// deployment, while the index bounds a decision by the subject's own grant
+// surface.
 //
 // The read lock belongs to the caller and has to cover the whole of this: the
 // branches and the index have to see one policy set, and taking the lock here
@@ -132,7 +131,7 @@ func (r *rbac) authorize(
 	roles := subjectRoleClosure(subject, tenant)
 	tenantRules := index.byTenantRole[tenant]
 	for _, role := range roles {
-		// The matcher refused a rule whose role names the subject itself, so
+		// The matcher refuses a rule whose role names the subject itself, so
 		// that a subject named like a role is not handed it; skipping the
 		// role's whole rule set is the same refusal.
 		if role == subject {
@@ -150,7 +149,7 @@ func (r *rbac) authorize(
 }
 
 // subjectRoleClosure resolves every role subject reaches inside tenant,
-// directly or through another role — what the matcher's g() answered once per
+// directly or through another role — what the matcher's g() answers once per
 // stored rule, asked once per decision instead.
 //
 // Each level is sorted before it is walked. Assignments arrive in no order
@@ -185,16 +184,16 @@ func subjectRoleClosure(subject string, tenant string) []string {
 }
 
 // hasRoleLink reports whether subject reaches role through the grouping ptype,
-// answering exactly what the g function in the matcher would have answered.
+// answering exactly what the g function in the matcher answers.
 //
 // The role graph is asked rather than the stored rules. It resolves a subject
 // that reaches the role through another role, which a lookup of the rules as
-// written does not, and moving a branch out of the matcher must not change what
-// that branch decides.
+// written does not, so a branch decided outside the matcher reaches the
+// subjects g() reaches.
 //
 // The inequality is part of that agreement: the graph reports a self-match, so
 // a subject named after the role would otherwise be handed it. The matcher
-// guarded against that with the same test.
+// guards against that with the same test.
 func (r *rbac) hasRoleLink(ptype string, subject string, role string, domain ...string) bool {
 	if subject == role {
 		return false

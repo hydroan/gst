@@ -51,7 +51,7 @@
 //     stack the deepest-stack rule ignores, at pure cost.
 //
 // Wrapping preserves the unwrap chain, so errors.Is/As checks against
-// ErrRecordNotFound, ErrDuplicatedKey, and friends behave exactly as before.
+// ErrRecordNotFound, ErrDuplicatedKey, and friends see through it.
 //
 // ClickHouse is an analytical instance (see clickhouse.New), never the
 // default database. Supported on it:

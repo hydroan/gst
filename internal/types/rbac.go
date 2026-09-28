@@ -113,11 +113,11 @@ type RBAC interface {
 
 	// RolesForSubject returns the roles subject holds inside tenant.
 	//
-	// It answers both questions the pair it replaced answered separately:
-	// membership is a non-empty result, and holding one particular role is that
-	// role being among them. Neither deserved an entry point of its own, and
-	// keeping the general one leaves this and SubjectsInTenant as the two
-	// directions of a single relation.
+	// It answers two questions at once: holding any role here is a non-empty
+	// result, and holding one particular role is that role being among them.
+	// Neither deserves an entry point of its own, and keeping the general one
+	// leaves this and SubjectsInTenant as the two directions of a single
+	// relation.
 	RolesForSubject(ctx context.Context, tenant string, subject string) ([]string, error)
 
 	// SubjectsInTenant returns subjects with at least one role assignment in

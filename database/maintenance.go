@@ -72,9 +72,9 @@ func cleanupOn[M types.Model](ctx context.Context, base *gorm.DB) (err error) {
 // a connection pool capacity warning, and a ping for response time.
 //
 // It is a package-level function because health is a property of the
-// connection, not of any model: the former chain form borrowed a model type
-// it never used. It checks the handle itself, not the read replicas attached
-// to it: Stats is what reports every node's pool.
+// connection, not of any model, so no model type takes part. It checks the
+// handle itself, not the read replicas attached to it: Stats is what reports
+// every node's pool.
 //
 // Returns nil if all checks pass. Panics if the database is not initialized,
 // consistent with Database[M].

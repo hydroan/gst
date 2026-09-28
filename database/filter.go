@@ -715,8 +715,8 @@ func (db *database[M]) existsCondition(f types.Filter, sq types.Subquery, scope 
 
 	// A subquery reading the same table as the query around it needs its own
 	// name, or both sides of the correlation resolve to the inner table and the
-	// condition degenerates into a comparison of a row with itself. Aliasing
-	// only that case keeps every other subquery rendering exactly as before.
+	// condition degenerates into a comparison of a row with itself. Only that
+	// case is aliased; every other subquery reads its table under its own name.
 	// Table takes a bare name: pre-quoting it makes gorm read the value as a
 	// raw table expression, and the soft-delete clause then qualifies itself
 	// with the struct-derived name instead of this one.

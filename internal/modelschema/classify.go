@@ -34,8 +34,8 @@ var timeType = reflect.TypeFor[time.Time]()
 //
 // Classification reads reflect.Kind only. Recognizing decimal types through
 // driver.Valuer looks tempting, but uuid, JSON and enum types stored as text
-// implement it too, and treating those as numeric would reintroduce exactly
-// the failure the split exists to prevent: MySQL and SQLite answer SUM over a
+// implement it too, and treating those as numeric would let in exactly the
+// failure the split exists to prevent: MySQL and SQLite answer SUM over a
 // text column with 0 and a warning rather than an error, so the mistake
 // reaches a report as a plausible wrong number instead of a failure. A decimal
 // stored as a struct is therefore classified as other, and SUM or AVG over it

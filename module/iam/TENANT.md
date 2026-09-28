@@ -1,6 +1,6 @@
 # IAM 租户边界
 
-本文记录 `module/iam` 在开启多租户后的边界。IAM 的核心原则是：用户、凭证、身份是全局身份主体数据，不直接归属某个 tenant；会话可以保存本次登录选择的当前 tenant，但不表达 tenant 成员关系或权限。tenant 成员关系和权限由 `module/authz` 的 RoleBinding、Role 和 Casbin tenant domain 表达。
+本文记录 `module/iam` 在开启多租户后的边界。IAM 的核心原则是：用户、凭证、身份是全局身份主体数据，不直接归属某个 tenant；会话可以保存本次登录选择的当前 tenant，但不表达 tenant 成员关系或权限。tenant 成员关系和权限由 `module/authz` 的 RoleBinding、Role 和 RBAC 策略的 tenant 域表达。
 
 ## 不属于 tenant 的接口
 
@@ -26,9 +26,12 @@
 
 ## in tenant 的接口
 
-这些接口管理某个目标用户，必须使用当前 tenant 做授权，并校验目标用户属于当前 tenant：
+这些接口以当前 tenant 做授权；其中管理某个目标用户的接口还要校验目标用户属于当前 tenant：
 
-- `PATCH /api/iam/admin/users/:id/status`
+- `POST /api/iam/admin/users`
+- `GET /api/iam/admin/users`
+- `GET /api/iam/admin/users/:id`
+- `PATCH /api/iam/admin/users/:id`
 - `POST /api/iam/reset-password`
 - `GET /api/iam/admin/users/:id/sessions`
 - `DELETE /api/iam/admin/users/:id/sessions`

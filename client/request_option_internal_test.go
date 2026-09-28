@@ -42,8 +42,8 @@ func TestWithQueryEncodesFreeFormPairs(t *testing.T) {
 }
 
 func TestWithQueryKeepsEmptyValuesAligned(t *testing.T) {
-	// An empty value must not shift later pairs; the old implementation
-	// dropped empty strings and mispaired everything after them.
+	// An empty value must not shift later pairs: dropping empty strings would
+	// mispair everything after them.
 	cfg := newRequestConfig([]RequestOption{WithQuery("a", "", "b", "2")})
 
 	encoded, err := cfg.encode()

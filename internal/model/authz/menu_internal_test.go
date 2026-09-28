@@ -14,7 +14,7 @@ import (
 // A menu is global and its routes are what every tenant's roles derive their
 // permissions from, so an ordinary subject — even one whose policies grant it
 // the route — must be refused, while the deployment's own writes, which carry
-// no subject, must not be. The package holds no enforcer, so the guard answers
+// no subject, must not be. No policy set is installed, so the guard answers
 // from the noop implementation, which knows exactly the built-in root subject.
 func TestMenuWriteGuardRequiresASystemSubject(t *testing.T) {
 	withSubject := func(userID string) context.Context {

@@ -91,10 +91,10 @@ func buildMigrateProgramForMode(moduleName string, schemaOnly bool, schemaSource
 // imports, so the program registers every model the running service does.
 //
 // A package the project does not have yet — a scaffold gg gen has not
-// restored since the framework grew one — is left out, with a note: it
-// registers nothing, and the service does not build without it either, so
-// the migration must not fail on its account. Migration never writes source
-// files; restoring the scaffold is gen's job.
+// written into the project — is left out, with a note: it registers nothing,
+// and the service does not build without it either, so the migration must not
+// fail on its account. Migration never writes source files; restoring the
+// scaffold is gen's job.
 func migrateProjectImports(moduleName string) string {
 	lines := make([]string, 0, len(ggconst.ProjectImportDirs))
 	for _, dir := range ggconst.ProjectImportDirs {

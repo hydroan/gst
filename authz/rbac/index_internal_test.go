@@ -13,8 +13,8 @@ import (
 )
 
 // matcherFuncPathMatch is the name modelData's matcher calls pathMatch by. It
-// lives with the oracle: the runtime stopped evaluating the matcher, so only
-// the engine the differential test builds still resolves the name.
+// lives with the oracle: the runtime does not evaluate the matcher, so only
+// the engine the differential test builds resolves the name.
 const matcherFuncPathMatch = "pathMatch"
 
 // pathMatchFunc adapts pathMatch to the signature the oracle's matcher calls
@@ -78,10 +78,10 @@ e = some(where (p.eft == allow))
 [matchers]
 # This matcher is the specification of a policy decision, not its execution.
 # Decisions answer from the decision index, which partitions the same rules by
-# the equalities below; the engine would have evaluated this expression once
-# per stored rule on every request, at an interpreter's price per row. The
-# differential tests hold the index to this text, so a semantic change here
-# without a matching index change is a test failure rather than a silent split.
+# the equalities below rather than evaluating this expression once per stored
+# rule on every request, at an interpreter's price per row. The differential
+# tests hold the index to this text, so a semantic change here without a
+# matching index change is a test failure rather than a silent split.
 # The two branches authorize decides before consulting any policy — system_root
 # and the built-in admin role inside the request tenant — are deliberately not
 # spelled here: neither reads p, so no rule is ever the reason for their access.
@@ -120,9 +120,9 @@ func newOracle(tb testing.TB) *casbin.Enforcer {
 }
 
 // TestDecisionIndexAgreesWithTheMatcher holds the runtime to its
-// specification. The matcher in modelData is no longer what executes, but it
-// remains what the implementation means, and the engine evaluating it over the
-// same rules is the one oracle that can say so: every round seeds a randomized
+// specification. The matcher in modelData is not what executes, but it is
+// what the implementation means, and the engine evaluating it over the same
+// rules is the one oracle that can say so: every round seeds a randomized
 // set of rules and assignments — inheritance chains, a subject named like a
 // role, rules whose effect is not allow, authenticated rules beside role rules
 // — into both the oracle and the process's own policy set, and every decision
@@ -130,7 +130,7 @@ func newOracle(tb testing.TB) *casbin.Enforcer {
 //
 // Decisions are compared, not attributions: which of several equally true
 // rules a grant names is answered in precedence order by design, where the
-// engine answered in storage order. The rule the runtime names is instead held
+// engine answers in storage order. The rule the runtime names is instead held
 // to justify the grant on its own: an allow effect, the action compared, the
 // template matched.
 //

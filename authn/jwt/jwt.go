@@ -229,11 +229,11 @@ func ParseToken(tokenStr string) (*Claims, error) {
 // by value, and a token recognized by value is a bearer credential no signature
 // stands behind.
 //
-// It asserts nothing about where the token is being used from. An earlier
-// version compared the caller's browser and operating system against a stored
-// session, which made a stateless token stateful and answered "not match" for
-// a user who simply switched browsers; binding a token to a device is the job
-// of whoever issues it, and requires a store this package deliberately has not.
+// It asserts nothing about where the token is being used from. Comparing the
+// caller's browser and operating system against a stored session would make a
+// stateless token stateful and refuse a user who simply switched browsers;
+// binding a token to a device is the job of whoever issues it, and requires a
+// store this package deliberately has not.
 func Verify(claims *Claims) error {
 	if claims == nil {
 		return errors.New("claims is nil")

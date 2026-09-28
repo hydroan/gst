@@ -385,7 +385,7 @@ type metadataContextKey struct{}
 // The metadata is stored as given rather than rebuilt from its own getters.
 // Metadata is immutable: its fields are unexported, nothing writes them after
 // construction, and the two getters exposing maps hand out clones, so no
-// caller can reach the stored maps to change them. Rebuilding here cloned
+// caller can reach the stored maps to change them. Rebuilding here would clone
 // those maps twice more on every request to produce a copy nothing could tell
 // apart from the original.
 func WithMetadata(ctx context.Context, meta Metadata) context.Context {

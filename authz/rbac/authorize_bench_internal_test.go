@@ -27,10 +27,10 @@ func BenchmarkAuthorize(b *testing.B) {
 	}
 }
 
-// BenchmarkAuthorizeSystemRoot covers the branch that no longer reaches the
-// engine at all. It is sized like the others so the comparison shows what
-// deciding a branch outside the matcher is worth: this one answers from the
-// role graph, so its cost should not follow the size of the policy set.
+// BenchmarkAuthorizeSystemRoot covers a branch decided before the decision
+// index is consulted. It is sized like the others so the comparison shows what
+// deciding a branch outside the index is worth: this one answers from the role
+// graph, so its cost should not follow the size of the policy set.
 func BenchmarkAuthorizeSystemRoot(b *testing.B) {
 	r := newTestRBAC(b, 363)
 	seed(b, systemRoleGrouping, []string{"u_root", consts.AUTHZ_SYSTEM_ROLE_ROOT})
@@ -46,8 +46,8 @@ func BenchmarkAuthorizeSystemRoot(b *testing.B) {
 	}
 }
 
-// BenchmarkAuthorizeDenied covers the denial path, which skips the
-// derivation entirely.
+// BenchmarkAuthorizeDenied covers the denial path, which finds no rule and
+// names what the subject is missing instead.
 func BenchmarkAuthorizeDenied(b *testing.B) {
 	r := newTestRBAC(b, 363)
 	ctx := context.Background()

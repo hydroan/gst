@@ -170,8 +170,8 @@ func warnMissingPruneIgnore(protect ggconfig.PruneConfig) {
 }
 
 // remindUnreadPruneSettings repeats, right before prune asks to delete, that
-// an old .gg.yaml protects nothing: the warning printed when gst.yaml was
-// read may have scrolled away by then.
+// a .gg.yaml protects nothing: the warning printed when gst.yaml was read may
+// have scrolled away by then.
 func remindUnreadPruneSettings() {
 	for _, name := range ggconfig.UnreadFiles(".") {
 		if ggconfig.IsLegacyPruneSettings(name) {

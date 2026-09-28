@@ -321,8 +321,8 @@ func Run(t *testing.T, cache types.Cache[string], caps Capabilities) {
 		}
 	})
 
-	// The concurrency probe is the regression guard for the data race the old
-	// interface carried: every operation used to rewrite a shared ctx field.
+	// The concurrency probe guards against a data race between operations,
+	// such as every operation rewriting a shared field of the backend.
 	// Run the suite with -race to arm it. Operation errors are ignored on
 	// purpose; admission-based backends may reject writes under contention.
 	t.Run("ConcurrentAccess", func(t *testing.T) {

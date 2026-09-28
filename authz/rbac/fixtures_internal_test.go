@@ -57,7 +57,7 @@ func installTestSet(tb testing.TB) {
 
 // seed writes rules straight into the installed policy set and rebuilds what
 // is derived from it, standing in for the memory half every real write
-// performs. Fixtures use it where they used to write through the enforcer.
+// performs.
 func seed(tb testing.TB, ptype string, rules ...[]string) {
 	tb.Helper()
 	policyMu.Lock()

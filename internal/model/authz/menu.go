@@ -65,7 +65,7 @@ type Menu struct {
 	// Self-referencing tree. The associations exist so Expands can preload Parent
 	// and Children; constraint:- keeps AutoMigrate from emitting a physical foreign
 	// key, because preloading resolves the relation in Go and never relies on one.
-	// Without that constraint the database no longer rejects deleting a menu that
+	// Without that constraint the database does not reject deleting a menu that
 	// still has children, so callers own the referential integrity of the tree.
 	ParentID string  `json:"parent_id,omitempty" gorm:"size:191" query:"parent_id"`
 	Children []*Menu `json:"children,omitempty" gorm:"foreignKey:ParentID;constraint:-"`             // Child menus.
@@ -219,8 +219,8 @@ func (m *Menu) DeleteBefore(ctx context.Context) error {
 		return err
 	}
 
-	// Same reach as UpdateAfter: the menu is global, so removing it has to be
-	// removed from every tenant's roles.
+	// Same reach as UpdateAfter: the menu is global, so its removal has to
+	// reach every tenant's roles.
 	ctx = tenant.Across(ctx)
 
 	roles, err := rolesToRefresh(ctx)

@@ -20,10 +20,10 @@ import (
 // TestRecoveryWithTracingAnswersInTheEnvelope pins that a recovered panic is
 // answered in the API envelope.
 //
-// It used to abort with a bare 500 and no body at all: a client reading the
-// documented shape could not tell the refusal from a malformed response, and
-// the one answer whose reader most needs the trace id that explains it carried
-// none.
+// Aborting with a bare 500 and no body at all would leave a client reading the
+// documented shape unable to tell the refusal from a malformed response, and
+// the one answer whose reader most needs the trace id that explains it would
+// carry none.
 func TestRecoveryWithTracingAnswersInTheEnvelope(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 

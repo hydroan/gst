@@ -118,7 +118,7 @@ func seedReconcilableBinding(t *testing.T) *modelauthz.RoleBinding {
 	binding := &modelauthz.RoleBinding{SubjectID: uuid.NewV7().String(), RoleID: role.ID}
 	require.NoError(t, database.Database[*modelauthz.RoleBinding](ctx).Create(binding))
 
-	// The binding must go: this fixture deliberately drops its casbin rule, so
+	// The binding must go: this fixture deliberately drops its policy rule, so
 	// a surviving record shows up as drift in the InSync assertions that follow.
 	// The role itself derives no expected policy, so it can stay.
 	t.Cleanup(func() {

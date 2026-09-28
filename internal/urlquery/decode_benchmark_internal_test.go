@@ -10,9 +10,9 @@ import (
 	"github.com/hydroan/gst/internal/types"
 )
 
-// The gorilla/schema pipeline below is the reference implementation Decode
-// replaced, kept test-only so the comparison benchmark stays honest and the
-// library never links into production binaries again.
+// The gorilla/schema pipeline below is the reference implementation the
+// comparison benchmark measures Decode against. It stays test-only, so the
+// library never links into production binaries.
 
 var gorillaDecoder = func() *schema.Decoder {
 	decoder := schema.NewDecoder()
@@ -20,7 +20,7 @@ var gorillaDecoder = func() *schema.Decoder {
 	return decoder
 }()
 
-// decodeGorilla replays the replaced pipeline: copy the query without filter
+// decodeGorilla runs the reference pipeline: copy the query without filter
 // keys, drop the controller-owned parameters, and stream-decode the rest.
 func decodeGorilla(q url.Values, m types.Model) error {
 	values := make(url.Values, len(q))
@@ -65,8 +65,8 @@ func BenchmarkDecode(b *testing.B) {
 	}
 }
 
-// BenchmarkDecodeGorilla measures the gorilla/schema pipeline this package
-// replaced, on the same request, for a like-for-like comparison.
+// BenchmarkDecodeGorilla measures the gorilla/schema reference pipeline on
+// the same request, for a like-for-like comparison.
 func BenchmarkDecodeGorilla(b *testing.B) {
 	b.ReportAllocs()
 	for b.Loop() {

@@ -61,8 +61,8 @@ func TestIPFilterBlacklistOutranksWhitelist(t *testing.T) {
 	require.Equal(t, http.StatusForbidden, filterStatus(t, handler, "192.168.1.100:41000", ""))
 }
 
-// TestIPFilterFiltersForwardedAddressBehindTrustedProxy is why this filter no
-// longer reads forwarding headers itself: behind a proxy the engine trusts,
+// TestIPFilterFiltersForwardedAddressBehindTrustedProxy is why this filter does
+// not read forwarding headers itself: behind a proxy the engine trusts,
 // the address on the lists is the client's, not the proxy's — so a blocked
 // client stays blocked even though every request arrives from the same peer.
 func TestIPFilterFiltersForwardedAddressBehindTrustedProxy(t *testing.T) {

@@ -9,8 +9,8 @@ import (
 
 // TestBuildConfSizesFromDefault pins the sizing rule: MaxCost bounds the
 // entry count (cost 1 per entry) and NumCounters is ten times the capacity as
-// the admission policy requires. This is the regression guard for the earlier
-// misconfiguration that left MaxCost effectively unbounded.
+// the admission policy requires. It guards against a MaxCost that leaves the
+// cache effectively unbounded.
 func TestBuildConfSizesFromDefault(t *testing.T) {
 	conf := buildConf[string]()
 	if conf.MaxCost != capacity.Default {

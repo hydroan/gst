@@ -836,8 +836,8 @@ gg config convert config.ini config.yaml
 - `file`：每一路写 `logger.dir` 下自己的文件，按 `max_age`、`max_size`、`max_backups` 轮转，适合由采集器读文件的部署。
 
 写标准输出和写日志文件都先缓冲，最迟 1 秒写出，停机时写完；`file` 模式下 `logger.file` 没配或配成
-`/dev/stdout`、`/dev/stderr` 时，全局那一路直接写、不缓冲。值写错启动直接失败。原来靠采集日志文件的项目升级后要加
-`output = file`（或环境变量 `LOGGER_OUTPUT=file`），否则日志不再落文件。
+`/dev/stdout`、`/dev/stderr` 时，全局那一路直接写、不缓冲。值写错启动直接失败。由采集器读日志文件的部署要写
+`output = file`（或环境变量 `LOGGER_OUTPUT=file`），默认的 `stdout` 不落文件。
 
 模型声明 `Migrate()` 后，字段变化先预览迁移计划：
 
@@ -1237,4 +1237,4 @@ testutil 的测试容器按镜像版本全局共享：所有测试二进制挂�
 - 清理或重置容器：`docker rm -f <容器名>`，下次测试会自动重建。修改容器启动参数
   （如连接数上限）后也要先这样删掉旧容器才会生效。
 - 需要每个测试二进制独占容器时（远程 docker daemon、容器被折腾坏、需要全新实例
-  调试），设置 `GST_TEST_DEDICATED_CONTAINERS=1` 回到独占模式，容器随测试结束销毁。
+  调试），设置 `GST_TEST_DEDICATED_CONTAINERS=1` 切换到独占模式，容器随测试结束销毁。

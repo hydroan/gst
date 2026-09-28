@@ -14,13 +14,13 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestPolicyWritesRollBackWithTheTransaction is the regression this whole
-// mechanism exists for.
+// TestPolicyWritesRollBackWithTheTransaction pins what this whole mechanism
+// exists for.
 //
-// Policy changes used to be written on the adapter's own connection, so they
-// committed even when the transaction around the model hook that made them
-// rolled back. That left an authorization behind with no record justifying it:
-// no role row, no binding row, and nothing in the admin interface to revoke.
+// Policy changes written on the adapter's own connection would commit even
+// when the transaction around the model hook that made them rolls back,
+// leaving an authorization behind with no record justifying it: no role row,
+// no binding row, and nothing in the admin interface to revoke.
 func TestPolicyWritesRollBackWithTheTransaction(t *testing.T) {
 	ctx := context.Background()
 	errRollback := errors.New("rollback the transaction")

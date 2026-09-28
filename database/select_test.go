@@ -514,8 +514,8 @@ func TestSelectBuildErrors(t *testing.T) {
 	})
 
 	t.Run("ConditionOnGroupKey", func(t *testing.T) {
-		// Conditions only restrict a measure. They used to be dropped without a
-		// word, which reads as a report quietly counting the wrong rows.
+		// Conditions only restrict a measure. Dropping one without a word
+		// reads as a report quietly counting the wrong rows.
 		rows := make([]row, 0)
 		require.ErrorIs(t, database.Select[*TestAggregateRecord, row](ctx, TestAggregateRecordCols.Category.Group().Where(TestAggregateRecordCols.Status.Eq("done")),
 			TestAggregateRecordCols.Amount.Sum().As("total")).

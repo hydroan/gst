@@ -21,8 +21,8 @@ import (
 // initialize the router and modules through that entry point instead of
 // guessing when module registration is done. A
 // scaffold package the project lacks — restored by gg gen, never by migrate
-// — is left out rather than failing the build, which is what an upgraded
-// project that has not run gen yet looks like.
+// — is left out rather than failing the build, which is what a project that
+// has not run gen yet looks like.
 func TestMigrateProgramLinksWhatMainLinks(t *testing.T) {
 	projectDir := t.TempDir()
 	for _, dir := range ggconst.ProjectImportDirs {

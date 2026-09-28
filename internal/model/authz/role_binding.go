@@ -23,10 +23,6 @@ type RoleBinding struct {
 }
 
 // Indexes declares that a subject holds a role at most once inside a tenant.
-//
-// It moved off the struct tags because the tenant column now arrives through an
-// embedded struct, and a tag on an embedded field cannot name the fields beside
-// it. The columns and the uniqueness are unchanged.
 func (RoleBinding) Indexes() []model.Index {
 	return []model.Index{{Fields: []string{"TenantID", "SubjectID", "RoleID"}, Unique: true}}
 }

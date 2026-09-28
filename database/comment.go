@@ -158,9 +158,9 @@ func (db *database[M]) annotate(tx *gorm.DB) *gorm.DB {
 // clauses in a map keyed by verb name, so the modifier registers itself as
 // the after-expression of each, and the three entries that never match cost
 // only their map slots. The chain owns the value and hands gorm a pointer to
-// it, so attaching the comment allocates nothing beyond the rendered text;
-// the four gorm.io/hints comment hints this replaces each boxed a hint value
-// and a clause-name slice of their own, per chain.
+// it, so attaching the comment allocates nothing beyond the rendered text,
+// where the four gorm.io/hints comment hints would each box a hint value and
+// a clause-name slice of their own, per chain.
 type statementComment struct {
 	text string // the rendered comment block, delimiters included
 }

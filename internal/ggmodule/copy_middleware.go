@@ -168,8 +168,8 @@ func (p *CopyPlan) addHandlerFiles(items []moduleCopyMiddleware, kind moduleCopy
 			return err
 		}
 		// The ownership marker is part of the planned content, so idempotent
-		// re-copies compare equal and marker-less files from older copies show
-		// up as a --force overwrite that upgrades them into prune management.
+		// re-copies compare equal and a marker-less file at the target shows up
+		// as a --force overwrite that brings it under prune management.
 		content = append([]byte(moduleCopyMiddlewareMarker(p.Name)+"\n\n"), content...)
 		p.Files = append(p.Files, moduleCopyFile{
 			Kind:        kind,
@@ -562,10 +562,10 @@ func parseOrCreateRegistrationFile(path, pkg string) (*token.FileSet, *ast.File,
 	fset := token.NewFileSet()
 	src, err := os.ReadFile(path)
 	if os.IsNotExist(err) {
-		// Older or hand-written projects may not have the template file, and
-		// no template writes the interceptor one. Creating a minimal package
-		// file lets the same AST path handle both new and existing projects
-		// without special string-concatenation output.
+		// A project need not have the template file — a hand-written one may
+		// lack it — and no template writes the interceptor one. Creating a
+		// minimal package file lets the same AST path handle both new and
+		// existing projects without special string-concatenation output.
 		file, parseErr := parser.ParseFile(fset, path, []byte("package "+pkg+"\n"), parser.ParseComments)
 		return fset, file, false, parseErr
 	}

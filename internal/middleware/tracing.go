@@ -75,9 +75,9 @@ func tracing() gin.HandlerFunc {
 			// keep the recording gate so the sampled-out path stays allocation-free.
 			// The trace and span IDs are deliberately not attributes: every span
 			// already carries both in its own envelope, which is what tracing
-			// backends index and display. Repeating them cost two string
+			// backends index and display. Repeating them would cost two string
 			// formats, two attributes and their encoding on every sampled
-			// request, for values a backend already had.
+			// request, for values a backend already has.
 			recording = gstotel.IsSpanRecording(span)
 			if recording {
 				attrs := make([]attribute.KeyValue, 0, requestSpanAttrCap)
@@ -176,8 +176,7 @@ func tracing() gin.HandlerFunc {
 		c.Header(consts.HEADER_TRACE_ID, traceID)
 
 		// Process request. The gst trace IDs and the request duration are part
-		// of the attribute batches above, so no per-request SetAttributes calls
-		// remain here.
+		// of the attribute batches above, so no SetAttributes call is made here.
 		c.Next()
 	}
 }

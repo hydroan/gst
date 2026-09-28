@@ -1,10 +1,5 @@
 // Package otel provides OpenTelemetry tracing integration using OTLP exporters.
 //
-// Note: This package was originally designed for Jaeger integration, but since
-// OpenTelemetry dropped support for the Jaeger exporter in July 2023, it now
-// uses OTLP (OpenTelemetry Protocol) exporters instead. Jaeger officially
-// accepts and recommends using OTLP for sending traces.
-//
 // Supported exporter types:
 //   - http/protobuf: OTLP over HTTP using protobuf payloads.
 //   - grpc: OTLP over gRPC.
@@ -58,8 +53,6 @@ import (
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
-
-	// "go.opentelemetry.io/otel/exporters/jaeger" // deprecated: use OTLP exporters instead
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp"
 	"go.opentelemetry.io/otel/propagation"
@@ -79,9 +72,8 @@ var (
 
 type requestRootSpanKey struct{}
 
-// Init initializes the OpenTelemetry tracer with OTLP exporters.
-// This function replaces the deprecated Jaeger exporter with OTLP exporters
-// that are compatible with Jaeger and other tracing backends.
+// Init initializes the OpenTelemetry tracer with OTLP exporters, which Jaeger
+// and other tracing backends accept.
 func Init() error {
 	cfg, err := normalizeConfig(config.App.OTEL)
 	if err != nil {
