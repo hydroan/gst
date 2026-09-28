@@ -7,11 +7,11 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestDatabaseUnderTestStopsOnTheRetiredVariable(t *testing.T) {
-	t.Setenv(envRetiredDatabaseUnderTest, "postgres")
+func TestDatabaseUnderTestStopsOnTheUnreadVariable(t *testing.T) {
+	t.Setenv(envUnreadDatabaseUnderTest, "postgres")
 
 	require.PanicsWithValue(t,
-		"GST_TEST_DATABASE is no longer read, build the test with -tags gsttest_postgres instead",
+		"GST_TEST_DATABASE does not select the dialect, build the test with -tags gsttest_postgres instead",
 		func() { DatabaseUnderTest() })
 }
 
