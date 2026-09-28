@@ -5,7 +5,6 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst"
 	"github.com/hydroan/gst/authz/rbac"
 	"github.com/hydroan/gst/consts"
@@ -89,14 +88,14 @@ func (r *Role) validate() error {
 	r.ID = strings.TrimSpace(r.ID)
 	r.Name = strings.TrimSpace(r.Name)
 	if len(r.Name) == 0 {
-		return errors.New("role name is required")
+		return service.NewError(http.StatusBadRequest, "role name is required")
 	}
 
 	// The system role is addressed by its constant ID and never lives in the
 	// roles table; reject both the ID and the name to avoid a user-created
 	// role masquerading as it.
 	if r.ID == consts.AUTHZ_SYSTEM_ROLE_ROOT || r.Name == consts.AUTHZ_SYSTEM_ROLE_ROOT {
-		return errors.New("system_root is reserved for the system role")
+		return service.NewError(http.StatusBadRequest, "system_root is reserved for the system role")
 	}
 
 	// Both checks below are on the ID alone, because the ID is what authorization
@@ -110,7 +109,7 @@ func (r *Role) validate() error {
 	// created under this ID hands tenant-wide superuser access to everyone bound
 	// to it, whatever permissions it appears to select.
 	if r.ID == consts.AUTHZ_ROLE_ADMIN {
-		return errors.New("admin is reserved for the built-in tenant administrator role")
+		return service.NewError(http.StatusBadRequest, "admin is reserved for the built-in tenant administrator role")
 	}
 
 	// Policies written for the authenticated role are matched without a role
@@ -119,7 +118,7 @@ func (r *Role) validate() error {
 	// policy syncPermissions generates for it would allow every subject that can
 	// log in, including subjects that were never bound to the role.
 	if r.ID == consts.AUTHZ_ROLE_AUTHENTICATED {
-		return errors.New("authenticated is reserved for the implicit role of every authenticated subject")
+		return service.NewError(http.StatusBadRequest, "authenticated is reserved for the implicit role of every authenticated subject")
 	}
 
 	return nil
@@ -213,7 +212,7 @@ func (r *Role) UpdateAfter(ctx context.Context) error {
 // for DeleteAfter, which runs on the other side of the row lock.
 func (r *Role) DeleteBefore(ctx context.Context) error {
 	if r.ID == "" {
-		return errors.New("role id is required")
+		return service.NewError(http.StatusBadRequest, "role id is required")
 	}
 
 	current := new(Role)

@@ -425,7 +425,7 @@ func TestAuthzRole(t *testing.T) {
 
 		t.Run("create_requires_name", func(t *testing.T) {
 			_, err := cli.Post[authz.Role](t.Context(), rolePath, &authz.Role{})
-			require.Error(t, err)
+			requireRefusedAsInvalid(t, err)
 		})
 
 		t.Run("create_rejects_system_root", func(t *testing.T) {
@@ -435,11 +435,11 @@ func TestAuthzRole(t *testing.T) {
 				ID:   consts.AUTHZ_SYSTEM_ROLE_ROOT,
 				Name: "some_role_name",
 			})
-			require.Error(t, err)
+			requireRefusedAsInvalid(t, err)
 			_, err = cli.Post[authz.Role](t.Context(), rolePath, &authz.Role{
 				Name: consts.AUTHZ_SYSTEM_ROLE_ROOT,
 			})
-			require.Error(t, err)
+			requireRefusedAsInvalid(t, err)
 		})
 
 		t.Run("rejects_menus_that_do_not_exist", func(t *testing.T) {
@@ -1150,4 +1150,14 @@ func listAuthzRules(t *testing.T, ptype, v0, v1, v2, v3, v4 string) []*authz.Aut
 		V4:    v4,
 	}).List(&rules))
 	return rules
+}
+
+// requireRefusedAsInvalid requires err to be the 400 a request the module's
+// validation refuses is answered with: the refusal is the client's to fix,
+// not a failure of the server.
+func requireRefusedAsInvalid(t *testing.T, err error) {
+	t.Helper()
+	var refused *client.Error
+	require.ErrorAs(t, err, &refused)
+	require.Equal(t, http.StatusBadRequest, refused.StatusCode, refused.Msg)
 }
