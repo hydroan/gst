@@ -184,7 +184,8 @@ func fieldPath(s *types.Struct, v *types.Var) []string {
 // buildMessage fills the message of obj with the fields of its struct type.
 // The keys are the ones the type encodes to (see jsonshape.Fields); each
 // carries the number of its pb tag, or the fixed number of a framework base
-// key, and the type of its Go type (see fieldTypeOf).
+// key, the type of its Go type (see fieldTypeOf), and its doc comment, or
+// the fixed comment of a framework base key (see baseFieldComments).
 //
 // For the model type
 //
@@ -200,14 +201,19 @@ func fieldPath(s *types.Struct, v *types.Var) []string {
 //
 //	// Item belongs to a record.
 //	message Item {
+//	  // The identifier of the record, assigned when it is created.
 //	  string id = 1;
 //
+//	  // The id of the user who created the record.
 //	  string created_by = 2;
 //
+//	  // The id of the user who last updated the record.
 //	  string updated_by = 3;
 //
+//	  // When the record was created.
 //	  google.protobuf.Timestamp created_at = 4;
 //
+//	  // When the record was last updated.
 //	  google.protobuf.Timestamp updated_at = 5;
 //
 //	  string content = 11;
@@ -360,7 +366,11 @@ func (g *generator) messageOfStruct(name, comment string, st *types.Struct, file
 		if obj, _, _ := types.LookupFieldOrMethod(st, true, f.Var.Pkg(), f.Var.Name()); obj != f.Var {
 			path = fieldPath(st, f.Var)
 		}
-		numbered = append(numbered, numberedField{field: field, comment: fieldComment(g.project.FieldDoc(f.Var), ft.enum), conversion: fieldConversion{field: f, ft: ft, path: path}})
+		doc := g.project.FieldDoc(f.Var)
+		if isBaseField(f) {
+			doc = baseFieldComments[f.Key]
+		}
+		numbered = append(numbered, numberedField{field: field, comment: fieldComment(doc, ft.enum), conversion: fieldConversion{field: f, ft: ft, path: path}})
 	}
 	slices.SortStableFunc(numbered, func(a, b numberedField) int { return cmp.Compare(a.field.GetNumber(), b.field.GetNumber()) })
 	for i, nf := range numbered {

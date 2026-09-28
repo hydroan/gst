@@ -60,6 +60,17 @@ var BaseFieldNumbers = map[string]int32{
 	"updated_at": 5,
 }
 
+// baseFieldComments are the comments the keys of the framework's model base
+// carry in every message: the base is declared outside the project, where
+// the generator reads no doc comment, so each key gets a fixed one.
+var baseFieldComments = map[string]string{
+	"id":         "The identifier of the record, assigned when it is created.",
+	"created_by": "The id of the user who created the record.",
+	"updated_by": "The id of the user who last updated the record.",
+	"created_at": "When the record was created.",
+	"updated_at": "When the record was last updated.",
+}
+
 // FirstBusinessFieldNumber is the lowest field number a business field of a
 // model embedding the framework's base may carry: 1 to 10 belong to the
 // framework. A type without the base numbers its fields from 1.
@@ -182,14 +193,19 @@ func (e *DiagnosticsError) Error() string {
 //
 //	// Note is a note kept by the note service.
 //	message Note {
+//	  // The identifier of the record, assigned when it is created.
 //	  string id = 1;
 //
+//	  // The id of the user who created the record.
 //	  string created_by = 2;
 //
+//	  // The id of the user who last updated the record.
 //	  string updated_by = 3;
 //
+//	  // When the record was created.
 //	  google.protobuf.Timestamp created_at = 4;
 //
+//	  // When the record was last updated.
 //	  google.protobuf.Timestamp updated_at = 5;
 //
 //	  // Title is the display title.

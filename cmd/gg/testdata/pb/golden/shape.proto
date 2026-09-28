@@ -14,14 +14,19 @@ option go_package = "tmpapp/pb;pb";
 
 // Shape carries one field of every kind the handlers convert.
 message Shape {
+  // The identifier of the record, assigned when it is created.
   string id = 1;
 
+  // The id of the user who created the record.
   string created_by = 2;
 
+  // The id of the user who last updated the record.
   string updated_by = 3;
 
+  // When the record was created.
   google.protobuf.Timestamp created_at = 4;
 
+  // When the record was last updated.
   google.protobuf.Timestamp updated_at = 5;
 
   google.protobuf.Timestamp date = 11;

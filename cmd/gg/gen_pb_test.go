@@ -184,6 +184,39 @@ func TestGenRunImportsThePBPackageWhileServingGRPC(t *testing.T) {
 	require.FileExists(t, filepath.Join(projectDir, ggconst.DirPB, ggconst.FilePBGen), "the stale files stay until pruned")
 }
 
+// TestGenRunCommentsTheFrameworkBaseFields pins the comment each key of the
+// framework's model base carries in every model message: the base is
+// declared outside the project, where the generator reads no doc comment,
+// so it writes the fixed one of each key, which is what buf's COMMENT_FIELD
+// rule asks of every field. Guards buildMessage's example.
+func TestGenRunCommentsTheFrameworkBaseFields(t *testing.T) {
+	projectDir, ok := newGenProject(t)
+	if !ok {
+		return
+	}
+	writeProtobufProject(t, projectDir, map[string]string{"model/note.go": protobufNoteModel})
+
+	require.NoError(t, genRunWithOptions(genRunOptions{Quiet: true}))
+
+	got := readGenerated(t, filepath.Join(projectDir, "pb"))
+	require.Contains(t, got["note.proto"], `message Note {
+  // The identifier of the record, assigned when it is created.
+  string id = 1;
+
+  // The id of the user who created the record.
+  string created_by = 2;
+
+  // The id of the user who last updated the record.
+  string updated_by = 3;
+
+  // When the record was created.
+  google.protobuf.Timestamp created_at = 4;
+
+  // When the record was last updated.
+  google.protobuf.Timestamp updated_at = 5;
+`)
+}
+
 // TestGenRunRefusesAModelFileNamedPB pins that a model file named pb.go is
 // reported: its handlers file would be pb/pb.gen.go, the registration file.
 func TestGenRunRefusesAModelFileNamedPB(t *testing.T) {
