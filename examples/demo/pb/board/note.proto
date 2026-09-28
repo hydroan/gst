@@ -18,14 +18,19 @@ option go_package = "demo/pb/board;board";
 // standard actions become the rpcs CreateNote, GetNote, ListNote and so on,
 // and the publish action PublishNote; over HTTP they are /api/board/notes.
 message Note {
+  // The identifier of the record, assigned when it is created.
   string id = 1;
 
+  // The id of the user who created the record.
   string created_by = 2;
 
+  // The id of the user who last updated the record.
   string updated_by = 3;
 
+  // When the record was created.
   google.protobuf.Timestamp created_at = 4;
 
+  // When the record was last updated.
   google.protobuf.Timestamp updated_at = 5;
 
   string title = 11;

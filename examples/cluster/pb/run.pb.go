@@ -31,11 +31,16 @@ const (
 // no end. Listing the runs across the replicas shows who did what and how
 // often, and whether two runs of one job or one lock ever overlapped.
 type Run struct {
-	state     protoimpl.MessageState `protogen:"open.v1"`
-	Id        string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
-	CreatedBy string                 `protobuf:"bytes,2,opt,name=created_by,json=createdBy,proto3" json:"created_by,omitempty"`
-	UpdatedBy string                 `protobuf:"bytes,3,opt,name=updated_by,json=updatedBy,proto3" json:"updated_by,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The identifier of the record, assigned when it is created.
+	Id string `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	// The id of the user who created the record.
+	CreatedBy string `protobuf:"bytes,2,opt,name=created_by,json=createdBy,proto3" json:"created_by,omitempty"`
+	// The id of the user who last updated the record.
+	UpdatedBy string `protobuf:"bytes,3,opt,name=updated_by,json=updatedBy,proto3" json:"updated_by,omitempty"`
+	// When the record was created.
 	CreatedAt *timestamppb.Timestamp `protobuf:"bytes,4,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
+	// When the record was last updated.
 	UpdatedAt *timestamppb.Timestamp `protobuf:"bytes,5,opt,name=updated_at,json=updatedAt,proto3" json:"updated_at,omitempty"`
 	// "cron" or "lock"
 	Kind string `protobuf:"bytes,11,opt,name=kind,proto3" json:"kind,omitempty"`

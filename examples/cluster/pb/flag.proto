@@ -18,14 +18,19 @@ option go_package = "cluster/pb;pb";
 // flag turned on without one: a binding tag would apply to a patch too, which
 // carries only the fields it changes.
 message Flag {
+  // The identifier of the record, assigned when it is created.
   string id = 1;
 
+  // The id of the user who created the record.
   string created_by = 2;
 
+  // The id of the user who last updated the record.
   string updated_by = 3;
 
+  // When the record was created.
   google.protobuf.Timestamp created_at = 4;
 
+  // When the record was last updated.
   google.protobuf.Timestamp updated_at = 5;
 
   string name = 11;
