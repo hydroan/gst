@@ -8,10 +8,12 @@ package router
 import (
 	"context"
 	"fmt"
+	"maps"
 	"net"
 	"net/http"
 	gopath "path"
 	"regexp"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -46,6 +48,12 @@ var (
 
 	routeMu sync.RWMutex
 	routes  = make(map[string][]string)
+	// authRoutes are the endpoints registered on a group other than Pub,
+	// the ones the auth middleware guards, or would (see
+	// warnUnguardedRoutes); authGuarded reports whether an auth middleware
+	// was ever mounted on the authenticated group (see Init).
+	authRoutes  = make(map[string]bool)
+	authGuarded atomic.Bool
 
 	routesReadyMu    sync.Mutex
 	routesReadyHooks []func(ctx context.Context, routes map[string][]string) error
@@ -218,6 +226,7 @@ func Init() error {
 		func(mid gin.HandlerFunc) {
 			if started.Load() == 0 {
 				auth.Use(mid)
+				authGuarded.Store(true)
 			}
 		},
 	)
@@ -262,6 +271,7 @@ func Run() error {
 	}
 
 	server = newServer(addr, root)
+	warnUnguardedRoutes(log)
 
 	// mark the server as started.
 	started.Store(1)
@@ -272,6 +282,27 @@ func Run() error {
 		return err
 	}
 	return nil
+}
+
+// unguardedRoutesMsg is the warning warnUnguardedRoutes logs.
+const unguardedRoutesMsg = "http server serves routes of the authenticated group with no auth middleware registered"
+
+// warnUnguardedRoutes warns, on log, when routes of the authenticated group
+// were registered and no auth middleware was mounted on it, naming the
+// routes: each is served to anyone. The gRPC listener warns the same way
+// for its non-public methods (see grpcserver.Run), and a project may
+// authenticate in a middleware registered for every route (see
+// middleware.Register), so this is a warning and not a refusal.
+func warnUnguardedRoutes(log *zap.SugaredLogger) {
+	if authGuarded.Load() {
+		return
+	}
+	routeMu.RLock()
+	unguarded := slices.Sorted(maps.Keys(authRoutes))
+	routeMu.RUnlock()
+	if len(unguarded) > 0 {
+		log.Warnw(unguardedRoutesMsg, "routes", unguarded)
+	}
 }
 
 // newServer builds the HTTP server Run serves handler on at addr. A
@@ -397,7 +428,7 @@ func register[M types.Model, REQ types.Request, RSP types.Response](router *gin.
 	handle := func(phase consts.Phase, handler gin.HandlerFunc) {
 		method := phase.HTTPMethod()
 		router.Handle(method, path, handler)
-		registerRoute(endpoint, method)
+		registerRoute(endpoint, method, authRequired)
 		middleware.RouteManager.Add(endpoint)
 		openapigen.Set[M, REQ, RSP](endpoint, authRequired, phase)
 	}
@@ -450,11 +481,16 @@ func register[M types.Model, REQ types.Request, RSP types.Response](router *gin.
 	}
 }
 
-func registerRoute(endpoint, method string) {
+// registerRoute records the route for Routes and, when it requires
+// authentication, for warnUnguardedRoutes.
+func registerRoute(endpoint, method string, authRequired bool) {
 	routeMu.Lock()
 	defer routeMu.Unlock()
 
 	routes[endpoint] = append(routes[endpoint], method)
+	if authRequired {
+		authRoutes[endpoint] = true
+	}
 }
 
 func sortedHTTPMethods(methods []string) []string {

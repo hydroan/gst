@@ -125,10 +125,10 @@ func Run() error {
 		register(srv)
 	}
 	// A non-public method with no auth interceptor is served to anyone. The
-	// HTTP listener does the same for a route of the authenticated group
-	// with nothing registered on it, and a project may authenticate in an
-	// interceptor registered for every method, so this is a warning and not
-	// a refusal.
+	// HTTP listener warns the same way for a route of the authenticated
+	// group with nothing registered on it (see router.Run), and a project
+	// may authenticate in an interceptor registered for every method, so
+	// this is a warning and not a refusal.
 	if unguarded := unguardedMethods(); len(unguarded) > 0 && len(authInterceptors) == 0 {
 		log.Warnw("grpc server serves non-public methods with no auth interceptor registered", "methods", unguarded)
 	}

@@ -61,10 +61,10 @@ import (
 // — ahead of whatever else of its own reads the caller: the authenticated
 // chains run in registration order.
 //
-// TODO: a project that mounts no auth middleware serves every route of the
-// authenticated group to anyone, and the HTTP listener does not even warn
-// (the gRPC listener warns, see grpcserver.Run). Refuse to start when
-// routes need authentication and nothing authenticates.
+// A project that mounts neither serves every route of the authenticated
+// group, and every non-public rpc, to anyone; both listeners warn at start
+// (see router.Run and grpcserver.Run) and refuse nothing, since a project
+// may authenticate in a middleware registered for every route.
 //
 // Configuration:
 //   - IAM_SESSION_EXPIRATION sets the session lifetime; it defaults to 8 hours.
