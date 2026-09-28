@@ -33,6 +33,20 @@ type payloadService struct {
 	serviceregistry.Base[*handlerRouteModel, *payloadReq, *payloadRsp]
 }
 
+// requiredReq is a payload with a required field, which the zero request of
+// an absent body fails to meet; requiredService answers with its note.
+type requiredReq struct {
+	Note string `json:"note" binding:"required"`
+}
+
+type requiredService struct {
+	serviceregistry.Base[*handlerRouteModel, *requiredReq, *payloadRsp]
+}
+
+func (*requiredService) Create(_ *types.ServiceContext, req *requiredReq) (*payloadRsp, error) {
+	return &payloadRsp{Note: req.Note}, nil
+}
+
 func (*payloadService) Create(_ *types.ServiceContext, req *payloadReq) (*payloadRsp, error) {
 	return &payloadRsp{Note: req.Note}, nil
 }
@@ -43,6 +57,42 @@ func (*payloadService) Get(_ *types.ServiceContext, req *payloadReq) (*payloadRs
 
 func (*payloadService) List(_ *types.ServiceContext, req *payloadReq) (*payloadRsp, error) {
 	return &payloadRsp{Note: req.Note}, nil
+}
+
+// TestServiceHandlerValidatesTheZeroRequestOfAnAbsentBody pins that an
+// absent body, a JSON null included, is bound as the zero request and
+// validated all the same, the way the gRPC call validates a payload the
+// message left unset: a required field refuses it with 400 where a body
+// naming the field passes. A payload without required fields still reaches
+// the service empty (see TestServiceHandlerBindsWhatTheActionReads).
+func TestServiceHandlerValidatesTheZeroRequestOfAnAbsentBody(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	const route = "required-payloads"
+	registerTestService[*handlerRouteModel, *requiredReq, *payloadRsp](consts.Create, route, &requiredService{})
+	cfg := &types.ControllerConfig[*handlerRouteModel]{Route: route, ParamName: "id"}
+	engine := gin.New()
+	engine.POST("/required-payloads", CreateHandler[*handlerRouteModel, *requiredReq, *payloadRsp](cfg))
+
+	for _, tt := range []struct {
+		name   string
+		body   string
+		status int
+	}{
+		{name: "an absent body fails the required field", status: http.StatusBadRequest},
+		{name: "a JSON null fails the required field", body: "null", status: http.StatusBadRequest},
+		{name: "a body naming the field passes", body: `{"note":"named"}`, status: http.StatusOK},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodPost, "/required-payloads", strings.NewReader(tt.body))
+			if tt.body != "" {
+				req.Header.Set("Content-Type", "application/json")
+			}
+			recorder := httptest.NewRecorder()
+			engine.ServeHTTP(recorder, req)
+
+			require.Equal(t, tt.status, recorder.Code, recorder.Body.String())
+		})
+	}
 }
 
 // TestServiceHandlerBindsWhatTheActionReads pins the one rule of the

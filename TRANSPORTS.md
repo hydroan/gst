@@ -50,7 +50,7 @@ gst · HTTP 与 gRPC 两条传输线
     <div class="arch-arrow">▼</div>
     <div class="arch-layer stage">
       <div class="arch-layer-title">⑥ 共用流程 · internal/controller</div>
-      <div class="arch-box lane shared"><b>十个 CRUD 流程（create.go … delete_many.go、flow.go）</b><ul><li>模型钩子（CreateBefore …）与 service 钩子（Filter、ListAfter …）按同一顺序跑，事务与审计在这一层。</li><li><code>types.ServiceContext</code> 与传输无关，元数据来自 <code>requestctx.Metadata</code>：ClientIP、UserAgent、Host、TLS、Route、Path、Method、RequiresAuth；gRPC 侧 Route、Method 取注册时描述的该动作的路由与 HTTP 方法（流式为 STREAM），Path、RequestURI 是 FullMethod，非 List/Get 动作的 Query 为空。</li><li>校验单点：binding tag 整体校验；Patch / PatchMany 只校验被点名的字段（HTTP 按 body 键，gRPC 按 update_mask）；批量逐条校验。</li><li>数据库经 <code>database.Database[T](ctx)</code>，列名只来自 gorm schema。</li></ul></div>
+      <div class="arch-box lane shared"><b>十个 CRUD 流程（create.go … delete_many.go、flow.go）</b><ul><li>模型钩子（CreateBefore …）与 service 钩子（Filter、ListAfter …）按同一顺序跑，事务与审计在这一层。</li><li><code>types.ServiceContext</code> 与传输无关，元数据来自 <code>requestctx.Metadata</code>：ClientIP、UserAgent、Host、TLS、Route、Path、Method、RequiresAuth；gRPC 侧 Route、Method 取注册时描述的该动作的路由与 HTTP 方法（流式为 STREAM），Path、RequestURI 是 FullMethod，非 List/Get 动作的 Query 为空。</li><li>校验单点：binding tag 整体校验，自定义动作的空 body 按零值请求校验、和 gRPC 未设置的 payload 一致；Patch / PatchMany 只校验被点名的字段（HTTP 按 body 键，gRPC 按 update_mask）；批量逐条校验。</li><li>数据库经 <code>database.Database[T](ctx)</code>，列名只来自 gorm schema。</li></ul></div>
     </div>
     <div class="arch-arrow">▼</div>
     <div class="arch-layer stage">

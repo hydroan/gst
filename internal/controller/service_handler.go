@@ -24,12 +24,14 @@ import (
 
 // serviceHandler returns the handler of a's action for a request whose
 // payload and result are the service's own types. It binds the JSON body
-// into REQ, tolerating an absent one, unless the action is a Get or a List,
-// whose GET request carries no body, or a Create sent as a multipart form,
-// whose body is a file the service reads itself; runs the phase service's
-// method in its service span on a service context of the request; and
-// writes the result in the envelope unless the service wrote the response
-// itself, streaming or sending a file.
+// into REQ, an absent one, a JSON null included, as the zero request, which
+// meets the binding tags all the same, a required field refusing it the way
+// the gRPC call refuses a payload the message left unset; unless the action
+// is a Get or a List, whose GET request carries no body, or a Create sent
+// as a multipart form, whose body is a file the service reads itself. It
+// runs the phase service's method in its service span on a service context
+// of the request, and writes the result in the envelope unless the service
+// wrote the response itself, streaming or sending a file.
 func (a *action[M, REQ, RSP]) serviceHandler() gin.HandlerFunc {
 	invoke := serviceMethod[M, REQ, RSP](a.phase)
 	binds := a.phase != consts.List && a.phase != consts.Get
@@ -45,13 +47,25 @@ func (a *action[M, REQ, RSP]) serviceHandler() gin.HandlerFunc {
 		// service reads the form itself.
 		form := a.phase == consts.Create && strings.EqualFold(c.ContentType(), "multipart/form-data")
 		if binds && !form {
-			if reqErr := bindJSONRequest(c, &req); reqErr != nil && !errors.Is(reqErr, io.EOF) {
+			reqErr := bindJSONRequest(c, &req)
+			// The bound request, or the zero one of an absent body, a JSON
+			// null restored from the nil pointer it leaves before the
+			// validator sees it: the zero request meets the binding tags all
+			// the same, a required field refusing it the way the gRPC call
+			// refuses a payload the message left unset.
+			a.normalizeRequest(&req)
+			if errors.Is(reqErr, io.EOF) {
+				reqErr = nil
+				if err := validateRequest(req); err != nil {
+					reqErr = clientSafeBindError(err)
+				}
+			}
+			if reqErr != nil {
 				log.Errorz("bind request body failed", zap.Error(reqErr))
 				JSON(c, CodeInvalidParam.WithErr(reqErr))
 				gstotel.RecordError(span, reqErr)
 				return
 			}
-			a.normalizeRequest(&req)
 		}
 		rsp, err := a.traceServiceOperation(ctrlSpanCtx, a.phase, func(spanCtx context.Context) (RSP, error) {
 			return invoke(svc, types.NewServiceContext(c, spanCtx, a.phase), req)
