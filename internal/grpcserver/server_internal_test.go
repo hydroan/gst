@@ -504,12 +504,12 @@ func TestRunFailsOnAnAddressItCannotBind(t *testing.T) {
 
 // TestRunLimitsTheMessagesItReceivesToMaxRecvMsgSize pins the
 // max_recv_msg_size key: a message above it is refused with
-// ResourceExhausted, and with the key unset grpc-go's own limit of 4MB
+// ResourceExhausted, and with the key unset grpc-go's own limit of 4MiB
 // holds. Ping ignores what its message carries, so the message may be
-// 2KB of bytes.
+// 2048 bytes, above the 1000 of "1KB".
 func TestRunLimitsTheMessagesItReceivesToMaxRecvMsgSize(t *testing.T) {
 	oversized := &wrapperspb.BytesValue{Value: make([]byte, 2048)}
-	t.Run("unset, grpc-go's 4MB holds", func(t *testing.T) {
+	t.Run("unset, grpc-go's 4MiB holds", func(t *testing.T) {
 		reset(t)
 		echo(nil, nil)
 		conn := dial(t, start(t), nil)
@@ -518,7 +518,7 @@ func TestRunLimitsTheMessagesItReceivesToMaxRecvMsgSize(t *testing.T) {
 
 		require.NoError(t, conn.Invoke(ctx, "/gst.test.Echo/Ping", oversized, &emptypb.Empty{}))
 	})
-	t.Run("1KB refuses a 2KB message", func(t *testing.T) {
+	t.Run("1KB refuses a 2048-byte message", func(t *testing.T) {
 		reset(t)
 		config.App.GRPC.MaxRecvMsgSize = "1KB"
 		echo(nil, nil)
