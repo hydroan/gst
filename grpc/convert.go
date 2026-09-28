@@ -5,15 +5,40 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/hydroan/gst/internal/grpcserver"
 	"google.golang.org/protobuf/types/known/structpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 // This file holds the conversions the generated handlers apply to what a
-// message cannot carry as the Go value is: a time, a JSON value, a JSON
-// object, and the filters of a List request. Each maps the unset value of
-// one side to the unset value of the other, the zero time to no Timestamp
-// and nil to nil, so a value comes back from a message as it went in.
+// message cannot carry as the Go value is: a time, a dynamic value, a JSON
+// object, and the filters of a List request (a JSON document, a
+// json.RawMessage or a datatypes.JSON, travels as its bytes and needs
+// none). Each maps the unset value of one side to the unset value of the
+// other, the zero time to no Timestamp and nil to nil, so a value comes
+// back from a message as it went in. It
+// also holds what a generated FromProto reads a value through when the
+// message's type is wider than the model's, Narrow and Number, which refuse
+// what the model's type cannot hold.
+
+// Narrow returns v as the narrower integer type T a model field holds, int8
+// for the int32 its message carries, and refuses with InvalidArgument,
+// naming field, a value T cannot hold, the way encoding/json refuses an
+// out-of-range number over HTTP: 300 folded into an int8 would come back
+// as 44. The generated FromProto reads every int8, int16, uint8 and uint16
+// field through it.
+func Narrow[T ~int8 | ~int16 | ~uint8 | ~uint16, V ~int32 | ~uint32](field string, v V) (T, error) {
+	return grpcserver.Narrow[T](field, v)
+}
+
+// Number returns s as the json.Number a model field holds, "" for the unset
+// field, and refuses with InvalidArgument, naming field, a string that is no
+// JSON number literal, the way encoding/json refuses it over HTTP: the
+// message carries the number as a string. The generated FromProto reads
+// every json.Number field through it.
+func Number(field, s string) (json.Number, error) {
+	return grpcserver.Number(field, s)
+}
 
 // Timestamp returns the Timestamp of t, and nil for the zero time, which a
 // message leaves unset.
@@ -45,34 +70,11 @@ func Value(v any) *structpb.Value {
 	if err != nil {
 		panic(fmt.Sprintf("grpc: encode %T as a Value: %v", v, err))
 	}
-	return JSONValue(encoded)
-}
-
-// JSONValue returns the Value holding the JSON document raw, and nil for an
-// empty one, which a JSON body would not carry either. It panics on
-// malformed JSON, the way encoding/json refuses to encode it over HTTP; the
-// recovery interceptor answers Internal and logs it.
-func JSONValue(raw []byte) *structpb.Value {
-	if len(raw) == 0 {
-		return nil
-	}
 	value := new(structpb.Value)
-	if err := value.UnmarshalJSON(raw); err != nil {
-		panic(fmt.Sprintf("grpc: encode JSON as a Value: %v", err))
+	if err := value.UnmarshalJSON(encoded); err != nil {
+		panic(fmt.Sprintf("grpc: encode %T as a Value: %v", v, err))
 	}
 	return value
-}
-
-// JSON returns the JSON document v holds, and nil for nil.
-func JSON(v *structpb.Value) []byte {
-	if v == nil {
-		return nil
-	}
-	encoded, err := v.MarshalJSON()
-	if err != nil {
-		panic(fmt.Sprintf("grpc: decode a Value as JSON: %v", err))
-	}
-	return encoded
 }
 
 // Struct returns the Struct holding m, the JSON object encoding/json encodes

@@ -401,8 +401,8 @@ func (g *generator) taggedNumber(tag string, base bool, s jsonshape.Site) int32 
 // double; time.Time, datatypes.Date and gorm.DeletedAt to
 // google.protobuf.Timestamp and datatypes.Time to google.protobuf.Duration
 // (see timeTypes); a project enum to its underlying string or integer type;
-// a JSON document (any, json.RawMessage, datatypes.JSON) to
-// google.protobuf.Value and a JSON object (map[string]any,
+// a JSON document (json.RawMessage, datatypes.JSON) to bytes, a dynamic
+// value (any) to google.protobuf.Value and a JSON object (map[string]any,
 // datatypes.JSONMap) to google.protobuf.Struct; []byte to bytes, a slice or
 // array to repeated, a map to map; a pointer to the type it
 // points to, optional when that is a scalar; a project struct to its message
@@ -424,7 +424,7 @@ func (g *generator) taggedNumber(tag string, base bool, s jsonshape.Site) int32 
 //	Ratio   float64           -> double ratio = 17;
 //	Enabled bool              -> bool enabled = 18;
 //	Payload []byte            -> bytes payload = 19;
-//	Raw     json.RawMessage   -> google.protobuf.Value raw = 20;
+//	Raw     json.RawMessage   -> bytes raw = 20;
 //	Extra   map[string]any    -> google.protobuf.Struct extra = 21;
 //	Due     time.Time         -> google.protobuf.Timestamp due = 22;
 //	Meta    RecordMeta        -> RecordMeta meta = 23;
@@ -539,15 +539,16 @@ func (g *generator) namedFieldType(n *types.Named, file *protoFile, parent *desc
 
 // builtinFieldType maps a type of jsonshape's builtin table other than the
 // time types (see timeTypes): a JSON number to string (json.Number keeps
-// digits a double would not), raw JSON to google.protobuf.Value, a JSON
-// object to google.protobuf.Struct, and a wrapper to the type it wraps.
+// digits a double would not), raw JSON to bytes (the document travels as it
+// is, every digit of it, where a google.protobuf.Value would hold its
+// numbers as doubles), a JSON object to google.protobuf.Struct, and a
+// wrapper to the type it wraps.
 func (g *generator) builtinFieldType(kind jsonshape.Builtin, n *types.Named, file *protoFile, parent *descriptorpb.DescriptorProto, key string, s jsonshape.Site) (fieldType, bool) {
 	switch kind {
 	case jsonshape.BuiltinNumber:
 		return fieldType{kind: descriptorpb.FieldDescriptorProto_TYPE_STRING}, true
 	case jsonshape.BuiltinAny:
-		file.importOf(structProto)
-		return fieldType{kind: descriptorpb.FieldDescriptorProto_TYPE_MESSAGE, typeName: wellKnownValue}, true
+		return fieldType{kind: descriptorpb.FieldDescriptorProto_TYPE_BYTES}, true
 	case jsonshape.BuiltinObject:
 		file.importOf(structProto)
 		return fieldType{kind: descriptorpb.FieldDescriptorProto_TYPE_MESSAGE, typeName: wellKnownStruct}, true

@@ -45,7 +45,7 @@ message Record {
 
   bytes payload = 19;
 
-  google.protobuf.Value raw = 20;
+  bytes raw = 20;
 
   google.protobuf.Struct extra = 21;
 

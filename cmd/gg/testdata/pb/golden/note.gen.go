@@ -26,7 +26,11 @@ var (
 
 // CreateNote serves the Create action of Note on /api/notes.
 func (NoteService) CreateNote(ctx context.Context, req *CreateNoteRequest) (*CreateNoteResponse, error) {
-	m, err := createNote(ctx, nil, NoteFromProto(req.GetNote()))
+	in, err := NoteFromProto(req.GetNote())
+	if err != nil {
+		return nil, err
+	}
+	m, err := createNote(ctx, nil, in)
 	if err != nil {
 		return nil, err
 	}
@@ -59,9 +63,9 @@ func NoteToProto(m *model.Note) *Note {
 }
 
 // NoteFromProto decodes Note messages into values, nil into nil.
-func NoteFromProto(p *Note) *model.Note {
+func NoteFromProto(p *Note) (*model.Note, error) {
 	if p == nil {
-		return nil
+		return nil, nil
 	}
 	m := new(model.Note)
 	m.ID = p.GetId()
@@ -71,5 +75,5 @@ func NoteFromProto(p *Note) *model.Note {
 	m.UpdatedAt = grpc.Time(p.GetUpdatedAt())
 	m.Title = p.GetTitle()
 	m.Tags = p.GetTags()
-	return m
+	return m, nil
 }

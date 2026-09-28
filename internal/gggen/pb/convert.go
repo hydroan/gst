@@ -28,6 +28,9 @@ type fileWriter struct {
 	file  *protoFile
 	out   *goFile
 	temps map[string]int // the temporaries declared so far in the function, by base name
+	// fallible records that the conversion function being written reads a
+	// value it may refuse (see refusing), and so declares err.
+	fallible bool
 }
 
 func (g *generator) newFileWriter(f *protoFile) *fileWriter {
@@ -311,9 +314,9 @@ func typeKey(t types.Type) string {
 // dst, a message field of protobuf type ft. A value the field holds as it
 // is, a string, a []string, is assigned; one of another type, an int for
 // an int64, a string enum for a string, is converted; a time becomes a
-// Timestamp through grpc.Timestamp, a duration a Duration, raw JSON a Value
-// through grpc.JSONValue, any value a Value through grpc.Value, a JSON object
-// a Struct through grpc.Struct; a project struct converts through its
+// Timestamp through grpc.Timestamp, a duration a Duration, any value a
+// Value through grpc.Value, a JSON object a Struct through grpc.Struct, and
+// raw JSON travels as its bytes; a project struct converts through its
 // XToProto, an unnamed one field by field into its own message; a slice
 // or a map of any of these converts element by element, and a pointer to
 // one converts when it is not nil.
@@ -334,7 +337,7 @@ func typeKey(t types.Type) string {
 //	p.Ratio = m.Ratio
 //	p.Enabled = m.Enabled
 //	p.Payload = m.Payload
-//	p.Raw = grpc.JSONValue(m.Raw)
+//	p.Raw = m.Raw
 //	p.Extra = grpc.Struct(m.Extra)
 //	p.Due = grpc.Timestamp(m.Due)
 //	p.Meta = RecordMetaToProto(&m.Meta)
@@ -357,7 +360,7 @@ func typeKey(t types.Type) string {
 //
 //	p.Date = grpc.Timestamp(time.Time(m.Date))
 //	p.Clock = durationpb.New(time.Duration(m.Clock))
-//	p.Doc = grpc.JSONValue(m.Doc)
+//	p.Doc = m.Doc
 //	p.Attrs = grpc.Struct(m.Attrs)
 //	data := m.Options.Data()
 //	p.Options = ShapeOptionsToProto(&data)
@@ -436,8 +439,6 @@ func (w *fileWriter) toProto(dst, src ast.Expr, t types.Type, ft fieldType) []as
 	if n, ok := t.(*types.Named); ok {
 		if kind, builtin := jsonshape.BuiltinOf(n); builtin {
 			switch kind {
-			case jsonshape.BuiltinAny:
-				return []ast.Stmt{assign(dst, call(w.grpc("JSONValue"), src))}
 			case jsonshape.BuiltinObject:
 				return []ast.Stmt{assign(dst, call(w.grpc("Struct"), src))}
 			case jsonshape.BuiltinWrapper:
@@ -534,9 +535,13 @@ func selPath(x ast.Expr, path []string) ast.Expr {
 }
 
 // fromProto returns the statements decoding src, the value of a message
-// field of protobuf type ft, into dst, a Go value of type t: the mirror of
-// toProto. A message is read through its getters, so an unset one decodes
-// into the zero value; the pointer of an optional scalar is taken as it is.
+// field of protobuf type ft, the field named name, into dst, a Go value of
+// type t: the mirror of toProto. A message is read through its getters, so
+// an unset one decodes into the zero value; the pointer of an optional
+// scalar is taken as it is. A value the Go type may not hold, a narrow
+// integer or a JSON number (see reader), and a message decoded through a
+// conversion function are read as statements that may refuse it (see
+// refusing), the field's name in the refusal.
 //
 // The fields of the Record model of the golden fixture decode as
 //
@@ -554,11 +559,16 @@ func selPath(x ast.Expr, path []string) ast.Expr {
 //	m.Ratio = p.GetRatio()
 //	m.Enabled = p.GetEnabled()
 //	m.Payload = p.GetPayload()
-//	m.Raw = grpc.JSON(p.GetRaw())
+//	m.Raw = p.GetRaw()
 //	m.Extra = grpc.Map(p.GetExtra())
 //	m.Due = grpc.Time(p.GetDue())
 //	if v := p.GetMeta(); v != nil {
-//		m.Meta = *RecordMetaFromProto(v)
+//		var x *model.RecordMeta
+//		x, err = RecordMetaFromProto(v)
+//		if err != nil {
+//			return nil, err
+//		}
+//		m.Meta = *x
 //	}
 //	if v := p.GetWindow(); v != nil {
 //		m.Window.From = v.GetFrom()
@@ -571,32 +581,54 @@ func selPath(x ast.Expr, path []string) ast.Expr {
 //		m.Links = make([]record.Link, len(p.GetLinks()))
 //		for i, v := range p.GetLinks() {
 //			if v != nil {
-//				m.Links[i] = *LinkFromProto(v)
+//				var x *record.Link
+//				x, err = LinkFromProto(v)
+//				if err != nil {
+//					return nil, err
+//				}
+//				m.Links[i] = *x
 //			}
 //		}
 //	}
 //
 // and, of the Shape model, the date, time of day, JSON document, JSON
-// object, JSON wrapper, struct held by value, JSON number, integer enum and
-// optional integer as
+// object, JSON wrapper, struct held by value, JSON number, integer enum,
+// optional integer and narrow integer as
 //
 //	m.Date = datatypes.Date(grpc.Time(p.GetDate()))
 //	m.Clock = datatypes.Time(p.GetClock().AsDuration())
-//	m.Doc = grpc.JSON(p.GetDoc())
+//	m.Doc = p.GetDoc()
 //	m.Attrs = grpc.Map(p.GetAttrs())
 //	var data model.ShapeOptions
 //	if v := p.GetOptions(); v != nil {
-//		data = *ShapeOptionsFromProto(v)
+//		var x *model.ShapeOptions
+//		x, err = ShapeOptionsFromProto(v)
+//		if err != nil {
+//			return nil, err
+//		}
+//		data = *x
 //	}
 //	m.Options = datatypes.NewJSONType(data)
 //	if v := p.GetAudit(); v != nil {
-//		m.Audit = *ShapeAuditFromProto(v)
+//		var x *model.ShapeAudit
+//		x, err = ShapeAuditFromProto(v)
+//		if err != nil {
+//			return nil, err
+//		}
+//		m.Audit = *x
 //	}
-//	m.Amount = json.Number(p.GetAmount())
+//	m.Amount, err = grpc.Number("amount", p.GetAmount())
+//	if err != nil {
+//		return nil, err
+//	}
 //	m.Level = model.ShapeLevel(p.GetLevel())
 //	if p.Score != nil {
 //		x := int(*p.Score)
 //		m.Score = &x
+//	}
+//	m.Rank, err = grpc.Narrow[int8]("rank", p.GetRank())
+//	if err != nil {
+//		return nil, err
 //	}
 //
 // then the pointer to an unnamed struct and the optional time as
@@ -611,7 +643,7 @@ func selPath(x ast.Expr, path []string) ast.Expr {
 //		x := grpc.Time(p.GetWhen())
 //		m.When = &x
 //	}
-func (w *fileWriter) fromProto(dst, src ast.Expr, t types.Type, ft fieldType) []ast.Stmt {
+func (w *fileWriter) fromProto(dst, src ast.Expr, t types.Type, ft fieldType, name string) []ast.Stmt {
 	// declared is t as the model spells it, an alias kept, which is how the
 	// file spells it too; t itself decides the conversion.
 	declared := t
@@ -619,7 +651,7 @@ func (w *fileWriter) fromProto(dst, src ast.Expr, t types.Type, ft fieldType) []
 	if p, ok := t.(*types.Pointer); ok {
 		elem := types.Unalias(p.Elem())
 		if msg := w.namedMessage(elem); msg != nil {
-			return []ast.Stmt{assign(dst, call(w.conversionFunc(msg, "FromProto"), src))}
+			return w.refusing(dst, call(w.conversionFunc(msg, "FromProto"), src))
 		}
 		if _, anonymous := elem.(*types.Struct); anonymous {
 			return []ast.Stmt{w.guarded(src, func(v ast.Expr) []ast.Stmt {
@@ -635,10 +667,20 @@ func (w *fileWriter) fromProto(dst, src ast.Expr, t types.Type, ft fieldType) []
 				return []ast.Stmt{assign(dst, src)}
 			}
 			x := w.temp("x")
+			value, elemFt := src, ft
 			if ft.optional {
-				return []ast.Stmt{ifNotNil(src, define([]string{x}, w.decoded(p.Elem(), elementOf(ft), star(src))), assign(dst, addr(ident(x))))}
+				value, elemFt = star(src), elementOf(ft)
 			}
-			return []ast.Stmt{define([]string{x}, w.decoded(p.Elem(), ft, src)), assign(dst, addr(ident(x)))}
+			var body []ast.Stmt
+			if read, ok := w.reader(p.Elem(), name, value); ok {
+				body = append(append([]ast.Stmt{w.varDecl(x, p.Elem())}, w.refusing(ident(x), read)...), assign(dst, addr(ident(x))))
+			} else {
+				body = []ast.Stmt{define([]string{x}, w.decoded(p.Elem(), elemFt, value)), assign(dst, addr(ident(x)))}
+			}
+			if ft.optional {
+				return []ast.Stmt{ifNotNil(src, body...)}
+			}
+			return body
 		}
 		// A pointer to a time, a JSON value, a slice, an array or a map: a
 		// pointer to the decoded value when the field is set, nil otherwise,
@@ -646,7 +688,7 @@ func (w *fileWriter) fromProto(dst, src ast.Expr, t types.Type, ft fieldType) []
 		// is declared inside the guard, so the fields of a struct share the
 		// name.
 		x := w.temp("x")
-		body := append(w.declared(x, p.Elem(), w.fromProto(ident(x), src, p.Elem(), ft)), assign(dst, addr(ident(x))))
+		body := append(w.declared(x, p.Elem(), w.fromProto(ident(x), src, p.Elem(), ft, name)), assign(dst, addr(ident(x))))
 		return []ast.Stmt{ifNotNil(src, body...)}
 	}
 
@@ -662,32 +704,33 @@ func (w *fileWriter) fromProto(dst, src ast.Expr, t types.Type, ft fieldType) []
 			deleted := compositeLit(sel(w.out.imports.fixedRef(importPathGorm), "DeletedAt"), keyValue("Time", call(sel(v, "AsTime"))), keyValue("Valid", ident("true")))
 			return []ast.Stmt{assign(dst, deleted)}
 		})}
-	case "encoding/json.Number":
-		return []ast.Stmt{assign(dst, call(sel(w.out.imports.fixedRef(importPathJSON), "Number"), src))}
 	}
 	if n, ok := t.(*types.Named); ok {
 		if kind, builtin := jsonshape.BuiltinOf(n); builtin {
 			switch kind {
-			case jsonshape.BuiltinAny:
-				return []ast.Stmt{assign(dst, call(w.grpc("JSON"), src))}
 			case jsonshape.BuiltinObject:
 				return []ast.Stmt{assign(dst, call(w.grpc("Map"), src))}
 			case jsonshape.BuiltinWrapper:
 				data := w.temp("data")
 				arg := n.TypeArgs().At(0)
-				stmts := w.declared(data, arg, w.fromProto(ident(data), src, arg, ft))
+				stmts := w.declared(data, arg, w.fromProto(ident(data), src, arg, ft, name))
 				return append(stmts, assign(dst, call(sel(w.out.imports.fixedRef(importPathDatatypes), "NewJSONType"), ident(data))))
 			}
 		}
 		if msg := w.namedMessage(n); msg != nil {
 			return []ast.Stmt{w.guarded(src, func(v ast.Expr) []ast.Stmt {
-				return []ast.Stmt{assign(dst, star(call(w.conversionFunc(msg, "FromProto"), v)))}
+				x := w.temp("x")
+				read := w.refusing(ident(x), call(w.conversionFunc(msg, "FromProto"), v))
+				return append(append([]ast.Stmt{w.varDecl(x, types.NewPointer(n))}, read...), assign(dst, star(ident(x))))
 			})}
 		}
 	}
 
 	switch u := t.Underlying().(type) {
 	case *types.Basic:
+		if read, ok := w.reader(declared, name, src); ok {
+			return w.refusing(dst, read)
+		}
 		return []ast.Stmt{assign(dst, w.decoded(declared, ft, src))}
 	case *types.Slice:
 		if ft.kind == descriptorpb.FieldDescriptorProto_TYPE_BYTES || assignable(t, ft, false) {
@@ -696,12 +739,12 @@ func (w *fileWriter) fromProto(dst, src ast.Expr, t types.Type, ft fieldType) []
 		i, v := w.temp("i"), w.temp("v")
 		return []ast.Stmt{ifNotNil(src,
 			assign(dst, makeCall(w.goType(declared), lenCall(src))),
-			rangeStmt(i, v, src, w.fromProto(index(dst, ident(i)), ident(v), u.Elem(), elementOf(ft))...),
+			rangeStmt(i, v, src, w.fromProto(index(dst, ident(i)), ident(v), u.Elem(), elementOf(ft), name)...),
 		)}
 	case *types.Array:
 		i := w.temp("i")
 		return []ast.Stmt{rangeStmt(i, "", call(ident("min"), lenCall(src), lenCall(dst)),
-			w.fromProto(index(dst, ident(i)), index(src, ident(i)), u.Elem(), elementOf(ft))...)}
+			w.fromProto(index(dst, ident(i)), index(src, ident(i)), u.Elem(), elementOf(ft), name)...)}
 	case *types.Map:
 		if ft.typeName == wellKnownStruct {
 			return []ast.Stmt{assign(dst, call(w.grpc("Map"), src))}
@@ -716,7 +759,7 @@ func (w *fileWriter) fromProto(dst, src ast.Expr, t types.Type, ft fieldType) []
 		}
 		return []ast.Stmt{ifNotNil(src,
 			assign(dst, makeCall(w.goType(declared), lenCall(src))),
-			rangeStmt(k, v, src, w.fromProto(index(dst, key), ident(v), u.Elem(), *ft.mapValue)...),
+			rangeStmt(k, v, src, w.fromProto(index(dst, key), ident(v), u.Elem(), *ft.mapValue, name)...),
 		)}
 	case *types.Interface:
 		return []ast.Stmt{assign(dst, call(sel(src, "AsInterface")))}
@@ -730,15 +773,15 @@ func (w *fileWriter) fromProto(dst, src ast.Expr, t types.Type, ft fieldType) []
 // running stmts, which assign it: x := expr when stmts is that one
 // assignment, var x T followed by stmts otherwise. A named JSON type over a
 // slice or a map, a json.RawMessage or a datatypes.JSONMap, is declared as
-// itself even then: the grpc helpers decoding it answer its underlying
-// type, and x := would declare x as that.
+// itself even then: the getter or the grpc helper decoding it answers its
+// underlying type, []byte or map[string]any, and x := would declare x as
+// that.
 func (w *fileWriter) declared(name string, t types.Type, stmts []ast.Stmt) []ast.Stmt {
 	if n, ok := types.Unalias(t).(*types.Named); ok {
 		if _, builtin := jsonshape.BuiltinOf(n); builtin {
 			switch n.Underlying().(type) {
 			case *types.Slice, *types.Map:
-				decl := &ast.DeclStmt{Decl: &ast.GenDecl{Tok: token.VAR, Specs: []ast.Spec{&ast.ValueSpec{Names: []*ast.Ident{ident(name)}, Type: w.goType(t)}}}}
-				return append([]ast.Stmt{decl}, stmts...)
+				return append([]ast.Stmt{w.varDecl(name, t)}, stmts...)
 			}
 		}
 	}
@@ -749,8 +792,12 @@ func (w *fileWriter) declared(name string, t types.Type, stmts []ast.Stmt) []ast
 			}
 		}
 	}
-	decl := &ast.DeclStmt{Decl: &ast.GenDecl{Tok: token.VAR, Specs: []ast.Spec{&ast.ValueSpec{Names: []*ast.Ident{ident(name)}, Type: w.goType(t)}}}}
-	return append([]ast.Stmt{decl}, stmts...)
+	return append([]ast.Stmt{w.varDecl(name, t)}, stmts...)
+}
+
+// varDecl declares the variable name of type t, var x T.
+func (w *fileWriter) varDecl(name string, t types.Type) ast.Stmt {
+	return &ast.DeclStmt{Decl: &ast.GenDecl{Tok: token.VAR, Specs: []ast.Spec{&ast.ValueSpec{Names: []*ast.Ident{ident(name)}, Type: w.goType(t)}}}}
 }
 
 // decoded returns src, the scalar value of a message field or element of
@@ -761,6 +808,39 @@ func (w *fileWriter) decoded(t types.Type, ft fieldType, src ast.Expr) ast.Expr 
 		return src
 	}
 	return converted(w.goType(t), src)
+}
+
+// reader returns the call a FromProto reads src through when the Go type t
+// of the field name is narrower than what its message field carries, and
+// false when the value is read as it is: grpc.Narrow for an int8, int16,
+// uint8 or uint16, or a type over one, read from an int32 or uint32, and
+// grpc.Number for a json.Number read from a string. Both refuse what t
+// cannot hold, which is why the reading is a statement of its own (see
+// refusing) and not an expression.
+func (w *fileWriter) reader(t types.Type, name string, src ast.Expr) (ast.Expr, bool) {
+	u := types.Unalias(t)
+	if typeKey(u) == "encoding/json.Number" {
+		return call(w.grpc("Number"), strLit(name), src), true
+	}
+	if b, ok := u.Underlying().(*types.Basic); ok {
+		switch b.Kind() {
+		case types.Int8, types.Int16, types.Uint8, types.Uint16:
+			return call(&ast.IndexExpr{X: w.grpc("Narrow"), Index: w.goType(t)}, strLit(name), src), true
+		}
+	}
+	return nil, false
+}
+
+// refusing returns the statements assigning to dst what call answers, a
+// value the call may refuse, a reading (see reader) or a conversion
+// function: its error ends the conversion function being written, which
+// declares err once for every such statement (see conversionFuncs).
+func (w *fileWriter) refusing(dst, call ast.Expr) []ast.Stmt {
+	w.fallible = true
+	return []ast.Stmt{
+		&ast.AssignStmt{Lhs: []ast.Expr{dst, ident("err")}, Tok: token.ASSIGN, Rhs: []ast.Expr{call}},
+		ifNotNil(ident("err"), returns(ident("nil"), ident("err"))),
+	}
 }
 
 // structFromProto returns the statements decoding the fields of src, a
@@ -782,12 +862,15 @@ func (w *fileWriter) fieldFromProto(dst, src ast.Expr, fc fieldConversion) []ast
 	if fc.ft.optional {
 		value = sel(src, fc.goName)
 	}
-	return w.fromProto(selPath(dst, fc.path), value, fc.field.Var.Type(), fc.ft)
+	return w.fromProto(selPath(dst, fc.path), value, fc.field.Var.Type(), fc.ft, fc.field.Key)
 }
 
 // conversionFuncs builds the two conversion functions of the message of
 // msg, a project type: XToProto encoding a value into its message and
 // XFromProto decoding a message into a value, nil into nil both ways.
+// XFromProto answers an error as well, the refusal of a value a field
+// cannot hold (see refusing), which the handlers answer the call with; a
+// message no field of which reads that way answers nil for it.
 //
 // The Link type of the golden fixture, record/item.proto, gets
 //
@@ -803,14 +886,14 @@ func (w *fileWriter) fieldFromProto(dst, src ast.Expr, fc fieldConversion) []ast
 //	}
 //
 //	// LinkFromProto decodes Link messages into values, nil into nil.
-//	func LinkFromProto(p *Link) *record.Link {
+//	func LinkFromProto(p *Link) (*record.Link, error) {
 //		if p == nil {
-//			return nil
+//			return nil, nil
 //		}
 //		m := new(record.Link)
 //		m.URL = p.GetUrl()
 //		m.Title = p.GetTitle()
-//		return m
+//		return m, nil
 //	}
 func (w *fileWriter) conversionFuncs(msg *message) {
 	goName := msg.conv.goName
@@ -833,20 +916,30 @@ func (w *fileWriter) conversionFuncs(msg *message) {
 		Body: block(body...),
 	}, nil)
 
-	body = []ast.Stmt{
-		ifStmt(nil, &ast.BinaryExpr{X: ident("p"), Op: token.EQL, Y: ident("nil")}, returns(ident("nil"))),
-		define([]string{"m"}, newCall(w.goType(msg.obj.Type()))),
-	}
+	w.fallible = false
+	var fields []ast.Stmt
 	for _, fc := range msg.conv.fields {
 		w.resetTemps()
-		body = append(body, w.fieldFromProto(ident("m"), ident("p"), fc)...)
+		fields = append(fields, w.fieldFromProto(ident("m"), ident("p"), fc)...)
 	}
-	body = append(body, returns(ident("m")))
-	w.out.add(goName+"FromProto decodes "+msg.obj.Name()+" messages into values, nil into nil.", &ast.FuncDecl{
+	body = []ast.Stmt{
+		ifStmt(nil, &ast.BinaryExpr{X: ident("p"), Op: token.EQL, Y: ident("nil")}, returns(ident("nil"), ident("nil"))),
+		define([]string{"m"}, newCall(w.goType(msg.obj.Type()))),
+	}
+	doc := goName + "FromProto decodes " + msg.obj.Name() + " messages into values, nil into nil."
+	if w.fallible {
+		// err is declared once, for every value read through a helper or a
+		// conversion function that may refuse it (see refusing).
+		body = append(body, &ast.DeclStmt{Decl: &ast.GenDecl{Tok: token.VAR, Specs: []ast.Spec{&ast.ValueSpec{Names: []*ast.Ident{ident("err")}, Type: ident("error")}}}})
+		doc += " A value a field cannot hold, an integer out of its range or a string that is no JSON number, is refused with InvalidArgument."
+	}
+	body = append(body, fields...)
+	body = append(body, returns(ident("m"), ident("nil")))
+	w.out.add(doc, &ast.FuncDecl{
 		Name: ident(goName + "FromProto"),
 		Type: &ast.FuncType{
 			Params:  &ast.FieldList{List: []*ast.Field{{Names: []*ast.Ident{ident("p")}, Type: star(ident(goName))}}},
-			Results: &ast.FieldList{List: []*ast.Field{{Type: star(w.goType(msg.obj.Type()))}}},
+			Results: &ast.FieldList{List: []*ast.Field{{Type: star(w.goType(msg.obj.Type()))}, {Type: ident("error")}}},
 		},
 		Body: block(body...),
 	}, nil)

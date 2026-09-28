@@ -33,7 +33,11 @@ var (
 
 // CreateShape serves the Create action of Shape on /api/shapes.
 func (ShapeService) CreateShape(ctx context.Context, req *CreateShapeRequest) (*CreateShapeResponse, error) {
-	m, err := createShape(ctx, nil, ShapeFromProto(req.GetShape()))
+	in, err := ShapeFromProto(req.GetShape())
+	if err != nil {
+		return nil, err
+	}
+	m, err := createShape(ctx, nil, in)
 	if err != nil {
 		return nil, err
 	}
@@ -62,7 +66,7 @@ func ShapeToProto(m *model.Shape) *Shape {
 	p.UpdatedAt = grpc.Timestamp(m.UpdatedAt)
 	p.Date = grpc.Timestamp(time.Time(m.Date))
 	p.Clock = durationpb.New(time.Duration(m.Clock))
-	p.Doc = grpc.JSONValue(m.Doc)
+	p.Doc = m.Doc
 	p.Attrs = grpc.Struct(m.Attrs)
 	data := m.Options.Data()
 	p.Options = ShapeOptionsToProto(&data)
@@ -140,10 +144,10 @@ func ShapeToProto(m *model.Shape) *Shape {
 		p.Raw = *m.Raw
 	}
 	if m.RawDoc != nil {
-		p.RawDoc = grpc.JSONValue(*m.RawDoc)
+		p.RawDoc = *m.RawDoc
 	}
 	if m.Extra != nil {
-		p.Extra = grpc.JSONValue(*m.Extra)
+		p.Extra = *m.Extra
 	}
 	if m.Meta != nil {
 		p.Meta = grpc.Struct(*m.Meta)
@@ -153,15 +157,20 @@ func ShapeToProto(m *model.Shape) *Shape {
 	p.Frame = WindowToProto(&m.Frame)
 	p.Window = new(ShapeWindow)
 	p.Window.Width = m.Window.Width
+	p.Rank = int32(m.Rank)
+	p.Port = uint32(m.Port)
 	return p
 }
 
-// ShapeFromProto decodes Shape messages into values, nil into nil.
-func ShapeFromProto(p *Shape) *model.Shape {
+// ShapeFromProto decodes Shape messages into values, nil into nil. A value a
+// field cannot hold, an integer out of its range or a string that is no JSON
+// number, is refused with InvalidArgument.
+func ShapeFromProto(p *Shape) (*model.Shape, error) {
 	if p == nil {
-		return nil
+		return nil, nil
 	}
 	m := new(model.Shape)
+	var err error
 	m.ID = p.GetId()
 	m.CreatedBy = p.GetCreatedBy()
 	m.UpdatedBy = p.GetUpdatedBy()
@@ -169,27 +178,46 @@ func ShapeFromProto(p *Shape) *model.Shape {
 	m.UpdatedAt = grpc.Time(p.GetUpdatedAt())
 	m.Date = datatypes.Date(grpc.Time(p.GetDate()))
 	m.Clock = datatypes.Time(p.GetClock().AsDuration())
-	m.Doc = grpc.JSON(p.GetDoc())
+	m.Doc = p.GetDoc()
 	m.Attrs = grpc.Map(p.GetAttrs())
 	var data model.ShapeOptions
 	if v := p.GetOptions(); v != nil {
-		data = *ShapeOptionsFromProto(v)
+		var x *model.ShapeOptions
+		x, err = ShapeOptionsFromProto(v)
+		if err != nil {
+			return nil, err
+		}
+		data = *x
 	}
 	m.Options = datatypes.NewJSONType(data)
 	if v := p.GetAudit(); v != nil {
-		m.Audit = *ShapeAuditFromProto(v)
+		var x *model.ShapeAudit
+		x, err = ShapeAuditFromProto(v)
+		if err != nil {
+			return nil, err
+		}
+		m.Audit = *x
 	}
-	m.Amount = json.Number(p.GetAmount())
+	m.Amount, err = grpc.Number("amount", p.GetAmount())
+	if err != nil {
+		return nil, err
+	}
 	m.Level = model.ShapeLevel(p.GetLevel())
 	if p.Score != nil {
 		x := int(*p.Score)
 		m.Score = &x
 	}
-	m.Owner = ShapeOwnerFromProto(p.GetOwner())
+	m.Owner, err = ShapeOwnerFromProto(p.GetOwner())
+	if err != nil {
+		return nil, err
+	}
 	if p.GetPoints() != nil {
 		m.Points = make([]*model.ShapePoint, len(p.GetPoints()))
 		for i, v := range p.GetPoints() {
-			m.Points[i] = ShapePointFromProto(v)
+			m.Points[i], err = ShapePointFromProto(v)
+			if err != nil {
+				return nil, err
+			}
 		}
 	}
 	for i := range min(len(p.GetGrid()), len(m.Grid)) {
@@ -205,7 +233,12 @@ func ShapeFromProto(p *Shape) *model.Shape {
 		m.ByCode = make(map[int32]model.ShapePoint, len(p.GetByCode()))
 		for k, v := range p.GetByCode() {
 			if v != nil {
-				m.ByCode[k] = *ShapePointFromProto(v)
+				var x *model.ShapePoint
+				x, err = ShapePointFromProto(v)
+				if err != nil {
+					return nil, err
+				}
+				m.ByCode[k] = *x
 			}
 		}
 	}
@@ -239,7 +272,12 @@ func ShapeFromProto(p *Shape) *model.Shape {
 		m.Steps = make(datatypes.JSONSlice[model.ShapePoint], len(p.GetSteps()))
 		for i, v := range p.GetSteps() {
 			if v != nil {
-				m.Steps[i] = *ShapePointFromProto(v)
+				var x *model.ShapePoint
+				x, err = ShapePointFromProto(v)
+				if err != nil {
+					return nil, err
+				}
+				m.Steps[i] = *x
 			}
 		}
 	}
@@ -254,7 +292,12 @@ func ShapeFromProto(p *Shape) *model.Shape {
 			x = make([]model.ShapePoint, len(p.GetCorners()))
 			for i, v := range p.GetCorners() {
 				if v != nil {
-					x[i] = *ShapePointFromProto(v)
+					var x2 *model.ShapePoint
+					x2, err = ShapePointFromProto(v)
+					if err != nil {
+						return nil, err
+					}
+					x[i] = *x2
 				}
 			}
 		}
@@ -268,14 +311,14 @@ func ShapeFromProto(p *Shape) *model.Shape {
 		x := p.Raw
 		m.Raw = &x
 	}
-	if p.GetRawDoc() != nil {
+	if p.RawDoc != nil {
 		var x json.RawMessage
-		x = grpc.JSON(p.GetRawDoc())
+		x = p.RawDoc
 		m.RawDoc = &x
 	}
-	if p.GetExtra() != nil {
+	if p.Extra != nil {
 		var x datatypes.JSON
-		x = grpc.JSON(p.GetExtra())
+		x = p.Extra
 		m.Extra = &x
 	}
 	if p.GetMeta() != nil {
@@ -286,12 +329,25 @@ func ShapeFromProto(p *Shape) *model.Shape {
 	m.Name = p.GetName()
 	m.ShapeMeta.Name = p.GetMetaName()
 	if v := p.GetFrame(); v != nil {
-		m.Frame = *WindowFromProto(v)
+		var x *model.Window
+		x, err = WindowFromProto(v)
+		if err != nil {
+			return nil, err
+		}
+		m.Frame = *x
 	}
 	if v := p.GetWindow(); v != nil {
 		m.Window.Width = v.GetWidth()
 	}
-	return m
+	m.Rank, err = grpc.Narrow[int8]("rank", p.GetRank())
+	if err != nil {
+		return nil, err
+	}
+	m.Port, err = grpc.Narrow[uint16]("port", p.GetPort())
+	if err != nil {
+		return nil, err
+	}
+	return m, nil
 }
 
 // ShapeOptionsToProto encodes ShapeOptions values into their message, nil
@@ -307,13 +363,13 @@ func ShapeOptionsToProto(m *model.ShapeOptions) *ShapeOptions {
 
 // ShapeOptionsFromProto decodes ShapeOptions messages into values, nil into
 // nil.
-func ShapeOptionsFromProto(p *ShapeOptions) *model.ShapeOptions {
+func ShapeOptionsFromProto(p *ShapeOptions) (*model.ShapeOptions, error) {
 	if p == nil {
-		return nil
+		return nil, nil
 	}
 	m := new(model.ShapeOptions)
 	m.Color = p.GetColor()
-	return m
+	return m, nil
 }
 
 // ShapeAuditToProto encodes ShapeAudit values into their message, nil into
@@ -330,15 +386,15 @@ func ShapeAuditToProto(m *model.ShapeAudit) *ShapeAudit {
 }
 
 // ShapeAuditFromProto decodes ShapeAudit messages into values, nil into nil.
-func ShapeAuditFromProto(p *ShapeAudit) *model.ShapeAudit {
+func ShapeAuditFromProto(p *ShapeAudit) (*model.ShapeAudit, error) {
 	if p == nil {
-		return nil
+		return nil, nil
 	}
 	m := new(model.ShapeAudit)
 	if v := p.GetRemoved(); v != nil {
 		m.Removed = gorm.DeletedAt{Time: v.AsTime(), Valid: true}
 	}
-	return m
+	return m, nil
 }
 
 // ShapeOwnerToProto encodes ShapeOwner values into their message, nil into
@@ -353,13 +409,13 @@ func ShapeOwnerToProto(m *model.ShapeOwner) *ShapeOwner {
 }
 
 // ShapeOwnerFromProto decodes ShapeOwner messages into values, nil into nil.
-func ShapeOwnerFromProto(p *ShapeOwner) *model.ShapeOwner {
+func ShapeOwnerFromProto(p *ShapeOwner) (*model.ShapeOwner, error) {
 	if p == nil {
-		return nil
+		return nil, nil
 	}
 	m := new(model.ShapeOwner)
 	m.Name = p.GetName()
-	return m
+	return m, nil
 }
 
 // ShapePointToProto encodes ShapePoint values into their message, nil into
@@ -375,14 +431,14 @@ func ShapePointToProto(m *model.ShapePoint) *ShapePoint {
 }
 
 // ShapePointFromProto decodes ShapePoint messages into values, nil into nil.
-func ShapePointFromProto(p *ShapePoint) *model.ShapePoint {
+func ShapePointFromProto(p *ShapePoint) (*model.ShapePoint, error) {
 	if p == nil {
-		return nil
+		return nil, nil
 	}
 	m := new(model.ShapePoint)
 	m.X = p.GetX()
 	m.Y = p.GetY()
-	return m
+	return m, nil
 }
 
 // WindowToProto encodes Window values into their message, nil into nil.
@@ -396,11 +452,11 @@ func WindowToProto(m *model.Window) *Window {
 }
 
 // WindowFromProto decodes Window messages into values, nil into nil.
-func WindowFromProto(p *Window) *model.Window {
+func WindowFromProto(p *Window) (*model.Window, error) {
 	if p == nil {
-		return nil
+		return nil, nil
 	}
 	m := new(model.Window)
 	m.Width = p.GetWidth()
-	return m
+	return m, nil
 }

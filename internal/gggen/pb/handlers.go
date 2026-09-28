@@ -78,13 +78,13 @@ import (
 //	}
 //
 //	// ReportRspFromProto decodes ReportRsp messages into values, nil into nil.
-//	func ReportRspFromProto(p *ReportRsp) *model.ReportRsp {
+//	func ReportRspFromProto(p *ReportRsp) (*model.ReportRsp, error) {
 //		if p == nil {
-//			return nil
+//			return nil, nil
 //		}
 //		m := new(model.ReportRsp)
 //		m.Total = p.GetTotal()
-//		return m
+//		return m, nil
 //	}
 func (g *generator) handlerFile(f *protoFile) (File, error) {
 	w := g.newFileWriter(f)
@@ -228,7 +228,8 @@ func (w *fileWriter) actionType(model *modelinfo.Model, typeName string) ast.Exp
 // service: it reads the route parameters, the id, the query, the record or
 // the items and the update masks off the request message, runs the call of
 // the action on them and answers the response message holding what the
-// call answered.
+// call answered. A record, an item or a payload is decoded first, and the
+// refusal of one its conversion function answers is the call's answer.
 //
 // The rpcs of the Record model of the golden fixture on records, with the
 // parameter record, and the PatchMany of the Item model under
@@ -236,7 +237,11 @@ func (w *fileWriter) actionType(model *modelinfo.Model, typeName string) ast.Exp
 //
 //	// CreateRecord serves the Create action of Record on /api/records.
 //	func (RecordService) CreateRecord(ctx context.Context, req *CreateRecordRequest) (*CreateRecordResponse, error) {
-//		m, err := createRecord(ctx, nil, RecordFromProto(req.GetRecord()))
+//		in, err := RecordFromProto(req.GetRecord())
+//		if err != nil {
+//			return nil, err
+//		}
+//		m, err := createRecord(ctx, nil, in)
 //		if err != nil {
 //			return nil, err
 //		}
@@ -245,7 +250,11 @@ func (w *fileWriter) actionType(model *modelinfo.Model, typeName string) ast.Exp
 //
 //	// PatchRecord serves the Patch action of Record on /api/records/:record.
 //	func (RecordService) PatchRecord(ctx context.Context, req *PatchRecordRequest) (*PatchRecordResponse, error) {
-//		m, err := patchRecord(ctx, map[string]string{"record": req.GetId()}, req.GetId(), RecordFromProto(req.GetRecord()), req.GetUpdateMask().GetPaths())
+//		in, err := RecordFromProto(req.GetRecord())
+//		if err != nil {
+//			return nil, err
+//		}
+//		m, err := patchRecord(ctx, map[string]string{"record": req.GetId()}, req.GetId(), in, req.GetUpdateMask().GetPaths())
 //		if err != nil {
 //			return nil, err
 //		}
@@ -282,7 +291,11 @@ func (w *fileWriter) actionType(model *modelinfo.Model, typeName string) ast.Exp
 //		models := make([]*record.Item, len(req.GetItems()))
 //		masks := make([][]string, len(req.GetItems()))
 //		for i, item := range req.GetItems() {
-//			m, err := grpc.PatchItem(i, params, map[string]string{"record": item.GetRecord()}, item.GetId(), ItemFromProto(item.GetItem()))
+//			in, err := ItemFromProto(item.GetItem())
+//			if err != nil {
+//				return nil, err
+//			}
+//			m, err := grpc.PatchItem(i, params, map[string]string{"record": item.GetRecord()}, item.GetId(), in)
 //			if err != nil {
 //				return nil, err
 //			}
@@ -305,7 +318,11 @@ func (w *fileWriter) actionType(model *modelinfo.Model, typeName string) ast.Exp
 //
 //	// MergeItem serves the Create action of Item on /api/items/merge.
 //	func (ItemService) MergeItem(ctx context.Context, req *MergeItemRequest) (*MergeItemResponse, error) {
-//		result, err := mergeItem(ctx, nil, grpc.Query{}, MergeReqFromProto(req.GetPayload()))
+//		payload, err := MergeReqFromProto(req.GetPayload())
+//		if err != nil {
+//			return nil, err
+//		}
+//		result, err := mergeItem(ctx, nil, grpc.Query{}, payload)
 //		if err != nil {
 //			return nil, err
 //		}
@@ -340,7 +357,11 @@ func (w *fileWriter) handler(r *rpc) {
 	var body []ast.Stmt
 	if r.standard {
 		x := modelFieldName(r.model)
-		fromProto := func(message ast.Expr) ast.Expr { return call(w.conversionFunc(r.message, "FromProto"), message) }
+		// decoded decodes the message expression into the variable name
+		// through the model's FromProto, the handler answering a refusal.
+		decoded := func(name string, message ast.Expr) []ast.Stmt {
+			return []ast.Stmt{define([]string{name, "err"}, call(w.conversionFunc(r.message, "FromProto"), message)), failing()}
+		}
 		toProto := func(m ast.Expr) ast.Expr { return call(w.conversionFunc(r.message, "ToProto"), m) }
 		// single runs the call answering one record and answers it.
 		single := func(args ...ast.Expr) []ast.Stmt {
@@ -353,30 +374,29 @@ func (w *fileWriter) handler(r *rpc) {
 				rangeStmt("i", "m", ident(from), assign(index(ident("items"), ident("i")), toProto(ident("m")))),
 			}
 		}
-		// modelsOf decodes the items of the request into models, each
-		// through item; more decodes what else an item carries.
-		modelsOf := func(item func(ast.Expr) ast.Expr, more ...ast.Stmt) []ast.Stmt {
+		// modelsOf decodes the items of the request into models.
+		modelsOf := func() []ast.Stmt {
 			return []ast.Stmt{
 				define([]string{"models"}, makeCall(&ast.ArrayType{Elt: star(w.modelPkgType(r.model, r.model.ModelName))}, lenCall(req("items")))),
-				rangeStmt("i", "item", req("items"), append([]ast.Stmt{assign(index(ident("models"), ident("i")), fromProto(item(ident("item"))))}, more...)...),
+				rangeStmt("i", "item", req("items"), append(decoded("in", ident("item")), assign(index(ident("models"), ident("i")), ident("in")))...),
 			}
 		}
 		switch r.action.Phase {
 		case consts.Create:
-			body = single(params, fromProto(req(x)))
+			body = append(decoded("in", req(x)), single(params, ident("in"))...)
 		case consts.Get:
 			body = single(params, id, query)
 		case consts.Update:
-			body = single(params, id, fromProto(req(x)))
+			body = append(decoded("in", req(x)), single(params, id, ident("in"))...)
 		case consts.Patch:
-			body = single(params, id, fromProto(req(x)), call(sel(req("update_mask"), "GetPaths")))
+			body = append(decoded("in", req(x)), single(params, id, ident("in"), call(sel(req("update_mask"), "GetPaths")))...)
 		case consts.Delete:
 			body = []ast.Stmt{ifStmt(define([]string{"err"}, run(params, id)), notNil(ident("err")), returns(ident("nil"), ident("err"))), respond()}
 		case consts.List:
 			body = append([]ast.Stmt{define([]string{"models", "total", "err"}, run(params, query)), failing()}, itemsOf("models")...)
 			body = append(body, respond(keyValue(responseFields["items"], ident("items")), keyValue(responseFields["total"], call(ident("int64"), ident("total")))))
 		case consts.CreateMany, consts.UpdateMany:
-			body = append(modelsOf(func(item ast.Expr) ast.Expr { return item }), define([]string{"stored", "err"}, run(params, ident("models"))), failing())
+			body = append(modelsOf(), define([]string{"stored", "err"}, run(params, ident("models"))), failing())
 			body = append(body, itemsOf("stored")...)
 			body = append(body, respond(keyValue(responseFields["items"], ident("items"))))
 		case consts.PatchMany:
@@ -399,12 +419,12 @@ func (w *fileWriter) handler(r *rpc) {
 			body = append(body,
 				define([]string{"models"}, makeCall(&ast.ArrayType{Elt: star(w.modelPkgType(r.model, r.model.ModelName))}, lenCall(req("items")))),
 				define([]string{"masks"}, makeCall(&ast.ArrayType{Elt: &ast.ArrayType{Elt: ident("string")}}, lenCall(req("items")))),
-				rangeStmt("i", "item", req("items"),
-					define([]string{"m", "err"}, call(w.grpc("PatchItem"), ident("i"), params, itemParams, call(sel(ident("item"), "Get"+itemFields["id"])), fromProto(call(sel(ident("item"), "Get"+itemFields[x]))))),
+				rangeStmt("i", "item", req("items"), append(decoded("in", call(sel(ident("item"), "Get"+itemFields[x]))),
+					define([]string{"m", "err"}, call(w.grpc("PatchItem"), ident("i"), params, itemParams, call(sel(ident("item"), "Get"+itemFields["id"])), ident("in"))),
 					failing(),
 					assign(index(ident("models"), ident("i")), ident("m")),
 					assign(index(ident("masks"), ident("i")), call(sel(call(sel(ident("item"), "Get"+itemFields["update_mask"])), "GetPaths"))),
-				),
+				)...),
 				define([]string{"stored", "err"}, run(params, ident("models"), ident("masks"))), failing())
 			body = append(body, itemsOf("stored")...)
 			body = append(body, respond(keyValue(responseFields["items"], ident("items"))))
@@ -412,20 +432,28 @@ func (w *fileWriter) handler(r *rpc) {
 			body = []ast.Stmt{ifStmt(define([]string{"err"}, run(params, req("ids"))), notNil(ident("err")), returns(ident("nil"), ident("err"))), respond()}
 		}
 	} else {
+		// The payload is decoded first, the handler answering a refusal;
+		// an action declaring none takes the empty request. With no result
+		// the call binds err alone, assigned when the decoding declared it
+		// and declared otherwise; result is new either way.
 		var payload ast.Expr
-		if r.payload != nil {
-			payload = call(w.conversionFunc(r.payload, "FromProto"), req("payload"))
-		} else {
+		var checked ast.Stmt
+		if r.payload == nil {
 			payload = newCall(sel(w.out.imports.fixedRef(ggconst.ImportPathModel), "Empty"))
+			checked = ifStmt(define([]string{"_", "err"}, run(params, query, payload)), notNil(ident("err")), returns(ident("nil"), ident("err")))
+		} else {
+			body = append(body, define([]string{"payload", "err"}, call(w.conversionFunc(r.payload, "FromProto"), req("payload"))), failing())
+			payload = ident("payload")
+			checked = ifStmt(&ast.AssignStmt{Lhs: []ast.Expr{ident("_"), ident("err")}, Tok: token.ASSIGN, Rhs: []ast.Expr{run(params, query, payload)}}, notNil(ident("err")), returns(ident("nil"), ident("err")))
 		}
 		if r.result == nil {
-			body = []ast.Stmt{ifStmt(define([]string{"_", "err"}, run(params, query, payload)), notNil(ident("err")), returns(ident("nil"), ident("err"))), respond()}
+			body = append(body, checked, respond())
 		} else {
-			body = []ast.Stmt{
+			body = append(body,
 				define([]string{"result", "err"}, run(params, query, payload)),
 				failing(),
 				respond(keyValue(responseFields["result"], call(w.conversionFunc(r.result, "ToProto"), ident("result")))),
-			}
+			)
 		}
 	}
 
@@ -477,7 +505,8 @@ func (w *fileWriter) query(phase consts.Phase, req func(string) ast.Expr) (ast.E
 // reads the route parameters off the request message, the first message of
 // a request stream, and runs the stream call of the action (see
 // actionCalls) with functions moving the messages of the stream converted
-// to the action's types: the request the message carries as payload, each
+// to the action's types: the request the message carries as payload, its
+// decoding answering the refusal of a message a field cannot hold, each
 // response encoded into a response message; a client stream answers its
 // response with SendAndClose.
 //
@@ -488,7 +517,11 @@ func (w *fileWriter) query(phase consts.Phase, req func(string) ast.Expr) (ast.E
 //	// WatchFeed serves the Stream action of Feed declared on feeds/watch, served
 //	// over gRPC alone.
 //	func (FeedService) WatchFeed(req *WatchFeedRequest, srv FeedService_WatchFeedServer) error {
-//		return watchFeed(srv.Context(), nil, FeedWatchReqFromProto(req.GetPayload()), func(rsp *model.FeedEvent) error {
+//		payload, err := FeedWatchReqFromProto(req.GetPayload())
+//		if err != nil {
+//			return err
+//		}
+//		return watchFeed(srv.Context(), nil, payload, func(rsp *model.FeedEvent) error {
 //			return srv.Send(&WatchFeedResponse{Result: FeedEventToProto(rsp)})
 //		})
 //	}
@@ -506,13 +539,13 @@ func (w *fileWriter) query(phase consts.Phase, req func(string) ast.Expr) (ast.E
 //		result, err := uploadFeedByFeed(srv.Context(), map[string]string{"feed": first.GetFeed()}, func() (*model.FeedEvent, error) {
 //			if msg := first; msg != nil {
 //				first = nil
-//				return FeedEventFromProto(msg.GetPayload()), nil
+//				return FeedEventFromProto(msg.GetPayload())
 //			}
 //			msg, recvErr := srv.Recv()
 //			if recvErr != nil {
 //				return nil, recvErr
 //			}
-//			return FeedEventFromProto(msg.GetPayload()), nil
+//			return FeedEventFromProto(msg.GetPayload())
 //		})
 //		if err != nil {
 //			return err
@@ -530,7 +563,7 @@ func (w *fileWriter) query(phase consts.Phase, req func(string) ast.Expr) (ast.E
 //			if recvErr != nil {
 //				return nil, recvErr
 //			}
-//			return FeedEventFromProto(msg.GetPayload()), nil
+//			return FeedEventFromProto(msg.GetPayload())
 //		}, func(rsp *model.FeedEvent) error {
 //			return srv.Send(&ChatFeedResponse{Result: FeedEventToProto(rsp)})
 //		})
@@ -552,13 +585,19 @@ func (w *fileWriter) streamHandler(r *rpc) {
 		}
 		return lit
 	}
-	// payloadOf decodes the payload the request message m carries, or is
-	// the empty request of an action declaring none.
-	payloadOf := func(m ast.Expr) ast.Expr {
+	// payloadOf decodes the payload the request message m carries, a call
+	// that may refuse the message; empty is the request of an action
+	// declaring no payload.
+	payloadOf := func(m ast.Expr) ast.Expr { return call(w.conversionFunc(r.payload, "FromProto"), get(m, "payload")) }
+	empty := func() ast.Expr { return newCall(sel(w.out.imports.fixedRef(ggconst.ImportPathModel), "Empty")) }
+	// returnPayload returns the payload of m from a receiving function: what
+	// the decoding answers, the payload or its refusal, or the empty request
+	// and no error.
+	returnPayload := func(m ast.Expr) ast.Stmt {
 		if r.payload == nil {
-			return newCall(sel(w.out.imports.fixedRef(ggconst.ImportPathModel), "Empty"))
+			return returns(empty(), ident("nil"))
 		}
-		return call(w.conversionFunc(r.payload, "FromProto"), get(m, "payload"))
+		return returns(payloadOf(m))
 	}
 	// responseOf encodes the response rsp into the response message, empty
 	// for an action declaring no Result.
@@ -579,13 +618,13 @@ func (w *fileWriter) streamHandler(r *rpc) {
 		if withFirst {
 			body = append(body, ifStmt(define([]string{"msg"}, ident("first")), notNil(ident("msg")),
 				assign(ident("first"), ident("nil")),
-				returns(payloadOf(ident("msg")), ident("nil")),
+				returnPayload(ident("msg")),
 			))
 		}
 		body = append(body,
 			define([]string{"msg", "recvErr"}, call(sel(srv, "Recv"))),
 			ifStmt(nil, notNil(ident("recvErr")), returns(ident("nil"), ident("recvErr"))),
-			returns(payloadOf(ident("msg")), ident("nil")),
+			returnPayload(ident("msg")),
 		)
 		return funcLit(nil, []*ast.Field{{Type: reqType}, {Type: ident("error")}}, body...)
 	}
@@ -597,7 +636,15 @@ func (w *fileWriter) streamHandler(r *rpc) {
 	switch streamKind(r.action) {
 	case "Server":
 		params = append([]*ast.Field{{Names: []*ast.Ident{ident("req")}, Type: star(ident(r.request.GetName()))}}, params...)
-		body = []ast.Stmt{returns(run(paramsOf(ident("req")), payloadOf(ident("req")), send))}
+		if r.payload == nil {
+			body = []ast.Stmt{returns(run(paramsOf(ident("req")), empty(), send))}
+		} else {
+			body = []ast.Stmt{
+				define([]string{"payload", "err"}, payloadOf(ident("req"))),
+				ifStmt(nil, notNil(ident("err")), returns(ident("err"))),
+				returns(run(paramsOf(ident("req")), ident("payload"), send)),
+			}
+		}
 	case "Client":
 		withFirst := len(r.params) > 0
 		if withFirst {

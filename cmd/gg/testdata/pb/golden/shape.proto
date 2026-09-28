@@ -28,7 +28,7 @@ message Shape {
 
   google.protobuf.Duration clock = 12;
 
-  google.protobuf.Value doc = 13;
+  bytes doc = 13;
 
   google.protobuf.Struct attrs = 14;
 
@@ -87,9 +87,9 @@ message Shape {
 
   // RawDoc, Extra and Meta are pointers to JSON types, declared as
   // themselves when decoded.
-  google.protobuf.Value raw_doc = 38;
+  optional bytes raw_doc = 38;
 
-  google.protobuf.Value extra = 39;
+  optional bytes extra = 39;
 
   google.protobuf.Struct meta = 40;
 
@@ -105,6 +105,13 @@ message Shape {
   Window frame = 43;
 
   ShapeWindow window = 44;
+
+  // Rank and Port are narrower than the int32 and uint32 their fields
+  // carry, read back through grpc.Narrow, which refuses what they cannot
+  // hold.
+  int32 rank = 45;
+
+  uint32 port = 46;
 }
 
 // ShapeSpans is the message of the spans field of Shape.

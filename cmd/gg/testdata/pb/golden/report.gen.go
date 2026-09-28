@@ -44,11 +44,11 @@ func ReportRspToProto(m *model.ReportRsp) *ReportRsp {
 }
 
 // ReportRspFromProto decodes ReportRsp messages into values, nil into nil.
-func ReportRspFromProto(p *ReportRsp) *model.ReportRsp {
+func ReportRspFromProto(p *ReportRsp) (*model.ReportRsp, error) {
 	if p == nil {
-		return nil
+		return nil, nil
 	}
 	m := new(model.ReportRsp)
 	m.Total = p.GetTotal()
-	return m
+	return m, nil
 }

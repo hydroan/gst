@@ -30,7 +30,11 @@ var (
 
 // CreateItem serves the Create action of Item on /api/records/:record/items.
 func (ItemService) CreateItem(ctx context.Context, req *CreateItemRequest) (*CreateItemResponse, error) {
-	m, err := createItem(ctx, map[string]string{"record": req.GetRecord()}, ItemFromProto(req.GetItem()))
+	in, err := ItemFromProto(req.GetItem())
+	if err != nil {
+		return nil, err
+	}
+	m, err := createItem(ctx, map[string]string{"record": req.GetRecord()}, in)
 	if err != nil {
 		return nil, err
 	}
@@ -53,7 +57,11 @@ func (ItemService) PatchManyItem(ctx context.Context, req *PatchManyItemRequest)
 	models := make([]*record.Item, len(req.GetItems()))
 	masks := make([][]string, len(req.GetItems()))
 	for i, item := range req.GetItems() {
-		m, err := grpc.PatchItem(i, params, map[string]string{"record": item.GetRecord()}, item.GetId(), ItemFromProto(item.GetItem()))
+		in, err := ItemFromProto(item.GetItem())
+		if err != nil {
+			return nil, err
+		}
+		m, err := grpc.PatchItem(i, params, map[string]string{"record": item.GetRecord()}, item.GetId(), in)
 		if err != nil {
 			return nil, err
 		}
@@ -73,7 +81,11 @@ func (ItemService) PatchManyItem(ctx context.Context, req *PatchManyItemRequest)
 
 // SealItem serves the Create action of Item on /api/items/:id/seal.
 func (ItemService) SealItem(ctx context.Context, req *SealItemRequest) (*SealItemResponse, error) {
-	m, err := sealItem(ctx, map[string]string{"id": req.GetId()}, ItemFromProto(req.GetItem()))
+	in, err := ItemFromProto(req.GetItem())
+	if err != nil {
+		return nil, err
+	}
+	m, err := sealItem(ctx, map[string]string{"id": req.GetId()}, in)
 	if err != nil {
 		return nil, err
 	}
@@ -82,7 +94,11 @@ func (ItemService) SealItem(ctx context.Context, req *SealItemRequest) (*SealIte
 
 // MergeItem serves the Create action of Item on /api/items/merge.
 func (ItemService) MergeItem(ctx context.Context, req *MergeItemRequest) (*MergeItemResponse, error) {
-	result, err := mergeItem(ctx, nil, grpc.Query{}, MergeReqFromProto(req.GetPayload()))
+	payload, err := MergeReqFromProto(req.GetPayload())
+	if err != nil {
+		return nil, err
+	}
+	result, err := mergeItem(ctx, nil, grpc.Query{}, payload)
 	if err != nil {
 		return nil, err
 	}
@@ -110,12 +126,15 @@ func ItemToProto(m *record.Item) *Item {
 	return p
 }
 
-// ItemFromProto decodes Item messages into values, nil into nil.
-func ItemFromProto(p *Item) *record.Item {
+// ItemFromProto decodes Item messages into values, nil into nil. A value a
+// field cannot hold, an integer out of its range or a string that is no JSON
+// number, is refused with InvalidArgument.
+func ItemFromProto(p *Item) (*record.Item, error) {
 	if p == nil {
-		return nil
+		return nil, nil
 	}
 	m := new(record.Item)
+	var err error
 	m.ID = p.GetId()
 	m.CreatedBy = p.GetCreatedBy()
 	m.UpdatedBy = p.GetUpdatedBy()
@@ -126,11 +145,16 @@ func ItemFromProto(p *Item) *record.Item {
 		m.Links = make([]record.Link, len(p.GetLinks()))
 		for i, v := range p.GetLinks() {
 			if v != nil {
-				m.Links[i] = *LinkFromProto(v)
+				var x *record.Link
+				x, err = LinkFromProto(v)
+				if err != nil {
+					return nil, err
+				}
+				m.Links[i] = *x
 			}
 		}
 	}
-	return m
+	return m, nil
 }
 
 // LinkToProto encodes Link values into their message, nil into nil.
@@ -145,14 +169,14 @@ func LinkToProto(m *record.Link) *Link {
 }
 
 // LinkFromProto decodes Link messages into values, nil into nil.
-func LinkFromProto(p *Link) *record.Link {
+func LinkFromProto(p *Link) (*record.Link, error) {
 	if p == nil {
-		return nil
+		return nil, nil
 	}
 	m := new(record.Link)
 	m.URL = p.GetUrl()
 	m.Title = p.GetTitle()
-	return m
+	return m, nil
 }
 
 // MergeReqToProto encodes MergeReq values into their message, nil into nil.
@@ -166,13 +190,13 @@ func MergeReqToProto(m *record.MergeReq) *MergeReq {
 }
 
 // MergeReqFromProto decodes MergeReq messages into values, nil into nil.
-func MergeReqFromProto(p *MergeReq) *record.MergeReq {
+func MergeReqFromProto(p *MergeReq) (*record.MergeReq, error) {
 	if p == nil {
-		return nil
+		return nil, nil
 	}
 	m := new(record.MergeReq)
 	m.IDs = p.GetIds()
-	return m
+	return m, nil
 }
 
 // MergeRspToProto encodes MergeRsp values into their message, nil into nil.
@@ -185,12 +209,18 @@ func MergeRspToProto(m *record.MergeRsp) *MergeRsp {
 	return p
 }
 
-// MergeRspFromProto decodes MergeRsp messages into values, nil into nil.
-func MergeRspFromProto(p *MergeRsp) *record.MergeRsp {
+// MergeRspFromProto decodes MergeRsp messages into values, nil into nil. A
+// value a field cannot hold, an integer out of its range or a string that is
+// no JSON number, is refused with InvalidArgument.
+func MergeRspFromProto(p *MergeRsp) (*record.MergeRsp, error) {
 	if p == nil {
-		return nil
+		return nil, nil
 	}
 	m := new(record.MergeRsp)
-	m.Item = ItemFromProto(p.GetItem())
-	return m
+	var err error
+	m.Item, err = ItemFromProto(p.GetItem())
+	if err != nil {
+		return nil, err
+	}
+	return m, nil
 }

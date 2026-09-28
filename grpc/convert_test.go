@@ -1,7 +1,6 @@
 package grpc_test
 
 import (
-	"encoding/json"
 	"testing"
 	"time"
 
@@ -36,7 +35,7 @@ func TestValueCarriesWhatJSONEncodes(t *testing.T) {
 		"n":    float64(3),
 	}, value.AsInterface())
 	require.Nil(t, gstgrpc.Value(nil))
-	require.Equal(t, "null", string(gstgrpc.JSON(gstgrpc.Value((*int)(nil)))), "a nil pointer is the JSON null, not an unset value")
+	require.Equal(t, structpb.NullValue_NULL_VALUE, gstgrpc.Value((*int)(nil)).GetNullValue(), "a nil pointer is the JSON null, not an unset value")
 }
 
 // TestValuePanicsOnWhatJSONCannotEncode pins that a value encoding/json
@@ -46,36 +45,6 @@ func TestValuePanicsOnWhatJSONCannotEncode(t *testing.T) {
 	require.PanicsWithValue(t, "grpc: encode chan int as a Value: json: unsupported type: chan int", func() {
 		gstgrpc.Value(make(chan int))
 	})
-	// The protobuf runtime words its own errors, with a non-breaking space
-	// after "proto:" that keeps them from being matched by hand.
-	require.Contains(t, panicValue(t, func() { gstgrpc.JSONValue([]byte("{")) }), "grpc: encode JSON as a Value: proto:")
-}
-
-// panicValue runs fn and returns the value it panics with, failing the test
-// when it returns.
-func panicValue(t *testing.T, fn func()) string {
-	t.Helper()
-	value := func() (value any) {
-		defer func() { value = recover() }()
-		fn()
-		return nil
-	}()
-	require.NotNil(t, value, "fn should have panicked")
-	s, ok := value.(string)
-	require.True(t, ok, "fn should panic with a string, not %T", value)
-	return s
-}
-
-// TestJSONValueRoundTripsADocument pins that a JSON document travels in a
-// Value and comes back as JSON, null included, and that an empty document
-// is unset.
-func TestJSONValueRoundTripsADocument(t *testing.T) {
-	raw := json.RawMessage(`{"a":[1,2,{"b":null}],"c":"x"}`)
-
-	require.JSONEq(t, string(raw), string(gstgrpc.JSON(gstgrpc.JSONValue(raw))))
-	require.Equal(t, "null", string(gstgrpc.JSON(gstgrpc.JSONValue([]byte("null")))))
-	require.Nil(t, gstgrpc.JSONValue(nil))
-	require.Nil(t, gstgrpc.JSON(nil))
 }
 
 // TestStructAndMapRoundTripAnObject pins that a map travels in a Struct as

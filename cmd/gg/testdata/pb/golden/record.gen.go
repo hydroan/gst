@@ -35,7 +35,11 @@ var (
 
 // CreateRecord serves the Create action of Record on /api/records.
 func (RecordService) CreateRecord(ctx context.Context, req *CreateRecordRequest) (*CreateRecordResponse, error) {
-	m, err := createRecord(ctx, nil, RecordFromProto(req.GetRecord()))
+	in, err := RecordFromProto(req.GetRecord())
+	if err != nil {
+		return nil, err
+	}
+	m, err := createRecord(ctx, nil, in)
 	if err != nil {
 		return nil, err
 	}
@@ -52,7 +56,11 @@ func (RecordService) DeleteRecord(ctx context.Context, req *DeleteRecordRequest)
 
 // UpdateRecord serves the Update action of Record on /api/records/:record.
 func (RecordService) UpdateRecord(ctx context.Context, req *UpdateRecordRequest) (*UpdateRecordResponse, error) {
-	m, err := updateRecord(ctx, map[string]string{"record": req.GetId()}, req.GetId(), RecordFromProto(req.GetRecord()))
+	in, err := RecordFromProto(req.GetRecord())
+	if err != nil {
+		return nil, err
+	}
+	m, err := updateRecord(ctx, map[string]string{"record": req.GetId()}, req.GetId(), in)
 	if err != nil {
 		return nil, err
 	}
@@ -61,7 +69,11 @@ func (RecordService) UpdateRecord(ctx context.Context, req *UpdateRecordRequest)
 
 // PatchRecord serves the Patch action of Record on /api/records/:record.
 func (RecordService) PatchRecord(ctx context.Context, req *PatchRecordRequest) (*PatchRecordResponse, error) {
-	m, err := patchRecord(ctx, map[string]string{"record": req.GetId()}, req.GetId(), RecordFromProto(req.GetRecord()), req.GetUpdateMask().GetPaths())
+	in, err := RecordFromProto(req.GetRecord())
+	if err != nil {
+		return nil, err
+	}
+	m, err := patchRecord(ctx, map[string]string{"record": req.GetId()}, req.GetId(), in, req.GetUpdateMask().GetPaths())
 	if err != nil {
 		return nil, err
 	}
@@ -105,7 +117,11 @@ func (RecordService) GetRecord(ctx context.Context, req *GetRecordRequest) (*Get
 func (RecordService) CreateManyRecord(ctx context.Context, req *CreateManyRecordRequest) (*CreateManyRecordResponse, error) {
 	models := make([]*model.Record, len(req.GetItems()))
 	for i, item := range req.GetItems() {
-		models[i] = RecordFromProto(item)
+		in, err := RecordFromProto(item)
+		if err != nil {
+			return nil, err
+		}
+		models[i] = in
 	}
 	stored, err := createManyRecord(ctx, nil, models)
 	if err != nil {
@@ -132,7 +148,11 @@ func (RecordService) DeleteManyRecord(ctx context.Context, req *DeleteManyRecord
 func (RecordService) UpdateManyRecord(ctx context.Context, req *UpdateManyRecordRequest) (*UpdateManyRecordResponse, error) {
 	models := make([]*model.Record, len(req.GetItems()))
 	for i, item := range req.GetItems() {
-		models[i] = RecordFromProto(item)
+		in, err := RecordFromProto(item)
+		if err != nil {
+			return nil, err
+		}
+		models[i] = in
 	}
 	stored, err := updateManyRecord(ctx, nil, models)
 	if err != nil {
@@ -151,7 +171,11 @@ func (RecordService) PatchManyRecord(ctx context.Context, req *PatchManyRecordRe
 	models := make([]*model.Record, len(req.GetItems()))
 	masks := make([][]string, len(req.GetItems()))
 	for i, item := range req.GetItems() {
-		m, err := grpc.PatchItem(i, nil, nil, item.GetId(), RecordFromProto(item.GetRecord()))
+		in, err := RecordFromProto(item.GetRecord())
+		if err != nil {
+			return nil, err
+		}
+		m, err := grpc.PatchItem(i, nil, nil, item.GetId(), in)
 		if err != nil {
 			return nil, err
 		}
@@ -213,7 +237,7 @@ func RecordToProto(m *model.Record) *Record {
 	p.Ratio = m.Ratio
 	p.Enabled = m.Enabled
 	p.Payload = m.Payload
-	p.Raw = grpc.JSONValue(m.Raw)
+	p.Raw = m.Raw
 	p.Extra = grpc.Struct(m.Extra)
 	p.Due = grpc.Timestamp(m.Due)
 	p.Meta = RecordMetaToProto(&m.Meta)
@@ -223,12 +247,15 @@ func RecordToProto(m *model.Record) *Record {
 	return p
 }
 
-// RecordFromProto decodes Record messages into values, nil into nil.
-func RecordFromProto(p *Record) *model.Record {
+// RecordFromProto decodes Record messages into values, nil into nil. A value
+// a field cannot hold, an integer out of its range or a string that is no
+// JSON number, is refused with InvalidArgument.
+func RecordFromProto(p *Record) (*model.Record, error) {
 	if p == nil {
-		return nil
+		return nil, nil
 	}
 	m := new(model.Record)
+	var err error
 	m.ID = p.GetId()
 	m.CreatedBy = p.GetCreatedBy()
 	m.UpdatedBy = p.GetUpdatedBy()
@@ -243,17 +270,22 @@ func RecordFromProto(p *Record) *model.Record {
 	m.Ratio = p.GetRatio()
 	m.Enabled = p.GetEnabled()
 	m.Payload = p.GetPayload()
-	m.Raw = grpc.JSON(p.GetRaw())
+	m.Raw = p.GetRaw()
 	m.Extra = grpc.Map(p.GetExtra())
 	m.Due = grpc.Time(p.GetDue())
 	if v := p.GetMeta(); v != nil {
-		m.Meta = *RecordMetaFromProto(v)
+		var x *model.RecordMeta
+		x, err = RecordMetaFromProto(v)
+		if err != nil {
+			return nil, err
+		}
+		m.Meta = *x
 	}
 	if v := p.GetWindow(); v != nil {
 		m.Window.From = v.GetFrom()
 		m.Window.To = v.GetTo()
 	}
-	return m
+	return m, nil
 }
 
 // RecordMetaToProto encodes RecordMeta values into their message, nil into
@@ -269,12 +301,12 @@ func RecordMetaToProto(m *model.RecordMeta) *RecordMeta {
 }
 
 // RecordMetaFromProto decodes RecordMeta messages into values, nil into nil.
-func RecordMetaFromProto(p *RecordMeta) *model.RecordMeta {
+func RecordMetaFromProto(p *RecordMeta) (*model.RecordMeta, error) {
 	if p == nil {
-		return nil
+		return nil, nil
 	}
 	m := new(model.RecordMeta)
 	m.Author = p.GetAuthor()
 	m.Score = p.GetScore()
-	return m
+	return m, nil
 }

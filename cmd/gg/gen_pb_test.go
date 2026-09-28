@@ -1125,6 +1125,11 @@ type Shape struct {
 	RawDoc *json.RawMessage   'json:"raw_doc,omitempty" pb:"38" gorm:"-"'
 	Extra  *datatypes.JSON    'json:"extra,omitempty" pb:"39" gorm:"-"'
 	Meta   *datatypes.JSONMap 'json:"meta,omitempty" pb:"40" gorm:"-"'
+	// Rank and Port are narrower than the int32 and uint32 their fields
+	// carry, read back through grpc.Narrow, which refuses what they cannot
+	// hold.
+	Rank int8   'json:"rank" pb:"45"'
+	Port uint16 'json:"port" pb:"46"'
 	// Name shadows the Name of the embedded ShapeMeta, which keeps its own
 	// key and is selected by its path.
 	Name string 'json:"name" pb:"41"'
@@ -1211,6 +1216,8 @@ import (
 	pbrecord "tmpapp/pb/record"
 
 	"github.com/stretchr/testify/require"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 	"gorm.io/datatypes"
 	"gorm.io/gorm"
 )
@@ -1228,7 +1235,7 @@ func TestRecordRoundTrips(t *testing.T) {
 		Ratio:   1.5,
 		Enabled: true,
 		Payload: []byte("bytes"),
-		Raw:     json.RawMessage('{"n":1}'),
+		Raw:     json.RawMessage('{"id":9007199254740993,"n":1.10}'),
 		Extra:   map[string]any{"ok": true, "list": []any{"x"}},
 		Due:     at,
 		Meta:    model.RecordMeta{Author: "author", Score: 2},
@@ -1245,14 +1252,19 @@ func TestRecordRoundTrips(t *testing.T) {
 	require.Equal(t, "from", msg.GetWindow().GetFrom())
 	require.Equal(t, int32(2), msg.GetMeta().GetScore())
 
-	out := pb.RecordFromProto(msg)
-	require.JSONEq(t, string(in.Raw), string(out.Raw))
-	in.Raw, out.Raw = nil, nil
+	require.Equal(t, []byte(in.Raw), msg.GetRaw(), "a JSON document travels as its bytes, every digit kept")
+
+	out, err := pb.RecordFromProto(msg)
+	require.NoError(t, err)
 	require.Equal(t, in, out)
 
 	require.Nil(t, pb.RecordToProto(nil))
-	require.Nil(t, pb.RecordFromProto(nil))
-	require.Equal(t, &model.Record{}, pb.RecordFromProto(&pb.Record{}), "an empty message decodes into the zero value")
+	none, err := pb.RecordFromProto(nil)
+	require.NoError(t, err)
+	require.Nil(t, none)
+	zero, err := pb.RecordFromProto(&pb.Record{})
+	require.NoError(t, err)
+	require.Equal(t, &model.Record{}, zero, "an empty message decodes into the zero value")
 }
 
 func TestItemLinksRoundTrip(t *testing.T) {
@@ -1261,8 +1273,12 @@ func TestItemLinksRoundTrip(t *testing.T) {
 	msg := pbrecord.ItemToProto(in)
 	require.Len(t, msg.GetLinks(), 2)
 	require.Equal(t, "https://b", msg.GetLinks()[1].GetUrl())
-	require.Equal(t, in, pbrecord.ItemFromProto(msg))
-	require.Nil(t, pbrecord.ItemFromProto(&pbrecord.Item{}).Links, "no links stay no links")
+	out, err := pbrecord.ItemFromProto(msg)
+	require.NoError(t, err)
+	require.Equal(t, in, out)
+	bare, err := pbrecord.ItemFromProto(&pbrecord.Item{})
+	require.NoError(t, err)
+	require.Nil(t, bare.Links, "no links stay no links")
 
 	merged := pbrecord.MergeRspToProto(&record.MergeRsp{Item: in})
 	require.Equal(t, "c", merged.GetItem().GetContent())
@@ -1308,6 +1324,8 @@ func TestShapeRoundTrips(t *testing.T) {
 		Name:    "outer",
 		ShapeMeta: model.ShapeMeta{Name: "inner"},
 		Frame:   model.Window{Width: 3},
+		Rank:    -3,
+		Port:    65000,
 	}
 	in.Window = struct {
 		Width int32 'json:"width" pb:"1"'
@@ -1345,17 +1363,16 @@ func TestShapeRoundTrips(t *testing.T) {
 	require.Equal(t, "inner", msg.GetMetaName())
 	require.Equal(t, int32(3), msg.GetFrame().GetWidth(), "frame is the named type Window")
 	require.Equal(t, int32(4), msg.GetWindow().GetWidth(), "window is the message of the unnamed struct")
+	require.Equal(t, int32(-3), msg.GetRank())
+	require.Equal(t, uint32(65000), msg.GetPort())
+	require.Equal(t, []byte(in.Doc), msg.GetDoc(), "a JSON document travels as its bytes")
 
-	out := pb.ShapeFromProto(msg)
-	require.JSONEq(t, string(in.Doc), string(out.Doc))
-	require.JSONEq(t, string(*in.RawDoc), string(*out.RawDoc))
-	require.JSONEq(t, string(*in.Extra), string(*out.Extra))
-	in.Doc, out.Doc = nil, nil
-	in.RawDoc, out.RawDoc = nil, nil
-	in.Extra, out.Extra = nil, nil
+	out, err := pb.ShapeFromProto(msg)
+	require.NoError(t, err)
 	require.Equal(t, in, out)
 
-	empty := pb.ShapeFromProto(&pb.Shape{})
+	empty, err := pb.ShapeFromProto(&pb.Shape{})
+	require.NoError(t, err)
 	require.False(t, empty.Audit.Removed.Valid)
 	require.Nil(t, empty.Score)
 	require.Nil(t, empty.When)
@@ -1369,6 +1386,24 @@ func TestShapeRoundTrips(t *testing.T) {
 	require.Nil(t, empty.Extra)
 	require.Nil(t, empty.Meta)
 	require.True(t, time.Time(empty.Date).IsZero())
+
+	t.Run("a value a field cannot hold is refused", func(t *testing.T) {
+		for _, tt := range []struct {
+			name string
+			msg  *pb.Shape
+			want string
+		}{
+			{name: "an integer out of range", msg: &pb.Shape{Rank: 300}, want: 'field "rank": 300 does not fit int8'},
+			{name: "an unsigned integer out of range", msg: &pb.Shape{Port: 70000}, want: 'field "port": 70000 does not fit uint16'},
+			{name: "a string that is no JSON number", msg: &pb.Shape{Amount: "abc"}, want: 'field "amount": "abc" is not a JSON number'},
+		} {
+			t.Run(tt.name, func(t *testing.T) {
+				_, err := pb.ShapeFromProto(tt.msg)
+				require.Equal(t, codes.InvalidArgument, status.Code(err))
+				require.Equal(t, tt.want, status.Convert(err).Message())
+			})
+		}
+	})
 }
 `
 
