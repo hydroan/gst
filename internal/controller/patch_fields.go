@@ -104,7 +104,7 @@ func patchFieldsOf(typ reflect.Type) *patchFieldTable {
 		}) {
 			continue
 		}
-		name, _, _ := strings.Cut(field.Tag.Get("json"), ",")
+		name := jsonTagName(field)
 		if field.Anonymous {
 			structType := field.Type
 			if structType.Kind() == reflect.Pointer {

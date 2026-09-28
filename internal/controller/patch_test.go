@@ -56,6 +56,7 @@ func TestPatchValidatesTheFieldsTheBodyNames(t *testing.T) {
 
 	rsp = serve(t, http.MethodPatch, "/controller-validated-samples/:id", handler, "/controller-validated-samples/"+record.GetID(), `{"name":""}`)
 	require.Equal(t, http.StatusBadRequest, rsp.Code)
+	require.Contains(t, rsp.Body.String(), `"msg":"name is a required field"`, "the refusal names the field by its JSON key")
 }
 
 // TestPatchAppliesAFieldAsAWhole pins what a body key patches: a time

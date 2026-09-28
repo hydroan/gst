@@ -6,6 +6,7 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/database"
 	"github.com/hydroan/gst/internal/serviceregistry"
+	"google.golang.org/genproto/googleapis/rpc/errdetails"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
@@ -13,20 +14,32 @@ import (
 // StatusError returns the status error a call answers err with: a service
 // error, anywhere in the wrap chain, answers with the gRPC code its HTTP
 // status maps to (see codeOf) and the client-safe message it was constructed
-// with, the answer the HTTP envelope would carry; any other error answers
-// Internal with serviceregistry.FailureMsg, the message the HTTP envelope
-// answers the server's own failure with, its text kept out of the answer
-// for the caller to log before mapping; nil stays nil. The public
-// grpc.StatusError forwards to it.
+// with, the answer the HTTP envelope would carry, and, for the fields a
+// validator refused (see serviceregistry.FieldViolations), a
+// google.rpc.BadRequest detail listing each field and its description; any
+// other error answers Internal with serviceregistry.FailureMsg, the message
+// the HTTP envelope answers the server's own failure with, its text kept
+// out of the answer for the caller to log before mapping; nil stays nil.
+// The public grpc.StatusError forwards to it.
 func StatusError(err error) error {
 	if err == nil {
 		return nil
 	}
 	var serviceErr *serviceregistry.Error
-	if errors.As(err, &serviceErr) {
-		return status.Error(codeOf(serviceErr.Status(), err), serviceErr.Msg())
+	if !errors.As(err, &serviceErr) {
+		return status.Error(codes.Internal, serviceregistry.FailureMsg)
 	}
-	return status.Error(codes.Internal, serviceregistry.FailureMsg)
+	st := status.New(codeOf(serviceErr.Status(), err), serviceErr.Msg())
+	if violations := serviceErr.FieldViolations(); len(violations) > 0 {
+		bad := &errdetails.BadRequest{FieldViolations: make([]*errdetails.BadRequest_FieldViolation, 0, len(violations))}
+		for _, v := range violations {
+			bad.FieldViolations = append(bad.FieldViolations, &errdetails.BadRequest_FieldViolation{Field: v.Field, Description: v.Description})
+		}
+		if detailed, detailErr := st.WithDetails(bad); detailErr == nil {
+			st = detailed
+		}
+	}
+	return st.Err()
 }
 
 // codeOf maps the HTTP status a failure answers with to its gRPC code: the

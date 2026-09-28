@@ -121,7 +121,7 @@ func PatchManyHandler[M types.Model, REQ types.Request, RSP types.Response](cfg 
 				return
 			}
 			if fieldErr := validatePatchFields(item, itemFields); fieldErr != nil {
-				fieldErr = clientSafeBindError(fieldErr)
+				fieldErr = clientSafeItemBindError(i, fieldErr)
 				log.Errorz("bind request body failed", zap.Error(fieldErr))
 				response.Error(c, invalidArgument(fieldErr))
 				gstotel.RecordError(span, fieldErr)
@@ -183,7 +183,7 @@ func PatchManyCall[M types.Model](route string) func(ctx context.Context, params
 		}
 		for i, item := range req.Items {
 			if err = validatePatchFields(item, fieldSets[i]); err != nil {
-				return nil, c.invalidMessage(errors.Wrapf(err, "item %d", i))
+				return nil, c.invalidItemMessage(i, err)
 			}
 		}
 		rsp, err := a.patchManyFlow(c.ctx, c.serviceContext, &req, fieldSets)

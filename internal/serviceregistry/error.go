@@ -28,10 +28,38 @@ type Error struct {
 	status int
 	msg    string
 	cause  error
+	// violations are the fields a request the validator refused failed on,
+	// set by NewInvalidFields alone; the gRPC answer lists them as its
+	// details, the HTTP answer carries them joined in msg.
+	violations []FieldViolation
 	// stack holds the program counters captured at the construction site,
 	// exposed through StackTrace so error-stack consumers such as
 	// errors.GetReportableStackTrace can locate where the error was created.
 	stack []uintptr
+}
+
+// FieldViolation is one field of a request the validator refused: the field
+// by its JSON key path, address.city or items[1].name, and the client-safe
+// description of what it failed, the shape of google.rpc.BadRequest's
+// FieldViolation.
+type FieldViolation struct {
+	Field       string
+	Description string
+}
+
+// NewInvalidFields creates the 400 of a request whose fields the validator
+// refused: the message joins the description of each violation with a
+// semicolon, the violations stay readable (see FieldViolations), and cause,
+// the validator's error, is reported by Error for logs and available
+// through Unwrap.
+func NewInvalidFields(violations []FieldViolation, cause error) *Error {
+	descriptions := make([]string, 0, len(violations))
+	for _, v := range violations {
+		descriptions = append(descriptions, v.Description)
+	}
+	err := newError(http.StatusBadRequest, strings.Join(descriptions, "; "), cause)
+	err.violations = violations
+	return err
 }
 
 // NewError creates a service-layer error with a client-safe message.
@@ -111,6 +139,15 @@ func (e *Error) Unwrap() error {
 		return nil
 	}
 	return e.cause
+}
+
+// FieldViolations returns the fields the request failed on, which only an
+// error NewInvalidFields created carries.
+func (e *Error) FieldViolations() []FieldViolation {
+	if e == nil {
+		return nil
+	}
+	return e.violations
 }
 
 func (e *Error) Status() int {

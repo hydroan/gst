@@ -9,6 +9,7 @@ import (
 	"github.com/hydroan/gst/internal/grpcserver"
 	"github.com/hydroan/gst/internal/serviceregistry"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/genproto/googleapis/rpc/errdetails"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
@@ -50,6 +51,30 @@ func TestStatusErrorMapsTheStatusToTheCode(t *testing.T) {
 			require.Equal(t, tc.err.Msg(), st.Message())
 			require.Empty(t, st.Details())
 		})
+	}
+}
+
+// TestStatusErrorAttachesTheFieldViolations pins that a service error
+// carrying the fields the validator refused answers InvalidArgument with
+// the message naming them, and a google.rpc.BadRequest detail listing each
+// field and its description, the shape AIP-193 gives a validation failure.
+func TestStatusErrorAttachesTheFieldViolations(t *testing.T) {
+	violations := []serviceregistry.FieldViolation{
+		{Field: "name", Description: "name is a required field"},
+		{Field: "address.city", Description: "address.city is a required field"},
+	}
+
+	st := status.Convert(grpcserver.StatusError(serviceregistry.NewInvalidFields(violations, errors.New("validation failed"))))
+
+	require.Equal(t, codes.InvalidArgument, st.Code())
+	require.Equal(t, "name is a required field; address.city is a required field", st.Message())
+	require.Len(t, st.Details(), 1)
+	bad, ok := st.Details()[0].(*errdetails.BadRequest)
+	require.True(t, ok, "%T", st.Details()[0])
+	require.Len(t, bad.GetFieldViolations(), 2)
+	for i, v := range violations {
+		require.Equal(t, v.Field, bad.GetFieldViolations()[i].GetField())
+		require.Equal(t, v.Description, bad.GetFieldViolations()[i].GetDescription())
 	}
 }
 

@@ -12,6 +12,7 @@ import (
 	"github.com/hydroan/gst/consts"
 	"github.com/hydroan/gst/internal/grpcserver"
 	"github.com/hydroan/gst/internal/requestctx"
+	"github.com/hydroan/gst/internal/serviceregistry"
 	"github.com/hydroan/gst/internal/types"
 	"github.com/hydroan/gst/logger"
 	gstotel "github.com/hydroan/gst/otel"
@@ -200,8 +201,9 @@ func (f Filter) value(key string) (string, error) {
 // The messages a call refuses a request with, where the HTTP handler's
 // wording speaks of a body or a route the call has none of.
 const (
-	// invalidMessageMsg answers a model or payload failing its binding tags;
-	// what failed stays in the log, the validator naming Go fields.
+	// invalidMessageMsg answers a model or payload a validator other than
+	// go-playground's refused, which names no field (see fieldViolations);
+	// what failed stays in the log.
 	invalidMessageMsg = "invalid request message"
 	// missingIDMsg answers an item action whose message names no record.
 	missingIDMsg = "id is required"
@@ -286,10 +288,24 @@ func (c *call) invalid(err error) error {
 }
 
 // invalidMessage refuses a model or payload the validator refused (err),
-// with invalidMessageMsg, the way the HTTP handler answers a bind failure
-// with a message free of Go names.
+// naming the fields refused the way the HTTP handler does (see
+// clientSafeBindError), and with invalidMessageMsg when the validator
+// names none.
 func (c *call) invalidMessage(err error) error {
+	if violations := fieldViolations(err, ""); len(violations) > 0 {
+		return c.refuse(serviceregistry.NewInvalidFields(violations, err), err)
+	}
 	return c.refuse(badRequest(invalidMessageMsg), err)
+}
+
+// invalidItemMessage is invalidMessage for the item at index i of a batch
+// validated on its own, the fields it names carrying the item in front (see
+// clientSafeItemBindError).
+func (c *call) invalidItemMessage(i int, err error) error {
+	if violations := fieldViolations(err, "items["+strconv.Itoa(i)+"]."); len(violations) > 0 {
+		return c.refuse(serviceregistry.NewInvalidFields(violations, err), err)
+	}
+	return c.invalidMessage(err)
 }
 
 // missingID refuses a call of an item action whose message names no record,

@@ -13,6 +13,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/gin-gonic/gin/binding"
 	ginjson "github.com/gin-gonic/gin/codec/json"
+	"github.com/go-playground/validator/v10"
 	"github.com/hydroan/gst/consts"
 	"github.com/hydroan/gst/internal/modelregistry"
 	"github.com/hydroan/gst/internal/serviceregistry"
@@ -245,6 +246,43 @@ func TestUpdateManyHandlerBindFailureAnswersTheFieldRefused(t *testing.T) {
 	require.Equal(t, http.StatusBadRequest, recorder.Code)
 	require.Contains(t, recorder.Body.String(), `"msg":"invalid value for field 'items'"`,
 		"a bind failure must name the field refused, not answer as the server's own failure")
+}
+
+// validatedProbe carries the binding tags the field-naming tests break: a
+// required name, and a required city inside a nested address.
+type validatedProbe struct {
+	Name    string `json:"name" binding:"required"`
+	Address struct {
+		City string `json:"city" binding:"required"`
+	} `json:"address"`
+}
+
+// TestClientSafeBindErrorNamesTheFieldsTheValidatorRefused pins the answer
+// to a request the validator refused: 400 with a sentence per field, the
+// field named by its JSON key path and the sentences joined by a semicolon,
+// each violation readable on the error for the gRPC details, and the item
+// of a batch named in front of the field when the item is validated on its
+// own.
+func TestClientSafeBindErrorNamesTheFieldsTheValidatorRefused(t *testing.T) {
+	refused := validateRequest(&validatedProbe{})
+	require.Error(t, refused)
+
+	wrapped := clientSafeBindError(refused)
+	var serviceErr *serviceregistry.Error
+	require.ErrorAs(t, wrapped, &serviceErr)
+	require.Equal(t, http.StatusBadRequest, serviceErr.Status())
+	require.Equal(t, "name is a required field; address.city is a required field", serviceErr.Msg())
+	require.Equal(t, []serviceregistry.FieldViolation{
+		{Field: "name", Description: "name is a required field"},
+		{Field: "address.city", Description: "address.city is a required field"},
+	}, serviceErr.FieldViolations())
+	var cause validator.ValidationErrors
+	require.ErrorAs(t, wrapped, &cause, "the validator's error travels as the cause")
+	require.Equal(t, refused, error(cause))
+
+	require.ErrorAs(t, clientSafeItemBindError(1, refused), &serviceErr)
+	require.Equal(t, "items[1].name is a required field; items[1].address.city is a required field", serviceErr.Msg())
+	require.Equal(t, "items[1].name", serviceErr.FieldViolations()[0].Field)
 }
 
 // TestBindJSONRequestHonorsDisabledValidator pins gin's validator-disable

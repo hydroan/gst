@@ -24,6 +24,7 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest/observer"
+	"google.golang.org/genproto/googleapis/rpc/errdetails"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials/insecure"
@@ -79,7 +80,14 @@ func TestCreateCallCreatesTheRecordForTheCaller(t *testing.T) {
 	t.Run("a message failing validation is refused", func(t *testing.T) {
 		_, err := invoke(t, conn, "ValidatedCreate", map[string]any{"record": map[string]any{}})
 
-		requireStatus(t, err, codes.InvalidArgument, "invalid request message")
+		requireStatus(t, err, codes.InvalidArgument, "name is a required field")
+		details := status.Convert(err).Details()
+		require.Len(t, details, 1, "the field refused travels as a BadRequest detail as well")
+		bad, ok := details[0].(*errdetails.BadRequest)
+		require.True(t, ok, "%T", details[0])
+		require.Len(t, bad.GetFieldViolations(), 1)
+		require.Equal(t, "name", bad.GetFieldViolations()[0].GetField())
+		require.Equal(t, "name is a required field", bad.GetFieldViolations()[0].GetDescription())
 	})
 
 	t.Run("a before hook refusal creates nothing", func(t *testing.T) {
@@ -336,12 +344,12 @@ func TestPatchCallValidatesTheMaskedFieldsAlone(t *testing.T) {
 	_, err = invoke(t, conn, "ValidatedPatch", map[string]any{"id": id, "record": map[string]any{"note": "only the note"}, "mask": []string{"note"}})
 	require.NoError(t, err, "a mask leaving the required name out has nothing to meet")
 	_, err = invoke(t, conn, "ValidatedPatch", map[string]any{"id": id, "record": map[string]any{"name": ""}, "mask": []string{"name"}})
-	requireStatus(t, err, codes.InvalidArgument, "invalid request message")
+	requireStatus(t, err, codes.InvalidArgument, "name is a required field")
 
 	_, err = invoke(t, conn, "ValidatedPatchMany", map[string]any{"items": []map[string]any{{"id": id, "note": "batch note"}}, "masks": [][]string{{"note"}}})
 	require.NoError(t, err)
 	_, err = invoke(t, conn, "ValidatedPatchMany", map[string]any{"items": []map[string]any{{"id": id, "name": ""}}, "masks": [][]string{{"name"}}})
-	requireStatus(t, err, codes.InvalidArgument, "invalid request message")
+	requireStatus(t, err, codes.InvalidArgument, "items[0].name is a required field")
 }
 
 // TestDeleteCallDeletesTheRecord pins the delete call: the record the id
@@ -414,7 +422,7 @@ func TestBatchCallsWriteAllOrNothing(t *testing.T) {
 
 	t.Run("an item failing validation refuses the batch", func(t *testing.T) {
 		_, createErr := invoke(t, conn, "ValidatedCreateMany", map[string]any{"items": []map[string]any{{"name": "valid"}, {}}})
-		requireStatus(t, createErr, codes.InvalidArgument, "invalid request message")
+		requireStatus(t, createErr, codes.InvalidArgument, "items[1].name is a required field")
 		var total int
 		require.NoError(t, database.Database[*validatedSample](context.Background()).WithQuery(&validatedSample{Name: "valid"}).Count(&total))
 		require.Zero(t, total)
@@ -478,7 +486,7 @@ func TestServiceCallDelegatesToThePhaseService(t *testing.T) {
 
 	t.Run("a payload failing validation is refused", func(t *testing.T) {
 		_, err := invoke(t, conn, "Action", map[string]any{"payload": map[string]any{}})
-		requireStatus(t, err, codes.InvalidArgument, "invalid request message")
+		requireStatus(t, err, codes.InvalidArgument, "note is a required field")
 	})
 
 	t.Run("the service's error answers with its status", func(t *testing.T) {

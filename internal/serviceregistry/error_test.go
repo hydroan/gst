@@ -85,3 +85,23 @@ func TestNewErrorWithCauseStackTracePrefersCauseOrigin(t *testing.T) {
 func TestErrorStackTraceOnNilReceiverIsEmpty(t *testing.T) {
 	require.Nil(t, (*serviceregistry.Error)(nil).StackTrace())
 }
+
+// TestNewInvalidFieldsJoinsTheViolations pins the error of a request whose
+// fields the validator refused: 400, a message joining the description of
+// each violation with a semicolon, the violations readable for the gRPC
+// details, and the validator's error as the cause.
+func TestNewInvalidFieldsJoinsTheViolations(t *testing.T) {
+	cause := errors.New("validation failed")
+	violations := []serviceregistry.FieldViolation{
+		{Field: "name", Description: "name is a required field"},
+		{Field: "address.city", Description: "address.city is a required field"},
+	}
+
+	err := serviceregistry.NewInvalidFields(violations, cause)
+
+	require.Equal(t, http.StatusBadRequest, err.Status())
+	require.Equal(t, "name is a required field; address.city is a required field", err.Msg())
+	require.Equal(t, violations, err.FieldViolations())
+	require.ErrorIs(t, err, cause)
+	require.Empty(t, serviceregistry.NewError(http.StatusBadRequest, "plain").FieldViolations())
+}

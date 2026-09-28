@@ -6,12 +6,17 @@ import (
 	"io"
 	"net/http"
 	"reflect"
+	"strconv"
 	"strings"
+	"sync"
 
 	"github.com/cockroachdb/errors"
 	"github.com/gin-gonic/gin"
 	"github.com/gin-gonic/gin/binding"
+	"github.com/go-playground/locales/en"
+	ut "github.com/go-playground/universal-translator"
 	"github.com/go-playground/validator/v10"
+	entranslations "github.com/go-playground/validator/v10/translations/en"
 	"github.com/hydroan/gst/internal/serviceregistry"
 	"github.com/hydroan/gst/internal/types"
 )
@@ -96,7 +101,96 @@ func validateRequest(target any) error {
 	if binding.Validator == nil {
 		return nil
 	}
+	configureValidator()
 	return binding.Validator.ValidateStruct(target)
+}
+
+var (
+	// validatorOnce configures gin's validator once, on the first
+	// validation (see configureValidator).
+	validatorOnce sync.Once
+	// validatorTranslator renders the validator's errors as English
+	// sentences (see fieldViolations); nil when the validator is not
+	// go-playground's.
+	validatorTranslator ut.Translator
+)
+
+// configureValidator sets gin's validator up for the answers the framework
+// gives, once: it names fields by their JSON key, the name the client sent
+// them under, and renders each failure as the English sentence of the
+// validator's own translations, "name is a required field". A validator
+// other than go-playground's is left as it is, its errors answered without
+// naming a field (see clientSafeBindError).
+func configureValidator() {
+	validatorOnce.Do(func() {
+		engine, ok := binding.Validator.Engine().(*validator.Validate)
+		if !ok {
+			return
+		}
+		engine.RegisterTagNameFunc(func(field reflect.StructField) string {
+			if name := jsonTagName(field); name != "-" {
+				return name
+			}
+			return ""
+		})
+		english := en.New()
+		translator, _ := ut.New(english, english).GetTranslator(english.Locale())
+		if err := entranslations.RegisterDefaultTranslations(engine, translator); err == nil {
+			validatorTranslator = translator
+		}
+	})
+}
+
+// jsonTagName returns the name a field's json tag gives it: the part before
+// the comma, "-" for a field the tag leaves out, and "" for a field without
+// a name in its tag, which encoding/json names after the field.
+func jsonTagName(field reflect.StructField) string {
+	name, _, _ := strings.Cut(field.Tag.Get("json"), ",")
+	return name
+}
+
+// fieldViolations returns the fields a validator error names, one violation
+// per field: the field by its JSON key path relative to the request, with
+// prefix in front, items[1]. for the item of a batch validated on its own,
+// and the sentence the validator's translation renders the failure as,
+// with the path in place of the bare field name; nil for any other error,
+// and for a validator without translations.
+func fieldViolations(err error, prefix string) []serviceregistry.FieldViolation {
+	var refused validator.ValidationErrors
+	if validatorTranslator == nil || !errors.As(err, &refused) {
+		return nil
+	}
+	violations := make([]serviceregistry.FieldViolation, 0, len(refused))
+	for _, fe := range refused {
+		path := prefix + fieldPath(fe.Namespace())
+		description := fe.Translate(validatorTranslator)
+		if field := fe.Field(); path != field {
+			description = path + strings.TrimPrefix(description, field)
+		}
+		violations = append(violations, serviceregistry.FieldViolation{Field: path, Description: description})
+	}
+	return violations
+}
+
+// fieldPath returns the namespace of a validator error without the type of
+// the request at its head: what follows the first dot outside the brackets
+// a generic type's name may carry, batch[...].items[1].name being the
+// namespace of an item's field.
+func fieldPath(namespace string) string {
+	depth := 0
+	for i, r := range namespace {
+		switch r {
+		case '[':
+			depth++
+		case ']':
+			depth--
+		case '.':
+			if depth == 0 {
+				return namespace[i+1:]
+			}
+		}
+	}
+	return namespace
 }
 
 // validatePatchFields checks target against the binding tags of the fields
@@ -152,6 +246,9 @@ func requiredBodyError(err error) error {
 // (each entry point returns them before decoding), and type-mismatch field
 // paths come from the target struct's JSON tags, not from client input.
 func clientSafeBindError(err error) error {
+	if violations := fieldViolations(err, ""); len(violations) > 0 {
+		return serviceregistry.NewInvalidFields(violations, err)
+	}
 	var typeErr *json.UnmarshalTypeError
 	var syntaxErr *json.SyntaxError
 	switch {
@@ -165,6 +262,16 @@ func clientSafeBindError(err error) error {
 	default:
 		return serviceregistry.NewErrorWithCause(http.StatusBadRequest, "invalid request body", err)
 	}
+}
+
+// clientSafeItemBindError is clientSafeBindError for the item at index i of
+// a batch validated on its own, the fields it names carrying the item in
+// front, items[1].name.
+func clientSafeItemBindError(i int, err error) error {
+	if violations := fieldViolations(err, "items["+strconv.Itoa(i)+"]."); len(violations) > 0 {
+		return serviceregistry.NewInvalidFields(violations, err)
+	}
+	return clientSafeBindError(err)
 }
 
 // normalizeRequest restores req to the zero-value instance when a JSON null

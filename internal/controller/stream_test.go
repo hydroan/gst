@@ -140,7 +140,7 @@ func TestServerStreamCallStreamsTheResponses(t *testing.T) {
 		stream := openStream(t, conn, "Watch", sampleCredential, serverStream)
 		sendPayload(t, stream, map[string]any{})
 		_, err := recvResponse(stream)
-		requireStatus(t, err, codes.InvalidArgument, "invalid request message")
+		requireStatus(t, err, codes.InvalidArgument, "note is a required field")
 	})
 
 	t.Run("the service's error ends the stream with its status", func(t *testing.T) {
@@ -218,7 +218,7 @@ func TestClientStreamCallReadsTheRequestsAndAnswers(t *testing.T) {
 		sendPayload(t, stream, map[string]any{})
 		require.NoError(t, stream.CloseSend())
 		_, err := recvResponse(stream)
-		requireStatus(t, err, codes.InvalidArgument, "invalid request message")
+		requireStatus(t, err, codes.InvalidArgument, "note is a required field")
 	})
 
 	t.Run("a request the decoding refuses ends the stream with the refusal", func(t *testing.T) {
