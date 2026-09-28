@@ -159,9 +159,10 @@ func FirstMessage[T any](recv func() (T, error)) (T, error) {
 
 // requests reads the requests of a request stream through the function the
 // handler hands the call: recv normalizes and validates each the way
-// ServiceCall treats a payload, and one the validator refuses ends the
-// stream, the refusal kept in refused for the call to answer whatever the
-// service returns for the error it got.
+// ServiceCall treats a payload, and one the validator refuses, or one the
+// handler's decoding refused before it got here, ends the stream, the
+// refusal kept in refused for the call to answer whatever the service
+// returns for the error it got.
 type requests[REQ types.Request] struct {
 	recv    func() (REQ, error)
 	refused error
@@ -173,6 +174,16 @@ func (a *action[M, REQ, RSP]) requests(c *call, recv func() (REQ, error)) *reque
 	r.recv = func() (REQ, error) {
 		req, err := recv()
 		if err != nil {
+			// An InvalidArgument is the decoding refusing the message, a
+			// value a field cannot hold (see grpc.Narrow): the transport's
+			// own errors, the stream ending or failing, never carry that
+			// code. It is answered as the refusal it is, whatever the
+			// service makes of the error its Recv gave it.
+			if status.Code(err) == codes.InvalidArgument {
+				c.log.Errorz("request message rejected", zap.Error(err))
+				gstotel.RecordError(c.span, err)
+				r.refused = err
+			}
 			return req, err
 		}
 		a.normalizeRequest(&req)

@@ -389,7 +389,9 @@ func (*uploadService) Stream(sc *types.ServiceContext, stream *types.ClientStrea
 			return &sampleActionRsp{Note: strings.Join(notes, ","), observedCall: observe(sc)}, nil
 		}
 		if err != nil {
-			return nil, err
+			// Wrapped the way a project's service wraps a failed read: what
+			// the client is answered must not depend on it.
+			return nil, errors.Wrap(err, "failed to read the request")
 		}
 		notes = append(notes, req.Note)
 	}
@@ -406,7 +408,7 @@ func (*chatService) Stream(sc *types.ServiceContext, stream *types.BidiStream[*s
 			return nil
 		}
 		if err != nil {
-			return err
+			return errors.Wrap(err, "failed to read the request")
 		}
 		if err := stream.Send(&sampleActionRsp{Note: "echo " + req.Note, observedCall: observe(sc)}); err != nil {
 			return err

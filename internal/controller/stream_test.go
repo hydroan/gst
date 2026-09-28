@@ -32,7 +32,14 @@ func streamDescs() []grpc.StreamDesc {
 			if err := stream.RecvMsg(in); err != nil {
 				return nil, err
 			}
-			return field[*sampleActionReq](in.AsMap(), "payload"), nil
+			m := in.AsMap()
+			// A message carrying refuse is one the decoding refuses, the
+			// way a generated FromProto refuses a value a field cannot
+			// hold (see grpc.Narrow), with the text it carries.
+			if refusal, ok := m["refuse"].(string); ok {
+				return nil, status.Error(codes.InvalidArgument, refusal)
+			}
+			return field[*sampleActionReq](m, "payload"), nil
 		}
 	}
 	send := func(stream grpc.ServerStream) func(*sampleActionRsp) error {
@@ -211,6 +218,18 @@ func TestClientStreamCallReadsTheRequestsAndAnswers(t *testing.T) {
 		_, err := recvResponse(stream)
 		requireStatus(t, err, codes.InvalidArgument, "invalid request message")
 	})
+
+	t.Run("a request the decoding refuses ends the stream with the refusal", func(t *testing.T) {
+		// The service wraps the error its Recv answers into one of its own;
+		// the refusal still reaches the client as the decoding worded it.
+		stream := openStream(t, conn, "Upload", sampleCredential, clientStream)
+		sendPayload(t, stream, map[string]any{"note": "a"})
+		require.NoError(t, stream.SendMsg(encode(map[string]any{"refuse": `field "rank": 300 does not fit int8`})))
+		require.NoError(t, stream.CloseSend())
+		_, err := recvResponse(stream)
+		require.Equal(t, codes.InvalidArgument, status.Code(err))
+		require.Equal(t, `field "rank": 300 does not fit int8`, status.Convert(err).Message())
+	})
 }
 
 // TestBidiStreamCallStreamsBothWays pins the bidirectional stream call end
@@ -230,6 +249,14 @@ func TestBidiStreamCallStreamsBothWays(t *testing.T) {
 	require.NoError(t, stream.CloseSend())
 	_, err := recvResponse(stream)
 	require.ErrorIs(t, err, io.EOF, "the stream ends once the client is done")
+
+	t.Run("a request the decoding refuses ends the stream with the refusal", func(t *testing.T) {
+		stream := openStream(t, conn, "Chat", sampleCredential, grpc.StreamDesc{ServerStreams: true, ClientStreams: true})
+		require.NoError(t, stream.SendMsg(encode(map[string]any{"refuse": `field "port": 70000 does not fit uint16`})))
+		_, err := recvResponse(stream)
+		require.Equal(t, codes.InvalidArgument, status.Code(err))
+		require.Equal(t, `field "port": 70000 does not fit uint16`, status.Convert(err).Message())
+	})
 }
 
 // TestFirstMessageRefusesAStreamEndedBeforeIt pins FirstMessage, what a
