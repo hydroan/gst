@@ -12,7 +12,7 @@ gst 是强约定框架（Apple 风格），不是自由框架（Windows 风格�
 - 可选即兜底，必须即报错：框架允许的每种使用形态都是一等契约，所有消费点必须兜底全部合法形态，不得要求使用方补配置来迁就实现；确实必须使用方提供的，在 bootstrap 或 gg 阶段直接报错，不留「文档约定加项目自觉」的中间态。契约以默认实现和存量用法为准，新增校验不得收窄既有契约。
 - 显式优先于静默：配置或声明错误在 bootstrap 或 gg 阶段直接报错退出，禁止静默忽略、去重、改写；后端或方言不支持某项能力时，能力入口直接返回错误，禁止静默 no-op、降级或悄悄换实现模拟，唯一例外是该能力在此后端语义上自动成立、no-op 与真实执行不可区分，此时在入口文档写明；有风险的变更显式交人评审（dry-run、报错提示），框架不自动执行变更决策。
 - 主路优先：同一件事只保留一条官方路径，扩展能力只补主路够不到的盲区，不做与主路重叠的平行第二入口。
-- 模块不动核心，两线互不波及：模块承载的是通用业务，优先级最低，模块的需要不得改动框架核心的代码与逻辑；HTTP 与 gRPC 是平行的两条线，改一条不得波及另一条。
+- 模块不动核心，两线互不波及：模块是 model、service、router、middleware、gRPC、interceptor 的集合，承载的是通用业务，优先级最低；模块的通用业务逻辑一定不能影响框架的架构与逻辑，模块的需要不得改动框架核心的代码，模块代码只用框架给项目的公开能力；HTTP 与 gRPC 是平行的两条线，改一条不得波及另一条。
 
 ### 协作与分批交付
 
@@ -87,6 +87,7 @@ gst 是强约定框架（Apple 风格），不是自由框架（Windows 风格�
 - 只给项目用、或主要给项目用的能力，是顶层公开包，实现就写在包里，如 `bootstrap`、`database`、`controller`、`cronjob`、`leader`。
 - 只有框架自己用的包一律放 `internal`：项目开发者看不到，就不必理解这些细节。
 - 项目和框架都大量使用的能力，实现下沉到 internal 包，再由一个顶层包做 alias 转发，只转发项目用得到的那部分，框架私用的符号不暴露；转发是唯一形状，符号只是空函数、常量或类型也一样，公开包自己不声明任何东西：根包 `gst` 转发 `internal/types`，`model` 转发 `internal/modelregistry`，`service` 转发 `internal/serviceregistry`，`sse` 转发 `internal/sse`，`router` 转发 `internal/router`，`middleware` 转发 `internal/middleware`，`dsl` 转发 `internal/dsl`。
+- middleware 与 interceptor 是例外：中间件和拦截器大多是给项目用的，所以这两个包按谁挂载分家，而不是像 router、dsl 那样全部在 internal 实现、公开包只转发。框架内建链上的中间件与拦截器是框架逻辑，放 internal/middleware 与 internal/grpcserver，由 internal/router、internal/grpcserver 装配；项目经 Register、RegisterAuth 自己挂的是项目能力，实现直接写在公开包里，不进 internal，也不得改动内建链与监听器的逻辑；随 gg module copy 复制的中间件同样在公开包，只引用公开包。公开包对 Register、RegisterAuth 这类挂载入口只做转发。
 
 引用方向随之固定：internal 包（含测试）需要这些能力时直接引用对应的 internal 包，禁止反向 import 公开包，避免 internal → 公开 → internal 的依赖绕行和潜在 import 环；框架自身代码（含公开包）使用 internal 能力时同样直接引用 internal 实现包，公开转发包只服务业务项目。如果所需符号只存在于公开包（如曾经的 `service.Error`），把实现下沉到 internal、公开包改为转发，而不是让 internal 反向引用。
 
