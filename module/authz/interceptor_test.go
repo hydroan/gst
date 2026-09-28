@@ -14,6 +14,8 @@ import (
 	"github.com/hydroan/gst/consts"
 	gstgrpc "github.com/hydroan/gst/grpc"
 	"github.com/hydroan/gst/internal/grpcserver"
+	modeliamuser "github.com/hydroan/gst/internal/model/iam/user"
+	"github.com/hydroan/gst/internal/modelregistry"
 	"github.com/hydroan/gst/internal/types"
 	"github.com/hydroan/gst/module/iam"
 	"github.com/hydroan/gst/tenant"
@@ -116,12 +118,32 @@ func TestAuthzInterceptor(t *testing.T) {
 	})
 }
 
+// TestTenantAdminManagesUsersOverGRPC pins that iam's tenant administration
+// judges a gRPC call by the route of the action, the way it judges an HTTP
+// request by its path: a user a policy grants the user list on lists the
+// users over the probe's ListUsers, which runs iam's user list the way a
+// generated handler does, and a user without the grant is refused.
+func TestTenantAdminManagesUsersOverGRPC(t *testing.T) {
+	conn := grpcAuthzProbe(t)
+	admin := authorizationSubject{}
+	admin.userID, admin.sessionID = authzSignupAndLoginUserWithUserAgent(t, authzTestUsername("grpc_tenant_admin"), "12345678", grpcUserAgent)
+	roleID := newAuthorizationRole(t, admin, "grpc_tenant_admin")
+	authzGrantTenantPolicy(t, tenant.Default, roleID, types.Permission{Object: userAdminPath, Action: http.MethodGet})
+
+	require.Equal(t, codes.OK, status.Code(authzProbeCall(t, conn, "ListUsers", admin.sessionID)))
+
+	_, plainSessionID := authzSignupAndLoginUserWithUserAgent(t, authzTestUsername("grpc_plain_user"), "12345678", grpcUserAgent)
+	require.Equal(t, codes.PermissionDenied, status.Code(authzProbeCall(t, conn, "ListUsers", plainSessionID)))
+}
+
 // The probe service stands for a project's gRPC service behind the module's
 // interceptors: gst.test.Probe with Look served at GET grantedRoute and Deny
-// at GET deniedRoute, the two routes the HTTP cases grant and refuse, and
-// Peek at GET probeThingRoute, a route with a parameter, and Tail, a Stream
-// action at probeTailRoute. One listener serves the whole test binary, the
-// server's registrations being made once.
+// at GET deniedRoute, the two routes the HTTP cases grant and refuse, Peek
+// at GET probeThingRoute, a route with a parameter, Tail, a Stream action
+// at probeTailRoute, and ListUsers, which runs iam's user list at GET
+// userAdminPath the way a generated handler runs a service. One listener
+// serves the whole test binary, the server's registrations being made
+// once.
 var (
 	grpcAuthzProbeOnce   sync.Once
 	grpcAuthzProbeAddr   string
@@ -167,11 +189,28 @@ func grpcAuthzProbe(t *testing.T) *grpc.ClientConn {
 				},
 			}
 		}
+		listUsers := gstgrpc.ServiceCall[*modeliamuser.User, *modelregistry.Empty, *modeliamuser.AdminUserListRsp](consts.List, userAdminPath)
+		users := grpc.MethodDesc{
+			MethodName: "ListUsers",
+			Handler: func(_ any, ctx context.Context, dec func(any) error, unary grpc.UnaryServerInterceptor) (any, error) {
+				in := new(emptypb.Empty)
+				if err := dec(in); err != nil {
+					return nil, err
+				}
+				handler := func(ctx context.Context, _ any) (any, error) {
+					if _, err := listUsers(ctx, nil, gstgrpc.Query{}, new(modelregistry.Empty)); err != nil {
+						return nil, err
+					}
+					return &emptypb.Empty{}, nil
+				}
+				return unary(ctx, in, &grpc.UnaryServerInfo{FullMethod: "/gst.test.Probe/ListUsers"}, handler)
+			},
+		}
 		grpcserver.Register(func(r grpc.ServiceRegistrar) {
 			r.RegisterService(&grpc.ServiceDesc{
 				ServiceName: "gst.test.Probe",
 				HandlerType: (*any)(nil),
-				Methods:     []grpc.MethodDesc{handle("Look"), handle("Deny"), handle("Peek")},
+				Methods:     []grpc.MethodDesc{handle("Look"), handle("Deny"), handle("Peek"), users},
 				Streams: []grpc.StreamDesc{{
 					StreamName:    "Tail",
 					ServerStreams: true,
@@ -192,6 +231,7 @@ func grpcAuthzProbe(t *testing.T) *grpc.ClientConn {
 			grpcserver.Method{Name: "/gst.test.Probe/Deny", HTTPMethod: http.MethodGet, Route: deniedRoute},
 			grpcserver.Method{Name: "/gst.test.Probe/Peek", HTTPMethod: http.MethodGet, Route: probeThingRoute},
 			grpcserver.Method{Name: "/gst.test.Probe/Tail", HTTPMethod: grpcserver.MethodStream, Route: probeTailRoute},
+			grpcserver.Method{Name: "/gst.test.Probe/ListUsers", HTTPMethod: http.MethodGet, Route: userAdminPath},
 		)
 		listener, err := net.Listen("tcp", "127.0.0.1:0")
 		if err != nil {

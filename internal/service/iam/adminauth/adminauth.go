@@ -2,6 +2,7 @@ package adminauth
 
 import (
 	"net/http"
+	"regexp"
 	"strings"
 
 	"github.com/hydroan/gst"
@@ -78,19 +79,36 @@ func currentTenant(ctx *gst.ServiceContext) string {
 	return tenant.Default
 }
 
-// operationObject returns the object string used for RBAC route authorization.
-//
-// ServiceContext.Path contains the concrete request path in normal HTTP flows.
-// Route is kept as a fallback for service-level tests or callers that construct
-// contexts without an HTTP request.
+// routeParam matches a parameter of a route as the router registers it,
+// :id in /api/iam/admin/users/:id.
+var routeParam = regexp.MustCompile(`:([a-zA-Z0-9_]+)`)
+
+// operationObject returns the object of the RBAC decision: the route of the
+// action with the request's parameters filled in, /api/iam/admin/users/42,
+// the same on both transports, where the path of an HTTP request is that
+// and the path of a gRPC call names the rpc, which no policy names. The
+// path stands in when the context carries no route, or when the route
+// names a parameter the request does not carry.
 func operationObject(ctx *gst.ServiceContext) string {
 	if ctx == nil {
 		return ""
 	}
-	if path := strings.TrimSpace(ctx.Path()); path != "" {
-		return path
+	route := strings.TrimSpace(ctx.Route())
+	if route == "" {
+		return strings.TrimSpace(ctx.Path())
 	}
-	return strings.TrimSpace(ctx.Route())
+	filled := true
+	object := routeParam.ReplaceAllStringFunc(route, func(param string) string {
+		value := ctx.Param(strings.TrimPrefix(param, ":"))
+		if value == "" {
+			filled = false
+		}
+		return value
+	})
+	if !filled {
+		return strings.TrimSpace(ctx.Path())
+	}
+	return object
 }
 
 // operationAction returns the action string used for RBAC route authorization.
