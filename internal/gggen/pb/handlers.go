@@ -11,6 +11,7 @@ import (
 	"github.com/hydroan/gst/internal/ggconst"
 	"github.com/hydroan/gst/internal/goast"
 	"github.com/hydroan/gst/internal/modelinfo"
+	"github.com/stoewer/go-strcase"
 )
 
 // This file builds the Go file generated beside every definition: for each
@@ -45,11 +46,11 @@ import (
 //		gstmodel "github.com/hydroan/gst/model"
 //	)
 //
-//	// ReportService serves the rpcs of the ReportService service through the
+//	// reportService serves the rpcs of the ReportService service through the
 //	// actions of Report: every handler decodes its request message into what the
 //	// action's call takes, runs the call and encodes what it answers into the
 //	// response message.
-//	type ReportService struct {
+//	type reportService struct {
 //		UnimplementedReportServiceServer
 //	}
 //
@@ -58,7 +59,7 @@ import (
 //	var getReport = grpc.ServiceCall[*model.Report, *gstmodel.Empty, *model.ReportRsp](consts.Get, "/api/reports/summary")
 //
 //	// GetReport serves the Get action of Report on /api/reports/summary.
-//	func (ReportService) GetReport(ctx context.Context, req *GetReportRequest) (*GetReportResponse, error) {
+//	func (reportService) GetReport(ctx context.Context, req *GetReportRequest) (*GetReportResponse, error) {
 //		result, err := getReport(ctx, nil, grpc.Query{Expand: req.GetExpand(), Depth: req.GetDepth()}, new(gstmodel.Empty))
 //		if err != nil {
 //			return nil, err
@@ -118,23 +119,32 @@ func (g *generator) handlerFile(f *protoFile) (File, error) {
 	return File{Path: ggconst.DirPB + "/" + name, Content: source}, nil
 }
 
-// serviceType declares the type serving service, the service of model: it
-// embeds the Unimplemented server the protobuf plugin generated, which
-// answers Unimplemented for any rpc added later, and the handlers are its
-// methods (see handler and streamHandler).
+// serviceTypeName names the type serving service, recordService for
+// RecordService and httpService for HTTPService: unexported, so that nothing
+// outside the generated package can register the handlers on a server of
+// its own, past the listener and its chain; the package's registration file
+// is the one place they are registered (see registrationFiles).
+func serviceTypeName(service string) string {
+	return strcase.LowerCamelCase(service)
+}
+
+// serviceType declares the type serving service, the service of model (see
+// serviceTypeName): it embeds the Unimplemented server the protobuf plugin
+// generated, which answers Unimplemented for any rpc added later, and the
+// handlers are its methods (see handler and streamHandler).
 //
-//	// RecordService serves the rpcs of the RecordService service through the
+//	// recordService serves the rpcs of the RecordService service through the
 //	// actions of Record: every handler decodes its request message into what the
 //	// action's call takes, runs the call and encodes what it answers into the
 //	// response message.
-//	type RecordService struct {
+//	type recordService struct {
 //		UnimplementedRecordServiceServer
 //	}
 func (w *fileWriter) serviceType(service string, model *modelinfo.Model) {
-	w.out.add(service+" serves the rpcs of the "+service+" service through the actions of "+model.ModelName+
+	w.out.add(serviceTypeName(service)+" serves the rpcs of the "+service+" service through the actions of "+model.ModelName+
 		": every handler decodes its request message into what the action's call takes, runs the call and encodes what it answers into the response message.",
 		&ast.GenDecl{Tok: token.TYPE, Specs: []ast.Spec{&ast.TypeSpec{
-			Name: ident(service),
+			Name: ident(serviceTypeName(service)),
 			Type: &ast.StructType{Fields: &ast.FieldList{List: []*ast.Field{{Type: ident("Unimplemented" + service + "Server")}}}},
 		}}}, nil)
 }
@@ -404,8 +414,16 @@ func (w *fileWriter) handler(r *rpc) {
 			// standardMessages), each readied through PatchItem: its id
 			// names the record and its parameters must agree with the
 			// request's, which the handler names once when there are any.
-			itemsField := r.request.Field[len(r.request.Field)-1]
-			itemFields := goFieldNames(w.file.messageNamed(strings.TrimPrefix(itemsField.GetTypeName(), "."+w.file.pkg+".")))
+			// The items field is found by name: the committed definition
+			// may number it ahead of a parameter the route took later, and
+			// the fields are printed in the order of their numbers.
+			var itemsType string
+			for _, f := range r.request.Field {
+				if f.GetName() == "items" {
+					itemsType = f.GetTypeName()
+				}
+			}
+			itemFields := goFieldNames(w.file.messageNamed(strings.TrimPrefix(itemsType, "."+w.file.pkg+".")))
 			itemParams := ast.Expr(ident("nil"))
 			if len(r.params) > 0 {
 				body = append(body, define([]string{"params"}, params))
@@ -458,7 +476,7 @@ func (w *fileWriter) handler(r *rpc) {
 	}
 
 	w.out.add(r.name+" serves the "+r.action.Phase.Name()+" action of "+r.model.ModelName+" on "+consts.APIPath(r.registered)+".", &ast.FuncDecl{
-		Recv: &ast.FieldList{List: []*ast.Field{{Type: ident(r.service)}}},
+		Recv: &ast.FieldList{List: []*ast.Field{{Type: ident(serviceTypeName(r.service))}}},
 		Name: ident(r.name),
 		Type: &ast.FuncType{
 			Params: &ast.FieldList{List: []*ast.Field{
@@ -663,7 +681,7 @@ func (w *fileWriter) streamHandler(r *rpc) {
 		body = append(body, returns(run(paramsOf(ident("first")), recv(withFirst), send)))
 	}
 	w.out.add(r.name+" serves the "+r.action.Phase.Name()+" action of "+r.model.ModelName+" declared on "+r.route+", served over gRPC alone.", &ast.FuncDecl{
-		Recv: &ast.FieldList{List: []*ast.Field{{Type: ident(r.service)}}},
+		Recv: &ast.FieldList{List: []*ast.Field{{Type: ident(serviceTypeName(r.service))}}},
 		Name: ident(r.name),
 		Type: &ast.FuncType{Params: &ast.FieldList{List: params}, Results: &ast.FieldList{List: []*ast.Field{{Type: ident("error")}}}},
 		Body: block(body...),

@@ -11,11 +11,11 @@ import (
 	gstmodel "github.com/hydroan/gst/model"
 )
 
-// ReportService serves the rpcs of the ReportService service through the
+// reportService serves the rpcs of the ReportService service through the
 // actions of Report: every handler decodes its request message into what the
 // action's call takes, runs the call and encodes what it answers into the
 // response message.
-type ReportService struct {
+type reportService struct {
 	UnimplementedReportServiceServer
 }
 
@@ -24,7 +24,7 @@ type ReportService struct {
 var getReport = grpc.ServiceCall[*model.Report, *gstmodel.Empty, *model.ReportRsp](consts.Get, "/api/reports/summary")
 
 // GetReport serves the Get action of Report on /api/reports/summary.
-func (ReportService) GetReport(ctx context.Context, req *GetReportRequest) (*GetReportResponse, error) {
+func (reportService) GetReport(ctx context.Context, req *GetReportRequest) (*GetReportResponse, error) {
 	result, err := getReport(ctx, nil, grpc.Query{Expand: req.GetExpand(), Depth: req.GetDepth()}, new(gstmodel.Empty))
 	if err != nil {
 		return nil, err

@@ -9,11 +9,11 @@ import (
 	gstmodel "github.com/hydroan/gst/model"
 )
 
-// FeedService serves the rpcs of the FeedService service through the actions
+// feedService serves the rpcs of the FeedService service through the actions
 // of Feed: every handler decodes its request message into what the action's
 // call takes, runs the call and encodes what it answers into the response
 // message.
-type FeedService struct {
+type feedService struct {
 	UnimplementedFeedServiceServer
 }
 
@@ -28,7 +28,7 @@ var (
 
 // TailFeedByFeed serves the Stream action of Feed declared on
 // feeds/:feed/tail, served over gRPC alone.
-func (FeedService) TailFeedByFeed(req *TailFeedByFeedRequest, srv FeedService_TailFeedByFeedServer) error {
+func (feedService) TailFeedByFeed(req *TailFeedByFeedRequest, srv FeedService_TailFeedByFeedServer) error {
 	return tailFeedByFeed(srv.Context(), map[string]string{"feed": req.GetFeed()}, new(gstmodel.Empty), func(rsp *model.FeedEvent) error {
 		return srv.Send(&TailFeedByFeedResponse{Result: FeedEventToProto(rsp)})
 	})
@@ -36,7 +36,7 @@ func (FeedService) TailFeedByFeed(req *TailFeedByFeedRequest, srv FeedService_Ta
 
 // UploadFeedByFeed serves the Stream action of Feed declared on
 // feeds/:feed/upload, served over gRPC alone.
-func (FeedService) UploadFeedByFeed(srv FeedService_UploadFeedByFeedServer) error {
+func (feedService) UploadFeedByFeed(srv FeedService_UploadFeedByFeedServer) error {
 	first, err := grpc.FirstMessage(srv.Recv)
 	if err != nil {
 		return err
@@ -60,7 +60,7 @@ func (FeedService) UploadFeedByFeed(srv FeedService_UploadFeedByFeedServer) erro
 
 // ChatFeed serves the Stream action of Feed declared on feeds/chat, served
 // over gRPC alone.
-func (FeedService) ChatFeed(srv FeedService_ChatFeedServer) error {
+func (feedService) ChatFeed(srv FeedService_ChatFeedServer) error {
 	return chatFeed(srv.Context(), nil, func() (*model.FeedEvent, error) {
 		msg, recvErr := srv.Recv()
 		if recvErr != nil {
@@ -74,7 +74,7 @@ func (FeedService) ChatFeed(srv FeedService_ChatFeedServer) error {
 
 // WatchFeed serves the Stream action of Feed declared on feeds/watch, served
 // over gRPC alone.
-func (FeedService) WatchFeed(req *WatchFeedRequest, srv FeedService_WatchFeedServer) error {
+func (feedService) WatchFeed(req *WatchFeedRequest, srv FeedService_WatchFeedServer) error {
 	payload, err := FeedWatchReqFromProto(req.GetPayload())
 	if err != nil {
 		return err

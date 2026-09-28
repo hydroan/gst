@@ -16,11 +16,11 @@ import (
 	"gorm.io/gorm"
 )
 
-// ShapeService serves the rpcs of the ShapeService service through the
+// shapeService serves the rpcs of the ShapeService service through the
 // actions of Shape: every handler decodes its request message into what the
 // action's call takes, runs the call and encodes what it answers into the
 // response message.
-type ShapeService struct {
+type shapeService struct {
 	UnimplementedShapeServiceServer
 }
 
@@ -32,7 +32,7 @@ var (
 )
 
 // CreateShape serves the Create action of Shape on /api/shapes.
-func (ShapeService) CreateShape(ctx context.Context, req *CreateShapeRequest) (*CreateShapeResponse, error) {
+func (shapeService) CreateShape(ctx context.Context, req *CreateShapeRequest) (*CreateShapeResponse, error) {
 	in, err := ShapeFromProto(req.GetShape())
 	if err != nil {
 		return nil, err
@@ -45,7 +45,7 @@ func (ShapeService) CreateShape(ctx context.Context, req *CreateShapeRequest) (*
 }
 
 // GetShape serves the Get action of Shape on /api/shapes/:id.
-func (ShapeService) GetShape(ctx context.Context, req *GetShapeRequest) (*GetShapeResponse, error) {
+func (shapeService) GetShape(ctx context.Context, req *GetShapeRequest) (*GetShapeResponse, error) {
 	m, err := getShape(ctx, map[string]string{"id": req.GetId()}, req.GetId(), grpc.Query{Expand: req.GetExpand(), Depth: req.GetDepth()})
 	if err != nil {
 		return nil, err

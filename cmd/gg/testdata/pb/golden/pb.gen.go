@@ -4,27 +4,28 @@ package pb
 
 import (
 	"net/http"
-	"tmpapp/pb/record"
+
+	_ "tmpapp/pb/record"
 
 	"github.com/hydroan/gst/grpc"
 )
 
 func init() {
-	grpc.Register[FeedServiceServer](RegisterFeedServiceServer, FeedService{},
+	grpc.Register[FeedServiceServer](RegisterFeedServiceServer, feedService{},
 		grpc.Method{Name: FeedService_TailFeedByFeed_FullMethodName, HTTPMethod: grpc.MethodStream, Route: "/api/feeds/:feed/tail"},
 		grpc.Method{Name: FeedService_UploadFeedByFeed_FullMethodName, HTTPMethod: grpc.MethodStream, Route: "/api/feeds/:feed/upload"},
 		grpc.Method{Name: FeedService_ChatFeed_FullMethodName, HTTPMethod: grpc.MethodStream, Route: "/api/feeds/chat"},
 		grpc.Method{Name: FeedService_WatchFeed_FullMethodName, HTTPMethod: grpc.MethodStream, Route: "/api/feeds/watch"},
 	)
-	grpc.Register[NoteServiceServer](RegisterNoteServiceServer, NoteService{},
+	grpc.Register[NoteServiceServer](RegisterNoteServiceServer, noteService{},
 		grpc.Method{Name: NoteService_CreateNote_FullMethodName, HTTPMethod: http.MethodPost, Route: "/api/notes"},
 		grpc.Method{Name: NoteService_GetNote_FullMethodName, HTTPMethod: http.MethodGet, Route: "/api/notes/:id"},
 	)
-	grpc.Register[PinServiceServer](RegisterPinServiceServer, PinService{},
+	grpc.Register[PinServiceServer](RegisterPinServiceServer, pinService{},
 		grpc.Method{Name: PinService_CreatePin_FullMethodName, HTTPMethod: http.MethodPost, Route: "/api/pins"},
 		grpc.Method{Name: PinService_GetPin_FullMethodName, HTTPMethod: http.MethodGet, Route: "/api/pins/:id"},
 	)
-	grpc.Register[RecordServiceServer](RegisterRecordServiceServer, RecordService{},
+	grpc.Register[RecordServiceServer](RegisterRecordServiceServer, recordService{},
 		grpc.Method{Name: RecordService_CreateRecord_FullMethodName, HTTPMethod: http.MethodPost, Route: "/api/records"},
 		grpc.Method{Name: RecordService_DeleteRecord_FullMethodName, HTTPMethod: http.MethodDelete, Route: "/api/records/:record"},
 		grpc.Method{Name: RecordService_UpdateRecord_FullMethodName, HTTPMethod: http.MethodPut, Route: "/api/records/:record"},
@@ -37,17 +38,10 @@ func init() {
 		grpc.Method{Name: RecordService_PatchManyRecord_FullMethodName, HTTPMethod: http.MethodPatch, Route: "/api/records/batch"},
 		grpc.Method{Name: RecordService_ListRecordByOwner_FullMethodName, HTTPMethod: http.MethodGet, Route: "/api/owners/:owner/records"},
 	)
-	grpc.Register[record.ItemServiceServer](record.RegisterItemServiceServer, record.ItemService{},
-		grpc.Method{Name: record.ItemService_CreateItem_FullMethodName, HTTPMethod: http.MethodPost, Route: "/api/records/:record/items"},
-		grpc.Method{Name: record.ItemService_GetItem_FullMethodName, HTTPMethod: http.MethodGet, Route: "/api/records/:record/items/:id"},
-		grpc.Method{Name: record.ItemService_PatchManyItem_FullMethodName, HTTPMethod: http.MethodPatch, Route: "/api/records/:record/items/batch"},
-		grpc.Method{Name: record.ItemService_SealItem_FullMethodName, HTTPMethod: http.MethodPost, Route: "/api/items/:id/seal"},
-		grpc.Method{Name: record.ItemService_MergeItem_FullMethodName, HTTPMethod: http.MethodPost, Route: "/api/items/merge"},
-	)
-	grpc.Register[ReportServiceServer](RegisterReportServiceServer, ReportService{},
+	grpc.Register[ReportServiceServer](RegisterReportServiceServer, reportService{},
 		grpc.Method{Name: ReportService_GetReport_FullMethodName, HTTPMethod: http.MethodGet, Route: "/api/reports/summary"},
 	)
-	grpc.Register[ShapeServiceServer](RegisterShapeServiceServer, ShapeService{},
+	grpc.Register[ShapeServiceServer](RegisterShapeServiceServer, shapeService{},
 		grpc.Method{Name: ShapeService_CreateShape_FullMethodName, HTTPMethod: http.MethodPost, Route: "/api/shapes"},
 		grpc.Method{Name: ShapeService_GetShape_FullMethodName, HTTPMethod: http.MethodGet, Route: "/api/shapes/:id"},
 	)

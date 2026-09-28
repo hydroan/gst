@@ -3,7 +3,7 @@
 // lifecycle: bootstrap starts it with the other listeners, drains it with
 // the readiness probe and stops it side by side with the HTTP listener
 // within the shutdown's window, its streams ending as the stop begins. The
-// services are the ones the generated pb/pb.gen.go registers (see Register);
+// services are the ones the generated pb.gen.go files register (see Register);
 // with none registered the listener never opens, so a project without
 // gRPC has no port to expose and nothing to switch off.
 package grpcserver
@@ -57,8 +57,9 @@ var (
 )
 
 // Register queues fn to register a service on the server Run starts, the
-// way the generated pb/pb.gen.go registers the service of every model
-// declaring GRPC(): fn gets the server as a grpc.ServiceRegistrar and calls
+// way the generated pb.gen.go of every package under pb/ registers the
+// services of the models declaring GRPC(): fn gets the server as a
+// grpc.ServiceRegistrar and calls
 // the RegisterXxxServiceServer function the protobuf plugin generated, and
 // methods describe the service's rpcs (see Method): which are public and
 // what the same actions are over HTTP. It runs at package initialization,

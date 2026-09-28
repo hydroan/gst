@@ -9,11 +9,11 @@ import (
 	"github.com/hydroan/gst/grpc"
 )
 
-// NoteService serves the rpcs of the NoteService service through the actions
+// noteService serves the rpcs of the NoteService service through the actions
 // of Note: every handler decodes its request message into what the action's
 // call takes, runs the call and encodes what it answers into the response
 // message.
-type NoteService struct {
+type noteService struct {
 	UnimplementedNoteServiceServer
 }
 
@@ -25,7 +25,7 @@ var (
 )
 
 // CreateNote serves the Create action of Note on /api/notes.
-func (NoteService) CreateNote(ctx context.Context, req *CreateNoteRequest) (*CreateNoteResponse, error) {
+func (noteService) CreateNote(ctx context.Context, req *CreateNoteRequest) (*CreateNoteResponse, error) {
 	in, err := NoteFromProto(req.GetNote())
 	if err != nil {
 		return nil, err
@@ -38,7 +38,7 @@ func (NoteService) CreateNote(ctx context.Context, req *CreateNoteRequest) (*Cre
 }
 
 // GetNote serves the Get action of Note on /api/notes/:id.
-func (NoteService) GetNote(ctx context.Context, req *GetNoteRequest) (*GetNoteResponse, error) {
+func (noteService) GetNote(ctx context.Context, req *GetNoteRequest) (*GetNoteResponse, error) {
 	m, err := getNote(ctx, map[string]string{"id": req.GetId()}, req.GetId(), grpc.Query{Expand: req.GetExpand(), Depth: req.GetDepth()})
 	if err != nil {
 		return nil, err

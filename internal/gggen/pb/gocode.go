@@ -67,10 +67,18 @@ type goImports struct {
 	fixed    map[string]bool         // the fixed-name packages used
 	resolved map[string]string       // import path -> package name, of the others
 	refs     map[string][]*ast.Ident // the identifiers referring to each resolved package
+	blank    map[string]bool         // the packages imported for their initialization alone
 }
 
 func newGoImports() *goImports {
-	return &goImports{fixed: make(map[string]bool), resolved: make(map[string]string), refs: make(map[string][]*ast.Ident)}
+	return &goImports{fixed: make(map[string]bool), resolved: make(map[string]string), refs: make(map[string][]*ast.Ident), blank: make(map[string]bool)}
+}
+
+// blankImport records an import of the package at importPath for its
+// initialization alone, which specs names _ unless the file refers to the
+// package as well.
+func (im *goImports) blankImport(importPath string) {
+	im.blank[importPath] = true
 }
 
 // fixedRef returns the identifier the file refers to the fixed-name package
@@ -97,10 +105,11 @@ func (im *goImports) ref(importPath, pkgName string) *ast.Ident {
 }
 
 // specs names every resolved reference and returns the import specs of the
-// file in three groups, the standard library, the resolved packages and the
-// other fixed-name ones, each sorted by path, laid out on the lines of lines
-// with a blank one between groups. A resolved package whose name a
-// fixed-name import or another resolved import takes is aliased (see
+// file in three groups, the standard library, the resolved packages with the
+// ones imported for their initialization alone, and the other fixed-name
+// ones, each sorted by path, laid out on the lines of lines with a blank one
+// between groups. A resolved package whose name a fixed-name import or
+// another resolved import takes is aliased (see
 // gggen.ResolveImportConflicts).
 func (im *goImports) specs(lines *goast.LineSet) []ast.Spec {
 	reserved := make([]string, 0, len(im.fixed))
@@ -128,6 +137,12 @@ func (im *goImports) specs(lines *goast.LineSet) []ast.Spec {
 	slices.Sort(std)
 	slices.Sort(others)
 	resolved := slices.Sorted(maps.Keys(im.resolved))
+	for importPath := range im.blank {
+		if _, referred := im.resolved[importPath]; !referred {
+			resolved = append(resolved, importPath)
+		}
+	}
+	slices.Sort(resolved)
 
 	var specs []ast.Spec
 	for i, group := range [][]string{std, resolved, others} {
@@ -141,7 +156,11 @@ func (im *goImports) specs(lines *goast.LineSet) []ast.Spec {
 			spec := &ast.ImportSpec{Path: &ast.BasicLit{Kind: token.STRING, Value: strconv.Quote(importPath), ValuePos: lines.Next()}}
 			name := fixedImportNames[importPath]
 			if i == 1 {
-				name = aliases[importPath]
+				if _, referred := im.resolved[importPath]; referred {
+					name = aliases[importPath]
+				} else {
+					name = "_"
+				}
 			}
 			if name != "" {
 				spec.Name = &ast.Ident{Name: name, NamePos: spec.Path.ValuePos}

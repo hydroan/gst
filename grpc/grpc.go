@@ -40,10 +40,11 @@ type Method = grpcserver.Method
 
 // Register queues the service server serves to be registered on the
 // listener through register, the RegisterXxxServiceServer function the
-// protobuf plugin generated for it, the way the generated pb/pb.gen.go
-// registers the service of every model declaring GRPC():
+// protobuf plugin generated for it, the way the generated pb.gen.go of
+// every package under pb/ registers the services of the models declaring
+// GRPC(), each through the type serving it:
 //
-//	grpc.Register[NoteServiceServer](RegisterNoteServiceServer, NoteService{},
+//	grpc.Register[NoteServiceServer](RegisterNoteServiceServer, noteService{},
 //		grpc.Method{Name: NoteService_CreateNote_FullMethodName, HTTPMethod: http.MethodPost, Route: "/api/notes"},
 //		grpc.Method{Name: NoteService_GetNote_FullMethodName, HTTPMethod: http.MethodGet, Route: "/api/notes/:id"},
 //	)

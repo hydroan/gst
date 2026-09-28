@@ -1096,7 +1096,7 @@ prune 删什么、不删什么、按什么顺序删、什么时候问你，完�
 - [gRPC 流：Feed](./examples/demo/model/board/feed.go)
 - [资源 service hook](./examples/demo/service/record/create.go)
 - [自定义动作 service](./examples/demo/service/tool/merge.go)
-- [生成的路由注册](./examples/demo/router/router.gen.go)、[service 注册](./examples/demo/service/service.gen.go)、[gRPC 注册](./examples/demo/pb/pb.gen.go)
+- [生成的路由注册](./examples/demo/router/router.gen.go)、[service 注册](./examples/demo/service/service.gen.go)、[gRPC 注册](./examples/demo/pb/board/pb.gen.go)
 - 扩展点：[configx](./examples/demo/configx)、[cronjob](./examples/demo/cronjob)、[component](./examples/demo/component)、[middleware](./examples/demo/middleware)、[interceptor](./examples/demo/interceptor)
 
 `examples/bench` 是压测专用项目（由 `gg new` 生成），提供 [BENCHMARK.md](./BENCHMARK.md) 中全部压测接口。

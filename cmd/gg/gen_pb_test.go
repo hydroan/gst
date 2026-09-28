@@ -23,8 +23,9 @@ var update = flag.Bool("update", false, "rewrite the golden files under testdata
 // directory, with the model's message, the messages of its standard
 // actions, the Go types of its custom actions and its service; beside it a
 // .gen.go with the type serving the service, the calls of its actions, the
-// handlers of its rpcs and the conversions of its messages; and pb/pb.gen.go
-// registering every service. A model without GRPC() gets no file. A model
+// handlers of its rpcs and the conversions of its messages; and, in every
+// package under pb/, a pb.gen.go registering its services, the root one
+// importing the packages below it. A model without GRPC() gets no file. A model
 // referring to a type of another directory, Pin's Link of
 // model/record/item.go, gets a definition importing the other's by its
 // registered path, tmpapp/record/item.proto, and conversions calling the
@@ -35,8 +36,8 @@ var update = flag.Bool("update", false, "rewrite the golden files under testdata
 // fieldTypeOf, fieldComment, declareService, rpcMessages, customRequest,
 // customResponse, standardMessages, queryFields and descriptor; the whole
 // report.gen.go of handlerFile, the excerpts of serviceType, actionCalls,
-// handler, toProto, fromProto and conversionFuncs; and the pb.gen.go of
-// registrationFile. Nothing compares the two: a change here is a change to
+// handler, toProto, fromProto and conversionFuncs; and the two pb.gen.go of
+// registrationFiles. Nothing compares the two: a change here is a change to
 // those examples, to carry over by hand.
 //
 // Beside every .proto the run writes the Go files the protobuf plugins
@@ -186,16 +187,88 @@ func TestGenRunImportsThePBPackageWhileServingGRPC(t *testing.T) {
 // TestGenRunRefusesAModelFileNamedPB pins that a model file named pb.go is
 // reported: its handlers file would be pb/pb.gen.go, the registration file.
 func TestGenRunRefusesAModelFileNamedPB(t *testing.T) {
-	projectDir, ok := newGenProject(t)
-	if !ok {
-		return
+	for _, tt := range []struct {
+		name, file, want string
+	}{
+		{"in the model directory", "model/pb.go", "pb/pb.proto: the model file model/pb.go would get its handlers at pb/pb.gen.go, the registration file; rename the file"},
+		{"in a directory below it", "model/record/pb.go", "pb/record/pb.proto: the model file model/record/pb.go would get its handlers at pb/record/pb.gen.go, the registration file; rename the file"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			projectDir, ok := newGenProject(t)
+			if !ok {
+				return
+			}
+			source := protobufPBFileModel
+			if tt.file == "model/record/pb.go" {
+				source = strings.Replace(source, "package model", "package record", 1)
+			}
+			writeProtobufProject(t, projectDir, map[string]string{tt.file: source})
+
+			err := genRunWithOptions(genRunOptions{Quiet: true})
+
+			require.Error(t, err)
+			require.Contains(t, err.Error(), tt.want)
+		})
 	}
-	writeProtobufProject(t, projectDir, map[string]string{"model/pb.go": protobufPBFileModel})
+}
 
-	err := genRunWithOptions(genRunOptions{Quiet: true})
+// TestGenRunRegistersTheServicesOfEachPackageInItsOwnFile pins where the
+// registrations go: every package under pb/ registers its own services in
+// its pb.gen.go, through the unexported type serving each, which nothing
+// outside the package can register elsewhere; and the root pb/pb.gen.go,
+// the one main.go imports, imports the packages below it, so that a project
+// whose services all live below the root still registers them through the
+// one import.
+func TestGenRunRegistersTheServicesOfEachPackageInItsOwnFile(t *testing.T) {
+	read := func(t *testing.T, projectDir string, path string) string {
+		t.Helper()
+		content, err := os.ReadFile(filepath.Join(projectDir, filepath.FromSlash(path)))
+		require.NoError(t, err)
+		return string(content)
+	}
 
-	require.Error(t, err)
-	require.Contains(t, err.Error(), "pb/pb.proto: the model file model/pb.go would get its handlers at pb/pb.gen.go, the registration file; rename the file")
+	t.Run("a package below the root beside services at the root", func(t *testing.T) {
+		projectDir, ok := newGenProject(t)
+		if !ok {
+			return
+		}
+		writeProtobufProject(t, projectDir, map[string]string{
+			"model/record.go":      protobufRecordModel,
+			"model/record/item.go": protobufItemModel,
+		})
+
+		require.NoError(t, genRunWithOptions(genRunOptions{Quiet: true}))
+
+		root := read(t, projectDir, "pb/pb.gen.go")
+		require.Contains(t, root, "grpc.Register[RecordServiceServer](RegisterRecordServiceServer, recordService{},")
+		require.Contains(t, root, `_ "tmpapp/pb/record"`)
+		require.NotContains(t, root, "ItemService", "a service below the root registers in its own package")
+		below := read(t, projectDir, "pb/record/pb.gen.go")
+		require.Contains(t, below, "package record")
+		require.Contains(t, below, "grpc.Register[ItemServiceServer](RegisterItemServiceServer, itemService{},")
+		handlers := read(t, projectDir, "pb/record/item.gen.go")
+		require.Contains(t, handlers, "type itemService struct")
+		require.Contains(t, handlers, "func (itemService) CreateItem(")
+	})
+	t.Run("every service below the root", func(t *testing.T) {
+		projectDir, ok := newGenProject(t)
+		if !ok {
+			return
+		}
+		writeProtobufProject(t, projectDir, map[string]string{"model/record/item.go": protobufItemModel})
+
+		require.NoError(t, genRunWithOptions(genRunOptions{Quiet: true}))
+
+		root := read(t, projectDir, "pb/pb.gen.go")
+		require.Contains(t, root, `_ "tmpapp/pb/record"`)
+		require.NotContains(t, root, "grpc.Register", "the root has no service of its own to register")
+		require.Contains(t, read(t, projectDir, "pb/record/pb.gen.go"), "grpc.Register[ItemServiceServer](RegisterItemServiceServer, itemService{},")
+		require.Contains(t, read(t, projectDir, ggconst.FileMain), `_ "tmpapp/pb"`)
+		build := exec.Command("go", "build", "./...")
+		build.Dir = projectDir
+		output, err := build.CombinedOutput()
+		require.NoError(t, err, "the project must build: %s", output)
+	})
 }
 
 // TestGenRunRefusesAModelFileNamedLikeAPluginOutput pins that a model file
@@ -1819,6 +1892,49 @@ func TestGenRunHoldsTheRPCMessagesToTheirCommittedNumbers(t *testing.T) {
 		require.Contains(t, content, "  reserved 4;")
 		require.Contains(t, content, `  reserved "legacy";`)
 	})
+}
+
+// TestGenRunReadsTheItemsOfAPatchManyWhateverTheirPosition pins that the
+// handler of a PatchMany finds the items field of its request by name: the
+// committed definition may number the items ahead of a route parameter the
+// route took later, and the fields are printed in the order of their
+// numbers, so the items are not the last field.
+func TestGenRunReadsTheItemsOfAPatchManyWhateverTheirPosition(t *testing.T) {
+	projectDir, ok := newGenProject(t)
+	if !ok {
+		return
+	}
+	writeProtobufProject(t, projectDir, map[string]string{
+		"model/record.go":      protobufRecordModel,
+		"model/record/item.go": protobufItemModel,
+	})
+	require.NoError(t, genRunWithOptions(genRunOptions{Quiet: true}))
+	proto := filepath.Join(ggconst.DirPB, "record", "item.proto")
+	content, err := os.ReadFile(proto)
+	require.NoError(t, err)
+	committed := string(content)
+	const request = "message PatchManyItemRequest {"
+	_, rest, found := strings.Cut(committed, request)
+	require.True(t, found, "the committed definition declares the PatchMany request")
+	block := request + rest[:strings.Index(rest, "\n}\n")+len("\n}\n")]
+	edited := strings.Replace(block, "  string record = 1;", "  string record = 2;", 1)
+	edited = strings.Replace(edited, "  repeated PatchItemRequest items = 2;", "  repeated PatchItemRequest items = 1;", 1)
+	require.NotEqual(t, block, edited, "the edit has to swap the two numbers")
+	require.NoError(t, os.WriteFile(proto, []byte(strings.Replace(committed, block, edited, 1)), 0o600))
+
+	require.NoError(t, genRunWithOptions(genRunOptions{Quiet: true}))
+
+	content, err = os.ReadFile(proto)
+	require.NoError(t, err)
+	require.Less(t, strings.Index(string(content), "repeated PatchItemRequest items = 1;"), strings.Index(string(content), "string record = 2;"), "the fields are printed in the order of their numbers")
+	handlers, err := os.ReadFile(filepath.Join(ggconst.DirPB, "record", "item"+ggconst.SuffixGenGo))
+	require.NoError(t, err)
+	require.Contains(t, string(handlers), "item.GetItem()")
+	require.Contains(t, string(handlers), `"record": item.GetRecord()`)
+	build := exec.Command("go", "build", "./pb/...")
+	build.Dir = projectDir
+	output, err := build.CombinedOutput()
+	require.NoError(t, err, "the generated Go files must build: %s", output)
 }
 
 // TestGenRunHoldsTheCommittedServicesAndMessages pins the rest of the

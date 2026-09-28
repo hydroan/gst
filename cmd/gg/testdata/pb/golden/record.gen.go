@@ -9,11 +9,11 @@ import (
 	"github.com/hydroan/gst/grpc"
 )
 
-// RecordService serves the rpcs of the RecordService service through the
+// recordService serves the rpcs of the RecordService service through the
 // actions of Record: every handler decodes its request message into what the
 // action's call takes, runs the call and encodes what it answers into the
 // response message.
-type RecordService struct {
+type recordService struct {
 	UnimplementedRecordServiceServer
 }
 
@@ -34,7 +34,7 @@ var (
 )
 
 // CreateRecord serves the Create action of Record on /api/records.
-func (RecordService) CreateRecord(ctx context.Context, req *CreateRecordRequest) (*CreateRecordResponse, error) {
+func (recordService) CreateRecord(ctx context.Context, req *CreateRecordRequest) (*CreateRecordResponse, error) {
 	in, err := RecordFromProto(req.GetRecord())
 	if err != nil {
 		return nil, err
@@ -47,7 +47,7 @@ func (RecordService) CreateRecord(ctx context.Context, req *CreateRecordRequest)
 }
 
 // DeleteRecord serves the Delete action of Record on /api/records/:record.
-func (RecordService) DeleteRecord(ctx context.Context, req *DeleteRecordRequest) (*DeleteRecordResponse, error) {
+func (recordService) DeleteRecord(ctx context.Context, req *DeleteRecordRequest) (*DeleteRecordResponse, error) {
 	if err := deleteRecord(ctx, map[string]string{"record": req.GetId()}, req.GetId()); err != nil {
 		return nil, err
 	}
@@ -55,7 +55,7 @@ func (RecordService) DeleteRecord(ctx context.Context, req *DeleteRecordRequest)
 }
 
 // UpdateRecord serves the Update action of Record on /api/records/:record.
-func (RecordService) UpdateRecord(ctx context.Context, req *UpdateRecordRequest) (*UpdateRecordResponse, error) {
+func (recordService) UpdateRecord(ctx context.Context, req *UpdateRecordRequest) (*UpdateRecordResponse, error) {
 	in, err := RecordFromProto(req.GetRecord())
 	if err != nil {
 		return nil, err
@@ -68,7 +68,7 @@ func (RecordService) UpdateRecord(ctx context.Context, req *UpdateRecordRequest)
 }
 
 // PatchRecord serves the Patch action of Record on /api/records/:record.
-func (RecordService) PatchRecord(ctx context.Context, req *PatchRecordRequest) (*PatchRecordResponse, error) {
+func (recordService) PatchRecord(ctx context.Context, req *PatchRecordRequest) (*PatchRecordResponse, error) {
 	in, err := RecordFromProto(req.GetRecord())
 	if err != nil {
 		return nil, err
@@ -81,7 +81,7 @@ func (RecordService) PatchRecord(ctx context.Context, req *PatchRecordRequest) (
 }
 
 // ListRecord serves the List action of Record on /api/records.
-func (RecordService) ListRecord(ctx context.Context, req *ListRecordRequest) (*ListRecordResponse, error) {
+func (recordService) ListRecord(ctx context.Context, req *ListRecordRequest) (*ListRecordResponse, error) {
 	models, total, err := listRecord(ctx, nil, grpc.Query{
 		Filters:     grpc.Filters(req.GetFilters()),
 		SortBy:      req.GetSortBy(),
@@ -104,7 +104,7 @@ func (RecordService) ListRecord(ctx context.Context, req *ListRecordRequest) (*L
 }
 
 // GetRecord serves the Get action of Record on /api/records/:record.
-func (RecordService) GetRecord(ctx context.Context, req *GetRecordRequest) (*GetRecordResponse, error) {
+func (recordService) GetRecord(ctx context.Context, req *GetRecordRequest) (*GetRecordResponse, error) {
 	m, err := getRecord(ctx, map[string]string{"record": req.GetId()}, req.GetId(), grpc.Query{Expand: req.GetExpand(), Depth: req.GetDepth()})
 	if err != nil {
 		return nil, err
@@ -114,7 +114,7 @@ func (RecordService) GetRecord(ctx context.Context, req *GetRecordRequest) (*Get
 
 // CreateManyRecord serves the CreateMany action of Record on
 // /api/records/batch.
-func (RecordService) CreateManyRecord(ctx context.Context, req *CreateManyRecordRequest) (*CreateManyRecordResponse, error) {
+func (recordService) CreateManyRecord(ctx context.Context, req *CreateManyRecordRequest) (*CreateManyRecordResponse, error) {
 	models := make([]*model.Record, len(req.GetItems()))
 	for i, item := range req.GetItems() {
 		in, err := RecordFromProto(item)
@@ -136,7 +136,7 @@ func (RecordService) CreateManyRecord(ctx context.Context, req *CreateManyRecord
 
 // DeleteManyRecord serves the DeleteMany action of Record on
 // /api/records/batch.
-func (RecordService) DeleteManyRecord(ctx context.Context, req *DeleteManyRecordRequest) (*DeleteManyRecordResponse, error) {
+func (recordService) DeleteManyRecord(ctx context.Context, req *DeleteManyRecordRequest) (*DeleteManyRecordResponse, error) {
 	if err := deleteManyRecord(ctx, nil, req.GetIds()); err != nil {
 		return nil, err
 	}
@@ -145,7 +145,7 @@ func (RecordService) DeleteManyRecord(ctx context.Context, req *DeleteManyRecord
 
 // UpdateManyRecord serves the UpdateMany action of Record on
 // /api/records/batch.
-func (RecordService) UpdateManyRecord(ctx context.Context, req *UpdateManyRecordRequest) (*UpdateManyRecordResponse, error) {
+func (recordService) UpdateManyRecord(ctx context.Context, req *UpdateManyRecordRequest) (*UpdateManyRecordResponse, error) {
 	models := make([]*model.Record, len(req.GetItems()))
 	for i, item := range req.GetItems() {
 		in, err := RecordFromProto(item)
@@ -167,7 +167,7 @@ func (RecordService) UpdateManyRecord(ctx context.Context, req *UpdateManyRecord
 
 // PatchManyRecord serves the PatchMany action of Record on
 // /api/records/batch.
-func (RecordService) PatchManyRecord(ctx context.Context, req *PatchManyRecordRequest) (*PatchManyRecordResponse, error) {
+func (recordService) PatchManyRecord(ctx context.Context, req *PatchManyRecordRequest) (*PatchManyRecordResponse, error) {
 	models := make([]*model.Record, len(req.GetItems()))
 	masks := make([][]string, len(req.GetItems()))
 	for i, item := range req.GetItems() {
@@ -195,7 +195,7 @@ func (RecordService) PatchManyRecord(ctx context.Context, req *PatchManyRecordRe
 
 // ListRecordByOwner serves the List action of Record on
 // /api/owners/:owner/records.
-func (RecordService) ListRecordByOwner(ctx context.Context, req *ListRecordByOwnerRequest) (*ListRecordByOwnerResponse, error) {
+func (recordService) ListRecordByOwner(ctx context.Context, req *ListRecordByOwnerRequest) (*ListRecordByOwnerResponse, error) {
 	models, total, err := listRecordByOwner(ctx, map[string]string{"owner": req.GetOwner()}, grpc.Query{
 		Filters:     grpc.Filters(req.GetFilters()),
 		SortBy:      req.GetSortBy(),

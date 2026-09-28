@@ -140,10 +140,15 @@ func (g *generator) generate() ([]File, error) {
 	}
 	g.buildQueued()
 	// The handlers of a definition go beside it under the same name, and
-	// pb/pb.gen.go is the registration file's.
-	if _, taken := g.files[ggconst.DirPB+".proto"]; taken {
-		g.project.Report(jsonshape.Site{Subject: ggconst.DirPB + "/" + ggconst.DirPB + ".proto"},
-			"the model file %s/%s.go would get its handlers at %s/%s, the registration file; rename the file", ggconst.DirModel, ggconst.DirPB, ggconst.DirPB, ggconst.FilePBGen)
+	// pb.gen.go in every directory is the registration file's (see
+	// registrationFiles).
+	for _, name := range slices.Sorted(maps.Keys(g.files)) {
+		if path.Base(name) == ggconst.DirPB+".proto" {
+			dir := path.Dir(name)
+			g.project.Report(jsonshape.Site{Subject: ggconst.DirPB + "/" + name},
+				"the model file %s would get its handlers at %s, the registration file; rename the file",
+				path.Join(ggconst.DirModel, dir, ggconst.DirPB+ggconst.ExtensionGo), path.Join(ggconst.DirPB, dir, ggconst.FilePBGen))
+		}
 	}
 	// The plugin writes the service of x.proto to x_grpc.pb.go, where the
 	// messages of x_grpc.proto would go too.
@@ -171,11 +176,11 @@ func (g *generator) generate() ([]File, error) {
 		}
 		files = append(files, handlers)
 	}
-	registration, err := g.registrationFile()
+	registrations, err := g.registrationFiles()
 	if err != nil {
 		return nil, err
 	}
-	files = append(files, registration)
+	files = append(files, registrations...)
 	slices.SortFunc(files, func(a, b File) int { return strings.Compare(a.Path, b.Path) })
 	return files, nil
 }

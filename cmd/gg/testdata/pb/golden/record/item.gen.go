@@ -10,11 +10,11 @@ import (
 	"github.com/hydroan/gst/grpc"
 )
 
-// ItemService serves the rpcs of the ItemService service through the actions
+// itemService serves the rpcs of the ItemService service through the actions
 // of Item: every handler decodes its request message into what the action's
 // call takes, runs the call and encodes what it answers into the response
 // message.
-type ItemService struct {
+type itemService struct {
 	UnimplementedItemServiceServer
 }
 
@@ -29,7 +29,7 @@ var (
 )
 
 // CreateItem serves the Create action of Item on /api/records/:record/items.
-func (ItemService) CreateItem(ctx context.Context, req *CreateItemRequest) (*CreateItemResponse, error) {
+func (itemService) CreateItem(ctx context.Context, req *CreateItemRequest) (*CreateItemResponse, error) {
 	in, err := ItemFromProto(req.GetItem())
 	if err != nil {
 		return nil, err
@@ -42,7 +42,7 @@ func (ItemService) CreateItem(ctx context.Context, req *CreateItemRequest) (*Cre
 }
 
 // GetItem serves the Get action of Item on /api/records/:record/items/:id.
-func (ItemService) GetItem(ctx context.Context, req *GetItemRequest) (*GetItemResponse, error) {
+func (itemService) GetItem(ctx context.Context, req *GetItemRequest) (*GetItemResponse, error) {
 	m, err := getItem(ctx, map[string]string{"record": req.GetRecord(), "id": req.GetId()}, req.GetId(), grpc.Query{Expand: req.GetExpand(), Depth: req.GetDepth()})
 	if err != nil {
 		return nil, err
@@ -52,7 +52,7 @@ func (ItemService) GetItem(ctx context.Context, req *GetItemRequest) (*GetItemRe
 
 // PatchManyItem serves the PatchMany action of Item on
 // /api/records/:record/items/batch.
-func (ItemService) PatchManyItem(ctx context.Context, req *PatchManyItemRequest) (*PatchManyItemResponse, error) {
+func (itemService) PatchManyItem(ctx context.Context, req *PatchManyItemRequest) (*PatchManyItemResponse, error) {
 	params := map[string]string{"record": req.GetRecord()}
 	models := make([]*record.Item, len(req.GetItems()))
 	masks := make([][]string, len(req.GetItems()))
@@ -80,7 +80,7 @@ func (ItemService) PatchManyItem(ctx context.Context, req *PatchManyItemRequest)
 }
 
 // SealItem serves the Create action of Item on /api/items/:id/seal.
-func (ItemService) SealItem(ctx context.Context, req *SealItemRequest) (*SealItemResponse, error) {
+func (itemService) SealItem(ctx context.Context, req *SealItemRequest) (*SealItemResponse, error) {
 	in, err := ItemFromProto(req.GetItem())
 	if err != nil {
 		return nil, err
@@ -93,7 +93,7 @@ func (ItemService) SealItem(ctx context.Context, req *SealItemRequest) (*SealIte
 }
 
 // MergeItem serves the Create action of Item on /api/items/merge.
-func (ItemService) MergeItem(ctx context.Context, req *MergeItemRequest) (*MergeItemResponse, error) {
+func (itemService) MergeItem(ctx context.Context, req *MergeItemRequest) (*MergeItemResponse, error) {
 	payload, err := MergeReqFromProto(req.GetPayload())
 	if err != nil {
 		return nil, err

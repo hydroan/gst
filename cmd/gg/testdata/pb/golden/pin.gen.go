@@ -12,11 +12,11 @@ import (
 	"github.com/hydroan/gst/grpc"
 )
 
-// PinService serves the rpcs of the PinService service through the actions
+// pinService serves the rpcs of the PinService service through the actions
 // of Pin: every handler decodes its request message into what the action's
 // call takes, runs the call and encodes what it answers into the response
 // message.
-type PinService struct {
+type pinService struct {
 	UnimplementedPinServiceServer
 }
 
@@ -28,7 +28,7 @@ var (
 )
 
 // CreatePin serves the Create action of Pin on /api/pins.
-func (PinService) CreatePin(ctx context.Context, req *CreatePinRequest) (*CreatePinResponse, error) {
+func (pinService) CreatePin(ctx context.Context, req *CreatePinRequest) (*CreatePinResponse, error) {
 	in, err := PinFromProto(req.GetPin())
 	if err != nil {
 		return nil, err
@@ -41,7 +41,7 @@ func (PinService) CreatePin(ctx context.Context, req *CreatePinRequest) (*Create
 }
 
 // GetPin serves the Get action of Pin on /api/pins/:id.
-func (PinService) GetPin(ctx context.Context, req *GetPinRequest) (*GetPinResponse, error) {
+func (pinService) GetPin(ctx context.Context, req *GetPinRequest) (*GetPinResponse, error) {
 	m, err := getPin(ctx, map[string]string{"id": req.GetId()}, req.GetId(), grpc.Query{Expand: req.GetExpand(), Depth: req.GetDepth()})
 	if err != nil {
 		return nil, err

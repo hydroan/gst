@@ -4,9 +4,9 @@
 // exposing its actions, printed as .proto files that mirror the model
 // directory under pb/; beside each, a .gen.go with the type serving the
 // service, the calls of its actions, the handlers of its rpcs and the
-// conversions between the messages and the Go types (see handlerFile); and
-// pb/pb.gen.go registering every service on the listener (see
-// registrationFile).
+// conversions between the messages and the Go types (see handlerFile); and,
+// in every package under pb/, a pb.gen.go registering its services on the
+// listener (see registrationFiles).
 //
 // The definitions are derived, never written by hand. Field shapes come from
 // jsonshape, the same reading of the Go types the TypeScript declarations
