@@ -68,37 +68,19 @@ jobs:
 
           func (User) Design() {
             Migrate()
+            Endpoint("users")
+            Param("user")
 
-            Create(func() {
-              Enabled(true)
-            })
-            Delete(func() {
-              Enabled(true)
-            })
-            Update(func() {
-              Enabled(true)
-            })
-            Patch(func() {
-              Enabled(true)
-            })
-            List(func() {
-              Enabled(true)
-            })
-            Get(func() {
-              Enabled(true)
-            })
-            CreateMany(func() {
-              Enabled(true)
-            })
-            DeleteMany(func() {
-              Enabled(true)
-            })
-            UpdateMany(func() {
-              Enabled(true)
-            })
-            PatchMany(func() {
-              Enabled(true)
-            })
+            Create(func() {})
+            Delete(func() {})
+            Update(func() {})
+            Patch(func() {})
+            List(func() {})
+            Get(func() {})
+            CreateMany(func() {})
+            DeleteMany(func() {})
+            UpdateMany(func() {})
+            PatchMany(func() {})
           }
           EOF
 
