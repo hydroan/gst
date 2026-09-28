@@ -11,11 +11,11 @@ import (
 	gstmodel "github.com/hydroan/gst/model"
 )
 
-// CachedService serves the rpcs of the CachedService service through the
+// cachedService serves the rpcs of the CachedService service through the
 // actions of Cached: every handler decodes its request message into what the
 // action's call takes, runs the call and encodes what it answers into the
 // response message.
-type CachedService struct {
+type cachedService struct {
 	UnimplementedCachedServiceServer
 }
 
@@ -30,7 +30,7 @@ var (
 )
 
 // CreateCached serves the Create action of Cached on /api/caches.
-func (CachedService) CreateCached(ctx context.Context, req *CreateCachedRequest) (*CreateCachedResponse, error) {
+func (cachedService) CreateCached(ctx context.Context, req *CreateCachedRequest) (*CreateCachedResponse, error) {
 	payload, err := CachedReqFromProto(req.GetPayload())
 	if err != nil {
 		return nil, err
@@ -43,7 +43,7 @@ func (CachedService) CreateCached(ctx context.Context, req *CreateCachedRequest)
 }
 
 // DeleteCached serves the Delete action of Cached on /api/caches/:id.
-func (CachedService) DeleteCached(ctx context.Context, req *DeleteCachedRequest) (*DeleteCachedResponse, error) {
+func (cachedService) DeleteCached(ctx context.Context, req *DeleteCachedRequest) (*DeleteCachedResponse, error) {
 	result, err := deleteCached(ctx, map[string]string{"id": req.GetId()}, grpc.Query{}, new(gstmodel.Empty))
 	if err != nil {
 		return nil, err
@@ -52,7 +52,7 @@ func (CachedService) DeleteCached(ctx context.Context, req *DeleteCachedRequest)
 }
 
 // GetCached serves the Get action of Cached on /api/caches/:id.
-func (CachedService) GetCached(ctx context.Context, req *GetCachedRequest) (*GetCachedResponse, error) {
+func (cachedService) GetCached(ctx context.Context, req *GetCachedRequest) (*GetCachedResponse, error) {
 	result, err := getCached(ctx, map[string]string{"id": req.GetId()}, grpc.Query{Expand: req.GetExpand(), Depth: req.GetDepth()}, new(gstmodel.Empty))
 	if err != nil {
 		return nil, err
@@ -62,7 +62,7 @@ func (CachedService) GetCached(ctx context.Context, req *GetCachedRequest) (*Get
 
 // ExchangeCached serves the Stream action of Cached declared on
 // caches/exchange, served over gRPC alone.
-func (CachedService) ExchangeCached(srv CachedService_ExchangeCachedServer) error {
+func (cachedService) ExchangeCached(srv CachedService_ExchangeCachedServer) error {
 	return exchangeCached(srv.Context(), nil, func() (*model.CachedKeyReq, error) {
 		msg, recvErr := srv.Recv()
 		if recvErr != nil {
@@ -76,7 +76,7 @@ func (CachedService) ExchangeCached(srv CachedService_ExchangeCachedServer) erro
 
 // LoadCached serves the Stream action of Cached declared on caches/load,
 // served over gRPC alone.
-func (CachedService) LoadCached(srv CachedService_LoadCachedServer) error {
+func (cachedService) LoadCached(srv CachedService_LoadCachedServer) error {
 	result, err := loadCached(srv.Context(), nil, func() (*model.CachedReq, error) {
 		msg, recvErr := srv.Recv()
 		if recvErr != nil {

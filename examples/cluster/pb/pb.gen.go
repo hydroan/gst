@@ -9,18 +9,18 @@ import (
 )
 
 func init() {
-	grpc.Register[CachedServiceServer](RegisterCachedServiceServer, CachedService{},
+	grpc.Register[CachedServiceServer](RegisterCachedServiceServer, cachedService{},
 		grpc.Method{Name: CachedService_CreateCached_FullMethodName, HTTPMethod: http.MethodPost, Route: "/api/caches"},
 		grpc.Method{Name: CachedService_DeleteCached_FullMethodName, HTTPMethod: http.MethodDelete, Route: "/api/caches/:id"},
 		grpc.Method{Name: CachedService_GetCached_FullMethodName, HTTPMethod: http.MethodGet, Route: "/api/caches/:id"},
 		grpc.Method{Name: CachedService_ExchangeCached_FullMethodName, HTTPMethod: grpc.MethodStream, Route: "/api/caches/exchange"},
 		grpc.Method{Name: CachedService_LoadCached_FullMethodName, HTTPMethod: grpc.MethodStream, Route: "/api/caches/load"},
 	)
-	grpc.Register[CounterStepServiceServer](RegisterCounterStepServiceServer, CounterStepService{},
+	grpc.Register[CounterStepServiceServer](RegisterCounterStepServiceServer, counterStepService{},
 		grpc.Method{Name: CounterStepService_ListCounterStep_FullMethodName, HTTPMethod: http.MethodGet, Route: "/api/counter_steps"},
 		grpc.Method{Name: CounterStepService_WatchCounterStep_FullMethodName, HTTPMethod: grpc.MethodStream, Route: "/api/counter_steps/watch"},
 	)
-	grpc.Register[FlagServiceServer](RegisterFlagServiceServer, FlagService{},
+	grpc.Register[FlagServiceServer](RegisterFlagServiceServer, flagService{},
 		grpc.Method{Name: FlagService_CreateFlag_FullMethodName, HTTPMethod: http.MethodPost, Route: "/api/flags"},
 		grpc.Method{Name: FlagService_DeleteFlag_FullMethodName, HTTPMethod: http.MethodDelete, Route: "/api/flags/:id"},
 		grpc.Method{Name: FlagService_UpdateFlag_FullMethodName, HTTPMethod: http.MethodPut, Route: "/api/flags/:id"},
@@ -32,13 +32,13 @@ func init() {
 		grpc.Method{Name: FlagService_UpdateManyFlag_FullMethodName, HTTPMethod: http.MethodPut, Route: "/api/flags/batch"},
 		grpc.Method{Name: FlagService_PatchManyFlag_FullMethodName, HTTPMethod: http.MethodPatch, Route: "/api/flags/batch"},
 	)
-	grpc.Register[RebuildServiceServer](RegisterRebuildServiceServer, RebuildService{},
+	grpc.Register[RebuildServiceServer](RegisterRebuildServiceServer, rebuildService{},
 		grpc.Method{Name: RebuildService_CreateRebuild_FullMethodName, HTTPMethod: http.MethodPost, Route: "/api/rebuilds"},
 	)
-	grpc.Register[RunServiceServer](RegisterRunServiceServer, RunService{},
+	grpc.Register[RunServiceServer](RegisterRunServiceServer, runService{},
 		grpc.Method{Name: RunService_ListRun_FullMethodName, HTTPMethod: http.MethodGet, Route: "/api/runs"},
 	)
-	grpc.Register[StepDownServiceServer](RegisterStepDownServiceServer, StepDownService{},
+	grpc.Register[StepDownServiceServer](RegisterStepDownServiceServer, stepDownService{},
 		grpc.Method{Name: StepDownService_CreateStepDown_FullMethodName, HTTPMethod: http.MethodPost, Route: "/api/step-downs"},
 	)
 }

@@ -2,26 +2,4 @@
 
 package pb
 
-import (
-	"demo/pb/board"
-	"net/http"
-
-	"github.com/hydroan/gst/grpc"
-)
-
-func init() {
-	grpc.Register[board.FeedServiceServer](board.RegisterFeedServiceServer, board.FeedService{},
-		grpc.Method{Name: board.FeedService_ChatFeed_FullMethodName, HTTPMethod: grpc.MethodStream, Route: "/api/board/feeds/chat"},
-		grpc.Method{Name: board.FeedService_UploadFeed_FullMethodName, HTTPMethod: grpc.MethodStream, Route: "/api/board/feeds/upload"},
-		grpc.Method{Name: board.FeedService_WatchFeed_FullMethodName, HTTPMethod: grpc.MethodStream, Route: "/api/board/feeds/watch", Public: true},
-	)
-	grpc.Register[board.NoteServiceServer](board.RegisterNoteServiceServer, board.NoteService{},
-		grpc.Method{Name: board.NoteService_CreateNote_FullMethodName, HTTPMethod: http.MethodPost, Route: "/api/board/notes"},
-		grpc.Method{Name: board.NoteService_DeleteNote_FullMethodName, HTTPMethod: http.MethodDelete, Route: "/api/board/notes/:id"},
-		grpc.Method{Name: board.NoteService_UpdateNote_FullMethodName, HTTPMethod: http.MethodPut, Route: "/api/board/notes/:id"},
-		grpc.Method{Name: board.NoteService_PatchNote_FullMethodName, HTTPMethod: http.MethodPatch, Route: "/api/board/notes/:id"},
-		grpc.Method{Name: board.NoteService_ListNote_FullMethodName, HTTPMethod: http.MethodGet, Route: "/api/board/notes"},
-		grpc.Method{Name: board.NoteService_GetNote_FullMethodName, HTTPMethod: http.MethodGet, Route: "/api/board/notes/:id"},
-		grpc.Method{Name: board.NoteService_PublishNote_FullMethodName, HTTPMethod: http.MethodPost, Route: "/api/board/notes/:id/publish"},
-	)
-}
+import _ "demo/pb/board"

@@ -11,11 +11,11 @@ import (
 	gstmodel "github.com/hydroan/gst/model"
 )
 
-// StepDownService serves the rpcs of the StepDownService service through the
+// stepDownService serves the rpcs of the StepDownService service through the
 // actions of StepDown: every handler decodes its request message into what
 // the action's call takes, runs the call and encodes what it answers into
 // the response message.
-type StepDownService struct {
+type stepDownService struct {
 	UnimplementedStepDownServiceServer
 }
 
@@ -24,7 +24,7 @@ type StepDownService struct {
 var createStepDown = grpc.ServiceCall[*model.StepDown, *gstmodel.Empty, *model.StepDownRsp](consts.Create, "/api/step-downs")
 
 // CreateStepDown serves the Create action of StepDown on /api/step-downs.
-func (StepDownService) CreateStepDown(ctx context.Context, req *CreateStepDownRequest) (*CreateStepDownResponse, error) {
+func (stepDownService) CreateStepDown(ctx context.Context, req *CreateStepDownRequest) (*CreateStepDownResponse, error) {
 	result, err := createStepDown(ctx, nil, grpc.Query{}, new(gstmodel.Empty))
 	if err != nil {
 		return nil, err

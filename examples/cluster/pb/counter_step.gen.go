@@ -9,11 +9,11 @@ import (
 	"github.com/hydroan/gst/grpc"
 )
 
-// CounterStepService serves the rpcs of the CounterStepService service
+// counterStepService serves the rpcs of the CounterStepService service
 // through the actions of CounterStep: every handler decodes its request
 // message into what the action's call takes, runs the call and encodes what
 // it answers into the response message.
-type CounterStepService struct {
+type counterStepService struct {
 	UnimplementedCounterStepServiceServer
 }
 
@@ -26,7 +26,7 @@ var (
 
 // ListCounterStep serves the List action of CounterStep on
 // /api/counter_steps.
-func (CounterStepService) ListCounterStep(ctx context.Context, req *ListCounterStepRequest) (*ListCounterStepResponse, error) {
+func (counterStepService) ListCounterStep(ctx context.Context, req *ListCounterStepRequest) (*ListCounterStepResponse, error) {
 	models, total, err := listCounterStep(ctx, nil, grpc.Query{
 		Filters:     grpc.Filters(req.GetFilters()),
 		SortBy:      req.GetSortBy(),
@@ -50,7 +50,7 @@ func (CounterStepService) ListCounterStep(ctx context.Context, req *ListCounterS
 
 // WatchCounterStep serves the Stream action of CounterStep declared on
 // counter_steps/watch, served over gRPC alone.
-func (CounterStepService) WatchCounterStep(req *WatchCounterStepRequest, srv CounterStepService_WatchCounterStepServer) error {
+func (counterStepService) WatchCounterStep(req *WatchCounterStepRequest, srv CounterStepService_WatchCounterStepServer) error {
 	payload, err := CounterStepWatchReqFromProto(req.GetPayload())
 	if err != nil {
 		return err

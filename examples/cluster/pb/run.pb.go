@@ -151,7 +151,7 @@ type ListRunRequest struct {
 	SortBy []string `protobuf:"bytes,2,rep,name=sort_by,json=sortBy,proto3" json:"sort_by,omitempty"`
 	// page is the page to list, as the _page query parameter.
 	Page uint32 `protobuf:"varint,3,opt,name=page,proto3" json:"page,omitempty"`
-	// size is the page size, as the _size query parameter, 20 when unset and at most 100.
+	// size is the page size, as the _size query parameter, read by a model embedding model.Pagination or model.Cursor alone: 20 when unset and at most 100; any other model ignores it and lists at most 1000 records.
 	Size uint32 `protobuf:"varint,4,opt,name=size,proto3" json:"size,omitempty"`
 	// cursor_field is the cursor column, as the _cursor_field query parameter.
 	CursorField string `protobuf:"bytes,5,opt,name=cursor_field,json=cursorField,proto3" json:"cursor_field,omitempty"`

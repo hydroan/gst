@@ -9,11 +9,11 @@ import (
 	"github.com/hydroan/gst/grpc"
 )
 
-// RunService serves the rpcs of the RunService service through the actions
+// runService serves the rpcs of the RunService service through the actions
 // of Run: every handler decodes its request message into what the action's
 // call takes, runs the call and encodes what it answers into the response
 // message.
-type RunService struct {
+type runService struct {
 	UnimplementedRunServiceServer
 }
 
@@ -22,7 +22,7 @@ type RunService struct {
 var listRun = grpc.ListCall[*model.Run]("/api/runs")
 
 // ListRun serves the List action of Run on /api/runs.
-func (RunService) ListRun(ctx context.Context, req *ListRunRequest) (*ListRunResponse, error) {
+func (runService) ListRun(ctx context.Context, req *ListRunRequest) (*ListRunResponse, error) {
 	models, total, err := listRun(ctx, nil, grpc.Query{
 		Filters:     grpc.Filters(req.GetFilters()),
 		SortBy:      req.GetSortBy(),

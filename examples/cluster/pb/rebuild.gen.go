@@ -10,11 +10,11 @@ import (
 	"github.com/hydroan/gst/grpc"
 )
 
-// RebuildService serves the rpcs of the RebuildService service through the
+// rebuildService serves the rpcs of the RebuildService service through the
 // actions of Rebuild: every handler decodes its request message into what
 // the action's call takes, runs the call and encodes what it answers into
 // the response message.
-type RebuildService struct {
+type rebuildService struct {
 	UnimplementedRebuildServiceServer
 }
 
@@ -23,7 +23,7 @@ type RebuildService struct {
 var createRebuild = grpc.ServiceCall[*model.Rebuild, *model.RebuildReq, *model.RebuildRsp](consts.Create, "/api/rebuilds")
 
 // CreateRebuild serves the Create action of Rebuild on /api/rebuilds.
-func (RebuildService) CreateRebuild(ctx context.Context, req *CreateRebuildRequest) (*CreateRebuildResponse, error) {
+func (rebuildService) CreateRebuild(ctx context.Context, req *CreateRebuildRequest) (*CreateRebuildResponse, error) {
 	payload, err := RebuildReqFromProto(req.GetPayload())
 	if err != nil {
 		return nil, err

@@ -10,11 +10,11 @@ import (
 	"github.com/hydroan/gst/grpc"
 )
 
-// NoteService serves the rpcs of the NoteService service through the actions
+// noteService serves the rpcs of the NoteService service through the actions
 // of Note: every handler decodes its request message into what the action's
 // call takes, runs the call and encodes what it answers into the response
 // message.
-type NoteService struct {
+type noteService struct {
 	UnimplementedNoteServiceServer
 }
 
@@ -31,7 +31,7 @@ var (
 )
 
 // CreateNote serves the Create action of Note on /api/board/notes.
-func (NoteService) CreateNote(ctx context.Context, req *CreateNoteRequest) (*CreateNoteResponse, error) {
+func (noteService) CreateNote(ctx context.Context, req *CreateNoteRequest) (*CreateNoteResponse, error) {
 	in, err := NoteFromProto(req.GetNote())
 	if err != nil {
 		return nil, err
@@ -44,7 +44,7 @@ func (NoteService) CreateNote(ctx context.Context, req *CreateNoteRequest) (*Cre
 }
 
 // DeleteNote serves the Delete action of Note on /api/board/notes/:id.
-func (NoteService) DeleteNote(ctx context.Context, req *DeleteNoteRequest) (*DeleteNoteResponse, error) {
+func (noteService) DeleteNote(ctx context.Context, req *DeleteNoteRequest) (*DeleteNoteResponse, error) {
 	if err := deleteNote(ctx, map[string]string{"id": req.GetId()}, req.GetId()); err != nil {
 		return nil, err
 	}
@@ -52,7 +52,7 @@ func (NoteService) DeleteNote(ctx context.Context, req *DeleteNoteRequest) (*Del
 }
 
 // UpdateNote serves the Update action of Note on /api/board/notes/:id.
-func (NoteService) UpdateNote(ctx context.Context, req *UpdateNoteRequest) (*UpdateNoteResponse, error) {
+func (noteService) UpdateNote(ctx context.Context, req *UpdateNoteRequest) (*UpdateNoteResponse, error) {
 	in, err := NoteFromProto(req.GetNote())
 	if err != nil {
 		return nil, err
@@ -65,7 +65,7 @@ func (NoteService) UpdateNote(ctx context.Context, req *UpdateNoteRequest) (*Upd
 }
 
 // PatchNote serves the Patch action of Note on /api/board/notes/:id.
-func (NoteService) PatchNote(ctx context.Context, req *PatchNoteRequest) (*PatchNoteResponse, error) {
+func (noteService) PatchNote(ctx context.Context, req *PatchNoteRequest) (*PatchNoteResponse, error) {
 	in, err := NoteFromProto(req.GetNote())
 	if err != nil {
 		return nil, err
@@ -78,7 +78,7 @@ func (NoteService) PatchNote(ctx context.Context, req *PatchNoteRequest) (*Patch
 }
 
 // ListNote serves the List action of Note on /api/board/notes.
-func (NoteService) ListNote(ctx context.Context, req *ListNoteRequest) (*ListNoteResponse, error) {
+func (noteService) ListNote(ctx context.Context, req *ListNoteRequest) (*ListNoteResponse, error) {
 	models, total, err := listNote(ctx, nil, grpc.Query{
 		Filters:     grpc.Filters(req.GetFilters()),
 		SortBy:      req.GetSortBy(),
@@ -101,7 +101,7 @@ func (NoteService) ListNote(ctx context.Context, req *ListNoteRequest) (*ListNot
 }
 
 // GetNote serves the Get action of Note on /api/board/notes/:id.
-func (NoteService) GetNote(ctx context.Context, req *GetNoteRequest) (*GetNoteResponse, error) {
+func (noteService) GetNote(ctx context.Context, req *GetNoteRequest) (*GetNoteResponse, error) {
 	m, err := getNote(ctx, map[string]string{"id": req.GetId()}, req.GetId(), grpc.Query{Expand: req.GetExpand(), Depth: req.GetDepth()})
 	if err != nil {
 		return nil, err
@@ -111,7 +111,7 @@ func (NoteService) GetNote(ctx context.Context, req *GetNoteRequest) (*GetNoteRe
 
 // PublishNote serves the Create action of Note on
 // /api/board/notes/:id/publish.
-func (NoteService) PublishNote(ctx context.Context, req *PublishNoteRequest) (*PublishNoteResponse, error) {
+func (noteService) PublishNote(ctx context.Context, req *PublishNoteRequest) (*PublishNoteResponse, error) {
 	payload, err := NotePublishReqFromProto(req.GetPayload())
 	if err != nil {
 		return nil, err

@@ -9,11 +9,11 @@ import (
 	"github.com/hydroan/gst/grpc"
 )
 
-// FlagService serves the rpcs of the FlagService service through the actions
+// flagService serves the rpcs of the FlagService service through the actions
 // of Flag: every handler decodes its request message into what the action's
 // call takes, runs the call and encodes what it answers into the response
 // message.
-type FlagService struct {
+type flagService struct {
 	UnimplementedFlagServiceServer
 }
 
@@ -33,7 +33,7 @@ var (
 )
 
 // CreateFlag serves the Create action of Flag on /api/flags.
-func (FlagService) CreateFlag(ctx context.Context, req *CreateFlagRequest) (*CreateFlagResponse, error) {
+func (flagService) CreateFlag(ctx context.Context, req *CreateFlagRequest) (*CreateFlagResponse, error) {
 	in, err := FlagFromProto(req.GetFlag())
 	if err != nil {
 		return nil, err
@@ -46,7 +46,7 @@ func (FlagService) CreateFlag(ctx context.Context, req *CreateFlagRequest) (*Cre
 }
 
 // DeleteFlag serves the Delete action of Flag on /api/flags/:id.
-func (FlagService) DeleteFlag(ctx context.Context, req *DeleteFlagRequest) (*DeleteFlagResponse, error) {
+func (flagService) DeleteFlag(ctx context.Context, req *DeleteFlagRequest) (*DeleteFlagResponse, error) {
 	if err := deleteFlag(ctx, map[string]string{"id": req.GetId()}, req.GetId()); err != nil {
 		return nil, err
 	}
@@ -54,7 +54,7 @@ func (FlagService) DeleteFlag(ctx context.Context, req *DeleteFlagRequest) (*Del
 }
 
 // UpdateFlag serves the Update action of Flag on /api/flags/:id.
-func (FlagService) UpdateFlag(ctx context.Context, req *UpdateFlagRequest) (*UpdateFlagResponse, error) {
+func (flagService) UpdateFlag(ctx context.Context, req *UpdateFlagRequest) (*UpdateFlagResponse, error) {
 	in, err := FlagFromProto(req.GetFlag())
 	if err != nil {
 		return nil, err
@@ -67,7 +67,7 @@ func (FlagService) UpdateFlag(ctx context.Context, req *UpdateFlagRequest) (*Upd
 }
 
 // PatchFlag serves the Patch action of Flag on /api/flags/:id.
-func (FlagService) PatchFlag(ctx context.Context, req *PatchFlagRequest) (*PatchFlagResponse, error) {
+func (flagService) PatchFlag(ctx context.Context, req *PatchFlagRequest) (*PatchFlagResponse, error) {
 	in, err := FlagFromProto(req.GetFlag())
 	if err != nil {
 		return nil, err
@@ -80,7 +80,7 @@ func (FlagService) PatchFlag(ctx context.Context, req *PatchFlagRequest) (*Patch
 }
 
 // ListFlag serves the List action of Flag on /api/flags.
-func (FlagService) ListFlag(ctx context.Context, req *ListFlagRequest) (*ListFlagResponse, error) {
+func (flagService) ListFlag(ctx context.Context, req *ListFlagRequest) (*ListFlagResponse, error) {
 	models, total, err := listFlag(ctx, nil, grpc.Query{
 		Filters:     grpc.Filters(req.GetFilters()),
 		SortBy:      req.GetSortBy(),
@@ -103,7 +103,7 @@ func (FlagService) ListFlag(ctx context.Context, req *ListFlagRequest) (*ListFla
 }
 
 // GetFlag serves the Get action of Flag on /api/flags/:id.
-func (FlagService) GetFlag(ctx context.Context, req *GetFlagRequest) (*GetFlagResponse, error) {
+func (flagService) GetFlag(ctx context.Context, req *GetFlagRequest) (*GetFlagResponse, error) {
 	m, err := getFlag(ctx, map[string]string{"id": req.GetId()}, req.GetId(), grpc.Query{Expand: req.GetExpand(), Depth: req.GetDepth()})
 	if err != nil {
 		return nil, err
@@ -112,7 +112,7 @@ func (FlagService) GetFlag(ctx context.Context, req *GetFlagRequest) (*GetFlagRe
 }
 
 // CreateManyFlag serves the CreateMany action of Flag on /api/flags/batch.
-func (FlagService) CreateManyFlag(ctx context.Context, req *CreateManyFlagRequest) (*CreateManyFlagResponse, error) {
+func (flagService) CreateManyFlag(ctx context.Context, req *CreateManyFlagRequest) (*CreateManyFlagResponse, error) {
 	models := make([]*model.Flag, len(req.GetItems()))
 	for i, item := range req.GetItems() {
 		in, err := FlagFromProto(item)
@@ -133,7 +133,7 @@ func (FlagService) CreateManyFlag(ctx context.Context, req *CreateManyFlagReques
 }
 
 // DeleteManyFlag serves the DeleteMany action of Flag on /api/flags/batch.
-func (FlagService) DeleteManyFlag(ctx context.Context, req *DeleteManyFlagRequest) (*DeleteManyFlagResponse, error) {
+func (flagService) DeleteManyFlag(ctx context.Context, req *DeleteManyFlagRequest) (*DeleteManyFlagResponse, error) {
 	if err := deleteManyFlag(ctx, nil, req.GetIds()); err != nil {
 		return nil, err
 	}
@@ -141,7 +141,7 @@ func (FlagService) DeleteManyFlag(ctx context.Context, req *DeleteManyFlagReques
 }
 
 // UpdateManyFlag serves the UpdateMany action of Flag on /api/flags/batch.
-func (FlagService) UpdateManyFlag(ctx context.Context, req *UpdateManyFlagRequest) (*UpdateManyFlagResponse, error) {
+func (flagService) UpdateManyFlag(ctx context.Context, req *UpdateManyFlagRequest) (*UpdateManyFlagResponse, error) {
 	models := make([]*model.Flag, len(req.GetItems()))
 	for i, item := range req.GetItems() {
 		in, err := FlagFromProto(item)
@@ -162,7 +162,7 @@ func (FlagService) UpdateManyFlag(ctx context.Context, req *UpdateManyFlagReques
 }
 
 // PatchManyFlag serves the PatchMany action of Flag on /api/flags/batch.
-func (FlagService) PatchManyFlag(ctx context.Context, req *PatchManyFlagRequest) (*PatchManyFlagResponse, error) {
+func (flagService) PatchManyFlag(ctx context.Context, req *PatchManyFlagRequest) (*PatchManyFlagResponse, error) {
 	models := make([]*model.Flag, len(req.GetItems()))
 	masks := make([][]string, len(req.GetItems()))
 	for i, item := range req.GetItems() {

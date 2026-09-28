@@ -46,7 +46,7 @@ message ListCounterStepRequest {
   // page is the page to list, as the _page query parameter.
   uint32 page = 3;
 
-  // size is the page size, as the _size query parameter, 20 when unset and at most 100.
+  // size is the page size, as the _size query parameter, read by a model embedding model.Pagination or model.Cursor alone: 20 when unset and at most 100; any other model ignores it and lists at most 1000 records.
   uint32 size = 4;
 
   // cursor_field is the cursor column, as the _cursor_field query parameter.
