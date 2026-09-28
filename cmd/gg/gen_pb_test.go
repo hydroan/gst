@@ -271,6 +271,100 @@ func TestGenRunRegistersTheServicesOfEachPackageInItsOwnFile(t *testing.T) {
 	})
 }
 
+// TestGenRunListsTheQueryFieldsAModelReads pins that the List request of a
+// model's standard action carries the query fields the model reads and no
+// other: the filters always, the page and size for a model embedding
+// model.Pagination, the size and the cursor for one embedding model.Cursor,
+// and the orderings and expansion, with all of those, for one embedding
+// model.Query; the handler reads the fields present. The Get request carries
+// the expansion whatever the model embeds, the get flow reading it for
+// every model.
+func TestGenRunListsTheQueryFieldsAModelReads(t *testing.T) {
+	projectDir, ok := newGenProject(t)
+	if !ok {
+		return
+	}
+	writeProtobufProject(t, projectDir, map[string]string{
+		"model/plain.go":    protobufQueryModel("Plain", ""),
+		"model/paged.go":    protobufQueryModel("Paged", "model.Pagination"),
+		"model/cursored.go": protobufQueryModel("Cursored", "model.Cursor"),
+		"model/queried.go":  protobufQueryModel("Queried", "model.Query"),
+	})
+
+	require.NoError(t, genRunWithOptions(genRunOptions{Quiet: true}))
+
+	for _, tt := range []struct {
+		model string
+		list  []string
+	}{
+		{"Plain", []string{"filters"}},
+		{"Paged", []string{"filters", "page", "size"}},
+		{"Cursored", []string{"filters", "size", "cursor_field", "cursor_value", "cursor_next"}},
+		{"Queried", []string{"filters", "sort_by", "page", "size", "cursor_field", "cursor_value", "cursor_next", "expand", "depth"}},
+	} {
+		content, err := os.ReadFile(filepath.Join(projectDir, ggconst.DirPB, strings.ToLower(tt.model)+".proto"))
+		require.NoError(t, err)
+		require.Equal(t, tt.list, messageFieldNames(string(content), "List"+tt.model+"Request"), "the List request of %s", tt.model)
+		require.Equal(t, []string{"id", "expand", "depth"}, messageFieldNames(string(content), "Get"+tt.model+"Request"), "the Get request of %s", tt.model)
+	}
+	build := exec.Command("go", "build", "./pb/...")
+	build.Dir = projectDir
+	output, err := build.CombinedOutput()
+	require.NoError(t, err, "the handlers read the fields present: %s", output)
+}
+
+// messageFieldNames returns the names of the fields the top-level message
+// named name declares in the definition proto, in order, the fields of a
+// message nested in it left out.
+func messageFieldNames(proto, name string) []string {
+	_, rest, found := strings.Cut(proto, "message "+name+" {\n")
+	if !found {
+		return nil
+	}
+	block, _, _ := strings.Cut(rest, "\n}\n")
+	var names []string
+	for line := range strings.SplitSeq(block, "\n") {
+		if !strings.HasPrefix(line, "  ") || strings.HasPrefix(line, "   ") || strings.HasPrefix(line, "  //") || !strings.HasSuffix(line, ";") {
+			continue
+		}
+		words := strings.Fields(line)
+		names = append(names, words[len(words)-3])
+	}
+	return names
+}
+
+// protobufQueryModel is a model declaring List and Get and embedding embed,
+// a query marker of the framework, or nothing when embed is empty: what
+// TestGenRunListsTheQueryFieldsAModelReads reads the request messages of.
+func protobufQueryModel(name, embed string) string {
+	if embed != "" {
+		embed = "\t" + embed + "\n"
+	}
+	return `package model
+
+import (
+	"github.com/hydroan/gst/dsl"
+	"github.com/hydroan/gst/model"
+)
+
+type ` + name + ` struct {
+	Title string 'json:"title" pb:"11"'
+
+` + embed + `	model.Base
+}
+
+func (` + name + `) TableName() string { return "` + strings.ToLower(name) + `s" }
+
+func (` + name + `) Design() {
+	dsl.GRPC()
+	dsl.Migrate()
+	dsl.Endpoint("` + strings.ToLower(name) + `s")
+	dsl.List(func() {})
+	dsl.Get(func() {})
+}
+`
+}
+
 // TestGenRunRefusesAModelFileNamedLikeAPluginOutput pins that a model file
 // ending in _grpc is refused: the protobuf plugin writes the service of
 // record.proto to record_grpc.pb.go, where the messages of record_grpc.proto
@@ -752,6 +846,7 @@ type Record struct {
 	} 'json:"window" pb:"24" gorm:"-"'
 	Ignored string 'json:"-"'
 
+	model.Query
 	model.Base
 }
 
@@ -937,6 +1032,7 @@ func (Pin) Design() {
 	dsl.Migrate()
 	dsl.Endpoint("pins")
 	dsl.Create(func() {})
+	dsl.List(func() {})
 	dsl.Get(func() {})
 }
 `
@@ -1107,6 +1203,7 @@ import (
 type Entry struct {
 	Title string 'json:"title" pb:"11"'
 
+	model.Pagination
 	model.Base
 }
 

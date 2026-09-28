@@ -12,6 +12,7 @@ import (
 
 	"github.com/hydroan/gst/internal/ggconst"
 	"github.com/hydroan/gst/internal/gggen/jsonshape"
+	"github.com/hydroan/gst/internal/modelregistry"
 	"github.com/stoewer/go-strcase"
 	"google.golang.org/protobuf/types/descriptorpb"
 )
@@ -46,6 +47,72 @@ var timeTypes = map[string]struct{ typeName, proto string }{
 // modelRegistryPath is the package declaring the framework's model base, whose
 // promoted keys carry the fixed field numbers of BaseFieldNumbers.
 const modelRegistryPath = ggconst.ImportPathGst + "/internal/modelregistry"
+
+// The query markers of the model registry a model embeds to opt in to the
+// framework's List controls, named after the types themselves.
+var (
+	queryMarkerName      = reflect.TypeFor[modelregistry.Query]().Name()
+	paginationMarkerName = reflect.TypeFor[modelregistry.Pagination]().Name()
+	cursorMarkerName     = reflect.TypeFor[modelregistry.Cursor]().Name()
+)
+
+// queryControls is what a model opted in to of the framework's List
+// controls by the markers it embeds: the orderings and the expansion with
+// Query, the page with Pagination, the cursor with Cursor and the size with
+// either. The List request of a standard action carries the fields of the
+// controls the model reads and no other (see queryFields), the HTTP
+// listener refusing the parameters of the others.
+type queryControls struct {
+	queryable, paginatable, cursorable bool
+}
+
+// allQueryControls is every control: what the request of a custom List
+// carries, its service reading the query itself.
+var allQueryControls = queryControls{queryable: true, paginatable: true, cursorable: true}
+
+// queryControlsOf reports the controls the model type obj opted in to by
+// the markers it embeds, directly or through one another, Query embedding
+// Pagination and Cursor: the reading modelregistry.IsQueryable and its kind
+// make of a model at run time.
+func queryControlsOf(obj *types.TypeName) queryControls {
+	var c queryControls
+	if st, ok := obj.Type().Underlying().(*types.Struct); ok {
+		c.collect(st)
+	}
+	return c
+}
+
+// collect turns on the controls of the markers embedded in st, at any depth.
+func (c *queryControls) collect(st *types.Struct) {
+	for f := range st.Fields() {
+		if !f.Embedded() {
+			continue
+		}
+		// The public model package declares the markers as aliases of the
+		// registry's types, which go/types keeps as such.
+		t := types.Unalias(f.Type())
+		if p, ok := t.(*types.Pointer); ok {
+			t = types.Unalias(p.Elem())
+		}
+		named, ok := t.(*types.Named)
+		if !ok {
+			continue
+		}
+		if named.Obj().Pkg() != nil && named.Obj().Pkg().Path() == modelRegistryPath {
+			switch named.Obj().Name() {
+			case queryMarkerName:
+				c.queryable = true
+			case paginationMarkerName:
+				c.paginatable = true
+			case cursorMarkerName:
+				c.cursorable = true
+			}
+		}
+		if inner, ok := named.Underlying().(*types.Struct); ok {
+			c.collect(inner)
+		}
+	}
+}
 
 // fieldType is the protobuf type of one field.
 type fieldType struct {

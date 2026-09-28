@@ -141,7 +141,7 @@ handler --> client : RecordToProto；失败映射成 status
 |---|---|---|---|
 | 入口 | | `main.go`（导入与注册），`main_test.go` | main.go 多两行空导入：`pb`、`interceptor` |
 | 模型 | `model/apidoc.gen.go` | `model/model.gen.go` | 模型文件里缺的 `pb` tag 由 gen 补号并回写 |
-| 接口定义 | Swagger 注释，运行期出 `/openapi.json` | | `pb/record.proto`：`RecordService`，每个 rpc 独享 `XxxRequest / XxxResponse`，List 请求带 filters、分页、expand，Patch 带 `google.protobuf.FieldMask` |
+| 接口定义 | Swagger 注释，运行期出 `/openapi.json` | | `pb/record.proto`：`RecordService`，每个 rpc 独享 `XxxRequest / XxxResponse`，List 请求带 filters，再按模型嵌入的 Query、Pagination、Cursor 带排序、分页、游标与 expand，Patch 带 `google.protobuf.FieldMask` |
 | 传输代码 | `router/router.gen.go` | `service/service.gen.go` | `pb/record.pb.go`、`pb/record_grpc.pb.go`（插件写），`pb/record.gen.go`（适配层：服务类型 `recordService`、`RecordToProto / RecordFromProto`），每个 pb 包一个 `pb.gen.go`（注册，根目录的空导入子包） |
 | 业务骨架 | | `service/record/<name>.go` 与同名 `_test.go`（生成一次，之后归项目） | Stream 动作的测试骨架拨 `testutil.GRPCTarget()` |
 | 模块代码 | `middleware/iam_session.go`、`authz.go`（gg module copy） | module 的 model 与 service 子树 | `interceptor/iam_session.go`、`authz.go`（只在项目有 GRPC() 模型时复制） |

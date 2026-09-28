@@ -682,7 +682,7 @@ func TestPagination(t *testing.T) {
 	t.Run("PlainModelKeepsBottomLine", func(t *testing.T) {
 		page, size := Pagination(url.Values{"_page": {"2"}, "_size": {"50"}}, &plainTestModel{})
 		require.Equal(t, 1, page, "a model without offset paging still yields a usable first page")
-		require.Equal(t, UnpagedLimit, size, "models without client size control keep the full-table safety limit")
+		require.Equal(t, defaultLimit, size, "models without client size control keep the full-table safety limit")
 	})
 
 	t.Run("ActiveCursorResetsPage", func(t *testing.T) {

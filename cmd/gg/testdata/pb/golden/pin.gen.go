@@ -24,6 +24,7 @@ type pinService struct {
 // package initialization.
 var (
 	createPin = grpc.CreateCall[*model.Pin]("/api/pins")
+	listPin   = grpc.ListCall[*model.Pin]("/api/pins")
 	getPin    = grpc.GetCall[*model.Pin]("/api/pins/:id")
 )
 
@@ -38,6 +39,21 @@ func (pinService) CreatePin(ctx context.Context, req *CreatePinRequest) (*Create
 		return nil, err
 	}
 	return &CreatePinResponse{Pin: PinToProto(m)}, nil
+}
+
+// ListPin serves the List action of Pin on /api/pins.
+func (pinService) ListPin(ctx context.Context, req *ListPinRequest) (*ListPinResponse, error) {
+	models, total, err := listPin(ctx, nil, grpc.Query{
+		Filters: grpc.Filters(req.GetFilters()),
+	})
+	if err != nil {
+		return nil, err
+	}
+	items := make([]*Pin, len(models))
+	for i, m := range models {
+		items[i] = PinToProto(m)
+	}
+	return &ListPinResponse{Items: items, Total: int64(total)}, nil
 }
 
 // GetPin serves the Get action of Pin on /api/pins/:id.

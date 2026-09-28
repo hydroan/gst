@@ -39,6 +39,30 @@ message CreatePinResponse {
   Pin pin = 1;
 }
 
+// ListPinRequest is the request of PinService.ListPin.
+message ListPinRequest {
+  // filters is the filters to apply, each one field[op]=value of the HTTP query.
+  repeated Filter filters = 1;
+
+  // Filter is one filter of filters: field names the column by its query name, op is the operator, none for the equality every model answers, and values is its value, several for in and notin.
+  message Filter {
+    string field = 1;
+
+    string op = 2;
+
+    repeated string values = 3;
+  }
+}
+
+// ListPinResponse is the response of PinService.ListPin.
+message ListPinResponse {
+  // items is the Pin records of the page.
+  repeated Pin items = 1;
+
+  // total is the number of records the filters match, 0 under cursor pagination.
+  int64 total = 2;
+}
+
 // GetPinRequest is the request of PinService.GetPin.
 message GetPinRequest {
   // id is the id of the Pin.
@@ -61,6 +85,9 @@ message GetPinResponse {
 service PinService {
   // CreatePin is the Create action of Pin on /api/pins.
   rpc CreatePin ( CreatePinRequest ) returns ( CreatePinResponse );
+
+  // ListPin is the List action of Pin on /api/pins.
+  rpc ListPin ( ListPinRequest ) returns ( ListPinResponse );
 
   // GetPin is the Get action of Pin on /api/pins/:id.
   rpc GetPin ( GetPinRequest ) returns ( GetPinResponse );

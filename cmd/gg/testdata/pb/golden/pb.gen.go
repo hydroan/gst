@@ -23,6 +23,7 @@ func init() {
 	)
 	grpc.Register[PinServiceServer](RegisterPinServiceServer, pinService{},
 		grpc.Method{Name: PinService_CreatePin_FullMethodName, HTTPMethod: http.MethodPost, Route: "/api/pins"},
+		grpc.Method{Name: PinService_ListPin_FullMethodName, HTTPMethod: http.MethodGet, Route: "/api/pins"},
 		grpc.Method{Name: PinService_GetPin_FullMethodName, HTTPMethod: http.MethodGet, Route: "/api/pins/:id"},
 	)
 	grpc.Register[RecordServiceServer](RegisterRecordServiceServer, recordService{},

@@ -44,9 +44,10 @@ import (
 //
 // gRPC has no URL, so what the HTTP request carries in its path and query
 // string the rpc's request message carries in its fields, the route
-// parameters first, then these; the example on the public grpc.Query shows
-// one query as an HTTP request, as the messages gg gen derives, in JSON and
-// as a Query.
+// parameters first, then these, a List request holding the fields of the
+// controls the model reads and a custom one every field; the example on
+// the public grpc.Query shows one query as an HTTP request, as the messages
+// gg gen derives, in JSON and as a Query.
 type Query struct {
 	Filters     []Filter
 	SortBy      []string

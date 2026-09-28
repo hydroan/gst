@@ -31,7 +31,13 @@ import (
 //
 // gRPC has no URL, so what an HTTP request carries in its path and query
 // string the request message carries in its fields, the route parameters
-// first and these after them. For a model Record on the route records, gg
+// first and these after them. A List request carries the filters and the
+// fields of the controls the model reads: the orderings and the expansion
+// of a model embedding model.Query, the page of one embedding
+// model.Pagination, the cursor of one embedding model.Cursor and the size
+// of either, the way the HTTP listener refuses the parameters of the
+// others; a custom List carries every field, its service reading the
+// query. For a model Record embedding model.Query on the route records, gg
 // gen derives
 //
 //	message ListRecordRequest {

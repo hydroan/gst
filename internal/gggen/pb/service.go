@@ -377,7 +377,7 @@ func (r *rpc) streaming() bool {
 //	}
 func (g *generator) customRequest(scope *types.Scope, file *protoFile, action *dsl.Action, s jsonshape.Site) (*descriptorpb.DescriptorProto, []string, *message, bool) {
 	if action.Phase == consts.List || action.Phase == consts.Get {
-		fields, comments, nested := queryFields(action.Phase)
+		fields, comments, nested := queryFields(action.Phase, allQueryControls)
 		request := newMessage(fields...)
 		request.NestedType = nested
 		return request, comments, nil, true
@@ -487,7 +487,7 @@ func standardMessages(m *modelinfo.Model, model *message, file *protoFile, route
 		response = newMessage(modelField(x, model))
 		responseFields = append(responseFields, "the "+m.ModelName+" created")
 	case consts.Get:
-		fields, comments, _ := queryFields(action.Phase)
+		fields, comments, _ := queryFields(action.Phase, allQueryControls)
 		request = newMessage(fields...)
 		requestFields = append(requestFields, comments...)
 		response = newMessage(modelField(x, model))
@@ -507,7 +507,7 @@ func standardMessages(m *modelinfo.Model, model *message, file *protoFile, route
 		request = newMessage()
 		response = newMessage()
 	case consts.List:
-		fields, comments, nested := queryFields(action.Phase)
+		fields, comments, nested := queryFields(action.Phase, queryControlsOf(model.obj))
 		request = newMessage(fields...)
 		request.NestedType = nested
 		requestFields = append(requestFields, comments...)
@@ -534,12 +534,16 @@ func standardMessages(m *modelinfo.Model, model *message, file *protoFile, route
 
 // queryFields returns the fields a request of the phase holds for the query
 // parameters gst reads on it, with their comments and nested types, numbered
-// by the caller: List's filters, orderings, pagination, cursor and
-// expansion, with the nested Filter of the filters; Get's expansion; nothing
-// for the other phases.
+// by the caller: List's filters, with the nested Filter, and the fields of
+// the controls the model reads (see queryControls), the orderings and the
+// expansion of a model embedding model.Query, the page of one embedding
+// model.Pagination, the cursor of one embedding model.Cursor and the size of
+// either; Get's expansion, which the get flow reads for every model;
+// nothing for the other phases. The request of a custom List carries every
+// control, its service reading the query itself.
 //
-// The List action of Record on records gets, its fields numbered from 1 as
-// the route has no parameter,
+// The List action of Record on records, Record embedding model.Query, gets,
+// its fields numbered from 1 as the route has no parameter,
 //
 //	// ListRecordRequest is the request of RecordService.ListRecord.
 //	message ListRecordRequest {
@@ -552,7 +556,7 @@ func standardMessages(m *modelinfo.Model, model *message, file *protoFile, route
 //	  // page is the page to list, as the _page query parameter.
 //	  uint32 page = 3;
 //
-//	  // size is the page size, as the _size query parameter, read by a model embedding model.Pagination or model.Cursor alone: 20 when unset and at most 100; any other model ignores it and lists at most 1000 records.
+//	  // size is the page size, as the _size query parameter, 20 when unset and at most 100.
 //	  uint32 size = 4;
 //
 //	  // cursor_field is the cursor column, as the _cursor_field query parameter.
@@ -579,7 +583,25 @@ func standardMessages(m *modelinfo.Model, model *message, file *protoFile, route
 //	    repeated string values = 3;
 //	  }
 //	}
-func queryFields(phase consts.Phase) (fields []*descriptorpb.FieldDescriptorProto, comments []string, nested []*descriptorpb.DescriptorProto) {
+//
+// and the List action of Pin on pins, Pin embedding no marker, gets the
+// filters alone:
+//
+//	// ListPinRequest is the request of PinService.ListPin.
+//	message ListPinRequest {
+//	  // filters is the filters to apply, each one field[op]=value of the HTTP query.
+//	  repeated Filter filters = 1;
+//
+//	  // Filter is one filter of filters: field names the column by its query name, op is the operator, none for the equality every model answers, and values is its value, several for in and notin.
+//	  message Filter {
+//	    string field = 1;
+//
+//	    string op = 2;
+//
+//	    repeated string values = 3;
+//	  }
+//	}
+func queryFields(phase consts.Phase, controls queryControls) (fields []*descriptorpb.FieldDescriptorProto, comments []string, nested []*descriptorpb.DescriptorProto) {
 	expansion := []*descriptorpb.FieldDescriptorProto{
 		repeatedStringField("expand", 0),
 		scalarField("depth", 0, descriptorpb.FieldDescriptorProto_TYPE_UINT32),
@@ -594,24 +616,36 @@ func queryFields(phase consts.Phase) (fields []*descriptorpb.FieldDescriptorProt
 	case consts.List:
 		filter := newMessage(stringField("field", 1), stringField("op", 2), repeatedStringField("values", 3))
 		filter.Name = new(filterMessage)
-		fields = append([]*descriptorpb.FieldDescriptorProto{
-			repeatedMessageField("filters", filterMessage),
-			repeatedStringField("sort_by", 0),
-			scalarField("page", 0, descriptorpb.FieldDescriptorProto_TYPE_UINT32),
-			scalarField("size", 0, descriptorpb.FieldDescriptorProto_TYPE_UINT32),
-			stringField("cursor_field", 0),
-			stringField("cursor_value", 0),
-			scalarField("cursor_next", 0, descriptorpb.FieldDescriptorProto_TYPE_BOOL),
-		}, expansion...)
-		comments = append([]string{
-			"the filters to apply, each one field[op]=value of the HTTP query",
-			"the orderings, as the _sort_by query parameter names them",
-			"the page to list, as the _page query parameter",
-			"the page size, as the _size query parameter, read by a model embedding model.Pagination or model.Cursor alone: " + strconv.Itoa(urlquery.DefaultPageSize) + " when unset and at most " + strconv.Itoa(urlquery.MaxPageSize) + "; any other model ignores it and lists at most " + strconv.Itoa(urlquery.UnpagedLimit) + " records",
-			"the cursor column, as the _cursor_field query parameter",
-			"the cursor position, as the _cursor_value query parameter",
-			"whether to list past the cursor, as the _cursor_next query parameter",
-		}, expansionComments...)
+		fields = append(fields, repeatedMessageField("filters", filterMessage))
+		comments = append(comments, "the filters to apply, each one field[op]=value of the HTTP query")
+		if controls.queryable {
+			fields = append(fields, repeatedStringField("sort_by", 0))
+			comments = append(comments, "the orderings, as the _sort_by query parameter names them")
+		}
+		if controls.paginatable {
+			fields = append(fields, scalarField("page", 0, descriptorpb.FieldDescriptorProto_TYPE_UINT32))
+			comments = append(comments, "the page to list, as the _page query parameter")
+		}
+		if controls.paginatable || controls.cursorable {
+			fields = append(fields, scalarField("size", 0, descriptorpb.FieldDescriptorProto_TYPE_UINT32))
+			comments = append(comments, "the page size, as the _size query parameter, "+strconv.Itoa(urlquery.DefaultPageSize)+" when unset and at most "+strconv.Itoa(urlquery.MaxPageSize))
+		}
+		if controls.cursorable {
+			fields = append(fields,
+				stringField("cursor_field", 0),
+				stringField("cursor_value", 0),
+				scalarField("cursor_next", 0, descriptorpb.FieldDescriptorProto_TYPE_BOOL),
+			)
+			comments = append(comments,
+				"the cursor column, as the _cursor_field query parameter",
+				"the cursor position, as the _cursor_value query parameter",
+				"whether to list past the cursor, as the _cursor_next query parameter",
+			)
+		}
+		if controls.queryable {
+			fields = append(fields, expansion...)
+			comments = append(comments, expansionComments...)
+		}
 		return fields, comments, []*descriptorpb.DescriptorProto{filter}
 	}
 	return nil, nil, nil

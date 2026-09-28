@@ -362,7 +362,8 @@ func (w *fileWriter) handler(r *rpc) {
 		}
 		params = lit
 	}
-	query, layout := w.query(r.action.Phase, req)
+	has := func(name string) bool { _, ok := requestFields[name]; return ok }
+	query, layout := w.query(r.action.Phase, req, has)
 
 	var body []ast.Stmt
 	if r.standard {
@@ -490,24 +491,29 @@ func (w *fileWriter) handler(r *rpc) {
 }
 
 // query builds the Query the call of an action of phase takes, read off the
-// request through req: the filters, orderings, pagination, cursor and
-// expansion of a List, laid out one field per line by the layout returned;
-// the expansion of a Get; and the zero Query for any other phase, which
-// takes no query.
-func (w *fileWriter) query(phase consts.Phase, req func(string) ast.Expr) (ast.Expr, func(*goast.LineSet)) {
+// request through req, has reporting the fields the request declares: the
+// filters and the fields of the controls the model reads (see queryFields)
+// of a List, laid out one field per line by the layout returned; the
+// expansion of a Get; and the zero Query for any other phase, which takes
+// no query.
+func (w *fileWriter) query(phase consts.Phase, req func(string) ast.Expr, has func(string) bool) (ast.Expr, func(*goast.LineSet)) {
 	lit := compositeLit(w.grpc("Query"))
 	switch phase {
 	case consts.List:
-		lit.Elts = []ast.Expr{
-			keyValue("Filters", call(w.grpc("Filters"), req("filters"))),
-			keyValue("SortBy", req("sort_by")),
-			keyValue("Page", req("page")),
-			keyValue("Size", req("size")),
-			keyValue("CursorField", req("cursor_field")),
-			keyValue("CursorValue", req("cursor_value")),
-			keyValue("CursorNext", req("cursor_next")),
-			keyValue("Expand", req("expand")),
-			keyValue("Depth", req("depth")),
+		lit.Elts = []ast.Expr{keyValue("Filters", call(w.grpc("Filters"), req("filters")))}
+		for _, control := range []struct{ field, name string }{
+			{"SortBy", "sort_by"},
+			{"Page", "page"},
+			{"Size", "size"},
+			{"CursorField", "cursor_field"},
+			{"CursorValue", "cursor_value"},
+			{"CursorNext", "cursor_next"},
+			{"Expand", "expand"},
+			{"Depth", "depth"},
+		} {
+			if has(control.name) {
+				lit.Elts = append(lit.Elts, keyValue(control.field, req(control.name)))
+			}
 		}
 		return lit, func(lines *goast.LineSet) { layoutLiteral(lit, lines) }
 	case consts.Get:
