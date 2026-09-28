@@ -17,7 +17,7 @@ import (
 // flow's failure carries for the transport to render — its status and
 // client-safe message, with the error behind as its cause — and the errors
 // the database ones map to. A failure carrying no service error is the
-// generic one, which each transport answers in its own way (see
+// server's own, which each transport answers with its fixed message (see
 // response.Error and grpcserver.StatusError).
 
 // The messages of the controller's fixed refusals, each answered with the
@@ -64,8 +64,8 @@ func failWith(ctx context.Context, log types.Logger, msg string, err, answer err
 // failService reports a service hook or operation that refused or failed,
 // answered with err itself: the service error it carries, when it does,
 // keeps the status and message it was constructed with, and anything else
-// is the generic failure. Internal error text — database drivers naming
-// tables and columns, third-party client output — never reaches the
+// is the server's own failure. Internal error text — database drivers
+// naming tables and columns, third-party client output — never reaches the
 // envelope; the transports render only a service error's message.
 func failService(ctx context.Context, log types.Logger, err error) error {
 	return failWith(ctx, log, "service operation failed", err, err)
@@ -83,7 +83,7 @@ func failDatabase(ctx context.Context, log types.Logger, err error) error {
 // database.ErrStaleObject 409, and database.ErrVersionRequired and
 // database.ErrIDRequired, request defects both, 400, each with its fixed
 // client-safe message and err behind it as the cause; anything else is
-// answered as it is, the generic failure. Handlers log the full error
+// answered as it is, the server's own failure. Handlers log the full error
 // themselves, so every branch deliberately keeps internal detail out of the
 // response.
 //
@@ -113,13 +113,10 @@ func databaseError(err error) error {
 		// defect as well.
 		return serviceregistry.NewErrorWithCause(http.StatusBadRequest, invalidArgumentMsg, err)
 	default:
-		// TODO: the generic failure this falls back to, like the one a plain
-		// error of a hook or service is, answers 400 on HTTP, reporting a
-		// server-side problem as the client's. Server-side failures should
-		// answer 5xx and client-side ones 4xx; doing it right also takes
-		// mapping the database errors client data causes (a value too long,
-		// a missing foreign key, a failed check) to 4xx, and giving the
-		// validation errors of the authz model hooks a 4xx status.
+		// TODO: the database errors client data causes — a value too long,
+		// a missing foreign key, a failed check — fall through here and
+		// answer as the server's own failure; they should map to 4xx, as
+		// should the validation errors of the authz model hooks.
 		return err
 	}
 }

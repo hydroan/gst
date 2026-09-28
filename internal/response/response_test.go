@@ -63,8 +63,8 @@ func TestJSONEncodesWithStandardLibrary(t *testing.T) {
 // TestErrorAnswersServiceErrorsAndHidesTheRest pins the failure envelope: a
 // service error, wherever it sits in the wrap chain, answers with the status
 // and client-safe message it was constructed with, its cause kept out of the
-// body; any other error answers 400 with the generic failure message, its
-// text kept out of the body as well.
+// body; any other error is the server's own failure and answers 500 with the
+// generic failure message, its text kept out of the body as well.
 func TestErrorAnswersServiceErrorsAndHidesTheRest(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	cause := errors.New("database password leaked")
@@ -81,7 +81,7 @@ func TestErrorAnswersServiceErrorsAndHidesTheRest(t *testing.T) {
 		{"service error", serviceErr, http.StatusInternalServerError, `{"data":null,"msg":"failed to load user","trace_id":""}`, cause.Error()},
 		{"wrapped service error", errors.Wrap(serviceErr, "load account"), http.StatusInternalServerError, `{"data":null,"msg":"failed to load user","trace_id":""}`, cause.Error()},
 		{"forbidden", serviceregistry.NewError(http.StatusForbidden, "account disabled"), http.StatusForbidden, `{"data":null,"msg":"account disabled","trace_id":""}`, ""},
-		{"other error", internal, http.StatusBadRequest, `{"data":null,"msg":"The request could not be processed.","trace_id":""}`, internal.Error()},
+		{"other error", internal, http.StatusInternalServerError, `{"data":null,"msg":"The server could not process the request.","trace_id":""}`, internal.Error()},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

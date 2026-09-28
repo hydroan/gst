@@ -1,6 +1,7 @@
 package controller_test
 
 import (
+	"net/http"
 	"testing"
 
 	"github.com/hydroan/gst/internal/controller"
@@ -31,5 +32,31 @@ func TestHandlersRefuseARequestTypeNoBodyDecodesInto(t *testing.T) {
 		controller.CreateHandler[*sampleRecord, any, *sampleRecord](cfg)
 		controller.CreateHandler[*sampleRecord, *any, *sampleRecord](cfg)
 		controller.CreateHandler[*sampleRecord, *sampleRecord, sampleBinder](cfg)
+	})
+}
+
+// TestActionHandlerAnswersTheServiceError pins what a custom action's error
+// becomes over HTTP, the counterpart of the gRPC cases of
+// TestServiceCallDelegatesToThePhaseService: a service error answers with
+// its own status and message; any other error is the server's own failure
+// and answers 500 with the fixed message, its text kept out of the envelope.
+func TestActionHandlerAnswersTheServiceError(t *testing.T) {
+	handler := controller.CreateHandler[*sampleRecord, *sampleActionReq, *sampleActionRsp](configFor[*sampleRecord](actionRoute))
+
+	t.Run("the service's error answers with its status", func(t *testing.T) {
+		rsp := serve(t, http.MethodPost, "/controller-sample-actions", handler,
+			"/controller-sample-actions", `{"note":"`+actionRefuse+`"}`)
+
+		require.Equal(t, http.StatusForbidden, rsp.Code)
+		require.Contains(t, rsp.Body.String(), `"msg":"not yours"`)
+	})
+
+	t.Run("any other error answers 500 with the fixed message", func(t *testing.T) {
+		rsp := serve(t, http.MethodPost, "/controller-sample-actions", handler,
+			"/controller-sample-actions", `{"note":"`+actionBreak+`"}`)
+
+		require.Equal(t, http.StatusInternalServerError, rsp.Code)
+		require.Contains(t, rsp.Body.String(), `"msg":"The server could not process the request."`)
+		require.NotContains(t, rsp.Body.String(), "connection refused")
 	})
 }

@@ -13,12 +13,13 @@ import (
 // SuccessMsg is the msg of the success envelope, the one JSON writes.
 const SuccessMsg = "success"
 
-// The answer of the generic failure: an error that is not a service error,
-// one no status and client-safe message were chosen for. Its text stays out
-// of the envelope.
+// The answer of the server's own failure: an error that is not a service
+// error, one no status and client-safe message were chosen for, which is the
+// server failing to serve the request and not the client's doing. Its text
+// stays out of the envelope.
 const (
-	failureStatus = http.StatusBadRequest
-	failureMsg    = "The request could not be processed."
+	failureStatus = http.StatusInternalServerError
+	failureMsg    = "The server could not process the request."
 )
 
 // JSON writes data in the success envelope: status 200, SuccessMsg, data
@@ -33,10 +34,10 @@ func JSON(c *gin.Context, data ...any) {
 
 // Error writes err in the failure envelope: a service error, anywhere in the
 // wrap chain, answers with the status and client-safe message it was
-// constructed with; any other error answers the generic failure, 400 with
-// failureMsg. Internal error text — database drivers naming tables and
-// columns, third-party client output — never reaches the envelope; callers
-// log the full error themselves before answering it here.
+// constructed with; any other error is the server's own failure and answers
+// 500 with failureMsg. Internal error text — database drivers naming tables
+// and columns, third-party client output — never reaches the envelope;
+// callers log the full error themselves before answering it here.
 func Error(c *gin.Context, err error) {
 	var serviceErr *serviceregistry.Error
 	if errors.As(err, &serviceErr) {

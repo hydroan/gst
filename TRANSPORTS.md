@@ -159,7 +159,7 @@ handler --> client : RecordToProto；失败映射成 status
 | JWT | `middleware.JwtAuth()` | `interceptor.JwtAuth()`，拒绝一律 Unauthenticated | jwt 包解析与校验 |
 | 授权 | `middleware.Authz()`，obj 是请求的具体路径（`/api/records/42`）、act 是 HTTP 方法 | `interceptor.Authz()`，obj 是路由模板（`/api/records/{id}`，拦截器把注册时记下的路由写成路由清单的写法）、act 是该 rpc 对应的 HTTP 方法，流式动作是 STREAM | `rbac.Enforce(ctx, Subject, obj, act)`，策略只有一份：写 `{id}`、`/*` 或静态路径的两边一致，写具体段的只在 HTTP 生效，写 `:id` 字面的两边都不命中 |
 | 调用者 | gin 上下文里的用户 | `grpc.WithCaller / CallerOf`，写进访问日志 | `execctx` 里的身份与 trace id |
-| 失败的形状 | JSON 错误体 `{msg, data, trace_id}`，状态码取 `service.Error` 的 status，没有业务状态码 | `service.Error` 映射成 status code 加同一句 msg；框架自己的拒绝（Internal、Unimplemented、Canceled、JwtAuth 的 Unauthenticated）同样只有 status | `service.NewError / NewErrorWithCause` |
+| 失败的形状 | JSON 错误体 `{msg, data, trace_id}`，状态码取 `service.Error` 的 status，没有业务状态码；没有 `service.Error` 的错误是服务端自身的故障，答 500「The server could not process the request.」 | `service.Error` 映射成 status code 加同一句 msg；框架自己的拒绝（Internal、Unimplemented、Canceled、JwtAuth 的 Unauthenticated）同样只有 status | `service.NewError / NewErrorWithCause` |
 
 HTTP 状态到 gRPC status 的映射（`grpcserver.StatusError`）：
 
