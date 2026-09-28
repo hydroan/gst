@@ -21,9 +21,9 @@ import (
 // the call's span the way the HTTP recovery middleware does on the request's,
 // logs it with the method, the trace id and the stack to the recovery log,
 // the one the HTTP listener's panics go to, and answers codes.Internal with
-// the message the HTTP envelope carries for the same case; what the panic
-// was stays in the log and the span, and the caller quotes back the trace
-// id the response header carries.
+// the fixed message StatusError answers the server's own failures with;
+// what the panic was stays in the log and the span, and the caller quotes
+// back the trace id the response header carries.
 func recovered(ctx context.Context, p any) error {
 	if span := trace.SpanFromContext(ctx); span.IsRecording() {
 		gstotel.RecordError(span, fmt.Errorf("panic recovered: %v", p))
