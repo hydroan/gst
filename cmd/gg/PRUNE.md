@@ -1,6 +1,6 @@
 # gg prune 清理逻辑
 
-**只动四个目录：`service/`、`middleware/`、`interceptor/` 和 `pb/`。** `gg prune` 和 `gg gen --prune` 清理 `service/` 里 model 不再需要的文件，被删掉的复制模块留在 `middleware/` 里的中间件文件和留在 `interceptor/` 里的 gRPC 拦截器文件（连同它们在 `middleware/middleware.go`、`interceptor/interceptor.go` 里的注册调用），以及 `pb/` 里 `gg gen` 不会再生成的 `.proto` 文件、和它们配套生成的 `.gen.go` 文件（各 `.proto` 旁边的处理器文件和 `pb/pb.gen.go` 注册文件）以及由 `.proto` 编出来的 `.pb.go`、`_grpc.pb.go` 文件。项目的其他地方，一个文件都不删、不改。本文说明它们删什么、不删什么、按什么顺序删、在哪一步问你。
+**只动四个目录：`service/`、`middleware/`、`interceptor/` 和 `pb/`。** `gg prune` 和 `gg gen --prune` 清理 `service/` 里 model 不再需要的文件，被删掉的复制模块留在 `middleware/` 里的中间件文件和留在 `interceptor/` 里的 gRPC 拦截器文件（连同它们在 `middleware/middleware.go`、`interceptor/interceptor.go` 里的注册调用），以及 `pb/` 里 `gg gen` 不会再生成的 `.proto` 文件、和它们配套生成的 `.gen.go` 文件（各 `.proto` 旁边的处理器文件和每个 pb 包一个的 `pb.gen.go` 注册文件）以及由 `.proto` 编出来的 `.pb.go`、`_grpc.pb.go` 文件。项目的其他地方，一个文件都不删、不改。本文说明它们删什么、不删什么、按什么顺序删、在哪一步问你。
 
 **删什么只认 `prune.ignore`**：`service/` 和 `pb/` 归 gg 管，要保持干净，放在里面的东西被 Git 忽略也好、被 Go 工具链忽略也好，用不上的照样是垃圾。所以 prune 删东西时读整个 `service/`，项目的 Git 忽略规则和 Go 工具链的内置忽略（名字以 `.` 或 `_` 开头的文件和目录、`vendor`、`testdata`、自带 `go.mod` 的子目录、`go.mod` 里 `ignore` 的目录）都不保护任何路径，想保留的路径写进 gst.yaml 的 `prune.ignore`。判断某个 service 目录还有没有代码在用时，prune 和 `gg check`、`gg gen` 一样按这两类规则认项目代码：被忽略的代码不算在用，所以清理完不会留下一直删不掉的目录。
 
@@ -117,7 +117,7 @@ stop
 
 **孤儿中间件、拦截器文件**：`middleware/` 或 `interceptor/` 下带着 `gg module copy` 所有权标记（第一行是 `// Managed by gg module copy (module <name>). ...`），而项目里已经没有 `model/<name>/` 目录的文件，也就是被删掉的复制模块留下的中间件和 gRPC 拦截器。注册文件 `middleware/middleware.go`、`interceptor/interceptor.go` 永远不算。所有权标记见 [MODULE.md](MODULE.md)。
 
-**过期的 protobuf 文件**：`pb/` 下现有的 `.proto`、`.gen.go`、`.pb.go`、`_grpc.pb.go` 文件里，这次 `gg gen` 不会再写出来的那些。`gg gen` 为每个声明了 `GRPC()` 的 model 文件在 `pb/` 下写一个同路径的 `.proto`（`model/archive/document.go` 对应 `pb/archive/document.proto`），旁边是它的处理器文件 `document.gen.go` 和由它编出来的 `document.pb.go`、`document_grpc.pb.go`，另有 `pb/pb.gen.go` 注册全部服务，所以 model 去掉 `GRPC()`、model 文件被删或改了路径，旧文件就过期了。这些文件完全由 model 推导、每次 `gg gen` 重写，里面没有项目自己写的东西，这一点和 service 文件不同。
+**过期的 protobuf 文件**：`pb/` 下现有的 `.proto`、`.gen.go`、`.pb.go`、`_grpc.pb.go` 文件里，这次 `gg gen` 不会再写出来的那些。`gg gen` 为每个声明了 `GRPC()` 的 model 文件在 `pb/` 下写一个同路径的 `.proto`（`model/archive/document.go` 对应 `pb/archive/document.proto`），旁边是它的处理器文件 `document.gen.go` 和由它编出来的 `document.pb.go`、`document_grpc.pb.go`，另有每个 pb 包一个的 `pb.gen.go` 注册本包的服务（根目录的空导入子包），所以 model 去掉 `GRPC()`、model 文件被删或改了路径，旧文件就过期了。这些文件完全由 model 推导、每次 `gg gen` 重写，里面没有项目自己写的东西，这一点和 service 文件不同。
 
 **prune.ignore**：gst.yaml 里的保护清单。每一项是 `service/`、`middleware/`、`interceptor/` 或 `pb/` 下的一个路径，按目录层级匹配：`service/legacy` 覆盖这个目录和它下面的全部内容，但不覆盖 `service/legacyx`；写到具体文件就只覆盖这一个文件。被覆盖的路径不会被删。写法和校验规则见 README 的[项目级配置 gst.yaml](../../README.md#项目级配置-gstyaml)。
 
