@@ -69,11 +69,40 @@ type validatedSample struct {
 
 func (validatedSample) TableName() string { return "controller_validated_samples" }
 
+// shapedSample carries the field shapes a patch applies as a whole beside
+// the plain ones: a time stored in a column of its own, a struct stored as
+// a JSON column, whose city is required whenever the address is written,
+// and the fields of an embedded struct of the model's own, promoted to keys
+// of the model's own.
+type shapedSample struct {
+	Name    string        `json:"name"`
+	DueAt   time.Time     `json:"due_at"`
+	Address sampleAddress `json:"address" gorm:"serializer:json"`
+	SampleAudit
+
+	modelregistry.Base
+}
+
+func (shapedSample) TableName() string { return "controller_shaped_samples" }
+
+// sampleAddress is the struct value of a shaped sample.
+type sampleAddress struct {
+	City string `json:"city" binding:"required"`
+	Zip  string `json:"zip"`
+}
+
+// SampleAudit is embedded in a shaped sample, its fields promoted.
+type SampleAudit struct {
+	Reviewer string `json:"reviewer"`
+	Reviewed bool   `json:"reviewed"`
+}
+
 // The routes the fixture services are registered under. A handler mounted
 // with one of them as its config route resolves that route's service; any
 // other route resolves none and runs on the framework's default service.
 const (
 	sampleRoute        = "controller-samples"
+	shapedRoute        = "controller-shaped-samples"
 	refusalRoute       = "controller-refusals"
 	filterRefusalRoute = "controller-filter-refusals"
 	importRoute        = "controller-imports"
@@ -335,6 +364,29 @@ func loadSample(t *testing.T, id string) *sampleRecord {
 	t.Helper()
 	stored := new(sampleRecord)
 	require.NoError(t, database.Database[*sampleRecord](context.Background()).Get(stored, id))
+	return stored
+}
+
+// shapedDueAt is the time the shaped samples are stored with, to the second
+// so that every dialect stores it as is.
+var shapedDueAt = time.Date(2026, 5, 6, 7, 8, 9, 0, time.UTC)
+
+// createShaped stores a shaped sample named name, due at shapedDueAt, at the
+// city "old" with the zip "1", reviewed by "first", and returns it with its
+// id.
+func createShaped(t *testing.T, name string) *shapedSample {
+	t.Helper()
+	record := &shapedSample{Name: name, DueAt: shapedDueAt, Address: sampleAddress{City: "old", Zip: "1"}, Reviewer: "first", Reviewed: true}
+	require.NoError(t, database.Database[*shapedSample](context.Background()).Create(record))
+	require.NotEmpty(t, record.GetID())
+	return record
+}
+
+// loadShaped returns the stored shaped sample id names.
+func loadShaped(t *testing.T, id string) *shapedSample {
+	t.Helper()
+	stored := new(shapedSample)
+	require.NoError(t, database.Database[*shapedSample](context.Background()).Get(stored, id))
 	return stored
 }
 

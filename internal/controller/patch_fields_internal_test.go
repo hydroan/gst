@@ -4,8 +4,10 @@ import (
 	"context"
 	"reflect"
 	"testing"
+	"time"
 
 	"github.com/hydroan/gst/consts"
+	"github.com/hydroan/gst/internal/modelregistry"
 	"github.com/hydroan/gst/internal/serviceregistry"
 	"github.com/hydroan/gst/internal/types"
 	"github.com/stretchr/testify/require"
@@ -24,6 +26,119 @@ type patchFieldsRecord struct {
 type patchFieldsKeyedRecord struct {
 	ID   string `json:"id"`
 	Name string `json:"name"`
+}
+
+// patchFieldsShapedRecord carries the field shapes a patch applies as a
+// whole and the structs it looks through: a time and a struct value, the
+// fields of an embedded struct of the model's own, promoted to keys of the
+// model's own, and the framework base, whose fields no patch applies.
+type patchFieldsShapedRecord struct {
+	Name    string             `json:"name"`
+	DueAt   time.Time          `json:"due_at"`
+	Address patchFieldsAddress `json:"address"`
+	patchFieldsAudit
+
+	modelregistry.Base
+}
+
+type patchFieldsAddress struct {
+	City string `json:"city"`
+	Zip  string `json:"zip"`
+}
+
+type patchFieldsAudit struct {
+	Reviewer string `json:"reviewer"`
+	Reviewed bool   `json:"reviewed"`
+}
+
+// TestPatchFieldSetsNameEveryFieldOfTheModelAsAWhole pins which fields a
+// body key or a mask path names: every field of the model's own, a time or
+// a struct value as a whole, a field promoted from an embedded struct under
+// its own key and Go path; none of the framework base's, and no part of a
+// field, a mask path into a struct being refused with the field to name
+// instead.
+func TestPatchFieldSetsNameEveryFieldOfTheModelAsAWhole(t *testing.T) {
+	typ := reflect.TypeFor[patchFieldsShapedRecord]()
+	named := patchFieldSet{"DueAt": {}, "Address": {}, "patchFieldsAudit.Reviewer": {}}
+
+	fields, err := patchFieldSetFromJSONBody(typ, []byte(`{"due_at":"2026-05-06T07:08:09Z","address":{"city":"new"},"reviewer":"second","created_at":"2026-01-01T00:00:00Z","patchFieldsAudit":{}}`))
+	require.NoError(t, err)
+	require.Equal(t, named, fields)
+
+	fields, err = maskFieldSet(typ, []string{"due_at", "address", "reviewer"})
+	require.NoError(t, err)
+	require.Equal(t, named, fields)
+
+	_, err = maskFieldSet(typ, []string{"created_at"})
+	require.EqualError(t, err, `update_mask names "created_at", which is no field a patch applies`)
+	_, err = maskFieldSet(typ, []string{"address.city"})
+	require.EqualError(t, err, `update_mask names "address.city", a part of a field; a patch applies "address" as a whole`)
+}
+
+// patchFieldsShadowedRecord encodes two fields to the key name: its own,
+// and the one the embedded struct promotes, which encoding/json leaves out
+// for the shallower, so a patch names the model's own.
+type patchFieldsShadowedRecord struct {
+	Name string `json:"name"`
+	*PatchFieldsLabel
+}
+
+type PatchFieldsLabel struct {
+	Name  string `json:"name"`
+	Label string `json:"label"`
+}
+
+// TestPatchFieldSetsFollowTheJSONKeys pins that the fields a patch names
+// are the ones encoding/json encodes, under its rules: of two fields
+// encoding to one key the shallower is the field, and a field promoted
+// through an embedded pointer is named through it, the pointer allocated
+// on the record when it is nil.
+func TestPatchFieldSetsFollowTheJSONKeys(t *testing.T) {
+	typ := reflect.TypeFor[patchFieldsShadowedRecord]()
+
+	fields, err := patchFieldSetFromJSONBody(typ, []byte(`{"name":"own","label":"promoted"}`))
+	require.NoError(t, err)
+	require.Equal(t, patchFieldSet{"Name": {}, "PatchFieldsLabel.Label": {}}, fields)
+
+	oldRecord := &patchFieldsShadowedRecord{Name: "before"}
+	newRecord := &patchFieldsShadowedRecord{Name: "own", PatchFieldsLabel: &PatchFieldsLabel{Name: "shadowed", Label: "promoted"}}
+	applyPatch(nopControllerLogger{}, typ, reflect.ValueOf(oldRecord).Elem(), reflect.ValueOf(newRecord).Elem(), fields)
+	require.Equal(t, "own", oldRecord.Name)
+	require.Equal(t, &PatchFieldsLabel{Label: "promoted"}, oldRecord.PatchFieldsLabel, "allocated on the way, the shadowed name left alone")
+}
+
+// TestApplyPatchAppliesAStructValuedFieldAsAWhole pins how the named
+// fields are copied: a time value and a struct value are replaced as a
+// whole, the parts of the struct the request left out included, a promoted
+// field is set through its embedded struct while its neighbor stays, and
+// the framework base stays as stored.
+func TestApplyPatchAppliesAStructValuedFieldAsAWhole(t *testing.T) {
+	typ := reflect.TypeFor[patchFieldsShapedRecord]()
+	createdAt := time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC)
+	dueAt := time.Date(2026, 5, 6, 7, 8, 9, 0, time.UTC)
+	oldRecord := &patchFieldsShapedRecord{
+		Name:      "kept",
+		DueAt:     createdAt,
+		Address:   patchFieldsAddress{City: "old", Zip: "1"},
+		Reviewer:  "first",
+		Reviewed:  true,
+		CreatedAt: createdAt,
+	}
+	newRecord := &patchFieldsShapedRecord{
+		DueAt:    dueAt,
+		Address:  patchFieldsAddress{City: "new"},
+		Reviewer: "second",
+	}
+
+	applyPatch(nopControllerLogger{}, typ, reflect.ValueOf(oldRecord).Elem(), reflect.ValueOf(newRecord).Elem(), patchFieldSet{
+		"DueAt": {}, "Address": {}, "patchFieldsAudit.Reviewer": {},
+	})
+
+	require.Equal(t, "kept", oldRecord.Name)
+	require.True(t, oldRecord.DueAt.Equal(dueAt))
+	require.Equal(t, patchFieldsAddress{City: "new"}, oldRecord.Address, "a struct value is replaced as a whole")
+	require.Equal(t, patchFieldsAudit{Reviewer: "second", Reviewed: true}, oldRecord.patchFieldsAudit)
+	require.True(t, oldRecord.CreatedAt.Equal(createdAt), "the framework base stays as stored")
 }
 
 // TestPatchFieldSetsLeaveThePrimaryKeyOut pins that no patch applies the

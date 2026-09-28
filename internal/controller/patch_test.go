@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"testing"
+	"time"
 
 	"github.com/hydroan/gst/database"
 	"github.com/hydroan/gst/internal/controller"
@@ -55,6 +56,34 @@ func TestPatchValidatesTheFieldsTheBodyNames(t *testing.T) {
 
 	rsp = serve(t, http.MethodPatch, "/controller-validated-samples/:id", handler, "/controller-validated-samples/"+record.GetID(), `{"name":""}`)
 	require.Equal(t, http.StatusBadRequest, rsp.Code)
+}
+
+// TestPatchAppliesAFieldAsAWhole pins what a body key patches: a time
+// value and a struct value are replaced as a whole, the parts of the struct
+// the body left out included, a key promoted from an embedded struct sets
+// its field while the neighbor stays, a struct the body names is checked
+// against its own binding tags as a whole, and null on a value clears it.
+func TestPatchAppliesAFieldAsAWhole(t *testing.T) {
+	record := createShaped(t, "patch-shaped")
+	handler := controller.PatchHandler[*shapedSample, *shapedSample, *shapedSample](configFor[*shapedSample](shapedRoute))
+	target := "/controller-shaped-samples/" + record.GetID()
+	dueAt := time.Date(2027, 1, 2, 3, 4, 5, 0, time.UTC)
+
+	rsp := serve(t, http.MethodPatch, "/controller-shaped-samples/:id", handler, target, `{"due_at":"2027-01-02T03:04:05Z","address":{"city":"new"},"reviewer":"second"}`)
+	require.Equal(t, http.StatusOK, rsp.Code, rsp.Body.String())
+	stored := loadShaped(t, record.GetID())
+	require.Equal(t, "patch-shaped", stored.Name)
+	require.True(t, stored.DueAt.Equal(dueAt), stored.DueAt)
+	require.Equal(t, sampleAddress{City: "new"}, stored.Address, "a struct value is replaced as a whole")
+	require.Equal(t, SampleAudit{Reviewer: "second", Reviewed: true}, stored.SampleAudit)
+
+	rsp = serve(t, http.MethodPatch, "/controller-shaped-samples/:id", handler, target, `{"address":{"zip":"2"}}`)
+	require.Equal(t, http.StatusBadRequest, rsp.Code, "the address is checked as a whole, its city required")
+	require.Equal(t, sampleAddress{City: "new"}, loadShaped(t, record.GetID()).Address)
+
+	rsp = serve(t, http.MethodPatch, "/controller-shaped-samples/:id", handler, target, `{"due_at":null}`)
+	require.Equal(t, http.StatusOK, rsp.Code, rsp.Body.String())
+	require.True(t, loadShaped(t, record.GetID()).DueAt.IsZero(), "null clears a value")
 }
 
 // TestPatchKeepsTheRecordTheBeforeHookRefuses pins that a PatchBefore

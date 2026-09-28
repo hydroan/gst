@@ -4,10 +4,9 @@ import (
 	"bytes"
 	"encoding/json"
 	"io"
-	"maps"
 	"net/http"
 	"reflect"
-	"slices"
+	"strings"
 
 	"github.com/cockroachdb/errors"
 	"github.com/gin-gonic/gin"
@@ -103,11 +102,13 @@ func validateRequest(target any) error {
 // validatePatchFields checks target against the binding tags of the fields
 // that fields names and of no other, with gin's validator: a patch carries
 // the fields it changes, so a tag on a field it leaves out, required above
-// all, is not its to meet, on either transport. The names are the Go field
-// names patchFieldSet keys by, which is how the validator names the fields
-// of the struct itself. Nothing named validates nothing. A validator other
-// than go-playground's cannot be asked for a part of the struct and checks
-// the whole; nil turns validation off, see validateRequest.
+// all, is not its to meet, on either transport. A field named is checked
+// as the whole the patch applies, the tags inside a struct value included;
+// the validator names each field by its Go path under the type's name,
+// which is how patchFieldSet keys the fields (see covers). Nothing named
+// validates nothing. A validator other than go-playground's cannot be asked
+// for a part of the struct and checks the whole; nil turns validation off,
+// see validateRequest.
 func validatePatchFields(target any, fields patchFieldSet) error {
 	if binding.Validator == nil || len(fields) == 0 {
 		return nil
@@ -116,7 +117,14 @@ func validatePatchFields(target any, fields patchFieldSet) error {
 	if !ok {
 		return binding.Validator.ValidateStruct(target)
 	}
-	return engine.StructPartial(target, slices.Sorted(maps.Keys(fields))...)
+	typ := reflect.TypeOf(target)
+	for typ.Kind() == reflect.Pointer {
+		typ = typ.Elem()
+	}
+	prefix := typ.Name() + "."
+	return engine.StructFiltered(target, func(ns []byte) bool {
+		return !fields.covers(strings.TrimPrefix(string(ns), prefix))
+	})
 }
 
 // requiredBodyError translates the io.EOF sentinel of an absent request body

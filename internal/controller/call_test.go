@@ -286,6 +286,42 @@ func TestPatchCallAppliesTheMaskedFields(t *testing.T) {
 	})
 }
 
+// TestPatchCallAppliesAFieldAsAWhole pins what a mask path patches: a
+// time value and a struct value are replaced as a whole, the parts of the
+// struct the message left out included, a path promoted from an embedded
+// struct sets its field while the neighbor stays, a struct the mask names
+// is checked against its own binding tags as a whole, and a path into a
+// struct is refused with the field to name instead.
+func TestPatchCallAppliesAFieldAsAWhole(t *testing.T) {
+	conn := sampleServer(t)
+	record := createShaped(t, "call-shaped")
+	dueAt := time.Date(2027, 1, 2, 3, 4, 5, 0, time.UTC)
+
+	patched, err := invoke(t, conn, "ShapedPatch", map[string]any{
+		"id":     record.GetID(),
+		"record": map[string]any{"due_at": "2027-01-02T03:04:05Z", "address": map[string]any{"city": "new"}, "reviewer": "second", "name": "unmasked"},
+		"mask":   []string{"due_at", "address", "reviewer"},
+	})
+	require.NoError(t, err)
+	require.Equal(t, "second", patched["reviewer"])
+	stored := loadShaped(t, record.GetID())
+	require.Equal(t, "call-shaped", stored.Name, "a field the mask does not name stays as stored")
+	require.True(t, stored.DueAt.Equal(dueAt), stored.DueAt)
+	require.Equal(t, sampleAddress{City: "new"}, stored.Address, "a struct value is replaced as a whole")
+	require.Equal(t, SampleAudit{Reviewer: "second", Reviewed: true}, stored.SampleAudit)
+
+	_, err = invoke(t, conn, "ShapedPatch", map[string]any{
+		"id": record.GetID(), "record": map[string]any{"address": map[string]any{"zip": "2"}}, "mask": []string{"address"},
+	})
+	requireStatus(t, err, codes.InvalidArgument, "")
+	require.Equal(t, sampleAddress{City: "new"}, loadShaped(t, record.GetID()).Address, "the address is checked as a whole, its city required")
+
+	_, err = invoke(t, conn, "ShapedPatch", map[string]any{
+		"id": record.GetID(), "record": map[string]any{"address": map[string]any{"city": "part"}}, "mask": []string{"address.city"},
+	})
+	requireStatus(t, err, codes.InvalidArgument, `update_mask names "address.city", a part of a field; a patch applies "address" as a whole`)
+}
+
 // TestPatchCallValidatesTheMaskedFieldsAlone pins that a patch call checks
 // the binding tags of the fields its mask names and no other, in the single
 // and the batch call alike: a mask leaving the required name out passes,
@@ -632,6 +668,7 @@ func sampleHandlers() map[string]func(ctx context.Context, in map[string]any) (a
 	counterGet := controller.GetCall[*sampleCounter](counterRoute)
 	counterList := controller.ListCall[*sampleCounter](counterRoute)
 	versionedPatch := controller.PatchCall[*versionedSample](versionedRoute)
+	shapedPatch := controller.PatchCall[*shapedSample](shapedRoute)
 	validatedCreate := controller.CreateCall[*validatedSample](validatedRoute)
 	validatedCreateMany := controller.CreateManyCall[*validatedSample](validatedRoute)
 	validatedPatch := controller.PatchCall[*validatedSample](validatedRoute)
@@ -696,6 +733,9 @@ func sampleHandlers() map[string]func(ctx context.Context, in map[string]any) (a
 		},
 		"VersionedPatch": func(ctx context.Context, in map[string]any) (any, error) {
 			return versionedPatch(ctx, params(in), field[string](in, "id"), field[*versionedSample](in, "record"), field[[]string](in, "mask"))
+		},
+		"ShapedPatch": func(ctx context.Context, in map[string]any) (any, error) {
+			return shapedPatch(ctx, params(in), field[string](in, "id"), field[*shapedSample](in, "record"), field[[]string](in, "mask"))
 		},
 		"ValidatedCreate": func(ctx context.Context, in map[string]any) (any, error) {
 			return validatedCreate(ctx, params(in), field[*validatedSample](in, "record"))

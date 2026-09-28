@@ -136,8 +136,8 @@ func UpdateCall[M types.Model](route string) func(ctx context.Context, params ma
 
 // PatchCall returns the patch call of M on route: given the route
 // parameters, the id, the values and the paths of the update mask, which
-// name the fields to apply as the message names them and must name at least
-// one, it answers with the record patched.
+// name the fields to apply as the message names them, each applied as a
+// whole, and must name at least one, it answers with the record patched.
 func PatchCall[M types.Model](route string) func(ctx context.Context, params map[string]string, id string, m M, paths []string) (M, error) {
 	return controller.PatchCall[M](route)
 }

@@ -17,6 +17,7 @@ func TestMain(m *testing.M) {
 			modelregistry.Register[*sampleCounter]()
 			modelregistry.Register[*versionedSample]()
 			modelregistry.Register[*validatedSample]()
+			modelregistry.Register[*shapedSample]()
 			registerFixtureServices()
 		},
 	})
