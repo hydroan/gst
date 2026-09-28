@@ -272,4 +272,20 @@ call --> client : OK，或映射后的 status；取消答 Canceled，停机答 U
 | `testutil` | 共用 | 真容器、两个监听、`GRPCTarget()` |
 | `examples/demo`、`examples/cluster` | 共用 | demo 是入门示例（gRPC 示例在 model/board），cluster 是多副本、gRPC 与会话认证的实弹验证项目 |
 
-这页跟着代码走：拦截器链、映射表、产物名以仓库为准，改了代码就改这页。
+## 9. 与 AIP、Buf 的有意差异
+
+生成的 .proto 过 buf lint 的 STANDARD 规则，只报 PACKAGE_VERSION_SUFFIX；下面是与 Google 的 API 设计规范（AIP）和 Buf 风格指南对不上、而且是有意为之的地方，每条写明差在哪、为什么。
+
+| 差异 | 规范怎么说 | gst 怎么做、为什么 |
+|---|---|---|
+| rpc 名单数、批量用 Many | AIP-132 要 `ListRecords` 复数，AIP-231/233/234/235 批量要 `Batch` 前缀 | rpc 名 = DSL 动作名 + 模型名（`ListRecord`、`CreateManyRecord`），和 HTTP 路由用同一套动作名，一个动作在两条线上一个名字 |
+| 列表响应与分页 | AIP-132/158 要 `<resources>` 复数字段、不透明的 `next_page_token`、`total_size` | 响应是 `items` 加 `total`，请求按模型嵌入的 Query、Pagination、Cursor 带 `page`、`size`、`cursor_*`，和 HTTP 契约同形，走同一个 urlquery 解析 |
+| 过滤 | AIP-160 是一段字符串表达式 | `filters` 是结构化的 `{field, op, values}`，和 HTTP 的 `field[op]=value` 一一对应，运行期同一套拒绝规则 |
+| update_mask | AIP-134 允许省略（省略即按已填字段）、必须支持 `*`；AIP-161 要求整字段与子字段路径都合法 | 必填，不认 `*`（等于 Update），只认顶层键、不点进字段内部：点名的字段整体替换，和 HTTP 的 PATCH 一致 |
+| 包名无版本段 | Buf 的 PACKAGE_VERSION_SUFFIX 要 `v1` 这样的后缀 | gst 没有 API 版本，包名就是项目名加目录 |
+| 不生成枚举 | AIP-126 用 enum | 字符串枚举保持 string，取值列在字段注释里，HTTP 与数据库里都是字符串 |
+| 时间类型 | AIP-142 一天里的时刻用 `google.type.TimeOfDay`、日期用 `google.type.Date` | `datatypes.Time` 映射 `google.protobuf.Duration`（从零点起的时长），`datatypes.Date` 映射 `google.protobuf.Timestamp`，不引入 googleapis 的类型 |
+| Delete 的响应 | AIP-135 返回 `google.protobuf.Empty` | 每个 rpc 独享自己的空 `DeleteXxxResponse`，照 Buf 风格指南，日后加字段不换类型 |
+| 不写 HTTP 注解 | AIP 用 `google.api.http`、`google.api.field_behavior` 标路由与必填 | 没有 gateway，路由与 HTTP 方法由注册物描述（`grpc.Method`），必填由模型的 binding tag 决定，注释里写明 |
+
+这页跟着代码走：拦截器链、映射表、产物名、差异清单以仓库为准，改了代码就改这页。
