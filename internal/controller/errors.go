@@ -89,8 +89,8 @@ func failDatabase(ctx context.Context, log types.Logger, err error) error {
 //
 // The service error is honored first, and here as well as in the action path:
 // a model hook refusing an operation states its status deliberately — a guard
-// answering 403 — and flattening that to a generic failure would misreport a
-// permission boundary as a malformed request.
+// answering 403 — and flattening that to the server's own failure would
+// misreport a permission boundary as a server fault.
 func databaseError(err error) error {
 	var serviceErr *serviceregistry.Error
 	switch {

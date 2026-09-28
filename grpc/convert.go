@@ -16,10 +16,10 @@ import (
 // json.RawMessage or a datatypes.JSON, travels as its bytes and needs
 // none). Each maps the unset value of one side to the unset value of the
 // other, the zero time to no Timestamp and nil to nil, so a value comes
-// back from a message as it went in. It
-// also holds what a generated FromProto reads a value through when the
-// message's type is wider than the model's, Narrow and Number, which refuse
-// what the model's type cannot hold.
+// back from a message as it went in. It also holds what a generated
+// FromProto reads a value through when the message's type is wider than
+// the model's, Narrow and Number, which refuse what the model's type cannot
+// hold.
 
 // Narrow returns v as the narrower integer type T a model field holds, int8
 // for the int32 its message carries, and refuses with InvalidArgument,

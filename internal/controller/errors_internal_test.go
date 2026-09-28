@@ -13,8 +13,8 @@ import (
 // TestDatabaseError pins the canonical mapping of database errors: a service
 // error keeps its own status and message, the database sentinels answer
 // their fixed status and message with the error behind them as the cause,
-// and everything else is answered as it is, the generic failure carrying no
-// service error.
+// and everything else is answered as it is, the server's own failure
+// carrying no service error.
 func TestDatabaseError(t *testing.T) {
 	serviceErr := serviceregistry.NewError(http.StatusForbidden, "operation refused")
 
@@ -43,7 +43,7 @@ func TestDatabaseError(t *testing.T) {
 		})
 	}
 
-	t.Run("other_errors_are_the_generic_failure", func(t *testing.T) {
+	t.Run("other_errors_are_the_servers_own_failure", func(t *testing.T) {
 		internal := errors.New("Error 1146: Table 'sample' doesn't exist")
 
 		answer := databaseError(internal)

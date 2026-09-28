@@ -244,7 +244,7 @@ func TestUpdateManyHandlerBindFailureAnswersTheFieldRefused(t *testing.T) {
 
 	require.Equal(t, http.StatusBadRequest, recorder.Code)
 	require.Contains(t, recorder.Body.String(), `"msg":"invalid value for field 'items'"`,
-		"a bind failure must name the field refused, not answer the generic failure")
+		"a bind failure must name the field refused, not answer as the server's own failure")
 }
 
 // TestBindJSONRequestHonorsDisabledValidator pins gin's validator-disable

@@ -119,7 +119,7 @@ func (a *action[M, REQ, RSP]) getFlow(ctx context.Context, newServiceContext ser
 		return zero, failService(ctx, log, err)
 	}
 	// 2.Get resource from database. The database layer answers existence:
-	// database.ErrRecordNotFound renders 404 instead of a generic failure.
+	// database.ErrRecordNotFound renders 404 instead of the server's own failure.
 	if err := database.Database[M](ctx).WithExpand(expands).Get(m, m.GetID()); err != nil {
 		return zero, failDatabase(ctx, log, err)
 	}

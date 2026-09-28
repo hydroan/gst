@@ -64,7 +64,7 @@ func TestJSONEncodesWithStandardLibrary(t *testing.T) {
 // service error, wherever it sits in the wrap chain, answers with the status
 // and client-safe message it was constructed with, its cause kept out of the
 // body; any other error is the server's own failure and answers 500 with the
-// generic failure message, its text kept out of the body as well.
+// fixed message, its text kept out of the body as well.
 func TestErrorAnswersServiceErrorsAndHidesTheRest(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	cause := errors.New("database password leaked")
