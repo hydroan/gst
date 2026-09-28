@@ -530,23 +530,7 @@ func (x *PatchNoteResponse) GetNote() *Note {
 type ListNoteRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// filters is the filters to apply, each one field[op]=value of the HTTP query.
-	Filters []*ListNoteRequest_Filter `protobuf:"bytes,1,rep,name=filters,proto3" json:"filters,omitempty"`
-	// sort_by is the orderings, as the _sort_by query parameter names them.
-	SortBy []string `protobuf:"bytes,2,rep,name=sort_by,json=sortBy,proto3" json:"sort_by,omitempty"`
-	// page is the page to list, as the _page query parameter.
-	Page uint32 `protobuf:"varint,3,opt,name=page,proto3" json:"page,omitempty"`
-	// size is the page size, as the _size query parameter, read by a model embedding model.Pagination or model.Cursor alone: 20 when unset and at most 100; any other model ignores it and lists at most 1000 records.
-	Size uint32 `protobuf:"varint,4,opt,name=size,proto3" json:"size,omitempty"`
-	// cursor_field is the cursor column, as the _cursor_field query parameter.
-	CursorField string `protobuf:"bytes,5,opt,name=cursor_field,json=cursorField,proto3" json:"cursor_field,omitempty"`
-	// cursor_value is the cursor position, as the _cursor_value query parameter.
-	CursorValue string `protobuf:"bytes,6,opt,name=cursor_value,json=cursorValue,proto3" json:"cursor_value,omitempty"`
-	// cursor_next is whether to list past the cursor, as the _cursor_next query parameter.
-	CursorNext bool `protobuf:"varint,7,opt,name=cursor_next,json=cursorNext,proto3" json:"cursor_next,omitempty"`
-	// expand is the associations to expand, as the _expand query parameter names them.
-	Expand []string `protobuf:"bytes,8,rep,name=expand,proto3" json:"expand,omitempty"`
-	// depth is the depth of the expansion, as the _depth query parameter.
-	Depth         uint32 `protobuf:"varint,9,opt,name=depth,proto3" json:"depth,omitempty"`
+	Filters       []*ListNoteRequest_Filter `protobuf:"bytes,1,rep,name=filters,proto3" json:"filters,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -586,62 +570,6 @@ func (x *ListNoteRequest) GetFilters() []*ListNoteRequest_Filter {
 		return x.Filters
 	}
 	return nil
-}
-
-func (x *ListNoteRequest) GetSortBy() []string {
-	if x != nil {
-		return x.SortBy
-	}
-	return nil
-}
-
-func (x *ListNoteRequest) GetPage() uint32 {
-	if x != nil {
-		return x.Page
-	}
-	return 0
-}
-
-func (x *ListNoteRequest) GetSize() uint32 {
-	if x != nil {
-		return x.Size
-	}
-	return 0
-}
-
-func (x *ListNoteRequest) GetCursorField() string {
-	if x != nil {
-		return x.CursorField
-	}
-	return ""
-}
-
-func (x *ListNoteRequest) GetCursorValue() string {
-	if x != nil {
-		return x.CursorValue
-	}
-	return ""
-}
-
-func (x *ListNoteRequest) GetCursorNext() bool {
-	if x != nil {
-		return x.CursorNext
-	}
-	return false
-}
-
-func (x *ListNoteRequest) GetExpand() []string {
-	if x != nil {
-		return x.Expand
-	}
-	return nil
-}
-
-func (x *ListNoteRequest) GetDepth() uint32 {
-	if x != nil {
-		return x.Depth
-	}
-	return 0
 }
 
 // ListNoteResponse is the response of NoteService.ListNote.
@@ -1115,18 +1043,9 @@ const file_demo_board_note_proto_rawDesc = "" +
 	"\vupdate_mask\x18\x03 \x01(\v2\x1a.google.protobuf.FieldMaskR\n" +
 	"updateMask\"9\n" +
 	"\x11PatchNoteResponse\x12$\n" +
-	"\x04note\x18\x01 \x01(\v2\x10.demo.board.NoteR\x04note\"\xed\x02\n" +
+	"\x04note\x18\x01 \x01(\v2\x10.demo.board.NoteR\x04note\"\x97\x01\n" +
 	"\x0fListNoteRequest\x12<\n" +
-	"\afilters\x18\x01 \x03(\v2\".demo.board.ListNoteRequest.FilterR\afilters\x12\x17\n" +
-	"\asort_by\x18\x02 \x03(\tR\x06sortBy\x12\x12\n" +
-	"\x04page\x18\x03 \x01(\rR\x04page\x12\x12\n" +
-	"\x04size\x18\x04 \x01(\rR\x04size\x12!\n" +
-	"\fcursor_field\x18\x05 \x01(\tR\vcursorField\x12!\n" +
-	"\fcursor_value\x18\x06 \x01(\tR\vcursorValue\x12\x1f\n" +
-	"\vcursor_next\x18\a \x01(\bR\n" +
-	"cursorNext\x12\x16\n" +
-	"\x06expand\x18\b \x03(\tR\x06expand\x12\x14\n" +
-	"\x05depth\x18\t \x01(\rR\x05depth\x1aF\n" +
+	"\afilters\x18\x01 \x03(\v2\".demo.board.ListNoteRequest.FilterR\afilters\x1aF\n" +
 	"\x06Filter\x12\x14\n" +
 	"\x05field\x18\x01 \x01(\tR\x05field\x12\x0e\n" +
 	"\x02op\x18\x02 \x01(\tR\x02op\x12\x16\n" +

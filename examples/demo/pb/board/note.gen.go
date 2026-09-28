@@ -80,15 +80,7 @@ func (noteService) PatchNote(ctx context.Context, req *PatchNoteRequest) (*Patch
 // ListNote serves the List action of Note on /api/board/notes.
 func (noteService) ListNote(ctx context.Context, req *ListNoteRequest) (*ListNoteResponse, error) {
 	models, total, err := listNote(ctx, nil, grpc.Query{
-		Filters:     grpc.Filters(req.GetFilters()),
-		SortBy:      req.GetSortBy(),
-		Page:        req.GetPage(),
-		Size:        req.GetSize(),
-		CursorField: req.GetCursorField(),
-		CursorValue: req.GetCursorValue(),
-		CursorNext:  req.GetCursorNext(),
-		Expand:      req.GetExpand(),
-		Depth:       req.GetDepth(),
+		Filters: grpc.Filters(req.GetFilters()),
 	})
 	if err != nil {
 		return nil, err
