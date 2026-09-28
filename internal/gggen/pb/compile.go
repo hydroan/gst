@@ -11,6 +11,7 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/internal/ggconst"
 	"github.com/hydroan/gst/internal/gghelper"
+	"github.com/hydroan/gst/internal/modelinfo"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/reflect/protodesc"
 	"google.golang.org/protobuf/reflect/protoreflect"
@@ -45,17 +46,21 @@ const (
 // has to be on disk first and nothing is written when a definition or a
 // plugin refuses; the plugins get the descriptors the way protoc hands them
 // over, comments included. The files come back sorted by path.
-func Compile(protos []File) ([]File, error) {
+func Compile(modulePath string, protos []File) ([]File, error) {
 	if len(protos) == 0 {
 		return nil, nil
 	}
-	// The definitions import one another and the well-known types by paths
-	// relative to pb/, the import root, so that is how the compiler and the
-	// plugins see them; the plugins' outputs are named the same way.
+	// The definitions are compiled under the paths they are registered
+	// under at run time, the application's name followed by their path
+	// under pb/, tmpapp/sample.proto (see protoFile.registered): the path
+	// they import one another by, and the one the compiler and the plugins
+	// see; the plugins' outputs are named the same way, and come back under
+	// pb/.
+	app := modelinfo.AppName(modulePath)
 	sources := make(map[string]string, len(protos))
 	names := make([]string, 0, len(protos))
 	for _, f := range protos {
-		name := strings.TrimPrefix(f.Path, ggconst.DirPB+"/")
+		name := path.Join(app, strings.TrimPrefix(f.Path, ggconst.DirPB+"/"))
 		sources[name] = f.Content
 		names = append(names, name)
 	}
@@ -109,13 +114,17 @@ func Compile(protos []File) ([]File, error) {
 		}
 		files = append(files, generated...)
 	}
+	for i := range files {
+		files[i].Path = path.Join(ggconst.DirPB, strings.TrimPrefix(files[i].Path, app+"/"))
+	}
 	slices.SortFunc(files, func(a, b File) int { return strings.Compare(a.Path, b.Path) })
 	return files, nil
 }
 
 // runPlugin runs the plugin pkg, of the module named by module, at version
 // (see gghelper.PinnedCommand), hands it request on its standard input the
-// way protoc does and returns the files it answers with, under pb/.
+// way protoc does and returns the files it answers with, named as the
+// plugin names them, after the definitions they come from.
 func runPlugin(module, version, pkg string, request *pluginpb.CodeGeneratorRequest) ([]File, error) {
 	input, err := proto.Marshal(request)
 	if err != nil {
@@ -141,7 +150,7 @@ func runPlugin(module, version, pkg string, request *pluginpb.CodeGeneratorReque
 	}
 	files := make([]File, 0, len(response.GetFile()))
 	for _, f := range response.GetFile() {
-		files = append(files, File{Path: path.Join(ggconst.DirPB, f.GetName()), Content: f.GetContent()})
+		files = append(files, File{Path: f.GetName(), Content: f.GetContent()})
 	}
 	return files, nil
 }

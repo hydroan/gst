@@ -655,22 +655,22 @@ func TestPagination(t *testing.T) {
 	t.Run("PaginatableModelDefaultsAndClamps", func(t *testing.T) {
 		page, size := Pagination(url.Values{}, &paginatableTestModel{})
 		require.Equal(t, 1, page, "an unset page normalizes to the first page")
-		require.Equal(t, defaultPageSize, size, "adjustable models default to a small page")
+		require.Equal(t, DefaultPageSize, size, "adjustable models default to a small page")
 
 		page, _ = Pagination(url.Values{"_page": {"-5"}}, &paginatableTestModel{})
 		require.Equal(t, 1, page, "a non-positive page normalizes to the first page")
 
 		_, size = Pagination(url.Values{"_size": {"0"}}, &paginatableTestModel{})
-		require.Equal(t, defaultPageSize, size)
+		require.Equal(t, DefaultPageSize, size)
 
 		_, size = Pagination(url.Values{"_size": {"101"}}, &paginatableTestModel{})
-		require.Equal(t, maxPageSize, size, "oversized page size clamps to the cap")
+		require.Equal(t, MaxPageSize, size, "oversized page size clamps to the cap")
 	})
 
 	t.Run("UnparsableValuesFallBackToDefaults", func(t *testing.T) {
 		page, size := Pagination(url.Values{"_page": {""}, "_size": {"abc"}}, &paginatableTestModel{})
 		require.Equal(t, 1, page, "an unparsable page normalizes to the first page")
-		require.Equal(t, defaultPageSize, size)
+		require.Equal(t, DefaultPageSize, size)
 	})
 
 	t.Run("CursorModelIgnoresPageButKeepsSize", func(t *testing.T) {

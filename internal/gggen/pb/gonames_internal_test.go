@@ -62,7 +62,7 @@ func TestGoFieldNamesMatchWhatTheProtobufPluginWrites(t *testing.T) {
 	}
 	require.Equal(t, want, goFieldNames(desc))
 
-	compiled, err := Compile([]File{{Path: "pb/naming.proto", Content: `syntax = "proto3";
+	compiled, err := Compile("tmpapp", []File{{Path: "pb/naming.proto", Content: `syntax = "proto3";
 
 package tmpapp;
 

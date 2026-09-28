@@ -61,13 +61,23 @@ func (m *message) fullName() string { return "." + m.file.pkg + "." + m.name }
 // with their comments; and what the Go file generated beside it serves, the
 // rpcs of its services and the project types its messages convert.
 type protoFile struct {
-	name      string // the file name relative to pb/, archive/document.proto
-	pkg       string // the protobuf package, app.archive
-	goPackage string // the go_package option, example.com/app/pb/archive;archive
-	imports   map[string]bool
-	messages  []*descriptorpb.DescriptorProto
-	services  []*descriptorpb.ServiceDescriptorProto
-	locations []*descriptorpb.SourceCodeInfo_Location
+	name string // the file name relative to pb/, archive/document.proto
+	// registered is the path the definition is compiled and registered
+	// under at run time, the application's name followed by the file's path
+	// under pb/, tmpapp/archive/document.proto: the directory the package
+	// names, as Buf's PACKAGE_DIRECTORY_MATCH rule has it and as googleapis
+	// lays its files out, so a consumer of the definitions copies pb/ into
+	// its import root as a directory of the application's name; and it
+	// keeps the definitions of one application apart from another's
+	// board/feed.proto when both are linked into one binary, the protobuf
+	// registry refusing a path registered twice.
+	registered string
+	pkg        string // the protobuf package, app.archive
+	goPackage  string // the go_package option, example.com/app/pb/archive;archive
+	imports    map[string]bool
+	messages   []*descriptorpb.DescriptorProto
+	services   []*descriptorpb.ServiceDescriptorProto
+	locations  []*descriptorpb.SourceCodeInfo_Location
 	// names are the message names declared so far, to refuse a second
 	// declaration of one.
 	names map[string]string // message name -> what declared it
@@ -98,7 +108,7 @@ func newGenerator(cfg Config, project *jsonshape.Project, models []*modelinfo.Mo
 	return &generator{
 		cfg:            cfg,
 		project:        project,
-		appName:        path.Base(cfg.ModulePath),
+		appName:        modelinfo.AppName(cfg.ModulePath),
 		models:         models,
 		files:          make(map[string]*protoFile),
 		messages:       make(map[*types.TypeName]*message),
@@ -111,8 +121,20 @@ func newGenerator(cfg Config, project *jsonshape.Project, models []*modelinfo.Mo
 
 // generate declares the service of every model, builds the messages they
 // reach and prints the files, the definitions and the Go files serving
-// them, or reports every diagnostic found on the way.
+// them, or reports every diagnostic found on the way. The messages of the
+// models are built first, ahead of every type they reach, so that a file
+// opens with its own model's message whichever model reaches a type of it
+// first: the Pin of the golden fixture, declared before Item, refers to
+// Item's Link, which would otherwise be built into item.proto ahead of
+// Item. The model a service cannot be declared for is reported by
+// declareService, not here.
 func (g *generator) generate() ([]File, error) {
+	for _, m := range g.models {
+		if obj := g.modelType(m); obj != nil && !m.Design.IsEmpty {
+			g.messageOf(obj)
+		}
+	}
+	g.buildQueued()
 	for _, m := range g.models {
 		g.declareService(m)
 	}
@@ -168,6 +190,18 @@ func (g *generator) buildQueued() {
 	}
 }
 
+// modelType returns the type of the model m in the loaded project, nil when
+// the project holds no such package or type; declareService reports either
+// case.
+func (g *generator) modelType(m *modelinfo.Model) *types.TypeName {
+	pkg := g.project.Package(m.ImportPath())
+	if pkg == nil || pkg.Types == nil {
+		return nil
+	}
+	obj, _ := pkg.Types.Scope().Lookup(m.ModelName).(*types.TypeName)
+	return obj
+}
+
 // messageOf returns the message of a project type, queueing the type to have
 // its fields built once. The message goes to the file mirroring the Go file
 // the type is declared in.
@@ -199,18 +233,20 @@ func (g *generator) fileOf(obj *types.TypeName) *protoFile {
 }
 
 // file returns the file of the given name, creating it on first use with the
-// package and go_package its directory implies.
+// package and go_package its directory implies and the path it is registered
+// under.
 func (g *generator) file(name string) *protoFile {
 	if f, ok := g.files[name]; ok {
 		return f
 	}
 	dir := path.Dir(name)
 	f := &protoFile{
-		name:      name,
-		pkg:       protoPackage(g.appName, dir),
-		goPackage: goPackageOption(g.cfg.ModulePath, dir),
-		imports:   make(map[string]bool),
-		names:     make(map[string]string),
+		name:       name,
+		registered: path.Join(g.appName, name),
+		pkg:        protoPackage(g.appName, dir),
+		goPackage:  goPackageOption(g.cfg.ModulePath, dir),
+		imports:    make(map[string]bool),
+		names:      make(map[string]string),
 	}
 	g.files[name] = f
 	return f
@@ -254,15 +290,16 @@ func (f *protoFile) addService(s *descriptorpb.ServiceDescriptorProto, comment s
 // The field numbers of FileDescriptorProto and its children that source
 // locations are addressed by, as in descriptor.proto.
 const (
-	fileSyntaxTag        int32 = 12
-	fileMessagesTag      int32 = 4
-	fileServicesTag      int32 = 6
-	messageFieldsTag     int32 = 2
-	serviceMethodsTag    int32 = 2
-	fieldMaxNumber       int32 = 536870911
-	reservedRangeStart   int32 = 19000
-	reservedRangeEnd     int32 = 19999
-	syntheticOneofPrefix       = "_"
+	fileSyntaxTag         int32 = 12
+	fileMessagesTag       int32 = 4
+	fileServicesTag       int32 = 6
+	messageFieldsTag      int32 = 2
+	messageNestedTypesTag int32 = 3
+	serviceMethodsTag     int32 = 2
+	fieldMaxNumber        int32 = 536870911
+	reservedRangeStart    int32 = 19000
+	reservedRangeEnd      int32 = 19999
+	syntheticOneofPrefix        = "_"
 )
 
 // int32Index converts the index of a descriptor list element to the int32
@@ -305,10 +342,10 @@ func commentText(text string) string {
 	return b.String()
 }
 
-// importOf makes the file import the file dependency, unless it is the file
-// itself.
+// importOf makes the file import the file dependency, a registered path,
+// unless it is the file itself.
 func (f *protoFile) importOf(dependency string) {
-	if dependency != f.name {
+	if dependency != f.registered {
 		f.imports[dependency] = true
 	}
 }

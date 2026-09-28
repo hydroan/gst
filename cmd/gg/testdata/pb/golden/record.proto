@@ -136,7 +136,7 @@ message ListRecordRequest {
   // page is the page to list, as the _page query parameter.
   uint32 page = 3;
 
-  // size is the page size, as the _size query parameter.
+  // size is the page size, as the _size query parameter, 20 when unset and at most 100.
   uint32 size = 4;
 
   // cursor_field is the cursor column, as the _cursor_field query parameter.
@@ -154,6 +154,7 @@ message ListRecordRequest {
   // depth is the depth of the expansion, as the _depth query parameter.
   uint32 depth = 9;
 
+  // Filter is one filter of filters: field names the column by its query name, op is the operator, none for the equality every model answers, and values is its value, several for in and notin.
   message Filter {
     string field = 1;
 
@@ -250,7 +251,7 @@ message ListRecordByOwnerRequest {
   // page is the page to list, as the _page query parameter.
   uint32 page = 4;
 
-  // size is the page size, as the _size query parameter.
+  // size is the page size, as the _size query parameter, 20 when unset and at most 100.
   uint32 size = 5;
 
   // cursor_field is the cursor column, as the _cursor_field query parameter.
@@ -268,6 +269,7 @@ message ListRecordByOwnerRequest {
   // depth is the depth of the expansion, as the _depth query parameter.
   uint32 depth = 10;
 
+  // Filter is one filter of filters: field names the column by its query name, op is the operator, none for the equality every model answers, and values is its value, several for in and notin.
   message Filter {
     string field = 1;
 

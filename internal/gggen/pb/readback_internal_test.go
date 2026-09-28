@@ -27,7 +27,7 @@ func TestReadBackReportsATypeThePrintedFileResolvesElsewhere(t *testing.T) {
 	}
 	request.Field[0].Number = new(int32(1))
 	fd, err := protodesc.NewFile(&descriptorpb.FileDescriptorProto{
-		Name:        new("item.proto"),
+		Name:        new("tmpapp/item.proto"),
 		Package:     new("tmpapp"),
 		Syntax:      new("proto3"),
 		MessageType: []*descriptorpb.DescriptorProto{item, request},
@@ -38,12 +38,12 @@ func TestReadBackReportsATypeThePrintedFileResolvesElsewhere(t *testing.T) {
 	require.NoError(t, printer.PrintProtoFile(fd, &printed))
 	require.Contains(t, printed.String(), "Item item = 1;", "the relative name the printer writes is the shadowed one")
 
-	err = readBack([]File{{Path: "pb/item.proto", Content: printed.String()}}, map[string]protoreflect.FileDescriptor{"item.proto": fd})
+	err = readBack("tmpapp", []File{{Path: "pb/item.proto", Content: printed.String()}}, map[string]protoreflect.FileDescriptor{"tmpapp/item.proto": fd})
 
 	require.EqualError(t, err, "pb/item.proto: the field tmpapp.PatchManyItemRequest.Item.item reads as tmpapp.PatchManyItemRequest.Item, the message nested in tmpapp.PatchManyItemRequest, where the definition means tmpapp.Item: the nested message shadows it; name the field or the type differently")
 
 	plain, err := protodesc.NewFile(&descriptorpb.FileDescriptorProto{
-		Name:        new("plain.proto"),
+		Name:        new("tmpapp/plain.proto"),
 		Package:     new("tmpapp"),
 		Syntax:      new("proto3"),
 		MessageType: []*descriptorpb.DescriptorProto{item},
@@ -51,5 +51,5 @@ func TestReadBackReportsATypeThePrintedFileResolvesElsewhere(t *testing.T) {
 	require.NoError(t, err)
 	printed.Reset()
 	require.NoError(t, printer.PrintProtoFile(plain, &printed))
-	require.NoError(t, readBack([]File{{Path: "pb/plain.proto", Content: printed.String()}}, map[string]protoreflect.FileDescriptor{"plain.proto": plain}))
+	require.NoError(t, readBack("tmpapp", []File{{Path: "pb/plain.proto", Content: printed.String()}}, map[string]protoreflect.FileDescriptor{"tmpapp/plain.proto": plain}))
 }

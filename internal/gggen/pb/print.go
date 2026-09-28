@@ -25,9 +25,13 @@ import (
 // print assembles the descriptor of every file, checks them the way protoc
 // would and prints them as protobuf source, sorted by path.
 func (g *generator) print() ([]File, error) {
+	// The descriptors are keyed by their registration path, the one they
+	// import each other by; relative maps it back to the path under pb/.
 	protos := make(map[string]*descriptorpb.FileDescriptorProto, len(g.files))
+	relative := make(map[string]string, len(g.files))
 	for name, f := range g.files {
-		protos[name] = f.descriptor()
+		protos[f.registered] = f.descriptor()
+		relative[f.registered] = name
 	}
 
 	// A file resolves once the generated files it imports have: they are
@@ -70,6 +74,9 @@ func (g *generator) print() ([]File, error) {
 					left = append(left, name)
 				}
 			}
+			for i, name := range left {
+				left[i] = relative[name]
+			}
 			slices.Sort(left)
 			return nil, errors.Newf("the generated files %s import each other in a cycle: a type of one Go file refers to a type of the other and back; keep the types referring to each other in one Go file", strings.Join(left, " and "))
 		}
@@ -87,12 +94,12 @@ func (g *generator) print() ([]File, error) {
 		if err := printer.PrintProtoFile(resolved[name], &b); err != nil {
 			return nil, errors.Wrapf(err, "print %s", name)
 		}
-		files = append(files, File{Path: ggconst.DirPB + "/" + name, Content: b.String(), Service: len(g.files[name].services) > 0})
+		files = append(files, File{Path: ggconst.DirPB + "/" + relative[name], Content: b.String(), Service: len(g.files[relative[name]].services) > 0})
 	}
 	// The printer writes the relative name of every type, which a nested
 	// message of that name would shadow (see readBack): a printed file
 	// meaning anything but the descriptor never reaches the disk.
-	if err := readBack(files, resolved); err != nil {
+	if err := readBack(g.appName, files, resolved); err != nil {
 		return nil, err
 	}
 	return files, nil
@@ -126,7 +133,7 @@ func (f *protoFile) descriptor() *descriptorpb.FileDescriptorProto {
 		LeadingDetachedComments: []string{commentText(strings.TrimPrefix(consts.CodeGeneratedComment(), "// "))},
 	}}, f.locations...)
 	return &descriptorpb.FileDescriptorProto{
-		Name:        new(f.name),
+		Name:        new(f.registered),
 		Package:     new(f.pkg),
 		Dependency:  slices.Sorted(maps.Keys(f.imports)),
 		MessageType: f.messages,

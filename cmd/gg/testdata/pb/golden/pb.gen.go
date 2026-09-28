@@ -20,6 +20,10 @@ func init() {
 		grpc.Method{Name: NoteService_CreateNote_FullMethodName, HTTPMethod: http.MethodPost, Route: "/api/notes"},
 		grpc.Method{Name: NoteService_GetNote_FullMethodName, HTTPMethod: http.MethodGet, Route: "/api/notes/:id"},
 	)
+	grpc.Register[PinServiceServer](RegisterPinServiceServer, PinService{},
+		grpc.Method{Name: PinService_CreatePin_FullMethodName, HTTPMethod: http.MethodPost, Route: "/api/pins"},
+		grpc.Method{Name: PinService_GetPin_FullMethodName, HTTPMethod: http.MethodGet, Route: "/api/pins/:id"},
+	)
 	grpc.Register[RecordServiceServer](RegisterRecordServiceServer, RecordService{},
 		grpc.Method{Name: RecordService_CreateRecord_FullMethodName, HTTPMethod: http.MethodPost, Route: "/api/records"},
 		grpc.Method{Name: RecordService_DeleteRecord_FullMethodName, HTTPMethod: http.MethodDelete, Route: "/api/records/:record"},

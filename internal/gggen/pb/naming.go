@@ -20,9 +20,9 @@ var nonIdentifier = regexp.MustCompile(`[^A-Za-z0-9_]`)
 var identifier = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
 
 // protoPackage names the protobuf package of the files of dir, a directory
-// relative to pb/: the application name, the last element of the module path,
-// followed by the directory elements, every character an identifier cannot
-// hold replaced. It returns app for the root directory ".", app.archive for
+// relative to pb/: the application name (see modelinfo.AppName) followed by
+// the directory elements, every character an identifier cannot hold
+// replaced. It returns app for the root directory ".", app.archive for
 // archive, app.archive.document for archive/document, and app.http_client
 // for http-client.
 func protoPackage(app, dir string) string {

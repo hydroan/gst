@@ -6,6 +6,8 @@ import (
 	"slices"
 	"strings"
 
+	"golang.org/x/mod/module"
+
 	"github.com/hydroan/gst/internal/dsl"
 	"github.com/hydroan/gst/internal/ggconst"
 	"github.com/stoewer/go-strcase"
@@ -72,6 +74,16 @@ func RouteParams(route string) []string {
 		}
 	}
 	return params
+}
+
+// AppName returns the name of the application the module path names, the
+// last element of the path with its major version suffix left off: app for
+// example.com/app and for example.com/app/v2, http-client for
+// example.com/http-client. The protobuf definitions carry it in their
+// package name.
+func AppName(modulePath string) string {
+	prefix, _, _ := module.SplitPathVersion(modulePath)
+	return path.Base(prefix)
 }
 
 // PBPackage returns the import path and the package name of the Go package

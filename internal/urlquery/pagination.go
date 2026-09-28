@@ -13,13 +13,15 @@ import (
 // model exposes no client-adjustable page size.
 const defaultLimit = 1000
 
-// defaultPageSize and maxPageSize bound the _size parameter on models that
+// DefaultPageSize and MaxPageSize bound the _size parameter on models that
 // embed Pagination or Cursor: an unset size defaults to a small first page
 // and oversized values clamp to the cap instead of erroring, matching common
-// API practice (bulk retrieval belongs to the Export action).
+// API practice (bulk retrieval belongs to the Export action). The pb
+// generator quotes both in the comment of a List request's size field, so
+// a gRPC caller reads the bounds off the message.
 const (
-	defaultPageSize = 20
-	maxPageSize     = 100
+	DefaultPageSize = 20
+	MaxPageSize     = 100
 )
 
 // Pagination returns the page and size arguments of the request, ready to be
@@ -48,9 +50,9 @@ func Pagination(q url.Values, m types.Model) (page, size int) {
 		size, _ = strconv.Atoi(q.Get(consts.QUERY_SIZE))
 		switch {
 		case size <= 0:
-			size = defaultPageSize
-		case size > maxPageSize:
-			size = maxPageSize
+			size = DefaultPageSize
+		case size > MaxPageSize:
+			size = MaxPageSize
 		}
 	} else {
 		size = defaultLimit

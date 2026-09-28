@@ -24,8 +24,12 @@ var update = flag.Bool("update", false, "rewrite the golden files under testdata
 // actions, the Go types of its custom actions and its service; beside it a
 // .gen.go with the type serving the service, the calls of its actions, the
 // handlers of its rpcs and the conversions of its messages; and pb/pb.gen.go
-// registering every service. A model without GRPC() gets no file. The
-// definitions are compiled the way protoc compiles them as well. The files
+// registering every service. A model without GRPC() gets no file. A model
+// referring to a type of another directory, Pin's Link of
+// model/record/item.go, gets a definition importing the other's by its
+// registered path, tmpapp/record/item.proto, and conversions calling the
+// other package's. The definitions are compiled the way protoc compiles
+// them as well. The files
 // are where the examples in the doc comments of the pb package come from:
 // pb.Generate's whole note.proto, the excerpts of buildMessage,
 // fieldTypeOf, fieldComment, declareService, rpcMessages, customRequest,
@@ -50,6 +54,7 @@ func TestGenRunWritesTheProtobufDefinitionsOfGRPCModels(t *testing.T) {
 		"model/report.go":      protobufReportModel,
 		"model/plain.go":       protobufPlainModel,
 		"model/note.go":        protobufNoteModel,
+		"model/pin.go":         protobufPinModel,
 		"model/shape.go":       protobufShapeModel,
 		"model/feed.go":        protobufFeedModel,
 	})
@@ -65,13 +70,18 @@ func TestGenRunWritesTheProtobufDefinitionsOfGRPCModels(t *testing.T) {
 		}
 	}
 	require.Equal(t, readGenerated(t, golden), got)
+	// The definitions are registered under the module path, which the Go
+	// files compiled from them name.
+	service, err := os.ReadFile(filepath.Join(projectDir, ggconst.DirPB, "feed_grpc.pb.go"))
+	require.NoError(t, err)
+	require.Contains(t, string(service), `Metadata: "tmpapp/feed.proto"`)
 	protos := make(map[string]string)
 	for path, content := range got {
 		if strings.HasSuffix(path, ".proto") {
 			protos[path] = content
 		}
 	}
-	requireProtosCompile(t, projectDir, protos)
+	requireProtosCompile(t, protos)
 
 	for path := range protos {
 		base := strings.TrimSuffix(path, ".proto")
@@ -613,22 +623,25 @@ func readGenerated(t *testing.T, root string) map[string]string {
 }
 
 // requireProtosCompile compiles the generated files, named relative to pb/,
-// with pb/ as the import root, the way protoc would with -I pb, so a file
-// protoc would refuse fails the test.
-func requireProtosCompile(t *testing.T, projectDir string, files map[string]string) {
+// under the paths they are registered by, tmpapp/note.proto, the way protoc
+// would from an import root holding pb/ as a directory named tmpapp, so a
+// file protoc would refuse fails the test.
+func requireProtosCompile(t *testing.T, files map[string]string) {
 	t.Helper()
 
 	// bufbuild/protocompile compiles .proto source the way protoc does,
 	// parsing and linking it against the well-known types, without protoc
 	// installed: what it accepts, protoc accepts.
+	sources := make(map[string]string, len(files))
+	names := make([]string, 0, len(files))
+	for path, content := range files {
+		sources["tmpapp/"+path] = content
+		names = append(names, "tmpapp/"+path)
+	}
 	compiler := protocompile.Compiler{
 		Resolver: protocompile.WithStandardImports(&protocompile.SourceResolver{
-			ImportPaths: []string{filepath.Join(projectDir, "pb")},
+			Accessor: protocompile.SourceAccessorFromMap(sources),
 		}),
-	}
-	names := make([]string, 0, len(files))
-	for path := range files {
-		names = append(names, path)
 	}
 	_, err := compiler.Compile(context.Background(), names...)
 	require.NoError(t, err)
@@ -819,6 +832,37 @@ func (Note) Design() {
 	dsl.GRPC()
 	dsl.Migrate()
 	dsl.Endpoint("notes")
+	dsl.Create(func() {})
+	dsl.Get(func() {})
+}
+`
+
+// protobufPinModel refers to a type of another directory, the Link of
+// model/record/item.go: its definition imports record/item.proto by the
+// registered path and its conversions call the record package's.
+const protobufPinModel = `package model
+
+import (
+	"tmpapp/model/record"
+
+	"github.com/hydroan/gst/dsl"
+	"github.com/hydroan/gst/model"
+)
+
+// Pin keeps a link of an item under a label.
+type Pin struct {
+	Label string      'json:"label" pb:"11"'
+	Link  record.Link 'json:"link" pb:"12" gorm:"-"'
+
+	model.Base
+}
+
+func (Pin) TableName() string { return "pins" }
+
+func (Pin) Design() {
+	dsl.GRPC()
+	dsl.Migrate()
+	dsl.Endpoint("pins")
 	dsl.Create(func() {})
 	dsl.Get(func() {})
 }
@@ -1404,6 +1448,19 @@ func TestShapeRoundTrips(t *testing.T) {
 			})
 		}
 	})
+}
+
+func TestPinRoundTrips(t *testing.T) {
+	in := &model.Pin{Label: "label", Link: record.Link{URL: "https://example.test/page", Title: "page"}}
+	in.ID = "p-1"
+
+	msg := pb.PinToProto(in)
+	require.IsType(t, &pbrecord.Link{}, msg.GetLink(), "the link travels as the message of the record package")
+	require.Equal(t, "page", msg.GetLink().GetTitle())
+
+	out, err := pb.PinFromProto(msg)
+	require.NoError(t, err)
+	require.Equal(t, in, out)
 }
 `
 

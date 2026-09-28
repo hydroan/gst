@@ -516,7 +516,7 @@ func (g *generator) namedFieldType(n *types.Named, file *protoFile, parent *desc
 		switch n.Underlying().(type) {
 		case *types.Struct:
 			m := g.messageOf(obj)
-			file.importOf(m.file.name)
+			file.importOf(m.file.registered)
 			return fieldType{kind: descriptorpb.FieldDescriptorProto_TYPE_MESSAGE, typeName: m.fullName()}, true
 		default:
 			// A named slice, map or basic type encodes as its underlying

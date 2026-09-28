@@ -5,6 +5,7 @@ import (
 	"go/types"
 	"maps"
 	"slices"
+	"strconv"
 	"strings"
 
 	"github.com/hydroan/gst/consts"
@@ -12,6 +13,7 @@ import (
 	"github.com/hydroan/gst/internal/ggconst"
 	"github.com/hydroan/gst/internal/gggen/jsonshape"
 	"github.com/hydroan/gst/internal/modelinfo"
+	"github.com/hydroan/gst/internal/urlquery"
 	"google.golang.org/protobuf/types/descriptorpb"
 )
 
@@ -431,7 +433,7 @@ func (g *generator) typeMessage(scope *types.Scope, file *protoFile, action *dsl
 		obj = named.Obj()
 	}
 	msg := g.messageOf(obj)
-	file.importOf(msg.file.name)
+	file.importOf(msg.file.registered)
 	return msg, true
 }
 
@@ -550,7 +552,7 @@ func standardMessages(m *modelinfo.Model, model *message, file *protoFile, route
 //	  // page is the page to list, as the _page query parameter.
 //	  uint32 page = 3;
 //
-//	  // size is the page size, as the _size query parameter.
+//	  // size is the page size, as the _size query parameter, 20 when unset and at most 100.
 //	  uint32 size = 4;
 //
 //	  // cursor_field is the cursor column, as the _cursor_field query parameter.
@@ -568,6 +570,7 @@ func standardMessages(m *modelinfo.Model, model *message, file *protoFile, route
 //	  // depth is the depth of the expansion, as the _depth query parameter.
 //	  uint32 depth = 9;
 //
+//	  // Filter is one filter of filters: field names the column by its query name, op is the operator, none for the equality every model answers, and values is its value, several for in and notin.
 //	  message Filter {
 //	    string field = 1;
 //
@@ -590,9 +593,9 @@ func queryFields(phase consts.Phase) (fields []*descriptorpb.FieldDescriptorProt
 		return expansion, expansionComments, nil
 	case consts.List:
 		filter := newMessage(stringField("field", 1), stringField("op", 2), repeatedStringField("values", 3))
-		filter.Name = new("Filter")
+		filter.Name = new(filterMessage)
 		fields = append([]*descriptorpb.FieldDescriptorProto{
-			repeatedMessageField("filters", "Filter"),
+			repeatedMessageField("filters", filterMessage),
 			repeatedStringField("sort_by", 0),
 			scalarField("page", 0, descriptorpb.FieldDescriptorProto_TYPE_UINT32),
 			scalarField("size", 0, descriptorpb.FieldDescriptorProto_TYPE_UINT32),
@@ -604,7 +607,7 @@ func queryFields(phase consts.Phase) (fields []*descriptorpb.FieldDescriptorProt
 			"the filters to apply, each one field[op]=value of the HTTP query",
 			"the orderings, as the _sort_by query parameter names them",
 			"the page to list, as the _page query parameter",
-			"the page size, as the _size query parameter",
+			"the page size, as the _size query parameter, " + strconv.Itoa(urlquery.DefaultPageSize) + " when unset and at most " + strconv.Itoa(urlquery.MaxPageSize),
 			"the cursor column, as the _cursor_field query parameter",
 			"the cursor position, as the _cursor_value query parameter",
 			"whether to list past the cursor, as the _cursor_next query parameter",
@@ -653,13 +656,28 @@ func (g *generator) numberFields(s jsonshape.Site, file *protoFile, name string,
 	return ordered, true
 }
 
+// filterMessage names the nested Filter message of a List request (see
+// queryFields) and filterComment is its leading comment; the Filter is the
+// one nested message a request or response message holds.
+const (
+	filterMessage = "Filter"
+	filterComment = "Filter is one filter of filters: field names the column by its query name, op is the operator, none for the equality every model answers, and values is its value, several for in and notin."
+)
+
 // addRPCMessage appends a request or response message to file, with the
-// comment of the message and one per field, each field's comment starting
-// with its name.
+// comment of the message, one per field, each field's comment starting with
+// its name, and the comment of its nested Filter, when it holds one.
 func (g *generator) addRPCMessage(file *protoFile, desc *descriptorpb.DescriptorProto, comment string, fieldComments []string) {
 	index := int32Index(len(file.messages))
 	for i, text := range fieldComments {
 		file.comment([]int32{fileMessagesTag, index, messageFieldsTag, int32Index(i)}, desc.Field[i].GetName()+" is "+text+".")
+	}
+	for i, nested := range desc.NestedType {
+		var text string
+		if nested.GetName() == filterMessage {
+			text = filterComment
+		}
+		file.comment([]int32{fileMessagesTag, index, messageNestedTypesTag, int32Index(i)}, text)
 	}
 	file.addMessage(desc, comment)
 }

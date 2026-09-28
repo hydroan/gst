@@ -2,6 +2,7 @@ package pb
 
 import (
 	"context"
+	"path"
 	"strings"
 
 	"github.com/bufbuild/protocompile"
@@ -21,11 +22,11 @@ import (
 // alone and refers to no message. This is the check that keeps it so: a
 // printed file meaning anything but the descriptor is reported, field or rpc
 // by name, with the message shadowing the one meant.
-func readBack(files []File, want map[string]protoreflect.FileDescriptor) error {
+func readBack(appName string, files []File, want map[string]protoreflect.FileDescriptor) error {
 	sources := make(map[string]string, len(files))
 	names := make([]string, 0, len(files))
 	for _, f := range files {
-		name := strings.TrimPrefix(f.Path, ggconst.DirPB+"/")
+		name := path.Join(appName, strings.TrimPrefix(f.Path, ggconst.DirPB+"/"))
 		sources[name] = f.Content
 		names = append(names, name)
 	}
@@ -37,7 +38,7 @@ func readBack(files []File, want map[string]protoreflect.FileDescriptor) error {
 		return errors.Wrap(err, "read the printed definitions back")
 	}
 	for _, fd := range got {
-		path := ggconst.DirPB + "/" + fd.Path()
+		path := ggconst.DirPB + "/" + strings.TrimPrefix(fd.Path(), appName+"/")
 		if err := sameTypes(path, fd.Messages(), want[fd.Path()].Messages()); err != nil {
 			return err
 		}

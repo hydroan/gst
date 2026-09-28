@@ -493,7 +493,7 @@ func protobufFiles(models []*modelinfo.Model, derived []pb.File) ([]pb.File, err
 			return nil, err
 		}
 	}
-	compiled, err := pb.Compile(definitionsOf(generated))
+	compiled, err := pb.Compile(module, definitionsOf(generated))
 	if err != nil {
 		return nil, err
 	}

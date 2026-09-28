@@ -36,6 +36,14 @@ func TestRouteParamsReadsBothParameterForms(t *testing.T) {
 	require.Empty(t, modelinfo.RouteParams("archive/documents"))
 }
 
+// TestAppNameIsTheModulePathWithoutItsVersion pins the examples of the
+// AppName doc comment.
+func TestAppNameIsTheModulePathWithoutItsVersion(t *testing.T) {
+	require.Equal(t, "app", modelinfo.AppName("example.com/app"))
+	require.Equal(t, "app", modelinfo.AppName("example.com/app/v2"))
+	require.Equal(t, "http-client", modelinfo.AppName("example.com/http-client"))
+}
+
 // TestPBPackageMirrorsTheDirectoryUnderPB pins the examples of the PBPackage
 // and PBDir doc comments.
 func TestPBPackageMirrorsTheDirectoryUnderPB(t *testing.T) {

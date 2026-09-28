@@ -120,7 +120,7 @@ message Link {
 `},
 	}
 
-	compiled, err := pb.Compile(protos)
+	compiled, err := pb.Compile("tmpapp", protos)
 	if err != nil {
 		t.Fatal(err)
 	}
