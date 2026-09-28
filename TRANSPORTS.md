@@ -165,7 +165,7 @@ HTTP 状态到 gRPC status 的映射（`grpcserver.StatusError`）：
 
 - 400 → InvalidArgument；401 → Unauthenticated；403 → PermissionDenied；404 → NotFound；408、504 → DeadlineExceeded。
 - 409 → AlreadyExists，其中乐观锁冲突（错误链里带 `database.ErrStaleObject`）→ Aborted；412 → FailedPrecondition；429 → ResourceExhausted；501 → Unimplemented；503 → Unavailable。
-- 其他 5xx → Internal；其他 4xx → InvalidArgument；数据库未知错误与钩子里的非 service.Error → Internal「internal server error」；请求消息校验失败 → InvalidArgument「invalid request message」；panic 经 recovery → Internal。
+- 其他 5xx → Internal；其他 4xx → InvalidArgument；数据库未知错误与钩子里的非 service.Error → Internal，和 HTTP 的 500 同一句文案；请求消息校验失败 → InvalidArgument「invalid request message」；panic 经 recovery → Internal。
 - 客户端已取消或超时的调用答 Canceled / DeadlineExceeded，不记错误日志。
 
 ## 5. 动作承载矩阵
@@ -252,7 +252,7 @@ call --> client : OK，或映射后的 status；取消答 Canceled，停机答 U
 
 ## 8. 包与文件地图
 
-项目开发者只看得到公开包；internal 里是框架自己的实现。`dsl`、`router`、`service` 只做转发；`middleware` 与 `grpc` 除了转发，还带项目直接用的实现（JwtAuth、IAMSession、Authz、限流与超时这些中间件，`Bearer` 与消息转换函数）。
+项目开发者只看得到公开包；internal 里是框架自己的实现。`dsl`、`router`、`service` 只做转发；`middleware`、`interceptor` 与 `grpc` 只对挂载与调用入口转发，项目自己挂的中间件与拦截器（JwtAuth、IAMSession、Authz、限流与超时这些）和生成代码用的转换函数、`Bearer` 实现就在公开包里。
 
 | 包 | 归属 | 职责 |
 |---|---|---|
@@ -264,8 +264,8 @@ call --> client : OK，或映射后的 status；取消答 Canceled，停机答 U
 | `router` → `internal/router` | HTTP | gin 引擎、路由注册、认证组、Run / Stop |
 | `middleware` → `internal/middleware` | HTTP | 内建链、`Register / RegisterAuth`；公开包另带 JwtAuth、IAMSession、Authz 等 |
 | `internal/controller` | 共用 | HTTP handler、gRPC 调用工厂、流的运行时、十个 CRUD 流程、校验与错误映射 |
-| `grpc` | gRPC | 生成代码与项目用的入口：`Register`、`Method`、十个 `XxxCall`、`ServiceCall`、三种流、转换函数、`Bearer / WithCaller / CallerOf / Route / StatusError` |
-| `interceptor` | gRPC | `Register / RegisterAuth`、`JwtAuth`，以及随 module copy 复制进项目的 `IAMSession`、`Authz` |
+| `grpc` → `internal/grpcserver`（调用函数与流经 `internal/controller`；转换函数与 `Bearer` 实现在本包） | gRPC | 生成代码与项目用的入口：`Register`、`Method`、十个 `XxxCall`、`ServiceCall`、三种流、转换函数、`Bearer / WithCaller / CallerOf / Route / StatusError` |
+| `interceptor` → `internal/grpcserver`（`Register / RegisterAuth`；`JwtAuth` 与模块拦截器实现在本包） | gRPC | `Register / RegisterAuth`、`JwtAuth`，以及随 module copy 复制进项目的 `IAMSession`、`Authz` |
 | `internal/grpcserver` | gRPC | 监听、拦截器链、requestScope、recovery、指标、health 与反射、状态映射、Drain / Stop |
 | `internal/requestctx`、`internal/types` | 共用 | 请求元数据与 `ServiceContext`、流对象接口，两种传输各自填充 |
 | `internal/service/iam/session`、`authz/rbac` | 共用 | `Authenticate` 与 `Enforce`：会话认证与授权判定的唯一实现 |

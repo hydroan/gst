@@ -6,6 +6,8 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/hydroan/gst/internal/serviceregistry"
+
 	"github.com/gin-gonic/gin"
 	"github.com/hydroan/gst/consts"
 	"github.com/hydroan/gst/logger"
@@ -42,7 +44,7 @@ func TestRecoveryWithTracingAnswersInTheEnvelope(t *testing.T) {
 	}
 	require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &envelope),
 		"response body: %s", recorder.Body.String())
-	require.Equal(t, "internal server error", envelope.Msg)
+	require.Equal(t, serviceregistry.FailureMsg, envelope.Msg)
 	require.NotNil(t, envelope.TraceID, "a refusal has to carry the trace that explains it")
 }
 

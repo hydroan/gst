@@ -6,6 +6,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/hydroan/gst/internal/serviceregistry"
+
 	"github.com/hydroan/gst/internal/controller"
 	"github.com/hydroan/gst/internal/grpcserver"
 	"github.com/stretchr/testify/require"
@@ -152,7 +154,7 @@ func TestServerStreamCallStreamsTheResponses(t *testing.T) {
 		stream := openStream(t, conn, "Watch", sampleCredential, serverStream)
 		sendPayload(t, stream, map[string]any{"note": actionBreak})
 		_, err := recvResponse(stream)
-		requireStatus(t, err, codes.Internal, "internal server error")
+		requireStatus(t, err, codes.Internal, serviceregistry.FailureMsg)
 	})
 
 	t.Run("without credentials the stream is refused", func(t *testing.T) {

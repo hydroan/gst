@@ -22,3 +22,11 @@ import (
 func Abort(c *gin.Context, status int, msg string) {
 	internalresponse.Abort(c, status, msg)
 }
+
+// AbortError refuses the request with err, written in the API envelope the
+// way the controller path answers an error — a service error with its
+// status and message, any other error as the server's own failure — and
+// stops the handler chain.
+func AbortError(c *gin.Context, err error) {
+	internalresponse.AbortError(c, err)
+}

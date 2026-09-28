@@ -115,6 +115,34 @@ func TestAbortWritesTheFailureEnvelopeAndStopsTheChain(t *testing.T) {
 	require.True(t, c.IsAborted())
 }
 
+// TestAbortErrorAnswersTheErrorAndStopsTheChain pins the refusal of code
+// outside the controller path holding an error: a service error answers with
+// its status and message, any other error with the server's own failure,
+// the way Error answers them, with the handler chain aborted.
+func TestAbortErrorAnswersTheErrorAndStopsTheChain(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	for name, tt := range map[string]struct {
+		err    error
+		status int
+		msg    string
+	}{
+		"a service error":          {serviceregistry.NewError(http.StatusForbidden, "permission denied"), http.StatusForbidden, "permission denied"},
+		"the server's own failure": {errors.New("store down"), http.StatusInternalServerError, serviceregistry.FailureMsg},
+	} {
+		t.Run(name, func(t *testing.T) {
+			w := httptest.NewRecorder()
+			c, _ := gin.CreateTestContext(w)
+			c.Set(consts.TRACE_ID, "trace-sample")
+
+			response.AbortError(c, tt.err)
+
+			require.Equal(t, tt.status, w.Code)
+			require.JSONEq(t, `{"data":null,"msg":"`+tt.msg+`","trace_id":"trace-sample"}`, w.Body.String())
+			require.True(t, c.IsAborted())
+		})
+	}
+}
+
 // TestJSONKeepsContentTypeSetBeforehand pins that the envelope render, like
 // gin's own JSON render, leaves a Content-Type already set on the response
 // alone.

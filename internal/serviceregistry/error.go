@@ -10,6 +10,12 @@ import (
 
 const defaultErrorStatus = http.StatusInternalServerError
 
+// FailureMsg is the message a failure carrying no Error is answered with on
+// every transport, the server's own failure: 500 with it in the HTTP
+// envelope (see response.Error), Internal with it over gRPC (see
+// grpcserver.StatusError). What went wrong stays in the log.
+const FailureMsg = "The server could not process the request."
+
 var (
 	_ error                      = (*Error)(nil)
 	_ errbase.StackTraceProvider = (*Error)(nil)

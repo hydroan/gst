@@ -7,6 +7,7 @@ import (
 
 	"github.com/hydroan/gst/consts"
 	"github.com/hydroan/gst/internal/execctx"
+	"github.com/hydroan/gst/internal/serviceregistry"
 	"github.com/hydroan/gst/logger"
 	gstotel "github.com/hydroan/gst/otel"
 	"go.opentelemetry.io/otel/attribute"
@@ -39,5 +40,5 @@ func recovered(ctx context.Context, p any) error {
 			zap.String(consts.TRACE_ID, execctx.FromContext(ctx).TraceID),
 		)
 	}
-	return status.Error(codes.Internal, "internal server error")
+	return status.Error(codes.Internal, serviceregistry.FailureMsg)
 }

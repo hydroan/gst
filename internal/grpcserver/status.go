@@ -14,10 +14,10 @@ import (
 // error, anywhere in the wrap chain, answers with the gRPC code its HTTP
 // status maps to (see codeOf) and the client-safe message it was constructed
 // with, the answer the HTTP envelope would carry; any other error answers
-// Internal with a fixed message, its text kept out of the answer the way the
-// HTTP listener keeps internal detail out of the envelope, for the caller to
-// log before mapping; nil stays nil. The public grpc.StatusError forwards
-// to it.
+// Internal with serviceregistry.FailureMsg, the message the HTTP envelope
+// answers the server's own failure with, its text kept out of the answer
+// for the caller to log before mapping; nil stays nil. The public
+// grpc.StatusError forwards to it.
 func StatusError(err error) error {
 	if err == nil {
 		return nil
@@ -26,7 +26,7 @@ func StatusError(err error) error {
 	if errors.As(err, &serviceErr) {
 		return status.Error(codeOf(serviceErr.Status(), err), serviceErr.Msg())
 	}
-	return status.Error(codes.Internal, "internal server error")
+	return status.Error(codes.Internal, serviceregistry.FailureMsg)
 }
 
 // codeOf maps the HTTP status a failure answers with to its gRPC code: the

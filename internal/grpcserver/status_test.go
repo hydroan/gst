@@ -67,7 +67,7 @@ func TestStatusErrorAnswersServiceErrorsAndHidesTheRest(t *testing.T) {
 
 	broken := status.Convert(grpcserver.StatusError(errors.New("dial tcp: connection refused")))
 	require.Equal(t, codes.Internal, broken.Code())
-	require.Equal(t, "internal server error", broken.Message())
+	require.Equal(t, serviceregistry.FailureMsg, broken.Message())
 
 	require.NoError(t, grpcserver.StatusError(nil))
 }

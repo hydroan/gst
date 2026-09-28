@@ -19,7 +19,7 @@ const SuccessMsg = "success"
 // stays out of the envelope.
 const (
 	failureStatus = http.StatusInternalServerError
-	failureMsg    = "The server could not process the request."
+	failureMsg    = serviceregistry.FailureMsg
 )
 
 // JSON writes data in the success envelope: status 200, SuccessMsg, data
@@ -45,6 +45,15 @@ func Error(c *gin.Context, err error) {
 		return
 	}
 	envelope(c, failureStatus, failureMsg, nil)
+}
+
+// AbortError refuses the request with err, written in the failure envelope
+// the way Error writes it, and stops the handler chain: what middleware
+// outside the controller path, the middleware a module ships among it,
+// answers an error with. The public response.AbortError forwards to it.
+func AbortError(c *gin.Context, err error) {
+	c.Abort()
+	Error(c, err)
 }
 
 // Abort refuses the request with status and msg, written in the failure

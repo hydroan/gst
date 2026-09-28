@@ -1,16 +1,13 @@
 package middleware
 
 import (
-	"net/http"
 	"os"
 
-	"github.com/cockroachdb/errors"
 	"github.com/gin-gonic/gin"
 	"github.com/hydroan/gst/authz/rbac"
 	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/consts"
 	"github.com/hydroan/gst/response"
-	"github.com/hydroan/gst/service"
 )
 
 // Authz authorizes requests using RBAC, through rbac.Enforce, the one
@@ -45,12 +42,7 @@ func Authz() gin.HandlerFunc {
 		}
 		ctx, tenantID, err := rbac.Enforce(c.Request.Context(), subject, c.Request.URL.Path, c.Request.Method)
 		if err != nil {
-			status, msg := http.StatusInternalServerError, "internal server error"
-			var serviceErr *service.Error
-			if errors.As(err, &serviceErr) {
-				status, msg = serviceErr.Status(), serviceErr.Msg()
-			}
-			response.Abort(c, status, msg)
+			response.AbortError(c, err)
 			return
 		}
 		c.Set(consts.CTX_TENANT_ID, tenantID)

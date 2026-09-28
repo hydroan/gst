@@ -10,6 +10,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/hydroan/gst/internal/serviceregistry"
+
 	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/consts"
 	"github.com/hydroan/gst/database"
@@ -450,7 +452,7 @@ func TestServiceCallDelegatesToThePhaseService(t *testing.T) {
 
 	t.Run("any other error answers Internal", func(t *testing.T) {
 		_, err := invoke(t, conn, "Action", map[string]any{"payload": map[string]any{"note": actionBreak}})
-		requireStatus(t, err, codes.Internal, "internal server error")
+		requireStatus(t, err, codes.Internal, serviceregistry.FailureMsg)
 	})
 
 	t.Run("a canceled call is answered as canceled", func(t *testing.T) {
@@ -473,7 +475,7 @@ func TestServiceCallDelegatesToThePhaseService(t *testing.T) {
 
 	t.Run("a response the service tried to write answers Internal", func(t *testing.T) {
 		_, err := invoke(t, conn, "Action", map[string]any{"payload": map[string]any{"note": actionWrite}})
-		requireStatus(t, err, codes.Internal, "internal server error")
+		requireStatus(t, err, codes.Internal, serviceregistry.FailureMsg)
 	})
 }
 

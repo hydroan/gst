@@ -1,15 +1,11 @@
 package middleware
 
 import (
-	"net/http"
-
-	"github.com/cockroachdb/errors"
 	"github.com/gin-gonic/gin"
 	"github.com/hydroan/gst/consts"
 	serviceiamsession "github.com/hydroan/gst/internal/service/iam/session"
 	"github.com/hydroan/gst/requestctx"
 	"github.com/hydroan/gst/response"
-	"github.com/hydroan/gst/service"
 )
 
 // IAMSession authenticates a request from the IAM session its cookie names,
@@ -30,12 +26,7 @@ func IAMSession() gin.HandlerFunc {
 		ctx := requestctx.WithGinMetadata(c)
 		current, err := serviceiamsession.Authenticate(ctx, sessionID, c.Request.UserAgent(), c.Request.Method, c.Request.URL.Path)
 		if err != nil {
-			status, msg := http.StatusInternalServerError, "internal server error"
-			var serviceErr *service.Error
-			if errors.As(err, &serviceErr) {
-				status, msg = serviceErr.Status(), serviceErr.Msg()
-			}
-			response.Abort(c, status, msg)
+			response.AbortError(c, err)
 			return
 		}
 
