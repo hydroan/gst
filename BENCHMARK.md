@@ -90,7 +90,6 @@ type pingData struct {
 }
 
 type envelope struct {
-	Code    int      `json:"code"`
 	Data    pingData `json:"data"`
 	Msg     string   `json:"msg"`
 	TraceID string   `json:"trace_id"`

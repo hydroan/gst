@@ -19,7 +19,6 @@ The id is optional: one left out of the body is generated.
 >
 > ```json
 > {
->   "code": 0,
 >   "data": {
 >     "id": "user01",
 >     "created_at": "2024-12-25T04:43:21.241Z",
@@ -60,7 +59,6 @@ follows the model's `Purge` setting.
 >
 > ```json
 > {
->     "code": 0,
 >     "data": null,
 >     "msg": "success",
 >     "trace_id": "..."
@@ -97,7 +95,6 @@ record answers 404.
 >
 > ```json
 > {
->     "code": 0,
 >     "data": {
 >        "id": "user01",
 >        "created_at": "2024-12-25T05:01:01.634Z",
@@ -143,7 +140,6 @@ record resolve as last writer wins unless the model declares `model.Version`.
 >
 > ```json
 > {
->     "code": 0,
 >     "data": {
 >        "id": "user01",
 >        "created_at": "2024-12-25T09:22:28.558Z",
@@ -182,7 +178,6 @@ record resolve as last writer wins unless the model declares `model.Version`.
 >
 > ```json
 > {
->   "code": 0,
 >   "data": {
 >     "items": [
 >       {
@@ -245,7 +240,6 @@ and `all` selects every association. List accepts it when the model embeds
 >
 > ```json
 > {
-> "code": 0,
 > "data": {
 >  "id": "fruit",
 >  "created_at": "2024-12-25T07:36:25.156Z",
@@ -305,7 +299,6 @@ and `all` selects every association. List accepts it when the model embeds
 >
 > ```json
 > {
-> "code": 0,
 > "data": {
 >  "id": "fruit",
 >  "created_at": "2024-12-25T07:36:25.156Z",
@@ -361,7 +354,6 @@ association such as `parent` ignores it.
 >
 > ```json
 > {
-> "code": 0,
 > "data": {
 >  "id": "fruit",
 >  "created_at": "2024-12-25T07:36:25.156Z",
@@ -466,7 +458,6 @@ type User struct {
 >
 > ```json
 > {
->  "code": 0,
 >  "data": {
 >      "items": [
 >          {

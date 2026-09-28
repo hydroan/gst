@@ -774,8 +774,8 @@ page, err := cli.Get[client.ListResult[model.Sample]](ctx, "/api/samples",
 rsp, err := cli.Post[model.SampleSealRsp](ctx, "/api/samples/seal", &model.SampleSealReq{Reason: "audit"})
 ```
 
-返回值分三种情况处理：调用成功得到解码后的响应；服务端拒绝（非 2xx，或信封 `code` 非 0）
-返回 `*client.Error`，带 HTTP 状态、业务码、消息和 `trace_id`，用 `errors.As` 取出后按状态决定
+返回值分三种情况处理：调用成功得到解码后的响应；服务端拒绝（非 2xx）返回
+`*client.Error`，带 HTTP 状态、消息和 `trace_id`，用 `errors.As` 取出后按状态决定
 怎么处理；连接失败、超时这类传输错误是普通 error。需要信封本身（`trace_id`、响应 cookie）时用
 `Do`。登录接口返回的 cookie 由客户端自动带到后续请求上。
 

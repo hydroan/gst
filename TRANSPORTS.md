@@ -129,7 +129,7 @@ handler -> flow : grpc.CreateCall(route)(ctx, params, m)
 flow -> svc : 同一套模型钩子、service 钩子、数据库
 svc --> flow : 结果
 flow --> handler : 结果或 service.Error
-handler --> client : RecordToProto；失败映射成 status 加 ErrorInfo
+handler --> client : RecordToProto；失败映射成 status
 @enduml
 ```
 
@@ -159,12 +159,12 @@ handler --> client : RecordToProto；失败映射成 status 加 ErrorInfo
 | JWT | `middleware.JwtAuth()` | `interceptor.JwtAuth()`，拒绝一律 Unauthenticated | jwt 包解析与校验 |
 | 授权 | `middleware.Authz()`，obj 是请求的具体路径（`/api/records/42`）、act 是 HTTP 方法 | `interceptor.Authz()`，obj 是路由模板（`/api/records/{id}`，拦截器把注册时记下的路由写成路由清单的写法）、act 是该 rpc 对应的 HTTP 方法，流式动作是 STREAM | `rbac.Enforce(ctx, Subject, obj, act)`，策略只有一份：写 `{id}`、`/*` 或静态路径的两边一致，写具体段的只在 HTTP 生效，写 `:id` 字面的两边都不命中 |
 | 调用者 | gin 上下文里的用户 | `grpc.WithCaller / CallerOf`，写进访问日志 | `execctx` 里的身份与 trace id |
-| 失败的形状 | JSON 错误体，状态码取 `service.Error` 的 status | `service.Error` 映射成 status code 加 `ErrorInfo{Reason: SERVICE_ERROR, Domain: gst, Metadata: code, status}`；框架自己的拒绝（Internal、Unimplemented、Canceled、JwtAuth 的 Unauthenticated）只有 status | `service.NewError / NewErrorWithCause`，没有业务状态码 |
+| 失败的形状 | JSON 错误体 `{msg, data, trace_id}`，状态码取 `service.Error` 的 status，没有业务状态码 | `service.Error` 映射成 status code 加同一句 msg；框架自己的拒绝（Internal、Unimplemented、Canceled、JwtAuth 的 Unauthenticated）同样只有 status | `service.NewError / NewErrorWithCause` |
 
-HTTP 状态到 gRPC status 的映射（`grpcserver.StatusOfCoder`）：
+HTTP 状态到 gRPC status 的映射（`grpcserver.StatusError`）：
 
 - 400 → InvalidArgument；401 → Unauthenticated；403 → PermissionDenied；404 → NotFound；408、504 → DeadlineExceeded。
-- 409 → AlreadyExists，其中乐观锁的 CodeStaleObject → Aborted；412 → FailedPrecondition；429 → ResourceExhausted；501 → Unimplemented；503 → Unavailable。
+- 409 → AlreadyExists，其中乐观锁冲突（错误链里带 `database.ErrStaleObject`）→ Aborted；412 → FailedPrecondition；429 → ResourceExhausted；501 → Unimplemented；503 → Unavailable。
 - 其他 5xx → Internal；其他 4xx → InvalidArgument；数据库未知错误与钩子里的非 service.Error → Internal「internal server error」；请求消息校验失败 → InvalidArgument「invalid request message」；panic 经 recovery → Internal。
 - 客户端已取消或超时的调用答 Canceled / DeadlineExceeded，不记错误日志。
 
