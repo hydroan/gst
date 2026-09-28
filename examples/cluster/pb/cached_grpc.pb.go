@@ -4,7 +4,7 @@
 // versions:
 // - protoc-gen-go-grpc v1.6.2
 // - protoc             (unknown)
-// source: cached.proto
+// source: cluster/cached.proto
 
 package pb
 
@@ -273,5 +273,5 @@ var CachedService_ServiceDesc = grpc.ServiceDesc{
 			ClientStreams: true,
 		},
 	},
-	Metadata: "cached.proto",
+	Metadata: "cluster/cached.proto",
 }

@@ -4,7 +4,7 @@
 // versions:
 // - protoc-gen-go-grpc v1.6.2
 // - protoc             (unknown)
-// source: flag.proto
+// source: cluster/flag.proto
 
 package pb
 
@@ -485,5 +485,5 @@ var FlagService_ServiceDesc = grpc.ServiceDesc{
 		},
 	},
 	Streams:  []grpc.StreamDesc{},
-	Metadata: "flag.proto",
+	Metadata: "cluster/flag.proto",
 }

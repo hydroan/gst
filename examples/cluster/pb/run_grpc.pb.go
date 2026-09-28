@@ -4,7 +4,7 @@
 // versions:
 // - protoc-gen-go-grpc v1.6.2
 // - protoc             (unknown)
-// source: run.proto
+// source: cluster/run.proto
 
 package pb
 
@@ -125,5 +125,5 @@ var RunService_ServiceDesc = grpc.ServiceDesc{
 		},
 	},
 	Streams:  []grpc.StreamDesc{},
-	Metadata: "run.proto",
+	Metadata: "cluster/run.proto",
 }

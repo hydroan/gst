@@ -4,7 +4,7 @@
 // versions:
 // - protoc-gen-go-grpc v1.6.2
 // - protoc             (unknown)
-// source: counter_step.proto
+// source: cluster/counter_step.proto
 
 package pb
 
@@ -169,5 +169,5 @@ var CounterStepService_ServiceDesc = grpc.ServiceDesc{
 			ServerStreams: true,
 		},
 	},
-	Metadata: "counter_step.proto",
+	Metadata: "cluster/counter_step.proto",
 }

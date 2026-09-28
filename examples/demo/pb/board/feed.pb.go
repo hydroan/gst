@@ -4,7 +4,7 @@
 // versions:
 // 	protoc-gen-go v1.36.12
 // 	protoc        (unknown)
-// source: board/feed.proto
+// source: demo/board/feed.proto
 
 package board
 
@@ -34,7 +34,7 @@ type ChatFeedRequest struct {
 
 func (x *ChatFeedRequest) Reset() {
 	*x = ChatFeedRequest{}
-	mi := &file_board_feed_proto_msgTypes[0]
+	mi := &file_demo_board_feed_proto_msgTypes[0]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -46,7 +46,7 @@ func (x *ChatFeedRequest) String() string {
 func (*ChatFeedRequest) ProtoMessage() {}
 
 func (x *ChatFeedRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_board_feed_proto_msgTypes[0]
+	mi := &file_demo_board_feed_proto_msgTypes[0]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -59,7 +59,7 @@ func (x *ChatFeedRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ChatFeedRequest.ProtoReflect.Descriptor instead.
 func (*ChatFeedRequest) Descriptor() ([]byte, []int) {
-	return file_board_feed_proto_rawDescGZIP(), []int{0}
+	return file_demo_board_feed_proto_rawDescGZIP(), []int{0}
 }
 
 func (x *ChatFeedRequest) GetPayload() *FeedEvent {
@@ -80,7 +80,7 @@ type ChatFeedResponse struct {
 
 func (x *ChatFeedResponse) Reset() {
 	*x = ChatFeedResponse{}
-	mi := &file_board_feed_proto_msgTypes[1]
+	mi := &file_demo_board_feed_proto_msgTypes[1]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -92,7 +92,7 @@ func (x *ChatFeedResponse) String() string {
 func (*ChatFeedResponse) ProtoMessage() {}
 
 func (x *ChatFeedResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_board_feed_proto_msgTypes[1]
+	mi := &file_demo_board_feed_proto_msgTypes[1]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -105,7 +105,7 @@ func (x *ChatFeedResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ChatFeedResponse.ProtoReflect.Descriptor instead.
 func (*ChatFeedResponse) Descriptor() ([]byte, []int) {
-	return file_board_feed_proto_rawDescGZIP(), []int{1}
+	return file_demo_board_feed_proto_rawDescGZIP(), []int{1}
 }
 
 func (x *ChatFeedResponse) GetResult() *FeedEvent {
@@ -126,7 +126,7 @@ type UploadFeedRequest struct {
 
 func (x *UploadFeedRequest) Reset() {
 	*x = UploadFeedRequest{}
-	mi := &file_board_feed_proto_msgTypes[2]
+	mi := &file_demo_board_feed_proto_msgTypes[2]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -138,7 +138,7 @@ func (x *UploadFeedRequest) String() string {
 func (*UploadFeedRequest) ProtoMessage() {}
 
 func (x *UploadFeedRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_board_feed_proto_msgTypes[2]
+	mi := &file_demo_board_feed_proto_msgTypes[2]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -151,7 +151,7 @@ func (x *UploadFeedRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UploadFeedRequest.ProtoReflect.Descriptor instead.
 func (*UploadFeedRequest) Descriptor() ([]byte, []int) {
-	return file_board_feed_proto_rawDescGZIP(), []int{2}
+	return file_demo_board_feed_proto_rawDescGZIP(), []int{2}
 }
 
 func (x *UploadFeedRequest) GetPayload() *FeedEvent {
@@ -172,7 +172,7 @@ type UploadFeedResponse struct {
 
 func (x *UploadFeedResponse) Reset() {
 	*x = UploadFeedResponse{}
-	mi := &file_board_feed_proto_msgTypes[3]
+	mi := &file_demo_board_feed_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -184,7 +184,7 @@ func (x *UploadFeedResponse) String() string {
 func (*UploadFeedResponse) ProtoMessage() {}
 
 func (x *UploadFeedResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_board_feed_proto_msgTypes[3]
+	mi := &file_demo_board_feed_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -197,7 +197,7 @@ func (x *UploadFeedResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UploadFeedResponse.ProtoReflect.Descriptor instead.
 func (*UploadFeedResponse) Descriptor() ([]byte, []int) {
-	return file_board_feed_proto_rawDescGZIP(), []int{3}
+	return file_demo_board_feed_proto_rawDescGZIP(), []int{3}
 }
 
 func (x *UploadFeedResponse) GetResult() *FeedUploadRsp {
@@ -218,7 +218,7 @@ type WatchFeedRequest struct {
 
 func (x *WatchFeedRequest) Reset() {
 	*x = WatchFeedRequest{}
-	mi := &file_board_feed_proto_msgTypes[4]
+	mi := &file_demo_board_feed_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -230,7 +230,7 @@ func (x *WatchFeedRequest) String() string {
 func (*WatchFeedRequest) ProtoMessage() {}
 
 func (x *WatchFeedRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_board_feed_proto_msgTypes[4]
+	mi := &file_demo_board_feed_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -243,7 +243,7 @@ func (x *WatchFeedRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WatchFeedRequest.ProtoReflect.Descriptor instead.
 func (*WatchFeedRequest) Descriptor() ([]byte, []int) {
-	return file_board_feed_proto_rawDescGZIP(), []int{4}
+	return file_demo_board_feed_proto_rawDescGZIP(), []int{4}
 }
 
 func (x *WatchFeedRequest) GetPayload() *FeedWatchReq {
@@ -264,7 +264,7 @@ type WatchFeedResponse struct {
 
 func (x *WatchFeedResponse) Reset() {
 	*x = WatchFeedResponse{}
-	mi := &file_board_feed_proto_msgTypes[5]
+	mi := &file_demo_board_feed_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -276,7 +276,7 @@ func (x *WatchFeedResponse) String() string {
 func (*WatchFeedResponse) ProtoMessage() {}
 
 func (x *WatchFeedResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_board_feed_proto_msgTypes[5]
+	mi := &file_demo_board_feed_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -289,7 +289,7 @@ func (x *WatchFeedResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WatchFeedResponse.ProtoReflect.Descriptor instead.
 func (*WatchFeedResponse) Descriptor() ([]byte, []int) {
-	return file_board_feed_proto_rawDescGZIP(), []int{5}
+	return file_demo_board_feed_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *WatchFeedResponse) GetResult() *FeedEvent {
@@ -310,7 +310,7 @@ type FeedEvent struct {
 
 func (x *FeedEvent) Reset() {
 	*x = FeedEvent{}
-	mi := &file_board_feed_proto_msgTypes[6]
+	mi := &file_demo_board_feed_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -322,7 +322,7 @@ func (x *FeedEvent) String() string {
 func (*FeedEvent) ProtoMessage() {}
 
 func (x *FeedEvent) ProtoReflect() protoreflect.Message {
-	mi := &file_board_feed_proto_msgTypes[6]
+	mi := &file_demo_board_feed_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -335,7 +335,7 @@ func (x *FeedEvent) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use FeedEvent.ProtoReflect.Descriptor instead.
 func (*FeedEvent) Descriptor() ([]byte, []int) {
-	return file_board_feed_proto_rawDescGZIP(), []int{6}
+	return file_demo_board_feed_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *FeedEvent) GetSeq() int64 {
@@ -362,7 +362,7 @@ type FeedUploadRsp struct {
 
 func (x *FeedUploadRsp) Reset() {
 	*x = FeedUploadRsp{}
-	mi := &file_board_feed_proto_msgTypes[7]
+	mi := &file_demo_board_feed_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -374,7 +374,7 @@ func (x *FeedUploadRsp) String() string {
 func (*FeedUploadRsp) ProtoMessage() {}
 
 func (x *FeedUploadRsp) ProtoReflect() protoreflect.Message {
-	mi := &file_board_feed_proto_msgTypes[7]
+	mi := &file_demo_board_feed_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -387,7 +387,7 @@ func (x *FeedUploadRsp) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use FeedUploadRsp.ProtoReflect.Descriptor instead.
 func (*FeedUploadRsp) Descriptor() ([]byte, []int) {
-	return file_board_feed_proto_rawDescGZIP(), []int{7}
+	return file_demo_board_feed_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *FeedUploadRsp) GetAccepted() int64 {
@@ -407,7 +407,7 @@ type FeedWatchReq struct {
 
 func (x *FeedWatchReq) Reset() {
 	*x = FeedWatchReq{}
-	mi := &file_board_feed_proto_msgTypes[8]
+	mi := &file_demo_board_feed_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -419,7 +419,7 @@ func (x *FeedWatchReq) String() string {
 func (*FeedWatchReq) ProtoMessage() {}
 
 func (x *FeedWatchReq) ProtoReflect() protoreflect.Message {
-	mi := &file_board_feed_proto_msgTypes[8]
+	mi := &file_demo_board_feed_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -432,7 +432,7 @@ func (x *FeedWatchReq) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use FeedWatchReq.ProtoReflect.Descriptor instead.
 func (*FeedWatchReq) Descriptor() ([]byte, []int) {
-	return file_board_feed_proto_rawDescGZIP(), []int{8}
+	return file_demo_board_feed_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *FeedWatchReq) GetTopic() string {
@@ -442,11 +442,11 @@ func (x *FeedWatchReq) GetTopic() string {
 	return ""
 }
 
-var File_board_feed_proto protoreflect.FileDescriptor
+var File_demo_board_feed_proto protoreflect.FileDescriptor
 
-const file_board_feed_proto_rawDesc = "" +
+const file_demo_board_feed_proto_rawDesc = "" +
 	"\n" +
-	"\x10board/feed.proto\x12\n" +
+	"\x15demo/board/feed.proto\x12\n" +
 	"demo.board\"B\n" +
 	"\x0fChatFeedRequest\x12/\n" +
 	"\apayload\x18\x01 \x01(\v2\x15.demo.board.FeedEventR\apayload\"A\n" +
@@ -474,19 +474,19 @@ const file_board_feed_proto_rawDesc = "" +
 	"\tWatchFeed\x12\x1c.demo.board.WatchFeedRequest\x1a\x1d.demo.board.WatchFeedResponse0\x01B\x15Z\x13demo/pb/board;boardb\x06proto3"
 
 var (
-	file_board_feed_proto_rawDescOnce sync.Once
-	file_board_feed_proto_rawDescData []byte
+	file_demo_board_feed_proto_rawDescOnce sync.Once
+	file_demo_board_feed_proto_rawDescData []byte
 )
 
-func file_board_feed_proto_rawDescGZIP() []byte {
-	file_board_feed_proto_rawDescOnce.Do(func() {
-		file_board_feed_proto_rawDescData = protoimpl.X.CompressGZIP(unsafe.Slice(unsafe.StringData(file_board_feed_proto_rawDesc), len(file_board_feed_proto_rawDesc)))
+func file_demo_board_feed_proto_rawDescGZIP() []byte {
+	file_demo_board_feed_proto_rawDescOnce.Do(func() {
+		file_demo_board_feed_proto_rawDescData = protoimpl.X.CompressGZIP(unsafe.Slice(unsafe.StringData(file_demo_board_feed_proto_rawDesc), len(file_demo_board_feed_proto_rawDesc)))
 	})
-	return file_board_feed_proto_rawDescData
+	return file_demo_board_feed_proto_rawDescData
 }
 
-var file_board_feed_proto_msgTypes = make([]protoimpl.MessageInfo, 9)
-var file_board_feed_proto_goTypes = []any{
+var file_demo_board_feed_proto_msgTypes = make([]protoimpl.MessageInfo, 9)
+var file_demo_board_feed_proto_goTypes = []any{
 	(*ChatFeedRequest)(nil),    // 0: demo.board.ChatFeedRequest
 	(*ChatFeedResponse)(nil),   // 1: demo.board.ChatFeedResponse
 	(*UploadFeedRequest)(nil),  // 2: demo.board.UploadFeedRequest
@@ -497,7 +497,7 @@ var file_board_feed_proto_goTypes = []any{
 	(*FeedUploadRsp)(nil),      // 7: demo.board.FeedUploadRsp
 	(*FeedWatchReq)(nil),       // 8: demo.board.FeedWatchReq
 }
-var file_board_feed_proto_depIdxs = []int32{
+var file_demo_board_feed_proto_depIdxs = []int32{
 	6, // 0: demo.board.ChatFeedRequest.payload:type_name -> demo.board.FeedEvent
 	6, // 1: demo.board.ChatFeedResponse.result:type_name -> demo.board.FeedEvent
 	6, // 2: demo.board.UploadFeedRequest.payload:type_name -> demo.board.FeedEvent
@@ -517,26 +517,26 @@ var file_board_feed_proto_depIdxs = []int32{
 	0, // [0:6] is the sub-list for field type_name
 }
 
-func init() { file_board_feed_proto_init() }
-func file_board_feed_proto_init() {
-	if File_board_feed_proto != nil {
+func init() { file_demo_board_feed_proto_init() }
+func file_demo_board_feed_proto_init() {
+	if File_demo_board_feed_proto != nil {
 		return
 	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
-			RawDescriptor: unsafe.Slice(unsafe.StringData(file_board_feed_proto_rawDesc), len(file_board_feed_proto_rawDesc)),
+			RawDescriptor: unsafe.Slice(unsafe.StringData(file_demo_board_feed_proto_rawDesc), len(file_demo_board_feed_proto_rawDesc)),
 			NumEnums:      0,
 			NumMessages:   9,
 			NumExtensions: 0,
 			NumServices:   1,
 		},
-		GoTypes:           file_board_feed_proto_goTypes,
-		DependencyIndexes: file_board_feed_proto_depIdxs,
-		MessageInfos:      file_board_feed_proto_msgTypes,
+		GoTypes:           file_demo_board_feed_proto_goTypes,
+		DependencyIndexes: file_demo_board_feed_proto_depIdxs,
+		MessageInfos:      file_demo_board_feed_proto_msgTypes,
 	}.Build()
-	File_board_feed_proto = out.File
-	file_board_feed_proto_goTypes = nil
-	file_board_feed_proto_depIdxs = nil
+	File_demo_board_feed_proto = out.File
+	file_demo_board_feed_proto_goTypes = nil
+	file_demo_board_feed_proto_depIdxs = nil
 }

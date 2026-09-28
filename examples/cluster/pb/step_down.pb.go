@@ -4,7 +4,7 @@
 // versions:
 // 	protoc-gen-go v1.36.12
 // 	protoc        (unknown)
-// source: step_down.proto
+// source: cluster/step_down.proto
 
 package pb
 
@@ -32,7 +32,7 @@ type CreateStepDownRequest struct {
 
 func (x *CreateStepDownRequest) Reset() {
 	*x = CreateStepDownRequest{}
-	mi := &file_step_down_proto_msgTypes[0]
+	mi := &file_cluster_step_down_proto_msgTypes[0]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -44,7 +44,7 @@ func (x *CreateStepDownRequest) String() string {
 func (*CreateStepDownRequest) ProtoMessage() {}
 
 func (x *CreateStepDownRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_step_down_proto_msgTypes[0]
+	mi := &file_cluster_step_down_proto_msgTypes[0]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -57,7 +57,7 @@ func (x *CreateStepDownRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateStepDownRequest.ProtoReflect.Descriptor instead.
 func (*CreateStepDownRequest) Descriptor() ([]byte, []int) {
-	return file_step_down_proto_rawDescGZIP(), []int{0}
+	return file_cluster_step_down_proto_rawDescGZIP(), []int{0}
 }
 
 // CreateStepDownResponse is the response of StepDownService.CreateStepDown.
@@ -71,7 +71,7 @@ type CreateStepDownResponse struct {
 
 func (x *CreateStepDownResponse) Reset() {
 	*x = CreateStepDownResponse{}
-	mi := &file_step_down_proto_msgTypes[1]
+	mi := &file_cluster_step_down_proto_msgTypes[1]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -83,7 +83,7 @@ func (x *CreateStepDownResponse) String() string {
 func (*CreateStepDownResponse) ProtoMessage() {}
 
 func (x *CreateStepDownResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_step_down_proto_msgTypes[1]
+	mi := &file_cluster_step_down_proto_msgTypes[1]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -96,7 +96,7 @@ func (x *CreateStepDownResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateStepDownResponse.ProtoReflect.Descriptor instead.
 func (*CreateStepDownResponse) Descriptor() ([]byte, []int) {
-	return file_step_down_proto_rawDescGZIP(), []int{1}
+	return file_cluster_step_down_proto_rawDescGZIP(), []int{1}
 }
 
 func (x *CreateStepDownResponse) GetResult() *StepDownRsp {
@@ -118,7 +118,7 @@ type StepDownRsp struct {
 
 func (x *StepDownRsp) Reset() {
 	*x = StepDownRsp{}
-	mi := &file_step_down_proto_msgTypes[2]
+	mi := &file_cluster_step_down_proto_msgTypes[2]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -130,7 +130,7 @@ func (x *StepDownRsp) String() string {
 func (*StepDownRsp) ProtoMessage() {}
 
 func (x *StepDownRsp) ProtoReflect() protoreflect.Message {
-	mi := &file_step_down_proto_msgTypes[2]
+	mi := &file_cluster_step_down_proto_msgTypes[2]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -143,7 +143,7 @@ func (x *StepDownRsp) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use StepDownRsp.ProtoReflect.Descriptor instead.
 func (*StepDownRsp) Descriptor() ([]byte, []int) {
-	return file_step_down_proto_rawDescGZIP(), []int{2}
+	return file_cluster_step_down_proto_rawDescGZIP(), []int{2}
 }
 
 func (x *StepDownRsp) GetReplica() string {
@@ -160,11 +160,11 @@ func (x *StepDownRsp) GetAsked() bool {
 	return false
 }
 
-var File_step_down_proto protoreflect.FileDescriptor
+var File_cluster_step_down_proto protoreflect.FileDescriptor
 
-const file_step_down_proto_rawDesc = "" +
+const file_cluster_step_down_proto_rawDesc = "" +
 	"\n" +
-	"\x0fstep_down.proto\x12\acluster\"\x17\n" +
+	"\x17cluster/step_down.proto\x12\acluster\"\x17\n" +
 	"\x15CreateStepDownRequest\"F\n" +
 	"\x16CreateStepDownResponse\x12,\n" +
 	"\x06result\x18\x01 \x01(\v2\x14.cluster.StepDownRspR\x06result\"=\n" +
@@ -175,24 +175,24 @@ const file_step_down_proto_rawDesc = "" +
 	"\x0eCreateStepDown\x12\x1e.cluster.CreateStepDownRequest\x1a\x1f.cluster.CreateStepDownResponseB\x0fZ\rcluster/pb;pbb\x06proto3"
 
 var (
-	file_step_down_proto_rawDescOnce sync.Once
-	file_step_down_proto_rawDescData []byte
+	file_cluster_step_down_proto_rawDescOnce sync.Once
+	file_cluster_step_down_proto_rawDescData []byte
 )
 
-func file_step_down_proto_rawDescGZIP() []byte {
-	file_step_down_proto_rawDescOnce.Do(func() {
-		file_step_down_proto_rawDescData = protoimpl.X.CompressGZIP(unsafe.Slice(unsafe.StringData(file_step_down_proto_rawDesc), len(file_step_down_proto_rawDesc)))
+func file_cluster_step_down_proto_rawDescGZIP() []byte {
+	file_cluster_step_down_proto_rawDescOnce.Do(func() {
+		file_cluster_step_down_proto_rawDescData = protoimpl.X.CompressGZIP(unsafe.Slice(unsafe.StringData(file_cluster_step_down_proto_rawDesc), len(file_cluster_step_down_proto_rawDesc)))
 	})
-	return file_step_down_proto_rawDescData
+	return file_cluster_step_down_proto_rawDescData
 }
 
-var file_step_down_proto_msgTypes = make([]protoimpl.MessageInfo, 3)
-var file_step_down_proto_goTypes = []any{
+var file_cluster_step_down_proto_msgTypes = make([]protoimpl.MessageInfo, 3)
+var file_cluster_step_down_proto_goTypes = []any{
 	(*CreateStepDownRequest)(nil),  // 0: cluster.CreateStepDownRequest
 	(*CreateStepDownResponse)(nil), // 1: cluster.CreateStepDownResponse
 	(*StepDownRsp)(nil),            // 2: cluster.StepDownRsp
 }
-var file_step_down_proto_depIdxs = []int32{
+var file_cluster_step_down_proto_depIdxs = []int32{
 	2, // 0: cluster.CreateStepDownResponse.result:type_name -> cluster.StepDownRsp
 	0, // 1: cluster.StepDownService.CreateStepDown:input_type -> cluster.CreateStepDownRequest
 	1, // 2: cluster.StepDownService.CreateStepDown:output_type -> cluster.CreateStepDownResponse
@@ -203,26 +203,26 @@ var file_step_down_proto_depIdxs = []int32{
 	0, // [0:1] is the sub-list for field type_name
 }
 
-func init() { file_step_down_proto_init() }
-func file_step_down_proto_init() {
-	if File_step_down_proto != nil {
+func init() { file_cluster_step_down_proto_init() }
+func file_cluster_step_down_proto_init() {
+	if File_cluster_step_down_proto != nil {
 		return
 	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
-			RawDescriptor: unsafe.Slice(unsafe.StringData(file_step_down_proto_rawDesc), len(file_step_down_proto_rawDesc)),
+			RawDescriptor: unsafe.Slice(unsafe.StringData(file_cluster_step_down_proto_rawDesc), len(file_cluster_step_down_proto_rawDesc)),
 			NumEnums:      0,
 			NumMessages:   3,
 			NumExtensions: 0,
 			NumServices:   1,
 		},
-		GoTypes:           file_step_down_proto_goTypes,
-		DependencyIndexes: file_step_down_proto_depIdxs,
-		MessageInfos:      file_step_down_proto_msgTypes,
+		GoTypes:           file_cluster_step_down_proto_goTypes,
+		DependencyIndexes: file_cluster_step_down_proto_depIdxs,
+		MessageInfos:      file_cluster_step_down_proto_msgTypes,
 	}.Build()
-	File_step_down_proto = out.File
-	file_step_down_proto_goTypes = nil
-	file_step_down_proto_depIdxs = nil
+	File_cluster_step_down_proto = out.File
+	file_cluster_step_down_proto_goTypes = nil
+	file_cluster_step_down_proto_depIdxs = nil
 }

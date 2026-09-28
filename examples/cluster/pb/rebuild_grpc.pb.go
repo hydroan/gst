@@ -4,7 +4,7 @@
 // versions:
 // - protoc-gen-go-grpc v1.6.2
 // - protoc             (unknown)
-// source: rebuild.proto
+// source: cluster/rebuild.proto
 
 package pb
 
@@ -125,5 +125,5 @@ var RebuildService_ServiceDesc = grpc.ServiceDesc{
 		},
 	},
 	Streams:  []grpc.StreamDesc{},
-	Metadata: "rebuild.proto",
+	Metadata: "cluster/rebuild.proto",
 }

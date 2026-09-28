@@ -4,7 +4,7 @@
 // versions:
 // - protoc-gen-go-grpc v1.6.2
 // - protoc             (unknown)
-// source: step_down.proto
+// source: cluster/step_down.proto
 
 package pb
 
@@ -125,5 +125,5 @@ var StepDownService_ServiceDesc = grpc.ServiceDesc{
 		},
 	},
 	Streams:  []grpc.StreamDesc{},
-	Metadata: "step_down.proto",
+	Metadata: "cluster/step_down.proto",
 }

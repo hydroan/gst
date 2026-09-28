@@ -4,7 +4,7 @@
 // versions:
 // - protoc-gen-go-grpc v1.6.2
 // - protoc             (unknown)
-// source: board/note.proto
+// source: demo/board/note.proto
 
 package board
 
@@ -365,5 +365,5 @@ var NoteService_ServiceDesc = grpc.ServiceDesc{
 		},
 	},
 	Streams:  []grpc.StreamDesc{},
-	Metadata: "board/note.proto",
+	Metadata: "demo/board/note.proto",
 }

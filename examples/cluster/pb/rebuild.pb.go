@@ -4,7 +4,7 @@
 // versions:
 // 	protoc-gen-go v1.36.12
 // 	protoc        (unknown)
-// source: rebuild.proto
+// source: cluster/rebuild.proto
 
 package pb
 
@@ -34,7 +34,7 @@ type CreateRebuildRequest struct {
 
 func (x *CreateRebuildRequest) Reset() {
 	*x = CreateRebuildRequest{}
-	mi := &file_rebuild_proto_msgTypes[0]
+	mi := &file_cluster_rebuild_proto_msgTypes[0]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -46,7 +46,7 @@ func (x *CreateRebuildRequest) String() string {
 func (*CreateRebuildRequest) ProtoMessage() {}
 
 func (x *CreateRebuildRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_rebuild_proto_msgTypes[0]
+	mi := &file_cluster_rebuild_proto_msgTypes[0]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -59,7 +59,7 @@ func (x *CreateRebuildRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateRebuildRequest.ProtoReflect.Descriptor instead.
 func (*CreateRebuildRequest) Descriptor() ([]byte, []int) {
-	return file_rebuild_proto_rawDescGZIP(), []int{0}
+	return file_cluster_rebuild_proto_rawDescGZIP(), []int{0}
 }
 
 func (x *CreateRebuildRequest) GetPayload() *RebuildReq {
@@ -80,7 +80,7 @@ type CreateRebuildResponse struct {
 
 func (x *CreateRebuildResponse) Reset() {
 	*x = CreateRebuildResponse{}
-	mi := &file_rebuild_proto_msgTypes[1]
+	mi := &file_cluster_rebuild_proto_msgTypes[1]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -92,7 +92,7 @@ func (x *CreateRebuildResponse) String() string {
 func (*CreateRebuildResponse) ProtoMessage() {}
 
 func (x *CreateRebuildResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_rebuild_proto_msgTypes[1]
+	mi := &file_cluster_rebuild_proto_msgTypes[1]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -105,7 +105,7 @@ func (x *CreateRebuildResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateRebuildResponse.ProtoReflect.Descriptor instead.
 func (*CreateRebuildResponse) Descriptor() ([]byte, []int) {
-	return file_rebuild_proto_rawDescGZIP(), []int{1}
+	return file_cluster_rebuild_proto_rawDescGZIP(), []int{1}
 }
 
 func (x *CreateRebuildResponse) GetResult() *RebuildRsp {
@@ -128,7 +128,7 @@ type RebuildReq struct {
 
 func (x *RebuildReq) Reset() {
 	*x = RebuildReq{}
-	mi := &file_rebuild_proto_msgTypes[2]
+	mi := &file_cluster_rebuild_proto_msgTypes[2]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -140,7 +140,7 @@ func (x *RebuildReq) String() string {
 func (*RebuildReq) ProtoMessage() {}
 
 func (x *RebuildReq) ProtoReflect() protoreflect.Message {
-	mi := &file_rebuild_proto_msgTypes[2]
+	mi := &file_cluster_rebuild_proto_msgTypes[2]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -153,7 +153,7 @@ func (x *RebuildReq) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RebuildReq.ProtoReflect.Descriptor instead.
 func (*RebuildReq) Descriptor() ([]byte, []int) {
-	return file_rebuild_proto_rawDescGZIP(), []int{2}
+	return file_cluster_rebuild_proto_rawDescGZIP(), []int{2}
 }
 
 func (x *RebuildReq) GetSeconds() int64 {
@@ -181,7 +181,7 @@ type RebuildRsp struct {
 
 func (x *RebuildRsp) Reset() {
 	*x = RebuildRsp{}
-	mi := &file_rebuild_proto_msgTypes[3]
+	mi := &file_cluster_rebuild_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -193,7 +193,7 @@ func (x *RebuildRsp) String() string {
 func (*RebuildRsp) ProtoMessage() {}
 
 func (x *RebuildRsp) ProtoReflect() protoreflect.Message {
-	mi := &file_rebuild_proto_msgTypes[3]
+	mi := &file_cluster_rebuild_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -206,7 +206,7 @@ func (x *RebuildRsp) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RebuildRsp.ProtoReflect.Descriptor instead.
 func (*RebuildRsp) Descriptor() ([]byte, []int) {
-	return file_rebuild_proto_rawDescGZIP(), []int{3}
+	return file_cluster_rebuild_proto_rawDescGZIP(), []int{3}
 }
 
 func (x *RebuildRsp) GetReplica() string {
@@ -223,11 +223,11 @@ func (x *RebuildRsp) GetSeconds() int64 {
 	return 0
 }
 
-var File_rebuild_proto protoreflect.FileDescriptor
+var File_cluster_rebuild_proto protoreflect.FileDescriptor
 
-const file_rebuild_proto_rawDesc = "" +
+const file_cluster_rebuild_proto_rawDesc = "" +
 	"\n" +
-	"\rrebuild.proto\x12\acluster\"E\n" +
+	"\x15cluster/rebuild.proto\x12\acluster\"E\n" +
 	"\x14CreateRebuildRequest\x12-\n" +
 	"\apayload\x18\x01 \x01(\v2\x13.cluster.RebuildReqR\apayload\"D\n" +
 	"\x15CreateRebuildResponse\x12+\n" +
@@ -244,25 +244,25 @@ const file_rebuild_proto_rawDesc = "" +
 	"\rCreateRebuild\x12\x1d.cluster.CreateRebuildRequest\x1a\x1e.cluster.CreateRebuildResponseB\x0fZ\rcluster/pb;pbb\x06proto3"
 
 var (
-	file_rebuild_proto_rawDescOnce sync.Once
-	file_rebuild_proto_rawDescData []byte
+	file_cluster_rebuild_proto_rawDescOnce sync.Once
+	file_cluster_rebuild_proto_rawDescData []byte
 )
 
-func file_rebuild_proto_rawDescGZIP() []byte {
-	file_rebuild_proto_rawDescOnce.Do(func() {
-		file_rebuild_proto_rawDescData = protoimpl.X.CompressGZIP(unsafe.Slice(unsafe.StringData(file_rebuild_proto_rawDesc), len(file_rebuild_proto_rawDesc)))
+func file_cluster_rebuild_proto_rawDescGZIP() []byte {
+	file_cluster_rebuild_proto_rawDescOnce.Do(func() {
+		file_cluster_rebuild_proto_rawDescData = protoimpl.X.CompressGZIP(unsafe.Slice(unsafe.StringData(file_cluster_rebuild_proto_rawDesc), len(file_cluster_rebuild_proto_rawDesc)))
 	})
-	return file_rebuild_proto_rawDescData
+	return file_cluster_rebuild_proto_rawDescData
 }
 
-var file_rebuild_proto_msgTypes = make([]protoimpl.MessageInfo, 4)
-var file_rebuild_proto_goTypes = []any{
+var file_cluster_rebuild_proto_msgTypes = make([]protoimpl.MessageInfo, 4)
+var file_cluster_rebuild_proto_goTypes = []any{
 	(*CreateRebuildRequest)(nil),  // 0: cluster.CreateRebuildRequest
 	(*CreateRebuildResponse)(nil), // 1: cluster.CreateRebuildResponse
 	(*RebuildReq)(nil),            // 2: cluster.RebuildReq
 	(*RebuildRsp)(nil),            // 3: cluster.RebuildRsp
 }
-var file_rebuild_proto_depIdxs = []int32{
+var file_cluster_rebuild_proto_depIdxs = []int32{
 	2, // 0: cluster.CreateRebuildRequest.payload:type_name -> cluster.RebuildReq
 	3, // 1: cluster.CreateRebuildResponse.result:type_name -> cluster.RebuildRsp
 	0, // 2: cluster.RebuildService.CreateRebuild:input_type -> cluster.CreateRebuildRequest
@@ -274,26 +274,26 @@ var file_rebuild_proto_depIdxs = []int32{
 	0, // [0:2] is the sub-list for field type_name
 }
 
-func init() { file_rebuild_proto_init() }
-func file_rebuild_proto_init() {
-	if File_rebuild_proto != nil {
+func init() { file_cluster_rebuild_proto_init() }
+func file_cluster_rebuild_proto_init() {
+	if File_cluster_rebuild_proto != nil {
 		return
 	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
-			RawDescriptor: unsafe.Slice(unsafe.StringData(file_rebuild_proto_rawDesc), len(file_rebuild_proto_rawDesc)),
+			RawDescriptor: unsafe.Slice(unsafe.StringData(file_cluster_rebuild_proto_rawDesc), len(file_cluster_rebuild_proto_rawDesc)),
 			NumEnums:      0,
 			NumMessages:   4,
 			NumExtensions: 0,
 			NumServices:   1,
 		},
-		GoTypes:           file_rebuild_proto_goTypes,
-		DependencyIndexes: file_rebuild_proto_depIdxs,
-		MessageInfos:      file_rebuild_proto_msgTypes,
+		GoTypes:           file_cluster_rebuild_proto_goTypes,
+		DependencyIndexes: file_cluster_rebuild_proto_depIdxs,
+		MessageInfos:      file_cluster_rebuild_proto_msgTypes,
 	}.Build()
-	File_rebuild_proto = out.File
-	file_rebuild_proto_goTypes = nil
-	file_rebuild_proto_depIdxs = nil
+	File_cluster_rebuild_proto = out.File
+	file_cluster_rebuild_proto_goTypes = nil
+	file_cluster_rebuild_proto_depIdxs = nil
 }

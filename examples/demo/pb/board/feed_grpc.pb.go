@@ -4,7 +4,7 @@
 // versions:
 // - protoc-gen-go-grpc v1.6.2
 // - protoc             (unknown)
-// source: board/feed.proto
+// source: demo/board/feed.proto
 
 package board
 
@@ -195,5 +195,5 @@ var FeedService_ServiceDesc = grpc.ServiceDesc{
 			ServerStreams: true,
 		},
 	},
-	Metadata: "board/feed.proto",
+	Metadata: "demo/board/feed.proto",
 }

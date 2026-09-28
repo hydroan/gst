@@ -4,7 +4,7 @@
 // versions:
 // 	protoc-gen-go v1.36.12
 // 	protoc        (unknown)
-// source: cached.proto
+// source: cluster/cached.proto
 
 package pb
 
@@ -34,7 +34,7 @@ type CreateCachedRequest struct {
 
 func (x *CreateCachedRequest) Reset() {
 	*x = CreateCachedRequest{}
-	mi := &file_cached_proto_msgTypes[0]
+	mi := &file_cluster_cached_proto_msgTypes[0]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -46,7 +46,7 @@ func (x *CreateCachedRequest) String() string {
 func (*CreateCachedRequest) ProtoMessage() {}
 
 func (x *CreateCachedRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_cached_proto_msgTypes[0]
+	mi := &file_cluster_cached_proto_msgTypes[0]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -59,7 +59,7 @@ func (x *CreateCachedRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateCachedRequest.ProtoReflect.Descriptor instead.
 func (*CreateCachedRequest) Descriptor() ([]byte, []int) {
-	return file_cached_proto_rawDescGZIP(), []int{0}
+	return file_cluster_cached_proto_rawDescGZIP(), []int{0}
 }
 
 func (x *CreateCachedRequest) GetPayload() *CachedReq {
@@ -80,7 +80,7 @@ type CreateCachedResponse struct {
 
 func (x *CreateCachedResponse) Reset() {
 	*x = CreateCachedResponse{}
-	mi := &file_cached_proto_msgTypes[1]
+	mi := &file_cluster_cached_proto_msgTypes[1]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -92,7 +92,7 @@ func (x *CreateCachedResponse) String() string {
 func (*CreateCachedResponse) ProtoMessage() {}
 
 func (x *CreateCachedResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_cached_proto_msgTypes[1]
+	mi := &file_cluster_cached_proto_msgTypes[1]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -105,7 +105,7 @@ func (x *CreateCachedResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateCachedResponse.ProtoReflect.Descriptor instead.
 func (*CreateCachedResponse) Descriptor() ([]byte, []int) {
-	return file_cached_proto_rawDescGZIP(), []int{1}
+	return file_cluster_cached_proto_rawDescGZIP(), []int{1}
 }
 
 func (x *CreateCachedResponse) GetResult() *CachedCreateRsp {
@@ -126,7 +126,7 @@ type DeleteCachedRequest struct {
 
 func (x *DeleteCachedRequest) Reset() {
 	*x = DeleteCachedRequest{}
-	mi := &file_cached_proto_msgTypes[2]
+	mi := &file_cluster_cached_proto_msgTypes[2]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -138,7 +138,7 @@ func (x *DeleteCachedRequest) String() string {
 func (*DeleteCachedRequest) ProtoMessage() {}
 
 func (x *DeleteCachedRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_cached_proto_msgTypes[2]
+	mi := &file_cluster_cached_proto_msgTypes[2]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -151,7 +151,7 @@ func (x *DeleteCachedRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteCachedRequest.ProtoReflect.Descriptor instead.
 func (*DeleteCachedRequest) Descriptor() ([]byte, []int) {
-	return file_cached_proto_rawDescGZIP(), []int{2}
+	return file_cluster_cached_proto_rawDescGZIP(), []int{2}
 }
 
 func (x *DeleteCachedRequest) GetId() string {
@@ -172,7 +172,7 @@ type DeleteCachedResponse struct {
 
 func (x *DeleteCachedResponse) Reset() {
 	*x = DeleteCachedResponse{}
-	mi := &file_cached_proto_msgTypes[3]
+	mi := &file_cluster_cached_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -184,7 +184,7 @@ func (x *DeleteCachedResponse) String() string {
 func (*DeleteCachedResponse) ProtoMessage() {}
 
 func (x *DeleteCachedResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_cached_proto_msgTypes[3]
+	mi := &file_cluster_cached_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -197,7 +197,7 @@ func (x *DeleteCachedResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteCachedResponse.ProtoReflect.Descriptor instead.
 func (*DeleteCachedResponse) Descriptor() ([]byte, []int) {
-	return file_cached_proto_rawDescGZIP(), []int{3}
+	return file_cluster_cached_proto_rawDescGZIP(), []int{3}
 }
 
 func (x *DeleteCachedResponse) GetResult() *CachedDeleteRsp {
@@ -222,7 +222,7 @@ type GetCachedRequest struct {
 
 func (x *GetCachedRequest) Reset() {
 	*x = GetCachedRequest{}
-	mi := &file_cached_proto_msgTypes[4]
+	mi := &file_cluster_cached_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -234,7 +234,7 @@ func (x *GetCachedRequest) String() string {
 func (*GetCachedRequest) ProtoMessage() {}
 
 func (x *GetCachedRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_cached_proto_msgTypes[4]
+	mi := &file_cluster_cached_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -247,7 +247,7 @@ func (x *GetCachedRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetCachedRequest.ProtoReflect.Descriptor instead.
 func (*GetCachedRequest) Descriptor() ([]byte, []int) {
-	return file_cached_proto_rawDescGZIP(), []int{4}
+	return file_cluster_cached_proto_rawDescGZIP(), []int{4}
 }
 
 func (x *GetCachedRequest) GetId() string {
@@ -282,7 +282,7 @@ type GetCachedResponse struct {
 
 func (x *GetCachedResponse) Reset() {
 	*x = GetCachedResponse{}
-	mi := &file_cached_proto_msgTypes[5]
+	mi := &file_cluster_cached_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -294,7 +294,7 @@ func (x *GetCachedResponse) String() string {
 func (*GetCachedResponse) ProtoMessage() {}
 
 func (x *GetCachedResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_cached_proto_msgTypes[5]
+	mi := &file_cluster_cached_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -307,7 +307,7 @@ func (x *GetCachedResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetCachedResponse.ProtoReflect.Descriptor instead.
 func (*GetCachedResponse) Descriptor() ([]byte, []int) {
-	return file_cached_proto_rawDescGZIP(), []int{5}
+	return file_cluster_cached_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *GetCachedResponse) GetResult() *CachedGetRsp {
@@ -328,7 +328,7 @@ type ExchangeCachedRequest struct {
 
 func (x *ExchangeCachedRequest) Reset() {
 	*x = ExchangeCachedRequest{}
-	mi := &file_cached_proto_msgTypes[6]
+	mi := &file_cluster_cached_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -340,7 +340,7 @@ func (x *ExchangeCachedRequest) String() string {
 func (*ExchangeCachedRequest) ProtoMessage() {}
 
 func (x *ExchangeCachedRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_cached_proto_msgTypes[6]
+	mi := &file_cluster_cached_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -353,7 +353,7 @@ func (x *ExchangeCachedRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ExchangeCachedRequest.ProtoReflect.Descriptor instead.
 func (*ExchangeCachedRequest) Descriptor() ([]byte, []int) {
-	return file_cached_proto_rawDescGZIP(), []int{6}
+	return file_cluster_cached_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *ExchangeCachedRequest) GetPayload() *CachedKeyReq {
@@ -374,7 +374,7 @@ type ExchangeCachedResponse struct {
 
 func (x *ExchangeCachedResponse) Reset() {
 	*x = ExchangeCachedResponse{}
-	mi := &file_cached_proto_msgTypes[7]
+	mi := &file_cluster_cached_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -386,7 +386,7 @@ func (x *ExchangeCachedResponse) String() string {
 func (*ExchangeCachedResponse) ProtoMessage() {}
 
 func (x *ExchangeCachedResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_cached_proto_msgTypes[7]
+	mi := &file_cluster_cached_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -399,7 +399,7 @@ func (x *ExchangeCachedResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ExchangeCachedResponse.ProtoReflect.Descriptor instead.
 func (*ExchangeCachedResponse) Descriptor() ([]byte, []int) {
-	return file_cached_proto_rawDescGZIP(), []int{7}
+	return file_cluster_cached_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *ExchangeCachedResponse) GetResult() *CachedExchangeRsp {
@@ -420,7 +420,7 @@ type LoadCachedRequest struct {
 
 func (x *LoadCachedRequest) Reset() {
 	*x = LoadCachedRequest{}
-	mi := &file_cached_proto_msgTypes[8]
+	mi := &file_cluster_cached_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -432,7 +432,7 @@ func (x *LoadCachedRequest) String() string {
 func (*LoadCachedRequest) ProtoMessage() {}
 
 func (x *LoadCachedRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_cached_proto_msgTypes[8]
+	mi := &file_cluster_cached_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -445,7 +445,7 @@ func (x *LoadCachedRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use LoadCachedRequest.ProtoReflect.Descriptor instead.
 func (*LoadCachedRequest) Descriptor() ([]byte, []int) {
-	return file_cached_proto_rawDescGZIP(), []int{8}
+	return file_cluster_cached_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *LoadCachedRequest) GetPayload() *CachedReq {
@@ -466,7 +466,7 @@ type LoadCachedResponse struct {
 
 func (x *LoadCachedResponse) Reset() {
 	*x = LoadCachedResponse{}
-	mi := &file_cached_proto_msgTypes[9]
+	mi := &file_cluster_cached_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -478,7 +478,7 @@ func (x *LoadCachedResponse) String() string {
 func (*LoadCachedResponse) ProtoMessage() {}
 
 func (x *LoadCachedResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_cached_proto_msgTypes[9]
+	mi := &file_cluster_cached_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -491,7 +491,7 @@ func (x *LoadCachedResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use LoadCachedResponse.ProtoReflect.Descriptor instead.
 func (*LoadCachedResponse) Descriptor() ([]byte, []int) {
-	return file_cached_proto_rawDescGZIP(), []int{9}
+	return file_cluster_cached_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *LoadCachedResponse) GetResult() *CachedLoadRsp {
@@ -513,7 +513,7 @@ type CachedReq struct {
 
 func (x *CachedReq) Reset() {
 	*x = CachedReq{}
-	mi := &file_cached_proto_msgTypes[10]
+	mi := &file_cluster_cached_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -525,7 +525,7 @@ func (x *CachedReq) String() string {
 func (*CachedReq) ProtoMessage() {}
 
 func (x *CachedReq) ProtoReflect() protoreflect.Message {
-	mi := &file_cached_proto_msgTypes[10]
+	mi := &file_cluster_cached_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -538,7 +538,7 @@ func (x *CachedReq) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CachedReq.ProtoReflect.Descriptor instead.
 func (*CachedReq) Descriptor() ([]byte, []int) {
-	return file_cached_proto_rawDescGZIP(), []int{10}
+	return file_cluster_cached_proto_rawDescGZIP(), []int{10}
 }
 
 func (x *CachedReq) GetKey() string {
@@ -568,7 +568,7 @@ type CachedCreateRsp struct {
 
 func (x *CachedCreateRsp) Reset() {
 	*x = CachedCreateRsp{}
-	mi := &file_cached_proto_msgTypes[11]
+	mi := &file_cluster_cached_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -580,7 +580,7 @@ func (x *CachedCreateRsp) String() string {
 func (*CachedCreateRsp) ProtoMessage() {}
 
 func (x *CachedCreateRsp) ProtoReflect() protoreflect.Message {
-	mi := &file_cached_proto_msgTypes[11]
+	mi := &file_cluster_cached_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -593,7 +593,7 @@ func (x *CachedCreateRsp) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CachedCreateRsp.ProtoReflect.Descriptor instead.
 func (*CachedCreateRsp) Descriptor() ([]byte, []int) {
-	return file_cached_proto_rawDescGZIP(), []int{11}
+	return file_cluster_cached_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *CachedCreateRsp) GetReplica() string {
@@ -635,7 +635,7 @@ type CachedDeleteRsp struct {
 
 func (x *CachedDeleteRsp) Reset() {
 	*x = CachedDeleteRsp{}
-	mi := &file_cached_proto_msgTypes[12]
+	mi := &file_cluster_cached_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -647,7 +647,7 @@ func (x *CachedDeleteRsp) String() string {
 func (*CachedDeleteRsp) ProtoMessage() {}
 
 func (x *CachedDeleteRsp) ProtoReflect() protoreflect.Message {
-	mi := &file_cached_proto_msgTypes[12]
+	mi := &file_cluster_cached_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -660,7 +660,7 @@ func (x *CachedDeleteRsp) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CachedDeleteRsp.ProtoReflect.Descriptor instead.
 func (*CachedDeleteRsp) Descriptor() ([]byte, []int) {
-	return file_cached_proto_rawDescGZIP(), []int{12}
+	return file_cluster_cached_proto_rawDescGZIP(), []int{12}
 }
 
 func (x *CachedDeleteRsp) GetReplica() string {
@@ -692,7 +692,7 @@ type CachedGetRsp struct {
 
 func (x *CachedGetRsp) Reset() {
 	*x = CachedGetRsp{}
-	mi := &file_cached_proto_msgTypes[13]
+	mi := &file_cluster_cached_proto_msgTypes[13]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -704,7 +704,7 @@ func (x *CachedGetRsp) String() string {
 func (*CachedGetRsp) ProtoMessage() {}
 
 func (x *CachedGetRsp) ProtoReflect() protoreflect.Message {
-	mi := &file_cached_proto_msgTypes[13]
+	mi := &file_cluster_cached_proto_msgTypes[13]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -717,7 +717,7 @@ func (x *CachedGetRsp) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CachedGetRsp.ProtoReflect.Descriptor instead.
 func (*CachedGetRsp) Descriptor() ([]byte, []int) {
-	return file_cached_proto_rawDescGZIP(), []int{13}
+	return file_cluster_cached_proto_rawDescGZIP(), []int{13}
 }
 
 func (x *CachedGetRsp) GetReplica() string {
@@ -758,7 +758,7 @@ type CachedKeyReq struct {
 
 func (x *CachedKeyReq) Reset() {
 	*x = CachedKeyReq{}
-	mi := &file_cached_proto_msgTypes[14]
+	mi := &file_cluster_cached_proto_msgTypes[14]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -770,7 +770,7 @@ func (x *CachedKeyReq) String() string {
 func (*CachedKeyReq) ProtoMessage() {}
 
 func (x *CachedKeyReq) ProtoReflect() protoreflect.Message {
-	mi := &file_cached_proto_msgTypes[14]
+	mi := &file_cluster_cached_proto_msgTypes[14]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -783,7 +783,7 @@ func (x *CachedKeyReq) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CachedKeyReq.ProtoReflect.Descriptor instead.
 func (*CachedKeyReq) Descriptor() ([]byte, []int) {
-	return file_cached_proto_rawDescGZIP(), []int{14}
+	return file_cluster_cached_proto_rawDescGZIP(), []int{14}
 }
 
 func (x *CachedKeyReq) GetKey() string {
@@ -807,7 +807,7 @@ type CachedExchangeRsp struct {
 
 func (x *CachedExchangeRsp) Reset() {
 	*x = CachedExchangeRsp{}
-	mi := &file_cached_proto_msgTypes[15]
+	mi := &file_cluster_cached_proto_msgTypes[15]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -819,7 +819,7 @@ func (x *CachedExchangeRsp) String() string {
 func (*CachedExchangeRsp) ProtoMessage() {}
 
 func (x *CachedExchangeRsp) ProtoReflect() protoreflect.Message {
-	mi := &file_cached_proto_msgTypes[15]
+	mi := &file_cluster_cached_proto_msgTypes[15]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -832,7 +832,7 @@ func (x *CachedExchangeRsp) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CachedExchangeRsp.ProtoReflect.Descriptor instead.
 func (*CachedExchangeRsp) Descriptor() ([]byte, []int) {
-	return file_cached_proto_rawDescGZIP(), []int{15}
+	return file_cluster_cached_proto_rawDescGZIP(), []int{15}
 }
 
 func (x *CachedExchangeRsp) GetReplica() string {
@@ -875,7 +875,7 @@ type CachedLoadRsp struct {
 
 func (x *CachedLoadRsp) Reset() {
 	*x = CachedLoadRsp{}
-	mi := &file_cached_proto_msgTypes[16]
+	mi := &file_cluster_cached_proto_msgTypes[16]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -887,7 +887,7 @@ func (x *CachedLoadRsp) String() string {
 func (*CachedLoadRsp) ProtoMessage() {}
 
 func (x *CachedLoadRsp) ProtoReflect() protoreflect.Message {
-	mi := &file_cached_proto_msgTypes[16]
+	mi := &file_cluster_cached_proto_msgTypes[16]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -900,7 +900,7 @@ func (x *CachedLoadRsp) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CachedLoadRsp.ProtoReflect.Descriptor instead.
 func (*CachedLoadRsp) Descriptor() ([]byte, []int) {
-	return file_cached_proto_rawDescGZIP(), []int{16}
+	return file_cluster_cached_proto_rawDescGZIP(), []int{16}
 }
 
 func (x *CachedLoadRsp) GetReplica() string {
@@ -917,11 +917,11 @@ func (x *CachedLoadRsp) GetCount() int64 {
 	return 0
 }
 
-var File_cached_proto protoreflect.FileDescriptor
+var File_cluster_cached_proto protoreflect.FileDescriptor
 
-const file_cached_proto_rawDesc = "" +
+const file_cluster_cached_proto_rawDesc = "" +
 	"\n" +
-	"\fcached.proto\x12\acluster\"C\n" +
+	"\x14cluster/cached.proto\x12\acluster\"C\n" +
 	"\x13CreateCachedRequest\x12,\n" +
 	"\apayload\x18\x01 \x01(\v2\x12.cluster.CachedReqR\apayload\"H\n" +
 	"\x14CreateCachedResponse\x120\n" +
@@ -979,19 +979,19 @@ const file_cached_proto_rawDesc = "" +
 	"LoadCached\x12\x1a.cluster.LoadCachedRequest\x1a\x1b.cluster.LoadCachedResponse(\x01B\x0fZ\rcluster/pb;pbb\x06proto3"
 
 var (
-	file_cached_proto_rawDescOnce sync.Once
-	file_cached_proto_rawDescData []byte
+	file_cluster_cached_proto_rawDescOnce sync.Once
+	file_cluster_cached_proto_rawDescData []byte
 )
 
-func file_cached_proto_rawDescGZIP() []byte {
-	file_cached_proto_rawDescOnce.Do(func() {
-		file_cached_proto_rawDescData = protoimpl.X.CompressGZIP(unsafe.Slice(unsafe.StringData(file_cached_proto_rawDesc), len(file_cached_proto_rawDesc)))
+func file_cluster_cached_proto_rawDescGZIP() []byte {
+	file_cluster_cached_proto_rawDescOnce.Do(func() {
+		file_cluster_cached_proto_rawDescData = protoimpl.X.CompressGZIP(unsafe.Slice(unsafe.StringData(file_cluster_cached_proto_rawDesc), len(file_cluster_cached_proto_rawDesc)))
 	})
-	return file_cached_proto_rawDescData
+	return file_cluster_cached_proto_rawDescData
 }
 
-var file_cached_proto_msgTypes = make([]protoimpl.MessageInfo, 17)
-var file_cached_proto_goTypes = []any{
+var file_cluster_cached_proto_msgTypes = make([]protoimpl.MessageInfo, 17)
+var file_cluster_cached_proto_goTypes = []any{
 	(*CreateCachedRequest)(nil),    // 0: cluster.CreateCachedRequest
 	(*CreateCachedResponse)(nil),   // 1: cluster.CreateCachedResponse
 	(*DeleteCachedRequest)(nil),    // 2: cluster.DeleteCachedRequest
@@ -1010,7 +1010,7 @@ var file_cached_proto_goTypes = []any{
 	(*CachedExchangeRsp)(nil),      // 15: cluster.CachedExchangeRsp
 	(*CachedLoadRsp)(nil),          // 16: cluster.CachedLoadRsp
 }
-var file_cached_proto_depIdxs = []int32{
+var file_cluster_cached_proto_depIdxs = []int32{
 	10, // 0: cluster.CreateCachedRequest.payload:type_name -> cluster.CachedReq
 	11, // 1: cluster.CreateCachedResponse.result:type_name -> cluster.CachedCreateRsp
 	12, // 2: cluster.DeleteCachedResponse.result:type_name -> cluster.CachedDeleteRsp
@@ -1036,26 +1036,26 @@ var file_cached_proto_depIdxs = []int32{
 	0,  // [0:8] is the sub-list for field type_name
 }
 
-func init() { file_cached_proto_init() }
-func file_cached_proto_init() {
-	if File_cached_proto != nil {
+func init() { file_cluster_cached_proto_init() }
+func file_cluster_cached_proto_init() {
+	if File_cluster_cached_proto != nil {
 		return
 	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
-			RawDescriptor: unsafe.Slice(unsafe.StringData(file_cached_proto_rawDesc), len(file_cached_proto_rawDesc)),
+			RawDescriptor: unsafe.Slice(unsafe.StringData(file_cluster_cached_proto_rawDesc), len(file_cluster_cached_proto_rawDesc)),
 			NumEnums:      0,
 			NumMessages:   17,
 			NumExtensions: 0,
 			NumServices:   1,
 		},
-		GoTypes:           file_cached_proto_goTypes,
-		DependencyIndexes: file_cached_proto_depIdxs,
-		MessageInfos:      file_cached_proto_msgTypes,
+		GoTypes:           file_cluster_cached_proto_goTypes,
+		DependencyIndexes: file_cluster_cached_proto_depIdxs,
+		MessageInfos:      file_cluster_cached_proto_msgTypes,
 	}.Build()
-	File_cached_proto = out.File
-	file_cached_proto_goTypes = nil
-	file_cached_proto_depIdxs = nil
+	File_cluster_cached_proto = out.File
+	file_cluster_cached_proto_goTypes = nil
+	file_cluster_cached_proto_depIdxs = nil
 }
