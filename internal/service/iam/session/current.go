@@ -58,39 +58,30 @@ func MustChangePasswordExempt(method, path string) bool {
 	}
 }
 
-// CurrentSession returns the authenticated session of the request.
+// CurrentSession returns the authenticated session of the request or call.
 //
-// The middleware has already loaded and validated it and left it on the
-// context, so the common path costs nothing; the load below is for callers
-// reached without the middleware, and for the case where the context carries a
-// different session than the cookie now does.
+// The session the middleware or interceptor admitted is on the context (see
+// WithCurrentSession) and answers first, on either listener: a gRPC call has
+// no cookie to read, and asking its context for one is a call the listener
+// refuses once the action returns. The cookie is read for a request reached
+// without the middleware, whose session is then loaded.
 //
 // A snapshot that fails validation is deleted on the way out. It cannot serve
 // another request, and leaving it would let every later request pay to load and
 // reject it again.
 func CurrentSession(ctx *gst.ServiceContext) (string, modeliamsession.Session, error) {
-	sessionID, err := CookieSessionID(ctx)
-	if err != nil {
-		// A call without a cookie, a gRPC call, carries the session its
-		// interceptor admitted on the context (see WithCurrentSession).
-		if cachedSessionID, sessionData, ok := currentSessionFromContext(ctx); ok {
-			if err = ValidateSession(cachedSessionID, sessionData); err != nil {
-				_, _ = Store.DeleteSession(ctx, cachedSessionID)
-				return "", modeliamsession.Session{}, service.NewErrorWithCause(http.StatusUnauthorized, "session invalid", err)
-			}
-			return cachedSessionID, sessionData, nil
-		}
-		return "", modeliamsession.Session{}, err
-	}
-
-	if cachedSessionID, sessionData, ok := currentSessionFromContext(ctx); ok && cachedSessionID == sessionID {
-		if err = ValidateSession(sessionID, sessionData); err != nil {
+	if sessionID, sessionData, ok := currentSessionFromContext(ctx); ok {
+		if err := ValidateSession(sessionID, sessionData); err != nil {
 			_, _ = Store.DeleteSession(ctx, sessionID)
 			return "", modeliamsession.Session{}, service.NewErrorWithCause(http.StatusUnauthorized, "session invalid", err)
 		}
 		return sessionID, sessionData, nil
 	}
 
+	sessionID, err := CookieSessionID(ctx)
+	if err != nil {
+		return "", modeliamsession.Session{}, err
+	}
 	sessionData, err := Store.LoadSession(ctx, sessionID)
 	if err != nil {
 		return "", modeliamsession.Session{}, service.NewErrorWithCause(http.StatusUnauthorized, "session not exists", err)

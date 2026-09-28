@@ -49,16 +49,22 @@ func TestCurrentSessionReadsTheContextWithoutACookie(t *testing.T) {
 	}
 	ctx := serviceiamsession.WithCurrentSession(t.Context(), sessionID, session)
 
-	gotSessionID, gotSession, err := serviceiamsession.CurrentSession(types.NewServiceContext(nil, ctx, consts.Get))
+	serviceCtx := types.NewServiceContext(nil, ctx, consts.Get)
+	gotSessionID, gotSession, err := serviceiamsession.CurrentSession(serviceCtx)
 	require.NoError(t, err)
 	require.Equal(t, sessionID, gotSessionID)
 	require.Equal(t, session, gotSession)
+	require.False(t, types.HTTPOnlyMethodCalled(serviceCtx), "the session on the context is read with no cookie asked for, which the call would be refused for")
 
 	_, _, err = serviceiamsession.CurrentSession(types.NewServiceContext(nil, t.Context(), consts.Get))
 	require.Error(t, err, "a call carrying no session at all is refused")
 }
 
-func TestCurrentSessionIgnoresMismatchedRequestCache(t *testing.T) {
+// TestCurrentSessionPrefersTheSessionOnTheContext pins the precedence: the
+// session the middleware or interceptor admitted and left on the context is
+// the current one, the cookie being read only when the context carries
+// none.
+func TestCurrentSessionPrefersTheSessionOnTheContext(t *testing.T) {
 	clearSessions(t)
 
 	now := time.Now().UTC()
@@ -83,8 +89,8 @@ func TestCurrentSessionIgnoresMismatchedRequestCache(t *testing.T) {
 
 	gotSessionID, gotSession, err := serviceiamsession.CurrentSession(serviceCtx)
 	require.NoError(t, err)
-	require.Equal(t, cookieSessionID, gotSessionID)
-	require.Equal(t, cookieSession, gotSession)
+	require.Equal(t, cachedSessionID, gotSessionID)
+	require.Equal(t, cachedSession, gotSession)
 }
 
 func newSessionServiceContext(baseCtx context.Context, t *testing.T, sessionID string) *types.ServiceContext {
