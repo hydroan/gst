@@ -552,7 +552,7 @@ func standardMessages(m *modelinfo.Model, model *message, file *protoFile, route
 //	  // page is the page to list, as the _page query parameter.
 //	  uint32 page = 3;
 //
-//	  // size is the page size, as the _size query parameter, 20 when unset and at most 100.
+//	  // size is the page size, as the _size query parameter, read by a model embedding model.Pagination or model.Cursor alone: 20 when unset and at most 100; any other model ignores it and lists at most 1000 records.
 //	  uint32 size = 4;
 //
 //	  // cursor_field is the cursor column, as the _cursor_field query parameter.
@@ -607,7 +607,7 @@ func queryFields(phase consts.Phase) (fields []*descriptorpb.FieldDescriptorProt
 			"the filters to apply, each one field[op]=value of the HTTP query",
 			"the orderings, as the _sort_by query parameter names them",
 			"the page to list, as the _page query parameter",
-			"the page size, as the _size query parameter, " + strconv.Itoa(urlquery.DefaultPageSize) + " when unset and at most " + strconv.Itoa(urlquery.MaxPageSize),
+			"the page size, as the _size query parameter, read by a model embedding model.Pagination or model.Cursor alone: " + strconv.Itoa(urlquery.DefaultPageSize) + " when unset and at most " + strconv.Itoa(urlquery.MaxPageSize) + "; any other model ignores it and lists at most " + strconv.Itoa(urlquery.UnpagedLimit) + " records",
 			"the cursor column, as the _cursor_field query parameter",
 			"the cursor position, as the _cursor_value query parameter",
 			"whether to list past the cursor, as the _cursor_next query parameter",

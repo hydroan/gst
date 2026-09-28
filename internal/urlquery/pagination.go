@@ -9,9 +9,12 @@ import (
 	"github.com/hydroan/gst/internal/types"
 )
 
-// defaultLimit is the full-table safety bottom line for list queries whose
-// model exposes no client-adjustable page size.
-const defaultLimit = 1000
+// UnpagedLimit is the full-table safety bottom line for list queries whose
+// model exposes no client-adjustable page size, embedding neither Pagination
+// nor Cursor: such a model ignores the _size parameter and lists this many
+// records at most. The pb generator quotes it in the comment of a List
+// request's size field.
+const UnpagedLimit = 1000
 
 // DefaultPageSize and MaxPageSize bound the _size parameter on models that
 // embed Pagination or Cursor: an unset size defaults to a small first page
@@ -55,7 +58,7 @@ func Pagination(q url.Values, m types.Model) (page, size int) {
 			size = MaxPageSize
 		}
 	} else {
-		size = defaultLimit
+		size = UnpagedLimit
 	}
 	if cursorable && len(q.Get(consts.QUERY_CURSOR_VALUE)) > 0 {
 		page = 1
