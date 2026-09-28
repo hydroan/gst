@@ -88,11 +88,24 @@ type PatchFieldsLabel struct {
 	Label string `json:"label"`
 }
 
+// PatchFieldsLeftLabel and PatchFieldsRightLabel each encode a field to the
+// key Label, one with its tag spelt like its Go name; embedded side by side
+// they tie at one depth, and encoding/json takes neither. The tie is built
+// at run time, a declared struct repeating a tag being what go vet refuses.
+type PatchFieldsLeftLabel struct {
+	Label string `json:"Label"`
+}
+
+type PatchFieldsRightLabel struct {
+	Tag string `json:"Label"`
+}
+
 // TestPatchFieldSetsFollowTheJSONKeys pins that the fields a patch names
 // are the ones encoding/json encodes, under its rules: of two fields
-// encoding to one key the shallower is the field, and a field promoted
-// through an embedded pointer is named through it, the pointer allocated
-// on the record when it is nil.
+// encoding to one key the shallower is the field, and neither is when two
+// tagged fields tie at one depth, a tag spelt like the Go name being a tag
+// all the same; a field promoted through an embedded pointer is named
+// through it, the pointer allocated on the record when it is nil.
 func TestPatchFieldSetsFollowTheJSONKeys(t *testing.T) {
 	typ := reflect.TypeFor[patchFieldsShadowedRecord]()
 
@@ -105,6 +118,14 @@ func TestPatchFieldSetsFollowTheJSONKeys(t *testing.T) {
 	applyPatch(nopControllerLogger{}, typ, reflect.ValueOf(oldRecord).Elem(), reflect.ValueOf(newRecord).Elem(), fields)
 	require.Equal(t, "own", oldRecord.Name)
 	require.Equal(t, &PatchFieldsLabel{Label: "promoted"}, oldRecord.PatchFieldsLabel, "allocated on the way, the shadowed name left alone")
+
+	tied := reflect.StructOf([]reflect.StructField{
+		{Name: "PatchFieldsLeftLabel", Type: reflect.TypeFor[PatchFieldsLeftLabel](), Anonymous: true},
+		{Name: "PatchFieldsRightLabel", Type: reflect.TypeFor[PatchFieldsRightLabel](), Anonymous: true},
+	})
+	fields, err = patchFieldSetFromJSONBody(tied, []byte(`{"Label":"tied"}`))
+	require.NoError(t, err)
+	require.Empty(t, fields, "two tagged fields tied at one depth encode to no key")
 }
 
 // TestApplyPatchAppliesAStructValuedFieldAsAWhole pins how the named

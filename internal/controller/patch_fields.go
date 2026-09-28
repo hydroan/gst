@@ -124,7 +124,9 @@ func patchFieldsOf(typ reflect.Type) *patchFieldTable {
 		if !field.IsExported() || name == "-" || field.Name == consts.FIELD_ID {
 			continue
 		}
-		if name == "" {
+		// A tag naming the field is a tag, spelt like the Go name or not.
+		tagged := name != ""
+		if !tagged {
 			name = field.Name
 		}
 		if _, seen := candidates[name]; !seen {
@@ -136,7 +138,7 @@ func patchFieldsOf(typ reflect.Type) *patchFieldTable {
 		}
 		candidates[name] = append(candidates[name], candidate{
 			field:  &patchField{key: name, name: strings.Join(goPath, "."), index: field.Index, typ: field.Type},
-			tagged: name != field.Name,
+			tagged: tagged,
 		})
 	}
 	table := &patchFieldTable{byKey: make(map[string]*patchField, len(keys)), byName: make(map[string]*patchField, len(keys))}
