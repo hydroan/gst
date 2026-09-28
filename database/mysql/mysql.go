@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/errors"
+	mysqldriver "github.com/go-sql-driver/mysql"
 	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/internal/dbruntime"
 	"github.com/hydroan/gst/logger"
@@ -40,11 +41,12 @@ func Init() (err error) {
 func New(cfg config.MySQL) (*gorm.DB, error) {
 	// TranslateError maps dialect-specific write failures to portable gorm
 	// sentinels (gorm.ErrDuplicatedKey, gorm.ErrForeignKeyViolated) that
-	// database.Create/Update surface to callers. Statements run over the
-	// text protocol with client-side parameter interpolation — no gorm
+	// database.Create/Update surface to callers, the framework's own table
+	// (see translate) ahead of the driver's. Statements run over the text
+	// protocol with client-side parameter interpolation — no gorm
 	// PrepareStmt, no server-side prepared statements; buildDSN explains
 	// why.
-	db, err := gorm.Open(mysql.Open(buildDSN(cfg)), &gorm.Config{Logger: logger.Gorm, TranslateError: true, NowFunc: dbruntime.NowUTC})
+	db, err := gorm.Open(dbruntime.Translating(mysql.Open(buildDSN(cfg)), translate), &gorm.Config{Logger: logger.Gorm, TranslateError: true, NowFunc: dbruntime.NowUTC})
 	if err != nil {
 		return nil, err
 	}
@@ -141,4 +143,28 @@ func buildDSN(cfg config.MySQL) string {
 		dsn += "&writeTimeout=" + cfg.WriteTimeout.String()
 	}
 	return dsn
+}
+
+// errCodes are the errors of the constraints a client's data breaks that the
+// driver's translation leaves as they are, keyed by MySQL's error number: a
+// value too long for its column (1406) and a check constraint the row fails
+// (3819); the driver translates the duplicated and the foreign keys itself.
+var errCodes = map[uint16]error{
+	1406: dbruntime.ErrValueTooLong,
+	3819: gorm.ErrCheckConstraintViolated,
+}
+
+// translate translates a driver error whose number errCodes lists to its
+// sentinel, the driver's text kept as the message, and nil for any other
+// error, which is left to the driver's translation (see dbruntime.Translating).
+func translate(err error) error {
+	var driverErr *mysqldriver.MySQLError
+	if !errors.As(err, &driverErr) {
+		return nil
+	}
+	sentinel, found := errCodes[driverErr.Number]
+	if !found {
+		return nil
+	}
+	return errors.Wrap(sentinel, driverErr.Message)
 }

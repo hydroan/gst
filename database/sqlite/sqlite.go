@@ -138,7 +138,9 @@ func New(cfg config.Sqlite) (*gorm.DB, error) {
 	// request-unique, so a text-keyed statement cache would hold one dead
 	// entry per request. Sqlite compiles statements in-process at
 	// microsecond cost, so each run simply compiles its statement.
-	db, err := gorm.Open(sqlite.New(sqlite.Config{DriverName: driverName, DSN: dsn}), &gorm.Config{Logger: logger.Gorm, TranslateError: true, NowFunc: dbruntime.NowUTC})
+	// TranslateError maps the write failures to the gorm sentinels, the
+	// framework's own table (see translate) ahead of the driver's.
+	db, err := gorm.Open(dbruntime.Translating(sqlite.New(sqlite.Config{DriverName: driverName, DSN: dsn}), translate), &gorm.Config{Logger: logger.Gorm, TranslateError: true, NowFunc: dbruntime.NowUTC})
 	if err != nil {
 		return nil, err
 	}
@@ -269,4 +271,29 @@ func isMemoryPath(path string) bool {
 	name, _, _ := strings.Cut(path, "?")
 	name = strings.TrimPrefix(name, "file:")
 	return name == ":memory:"
+}
+
+// errCodes are the errors of the constraints a client's data breaks that the
+// driver's translation leaves as they are, keyed by sqlite's extended error
+// code: a check constraint the row fails; the driver translates the
+// duplicated and the foreign keys itself, and sqlite declares no length for
+// a column.
+var errCodes = map[sqlite3.ErrNoExtended]error{
+	sqlite3.ErrConstraintCheck: gorm.ErrCheckConstraintViolated,
+}
+
+// translate translates a driver error whose extended code errCodes lists to
+// its sentinel, the driver's text kept as the message, and nil for any
+// other error, which is left to the driver's translation (see
+// dbruntime.Translating).
+func translate(err error) error {
+	var driverErr sqlite3.Error
+	if !errors.As(err, &driverErr) {
+		return nil
+	}
+	sentinel, found := errCodes[driverErr.ExtendedCode]
+	if !found {
+		return nil
+	}
+	return errors.Wrap(sentinel, driverErr.Error())
 }

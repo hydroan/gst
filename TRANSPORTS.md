@@ -164,7 +164,7 @@ handler --> client : RecordToProto；失败映射成 status
 HTTP 状态到 gRPC status 的映射（`grpcserver.StatusError`）：
 
 - 400 → InvalidArgument；401 → Unauthenticated；403 → PermissionDenied；404 → NotFound；408、504 → DeadlineExceeded。
-- 409 → AlreadyExists，其中乐观锁冲突（错误链里带 `database.ErrStaleObject`）→ Aborted；412 → FailedPrecondition；429 → ResourceExhausted；501 → Unimplemented；503 → Unavailable。
+- 409 → AlreadyExists，其中乐观锁冲突（错误链里带 `database.ErrStaleObject`）→ Aborted，外键不满足（带 `database.ErrForeignKeyViolated`，指向不存在或还被引用的记录）→ FailedPrecondition；412 → FailedPrecondition；429 → ResourceExhausted；501 → Unimplemented；503 → Unavailable。
 - 其他 5xx → Internal；其他 4xx → InvalidArgument；数据库未知错误与钩子里的非 service.Error → Internal，和 HTTP 的 500 同一句文案；请求消息校验失败 → InvalidArgument「invalid request message」；panic 经 recovery → Internal。
 - 客户端已取消或超时的调用答 Canceled / DeadlineExceeded，不记错误日志。
 

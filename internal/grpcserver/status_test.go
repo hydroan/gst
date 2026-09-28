@@ -16,7 +16,8 @@ import (
 // TestStatusErrorMapsTheStatusToTheCode pins the code a failure answers
 // with over gRPC, from the HTTP status the service or the flow chose: the
 // standard mapping of the HTTP statuses that have a gRPC code, a stale
-// object's 409 as Aborted rather than AlreadyExists, any other client error
+// object's 409 as Aborted and a foreign key's as FailedPrecondition rather
+// than AlreadyExists, any other client error
 // as InvalidArgument and any other server error as Internal. The status
 // carries the message the envelope would, and nothing else.
 func TestStatusErrorMapsTheStatusToTheCode(t *testing.T) {
@@ -32,6 +33,7 @@ func TestStatusErrorMapsTheStatusToTheCode(t *testing.T) {
 		{"408", serviceregistry.NewError(http.StatusRequestTimeout, "too slow"), codes.DeadlineExceeded},
 		{"409", serviceregistry.NewError(http.StatusConflict, "taken"), codes.AlreadyExists},
 		{"409 of a stale object", serviceregistry.NewErrorWithCause(http.StatusConflict, "reload", errors.Wrap(database.ErrStaleObject, "update sample")), codes.Aborted},
+		{"409 of a foreign key", serviceregistry.NewErrorWithCause(http.StatusConflict, "refers", errors.Wrap(database.ErrForeignKeyViolated, "create sample")), codes.FailedPrecondition},
 		{"412", serviceregistry.NewError(http.StatusPreconditionFailed, "not yet"), codes.FailedPrecondition},
 		{"422", serviceregistry.NewError(http.StatusUnprocessableEntity, "cannot"), codes.InvalidArgument},
 		{"429", serviceregistry.NewError(http.StatusTooManyRequests, "slow down"), codes.ResourceExhausted},

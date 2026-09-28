@@ -33,8 +33,12 @@ func StatusError(err error) error {
 // standard correspondence for the statuses that have one; the 409 of a stale
 // object — err wraps database.ErrStaleObject, the optimistic-lock miss of a
 // versioned model — as Aborted rather than AlreadyExists, since it is a
-// concurrent change to retry after and not a duplicate; and, for the rest,
-// InvalidArgument for a client error and Internal for a server error.
+// concurrent change to retry after and not a duplicate; the 409 of a
+// foreign key — err wraps database.ErrForeignKeyViolated, a record the
+// request refers to missing or still referred to — as FailedPrecondition,
+// the code AIP-135 gives a delete the records referring to the resource
+// hold up; and, for the rest, InvalidArgument for a client error and
+// Internal for a server error.
 func codeOf(httpStatus int, err error) codes.Code {
 	switch httpStatus {
 	case http.StatusBadRequest:
@@ -50,6 +54,9 @@ func codeOf(httpStatus int, err error) codes.Code {
 	case http.StatusConflict:
 		if errors.Is(err, database.ErrStaleObject) {
 			return codes.Aborted
+		}
+		if errors.Is(err, database.ErrForeignKeyViolated) {
+			return codes.FailedPrecondition
 		}
 		return codes.AlreadyExists
 	case http.StatusPreconditionFailed:

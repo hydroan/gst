@@ -259,6 +259,29 @@ func (i *TestPlainItem) CreateAfter(ctx context.Context) error {
 	return nil
 }
 
+// TestConstrainedRecord carries the constraints a client's data can break:
+// a code of at most four characters, and a level the table checks stays
+// between 1 and 5; TestConstrainedEntry adds the foreign key.
+type TestConstrainedRecord struct {
+	Code  string `json:"code" gorm:"size:4"`
+	Level int    `json:"level" gorm:"check:level BETWEEN 1 AND 5"`
+
+	modelregistry.Base
+}
+
+func (*TestConstrainedRecord) TableName() string { return "test_constrained_records" }
+
+// TestConstrainedEntry belongs to a TestConstrainedRecord, a foreign key
+// holding it to one that exists.
+type TestConstrainedEntry struct {
+	RecordID string                 `json:"record_id" gorm:"size:36"`
+	Record   *TestConstrainedRecord `json:"-" gorm:"foreignKey:RecordID"`
+
+	modelregistry.Base
+}
+
+func (*TestConstrainedEntry) TableName() string { return "test_constrained_entries" }
+
 type TestUniqueItem struct {
 	UniqueCode    string `json:"unique_code" gorm:"size:191;uniqueIndex"`
 	Name          string `json:"name" gorm:"size:191"`

@@ -13,8 +13,8 @@ import (
 // TestDatabaseError pins the canonical mapping of database errors: a service
 // error keeps its own status and message, the database sentinels answer
 // their fixed status and message with the error behind them as the cause,
-// and everything else is answered as it is, the server's own failure
-// carrying no service error.
+// the constraints a client's data breaks among them, and everything else is
+// answered as it is, the server's own failure carrying no service error.
 func TestDatabaseError(t *testing.T) {
 	serviceErr := serviceregistry.NewError(http.StatusForbidden, "operation refused")
 
@@ -30,6 +30,9 @@ func TestDatabaseError(t *testing.T) {
 		{"stale_object_answers_409", errors.Wrap(database.ErrStaleObject, "update sample"), http.StatusConflict, "The resource was modified by another operation. Reload and retry."},
 		{"missing_version_answers_400", errors.Wrap(database.ErrVersionRequired, "update sample"), http.StatusBadRequest, "The request contains invalid parameters."},
 		{"missing_id_answers_400", errors.Wrap(database.ErrIDRequired, "update sample"), http.StatusBadRequest, "The request contains invalid parameters."},
+		{"foreign_key_answers_409", errors.Wrap(database.ErrForeignKeyViolated, "create sample"), http.StatusConflict, "The request refers to a record that does not exist or is still in use."},
+		{"check_constraint_answers_400", errors.Wrap(database.ErrCheckConstraintViolated, "create sample"), http.StatusBadRequest, "The request contains invalid parameters."},
+		{"value_too_long_answers_400", errors.Wrap(database.ErrValueTooLong, "create sample"), http.StatusBadRequest, "The request contains invalid parameters."},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

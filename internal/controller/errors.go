@@ -23,10 +23,11 @@ import (
 // The messages of the controller's fixed refusals, each answered with the
 // status named beside it.
 const (
-	invalidArgumentMsg = "The request contains invalid parameters."                          // 400
-	notFoundMsg        = "The requested resource was not found."                             // 404
-	alreadyExistsMsg   = "The resource already exists."                                      // 409
-	staleObjectMsg     = "The resource was modified by another operation. Reload and retry." // 409
+	invalidArgumentMsg = "The request contains invalid parameters."                               // 400
+	notFoundMsg        = "The requested resource was not found."                                  // 404
+	alreadyExistsMsg   = "The resource already exists."                                           // 409
+	staleObjectMsg     = "The resource was modified by another operation. Reload and retry."      // 409
+	foreignKeyMsg      = "The request refers to a record that does not exist or is still in use." // 409
 )
 
 // invalidArgument returns the refusal of a request the controller could not
@@ -112,11 +113,18 @@ func databaseError(err error) error {
 		// A batch item arrived without the id naming its record — a request
 		// defect as well.
 		return serviceregistry.NewErrorWithCause(http.StatusBadRequest, invalidArgumentMsg, err)
+	case errors.Is(err, database.ErrForeignKeyViolated):
+		// The request names a record that is not there, or would leave one
+		// other records still refer to: a conflict with the records as they
+		// are, to retry once they are in place, FailedPrecondition over gRPC
+		// (see grpcserver.StatusError).
+		return serviceregistry.NewErrorWithCause(http.StatusConflict, foreignKeyMsg, err)
+	case errors.Is(err, database.ErrCheckConstraintViolated), errors.Is(err, database.ErrValueTooLong):
+		// A value the table refuses, by a check or by the length of the
+		// column: the request's own defect.
+		return serviceregistry.NewErrorWithCause(http.StatusBadRequest, invalidArgumentMsg, err)
 	default:
-		// TODO: the database errors client data causes — a value too long,
-		// a missing foreign key, a failed check — fall through here and
-		// answer as the server's own failure; they should map to 4xx, as
-		// should the validation errors of the authz model hooks.
+		// Any other database error is the server's own failure.
 		return err
 	}
 }

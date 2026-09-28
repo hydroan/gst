@@ -72,6 +72,20 @@ var (
 	// primary or unique key, translated from the dialect's own error.
 	ErrDuplicatedKey = gorm.ErrDuplicatedKey
 
+	// ErrForeignKeyViolated is the gorm sentinel for a write whose foreign
+	// key no record satisfies, or that would leave a record other records
+	// still refer to, translated from the dialect's own error.
+	ErrForeignKeyViolated = gorm.ErrForeignKeyViolated
+
+	// ErrCheckConstraintViolated is the gorm sentinel for a write carrying a
+	// value a check constraint of the table refuses, translated from the
+	// dialect's own error.
+	ErrCheckConstraintViolated = gorm.ErrCheckConstraintViolated
+
+	// ErrValueTooLong is the sentinel for a write carrying a value longer
+	// than its column holds, translated from the dialect's own error.
+	ErrValueTooLong = dbruntime.ErrValueTooLong
+
 	// ErrNilSQLBuilder is returned when WithDryRun is handed an explicitly nil
 	// statement collector: the caller asked for statements it could never
 	// receive.

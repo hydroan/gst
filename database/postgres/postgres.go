@@ -7,6 +7,7 @@ import (
 	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/internal/dbruntime"
 	"github.com/hydroan/gst/logger"
+	"github.com/jackc/pgx/v5/pgconn"
 	"go.uber.org/zap"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
@@ -41,7 +42,9 @@ func New(cfg config.Postgres) (*gorm.DB, error) {
 	// Statements run over pgx's simple protocol — no gorm PrepareStmt, no
 	// pgx statement cache, no server-side statement state; buildDSN explains
 	// why.
-	db, err := gorm.Open(postgres.Open(buildDSN(cfg)), &gorm.Config{Logger: logger.Gorm, TranslateError: true, NowFunc: dbruntime.NowUTC})
+	// TranslateError maps the write failures to the gorm sentinels, the
+	// framework's own table (see translate) ahead of the driver's.
+	db, err := gorm.Open(dbruntime.Translating(postgres.Open(buildDSN(cfg)), translate), &gorm.Config{Logger: logger.Gorm, TranslateError: true, NowFunc: dbruntime.NowUTC})
 	if err != nil {
 		return nil, err
 	}
@@ -102,4 +105,27 @@ func buildDSN(cfg config.Postgres) string {
 		"host=%s user=%s password=%s dbname=%s port=%d sslmode=%s TimeZone=UTC default_query_exec_mode=simple_protocol",
 		cfg.Host, cfg.Username, cfg.Password, cfg.Database, cfg.Port, cfg.SSLMode,
 	)
+}
+
+// errCodes are the errors of the constraints a client's data breaks that the
+// driver's translation leaves as they are, keyed by the SQLSTATE code: a
+// value too long for its column (22001); the driver translates the
+// duplicated key, the foreign key and the check constraint itself.
+var errCodes = map[string]error{
+	"22001": dbruntime.ErrValueTooLong,
+}
+
+// translate translates a driver error whose code errCodes lists to its
+// sentinel, the driver's text kept as the message, and nil for any other
+// error, which is left to the driver's translation (see dbruntime.Translating).
+func translate(err error) error {
+	var driverErr *pgconn.PgError
+	if !errors.As(err, &driverErr) {
+		return nil
+	}
+	sentinel, found := errCodes[driverErr.Code]
+	if !found {
+		return nil
+	}
+	return errors.Wrap(sentinel, driverErr.Message)
 }
