@@ -7,9 +7,10 @@
 #   - /-/readyz turns 503 the moment shutdown begins and the listeners close
 #     SERVER_SHUTDOWN_DELAY later, the time the endpoints need to stop sending
 #     requests to a terminating pod; the gRPC health service answers
-#     NOT_SERVING from the same moment, so a gRPC client checking it stops
-#     sending too, and a gRPC stream still open ends as the listeners close,
-#     answered Unavailable, so its client resumes on another pod;
+#     NOT_SERVING from the same moment, for the process and for each service
+#     by name, so a gRPC client or probe checking either stops sending too,
+#     and a gRPC stream still open ends as the listeners close, answered
+#     Unavailable, so its client resumes on another pod;
 #   - the gRPC listener is a second port, grpc, behind the same Service; a
 #     client inside the cluster connects to the headless Service cluster-grpc,
 #     which resolves to the pods themselves, so that its connections spread

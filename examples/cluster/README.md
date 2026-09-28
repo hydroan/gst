@@ -576,12 +576,13 @@ timeout 3 rpc "$(pods | sed -n 1p)" -v -d "{\"payload\":{\"after\":$LAST}}" loca
 ```bash
 P1=$(pods | sed -n 1p)
 kubectl -n $NS exec "$P1" -c cluster -- grpcurl -plaintext localhost:8081 grpc.health.v1.Health/Check
+kubectl -n $NS exec "$P1" -c cluster -- grpcurl -plaintext -d '{"service":"cluster.FlagService"}' localhost:8081 grpc.health.v1.Health/Check
 kubectl -n $NS delete pod "$P1" --wait=false
 for i in 1 2 3 4 5 6 7 8; do sleep 0.6; kubectl -n $NS exec "$P1" -c cluster -- grpcurl -plaintext -max-time 1 localhost:8081 grpc.health.v1.Health/Check 2>&1 | tr -d ' \n'; echo; done
 kubectl -n $NS rollout status deployment/cluster --timeout=240s
 ```
 
-删 Pod 之前答 `SERVING`；进程一收到 SIGTERM 就答 `NOT_SERVING`，和 `/-/readyz` 变 503 是同一个时刻，`SERVER_SHUTDOWN_DELAY` 的 5 秒里一直如此，之后监听关闭、连接被拒。拿健康服务做探针或让客户端自己检查，都能在监听关闭之前把流量挪开。
+删 Pod 之前答 `SERVING`：不指名问的是整个进程，指名 `cluster.FlagService` 问的是这一个服务，监听上的每个服务都能这样问，没有的服务名答 `NotFound`。进程一收到 SIGTERM 就都答 `NOT_SERVING`，和 `/-/readyz` 变 503 是同一个时刻，`SERVER_SHUTDOWN_DELAY` 的 5 秒里一直如此，之后监听关闭、连接被拒。拿健康服务做探针（Kubernetes 的 gRPC 探针在 `service` 里指名一个服务）或让客户端自己检查，都能在监听关闭之前把流量挪开。
 
 #### 7.7 集群内的地址
 
