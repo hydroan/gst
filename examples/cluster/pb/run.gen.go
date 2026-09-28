@@ -65,9 +65,9 @@ func RunToProto(m *model.Run) *Run {
 }
 
 // RunFromProto decodes Run messages into values, nil into nil.
-func RunFromProto(p *Run) *model.Run {
+func RunFromProto(p *Run) (*model.Run, error) {
 	if p == nil {
-		return nil
+		return nil, nil
 	}
 	m := new(model.Run)
 	m.ID = p.GetId()
@@ -82,5 +82,5 @@ func RunFromProto(p *Run) *model.Run {
 		x := grpc.Time(p.GetEndedAt())
 		m.EndedAt = &x
 	}
-	return m
+	return m, nil
 }

@@ -46,12 +46,12 @@ func StepDownRspToProto(m *model.StepDownRsp) *StepDownRsp {
 
 // StepDownRspFromProto decodes StepDownRsp messages into values, nil into
 // nil.
-func StepDownRspFromProto(p *StepDownRsp) *model.StepDownRsp {
+func StepDownRspFromProto(p *StepDownRsp) (*model.StepDownRsp, error) {
 	if p == nil {
-		return nil
+		return nil, nil
 	}
 	m := new(model.StepDownRsp)
 	m.Replica = p.GetReplica()
 	m.Asked = p.GetAsked()
-	return m
+	return m, nil
 }

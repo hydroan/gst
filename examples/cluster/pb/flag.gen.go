@@ -34,7 +34,11 @@ var (
 
 // CreateFlag serves the Create action of Flag on /api/flags.
 func (FlagService) CreateFlag(ctx context.Context, req *CreateFlagRequest) (*CreateFlagResponse, error) {
-	m, err := createFlag(ctx, nil, FlagFromProto(req.GetFlag()))
+	in, err := FlagFromProto(req.GetFlag())
+	if err != nil {
+		return nil, err
+	}
+	m, err := createFlag(ctx, nil, in)
 	if err != nil {
 		return nil, err
 	}
@@ -51,7 +55,11 @@ func (FlagService) DeleteFlag(ctx context.Context, req *DeleteFlagRequest) (*Del
 
 // UpdateFlag serves the Update action of Flag on /api/flags/:id.
 func (FlagService) UpdateFlag(ctx context.Context, req *UpdateFlagRequest) (*UpdateFlagResponse, error) {
-	m, err := updateFlag(ctx, map[string]string{"id": req.GetId()}, req.GetId(), FlagFromProto(req.GetFlag()))
+	in, err := FlagFromProto(req.GetFlag())
+	if err != nil {
+		return nil, err
+	}
+	m, err := updateFlag(ctx, map[string]string{"id": req.GetId()}, req.GetId(), in)
 	if err != nil {
 		return nil, err
 	}
@@ -60,7 +68,11 @@ func (FlagService) UpdateFlag(ctx context.Context, req *UpdateFlagRequest) (*Upd
 
 // PatchFlag serves the Patch action of Flag on /api/flags/:id.
 func (FlagService) PatchFlag(ctx context.Context, req *PatchFlagRequest) (*PatchFlagResponse, error) {
-	m, err := patchFlag(ctx, map[string]string{"id": req.GetId()}, req.GetId(), FlagFromProto(req.GetFlag()), req.GetUpdateMask().GetPaths())
+	in, err := FlagFromProto(req.GetFlag())
+	if err != nil {
+		return nil, err
+	}
+	m, err := patchFlag(ctx, map[string]string{"id": req.GetId()}, req.GetId(), in, req.GetUpdateMask().GetPaths())
 	if err != nil {
 		return nil, err
 	}
@@ -103,7 +115,11 @@ func (FlagService) GetFlag(ctx context.Context, req *GetFlagRequest) (*GetFlagRe
 func (FlagService) CreateManyFlag(ctx context.Context, req *CreateManyFlagRequest) (*CreateManyFlagResponse, error) {
 	models := make([]*model.Flag, len(req.GetItems()))
 	for i, item := range req.GetItems() {
-		models[i] = FlagFromProto(item)
+		in, err := FlagFromProto(item)
+		if err != nil {
+			return nil, err
+		}
+		models[i] = in
 	}
 	stored, err := createManyFlag(ctx, nil, models)
 	if err != nil {
@@ -128,7 +144,11 @@ func (FlagService) DeleteManyFlag(ctx context.Context, req *DeleteManyFlagReques
 func (FlagService) UpdateManyFlag(ctx context.Context, req *UpdateManyFlagRequest) (*UpdateManyFlagResponse, error) {
 	models := make([]*model.Flag, len(req.GetItems()))
 	for i, item := range req.GetItems() {
-		models[i] = FlagFromProto(item)
+		in, err := FlagFromProto(item)
+		if err != nil {
+			return nil, err
+		}
+		models[i] = in
 	}
 	stored, err := updateManyFlag(ctx, nil, models)
 	if err != nil {
@@ -146,7 +166,11 @@ func (FlagService) PatchManyFlag(ctx context.Context, req *PatchManyFlagRequest)
 	models := make([]*model.Flag, len(req.GetItems()))
 	masks := make([][]string, len(req.GetItems()))
 	for i, item := range req.GetItems() {
-		m, err := grpc.PatchItem(i, nil, nil, item.GetId(), FlagFromProto(item.GetFlag()))
+		in, err := FlagFromProto(item.GetFlag())
+		if err != nil {
+			return nil, err
+		}
+		m, err := grpc.PatchItem(i, nil, nil, item.GetId(), in)
 		if err != nil {
 			return nil, err
 		}
@@ -183,9 +207,9 @@ func FlagToProto(m *model.Flag) *Flag {
 }
 
 // FlagFromProto decodes Flag messages into values, nil into nil.
-func FlagFromProto(p *Flag) *model.Flag {
+func FlagFromProto(p *Flag) (*model.Flag, error) {
 	if p == nil {
-		return nil
+		return nil, nil
 	}
 	m := new(model.Flag)
 	m.ID = p.GetId()
@@ -197,5 +221,5 @@ func FlagFromProto(p *Flag) *model.Flag {
 	m.On = p.GetOn()
 	m.Percent = int(p.GetPercent())
 	m.Note = p.GetNote()
-	return m
+	return m, nil
 }

@@ -51,7 +51,11 @@ func (CounterStepService) ListCounterStep(ctx context.Context, req *ListCounterS
 // WatchCounterStep serves the Stream action of CounterStep declared on
 // counter_steps/watch, served over gRPC alone.
 func (CounterStepService) WatchCounterStep(req *WatchCounterStepRequest, srv CounterStepService_WatchCounterStepServer) error {
-	return watchCounterStep(srv.Context(), nil, CounterStepWatchReqFromProto(req.GetPayload()), func(rsp *model.CounterStep) error {
+	payload, err := CounterStepWatchReqFromProto(req.GetPayload())
+	if err != nil {
+		return err
+	}
+	return watchCounterStep(srv.Context(), nil, payload, func(rsp *model.CounterStep) error {
 		return srv.Send(&WatchCounterStepResponse{Result: CounterStepToProto(rsp)})
 	})
 }
@@ -76,9 +80,9 @@ func CounterStepToProto(m *model.CounterStep) *CounterStep {
 
 // CounterStepFromProto decodes CounterStep messages into values, nil into
 // nil.
-func CounterStepFromProto(p *CounterStep) *model.CounterStep {
+func CounterStepFromProto(p *CounterStep) (*model.CounterStep, error) {
 	if p == nil {
-		return nil
+		return nil, nil
 	}
 	m := new(model.CounterStep)
 	m.ID = p.GetId()
@@ -89,7 +93,7 @@ func CounterStepFromProto(p *CounterStep) *model.CounterStep {
 	m.Seq = p.GetSeq()
 	m.Tenure = p.GetTenure()
 	m.Replica = p.GetReplica()
-	return m
+	return m, nil
 }
 
 // CounterStepWatchReqToProto encodes CounterStepWatchReq values into their
@@ -105,11 +109,11 @@ func CounterStepWatchReqToProto(m *model.CounterStepWatchReq) *CounterStepWatchR
 
 // CounterStepWatchReqFromProto decodes CounterStepWatchReq messages into
 // values, nil into nil.
-func CounterStepWatchReqFromProto(p *CounterStepWatchReq) *model.CounterStepWatchReq {
+func CounterStepWatchReqFromProto(p *CounterStepWatchReq) (*model.CounterStepWatchReq, error) {
 	if p == nil {
-		return nil
+		return nil, nil
 	}
 	m := new(model.CounterStepWatchReq)
 	m.After = p.GetAfter()
-	return m
+	return m, nil
 }

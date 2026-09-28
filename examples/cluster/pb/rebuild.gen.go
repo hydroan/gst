@@ -24,7 +24,11 @@ var createRebuild = grpc.ServiceCall[*model.Rebuild, *model.RebuildReq, *model.R
 
 // CreateRebuild serves the Create action of Rebuild on /api/rebuilds.
 func (RebuildService) CreateRebuild(ctx context.Context, req *CreateRebuildRequest) (*CreateRebuildResponse, error) {
-	result, err := createRebuild(ctx, nil, grpc.Query{}, RebuildReqFromProto(req.GetPayload()))
+	payload, err := RebuildReqFromProto(req.GetPayload())
+	if err != nil {
+		return nil, err
+	}
+	result, err := createRebuild(ctx, nil, grpc.Query{}, payload)
 	if err != nil {
 		return nil, err
 	}
@@ -44,14 +48,14 @@ func RebuildReqToProto(m *model.RebuildReq) *RebuildReq {
 }
 
 // RebuildReqFromProto decodes RebuildReq messages into values, nil into nil.
-func RebuildReqFromProto(p *RebuildReq) *model.RebuildReq {
+func RebuildReqFromProto(p *RebuildReq) (*model.RebuildReq, error) {
 	if p == nil {
-		return nil
+		return nil, nil
 	}
 	m := new(model.RebuildReq)
 	m.Seconds = int(p.GetSeconds())
 	m.InTransaction = p.GetInTransaction()
-	return m
+	return m, nil
 }
 
 // RebuildRspToProto encodes RebuildRsp values into their message, nil into
@@ -67,12 +71,12 @@ func RebuildRspToProto(m *model.RebuildRsp) *RebuildRsp {
 }
 
 // RebuildRspFromProto decodes RebuildRsp messages into values, nil into nil.
-func RebuildRspFromProto(p *RebuildRsp) *model.RebuildRsp {
+func RebuildRspFromProto(p *RebuildRsp) (*model.RebuildRsp, error) {
 	if p == nil {
-		return nil
+		return nil, nil
 	}
 	m := new(model.RebuildRsp)
 	m.Replica = p.GetReplica()
 	m.Seconds = int(p.GetSeconds())
-	return m
+	return m, nil
 }

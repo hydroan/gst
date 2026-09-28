@@ -32,7 +32,11 @@ var (
 
 // CreateNote serves the Create action of Note on /api/board/notes.
 func (NoteService) CreateNote(ctx context.Context, req *CreateNoteRequest) (*CreateNoteResponse, error) {
-	m, err := createNote(ctx, nil, NoteFromProto(req.GetNote()))
+	in, err := NoteFromProto(req.GetNote())
+	if err != nil {
+		return nil, err
+	}
+	m, err := createNote(ctx, nil, in)
 	if err != nil {
 		return nil, err
 	}
@@ -49,7 +53,11 @@ func (NoteService) DeleteNote(ctx context.Context, req *DeleteNoteRequest) (*Del
 
 // UpdateNote serves the Update action of Note on /api/board/notes/:id.
 func (NoteService) UpdateNote(ctx context.Context, req *UpdateNoteRequest) (*UpdateNoteResponse, error) {
-	m, err := updateNote(ctx, map[string]string{"id": req.GetId()}, req.GetId(), NoteFromProto(req.GetNote()))
+	in, err := NoteFromProto(req.GetNote())
+	if err != nil {
+		return nil, err
+	}
+	m, err := updateNote(ctx, map[string]string{"id": req.GetId()}, req.GetId(), in)
 	if err != nil {
 		return nil, err
 	}
@@ -58,7 +66,11 @@ func (NoteService) UpdateNote(ctx context.Context, req *UpdateNoteRequest) (*Upd
 
 // PatchNote serves the Patch action of Note on /api/board/notes/:id.
 func (NoteService) PatchNote(ctx context.Context, req *PatchNoteRequest) (*PatchNoteResponse, error) {
-	m, err := patchNote(ctx, map[string]string{"id": req.GetId()}, req.GetId(), NoteFromProto(req.GetNote()), req.GetUpdateMask().GetPaths())
+	in, err := NoteFromProto(req.GetNote())
+	if err != nil {
+		return nil, err
+	}
+	m, err := patchNote(ctx, map[string]string{"id": req.GetId()}, req.GetId(), in, req.GetUpdateMask().GetPaths())
 	if err != nil {
 		return nil, err
 	}
@@ -100,7 +112,11 @@ func (NoteService) GetNote(ctx context.Context, req *GetNoteRequest) (*GetNoteRe
 // PublishNote serves the Create action of Note on
 // /api/board/notes/:id/publish.
 func (NoteService) PublishNote(ctx context.Context, req *PublishNoteRequest) (*PublishNoteResponse, error) {
-	result, err := publishNote(ctx, map[string]string{"id": req.GetId()}, grpc.Query{}, NotePublishReqFromProto(req.GetPayload()))
+	payload, err := NotePublishReqFromProto(req.GetPayload())
+	if err != nil {
+		return nil, err
+	}
+	result, err := publishNote(ctx, map[string]string{"id": req.GetId()}, grpc.Query{}, payload)
 	if err != nil {
 		return nil, err
 	}
@@ -128,9 +144,9 @@ func NoteToProto(m *board.Note) *Note {
 }
 
 // NoteFromProto decodes Note messages into values, nil into nil.
-func NoteFromProto(p *Note) *board.Note {
+func NoteFromProto(p *Note) (*board.Note, error) {
 	if p == nil {
-		return nil
+		return nil, nil
 	}
 	m := new(board.Note)
 	m.ID = p.GetId()
@@ -145,7 +161,7 @@ func NoteFromProto(p *Note) *board.Note {
 		x := grpc.Time(p.GetPublishedAt())
 		m.PublishedAt = &x
 	}
-	return m
+	return m, nil
 }
 
 // NotePublishReqToProto encodes NotePublishReq values into their message,
@@ -161,13 +177,13 @@ func NotePublishReqToProto(m *board.NotePublishReq) *NotePublishReq {
 
 // NotePublishReqFromProto decodes NotePublishReq messages into values, nil
 // into nil.
-func NotePublishReqFromProto(p *NotePublishReq) *board.NotePublishReq {
+func NotePublishReqFromProto(p *NotePublishReq) (*board.NotePublishReq, error) {
 	if p == nil {
-		return nil
+		return nil, nil
 	}
 	m := new(board.NotePublishReq)
 	m.Channel = p.GetChannel()
-	return m
+	return m, nil
 }
 
 // NotePublishRspToProto encodes NotePublishRsp values into their message,
@@ -185,13 +201,13 @@ func NotePublishRspToProto(m *board.NotePublishRsp) *NotePublishRsp {
 
 // NotePublishRspFromProto decodes NotePublishRsp messages into values, nil
 // into nil.
-func NotePublishRspFromProto(p *NotePublishRsp) *board.NotePublishRsp {
+func NotePublishRspFromProto(p *NotePublishRsp) (*board.NotePublishRsp, error) {
 	if p == nil {
-		return nil
+		return nil, nil
 	}
 	m := new(board.NotePublishRsp)
 	m.ID = p.GetId()
 	m.Channel = p.GetChannel()
 	m.PublishedAt = grpc.Time(p.GetPublishedAt())
-	return m
+	return m, nil
 }

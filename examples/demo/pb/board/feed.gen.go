@@ -32,7 +32,7 @@ func (FeedService) ChatFeed(srv FeedService_ChatFeedServer) error {
 		if recvErr != nil {
 			return nil, recvErr
 		}
-		return FeedEventFromProto(msg.GetPayload()), nil
+		return FeedEventFromProto(msg.GetPayload())
 	}, func(rsp *board.FeedEvent) error {
 		return srv.Send(&ChatFeedResponse{Result: FeedEventToProto(rsp)})
 	})
@@ -46,7 +46,7 @@ func (FeedService) UploadFeed(srv FeedService_UploadFeedServer) error {
 		if recvErr != nil {
 			return nil, recvErr
 		}
-		return FeedEventFromProto(msg.GetPayload()), nil
+		return FeedEventFromProto(msg.GetPayload())
 	})
 	if err != nil {
 		return err
@@ -57,7 +57,11 @@ func (FeedService) UploadFeed(srv FeedService_UploadFeedServer) error {
 // WatchFeed serves the Stream action of Feed declared on board/feeds/watch,
 // served over gRPC alone.
 func (FeedService) WatchFeed(req *WatchFeedRequest, srv FeedService_WatchFeedServer) error {
-	return watchFeed(srv.Context(), nil, FeedWatchReqFromProto(req.GetPayload()), func(rsp *board.FeedEvent) error {
+	payload, err := FeedWatchReqFromProto(req.GetPayload())
+	if err != nil {
+		return err
+	}
+	return watchFeed(srv.Context(), nil, payload, func(rsp *board.FeedEvent) error {
 		return srv.Send(&WatchFeedResponse{Result: FeedEventToProto(rsp)})
 	})
 }
@@ -75,14 +79,14 @@ func FeedEventToProto(m *board.FeedEvent) *FeedEvent {
 }
 
 // FeedEventFromProto decodes FeedEvent messages into values, nil into nil.
-func FeedEventFromProto(p *FeedEvent) *board.FeedEvent {
+func FeedEventFromProto(p *FeedEvent) (*board.FeedEvent, error) {
 	if p == nil {
-		return nil
+		return nil, nil
 	}
 	m := new(board.FeedEvent)
 	m.Seq = p.GetSeq()
 	m.Body = p.GetBody()
-	return m
+	return m, nil
 }
 
 // FeedUploadRspToProto encodes FeedUploadRsp values into their message, nil
@@ -98,13 +102,13 @@ func FeedUploadRspToProto(m *board.FeedUploadRsp) *FeedUploadRsp {
 
 // FeedUploadRspFromProto decodes FeedUploadRsp messages into values, nil
 // into nil.
-func FeedUploadRspFromProto(p *FeedUploadRsp) *board.FeedUploadRsp {
+func FeedUploadRspFromProto(p *FeedUploadRsp) (*board.FeedUploadRsp, error) {
 	if p == nil {
-		return nil
+		return nil, nil
 	}
 	m := new(board.FeedUploadRsp)
 	m.Accepted = p.GetAccepted()
-	return m
+	return m, nil
 }
 
 // FeedWatchReqToProto encodes FeedWatchReq values into their message, nil
@@ -120,11 +124,11 @@ func FeedWatchReqToProto(m *board.FeedWatchReq) *FeedWatchReq {
 
 // FeedWatchReqFromProto decodes FeedWatchReq messages into values, nil into
 // nil.
-func FeedWatchReqFromProto(p *FeedWatchReq) *board.FeedWatchReq {
+func FeedWatchReqFromProto(p *FeedWatchReq) (*board.FeedWatchReq, error) {
 	if p == nil {
-		return nil
+		return nil, nil
 	}
 	m := new(board.FeedWatchReq)
 	m.Topic = p.GetTopic()
-	return m
+	return m, nil
 }
