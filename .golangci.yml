@@ -185,6 +185,21 @@ linters:
           deny:
             - pkg: "github.com/hydroan/gst/interceptor$"
               desc: "framework code imports github.com/hydroan/gst/internal/grpcserver; only the interceptors of the modules come from the public package, mounted by the project"
+        # The same rule for the public grpc package, which forwards to the
+        # server package and the controller: the interceptors of the modules
+        # and the public interceptor package, its counterpart of middleware,
+        # spell the call's types by it, and the package's external tests and
+        # the module tests mounting them as a project does are left out.
+        grpc-forwarder:
+          files:
+            - "$all"
+            - "!**/grpc/*_test.go"
+            - "!**/interceptor/*.go"
+            - "!**/module/iam/interceptor_test.go"
+            - "!**/module/authz/interceptor_test.go"
+          deny:
+            - pkg: "github.com/hydroan/gst/grpc$"
+              desc: "framework code imports github.com/hydroan/gst/internal/grpcserver and github.com/hydroan/gst/internal/controller; the public package forwards to them for the generated code and the project"
         # Only the gg command prints. The packages it runs return what they
         # found, or report progress through callbacks the command passes, and
         # the command decides how that shows.

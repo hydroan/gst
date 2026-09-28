@@ -5,39 +5,52 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/hydroan/gst/internal/grpcserver"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/structpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 // This file holds the conversions the generated handlers apply to what a
-// message cannot carry as the Go value is: a time, a dynamic value, a JSON
-// object, and the filters of a List request (a JSON document, a
+// message cannot carry as the Go value is: a time, a dynamic value, a
+// JSON object, and the filters of a List request (a JSON document, a
 // json.RawMessage or a datatypes.JSON, travels as its bytes and needs
 // none). Each maps the unset value of one side to the unset value of the
 // other, the zero time to no Timestamp and nil to nil, so a value comes
 // back from a message as it went in. It also holds what a generated
 // FromProto reads a value through when the message's type is wider than
 // the model's, Narrow and Number, which refuse what the model's type cannot
-// hold.
+// hold, the way encoding/json refuses it over HTTP.
 
 // Narrow returns v as the narrower integer type T a model field holds, int8
 // for the int32 its message carries, and refuses with InvalidArgument,
-// naming field, a value T cannot hold, the way encoding/json refuses an
-// out-of-range number over HTTP: 300 folded into an int8 would come back
-// as 44. The generated FromProto reads every int8, int16, uint8 and uint16
-// field through it.
+// naming field, a value T cannot hold: 300 folded into an int8 would come
+// back as 44. The generated FromProto reads every int8, int16, uint8 and
+// uint16 field through it.
 func Narrow[T ~int8 | ~int16 | ~uint8 | ~uint16, V ~int32 | ~uint32](field string, v V) (T, error) {
-	return grpcserver.Narrow[T](field, v)
+	narrowed := T(v)
+	if V(narrowed) != v {
+		return 0, status.Errorf(codes.InvalidArgument, "field %q: %d does not fit %T", field, v, narrowed)
+	}
+	return narrowed, nil
 }
 
 // Number returns s as the json.Number a model field holds, "" for the unset
 // field, and refuses with InvalidArgument, naming field, a string that is no
-// JSON number literal, the way encoding/json refuses it over HTTP: the
-// message carries the number as a string. The generated FromProto reads
-// every json.Number field through it.
+// JSON number literal, text or a quoted number among them: the message
+// carries the number as a string, and one that is not a number would be
+// written out as one. encoding/json judges the literal, so the two
+// listeners refuse the same strings. The generated FromProto reads every
+// json.Number field through it.
 func Number(field, s string) (json.Number, error) {
-	return grpcserver.Number(field, s)
+	if s == "" {
+		return "", nil
+	}
+	var n json.Number
+	if err := json.Unmarshal([]byte(s), &n); err != nil || string(n) != s {
+		return "", status.Errorf(codes.InvalidArgument, "field %q: %q is not a JSON number", field, s)
+	}
+	return n, nil
 }
 
 // Timestamp returns the Timestamp of t, and nil for the zero time, which a
