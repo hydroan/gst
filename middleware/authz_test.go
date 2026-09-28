@@ -66,13 +66,15 @@ func TestAuthzLogsDecisionDuration(t *testing.T) {
 
 // requireAuthzLogDuration asserts the pair util.LogDuration renders. Both keys
 // come from that one field, so a grant and a failure carry them too: all three
-// entry kinds take them from authzLogFields.
+// entry kinds take them from authzLogFields. The duration may be zero: a
+// decision made within one tick of the monotonic clock, some 40ns on Apple
+// silicon, reads the same time at both ends.
 func requireAuthzLogDuration(t *testing.T, fields map[string]any) {
 	t.Helper()
 
 	duration, ok := fields[consts.LOG_DURATION].(int64)
 	require.True(t, ok, "log field %q is not an int64", consts.LOG_DURATION)
-	require.Positive(t, duration)
+	require.GreaterOrEqual(t, duration, int64(0))
 	require.NotEmpty(t, fields[consts.LOG_DURATION_HUMAN])
 }
 
