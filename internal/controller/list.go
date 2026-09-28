@@ -8,7 +8,7 @@ import (
 	"github.com/hydroan/gst/database"
 	modellogmgmt "github.com/hydroan/gst/internal/model/logmgmt"
 	"github.com/hydroan/gst/internal/requestctx"
-	. "github.com/hydroan/gst/internal/response"
+	"github.com/hydroan/gst/internal/response"
 	"github.com/hydroan/gst/internal/types"
 	"github.com/hydroan/gst/internal/urlquery"
 	"github.com/hydroan/gst/logger"
@@ -41,10 +41,10 @@ func ListHandler[M types.Model, REQ types.Request, RSP types.Response](cfg ...*t
 
 		items, total, err := a.listFlow(requestContext(c), ginServiceContext(c))
 		if err != nil {
-			JSON(c, failureCoder(err))
+			response.JSON(c, failureCoder(err))
 			return
 		}
-		JSON(c, CodeSuccess, gin.H{
+		response.JSON(c, response.CodeSuccess, gin.H{
 			"items": items,
 			"total": total,
 		})
@@ -94,26 +94,26 @@ func (a *action[M, REQ, RSP]) listFlow(ctx context.Context, newServiceContext se
 	m := a.newModel()
 
 	if err := decodeListQuery(m, query); err != nil {
-		return nil, 0, failWith(ctx, log, "parse query parameter failed", CodeInvalidParam.WithErr(err), err)
+		return nil, 0, failWith(ctx, log, "parse query parameter failed", response.CodeInvalidArgument.WithErr(err), err)
 	}
 	filters, err := urlquery.Filters(query, m)
 	if err != nil {
-		return nil, 0, failWith(ctx, log, "parse query parameter failed", CodeInvalidParam.WithErr(err), err)
+		return nil, 0, failWith(ctx, log, "parse query parameter failed", response.CodeInvalidArgument.WithErr(err), err)
 	}
 	present := urlquery.PresentFields(query)
 
 	orders, err := urlquery.Orders(query, m)
 	if err != nil {
-		return nil, 0, failWith(ctx, log, "parse query parameter failed", CodeInvalidParam.WithErr(err), err)
+		return nil, 0, failWith(ctx, log, "parse query parameter failed", response.CodeInvalidArgument.WithErr(err), err)
 	}
 
 	cursor, err := urlquery.Cursor(query, m)
 	if err != nil {
-		return nil, 0, failWith(ctx, log, "parse query parameter failed", CodeInvalidParam.WithErr(err), err)
+		return nil, 0, failWith(ctx, log, "parse query parameter failed", response.CodeInvalidArgument.WithErr(err), err)
 	}
 
 	if err = checkCursorOrderConflict(cursor, orders); err != nil {
-		return nil, 0, failWith(ctx, log, "parse query parameter failed", CodeInvalidParam.WithErr(err), err)
+		return nil, 0, failWith(ctx, log, "parse query parameter failed", response.CodeInvalidArgument.WithErr(err), err)
 	}
 
 	data := make([]M, 0)

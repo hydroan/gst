@@ -15,7 +15,7 @@ import (
 // record by, the body's bytes, and the context the flow runs on.
 
 // missingRouteParamMsg answers a request whose configured route parameter is
-// absent. It is carried as a message under CodeInvalidParam rather than as a
+// absent. It is carried as a message under CodeInvalidArgument rather than as a
 // code of its own: the request is malformed in exactly the way that code
 // already names, and a separate number said nothing the text does not.
 const missingRouteParamMsg = "not found router param"

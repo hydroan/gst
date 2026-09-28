@@ -12,7 +12,7 @@ import (
 	"github.com/hydroan/gst/consts"
 	"github.com/hydroan/gst/internal/grpcserver"
 	"github.com/hydroan/gst/internal/requestctx"
-	. "github.com/hydroan/gst/internal/response"
+	"github.com/hydroan/gst/internal/response"
 	"github.com/hydroan/gst/internal/types"
 	"github.com/hydroan/gst/logger"
 	gstotel "github.com/hydroan/gst/otel"
@@ -279,30 +279,30 @@ func (c *call) refuse(coder types.Coder, err error) error {
 }
 
 // invalid refuses the request for err with the message err carries, the
-// way the HTTP handler answers CodeInvalidParam.WithErr.
+// way the HTTP handler answers response.CodeInvalidArgument.WithErr.
 func (c *call) invalid(err error) error {
-	return c.refuse(CodeInvalidParam.WithErr(err), err)
+	return c.refuse(response.CodeInvalidArgument.WithErr(err), err)
 }
 
 // invalidMessage refuses a model or payload the validator refused (err),
 // with invalidMessageMsg, the way the HTTP handler answers a bind failure
 // with a message free of Go names.
 func (c *call) invalidMessage(err error) error {
-	return c.refuse(CodeInvalidParam.WithMsg(invalidMessageMsg), err)
+	return c.refuse(response.CodeInvalidArgument.WithMsg(invalidMessageMsg), err)
 }
 
 // missingID refuses a call of an item action whose message names no record,
 // the way the HTTP handler refuses a request whose route parameter is
 // absent.
 func (c *call) missingID() error {
-	return c.refuse(CodeInvalidParam.WithMsg(missingIDMsg), errors.New(missingIDMsg))
+	return c.refuse(response.CodeInvalidArgument.WithMsg(missingIDMsg), errors.New(missingIDMsg))
 }
 
 // missingRecord refuses a call whose message carries no record, the way the
 // HTTP handler refuses a request without a body: an absent record would
 // create a zero one or replace the stored one by it.
 func (c *call) missingRecord() error {
-	return c.refuse(CodeInvalidParam.WithMsg(missingRecordMsg), errors.New(missingRecordMsg))
+	return c.refuse(response.CodeInvalidArgument.WithMsg(missingRecordMsg), errors.New(missingRecordMsg))
 }
 
 // fail answers a flow's failure, which the flow logged and recorded already,

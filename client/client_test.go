@@ -101,7 +101,7 @@ func TestClientCRUDRoundTrip(t *testing.T) {
 	// The database layer answers existence, so a vanished record renders the
 	// framework's 404 with its fixed message instead of the driver's own text.
 	_, err = cli.Get[TestRecord](t.Context(), recordPath+"/"+id)
-	testutil.RequireError(t, err, http.StatusNotFound, "Requested resource not found.")
+	testutil.RequireError(t, err, http.StatusNotFound, "The requested resource was not found.")
 }
 
 func TestClientListQueryOptions(t *testing.T) {
@@ -158,7 +158,7 @@ func TestClientBatchRoundTrip(t *testing.T) {
 	require.NoError(t, err)
 
 	_, err = cli.Get[TestRecord](t.Context(), recordPath+"/"+id1)
-	testutil.RequireError(t, err, http.StatusNotFound, "Requested resource not found.")
+	testutil.RequireError(t, err, http.StatusNotFound, "The requested resource was not found.")
 }
 
 func TestClientRejectionCarriesEnvelope(t *testing.T) {

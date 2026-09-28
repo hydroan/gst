@@ -9,7 +9,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/hydroan/gst/consts"
 	"github.com/hydroan/gst/database"
-	. "github.com/hydroan/gst/internal/response"
+	"github.com/hydroan/gst/internal/response"
 	"github.com/hydroan/gst/internal/types"
 	"github.com/hydroan/gst/logger"
 	gstotel "github.com/hydroan/gst/otel"
@@ -20,8 +20,8 @@ import (
 const MaxImportSize = 5 * 1024 * 1024
 
 // tooLargeFileMsg answers an upload over MaxImportSize. It is carried as a
-// message under CodeInvalidParam rather than as a code of its own, for the same
-// reason as missingRouteParamMsg.
+// message under response.CodeInvalidArgument rather than as a code of its
+// own, for the same reason as missingRouteParamMsg.
 const tooLargeFileMsg = "too large file"
 
 // missingUploadFileMsg answers an import request whose multipart form carries
@@ -49,21 +49,21 @@ func ImportHandler[M types.Model, REQ types.Request, RSP types.Response](cfg ...
 		file, err := c.FormFile("file")
 		if err != nil {
 			log.Errorz("read upload file failed", zap.Error(err))
-			JSON(c, CodeInvalidParam.WithMsg(missingUploadFileMsg))
+			response.JSON(c, response.CodeInvalidArgument.WithMsg(missingUploadFileMsg))
 			gstotel.RecordError(span, err)
 			return
 		}
 		// check file size.
 		if file.Size > int64(MaxImportSize) {
 			log.Errorz(tooLargeFileMsg)
-			JSON(c, CodeInvalidParam.WithMsg(tooLargeFileMsg))
+			response.JSON(c, response.CodeInvalidArgument.WithMsg(tooLargeFileMsg))
 			gstotel.RecordError(span, errors.New(tooLargeFileMsg))
 			return
 		}
 		fd, err := file.Open()
 		if err != nil {
 			log.Errorz("read upload file failed", zap.Error(err))
-			JSON(c, CodeFailure)
+			response.JSON(c, response.CodeFailure)
 			gstotel.RecordError(span, err)
 			return
 		}
@@ -72,7 +72,7 @@ func ImportHandler[M types.Model, REQ types.Request, RSP types.Response](cfg ...
 		buf := new(bytes.Buffer)
 		if _, err = io.Copy(buf, fd); err != nil {
 			log.Errorz("read upload file failed", zap.Error(err))
-			JSON(c, CodeFailure)
+			response.JSON(c, response.CodeFailure)
 			gstotel.RecordError(span, err)
 			return
 		}
@@ -115,10 +115,10 @@ func ImportHandler[M types.Model, REQ types.Request, RSP types.Response](cfg ...
 			return database.Database[M](txCtx).Update(toUpdate...)
 		}); err != nil {
 			log.Errorz("database operation failed", zap.Error(err))
-			JSON(c, databaseErrorCoder(err))
+			response.JSON(c, databaseErrorCoder(err))
 			gstotel.RecordError(span, err)
 			return
 		}
-		JSON(c, CodeSuccess)
+		response.JSON(c, response.CodeSuccess)
 	}
 }

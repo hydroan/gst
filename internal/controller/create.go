@@ -10,7 +10,7 @@ import (
 	"github.com/hydroan/gst/database"
 	modellogmgmt "github.com/hydroan/gst/internal/model/logmgmt"
 	"github.com/hydroan/gst/internal/requestctx"
-	. "github.com/hydroan/gst/internal/response"
+	"github.com/hydroan/gst/internal/response"
 	"github.com/hydroan/gst/internal/types"
 	"github.com/hydroan/gst/logger"
 	gstotel "github.com/hydroan/gst/otel"
@@ -48,17 +48,17 @@ func CreateHandler[M types.Model, REQ types.Request, RSP types.Response](cfg ...
 			// rather than answered as a success that wrote nothing.
 			reqErr = requiredBodyError(reqErr)
 			log.Errorz("bind request body failed", zap.Error(reqErr))
-			JSON(c, CodeInvalidParam.WithErr(reqErr))
+			response.JSON(c, response.CodeInvalidArgument.WithErr(reqErr))
 			gstotel.RecordError(span, reqErr)
 			return
 		}
 		a.normalizeModel(&req)
 
 		if err := a.createFlow(requestContext(c), ginServiceContext(c), req); err != nil {
-			JSON(c, failureCoder(err))
+			response.JSON(c, failureCoder(err))
 			return
 		}
-		JSON(c, CodeSuccess, req)
+		response.JSON(c, response.CodeSuccess, req)
 	}
 }
 

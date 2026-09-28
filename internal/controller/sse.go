@@ -7,7 +7,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/hydroan/gst/consts"
 	"github.com/hydroan/gst/internal/lifecycle"
-	. "github.com/hydroan/gst/internal/response"
+	"github.com/hydroan/gst/internal/response"
 	"github.com/hydroan/gst/internal/sse"
 	"github.com/hydroan/gst/internal/types"
 	"github.com/hydroan/gst/logger"
@@ -75,7 +75,7 @@ func SSEHandler[M types.Model, REQ types.Request, RSP types.Response](cfg ...*ty
 		default:
 			// A service that never opened the stream and returned nil still
 			// owes the client an answer.
-			JSON(c, CodeSuccess, nil)
+			response.JSON(c, response.CodeSuccess, nil)
 		}
 	}
 }

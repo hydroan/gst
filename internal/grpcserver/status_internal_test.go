@@ -45,7 +45,7 @@ func TestStatusOfCoderMapsTheAnswerToTheCode(t *testing.T) {
 		{"502", serviceregistry.NewError(http.StatusBadGateway, "upstream broke"), codes.Internal},
 		{"generic failure", response.CodeFailure, codes.InvalidArgument},
 		{"not found", response.CodeNotFound, codes.NotFound},
-		{"already exists", response.CodeAlreadyExist, codes.AlreadyExists},
+		{"already exists", response.CodeAlreadyExists, codes.AlreadyExists},
 		{"stale object", response.CodeStaleObject, codes.Aborted},
 	} {
 		t.Run(tc.name, func(t *testing.T) {

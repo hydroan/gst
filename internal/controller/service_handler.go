@@ -9,7 +9,7 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/gin-gonic/gin"
 	"github.com/hydroan/gst/consts"
-	. "github.com/hydroan/gst/internal/response"
+	"github.com/hydroan/gst/internal/response"
 	"github.com/hydroan/gst/internal/types"
 	"github.com/hydroan/gst/logger"
 	gstotel "github.com/hydroan/gst/otel"
@@ -62,7 +62,7 @@ func (a *action[M, REQ, RSP]) serviceHandler() gin.HandlerFunc {
 			}
 			if reqErr != nil {
 				log.Errorz("bind request body failed", zap.Error(reqErr))
-				JSON(c, CodeInvalidParam.WithErr(reqErr))
+				response.JSON(c, response.CodeInvalidArgument.WithErr(reqErr))
 				gstotel.RecordError(span, reqErr)
 				return
 			}
@@ -78,7 +78,7 @@ func (a *action[M, REQ, RSP]) serviceHandler() gin.HandlerFunc {
 		}
 		// Check if response is already written (e.g., SSE streaming)
 		if !c.Writer.Written() {
-			JSON(c, CodeSuccess, rsp)
+			response.JSON(c, response.CodeSuccess, rsp)
 		}
 	}
 }

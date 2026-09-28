@@ -9,7 +9,7 @@ import (
 	"github.com/hydroan/gst/database"
 	"github.com/hydroan/gst/internal/modelregistry"
 	"github.com/hydroan/gst/internal/requestctx"
-	. "github.com/hydroan/gst/internal/response"
+	"github.com/hydroan/gst/internal/response"
 	"github.com/hydroan/gst/internal/types"
 	"github.com/hydroan/gst/internal/urlquery"
 	"github.com/hydroan/gst/logger"
@@ -108,14 +108,14 @@ func ExportHandler[M types.Model, REQ types.Request, RSP types.Response](cfg ...
 			// dropped condition set.
 			if err = urlquery.Decode(query, m); err != nil {
 				log.Errorz("parse query parameter failed", zap.Error(err))
-				JSON(c, CodeInvalidParam.WithErr(err))
+				response.JSON(c, response.CodeInvalidArgument.WithErr(err))
 				gstotel.RecordError(span, err)
 				return
 			}
 			var filters []types.Filter
 			if filters, err = urlquery.Filters(query, m); err != nil {
 				log.Errorz("parse query parameter failed", zap.Error(err))
-				JSON(c, CodeInvalidParam.WithErr(err))
+				response.JSON(c, response.CodeInvalidArgument.WithErr(err))
 				gstotel.RecordError(span, err)
 				return
 			}
@@ -124,7 +124,7 @@ func ExportHandler[M types.Model, REQ types.Request, RSP types.Response](cfg ...
 			var orders []types.Order
 			if orders, err = urlquery.Orders(query, m); err != nil {
 				log.Errorz("parse query parameter failed", zap.Error(err))
-				JSON(c, CodeInvalidParam.WithErr(err))
+				response.JSON(c, response.CodeInvalidArgument.WithErr(err))
 				gstotel.RecordError(span, err)
 				return
 			}
@@ -164,7 +164,7 @@ func ExportHandler[M types.Model, REQ types.Request, RSP types.Response](cfg ...
 				WithOrder(orders...).
 				List(&data); err != nil {
 				log.Errorz("database operation failed", zap.Error(err))
-				JSON(c, databaseErrorCoder(err))
+				response.JSON(c, databaseErrorCoder(err))
 				gstotel.RecordError(span, err)
 				return
 			}
@@ -190,6 +190,6 @@ func ExportHandler[M types.Model, REQ types.Request, RSP types.Response](cfg ...
 		}
 		format := resolveExportFormat(c.Query(consts.QUERY_FORMAT), exported)
 		filename, contentType := exportAttachment(format)
-		Attachment(c, exported, filename, contentType)
+		response.Attachment(c, exported, filename, contentType)
 	}
 }

@@ -16,7 +16,7 @@ import (
 	"github.com/hydroan/gst/internal/grpcserver"
 	modellogmgmt "github.com/hydroan/gst/internal/model/logmgmt"
 	"github.com/hydroan/gst/internal/modelregistry"
-	. "github.com/hydroan/gst/internal/response"
+	"github.com/hydroan/gst/internal/response"
 	"github.com/hydroan/gst/internal/types"
 	"github.com/hydroan/gst/logger"
 	gstotel "github.com/hydroan/gst/otel"
@@ -38,7 +38,7 @@ import (
 // forwards to it.
 func PatchItem[M types.Model](i int, params, itemParams map[string]string, id string, m M) (M, error) {
 	invalid := func(format string, args ...any) error {
-		return grpcserver.StatusOfCoder(CodeInvalidParam.WithMsg(fmt.Sprintf(format, args...)))
+		return grpcserver.StatusOfCoder(response.CodeInvalidArgument.WithMsg(fmt.Sprintf(format, args...)))
 	}
 	for _, name := range slices.Sorted(maps.Keys(itemParams)) {
 		if value := itemParams[name]; value != "" && value != params[name] {
@@ -84,20 +84,20 @@ func PatchManyHandler[M types.Model, REQ types.Request, RSP types.Response](cfg 
 		body, err := readJSONRequestBody(c)
 		if err != nil {
 			log.Errorz("bind request body failed", zap.Error(err))
-			JSON(c, CodeInvalidParam.WithErr(err))
+			response.JSON(c, response.CodeInvalidArgument.WithErr(err))
 			gstotel.RecordError(span, err)
 			return
 		}
 		fieldSets, fieldErr := patchManyFieldSetsFromJSONBody(a.typ, body)
 		if fieldErr != nil && !errors.Is(fieldErr, io.EOF) {
 			log.Errorz("bind request body failed", zap.Error(fieldErr))
-			JSON(c, CodeInvalidParam.WithErr(fieldErr))
+			response.JSON(c, response.CodeInvalidArgument.WithErr(fieldErr))
 			gstotel.RecordError(span, fieldErr)
 			return
 		}
 		if reqErr := decodeJSONRequest(c, &req); reqErr != nil && !errors.Is(reqErr, io.EOF) {
 			log.Errorz("bind request body failed", zap.Error(reqErr))
-			JSON(c, CodeInvalidParam.WithErr(reqErr))
+			response.JSON(c, response.CodeInvalidArgument.WithErr(reqErr))
 			gstotel.RecordError(span, reqErr)
 			return
 		}
@@ -116,14 +116,14 @@ func PatchManyHandler[M types.Model, REQ types.Request, RSP types.Response](cfg 
 			if _, ok := itemFields[versionField]; versioned && !ok {
 				log.Errorz("versioned model patched without its version",
 					zap.Int("item", i), zap.String("field", versionField))
-				JSON(c, databaseErrorCoder(database.ErrVersionRequired))
+				response.JSON(c, databaseErrorCoder(database.ErrVersionRequired))
 				gstotel.RecordError(span, database.ErrVersionRequired)
 				return
 			}
 			if fieldErr := validatePatchFields(item, itemFields); fieldErr != nil {
 				fieldErr = clientSafeBindError(fieldErr)
 				log.Errorz("bind request body failed", zap.Error(fieldErr))
-				JSON(c, CodeInvalidParam.WithErr(fieldErr))
+				response.JSON(c, response.CodeInvalidArgument.WithErr(fieldErr))
 				gstotel.RecordError(span, fieldErr)
 				return
 			}
@@ -131,10 +131,10 @@ func PatchManyHandler[M types.Model, REQ types.Request, RSP types.Response](cfg 
 
 		rsp, err := a.patchManyFlow(requestContext(c), ginServiceContext(c), &req, fieldSets)
 		if err != nil {
-			JSON(c, failureCoder(err))
+			response.JSON(c, failureCoder(err))
 			return
 		}
-		JSON(c, CodeSuccess, rsp)
+		response.JSON(c, response.CodeSuccess, rsp)
 	}
 }
 

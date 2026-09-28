@@ -58,7 +58,7 @@ func TestHandleServiceErrorHidesInternalErrorText(t *testing.T) {
 	handleServiceError(ctx, internal)
 
 	require.Equal(t, http.StatusBadRequest, recorder.Code)
-	require.JSONEq(t, `{"code":-1,"msg":"failure","data":null,"trace_id":""}`, recorder.Body.String())
+	require.JSONEq(t, `{"code":-1,"msg":"The request could not be processed.","data":null,"trace_id":""}`, recorder.Body.String())
 	require.NotContains(t, recorder.Body.String(), internal.Error())
 }
 
@@ -76,12 +76,12 @@ func TestDatabaseErrorCoder(t *testing.T) {
 		wantMsg    string
 	}{
 		{"service_error_keeps_status_and_message", serviceErr, http.StatusForbidden, "operation refused"},
-		{"record_not_found_renders_404", errors.Wrap(database.ErrRecordNotFound, "get sample"), http.StatusNotFound, "Requested resource not found."},
-		{"duplicated_key_renders_409", errors.Wrap(database.ErrDuplicatedKey, "create sample"), http.StatusConflict, "Resource already exists."},
-		{"stale_object_renders_409", errors.Wrap(database.ErrStaleObject, "update sample"), http.StatusConflict, "Resource was modified by another operation. Reload and retry."},
-		{"missing_version_renders_400", errors.Wrap(database.ErrVersionRequired, "update sample"), http.StatusBadRequest, "Invalid parameters provided in the request."},
-		{"missing_id_renders_400", errors.Wrap(database.ErrIDRequired, "update sample"), http.StatusBadRequest, "Invalid parameters provided in the request."},
-		{"other_errors_hide_internal_text", errors.New("Error 1146: Table 'sample' doesn't exist"), http.StatusBadRequest, "failure"},
+		{"record_not_found_renders_404", errors.Wrap(database.ErrRecordNotFound, "get sample"), http.StatusNotFound, "The requested resource was not found."},
+		{"duplicated_key_renders_409", errors.Wrap(database.ErrDuplicatedKey, "create sample"), http.StatusConflict, "The resource already exists."},
+		{"stale_object_renders_409", errors.Wrap(database.ErrStaleObject, "update sample"), http.StatusConflict, "The resource was modified by another operation. Reload and retry."},
+		{"missing_version_renders_400", errors.Wrap(database.ErrVersionRequired, "update sample"), http.StatusBadRequest, "The request contains invalid parameters."},
+		{"missing_id_renders_400", errors.Wrap(database.ErrIDRequired, "update sample"), http.StatusBadRequest, "The request contains invalid parameters."},
+		{"other_errors_hide_internal_text", errors.New("Error 1146: Table 'sample' doesn't exist"), http.StatusBadRequest, "The request could not be processed."},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

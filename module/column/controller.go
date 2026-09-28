@@ -7,7 +7,7 @@ import (
 	"strings"
 	"sync"
 
-	. "github.com/hydroan/gst/internal/response"
+	"github.com/hydroan/gst/internal/response"
 
 	"github.com/gin-gonic/gin"
 	"github.com/hydroan/gst/database"
@@ -31,7 +31,7 @@ type column struct{}
 // 		cs.GetColumns(c, "samples", columnUser)
 // 	default:
 // 		zap.S().Warn("unknow id: ", c.Param(consts.PARAM_ID))
-// 		ResponseJSON(c, CodeSuccess)
+// 		ResponseJSON(c, response.CodeSuccess)
 // 	}
 // }
 
@@ -43,10 +43,10 @@ func (cs *column) GetColumns(c *gin.Context, tableName string, columns []string,
 	columnRes, err := queryColumnsWithQuery(tableName, columns, c.Request.URL.Query(), db...)
 	if err != nil {
 		zap.S().Error(err)
-		JSON(c, CodeFailure)
+		response.JSON(c, response.CodeFailure)
 		return
 	}
-	JSON(c, CodeSuccess, columnRes)
+	response.JSON(c, response.CodeSuccess, columnRes)
 }
 
 // queryColumns only queries which distinct values each column has.

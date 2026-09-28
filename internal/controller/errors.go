@@ -7,7 +7,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/hydroan/gst/database"
 	"github.com/hydroan/gst/internal/grpcserver"
-	. "github.com/hydroan/gst/internal/response"
+	"github.com/hydroan/gst/internal/response"
 	"github.com/hydroan/gst/internal/serviceregistry"
 	"github.com/hydroan/gst/internal/types"
 	gstotel "github.com/hydroan/gst/otel"
@@ -46,7 +46,7 @@ func failureCoder(err error) types.Coder {
 	if errors.As(err, &f) {
 		return f.coder
 	}
-	return CodeFailure
+	return response.CodeFailure
 }
 
 // failWith logs err under msg, records it on the controller span ctx
@@ -79,13 +79,13 @@ func serviceErrorCoder(err error) types.Coder {
 	if errors.As(err, &serviceErr) {
 		return serviceErr
 	}
-	return CodeFailure
+	return response.CodeFailure
 }
 
 // handleServiceError renders a service-layer failure through
 // serviceErrorCoder.
 func handleServiceError(c *gin.Context, err error) {
-	JSON(c, serviceErrorCoder(err))
+	response.JSON(c, serviceErrorCoder(err))
 }
 
 // databaseErrorCoder maps database errors to their canonical API codes: a
@@ -107,21 +107,21 @@ func databaseErrorCoder(err error) types.Coder {
 	case errors.As(err, &serviceErr):
 		return serviceErr
 	case errors.Is(err, database.ErrRecordNotFound):
-		return CodeNotFound
+		return response.CodeNotFound
 	case errors.Is(err, database.ErrDuplicatedKey):
-		return CodeAlreadyExist
+		return response.CodeAlreadyExists
 	case errors.Is(err, database.ErrStaleObject):
 		// The optimistic-lock miss of a versioned model: modified or deleted
 		// by someone else after this caller read it. 409, reload and retry.
-		return CodeStaleObject
+		return response.CodeStaleObject
 	case errors.Is(err, database.ErrVersionRequired):
 		// A versioned record arrived without the version it was read with —
 		// a request defect, not a conflict.
-		return CodeInvalidParam
+		return response.CodeInvalidArgument
 	case errors.Is(err, database.ErrIDRequired):
 		// A batch item arrived without the id naming its record — a request
 		// defect as well.
-		return CodeInvalidParam
+		return response.CodeInvalidArgument
 	default:
 		// TODO: this fallback, like handleServiceError's, answers an
 		// unexpected failure with 400, reporting a server-side problem as the
@@ -130,7 +130,7 @@ func databaseErrorCoder(err error) types.Coder {
 		// client data causes (a value too long, a missing foreign key, a
 		// failed check) to 4xx, and giving the validation errors of the authz
 		// model hooks a 4xx status.
-		return CodeFailure
+		return response.CodeFailure
 	}
 }
 
@@ -145,7 +145,7 @@ func databaseErrorCoder(err error) types.Coder {
 // envelope has it, the client's, and its text stays out of the answer the
 // way grpcserver.StatusError keeps it out.
 func statusOf(coder types.Coder, err error) error {
-	if coder == CodeFailure {
+	if coder == response.CodeFailure {
 		return grpcserver.StatusError(err)
 	}
 	return grpcserver.StatusOfCoder(coder)

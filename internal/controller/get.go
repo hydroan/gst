@@ -10,7 +10,7 @@ import (
 	"github.com/hydroan/gst/database"
 	modellogmgmt "github.com/hydroan/gst/internal/model/logmgmt"
 	"github.com/hydroan/gst/internal/requestctx"
-	. "github.com/hydroan/gst/internal/response"
+	"github.com/hydroan/gst/internal/response"
 	"github.com/hydroan/gst/internal/types"
 	"github.com/hydroan/gst/logger"
 	gstotel "github.com/hydroan/gst/otel"
@@ -48,17 +48,17 @@ func GetHandler[M types.Model, REQ types.Request, RSP types.Response](cfg ...*ty
 		}
 		if len(param) == 0 {
 			log.Errorz(missingRouteParamMsg)
-			JSON(c, CodeInvalidParam.WithMsg(missingRouteParamMsg))
+			response.JSON(c, response.CodeInvalidArgument.WithMsg(missingRouteParamMsg))
 			gstotel.RecordError(span, errors.New(missingRouteParamMsg))
 			return
 		}
 
 		m, err := a.getFlow(requestContext(c), ginServiceContext(c), param)
 		if err != nil {
-			JSON(c, failureCoder(err))
+			response.JSON(c, failureCoder(err))
 			return
 		}
-		JSON(c, CodeSuccess, m)
+		response.JSON(c, response.CodeSuccess, m)
 	}
 }
 
@@ -94,7 +94,7 @@ func GetCall[M types.Model](route string) func(ctx context.Context, params map[s
 // read, records the operation, and returns the model. id must not be empty:
 // a UUID-keyed model mints a fresh id for an empty one (see setID). An
 // id the model rejects, and a read that finds no stored record, both answer
-// CodeNotFound.
+// response.CodeNotFound.
 func (a *action[M, REQ, RSP]) getFlow(ctx context.Context, newServiceContext serviceContextFunc, id string) (M, error) {
 	var zero M
 	log := logger.Controller.WithContext(ctx, consts.Get)
@@ -108,7 +108,7 @@ func (a *action[M, REQ, RSP]) getFlow(ctx context.Context, newServiceContext ser
 		// the raw value reaches SQL, where implicit string-to-integer
 		// coercion could match an unintended row.
 		log.Errorz("route id rejected by model", zap.String("id", id))
-		return zero, &failure{coder: CodeNotFound}
+		return zero, &failure{coder: response.CodeNotFound}
 	}
 	expands := parseExpandQuery(requestctx.QueryValues(ctx), m)
 
@@ -131,12 +131,12 @@ func (a *action[M, REQ, RSP]) getFlow(ctx context.Context, newServiceContext ser
 	}
 	// A model without an id or creation time holds no stored record (a
 	// missing row already failed above with ErrRecordNotFound), so answer
-	// CodeNotFound instead of an empty resource.
+	// response.CodeNotFound instead of an empty resource.
 	if len(m.GetID()) == 0 || m.GetCreatedAt().Equal(time.Time{}) {
-		log.Errorz(CodeNotFound.String())
-		err := errors.New(CodeNotFound.Msg())
+		log.Errorz(response.CodeNotFound.String())
+		err := errors.New(response.CodeNotFound.Msg())
 		gstotel.RecordError(trace.SpanFromContext(ctx), err)
-		return zero, &failure{coder: CodeNotFound, err: err}
+		return zero, &failure{coder: response.CodeNotFound, err: err}
 	}
 
 	// 4.record operation log to database.

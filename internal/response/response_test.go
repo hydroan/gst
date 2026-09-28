@@ -168,7 +168,7 @@ func TestWithErrKeepsServiceErrorCauseOutOfMessage(t *testing.T) {
 
 func TestCodeStringRendersMessageNotBareInteger(t *testing.T) {
 	got := response.CodeNotFound.String()
-	want := fmt.Sprintf("Requested resource not found. (code=%d)", int32(response.CodeNotFound))
+	want := fmt.Sprintf("The requested resource was not found. (code=%d)", int32(response.CodeNotFound))
 	if got != want {
 		t.Errorf("String() = %q, want %q", got, want)
 	}
