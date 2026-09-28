@@ -225,8 +225,6 @@ func distinctValues(_db *gorm.DB, table, column string, filters []clause.Express
 	if err := tx.Pluck(column, &scanned).Error; err != nil {
 		return nil, err
 	}
-	// fmt.Println("--------------------- statement: ", tx.Statement.SQL.String())
-
 	results := make([]string, 0, len(scanned))
 	for _, name := range scanned {
 		// An empty value is useless as a frontend filter option: it either
