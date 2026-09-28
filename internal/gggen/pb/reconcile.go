@@ -1,6 +1,7 @@
 package pb
 
 import (
+	"maps"
 	"os"
 	"path/filepath"
 	"slices"
@@ -16,13 +17,19 @@ import (
 // This file holds the definitions to the contract already on disk: the
 // committed .proto files are what the clients were built against, so a
 // generated file replaces one only if every field keeps its number and no
-// number changes hands, and the fields the models dropped stay reserved.
+// number changes hands, the fields the models dropped stay reserved, and
+// every message, service and rpc is still declared, each rpc with the
+// messages and the streaming it had (after Buf's breaking rules
+// MESSAGE_NO_DELETE, SERVICE_NO_DELETE, RPC_NO_DELETE, RPC_SAME_REQUEST_TYPE,
+// RPC_SAME_RESPONSE_TYPE, RPC_SAME_CLIENT_STREAMING and
+// RPC_SAME_SERVER_STREAMING).
 
 // reconcile reads, for every file about to be written, the committed one
 // under pb/ in the project and holds the new file to it, message by message
-// (see holdMessage). A committed file that cannot be parsed is reported, so
-// that it is never overwritten blindly; a file without a committed
-// counterpart is new and free.
+// (see holdMessage) and service by service (see holdServices), the messages
+// the committed file declared having to be declared still. A committed file
+// that cannot be parsed is reported, so that it is never overwritten
+// blindly; a file without a committed counterpart is new and free.
 func (g *generator) reconcile() {
 	for name, f := range g.files {
 		s := jsonshape.Site{Subject: ggconst.DirPB + "/" + name}
@@ -37,16 +44,25 @@ func (g *generator) reconcile() {
 		for _, m := range f.messages {
 			g.holdMessage(s, m, "", committed.messages)
 		}
+		declared := make(map[string]*descriptorpb.DescriptorProto, len(committed.messages))
+		indexMessages(f.messages, "", declared)
+		for _, name := range slices.Sorted(maps.Keys(committed.messages)) {
+			if _, ok := declared[name]; !ok {
+				g.project.Report(s, "the message %s is gone; a client was built against it, so keep it, or delete %s to accept the break", name, s.Subject)
+			}
+		}
+		g.holdServices(s, f, committed.services)
 	}
 }
 
 // committedFile is a definition already under pb/ as reconcile and the
 // numbering of untagged fields read it: absent when the project holds none,
-// otherwise its messages by dotted name (see indexMessages), or what kept
-// it from being read.
+// otherwise its messages by dotted name (see indexMessages) and its services
+// by name, or what kept it from being read.
 type committedFile struct {
 	absent   bool
 	messages map[string]*descriptorpb.DescriptorProto
+	services map[string]*descriptorpb.ServiceDescriptorProto
 	err      error
 }
 
@@ -65,6 +81,10 @@ func (g *generator) committed(name string) committedFile {
 	} else {
 		c.messages = make(map[string]*descriptorpb.DescriptorProto)
 		indexMessages(desc.GetMessageType(), "", c.messages)
+		c.services = make(map[string]*descriptorpb.ServiceDescriptorProto, len(desc.GetService()))
+		for _, svc := range desc.GetService() {
+			c.services[svc.GetName()] = svc
+		}
 	}
 	g.committedFiles[name] = c
 	return c
@@ -191,6 +211,65 @@ func (g *generator) holdMessage(s jsonshape.Site, msg *descriptorpb.DescriptorPr
 	for _, nested := range msg.GetNestedType() {
 		g.holdMessage(s, nested, name, old)
 	}
+}
+
+// holdServices holds the services of file to the committed ones, old: a
+// committed service must still be declared, and so must every rpc of it,
+// taking the request message, answering the response message and streaming
+// the sides it did, since a client was built against each; every breach is
+// reported with the file to delete for accepting the break. A committed
+// NoteService whose GetNote took GetNoteRequest and answered GetNoteResponse
+// as a unary rpc holds the file to exactly that.
+func (g *generator) holdServices(s jsonshape.Site, file *protoFile, old map[string]*descriptorpb.ServiceDescriptorProto) {
+	services := make(map[string]*descriptorpb.ServiceDescriptorProto, len(file.services))
+	for _, svc := range file.services {
+		services[svc.GetName()] = svc
+	}
+	for _, name := range slices.Sorted(maps.Keys(old)) {
+		svc, ok := services[name]
+		if !ok {
+			g.project.Report(s, "the service %s is gone; a client was built against it, so keep it, or delete %s to accept the break", name, s.Subject)
+			continue
+		}
+		methods := make(map[string]*descriptorpb.MethodDescriptorProto, len(svc.GetMethod()))
+		for _, m := range svc.GetMethod() {
+			methods[m.GetName()] = m
+		}
+		for _, was := range old[name].GetMethod() {
+			m, ok := methods[was.GetName()]
+			switch {
+			case !ok:
+				g.project.Report(s, "the rpc %s of service %s is gone; a client was built against it, so keep it, or delete %s to accept the break", was.GetName(), name, s.Subject)
+			case messageOfType(was.GetInputType()) != messageOfType(m.GetInputType()):
+				g.project.Report(s, "the rpc %s of service %s took %s and now takes %s; a client was built against it, so keep it, or delete %s to accept the break", was.GetName(), name, messageOfType(was.GetInputType()), messageOfType(m.GetInputType()), s.Subject)
+			case messageOfType(was.GetOutputType()) != messageOfType(m.GetOutputType()):
+				g.project.Report(s, "the rpc %s of service %s answered %s and now answers %s; a client was built against it, so keep it, or delete %s to accept the break", was.GetName(), name, messageOfType(was.GetOutputType()), messageOfType(m.GetOutputType()), s.Subject)
+			case was.GetClientStreaming() != m.GetClientStreaming() || was.GetServerStreaming() != m.GetServerStreaming():
+				g.project.Report(s, "the rpc %s of service %s was %s and is now %s; a change of streaming breaks the wire, so keep it %s, or delete %s to accept the break", was.GetName(), name, streaming(was), streaming(m), streaming(was), s.Subject)
+			}
+		}
+	}
+}
+
+// messageOfType is the name of the message an rpc's type names, below its
+// package: GetNoteRequest for .app.GetNoteRequest, which a parsed file
+// spells, and for GetNoteRequest as is.
+func messageOfType(typeName string) string {
+	return typeName[strings.LastIndex(typeName, ".")+1:]
+}
+
+// streaming names the streaming of an rpc for a diagnostic: unary, client
+// streaming, server streaming or bidirectional streaming.
+func streaming(m *descriptorpb.MethodDescriptorProto) string {
+	switch {
+	case m.GetClientStreaming() && m.GetServerStreaming():
+		return "bidirectional streaming"
+	case m.GetClientStreaming():
+		return "client streaming"
+	case m.GetServerStreaming():
+		return "server streaming"
+	}
+	return "unary"
 }
 
 // reserves reports whether the ranges, ends exclusive as the descriptor has

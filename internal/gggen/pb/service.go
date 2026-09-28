@@ -1,6 +1,7 @@
 package pb
 
 import (
+	"cmp"
 	"go/types"
 	"maps"
 	"slices"
@@ -8,6 +9,7 @@ import (
 
 	"github.com/hydroan/gst/consts"
 	"github.com/hydroan/gst/internal/dsl"
+	"github.com/hydroan/gst/internal/ggconst"
 	"github.com/hydroan/gst/internal/gggen/jsonshape"
 	"github.com/hydroan/gst/internal/modelinfo"
 	"google.golang.org/protobuf/types/descriptorpb"
@@ -225,7 +227,9 @@ func (g *generator) rpcMessages(m *modelinfo.Model, scope *types.Scope, model *m
 		return nil, false
 	}
 	r.params = params
-	numberInOrder(response)
+	if responseFields, ok = g.numberFields(s, file, responseName, response, responseFields); !ok {
+		return nil, false
+	}
 	response.Name = new(responseName)
 	if holder, ok := file.claim(responseName, "the rpc "+qualified); !ok {
 		g.project.Report(s, "the message %s clashes with %s; rename the type", responseName, holder)
@@ -240,8 +244,9 @@ func (g *generator) rpcMessages(m *modelinfo.Model, scope *types.Scope, model *m
 // a standard PatchMany lists (see patchRequest), and adds it to file: the
 // parameters of the route (see requestParams) go first, before what request
 // holds, a parameter named like a field of the request being reported; the
-// fields are numbered in order; the message takes name, claimed for owner,
-// and comment, with the comment of each field. It returns the parameters.
+// fields are numbered after the committed definition (see numberFields);
+// the message takes name, claimed for owner, and comment, with the comment
+// of each field. It returns the parameters.
 func (g *generator) addRequest(m *modelinfo.Model, file *protoFile, route string, action *dsl.Action, request *descriptorpb.DescriptorProto, requestFields []string, name, comment, owner string, s jsonshape.Site) ([]requestParam, bool) {
 	params := requestParams(m, route, action)
 	fields := make([]*descriptorpb.FieldDescriptorProto, 0, len(params)+len(request.Field))
@@ -261,7 +266,10 @@ func (g *generator) addRequest(m *modelinfo.Model, file *protoFile, route string
 			}
 		}
 	}
-	numberInOrder(request)
+	requestFields, ok := g.numberFields(s, file, name, request, requestFields)
+	if !ok {
+		return nil, false
+	}
 	request.Name = new(name)
 	if holder, ok := file.claim(name, owner); !ok {
 		g.project.Report(s, "the message %s clashes with %s; rename the type", name, holder)
@@ -606,12 +614,43 @@ func queryFields(phase consts.Phase) (fields []*descriptorpb.FieldDescriptorProt
 	return nil, nil, nil
 }
 
-// numberInOrder numbers the fields of a request or response message 1, 2, 3
-// in the order they hold; the nested messages keep the numbers they declare.
-func numberInOrder(desc *descriptorpb.DescriptorProto) {
-	for i, field := range desc.Field {
-		field.Number = new(int32Index(i) + 1)
+// numberFields numbers the fields of the request or response message desc,
+// to be named name in file, the way a model's untagged fields are numbered
+// (see nextNumbers): a field the committed definition under pb/ holds keeps
+// its number, whatever position it holds now, and any other takes the next
+// free number; the fields, and comments with them, are then ordered by
+// number. The nested messages keep the numbers they declare. GetNoteRequest,
+// holding id, expand and depth in that order, is numbered 1, 2, 3 by a first
+// generation; when the committed file holds expand = 1 and id = 2 it is
+// numbered expand = 1, id = 2, depth = 3 and printed in that order, and when
+// the committed file holds id = 1, expand = 2 and reserves 3, depth takes 4.
+// It returns the comments in the order of the fields, or false once no
+// number is left, the message reported.
+func (g *generator) numberFields(s jsonshape.Site, file *protoFile, name string, desc *descriptorpb.DescriptorProto, comments []string) ([]string, bool) {
+	numbers := make(map[int32]string, len(desc.Field))
+	next := g.nextNumbers(file, name, numbers, false)
+	for _, field := range desc.Field {
+		number, ok := next(field.GetName())
+		if !ok {
+			g.project.Report(s, "the field %s of message %s has no field number left: every one is one the committed %s/%s reserves; lift a reservation, or delete the file to start over", field.GetName(), name, ggconst.DirPB, file.name)
+			return nil, false
+		}
+		numbers[number] = field.GetName()
+		field.Number = new(number)
 	}
+	order := make([]int, len(desc.Field))
+	for i := range order {
+		order[i] = i
+	}
+	slices.SortStableFunc(order, func(a, b int) int { return cmp.Compare(desc.Field[a].GetNumber(), desc.Field[b].GetNumber()) })
+	fields := make([]*descriptorpb.FieldDescriptorProto, len(desc.Field))
+	ordered := make([]string, len(comments))
+	for i, from := range order {
+		fields[i] = desc.Field[from]
+		ordered[i] = comments[from]
+	}
+	desc.Field = fields
+	return ordered, true
 }
 
 // addRPCMessage appends a request or response message to file, with the

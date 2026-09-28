@@ -1681,3 +1681,158 @@ func (Draft) Design() {
 	dsl.Create(func() {})
 }
 `
+
+// TestGenRunHoldsTheRPCMessagesToTheirCommittedNumbers pins that the
+// request and response messages of an rpc take their numbers from the
+// definition already under pb/, the way a model's untagged fields do: a
+// field the committed message holds keeps its number whatever position it
+// holds now, a new field takes the next free number, one the committed
+// message reserves excluded, and a field the committed message held stays
+// reserved.
+func TestGenRunHoldsTheRPCMessagesToTheirCommittedNumbers(t *testing.T) {
+	projectDir, ok := newGenProject(t)
+	if !ok {
+		return
+	}
+	proto := filepath.Join(ggconst.DirPB, "note.proto")
+	// fresh commits the definition as first generated, then rewrites it as
+	// edit leaves it, for the run that starts from it.
+	fresh := func(t *testing.T, edit func(string) string) {
+		t.Helper()
+		writeProtobufProject(t, projectDir, map[string]string{"model/note.go": protobufNoteModel})
+		require.NoError(t, os.RemoveAll(ggconst.DirPB))
+		require.NoError(t, genRunWithOptions(genRunOptions{Quiet: true}))
+		content, err := os.ReadFile(proto)
+		require.NoError(t, err)
+		edited := edit(string(content))
+		require.NotEqual(t, string(content), edited, "the edit has to change the committed file")
+		require.NoError(t, os.WriteFile(proto, []byte(edited), 0o600))
+	}
+	regenerated := func(t *testing.T) string {
+		t.Helper()
+		require.NoError(t, genRunWithOptions(genRunOptions{Quiet: true}))
+		content, err := os.ReadFile(proto)
+		require.NoError(t, err)
+		return string(content)
+	}
+	// inRequest applies edit to the block of the committed file declaring
+	// GetNoteRequest, whose fields Note declares alike.
+	inRequest := func(edit func(string) string) func(string) string {
+		return func(s string) string {
+			start := strings.Index(s, "message GetNoteRequest {")
+			end := start + strings.Index(s[start:], "\n}\n") + len("\n}\n")
+			return s[:start] + edit(s[start:end]) + s[end:]
+		}
+	}
+
+	t.Run("a field keeps its number by name", func(t *testing.T) {
+		// The committed definition numbers two fields the other way round,
+		// as a generator ordering the fields differently would have.
+		fresh(t, inRequest(func(s string) string {
+			s = strings.Replace(s, "  string id = 1;", "  string id = 2;", 1)
+			return strings.Replace(s, "  repeated string expand = 2;", "  repeated string expand = 1;", 1)
+		}))
+
+		content := regenerated(t)
+
+		require.Contains(t, content, "  string id = 2;")
+		require.Contains(t, content, "  repeated string expand = 1;")
+		require.Less(t, strings.Index(content, "repeated string expand = 1;"), strings.Index(content, "string id = 2;"), "the fields are printed in the order of their numbers")
+	})
+	t.Run("a new field takes the next free number", func(t *testing.T) {
+		// The committed definition lacks a field the generator adds, as one
+		// written before the generator added it would, and reserves the
+		// number after its last.
+		fresh(t, inRequest(func(s string) string {
+			return strings.Replace(s, "  // depth is the depth of the expansion, as the _depth query parameter.\n  uint32 depth = 3;\n", "  reserved 3;\n", 1)
+		}))
+
+		content := regenerated(t)
+
+		require.Contains(t, content, "  uint32 depth = 4;")
+		require.Contains(t, content, "  reserved 3;")
+	})
+	t.Run("a field the committed message held stays reserved", func(t *testing.T) {
+		fresh(t, inRequest(func(s string) string {
+			return strings.Replace(s, "  uint32 depth = 3;\n", "  uint32 depth = 3;\n\n  string legacy = 4;\n", 1)
+		}))
+
+		content := regenerated(t)
+
+		require.Contains(t, content, "  reserved 4;")
+		require.Contains(t, content, `  reserved "legacy";`)
+	})
+}
+
+// TestGenRunHoldsTheCommittedServicesAndMessages pins the rest of the
+// contract the committed file holds, after Buf's breaking rules: a service,
+// an rpc and a message the committed file declares must still be declared,
+// and an rpc keeps its request and response messages and its streaming,
+// since a client was built against each; every breach names the file to
+// delete for accepting the break.
+func TestGenRunHoldsTheCommittedServicesAndMessages(t *testing.T) {
+	projectDir, ok := newGenProject(t)
+	if !ok {
+		return
+	}
+	proto := filepath.Join(ggconst.DirPB, "note.proto")
+	// fresh commits the definition of the model as first written, then
+	// rewrites it as edit leaves it when there is one.
+	fresh := func(t *testing.T, edit func(string) string) {
+		t.Helper()
+		writeProtobufProject(t, projectDir, map[string]string{"model/note.go": protobufNoteModel})
+		require.NoError(t, os.RemoveAll(ggconst.DirPB))
+		require.NoError(t, genRunWithOptions(genRunOptions{Quiet: true}))
+		if edit == nil {
+			return
+		}
+		content, err := os.ReadFile(proto)
+		require.NoError(t, err)
+		edited := edit(string(content))
+		require.NotEqual(t, string(content), edited, "the edit has to change the committed file")
+		require.NoError(t, os.WriteFile(proto, []byte(edited), 0o600))
+	}
+
+	t.Run("an rpc and its messages stay declared", func(t *testing.T) {
+		fresh(t, nil)
+		writeProtobufProject(t, projectDir, map[string]string{"model/note.go": strings.Replace(protobufNoteModel, "\tdsl.Get(func() {})\n", "", 1)})
+
+		err := genRunWithOptions(genRunOptions{Quiet: true})
+
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "pb/note.proto: the rpc GetNote of service NoteService is gone; a client was built against it, so keep it, or delete pb/note.proto to accept the break")
+		require.Contains(t, err.Error(), "pb/note.proto: the message GetNoteRequest is gone; a client was built against it, so keep it, or delete pb/note.proto to accept the break")
+		require.Contains(t, err.Error(), "pb/note.proto: the message GetNoteResponse is gone; a client was built against it, so keep it, or delete pb/note.proto to accept the break")
+	})
+	t.Run("a service stays declared", func(t *testing.T) {
+		fresh(t, func(s string) string {
+			return strings.Replace(s, "service NoteService {", "service NoteArchiveService {", 1)
+		})
+
+		err := genRunWithOptions(genRunOptions{Quiet: true})
+
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "pb/note.proto: the service NoteArchiveService is gone; a client was built against it, so keep it, or delete pb/note.proto to accept the break")
+	})
+	t.Run("an rpc keeps its messages", func(t *testing.T) {
+		fresh(t, func(s string) string {
+			return strings.Replace(s, "rpc GetNote ( GetNoteRequest ) returns ( GetNoteResponse );", "rpc GetNote ( GetNoteRequest ) returns ( CreateNoteResponse );", 1)
+		})
+
+		err := genRunWithOptions(genRunOptions{Quiet: true})
+
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "pb/note.proto: the rpc GetNote of service NoteService answered CreateNoteResponse and now answers GetNoteResponse; a client was built against it, so keep it, or delete pb/note.proto to accept the break")
+	})
+	t.Run("an rpc keeps its streaming", func(t *testing.T) {
+		fresh(t, nil)
+		writeProtobufProject(t, projectDir, map[string]string{"model/feed.go": protobufFeedModel})
+		require.NoError(t, genRunWithOptions(genRunOptions{Quiet: true}))
+		writeProtobufProject(t, projectDir, map[string]string{"model/feed.go": strings.Replace(protobufFeedModel, "\t\t\tdsl.Payload[*FeedWatchReq]()\n\t\t\tdsl.StreamingResult[*FeedEvent]()", "\t\t\tdsl.StreamingPayload[*FeedWatchReq]()\n\t\t\tdsl.StreamingResult[*FeedEvent]()", 1)})
+
+		err := genRunWithOptions(genRunOptions{Quiet: true})
+
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "pb/feed.proto: the rpc WatchFeed of service FeedService was server streaming and is now bidirectional streaming; a change of streaming breaks the wire, so keep it server streaming, or delete pb/feed.proto to accept the break")
+	})
+}
