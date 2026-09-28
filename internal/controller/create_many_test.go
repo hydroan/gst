@@ -37,7 +37,6 @@ func TestCreateManyRefusesAnItemFailingValidation(t *testing.T) {
 		"/controller-validated-samples/batch", `{"items":[{"name":"valid"},{}]}`)
 
 	require.Equal(t, http.StatusBadRequest, rsp.Code)
-	require.Contains(t, rsp.Body.String(), `"code":1000`)
 	var total int
 	require.NoError(t, database.Database[*validatedSample](context.Background()).WithQuery(&validatedSample{Name: "valid"}).Count(&total))
 	require.Zero(t, total)

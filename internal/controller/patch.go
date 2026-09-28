@@ -51,14 +51,14 @@ func PatchHandler[M types.Model, REQ types.Request, RSP types.Response](cfg ...*
 		body, err := readJSONRequestBody(c)
 		if err != nil {
 			log.Errorz("bind request body failed", zap.Error(err))
-			response.JSON(c, response.CodeInvalidArgument.WithErr(err))
+			response.Error(c, invalidArgument(err))
 			gstotel.RecordError(span, err)
 			return
 		}
 		fields, err := patchFieldSetFromJSONBody(a.typ, body)
 		if err != nil && !errors.Is(err, io.EOF) {
 			log.Errorz("bind request body failed", zap.Error(err))
-			response.JSON(c, response.CodeInvalidArgument.WithErr(err))
+			response.Error(c, invalidArgument(err))
 			gstotel.RecordError(span, err)
 			return
 		}
@@ -70,7 +70,7 @@ func PatchHandler[M types.Model, REQ types.Request, RSP types.Response](cfg ...*
 		if versionField, versioned := modelregistry.VersionFieldName(req); versioned {
 			if _, ok := fields[versionField]; !ok {
 				log.Errorz("versioned model patched without its version", zap.String("field", versionField))
-				response.JSON(c, databaseErrorCoder(database.ErrVersionRequired))
+				response.Error(c, databaseError(database.ErrVersionRequired))
 				gstotel.RecordError(span, database.ErrVersionRequired)
 				return
 			}
@@ -84,31 +84,31 @@ func PatchHandler[M types.Model, REQ types.Request, RSP types.Response](cfg ...*
 			// with a stable message instead of the bare io.EOF text.
 			err = requiredBodyError(err)
 			log.Errorz("bind request body failed", zap.Error(err))
-			response.JSON(c, response.CodeInvalidArgument.WithErr(err))
+			response.Error(c, invalidArgument(err))
 			gstotel.RecordError(span, err)
 			return
 		}
 		if err = validatePatchFields(req, fields); err != nil {
 			err = clientSafeBindError(err)
 			log.Errorz("bind request body failed", zap.Error(err))
-			response.JSON(c, response.CodeInvalidArgument.WithErr(err))
+			response.Error(c, invalidArgument(err))
 			gstotel.RecordError(span, err)
 			return
 		}
 		a.normalizeModel(&req)
 		if len(id) == 0 {
 			log.Errorz(missingRouteParamMsg)
-			response.JSON(c, response.CodeInvalidArgument.WithMsg(missingRouteParamMsg))
+			response.Error(c, badRequest(missingRouteParamMsg))
 			gstotel.RecordError(span, errors.New(missingRouteParamMsg))
 			return
 		}
 
 		cur, err := a.patchFlow(requestContext(c), ginServiceContext(c), id, req, fields)
 		if err != nil {
-			response.JSON(c, failureCoder(err))
+			response.Error(c, err)
 			return
 		}
-		response.JSON(c, response.CodeSuccess, cur)
+		response.JSON(c, cur)
 	}
 }
 
@@ -138,7 +138,7 @@ func PatchCall[M types.Model](route string) func(ctx context.Context, params map
 		}
 		if versionField, versioned := modelregistry.VersionFieldName(m); versioned {
 			if _, ok := fields[versionField]; !ok {
-				return zero, c.refuse(databaseErrorCoder(database.ErrVersionRequired), errors.Wrapf(database.ErrVersionRequired, "patch %s without its %s", a.name, versionField))
+				return zero, c.refuse(databaseError(database.ErrVersionRequired), errors.Wrapf(database.ErrVersionRequired, "patch %s without its %s", a.name, versionField))
 			}
 		}
 		if err = validatePatchFields(m, fields); err != nil {
@@ -160,7 +160,7 @@ func PatchCall[M types.Model](route string) func(ctx context.Context, params map
 // updater from the identity the request carries, runs the patch hooks around
 // the write, records the operation, and returns the patched record. id must
 // not be empty (see setID); an id the model rejects, and one naming no
-// record, both answer response.CodeNotFound.
+// record, both answer 404 (see notFound).
 //
 // The write is the whole record loaded, not only the fields the request
 // carried. Concurrent patches of one record therefore resolve as last writer
@@ -180,7 +180,7 @@ func (a *action[M, REQ, RSP]) patchFlow(ctx context.Context, newServiceContext s
 		// An id the model rejects cannot match any row; answer 404 without
 		// relying on the empty-query safety net below.
 		log.Errorz("route id rejected by model", zap.String("id", id))
-		return zero, &failure{coder: response.CodeNotFound}
+		return zero, notFound(nil)
 	}
 
 	// Make sure the record already exists. The read is pinned to
@@ -192,7 +192,7 @@ func (a *action[M, REQ, RSP]) patchFlow(ctx context.Context, newServiceContext s
 	}
 	if len(data) != 1 {
 		log.Errorz("records matched by id is not exactly one", zap.Int("count", len(data)), zap.String("id", id))
-		return zero, &failure{coder: response.CodeNotFound}
+		return zero, notFound(nil)
 	}
 	data[0].SetUpdatedBy(requestctx.FromContext(ctx).Username())
 

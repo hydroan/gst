@@ -108,14 +108,14 @@ func ExportHandler[M types.Model, REQ types.Request, RSP types.Response](cfg ...
 			// dropped condition set.
 			if err = urlquery.Decode(query, m); err != nil {
 				log.Errorz("parse query parameter failed", zap.Error(err))
-				response.JSON(c, response.CodeInvalidArgument.WithErr(err))
+				response.Error(c, invalidArgument(err))
 				gstotel.RecordError(span, err)
 				return
 			}
 			var filters []types.Filter
 			if filters, err = urlquery.Filters(query, m); err != nil {
 				log.Errorz("parse query parameter failed", zap.Error(err))
-				response.JSON(c, response.CodeInvalidArgument.WithErr(err))
+				response.Error(c, invalidArgument(err))
 				gstotel.RecordError(span, err)
 				return
 			}
@@ -124,7 +124,7 @@ func ExportHandler[M types.Model, REQ types.Request, RSP types.Response](cfg ...
 			var orders []types.Order
 			if orders, err = urlquery.Orders(query, m); err != nil {
 				log.Errorz("parse query parameter failed", zap.Error(err))
-				response.JSON(c, response.CodeInvalidArgument.WithErr(err))
+				response.Error(c, invalidArgument(err))
 				gstotel.RecordError(span, err)
 				return
 			}
@@ -136,7 +136,7 @@ func ExportHandler[M types.Model, REQ types.Request, RSP types.Response](cfg ...
 				return svc.ListBefore(types.NewServiceContext(c, spanCtx, consts.Export), &data)
 			}); err != nil {
 				log.Errorz("service operation failed", zap.Error(err))
-				handleServiceError(c, err)
+				response.Error(c, err)
 				gstotel.RecordError(span, err)
 				return
 			}
@@ -151,7 +151,7 @@ func ExportHandler[M types.Model, REQ types.Request, RSP types.Response](cfg ...
 			}
 			if m, queryOpts, err = svc.Filter(svcCtx, m, queryOpts); err != nil {
 				log.Errorz("service operation failed", zap.Error(err))
-				handleServiceError(c, err)
+				response.Error(c, err)
 				gstotel.RecordError(span, err)
 				return
 			}
@@ -164,7 +164,7 @@ func ExportHandler[M types.Model, REQ types.Request, RSP types.Response](cfg ...
 				WithOrder(orders...).
 				List(&data); err != nil {
 				log.Errorz("database operation failed", zap.Error(err))
-				response.JSON(c, databaseErrorCoder(err))
+				response.Error(c, databaseError(err))
 				gstotel.RecordError(span, err)
 				return
 			}
@@ -173,7 +173,7 @@ func ExportHandler[M types.Model, REQ types.Request, RSP types.Response](cfg ...
 				return svc.ListAfter(types.NewServiceContext(c, spanCtx, consts.Export), &data)
 			}); err != nil {
 				log.Errorz("service operation failed", zap.Error(err))
-				handleServiceError(c, err)
+				response.Error(c, err)
 				gstotel.RecordError(span, err)
 				return
 			}
@@ -184,7 +184,7 @@ func ExportHandler[M types.Model, REQ types.Request, RSP types.Response](cfg ...
 		})
 		if err != nil {
 			log.Errorz("service operation failed", zap.Error(err))
-			handleServiceError(c, err)
+			response.Error(c, err)
 			gstotel.RecordError(span, err)
 			return
 		}

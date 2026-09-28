@@ -122,20 +122,18 @@ func (c *Client) roundTrip(req *http.Request) (*Envelope, error) {
 }
 
 // parseEnvelope turns one HTTP response into an Envelope, or an *Error when
-// the server rejected the request: a non-2xx status, or a non-zero envelope
-// code. The envelope decode is best-effort so a non-JSON error page still
-// produces an *Error carrying the raw body.
+// the server rejected the request with a non-2xx status. The envelope decode
+// is best-effort so a non-JSON error page still produces an *Error carrying
+// the raw body.
 func parseEnvelope(httpRsp *http.Response, body []byte) (*Envelope, error) {
 	res := new(Envelope)
 	if len(body) > 0 {
 		_ = json.Unmarshal(body, res)
 	}
 
-	ok := httpRsp.StatusCode >= 200 && httpRsp.StatusCode < 300
-	if !ok || res.Code != 0 {
+	if httpRsp.StatusCode < 200 || httpRsp.StatusCode >= 300 {
 		return nil, &Error{
 			StatusCode: httpRsp.StatusCode,
-			Code:       res.Code,
 			Msg:        res.Msg,
 			TraceID:    res.TraceID,
 			Body:       body,

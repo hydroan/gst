@@ -210,9 +210,9 @@ func (w *bodyLogWriter) capture(data []byte) {
 }
 
 // httpBodyLogFieldCap is the most fields one body log entry carries: the
-// eleven every entry has — route, path, method, username, user id, trace id,
-// params, query, status, code and the duration, whose two keys
-// util.LogDuration renders from one inlined field — plus two for the request
+// ten every entry has — route, path, method, username, user id, trace id,
+// params, query, status and the duration, whose two keys util.LogDuration
+// renders from one inlined field — plus two for the request
 // body and three for the response body. A request body is captured whole or
 // not at all, so it carries its content and size, or its size beside the
 // truncation marker or the read error; a response body is teed from what the
@@ -221,7 +221,7 @@ func (w *bodyLogWriter) capture(data []byte) {
 // writeHTTPBodyLog sizes its field slice to it once, so the hot path never
 // regrows it; a field added to the entry bumps it, which the worst-case test
 // enforces.
-const httpBodyLogFieldCap = 16
+const httpBodyLogFieldCap = 15
 
 // writeHTTPBodyLog writes at most one log entry for the finished request,
 // carrying whichever captured bodies the configured modes admit. Requests
@@ -259,7 +259,6 @@ func writeHTTPBodyLog(
 		zap.Any(consts.PARAMS, httpBodyLogParams(c.Params)),
 		zap.String(consts.QUERY, c.Request.URL.RawQuery),
 		zap.Int("status", c.Writer.Status()),
-		zap.Int("code", c.GetInt(consts.CTX_RESPONSE_CODE)),
 		util.LogDuration(elapsed),
 	)
 	fields = appendHTTPBodyLogFields(fields, "request", request)
@@ -290,10 +289,9 @@ func appendHTTPBodyLogFields(fields []zap.Field, side string, body *httpBodyCapt
 }
 
 // httpBodyLogIsError reports whether the finished request counts as failed
-// for the "error" mode: an HTTP error status, or a non-zero envelope code
-// recorded by the response helpers (covers coders mapped to 2xx statuses).
+// for the "error" mode: it answered an HTTP error status.
 func httpBodyLogIsError(c *gin.Context) bool {
-	return c.Writer.Status() >= http.StatusBadRequest || c.GetInt(consts.CTX_RESPONSE_CODE) != 0
+	return c.Writer.Status() >= http.StatusBadRequest
 }
 
 // httpBodyLogWanted reports whether a mode admits logging for the request outcome.

@@ -12,7 +12,6 @@ import (
 	"github.com/hydroan/gst/consts"
 	"github.com/hydroan/gst/internal/grpcserver"
 	"github.com/hydroan/gst/internal/requestctx"
-	"github.com/hydroan/gst/internal/response"
 	"github.com/hydroan/gst/internal/types"
 	"github.com/hydroan/gst/logger"
 	gstotel "github.com/hydroan/gst/otel"
@@ -270,62 +269,63 @@ func (c *call) end() { c.span.End() }
 
 // refuse answers a request the action cannot run — a query the listener
 // could not carry, a model or payload failing validation, a message naming
-// no record — with the status coder maps to, logged and recorded on the
-// span the way the HTTP handler treats a bind failure.
-func (c *call) refuse(coder types.Coder, err error) error {
+// no record — with the status answer maps to (see grpcserver.StatusError),
+// err logged and recorded on the span the way the HTTP handler treats a
+// bind failure.
+func (c *call) refuse(answer, err error) error {
 	c.log.Errorz("request message rejected", zap.Error(err))
 	gstotel.RecordError(c.span, err)
-	return grpcserver.StatusOfCoder(coder)
+	return grpcserver.StatusError(answer)
 }
 
 // invalid refuses the request for err with the message err carries, the
-// way the HTTP handler answers response.CodeInvalidArgument.WithErr.
+// way the HTTP handler answers a bind failure (see invalidArgument).
 func (c *call) invalid(err error) error {
-	return c.refuse(response.CodeInvalidArgument.WithErr(err), err)
+	return c.refuse(invalidArgument(err), err)
 }
 
 // invalidMessage refuses a model or payload the validator refused (err),
 // with invalidMessageMsg, the way the HTTP handler answers a bind failure
 // with a message free of Go names.
 func (c *call) invalidMessage(err error) error {
-	return c.refuse(response.CodeInvalidArgument.WithMsg(invalidMessageMsg), err)
+	return c.refuse(badRequest(invalidMessageMsg), err)
 }
 
 // missingID refuses a call of an item action whose message names no record,
 // the way the HTTP handler refuses a request whose route parameter is
 // absent.
 func (c *call) missingID() error {
-	return c.refuse(response.CodeInvalidArgument.WithMsg(missingIDMsg), errors.New(missingIDMsg))
+	return c.refuse(badRequest(missingIDMsg), errors.New(missingIDMsg))
 }
 
 // missingRecord refuses a call whose message carries no record, the way the
 // HTTP handler refuses a request without a body: an absent record would
 // create a zero one or replace the stored one by it.
 func (c *call) missingRecord() error {
-	return c.refuse(response.CodeInvalidArgument.WithMsg(missingRecordMsg), errors.New(missingRecordMsg))
+	return c.refuse(badRequest(missingRecordMsg), errors.New(missingRecordMsg))
 }
 
 // fail answers a flow's failure, which the flow logged and recorded already,
-// with the status its code maps to (see failureCoder and statusOf), or with
-// the status of the call's context once the call ended (see ended).
+// with the status it maps to (see grpcserver.StatusError), or with the
+// status of the call's context once the call ended (see ended).
 func (c *call) fail(err error) error {
 	if ended := c.ended(); ended != nil {
 		return ended
 	}
-	return statusOf(failureCoder(err), err)
+	return grpcserver.StatusError(err)
 }
 
 // failService answers a delegated service's error the way the HTTP handler
-// does: logged and recorded on the span, then the status its code maps to
-// (see serviceErrorCoder and statusOf). A call that ended is answered with
-// the status of its context instead, the error unlogged (see ended).
+// does: logged and recorded on the span, then the status it maps to (see
+// grpcserver.StatusError). A call that ended is answered with the status of
+// its context instead, the error unlogged (see ended).
 func (c *call) failService(err error) error {
 	if ended := c.ended(); ended != nil {
 		return ended
 	}
 	c.log.Errorz("service operation failed", zap.Error(err))
 	gstotel.RecordError(c.span, err)
-	return statusOf(serviceErrorCoder(err), err)
+	return grpcserver.StatusError(err)
 }
 
 // ended returns the status of the call's context once the call ended, nil

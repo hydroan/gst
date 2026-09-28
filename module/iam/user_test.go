@@ -209,8 +209,7 @@ func TestAdminUserPatch(t *testing.T) {
 			Username: victim.Username,
 			Password: victim.Password,
 		})
-		respErr := testutil.RequireError(t, err, http.StatusForbidden, "disabled")
-		require.Equal(t, -1, respErr.Code)
+		testutil.RequireError(t, err, http.StatusForbidden, "disabled")
 	})
 
 	t.Run("enable_user", func(t *testing.T) {
@@ -299,8 +298,7 @@ func TestAdminUserPatch(t *testing.T) {
 			Username: victim.Username,
 			Password: victim.Password,
 		})
-		respErr := testutil.RequireError(t, err, http.StatusForbidden, "locked")
-		require.Equal(t, -1, respErr.Code)
+		testutil.RequireError(t, err, http.StatusForbidden, "locked")
 	})
 
 	t.Run("unlock_user", func(t *testing.T) {

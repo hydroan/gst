@@ -179,7 +179,6 @@ func TestCreateHandlerRequiresBodyOnModelPath(t *testing.T) {
 	engine.ServeHTTP(recorder, req)
 
 	require.Equal(t, http.StatusBadRequest, recorder.Code)
-	require.Contains(t, recorder.Body.String(), `"code":1000`)
 	require.Contains(t, recorder.Body.String(), `"msg":"request body is required"`,
 		"an absent body must be refused, not answered as an empty success")
 }
@@ -202,7 +201,6 @@ func TestUpdateHandlerRequiresBody(t *testing.T) {
 	engine.ServeHTTP(recorder, req)
 
 	require.Equal(t, http.StatusBadRequest, recorder.Code)
-	require.Contains(t, recorder.Body.String(), `"code":1000`)
 	require.Contains(t, recorder.Body.String(), `"msg":"request body is required"`,
 		"an absent body must render the stable message, not the bare io.EOF text")
 }
@@ -225,30 +223,28 @@ func TestDeleteManyHandlerBindFailureRendersClientSafeMessage(t *testing.T) {
 	engine.ServeHTTP(recorder, req)
 
 	require.Equal(t, http.StatusBadRequest, recorder.Code)
-	require.Contains(t, recorder.Body.String(), `"code":1000`)
 	require.Contains(t, recorder.Body.String(), `"msg":"invalid value for field 'ids'"`)
 }
 
-// TestUpdateManyHandlerBindFailureRendersInvalidParamCode pins the error code
-// of a model-path bind failure: every bind failure classifies as invalid
-// parameters, aligning the batch and patch handlers with the create/update
+// TestUpdateManyHandlerBindFailureAnswersTheFieldRefused pins the answer of
+// a model-path bind failure: 400 with the message naming the field refused,
+// aligning the batch and patch handlers with the create/update
 // single-resource ones.
-func TestUpdateManyHandlerBindFailureRendersInvalidParamCode(t *testing.T) {
+func TestUpdateManyHandlerBindFailureAnswersTheFieldRefused(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
 	engine := gin.New()
-	engine.PUT("/bind-error-code-probes/batch",
+	engine.PUT("/bind-error-update-probes/batch",
 		UpdateManyHandler[*normalizeProbeModel, *normalizeProbeModel, *normalizeProbeModel]())
 
 	recorder := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodPut, "/bind-error-code-probes/batch", strings.NewReader(`{"items":3}`))
+	req := httptest.NewRequest(http.MethodPut, "/bind-error-update-probes/batch", strings.NewReader(`{"items":3}`))
 	req.Header.Set("Content-Type", "application/json")
 	engine.ServeHTTP(recorder, req)
 
 	require.Equal(t, http.StatusBadRequest, recorder.Code)
-	require.Contains(t, recorder.Body.String(), `"code":1000`,
-		"a bind failure must classify as invalid parameters, not the generic failure code")
-	require.Contains(t, recorder.Body.String(), `"msg":"invalid value for field 'items'"`)
+	require.Contains(t, recorder.Body.String(), `"msg":"invalid value for field 'items'"`,
+		"a bind failure must name the field refused, not answer the generic failure")
 }
 
 // TestBindJSONRequestHonorsDisabledValidator pins gin's validator-disable

@@ -148,7 +148,7 @@ func TestStreamSurfacesEnvelopeRejection(t *testing.T) {
 	srv := httptest.NewTestServer(t, http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusForbidden)
-		fmt.Fprint(w, `{"code":403,"msg":"permission denied"}`)
+		fmt.Fprint(w, `{"msg":"permission denied"}`)
 	}))
 	srv.Start()
 

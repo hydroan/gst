@@ -81,7 +81,7 @@ func TestHTTPBodyLoggerLogsRequestAndResponseAsOneEntry(t *testing.T) {
 		body, err := io.ReadAll(c.Request.Body)
 		require.NoError(t, err)
 		require.JSONEq(t, `{"a":1,"b":2}`, string(body))
-		c.JSON(http.StatusOK, gin.H{"code": 0, "msg": "success", "data": gin.H{"sum": 3}})
+		c.JSON(http.StatusOK, gin.H{"msg": "success", "data": gin.H{"sum": 3}})
 	})
 
 	w := performHTTPBodyLoggerRequest(router, "/api/records?verbose=true", `{"a":1,"b":2}`, "application/json")
@@ -102,7 +102,7 @@ func TestHTTPBodyLoggerLogsRequestAndResponseAsOneEntry(t *testing.T) {
 	require.Equal(t, int64(http.StatusOK), ctx["status"])
 	require.Equal(t, `{"a":1,"b":2}`, ctx["request"])
 	require.Equal(t, int64(len(`{"a":1,"b":2}`)), ctx["request_size"])
-	require.JSONEq(t, `{"code":0,"msg":"success","data":{"sum":3}}`, httpBodyLogStringField(t, ctx, "response"))
+	require.JSONEq(t, `{"msg":"success","data":{"sum":3}}`, httpBodyLogStringField(t, ctx, "response"))
 	require.Equal(t, int64(w.Body.Len()), ctx["response_size"])
 	require.NotContains(t, ctx, "request_truncated")
 	require.NotContains(t, ctx, "response_truncated")
@@ -157,7 +157,7 @@ func TestHTTPBodyLoggerDefaultModesLogRequestAlwaysResponseOnError(t *testing.T)
 	t.Run("success omits response", func(t *testing.T) {
 		logs := setupHTTPBodyLoggerTest(t, config.HTTPBodyLogger{Enabled: true, MaxBodySize: "64KB"})
 		router := newRouter(func(c *gin.Context) {
-			c.JSON(http.StatusOK, gin.H{"code": 0, "msg": "success"})
+			c.JSON(http.StatusOK, gin.H{"msg": "success"})
 		})
 
 		w := performHTTPBodyLoggerRequest(router, "/api/records", `{"a":1}`, "application/json")
@@ -173,7 +173,7 @@ func TestHTTPBodyLoggerDefaultModesLogRequestAlwaysResponseOnError(t *testing.T)
 	t.Run("http error logs response", func(t *testing.T) {
 		logs := setupHTTPBodyLoggerTest(t, config.HTTPBodyLogger{Enabled: true, MaxBodySize: "64KB"})
 		router := newRouter(func(c *gin.Context) {
-			c.JSON(http.StatusBadRequest, gin.H{"code": -1, "msg": "failure"})
+			c.JSON(http.StatusBadRequest, gin.H{"msg": "failure"})
 		})
 
 		w := performHTTPBodyLoggerRequest(router, "/api/records", `{"a":1}`, "application/json")
@@ -184,33 +184,12 @@ func TestHTTPBodyLoggerDefaultModesLogRequestAlwaysResponseOnError(t *testing.T)
 		ctx := entries[0].ContextMap()
 		require.Equal(t, int64(http.StatusBadRequest), ctx["status"])
 		require.Equal(t, `{"a":1}`, ctx["request"])
-		require.JSONEq(t, `{"code":-1,"msg":"failure"}`, httpBodyLogStringField(t, ctx, "response"))
+		require.JSONEq(t, `{"msg":"failure"}`, httpBodyLogStringField(t, ctx, "response"))
 	})
 
-	t.Run("envelope code marks error", func(t *testing.T) {
-		logs := setupHTTPBodyLoggerTest(t, config.HTTPBodyLogger{Enabled: true, MaxBodySize: "64KB"})
-		router := newRouter(func(c *gin.Context) {
-			// The response helpers record the envelope code in the gin context
-			// so custom coders mapped to 2xx statuses still count as errors.
-			c.Set(consts.CTX_RESPONSE_CODE, 1000)
-			c.JSON(http.StatusOK, gin.H{"code": 1000, "msg": "invalid parameters"})
-		})
-
-		w := performHTTPBodyLoggerRequest(router, "/api/records", `{"a":1}`, "application/json")
-
-		require.Equal(t, http.StatusOK, w.Code)
-		entries := logs.All()
-		require.Len(t, entries, 1)
-		ctx := entries[0].ContextMap()
-		require.Equal(t, int64(1000), ctx["code"])
-		require.JSONEq(t, `{"code":1000,"msg":"invalid parameters"}`, httpBodyLogStringField(t, ctx, "response"))
-	})
-
-	t.Run("a refusal through response.Abort records its code", func(t *testing.T) {
-		// The case above sets the key by hand and proves the logger reads it.
-		// This one proves the only way to refuse from outside the controller
-		// path writes it: the refusals that built the envelope themselves never
-		// did, and logged code 0 beside a body of their own that said -1.
+	t.Run("a refusal through response.Abort logs its status and envelope", func(t *testing.T) {
+		// The refusal of the only way to refuse from outside the controller
+		// path counts as an error by its status, like a handler's own.
 		logs := setupHTTPBodyLoggerTest(t, config.HTTPBodyLogger{Enabled: true, MaxBodySize: "64KB"})
 		router := newRouter(func(c *gin.Context) {
 			response.Abort(c, http.StatusForbidden, "permission denied")
@@ -222,9 +201,8 @@ func TestHTTPBodyLoggerDefaultModesLogRequestAlwaysResponseOnError(t *testing.T)
 		entries := logs.All()
 		require.Len(t, entries, 1)
 		ctx := entries[0].ContextMap()
-		require.Equal(t, int64(-1), ctx["code"])
 		require.Equal(t, int64(http.StatusForbidden), ctx["status"])
-		require.JSONEq(t, `{"code":-1,"msg":"permission denied","data":null,"trace_id":""}`,
+		require.JSONEq(t, `{"msg":"permission denied","data":null,"trace_id":""}`,
 			httpBodyLogStringField(t, ctx, "response"))
 	})
 }

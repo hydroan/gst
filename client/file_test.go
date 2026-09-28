@@ -38,7 +38,7 @@ func TestDownloadReturnsStructuredErrorOnRejection(t *testing.T) {
 	srv := httptest.NewTestServer(t, http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusForbidden)
-		fmt.Fprint(w, `{"code":403,"msg":"permission denied"}`)
+		fmt.Fprint(w, `{"msg":"permission denied"}`)
 	}))
 	srv.Start()
 
@@ -78,7 +78,7 @@ func TestUploadSendsMultipartFileAndFields(t *testing.T) {
 		gotName = header.Filename
 		gotField = r.FormValue("mode")
 		w.Header().Set("Content-Type", "application/json")
-		fmt.Fprint(w, `{"code":0,"msg":"success"}`)
+		fmt.Fprint(w, `{"msg":"success"}`)
 	}))
 	srv.Start()
 
@@ -88,8 +88,8 @@ func TestUploadSendsMultipartFileAndFields(t *testing.T) {
 	resp, err := cli.Upload(t.Context(), "/api/records/import", "records.csv",
 		strings.NewReader("name\nsample\n"), map[string]string{"mode": "append"})
 	require.NoError(t, err)
+	require.Equal(t, "success", resp.Msg)
 	require.NoError(t, handlerErr)
-	require.Equal(t, 0, resp.Code)
 	require.Equal(t, "records.csv", gotName)
 	require.Equal(t, "name\nsample\n", gotFile)
 	require.Equal(t, "append", gotField)

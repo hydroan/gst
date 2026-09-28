@@ -59,6 +59,5 @@ func TestUpdateManyRefusesAnItemWithoutAnID(t *testing.T) {
 		"/controller-samples/batch", `{"items":[{"id":"`+record.GetID()+`","name":"update-many-renamed"},{"name":"update-many-other"}]}`)
 
 	require.Equal(t, http.StatusBadRequest, rsp.Code)
-	require.Contains(t, rsp.Body.String(), `"code":1000`)
 	requireSampleName(t, record.GetID(), "update-many-identified")
 }

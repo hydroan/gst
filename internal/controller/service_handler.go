@@ -62,7 +62,7 @@ func (a *action[M, REQ, RSP]) serviceHandler() gin.HandlerFunc {
 			}
 			if reqErr != nil {
 				log.Errorz("bind request body failed", zap.Error(reqErr))
-				response.JSON(c, response.CodeInvalidArgument.WithErr(reqErr))
+				response.Error(c, invalidArgument(reqErr))
 				gstotel.RecordError(span, reqErr)
 				return
 			}
@@ -72,13 +72,13 @@ func (a *action[M, REQ, RSP]) serviceHandler() gin.HandlerFunc {
 		})
 		if err != nil {
 			log.Errorz("service operation failed", zap.Error(err))
-			handleServiceError(c, err)
+			response.Error(c, err)
 			gstotel.RecordError(span, err)
 			return
 		}
 		// Check if response is already written (e.g., SSE streaming)
 		if !c.Writer.Written() {
-			response.JSON(c, response.CodeSuccess, rsp)
+			response.JSON(c, rsp)
 		}
 	}
 }

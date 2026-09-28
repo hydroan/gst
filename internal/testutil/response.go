@@ -16,8 +16,7 @@ func DecodeResp[RSP any](t *testing.T, resp *client.Envelope) RSP {
 	t.Helper()
 
 	require.NotNil(t, resp)
-	require.Equal(t, response.CodeSuccess.Code(), resp.Code)
-	require.Equal(t, response.CodeSuccess.Msg(), resp.Msg)
+	require.Equal(t, response.SuccessMsg, resp.Msg)
 	require.NotEmpty(t, resp.TraceID)
 	require.NotEmpty(t, resp.Data)
 
@@ -29,7 +28,7 @@ func DecodeResp[RSP any](t *testing.T, resp *client.Envelope) RSP {
 // RequireError asserts that err is a server-side rejection with the given
 // HTTP status code and that the business message contains every msgContains
 // entry. The rejection is returned by value for follow-up asserts, such as
-// the business code; the value form keeps ignoring it errcheck-clean.
+// the raw body; the value form keeps ignoring it errcheck-clean.
 func RequireError(t *testing.T, err error, statusCode int, msgContains ...string) client.Error {
 	t.Helper()
 

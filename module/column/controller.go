@@ -19,22 +19,6 @@ import (
 
 type column struct{}
 
-// func (cs *column) Get(c *gin.Context) {
-// 	columnUser := []string{
-// 		"name",
-// 		"email",
-// 	}
-//
-// 	switch c.Param(consts.PARAM_ID) {
-// 	case "user":
-// 		// cs.Sample(c)
-// 		cs.GetColumns(c, "samples", columnUser)
-// 	default:
-// 		zap.S().Warn("unknow id: ", c.Param(consts.PARAM_ID))
-// 		ResponseJSON(c, response.CodeSuccess)
-// 	}
-// }
-
 func (cs *column) QueryColumns(query map[string][]string, tableName string, columns []string, db ...*gorm.DB) (map[string][]string, error) {
 	return queryColumnsWithQuery(tableName, columns, query, db...)
 }
@@ -43,10 +27,10 @@ func (cs *column) GetColumns(c *gin.Context, tableName string, columns []string,
 	columnRes, err := queryColumnsWithQuery(tableName, columns, c.Request.URL.Query(), db...)
 	if err != nil {
 		zap.S().Error(err)
-		response.JSON(c, response.CodeFailure)
+		response.Error(c, err)
 		return
 	}
-	response.JSON(c, response.CodeSuccess, columnRes)
+	response.JSON(c, columnRes)
 }
 
 // queryColumns only queries which distinct values each column has.

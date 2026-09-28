@@ -9,14 +9,12 @@ type apiBatchRequest[T any] struct {
 }
 
 type apiResponse[T any] struct {
-	Code    int    `json:"code"`
 	Data    T      `json:"data"`
 	Msg     string `json:"msg"`
 	TraceID string `json:"trace_id"`
 }
 
 type apiListResponse[T any] struct {
-	Code    int         `json:"code"`
 	Data    listData[T] `json:"data"`
 	Msg     string      `json:"msg"`
 	TraceID string      `json:"trace_id"`
@@ -28,7 +26,6 @@ type listData[T any] struct {
 }
 
 type apiBatchResponse[T any] struct {
-	Code    int          `json:"code"`
 	Data    batchData[T] `json:"data"`
 	Msg     string       `json:"msg"`
 	TraceID string       `json:"trace_id"`

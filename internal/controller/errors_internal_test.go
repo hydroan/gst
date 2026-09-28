@@ -1,72 +1,21 @@
 package controller
 
 import (
-	"encoding/json"
 	"net/http"
-	"net/http/httptest"
 	"testing"
 
 	"github.com/cockroachdb/errors"
-	"github.com/gin-gonic/gin"
 	"github.com/hydroan/gst/database"
 	"github.com/hydroan/gst/internal/serviceregistry"
 	"github.com/stretchr/testify/require"
 )
 
-func TestHandleServiceErrorDoesNotExposeCause(t *testing.T) {
-	gin.SetMode(gin.TestMode)
-
-	recorder := httptest.NewRecorder()
-	ctx, _ := gin.CreateTestContext(recorder)
-	cause := errors.New("database password leaked")
-
-	handleServiceError(ctx, serviceregistry.NewErrorWithCause(http.StatusInternalServerError, "failed to load user", cause))
-
-	require.Equal(t, http.StatusInternalServerError, recorder.Code)
-	require.JSONEq(t, `{"code":-1,"msg":"failed to load user","data":null,"trace_id":""}`, recorder.Body.String())
-	require.NotContains(t, recorder.Body.String(), cause.Error())
-}
-
-func TestHandleServiceErrorUsesServiceErrorResponse(t *testing.T) {
-	gin.SetMode(gin.TestMode)
-
-	recorder := httptest.NewRecorder()
-	ctx, _ := gin.CreateTestContext(recorder)
-
-	handleServiceError(ctx, serviceregistry.NewError(http.StatusForbidden, "account disabled"))
-
-	require.Equal(t, http.StatusForbidden, recorder.Code)
-	var body struct {
-		Code int    `json:"code"`
-		Msg  string `json:"msg"`
-	}
-	require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &body))
-	require.Equal(t, -1, body.Code)
-	require.Equal(t, "account disabled", body.Msg)
-}
-
-// TestHandleServiceErrorHidesInternalErrorText pins the fallback branch: an
-// error that is not a service-layer error renders the generic failure message,
-// keeping driver and infrastructure text out of the envelope.
-func TestHandleServiceErrorHidesInternalErrorText(t *testing.T) {
-	gin.SetMode(gin.TestMode)
-
-	recorder := httptest.NewRecorder()
-	ctx, _ := gin.CreateTestContext(recorder)
-	internal := errors.New("dial tcp 10.0.0.1:3306: connection refused")
-
-	handleServiceError(ctx, internal)
-
-	require.Equal(t, http.StatusBadRequest, recorder.Code)
-	require.JSONEq(t, `{"code":-1,"msg":"The request could not be processed.","data":null,"trace_id":""}`, recorder.Body.String())
-	require.NotContains(t, recorder.Body.String(), internal.Error())
-}
-
-// TestDatabaseErrorCoder pins the canonical mapping of database errors: a
-// service error keeps its own status and message, the two database sentinels
-// render their fixed codes, and everything else falls back to the generic
-// failure message without carrying internal error text.
-func TestDatabaseErrorCoder(t *testing.T) {
+// TestDatabaseError pins the canonical mapping of database errors: a service
+// error keeps its own status and message, the database sentinels answer
+// their fixed status and message with the error behind them as the cause,
+// and everything else is answered as it is, the generic failure carrying no
+// service error.
+func TestDatabaseError(t *testing.T) {
 	serviceErr := serviceregistry.NewError(http.StatusForbidden, "operation refused")
 
 	tests := []struct {
@@ -76,19 +25,57 @@ func TestDatabaseErrorCoder(t *testing.T) {
 		wantMsg    string
 	}{
 		{"service_error_keeps_status_and_message", serviceErr, http.StatusForbidden, "operation refused"},
-		{"record_not_found_renders_404", errors.Wrap(database.ErrRecordNotFound, "get sample"), http.StatusNotFound, "The requested resource was not found."},
-		{"duplicated_key_renders_409", errors.Wrap(database.ErrDuplicatedKey, "create sample"), http.StatusConflict, "The resource already exists."},
-		{"stale_object_renders_409", errors.Wrap(database.ErrStaleObject, "update sample"), http.StatusConflict, "The resource was modified by another operation. Reload and retry."},
-		{"missing_version_renders_400", errors.Wrap(database.ErrVersionRequired, "update sample"), http.StatusBadRequest, "The request contains invalid parameters."},
-		{"missing_id_renders_400", errors.Wrap(database.ErrIDRequired, "update sample"), http.StatusBadRequest, "The request contains invalid parameters."},
-		{"other_errors_hide_internal_text", errors.New("Error 1146: Table 'sample' doesn't exist"), http.StatusBadRequest, "The request could not be processed."},
+		{"record_not_found_answers_404", errors.Wrap(database.ErrRecordNotFound, "get sample"), http.StatusNotFound, "The requested resource was not found."},
+		{"duplicated_key_answers_409", errors.Wrap(database.ErrDuplicatedKey, "create sample"), http.StatusConflict, "The resource already exists."},
+		{"stale_object_answers_409", errors.Wrap(database.ErrStaleObject, "update sample"), http.StatusConflict, "The resource was modified by another operation. Reload and retry."},
+		{"missing_version_answers_400", errors.Wrap(database.ErrVersionRequired, "update sample"), http.StatusBadRequest, "The request contains invalid parameters."},
+		{"missing_id_answers_400", errors.Wrap(database.ErrIDRequired, "update sample"), http.StatusBadRequest, "The request contains invalid parameters."},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			coder := databaseErrorCoder(tt.err)
+			answer := databaseError(tt.err)
 
-			require.Equal(t, tt.wantStatus, coder.Status())
-			require.Equal(t, tt.wantMsg, coder.Msg())
+			var answered *serviceregistry.Error
+			require.ErrorAs(t, answer, &answered)
+			require.Equal(t, tt.wantStatus, answered.Status())
+			require.Equal(t, tt.wantMsg, answered.Msg())
+			require.ErrorIs(t, answer, tt.err, "the error behind travels as the cause")
+		})
+	}
+
+	t.Run("other_errors_are_the_generic_failure", func(t *testing.T) {
+		internal := errors.New("Error 1146: Table 'sample' doesn't exist")
+
+		answer := databaseError(internal)
+
+		var answered *serviceregistry.Error
+		require.False(t, errors.As(answer, &answered), "no status and message were chosen: %v", answer)
+		require.Equal(t, internal, answer)
+	})
+}
+
+// TestInvalidArgumentCarriesTheClientSafeText pins the refusal of a request
+// the controller could not carry: 400, with the message of the service error
+// the error wraps when it does, and the error's own text otherwise, the
+// error behind as the cause either way.
+func TestInvalidArgumentCarriesTheClientSafeText(t *testing.T) {
+	cause := errors.New("database password leaked")
+	serviceErr := serviceregistry.NewErrorWithCause(http.StatusInternalServerError, "failed to load user", cause)
+
+	for name, tt := range map[string]struct {
+		err     error
+		wantMsg string
+	}{
+		"service error":         {serviceErr, "failed to load user"},
+		"wrapped service error": {errors.Wrap(serviceErr, "load account"), "failed to load user"},
+		"plain error":           {errors.New("invalid value for field 'name'"), "invalid value for field 'name'"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			answer := invalidArgument(tt.err)
+
+			require.Equal(t, http.StatusBadRequest, answer.Status())
+			require.Equal(t, tt.wantMsg, answer.Msg())
+			require.ErrorIs(t, answer, tt.err)
 		})
 	}
 }

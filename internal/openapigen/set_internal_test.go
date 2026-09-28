@@ -184,7 +184,7 @@ type openapiNoDataRsp struct{}
 
 // TestSetDeclaresResponsesForEmptyResponseType asserts that an action whose
 // response type has no fields still documents its response. The handler answers
-// {"code":0,"data":null,"msg":"success","trace_id":"..."}, and responses is a
+// {"data":null,"msg":"success","trace_id":"..."}, and responses is a
 // required member of an OpenAPI operation.
 func TestSetDeclaresResponsesForEmptyResponseType(t *testing.T) {
 	set[*openapiActionModel, *openapiNoDataReq, *openapiNoDataRsp]("/api/openapi-nodata", true, consts.Create)
@@ -194,7 +194,7 @@ func TestSetDeclaresResponsesForEmptyResponseType(t *testing.T) {
 		t.Fatal("operation declares no responses")
 	}
 	schema := registeredResponseSchema(t, op.Responses.Status(200))
-	for _, field := range []string{"code", "msg", "trace_id", "data"} {
+	for _, field := range []string{"msg", "trace_id", "data"} {
 		if _, ok := schema.Properties[field]; !ok {
 			t.Errorf("response envelope = %v, want a %q member", propertyNames(schema), field)
 		}

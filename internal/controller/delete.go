@@ -49,16 +49,16 @@ func DeleteHandler[M types.Model, REQ types.Request, RSP types.Response](cfg ...
 		}
 		if len(id) == 0 {
 			log.Errorz(missingRouteParamMsg)
-			response.JSON(c, response.CodeInvalidArgument.WithMsg(missingRouteParamMsg))
+			response.Error(c, badRequest(missingRouteParamMsg))
 			gstotel.RecordError(span, errors.New(missingRouteParamMsg))
 			return
 		}
 
 		if err := a.deleteFlow(requestContext(c), ginServiceContext(c), id); err != nil {
-			response.JSON(c, failureCoder(err))
+			response.Error(c, err)
 			return
 		}
-		response.JSON(c, response.CodeSuccess)
+		response.JSON(c)
 	}
 }
 
@@ -88,7 +88,7 @@ func DeleteCall[M types.Model](route string) func(ctx context.Context, params ma
 // deleteFlow runs the delete flow on the record id names: it runs the delete
 // hooks around the write, keeps a copy of the record for the operation log,
 // and records the operation. id must not be empty (see setID); an id the
-// model rejects answers response.CodeNotFound. Whether the row is purged is the
+// model rejects answers 404 (see notFound). Whether the row is purged is the
 // model's decision (its Purge method), never the request's.
 func (a *action[M, REQ, RSP]) deleteFlow(ctx context.Context, newServiceContext serviceContextFunc, id string) error {
 	log := logger.Controller.WithContext(ctx, consts.Delete)
@@ -100,7 +100,7 @@ func (a *action[M, REQ, RSP]) deleteFlow(ctx context.Context, newServiceContext 
 		// An id the model rejects cannot match any row; answer 404 instead
 		// of passing an unset id to the database layer.
 		log.Errorz("route id rejected by model", zap.String("id", id))
-		return &failure{coder: response.CodeNotFound}
+		return notFound(nil)
 	}
 
 	// 1.Perform business logic processing before delete resource.

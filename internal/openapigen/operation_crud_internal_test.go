@@ -133,7 +133,7 @@ func TestSetCustomBatchDocumentsResponseEnvelope(t *testing.T) {
 			}
 
 			schema := registeredResponseSchema(t, op.Responses.Value(tt.wantStatus))
-			for _, name := range []string{"code", "msg", "data", "trace_id"} {
+			for _, name := range []string{"msg", "data", "trace_id"} {
 				if schema.Properties[name] == nil {
 					t.Errorf("response envelope property %q is missing", name)
 				}

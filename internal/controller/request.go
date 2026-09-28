@@ -14,10 +14,8 @@ import (
 // runs: the route the action registered under, the id the request names a
 // record by, the body's bytes, and the context the flow runs on.
 
-// missingRouteParamMsg answers a request whose configured route parameter is
-// absent. It is carried as a message under CodeInvalidArgument rather than as a
-// code of its own: the request is malformed in exactly the way that code
-// already names, and a separate number said nothing the text does not.
+// missingRouteParamMsg answers, with 400, a request whose configured route
+// parameter is absent.
 const missingRouteParamMsg = "not found router param"
 
 // routeFromConfig returns the route carried by the controller config, or an

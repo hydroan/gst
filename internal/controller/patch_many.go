@@ -32,13 +32,13 @@ import (
 // params are, may be left empty or repeat the request's. An item naming no
 // id or contradicting the request is refused with InvalidArgument, the way
 // a batch request whose sub-request names another parent must fail
-// (AIP-234), carrying the envelope's code the way a call's refusal does (see
-// grpcserver.StatusOfCoder); an item carrying no record is answered as it
+// (AIP-234), the way a call's refusal does (see grpcserver.StatusError); an
+// item carrying no record is answered as it
 // is, for the call to refuse (see PatchManyCall). The public grpc.PatchItem
 // forwards to it.
 func PatchItem[M types.Model](i int, params, itemParams map[string]string, id string, m M) (M, error) {
 	invalid := func(format string, args ...any) error {
-		return grpcserver.StatusOfCoder(response.CodeInvalidArgument.WithMsg(fmt.Sprintf(format, args...)))
+		return grpcserver.StatusError(badRequest(fmt.Sprintf(format, args...)))
 	}
 	for _, name := range slices.Sorted(maps.Keys(itemParams)) {
 		if value := itemParams[name]; value != "" && value != params[name] {
@@ -84,20 +84,20 @@ func PatchManyHandler[M types.Model, REQ types.Request, RSP types.Response](cfg 
 		body, err := readJSONRequestBody(c)
 		if err != nil {
 			log.Errorz("bind request body failed", zap.Error(err))
-			response.JSON(c, response.CodeInvalidArgument.WithErr(err))
+			response.Error(c, invalidArgument(err))
 			gstotel.RecordError(span, err)
 			return
 		}
 		fieldSets, fieldErr := patchManyFieldSetsFromJSONBody(a.typ, body)
 		if fieldErr != nil && !errors.Is(fieldErr, io.EOF) {
 			log.Errorz("bind request body failed", zap.Error(fieldErr))
-			response.JSON(c, response.CodeInvalidArgument.WithErr(fieldErr))
+			response.Error(c, invalidArgument(fieldErr))
 			gstotel.RecordError(span, fieldErr)
 			return
 		}
 		if reqErr := decodeJSONRequest(c, &req); reqErr != nil && !errors.Is(reqErr, io.EOF) {
 			log.Errorz("bind request body failed", zap.Error(reqErr))
-			response.JSON(c, response.CodeInvalidArgument.WithErr(reqErr))
+			response.Error(c, invalidArgument(reqErr))
 			gstotel.RecordError(span, reqErr)
 			return
 		}
@@ -116,14 +116,14 @@ func PatchManyHandler[M types.Model, REQ types.Request, RSP types.Response](cfg 
 			if _, ok := itemFields[versionField]; versioned && !ok {
 				log.Errorz("versioned model patched without its version",
 					zap.Int("item", i), zap.String("field", versionField))
-				response.JSON(c, databaseErrorCoder(database.ErrVersionRequired))
+				response.Error(c, databaseError(database.ErrVersionRequired))
 				gstotel.RecordError(span, database.ErrVersionRequired)
 				return
 			}
 			if fieldErr := validatePatchFields(item, itemFields); fieldErr != nil {
 				fieldErr = clientSafeBindError(fieldErr)
 				log.Errorz("bind request body failed", zap.Error(fieldErr))
-				response.JSON(c, response.CodeInvalidArgument.WithErr(fieldErr))
+				response.Error(c, invalidArgument(fieldErr))
 				gstotel.RecordError(span, fieldErr)
 				return
 			}
@@ -131,10 +131,10 @@ func PatchManyHandler[M types.Model, REQ types.Request, RSP types.Response](cfg 
 
 		rsp, err := a.patchManyFlow(requestContext(c), ginServiceContext(c), &req, fieldSets)
 		if err != nil {
-			response.JSON(c, failureCoder(err))
+			response.Error(c, err)
 			return
 		}
-		response.JSON(c, response.CodeSuccess, rsp)
+		response.JSON(c, rsp)
 	}
 }
 
@@ -177,7 +177,7 @@ func PatchManyCall[M types.Model](route string) func(ctx context.Context, params
 		if versionField, versioned := modelregistry.VersionFieldName(a.newModel()); versioned {
 			for i, itemFields := range fieldSets {
 				if _, ok := itemFields[versionField]; !ok {
-					return nil, c.refuse(databaseErrorCoder(database.ErrVersionRequired), errors.Wrapf(database.ErrVersionRequired, "patch many %s item %d without its %s", a.name, i, versionField))
+					return nil, c.refuse(databaseError(database.ErrVersionRequired), errors.Wrapf(database.ErrVersionRequired, "patch many %s item %d without its %s", a.name, i, versionField))
 				}
 			}
 		}
@@ -221,7 +221,7 @@ func (a *action[M, REQ, RSP]) patchManyFlow(ctx context.Context, newServiceConte
 		// UUID-keyed model would mint a fresh one instead.
 		if len(m.GetID()) == 0 {
 			err := errors.Wrapf(database.ErrIDRequired, "patch many %s item %d", a.name, i)
-			return zero, failWith(ctx, log, "batch patch item without its id", databaseErrorCoder(err), err)
+			return zero, failWith(ctx, log, "batch patch item without its id", err, databaseError(err))
 		}
 		var results []M
 		v := a.newModel()
@@ -234,7 +234,7 @@ func (a *action[M, REQ, RSP]) patchManyFlow(ctx context.Context, newServiceConte
 		}
 		if len(results) != 1 || len(results[0].GetID()) == 0 {
 			err := errors.Wrapf(database.ErrRecordNotFound, "patch many %s id=%s", a.name, m.GetID())
-			return zero, failWith(ctx, log, "partial update resource not found", databaseErrorCoder(err), err)
+			return zero, failWith(ctx, log, "partial update resource not found", err, databaseError(err))
 		}
 		oldVal, newVal := reflect.ValueOf(results[0]).Elem(), reflect.ValueOf(m).Elem()
 		fields := patchFieldSet{}

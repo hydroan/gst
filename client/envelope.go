@@ -10,7 +10,6 @@ import (
 // itself is returned by Do for callers that need the envelope details, such
 // as TraceID or the response cookies.
 type Envelope struct {
-	Code    int             `json:"code,omitempty"`
 	Msg     string          `json:"msg,omitempty"`
 	Data    json.RawMessage `json:"data,omitempty"`
 	TraceID string          `json:"trace_id,omitempty"`

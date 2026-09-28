@@ -48,17 +48,17 @@ func GetHandler[M types.Model, REQ types.Request, RSP types.Response](cfg ...*ty
 		}
 		if len(param) == 0 {
 			log.Errorz(missingRouteParamMsg)
-			response.JSON(c, response.CodeInvalidArgument.WithMsg(missingRouteParamMsg))
+			response.Error(c, badRequest(missingRouteParamMsg))
 			gstotel.RecordError(span, errors.New(missingRouteParamMsg))
 			return
 		}
 
 		m, err := a.getFlow(requestContext(c), ginServiceContext(c), param)
 		if err != nil {
-			response.JSON(c, failureCoder(err))
+			response.Error(c, err)
 			return
 		}
-		response.JSON(c, response.CodeSuccess, m)
+		response.JSON(c, m)
 	}
 }
 
@@ -94,7 +94,7 @@ func GetCall[M types.Model](route string) func(ctx context.Context, params map[s
 // read, records the operation, and returns the model. id must not be empty:
 // a UUID-keyed model mints a fresh id for an empty one (see setID). An
 // id the model rejects, and a read that finds no stored record, both answer
-// response.CodeNotFound.
+// 404 (see notFound).
 func (a *action[M, REQ, RSP]) getFlow(ctx context.Context, newServiceContext serviceContextFunc, id string) (M, error) {
 	var zero M
 	log := logger.Controller.WithContext(ctx, consts.Get)
@@ -108,7 +108,7 @@ func (a *action[M, REQ, RSP]) getFlow(ctx context.Context, newServiceContext ser
 		// the raw value reaches SQL, where implicit string-to-integer
 		// coercion could match an unintended row.
 		log.Errorz("route id rejected by model", zap.String("id", id))
-		return zero, &failure{coder: response.CodeNotFound}
+		return zero, notFound(nil)
 	}
 	expands := parseExpandQuery(requestctx.QueryValues(ctx), m)
 
@@ -131,12 +131,12 @@ func (a *action[M, REQ, RSP]) getFlow(ctx context.Context, newServiceContext ser
 	}
 	// A model without an id or creation time holds no stored record (a
 	// missing row already failed above with ErrRecordNotFound), so answer
-	// response.CodeNotFound instead of an empty resource.
+	// 404 instead of an empty resource.
 	if len(m.GetID()) == 0 || m.GetCreatedAt().Equal(time.Time{}) {
-		log.Errorz(response.CodeNotFound.String())
-		err := errors.New(response.CodeNotFound.Msg())
+		log.Errorz(notFoundMsg)
+		err := errors.New(notFoundMsg)
 		gstotel.RecordError(trace.SpanFromContext(ctx), err)
-		return zero, &failure{coder: response.CodeNotFound, err: err}
+		return zero, notFound(err)
 	}
 
 	// 4.record operation log to database.

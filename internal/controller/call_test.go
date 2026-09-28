@@ -22,7 +22,6 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest/observer"
-	"google.golang.org/genproto/googleapis/rpc/errdetails"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials/insecure"
@@ -820,8 +819,7 @@ func stringOf(value any) string {
 }
 
 // requireStatus requires err to be a status of code, carrying message when
-// one is given, and, for a code the framework maps a failure to, the
-// ErrorInfo detail the envelope's code and status travel in.
+// one is given.
 func requireStatus(t *testing.T, err error, code codes.Code, message string) {
 	t.Helper()
 	require.Error(t, err)
@@ -830,14 +828,4 @@ func requireStatus(t *testing.T, err error, code codes.Code, message string) {
 	if message != "" {
 		require.Equal(t, message, st.Message())
 	}
-	if code == codes.Internal {
-		return
-	}
-	var info *errdetails.ErrorInfo
-	for _, detail := range st.Details() {
-		if d, ok := detail.(*errdetails.ErrorInfo); ok {
-			info = d
-		}
-	}
-	require.NotNil(t, info, "a mapped failure carries the envelope's code and status")
 }

@@ -169,7 +169,6 @@ func TestClientRejectionCarriesEnvelope(t *testing.T) {
 	var respErr *client.Error
 	require.ErrorAs(t, err, &respErr)
 	require.Equal(t, http.StatusNotFound, respErr.StatusCode)
-	require.NotZero(t, respErr.Code)
 	require.NotEmpty(t, respErr.Msg)
 	require.NotEmpty(t, respErr.TraceID)
 }
@@ -183,7 +182,6 @@ func TestClientEnvelopeCompleteness(t *testing.T) {
 	resp, err := cli.Do(t.Context(), http.MethodGet, recordPath, nil)
 	require.NoError(t, err)
 	require.NotEmpty(t, resp.TraceID)
-	require.Zero(t, resp.Code)
 
 	// The server continues the trace the call belongs to: the trace id
 	// stamped on the context is the trace id of the answer.

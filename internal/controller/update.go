@@ -48,7 +48,7 @@ func UpdateHandler[M types.Model, REQ types.Request, RSP types.Response](cfg ...
 			// rather than tolerated as "nothing to change".
 			reqErr = requiredBodyError(reqErr)
 			log.Errorz("bind request body failed", zap.Error(reqErr))
-			response.JSON(c, response.CodeInvalidArgument.WithErr(reqErr))
+			response.Error(c, invalidArgument(reqErr))
 			gstotel.RecordError(span, reqErr)
 			return
 		}
@@ -61,16 +61,16 @@ func UpdateHandler[M types.Model, REQ types.Request, RSP types.Response](cfg ...
 		}
 		if len(id) == 0 {
 			log.Errorz(missingRouteParamMsg)
-			response.JSON(c, response.CodeInvalidArgument.WithMsg(missingRouteParamMsg))
+			response.Error(c, badRequest(missingRouteParamMsg))
 			gstotel.RecordError(span, errors.New(missingRouteParamMsg))
 			return
 		}
 
 		if err := a.updateFlow(requestContext(c), ginServiceContext(c), id, req); err != nil {
-			response.JSON(c, failureCoder(err))
+			response.Error(c, err)
 			return
 		}
-		response.JSON(c, response.CodeSuccess, req)
+		response.JSON(c, req)
 	}
 }
 
@@ -119,7 +119,7 @@ func UpdateCall[M types.Model](route string) func(ctx context.Context, params ma
 // replacement answered. The id req carries is replaced by id, which must not
 // be empty (see setID): SetID keeps an id already set, so the one the body
 // carries is cleared first, or the replacement would land on the record it
-// names; an id the model rejects answers response.CodeNotFound without
+// names; an id the model rejects answers 404 (see notFound) without
 // touching the database.
 func (a *action[M, REQ, RSP]) updateFlow(ctx context.Context, newServiceContext serviceContextFunc, id string, req M) error {
 	log := logger.Controller.WithContext(ctx, consts.Update)
@@ -131,7 +131,7 @@ func (a *action[M, REQ, RSP]) updateFlow(ctx context.Context, newServiceContext 
 		// An id the model rejects cannot match any row; answer 404 without
 		// touching the database.
 		log.Errorz("route id rejected by model", zap.String("id", id))
-		return &failure{coder: response.CodeNotFound}
+		return notFound(nil)
 	}
 	req.ClearID()
 	req.SetID(id)

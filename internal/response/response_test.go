@@ -1,7 +1,6 @@
 package response_test
 
 import (
-	"fmt"
 	"math"
 	"net/http"
 	"net/http/httptest"
@@ -15,13 +14,15 @@ import (
 	"github.com/hydroan/gst/internal/response"
 	"github.com/hydroan/gst/internal/serviceregistry"
 	"github.com/hydroan/gst/internal/testutil/swap"
+	"github.com/stretchr/testify/require"
 )
 
-// TestJSONEncodesWithStandardLibrary pins the response envelope to
-// encoding/json whatever JSON codec gin was built with. The codecs the
-// jsoniter and go_json build tags select ignore omitzero, so an envelope
-// encoded through gin's codec grows keys, such as a zero created_at, that the
-// framework's models declare absent.
+// TestJSONEncodesWithStandardLibrary pins the success envelope — its three
+// fields, no code among them — and its encoding through encoding/json
+// whatever JSON codec gin was built with. The codecs the jsoniter and go_json
+// build tags select ignore omitzero, so an envelope encoded through gin's
+// codec grows keys, such as a zero created_at, that the framework's models
+// declare absent.
 func TestJSONEncodesWithStandardLibrary(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	swap.Value(t, &ginjson.API, ginjson.Core(swappedGinCodec{}))
@@ -35,8 +36,8 @@ func TestJSONEncodesWithStandardLibrary(t *testing.T) {
 		data []any
 		want string
 	}{
-		{"with data", []any{&sample{Name: "sample"}}, `{"code":0,"data":{"name":"sample"},"msg":"success","trace_id":"trace-sample"}`},
-		{"without data", nil, `{"code":0,"data":null,"msg":"success","trace_id":"trace-sample"}`},
+		{"with data", []any{&sample{Name: "sample"}}, `{"data":{"name":"sample"},"msg":"success","trace_id":"trace-sample"}`},
+		{"without data", nil, `{"data":null,"msg":"success","trace_id":"trace-sample"}`},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -44,7 +45,7 @@ func TestJSONEncodesWithStandardLibrary(t *testing.T) {
 			c, _ := gin.CreateTestContext(w)
 			c.Set(consts.TRACE_ID, "trace-sample")
 
-			response.JSON(c, response.CodeSuccess, tt.data...)
+			response.JSON(c, tt.data...)
 
 			if w.Code != http.StatusOK {
 				t.Errorf("status = %d, want %d", w.Code, http.StatusOK)
@@ -59,6 +60,61 @@ func TestJSONEncodesWithStandardLibrary(t *testing.T) {
 	}
 }
 
+// TestErrorAnswersServiceErrorsAndHidesTheRest pins the failure envelope: a
+// service error, wherever it sits in the wrap chain, answers with the status
+// and client-safe message it was constructed with, its cause kept out of the
+// body; any other error answers 400 with the generic failure message, its
+// text kept out of the body as well.
+func TestErrorAnswersServiceErrorsAndHidesTheRest(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	cause := errors.New("database password leaked")
+	serviceErr := serviceregistry.NewErrorWithCause(http.StatusInternalServerError, "failed to load user", cause)
+	internal := errors.New("dial tcp 10.0.0.1:3306: connection refused")
+
+	tests := []struct {
+		name       string
+		err        error
+		wantStatus int
+		wantBody   string
+		hidden     string
+	}{
+		{"service error", serviceErr, http.StatusInternalServerError, `{"data":null,"msg":"failed to load user","trace_id":""}`, cause.Error()},
+		{"wrapped service error", errors.Wrap(serviceErr, "load account"), http.StatusInternalServerError, `{"data":null,"msg":"failed to load user","trace_id":""}`, cause.Error()},
+		{"forbidden", serviceregistry.NewError(http.StatusForbidden, "account disabled"), http.StatusForbidden, `{"data":null,"msg":"account disabled","trace_id":""}`, ""},
+		{"other error", internal, http.StatusBadRequest, `{"data":null,"msg":"The request could not be processed.","trace_id":""}`, internal.Error()},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			w := httptest.NewRecorder()
+			c, _ := gin.CreateTestContext(w)
+
+			response.Error(c, tt.err)
+
+			require.Equal(t, tt.wantStatus, w.Code)
+			require.JSONEq(t, tt.wantBody, w.Body.String())
+			if tt.hidden != "" {
+				require.NotContains(t, w.Body.String(), tt.hidden)
+			}
+		})
+	}
+}
+
+// TestAbortWritesTheFailureEnvelopeAndStopsTheChain pins the refusal of
+// code outside the controller path: the status and message given, in the
+// failure envelope, with the handler chain aborted.
+func TestAbortWritesTheFailureEnvelopeAndStopsTheChain(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Set(consts.TRACE_ID, "trace-sample")
+
+	response.Abort(c, http.StatusForbidden, "permission denied")
+
+	require.Equal(t, http.StatusForbidden, w.Code)
+	require.JSONEq(t, `{"data":null,"msg":"permission denied","trace_id":"trace-sample"}`, w.Body.String())
+	require.True(t, c.IsAborted())
+}
+
 // TestJSONKeepsContentTypeSetBeforehand pins that the envelope render, like
 // gin's own JSON render, leaves a Content-Type already set on the response
 // alone.
@@ -68,22 +124,22 @@ func TestJSONKeepsContentTypeSetBeforehand(t *testing.T) {
 	c, _ := gin.CreateTestContext(w)
 	c.Header("Content-Type", "application/problem+json")
 
-	response.JSON(c, response.CodeSuccess)
+	response.JSON(c)
 
 	if got := w.Header().Get("Content-Type"); got != "application/problem+json" {
 		t.Errorf("Content-Type = %q, want %q", got, "application/problem+json")
 	}
 }
 
-// TestJSONWritesNoBodyForBodylessStatus pins the envelope on a status that
+// TestAbortWritesNoBodyForBodylessStatus pins the envelope on a status that
 // cannot carry a body: the JSON Content-Type is still announced and nothing is
 // written.
-func TestJSONWritesNoBodyForBodylessStatus(t *testing.T) {
+func TestAbortWritesNoBodyForBodylessStatus(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	w := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(w)
 
-	response.JSON(c, response.CodeSuccess.WithStatus(http.StatusNoContent))
+	response.Abort(c, http.StatusNoContent, "")
 
 	if w.Code != http.StatusNoContent {
 		t.Errorf("status = %d, want %d", w.Code, http.StatusNoContent)
@@ -105,7 +161,7 @@ func TestJSONRecordsMarshalFailureWithoutWritingBody(t *testing.T) {
 	w := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(w)
 
-	response.JSON(c, response.CodeSuccess, math.NaN())
+	response.JSON(c, math.NaN())
 
 	if got := w.Body.String(); got != "" {
 		t.Errorf("body = %q, want empty", got)
@@ -141,35 +197,5 @@ func TestAttachment(t *testing.T) {
 	}
 	if got := w.Body.String(); got != "hello" {
 		t.Errorf("body = %q, want %q", got, "hello")
-	}
-}
-
-func TestWithErrKeepsServiceErrorCauseOutOfMessage(t *testing.T) {
-	cause := errors.New("database password leaked")
-	serviceErr := serviceregistry.NewErrorWithCause(http.StatusInternalServerError, "failed to load user", cause)
-
-	// Both WithErr variants must render the client-safe Msg for service-layer
-	// errors, wherever they sit in the wrap chain.
-	for name, msg := range map[string]string{
-		"code":         response.CodeFailure.WithErr(serviceErr).Msg(),
-		"codeInstance": response.CodeFailure.WithStatus(http.StatusBadRequest).WithErr(serviceErr).Msg(),
-		"wrapped":      response.CodeFailure.WithErr(errors.Wrap(serviceErr, "load account")).Msg(),
-	} {
-		if msg != "failed to load user" {
-			t.Errorf("%s: msg = %q, want %q", name, msg, "failed to load user")
-		}
-	}
-
-	// Plain errors keep rendering their full Error text.
-	if got := response.CodeFailure.WithErr(errors.New("plain failure")).Msg(); got != "plain failure" {
-		t.Errorf("plain: msg = %q, want %q", got, "plain failure")
-	}
-}
-
-func TestCodeStringRendersMessageNotBareInteger(t *testing.T) {
-	got := response.CodeNotFound.String()
-	want := fmt.Sprintf("The requested resource was not found. (code=%d)", int32(response.CodeNotFound))
-	if got != want {
-		t.Errorf("String() = %q, want %q", got, want)
 	}
 }

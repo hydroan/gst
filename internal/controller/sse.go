@@ -65,17 +65,17 @@ func SSEHandler[M types.Model, REQ types.Request, RSP types.Response](cfg ...*ty
 			log.Errorz("service operation failed", zap.Error(err))
 			gstotel.RecordError(span, err)
 			if !c.Writer.Written() {
-				handleServiceError(c, err)
+				response.Error(c, err)
 			}
 		case c.Writer.Written():
 			// A finished stream needs no envelope; the connection closing is
 			// the response.
 		case ended != nil:
-			handleServiceError(c, ended)
+			response.Error(c, ended)
 		default:
 			// A service that never opened the stream and returned nil still
 			// owes the client an answer.
-			response.JSON(c, response.CodeSuccess, nil)
+			response.JSON(c)
 		}
 	}
 }

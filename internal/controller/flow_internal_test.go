@@ -15,7 +15,7 @@ import (
 	modellogmgmt "github.com/hydroan/gst/internal/model/logmgmt"
 	"github.com/hydroan/gst/internal/modelregistry"
 	"github.com/hydroan/gst/internal/requestctx"
-	"github.com/hydroan/gst/internal/response"
+	"github.com/hydroan/gst/internal/serviceregistry"
 	"github.com/hydroan/gst/internal/types"
 	"github.com/hydroan/gst/pkg/auditmanager"
 	"github.com/stretchr/testify/require"
@@ -57,17 +57,20 @@ func TestCreateFlowRunsOnRequestMetadataAlone(t *testing.T) {
 	require.Equal(t, "flow-user", record.GetUpdatedBy())
 }
 
-// TestGetFlowAnswersNotFoundAsACode pins how a flow reports a request it
-// cannot serve: the error carries the canonical code the transport answers
-// with, CodeNotFound here for an id naming no record.
-func TestGetFlowAnswersNotFoundAsACode(t *testing.T) {
+// TestGetFlowAnswersNotFoundAsAServiceError pins how a flow reports a
+// request it cannot serve: the error carries the service error the transport
+// answers with, 404 with the not-found message here for an id naming no
+// record.
+func TestGetFlowAnswersNotFoundAsAServiceError(t *testing.T) {
 	a := newAction[*flowSample, *flowSample, *flowSample]("flow-samples", consts.Get, consts.GetBefore, consts.GetAfter)
 	ctx := requestctx.WithMetadata(context.Background(), requestctx.New(requestctx.Fields{}))
 
 	_, err := a.getFlow(ctx, plainServiceContext, "missing")
 
-	require.Error(t, err)
-	require.Equal(t, response.CodeNotFound, failureCoder(err))
+	var serviceErr *serviceregistry.Error
+	require.ErrorAs(t, err, &serviceErr)
+	require.Equal(t, http.StatusNotFound, serviceErr.Status())
+	require.Equal(t, notFoundMsg, serviceErr.Msg())
 }
 
 // TestFlowRecordsTheRequestMethodAndURIInTheOperationLog pins that the

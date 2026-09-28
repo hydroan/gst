@@ -10,7 +10,6 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/internal/errorstack"
 	"github.com/hydroan/gst/internal/serviceregistry"
-	"github.com/hydroan/gst/internal/types"
 	"github.com/stretchr/testify/require"
 )
 
@@ -19,14 +18,8 @@ func TestNewError(t *testing.T) {
 
 	require.Error(t, err)
 	require.Equal(t, http.StatusBadRequest, err.Status())
-	require.Equal(t, -1, err.Code())
 	require.Equal(t, "invalid input", err.Msg())
 	require.Equal(t, "invalid input", err.Error())
-
-	var coder types.Coder = err
-	require.Equal(t, err.Status(), coder.Status())
-	require.Equal(t, err.Code(), coder.Code())
-	require.Equal(t, err.Msg(), coder.Msg())
 }
 
 func TestNewErrorNormalizesInvalidStatus(t *testing.T) {
@@ -34,7 +27,6 @@ func TestNewErrorNormalizesInvalidStatus(t *testing.T) {
 		err := serviceregistry.NewError(status, "should not leak")
 
 		require.Equal(t, http.StatusInternalServerError, err.Status())
-		require.Equal(t, -1, err.Code())
 		require.Equal(t, http.StatusText(http.StatusInternalServerError), err.Msg())
 	}
 }
@@ -43,7 +35,6 @@ func TestNewErrorUsesHTTPStatusTextWhenMessageIsEmpty(t *testing.T) {
 	err := serviceregistry.NewError(http.StatusNotFound, "")
 
 	require.Equal(t, http.StatusNotFound, err.Status())
-	require.Equal(t, -1, err.Code())
 	require.Equal(t, http.StatusText(http.StatusNotFound), err.Msg())
 }
 

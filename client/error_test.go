@@ -9,8 +9,8 @@ import (
 )
 
 func TestErrorRendersReadableText(t *testing.T) {
-	err := &client.Error{StatusCode: 403, Code: 403, Msg: "permission denied", TraceID: "trace-1"}
-	require.EqualError(t, err, `server rejected: status=403 code=403 msg="permission denied" trace_id=trace-1`)
+	err := &client.Error{StatusCode: 403, Msg: "permission denied", TraceID: "trace-1"}
+	require.EqualError(t, err, `server rejected: status=403 msg="permission denied" trace_id=trace-1`)
 }
 
 func TestErrorSurvivesWrappingForErrorsAs(t *testing.T) {

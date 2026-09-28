@@ -61,7 +61,6 @@ const (
 	CTX_SESSION_ID    = "session_id"
 	CTX_TENANT_ID     = "tenant_id"
 	CTX_REQUIRES_AUTH = "requires_auth"
-	CTX_RESPONSE_CODE = "response_code"
 )
 
 // Framework-owned URL query parameters all live in the "_" prefix namespace,

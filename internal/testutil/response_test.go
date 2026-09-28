@@ -14,17 +14,15 @@ import (
 func TestRequireErrorAcceptsWrappedRejectionAndReturnsIt(t *testing.T) {
 	err := errors.Wrap(&client.Error{
 		StatusCode: http.StatusForbidden,
-		Code:       -1,
 		Msg:        "permission denied for sample",
 	}, "call sample endpoint")
 
 	respErr := testutil.RequireError(t, err, http.StatusForbidden, "permission denied", "sample")
-	require.Equal(t, -1, respErr.Code)
+	require.Equal(t, http.StatusForbidden, respErr.StatusCode)
 }
 
 func TestDecodeRespReturnsDecodedPayload(t *testing.T) {
 	resp := &client.Envelope{
-		Code:    0,
 		Msg:     "success",
 		Data:    json.RawMessage(`{"name":"sample","count":2}`),
 		TraceID: "trace-1",

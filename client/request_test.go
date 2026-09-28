@@ -37,7 +37,7 @@ func newEnvelopeServer(t *testing.T, status int, envelope string) (*httptest.Ser
 
 func TestDoParsesSuccessEnvelope(t *testing.T) {
 	srv, captured := newEnvelopeServer(t, http.StatusOK,
-		`{"code":0,"msg":"success","data":{"name":"sample"},"trace_id":"trace-1"}`)
+		`{"msg":"success","data":{"name":"sample"},"trace_id":"trace-1"}`)
 
 	cli, err := client.New(srv.URL)
 	require.NoError(t, err)
@@ -45,7 +45,6 @@ func TestDoParsesSuccessEnvelope(t *testing.T) {
 	resp, err := cli.Do(t.Context(), http.MethodPost, "/api/records", map[string]string{"name": "sample"},
 		client.WithQuery("kind", "sample"), client.WithPage(1, 10))
 	require.NoError(t, err)
-	require.Equal(t, 0, resp.Code)
 	require.Equal(t, "trace-1", resp.TraceID)
 	require.JSONEq(t, `{"name":"sample"}`, string(resp.Data))
 
@@ -57,7 +56,7 @@ func TestDoParsesSuccessEnvelope(t *testing.T) {
 
 func TestDoReturnsStructuredErrorOnRejection(t *testing.T) {
 	srv, _ := newEnvelopeServer(t, http.StatusForbidden,
-		`{"code":403,"msg":"permission denied","trace_id":"trace-2"}`)
+		`{"msg":"permission denied","trace_id":"trace-2"}`)
 
 	cli, err := client.New(srv.URL)
 	require.NoError(t, err)
@@ -66,23 +65,9 @@ func TestDoReturnsStructuredErrorOnRejection(t *testing.T) {
 	var respErr *client.Error
 	require.True(t, errors.As(err, &respErr), "error: %v", err)
 	require.Equal(t, http.StatusForbidden, respErr.StatusCode)
-	require.Equal(t, 403, respErr.Code)
 	require.Equal(t, "permission denied", respErr.Msg)
 	require.Equal(t, "trace-2", respErr.TraceID)
 	require.NotEmpty(t, respErr.Body)
-}
-
-func TestDoReturnsStructuredErrorOnBusinessCodeWith2xx(t *testing.T) {
-	srv, _ := newEnvelopeServer(t, http.StatusOK, `{"code":1001,"msg":"sample failure"}`)
-
-	cli, err := client.New(srv.URL)
-	require.NoError(t, err)
-
-	_, err = cli.Do(t.Context(), http.MethodGet, "/api/records", nil)
-	var respErr *client.Error
-	require.True(t, errors.As(err, &respErr))
-	require.Equal(t, http.StatusOK, respErr.StatusCode)
-	require.Equal(t, 1001, respErr.Code)
 }
 
 func TestClientKeepsSessionCookieAcrossRequests(t *testing.T) {
@@ -97,7 +82,7 @@ func TestClientKeepsSessionCookieAcrossRequests(t *testing.T) {
 			gotCookie = cookie.Value
 		}
 		w.Header().Set("Content-Type", "application/json")
-		fmt.Fprint(w, `{"code":0,"msg":"success"}`)
+		fmt.Fprint(w, `{"msg":"success"}`)
 	}))
 	srv.Start()
 
@@ -114,7 +99,7 @@ func TestClientKeepsSessionCookieAcrossRequests(t *testing.T) {
 }
 
 func TestWithHeaderMergesIntoDefaultHeaders(t *testing.T) {
-	srv, captured := newEnvelopeServer(t, http.StatusOK, `{"code":0}`)
+	srv, captured := newEnvelopeServer(t, http.StatusOK, `{"msg":"success"}`)
 
 	header := http.Header{}
 	header.Set("X-Forwarded-Proto", "https")
@@ -159,7 +144,7 @@ func TestDoRefusesNilContext(t *testing.T) {
 }
 
 func TestRequestCarriesTraceOfContext(t *testing.T) {
-	srv, captured := newEnvelopeServer(t, http.StatusOK, `{"code":0}`)
+	srv, captured := newEnvelopeServer(t, http.StatusOK, `{"msg":"success"}`)
 
 	cli, err := client.New(srv.URL)
 	require.NoError(t, err)

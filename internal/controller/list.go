@@ -41,10 +41,10 @@ func ListHandler[M types.Model, REQ types.Request, RSP types.Response](cfg ...*t
 
 		items, total, err := a.listFlow(requestContext(c), ginServiceContext(c))
 		if err != nil {
-			response.JSON(c, failureCoder(err))
+			response.Error(c, err)
 			return
 		}
-		response.JSON(c, response.CodeSuccess, gin.H{
+		response.JSON(c, gin.H{
 			"items": items,
 			"total": total,
 		})
@@ -94,26 +94,26 @@ func (a *action[M, REQ, RSP]) listFlow(ctx context.Context, newServiceContext se
 	m := a.newModel()
 
 	if err := decodeListQuery(m, query); err != nil {
-		return nil, 0, failWith(ctx, log, "parse query parameter failed", response.CodeInvalidArgument.WithErr(err), err)
+		return nil, 0, failWith(ctx, log, "parse query parameter failed", err, invalidArgument(err))
 	}
 	filters, err := urlquery.Filters(query, m)
 	if err != nil {
-		return nil, 0, failWith(ctx, log, "parse query parameter failed", response.CodeInvalidArgument.WithErr(err), err)
+		return nil, 0, failWith(ctx, log, "parse query parameter failed", err, invalidArgument(err))
 	}
 	present := urlquery.PresentFields(query)
 
 	orders, err := urlquery.Orders(query, m)
 	if err != nil {
-		return nil, 0, failWith(ctx, log, "parse query parameter failed", response.CodeInvalidArgument.WithErr(err), err)
+		return nil, 0, failWith(ctx, log, "parse query parameter failed", err, invalidArgument(err))
 	}
 
 	cursor, err := urlquery.Cursor(query, m)
 	if err != nil {
-		return nil, 0, failWith(ctx, log, "parse query parameter failed", response.CodeInvalidArgument.WithErr(err), err)
+		return nil, 0, failWith(ctx, log, "parse query parameter failed", err, invalidArgument(err))
 	}
 
 	if err = checkCursorOrderConflict(cursor, orders); err != nil {
-		return nil, 0, failWith(ctx, log, "parse query parameter failed", response.CodeInvalidArgument.WithErr(err), err)
+		return nil, 0, failWith(ctx, log, "parse query parameter failed", err, invalidArgument(err))
 	}
 
 	data := make([]M, 0)

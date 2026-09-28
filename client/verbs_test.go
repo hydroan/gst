@@ -22,7 +22,7 @@ func TestVerbsDecodeEnvelopeData(t *testing.T) {
 	srv := httptest.NewTestServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		name := r.Method + "-" + strings.TrimPrefix(r.URL.Path, "/api/records/")
 		w.Header().Set("Content-Type", "application/json")
-		fmt.Fprintf(w, `{"code":0,"data":{"name":"%s","count":2}}`, name)
+		fmt.Fprintf(w, `{"msg":"success","data":{"name":"%s","count":2}}`, name)
 	}))
 	srv.Start()
 
@@ -53,7 +53,7 @@ func TestVerbsDecodeEnvelopeData(t *testing.T) {
 func TestVerbsDecodeEmptyDataToZeroValue(t *testing.T) {
 	srv := httptest.NewTestServer(t, http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		fmt.Fprint(w, `{"code":0,"msg":"success"}`)
+		fmt.Fprint(w, `{"msg":"success"}`)
 	}))
 	srv.Start()
 
@@ -68,7 +68,7 @@ func TestVerbsDecodeEmptyDataToZeroValue(t *testing.T) {
 func TestListResultDecodesItemsAndTotal(t *testing.T) {
 	srv := httptest.NewTestServer(t, http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		fmt.Fprint(w, `{"code":0,"data":{"items":[{"name":"a","count":1},{"name":"b","count":2}],"total":7}}`)
+		fmt.Fprint(w, `{"msg":"success","data":{"items":[{"name":"a","count":1},{"name":"b","count":2}],"total":7}}`)
 	}))
 	srv.Start()
 
@@ -96,7 +96,7 @@ func TestGetSendsNoBody(t *testing.T) {
 	srv := httptest.NewTestServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		body, _ := io.ReadAll(r.Body)
 		w.Header().Set("Content-Type", "application/json")
-		fmt.Fprintf(w, `{"code":0,"data":{"count":%d}}`, len(body))
+		fmt.Fprintf(w, `{"msg":"success","data":{"count":%d}}`, len(body))
 	}))
 	srv.Start()
 

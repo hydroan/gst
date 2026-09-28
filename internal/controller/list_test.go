@@ -36,7 +36,6 @@ func TestListRefusesMalformedQueryParameters(t *testing.T) {
 			rsp := serve(t, http.MethodGet, pattern, handler, tt.target, "")
 
 			require.Equal(t, http.StatusBadRequest, rsp.Code, rsp.Body.String())
-			require.Contains(t, rsp.Body.String(), `"code":1000`)
 		})
 	}
 }

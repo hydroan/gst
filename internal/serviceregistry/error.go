@@ -6,17 +6,12 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/errors/errbase"
-	"github.com/hydroan/gst/internal/types"
 )
 
-const (
-	defaultErrorCode   = -1
-	defaultErrorStatus = http.StatusInternalServerError
-)
+const defaultErrorStatus = http.StatusInternalServerError
 
 var (
 	_ error                      = (*Error)(nil)
-	_ types.Coder                = (*Error)(nil)
 	_ errbase.StackTraceProvider = (*Error)(nil)
 )
 
@@ -110,10 +105,6 @@ func (e *Error) Unwrap() error {
 		return nil
 	}
 	return e.cause
-}
-
-func (e *Error) Code() int {
-	return defaultErrorCode
 }
 
 func (e *Error) Status() int {

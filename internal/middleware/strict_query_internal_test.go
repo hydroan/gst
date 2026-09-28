@@ -104,7 +104,7 @@ func TestStrictQueryCoversEveryMethod(t *testing.T) {
 // other framework refusal.
 func TestStrictQueryRefusalUsesEnvelope(t *testing.T) {
 	_, body := strictQueryResult(t, http.MethodGet, "a=1&a=2")
-	require.True(t, strings.Contains(body, `"code"`) && strings.Contains(body, `"msg"`),
+	require.True(t, strings.Contains(body, `"msg"`) && strings.Contains(body, `"trace_id"`),
 		"refusal must use the response envelope, got: %s", body)
 }
 

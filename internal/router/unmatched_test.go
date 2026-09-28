@@ -85,14 +85,11 @@ func requireRefusalEnvelope(t *testing.T, body []byte, msg string) {
 	t.Helper()
 
 	var envelope struct {
-		Code    *int             `json:"code"`
 		Msg     string           `json:"msg"`
 		Data    *json.RawMessage `json:"data"`
 		TraceID *string          `json:"trace_id"`
 	}
 	require.NoError(t, json.Unmarshal(body, &envelope), "response body: %s", body)
-	require.NotNil(t, envelope.Code, "a refusal has to carry a code, like every other response")
-	require.Equal(t, -1, *envelope.Code)
 	require.Equal(t, msg, envelope.Msg)
 	require.NotNil(t, envelope.TraceID)
 	require.NotEmpty(t, *envelope.TraceID, "a refusal has to carry the trace that explains it")

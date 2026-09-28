@@ -48,17 +48,17 @@ func CreateHandler[M types.Model, REQ types.Request, RSP types.Response](cfg ...
 			// rather than answered as a success that wrote nothing.
 			reqErr = requiredBodyError(reqErr)
 			log.Errorz("bind request body failed", zap.Error(reqErr))
-			response.JSON(c, response.CodeInvalidArgument.WithErr(reqErr))
+			response.Error(c, invalidArgument(reqErr))
 			gstotel.RecordError(span, reqErr)
 			return
 		}
 		a.normalizeModel(&req)
 
 		if err := a.createFlow(requestContext(c), ginServiceContext(c), req); err != nil {
-			response.JSON(c, failureCoder(err))
+			response.Error(c, err)
 			return
 		}
-		response.JSON(c, response.CodeSuccess, req)
+		response.JSON(c, req)
 	}
 }
 

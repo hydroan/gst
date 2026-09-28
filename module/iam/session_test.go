@@ -428,13 +428,11 @@ func TestSessionRejectionsAnswerInTheEnvelope(t *testing.T) {
 
 		respErr := testutil.RequireError(t, err, http.StatusUnauthorized, wantMsg)
 		var envelope struct {
-			Code    *int             `json:"code"`
 			Msg     string           `json:"msg"`
 			Data    *json.RawMessage `json:"data"`
 			TraceID *string          `json:"trace_id"`
 		}
 		require.NoError(t, json.Unmarshal(respErr.Body, &envelope), "response body: %s", respErr.Body)
-		require.NotNil(t, envelope.Code, "a rejection has to carry a code, like every other response")
 		require.NotNil(t, envelope.TraceID, "a rejection has to carry the trace that explains it")
 		require.Equal(t, wantMsg, envelope.Msg)
 	}
@@ -1145,7 +1143,7 @@ type requestMetadataProbeRsp struct {
 func registerRequestMetadataProbe() error {
 	router.Auth().GET(requestMetadataProbeRoute, func(c *gin.Context) {
 		meta := requestctx.FromContext(c.Request.Context())
-		internalresponse.JSON(c, internalresponse.CodeSuccess, requestMetadataProbeRsp{
+		internalresponse.JSON(c, requestMetadataProbeRsp{
 			Route:    meta.Route(),
 			Path:     meta.Path(),
 			RawQuery: meta.RawQuery(),

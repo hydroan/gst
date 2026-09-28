@@ -40,7 +40,6 @@ func TestPatchRefusesAVersionedRecordWithoutItsVersion(t *testing.T) {
 		"/controller-versioned-samples/missing", `{"name":"renamed"}`)
 
 	require.Equal(t, http.StatusBadRequest, rsp.Code)
-	require.Contains(t, rsp.Body.String(), `"code":1000`)
 }
 
 // TestPatchValidatesTheFieldsTheBodyNames pins that a patch is checked

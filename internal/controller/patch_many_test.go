@@ -62,7 +62,6 @@ func TestPatchManyReportsAMissingVersionBeforeAMissingRecord(t *testing.T) {
 		"/controller-versioned-samples/batch", `{"items":[{"id":"missing","name":"renamed"}]}`)
 
 	require.Equal(t, http.StatusBadRequest, rsp.Code)
-	require.Contains(t, rsp.Body.String(), `"code":1000`)
 }
 
 // TestPatchManyValidatesTheFieldsEachItemNames pins that a batch patch
@@ -132,6 +131,5 @@ func TestPatchManyRefusesAnItemWithoutAnID(t *testing.T) {
 		"/controller-samples/batch", `{"items":[{"id":"`+record.GetID()+`","name":"patch-many-renamed"},{"name":"patch-many-other"}]}`)
 
 	require.Equal(t, http.StatusBadRequest, rsp.Code)
-	require.Contains(t, rsp.Body.String(), `"code":1000`)
 	requireSampleName(t, record.GetID(), "patch-many-identified")
 }

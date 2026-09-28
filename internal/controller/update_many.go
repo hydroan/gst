@@ -42,17 +42,17 @@ func UpdateManyHandler[M types.Model, REQ types.Request, RSP types.Response](cfg
 		var req batch[M]
 		if reqErr := bindJSONRequest(c, &req); reqErr != nil && !errors.Is(reqErr, io.EOF) {
 			log.Errorz("bind request body failed", zap.Error(reqErr))
-			response.JSON(c, response.CodeInvalidArgument.WithErr(reqErr))
+			response.Error(c, invalidArgument(reqErr))
 			gstotel.RecordError(span, reqErr)
 			return
 		}
 		normalizeBatch(&req)
 
 		if err := a.updateManyFlow(requestContext(c), ginServiceContext(c), &req); err != nil {
-			response.JSON(c, failureCoder(err))
+			response.Error(c, err)
 			return
 		}
-		response.JSON(c, response.CodeSuccess, req)
+		response.JSON(c, req)
 	}
 }
 

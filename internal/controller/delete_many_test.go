@@ -43,7 +43,6 @@ func TestDeleteManyRefusesAnEmptyOrBlankID(t *testing.T) {
 				"/controller-samples/batch", `{"ids":["`+record.GetID()+`","`+tt.id+`"]}`)
 
 			require.Equal(t, http.StatusBadRequest, rsp.Code)
-			require.Contains(t, rsp.Body.String(), `"code":1000`)
 			requireSampleName(t, record.GetID(), "delete-many-identified-"+tt.name)
 		})
 	}

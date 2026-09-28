@@ -43,17 +43,17 @@ func DeleteManyHandler[M types.Model, REQ types.Request, RSP types.Response](cfg
 		var req batch[M]
 		if reqErr := bindJSONRequest(c, &req); reqErr != nil && !errors.Is(reqErr, io.EOF) {
 			log.Errorz("bind request body failed", zap.Error(reqErr))
-			response.JSON(c, response.CodeInvalidArgument.WithErr(reqErr))
+			response.Error(c, invalidArgument(reqErr))
 			gstotel.RecordError(span, reqErr)
 			return
 		}
 		normalizeBatch(&req)
 
 		if err := a.deleteManyFlow(requestContext(c), ginServiceContext(c), &req); err != nil {
-			response.JSON(c, failureCoder(err))
+			response.Error(c, err)
 			return
 		}
-		response.JSON(c, response.CodeSuccess)
+		response.JSON(c)
 	}
 }
 
@@ -103,7 +103,7 @@ func (a *action[M, REQ, RSP]) deleteManyFlow(ctx context.Context, newServiceCont
 		// id instead. Any other id is used as sent, never trimmed.
 		if strings.TrimSpace(id) == "" {
 			err := errors.Wrapf(database.ErrIDRequired, "delete many %s", a.name)
-			return failWith(ctx, log, "batch delete with an empty id", databaseErrorCoder(err), err)
+			return failWith(ctx, log, "batch delete with an empty id", err, databaseError(err))
 		}
 		m := a.newModel()
 		if !setID(m, id) {
