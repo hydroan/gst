@@ -8,7 +8,6 @@ import (
 	"reflect"
 	"strconv"
 	"strings"
-	"sync"
 
 	"github.com/cockroachdb/errors"
 	"github.com/gin-gonic/gin"
@@ -101,44 +100,48 @@ func validateRequest(target any) error {
 	if binding.Validator == nil {
 		return nil
 	}
-	configureValidator()
 	return binding.Validator.ValidateStruct(target)
 }
 
 var (
-	// validatorOnce configures gin's validator once, on the first
-	// validation (see configureValidator).
-	validatorOnce sync.Once
-	// validatorTranslator renders the validator's errors as English
-	// sentences (see fieldViolations); nil when the validator is not
-	// go-playground's.
+	// validatorEngine is gin's validator as configured at initialization
+	// (see init), whose errors fieldViolations names fields of; nil when
+	// gin's validator is not go-playground's.
+	validatorEngine *validator.Validate
+	// validatorTranslator renders the errors of validatorEngine as English
+	// sentences (see fieldViolations).
 	validatorTranslator ut.Translator
 )
 
-// configureValidator sets gin's validator up for the answers the framework
-// gives, once: it names fields by their JSON key, the name the client sent
-// them under, and renders each failure as the English sentence of the
-// validator's own translations, "name is a required field". A validator
-// other than go-playground's is left as it is, its errors answered without
-// naming a field (see clientSafeBindError).
-func configureValidator() {
-	validatorOnce.Do(func() {
-		engine, ok := binding.Validator.Engine().(*validator.Validate)
-		if !ok {
-			return
+// init sets gin's validator up for the answers the framework gives, at
+// package initialization so that it is set before any request, on either
+// transport, and before any validation a project runs through gin itself:
+// the validator names fields by their JSON key, the name the client sent
+// them under, and renders each failure as the English sentence of its own
+// translations, "name is a required field". A validator other than
+// go-playground's is left as it is, its errors answered without naming a
+// field (see clientSafeBindError).
+func init() {
+	if binding.Validator == nil {
+		return
+	}
+	engine, ok := binding.Validator.Engine().(*validator.Validate)
+	if !ok {
+		return
+	}
+	engine.RegisterTagNameFunc(func(field reflect.StructField) string {
+		if name := jsonTagName(field); name != "-" {
+			return name
 		}
-		engine.RegisterTagNameFunc(func(field reflect.StructField) string {
-			if name := jsonTagName(field); name != "-" {
-				return name
-			}
-			return ""
-		})
-		english := en.New()
-		translator, _ := ut.New(english, english).GetTranslator(english.Locale())
-		if err := entranslations.RegisterDefaultTranslations(engine, translator); err == nil {
-			validatorTranslator = translator
-		}
+		return ""
 	})
+	english := en.New()
+	translator, _ := ut.New(english, english).GetTranslator(english.Locale())
+	if err := entranslations.RegisterDefaultTranslations(engine, translator); err != nil {
+		return
+	}
+	validatorEngine = engine
+	validatorTranslator = translator
 }
 
 // jsonTagName returns the name a field's json tag gives it: the part before
@@ -154,10 +157,11 @@ func jsonTagName(field reflect.StructField) string {
 // prefix in front, items[1]. for the item of a batch validated on its own,
 // and the sentence the validator's translation renders the failure as,
 // with the path in place of the bare field name; nil for any other error,
-// and for a validator without translations.
+// and for the errors of a validator other than the one init configured,
+// which a project may have put in gin's place since.
 func fieldViolations(err error, prefix string) []serviceregistry.FieldViolation {
 	var refused validator.ValidationErrors
-	if validatorTranslator == nil || !errors.As(err, &refused) {
+	if validatorEngine == nil || binding.Validator == nil || binding.Validator.Engine() != validatorEngine || !errors.As(err, &refused) {
 		return nil
 	}
 	violations := make([]serviceregistry.FieldViolation, 0, len(refused))
