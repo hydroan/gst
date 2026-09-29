@@ -127,22 +127,34 @@ func TestMigrateProgramHasNothingToMigrateOnAnInMemorySqliteDatabase(t *testing.
 			t.Fatalf("expected the migration output to contain %q, got:\n%s", want, out)
 		}
 	}
-	var written []string
-	for path := range projectTree(t, ".") {
-		if _, existed := before[path]; !existed {
-			written = append(written, path)
+	requireOnlySchemaSnapshotWritten(t, before)
+}
+
+// Planning against a sqlite database file that does not exist yet creates
+// nothing: the plan starts from the empty database the file would be, and the
+// program says applying it creates the file.
+func TestMigrateProgramPlansAMissingSqliteFileWithoutCreatingIt(t *testing.T) {
+	if !newMigrateSampleProject(t) {
+		return
+	}
+	t.Setenv(config.SQLITE_IS_MEMORY, "false")
+	t.Setenv(config.SQLITE_PATH, "./data.db")
+	before := projectTree(t, ".")
+
+	out := runMigrateProgramForTest(t, true, false)
+
+	for _, want := range []string{"CREATE TABLE `samples`", missingSqliteFileNotice} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("expected the migration output to contain %q, got:\n%s", want, out)
 		}
 	}
-	slices.Sort(written)
-	want := []string{filepath.Join("generated", "migrate", "sqlite", "schema.sql")}
-	if !slices.Equal(written, want) {
-		t.Fatalf("expected the migration program to write %q alone, wrote %q", want, written)
-	}
+	requireOnlySchemaSnapshotWritten(t, before)
 }
 
 // On a sqlite database file the migration program migrates the file
 // sqlite.path names, the database the application opens: applied, the plan
-// creates the tables there, and planned again, it finds nothing to change.
+// creates the file and the tables there, and planned again, it finds nothing
+// to change.
 func TestMigrateProgramMigratesTheSqliteFileThePathNames(t *testing.T) {
 	if !newMigrateSampleProject(t) {
 		return
@@ -152,7 +164,7 @@ func TestMigrateProgramMigratesTheSqliteFileThePathNames(t *testing.T) {
 
 	out := runMigrateProgramForTest(t, false, true)
 
-	for _, want := range []string{"→ Target: ./data.db", "✔ Migration executed successfully."} {
+	for _, want := range []string{"→ Target: ./data.db", missingSqliteFileNotice, "✔ Migration executed successfully."} {
 		if !strings.Contains(out, want) {
 			t.Fatalf("expected the applied migration's output to contain %q, got:\n%s", want, out)
 		}
@@ -296,6 +308,29 @@ func runMigrateProgramForTest(t *testing.T, dryRun, yes bool) string {
 		t.Fatalf("expected the migration program to run, got %v\n%s", err, out.String())
 	}
 	return out.String()
+}
+
+// missingSqliteFileNotice is what the migration program prints below a plan
+// for ./data.db while the file does not exist yet.
+const missingSqliteFileNotice = "→ ./data.db does not exist yet: the plan starts from an empty database, and applying it creates the file."
+
+// requireOnlySchemaSnapshotWritten fails the test unless the one file the
+// working directory holds beyond the files of before, a projectTree taken
+// before the migration program ran, is the schema snapshot.
+func requireOnlySchemaSnapshotWritten(t *testing.T, before map[string]string) {
+	t.Helper()
+
+	var written []string
+	for path := range projectTree(t, ".") {
+		if _, existed := before[path]; !existed {
+			written = append(written, path)
+		}
+	}
+	slices.Sort(written)
+	want := []string{filepath.Join("generated", "migrate", "sqlite", "schema.sql")}
+	if !slices.Equal(written, want) {
+		t.Fatalf("expected the migration program to write %q alone, wrote %q", want, written)
+	}
 }
 
 // migrateSampleModule is the module package of a project that registers one
