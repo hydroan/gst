@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
 
@@ -226,22 +227,38 @@ func TestMigratePlansAMissingSqliteFileWithoutCreatingIt(t *testing.T) {
 	}
 }
 
-// A sqlite database file whose directory does not exist cannot come into
-// being: the driver creates the file but not the directory. Planning refuses
-// it, naming the directory, instead of promising a file that applying would
-// fail to create, and creates nothing on the way.
-func TestMigrateRefusesASqliteFileInAMissingDirectory(t *testing.T) {
+// A sqlite database file that cannot come into being is refused while
+// planning instead of promised: the driver creates a missing file but not
+// the directory it goes in, and none where a regular file stands in for that
+// directory. The refusal names the cause, and nothing is created on the way.
+func TestMigrateRefusesASqliteFileItCannotCreate(t *testing.T) {
 	dumper, err := dbmigrate.NewSchemaDumper()
 	require.NoError(t, err)
 	schema, err := dumper.Dump(config.DBSqlite, User{})
 	require.NoError(t, err)
-	dir := filepath.Join(t.TempDir(), "missing")
-	file := filepath.Join(dir, "data.db")
+	root := t.TempDir()
+	plan := func(file string) error {
+		_, err := dbmigrate.Migrate([]string{schema}, config.DBSqlite, &dbmigrate.DatabaseConfig{Database: file}, &dbmigrate.MigrateOption{DryRun: true})
+		return err
+	}
 
-	_, err = dbmigrate.Migrate([]string{schema}, config.DBSqlite, &dbmigrate.DatabaseConfig{Database: file}, &dbmigrate.MigrateOption{DryRun: true})
+	t.Run("missing_directory", func(t *testing.T) {
+		dir := filepath.Join(root, "missing")
+		file := filepath.Join(dir, "data.db")
 
-	require.ErrorContains(t, err, "the sqlite database file "+file+" cannot be created: its directory "+dir+" does not exist")
-	require.NoDirExists(t, dir)
+		require.ErrorContains(t, plan(file), "the sqlite database file "+file+" cannot be created: its directory "+dir+" does not exist")
+		require.NoDirExists(t, dir)
+	})
+
+	t.Run("regular_file_in_place_of_the_directory", func(t *testing.T) {
+		notes := filepath.Join(root, "notes.txt")
+		require.NoError(t, os.WriteFile(notes, nil, 0o644))
+		file := filepath.Join(notes, "data.db")
+
+		err := plan(file)
+		require.ErrorContains(t, err, "failed to inspect the sqlite database file "+file)
+		require.ErrorIs(t, err, syscall.ENOTDIR)
+	})
 }
 
 // TestMigrateDropsRemovedIndex pins the planner's drop path for a secondary
