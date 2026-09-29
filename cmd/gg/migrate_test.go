@@ -11,6 +11,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/internal/ggconst"
 	"github.com/hydroan/gst/internal/gghelper"
 )
@@ -99,6 +100,70 @@ func TestMigrateSchemaProgramReadsTheModelsItsSourceDeclares(t *testing.T) {
 
 	if !strings.Contains(out, "CREATE TABLE `samples`") {
 		t.Fatalf("expected the schema dump to create the table of the model the source declares, got:\n%s", out)
+	}
+}
+
+// On an in-memory sqlite database, the default configuration, the migration
+// program has nothing to migrate: the application creates the tables from the
+// models every time it starts, and the program, running in a process of its
+// own, cannot reach that database. It says so, and opens no database file:
+// the one file it writes is the schema snapshot.
+func TestMigrateProgramHasNothingToMigrateOnAnInMemorySqliteDatabase(t *testing.T) {
+	if !newMigrateSampleProject(t) {
+		return
+	}
+	for _, key := range []string{config.SQLITE_IS_MEMORY, config.SQLITE_PATH} {
+		t.Setenv(key, "")
+		if err := os.Unsetenv(key); err != nil {
+			t.Fatal(err)
+		}
+	}
+	before := projectTree(t, ".")
+
+	out := runMigrateProgramForTest(t, true, false)
+
+	for _, want := range []string{"→ Target: in-memory database", "→ Nothing to migrate:"} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("expected the migration output to contain %q, got:\n%s", want, out)
+		}
+	}
+	var written []string
+	for path := range projectTree(t, ".") {
+		if _, existed := before[path]; !existed {
+			written = append(written, path)
+		}
+	}
+	slices.Sort(written)
+	want := []string{filepath.Join("generated", "migrate", "sqlite", "schema.sql")}
+	if !slices.Equal(written, want) {
+		t.Fatalf("expected the migration program to write %q alone, wrote %q", want, written)
+	}
+}
+
+// On a sqlite database file the migration program migrates the file
+// sqlite.path names, the database the application opens: applied, the plan
+// creates the tables there, and planned again, it finds nothing to change.
+func TestMigrateProgramMigratesTheSqliteFileThePathNames(t *testing.T) {
+	if !newMigrateSampleProject(t) {
+		return
+	}
+	t.Setenv(config.SQLITE_IS_MEMORY, "false")
+	t.Setenv(config.SQLITE_PATH, "./data.db")
+
+	out := runMigrateProgramForTest(t, false, true)
+
+	for _, want := range []string{"→ Target: ./data.db", "✔ Migration executed successfully."} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("expected the applied migration's output to contain %q, got:\n%s", want, out)
+		}
+	}
+
+	out = runMigrateProgramForTest(t, true, false)
+
+	for _, want := range []string{"→ Target: ./data.db", "→ No changes detected."} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("expected the planned migration's output to contain %q, got:\n%s", want, out)
+		}
 	}
 }
 
@@ -211,6 +276,24 @@ func runMigrateSchemaProgramForTest(t *testing.T, source string, files []string)
 	program := gghelper.ProjectProgram{Content: buildMigrateSchemaProgram("tmpapp", source, files), Stdout: &out}
 	if err := program.Run(); err != nil {
 		t.Fatalf("expected the migration schema program to run, got %v\n%s", err, out.String())
+	}
+	return out.String()
+}
+
+// runMigrateProgramForTest builds the migration program in the mode the
+// --dry-run and --yes flags select, runs it in the working directory and
+// returns what it printed.
+func runMigrateProgramForTest(t *testing.T, dryRun, yes bool) string {
+	t.Helper()
+
+	oldDryRun, oldYes := migrateDryRun, migrateYes
+	migrateDryRun, migrateYes = dryRun, yes
+	defer func() { migrateDryRun, migrateYes = oldDryRun, oldYes }()
+
+	var out bytes.Buffer
+	program := gghelper.ProjectProgram{Content: buildMigrateProgramForMode("tmpapp", false, "", nil), Stdout: &out}
+	if err := program.Run(); err != nil {
+		t.Fatalf("expected the migration program to run, got %v\n%s", err, out.String())
 	}
 	return out.String()
 }

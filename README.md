@@ -855,6 +855,8 @@ gg migrate
 
 命令会生成 `generated/migrate/<dbtype>/schema.sql`，并在执行前要求确认。
 执行前先确认 `config.ini` 指向目标环境，避免把开发中的模型变化迁移到错误数据库。
+用 SQLite 时迁移的是 `sqlite.path` 指向的库文件；内存库（`sqlite.is_memory = true`，默认值）每次启动都按模型建表，
+`gg migrate` 提示没有可迁移的内容后直接退出。
 
 ### 索引改名必须先迁移后发布
 

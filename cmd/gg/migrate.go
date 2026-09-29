@@ -20,7 +20,12 @@ import (
 var migrateCmd = &cobra.Command{
 	Use:   "migrate",
 	Short: "Run database migrations",
-	Long:  "Generate and execute database migration code based on current models",
+	Long: `Generate and execute database migration code based on current models.
+
+On SQLite the migration targets the database file sqlite.path names. An
+in-memory database, which sqlite.is_memory selects by default, has nothing to
+migrate: the application creates its tables from the models every time it
+starts.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		// 1. Get module name
 		moduleName, err := gghelper.ModulePath()
@@ -239,8 +244,9 @@ func main() {
 		exitWithError(err)
 	}
 
-	// Get database configuration based on the configured database type.
-	dbConfig := getDatabaseConfig()
+	// Get the database the migration targets, if the configuration has one
+	// to migrate.
+	dbConfig, migratable := getDatabaseConfig()
 
 	// Write the schema to a generated file for reference or debugging.
 	schemaFile, err := writeSchemaFile(schema, len(models))
@@ -249,6 +255,13 @@ func main() {
 	}
 
 	printMigrationSummary(schemaFile, dbConfig, len(models))
+
+	if !migratable {
+		fmt.Println("\n▶ Result")
+		fmt.Println("  → Nothing to migrate: the application creates the tables of its in-memory database from the models every time it starts.")
+		fmt.Println("  → To migrate a database file, set sqlite.is_memory = false and point sqlite.path at the file.")
+		return
+	}
 
 	// Perform migration.
 	if err := performMigration(schema, dbConfig); err != nil {
@@ -496,9 +509,10 @@ func schemaSnapshotContent(schema string, modelCount int) string {
 	return header + strings.TrimLeft(schema, "\n")
 }
 
-// getDatabaseConfig constructs the database configuration based on the application config.
-func getDatabaseConfig() *dbmigrate.DatabaseConfig {
-	var cfg *dbmigrate.DatabaseConfig
+// getDatabaseConfig constructs the database configuration based on the
+// application config. It reports false for an in-memory sqlite database,
+// which has nothing to migrate: see dbmigrate.SQLiteTarget.
+func getDatabaseConfig() (cfg *dbmigrate.DatabaseConfig, migratable bool) {
 	switch config.App.Database.Type {
 	case config.DBMySQL:
 		cfg = &dbmigrate.DatabaseConfig{
@@ -518,13 +532,11 @@ func getDatabaseConfig() *dbmigrate.DatabaseConfig {
 			SSLMode:  config.App.Postgres.SSLMode,
 		}
 	case config.DBSqlite:
-		cfg = &dbmigrate.DatabaseConfig{
-			Database: config.App.Sqlite.Database,
-		}
+		return dbmigrate.SQLiteTarget(config.App.Sqlite)
 	default:
 		exitWithError(fmt.Errorf("unsupported database type: %s", config.App.Database.Type))
 	}
-	return cfg
+	return cfg, true
 }
 
 // printMigrationSummary prints the target and generated schema path before any SQL is applied.
@@ -543,10 +555,14 @@ func printMigrationSummary(schemaFile string, cfg *dbmigrate.DatabaseConfig, mod
 	}
 }
 
-// databaseTarget formats the configured database target without printing credentials.
+// databaseTarget formats the configured database target without printing
+// credentials: the file on sqlite, "in-memory database" when there is none.
 func databaseTarget(cfg *dbmigrate.DatabaseConfig) string {
 	switch config.App.Database.Type {
 	case config.DBSqlite:
+		if cfg == nil {
+			return "in-memory database"
+		}
 		return cfg.Database
 	default:
 		return fmt.Sprintf("%s:%d/%s", cfg.Host, cfg.Port, cfg.Database)
