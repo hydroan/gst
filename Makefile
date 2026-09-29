@@ -74,13 +74,21 @@ help:
 check: build lint selfcheck format vet
 	@echo "All checks passed successfully!"
 
-# Build the project. The example modules are not built: vet type-checks each
-# of them, which already fails the check on an API change that breaks one, and
-# building them would add only the link of each example's program, which go
-# build never caches and so would redo on every check.
+# Build the project, then build it again with cgo off, the way a project
+# builds a static binary for a minimal image: the framework compiles into
+# every project binary, so it has to compile without cgo too. Built without
+# cgo, the sqlite driver is a stub declaring little more than the driver and
+# its connection, so code using anything else the driver declares, such as
+# its error type and codes, lives in a file built only with cgo, beside a
+# file built only without cgo that stands in for it (see database/sqlite).
+# The example modules are not built: vet type-checks each of them, which
+# already fails the check on an API change that breaks one, and building them
+# would add only the link of each example's program, which go build never
+# caches and so would redo on every check.
 build:
 	@echo "Running go build..."
 	go build ./...
+	CGO_ENABLED=0 go build ./...
 
 format:
 	$(call install_tool_if_missing,gofumpt,$(GOFUMPT_VERSION),$(GOFUMPT_PKG))
