@@ -208,9 +208,9 @@ func openTarget(dbtyp config.DBType, cfg *DatabaseConfig) (database.Database, pa
 
 // runMigration executes the database migration logic.
 // This function is derived from sqldef.Run (https://github.com/sqldef/sqldef),
-// but modified to return a boolean indicating whether any migration was
-// performed, the rename advisory text for the caller to present, and an error
-// if any occurred, instead of exiting the program directly.
+// but modified to return the plan — its statements and the rename advisory for
+// the caller to present — and an error if any occurred, instead of exiting the
+// program directly.
 //
 // The upstream paths this package cannot reach are dropped, because Migrate is
 // the only caller and never asks for them: schema export, the current-file

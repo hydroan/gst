@@ -31,11 +31,12 @@ import (
 // told to stop while it starts — warning every startupLockWaitReport that
 // it is still waiting; see lockStartup for why the wait has no bound of its
 // own. ctx bounds the wait only: fn runs to its end once the lock is held.
-// Where no lock can be held — SQLite, a pool of a single connection, a
-// ClickHouse primary, which has no advisory locks and no transactions or
-// unique keys for seeding to count on either — fn runs as is. A process
-// with no primary database has nothing to coordinate through and runs fn
-// as is too.
+// Where there is no lock to hold — SQLite, or a ClickHouse primary, which has
+// no advisory locks and no transactions or unique keys for seeding to count
+// on either — fn runs as is; a MySQL or PostgreSQL pool of a single
+// connection has none to spare for the lock and fails instead, see
+// lockStartup. A process with no primary database has nothing to coordinate
+// through and runs fn as is too.
 func Serialized(ctx context.Context, purpose string, fn func() error) error {
 	if DB == nil {
 		return fn()
@@ -141,10 +142,10 @@ var startupLocks = map[string]startupLock{
 // that releases it. Both servers scope the lock to the session, so it is
 // held on a connection of its own while the step runs on the pool's other
 // connections. A pool of a single connection cannot hold the lock and work
-// at once, and SQLite and ClickHouse have no such lock: there nothing is
-// locked — for table preparation the retries of migrateTable and
-// ensureCustomIndexes cover a race, and none of the three is the shape a
-// deployment takes.
+// at once, so the step fails there instead of running unlocked. SQLite and
+// ClickHouse have no such lock: there nothing is locked — for table
+// preparation the retries of migrateTable and ensureCustomIndexes cover a
+// race, and neither is the shape a deployment takes.
 //
 // The wait for the lock has no bound of its own: how long the holder takes
 // — a large seeding, a column added to a large table — is the project's,
