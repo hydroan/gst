@@ -311,8 +311,8 @@ func runMigrateProgramForTest(t *testing.T, dryRun, yes bool) string {
 }
 
 // missingSqliteFileNotice is what the migration program prints below a plan
-// for ./data.db while the file does not exist yet.
-const missingSqliteFileNotice = "→ ./data.db does not exist yet: the plan starts from an empty database, and applying it creates the file."
+// whose sqlite database file does not exist yet.
+const missingSqliteFileNotice = "→ The target database file does not exist yet: the plan starts from an empty database, and applying it creates the file."
 
 // requireOnlySchemaSnapshotWritten fails the test unless the one file the
 // working directory holds beyond the files of before, a projectTree taken

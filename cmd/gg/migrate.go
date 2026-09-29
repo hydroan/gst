@@ -593,7 +593,7 @@ func performMigration(schema string, cfg *dbmigrate.DatabaseConfig) error {
 	}
 
 	if plan.CreatesDatabase {
-		fmt.Printf("  → %s does not exist yet: the plan starts from an empty database, and applying it creates the file.\n", cfg.Database)
+		fmt.Println("  → The target database file does not exist yet: the plan starts from an empty database, and applying it creates the file.")
 	}
 
 	// The advisory gets its own section after the plan, so suspected table
