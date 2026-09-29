@@ -232,19 +232,16 @@ func optimizeDatabase(db *gorm.DB) error {
 	return nil
 }
 
-// buildDSN renders the connection string of the configured database.
-//
-// A path naming memory is an in-memory database whatever is_memory says: the
-// two spell the same intent, and honoring the path as a file would open a
-// database that lives as long as one connection and disappears with it,
-// which is not what either of them asked for.
+// buildDSN renders the connection string of the configured database: the
+// in-memory database when cfg selects it (see dbruntime.SqliteInMemory), the
+// file at the configured path otherwise.
 //
 // A path carrying parameters of its own keeps them: the framework's own are
 // appended to those, so the connection string never ends up with two question
 // marks — sqlite reads the second one as part of a parameter value and the
 // tuning is silently lost.
 func buildDSN(cfg config.Sqlite) string {
-	if cfg.IsMemory || len(cfg.Path) == 0 || isMemoryPath(cfg.Path) {
+	if dbruntime.SqliteInMemory(cfg) {
 		if len(cfg.Path) == 0 {
 			zap.S().Warn("sqlite path is empty, using in-memory database")
 		}
@@ -266,12 +263,4 @@ func buildDSN(cfg config.Sqlite) string {
 		separator = "&"
 	}
 	return cfg.Path + separator + strings.Join(params, "&")
-}
-
-// isMemoryPath reports whether a path names sqlite's in-memory database,
-// plainly or as a file URI with or without parameters.
-func isMemoryPath(path string) bool {
-	name, _, _ := strings.Cut(path, "?")
-	name = strings.TrimPrefix(name, "file:")
-	return name == ":memory:"
 }

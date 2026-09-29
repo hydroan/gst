@@ -130,7 +130,7 @@ func TestBuildDSNKeepsWhatThePathAsked(t *testing.T) {
 			want: memoryDSN,
 		},
 		{
-			name: "FlagWithoutThePath",
+			name: "FlagWinsOverThePath",
 			cfg:  config.Sqlite{IsMemory: true, Path: "/tmp/ignored.db"},
 			want: memoryDSN,
 		},
