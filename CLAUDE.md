@@ -89,7 +89,7 @@ gst 是强约定框架（Apple 风格），不是自由框架（Windows 风格�
 - 项目和框架都大量使用的能力，实现下沉到 internal 包，再由一个顶层包做 alias 转发，只转发项目用得到的那部分，框架私用的符号不暴露；转发是唯一形状，符号只是空函数、常量或类型也一样，公开包自己不声明任何东西：根包 `gst` 转发 `internal/types`，`model` 转发 `internal/modelregistry`，`service` 转发 `internal/serviceregistry`，`sse` 转发 `internal/sse`，`router` 转发 `internal/router`，`middleware` 转发 `internal/middleware`，`dsl` 转发 `internal/dsl`。
 - middleware 与 interceptor 是例外：中间件和拦截器大多是给项目用的，所以这两个包按谁挂载分家，而不是像 router、dsl 那样全部在 internal 实现、公开包只转发。框架内建链上的中间件与拦截器是框架逻辑，放 internal/middleware 与 internal/grpcserver，由 internal/router、internal/grpcserver 装配；项目经 Register、RegisterAuth 自己挂的是项目能力，实现直接写在公开包里，不进 internal，也不得改动内建链与监听器的逻辑；随 gg module copy 复制的中间件同样在公开包，只引用公开包。公开包对 Register、RegisterAuth 这类挂载入口只做转发。
 
-引用方向随之固定：internal 包（含测试）需要这些能力时直接引用对应的 internal 包，禁止反向 import 公开包，避免 internal → 公开 → internal 的依赖绕行和潜在 import 环；框架自身代码（含公开包）使用 internal 能力时同样直接引用 internal 实现包，公开转发包只服务业务项目。如果所需符号只存在于公开包（如曾经的 `service.Error`），把实现下沉到 internal、公开包改为转发，而不是让 internal 反向引用。
+引用方向随之固定：internal 包（含测试）需要这些能力时直接引用对应的 internal 包，禁止反向 import 公开包，避免 internal → 公开 → internal 的依赖绕行和潜在 import 环；框架自身代码（含公开包）使用 internal 能力时同样直接引用 internal 实现包，公开转发包只服务业务项目。如果所需符号只存在于公开包，把实现下沉到 internal、公开包改为转发，而不是让 internal 反向引用。
 
 例外，以下内容必须保持公开包 import：
 
@@ -154,7 +154,7 @@ gst 是强约定框架（Apple 风格），不是自由框架（Windows 风格�
 module 包中的接口测试用例规范：
 
 - 测试文件名要符合子 module 名，例如 module/iam/session_test.go 就是专门用来存放 session 相关接口的测试用例，其对应的接口实现放在 internal/{model,service}/iam/session 目录中。
-- 测试组织方式要改成一个接口对应一个顶层测试函数，各个顶层测试函数应该尽量避免相互影响。
+- 测试组织方式是一个接口对应一个顶层测试函数，各个顶层测试函数应该尽量避免相互影响。
 - 如果同一个接口有多种场景，则在这个接口对应的测试函数里 用 t.Run(...) 做子测试，如果只有一个场景，则不需要额外使用 t.Run(...) 来运行子测试。
 - 测试用到的辅助函数应该放在其对应的测试文件中，例如 session 子模块相关的测试辅助函数应该放在 session_test.go 中，account 子模块相关的测试辅助函数应该放在 account_test.go 中。并且测试用例使用到的辅助函数尽量放在顶层测试函数之后。
 
