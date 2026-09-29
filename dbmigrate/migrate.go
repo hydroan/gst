@@ -15,6 +15,7 @@ import (
 
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/config"
+	"github.com/hydroan/gst/internal/dbruntime"
 	"github.com/sqldef/sqldef/v3"
 	"github.com/sqldef/sqldef/v3/database"
 	"github.com/sqldef/sqldef/v3/database/mysql"
@@ -34,6 +35,21 @@ type DatabaseConfig struct {
 	Port     int
 	// SSLMode is the PostgreSQL sslmode parameter; the other dialects ignore it.
 	SSLMode string
+}
+
+// SQLiteTarget returns the migration target of a sqlite configuration: the
+// database file the application opens, the one the path names. It reports
+// false for a configuration selecting the in-memory database, with is_memory
+// set, with no path, or with a path naming memory: the application creates
+// that database's tables from the models every time it starts, and a
+// migration, running in a process of its own, cannot reach it. For
+// {Path: "./data.db"} it returns {Database: "./data.db"} and true; for
+// {IsMemory: true, Path: "./data.db"} it returns nil and false.
+func SQLiteTarget(cfg config.Sqlite) (*DatabaseConfig, bool) {
+	if dbruntime.SqliteInMemory(cfg) {
+		return nil, false
+	}
+	return &DatabaseConfig{Database: cfg.Path}, true
 }
 
 // MigrateOption tunes a single migration run.

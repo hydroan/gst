@@ -41,6 +41,28 @@ func runTests(m *testing.M) int {
 	return m.Run()
 }
 
+// TestSQLiteTarget pins the migration target of a sqlite configuration, the
+// examples of SQLiteTarget's comment among them: the file the path names,
+// parameters and all, and none for a configuration selecting the in-memory
+// database.
+func TestSQLiteTarget(t *testing.T) {
+	for _, path := range []string{"./data.db", "/var/lib/app/data.db?_busy_timeout=1000"} {
+		target, ok := dbmigrate.SQLiteTarget(config.Sqlite{Path: path})
+		require.True(t, ok, path)
+		require.Equal(t, &dbmigrate.DatabaseConfig{Database: path}, target)
+	}
+
+	for _, cfg := range []config.Sqlite{
+		{IsMemory: true, Path: "./data.db"},
+		{},
+		{Path: "file::memory:?cache=shared"},
+	} {
+		target, ok := dbmigrate.SQLiteTarget(cfg)
+		require.False(t, ok, "%+v", cfg)
+		require.Nil(t, target, "%+v", cfg)
+	}
+}
+
 func TestMigrate(t *testing.T) {
 	t.Run("mysql", func(t *testing.T) {
 		dumper, err := dbmigrate.NewSchemaDumper()
