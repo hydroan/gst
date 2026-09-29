@@ -93,7 +93,9 @@ func (p Plan) Changed() bool { return len(p.Statements) > 0 }
 //
 // A dry run creates nothing. A sqlite database file that does not exist yet
 // is planned against as the empty database it would be, and the plan reports
-// CreatesDatabase; the file comes into being when the plan is applied.
+// CreatesDatabase; the file comes into being when the plan is applied. A file
+// whose directory does not exist either fails the migration: the driver
+// creates the file but not the directory.
 //
 // Index renames must run through this migration path BEFORE deploying code
 // that carries the new index name: once the rename is applied, startup table

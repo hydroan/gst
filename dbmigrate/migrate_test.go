@@ -226,6 +226,24 @@ func TestMigratePlansAMissingSqliteFileWithoutCreatingIt(t *testing.T) {
 	}
 }
 
+// A sqlite database file whose directory does not exist cannot come into
+// being: the driver creates the file but not the directory. Planning refuses
+// it, naming the directory, instead of promising a file that applying would
+// fail to create, and creates nothing on the way.
+func TestMigrateRefusesASqliteFileInAMissingDirectory(t *testing.T) {
+	dumper, err := dbmigrate.NewSchemaDumper()
+	require.NoError(t, err)
+	schema, err := dumper.Dump(config.DBSqlite, User{})
+	require.NoError(t, err)
+	dir := filepath.Join(t.TempDir(), "missing")
+	file := filepath.Join(dir, "data.db")
+
+	_, err = dbmigrate.Migrate([]string{schema}, config.DBSqlite, &dbmigrate.DatabaseConfig{Database: file}, &dbmigrate.MigrateOption{DryRun: true})
+
+	require.ErrorContains(t, err, "the sqlite database file "+file+" cannot be created: its directory "+dir+" does not exist")
+	require.NoDirExists(t, dir)
+}
+
 // TestMigrateDropsRemovedIndex pins the planner's drop path for a secondary
 // index that disappears from the desired schema: the index survives without
 // EnableDrop, and is planned and executed as a drop with it. The fixture

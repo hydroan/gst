@@ -5,6 +5,7 @@ import (
 	"io/fs"
 	"net/url"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/cockroachdb/errors"
@@ -51,6 +52,10 @@ const emptySQLiteDatabase = ":memory:"
 // any other string names the file before its first question mark, the rest
 // being the driver's parameters. For "./data.db?_busy_timeout=1000" it checks
 // ./data.db, for "file:/tmp/my%20data.db?cache=private" /tmp/my data.db.
+//
+// A missing file whose directory is missing too is an error: the driver
+// creates the file but not the directory it goes in, so applying the plan
+// would fail, and planning fails first rather than promise the file.
 func sqliteFileMissing(dsn string) (bool, error) {
 	file := dsn
 	if strings.HasPrefix(dsn, "file:") {
@@ -70,10 +75,18 @@ func sqliteFileMissing(dsn string) (bool, error) {
 		file = dsn[:pos]
 	}
 	_, err := os.Stat(file)
-	if errors.Is(err, fs.ErrNotExist) {
-		return true, nil
+	if !errors.Is(err, fs.ErrNotExist) {
+		return false, errors.Wrapf(err, "failed to inspect the sqlite database file %s", file)
 	}
-	return false, errors.Wrapf(err, "failed to inspect the sqlite database file %s", file)
+	dir := filepath.Dir(file)
+	_, err = os.Stat(dir)
+	switch {
+	case errors.Is(err, fs.ErrNotExist):
+		return false, errors.Newf("the sqlite database file %s cannot be created: its directory %s does not exist", file, dir)
+	case err != nil:
+		return false, errors.Wrapf(err, "failed to inspect the directory of the sqlite database file %s", file)
+	}
+	return true, nil
 }
 
 func (d *sqliteDatabase) ExportDDLs() (string, error) {
