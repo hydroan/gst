@@ -146,7 +146,6 @@ auto_migrate = true
 
 [sqlite]
 path = ./data.db
-database = main
 is_memory = true
 enabled = true
 

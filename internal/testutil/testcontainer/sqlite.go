@@ -23,10 +23,7 @@ func setupSqlite() (func() error, error) {
 	}
 	path := filepath.Join(dir, sqliteDatabase+".db")
 
-	ApplyConfigToEnv(config.Sqlite{
-		Path:     path,
-		Database: sqliteDatabase,
-	})
+	ApplyConfigToEnv(config.Sqlite{Path: path})
 	// File mode is the zero value of IsMemory and ApplyConfigToEnv skips zero
 	// values, while the framework defaults the field to true.
 	os.Setenv(config.SQLITE_IS_MEMORY, "false")

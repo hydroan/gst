@@ -11,7 +11,7 @@ import (
 
 func TestSetupSqlite(t *testing.T) {
 	isolateEnv(t,
-		config.SQLITE_PATH, config.SQLITE_DATABASE, config.SQLITE_IS_MEMORY,
+		config.SQLITE_PATH, config.SQLITE_IS_MEMORY,
 		config.DATABASE_TYPE, config.DATABASE_AUTO_MIGRATE)
 
 	cleanup, err := setupSqlite()
