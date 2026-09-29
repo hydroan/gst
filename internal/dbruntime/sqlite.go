@@ -7,7 +7,7 @@ import (
 	"github.com/hydroan/gst/config"
 )
 
-// SqliteInMemory reports whether cfg selects sqlite's in-memory database
+// SQLiteInMemory reports whether cfg selects sqlite's in-memory database
 // rather than a database file: with is_memory set, with no path, with a path
 // naming memory, plainly or as a file URI, with or without parameters, or
 // with a file URI in memory mode. It reports true for
@@ -20,7 +20,7 @@ import (
 // same intent, and honoring the path as a file would open a database that
 // lives as long as one connection and disappears with it, which is not what
 // either of them asked for.
-func SqliteInMemory(cfg config.Sqlite) bool {
+func SQLiteInMemory(cfg config.Sqlite) bool {
 	if cfg.IsMemory || len(cfg.Path) == 0 {
 		return true
 	}

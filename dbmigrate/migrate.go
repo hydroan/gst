@@ -46,7 +46,7 @@ type DatabaseConfig struct {
 // {Path: "./data.db"} it returns {Database: "./data.db"} and true; for
 // {IsMemory: true, Path: "./data.db"} it returns nil and false.
 func SQLiteTarget(cfg config.Sqlite) (*DatabaseConfig, bool) {
-	if dbruntime.SqliteInMemory(cfg) {
+	if dbruntime.SQLiteInMemory(cfg) {
 		return nil, false
 	}
 	return &DatabaseConfig{Database: cfg.Path}, true
@@ -132,7 +132,7 @@ func Migrate(schemas []string, dbtyp config.DBType, cfg *DatabaseConfig, opt *Mi
 	// naming no file, an empty one or one naming the in-memory database, has
 	// no file to miss.
 	var missing bool
-	if dbtyp == config.DBSqlite && !dbruntime.SqliteInMemory(config.Sqlite{Path: cfg.Database}) {
+	if dbtyp == config.DBSqlite && !dbruntime.SQLiteInMemory(config.Sqlite{Path: cfg.Database}) {
 		if missing, err = sqliteFileMissing(cfg.Database); err != nil {
 			return Plan{}, err
 		}

@@ -233,7 +233,7 @@ func optimizeDatabase(db *gorm.DB) error {
 }
 
 // buildDSN renders the connection string of the configured database: the
-// in-memory database when cfg selects it (see dbruntime.SqliteInMemory), the
+// in-memory database when cfg selects it (see dbruntime.SQLiteInMemory), the
 // file at the configured path otherwise.
 //
 // A path carrying parameters of its own keeps them: the framework's own are
@@ -241,7 +241,7 @@ func optimizeDatabase(db *gorm.DB) error {
 // marks — sqlite reads the second one as part of a parameter value and the
 // tuning is silently lost.
 func buildDSN(cfg config.Sqlite) string {
-	if dbruntime.SqliteInMemory(cfg) {
+	if dbruntime.SQLiteInMemory(cfg) {
 		if len(cfg.Path) == 0 {
 			zap.S().Warn("sqlite path is empty, using in-memory database")
 		}

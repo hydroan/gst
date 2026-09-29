@@ -85,7 +85,7 @@ func preparationFailed() error {
 // stay an explicit "gg migrate" decision instead of a startup side effect.
 //
 // An in-memory sqlite database, whichever way the configuration selects it
-// (see SqliteInMemory), is exempt from that check: it is created empty in
+// (see SQLiteInMemory), is exempt from that check: it is created empty in
 // every process and dies with it, so no earlier "gg migrate" run can have
 // populated it and there is no shared schema to protect. Migrating it anyway
 // keeps the zero-config defaults (sqlite, in-memory, auto_migrate off) bootable
@@ -107,7 +107,7 @@ func ensureTable(handler *gorm.DB, m types.Model) error {
 		return nil
 	}
 
-	inMemory := config.App.Database.Type == config.DBSqlite && SqliteInMemory(config.App.Sqlite)
+	inMemory := config.App.Database.Type == config.DBSqlite && SQLiteInMemory(config.App.Sqlite)
 	if config.App.Database.AutoMigrate || inMemory {
 		return migrateTable(handler, m, tableName)
 	}
