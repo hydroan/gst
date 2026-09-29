@@ -8,7 +8,7 @@ import (
 	"github.com/hydroan/gst/config"
 )
 
-const sqliteDatabase = "test"
+const sqliteFileName = "test.db"
 
 // setupSqlite prepares a file backed sqlite database in a directory of its own
 // and points the framework at it. The returned function removes that directory.
@@ -21,7 +21,7 @@ func setupSqlite() (func() error, error) {
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to create sqlite directory")
 	}
-	path := filepath.Join(dir, sqliteDatabase+".db")
+	path := filepath.Join(dir, sqliteFileName)
 
 	ApplyConfigToEnv(config.Sqlite{Path: path})
 	// File mode is the zero value of IsMemory and ApplyConfigToEnv skips zero
