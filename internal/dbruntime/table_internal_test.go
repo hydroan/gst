@@ -36,7 +36,7 @@ func TestEnsureTableCreatesTableWhenAutoMigrateEnabled(t *testing.T) {
 func TestEnsureTableFailsFastWhenDisabledAndTableMissing(t *testing.T) {
 	db := newSQLiteDB(t)
 	withAutoMigrate(t, false)
-	withSqlite(t, false)
+	withSqlite(t, config.Sqlite{Path: "data.db"})
 
 	err := ensureTable(db, &plainRecord{})
 	require.Error(t, err)
@@ -44,13 +44,26 @@ func TestEnsureTableFailsFastWhenDisabledAndTableMissing(t *testing.T) {
 	require.False(t, db.Migrator().HasTable("plain_records"))
 }
 
+// An in-memory sqlite database is migrated even with auto_migrate off,
+// whichever way the configuration selects it: the flag, no path, or a path
+// naming memory, plainly, as a file URI, or through a file URI's mode.
 func TestEnsureTableMigratesInMemorySqliteWhenDisabled(t *testing.T) {
-	db := newSQLiteDB(t)
-	withAutoMigrate(t, false)
-	withSqlite(t, true)
+	for name, cfg := range map[string]config.Sqlite{
+		"the_flag":                  {IsMemory: true, Path: "data.db"},
+		"no_path":                   {},
+		"a_path_naming_memory":      {Path: ":memory:"},
+		"a_file_uri_naming_memory":  {Path: "file::memory:?cache=shared"},
+		"a_file_uri_in_memory_mode": {Path: "file:data.db?mode=memory"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			db := newSQLiteDB(t)
+			withAutoMigrate(t, false)
+			withSqlite(t, cfg)
 
-	require.NoError(t, ensureTable(db, &plainRecord{}))
-	require.True(t, db.Migrator().HasTable("plain_records"))
+			require.NoError(t, ensureTable(db, &plainRecord{}))
+			require.True(t, db.Migrator().HasTable("plain_records"))
+		})
+	}
 }
 
 func TestEnsureTablePassesWhenDisabledAndTableExists(t *testing.T) {
@@ -332,13 +345,13 @@ func withAutoMigrate(t *testing.T, enabled bool) {
 	t.Cleanup(func() { config.App.Database.AutoMigrate = old })
 }
 
-// withSqlite selects sqlite as the database type and marks whether it is the
-// in-memory variant, restoring both options on cleanup.
-func withSqlite(t *testing.T, inMemory bool) {
+// withSqlite selects sqlite as the database type, configured as cfg,
+// restoring both on cleanup.
+func withSqlite(t *testing.T, cfg config.Sqlite) {
 	t.Helper()
-	oldType, oldIsMemory := config.App.Database.Type, config.App.Sqlite.IsMemory
-	config.App.Database.Type, config.App.Sqlite.IsMemory = config.DBSqlite, inMemory
+	oldType, oldSqlite := config.App.Database.Type, config.App.Sqlite
+	config.App.Database.Type, config.App.Sqlite = config.DBSqlite, cfg
 	t.Cleanup(func() {
-		config.App.Database.Type, config.App.Sqlite.IsMemory = oldType, oldIsMemory
+		config.App.Database.Type, config.App.Sqlite = oldType, oldSqlite
 	})
 }

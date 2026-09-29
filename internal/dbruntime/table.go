@@ -84,11 +84,12 @@ func preparationFailed() error {
 // the dialect-aware gorm Migrator, so schema changes in shared environments
 // stay an explicit "gg migrate" decision instead of a startup side effect.
 //
-// An in-memory sqlite database is exempt from that check: it is created empty
-// in every process and dies with it, so no earlier "gg migrate" run can have
+// An in-memory sqlite database, whichever way the configuration selects it
+// (see SqliteInMemory), is exempt from that check: it is created empty in
+// every process and dies with it, so no earlier "gg migrate" run can have
 // populated it and there is no shared schema to protect. Migrating it anyway
 // keeps the zero-config defaults (sqlite, in-memory, auto_migrate off) bootable
-// instead of panicking on the first registered model.
+// instead of failing the start on the first registered model.
 func ensureTable(handler *gorm.DB, m types.Model) error {
 	tableName, err := requireTableName(m)
 	if err != nil {
@@ -106,7 +107,7 @@ func ensureTable(handler *gorm.DB, m types.Model) error {
 		return nil
 	}
 
-	inMemory := config.App.Database.Type == config.DBSqlite && config.App.Sqlite.IsMemory
+	inMemory := config.App.Database.Type == config.DBSqlite && SqliteInMemory(config.App.Sqlite)
 	if config.App.Database.AutoMigrate || inMemory {
 		return migrateTable(handler, m, tableName)
 	}
@@ -134,10 +135,9 @@ func requireTableName(m types.Model) (string, error) {
 // indexes, once across the processes sharing the database. Replicas
 // starting together all find the table missing and all issue CREATE TABLE,
 // and the server refuses every one but the first: on MySQL and PostgreSQL
-// the processes take turns under the startup lock, and where none can be
-// held — SQLite, or a pool of a single connection — a failure while another
-// process created the table is retried once, against the table that is
-// there now.
+// the processes take turns under the startup lock, and on SQLite, which has
+// none, a failure while another process created the table is retried once,
+// against the table that is there now.
 //
 // AutoMigrate reads the table name through gorm's Tabler, which is the
 // model's own TableName method. Supplying it again through Table() would make

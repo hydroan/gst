@@ -11,7 +11,8 @@ import (
 // TestSqliteInMemory pins which configurations select the in-memory database
 // and which a database file, with the examples of SqliteInMemory's comment
 // among them. Only the exact name counts as memory: a file of that name in a
-// directory is a file.
+// directory is a file. A mode counts in a file URI alone, by its last mode
+// parameter, the one sqlite reads; outside a URI the driver takes no mode.
 func TestSqliteInMemory(t *testing.T) {
 	for name, cfg := range map[string]config.Sqlite{
 		"the_flag_over_a_path":                     {IsMemory: true, Path: "./data.db"},
@@ -20,6 +21,8 @@ func TestSqliteInMemory(t *testing.T) {
 		"a_path_naming_memory_with_parameters":     {Path: ":memory:?cache=shared"},
 		"a_file_uri_naming_memory":                 {Path: "file::memory:"},
 		"a_file_uri_naming_memory_with_parameters": {Path: "file::memory:?cache=shared"},
+		"a_file_uri_in_memory_mode":                {Path: "file:data.db?mode=memory"},
+		"a_file_uri_last_in_memory_mode":           {Path: "file:data.db?mode=rwc&cache=shared&mode=memory"},
 	} {
 		t.Run("memory_for_"+name, func(t *testing.T) {
 			require.True(t, dbruntime.SqliteInMemory(cfg))
@@ -31,6 +34,8 @@ func TestSqliteInMemory(t *testing.T) {
 		"a_file_path_with_parameters":        {Path: "./data.db?_busy_timeout=1000"},
 		"a_file_uri":                         {Path: "file:data.db?cache=shared"},
 		"a_file_named_memory_in_a_directory": {Path: "/tmp/:memory:"},
+		"a_file_uri_leaving_memory_mode":     {Path: "file:data.db?mode=memory&mode=rwc"},
+		"a_path_asking_for_memory_mode":      {Path: "data.db?mode=memory"},
 	} {
 		t.Run("file_for_"+name, func(t *testing.T) {
 			require.False(t, dbruntime.SqliteInMemory(cfg))
