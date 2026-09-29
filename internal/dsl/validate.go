@@ -131,8 +131,8 @@ func GRPCOnlyAction(name string) bool {
 }
 
 // serviceNamePattern is what Service("name") accepts: a bare name of
-// letters, digits and underscores, which names the service file, the service
-// type and, for a model declaring GRPC(), the rpc.
+// letters, digits and underscores, starting with a letter, which names the
+// service file, the service type and, for a model declaring GRPC(), the rpc.
 var serviceNamePattern = regexp.MustCompile(`^[A-Za-z][A-Za-z0-9_]*$`)
 
 var actionOnlyMethodNames = map[string]bool{
@@ -653,9 +653,11 @@ func funcName(expr ast.Expr) (string, bool) {
 
 // validateServiceName reads the name a Service call gives the action into
 // info and reports a call the generator cannot take a name from: more than
-// one argument, an argument that is not a string literal, or a name outside
-// serviceNamePattern; for a name written like a file, archive.go or
-// sample/archive.go, the report suggests its base name, archive.
+// one argument, an argument that is not a string literal, an empty name,
+// pointed at Service() for the service named after the action, or a name
+// serviceNameRefusal refuses; for a name written like a file whose base name
+// it takes, archive.go or sample/archive.go, the report suggests that base
+// name, archive.
 func validateServiceName(call *ast.CallExpr, actionName, filename string, info *actionCallInfo) []error {
 	switch {
 	case len(call.Args) == 0:
@@ -667,27 +669,43 @@ func validateServiceName(call *ast.CallExpr, actionName, filename string, info *
 	if !ok {
 		return []error{fmt.Errorf("%s: %s action names its service with something other than a string literal; write Service(\"name\")", filename, actionName)}
 	}
-	if !serviceNamePattern.MatchString(value) {
-		suggestion := strings.TrimSuffix(filepath.Base(value), filepath.Ext(value))
-		return []error{fmt.Errorf("%s: %s action names its service %q; a service name is letters, digits and underscores, naming the service file, its type and its rpc: Service(%q)", filename, actionName, value, suggestion)}
+	if value == "" {
+		return []error{fmt.Errorf("%s: %s action names its service \"\"; write Service() to name the service after the action, or Service(\"name\") to name it", filename, actionName)}
 	}
-	lower := strings.ToLower(value)
-	if strings.HasSuffix(lower, "_test") {
-		return []error{fmt.Errorf("%s: %s action names its service %q; a name ending in _test names a test file, choose another name", filename, actionName, value)}
-	}
-	if i := strings.LastIndex(lower, "_"); i >= 0 {
-		if suffix := lower[i+1:]; knownOS[suffix] || knownArch[suffix] {
-			return []error{fmt.Errorf("%s: %s action names its service %q; a name ending in _%s names a file built for that platform alone, choose another name", filename, actionName, value, suffix)}
+	if refusal := serviceNameRefusal(value); refusal != "" {
+		if base := strings.TrimSuffix(filepath.Base(value), filepath.Ext(value)); serviceNameRefusal(base) == "" {
+			refusal += fmt.Sprintf(": Service(%q)", base)
 		}
+		return []error{fmt.Errorf("%s: %s action names its service %q; %s", filename, actionName, value, refusal)}
 	}
 	info.serviceName = value
 	return nil
 }
 
+// serviceNameRefusal returns why Service refuses name, or "" when it takes
+// it: a name outside serviceNamePattern, or one the go command reads as the
+// suffix of the file it names, _test making that a test file and _windows or
+// _amd64 building it for that platform alone.
+func serviceNameRefusal(name string) string {
+	if !serviceNamePattern.MatchString(name) {
+		return "a service name is letters, digits and underscores, starting with a letter, naming the service file, its type and its rpc"
+	}
+	lower := strings.ToLower(name)
+	if strings.HasSuffix(lower, "_test") {
+		return "a name ending in _test names a test file, choose another name"
+	}
+	if i := strings.LastIndex(lower, "_"); i >= 0 {
+		if suffix := lower[i+1:]; knownOS[suffix] || knownArch[suffix] {
+			return fmt.Sprintf("a name ending in _%s names a file built for that platform alone, choose another name", suffix)
+		}
+	}
+	return ""
+}
+
 // The operating systems and architectures the go command reads as the
 // suffix of a file name, _windows.go or _amd64.go, which then builds for
 // that platform alone; the go command keeps the lists in an internal
-// package, so validateServiceName repeats them.
+// package, so serviceNameRefusal repeats them.
 var (
 	knownOS = map[string]bool{
 		"aix": true, "android": true, "darwin": true, "dragonfly": true, "freebsd": true, "hurd": true, "illumos": true, "ios": true, "js": true,

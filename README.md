@@ -222,8 +222,9 @@ func (Entry) Design() {
   查询参数通过 `ctx.Query()`、路径参数通过 `ctx.Param()` 读取。
 - `Import`、`Export` 的 service 方法签名固定（`Import(ctx, io.Reader)` 读上传文件、
   `Export(ctx, ...M)` 返回附件字节），禁止声明 `Payload[T]()` 和 `Result[T]()`。
-- `Service()` 表示当前 action 需要生成并注册业务 service；`Service("merge")`
-  同时给它起名，service 文件、service 类型和 rpc 都用这个名。
+- `Service()` 表示当前 action 需要生成并注册业务 service，默认按动作命名
+  （`Create` 生成 `create.go`、类型 `Creator`）；`Service("merge")` 同时给它起名，
+  service 文件、service 类型和 rpc 都用这个名。
 - 只声明 `Create(func(){})`、`List(func(){})` 等 action 就会启用对应接口；
   不需要的接口不声明即可。
 

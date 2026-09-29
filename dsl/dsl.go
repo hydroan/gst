@@ -204,15 +204,16 @@ func GRPC() { internaldsl.GRPC() }
 // list.go declaring Lister.
 //
 // Service("name") names the service instead: a bare name of letters, digits
-// and underscores, which names the generated file (name.go), the service type
-// (its UpperCamelCase form) and, for a model declaring GRPC(), the rpc (the
-// type name followed by the model name, MergeEntry for Service("merge") on
-// Entry). Name the service when a model declares the same action on several
-// routes, since two actions named after one phase would fight over one file,
-// and for a custom action whose name says what it does; a Stream action
-// always names its service, there being no default name for its rpc.
-// Generated service log.Info messages use "{model}: {label}", label being the
-// name with underscores replaced by spaces.
+// and underscores, starting with a letter, which names the generated file
+// (name.go), the service type (its UpperCamelCase form) and, for a model
+// declaring GRPC(), the rpc (the type name followed by the model name,
+// MergeEntry for Service("merge") on Entry). Name the service when a model
+// declares the same action on several routes, since two actions named after
+// one phase would fight over one file, and for a custom action whose name
+// says what it does; a Stream action always names its service, there being
+// no default name for its rpc. Generated service log.Info messages use
+// "{model}: {label}", label being the name with underscores replaced by
+// spaces.
 //
 //	// Both routes of a model declared in model/sample/item.go declare
 //	// Create; named, they generate service/sample/item/archive.go and

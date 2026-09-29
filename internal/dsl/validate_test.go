@@ -53,6 +53,13 @@ func TestValidateFlattenUsage(t *testing.T) {
 			wantError: "names no service",
 		},
 		{
+			name:      "flatten_with_empty_service_name",
+			source:    validateFlattenEmptyServiceNameSource,
+			modelDir:  "/repo/model",
+			filename:  "/repo/model/authz/role.go",
+			wantError: "names no service",
+		},
+		{
 			name:      "flatten_without_service",
 			source:    validateFlattenWithoutServiceSource,
 			modelDir:  "/repo/model",
@@ -195,6 +202,26 @@ func (Role) Design() {
 	Create(func() {
 		Service()
 		Flatten()
+	})
+}
+`
+
+const validateFlattenEmptyServiceNameSource = `
+package authz
+
+import (
+	. "github.com/hydroan/gst/dsl"
+	"github.com/hydroan/gst/model"
+)
+
+type Role struct {
+	model.Base
+}
+
+func (Role) Design() {
+	Create(func() {
+		Flatten()
+		Service("")
 	})
 }
 `
@@ -1763,6 +1790,11 @@ func TestValidateStreamUsage(t *testing.T) {
 			wantError: `Stream action must name its service, Service("name"), which names its rpc`,
 		},
 		{
+			name:      "stream_with_empty_service_name",
+			source:    validateStreamEmptyServiceNameSource,
+			wantError: `Stream action must name its service, Service("name"), which names its rpc`,
+		},
+		{
 			name:      "stream_without_service",
 			source:    validateStreamWithoutServiceSource,
 			wantError: "Stream action has no built-in implementation and must declare Service()",
@@ -1993,6 +2025,29 @@ func (Record) Design() {
 }
 `
 
+const validateStreamEmptyServiceNameSource = `
+package sample
+
+import (
+	. "github.com/hydroan/gst/dsl"
+	"github.com/hydroan/gst/model"
+)
+
+type Record struct {
+	model.Base
+}
+
+type RecordEvent struct{}
+
+func (Record) Design() {
+	GRPC()
+	Stream(func() {
+		Service("")
+		StreamingResult[*RecordEvent]()
+	})
+}
+`
+
 const validateStreamWithoutServiceSource = `
 package sample
 
@@ -2138,6 +2193,9 @@ func TestHTTPOnlyActionNamesTheActionsGRPCCannotServe(t *testing.T) {
 	}
 }
 
+// TestValidateServiceName pins the report on the name a Service call gives:
+// an empty name is pointed at Service(), and a refused name is suggested
+// another only when that one is accepted, so each report is compared whole.
 func TestValidateServiceName(t *testing.T) {
 	tests := []struct {
 		name      string
@@ -2149,14 +2207,49 @@ func TestValidateServiceName(t *testing.T) {
 			source: validateServiceBareNameSource,
 		},
 		{
+			name:      "empty_name",
+			source:    validateServiceEmptyNameSource,
+			wantError: `Create action names its service ""; write Service() to name the service after the action, or Service("name") to name it`,
+		},
+		{
 			name:      "file_name",
 			source:    validateServiceFileNameSource,
-			wantError: `Create action names its service "archive.go"; a service name is letters, digits and underscores, naming the service file, its type and its rpc: Service("archive")`,
+			wantError: `Create action names its service "archive.go"; a service name is letters, digits and underscores, starting with a letter, naming the service file, its type and its rpc: Service("archive")`,
 		},
 		{
 			name:      "path",
 			source:    validateServicePathNameSource,
-			wantError: `Create action names its service "sample/record/archive.go"; a service name is letters, digits and underscores, naming the service file, its type and its rpc: Service("archive")`,
+			wantError: `Create action names its service "sample/record/archive.go"; a service name is letters, digits and underscores, starting with a letter, naming the service file, its type and its rpc: Service("archive")`,
+		},
+		{
+			name:      "leading_digit",
+			source:    validateServiceLeadingDigitSource,
+			wantError: `Create action names its service "1archive"; a service name is letters, digits and underscores, starting with a letter, naming the service file, its type and its rpc`,
+		},
+		{
+			name:      "hyphen",
+			source:    validateServiceHyphenSource,
+			wantError: `Create action names its service "item-archive"; a service name is letters, digits and underscores, starting with a letter, naming the service file, its type and its rpc`,
+		},
+		{
+			name:      "file_name_with_leading_digit",
+			source:    validateServiceLeadingDigitFileNameSource,
+			wantError: `Create action names its service "1archive.go"; a service name is letters, digits and underscores, starting with a letter, naming the service file, its type and its rpc`,
+		},
+		{
+			name:      "extension_alone",
+			source:    validateServiceExtensionAloneSource,
+			wantError: `Create action names its service ".go"; a service name is letters, digits and underscores, starting with a letter, naming the service file, its type and its rpc`,
+		},
+		{
+			name:      "file_name_ending_in_test",
+			source:    validateServiceTestSuffixFileNameSource,
+			wantError: `Create action names its service "merge_test.go"; a service name is letters, digits and underscores, starting with a letter, naming the service file, its type and its rpc`,
+		},
+		{
+			name:      "file_name_ending_in_a_platform",
+			source:    validateServiceOSSuffixFileNameSource,
+			wantError: `Create action names its service "sync_windows.go"; a service name is letters, digits and underscores, starting with a letter, naming the service file, its type and its rpc`,
 		},
 		{
 			name:      "two_arguments",
@@ -2185,17 +2278,13 @@ func TestValidateServiceName(t *testing.T) {
 				}
 				return
 			}
-			if len(errs) == 0 {
-				t.Fatalf("Validate returned no errors, want %q", tt.wantError)
-			}
-			var got strings.Builder
+			want := "/repo/model/sample/record.go: " + tt.wantError
 			for _, err := range errs {
-				got.WriteString(err.Error())
-				got.WriteString("\n")
+				if err.Error() == want {
+					return
+				}
 			}
-			if !strings.Contains(got.String(), tt.wantError) {
-				t.Fatalf("Validate errors = %q, want one containing %q", got.String(), tt.wantError)
-			}
+			t.Fatalf("Validate errors = %q, want one equal to %q", errs, want)
 		})
 	}
 }
@@ -2216,6 +2305,27 @@ func (Record) Design() {
 	Route("sample/archive", func() {
 		Create(func() {
 			Service("item_archive")
+		})
+	})
+}
+`
+
+const validateServiceEmptyNameSource = `
+package sample
+
+import (
+	. "github.com/hydroan/gst/dsl"
+	"github.com/hydroan/gst/model"
+)
+
+type Record struct {
+	model.Base
+}
+
+func (Record) Design() {
+	Route("sample/archive", func() {
+		Create(func() {
+			Service("")
 		})
 	})
 }
@@ -2258,6 +2368,132 @@ func (Record) Design() {
 	Route("sample/archive", func() {
 		Create(func() {
 			Service("sample/record/archive.go")
+		})
+	})
+}
+`
+
+const validateServiceLeadingDigitSource = `
+package sample
+
+import (
+	. "github.com/hydroan/gst/dsl"
+	"github.com/hydroan/gst/model"
+)
+
+type Record struct {
+	model.Base
+}
+
+func (Record) Design() {
+	Route("sample/archive", func() {
+		Create(func() {
+			Service("1archive")
+		})
+	})
+}
+`
+
+const validateServiceHyphenSource = `
+package sample
+
+import (
+	. "github.com/hydroan/gst/dsl"
+	"github.com/hydroan/gst/model"
+)
+
+type Record struct {
+	model.Base
+}
+
+func (Record) Design() {
+	Route("sample/archive", func() {
+		Create(func() {
+			Service("item-archive")
+		})
+	})
+}
+`
+
+const validateServiceLeadingDigitFileNameSource = `
+package sample
+
+import (
+	. "github.com/hydroan/gst/dsl"
+	"github.com/hydroan/gst/model"
+)
+
+type Record struct {
+	model.Base
+}
+
+func (Record) Design() {
+	Route("sample/archive", func() {
+		Create(func() {
+			Service("1archive.go")
+		})
+	})
+}
+`
+
+const validateServiceExtensionAloneSource = `
+package sample
+
+import (
+	. "github.com/hydroan/gst/dsl"
+	"github.com/hydroan/gst/model"
+)
+
+type Record struct {
+	model.Base
+}
+
+func (Record) Design() {
+	Route("sample/archive", func() {
+		Create(func() {
+			Service(".go")
+		})
+	})
+}
+`
+
+const validateServiceTestSuffixFileNameSource = `
+package sample
+
+import (
+	. "github.com/hydroan/gst/dsl"
+	"github.com/hydroan/gst/model"
+)
+
+type Record struct {
+	model.Base
+}
+
+func (Record) Design() {
+	Route("sample/archive", func() {
+		Create(func() {
+			Service("merge_test.go")
+		})
+	})
+}
+`
+
+const validateServiceOSSuffixFileNameSource = `
+package sample
+
+import (
+	. "github.com/hydroan/gst/dsl"
+	"github.com/hydroan/gst/model"
+)
+
+type Record struct {
+	model.Base
+}
+
+func (Record) Design() {
+	Route("sample/archive", func() {
+		Create(func() {
+			Service("sync_windows.go")
 		})
 	})
 }
