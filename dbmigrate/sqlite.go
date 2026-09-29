@@ -2,6 +2,9 @@ package dbmigrate
 
 import (
 	"database/sql"
+	"io/fs"
+	"net/url"
+	"os"
 	"strings"
 
 	"github.com/cockroachdb/errors"
@@ -35,6 +38,42 @@ func newSQLiteDatabase(config database.Config) (database.Database, error) {
 		config: config,
 		db:     db,
 	}, nil
+}
+
+// emptySQLiteDatabase names a private in-memory database, which a dry run
+// plans against in place of a database file that does not exist yet: that
+// file is an empty database too, and planning against it would create it.
+const emptySQLiteDatabase = ":memory:"
+
+// sqliteFileMissing reports whether the database file a sqlite connection
+// string names does not exist yet, reading the string the way the driver
+// does: a file: URI names the file its path spells, percent escapes decoded;
+// any other string names the file before its first question mark, the rest
+// being the driver's parameters. For "./data.db?_busy_timeout=1000" it checks
+// ./data.db, for "file:/tmp/my%20data.db?cache=private" /tmp/my data.db.
+func sqliteFileMissing(dsn string) (bool, error) {
+	file := dsn
+	if strings.HasPrefix(dsn, "file:") {
+		uri, err := url.Parse(dsn)
+		if err != nil {
+			return false, errors.Wrapf(err, "failed to read the sqlite database path %q", dsn)
+		}
+		// A relative path is opaque to the URI syntax: file:data.db leaves
+		// it escaped in Opaque, while file:/tmp/data.db decodes into Path.
+		file = uri.Path
+		if uri.Opaque != "" {
+			if file, err = url.PathUnescape(uri.Opaque); err != nil {
+				return false, errors.Wrapf(err, "failed to read the sqlite database path %q", dsn)
+			}
+		}
+	} else if pos := strings.IndexByte(dsn, '?'); pos >= 1 {
+		file = dsn[:pos]
+	}
+	_, err := os.Stat(file)
+	if errors.Is(err, fs.ErrNotExist) {
+		return true, nil
+	}
+	return false, errors.Wrapf(err, "failed to inspect the sqlite database file %s", file)
 }
 
 func (d *sqliteDatabase) ExportDDLs() (string, error) {

@@ -179,6 +179,53 @@ func TestMigrate(t *testing.T) {
 	})
 }
 
+// A sqlite database file that does not exist yet is planned against as the
+// empty database it would be, whichever way the path spells it — plainly,
+// with the driver's parameters, or as a file URI, relative or absolute, whose
+// escapes name a space: a dry run creates nothing and reports that applying
+// the plan creates the file, and applying it does. Planned again, the file
+// needs nothing.
+func TestMigratePlansAMissingSqliteFileWithoutCreatingIt(t *testing.T) {
+	dumper, err := dbmigrate.NewSchemaDumper()
+	require.NoError(t, err)
+	schema, err := dumper.Dump(config.DBSqlite, User{})
+	require.NoError(t, err)
+
+	dir := filepath.Join(t.TempDir(), "with space")
+	require.NoError(t, os.Mkdir(dir, 0o755))
+	t.Chdir(dir)
+	absolute := filepath.Join(dir, "absolute uri.db")
+
+	for _, tc := range []struct {
+		name string
+		file string
+		dsn  string
+	}{
+		{name: "plain_path", file: "plain.db", dsn: "plain.db"},
+		{name: "path_with_parameters", file: "parameters.db", dsn: "parameters.db?_busy_timeout=1000"},
+		{name: "relative_file_uri", file: "relative uri.db", dsn: "file:relative%20uri.db?cache=private"},
+		{name: "absolute_file_uri", file: absolute, dsn: "file:" + (&url.URL{Path: absolute}).EscapedPath() + "?cache=private"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			cfg := &dbmigrate.DatabaseConfig{Database: tc.dsn}
+
+			plan, err := dbmigrate.Migrate([]string{schema}, config.DBSqlite, cfg, &dbmigrate.MigrateOption{DryRun: true})
+			require.NoError(t, err)
+			require.True(t, plan.Changed())
+			require.True(t, plan.CreatesDatabase)
+			require.NoFileExists(t, tc.file, "a dry run creates nothing")
+
+			require.NoError(t, dbmigrate.Apply(plan, config.DBSqlite, cfg))
+			require.FileExists(t, tc.file)
+
+			plan, err = dbmigrate.Migrate([]string{schema}, config.DBSqlite, cfg, &dbmigrate.MigrateOption{DryRun: true})
+			require.NoError(t, err)
+			require.False(t, plan.Changed())
+			require.False(t, plan.CreatesDatabase)
+		})
+	}
+}
+
 // TestMigrateDropsRemovedIndex pins the planner's drop path for a secondary
 // index that disappears from the desired schema: the index survives without
 // EnableDrop, and is planned and executed as a drop with it. The fixture

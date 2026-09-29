@@ -76,6 +76,10 @@ type Plan struct {
 	Statements []string
 	// Advisory is the rename advisory, empty when the plan suggests none.
 	Advisory string
+	// CreatesDatabase reports that the plan starts from a sqlite database file
+	// that does not exist yet: applying its statements creates the file.
+	// MySQL and PostgreSQL databases must exist, so it is always false there.
+	CreatesDatabase bool
 }
 
 // Changed reports whether the plan has anything to run: a database already
@@ -86,6 +90,10 @@ func (p Plan) Changed() bool { return len(p.Statements) > 0 }
 // them unless the option asks for a dry run. It returns the plan either way,
 // so a caller that plans first can execute exactly what it showed through
 // Apply.
+//
+// A dry run creates nothing. A sqlite database file that does not exist yet
+// is planned against as the empty database it would be, and the plan reports
+// CreatesDatabase; the file comes into being when the plan is applied.
 //
 // Index renames must run through this migration path BEFORE deploying code
 // that carries the new index name: once the rename is applied, startup table
@@ -119,14 +127,33 @@ func Migrate(schemas []string, dbtyp config.DBType, cfg *DatabaseConfig, opt *Mi
 		},
 	}
 
-	db, parseMode, genMode, err := openTarget(dbtyp, cfg)
+	// Opening a sqlite database file creates it, so a dry run plans against a
+	// missing one through an empty database of its own. A connection string
+	// naming no file, an empty one or one naming the in-memory database, has
+	// no file to miss.
+	var missing bool
+	if dbtyp == config.DBSqlite && !dbruntime.SqliteInMemory(config.Sqlite{Path: cfg.Database}) {
+		if missing, err = sqliteFileMissing(cfg.Database); err != nil {
+			return Plan{}, err
+		}
+	}
+	target := cfg
+	if missing && opt.DryRun {
+		target = &DatabaseConfig{Database: emptySQLiteDatabase}
+	}
+
+	db, parseMode, genMode, err := openTarget(dbtyp, target)
 	if err != nil {
 		return Plan{}, err
 	}
 	defer db.Close()
 
 	sqlParser := database.NewParser(parseMode)
-	return runMigration(genMode, db, sqlParser, migOpt)
+	if plan, err = runMigration(genMode, db, sqlParser, migOpt); err != nil {
+		return Plan{}, err
+	}
+	plan.CreatesDatabase = missing && plan.Changed()
+	return plan, nil
 }
 
 // Apply runs the statements of a plan as they stand, against the same kind of
