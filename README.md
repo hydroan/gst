@@ -803,7 +803,8 @@ rsp, err := cli.Post[model.SampleSealRsp](ctx, "/api/samples/seal", &model.Sampl
 ## 配置和迁移
 
 `config.ini.example` 是新项目的默认配置模板。复制为 `config.ini` 后按环境修改。
-默认模板会开启 sqlite，适合本地快速启动。
+默认模板会开启 sqlite，适合本地快速启动。SQLite 驱动依赖 cgo：用 `CGO_ENABLED=0` 构建的静态二进制照常编译，
+但启用 SQLite 会在启动时报错，这类部署要换成 MySQL 或 PostgreSQL。
 
 每个配置键都按"环境变量 > 配置文件 > 默认值"取值，配置文件里没写的键、`configx` 里 `config.Register`
 注册的自定义段都一样。变量名是键名转大写、点换成下划线：`server.port` 对应 `SERVER_PORT`，
