@@ -126,6 +126,8 @@ func Init() (err error) {
 // framework's REGEXP implementation; see registerRegexpFunc. Every handle on
 // the in-memory database shares the one database of the process, which lives
 // until the process ends; see anchorMemoryDatabase.
+// Built without cgo, the driver is a stub whose connections all fail to open,
+// so New fails with the driver's error saying the binary needs cgo.
 func New(cfg config.Sqlite) (*gorm.DB, error) {
 	dsn := buildDSN(cfg)
 	if dsn == memoryDSN {
@@ -272,29 +274,4 @@ func isMemoryPath(path string) bool {
 	name, _, _ := strings.Cut(path, "?")
 	name = strings.TrimPrefix(name, "file:")
 	return name == ":memory:"
-}
-
-// errCodes are the errors of the constraints a client's data breaks that the
-// driver's translation leaves as they are, keyed by sqlite's extended error
-// code: a check constraint the row fails; the driver translates the
-// duplicated and the foreign keys itself, and sqlite declares no length for
-// a column.
-var errCodes = map[sqlite3.ErrNoExtended]error{
-	sqlite3.ErrConstraintCheck: gorm.ErrCheckConstraintViolated,
-}
-
-// translate translates a driver error whose extended code errCodes lists to
-// its sentinel, the driver's text kept as the message, and nil for any
-// other error, which is left to the driver's translation (see
-// dbruntime.Translating).
-func translate(err error) error {
-	var driverErr sqlite3.Error
-	if !errors.As(err, &driverErr) {
-		return nil
-	}
-	sentinel, found := errCodes[driverErr.ExtendedCode]
-	if !found {
-		return nil
-	}
-	return errors.Wrap(sentinel, driverErr.Error())
 }
