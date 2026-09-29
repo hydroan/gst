@@ -679,7 +679,7 @@ func TestGenRunRefusesAGRPCModelWithNothingToServe(t *testing.T) {
 		return
 	}
 	writeProtobufProject(t, projectDir, map[string]string{"model/silent.go": protobufIgnoredModel})
-	writeProjectFile(t, filepath.Join(projectDir, "gst.yaml"), "version: 1\ngen:\n  routes:\n    ignore:\n      /api/silents: [GET]\n")
+	writeProjectFile(t, filepath.Join(projectDir, "gst.yaml"), "gen:\n  routes:\n    ignore:\n      /api/silents: [GET]\n")
 
 	err := genRunWithOptions(genRunOptions{Quiet: true})
 

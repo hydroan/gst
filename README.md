@@ -1029,8 +1029,6 @@ channel 与函数字段、键不是字符串或整数的 map，以及 `encoding/
 或把被框架模块占用的路径让给业务自己的实现：
 
 ```yaml
-version: 1
-
 gen:
   routes:
     ignore:
@@ -1061,8 +1059,6 @@ gen:
 `prune.ignore` 列出的路径一律跳过：
 
 ```yaml
-version: 1
-
 prune:
   ignore:
     - service/legacy           # 该目录及其下全部内容

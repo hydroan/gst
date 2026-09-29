@@ -3,6 +3,7 @@ package ggconfig_test
 import (
 	"os"
 	"path/filepath"
+	"reflect"
 	"slices"
 	"testing"
 
@@ -10,47 +11,41 @@ import (
 )
 
 func TestLoad(t *testing.T) {
-	t.Run("missing file yields empty config", func(t *testing.T) {
-		cfg, err := ggconfig.Load(t.TempDir())
-		if err != nil {
-			t.Fatalf("Load() error = %v", err)
-		}
-		if cfg.Version != 1 {
-			t.Errorf("Load().Version = %d, want 1", cfg.Version)
-		}
-		if len(cfg.Gen.Routes.Ignore) != 0 {
-			t.Errorf("Load().Gen.Routes.Ignore = %v, want empty", cfg.Gen.Routes.Ignore)
+	t.Run("missing, empty or comment-only file yields empty config", func(t *testing.T) {
+		for name, dir := range map[string]string{
+			"missing file":  t.TempDir(),
+			"empty file":    writeConfig(t, ""),
+			"blank line":    writeConfig(t, "\n"),
+			"comments only": writeConfig(t, "# gg settings of this project\n# none yet\n"),
+		} {
+			t.Run(name, func(t *testing.T) {
+				cfg, err := ggconfig.Load(dir)
+				if err != nil {
+					t.Fatalf("Load() error = %v", err)
+				}
+				if !reflect.DeepEqual(*cfg, ggconfig.Config{}) {
+					t.Errorf("Load() = %+v, want empty config", *cfg)
+				}
+			})
 		}
 	})
 
 	t.Run("unknown field is rejected", func(t *testing.T) {
-		dir := writeConfig(t, `version: 1
-gen:
-  routes:
-    ignroe:
-      /api/signup: [POST]
-`)
-		if _, err := ggconfig.Load(dir); err == nil {
-			t.Fatal("Load() expected error for unknown field, got nil")
-		}
-	})
-
-	t.Run("unsupported version is rejected", func(t *testing.T) {
-		dir := writeConfig(t, "version: 2\n")
-		if _, err := ggconfig.Load(dir); err == nil {
-			t.Fatal("Load() expected error for version 2, got nil")
-		}
-	})
-
-	t.Run("missing version is rejected", func(t *testing.T) {
-		dir := writeConfig(t, "gen:\n  routes:\n    ignore: {}\n")
-		if _, err := ggconfig.Load(dir); err == nil {
-			t.Fatal("Load() expected error for missing version, got nil")
+		for name, content := range map[string]string{
+			"misspelled nested key": "gen:\n  routes:\n    ignroe:\n      /api/signup: [POST]\n",
+			"top-level version":     "version: 1\n",
+		} {
+			t.Run(name, func(t *testing.T) {
+				dir := writeConfig(t, content)
+				if _, err := ggconfig.Load(dir); err == nil {
+					t.Fatal("Load() expected error for unknown field, got nil")
+				}
+			})
 		}
 	})
 
 	t.Run("prune ignore entries are cleaned", func(t *testing.T) {
-		dir := writeConfig(t, "version: 1\nprune:\n  ignore:\n    - \" service/iam/ \"\n    - service/record/list.go\n    - middleware/sample_auth.go\n    - interceptor/sample_auth.go\n    - pb/legacy\n")
+		dir := writeConfig(t, "prune:\n  ignore:\n    - \" service/iam/ \"\n    - service/record/list.go\n    - middleware/sample_auth.go\n    - interceptor/sample_auth.go\n    - pb/legacy\n")
 		cfg, err := ggconfig.Load(dir)
 		if err != nil {
 			t.Fatalf("Load() error = %v", err)
@@ -72,7 +67,7 @@ gen:
 			"the pb root":      "    - pbx\n",
 		} {
 			t.Run(name, func(t *testing.T) {
-				dir := writeConfig(t, "version: 1\nprune:\n  ignore:\n"+entries)
+				dir := writeConfig(t, "prune:\n  ignore:\n"+entries)
 				if _, err := ggconfig.Load(dir); err == nil {
 					t.Fatal("Load() expected error, got nil")
 				}
@@ -81,7 +76,7 @@ gen:
 	})
 
 	t.Run("unknown prune field is rejected", func(t *testing.T) {
-		dir := writeConfig(t, "version: 1\nprune:\n  orphan_ignore:\n    - service/iam\n")
+		dir := writeConfig(t, "prune:\n  orphan_ignore:\n    - service/iam\n")
 		if _, err := ggconfig.Load(dir); err == nil {
 			t.Fatal("Load() expected error for unknown field, got nil")
 		}
@@ -111,7 +106,7 @@ func TestPruneConfigIgnores(t *testing.T) {
 func TestUnreadFiles(t *testing.T) {
 	dir := t.TempDir()
 	for _, name := range []string{ggconfig.FileName, "gst.yml", ".gg.yaml"} {
-		if err := os.WriteFile(filepath.Join(dir, name), []byte("version: 1\n"), 0o600); err != nil {
+		if err := os.WriteFile(filepath.Join(dir, name), []byte("prune:\n  ignore:\n    - service/sample\n"), 0o600); err != nil {
 			t.Fatal(err)
 		}
 	}

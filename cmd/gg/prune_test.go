@@ -265,7 +265,7 @@ func TestPruneRunStopsOnABrokenConfig(t *testing.T) {
 	listFile := filepath.Join(ggconst.DirService, "record", "list.go")
 	writeProjectFile(t, filepath.Join(ggconst.DirModel, "record.go"), "package model\n")
 	writeProjectFile(t, listFile, "package record\n")
-	writeProjectFile(t, ggconfig.FileName, "version: 1\nprune:\n  ignore:\n    - model/record.go\n")
+	writeProjectFile(t, ggconfig.FileName, "prune:\n  ignore:\n    - model/record.go\n")
 
 	err := pruneRun()
 

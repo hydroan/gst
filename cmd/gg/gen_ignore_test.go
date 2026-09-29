@@ -140,8 +140,7 @@ func TestGenRunAppliesRouteIgnoresFromGstYAML(t *testing.T) {
 	if !ok {
 		return
 	}
-	if err := os.WriteFile(filepath.Join(projectDir, "gst.yaml"), []byte(`version: 1
-gen:
+	if err := os.WriteFile(filepath.Join(projectDir, "gst.yaml"), []byte(`gen:
   routes:
     ignore:
       /api/samples: [GET]
@@ -247,7 +246,7 @@ func (Record) Design() {
 }
 `)
 	writeProjectFile(t, filepath.Join(projectDir, ".gg.yaml"), "prune:\n  ignore:\n    - service/sample\n")
-	writeProjectFile(t, filepath.Join(projectDir, "gst.yml"), "version: 1\n")
+	writeProjectFile(t, filepath.Join(projectDir, "gst.yml"), "prune:\n  ignore:\n    - service/sample\n")
 
 	var genErr error
 	stdout := captureStdout(t, func() {

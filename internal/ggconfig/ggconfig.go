@@ -20,14 +20,8 @@ import (
 // located next to go.mod in a business project.
 const FileName = "gst.yaml"
 
-// currentVersion is the only gst.yaml schema version supported by this build.
-const currentVersion = 1
-
 // Config is the project-level gst configuration.
 type Config struct {
-	// Version is the gst.yaml schema version. Must be 1.
-	Version int `yaml:"version"`
-
 	// Gen configures gg gen behavior.
 	Gen GenConfig `yaml:"gen"`
 
@@ -88,15 +82,15 @@ func (c PruneConfig) Ignores(path string) bool {
 	})
 }
 
-// Load reads the gst.yaml file from dir. A missing file is not an error
-// and yields a configuration with only defaults, so projects without a
-// gst.yaml keep the current gg behavior.
+// Load reads the gst.yaml file from dir. A missing file, an empty file and a
+// file holding only comments are not errors: each yields a configuration
+// with only defaults.
 func Load(dir string) (*Config, error) {
 	path := filepath.Join(dir, FileName)
 	data, err := os.ReadFile(path)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return &Config{Version: currentVersion}, nil
+			return new(Config), nil
 		}
 		return nil, errors.Wrapf(err, "failed to read %s", path)
 	}
@@ -104,11 +98,10 @@ func Load(dir string) (*Config, error) {
 	decoder := yaml.NewDecoder(bytes.NewReader(data))
 	decoder.KnownFields(true)
 	cfg := new(Config)
+	// A file that is empty or holds only comments has no document to decode:
+	// Decode reports io.EOF and cfg keeps its defaults.
 	if err := decoder.Decode(cfg); err != nil && !errors.Is(err, io.EOF) {
 		return nil, errors.Wrapf(err, "failed to parse %s", path)
-	}
-	if cfg.Version != currentVersion {
-		return nil, errors.Newf("%s: unsupported version %d, want %d", path, cfg.Version, currentVersion)
 	}
 	if err := validateRouteIgnoreRules(cfg.Gen.Routes.Ignore); err != nil {
 		return nil, errors.Wrapf(err, "%s: gen.routes.ignore", path)

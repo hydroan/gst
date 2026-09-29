@@ -106,8 +106,7 @@ func (Legacy) Design() {
 	})
 }
 `)
-	writeCheckFile(t, filepath.Join(projectDir, "gst.yaml"), `version: 1
-gen:
+	writeCheckFile(t, filepath.Join(projectDir, "gst.yaml"), `gen:
   routes:
     ignore:
       /api/legacies: [POST]

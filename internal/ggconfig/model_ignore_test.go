@@ -9,8 +9,7 @@ import (
 
 func TestModelIgnoreRulesUnmarshal(t *testing.T) {
 	t.Run("valid entries", func(t *testing.T) {
-		dir := writeConfig(t, `version: 1
-gen:
+		dir := writeConfig(t, `gen:
   models:
     ignore:
       Profile:
@@ -34,14 +33,14 @@ gen:
 
 	t.Run("invalid entries", func(t *testing.T) {
 		for name, content := range map[string]string{
-			"not a mapping":       "version: 1\ngen:\n  models:\n    ignore: [Profile]\n",
-			"unexported name":     "version: 1\ngen:\n  models:\n    ignore:\n      profile:\n",
-			"invalid identifier":  "version: 1\ngen:\n  models:\n    ignore:\n      \"My-Model\":\n",
-			"duplicate name":      "version: 1\ngen:\n  models:\n    ignore:\n      Profile:\n      Profile:\n", //nolint:dupword // the duplicate key is the invalid input under test
-			"unknown value field": "version: 1\ngen:\n  models:\n    ignore:\n      Profile:\n        source: model/iam\n",
-			"value not a mapping": "version: 1\ngen:\n  models:\n    ignore:\n      Profile: model/iam\n",
-			"empty from":          "version: 1\ngen:\n  models:\n    ignore:\n      Profile:\n        from: \"\"\n",
-			"escaping from":       "version: 1\ngen:\n  models:\n    ignore:\n      Profile:\n        from: ../outside\n",
+			"not a mapping":       "gen:\n  models:\n    ignore: [Profile]\n",
+			"unexported name":     "gen:\n  models:\n    ignore:\n      profile:\n",
+			"invalid identifier":  "gen:\n  models:\n    ignore:\n      \"My-Model\":\n",
+			"duplicate name":      "gen:\n  models:\n    ignore:\n      Profile:\n      Profile:\n", //nolint:dupword // the duplicate key is the invalid input under test
+			"unknown value field": "gen:\n  models:\n    ignore:\n      Profile:\n        source: model/iam\n",
+			"value not a mapping": "gen:\n  models:\n    ignore:\n      Profile: model/iam\n",
+			"empty from":          "gen:\n  models:\n    ignore:\n      Profile:\n        from: \"\"\n",
+			"escaping from":       "gen:\n  models:\n    ignore:\n      Profile:\n        from: ../outside\n",
 		} {
 			t.Run(name, func(t *testing.T) {
 				dir := writeConfig(t, content)

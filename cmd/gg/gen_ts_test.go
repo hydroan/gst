@@ -215,7 +215,7 @@ func (Sample) Design() {
 func writeTypeScriptProject(t *testing.T, projectDir, modelSource string) {
 	t.Helper()
 
-	writeProjectFile(t, filepath.Join(projectDir, "gst.yaml"), "version: 1\ngen:\n  routes:\n    ignore:\n      /api/samples: [GET]\n")
+	writeProjectFile(t, filepath.Join(projectDir, "gst.yaml"), "gen:\n  routes:\n    ignore:\n      /api/samples: [GET]\n")
 	writeProjectFile(t, filepath.Join(projectDir, "model", "sample.go"), strings.ReplaceAll(modelSource, "'", "`"))
 }
 

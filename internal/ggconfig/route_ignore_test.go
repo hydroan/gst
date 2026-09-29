@@ -12,8 +12,7 @@ import (
 // Load, which also rejects duplicate rules once they are parsed.
 func TestRouteIgnoreRulesUnmarshal(t *testing.T) {
 	t.Run("valid entries", func(t *testing.T) {
-		dir := writeConfig(t, `version: 1
-gen:
+		dir := writeConfig(t, `gen:
   routes:
     ignore:
       /api/signup: [POST]
@@ -39,8 +38,7 @@ gen:
 	})
 
 	t.Run("string entries are rejected", func(t *testing.T) {
-		dir := writeConfig(t, `version: 1
-gen:
+		dir := writeConfig(t, `gen:
   routes:
     ignore:
       - POST /api/signup
@@ -51,8 +49,7 @@ gen:
 	})
 
 	t.Run("invalid method is rejected", func(t *testing.T) {
-		dir := writeConfig(t, `version: 1
-gen:
+		dir := writeConfig(t, `gen:
   routes:
     ignore:
       /api/signup: [TRACE]
@@ -63,8 +60,7 @@ gen:
 	})
 
 	t.Run("route without methods is rejected", func(t *testing.T) {
-		dir := writeConfig(t, `version: 1
-gen:
+		dir := writeConfig(t, `gen:
   routes:
     ignore:
       /api/signup: []
@@ -87,7 +83,7 @@ gen:
 		}
 		for _, tt := range tests {
 			t.Run(tt.name, func(t *testing.T) {
-				dir := writeConfig(t, "version: 1\ngen:\n  routes:\n    ignore:\n"+tt.entries)
+				dir := writeConfig(t, "gen:\n  routes:\n    ignore:\n"+tt.entries)
 				if _, err := ggconfig.Load(dir); err == nil {
 					t.Fatal("Load() expected error for duplicate route paths, got nil")
 				}
@@ -96,8 +92,7 @@ gen:
 	})
 
 	t.Run("duplicate methods on one path are rejected", func(t *testing.T) {
-		dir := writeConfig(t, `version: 1
-gen:
+		dir := writeConfig(t, `gen:
   routes:
     ignore:
       /api/signup: [POST, post]
@@ -108,8 +103,7 @@ gen:
 	})
 
 	t.Run("object form with from scopes the rule", func(t *testing.T) {
-		dir := writeConfig(t, `version: 1
-gen:
+		dir := writeConfig(t, `gen:
   routes:
     ignore:
       /api/iam/admin/users:
@@ -129,8 +123,7 @@ gen:
 	})
 
 	t.Run("object form without from matches all models", func(t *testing.T) {
-		dir := writeConfig(t, `version: 1
-gen:
+		dir := writeConfig(t, `gen:
   routes:
     ignore:
       /api/signup:
@@ -146,8 +139,7 @@ gen:
 	})
 
 	t.Run("object form with unknown field is rejected", func(t *testing.T) {
-		dir := writeConfig(t, `version: 1
-gen:
+		dir := writeConfig(t, `gen:
   routes:
     ignore:
       /api/signup:
@@ -161,8 +153,7 @@ gen:
 
 	t.Run("object form with invalid from is rejected", func(t *testing.T) {
 		for _, from := range []string{`""`, `../iam`, `model//iam`} {
-			dir := writeConfig(t, `version: 1
-gen:
+			dir := writeConfig(t, `gen:
   routes:
     ignore:
       /api/signup:
