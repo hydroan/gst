@@ -1,0 +1,10 @@
+version: "2"
+linters:
+  enable:
+    - importas
+  settings:
+    importas:
+      no-unaliased: true
+      alias:
+        - pkg: example.com/module/otel
+          alias: fxotel

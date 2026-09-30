@@ -1,0 +1,7 @@
+version: "2"
+linters:
+  enable:
+    - importas
+  settings:
+    importas:
+      no-unaliased: true

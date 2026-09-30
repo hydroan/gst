@@ -36,6 +36,15 @@
 // import of text/template anywhere in them. checkSourceFormat names the
 // formatters, the generators and the path.
 //
+// # Import aliases
+//
+// An import carries an alias in two cases alone: the package is one the
+// importas section of .golangci.yml lists, spelt by that alias wherever it is
+// imported, which golangci-lint holds; or another import of the same file
+// binds the package's own name. An identifier named like the package is
+// renamed instead. checkImportAlias reports every other alias, and a package
+// spelt two ways anywhere in the tree.
+//
 // # Layout
 //
 // Each check lives in the file named after it, testplacement.go for the
@@ -75,6 +84,7 @@ var checks = []check{
 	{name: "testplacement", run: checkTestPlacement},
 	{name: "forwarding", run: checkForwarding},
 	{name: "sourceformat", run: checkSourceFormat},
+	{name: "importalias", run: checkImportAlias},
 }
 
 func main() {

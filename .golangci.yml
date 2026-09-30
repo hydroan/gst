@@ -78,6 +78,7 @@ linters:
     - depguard
     - forbidigo
     - gomoddirectives
+    - importas
 
     # Project-specific checks.
     # canonicalheader v1.1.2 panics on parameterized method calls (go1.27);
@@ -295,8 +296,44 @@ linters:
         - deepequalerrors
         - sortslice
 
+    importas:
+      # A package a reader meets beside another of the same name goes under
+      # one alias wherever it is imported; every other alias is held to a
+      # clash in its file by the framework's self check (see
+      # internal/cmd/selfcheck), which reads this list.
+      no-unaliased: true
+      alias:
+        # The framework's own packages named like a well-known third-party
+        # package.
+        - pkg: github.com/hydroan/gst/otel
+          alias: gstotel
+        - pkg: github.com/hydroan/gst/grpc
+          alias: gstgrpc
+        - pkg: github.com/hydroan/gst/redis
+          alias: gstredis
+        - pkg: github.com/hydroan/gst/logger/zap
+          alias: gstzap
+        - pkg: github.com/hydroan/gst/database/mysql
+          alias: gstmysql
+        - pkg: github.com/hydroan/gst/database/postgres
+          alias: gstpostgres
+        - pkg: github.com/hydroan/gst/database/sqlite
+          alias: gstsqlite
+        # Third-party packages named like a package of the framework or of
+        # the standard library.
+        - pkg: gorm.io/gorm/logger
+          alias: gormlogger
+        - pkg: gorm.io/gorm/schema
+          alias: gormschema
+        - pkg: github.com/casbin/casbin/v3/model
+          alias: casbinmodel
+        - pkg: github.com/gin-gonic/gin/codec/json
+          alias: ginjson
+
     misspell:
       locale: US
+      ignore-rules:
+        - importas # the linter's name
 
     recvcheck:
       # Design, GetTableName, Purge and Indexes are stateless declaration
