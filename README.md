@@ -246,7 +246,7 @@ func (Entry) Design() {
 ping 得更勤的客户端会被 `too_many_pings` 断开，客户端的 keepalive 要照这两个值配）；`max_connection_age`、`max_connection_age_grace`
 （一条连接活多久就让客户端重连、在途的调用再宽限多久，默认不限；经 Kubernetes Service 这类按连接分流的入口，长连接不换就一直落在老副本上，靠它换到新副本）；
 `max_recv_msg_size`（收多大的消息，写 `8MiB` 这样带单位的值，默认 4MiB 即 4,194,304 字节，更大的消息答 ResourceExhausted；MiB 按 1024 进、MB 按 1000 进，`4MB` 只有 4,000,000 字节，比默认值还小）。
-时长键不能是负数，`keepalive_time`、`max_connection_age` 填了就至少 1 秒，`max_recv_msg_size` 要在 1 字节到 2GiB 之间；写错的值启动时直接报错退出，没有模型声明 `GRPC()` 的项目也一样检查。
+时长键不能是负数，`keepalive_time`、`max_connection_age` 填了就至少 1 秒，`max_recv_msg_size` 要在 1 字节到 2GiB 之间；写错的值和读不出来的证书都让启动直接报错退出，没有模型声明 `GRPC()` 的项目也一样检查。
 没有模型声明 `GRPC()` 的项目不开这个端口。监听上还有两个框架自带的服务：标准的健康服务
 `grpc.health.v1.Health`，进程在服务时答 SERVING，收到停机信号后和 `/-/readyz` 同时变成 NOT_SERVING，
 每个服务按全名也各报一份、和整体同起同落，Kubernetes 的 gRPC 探针指名 `service` 时问的就是它；

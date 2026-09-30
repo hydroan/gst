@@ -47,7 +47,7 @@ type GRPC struct {
 	// The keys below are grpc-go's own server parameters, named as grpc-go
 	// names them; a zero value leaves grpc-go's own default for it. A
 	// negative duration, or a KeepaliveTime or MaxConnectionAge under a
-	// second, is refused as the process starts (see grpcserver.Run).
+	// second, is refused as the process starts.
 
 	// KeepaliveTime is how long a connection may stay idle before the server
 	// pings it, and KeepaliveTimeout how long it then waits for the answer
