@@ -33,11 +33,11 @@ var (
 // newLogWriter selects log sink: the shared stdout sink in stdout mode, and in
 // file mode stdout/stderr or a rolling file.
 // opts: opts[0].Console additionally mirrors a file sink to os.Stdout.
-func newLogWriter(opts ...Option) zapcore.WriteSyncer {
-	if logOutput == config.LoggerOutputStdout {
+func newLogWriter(cfg logConfig, opts ...Option) zapcore.WriteSyncer {
+	if cfg.output == config.LoggerOutputStdout {
 		return stdoutLogWriter()
 	}
-	switch strings.TrimSpace(logFile) {
+	switch strings.TrimSpace(cfg.file) {
 	case "/dev/stdout":
 		return zapcore.AddSync(os.Stdout)
 	case "/dev/stderr":
@@ -45,13 +45,13 @@ func newLogWriter(opts ...Option) zapcore.WriteSyncer {
 	case "":
 		return zapcore.AddSync(os.Stdout)
 	default:
-		precreateLogFile(filepath.Join(config.App.Dir, logFile))
+		precreateLogFile(filepath.Join(config.App.Dir, cfg.file))
 		writer := &zapcore.BufferedWriteSyncer{
 			WS: zapcore.AddSync(&lumberjack.Logger{
-				Filename:   filepath.Join(config.App.Dir, logFile),
-				MaxAge:     logMaxAge,
-				MaxSize:    logMaxSize,
-				MaxBackups: logMaxBackups,
+				Filename:   filepath.Join(config.App.Dir, cfg.file),
+				MaxAge:     cfg.maxAge,
+				MaxSize:    cfg.maxSize,
+				MaxBackups: cfg.maxBackups,
 				LocalTime:  true,
 				Compress:   false, // openwrt may not support compress.
 			}),

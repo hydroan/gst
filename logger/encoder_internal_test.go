@@ -12,7 +12,7 @@ import (
 )
 
 func TestNewLogEncoderTimestampIsUTCAndOrdersWithinASecond(t *testing.T) {
-	encoder := newLogEncoder()
+	encoder := newLogEncoder(readConf(""))
 	at := time.Date(2026, 7, 29, 14, 3, 8, 243834831, time.FixedZone("", 8*60*60))
 
 	encode := func(at time.Time) string {
@@ -46,7 +46,7 @@ func TestNewLogEncoderTimestampIsUTCAndOrdersWithinASecond(t *testing.T) {
 }
 
 func TestNewLogEncoderReflectedObjectsAndArraysCollapseToOneStringField(t *testing.T) {
-	encoder := newLogEncoder()
+	encoder := newLogEncoder(readConf(""))
 
 	encode := func(t *testing.T, fields ...zapcore.Field) map[string]any {
 		t.Helper()
@@ -172,7 +172,7 @@ func BenchmarkNewLogEncoderReflectedValue(b *testing.B) {
 		Name  string `json:"name"`
 		Count int    `json:"count"`
 	}
-	encoder := newLogEncoder()
+	encoder := newLogEncoder(readConf(""))
 	entry := zapcore.Entry{Time: time.Now(), Message: "sample"}
 
 	for _, bc := range []struct {

@@ -22,7 +22,7 @@ import (
 func TestNewLogWriterBuffersFileSink(t *testing.T) {
 	withLogWriterConfig(t, t.TempDir(), "buffered.log")
 
-	writer := newLogWriter()
+	writer := newLogWriter(readConf(""))
 	buffered, ok := writer.(*zapcore.BufferedWriteSyncer)
 	if !ok {
 		t.Fatalf("expected file sink to use *zapcore.BufferedWriteSyncer, got %T", writer)
@@ -51,7 +51,7 @@ func TestNewLogWriterLeavesStdStreamsUnbuffered(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			withLogWriterConfig(t, t.TempDir(), tt.file)
 
-			writer := newLogWriter()
+			writer := newLogWriter(readConf(""))
 			if buffered, ok := writer.(*zapcore.BufferedWriteSyncer); ok {
 				t.Cleanup(func() { _ = buffered.Stop() })
 				t.Fatalf("expected %q sink to stay unbuffered", tt.file)
@@ -66,7 +66,7 @@ func TestNewLogWriterConsoleOptionTeesFileSinkToStdout(t *testing.T) {
 
 	var writer zapcore.WriteSyncer
 	output := captureStdout(t, func() {
-		writer = newLogWriter(Option{Console: true})
+		writer = newLogWriter(readConf(""), Option{Console: true})
 		_, err := writer.Write([]byte("teed to stdout"))
 		require.NoError(t, err)
 		// Syncing a pipe (stdout stand-in here) fails on some platforms since
@@ -92,7 +92,7 @@ func TestNewLogWriterWithoutConsoleOptionStaysFileOnly(t *testing.T) {
 
 	var writer zapcore.WriteSyncer
 	output := captureStdout(t, func() {
-		writer = newLogWriter()
+		writer = newLogWriter(readConf(""))
 		_, err := writer.Write([]byte("file only"))
 		require.NoError(t, err)
 		require.NoError(t, writer.Sync())
@@ -123,7 +123,7 @@ func TestNewLogWriterConsoleOptionIgnoredForStdStreams(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			withLogWriterConfig(t, t.TempDir(), tt.file)
 
-			writer := newLogWriter(Option{Console: true})
+			writer := newLogWriter(readConf(""), Option{Console: true})
 			if buffered, ok := writer.(*zapcore.BufferedWriteSyncer); ok {
 				t.Cleanup(func() { _ = buffered.Stop() })
 				t.Fatalf("expected %q sink to stay unbuffered", tt.file)
@@ -136,7 +136,7 @@ func TestNewLogWriterPrecreatesEmptyLogFile(t *testing.T) {
 	dir := t.TempDir()
 	withLogWriterConfig(t, dir, "precreated.log")
 
-	writer := newLogWriter()
+	writer := newLogWriter(readConf(""))
 	t.Cleanup(func() {
 		if buffered, ok := writer.(*zapcore.BufferedWriteSyncer); ok {
 			_ = buffered.Stop()
@@ -157,7 +157,7 @@ func TestNewLogWriterPrecreationKeepsExistingContent(t *testing.T) {
 	path := filepath.Join(dir, "existing.log")
 	require.NoError(t, os.WriteFile(path, []byte("entry before restart\n"), 0o600))
 
-	writer := newLogWriter()
+	writer := newLogWriter(readConf(""))
 	t.Cleanup(func() {
 		if buffered, ok := writer.(*zapcore.BufferedWriteSyncer); ok {
 			_ = buffered.Stop()
@@ -180,7 +180,7 @@ func TestNewLogWriterPrecreationFailureWarnsAndKeepsSink(t *testing.T) {
 
 	var writer zapcore.WriteSyncer
 	output := captureStderr(t, func() {
-		writer = newLogWriter()
+		writer = newLogWriter(readConf(""))
 	})
 	t.Cleanup(func() {
 		if buffered, ok := writer.(*zapcore.BufferedWriteSyncer); ok {
@@ -330,33 +330,20 @@ func withLogWriterConfig(t *testing.T, dir, file string) {
 	t.Helper()
 
 	oldDir := config.App.Dir
-	oldLogOutput := logOutput
-	oldLogFile := logFile
-	oldLogLevel := logLevel
-	oldLogFormat := logFormat
-	oldLogMaxAge := logMaxAge
-	oldLogMaxSize := logMaxSize
-	oldLogMaxBackups := logMaxBackups
+	oldLogger := config.App.Logger
 
 	config.App.Dir = dir
 	config.App.Logger.Dir = dir
-	logOutput = config.LoggerOutputFile
-	logFile = file
-	logLevel = "info"
-	logFormat = "json"
-	logMaxAge = 30
-	logMaxSize = 100
-	logMaxBackups = 1
+	config.App.Logger.Output = config.LoggerOutputFile
+	config.App.Logger.File = file
+	config.App.Logger.Level = "info"
+	config.App.Logger.Format = "json"
+	config.App.Logger.MaxAge = 30
+	config.App.Logger.MaxSize = 100
+	config.App.Logger.MaxBackups = 1
 
 	t.Cleanup(func() {
 		config.App.Dir = oldDir
-		config.App.Logger.Dir = oldDir
-		logOutput = oldLogOutput
-		logFile = oldLogFile
-		logLevel = oldLogLevel
-		logFormat = oldLogFormat
-		logMaxAge = oldLogMaxAge
-		logMaxSize = oldLogMaxSize
-		logMaxBackups = oldLogMaxBackups
+		config.App.Logger = oldLogger
 	})
 }

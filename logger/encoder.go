@@ -15,20 +15,20 @@ import (
 )
 
 // newLogLevel parses the configured level; defaults to Info.
-func newLogLevel() zapcore.Level {
-	if len(logLevel) == 0 {
+func newLogLevel(cfg logConfig) zapcore.Level {
+	if len(cfg.level) == 0 {
 		return zapcore.InfoLevel
 	}
 	level := new(zapcore.Level)
-	if err := level.UnmarshalText([]byte(logLevel)); err != nil {
+	if err := level.UnmarshalText([]byte(cfg.level)); err != nil {
 		return zapcore.InfoLevel
 	}
 	return *level
 }
 
-// newLogEncoder builds JSON/console encoder with optional field suppression.
-// opts: encoder options
-func newLogEncoder(opts ...Option) zapcore.Encoder {
+// newLogEncoder builds the JSON or console encoder cfg names, with the
+// fields opts leave out.
+func newLogEncoder(cfg logConfig, opts ...Option) zapcore.Encoder {
 	encConfig := zap.NewProductionEncoderConfig()
 	// The entry timestamp is rendered in UTC using consts.LayoutTimeEncoder.
 	// The conversion happens here, the single point every logger's encoder is
@@ -59,7 +59,7 @@ func newLogEncoder(opts ...Option) zapcore.Encoder {
 			encConfig.CallerKey = ""
 		}
 	}
-	switch strings.ToLower(logFormat) {
+	switch strings.ToLower(cfg.format) {
 	case "json":
 		return zapcore.NewJSONEncoder(encConfig)
 	case "text", "console":

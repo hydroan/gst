@@ -60,13 +60,13 @@ var (
 // listeners' loggers. It fails when the configured output is neither stdout
 // nor file.
 func Init() error {
-	readConf()
-	if logOutput != config.LoggerOutputStdout && logOutput != config.LoggerOutputFile {
-		return errors.Newf("logger.output must be %q or %q, not %q", config.LoggerOutputStdout, config.LoggerOutputFile, logOutput)
+	cfg := readConf("")
+	if cfg.output != config.LoggerOutputStdout && cfg.output != config.LoggerOutputFile {
+		return errors.Newf("logger.output must be %q or %q, not %q", config.LoggerOutputStdout, config.LoggerOutputFile, cfg.output)
 	}
 	opt := Option{Console: config.App.Logger.Console}
-	zap.ReplaceGlobals(named(zap.New(
-		newLogCore(opt),
+	zap.ReplaceGlobals(named(cfg, zap.New(
+		newLogCore(cfg, opt),
 		zap.AddCaller(),
 		zap.AddStacktrace(zapcore.FatalLevel),
 	)))

@@ -87,7 +87,7 @@ func BenchmarkLoggerDiscard10000(b *testing.B) {
 // with no write adding to the figure. The File benchmarks in logger_test.go
 // measure the same calls through the buffered file sink.
 func newDiscardLogger() *Logger {
-	core := zapcore.NewCore(newLogEncoder(), zapcore.AddSync(io.Discard), newLogLevel())
+	core := zapcore.NewCore(newLogEncoder(readConf("")), zapcore.AddSync(io.Discard), newLogLevel(readConf("")))
 	return &Logger{zlog: zap.New(
 		core.With([]zapcore.Field{zap.String(consts.INSTANCE, instance.ID())}),
 		zap.AddCaller(),

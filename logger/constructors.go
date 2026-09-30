@@ -13,28 +13,36 @@ import (
 	gormlogger "gorm.io/gorm/logger"
 )
 
-// The logger configuration as the last constructor read it (see readConf):
-// what every logger built since is made of.
-var (
-	logOutput     config.LoggerOutput
-	logFile       string
-	logLevel      string
-	logFormat     string
-	logMaxAge     int
-	logMaxSize    int
-	logMaxBackups int
-)
+// logConfig is what a constructor builds one logger from: the [logger]
+// section as it stands when the constructor runs, with the stream's own file
+// in place of the section's. Each constructor reads its own, so constructors
+// running at the same time never build from one another's file.
+type logConfig struct {
+	output     config.LoggerOutput
+	file       string
+	level      string
+	format     string
+	maxAge     int
+	maxSize    int
+	maxBackups int
+}
 
-// readConf takes the logger configuration as it stands, for the logger
-// built next.
-func readConf() {
-	logOutput = config.App.Logger.Output
-	logFile = config.App.Logger.File
-	logLevel = config.App.Logger.Level
-	logFormat = config.App.Logger.Format
-	logMaxAge = config.App.Logger.MaxAge
-	logMaxSize = config.App.Logger.MaxSize
-	logMaxBackups = config.App.Logger.MaxBackups
+// readConf reads the logger configuration as it stands, for the stream of
+// filename; an empty filename keeps the section's own file.
+func readConf(filename string) logConfig {
+	cfg := logConfig{
+		output:     config.App.Logger.Output,
+		file:       config.App.Logger.File,
+		level:      config.App.Logger.Level,
+		format:     config.App.Logger.Format,
+		maxAge:     config.App.Logger.MaxAge,
+		maxSize:    config.App.Logger.MaxSize,
+		maxBackups: config.App.Logger.MaxBackups,
+	}
+	if len(filename) > 0 {
+		cfg.file = filename
+	}
+	return cfg
 }
 
 // Option configures encoder and writer behavior for constructors.
@@ -56,12 +64,9 @@ type Option struct {
 // stream in stdout mode ("/dev/stdout" for console)
 // opts: optional encoder options
 func New(filename string, opts ...Option) *Logger {
-	readConf()
-	if len(filename) > 0 {
-		logFile = filename
-	}
-	built := named(zap.New(
-		newLogCore(opts...),
+	cfg := readConf(filename)
+	built := named(cfg, zap.New(
+		newLogCore(cfg, opts...),
 		zap.AddCaller(),
 		zap.AddCallerSkip(1),
 		zap.AddStacktrace(zapcore.FatalLevel),
@@ -78,12 +83,9 @@ func New(filename string, opts ...Option) *Logger {
 // AddCallerSkip would misattribute most statements. GormLogger.Trace walks
 // the stack itself and attaches the business caller as a plain field.
 func NewGorm(filename string) gormlogger.Interface {
-	readConf()
-	if len(filename) > 0 {
-		logFile = filename
-	}
-	built := named(zap.New(
-		newLogCore(),
+	cfg := readConf(filename)
+	built := named(cfg, zap.New(
+		newLogCore(cfg),
 		zap.AddStacktrace(zapcore.FatalLevel),
 	))
 	return &GormLogger{l: &Logger{zlog: built}}
@@ -93,11 +95,8 @@ func NewGorm(filename string) gormlogger.Interface {
 // filename: the stream's log file, whose name without ".log" names the
 // stream in stdout mode ("/dev/stdout" for console)
 func NewGin(filename string) *zap.Logger {
-	readConf()
-	if len(filename) > 0 {
-		logFile = filename
-	}
-	return named(zap.New(newLogCore(Option{DisableMsg: true, DisableLevel: true})))
+	cfg := readConf(filename)
+	return named(cfg, zap.New(newLogCore(cfg, Option{DisableMsg: true, DisableLevel: true})))
 }
 
 // NewStdLog builds a *log.Logger backed by *zap.Logger.
@@ -110,42 +109,29 @@ func NewStdLog() *log.Logger {
 // stream in stdout mode ("/dev/stdout" for console)
 // opts: optional encoder options
 func NewZap(filename string, opts ...Option) *zap.Logger {
-	readConf()
-	if len(filename) > 0 {
-		logFile = filename
-	}
-	return named(zap.New(
-		newLogCore(opts...),
+	cfg := readConf(filename)
+	return named(cfg, zap.New(
+		newLogCore(cfg, opts...),
 		zap.AddCaller(),
 		zap.AddStacktrace(zapcore.FatalLevel),
 	))
 }
 
-// NewSugared builds a *zap.SugaredLogger with optional filename and options.
-// filename: the stream's log file, whose name without ".log" names the
-// stream in stdout mode ("/dev/stdout" for console)
-// opts: optional encoder options
+// NewSugared builds a *zap.SugaredLogger with optional filename and options:
+// the logger NewZap builds, sugared.
 func NewSugared(filename string, opts ...Option) *zap.SugaredLogger {
-	readConf()
-	if len(filename) > 0 {
-		logFile = filename
-	}
-	return named(zap.New(
-		newLogCore(opts...),
-		zap.AddCaller(),
-		zap.AddStacktrace(zapcore.FatalLevel),
-	)).Sugar()
+	return NewZap(filename, opts...).Sugar()
 }
 
 // named names a logger after the stream it writes in stdout mode, where the
 // stream has no file of its own to tell it apart: zap writes the name as the
 // entry's logger field. In file mode the logger stays unnamed, and its entries
 // unchanged.
-func named(l *zap.Logger) *zap.Logger {
-	if logOutput != config.LoggerOutputStdout {
+func named(cfg logConfig, l *zap.Logger) *zap.Logger {
+	if cfg.output != config.LoggerOutputStdout {
 		return l
 	}
-	return l.Named(streamName(logFile))
+	return l.Named(streamName(cfg.file))
 }
 
 // streamName returns the name a stream goes by in stdout mode: its file name
@@ -159,11 +145,11 @@ func streamName(file string) string {
 }
 
 // newLogCore builds the core every logger here writes through: the encoder,
-// sink and level opts select, with the process identity stamped on every
-// entry so the entries of replicas — on one host, or restarts of one pod —
-// can be told apart wherever they end up collected together. The field is
-// encoded once, here, not once per entry.
-func newLogCore(opts ...Option) zapcore.Core {
-	core := zapcore.NewCore(newLogEncoder(opts...), newLogWriter(opts...), newLogLevel())
+// sink and level cfg and opts select, with the process identity stamped on
+// every entry so the entries of replicas — on one host, or restarts of one
+// pod — can be told apart wherever they end up collected together. The field
+// is encoded once, here, not once per entry.
+func newLogCore(cfg logConfig, opts ...Option) zapcore.Core {
+	core := zapcore.NewCore(newLogEncoder(cfg, opts...), newLogWriter(cfg, opts...), newLogLevel(cfg))
 	return core.With([]zapcore.Field{zap.String(consts.INSTANCE, instance.ID())})
 }

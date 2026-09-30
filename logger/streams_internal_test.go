@@ -169,13 +169,11 @@ func TestInitRejectsAnUnknownOutput(t *testing.T) {
 }
 
 // withLoggerInitConfig points config.App at a scratch file-mode logger setup
-// for tests that run Init, which re-reads every logger setting from config.App
-// rather than the package-level variables withLogWriterConfig covers.
+// for tests that run Init, which reads every logger setting from config.App.
 func withLoggerInitConfig(t *testing.T, dir, file string) {
 	t.Helper()
 
 	original := config.App
-	originalOutput := logOutput
 	config.App = new(config.Config)
 	config.App.Logger.Output = config.LoggerOutputFile
 	config.App.Logger.Dir = dir
@@ -188,7 +186,6 @@ func withLoggerInitConfig(t *testing.T, dir, file string) {
 
 	t.Cleanup(func() {
 		config.App = original
-		logOutput = originalOutput
 	})
 }
 
