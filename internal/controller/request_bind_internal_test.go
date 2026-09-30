@@ -323,7 +323,8 @@ func TestClientSafeBindErrorSpeaksOfTheRuleWithoutATranslation(t *testing.T) {
 }
 
 // probeAudit, probeTaggedAudit and probeNamedAudit are the structs
-// jsonPathProbe holds in the ways a request struct holds one.
+// jsonPathProbe holds in the ways a request struct holds one; ProbeCode is
+// the string it embeds.
 type (
 	probeAudit struct {
 		Reviewer string `json:"reviewer" binding:"required"`
@@ -334,15 +335,18 @@ type (
 	probeNamedAudit struct {
 		Approver string `json:"approver" binding:"required"`
 	}
+	ProbeCode string
 )
 
 // jsonPathProbe holds a struct in each way JSON names, or does not name,
 // the level: embedded without a name, whose fields JSON promotes; embedded
 // under a name; a named field; a named field without a json tag, which
-// JSON names after the field; and the items of a slice.
+// JSON names after the field; and the items of a slice. It embeds a string
+// too, which JSON names after its type, as a field of its own.
 type jsonPathProbe struct {
 	probeAudit
 	probeTaggedAudit `json:"audit"`
+	ProbeCode        `binding:"required"`
 	Named            probeNamedAudit `json:"named"`
 	Plain            probeNamedAudit
 	Items            []probeAudit `json:"items" binding:"dive"`
@@ -354,7 +358,8 @@ type jsonPathProbe struct {
 // name of its own is no level of the path, since JSON promotes its fields,
 // where an embedded struct under a name, a named field and a field without
 // a json tag each are, under their JSON name, and the items of a slice by
-// their index.
+// their index; an embedded value that is no struct is a field under its
+// type's name, since JSON promotes nothing of it.
 func TestClientSafeBindErrorNamesTheFieldsByTheirJSONPath(t *testing.T) {
 	refused := validateRequest(&jsonPathProbe{Items: []probeAudit{{}, {}}})
 	require.Error(t, refused)
@@ -365,8 +370,9 @@ func TestClientSafeBindErrorNamesTheFieldsByTheirJSONPath(t *testing.T) {
 	for _, v := range serviceErr.FieldViolations() {
 		fields = append(fields, v.Field)
 	}
-	require.Equal(t, []string{"reviewer", "audit.signer", "named.approver", "Plain.approver", "items[0].reviewer", "items[1].reviewer", "name"}, fields)
+	require.Equal(t, []string{"reviewer", "audit.signer", "ProbeCode", "named.approver", "Plain.approver", "items[0].reviewer", "items[1].reviewer", "name"}, fields)
 	require.Equal(t, "reviewer is a required field", serviceErr.FieldViolations()[0].Description)
+	require.Equal(t, "ProbeCode is a required field", serviceErr.FieldViolations()[2].Description)
 }
 
 // freshPatchHelper marks the child process of

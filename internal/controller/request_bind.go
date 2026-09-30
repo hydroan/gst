@@ -222,7 +222,9 @@ func fieldViolations(err error, prefix string) []serviceregistry.FieldViolation 
 // request, as the client sent it: the JSON name of each field down from
 // typ, the type the validator checked, an index kept as it is, and nothing
 // for an embedded struct without a name of its own, whose fields JSON
-// promotes to its level. The validator's namespace of Go names (see
+// promotes to its level; an embedded struct, or pointer to one, is what
+// encoding/json promotes, an embedded value of any other type being a field
+// under its type's name. The validator's namespace of Go names (see
 // validator.FieldError.StructNamespace) drives the walk of the type; a
 // namespace the walk cannot follow falls back to the validator's namespace
 // of tag names (see fieldPath).
@@ -252,7 +254,11 @@ func jsonFieldPath(typ reflect.Type, fe validator.FieldError) string {
 		if !found {
 			return fallback
 		}
-		if field.Anonymous && jsonTagName(field) == "" {
+		embedded := field.Type
+		for embedded.Kind() == reflect.Pointer {
+			embedded = embedded.Elem()
+		}
+		if field.Anonymous && jsonTagName(field) == "" && embedded.Kind() == reflect.Struct {
 			if indexed {
 				return fallback
 			}
