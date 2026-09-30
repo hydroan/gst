@@ -14,18 +14,6 @@ type Attachment struct {
 	model.Empty
 }
 
-// AttachmentReq is the file to keep.
-type AttachmentReq struct {
-	Content string `json:"content"`
-}
-
-// AttachmentRsp describes the file kept, content included when read back.
-type AttachmentRsp struct {
-	Key     string `json:"key"`
-	Size    int64  `json:"size"`
-	Content string `json:"content,omitempty"`
-}
-
 func (Attachment) Design() {
 	Route("archive/documents/:document/attachment", func() {
 		Create(func() {
@@ -40,3 +28,17 @@ func (Attachment) Design() {
 		})
 	})
 }
+
+type (
+	// AttachmentReq is the file to keep.
+	AttachmentReq struct {
+		Content string `json:"content"`
+	}
+
+	// AttachmentRsp describes the file kept.
+	AttachmentRsp struct {
+		Key     string `json:"key"`
+		Size    int64  `json:"size"`
+		Content string `json:"content,omitempty"` // included when read back
+	}
+)

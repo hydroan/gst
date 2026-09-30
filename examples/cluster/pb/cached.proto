@@ -72,11 +72,12 @@ message LoadCachedResponse {
   CachedLoadRsp result = 1;
 }
 
-// CachedReq is the entry to write: the key it is filed under and the value
-// every other replica must end up holding for it.
+// CachedReq is the entry to write.
 message CachedReq {
+  // what the entry is filed under
   string key = 1;
 
+  // what every other replica must end up holding for it
   string value = 2;
 }
 
@@ -98,8 +99,8 @@ message CachedDeleteRsp {
   string key = 2;
 }
 
-// CachedGetRsp reports which replica answered and what its own store holds
-// for the key, so a client reading every replica in turn sees the
+// CachedGetRsp reports which replica answered and what its own store
+// holds for the key, so a client reading every replica in turn sees the
 // propagation.
 message CachedGetRsp {
   string replica = 1;
@@ -128,11 +129,12 @@ message CachedExchangeRsp {
   bool found = 4;
 }
 
-// CachedLoadRsp reports how many entries a load stream wrote and which
-// replica took them in.
+// CachedLoadRsp reports what a load stream did.
 message CachedLoadRsp {
+  // the replica that took the entries in
   string replica = 1;
 
+  // how many entries the stream wrote
   int64 count = 2;
 }
 

@@ -11,13 +11,6 @@ type Ping struct {
 	model.Empty
 }
 
-// PingRsp is what a ping answers: a word, and the record count the
-// record_count component keeps.
-type PingRsp struct {
-	Msg     string `json:"msg"`
-	Records int64  `json:"records"`
-}
-
 func (Ping) Design() {
 	List(func() {
 		Public()
@@ -25,3 +18,11 @@ func (Ping) Design() {
 		Result[*PingRsp]()
 	})
 }
+
+type (
+	// PingRsp is what a ping answers.
+	PingRsp struct {
+		Msg     string `json:"msg"`     // a word
+		Records int64  `json:"records"` // the record count the record_count component keeps
+	}
+)

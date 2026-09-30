@@ -22,16 +22,7 @@ type CounterStep struct {
 }
 
 func (CounterStep) TableName() string { return "counter_steps" }
-
-// CounterStepWatchReq says where a watch starts: the numbers after Seq are
-// streamed, so a client that lost its stream resumes from the last number it
-// saw.
-type CounterStepWatchReq struct {
-	After int64 `json:"after" pb:"1"`
-}
-
-func (CounterStep) Purge() bool { return true }
-
+func (CounterStep) Purge() bool       { return true }
 func (CounterStep) Indexes() []model.Index {
 	return []model.Index{{Fields: []string{"Seq"}, Unique: true}}
 }
@@ -56,3 +47,10 @@ func (CounterStep) Design() {
 		})
 	})
 }
+
+type (
+	// CounterStepWatchReq says where a watch starts.
+	CounterStepWatchReq struct {
+		After int64 `json:"after" pb:"1"` // the numbers after it are streamed, so a client that lost its stream resumes from the last number it saw
+	}
+)

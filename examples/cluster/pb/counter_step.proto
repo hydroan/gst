@@ -100,10 +100,9 @@ message WatchCounterStepResponse {
   CounterStep result = 1;
 }
 
-// CounterStepWatchReq says where a watch starts: the numbers after Seq are
-// streamed, so a client that lost its stream resumes from the last number it
-// saw.
+// CounterStepWatchReq says where a watch starts.
 message CounterStepWatchReq {
+  // the numbers after it are streamed, so a client that lost its stream resumes from the last number it saw
   int64 after = 1;
 }
 

@@ -15,7 +15,11 @@ func init() {
 		Comment: "Ping is the smallest model there is: an action with no table behind it,\nanswered by service code, open to anyone. GET /api/pings.",
 	})
 	apidoc.Register("demo/model", "PingRsp", apidoc.StructDoc{
-		Comment: "PingRsp is what a ping answers: a word, and the record count the\nrecord_count component keeps.",
+		Comment: "PingRsp is what a ping answers.",
+		Fields: map[string]string{
+			"Msg":     "a word",
+			"Records": "the record count the record_count component keeps",
+		},
 	})
 	apidoc.Register("demo/model", "Record", apidoc.StructDoc{
 		Comment: "Record is a table-backed resource with the standard actions on\n/api/records and /api/records/:record. Delete, Update, Patch and Get are\nthe framework's own; Create and List declare Service() for the hooks in\nservice/record, which stamp the owner, write the audit trail and keep a\nlist to the caller's own records. Embedding model.Query lets a list take\nthe framework's query parameters: field[op]=value filters such as\ntype[in]=text,image, _sort_by, _page and _size, and cursor pagination.\nThe summary route counts the records by type in service code of its own,\nand the search route is a custom List reading those parameters itself.",
@@ -43,7 +47,10 @@ func init() {
 		Comment: "AttachmentReq is the file to keep.",
 	})
 	apidoc.Register("demo/model/archive/document", "AttachmentRsp", apidoc.StructDoc{
-		Comment: "AttachmentRsp describes the file kept, content included when read back.",
+		Comment: "AttachmentRsp describes the file kept.",
+		Fields: map[string]string{
+			"Content": "included when read back",
+		},
 	})
 	apidoc.Register("demo/model/board", "Feed", apidoc.StructDoc{
 		Comment: "Feed is the streaming half of the gRPC example, served over gRPC alone: a\nStream action carries a stream of messages on one side of the call or on\nboth, which HTTP cannot, so a model declaring one needs GRPC(). WatchFeed\nanswers one request with a stream of events, UploadFeed takes a stream of\nevents and answers once, ChatFeed streams both ways. A Stream action names\nits rpc with Service(\"name\") and always has service code, in service/board/feed;\nthe router registers nothing for it.",

@@ -11,20 +11,6 @@ type Rebuild struct {
 	model.Empty
 }
 
-// RebuildReq says how long the rebuild takes: long enough to send a second
-// request while it runs and see that one refused. InTransaction asks for the
-// lock to be taken from inside a transaction, which the framework refuses.
-type RebuildReq struct {
-	Seconds       int  `json:"seconds" pb:"1"`
-	InTransaction bool `json:"in_transaction" pb:"2"`
-}
-
-// RebuildRsp reports which replica ran the rebuild and for how long.
-type RebuildRsp struct {
-	Replica string `json:"replica" pb:"1"`
-	Seconds int    `json:"seconds" pb:"2"`
-}
-
 func (Rebuild) Design() {
 	GRPC()
 
@@ -36,3 +22,17 @@ func (Rebuild) Design() {
 		})
 	})
 }
+
+type (
+	// RebuildReq says how the rebuild runs.
+	RebuildReq struct {
+		Seconds       int  `json:"seconds" pb:"1"`        // how long the rebuild takes: long enough to send a second request while it runs and see that one refused
+		InTransaction bool `json:"in_transaction" pb:"2"` // asks for the lock to be taken from inside a transaction, which the framework refuses
+	}
+
+	// RebuildRsp reports which replica ran the rebuild and for how long.
+	RebuildRsp struct {
+		Replica string `json:"replica" pb:"1"`
+		Seconds int    `json:"seconds" pb:"2"`
+	}
+)

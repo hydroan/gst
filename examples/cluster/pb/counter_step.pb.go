@@ -403,12 +403,11 @@ func (x *WatchCounterStepResponse) GetResult() *CounterStep {
 	return nil
 }
 
-// CounterStepWatchReq says where a watch starts: the numbers after Seq are
-// streamed, so a client that lost its stream resumes from the last number it
-// saw.
+// CounterStepWatchReq says where a watch starts.
 type CounterStepWatchReq struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	After         int64                  `protobuf:"varint,1,opt,name=after,proto3" json:"after,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// the numbers after it are streamed, so a client that lost its stream resumes from the last number it saw
+	After         int64 `protobuf:"varint,1,opt,name=after,proto3" json:"after,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }

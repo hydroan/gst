@@ -16,11 +16,12 @@ message CreateStepDownResponse {
   StepDownRsp result = 1;
 }
 
-// StepDownRsp reports which replica took the request, and whether that
-// replica had leader work to end.
+// StepDownRsp reports what the request met.
 message StepDownRsp {
+  // the replica that took the request
   string replica = 1;
 
+  // whether that replica had leader work to end
   bool asked = 2;
 }
 

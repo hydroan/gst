@@ -25,18 +25,6 @@ type Note struct {
 
 func (Note) TableName() string { return "notes" }
 
-// NotePublishReq names the channel a note is published to.
-type NotePublishReq struct {
-	Channel string `json:"channel" pb:"1"`
-}
-
-// NotePublishRsp reports a publication.
-type NotePublishRsp struct {
-	ID          string    `json:"id" pb:"1"`
-	Channel     string    `json:"channel" pb:"2"`
-	PublishedAt time.Time `json:"published_at" pb:"3"`
-}
-
 func (Note) Design() {
 	GRPC()
 	Migrate()
@@ -59,3 +47,17 @@ func (Note) Design() {
 		})
 	})
 }
+
+type (
+	// NotePublishReq names the channel a note is published to.
+	NotePublishReq struct {
+		Channel string `json:"channel" pb:"1"`
+	}
+
+	// NotePublishRsp reports a publication.
+	NotePublishRsp struct {
+		ID          string    `json:"id" pb:"1"`
+		Channel     string    `json:"channel" pb:"2"`
+		PublishedAt time.Time `json:"published_at" pb:"3"`
+	}
+)

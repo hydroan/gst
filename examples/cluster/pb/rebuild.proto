@@ -18,12 +18,12 @@ message CreateRebuildResponse {
   RebuildRsp result = 1;
 }
 
-// RebuildReq says how long the rebuild takes: long enough to send a second
-// request while it runs and see that one refused. InTransaction asks for the
-// lock to be taken from inside a transaction, which the framework refuses.
+// RebuildReq says how the rebuild runs.
 message RebuildReq {
+  // how long the rebuild takes: long enough to send a second request while it runs and see that one refused
   int64 seconds = 1;
 
+  // asks for the lock to be taken from inside a transaction, which the framework refuses
   bool in_transaction = 2;
 }
 

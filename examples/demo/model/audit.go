@@ -18,10 +18,7 @@ type Audit struct {
 }
 
 func (Audit) TableName() string { return "audits" }
-
-// Purge deletes audit rows for good: they are a log, not something anyone
-// restores.
-func (Audit) Purge() bool { return true }
+func (Audit) Purge() bool       { return true } // deleted for good: a log, not something anyone restores
 
 func (Audit) Design() {
 	Migrate()

@@ -14,22 +14,6 @@ type Entry struct {
 	model.Empty
 }
 
-// EntryPair is one key/value pair.
-type EntryPair struct {
-	Key   string `json:"key"`
-	Value string `json:"value,omitempty"`
-}
-
-// EntryMergeReq is the pairs to merge.
-type EntryMergeReq struct {
-	Entries []EntryPair `json:"entries"`
-}
-
-// EntryMergeRsp is the pairs merged by key.
-type EntryMergeRsp struct {
-	Entries []EntryPair `json:"entries"`
-}
-
 func (Entry) Design() {
 	Route("entries/merge", func() {
 		Create(func() {
@@ -40,3 +24,21 @@ func (Entry) Design() {
 		})
 	})
 }
+
+type (
+	// EntryPair is one key/value pair.
+	EntryPair struct {
+		Key   string `json:"key"`
+		Value string `json:"value,omitempty"`
+	}
+
+	// EntryMergeReq is the pairs to merge.
+	EntryMergeReq struct {
+		Entries []EntryPair `json:"entries"`
+	}
+
+	// EntryMergeRsp is the pairs merged by key.
+	EntryMergeRsp struct {
+		Entries []EntryPair `json:"entries"`
+	}
+)

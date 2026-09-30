@@ -115,13 +115,13 @@ func (x *CreateRebuildResponse) GetResult() *RebuildRsp {
 	return nil
 }
 
-// RebuildReq says how long the rebuild takes: long enough to send a second
-// request while it runs and see that one refused. InTransaction asks for the
-// lock to be taken from inside a transaction, which the framework refuses.
+// RebuildReq says how the rebuild runs.
 type RebuildReq struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Seconds       int64                  `protobuf:"varint,1,opt,name=seconds,proto3" json:"seconds,omitempty"`
-	InTransaction bool                   `protobuf:"varint,2,opt,name=in_transaction,json=inTransaction,proto3" json:"in_transaction,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// how long the rebuild takes: long enough to send a second request while it runs and see that one refused
+	Seconds int64 `protobuf:"varint,1,opt,name=seconds,proto3" json:"seconds,omitempty"`
+	// asks for the lock to be taken from inside a transaction, which the framework refuses
+	InTransaction bool `protobuf:"varint,2,opt,name=in_transaction,json=inTransaction,proto3" json:"in_transaction,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }

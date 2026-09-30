@@ -28,9 +28,7 @@ type Run struct {
 }
 
 func (Run) TableName() string { return "runs" }
-
-func (Run) Purge() bool { return true }
-
+func (Run) Purge() bool       { return true }
 func (Run) Indexes() []model.Index {
 	return []model.Index{{Fields: []string{"Kind", "Name", "CreatedAt"}}}
 }

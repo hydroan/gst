@@ -106,12 +106,13 @@ func (x *CreateStepDownResponse) GetResult() *StepDownRsp {
 	return nil
 }
 
-// StepDownRsp reports which replica took the request, and whether that
-// replica had leader work to end.
+// StepDownRsp reports what the request met.
 type StepDownRsp struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Replica       string                 `protobuf:"bytes,1,opt,name=replica,proto3" json:"replica,omitempty"`
-	Asked         bool                   `protobuf:"varint,2,opt,name=asked,proto3" json:"asked,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// the replica that took the request
+	Replica string `protobuf:"bytes,1,opt,name=replica,proto3" json:"replica,omitempty"`
+	// whether that replica had leader work to end
+	Asked         bool `protobuf:"varint,2,opt,name=asked,proto3" json:"asked,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }

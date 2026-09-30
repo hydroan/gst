@@ -22,11 +22,8 @@ type Flag struct {
 	Note    string `json:"note" gorm:"size:191" pb:"14"`
 }
 
-func (Flag) TableName() string { return "flags" }
-
-func (Flag) Indexes() []model.Index {
-	return []model.Index{{Fields: []string{"Name"}}}
-}
+func (Flag) TableName() string      { return "flags" }
+func (Flag) Indexes() []model.Index { return []model.Index{{Fields: []string{"Name"}}} }
 
 func (Flag) Design() {
 	GRPC()

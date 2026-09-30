@@ -34,24 +34,8 @@ type Record struct {
 	model.Base
 }
 
-func (Record) TableName() string { return "records" }
-
-// Indexes declares the index the owner filter of every list relies on.
-func (Record) Indexes() []model.Index {
-	return []model.Index{{Fields: []string{"UserID"}}}
-}
-
-// RecordSummaryRsp counts the caller's records, in all and by type.
-type RecordSummaryRsp struct {
-	Total  int                `json:"total"`
-	ByType map[RecordType]int `json:"by_type"`
-}
-
-// RecordSearchRsp is a page of the caller's records and how many match.
-type RecordSearchRsp struct {
-	Items []*Record `json:"items"`
-	Total int       `json:"total"`
-}
+func (Record) TableName() string      { return "records" }
+func (Record) Indexes() []model.Index { return []model.Index{{Fields: []string{"UserID"}}} } // the owner filter of every list relies on it
 
 func (Record) Design() {
 	Migrate()
@@ -82,3 +66,17 @@ func (Record) Design() {
 		})
 	})
 }
+
+type (
+	// RecordSummaryRsp counts the caller's records, in all and by type.
+	RecordSummaryRsp struct {
+		Total  int                `json:"total"`
+		ByType map[RecordType]int `json:"by_type"`
+	}
+
+	// RecordSearchRsp is a page of the caller's records and how many match.
+	RecordSearchRsp struct {
+		Items []*Record `json:"items"`
+		Total int       `json:"total"`
+	}
+)

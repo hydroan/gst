@@ -501,12 +501,13 @@ func (x *LoadCachedResponse) GetResult() *CachedLoadRsp {
 	return nil
 }
 
-// CachedReq is the entry to write: the key it is filed under and the value
-// every other replica must end up holding for it.
+// CachedReq is the entry to write.
 type CachedReq struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Key           string                 `protobuf:"bytes,1,opt,name=key,proto3" json:"key,omitempty"`
-	Value         string                 `protobuf:"bytes,2,opt,name=value,proto3" json:"value,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// what the entry is filed under
+	Key string `protobuf:"bytes,1,opt,name=key,proto3" json:"key,omitempty"`
+	// what every other replica must end up holding for it
+	Value         string `protobuf:"bytes,2,opt,name=value,proto3" json:"value,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -677,8 +678,8 @@ func (x *CachedDeleteRsp) GetKey() string {
 	return ""
 }
 
-// CachedGetRsp reports which replica answered and what its own store holds
-// for the key, so a client reading every replica in turn sees the
+// CachedGetRsp reports which replica answered and what its own store
+// holds for the key, so a client reading every replica in turn sees the
 // propagation.
 type CachedGetRsp struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
@@ -863,12 +864,13 @@ func (x *CachedExchangeRsp) GetFound() bool {
 	return false
 }
 
-// CachedLoadRsp reports how many entries a load stream wrote and which
-// replica took them in.
+// CachedLoadRsp reports what a load stream did.
 type CachedLoadRsp struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Replica       string                 `protobuf:"bytes,1,opt,name=replica,proto3" json:"replica,omitempty"`
-	Count         int64                  `protobuf:"varint,2,opt,name=count,proto3" json:"count,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// the replica that took the entries in
+	Replica string `protobuf:"bytes,1,opt,name=replica,proto3" json:"replica,omitempty"`
+	// how many entries the stream wrote
+	Count         int64 `protobuf:"varint,2,opt,name=count,proto3" json:"count,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }

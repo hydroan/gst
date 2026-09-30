@@ -21,48 +21,6 @@ type Bench struct {
 func (Bench) TableName() string { return "benches" }
 func (Bench) Purge() bool       { return true }
 
-type (
-	PingRsp struct {
-		Msg string `json:"msg"`
-	}
-
-	GetRsp struct {
-		Msg string `json:"msg"`
-	}
-	ListRsp struct {
-		Msg string `json:"msg"`
-	}
-
-	CreateReq struct {
-		Field1 string  `json:"field1"`
-		Field2 int     `json:"field2"`
-		Field3 *string `json:"field3"`
-		Field4 *int    `json:"field4"`
-	}
-	CreateRsp = Bench
-
-	UpdateReq struct {
-		Field1 string  `json:"field1"`
-		Field2 int     `json:"field2"`
-		Field3 *string `json:"field3"`
-		Field4 *int    `json:"field4"`
-	}
-	UpdateRsp struct {
-		Msg string `json:"msg"`
-	}
-
-	DeleteRsp struct {
-		Msg string `json:"msg"`
-	}
-
-	UpdateByIDReq struct {
-		Field1 string `json:"field1"`
-	}
-	UpdateByIDRsp struct {
-		Msg string `json:"msg"`
-	}
-)
-
 func (Bench) Design() {
 	Migrate()
 
@@ -130,3 +88,45 @@ func (Bench) Design() {
 		})
 	})
 }
+
+type (
+	PingRsp struct {
+		Msg string `json:"msg"`
+	}
+
+	GetRsp struct {
+		Msg string `json:"msg"`
+	}
+	ListRsp struct {
+		Msg string `json:"msg"`
+	}
+
+	CreateReq struct {
+		Field1 string  `json:"field1"`
+		Field2 int     `json:"field2"`
+		Field3 *string `json:"field3"`
+		Field4 *int    `json:"field4"`
+	}
+	CreateRsp = Bench
+
+	UpdateReq struct {
+		Field1 string  `json:"field1"`
+		Field2 int     `json:"field2"`
+		Field3 *string `json:"field3"`
+		Field4 *int    `json:"field4"`
+	}
+	UpdateRsp struct {
+		Msg string `json:"msg"`
+	}
+
+	DeleteRsp struct {
+		Msg string `json:"msg"`
+	}
+
+	UpdateByIDReq struct {
+		Field1 string `json:"field1"`
+	}
+	UpdateByIDRsp struct {
+		Msg string `json:"msg"`
+	}
+)

@@ -16,22 +16,6 @@ type Feed struct {
 	model.Empty
 }
 
-// FeedWatchReq names the topic to watch.
-type FeedWatchReq struct {
-	Topic string `json:"topic" pb:"1"`
-}
-
-// FeedEvent is one event of a feed.
-type FeedEvent struct {
-	Seq  int64  `json:"seq" pb:"1"`
-	Body string `json:"body" pb:"2"`
-}
-
-// FeedUploadRsp counts the events a client streamed in.
-type FeedUploadRsp struct {
-	Accepted int64 `json:"accepted" pb:"1"`
-}
-
 func (Feed) Design() {
 	GRPC()
 
@@ -58,3 +42,21 @@ func (Feed) Design() {
 		})
 	})
 }
+
+type (
+	// FeedWatchReq names the topic to watch.
+	FeedWatchReq struct {
+		Topic string `json:"topic" pb:"1"`
+	}
+
+	// FeedEvent is one event of a feed.
+	FeedEvent struct {
+		Seq  int64  `json:"seq" pb:"1"`
+		Body string `json:"body" pb:"2"`
+	}
+
+	// FeedUploadRsp counts the events a client streamed in.
+	FeedUploadRsp struct {
+		Accepted int64 `json:"accepted" pb:"1"`
+	}
+)

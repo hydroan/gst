@@ -13,13 +13,6 @@ type StepDown struct {
 	model.Empty
 }
 
-// StepDownRsp reports which replica took the request, and whether that
-// replica had leader work to end.
-type StepDownRsp struct {
-	Replica string `json:"replica" pb:"1"`
-	Asked   bool   `json:"asked" pb:"2"`
-}
-
 func (StepDown) Design() {
 	GRPC()
 
@@ -30,3 +23,11 @@ func (StepDown) Design() {
 		})
 	})
 }
+
+type (
+	// StepDownRsp reports what the request met.
+	StepDownRsp struct {
+		Replica string `json:"replica" pb:"1"` // the replica that took the request
+		Asked   bool   `json:"asked" pb:"2"`   // whether that replica had leader work to end
+	}
+)

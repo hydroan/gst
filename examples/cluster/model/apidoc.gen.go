@@ -18,16 +18,24 @@ func init() {
 		Comment: "CachedExchangeRsp answers one key of an exchange stream: which replica\nanswered and what its own store holds for the key.",
 	})
 	apidoc.Register("cluster/model", "CachedGetRsp", apidoc.StructDoc{
-		Comment: "CachedGetRsp reports which replica answered and what its own store holds\nfor the key, so a client reading every replica in turn sees the\npropagation.",
+		Comment: "CachedGetRsp reports which replica answered and what its own store\nholds for the key, so a client reading every replica in turn sees the\npropagation.",
 	})
 	apidoc.Register("cluster/model", "CachedKeyReq", apidoc.StructDoc{
 		Comment: "CachedKeyReq names an entry to look up.",
 	})
 	apidoc.Register("cluster/model", "CachedLoadRsp", apidoc.StructDoc{
-		Comment: "CachedLoadRsp reports how many entries a load stream wrote and which\nreplica took them in.",
+		Comment: "CachedLoadRsp reports what a load stream did.",
+		Fields: map[string]string{
+			"Count":   "how many entries the stream wrote",
+			"Replica": "the replica that took the entries in",
+		},
 	})
 	apidoc.Register("cluster/model", "CachedReq", apidoc.StructDoc{
-		Comment: "CachedReq is the entry to write: the key it is filed under and the value\nevery other replica must end up holding for it.",
+		Comment: "CachedReq is the entry to write.",
+		Fields: map[string]string{
+			"Key":   "what the entry is filed under",
+			"Value": "what every other replica must end up holding for it",
+		},
 	})
 	apidoc.Register("cluster/model", "CounterStep", apidoc.StructDoc{
 		Comment: "CounterStep is one number of the counter the leader work keeps: every second\nthe leader appends the next number, in a transaction under its lease. Seq is\nunique, so no number is written twice, and Tenure names the leadership that\nwrote it: the numbers of one tenure form one unbroken run, and the runs\nfollow each other, unless two leaderships ever wrote at the same time. The\ncounter lives in the database, so a replica taking the leadership over\ncontinues from the last number.",
@@ -37,7 +45,10 @@ func init() {
 		},
 	})
 	apidoc.Register("cluster/model", "CounterStepWatchReq", apidoc.StructDoc{
-		Comment: "CounterStepWatchReq says where a watch starts: the numbers after Seq are\nstreamed, so a client that lost its stream resumes from the last number it\nsaw.",
+		Comment: "CounterStepWatchReq says where a watch starts.",
+		Fields: map[string]string{
+			"After": "the numbers after it are streamed, so a client that lost its stream resumes from the last number it saw",
+		},
 	})
 	apidoc.Register("cluster/model", "Flag", apidoc.StructDoc{
 		Comment: "Flag is a switch every replica reads from the shared database: turned on or\noff through any replica, over HTTP or gRPC, it is what all of them see from\nthen on. It declares the whole standard set of actions, the batch ones\nincluded, so every standard rpc has a table behind it in this project. The\nCreate hook in service/flag checks the name and fills in the percent of a\nflag turned on without one: a binding tag would apply to a patch too, which\ncarries only the fields it changes.",
@@ -49,7 +60,11 @@ func init() {
 		Comment: "Rebuild is the action a client triggers: work that must not run twice at\nonce across the deployment. The service runs it under the \"rebuild\" lock.",
 	})
 	apidoc.Register("cluster/model", "RebuildReq", apidoc.StructDoc{
-		Comment: "RebuildReq says how long the rebuild takes: long enough to send a second\nrequest while it runs and see that one refused. InTransaction asks for the\nlock to be taken from inside a transaction, which the framework refuses.",
+		Comment: "RebuildReq says how the rebuild runs.",
+		Fields: map[string]string{
+			"InTransaction": "asks for the lock to be taken from inside a transaction, which the framework refuses",
+			"Seconds":       "how long the rebuild takes: long enough to send a second request while it runs and see that one refused",
+		},
 	})
 	apidoc.Register("cluster/model", "RebuildRsp", apidoc.StructDoc{
 		Comment: "RebuildRsp reports which replica ran the rebuild and for how long.",
@@ -67,6 +82,10 @@ func init() {
 		Comment: "StepDown is the request that ends the leadership on the replica that takes\nit: the leader work returns a failure of its own instead of running until\nits context ends, which is how a deployment sees what the framework does\nwith work that gives the name back early.",
 	})
 	apidoc.Register("cluster/model", "StepDownRsp", apidoc.StructDoc{
-		Comment: "StepDownRsp reports which replica took the request, and whether that\nreplica had leader work to end.",
+		Comment: "StepDownRsp reports what the request met.",
+		Fields: map[string]string{
+			"Asked":   "whether that replica had leader work to end",
+			"Replica": "the replica that took the request",
+		},
 	})
 }
