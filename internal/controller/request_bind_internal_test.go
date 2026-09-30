@@ -278,13 +278,95 @@ func TestClientSafeBindErrorNamesTheFieldsTheValidatorRefused(t *testing.T) {
 		{Field: "name", Description: "name is a required field"},
 		{Field: "address.city", Description: "address.city is a required field"},
 	}, serviceErr.FieldViolations())
-	var cause validator.ValidationErrors
+	var cause, direct validator.ValidationErrors
 	require.ErrorAs(t, wrapped, &cause, "the validator's error travels as the cause")
-	require.Equal(t, refused, error(cause))
+	require.ErrorAs(t, refused, &direct)
+	require.Equal(t, direct, cause)
 
 	require.ErrorAs(t, clientSafeItemBindError(1, refused), &serviceErr)
 	require.Equal(t, "items[1].name is a required field; items[1].address.city is a required field", serviceErr.Msg())
 	require.Equal(t, "items[1].name", serviceErr.FieldViolations()[0].Field)
+}
+
+// untranslatedProbe carries rules the validator has no English sentence for:
+// hostname and startswith are two of its own without one, gstprobe is a rule
+// a project registers.
+type untranslatedProbe struct {
+	Host    string `json:"host" binding:"hostname"`
+	Address struct {
+		Zip string `json:"zip" binding:"hostname"`
+	} `json:"address"`
+	Tag string `json:"tag" binding:"startswith=ab"`
+	Own string `json:"own" binding:"gstprobe"`
+}
+
+// TestClientSafeBindErrorSpeaksOfTheRuleWithoutATranslation pins the sentence
+// of a field refused by a rule the validator has no English sentence for,
+// one of its own or one a project registered: the field's path and the rule,
+// with its parameter when it has one, and nothing of the validator's own
+// text, which names the Go type of the request.
+func TestClientSafeBindErrorSpeaksOfTheRuleWithoutATranslation(t *testing.T) {
+	require.NoError(t, validatorEngine.RegisterValidation("gstprobe", func(validator.FieldLevel) bool { return false }))
+	refused := validateRequest(&untranslatedProbe{})
+	require.Error(t, refused)
+
+	var serviceErr *serviceregistry.Error
+	require.ErrorAs(t, clientSafeBindError(refused), &serviceErr)
+	require.Equal(t, []serviceregistry.FieldViolation{
+		{Field: "host", Description: "host failed the hostname check"},
+		{Field: "address.zip", Description: "address.zip failed the hostname check"},
+		{Field: "tag", Description: "tag failed the startswith=ab check"},
+		{Field: "own", Description: "own failed the gstprobe check"},
+	}, serviceErr.FieldViolations())
+	require.NotContains(t, serviceErr.Msg(), "Key:")
+	require.NotContains(t, serviceErr.Msg(), "untranslatedProbe")
+}
+
+// probeAudit, probeTaggedAudit and probeNamedAudit are the structs
+// jsonPathProbe holds in the ways a request struct holds one.
+type (
+	probeAudit struct {
+		Reviewer string `json:"reviewer" binding:"required"`
+	}
+	probeTaggedAudit struct {
+		Signer string `json:"signer" binding:"required"`
+	}
+	probeNamedAudit struct {
+		Approver string `json:"approver" binding:"required"`
+	}
+)
+
+// jsonPathProbe holds a struct in each way JSON names, or does not name,
+// the level: embedded without a name, whose fields JSON promotes; embedded
+// under a name; a named field; a named field without a json tag, which
+// JSON names after the field; and the items of a slice.
+type jsonPathProbe struct {
+	probeAudit
+	probeTaggedAudit `json:"audit"`
+	Named            probeNamedAudit `json:"named"`
+	Plain            probeNamedAudit
+	Items            []probeAudit `json:"items" binding:"dive"`
+	Name             string       `json:"name" binding:"required"`
+}
+
+// TestClientSafeBindErrorNamesTheFieldsByTheirJSONPath pins that a field is
+// named by the path the client sent it under: an embedded struct without a
+// name of its own is no level of the path, since JSON promotes its fields,
+// where an embedded struct under a name, a named field and a field without
+// a json tag each are, under their JSON name, and the items of a slice by
+// their index.
+func TestClientSafeBindErrorNamesTheFieldsByTheirJSONPath(t *testing.T) {
+	refused := validateRequest(&jsonPathProbe{Items: []probeAudit{{}, {}}})
+	require.Error(t, refused)
+
+	var serviceErr *serviceregistry.Error
+	require.ErrorAs(t, clientSafeBindError(refused), &serviceErr)
+	fields := make([]string, 0, len(serviceErr.FieldViolations()))
+	for _, v := range serviceErr.FieldViolations() {
+		fields = append(fields, v.Field)
+	}
+	require.Equal(t, []string{"reviewer", "audit.signer", "named.approver", "Plain.approver", "items[0].reviewer", "items[1].reviewer", "name"}, fields)
+	require.Equal(t, "reviewer is a required field", serviceErr.FieldViolations()[0].Description)
 }
 
 // freshPatchHelper marks the child process of

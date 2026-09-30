@@ -163,7 +163,9 @@ query 名不要以 `_` 开头。反过来，所有裸名参数都属于业务字
 - 数据不满足数据库约束时同样是 4xx，`msg` 可直接展示：外键指向不存在或还被引用的记录返回
   `409`；check 约束不满足、值超过列长度返回 `400`。
 - 字段校验失败返回 `400`，`msg` 点名字段：`name is a required field`，多个字段用分号连，
-  嵌套字段写路径 `address.city`，批量请求的项写 `items[1].name`；字段名是 JSON 名。
+  嵌套字段写路径 `address.city`，批量请求的项写 `items[1].name`；字段名是 JSON 名，没有 json 名的
+  嵌入结构体不占路径一层，它的字段按 JSON 提升后的名字写。校验器没有现成句子的规则（含项目自己注册的）
+  写成 `host failed the hostname check`，规则带参数时带上：`tag failed the startswith=ab check`。
 
 ## 关键规则
 

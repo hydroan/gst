@@ -92,15 +92,38 @@ func decodeJSONRequest(c *gin.Context, target any) error {
 // validator: the check bindJSONRequest makes of a bound body and the call
 // functions make of the value a request message decoded into, so a model or
 // payload meets the same tags on both transports. The error is the
-// validator's own, naming Go fields, for each transport to wrap in its
-// client-safe message. A nil binding.Validator is gin's documented way to
-// turn validation off; gin's own binding paths nil-check it, so this does
-// the same.
+// validator's own, naming Go fields, with the type it checked (see
+// refusedRequestError), for each transport to wrap in its client-safe message. A
+// nil binding.Validator is gin's documented way to turn validation off;
+// gin's own binding paths nil-check it, so this does the same.
 func validateRequest(target any) error {
 	if binding.Validator == nil {
 		return nil
 	}
-	return binding.Validator.ValidateStruct(target)
+	return refused(binding.Validator.ValidateStruct(target), target)
+}
+
+// refusedRequestError is the error of a request the validator refused, with the
+// type the validator checked: the type names the fields refused by the JSON
+// path the client sent them under (see jsonFieldPath), which the
+// validator's namespaces, one of tag names and one of Go names, do not tell
+// on their own, an embedded struct being a level of both and none of the
+// JSON. The validator's own error stays reachable through Unwrap.
+type refusedRequestError struct {
+	err error
+	typ reflect.Type
+}
+
+func (r *refusedRequestError) Error() string { return r.err.Error() }
+func (r *refusedRequestError) Unwrap() error { return r.err }
+
+// refused returns err, the outcome of validating target, as the
+// refusedRequestError of target when it is an error, and nil when it is nil.
+func refused(err error, target any) error {
+	if err == nil {
+		return nil
+	}
+	return &refusedRequestError{err: err, typ: reflect.TypeOf(target)}
 }
 
 var (
@@ -129,12 +152,7 @@ func init() {
 	if !ok {
 		return
 	}
-	engine.RegisterTagNameFunc(func(field reflect.StructField) string {
-		if name := jsonTagName(field); name != "-" {
-			return name
-		}
-		return ""
-	})
+	engine.RegisterTagNameFunc(fieldJSONName)
 	english := en.New()
 	translator, _ := ut.New(english, english).GetTranslator(english.Locale())
 	if err := entranslations.RegisterDefaultTranslations(engine, translator); err != nil {
@@ -152,34 +170,138 @@ func jsonTagName(field reflect.StructField) string {
 	return name
 }
 
+// fieldJSONName returns the name a field carries in JSON: the name its json
+// tag gives it, and the field's own name when the tag gives none or leaves
+// the field out. It names the fields for the validator (see init) and for
+// the paths of the fields refused (see jsonFieldPath).
+func fieldJSONName(field reflect.StructField) string {
+	if name := jsonTagName(field); name != "" && name != "-" {
+		return name
+	}
+	return field.Name
+}
+
 // fieldViolations returns the fields a validator error names, one violation
-// per field: the field by its JSON key path relative to the request, with
-// prefix in front, items[1]. for the item of a batch validated on its own,
-// and the sentence the validator's translation renders the failure as,
-// with the path in place of the bare field name; nil for any other error,
-// and for the errors of a validator other than the one init configured,
-// which a project may have put in gin's place since.
+// per field: the field by its JSON key path relative to the request (see
+// jsonFieldPath), with prefix in front, items[1]. for the item of a batch
+// validated on its own, and a sentence for the failure. The sentence is the
+// validator's own English sentence for the rule with the path in place of
+// the bare field name it begins with, "address.city is a required field";
+// for a rule the validator has no sentence for, one of its own or one a
+// project registered, it is the path and the rule, "address.zip failed the
+// hostname check", the parameter with the rule when it has one, "tag failed
+// the startswith=ab check": the text the validator renders those with
+// instead names the Go type of the request and is not the client's. nil for
+// any other error, and for the errors of a validator other than the one
+// init configured, whose sentences and field names are its own.
 func fieldViolations(err error, prefix string) []serviceregistry.FieldViolation {
-	var refused validator.ValidationErrors
-	if validatorEngine == nil || binding.Validator == nil || binding.Validator.Engine() != validatorEngine || !errors.As(err, &refused) {
+	var request *refusedRequestError
+	var fieldErrors validator.ValidationErrors
+	if validatorEngine == nil || binding.Validator == nil || binding.Validator.Engine() != validatorEngine || !errors.As(err, &request) || !errors.As(request.err, &fieldErrors) {
 		return nil
 	}
-	violations := make([]serviceregistry.FieldViolation, 0, len(refused))
-	for _, fe := range refused {
-		path := prefix + fieldPath(fe.Namespace())
+	violations := make([]serviceregistry.FieldViolation, 0, len(fieldErrors))
+	for _, fe := range fieldErrors {
+		path := prefix + jsonFieldPath(request.typ, fe)
 		description := fe.Translate(validatorTranslator)
-		if field := fe.Field(); path != field {
-			description = path + strings.TrimPrefix(description, field)
+		if description == fe.Error() {
+			rule := fe.Tag()
+			if param := fe.Param(); param != "" {
+				rule += "=" + param
+			}
+			description = path + " failed the " + rule + " check"
+		} else {
+			description = path + strings.TrimPrefix(description, fe.Field())
 		}
 		violations = append(violations, serviceregistry.FieldViolation{Field: path, Description: description})
 	}
 	return violations
 }
 
+// jsonFieldPath returns the path of the field fe names, relative to the
+// request, as the client sent it: the JSON name of each field down from
+// typ, the type the validator checked, an index kept as it is, and nothing
+// for an embedded struct without a name of its own, whose fields JSON
+// promotes to its level. The validator's namespace of Go names (see
+// validator.FieldError.StructNamespace) drives the walk of the type; a
+// namespace the walk cannot follow falls back to the validator's namespace
+// of tag names (see fieldPath).
+func jsonFieldPath(typ reflect.Type, fe validator.FieldError) string {
+	fallback := fieldPath(fe.Namespace())
+	path := make([]string, 0, 4)
+	current := typ
+	for _, segment := range splitOutsideBrackets(fieldPath(fe.StructNamespace())) {
+		name, indexes, indexed := strings.Cut(segment, "[")
+		if indexed {
+			indexes = "[" + indexes
+		}
+		for current.Kind() == reflect.Pointer {
+			current = current.Elem()
+		}
+		if current.Kind() != reflect.Struct {
+			return fallback
+		}
+		var field reflect.StructField
+		found := false
+		for candidate := range current.Fields() {
+			if candidate.Name == name {
+				field, found = candidate, true
+				break
+			}
+		}
+		if !found {
+			return fallback
+		}
+		if field.Anonymous && jsonTagName(field) == "" {
+			if indexed {
+				return fallback
+			}
+		} else {
+			path = append(path, fieldJSONName(field)+indexes)
+		}
+		current = field.Type
+		for range strings.Count(indexes, "[") {
+			for current.Kind() == reflect.Pointer {
+				current = current.Elem()
+			}
+			switch current.Kind() {
+			case reflect.Slice, reflect.Array, reflect.Map:
+				current = current.Elem()
+			default:
+				return fallback
+			}
+		}
+	}
+	return strings.Join(path, ".")
+}
+
+// splitOutsideBrackets splits a namespace at the dots outside its brackets,
+// the key of a map field carrying any character: items[a.b].name is the two
+// segments items[a.b] and name.
+func splitOutsideBrackets(namespace string) []string {
+	segments := make([]string, 0, 4)
+	depth, start := 0, 0
+	for i, r := range namespace {
+		switch r {
+		case '[':
+			depth++
+		case ']':
+			depth--
+		case '.':
+			if depth == 0 {
+				segments = append(segments, namespace[start:i])
+				start = i + 1
+			}
+		}
+	}
+	return append(segments, namespace[start:])
+}
+
 // fieldPath returns the namespace of a validator error without the type of
 // the request at its head: what follows the first dot outside the brackets
 // a generic type's name may carry, batch[...].items[1].name being the
-// namespace of an item's field.
+// namespace of an item's field. It is what the path of a field falls back
+// to when jsonFieldPath cannot follow the type.
 func fieldPath(namespace string) string {
 	depth := 0
 	for i, r := range namespace {
@@ -206,23 +328,24 @@ func fieldPath(namespace string) string {
 // which is how patchFieldSet keys the fields (see covers). Nothing named
 // validates nothing. A validator other than go-playground's cannot be asked
 // for a part of the struct and checks the whole; nil turns validation off,
-// see validateRequest.
+// see validateRequest. The error carries the type checked the way
+// validateRequest's does.
 func validatePatchFields(target any, fields patchFieldSet) error {
 	if binding.Validator == nil || len(fields) == 0 {
 		return nil
 	}
 	engine, ok := binding.Validator.Engine().(*validator.Validate)
 	if !ok {
-		return binding.Validator.ValidateStruct(target)
+		return refused(binding.Validator.ValidateStruct(target), target)
 	}
 	typ := reflect.TypeOf(target)
 	for typ.Kind() == reflect.Pointer {
 		typ = typ.Elem()
 	}
 	prefix := typ.Name() + "."
-	return engine.StructFiltered(target, func(ns []byte) bool {
+	return refused(engine.StructFiltered(target, func(ns []byte) bool {
 		return !fields.covers(strings.TrimPrefix(string(ns), prefix))
-	})
+	}), target)
 }
 
 // requiredBodyError translates the io.EOF sentinel of an absent request body
