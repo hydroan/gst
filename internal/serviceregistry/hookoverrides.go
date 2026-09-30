@@ -5,8 +5,8 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/hydroan/gst/internal/hookoverride"
 	"github.com/hydroan/gst/internal/modelregistry"
+	"github.com/hydroan/gst/internal/modelregistry/hookoverride"
 )
 
 // Hook override detection for services.
