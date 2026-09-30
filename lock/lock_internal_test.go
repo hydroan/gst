@@ -13,9 +13,9 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/database"
-	"github.com/hydroan/gst/database/mysql"
-	"github.com/hydroan/gst/database/postgres"
-	"github.com/hydroan/gst/database/sqlite"
+	gstmysql "github.com/hydroan/gst/database/mysql"
+	gstpostgres "github.com/hydroan/gst/database/postgres"
+	gstsqlite "github.com/hydroan/gst/database/sqlite"
 	"github.com/hydroan/gst/internal/dbruntime"
 	"github.com/hydroan/gst/internal/execctx"
 	"github.com/hydroan/gst/internal/lease"
@@ -23,8 +23,8 @@ import (
 	"github.com/hydroan/gst/internal/modelregistry"
 	"github.com/hydroan/gst/internal/testutil"
 	"github.com/hydroan/gst/internal/testutil/testcontainer"
-	logpkg "github.com/hydroan/gst/logger"
-	pkgzap "github.com/hydroan/gst/logger/zap"
+	"github.com/hydroan/gst/logger"
+	gstzap "github.com/hydroan/gst/logger/zap"
 	"github.com/stretchr/testify/require"
 	"gorm.io/gorm"
 	gormlogger "gorm.io/gorm/logger"
@@ -48,17 +48,17 @@ func run(m *testing.M) int {
 	}
 	defer func() { _ = release() }()
 
-	logpkg.Gorm = gormlogger.Discard
+	logger.Gorm = gormlogger.Discard
 	// A write through the database chain logs its outcome; the fallback
 	// drops the entry in a process that never initialized the loggers.
-	logpkg.Database = pkgzap.Fallback("database")
+	logger.Database = gstzap.Fallback("database")
 	if err := config.Init(); err != nil {
 		panic(err)
 	}
 	// Registered before the database opens, so its table is created with the
 	// lease table.
 	modelregistry.Register[*hookedRecord]()
-	if err := errors.Join(sqlite.Init(), mysql.Init(), postgres.Init()); err != nil {
+	if err := errors.Join(gstsqlite.Init(), gstmysql.Init(), gstpostgres.Init()); err != nil {
 		panic(err)
 	}
 	if err := dbruntime.Wait(); err != nil {
@@ -135,7 +135,7 @@ func TestTryRunRefusesAnOpenTransaction(t *testing.T) {
 	resetLockState(t)
 	l := New("transactional-work")
 
-	other, err := sqlite.New(config.Sqlite{Path: filepath.Join(t.TempDir(), "other.db")})
+	other, err := gstsqlite.New(config.Sqlite{Path: filepath.Join(t.TempDir(), "other.db")})
 	require.NoError(t, err)
 	t.Cleanup(func() {
 		pool, err := other.DB()
@@ -317,11 +317,11 @@ func TestLocksAreALifecycleComponent(t *testing.T) {
 	require.Nil(t, component.Stop, "a lock holds nothing between tries, so there is nothing to stop")
 
 	New("component-work")
-	component.SetLogger(pkgzap.New("bound_lock.log"))
+	component.SetLogger(gstzap.New("bound_lock.log"))
 	require.NoError(t, component.Start(context.Background()))
 	require.True(t, started, "the locks must have been checked through the component")
 
-	pkgzap.Clean()
+	gstzap.Clean()
 	entry := readLogEntry(t, filepath.Join(dir, "bound_lock.log"), "declared lock")
 	require.Equal(t, "component-work", entry["name"])
 	require.NoFileExists(t, filepath.Join(dir, "lock.log"), "the bound logger replaces the package's own")

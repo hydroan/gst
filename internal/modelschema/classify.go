@@ -5,7 +5,7 @@ import (
 	"strings"
 	"time"
 
-	"gorm.io/gorm/schema"
+	gormschema "gorm.io/gorm/schema"
 )
 
 // ColumnClass is the aggregate capability a column type carries. It decides
@@ -83,9 +83,9 @@ func IsJSONType(typ reflect.Type) bool {
 		typ = typ.Elem()
 	}
 	value := reflect.New(typ)
-	decl, ok := reflect.TypeAssert[schema.GormDataTypeInterface](value.Elem())
+	decl, ok := reflect.TypeAssert[gormschema.GormDataTypeInterface](value.Elem())
 	if !ok {
-		if decl, ok = reflect.TypeAssert[schema.GormDataTypeInterface](value); !ok {
+		if decl, ok = reflect.TypeAssert[gormschema.GormDataTypeInterface](value); !ok {
 			return false
 		}
 	}

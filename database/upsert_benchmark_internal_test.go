@@ -7,7 +7,7 @@ import (
 	"github.com/hydroan/gst/internal/modelregistry"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
-	glogger "gorm.io/gorm/logger"
+	gormlogger "gorm.io/gorm/logger"
 )
 
 type syncBenchPlainItem struct {
@@ -41,7 +41,7 @@ func (*syncBenchIndexerItem) Indexes() []modelregistry.Index {
 func BenchmarkSyncSaveResultsByUniqueIndexes(b *testing.B) {
 	gormDB, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{
 		DryRun: true,
-		Logger: glogger.Default.LogMode(glogger.Silent),
+		Logger: gormlogger.Default.LogMode(gormlogger.Silent),
 	})
 	if err != nil {
 		b.Fatal(err)

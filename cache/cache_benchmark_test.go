@@ -20,7 +20,7 @@ import (
 	"github.com/hydroan/gst/internal/modelregistry"
 	"github.com/hydroan/gst/internal/testutil"
 	"github.com/hydroan/gst/internal/types"
-	"github.com/hydroan/gst/redis"
+	gstredis "github.com/hydroan/gst/redis"
 )
 
 type User struct {
@@ -133,7 +133,7 @@ func BenchmarkInt(b *testing.B) {
 		benchInt(b, ristretto.Cache[int]())
 	})
 	b.Run("redis", func(b *testing.B) {
-		benchInt(b, redis.Cache[int]())
+		benchInt(b, gstredis.Cache[int]())
 	})
 }
 
@@ -169,7 +169,7 @@ func BenchmarkIntParallel(b *testing.B) {
 		benchIntParallel(b, ristretto.Cache[int]())
 	})
 	b.Run("redis", func(b *testing.B) {
-		benchIntParallel(b, redis.Cache[int]())
+		benchIntParallel(b, gstredis.Cache[int]())
 	})
 }
 
@@ -205,7 +205,7 @@ func BenchmarkString(b *testing.B) {
 		benchString(b, ristretto.Cache[string]())
 	})
 	b.Run("redis", func(b *testing.B) {
-		benchString(b, redis.Cache[string]())
+		benchString(b, gstredis.Cache[string]())
 	})
 }
 
@@ -241,7 +241,7 @@ func BenchmarkStringParallel(b *testing.B) {
 		benchStringParallel(b, ristretto.Cache[string]())
 	})
 	b.Run("redis", func(b *testing.B) {
-		benchStringParallel(b, redis.Cache[string]())
+		benchStringParallel(b, gstredis.Cache[string]())
 	})
 }
 
@@ -277,7 +277,7 @@ func BenchmarkUser(b *testing.B) {
 		benchUser(b, ristretto.Cache[User]())
 	})
 	b.Run("redis", func(b *testing.B) {
-		benchUser(b, redis.Cache[User]())
+		benchUser(b, gstredis.Cache[User]())
 	})
 }
 
@@ -313,7 +313,7 @@ func BenchmarkUserParallel(b *testing.B) {
 		benchUserParallel(b, ristretto.Cache[User]())
 	})
 	b.Run("redis", func(b *testing.B) {
-		benchUserParallel(b, redis.Cache[User]())
+		benchUserParallel(b, gstredis.Cache[User]())
 	})
 }
 

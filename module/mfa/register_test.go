@@ -27,7 +27,7 @@ import (
 	"github.com/hydroan/gst/middleware"
 	"github.com/hydroan/gst/module/iam"
 	"github.com/hydroan/gst/module/mfa"
-	"github.com/hydroan/gst/redis"
+	gstredis "github.com/hydroan/gst/redis"
 	"github.com/pquerna/otp"
 	"github.com/pquerna/otp/totp"
 	"github.com/stretchr/testify/require"
@@ -364,9 +364,9 @@ func TestTOTPLogin(t *testing.T) {
 			BackupCode: outageBackupCodes[0],
 		}
 
-		require.NoError(t, redis.Close())
+		require.NoError(t, gstredis.Close())
 		_, err = cli.Do(t.Context(), http.MethodPost, loginPath, login)
-		require.NoError(t, redis.Init())
+		require.NoError(t, gstredis.Init())
 		testutil.RequireError(t, err, http.StatusInternalServerError, "failed to verify second factor")
 		assertBackupCodeHashCount(t, outageDeviceID, 10)
 

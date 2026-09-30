@@ -18,15 +18,15 @@ import (
 	"github.com/hydroan/gst/util"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
-	gorml "gorm.io/gorm/logger"
+	gormlogger "gorm.io/gorm/logger"
 )
 
 // GormLogger implements gorm logger.Interface
 type GormLogger struct{ l types.Logger }
 
-var _ gorml.Interface = (*GormLogger)(nil)
+var _ gormlogger.Interface = (*GormLogger)(nil)
 
-func (g *GormLogger) LogMode(gorml.LogLevel) gorml.Interface { return g }
+func (g *GormLogger) LogMode(gormlogger.LogLevel) gormlogger.Interface { return g }
 
 // Info, Warn and Error carry gorm's own non-statement messages (migrator
 // progress, callback registration problems). gorm passes a printf format
@@ -292,7 +292,7 @@ func (g *GormLogger) Trace(ctx context.Context, begin time.Time, fc func() (sql 
 	if role := dbruntime.RoleFromContext(ctx); len(role) > 0 {
 		fields = append(fields, zap.String("db_role", role))
 	}
-	notFound := errors.Is(err, gorml.ErrRecordNotFound)
+	notFound := errors.Is(err, gormlogger.ErrRecordNotFound)
 	if notFound {
 		fields = append(fields, zap.Bool("record_not_found", true))
 	}

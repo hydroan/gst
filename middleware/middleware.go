@@ -12,7 +12,7 @@ package middleware
 
 import (
 	"github.com/gin-gonic/gin"
-	internalmiddleware "github.com/hydroan/gst/internal/middleware"
+	"github.com/hydroan/gst/internal/middleware"
 )
 
 // Register adds middlewares that run on every API route. Call it from an init
@@ -21,7 +21,7 @@ import (
 // router.Auth ahead of every middleware RegisterAuth adds. When tracing is
 // enabled, each middleware runs in a span of its own.
 func Register(middlewares ...gin.HandlerFunc) {
-	internalmiddleware.Register(middlewares...)
+	middleware.Register(middlewares...)
 }
 
 // RegisterAuth adds middlewares that run only on the routes registered on
@@ -31,7 +31,7 @@ func Register(middlewares ...gin.HandlerFunc) {
 // middleware Register adds. When tracing is enabled, each middleware runs in a
 // span of its own.
 func RegisterAuth(middlewares ...gin.HandlerFunc) {
-	internalmiddleware.RegisterAuth(middlewares...)
+	middleware.RegisterAuth(middlewares...)
 }
 
 // CircuitBreaker returns a middleware that runs each request through the
@@ -44,5 +44,5 @@ func RegisterAuth(middlewares ...gin.HandlerFunc) {
 // keeps the answer its handlers gave, failed or not. Requests to streaming
 // routes bypass the breaker.
 func CircuitBreaker() gin.HandlerFunc {
-	return internalmiddleware.CircuitBreaker()
+	return middleware.CircuitBreaker()
 }

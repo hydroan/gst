@@ -11,7 +11,7 @@ import (
 
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/config"
-	pkgzap "github.com/hydroan/gst/logger/zap"
+	gstzap "github.com/hydroan/gst/logger/zap"
 )
 
 // globalLogFile is the file the global stream writes to, named after what
@@ -57,7 +57,7 @@ func ToTempDir() (dir string, release func() error, err error) {
 	config.App.Logger.Console = false
 
 	return dir, func() error {
-		pkgzap.Clean()
+		gstzap.Clean()
 		return os.RemoveAll(dir)
 	}, nil
 }

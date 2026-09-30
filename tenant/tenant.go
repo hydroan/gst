@@ -35,7 +35,7 @@ import (
 	"github.com/cockroachdb/errors"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
-	"gorm.io/gorm/schema"
+	gormschema "gorm.io/gorm/schema"
 )
 
 // ErrTenantRequired reports an insert made under a cross-tenant scope without
@@ -77,19 +77,19 @@ type ID string
 // value that came from somewhere without a type.
 func (id ID) String() string { return string(id) }
 
-func (ID) QueryClauses(f *schema.Field) []clause.Interface {
+func (ID) QueryClauses(f *gormschema.Field) []clause.Interface {
 	return []clause.Interface{predicateClause{field: f}}
 }
 
-func (ID) UpdateClauses(f *schema.Field) []clause.Interface {
+func (ID) UpdateClauses(f *gormschema.Field) []clause.Interface {
 	return []clause.Interface{predicateClause{field: f}, immutableClause{field: f}}
 }
 
-func (ID) DeleteClauses(f *schema.Field) []clause.Interface {
+func (ID) DeleteClauses(f *gormschema.Field) []clause.Interface {
 	return []clause.Interface{predicateClause{field: f}}
 }
 
-func (ID) CreateClauses(f *schema.Field) []clause.Interface {
+func (ID) CreateClauses(f *gormschema.Field) []clause.Interface {
 	return []clause.Interface{stampClause{field: f}}
 }
 
@@ -112,7 +112,7 @@ func (s *Scope) GetTenantID() string { return string(s.TenantID) }
 // deletion, and a caller reaching for deleted rows is not asking to reach into
 // other tenants — the framework's hard-delete path and WithDeleted reads both
 // set it, and tenant scoping has to survive both.
-type predicateClause struct{ field *schema.Field }
+type predicateClause struct{ field *gormschema.Field }
 
 func (predicateClause) Name() string               { return "" }
 func (predicateClause) Build(clause.Builder)       {}
@@ -145,7 +145,7 @@ func (c predicateClause) ModifyStatement(stmt *gorm.Statement) {
 // value the caller supplied stands; when it supplied none, the tenant its
 // request is acting in does, and a caller with no request at all is refused
 // rather than having one guessed for it.
-type stampClause struct{ field *schema.Field }
+type stampClause struct{ field *gormschema.Field }
 
 func (stampClause) Name() string               { return "" }
 func (stampClause) Build(clause.Builder)       {}
@@ -190,7 +190,7 @@ func (c stampClause) ModifyStatement(stmt *gorm.Statement) {
 //
 // A cross-tenant caller is exempt because it acts in no single tenant, so there
 // is nothing to compare the value against.
-type immutableClause struct{ field *schema.Field }
+type immutableClause struct{ field *gormschema.Field }
 
 func (immutableClause) Name() string               { return "" }
 func (immutableClause) Build(clause.Builder)       {}

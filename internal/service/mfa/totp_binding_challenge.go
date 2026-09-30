@@ -11,7 +11,7 @@ import (
 
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst"
-	"github.com/hydroan/gst/redis"
+	gstredis "github.com/hydroan/gst/redis"
 	"github.com/hydroan/gst/service"
 )
 
@@ -40,7 +40,7 @@ var (
 	errTOTPBindChallengeInvalid  = errors.New("totp bind challenge invalid")
 
 	totpBindChallengeCache = func() gst.Cache[totpBindChallenge] {
-		return redis.Cache[totpBindChallenge]()
+		return gstredis.Cache[totpBindChallenge]()
 	}
 	totpBindChallengeNow          = func() time.Time { return time.Now().UTC() }
 	totpBindChallengeRandomReader = rand.Reader

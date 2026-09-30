@@ -13,14 +13,14 @@ package response
 
 import (
 	"github.com/gin-gonic/gin"
-	internalresponse "github.com/hydroan/gst/internal/response"
+	"github.com/hydroan/gst/internal/response"
 )
 
 // Abort refuses the request with status and msg, written in the API envelope,
 // and stops the handler chain. It is the one way to refuse a request from
 // outside the controller path.
 func Abort(c *gin.Context, status int, msg string) {
-	internalresponse.Abort(c, status, msg)
+	response.Abort(c, status, msg)
 }
 
 // AbortError refuses the request with err, written in the API envelope the
@@ -28,5 +28,5 @@ func Abort(c *gin.Context, status int, msg string) {
 // status and message, any other error as the server's own failure — and
 // stops the handler chain.
 func AbortError(c *gin.Context, err error) {
-	internalresponse.AbortError(c, err)
+	response.AbortError(c, err)
 }

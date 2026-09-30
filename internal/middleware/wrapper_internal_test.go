@@ -13,7 +13,7 @@ import (
 	"github.com/hydroan/gst/internal/testutil/oteltest"
 	"github.com/hydroan/gst/middleware/ratelimiter"
 	"github.com/stretchr/testify/require"
-	oteltrace "go.opentelemetry.io/otel/trace"
+	"go.opentelemetry.io/otel/trace"
 )
 
 // wrapperStampKey keys the value a test middleware attaches to the request
@@ -28,20 +28,20 @@ type wrapperStampKey struct{}
 func TestMiddlewareWrapperKeepsContextOfMiddlewareThatReturns(t *testing.T) {
 	setupTracingTest(t)
 
-	var rootSpanID, handlerSpanID oteltrace.SpanID
+	var rootSpanID, handlerSpanID trace.SpanID
 	var handlerStamp any
 
 	router := gin.New()
 	router.Use(tracing())
 	router.Use(func(c *gin.Context) {
-		rootSpanID = oteltrace.SpanFromContext(c.Request.Context()).SpanContext().SpanID()
+		rootSpanID = trace.SpanFromContext(c.Request.Context()).SpanContext().SpanID()
 	})
 	router.Use(middlewareWrapper("stamp", func(c *gin.Context) {
 		c.Request = c.Request.WithContext(context.WithValue(c.Request.Context(), wrapperStampKey{}, "stamped"))
 	}))
 	router.GET("/api/ping", func(c *gin.Context) {
 		handlerStamp = c.Request.Context().Value(wrapperStampKey{})
-		handlerSpanID = oteltrace.SpanFromContext(c.Request.Context()).SpanContext().SpanID()
+		handlerSpanID = trace.SpanFromContext(c.Request.Context()).SpanContext().SpanID()
 		c.Status(http.StatusNoContent)
 	})
 
@@ -110,8 +110,8 @@ func TestMiddlewareWrapperCoversDownstreamOfMiddlewareThatCallsNext(t *testing.T
 func TestMiddlewareWrapperKeepsMiddlewareSpanWhenSamplerDrops(t *testing.T) {
 	setupTracingTest(t, oteltest.WithSampler(config.TracesSamplerAlwaysOff))
 
-	var rootSpanContext oteltrace.SpanContext
-	var middlewareSpanContext oteltrace.SpanContext
+	var rootSpanContext trace.SpanContext
+	var middlewareSpanContext trace.SpanContext
 
 	router := gin.New()
 	router.Use(tracing())
@@ -119,16 +119,16 @@ func TestMiddlewareWrapperKeepsMiddlewareSpanWhenSamplerDrops(t *testing.T) {
 		rootSpan, exists := c.Get("otel_span")
 		require.True(t, exists)
 
-		root, ok := rootSpan.(oteltrace.Span)
+		root, ok := rootSpan.(trace.Span)
 		require.True(t, ok)
 		rootSpanContext = root.SpanContext()
 
-		currentSpan := oteltrace.SpanFromContext(c.Request.Context())
+		currentSpan := trace.SpanFromContext(c.Request.Context())
 		middlewareSpanContext = currentSpan.SpanContext()
 		require.False(t, currentSpan.IsRecording())
 	}))
 	router.GET("/api/ping", func(c *gin.Context) {
-		currentSpanContext := oteltrace.SpanFromContext(c.Request.Context()).SpanContext()
+		currentSpanContext := trace.SpanFromContext(c.Request.Context()).SpanContext()
 		require.Equal(t, rootSpanContext.SpanID(), currentSpanContext.SpanID())
 		c.Status(http.StatusNoContent)
 	})

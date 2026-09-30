@@ -11,7 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
-	sdktrace "go.opentelemetry.io/otel/sdk/trace"
+	"go.opentelemetry.io/otel/sdk/trace"
 	"go.opentelemetry.io/otel/sdk/trace/tracetest"
 	semconv "go.opentelemetry.io/otel/semconv/v1.26.0"
 	oteltrace "go.opentelemetry.io/otel/trace"
@@ -26,10 +26,10 @@ func TestNormalizeConfigUsesOTELDefaults(t *testing.T) {
 	require.Equal(t, config.OTLPCompressionNone, cfg.ExporterOTLPCompression)
 	require.Equal(t, config.TracesSamplerParentBasedAlwaysOn, cfg.TracesSampler)
 	require.Empty(t, cfg.TracesSamplerArg)
-	require.Equal(t, sdktrace.DefaultMaxQueueSize, cfg.BSPMaxQueueSize)
-	require.Equal(t, sdktrace.DefaultMaxExportBatchSize, cfg.BSPMaxExportBatchSize)
-	require.Equal(t, time.Duration(sdktrace.DefaultScheduleDelay)*time.Millisecond, cfg.BSPScheduleDelay)
-	require.Equal(t, time.Duration(sdktrace.DefaultExportTimeout)*time.Millisecond, cfg.BSPExportTimeout)
+	require.Equal(t, trace.DefaultMaxQueueSize, cfg.BSPMaxQueueSize)
+	require.Equal(t, trace.DefaultMaxExportBatchSize, cfg.BSPMaxExportBatchSize)
+	require.Equal(t, time.Duration(trace.DefaultScheduleDelay)*time.Millisecond, cfg.BSPScheduleDelay)
+	require.Equal(t, time.Duration(trace.DefaultExportTimeout)*time.Millisecond, cfg.BSPExportTimeout)
 }
 
 func TestNormalizeConfigUsesGRPCDefaultEndpoint(t *testing.T) {
@@ -48,9 +48,9 @@ func TestNewSamplerUsesParentBasedTraceIDRatio(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	require.Equal(t, sdktrace.RecordAndSample, sampleDecision(context.Background(), t, sampler))
-	require.Equal(t, sdktrace.RecordAndSample, sampleDecision(parentContext(t, true), t, sampler))
-	require.Equal(t, sdktrace.Drop, sampleDecision(parentContext(t, false), t, sampler))
+	require.Equal(t, trace.RecordAndSample, sampleDecision(context.Background(), t, sampler))
+	require.Equal(t, trace.RecordAndSample, sampleDecision(parentContext(t, true), t, sampler))
+	require.Equal(t, trace.Drop, sampleDecision(parentContext(t, false), t, sampler))
 }
 
 func TestNewSamplerRejectsInvalidTraceIDRatio(t *testing.T) {
@@ -266,11 +266,11 @@ func newStackTracedError() error {
 
 // recordErrorOnSpan runs RecordError against a real recording span and
 // returns the ended span for assertions.
-func recordErrorOnSpan(t *testing.T, err error) sdktrace.ReadOnlySpan {
+func recordErrorOnSpan(t *testing.T, err error) trace.ReadOnlySpan {
 	t.Helper()
 
 	recorder := tracetest.NewSpanRecorder()
-	provider := sdktrace.NewTracerProvider(sdktrace.WithSpanProcessor(recorder))
+	provider := trace.NewTracerProvider(trace.WithSpanProcessor(recorder))
 	t.Cleanup(func() { require.NoError(t, provider.Shutdown(context.Background())) })
 
 	_, span := provider.Tracer("test").Start(context.Background(), "operation")
@@ -282,7 +282,7 @@ func recordErrorOnSpan(t *testing.T, err error) sdktrace.ReadOnlySpan {
 	return spans[0]
 }
 
-func exceptionStackTrace(t *testing.T, span sdktrace.ReadOnlySpan) string {
+func exceptionStackTrace(t *testing.T, span trace.ReadOnlySpan) string {
 	t.Helper()
 
 	events := span.Events()
@@ -317,13 +317,13 @@ func (s *attributeCountingSpan) SetAttributes(kv ...attribute.KeyValue) {
 
 func (s *attributeCountingSpan) SetStatus(code codes.Code, description string) {}
 
-func sampleDecision(parent context.Context, t *testing.T, sampler sdktrace.Sampler) sdktrace.SamplingDecision {
+func sampleDecision(parent context.Context, t *testing.T, sampler trace.Sampler) trace.SamplingDecision {
 	t.Helper()
 
 	traceID, err := oteltrace.TraceIDFromHex("11111111111111111111111111111111")
 	require.NoError(t, err)
 
-	result := sampler.ShouldSample(sdktrace.SamplingParameters{
+	result := sampler.ShouldSample(trace.SamplingParameters{
 		ParentContext: parent,
 		TraceID:       traceID,
 		Name:          "GET /api/ping",

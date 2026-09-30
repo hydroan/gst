@@ -4,17 +4,17 @@ import (
 	"fmt"
 	"testing"
 
-	pq "github.com/hydroan/gst/ds/queue/priorityqueue"
+	"github.com/hydroan/gst/ds/queue/priorityqueue"
 )
 
-func createQueue(b *testing.B, size int, safe bool) *pq.Queue[int] {
+func createQueue(b *testing.B, size int, safe bool) *priorityqueue.Queue[int] {
 	b.Helper()
-	var q *pq.Queue[int]
+	var q *priorityqueue.Queue[int]
 	var err error
 	if safe {
-		q, err = pq.New(intCmp, pq.WithSafe[int]())
+		q, err = priorityqueue.New(intCmp, priorityqueue.WithSafe[int]())
 	} else {
-		q, err = pq.New(intCmp)
+		q, err = priorityqueue.New(intCmp)
 	}
 	if err != nil {
 		b.Fatalf("failed to create queue: %v", err)
@@ -25,7 +25,7 @@ func createQueue(b *testing.B, size int, safe bool) *pq.Queue[int] {
 	return q
 }
 
-func benchmark(b *testing.B, sizes []int, do func(q *pq.Queue[int])) {
+func benchmark(b *testing.B, sizes []int, do func(q *priorityqueue.Queue[int])) {
 	b.Helper()
 	for _, size := range sizes {
 		b.Run(fmt.Sprintf("size-%d", size), func(b *testing.B) {
@@ -57,31 +57,31 @@ func benchmark(b *testing.B, sizes []int, do func(q *pq.Queue[int])) {
 }
 
 func BenchmarkPriorityQueue_Enqueue(b *testing.B) {
-	benchmark(b, []int{10, 100000}, func(q *pq.Queue[int]) {
+	benchmark(b, []int{10, 100000}, func(q *priorityqueue.Queue[int]) {
 		q.Enqueue(0)
 	})
 }
 
 func BenchmarkPriorityQueue_Dequeue(b *testing.B) {
-	benchmark(b, []int{10, 100000}, func(q *pq.Queue[int]) {
+	benchmark(b, []int{10, 100000}, func(q *priorityqueue.Queue[int]) {
 		_, _ = q.Dequeue()
 	})
 }
 
 func BenchmarkPriorityQueue_Peek(b *testing.B) {
-	benchmark(b, []int{10, 100000}, func(q *pq.Queue[int]) {
+	benchmark(b, []int{10, 100000}, func(q *priorityqueue.Queue[int]) {
 		_, _ = q.Peek()
 	})
 }
 
 func BenchmarkPriorityQueue_Values(b *testing.B) {
-	benchmark(b, []int{10, 100000}, func(q *pq.Queue[int]) {
+	benchmark(b, []int{10, 100000}, func(q *priorityqueue.Queue[int]) {
 		_ = q.Values()
 	})
 }
 
 func BenchmarkPriorityQueue_Clone(b *testing.B) {
-	benchmark(b, []int{10, 100000}, func(q *pq.Queue[int]) {
+	benchmark(b, []int{10, 100000}, func(q *priorityqueue.Queue[int]) {
 		_ = q.Clone()
 	})
 }

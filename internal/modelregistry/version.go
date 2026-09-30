@@ -6,7 +6,7 @@ import (
 	"strings"
 	"sync"
 
-	"gorm.io/gorm/schema"
+	gormschema "gorm.io/gorm/schema"
 )
 
 // Version is the optimistic-locking column type. A model opts in by declaring
@@ -253,7 +253,7 @@ func versionColumnName(field reflect.StructField) string {
 			return name
 		}
 	}
-	return schema.NamingStrategy{}.ColumnName("", field.Name)
+	return gormschema.NamingStrategy{}.ColumnName("", field.Name)
 }
 
 // IsVersioned reports whether m declares a Version field and therefore takes

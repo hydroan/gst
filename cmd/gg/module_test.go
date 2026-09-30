@@ -5,7 +5,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	runtimedebug "runtime/debug"
+	"runtime/debug"
 	"strings"
 	"testing"
 
@@ -69,7 +69,7 @@ func TestRunModuleListReportsCopyableModules(t *testing.T) {
 }
 
 func TestRunModuleListDoesNotDependOnGoPretty(t *testing.T) {
-	buildInfo, ok := runtimedebug.ReadBuildInfo()
+	buildInfo, ok := debug.ReadBuildInfo()
 	if !ok {
 		t.Fatal("read build info")
 	}

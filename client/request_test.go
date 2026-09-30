@@ -16,7 +16,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/propagation"
-	sdktrace "go.opentelemetry.io/otel/sdk/trace"
+	"go.opentelemetry.io/otel/sdk/trace"
 )
 
 // newEnvelopeServer returns a test server answering with a gst envelope and a
@@ -164,7 +164,7 @@ func TestRequestCarriesTraceOfContext(t *testing.T) {
 		restore := otel.GetTextMapPropagator()
 		otel.SetTextMapPropagator(propagation.TraceContext{})
 		t.Cleanup(func() { otel.SetTextMapPropagator(restore) })
-		provider := sdktrace.NewTracerProvider()
+		provider := trace.NewTracerProvider()
 		t.Cleanup(func() { require.NoError(t, provider.Shutdown(context.Background())) })
 		ctx, span := provider.Tracer("client-test").Start(t.Context(), "caller")
 		defer span.End()

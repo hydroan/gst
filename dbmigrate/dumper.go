@@ -20,7 +20,7 @@ import (
 	"gorm.io/driver/postgres"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
-	"gorm.io/gorm/logger"
+	gormlogger "gorm.io/gorm/logger"
 )
 
 // SchemaDumper renders models into the target schema DDL that Migrate diffs
@@ -271,10 +271,10 @@ type dumperLogger struct {
 	SQLs []string
 }
 
-func (l *dumperLogger) LogMode(level logger.LogLevel) logger.Interface     { return l }
-func (l *dumperLogger) Info(ctx context.Context, msg string, data ...any)  {}
-func (l *dumperLogger) Warn(ctx context.Context, msg string, data ...any)  {}
-func (l *dumperLogger) Error(ctx context.Context, msg string, data ...any) {}
+func (l *dumperLogger) LogMode(level gormlogger.LogLevel) gormlogger.Interface { return l }
+func (l *dumperLogger) Info(ctx context.Context, msg string, data ...any)      {}
+func (l *dumperLogger) Warn(ctx context.Context, msg string, data ...any)      {}
+func (l *dumperLogger) Error(ctx context.Context, msg string, data ...any)     {}
 
 func (l *dumperLogger) Trace(ctx context.Context, begin time.Time, fc func() (string, int64), err error) {
 	sql, _ := fc()

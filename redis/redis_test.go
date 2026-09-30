@@ -8,15 +8,15 @@ import (
 
 	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/internal/testutil/oteltest"
-	"github.com/hydroan/gst/redis"
-	goredis "github.com/redis/go-redis/v9"
+	gstredis "github.com/hydroan/gst/redis"
+	"github.com/redis/go-redis/v9"
 	"github.com/stretchr/testify/require"
 )
 
 // TestHealthReportsReachableServer asserts the readiness answer a connected
 // process gives.
 func TestHealthReportsReachableServer(t *testing.T) {
-	if err := redis.Health(t.Context()); err != nil {
+	if err := gstredis.Health(t.Context()); err != nil {
 		t.Fatalf("want a healthy connection, got %v", err)
 	}
 }
@@ -35,17 +35,17 @@ func TestInitInstrumentsTracingWithoutCallerAttributes(t *testing.T) {
 	// suite back a bare client instead of one whose hook points at a
 	// provider that is gone.
 	t.Cleanup(func() {
-		require.NoError(t, redis.Close())
-		require.NoError(t, redis.Init())
+		require.NoError(t, gstredis.Close())
+		require.NoError(t, gstredis.Init())
 	})
 	oteltest.Enable(t)
 	recorder := oteltest.Record(t)
-	require.NoError(t, redis.Close())
-	require.NoError(t, redis.Init())
+	require.NoError(t, gstredis.Close())
+	require.NoError(t, gstredis.Init())
 
 	key := "redis_test:tracing:" + t.Name()
-	require.NoError(t, redis.Set(t.Context(), key, "value", time.Minute))
-	t.Cleanup(func() { _ = redis.Del(t.Context(), key) })
+	require.NoError(t, gstredis.Set(t.Context(), key, "value", time.Minute))
+	t.Cleanup(func() { _ = gstredis.Del(t.Context(), key) })
 
 	span := oteltest.EndedNamed(t, recorder, "set")
 	keys := make([]string, 0, len(span.Attributes()))
@@ -64,15 +64,15 @@ func TestInitInstrumentsTracingWithoutCallerAttributes(t *testing.T) {
 // formats the statement or opens a span for nobody.
 func TestInitLeavesCommandsBareWhenTracingIsOff(t *testing.T) {
 	require.False(t, config.App.OTEL.Enabled, "the suite runs with tracing configured off")
-	connected, err := redis.Client()
+	connected, err := gstredis.Client()
 	require.NoError(t, err)
-	bare, err := redis.New(config.App.Redis)
+	bare, err := gstredis.New(config.App.Redis)
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = bare.Close() })
 
-	key := redis.Key("redis_test:bare:" + t.Name())
+	key := gstredis.Key("redis_test:bare:" + t.Name())
 	t.Cleanup(func() { _ = connected.Del(context.Background(), key).Err() })
-	allocsPerSet := func(client goredis.UniversalClient) int {
+	allocsPerSet := func(client redis.UniversalClient) int {
 		ctx := context.Background()
 		// The first command dials the connection; keep it out of the count.
 		require.NoError(t, client.Set(ctx, key, "value", time.Minute).Err())
@@ -92,18 +92,18 @@ func TestInitLeavesCommandsBareWhenTracingIsOff(t *testing.T) {
 // client from New, which carries no hooks. The gap between the two is the
 // hooks' share; with tracing configured off there is none to pay.
 func BenchmarkCommandInstrumentation(b *testing.B) {
-	instrumented, err := redis.Client()
+	instrumented, err := gstredis.Client()
 	require.NoError(b, err)
-	bare, err := redis.New(config.App.Redis)
+	bare, err := gstredis.New(config.App.Redis)
 	require.NoError(b, err)
 	b.Cleanup(func() { _ = bare.Close() })
 
-	key := redis.Key("redis_test:bench:" + b.Name())
+	key := gstredis.Key("redis_test:bench:" + b.Name())
 	b.Cleanup(func() { _ = instrumented.Del(context.Background(), key).Err() })
 
 	clients := []struct {
 		name   string
-		client goredis.UniversalClient
+		client redis.UniversalClient
 	}{
 		{name: "instrumented", client: instrumented},
 		{name: "bare", client: bare},

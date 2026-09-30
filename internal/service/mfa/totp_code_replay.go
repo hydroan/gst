@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/errors"
-	"github.com/hydroan/gst/redis"
+	gstredis "github.com/hydroan/gst/redis"
 )
 
 // totpCodeReplayTTL outlives the ±1-period validation window (about 90 seconds
@@ -29,7 +29,7 @@ var errTOTPCodeReplayed = errors.New("TOTP code already used")
 // instead of silently accepted (fail closed).
 func markTOTPCodeUsed(ctx context.Context, userID, code string) error {
 	key := strings.Join([]string{totpCodeReplayKeyPrefix, strings.TrimSpace(userID), strings.TrimSpace(code)}, ":")
-	ok, err := redis.SetNX(ctx, key, "1", totpCodeReplayTTL)
+	ok, err := gstredis.SetNX(ctx, key, "1", totpCodeReplayTTL)
 	if err != nil {
 		return errors.Wrap(err, "mark TOTP code used")
 	}

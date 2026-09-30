@@ -8,7 +8,7 @@ import (
 
 	"github.com/cockroachdb/errors"
 	"gorm.io/gorm"
-	"gorm.io/gorm/schema"
+	gormschema "gorm.io/gorm/schema"
 )
 
 // indexNameMaxLen is the identifier length limit shared by the supported
@@ -61,7 +61,7 @@ type IndexPlan struct {
 // CreateSQL renders the CREATE INDEX statement for the plan using the
 // dialector's identifier quoting. Every consumer must render statements
 // through this single method so DDL text never diverges between the
-// database and the migration schema.
+// database and the migration gormschema.
 func (p IndexPlan) CreateSQL(dialector gorm.Dialector) string {
 	var b strings.Builder
 	b.WriteString("CREATE ")
@@ -115,7 +115,7 @@ func ParseIndexPlans(db *gorm.DB, model any) ([]IndexPlan, error) {
 // every field must exist, no column repeats inside one index, no two
 // declarations share the same column sequence, and no declaration may
 // duplicate a struct tag index.
-func buildIndexPlans(sch *schema.Schema, tableName string, decls []Index) ([]IndexPlan, error) {
+func buildIndexPlans(sch *gormschema.Schema, tableName string, decls []Index) ([]IndexPlan, error) {
 	plans := make([]IndexPlan, 0, len(decls))
 	declared := make(map[string]struct{}, len(decls))
 	for _, decl := range decls {
@@ -167,7 +167,7 @@ func buildIndexPlans(sch *schema.Schema, tableName string, decls []Index) ([]Ind
 // in business projects, but running gg check is the project's choice, so
 // this entry point keeps validating its own input instead of trusting that
 // the ban was enforced elsewhere.
-func checkTagIndexConflicts(sch *schema.Schema, plans []IndexPlan) error {
+func checkTagIndexConflicts(sch *gormschema.Schema, plans []IndexPlan) error {
 	for _, tagIndex := range sch.ParseIndexes() {
 		columns := make([]string, 0, len(tagIndex.Fields))
 		for _, opt := range tagIndex.Fields {

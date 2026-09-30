@@ -4,7 +4,7 @@ package logger
 import (
 	"github.com/hydroan/gst/internal/types"
 	"go.uber.org/zap"
-	gorml "gorm.io/gorm/logger"
+	gormlogger "gorm.io/gorm/logger"
 )
 
 var (
@@ -47,5 +47,5 @@ var (
 	// from, with their stacks. One logger serves both so the file has one
 	// writer: a second one on the same path would race it at rotation.
 	Recovery *zap.Logger
-	Gorm     gorml.Interface
+	Gorm     gormlogger.Interface
 )

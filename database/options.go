@@ -4,7 +4,7 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/internal/types"
 	"gorm.io/gorm"
-	glogger "gorm.io/gorm/logger"
+	gormlogger "gorm.io/gorm/logger"
 )
 
 // This file holds the execution-mode options: how an operation runs (batch
@@ -123,7 +123,7 @@ func (db *database[M]) WithDryRun(collector ...*[]types.SQLStatement) types.Data
 // so without the skip a dry-run write still opens a real BEGIN/COMMIT pair on
 // the connection pool — database I/O issued for a statement that never runs.
 func dryRunSession(tx *gorm.DB) *gorm.DB {
-	return tx.Session(&gorm.Session{DryRun: true, SkipDefaultTransaction: true, Logger: glogger.Default.LogMode(glogger.Silent)})
+	return tx.Session(&gorm.Session{DryRun: true, SkipDefaultTransaction: true, Logger: gormlogger.Default.LogMode(gormlogger.Silent)})
 }
 
 // collectSQL appends generated SQL to the active WithDryRun collector, when

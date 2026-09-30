@@ -17,13 +17,13 @@ import (
 	"github.com/hydroan/gst/internal/dbruntime"
 	"github.com/hydroan/gst/internal/execctx"
 	"github.com/hydroan/gst/internal/lease"
-	pkgzap "github.com/hydroan/gst/logger/zap"
+	gstzap "github.com/hydroan/gst/logger/zap"
 	"github.com/stretchr/testify/require"
-	oteltrace "go.opentelemetry.io/otel/trace"
+	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 	"go.uber.org/zap/zaptest/observer"
-	gormsqlite "gorm.io/driver/sqlite"
+	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 	gormlogger "gorm.io/gorm/logger"
 )
@@ -32,7 +32,7 @@ import (
 // context and the span it runs under.
 type roundObservation struct {
 	identity execctx.Identity
-	span     oteltrace.SpanContext
+	span     trace.SpanContext
 }
 
 // clickhouseDialector stands in for a ClickHouse primary database: only its
@@ -117,7 +117,7 @@ func cutShortRun(t *testing.T, leaseName string, at time.Time, crashed bool) {
 func withUnreachableDatabase(t *testing.T) {
 	t.Helper()
 
-	closed, err := gorm.Open(gormsqlite.Open("file::memory:?cache=private"), &gorm.Config{Logger: gormlogger.Discard})
+	closed, err := gorm.Open(sqlite.Open("file::memory:?cache=private"), &gorm.Config{Logger: gormlogger.Discard})
 	require.NoError(t, err)
 	pool, err := closed.DB()
 	require.NoError(t, err)
@@ -417,7 +417,7 @@ func withBoundCronjobLogger(t *testing.T) {
 	mu.Lock()
 	defer mu.Unlock()
 	if log == nil {
-		log = pkgzap.New("cronjob.log")
+		log = gstzap.New("cronjob.log")
 	}
 }
 

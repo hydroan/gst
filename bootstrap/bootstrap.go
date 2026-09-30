@@ -24,9 +24,9 @@ import (
 	"github.com/hydroan/gst/authz/rbac"
 	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/database/clickhouse"
-	"github.com/hydroan/gst/database/mysql"
-	"github.com/hydroan/gst/database/postgres"
-	"github.com/hydroan/gst/database/sqlite"
+	gstmysql "github.com/hydroan/gst/database/mysql"
+	gstpostgres "github.com/hydroan/gst/database/postgres"
+	gstsqlite "github.com/hydroan/gst/database/sqlite"
 	"github.com/hydroan/gst/debug/gops"
 	debugpprof "github.com/hydroan/gst/debug/pprof"
 	"github.com/hydroan/gst/debug/statsviz"
@@ -37,11 +37,11 @@ import (
 	"github.com/hydroan/gst/internal/middleware"
 	"github.com/hydroan/gst/internal/router"
 	"github.com/hydroan/gst/internal/serviceregistry"
-	pkgzap "github.com/hydroan/gst/logger/zap"
+	gstzap "github.com/hydroan/gst/logger/zap"
 	prommetrics "github.com/hydroan/gst/metrics"
 	"github.com/hydroan/gst/module"
 	gstotel "github.com/hydroan/gst/otel"
-	"github.com/hydroan/gst/redis"
+	gstredis "github.com/hydroan/gst/redis"
 	"go.uber.org/zap"
 )
 
@@ -73,13 +73,13 @@ func Bootstrap() error {
 
 	startup.Register(
 		config.Init,
-		pkgzap.Init,
+		gstzap.Init,
 		prommetrics.Init,
 
 		// database
-		sqlite.Init,
-		postgres.Init,
-		mysql.Init,
+		gstsqlite.Init,
+		gstpostgres.Init,
+		gstmysql.Init,
 		clickhouse.Init,
 	)
 	if err := startup.Init(); err != nil {
@@ -89,7 +89,7 @@ func Bootstrap() error {
 	// it did, and a line written once the log writers have stopped never
 	// reaches the output. The temp directory goes right before the writers,
 	// for the same reason.
-	registerCleanup(pkgzap.Clean)
+	registerCleanup(gstzap.Clean)
 	registerCleanup(config.Clean)
 	warnUnlinkedProviders()
 	// First database drain: create the tables registered before the clients
@@ -100,7 +100,7 @@ func Bootstrap() error {
 
 	startup.Register(
 		// backbone clients
-		redis.Init,
+		gstredis.Init,
 		gstotel.Init,
 	)
 	if err := startup.Init(); err != nil {
@@ -128,7 +128,7 @@ func Bootstrap() error {
 		InitRouterAndModules,
 	)
 
-	registerCleanup(closeComponent("redis", redis.Close))
+	registerCleanup(closeComponent("redis", gstredis.Close))
 	registerCleanup(closeComponent("otel", gstotel.Close))
 
 	if err := startup.Init(); err != nil {

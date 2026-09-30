@@ -12,7 +12,7 @@ import (
 	gstotel "github.com/hydroan/gst/otel"
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/otel/codes"
-	oteltrace "go.opentelemetry.io/otel/trace"
+	"go.opentelemetry.io/otel/trace"
 )
 
 func TestDatabaseTransactionModelHook(t *testing.T) {
@@ -212,7 +212,7 @@ func TestTransactionWithOTELEnabled(t *testing.T) {
 	t.Run("commit", func(t *testing.T) {
 		defer cleanupTestData()
 		err := database.Transaction(context.Background(), func(ctx context.Context) error {
-			require.True(t, oteltrace.SpanContextFromContext(ctx).IsValid(),
+			require.True(t, trace.SpanContextFromContext(ctx).IsValid(),
 				"closure ctx must carry the transaction span so inner spans nest under it")
 			return database.Database[*TestUser](ctx).Create(ul...)
 		})

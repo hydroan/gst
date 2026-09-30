@@ -6,9 +6,9 @@ import (
 	"math"
 	"net/netip"
 
-	dashed "github.com/hydroan/gst/internal/gggen/jsonshape/fixture/a-b"
+	"github.com/hydroan/gst/internal/gggen/jsonshape/fixture/a-b"
 	underscored "github.com/hydroan/gst/internal/gggen/jsonshape/fixture/a_b"
-	prelude "github.com/hydroan/gst/internal/gggen/jsonshape/fixture/gst"
+	"github.com/hydroan/gst/internal/gggen/jsonshape/fixture/gst"
 	"github.com/hydroan/gst/internal/gggen/jsonshape/fixture/mode"
 )
 
@@ -27,9 +27,9 @@ type Rejected struct {
 	Huge    Huge                  `json:"huge"`
 	Mode    mode.Mode             `json:"mode"`
 
-	Dashed      dashed.Item      `json:"dashed"`
+	Dashed      ab.Item          `json:"dashed"`
 	Underscored underscored.Item `json:"underscored"`
-	Prelude     prelude.Item     `json:"prelude"`
+	Prelude     gst.Item         `json:"prelude"`
 
 	*hidden
 }

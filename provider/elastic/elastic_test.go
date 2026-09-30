@@ -11,7 +11,7 @@ import (
 	"github.com/araddon/dateparse"
 	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/internal/lifecycle"
-	"github.com/hydroan/gst/logger/zap"
+	gstzap "github.com/hydroan/gst/logger/zap"
 	"github.com/hydroan/gst/provider/elastic"
 	"github.com/hydroan/gst/util"
 	"github.com/stretchr/testify/assert"
@@ -33,7 +33,7 @@ func setupElastic(t *testing.T) {
 	if err := config.Init(); err != nil {
 		t.Fatalf("init config: %v", err)
 	}
-	if err := zap.Init(); err != nil {
+	if err := gstzap.Init(); err != nil {
 		t.Fatalf("init logger: %v", err)
 	}
 	// Bring the compiled-in providers up through the registry — the same

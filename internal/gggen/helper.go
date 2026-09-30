@@ -11,8 +11,8 @@ import (
 	"strings"
 	"unicode"
 
-	goimports "golang.org/x/tools/imports"
-	fumpt "mvdan.cc/gofumpt/format"
+	"golang.org/x/tools/imports"
+	gofumpt "mvdan.cc/gofumpt/format"
 )
 
 // formatOnlyImports runs goimports as an import formatter only. Its import
@@ -20,7 +20,7 @@ import (
 // package that could supply them, which costs seconds per file and cannot tell
 // a package qualifier from any other selector in a single file. Every caller
 // here builds its own import set, so there is nothing left for it to fix.
-var formatOnlyImports = &goimports.Options{Comments: true, TabIndent: true, TabWidth: 8, FormatOnly: true}
+var formatOnlyImports = &imports.Options{Comments: true, TabIndent: true, TabWidth: 8, FormatOnly: true}
 
 // FormatNode prints node as Go source in the go/format style. With
 // processImport set, goimports then regroups and sorts the imports, adding or
@@ -39,7 +39,7 @@ func FormatNode(node ast.Node, processImport ...bool) (string, error) {
 	}
 
 	if len(processImport) > 0 && processImport[0] {
-		result, err := goimports.Process("", formatted, formatOnlyImports)
+		result, err := imports.Process("", formatted, formatOnlyImports)
 		if err != nil {
 			return "", err
 		}
@@ -73,9 +73,9 @@ func FormatNodeExtraWithFileSet(node ast.Node, fset *token.FileSet, processImpor
 		return "", err
 	}
 
-	formatted, err := fumpt.Source(buf.Bytes(), fumpt.Options{
+	formatted, err := gofumpt.Source(buf.Bytes(), gofumpt.Options{
 		LangVersion: "",
-		Extra:       fumpt.Extra{GroupParams: true, ClotheReturns: true, BalanceCalls: true},
+		Extra:       gofumpt.Extra{GroupParams: true, ClotheReturns: true, BalanceCalls: true},
 	})
 	if err != nil {
 		return "", err
@@ -83,7 +83,7 @@ func FormatNodeExtraWithFileSet(node ast.Node, fset *token.FileSet, processImpor
 
 	if len(processImport) > 0 && processImport[0] {
 		var result []byte
-		if result, err = goimports.Process("", formatted, formatOnlyImports); err != nil {
+		if result, err = imports.Process("", formatted, formatOnlyImports); err != nil {
 			return "", err
 		}
 		return string(result), nil
@@ -93,7 +93,7 @@ func FormatNodeExtraWithFileSet(node ast.Node, fset *token.FileSet, processImpor
 }
 
 // ResolveImportConflicts picks the alias each project import of a generated
-// file needs. imports maps every import path to the name of the package it
+// file needs. declared maps every import path to the name of the package it
 // declares, and reserved lists the names the file's framework imports take.
 // An import keeps its package name when no reserved name and no other import
 // claims it; otherwise it is aliased with its last two path segments joined by
@@ -121,27 +121,27 @@ func FormatNodeExtraWithFileSet(node ast.Node, fset *token.FileSet, processImpor
 //	"helloworld/service/sample/item"
 //	sample_record_item "helloworld/service/sample/record_item"
 //	sample_service "helloworld/service/sample/service"
-func ResolveImportConflicts(imports map[string]string, reserved ...string) map[string]string {
-	paths := slices.Sorted(maps.Keys(imports))
+func ResolveImportConflicts(declared map[string]string, reserved ...string) map[string]string {
+	paths := slices.Sorted(maps.Keys(declared))
 
 	claims := make(map[string]int, len(paths)+len(reserved))
 	for _, reservedName := range reserved {
 		claims[reservedName]++
 	}
 	for _, importPath := range paths {
-		claims[imports[importPath]]++
+		claims[declared[importPath]]++
 	}
 	// depth is the number of trailing path segments an aliased import's name
 	// is built from; 0 marks an import that keeps its package name.
 	depth := make(map[string]int, len(paths))
 	for _, importPath := range paths {
-		if claims[imports[importPath]] > 1 {
+		if claims[declared[importPath]] > 1 {
 			depth[importPath] = 2
 		}
 	}
 	name := func(importPath string) string {
 		if depth[importPath] == 0 {
-			return imports[importPath]
+			return declared[importPath]
 		}
 		return importName(importPath, depth[importPath])
 	}
@@ -181,7 +181,7 @@ func ResolveImportConflicts(imports map[string]string, reserved ...string) map[s
 	for _, importPath := range paths {
 		if depth[importPath] == 0 {
 			aliases[importPath] = ""
-			taken[imports[importPath]] = true
+			taken[declared[importPath]] = true
 		}
 	}
 	for _, importPath := range paths {

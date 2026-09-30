@@ -12,9 +12,9 @@ import (
 
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/config"
-	"github.com/hydroan/gst/database/mysql"
-	"github.com/hydroan/gst/database/postgres"
-	"github.com/hydroan/gst/database/sqlite"
+	gstmysql "github.com/hydroan/gst/database/mysql"
+	gstpostgres "github.com/hydroan/gst/database/postgres"
+	gstsqlite "github.com/hydroan/gst/database/sqlite"
 	"github.com/hydroan/gst/internal/dbruntime"
 	"github.com/hydroan/gst/internal/execctx"
 	"github.com/hydroan/gst/internal/lease"
@@ -22,7 +22,7 @@ import (
 	"github.com/hydroan/gst/internal/testutil"
 	"github.com/hydroan/gst/internal/testutil/testcontainer"
 	"github.com/hydroan/gst/logger"
-	pkgzap "github.com/hydroan/gst/logger/zap"
+	gstzap "github.com/hydroan/gst/logger/zap"
 	"github.com/stretchr/testify/require"
 	"gorm.io/gorm"
 	gormlogger "gorm.io/gorm/logger"
@@ -50,7 +50,7 @@ func run(m *testing.M) int {
 	if err := config.Init(); err != nil {
 		panic(err)
 	}
-	if err := errors.Join(sqlite.Init(), mysql.Init(), postgres.Init()); err != nil {
+	if err := errors.Join(gstsqlite.Init(), gstmysql.Init(), gstpostgres.Init()); err != nil {
 		panic(err)
 	}
 	if err := dbruntime.Wait(); err != nil {
@@ -128,7 +128,7 @@ func TestLostLeaseEndsTheTenure(t *testing.T) {
 			tenures.awaitBegin(t)
 			require.Equal(t, 2, tenures.started(), "the replica campaigns again after losing the lease")
 
-			pkgzap.Clean()
+			gstzap.Clean()
 			// The work returned its context's own ending, which is how a tenure
 			// ends, not a failure of the work.
 			entry := readLogEntry(t, filepath.Join(dir, "leader.log"), "leader stepped down")
@@ -199,7 +199,7 @@ func TestWorkThatReturnsIsCampaignedForAgain(t *testing.T) {
 		awaitSignal(t, failed, "the work that fails")
 	}
 
-	pkgzap.Clean()
+	gstzap.Clean()
 	path := filepath.Join(dir, "leader.log")
 	entry := readLogEntry(t, path, "leader stepped down")
 	require.Equal(t, "done-work", entry["name"])
@@ -229,7 +229,7 @@ func TestWorkPanicIsRecoveredAndLogged(t *testing.T) {
 	awaitSignal(t, runs, "the work")
 	awaitSignal(t, runs, "the work, again")
 
-	pkgzap.Clean()
+	gstzap.Clean()
 	entry := readLogEntry(t, filepath.Join(dir, "leader.log"), "leader work panicked")
 	require.Equal(t, "panicking-work", entry["name"])
 	require.Contains(t, entry["error"], "sample panic")
@@ -418,13 +418,13 @@ func TestElectorIsALifecycleComponent(t *testing.T) {
 		return nil
 	}, "component-work")
 
-	component.SetLogger(pkgzap.New("bound_leader.log"))
+	component.SetLogger(gstzap.New("bound_leader.log"))
 	require.NoError(t, component.Start(context.Background()))
 	awaitSignal(t, entered, "the tenure")
 	require.NoError(t, component.Stop(context.Background()))
 	require.NotNil(t, current, "the elector must have been started through the component")
 
-	pkgzap.Clean()
+	gstzap.Clean()
 	entry := readLogEntry(t, filepath.Join(dir, "bound_leader.log"), "elected leader")
 	require.Equal(t, "component-work", entry["name"])
 	require.NoFileExists(t, filepath.Join(dir, "leader.log"), "the bound logger replaces the package's own")
@@ -520,7 +520,7 @@ func startInstances(t *testing.T, n int) []*elector {
 	t.Helper()
 
 	if log == nil {
-		log = pkgzap.New("leader.log")
+		log = gstzap.New("leader.log")
 	}
 	instances := make([]*elector, 0, n)
 	for range n {

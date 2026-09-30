@@ -58,7 +58,7 @@ import (
 	"github.com/hydroan/gst/internal/lease"
 	"github.com/hydroan/gst/internal/lifecycle"
 	"github.com/hydroan/gst/internal/types"
-	pkgzap "github.com/hydroan/gst/logger/zap"
+	gstzap "github.com/hydroan/gst/logger/zap"
 	"go.uber.org/zap"
 )
 
@@ -115,16 +115,16 @@ func setLogger(l types.Logger) {
 	log = l
 }
 
-// logger returns the package's logger: the bound lock stream, or, until the
+// packageLogger returns the package's logger: the bound lock stream, or, until the
 // lifecycle binds it — a try made during Bootstrap, a unit test — a logger
 // that writes to the global log stream. Opening lock.log here instead would
 // put a second rotation instance on the file once the lifecycle opens its
 // own.
-func logger() types.Logger {
+func packageLogger() types.Logger {
 	mu.Lock()
 	defer mu.Unlock()
 	if log == nil {
-		log = pkgzap.Fallback("lock")
+		log = gstzap.Fallback("lock")
 	}
 	return log
 }
@@ -198,7 +198,7 @@ func start(context.Context) error {
 	}
 
 	for _, l := range declared {
-		logger().Infoz("declared lock", zap.String("name", l.name))
+		packageLogger().Infoz("declared lock", zap.String("name", l.name))
 	}
 	return nil
 }
@@ -229,8 +229,8 @@ func (l *Lock) TryRun(ctx context.Context, fn func(ctx context.Context) error) e
 		return errors.Wrapf(ErrHeld, "lock %q", l.name)
 	}
 
-	held, stopHold := lease.Hold(ctx, h, logger())
-	err = lease.Run(lease.WithHandle(held, h), h, logger(), fn)
+	held, stopHold := lease.Hold(ctx, h, packageLogger())
+	err = lease.Run(lease.WithHandle(held, h), h, packageLogger(), fn)
 	lost := h.Lost()
 	stopHold()
 	if lost {
@@ -246,7 +246,7 @@ func (l *Lock) TryRun(ctx context.Context, fn func(ctx context.Context) error) e
 	releaseCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), releaseTimeout)
 	defer cancel()
 	if releaseErr := h.Release(releaseCtx); releaseErr != nil {
-		logger().Warnz("lock could not release its lease", zap.Error(releaseErr), zap.String("name", l.name))
+		packageLogger().Warnz("lock could not release its lease", zap.Error(releaseErr), zap.String("name", l.name))
 	}
 	return err
 }

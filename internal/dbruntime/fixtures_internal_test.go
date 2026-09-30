@@ -18,7 +18,7 @@ import (
 	"gorm.io/driver/postgres"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
-	"gorm.io/gorm/logger"
+	gormlogger "gorm.io/gorm/logger"
 )
 
 var (
@@ -44,7 +44,7 @@ func newSQLiteDB(t *testing.T) *gorm.DB {
 func openSQLiteDB(t *testing.T, dsn string) *gorm.DB {
 	t.Helper()
 
-	db, err := gorm.Open(sqlite.Open(dsn), &gorm.Config{Logger: logger.Discard})
+	db, err := gorm.Open(sqlite.Open(dsn), &gorm.Config{Logger: gormlogger.Discard})
 	require.NoError(t, err)
 	sqlDB, err := db.DB()
 	require.NoError(t, err)
@@ -70,7 +70,7 @@ func newMySQLDB(t *testing.T) *gorm.DB {
 		os.Getenv(config.MYSQL_USERNAME), os.Getenv(config.MYSQL_PASSWORD),
 		os.Getenv(config.MYSQL_HOST), port, os.Getenv(config.MYSQL_DATABASE))
 
-	db, err := gorm.Open(mysql.Open(dsn), &gorm.Config{Logger: logger.Discard, TranslateError: true})
+	db, err := gorm.Open(mysql.Open(dsn), &gorm.Config{Logger: gormlogger.Discard, TranslateError: true})
 	require.NoError(t, err)
 	sqlDB, err := db.DB()
 	require.NoError(t, err)
@@ -95,7 +95,7 @@ func newPostgresDB(t *testing.T) *gorm.DB {
 		os.Getenv(config.POSTGRES_HOST), port, os.Getenv(config.POSTGRES_USERNAME),
 		os.Getenv(config.POSTGRES_PASSWORD), os.Getenv(config.POSTGRES_DATABASE))
 
-	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{Logger: logger.Discard, TranslateError: true})
+	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{Logger: gormlogger.Discard, TranslateError: true})
 	require.NoError(t, err)
 	sqlDB, err := db.DB()
 	require.NoError(t, err)

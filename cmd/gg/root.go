@@ -1,7 +1,7 @@
 package main
 
 import (
-	rtdebug "runtime/debug"
+	"runtime/debug"
 
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/internal/gghelper"
@@ -9,8 +9,8 @@ import (
 )
 
 var (
-	module string
-	debug  bool
+	module       string
+	debugLogging bool
 )
 
 var rootCmd = &cobra.Command{
@@ -27,11 +27,11 @@ func init() {
 	// gg reports the module version Go recorded when it was built: the tag it
 	// was installed at, a pseudo-version for an untagged commit, "(devel)" for
 	// a build that recorded none.
-	if info, ok := rtdebug.ReadBuildInfo(); ok {
+	if info, ok := debug.ReadBuildInfo(); ok {
 		rootCmd.Version = info.Main.Version
 	}
 
-	rootCmd.PersistentFlags().BoolVarP(&debug, "debug", "d", false, "enable debug logging")
+	rootCmd.PersistentFlags().BoolVarP(&debugLogging, "debug", "d", false, "enable debug logging")
 
 	rootCmd.AddCommand(
 		genCmd,

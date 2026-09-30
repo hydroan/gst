@@ -77,7 +77,7 @@ func modelImportSpec(importPath, modelQualifier string) *ast.ImportSpec {
 	return spec
 }
 
-// imports builds the imports of a generated service file of an action with
+// importDecl builds the imports of a generated service file of an action with
 // phase, in this order: the model package under modelQualifier (see
 // modelImportSpec), the packages of serviceScaffoldImports, then every otherPkg
 // entry. For example, an Import action on a model in package io at
@@ -89,7 +89,7 @@ func modelImportSpec(importPath, modelQualifier string) *ast.ImportSpec {
 //		"github.com/hydroan/gst"
 //		"io"
 //	)
-func imports(modulePath, modelFileDir, modelQualifier string, phase consts.Phase, otherPkg ...string) *ast.GenDecl {
+func importDecl(modulePath, modelFileDir, modelQualifier string, phase consts.Phase, otherPkg ...string) *ast.GenDecl {
 	genDecl := &ast.GenDecl{
 		Tok:   token.IMPORT,
 		Specs: []ast.Spec{modelImportSpec(filepath.Join(modulePath, modelFileDir), modelQualifier)},

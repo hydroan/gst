@@ -13,7 +13,7 @@ import (
 
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst"
-	"github.com/hydroan/gst/redis"
+	gstredis "github.com/hydroan/gst/redis"
 )
 
 type iamEmailFlowKind string
@@ -92,8 +92,8 @@ var (
 
 	emailNow                                  = func() time.Time { return time.Now().UTC() }
 	emailRandomReader                         = rand.Reader
-	emailFlowCache                            = func() gst.Cache[iamEmailFlowState] { return redis.Cache[iamEmailFlowState]() }
-	emailThrottleCache                        = func() gst.Cache[emailThrottleRecord] { return redis.Cache[emailThrottleRecord]() }
+	emailFlowCache                            = func() gst.Cache[iamEmailFlowState] { return gstredis.Cache[iamEmailFlowState]() }
+	emailThrottleCache                        = func() gst.Cache[emailThrottleRecord] { return gstredis.Cache[emailThrottleRecord]() }
 	activeEmailSender  iamEmailDeliverySender = noopEmailSender{}
 )
 

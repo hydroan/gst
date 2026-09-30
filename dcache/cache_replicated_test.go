@@ -13,7 +13,7 @@ import (
 	"github.com/hydroan/gst/internal/testutil/testcontainer"
 	"github.com/hydroan/gst/internal/testutil/testlog"
 	"github.com/hydroan/gst/internal/types"
-	"github.com/hydroan/gst/logger/zap"
+	gstzap "github.com/hydroan/gst/logger/zap"
 	"github.com/stretchr/testify/require"
 )
 
@@ -53,7 +53,7 @@ func runTests(m *testing.M) int {
 	if err := config.Init(); err != nil {
 		panic(err)
 	}
-	if err := zap.Init(); err != nil {
+	if err := gstzap.Init(); err != nil {
 		panic(err)
 	}
 

@@ -16,7 +16,7 @@ import (
 	"github.com/hydroan/gst/internal/types"
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/otel/codes"
-	sdktrace "go.opentelemetry.io/otel/sdk/trace"
+	"go.opentelemetry.io/otel/sdk/trace"
 )
 
 // sseSampleService streams until its context ends and returns that ending,
@@ -66,7 +66,7 @@ func TestSSEHandlerRecordsAStreamEndedByShutdownAsInterrupted(t *testing.T) {
 }
 
 // eventReasons returns the reason attribute of every event named name on span.
-func eventReasons(span sdktrace.ReadOnlySpan, name string) []string {
+func eventReasons(span trace.ReadOnlySpan, name string) []string {
 	var reasons []string
 	for _, event := range span.Events() {
 		if event.Name != name {

@@ -5,7 +5,7 @@ import (
 	"testing"
 
 	serviceiamsession "github.com/hydroan/gst/internal/service/iam/session"
-	"github.com/hydroan/gst/redis"
+	gstredis "github.com/hydroan/gst/redis"
 	"github.com/stretchr/testify/require"
 )
 
@@ -17,6 +17,6 @@ func clearSessions(t *testing.T) {
 
 	// Both namespaces, because the user-state cache is keyed by user and is
 	// therefore deliberately outside the session prefix.
-	require.NoError(t, redis.RemovePrefix(context.Background(), serviceiamsession.SessionNamespace))
-	require.NoError(t, redis.RemovePrefix(context.Background(), serviceiamsession.UserNamespace))
+	require.NoError(t, gstredis.RemovePrefix(context.Background(), serviceiamsession.SessionNamespace))
+	require.NoError(t, gstredis.RemovePrefix(context.Background(), serviceiamsession.UserNamespace))
 }

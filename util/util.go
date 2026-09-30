@@ -19,7 +19,7 @@ import (
 	"time"
 	"unsafe"
 
-	tcping "github.com/cloverstd/tcping/ping"
+	"github.com/cloverstd/tcping/ping"
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/consts"
 	probing "github.com/prometheus-community/pro-bing"
@@ -208,10 +208,10 @@ func Tcping(host string, port int, timeout time.Duration) bool {
 	return res.SuccessCounter == 1
 }
 
-func _tcping(host string, port, count int, interval, timeout time.Duration) (minLatency, maxLatency, avgLatency time.Duration, result *tcping.Result) {
-	pinger := tcping.NewTCPing()
-	pinger.SetTarget(&tcping.Target{
-		Protocol: tcping.TCP,
+func _tcping(host string, port, count int, interval, timeout time.Duration) (minLatency, maxLatency, avgLatency time.Duration, result *ping.Result) {
+	pinger := ping.NewTCPing()
+	pinger.SetTarget(&ping.Target{
+		Protocol: ping.TCP,
 		Host:     host,
 		Port:     port,
 		Counter:  count,

@@ -22,9 +22,9 @@ import (
 	"github.com/hydroan/gst/internal/serviceregistry"
 	"github.com/hydroan/gst/internal/testutil"
 	"github.com/hydroan/gst/internal/types"
-	loggerzap "github.com/hydroan/gst/logger/zap"
+	gstzap "github.com/hydroan/gst/logger/zap"
 	"github.com/hydroan/gst/module/iam"
-	"github.com/hydroan/gst/redis"
+	gstredis "github.com/hydroan/gst/redis"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/crypto/bcrypt"
 )
@@ -196,14 +196,14 @@ func TestAccountLogout(t *testing.T) {
 		// it afterwards: a string left where a zset belongs makes every later
 		// read of that key fail, and nothing else clears it.
 		t.Cleanup(func() {
-			require.NoError(t, redis.Del(context.Background(), userSessionKey))
+			require.NoError(t, gstredis.Del(context.Background(), userSessionKey))
 			require.NoError(t, serviceiamsession.Store.DropSessionIndexes(context.Background(), "", brokenIndexUser.SessionID))
 			_, _ = serviceiamsession.Store.DeleteSession(context.Background(), brokenIndexUser.SessionID)
 			_ = serviceiamsession.Store.DeleteUserSessions(context.Background(), brokenIndexUser.UserID)
 		})
 
-		require.NoError(t, redis.Del(t.Context(), userSessionKey))
-		require.NoError(t, redis.Set(t.Context(), userSessionKey, "not-a-zset", time.Hour))
+		require.NoError(t, gstredis.Del(t.Context(), userSessionKey))
+		require.NoError(t, gstredis.Set(t.Context(), userSessionKey, "not-a-zset", time.Hour))
 
 		cli := accountSessionClient(t, brokenIndexUser.SessionID)
 
@@ -432,10 +432,10 @@ func TestAccountChangePassword(t *testing.T) {
 			syncFailUser.SessionID,
 			consts.Create,
 		)
-		require.NoError(t, redis.Set(t.Context(), accountSessionDataKey(t, syncFailUser.SessionID), "not-a-session", time.Hour))
+		require.NoError(t, gstredis.Set(t.Context(), accountSessionDataKey(t, syncFailUser.SessionID), "not-a-session", time.Hour))
 
 		svc := &serviceiamaccount.ChangePasswordService{}
-		svc.Logger = loggerzap.Fallback("service")
+		svc.Logger = gstzap.Fallback("service")
 
 		resp, err := svc.Create(serviceCtx, &iam.ChangePasswordReq{
 			OldPassword: syncFailUser.Password,
@@ -467,12 +467,12 @@ func TestAccountChangePassword(t *testing.T) {
 		// revoke below trips over. The current session is skipped by the revoke,
 		// so it has to be a different one for this to reach the failure at all.
 		otherSessionKey := accountSessionDataKey(t, revokeFailOtherSessionID)
-		require.NoError(t, redis.Set(t.Context(), otherSessionKey, "not-a-session", time.Hour))
+		require.NoError(t, gstredis.Set(t.Context(), otherSessionKey, "not-a-session", time.Hour))
 		// Only this user's wreckage is cleared. The subtests around this one
 		// share a session of their own, so purging the store would take theirs
 		// with it.
 		t.Cleanup(func() {
-			require.NoError(t, redis.Del(context.Background(), otherSessionKey))
+			require.NoError(t, gstredis.Del(context.Background(), otherSessionKey))
 			require.NoError(t, serviceiamsession.Store.DropSessionIndexes(context.Background(), revokeFailUser.UserID, revokeFailOtherSessionID))
 			require.NoError(t, serviceiamsession.Store.DeleteUserSessions(context.Background(), revokeFailUser.UserID))
 		})
@@ -485,7 +485,7 @@ func TestAccountChangePassword(t *testing.T) {
 			consts.Create,
 		)
 		svc := &serviceiamaccount.ChangePasswordService{}
-		svc.Logger = loggerzap.Fallback("service")
+		svc.Logger = gstzap.Fallback("service")
 
 		_, err = svc.Create(serviceCtx, &iam.ChangePasswordReq{
 			OldPassword: revokeFailUser.Password,
@@ -610,14 +610,14 @@ func TestAccountResetPassword(t *testing.T) {
 		// See the note in TestAccountLogout: the corrupted index has to be
 		// repaired here, nothing else clears it.
 		t.Cleanup(func() {
-			require.NoError(t, redis.Del(context.Background(), userSessionKey))
+			require.NoError(t, gstredis.Del(context.Background(), userSessionKey))
 			require.NoError(t, serviceiamsession.Store.DropSessionIndexes(context.Background(), "", brokenSessionID))
 			_, _ = serviceiamsession.Store.DeleteSession(context.Background(), brokenSessionID)
 			_ = serviceiamsession.Store.DeleteUserSessions(context.Background(), brokenIndexVictim.UserID)
 		})
 
-		require.NoError(t, redis.Del(t.Context(), userSessionKey))
-		require.NoError(t, redis.Set(t.Context(), userSessionKey, "not-a-zset", time.Hour))
+		require.NoError(t, gstredis.Del(t.Context(), userSessionKey))
+		require.NoError(t, gstredis.Set(t.Context(), userSessionKey, "not-a-zset", time.Hour))
 
 		cli := accountSessionClient(t, rootSessionID)
 
@@ -882,8 +882,8 @@ func accountSessionDataKey(t *testing.T, sessionID string) string {
 func accountRequireExistingKey(t *testing.T, key string) string {
 	t.Helper()
 
-	ttl, err := redis.TTL(t.Context(), key)
+	ttl, err := gstredis.TTL(t.Context(), key)
 	require.NoError(t, err)
-	require.NotEqual(t, redis.TTLKeyNotExists, ttl, "key %q does not exist: the store's key layout changed", key)
+	require.NotEqual(t, gstredis.TTLKeyNotExists, ttl, "key %q does not exist: the store's key layout changed", key)
 	return key
 }

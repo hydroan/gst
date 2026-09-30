@@ -15,7 +15,7 @@ import (
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 	gormlogger "gorm.io/gorm/logger"
-	"gorm.io/gorm/schema"
+	gormschema "gorm.io/gorm/schema"
 )
 
 // TestMain runs the suite against the dialect under test; the Makefile test
@@ -420,7 +420,7 @@ func TestValidateNameRefusesWhatTheColumnCannotHold(t *testing.T) {
 	require.ErrorContains(t, ValidateName(strings.Repeat("n", nameMaxLength+1)), "longer than")
 	require.ErrorContains(t, ValidateName(""), "empty name")
 
-	parsed, err := schema.Parse(&row{}, &sync.Map{}, schema.NamingStrategy{})
+	parsed, err := gormschema.Parse(&row{}, &sync.Map{}, gormschema.NamingStrategy{})
 	require.NoError(t, err)
 	require.Equal(t, nameMaxLength, parsed.LookUpField("Name").Size, "the name column must be exactly as wide as ValidateName allows")
 }

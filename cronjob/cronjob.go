@@ -92,7 +92,7 @@ import (
 	"github.com/hydroan/gst/internal/lease"
 	"github.com/hydroan/gst/internal/lifecycle"
 	"github.com/hydroan/gst/internal/types"
-	pkgzap "github.com/hydroan/gst/logger/zap"
+	gstzap "github.com/hydroan/gst/logger/zap"
 	"go.uber.org/zap"
 )
 
@@ -267,7 +267,7 @@ func start(ctx context.Context) error {
 		// logs to the global stream. Opening cronjob.log here instead would
 		// put a second rotation instance on the file once the lifecycle
 		// opens its own.
-		log = pkgzap.Fallback("cronjob")
+		log = gstzap.Fallback("cronjob")
 	}
 
 	s := newScheduler(jobs)

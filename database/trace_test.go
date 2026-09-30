@@ -12,7 +12,7 @@ import (
 	"github.com/hydroan/gst/internal/testutil/oteltest"
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/otel/codes"
-	sdktrace "go.opentelemetry.io/otel/sdk/trace"
+	"go.opentelemetry.io/otel/sdk/trace"
 	"go.opentelemetry.io/otel/sdk/trace/tracetest"
 )
 
@@ -109,7 +109,7 @@ func TestTraceSpanReadsOutcomeLikeTheLog(t *testing.T) {
 
 // lastEndedNamed returns the most recently ended span carrying name, which is
 // the one an operation repeated in a test just finished.
-func lastEndedNamed(t *testing.T, recorder *tracetest.SpanRecorder, name string) sdktrace.ReadOnlySpan {
+func lastEndedNamed(t *testing.T, recorder *tracetest.SpanRecorder, name string) trace.ReadOnlySpan {
 	t.Helper()
 	for _, span := range slices.Backward(recorder.Ended()) {
 		if span.Name() == name {
@@ -121,7 +121,7 @@ func lastEndedNamed(t *testing.T, recorder *tracetest.SpanRecorder, name string)
 }
 
 // spanAttributes indexes a span's attributes by key.
-func spanAttributes(span sdktrace.ReadOnlySpan) map[string]any {
+func spanAttributes(span trace.ReadOnlySpan) map[string]any {
 	attrs := make(map[string]any, len(span.Attributes()))
 	for _, kv := range span.Attributes() {
 		attrs[string(kv.Key)] = kv.Value.AsInterface()

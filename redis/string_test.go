@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/errors"
-	"github.com/hydroan/gst/redis"
+	gstredis "github.com/hydroan/gst/redis"
 )
 
 // TestSetNXIsExclusive pins the semantics every caller building a lock or a
@@ -19,7 +19,7 @@ func TestSetNXIsExclusive(t *testing.T) {
 	// first setnx below only wins on a key that does not exist.
 	clearKey(t, "redis-test:setnx")
 
-	acquired, err := redis.SetNX(ctx, "redis-test:setnx", "first", time.Minute)
+	acquired, err := gstredis.SetNX(ctx, "redis-test:setnx", "first", time.Minute)
 	if err != nil {
 		t.Fatalf("first setnx: %v", err)
 	}
@@ -27,7 +27,7 @@ func TestSetNXIsExclusive(t *testing.T) {
 		t.Fatal("want the first setnx to acquire the key")
 	}
 
-	acquired, err = redis.SetNX(ctx, "redis-test:setnx", "second", time.Minute)
+	acquired, err = gstredis.SetNX(ctx, "redis-test:setnx", "second", time.Minute)
 	if err != nil {
 		t.Fatalf("second setnx: %v", err)
 	}
@@ -46,28 +46,28 @@ func TestSetXXWritesOnlyAnExistingKey(t *testing.T) {
 	// first setxx below must meet an absent key.
 	clearKey(t, "redis-test:setxx")
 
-	written, err := redis.SetXX(ctx, "redis-test:setxx", "first", time.Minute)
+	written, err := gstredis.SetXX(ctx, "redis-test:setxx", "first", time.Minute)
 	if err != nil {
 		t.Fatalf("setxx on an absent key: %v", err)
 	}
 	if written {
 		t.Fatal("want setxx to write nothing when the key does not exist")
 	}
-	if _, err = redis.Get(ctx, "redis-test:setxx"); !errors.Is(err, redis.ErrKeyNotExists) {
+	if _, err = gstredis.Get(ctx, "redis-test:setxx"); !errors.Is(err, gstredis.ErrKeyNotExists) {
 		t.Fatalf("want the key to stay absent, got %v", err)
 	}
 
-	if err = redis.Set(ctx, "redis-test:setxx", "existing", time.Hour); err != nil {
+	if err = gstredis.Set(ctx, "redis-test:setxx", "existing", time.Hour); err != nil {
 		t.Fatalf("set: %v", err)
 	}
-	written, err = redis.SetXX(ctx, "redis-test:setxx", "replaced", time.Minute)
+	written, err = gstredis.SetXX(ctx, "redis-test:setxx", "replaced", time.Minute)
 	if err != nil {
 		t.Fatalf("setxx on a present key: %v", err)
 	}
 	if !written {
 		t.Fatal("want setxx to overwrite a present key")
 	}
-	got, err := redis.Get(ctx, "redis-test:setxx")
+	got, err := gstredis.Get(ctx, "redis-test:setxx")
 	if err != nil {
 		t.Fatalf("get: %v", err)
 	}
@@ -76,7 +76,7 @@ func TestSetXXWritesOnlyAnExistingKey(t *testing.T) {
 	}
 	// The key was set to live an hour; a remaining lifetime within the minute
 	// passed to setxx shows the new expiration replaced the old one.
-	ttl, err := redis.TTL(ctx, "redis-test:setxx")
+	ttl, err := gstredis.TTL(ctx, "redis-test:setxx")
 	if err != nil {
 		t.Fatalf("ttl: %v", err)
 	}
@@ -88,10 +88,10 @@ func TestSetXXWritesOnlyAnExistingKey(t *testing.T) {
 func TestStringHelpersRoundtrip(t *testing.T) {
 	ctx := t.Context()
 
-	if err := redis.Set(ctx, "redis-test:string", "value", time.Minute); err != nil {
+	if err := gstredis.Set(ctx, "redis-test:string", "value", time.Minute); err != nil {
 		t.Fatalf("set: %v", err)
 	}
-	got, err := redis.Get(ctx, "redis-test:string")
+	got, err := gstredis.Get(ctx, "redis-test:string")
 	if err != nil {
 		t.Fatalf("get: %v", err)
 	}
@@ -99,10 +99,10 @@ func TestStringHelpersRoundtrip(t *testing.T) {
 		t.Fatalf("want %q, got %q", "value", got)
 	}
 
-	if err = redis.Del(ctx, "redis-test:string"); err != nil {
+	if err = gstredis.Del(ctx, "redis-test:string"); err != nil {
 		t.Fatalf("del: %v", err)
 	}
-	if _, err = redis.Get(ctx, "redis-test:string"); !errors.Is(err, redis.ErrKeyNotExists) {
+	if _, err = gstredis.Get(ctx, "redis-test:string"); !errors.Is(err, gstredis.ErrKeyNotExists) {
 		t.Fatalf("want ErrKeyNotExists after del, got %v", err)
 	}
 }
@@ -112,18 +112,18 @@ func TestCounterHelpersRoundtrip(t *testing.T) {
 	// The counts below start from an absent key.
 	clearKey(t, "redis-test:counter")
 
-	count, err := redis.Incr(ctx, "redis-test:counter")
+	count, err := gstredis.Incr(ctx, "redis-test:counter")
 	if err != nil {
 		t.Fatalf("first incr: %v", err)
 	}
 	if count != 1 {
 		t.Fatalf("want 1 from the first incr, got %d", count)
 	}
-	if count, err = redis.Incr(ctx, "redis-test:counter"); err != nil || count != 2 {
+	if count, err = gstredis.Incr(ctx, "redis-test:counter"); err != nil || count != 2 {
 		t.Fatalf("want 2 from the second incr, got %d (%v)", count, err)
 	}
 
-	stored, err := redis.GetInt(ctx, "redis-test:counter")
+	stored, err := gstredis.GetInt(ctx, "redis-test:counter")
 	if err != nil {
 		t.Fatalf("getint: %v", err)
 	}
@@ -143,14 +143,14 @@ func TestIncrFixedWindowBoundsTheCountToItsFirstWindow(t *testing.T) {
 		key := "redis-test:fixed-window:first"
 		clearKey(t, key)
 
-		count, err := redis.IncrFixedWindow(ctx, key, time.Hour)
+		count, err := gstredis.IncrFixedWindow(ctx, key, time.Hour)
 		if err != nil {
 			t.Fatalf("incr: %v", err)
 		}
 		if count != 1 {
 			t.Fatalf("want 1 from the first increment, got %d", count)
 		}
-		ttl, err := redis.TTL(ctx, key)
+		ttl, err := gstredis.TTL(ctx, key)
 		if err != nil {
 			t.Fatalf("ttl: %v", err)
 		}
@@ -163,19 +163,19 @@ func TestIncrFixedWindowBoundsTheCountToItsFirstWindow(t *testing.T) {
 		key := "redis-test:fixed-window:later"
 		clearKey(t, key)
 
-		if _, err := redis.IncrFixedWindow(ctx, key, time.Hour); err != nil {
+		if _, err := gstredis.IncrFixedWindow(ctx, key, time.Hour); err != nil {
 			t.Fatalf("first incr: %v", err)
 		}
 		// A day-long window on the second increment would push the ttl past
 		// the hour if the window were set again.
-		count, err := redis.IncrFixedWindow(ctx, key, 24*time.Hour)
+		count, err := gstredis.IncrFixedWindow(ctx, key, 24*time.Hour)
 		if err != nil {
 			t.Fatalf("second incr: %v", err)
 		}
 		if count != 2 {
 			t.Fatalf("want 2 from the second increment, got %d", count)
 		}
-		ttl, err := redis.TTL(ctx, key)
+		ttl, err := gstredis.TTL(ctx, key)
 		if err != nil {
 			t.Fatalf("ttl: %v", err)
 		}
@@ -190,21 +190,21 @@ func TestIncrFixedWindowBoundsTheCountToItsFirstWindow(t *testing.T) {
 
 		// The shape a two-command increment leaves when its process stops
 		// before setting the ttl.
-		if _, err := redis.Incr(ctx, key); err != nil {
+		if _, err := gstredis.Incr(ctx, key); err != nil {
 			t.Fatalf("incr without ttl: %v", err)
 		}
-		if ttl, err := redis.TTL(ctx, key); err != nil || ttl != redis.TTLNoExpiry {
+		if ttl, err := gstredis.TTL(ctx, key); err != nil || ttl != gstredis.TTLNoExpiry {
 			t.Fatalf("precondition: want a count without ttl, got %v (%v)", ttl, err)
 		}
 
-		count, err := redis.IncrFixedWindow(ctx, key, time.Minute)
+		count, err := gstredis.IncrFixedWindow(ctx, key, time.Minute)
 		if err != nil {
 			t.Fatalf("incr: %v", err)
 		}
 		if count != 2 {
 			t.Fatalf("want 2, got %d", count)
 		}
-		ttl, err := redis.TTL(ctx, key)
+		ttl, err := gstredis.TTL(ctx, key)
 		if err != nil {
 			t.Fatalf("ttl: %v", err)
 		}
@@ -218,11 +218,11 @@ func TestIncrFixedWindowBoundsTheCountToItsFirstWindow(t *testing.T) {
 		clearKey(t, key)
 
 		for _, window := range []time.Duration{0, -time.Second, 500 * time.Microsecond, 1500 * time.Microsecond} {
-			if _, err := redis.IncrFixedWindow(ctx, key, window); err == nil {
+			if _, err := gstredis.IncrFixedWindow(ctx, key, window); err == nil {
 				t.Fatalf("want an error for window %v", window)
 			}
 		}
-		if ttl, err := redis.TTL(ctx, key); err != nil || ttl != redis.TTLKeyNotExists {
+		if ttl, err := gstredis.TTL(ctx, key); err != nil || ttl != gstredis.TTLKeyNotExists {
 			t.Fatalf("a rejected window must leave the key untouched, got ttl %v (%v)", ttl, err)
 		}
 	})
@@ -233,10 +233,10 @@ func TestIncrFixedWindowBoundsTheCountToItsFirstWindow(t *testing.T) {
 		key := "redis-test:fixed-window:wrong-type"
 		clearKey(t, key)
 
-		if err := redis.ZAdd(ctx, key, 1, "member"); err != nil {
+		if err := gstredis.ZAdd(ctx, key, 1, "member"); err != nil {
 			t.Fatalf("zadd: %v", err)
 		}
-		_, err := redis.IncrFixedWindow(ctx, key, time.Minute)
+		_, err := gstredis.IncrFixedWindow(ctx, key, time.Minute)
 		if err == nil {
 			t.Fatal("want the backend error for a key holding a sorted set")
 		}
@@ -246,16 +246,16 @@ func TestIncrFixedWindowBoundsTheCountToItsFirstWindow(t *testing.T) {
 	})
 
 	t.Run("reports_redis_not_enabled", func(t *testing.T) {
-		if err := redis.Close(); err != nil {
+		if err := gstredis.Close(); err != nil {
 			t.Fatalf("close: %v", err)
 		}
 		t.Cleanup(func() {
-			if err := redis.Init(); err != nil {
+			if err := gstredis.Init(); err != nil {
 				t.Fatalf("reconnect: %v", err)
 			}
 		})
 
-		if _, err := redis.IncrFixedWindow(ctx, "redis-test:fixed-window:closed", time.Minute); !errors.Is(err, redis.ErrRedisIsDisabled) {
+		if _, err := gstredis.IncrFixedWindow(ctx, "redis-test:fixed-window:closed", time.Minute); !errors.Is(err, gstredis.ErrRedisIsDisabled) {
 			t.Fatalf("want ErrRedisIsDisabled, got %v", err)
 		}
 	})
@@ -268,15 +268,15 @@ func TestIncrFixedWindowBoundsTheCountToItsFirstWindow(t *testing.T) {
 func TestReadHelpersReportBackendErrors(t *testing.T) {
 	ctx := t.Context()
 	key := "redis-test:wrong-type"
-	if err := redis.ZAdd(ctx, key, 1, "member"); err != nil {
+	if err := gstredis.ZAdd(ctx, key, 1, "member"); err != nil {
 		t.Fatalf("zadd: %v", err)
 	}
 
-	got, err := redis.Get(ctx, key)
+	got, err := gstredis.Get(ctx, key)
 	if err == nil {
 		t.Fatalf("want the backend error from Get, got a successful read of %q", got)
 	}
-	if errors.Is(err, redis.ErrKeyNotExists) {
+	if errors.Is(err, gstredis.ErrKeyNotExists) {
 		t.Fatalf("want the backend error, got ErrKeyNotExists: %v", err)
 	}
 	// The backend error must carry the run-time stack embedded at its
@@ -286,11 +286,11 @@ func TestReadHelpersReportBackendErrors(t *testing.T) {
 		t.Fatalf("want a run-time stack on the backend error, got none: %v", err)
 	}
 
-	count, err := redis.GetInt(ctx, key)
+	count, err := gstredis.GetInt(ctx, key)
 	if err == nil {
 		t.Fatalf("want the backend error from GetInt, got %d", count)
 	}
-	if errors.Is(err, redis.ErrKeyNotExists) {
+	if errors.Is(err, gstredis.ErrKeyNotExists) {
 		t.Fatalf("want the backend error, got ErrKeyNotExists: %v", err)
 	}
 	if strings.Contains(err.Error(), "strconv") {
@@ -303,11 +303,11 @@ func TestReadHelpersReportBackendErrors(t *testing.T) {
 // value the caller cannot use.
 func TestGetIntReportsUndecodableValue(t *testing.T) {
 	ctx := t.Context()
-	if err := redis.Set(ctx, "redis-test:not-a-number", "value", time.Minute); err != nil {
+	if err := gstredis.Set(ctx, "redis-test:not-a-number", "value", time.Minute); err != nil {
 		t.Fatalf("set: %v", err)
 	}
 
-	if _, err := redis.GetInt(ctx, "redis-test:not-a-number"); err == nil {
+	if _, err := gstredis.GetInt(ctx, "redis-test:not-a-number"); err == nil {
 		t.Fatal("want a decode error for a non-numeric value")
 	} else if !strings.Contains(err.Error(), "strconv") {
 		t.Fatalf("want the decode error, got %v", err)
@@ -321,11 +321,11 @@ func TestGetIntReportsUndecodableValue(t *testing.T) {
 // platform, including one whose int is 32 bits wide.
 func TestGetIntDecodesSixtyFourBitValues(t *testing.T) {
 	ctx := t.Context()
-	if err := redis.Set(ctx, "redis-test:large", "4294967296", time.Minute); err != nil {
+	if err := gstredis.Set(ctx, "redis-test:large", "4294967296", time.Minute); err != nil {
 		t.Fatalf("set: %v", err)
 	}
 
-	got, err := redis.GetInt(ctx, "redis-test:large")
+	got, err := gstredis.GetInt(ctx, "redis-test:large")
 	if err != nil {
 		t.Fatalf("getint: %v", err)
 	}
@@ -338,8 +338,8 @@ func TestGetIntDecodesSixtyFourBitValues(t *testing.T) {
 // depends on the key being absent holds in a repeated run of the process.
 func clearKey(t *testing.T, key string) {
 	t.Helper()
-	if err := redis.Del(t.Context(), key); err != nil {
+	if err := gstredis.Del(t.Context(), key); err != nil {
 		t.Fatalf("del %s: %v", key, err)
 	}
-	t.Cleanup(func() { _ = redis.Del(context.Background(), key) })
+	t.Cleanup(func() { _ = gstredis.Del(context.Background(), key) })
 }

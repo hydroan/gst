@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"go/token"
 	"os"
-	pathpkg "path"
+	"path"
 	"path/filepath"
 	"strings"
 )
@@ -74,44 +74,44 @@ type moduleCopyMiddlewareManifest struct {
 }
 
 func loadModuleManifest(moduleDir string) (moduleManifest, error) {
-	path := filepath.Join(moduleDir, moduleManifestFilename)
-	data, err := os.ReadFile(path)
+	manifestPath := filepath.Join(moduleDir, moduleManifestFilename)
+	data, err := os.ReadFile(manifestPath)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return moduleManifest{}, fmt.Errorf("module copy requires %s: %w", path, err)
+			return moduleManifest{}, fmt.Errorf("module copy requires %s: %w", manifestPath, err)
 		}
 		return moduleManifest{}, err
 	}
 
 	var manifest moduleManifest
 	if err := json.Unmarshal(data, &manifest); err != nil {
-		return moduleManifest{}, fmt.Errorf("parse %s: %w", path, err)
+		return moduleManifest{}, fmt.Errorf("parse %s: %w", manifestPath, err)
 	}
 
 	manifest.Copy.PostNotes = cleanModuleCopyPostNotes(manifest.Copy.PostNotes)
 	excludeSourceFiles, excludeErr := cleanModuleCopySourceFiles("excludeSourceFiles", manifest.Copy.ExcludeSourceFiles)
 	if excludeErr != nil {
-		return moduleManifest{}, fmt.Errorf("parse %s: %w", path, excludeErr)
+		return moduleManifest{}, fmt.Errorf("parse %s: %w", manifestPath, excludeErr)
 	}
 	manifest.Copy.ExcludeSourceFiles = excludeSourceFiles
 	includeSourceFiles, includeErr := cleanModuleCopySourceFiles("includeSourceFiles", manifest.Copy.IncludeSourceFiles)
 	if includeErr != nil {
-		return moduleManifest{}, fmt.Errorf("parse %s: %w", path, includeErr)
+		return moduleManifest{}, fmt.Errorf("parse %s: %w", manifestPath, includeErr)
 	}
 	manifest.Copy.IncludeSourceFiles = includeSourceFiles
 	middleware, middlewareErr := cleanModuleCopyHandlers("middleware", manifest.Copy.Middleware)
 	if middlewareErr != nil {
-		return moduleManifest{}, fmt.Errorf("parse %s: %w", path, middlewareErr)
+		return moduleManifest{}, fmt.Errorf("parse %s: %w", manifestPath, middlewareErr)
 	}
 	manifest.Copy.Middleware = middleware
 	interceptors, interceptorsErr := cleanModuleCopyHandlers("interceptors", manifest.Copy.Interceptors)
 	if interceptorsErr != nil {
-		return moduleManifest{}, fmt.Errorf("parse %s: %w", path, interceptorsErr)
+		return moduleManifest{}, fmt.Errorf("parse %s: %w", manifestPath, interceptorsErr)
 	}
 	manifest.Copy.Interceptors = interceptors
 	assembly, assemblyErr := cleanModuleCopyAssembly(manifest.Copy.RequiredAssembly)
 	if assemblyErr != nil {
-		return moduleManifest{}, fmt.Errorf("parse %s: %w", path, assemblyErr)
+		return moduleManifest{}, fmt.Errorf("parse %s: %w", manifestPath, assemblyErr)
 	}
 	manifest.Copy.RequiredAssembly = assembly
 	return manifest, nil
@@ -161,7 +161,7 @@ func cleanModuleCopyHandlers(field string, values []moduleCopyMiddlewareManifest
 		// project package of the same name with the same filename. That
 		// avoids hidden copy-time routing rules in copytest/register.go or
 		// arbitrary manifest target paths.
-		if pathpkg.Dir(sourceFile) != sourceDir || !strings.HasSuffix(pathpkg.Base(sourceFile), ".go") || strings.HasSuffix(pathpkg.Base(sourceFile), "_test.go") {
+		if path.Dir(sourceFile) != sourceDir || !strings.HasSuffix(path.Base(sourceFile), ".go") || strings.HasSuffix(path.Base(sourceFile), "_test.go") {
 			return nil, fmt.Errorf("%s[%d].sourceFile must match %s/*.go: %s", field, i, sourceDir, sourceFile)
 		}
 
@@ -215,8 +215,8 @@ func cleanModuleCopyRelativePath(value string) (string, error) {
 	if value == "" {
 		return "", nil
 	}
-	value = pathpkg.Clean(value)
-	if value == "." || pathpkg.IsAbs(value) || value == ".." || strings.HasPrefix(value, "../") {
+	value = path.Clean(value)
+	if value == "." || path.IsAbs(value) || value == ".." || strings.HasPrefix(value, "../") {
 		return "", fmt.Errorf("unsafe framework-root relative path %q", value)
 	}
 	return value, nil

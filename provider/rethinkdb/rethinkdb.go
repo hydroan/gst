@@ -12,11 +12,11 @@ import (
 	"github.com/hydroan/gst/logger"
 	"github.com/hydroan/gst/util"
 	"go.uber.org/zap"
-	r "gopkg.in/rethinkdb/rethinkdb-go.v6"
+	"gopkg.in/rethinkdb/rethinkdb-go.v6"
 )
 
 var (
-	session *r.Session
+	session *rethinkdb.Session
 	mu      sync.RWMutex
 )
 
@@ -48,7 +48,7 @@ func start(_ context.Context) (err error) {
 		return errors.Wrap(err, "failed to connect to rethinkdb")
 	}
 
-	if _, err = r.Expr("ping").Run(session); err != nil {
+	if _, err = rethinkdb.Expr("ping").Run(session); err != nil {
 		session.Close()
 		session = nil
 		return errors.Wrap(err, "failed to connect to rethinkdb")
@@ -61,8 +61,8 @@ func start(_ context.Context) (err error) {
 // New returns a new RethinkDB session with given configuration.
 // It's the caller's responsibility to close the session,
 // caller should always call Close() when it's no longer needed.
-func New(cfg config.RethinkDB) (*r.Session, error) {
-	opts := r.ConnectOpts{
+func New(cfg config.RethinkDB) (*rethinkdb.Session, error) {
+	opts := rethinkdb.ConnectOpts{
 		Addresses:     cfg.Hosts,
 		Database:      cfg.Database,
 		Username:      cfg.Username,
@@ -102,7 +102,7 @@ func New(cfg config.RethinkDB) (*r.Session, error) {
 		opts.TLSConfig = tlsConfig
 	}
 
-	_session, err := r.Connect(opts)
+	_session, err := rethinkdb.Connect(opts)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to connect to rethinkdb")
 	}
@@ -111,7 +111,7 @@ func New(cfg config.RethinkDB) (*r.Session, error) {
 
 // Client returns the initialized RethinkDB session, the client handle of
 // this provider.
-func Client() (*r.Session, error) {
+func Client() (*rethinkdb.Session, error) {
 	mu.RLock()
 	defer mu.RUnlock()
 	if session == nil {
@@ -147,6 +147,6 @@ func Health() error {
 		return err
 	}
 
-	_, err = r.Expr("ping").Run(s)
+	_, err = rethinkdb.Expr("ping").Run(s)
 	return err
 }

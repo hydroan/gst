@@ -5,7 +5,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/errors"
-	"github.com/hydroan/gst/redis"
+	gstredis "github.com/hydroan/gst/redis"
 )
 
 // TestTTLReportsLifetime covers the three answers TTL carries: a remaining
@@ -15,10 +15,10 @@ import (
 func TestTTLReportsLifetime(t *testing.T) {
 	ctx := t.Context()
 
-	if err := redis.Set(ctx, "redis-test:ttl", "value", time.Hour); err != nil {
+	if err := gstredis.Set(ctx, "redis-test:ttl", "value", time.Hour); err != nil {
 		t.Fatalf("set: %v", err)
 	}
-	ttl, err := redis.TTL(ctx, "redis-test:ttl")
+	ttl, err := gstredis.TTL(ctx, "redis-test:ttl")
 	if err != nil {
 		t.Fatalf("ttl: %v", err)
 	}
@@ -26,21 +26,21 @@ func TestTTLReportsLifetime(t *testing.T) {
 		t.Fatalf("want a remaining lifetime within the hour, got %v", ttl)
 	}
 
-	if err = redis.Expire(ctx, "redis-test:ttl", 2*time.Hour); err != nil {
+	if err = gstredis.Expire(ctx, "redis-test:ttl", 2*time.Hour); err != nil {
 		t.Fatalf("expire: %v", err)
 	}
-	if ttl, err = redis.TTL(ctx, "redis-test:ttl"); err != nil || ttl <= time.Hour {
+	if ttl, err = gstredis.TTL(ctx, "redis-test:ttl"); err != nil || ttl <= time.Hour {
 		t.Fatalf("want the extended lifetime, got %v (%v)", ttl, err)
 	}
 
-	if ttl, err = redis.TTL(ctx, "redis-test:ttl-missing"); err != nil || ttl != redis.TTLKeyNotExists {
+	if ttl, err = gstredis.TTL(ctx, "redis-test:ttl-missing"); err != nil || ttl != gstredis.TTLKeyNotExists {
 		t.Fatalf("want TTLKeyNotExists, got %v (%v)", ttl, err)
 	}
 
-	if err = redis.Set(ctx, "redis-test:ttl-forever", "value", 0); err != nil {
+	if err = gstredis.Set(ctx, "redis-test:ttl-forever", "value", 0); err != nil {
 		t.Fatalf("set without a ttl: %v", err)
 	}
-	if ttl, err = redis.TTL(ctx, "redis-test:ttl-forever"); err != nil || ttl != redis.TTLNoExpiry {
+	if ttl, err = gstredis.TTL(ctx, "redis-test:ttl-forever"); err != nil || ttl != gstredis.TTLNoExpiry {
 		t.Fatalf("want TTLNoExpiry, got %v (%v)", ttl, err)
 	}
 }
@@ -51,24 +51,24 @@ func TestRemovePrefixDeletesMatchingKeysOnly(t *testing.T) {
 	ctx := t.Context()
 
 	for _, key := range []string{"redis-test:sweep:one", "redis-test:sweep:two"} {
-		if err := redis.Set(ctx, key, "value", time.Minute); err != nil {
+		if err := gstredis.Set(ctx, key, "value", time.Minute); err != nil {
 			t.Fatalf("set %s: %v", key, err)
 		}
 	}
-	if err := redis.Set(ctx, "redis-test:kept", "value", time.Minute); err != nil {
+	if err := gstredis.Set(ctx, "redis-test:kept", "value", time.Minute); err != nil {
 		t.Fatalf("set the key outside the prefix: %v", err)
 	}
 
-	if err := redis.RemovePrefix(ctx, "redis-test:sweep"); err != nil {
+	if err := gstredis.RemovePrefix(ctx, "redis-test:sweep"); err != nil {
 		t.Fatalf("removeprefix: %v", err)
 	}
 
 	for _, key := range []string{"redis-test:sweep:one", "redis-test:sweep:two"} {
-		if _, err := redis.Get(ctx, key); !errors.Is(err, redis.ErrKeyNotExists) {
+		if _, err := gstredis.Get(ctx, key); !errors.Is(err, gstredis.ErrKeyNotExists) {
 			t.Fatalf("want %s swept, got %v", key, err)
 		}
 	}
-	if _, err := redis.Get(ctx, "redis-test:kept"); err != nil {
+	if _, err := gstredis.Get(ctx, "redis-test:kept"); err != nil {
 		t.Fatalf("want the key outside the prefix kept: %v", err)
 	}
 }

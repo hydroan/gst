@@ -15,7 +15,7 @@ import (
 
 	"github.com/cockroachdb/errors"
 	"github.com/stoewer/go-strcase"
-	"gorm.io/gorm/schema"
+	gormschema "gorm.io/gorm/schema"
 )
 
 // Column is one database column of a model.
@@ -42,7 +42,7 @@ var schemaCache = &sync.Map{}
 // namer matches the naming strategy the database drivers use. Every driver
 // opens gorm with a default gorm.Config, so the zero NamingStrategy is the
 // one that runs in production.
-var namer = schema.NamingStrategy{}
+var namer = gormschema.NamingStrategy{}
 
 // columnsCache memoizes the resolved columns per model type.
 var columnsCache sync.Map
@@ -61,7 +61,7 @@ func Columns(typ reflect.Type) ([]Column, error) {
 		return cached.([]Column), nil //nolint:errcheck
 	}
 
-	parsed, err := schema.Parse(reflect.New(typ).Interface(), schemaCache, namer)
+	parsed, err := gormschema.Parse(reflect.New(typ).Interface(), schemaCache, namer)
 	if err != nil {
 		return nil, errors.Wrapf(err, "modelschema: parse %s", typ.String())
 	}

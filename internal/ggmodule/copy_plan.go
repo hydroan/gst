@@ -3,7 +3,7 @@ package ggmodule
 import (
 	"fmt"
 	"os"
-	pathpkg "path"
+	"path"
 	"path/filepath"
 	"slices"
 	"sort"
@@ -337,7 +337,7 @@ func (p *CopyPlan) checkConflicts(force bool) error {
 // excluded, and must not declare a service struct: action service files are
 // copied through their DSL actions, not through the manifest.
 func (p *CopyPlan) resolveIncludeSourceFiles(includes []string) error {
-	servicePrefix := pathpkg.Join("internal", "service", p.Name) + "/"
+	servicePrefix := path.Join("internal", "service", p.Name) + "/"
 	for _, rel := range includes {
 		if !strings.HasPrefix(rel, servicePrefix) {
 			return fmt.Errorf("includeSourceFiles entry %q must live under %s", rel, servicePrefix)

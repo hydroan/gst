@@ -8,7 +8,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
-	glogger "gorm.io/gorm/logger"
+	gormlogger "gorm.io/gorm/logger"
 	gormschema "gorm.io/gorm/schema"
 )
 
@@ -74,7 +74,7 @@ func newSyncCollectDB(t *testing.T) *gorm.DB {
 	t.Helper()
 	gormDB, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{
 		DryRun: true,
-		Logger: glogger.Default.LogMode(glogger.Silent),
+		Logger: gormlogger.Default.LogMode(gormlogger.Silent),
 	})
 	require.NoError(t, err)
 	return gormDB

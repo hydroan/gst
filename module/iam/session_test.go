@@ -17,14 +17,14 @@ import (
 	modeliamsession "github.com/hydroan/gst/internal/model/iam/session"
 	modeliamuser "github.com/hydroan/gst/internal/model/iam/user"
 	"github.com/hydroan/gst/internal/requestctx"
-	internalresponse "github.com/hydroan/gst/internal/response"
+	"github.com/hydroan/gst/internal/response"
 	"github.com/hydroan/gst/internal/router"
 	serviceiamsession "github.com/hydroan/gst/internal/service/iam/session"
 	"github.com/hydroan/gst/internal/serviceregistry"
 	"github.com/hydroan/gst/internal/testutil"
 	"github.com/hydroan/gst/internal/types"
 	"github.com/hydroan/gst/module/iam"
-	"github.com/hydroan/gst/redis"
+	gstredis "github.com/hydroan/gst/redis"
 	"github.com/stretchr/testify/require"
 )
 
@@ -134,7 +134,7 @@ func TestCurrentSessionGet(t *testing.T) {
 		// Written through the raw key on purpose: SaveSession derives the key
 		// from the snapshot's own id, so the disagreement this asserts on is one
 		// the store cannot be asked to create.
-		require.NoError(t, redis.Cache[modeliamsession.Session]().Set(
+		require.NoError(t, gstredis.Cache[modeliamsession.Session]().Set(
 			t.Context(), sessionDataKeyForCorruption(t, sessionID), session, time.Hour))
 
 		cli := sessionClient(t, sessionID)
@@ -1108,7 +1108,7 @@ func TestSessionDeleteAll(t *testing.T) {
 		requireUserSessionContains(t, account.UserID, currentSessionID)
 		requireUserSessionContains(t, account.UserID, staleSessionID)
 
-		require.NoError(t, redis.Del(t.Context(), sessionDataKeyForCorruption(t, staleSessionID)))
+		require.NoError(t, gstredis.Del(t.Context(), sessionDataKeyForCorruption(t, staleSessionID)))
 		requireUserSessionContains(t, account.UserID, staleSessionID)
 
 		cli := sessionClient(t, currentSessionID)
@@ -1143,7 +1143,7 @@ type requestMetadataProbeRsp struct {
 func registerRequestMetadataProbe() error {
 	router.Auth().GET(requestMetadataProbeRoute, func(c *gin.Context) {
 		meta := requestctx.FromContext(c.Request.Context())
-		internalresponse.JSON(c, requestMetadataProbeRsp{
+		response.JSON(c, requestMetadataProbeRsp{
 			Route:    meta.Route(),
 			Path:     meta.Path(),
 			RawQuery: meta.RawQuery(),
@@ -1357,8 +1357,8 @@ func sessionDataKeyForCorruption(t *testing.T, sessionID string) string {
 	t.Helper()
 
 	key := "iam:session:data:" + sessionID
-	ttl, err := redis.TTL(t.Context(), key)
+	ttl, err := gstredis.TTL(t.Context(), key)
 	require.NoError(t, err)
-	require.NotEqual(t, redis.TTLKeyNotExists, ttl, "key %q does not exist: the store's key layout changed", key)
+	require.NotEqual(t, gstredis.TTLKeyNotExists, ttl, "key %q does not exist: the store's key layout changed", key)
 	return key
 }

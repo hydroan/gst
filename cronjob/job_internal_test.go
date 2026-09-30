@@ -13,10 +13,10 @@ import (
 	"github.com/hydroan/gst/internal/execctx"
 	"github.com/hydroan/gst/internal/lease"
 	"github.com/hydroan/gst/internal/testutil/oteltest"
-	pkgzap "github.com/hydroan/gst/logger/zap"
+	gstzap "github.com/hydroan/gst/logger/zap"
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/otel/codes"
-	sdktrace "go.opentelemetry.io/otel/sdk/trace"
+	"go.opentelemetry.io/otel/sdk/trace"
 	oteltrace "go.opentelemetry.io/otel/trace"
 )
 
@@ -122,7 +122,7 @@ func TestRoundStillRunningAtItsNextInstantSaysSo(t *testing.T) {
 	close(release)
 	require.NoError(t, stop(context.Background()))
 
-	pkgzap.Clean()
+	gstzap.Clean()
 	entry := readLogEntry(t, filepath.Join(dir, "cronjob.log"), "cronjob round is still running at its next instant")
 	require.Equal(t, "overrunning-job", entry["name"])
 	require.EqualValues(t, 1, entry["overrun"], "the first entry is written at the first instant the round overran")
@@ -257,7 +257,7 @@ func TestCatchUpRunsTheMostRecentInstantNoReplicaRan(t *testing.T) {
 	require.Equal(t, time.Date(2026, 1, 1, 10, 1, 0, 0, time.UTC), awaitRun(t, runs), "the schedule goes on with the next instant")
 	require.NoError(t, stop(context.Background()))
 
-	pkgzap.Clean()
+	gstzap.Clean()
 	entry := readLogEntry(t, filepath.Join(dir, "cronjob.log"), "finished cronjob")
 	require.Equal(t, "2026-01-01T10:00:00Z", entry["at"], "the catch-up runs for the instant it caught up")
 	require.Equal(t, true, entry["catch_up"])
@@ -303,7 +303,7 @@ func TestInstantsPassingDuringACatchUpAreSkipped(t *testing.T) {
 		time.Date(2026, 1, 1, 10, 2, 0, 0, time.UTC):  1,
 	}, runs.counts(), "the instant overrun by the catch-up must be skipped, not run late")
 
-	pkgzap.Clean()
+	gstzap.Clean()
 	entry := readLogEntry(t, filepath.Join(dir, "cronjob.log"), "cronjob skipped instants")
 	require.EqualValues(t, 1, entry["skipped"])
 	require.Equal(t, "2026-01-01T10:00:00Z", entry["after"], "the skip is counted from the instant the catch-up ran for")
@@ -380,7 +380,7 @@ func TestRoundCutShortByAShutdownRunsAgainElsewhere(t *testing.T) {
 	require.NoError(t, shuttingDown.stop(context.Background()))
 	awaitSignal(t, entered, "the round run a second time")
 	require.NoError(t, takingOver.stop(context.Background()))
-	pkgzap.Clean()
+	gstzap.Clean()
 
 	interrupted := readLogEntry(t, filepath.Join(dir, "cronjob.log"), "cronjob interrupted")
 	require.Equal(t, "2026-01-01T10:01:00Z", interrupted["at"])
@@ -416,7 +416,7 @@ func TestRoundCutShortByACrashRunsAgainOnce(t *testing.T) {
 	instance := startInstances(t, 1)[0]
 	awaitSignal(t, entered, "the round run a second time")
 	require.NoError(t, instance.stop(context.Background()))
-	pkgzap.Clean()
+	gstzap.Clean()
 
 	entry := readLogEntry(t, filepath.Join(dir, "cronjob.log"), "cronjob interrupted")
 	require.Equal(t, "2026-01-01T10:00:00Z", entry["at"], "the second round runs for the instant the crash cut short")
@@ -462,7 +462,7 @@ func TestInstantKeptByACrashedLeaseStaysSkipped(t *testing.T) {
 	clock.untilWaiters(t, 2)
 	require.NoError(t, running.stop(context.Background()))
 	require.NoError(t, starting.stop(context.Background()))
-	pkgzap.Clean()
+	gstzap.Clean()
 
 	finished := readLogEntries(t, filepath.Join(dir, "cronjob.log"), "finished cronjob")
 	require.Len(t, finished, 2, "10:01, kept from everyone by the crashed round's lease, runs nowhere")
@@ -497,7 +497,7 @@ func TestRoundWhoseEndIsNotRecordedRunsAgain(t *testing.T) {
 	awaitSignal(t, entered, "the round")
 	awaitSignal(t, entered, "the round run a second time")
 	require.NoError(t, stop(context.Background()))
-	pkgzap.Clean()
+	gstzap.Clean()
 
 	unrecorded := readLogEntry(t, filepath.Join(dir, "cronjob.log"), "cronjob could not record its round as finished")
 	require.Equal(t, "WARN", unrecorded["level"])
@@ -607,7 +607,7 @@ func TestNextInstantGivesUpARoundCutShort(t *testing.T) {
 			}
 			awaitRun(t, runs)
 			require.NoError(t, stop(context.Background()))
-			pkgzap.Clean()
+			gstzap.Clean()
 
 			entry := readLogEntry(t, filepath.Join(dir, "cronjob.log"), "cronjob gave up a round cut short")
 			require.Equal(t, "WARN", entry["level"])
@@ -661,7 +661,7 @@ func TestInstantsPassingDuringARunAreSkipped(t *testing.T) {
 	require.NoError(t, stop(context.Background()))
 	require.EqualValues(t, 2, runs.Load(), "the instants overrun by the first round must be skipped")
 
-	pkgzap.Clean()
+	gstzap.Clean()
 	entry := readLogEntry(t, filepath.Join(dir, "cronjob.log"), "cronjob skipped instants")
 	require.Equal(t, "overrun-job", entry["name"])
 	require.EqualValues(t, 3, entry["skipped"], "the warning must count the instants the run cost")
@@ -713,7 +713,7 @@ func TestRoundThatLosesItsLeaseIsCutShortAndLogged(t *testing.T) {
 				t.Fatal("the round must end once its lease is lost")
 			}
 			clock.untilWaiting(t)
-			pkgzap.Clean()
+			gstzap.Clean()
 
 			interrupted := readLogEntry(t, filepath.Join(dir, "cronjob.log"), "cronjob interrupted")
 			require.Equal(t, "lost-job", interrupted["name"])
@@ -757,7 +757,7 @@ func TestRoundThatReturnsNothingAfterLosingItsLeaseIsLogged(t *testing.T) {
 	takeOver(t, "cron:quiet-lost-job")
 	awaitSignal(t, ended, "the round's end")
 	clock.untilWaiting(t)
-	pkgzap.Clean()
+	gstzap.Clean()
 
 	entry := readLogEntry(t, filepath.Join(dir, "cronjob.log"), "cronjob lost its lease during the round")
 	require.Equal(t, "quiet-lost-job", entry["name"])
@@ -811,7 +811,7 @@ func TestRoundThatLosesItsLeaseWhileWindingDownIsLoggedAsALoss(t *testing.T) {
 	case <-time.After(5 * time.Second):
 		t.Fatal("the scheduler must stop once the round returned")
 	}
-	pkgzap.Clean()
+	gstzap.Clean()
 
 	interrupted := readLogEntry(t, filepath.Join(dir, "cronjob.log"), "cronjob interrupted")
 	require.Equal(t, "lease lost", interrupted["reason"], "the loss is what ended the round, not the shutdown before it")
@@ -846,7 +846,7 @@ func TestRoundInterruptedAtShutdownIsAWarning(t *testing.T) {
 	awaitSignal(t, entered, "the round")
 	require.NoError(t, stop(context.Background()))
 
-	pkgzap.Clean()
+	gstzap.Clean()
 	entry := readLogEntry(t, filepath.Join(dir, "cronjob.log"), "cronjob interrupted")
 	require.Equal(t, "interrupted-job", entry["name"])
 	require.Equal(t, "shutting down", entry["reason"])
@@ -860,7 +860,7 @@ func TestRoundInterruptedAtShutdownIsAWarning(t *testing.T) {
 }
 
 // spanEventAttribute reads one string attribute of a span event.
-func spanEventAttribute(event sdktrace.Event, key string) string {
+func spanEventAttribute(event trace.Event, key string) string {
 	for _, kv := range event.Attributes {
 		if string(kv.Key) == key {
 			return kv.Value.AsString()
@@ -882,7 +882,7 @@ func TestNeverMatchingScheduleEndsItsLoop(t *testing.T) {
 	require.NoError(t, start(context.Background()))
 
 	<-current.done
-	pkgzap.Clean()
+	gstzap.Clean()
 	entry := readLogEntry(t, filepath.Join(dir, "cronjob.log"), "cronjob has no further instant")
 	require.Equal(t, "never-job", entry["name"])
 }
@@ -931,7 +931,7 @@ func TestRunLogsFailureWithErrorStack(t *testing.T) {
 			// Stop waits for the in-flight round, whose outcome entry is
 			// written before the round returns.
 			require.NoError(t, stop(context.Background()))
-			pkgzap.Clean()
+			gstzap.Clean()
 
 			entry := readLogEntry(t, filepath.Join(dir, "cronjob.log"), tc.msg)
 			require.Equal(t, tc.err, entry["error"])
@@ -973,7 +973,7 @@ func TestRunStampsRoundIdentity(t *testing.T) {
 		t.Fatal("the round did not run")
 	}
 	require.NoError(t, stop(context.Background()))
-	pkgzap.Clean()
+	gstzap.Clean()
 
 	require.Equal(t, "identity-job", got.identity.Cronjob)
 	require.NotEmpty(t, got.identity.TraceID)
@@ -1014,7 +1014,7 @@ func TestRunOpensRoundSpanWhenTracingIsOn(t *testing.T) {
 		t.Fatal("the round did not run")
 	}
 	require.NoError(t, stop(context.Background()))
-	pkgzap.Clean()
+	gstzap.Clean()
 
 	require.True(t, got.span.HasTraceID(), "the job must run under the round's span")
 	require.Equal(t, got.span.TraceID().String(), got.identity.TraceID)

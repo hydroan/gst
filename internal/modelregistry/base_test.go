@@ -6,7 +6,7 @@ import (
 
 	"github.com/hydroan/gst/internal/modelregistry"
 	"github.com/stretchr/testify/require"
-	"gorm.io/gorm/schema"
+	gormschema "gorm.io/gorm/schema"
 )
 
 type BaseSample struct {
@@ -26,7 +26,7 @@ func TestBaseTimestampColumnsNotNull(t *testing.T) {
 // NOT NULL columns without a database default on the given model.
 func requireTimestampColumnsNotNull(t *testing.T, model any) {
 	t.Helper()
-	s, err := schema.Parse(model, &sync.Map{}, schema.NamingStrategy{})
+	s, err := gormschema.Parse(model, &sync.Map{}, gormschema.NamingStrategy{})
 	require.NoError(t, err)
 	for _, name := range []string{"CreatedAt", "UpdatedAt"} {
 		field := s.LookUpField(name)

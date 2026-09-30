@@ -11,7 +11,7 @@ import (
 	"gorm.io/driver/mysql"
 	"gorm.io/driver/postgres"
 	"gorm.io/driver/sqlite"
-	"gorm.io/gorm/schema"
+	gormschema "gorm.io/gorm/schema"
 )
 
 // TestDialectAppliesItsNamingLimits pins that the driver's own settings
@@ -22,7 +22,7 @@ import (
 // The handle carries the driver's dialector as it is, which is what lets
 // those settings through.
 func TestDialectAppliesItsNamingLimits(t *testing.T) {
-	naming, ok := database.DB().NamingStrategy.(schema.NamingStrategy)
+	naming, ok := database.DB().NamingStrategy.(gormschema.NamingStrategy)
 	require.True(t, ok, "the handle runs on gorm's naming strategy: %T", database.DB().NamingStrategy)
 
 	want := 64

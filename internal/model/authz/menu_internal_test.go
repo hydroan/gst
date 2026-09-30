@@ -7,7 +7,7 @@ import (
 
 	"github.com/hydroan/gst/internal/requestctx"
 	"github.com/stretchr/testify/require"
-	"gorm.io/gorm/schema"
+	gormschema "gorm.io/gorm/schema"
 )
 
 // TestMenuWriteGuardRequiresASystemSubject covers the boundary on menu writes.
@@ -44,7 +44,7 @@ func TestMenuWriteGuardRequiresASystemSubject(t *testing.T) {
 // here surfaces only when a long identifier reaches the database and the driver
 // rejects the whole batch.
 func TestMenuShadowedIDColumn(t *testing.T) {
-	parsed, err := schema.Parse(&Menu{}, &sync.Map{}, schema.NamingStrategy{})
+	parsed, err := gormschema.Parse(&Menu{}, &sync.Map{}, gormschema.NamingStrategy{})
 	require.NoError(t, err)
 
 	field := parsed.FieldsByDBName["id"]

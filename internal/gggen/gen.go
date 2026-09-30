@@ -338,7 +338,7 @@ func GenerateService(info *modelinfo.Model, action *dsl.Action, phase consts.Pha
 	}
 
 	decls := []ast.Decl{
-		imports(info.ModulePath, info.ModelFileDir, qualifier, phase, otherPkgs...),
+		importDecl(info.ModulePath, info.ModelFileDir, qualifier, phase, otherPkgs...),
 		types(qualifier, info.ModelName, action.Payload, action.Result, roleName),
 	}
 

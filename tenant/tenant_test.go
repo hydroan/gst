@@ -10,7 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
-	"gorm.io/gorm/logger"
+	gormlogger "gorm.io/gorm/logger"
 )
 
 // Record is a model scoped to one tenant, declared the only way a model can be:
@@ -36,7 +36,7 @@ func (Unscoped) TableName() string { return "unscoped_records" }
 func newDB(t *testing.T) *gorm.DB {
 	t.Helper()
 	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{
-		Logger:         logger.Discard,
+		Logger:         gormlogger.Discard,
 		TranslateError: true,
 	})
 	require.NoError(t, err)

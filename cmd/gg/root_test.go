@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"os"
 	"path/filepath"
-	rtdebug "runtime/debug"
+	"runtime/debug"
 	"strings"
 	"testing"
 )
@@ -90,7 +90,7 @@ func TestCommandErrorsLeaveThePrintingToMain(t *testing.T) {
 // recorded none, as this test binary is — never a number written into the
 // code.
 func TestVersionReportsTheBuild(t *testing.T) {
-	info, ok := rtdebug.ReadBuildInfo()
+	info, ok := debug.ReadBuildInfo()
 	if !ok {
 		t.Fatal("the test binary carries no build information")
 	}

@@ -14,7 +14,7 @@ import (
 	modeliamsession "github.com/hydroan/gst/internal/model/iam/session"
 	modeliamuser "github.com/hydroan/gst/internal/model/iam/user"
 	"github.com/hydroan/gst/logger"
-	"github.com/hydroan/gst/redis"
+	gstredis "github.com/hydroan/gst/redis"
 	"github.com/hydroan/gst/service"
 	"go.uber.org/zap"
 )
@@ -101,7 +101,7 @@ func (store) LoadSession(ctx context.Context, sessionID string) (modeliamsession
 	if sessionID == "" {
 		return modeliamsession.Session{}, gst.ErrEntryNotFound
 	}
-	return redis.Cache[modeliamsession.Session]().Get(ctx, sessionDataKey(sessionID))
+	return gstredis.Cache[modeliamsession.Session]().Get(ctx, sessionDataKey(sessionID))
 }
 
 // SaveSession writes a session snapshot with the given lifetime.
@@ -109,7 +109,7 @@ func (store) SaveSession(ctx context.Context, sessionData modeliamsession.Sessio
 	if sessionData.ID == "" {
 		return service.NewError(http.StatusInternalServerError, "session id is required")
 	}
-	if err := redis.Cache[modeliamsession.Session]().Set(ctx, sessionDataKey(sessionData.ID), sessionData, ttl); err != nil {
+	if err := gstredis.Cache[modeliamsession.Session]().Set(ctx, sessionDataKey(sessionData.ID), sessionData, ttl); err != nil {
 		return service.NewErrorWithCause(http.StatusInternalServerError, "failed to store session", err)
 	}
 	return nil
@@ -125,7 +125,7 @@ func (store) DeleteSession(ctx context.Context, sessionID string) (modeliamsessi
 	if sessionID == "" {
 		return modeliamsession.Session{}, nil
 	}
-	cache := redis.Cache[modeliamsession.Session]()
+	cache := gstredis.Cache[modeliamsession.Session]()
 
 	sessionKey := sessionDataKey(sessionID)
 	sessionData, err := cache.Get(ctx, sessionKey)
@@ -177,28 +177,28 @@ func (store) IndexSession(ctx context.Context, sessionData modeliamsession.Sessi
 
 	score := float64(sessionData.ExpiresAt.UnixMilli())
 	userKey := sessionIndexUserKey(sessionData.UserID)
-	if err := redis.ZAdd(ctx, userKey, score, sessionData.ID); err != nil {
+	if err := gstredis.ZAdd(ctx, userKey, score, sessionData.ID); err != nil {
 		return indexSessionError(err)
 	}
 
 	undo := func() { _ = Store.DropSessionIndexes(ctx, sessionData.UserID, sessionData.ID) }
-	if err := redis.ZAdd(ctx, sessionIndexAllKey(), score, sessionData.ID); err != nil {
+	if err := gstredis.ZAdd(ctx, sessionIndexAllKey(), score, sessionData.ID); err != nil {
 		undo()
 		return indexSessionError(err)
 	}
-	if err := redis.ZAdd(ctx, sessionIndexSeenKey(), float64(sessionData.LastSeenAt.UnixMilli()), sessionData.ID); err != nil {
+	if err := gstredis.ZAdd(ctx, sessionIndexSeenKey(), float64(sessionData.LastSeenAt.UnixMilli()), sessionData.ID); err != nil {
 		undo()
 		return indexSessionError(err)
 	}
-	if err := redis.Expire(ctx, userKey, indexRetention()); err != nil {
+	if err := gstredis.Expire(ctx, userKey, indexRetention()); err != nil {
 		undo()
 		return indexSessionError(err)
 	}
-	if err := redis.Expire(ctx, sessionIndexAllKey(), indexRetention()); err != nil {
+	if err := gstredis.Expire(ctx, sessionIndexAllKey(), indexRetention()); err != nil {
 		undo()
 		return indexSessionError(err)
 	}
-	if err := redis.Expire(ctx, sessionIndexSeenKey(), seenIndexRetention()); err != nil {
+	if err := gstredis.Expire(ctx, sessionIndexSeenKey(), seenIndexRetention()); err != nil {
 		undo()
 		return indexSessionError(err)
 	}
@@ -218,14 +218,14 @@ func (store) DropSessionIndexes(ctx context.Context, userID, sessionID string) e
 		return nil
 	}
 	if userID != "" {
-		if err := redis.ZRem(ctx, sessionIndexUserKey(userID), sessionID); err != nil {
+		if err := gstredis.ZRem(ctx, sessionIndexUserKey(userID), sessionID); err != nil {
 			return dropIndexError(err)
 		}
 	}
-	if err := redis.ZRem(ctx, sessionIndexAllKey(), sessionID); err != nil {
+	if err := gstredis.ZRem(ctx, sessionIndexAllKey(), sessionID); err != nil {
 		return dropIndexError(err)
 	}
-	if err := redis.ZRem(ctx, sessionIndexSeenKey(), sessionID); err != nil {
+	if err := gstredis.ZRem(ctx, sessionIndexSeenKey(), sessionID); err != nil {
 		return dropIndexError(err)
 	}
 	return nil
@@ -241,7 +241,7 @@ func (store) DropUserSessionIndexMember(ctx context.Context, userID, sessionID s
 	if userID == "" || sessionID == "" {
 		return nil
 	}
-	if err := redis.ZRem(ctx, sessionIndexUserKey(userID), sessionID); err != nil {
+	if err := gstredis.ZRem(ctx, sessionIndexUserKey(userID), sessionID); err != nil {
 		return dropIndexError(err)
 	}
 	return nil
@@ -261,7 +261,7 @@ func (store) ListUserSessionIDs(ctx context.Context, userID string) ([]string, e
 	if err := pruneIndex(ctx, userKey, time.Now()); err != nil {
 		return nil, err
 	}
-	sessionIDs, err := redis.ZRange(ctx, userKey, 0, -1)
+	sessionIDs, err := gstredis.ZRange(ctx, userKey, 0, -1)
 	if err != nil {
 		return nil, service.NewErrorWithCause(http.StatusInternalServerError, "failed to list user sessions", err)
 	}
@@ -273,7 +273,7 @@ func (store) ListAllSessionIDs(ctx context.Context) ([]string, error) {
 	if err := pruneIndex(ctx, sessionIndexAllKey(), time.Now()); err != nil {
 		return nil, err
 	}
-	sessionIDs, err := redis.ZRange(ctx, sessionIndexAllKey(), 0, -1)
+	sessionIDs, err := gstredis.ZRange(ctx, sessionIndexAllKey(), 0, -1)
 	if err != nil {
 		return nil, service.NewErrorWithCause(http.StatusInternalServerError, "failed to list sessions", err)
 	}
@@ -291,7 +291,7 @@ func (store) ListSeenSessionIDs(ctx context.Context, since time.Time) ([]string,
 	// Sweeping is hygiene for a query that already filters by score, so its
 	// failure is not this caller's answer to give.
 	_ = pruneIndex(ctx, sessionIndexSeenKey(), seenIndexCutoff(time.Now()))
-	sessionIDs, err := redis.ZRangeByScore(
+	sessionIDs, err := gstredis.ZRangeByScore(
 		ctx,
 		sessionIndexSeenKey(),
 		strconv.FormatInt(since.UnixMilli(), 10),
@@ -310,7 +310,7 @@ func (store) ListSeenSessionIDs(ctx context.Context, since time.Time) ([]string,
 // so anything scored before now is spent; the seen index carries LastSeenAt, so
 // staleness is bounded by seenIndexCutoff instead.
 func pruneIndex(ctx context.Context, key string, cutoff time.Time) error {
-	if err := redis.ZRemRangeByScore(ctx, key, "-inf", strconv.FormatInt(cutoff.UnixMilli(), 10)); err != nil {
+	if err := gstredis.ZRemRangeByScore(ctx, key, "-inf", strconv.FormatInt(cutoff.UnixMilli(), 10)); err != nil {
 		return service.NewErrorWithCause(http.StatusInternalServerError, "failed to prune expired sessions", err)
 	}
 	return nil
@@ -386,15 +386,15 @@ func (store) TouchSession(ctx context.Context, sessionID string, sessionData mod
 	// index alone, out of reach of the revocations that walk the user and all
 	// indexes. A snapshot already gone stays gone: this request was
 	// authenticated before the revocation, and the next one finds nothing to
-	// load. The value is the JSON redis.Cache reads the snapshot back from.
-	written, err := redis.SetXX(ctx, sessionDataKey(sessionID), string(payload), ttl)
+	// load. The value is the JSON gstredis.Cache reads the snapshot back from.
+	written, err := gstredis.SetXX(ctx, sessionDataKey(sessionID), string(payload), ttl)
 	if err != nil {
 		return touchSessionError(err)
 	}
 	if !written {
 		return nil
 	}
-	if err = redis.ZAdd(ctx, sessionIndexSeenKey(), float64(now.UnixMilli()), sessionID); err != nil {
+	if err = gstredis.ZAdd(ctx, sessionIndexSeenKey(), float64(now.UnixMilli()), sessionID); err != nil {
 		return touchSessionError(err)
 	}
 	_ = pruneIndex(ctx, sessionIndexSeenKey(), seenIndexCutoff(now))
@@ -422,7 +422,7 @@ func (store) DeleteUserSessions(ctx context.Context, userID string) error {
 	if err := deleteUserSessions(ctx, userID, ""); err != nil {
 		return err
 	}
-	if err := redis.Del(ctx, sessionIndexUserKey(userID)); err != nil {
+	if err := gstredis.Del(ctx, sessionIndexUserKey(userID)); err != nil {
 		return service.NewErrorWithCause(http.StatusInternalServerError, "failed to delete user session index", err)
 	}
 	return nil
@@ -469,7 +469,7 @@ func deleteUserSessions(ctx context.Context, userID, keepSessionID string) error
 // the caller's fallback is to read the database, which is the answer the cache
 // was standing in for anyway.
 func (store) LoadUserState(ctx context.Context, userID string) (UserState, bool) {
-	state, err := redis.Cache[UserState]().Get(ctx, userStateKey(userID))
+	state, err := gstredis.Cache[UserState]().Get(ctx, userStateKey(userID))
 	if err == nil {
 		return state, true
 	}
@@ -485,7 +485,7 @@ func (store) LoadUserState(ctx context.Context, userID string) (UserState, bool)
 // the state it was given is already the truth, and the next request pays for a
 // database read instead.
 func (store) SaveUserState(ctx context.Context, userID string, state UserState) {
-	if err := redis.Cache[UserState]().Set(ctx, userStateKey(userID), state, GetSessionUserStateTTL()); err != nil {
+	if err := gstredis.Cache[UserState]().Set(ctx, userStateKey(userID), state, GetSessionUserStateTTL()); err != nil {
 		logStoreWarning("failed to cache iam user state", userID, err)
 	}
 }
@@ -500,7 +500,7 @@ func (store) DropUserState(ctx context.Context, userID string) {
 	if userID == "" {
 		return
 	}
-	_ = redis.Del(ctx, userStateKey(userID))
+	_ = gstredis.Del(ctx, userStateKey(userID))
 }
 
 // ---------- login failures ----------
@@ -512,9 +512,9 @@ func (store) DropUserState(ctx context.Context, userID string) {
 // login while Redis is unwell, which turns a degraded cache into an outage, and
 // the account is still protected by the password itself.
 func (store) LoginFailures(ctx context.Context, username string) int64 {
-	count, err := redis.GetInt(ctx, loginFailureKey(username))
+	count, err := gstredis.GetInt(ctx, loginFailureKey(username))
 	if err != nil {
-		if !errors.Is(err, redis.ErrKeyNotExists) {
+		if !errors.Is(err, gstredis.ErrKeyNotExists) {
 			logStoreWarning("failed to read iam login failure count", username, err)
 		}
 		return 0
@@ -530,16 +530,16 @@ func (store) LoginFailures(ctx context.Context, username string) int64 {
 // continuing to fail against it.
 func (store) RecordLoginFailure(ctx context.Context, username string, window time.Duration) int64 {
 	key := loginFailureKey(username)
-	count, err := redis.Incr(ctx, key)
+	count, err := gstredis.Incr(ctx, key)
 	if err != nil {
 		logStoreWarning("failed to count iam login failure", username, err)
 		return 0
 	}
 	if count == 1 {
-		if err = redis.Expire(ctx, key, window); err != nil {
+		if err = gstredis.Expire(ctx, key, window); err != nil {
 			// Without the ttl this counter would never reset, locking the
 			// account out for good; dropping it restarts the window instead.
-			_ = redis.Del(ctx, key)
+			_ = gstredis.Del(ctx, key)
 			logStoreWarning("failed to bound iam login failure window", username, err)
 			return 0
 		}
@@ -553,7 +553,7 @@ func (store) ClearLoginFailures(ctx context.Context, username string) {
 	if username == "" {
 		return
 	}
-	_ = redis.Del(ctx, loginFailureKey(username))
+	_ = gstredis.Del(ctx, loginFailureKey(username))
 }
 
 // ---------- maintenance ----------
@@ -565,13 +565,13 @@ func (store) ClearLoginFailures(ctx context.Context, username string) {
 // counters are deliberately outside it, and a purge that left them would hand
 // the next test a locked-out account.
 func (store) Purge(ctx context.Context) error {
-	if err := redis.RemovePrefix(ctx, sessionNamespace); err != nil {
+	if err := gstredis.RemovePrefix(ctx, sessionNamespace); err != nil {
 		return err
 	}
-	if err := redis.RemovePrefix(ctx, userNamespace); err != nil {
+	if err := gstredis.RemovePrefix(ctx, userNamespace); err != nil {
 		return err
 	}
-	return redis.RemovePrefix(ctx, loginNamespace)
+	return gstredis.RemovePrefix(ctx, loginNamespace)
 }
 
 // logStoreWarning reports a storage failure the caller is not expected to act

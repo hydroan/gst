@@ -11,7 +11,7 @@ import (
 	"maps"
 	"net"
 	"net/http"
-	gopath "path"
+	"path"
 	"regexp"
 	"slices"
 	"sort"
@@ -412,11 +412,11 @@ func Register[M types.Model, REQ types.Request, RSP types.Response](router *gin.
 	register[M, REQ, RSP](router, routed.Route, set, &routed)
 }
 
-func register[M types.Model, REQ types.Request, RSP types.Response](router *gin.RouterGroup, path string, phases map[consts.Phase]bool, cfg ...*types.ControllerConfig[M]) {
+func register[M types.Model, REQ types.Request, RSP types.Response](router *gin.RouterGroup, relativePath string, phases map[consts.Phase]bool, cfg ...*types.ControllerConfig[M]) {
 	mu.Lock()
 	defer mu.Unlock()
 
-	endpoint := gopath.Join(router.BasePath(), path)
+	endpoint := path.Join(router.BasePath(), relativePath)
 
 	// Everything except the public route group is documented as requiring
 	// authentication, which is the safe default for custom sub groups.
@@ -427,7 +427,7 @@ func register[M types.Model, REQ types.Request, RSP types.Response](router *gin.
 	// gg gen's route ignore rules read the method from as well.
 	handle := func(phase consts.Phase, handler gin.HandlerFunc) {
 		method := phase.HTTPMethod()
-		router.Handle(method, path, handler)
+		router.Handle(method, relativePath, handler)
 		registerRoute(endpoint, method, authRequired)
 		middleware.RouteManager.Add(endpoint)
 		openapigen.Set[M, REQ, RSP](endpoint, authRequired, phase)

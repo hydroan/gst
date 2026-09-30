@@ -8,7 +8,7 @@ import (
 	"github.com/hydroan/gst"
 	modeliamsession "github.com/hydroan/gst/internal/model/iam/session"
 	serviceiamsession "github.com/hydroan/gst/internal/service/iam/session"
-	"github.com/hydroan/gst/redis"
+	gstredis "github.com/hydroan/gst/redis"
 	"github.com/stretchr/testify/require"
 )
 
@@ -29,11 +29,11 @@ func TestTouchSession(t *testing.T) {
 			LastSeenAt: lastSeenAt,
 			ExpiresAt:  now.Add(time.Hour),
 		}
-		require.NoError(t, redis.Cache[modeliamsession.Session]().Set(t.Context(), serviceiamsession.SessionDataKey(sessionID), session, time.Until(session.ExpiresAt)))
+		require.NoError(t, gstredis.Cache[modeliamsession.Session]().Set(t.Context(), serviceiamsession.SessionDataKey(sessionID), session, time.Until(session.ExpiresAt)))
 
 		require.NoError(t, serviceiamsession.Store.TouchSession(t.Context(), sessionID, session, now))
 
-		stored, err := redis.Cache[modeliamsession.Session]().Get(t.Context(), serviceiamsession.SessionDataKey(sessionID))
+		stored, err := gstredis.Cache[modeliamsession.Session]().Get(t.Context(), serviceiamsession.SessionDataKey(sessionID))
 		require.NoError(t, err)
 		require.True(t, stored.LastSeenAt.Equal(lastSeenAt))
 	})
@@ -48,18 +48,18 @@ func TestTouchSession(t *testing.T) {
 			LastSeenAt: now.Add(-time.Minute),
 			ExpiresAt:  now.Add(time.Hour),
 		}
-		require.NoError(t, redis.Cache[modeliamsession.Session]().Set(t.Context(), serviceiamsession.SessionDataKey(sessionID), session, time.Until(session.ExpiresAt)))
+		require.NoError(t, gstredis.Cache[modeliamsession.Session]().Set(t.Context(), serviceiamsession.SessionDataKey(sessionID), session, time.Until(session.ExpiresAt)))
 
 		require.NoError(t, serviceiamsession.Store.TouchSession(t.Context(), sessionID, session, now))
 
-		stored, err := redis.Cache[modeliamsession.Session]().Get(t.Context(), serviceiamsession.SessionDataKey(sessionID))
+		stored, err := gstredis.Cache[modeliamsession.Session]().Get(t.Context(), serviceiamsession.SessionDataKey(sessionID))
 		require.NoError(t, err)
 		require.True(t, stored.LastSeenAt.Equal(now))
 		require.Equal(t, session.ExpiresAt.UnixMilli(), stored.ExpiresAt.UnixMilli())
 
 		// The snapshot and the last-seen index carry the same activity time, which
 		// is what lets the online-window query answer from the index alone.
-		indexed, err := redis.ZRangeByScore(
+		indexed, err := gstredis.ZRangeByScore(
 			t.Context(),
 			serviceiamsession.SessionIndexSeenKey(),
 			strconv.FormatInt(now.UnixMilli(), 10),
@@ -84,7 +84,7 @@ func TestTouchSession(t *testing.T) {
 			LastSeenAt: now.Add(-time.Minute),
 			ExpiresAt:  now.Add(time.Hour),
 		}
-		require.NoError(t, redis.Cache[modeliamsession.Session]().Set(t.Context(), serviceiamsession.SessionDataKey(sessionID), session, time.Until(session.ExpiresAt)))
+		require.NoError(t, gstredis.Cache[modeliamsession.Session]().Set(t.Context(), serviceiamsession.SessionDataKey(sessionID), session, time.Until(session.ExpiresAt)))
 		require.NoError(t, serviceiamsession.Store.IndexSession(t.Context(), session))
 
 		_, err := serviceiamsession.Store.DeleteSession(t.Context(), sessionID)
@@ -92,14 +92,14 @@ func TestTouchSession(t *testing.T) {
 
 		require.NoError(t, serviceiamsession.Store.TouchSession(t.Context(), sessionID, session, now))
 
-		_, err = redis.Cache[modeliamsession.Session]().Get(t.Context(), serviceiamsession.SessionDataKey(sessionID))
+		_, err = gstredis.Cache[modeliamsession.Session]().Get(t.Context(), serviceiamsession.SessionDataKey(sessionID))
 		require.ErrorIs(t, err, gst.ErrEntryNotFound, "the revoked snapshot must not be written back")
 		for _, key := range []string{
 			serviceiamsession.SessionIndexUserKey(session.UserID),
 			serviceiamsession.SessionIndexAllKey(),
 			serviceiamsession.SessionIndexSeenKey(),
 		} {
-			members, err := redis.ZRange(t.Context(), key, 0, -1)
+			members, err := gstredis.ZRange(t.Context(), key, 0, -1)
 			require.NoError(t, err)
 			require.NotContains(t, members, sessionID, "index %s", key)
 		}
@@ -129,7 +129,7 @@ func TestIndexSessionSetsIndexTTL(t *testing.T) {
 		require.NoError(t, serviceiamsession.Store.IndexSession(t.Context(), session))
 
 		for _, key := range []string{serviceiamsession.SessionIndexUserKey(session.UserID), serviceiamsession.SessionIndexAllKey()} {
-			ttl, err := redis.TTL(t.Context(), key)
+			ttl, err := gstredis.TTL(t.Context(), key)
 			require.NoError(t, err)
 			require.LessOrEqual(t, ttl, lifetime, key)
 			require.Greater(t, ttl, lifetime-time.Minute, key)
@@ -137,7 +137,7 @@ func TestIndexSessionSetsIndexTTL(t *testing.T) {
 
 		// The last-seen index is scored by activity rather than by expiry, so it
 		// has to outlive the sessions themselves by one touch interval.
-		seenTTL, err := redis.TTL(t.Context(), serviceiamsession.SessionIndexSeenKey())
+		seenTTL, err := gstredis.TTL(t.Context(), serviceiamsession.SessionIndexSeenKey())
 		require.NoError(t, err)
 		require.Greater(t, seenTTL, lifetime)
 	})
@@ -163,7 +163,7 @@ func TestIndexSessionSetsIndexTTL(t *testing.T) {
 		// A shared index belongs to every member, so the one with the least time
 		// left must not decide when the whole index is reclaimed.
 		for _, key := range []string{serviceiamsession.SessionIndexUserKey(longLived.UserID), serviceiamsession.SessionIndexAllKey()} {
-			ttl, err := redis.TTL(t.Context(), key)
+			ttl, err := gstredis.TTL(t.Context(), key)
 			require.NoError(t, err)
 			require.Greater(t, ttl, lifetime-time.Minute, key)
 		}
@@ -183,8 +183,8 @@ func TestIndexSessionPrunesStaleSeenIndex(t *testing.T) {
 	staleSessionID := "stale-last-seen-session"
 	retainedSessionID := "retained-last-seen-session"
 	currentSessionID := "current-session"
-	require.NoError(t, redis.ZAdd(t.Context(), serviceiamsession.SessionIndexSeenKey(), float64(now.Add(-2*time.Hour).UnixMilli()), staleSessionID))
-	require.NoError(t, redis.ZAdd(t.Context(), serviceiamsession.SessionIndexSeenKey(), float64(now.Add(-30*time.Minute).UnixMilli()), retainedSessionID))
+	require.NoError(t, gstredis.ZAdd(t.Context(), serviceiamsession.SessionIndexSeenKey(), float64(now.Add(-2*time.Hour).UnixMilli()), staleSessionID))
+	require.NoError(t, gstredis.ZAdd(t.Context(), serviceiamsession.SessionIndexSeenKey(), float64(now.Add(-30*time.Minute).UnixMilli()), retainedSessionID))
 
 	session := modeliamsession.Session{
 		ID:         currentSessionID,
@@ -195,7 +195,7 @@ func TestIndexSessionPrunesStaleSeenIndex(t *testing.T) {
 	}
 	require.NoError(t, serviceiamsession.Store.IndexSession(t.Context(), session))
 
-	seenIndexSessionIDs, err := redis.ZRange(t.Context(), serviceiamsession.SessionIndexSeenKey(), 0, -1)
+	seenIndexSessionIDs, err := gstredis.ZRange(t.Context(), serviceiamsession.SessionIndexSeenKey(), 0, -1)
 	require.NoError(t, err)
 	require.NotContains(t, seenIndexSessionIDs, staleSessionID)
 	require.Contains(t, seenIndexSessionIDs, retainedSessionID)

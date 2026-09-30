@@ -2,7 +2,7 @@ package ggmodule
 
 import (
 	"os"
-	pathpkg "path"
+	"path"
 	"path/filepath"
 	"slices"
 	"sort"
@@ -76,7 +76,7 @@ func (p *CopyPlan) addModelFiles() error {
 // referencing an excluded model symbol still surfaces through the copied
 // project's build: the service closure walks the service tree only.
 func (p *CopyPlan) requireExcludedModelFilesUnreferenced() error {
-	modelTreePrefix := pathpkg.Join("internal", "model", p.Name) + "/"
+	modelTreePrefix := path.Join("internal", "model", p.Name) + "/"
 	excludesModelSources := false
 	for _, rel := range p.ExcludeSourceFiles {
 		if strings.HasPrefix(rel, modelTreePrefix) {
@@ -93,18 +93,18 @@ func (p *CopyPlan) requireExcludedModelFilesUnreferenced() error {
 		return err
 	}
 	copied := make([]string, 0, len(tree.files))
-	for path := range tree.files {
-		if !p.canonicalIgnoredSourcePath(path) {
-			copied = append(copied, path)
+	for file := range tree.files {
+		if !p.canonicalIgnoredSourcePath(file) {
+			copied = append(copied, file)
 		}
 	}
 	sort.Strings(copied)
-	for _, path := range copied {
-		for _, declFile := range tree.referencedTreeFiles(path) {
+	for _, file := range copied {
+		for _, declFile := range tree.referencedTreeFiles(file) {
 			if p.canonicalIgnoredSourcePath(declFile) {
 				return errors.Newf(
 					"module copy: %s references %s, which excludeSourceFiles skips; remove the exclusion or the references",
-					p.describeFrameworkPath(path), p.describeFrameworkPath(declFile),
+					p.describeFrameworkPath(file), p.describeFrameworkPath(declFile),
 				)
 			}
 		}

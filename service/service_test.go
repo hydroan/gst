@@ -11,7 +11,7 @@ import (
 	"github.com/hydroan/gst/internal/serviceregistry"
 	"github.com/hydroan/gst/internal/types"
 	"github.com/hydroan/gst/logger"
-	"github.com/hydroan/gst/logger/zap"
+	gstzap "github.com/hydroan/gst/logger/zap"
 	"github.com/hydroan/gst/service"
 	"github.com/stretchr/testify/require"
 )
@@ -80,7 +80,7 @@ func TestBaseAliasesServiceRegistryBase(t *testing.T) {
 // in the generated form embeds.
 func TestRegisterInjectsTheServiceLogger(t *testing.T) {
 	previous := logger.Service
-	logger.Service = zap.Fallback("service")
+	logger.Service = gstzap.Fallback("service")
 	t.Cleanup(func() { logger.Service = previous })
 
 	type base = service.Base[*testUser, *testUser, *testUser]

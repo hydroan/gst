@@ -8,7 +8,7 @@ import (
 	"github.com/hydroan/gst/internal/cache/registry"
 	"github.com/hydroan/gst/internal/cache/tracing"
 	"github.com/hydroan/gst/internal/types"
-	goredis "github.com/redis/go-redis/v9"
+	"github.com/redis/go-redis/v9"
 )
 
 var (
@@ -70,7 +70,7 @@ func (cache[T]) Get(ctx context.Context, key string) (T, error) {
 	}
 	data, err := client.Get(ctx, Key(key)).Bytes()
 	if err != nil {
-		if errors.Is(err, goredis.Nil) {
+		if errors.Is(err, redis.Nil) {
 			return zero, types.ErrEntryNotFound
 		}
 		return zero, errors.WithStack(err)

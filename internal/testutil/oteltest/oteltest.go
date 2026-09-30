@@ -12,12 +12,12 @@ import (
 
 	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/logger"
-	pkgzap "github.com/hydroan/gst/logger/zap"
+	gstzap "github.com/hydroan/gst/logger/zap"
 	gstotel "github.com/hydroan/gst/otel"
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
-	sdktrace "go.opentelemetry.io/otel/sdk/trace"
+	"go.opentelemetry.io/otel/sdk/trace"
 	"go.opentelemetry.io/otel/sdk/trace/tracetest"
 )
 
@@ -80,7 +80,7 @@ func Enable(t *testing.T, opts ...Option) {
 	})
 
 	originalLogger := logger.OTEL
-	logger.OTEL = pkgzap.Fallback("otel")
+	logger.OTEL = gstzap.Fallback("otel")
 	t.Cleanup(func() {
 		logger.OTEL = originalLogger
 	})
@@ -97,7 +97,7 @@ func Enable(t *testing.T, opts ...Option) {
 // so far, which is how a test reads back what an operation exported.
 func Record(t *testing.T) *tracetest.SpanRecorder {
 	t.Helper()
-	provider, ok := otel.GetTracerProvider().(*sdktrace.TracerProvider)
+	provider, ok := otel.GetTracerProvider().(*trace.TracerProvider)
 	require.True(t, ok, "Enable must have installed the SDK tracer provider")
 	recorder := tracetest.NewSpanRecorder()
 	provider.RegisterSpanProcessor(recorder)
@@ -116,7 +116,7 @@ func EndedNames(recorder *tracetest.SpanRecorder) []string {
 
 // EndedNamed returns the first ended span carrying name, failing the test
 // when none was exported.
-func EndedNamed(t *testing.T, recorder *tracetest.SpanRecorder, name string) sdktrace.ReadOnlySpan {
+func EndedNamed(t *testing.T, recorder *tracetest.SpanRecorder, name string) trace.ReadOnlySpan {
 	t.Helper()
 	for _, span := range recorder.Ended() {
 		if span.Name() == name {

@@ -9,7 +9,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
-	"gorm.io/gorm/logger"
+	gormlogger "gorm.io/gorm/logger"
 )
 
 // TestInstallErrorTranslationRewritesTheErrorOfEveryOperation pins that an
@@ -18,7 +18,7 @@ import (
 // delete, row and raw, and that an error it does not recognize comes back
 // as it is.
 func TestInstallErrorTranslationRewritesTheErrorOfEveryOperation(t *testing.T) {
-	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{Logger: logger.Discard})
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{Logger: gormlogger.Discard})
 	require.NoError(t, err)
 	missing := errors.New("the table is missing")
 	require.NoError(t, dbruntime.InstallErrorTranslation(db, func(err error) error {

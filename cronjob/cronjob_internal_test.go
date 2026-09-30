@@ -10,16 +10,16 @@ import (
 
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/config"
-	"github.com/hydroan/gst/database/mysql"
-	"github.com/hydroan/gst/database/postgres"
-	"github.com/hydroan/gst/database/sqlite"
+	gstmysql "github.com/hydroan/gst/database/mysql"
+	gstpostgres "github.com/hydroan/gst/database/postgres"
+	gstsqlite "github.com/hydroan/gst/database/sqlite"
 	"github.com/hydroan/gst/internal/dbruntime"
 	"github.com/hydroan/gst/internal/lease"
 	"github.com/hydroan/gst/internal/lifecycle"
 	"github.com/hydroan/gst/internal/testutil"
 	"github.com/hydroan/gst/internal/testutil/testcontainer"
 	"github.com/hydroan/gst/logger"
-	pkgzap "github.com/hydroan/gst/logger/zap"
+	gstzap "github.com/hydroan/gst/logger/zap"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap/zapcore"
 	"gorm.io/gorm"
@@ -48,7 +48,7 @@ func run(m *testing.M) int {
 	if err := config.Init(); err != nil {
 		panic(err)
 	}
-	if err := errors.Join(sqlite.Init(), mysql.Init(), postgres.Init()); err != nil {
+	if err := errors.Join(gstsqlite.Init(), gstmysql.Init(), gstpostgres.Init()); err != nil {
 		panic(err)
 	}
 	if err := dbruntime.Wait(); err != nil {
@@ -290,7 +290,7 @@ func TestStartFallsBackToTheGlobalStreamWithoutABoundLogger(t *testing.T) {
 
 	Register(noopJob, "0 0 * * * *", "fallback-job")
 	require.NoError(t, start(context.Background()))
-	pkgzap.Clean()
+	gstzap.Clean()
 
 	scheduled := entries.FilterMessage("scheduled cronjob").All()
 	require.Len(t, scheduled, 1, "scheduling must log through the fallback logger")
@@ -326,14 +326,14 @@ func TestSchedulerIsALifecycleComponent(t *testing.T) {
 		return nil
 	}, "* * * * * *", "component-job")
 
-	component.SetLogger(pkgzap.New("bound_cronjob.log"))
+	component.SetLogger(gstzap.New("bound_cronjob.log"))
 	require.NoError(t, component.Start(context.Background()))
 	clock.Advance(time.Second)
 	awaitSignal(t, entered, "the round")
 	require.NoError(t, component.Stop(context.Background()))
 	require.NotNil(t, current, "the scheduler must have been started through the component")
 
-	pkgzap.Clean()
+	gstzap.Clean()
 	entry := readLogEntry(t, filepath.Join(dir, "bound_cronjob.log"), "scheduled cronjob")
 	require.Equal(t, "component-job", entry["name"])
 	require.NoFileExists(t, filepath.Join(dir, "cronjob.log"), "the bound logger replaces the package's own")

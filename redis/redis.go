@@ -16,7 +16,7 @@ import (
 	"github.com/hydroan/gst/util"
 	jsoniter "github.com/json-iterator/go"
 	redisotel "github.com/redis/go-redis/extra/redisotel/v9"
-	goredis "github.com/redis/go-redis/v9"
+	"github.com/redis/go-redis/v9"
 	"go.uber.org/zap"
 )
 
@@ -34,7 +34,7 @@ var (
 	// connections both satisfy it, so every operation reads the same variable
 	// under the same lock: a handle that is absent — never initialized, or
 	// closed during shutdown — is absent for all of them at once.
-	cli goredis.UniversalClient
+	cli redis.UniversalClient
 	mu  sync.RWMutex
 
 	ErrKeyNotExists    = errors.New("key no longer exists, may be expired")
@@ -57,14 +57,14 @@ func Init() (err error) {
 	}
 
 	if cfg.ClusterMode {
-		var cluster *goredis.ClusterClient
+		var cluster *redis.ClusterClient
 		if cluster, err = NewCluster(cfg); err != nil {
 			return errors.Wrap(err, "failed to connect to redis")
 		}
 		cli = cluster
 		zap.S().Infow("successfully connect to redis", "addrs", cfg.Addrs, "cluster_mode", cfg.ClusterMode)
 	} else {
-		var client *goredis.Client
+		var client *redis.Client
 		if client, err = New(cfg); err != nil {
 			return errors.Wrap(err, "failed to connect to redis")
 		}
@@ -110,8 +110,8 @@ func Init() (err error) {
 // New builds a standalone client from cfg without installing it as the
 // process-wide handle. Init builds its handle with it, and a caller needing a
 // connection of its own — one pointed at another database, say — can too.
-func New(cfg config.Redis) (*goredis.Client, error) {
-	opts := &goredis.Options{
+func New(cfg config.Redis) (*redis.Client, error) {
+	opts := &redis.Options{
 		Addr:     cfg.Addr,
 		Password: cfg.Password,
 		DB:       cfg.DB,
@@ -149,13 +149,13 @@ func New(cfg config.Redis) (*goredis.Client, error) {
 		opts.TLSConfig = tlsConfig
 	}
 
-	return goredis.NewClient(opts), nil
+	return redis.NewClient(opts), nil
 }
 
 // NewCluster is New for a cluster deployment, reading cfg.Addrs instead of
 // the single address.
-func NewCluster(cfg config.Redis) (*goredis.ClusterClient, error) {
-	opts := &goredis.ClusterOptions{
+func NewCluster(cfg config.Redis) (*redis.ClusterClient, error) {
+	opts := &redis.ClusterOptions{
 		Addrs:    cfg.Addrs,
 		Password: cfg.Password,
 	}
@@ -192,7 +192,7 @@ func NewCluster(cfg config.Redis) (*goredis.ClusterClient, error) {
 		opts.TLSConfig = tlsConfig
 	}
 
-	return goredis.NewClusterClient(opts), nil
+	return redis.NewClusterClient(opts), nil
 }
 
 // Client returns the initialized Redis client handle, standalone or
@@ -203,7 +203,7 @@ func NewCluster(cfg config.Redis) (*goredis.ClusterClient, error) {
 // past Close. Every operation in this package goes through it, so an absent
 // handle is an error at the call site instead of a zero value the caller
 // cannot tell from a real answer.
-func Client() (goredis.UniversalClient, error) {
+func Client() (redis.UniversalClient, error) {
 	mu.RLock()
 	defer mu.RUnlock()
 	if cli == nil {

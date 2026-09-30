@@ -6,7 +6,7 @@ import (
 	"go/format"
 	"go/parser"
 	"go/token"
-	pathpkg "path"
+	"path"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -82,12 +82,12 @@ func normalizeModuleCopySource(filename string, src []byte, config moduleCopyRew
 // shipping code that cannot build.
 func requirePublicFrameworkImports(filename string, file *ast.File) error {
 	for _, imp := range file.Imports {
-		path, err := strconv.Unquote(imp.Path.Value)
+		importPath, err := strconv.Unquote(imp.Path.Value)
 		if err != nil {
 			continue
 		}
-		if strings.HasPrefix(path, frameworkModulePath+"/internal/") {
-			return errors.Newf("module copy source %s imports framework internal package %q; copied files must import public framework packages", filename, path)
+		if strings.HasPrefix(importPath, frameworkModulePath+"/internal/") {
+			return errors.Newf("module copy source %s imports framework internal package %q; copied files must import public framework packages", filename, importPath)
 		}
 	}
 	return nil
@@ -100,24 +100,24 @@ func rewriteModuleCopyFile(file *ast.File, config moduleCopyRewriteConfig, inclu
 	usedNames := make(map[string]bool)
 	// An import left as-is still occupies its local name, so the alias search for
 	// rewritten imports must not hand that name out again.
-	markUsedName := func(imp *ast.ImportSpec, path string) {
-		name := importLocalName(imp, path)
+	markUsedName := func(imp *ast.ImportSpec, importPath string) {
+		name := importLocalName(imp, importPath)
 		if name != "" && name != "." && name != "_" {
 			usedNames[name] = true
 		}
 	}
 	for _, imp := range file.Imports {
-		path, err := strconv.Unquote(imp.Path.Value)
+		importPath, err := strconv.Unquote(imp.Path.Value)
 		if err != nil {
 			continue
 		}
-		rewrite, ok := buildModuleCopyImportRewrite(imp, path, config)
+		rewrite, ok := buildModuleCopyImportRewrite(imp, importPath, config)
 		if !ok {
-			markUsedName(imp, path)
+			markUsedName(imp, importPath)
 			continue
 		}
 		if rewrite.kind == moduleCopyImportService && !includeServiceImports {
-			markUsedName(imp, path)
+			markUsedName(imp, importPath)
 			continue
 		}
 		rewrites = append(rewrites, rewrite)
@@ -219,7 +219,7 @@ func newModuleCopyImportRewrite(imp *ast.ImportSpec, sourcePath string, sourcePr
 		spec:            imp,
 		oldName:         name,
 		newPath:         newPath,
-		desiredName:     pathpkg.Base(newPath),
+		desiredName:     path.Base(newPath),
 		kind:            kind,
 		keepSpecialName: name == "." || name == "_",
 	}
@@ -233,7 +233,7 @@ func importLocalName(imp *ast.ImportSpec, importPath string) string {
 	if imp.Name != nil {
 		return imp.Name.Name
 	}
-	return pathpkg.Base(importPath)
+	return path.Base(importPath)
 }
 
 func sanitizeModuleCopyIdentifier(value string) string {

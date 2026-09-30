@@ -7,7 +7,7 @@ import (
 	"go/parser"
 	"go/token"
 	"os"
-	gopath "path"
+	"path"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -73,24 +73,24 @@ func checkModuleAssembly(ignore gghelper.ProjectIgnore) []string {
 	}
 	satisfied := make(map[string]bool, len(pending))
 
-	walkErr := ignore.Walk(".", func(path string, info os.FileInfo) error {
+	walkErr := ignore.Walk(".", func(filename string, info os.FileInfo) error {
 		if info.IsDir() {
-			if moduleOwnedPath(owned, ggconst.DirModel, path) || moduleOwnedPath(owned, ggconst.DirService, path) {
+			if moduleOwnedPath(owned, ggconst.DirModel, filename) || moduleOwnedPath(owned, ggconst.DirService, filename) {
 				return filepath.SkipDir
 			}
 			return nil
 		}
-		if !strings.HasSuffix(path, ".go") || strings.HasSuffix(path, "_test.go") {
+		if !strings.HasSuffix(filename, ".go") || strings.HasSuffix(filename, "_test.go") {
 			return nil
 		}
-		source, readErr := os.ReadFile(path)
+		source, readErr := os.ReadFile(filename)
 		if readErr != nil {
 			return readErr
 		}
 		if !mentionsAnyFunction(source, wanted) {
 			return nil
 		}
-		collectAssemblyCalls(path, source, pending, satisfied)
+		collectAssemblyCalls(filename, source, pending, satisfied)
 
 		return nil
 	})
@@ -105,7 +105,7 @@ func checkModuleAssembly(ignore gghelper.ProjectIgnore) []string {
 		}
 		violations = append(violations, fmt.Sprintf(
 			"module %s is copied but the project never calls %s.%s: %s",
-			call.Module, gopath.Base(call.Import), call.Function, call.Reason))
+			call.Module, path.Base(call.Import), call.Function, call.Reason))
 	}
 	sort.Strings(violations)
 
@@ -130,8 +130,8 @@ func mentionsAnyFunction(source []byte, wanted map[string]bool) bool {
 // only when it names the declared package the way this file imports it —
 // under its package name, an alias or a dot import — so a same-named function
 // from another package does not.
-func collectAssemblyCalls(path string, source []byte, pending []ggmodule.AssemblyCall, satisfied map[string]bool) {
-	file, err := parser.ParseFile(token.NewFileSet(), path, source, parser.SkipObjectResolution)
+func collectAssemblyCalls(filename string, source []byte, pending []ggmodule.AssemblyCall, satisfied map[string]bool) {
+	file, err := parser.ParseFile(token.NewFileSet(), filename, source, parser.SkipObjectResolution)
 	if err != nil {
 		// An unparsable file is reported by the compiler and by every other
 		// check; treating it as "no call here" keeps this check quiet about it.
@@ -140,7 +140,7 @@ func collectAssemblyCalls(path string, source []byte, pending []ggmodule.Assembl
 
 	names := make([]goast.PackageNames, len(pending))
 	for i, required := range pending {
-		names[i] = goast.ImportedNames(file, required.Import, gopath.Base(required.Import))
+		names[i] = goast.ImportedNames(file, required.Import, path.Base(required.Import))
 	}
 	ast.Inspect(file, func(node ast.Node) bool {
 		call, ok := node.(*ast.CallExpr)

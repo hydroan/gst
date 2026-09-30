@@ -12,7 +12,7 @@ import (
 	modeliamsession "github.com/hydroan/gst/internal/model/iam/session"
 	serviceiamsession "github.com/hydroan/gst/internal/service/iam/session"
 	"github.com/hydroan/gst/internal/types"
-	"github.com/hydroan/gst/redis"
+	gstredis "github.com/hydroan/gst/redis"
 	"github.com/stretchr/testify/require"
 )
 
@@ -75,7 +75,7 @@ func TestCurrentSessionPrefersTheSessionOnTheContext(t *testing.T) {
 		IssuedAt:  now.Add(-time.Minute),
 		ExpiresAt: now.Add(time.Hour),
 	}
-	require.NoError(t, redis.Cache[modeliamsession.Session]().Set(t.Context(), serviceiamsession.SessionDataKey(cookieSessionID), cookieSession, time.Until(cookieSession.ExpiresAt)))
+	require.NoError(t, gstredis.Cache[modeliamsession.Session]().Set(t.Context(), serviceiamsession.SessionDataKey(cookieSessionID), cookieSession, time.Until(cookieSession.ExpiresAt)))
 
 	cachedSessionID := "cached-session"
 	cachedSession := modeliamsession.Session{

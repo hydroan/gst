@@ -5,20 +5,20 @@ import (
 	"fmt"
 	"testing"
 
-	cb "github.com/hydroan/gst/ds/queue/circularbuffer"
+	"github.com/hydroan/gst/ds/queue/circularbuffer"
 )
 
-func createCircularBuffer(b *testing.B, size int, safe bool, drop bool) *cb.CircularBuffer[int] {
+func createCircularBuffer(b *testing.B, size int, safe bool, drop bool) *circularbuffer.CircularBuffer[int] {
 	b.Helper()
-	ops := make([]cb.Option[int], 0)
+	ops := make([]circularbuffer.Option[int], 0)
 	if safe {
-		ops = append(ops, cb.WithSafe[int]())
+		ops = append(ops, circularbuffer.WithSafe[int]())
 	}
 	if drop {
-		ops = append(ops, cb.WithDrop[int]())
+		ops = append(ops, circularbuffer.WithDrop[int]())
 	}
 
-	cb, err := cb.New(10, ops...)
+	cb, err := circularbuffer.New(10, ops...)
 	if err != nil {
 		b.Fatalf("failed to create circular buffer: %v", err)
 	}
@@ -30,14 +30,14 @@ func createCircularBuffer(b *testing.B, size int, safe bool, drop bool) *cb.Circ
 	return cb
 }
 
-func createCircularBuffer2(b *testing.B, size int, safe bool) *cb.CircularBuffer[int] {
+func createCircularBuffer2(b *testing.B, size int, safe bool) *circularbuffer.CircularBuffer[int] {
 	b.Helper()
-	ops := make([]cb.Option[int], 0)
+	ops := make([]circularbuffer.Option[int], 0)
 	if safe {
-		ops = append(ops, cb.WithSafe[int]())
+		ops = append(ops, circularbuffer.WithSafe[int]())
 	}
 
-	cb, err := cb.New(size, ops...)
+	cb, err := circularbuffer.New(size, ops...)
 	if err != nil {
 		b.Fatalf("failed to create circular buffer: %v", err)
 	}
@@ -49,7 +49,7 @@ func createCircularBuffer2(b *testing.B, size int, safe bool) *cb.CircularBuffer
 	return cb
 }
 
-func benchmark(b *testing.B, sizes []int, do func(cb *cb.CircularBuffer[int])) {
+func benchmark(b *testing.B, sizes []int, do func(cb *circularbuffer.CircularBuffer[int])) {
 	b.Helper()
 	b.Run("overwrite", func(b *testing.B) {
 		for _, size := range sizes {
@@ -111,7 +111,7 @@ func benchmark(b *testing.B, sizes []int, do func(cb *cb.CircularBuffer[int])) {
 	})
 }
 
-func benchmark2(b *testing.B, sizes []int, do func(cb *cb.CircularBuffer[int])) {
+func benchmark2(b *testing.B, sizes []int, do func(cb *circularbuffer.CircularBuffer[int])) {
 	b.Helper()
 	for _, size := range sizes {
 		b.Run(fmt.Sprintf("size-%d", size), func(b *testing.B) {
@@ -143,37 +143,37 @@ func benchmark2(b *testing.B, sizes []int, do func(cb *cb.CircularBuffer[int])) 
 }
 
 func BenchmarkCircularBuffer_Enqueue(b *testing.B) {
-	benchmark(b, []int{100, 1000000}, func(cb *cb.CircularBuffer[int]) {
+	benchmark(b, []int{100, 1000000}, func(cb *circularbuffer.CircularBuffer[int]) {
 		cb.Enqueue(0)
 	})
 }
 
 func BenchmarkCircularBuffer_Dequeue(b *testing.B) {
-	benchmark2(b, []int{100, 100000}, func(cb *cb.CircularBuffer[int]) {
+	benchmark2(b, []int{100, 100000}, func(cb *circularbuffer.CircularBuffer[int]) {
 		_, _ = cb.Dequeue()
 	})
 }
 
 func BenchmarkCircularBuffer_Peek(b *testing.B) {
-	benchmark2(b, []int{100, 100000}, func(cb *cb.CircularBuffer[int]) {
+	benchmark2(b, []int{100, 100000}, func(cb *circularbuffer.CircularBuffer[int]) {
 		_, _ = cb.Peek()
 	})
 }
 
 func BenchmarkCircularBuffer_Slice(b *testing.B) {
-	benchmark2(b, []int{100, 100000}, func(cb *cb.CircularBuffer[int]) {
+	benchmark2(b, []int{100, 100000}, func(cb *circularbuffer.CircularBuffer[int]) {
 		_ = cb.Slice()
 	})
 }
 
 func BenchmarkCircularBuffer_Clone(b *testing.B) {
-	benchmark2(b, []int{100, 100000}, func(cb *cb.CircularBuffer[int]) {
+	benchmark2(b, []int{100, 100000}, func(cb *circularbuffer.CircularBuffer[int]) {
 		_ = cb.Clone()
 	})
 }
 
 func BenchmarkCircularBuffer_Range(b *testing.B) {
-	benchmark2(b, []int{100, 100000}, func(cb *cb.CircularBuffer[int]) {
+	benchmark2(b, []int{100, 100000}, func(cb *circularbuffer.CircularBuffer[int]) {
 		cb.Range(func(e int) bool {
 			_ = e
 			return true
@@ -182,24 +182,24 @@ func BenchmarkCircularBuffer_Range(b *testing.B) {
 }
 
 func BenchmarkCircularBuffer_MarshalJSON(b *testing.B) {
-	benchmark2(b, []int{100, 100000}, func(cb *cb.CircularBuffer[int]) {
+	benchmark2(b, []int{100, 100000}, func(cb *circularbuffer.CircularBuffer[int]) {
 		_, _ = json.Marshal(cb)
 	})
 }
 
 func BenchmarkCircularBuffer_UnmarshalJSON(b *testing.B) {
-	dst, err := cb.New[int](10)
+	dst, err := circularbuffer.New[int](10)
 	if err != nil {
 		b.Fatal(err)
 	}
 	bytes := []byte("[1, 2, 3, 4, 5, 6, 7, 8, 9, 10]")
-	benchmark2(b, []int{100, 100000}, func(cb *cb.CircularBuffer[int]) {
+	benchmark2(b, []int{100, 100000}, func(cb *circularbuffer.CircularBuffer[int]) {
 		_ = json.Unmarshal(bytes, dst)
 	})
 }
 
 func BenchmarkCircularBuffer_String(b *testing.B) {
-	benchmark2(b, []int{100, 100000}, func(cb *cb.CircularBuffer[int]) {
+	benchmark2(b, []int{100, 100000}, func(cb *circularbuffer.CircularBuffer[int]) {
 		_ = cb.String()
 	})
 }

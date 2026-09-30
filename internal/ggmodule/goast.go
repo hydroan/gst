@@ -3,7 +3,7 @@ package ggmodule
 import (
 	"bytes"
 	"go/ast"
-	goformat "go/format"
+	"go/format"
 	"go/parser"
 	"go/token"
 	"os"
@@ -20,7 +20,7 @@ func parseGoFile(path string) (*token.FileSet, *ast.File, error) {
 
 func formatGoFile(fset *token.FileSet, file *ast.File) ([]byte, error) {
 	var buf bytes.Buffer
-	if err := goformat.Node(&buf, fset, file); err != nil {
+	if err := format.Node(&buf, fset, file); err != nil {
 		return nil, err
 	}
 	return gofumpt.Source(buf.Bytes(), gofumpt.Options{})

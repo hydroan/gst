@@ -15,7 +15,7 @@ import (
 	"github.com/hydroan/gst/internal/testutil/oteltest"
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/otel/attribute"
-	oteltrace "go.opentelemetry.io/otel/trace"
+	"go.opentelemetry.io/otel/trace"
 )
 
 func TestTracingUsesIncomingTraceparent(t *testing.T) {
@@ -26,7 +26,7 @@ func TestTracingUsesIncomingTraceparent(t *testing.T) {
 	router := gin.New()
 	router.Use(tracing())
 	router.GET("/api/ping", func(c *gin.Context) {
-		spanContext := oteltrace.SpanFromContext(c.Request.Context()).SpanContext()
+		spanContext := trace.SpanFromContext(c.Request.Context()).SpanContext()
 		require.True(t, spanContext.HasTraceID())
 		require.Equal(t, incomingTraceID, spanContext.TraceID().String())
 		require.Equal(t, incomingTraceID, c.GetString(consts.TRACE_ID))
@@ -51,7 +51,7 @@ func TestTracingUsesIncomingTraceIDHeader(t *testing.T) {
 	router := gin.New()
 	router.Use(tracing())
 	router.GET("/api/ping", func(c *gin.Context) {
-		spanContext := oteltrace.SpanFromContext(c.Request.Context()).SpanContext()
+		spanContext := trace.SpanFromContext(c.Request.Context()).SpanContext()
 		require.True(t, spanContext.HasTraceID())
 		require.Equal(t, incomingTraceID, spanContext.TraceID().String())
 		require.Equal(t, incomingTraceID, c.GetString(consts.TRACE_ID))
@@ -99,7 +99,7 @@ func TestTracingSkipsRecordingOnlyStateWhenSamplerDrops(t *testing.T) {
 	router := gin.New()
 	router.Use(tracing())
 	router.GET("/api/ping", func(c *gin.Context) {
-		span := oteltrace.SpanFromContext(c.Request.Context())
+		span := trace.SpanFromContext(c.Request.Context())
 		require.True(t, span.SpanContext().HasTraceID())
 		require.False(t, span.IsRecording())
 

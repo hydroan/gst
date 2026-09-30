@@ -8,7 +8,7 @@ import (
 	"github.com/hydroan/gst/consts"
 	prommetrics "github.com/hydroan/gst/metrics"
 	"github.com/prometheus/client_golang/prometheus"
-	dto "github.com/prometheus/client_model/go"
+	"github.com/prometheus/client_model/go"
 )
 
 // TestAuthorizeNamesTheGrantingRule covers one case per branch a decision can
@@ -410,7 +410,7 @@ func TestAuthorizeCountsEveryDecision(t *testing.T) {
 		{string(consts.EffectDeny), "", string(consts.DenyReasonNoRole), 1},
 		{string(consts.EffectDeny), "", string(consts.DenyReasonNoPolicy), 1},
 	} {
-		var metric dto.Metric
+		var metric io_prometheus_client.Metric
 		counter, err := prommetrics.AuthzDecisionsTotal.GetMetricWithLabelValues(c.effect, c.allowedBy, c.deniedBy)
 		if err != nil {
 			t.Fatal(err)

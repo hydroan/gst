@@ -13,7 +13,7 @@ import (
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 	"go.uber.org/zap/zaptest/observer"
-	gorml "gorm.io/gorm/logger"
+	gormlogger "gorm.io/gorm/logger"
 )
 
 // newObservedGormLogger builds a GormLogger over an observer core so tests
@@ -250,7 +250,7 @@ func TestGormLoggerTraceKeepsRecordNotFoundAtInfo(t *testing.T) {
 	stubSlowQueryThreshold(t, time.Hour)
 	g, logs := newObservedGormLogger()
 
-	g.Trace(context.Background(), time.Now(), func() (string, int64) { return "SELECT 1", 0 }, gorml.ErrRecordNotFound)
+	g.Trace(context.Background(), time.Now(), func() (string, int64) { return "SELECT 1", 0 }, gormlogger.ErrRecordNotFound)
 
 	entry := requireSingleEntry(t, logs)
 	require.Equal(t, zapcore.InfoLevel, entry.Level)
@@ -329,7 +329,7 @@ func TestTraceFieldsFitTheCapacityInTheWorstCase(t *testing.T) {
 
 	ctx := execctx.WithCronjob(context.Background(), "sample_job", "trace-worst")
 	ctx = dbruntime.WithRole(ctx, "replica")
-	g.Trace(ctx, time.Now().Add(-time.Second), func() (string, int64) { return "SELECT 1", 0 }, gorml.ErrRecordNotFound)
+	g.Trace(ctx, time.Now().Add(-time.Second), func() (string, int64) { return "SELECT 1", 0 }, gormlogger.ErrRecordNotFound)
 
 	entry := requireSingleEntry(t, logs)
 	require.Len(t, entry.Context, traceFieldCap,

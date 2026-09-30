@@ -6,7 +6,7 @@ import (
 	"sort"
 	"testing"
 
-	pq "github.com/hydroan/gst/ds/queue/priorityqueue"
+	"github.com/hydroan/gst/ds/queue/priorityqueue"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -58,7 +58,7 @@ var users = []*User{
 }
 
 func TestPriorityQueue_CustomStruct(t *testing.T) {
-	q, err := pq.New(userCmp)
+	q, err := priorityqueue.New(userCmp)
 	require.NoError(t, err)
 	for _, u := range users {
 		q.Enqueue(u)
@@ -75,7 +75,7 @@ func TestPriorityQueue_CustomStruct(t *testing.T) {
 	// fmt.Println(users)
 	assert.Equal(t, sorted1, q.Values())
 
-	q, err = pq.New(userCmp, pq.WithMaxPriority[*User]())
+	q, err = priorityqueue.New(userCmp, priorityqueue.WithMaxPriority[*User]())
 	require.NoError(t, err)
 	for _, u := range users {
 		q.Enqueue(u)
@@ -92,7 +92,7 @@ func TestNew(t *testing.T) {
 	tests := []struct {
 		name      string
 		cmp       func(int, int) int
-		opts      []pq.Option[int]
+		opts      []priorityqueue.Option[int]
 		wantError bool
 	}{
 		{
@@ -108,23 +108,23 @@ func TestNew(t *testing.T) {
 		{
 			name: "with safe option",
 			cmp:  intCmp,
-			opts: []pq.Option[int]{pq.WithSafe[int]()},
+			opts: []priorityqueue.Option[int]{priorityqueue.WithSafe[int]()},
 		},
 		{
 			name: "with max priority option",
 			cmp:  intCmp,
-			opts: []pq.Option[int]{pq.WithMaxPriority[int]()},
+			opts: []priorityqueue.Option[int]{priorityqueue.WithMaxPriority[int]()},
 		},
 		{
 			name: "with multiple options",
 			cmp:  intCmp,
-			opts: []pq.Option[int]{pq.WithSafe[int](), pq.WithMaxPriority[int]()},
+			opts: []priorityqueue.Option[int]{priorityqueue.WithSafe[int](), priorityqueue.WithMaxPriority[int]()},
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			q, err := pq.New(tt.cmp, tt.opts...)
+			q, err := priorityqueue.New(tt.cmp, tt.opts...)
 			if tt.wantError {
 				require.Error(t, err)
 				assert.Nil(t, q)
@@ -137,7 +137,7 @@ func TestNew(t *testing.T) {
 }
 
 func TestPriorityQueue_Basic(t *testing.T) {
-	q, err := pq.New(intCmp)
+	q, err := priorityqueue.New(intCmp)
 	require.NoError(t, err)
 
 	assert.True(t, q.IsEmpty())
@@ -166,7 +166,7 @@ func TestPriorityQueue_Basic(t *testing.T) {
 }
 
 func TestPriorityQueue_MaxPriority(t *testing.T) {
-	q, err := pq.New(intCmp, pq.WithMaxPriority[int]())
+	q, err := priorityqueue.New(intCmp, priorityqueue.WithMaxPriority[int]())
 	require.NoError(t, err)
 
 	nums := []int{3, 1, 4, 1, 5, 9, 2, 6}
@@ -183,7 +183,7 @@ func TestPriorityQueue_MaxPriority(t *testing.T) {
 }
 
 func TestPriorityQueue_EmptyOperations(t *testing.T) {
-	q, err := pq.New(intCmp)
+	q, err := priorityqueue.New(intCmp)
 	require.NoError(t, err)
 
 	val, ok := q.Peek()
@@ -198,7 +198,7 @@ func TestPriorityQueue_EmptyOperations(t *testing.T) {
 }
 
 func TestPriorityQueue_Clone(t *testing.T) {
-	q, err := pq.New(intCmp)
+	q, err := priorityqueue.New(intCmp)
 	require.NoError(t, err)
 
 	nums := []int{3, 1, 4, 1, 5}
@@ -216,7 +216,7 @@ func TestPriorityQueue_Clone(t *testing.T) {
 }
 
 func TestPriorityQueue_String(t *testing.T) {
-	q, err := pq.New(intCmp)
+	q, err := priorityqueue.New(intCmp)
 	require.NoError(t, err)
 
 	// Empty queue
@@ -232,7 +232,7 @@ func TestPriorityQueue_String(t *testing.T) {
 }
 
 func TestPriorityQueue_Encoding(t *testing.T) {
-	q, err := pq.New(intCmp)
+	q, err := priorityqueue.New(intCmp)
 	require.NoError(t, err)
 
 	q.Enqueue(1)
@@ -242,7 +242,7 @@ func TestPriorityQueue_Encoding(t *testing.T) {
 	bytesData, err := json.Marshal(q)
 	require.NoError(t, err)
 
-	q2, err := pq.New(intCmp)
+	q2, err := priorityqueue.New(intCmp)
 	require.NoError(t, err)
 	require.NoError(t, json.Unmarshal(bytesData, q2))
 
@@ -251,7 +251,7 @@ func TestPriorityQueue_Encoding(t *testing.T) {
 }
 
 func TestPriorityQueue_EdgeCases(t *testing.T) {
-	q, err := pq.New(intCmp)
+	q, err := priorityqueue.New(intCmp)
 	require.NoError(t, err)
 
 	q.Enqueue(1)

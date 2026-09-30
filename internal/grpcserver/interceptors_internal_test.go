@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
-	dto "github.com/prometheus/client_model/go"
+	"github.com/prometheus/client_model/go"
 	"github.com/stretchr/testify/require"
 )
 
@@ -38,7 +38,7 @@ func TestCallsAreCountedInTheMetrics(t *testing.T) {
 
 // metricSample reads the sample of family carrying labels off the default
 // registry, nil when there is none: the getters of a nil sample answer zero.
-func metricSample(t *testing.T, family string, labels map[string]string) *dto.Metric {
+func metricSample(t *testing.T, family string, labels map[string]string) *io_prometheus_client.Metric {
 	t.Helper()
 	families, err := prometheus.DefaultGatherer.Gather()
 	require.NoError(t, err)

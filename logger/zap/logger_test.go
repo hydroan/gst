@@ -7,7 +7,7 @@ import (
 
 	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/internal/types"
-	"github.com/hydroan/gst/logger/zap"
+	gstzap "github.com/hydroan/gst/logger/zap"
 )
 
 var (
@@ -39,7 +39,7 @@ func createLogger(b *testing.B, filename string) types.Logger {
 	if err := config.Init(); err != nil {
 		b.Fatal(err)
 	}
-	l := zap.New("")
+	l := gstzap.New("")
 	return l
 }
 

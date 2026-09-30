@@ -13,7 +13,7 @@ import (
 	"github.com/hydroan/gst/internal/modelregistry"
 	"github.com/stretchr/testify/require"
 	"gorm.io/gorm"
-	"gorm.io/gorm/logger"
+	gormlogger "gorm.io/gorm/logger"
 )
 
 // plainRecord is a minimal model for table preparation tests.
@@ -236,7 +236,7 @@ func TestMigrateTableLeavesTheIndexesAlone(t *testing.T) {
 
 // statementLog is a gorm logger that keeps every statement the handle runs.
 type statementLog struct {
-	logger.Interface
+	gormlogger.Interface
 	mu         sync.Mutex
 	statements []string
 }
@@ -244,12 +244,12 @@ type statementLog struct {
 // recordStatements makes handle log its statements to a statementLog and
 // returns it.
 func recordStatements(handle *gorm.DB) *statementLog {
-	log := &statementLog{Interface: logger.Discard}
+	log := &statementLog{Interface: gormlogger.Discard}
 	handle.Logger = log
 	return log
 }
 
-func (l *statementLog) LogMode(logger.LogLevel) logger.Interface { return l }
+func (l *statementLog) LogMode(gormlogger.LogLevel) gormlogger.Interface { return l }
 
 func (l *statementLog) Trace(_ context.Context, _ time.Time, fc func() (string, int64), _ error) {
 	statement, _ := fc()

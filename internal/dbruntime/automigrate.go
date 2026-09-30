@@ -5,7 +5,7 @@ import (
 
 	"gorm.io/gorm"
 	"gorm.io/gorm/migrator"
-	"gorm.io/gorm/schema"
+	gormschema "gorm.io/gorm/schema"
 )
 
 // MySQLTableOptions is what a MySQL table the framework creates is created
@@ -72,7 +72,7 @@ type automigrateMigrator struct{ gorm.Migrator }
 
 // MigrateColumnUnique migrates the unique constraint of a column a tag
 // declares unique, and leaves every other column alone.
-func (m automigrateMigrator) MigrateColumnUnique(value any, field *schema.Field, columnType gorm.ColumnType) error {
+func (m automigrateMigrator) MigrateColumnUnique(value any, field *gormschema.Field, columnType gorm.ColumnType) error {
 	if !field.Unique && field.UniqueIndex == "" {
 		return nil
 	}
@@ -82,7 +82,7 @@ func (m automigrateMigrator) MigrateColumnUnique(value any, field *schema.Field,
 // BuildIndexOptions forwards to the dialect's migrator: gorm asserts the
 // method on the migrator it resolves, and an embedded interface hides it. A
 // dialect without one gets gorm's own, which every dialect builds on.
-func (m automigrateMigrator) BuildIndexOptions(opts []schema.IndexOption, stmt *gorm.Statement) []any {
+func (m automigrateMigrator) BuildIndexOptions(opts []gormschema.IndexOption, stmt *gorm.Statement) []any {
 	if builder, ok := m.Migrator.(migrator.BuildIndexOptionsInterface); ok {
 		return builder.BuildIndexOptions(opts, stmt)
 	}

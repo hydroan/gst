@@ -4,7 +4,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/errors"
-	goredis "github.com/redis/go-redis/v9"
+	"github.com/redis/go-redis/v9"
 )
 
 // ZAdd adds one or multiple string members with the same score into a sorted set.
@@ -16,9 +16,9 @@ func ZAdd(ctx context.Context, key string, score float64, members ...string) err
 	if len(members) == 0 {
 		return nil
 	}
-	entries := make([]goredis.Z, 0, len(members))
+	entries := make([]redis.Z, 0, len(members))
 	for i := range members {
-		entries = append(entries, goredis.Z{Score: score, Member: members[i]})
+		entries = append(entries, redis.Z{Score: score, Member: members[i]})
 	}
 	// First-hand exit of a stack-less go-redis error; see the error-stack
 	// contract in the database package doc. WithStack passes nil through.
@@ -41,7 +41,7 @@ func ZRangeByScore(ctx context.Context, key, minScore, maxScore string) ([]strin
 	if err != nil {
 		return nil, err
 	}
-	args := goredis.ZRangeArgs{
+	args := redis.ZRangeArgs{
 		Key:     Key(key),
 		Start:   minScore,
 		Stop:    maxScore,

@@ -6,7 +6,7 @@ import (
 
 	"github.com/hydroan/gst/internal/dbruntime"
 	"github.com/hydroan/gst/internal/testutil/testlog"
-	zaplogger "github.com/hydroan/gst/logger/zap"
+	gstzap "github.com/hydroan/gst/logger/zap"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 )
@@ -32,7 +32,7 @@ func runTests(m *testing.M) int {
 		panic(err)
 	}
 	defer func() { _ = releaseLogs() }()
-	if err = zaplogger.Init(); err != nil {
+	if err = gstzap.Init(); err != nil {
 		panic(err)
 	}
 	db, err := gorm.Open(sqlite.Open("file::memory:?cache=shared"), &gorm.Config{TranslateError: true})

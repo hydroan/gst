@@ -9,14 +9,14 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/internal/cache/cachetest"
 	"github.com/hydroan/gst/internal/types"
-	"github.com/hydroan/gst/redis"
+	gstredis "github.com/hydroan/gst/redis"
 )
 
 // TestCacheConformance runs the shared types.Cache conformance suite against
 // the Redis backend, tracing wrapper included, on the testcontainer Redis
 // this package's TestMain provisions.
 func TestCacheConformance(t *testing.T) {
-	cachetest.Run(t, redis.Cache[string](), cachetest.Capabilities{PerEntryTTL: true, NoExpiry: true})
+	cachetest.Run(t, gstredis.Cache[string](), cachetest.Capabilities{PerEntryTTL: true, NoExpiry: true})
 }
 
 type cacheSample struct {
@@ -27,7 +27,7 @@ type cacheSample struct {
 
 func TestCacheStructRoundtrip(t *testing.T) {
 	ctx := context.Background()
-	c := redis.Cache[cacheSample]()
+	c := gstredis.Cache[cacheSample]()
 	want := cacheSample{Name: "roundtrip", Num: 42, CreatedAt: time.Date(2026, 8, 1, 10, 0, 0, 0, time.UTC)}
 	if err := c.Set(ctx, "cache-test:struct", want, time.Minute); err != nil {
 		t.Fatalf("set: %v", err)
@@ -45,7 +45,7 @@ func TestCacheStructRoundtrip(t *testing.T) {
 // stored nil pointer serializes as JSON null and reads back as (nil, nil).
 func TestCachePointerRoundtrip(t *testing.T) {
 	ctx := context.Background()
-	c := redis.Cache[*cacheSample]()
+	c := gstredis.Cache[*cacheSample]()
 
 	want := &cacheSample{Name: "pointer", Num: 7}
 	if err := c.Set(ctx, "cache-test:pointer", want, time.Minute); err != nil {
@@ -73,7 +73,7 @@ func TestCachePointerRoundtrip(t *testing.T) {
 
 func TestCacheLargeValueRoundtrip(t *testing.T) {
 	ctx := context.Background()
-	c := redis.Cache[string]()
+	c := gstredis.Cache[string]()
 	want := strings.Repeat("x", 1<<20) // 1MB
 	if err := c.Set(ctx, "cache-test:large", want, time.Minute); err != nil {
 		t.Fatalf("set: %v", err)
@@ -92,7 +92,7 @@ func TestCacheLargeValueRoundtrip(t *testing.T) {
 // entry outlive the first short ttl.
 func TestCacheSetOverwriteResetsTTL(t *testing.T) {
 	ctx := context.Background()
-	c := redis.Cache[string]()
+	c := gstredis.Cache[string]()
 	if err := c.Set(ctx, "cache-test:overwrite", "short-lived", 300*time.Millisecond); err != nil {
 		t.Fatalf("first set: %v", err)
 	}
@@ -111,17 +111,17 @@ func TestCacheSetOverwriteResetsTTL(t *testing.T) {
 }
 
 // TestCacheKeyspaceIsSharedAcrossTypes pins the documented contract: unlike
-// the in-memory backends, redis.Cache handles of different types share one
+// the in-memory backends, gstredis.Cache handles of different types share one
 // keyspace, so key isolation belongs to the caller's key builders. A cache of
 // another type sees the raw bytes and fails to decode them instead of
 // answering ErrEntryNotFound.
 func TestCacheKeyspaceIsSharedAcrossTypes(t *testing.T) {
 	ctx := context.Background()
-	if err := redis.Cache[string]().Set(ctx, "cache-test:shared-keyspace", "text", time.Minute); err != nil {
+	if err := gstredis.Cache[string]().Set(ctx, "cache-test:shared-keyspace", "text", time.Minute); err != nil {
 		t.Fatalf("set: %v", err)
 	}
 
-	_, err := redis.Cache[int]().Get(ctx, "cache-test:shared-keyspace")
+	_, err := gstredis.Cache[int]().Get(ctx, "cache-test:shared-keyspace")
 	if err == nil {
 		t.Fatal("want a decode error when reading another type's entry")
 	}

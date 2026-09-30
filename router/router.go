@@ -13,12 +13,12 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/hydroan/gst/consts"
-	internalrouter "github.com/hydroan/gst/internal/router"
+	"github.com/hydroan/gst/internal/router"
 	"github.com/hydroan/gst/internal/types"
 )
 
-// Register registers route on router for each of phases, the actions to
-// serve on it. router is the route group the route belongs to: Auth, whose
+// Register registers route on group for each of phases, the actions to
+// serve on it. group is the route group the route belongs to: Auth, whose
 // routes run the middleware registered with middleware.RegisterAuth, or Pub,
 // whose routes do not. Each phase is served by the framework's handler for
 // it, under its HTTP method (see consts.Phase.HTTPMethod):
@@ -38,8 +38,8 @@ import (
 // phases, or a phase no HTTP route serves, a hook phase such as CreateBefore
 // or Stream, panics: the mistake stops the start instead of leaving an
 // endpoint that answers 404 or registering nothing in silence.
-func Register[M types.Model, REQ types.Request, RSP types.Response](router *gin.RouterGroup, route string, cfg *types.ControllerConfig[M], phases ...consts.Phase) {
-	internalrouter.Register[M, REQ, RSP](router, route, cfg, phases...)
+func Register[M types.Model, REQ types.Request, RSP types.Response](group *gin.RouterGroup, route string, cfg *types.ControllerConfig[M], phases ...consts.Phase) {
+	router.Register[M, REQ, RSP](group, route, cfg, phases...)
 }
 
 // Auth returns the route group whose routes run the middleware registered
@@ -48,7 +48,7 @@ func Register[M types.Model, REQ types.Request, RSP types.Response](router *gin.
 // handler put on the group directly names it itself. It is nil until the
 // framework has bootstrapped.
 func Auth() *gin.RouterGroup {
-	return internalrouter.Auth()
+	return router.Auth()
 }
 
 // Pub returns the route group of the public routes, the ones the middleware
@@ -56,7 +56,7 @@ func Auth() *gin.RouterGroup {
 // on it by their path the way they do on Auth. It is nil until the
 // framework has bootstrapped.
 func Pub() *gin.RouterGroup {
-	return internalrouter.Pub()
+	return router.Pub()
 }
 
 // OnRoutesReady registers a hook that runs after all routes are registered
@@ -80,7 +80,7 @@ func Pub() *gin.RouterGroup {
 // them. The hook also receives a route snapshot; mutating it does not
 // change the router registry.
 func OnRoutesReady(fn func(ctx context.Context, routes map[string][]string) error) {
-	internalrouter.OnRoutesReady(fn)
+	router.OnRoutesReady(fn)
 }
 
 // Routes returns a read-only snapshot of registered business API routes.
@@ -91,5 +91,5 @@ func OnRoutesReady(fn func(ctx context.Context, routes map[string][]string) erro
 // segment. Mutating the returned map or method slices does not affect router
 // state.
 func Routes() map[string][]string {
-	return internalrouter.Routes()
+	return router.Routes()
 }

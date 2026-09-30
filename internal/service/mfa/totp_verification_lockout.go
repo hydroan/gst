@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/errors"
-	"github.com/hydroan/gst/redis"
+	gstredis "github.com/hydroan/gst/redis"
 )
 
 // A user may submit this many second-factor proofs to one purpose within a
@@ -42,7 +42,7 @@ var errTOTPVerificationLocked = errors.New("too many failed TOTP verification at
 // the attempt is refused (fail closed) and no proof may be checked, so an
 // outage neither opens unlimited guessing nor spends a recovery code.
 func reserveTOTPVerificationAttempt(ctx context.Context, purpose totpVerificationPurpose, userID string) error {
-	count, err := redis.IncrFixedWindow(ctx, totpVerificationFailureKey(purpose, userID), totpVerificationAttemptWindow)
+	count, err := gstredis.IncrFixedWindow(ctx, totpVerificationFailureKey(purpose, userID), totpVerificationAttemptWindow)
 	if err != nil {
 		return errors.Wrap(err, "reserve TOTP verification attempt")
 	}
@@ -63,7 +63,7 @@ func clearTOTPVerificationFailures(ctx context.Context, userID string, purposes 
 	for _, purpose := range purposes {
 		keys = append(keys, totpVerificationFailureKey(purpose, userID))
 	}
-	_ = redis.Del(ctx, keys...)
+	_ = gstredis.Del(ctx, keys...)
 }
 
 // totpVerificationFailureKey builds the attempt counter key for one user and purpose.

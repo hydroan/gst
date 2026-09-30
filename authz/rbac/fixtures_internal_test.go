@@ -8,7 +8,7 @@ import (
 
 	"github.com/hydroan/gst/internal/dbruntime"
 	"github.com/prometheus/client_golang/prometheus"
-	dto "github.com/prometheus/client_model/go"
+	"github.com/prometheus/client_model/go"
 	"github.com/stretchr/testify/require"
 	"gorm.io/gorm"
 )
@@ -168,7 +168,7 @@ func storedRules(tb testing.TB, store *adapter) []string {
 // that the polarity of a published state is the right way round.
 func gaugeValue(tb testing.TB, gauge prometheus.Gauge) float64 {
 	tb.Helper()
-	var metric dto.Metric
+	var metric io_prometheus_client.Metric
 	require.NoError(tb, gauge.Write(&metric))
 	return metric.GetGauge().GetValue()
 }

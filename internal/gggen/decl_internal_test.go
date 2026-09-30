@@ -110,7 +110,7 @@ func TestImports(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := FormatNode(imports(tt.modulePath, tt.modelFileDir, tt.modelQualifier, tt.phase, tt.otherPkgs...))
+			got, err := FormatNode(importDecl(tt.modulePath, tt.modelFileDir, tt.modelQualifier, tt.phase, tt.otherPkgs...))
 			if err != nil {
 				t.Error(err)
 				return

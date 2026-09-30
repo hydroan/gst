@@ -21,7 +21,7 @@ import (
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 	"gopkg.in/natefinch/lumberjack.v2"
-	gorml "gorm.io/gorm/logger"
+	gormlogger "gorm.io/gorm/logger"
 )
 
 const (
@@ -168,7 +168,7 @@ func Clean() {
 	}
 
 	// gorm logger
-	gormLogs := []gorml.Interface{
+	gormLogs := []gormlogger.Interface{
 		logger.Gorm,
 	}
 	for _, glog := range gormLogs {
@@ -224,7 +224,7 @@ func New(filename string, opts ...Option) *Logger {
 // between business code and the log call varies per operation, so a fixed
 // AddCallerSkip would misattribute most statements. GormLogger.Trace walks
 // the stack itself and attaches the business caller as a plain field.
-func NewGorm(filename string) gorml.Interface {
+func NewGorm(filename string) gormlogger.Interface {
 	readConf()
 	if len(filename) > 0 {
 		logFile = filename

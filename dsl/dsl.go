@@ -76,7 +76,7 @@
 package dsl
 
 import (
-	internaldsl "github.com/hydroan/gst/internal/dsl"
+	"github.com/hydroan/gst/internal/dsl"
 )
 
 // Endpoint sets a custom endpoint path for the model's API routes.
@@ -84,7 +84,7 @@ import (
 // e.g. "sample_records" for a SampleRecord model.
 // Leading slashes are automatically removed and forward slashes are replaced with hyphens.
 // Example: Endpoint("users") for a User model, Endpoint("/iam/users") becomes "iam-users"
-func Endpoint(path string) { internaldsl.Endpoint(path) }
+func Endpoint(path string) { dsl.Endpoint(path) }
 
 // Param defines a path parameter for dynamic routing in RESTful APIs.
 // It adds a URL parameter segment to the endpoint, enabling hierarchical resource access.
@@ -108,7 +108,7 @@ func Endpoint(path string) { internaldsl.Endpoint(path) }
 //
 // The parameter creates RESTful nested resource patterns, enabling hierarchical API designs
 // where child resources are scoped under parent resources through URL path parameters.
-func Param(name string) { internaldsl.Param(name) }
+func Param(name string) { dsl.Param(name) }
 
 // Route defines an alternative API route for the model beyond the default hierarchical route.
 // This allows a resource to be accessible through multiple API endpoints, providing flexibility
@@ -178,12 +178,12 @@ func Param(name string) { internaldsl.Param(name) }
 //   - /api/samples/:sample/items (default hierarchical route)
 //   - /api/items and /api/items/:item (additional global route)
 //   - /api/archive/items and /api/archive/items/:item (additional archive route)
-func Route(path string, fn func()) { internaldsl.Route(path, fn) }
+func Route(path string, fn func()) { dsl.Route(path, fn) }
 
 // Migrate marks the model as a database model that requires schema migration.
 // When declared, the model's table structure will be created/updated in the database.
 // Migration is disabled by default; declaring Migrate() enables it.
-func Migrate() { internaldsl.Migrate() }
+func Migrate() { dsl.Migrate() }
 
 // GRPC serves the model over gRPC as well as HTTP: gg gen derives the model's
 // .proto from its Go type and its Design() and generates the gRPC service
@@ -192,7 +192,7 @@ func Migrate() { internaldsl.Migrate() }
 // Design() top level, and needs at least one action gRPC can serve: Import,
 // Export and SSE are HTTP only. A Stream action is served over gRPC alone
 // and needs it.
-func GRPC() { internaldsl.GRPC() }
+func GRPC() { dsl.GRPC() }
 
 // Service marks the current action as requiring custom service code, and
 // names it.
@@ -233,7 +233,7 @@ func GRPC() { internaldsl.GRPC() }
 // marker only controls service generation and registration for the current
 // action; it does not change Payload, Result, Public, Exact, Flatten or route
 // generation semantics.
-func Service(name ...string) { internaldsl.Service(name...) }
+func Service(name ...string) { dsl.Service(name...) }
 
 // Flatten changes the service output layout for the current action.
 //
@@ -263,7 +263,7 @@ func Service(name ...string) { internaldsl.Service(name...) }
 // Flatten is only valid for model files under model/<package>/<file>.go. Root model files
 // such as model/user.go cannot be flattened because service/ is reserved for generated
 // registration code and should not contain business service files.
-func Flatten() { internaldsl.Flatten() }
+func Flatten() { dsl.Flatten() }
 
 // Public marks the current action as publicly accessible.
 //
@@ -275,7 +275,7 @@ func Flatten() { internaldsl.Flatten() }
 // Omit Public() for authenticated APIs. The default is intentionally protected:
 // actions are registered on the authenticated router unless they explicitly opt
 // in to public access.
-func Public() { internaldsl.Public() }
+func Public() { dsl.Public() }
 
 // Exact marks the current action route as exact.
 //
@@ -292,7 +292,7 @@ func Public() { internaldsl.Public() }
 // resource id from the route parameter only. An Exact route without an id
 // segment must declare Payload/Result so the action is delegated to a custom
 // service method instead of the built-in controller.
-func Exact() { internaldsl.Exact() }
+func Exact() { dsl.Exact() }
 
 // Payload specifies the request payload type for the current action.
 // The type parameter T defines the structure of incoming request data.
@@ -303,7 +303,7 @@ func Exact() { internaldsl.Exact() }
 // Result only and read query parameters from ServiceContext.Query().
 // Payload must not be declared on Import and Export actions either: they
 // delegate to fixed service method signatures that never bind a request type.
-func Payload[T any]() { internaldsl.Payload[T]() }
+func Payload[T any]() { dsl.Payload[T]() }
 
 // Result specifies the response result type for the current action.
 // The type parameter T defines the structure of outgoing response data.
@@ -311,25 +311,25 @@ func Payload[T any]() { internaldsl.Payload[T]() }
 //
 // Result must not be declared on Import and Export actions: they delegate to
 // fixed service method signatures that never bind a response type.
-func Result[T any]() { internaldsl.Result[T]() }
+func Result[T any]() { dsl.Result[T]() }
 
 // Create defines the configuration for the create operation.
 // The function parameter allows setting Service, Public, Payload, and Result.
 // Declaring the action enables it.
 // Example: Create(func() { Payload[*CreateUserRequest](); Result[*User]() })
-func Create(fn func()) { internaldsl.Create(fn) }
+func Create(fn func()) { dsl.Create(fn) }
 
 // Delete defines the configuration for the delete operation.
 // Typically used for soft or hard deletion of single records.
-func Delete(fn func()) { internaldsl.Delete(fn) }
+func Delete(fn func()) { dsl.Delete(fn) }
 
 // Update defines the configuration for the update operation.
 // Used for full record updates, replacing all fields.
-func Update(fn func()) { internaldsl.Update(fn) }
+func Update(fn func()) { dsl.Update(fn) }
 
 // Patch defines the configuration for the patch operation.
 // Used for partial record updates, modifying only specified fields.
-func Patch(fn func()) { internaldsl.Patch(fn) }
+func Patch(fn func()) { dsl.Patch(fn) }
 
 // List defines the configuration for the list operation.
 // Used for retrieving multiple records with optional filtering and pagination.
@@ -337,7 +337,7 @@ func Patch(fn func()) { internaldsl.Patch(fn) }
 // List handles an HTTP GET request and must not declare Payload. Declaring
 // Result delegates the action to a custom service method whose request type
 // is generated as *model.Empty; filters are read from ServiceContext.Query().
-func List(fn func()) { internaldsl.List(fn) }
+func List(fn func()) { dsl.List(fn) }
 
 // Get defines the configuration for the get operation.
 // Used for retrieving a single record by identifier.
@@ -346,23 +346,23 @@ func List(fn func()) { internaldsl.List(fn) }
 // Result delegates the action to a custom service method whose request type
 // is generated as *model.Empty; parameters are read from ServiceContext.Query()
 // and ServiceContext.Param().
-func Get(fn func()) { internaldsl.Get(fn) }
+func Get(fn func()) { dsl.Get(fn) }
 
 // CreateMany defines the configuration for batch create operations.
 // Allows creating multiple records in a single request.
-func CreateMany(fn func()) { internaldsl.CreateMany(fn) }
+func CreateMany(fn func()) { dsl.CreateMany(fn) }
 
 // DeleteMany defines the configuration for batch delete operations.
 // Allows deleting multiple records in a single request.
-func DeleteMany(fn func()) { internaldsl.DeleteMany(fn) }
+func DeleteMany(fn func()) { dsl.DeleteMany(fn) }
 
 // UpdateMany defines the configuration for batch update operations.
 // Allows updating multiple records in a single request.
-func UpdateMany(fn func()) { internaldsl.UpdateMany(fn) }
+func UpdateMany(fn func()) { dsl.UpdateMany(fn) }
 
 // PatchMany defines the configuration for batch patch operations.
 // Allows partially updating multiple records in a single request.
-func PatchMany(fn func()) { internaldsl.PatchMany(fn) }
+func PatchMany(fn func()) { dsl.PatchMany(fn) }
 
 // Import defines the configuration for data import operations.
 // Used for bulk data ingestion from external sources.
@@ -370,7 +370,7 @@ func PatchMany(fn func()) { internaldsl.PatchMany(fn) }
 // Import must not declare Payload or Result: the controller reads the
 // uploaded multipart form file, delegates to the fixed service method
 // Import(ctx, io.Reader) ([]M, error), and responds with a bare status code.
-func Import(fn func()) { internaldsl.Import(fn) }
+func Import(fn func()) { dsl.Import(fn) }
 
 // Export defines the configuration for data export operations.
 // Used for bulk data extraction to external formats.
@@ -379,7 +379,7 @@ func Import(fn func()) { internaldsl.Import(fn) }
 // request whose filters come from query parameters, and the controller writes
 // the bytes returned by the fixed service method
 // Export(ctx, ...M) ([]byte, error) as a file attachment.
-func Export(fn func()) { internaldsl.Export(fn) }
+func Export(fn func()) { dsl.Export(fn) }
 
 // SSE defines the configuration for a Server-Sent Events streaming operation.
 // The route handles an HTTP GET request whose response is a long-lived
@@ -393,7 +393,7 @@ func Export(fn func()) { internaldsl.Export(fn) }
 // parameters are read from ServiceContext.Query(), and the response is the
 // event stream itself. An SSE action cannot share a route with List, as both
 // register the GET route path itself.
-func SSE(fn func()) { internaldsl.SSE(fn) }
+func SSE(fn func()) { dsl.SSE(fn) }
 
 // Stream defines a streaming operation, served over gRPC alone: one side of
 // the call, or both, is a stream of messages rather than one message. The
@@ -420,16 +420,16 @@ func SSE(fn func()) { internaldsl.SSE(fn) }
 //	        StreamingResult[*FeedEvent]()
 //	    })
 //	})
-func Stream(fn func()) { internaldsl.Stream(fn) }
+func Stream(fn func()) { dsl.Stream(fn) }
 
 // StreamingPayload declares the request side of a Stream action as a stream
 // of T, one message per value the client sends. Example:
 // StreamingPayload[*FeedEvent](). It can only be used inside a Stream block,
 // which then cannot declare Payload as well.
-func StreamingPayload[T any]() { internaldsl.StreamingPayload[T]() }
+func StreamingPayload[T any]() { dsl.StreamingPayload[T]() }
 
 // StreamingResult declares the response side of a Stream action as a stream
 // of T, one message per value the service sends. Example:
 // StreamingResult[*FeedEvent](). It can only be used inside a Stream block,
 // which then cannot declare Result as well.
-func StreamingResult[T any]() { internaldsl.StreamingResult[T]() }
+func StreamingResult[T any]() { dsl.StreamingResult[T]() }

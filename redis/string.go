@@ -7,7 +7,7 @@ import (
 
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/config"
-	goredis "github.com/redis/go-redis/v9"
+	"github.com/redis/go-redis/v9"
 )
 
 // Set stores data at key. The key expires after config.App.Redis.Expiration
@@ -38,7 +38,7 @@ func Get(ctx context.Context, key string) (cache []byte, err error) {
 	}
 	cache, err = client.Get(ctx, Key(key)).Bytes()
 	if err != nil {
-		if errors.Is(err, goredis.Nil) {
+		if errors.Is(err, redis.Nil) {
 			return nil, ErrKeyNotExists
 		}
 		return nil, errors.WithStack(err)
@@ -113,8 +113,8 @@ func IncrFixedWindow(ctx context.Context, key string, window time.Duration) (int
 		return 0, err
 	}
 	namespaced := Key(key)
-	var count *goredis.IntCmd
-	if _, err = client.TxPipelined(ctx, func(pipe goredis.Pipeliner) error {
+	var count *redis.IntCmd
+	if _, err = client.TxPipelined(ctx, func(pipe redis.Pipeliner) error {
 		count = pipe.Incr(ctx, namespaced)
 		pipe.Do(ctx, "pexpire", namespaced, window.Milliseconds(), "nx")
 		return nil
@@ -135,7 +135,7 @@ func GetInt(ctx context.Context, key string) (int64, error) {
 	}
 	cache, err := client.Get(ctx, Key(key)).Result()
 	if err != nil {
-		if errors.Is(err, goredis.Nil) {
+		if errors.Is(err, redis.Nil) {
 			return 0, ErrKeyNotExists
 		}
 		return 0, errors.WithStack(err)
