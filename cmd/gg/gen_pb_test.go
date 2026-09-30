@@ -1640,8 +1640,10 @@ func TestShapeRoundTrips(t *testing.T) {
 			msg  *pb.Shape
 			want string
 		}{
-			{name: "an integer out of range", msg: &pb.Shape{Rank: 300}, want: 'field "rank": 300 does not fit int8'},
-			{name: "an unsigned integer out of range", msg: &pb.Shape{Port: 70000}, want: 'field "port": 70000 does not fit uint16'},
+			// \x27 is the apostrophe: a single quote in this source stands
+			// for a backtick (see writeProtobufProject).
+			{name: "an integer out of range", msg: &pb.Shape{Rank: 300}, want: "invalid value for field \x27rank\x27"},
+			{name: "an unsigned integer out of range", msg: &pb.Shape{Port: 70000}, want: "invalid value for field \x27port\x27"},
 			{name: "a string that is no JSON number", msg: &pb.Shape{Amount: "abc"}, want: 'field "amount": "abc" is not a JSON number'},
 		} {
 			t.Run(tt.name, func(t *testing.T) {

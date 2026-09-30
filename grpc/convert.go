@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"time"
 
+	"google.golang.org/genproto/googleapis/rpc/errdetails"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/structpb"
@@ -23,16 +24,24 @@ import (
 // hold, the way encoding/json refuses it over HTTP.
 
 // Narrow returns v as the narrower integer type T a model field holds, int8
-// for the int32 its message carries, and refuses with InvalidArgument,
-// naming field, a value T cannot hold: 300 folded into an int8 would come
-// back as 44. The generated FromProto reads every int8, int16, uint8 and
-// uint16 field through it.
+// for the int32 its message carries, and refuses a value T cannot hold, 300
+// folded into an int8 would come back as 44, with InvalidArgument and the
+// message HTTP answers for a body field it cannot decode a value into,
+// "invalid value for field 'rank'", a google.rpc.BadRequest detail naming
+// the field with the value, "300 is out of range", the way the fields a
+// validator refused are detailed. The generated FromProto reads every int8,
+// int16, uint8 and uint16 field through it.
 func Narrow[T ~int8 | ~int16 | ~uint8 | ~uint16, V ~int32 | ~uint32](field string, v V) (T, error) {
 	narrowed := T(v)
-	if V(narrowed) != v {
-		return 0, status.Errorf(codes.InvalidArgument, "field %q: %d does not fit %T", field, v, narrowed)
+	if V(narrowed) == v {
+		return narrowed, nil
 	}
-	return narrowed, nil
+	st := status.New(codes.InvalidArgument, "invalid value for field '"+field+"'")
+	detail := &errdetails.BadRequest{FieldViolations: []*errdetails.BadRequest_FieldViolation{{Field: field, Description: fmt.Sprintf("%d is out of range", v)}}}
+	if detailed, err := st.WithDetails(detail); err == nil {
+		st = detailed
+	}
+	return 0, st.Err()
 }
 
 // Number returns s as the json.Number a model field holds, "" for the unset

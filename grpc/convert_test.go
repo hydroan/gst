@@ -8,6 +8,7 @@ import (
 
 	gstgrpc "github.com/hydroan/gst/grpc"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/genproto/googleapis/rpc/errdetails"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/structpb"
@@ -83,12 +84,30 @@ func TestNarrowRefusesWhatTheTypeCannotHold(t *testing.T) {
 
 	_, err = gstgrpc.Narrow[int8]("count", int32(300))
 	require.Equal(t, codes.InvalidArgument, status.Code(err))
-	require.Equal(t, `field "count": 300 does not fit int8`, status.Convert(err).Message())
+	require.Equal(t, "invalid value for field 'count'", status.Convert(err).Message())
+	requireFieldViolation(t, err, "count", "300 is out of range")
 	_, err = gstgrpc.Narrow[uint16]("port", uint32(70000))
 	require.Equal(t, codes.InvalidArgument, status.Code(err))
+	requireFieldViolation(t, err, "port", "70000 is out of range")
 	_, err = gstgrpc.Narrow[level]("level", int32(128))
 	require.Equal(t, codes.InvalidArgument, status.Code(err))
-	require.Contains(t, status.Convert(err).Message(), "does not fit grpc_test.level")
+	require.Equal(t, "invalid value for field 'level'", status.Convert(err).Message())
+	requireFieldViolation(t, err, "level", "128 is out of range")
+}
+
+// requireFieldViolation asserts that err carries one google.rpc.BadRequest
+// detail naming field with description.
+func requireFieldViolation(t *testing.T, err error, field, description string) {
+	t.Helper()
+	var violations []*errdetails.BadRequest_FieldViolation
+	for _, detail := range status.Convert(err).Details() {
+		if bad, ok := detail.(*errdetails.BadRequest); ok {
+			violations = append(violations, bad.GetFieldViolations()...)
+		}
+	}
+	require.Len(t, violations, 1)
+	require.Equal(t, field, violations[0].GetField())
+	require.Equal(t, description, violations[0].GetDescription())
 }
 
 // TestNumberRefusesWhatIsNoJSONNumber pins Number, what a generated

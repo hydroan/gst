@@ -226,11 +226,11 @@ func TestClientStreamCallReadsTheRequestsAndAnswers(t *testing.T) {
 		// the refusal still reaches the client as the decoding worded it.
 		stream := openStream(t, conn, "Upload", sampleCredential, clientStream)
 		sendPayload(t, stream, map[string]any{"note": "a"})
-		require.NoError(t, stream.SendMsg(encode(map[string]any{"refuse": `field "rank": 300 does not fit int8`})))
+		require.NoError(t, stream.SendMsg(encode(map[string]any{"refuse": "invalid value for field 'rank'"})))
 		require.NoError(t, stream.CloseSend())
 		_, err := recvResponse(stream)
 		require.Equal(t, codes.InvalidArgument, status.Code(err))
-		require.Equal(t, `field "rank": 300 does not fit int8`, status.Convert(err).Message())
+		require.Equal(t, "invalid value for field 'rank'", status.Convert(err).Message())
 	})
 }
 
@@ -254,10 +254,10 @@ func TestBidiStreamCallStreamsBothWays(t *testing.T) {
 
 	t.Run("a request the decoding refuses ends the stream with the refusal", func(t *testing.T) {
 		stream := openStream(t, conn, "Chat", sampleCredential, grpc.StreamDesc{ServerStreams: true, ClientStreams: true})
-		require.NoError(t, stream.SendMsg(encode(map[string]any{"refuse": `field "port": 70000 does not fit uint16`})))
+		require.NoError(t, stream.SendMsg(encode(map[string]any{"refuse": "invalid value for field 'port'"})))
 		_, err := recvResponse(stream)
 		require.Equal(t, codes.InvalidArgument, status.Code(err))
-		require.Equal(t, `field "port": 70000 does not fit uint16`, status.Convert(err).Message())
+		require.Equal(t, "invalid value for field 'port'", status.Convert(err).Message())
 	})
 }
 
