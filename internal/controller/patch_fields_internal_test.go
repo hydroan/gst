@@ -2,7 +2,10 @@ package controller
 
 import (
 	"context"
+	"encoding/json"
+	"maps"
 	"reflect"
+	"slices"
 	"testing"
 	"time"
 
@@ -88,6 +91,35 @@ type PatchFieldsLabel struct {
 	Label string `json:"label"`
 }
 
+// patchFieldsTitledRecord encodes its own Name under title and the Name the
+// embedded struct promotes under Name, two keys: encoding/json tells fields
+// apart by their keys, where Go tells them apart by their names and hides
+// the promoted one.
+type patchFieldsTitledRecord struct {
+	Name string `json:"title"`
+	PatchFieldsPlainName
+}
+
+type PatchFieldsPlainName struct {
+	Name string
+}
+
+// PatchFieldsFirstName and PatchFieldsSecondName each hold a field named
+// Name in Go, under the keys first and second; embedded side by side, Go
+// sees one ambiguous Name and encoding/json two keys.
+type PatchFieldsFirstName struct {
+	Name string `json:"first"`
+}
+
+type PatchFieldsSecondName struct {
+	Name string `json:"second"`
+}
+
+type patchFieldsTwoNamesRecord struct {
+	PatchFieldsFirstName
+	PatchFieldsSecondName
+}
+
 // PatchFieldsLeftLabel and PatchFieldsRightLabel each encode a field to the
 // key Label, one with its tag spelt like its Go name; embedded side by side
 // they tie at one depth, and encoding/json takes neither. The tie is built
@@ -105,8 +137,22 @@ type PatchFieldsRightLabel struct {
 // encoding to one key the shallower is the field, and neither is when two
 // tagged fields tie at one depth, a tag spelt like the Go name being a tag
 // all the same; a field promoted through an embedded pointer is named
-// through it, the pointer allocated on the record when it is nil.
+// through it, the pointer allocated on the record when it is nil; and two
+// fields Go would hide behind one name are two fields under the two keys
+// they encode to, the keys encoding/json writes being the reference.
 func TestPatchFieldSetsFollowTheJSONKeys(t *testing.T) {
+	// The embedded pointer is allocated for the reference: encoding/json
+	// writes nothing of a nil one, where the table names the type's fields.
+	for _, record := range []any{patchFieldsShadowedRecord{PatchFieldsLabel: &PatchFieldsLabel{}}, patchFieldsTitledRecord{}, patchFieldsTwoNamesRecord{}} {
+		require.Equal(t, jsonKeysOf(t, record), slices.Sorted(maps.Keys(patchFieldsOf(reflect.TypeOf(record)).byKey)), "%T", record)
+	}
+	titled, err := patchFieldSetFromJSONBody(reflect.TypeFor[patchFieldsTitledRecord](), []byte(`{"title":"own","Name":"promoted"}`))
+	require.NoError(t, err)
+	require.Equal(t, patchFieldSet{"Name": {}, "PatchFieldsPlainName.Name": {}}, titled)
+	twoNames, err := patchFieldSetFromJSONBody(reflect.TypeFor[patchFieldsTwoNamesRecord](), []byte(`{"first":"a","second":"b"}`))
+	require.NoError(t, err)
+	require.Equal(t, patchFieldSet{"PatchFieldsFirstName.Name": {}, "PatchFieldsSecondName.Name": {}}, twoNames)
+
 	typ := reflect.TypeFor[patchFieldsShadowedRecord]()
 
 	fields, err := patchFieldSetFromJSONBody(typ, []byte(`{"name":"own","label":"promoted"}`))
@@ -328,3 +374,13 @@ func (nopControllerLogger) Infoz(msg string, fields ...zap.Field)   {}
 func (nopControllerLogger) Warnz(msg string, fields ...zap.Field)   {}
 func (nopControllerLogger) Errorz(msg string, fields ...zap.Field)  {}
 func (nopControllerLogger) Fatalz(msg string, fields ...zap.Field)  {}
+
+// jsonKeysOf returns the keys encoding/json encodes record under, sorted.
+func jsonKeysOf(t *testing.T, record any) []string {
+	t.Helper()
+	encoded, err := json.Marshal(record)
+	require.NoError(t, err)
+	var keyed map[string]json.RawMessage
+	require.NoError(t, json.Unmarshal(encoded, &keyed))
+	return slices.Sorted(maps.Keys(keyed))
+}

@@ -79,9 +79,11 @@ var frameworkBases = map[reflect.Type]struct{}{
 // struct promoted to keys of the type's own the way encoding/json promotes
 // them, and among two fields encoding to one key the one encoding/json
 // picks, the shallower, or the tagged one at the same depth, and neither
-// when still tied. Left out are the fields of the framework's base types,
-// and a field named ID at any depth: the primary key names the record
-// patched and moves it nowhere.
+// when still tied. The keys are what tell fields apart, as they do for
+// encoding/json, not their Go names, which Go's own visibility goes by.
+// Left out are the fields of the framework's base types, and a field named
+// ID at any depth: the primary key names the record patched and moves it
+// nowhere.
 func patchFieldsOf(typ reflect.Type) *patchFieldTable {
 	if cached, ok := patchFieldTables.Load(typ); ok {
 		return cached.(*patchFieldTable) //nolint:errcheck
@@ -92,54 +94,81 @@ func patchFieldsOf(typ reflect.Type) *patchFieldTable {
 	}
 	candidates := make(map[string][]candidate)
 	var keys []string
-	// opaque are the index paths of the embedded structs encoding/json does
-	// not look into, whose promoted fields are therefore no keys: the
-	// framework's base types, an embedded struct with a json name of its
-	// own, encoded as one value under it, one the tag leaves out, and one
-	// held through a pointer of an unexported type.
-	var opaque [][]int
-	for _, field := range reflect.VisibleFields(typ) {
-		if slices.ContainsFunc(opaque, func(prefix []int) bool {
-			return len(field.Index) > len(prefix) && slices.Equal(field.Index[:len(prefix)], prefix)
-		}) {
-			continue
-		}
-		name := jsonTagName(field)
-		if field.Anonymous {
-			structType := field.Type
-			if structType.Kind() == reflect.Pointer {
-				structType = structType.Elem()
+	// The walk is encoding/json's typeFields, which it does not export:
+	// breadth first, a level per depth of embedding, over every field a
+	// struct holds, so that two fields Go hides behind one name are the two
+	// keys they encode to. A struct type is looked into once, at the
+	// shallowest depth it is embedded at, and a type embedded twice at one
+	// depth has its fields counted twice, for the tie to take neither, the
+	// way encoding/json takes neither.
+	type embedding struct {
+		typ   reflect.Type
+		index []int
+	}
+	current := []embedding{{typ: typ}}
+	count := map[reflect.Type]int{typ: 1}
+	visited := map[reflect.Type]bool{}
+	for len(current) > 0 {
+		var next []embedding
+		nextCount := map[reflect.Type]int{}
+		for _, e := range current {
+			if visited[e.typ] {
+				continue
 			}
-			if structType.Kind() == reflect.Struct {
-				if _, base := frameworkBases[structType]; base || name == "-" || (field.Type.Kind() == reflect.Pointer && !field.IsExported()) {
-					opaque = append(opaque, field.Index)
+			visited[e.typ] = true
+			for i := range e.typ.NumField() {
+				field := e.typ.Field(i)
+				name := jsonTagName(field)
+				index := append(slices.Clone(e.index), i)
+				if field.Anonymous {
+					structType := field.Type
+					if structType.Kind() == reflect.Pointer {
+						structType = structType.Elem()
+					}
+					if structType.Kind() == reflect.Struct {
+						// Not looked into, its promoted fields no keys: a
+						// framework base type, an embedded struct with a
+						// json name of its own, encoded as one value under
+						// it, one the tag leaves out, and one held through
+						// a pointer of an unexported type.
+						if _, base := frameworkBases[structType]; base || name == "-" || (field.Type.Kind() == reflect.Pointer && !field.IsExported()) {
+							continue
+						}
+						if name == "" {
+							nextCount[structType]++
+							if nextCount[structType] == 1 {
+								next = append(next, embedding{typ: structType, index: index})
+							}
+							continue // the fields it promotes are the type's own
+						}
+					}
+				}
+				if !field.IsExported() || name == "-" || field.Name == consts.FIELD_ID {
 					continue
 				}
-				if name == "" {
-					continue // the fields it promotes are the type's own
+				// A tag naming the field is a tag, spelt like the Go name or not.
+				tagged := name != ""
+				if !tagged {
+					name = field.Name
 				}
-				opaque = append(opaque, field.Index)
+				if _, seen := candidates[name]; !seen {
+					keys = append(keys, name)
+				}
+				var goPath []string
+				for depth := range index {
+					goPath = append(goPath, typ.FieldByIndex(index[:depth+1]).Name)
+				}
+				c := candidate{
+					field:  &patchField{key: name, name: strings.Join(goPath, "."), index: index, typ: field.Type},
+					tagged: tagged,
+				}
+				candidates[name] = append(candidates[name], c)
+				if count[e.typ] > 1 {
+					candidates[name] = append(candidates[name], c)
+				}
 			}
 		}
-		if !field.IsExported() || name == "-" || field.Name == consts.FIELD_ID {
-			continue
-		}
-		// A tag naming the field is a tag, spelt like the Go name or not.
-		tagged := name != ""
-		if !tagged {
-			name = field.Name
-		}
-		if _, seen := candidates[name]; !seen {
-			keys = append(keys, name)
-		}
-		var goPath []string
-		for depth := range field.Index {
-			goPath = append(goPath, typ.FieldByIndex(field.Index[:depth+1]).Name)
-		}
-		candidates[name] = append(candidates[name], candidate{
-			field:  &patchField{key: name, name: strings.Join(goPath, "."), index: field.Index, typ: field.Type},
-			tagged: tagged,
-		})
+		current, count = next, nextCount
 	}
 	table := &patchFieldTable{byKey: make(map[string]*patchField, len(keys)), byName: make(map[string]*patchField, len(keys))}
 	for _, key := range keys {
