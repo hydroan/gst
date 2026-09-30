@@ -100,7 +100,7 @@ func validateRequest(target any) error {
 	if binding.Validator == nil {
 		return nil
 	}
-	return refused(binding.Validator.ValidateStruct(target), target)
+	return withRequestType(binding.Validator.ValidateStruct(target), target)
 }
 
 // refusedRequestError is the error of a request the validator refused, with the
@@ -117,9 +117,9 @@ type refusedRequestError struct {
 func (r *refusedRequestError) Error() string { return r.err.Error() }
 func (r *refusedRequestError) Unwrap() error { return r.err }
 
-// refused returns err, the outcome of validating target, as the
+// withRequestType returns err, the outcome of validating target, as the
 // refusedRequestError of target when it is an error, and nil when it is nil.
-func refused(err error, target any) error {
+func withRequestType(err error, target any) error {
 	if err == nil {
 		return nil
 	}
@@ -335,21 +335,21 @@ func fieldPath(namespace string) string {
 // validates nothing. A validator other than go-playground's cannot be asked
 // for a part of the struct and checks the whole; nil turns validation off,
 // see validateRequest. The error carries the type checked the way
-// validateRequest's does.
+// validateRequest's does (see withRequestType).
 func validatePatchFields(target any, fields patchFieldSet) error {
 	if binding.Validator == nil || len(fields) == 0 {
 		return nil
 	}
 	engine, ok := binding.Validator.Engine().(*validator.Validate)
 	if !ok {
-		return refused(binding.Validator.ValidateStruct(target), target)
+		return withRequestType(binding.Validator.ValidateStruct(target), target)
 	}
 	typ := reflect.TypeOf(target)
 	for typ.Kind() == reflect.Pointer {
 		typ = typ.Elem()
 	}
 	prefix := typ.Name() + "."
-	return refused(engine.StructFiltered(target, func(ns []byte) bool {
+	return withRequestType(engine.StructFiltered(target, func(ns []byte) bool {
 		return !fields.covers(strings.TrimPrefix(string(ns), prefix))
 	}), target)
 }
