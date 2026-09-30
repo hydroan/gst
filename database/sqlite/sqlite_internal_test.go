@@ -63,6 +63,22 @@ func TestMemoryDatabaseIsSharedAcrossHandles(t *testing.T) {
 	requireSampleRows(t, second, "shared_samples", 1)
 }
 
+// TestMemoryDatabaseEnforcesForeignKeys pins that the in-memory database
+// holds a foreign key the way the file database does: a row referring to a
+// record that does not exist is refused, as gorm's ErrForeignKeyViolated,
+// rather than written. Sqlite checks foreign keys per connection and only
+// when asked, which the connection string of either database asks for.
+func TestMemoryDatabaseEnforcesForeignKeys(t *testing.T) {
+	withPoolLifetime(t, 0)
+	db, _ := openMemoryDatabase(t)
+	createSampleTable(t, db, "fk_parents")
+	require.NoError(t, db.Exec("CREATE TABLE fk_children (id INTEGER PRIMARY KEY, parent_id INTEGER REFERENCES fk_parents(id))").Error)
+	t.Cleanup(func() { require.NoError(t, db.Exec("DROP TABLE IF EXISTS fk_children").Error) })
+
+	err := db.Exec("INSERT INTO fk_children (id, parent_id) VALUES (1, 999)").Error
+	require.ErrorIs(t, err, gorm.ErrForeignKeyViolated)
+}
+
 // withPoolLifetime sets the [database] lifetime and idle-time limits the pool
 // runs under to d, silences the SQL log, and restores both afterwards.
 func withPoolLifetime(t *testing.T, d time.Duration) {

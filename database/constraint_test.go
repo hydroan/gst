@@ -13,8 +13,7 @@ import (
 // write answers when the data breaks a constraint of the table, on every
 // dialect that enforces it: a value too long for its column, a value the
 // table's check refuses, and a foreign key no record satisfies. Sqlite
-// declares no length for a column and enforces no foreign key on the
-// framework's connection, so it answers neither of those.
+// declares no length for a column, so it answers no value too long.
 func TestWritesAnswerTheConstraintsTheClientsDataBreaks(t *testing.T) {
 	ctx := context.Background()
 	sqlite := config.App.Database.Type == config.DBSqlite
@@ -33,9 +32,6 @@ func TestWritesAnswerTheConstraintsTheClientsDataBreaks(t *testing.T) {
 	})
 
 	t.Run("a foreign key no record satisfies", func(t *testing.T) {
-		if sqlite {
-			t.Skip("sqlite enforces no foreign key on the framework's connection")
-		}
 		err := database.Database[*TestConstrainedEntry](ctx).Create(&TestConstrainedEntry{RecordID: "no-such-record"})
 		require.ErrorIs(t, err, database.ErrForeignKeyViolated)
 	})

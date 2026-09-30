@@ -170,8 +170,10 @@ func New(cfg config.Sqlite) (*gorm.DB, error) {
 
 // memoryDSN names the in-memory database. Connections sharing its cache
 // share one database, and the name is the same everywhere in a process, so a
-// process has exactly one in-memory database.
-const memoryDSN = "file::memory:?cache=shared"
+// process has exactly one in-memory database. Foreign keys are checked on
+// its connections as on the file database's (see buildDSN): sqlite checks
+// them per connection and only when asked.
+const memoryDSN = "file::memory:?cache=shared&_foreign_keys=ON"
 
 var (
 	// memoryAnchorMu guards memoryAnchor.
