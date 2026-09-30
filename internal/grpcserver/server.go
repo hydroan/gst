@@ -15,6 +15,7 @@ import (
 	"strconv"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/cockroachdb/errors"
 	"github.com/dustin/go-humanize"
@@ -93,22 +94,30 @@ func HasServices() bool {
 }
 
 // Run serves the registered services on the address config.App.GRPC names
-// until Stop. With no service registered it returns at once and opens no
-// listener. Like router.Run it is one of bootstrap's long-running
-// functions: an error it returns, a port it cannot bind or a certificate it
-// cannot load, brings the process down.
+// until Stop. It checks the grpc section first, whether a service is
+// registered or not (see serverOptions); with no service registered it
+// then returns at once and opens no listener. Like router.Run it is one of
+// bootstrap's long-running functions: an error it returns, a key of the
+// section the listener could not run with, a port it cannot bind or a
+// certificate it cannot load, brings the process down.
 func Run() error {
 	mu.Lock()
 	defer mu.Unlock()
 	log := zap.S()
+	cfg := config.App.GRPC
+	// A project with no service never opens the listener, and a key the
+	// listener could not run with is wrong all the same.
+	configured, err := serverOptions(cfg)
+	if err != nil {
+		return err
+	}
 	if len(registrations) == 0 {
 		log.Debugw("grpc server not started: no service registered")
 		return nil
 	}
-	if err := registerServerMetrics(); err != nil {
+	if err = registerServerMetrics(); err != nil {
 		return err
 	}
-	cfg := config.App.GRPC
 	// The streams of the server watch stopping, which Stop ends; a Run
 	// that fails before serving ends it itself.
 	stopping, stop := context.WithCancel(context.Background())
@@ -116,41 +125,7 @@ func Run() error {
 		stop()
 		return err
 	}
-	// The keys of the grpc section are grpc-go's own parameters, handed
-	// over as they are: zero where unset, which grpc-go fills with its own
-	// defaults.
-	opts := append(chains(stopping),
-		grpc.KeepaliveParams(keepalive.ServerParameters{
-			Time:                  cfg.KeepaliveTime,
-			Timeout:               cfg.KeepaliveTimeout,
-			MaxConnectionAge:      cfg.MaxConnectionAge,
-			MaxConnectionAgeGrace: cfg.MaxConnectionAgeGrace,
-		}),
-		grpc.KeepaliveEnforcementPolicy(keepalive.EnforcementPolicy{
-			MinTime:             cfg.KeepaliveMinTime,
-			PermitWithoutStream: cfg.KeepalivePermitWithoutStream,
-		}),
-	)
-	if cfg.MaxRecvMsgSize != "" {
-		size, err := humanize.ParseBytes(cfg.MaxRecvMsgSize)
-		if err != nil {
-			return failed(errors.Wrapf(err, "parse grpc.max_recv_msg_size %q", cfg.MaxRecvMsgSize))
-		}
-		// A message's length is a 32-bit field of the wire, and no message
-		// at all would fit under zero.
-		if size == 0 || size > math.MaxInt32 {
-			return failed(errors.Newf("grpc.max_recv_msg_size %q is not between 1 byte and %s", cfg.MaxRecvMsgSize, humanize.IBytes(math.MaxInt32)))
-		}
-		opts = append(opts, grpc.MaxRecvMsgSize(int(size)))
-	}
-	if cfg.TLSEnabled {
-		creds, err := credentials.NewServerTLSFromFile(cfg.CertFile, cfg.KeyFile)
-		if err != nil {
-			return failed(errors.Wrap(err, "load the grpc server certificate"))
-		}
-		opts = append(opts, grpc.Creds(creds))
-	}
-	srv := grpc.NewServer(opts...)
+	srv := grpc.NewServer(append(chains(stopping), configured...)...)
 	for _, register := range registrations {
 		register(srv)
 	}
@@ -202,6 +177,73 @@ func Run() error {
 		return err
 	}
 	return nil
+}
+
+// serverOptions returns the options the keys of the grpc section
+// configure, grpc-go's own parameters handed over as they are, zero where
+// unset for grpc-go to fill with its own defaults, or the first key the
+// listener could not run with. grpc-go checks none of them: a negative
+// max_connection_age, or one under ten nanoseconds, brings the process
+// down at the first connection, in the tenth of it grpc-go draws a random
+// spread from; a negative keepalive_timeout fails every connection's
+// TCP_USER_TIMEOUT; a negative keepalive_min_time turns the ping policy
+// off; a keepalive_time under a second grpc-go raises to a second on its
+// own, warning through its own logger. So a negative duration is refused,
+// and a keepalive_time or a max_connection_age under a second, the least
+// grpc-go pings at and the least an age spread by a tenth is good for. A
+// max_recv_msg_size is a size between 1 byte and what a message's 32-bit
+// length field carries. The certificate TLS serves is loaded here too.
+func serverOptions(cfg config.GRPC) ([]grpc.ServerOption, error) {
+	for _, d := range []struct {
+		key   string
+		value time.Duration
+		least time.Duration
+	}{
+		{"grpc.keepalive_time", cfg.KeepaliveTime, time.Second},
+		{"grpc.keepalive_timeout", cfg.KeepaliveTimeout, 0},
+		{"grpc.keepalive_min_time", cfg.KeepaliveMinTime, 0},
+		{"grpc.max_connection_age", cfg.MaxConnectionAge, time.Second},
+		{"grpc.max_connection_age_grace", cfg.MaxConnectionAgeGrace, 0},
+	} {
+		if d.value < 0 {
+			return nil, errors.Newf("%s %s must not be negative", d.key, d.value)
+		}
+		if d.value != 0 && d.value < d.least {
+			return nil, errors.Newf("%s %s is less than %s, the least it may be", d.key, d.value, d.least)
+		}
+	}
+	opts := []grpc.ServerOption{
+		grpc.KeepaliveParams(keepalive.ServerParameters{
+			Time:                  cfg.KeepaliveTime,
+			Timeout:               cfg.KeepaliveTimeout,
+			MaxConnectionAge:      cfg.MaxConnectionAge,
+			MaxConnectionAgeGrace: cfg.MaxConnectionAgeGrace,
+		}),
+		grpc.KeepaliveEnforcementPolicy(keepalive.EnforcementPolicy{
+			MinTime:             cfg.KeepaliveMinTime,
+			PermitWithoutStream: cfg.KeepalivePermitWithoutStream,
+		}),
+	}
+	if cfg.MaxRecvMsgSize != "" {
+		size, err := humanize.ParseBytes(cfg.MaxRecvMsgSize)
+		if err != nil {
+			return nil, errors.Wrapf(err, "parse grpc.max_recv_msg_size %q", cfg.MaxRecvMsgSize)
+		}
+		// A message's length is a 32-bit field of the wire, and no message
+		// at all would fit under zero.
+		if size == 0 || size > math.MaxInt32 {
+			return nil, errors.Newf("grpc.max_recv_msg_size %q is not between 1 byte and %s", cfg.MaxRecvMsgSize, humanize.IBytes(math.MaxInt32))
+		}
+		opts = append(opts, grpc.MaxRecvMsgSize(int(size)))
+	}
+	if cfg.TLSEnabled {
+		creds, err := credentials.NewServerTLSFromFile(cfg.CertFile, cfg.KeyFile)
+		if err != nil {
+			return nil, errors.Wrap(err, "load the grpc server certificate")
+		}
+		opts = append(opts, grpc.Creds(creds))
+	}
+	return opts, nil
 }
 
 // Drain turns the health service to NOT_SERVING, for the process and every

@@ -45,7 +45,9 @@ type GRPC struct {
 	Reflection bool `json:"reflection" mapstructure:"reflection" ini:"reflection" yaml:"reflection"`
 
 	// The keys below are grpc-go's own server parameters, named as grpc-go
-	// names them; a zero value leaves grpc-go's own default for it.
+	// names them; a zero value leaves grpc-go's own default for it. A
+	// negative duration, or a KeepaliveTime or MaxConnectionAge under a
+	// second, is refused as the process starts (see grpcserver.Run).
 
 	// KeepaliveTime is how long a connection may stay idle before the server
 	// pings it, and KeepaliveTimeout how long it then waits for the answer

@@ -560,6 +560,61 @@ func TestRunRefusesAMaxRecvMsgSizeItCannotApply(t *testing.T) {
 	}
 }
 
+// TestRunRefusesADurationItCannotApply pins that a duration of the grpc
+// section the listener could not run with, a negative one, or a
+// keepalive_time or a max_connection_age under the second that is the
+// least of either, is an error Run reports before it opens the listener,
+// the way a max_recv_msg_size it cannot apply is; and that Run reports it
+// with no service registered too, when it opens no listener at all: a key
+// the listener could not run with is wrong whether the listener opens or
+// not.
+func TestRunRefusesADurationItCannotApply(t *testing.T) {
+	for name, tc := range map[string]struct {
+		key   string
+		apply func(cfg *config.GRPC)
+	}{
+		"a_negative_keepalive_time":           {"grpc.keepalive_time", func(cfg *config.GRPC) { cfg.KeepaliveTime = -time.Second }},
+		"a_keepalive_time_under_a_second":     {"grpc.keepalive_time", func(cfg *config.GRPC) { cfg.KeepaliveTime = 500 * time.Millisecond }},
+		"a_negative_keepalive_timeout":        {"grpc.keepalive_timeout", func(cfg *config.GRPC) { cfg.KeepaliveTimeout = -time.Second }},
+		"a_negative_keepalive_min_time":       {"grpc.keepalive_min_time", func(cfg *config.GRPC) { cfg.KeepaliveMinTime = -time.Second }},
+		"a_negative_max_connection_age":       {"grpc.max_connection_age", func(cfg *config.GRPC) { cfg.MaxConnectionAge = -time.Second }},
+		"a_max_connection_age_under_a_second": {"grpc.max_connection_age", func(cfg *config.GRPC) { cfg.MaxConnectionAge = 500 * time.Millisecond }},
+		// The value a YAML integer 5 decodes to, a duration being a count
+		// of nanoseconds.
+		"a_max_connection_age_of_nanoseconds": {"grpc.max_connection_age", func(cfg *config.GRPC) { cfg.MaxConnectionAge = 5 * time.Nanosecond }},
+		"a_negative_max_connection_age_grace": {"grpc.max_connection_age_grace", func(cfg *config.GRPC) { cfg.MaxConnectionAgeGrace = -time.Second }},
+	} {
+		t.Run(name, func(t *testing.T) {
+			reset(t)
+			tc.apply(&config.App.GRPC)
+			echo(nil, nil)
+			opened := make(chan net.Addr, 1)
+			listened = func(addr net.Addr) { opened <- addr }
+			t.Cleanup(func() { listened = nil })
+			t.Cleanup(func() { Stop(context.Background()) })
+			errs := make(chan error, 1)
+			go func() { errs <- Run() }()
+
+			select {
+			case err := <-errs:
+				require.ErrorContains(t, err, tc.key)
+			case <-opened:
+				t.Fatal("the listener opened with a duration it cannot apply")
+			}
+		})
+	}
+
+	t.Run("with_no_service_registered", func(t *testing.T) {
+		reset(t)
+		config.App.GRPC.MaxConnectionAge = -time.Second
+		require.ErrorContains(t, Run(), "grpc.max_connection_age")
+
+		reset(t)
+		config.App.GRPC.MaxRecvMsgSize = "lots"
+		require.ErrorContains(t, Run(), "grpc.max_recv_msg_size")
+	})
+}
+
 // TestRunClosesAConnectionPastItsMaxConnectionAge pins the
 // max_connection_age and max_connection_age_grace keys: a connection
 // older than the age is told to go away, max_age the reason, and closed
@@ -567,7 +622,7 @@ func TestRunRefusesAMaxRecvMsgSizeItCannotApply(t *testing.T) {
 // gRPC client would quietly reconnect.
 func TestRunClosesAConnectionPastItsMaxConnectionAge(t *testing.T) {
 	reset(t)
-	config.App.GRPC.MaxConnectionAge = 50 * time.Millisecond
+	config.App.GRPC.MaxConnectionAge = time.Second
 	config.App.GRPC.MaxConnectionAgeGrace = 50 * time.Millisecond
 	echo(nil, nil)
 	framer := http2Conn(t, start(t))
