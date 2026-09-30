@@ -706,3 +706,36 @@ func selfSigned(t *testing.T) (certFile, keyFile string) {
 	require.NoError(t, os.WriteFile(keyFile, pem.EncodeToMemory(&pem.Block{Type: "EC PRIVATE KEY", Bytes: keyDER}), 0o600))
 	return certFile, keyFile
 }
+
+// TestRunWarnsWhenNoAuthInterceptorGuardsTheNonPublicMethods pins the
+// warning a server starts with when it serves non-public methods and no
+// auth interceptor was registered, and its absence once one is: the HTTP
+// listener refuses nothing in the same situation, so neither does this one.
+func TestRunWarnsWhenNoAuthInterceptorGuardsTheNonPublicMethods(t *testing.T) {
+	warnings := func(t *testing.T) *observer.ObservedLogs {
+		t.Helper()
+		core, logs := observer.New(zapcore.WarnLevel)
+		restore := zap.ReplaceGlobals(zap.New(core))
+		t.Cleanup(restore)
+		return logs
+	}
+
+	t.Run("without an auth interceptor", func(t *testing.T) {
+		reset(t)
+		logs := warnings(t)
+		serve(map[string]func(context.Context) error{"Ping": func(context.Context) error { return nil }}, Method{Name: "/gst.test.Echo/Ping"})
+		start(t)
+		entries := logs.FilterMessage("grpc server serves non-public methods with no auth interceptor registered").All()
+		require.Len(t, entries, 1)
+		require.Equal(t, []any{"/gst.test.Echo/Ping"}, entries[0].ContextMap()["methods"])
+	})
+
+	t.Run("with one", func(t *testing.T) {
+		reset(t)
+		logs := warnings(t)
+		UseAuth(func(ctx context.Context) (context.Context, error) { return ctx, nil })
+		serve(map[string]func(context.Context) error{"Ping": func(context.Context) error { return nil }}, Method{Name: "/gst.test.Echo/Ping"})
+		start(t)
+		require.Empty(t, logs.FilterMessage("grpc server serves non-public methods with no auth interceptor registered").All())
+	})
+}

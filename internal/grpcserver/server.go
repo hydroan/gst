@@ -63,10 +63,9 @@ var (
 // Register queues fn to register a service on the server Run starts, the
 // way the generated pb.gen.go of every package under pb/ registers the
 // services of the models declaring GRPC(): fn gets the server as a
-// grpc.ServiceRegistrar and calls
-// the RegisterXxxServiceServer function the protobuf plugin generated, and
-// methods describe the service's rpcs (see Method): which are public and
-// what the same actions are over HTTP. It runs at package initialization,
+// grpc.ServiceRegistrar and calls the RegisterXxxServiceServer function the
+// protobuf plugin generated, and described describes the service's rpcs (see
+// Method): which are public and what the same actions are over HTTP. It runs at package initialization,
 // before bootstrap starts the listeners; registering once the server runs
 // would serve nothing, so it panics.
 func Register(fn func(grpc.ServiceRegistrar), described ...Method) {
