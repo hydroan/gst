@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/health/grpc_health_v1"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 )
@@ -121,7 +122,9 @@ func TestCallsDescribedByAnActionCarryItsRouteAndMethod(t *testing.T) {
 // request metadata, the answer a ServiceContext built on the call gives: a
 // method the registration described as public does not require auth, any
 // other does, the way the routes outside the HTTP listener's public group
-// do.
+// do; nor does a call of the server's own services, the health and the
+// reflection service, which the auth interceptors leave alone (see guarded),
+// the way the HTTP listener's probes require none.
 func TestCallsCarryWhetherTheirMethodRequiresAuth(t *testing.T) {
 	reset(t)
 	seen := make(chan bool, 1)
@@ -139,6 +142,9 @@ func TestCallsCarryWhetherTheirMethodRequiresAuth(t *testing.T) {
 	require.True(t, <-seen)
 	require.NoError(t, call(ctx, conn, "Open"))
 	require.False(t, <-seen)
+
+	health := enterCall(context.Background(), "/"+grpc_health_v1.Health_ServiceDesc.ServiceName+"/Check")
+	require.False(t, health.meta.RequiresAuth(), "the health service is the server's own")
 }
 
 // TestCallsAreLoggedLikeHTTPRequests pins the access log entry of a call:

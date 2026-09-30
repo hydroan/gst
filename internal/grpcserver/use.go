@@ -66,9 +66,11 @@ var (
 // Use queues interceptors to run on every call, unary or stream, after the
 // framework's own chain and before the ones UseAuth queued, in the order
 // given, the way the HTTP listener runs the middleware Register adds on
-// every route. The public interceptor.Register forwards to it. Like
-// Register it runs at package initialization; queuing once the server runs
-// would intercept nothing, so it panics.
+// every route; the calls of the server's own services are left alone (see
+// ownServices), the way the listener's probes run outside that middleware.
+// The public interceptor.Register forwards to it. Like Register it runs at
+// package initialization; queuing once the server runs would intercept
+// nothing, so it panics.
 func Use(interceptors ...Interceptor) {
 	mu.Lock()
 	defer mu.Unlock()
@@ -108,32 +110,47 @@ func unguardedMethods() []string {
 
 // ownServices are the services the server registers for itself (see Run),
 // the health service and the reflection service in its two versions, which
-// the auth interceptors leave alone: they are the framework's, not the
-// project's actions, and the callers of either present no credentials — a
-// Kubernetes gRPC probe or a balancer checking the health service, grpcurl
-// listing the services through reflection — the way the HTTP listener's
-// probes take no authentication. Reflection exposes the schema alone, what
-// the committed .proto files carry; [grpc] reflection turns it off where
-// that is too much.
+// the project's interceptors leave alone, the common and the auth ones
+// alike: they are the framework's, not the project's actions, and the
+// callers of either present no credentials — a Kubernetes gRPC probe or a
+// balancer checking the health service, grpcurl listing the services
+// through reflection — the way the HTTP listener's probes run outside the
+// middleware a project registers and take no authentication. Reflection
+// exposes the schema alone, what the committed .proto files carry; [grpc]
+// reflection turns it off where that is too much.
 var ownServices = map[string]bool{
 	grpc_health_v1.Health_ServiceDesc.ServiceName:                    true,
 	grpc_reflection_v1.ServerReflection_ServiceDesc.ServiceName:      true,
 	grpc_reflection_v1alpha.ServerReflection_ServiceDesc.ServiceName: true,
 }
 
-// guarded matches the calls the auth interceptors run on: those to a
-// method not declared public, the server's own services aside.
+// requiresAuth reports whether the call of fullMethod, an rpc of service,
+// is one the auth interceptors run on, which is what the RequiresAuth of
+// its request metadata says (see enterCall): a call of a method not
+// declared public, the server's own services aside.
+func requiresAuth(service, fullMethod string) bool {
+	return !ownServices[service] && !methods[fullMethod].Public
+}
+
+// projectCall matches the calls the common interceptors run on: every call
+// but those of the server's own services.
+var projectCall = selector.MatchFunc(func(_ context.Context, meta interceptors.CallMeta) bool {
+	return !ownServices[meta.Service]
+})
+
+// guarded matches the calls the auth interceptors run on (see requiresAuth).
 var guarded = selector.MatchFunc(func(_ context.Context, meta interceptors.CallMeta) bool {
-	return !ownServices[meta.Service] && !methods[meta.FullMethod()].Public
+	return requiresAuth(meta.Service, meta.FullMethod())
 })
 
 // projectUnaryInterceptors returns the interceptors Use and UseAuth queued
-// as the unary chain runs them, in order: the common ones, then the auth
-// ones, each behind a selector that leaves the public methods alone.
+// as the unary chain runs them, in order: the common ones behind the
+// selector leaving the server's own services alone, then the auth ones
+// behind the one leaving the public methods alone as well.
 func projectUnaryInterceptors() []grpc.UnaryServerInterceptor {
 	var chain []grpc.UnaryServerInterceptor
 	for _, ic := range commonInterceptors {
-		chain = append(chain, unaryOf(ic))
+		chain = append(chain, selector.UnaryServerInterceptor(unaryOf(ic), projectCall))
 	}
 	for _, ic := range authInterceptors {
 		chain = append(chain, selector.UnaryServerInterceptor(unaryOf(ic), guarded))
@@ -142,11 +159,11 @@ func projectUnaryInterceptors() []grpc.UnaryServerInterceptor {
 }
 
 // projectStreamInterceptors returns the same interceptors as the stream
-// chain runs them, in the same order and behind the same selector.
+// chain runs them, in the same order and behind the same selectors.
 func projectStreamInterceptors() []grpc.StreamServerInterceptor {
 	var chain []grpc.StreamServerInterceptor
 	for _, ic := range commonInterceptors {
-		chain = append(chain, streamOf(ic))
+		chain = append(chain, selector.StreamServerInterceptor(streamOf(ic), projectCall))
 	}
 	for _, ic := range authInterceptors {
 		chain = append(chain, selector.StreamServerInterceptor(streamOf(ic), guarded))

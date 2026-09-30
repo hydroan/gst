@@ -4,6 +4,7 @@ import (
 	"context"
 	"net"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/hydroan/gst/consts"
@@ -100,6 +101,14 @@ type callScope struct {
 	start      time.Time
 }
 
+// serviceOf returns the service of the full method name of an rpc, the
+// part between its slashes: grpc.health.v1.Health of
+// /grpc.health.v1.Health/Check.
+func serviceOf(fullMethod string) string {
+	service, _, _ := strings.Cut(strings.TrimPrefix(fullMethod, "/"), "/")
+	return service
+}
+
 // enterCall enters the request scope of the call of fullMethod on ctx (see
 // requestScope): the trace id, the request metadata and the call record
 // go on the context, and the trace id goes out in the response header.
@@ -132,7 +141,7 @@ func enterCall(ctx context.Context, fullMethod string) *callScope {
 		UserAgent:    first(md, userAgentKey),
 		Host:         first(md, authorityKey),
 		TLS:          tls,
-		RequiresAuth: !method.Public,
+		RequiresAuth: requiresAuth(serviceOf(fullMethod), fullMethod),
 	}}
 	meta := requestctx.New(c.fields)
 	ctx = requestctx.WithMetadata(context.WithValue(ctx, callRecordKey{}, c), meta)

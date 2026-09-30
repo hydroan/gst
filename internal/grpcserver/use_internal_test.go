@@ -101,6 +101,35 @@ func TestUseAuthLeavesTheServersOwnServicesAlone(t *testing.T) {
 	require.Equal(t, codes.Unauthenticated, status.Code(call(ctx, conn, "Ping")))
 }
 
+// TestUseLeavesTheServersOwnServicesAlone pins that the common interceptors
+// leave the health and reflection services alone the way the auth
+// interceptors do (see TestUseAuthLeavesTheServersOwnServicesAlone): they
+// are the framework's, not the project's actions, the way the HTTP
+// listener's probes run outside the middleware a project registers; a
+// common interceptor refusing every call it sees still leaves a probe its
+// answer.
+func TestUseLeavesTheServersOwnServicesAlone(t *testing.T) {
+	reset(t)
+	Use(func(context.Context) (context.Context, error) {
+		return nil, status.Error(codes.PermissionDenied, "refused")
+	})
+	serve(map[string]func(context.Context) error{"Ping": func(context.Context) error { return nil }}, Method{Name: "/gst.test.Echo/Ping"})
+	conn := dial(t, start(t), nil)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	require.Equal(t, grpc_health_v1.HealthCheckResponse_SERVING, healthOf(t, conn, ""))
+	watch, err := grpc_health_v1.NewHealthClient(conn).Watch(ctx, &grpc_health_v1.HealthCheckRequest{})
+	require.NoError(t, err)
+	first, err := watch.Recv()
+	require.NoError(t, err, "the health watch, a stream, runs outside the common interceptors too")
+	require.Equal(t, grpc_health_v1.HealthCheckResponse_SERVING, first.GetStatus())
+	names, err := services(t, conn)
+	require.NoError(t, err)
+	require.Contains(t, names, "gst.test.Echo")
+	require.Equal(t, codes.PermissionDenied, status.Code(call(ctx, conn, "Ping")), "the project's own methods stay intercepted")
+}
+
 // TestWithCallerNamesTheCallerDownstreamAndInTheAccessLog pins what an
 // auth interceptor establishing the caller hands on: the request metadata
 // the handler reads carries the caller beside everything it carried
