@@ -29,8 +29,9 @@ type Error struct {
 	msg    string
 	cause  error
 	// violations are the fields a request the validator refused failed on,
-	// set by NewInvalidFields alone; the gRPC answer lists them as its
-	// details, the HTTP answer carries them joined in msg.
+	// set by NewInvalidFields alone and read through FieldViolations; the
+	// gRPC answer lists them as its details, the HTTP answer carries them
+	// joined in msg.
 	violations []FieldViolation
 	// stack holds the program counters captured at the construction site,
 	// exposed through StackTrace so error-stack consumers such as
@@ -141,13 +142,17 @@ func (e *Error) Unwrap() error {
 	return e.cause
 }
 
-// FieldViolations returns the fields the request failed on, which only an
-// error NewInvalidFields created carries.
-func (e *Error) FieldViolations() []FieldViolation {
-	if e == nil {
+// FieldViolations returns the fields the request err answers for failed on,
+// which only an error NewInvalidFields created carries; nil for any other
+// error, and for nil. It is a package function rather than a method so it
+// stays out of the public alias of Error: only the framework's gRPC answer
+// reads the fields, to list them as its details, and the type they come as
+// is the framework's own.
+func FieldViolations(err *Error) []FieldViolation {
+	if err == nil {
 		return nil
 	}
-	return e.violations
+	return err.violations
 }
 
 func (e *Error) Status() int {

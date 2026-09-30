@@ -277,7 +277,7 @@ func TestClientSafeBindErrorNamesTheFieldsTheValidatorRefused(t *testing.T) {
 	require.Equal(t, []serviceregistry.FieldViolation{
 		{Field: "name", Description: "name is a required field"},
 		{Field: "address.city", Description: "address.city is a required field"},
-	}, serviceErr.FieldViolations())
+	}, serviceregistry.FieldViolations(serviceErr))
 	var cause, direct validator.ValidationErrors
 	require.ErrorAs(t, wrapped, &cause, "the validator's error travels as the cause")
 	require.ErrorAs(t, refused, &direct)
@@ -285,7 +285,7 @@ func TestClientSafeBindErrorNamesTheFieldsTheValidatorRefused(t *testing.T) {
 
 	require.ErrorAs(t, clientSafeItemBindError(1, refused), &serviceErr)
 	require.Equal(t, "items[1].name is a required field; items[1].address.city is a required field", serviceErr.Msg())
-	require.Equal(t, "items[1].name", serviceErr.FieldViolations()[0].Field)
+	require.Equal(t, "items[1].name", serviceregistry.FieldViolations(serviceErr)[0].Field)
 }
 
 // untranslatedProbe carries rules the validator has no English sentence for:
@@ -317,7 +317,7 @@ func TestClientSafeBindErrorSpeaksOfTheRuleWithoutATranslation(t *testing.T) {
 		{Field: "address.zip", Description: "address.zip failed the hostname check"},
 		{Field: "tag", Description: "tag failed the startswith=ab check"},
 		{Field: "own", Description: "own failed the gstprobe check"},
-	}, serviceErr.FieldViolations())
+	}, serviceregistry.FieldViolations(serviceErr))
 	require.NotContains(t, serviceErr.Msg(), "Key:")
 	require.NotContains(t, serviceErr.Msg(), "untranslatedProbe")
 }
@@ -366,13 +366,13 @@ func TestClientSafeBindErrorNamesTheFieldsByTheirJSONPath(t *testing.T) {
 
 	var serviceErr *serviceregistry.Error
 	require.ErrorAs(t, clientSafeBindError(refused), &serviceErr)
-	fields := make([]string, 0, len(serviceErr.FieldViolations()))
-	for _, v := range serviceErr.FieldViolations() {
+	fields := make([]string, 0, len(serviceregistry.FieldViolations(serviceErr)))
+	for _, v := range serviceregistry.FieldViolations(serviceErr) {
 		fields = append(fields, v.Field)
 	}
 	require.Equal(t, []string{"reviewer", "audit.signer", "ProbeCode", "named.approver", "Plain.approver", "items[0].reviewer", "items[1].reviewer", "name"}, fields)
-	require.Equal(t, "reviewer is a required field", serviceErr.FieldViolations()[0].Description)
-	require.Equal(t, "ProbeCode is a required field", serviceErr.FieldViolations()[2].Description)
+	require.Equal(t, "reviewer is a required field", serviceregistry.FieldViolations(serviceErr)[0].Description)
+	require.Equal(t, "ProbeCode is a required field", serviceregistry.FieldViolations(serviceErr)[2].Description)
 }
 
 // freshPatchHelper marks the child process of

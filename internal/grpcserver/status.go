@@ -30,7 +30,7 @@ func StatusError(err error) error {
 		return status.Error(codes.Internal, serviceregistry.FailureMsg)
 	}
 	st := status.New(codeOf(serviceErr.Status(), err), serviceErr.Msg())
-	if violations := serviceErr.FieldViolations(); len(violations) > 0 {
+	if violations := serviceregistry.FieldViolations(serviceErr); len(violations) > 0 {
 		bad := &errdetails.BadRequest{FieldViolations: make([]*errdetails.BadRequest_FieldViolation, 0, len(violations))}
 		for _, v := range violations {
 			bad.FieldViolations = append(bad.FieldViolations, &errdetails.BadRequest_FieldViolation{Field: v.Field, Description: v.Description})

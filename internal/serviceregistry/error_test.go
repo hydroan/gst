@@ -101,7 +101,7 @@ func TestNewInvalidFieldsJoinsTheViolations(t *testing.T) {
 
 	require.Equal(t, http.StatusBadRequest, err.Status())
 	require.Equal(t, "name is a required field; address.city is a required field", err.Msg())
-	require.Equal(t, violations, err.FieldViolations())
+	require.Equal(t, violations, serviceregistry.FieldViolations(err))
 	require.ErrorIs(t, err, cause)
-	require.Empty(t, serviceregistry.NewError(http.StatusBadRequest, "plain").FieldViolations())
+	require.Empty(t, serviceregistry.FieldViolations(serviceregistry.NewError(http.StatusBadRequest, "plain")))
 }
