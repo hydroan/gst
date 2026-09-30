@@ -318,6 +318,10 @@ func (j *job) runClaimed(ctx context.Context, h *lease.Handle, at time.Time, fie
 // time even where a test drives the instants by hand, and a wait of its own
 // on that clock would be one the test cannot tell from the loop's.
 func (j *job) warnWhileOverrunning(ctx context.Context, at time.Time, fields ...zap.Field) {
+	// The logger is read once, here: the goroutine outlives the round it
+	// warns about, and the package's logger is what a test resets between
+	// runs.
+	warn := log
 	go func() {
 		overrun := 0
 		for next := j.schedule.Next(time.Now()); !next.IsZero(); next = j.schedule.Next(next) {
@@ -329,7 +333,7 @@ func (j *job) warnWhileOverrunning(ctx context.Context, at time.Time, fields ...
 				return
 			}
 			overrun++
-			log.Warnz("cronjob round is still running at its next instant",
+			warn.Warnz("cronjob round is still running at its next instant",
 				append([]zap.Field{
 					zap.String("name", j.name), zap.String("spec", j.spec),
 					zap.Time("at", at), zap.Time("instant", next), zap.Int("overrun", overrun),
