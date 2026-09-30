@@ -121,6 +121,29 @@ func TestCreateCallCreatesTheRecordForTheCaller(t *testing.T) {
 	})
 }
 
+// TestCreateCallRefusesAnHTTPOnlyMethodBeforeWriting pins where a call
+// refuses a service that called a method of its context only an HTTP
+// request can serve: right after the hook that called it, so a before hook
+// leaves nothing written, where an after hook, running once the record is
+// written, leaves it written the way its own error would.
+func TestCreateCallRefusesAnHTTPOnlyMethodBeforeWriting(t *testing.T) {
+	conn := sampleServer(t)
+
+	t.Run("called in a before hook, nothing is written", func(t *testing.T) {
+		name := uniqueName("call-cookie-before")
+		_, err := invoke(t, conn, "CookieBeforeCreate", map[string]any{"record": map[string]any{"name": name}})
+		requireStatus(t, err, codes.Internal, serviceregistry.FailureMsg)
+		require.Zero(t, countSamplesNamed(t, name))
+	})
+
+	t.Run("called in an after hook, the record written stays", func(t *testing.T) {
+		name := uniqueName("call-cookie-after")
+		_, err := invoke(t, conn, "CookieAfterCreate", map[string]any{"record": map[string]any{"name": name}})
+		requireStatus(t, err, codes.Internal, serviceregistry.FailureMsg)
+		require.Equal(t, 1, countSamplesNamed(t, name))
+	})
+}
+
 // TestGetCallAnswersTheRecordOrNotFound pins the get call: the record the id
 // names, NotFound for an id no record carries or the integer key cannot
 // hold, and a refusal for a message naming no id at all.
@@ -682,6 +705,8 @@ func sampleHandlers() map[string]func(ctx context.Context, in map[string]any) (a
 	refusedCreateMany := controller.CreateManyCall[*sampleRecord](refusalRoute)
 	filterRefusedList := controller.ListCall[*sampleRecord](filterRefusalRoute)
 	observedCreate := controller.CreateCall[*sampleRecord](observedRoute)
+	cookieBeforeCreate := controller.CreateCall[*sampleRecord](cookieBeforeRoute)
+	cookieAfterCreate := controller.CreateCall[*sampleRecord](cookieAfterRoute)
 	counterGet := controller.GetCall[*sampleCounter](counterRoute)
 	counterList := controller.ListCall[*sampleCounter](counterRoute)
 	versionedPatch := controller.PatchCall[*versionedSample](versionedRoute)
@@ -723,6 +748,12 @@ func sampleHandlers() map[string]func(ctx context.Context, in map[string]any) (a
 		},
 		"DeleteMany": func(ctx context.Context, in map[string]any) (any, error) {
 			return done(deleteMany(ctx, params(in), field[[]string](in, "ids")))
+		},
+		"CookieBeforeCreate": func(ctx context.Context, in map[string]any) (any, error) {
+			return cookieBeforeCreate(ctx, params(in), field[*sampleRecord](in, "record"))
+		},
+		"CookieAfterCreate": func(ctx context.Context, in map[string]any) (any, error) {
+			return cookieAfterCreate(ctx, params(in), field[*sampleRecord](in, "record"))
 		},
 		"RefusedCreate": func(ctx context.Context, in map[string]any) (any, error) {
 			return refusedCreate(ctx, params(in), field[*sampleRecord](in, "record"))

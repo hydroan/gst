@@ -202,8 +202,8 @@ func (a *action[M, REQ, RSP]) patchFlow(ctx context.Context, newServiceContext s
 	cur := oldVal.Addr().Interface().(M) //nolint:errcheck
 
 	// 1.Perform business logic processing before partial update resource.
-	if err := a.traceServiceHook(ctx, consts.PatchBefore, svc, func(spanCtx context.Context) error {
-		return svc.PatchBefore(newServiceContext(spanCtx, consts.PatchBefore), cur)
+	if err := a.traceServiceHook(ctx, consts.PatchBefore, svc, newServiceContext, func(sc *types.ServiceContext) error {
+		return svc.PatchBefore(sc, cur)
 	}); err != nil {
 		return zero, failService(ctx, log, err)
 	}
@@ -214,8 +214,8 @@ func (a *action[M, REQ, RSP]) patchFlow(ctx context.Context, newServiceContext s
 		return zero, failDatabase(ctx, log, err)
 	}
 	// 3.Perform business logic processing after partial update resource.
-	if err := a.traceServiceHook(ctx, consts.PatchAfter, svc, func(spanCtx context.Context) error {
-		return svc.PatchAfter(newServiceContext(spanCtx, consts.PatchAfter), cur)
+	if err := a.traceServiceHook(ctx, consts.PatchAfter, svc, newServiceContext, func(sc *types.ServiceContext) error {
+		return svc.PatchAfter(sc, cur)
 	}); err != nil {
 		return zero, failService(ctx, log, err)
 	}

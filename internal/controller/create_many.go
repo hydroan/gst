@@ -120,8 +120,8 @@ func (a *action[M, REQ, RSP]) createManyFlow(ctx context.Context, newServiceCont
 	}
 
 	// 1.Perform business logic processing before batch create resource.
-	if err := a.traceServiceHook(ctx, consts.CreateManyBefore, svc, func(spanCtx context.Context) error {
-		return svc.CreateManyBefore(newServiceContext(spanCtx, consts.CreateManyBefore), req.Items...)
+	if err := a.traceServiceHook(ctx, consts.CreateManyBefore, svc, newServiceContext, func(sc *types.ServiceContext) error {
+		return svc.CreateManyBefore(sc, req.Items...)
 	}); err != nil {
 		return failService(ctx, log, err)
 	}
@@ -133,8 +133,8 @@ func (a *action[M, REQ, RSP]) createManyFlow(ctx context.Context, newServiceCont
 		return failDatabase(ctx, log, err)
 	}
 	// 3.Perform business logic processing after batch create resource
-	if err := a.traceServiceHook(ctx, consts.CreateManyAfter, svc, func(spanCtx context.Context) error {
-		return svc.CreateManyAfter(newServiceContext(spanCtx, consts.CreateManyAfter), req.Items...)
+	if err := a.traceServiceHook(ctx, consts.CreateManyAfter, svc, newServiceContext, func(sc *types.ServiceContext) error {
+		return svc.CreateManyAfter(sc, req.Items...)
 	}); err != nil {
 		return failService(ctx, log, err)
 	}

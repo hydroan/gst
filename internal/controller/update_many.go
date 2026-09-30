@@ -91,8 +91,8 @@ func (a *action[M, REQ, RSP]) updateManyFlow(ctx context.Context, newServiceCont
 	svc := a.service()
 
 	// 1.Perform business logic processing before batch update resource.
-	if err := a.traceServiceHook(ctx, consts.UpdateManyBefore, svc, func(spanCtx context.Context) error {
-		return svc.UpdateManyBefore(newServiceContext(spanCtx, consts.UpdateManyBefore), req.Items...)
+	if err := a.traceServiceHook(ctx, consts.UpdateManyBefore, svc, newServiceContext, func(sc *types.ServiceContext) error {
+		return svc.UpdateManyBefore(sc, req.Items...)
 	}); err != nil {
 		return failService(ctx, log, err)
 	}
@@ -105,8 +105,8 @@ func (a *action[M, REQ, RSP]) updateManyFlow(ctx context.Context, newServiceCont
 		return failDatabase(ctx, log, err)
 	}
 	// 3.Perform business logic processing after batch update resource.
-	if err := a.traceServiceHook(ctx, consts.UpdateManyAfter, svc, func(spanCtx context.Context) error {
-		return svc.UpdateManyAfter(newServiceContext(spanCtx, consts.UpdateManyAfter), req.Items...)
+	if err := a.traceServiceHook(ctx, consts.UpdateManyAfter, svc, newServiceContext, func(sc *types.ServiceContext) error {
+		return svc.UpdateManyAfter(sc, req.Items...)
 	}); err != nil {
 		return failService(ctx, log, err)
 	}

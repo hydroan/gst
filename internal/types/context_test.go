@@ -169,7 +169,8 @@ func TestServiceContextResponseHelpers(t *testing.T) {
 }
 
 // TestHTTPOnlyMethodCalledRecordsCallsWithoutHTTP pins the flag a transport
-// other than HTTP reads once the service returns: every HTTP-only method sets
+// other than HTTP reads once a hook or a service method returns: every
+// HTTP-only method sets
 // it when there is no HTTP request or response behind the context, the
 // readers of the request as much as the writers of the response, and a nil
 // cookie -- nothing to write on any transport -- does not.

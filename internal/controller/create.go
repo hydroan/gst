@@ -103,8 +103,8 @@ func (a *action[M, REQ, RSP]) createFlow(ctx context.Context, newServiceContext 
 	req.SetUpdatedBy(username)
 
 	// 1.Perform business logic processing before create resource.
-	if err := a.traceServiceHook(ctx, consts.CreateBefore, svc, func(spanCtx context.Context) error {
-		return svc.CreateBefore(newServiceContext(spanCtx, consts.CreateBefore), req)
+	if err := a.traceServiceHook(ctx, consts.CreateBefore, svc, newServiceContext, func(sc *types.ServiceContext) error {
+		return svc.CreateBefore(sc, req)
 	}); err != nil {
 		return failService(ctx, log, err)
 	}
@@ -115,8 +115,8 @@ func (a *action[M, REQ, RSP]) createFlow(ctx context.Context, newServiceContext 
 		return failDatabase(ctx, log, err)
 	}
 	// 3.Perform business logic processing after create resource
-	if err := a.traceServiceHook(ctx, consts.CreateAfter, svc, func(spanCtx context.Context) error {
-		return svc.CreateAfter(newServiceContext(spanCtx, consts.CreateAfter), req)
+	if err := a.traceServiceHook(ctx, consts.CreateAfter, svc, newServiceContext, func(sc *types.ServiceContext) error {
+		return svc.CreateAfter(sc, req)
 	}); err != nil {
 		return failService(ctx, log, err)
 	}

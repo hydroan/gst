@@ -114,8 +114,8 @@ func TestTraceServiceHookSpansOnlyOverriddenHooks(t *testing.T) {
 	t.Run("the_default_service_exports_no_hook_span", func(t *testing.T) {
 		svc := serviceregistry.Resolve[*handlerRouteModel, *handlerRouteModel, *handlerRouteModel]("samples/unregistered")
 		data := make([]*handlerRouteModel, 0)
-		require.NoError(t, a.traceServiceHook(context.Background(), consts.ListBefore, svc, func(ctx context.Context) error {
-			return svc.ListBefore(types.NewServiceContext(nil, ctx, consts.ListBefore), &data)
+		require.NoError(t, a.traceServiceHook(context.Background(), consts.ListBefore, svc, bareServiceContext, func(sc *types.ServiceContext) error {
+			return svc.ListBefore(sc, &data)
 		}))
 		require.NotContains(t, oteltest.EndedNames(recorder), "service.HandlerRouteModel.ListBefore")
 	})
@@ -123,14 +123,20 @@ func TestTraceServiceHookSpansOnlyOverriddenHooks(t *testing.T) {
 	t.Run("an_overridden_hook_gets_a_span_and_its_no-op_partner_does_not", func(t *testing.T) {
 		svc := &handlerListBeforeService{}
 		data := make([]*handlerRouteModel, 0)
-		require.NoError(t, a.traceServiceHook(context.Background(), consts.ListBefore, svc, func(ctx context.Context) error {
-			return svc.ListBefore(types.NewServiceContext(nil, ctx, consts.ListBefore), &data)
+		require.NoError(t, a.traceServiceHook(context.Background(), consts.ListBefore, svc, bareServiceContext, func(sc *types.ServiceContext) error {
+			return svc.ListBefore(sc, &data)
 		}))
-		require.NoError(t, a.traceServiceHook(context.Background(), consts.ListAfter, svc, func(ctx context.Context) error {
-			return svc.ListAfter(types.NewServiceContext(nil, ctx, consts.ListAfter), &data)
+		require.NoError(t, a.traceServiceHook(context.Background(), consts.ListAfter, svc, bareServiceContext, func(sc *types.ServiceContext) error {
+			return svc.ListAfter(sc, &data)
 		}))
 		names := oteltest.EndedNames(recorder)
 		require.Contains(t, names, "service.HandlerRouteModel.ListBefore")
 		require.NotContains(t, names, "service.HandlerRouteModel.ListAfter")
 	})
+}
+
+// bareServiceContext builds the service context of a hook run outside any
+// transport, carrying no request.
+func bareServiceContext(ctx context.Context, phase consts.Phase) *types.ServiceContext {
+	return types.NewServiceContext(nil, ctx, phase)
 }

@@ -142,7 +142,8 @@ func (sc *ServiceContext) IsHTTPS() bool     { return requestctx.FromContext(sc)
 // on, so the services of a model declaring GRPC() must not call them; gg
 // check holds them to it (its check named gRPC service context), and a
 // call that reaches one at run time records it for HTTPOnlyMethodCalled,
-// which the transport answers as a failure once the service returns.
+// which the transport answers as a failure once the hook or the service
+// method returns.
 var HTTPOnlyMethods = []string{"Cookie", "Data", "FormFile", "PostForm", "SSE", "SetCookie"}
 
 // Data writes data as the response body with the given status and content
@@ -222,11 +223,11 @@ func (sc *ServiceContext) recordHTTPOnlyMethodCall() {
 // or a cookie, or read a cookie, a form value or a file -- while sc carried
 // no HTTP request or response. The call itself does nothing, answering the
 // zero value where it reads; the transport behind such a context reads the
-// flag once the service returns and refuses the request, because what the
-// service meant to send cannot be carried and what it meant to read was
-// never there. It is a package function rather than a method so it stays
-// out of the public alias of ServiceContext: only the framework's transports
-// read it.
+// flag once the hook or the service method returns and refuses the request,
+// because what the service meant to send cannot be carried and what it
+// meant to read was never there. It is a package function rather than a
+// method so it stays out of the public alias of ServiceContext: only the
+// framework's transports read it.
 func HTTPOnlyMethodCalled(sc *ServiceContext) bool {
 	return sc != nil && sc.httpOnlyMethodCalled
 }

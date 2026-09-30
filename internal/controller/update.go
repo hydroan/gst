@@ -138,8 +138,8 @@ func (a *action[M, REQ, RSP]) updateFlow(ctx context.Context, newServiceContext 
 	req.SetUpdatedBy(requestctx.FromContext(ctx).Username()) // set updated_by to current user
 
 	// 1.Perform business logic processing before update resource.
-	if err := a.traceServiceHook(ctx, consts.UpdateBefore, svc, func(spanCtx context.Context) error {
-		return svc.UpdateBefore(newServiceContext(spanCtx, consts.UpdateBefore), req)
+	if err := a.traceServiceHook(ctx, consts.UpdateBefore, svc, newServiceContext, func(sc *types.ServiceContext) error {
+		return svc.UpdateBefore(sc, req)
 	}); err != nil {
 		return failService(ctx, log, err)
 	}
@@ -149,8 +149,8 @@ func (a *action[M, REQ, RSP]) updateFlow(ctx context.Context, newServiceContext 
 		return failDatabase(ctx, log, err)
 	}
 	// 3.Perform business logic processing after update resource.
-	if err := a.traceServiceHook(ctx, consts.UpdateAfter, svc, func(spanCtx context.Context) error {
-		return svc.UpdateAfter(newServiceContext(spanCtx, consts.UpdateAfter), req)
+	if err := a.traceServiceHook(ctx, consts.UpdateAfter, svc, newServiceContext, func(sc *types.ServiceContext) error {
+		return svc.UpdateAfter(sc, req)
 	}); err != nil {
 		return failService(ctx, log, err)
 	}

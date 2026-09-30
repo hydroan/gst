@@ -246,8 +246,8 @@ func (a *action[M, REQ, RSP]) patchManyFlow(ctx context.Context, newServiceConte
 	}
 
 	// 1.Perform business logic processing before batch patch resource.
-	if err := a.traceServiceHook(ctx, consts.PatchManyBefore, svc, func(spanCtx context.Context) error {
-		return svc.PatchManyBefore(newServiceContext(spanCtx, consts.PatchManyBefore), shouldUpdates...)
+	if err := a.traceServiceHook(ctx, consts.PatchManyBefore, svc, newServiceContext, func(sc *types.ServiceContext) error {
+		return svc.PatchManyBefore(sc, shouldUpdates...)
 	}); err != nil {
 		return zero, failService(ctx, log, err)
 	}
@@ -260,8 +260,8 @@ func (a *action[M, REQ, RSP]) patchManyFlow(ctx context.Context, newServiceConte
 		return zero, failDatabase(ctx, log, err)
 	}
 	// 3.Perform business logic processing after batch patch resource.
-	if err := a.traceServiceHook(ctx, consts.PatchManyAfter, svc, func(spanCtx context.Context) error {
-		return svc.PatchManyAfter(newServiceContext(spanCtx, consts.PatchManyAfter), shouldUpdates...)
+	if err := a.traceServiceHook(ctx, consts.PatchManyAfter, svc, newServiceContext, func(sc *types.ServiceContext) error {
+		return svc.PatchManyAfter(sc, shouldUpdates...)
 	}); err != nil {
 		return zero, failService(ctx, log, err)
 	}

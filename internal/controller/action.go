@@ -176,17 +176,28 @@ func (a *action[M, REQ, RSP]) startSpan(ctx context.Context, method, path string
 	return spanCtx, span
 }
 
-// traceServiceHook traces a service hook that returns only an error. A hook
-// the service does not override is the framework base's no-op: it still runs,
-// so the hook sequence stays the same for every service, but it has nothing
-// worth timing and gets no span.
-func (a *action[M, REQ, RSP]) traceServiceHook(parentCtx context.Context, phase consts.Phase, svc types.Service[M, REQ, RSP], fn func(context.Context) error) error {
+// traceServiceHook runs a service hook that returns only an error, on the
+// service context newServiceContext builds for phase, and refuses, right
+// after the hook returns, a hook that called a method of its context only an
+// HTTP request can serve (see httpOnlyMethodCalled), so that the flow stops
+// before what follows the hook, above all a record written after a before
+// hook. A hook the service does not override is the framework base's no-op:
+// it still runs, so the hook sequence stays the same for every service, but
+// it has nothing worth timing and gets no span.
+func (a *action[M, REQ, RSP]) traceServiceHook(parentCtx context.Context, phase consts.Phase, svc types.Service[M, REQ, RSP], newServiceContext serviceContextFunc, fn func(*types.ServiceContext) error) error {
+	run := func(ctx context.Context) error {
+		sc := newServiceContext(ctx, phase)
+		if err := fn(sc); err != nil {
+			return err
+		}
+		return httpOnlyMethodCalled(sc)
+	}
 	span := a.serviceSpan(phase)
 	if !gstotel.IsEnabled() || !serviceregistry.OverridesHook(svc, span.operation) {
-		return fn(parentCtx)
+		return run(parentCtx)
 	}
 	_, err := traceServiceCall[struct{}](parentCtx, span, a.name, func(spanCtx context.Context) (struct{}, error) {
-		return struct{}{}, fn(spanCtx)
+		return struct{}{}, run(spanCtx)
 	})
 	return err
 }

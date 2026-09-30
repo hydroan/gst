@@ -113,8 +113,8 @@ func (a *action[M, REQ, RSP]) getFlow(ctx context.Context, newServiceContext ser
 	expands := parseExpandQuery(requestctx.QueryValues(ctx), m)
 
 	// 1.Perform business logic processing before get resource.
-	if err := a.traceServiceHook(ctx, consts.GetBefore, svc, func(spanCtx context.Context) error {
-		return svc.GetBefore(newServiceContext(spanCtx, consts.GetBefore), m)
+	if err := a.traceServiceHook(ctx, consts.GetBefore, svc, newServiceContext, func(sc *types.ServiceContext) error {
+		return svc.GetBefore(sc, m)
 	}); err != nil {
 		return zero, failService(ctx, log, err)
 	}
@@ -124,8 +124,8 @@ func (a *action[M, REQ, RSP]) getFlow(ctx context.Context, newServiceContext ser
 		return zero, failDatabase(ctx, log, err)
 	}
 	// 3.Perform business logic processing after get resource.
-	if err := a.traceServiceHook(ctx, consts.GetAfter, svc, func(spanCtx context.Context) error {
-		return svc.GetAfter(newServiceContext(spanCtx, consts.GetAfter), m)
+	if err := a.traceServiceHook(ctx, consts.GetAfter, svc, newServiceContext, func(sc *types.ServiceContext) error {
+		return svc.GetAfter(sc, m)
 	}); err != nil {
 		return zero, failService(ctx, log, err)
 	}

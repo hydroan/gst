@@ -114,8 +114,8 @@ func (a *action[M, REQ, RSP]) deleteManyFlow(ctx context.Context, newServiceCont
 		}
 		req.Items = append(req.Items, m)
 	}
-	if err := a.traceServiceHook(ctx, consts.DeleteManyBefore, svc, func(spanCtx context.Context) error {
-		return svc.DeleteManyBefore(newServiceContext(spanCtx, consts.DeleteManyBefore), req.Items...)
+	if err := a.traceServiceHook(ctx, consts.DeleteManyBefore, svc, newServiceContext, func(sc *types.ServiceContext) error {
+		return svc.DeleteManyBefore(sc, req.Items...)
 	}); err != nil {
 		return failService(ctx, log, err)
 	}
@@ -125,8 +125,8 @@ func (a *action[M, REQ, RSP]) deleteManyFlow(ctx context.Context, newServiceCont
 		return failDatabase(ctx, log, err)
 	}
 	// 3.Perform business logic processing after batch delete resources.
-	if err := a.traceServiceHook(ctx, consts.DeleteManyAfter, svc, func(spanCtx context.Context) error {
-		return svc.DeleteManyAfter(newServiceContext(spanCtx, consts.DeleteManyAfter), req.Items...)
+	if err := a.traceServiceHook(ctx, consts.DeleteManyAfter, svc, newServiceContext, func(sc *types.ServiceContext) error {
+		return svc.DeleteManyAfter(sc, req.Items...)
 	}); err != nil {
 		return failService(ctx, log, err)
 	}

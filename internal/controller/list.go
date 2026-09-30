@@ -120,8 +120,8 @@ func (a *action[M, REQ, RSP]) listFlow(ctx context.Context, newServiceContext se
 	expands := parseExpandQuery(query, m)
 
 	// 1.Perform business logic processing before list resources.
-	if err = a.traceServiceHook(ctx, consts.ListBefore, svc, func(spanCtx context.Context) error {
-		return svc.ListBefore(newServiceContext(spanCtx, consts.ListBefore), &data)
+	if err = a.traceServiceHook(ctx, consts.ListBefore, svc, newServiceContext, func(sc *types.ServiceContext) error {
+		return svc.ListBefore(sc, &data)
 	}); err != nil {
 		return nil, 0, failService(ctx, log, err)
 	}
@@ -133,7 +133,11 @@ func (a *action[M, REQ, RSP]) listFlow(ctx context.Context, newServiceContext se
 		PresentFields: present,
 		Filters:       filters,
 	}
-	if m, queryOpts, err = svc.Filter(newServiceContext(ctx, consts.List), m, queryOpts); err != nil {
+	filterCtx := newServiceContext(ctx, consts.List)
+	if m, queryOpts, err = svc.Filter(filterCtx, m, queryOpts); err != nil {
+		return nil, 0, failService(ctx, log, err)
+	}
+	if err = httpOnlyMethodCalled(filterCtx); err != nil {
 		return nil, 0, failService(ctx, log, err)
 	}
 	// 3.List resources from database.
@@ -147,8 +151,8 @@ func (a *action[M, REQ, RSP]) listFlow(ctx context.Context, newServiceContext se
 		return nil, 0, failDatabase(ctx, log, err)
 	}
 	// 4.Perform business logic processing after list resources.
-	if err = a.traceServiceHook(ctx, consts.ListAfter, svc, func(spanCtx context.Context) error {
-		return svc.ListAfter(newServiceContext(spanCtx, consts.ListAfter), &data)
+	if err = a.traceServiceHook(ctx, consts.ListAfter, svc, newServiceContext, func(sc *types.ServiceContext) error {
+		return svc.ListAfter(sc, &data)
 	}); err != nil {
 		return nil, 0, failService(ctx, log, err)
 	}

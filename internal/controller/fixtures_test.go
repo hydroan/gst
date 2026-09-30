@@ -111,6 +111,8 @@ const (
 	versionedRoute     = "controller-versioned-samples"
 	validatedRoute     = "controller-validated-samples"
 	observedRoute      = "controller-observed-samples"
+	cookieBeforeRoute  = "controller-cookie-before-samples"
+	cookieAfterRoute   = "controller-cookie-after-samples"
 	actionRoute        = "controller-sample-actions"
 	watchRoute         = "controller-sample-watches"
 	uploadRoute        = "controller-sample-uploads"
@@ -132,12 +134,35 @@ func registerFixtureServices() {
 	serviceregistry.Register[*sampleRecord, *sampleRecord, *sampleRecord](consts.Import, importRoute, &importingService{})
 	serviceregistry.Register[*sampleRecord, *sampleRecord, *sampleRecord](consts.Import, refusedImportRoute, &refusingService{})
 	serviceregistry.Register[*sampleRecord, *sampleRecord, *sampleRecord](consts.Create, observedRoute, &observingService{})
+	serviceregistry.Register[*sampleRecord, *sampleRecord, *sampleRecord](consts.Create, cookieBeforeRoute, &cookieBeforeService{})
+	serviceregistry.Register[*sampleRecord, *sampleRecord, *sampleRecord](consts.Create, cookieAfterRoute, &cookieAfterService{})
 	serviceregistry.Register[*sampleRecord, *sampleActionReq, *sampleActionRsp](consts.Create, actionRoute, &actionService{})
 	serviceregistry.Register[*sampleRecord, *sampleActionReq, *sampleActionRsp](consts.List, actionRoute, &actionService{})
 	serviceregistry.Register[*sampleRecord, *sampleActionReq, *sampleActionRsp](consts.Stream, watchRoute, &watchService{})
 	serviceregistry.Register[*sampleRecord, *sampleActionReq, *sampleActionRsp](consts.Stream, uploadRoute, &uploadService{})
 	serviceregistry.Register[*sampleRecord, *sampleActionReq, *sampleActionRsp](consts.Stream, chatRoute, &chatService{})
 	serviceregistry.Register[*sampleRecord, *sampleActionReq, *sampleActionRsp](consts.Stream, silentRoute, &actionService{})
+}
+
+// cookieBeforeService and cookieAfterService set a cookie, which only an
+// HTTP response carries, in the hook before and the hook after the record
+// is written, for the calls that pin where a call refuses that.
+type cookieBeforeService struct {
+	serviceregistry.Base[*sampleRecord, *sampleRecord, *sampleRecord]
+}
+
+func (*cookieBeforeService) CreateBefore(sc *types.ServiceContext, _ *sampleRecord) error {
+	sc.SetCookie(&http.Cookie{Name: "probe", Value: "set"})
+	return nil
+}
+
+type cookieAfterService struct {
+	serviceregistry.Base[*sampleRecord, *sampleRecord, *sampleRecord]
+}
+
+func (*cookieAfterService) CreateAfter(sc *types.ServiceContext, _ *sampleRecord) error {
+	sc.SetCookie(&http.Cookie{Name: "probe", Value: "set"})
+	return nil
 }
 
 // refusedMsg is what the refusing services answer every refused request with.

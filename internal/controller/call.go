@@ -265,7 +265,8 @@ func (a *action[M, REQ, RSP]) beginQueryCall(ctx context.Context, params map[str
 }
 
 // serviceContext is the serviceContextFunc of the call: its service
-// contexts carry no HTTP request, and are kept for finish to check.
+// contexts carry no HTTP request, and are kept for finish to check what
+// the hooks' own checks did not, a service method's calls.
 func (c *call) serviceContext(ctx context.Context, phase consts.Phase) *types.ServiceContext {
 	sc := types.NewServiceContext(nil, ctx, phase)
 	c.built = append(c.built, sc)
@@ -367,21 +368,37 @@ func (c *call) ended() error {
 	return nil
 }
 
-// finish ends a call whose flow or service returned, checking the service
-// contexts it built: a service that called a method of one of them only an
-// HTTP request can serve — wrote a body, a stream or a cookie it believes
-// answered, read a cookie, a form value or a file that was never there —
-// ran on what the call cannot carry, so the call answers Internal and logs
-// why, naming the methods (gg check reports the call at generation time;
-// this is the transport's own refusal). nil otherwise.
-func (c *call) finish() error {
-	if !slices.ContainsFunc(c.built, types.HTTPOnlyMethodCalled) {
+// httpOnlyMethodCalled returns the error of a service that called a method
+// of sc only an HTTP request can serve — wrote a body, a stream or a cookie
+// it believes answered, read a cookie, a form value or a file that was never
+// there — while sc carried no HTTP request (see types.HTTPOnlyMethodCalled),
+// naming the methods, and nil when it called none. A call answers Internal
+// for it, right after the hook that called it (see traceServiceHook) or
+// once its service method returned (see finish); gg check reports the call
+// at generation time, this is the transport's own refusal. A context of an
+// HTTP request carries the request, so its hooks never trip it.
+func httpOnlyMethodCalled(sc *types.ServiceContext) error {
+	if !types.HTTPOnlyMethodCalled(sc) {
 		return nil
 	}
-	err := errors.Newf("the service called a method of its context only an HTTP request can serve: an action served over gRPC must not call %s", strings.Join(types.HTTPOnlyMethods, ", "))
-	c.log.Errorz("service operation failed", zap.Error(err))
-	gstotel.RecordError(c.span, err)
-	return grpcserver.StatusError(err)
+	return errors.Newf("the service called a method of its context only an HTTP request can serve: an action served over gRPC must not call %s", strings.Join(types.HTTPOnlyMethods, ", "))
+}
+
+// finish ends a call whose flow or service returned, checking the service
+// contexts it built the way traceServiceHook checks each hook's (see
+// httpOnlyMethodCalled): what a service method called on its context is
+// checked here, once the method returned. nil otherwise.
+func (c *call) finish() error {
+	for _, sc := range c.built {
+		err := httpOnlyMethodCalled(sc)
+		if err == nil {
+			continue
+		}
+		c.log.Errorz("service operation failed", zap.Error(err))
+		gstotel.RecordError(c.span, err)
+		return grpcserver.StatusError(err)
+	}
+	return nil
 }
 
 // answer finishes c (see finish) and returns result, or the status finish

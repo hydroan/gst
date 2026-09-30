@@ -131,9 +131,14 @@ func ExportHandler[M types.Model, REQ types.Request, RSP types.Response](cfg ...
 
 			expands := parseExpandQuery(query, m)
 			svcCtx := types.NewServiceContext(c, nil, consts.Export)
+			// The list hooks of an export run on contexts of the Export phase,
+			// the phase of the action they serve.
+			exportServiceContext := func(ctx context.Context, _ consts.Phase) *types.ServiceContext {
+				return types.NewServiceContext(c, ctx, consts.Export)
+			}
 			// 1.Perform business logic processing before list resources.
-			if err = a.traceServiceHook(ctrlSpanCtx, consts.ListBefore, svc, func(spanCtx context.Context) error {
-				return svc.ListBefore(types.NewServiceContext(c, spanCtx, consts.Export), &data)
+			if err = a.traceServiceHook(ctrlSpanCtx, consts.ListBefore, svc, exportServiceContext, func(sc *types.ServiceContext) error {
+				return svc.ListBefore(sc, &data)
 			}); err != nil {
 				log.Errorz("service operation failed", zap.Error(err))
 				response.Error(c, err)
@@ -169,8 +174,8 @@ func ExportHandler[M types.Model, REQ types.Request, RSP types.Response](cfg ...
 				return
 			}
 			// 4.Perform business logic processing after list resources.
-			if err = a.traceServiceHook(ctrlSpanCtx, consts.ListAfter, svc, func(spanCtx context.Context) error {
-				return svc.ListAfter(types.NewServiceContext(c, spanCtx, consts.Export), &data)
+			if err = a.traceServiceHook(ctrlSpanCtx, consts.ListAfter, svc, exportServiceContext, func(sc *types.ServiceContext) error {
+				return svc.ListAfter(sc, &data)
 			}); err != nil {
 				log.Errorz("service operation failed", zap.Error(err))
 				response.Error(c, err)

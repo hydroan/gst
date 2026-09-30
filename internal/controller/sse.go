@@ -49,8 +49,8 @@ func SSEHandler[M types.Model, REQ types.Request, RSP types.Response](cfg ...*ty
 		// ended keeps what the service returned when that was nothing but the
 		// stream's context ending, away from the service span and the log.
 		var ended error
-		err := a.traceServiceHook(ctrlSpanCtx, consts.SSE, svc, func(spanCtx context.Context) error {
-			err := svc.SSE(types.NewServiceContext(c, spanCtx, consts.SSE))
+		err := a.traceServiceHook(ctrlSpanCtx, consts.SSE, svc, ginServiceContext(c), func(sc *types.ServiceContext) error {
+			err := svc.SSE(sc)
 			if lifecycle.Interrupted(stream, err) {
 				ended = err
 				return nil

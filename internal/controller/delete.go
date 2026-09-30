@@ -104,8 +104,8 @@ func (a *action[M, REQ, RSP]) deleteFlow(ctx context.Context, newServiceContext 
 	}
 
 	// 1.Perform business logic processing before delete resource.
-	if err := a.traceServiceHook(ctx, consts.DeleteBefore, svc, func(spanCtx context.Context) error {
-		return svc.DeleteBefore(newServiceContext(spanCtx, consts.DeleteBefore), m)
+	if err := a.traceServiceHook(ctx, consts.DeleteBefore, svc, newServiceContext, func(sc *types.ServiceContext) error {
+		return svc.DeleteBefore(sc, m)
 	}); err != nil {
 		return failService(ctx, log, err)
 	}
@@ -123,8 +123,8 @@ func (a *action[M, REQ, RSP]) deleteFlow(ctx context.Context, newServiceContext 
 		return failDatabase(ctx, log, err)
 	}
 	// 3.Perform business logic processing after delete resource.
-	if err := a.traceServiceHook(ctx, consts.DeleteAfter, svc, func(spanCtx context.Context) error {
-		return svc.DeleteAfter(newServiceContext(spanCtx, consts.DeleteAfter), m)
+	if err := a.traceServiceHook(ctx, consts.DeleteAfter, svc, newServiceContext, func(sc *types.ServiceContext) error {
+		return svc.DeleteAfter(sc, m)
 	}); err != nil {
 		return failService(ctx, log, err)
 	}
