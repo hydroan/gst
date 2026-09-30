@@ -167,6 +167,7 @@ HTTP 状态到 gRPC status 的映射（`grpcserver.StatusError`）：
 - 409 → AlreadyExists，其中乐观锁冲突（错误链里带 `database.ErrStaleObject`）→ Aborted，外键不满足（带 `database.ErrForeignKeyViolated`，指向不存在或还被引用的记录）→ FailedPrecondition；412 → FailedPrecondition；429 → ResourceExhausted；501 → Unimplemented；503 → Unavailable。
 - 其他 5xx → Internal；其他 4xx → InvalidArgument；数据库未知错误与钩子里的非 service.Error → Internal，和 HTTP 的 500 同一句文案；请求消息校验失败 → InvalidArgument，message 是点名字段的句子（`name is a required field`，多个字段用分号连，字段用 JSON 名路径，批量项带 `items[1].`），并附 `google.rpc.BadRequest` 明细逐字段列出，HTTP 的 `msg` 是同一句；panic 经 recovery → Internal。
 - 客户端已取消或超时的调用答 Canceled / DeadlineExceeded，不记错误日志。
+- 路由参数来自请求消息开头的字段：留空或含 `/` 的值答 InvalidArgument（`route parameter "parent" is required`、`route parameter "parent" must not contain "/"`），HTTP 上一个参数只对应路径的一段，这两种值它永远送不进来。
 
 ## 5. 动作承载矩阵
 

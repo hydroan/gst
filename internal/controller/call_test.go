@@ -110,6 +110,15 @@ func TestCreateCallCreatesTheRecordForTheCaller(t *testing.T) {
 		requireStatus(t, err, codes.InvalidArgument, `route parameter "parent" is required`)
 		require.Zero(t, countSamplesNamed(t, name))
 	})
+
+	t.Run("a route parameter spanning segments is refused", func(t *testing.T) {
+		// Over HTTP a parameter matches one segment of the path; a value
+		// with a slash in it is one no request could carry.
+		name := uniqueName("call-slashed-param")
+		_, err := invoke(t, conn, "Create", map[string]any{"params": map[string]string{"parent": "a/b"}, "record": map[string]any{"name": name}})
+		requireStatus(t, err, codes.InvalidArgument, `route parameter "parent" must not contain "/"`)
+		require.Zero(t, countSamplesNamed(t, name))
+	})
 }
 
 // TestGetCallAnswersTheRecordOrNotFound pins the get call: the record the id

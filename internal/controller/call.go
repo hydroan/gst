@@ -227,11 +227,13 @@ type call struct {
 // (see grpcserver.WithParams) and starts the controller span on it, the way
 // the HTTP handler starts one on the request, described by the method and
 // route the call carries, the action's as the registration described it;
-// the caller ends the span through end. A route parameter left empty is
-// reported once the call began, so the caller refuses it on the call, its
-// span recording the refusal: over HTTP no route matches an empty segment,
-// while a message may leave the field empty, and a service scoping its work
-// by the parameter would then scope it by nothing.
+// the caller ends the span through end. A route parameter left empty, or
+// carrying a slash, is reported once the call began, so the caller refuses
+// it on the call, its span recording the refusal: over HTTP a parameter
+// matches one segment of the path, so no request carries an empty one or
+// one with a slash in it, while a message may carry either, and a service
+// scoping its work by the parameter would then scope it by nothing, or by a
+// path of its own.
 func (a *action[M, REQ, RSP]) beginCall(ctx context.Context, params map[string]string, query url.Values) (*call, error) {
 	ctx = grpcserver.WithParams(ctx, params, query)
 	reqMeta := requestctx.FromContext(ctx)
@@ -240,6 +242,9 @@ func (a *action[M, REQ, RSP]) beginCall(ctx context.Context, params map[string]s
 	for _, name := range slices.Sorted(maps.Keys(params)) {
 		if params[name] == "" {
 			return c, errors.Newf("route parameter %q is required", name)
+		}
+		if strings.Contains(params[name], "/") {
+			return c, errors.Newf("route parameter %q must not contain \"/\"", name)
 		}
 	}
 	return c, nil
