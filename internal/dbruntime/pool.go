@@ -4,9 +4,8 @@ import (
 	"database/sql"
 	"fmt"
 
-	"github.com/hydroan/gst/internal/dbruntime/dbnode"
-
 	"github.com/hydroan/gst/config"
+	"github.com/hydroan/gst/internal/dbruntime/dbnode"
 	prommetrics "github.com/hydroan/gst/metrics"
 	"go.uber.org/zap"
 	"gorm.io/gorm"
@@ -68,7 +67,7 @@ func registerPoolMetrics(db *gorm.DB) {
 
 // replicaPoolMetricNames names the pool metric of each node for one handle:
 // the primary keeps the base name, replicas append their index.
-func replicaPoolMetricNames(base string, nodes []DBNode) []string {
+func replicaPoolMetricNames(base string, nodes []Node) []string {
 	names := make([]string, 0, len(nodes))
 	replicaIndex := 0
 	for _, node := range nodes {

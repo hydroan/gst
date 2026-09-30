@@ -13,7 +13,7 @@ func TestAttachNodesRoundTrip(t *testing.T) {
 	handle := new(gorm.DB)
 	require.Nil(t, dbruntime.NodesFor(handle), "a plain handle carries no nodes")
 
-	nodes := []dbruntime.DBNode{{Role: dbnode.RolePrimary}, {Role: dbnode.RoleReplica}}
+	nodes := []dbruntime.Node{{Role: dbnode.RolePrimary}, {Role: dbnode.RoleReplica}}
 	dbruntime.AttachNodes(handle, nodes)
 	require.Equal(t, nodes, dbruntime.NodesFor(handle))
 

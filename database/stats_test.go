@@ -22,7 +22,7 @@ func TestStatsReportsEveryNode(t *testing.T) {
 	// in registration order.
 	sqlDB, err := database.DB().DB()
 	require.NoError(t, err)
-	dbruntime.AttachNodes(database.DB(), []dbruntime.DBNode{
+	dbruntime.AttachNodes(database.DB(), []dbruntime.Node{
 		{Role: database.RolePrimary, DB: sqlDB},
 		{Role: database.RoleReplica, DB: sqlDB},
 	})

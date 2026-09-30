@@ -6,9 +6,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/hydroan/gst/internal/dbruntime/dbnode"
-
 	"github.com/hydroan/gst/config"
+	"github.com/hydroan/gst/internal/dbruntime/dbnode"
 	"github.com/stretchr/testify/require"
 )
 
@@ -49,7 +48,7 @@ func TestConfigurePoolAppliesTheConfiguredLimits(t *testing.T) {
 }
 
 func TestReplicaPoolMetricNames(t *testing.T) {
-	names := replicaPoolMetricNames("default", []DBNode{
+	names := replicaPoolMetricNames("default", []Node{
 		{Role: dbnode.RolePrimary},
 		{Role: dbnode.RoleReplica},
 		{Role: dbnode.RoleReplica},

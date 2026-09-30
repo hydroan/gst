@@ -6,18 +6,17 @@ import (
 	"strconv"
 	"sync"
 
-	"github.com/hydroan/gst/internal/dbruntime/dbnode"
-
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/config"
+	"github.com/hydroan/gst/internal/dbruntime/dbnode"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
 	"gorm.io/gorm"
 	"gorm.io/plugin/dbresolver"
 )
 
-// DBNode is one connection pool of a database handle, named by its role.
-type DBNode struct {
+// Node is one connection pool of a database handle, named by its role.
+type Node struct {
 	Role string
 	DB   *sql.DB
 }
@@ -29,7 +28,7 @@ type DBNode struct {
 var nodeRegistry sync.Map
 
 // AttachNodes records the nodes behind one handle; nil detaches.
-func AttachNodes(handle *gorm.DB, nodes []DBNode) {
+func AttachNodes(handle *gorm.DB, nodes []Node) {
 	if len(nodes) == 0 {
 		nodeRegistry.Delete(handle)
 		return
@@ -38,9 +37,9 @@ func AttachNodes(handle *gorm.DB, nodes []DBNode) {
 }
 
 // NodesFor reports the nodes attached to handle, nil for a plain handle.
-func NodesFor(handle *gorm.DB) []DBNode {
+func NodesFor(handle *gorm.DB) []Node {
 	if nodes, ok := nodeRegistry.Load(handle); ok {
-		return nodes.([]DBNode) //nolint:errcheck
+		return nodes.([]Node) //nolint:errcheck
 	}
 	return nil
 }
@@ -96,7 +95,7 @@ func AttachResolver(db *gorm.DB, replicas []gorm.Dialector) (*gorm.DB, error) {
 	}
 
 	pinned := db.Clauses(dbresolver.Write)
-	nodes := make([]DBNode, 0, len(replicas)+1)
+	nodes := make([]Node, 0, len(replicas)+1)
 	if err := resolver.Call(func(pool gorm.ConnPool) error {
 		sqlDB, ok := pool.(*sql.DB)
 		if !ok {
@@ -106,7 +105,7 @@ func AttachResolver(db *gorm.DB, replicas []gorm.Dialector) (*gorm.DB, error) {
 		if pool == primaryPool {
 			role = dbnode.RolePrimary
 		}
-		nodes = append(nodes, DBNode{Role: role, DB: sqlDB})
+		nodes = append(nodes, Node{Role: role, DB: sqlDB})
 		return nil
 	}); err != nil {
 		return nil, errors.Wrap(err, "failed to enumerate database nodes")
