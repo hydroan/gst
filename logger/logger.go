@@ -148,6 +148,8 @@ func (l *Logger) WithContext(ctx context.Context, phase consts.Phase) types.Logg
 	return l.withContextFields(requestctx.FromContext(ctx), execctx.FromContext(ctx), phase)
 }
 
+// paramsObject logs the route parameters as one object field, a key per
+// parameter.
 type paramsObject map[string]string
 
 func (o paramsObject) MarshalLogObject(enc zapcore.ObjectEncoder) error {

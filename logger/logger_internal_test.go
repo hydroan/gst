@@ -3,6 +3,7 @@ package logger
 import (
 	"context"
 	"io"
+	"net/http"
 	"strings"
 	"testing"
 
@@ -44,7 +45,7 @@ func TestContextFieldsFitTheCapacityInTheWorstCase(t *testing.T) {
 	require.Contains(t, entries[0].ContextMap(), consts.CRONJOB, "the worst case must carry the optional identity field")
 }
 
-func BenchmarkLogger_Discard10(b *testing.B) {
+func BenchmarkLoggerDiscard10(b *testing.B) {
 	l := newDiscardLogger()
 	msg := strings.Repeat("0", 10)
 
@@ -53,7 +54,7 @@ func BenchmarkLogger_Discard10(b *testing.B) {
 	}
 }
 
-func BenchmarkLogger_Discard100(b *testing.B) {
+func BenchmarkLoggerDiscard100(b *testing.B) {
 	l := newDiscardLogger()
 	msg := strings.Repeat("0", 100)
 
@@ -62,7 +63,7 @@ func BenchmarkLogger_Discard100(b *testing.B) {
 	}
 }
 
-func BenchmarkLogger_Discard1000(b *testing.B) {
+func BenchmarkLoggerDiscard1000(b *testing.B) {
 	l := newDiscardLogger()
 	msg := strings.Repeat("0", 1000)
 
@@ -71,7 +72,7 @@ func BenchmarkLogger_Discard1000(b *testing.B) {
 	}
 }
 
-func BenchmarkLogger_Discard10000(b *testing.B) {
+func BenchmarkLoggerDiscard10000(b *testing.B) {
 	l := newDiscardLogger()
 	msg := strings.Repeat("0", 10000)
 
@@ -93,4 +94,57 @@ func newDiscardLogger() *Logger {
 		zap.AddCallerSkip(1),
 		zap.AddStacktrace(zapcore.FatalLevel),
 	)}
+}
+
+func TestWithContextAddsMetadataFields(t *testing.T) {
+	core, logs := observer.New(zapcore.InfoLevel)
+	log := &Logger{zlog: zap.New(core)}
+	meta := requestctx.New(requestctx.Fields{
+		Route:    "/api/users/:id",
+		Path:     "/api/users/42",
+		Method:   http.MethodGet,
+		Username: "admin",
+		UserID:   "user-1",
+		Params: map[string]string{
+			"id": "42",
+		},
+		Query: map[string][]string{
+			"tag": {"blue", "green"},
+		},
+	})
+	ctx := execctx.WithTraceID(requestctx.WithMetadata(context.Background(), meta), "trace-1")
+
+	log.WithContext(ctx, consts.List).Infoz("database request")
+
+	entries := logs.All()
+	require.Len(t, entries, 1)
+
+	fields := entries[0].ContextMap()
+	require.Equal(t, string(consts.List), fields[consts.PHASE])
+	require.Equal(t, "/api/users/:id", fields[consts.CTX_ROUTE])
+	require.Equal(t, "/api/users/42", fields[consts.CTX_PATH])
+	require.Equal(t, http.MethodGet, fields[consts.CTX_METHOD])
+	require.Equal(t, "admin", fields[consts.CTX_USERNAME])
+	require.Equal(t, "user-1", fields[consts.CTX_USER_ID])
+	require.Equal(t, "trace-1", fields[consts.TRACE_ID])
+	require.Equal(t, map[string]any{"id": "42"}, fields[consts.PARAMS])
+	// Fields carries no RawQuery, so the logged query is re-encoded from Query.
+	require.Equal(t, "tag=blue&tag=green", fields[consts.QUERY])
+	// A request runs in no cron round, so its lines carry no field for one.
+	require.NotContains(t, fields, consts.CRONJOB)
+}
+
+func TestWithContextAddsCronjobField(t *testing.T) {
+	core, logs := observer.New(zapcore.InfoLevel)
+	log := &Logger{zlog: zap.New(core)}
+	ctx := execctx.WithCronjob(context.Background(), "sample_job", "trace-cron")
+
+	log.WithContext(ctx, consts.List).Infoz("round request")
+
+	entries := logs.All()
+	require.Len(t, entries, 1)
+
+	fields := entries[0].ContextMap()
+	require.Equal(t, "trace-cron", fields[consts.TRACE_ID])
+	require.Equal(t, "sample_job", fields[consts.CRONJOB])
 }

@@ -43,7 +43,7 @@ func createLogger(b *testing.B, filename string) types.Logger {
 	return l
 }
 
-func BenchmarkLogger_File10(b *testing.B) {
+func BenchmarkLoggerFile10(b *testing.B) {
 	l := createLogger(b, "test.log")
 
 	for b.Loop() {
@@ -51,7 +51,7 @@ func BenchmarkLogger_File10(b *testing.B) {
 	}
 }
 
-func BenchmarkLogger_File100(b *testing.B) {
+func BenchmarkLoggerFile100(b *testing.B) {
 	l := createLogger(b, "test.log")
 
 	for b.Loop() {
@@ -59,7 +59,7 @@ func BenchmarkLogger_File100(b *testing.B) {
 	}
 }
 
-func BenchmarkLogger_File1000(b *testing.B) {
+func BenchmarkLoggerFile1000(b *testing.B) {
 	l := createLogger(b, "test.log")
 
 	for b.Loop() {
@@ -67,7 +67,7 @@ func BenchmarkLogger_File1000(b *testing.B) {
 	}
 }
 
-func BenchmarkLogger_File10000(b *testing.B) {
+func BenchmarkLoggerFile10000(b *testing.B) {
 	l := createLogger(b, "test.log")
 
 	for b.Loop() {
@@ -75,7 +75,7 @@ func BenchmarkLogger_File10000(b *testing.B) {
 	}
 }
 
-func BenchmarkLogger_With10(b *testing.B) {
+func BenchmarkLoggerWith10(b *testing.B) {
 	l := createLogger(b, "test.log")
 
 	b.ReportAllocs()
@@ -84,7 +84,7 @@ func BenchmarkLogger_With10(b *testing.B) {
 	}
 }
 
-func BenchmarkLogger_With100(b *testing.B) {
+func BenchmarkLoggerWith100(b *testing.B) {
 	l := createLogger(b, "test.log")
 
 	b.ReportAllocs()

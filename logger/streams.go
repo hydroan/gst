@@ -4,8 +4,11 @@
 package logger
 
 import (
+	"github.com/cockroachdb/errors"
+	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/internal/types"
 	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
 	gormlogger "gorm.io/gorm/logger"
 )
 
@@ -51,3 +54,136 @@ var (
 	Recovery *zap.Logger
 	Gorm     gormlogger.Interface
 )
+
+// Init builds every stream from the configuration: the global zap logger,
+// the component loggers, the fallbacks of the optional providers and the
+// listeners' loggers. It fails when the configured output is neither stdout
+// nor file.
+func Init() error {
+	readConf()
+	if logOutput != config.LoggerOutputStdout && logOutput != config.LoggerOutputFile {
+		return errors.Newf("logger.output must be %q or %q, not %q", config.LoggerOutputStdout, config.LoggerOutputFile, logOutput)
+	}
+	opt := Option{Console: config.App.Logger.Console}
+	zap.ReplaceGlobals(named(zap.New(
+		newLogCore(opt),
+		zap.AddCaller(),
+		zap.AddStacktrace(zapcore.FatalLevel),
+	)))
+
+	App = New("app.log")
+
+	Controller = New("controller.log")
+	Service = New("service.log")
+	Database = New("database.log")
+	Cache = New("cache.log")
+	Dcache = New("dcache.log")
+	Redis = New("redis.log")
+
+	Authz = New("authz.log", Option{DisableMsg: true, DisableCaller: true})
+	OTEL = New("otel.log")
+
+	// Optional provider loggers start on a fallback sharing the global core:
+	// non-nil and safe to use, but owning no stream of their own. The
+	// lifecycle registry replaces each with a dedicated logger for the
+	// providers actually compiled in (see lifecycle.Component.SetLogger), so a
+	// stream of its own — a log file in file mode — exists exactly for the
+	// capabilities the binary carries.
+	Cassandra = Fallback("cassandra")
+	Elastic = Fallback("elastic")
+	Etcd = Fallback("etcd")
+	Influxdb = Fallback("influxdb")
+	Kafka = Fallback("kafka")
+	Ldap = Fallback("ldap")
+	Minio = Fallback("minio")
+	Mongo = Fallback("mongo")
+	Mqtt = Fallback("mqtt")
+	Nats = Fallback("nats")
+	Scylla = Fallback("scylla")
+	RethinkDB = Fallback("rethinkdb")
+	RocketMQ = Fallback("rocketmq")
+
+	Gin = NewGin("access.log")
+	HTTPBody = NewGin("http_body.log")
+	GRPC = NewGin("grpc.log")
+	// A panic entry is its message — the request, the panic and the stack —
+	// so the recovery log keeps the message and the level the access-log
+	// encoder leaves out.
+	Recovery = NewZap("recovery.log")
+	Gorm = NewGorm("gorm.log")
+
+	return nil
+}
+
+// Clean flushes the loggers built by Init and stops every buffered writer the
+// constructors registered — the file writers and the shared stdout sink — so
+// a process about to exit, or a test about to read a log back, sees everything
+// that was logged.
+func Clean() {
+	_ = zap.L().Sync()
+	// The component streams.
+	logs := []types.Logger{
+		App,
+
+		Controller,
+		Service,
+		Database,
+		Cache,
+		Dcache,
+		Redis,
+
+		Authz,
+		OTEL,
+		Cassandra,
+		Elastic,
+		Etcd,
+		Influxdb,
+		Kafka,
+		Ldap,
+		Minio,
+		Mongo,
+		Mqtt,
+		Nats,
+		Scylla,
+		RethinkDB,
+		RocketMQ,
+	}
+	for _, log := range logs {
+		if l, ok := log.(*Logger); ok {
+			_ = l.zlog.Sync()
+		}
+	}
+
+	// The listeners' loggers: the HTTP access and body logs, the gRPC
+	// access log and the recovery log.
+	for _, log := range []*zap.Logger{Gin, HTTPBody, GRPC, Recovery} {
+		if log != nil {
+			_ = log.Sync()
+		}
+	}
+
+	// The SQL log.
+	if gorm, ok := Gorm.(*GormLogger); ok {
+		if l, ok := gorm.l.(*Logger); ok {
+			_ = l.zlog.Sync()
+		}
+	}
+
+	stopBufferedLogWriters()
+}
+
+// Fallback builds the logger a component's logger variable holds until the
+// lifecycle registry binds its dedicated one (see
+// lifecycle.Component.SetLogger): a provider's until the provider stage
+// starts, a lock's for a try made before Run. It derives from the global zap
+// logger installed by Init — no file, no extra sink, and in particular no
+// second lumberjack instance on any path, which the binding would then race
+// at rotation — so an entry written through it lands in the global log
+// stream, tagged with the component name. In a process that never ran Init
+// (unit tests), the global logger is zap's no-op and the entry is dropped,
+// which matches how such processes behave for every other logger. The
+// caller-skip mirrors New so callers are attributed identically through
+// either logger.
+func Fallback(component string) types.Logger {
+	return (&Logger{zlog: zap.L().WithOptions(zap.AddCallerSkip(1))}).With("component", component)
+}
