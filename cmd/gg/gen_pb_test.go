@@ -1644,7 +1644,7 @@ func TestShapeRoundTrips(t *testing.T) {
 			// for a backtick (see writeProtobufProject).
 			{name: "an integer out of range", msg: &pb.Shape{Rank: 300}, want: "invalid value for field \x27rank\x27"},
 			{name: "an unsigned integer out of range", msg: &pb.Shape{Port: 70000}, want: "invalid value for field \x27port\x27"},
-			{name: "a string that is no JSON number", msg: &pb.Shape{Amount: "abc"}, want: 'field "amount": "abc" is not a JSON number'},
+			{name: "a string that is no JSON number", msg: &pb.Shape{Amount: "abc"}, want: "invalid value for field \x27amount\x27"},
 		} {
 			t.Run(tt.name, func(t *testing.T) {
 				_, err := pb.ShapeFromProto(tt.msg)

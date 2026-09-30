@@ -25,41 +25,48 @@ import (
 
 // Narrow returns v as the narrower integer type T a model field holds, int8
 // for the int32 its message carries, and refuses a value T cannot hold, 300
-// folded into an int8 would come back as 44, with InvalidArgument and the
-// message HTTP answers for a body field it cannot decode a value into,
-// "invalid value for field 'rank'", a google.rpc.BadRequest detail naming
-// the field with the value, "300 is out of range", the way the fields a
-// validator refused are detailed. The generated FromProto reads every int8,
-// int16, uint8 and uint16 field through it.
+// folded into an int8 would come back as 44, with invalidValue naming
+// field, "300 is out of range" the detail. The generated FromProto reads
+// every int8, int16, uint8 and uint16 field through it.
 func Narrow[T ~int8 | ~int16 | ~uint8 | ~uint16, V ~int32 | ~uint32](field string, v V) (T, error) {
 	narrowed := T(v)
-	if V(narrowed) == v {
-		return narrowed, nil
+	if V(narrowed) != v {
+		return 0, invalidValue(field, fmt.Sprintf("%d is out of range", v))
 	}
-	st := status.New(codes.InvalidArgument, "invalid value for field '"+field+"'")
-	detail := &errdetails.BadRequest{FieldViolations: []*errdetails.BadRequest_FieldViolation{{Field: field, Description: fmt.Sprintf("%d is out of range", v)}}}
-	if detailed, err := st.WithDetails(detail); err == nil {
-		st = detailed
-	}
-	return 0, st.Err()
+	return narrowed, nil
 }
 
 // Number returns s as the json.Number a model field holds, "" for the unset
-// field, and refuses with InvalidArgument, naming field, a string that is no
-// JSON number literal, text or a quoted number among them: the message
-// carries the number as a string, and one that is not a number would be
-// written out as one. encoding/json judges the literal, so the two
-// listeners refuse the same strings. The generated FromProto reads every
-// json.Number field through it.
+// field, and refuses with invalidValue naming field, `"abc" is not a JSON
+// number` the detail, a string that is no JSON number literal, text or a
+// quoted number among them: the message carries the number as a string, and
+// one that is not a number would be written out as one. encoding/json
+// judges the literal, so the two listeners refuse the same strings. The
+// generated FromProto reads every json.Number field through it.
 func Number(field, s string) (json.Number, error) {
 	if s == "" {
 		return "", nil
 	}
 	var n json.Number
 	if err := json.Unmarshal([]byte(s), &n); err != nil || string(n) != s {
-		return "", status.Errorf(codes.InvalidArgument, "field %q: %q is not a JSON number", field, s)
+		return "", invalidValue(field, fmt.Sprintf("%q is not a JSON number", s))
 	}
 	return n, nil
+}
+
+// invalidValue is the InvalidArgument a generated FromProto refuses a
+// message field with when the value it carries is not one the model field
+// holds: the message HTTP answers for a body field it cannot decode a value
+// into, "invalid value for field 'rank'", and a google.rpc.BadRequest detail
+// naming the field with description, the way the fields a validator refused
+// are detailed.
+func invalidValue(field, description string) error {
+	st := status.New(codes.InvalidArgument, "invalid value for field '"+field+"'")
+	detail := &errdetails.BadRequest{FieldViolations: []*errdetails.BadRequest_FieldViolation{{Field: field, Description: description}}}
+	if detailed, err := st.WithDetails(detail); err == nil {
+		st = detailed
+	}
+	return st.Err()
 }
 
 // Timestamp returns the Timestamp of t, and nil for the zero time, which a

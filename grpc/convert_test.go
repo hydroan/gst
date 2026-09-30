@@ -126,7 +126,8 @@ func TestNumberRefusesWhatIsNoJSONNumber(t *testing.T) {
 	for _, s := range []string{"abc", `"12"`, "12 ", "0x1f", "1.", "null"} {
 		_, err := gstgrpc.Number("amount", s)
 		require.Equal(t, codes.InvalidArgument, status.Code(err), s)
-		require.Equal(t, `field "amount": `+strconv.Quote(s)+` is not a JSON number`, status.Convert(err).Message())
+		require.Equal(t, "invalid value for field 'amount'", status.Convert(err).Message())
+		requireFieldViolation(t, err, "amount", strconv.Quote(s)+" is not a JSON number")
 	}
 }
 
