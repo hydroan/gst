@@ -19,8 +19,8 @@ var errCodes = map[sqlite3.ErrNoExtended]error{
 
 // translate translates a driver error whose extended code errCodes lists to
 // its sentinel, the driver's text kept as the message, and nil for any
-// other error, which is left to the driver's translation (see
-// dbruntime.Translating).
+// other error, which stays as the driver's translation left it (see
+// dbruntime.InstallErrorTranslation).
 //
 // The driver declares its error type and codes only when built with cgo, so
 // this file is built only with cgo; translate_nocgo.go stands in without it.

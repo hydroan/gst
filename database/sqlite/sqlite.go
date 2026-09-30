@@ -140,10 +140,14 @@ func New(cfg config.Sqlite) (*gorm.DB, error) {
 	// request-unique, so a text-keyed statement cache would hold one dead
 	// entry per request. Sqlite compiles statements in-process at
 	// microsecond cost, so each run simply compiles its statement.
-	// TranslateError maps the write failures to the gorm sentinels, the
-	// framework's own table (see translate) ahead of the driver's.
-	db, err := gorm.Open(dbruntime.Translating(sqlite.New(sqlite.Config{DriverName: driverName, DSN: dsn}), translate), &gorm.Config{Logger: logger.Gorm, TranslateError: true, NowFunc: dbruntime.NowUTC})
+	// TranslateError maps the write failures to the gorm sentinels; the
+	// framework's own table (see translate) runs over what the driver's
+	// leaves as it is.
+	db, err := gorm.Open(sqlite.New(sqlite.Config{DriverName: driverName, DSN: dsn}), &gorm.Config{Logger: logger.Gorm, TranslateError: true, NowFunc: dbruntime.NowUTC})
 	if err != nil {
+		return nil, err
+	}
+	if err = dbruntime.InstallErrorTranslation(db, translate); err != nil {
 		return nil, err
 	}
 	restoreInsertClauseContract(db)

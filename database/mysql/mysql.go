@@ -41,13 +41,16 @@ func Init() (err error) {
 func New(cfg config.MySQL) (*gorm.DB, error) {
 	// TranslateError maps dialect-specific write failures to portable gorm
 	// sentinels (gorm.ErrDuplicatedKey, gorm.ErrForeignKeyViolated) that
-	// database.Create/Update surface to callers, the framework's own table
-	// (see translate) ahead of the driver's. Statements run over the text
-	// protocol with client-side parameter interpolation — no gorm
-	// PrepareStmt, no server-side prepared statements; buildDSN explains
-	// why.
-	db, err := gorm.Open(dbruntime.Translating(mysql.Open(buildDSN(cfg)), translate), &gorm.Config{Logger: logger.Gorm, TranslateError: true, NowFunc: dbruntime.NowUTC})
+	// database.Create/Update surface to callers; the framework's own table
+	// (see translate) runs over what the driver's leaves as it is. Statements
+	// run over the text protocol with client-side parameter interpolation —
+	// no gorm PrepareStmt, no server-side prepared statements; buildDSN
+	// explains why.
+	db, err := gorm.Open(mysql.Open(buildDSN(cfg)), &gorm.Config{Logger: logger.Gorm, TranslateError: true, NowFunc: dbruntime.NowUTC})
 	if err != nil {
+		return nil, err
+	}
+	if err = dbruntime.InstallErrorTranslation(db, translate); err != nil {
 		return nil, err
 	}
 	pool, err := db.DB()
@@ -156,7 +159,8 @@ var errCodes = map[uint16]error{
 
 // translate translates a driver error whose number errCodes lists to its
 // sentinel, the driver's text kept as the message, and nil for any other
-// error, which is left to the driver's translation (see dbruntime.Translating).
+// error, which stays as the driver's translation left it (see
+// dbruntime.InstallErrorTranslation).
 func translate(err error) error {
 	var driverErr *mysqldriver.MySQLError
 	if !errors.As(err, &driverErr) {

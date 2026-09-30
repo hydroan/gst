@@ -42,10 +42,14 @@ func New(cfg config.Postgres) (*gorm.DB, error) {
 	// Statements run over pgx's simple protocol — no gorm PrepareStmt, no
 	// pgx statement cache, no server-side statement state; buildDSN explains
 	// why.
-	// TranslateError maps the write failures to the gorm sentinels, the
-	// framework's own table (see translate) ahead of the driver's.
-	db, err := gorm.Open(dbruntime.Translating(postgres.Open(buildDSN(cfg)), translate), &gorm.Config{Logger: logger.Gorm, TranslateError: true, NowFunc: dbruntime.NowUTC})
+	// TranslateError maps the write failures to the gorm sentinels; the
+	// framework's own table (see translate) runs over what the driver's
+	// leaves as it is.
+	db, err := gorm.Open(postgres.Open(buildDSN(cfg)), &gorm.Config{Logger: logger.Gorm, TranslateError: true, NowFunc: dbruntime.NowUTC})
 	if err != nil {
+		return nil, err
+	}
+	if err = dbruntime.InstallErrorTranslation(db, translate); err != nil {
 		return nil, err
 	}
 	pool, err := db.DB()
@@ -117,7 +121,8 @@ var errCodes = map[string]error{
 
 // translate translates a driver error whose code errCodes lists to its
 // sentinel, the driver's text kept as the message, and nil for any other
-// error, which is left to the driver's translation (see dbruntime.Translating).
+// error, which stays as the driver's translation left it (see
+// dbruntime.InstallErrorTranslation).
 func translate(err error) error {
 	var driverErr *pgconn.PgError
 	if !errors.As(err, &driverErr) {
