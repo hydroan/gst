@@ -1,4 +1,4 @@
-package zap
+package logger
 
 import (
 	"context"
@@ -11,7 +11,7 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/consts"
-	"github.com/hydroan/gst/internal/dbruntime"
+	"github.com/hydroan/gst/internal/dbruntime/dbnode"
 	"github.com/hydroan/gst/internal/execctx"
 	"github.com/hydroan/gst/internal/requestctx"
 	"github.com/hydroan/gst/internal/types"
@@ -289,7 +289,7 @@ func (g *GormLogger) Trace(ctx context.Context, begin time.Time, fc func() (sql 
 	}
 	// Present only on handles with read replicas attached, where "which node
 	// served this query" stops being answerable by assumption.
-	if role := dbruntime.RoleFromContext(ctx); len(role) > 0 {
+	if role := dbnode.RoleFromContext(ctx); len(role) > 0 {
 		fields = append(fields, zap.String("db_role", role))
 	}
 	notFound := errors.Is(err, gormlogger.ErrRecordNotFound)

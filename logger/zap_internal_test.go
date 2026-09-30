@@ -1,4 +1,4 @@
-package zap
+package logger
 
 import (
 	"context"
@@ -19,7 +19,6 @@ import (
 	"github.com/hydroan/gst/internal/instance"
 	"github.com/hydroan/gst/internal/requestctx"
 	"github.com/hydroan/gst/internal/types"
-	"github.com/hydroan/gst/logger"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
@@ -151,19 +150,19 @@ func TestInitInstallsFallbackForOptionalProviderLoggers(t *testing.T) {
 	// providers actually compiled in; only that binding may create their log
 	// files.
 	optional := map[string]types.Logger{
-		"cassandra": logger.Cassandra,
-		"elastic":   logger.Elastic,
-		"etcd":      logger.Etcd,
-		"influxdb":  logger.Influxdb,
-		"kafka":     logger.Kafka,
-		"ldap":      logger.Ldap,
-		"minio":     logger.Minio,
-		"mongo":     logger.Mongo,
-		"mqtt":      logger.Mqtt,
-		"nats":      logger.Nats,
-		"rethinkdb": logger.RethinkDB,
-		"rocketmq":  logger.RocketMQ,
-		"scylla":    logger.Scylla,
+		"cassandra": Cassandra,
+		"elastic":   Elastic,
+		"etcd":      Etcd,
+		"influxdb":  Influxdb,
+		"kafka":     Kafka,
+		"ldap":      Ldap,
+		"minio":     Minio,
+		"mongo":     Mongo,
+		"mqtt":      Mqtt,
+		"nats":      Nats,
+		"rethinkdb": RethinkDB,
+		"rocketmq":  RocketMQ,
+		"scylla":    Scylla,
 	}
 	for name, optionalLogger := range optional {
 		require.NotNil(t, optionalLogger, "optional provider logger %s must fall back, not stay nil", name)
@@ -179,7 +178,7 @@ func TestInitInstallsFallbackForOptionalProviderLoggers(t *testing.T) {
 	require.FileExists(t, filepath.Join(dir, "dcache.log"))
 
 	// A fallback entry routes to the global sink instead of vanishing.
-	logger.Kafka.Infow("fallback routed to the global sink")
+	Kafka.Infow("fallback routed to the global sink")
 	Clean()
 	data, err := os.ReadFile(filepath.Join(dir, "global.log"))
 	require.NoError(t, err)
@@ -626,15 +625,15 @@ func TestInitBuildsTheListenerLoggers(t *testing.T) {
 	restoreGlobalLoggers(t)
 	require.NoError(t, Init())
 
-	require.NotNil(t, logger.Gin)
-	require.NotNil(t, logger.HTTPBody)
-	require.NotNil(t, logger.GRPC)
-	require.NotNil(t, logger.Recovery)
+	require.NotNil(t, Gin)
+	require.NotNil(t, HTTPBody)
+	require.NotNil(t, GRPC)
+	require.NotNil(t, Recovery)
 	for _, file := range []string{"access.log", "http_body.log", "grpc.log", "recovery.log"} {
 		require.FileExists(t, filepath.Join(dir, file))
 	}
 
-	logger.Recovery.Error("[recovery] panic recovered: boom", zap.String(consts.TRACE_ID, "trace-panic"))
+	Recovery.Error("[recovery] panic recovered: boom", zap.String(consts.TRACE_ID, "trace-panic"))
 	Clean()
 
 	data, err := os.ReadFile(filepath.Join(dir, "recovery.log"))
@@ -659,8 +658,8 @@ func TestStdoutOutputWritesEveryStreamToStdoutUnderItsName(t *testing.T) {
 	output := captureStdout(t, func() {
 		require.NoError(t, Init())
 		zap.S().Info("global")
-		logger.App.Infoz("app")
-		logger.Gorm.Info(context.Background(), "gorm")
+		App.Infoz("app")
+		Gorm.Info(context.Background(), "gorm")
 		New("typed.log").Infoz("typed")
 		NewGin("access.log").Info("access")
 		NewZap("plain.log").Info("plain")
@@ -831,24 +830,24 @@ func restoreGlobalLoggers(t *testing.T) {
 
 	savedTyped := map[*types.Logger]types.Logger{}
 	for _, ref := range []*types.Logger{
-		&logger.App,
-		&logger.Controller, &logger.Service, &logger.Database,
-		&logger.Cache, &logger.Dcache, &logger.Redis,
-		&logger.Authz, &logger.OTEL, &logger.Cassandra, &logger.Elastic,
-		&logger.Etcd, &logger.Influxdb, &logger.Kafka, &logger.Ldap,
-		&logger.Minio, &logger.Mongo, &logger.Mqtt, &logger.Nats,
-		&logger.RethinkDB, &logger.RocketMQ, &logger.Scylla,
+		&App,
+		&Controller, &Service, &Database,
+		&Cache, &Dcache, &Redis,
+		&Authz, &OTEL, &Cassandra, &Elastic,
+		&Etcd, &Influxdb, &Kafka, &Ldap,
+		&Minio, &Mongo, &Mqtt, &Nats,
+		&RethinkDB, &RocketMQ, &Scylla,
 	} {
 		savedTyped[ref] = *ref
 	}
-	savedGin, savedHTTPBody, savedGorm := logger.Gin, logger.HTTPBody, logger.Gorm
+	savedGin, savedHTTPBody, savedGorm := Gin, HTTPBody, Gorm
 	savedZap := zap.L()
 
 	t.Cleanup(func() {
 		for ref, saved := range savedTyped {
 			*ref = saved
 		}
-		logger.Gin, logger.HTTPBody, logger.Gorm = savedGin, savedHTTPBody, savedGorm
+		Gin, HTTPBody, Gorm = savedGin, savedHTTPBody, savedGorm
 		zap.ReplaceGlobals(savedZap)
 	})
 }

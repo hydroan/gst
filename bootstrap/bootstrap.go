@@ -37,7 +37,7 @@ import (
 	"github.com/hydroan/gst/internal/middleware"
 	"github.com/hydroan/gst/internal/router"
 	"github.com/hydroan/gst/internal/serviceregistry"
-	gstzap "github.com/hydroan/gst/logger/zap"
+	"github.com/hydroan/gst/logger"
 	prommetrics "github.com/hydroan/gst/metrics"
 	"github.com/hydroan/gst/module"
 	gstotel "github.com/hydroan/gst/otel"
@@ -73,7 +73,7 @@ func Bootstrap() error {
 
 	startup.Register(
 		config.Init,
-		gstzap.Init,
+		logger.Init,
 		prommetrics.Init,
 
 		// database
@@ -89,7 +89,7 @@ func Bootstrap() error {
 	// it did, and a line written once the log writers have stopped never
 	// reaches the output. The temp directory goes right before the writers,
 	// for the same reason.
-	registerCleanup(gstzap.Clean)
+	registerCleanup(logger.Clean)
 	registerCleanup(config.Clean)
 	warnUnlinkedProviders()
 	// First database drain: create the tables registered before the clients

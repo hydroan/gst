@@ -1,11 +1,12 @@
 package dbruntime
 
 import (
-	"context"
 	"database/sql"
 	"net"
 	"strconv"
 	"sync"
+
+	"github.com/hydroan/gst/internal/dbruntime/dbnode"
 
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/config"
@@ -13,12 +14,6 @@ import (
 	"go.opentelemetry.io/otel/trace"
 	"gorm.io/gorm"
 	"gorm.io/plugin/dbresolver"
-)
-
-// Node roles of a replicated database handle.
-const (
-	RolePrimary = "primary"
-	RoleReplica = "replica"
 )
 
 // DBNode is one connection pool of a database handle, named by its role.
@@ -48,27 +43,6 @@ func NodesFor(handle *gorm.DB) []DBNode {
 		return nodes.([]DBNode) //nolint:errcheck
 	}
 	return nil
-}
-
-// roleContextKey carries the node role that served one statement.
-type roleContextKey struct{}
-
-// WithRole returns ctx stamped with the node role that serves the statement
-// it belongs to; RoleFromContext reads it back.
-func WithRole(ctx context.Context, role string) context.Context {
-	return context.WithValue(ctx, roleContextKey{}, role)
-}
-
-// RoleFromContext reports which node role served the statement this context
-// belongs to, and "" when the statement ran on a handle without replicas —
-// role stamping is only installed alongside a resolver, so a replica-free
-// deployment logs no role field at all.
-func RoleFromContext(ctx context.Context) string {
-	if ctx == nil {
-		return ""
-	}
-	role, _ := ctx.Value(roleContextKey{}).(string)
-	return role
 }
 
 // ParseReplicaEndpoint splits one configured replica entry into host and
@@ -128,9 +102,9 @@ func AttachResolver(db *gorm.DB, replicas []gorm.Dialector) (*gorm.DB, error) {
 		if !ok {
 			return nil
 		}
-		role := RoleReplica
+		role := dbnode.RoleReplica
 		if pool == primaryPool {
-			role = RolePrimary
+			role = dbnode.RolePrimary
 		}
 		nodes = append(nodes, DBNode{Role: role, DB: sqlDB})
 		return nil
@@ -168,16 +142,16 @@ func installRoleObserver(db *gorm.DB, primaryPool gorm.ConnPool) error {
 // per-pool prepared-statement layer the resolver adds.
 func markStatementRole(stmt *gorm.DB, primaryPool gorm.ConnPool) {
 	pool := stmt.Statement.ConnPool
-	role := RolePrimary
+	role := dbnode.RolePrimary
 	if _, inTx := pool.(gorm.TxCommitter); !inTx {
 		if prepared, ok := pool.(*gorm.PreparedStmtDB); ok {
 			pool = prepared.ConnPool
 		}
 		if pool != primaryPool {
-			role = RoleReplica
+			role = dbnode.RoleReplica
 		}
 	}
-	stmt.Statement.Context = WithRole(stmt.Statement.Context, role)
+	stmt.Statement.Context = dbnode.WithRole(stmt.Statement.Context, role)
 	if span := trace.SpanFromContext(stmt.Statement.Context); span.IsRecording() {
 		span.SetAttributes(attribute.String("db.role", role))
 	}

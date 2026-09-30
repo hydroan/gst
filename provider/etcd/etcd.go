@@ -10,7 +10,6 @@ import (
 	"github.com/hydroan/gst/internal/lifecycle"
 	"github.com/hydroan/gst/internal/types"
 	"github.com/hydroan/gst/logger"
-	gstzap "github.com/hydroan/gst/logger/zap"
 	"github.com/hydroan/gst/util"
 	clientv3 "go.etcd.io/etcd/client/v3"
 	"go.uber.org/zap"
@@ -76,7 +75,7 @@ func New(cfg config.Etcd) (*clientv3.Client, error) {
 	etcdConfig := clientv3.Config{
 		Endpoints:   cfg.Endpoints,
 		DialTimeout: cfg.DialTimeout,
-		Logger:      logger.Etcd.(*gstzap.Logger).ZapLogger(), //nolint:errcheck
+		Logger:      logger.Etcd.(*logger.Logger).ZapLogger(), //nolint:errcheck
 	}
 
 	// Set username and password authentication if provided

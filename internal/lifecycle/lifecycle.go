@@ -32,7 +32,7 @@ import (
 
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/internal/types"
-	gstzap "github.com/hydroan/gst/logger/zap"
+	"github.com/hydroan/gst/logger"
 	"github.com/hydroan/gst/util"
 	"go.uber.org/zap"
 )
@@ -208,7 +208,7 @@ func Start(ctx context.Context, stage Stage) error {
 	// stream, a file of its own in file mode and its name on stdout otherwise.
 	for _, c := range pending {
 		if c.SetLogger != nil {
-			c.SetLogger(gstzap.New(c.Name + ".log"))
+			c.SetLogger(logger.New(c.Name + ".log"))
 		}
 	}
 

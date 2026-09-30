@@ -11,7 +11,7 @@ import (
 
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/config"
-	gstzap "github.com/hydroan/gst/logger/zap"
+	"github.com/hydroan/gst/logger"
 )
 
 // globalLogFile is the file the global stream writes to, named after what
@@ -31,7 +31,7 @@ const globalLogFile = "global.log"
 //
 // The files are not evidence a test can read back: the directory goes away at
 // release, and every file sink buffers its entries (see the buffered writer in
-// logger/zap), so a test process that ends within the flush interval leaves
+// the logger package), so a test process that ends within the flush interval leaves
 // most of them empty. A test that needs to assert on log output instead swaps
 // the package logger it cares about for a scratch file logger under its own
 // t.TempDir and flushes that one before reading — see withCronjobLoggerConfig
@@ -57,7 +57,7 @@ func ToTempDir() (dir string, release func() error, err error) {
 	config.App.Logger.Console = false
 
 	return dir, func() error {
-		gstzap.Clean()
+		logger.Clean()
 		return os.RemoveAll(dir)
 	}, nil
 }

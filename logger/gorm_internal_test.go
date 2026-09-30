@@ -1,4 +1,4 @@
-package zap
+package logger
 
 import (
 	"context"
@@ -7,7 +7,7 @@ import (
 
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/config"
-	"github.com/hydroan/gst/internal/dbruntime"
+	"github.com/hydroan/gst/internal/dbruntime/dbnode"
 	"github.com/hydroan/gst/internal/execctx"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
@@ -47,7 +47,7 @@ func TestFrameworkSQLFramePredicate(t *testing.T) {
 		{"gorm.io/gorm.(*DB).Find", true},
 		{"gorm.io/gorm/callbacks.query", true},
 		{"gorm.io/driver/mysql.Migrator.CurrentDatabase", true},
-		{"github.com/hydroan/gst/logger/zap.(*GormLogger).Trace", true},
+		{"github.com/hydroan/gst/logger.(*GormLogger).Trace", true},
 		{"github.com/hydroan/gst/database.(*database[go.shape.*uint8]).List", true},
 		{"github.com/hydroan/gst/database.withWriteTransaction.func1", true},
 		{"github.com/hydroan/gst/database/sqlite.New", true},
@@ -328,7 +328,7 @@ func TestTraceFieldsFitTheCapacityInTheWorstCase(t *testing.T) {
 	g, logs := newObservedGormLogger()
 
 	ctx := execctx.WithCronjob(context.Background(), "sample_job", "trace-worst")
-	ctx = dbruntime.WithRole(ctx, "replica")
+	ctx = dbnode.WithRole(ctx, "replica")
 	g.Trace(ctx, time.Now().Add(-time.Second), func() (string, int64) { return "SELECT 1", 0 }, gormlogger.ErrRecordNotFound)
 
 	entry := requireSingleEntry(t, logs)

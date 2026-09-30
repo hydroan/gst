@@ -17,7 +17,7 @@ import (
 	"github.com/hydroan/gst/internal/dbruntime"
 	"github.com/hydroan/gst/internal/execctx"
 	"github.com/hydroan/gst/internal/lease"
-	gstzap "github.com/hydroan/gst/logger/zap"
+	"github.com/hydroan/gst/logger"
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
@@ -417,7 +417,7 @@ func withBoundCronjobLogger(t *testing.T) {
 	mu.Lock()
 	defer mu.Unlock()
 	if log == nil {
-		log = gstzap.New("cronjob.log")
+		log = logger.New("cronjob.log")
 	}
 }
 

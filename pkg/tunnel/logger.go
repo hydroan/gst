@@ -4,7 +4,7 @@ import (
 	"sync"
 
 	"github.com/hydroan/gst/internal/types"
-	gstzap "github.com/hydroan/gst/logger/zap"
+	"github.com/hydroan/gst/logger"
 )
 
 var (
@@ -31,7 +31,7 @@ func binaryLog() types.Logger {
 
 func ensureLoggers() {
 	loggerOnce.Do(func() {
-		protocolLogger = gstzap.New("protocol.log")
-		binaryLogger = gstzap.New("binary.log")
+		protocolLogger = logger.New("protocol.log")
+		binaryLogger = logger.New("binary.log")
 	})
 }

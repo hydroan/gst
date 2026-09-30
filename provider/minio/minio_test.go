@@ -12,7 +12,7 @@ import (
 	"github.com/hydroan/gst/internal/lifecycle"
 	"github.com/hydroan/gst/internal/testutil/testcontainer"
 	"github.com/hydroan/gst/internal/testutil/testlog"
-	gstzap "github.com/hydroan/gst/logger/zap"
+	"github.com/hydroan/gst/logger"
 	"github.com/hydroan/gst/provider/minio"
 	"github.com/stretchr/testify/require"
 )
@@ -43,7 +43,7 @@ func runTests(m *testing.M) int {
 	if err := config.Init(); err != nil {
 		panic(err)
 	}
-	if err := gstzap.Init(); err != nil {
+	if err := logger.Init(); err != nil {
 		panic(err)
 	}
 	// Bring the compiled-in providers up through the registry — the same

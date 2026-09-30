@@ -24,7 +24,6 @@ import (
 	"github.com/hydroan/gst/internal/testutil"
 	"github.com/hydroan/gst/internal/testutil/testcontainer"
 	"github.com/hydroan/gst/logger"
-	gstzap "github.com/hydroan/gst/logger/zap"
 	"github.com/stretchr/testify/require"
 	"gorm.io/gorm"
 	gormlogger "gorm.io/gorm/logger"
@@ -51,7 +50,7 @@ func run(m *testing.M) int {
 	logger.Gorm = gormlogger.Discard
 	// A write through the database chain logs its outcome; the fallback
 	// drops the entry in a process that never initialized the loggers.
-	logger.Database = gstzap.Fallback("database")
+	logger.Database = logger.Fallback("database")
 	if err := config.Init(); err != nil {
 		panic(err)
 	}
@@ -317,11 +316,11 @@ func TestLocksAreALifecycleComponent(t *testing.T) {
 	require.Nil(t, component.Stop, "a lock holds nothing between tries, so there is nothing to stop")
 
 	New("component-work")
-	component.SetLogger(gstzap.New("bound_lock.log"))
+	component.SetLogger(logger.New("bound_lock.log"))
 	require.NoError(t, component.Start(context.Background()))
 	require.True(t, started, "the locks must have been checked through the component")
 
-	gstzap.Clean()
+	logger.Clean()
 	entry := readLogEntry(t, filepath.Join(dir, "bound_lock.log"), "declared lock")
 	require.Equal(t, "component-work", entry["name"])
 	require.NoFileExists(t, filepath.Join(dir, "lock.log"), "the bound logger replaces the package's own")

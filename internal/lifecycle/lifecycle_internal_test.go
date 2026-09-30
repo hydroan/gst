@@ -10,7 +10,7 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/internal/types"
-	gstzap "github.com/hydroan/gst/logger/zap"
+	"github.com/hydroan/gst/logger"
 	"github.com/stretchr/testify/require"
 )
 
@@ -481,7 +481,7 @@ func withLoggerConfig(t *testing.T) string {
 	config.App.Logger.Level = "info"
 	config.App.Logger.Format = "json"
 	t.Cleanup(func() {
-		gstzap.Clean()
+		logger.Clean()
 		config.App = original
 	})
 	return dir

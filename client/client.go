@@ -9,7 +9,7 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/consts"
 	"github.com/hydroan/gst/internal/types"
-	gstzap "github.com/hydroan/gst/logger/zap"
+	"github.com/hydroan/gst/logger"
 )
 
 // Client is a service-level HTTP client for one gst backend: it carries the
@@ -49,7 +49,7 @@ func New(addr string, opts ...Option) (*Client, error) {
 		httpClient: &http.Client{Jar: jar},
 		header:     http.Header{},
 		addr:       addr,
-		logger:     gstzap.New(""),
+		logger:     logger.New(""),
 	}
 	client.header.Set("User-Agent", consts.FrameworkName)
 	client.header.Set("Content-Type", "application/json")

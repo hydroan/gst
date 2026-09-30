@@ -311,8 +311,6 @@ linters:
           alias: gstgrpc
         - pkg: github.com/hydroan/gst/redis
           alias: gstredis
-        - pkg: github.com/hydroan/gst/logger/zap
-          alias: gstzap
         - pkg: github.com/hydroan/gst/database/mysql
           alias: gstmysql
         - pkg: github.com/hydroan/gst/database/postgres

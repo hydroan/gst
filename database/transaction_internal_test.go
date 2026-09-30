@@ -10,7 +10,7 @@ import (
 	"time"
 
 	"github.com/hydroan/gst/config"
-	gstzap "github.com/hydroan/gst/logger/zap"
+	"github.com/hydroan/gst/logger"
 	"github.com/stretchr/testify/require"
 )
 
@@ -61,7 +61,7 @@ func withLongTransaction(t *testing.T, d time.Duration) {
 func databaseLogSize(t *testing.T) int64 {
 	t.Helper()
 
-	gstzap.Clean()
+	logger.Clean()
 	info, err := os.Stat(databaseLogPath())
 	if os.IsNotExist(err) {
 		return 0
@@ -75,7 +75,7 @@ func databaseLogSize(t *testing.T) int64 {
 func databaseLogEntry(t *testing.T, from int64, msg string) map[string]any {
 	t.Helper()
 
-	gstzap.Clean()
+	logger.Clean()
 	content, err := os.ReadFile(databaseLogPath())
 	if os.IsNotExist(err) {
 		return nil

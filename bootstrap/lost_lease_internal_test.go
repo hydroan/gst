@@ -18,7 +18,7 @@ import (
 	"github.com/hydroan/gst/internal/lease"
 	"github.com/hydroan/gst/internal/lifecycle"
 	"github.com/hydroan/gst/internal/router"
-	gstzap "github.com/hydroan/gst/logger/zap"
+	"github.com/hydroan/gst/logger"
 	"github.com/stretchr/testify/require"
 )
 
@@ -162,7 +162,7 @@ func runLosingALeaseDuringTheShutdown(t *testing.T) {
 func registerStubbornWork(t *testing.T) (claimed <-chan error, stopping <-chan struct{}) {
 	t.Helper()
 
-	log := gstzap.Fallback(stubbornWork)
+	log := logger.Fallback(stubbornWork)
 	claims, ended, returned := make(chan error, 1), make(chan struct{}), make(chan struct{})
 	lifecycle.Register(lifecycle.Component{
 		Name:  "sample-lease-holder",

@@ -1,4 +1,4 @@
-package zap
+package logger
 
 import (
 	"testing"
@@ -12,9 +12,9 @@ import (
 )
 
 func TestErrorAttachesErrorStackFieldFromErrorOrigin(t *testing.T) {
-	logger, logs := newObservedLogger()
+	lg, logs := newObservedLogger()
 
-	logger.Error(newStackTracedError())
+	lg.Error(newStackTracedError())
 
 	entries := logs.All()
 	require.Len(t, entries, 1)
@@ -26,9 +26,9 @@ func TestErrorAttachesErrorStackFieldFromErrorOrigin(t *testing.T) {
 }
 
 func TestErrorfAttachesErrorStackFieldFromErrorOrigin(t *testing.T) {
-	logger, logs := newObservedLogger()
+	lg, logs := newObservedLogger()
 
-	logger.Errorf("operation failed: %v", newStackTracedError())
+	lg.Errorf("operation failed: %v", newStackTracedError())
 
 	entries := logs.All()
 	require.Len(t, entries, 1)
@@ -39,9 +39,9 @@ func TestErrorfAttachesErrorStackFieldFromErrorOrigin(t *testing.T) {
 }
 
 func TestErrorwAttachesErrorStackFieldFromErrorOrigin(t *testing.T) {
-	logger, logs := newObservedLogger()
+	lg, logs := newObservedLogger()
 
-	logger.Errorw("operation failed", "error", newStackTracedError())
+	lg.Errorw("operation failed", "error", newStackTracedError())
 
 	entries := logs.All()
 	require.Len(t, entries, 1)
@@ -52,9 +52,9 @@ func TestErrorwAttachesErrorStackFieldFromErrorOrigin(t *testing.T) {
 }
 
 func TestErrorzAttachesErrorStackFieldFromErrorOrigin(t *testing.T) {
-	logger, logs := newObservedLogger()
+	lg, logs := newObservedLogger()
 
-	logger.Errorz("operation failed", zap.Error(newStackTracedError()))
+	lg.Errorz("operation failed", zap.Error(newStackTracedError()))
 
 	entries := logs.All()
 	require.Len(t, entries, 1)
@@ -65,9 +65,9 @@ func TestErrorzAttachesErrorStackFieldFromErrorOrigin(t *testing.T) {
 }
 
 func TestErrorzSkipsErrorStackFieldWhenNoErrorField(t *testing.T) {
-	logger, logs := newObservedLogger()
+	lg, logs := newObservedLogger()
 
-	logger.Errorz("operation failed", zap.String("key", "value"))
+	lg.Errorz("operation failed", zap.String("key", "value"))
 
 	entries := logs.All()
 	require.Len(t, entries, 1)
@@ -78,9 +78,9 @@ func TestErrorzSkipsErrorStackFieldWhenNoErrorField(t *testing.T) {
 }
 
 func TestErrorSkipsErrorStackFieldWhenErrorHasNoStackTrace(t *testing.T) {
-	logger, logs := newObservedLogger()
+	lg, logs := newObservedLogger()
 
-	logger.Error(plainError{})
+	lg.Error(plainError{})
 
 	entries := logs.All()
 	require.Len(t, entries, 1)
@@ -96,9 +96,9 @@ func TestErrorSkipsErrorStackFieldWhenDisabledByConfig(t *testing.T) {
 	config.App.Logger.ErrorStackDisabled = true
 	t.Cleanup(func() { config.App.Logger.ErrorStackDisabled = old })
 
-	logger, logs := newObservedLogger()
+	lg, logs := newObservedLogger()
 
-	logger.Error(newStackTracedError())
+	lg.Error(newStackTracedError())
 
 	entries := logs.All()
 	require.Len(t, entries, 1)
@@ -110,9 +110,9 @@ func TestErrorSkipsErrorStackFieldWhenDisabledByConfig(t *testing.T) {
 }
 
 func TestErrorSkipsErrorStackFieldWhenNoErrorArgs(t *testing.T) {
-	logger, logs := newObservedLogger()
+	lg, logs := newObservedLogger()
 
-	logger.Error("plain message")
+	lg.Error("plain message")
 
 	entries := logs.All()
 	require.Len(t, entries, 1)
@@ -136,21 +136,21 @@ func newObservedLogger() (*Logger, *observer.ObservedLogs) {
 }
 
 func BenchmarkErrorWithStackTracedError(b *testing.B) {
-	logger := newDiscardLogger()
+	lg := newDiscardLogger()
 	err := errors.Wrap(newStackTracedError(), "wrapped")
 
 	b.ReportAllocs()
 	for b.Loop() {
-		logger.Error(err)
+		lg.Error(err)
 	}
 }
 
 func BenchmarkErrorWithPlainError(b *testing.B) {
-	logger := newDiscardLogger()
+	lg := newDiscardLogger()
 
 	b.ReportAllocs()
 	for b.Loop() {
-		logger.Error(plainError{})
+		lg.Error(plainError{})
 	}
 }
 

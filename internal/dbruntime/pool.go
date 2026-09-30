@@ -4,6 +4,8 @@ import (
 	"database/sql"
 	"fmt"
 
+	"github.com/hydroan/gst/internal/dbruntime/dbnode"
+
 	"github.com/hydroan/gst/config"
 	prommetrics "github.com/hydroan/gst/metrics"
 	"go.uber.org/zap"
@@ -70,7 +72,7 @@ func replicaPoolMetricNames(base string, nodes []DBNode) []string {
 	names := make([]string, 0, len(nodes))
 	replicaIndex := 0
 	for _, node := range nodes {
-		if node.Role == RolePrimary {
+		if node.Role == dbnode.RolePrimary {
 			names = append(names, base)
 			continue
 		}

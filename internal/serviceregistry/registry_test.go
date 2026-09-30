@@ -9,7 +9,6 @@ import (
 	"github.com/hydroan/gst/internal/modelregistry"
 	"github.com/hydroan/gst/internal/serviceregistry"
 	"github.com/hydroan/gst/logger"
-	gstzap "github.com/hydroan/gst/logger/zap"
 	"github.com/stretchr/testify/require"
 )
 
@@ -21,7 +20,7 @@ type testRecord struct {
 }
 
 func TestRegisterAndResolve(t *testing.T) {
-	logger.Service = gstzap.Fallback("service")
+	logger.Service = logger.Fallback("service")
 
 	type svc struct {
 		serviceregistry.Base[*testUser, *testUser, *testUser]

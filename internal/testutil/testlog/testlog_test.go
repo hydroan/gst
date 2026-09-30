@@ -7,7 +7,7 @@ import (
 
 	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/internal/testutil/testlog"
-	gstzap "github.com/hydroan/gst/logger/zap"
+	"github.com/hydroan/gst/logger"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 )
@@ -40,7 +40,7 @@ func TestToTempDir(t *testing.T) {
 			if tt.configInit {
 				require.NoError(t, config.Init())
 			}
-			require.NoError(t, gstzap.Init())
+			require.NoError(t, logger.Init())
 			zap.S().Info("sample entry")
 			require.NoError(t, zap.L().Sync())
 

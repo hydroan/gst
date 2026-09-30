@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/hydroan/gst/internal/dbruntime"
+	"github.com/hydroan/gst/internal/dbruntime/dbnode"
 	"github.com/stretchr/testify/require"
 	"gorm.io/gorm"
 )
@@ -12,7 +13,7 @@ func TestAttachNodesRoundTrip(t *testing.T) {
 	handle := new(gorm.DB)
 	require.Nil(t, dbruntime.NodesFor(handle), "a plain handle carries no nodes")
 
-	nodes := []dbruntime.DBNode{{Role: dbruntime.RolePrimary}, {Role: dbruntime.RoleReplica}}
+	nodes := []dbruntime.DBNode{{Role: dbnode.RolePrimary}, {Role: dbnode.RoleReplica}}
 	dbruntime.AttachNodes(handle, nodes)
 	require.Equal(t, nodes, dbruntime.NodesFor(handle))
 

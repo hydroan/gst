@@ -22,7 +22,7 @@ import (
 	"github.com/hydroan/gst/internal/serviceregistry"
 	"github.com/hydroan/gst/internal/testutil"
 	"github.com/hydroan/gst/internal/types"
-	gstzap "github.com/hydroan/gst/logger/zap"
+	"github.com/hydroan/gst/logger"
 	"github.com/hydroan/gst/module/iam"
 	gstredis "github.com/hydroan/gst/redis"
 	"github.com/stretchr/testify/require"
@@ -435,7 +435,7 @@ func TestAccountChangePassword(t *testing.T) {
 		require.NoError(t, gstredis.Set(t.Context(), accountSessionDataKey(t, syncFailUser.SessionID), "not-a-session", time.Hour))
 
 		svc := &serviceiamaccount.ChangePasswordService{}
-		svc.Logger = gstzap.Fallback("service")
+		svc.Logger = logger.Fallback("service")
 
 		resp, err := svc.Create(serviceCtx, &iam.ChangePasswordReq{
 			OldPassword: syncFailUser.Password,
@@ -485,7 +485,7 @@ func TestAccountChangePassword(t *testing.T) {
 			consts.Create,
 		)
 		svc := &serviceiamaccount.ChangePasswordService{}
-		svc.Logger = gstzap.Fallback("service")
+		svc.Logger = logger.Fallback("service")
 
 		_, err = svc.Create(serviceCtx, &iam.ChangePasswordReq{
 			OldPassword: revokeFailUser.Password,

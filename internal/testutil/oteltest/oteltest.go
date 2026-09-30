@@ -12,7 +12,6 @@ import (
 
 	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/logger"
-	gstzap "github.com/hydroan/gst/logger/zap"
 	gstotel "github.com/hydroan/gst/otel"
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/otel"
@@ -80,7 +79,7 @@ func Enable(t *testing.T, opts ...Option) {
 	})
 
 	originalLogger := logger.OTEL
-	logger.OTEL = gstzap.Fallback("otel")
+	logger.OTEL = logger.Fallback("otel")
 	t.Cleanup(func() {
 		logger.OTEL = originalLogger
 	})

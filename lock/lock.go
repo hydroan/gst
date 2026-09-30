@@ -58,7 +58,7 @@ import (
 	"github.com/hydroan/gst/internal/lease"
 	"github.com/hydroan/gst/internal/lifecycle"
 	"github.com/hydroan/gst/internal/types"
-	gstzap "github.com/hydroan/gst/logger/zap"
+	"github.com/hydroan/gst/logger"
 	"go.uber.org/zap"
 )
 
@@ -124,7 +124,7 @@ func packageLogger() types.Logger {
 	mu.Lock()
 	defer mu.Unlock()
 	if log == nil {
-		log = gstzap.Fallback("lock")
+		log = logger.Fallback("lock")
 	}
 	return log
 }

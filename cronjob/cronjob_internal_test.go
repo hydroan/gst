@@ -19,7 +19,6 @@ import (
 	"github.com/hydroan/gst/internal/testutil"
 	"github.com/hydroan/gst/internal/testutil/testcontainer"
 	"github.com/hydroan/gst/logger"
-	gstzap "github.com/hydroan/gst/logger/zap"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap/zapcore"
 	"gorm.io/gorm"
@@ -290,7 +289,7 @@ func TestStartFallsBackToTheGlobalStreamWithoutABoundLogger(t *testing.T) {
 
 	Register(noopJob, "0 0 * * * *", "fallback-job")
 	require.NoError(t, start(context.Background()))
-	gstzap.Clean()
+	logger.Clean()
 
 	scheduled := entries.FilterMessage("scheduled cronjob").All()
 	require.Len(t, scheduled, 1, "scheduling must log through the fallback logger")
@@ -326,14 +325,14 @@ func TestSchedulerIsALifecycleComponent(t *testing.T) {
 		return nil
 	}, "* * * * * *", "component-job")
 
-	component.SetLogger(gstzap.New("bound_cronjob.log"))
+	component.SetLogger(logger.New("bound_cronjob.log"))
 	require.NoError(t, component.Start(context.Background()))
 	clock.Advance(time.Second)
 	awaitSignal(t, entered, "the round")
 	require.NoError(t, component.Stop(context.Background()))
 	require.NotNil(t, current, "the scheduler must have been started through the component")
 
-	gstzap.Clean()
+	logger.Clean()
 	entry := readLogEntry(t, filepath.Join(dir, "bound_cronjob.log"), "scheduled cronjob")
 	require.Equal(t, "component-job", entry["name"])
 	require.NoFileExists(t, filepath.Join(dir, "cronjob.log"), "the bound logger replaces the package's own")

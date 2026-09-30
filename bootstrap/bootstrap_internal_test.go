@@ -49,7 +49,7 @@ func TestTeardownStopsTheLogWritersLast(t *testing.T) {
 		teardown = append(teardown, runtime.FuncForPC(reflect.ValueOf(cleanup).Pointer()).Name())
 	}
 	require.Equal(t,
-		[]string{"github.com/hydroan/gst/config.Clean", "github.com/hydroan/gst/logger/zap.Clean"},
+		[]string{"github.com/hydroan/gst/config.Clean", "github.com/hydroan/gst/logger.Clean"},
 		teardown[len(teardown)-2:],
 		"the temp directory and then the log writers must be the last things torn down")
 }

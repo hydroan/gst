@@ -1,4 +1,4 @@
-package zap
+package logger
 
 import (
 	"bytes"
@@ -17,7 +17,6 @@ import (
 	"github.com/hydroan/gst/consts"
 	"github.com/hydroan/gst/internal/instance"
 	"github.com/hydroan/gst/internal/types"
-	"github.com/hydroan/gst/logger"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 	"gopkg.in/natefinch/lumberjack.v2"
@@ -76,17 +75,17 @@ func Init() error {
 		zap.AddStacktrace(zapcore.FatalLevel),
 	)))
 
-	logger.App = New("app.log")
+	App = New("app.log")
 
-	logger.Controller = New("controller.log")
-	logger.Service = New("service.log")
-	logger.Database = New("database.log")
-	logger.Cache = New("cache.log")
-	logger.Dcache = New("dcache.log")
-	logger.Redis = New("redis.log")
+	Controller = New("controller.log")
+	Service = New("service.log")
+	Database = New("database.log")
+	Cache = New("cache.log")
+	Dcache = New("dcache.log")
+	Redis = New("redis.log")
 
-	logger.Authz = New("authz.log", Option{DisableMsg: true, DisableCaller: true})
-	logger.OTEL = New("otel.log")
+	Authz = New("authz.log", Option{DisableMsg: true, DisableCaller: true})
+	OTEL = New("otel.log")
 
 	// Optional provider loggers start on a fallback sharing the global core:
 	// non-nil and safe to use, but owning no stream of their own. The
@@ -94,28 +93,28 @@ func Init() error {
 	// providers actually compiled in (see lifecycle.Component.SetLogger), so a
 	// stream of its own — a log file in file mode — exists exactly for the
 	// capabilities the binary carries.
-	logger.Cassandra = Fallback("cassandra")
-	logger.Elastic = Fallback("elastic")
-	logger.Etcd = Fallback("etcd")
-	logger.Influxdb = Fallback("influxdb")
-	logger.Kafka = Fallback("kafka")
-	logger.Ldap = Fallback("ldap")
-	logger.Minio = Fallback("minio")
-	logger.Mongo = Fallback("mongo")
-	logger.Mqtt = Fallback("mqtt")
-	logger.Nats = Fallback("nats")
-	logger.Scylla = Fallback("scylla")
-	logger.RethinkDB = Fallback("rethinkdb")
-	logger.RocketMQ = Fallback("rocketmq")
+	Cassandra = Fallback("cassandra")
+	Elastic = Fallback("elastic")
+	Etcd = Fallback("etcd")
+	Influxdb = Fallback("influxdb")
+	Kafka = Fallback("kafka")
+	Ldap = Fallback("ldap")
+	Minio = Fallback("minio")
+	Mongo = Fallback("mongo")
+	Mqtt = Fallback("mqtt")
+	Nats = Fallback("nats")
+	Scylla = Fallback("scylla")
+	RethinkDB = Fallback("rethinkdb")
+	RocketMQ = Fallback("rocketmq")
 
-	logger.Gin = NewGin("access.log")
-	logger.HTTPBody = NewGin("http_body.log")
-	logger.GRPC = NewGin("grpc.log")
+	Gin = NewGin("access.log")
+	HTTPBody = NewGin("http_body.log")
+	GRPC = NewGin("grpc.log")
 	// A panic entry is its message — the request, the panic and the stack —
 	// so the recovery log keeps the message and the level the access-log
 	// encoder leaves out.
-	logger.Recovery = NewZap("recovery.log")
-	logger.Gorm = NewGorm("gorm.log")
+	Recovery = NewZap("recovery.log")
+	Gorm = NewGorm("gorm.log")
 
 	return nil
 }
@@ -128,30 +127,30 @@ func Clean() {
 	// types.Logger
 	_ = zap.L().Sync()
 	logs := []types.Logger{
-		logger.App,
+		App,
 
-		logger.Controller,
-		logger.Service,
-		logger.Database,
-		logger.Cache,
-		logger.Dcache,
-		logger.Redis,
+		Controller,
+		Service,
+		Database,
+		Cache,
+		Dcache,
+		Redis,
 
-		logger.Authz,
-		logger.OTEL,
-		logger.Cassandra,
-		logger.Elastic,
-		logger.Etcd,
-		logger.Influxdb,
-		logger.Kafka,
-		logger.Ldap,
-		logger.Minio,
-		logger.Mongo,
-		logger.Mqtt,
-		logger.Nats,
-		logger.Scylla,
-		logger.RethinkDB,
-		logger.RocketMQ,
+		Authz,
+		OTEL,
+		Cassandra,
+		Elastic,
+		Etcd,
+		Influxdb,
+		Kafka,
+		Ldap,
+		Minio,
+		Mongo,
+		Mqtt,
+		Nats,
+		Scylla,
+		RethinkDB,
+		RocketMQ,
 	}
 	for _, log := range logs {
 		if l, ok := log.(*Logger); ok {
@@ -161,7 +160,7 @@ func Clean() {
 
 	// The listeners' loggers: the HTTP access and body logs, the gRPC
 	// access log and the recovery log.
-	for _, log := range []*zap.Logger{logger.Gin, logger.HTTPBody, logger.GRPC, logger.Recovery} {
+	for _, log := range []*zap.Logger{Gin, HTTPBody, GRPC, Recovery} {
 		if log != nil {
 			_ = log.Sync()
 		}
@@ -169,7 +168,7 @@ func Clean() {
 
 	// gorm logger
 	gormLogs := []gormlogger.Interface{
-		logger.Gorm,
+		Gorm,
 	}
 	for _, glog := range gormLogs {
 		if log, ok := glog.(*GormLogger); ok {
@@ -207,13 +206,13 @@ func New(filename string, opts ...Option) *Logger {
 	if len(filename) > 0 {
 		logFile = filename
 	}
-	logger := named(zap.New(
+	built := named(zap.New(
 		newLogCore(opts...),
 		zap.AddCaller(),
 		zap.AddCallerSkip(1),
 		zap.AddStacktrace(zapcore.FatalLevel),
 	))
-	return &Logger{zlog: logger}
+	return &Logger{zlog: built}
 }
 
 // NewGorm builds a gorm logger.Interface.
@@ -229,11 +228,11 @@ func NewGorm(filename string) gormlogger.Interface {
 	if len(filename) > 0 {
 		logFile = filename
 	}
-	logger := named(zap.New(
+	built := named(zap.New(
 		newLogCore(),
 		zap.AddStacktrace(zapcore.FatalLevel),
 	))
-	return &GormLogger{l: &Logger{zlog: logger}}
+	return &GormLogger{l: &Logger{zlog: built}}
 }
 
 // NewGin builds a *zap.Logger for Gin access logs.

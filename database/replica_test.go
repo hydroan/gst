@@ -23,6 +23,7 @@ import (
 	gstmysql "github.com/hydroan/gst/database/mysql"
 	gstpostgres "github.com/hydroan/gst/database/postgres"
 	"github.com/hydroan/gst/internal/dbruntime"
+	"github.com/hydroan/gst/internal/dbruntime/dbnode"
 	"github.com/hydroan/gst/internal/modelregistry"
 	"github.com/hydroan/gst/internal/testutil/testcontainer"
 	"github.com/stretchr/testify/require"
@@ -40,7 +41,7 @@ type roleCaptureLogger struct {
 
 func (l *roleCaptureLogger) Trace(ctx context.Context, begin time.Time, fc func() (string, int64), err error) {
 	l.mu.Lock()
-	l.roles = append(l.roles, dbruntime.RoleFromContext(ctx))
+	l.roles = append(l.roles, dbnode.RoleFromContext(ctx))
 	l.mu.Unlock()
 	l.Interface.Trace(ctx, begin, fc, err)
 }
@@ -248,7 +249,7 @@ func TestReplicaRouting(t *testing.T) {
 		nodes := dbruntime.NodesFor(top.handle)
 		require.Len(t, nodes, 2)
 		require.ElementsMatch(t,
-			[]string{dbruntime.RolePrimary, dbruntime.RoleReplica},
+			[]string{dbnode.RolePrimary, dbnode.RoleReplica},
 			[]string{nodes[0].Role, nodes[1].Role})
 		for _, node := range nodes {
 			require.Equal(t, config.App.Database.MaxOpenConns, node.DB.Stats().MaxOpenConnections,
@@ -262,11 +263,11 @@ func TestReplicaRouting(t *testing.T) {
 
 		rows := make([]*routedRecord, 0)
 		require.NoError(t, database.DatabaseOn[*routedRecord](ctx, session).List(&rows))
-		require.Equal(t, dbruntime.RolePrimary, capture.last(), "a plain read logs as served by the primary")
+		require.Equal(t, dbnode.RolePrimary, capture.last(), "a plain read logs as served by the primary")
 
 		rows = rows[:0]
 		require.NoError(t, database.DatabaseOn[*routedRecord](ctx, session).WithReplica().List(&rows))
-		require.Equal(t, dbruntime.RoleReplica, capture.last(), "a WithReplica read logs as served by the replica")
+		require.Equal(t, dbnode.RoleReplica, capture.last(), "a WithReplica read logs as served by the replica")
 	})
 
 	t.Run("WithReplica on a write is refused", func(t *testing.T) {

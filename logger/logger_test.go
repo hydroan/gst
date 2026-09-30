@@ -1,4 +1,4 @@
-package zap_test
+package logger_test
 
 import (
 	"strconv"
@@ -7,7 +7,7 @@ import (
 
 	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/internal/types"
-	gstzap "github.com/hydroan/gst/logger/zap"
+	"github.com/hydroan/gst/logger"
 )
 
 var (
@@ -39,7 +39,7 @@ func createLogger(b *testing.B, filename string) types.Logger {
 	if err := config.Init(); err != nil {
 		b.Fatal(err)
 	}
-	l := gstzap.New("")
+	l := logger.New("")
 	return l
 }
 

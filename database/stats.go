@@ -4,14 +4,15 @@ import (
 	"database/sql"
 
 	"github.com/hydroan/gst/internal/dbruntime"
+	"github.com/hydroan/gst/internal/dbruntime/dbnode"
 )
 
 // Node roles reported in NodeStats: the writable primary, and the read
 // replicas attached through the mysql.replicas / postgres.replicas
 // configuration.
 const (
-	RolePrimary = dbruntime.RolePrimary
-	RoleReplica = dbruntime.RoleReplica
+	RolePrimary = dbnode.RolePrimary
+	RoleReplica = dbnode.RoleReplica
 )
 
 // NodeStats is the connection pool snapshot of one database node.
