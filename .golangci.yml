@@ -210,6 +210,42 @@ linters:
           deny:
             - pkg: "github.com/hydroan/gst/internal/clioutput$"
               desc: "only the gg command prints; return the result, or take a progress callback the command passes"
+        # The HTTP line and the gRPC line share no code (CLAUDE.md, 模块不动
+        # 核心、两线互不波及): the packages serving HTTP requests, the router,
+        # its middleware and the registration of the modules, never import the
+        # gRPC listener or its interceptors, and the packages serving gRPC
+        # calls never import the router or its middleware; bootstrap alone
+        # wires both. The tests are left out, the module tests mounting both
+        # lines the way a project does.
+        http-line:
+          files:
+            - "**/middleware/**"
+            - "**/internal/middleware/**"
+            - "**/router/**"
+            - "**/internal/router/**"
+            - "**/module/*/register.go"
+            - "!$test"
+          deny:
+            - pkg: "github.com/hydroan/gst/interceptor$"
+              desc: "the HTTP line never imports the gRPC line; an interceptor is the gRPC listener's"
+            - pkg: "github.com/hydroan/gst/internal/grpcserver$"
+              desc: "the HTTP line never imports the gRPC line; the listener is bootstrap's to wire"
+            - pkg: "github.com/hydroan/gst/grpc$"
+              desc: "the HTTP line never imports the gRPC line; the public grpc package serves the generated code and the interceptors"
+        grpc-line:
+          files:
+            - "**/interceptor/**"
+            - "**/internal/grpcserver/**"
+            - "!$test"
+          deny:
+            - pkg: "github.com/hydroan/gst/middleware$"
+              desc: "the gRPC line never imports the HTTP line; a middleware is the router's"
+            - pkg: "github.com/hydroan/gst/internal/middleware$"
+              desc: "the gRPC line never imports the HTTP line; a middleware is the router's"
+            - pkg: "github.com/hydroan/gst/router$"
+              desc: "the gRPC line never imports the HTTP line; the router is bootstrap's to wire"
+            - pkg: "github.com/hydroan/gst/internal/router$"
+              desc: "the gRPC line never imports the HTTP line; the router is bootstrap's to wire"
 
     errcheck:
       check-type-assertions: true
