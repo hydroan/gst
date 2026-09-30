@@ -8,10 +8,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-var (
-	module       string
-	debugLogging bool
-)
+var module string
 
 var rootCmd = &cobra.Command{
 	Use:   "gg",
@@ -30,8 +27,6 @@ func init() {
 	if info, ok := debug.ReadBuildInfo(); ok {
 		rootCmd.Version = info.Main.Version
 	}
-
-	rootCmd.PersistentFlags().BoolVarP(&debugLogging, "debug", "d", false, "enable debug logging")
 
 	rootCmd.AddCommand(
 		genCmd,
