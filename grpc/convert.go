@@ -56,10 +56,12 @@ func Number(field, s string) (json.Number, error) {
 
 // invalidValue is the InvalidArgument a generated FromProto refuses a
 // message field with when the value it carries is not one the model field
-// holds: the message HTTP answers for a body field it cannot decode a value
-// into, "invalid value for field 'rank'", and a google.rpc.BadRequest detail
-// naming the field with description, the way the fields a validator refused
-// are detailed.
+// holds: the sentence HTTP answers with for a body value it cannot decode
+// into a field it can name, "invalid value for field 'rank'", and a
+// google.rpc.BadRequest detail naming the field with description, the way
+// the fields a validator refused are detailed. HTTP names the field of a
+// number it cannot decode only when encoding/json reports it, which for a
+// json.Number field it does not, answering without the name there.
 func invalidValue(field, description string) error {
 	st := status.New(codes.InvalidArgument, "invalid value for field '"+field+"'")
 	detail := &errdetails.BadRequest{FieldViolations: []*errdetails.BadRequest_FieldViolation{{Field: field, Description: description}}}
