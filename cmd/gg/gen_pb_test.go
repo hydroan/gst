@@ -596,7 +596,7 @@ func TestGenRunWritesNoProtobufDefinitionWhenAShapeCannotBeDescribed(t *testing.
 	// the numbers the tagged fields hold.
 	healed, readErr := os.ReadFile(filepath.Join(projectDir, "model", "rejected.go"))
 	require.NoError(t, readErr)
-	require.Contains(t, string(healed), "Untagged string            `json:\"untagged\" pb:\"16\"`")
+	require.Regexp(t, "Untagged string +`json:\"untagged\" pb:\"18\"`", string(healed))
 	require.NotContains(t, err.Error(), "Rejected.untagged")
 	for _, want := range []string{
 		"tmpapp/model.Rejected.low: the pb tag names field number 3, but 1 to 10 belong to the framework's base fields; number business fields from 11",
@@ -607,7 +607,9 @@ func TestGenRunWritesNoProtobufDefinitionWhenAShapeCannotBeDescribed(t *testing.
 		"tmpapp/model.Rejected.comment: type database/sql.NullString is declared outside the project, so its fields cannot carry pb tags; use a project type",
 		"tmpapp/model.Rejected.word: the pb tag \"eleven\" is not a field number; write the number alone, as in pb:\"11\"",
 		"tmpapp/model.Rejected.note: the field is promoted through an embedded pointer, which a message has no way to leave unset; embed the struct by value",
-		"tmpapp/model.Rejected.limits: a map of pointers has no protobuf type, a map value is never unset; use a map of values",
+		"tmpapp/model.Rejected.limits: a map of pointers to a scalar has no protobuf type, a value is never unset; use a map of values",
+		"tmpapp/model.Rejected.slots: a slice of pointers to a scalar has no protobuf type, an element is never unset; use a slice of values",
+		"tmpapp/model.Rejected.keyed: map key type tmpapp/model.RejectedKey declares MarshalText, which encoding/json and the JSON v2 experiment apply to keys differently; use a string or integer key type without it",
 	} {
 		require.Contains(t, err.Error(), want)
 	}
@@ -1302,6 +1304,8 @@ type Rejected struct {
 	Comment  sql.NullString 'json:"comment" pb:"14"'
 	Word     string         'json:"word" pb:"eleven"'
 	Limits   map[string]*int32 'json:"limits" pb:"15" gorm:"-"'
+	Slots    []*int32          'json:"slots" pb:"16" gorm:"-"'
+	Keyed    map[RejectedKey]string 'json:"keyed" pb:"17" gorm:"-"'
 	*RejectedExtra
 
 	model.Base
@@ -1316,6 +1320,12 @@ type RejectedExtra struct {
 type Speaker interface {
 	Speak() string
 }
+
+// RejectedKey writes its own text, which keys a JSON object differently
+// from the key itself.
+type RejectedKey string
+
+func (k RejectedKey) MarshalText() ([]byte, error) { return []byte("k:" + string(k)), nil }
 
 func (Rejected) TableName() string { return "rejected" }
 
@@ -1503,8 +1513,9 @@ func (Clash) Design() {
 // slice of and a pointer to an unnamed struct, an optional time, any value,
 // bytes, a named slice, the framework's version type, an alias of an
 // internal type, gorm's JSON slices of structs and of strings, pointers to
-// a slice of strings, to a slice of structs, to a map and to bytes, and a
-// second JSON wrapper.
+// a slice of strings, to a slice of structs, to a map and to bytes, a
+// second JSON wrapper, a map keyed by a narrow integer, an optional JSON
+// number, a slice of times and a map of pointers to structs.
 const protobufShapeModel = `package model
 
 import (
@@ -1574,6 +1585,18 @@ type Shape struct {
 	Cells map[string]struct {
 		Count int32 'json:"count" pb:"1"'
 	} 'json:"cells,omitempty" pb:"48" gorm:"-"'
+	// ByRank is keyed by an integer narrower than the int32 the message
+	// carries, read back through grpc.Narrow like a field.
+	ByRank map[int8]ShapePoint 'json:"by_rank,omitempty" pb:"49" gorm:"-"'
+	// Price is an optional JSON number, whose message field may be set to
+	// the empty string, which is no number.
+	Price *json.Number 'json:"price,omitempty" pb:"50"'
+	// Stamps holds times in a repeated field, where the zero time travels
+	// as 0001-01-01 and comes back as the zero time.
+	Stamps []time.Time 'json:"stamps,omitempty" pb:"51" gorm:"-"'
+	// Owners is a map of pointers to structs, whose nil values travel as
+	// empty messages.
+	Owners map[string]*ShapeOwner 'json:"owners,omitempty" pb:"52" gorm:"-"'
 	// Name shadows the Name of the embedded ShapeMeta, which keeps its own
 	// key and is selected by its path.
 	Name string 'json:"name" pb:"41"'
@@ -1651,6 +1674,7 @@ const protobufConversionTest = `package pb_test
 
 import (
 	"encoding/json"
+	"math"
 	"testing"
 	"time"
 
@@ -1662,6 +1686,8 @@ import (
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/types/known/timestamppb"
 	"gorm.io/datatypes"
 	"gorm.io/gorm"
 )
@@ -1709,6 +1735,10 @@ func TestRecordRoundTrips(t *testing.T) {
 	zero, err := pb.RecordFromProto(&pb.Record{})
 	require.NoError(t, err)
 	require.Equal(t, &model.Record{}, zero, "an empty message decodes into the zero value")
+
+	_, err = pb.RecordFromProto(&pb.Record{Ratio: math.NaN()})
+	require.Equal(t, codes.InvalidArgument, status.Code(err))
+	require.Equal(t, "invalid value for field \x27ratio\x27", status.Convert(err).Message(), "a number JSON has no spelling for is refused")
 }
 
 func TestItemLinksRoundTrip(t *testing.T) {
@@ -1733,6 +1763,7 @@ func TestShapeRoundTrips(t *testing.T) {
 	day := time.Date(2026, 9, 26, 0, 0, 0, 0, time.UTC)
 	when := day.Add(time.Hour)
 	score := 7
+	price := json.Number("1.5")
 	rawDoc := json.RawMessage('{"b":1}')
 	extra := datatypes.JSON('{"c":2}')
 	meta := datatypes.JSONMap{"m": float64(1)}
@@ -1770,6 +1801,10 @@ func TestShapeRoundTrips(t *testing.T) {
 		Frame:   model.Window{Width: 3},
 		Rank:    -3,
 		Port:    65000,
+		ByRank:  map[int8]model.ShapePoint{-1: {X: 9}},
+		Price:   &price,
+		Stamps:  []time.Time{{}, day},
+		Owners:  map[string]*model.ShapeOwner{"o": {Name: "o"}},
 	}
 	in.Window = struct {
 		Width int32 'json:"width" pb:"1"'
@@ -1810,10 +1845,38 @@ func TestShapeRoundTrips(t *testing.T) {
 	require.Equal(t, int32(-3), msg.GetRank())
 	require.Equal(t, uint32(65000), msg.GetPort())
 	require.Equal(t, []byte(in.Doc), msg.GetDoc(), "a JSON document travels as its bytes")
+	require.Equal(t, int32(9), msg.GetByRank()[-1].GetX())
+	require.Equal(t, "1.5", msg.GetPrice())
+	require.True(t, msg.GetStamps()[0].AsTime().IsZero(), "the zero time of an element travels as 0001-01-01, not as nothing")
+	require.Equal(t, day, msg.GetStamps()[1].AsTime())
+	require.Equal(t, "o", msg.GetOwners()["o"].GetName())
 
 	out, err := pb.ShapeFromProto(msg)
 	require.NoError(t, err)
 	require.Equal(t, in, out)
+
+	t.Run("the values survive the wire", func(t *testing.T) {
+		encoded, err := proto.Marshal(msg)
+		require.NoError(t, err)
+		decoded := new(pb.Shape)
+		require.NoError(t, proto.Unmarshal(encoded, decoded))
+		wired, err := pb.ShapeFromProto(decoded)
+		require.NoError(t, err)
+		expected := *in
+		// A nil element or value of a message type has no spelling on the
+		// wire: it arrives as an empty message, decoded into the zero value.
+		expected.Points = []*model.ShapePoint{{X: 1, Y: 2}, {}}
+		require.Equal(t, &expected, wired)
+	})
+
+	t.Run("a string that is no valid UTF-8 is written out as the JSON encoder writes it", func(t *testing.T) {
+		broken := *in
+		broken.Name = "a\xffb"
+		msg := pb.ShapeToProto(&broken)
+		require.Equal(t, "a�b", msg.GetName())
+		_, err := proto.Marshal(msg)
+		require.NoError(t, err, "the message encodes, where an invalid string would fail the whole response")
+	})
 
 	empty, err := pb.ShapeFromProto(&pb.Shape{})
 	require.NoError(t, err)
@@ -1842,6 +1905,13 @@ func TestShapeRoundTrips(t *testing.T) {
 			{name: "an integer out of range", msg: &pb.Shape{Rank: 300}, want: "invalid value for field \x27rank\x27"},
 			{name: "an unsigned integer out of range", msg: &pb.Shape{Port: 70000}, want: "invalid value for field \x27port\x27"},
 			{name: "a string that is no JSON number", msg: &pb.Shape{Amount: "abc"}, want: "invalid value for field \x27amount\x27"},
+			{name: "an empty optional number", msg: &pb.Shape{Price: proto.String("")}, want: "invalid value for field \x27price\x27"},
+			{name: "a document that is no JSON", msg: &pb.Shape{Doc: []byte("{")}, want: "invalid value for field \x27doc\x27"},
+			{name: "a pointed-to document that is no JSON", msg: &pb.Shape{RawDoc: []byte("nope")}, want: "invalid value for field \x27raw_doc\x27"},
+			{name: "a timestamp past the year 9999", msg: &pb.Shape{When: &timestamppb.Timestamp{Seconds: 253402300800}}, want: "invalid value for field \x27when\x27"},
+			{name: "a framework timestamp past the year 9999", msg: &pb.Shape{CreatedAt: &timestamppb.Timestamp{Seconds: 253402300800}}, want: "invalid value for field \x27created_at\x27"},
+			{name: "a timestamp in a slice past the year 9999", msg: &pb.Shape{Stamps: []*timestamppb.Timestamp{{Seconds: 253402300800}}}, want: "invalid value for field \x27stamps\x27"},
+			{name: "a map key out of range", msg: &pb.Shape{ByRank: map[int32]*pb.ShapePoint{300: {}}}, want: "invalid value for field \x27by_rank\x27"},
 		} {
 			t.Run(tt.name, func(t *testing.T) {
 				_, err := pb.ShapeFromProto(tt.msg)

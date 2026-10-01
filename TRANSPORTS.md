@@ -166,6 +166,7 @@ HTTP 状态到 gRPC status 的映射（`grpcserver.StatusError`）：
 - 400 → InvalidArgument；401 → Unauthenticated；403 → PermissionDenied；404 → NotFound；408、504 → DeadlineExceeded。
 - 409 → AlreadyExists，其中乐观锁冲突（错误链里带 `database.ErrStaleObject`）→ Aborted，外键不满足（带 `database.ErrForeignKeyViolated`，指向不存在或还被引用的记录）→ FailedPrecondition；412 → FailedPrecondition；429 → ResourceExhausted；501 → Unimplemented；503 → Unavailable。
 - 其他 5xx → Internal；其他 4xx → InvalidArgument；数据库未知错误与钩子里的非 service.Error → Internal，和 HTTP 的 500 同一句文案；请求消息校验失败 → InvalidArgument，message 是点名字段的句子（`name is a required field`，多个字段用分号连，字段用 JSON 名路径，批量项带 `items[1].`），并附 `google.rpc.BadRequest` 明细逐字段列出，HTTP 的 `msg` 是同一句；panic 经 recovery → Internal。
+- 请求消息里 HTTP 收不进来的值由生成的 FromProto 当场拒绝，答 InvalidArgument「invalid value for field 'rank'」并附 `google.rpc.BadRequest` 明细：窄整数越界（`grpc.Narrow`）、不是 JSON 数字的字符串与可选字段显式给的空串（`grpc.Number`）、Timestamp 超出公元 1 到 9999 年（`grpc.Time`）、不是合法 JSON 的文档字节（`grpc.Document`）、NaN 与无穷（`grpc.Finite`），map 的窄整数键同样经 Narrow。反方向生成的 ToProto 把字符串里的非法 UTF-8 逐字节换成 U+FFFD（`grpc.UTF8`），和 encoding/json 写出的一样，不让一条记录拖垮整页响应。
 - 客户端已取消或超时的调用答 Canceled / DeadlineExceeded，不记错误日志。
 - 路由参数来自请求消息开头的字段：留空或含 `/` 的值答 InvalidArgument（`route parameter "parent" is required`、`route parameter "parent" must not contain "/"`），HTTP 上一个参数只对应路径的一段，这两种值它永远送不进来。
 
@@ -289,5 +290,6 @@ call --> client : OK，或映射后的 status；取消答 Canceled，停机答 U
 | 时间类型 | AIP-142 一天里的时刻用 `google.type.TimeOfDay`、日期用 `google.type.Date` | `datatypes.Time` 映射 `google.protobuf.Duration`（从零点起的时长），`datatypes.Date` 映射 `google.protobuf.Timestamp`，不引入 googleapis 的类型 |
 | Delete 的响应 | AIP-135 返回 `google.protobuf.Empty` | 每个 rpc 独享自己的空 `DeleteXxxResponse`，照 Buf 风格指南，日后加字段不换类型 |
 | 不写 HTTP 注解 | AIP 用 `google.api.http`、`google.api.field_behavior` 标路由与必填 | 没有 gateway，路由与 HTTP 方法由注册物描述（`grpc.Method`），必填由模型的 binding tag 决定，注释里写明 |
+| proto3 表达不了的形态 | proto3 的标量没有「未设置」，repeated 与 map 的元素不能为 nil，`google.protobuf.Value` 的数字是 double | 这些照 protobuf 的本性走，写在这里不另加机制：切片、map 的 nil 与空过线后分不开（nil 的 JSONSlice 经 gRPC 写库是空数组还是 null 取决于对端怎么发）；`[]*T`、`map[K]*T` 里指向消息的 nil 元素过线变成空消息、解出来是零值（指向标量的指针元素 gg gen 直接拒绝，无从表达「未设置」）；any 与 JSON 对象字段里超过 2^53 的整数经 Value 丢精度，NaN 与无穷按 Value 的 JSON 映射变成字符串 "NaN"、"Infinity"；集合、map 值与可选字段里的零值时间编成 0001-01-01 再读回零值 |
 
 这页跟着代码走：拦截器链、映射表、产物名、差异清单以仓库为准，改了代码就改这页。两线对同一输入的答复由 internal/controller 的对照用例 TestTransportsAnswerTheContractAlike 逐场景比对（状态码按第 4 节的映射、msg 逐字、落库结果），有意的差异在它的表里是显式的差异行：改了一边它先红，新增一处差异要同时写进表和这页。

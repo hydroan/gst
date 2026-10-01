@@ -5,9 +5,11 @@ package board
 import (
 	"context"
 	"demo/model/board"
+	"time"
 
 	"github.com/hydroan/gst/consts"
 	"github.com/hydroan/gst/grpc"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 // noteService serves the rpcs of the NoteService service through the actions
@@ -121,36 +123,50 @@ func NoteToProto(m *board.Note) *Note {
 		return nil
 	}
 	p := new(Note)
-	p.Id = m.ID
-	p.CreatedBy = m.CreatedBy
-	p.UpdatedBy = m.UpdatedBy
+	p.Id = grpc.UTF8(m.ID)
+	p.CreatedBy = grpc.UTF8(m.CreatedBy)
+	p.UpdatedBy = grpc.UTF8(m.UpdatedBy)
 	p.CreatedAt = grpc.Timestamp(m.CreatedAt)
 	p.UpdatedAt = grpc.Timestamp(m.UpdatedAt)
-	p.Title = m.Title
-	p.Body = m.Body
+	p.Title = grpc.UTF8(m.Title)
+	p.Body = grpc.UTF8(m.Body)
 	p.Published = m.Published
 	if m.PublishedAt != nil {
-		p.PublishedAt = grpc.Timestamp(*m.PublishedAt)
+		p.PublishedAt = timestamppb.New(*m.PublishedAt)
 	}
 	return p
 }
 
-// NoteFromProto decodes Note messages into values, nil into nil.
+// NoteFromProto decodes Note messages into values, nil into nil. A value a
+// field cannot hold, an integer out of its range, a string that is no JSON
+// number, a time outside the years 1 to 9999, bytes that are no JSON
+// document or a number that is not finite, is refused with InvalidArgument.
 func NoteFromProto(p *Note) (*board.Note, error) {
 	if p == nil {
 		return nil, nil
 	}
 	m := new(board.Note)
+	var err error
 	m.ID = p.GetId()
 	m.CreatedBy = p.GetCreatedBy()
 	m.UpdatedBy = p.GetUpdatedBy()
-	m.CreatedAt = grpc.Time(p.GetCreatedAt())
-	m.UpdatedAt = grpc.Time(p.GetUpdatedAt())
+	m.CreatedAt, err = grpc.Time("created_at", p.GetCreatedAt())
+	if err != nil {
+		return nil, err
+	}
+	m.UpdatedAt, err = grpc.Time("updated_at", p.GetUpdatedAt())
+	if err != nil {
+		return nil, err
+	}
 	m.Title = p.GetTitle()
 	m.Body = p.GetBody()
 	m.Published = p.GetPublished()
 	if p.GetPublishedAt() != nil {
-		x := grpc.Time(p.GetPublishedAt())
+		var x time.Time
+		x, err = grpc.Time("published_at", p.GetPublishedAt())
+		if err != nil {
+			return nil, err
+		}
 		m.PublishedAt = &x
 	}
 	return m, nil
@@ -163,7 +179,7 @@ func NotePublishReqToProto(m *board.NotePublishReq) *NotePublishReq {
 		return nil
 	}
 	p := new(NotePublishReq)
-	p.Channel = m.Channel
+	p.Channel = grpc.UTF8(m.Channel)
 	return p
 }
 
@@ -185,21 +201,28 @@ func NotePublishRspToProto(m *board.NotePublishRsp) *NotePublishRsp {
 		return nil
 	}
 	p := new(NotePublishRsp)
-	p.Id = m.ID
-	p.Channel = m.Channel
+	p.Id = grpc.UTF8(m.ID)
+	p.Channel = grpc.UTF8(m.Channel)
 	p.PublishedAt = grpc.Timestamp(m.PublishedAt)
 	return p
 }
 
 // NotePublishRspFromProto decodes NotePublishRsp messages into values, nil
-// into nil.
+// into nil. A value a field cannot hold, an integer out of its range, a
+// string that is no JSON number, a time outside the years 1 to 9999, bytes
+// that are no JSON document or a number that is not finite, is refused with
+// InvalidArgument.
 func NotePublishRspFromProto(p *NotePublishRsp) (*board.NotePublishRsp, error) {
 	if p == nil {
 		return nil, nil
 	}
 	m := new(board.NotePublishRsp)
+	var err error
 	m.ID = p.GetId()
 	m.Channel = p.GetChannel()
-	m.PublishedAt = grpc.Time(p.GetPublishedAt())
+	m.PublishedAt, err = grpc.Time("published_at", p.GetPublishedAt())
+	if err != nil {
+		return nil, err
+	}
 	return m, nil
 }

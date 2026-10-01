@@ -97,8 +97,8 @@ func CachedReqToProto(m *model.CachedReq) *CachedReq {
 		return nil
 	}
 	p := new(CachedReq)
-	p.Key = m.Key
-	p.Value = m.Value
+	p.Key = grpc.UTF8(m.Key)
+	p.Value = grpc.UTF8(m.Value)
 	return p
 }
 
@@ -120,9 +120,9 @@ func CachedCreateRspToProto(m *model.CachedCreateRsp) *CachedCreateRsp {
 		return nil
 	}
 	p := new(CachedCreateRsp)
-	p.Replica = m.Replica
-	p.Key = m.Key
-	p.Value = m.Value
+	p.Replica = grpc.UTF8(m.Replica)
+	p.Key = grpc.UTF8(m.Key)
+	p.Value = grpc.UTF8(m.Value)
 	p.Found = m.Found
 	return p
 }
@@ -148,8 +148,8 @@ func CachedDeleteRspToProto(m *model.CachedDeleteRsp) *CachedDeleteRsp {
 		return nil
 	}
 	p := new(CachedDeleteRsp)
-	p.Replica = m.Replica
-	p.Key = m.Key
+	p.Replica = grpc.UTF8(m.Replica)
+	p.Key = grpc.UTF8(m.Key)
 	return p
 }
 
@@ -172,9 +172,9 @@ func CachedGetRspToProto(m *model.CachedGetRsp) *CachedGetRsp {
 		return nil
 	}
 	p := new(CachedGetRsp)
-	p.Replica = m.Replica
-	p.Key = m.Key
-	p.Value = m.Value
+	p.Replica = grpc.UTF8(m.Replica)
+	p.Key = grpc.UTF8(m.Key)
+	p.Value = grpc.UTF8(m.Value)
 	p.Found = m.Found
 	return p
 }
@@ -200,7 +200,7 @@ func CachedKeyReqToProto(m *model.CachedKeyReq) *CachedKeyReq {
 		return nil
 	}
 	p := new(CachedKeyReq)
-	p.Key = m.Key
+	p.Key = grpc.UTF8(m.Key)
 	return p
 }
 
@@ -222,9 +222,9 @@ func CachedExchangeRspToProto(m *model.CachedExchangeRsp) *CachedExchangeRsp {
 		return nil
 	}
 	p := new(CachedExchangeRsp)
-	p.Replica = m.Replica
-	p.Key = m.Key
-	p.Value = m.Value
+	p.Replica = grpc.UTF8(m.Replica)
+	p.Key = grpc.UTF8(m.Key)
+	p.Value = grpc.UTF8(m.Value)
 	p.Found = m.Found
 	return p
 }
@@ -250,7 +250,7 @@ func CachedLoadRspToProto(m *model.CachedLoadRsp) *CachedLoadRsp {
 		return nil
 	}
 	p := new(CachedLoadRsp)
-	p.Replica = m.Replica
+	p.Replica = grpc.UTF8(m.Replica)
 	p.Count = m.Count
 	return p
 }

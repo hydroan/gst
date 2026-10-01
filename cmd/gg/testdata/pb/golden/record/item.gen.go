@@ -111,12 +111,12 @@ func ItemToProto(m *record.Item) *Item {
 		return nil
 	}
 	p := new(Item)
-	p.Id = m.ID
-	p.CreatedBy = m.CreatedBy
-	p.UpdatedBy = m.UpdatedBy
+	p.Id = grpc.UTF8(m.ID)
+	p.CreatedBy = grpc.UTF8(m.CreatedBy)
+	p.UpdatedBy = grpc.UTF8(m.UpdatedBy)
 	p.CreatedAt = grpc.Timestamp(m.CreatedAt)
 	p.UpdatedAt = grpc.Timestamp(m.UpdatedAt)
-	p.Content = m.Content
+	p.Content = grpc.UTF8(m.Content)
 	if m.Links != nil {
 		p.Links = make([]*Link, len(m.Links))
 		for i, v := range m.Links {
@@ -127,8 +127,9 @@ func ItemToProto(m *record.Item) *Item {
 }
 
 // ItemFromProto decodes Item messages into values, nil into nil. A value a
-// field cannot hold, an integer out of its range or a string that is no JSON
-// number, is refused with InvalidArgument.
+// field cannot hold, an integer out of its range, a string that is no JSON
+// number, a time outside the years 1 to 9999, bytes that are no JSON
+// document or a number that is not finite, is refused with InvalidArgument.
 func ItemFromProto(p *Item) (*record.Item, error) {
 	if p == nil {
 		return nil, nil
@@ -138,8 +139,14 @@ func ItemFromProto(p *Item) (*record.Item, error) {
 	m.ID = p.GetId()
 	m.CreatedBy = p.GetCreatedBy()
 	m.UpdatedBy = p.GetUpdatedBy()
-	m.CreatedAt = grpc.Time(p.GetCreatedAt())
-	m.UpdatedAt = grpc.Time(p.GetUpdatedAt())
+	m.CreatedAt, err = grpc.Time("created_at", p.GetCreatedAt())
+	if err != nil {
+		return nil, err
+	}
+	m.UpdatedAt, err = grpc.Time("updated_at", p.GetUpdatedAt())
+	if err != nil {
+		return nil, err
+	}
 	m.Content = p.GetContent()
 	if p.GetLinks() != nil {
 		m.Links = make([]record.Link, len(p.GetLinks()))
@@ -163,8 +170,8 @@ func LinkToProto(m *record.Link) *Link {
 		return nil
 	}
 	p := new(Link)
-	p.Url = m.URL
-	p.Title = m.Title
+	p.Url = grpc.UTF8(m.URL)
+	p.Title = grpc.UTF8(m.Title)
 	return p
 }
 
@@ -210,8 +217,9 @@ func MergeRspToProto(m *record.MergeRsp) *MergeRsp {
 }
 
 // MergeRspFromProto decodes MergeRsp messages into values, nil into nil. A
-// value a field cannot hold, an integer out of its range or a string that is
-// no JSON number, is refused with InvalidArgument.
+// value a field cannot hold, an integer out of its range, a string that is
+// no JSON number, a time outside the years 1 to 9999, bytes that are no JSON
+// document or a number that is not finite, is refused with InvalidArgument.
 func MergeRspFromProto(p *MergeRsp) (*record.MergeRsp, error) {
 	if p == nil {
 		return nil, nil

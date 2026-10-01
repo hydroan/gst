@@ -106,26 +106,36 @@ func FeedToProto(m *model.Feed) *Feed {
 		return nil
 	}
 	p := new(Feed)
-	p.Id = m.ID
-	p.CreatedBy = m.CreatedBy
-	p.UpdatedBy = m.UpdatedBy
+	p.Id = grpc.UTF8(m.ID)
+	p.CreatedBy = grpc.UTF8(m.CreatedBy)
+	p.UpdatedBy = grpc.UTF8(m.UpdatedBy)
 	p.CreatedAt = grpc.Timestamp(m.CreatedAt)
 	p.UpdatedAt = grpc.Timestamp(m.UpdatedAt)
-	p.Topic = m.Topic
+	p.Topic = grpc.UTF8(m.Topic)
 	return p
 }
 
-// FeedFromProto decodes Feed messages into values, nil into nil.
+// FeedFromProto decodes Feed messages into values, nil into nil. A value a
+// field cannot hold, an integer out of its range, a string that is no JSON
+// number, a time outside the years 1 to 9999, bytes that are no JSON
+// document or a number that is not finite, is refused with InvalidArgument.
 func FeedFromProto(p *Feed) (*model.Feed, error) {
 	if p == nil {
 		return nil, nil
 	}
 	m := new(model.Feed)
+	var err error
 	m.ID = p.GetId()
 	m.CreatedBy = p.GetCreatedBy()
 	m.UpdatedBy = p.GetUpdatedBy()
-	m.CreatedAt = grpc.Time(p.GetCreatedAt())
-	m.UpdatedAt = grpc.Time(p.GetUpdatedAt())
+	m.CreatedAt, err = grpc.Time("created_at", p.GetCreatedAt())
+	if err != nil {
+		return nil, err
+	}
+	m.UpdatedAt, err = grpc.Time("updated_at", p.GetUpdatedAt())
+	if err != nil {
+		return nil, err
+	}
 	m.Topic = p.GetTopic()
 	return m, nil
 }
@@ -138,7 +148,7 @@ func FeedEventToProto(m *model.FeedEvent) *FeedEvent {
 	}
 	p := new(FeedEvent)
 	p.Seq = m.Seq
-	p.Body = m.Body
+	p.Body = grpc.UTF8(m.Body)
 	return p
 }
 
@@ -182,7 +192,7 @@ func FeedWatchReqToProto(m *model.FeedWatchReq) *FeedWatchReq {
 		return nil
 	}
 	p := new(FeedWatchReq)
-	p.Topic = m.Topic
+	p.Topic = grpc.UTF8(m.Topic)
 	return p
 }
 

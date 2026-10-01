@@ -223,13 +223,13 @@ func RecordToProto(m *model.Record) *Record {
 		return nil
 	}
 	p := new(Record)
-	p.Id = m.ID
-	p.CreatedBy = m.CreatedBy
-	p.UpdatedBy = m.UpdatedBy
+	p.Id = grpc.UTF8(m.ID)
+	p.CreatedBy = grpc.UTF8(m.CreatedBy)
+	p.UpdatedBy = grpc.UTF8(m.UpdatedBy)
 	p.CreatedAt = grpc.Timestamp(m.CreatedAt)
 	p.UpdatedAt = grpc.Timestamp(m.UpdatedAt)
-	p.Title = m.Title
-	p.Status = string(m.Status)
+	p.Title = grpc.UTF8(m.Title)
+	p.Status = grpc.UTF8(string(m.Status))
 	p.Summary = m.Summary
 	p.Tags = m.Tags
 	p.Labels = m.Labels
@@ -242,14 +242,15 @@ func RecordToProto(m *model.Record) *Record {
 	p.Due = grpc.Timestamp(m.Due)
 	p.Meta = RecordMetaToProto(&m.Meta)
 	p.Window = new(RecordWindow)
-	p.Window.From = m.Window.From
-	p.Window.To = m.Window.To
+	p.Window.From = grpc.UTF8(m.Window.From)
+	p.Window.To = grpc.UTF8(m.Window.To)
 	return p
 }
 
 // RecordFromProto decodes Record messages into values, nil into nil. A value
-// a field cannot hold, an integer out of its range or a string that is no
-// JSON number, is refused with InvalidArgument.
+// a field cannot hold, an integer out of its range, a string that is no JSON
+// number, a time outside the years 1 to 9999, bytes that are no JSON
+// document or a number that is not finite, is refused with InvalidArgument.
 func RecordFromProto(p *Record) (*model.Record, error) {
 	if p == nil {
 		return nil, nil
@@ -259,20 +260,35 @@ func RecordFromProto(p *Record) (*model.Record, error) {
 	m.ID = p.GetId()
 	m.CreatedBy = p.GetCreatedBy()
 	m.UpdatedBy = p.GetUpdatedBy()
-	m.CreatedAt = grpc.Time(p.GetCreatedAt())
-	m.UpdatedAt = grpc.Time(p.GetUpdatedAt())
+	m.CreatedAt, err = grpc.Time("created_at", p.GetCreatedAt())
+	if err != nil {
+		return nil, err
+	}
+	m.UpdatedAt, err = grpc.Time("updated_at", p.GetUpdatedAt())
+	if err != nil {
+		return nil, err
+	}
 	m.Title = p.GetTitle()
 	m.Status = model.RecordStatus(p.GetStatus())
 	m.Summary = p.Summary
 	m.Tags = p.GetTags()
 	m.Labels = p.GetLabels()
 	m.Count = int(p.GetCount())
-	m.Ratio = p.GetRatio()
+	m.Ratio, err = grpc.Finite[float64]("ratio", p.GetRatio())
+	if err != nil {
+		return nil, err
+	}
 	m.Enabled = p.GetEnabled()
 	m.Payload = p.GetPayload()
-	m.Raw = p.GetRaw()
+	m.Raw, err = grpc.Document("raw", p.GetRaw())
+	if err != nil {
+		return nil, err
+	}
 	m.Extra = grpc.Map(p.GetExtra())
-	m.Due = grpc.Time(p.GetDue())
+	m.Due, err = grpc.Time("due", p.GetDue())
+	if err != nil {
+		return nil, err
+	}
 	if v := p.GetMeta(); v != nil {
 		var x *model.RecordMeta
 		x, err = RecordMetaFromProto(v)
@@ -295,7 +311,7 @@ func RecordMetaToProto(m *model.RecordMeta) *RecordMeta {
 		return nil
 	}
 	p := new(RecordMeta)
-	p.Author = m.Author
+	p.Author = grpc.UTF8(m.Author)
 	p.Score = m.Score
 	return p
 }

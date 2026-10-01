@@ -678,6 +678,14 @@ func (g *generator) builtinFieldType(kind jsonshape.Builtin, n *types.Named, fil
 // which must be a scalar or a message, since protobuf has no repeated of
 // repeated or of map.
 func (g *generator) repeatedOf(elem types.Type, file *protoFile, parent *descriptorpb.DescriptorProto, key string, s jsonshape.Site) (fieldType, bool) {
+	// A nil element has no spelling in a repeated field: a pointer to a
+	// message arrives as an empty message, which the value's zero value
+	// stands for, where a pointer to a scalar would arrive as the scalar's
+	// zero value, nothing telling it from a value that was never set.
+	if pointsToScalar(elem) {
+		g.project.Report(s, "a slice of pointers to a scalar has no protobuf type, an element is never unset; use a slice of values")
+		return fieldType{}, false
+	}
 	ft, ok := g.fieldTypeOf(elem, file, parent, key, s)
 	if !ok {
 		return fieldType{}, false
@@ -691,9 +699,21 @@ func (g *generator) repeatedOf(elem types.Type, file *protoFile, parent *descrip
 	return ft, true
 }
 
+// pointsToScalar reports whether t is a pointer to a type over a scalar.
+func pointsToScalar(t types.Type) bool {
+	p, ok := types.Unalias(t).(*types.Pointer)
+	if !ok {
+		return false
+	}
+	_, scalar := types.Unalias(p.Elem()).Underlying().(*types.Basic)
+	return scalar
+}
+
 // mapOf maps a Go map: a JSON object of any values becomes
 // google.protobuf.Struct, any other map a protobuf map whose key is a string
-// or integer type and whose value is a scalar or a message.
+// or integer type, without marshal methods of its own, and whose value is a
+// scalar or a message, a pointer to a message included, whose nil values
+// arrive as empty messages.
 func (g *generator) mapOf(m *types.Map, file *protoFile, parent *descriptorpb.DescriptorProto, key string, s jsonshape.Site) (fieldType, bool) {
 	keyBasic, keyOK := types.Unalias(m.Key()).Underlying().(*types.Basic)
 	if keyOK && keyBasic.Info()&types.IsString != 0 {
@@ -706,9 +726,15 @@ func (g *generator) mapOf(m *types.Map, file *protoFile, parent *descriptorpb.De
 		g.project.Report(s, "map key type %s has no protobuf type; use a string or integer key type", m.Key())
 		return fieldType{}, false
 	}
+	// A key writing its own text keys the JSON object by that text, where
+	// the message keys by the value: the same check the TypeScript
+	// generator makes.
+	if g.project.CheckMapKey(m.Key(), s) {
+		return fieldType{}, false
+	}
 	keyKind, _ := scalarKind(keyBasic)
-	if _, pointer := types.Unalias(m.Elem()).(*types.Pointer); pointer {
-		g.project.Report(s, "a map of pointers has no protobuf type, a map value is never unset; use a map of values")
+	if pointsToScalar(m.Elem()) {
+		g.project.Report(s, "a map of pointers to a scalar has no protobuf type, a value is never unset; use a map of values")
 		return fieldType{}, false
 	}
 	value, ok := g.fieldTypeOf(m.Elem(), file, parent, key, s)

@@ -64,7 +64,7 @@ var fixedImportNames = map[string]string{
 // in scope, so a project package named like one, data or item, is imported
 // under an alias (see goImports.specs).
 var generatedLocalNames = []string{
-	"ctx", "req", "srv", "in", "m", "p", "x", "v", "i", "k", "e", "data", "err", "recvErr",
+	"ctx", "req", "srv", "in", "m", "p", "x", "v", "i", "k", "e", "s", "key", "day", "at", "data", "err", "recvErr",
 	"params", "payload", "result", "first", "msg", "rsp", "items", "item", "models", "masks", "stored", "total",
 }
 

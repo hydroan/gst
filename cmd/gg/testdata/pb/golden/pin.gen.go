@@ -71,19 +71,20 @@ func PinToProto(m *model.Pin) *Pin {
 		return nil
 	}
 	p := new(Pin)
-	p.Id = m.ID
-	p.CreatedBy = m.CreatedBy
-	p.UpdatedBy = m.UpdatedBy
+	p.Id = grpc.UTF8(m.ID)
+	p.CreatedBy = grpc.UTF8(m.CreatedBy)
+	p.UpdatedBy = grpc.UTF8(m.UpdatedBy)
 	p.CreatedAt = grpc.Timestamp(m.CreatedAt)
 	p.UpdatedAt = grpc.Timestamp(m.UpdatedAt)
-	p.Label = m.Label
+	p.Label = grpc.UTF8(m.Label)
 	p.Link = pb_record.LinkToProto(&m.Link)
 	return p
 }
 
 // PinFromProto decodes Pin messages into values, nil into nil. A value a
-// field cannot hold, an integer out of its range or a string that is no JSON
-// number, is refused with InvalidArgument.
+// field cannot hold, an integer out of its range, a string that is no JSON
+// number, a time outside the years 1 to 9999, bytes that are no JSON
+// document or a number that is not finite, is refused with InvalidArgument.
 func PinFromProto(p *Pin) (*model.Pin, error) {
 	if p == nil {
 		return nil, nil
@@ -93,8 +94,14 @@ func PinFromProto(p *Pin) (*model.Pin, error) {
 	m.ID = p.GetId()
 	m.CreatedBy = p.GetCreatedBy()
 	m.UpdatedBy = p.GetUpdatedBy()
-	m.CreatedAt = grpc.Time(p.GetCreatedAt())
-	m.UpdatedAt = grpc.Time(p.GetUpdatedAt())
+	m.CreatedAt, err = grpc.Time("created_at", p.GetCreatedAt())
+	if err != nil {
+		return nil, err
+	}
+	m.UpdatedAt, err = grpc.Time("updated_at", p.GetUpdatedAt())
+	if err != nil {
+		return nil, err
+	}
 	m.Label = p.GetLabel()
 	if v := p.GetLink(); v != nil {
 		var x *model_record.Link

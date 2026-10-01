@@ -125,6 +125,22 @@ message Shape {
   // Cells is a map of unnamed structs, each decoded whole before it is
   // put in.
   map<string, ShapeCells> cells = 48;
+
+  // ByRank is keyed by an integer narrower than the int32 the message
+  // carries, read back through grpc.Narrow like a field.
+  map<int32, ShapePoint> by_rank = 49;
+
+  // Price is an optional JSON number, whose message field may be set to
+  // the empty string, which is no number.
+  optional string price = 50;
+
+  // Stamps holds times in a repeated field, where the zero time travels
+  // as 0001-01-01 and comes back as the zero time.
+  repeated google.protobuf.Timestamp stamps = 51;
+
+  // Owners is a map of pointers to structs, whose nil values travel as
+  // empty messages.
+  map<string, ShapeOwner> owners = 52;
 }
 
 // ShapeSpans is the message of the spans field of Shape.

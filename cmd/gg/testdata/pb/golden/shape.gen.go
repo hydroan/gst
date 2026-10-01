@@ -59,9 +59,9 @@ func ShapeToProto(m *model.Shape) *Shape {
 		return nil
 	}
 	p := new(Shape)
-	p.Id = m.ID
-	p.CreatedBy = m.CreatedBy
-	p.UpdatedBy = m.UpdatedBy
+	p.Id = grpc.UTF8(m.ID)
+	p.CreatedBy = grpc.UTF8(m.CreatedBy)
+	p.UpdatedBy = grpc.UTF8(m.UpdatedBy)
 	p.CreatedAt = grpc.Timestamp(m.CreatedAt)
 	p.UpdatedAt = grpc.Timestamp(m.UpdatedAt)
 	p.Date = grpc.Timestamp(time.Time(m.Date))
@@ -91,7 +91,7 @@ func ShapeToProto(m *model.Shape) *Shape {
 	if m.Scores != nil {
 		p.Scores = make(map[string]int64, len(m.Scores))
 		for k, v := range m.Scores {
-			p.Scores[k] = int64(v)
+			p.Scores[grpc.UTF8(k)] = int64(v)
 		}
 	}
 	if m.ByCode != nil {
@@ -110,10 +110,10 @@ func ShapeToProto(m *model.Shape) *Shape {
 	}
 	if m.Note != nil {
 		p.Note = new(ShapeNote)
-		p.Note.Text = m.Note.Text
+		p.Note.Text = grpc.UTF8(m.Note.Text)
 	}
 	if m.When != nil {
-		p.When = grpc.Timestamp(*m.When)
+		p.When = timestamppb.New(*m.When)
 	}
 	p.Any = grpc.Value(m.Any)
 	p.Blob = m.Blob
@@ -152,8 +152,8 @@ func ShapeToProto(m *model.Shape) *Shape {
 	if m.Meta != nil {
 		p.Meta = grpc.Struct(*m.Meta)
 	}
-	p.Name = m.Name
-	p.MetaName = m.ShapeMeta.Name
+	p.Name = grpc.UTF8(m.Name)
+	p.MetaName = grpc.UTF8(m.ShapeMeta.Name)
 	p.Frame = WindowToProto(&m.Frame)
 	p.Window = new(ShapeWindow)
 	p.Window.Width = m.Window.Width
@@ -164,16 +164,39 @@ func ShapeToProto(m *model.Shape) *Shape {
 	if m.Cells != nil {
 		p.Cells = make(map[string]*ShapeCells, len(m.Cells))
 		for k, v := range m.Cells {
-			p.Cells[k] = new(ShapeCells)
-			p.Cells[k].Count = v.Count
+			p.Cells[grpc.UTF8(k)] = new(ShapeCells)
+			p.Cells[grpc.UTF8(k)].Count = v.Count
+		}
+	}
+	if m.ByRank != nil {
+		p.ByRank = make(map[int32]*ShapePoint, len(m.ByRank))
+		for k, v := range m.ByRank {
+			p.ByRank[int32(k)] = ShapePointToProto(&v)
+		}
+	}
+	if m.Price != nil {
+		x := string(*m.Price)
+		p.Price = &x
+	}
+	if m.Stamps != nil {
+		p.Stamps = make([]*timestamppb.Timestamp, len(m.Stamps))
+		for i, v := range m.Stamps {
+			p.Stamps[i] = timestamppb.New(v)
+		}
+	}
+	if m.Owners != nil {
+		p.Owners = make(map[string]*ShapeOwner, len(m.Owners))
+		for k, v := range m.Owners {
+			p.Owners[grpc.UTF8(k)] = ShapeOwnerToProto(v)
 		}
 	}
 	return p
 }
 
 // ShapeFromProto decodes Shape messages into values, nil into nil. A value a
-// field cannot hold, an integer out of its range or a string that is no JSON
-// number, is refused with InvalidArgument.
+// field cannot hold, an integer out of its range, a string that is no JSON
+// number, a time outside the years 1 to 9999, bytes that are no JSON
+// document or a number that is not finite, is refused with InvalidArgument.
 func ShapeFromProto(p *Shape) (*model.Shape, error) {
 	if p == nil {
 		return nil, nil
@@ -183,11 +206,25 @@ func ShapeFromProto(p *Shape) (*model.Shape, error) {
 	m.ID = p.GetId()
 	m.CreatedBy = p.GetCreatedBy()
 	m.UpdatedBy = p.GetUpdatedBy()
-	m.CreatedAt = grpc.Time(p.GetCreatedAt())
-	m.UpdatedAt = grpc.Time(p.GetUpdatedAt())
-	m.Date = datatypes.Date(grpc.Time(p.GetDate()))
+	m.CreatedAt, err = grpc.Time("created_at", p.GetCreatedAt())
+	if err != nil {
+		return nil, err
+	}
+	m.UpdatedAt, err = grpc.Time("updated_at", p.GetUpdatedAt())
+	if err != nil {
+		return nil, err
+	}
+	var day time.Time
+	day, err = grpc.Time("date", p.GetDate())
+	if err != nil {
+		return nil, err
+	}
+	m.Date = datatypes.Date(day)
 	m.Clock = datatypes.Time(p.GetClock().AsDuration())
-	m.Doc = p.GetDoc()
+	m.Doc, err = grpc.Document("doc", p.GetDoc())
+	if err != nil {
+		return nil, err
+	}
 	m.Attrs = grpc.Map(p.GetAttrs())
 	var data model.ShapeOptions
 	if v := p.GetOptions(); v != nil {
@@ -207,9 +244,11 @@ func ShapeFromProto(p *Shape) (*model.Shape, error) {
 		}
 		m.Audit = *x
 	}
-	m.Amount, err = grpc.Number("amount", p.GetAmount())
-	if err != nil {
-		return nil, err
+	if s := p.GetAmount(); s != "" {
+		m.Amount, err = grpc.Number("amount", s)
+		if err != nil {
+			return nil, err
+		}
 	}
 	m.Level = model.ShapeLevel(p.GetLevel())
 	if p.Score != nil {
@@ -270,7 +309,11 @@ func ShapeFromProto(p *Shape) (*model.Shape, error) {
 		m.Note.Text = v.GetText()
 	}
 	if p.GetWhen() != nil {
-		x := grpc.Time(p.GetWhen())
+		var x time.Time
+		x, err = grpc.Time("when", p.GetWhen())
+		if err != nil {
+			return nil, err
+		}
 		m.When = &x
 	}
 	m.Any = p.GetAny().AsInterface()
@@ -322,12 +365,18 @@ func ShapeFromProto(p *Shape) (*model.Shape, error) {
 	}
 	if p.RawDoc != nil {
 		var x json.RawMessage
-		x = p.RawDoc
+		x, err = grpc.Document("raw_doc", p.RawDoc)
+		if err != nil {
+			return nil, err
+		}
 		m.RawDoc = &x
 	}
 	if p.Extra != nil {
 		var x datatypes.JSON
-		x = p.Extra
+		x, err = grpc.Document("extra", p.Extra)
+		if err != nil {
+			return nil, err
+		}
 		m.Extra = &x
 	}
 	if p.GetMeta() != nil {
@@ -380,6 +429,50 @@ func ShapeFromProto(p *Shape) (*model.Shape, error) {
 			m.Cells[k] = e
 		}
 	}
+	if p.GetByRank() != nil {
+		m.ByRank = make(map[int8]model.ShapePoint, len(p.GetByRank()))
+		for k, v := range p.GetByRank() {
+			var key int8
+			key, err = grpc.Narrow[int8]("by_rank", k)
+			if err != nil {
+				return nil, err
+			}
+			if v != nil {
+				var x *model.ShapePoint
+				x, err = ShapePointFromProto(v)
+				if err != nil {
+					return nil, err
+				}
+				m.ByRank[key] = *x
+			}
+		}
+	}
+	if p.Price != nil {
+		var x json.Number
+		x, err = grpc.Number("price", *p.Price)
+		if err != nil {
+			return nil, err
+		}
+		m.Price = &x
+	}
+	if p.GetStamps() != nil {
+		m.Stamps = make([]time.Time, len(p.GetStamps()))
+		for i, v := range p.GetStamps() {
+			m.Stamps[i], err = grpc.Time("stamps", v)
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	if p.GetOwners() != nil {
+		m.Owners = make(map[string]*model.ShapeOwner, len(p.GetOwners()))
+		for k, v := range p.GetOwners() {
+			m.Owners[k], err = ShapeOwnerFromProto(v)
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
 	return m, nil
 }
 
@@ -390,7 +483,7 @@ func ShapeOptionsToProto(m *model.ShapeOptions) *ShapeOptions {
 		return nil
 	}
 	p := new(ShapeOptions)
-	p.Color = m.Color
+	p.Color = grpc.UTF8(m.Color)
 	return p
 }
 
@@ -419,13 +512,22 @@ func ShapeAuditToProto(m *model.ShapeAudit) *ShapeAudit {
 }
 
 // ShapeAuditFromProto decodes ShapeAudit messages into values, nil into nil.
+// A value a field cannot hold, an integer out of its range, a string that is
+// no JSON number, a time outside the years 1 to 9999, bytes that are no JSON
+// document or a number that is not finite, is refused with InvalidArgument.
 func ShapeAuditFromProto(p *ShapeAudit) (*model.ShapeAudit, error) {
 	if p == nil {
 		return nil, nil
 	}
 	m := new(model.ShapeAudit)
+	var err error
 	if v := p.GetRemoved(); v != nil {
-		m.Removed = gorm.DeletedAt{Time: v.AsTime(), Valid: true}
+		var at time.Time
+		at, err = grpc.Time("removed", v)
+		if err != nil {
+			return nil, err
+		}
+		m.Removed = gorm.DeletedAt{Time: at, Valid: true}
 	}
 	return m, nil
 }
@@ -437,7 +539,7 @@ func ShapeOwnerToProto(m *model.ShapeOwner) *ShapeOwner {
 		return nil
 	}
 	p := new(ShapeOwner)
-	p.Name = m.Name
+	p.Name = grpc.UTF8(m.Name)
 	return p
 }
 

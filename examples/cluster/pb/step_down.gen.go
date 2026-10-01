@@ -39,7 +39,7 @@ func StepDownRspToProto(m *model.StepDownRsp) *StepDownRsp {
 		return nil
 	}
 	p := new(StepDownRsp)
-	p.Replica = m.Replica
+	p.Replica = grpc.UTF8(m.Replica)
 	p.Asked = m.Asked
 	return p
 }

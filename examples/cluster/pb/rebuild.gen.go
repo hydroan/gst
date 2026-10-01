@@ -65,7 +65,7 @@ func RebuildRspToProto(m *model.RebuildRsp) *RebuildRsp {
 		return nil
 	}
 	p := new(RebuildRsp)
-	p.Replica = m.Replica
+	p.Replica = grpc.UTF8(m.Replica)
 	p.Seconds = int64(m.Seconds)
 	return p
 }

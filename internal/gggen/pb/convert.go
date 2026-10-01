@@ -337,24 +337,24 @@ func typeKey(t types.Type) string {
 
 // toProto returns the statements encoding src, a Go value of type t, into
 // dst, a message field of protobuf type ft. A value the field holds as it
-// is, a string, a []string, is assigned; one of another type, an int for
-// an int64, a string enum for a string, is converted; a time becomes a
-// Timestamp through grpc.Timestamp, a duration a Duration, any value a
-// Value through grpc.Value, a JSON object a Struct through grpc.Struct, and
-// raw JSON travels as its bytes; a project struct converts through its
+// is, a []string, is assigned; one of another type, an int for an int64,
+// a string enum for a string, is converted; a string is written through
+// grpc.UTF8; a time becomes a Timestamp through grpc.Timestamp, a duration
+// a Duration, any value a Value through grpc.Value, a JSON object a Struct
+// through grpc.Struct, and raw JSON travels as its bytes; a project struct converts through its
 // XToProto, an unnamed one field by field into its own message; a slice
 // or a map of any of these converts element by element, and a pointer to
 // one converts when it is not nil.
 //
 // The fields of the Record model of the golden fixture encode as
 //
-//	p.Id = m.ID
-//	p.CreatedBy = m.CreatedBy
-//	p.UpdatedBy = m.UpdatedBy
+//	p.Id = grpc.UTF8(m.ID)
+//	p.CreatedBy = grpc.UTF8(m.CreatedBy)
+//	p.UpdatedBy = grpc.UTF8(m.UpdatedBy)
 //	p.CreatedAt = grpc.Timestamp(m.CreatedAt)
 //	p.UpdatedAt = grpc.Timestamp(m.UpdatedAt)
-//	p.Title = m.Title
-//	p.Status = string(m.Status)
+//	p.Title = grpc.UTF8(m.Title)
+//	p.Status = grpc.UTF8(string(m.Status))
 //	p.Summary = m.Summary
 //	p.Tags = m.Tags
 //	p.Labels = m.Labels
@@ -420,7 +420,7 @@ func typeKey(t types.Type) string {
 //			p.Spans[i].To = int64(v.To)
 //		}
 //	}
-func (w *fileWriter) toProto(dst, src ast.Expr, t types.Type, ft fieldType) []ast.Stmt {
+func (w *fileWriter) toProto(dst, src ast.Expr, t types.Type, ft fieldType, inner bool) []ast.Stmt {
 	t = types.Unalias(t)
 	if p, ok := t.(*types.Pointer); ok {
 		elem := types.Unalias(p.Elem())
@@ -446,14 +446,14 @@ func (w *fileWriter) toProto(dst, src ast.Expr, t types.Type, ft fieldType) []as
 		}
 		// A pointer to a time, a JSON value, a slice, an array or a map:
 		// what it points to encodes when there is anything.
-		return []ast.Stmt{ifNotNil(src, w.toProto(dst, star(src), elem, ft)...)}
+		return []ast.Stmt{ifNotNil(src, w.toProto(dst, star(src), elem, ft, true)...)}
 	}
 
 	switch typeKey(t) {
 	case "time.Time":
-		return []ast.Stmt{assign(dst, call(w.grpc("Timestamp"), src))}
+		return []ast.Stmt{assign(dst, w.timestampOf(src, inner))}
 	case "gorm.io/datatypes.Date":
-		return []ast.Stmt{assign(dst, call(w.grpc("Timestamp"), call(sel(w.out.imports.fixedRef(importPathTime), "Time"), src)))}
+		return []ast.Stmt{assign(dst, w.timestampOf(call(sel(w.out.imports.fixedRef(importPathTime), "Time"), src), inner))}
 	case "gorm.io/datatypes.Time":
 		return []ast.Stmt{assign(dst, call(sel(w.out.imports.fixedRef(importPathDurationPB), "New"), call(sel(w.out.imports.fixedRef(importPathTime), "Duration"), src)))}
 	case "gorm.io/gorm.DeletedAt":
@@ -468,7 +468,7 @@ func (w *fileWriter) toProto(dst, src ast.Expr, t types.Type, ft fieldType) []as
 				return []ast.Stmt{assign(dst, call(w.grpc("Struct"), src))}
 			case jsonshape.BuiltinWrapper:
 				data := w.funcTemp("data")
-				return append([]ast.Stmt{define([]string{data}, call(sel(src, "Data")))}, w.toProto(dst, ident(data), n.TypeArgs().At(0), ft)...)
+				return append([]ast.Stmt{define([]string{data}, call(sel(src, "Data")))}, w.toProto(dst, ident(data), n.TypeArgs().At(0), ft, inner)...)
 			}
 		}
 		if msg := w.namedMessage(n); msg != nil {
@@ -478,7 +478,13 @@ func (w *fileWriter) toProto(dst, src ast.Expr, t types.Type, ft fieldType) []as
 
 	switch u := t.Underlying().(type) {
 	case *types.Basic:
-		return []ast.Stmt{assign(dst, w.encoded(t, ft, src))}
+		// A string is written through UTF8, a message carrying valid UTF-8
+		// alone where a JSON body replaces what is not.
+		value := w.encoded(t, ft, src)
+		if u.Info()&types.IsString != 0 {
+			value = call(w.grpc("UTF8"), value)
+		}
+		return []ast.Stmt{assign(dst, value)}
 	case *types.Slice:
 		if ft.kind == descriptorpb.FieldDescriptorProto_TYPE_BYTES || assignable(t, ft, false) {
 			return []ast.Stmt{assign(dst, src)}
@@ -486,13 +492,13 @@ func (w *fileWriter) toProto(dst, src ast.Expr, t types.Type, ft fieldType) []as
 		i, v := w.temp("i"), w.temp("v")
 		return []ast.Stmt{ifNotNil(src,
 			assign(dst, makeCall(w.protoType(ft, false), lenCall(src))),
-			rangeStmt(i, v, src, w.toProto(index(dst, ident(i)), ident(v), u.Elem(), elementOf(ft))...),
+			rangeStmt(i, v, src, w.toProto(index(dst, ident(i)), ident(v), u.Elem(), elementOf(ft), true)...),
 		)}
 	case *types.Array:
 		i, v := w.temp("i"), w.temp("v")
 		return []ast.Stmt{
 			assign(dst, makeCall(w.protoType(ft, false), lenCall(src))),
-			rangeStmt(i, v, src, w.toProto(index(dst, ident(i)), ident(v), u.Elem(), elementOf(ft))...),
+			rangeStmt(i, v, src, w.toProto(index(dst, ident(i)), ident(v), u.Elem(), elementOf(ft), true)...),
 		}
 	case *types.Map:
 		if ft.typeName == wellKnownStruct {
@@ -506,9 +512,12 @@ func (w *fileWriter) toProto(dst, src ast.Expr, t types.Type, ft fieldType) []as
 		if !types.Identical(types.Unalias(u.Key()), scalarType(ft.mapKey)) {
 			key = call(ident(scalarGoType(ft.mapKey)), ident(k))
 		}
+		if kb, ok := types.Unalias(u.Key()).Underlying().(*types.Basic); ok && kb.Info()&types.IsString != 0 {
+			key = call(w.grpc("UTF8"), key)
+		}
 		return []ast.Stmt{ifNotNil(src,
 			assign(dst, makeCall(w.protoType(ft, false), lenCall(src))),
-			rangeStmt(k, v, src, w.toProto(index(dst, key), ident(v), u.Elem(), *ft.mapValue)...),
+			rangeStmt(k, v, src, w.toProto(index(dst, key), ident(v), u.Elem(), *ft.mapValue, true)...),
 		)}
 	case *types.Interface:
 		return []ast.Stmt{assign(dst, call(w.grpc("Value"), src))}
@@ -516,6 +525,19 @@ func (w *fileWriter) toProto(dst, src ast.Expr, t types.Type, ft fieldType) []as
 		return append([]ast.Stmt{assign(dst, newCall(ident(ft.nested.goName)))}, w.structToProto(dst, src, ft.nested)...)
 	}
 	panic(fmt.Sprintf("pb: no encoding for a %s", t))
+}
+
+// timestampOf returns the Timestamp of the time src: grpc.Timestamp, which
+// leaves the zero time unset, for a field of its own, and timestamppb.New,
+// which writes the zero time as the Timestamp of 0001-01-01, for a value an
+// unset message would stand for something else in the place of, inner: an
+// element, a map value or what an optional field points to. Either way the
+// zero time comes back as the zero time.
+func (w *fileWriter) timestampOf(src ast.Expr, inner bool) ast.Expr {
+	if inner {
+		return call(sel(w.out.imports.fixedRef(importPathTimestampPB), "New"), src)
+	}
+	return call(w.grpc("Timestamp"), src)
 }
 
 // encoded returns src, a scalar Go value of type t, as a message field or
@@ -548,7 +570,7 @@ func (w *fileWriter) structToProto(dst, src ast.Expr, conv *conversion) []ast.St
 // fieldToProto encodes the field fc of the struct src into the field of its
 // message dst.
 func (w *fileWriter) fieldToProto(dst, src ast.Expr, fc fieldConversion) []ast.Stmt {
-	return w.toProto(sel(dst, fc.goName), selPath(src, fc.path), fc.field.Var.Type(), fc.ft)
+	return w.toProto(sel(dst, fc.goName), selPath(src, fc.path), fc.field.Var.Type(), fc.ft, false)
 }
 
 // selPath selects the field at path from x, m.Audit.Name for Audit, Name.
@@ -564,29 +586,45 @@ func selPath(x ast.Expr, path []string) ast.Expr {
 // type t: the mirror of toProto. A message is read through its getters, so
 // an unset one decodes into the zero value; the pointer of an optional
 // scalar is taken as it is. A value the Go type may not hold, a narrow
-// integer or a JSON number (see reader), and a message decoded through a
-// conversion function are read as statements that may refuse it (see
-// refusing), the field's name in the refusal.
+// integer, a floating-point number or a JSON number (see reader), a time,
+// a JSON document, and a message decoded through a conversion function
+// are read as statements that may refuse it (see refusing), the field's
+// name in the refusal.
 //
 // The fields of the Record model of the golden fixture decode as
 //
 //	m.ID = p.GetId()
 //	m.CreatedBy = p.GetCreatedBy()
 //	m.UpdatedBy = p.GetUpdatedBy()
-//	m.CreatedAt = grpc.Time(p.GetCreatedAt())
-//	m.UpdatedAt = grpc.Time(p.GetUpdatedAt())
+//	m.CreatedAt, err = grpc.Time("created_at", p.GetCreatedAt())
+//	if err != nil {
+//		return nil, err
+//	}
+//	m.UpdatedAt, err = grpc.Time("updated_at", p.GetUpdatedAt())
+//	if err != nil {
+//		return nil, err
+//	}
 //	m.Title = p.GetTitle()
 //	m.Status = model.RecordStatus(p.GetStatus())
 //	m.Summary = p.Summary
 //	m.Tags = p.GetTags()
 //	m.Labels = p.GetLabels()
 //	m.Count = int(p.GetCount())
-//	m.Ratio = p.GetRatio()
+//	m.Ratio, err = grpc.Finite[float64]("ratio", p.GetRatio())
+//	if err != nil {
+//		return nil, err
+//	}
 //	m.Enabled = p.GetEnabled()
 //	m.Payload = p.GetPayload()
-//	m.Raw = p.GetRaw()
+//	m.Raw, err = grpc.Document("raw", p.GetRaw())
+//	if err != nil {
+//		return nil, err
+//	}
 //	m.Extra = grpc.Map(p.GetExtra())
-//	m.Due = grpc.Time(p.GetDue())
+//	m.Due, err = grpc.Time("due", p.GetDue())
+//	if err != nil {
+//		return nil, err
+//	}
 //	if v := p.GetMeta(); v != nil {
 //		var x *model.RecordMeta
 //		x, err = RecordMetaFromProto(v)
@@ -719,20 +757,26 @@ func (w *fileWriter) fromProto(dst, src ast.Expr, t types.Type, ft fieldType, na
 
 	switch typeKey(t) {
 	case "time.Time":
-		return []ast.Stmt{assign(dst, call(w.grpc("Time"), src))}
+		return w.refusing(dst, call(w.grpc("Time"), strLit(name), src))
 	case "gorm.io/datatypes.Date":
-		return []ast.Stmt{assign(dst, call(sel(w.out.imports.fixedRef(importPathDatatypes), "Date"), call(w.grpc("Time"), src)))}
+		day := w.temp("day")
+		read := append([]ast.Stmt{w.varDeclExpr(day, w.timeType())}, w.refusing(ident(day), call(w.grpc("Time"), strLit(name), src))...)
+		return append(read, assign(dst, call(sel(w.out.imports.fixedRef(importPathDatatypes), "Date"), ident(day))))
 	case "gorm.io/datatypes.Time":
 		return []ast.Stmt{assign(dst, call(sel(w.out.imports.fixedRef(importPathDatatypes), "Time"), call(sel(src, "AsDuration"))))}
 	case "gorm.io/gorm.DeletedAt":
 		return []ast.Stmt{w.guarded(src, func(v ast.Expr) []ast.Stmt {
-			deleted := compositeLit(sel(w.out.imports.fixedRef(importPathGorm), "DeletedAt"), keyValue("Time", call(sel(v, "AsTime"))), keyValue("Valid", ident("true")))
-			return []ast.Stmt{assign(dst, deleted)}
+			at := w.temp("at")
+			deleted := compositeLit(sel(w.out.imports.fixedRef(importPathGorm), "DeletedAt"), keyValue("Time", ident(at)), keyValue("Valid", ident("true")))
+			read := append([]ast.Stmt{w.varDeclExpr(at, w.timeType())}, w.refusing(ident(at), call(w.grpc("Time"), strLit(name), v))...)
+			return append(read, assign(dst, deleted))
 		})}
 	}
 	if n, ok := t.(*types.Named); ok {
 		if kind, builtin := jsonshape.BuiltinOf(n); builtin {
 			switch kind {
+			case jsonshape.BuiltinAny:
+				return w.refusing(dst, call(w.grpc("Document"), strLit(name), src))
 			case jsonshape.BuiltinObject:
 				return []ast.Stmt{assign(dst, call(w.grpc("Map"), src))}
 			case jsonshape.BuiltinWrapper:
@@ -754,6 +798,14 @@ func (w *fileWriter) fromProto(dst, src ast.Expr, t types.Type, ft fieldType, na
 	switch u := t.Underlying().(type) {
 	case *types.Basic:
 		if read, ok := w.reader(declared, name, src); ok {
+			if typeKey(t) == "encoding/json.Number" {
+				// The empty string is the field unset, read as it is; any
+				// other is read through Number, which refuses what is no
+				// number, the empty string among them.
+				s := w.temp("s")
+				read, _ = w.reader(declared, name, ident(s))
+				return []ast.Stmt{ifStmt(define([]string{s}, src), &ast.BinaryExpr{X: ident(s), Op: token.NEQ, Y: strLit("")}, w.refusing(dst, read)...)}
+			}
 			return w.refusing(dst, read)
 		}
 		return []ast.Stmt{assign(dst, w.decoded(declared, ft, src))}
@@ -779,7 +831,14 @@ func (w *fileWriter) fromProto(dst, src ast.Expr, t types.Type, ft fieldType, na
 		}
 		k, v := w.temp("k"), w.temp("v")
 		key := ast.Expr(ident(k))
-		if !types.Identical(types.Unalias(u.Key()), scalarType(ft.mapKey)) {
+		var body []ast.Stmt
+		if read, ok := w.reader(u.Key(), name, ident(k)); ok {
+			// A key narrower than the message's is read through Narrow,
+			// like a field, two keys folding into one otherwise.
+			narrowed := w.temp("key")
+			body = append([]ast.Stmt{w.varDecl(narrowed, u.Key())}, w.refusing(ident(narrowed), read)...)
+			key = ident(narrowed)
+		} else if !types.Identical(types.Unalias(u.Key()), scalarType(ft.mapKey)) {
 			key = converted(w.goType(u.Key()), ident(k))
 		}
 		value := w.fromProto(index(dst, key), ident(v), u.Elem(), *ft.mapValue, name)
@@ -792,7 +851,7 @@ func (w *fileWriter) fromProto(dst, src ast.Expr, t types.Type, ft fieldType, na
 		}
 		return []ast.Stmt{ifNotNil(src,
 			assign(dst, makeCall(w.goType(declared), lenCall(src))),
-			rangeStmt(k, v, src, value...),
+			rangeStmt(k, v, src, append(body, value...)...),
 		)}
 	case *types.Interface:
 		return []ast.Stmt{assign(dst, call(sel(src, "AsInterface")))}
@@ -830,7 +889,17 @@ func (w *fileWriter) declared(name string, t types.Type, stmts []ast.Stmt) []ast
 
 // varDecl declares the variable name of type t, var x T.
 func (w *fileWriter) varDecl(name string, t types.Type) ast.Stmt {
-	return &ast.DeclStmt{Decl: &ast.GenDecl{Tok: token.VAR, Specs: []ast.Spec{&ast.ValueSpec{Names: []*ast.Ident{ident(name)}, Type: w.goType(t)}}}}
+	return w.varDeclExpr(name, w.goType(t))
+}
+
+// varDeclExpr declares the variable name of the type typ spells.
+func (w *fileWriter) varDeclExpr(name string, typ ast.Expr) ast.Stmt {
+	return &ast.DeclStmt{Decl: &ast.GenDecl{Tok: token.VAR, Specs: []ast.Spec{&ast.ValueSpec{Names: []*ast.Ident{ident(name)}, Type: typ}}}}
+}
+
+// timeType spells time.Time, importing the package.
+func (w *fileWriter) timeType() ast.Expr {
+	return sel(w.out.imports.fixedRef(importPathTime), "Time")
 }
 
 // decoded returns src, the scalar value of a message field or element of
@@ -844,12 +913,13 @@ func (w *fileWriter) decoded(t types.Type, ft fieldType, src ast.Expr) ast.Expr 
 }
 
 // reader returns the call a FromProto reads src through when the Go type t
-// of the field name is narrower than what its message field carries, and
-// false when the value is read as it is: grpc.Narrow for an int8, int16,
-// uint8 or uint16, or a type over one, read from an int32 or uint32, and
-// grpc.Number for a json.Number read from a string. Both refuse what t
-// cannot hold, which is why the reading is a statement of its own (see
-// refusing) and not an expression.
+// of the field name is narrower than what its message field carries, or
+// than what a JSON body carries, and false when the value is read as it
+// is: grpc.Narrow for an int8, int16, uint8 or uint16, or a type over one,
+// read from an int32 or uint32, grpc.Finite for a float32 or float64, or
+// a type over one, and grpc.Number for a json.Number read from a string.
+// All refuse what t cannot hold, which is why the reading is a statement
+// of its own (see refusing) and not an expression.
 func (w *fileWriter) reader(t types.Type, name string, src ast.Expr) (ast.Expr, bool) {
 	u := types.Unalias(t)
 	if typeKey(u) == "encoding/json.Number" {
@@ -859,6 +929,8 @@ func (w *fileWriter) reader(t types.Type, name string, src ast.Expr) (ast.Expr, 
 		switch b.Kind() {
 		case types.Int8, types.Int16, types.Uint8, types.Uint16:
 			return call(&ast.IndexExpr{X: w.grpc("Narrow"), Index: w.goType(t)}, strLit(name), src), true
+		case types.Float32, types.Float64:
+			return call(&ast.IndexExpr{X: w.grpc("Finite"), Index: w.goType(t)}, strLit(name), src), true
 		}
 	}
 	return nil, false
@@ -913,8 +985,8 @@ func (w *fileWriter) fieldFromProto(dst, src ast.Expr, fc fieldConversion) []ast
 //			return nil
 //		}
 //		p := new(Link)
-//		p.Url = m.URL
-//		p.Title = m.Title
+//		p.Url = grpc.UTF8(m.URL)
+//		p.Title = grpc.UTF8(m.Title)
 //		return p
 //	}
 //
@@ -967,7 +1039,7 @@ func (w *fileWriter) conversionFuncs(msg *message) {
 		// err is declared once, for every value read through a helper or a
 		// conversion function that may refuse it (see refusing).
 		body = append(body, &ast.DeclStmt{Decl: &ast.GenDecl{Tok: token.VAR, Specs: []ast.Spec{&ast.ValueSpec{Names: []*ast.Ident{ident("err")}, Type: ident("error")}}}})
-		doc += " A value a field cannot hold, an integer out of its range or a string that is no JSON number, is refused with InvalidArgument."
+		doc += " A value a field cannot hold, an integer out of its range, a string that is no JSON number, a time outside the years 1 to 9999, bytes that are no JSON document or a number that is not finite, is refused with InvalidArgument."
 	}
 	body = append(body, fields...)
 	body = append(body, returns(ident("m"), ident("nil")))

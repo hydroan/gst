@@ -5,8 +5,10 @@ package pb
 import (
 	"cluster/model"
 	"context"
+	"time"
 
 	"github.com/hydroan/gst/grpc"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 // runService serves the rpcs of the RunService service through the actions
@@ -50,36 +52,50 @@ func RunToProto(m *model.Run) *Run {
 		return nil
 	}
 	p := new(Run)
-	p.Id = m.ID
-	p.CreatedBy = m.CreatedBy
-	p.UpdatedBy = m.UpdatedBy
+	p.Id = grpc.UTF8(m.ID)
+	p.CreatedBy = grpc.UTF8(m.CreatedBy)
+	p.UpdatedBy = grpc.UTF8(m.UpdatedBy)
 	p.CreatedAt = grpc.Timestamp(m.CreatedAt)
 	p.UpdatedAt = grpc.Timestamp(m.UpdatedAt)
-	p.Kind = m.Kind
-	p.Name = m.Name
-	p.Replica = m.Replica
+	p.Kind = grpc.UTF8(m.Kind)
+	p.Name = grpc.UTF8(m.Name)
+	p.Replica = grpc.UTF8(m.Replica)
 	if m.EndedAt != nil {
-		p.EndedAt = grpc.Timestamp(*m.EndedAt)
+		p.EndedAt = timestamppb.New(*m.EndedAt)
 	}
 	return p
 }
 
-// RunFromProto decodes Run messages into values, nil into nil.
+// RunFromProto decodes Run messages into values, nil into nil. A value a
+// field cannot hold, an integer out of its range, a string that is no JSON
+// number, a time outside the years 1 to 9999, bytes that are no JSON
+// document or a number that is not finite, is refused with InvalidArgument.
 func RunFromProto(p *Run) (*model.Run, error) {
 	if p == nil {
 		return nil, nil
 	}
 	m := new(model.Run)
+	var err error
 	m.ID = p.GetId()
 	m.CreatedBy = p.GetCreatedBy()
 	m.UpdatedBy = p.GetUpdatedBy()
-	m.CreatedAt = grpc.Time(p.GetCreatedAt())
-	m.UpdatedAt = grpc.Time(p.GetUpdatedAt())
+	m.CreatedAt, err = grpc.Time("created_at", p.GetCreatedAt())
+	if err != nil {
+		return nil, err
+	}
+	m.UpdatedAt, err = grpc.Time("updated_at", p.GetUpdatedAt())
+	if err != nil {
+		return nil, err
+	}
 	m.Kind = p.GetKind()
 	m.Name = p.GetName()
 	m.Replica = p.GetReplica()
 	if p.GetEndedAt() != nil {
-		x := grpc.Time(p.GetEndedAt())
+		var x time.Time
+		x, err = grpc.Time("ended_at", p.GetEndedAt())
+		if err != nil {
+			return nil, err
+		}
 		m.EndedAt = &x
 	}
 	return m, nil

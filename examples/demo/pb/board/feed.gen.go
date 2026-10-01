@@ -74,7 +74,7 @@ func FeedEventToProto(m *board.FeedEvent) *FeedEvent {
 	}
 	p := new(FeedEvent)
 	p.Seq = m.Seq
-	p.Body = m.Body
+	p.Body = grpc.UTF8(m.Body)
 	return p
 }
 
@@ -118,7 +118,7 @@ func FeedWatchReqToProto(m *board.FeedWatchReq) *FeedWatchReq {
 		return nil
 	}
 	p := new(FeedWatchReq)
-	p.Topic = m.Topic
+	p.Topic = grpc.UTF8(m.Topic)
 	return p
 }
 

@@ -315,19 +315,21 @@ func (p *Project) IsByteSlice(s *types.Slice) bool {
 	return ok && b.Kind() == types.Uint8 && p.method(elem, marshalMethods) == ""
 }
 
-// CheckMapKey reports a map key type without a stable JSON encoding. Keys of
-// string and integer types encode as strings; a key type with text marshal
-// methods is keyed differently with and without the JSON v2 experiment.
-func (p *Project) CheckMapKey(key types.Type, s Site) {
+// CheckMapKey reports a map key type without a stable JSON encoding, and
+// returns whether it did. Keys of string and integer types encode as
+// strings; a key type with text marshal methods is keyed differently with
+// and without the JSON v2 experiment.
+func (p *Project) CheckMapKey(key types.Type, s Site) bool {
 	key = types.Unalias(key)
 	if method := p.method(key, keyMarshalMethods); method != "" {
 		p.Report(s, "map key type %s declares %s, which encoding/json and the JSON v2 experiment apply to keys differently; use a string or integer key type without it", key, method)
-		return
+		return true
 	}
 	if b, ok := key.Underlying().(*types.Basic); ok && b.Info()&(types.IsString|types.IsInteger) != 0 {
-		return
+		return false
 	}
 	p.Report(s, "map key type %s has no JSON encoding; use a string or integer key type", key)
+	return true
 }
 
 // Nilable reports whether a value of t can be nil: a pointer, slice, map or
