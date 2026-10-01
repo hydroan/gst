@@ -1089,3 +1089,72 @@ func TestBuildCopyPlanSkipsTestdataAndVendorModelSources(t *testing.T) {
 		}
 	}
 }
+
+// TestBuildCopyPlanReadsGRPCWithoutValidatingTheModels pins that the plan
+// reads whether the project serves gRPC from the model files by the parser
+// alone: a model gg gen would refuse, the copy of the module being replaced
+// among them, stops no copy, which may be what fixes it.
+func TestBuildCopyPlanReadsGRPCWithoutValidatingTheModels(t *testing.T) {
+	for name, faulty := range map[string]string{
+		"the copy being replaced": filepath.Join("model", "copytest", "old.go"),
+		"a model elsewhere":       filepath.Join("model", "other.go"),
+	} {
+		t.Run(name, func(t *testing.T) {
+			projectDir := newModuleCopyPlanProject(t)
+			writeCopyTestModuleSource(t, projectDir, nil)
+			writeProjectFile(t, filepath.Join(projectDir, "model", "feed.go"), `package model
+
+import (
+	"github.com/hydroan/gst/dsl"
+	"github.com/hydroan/gst/model"
+)
+
+type Feed struct {
+	model.Empty
+}
+
+func (Feed) Design() {
+	dsl.GRPC()
+	dsl.Create(func() {
+		dsl.Service()
+	})
+}
+`)
+			writeProjectFile(t, filepath.Join(projectDir, faulty), "package "+filepath.Base(filepath.Dir(faulty))+`
+
+import (
+	"github.com/hydroan/gst/dsl"
+	"github.com/hydroan/gst/model"
+)
+
+type Old struct {
+	model.Empty
+}
+
+func (Old) Design() {
+	dsl.Service()
+}
+`)
+			t.Chdir(projectDir)
+
+			plan, err := BuildCopyPlan("copytest", CopyOptions{})
+			if err != nil {
+				t.Fatalf("BuildCopyPlan() error = %v", err)
+			}
+			if !plan.ServesGRPC {
+				t.Fatal("ServesGRPC = false, want true: model/feed.go declares GRPC()")
+			}
+		})
+	}
+}
+
+// writeProjectFile writes content at path, creating its directory.
+func writeProjectFile(t *testing.T, path, content string) {
+	t.Helper()
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
+		t.Fatal(err)
+	}
+}

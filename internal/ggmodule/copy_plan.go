@@ -2,6 +2,8 @@ package ggmodule
 
 import (
 	"fmt"
+	"go/parser"
+	"go/token"
 	"os"
 	"path"
 	"path/filepath"
@@ -174,7 +176,7 @@ func BuildCopyPlan(name string, opts CopyOptions) (*CopyPlan, error) {
 	// The interceptors go into a project serving gRPC alone; a project
 	// without gRPC gets no gRPC code to look at, and the interceptor files an
 	// earlier copy left there are stale (see staleHandlerFiles).
-	if plan.ServesGRPC, err = projectServesGRPC(projectModule); err != nil {
+	if plan.ServesGRPC, err = projectServesGRPC(name); err != nil {
 		return nil, err
 	}
 	if plan.ServesGRPC {
@@ -483,20 +485,33 @@ func (p *CopyPlan) StaleInterceptorTargets() []string {
 	return append([]string(nil), p.StaleInterceptorFiles...)
 }
 
-// projectServesGRPC reports whether the project of module path modulePath
-// has a model declaring GRPC(), read the way gg gen reads the models; a
-// project without a model directory serves none.
-func projectServesGRPC(modulePath string) (bool, error) {
+// projectServesGRPC reports whether a model of the project declares
+// GRPC(), read from the model files gg gen reads by the parser alone: a
+// model gg gen would refuse stops no copy, since the copy may be what fixes
+// it, the one of the module name being replaced in particular, whose files
+// under model/<name> are left out; gg gen validates the models next. A
+// project without a model directory serves none, and a file the parser
+// refuses declares nothing here, gg gen reporting it.
+func projectServesGRPC(name string) (bool, error) {
 	if _, err := os.Stat(defaultModelDir); os.IsNotExist(err) {
 		return false, nil
 	}
-	models, err := modelinfo.FindModels(modulePath, defaultModelDir, gghelper.NewProjectIgnore())
-	if err != nil {
-		return false, err
-	}
-	return slices.ContainsFunc(models, func(m *modelinfo.Model) bool {
-		return m.Design != nil && m.Design.GRPC
-	}), nil
+	replaced := filepath.Join(defaultModelDir, name) + string(filepath.Separator)
+	served := false
+	err := modelinfo.WalkModelFiles(defaultModelDir, gghelper.NewProjectIgnore(), func(path string) error {
+		if served || strings.HasPrefix(path, replaced) {
+			return nil
+		}
+		if file, err := parser.ParseFile(token.NewFileSet(), path, nil, parser.SkipObjectResolution); err == nil {
+			for _, design := range dsl.Parse(file) {
+				if design.GRPC {
+					served = true
+				}
+			}
+		}
+		return nil
+	})
+	return served, err
 }
 
 func (p *CopyPlan) targetsByKind(kind moduleCopyFileKind) []string {
