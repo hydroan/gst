@@ -57,6 +57,17 @@ var fixedImportNames = map[string]string{
 	ggconst.ImportPathConsts: "",
 }
 
+// generatedLocalNames are the identifiers the generated functions declare
+// locally, their parameters, variables and temporaries (see
+// fileWriter.temp and funcTemp): an import of the file cannot take one, a
+// package imported under such a name being shadowed wherever the local is
+// in scope, so a project package named like one, data or item, is imported
+// under an alias (see goImports.specs).
+var generatedLocalNames = []string{
+	"ctx", "req", "srv", "in", "m", "p", "x", "v", "i", "k", "e", "data", "err", "recvErr",
+	"params", "payload", "result", "first", "msg", "rsp", "items", "item", "models", "masks", "stored", "total",
+}
+
 // goImports collects the imports of one generated Go file while it is
 // built: a fixed-name package is referred to by its name at once, and any
 // other, a model package, another generated one or a package a model field
@@ -108,14 +119,15 @@ func (im *goImports) ref(importPath, pkgName string) *ast.Ident {
 // file in three groups, the standard library, the resolved packages with the
 // ones imported for their initialization alone, and the other fixed-name
 // ones, each sorted by path, laid out on the lines of lines with a blank one
-// between groups. A resolved package whose name a fixed-name import or
-// another resolved import takes is aliased (see
-// gggen.ResolveImportConflicts).
+// between groups. A resolved package whose name a fixed-name import, a
+// local of the generated code (see generatedLocalNames) or another
+// resolved import takes is aliased (see gggen.ResolveImportConflicts).
 func (im *goImports) specs(lines *goast.LineSet) []ast.Spec {
-	reserved := make([]string, 0, len(im.fixed))
+	reserved := make([]string, 0, len(im.fixed)+len(generatedLocalNames))
 	for importPath := range im.fixed {
 		reserved = append(reserved, im.fixedRef(importPath).Name)
 	}
+	reserved = append(reserved, generatedLocalNames...)
 	aliases := gggen.ResolveImportConflicts(im.resolved, reserved...)
 	for importPath, alias := range aliases {
 		if alias == "" {

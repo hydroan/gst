@@ -181,6 +181,37 @@ func fieldPath(s *types.Struct, v *types.Var) []string {
 	return nil
 }
 
+// unexportedOnPath returns the name of the first unexported embedded field
+// the path selects through, walking s by the names of path but its last,
+// and "" when every one is exported.
+func unexportedOnPath(s *types.Struct, path []string) string {
+	for _, name := range path[:len(path)-1] {
+		var next *types.Var
+		for f := range s.Fields() {
+			if f.Name() == name {
+				next = f
+				break
+			}
+		}
+		if next == nil {
+			return ""
+		}
+		if !next.Exported() {
+			return name
+		}
+		t := types.Unalias(next.Type())
+		if p, ok := t.(*types.Pointer); ok {
+			t = types.Unalias(p.Elem())
+		}
+		inner, ok := t.Underlying().(*types.Struct)
+		if !ok {
+			return ""
+		}
+		s = inner
+	}
+	return ""
+}
+
 // buildMessage fills the message of obj with the fields of its struct type.
 // The keys are the ones the type encodes to (see jsonshape.Fields); each
 // carries the number of its pb tag, or the fixed number of a framework base
@@ -361,10 +392,16 @@ func (g *generator) messageOfStruct(name, comment string, st *types.Struct, file
 		}
 		// The field's name selects it unless Go resolves the name to another
 		// field, one declared nearer the surface with the same name, or to
-		// none, two embedded structs promoting it alike: then its path does.
+		// none, two embedded structs promoting it alike: then its path does,
+		// which the generated code, in a package of its own, can only spell
+		// through exported embedded fields.
 		path := []string{f.Var.Name()}
-		if obj, _, _ := types.LookupFieldOrMethod(st, true, f.Var.Pkg(), f.Var.Name()); obj != f.Var {
+		if selected, _, _ := types.LookupFieldOrMethod(st, true, f.Var.Pkg(), f.Var.Name()); selected != f.Var {
 			path = fieldPath(st, f.Var)
+			if unexported := unexportedOnPath(st, path); unexported != "" {
+				g.project.Report(fs, "the field is selected through the unexported embedded field %s, which the generated code cannot name; export %s, or declare the field on %s", unexported, unexported, name)
+				continue
+			}
 		}
 		doc := g.project.FieldDoc(f.Var)
 		if isBaseField(f) {

@@ -111,6 +111,21 @@ func existingPBFiles() []string {
 	return files
 }
 
+// staleDerivedPBFiles lists the Go files under pb/ gg gen did not write this
+// run, generated being the paths it wrote: the handlers and the plugins'
+// files of a model deleted or no longer declaring GRPC(), which gg gen
+// deletes itself, leaving the definitions to prune (see PlanPBFiles) and
+// what a gst.yaml prune.ignore entry in protect covers alone.
+func staleDerivedPBFiles(generated []string, protect ggconfig.PruneConfig) []string {
+	var stale []string
+	for _, path := range ggprune.PlanPBFiles(existingPBFiles(), generated, protect).Delete {
+		if !strings.HasSuffix(path, ".proto") {
+			stale = append(stale, path)
+		}
+	}
+	return stale
+}
+
 // generatedPBFiles lists the paths of the files gg gen writes under pb/ for
 // the current models, which prune keeps: the models are read the way gg gen
 // reads them, gst.yaml route and model ignores applied, since the files
@@ -234,6 +249,9 @@ func pruneLeftovers(oldServiceFiles []string, allModels []*modelinfo.Model, kept
 		clioutput.Section("Stale Protobuf Files")
 		for _, file := range pbPlan.Delete {
 			clioutput.Error("", "%s", file)
+		}
+		if slices.ContainsFunc(pbPlan.Delete, func(file string) bool { return strings.HasSuffix(file, ".proto") }) {
+			clioutput.Warn("", "A definition goes with the numbers and names it reserves: a client built against it would read a new field under a number a removed one held, so move its reservations into the definition replacing it first")
 		}
 	}
 	remindUnreadPruneSettings()

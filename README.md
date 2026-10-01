@@ -79,7 +79,7 @@ git init
 | `component/` | 注册常驻组件（每个副本各跑一份、跑到进程结束） |
 | `middleware/` | 注册中间件 |
 | `interceptor/` | 注册 gRPC 拦截器；只有声明了 `GRPC()` 模型的项目才有 |
-| `pb/` | 由 `gg gen` 从声明了 `GRPC()` 的模型推导的 `.proto` 和 Go 代码，提交进仓库 |
+| `pb/` | 由 `gg gen` 从声明了 `GRPC()` 的模型推导的 `.proto` 和 Go 代码，提交进仓库；已提交的 `.proto` 决定字段编号，模型改动会破坏它时 `gg gen` 报错并写明在 `.proto` 里改哪一行来接受这次破坏（删掉的编号用 `reserved` 留住），不要删整个文件；模型不再走 gRPC 时 `gg gen` 直接删掉它的 Go 文件，`.proto` 留给 `gg prune` |
 | `router/router.gen.go` | 由 `gg gen` 生成的路由注册文件 |
 | `model/model.gen.go` | 由 `gg gen` 生成的模型注册文件 |
 | `model/apidoc.gen.go` | 由 `gg gen` 生成的注释与枚举注册文件，让 Swagger 文档在无源码的部署环境仍带字段说明和枚举值 |

@@ -267,6 +267,14 @@ func (g *generator) addRequest(m *modelinfo.Model, file *protoFile, route string
 				return nil, false
 			}
 		}
+		// The query fields of a List request are the query's whatever
+		// controls the model reads: the handler reads a control off the
+		// field of its name, so a parameter taking the name is reported
+		// even when the request carries no such field.
+		if action.Phase == consts.List && slices.Contains(listQueryFieldNames, param.name) {
+			g.project.Report(s, "the :%s parameter of %s takes the name of the %s query field of a List request; rename the parameter", param.param, registered, param.name)
+			return nil, false
+		}
 	}
 	requestFields, ok := g.numberFields(s, file, name, request, requestFields)
 	if !ok {
@@ -601,6 +609,11 @@ func standardMessages(m *modelinfo.Model, model *message, file *protoFile, route
 //	    repeated string values = 3;
 //	  }
 //	}
+//
+// listQueryFieldNames are the names of the query fields a List request may
+// carry (see queryFields), which no route parameter of a List may take.
+var listQueryFieldNames = []string{"filters", "sort_by", "page", "size", "cursor_field", "cursor_value", "cursor_next", "expand", "depth"}
+
 func queryFields(phase consts.Phase, controls queryControls) (fields []*descriptorpb.FieldDescriptorProto, comments []string, nested []*descriptorpb.DescriptorProto) {
 	expansion := []*descriptorpb.FieldDescriptorProto{
 		repeatedStringField("expand", 0),

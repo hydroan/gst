@@ -181,6 +181,9 @@ func TestPruneRunDeletesTheFilesOfAModelNoLongerServedOverGRPC(t *testing.T) {
 			t.Errorf("prune should list %s under Stale Protobuf Files:\n%s", path, stdout)
 		}
 	}
+	if !strings.Contains(stdout, "A definition goes with the numbers and names it reserves: a client built against it would read a new field under a number a removed one held, so move its reservations into the definition replacing it first") {
+		t.Errorf("prune should warn that a deleted definition takes its reservations with it:\n%s", stdout)
+	}
 	if _, err := os.Stat(ggconst.DirPB); !os.IsNotExist(err) {
 		t.Errorf("%s should be gone with its last file; stat error = %v", ggconst.DirPB, err)
 	}

@@ -339,7 +339,7 @@ func (w *fileWriter) actionType(model *modelinfo.Model, typeName string) ast.Exp
 //		return &MergeItemResponse{Result: MergeRspToProto(result)}, nil
 //	}
 func (w *fileWriter) handler(r *rpc) {
-	w.resetTemps()
+	w.resetFuncTemps()
 	requestFields, responseFields := goFieldNames(r.request), goFieldNames(r.response)
 	req := func(name string) ast.Expr { return call(sel(ident("req"), "Get"+requestFields[name])) }
 	callee := ident(callName(r))
@@ -593,7 +593,7 @@ func (w *fileWriter) query(phase consts.Phase, req func(string) ast.Expr, has fu
 //		})
 //	}
 func (w *fileWriter) streamHandler(r *rpc) {
-	w.resetTemps()
+	w.resetFuncTemps()
 	requestFields, responseFields := goFieldNames(r.request), goFieldNames(r.response)
 	srv, callee := ident("srv"), ident(callName(r))
 	get := func(m ast.Expr, name string) ast.Expr { return call(sel(m, "Get"+requestFields[name])) }
@@ -674,11 +674,17 @@ func (w *fileWriter) streamHandler(r *rpc) {
 		if withFirst {
 			body = append(body, define([]string{"first", "err"}, call(w.grpc("FirstMessage"), sel(srv, "Recv"))), ifStmt(nil, notNil(ident("err")), returns(ident("err"))))
 		}
-		body = append(body,
-			define([]string{"result", "err"}, run(paramsOf(ident("first")), recv(withFirst))),
-			ifStmt(nil, notNil(ident("err")), returns(ident("err"))),
-			returns(call(sel(srv, "SendAndClose"), responseOf(ident("result")))),
-		)
+		// With no Result declared the call answers nothing to encode, and
+		// the response message is sent empty.
+		if r.result == nil {
+			body = append(body, ifStmt(define([]string{"_", "err"}, run(paramsOf(ident("first")), recv(withFirst))), notNil(ident("err")), returns(ident("err"))))
+		} else {
+			body = append(body,
+				define([]string{"result", "err"}, run(paramsOf(ident("first")), recv(withFirst))),
+				ifStmt(nil, notNil(ident("err")), returns(ident("err"))),
+			)
+		}
+		body = append(body, returns(call(sel(srv, "SendAndClose"), responseOf(ident("result")))))
 	default:
 		withFirst := len(r.params) > 0
 		if withFirst {

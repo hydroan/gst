@@ -15,6 +15,7 @@ func init() {
 		grpc.Method{Name: FeedService_TailFeedByFeed_FullMethodName, HTTPMethod: grpc.MethodStream, Route: "/api/feeds/:feed/tail"},
 		grpc.Method{Name: FeedService_UploadFeedByFeed_FullMethodName, HTTPMethod: grpc.MethodStream, Route: "/api/feeds/:feed/upload"},
 		grpc.Method{Name: FeedService_ChatFeed_FullMethodName, HTTPMethod: grpc.MethodStream, Route: "/api/feeds/chat"},
+		grpc.Method{Name: FeedService_IngestFeed_FullMethodName, HTTPMethod: grpc.MethodStream, Route: "/api/feeds/ingest"},
 		grpc.Method{Name: FeedService_WatchFeed_FullMethodName, HTTPMethod: grpc.MethodStream, Route: "/api/feeds/watch"},
 	)
 	grpc.Register[NoteServiceServer](RegisterNoteServiceServer, noteService{},

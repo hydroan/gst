@@ -27,31 +27,56 @@ type fileWriter struct {
 	g     *generator
 	file  *protoFile
 	out   *goFile
-	temps map[string]int // the temporaries declared so far in the function, by base name
+	temps map[string]int // the temporaries declared so far in the scope, by base name (see temp)
+	// funcTemps counts the temporaries declared at the top level of the
+	// function being written (see funcTemp).
+	funcTemps map[string]int
 	// fallible records that the conversion function being written reads a
 	// value it may refuse (see refusing), and so declares err.
 	fallible bool
 }
 
 func (g *generator) newFileWriter(f *protoFile) *fileWriter {
-	return &fileWriter{g: g, file: f, out: newGoFile(f.goPackageName()), temps: make(map[string]int)}
+	return &fileWriter{g: g, file: f, out: newGoFile(f.goPackageName()), temps: make(map[string]int), funcTemps: make(map[string]int)}
 }
 
-// temp returns the name of a temporary of the function being written: base
+// temp returns the name of a temporary of the scope being written: base
 // on first use, then base2, base3 and so on, so that the temporaries of a
-// nested conversion never shadow one of the enclosing.
+// nested conversion never shadow one of the enclosing. The temporaries
+// counted here are declared in a block of their own, a range body or an if
+// body, so the count starts over with every field (see resetTemps).
 func (w *fileWriter) temp(base string) string {
-	w.temps[base]++
-	if n := w.temps[base]; n > 1 {
+	return nextTemp(w.temps, base)
+}
+
+// funcTemp is temp for a temporary declared at the top level of the
+// function being written, the value a JSON wrapper is decoded into: the
+// count runs over the whole function (see resetFuncTemps), so the fields
+// declaring one each get data, data2 and so on.
+func (w *fileWriter) funcTemp(base string) string {
+	return nextTemp(w.funcTemps, base)
+}
+
+// nextTemp counts one more temporary of base in counts and returns its
+// name.
+func nextTemp(counts map[string]int, base string) string {
+	counts[base]++
+	if n := counts[base]; n > 1 {
 		return base + strconv.Itoa(n)
 	}
 	return base
 }
 
 // resetTemps starts a scope no temporary of the enclosing code is visible
-// in, a function or one field of a conversion function: the temporaries
-// start over.
+// in, one field of a conversion function: the temporaries start over.
 func (w *fileWriter) resetTemps() { clear(w.temps) }
+
+// resetFuncTemps starts a function: every temporary starts over, the ones
+// declared at its top level included.
+func (w *fileWriter) resetFuncTemps() {
+	clear(w.temps)
+	clear(w.funcTemps)
+}
 
 // guarded returns the statement running body on src when src is not nil,
 // with src bound to a temporary unless it is an identifier already:
@@ -442,7 +467,7 @@ func (w *fileWriter) toProto(dst, src ast.Expr, t types.Type, ft fieldType) []as
 			case jsonshape.BuiltinObject:
 				return []ast.Stmt{assign(dst, call(w.grpc("Struct"), src))}
 			case jsonshape.BuiltinWrapper:
-				data := w.temp("data")
+				data := w.funcTemp("data")
 				return append([]ast.Stmt{define([]string{data}, call(sel(src, "Data")))}, w.toProto(dst, ident(data), n.TypeArgs().At(0), ft)...)
 			}
 		}
@@ -711,7 +736,7 @@ func (w *fileWriter) fromProto(dst, src ast.Expr, t types.Type, ft fieldType, na
 			case jsonshape.BuiltinObject:
 				return []ast.Stmt{assign(dst, call(w.grpc("Map"), src))}
 			case jsonshape.BuiltinWrapper:
-				data := w.temp("data")
+				data := w.funcTemp("data")
 				arg := n.TypeArgs().At(0)
 				stmts := w.declared(data, arg, w.fromProto(ident(data), src, arg, ft, name))
 				return append(stmts, assign(dst, call(sel(w.out.imports.fixedRef(importPathDatatypes), "NewJSONType"), ident(data))))
@@ -757,9 +782,17 @@ func (w *fileWriter) fromProto(dst, src ast.Expr, t types.Type, ft fieldType, na
 		if !types.Identical(types.Unalias(u.Key()), scalarType(ft.mapKey)) {
 			key = converted(w.goType(u.Key()), ident(k))
 		}
+		value := w.fromProto(index(dst, key), ident(v), u.Elem(), *ft.mapValue, name)
+		if _, anonymous := types.Unalias(u.Elem()).(*types.Struct); anonymous {
+			// The fields of a struct held in a map cannot be assigned one
+			// by one, the element not being addressable: the struct is
+			// decoded into a value of its own, put in whole.
+			e := w.temp("e")
+			value = append(append([]ast.Stmt{w.varDecl(e, u.Elem())}, w.fromProto(ident(e), ident(v), u.Elem(), *ft.mapValue, name)...), assign(index(dst, key), ident(e)))
+		}
 		return []ast.Stmt{ifNotNil(src,
 			assign(dst, makeCall(w.goType(declared), lenCall(src))),
-			rangeStmt(k, v, src, w.fromProto(index(dst, key), ident(v), u.Elem(), *ft.mapValue, name)...),
+			rangeStmt(k, v, src, value...),
 		)}
 	case *types.Interface:
 		return []ast.Stmt{assign(dst, call(sel(src, "AsInterface")))}
@@ -901,8 +934,10 @@ func (w *fileWriter) conversionFuncs(msg *message) {
 		ifStmt(nil, &ast.BinaryExpr{X: ident("m"), Op: token.EQL, Y: ident("nil")}, returns(ident("nil"))),
 		define([]string{"p"}, newCall(ident(goName))),
 	}
+	w.resetFuncTemps()
 	for _, fc := range msg.conv.fields {
-		// The temporaries of one field are scoped to its statements.
+		// The temporaries of one field are scoped to its statements, but
+		// for the ones declared at the top level of the function.
 		w.resetTemps()
 		body = append(body, w.fieldToProto(ident("p"), ident("m"), fc)...)
 	}
@@ -917,6 +952,7 @@ func (w *fileWriter) conversionFuncs(msg *message) {
 	}, nil)
 
 	w.fallible = false
+	w.resetFuncTemps()
 	var fields []ast.Stmt
 	for _, fc := range msg.conv.fields {
 		w.resetTemps()

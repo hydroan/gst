@@ -108,13 +108,12 @@ func genRunWithOptions(opts genRunOptions) error {
 	}
 	allModels, ignoreResult := scanned.models, scanned.routeIgnores
 
-	// Record the service files and protobuf definitions present before
-	// generating (if prune option is enabled): the ones this run does not
-	// write again are what prune deletes.
-	var oldServiceFiles, oldPBFiles []string
+	// Record the service files present before generating (if prune option
+	// is enabled): the ones this run does not write again are what prune
+	// deletes.
+	var oldServiceFiles []string
 	if prune {
 		oldServiceFiles = existingServiceFiles()
-		oldPBFiles = existingPBFiles()
 	}
 
 	if !opts.Quiet {
@@ -281,11 +280,33 @@ func genRunWithOptions(opts genRunOptions) error {
 	if err != nil {
 		return err
 	}
+	// The Go files are checked as the packages they make up before any is
+	// written (see pb.TypeCheck): one the compiler would refuse is a defect
+	// of gg gen, reported here rather than by go build on what was written.
+	if err = pb.TypeCheck(".", module, pbFiles); err != nil {
+		if !errors.Is(err, pb.ErrUnchecked) {
+			return errors.Wrap(err, "the Go files generated under "+ggconst.DirPB+"/ do not compile, a defect of gg gen")
+		}
+		clioutput.Warn("", "%v; go build reports what the check would have", err)
+	}
 	pbPaths := make([]string, 0, len(pbFiles))
 	for _, f := range pbFiles {
 		pbPaths = append(pbPaths, f.Path)
 		if err = writeGenFile(filepath.FromSlash(f.Path), f.Content); err != nil {
 			return err
+		}
+	}
+	// The Go files under pb/ this run did not write served a model deleted
+	// or no longer declaring GRPC(): derived from the models alone, they go
+	// with it, so that the project builds. The definition stays, with the
+	// numbers and names it reserves, for prune to delete (see
+	// pruneLeftovers).
+	for _, stale := range staleDerivedPBFiles(pbPaths, scanned.pruneConfig) {
+		if err = os.Remove(stale); err != nil {
+			return errors.Wrapf(err, "remove %s", stale)
+		}
+		if !opts.Quiet {
+			clioutput.Success("REMOVE", "%s (its model is no longer served over gRPC)", stale)
 		}
 	}
 
@@ -403,7 +424,7 @@ func genRunWithOptions(opts genRunOptions) error {
 	// Prune what the models no longer need
 	// ============================================================
 	if prune {
-		pruneLeftovers(oldServiceFiles, allModels, ignoreResult.KeptServiceFiles, ignoreResult.KeptServiceDirs, ignore, scanned.pruneConfig, oldPBFiles, pbPaths)
+		pruneLeftovers(oldServiceFiles, allModels, ignoreResult.KeptServiceFiles, ignoreResult.KeptServiceDirs, ignore, scanned.pruneConfig, existingPBFiles(), pbPaths)
 	}
 
 	// ============================================================

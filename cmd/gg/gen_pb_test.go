@@ -6,11 +6,14 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
+	"slices"
 	"strings"
 	"testing"
 
 	"github.com/bufbuild/protocompile"
 	"github.com/hydroan/gst/internal/ggconst"
+	"github.com/hydroan/gst/internal/gggen/pb"
 	"github.com/stretchr/testify/require"
 )
 
@@ -108,6 +111,51 @@ func TestGenRunWritesTheProtobufDefinitionsOfGRPCModels(t *testing.T) {
 	require.NoError(t, err, "the generated conversions must round-trip every value: %s", output)
 }
 
+// TestGenRunTypeChecksTheGeneratedGoFiles pins the check gg gen runs on the
+// Go files it is about to write under pb/ (see pb.TypeCheck): the files of
+// a project type-check as the packages they make up; a file the compiler
+// would refuse is reported at its line, under its package; and a project
+// whose imports cannot be listed is reported as unchecked, which gg gen
+// warns about and writes the files all the same.
+func TestGenRunTypeChecksTheGeneratedGoFiles(t *testing.T) {
+	projectDir, ok := newGenProject(t)
+	if !ok {
+		return
+	}
+	writeProtobufProject(t, projectDir, map[string]string{"model/note.go": protobufNoteModel})
+	require.NoError(t, genRunWithOptions(genRunOptions{Quiet: true}))
+
+	var files []pb.File
+	require.NoError(t, filepath.WalkDir(filepath.Join(projectDir, ggconst.DirPB), func(path string, d os.DirEntry, err error) error {
+		if err != nil || d.IsDir() || !strings.HasSuffix(path, ggconst.ExtensionGo) {
+			return err
+		}
+		content, readErr := os.ReadFile(path)
+		if readErr != nil {
+			return readErr
+		}
+		rel, relErr := filepath.Rel(projectDir, path)
+		if relErr != nil {
+			return relErr
+		}
+		files = append(files, pb.File{Path: filepath.ToSlash(rel), Content: string(content)})
+		return nil
+	}))
+	require.NotEmpty(t, files)
+	require.NoError(t, pb.TypeCheck(projectDir, "tmpapp", files))
+
+	broken := append(slices.Clone(files), pb.File{Path: "pb/broken.gen.go", Content: "package pb\n\nvar broken = missing\n"})
+	err := pb.TypeCheck(projectDir, "tmpapp", broken)
+	var diagnostics *pb.DiagnosticsError
+	require.ErrorAs(t, err, &diagnostics)
+	require.Contains(t, err.Error(), "pb/broken.gen.go:3: tmpapp/pb: undefined: missing")
+
+	unresolved := t.TempDir()
+	writeProjectFile(t, filepath.Join(unresolved, "go.mod"), "module unresolved\n\ngo "+strings.TrimPrefix(runtime.Version(), "go")+"\n")
+	err = pb.TypeCheck(unresolved, "unresolved", []pb.File{{Path: "pb/note.gen.go", Content: "package pb\n\nimport \"github.com/hydroan/gst/grpc\"\n\nvar _ = grpc.MethodStream\n"}})
+	require.ErrorIs(t, err, pb.ErrUnchecked)
+}
+
 // TestGenRunServesStreamActionsOverGRPCAlone pins what gg gen makes of a
 // model whose actions are Stream actions alone: its rpcs are derived, each
 // streaming the side it declares and described by the route it is declared
@@ -130,6 +178,7 @@ func TestGenRunServesStreamActionsOverGRPCAlone(t *testing.T) {
 	require.Contains(t, string(proto), "rpc WatchFeed ( WatchFeedRequest ) returns ( stream WatchFeedResponse );")
 	require.Contains(t, string(proto), "rpc UploadFeedByFeed ( stream UploadFeedByFeedRequest ) returns ( UploadFeedByFeedResponse );")
 	require.Contains(t, string(proto), "rpc ChatFeed ( stream ChatFeedRequest ) returns ( stream ChatFeedResponse );")
+	require.Contains(t, string(proto), "rpc IngestFeed ( stream IngestFeedRequest ) returns ( IngestFeedResponse );", "a client stream declaring no Result answers an empty message")
 	router, err := os.ReadFile(filepath.Join(projectDir, ggconst.DirRouter, ggconst.FileRouterGen))
 	require.NoError(t, err)
 	require.NotContains(t, string(router), "feeds", "the router registers nothing for a Stream")
@@ -181,7 +230,56 @@ func TestGenRunImportsThePBPackageWhileServingGRPC(t *testing.T) {
 	mainCode, err = os.ReadFile(filepath.Join(projectDir, ggconst.FileMain))
 	require.NoError(t, err)
 	require.NotContains(t, string(mainCode), "tmpapp/pb", "without a model served over gRPC main.go must not import the package")
-	require.FileExists(t, filepath.Join(projectDir, ggconst.DirPB, ggconst.FilePBGen), "the stale files stay until pruned")
+	require.NoFileExists(t, filepath.Join(projectDir, ggconst.DirPB, ggconst.FilePBGen), "the Go files go with the last model served over gRPC")
+	require.FileExists(t, filepath.Join(projectDir, ggconst.DirPB, "note.proto"), "the definition stays, with what it reserves, until pruned")
+}
+
+// TestGenRunRemovesTheGoFilesOfAModelNoLongerServedOverGRPC pins that gg gen
+// deletes the Go files under pb/ it did not write this run, the handlers
+// and the plugins' files of a model deleted or no longer declaring GRPC(),
+// so that the project builds without a prune, while the definition stays,
+// with the numbers it reserves, for prune to delete; a file a gst.yaml
+// prune.ignore entry covers stays as well.
+func TestGenRunRemovesTheGoFilesOfAModelNoLongerServedOverGRPC(t *testing.T) {
+	projectDir, ok := newGenProject(t)
+	if !ok {
+		return
+	}
+	writeProtobufProject(t, projectDir, map[string]string{"model/note.go": protobufNoteModel, "model/feed.go": protobufFeedModel})
+	require.NoError(t, genRunWithOptions(genRunOptions{Quiet: true}))
+	derived := []string{"feed.gen.go", "feed.pb.go", "feed_grpc.pb.go"}
+	for _, name := range derived {
+		require.FileExists(t, filepath.Join(projectDir, ggconst.DirPB, name))
+	}
+
+	require.NoError(t, os.Remove(filepath.Join(projectDir, "model", "feed.go")))
+	require.NoError(t, os.RemoveAll(filepath.Join(projectDir, ggconst.DirService, "feed")))
+	require.NoError(t, genRunWithOptions(genRunOptions{Quiet: true}))
+
+	for _, name := range derived {
+		require.NoFileExists(t, filepath.Join(projectDir, ggconst.DirPB, name))
+	}
+	require.FileExists(t, filepath.Join(projectDir, ggconst.DirPB, "feed.proto"))
+	registration, err := os.ReadFile(filepath.Join(projectDir, ggconst.DirPB, ggconst.FilePBGen))
+	require.NoError(t, err)
+	require.NotContains(t, string(registration), "FeedService")
+	build := exec.Command("go", "build", "./pb/...")
+	build.Dir = projectDir
+	output, err := build.CombinedOutput()
+	require.NoError(t, err, "the project builds without the stale files: %s", output)
+
+	t.Run("a file prune.ignore covers stays", func(t *testing.T) {
+		writeProtobufProject(t, projectDir, map[string]string{"model/feed.go": protobufFeedModel})
+		require.NoError(t, genRunWithOptions(genRunOptions{Quiet: true}))
+		writeProjectFile(t, filepath.Join(projectDir, "gst.yaml"), "prune:\n  ignore:\n    - pb/feed.gen.go\n")
+		require.NoError(t, os.Remove(filepath.Join(projectDir, "model", "feed.go")))
+		require.NoError(t, os.RemoveAll(filepath.Join(projectDir, ggconst.DirService, "feed")))
+
+		require.NoError(t, genRunWithOptions(genRunOptions{Quiet: true}))
+
+		require.FileExists(t, filepath.Join(projectDir, ggconst.DirPB, "feed.gen.go"))
+		require.NoFileExists(t, filepath.Join(projectDir, ggconst.DirPB, "feed.pb.go"))
+	})
 }
 
 // TestGenRunCommentsTheFrameworkBaseFields pins the comment each key of the
@@ -670,6 +768,62 @@ func TestGenRunRefusesARouteParameterNamedLikeAField(t *testing.T) {
 	require.Contains(t, err.Error(), "tmpapp/model.Entry: the :page parameter of /api/pages/:page/entries clashes with the page field of ListEntryByPageRequest; rename the parameter")
 }
 
+// TestGenRunRefusesARouteParameterNamedLikeAQueryField pins that a route
+// parameter named like a query field of a List request is reported even
+// when the model reads no such control and the request carries no such
+// field: the name is the query's in every List request, which is where the
+// handler would read it from.
+func TestGenRunRefusesARouteParameterNamedLikeAQueryField(t *testing.T) {
+	projectDir, ok := newGenProject(t)
+	if !ok {
+		return
+	}
+	writeProtobufProject(t, projectDir, map[string]string{"model/entry.go": strings.Replace(protobufParamClashModel, "\tmodel.Pagination\n", "", 1)})
+
+	err := genRunWithOptions(genRunOptions{Quiet: true})
+
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "tmpapp/model.Entry: the :page parameter of /api/pages/:page/entries takes the name of the page query field of a List request; rename the parameter")
+}
+
+// TestGenRunRefusesAFieldReachedThroughAnUnexportedEmbeddedStruct pins that
+// a field the generated conversions can only select through an unexported
+// embedded struct, its name shadowed by a field declared nearer the
+// surface, is reported: the embedded field's name is one no other package
+// can write, so the field is reported with the ways out.
+func TestGenRunRefusesAFieldReachedThroughAnUnexportedEmbeddedStruct(t *testing.T) {
+	projectDir, ok := newGenProject(t)
+	if !ok {
+		return
+	}
+	writeProtobufProject(t, projectDir, map[string]string{"model/entry.go": protobufUnexportedEmbeddingModel})
+
+	err := genRunWithOptions(genRunOptions{Quiet: true})
+
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "tmpapp/model.Entry.name: the field is selected through the unexported embedded field entryMeta, which the generated code cannot name; export entryMeta, or declare the field on Entry")
+}
+
+// TestGenRunAliasesAnImportNamedLikeAGeneratedLocal pins that a project
+// package named like a local of the generated code, data for the value a
+// JSON wrapper is decoded into, is imported under an alias: a package
+// imported under its own name would be shadowed where the local is in
+// scope.
+func TestGenRunAliasesAnImportNamedLikeAGeneratedLocal(t *testing.T) {
+	projectDir, ok := newGenProject(t)
+	if !ok {
+		return
+	}
+	writeProtobufProject(t, projectDir, map[string]string{"model/data/sample.go": protobufDataPackageModel})
+
+	require.NoError(t, genRunWithOptions(genRunOptions{Quiet: true}))
+
+	handlers, err := os.ReadFile(filepath.Join(projectDir, ggconst.DirPB, "data", "sample.gen.go"))
+	require.NoError(t, err)
+	require.Contains(t, string(handlers), `model_data "tmpapp/model/data"`)
+	require.Contains(t, string(handlers), "var data model_data.SampleOptions")
+}
+
 // TestGenRunRefusesAGRPCModelWithNothingToServe pins that a model declaring
 // GRPC() none of whose actions gRPC serves, every one ignored by gst.yaml or
 // HTTP only, is reported instead of getting a service without an rpc.
@@ -716,7 +870,7 @@ func TestGenRunHoldsTheCommittedDefinitionsToTheirNumbers(t *testing.T) {
 		err := genRunWithOptions(genRunOptions{Quiet: true})
 
 		require.Error(t, err)
-		require.Contains(t, err.Error(), "pb/note.proto: the field title of message Note was number 11 and is now 13; keep 11, or delete pb/note.proto to accept the break")
+		require.Contains(t, err.Error(), "pb/note.proto: the field title of message Note was number 11 and is now 13; keep 11, or replace the field in pb/note.proto by \"reserved 11;\" to accept the break")
 	})
 	t.Run("a number is never reused", func(t *testing.T) {
 		writeProtobufProject(t, projectDir, map[string]string{"model/note.go": strings.Replace(protobufNoteModel, "Title string   'json:\"title\" pb:\"11\"'", "Caption string 'json:\"caption\" pb:\"11\"'", 1)})
@@ -724,7 +878,7 @@ func TestGenRunHoldsTheCommittedDefinitionsToTheirNumbers(t *testing.T) {
 		err := genRunWithOptions(genRunOptions{Quiet: true})
 
 		require.Error(t, err)
-		require.Contains(t, err.Error(), "pb/note.proto: the field caption of message Note takes number 11, which the field title held; a number is never reused, so give caption a fresh number and let 11 stay reserved, or delete pb/note.proto to accept the break")
+		require.Contains(t, err.Error(), "pb/note.proto: the field caption of message Note takes number 11, which the field title held; a number is never reused, so give caption a fresh number and let 11 stay reserved, or remove the field title from pb/note.proto to accept the break")
 	})
 	t.Run("a field keeps a compatible type", func(t *testing.T) {
 		// string to bytes is wire compatible; a repeated field turning
@@ -735,12 +889,12 @@ func TestGenRunHoldsTheCommittedDefinitionsToTheirNumbers(t *testing.T) {
 		writeProtobufProject(t, projectDir, map[string]string{"model/note.go": strings.Replace(protobufNoteModel, "Title string   'json:\"title\" pb:\"11\"'", "Title int64    'json:\"title\" pb:\"11\"'", 1)})
 		err := genRunWithOptions(genRunOptions{Quiet: true})
 		require.Error(t, err)
-		require.Contains(t, err.Error(), "pb/note.proto: the field title of message Note was bytes and is now int64; a type change breaks the wire, so keep bytes or a type compatible with it, or delete pb/note.proto to accept the break")
+		require.Contains(t, err.Error(), "pb/note.proto: the field title of message Note was bytes and is now int64; a type change breaks the wire, so keep bytes or a type compatible with it, or remove the field from pb/note.proto to accept the break")
 
 		writeProtobufProject(t, projectDir, map[string]string{"model/note.go": strings.Replace(protobufNoteModel, "Tags  []string 'json:\"tags,omitempty\" pb:\"12\" gorm:\"-\"'", "Tags  string   'json:\"tags,omitempty\" pb:\"12\" gorm:\"-\"'", 1)})
 		err = genRunWithOptions(genRunOptions{Quiet: true})
 		require.Error(t, err)
-		require.Contains(t, err.Error(), "pb/note.proto: the field tags of message Note was repeated and is now singular; a cardinality change breaks the wire, so keep it repeated, or delete pb/note.proto to accept the break")
+		require.Contains(t, err.Error(), "pb/note.proto: the field tags of message Note was repeated and is now singular; a cardinality change breaks the wire, so keep it repeated, or remove the field from pb/note.proto to accept the break")
 
 		// Bytes back to string is compatible as well.
 		writeProtobufProject(t, projectDir, map[string]string{"model/note.go": protobufNoteModel})
@@ -782,7 +936,41 @@ func TestGenRunHoldsTheCommittedDefinitionsToTheirNumbers(t *testing.T) {
 		err = genRunWithOptions(genRunOptions{Quiet: true})
 
 		require.Error(t, err)
-		require.Contains(t, err.Error(), "pb/note.proto: the field body of message Note takes number 12, which the file reserves; give body a fresh number, or delete pb/note.proto to accept the break")
+		require.Contains(t, err.Error(), "pb/note.proto: the field body of message Note takes number 12, which the file reserves; give body a fresh number, or remove the reservation of 12 from pb/note.proto to accept the break")
+	})
+	t.Run("a dropped map field reserves its number", func(t *testing.T) {
+		labeled := strings.Replace(protobufNoteModel, "\tmodel.Base\n", "\tLabels map[string]string 'json:\"labels,omitempty\" pb:\"13\" gorm:\"-\"'\n\n\tmodel.Base\n", 1)
+		writeProtobufProject(t, projectDir, map[string]string{"model/note.go": labeled})
+		require.NoError(t, os.RemoveAll(ggconst.DirPB))
+		require.NoError(t, genRunWithOptions(genRunOptions{Quiet: true}))
+		// The entry message of the map goes with the field: it was never
+		// a message a client was built against.
+		writeProtobufProject(t, projectDir, map[string]string{"model/note.go": protobufNoteModel})
+
+		require.NoError(t, genRunWithOptions(genRunOptions{Quiet: true}))
+
+		content, err := os.ReadFile(proto)
+		require.NoError(t, err)
+		require.Contains(t, string(content), "reserved 13;")
+		require.Contains(t, string(content), `reserved "labels";`)
+		require.NotContains(t, string(content), "LabelsEntry")
+	})
+	t.Run("a break is accepted by editing the file as told", func(t *testing.T) {
+		fresh(t)
+		writeProtobufProject(t, projectDir, map[string]string{"model/note.go": strings.Replace(protobufNoteModel, `pb:"11"`, `pb:"13"`, 1)})
+		require.Error(t, genRunWithOptions(genRunOptions{Quiet: true}))
+		content, err := os.ReadFile(proto)
+		require.NoError(t, err)
+		edited := strings.Replace(string(content), "  string title = 11;", "  reserved 11;", 1)
+		require.NotEqual(t, string(content), edited)
+		require.NoError(t, os.WriteFile(proto, []byte(edited), 0o600))
+
+		require.NoError(t, genRunWithOptions(genRunOptions{Quiet: true}))
+
+		kept, err := os.ReadFile(proto)
+		require.NoError(t, err)
+		require.Contains(t, string(kept), "string title = 13;")
+		require.Contains(t, string(kept), "reserved 11;", "the reservation outlives the edit")
 	})
 }
 
@@ -1311,11 +1499,12 @@ func (Clash) Design() {
 // beyond the ones of the Record model: gorm's date, time of day, JSON
 // document, JSON map and JSON wrapper, a soft-delete time, a JSON number, an
 // integer enum, an optional integer, a pointer to a struct, a slice of
-// pointers, an array, maps of scalars and of structs, a slice of and a
-// pointer to an unnamed struct, an optional time, any value, bytes, a named
-// slice, the framework's version type, an alias of an internal type, gorm's
-// JSON slices of structs and of strings, and pointers to a slice of
-// strings, to a slice of structs, to a map and to bytes.
+// pointers, an array, maps of scalars, of structs and of unnamed structs, a
+// slice of and a pointer to an unnamed struct, an optional time, any value,
+// bytes, a named slice, the framework's version type, an alias of an
+// internal type, gorm's JSON slices of structs and of strings, pointers to
+// a slice of strings, to a slice of structs, to a map and to bytes, and a
+// second JSON wrapper.
 const protobufShapeModel = `package model
 
 import (
@@ -1377,6 +1566,14 @@ type Shape struct {
 	// hold.
 	Rank int8   'json:"rank" pb:"45"'
 	Port uint16 'json:"port" pb:"46"'
+	// Extras is a second JSON wrapper, decoded into a value of its own
+	// beside the one of Options.
+	Extras datatypes.JSONType[ShapeOptions] 'json:"extras" pb:"47"'
+	// Cells is a map of unnamed structs, each decoded whole before it is
+	// put in.
+	Cells map[string]struct {
+		Count int32 'json:"count" pb:"1"'
+	} 'json:"cells,omitempty" pb:"48" gorm:"-"'
 	// Name shadows the Name of the embedded ShapeMeta, which keeps its own
 	// key and is selected by its path.
 	Name string 'json:"name" pb:"41"'
@@ -1736,6 +1933,75 @@ func (Feed) Design() {
 			dsl.StreamingResult[*FeedEvent]()
 		})
 	})
+	dsl.Route("feeds/ingest", func() {
+		dsl.Stream(func() {
+			dsl.Service("ingest")
+			dsl.StreamingPayload[*FeedEvent]()
+		})
+	})
+}
+`
+
+// protobufDataPackageModel is a model of a package named data, the name of
+// the local the generated conversions decode a JSON wrapper into.
+const protobufDataPackageModel = `package data
+
+import (
+	"github.com/hydroan/gst/dsl"
+	"github.com/hydroan/gst/model"
+	"gorm.io/datatypes"
+)
+
+// Sample keeps its options as a JSON document.
+type Sample struct {
+	Options datatypes.JSONType[SampleOptions] 'json:"options" pb:"11"'
+
+	model.Base
+}
+
+// SampleOptions is kept as a JSON document.
+type SampleOptions struct {
+	Color string 'json:"color" pb:"1"'
+}
+
+func (Sample) TableName() string { return "samples" }
+
+func (Sample) Design() {
+	dsl.GRPC()
+	dsl.Migrate()
+	dsl.Endpoint("samples")
+	dsl.Create(func() {})
+}
+`
+
+// protobufUnexportedEmbeddingModel shadows a field of an unexported
+// embedded struct with a field of its own, keeping both JSON keys.
+const protobufUnexportedEmbeddingModel = `package model
+
+import (
+	"github.com/hydroan/gst/dsl"
+	"github.com/hydroan/gst/model"
+)
+
+// Entry has a name of its own beside the one of its meta.
+type Entry struct {
+	Name string 'json:"title" pb:"11"'
+	entryMeta
+
+	model.Base
+}
+
+type entryMeta struct {
+	Name string 'json:"name" pb:"12" gorm:"-"'
+}
+
+func (Entry) TableName() string { return "entries" }
+
+func (Entry) Design() {
+	dsl.GRPC()
+	dsl.Migrate()
+	dsl.Endpoint("entries")
+	dsl.Create(func() {})
 }
 `
 
@@ -2105,9 +2371,9 @@ func TestGenRunHoldsTheCommittedServicesAndMessages(t *testing.T) {
 		err := genRunWithOptions(genRunOptions{Quiet: true})
 
 		require.Error(t, err)
-		require.Contains(t, err.Error(), "pb/note.proto: the rpc GetNote of service NoteService is gone; a client was built against it, so keep it, or delete pb/note.proto to accept the break")
-		require.Contains(t, err.Error(), "pb/note.proto: the message GetNoteRequest is gone; a client was built against it, so keep it, or delete pb/note.proto to accept the break")
-		require.Contains(t, err.Error(), "pb/note.proto: the message GetNoteResponse is gone; a client was built against it, so keep it, or delete pb/note.proto to accept the break")
+		require.Contains(t, err.Error(), "pb/note.proto: the rpc GetNote of service NoteService is gone; a client was built against it, so keep it, or remove it from pb/note.proto to accept the break")
+		require.Contains(t, err.Error(), "pb/note.proto: the message GetNoteRequest is gone; a client was built against it, so keep it, or remove it from pb/note.proto to accept the break")
+		require.Contains(t, err.Error(), "pb/note.proto: the message GetNoteResponse is gone; a client was built against it, so keep it, or remove it from pb/note.proto to accept the break")
 	})
 	t.Run("a service stays declared", func(t *testing.T) {
 		fresh(t, func(s string) string {
@@ -2117,7 +2383,7 @@ func TestGenRunHoldsTheCommittedServicesAndMessages(t *testing.T) {
 		err := genRunWithOptions(genRunOptions{Quiet: true})
 
 		require.Error(t, err)
-		require.Contains(t, err.Error(), "pb/note.proto: the service NoteArchiveService is gone; a client was built against it, so keep it, or delete pb/note.proto to accept the break")
+		require.Contains(t, err.Error(), "pb/note.proto: the service NoteArchiveService is gone; a client was built against it, so keep it, or remove it from pb/note.proto to accept the break")
 	})
 	t.Run("an rpc keeps its messages", func(t *testing.T) {
 		fresh(t, func(s string) string {
@@ -2127,7 +2393,7 @@ func TestGenRunHoldsTheCommittedServicesAndMessages(t *testing.T) {
 		err := genRunWithOptions(genRunOptions{Quiet: true})
 
 		require.Error(t, err)
-		require.Contains(t, err.Error(), "pb/note.proto: the rpc GetNote of service NoteService answered CreateNoteResponse and now answers GetNoteResponse; a client was built against it, so keep it, or delete pb/note.proto to accept the break")
+		require.Contains(t, err.Error(), "pb/note.proto: the rpc GetNote of service NoteService answered CreateNoteResponse and now answers GetNoteResponse; a client was built against it, so keep it, or remove the rpc from pb/note.proto to accept the break")
 	})
 	t.Run("an rpc keeps its streaming", func(t *testing.T) {
 		fresh(t, nil)
@@ -2138,6 +2404,6 @@ func TestGenRunHoldsTheCommittedServicesAndMessages(t *testing.T) {
 		err := genRunWithOptions(genRunOptions{Quiet: true})
 
 		require.Error(t, err)
-		require.Contains(t, err.Error(), "pb/feed.proto: the rpc WatchFeed of service FeedService was server streaming and is now bidirectional streaming; a change of streaming breaks the wire, so keep it server streaming, or delete pb/feed.proto to accept the break")
+		require.Contains(t, err.Error(), "pb/feed.proto: the rpc WatchFeed of service FeedService was server streaming and is now bidirectional streaming; a change of streaming breaks the wire, so keep it server streaming, or remove the rpc from pb/feed.proto to accept the break")
 	})
 }

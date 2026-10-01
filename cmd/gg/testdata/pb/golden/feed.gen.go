@@ -23,6 +23,7 @@ var (
 	tailFeedByFeed   = grpc.ServerStreamCall[*model.Feed, *gstmodel.Empty, *model.FeedEvent]("/api/feeds/:feed/tail")
 	uploadFeedByFeed = grpc.ClientStreamCall[*model.Feed, *model.FeedEvent, *model.FeedUploadRsp]("/api/feeds/:feed/upload")
 	chatFeed         = grpc.BidiStreamCall[*model.Feed, *model.FeedEvent, *model.FeedEvent]("/api/feeds/chat")
+	ingestFeed       = grpc.ClientStreamCall[*model.Feed, *model.FeedEvent, *gstmodel.Empty]("/api/feeds/ingest")
 	watchFeed        = grpc.ServerStreamCall[*model.Feed, *model.FeedWatchReq, *model.FeedEvent]("/api/feeds/watch")
 )
 
@@ -70,6 +71,21 @@ func (feedService) ChatFeed(srv FeedService_ChatFeedServer) error {
 	}, func(rsp *model.FeedEvent) error {
 		return srv.Send(&ChatFeedResponse{Result: FeedEventToProto(rsp)})
 	})
+}
+
+// IngestFeed serves the Stream action of Feed declared on feeds/ingest,
+// served over gRPC alone.
+func (feedService) IngestFeed(srv FeedService_IngestFeedServer) error {
+	if _, err := ingestFeed(srv.Context(), nil, func() (*model.FeedEvent, error) {
+		msg, recvErr := srv.Recv()
+		if recvErr != nil {
+			return nil, recvErr
+		}
+		return FeedEventFromProto(msg.GetPayload())
+	}); err != nil {
+		return err
+	}
+	return srv.SendAndClose(&IngestFeedResponse{})
 }
 
 // WatchFeed serves the Stream action of Feed declared on feeds/watch, served

@@ -45,7 +45,9 @@ func ScanPBFiles(pbDir string) ([]string, error) {
 // and, with a gst.yaml prune.ignore entry pb/legacy in protect, keeps
 // pb/legacy/item.proto under Ignored. The files are the models' mirror,
 // rewritten by every gg gen, so unlike a service file nothing in them is the
-// project's to keep.
+// project's to keep, but for the numbers and names a definition reserves:
+// gg gen deletes the stale Go files itself, as it writes, and leaves the
+// definitions to prune, which warns of the reservations going with them.
 func PlanPBFiles(existing, generated []string, protect ggconfig.PruneConfig) FilePlan {
 	current := make([]string, 0, len(generated))
 	for _, path := range generated {

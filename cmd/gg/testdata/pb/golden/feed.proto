@@ -67,6 +67,16 @@ message ChatFeedResponse {
   FeedEvent result = 1;
 }
 
+// IngestFeedRequest is the request of FeedService.IngestFeed.
+message IngestFeedRequest {
+  // payload is the FeedEvent the action takes.
+  FeedEvent payload = 1;
+}
+
+// IngestFeedResponse is the response of FeedService.IngestFeed.
+message IngestFeedResponse {
+}
+
 // WatchFeedRequest is the request of FeedService.WatchFeed.
 message WatchFeedRequest {
   // payload is the FeedWatchReq the action takes.
@@ -106,6 +116,9 @@ service FeedService {
 
   // ChatFeed is the Stream action of Feed declared on feeds/chat, served over gRPC alone.
   rpc ChatFeed ( stream ChatFeedRequest ) returns ( stream ChatFeedResponse );
+
+  // IngestFeed is the Stream action of Feed declared on feeds/ingest, served over gRPC alone.
+  rpc IngestFeed ( stream IngestFeedRequest ) returns ( IngestFeedResponse );
 
   // WatchFeed is the Stream action of Feed declared on feeds/watch, served over gRPC alone.
   rpc WatchFeed ( WatchFeedRequest ) returns ( stream WatchFeedResponse );

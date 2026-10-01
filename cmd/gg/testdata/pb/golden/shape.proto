@@ -117,6 +117,14 @@ message Shape {
   int32 rank = 45;
 
   uint32 port = 46;
+
+  // Extras is a second JSON wrapper, decoded into a value of its own
+  // beside the one of Options.
+  ShapeOptions extras = 47;
+
+  // Cells is a map of unnamed structs, each decoded whole before it is
+  // put in.
+  map<string, ShapeCells> cells = 48;
 }
 
 // ShapeSpans is the message of the spans field of Shape.
@@ -129,6 +137,11 @@ message ShapeSpans {
 // ShapeNote is the message of the note field of Shape.
 message ShapeNote {
   string text = 1;
+}
+
+// ShapeCells is the message of the cells field of Shape.
+message ShapeCells {
+  int32 count = 1;
 }
 
 // ShapeWindow is the message of the window field of Shape.

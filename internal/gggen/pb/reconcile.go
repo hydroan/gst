@@ -47,8 +47,10 @@ func (g *generator) reconcile() {
 		declared := make(map[string]*descriptorpb.DescriptorProto, len(committed.messages))
 		indexMessages(f.messages, "", declared)
 		for _, name := range slices.Sorted(maps.Keys(committed.messages)) {
-			if _, ok := declared[name]; !ok {
-				g.project.Report(s, "the message %s is gone; a client was built against it, so keep it, or delete %s to accept the break", name, s.Subject)
+			// The entry message of a map field goes with the field, whose
+			// number holdMessage reserves: no client was built against it.
+			if _, ok := declared[name]; !ok && !committed.messages[name].GetOptions().GetMapEntry() {
+				g.project.Report(s, "the message %s is gone; a client was built against it, so keep it, or remove it from %s to accept the break", name, s.Subject)
 			}
 		}
 		g.holdServices(s, f, committed.services)
@@ -139,8 +141,9 @@ func indexMessages(messages []*descriptorpb.DescriptorProto, parent string, inde
 // keeps its number, its cardinality and a wire-compatible type (see
 // wireType), a number a field of the committed message held cannot pass to
 // a field of another name, and neither can a number or a name the committed
-// message reserves be taken; each breach is reported with the file to delete
-// for accepting the break. The numbers and names of the
+// message reserves be taken; each breach is reported with the edit of the
+// committed file that accepts the break, which keeps what the file reserves
+// where deleting it would not. The numbers and names of the
 // committed fields the message dropped are reserved in msg, along with
 // everything the committed message reserved, so that the next generation
 // keeps reserving them; a field coming back under a reserved number or name
@@ -180,17 +183,17 @@ func (g *generator) holdMessage(s jsonshape.Site, msg *descriptorpb.DescriptorPr
 			was, known := fields[f.GetName()]
 			switch holder, held := numbers[f.GetNumber()]; {
 			case known && was.GetNumber() != f.GetNumber():
-				g.project.Report(s, "the field %s of message %s was number %d and is now %d; keep %d, or delete %s to accept the break", f.GetName(), name, was.GetNumber(), f.GetNumber(), was.GetNumber(), s.Subject)
+				g.project.Report(s, "the field %s of message %s was number %d and is now %d; keep %d, or replace the field in %s by \"reserved %d;\" to accept the break", f.GetName(), name, was.GetNumber(), f.GetNumber(), was.GetNumber(), s.Subject, was.GetNumber())
 			case known && repeated(was) != repeated(f):
-				g.project.Report(s, "the field %s of message %s was %s and is now %s; a cardinality change breaks the wire, so keep it %s, or delete %s to accept the break", f.GetName(), name, cardinality(was), cardinality(f), cardinality(was), s.Subject)
+				g.project.Report(s, "the field %s of message %s was %s and is now %s; a cardinality change breaks the wire, so keep it %s, or remove the field from %s to accept the break", f.GetName(), name, cardinality(was), cardinality(f), cardinality(was), s.Subject)
 			case known && wireType(was) != wireType(f):
-				g.project.Report(s, "the field %s of message %s was %s and is now %s; a type change breaks the wire, so keep %s or a type compatible with it, or delete %s to accept the break", f.GetName(), name, typeName(was), typeName(f), typeName(was), s.Subject)
+				g.project.Report(s, "the field %s of message %s was %s and is now %s; a type change breaks the wire, so keep %s or a type compatible with it, or remove the field from %s to accept the break", f.GetName(), name, typeName(was), typeName(f), typeName(was), s.Subject)
 			case held && holder != f.GetName():
-				g.project.Report(s, "the field %s of message %s takes number %d, which the field %s held; a number is never reused, so give %s a fresh number and let %d stay reserved, or delete %s to accept the break", f.GetName(), name, f.GetNumber(), holder, f.GetName(), f.GetNumber(), s.Subject)
+				g.project.Report(s, "the field %s of message %s takes number %d, which the field %s held; a number is never reused, so give %s a fresh number and let %d stay reserved, or remove the field %s from %s to accept the break", f.GetName(), name, f.GetNumber(), holder, f.GetName(), f.GetNumber(), holder, s.Subject)
 			case reserves(reserved, f.GetNumber()):
-				g.project.Report(s, "the field %s of message %s takes number %d, which the file reserves; give %s a fresh number, or delete %s to accept the break", f.GetName(), name, f.GetNumber(), f.GetName(), s.Subject)
+				g.project.Report(s, "the field %s of message %s takes number %d, which the file reserves; give %s a fresh number, or remove the reservation of %d from %s to accept the break", f.GetName(), name, f.GetNumber(), f.GetName(), f.GetNumber(), s.Subject)
 			case reservedNames[f.GetName()]:
-				g.project.Report(s, "the field %s of message %s takes a name the file reserves; a removed field's name is never reused, so name it differently, or delete %s to accept the break", f.GetName(), name, s.Subject)
+				g.project.Report(s, "the field %s of message %s takes a name the file reserves; a removed field's name is never reused, so name it differently, or remove the reservation of the name from %s to accept the break", f.GetName(), name, s.Subject)
 			}
 		}
 		for _, f := range committed.GetField() {
@@ -217,7 +220,7 @@ func (g *generator) holdMessage(s jsonshape.Site, msg *descriptorpb.DescriptorPr
 // committed service must still be declared, and so must every rpc of it,
 // taking the request message, answering the response message and streaming
 // the sides it did, since a client was built against each; every breach is
-// reported with the file to delete for accepting the break. A committed
+// reported with the edit of the committed file that accepts the break. A committed
 // NoteService whose GetNote took GetNoteRequest and answered GetNoteResponse
 // as a unary rpc holds the file to exactly that.
 func (g *generator) holdServices(s jsonshape.Site, file *protoFile, old map[string]*descriptorpb.ServiceDescriptorProto) {
@@ -228,7 +231,7 @@ func (g *generator) holdServices(s jsonshape.Site, file *protoFile, old map[stri
 	for _, name := range slices.Sorted(maps.Keys(old)) {
 		svc, ok := services[name]
 		if !ok {
-			g.project.Report(s, "the service %s is gone; a client was built against it, so keep it, or delete %s to accept the break", name, s.Subject)
+			g.project.Report(s, "the service %s is gone; a client was built against it, so keep it, or remove it from %s to accept the break", name, s.Subject)
 			continue
 		}
 		methods := make(map[string]*descriptorpb.MethodDescriptorProto, len(svc.GetMethod()))
@@ -239,13 +242,13 @@ func (g *generator) holdServices(s jsonshape.Site, file *protoFile, old map[stri
 			m, ok := methods[was.GetName()]
 			switch {
 			case !ok:
-				g.project.Report(s, "the rpc %s of service %s is gone; a client was built against it, so keep it, or delete %s to accept the break", was.GetName(), name, s.Subject)
+				g.project.Report(s, "the rpc %s of service %s is gone; a client was built against it, so keep it, or remove it from %s to accept the break", was.GetName(), name, s.Subject)
 			case messageOfType(was.GetInputType()) != messageOfType(m.GetInputType()):
-				g.project.Report(s, "the rpc %s of service %s took %s and now takes %s; a client was built against it, so keep it, or delete %s to accept the break", was.GetName(), name, messageOfType(was.GetInputType()), messageOfType(m.GetInputType()), s.Subject)
+				g.project.Report(s, "the rpc %s of service %s took %s and now takes %s; a client was built against it, so keep it, or remove the rpc from %s to accept the break", was.GetName(), name, messageOfType(was.GetInputType()), messageOfType(m.GetInputType()), s.Subject)
 			case messageOfType(was.GetOutputType()) != messageOfType(m.GetOutputType()):
-				g.project.Report(s, "the rpc %s of service %s answered %s and now answers %s; a client was built against it, so keep it, or delete %s to accept the break", was.GetName(), name, messageOfType(was.GetOutputType()), messageOfType(m.GetOutputType()), s.Subject)
+				g.project.Report(s, "the rpc %s of service %s answered %s and now answers %s; a client was built against it, so keep it, or remove the rpc from %s to accept the break", was.GetName(), name, messageOfType(was.GetOutputType()), messageOfType(m.GetOutputType()), s.Subject)
 			case was.GetClientStreaming() != m.GetClientStreaming() || was.GetServerStreaming() != m.GetServerStreaming():
-				g.project.Report(s, "the rpc %s of service %s was %s and is now %s; a change of streaming breaks the wire, so keep it %s, or delete %s to accept the break", was.GetName(), name, streaming(was), streaming(m), streaming(was), s.Subject)
+				g.project.Report(s, "the rpc %s of service %s was %s and is now %s; a change of streaming breaks the wire, so keep it %s, or remove the rpc from %s to accept the break", was.GetName(), name, streaming(was), streaming(m), streaming(was), s.Subject)
 			}
 		}
 	}

@@ -159,6 +159,15 @@ func ShapeToProto(m *model.Shape) *Shape {
 	p.Window.Width = m.Window.Width
 	p.Rank = int32(m.Rank)
 	p.Port = uint32(m.Port)
+	data2 := m.Extras.Data()
+	p.Extras = ShapeOptionsToProto(&data2)
+	if m.Cells != nil {
+		p.Cells = make(map[string]*ShapeCells, len(m.Cells))
+		for k, v := range m.Cells {
+			p.Cells[k] = new(ShapeCells)
+			p.Cells[k].Count = v.Count
+		}
+	}
 	return p
 }
 
@@ -346,6 +355,30 @@ func ShapeFromProto(p *Shape) (*model.Shape, error) {
 	m.Port, err = grpc.Narrow[uint16]("port", p.GetPort())
 	if err != nil {
 		return nil, err
+	}
+	var data2 model.ShapeOptions
+	if v := p.GetExtras(); v != nil {
+		var x *model.ShapeOptions
+		x, err = ShapeOptionsFromProto(v)
+		if err != nil {
+			return nil, err
+		}
+		data2 = *x
+	}
+	m.Extras = datatypes.NewJSONType(data2)
+	if p.GetCells() != nil {
+		m.Cells = make(map[string]struct {
+			Count int32 `json:"count" pb:"1"`
+		}, len(p.GetCells()))
+		for k, v := range p.GetCells() {
+			var e struct {
+				Count int32 `json:"count" pb:"1"`
+			}
+			if v != nil {
+				e.Count = v.GetCount()
+			}
+			m.Cells[k] = e
+		}
 	}
 	return m, nil
 }

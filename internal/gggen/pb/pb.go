@@ -30,8 +30,10 @@
 // were built against, so a generated file replaces one only if every field
 // keeps its number and no number changes hands; the numbers and names of the
 // fields a model dropped stay reserved in the new file. A change that would
-// break the wire is reported, with the file to delete for accepting it on
-// purpose.
+// break the wire is reported, with the edit of the committed file that
+// accepts it on purpose while keeping what the file reserves (see
+// reconcile). The Go files are type-checked before any is written (see
+// TypeCheck).
 package pb
 
 import (
