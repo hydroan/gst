@@ -268,7 +268,6 @@ func validateDesignFunc(fn *ast.FuncDecl, modelName string, rootModelFile, virtu
 			errs = append(errs, fmt.Errorf("%s: %s() can only be used inside an action block", filename, name))
 		}
 	}
-	errs = append(errs, validateSSEListConflict(seenActions, filename)...)
 	if grpc && !grpcServable {
 		errs = append(errs, fmt.Errorf("%s: %s declares GRPC() but no action gRPC can serve: Import, Export and SSE are HTTP only; declare another action or remove GRPC()", filename, modelName))
 	}
@@ -276,17 +275,6 @@ func validateDesignFunc(fn *ast.FuncDecl, modelName string, rootModelFile, virtu
 		errs = append(errs, fmt.Errorf("%s: %s declares a Stream action but no GRPC(); a stream is served over gRPC alone, declare GRPC() or remove the Stream action", filename, modelName))
 	}
 	return records, errs
-}
-
-// validateSSEListConflict rejects SSE and List sharing one route: both
-// register a GET handler on the route path itself, and the router panics on
-// the duplicate at startup. Rejecting the design at generation time reports
-// the mistake where it was made.
-func validateSSEListConflict(seenActions map[string]bool, filename string) []error {
-	if seenActions[consts.SSE.Name()] && seenActions[consts.List.Name()] {
-		return []error{fmt.Errorf("%s: SSE and List cannot share one route: both register the GET route path itself", filename)}
-	}
-	return nil
 }
 
 // functionLiteralArg returns the function literal a block keyword takes as
@@ -306,7 +294,11 @@ func functionLiteralArg(call *ast.CallExpr, i int) *ast.FuncLit {
 // validateRouteCall validates one Route block and reports, beside the service
 // records and errors of its actions, whether any of them is an action gRPC
 // can serve (see httpOnlyActionMethodNames) and whether any is one only
-// gRPC can serve (see grpcOnlyActionMethodNames).
+// gRPC can serve (see grpcOnlyActionMethodNames). A parameter of the route
+// is written :name, the one form the router reads; one written {name},
+// which the router would serve as that literal segment, is refused with
+// "the Route("archive/boxes/{box}/documents") of Record writes the
+// parameter box as {box}; write :box, the form the router reads".
 func validateRouteCall(call *ast.CallExpr, modelName string, rootModelFile, virtual bool, filename string) (records []serviceActionRecord, grpcServable, grpcOnly bool, errs []error) {
 	flit := functionLiteralArg(call, 1)
 	if flit == nil {
@@ -316,7 +308,12 @@ func validateRouteCall(call *ast.CallExpr, modelName string, rootModelFile, virt
 	route := stringArgValue(call, "")
 	records = make([]serviceActionRecord, 0)
 	errs = make([]error, 0)
-	seenActions := make(map[string]bool)
+	for part := range strings.SplitSeq(route, "/") {
+		if strings.HasPrefix(part, "{") && strings.HasSuffix(part, "}") {
+			name := strings.TrimSuffix(strings.TrimPrefix(part, "{"), "}")
+			errs = append(errs, fmt.Errorf("%s: the Route(%q) of %s writes the parameter %s as {%[4]s}; write :%[4]s, the form the router reads", filename, route, modelName, name))
+		}
+	}
 	// An action is declared once per route and form: an Exact() action
 	// serves the route path itself, the other the item under it, so a
 	// Delete of each is two endpoints, while two of one form would register
@@ -335,7 +332,6 @@ func validateRouteCall(call *ast.CallExpr, modelName string, rootModelFile, virt
 
 		switch {
 		case isActionMethod(name):
-			seenActions[name] = true
 			grpcServable = grpcServable || !httpOnlyActionMethodNames[name]
 			grpcOnly = grpcOnly || grpcOnlyActionMethodNames[name]
 			info, actionErrs := validateActionCall(child, name, rootModelFile, virtual, filename)
@@ -355,7 +351,6 @@ func validateRouteCall(call *ast.CallExpr, modelName string, rootModelFile, virt
 			errs = append(errs, fmt.Errorf("%s: %s() can only be used at Design() top level", filename, name))
 		}
 	}
-	errs = append(errs, validateSSEListConflict(seenActions, filename)...)
 	return records, grpcServable, grpcOnly, errs
 }
 

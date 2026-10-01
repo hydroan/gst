@@ -61,16 +61,12 @@ func rpcSuffix(m *Model, route string) string {
 }
 
 // RouteParams returns the names of the path parameters of route, written
-// :name or {name}, in order: box and shelf for
-// archive/boxes/:box/shelves/{shelf}/documents.
+// :name, in order: box and shelf for archive/boxes/:box/shelves/:shelf/documents.
 func RouteParams(route string) []string {
 	var params []string
 	for part := range strings.SplitSeq(route, "/") {
-		switch {
-		case strings.HasPrefix(part, ":"):
-			params = append(params, strings.TrimPrefix(part, ":"))
-		case strings.HasPrefix(part, "{") && strings.HasSuffix(part, "}"):
-			params = append(params, strings.TrimSuffix(strings.TrimPrefix(part, "{"), "}"))
+		if name, ok := strings.CutPrefix(part, ":"); ok {
+			params = append(params, name)
 		}
 	}
 	return params

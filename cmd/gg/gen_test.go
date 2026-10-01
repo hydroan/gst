@@ -1261,3 +1261,36 @@ func TestCreate(t *testing.T) {}
 
 	requireProjectCompiles(t)
 }
+
+// TestGenRunRefusesTheRoutesTwoActionsRegisterAlike pins that gg gen stops
+// at the scan on two actions registering one path, what the router would
+// refuse at startup, naming both: model/token.go and model/api/token.go,
+// whose endpoints both resolve to /api/tokens.
+func TestGenRunRefusesTheRoutesTwoActionsRegisterAlike(t *testing.T) {
+	projectDir, ok := newGenProject(t)
+	if !ok {
+		return
+	}
+	for _, path := range []string{"model/token.go", "model/api/token.go"} {
+		writeProjectFile(t, filepath.Join(projectDir, path), "package "+filepath.Base(filepath.Dir(path))+`
+
+import (
+	"github.com/hydroan/gst/dsl"
+	"github.com/hydroan/gst/model"
+)
+
+type Token struct {
+	model.Base
+}
+
+func (Token) Design() {
+	dsl.Endpoint("tokens")
+	dsl.List(func() {})
+}
+`)
+	}
+
+	err := genRunWithOptions(genRunOptions{Quiet: true})
+
+	require.EqualError(t, err, "model/token.go: the List action of Token registers GET /api/tokens, as the List action of Token in model/api/token.go does; a path is served by one action")
+}

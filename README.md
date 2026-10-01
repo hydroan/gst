@@ -153,7 +153,8 @@ func (Record) Design() {
 - `GET /api/records/:rec`
 
 `Param("rec")` 控制单资源路由中的参数名。未声明 `Param(...)` 时，单资源路由默认
-使用框架默认参数。
+使用框架默认参数。`Route(...)` 里的参数段一律写 `:name`，路由只认这一种写法；写成
+`{name}` 的 `gg gen` 直接拒绝。
 
 需要自增整数主键的资源改用 `model.AutoBase`，字段和默认 hook 与 `model.Base`
 一致，区别是 ID 由数据库在插入时分配（框架不会生成）。注意：这类模型通过

@@ -1407,20 +1407,6 @@ func TestValidateSSEUsage(t *testing.T) {
 			filename:  "/repo/model/sample/record.go",
 			wantError: "SSE action delegates to the fixed service method SSE(ctx) error and cannot declare Result",
 		},
-		{
-			name:      "sse_and_list_share_a_route_block",
-			source:    validateSSEWithListInRouteSource,
-			modelDir:  "/repo/model",
-			filename:  "/repo/model/sample/record.go",
-			wantError: "SSE and List cannot share one route: both register the GET route path itself",
-		},
-		{
-			name:      "sse_and_list_share_the_design_top_level",
-			source:    validateSSEWithListTopLevelSource,
-			modelDir:  "/repo/model",
-			filename:  "/repo/model/sample/record.go",
-			wantError: "SSE and List cannot share one route: both register the GET route path itself",
-		},
 	}
 
 	for _, tt := range tests {
@@ -1558,7 +1544,25 @@ func (Record) Design() {
 }
 `
 
-const validateSSEWithListInRouteSource = `
+// TestValidateRejectsARouteParameterInBraces pins that a Route writing a
+// parameter as {name}, which the router would serve as a literal segment,
+// is refused and told the :name form.
+func TestValidateRejectsARouteParameterInBraces(t *testing.T) {
+	fset := token.NewFileSet()
+	file, err := parser.ParseFile(fset, "/repo/model/sample/record.go", validateRouteBraceParameterSource, parser.ParseComments)
+	if err != nil {
+		t.Fatalf("parse source failed: %v", err)
+	}
+
+	errs := dsl.Validate(file, "/repo/model", "/repo/model/sample/record.go")
+
+	want := `/repo/model/sample/record.go: the Route("archive/boxes/{box}/documents") of Record writes the parameter box as {box}; write :box, the form the router reads`
+	if len(errs) != 1 || errs[0].Error() != want {
+		t.Fatalf("Validate errors = %v, want exactly %q", errs, want)
+	}
+}
+
+const validateRouteBraceParameterSource = `
 package sample
 
 import (
@@ -1571,37 +1575,8 @@ type Record struct {
 }
 
 func (Record) Design() {
-	Route("sample/records", func() {
-		SSE(func() {
-			Service()
-		})
-		List(func() {
-			Service()
-			Result[*RecordListRsp]()
-		})
-	})
-}
-`
-
-const validateSSEWithListTopLevelSource = `
-package sample
-
-import (
-	. "github.com/hydroan/gst/dsl"
-	"github.com/hydroan/gst/model"
-)
-
-type Record struct {
-	model.Base
-}
-
-func (Record) Design() {
-	SSE(func() {
-		Service()
-	})
-	List(func() {
-		Service()
-		Result[*RecordListRsp]()
+	Route("archive/boxes/{box}/documents", func() {
+		List(func() {})
 	})
 }
 `

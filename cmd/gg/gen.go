@@ -572,6 +572,11 @@ func scanModels(quiet bool, ignore gghelper.ProjectIgnore) (scannedModels, error
 		return scannedModels{}, err
 	}
 	ignoreResult := modelinfo.ResolveRoutes(allModels, projectCfg.Gen.Routes.Ignore)
+	// Two actions registering one path would stop the router at startup;
+	// the scan stops here instead, naming both.
+	if conflicts := modelinfo.RouteConflicts(allModels); len(conflicts) > 0 {
+		return scannedModels{}, errors.Join(conflicts...)
+	}
 	if !quiet && len(ignoreResult.Matches) > 0 {
 		clioutput.Section("Ignore Routes")
 		for _, match := range ignoreResult.Matches {

@@ -18,7 +18,7 @@ func TestRPCNameJoinsActionModelAndRouteParameters(t *testing.T) {
 	list := &dsl.Action{Phase: consts.List}
 	require.Equal(t, "ListDocument", modelinfo.RPCName(document, "archive/documents", list))
 	require.Equal(t, "ListDocumentByBox", modelinfo.RPCName(document, "archive/boxes/:box/documents", list))
-	require.Equal(t, "ListDocumentByBoxAndShelf", modelinfo.RPCName(document, "archive/boxes/:box/shelves/{shelf}/documents", list))
+	require.Equal(t, "ListDocumentByBoxAndShelf", modelinfo.RPCName(document, "archive/boxes/:box/shelves/:shelf/documents", list))
 	require.Equal(t, "MergeDocument", modelinfo.RPCName(document, "archive/documents/merge", &dsl.Action{Phase: consts.Create, ServiceName: "merge"}))
 
 	// A nested model's own parameters are those of its endpoint and its
@@ -32,7 +32,7 @@ func TestRPCNameJoinsActionModelAndRouteParameters(t *testing.T) {
 // TestRouteParamsReadsBothParameterForms pins the example of the RouteParams
 // doc comment.
 func TestRouteParamsReadsBothParameterForms(t *testing.T) {
-	require.Equal(t, []string{"box", "shelf"}, modelinfo.RouteParams("archive/boxes/:box/shelves/{shelf}/documents"))
+	require.Equal(t, []string{"box", "shelf"}, modelinfo.RouteParams("archive/boxes/:box/shelves/:shelf/documents"))
 	require.Empty(t, modelinfo.RouteParams("archive/documents"))
 }
 

@@ -32,6 +32,49 @@ func ResolveRoutes(models []*Model, ignores []ggconfig.RouteRule) RouteIgnoreRes
 	return applyRouteIgnores(models, ignores)
 }
 
+// RouteConflicts returns the conflicts among the routes the models
+// register, once ResolveRoutes resolved them, each as an error naming both
+// actions: two actions registering one path under one HTTP method, which
+// the router refuses at startup, and two Stream actions on one route, which
+// the service registry refuses. The later action, in the order the models
+// were found and their actions are declared, is held to the earlier one.
+// For model/api/token.go and model/token.go, found in that order and both
+// declaring a List action on Endpoint("tokens"), it returns
+//
+//	model/token.go: the List action of Token registers GET /api/tokens, as the List action of Token in model/api/token.go does; a path is served by one action
+//
+// and for two models declaring a Stream action on Route("feeds/chat")
+//
+//	model/feed.go: the Stream action of Feed registers the stream on /api/feeds/chat, as the Stream action of Feed in model/api/feed.go does; a route serves one Stream action
+func RouteConflicts(models []*Model) []error {
+	type registration struct {
+		file, model, action string
+	}
+	registered := make(map[string]registration)
+	var conflicts []error
+	for _, m := range models {
+		if m.Design == nil {
+			continue
+		}
+		m.Design.Range(func(route string, act *dsl.Action) {
+			path, _ := RouterTargetForAction(route, m.Design, act)
+			method := act.Phase.HTTPMethod()
+			key, registers, serves := method+" "+path, method+" "+path, "a path is served by one action"
+			if method == "" {
+				key, registers, serves = act.Phase.Name()+" "+path, "the stream on "+path, "a route serves one Stream action"
+			}
+			current := registration{file: m.ModelFilePath, model: m.ModelName, action: act.Phase.Name()}
+			if earlier, ok := registered[key]; ok {
+				conflicts = append(conflicts, fmt.Errorf("%s: the %s action of %s registers %s, as the %s action of %s in %s does; %s",
+					current.file, current.action, current.model, registers, earlier.action, earlier.model, earlier.file, serves))
+				return
+			}
+			registered[key] = current
+		})
+	}
+	return conflicts
+}
+
 // ItemParam returns the path parameter the item actions (Get, Update, Patch,
 // Delete) of a model append to its route: the parameter its design declares,
 // :sample for Param("sample"), or :id when it declares none.
@@ -84,23 +127,12 @@ func RouterTargetForAction(route string, design *dsl.Design, action *dsl.Action)
 }
 
 // routerPathParamName returns the name of the last parameter segment of
-// route, written :name or {name}: id for iam/admin/users/:id/sessions, and ""
-// for a route without one.
+// route, written :name, the one form the router reads (see dsl.Validate):
+// id for iam/admin/users/:id/sessions, and "" for a route without one.
 func routerPathParamName(route string) string {
-	parts := strings.Split(route, "/")
-	for _, part := range slices.Backward(parts) {
-		trimmedPart := strings.TrimSpace(part)
-		switch {
-		case strings.HasPrefix(trimmedPart, ":"):
-			name := strings.TrimPrefix(trimmedPart, ":")
-			if name != "" {
-				return name
-			}
-		case strings.HasPrefix(trimmedPart, "{") && strings.HasSuffix(trimmedPart, "}"):
-			name := strings.TrimSuffix(strings.TrimPrefix(trimmedPart, "{"), "}")
-			if name != "" {
-				return name
-			}
+	for _, part := range slices.Backward(strings.Split(route, "/")) {
+		if name, ok := strings.CutPrefix(strings.TrimSpace(part), ":"); ok && name != "" {
+			return name
 		}
 	}
 	return ""

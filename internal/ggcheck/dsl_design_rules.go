@@ -7,22 +7,27 @@ import (
 	"os"
 
 	"github.com/hydroan/gst/internal/dsl"
+	"github.com/hydroan/gst/internal/ggconfig"
 	"github.com/hydroan/gst/internal/ggconst"
 	"github.com/hydroan/gst/internal/gghelper"
 	"github.com/hydroan/gst/internal/modelinfo"
 )
 
 // DSLDesignRules runs the Design() validation that gates gg gen over every
-// model file.
+// model file, and the route conflict check gg gen runs over them all.
 var DSLDesignRules = Check{
 	Name: "DSL design rules",
-	Rule: "model files must pass the same validation rules that gate gg gen: the Design() DSL rules, and the base types model.Base, model.AutoBase and model.Empty embedded by value, never through a pointer",
+	Rule: "model files must pass the same validation rules that gate gg gen: the Design() DSL rules, the base types model.Base, model.AutoBase and model.Empty embedded by value, never through a pointer, and no two actions registering one path",
 	run:  checkDSLDesignRules,
 }
 
 // checkDSLDesignRules runs DSL Design() validation on every model file, so keyword
 // placement and generation-semantic violations fail gg check with the same
-// rules that block gg gen.
+// rules that block gg gen, and then reports the conflicts among the routes
+// of all the models the way gg gen refuses them (see
+// modelinfo.RouteConflicts), the models read the way gg gen reads them,
+// with the gst.yaml route ignores applied; a model tree that fails to load
+// was reported file by file already.
 func checkDSLDesignRules(ignore gghelper.ProjectIgnore) []string {
 	var violations []string
 
@@ -48,5 +53,21 @@ func checkDSLDesignRules(ignore gghelper.ProjectIgnore) []string {
 		violations = append(violations, err.Error())
 	}
 
+	cfg, err := ggconfig.Load(".")
+	if err != nil {
+		return append(violations, fmt.Sprintf("loading gst.yaml: %v", err))
+	}
+	modulePath, err := gghelper.ModulePath()
+	if err != nil {
+		return append(violations, fmt.Sprintf("reading the module path: %v", err))
+	}
+	models, err := modelinfo.FindModels(modulePath, ggconst.DirModel, ignore)
+	if err != nil {
+		return violations
+	}
+	modelinfo.ResolveRoutes(models, cfg.Gen.Routes.Ignore)
+	for _, conflict := range modelinfo.RouteConflicts(models) {
+		violations = append(violations, conflict.Error())
+	}
 	return violations
 }

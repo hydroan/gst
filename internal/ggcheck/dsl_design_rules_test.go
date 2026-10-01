@@ -2,6 +2,7 @@ package ggcheck_test
 
 import (
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -14,6 +15,7 @@ import (
 func TestDSLDesignRulesRejectsBaseTypesEmbeddedThroughAPointer(t *testing.T) {
 	projectDir := t.TempDir()
 	t.Chdir(projectDir)
+	writeCheckProjectGoMod(t, projectDir)
 
 	writeCheckFile(t, filepath.Join(projectDir, "model", "record", "record.go"), `package record
 
@@ -38,6 +40,7 @@ func (Record) TableName() string { return "records" }
 func TestDSLDesignRulesRejectsExactOnBuiltinIDActions(t *testing.T) {
 	projectDir := t.TempDir()
 	t.Chdir(projectDir)
+	writeCheckProjectGoMod(t, projectDir)
 
 	writeCheckFile(t, filepath.Join(projectDir, "model", "iam", "session.go"), `package iam
 
@@ -89,5 +92,40 @@ func (Current) Design() {
 	}
 	if !strings.Contains(violations[0], filepath.Join("model", "iam", "session.go")) {
 		t.Fatalf("violation should point to the offending file, got %q", violations[0])
+	}
+}
+
+// TestDSLDesignRulesReportsTheRoutesTwoActionsRegisterAlike pins that gg
+// check reports, under the DSL design rules, two actions registering one
+// path, the way gg gen refuses them: model/token.go and model/api/token.go,
+// whose endpoints both resolve to /api/tokens.
+func TestDSLDesignRulesReportsTheRoutesTwoActionsRegisterAlike(t *testing.T) {
+	projectDir := t.TempDir()
+	t.Chdir(projectDir)
+	writeCheckProjectGoMod(t, projectDir)
+	for _, path := range []string{"model/token.go", "model/api/token.go"} {
+		writeCheckFile(t, filepath.Join(projectDir, path), "package "+filepath.Base(filepath.Dir(path))+`
+
+import (
+	"github.com/hydroan/gst/dsl"
+	"github.com/hydroan/gst/model"
+)
+
+type Token struct {
+	model.Base
+}
+
+func (Token) Design() {
+	dsl.Endpoint("tokens")
+	dsl.List(func() {})
+}
+`)
+	}
+
+	violations := runCheck(ggcheck.DSLDesignRules)
+
+	want := []string{"model/token.go: the List action of Token registers GET /api/tokens, as the List action of Token in model/api/token.go does; a path is served by one action"}
+	if !slices.Equal(violations, want) {
+		t.Fatalf("violations = %q, want %q", violations, want)
 	}
 }

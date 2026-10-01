@@ -159,3 +159,93 @@ func TestRouterTargetForAction(t *testing.T) {
 		})
 	}
 }
+
+// TestRouteConflictsNamesBothActionsOfAPath pins the example of
+// RouteConflicts and the forms the router or the service registry would
+// refuse at startup: two models resolving to one path, an Exact action on
+// the path of another, SSE beside List, one Route block written twice, and
+// two Stream actions on one route; the batch path beside the item path
+// conflicts with nothing.
+func TestRouteConflictsNamesBothActionsOfAPath(t *testing.T) {
+	model := func(pkg, name, design string) string {
+		return "package " + pkg + `
+
+import (
+	"github.com/hydroan/gst/dsl"
+	"github.com/hydroan/gst/model"
+)
+
+type ` + name + ` struct {
+	model.Base
+}
+
+func (` + name + `) Design() {
+` + design + `}
+`
+	}
+	tests := []struct {
+		name    string
+		sources map[string]string
+		want    []string
+	}{
+		{
+			name: "two models resolving to one path",
+			sources: map[string]string{
+				filepath.Join("model", "token.go"):        model("model", "Token", "\tdsl.Endpoint(\"tokens\")\n\tdsl.List(func() {})\n"),
+				filepath.Join("model", "api", "token.go"): model("api", "Token", "\tdsl.Endpoint(\"tokens\")\n\tdsl.List(func() {})\n"),
+			},
+			want: []string{"model/token.go: the List action of Token registers GET /api/tokens, as the List action of Token in model/api/token.go does; a path is served by one action"},
+		},
+		{
+			name: "an Exact action on the path of another",
+			sources: map[string]string{
+				filepath.Join("model", "item.go"): model("model", "Item", "\tdsl.Endpoint(\"items\")\n\tdsl.List(func() {})\n\tdsl.Export(func() {\n\t\tdsl.Service()\n\t\tdsl.Exact()\n\t})\n"),
+			},
+			want: []string{"model/item.go: the Export action of Item registers GET /api/items, as the List action of Item in model/item.go does; a path is served by one action"},
+		},
+		{
+			name: "SSE beside List",
+			sources: map[string]string{
+				filepath.Join("model", "record.go"): model("model", "Record", "\tdsl.Endpoint(\"records\")\n\tdsl.SSE(func() {\n\t\tdsl.Service()\n\t})\n\tdsl.List(func() {})\n"),
+			},
+			want: []string{"model/record.go: the SSE action of Record registers GET /api/records, as the List action of Record in model/record.go does; a path is served by one action"},
+		},
+		{
+			name: "a Route block written twice",
+			sources: map[string]string{
+				filepath.Join("model", "item.go"): model("model", "Item", "\tdsl.Endpoint(\"items\")\n\tdsl.Route(\"items/archive\", func() {\n\t\tdsl.List(func() {})\n\t})\n\tdsl.Route(\"items/archive\", func() {\n\t\tdsl.List(func() {})\n\t})\n"),
+			},
+			want: []string{"model/item.go: the List action of Item registers GET /api/items/archive, as the List action of Item in model/item.go does; a path is served by one action"},
+		},
+		{
+			name: "two Stream actions on one route",
+			sources: map[string]string{
+				filepath.Join("model", "feed.go"):        model("model", "Feed", "\tdsl.GRPC()\n\tdsl.Endpoint(\"feeds\")\n\tdsl.Route(\"feeds/chat\", func() {\n\t\tdsl.Stream(func() {\n\t\t\tdsl.Service(\"chat\")\n\t\t\tdsl.StreamingPayload[*FeedEvent]()\n\t\t\tdsl.StreamingResult[*FeedEvent]()\n\t\t})\n\t})\n"),
+				filepath.Join("model", "api", "feed.go"): model("api", "Feed", "\tdsl.GRPC()\n\tdsl.Endpoint(\"feeds\")\n\tdsl.Route(\"feeds/chat\", func() {\n\t\tdsl.Stream(func() {\n\t\t\tdsl.Service(\"chat\")\n\t\t\tdsl.StreamingPayload[*FeedEvent]()\n\t\t\tdsl.StreamingResult[*FeedEvent]()\n\t\t})\n\t})\n"),
+			},
+			want: []string{"model/feed.go: the Stream action of Feed registers the stream on /api/feeds/chat, as the Stream action of Feed in model/api/feed.go does; a route serves one Stream action"},
+		},
+		{
+			name: "the batch path beside the item path",
+			sources: map[string]string{
+				filepath.Join("model", "item.go"): model("model", "Item", "\tdsl.Endpoint(\"items\")\n\tdsl.Create(func() {})\n\tdsl.CreateMany(func() {})\n\tdsl.List(func() {})\n\tdsl.Get(func() {})\n"),
+			},
+			want: nil,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			models := findModels(t, tt.sources)
+			modelinfo.ResolveRoutes(models, nil)
+
+			var got []string
+			for _, err := range modelinfo.RouteConflicts(models) {
+				got = append(got, err.Error())
+			}
+
+			if !slices.Equal(got, tt.want) {
+				t.Fatalf("RouteConflicts = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
