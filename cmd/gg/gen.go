@@ -549,12 +549,13 @@ func protobufDefinitions(models []*modelinfo.Model) ([]pb.File, error) {
 	return files, nil
 }
 
-// scanModels reads the models of the model directory and resolves their
-// routes: hierarchical endpoints and parent params are applied, then the
-// gst.yaml route and model ignores. Route ignores apply before anything reads
-// the actions, so a matched action behaves exactly like an action that was
-// never declared. gg gen and gg gen ts both start from here, which keeps the
-// TypeScript declarations on the routes the generated router registers.
+// scanModels reads the models of the model directory the way every command
+// and check reads them (see modelinfo.ScanModels): their routes resolved,
+// then the gst.yaml route and model ignores applied, so a matched action
+// behaves exactly like an action that was never declared, and reports what
+// the ignores matched. gg gen and gg gen ts both start from here, which
+// keeps the TypeScript declarations on the routes the generated router
+// registers.
 func scanModels(quiet bool, ignore gghelper.ProjectIgnore) (scannedModels, error) {
 	if !gghelper.FileExists(ggconst.DirModel) {
 		return scannedModels{}, fmt.Errorf("model dir not found: %s", ggconst.DirModel)
@@ -563,23 +564,22 @@ func scanModels(quiet bool, ignore gghelper.ProjectIgnore) (scannedModels, error
 	if !quiet {
 		clioutput.Section("Scan Models")
 	}
-	allModels, err := modelinfo.FindModels(module, ggconst.DirModel, ignore)
-	if err != nil {
-		return scannedModels{}, err
-	}
 	projectCfg, err := loadProjectConfig()
 	if err != nil {
 		return scannedModels{}, err
 	}
-	ignoreResult := modelinfo.ResolveRoutes(allModels, projectCfg.Gen.Routes.Ignore)
+	scanned, err := modelinfo.ScanModels(module, ggconst.DirModel, ignore, projectCfg)
+	if err != nil {
+		return scannedModels{}, err
+	}
 	// Two actions registering one path would stop the router at startup;
 	// the scan stops here instead, naming both.
-	if conflicts := modelinfo.RouteConflicts(allModels); len(conflicts) > 0 {
+	if conflicts := modelinfo.RouteConflicts(scanned.Models); len(conflicts) > 0 {
 		return scannedModels{}, errors.Join(conflicts...)
 	}
-	if !quiet && len(ignoreResult.Matches) > 0 {
+	if !quiet && len(scanned.RouteIgnores.Matches) > 0 {
 		clioutput.Section("Ignore Routes")
-		for _, match := range ignoreResult.Matches {
+		for _, match := range scanned.RouteIgnores.Matches {
 			clioutput.Item("IGNORE", "%s %s (%s)", match.Method, match.Path, match.Model)
 		}
 	}
@@ -587,23 +587,19 @@ func scanModels(quiet bool, ignore gghelper.ProjectIgnore) (scannedModels, error
 	// quietly before the scan that reports, which would otherwise print
 	// each warning twice.
 	if !quiet {
-		reportRouteIgnoreWarnings(ignoreResult)
+		reportRouteIgnoreWarnings(scanned.RouteIgnores)
 	}
-
-	// Model ignores run after route ignores so the live-action warning sees
-	// the final enabled-action set.
-	modelIgnores := modelinfo.ApplyModelIgnores(allModels, projectCfg.Gen.Models.Ignore)
-	if !quiet && len(modelIgnores.Matches) > 0 {
+	if !quiet && len(scanned.ModelIgnores.Matches) > 0 {
 		clioutput.Section("Ignore Models")
-		for _, match := range modelIgnores.Matches {
+		for _, match := range scanned.ModelIgnores.Matches {
 			clioutput.Item("IGNORE", "model %s (%s)", match.Model, match.File)
 		}
 	}
 	if !quiet {
-		reportModelIgnoreWarnings(modelIgnores)
+		reportModelIgnoreWarnings(scanned.ModelIgnores)
 	}
 
-	return scannedModels{models: allModels, routeIgnores: ignoreResult, pruneConfig: projectCfg.Prune}, nil
+	return scannedModels{models: scanned.Models, routeIgnores: scanned.RouteIgnores, pruneConfig: projectCfg.Prune}, nil
 }
 
 // reportModelIgnoreWarnings warns about model ignore rules that matched no

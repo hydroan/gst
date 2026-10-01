@@ -7,15 +7,19 @@
 package ggcheck
 
 import (
+	"fmt"
 	"go/ast"
 	"go/parser"
 	"go/token"
 	"path/filepath"
 	"strings"
 
+	"github.com/hydroan/gst/internal/ggconfig"
 	"github.com/hydroan/gst/internal/ggconst"
+	"github.com/hydroan/gst/internal/gghelper"
 	"github.com/hydroan/gst/internal/ggmodule"
 	"github.com/hydroan/gst/internal/goast"
+	"github.com/hydroan/gst/internal/modelinfo"
 )
 
 // isGeneratedFileName reports whether a path is a file gg generates and owns.
@@ -187,4 +191,25 @@ func packageNameOf(dir string) string {
 		return file.Name.Name
 	}
 	return filepath.Base(dir)
+}
+
+// scanModels reads the models of the project the way gg gen reads them
+// (see modelinfo.ScanModels), for the checks that read the models: gst.yaml
+// for the ignore rules, go.mod for the module path, then the scan. It
+// returns the scan, or the violation naming what stopped it, which a check
+// reports as it is.
+func scanModels(ignore gghelper.ProjectIgnore) (modelinfo.ScannedModels, string) {
+	cfg, err := ggconfig.Load(".")
+	if err != nil {
+		return modelinfo.ScannedModels{}, fmt.Sprintf("loading gst.yaml: %v", err)
+	}
+	modulePath, err := gghelper.ModulePath()
+	if err != nil {
+		return modelinfo.ScannedModels{}, fmt.Sprintf("reading the module path: %v", err)
+	}
+	scanned, err := modelinfo.ScanModels(modulePath, ggconst.DirModel, ignore, cfg)
+	if err != nil {
+		return modelinfo.ScannedModels{}, fmt.Sprintf("scanning model designs: %v", err)
+	}
+	return scanned, ""
 }

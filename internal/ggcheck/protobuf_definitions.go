@@ -5,11 +5,9 @@ import (
 	"os"
 
 	"github.com/cockroachdb/errors"
-	"github.com/hydroan/gst/internal/ggconfig"
 	"github.com/hydroan/gst/internal/ggconst"
 	"github.com/hydroan/gst/internal/gggen/pb"
 	"github.com/hydroan/gst/internal/gghelper"
-	"github.com/hydroan/gst/internal/modelinfo"
 )
 
 // ProtobufDefinitions holds the models declaring GRPC() to what gg gen
@@ -35,22 +33,12 @@ func checkProtobufDefinitions(ignore gghelper.ProjectIgnore) []string {
 	if _, err := os.Stat(ggconst.DirModel); os.IsNotExist(err) {
 		return violations
 	}
-	cfg, err := ggconfig.Load(".")
-	if err != nil {
-		return append(violations, fmt.Sprintf("loading gst.yaml: %v", err))
+	scanned, violation := scanModels(ignore)
+	if violation != "" {
+		return append(violations, violation)
 	}
-	modulePath, err := gghelper.ModulePath()
-	if err != nil {
-		return append(violations, fmt.Sprintf("reading the module path: %v", err))
-	}
-	allModels, err := modelinfo.FindModels(modulePath, ggconst.DirModel, ignore)
-	if err != nil {
-		return append(violations, fmt.Sprintf("scanning model designs: %v", err))
-	}
-	modelinfo.ResolveRoutes(allModels, cfg.Gen.Routes.Ignore)
-	modelinfo.ApplyModelIgnores(allModels, cfg.Gen.Models.Ignore)
 
-	_, err = pb.Generate(pb.Config{Dir: ".", ModulePath: modulePath, Models: allModels})
+	_, err := pb.Generate(pb.Config{Dir: ".", ModulePath: scanned.Module, Models: scanned.Models})
 	var diagnostics *pb.DiagnosticsError
 	switch {
 	case errors.As(err, &diagnostics):

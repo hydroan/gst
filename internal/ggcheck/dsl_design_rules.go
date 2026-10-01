@@ -7,7 +7,6 @@ import (
 	"os"
 
 	"github.com/hydroan/gst/internal/dsl"
-	"github.com/hydroan/gst/internal/ggconfig"
 	"github.com/hydroan/gst/internal/ggconst"
 	"github.com/hydroan/gst/internal/gghelper"
 	"github.com/hydroan/gst/internal/modelinfo"
@@ -25,9 +24,9 @@ var DSLDesignRules = Check{
 // placement and generation-semantic violations fail gg check with the same
 // rules that block gg gen, and then reports the conflicts among the routes
 // of all the models the way gg gen refuses them (see
-// modelinfo.RouteConflicts), the models read the way gg gen reads them,
-// with the gst.yaml route ignores applied; a model tree that fails to load
-// was reported file by file already.
+// modelinfo.RouteConflicts), the models read the way gg gen reads them; a
+// scan that stops adds nothing here, the model faults being reported file
+// by file above and a gst.yaml or go.mod fault by the checks reading them.
 func checkDSLDesignRules(ignore gghelper.ProjectIgnore) []string {
 	var violations []string
 
@@ -53,20 +52,11 @@ func checkDSLDesignRules(ignore gghelper.ProjectIgnore) []string {
 		violations = append(violations, err.Error())
 	}
 
-	cfg, err := ggconfig.Load(".")
-	if err != nil {
-		return append(violations, fmt.Sprintf("loading gst.yaml: %v", err))
-	}
-	modulePath, err := gghelper.ModulePath()
-	if err != nil {
-		return append(violations, fmt.Sprintf("reading the module path: %v", err))
-	}
-	models, err := modelinfo.FindModels(modulePath, ggconst.DirModel, ignore)
-	if err != nil {
+	scanned, violation := scanModels(ignore)
+	if violation != "" {
 		return violations
 	}
-	modelinfo.ResolveRoutes(models, cfg.Gen.Routes.Ignore)
-	for _, conflict := range modelinfo.RouteConflicts(models) {
+	for _, conflict := range modelinfo.RouteConflicts(scanned.Models) {
 		violations = append(violations, conflict.Error())
 	}
 	return violations

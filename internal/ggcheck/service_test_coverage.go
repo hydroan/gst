@@ -7,7 +7,6 @@ import (
 	"strings"
 
 	"github.com/hydroan/gst/internal/dsl"
-	"github.com/hydroan/gst/internal/ggconfig"
 	"github.com/hydroan/gst/internal/ggconst"
 	"github.com/hydroan/gst/internal/gghelper"
 	"github.com/hydroan/gst/internal/modelinfo"
@@ -40,23 +39,14 @@ func checkServiceTestCoverage(ignore gghelper.ProjectIgnore) []string {
 	if err != nil {
 		return append(violations, fmt.Sprintf("listing copyable framework modules: %v", err))
 	}
-	cfg, err := ggconfig.Load(".")
-	if err != nil {
-		return append(violations, fmt.Sprintf("loading gst.yaml: %v", err))
-	}
-	modulePath, err := gghelper.ModulePath()
-	if err != nil {
-		return append(violations, fmt.Sprintf("reading the module path: %v", err))
-	}
-	allModels, err := modelinfo.FindModels(modulePath, ggconst.DirModel, ignore)
-	if err != nil {
-		return append(violations, fmt.Sprintf("scanning model designs: %v", err))
-	}
-
 	// Route-ignored actions are disabled here for the same reason gg gen
 	// disables them: their service files stay on disk without a registered
 	// route, so no test can exercise them.
-	modelinfo.ResolveRoutes(allModels, cfg.Gen.Routes.Ignore)
+	scanned, violation := scanModels(ignore)
+	if violation != "" {
+		return append(violations, violation)
+	}
+	allModels := scanned.Models
 
 	seen := make(map[string]bool)
 	for _, m := range allModels {

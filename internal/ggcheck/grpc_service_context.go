@@ -11,7 +11,6 @@ import (
 	"strings"
 
 	"github.com/hydroan/gst/internal/dsl"
-	"github.com/hydroan/gst/internal/ggconfig"
 	"github.com/hydroan/gst/internal/ggconst"
 	"github.com/hydroan/gst/internal/gghelper"
 	"github.com/hydroan/gst/internal/goast"
@@ -46,19 +45,11 @@ func checkGRPCServiceContext(ignore gghelper.ProjectIgnore) []string {
 	if _, err := os.Stat(ggconst.DirModel); os.IsNotExist(err) {
 		return violations
 	}
-	cfg, err := ggconfig.Load(".")
-	if err != nil {
-		return append(violations, fmt.Sprintf("loading gst.yaml: %v", err))
+	scanned, violation := scanModels(ignore)
+	if violation != "" {
+		return append(violations, violation)
 	}
-	modulePath, err := gghelper.ModulePath()
-	if err != nil {
-		return append(violations, fmt.Sprintf("reading the module path: %v", err))
-	}
-	allModels, err := modelinfo.FindModels(modulePath, ggconst.DirModel, ignore)
-	if err != nil {
-		return append(violations, fmt.Sprintf("scanning model designs: %v", err))
-	}
-	modelinfo.ResolveRoutes(allModels, cfg.Gen.Routes.Ignore)
+	allModels := scanned.Models
 
 	// Every action's service file, with whether gRPC serves the action, and
 	// the service directories of the gRPC models, each with the model it
