@@ -119,9 +119,9 @@ func databaseError(err error) error {
 		// are, to retry once they are in place, FailedPrecondition over gRPC
 		// (see grpcserver.StatusError).
 		return serviceregistry.NewErrorWithCause(http.StatusConflict, foreignKeyMsg, err)
-	case errors.Is(err, database.ErrCheckConstraintViolated), errors.Is(err, database.ErrValueTooLong):
-		// A value the table refuses, by a check or by the length of the
-		// column: the request's own defect.
+	case errors.Is(err, database.ErrCheckConstraintViolated), errors.Is(err, database.ErrValueTooLong), errors.Is(err, database.ErrNotNullViolated):
+		// A value the table refuses, by a check, by the length of the
+		// column or by a column that requires one: the request's own defect.
 		return serviceregistry.NewErrorWithCause(http.StatusBadRequest, invalidArgumentMsg, err)
 	default:
 		// Any other database error is the server's own failure.

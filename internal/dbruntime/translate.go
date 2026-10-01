@@ -10,6 +10,11 @@ import (
 // translates a duplicated key; database.ErrValueTooLong forwards it.
 var ErrValueTooLong = errors.New("value too long for its column")
 
+// ErrNotNullViolated is answered for a write leaving a column the table
+// requires a value for NULL, translated from the dialect's own error the
+// way ErrValueTooLong is; database.ErrNotNullViolated forwards it.
+var ErrNotNullViolated = errors.New("a column the table requires a value for is null")
+
 // translateErrorCallback names the callback InstallErrorTranslation registers
 // on each of gorm's operations.
 const translateErrorCallback = "gst:translate_error"

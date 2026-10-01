@@ -126,15 +126,25 @@ func attachReplicas(db *gorm.DB, cfg config.MySQL) (*gorm.DB, error) {
 // per server timezone), which is what breaks time bucket labels, boundary
 // comparisons, and URL time filters.
 //
+// sql_mode pins every connection to MySQL 8's default modes, whatever the
+// server is configured with, STRICT_TRANS_TABLES among them: without the
+// strict mode the server cuts a value too long for its column short and
+// warns, where the refusal is what the framework answers 400 with (see
+// errCodes). The list is MySQL 8's own default, the one Laravel pins as
+// well; the driver sets it on the session as the connection opens.
+//
 // The timeout parameters mirror config.MySQL: timeout (dial) is on by
 // default so a black-holed host fails in seconds instead of blocking until
 // the OS gives up; readTimeout and writeTimeout are appended only when
 // configured, because their default is deliberately off — see the field
 // comments on config.MySQL.
+// sqlMode is the sql_mode every connection runs under (see buildDSN).
+const sqlMode = "ONLY_FULL_GROUP_BY,STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION"
+
 func buildDSN(cfg config.MySQL) string {
 	dsn := fmt.Sprintf(
-		"%s:%s@tcp(%s:%d)/%s?charset=utf8mb4&parseTime=True&loc=UTC&clientFoundRows=true&interpolateParams=true",
-		cfg.Username, cfg.Password, cfg.Host, cfg.Port, cfg.Database,
+		"%s:%s@tcp(%s:%d)/%s?charset=utf8mb4&parseTime=True&loc=UTC&clientFoundRows=true&interpolateParams=true&sql_mode=%%27%s%%27",
+		cfg.Username, cfg.Password, cfg.Host, cfg.Port, cfg.Database, sqlMode,
 	)
 	if cfg.DialTimeout > 0 {
 		dsn += "&timeout=" + cfg.DialTimeout.String()
@@ -150,9 +160,13 @@ func buildDSN(cfg config.MySQL) string {
 
 // errCodes are the errors of the constraints a client's data breaks that the
 // driver's translation leaves as they are, keyed by MySQL's error number: a
-// value too long for its column (1406) and a check constraint the row fails
-// (3819); the driver translates the duplicated and the foreign keys itself.
+// value too long for its column (1406), a check constraint the row fails
+// (3819), and a column the table requires a value for left NULL (1048) or
+// left out of a strict-mode insert (1364); the driver translates the
+// duplicated and the foreign keys itself.
 var errCodes = map[uint16]error{
+	1048: dbruntime.ErrNotNullViolated,
+	1364: dbruntime.ErrNotNullViolated,
 	1406: dbruntime.ErrValueTooLong,
 	3819: gorm.ErrCheckConstraintViolated,
 }

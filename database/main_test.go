@@ -26,6 +26,7 @@ func TestMain(m *testing.M) {
 			modelregistry.Register[*TestUniqueItem]()
 			modelregistry.Register[*TestConstrainedRecord]()
 			modelregistry.Register[*TestConstrainedEntry]()
+			modelregistry.Register[*TestRequiredRecord]()
 			modelregistry.Register[*TestIndexerUniqueItem]()
 			modelregistry.Register[*TestMixedUniqueItem]()
 			modelregistry.Register[*TestAutoItem]()

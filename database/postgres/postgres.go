@@ -113,10 +113,12 @@ func buildDSN(cfg config.Postgres) string {
 
 // errCodes are the errors of the constraints a client's data breaks that the
 // driver's translation leaves as they are, keyed by the SQLSTATE code: a
-// value too long for its column (22001); the driver translates the
-// duplicated key, the foreign key and the check constraint itself.
+// value too long for its column (22001) and a column the table requires a
+// value for left NULL (23502); the driver translates the duplicated key,
+// the foreign key and the check constraint itself.
 var errCodes = map[string]error{
 	"22001": dbruntime.ErrValueTooLong,
+	"23502": dbruntime.ErrNotNullViolated,
 }
 
 // translate translates a driver error whose code errCodes lists to its

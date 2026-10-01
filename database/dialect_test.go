@@ -32,6 +32,19 @@ func TestDialectAppliesItsNamingLimits(t *testing.T) {
 	require.Equal(t, want, naming.IdentifierMaxLength)
 }
 
+// TestMySQLConnectionsRunInStrictMode pins the sql_mode every MySQL
+// connection runs under, the one the DSN sets whatever the server is
+// configured with: MySQL 8's own default, STRICT_TRANS_TABLES among it, so
+// that a value too long for its column is refused and never cut short.
+func TestMySQLConnectionsRunInStrictMode(t *testing.T) {
+	if config.App.Database.Type != config.DBMySQL {
+		t.Skip("the sql_mode is MySQL's")
+	}
+	var mode string
+	require.NoError(t, database.DB().Raw("SELECT @@SESSION.sql_mode").Scan(&mode).Error)
+	require.Equal(t, "ONLY_FULL_GROUP_BY,STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION", mode)
+}
+
 // TestJSONValuesFindTheRowTheyWereWrittenFrom pins that a JSON value bound
 // as a condition compares equal to the row it was written from on every
 // dialect. gorm.io/datatypes renders the value for the dialect the handle

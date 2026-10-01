@@ -86,6 +86,11 @@ var (
 	// than its column holds, translated from the dialect's own error.
 	ErrValueTooLong = dbruntime.ErrValueTooLong
 
+	// ErrNotNullViolated is the sentinel for a write leaving a column the
+	// table requires a value for NULL, translated from the dialect's own
+	// error.
+	ErrNotNullViolated = dbruntime.ErrNotNullViolated
+
 	// ErrNilSQLBuilder is returned when WithDryRun is handed an explicitly nil
 	// statement collector: the caller asked for statements it could never
 	// receive.

@@ -271,6 +271,16 @@ type TestConstrainedRecord struct {
 
 func (*TestConstrainedRecord) TableName() string { return "test_constrained_records" }
 
+// TestRequiredRecord carries a column the table requires a value for, which
+// a nil Label leaves NULL.
+type TestRequiredRecord struct {
+	Label *string `json:"label" gorm:"size:16;not null"`
+
+	modelregistry.Base
+}
+
+func (*TestRequiredRecord) TableName() string { return "test_required_records" }
+
 // TestConstrainedEntry belongs to a TestConstrainedRecord, a foreign key
 // holding it to one that exists.
 type TestConstrainedEntry struct {
