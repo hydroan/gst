@@ -540,6 +540,18 @@ func standardMessages(m *modelinfo.Model, model *message, file *protoFile, route
 	return request, requestFields, response, responseFields
 }
 
+// listQueryFieldNames are the names of the query fields a List request may
+// carry, the ones queryFields writes for a model reading every control,
+// which no route parameter of a List may take.
+var listQueryFieldNames = func() []string {
+	fields, _, _ := queryFields(consts.List, allQueryControls)
+	names := make([]string, 0, len(fields))
+	for _, f := range fields {
+		names = append(names, f.GetName())
+	}
+	return names
+}()
+
 // queryFields returns the fields a request of the phase holds for the query
 // parameters gst reads on it, with their comments and nested types, numbered
 // by the caller: List's filters, with the nested Filter, and the fields of
@@ -609,11 +621,6 @@ func standardMessages(m *modelinfo.Model, model *message, file *protoFile, route
 //	    repeated string values = 3;
 //	  }
 //	}
-//
-// listQueryFieldNames are the names of the query fields a List request may
-// carry (see queryFields), which no route parameter of a List may take.
-var listQueryFieldNames = []string{"filters", "sort_by", "page", "size", "cursor_field", "cursor_value", "cursor_next", "expand", "depth"}
-
 func queryFields(phase consts.Phase, controls queryControls) (fields []*descriptorpb.FieldDescriptorProto, comments []string, nested []*descriptorpb.DescriptorProto) {
 	expansion := []*descriptorpb.FieldDescriptorProto{
 		repeatedStringField("expand", 0),
