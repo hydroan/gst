@@ -21,12 +21,14 @@ import (
 // streamDescs are the streaming rpcs of the sample service, served through
 // the stream calls of the controller the way a generated handler serves
 // them: Watch streams the responses of a request, Upload answers a stream
-// of requests, Chat streams both ways, and Silence is a Watch on a route
+// of requests, Chat streams both ways, Fork is a Chat whose service
+// receives on a goroutine of its own, and Silence is a Watch on a route
 // whose service streams nothing.
 func streamDescs() []grpc.StreamDesc {
 	watch := controller.ServerStreamCall[*sampleRecord, *sampleActionReq, *sampleActionRsp](watchRoute)
 	upload := controller.ClientStreamCall[*sampleRecord, *sampleActionReq, *sampleActionRsp](uploadRoute)
 	chat := controller.BidiStreamCall[*sampleRecord, *sampleActionReq, *sampleActionRsp](chatRoute)
+	fork := controller.BidiStreamCall[*sampleRecord, *sampleActionReq, *sampleActionRsp](forkRoute)
 	silence := controller.ServerStreamCall[*sampleRecord, *sampleActionReq, *sampleActionRsp](silentRoute)
 	recv := func(stream grpc.ServerStream) func() (*sampleActionReq, error) {
 		return func() (*sampleActionReq, error) {
@@ -69,6 +71,9 @@ func streamDescs() []grpc.StreamDesc {
 		}},
 		{StreamName: "Chat", ServerStreams: true, ClientStreams: true, Handler: func(_ any, stream grpc.ServerStream) error {
 			return chat(stream.Context(), nil, recv(stream), send(stream))
+		}},
+		{StreamName: "Fork", ServerStreams: true, ClientStreams: true, Handler: func(_ any, stream grpc.ServerStream) error {
+			return fork(stream.Context(), nil, recv(stream), send(stream))
 		}},
 	}
 }
@@ -259,6 +264,30 @@ func TestBidiStreamCallStreamsBothWays(t *testing.T) {
 		require.Equal(t, codes.InvalidArgument, status.Code(err))
 		require.Equal(t, "invalid value for field 'port'", status.Convert(err).Message())
 	})
+}
+
+// TestBidiStreamCallKeepsARefusalReadOnAnotherGoroutine pins that the
+// refusal a request stream's read records is read by the call under the
+// lock it is written under: a service receiving on a goroutine of its own
+// and returning without waiting for it, which grpc-go allows, has the
+// write and the call's read on two goroutines with nothing but time
+// between them, and the race detector, which make test runs with, is what
+// fails the test without the lock. The refusal, recorded a second before
+// the service returns, is what the call answers.
+func TestBidiStreamCallKeepsARefusalReadOnAnotherGoroutine(t *testing.T) {
+	conn := sampleServer(t)
+	stream := openStream(t, conn, "Fork", sampleCredential, grpc.StreamDesc{ServerStreams: true, ClientStreams: true})
+	require.NoError(t, stream.SendMsg(encode(map[string]any{"refuse": "invalid value for field 'rank'"})))
+
+	_, err := recvResponse(stream)
+
+	requireStatus(t, err, codes.InvalidArgument, "invalid value for field 'rank'")
+	select {
+	case got := <-forkingChat.read:
+		requireStatus(t, got, codes.InvalidArgument, "invalid value for field 'rank'")
+	case <-time.After(5 * time.Second):
+		t.Fatal("the goroutine's read did not end")
+	}
 }
 
 // TestFirstMessageRefusesAStreamEndedBeforeIt pins FirstMessage, what a

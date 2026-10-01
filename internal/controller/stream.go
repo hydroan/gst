@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"sync"
 
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/consts"
@@ -33,9 +34,10 @@ import (
 // which the generated service file declares; a call finding none answers
 // Unimplemented. A stream ends the way the client ends it as well: once the
 // call's context is canceled or past its deadline, whatever the service
-// returns answers the context's status (see call.ended); a stream the
-// listener's stop ended the same way is answered Unavailable by the
-// listener in its place (see grpcserver).
+// returns answers the context's status (see call.ended), a Recv waiting on
+// the client returning with the context too, the listener seeing to it,
+// and a stream the listener's stop ended the same way is answered
+// Unavailable by the listener in its place (see grpcserver).
 
 // ServerStreamCall returns the call of the Stream action on route whose
 // response is streamed: given the route parameters, the request the message
@@ -92,8 +94,8 @@ func ClientStreamCall[M types.Model, REQ types.Request, RSP types.Response](rout
 		rsp, err := a.traceServiceOperation(c.ctx, consts.Stream, func(spanCtx context.Context) (RSP, error) {
 			return svc.Stream(c.serviceContext(spanCtx, consts.Stream), types.NewClientStream(in.recv))
 		})
-		if in.refused != nil {
-			return zero, in.refused
+		if refused := in.refusal(); refused != nil {
+			return zero, refused
 		}
 		if err != nil {
 			return zero, c.failService(err)
@@ -124,8 +126,8 @@ func BidiStreamCall[M types.Model, REQ types.Request, RSP types.Response](route 
 			var zero RSP
 			return zero, svc.Stream(c.serviceContext(spanCtx, consts.Stream), types.NewBidiStream(in.recv, send))
 		})
-		if in.refused != nil {
-			return in.refused
+		if refused := in.refusal(); refused != nil {
+			return refused
 		}
 		if err != nil {
 			return c.failService(err)
@@ -179,10 +181,29 @@ func SameParams(i int, params, msgParams map[string]string) error {
 // ServiceCall treats a payload, and one the validator refuses, or one the
 // handler's decoding refused before it got here, ends the stream, the
 // refusal kept in refused for the call to answer whatever the service
-// returns for the error it got.
+// returns for the error it got. recv runs on whichever goroutine the
+// service receives on, which grpc-go allows to be one beside the
+// service's own, and the call reads the refusal once the service returned,
+// without the service having waited for that goroutine: mu orders the two.
 type requests[REQ types.Request] struct {
-	recv    func() (REQ, error)
+	recv func() (REQ, error)
+
+	mu      sync.Mutex
 	refused error
+}
+
+// refuse records err as the refusal.
+func (r *requests[REQ]) refuse(err error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.refused = err
+}
+
+// refusal returns the refusal recv recorded, nil for none.
+func (r *requests[REQ]) refusal() error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.refused
 }
 
 // requests builds the requests of the call c read through recv.
@@ -199,14 +220,15 @@ func (a *action[M, REQ, RSP]) requests(c *call, recv func() (REQ, error)) *reque
 			if status.Code(err) == codes.InvalidArgument {
 				c.log.Errorz("request message rejected", zap.Error(err))
 				gstotel.RecordError(c.span, err)
-				r.refused = err
+				r.refuse(err)
 			}
 			return req, err
 		}
 		a.normalizeRequest(&req)
 		if err := validateRequest(req); err != nil {
-			r.refused = c.invalidMessage(err)
-			return req, r.refused
+			refused := c.invalidMessage(err)
+			r.refuse(refused)
+			return req, refused
 		}
 		return req, nil
 	}

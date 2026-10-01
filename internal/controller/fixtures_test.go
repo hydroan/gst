@@ -118,6 +118,7 @@ const (
 	uploadRoute        = "controller-sample-uploads"
 	chatRoute          = "controller-sample-chats"
 	silentRoute        = "controller-sample-silences"
+	forkRoute          = "controller-sample-forks"
 )
 
 // registerFixtureServices registers the fixture services once for the test
@@ -142,6 +143,7 @@ func registerFixtureServices() {
 	serviceregistry.Register[*sampleRecord, *sampleActionReq, *sampleActionRsp](consts.Stream, uploadRoute, &uploadService{})
 	serviceregistry.Register[*sampleRecord, *sampleActionReq, *sampleActionRsp](consts.Stream, chatRoute, &chatService{})
 	serviceregistry.Register[*sampleRecord, *sampleActionReq, *sampleActionRsp](consts.Stream, silentRoute, &actionService{})
+	serviceregistry.Register[*sampleRecord, *sampleActionReq, *sampleActionRsp](consts.Stream, forkRoute, forkingChat)
 }
 
 // cookieBeforeService and cookieAfterService set a cookie, which only an
@@ -452,8 +454,9 @@ func countSamplesNamed(t *testing.T, name string) int {
 // many responses as the request's note counts, numbered from 0, refusing
 // and failing for the notes the action service does; uploadService reads
 // the requests until the client is done and answers their notes joined;
-// chatService echoes each request as it comes. The silent route registers
-// the action service, which streams nothing, for the call to refuse.
+// chatService echoes each request as it comes; forkingChatService receives
+// on a goroutine of its own. The silent route registers the action
+// service, which streams nothing, for the call to refuse.
 type watchService struct {
 	serviceregistry.Base[*sampleRecord, *sampleActionReq, *sampleActionRsp]
 }
@@ -511,4 +514,28 @@ func (*chatService) Stream(sc *types.ServiceContext, stream *types.BidiStream[*s
 			return err
 		}
 	}
+}
+
+// forkingChatService receives on a goroutine of its own, which grpc-go
+// allows beside the goroutine the service runs on, and returns a moment
+// later without waiting for it: the refusal its read records (see
+// controller.requests) is then written on one goroutine and read by the
+// call on another with time alone between the two, nothing ordering them,
+// which is what the lock on it is for; a channel or a wait here would
+// order the two and hide the race. The test reads what the goroutine got
+// through read.
+type forkingChatService struct {
+	serviceregistry.Base[*sampleRecord, *sampleActionReq, *sampleActionRsp]
+	read chan error
+}
+
+var forkingChat = &forkingChatService{read: make(chan error, 1)}
+
+func (s *forkingChatService) Stream(_ *types.ServiceContext, stream *types.BidiStream[*sampleActionReq, *sampleActionRsp]) error {
+	go func() {
+		_, err := stream.Recv()
+		s.read <- err
+	}()
+	time.Sleep(time.Second)
+	return nil
 }
