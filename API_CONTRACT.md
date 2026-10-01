@@ -28,8 +28,8 @@ Content-Type: application/json
 | 获取一个 group | `GET /api/groups/:id` | 必须把 `id` 放在 URL；body 不承载语义 |
 | 创建多个 group | `POST /api/groups/batch` | body 必须使用 `{ "items": [...] }` |
 | 删除多个 group | `DELETE /api/groups/batch` | body 必须使用 `{ "ids": [...] }` |
-| 全量更新多个 group | `PUT /api/groups/batch` | body 必须使用 `{ "items": [...] }`，每个 item 必须带 `id` |
-| 部分更新多个 group | `PATCH /api/groups/batch` | body 必须使用 `{ "items": [...] }`，每个 item 必须带 `id` 和要修改的字段 |
+| 全量更新多个 group | `PUT /api/groups/batch` | body 必须使用 `{ "items": [...] }`，每个 item 必须带 `id`，同一个 `id` 只能出现一次 |
+| 部分更新多个 group | `PATCH /api/groups/batch` | body 必须使用 `{ "items": [...] }`，每个 item 必须带 `id` 和要修改的字段，同一个 `id` 只能出现一次 |
 
 ## 列表通用查询参数
 
@@ -92,8 +92,9 @@ query 名不要以 `_` 开头。反过来，所有裸名参数都属于业务字
 ```
 
 批量创建时，`items` 中通常不需要传 `id`，`id` 由后端生成并在响应中返回；批量全量
-更新和批量部分更新时，每个 item 都必须带 `id`，缺 `id` 返回 400。删除多个时 `ids`
-里同样不能有空值或只含空白的值，否则返回 400。
+更新和批量部分更新时，每个 item 都必须带 `id`，缺 `id` 返回 400，同一个 `id` 在一个
+批次里只能出现一次，重复返回 400。删除多个时 `ids` 里同样不能有空值或只含空白的值，
+否则返回 400。
 
 删除多个 group：
 
@@ -173,7 +174,7 @@ query 名不要以 `_` 开头。反过来，所有裸名参数都属于业务字
 - body 中的 `id` 不能替代 URL 中的 `:id`。
 - `GET` 请求只认 URL query 中的查询条件，不使用 body。
 - `PUT` 表示全量更新，body 应包含完整更新内容。
-- `PATCH` 表示部分更新，body 只放需要修改的字段；写进 body 的字段整体替换，对象字段也整体换成 body 里的值（没写的子字段按零值算），给 null 或零值就是清空；不支持只改对象里的某个子字段；`id`、`created_at` 这类框架管理的字段不能改。
+- `PATCH` 表示部分更新，body 只放需要修改的字段；写进 body 的字段整体替换，对象字段也整体换成 body 里的值（没写的子字段按零值算），给 null 或零值就是清空；不支持只改对象里的某个子字段；`id`、`created_at` 这类框架管理的字段不能改，写了也被忽略；模型没有的键同样忽略（和创建、全量更新一致）；`{}` 这样一个字段都没写的 body 照样把整行按原样写回，`updated_at` 会刷新。
 - 批量创建、批量全量更新、批量部分更新统一使用 `items`。
 - 批量删除统一使用 `ids`。
 - 不要把参数放到“看起来也能传”的其他位置；本文指定的位置就是前端对接时必须遵守的位置。

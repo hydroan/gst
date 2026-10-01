@@ -117,11 +117,12 @@ func PatchHandler[M types.Model, REQ types.Request, RSP types.Response](cfg ...*
 // given the route parameters, the id the request message names the record
 // by, the values it decoded into and the paths of its update mask, which
 // name the fields to apply as the message names them (see maskFieldSet), it
-// validates the fields the mask names the way the handler validates the
-// fields a body names (see validatePatchFields), refuses a versioned model
-// patched without its version the way the handler does,
-// runs the patch flow (see patchFlow) and answers with the record patched,
-// or with the status the failure maps to (see call).
+// refuses a message carrying no record the way the handler refuses a
+// request without a body, validates the fields the mask names the way the
+// handler validates the fields a body names (see validatePatchFields),
+// refuses a versioned model patched without its version the way the
+// handler does, runs the patch flow (see patchFlow) and answers with the
+// record patched, or with the status the failure maps to (see call).
 func PatchCall[M types.Model](route string) func(ctx context.Context, params map[string]string, id string, m M, paths []string) (M, error) {
 	a := newAction[M, M, M](route, consts.Patch, consts.PatchBefore, consts.PatchAfter)
 	return func(ctx context.Context, params map[string]string, id string, m M, paths []string) (M, error) {
@@ -130,6 +131,9 @@ func PatchCall[M types.Model](route string) func(ctx context.Context, params map
 		defer c.end()
 		if err != nil {
 			return zero, c.invalid(err)
+		}
+		if reflect.ValueOf(m).IsNil() {
+			return zero, c.missingRecord()
 		}
 		a.normalizeModel(&m)
 		fields, err := maskFieldSet(a.typ, paths)

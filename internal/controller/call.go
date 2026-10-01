@@ -2,8 +2,10 @@ package controller
 
 import (
 	"context"
+	"fmt"
 	"maps"
 	"net/url"
+	"reflect"
 	"slices"
 	"strconv"
 	"strings"
@@ -207,8 +209,8 @@ const (
 	invalidMessageMsg = "invalid request message"
 	// missingIDMsg answers an item action whose message names no record.
 	missingIDMsg = "id is required"
-	// missingRecordMsg answers a Create or Update whose message carries no
-	// record, and names the item of a batch patch carrying none.
+	// missingRecordMsg answers a Create, an Update or a Patch whose message
+	// carries no record.
 	missingRecordMsg = "record is required"
 )
 
@@ -448,4 +450,40 @@ func ServiceCall[M types.Model, REQ types.Request, RSP types.Response](phase con
 		}
 		return answer(c, rsp)
 	}
+}
+
+// PatchItem readies the record of the item at index i of a batch patch, what
+// the generated handler of a PatchMany rpc reads each item it carries
+// through, the item being the request of a single Patch: the item names its
+// record by id, written onto the record it carries in place of whatever id
+// the record names, the way a patch call patches the record its message
+// names whatever id the record carries (see PatchCall); and the route
+// parameters it carries, keyed as the request's params are, may be left
+// empty or repeat the request's. An item naming no id, or naming a
+// parameter otherwise than the request does, is refused with
+// InvalidArgument, the way a batch request whose sub-request names another
+// parent must fail (AIP-234), the way a call's refusal does (see
+// grpcserver.StatusError); an item carrying no record is answered as it is,
+// for the call to refuse (see PatchManyCall). The public grpc.PatchItem
+// forwards to it.
+func PatchItem[M types.Model](i int, params, itemParams map[string]string, id string, m M) (M, error) {
+	invalid := func(format string, args ...any) error {
+		return grpcserver.StatusError(badRequest(fmt.Sprintf(format, args...)))
+	}
+	for _, name := range slices.Sorted(maps.Keys(itemParams)) {
+		if value := itemParams[name]; value != "" && value != params[name] {
+			return m, invalid("item %d names the %s parameter %q, the request names %q", i, name, value, params[name])
+		}
+	}
+	if id == "" {
+		return m, invalid("item %d names no id", i)
+	}
+	if reflect.ValueOf(m).IsNil() {
+		return m, nil
+	}
+	// SetID keeps an id already set, so the one the record carries is
+	// cleared first.
+	m.ClearID()
+	m.SetID(id)
+	return m, nil
 }

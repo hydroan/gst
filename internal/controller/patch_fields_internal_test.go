@@ -57,9 +57,10 @@ type patchFieldsAudit struct {
 // TestPatchFieldSetsNameEveryFieldOfTheModelAsAWhole pins which fields a
 // body key or a mask path names: every field of the model's own, a time or
 // a struct value as a whole, a field promoted from an embedded struct under
-// its own key and Go path; none of the framework base's, and no part of a
-// field, a mask path into a struct being refused with the field to name
-// instead.
+// its own key and Go path; none of the framework base's, a body key or a
+// mask path naming one passed over, a mask naming no other field refused;
+// and no part of a field, a mask path into a struct being refused with the
+// field to name instead.
 func TestPatchFieldSetsNameEveryFieldOfTheModelAsAWhole(t *testing.T) {
 	typ := reflect.TypeFor[patchFieldsShapedRecord]()
 	named := patchFieldSet{"DueAt": {}, "Address": {}, "patchFieldsAudit.Reviewer": {}}
@@ -68,12 +69,12 @@ func TestPatchFieldSetsNameEveryFieldOfTheModelAsAWhole(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, named, fields)
 
-	fields, err = maskFieldSet(typ, []string{"due_at", "address", "reviewer"})
+	fields, err = maskFieldSet(typ, []string{"due_at", "address", "reviewer", "created_at"})
 	require.NoError(t, err)
 	require.Equal(t, named, fields)
 
 	_, err = maskFieldSet(typ, []string{"created_at"})
-	require.EqualError(t, err, `update_mask names "created_at", which is no field a patch applies`)
+	require.EqualError(t, err, "update_mask must name at least one field a patch applies")
 	_, err = maskFieldSet(typ, []string{"address.city"})
 	require.EqualError(t, err, `update_mask names "address.city", a part of a field; a patch applies "address" as a whole`)
 }
@@ -210,7 +211,8 @@ func TestApplyPatchAppliesAStructValuedFieldAsAWhole(t *testing.T) {
 
 // TestPatchFieldSetsLeaveThePrimaryKeyOut pins that no patch applies the
 // primary key, which names the record patched and moves it nowhere: a body
-// key naming it names no field, and a mask path naming it is refused.
+// key or a mask path naming it names no field, and a mask naming it alone
+// is refused.
 func TestPatchFieldSetsLeaveThePrimaryKeyOut(t *testing.T) {
 	typ := reflect.TypeFor[patchFieldsKeyedRecord]()
 
@@ -218,8 +220,12 @@ func TestPatchFieldSetsLeaveThePrimaryKeyOut(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, patchFieldSet{"Name": {}}, fields)
 
+	fields, err = maskFieldSet(typ, []string{"id", "name"})
+	require.NoError(t, err)
+	require.Equal(t, patchFieldSet{"Name": {}}, fields)
+
 	_, err = maskFieldSet(typ, []string{"id"})
-	require.EqualError(t, err, `update_mask names "id", which is no field a patch applies`)
+	require.EqualError(t, err, "update_mask must name at least one field a patch applies")
 
 	oldRecord := &patchFieldsKeyedRecord{ID: "kept", Name: "before"}
 	newRecord := &patchFieldsKeyedRecord{ID: "other", Name: "after"}

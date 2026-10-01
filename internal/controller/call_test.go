@@ -18,6 +18,7 @@ import (
 	"github.com/hydroan/gst/internal/controller"
 	"github.com/hydroan/gst/internal/grpcserver"
 	"github.com/hydroan/gst/internal/testutil/oteltest"
+	"github.com/hydroan/gst/internal/types"
 	"github.com/hydroan/gst/logger"
 	gstotel "github.com/hydroan/gst/otel"
 	"github.com/stretchr/testify/require"
@@ -278,8 +279,10 @@ func TestUpdateCallReplacesTheRecord(t *testing.T) {
 // TestPatchCallAppliesTheMaskedFields pins the patch call: only the fields
 // the mask names are copied onto the stored record, the others the message
 // carries staying as stored; a mask naming nothing, or naming what no patch
-// applies, is refused; a versioned record patched without its version is
-// refused; and an id no record carries answers NotFound.
+// applies, is refused, a path naming a field the framework manages passed
+// over on the way, as the HTTP handler passes over the key; a message
+// carrying no record is refused; a versioned record patched without its
+// version is refused; and an id no record carries answers NotFound.
 func TestPatchCallAppliesTheMaskedFields(t *testing.T) {
 	conn := sampleServer(t)
 	record := createSample(t, "call-patch")
@@ -298,8 +301,8 @@ func TestPatchCallAppliesTheMaskedFields(t *testing.T) {
 		mask    []string
 		message string
 	}{
-		{name: "a mask naming nothing", mask: []string{}, message: "update_mask must name at least one field"},
-		{name: "a mask naming a base field", mask: []string{"id"}, message: `update_mask names "id", which is no field a patch applies`},
+		{name: "a mask naming nothing", mask: []string{}, message: "update_mask must name at least one field a patch applies"},
+		{name: "a mask naming only a field the framework manages", mask: []string{"id"}, message: "update_mask must name at least one field a patch applies"},
 		{name: "a mask naming a field the model lacks", mask: []string{"missing"}, message: `update_mask names "missing", which is no field a patch applies`},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
@@ -323,6 +326,23 @@ func TestPatchCallAppliesTheMaskedFields(t *testing.T) {
 			"id": "missing", "record": map[string]any{"name": "renamed"}, "mask": []string{"name"},
 		})
 		requireStatus(t, err, codes.NotFound, "")
+	})
+
+	t.Run("a message carrying no record", func(t *testing.T) {
+		_, err := invoke(t, conn, "Patch", map[string]any{"id": record.GetID(), "mask": []string{"name"}})
+		requireStatus(t, err, codes.InvalidArgument, "record is required")
+		requireSampleName(t, record.GetID(), "call-patched")
+	})
+
+	t.Run("a mask naming a field the framework manages beside one it applies", func(t *testing.T) {
+		patched, err := invoke(t, conn, "Patch", map[string]any{
+			"id": record.GetID(), "record": map[string]any{"name": "call-patched-beside", "created_at": "2001-02-03T04:05:06Z"}, "mask": []string{"created_at", "name"},
+		})
+		require.NoError(t, err)
+		require.Equal(t, "call-patched-beside", patched["name"])
+		stored := loadSample(t, record.GetID())
+		require.Equal(t, "call-patched-beside", stored.Name)
+		require.True(t, stored.GetCreatedAt().Equal(record.GetCreatedAt()), "the framework's field stays as stored: %s", stored.GetCreatedAt())
 	})
 }
 
@@ -404,8 +424,8 @@ func TestDeleteCallDeletesTheRecord(t *testing.T) {
 // created, replaced, patched under their masks and deleted as one batch; a
 // hook's refusal writes nothing; an item failing its binding tags refuses
 // the batch; a batch patch carries one mask per item and a record in every
-// item; and a delete naming an empty id is refused before anything is
-// deleted.
+// item; a batch update or patch names each record once; and a delete naming
+// an empty id is refused before anything is deleted.
 func TestBatchCallsWriteAllOrNothing(t *testing.T) {
 	conn := sampleServer(t)
 	prefix := uniqueName("call-batch")
@@ -452,6 +472,24 @@ func TestBatchCallsWriteAllOrNothing(t *testing.T) {
 		requireSampleName(t, createdIDs[0], prefix+"-a3")
 	})
 
+	t.Run("a batch update naming a record twice", func(t *testing.T) {
+		_, updateErr := invoke(t, conn, "UpdateMany", map[string]any{"items": []map[string]any{
+			{"id": createdIDs[0], "name": prefix + "-a5"}, {"id": createdIDs[0], "name": prefix + "-a6"},
+		}})
+		requireStatus(t, updateErr, codes.InvalidArgument, `items[1] names the record "`+createdIDs[0]+`", which items[0] already names`)
+		requireSampleName(t, createdIDs[0], prefix+"-a3")
+	})
+
+	t.Run("a batch patch naming a record twice", func(t *testing.T) {
+		_, patchErr := invoke(t, conn, "PatchMany", map[string]any{
+			"items": []map[string]any{{"id": createdIDs[0], "name": prefix + "-a5"}, {"id": createdIDs[0], "note": "twice"}},
+			"masks": [][]string{{"name"}, {"note"}},
+		})
+		requireStatus(t, patchErr, codes.InvalidArgument, `items[1] names the record "`+createdIDs[0]+`", which items[0] already names`)
+		requireSampleName(t, createdIDs[0], prefix+"-a3")
+		require.Empty(t, loadSample(t, createdIDs[0]).Note)
+	})
+
 	t.Run("an item failing validation refuses the batch", func(t *testing.T) {
 		_, createErr := invoke(t, conn, "ValidatedCreateMany", map[string]any{"items": []map[string]any{{"name": "valid"}, {}}})
 		requireStatus(t, createErr, codes.InvalidArgument, "items[1].name is a required field")
@@ -478,6 +516,42 @@ func TestBatchCallsWriteAllOrNothing(t *testing.T) {
 		requireStatus(t, err, codes.InvalidArgument, "")
 		requireSampleName(t, kept.GetID(), "call-batch-kept")
 	})
+}
+
+// TestPatchItemReadiesTheRecordOfABatchItem pins PatchItem, what the
+// generated handler of a PatchMany rpc reads each item through: the item
+// names its record by id, written onto the record it carries whatever id
+// the record names, the way a patch call writes the record its message
+// names; an item naming no id and an item whose route parameter contradicts
+// the request's are refused with InvalidArgument; a parameter the item
+// leaves empty is the request's; and an item carrying no record is left to
+// the call to refuse.
+func TestPatchItemReadiesTheRecordOfABatchItem(t *testing.T) {
+	readied, err := controller.PatchItem(0, nil, nil, "r1", &sampleRecord{Name: "named"})
+	require.NoError(t, err)
+	require.Equal(t, "r1", readied.GetID())
+	require.Equal(t, "named", readied.Name)
+
+	other := &sampleRecord{}
+	other.SetID("r2")
+	readied, err = controller.PatchItem(1, nil, nil, "r1", other)
+	require.NoError(t, err)
+	require.Equal(t, "r1", readied.GetID(), "the id of the item names the record, whatever id the record carries")
+
+	_, err = controller.PatchItem(2, nil, nil, "", &sampleRecord{})
+	requireStatus(t, err, codes.InvalidArgument, "item 2 names no id")
+
+	_, err = controller.PatchItem(3, map[string]string{"record": "a"}, map[string]string{"record": "b"}, "r1", &sampleRecord{})
+	requireStatus(t, err, codes.InvalidArgument, `item 3 names the record parameter "b", the request names "a"`)
+
+	readied, err = controller.PatchItem(4, map[string]string{"record": "a"}, map[string]string{"record": ""}, "r1", &sampleRecord{})
+	require.NoError(t, err)
+	require.Equal(t, "r1", readied.GetID())
+
+	var absent *sampleRecord
+	readied, err = controller.PatchItem(5, nil, nil, "r1", absent)
+	require.NoError(t, err)
+	require.Nil(t, readied)
 }
 
 // TestServiceCallDelegatesToThePhaseService pins the call of an action with
@@ -683,129 +757,86 @@ func sampleServer(t *testing.T) *grpc.ClientConn {
 	return conn
 }
 
-// sampleHandlers builds the rpcs of the sample service, each running the
-// call function of its action the way a generated handler does, with what
-// the request message carries: the route parameters under params, the id,
-// the record or the items, the update mask or masks, the query and the
-// payload.
-func sampleHandlers() map[string]func(ctx context.Context, in map[string]any) (any, error) {
-	create := controller.CreateCall[*sampleRecord](sampleRoute)
-	get := controller.GetCall[*sampleRecord](sampleRoute)
-	list := controller.ListCall[*sampleRecord](sampleRoute)
-	update := controller.UpdateCall[*sampleRecord](sampleRoute)
-	patch := controller.PatchCall[*sampleRecord](sampleRoute)
-	del := controller.DeleteCall[*sampleRecord](sampleRoute)
-	createMany := controller.CreateManyCall[*sampleRecord](sampleRoute)
-	updateMany := controller.UpdateManyCall[*sampleRecord](sampleRoute)
-	patchMany := controller.PatchManyCall[*sampleRecord](sampleRoute)
-	deleteMany := controller.DeleteManyCall[*sampleRecord](sampleRoute)
-	refusedCreate := controller.CreateCall[*sampleRecord](refusalRoute)
-	refusedList := controller.ListCall[*sampleRecord](refusalRoute)
-	refusedDelete := controller.DeleteCall[*sampleRecord](refusalRoute)
-	refusedCreateMany := controller.CreateManyCall[*sampleRecord](refusalRoute)
-	filterRefusedList := controller.ListCall[*sampleRecord](filterRefusalRoute)
-	observedCreate := controller.CreateCall[*sampleRecord](observedRoute)
-	cookieBeforeCreate := controller.CreateCall[*sampleRecord](cookieBeforeRoute)
-	cookieAfterCreate := controller.CreateCall[*sampleRecord](cookieAfterRoute)
-	counterGet := controller.GetCall[*sampleCounter](counterRoute)
-	counterList := controller.ListCall[*sampleCounter](counterRoute)
-	versionedPatch := controller.PatchCall[*versionedSample](versionedRoute)
-	shapedPatch := controller.PatchCall[*shapedSample](shapedRoute)
-	validatedCreate := controller.CreateCall[*validatedSample](validatedRoute)
-	validatedCreateMany := controller.CreateManyCall[*validatedSample](validatedRoute)
-	validatedPatch := controller.PatchCall[*validatedSample](validatedRoute)
-	validatedPatchMany := controller.PatchManyCall[*validatedSample](validatedRoute)
+// rpcHandler is an rpc of the sample service: it runs the call function of
+// its action the way a generated handler does, with what the request
+// message carries, and answers what the response message would.
+type rpcHandler func(ctx context.Context, in map[string]any) (any, error)
+
+// sampleHandlers builds the rpcs of the sample service: the ten standard
+// actions of every fixture model on every fixture route (see standardRPCs),
+// and the custom action of the sample, taking the query and the payload.
+func sampleHandlers() map[string]rpcHandler {
+	handlers := make(map[string]rpcHandler)
+	standardRPCs[*sampleRecord](handlers, sampleRoute, "")
+	standardRPCs[*sampleRecord](handlers, refusalRoute, "Refused")
+	standardRPCs[*sampleRecord](handlers, filterRefusalRoute, "FilterRefused")
+	standardRPCs[*sampleRecord](handlers, observedRoute, "Observed")
+	standardRPCs[*sampleRecord](handlers, cookieBeforeRoute, "CookieBefore")
+	standardRPCs[*sampleRecord](handlers, cookieAfterRoute, "CookieAfter")
+	standardRPCs[*sampleCounter](handlers, counterRoute, "Counter")
+	standardRPCs[*versionedSample](handlers, versionedRoute, "Versioned")
+	standardRPCs[*shapedSample](handlers, shapedRoute, "Shaped")
+	standardRPCs[*validatedSample](handlers, validatedRoute, "Validated")
+
 	action := controller.ServiceCall[*sampleRecord, *sampleActionReq, *sampleActionRsp](consts.Create, actionRoute)
 	actionList := controller.ServiceCall[*sampleRecord, *sampleActionReq, *sampleActionRsp](consts.List, actionRoute)
+	handlers["Action"] = func(ctx context.Context, in map[string]any) (any, error) {
+		return action(ctx, params(in), field[controller.Query](in, "query"), field[*sampleActionReq](in, "payload"))
+	}
+	handlers["OpenAction"] = handlers["Action"]
+	handlers["ActionList"] = func(ctx context.Context, in map[string]any) (any, error) {
+		return actionList(ctx, params(in), field[controller.Query](in, "query"), field[*sampleActionReq](in, "payload"))
+	}
+	return handlers
+}
 
-	return map[string]func(ctx context.Context, in map[string]any) (any, error){
-		"Create": func(ctx context.Context, in map[string]any) (any, error) {
-			return create(ctx, params(in), field[*sampleRecord](in, "record"))
-		},
-		"Get": func(ctx context.Context, in map[string]any) (any, error) {
-			return get(ctx, params(in), field[string](in, "id"), field[controller.Query](in, "query"))
-		},
-		"List": func(ctx context.Context, in map[string]any) (any, error) {
-			return listing(list(ctx, params(in), field[controller.Query](in, "query")))
-		},
-		"Update": func(ctx context.Context, in map[string]any) (any, error) {
-			return update(ctx, params(in), field[string](in, "id"), field[*sampleRecord](in, "record"))
-		},
-		"Patch": func(ctx context.Context, in map[string]any) (any, error) {
-			return patch(ctx, params(in), field[string](in, "id"), field[*sampleRecord](in, "record"), field[[]string](in, "mask"))
-		},
-		"Delete": func(ctx context.Context, in map[string]any) (any, error) {
-			return done(del(ctx, params(in), field[string](in, "id")))
-		},
-		"CreateMany": func(ctx context.Context, in map[string]any) (any, error) {
-			return batch(createMany(ctx, params(in), field[[]*sampleRecord](in, "items")))
-		},
-		"UpdateMany": func(ctx context.Context, in map[string]any) (any, error) {
-			return batch(updateMany(ctx, params(in), field[[]*sampleRecord](in, "items")))
-		},
-		"PatchMany": func(ctx context.Context, in map[string]any) (any, error) {
-			return batch(patchMany(ctx, params(in), field[[]*sampleRecord](in, "items"), field[[][]string](in, "masks")))
-		},
-		"DeleteMany": func(ctx context.Context, in map[string]any) (any, error) {
-			return done(deleteMany(ctx, params(in), field[[]string](in, "ids")))
-		},
-		"CookieBeforeCreate": func(ctx context.Context, in map[string]any) (any, error) {
-			return cookieBeforeCreate(ctx, params(in), field[*sampleRecord](in, "record"))
-		},
-		"CookieAfterCreate": func(ctx context.Context, in map[string]any) (any, error) {
-			return cookieAfterCreate(ctx, params(in), field[*sampleRecord](in, "record"))
-		},
-		"RefusedCreate": func(ctx context.Context, in map[string]any) (any, error) {
-			return refusedCreate(ctx, params(in), field[*sampleRecord](in, "record"))
-		},
-		"RefusedList": func(ctx context.Context, in map[string]any) (any, error) {
-			return listing(refusedList(ctx, params(in), field[controller.Query](in, "query")))
-		},
-		"RefusedDelete": func(ctx context.Context, in map[string]any) (any, error) {
-			return done(refusedDelete(ctx, params(in), field[string](in, "id")))
-		},
-		"RefusedCreateMany": func(ctx context.Context, in map[string]any) (any, error) {
-			return batch(refusedCreateMany(ctx, params(in), field[[]*sampleRecord](in, "items")))
-		},
-		"FilterRefusedList": func(ctx context.Context, in map[string]any) (any, error) {
-			return listing(filterRefusedList(ctx, params(in), field[controller.Query](in, "query")))
-		},
-		"ObservedCreate": func(ctx context.Context, in map[string]any) (any, error) {
-			return observedCreate(ctx, params(in), field[*sampleRecord](in, "record"))
-		},
-		"CounterGet": func(ctx context.Context, in map[string]any) (any, error) {
-			return counterGet(ctx, params(in), field[string](in, "id"), field[controller.Query](in, "query"))
-		},
-		"CounterList": func(ctx context.Context, in map[string]any) (any, error) {
-			return listing(counterList(ctx, params(in), field[controller.Query](in, "query")))
-		},
-		"VersionedPatch": func(ctx context.Context, in map[string]any) (any, error) {
-			return versionedPatch(ctx, params(in), field[string](in, "id"), field[*versionedSample](in, "record"), field[[]string](in, "mask"))
-		},
-		"ShapedPatch": func(ctx context.Context, in map[string]any) (any, error) {
-			return shapedPatch(ctx, params(in), field[string](in, "id"), field[*shapedSample](in, "record"), field[[]string](in, "mask"))
-		},
-		"ValidatedCreate": func(ctx context.Context, in map[string]any) (any, error) {
-			return validatedCreate(ctx, params(in), field[*validatedSample](in, "record"))
-		},
-		"ValidatedCreateMany": func(ctx context.Context, in map[string]any) (any, error) {
-			return batch(validatedCreateMany(ctx, params(in), field[[]*validatedSample](in, "items")))
-		},
-		"ValidatedPatch": func(ctx context.Context, in map[string]any) (any, error) {
-			return validatedPatch(ctx, params(in), field[string](in, "id"), field[*validatedSample](in, "record"), field[[]string](in, "mask"))
-		},
-		"ValidatedPatchMany": func(ctx context.Context, in map[string]any) (any, error) {
-			return batch(validatedPatchMany(ctx, params(in), field[[]*validatedSample](in, "items"), field[[][]string](in, "masks")))
-		},
-		"Action": func(ctx context.Context, in map[string]any) (any, error) {
-			return action(ctx, params(in), field[controller.Query](in, "query"), field[*sampleActionReq](in, "payload"))
-		},
-		"OpenAction": func(ctx context.Context, in map[string]any) (any, error) {
-			return action(ctx, params(in), field[controller.Query](in, "query"), field[*sampleActionReq](in, "payload"))
-		},
-		"ActionList": func(ctx context.Context, in map[string]any) (any, error) {
-			return actionList(ctx, params(in), field[controller.Query](in, "query"), field[*sampleActionReq](in, "payload"))
-		},
+// standardRPCs adds to handlers the rpcs of the ten standard actions of M
+// on route, each named prefix followed by the action's name, Create and
+// PatchMany for the samples, RefusedCreate for the refusals: each runs the
+// call function of its action with what the request message carries, the
+// route parameters under params, the id, the record or the items, the
+// update mask or masks, the query and the ids.
+func standardRPCs[M types.Model](handlers map[string]rpcHandler, route, prefix string) {
+	create := controller.CreateCall[M](route)
+	get := controller.GetCall[M](route)
+	list := controller.ListCall[M](route)
+	update := controller.UpdateCall[M](route)
+	patch := controller.PatchCall[M](route)
+	del := controller.DeleteCall[M](route)
+	createMany := controller.CreateManyCall[M](route)
+	updateMany := controller.UpdateManyCall[M](route)
+	patchMany := controller.PatchManyCall[M](route)
+	deleteMany := controller.DeleteManyCall[M](route)
+
+	handlers[prefix+consts.Create.Name()] = func(ctx context.Context, in map[string]any) (any, error) {
+		return create(ctx, params(in), field[M](in, "record"))
+	}
+	handlers[prefix+consts.Get.Name()] = func(ctx context.Context, in map[string]any) (any, error) {
+		return get(ctx, params(in), field[string](in, "id"), field[controller.Query](in, "query"))
+	}
+	handlers[prefix+consts.List.Name()] = func(ctx context.Context, in map[string]any) (any, error) {
+		return listing(list(ctx, params(in), field[controller.Query](in, "query")))
+	}
+	handlers[prefix+consts.Update.Name()] = func(ctx context.Context, in map[string]any) (any, error) {
+		return update(ctx, params(in), field[string](in, "id"), field[M](in, "record"))
+	}
+	handlers[prefix+consts.Patch.Name()] = func(ctx context.Context, in map[string]any) (any, error) {
+		return patch(ctx, params(in), field[string](in, "id"), field[M](in, "record"), field[[]string](in, "mask"))
+	}
+	handlers[prefix+consts.Delete.Name()] = func(ctx context.Context, in map[string]any) (any, error) {
+		return done(del(ctx, params(in), field[string](in, "id")))
+	}
+	handlers[prefix+consts.CreateMany.Name()] = func(ctx context.Context, in map[string]any) (any, error) {
+		return batch(createMany(ctx, params(in), field[[]M](in, "items")))
+	}
+	handlers[prefix+consts.UpdateMany.Name()] = func(ctx context.Context, in map[string]any) (any, error) {
+		return batch(updateMany(ctx, params(in), field[[]M](in, "items")))
+	}
+	handlers[prefix+consts.PatchMany.Name()] = func(ctx context.Context, in map[string]any) (any, error) {
+		return batch(patchMany(ctx, params(in), field[[]M](in, "items"), field[[][]string](in, "masks")))
+	}
+	handlers[prefix+consts.DeleteMany.Name()] = func(ctx context.Context, in map[string]any) (any, error) {
+		return done(deleteMany(ctx, params(in), field[[]string](in, "ids")))
 	}
 }
 

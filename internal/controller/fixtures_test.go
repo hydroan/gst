@@ -126,7 +126,7 @@ const (
 func registerFixtureServices() {
 	for _, phase := range []consts.Phase{
 		consts.Create, consts.Delete, consts.Update, consts.Patch, consts.List,
-		consts.CreateMany, consts.DeleteMany, consts.UpdateMany,
+		consts.CreateMany, consts.DeleteMany, consts.UpdateMany, consts.PatchMany,
 	} {
 		serviceregistry.Register[*sampleRecord, *sampleRecord, *sampleRecord](phase, refusalRoute, &refusingService{})
 	}
@@ -198,6 +198,10 @@ func (*refusingService) DeleteManyBefore(*types.ServiceContext, ...*sampleRecord
 }
 
 func (*refusingService) UpdateManyBefore(*types.ServiceContext, ...*sampleRecord) error {
+	return refusal()
+}
+
+func (*refusingService) PatchManyBefore(*types.ServiceContext, ...*sampleRecord) error {
 	return refusal()
 }
 
@@ -342,9 +346,17 @@ func configFor[M types.Model](route string) *types.ControllerConfig[M] {
 }
 
 // serve mounts handler on a fresh engine under method and pattern, sends it
-// one request for target, with body as its JSON body unless body is empty,
-// and returns the recorded response.
+// one request for target, anonymous, with body as its JSON body unless body
+// is empty, and returns the recorded response.
 func serve(t *testing.T, method, pattern string, handler gin.HandlerFunc, target, body string) *httptest.ResponseRecorder {
+	t.Helper()
+	return serveAs(t, method, pattern, handler, target, body, "")
+}
+
+// serveAs is serve for a request of the user named username, the caller
+// the identity middleware would have named, whom the flows record as the
+// creator and updater; "" sends the request anonymous.
+func serveAs(t *testing.T, method, pattern string, handler gin.HandlerFunc, target, body, username string) *httptest.ResponseRecorder {
 	t.Helper()
 	gin.SetMode(gin.TestMode)
 
@@ -354,6 +366,10 @@ func serve(t *testing.T, method, pattern string, handler gin.HandlerFunc, target
 	engine := gin.New()
 	engine.Handle(method, pattern, func(c *gin.Context) {
 		c.Set(consts.PARAMS, middleware.RouteManager.Get(c.FullPath()))
+		if username != "" {
+			c.Set(consts.CTX_USERNAME, username)
+			c.Set(consts.CTX_USER_ID, "u-1")
+		}
 	}, handler)
 
 	var reader io.Reader

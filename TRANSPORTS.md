@@ -50,7 +50,7 @@ gst · HTTP 与 gRPC 两条传输线
     <div class="arch-arrow">▼</div>
     <div class="arch-layer stage">
       <div class="arch-layer-title">⑥ 共用流程 · internal/controller</div>
-      <div class="arch-box lane shared"><b>十个 CRUD 流程（create.go … delete_many.go、flow.go）</b><ul><li>模型钩子（CreateBefore …）与 service 钩子（Filter、ListAfter …）按同一顺序跑，事务与审计在这一层。</li><li><code>types.ServiceContext</code> 与传输无关，元数据来自 <code>requestctx.Metadata</code>：ClientIP、UserAgent、Host、TLS、Route、Path、Method、RequiresAuth；gRPC 侧 Route、Method 取注册时描述的该动作的路由与 HTTP 方法（流式为 STREAM），Path、RequestURI 是 FullMethod，非 List/Get 动作的 Query 为空。</li><li>校验单点：binding tag 整体校验，自定义动作的空 body 按零值请求校验、和 gRPC 未设置的 payload 一致；Patch / PatchMany 只校验被点名的字段（HTTP 按 body 键，gRPC 按 update_mask），点名的字段整体替换，不论它是标量、时间还是结构体，掩码只认顶层键、不点进字段内部；批量逐条校验。gin 的校验器在框架包初始化时配成按 json 名称呼字段、失败句子用英文翻译，项目自己用 gin 的 ShouldBind 时错误里的字段名也是 JSON 名。</li><li>数据库经 <code>database.Database[T](ctx)</code>，列名只来自 gorm schema。</li></ul></div>
+      <div class="arch-box lane shared"><b>十个 CRUD 流程（create.go … delete_many.go、flow.go）</b><ul><li>模型钩子（CreateBefore …）与 service 钩子（Filter、ListAfter …）按同一顺序跑，事务与审计在这一层。</li><li><code>types.ServiceContext</code> 与传输无关，元数据来自 <code>requestctx.Metadata</code>：ClientIP、UserAgent、Host、TLS、Route、Path、Method、RequiresAuth；gRPC 侧 Route、Method 取注册时描述的该动作的路由与 HTTP 方法（流式为 STREAM），Path、RequestURI 是 FullMethod，非 List/Get 动作的 Query 为空。</li><li>校验单点：binding tag 整体校验，自定义动作的空 body 按零值请求校验、和 gRPC 未设置的 payload 一致；Patch / PatchMany 只校验被点名的字段（HTTP 按 body 键，gRPC 按 update_mask），点名的字段整体替换，不论它是标量、时间还是结构体，掩码只认顶层键、不点进字段内部；id、created_at 这类框架管理的字段两线都不改、点了也跳过，模型没有的字段 HTTP 忽略 body 里的键、gRPC 拒绝掩码里的路径，一个可改字段都没点到时 HTTP 整行按原样写回、gRPC 拒绝；批量逐条校验，UpdateMany / PatchMany 同一个 id 出现两次两线都拒绝。gin 的校验器在框架包初始化时配成按 json 名称呼字段、失败句子用英文翻译，项目自己用 gin 的 ShouldBind 时错误里的字段名也是 JSON 名。</li><li>数据库经 <code>database.Database[T](ctx)</code>，列名只来自 gorm schema。</li></ul></div>
     </div>
     <div class="arch-arrow">▼</div>
     <div class="arch-layer stage">
@@ -176,7 +176,7 @@ HTTP 状态到 gRPC status 的映射（`grpcserver.StatusError`）：
 | 动作 | HTTP | gRPC（模型声明了 GRPC()） | 说明 |
 |---|:---:|:---:|---|
 | Create / Get / List / Update / Patch / Delete | ✓ | ✓ | rpc 名 = 动作名 + 模型名，嵌套路由加 `By<参数>`；不要求 Service() |
-| CreateMany / UpdateMany / PatchMany / DeleteMany | ✓ | ✓ | 批量逐条校验；PatchMany 的每一项就是单条 Patch 的请求（id、记录、update_mask），项里的 id 和路由参数与外层不一致即拒绝 |
+| CreateMany / UpdateMany / PatchMany / DeleteMany | ✓ | ✓ | 批量逐条校验，UpdateMany / PatchMany 同一个 id 出现两次即拒绝；PatchMany 的每一项就是单条 Patch 的请求（id、记录、update_mask），和单条一样以项的 id 为准、记录自带的 id 不读，项里的路由参数与外层不一致即拒绝 |
 | Route() 里的自定义动作 | ✓ | ✓ | rpc 名 = Service 名 + 模型名；Payload 挂成 `payload`，Result 挂成 `result` |
 | Import / Export / SSE | ✓ | — | 文件流与事件流只有 HTTP 能承载；gg check 在 GRPC() 模型的其他 service 里拦住 HTTP 专属的 ServiceContext 方法（Cookie、FormFile、SSE 等），这三种动作自己的 service 文件不扫，运行期在 gRPC 调用里碰到其中任何一个，调用一律答 Internal，钩子一返回就拦：Before 钩子里的在写库之前拦下，After 钩子里的在写库之后（和 After 钩子返回错误一样，行已写入） |
 | Stream | — | ✓ | 只允许自定义动作，必须 Service("name") 与 GRPC()；router、service.gen.go、TS 类型都跳过它 |
@@ -282,11 +282,12 @@ call --> client : OK，或映射后的 status；取消答 Canceled，停机答 U
 | rpc 名单数、批量用 Many | AIP-132 要 `ListRecords` 复数，AIP-231/233/234/235 批量要 `Batch` 前缀 | rpc 名 = DSL 动作名 + 模型名（`ListRecord`、`CreateManyRecord`），和 HTTP 路由用同一套动作名，一个动作在两条线上一个名字 |
 | 列表响应与分页 | AIP-132/158 要 `<resources>` 复数字段、不透明的 `next_page_token`、`total_size` | 响应是 `items` 加 `total`，请求按模型嵌入的 Query、Pagination、Cursor 带 `page`、`size`、`cursor_*`，和 HTTP 契约同形，走同一个 urlquery 解析 |
 | 过滤 | AIP-160 是一段字符串表达式 | `filters` 是结构化的 `{field, op, values}`，和 HTTP 的 `field[op]=value` 一一对应，运行期同一套拒绝规则 |
-| update_mask | AIP-134 允许省略（省略即按已填字段）、必须支持 `*`；AIP-161 要求整字段与子字段路径都合法 | 必填，不认 `*`（等于 Update），只认顶层键、不点进字段内部：点名的字段整体替换，和 HTTP 的 PATCH 一致 |
+| update_mask | AIP-134 允许省略（省略即按已填字段）、必须支持 `*`；AIP-161 要求整字段与子字段路径都合法 | 必填，不认 `*`（等于 Update），只认顶层键、不点进字段内部：点名的字段整体替换，和 HTTP 的 PATCH 一致；点到 id、created_at 这类框架管理的字段时跳过（AIP-161/203 对只读字段的规定）、点到模型没有的字段拒绝（AIP-161） |
+| 什么都没点到的补丁 | AIP-134 的掩码省略即按已填字段；RFC 7396 的空补丁 `{}` 合法、表示不改 | HTTP 的 `{}` 与只含模型没有的键的 body 照 encoding/json 的惯例忽略未知键、整行按原样写回并刷新 updated_at；gRPC 的掩码不剩可改字段时拒绝。这是两线唯一有意不同的地方，internal/controller 的对照用例把它写成显式的差异行 |
 | 包名无版本段 | Buf 的 PACKAGE_VERSION_SUFFIX 要 `v1` 这样的后缀 | gst 没有 API 版本，包名就是项目名加目录 |
 | 不生成枚举 | AIP-126 用 enum | 字符串枚举保持 string，取值列在字段注释里，HTTP 与数据库里都是字符串 |
 | 时间类型 | AIP-142 一天里的时刻用 `google.type.TimeOfDay`、日期用 `google.type.Date` | `datatypes.Time` 映射 `google.protobuf.Duration`（从零点起的时长），`datatypes.Date` 映射 `google.protobuf.Timestamp`，不引入 googleapis 的类型 |
 | Delete 的响应 | AIP-135 返回 `google.protobuf.Empty` | 每个 rpc 独享自己的空 `DeleteXxxResponse`，照 Buf 风格指南，日后加字段不换类型 |
 | 不写 HTTP 注解 | AIP 用 `google.api.http`、`google.api.field_behavior` 标路由与必填 | 没有 gateway，路由与 HTTP 方法由注册物描述（`grpc.Method`），必填由模型的 binding tag 决定，注释里写明 |
 
-这页跟着代码走：拦截器链、映射表、产物名、差异清单以仓库为准，改了代码就改这页。
+这页跟着代码走：拦截器链、映射表、产物名、差异清单以仓库为准，改了代码就改这页。两线对同一输入的答复由 internal/controller 的对照用例 TestTransportsAnswerTheContractAlike 逐场景比对（状态码按第 4 节的映射、msg 逐字、落库结果），有意的差异在它的表里是显式的差异行：改了一边它先红，新增一处差异要同时写进表和这页。

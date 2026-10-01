@@ -48,6 +48,21 @@ func TestUpdateManyWritesNothingTheBeforeHookRefuses(t *testing.T) {
 	requireSampleName(t, record.GetID(), "update-many-refused")
 }
 
+// TestUpdateManyRefusesARecordNamedTwice pins the 400 of a batch update
+// whose items name one record twice: the batch is refused before anything
+// is written, naming the items, so neither item reaches the record.
+func TestUpdateManyRefusesARecordNamedTwice(t *testing.T) {
+	record := createSample(t, "update-many-named-twice")
+
+	rsp := serve(t, http.MethodPut, "/controller-samples/batch",
+		controller.UpdateManyHandler[*sampleRecord, *sampleRecord, *sampleRecord](configFor[*sampleRecord](sampleRoute)),
+		"/controller-samples/batch", `{"items":[{"id":"`+record.GetID()+`","name":"update-many-first"},{"id":"`+record.GetID()+`","name":"update-many-second"}]}`)
+
+	require.Equal(t, http.StatusBadRequest, rsp.Code)
+	require.Contains(t, rsp.Body.String(), `"msg":"items[1] names the record \"`+record.GetID()+`\", which items[0] already names"`)
+	requireSampleName(t, record.GetID(), "update-many-named-twice")
+}
+
 // TestUpdateManyRefusesAnItemWithoutAnID pins the 400 of a batch update
 // with an item that names no record: the request is defective, and the item
 // beside it is not written either.

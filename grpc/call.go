@@ -137,7 +137,9 @@ func UpdateCall[M types.Model](route string) func(ctx context.Context, params ma
 // PatchCall returns the patch call of M on route: given the route
 // parameters, the id, the values and the paths of the update mask, which
 // name the fields to apply as the message names them, each applied as a
-// whole, and must name at least one, it answers with the record patched.
+// whole, a path naming a field the framework manages passed over, and must
+// leave at least one to apply, it answers with the record patched; a
+// message carrying no record is refused.
 func PatchCall[M types.Model](route string) func(ctx context.Context, params map[string]string, id string, m M, paths []string) (M, error) {
 	return controller.PatchCall[M](route)
 }
@@ -163,11 +165,12 @@ func UpdateManyCall[M types.Model](route string) func(ctx context.Context, param
 // PatchItem readies the record of the item at index i of a batch patch,
 // what the generated handler of a PatchMany rpc reads each item through,
 // an item being the request of a single Patch: the item names its record by
-// id, which the record may leave out or repeat but not contradict, and the
-// route parameters it carries, keyed as the request's params are, may be
-// left empty or repeat the request's. An item naming no id or contradicting
-// the request is refused with InvalidArgument; an item carrying no record
-// is answered as it is, for PatchManyCall to refuse.
+// id, written onto the record whatever id the record carries, as a Patch
+// call patches the record its message names, and the route parameters it
+// carries, keyed as the request's params are, may be left empty or repeat
+// the request's. An item naming no id, or naming a parameter otherwise than
+// the request does, is refused with InvalidArgument; an item carrying no
+// record is answered as it is, for PatchManyCall to refuse.
 func PatchItem[M types.Model](i int, params, itemParams map[string]string, id string, m M) (M, error) {
 	return controller.PatchItem(i, params, itemParams, id, m)
 }

@@ -34,11 +34,14 @@ type patchField struct {
 }
 
 // patchFieldTable is the table of the fields of a model a patch may apply,
-// in declaration order, with its lookups by JSON key and by Go path.
+// in declaration order, with its lookups by JSON key and by Go path, and
+// the JSON keys of the fields the framework manages, which a mask names to
+// no effect (see maskFieldSet).
 type patchFieldTable struct {
-	fields []*patchField
-	byKey  map[string]*patchField
-	byName map[string]*patchField
+	fields  []*patchField
+	byKey   map[string]*patchField
+	byName  map[string]*patchField
+	managed map[string]struct{}
 }
 
 // patchFieldSet is the set of fields a patch applies, keyed by the Go path
@@ -83,7 +86,7 @@ var frameworkBases = map[reflect.Type]struct{}{
 // encoding/json, not their Go names, which Go's own visibility goes by.
 // Left out are the fields of the framework's base types, and a field named
 // ID at any depth: the primary key names the record patched and moves it
-// nowhere.
+// nowhere. Their keys are kept as the ones the framework manages.
 func patchFieldsOf(typ reflect.Type) *patchFieldTable {
 	if cached, ok := patchFieldTables.Load(typ); ok {
 		return cached.(*patchFieldTable) //nolint:errcheck
@@ -94,6 +97,7 @@ func patchFieldsOf(typ reflect.Type) *patchFieldTable {
 	}
 	candidates := make(map[string][]candidate)
 	var keys []string
+	managed := make(map[string]struct{})
 	// The walk is encoding/json's typeFields, which it does not export:
 	// breadth first, a level per depth of embedding, over every field a
 	// struct holds, so that two fields Go hides behind one name are the two
@@ -126,12 +130,22 @@ func patchFieldsOf(typ reflect.Type) *patchFieldTable {
 						structType = structType.Elem()
 					}
 					if structType.Kind() == reflect.Struct {
-						// Not looked into, its promoted fields no keys: a
-						// framework base type, an embedded struct with a
-						// json name of its own, encoded as one value under
-						// it, one the tag leaves out, and one held through
-						// a pointer of an unexported type.
-						if _, base := frameworkBases[structType]; base || name == "-" || (field.Type.Kind() == reflect.Pointer && !field.IsExported()) {
+						// A framework base type is not looked into: its
+						// fields are the framework's to write, their keys
+						// kept as the managed ones.
+						if _, base := frameworkBases[structType]; base {
+							for baseField := range structType.Fields() {
+								if key := jsonKey(baseField); key != "" {
+									managed[key] = struct{}{}
+								}
+							}
+							continue
+						}
+						// Neither is an embedded struct with a json name of
+						// its own, encoded as one value under it, one the tag
+						// leaves out, or one held through a pointer of an
+						// unexported type: their promoted fields are no keys.
+						if name == "-" || (field.Type.Kind() == reflect.Pointer && !field.IsExported()) {
 							continue
 						}
 						if name == "" {
@@ -143,7 +157,11 @@ func patchFieldsOf(typ reflect.Type) *patchFieldTable {
 						}
 					}
 				}
-				if !field.IsExported() || name == "-" || field.Name == consts.FIELD_ID {
+				if !field.IsExported() || name == "-" {
+					continue
+				}
+				if field.Name == consts.FIELD_ID {
+					managed[jsonKey(field)] = struct{}{}
 					continue
 				}
 				// A tag naming the field is a tag, spelt like the Go name or not.
@@ -170,7 +188,7 @@ func patchFieldsOf(typ reflect.Type) *patchFieldTable {
 		}
 		current, count = next, nextCount
 	}
-	table := &patchFieldTable{byKey: make(map[string]*patchField, len(keys)), byName: make(map[string]*patchField, len(keys))}
+	table := &patchFieldTable{byKey: make(map[string]*patchField, len(keys)), byName: make(map[string]*patchField, len(keys)), managed: managed}
 	for _, key := range keys {
 		shallowest := slices.MinFunc(candidates[key], func(a, b candidate) int {
 			return len(a.field.index) - len(b.field.index)
@@ -203,6 +221,20 @@ func (t *patchFieldTable) add(field *patchField) {
 	t.fields = append(t.fields, field)
 	t.byKey[field.key] = field
 	t.byName[field.name] = field
+}
+
+// jsonKey returns the key field encodes to in JSON, the name its json tag
+// gives it or its own name, and "" for a field encoding to none, unexported
+// or left out by its tag.
+func jsonKey(field reflect.StructField) string {
+	name := jsonTagName(field)
+	if !field.IsExported() || name == "-" {
+		return ""
+	}
+	if name == "" {
+		return field.Name
+	}
+	return name
 }
 
 // applyPatch copies the fields of newVal that fieldSets name — every field
@@ -336,20 +368,23 @@ func patchFieldSetFromJSONFields(typ reflect.Type, fields map[string]json.RawMes
 
 // maskFieldSet returns the fields of typ the paths of an update mask name,
 // as the message names them, the JSON keys of the model: what a Patch rpc
-// applies of the values it carries. The mask must name at least one field,
-// a Patch applying nothing being a mistake to report rather than a
-// record to answer unchanged, and every path must name a field the patch
-// applies, as a whole: a path into a field, address.city, is refused and
-// told the field to name instead, and so is a path naming what no patch
-// applies, the framework's base fields, the primary key or a field the
-// model does not have.
+// applies of the values it carries. A path naming a field the framework
+// manages, the primary key or the audit columns, is passed over, the way
+// the HTTP handler passes over the key, and the way a mask naming an
+// output-only field is read (AIP-161, AIP-203). Every other path must name
+// a field the patch applies, as a whole: a path into a field, address.city,
+// is refused and told the field to name instead, and so is a path naming a
+// field the model does not have, a key the HTTP handler passes over. The
+// mask must leave at least one field to apply, a Patch applying nothing
+// being a mistake to report rather than a record to answer unchanged,
+// where the HTTP handler writes the record back as stored.
 func maskFieldSet(typ reflect.Type, paths []string) (patchFieldSet, error) {
-	if len(paths) == 0 {
-		return nil, errors.New("update_mask must name at least one field")
-	}
 	table := patchFieldsOf(typ)
 	fields := make(patchFieldSet, len(paths))
 	for _, path := range paths {
+		if _, managed := table.managed[path]; managed {
+			continue
+		}
 		if head, _, into := strings.Cut(path, "."); into {
 			if _, ok := table.byKey[head]; ok {
 				return nil, errors.Newf("update_mask names %q, a part of a field; a patch applies %q as a whole", path, head)
@@ -360,6 +395,9 @@ func maskFieldSet(typ reflect.Type, paths []string) (patchFieldSet, error) {
 			return nil, errors.Newf("update_mask names %q, which is no field a patch applies", path)
 		}
 		fields[field.name] = struct{}{}
+	}
+	if len(fields) == 0 {
+		return nil, errors.New("update_mask must name at least one field a patch applies")
 	}
 	return fields, nil
 }

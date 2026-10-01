@@ -40,6 +40,28 @@ type batch[M types.Model] struct {
 	Items []M `json:"items,omitempty" binding:"dive"`
 }
 
+// repeatedID returns the error of a batch update or patch whose items name
+// one record twice, items[1] names the record "r1", which items[0] already
+// names, and nil when every item names a record of its own. The batch
+// writes each record once, all of them or none, so a later item naming a
+// record an earlier one names would write over it; the batch is refused
+// before any record is read. An item naming no record is left to the
+// flow, which refuses it.
+func (req *batch[M]) repeatedID() error {
+	named := make(map[string]int, len(req.Items))
+	for i, m := range req.Items {
+		id := m.GetID()
+		if id == "" {
+			continue
+		}
+		if first, ok := named[id]; ok {
+			return errors.Newf("items[%d] names the record %q, which items[%d] already names", i, id, first)
+		}
+		named[id] = i
+	}
+	return nil
+}
+
 // CreateManyHandler returns a Gin handler that creates multiple resources.
 //
 // When M, REQ, and RSP are the same type, the handler binds the JSON body into

@@ -3,17 +3,13 @@ package controller
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"io"
-	"maps"
 	"reflect"
-	"slices"
 
 	"github.com/cockroachdb/errors"
 	"github.com/gin-gonic/gin"
 	"github.com/hydroan/gst/consts"
 	"github.com/hydroan/gst/database"
-	"github.com/hydroan/gst/internal/grpcserver"
 	modellogmgmt "github.com/hydroan/gst/internal/model/logmgmt"
 	"github.com/hydroan/gst/internal/modelregistry"
 	"github.com/hydroan/gst/internal/response"
@@ -23,40 +19,6 @@ import (
 	"github.com/hydroan/gst/util"
 	"go.uber.org/zap"
 )
-
-// PatchItem readies the record of the item at index i of a batch patch, what
-// the generated handler of a PatchMany rpc reads each item it carries
-// through, the item being the request of a single Patch: the item names its
-// record by id, which the record it carries may leave out or repeat but not
-// contradict, and the route parameters it carries, keyed as the request's
-// params are, may be left empty or repeat the request's. An item naming no
-// id or contradicting the request is refused with InvalidArgument, the way
-// a batch request whose sub-request names another parent must fail
-// (AIP-234), the way a call's refusal does (see grpcserver.StatusError); an
-// item carrying no record is answered as it
-// is, for the call to refuse (see PatchManyCall). The public grpc.PatchItem
-// forwards to it.
-func PatchItem[M types.Model](i int, params, itemParams map[string]string, id string, m M) (M, error) {
-	invalid := func(format string, args ...any) error {
-		return grpcserver.StatusError(badRequest(fmt.Sprintf(format, args...)))
-	}
-	for _, name := range slices.Sorted(maps.Keys(itemParams)) {
-		if value := itemParams[name]; value != "" && value != params[name] {
-			return m, invalid("item %d names the %s parameter %q, the request names %q", i, name, value, params[name])
-		}
-	}
-	if id == "" {
-		return m, invalid("item %d names no id", i)
-	}
-	if reflect.ValueOf(m).IsNil() {
-		return m, nil
-	}
-	if carried := m.GetID(); carried != "" && carried != id {
-		return m, invalid("item %d names the record %s but carries the record %s", i, id, carried)
-	}
-	m.SetID(id)
-	return m, nil
-}
 
 // PatchManyHandler returns a Gin handler that partially updates multiple resources.
 //
@@ -200,9 +162,10 @@ func PatchManyCall[M types.Model](route string) func(ctx context.Context, params
 // record, runs the batch patch hooks around the write, records the
 // operation, and returns the batch with the patched records, as the hooks
 // left them, in place of the items. The batch patches all of its items or
-// none, as a batch update does: an item without an id fails the whole batch
-// with 400 before any record is read, and an item whose record does not exist
-// fails it with 404 before anything is written.
+// none, as a batch update does: a batch naming one record twice (see
+// repeatedID) and an item without an id fail the whole batch with 400
+// before any record is read, and an item whose record does not exist fails
+// it with 404 before anything is written.
 //
 // Each write is the whole record loaded, not only the fields its item
 // carried, so concurrent patches of one record resolve as last writer wins
@@ -214,6 +177,9 @@ func (a *action[M, REQ, RSP]) patchManyFlow(ctx context.Context, newServiceConte
 	log := logger.Controller.WithContext(ctx, consts.PatchMany)
 	svc := a.service()
 
+	if err := req.repeatedID(); err != nil {
+		return zero, failWith(ctx, log, "batch patch naming a record twice", err, invalidArgument(err))
+	}
 	var shouldUpdates []M
 	for i, m := range req.Items {
 		// An item without an id names no record: a defective request,
