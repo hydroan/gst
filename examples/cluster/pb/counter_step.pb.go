@@ -35,9 +35,9 @@ type CounterStep struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// The identifier of the record, assigned when it is created.
 	Id string `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
-	// The id of the user who created the record.
+	// The username of the user who created the record.
 	CreatedBy string `protobuf:"bytes,2,opt,name=created_by,json=createdBy,proto3" json:"created_by,omitempty"`
-	// The id of the user who last updated the record.
+	// The username of the user who last updated the record.
 	UpdatedBy string `protobuf:"bytes,3,opt,name=updated_by,json=updatedBy,proto3" json:"updated_by,omitempty"`
 	// When the record was created.
 	CreatedAt *timestamppb.Timestamp `protobuf:"bytes,4,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`

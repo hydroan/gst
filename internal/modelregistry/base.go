@@ -47,8 +47,8 @@ var _ types.Model = (*Base)(nil)
 type Base struct {
 	ID string `json:"id" gorm:"primaryKey;size:36" query:"id" url:"-"` // UUIDv7 identifier for the record
 
-	CreatedBy string         `json:"created_by,omitempty" gorm:"size:36" query:"created_by" url:"-"` // UUIDv7 user ID who created the record
-	UpdatedBy string         `json:"updated_by,omitempty" gorm:"size:36" query:"updated_by" url:"-"` // UUIDv7 user ID who last updated the record
+	CreatedBy string         `json:"created_by,omitempty" gorm:"size:36" query:"created_by" url:"-"` // Username of the user who created the record
+	UpdatedBy string         `json:"updated_by,omitempty" gorm:"size:36" query:"updated_by" url:"-"` // Username of the user who last updated the record
 	CreatedAt time.Time      `json:"created_at,omitzero" gorm:"not null" query:"-" url:"-"`          // Timestamp when the record was created
 	UpdatedAt time.Time      `json:"updated_at,omitzero" gorm:"not null" query:"-" url:"-"`          // Timestamp when the record was last updated
 	DeletedAt gorm.DeletedAt `json:"-" query:"-" url:"-"`                                            // Timestamp when the record was deleted

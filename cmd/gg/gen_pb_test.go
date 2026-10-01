@@ -301,10 +301,10 @@ func TestGenRunCommentsTheFrameworkBaseFields(t *testing.T) {
   // The identifier of the record, assigned when it is created.
   string id = 1;
 
-  // The id of the user who created the record.
+  // The username of the user who created the record.
   string created_by = 2;
 
-  // The id of the user who last updated the record.
+  // The username of the user who last updated the record.
   string updated_by = 3;
 
   // When the record was created.
