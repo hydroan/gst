@@ -1,6 +1,7 @@
 // Package family has a method several types of the package declare alike,
 // each in a one-line version of its own that the caller runs one by one:
-// the name is the convention the types share, so none is reported.
+// a shared name is no interface, so each is judged on its own and both,
+// wrapping one call with one use each, are reported.
 package family
 
 import "strings"

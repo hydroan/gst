@@ -101,38 +101,23 @@ type Config struct {
 	Logmgmt       `json:"logmgmt" mapstructure:"logmgmt" ini:"logmgmt" yaml:"logmgmt"`
 }
 
+// section is a section of Config setting the defaults of its keys on v:
+// every section Config embeds is one, run in turn by setDefault.
+type section interface {
+	setDefault(v *viper.Viper)
+}
+
 // setDefault sets the default value of every framework key on v.
 func (c *Config) setDefault(v *viper.Viper) {
-	c.AppInfo.setDefault(v)
-	c.Server.setDefault(v)
-	c.GRPC.setDefault(v)
-	c.Cache.setDefault(v)
-	c.Middleware.setDefault(v)
-	c.Auth.setDefault(v)
-	c.Logger.setDefault(v)
-	c.Database.setDefault(v)
-	c.Sqlite.setDefault(v)
-	c.Postgres.setDefault(v)
-	c.MySQL.setDefault(v)
-	c.Clickhouse.setDefault(v)
-	c.Redis.setDefault(v)
-	c.OTEL.setDefault(v)
-	c.Elasticsearch.setDefault(v)
-	c.Mongo.setDefault(v)
-	c.Kafka.setDefault(v)
-	c.Ldap.setDefault(v)
-	c.Influxdb.setDefault(v)
-	c.Minio.setDefault(v)
-	c.Mqtt.setDefault(v)
-	c.Nats.setDefault(v)
-	c.Etcd.setDefault(v)
-	c.Cassandra.setDefault(v)
-	c.Scylla.setDefault(v)
-	c.RethinkDB.setDefault(v)
-	c.RocketMQ.setDefault(v)
-	c.Debug.setDefault(v)
-	c.Audit.setDefault(v)
-	c.Logmgmt.setDefault(v)
+	for _, s := range []section{
+		&c.AppInfo, &c.Server, &c.GRPC, &c.Cache, &c.Middleware, &c.Auth, &c.Logger,
+		&c.Database, &c.Sqlite, &c.Postgres, &c.MySQL, &c.Clickhouse, &c.Redis, &c.OTEL,
+		&c.Elasticsearch, &c.Mongo, &c.Kafka, &c.Ldap, &c.Influxdb, &c.Minio, &c.Mqtt,
+		&c.Nats, &c.Etcd, &c.Cassandra, &c.Scylla, &c.RethinkDB, &c.RocketMQ, &c.Debug,
+		&c.Audit, &c.Logmgmt,
+	} {
+		s.setDefault(v)
+	}
 }
 
 // defaultConfigName is the base name of the configuration file Init looks for.

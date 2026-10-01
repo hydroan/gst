@@ -55,10 +55,8 @@ type forwarding struct {
 // Only uses inside the package are counted, tests included, which is why only
 // unexported functions are judged. Left alone are a method whose name an
 // interface of its package declares, since a call through the interface is a
-// use the check cannot count; a method several types of the package declare
-// alike, its name being the convention the types share the way an interface
-// would spell it out (see familyMethods); a function whose name appears in a
-// file the build leaves out; and anything declared in a generated file.
+// use the check cannot count; a function whose name appears in a file the
+// build leaves out; and anything declared in a generated file.
 func checkForwarding(root string, pkgs []*packages.Package) ([]violation, error) {
 	withTests := make(map[string]bool)
 	for _, p := range pkgs {
@@ -103,7 +101,6 @@ func forwardingIn(root string, p *packages.Package) ([]forwarding, error) {
 		return nil, err
 	}
 	viaInterface := interfaceMethods(p)
-	family := familyMethods(p)
 	generated := make(map[string]bool)
 	for i, f := range p.Syntax {
 		if ast.IsGenerated(f) {
@@ -115,7 +112,7 @@ func forwardingIn(root string, p *packages.Package) ([]forwarding, error) {
 		if fn.Exported() || ignored[fn.Name()] {
 			return false
 		}
-		return fn.Signature().Recv() == nil || (!viaInterface[fn.Name()] && !family[methodKey(fn)])
+		return fn.Signature().Recv() == nil || !viaInterface[fn.Name()]
 	}
 	at := func(pos token.Pos) string {
 		position := p.Fset.Position(pos)
@@ -392,45 +389,6 @@ func interfaceMethods(p *packages.Package) map[string]bool {
 		}
 	}
 	return names
-}
-
-// familyMethods returns the keys (see methodKey) of the methods several
-// types of p declare alike, the configuration sections each carrying a
-// setDefault of their own for the one caller running them in turn: the
-// name is the convention the types follow, what an interface would declare
-// had one been written, and each type's version is that convention kept,
-// not a call written away from its site.
-func familyMethods(p *packages.Package) map[string]bool {
-	holders := make(map[string]map[*types.TypeName]bool)
-	for _, obj := range p.TypesInfo.Defs {
-		fn, ok := obj.(*types.Func)
-		if !ok || fn.Signature().Recv() == nil {
-			continue
-		}
-		named, ok := derefNamed(fn.Signature().Recv().Type())
-		if !ok {
-			continue
-		}
-		key := methodKey(fn)
-		if holders[key] == nil {
-			holders[key] = make(map[*types.TypeName]bool)
-		}
-		holders[key][named.Obj()] = true
-	}
-	family := make(map[string]bool)
-	for key, declaring := range holders {
-		if len(declaring) > 1 {
-			family[key] = true
-		}
-	}
-	return family
-}
-
-// methodKey names a method by its name and its signature, the receiver
-// aside, "setDefault func(v *viper.Viper)": what the versions of one method
-// on several types share.
-func methodKey(fn *types.Func) string {
-	return fn.Name() + " " + fn.Signature().String()
 }
 
 // ignoredNames returns every identifier in the Go files of p's directory that

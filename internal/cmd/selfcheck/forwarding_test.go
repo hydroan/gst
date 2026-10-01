@@ -7,21 +7,22 @@ import (
 )
 
 // TestCheckForwarding runs the check over a fixture module with one package
-// per case. Ten functions are reported. Five only forward and have one use:
+// per case. Twelve functions are reported. Five only forward and have one use:
 // to a function of another package (single), to a variadic one (variadic), to
 // another method of the receiver (method), to a function taking the receiver
 // (recvarg), and from an external test (exttest). Two forward to a function
 // nothing else uses: right away (merged), and after one straight-line
-// statement of their own (lead). Three wrap one call, shaping the arguments,
+// statement of their own (lead). Five wrap one call, shaping the arguments,
 // and have one use: of a function of their own package (adapter's pair), of
-// another package's (adapter's join), and of a method of a package-level
-// value of another package's type (valuemethod). Nothing is reported where
+// another package's (adapter's join), of a method of a package-level value
+// of another package's type (valuemethod), and of a method of a parameter,
+// in a method several types of the package declare alike, which a shared
+// name does not exempt (family's two). Nothing is reported where
 // the forwarding function is exported and the other one has more uses
 // (exported), where the forwarding function has a second use (multiuse), in
 // an internal test (testuse) or in a file the build leaves out (tagged),
-// where an interface of the package declares the method (sealed) or several
-// types of the package declare it alike (family), where the forwarding
-// function is generated (generated), where a type changes on the way
+// where an interface of the package declares the method (sealed), where the
+// forwarding function is generated (generated), where a type changes on the way
 // (converted), where the one call a function wraps takes a function literal
 // (funclit) or is laid out over several lines (multiline), and where more
 // than a straight-line statement runs before the forwarding: two of them
@@ -43,6 +44,14 @@ func TestCheckForwarding(t *testing.T) {
 		{
 			File:    "exttest/exttest_test.go",
 			Message: "Function 'newSample' at exttest/exttest_test.go:15 only forwards to exttest.New and has one use, at exttest/exttest_test.go:10: call exttest.New there instead",
+		},
+		{
+			File:    "family/family.go",
+			Message: "Method 'Header.write' at family/family.go:20 only wraps a call of Sink.add and has one use, at family/family.go:27: write the call there instead",
+		},
+		{
+			File:    "family/family.go",
+			Message: "Method 'Footer.write' at family/family.go:22 only wraps a call of Sink.add and has one use, at family/family.go:28: write the call there instead",
 		},
 		{
 			File:    "lead/lead.go",
