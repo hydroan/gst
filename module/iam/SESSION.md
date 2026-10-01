@@ -120,6 +120,12 @@ if (Cookie session_id?) then (缺失)
 else (存在)
 endif
 :GET data:sid;
+if (读得到?) then (否)
+  :500 failed to load session
+  快照保留;
+  end
+else (是)
+endif
 if (快照命中?) then (否)
   :401 session invalid;
   end
@@ -138,6 +144,12 @@ else (是)
 endif
 if (user:state 命中?) then (否)
   :回查 MySQL 并写缓存;
+  if (回查成功?) then (否)
+    :500 failed to refresh session user state
+    快照保留;
+    end
+  else (是)
+  endif
 else (是)
 endif
 if (status) then (inactive / locked)
@@ -220,7 +232,14 @@ end note
 if (GET user:state:uid) then (命中)
 else (未命中)
   :SELECT users + password_credentials;
+  if (查得到?) then (否)
+    :500 failed to refresh session user state
+    快照保留;
+    end
+  else (是)
+  endif
   if (两行都还在?) then (否)
+    :DEL 快照;
     :401 session invalid;
     end
   else (是)
@@ -318,7 +337,8 @@ T6 --> P4
 
 ## 边界
 
-**Redis 不可用时 IAM 谁也认证不了。** 会话不落库，所以没有降级路径。`iam.Register()` 因此在启动期检查
+**Redis 不可用时 IAM 谁也认证不了。** 会话不落库，所以没有降级路径；读不到快照答 500 而不是 401——这是服务端的故障，
+客户端不该因此清掉 cookie，存储恢复后会话照常可用，回查用户状态失败同样答 500 且不删快照。`iam.Register()` 因此在启动期检查
 `Redis.Enabled`，没开就拒绝启动。需要注意框架层的行为并不整齐：typed `redis.Cache` 在禁用时返回
 `ErrRedisIsDisabled`，而 `ZAdd` / `ZRem` / `SetNX` / `Expire` / `Del` 是静默 no-op，`SetNX` 甚至返回
 `true`。启动期那道检查就是为了让这种不对称永远没机会发生。

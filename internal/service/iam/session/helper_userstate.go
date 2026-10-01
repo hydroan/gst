@@ -21,7 +21,7 @@ func ValidateSessionUserState(ctx context.Context, session modeliamsession.Sessi
 	state, ok := Store.LoadUserState(ctx, session.UserID)
 	if !ok {
 		var err error
-		if state, err = refreshSessionUserState(ctx, session.UserID); err != nil {
+		if state, err = refreshUserState(ctx, session.UserID); err != nil {
 			return session, err
 		}
 	}
@@ -29,6 +29,10 @@ func ValidateSessionUserState(ctx context.Context, session modeliamsession.Sessi
 	session.MustChangePassword = state.MustChangePassword
 	return session, ensureSessionUserActive(&modeliamuser.User{Status: state.Status})
 }
+
+// refreshUserState is refreshSessionUserState, a variable so that the
+// package's tests can stand in a refresh that fails.
+var refreshUserState = refreshSessionUserState
 
 // refreshSessionUserState reads the mutable user state from the database and
 // caches it.

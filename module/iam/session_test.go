@@ -355,6 +355,27 @@ func TestSessionUserStateRefresh(t *testing.T) {
 	})
 }
 
+// TestSessionStoreFailureKeepsTheSession pins what a session the store holds
+// but cannot read answers: 500 "failed to load session", the server's own
+// failure, not 401, so the client keeps its cookie for the store to come back;
+// and the failure deletes nothing, the session serving again once the store
+// reads it.
+func TestSessionStoreFailureKeepsTheSession(t *testing.T) {
+	clearSessionsAfterTest(t)
+
+	account := newSessionTestAccount(t)
+	sessionID := loginSession(t, account.Username, account.Password)
+	restore := corruptSessionSnapshot(t, sessionID)
+
+	_, err := sessionClient(t, sessionID).Get[iam.CurrentGetRsp](t.Context(), currentPath)
+	testutil.RequireError(t, err, http.StatusInternalServerError, "failed to load session")
+	requireUserSessionContains(t, account.UserID, sessionID)
+
+	restore()
+	_, err = sessionClient(t, sessionID).Get[iam.CurrentGetRsp](t.Context(), currentPath)
+	require.NoError(t, err, "the session serves again once the store reads it")
+}
+
 // TestInvalidateUserSessions covers the revocation entry point user lifecycle
 // operations reach for. Those operations live wherever a project models its
 // users, which is regularly outside the IAM service package, so this asserts the
@@ -1361,4 +1382,23 @@ func sessionDataKeyForCorruption(t *testing.T, sessionID string) string {
 	require.NoError(t, err)
 	require.NotEqual(t, gstredis.TTLKeyNotExists, ttl, "key %q does not exist: the store's key layout changed", key)
 	return key
+}
+
+// corruptSessionSnapshot overwrites the stored snapshot of sessionID with
+// bytes the store cannot decode — the failure of the store a test produces
+// without taking Redis down — and returns the function putting the snapshot
+// back, which the cleanup runs as well, so a failed assertion leaves the
+// session usable for what follows.
+func corruptSessionSnapshot(t *testing.T, sessionID string) (restore func()) {
+	t.Helper()
+
+	key := sessionDataKeyForCorruption(t, sessionID)
+	snapshot, err := gstredis.Get(t.Context(), key)
+	require.NoError(t, err)
+	ttl, err := gstredis.TTL(t.Context(), key)
+	require.NoError(t, err)
+	require.NoError(t, gstredis.Set(t.Context(), key, "not a snapshot", ttl))
+	restore = func() { require.NoError(t, gstredis.Set(context.Background(), key, snapshot, ttl)) }
+	t.Cleanup(restore)
+	return restore
 }

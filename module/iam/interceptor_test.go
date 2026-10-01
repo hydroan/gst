@@ -34,8 +34,10 @@ import (
 // session established presenting the user agent the client calls with, with
 // the session's user as the caller, refuses a missing or unknown one and one
 // established from another client with the fixed messages the middleware
-// answers, leaves a public method alone, and, while the session requires a
-// password change, admits only the actions a user needs to change it.
+// answers, answers a session the store cannot read as the server's own
+// failure, Internal, leaving the session for the store to come back, leaves
+// a public method alone, and, while the session requires a password change,
+// admits only the actions a user needs to change it.
 func TestIAMSessionInterceptor(t *testing.T) {
 	conn := grpcProbe(t)
 	account := newSessionTestAccount(t)
@@ -70,6 +72,17 @@ func TestIAMSessionInterceptor(t *testing.T) {
 		require.NoError(t, probeCall(t, conn, "Look", sessionID))
 		session := loadStoredSession(t, sessionID)
 		require.Equal(t, gstgrpc.Caller{UserID: account.UserID, Username: account.Username, SessionID: sessionID, TenantID: session.TenantID}, probeLastCaller(t))
+	})
+
+	t.Run("with a session the store cannot read", func(t *testing.T) {
+		restore := corruptSessionSnapshot(t, sessionID)
+
+		err := probeCall(t, conn, "Look", sessionID)
+		require.Equal(t, codes.Internal, status.Code(err))
+		require.Equal(t, "failed to load session", status.Convert(err).Message())
+
+		restore()
+		require.NoError(t, probeCall(t, conn, "Look", sessionID), "the session serves again once the store reads it")
 	})
 
 	t.Run("on a public method", func(t *testing.T) {

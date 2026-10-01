@@ -7,11 +7,28 @@ import (
 	"time"
 
 	"github.com/cockroachdb/errors"
+	"github.com/hydroan/gst"
 	modeliamsession "github.com/hydroan/gst/internal/model/iam/session"
 	"github.com/hydroan/gst/service"
 	"github.com/mssola/useragent"
 	"go.uber.org/zap"
 )
+
+// loadSession returns the stored snapshot sessionID names: gst.ErrEntryNotFound
+// when the store holds none, and, for any other failure of the store, the 500
+// refusal "failed to load session" with the failure as its cause, logged. A
+// store that cannot be read is the server's failure, not the client's, so it
+// is answered as one and changes nothing about the session: the client keeps
+// it for the store to come back. Both the authentication of a request and the
+// cookie path of CurrentSession read through it.
+func loadSession(ctx context.Context, sessionID string) (modeliamsession.Session, error) {
+	current, err := Store.LoadSession(ctx, sessionID)
+	if err == nil || errors.Is(err, gst.ErrEntryNotFound) {
+		return current, err
+	}
+	logStoreWarning("failed to load iam session", sessionID, err)
+	return modeliamsession.Session{}, service.NewErrorWithCause(http.StatusInternalServerError, "failed to load session", err)
+}
 
 // Authenticate resolves the session sessionID names for a request or call
 // that arrived with userAgent for the action at the HTTP method and path:
@@ -37,18 +54,28 @@ import (
 // one component of the request at a time and read back which one the server
 // objected to. The holder of a live session is told nothing by the
 // distinction either, since every one of these is answered by logging in
-// again, so only the log keeps it. A snapshot that fails validation is
-// deleted on the way out: it cannot serve another request, and leaving it
-// would let every later request pay to load and reject it again.
+// again, so only the log keeps it. A store that holds the snapshot but cannot
+// read it is the server's failure, answered 500 "failed to load session" (see
+// loadSession); so is a user state that could not be read, answered with its
+// own 500.
+//
+// A snapshot that fails validation is deleted on the way out, and so is one
+// whose user is refused — gone, disabled or locked: it cannot serve another
+// request, and leaving it would let every later request pay to load and
+// reject it again. A session whose store or user state could not be read is
+// kept, for the next request to read it once the store is back.
 func Authenticate(ctx context.Context, sessionID, userAgent, method, path string) (modeliamsession.Session, error) {
 	sessionID = strings.TrimSpace(sessionID)
 	if sessionID == "" {
 		return modeliamsession.Session{}, service.NewError(http.StatusUnauthorized, "no session")
 	}
 
-	current, err := Store.LoadSession(ctx, sessionID)
+	current, err := loadSession(ctx, sessionID)
 	if err != nil {
-		return modeliamsession.Session{}, rejected(err.Error(), method, path)
+		if errors.Is(err, gst.ErrEntryNotFound) {
+			return modeliamsession.Session{}, rejected(err.Error(), method, path)
+		}
+		return modeliamsession.Session{}, err
 	}
 	if err = ValidateSession(sessionID, current); err != nil {
 		_, _ = Store.DeleteSession(ctx, sessionID)
@@ -59,16 +86,21 @@ func Authenticate(ctx context.Context, sessionID, userAgent, method, path string
 	}
 
 	if current, err = ValidateSessionUserState(ctx, current); err != nil {
-		_, _ = Store.DeleteSession(ctx, sessionID)
 		// A service error carries a status and a message written for the
 		// client. Anything else is an internal failure whose text belongs
 		// in logs, not in the answer.
 		var serviceErr *service.Error
-		if errors.As(err, &serviceErr) {
-			return modeliamsession.Session{}, err
+		if !errors.As(err, &serviceErr) {
+			zap.S().Warnw("iam session rejected", "reason", err.Error(), "path", path, "method", method)
+			serviceErr = service.NewError(http.StatusForbidden, "session invalid")
+			err = serviceErr
 		}
-		zap.S().Warnw("iam session rejected", "reason", err.Error(), "path", path, "method", method)
-		return modeliamsession.Session{}, service.NewError(http.StatusForbidden, "session invalid")
+		// A refused user — gone, disabled or locked — ends the session; a
+		// state that could not be read keeps it for the next request.
+		if status := serviceErr.Status(); status == http.StatusUnauthorized || status == http.StatusForbidden {
+			_, _ = Store.DeleteSession(ctx, sessionID)
+		}
+		return modeliamsession.Session{}, err
 	}
 	if current.MustChangePassword && !MustChangePasswordExempt(method, path) {
 		return modeliamsession.Session{}, service.NewError(http.StatusForbidden, "password change required before using this resource")
