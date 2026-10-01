@@ -521,9 +521,11 @@ func (*chatService) Stream(sc *types.ServiceContext, stream *types.BidiStream[*s
 // later without waiting for it: the refusal its read records (see
 // controller.requests) is then written on one goroutine and read by the
 // call on another with time alone between the two, nothing ordering them,
-// which is what the lock on it is for; a channel or a wait here would
-// order the two and hide the race. The test reads what the goroutine got
-// through read.
+// which is what the lock on it is for. A channel or a wait here would
+// order the two and hide the race, and so does ending the stream from the
+// client once the read is done: the cancellation reaches the service
+// through the transport, which orders it after the read. The test reads
+// what the goroutine got through read.
 type forkingChatService struct {
 	serviceregistry.Base[*sampleRecord, *sampleActionReq, *sampleActionRsp]
 	read chan error
