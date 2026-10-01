@@ -34,10 +34,11 @@ import (
 // session established presenting the user agent the client calls with, with
 // the session's user as the caller, refuses a missing or unknown one and one
 // established from another client with the fixed messages the middleware
-// answers, answers a session the store cannot read as the server's own
-// failure, Internal, leaving the session for the store to come back, leaves
-// a public method alone, and, while the session requires a password change,
-// admits only the actions a user needs to change it.
+// answers, answers a store that does not answer with Internal, leaving the
+// session for the store to come back, and a stored value that is not a
+// snapshot as an unknown session, deleting it, leaves a public method alone,
+// and, while the session requires a password change, admits only the actions
+// a user needs to change it.
 func TestIAMSessionInterceptor(t *testing.T) {
 	conn := grpcProbe(t)
 	account := newSessionTestAccount(t)
@@ -74,15 +75,25 @@ func TestIAMSessionInterceptor(t *testing.T) {
 		require.Equal(t, gstgrpc.Caller{UserID: account.UserID, Username: account.Username, SessionID: sessionID, TenantID: session.TenantID}, probeLastCaller(t))
 	})
 
-	t.Run("with a session the store cannot read", func(t *testing.T) {
-		restore := corruptSessionSnapshot(t, sessionID)
+	t.Run("while the store does not answer", func(t *testing.T) {
+		reconnect := withRedisUnreachable(t)
 
 		err := probeCall(t, conn, "Look", sessionID)
 		require.Equal(t, codes.Internal, status.Code(err))
 		require.Equal(t, "failed to load session", status.Convert(err).Message())
 
-		restore()
-		require.NoError(t, probeCall(t, conn, "Look", sessionID), "the session serves again once the store reads it")
+		reconnect()
+		require.NoError(t, probeCall(t, conn, "Look", sessionID), "the session serves again once the store answers")
+	})
+
+	t.Run("with a stored value that is not a snapshot", func(t *testing.T) {
+		corrupted := loginSession(t, account.Username, account.Password, client.WithUserAgent(grpcUserAgent))
+		corruptSessionSnapshot(t, corrupted)
+
+		err := probeCall(t, conn, "Look", corrupted)
+		require.Equal(t, codes.Unauthenticated, status.Code(err))
+		require.Equal(t, "session invalid", status.Convert(err).Message())
+		requireSessionNotFound(t, corrupted)
 	})
 
 	t.Run("on a public method", func(t *testing.T) {

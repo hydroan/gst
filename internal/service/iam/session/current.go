@@ -65,7 +65,8 @@ func MustChangePasswordExempt(method, path string) bool {
 // no cookie to read, and asking its context for one is a call the listener
 // refuses once the action returns. The cookie is read for a request reached
 // without the middleware, whose session is then loaded through loadSession: a
-// store that holds the snapshot but cannot read it answers 500, not 401.
+// store that does not answer is 500, not 401, and a stored value that is not
+// a snapshot is deleted and 401.
 //
 // A snapshot that fails validation is deleted on the way out. It cannot serve
 // another request, and leaving it would let every later request pay to load and
@@ -83,12 +84,12 @@ func CurrentSession(ctx *gst.ServiceContext) (string, modeliamsession.Session, e
 	if err != nil {
 		return "", modeliamsession.Session{}, err
 	}
-	sessionData, err := loadSession(ctx, sessionID)
+	sessionData, found, err := loadSession(ctx, sessionID)
 	if err != nil {
-		if errors.Is(err, gst.ErrEntryNotFound) {
-			return "", modeliamsession.Session{}, service.NewErrorWithCause(http.StatusUnauthorized, "session not exists", err)
-		}
 		return "", modeliamsession.Session{}, err
+	}
+	if !found {
+		return "", modeliamsession.Session{}, service.NewError(http.StatusUnauthorized, "session not exists")
 	}
 	if err = ValidateSession(sessionID, sessionData); err != nil {
 		_, _ = Store.DeleteSession(ctx, sessionID)

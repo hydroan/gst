@@ -120,13 +120,19 @@ if (Cookie session_id?) then (缺失)
 else (存在)
 endif
 :GET data:sid;
-if (读得到?) then (否)
+if (存储应答?) then (否)
   :500 failed to load session
   快照保留;
   end
 else (是)
 endif
 if (快照命中?) then (否)
+  :401 session invalid;
+  end
+else (是)
+endif
+if (解得成快照?) then (否)
+  :DEL 快照与索引;
   :401 session invalid;
   end
 else (是)
@@ -337,8 +343,9 @@ T6 --> P4
 
 ## 边界
 
-**Redis 不可用时 IAM 谁也认证不了。** 会话不落库，所以没有降级路径；读不到快照答 500 而不是 401——这是服务端的故障，
-客户端不该因此清掉 cookie，存储恢复后会话照常可用，回查用户状态失败同样答 500 且不删快照。`iam.Register()` 因此在启动期检查
+**Redis 不可用时 IAM 谁也认证不了。** 会话不落库，所以没有降级路径；存储没应答时答 500 而不是 401——这是服务端的故障，
+客户端不该因此清掉 cookie，存储恢复后会话照常可用，回查用户状态失败同样答 500 且不删快照。存储应答了、但存的值解不成快照
+（比如发版改了快照字段的类型）就删掉它答 401，让用户重新登录，而不是答 500 直到键过期。`iam.Register()` 因此在启动期检查
 `Redis.Enabled`，没开就拒绝启动。需要注意框架层的行为并不整齐：typed `redis.Cache` 在禁用时返回
 `ErrRedisIsDisabled`，而 `ZAdd` / `ZRem` / `SetNX` / `Expire` / `Del` 是静默 no-op，`SetNX` 甚至返回
 `true`。启动期那道检查就是为了让这种不对称永远没机会发生。

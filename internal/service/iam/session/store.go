@@ -95,13 +95,44 @@ type UserState struct {
 
 // ---------- session snapshots ----------
 
-// LoadSession returns the stored snapshot of a session.
+// errSnapshotUnreadable marks a stored session value that is not a snapshot:
+// bytes the store answered with that do not decode, which no retry changes.
+var errSnapshotUnreadable = errors.New("session snapshot cannot be read")
+
+// LoadSession returns the stored snapshot of a session: gst.ErrEntryNotFound
+// when the store holds none, errSnapshotUnreadable when what it holds is not
+// a snapshot, and the store's own error when it did not answer. The value is
+// read raw and decoded here, where the last two tell apart; the typed cache
+// answers a value it cannot decode and a store it cannot reach with the same
+// error.
 func (store) LoadSession(ctx context.Context, sessionID string) (modeliamsession.Session, error) {
 	sessionID = strings.TrimSpace(sessionID)
 	if sessionID == "" {
 		return modeliamsession.Session{}, gst.ErrEntryNotFound
 	}
-	return gstredis.Cache[modeliamsession.Session]().Get(ctx, sessionDataKey(sessionID))
+	data, err := gstredis.Get(ctx, sessionDataKey(sessionID))
+	if err != nil {
+		if errors.Is(err, gstredis.ErrKeyNotExists) {
+			return modeliamsession.Session{}, gst.ErrEntryNotFound
+		}
+		return modeliamsession.Session{}, err
+	}
+	var current modeliamsession.Session
+	if err = json.Unmarshal(data, &current); err != nil {
+		return modeliamsession.Session{}, errors.Wrap(errSnapshotUnreadable, err.Error())
+	}
+	return current, nil
+}
+
+// deleteUnreadableSnapshot removes the stored value of a session that is not
+// a snapshot, and the index members keyed by its id. The owner's index keeps
+// its member: the owner is only known from the snapshot, and a member no
+// snapshot backs is what every read of an index prunes.
+func deleteUnreadableSnapshot(ctx context.Context, sessionID string) error {
+	if err := gstredis.Del(ctx, sessionDataKey(sessionID)); err != nil {
+		return err
+	}
+	return Store.DropSessionIndexes(ctx, "", sessionID)
 }
 
 // SaveSession writes a session snapshot with the given lifetime.

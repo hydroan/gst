@@ -355,25 +355,40 @@ func TestSessionUserStateRefresh(t *testing.T) {
 	})
 }
 
-// TestSessionStoreFailureKeepsTheSession pins what a session the store holds
-// but cannot read answers: 500 "failed to load session", the server's own
-// failure, not 401, so the client keeps its cookie for the store to come back;
-// and the failure deletes nothing, the session serving again once the store
-// reads it.
-func TestSessionStoreFailureKeepsTheSession(t *testing.T) {
+// TestSessionStoreFailures pins what the session middleware answers when the
+// store fails it, by the kind of failure. A store that does not answer is the
+// server's failure: 500 "failed to load session", not 401, so the client keeps
+// its cookie, and the session serves again once the store is back. A value the
+// store holds that is not a snapshot never will be: 401 "session invalid", the
+// value and the index members keyed by its id deleted, so the client logs in
+// again instead of being answered 500 until the key expires.
+func TestSessionStoreFailures(t *testing.T) {
 	clearSessionsAfterTest(t)
 
-	account := newSessionTestAccount(t)
-	sessionID := loginSession(t, account.Username, account.Password)
-	restore := corruptSessionSnapshot(t, sessionID)
+	t.Run("a store that does not answer", func(t *testing.T) {
+		account := newSessionTestAccount(t)
+		sessionID := loginSession(t, account.Username, account.Password)
+		reconnect := withRedisUnreachable(t)
 
-	_, err := sessionClient(t, sessionID).Get[iam.CurrentGetRsp](t.Context(), currentPath)
-	testutil.RequireError(t, err, http.StatusInternalServerError, "failed to load session")
-	requireUserSessionContains(t, account.UserID, sessionID)
+		_, err := sessionClient(t, sessionID).Get[iam.CurrentGetRsp](t.Context(), currentPath)
+		testutil.RequireError(t, err, http.StatusInternalServerError, "failed to load session")
 
-	restore()
-	_, err = sessionClient(t, sessionID).Get[iam.CurrentGetRsp](t.Context(), currentPath)
-	require.NoError(t, err, "the session serves again once the store reads it")
+		reconnect()
+		requireUserSessionContains(t, account.UserID, sessionID)
+		_, err = sessionClient(t, sessionID).Get[iam.CurrentGetRsp](t.Context(), currentPath)
+		require.NoError(t, err, "the session serves again once the store answers")
+	})
+
+	t.Run("a value that is not a snapshot", func(t *testing.T) {
+		account := newSessionTestAccount(t)
+		sessionID := loginSession(t, account.Username, account.Password)
+		corruptSessionSnapshot(t, sessionID)
+
+		_, err := sessionClient(t, sessionID).Get[iam.CurrentGetRsp](t.Context(), currentPath)
+		testutil.RequireError(t, err, http.StatusUnauthorized, "session invalid")
+		requireSessionNotFound(t, sessionID)
+		requireAllSessionNotContains(t, sessionID)
+	})
 }
 
 // TestInvalidateUserSessions covers the revocation entry point user lifecycle
@@ -1385,20 +1400,27 @@ func sessionDataKeyForCorruption(t *testing.T, sessionID string) string {
 }
 
 // corruptSessionSnapshot overwrites the stored snapshot of sessionID with
-// bytes the store cannot decode — the failure of the store a test produces
-// without taking Redis down — and returns the function putting the snapshot
-// back, which the cleanup runs as well, so a failed assertion leaves the
-// session usable for what follows.
-func corruptSessionSnapshot(t *testing.T, sessionID string) (restore func()) {
+// bytes that are not a snapshot: what the store holds after a deploy changed
+// the snapshot's shape, produced without taking Redis down. The server
+// deletes the value on the next request, so nothing puts it back.
+func corruptSessionSnapshot(t *testing.T, sessionID string) {
 	t.Helper()
 
 	key := sessionDataKeyForCorruption(t, sessionID)
-	snapshot, err := gstredis.Get(t.Context(), key)
-	require.NoError(t, err)
 	ttl, err := gstredis.TTL(t.Context(), key)
 	require.NoError(t, err)
 	require.NoError(t, gstredis.Set(t.Context(), key, "not a snapshot", ttl))
-	restore = func() { require.NoError(t, gstredis.Set(context.Background(), key, snapshot, ttl)) }
-	t.Cleanup(restore)
-	return restore
+}
+
+// withRedisUnreachable closes the process-wide Redis client, so every
+// operation until the returned reconnect reports the store as unreachable,
+// the way an outage does; the cleanup reconnects as well, so a failed
+// assertion leaves the store usable for the tests that follow.
+func withRedisUnreachable(t *testing.T) (reconnect func()) {
+	t.Helper()
+
+	require.NoError(t, gstredis.Close())
+	reconnect = func() { require.NoError(t, gstredis.Init()) }
+	t.Cleanup(reconnect)
+	return reconnect
 }

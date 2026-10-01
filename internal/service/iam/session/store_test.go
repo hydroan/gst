@@ -106,6 +106,24 @@ func TestTouchSession(t *testing.T) {
 	})
 }
 
+// TestLoadSessionTellsAnUnreadableValueFromAMissingOne pins the answers of
+// LoadSession to what the store holds: ErrSnapshotUnreadable for a value that
+// is not a snapshot, which the authentication deletes rather than answering
+// 500 for, and ErrEntryNotFound once the key is gone.
+func TestLoadSessionTellsAnUnreadableValueFromAMissingOne(t *testing.T) {
+	clearSessions(t)
+
+	sessionID := "load-session-unreadable"
+	key := serviceiamsession.SessionDataKey(sessionID)
+	require.NoError(t, gstredis.Set(t.Context(), key, "not a snapshot", time.Hour))
+	_, err := serviceiamsession.Store.LoadSession(t.Context(), sessionID)
+	require.ErrorIs(t, err, serviceiamsession.ErrSnapshotUnreadable)
+
+	require.NoError(t, gstredis.Del(t.Context(), key))
+	_, err = serviceiamsession.Store.LoadSession(t.Context(), sessionID)
+	require.ErrorIs(t, err, gst.ErrEntryNotFound)
+}
+
 func TestIndexSessionSetsIndexTTL(t *testing.T) {
 	const lifetime = time.Hour
 

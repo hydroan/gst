@@ -16,6 +16,8 @@ var (
 	SessionIndexAllKey  = sessionIndexAllKey
 	SessionIndexSeenKey = sessionIndexSeenKey
 	UserStateKey        = userStateKey
+
+	ErrSnapshotUnreadable = errSnapshotUnreadable
 )
 
 const (

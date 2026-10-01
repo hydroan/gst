@@ -14,20 +14,33 @@ import (
 	"go.uber.org/zap"
 )
 
-// loadSession returns the stored snapshot sessionID names: gst.ErrEntryNotFound
-// when the store holds none, and, for any other failure of the store, the 500
-// refusal "failed to load session" with the failure as its cause, logged. A
-// store that cannot be read is the server's failure, not the client's, so it
-// is answered as one and changes nothing about the session: the client keeps
-// it for the store to come back. Both the authentication of a request and the
-// cookie path of CurrentSession read through it.
-func loadSession(ctx context.Context, sessionID string) (modeliamsession.Session, error) {
+// loadSession returns the stored snapshot sessionID names and whether the
+// store holds one it can use; a store that did not answer is the 500 refusal
+// "failed to load session" with the failure as its cause, logged. A store that
+// does not answer is the server's failure, not the client's, so it is answered
+// as one and changes nothing about the session: the client keeps it for the
+// store to come back. A value that is not a snapshot never will be, so it is
+// deleted, as a snapshot failing validation is, and reported as none held:
+// the client logs in again instead of being answered 500 until the key
+// expires. Both the authentication of a request and the cookie path of
+// CurrentSession read through it.
+func loadSession(ctx context.Context, sessionID string) (modeliamsession.Session, bool, error) {
 	current, err := Store.LoadSession(ctx, sessionID)
-	if err == nil || errors.Is(err, gst.ErrEntryNotFound) {
-		return current, err
+	switch {
+	case err == nil:
+		return current, true, nil
+	case errors.Is(err, gst.ErrEntryNotFound):
+		return modeliamsession.Session{}, false, nil
+	case errors.Is(err, errSnapshotUnreadable):
+		logStoreWarning("deleting an iam session snapshot that cannot be read", sessionID, err)
+		if err = deleteUnreadableSnapshot(ctx, sessionID); err != nil {
+			logStoreWarning("failed to delete an iam session snapshot that cannot be read", sessionID, err)
+		}
+		return modeliamsession.Session{}, false, nil
+	default:
+		logStoreWarning("failed to load iam session", sessionID, err)
+		return modeliamsession.Session{}, false, service.NewErrorWithCause(http.StatusInternalServerError, "failed to load session", err)
 	}
-	logStoreWarning("failed to load iam session", sessionID, err)
-	return modeliamsession.Session{}, service.NewErrorWithCause(http.StatusInternalServerError, "failed to load session", err)
 }
 
 // Authenticate resolves the session sessionID names for a request or call
@@ -54,28 +67,28 @@ func loadSession(ctx context.Context, sessionID string) (modeliamsession.Session
 // one component of the request at a time and read back which one the server
 // objected to. The holder of a live session is told nothing by the
 // distinction either, since every one of these is answered by logging in
-// again, so only the log keeps it. A store that holds the snapshot but cannot
-// read it is the server's failure, answered 500 "failed to load session" (see
-// loadSession); so is a user state that could not be read, answered with its
-// own 500.
+// again, so only the log keeps it. A store that does not answer is the
+// server's failure, answered 500 "failed to load session" (see loadSession);
+// so is a user state that could not be read, answered with its own 500.
 //
-// A snapshot that fails validation is deleted on the way out, and so is one
-// whose user is refused — gone, disabled or locked: it cannot serve another
-// request, and leaving it would let every later request pay to load and
-// reject it again. A session whose store or user state could not be read is
-// kept, for the next request to read it once the store is back.
+// A snapshot that fails validation is deleted on the way out, and so are one
+// whose user is refused — gone, disabled or locked — and a stored value that
+// is not a snapshot: none can serve another request, and leaving them would
+// let every later request pay to load and reject them again. A session the
+// store did not answer for, or whose user's state could not be read, is kept
+// for the next request to read it once the store is back.
 func Authenticate(ctx context.Context, sessionID, userAgent, method, path string) (modeliamsession.Session, error) {
 	sessionID = strings.TrimSpace(sessionID)
 	if sessionID == "" {
 		return modeliamsession.Session{}, service.NewError(http.StatusUnauthorized, "no session")
 	}
 
-	current, err := loadSession(ctx, sessionID)
+	current, found, err := loadSession(ctx, sessionID)
 	if err != nil {
-		if errors.Is(err, gst.ErrEntryNotFound) {
-			return modeliamsession.Session{}, rejected(err.Error(), method, path)
-		}
 		return modeliamsession.Session{}, err
+	}
+	if !found {
+		return modeliamsession.Session{}, rejected("session not found", method, path)
 	}
 	if err = ValidateSession(sessionID, current); err != nil {
 		_, _ = Store.DeleteSession(ctx, sessionID)
