@@ -396,6 +396,10 @@ func withCronjobLoggerConfig(t *testing.T) string {
 	t.Helper()
 
 	dir := t.TempDir()
+	// The streams hold their entries back for up to a second and a file sink
+	// recreates its directory on a write that lands after the removal, so the
+	// writers stop before the directory goes: the cleanups run last to first.
+	t.Cleanup(logger.Clean)
 	original := config.App
 	config.App = new(config.Config)
 	config.App.Logger.Dir = dir
