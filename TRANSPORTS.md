@@ -200,7 +200,7 @@ HTTP 状态到 gRPC status 的映射（`grpcserver.StatusError`）：
 - 服务端流：`Stream(ctx *gst.ServiceContext, req REQ, stream *grpc.ServerStream[RSP]) error`。
 - 客户端流：`Stream(ctx, stream *grpc.ClientStream[REQ]) (RSP, error)`，对方发完 Recv 答 io.EOF。
 - 双向流：`Stream(ctx, stream *grpc.BidiStream[REQ, RSP]) error`。
-- ctx 取消即流结束：客户端停掉 watch 答 Canceled，不算错误；进程停机时流的 ctx 同样结束，调用答 Unavailable「the server is shutting down」，客户端据此换副本重连（一元调用照常排空）。
+- ctx 取消即流结束：客户端停掉 watch 答 Canceled，不算错误；进程停机时流的 ctx 同样结束，正等客户端下一条消息（或首条）的 Recv 也随之返回，调用答 Unavailable「the server is shutting down」，客户端据此换副本重连（一元调用照常排空）。
 
 ```plantuml
 @startuml

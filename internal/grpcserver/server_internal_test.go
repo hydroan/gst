@@ -351,11 +351,13 @@ func TestStopCutsTheCallsItsDrainLeftRunning(t *testing.T) {
 // shutdown and the stream answered Unavailable, "the server is shutting
 // down", so the client resumes on another replica: a server stream or a
 // bidirectional one whose handler returned nil or Canceled once its context
-// ended, the health service's Watch among them. A client stream that
-// answered before its context ended keeps its answer: a response already
-// built is not thrown away for a retry that would repeat its writes. Stop
-// returns once the unary call drained, well within the window, and the
-// access log records the streams as Unavailable.
+// ended, the health service's Watch among them, and so does a stream
+// waiting on the client for its next message, or for its first, in
+// RecvMsg, which the stop ends the same way (see shutdownStream). A client
+// stream that answered before its context ended keeps its answer: a
+// response already built is not thrown away for a retry that would repeat
+// its writes. Stop returns once the unary call drained, well within the
+// window, and the access log records the streams as Unavailable.
 func TestStopEndsTheStreamsAsTheUnaryCallsDrain(t *testing.T) {
 	reset(t)
 	entered := make(chan struct{}, 8)
@@ -377,6 +379,21 @@ func TestStopEndsTheStreamsAsTheUnaryCallsDrain(t *testing.T) {
 			ended(ss)
 			return ss.SendMsg(&emptypb.Empty{})
 		}},
+		// Relay reads the message the client opened with and then waits on
+		// the client for the next one, the way a service in Recv does;
+		// Await waits for the first, the way the generated handler of a
+		// route with parameters does.
+		"Relay": {ServerStreams: true, ClientStreams: true, Handler: func(_ any, ss grpc.ServerStream) error {
+			if err := ss.RecvMsg(&emptypb.Empty{}); err != nil {
+				return err
+			}
+			entered <- struct{}{}
+			return ss.RecvMsg(&emptypb.Empty{})
+		}},
+		"Await": {ServerStreams: true, Handler: func(_ any, ss grpc.ServerStream) error {
+			entered <- struct{}{}
+			return ss.RecvMsg(&emptypb.Empty{})
+		}},
 	}
 	serveWith(map[string]func(context.Context) error{"Ping": func(context.Context) error {
 		entered <- struct{}{}
@@ -386,14 +403,17 @@ func TestStopEndsTheStreamsAsTheUnaryCallsDrain(t *testing.T) {
 	conn := dial(t, start(t), nil)
 	drainTimeout = 5 * time.Second
 
-	open := func(name string) grpc.ClientStream {
+	open := func(name string, first bool) grpc.ClientStream {
 		desc := streams[name]
 		cs, err := conn.NewStream(context.Background(), &grpc.StreamDesc{StreamName: name, ServerStreams: desc.ServerStreams, ClientStreams: desc.ClientStreams}, "/gst.test.Echo/"+name)
 		require.NoError(t, err)
-		require.NoError(t, cs.SendMsg(&emptypb.Empty{}))
+		if first {
+			require.NoError(t, cs.SendMsg(&emptypb.Empty{}))
+		}
 		return cs
 	}
-	watching, chatting, uploading := open("Watch"), open("Chat"), open("Upload")
+	watching, chatting, uploading := open("Watch", true), open("Chat", true), open("Upload", true)
+	relaying, awaiting := open("Relay", true), open("Await", false)
 	require.NoError(t, watching.CloseSend())
 	watchingHealth, err := grpc_health_v1.NewHealthClient(conn).Watch(context.Background(), &grpc_health_v1.HealthCheckRequest{})
 	require.NoError(t, err)
@@ -401,7 +421,7 @@ func TestStopEndsTheStreamsAsTheUnaryCallsDrain(t *testing.T) {
 	require.NoError(t, err, "the health watch answers the status first")
 	unary := make(chan error, 1)
 	go func() { unary <- call(context.Background(), conn, "Ping") }()
-	for range 4 {
+	for range 6 {
 		<-entered
 	}
 
@@ -427,6 +447,8 @@ func TestStopEndsTheStreamsAsTheUnaryCallsDrain(t *testing.T) {
 	requireShutDown("Watch", func() error { return watching.RecvMsg(&emptypb.Empty{}) })
 	requireShutDown("Chat", func() error { return chatting.RecvMsg(&emptypb.Empty{}) })
 	requireShutDown("health Watch", func() error { _, err := watchingHealth.Recv(); return err })
+	requireShutDown("Relay", func() error { return relaying.RecvMsg(&emptypb.Empty{}) })
+	requireShutDown("Await", func() error { return awaiting.RecvMsg(&emptypb.Empty{}) })
 	require.NoError(t, uploading.CloseSend())
 	require.NoError(t, uploading.RecvMsg(&emptypb.Empty{}), "a client stream that answered keeps its answer")
 	select {
@@ -449,7 +471,7 @@ func TestStopEndsTheStreamsAsTheUnaryCallsDrain(t *testing.T) {
 				unavailable++
 			}
 		}
-		return unavailable == 3
+		return unavailable == 5
 	}, 5*time.Second, 10*time.Millisecond, "the streams the stop ended are logged as Unavailable")
 }
 
