@@ -73,35 +73,49 @@ func Abort(c *gin.Context, status int, msg string) {
 // status. It is encoded with encoding/json whatever JSON codec gin was built
 // with: the codecs gin's jsoniter, go_json and sonic build tags select encode
 // differently (the first two ignore omitzero), and the framework's wire
-// contract is the encoding/json one.
+// contract is the encoding/json one. It is encoded before anything is
+// written: a data no JSON holds, a NaN or a channel a service put there, is
+// the server's own failure, answered 500 with failureMsg and recorded on
+// the context for the access log, the handler chain stopped, where an
+// encoding failing under gin's render would leave the status already
+// written, a 200 with an empty body that reads as a success with nothing in
+// it.
 func envelope(c *gin.Context, status int, msg string, data any) {
-	c.Render(status, jsonRender{data: gin.H{
-		"msg":           msg,
-		"data":          data,
-		consts.TRACE_ID: c.GetString(consts.TRACE_ID),
-	}})
+	traceID := c.GetString(consts.TRACE_ID)
+	body, err := json.Marshal(gin.H{"msg": msg, "data": data, consts.TRACE_ID: traceID})
+	if err != nil {
+		_ = c.Error(err)
+		c.Abort()
+		status = failureStatus
+		body, _ = json.Marshal(failureEnvelope{Msg: failureMsg, TraceID: traceID}) //nolint:errchkjson // strings and a null: nothing in it fails to encode
+	}
+	c.Render(status, jsonRender{body: body})
+}
+
+// failureEnvelope is the envelope a response that could not be encoded is
+// answered with: the failure message, a null data and the trace id, nothing
+// in it that fails to encode, so its encoding goes unchecked.
+type failureEnvelope struct {
+	Msg     string    `json:"msg"`
+	Data    *struct{} `json:"data"`
+	TraceID string    `json:"trace_id"`
 }
 
 // jsonContentType is the Content-Type of a JSON response, the value gin's own
 // JSON render sets.
 var jsonContentType = []string{"application/json; charset=utf-8"}
 
-// jsonRender renders data as JSON through encoding/json. It mirrors gin's JSON
-// render in everything but the codec: the Content-Type is set only when none
-// is set yet, and a marshaling failure is returned before anything is written,
-// for gin.Context.Render to record and abort on.
+// jsonRender renders an encoded JSON body. It mirrors gin's JSON render in
+// everything but the codec, the body being encoded by envelope already: the
+// Content-Type is set only when none is set yet.
 type jsonRender struct {
-	data any
+	body []byte
 }
 
-// Render writes the JSON Content-Type and the encoded data.
+// Render writes the JSON Content-Type and the body.
 func (r jsonRender) Render(w http.ResponseWriter) error {
 	r.WriteContentType(w)
-	body, err := json.Marshal(r.data)
-	if err != nil {
-		return err
-	}
-	_, err = w.Write(body)
+	_, err := w.Write(r.body)
 	return err
 }
 

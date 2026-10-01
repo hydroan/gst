@@ -180,28 +180,6 @@ func TestAbortWritesNoBodyForBodylessStatus(t *testing.T) {
 	}
 }
 
-// TestJSONRecordsMarshalFailureWithoutWritingBody pins the failure path of the
-// envelope render: an envelope encoding/json cannot encode writes no partial
-// body, and the error reaches the context's errors with the handler chain
-// aborted, as with gin's own JSON render.
-func TestJSONRecordsMarshalFailureWithoutWritingBody(t *testing.T) {
-	gin.SetMode(gin.TestMode)
-	w := httptest.NewRecorder()
-	c, _ := gin.CreateTestContext(w)
-
-	response.JSON(c, math.NaN())
-
-	if got := w.Body.String(); got != "" {
-		t.Errorf("body = %q, want empty", got)
-	}
-	if len(c.Errors) != 1 {
-		t.Errorf("context errors = %d, want 1", len(c.Errors))
-	}
-	if !c.IsAborted() {
-		t.Error("handler chain was not aborted after the encoding failure")
-	}
-}
-
 // swappedGinCodec stands in for the codec gin compiles in under the jsoniter,
 // go_json or sonic build tags: whatever it encodes is recognizably not
 // encoding/json's output, and the methods it leaves to the nil embedded Core
@@ -226,4 +204,25 @@ func TestAttachment(t *testing.T) {
 	if got := w.Body.String(); got != "hello" {
 		t.Errorf("body = %q, want %q", got, "hello")
 	}
+}
+
+// TestJSONAnswersAnEncodingFailureAsTheServersOwn pins what a data no JSON
+// holds, a NaN here, is answered with: the server's own failure, 500 with
+// the fixed message in the failure envelope, the error recorded on the
+// context for the access log and the handler chain stopped, and not the 200
+// with an empty body gin's render leaves behind when the encoding fails
+// under it.
+func TestJSONAnswersAnEncodingFailureAsTheServersOwn(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Set(consts.TRACE_ID, "trace-sample")
+
+	response.JSON(c, map[string]any{"ratio": math.NaN()})
+
+	require.Equal(t, http.StatusInternalServerError, w.Code)
+	require.Equal(t, "application/json; charset=utf-8", w.Header().Get("Content-Type"))
+	require.JSONEq(t, `{"data":null,"msg":"The server could not process the request.","trace_id":"trace-sample"}`, w.Body.String())
+	require.Len(t, c.Errors, 1)
+	require.True(t, c.IsAborted())
 }
