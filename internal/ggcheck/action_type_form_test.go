@@ -339,3 +339,50 @@ type RecordListRsp struct {
 		t.Fatalf("expected no violations, got %#v", violations)
 	}
 }
+
+// TestActionTypeFormRejectsInterfaceStreamingPayloads pins that the
+// request side of a Stream action is held to what a request body decodes
+// into the way Payload is: a StreamingPayload naming an interface with
+// methods is reported, under its own keyword.
+func TestActionTypeFormRejectsInterfaceStreamingPayloads(t *testing.T) {
+	projectDir := t.TempDir()
+	t.Chdir(projectDir)
+
+	writeCheckFile(t, filepath.Join(projectDir, "model", "sample", "sample.go"), `package sample
+
+import (
+	. "github.com/hydroan/gst/dsl"
+	"github.com/hydroan/gst/model"
+)
+
+type Sample struct {
+	model.Base
+}
+
+func (Sample) Design() {
+	GRPC()
+	Route("samples/chat", func() {
+		Stream(func() {
+			Service("chat")
+			StreamingPayload[SampleChatReq]()
+			StreamingResult[SampleChatRsp]()
+		})
+	})
+}
+
+type SampleChatReq interface {
+	Bind()
+}
+
+type SampleChatRsp interface {
+	Render()
+}
+`)
+
+	violations := runCheck(ggcheck.ActionTypeForm)
+
+	want := "Stream action declares StreamingPayload[SampleChatReq] whose type is an interface with methods, which no request body decodes into; declare a struct type and use the pointer form StreamingPayload[*SampleChatReq]"
+	if len(violations) != 1 || !strings.Contains(violations[0], want) {
+		t.Fatalf("expected the streaming payload interface to be reported once as %q, got %#v", want, violations)
+	}
+}

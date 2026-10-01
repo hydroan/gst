@@ -317,11 +317,11 @@ func checkActionTypePair(relPath string, action *dsl.Action, resolve func(string
 			}
 		case actionTypeMethodInterface:
 			// A Result is only encoded, and any value encodes; a request
-			// body decodes into no interface with methods.
-			if kind == "Payload" {
+			// body decodes into no interface with methods, streamed or not.
+			if dsl.PayloadKeyword(kind) {
 				violations = append(violations, fmt.Sprintf(
-					"%s: %s action declares Payload[%s] whose type is an interface with methods, which no request body decodes into; declare a struct type and use the pointer form Payload[*%s]",
-					relPath, actionName, raw, name,
+					"%s: %s action declares %s[%s] whose type is an interface with methods, which no request body decodes into; declare a struct type and use the pointer form %s[*%s]",
+					relPath, actionName, kind, raw, kind, name,
 				))
 			}
 		case actionTypeOther:

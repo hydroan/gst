@@ -33,12 +33,12 @@ func checkProtobufDefinitions(ignore gghelper.ProjectIgnore) []string {
 	if _, err := os.Stat(ggconst.DirModel); os.IsNotExist(err) {
 		return violations
 	}
-	scanned, violation := scanModels(ignore)
-	if violation != "" {
-		return append(violations, violation)
+	scanned, err := scanModels(ignore)
+	if err != nil {
+		return violations
 	}
 
-	_, err := pb.Generate(pb.Config{Dir: ".", ModulePath: scanned.Module, Models: scanned.Models})
+	_, err = pb.Generate(pb.Config{Dir: ".", ModulePath: scanned.Module, Models: scanned.Models})
 	var diagnostics *pb.DiagnosticsError
 	switch {
 	case errors.As(err, &diagnostics):

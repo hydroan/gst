@@ -2155,6 +2155,26 @@ func TestGRPCOnlyActionNamesTheActionsHTTPCannotServe(t *testing.T) {
 	}
 }
 
+// TestKeywordPredicatesNameTheTypedKeywords pins the predicates every
+// reader of the typed keywords goes by: PayloadKeyword for the request
+// side, ResultKeyword for the response side, StreamingKeyword for the sides
+// a Stream action streams.
+func TestKeywordPredicatesNameTheTypedKeywords(t *testing.T) {
+	for name, want := range map[string][3]bool{
+		"Payload":          {true, false, false},
+		"StreamingPayload": {true, false, true},
+		"Result":           {false, true, false},
+		"StreamingResult":  {false, true, true},
+		"Service":          {false, false, false},
+		"Stream":           {false, false, false},
+	} {
+		got := [3]bool{dsl.PayloadKeyword(name), dsl.ResultKeyword(name), dsl.StreamingKeyword(name)}
+		if got != want {
+			t.Errorf("PayloadKeyword, ResultKeyword, StreamingKeyword of %q = %v, want %v", name, got, want)
+		}
+	}
+}
+
 func TestHTTPOnlyActionNamesTheActionsGRPCCannotServe(t *testing.T) {
 	for _, name := range []string{"Import", "Export", "SSE"} {
 		if !dsl.HTTPOnlyAction(name) {

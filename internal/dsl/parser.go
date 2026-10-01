@@ -575,15 +575,13 @@ func parseAction(phase consts.Phase, funcName string, expr ast.Expr) (*Action, b
 							funcName = x.Sel.Name
 						}
 					}
-					switch funcName {
-					case "Payload":
-						isPayload = true
-					case "Result":
-						isResult = true
-					case "StreamingPayload":
-						isPayload, streamingPayload = phase == consts.Stream, phase == consts.Stream
-					case "StreamingResult":
-						isResult, streamingResult = phase == consts.Stream, phase == consts.Stream
+					// A streaming side is read for a Stream action alone.
+					declared := !StreamingKeyword(funcName) || phase == consts.Stream
+					switch {
+					case PayloadKeyword(funcName):
+						isPayload, streamingPayload = declared, declared && StreamingKeyword(funcName)
+					case ResultKeyword(funcName):
+						isResult, streamingResult = declared, declared && StreamingKeyword(funcName)
 					}
 					// List and Get handle HTTP GET requests without a request
 					// body, Import and Export delegate to fixed service

@@ -42,9 +42,9 @@ func checkServiceTestCoverage(ignore gghelper.ProjectIgnore) []string {
 	// Route-ignored actions are disabled here for the same reason gg gen
 	// disables them: their service files stay on disk without a registered
 	// route, so no test can exercise them.
-	scanned, violation := scanModels(ignore)
-	if violation != "" {
-		return append(violations, violation)
+	scanned, err := scanModels(ignore)
+	if err != nil {
+		return violations
 	}
 	allModels := scanned.Models
 

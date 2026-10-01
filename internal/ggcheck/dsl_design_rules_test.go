@@ -129,3 +129,61 @@ func (Token) Design() {
 		t.Fatalf("violations = %q, want %q", violations, want)
 	}
 }
+
+// TestScanFaultsAreReportedByTheDSLDesignRulesAlone pins who reports what
+// stops the scan of the models: the DSL design rules, which report a model
+// fault file by file and a gst.yaml fault once, while the other checks
+// reading the models say nothing of it.
+func TestScanFaultsAreReportedByTheDSLDesignRulesAlone(t *testing.T) {
+	model := `package model
+
+import (
+	"github.com/hydroan/gst/dsl"
+	"github.com/hydroan/gst/model"
+)
+
+type Sample struct {
+	model.Base
+}
+
+func (Sample) Design() {
+	dsl.Endpoint("samples")
+	dsl.List(func() {})
+}
+`
+	quiet := []ggcheck.Check{ggcheck.GRPCServiceContext, ggcheck.ProtobufDefinitions, ggcheck.ServiceTestCoverage}
+
+	t.Run("a model fault", func(t *testing.T) {
+		projectDir := t.TempDir()
+		t.Chdir(projectDir)
+		writeCheckProjectGoMod(t, projectDir)
+		writeCheckFile(t, filepath.Join(projectDir, "model", "sample.go"), strings.Replace(model, "\tdsl.List(func() {})\n", "\tdsl.Service()\n", 1))
+
+		violations := runCheck(ggcheck.DSLDesignRules)
+		if len(violations) != 1 || !strings.Contains(violations[0], "Service() can only be used inside an action block") {
+			t.Fatalf("DSL design rules violations = %#v, want the misplaced keyword once", violations)
+		}
+		for _, check := range quiet {
+			if violations := runCheck(check); len(violations) != 0 {
+				t.Fatalf("%s violations = %#v, want none: the DSL design rules reported the fault", check.Name, violations)
+			}
+		}
+	})
+	t.Run("a gst.yaml fault", func(t *testing.T) {
+		projectDir := t.TempDir()
+		t.Chdir(projectDir)
+		writeCheckProjectGoMod(t, projectDir)
+		writeCheckFile(t, filepath.Join(projectDir, "model", "sample.go"), model)
+		writeCheckFile(t, filepath.Join(projectDir, "gst.yaml"), "gen: [\n")
+
+		violations := runCheck(ggcheck.DSLDesignRules)
+		if len(violations) != 1 || !strings.HasPrefix(violations[0], "loading gst.yaml: ") {
+			t.Fatalf("DSL design rules violations = %#v, want the gst.yaml fault once", violations)
+		}
+		for _, check := range quiet {
+			if violations := runCheck(check); len(violations) != 0 {
+				t.Fatalf("%s violations = %#v, want none: the DSL design rules reported the fault", check.Name, violations)
+			}
+		}
+	})
+}

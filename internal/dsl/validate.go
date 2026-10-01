@@ -130,6 +130,29 @@ func GRPCOnlyAction(name string) bool {
 	return grpcOnlyActionMethodNames[name]
 }
 
+// PayloadKeyword reports whether name is the keyword declaring the request
+// side of an action's types: true for Payload and StreamingPayload, false
+// for Result or Service. ResultKeyword reports the response side, Result
+// and StreamingResult, and StreamingKeyword the sides a Stream action
+// streams, StreamingPayload and StreamingResult. The parser, the validator
+// and gg check read the typed keywords through these alone.
+func PayloadKeyword(name string) bool {
+	return name == "Payload" || name == "StreamingPayload"
+}
+
+// ResultKeyword reports whether name declares the response side of an
+// action's types (see PayloadKeyword): true for Result and StreamingResult.
+func ResultKeyword(name string) bool {
+	return name == "Result" || name == "StreamingResult"
+}
+
+// StreamingKeyword reports whether name declares a side a Stream action
+// streams (see PayloadKeyword): true for StreamingPayload and
+// StreamingResult.
+func StreamingKeyword(name string) bool {
+	return name == "StreamingPayload" || name == "StreamingResult"
+}
+
 // serviceNamePattern is what Service("name") accepts: a bare name of
 // letters, digits and underscores, starting with a letter, which names the
 // service file, the service type and, for a model declaring GRPC(), the rpc.
@@ -391,16 +414,16 @@ func validateActionCall(call *ast.CallExpr, actionName string, rootModelFile, vi
 			info.flatten = true
 		case name == "Exact":
 			info.exact = true
-		case name == "Payload", name == "Result", name == "StreamingPayload", name == "StreamingResult":
-			switch name {
-			case "Payload":
-				info.payload = true
-			case "Result":
-				info.result = true
-			case "StreamingPayload":
+		case PayloadKeyword(name), ResultKeyword(name):
+			switch {
+			case StreamingKeyword(name) && PayloadKeyword(name):
 				info.streamingPayload = true
-			case "StreamingResult":
+			case StreamingKeyword(name):
 				info.streamingResult = true
+			case PayloadKeyword(name):
+				info.payload = true
+			default:
+				info.result = true
 			}
 			if arg, ok := actionTypeArgument(child); ok && !modelPackageType(arg) {
 				errs = append(errs, fmt.Errorf("%s: %s action declares %s[%s]; Payload, Result, StreamingPayload and StreamingResult name a type of the model package, T or *T", filename, actionName, name, nodeSource(arg)))

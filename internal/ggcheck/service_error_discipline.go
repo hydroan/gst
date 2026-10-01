@@ -69,24 +69,7 @@ func checkServiceErrorDiscipline(ignore gghelper.ProjectIgnore) []string {
 	if err != nil {
 		return []string{fmt.Sprintf("reading the module path: %v", err)}
 	}
-	analysis := &svcErrAnalysis{
-		modulePath:   modulePath,
-		fset:         token.NewFileSet(),
-		summaries:    map[svcErrFuncKey]*svcErrFuncSummary{},
-		entryTypes:   map[string]map[string]bool{},
-		pkgVarTypes:  map[string]map[string]string{},
-		packageNames: map[string]string{},
-	}
-	err = ignore.Walk(".", func(path string, info os.FileInfo) error {
-		if info.IsDir() {
-			return nil
-		}
-		if !strings.HasSuffix(path, ".go") || strings.HasSuffix(path, "_test.go") {
-			return nil
-		}
-		analysis.collectFile(path)
-		return nil
-	})
+	analysis, err := collectProject(modulePath, ignore)
 	if err != nil {
 		return []string{fmt.Sprintf("walking project directory: %v", err)}
 	}
@@ -103,30 +86,6 @@ func checkServiceErrorDiscipline(ignore gghelper.ProjectIgnore) []string {
 	}
 
 	return analysis.report()
-}
-
-// svcErrVarObj is the parser-resolved declaration object of a local
-// variable. ast.Object is deprecated because syntactic resolution is
-// ambiguous without type information (composite literal keys, selector
-// fields); this checker resolves only plain local variables in assignments,
-// returns and method calls, a subset the parser's lexical scoping gets
-// right, and it must stay off go/types to keep gg gen fast. Every use of the
-// deprecated API is confined to this alias and the two accessors below.
-//
-//nolint:staticcheck // SA1019: sound for the local-variable subset, see above.
-type svcErrVarObj = *ast.Object
-
-// svcErrDeclObj returns the declaration object of an identifier, the single
-// accessor for the deprecated field.
-func svcErrDeclObj(ident *ast.Ident) svcErrVarObj {
-	return ident.Obj
-}
-
-// svcErrDeclNode returns the node declaring obj: a Field for a receiver or
-// parameter, a ValueSpec for a var declaration, an AssignStmt for a short
-// variable declaration, a FuncDecl for a function, and so on.
-func svcErrDeclNode(obj svcErrVarObj) any {
-	return obj.Decl
 }
 
 // svcErrFuncKey identifies a project function or method: the package
@@ -184,6 +143,43 @@ type svcErrAnalysis struct {
 	// packageNames caches the package clause of every project directory an
 	// import names, see packageName.
 	packageNames map[string]string
+	// parseErrors holds, by path, the error of every file the parser
+	// refused, which the analysis holds no functions of.
+	parseErrors map[string]error
+}
+
+// collectProject parses every Go file of the project but the tests, under
+// the ignore rules, into the analysis of the project of module path
+// modulePath: the files with the service struct types and the package-level
+// variable types they declare (see svcErrFileCollector), from which the
+// error discipline check summarizes the error exits and the gRPC service
+// context check follows the calls. The function bodies are read once every
+// file is collected, so that cross-file knowledge is complete regardless of
+// walk order.
+func collectProject(modulePath string, ignore gghelper.ProjectIgnore) (*svcErrAnalysis, error) {
+	analysis := &svcErrAnalysis{
+		modulePath:   modulePath,
+		fset:         token.NewFileSet(),
+		summaries:    map[svcErrFuncKey]*svcErrFuncSummary{},
+		entryTypes:   map[string]map[string]bool{},
+		pkgVarTypes:  map[string]map[string]string{},
+		packageNames: map[string]string{},
+		parseErrors:  map[string]error{},
+	}
+	err := ignore.Walk(".", func(path string, info os.FileInfo) error {
+		if info.IsDir() {
+			return nil
+		}
+		if !strings.HasSuffix(path, ".go") || strings.HasSuffix(path, "_test.go") {
+			return nil
+		}
+		analysis.collectFile(path)
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return analysis, nil
 }
 
 // packageName returns the package clause of the project directory dir, the
@@ -199,15 +195,18 @@ func (a *svcErrAnalysis) packageName(dir string) string {
 }
 
 // collectFile parses one project file and records service struct types and
-// function summaries.
+// package-level variable types; a file the parser refuses is recorded by
+// its error.
 func (a *svcErrAnalysis) collectFile(path string) {
 	file, err := parser.ParseFile(a.fset, path, nil, 0)
 	if err != nil {
+		a.parseErrors[filepath.ToSlash(path)] = err
 		return
 	}
 
 	collector := &svcErrFileCollector{
 		analysis:   a,
+		path:       filepath.ToSlash(path),
 		pkgDir:     filepath.ToSlash(filepath.Dir(path)),
 		svc:        goast.ImportedNames(file, gstServiceImportPath, "service"),
 		db:         goast.ImportedNames(file, gstDatabaseImportPath, "database"),
@@ -253,7 +252,11 @@ func (a *svcErrAnalysis) collectFile(path string) {
 type svcErrFileCollector struct {
 	analysis *svcErrAnalysis
 	file     *ast.File
+	path     string
 	pkgDir   string
+	// serviceTypes are the service struct types the file declares, the
+	// ones entryTypes records for its package.
+	serviceTypes []string
 	// svc, db and gst are the names of the framework service, database and
 	// root packages.
 	svc goast.PackageNames
@@ -335,6 +338,7 @@ func (c *svcErrFileCollector) collectServiceTypes(decl *ast.GenDecl) {
 				c.analysis.entryTypes[c.pkgDir] = types
 			}
 			types[typeSpec.Name.Name] = true
+			c.serviceTypes = append(c.serviceTypes, typeSpec.Name.Name)
 		}
 	}
 }
@@ -357,29 +361,7 @@ func (c *svcErrFileCollector) collectFunc(decl *ast.FuncDecl) {
 		return
 	}
 
-	scope := &svcErrFuncScope{
-		file:       c,
-		decl:       decl,
-		numResults: 0,
-		ctxParams:  serviceContextParams(decl, c.gst),
-	}
-	for _, field := range results {
-		n := len(field.Names)
-		if n == 0 {
-			n = 1
-		}
-		scope.numResults += n
-	}
-	if names := last.Names; len(names) > 0 {
-		scope.resultObj = svcErrDeclObj(names[len(names)-1])
-	}
-	if decl.Recv != nil && len(decl.Recv.List) == 1 {
-		scope.recvType = svcErrReceiverTypeName(decl.Recv.List[0].Type)
-		if names := decl.Recv.List[0].Names; len(names) == 1 {
-			scope.recvObj = svcErrDeclObj(names[0])
-		}
-	}
-
+	scope := c.newScope(decl)
 	scope.collectAssigns(decl.Body)
 	summary := &svcErrFuncSummary{}
 	scope.collectExits(decl.Body, summary)
@@ -391,6 +373,34 @@ func (c *svcErrFileCollector) collectFunc(decl *ast.FuncDecl) {
 	}
 }
 
+// newScope returns the scope of decl, a function of the file: what the
+// function declares itself, its receiver, its *gst.ServiceContext
+// parameters and its results, for its calls and exits to be resolved
+// against (see svcErrFuncScope).
+func (c *svcErrFileCollector) newScope(decl *ast.FuncDecl) *svcErrFuncScope {
+	scope := &svcErrFuncScope{file: c, decl: decl, ctxParams: serviceContextParams(decl, c.gst)}
+	if decl.Type.Results != nil && len(decl.Type.Results.List) > 0 {
+		results := decl.Type.Results.List
+		for _, field := range results {
+			n := len(field.Names)
+			if n == 0 {
+				n = 1
+			}
+			scope.numResults += n
+		}
+		if names := results[len(results)-1].Names; len(names) > 0 {
+			scope.resultObj = declObj(names[len(names)-1])
+		}
+	}
+	if decl.Recv != nil && len(decl.Recv.List) == 1 {
+		scope.recvType = svcErrReceiverTypeName(decl.Recv.List[0].Type)
+		if names := decl.Recv.List[0].Names; len(names) == 1 {
+			scope.recvObj = declObj(names[0])
+		}
+	}
+	return scope
+}
+
 // receiverType returns the receiver type expression of a method declaration,
 // or nil for a plain function.
 func receiverType(decl *ast.FuncDecl) ast.Expr {
@@ -398,29 +408,6 @@ func receiverType(decl *ast.FuncDecl) ast.Expr {
 		return nil
 	}
 	return decl.Recv.List[0].Type
-}
-
-// serviceContextParams returns the declaration objects of the function's
-// parameters declared as *gst.ServiceContext under the names gstNames
-// resolves. Objects rather than names tell the parameter apart from a local
-// variable that reuses its name.
-func serviceContextParams(decl *ast.FuncDecl, gstNames goast.PackageNames) map[svcErrVarObj]bool {
-	params := map[svcErrVarObj]bool{}
-	if decl.Type == nil || decl.Type.Params == nil {
-		return params
-	}
-	for _, field := range decl.Type.Params.List {
-		star, ok := field.Type.(*ast.StarExpr)
-		if !ok || !gstNames.Refers(star.X, "ServiceContext") {
-			continue
-		}
-		for _, name := range field.Names {
-			if obj := svcErrDeclObj(name); obj != nil {
-				params[obj] = true
-			}
-		}
-	}
-	return params
 }
 
 // isServiceErrorPtr reports whether expr denotes *service.Error under the
@@ -453,23 +440,23 @@ type svcErrFuncScope struct {
 	// decl is the function the scope summarizes; a name declared inside it
 	// is the function's own, see declaresLocally.
 	decl       *ast.FuncDecl
-	recvObj    svcErrVarObj // the named receiver, for calls of its methods
+	recvObj    varObj // the named receiver, for calls of its methods
 	recvType   string
-	resultObj  svcErrVarObj // named error result, for naked returns
+	resultObj  varObj // named error result, for naked returns
 	numResults int
 	// ctxParams holds the function's *gst.ServiceContext parameters, whose
 	// SSE method is a sanctioned error exit.
-	ctxParams map[svcErrVarObj]bool
+	ctxParams map[varObj]bool
 	// assigns maps a declared variable to every expression assigned to it,
 	// closures included. Keying by the parser-resolved declaration object
 	// keeps same-named variables from different scopes apart, and each entry
 	// records its position so a return only pools assignments that happened
 	// before it: reusing one err variable for several sources must not let a
 	// later raw assignment pollute an earlier compliant exit.
-	assigns map[svcErrVarObj][]svcErrAssign
+	assigns map[varObj][]svcErrAssign
 	// windows lists the exclusive visibility windows per variable; a use
 	// inside a window sees only the window's own assignment.
-	windows map[svcErrVarObj][]svcErrWindow
+	windows map[varObj][]svcErrWindow
 }
 
 // svcErrAssign is one recorded assignment: the assigned expression, where
@@ -495,7 +482,7 @@ type svcErrWindow struct {
 // collectAssigns records every assignment in the function body, closures
 // included, keyed by the assigned variable's declaration object.
 func (s *svcErrFuncScope) collectAssigns(body *ast.BlockStmt) {
-	s.assigns = map[svcErrVarObj][]svcErrAssign{}
+	s.assigns = map[varObj][]svcErrAssign{}
 	ast.Inspect(body, func(n ast.Node) bool {
 		assign, ok := n.(*ast.AssignStmt)
 		if !ok {
@@ -505,8 +492,8 @@ func (s *svcErrFuncScope) collectAssigns(body *ast.BlockStmt) {
 			// Multi-value assignment from one call: every variable pools the
 			// call as origin; only the error-typed one ever reaches an exit.
 			for _, lhs := range assign.Lhs {
-				if ident, ok := lhs.(*ast.Ident); ok && svcErrDeclObj(ident) != nil {
-					s.assigns[svcErrDeclObj(ident)] = append(s.assigns[svcErrDeclObj(ident)], svcErrAssign{expr: assign.Rhs[0], pos: assign.Pos()})
+				if ident, ok := lhs.(*ast.Ident); ok && declObj(ident) != nil {
+					s.assigns[declObj(ident)] = append(s.assigns[declObj(ident)], svcErrAssign{expr: assign.Rhs[0], pos: assign.Pos()})
 				}
 			}
 			return true
@@ -515,8 +502,8 @@ func (s *svcErrFuncScope) collectAssigns(body *ast.BlockStmt) {
 			return true
 		}
 		for i, lhs := range assign.Lhs {
-			if ident, ok := lhs.(*ast.Ident); ok && svcErrDeclObj(ident) != nil {
-				s.assigns[svcErrDeclObj(ident)] = append(s.assigns[svcErrDeclObj(ident)], svcErrAssign{expr: assign.Rhs[i], pos: assign.Pos()})
+			if ident, ok := lhs.(*ast.Ident); ok && declObj(ident) != nil {
+				s.assigns[declObj(ident)] = append(s.assigns[declObj(ident)], svcErrAssign{expr: assign.Rhs[i], pos: assign.Pos()})
 			}
 		}
 		return true
@@ -531,7 +518,7 @@ func (s *svcErrFuncScope) collectAssigns(body *ast.BlockStmt) {
 // always leaves (return, branch, or panic), the variable no longer carries
 // that value, which is exactly how idiomatic Go reuses one err variable.
 func (s *svcErrFuncScope) markKilledAssigns(body *ast.BlockStmt) {
-	s.windows = map[svcErrVarObj][]svcErrWindow{}
+	s.windows = map[varObj][]svcErrWindow{}
 	ast.Inspect(body, func(n ast.Node) bool {
 		var stmts []ast.Stmt
 		switch n := n.(type) {
@@ -579,7 +566,7 @@ func (s *svcErrFuncScope) markKilledAssigns(body *ast.BlockStmt) {
 
 // svcErrNilCheckedObj returns the declaration object of v when cond is a
 // plain `v != nil` comparison, nil otherwise.
-func svcErrNilCheckedObj(ifStmt *ast.IfStmt) svcErrVarObj {
+func svcErrNilCheckedObj(ifStmt *ast.IfStmt) varObj {
 	cond, ok := ifStmt.Cond.(*ast.BinaryExpr)
 	if !ok || cond.Op != token.NEQ {
 		return nil
@@ -591,7 +578,7 @@ func svcErrNilCheckedObj(ifStmt *ast.IfStmt) svcErrVarObj {
 	if right, ok := cond.Y.(*ast.Ident); !ok || right.Name != "nil" {
 		return nil
 	}
-	return svcErrDeclObj(ident)
+	return declObj(ident)
 }
 
 // svcErrStmtsAlwaysLeave reports whether a statement list ends by leaving
@@ -616,7 +603,7 @@ func svcErrStmtsAlwaysLeave(stmts []ast.Stmt) bool {
 
 // killAssign records the kill point on the recorded entries of one
 // assignment statement for the checked variable.
-func (s *svcErrFuncScope) killAssign(obj svcErrVarObj, assign *ast.AssignStmt, killEnd token.Pos) {
+func (s *svcErrFuncScope) killAssign(obj varObj, assign *ast.AssignStmt, killEnd token.Pos) {
 	entries := s.assigns[obj]
 	for i := range entries {
 		if entries[i].pos == assign.Pos() {
@@ -646,7 +633,7 @@ func (s *svcErrFuncScope) collectExits(body *ast.BlockStmt, summary *svcErrFuncS
 // resolveReturn resolves the origins of the error value produced by one
 // return statement.
 func (s *svcErrFuncScope) resolveReturn(ret *ast.ReturnStmt) []svcErrSource {
-	visiting := map[svcErrVarObj]bool{}
+	visiting := map[varObj]bool{}
 	switch {
 	case len(ret.Results) == 0:
 		// Naked return: the named error result carries the value.
@@ -661,18 +648,18 @@ func (s *svcErrFuncScope) resolveReturn(ret *ast.ReturnStmt) []svcErrSource {
 }
 
 // resolveExpr resolves the origins of one error-typed expression.
-func (s *svcErrFuncScope) resolveExpr(expr ast.Expr, visiting map[svcErrVarObj]bool) []svcErrSource {
+func (s *svcErrFuncScope) resolveExpr(expr ast.Expr, visiting map[varObj]bool) []svcErrSource {
 	switch expr := expr.(type) {
 	case *ast.Ident:
 		if expr.Name == "nil" {
 			return []svcErrSource{{kind: svcErrSourceNil}}
 		}
-		if svcErrDeclObj(expr) == nil {
+		if declObj(expr) == nil {
 			// Unresolved identifier: a package-level error variable (a raw
 			// sentinel) or a cross-file symbol; fail closed.
 			return []svcErrSource{s.raw(expr)}
 		}
-		return s.resolveObj(svcErrDeclObj(expr), expr, visiting)
+		return s.resolveObj(declObj(expr), expr, visiting)
 	case *ast.CallExpr:
 		return s.resolveCall(expr, visiting)
 	case *ast.ParenExpr:
@@ -686,7 +673,7 @@ func (s *svcErrFuncScope) resolveExpr(expr ast.Expr, visiting map[svcErrVarObj]b
 // variable, pooling the assignments recorded for its declaration object that
 // happen before the use site. at names the use — the expression or statement
 // to blame when nothing was recorded.
-func (s *svcErrFuncScope) resolveObj(obj svcErrVarObj, at ast.Node, visiting map[svcErrVarObj]bool) []svcErrSource {
+func (s *svcErrFuncScope) resolveObj(obj varObj, at ast.Node, visiting map[varObj]bool) []svcErrSource {
 	if obj == nil || visiting[obj] {
 		return nil
 	}
@@ -730,76 +717,45 @@ func (s *svcErrFuncScope) resolveObj(obj svcErrVarObj, at ast.Node, visiting map
 	return sources
 }
 
-// resolveCall resolves the origins of the error produced by one call.
-func (s *svcErrFuncScope) resolveCall(call *ast.CallExpr, visiting map[svcErrVarObj]bool) []svcErrSource {
-	fun := call.Fun
-	// A generic call instantiates its function first; the instantiation
-	// wrapper is transparent for resolving who is called.
-	for {
-		switch instantiated := fun.(type) {
-		case *ast.IndexExpr:
-			fun = instantiated.X
-			continue
-		case *ast.IndexListExpr:
-			fun = instantiated.X
-			continue
-		}
-		break
-	}
-	switch fun := fun.(type) {
+// resolveCall resolves the origins of the error produced by one call: the
+// framework constructors and the transaction are read for what they are,
+// and so is the SSE method of a *gst.ServiceContext parameter, whose
+// errors are framework-governed; a project function or method the call
+// resolves to (see calleeOf) answers through its own summary, and a call
+// the checker cannot follow fails closed.
+func (s *svcErrFuncScope) resolveCall(call *ast.CallExpr, visiting map[varObj]bool) []svcErrSource {
+	switch fun := instantiated(call.Fun).(type) {
 	case *ast.Ident:
-		// A function value the function declares itself, such as a closure
-		// held in a local variable, cannot be followed; it fails closed even
-		// when a package-level function of the same name exists.
-		if s.declaresLocally(svcErrDeclObj(fun)) {
-			return []svcErrSource{s.raw(call)}
-		}
 		// A dot import names the framework constructors and the
-		// transaction without a qualifier.
-		if s.file.svc.Refers(fun, "NewError", "NewErrorWithCause") {
-			return []svcErrSource{{kind: svcErrSourceNewError}}
-		}
-		if s.file.db.Refers(fun, "Transaction") {
-			return s.resolveTransaction(call, visiting)
-		}
-		// A same-package call; whether it is compliant is the callee
-		// summary's business.
-		return []svcErrSource{{
-			kind:   svcErrSourceCall,
-			callee: svcErrFuncKey{pkgDir: s.file.pkgDir, name: fun.Name},
-			pos:    s.file.analysis.fset.Position(call.Pos()),
-		}}
-	case *ast.SelectorExpr:
-		if fun.Sel == nil {
-			return []svcErrSource{s.raw(call)}
-		}
-		// A method call on another project package's package-level variable
-		// (pkg.Manager.Method) resolves through that package's recorded
-		// variable types.
-		if varSel, ok := fun.X.(*ast.SelectorExpr); ok {
-			if pkgIdent, ok := varSel.X.(*ast.Ident); ok && varSel.Sel != nil {
-				if pkgDir, ok := s.file.projectPkg[pkgIdent.Name]; ok {
-					if typeName, ok := s.file.analysis.pkgVarTypes[pkgDir][varSel.Sel.Name]; ok {
-						return []svcErrSource{{
-							kind:   svcErrSourceCall,
-							callee: svcErrFuncKey{pkgDir: pkgDir, recv: typeName, name: fun.Sel.Name},
-							pos:    s.file.analysis.fset.Position(call.Pos()),
-						}}
-					}
-				}
+		// transaction without a qualifier; a name the function declares
+		// itself hides them (see calleeOf).
+		if !s.declaresLocally(declObj(fun)) {
+			if s.file.svc.Refers(fun, "NewError", "NewErrorWithCause") {
+				return []svcErrSource{{kind: svcErrSourceNewError}}
 			}
-			return []svcErrSource{s.raw(call)}
+			if s.file.db.Refers(fun, "Transaction") {
+				return s.resolveTransaction(call, visiting)
+			}
 		}
+	case *ast.SelectorExpr:
 		ident, ok := fun.X.(*ast.Ident)
-		if !ok {
-			return []svcErrSource{s.raw(call)}
+		if !ok || fun.Sel == nil {
+			break
 		}
 		// The receiver, a parameter or a local variable hides every
 		// package-level meaning of its name, an import included: with
 		// service := other{} in the body, service.NewError() is other's
 		// method, not the framework constructor.
-		if obj := svcErrDeclObj(ident); s.declaresLocally(obj) {
-			return s.resolveLocalCall(call, fun, obj)
+		if obj := declObj(ident); s.declaresLocally(obj) {
+			// ServiceContext.SSE errors are framework-governed: a setup
+			// failure carries a framework-built message, and an error after
+			// the stream opened never reaches the response envelope, so
+			// wrapping the call in service.NewError adds nothing the client
+			// could see.
+			if s.ctxParams[obj] && fun.Sel.Name == "SSE" {
+				return []svcErrSource{{kind: svcErrSourceNewError}}
+			}
+			break
 		}
 		if s.file.svc.Refers(fun, "NewError", "NewErrorWithCause") {
 			return []svcErrSource{{kind: svcErrSourceNewError}}
@@ -807,27 +763,93 @@ func (s *svcErrFuncScope) resolveCall(call *ast.CallExpr, visiting map[svcErrVar
 		if s.file.db.Refers(fun, "Transaction") {
 			return s.resolveTransaction(call, visiting)
 		}
-		if pkgDir, ok := s.file.projectPkg[ident.Name]; ok {
-			return []svcErrSource{{
-				kind:   svcErrSourceCall,
-				callee: svcErrFuncKey{pkgDir: pkgDir, name: fun.Sel.Name},
-				pos:    s.file.analysis.fset.Position(call.Pos()),
-			}}
-		}
-		// A method call on a same-package package-level variable (a manager
-		// singleton) resolves through the variable's recorded concrete type;
-		// a local variable of the same name never gets here, see above.
-		if typeName, ok := s.file.analysis.pkgVarTypes[s.file.pkgDir][ident.Name]; ok {
-			return []svcErrSource{{
-				kind:   svcErrSourceCall,
-				callee: svcErrFuncKey{pkgDir: s.file.pkgDir, recv: typeName, name: fun.Sel.Name},
-				pos:    s.file.analysis.fset.Position(call.Pos()),
-			}}
-		}
-		return []svcErrSource{s.raw(call)}
-	default:
+	}
+	callee, ok := s.calleeOf(call)
+	if !ok {
 		return []svcErrSource{s.raw(call)}
 	}
+	// Whether the call is compliant is the callee summary's business.
+	return []svcErrSource{{kind: svcErrSourceCall, callee: callee, pos: s.file.analysis.fset.Position(call.Pos())}}
+}
+
+// instantiated returns the function a call expression calls, the
+// instantiation of a generic function seen through: the wrapper is
+// transparent for resolving who is called.
+func instantiated(fun ast.Expr) ast.Expr {
+	for {
+		switch wrapper := fun.(type) {
+		case *ast.IndexExpr:
+			fun = wrapper.X
+		case *ast.IndexListExpr:
+			fun = wrapper.X
+		default:
+			return fun
+		}
+	}
+}
+
+// calleeOf returns the key of the project function or method the call
+// calls, resolved the way the Go compiler reads the call: a bare name is a
+// function of the package, pkg.F one of the project package pkg names,
+// pkg.Var.M and Var.M a method of the type a package-level variable's
+// declaration spells out (see collectPackageVars), and x.M on a name x the
+// function declares itself a method of the receiver's type, or of the type
+// the declaration of x spells out:
+//
+//	mgr := manager{}   // mgr.Do() is manager.Do
+//	var mgr manager    // manager.Do
+//	func run(m manager) error { return m.Do() } // manager.Do
+//	cli := newClient() // no type spelled out: cli.Do() resolves to nothing
+//
+// It reports false for a call it cannot follow: a function value the
+// function declares itself, such as a closure held in a local variable,
+// even when a package-level function of the same name exists; a method of
+// a type it cannot see; a call of another package's function the file does
+// not import as a project package. A dot-imported project package names
+// nothing here: its calls read as same-package calls.
+func (s *svcErrFuncScope) calleeOf(call *ast.CallExpr) (svcErrFuncKey, bool) {
+	switch fun := instantiated(call.Fun).(type) {
+	case *ast.Ident:
+		if s.declaresLocally(declObj(fun)) {
+			return svcErrFuncKey{}, false
+		}
+		return svcErrFuncKey{pkgDir: s.file.pkgDir, name: fun.Name}, true
+	case *ast.SelectorExpr:
+		if fun.Sel == nil {
+			return svcErrFuncKey{}, false
+		}
+		if varSel, ok := fun.X.(*ast.SelectorExpr); ok {
+			if pkgIdent, ok := varSel.X.(*ast.Ident); ok && varSel.Sel != nil {
+				if pkgDir, ok := s.file.projectPkg[pkgIdent.Name]; ok {
+					if typeName, ok := s.file.analysis.pkgVarTypes[pkgDir][varSel.Sel.Name]; ok {
+						return svcErrFuncKey{pkgDir: pkgDir, recv: typeName, name: fun.Sel.Name}, true
+					}
+				}
+			}
+			return svcErrFuncKey{}, false
+		}
+		ident, ok := fun.X.(*ast.Ident)
+		if !ok {
+			return svcErrFuncKey{}, false
+		}
+		if obj := declObj(ident); s.declaresLocally(obj) {
+			recvType := s.recvType
+			if obj != s.recvObj {
+				recvType = svcErrDeclaredTypeName(obj)
+			}
+			if recvType == "" {
+				return svcErrFuncKey{}, false
+			}
+			return svcErrFuncKey{pkgDir: s.file.pkgDir, recv: recvType, name: fun.Sel.Name}, true
+		}
+		if pkgDir, ok := s.file.projectPkg[ident.Name]; ok {
+			return svcErrFuncKey{pkgDir: pkgDir, name: fun.Sel.Name}, true
+		}
+		if typeName, ok := s.file.analysis.pkgVarTypes[s.file.pkgDir][ident.Name]; ok {
+			return svcErrFuncKey{pkgDir: s.file.pkgDir, recv: typeName, name: fun.Sel.Name}, true
+		}
+	}
+	return svcErrFuncKey{}, false
 }
 
 // declaresLocally reports whether obj, the declaration object of a name used
@@ -835,47 +857,15 @@ func (s *svcErrFuncScope) resolveCall(call *ast.CallExpr, visiting map[svcErrVar
 // parameter or result, or a variable of its body or of a closure inside it.
 // A package-level declaration, even one in the same file, is not, and
 // neither is the function's own name, which a recursive call uses.
-func (s *svcErrFuncScope) declaresLocally(obj svcErrVarObj) bool {
+func (s *svcErrFuncScope) declaresLocally(obj varObj) bool {
 	if obj == nil {
 		return false
 	}
-	node, ok := svcErrDeclNode(obj).(ast.Node)
+	node, ok := declNode(obj).(ast.Node)
 	if _, isFunc := node.(*ast.FuncDecl); !ok || isFunc {
 		return false
 	}
 	return node.Pos() >= s.decl.Pos() && node.Pos() < s.decl.End()
-}
-
-// resolveLocalCall resolves the method call x.M() on a name x the function
-// declares itself. The receiver calls its own type's method, and M = SSE on
-// a *gst.ServiceContext parameter is the sanctioned streaming exit; any
-// other x resolves through the type its declaration spells out:
-//
-//	mgr := manager{}   // mgr.Do() is manager.Do
-//	var mgr manager    // manager.Do
-//	func run(m manager) error { return m.Do() } // manager.Do
-//	cli := newClient() // no type spelled out: cli.Do() fails closed
-func (s *svcErrFuncScope) resolveLocalCall(call *ast.CallExpr, fun *ast.SelectorExpr, obj svcErrVarObj) []svcErrSource {
-	recvType := s.recvType
-	switch {
-	case obj == s.recvObj:
-	case s.ctxParams[obj] && fun.Sel.Name == "SSE":
-		// ServiceContext.SSE errors are framework-governed: a setup failure
-		// carries a framework-built message, and an error after the stream
-		// opened never reaches the response envelope, so wrapping the call
-		// in service.NewError adds nothing the client could see.
-		return []svcErrSource{{kind: svcErrSourceNewError}}
-	default:
-		recvType = svcErrDeclaredTypeName(obj)
-	}
-	if recvType == "" {
-		return []svcErrSource{s.raw(call)}
-	}
-	return []svcErrSource{{
-		kind:   svcErrSourceCall,
-		callee: svcErrFuncKey{pkgDir: s.file.pkgDir, recv: recvType, name: fun.Sel.Name},
-		pos:    s.file.analysis.fset.Position(call.Pos()),
-	}}
 }
 
 // svcErrDeclaredTypeName returns the same-package type name a variable's
@@ -883,13 +873,13 @@ func (s *svcErrFuncScope) resolveLocalCall(call *ast.CallExpr, fun *ast.Selector
 // one: other for p other and p *other (a parameter), var x other,
 // var x = other{} and x := &other{}. It returns "" when the declaration
 // names no such type, as for x := newOther() or var x pkg.Other.
-func svcErrDeclaredTypeName(obj svcErrVarObj) string {
-	switch decl := svcErrDeclNode(obj).(type) {
+func svcErrDeclaredTypeName(obj varObj) string {
+	switch decl := declNode(obj).(type) {
 	case *ast.Field:
 		return svcErrReceiverTypeName(decl.Type)
 	case *ast.ValueSpec:
 		for i, name := range decl.Names {
-			if svcErrDeclObj(name) != obj {
+			if declObj(name) != obj {
 				continue
 			}
 			switch {
@@ -904,7 +894,7 @@ func svcErrDeclaredTypeName(obj svcErrVarObj) string {
 			return ""
 		}
 		for i, lhs := range decl.Lhs {
-			if name, ok := lhs.(*ast.Ident); ok && svcErrDeclObj(name) == obj {
+			if name, ok := lhs.(*ast.Ident); ok && declObj(name) == obj {
 				return svcErrCompositeTypeName(decl.Rhs[i])
 			}
 		}
@@ -916,7 +906,7 @@ func svcErrDeclaredTypeName(obj svcErrVarObj) string {
 // returns is whatever the closure exits return, so those exits join the
 // enclosing flow. A non-literal transaction function cannot be followed and
 // fails closed.
-func (s *svcErrFuncScope) resolveTransaction(call *ast.CallExpr, visiting map[svcErrVarObj]bool) []svcErrSource {
+func (s *svcErrFuncScope) resolveTransaction(call *ast.CallExpr, visiting map[varObj]bool) []svcErrSource {
 	if len(call.Args) != 2 {
 		return []svcErrSource{s.raw(call)}
 	}

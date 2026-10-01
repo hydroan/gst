@@ -7,13 +7,14 @@
 package ggcheck
 
 import (
-	"fmt"
 	"go/ast"
 	"go/parser"
 	"go/token"
 	"path/filepath"
 	"strings"
 
+	"github.com/cockroachdb/errors"
+	"github.com/hydroan/gst/internal/dsl"
 	"github.com/hydroan/gst/internal/ggconfig"
 	"github.com/hydroan/gst/internal/ggconst"
 	"github.com/hydroan/gst/internal/gghelper"
@@ -74,21 +75,20 @@ func dslActionTypeCall(expr ast.Expr) (string, ast.Expr, bool) {
 }
 
 // dslActionTypeName returns the DSL function name of an action type
-// keyword: Payload, Result, StreamingPayload or StreamingResult.
+// keyword, one taking an action type argument (see dsl.PayloadKeyword and
+// dsl.ResultKeyword): Payload, Result, StreamingPayload or StreamingResult.
 func dslActionTypeName(expr ast.Expr) (string, bool) {
+	var name string
 	switch x := expr.(type) {
 	case *ast.Ident:
-		return x.Name, actionTypeKeywords[x.Name]
+		name = x.Name
 	case *ast.SelectorExpr:
 		if x.Sel != nil {
-			return x.Sel.Name, actionTypeKeywords[x.Sel.Name]
+			name = x.Sel.Name
 		}
 	}
-	return "", false
+	return name, dsl.PayloadKeyword(name) || dsl.ResultKeyword(name)
 }
-
-// actionTypeKeywords are the DSL keywords taking an action type argument.
-var actionTypeKeywords = map[string]bool{"Payload": true, "Result": true, "StreamingPayload": true, "StreamingResult": true}
 
 // localActionTypeName resolves a DSL type argument to a type name declared in
 // the same package. Pointer forms are unwrapped; qualified names from other
@@ -193,23 +193,76 @@ func packageNameOf(dir string) string {
 	return filepath.Base(dir)
 }
 
+// errModelsRefused marks the error of a scan the model files stopped (see
+// scanModels): the DSL design rules report such a fault file by file, so
+// the checks reading the models say nothing of it.
+var errModelsRefused = errors.New("the model files were refused")
+
 // scanModels reads the models of the project the way gg gen reads them
 // (see modelinfo.ScanModels), for the checks that read the models: gst.yaml
-// for the ignore rules, go.mod for the module path, then the scan. It
-// returns the scan, or the violation naming what stopped it, which a check
-// reports as it is.
-func scanModels(ignore gghelper.ProjectIgnore) (modelinfo.ScannedModels, string) {
+// for the ignore rules, go.mod for the module path, then the scan. An error
+// names what stopped the scan, marked errModelsRefused when the model files
+// did; the DSL design rules report it, once, and the other checks reading
+// the models return nothing for it.
+func scanModels(ignore gghelper.ProjectIgnore) (modelinfo.ScannedModels, error) {
 	cfg, err := ggconfig.Load(".")
 	if err != nil {
-		return modelinfo.ScannedModels{}, fmt.Sprintf("loading gst.yaml: %v", err)
+		return modelinfo.ScannedModels{}, errors.Wrap(err, "loading gst.yaml")
 	}
 	modulePath, err := gghelper.ModulePath()
 	if err != nil {
-		return modelinfo.ScannedModels{}, fmt.Sprintf("reading the module path: %v", err)
+		return modelinfo.ScannedModels{}, errors.Wrap(err, "reading the module path")
 	}
 	scanned, err := modelinfo.ScanModels(modulePath, ggconst.DirModel, ignore, cfg)
 	if err != nil {
-		return modelinfo.ScannedModels{}, fmt.Sprintf("scanning model designs: %v", err)
+		return modelinfo.ScannedModels{}, errors.Mark(errors.Wrap(err, "scanning model designs"), errModelsRefused)
 	}
-	return scanned, ""
+	return scanned, nil
+}
+
+// varObj is the parser-resolved declaration object of a local variable.
+// ast.Object is deprecated because syntactic resolution is ambiguous
+// without type information (composite literal keys, selector fields); the
+// checks resolve only plain local variables in assignments, returns and
+// method calls, a subset the parser's lexical scoping gets right, and they
+// must stay off go/types to keep gg gen fast. Every use of the deprecated
+// API is confined to this alias and the two accessors below.
+//
+//nolint:staticcheck // SA1019: sound for the local-variable subset, see above.
+type varObj = *ast.Object
+
+// declObj returns the declaration object of an identifier, the single
+// accessor for the deprecated field.
+func declObj(ident *ast.Ident) varObj {
+	return ident.Obj
+}
+
+// declNode returns the node declaring obj: a Field for a receiver or
+// parameter, a ValueSpec for a var declaration, an AssignStmt for a short
+// variable declaration, a FuncDecl for a function, and so on.
+func declNode(obj varObj) any {
+	return obj.Decl
+}
+
+// serviceContextParams returns the declaration objects of the function's
+// parameters declared as *gst.ServiceContext under the names gstNames
+// resolves. Objects rather than names tell the parameter apart from a local
+// variable that reuses its name.
+func serviceContextParams(decl *ast.FuncDecl, gstNames goast.PackageNames) map[varObj]bool {
+	params := map[varObj]bool{}
+	if decl.Type == nil || decl.Type.Params == nil {
+		return params
+	}
+	for _, field := range decl.Type.Params.List {
+		star, ok := field.Type.(*ast.StarExpr)
+		if !ok || !gstNames.Refers(star.X, "ServiceContext") {
+			continue
+		}
+		for _, name := range field.Names {
+			if obj := declObj(name); obj != nil {
+				params[obj] = true
+			}
+		}
+	}
+	return params
 }
