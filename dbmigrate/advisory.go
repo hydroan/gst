@@ -4,42 +4,21 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/hydroan/gst/config"
+	"github.com/hydroan/gst/internal/dbruntime"
 	"github.com/sqldef/sqldef/v3/schema"
 )
 
-// advisoryStyle renders identifiers and rename statements in the dialect the
-// advisory targets, so the executable block pastes into that server as-is.
-type advisoryStyle struct {
-	quote       func(ident string) string
-	renameTable func(from, to string) string
-	renameIndex func(table, from, to string) string
-}
-
-// styleFor returns the rendering style of the generator mode. Only the modes
-// migrate runs the detectors for have a style.
-func styleFor(mode schema.GeneratorMode) advisoryStyle {
+// dialectFor returns the name of the dialect the generator mode targets,
+// the one dbruntime renders the identifiers and rename statements of the
+// advisory for, so the executable block pastes into that server as it is.
+// Only the modes migrate runs the detectors for, MySQL and PostgreSQL, get
+// here.
+func dialectFor(mode schema.GeneratorMode) string {
 	if mode == schema.GeneratorModePostgres {
-		quote := func(ident string) string { return `"` + ident + `"` }
-		return advisoryStyle{
-			quote: quote,
-			renameTable: func(from, to string) string {
-				return fmt.Sprintf("ALTER TABLE %s RENAME TO %s;", quote(from), quote(to))
-			},
-			renameIndex: func(_, from, to string) string {
-				return fmt.Sprintf("ALTER INDEX %s RENAME TO %s;", quote(from), quote(to))
-			},
-		}
+		return string(config.DBPostgres)
 	}
-	quote := func(ident string) string { return "`" + ident + "`" }
-	return advisoryStyle{
-		quote: quote,
-		renameTable: func(from, to string) string {
-			return fmt.Sprintf("RENAME TABLE %s TO %s;", quote(from), quote(to))
-		},
-		renameIndex: func(table, from, to string) string {
-			return fmt.Sprintf("ALTER TABLE %s RENAME INDEX %s TO %s;", quote(table), quote(from), quote(to))
-		},
-	}
+	return string(config.DBMySQL)
 }
 
 // combineAdvisories joins the non-empty advisory sections with one blank
@@ -70,7 +49,7 @@ func formatTableRenames(mode schema.GeneratorMode, pairs []tableRenamePair) stri
 	if len(pairs) == 0 {
 		return ""
 	}
-	style := styleFor(mode)
+	dialect := dialectFor(mode)
 
 	var b strings.Builder
 	b.WriteString("  -- The plan above drops and re-creates the tables below; the created table keeps every column of the dropped one, so these are renames.\n")
@@ -83,13 +62,13 @@ func formatTableRenames(mode schema.GeneratorMode, pairs []tableRenamePair) stri
 		}
 	}
 	for _, pair := range pairs {
-		fmt.Fprintf(&b, "  -- Table %s -> %s\n", style.quote(pair.From), style.quote(pair.To))
+		fmt.Fprintf(&b, "  -- Table %s -> %s\n", dbruntime.QuoteIdentifier(dialect, pair.From), dbruntime.QuoteIdentifier(dialect, pair.To))
 		for _, index := range pair.IndexRenames {
 			unique := ""
 			if index.Unique {
 				unique = ", UNIQUE"
 			}
-			fmt.Fprintf(&b, "  --   index %s -> %s (%s%s)\n", style.quote(index.From), style.quote(index.To), index.Columns, unique)
+			fmt.Fprintf(&b, "  --   index %s -> %s (%s%s)\n", dbruntime.QuoteIdentifier(dialect, index.From), dbruntime.QuoteIdentifier(dialect, index.To), index.Columns, unique)
 		}
 		for _, statement := range pair.Residual {
 			fmt.Fprintf(&b, "  --   remaining change: %s\n", statement)
@@ -97,9 +76,9 @@ func formatTableRenames(mode schema.GeneratorMode, pairs []tableRenamePair) stri
 	}
 	b.WriteString("\n")
 	for _, pair := range pairs {
-		b.WriteString(style.renameTable(pair.From, pair.To) + "\n")
+		b.WriteString(dbruntime.RenameTableSQL(dialect, pair.From, pair.To) + "\n")
 		for _, index := range pair.IndexRenames {
-			b.WriteString(style.renameIndex(index.Table, index.From, index.To) + "\n")
+			b.WriteString(dbruntime.RenameIndexSQL(dialect, index.Table, index.From, index.To) + "\n")
 		}
 	}
 	return b.String()
@@ -118,7 +97,7 @@ func formatIndexRenames(mode schema.GeneratorMode, pairs []indexRenamePair) stri
 	if len(pairs) == 0 {
 		return ""
 	}
-	style := styleFor(mode)
+	dialect := dialectFor(mode)
 
 	var b strings.Builder
 	b.WriteString("  -- The plan above drops and re-creates the indexes below with identical definitions; these are renames.\n")
@@ -129,11 +108,11 @@ func formatIndexRenames(mode schema.GeneratorMode, pairs []indexRenamePair) stri
 		if pair.Unique {
 			unique = ", UNIQUE"
 		}
-		fmt.Fprintf(&b, "  -- Table %s: %s -> %s (%s%s)\n", style.quote(pair.Table), style.quote(pair.From), style.quote(pair.To), pair.Columns, unique)
+		fmt.Fprintf(&b, "  -- Table %s: %s -> %s (%s%s)\n", dbruntime.QuoteIdentifier(dialect, pair.Table), dbruntime.QuoteIdentifier(dialect, pair.From), dbruntime.QuoteIdentifier(dialect, pair.To), pair.Columns, unique)
 	}
 	b.WriteString("\n")
 	for _, pair := range pairs {
-		b.WriteString(style.renameIndex(pair.Table, pair.From, pair.To) + "\n")
+		b.WriteString(dbruntime.RenameIndexSQL(dialect, pair.Table, pair.From, pair.To) + "\n")
 	}
 	return b.String()
 }

@@ -105,8 +105,8 @@ func ensureCustomIndexes(handler *gorm.DB, m types.Model) error {
 			continue
 		}
 		if renamed := sameDefinitionName(existing, plan); len(renamed) != 0 {
-			return errors.Newf("index on table %q columns (%s) already exists as %q; rename it manually, e.g. ALTER TABLE %s RENAME INDEX %s TO %s",
-				plan.Table, strings.Join(plan.Columns, ","), renamed, plan.Table, renamed, plan.Name)
+			return errors.Newf("index on table %q columns (%s) already exists as %q; rename it manually, e.g. %s",
+				plan.Table, strings.Join(plan.Columns, ","), renamed, RenameIndexSQL(handler.Dialector.Name(), plan.Table, renamed, plan.Name))
 		}
 		if err = handler.Exec(plan.CreateSQL(handler.Dialector)).Error; err != nil {
 			if created, inspectErr := indexMatchesPlan(handler, tableName, plan); inspectErr == nil && created {

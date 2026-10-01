@@ -151,7 +151,26 @@ func TestEnsureCustomIndexesRejectsRenameCandidate(t *testing.T) {
 
 	err := ensureCustomIndexes(db, m)
 	require.ErrorContains(t, err, `already exists as "legacy_records_kind"`)
-	require.ErrorContains(t, err, "RENAME INDEX legacy_records_kind TO idx_renamed_records_kind_created_at")
+	// SQLite renames no index: the hint drops it for the start to create it.
+	require.ErrorContains(t, err, `e.g. DROP INDEX "legacy_records_kind"`)
+}
+
+// TestRenameSQLFollowsTheDialect pins the examples of QuoteIdentifier,
+// RenameTableSQL and RenameIndexSQL: MySQL's backticks and RENAME forms,
+// PostgreSQL's double quotes and ALTER forms, and SQLite, which renames a
+// table but no index, so the index is dropped for the start to create it.
+func TestRenameSQLFollowsTheDialect(t *testing.T) {
+	require.Equal(t, "`records`", QuoteIdentifier("mysql", "records"))
+	require.Equal(t, `"records"`, QuoteIdentifier("postgres", "records"))
+	require.Equal(t, `"records"`, QuoteIdentifier("sqlite", "records"))
+
+	require.Equal(t, "RENAME TABLE `old_records` TO `records`;", RenameTableSQL("mysql", "old_records", "records"))
+	require.Equal(t, `ALTER TABLE "old_records" RENAME TO "records";`, RenameTableSQL("postgres", "old_records", "records"))
+	require.Equal(t, `ALTER TABLE "old_records" RENAME TO "records";`, RenameTableSQL("sqlite", "old_records", "records"))
+
+	require.Equal(t, "ALTER TABLE `records` RENAME INDEX `legacy_records_kind` TO `idx_records_kind`;", RenameIndexSQL("mysql", "records", "legacy_records_kind", "idx_records_kind"))
+	require.Equal(t, `ALTER INDEX "legacy_records_kind" RENAME TO "idx_records_kind";`, RenameIndexSQL("postgres", "records", "legacy_records_kind", "idx_records_kind"))
+	require.Equal(t, `DROP INDEX "legacy_records_kind";`, RenameIndexSQL("sqlite", "records", "legacy_records_kind", "idx_records_kind"))
 }
 
 func TestEnsureCustomIndexesRejectsOccupiedName(t *testing.T) {
