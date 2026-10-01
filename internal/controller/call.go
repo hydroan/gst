@@ -470,10 +470,8 @@ func PatchItem[M types.Model](i int, params, itemParams map[string]string, id st
 	invalid := func(format string, args ...any) error {
 		return grpcserver.StatusError(badRequest(fmt.Sprintf(format, args...)))
 	}
-	for _, name := range slices.Sorted(maps.Keys(itemParams)) {
-		if value := itemParams[name]; value != "" && value != params[name] {
-			return m, invalid("item %d names the %s parameter %q, the request names %q", i, name, value, params[name])
-		}
+	if name, value, differs := disagreeingParam(params, itemParams); differs {
+		return m, invalid("item %d names the %s parameter %q, the request names %q", i, name, value, params[name])
 	}
 	if id == "" {
 		return m, invalid("item %d names no id", i)
@@ -486,4 +484,18 @@ func PatchItem[M types.Model](i int, params, itemParams map[string]string, id st
 	m.ClearID()
 	m.SetID(id)
 	return m, nil
+}
+
+// disagreeingParam returns the first route parameter, by name, that given
+// names otherwise than params, the parameters of the request, with the
+// value given names it: a parameter given leaves empty or names as params
+// does agrees. A message or item of a request carrying the parameters of
+// its own may repeat the request's, never contradict them.
+func disagreeingParam(params, given map[string]string) (name, value string, differs bool) {
+	for _, name := range slices.Sorted(maps.Keys(given)) {
+		if value := given[name]; value != "" && value != params[name] {
+			return name, value, true
+		}
+	}
+	return "", "", false
 }

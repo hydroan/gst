@@ -279,3 +279,18 @@ func TestFirstMessageRefusesAStreamEndedBeforeIt(t *testing.T) {
 	_, err = controller.FirstMessage(func() (string, error) { return "", status.Error(codes.Canceled, "context canceled") })
 	require.Equal(t, codes.Canceled, status.Code(err))
 }
+
+// TestSameParamsHoldsLaterMessagesToTheFirst pins SameParams, what the
+// generated handler of a client or bidirectional stream reads every message
+// after the first through: a parameter the message leaves empty or repeats
+// is the first's, and one it names otherwise is refused with
+// InvalidArgument naming the message, the parameter and both values.
+func TestSameParamsHoldsLaterMessagesToTheFirst(t *testing.T) {
+	params := map[string]string{"feed": "a"}
+	require.NoError(t, controller.SameParams(2, params, map[string]string{"feed": ""}))
+	require.NoError(t, controller.SameParams(2, params, map[string]string{"feed": "a"}))
+	require.NoError(t, controller.SameParams(2, nil, nil))
+
+	err := controller.SameParams(3, params, map[string]string{"feed": "b"})
+	requireStatus(t, err, codes.InvalidArgument, `message 3 names the feed parameter "b", the first names "a"`)
+}

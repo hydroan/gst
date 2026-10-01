@@ -42,7 +42,9 @@ func (feedService) UploadFeedByFeed(srv FeedService_UploadFeedByFeedServer) erro
 	if err != nil {
 		return err
 	}
-	result, err := uploadFeedByFeed(srv.Context(), map[string]string{"feed": first.GetFeed()}, func() (*model.FeedEvent, error) {
+	params := map[string]string{"feed": first.GetFeed()}
+	n := 1
+	result, err := uploadFeedByFeed(srv.Context(), params, func() (*model.FeedEvent, error) {
 		if msg := first; msg != nil {
 			first = nil
 			return FeedEventFromProto(msg.GetPayload())
@@ -50,6 +52,10 @@ func (feedService) UploadFeedByFeed(srv FeedService_UploadFeedByFeedServer) erro
 		msg, recvErr := srv.Recv()
 		if recvErr != nil {
 			return nil, recvErr
+		}
+		n++
+		if err := grpc.SameParams(n, params, map[string]string{"feed": msg.GetFeed()}); err != nil {
+			return nil, err
 		}
 		return FeedEventFromProto(msg.GetPayload())
 	})

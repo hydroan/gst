@@ -7,6 +7,7 @@ import (
 
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/consts"
+	"github.com/hydroan/gst/internal/grpcserver"
 	"github.com/hydroan/gst/internal/types"
 	gstotel "github.com/hydroan/gst/otel"
 	"go.uber.org/zap"
@@ -155,6 +156,22 @@ func FirstMessage[T any](recv func() (T, error)) (T, error) {
 		return first, status.Error(codes.InvalidArgument, firstMessageMsg)
 	}
 	return first, err
+}
+
+// SameParams holds the route parameters msgParams of the message at index
+// i of a request stream, the first message being 1, to params, the
+// parameters the first message carried and the call runs under: what the
+// generated handler of a client or bidirectional stream on a route with
+// parameters reads every message after the first through. A parameter the
+// message leaves empty or names as the first did agrees; one it names
+// otherwise is refused with InvalidArgument naming the message, the way
+// PatchItem refuses an item of a batch contradicting its request. The
+// public grpc.SameParams forwards to it.
+func SameParams(i int, params, msgParams map[string]string) error {
+	if name, value, differs := disagreeingParam(params, msgParams); differs {
+		return grpcserver.StatusError(badRequest(fmt.Sprintf("message %d names the %s parameter %q, the first names %q", i, name, value, params[name])))
+	}
+	return nil
 }
 
 // requests reads the requests of a request stream through the function the

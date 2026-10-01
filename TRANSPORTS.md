@@ -190,7 +190,7 @@ HTTP 状态到 gRPC status 的映射（`grpcserver.StatusError`）：
 
 - `Stream(func(){ Service("watch"); Payload[*Req](); StreamingResult[*Rsp]() })`：Payload / Result 写一问一答的一侧，Streaming 版写流的一侧，至少一侧是流，三种组合都支持。
 - .proto：`rpc WatchFeed (WatchFeedRequest) returns (stream WatchFeedResponse)`；请求消息开头仍是路由参数。
-- `x.gen.go`：服务端流把 `srv.Send` 交给流程；客户端流与双向流先用 `grpc.FirstMessage(srv.Recv)` 读首条消息取路由参数，再把它当第一条交回。
+- `x.gen.go`：服务端流把 `srv.Send` 交给流程；客户端流与双向流先用 `grpc.FirstMessage(srv.Recv)` 读首条消息取路由参数，再把它当第一条交回；第二条起的消息里的路由参数留空或与首条相同放行，不同的那条让 Recv 返回 InvalidArgument（`message 3 names the feed parameter "b", the first names "a"`，`grpc.SameParams`），和批量项对外层参数的规则一样。
 - authz：act 是 `STREAM`，obj 是声明的 `/api/…` 路径的模板（`/api/records/{id}/tail`）；`GET /api/authz/routes` 只列 HTTP 路由，流式动作的策略按这个写法手写。
 
 运行时与 service 签名：

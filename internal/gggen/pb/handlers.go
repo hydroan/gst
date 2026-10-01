@@ -200,6 +200,20 @@ func (w *fileWriter) actionCalls(service string, rpcs []*rpc) {
 // for CreateRecord.
 func callName(r *rpc) string { return lowerFirst(r.name) }
 
+// firstMessage returns the statements a client or bidirectional stream
+// handler on a route with parameters opens with: the first message read
+// ahead of the call (see grpc.FirstMessage), the parameters it carries
+// named params for the call and for the later messages to be held to, and
+// the count of the messages, n, which the later ones advance.
+func firstMessage(w *fileWriter, srv ast.Expr, params ast.Expr) []ast.Stmt {
+	return []ast.Stmt{
+		define([]string{"first", "err"}, call(w.grpc("FirstMessage"), sel(srv, "Recv"))),
+		ifStmt(nil, notNil(ident("err")), returns(ident("err"))),
+		define([]string{"params"}, params),
+		define([]string{"n"}, &ast.BasicLit{Kind: token.INT, Value: "1"}),
+	}
+}
+
 // streamKind names the kind of stream of a Stream action, the prefix of the
 // call and the stream type of the framework serving it: Server for a
 // streaming result, Client for a streaming payload, Bidi for both.
@@ -552,6 +566,7 @@ func (w *fileWriter) query(phase consts.Phase, req func(string) ast.Expr, has fu
 //
 // for its Service("upload") Stream on feeds/:feed/upload, a streaming
 // Payload with a Result, whose first message carries the route parameter,
+// which every later message may leave empty or repeat,
 //
 //	// UploadFeedByFeed serves the Stream action of Feed declared on
 //	// feeds/:feed/upload, served over gRPC alone.
@@ -560,7 +575,9 @@ func (w *fileWriter) query(phase consts.Phase, req func(string) ast.Expr, has fu
 //		if err != nil {
 //			return err
 //		}
-//		result, err := uploadFeedByFeed(srv.Context(), map[string]string{"feed": first.GetFeed()}, func() (*model.FeedEvent, error) {
+//		params := map[string]string{"feed": first.GetFeed()}
+//		n := 1
+//		result, err := uploadFeedByFeed(srv.Context(), params, func() (*model.FeedEvent, error) {
 //			if msg := first; msg != nil {
 //				first = nil
 //				return FeedEventFromProto(msg.GetPayload())
@@ -568,6 +585,10 @@ func (w *fileWriter) query(phase consts.Phase, req func(string) ast.Expr, has fu
 //			msg, recvErr := srv.Recv()
 //			if recvErr != nil {
 //				return nil, recvErr
+//			}
+//			n++
+//			if err := grpc.SameParams(n, params, map[string]string{"feed": msg.GetFeed()}); err != nil {
+//				return nil, err
 //			}
 //			return FeedEventFromProto(msg.GetPayload())
 //		})
@@ -636,7 +657,9 @@ func (w *fileWriter) streamHandler(r *rpc) {
 	send := funcLit([]*ast.Field{{Names: []*ast.Ident{ident("rsp")}, Type: rspType}}, []*ast.Field{{Type: ident("error")}},
 		returns(call(sel(srv, "Send"), responseOf(ident("rsp")))))
 	// recv is the function receiving the next request off the stream, the
-	// first message first when it was read for the route parameters.
+	// first message first when it was read for the route parameters, every
+	// later message then held to the parameters it carried (see
+	// grpc.SameParams), counted by n.
 	recv := func(withFirst bool) ast.Expr {
 		var body []ast.Stmt
 		if withFirst {
@@ -648,8 +671,14 @@ func (w *fileWriter) streamHandler(r *rpc) {
 		body = append(body,
 			define([]string{"msg", "recvErr"}, call(sel(srv, "Recv"))),
 			ifStmt(nil, notNil(ident("recvErr")), returns(ident("nil"), ident("recvErr"))),
-			returnPayload(ident("msg")),
 		)
+		if withFirst {
+			body = append(body,
+				&ast.IncDecStmt{X: ident("n"), Tok: token.INC},
+				ifStmt(define([]string{"err"}, call(w.grpc("SameParams"), ident("n"), ident("params"), paramsOf(ident("msg")))), notNil(ident("err")), returns(ident("nil"), ident("err"))),
+			)
+		}
+		body = append(body, returnPayload(ident("msg")))
 		return funcLit(nil, []*ast.Field{{Type: reqType}, {Type: ident("error")}}, body...)
 	}
 	run := func(args ...ast.Expr) ast.Expr {
@@ -671,26 +700,28 @@ func (w *fileWriter) streamHandler(r *rpc) {
 		}
 	case "Client":
 		withFirst := len(r.params) > 0
+		params := paramsOf(ident("first"))
 		if withFirst {
-			body = append(body, define([]string{"first", "err"}, call(w.grpc("FirstMessage"), sel(srv, "Recv"))), ifStmt(nil, notNil(ident("err")), returns(ident("err"))))
+			body, params = append(body, firstMessage(w, srv, params)...), ident("params")
 		}
 		// With no Result declared the call answers nothing to encode, and
 		// the response message is sent empty.
 		if r.result == nil {
-			body = append(body, ifStmt(define([]string{"_", "err"}, run(paramsOf(ident("first")), recv(withFirst))), notNil(ident("err")), returns(ident("err"))))
+			body = append(body, ifStmt(define([]string{"_", "err"}, run(params, recv(withFirst))), notNil(ident("err")), returns(ident("err"))))
 		} else {
 			body = append(body,
-				define([]string{"result", "err"}, run(paramsOf(ident("first")), recv(withFirst))),
+				define([]string{"result", "err"}, run(params, recv(withFirst))),
 				ifStmt(nil, notNil(ident("err")), returns(ident("err"))),
 			)
 		}
 		body = append(body, returns(call(sel(srv, "SendAndClose"), responseOf(ident("result")))))
 	default:
 		withFirst := len(r.params) > 0
+		params := paramsOf(ident("first"))
 		if withFirst {
-			body = append(body, define([]string{"first", "err"}, call(w.grpc("FirstMessage"), sel(srv, "Recv"))), ifStmt(nil, notNil(ident("err")), returns(ident("err"))))
+			body, params = append(body, firstMessage(w, srv, params)...), ident("params")
 		}
-		body = append(body, returns(run(paramsOf(ident("first")), recv(withFirst), send)))
+		body = append(body, returns(run(params, recv(withFirst), send)))
 	}
 	w.out.add(r.name+" serves the "+r.action.Phase.Name()+" action of "+r.model.ModelName+" declared on "+r.route+", served over gRPC alone.", &ast.FuncDecl{
 		Recv: &ast.FieldList{List: []*ast.Field{{Type: ident(serviceTypeName(r.service))}}},

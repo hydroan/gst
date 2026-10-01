@@ -65,7 +65,7 @@ var fixedImportNames = map[string]string{
 // under an alias (see goImports.specs).
 var generatedLocalNames = []string{
 	"ctx", "req", "srv", "in", "m", "p", "x", "v", "i", "k", "e", "s", "key", "day", "at", "data", "err", "recvErr",
-	"params", "payload", "result", "first", "msg", "rsp", "items", "item", "models", "masks", "stored", "total",
+	"params", "payload", "result", "first", "msg", "n", "rsp", "items", "item", "models", "masks", "stored", "total",
 }
 
 // goImports collects the imports of one generated Go file while it is

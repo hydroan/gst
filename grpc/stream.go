@@ -10,8 +10,9 @@ import (
 // This file holds what a Stream action's service reads and writes, the
 // streams, and the calls the generated handlers of streaming rpcs run the
 // action through: ServerStreamCall, ClientStreamCall and BidiStreamCall,
-// one per kind of stream, the counterparts of ServiceCall, and FirstMessage,
-// which a handler reads the route parameters of a request stream through.
+// one per kind of stream, the counterparts of ServiceCall, FirstMessage,
+// which a handler reads the route parameters of a request stream through,
+// and SameParams, which it holds every later message to them with.
 
 // ServerStream is the response stream of a Stream action declaring a
 // StreamingResult: the service's Stream method sends each response through
@@ -36,6 +37,17 @@ type BidiStream[REQ types.Request, RSP types.Response] = types.BidiStream[REQ, R
 // InvalidArgument; any other error of recv is returned as it is.
 func FirstMessage[T any](recv func() (T, error)) (T, error) {
 	return controller.FirstMessage(recv)
+}
+
+// SameParams holds the route parameters msgParams of the message at index
+// i of a request stream, the first message being 1, to params, the ones
+// the first message carried: what the generated handler of a client or
+// bidirectional stream on a route with parameters reads every message
+// after the first through. A parameter the message leaves empty or names
+// as the first did agrees; one it names otherwise is refused with
+// InvalidArgument naming the message, the parameter and both values.
+func SameParams(i int, params, msgParams map[string]string) error {
+	return controller.SameParams(i, params, msgParams)
 }
 
 // ServerStreamCall returns the call of the Stream action on route whose
