@@ -92,8 +92,12 @@ func TypeCheck(dir, modulePath string, files []File) error {
 
 	// A go.work above the project would pull every workspace module into
 	// the load, while the files build against the project's own go.mod.
+	// The imported packages alone are read from their export data; their
+	// own dependencies are filled in as the export data refers to them,
+	// where loading every package of the closure would read the types of
+	// hundreds of packages a check never looks at.
 	loaded, err := packages.Load(&packages.Config{
-		Mode: packages.NeedName | packages.NeedImports | packages.NeedDeps | packages.NeedTypes,
+		Mode: packages.NeedName | packages.NeedImports | packages.NeedTypes,
 		Dir:  dir,
 		Env:  append(os.Environ(), "GOWORK=off"),
 	}, external...)
