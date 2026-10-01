@@ -236,7 +236,7 @@ func (Entry) Design() {
 字段用 `pb` tag 给消息编号（`pb:"11"`，框架的 `model.Base` 字段占 1 到 10），缺的 `gg gen` 会补上。
 只在 gRPC 上有的是流：自定义动作里用 `Stream(func(){...})` 声明，流的那一侧写 `StreamingPayload`/`StreamingResult`，
 另一侧写 `Payload`/`Result`，两侧都流就是双向流，service 方法收发 `grpc.ServerStream`、`ClientStream`
-或 `BidiStream`。测试里 `testutil.GRPCTarget()` 给出测试服务器的 gRPC 地址。完整示例见
+或 `BidiStream`。测试里 `testutil.GRPCTarget()` 给出测试服务器的 gRPC 地址；测试二进制没导入 `pb` 包、一个 gRPC 服务都没注册时，它直接 panic 并点名要加的导入，`gg gen` 写测试骨架时也会为此警告。完整示例见
 [examples/demo/model/board](./examples/demo/model/board)。
 
 监听在 `[grpc]` 节配置，环境变量是 `GRPC_PORT` 这样的写法：`listen`、`port`（默认 8081，挨着 HTTP 的 8080）、

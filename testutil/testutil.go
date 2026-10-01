@@ -80,7 +80,8 @@ func URL(path string) string {
 // target can be declared as a package-level variable. The listener comes up
 // only when the test binary registers the project's gRPC services: import
 // the project's pb package the way main.go does, `_ "myapp/pb"`, next to the
-// other project imports of the file declaring TestMain.
+// other project imports of the file declaring TestMain; a test binary that
+// registered none is told so, GRPCTarget panicking with that import to add.
 func GRPCTarget() string {
 	return testutil.GRPCTarget()
 }

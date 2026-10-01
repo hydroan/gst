@@ -1294,3 +1294,47 @@ func (Token) Design() {
 
 	require.EqualError(t, err, "model/token.go: the List action of Token registers GET /api/tokens, as the List action of Token in model/api/token.go does; a path is served by one action")
 }
+
+// TestGenRunWarnsWhenTheTestMainFileImportsNoPB pins the warning gg gen
+// prints while scaffolding a service test in a project serving gRPC whose
+// package declares TestMain in a file that does not import the pb package:
+// the test server of that package would serve no gRPC.
+func TestGenRunWarnsWhenTheTestMainFileImportsNoPB(t *testing.T) {
+	projectDir, ok := newGenProject(t)
+	if !ok {
+		return
+	}
+	writeProjectFile(t, filepath.Join(projectDir, "model/feed.go"), `package model
+
+import (
+	"github.com/hydroan/gst/dsl"
+	"github.com/hydroan/gst/model"
+)
+
+type Feed struct {
+	Name string `+"`"+`json:"name" pb:"11"`+"`"+`
+
+	model.Base
+}
+
+func (Feed) TableName() string { return "feeds" }
+
+func (Feed) Design() {
+	dsl.GRPC()
+	dsl.Migrate()
+	dsl.Endpoint("feeds")
+	dsl.Create(func() {
+		dsl.Service()
+	})
+}
+`)
+	writeProjectFile(t, filepath.Join(projectDir, "service/feed/main_test.go"), "package feed_test\n\nimport \"testing\"\n\nfunc TestMain(m *testing.M) {}\n")
+
+	var genErr error
+	stdout := captureStdout(t, func() {
+		genErr = genRunWithOptions(genRunOptions{Quiet: true})
+	})
+
+	require.NoError(t, genErr)
+	require.Contains(t, stdout, `service/feed/main_test.go declares TestMain without importing tmpapp/pb: the test server of the package serves no gRPC, so a test dialing testutil.GRPCTarget finds no listener; import it the way main.go does, _ "tmpapp/pb"`)
+}

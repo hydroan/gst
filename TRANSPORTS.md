@@ -250,7 +250,7 @@ call --> client : OK，或映射后的 status；取消答 Canceled，停机答 U
 - 指标：HTTP 是 `gst_backend_*`，gRPC 保持库默认 `grpc_server_*`，方便现成看板。
 - 追踪：HTTP 的 tracing 中间件与 gRPC 的 otelgrpc 各起服务端 span，trace id 都盖进 ctx；没带 W3C 头时两边都认 X-Trace-ID，gRPC 还回写 `x-trace-id`。
 - panic：两边共用 logger.Recovery 写 recovery.log，并记在 span 上。
-- 测试：`testutil.Run` 同时起两个空闲端口的监听，`testutil.GRPCTarget()` 给 `grpc.NewClient`。
+- 测试：`testutil.Run` 同时起两个空闲端口的监听，`testutil.GRPCTarget()` 给 `grpc.NewClient`；测试二进制没注册任何 gRPC 服务（声明 TestMain 的文件没导入 `pb` 包）时 `GRPCTarget()` 直接 panic 点名要加的导入，`gg gen` 为带 gRPC 的项目写服务测试骨架时发现这种文件也会警告。
 
 ## 8. 包与文件地图
 

@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/errors"
+	"github.com/hydroan/gst/internal/grpcserver"
 )
 
 // BaseURL returns the test server base address clients are constructed with.
@@ -24,10 +25,20 @@ func URL(path string) string {
 // at, the target a grpc.NewClient takes. Like the HTTP port, the port is
 // picked per test binary, so the target can be declared as a package-level
 // variable; the listener itself comes up only when the test binary
-// registers gRPC services, see Run.
+// registers gRPC services, see Run, and a test binary that registered none
+// is told so instead of dialing a port nothing listens on: GRPCTarget
+// panics naming the import that registers them, the project's pb package
+// in the test file declaring TestMain, the way main.go imports it.
 func GRPCTarget() string {
+	if !grpcServed() {
+		panic(`testutil: the test binary registered no gRPC service, so the test server serves no gRPC; import the project's pb package in the test file declaring TestMain the way main.go does, _ "<module>/pb"`)
+	}
 	return net.JoinHostPort("127.0.0.1", strconv.Itoa(grpcPort))
 }
+
+// grpcServed reports whether the test binary registered gRPC services; a
+// variable for the test of GRPCTarget to run with none.
+var grpcServed = grpcserver.HasServices
 
 // mustWaitForGRPC waits until the test server's gRPC listener accepts
 // connections.

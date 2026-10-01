@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 
 	"github.com/cockroachdb/errors"
@@ -446,19 +447,22 @@ func genRunWithOptions(opts genRunOptions) error {
 // service test coverage check requires the test file from the next run on,
 // so the run that creates the service file creates its test as well. A test
 // file the project already has, in its external or internal form, is kept
-// as it is, and so is a main_test.go that exists already.
+// as it is, and so is a main_test.go that exists already; one declaring
+// TestMain without importing the pb package of a project serving gRPC,
+// written before the project did, is warned about: the test server of the
+// package serves no gRPC without that import.
 func scaffoldServiceTests(modelInfo *modelinfo.Model, target modelinfo.ServiceTargetInfo, action *dsl.Action, route string, extraDirs []string, quiet bool) error {
 	stem := strings.TrimSuffix(target.FilePath, ".go")
 	if gghelper.FileExists(stem+ggconst.PatternTestFile) || gghelper.FileExists(stem+"_internal"+ggconst.PatternTestFile) {
 		return nil
 	}
 
-	declared, err := gggen.PackageDeclaresTestMain(target.Dir)
+	mainTestFile, err := gggen.TestMainFile(target.Dir)
 	if err != nil {
 		return err
 	}
 	mainTest := filepath.Join(target.Dir, ggconst.FileMainTest)
-	if !declared && !gghelper.FileExists(mainTest) {
+	if mainTestFile == "" && !gghelper.FileExists(mainTest) {
 		var mainCode string
 		if mainCode, err = gggen.GenerateServiceTestMain(module, target.PackageName, extraDirs...); err != nil {
 			return err
@@ -467,12 +471,37 @@ func scaffoldServiceTests(modelInfo *modelinfo.Model, target modelinfo.ServiceTa
 			return err
 		}
 	}
+	if mainTestFile != "" && slices.Contains(extraDirs, ggconst.DirPB) {
+		pbImport := module + "/" + ggconst.DirPB
+		imported, importErr := importsPackage(mainTestFile, pbImport)
+		if importErr != nil {
+			return importErr
+		}
+		if !imported {
+			clioutput.Warn("", "%s declares TestMain without importing %s: the test server of the package serves no gRPC, so a test dialing testutil.GRPCTarget finds no listener; import it the way main.go does, _ %q", filepath.ToSlash(mainTestFile), pbImport, pbImport)
+		}
+	}
 
 	code, err := gggen.GenerateServiceTest(modelInfo, target, action, route)
 	if err != nil {
 		return err
 	}
 	return writeGeneratedFile(stem+ggconst.PatternTestFile, code, !quiet)
+}
+
+// importsPackage reports whether the Go file at path imports importPath,
+// under any name or none.
+func importsPackage(path, importPath string) (bool, error) {
+	file, err := parser.ParseFile(token.NewFileSet(), path, nil, parser.ImportsOnly)
+	if err != nil {
+		return false, errors.Wrapf(err, "reading %s", path)
+	}
+	for _, spec := range file.Imports {
+		if imported, err := strconv.Unquote(spec.Path.Value); err == nil && imported == importPath {
+			return true, nil
+		}
+	}
+	return false, nil
 }
 
 // scannedModels is the model set code generation works from.

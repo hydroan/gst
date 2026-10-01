@@ -473,54 +473,54 @@ func TestMain(m *testing.M) {
 	})
 }
 
-// TestPackageDeclaresTestMain pins where PackageDeclaresTestMain looks for a
-// TestMain: in any test file of the directory, main_test.go or not, and only
-// at package-level functions.
-func TestPackageDeclaresTestMain(t *testing.T) {
+// TestTestMainFileFindsTheDeclaringTestFile pins where TestMainFile looks
+// for a TestMain, in any test file of the directory, main_test.go or not,
+// and only at package-level functions, and that it names the file it found.
+func TestTestMainFileFindsTheDeclaringTestFile(t *testing.T) {
 	testMain := "package record_test\n\nimport \"testing\"\n\nfunc TestMain(m *testing.M) {}\n"
 
 	t.Run("no_test_file", func(t *testing.T) {
 		dir := t.TempDir()
 		writeFile(t, filepath.Join(dir, "create.go"), "package record\n")
 
-		declared, err := gggen.PackageDeclaresTestMain(dir)
+		path, err := gggen.TestMainFile(dir)
 		require.NoError(t, err)
-		require.False(t, declared)
+		require.Empty(t, path)
 	})
 	t.Run("main_test_file", func(t *testing.T) {
 		dir := t.TempDir()
 		writeFile(t, filepath.Join(dir, "main_test.go"), testMain)
 
-		declared, err := gggen.PackageDeclaresTestMain(dir)
+		path, err := gggen.TestMainFile(dir)
 		require.NoError(t, err)
-		require.True(t, declared)
+		require.Equal(t, filepath.Join(dir, "main_test.go"), path)
 	})
 	t.Run("test_main_in_a_paired_test_file", func(t *testing.T) {
 		dir := t.TempDir()
 		writeFile(t, filepath.Join(dir, "create_test.go"), testMain)
 
-		declared, err := gggen.PackageDeclaresTestMain(dir)
+		path, err := gggen.TestMainFile(dir)
 		require.NoError(t, err)
-		require.True(t, declared)
+		require.Equal(t, filepath.Join(dir, "create_test.go"), path)
 	})
 	t.Run("a_method_named_test_main_does_not_count", func(t *testing.T) {
 		dir := t.TempDir()
 		writeFile(t, filepath.Join(dir, "create_test.go"), "package record_test\n\nimport \"testing\"\n\ntype suite struct{}\n\nfunc (suite) TestMain(m *testing.M) {}\n")
 
-		declared, err := gggen.PackageDeclaresTestMain(dir)
+		path, err := gggen.TestMainFile(dir)
 		require.NoError(t, err)
-		require.False(t, declared)
+		require.Empty(t, path)
 	})
 	t.Run("missing_directory", func(t *testing.T) {
-		declared, err := gggen.PackageDeclaresTestMain(filepath.Join(t.TempDir(), "missing"))
+		path, err := gggen.TestMainFile(filepath.Join(t.TempDir(), "missing"))
 		require.NoError(t, err)
-		require.False(t, declared)
+		require.Empty(t, path)
 	})
 	t.Run("unparsable_test_file_is_an_error", func(t *testing.T) {
 		dir := t.TempDir()
 		writeFile(t, filepath.Join(dir, "create_test.go"), "package record_test\n\nfunc {\n")
 
-		_, err := gggen.PackageDeclaresTestMain(dir)
+		_, err := gggen.TestMainFile(dir)
 		require.Error(t, err)
 	})
 }

@@ -584,18 +584,19 @@ func GenerateServiceTestMain(modulePath, servicePkgName string, extraDirs ...str
 	return FormatNodeExtraWithFileSet(file, fset)
 }
 
-// PackageDeclaresTestMain reports whether a test file in dir declares
-// TestMain at package level, be it main_test.go or any other test file,
-// since the test binary of a package takes its TestMain from any of them. A
-// missing directory declares none. A test file that does not parse is an
-// error: gg cannot tell what it declares.
-func PackageDeclaresTestMain(dir string) (bool, error) {
+// TestMainFile returns the path of the test file in dir declaring TestMain
+// at package level, be it main_test.go or any other test file, since the
+// test binary of a package takes its TestMain from any of them: for
+// service/record/main_test.go declaring one, that path; "" when no test
+// file of dir declares one, a missing directory included. A test file that
+// does not parse is an error: gg cannot tell what it declares.
+func TestMainFile(dir string) (string, error) {
 	entries, err := os.ReadDir(dir)
 	if errors.Is(err, os.ErrNotExist) {
-		return false, nil
+		return "", nil
 	}
 	if err != nil {
-		return false, err
+		return "", err
 	}
 
 	fset := token.NewFileSet()
@@ -606,15 +607,15 @@ func PackageDeclaresTestMain(dir string) (bool, error) {
 		path := filepath.Join(dir, entry.Name())
 		file, err := parser.ParseFile(fset, path, nil, 0)
 		if err != nil {
-			return false, errors.Wrapf(err, "reading the test file %s", path)
+			return "", errors.Wrapf(err, "reading the test file %s", path)
 		}
 		for _, decl := range file.Decls {
 			if fn, ok := decl.(*ast.FuncDecl); ok && fn.Recv == nil && goast.IsTestMainFunc(fn) {
-				return true, nil
+				return path, nil
 			}
 		}
 	}
-	return false, nil
+	return "", nil
 }
 
 // The AST builders of the scaffolds.
