@@ -7,13 +7,22 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/errors"
+	"github.com/hydroan/gst/config"
 	"gorm.io/gorm"
 	gormschema "gorm.io/gorm/schema"
 )
 
-// indexNameMaxLen is the identifier length limit shared by the supported
-// databases (MySQL enforces 64); generated index names never exceed it.
-const indexNameMaxLen = 64
+// indexNameLimit returns the longest index name the database of db stores
+// as it is: 63 characters on PostgreSQL, which cuts a longer identifier to
+// 63 on its own and would then never find the index under its full name
+// again, 64 on MySQL, which refuses a longer one, and on SQLite, which
+// bounds none, held to MySQL's for the names to agree across the two.
+func indexNameLimit(db *gorm.DB) int {
+	if db != nil && db.Dialector != nil && strings.EqualFold(db.Dialector.Name(), string(config.DBPostgres)) {
+		return 63
+	}
+	return 64
+}
 
 // Index declares one secondary index on the model's table.
 //
@@ -108,14 +117,15 @@ func ParseIndexPlans(db *gorm.DB, model any) ([]IndexPlan, error) {
 	if len(sch.Table) == 0 {
 		return nil, errors.Newf("model %s must declare an explicit table name by overriding TableName", sch.Name)
 	}
-	return buildIndexPlans(sch, sch.Table, decls)
+	return buildIndexPlans(sch, sch.Table, decls, indexNameLimit(db))
 }
 
 // buildIndexPlans validates declarations and resolves them into plans:
 // every field must exist, no column repeats inside one index, no two
 // declarations share the same column sequence, and no declaration may
-// duplicate a struct tag index.
-func buildIndexPlans(sch *gormschema.Schema, tableName string, decls []Index) ([]IndexPlan, error) {
+// duplicate a struct tag index. The names are held to nameLimit characters
+// (see indexNameLimit).
+func buildIndexPlans(sch *gormschema.Schema, tableName string, decls []Index, nameLimit int) ([]IndexPlan, error) {
 	plans := make([]IndexPlan, 0, len(decls))
 	declared := make(map[string]struct{}, len(decls))
 	for _, decl := range decls {
@@ -144,7 +154,7 @@ func buildIndexPlans(sch *gormschema.Schema, tableName string, decls []Index) ([
 		}
 		declared[key] = struct{}{}
 		plans = append(plans, IndexPlan{
-			Name:    indexName(tableName, columns, decl.Unique),
+			Name:    indexName(tableName, columns, decl.Unique, nameLimit),
 			Table:   tableName,
 			Columns: columns,
 			Unique:  decl.Unique,
@@ -246,21 +256,23 @@ func CheckCrossModelIndexPlanConflicts(sets []ModelIndexPlans) error {
 }
 
 // indexName generates the deterministic framework index name: an idx_ (or
-// uniq_ for unique) prefix, the table name, and the column names. Names
-// beyond the identifier limit keep a readable prefix and end with an fnv-32a
-// hash so truncation stays deterministic across runs.
-func indexName(table string, columns []string, unique bool) string {
+// uniq_ for unique) prefix, the table name, and the column names,
+// idx_samples_kind_created_at for the columns kind and created_at of
+// samples. A name beyond limit characters (see indexNameLimit) keeps a
+// readable prefix and ends with an fnv-32a hash of the full name, so
+// truncation stays deterministic across runs.
+func indexName(table string, columns []string, unique bool, limit int) string {
 	prefix := "idx_"
 	if unique {
 		prefix = "uniq_"
 	}
 	name := prefix + table + "_" + strings.Join(columns, "_")
-	if len(name) <= indexNameMaxLen {
+	if len(name) <= limit {
 		return name
 	}
 	h := fnv.New32a()
 	_, _ = h.Write([]byte(name))
-	return fmt.Sprintf("%s_%08x", name[:indexNameMaxLen-9], h.Sum32())
+	return fmt.Sprintf("%s_%08x", name[:limit-9], h.Sum32())
 }
 
 // asIndexer reports the indexer implementation of model, tolerating both

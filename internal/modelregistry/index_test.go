@@ -243,6 +243,69 @@ func TestParseIndexPlansTruncatesLongNames(t *testing.T) {
 	require.Equal(t, plans[0].Name, again[0].Name)
 }
 
+// LimitNameSample and OverLimitNameSample sit on either side of the
+// PostgreSQL index name limit: idx_<table>_kind is 63 characters for the
+// first and 64 for the second.
+type (
+	LimitNameSample struct {
+		Kind string
+		modelregistry.Base
+	}
+	OverLimitNameSample struct {
+		Kind string
+		modelregistry.Base
+	}
+)
+
+func (*LimitNameSample) TableName() string {
+	return "limit_name_samples_of_fifty_four_characters_in_allxxxx"
+}
+
+func (*LimitNameSample) Indexes() []modelregistry.Index {
+	return []modelregistry.Index{{Fields: []string{"Kind"}}}
+}
+
+func (*OverLimitNameSample) TableName() string {
+	return "over_limit_name_samples_of_fifty_five_characters_in_all"
+}
+
+func (*OverLimitNameSample) Indexes() []modelregistry.Index {
+	return []modelregistry.Index{{Fields: []string{"Kind"}}}
+}
+
+// postgresDialector is a dialector named like PostgreSQL's, for the plans
+// to be read under its identifier limit without a server.
+type postgresDialector struct{ tests.DummyDialector }
+
+func (postgresDialector) Name() string { return "postgres" }
+
+// TestParseIndexPlansHoldNamesToTheDialectsLimit pins the limit the names
+// are held to on each database: 63 characters on PostgreSQL, the most it
+// stores of an identifier, where a name of exactly 63 stays as it is and
+// one of 64 is cut to 63 with the hash, since PostgreSQL would otherwise
+// cut it itself and never find the index under its full name again; 64
+// elsewhere, where the 64-character name stays as it is.
+func TestParseIndexPlansHoldNamesToTheDialectsLimit(t *testing.T) {
+	limitName := "idx_" + (&LimitNameSample{}).TableName() + "_kind"
+	overName := "idx_" + (&OverLimitNameSample{}).TableName() + "_kind"
+	require.Len(t, limitName, 63)
+	require.Len(t, overName, 64)
+
+	postgres, err := gorm.Open(postgresDialector{}, &gorm.Config{DryRun: true})
+	require.NoError(t, err)
+	limit, err := modelregistry.ParseIndexPlans(postgres, &LimitNameSample{})
+	require.NoError(t, err)
+	require.Equal(t, limitName, limit[0].Name)
+	over, err := modelregistry.ParseIndexPlans(postgres, &OverLimitNameSample{})
+	require.NoError(t, err)
+	require.Len(t, over[0].Name, 63)
+	require.True(t, strings.HasPrefix(over[0].Name, "idx_over_limit_name_samples"))
+
+	other, err := modelregistry.ParseIndexPlans(newSchemaDB(t), &OverLimitNameSample{})
+	require.NoError(t, err)
+	require.Equal(t, overName, other[0].Name)
+}
+
 func TestCheckCrossModelIndexPlanConflicts(t *testing.T) {
 	plan := func(table, name string, unique bool, columns ...string) modelregistry.IndexPlan {
 		return modelregistry.IndexPlan{Name: name, Table: table, Columns: columns, Unique: unique}
