@@ -279,13 +279,13 @@ type postgresDialector struct{ tests.DummyDialector }
 
 func (postgresDialector) Name() string { return "postgres" }
 
-// TestParseIndexPlansHoldNamesToTheDialectsLimit pins the limit the names
+// TestParseIndexPlansHoldsNamesToTheDialectsLimit pins the limit the names
 // are held to on each database: 63 characters on PostgreSQL, the most it
 // stores of an identifier, where a name of exactly 63 stays as it is and
 // one of 64 is cut to 63 with the hash, since PostgreSQL would otherwise
 // cut it itself and never find the index under its full name again; 64
 // elsewhere, where the 64-character name stays as it is.
-func TestParseIndexPlansHoldNamesToTheDialectsLimit(t *testing.T) {
+func TestParseIndexPlansHoldsNamesToTheDialectsLimit(t *testing.T) {
 	limitName := "idx_" + (&LimitNameSample{}).TableName() + "_kind"
 	overName := "idx_" + (&OverLimitNameSample{}).TableName() + "_kind"
 	require.Len(t, limitName, 63)
