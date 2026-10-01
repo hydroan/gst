@@ -35,22 +35,32 @@ func ResolveRoutes(models []*Model, ignores []ggconfig.RouteRule) RouteIgnoreRes
 // RouteConflicts returns the conflicts among the routes the models
 // register, once ResolveRoutes resolved them, each as an error naming both
 // actions: two actions registering one path under one HTTP method, which
-// the router refuses at startup, and two Stream actions on one route, which
-// the service registry refuses. The later action, in the order the models
-// were found and their actions are declared, is held to the earlier one.
-// For model/api/token.go and model/token.go, found in that order and both
+// the router refuses at startup, two Stream actions on one route, which
+// the service registry refuses, and two paths of one method naming a
+// parameter differently at one position, which the router refuses as well
+// (see parameterClash). The later action, in the order the models were
+// found and their actions are declared, is held to the earlier one. For
+// model/api/token.go and model/token.go, found in that order and both
 // declaring a List action on Endpoint("tokens"), it returns
 //
 //	model/token.go: the List action of Token registers GET /api/tokens, as the List action of Token in model/api/token.go does; a path is served by one action
 //
-// and for two models declaring a Stream action on Route("feeds/chat")
+// for two models declaring a Stream action on Route("feeds/chat")
 //
 //	model/feed.go: the Stream action of Feed registers the stream on /api/feeds/chat, as the Stream action of Feed in model/api/feed.go does; a route serves one Stream action
+//
+// and for a model declaring a Get action on Endpoint("records") and a List
+// action on Route("records/:record/items")
+//
+//	model/record.go: the List action of Record registers GET /api/records/:record/items, naming the parameter :record where the Get action of Record in model/record.go, registering GET /api/records/:id, names :id; the router reads one parameter name at a position
 func RouteConflicts(models []*Model) []error {
 	type registration struct {
-		file, model, action string
+		file, model, action, path string
 	}
 	registered := make(map[string]registration)
+	// The paths registered under each HTTP method, for the parameter names
+	// of every later path to be held to.
+	paths := make(map[string][]registration)
 	var conflicts []error
 	for _, m := range models {
 		if m.Design == nil {
@@ -63,16 +73,47 @@ func RouteConflicts(models []*Model) []error {
 			if method == "" {
 				key, registers, serves = act.Phase.Name()+" "+path, "the stream on "+path, "a route serves one Stream action"
 			}
-			current := registration{file: m.ModelFilePath, model: m.ModelName, action: act.Phase.Name()}
+			current := registration{file: m.ModelFilePath, model: m.ModelName, action: act.Phase.Name(), path: path}
 			if earlier, ok := registered[key]; ok {
 				conflicts = append(conflicts, fmt.Errorf("%s: the %s action of %s registers %s, as the %s action of %s in %s does; %s",
 					current.file, current.action, current.model, registers, earlier.action, earlier.model, earlier.file, serves))
 				return
 			}
 			registered[key] = current
+			if method == "" {
+				return
+			}
+			for _, earlier := range paths[method] {
+				if name, earlierName, clash := parameterClash(path, earlier.path); clash {
+					conflicts = append(conflicts, fmt.Errorf("%s: the %s action of %s registers %s %s, naming the parameter :%s where the %s action of %s in %s, registering %s %s, names :%s; the router reads one parameter name at a position",
+						current.file, current.action, current.model, method, path, name, earlier.action, earlier.model, earlier.file, method, earlier.path, earlierName))
+					break
+				}
+			}
+			paths[method] = append(paths[method], current)
 		})
 	}
 	return conflicts
+}
+
+// parameterClash reports whether the router would refuse path beside
+// earlier, a path registered under the same method before it: the two name
+// a parameter differently at one position after the same segments up to
+// it, and the router's tree holds one parameter name at a position. It
+// returns the two names, record and id for /api/records/:record/items
+// beside /api/records/:id; a literal segment beside a parameter, batch
+// beside :id, is served by the router and clashes with nothing.
+func parameterClash(path, earlier string) (name, earlierName string, clash bool) {
+	segments, earlierSegments := strings.Split(path, "/"), strings.Split(earlier, "/")
+	for i := 0; i < len(segments) && i < len(earlierSegments); i++ {
+		if segments[i] == earlierSegments[i] {
+			continue
+		}
+		name, isParam := strings.CutPrefix(segments[i], ":")
+		earlierName, earlierIsParam := strings.CutPrefix(earlierSegments[i], ":")
+		return name, earlierName, isParam && earlierIsParam
+	}
+	return "", "", false
 }
 
 // ItemParam returns the path parameter the item actions (Get, Update, Patch,

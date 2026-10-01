@@ -163,9 +163,10 @@ func TestRouterTargetForAction(t *testing.T) {
 // TestRouteConflictsNamesBothActionsOfAPath pins the example of
 // RouteConflicts and the forms the router or the service registry would
 // refuse at startup: two models resolving to one path, an Exact action on
-// the path of another, SSE beside List, one Route block written twice, and
-// two Stream actions on one route; the batch path beside the item path
-// conflicts with nothing.
+// the path of another, SSE beside List, one Route block written twice, two
+// Stream actions on one route, and two parameter names at one position of
+// one method's paths; the batch path beside the item path, and a route
+// naming the parameter the item path names, conflict with nothing.
 func TestRouteConflictsNamesBothActionsOfAPath(t *testing.T) {
 	model := func(pkg, name, design string) string {
 		return "package " + pkg + `
@@ -226,9 +227,16 @@ func (` + name + `) Design() {
 			want: []string{"model/feed.go: the Stream action of Feed registers the stream on /api/feeds/chat, as the Stream action of Feed in model/api/feed.go does; a route serves one Stream action"},
 		},
 		{
+			name: "two parameter names at one position",
+			sources: map[string]string{
+				filepath.Join("model", "record.go"): model("model", "Record", "\tdsl.Endpoint(\"records\")\n\tdsl.Get(func() {})\n\tdsl.Route(\"records/:record/items\", func() {\n\t\tdsl.List(func() {})\n\t})\n"),
+			},
+			want: []string{"model/record.go: the List action of Record registers GET /api/records/:record/items, naming the parameter :record where the Get action of Record in model/record.go, registering GET /api/records/:id, names :id; the router reads one parameter name at a position"},
+		},
+		{
 			name: "the batch path beside the item path",
 			sources: map[string]string{
-				filepath.Join("model", "item.go"): model("model", "Item", "\tdsl.Endpoint(\"items\")\n\tdsl.Create(func() {})\n\tdsl.CreateMany(func() {})\n\tdsl.List(func() {})\n\tdsl.Get(func() {})\n"),
+				filepath.Join("model", "item.go"): model("model", "Item", "\tdsl.Endpoint(\"items\")\n\tdsl.Create(func() {})\n\tdsl.CreateMany(func() {})\n\tdsl.List(func() {})\n\tdsl.Get(func() {})\n\tdsl.Route(\"items/:id/notes\", func() {\n\t\tdsl.List(func() {})\n\t})\n"),
 			},
 			want: nil,
 		},
