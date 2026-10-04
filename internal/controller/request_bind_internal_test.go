@@ -506,8 +506,8 @@ func TestClientSafeBindError(t *testing.T) {
 	}
 }
 
-// TestNormalizeValueCompactsNilSliceElements covers the reflective walk over the value
-// shapes JSON binding can produce.
+// TestNormalizeValueCompactsNilSliceElements covers the reflective walk over
+// the value shapes JSON binding can produce.
 func TestNormalizeValueCompactsNilSliceElements(t *testing.T) {
 	type inner struct {
 		Records []*normalizeProbeItem `json:"records"`

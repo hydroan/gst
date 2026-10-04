@@ -416,6 +416,13 @@ func requireSampleName(t *testing.T, id, name string) {
 }
 
 // loadSample returns the stored sample id names.
+func loadSample(t *testing.T, id string) *sampleRecord {
+	t.Helper()
+	stored := new(sampleRecord)
+	require.NoError(t, database.Database[*sampleRecord](context.Background()).Get(stored, id))
+	return stored
+}
+
 // requireDatedDay requires the dated sample id to hold want as its day.
 func requireDatedDay(t *testing.T, id string, want time.Time) {
 	t.Helper()
@@ -423,13 +430,6 @@ func requireDatedDay(t *testing.T, id string, want time.Time) {
 	record := new(datedSample)
 	require.NoError(t, database.Database[*datedSample](context.Background()).Get(record, id))
 	require.True(t, time.Time(record.Day).Equal(want), "stored day %s, want %s", time.Time(record.Day), want)
-}
-
-func loadSample(t *testing.T, id string) *sampleRecord {
-	t.Helper()
-	stored := new(sampleRecord)
-	require.NoError(t, database.Database[*sampleRecord](context.Background()).Get(stored, id))
-	return stored
 }
 
 // shapedDueAt is the time the shaped samples are stored with, to the second
