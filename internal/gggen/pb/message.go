@@ -45,7 +45,7 @@ var timeTypes = map[string]struct{ typeName, proto string }{
 }
 
 // modelRegistryPath is the package declaring the framework's model base, whose
-// promoted keys carry the fixed field numbers of BaseFieldNumbers.
+// promoted keys carry the fixed field numbers of baseFieldNumbers.
 const modelRegistryPath = ggconst.ImportPathGst + "/internal/modelregistry"
 
 // The query markers of the model registry a model embeds to opt in to the
@@ -322,12 +322,12 @@ func (g *generator) messageOfStruct(name, comment string, st *types.Struct, file
 		case f.ViaPointer:
 			g.project.Report(fs, "the field is promoted through an embedded pointer, which a message has no way to leave unset; embed the struct by value")
 		case isBaseField(f):
-			planned[i] = BaseFieldNumbers[f.Key]
+			planned[i] = baseFieldNumbers[f.Key]
 			numbers[planned[i]] = f.Key
 		case f.Var.Pkg() == nil || g.project.Package(f.Var.Pkg().Path()) == nil:
 			g.project.Report(fs, "the field is promoted from a struct outside the project, whose fields cannot carry pb tags; embed a project type")
 		default:
-			tag, tagged := reflect.StructTag(f.Tag).Lookup(Tag)
+			tag, tagged := reflect.StructTag(f.Tag).Lookup(pbTag)
 			if !tagged {
 				untagged = append(untagged, i)
 				continue
@@ -444,7 +444,7 @@ func (g *generator) nextNumbers(file *protoFile, protoName string, numbers map[i
 	}
 	first := int32(1)
 	if base {
-		first = FirstBusinessFieldNumber
+		first = firstBusinessFieldNumber
 	}
 	candidate := first - 1
 	for n := range numbers {
@@ -476,18 +476,18 @@ func (g *generator) nextNumbers(file *protoFile, protoName string, numbers map[i
 // isBaseField reports whether f is a key promoted from the framework's model
 // base, which carries a fixed field number.
 func isBaseField(f jsonshape.Field) bool {
-	_, fixed := BaseFieldNumbers[f.Key]
+	_, fixed := baseFieldNumbers[f.Key]
 	return fixed && f.Var.Pkg() != nil && f.Var.Pkg().Path() == modelRegistryPath
 }
 
 // taggedNumber returns the field number the pb tag of a field names, which
 // must be positive, at most 536870911, outside the range 19000 to 19999
-// protobuf reserves, and from FirstBusinessFieldNumber on in a message
+// protobuf reserves, and from firstBusinessFieldNumber on in a message
 // embedding the base. A number that fails these is reported and yields 0.
 func (g *generator) taggedNumber(tag string, base bool, s jsonshape.Site) int32 {
 	first := int32(1)
 	if base {
-		first = FirstBusinessFieldNumber
+		first = firstBusinessFieldNumber
 	}
 	number, err := strconv.ParseInt(tag, 10, 32)
 	switch {
@@ -495,7 +495,7 @@ func (g *generator) taggedNumber(tag string, base bool, s jsonshape.Site) int32 
 		g.project.Report(s, "the pb tag %q is not a field number; write the number alone, as in pb:%q", tag, strconv.Itoa(int(first)))
 	case number < int64(first):
 		if base {
-			g.project.Report(s, "the pb tag names field number %d, but 1 to %d belong to the framework's base fields; number business fields from %d", number, FirstBusinessFieldNumber-1, first)
+			g.project.Report(s, "the pb tag names field number %d, but 1 to %d belong to the framework's base fields; number business fields from %d", number, firstBusinessFieldNumber-1, first)
 		} else {
 			g.project.Report(s, "the pb tag names field number %d; field numbers start at 1", number)
 		}

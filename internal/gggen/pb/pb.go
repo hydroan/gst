@@ -11,8 +11,8 @@
 // The definitions are derived, never written by hand. Field shapes come from
 // jsonshape, the same reading of the Go types the TypeScript declarations
 // use, so both descriptions agree; field numbers come from the pb struct tag
-// every business field carries (see Tag), while the keys of the framework's
-// model base have fixed numbers (see BaseFieldNumbers). A type whose shape
+// every business field carries (see pbTag), while the keys of the framework's
+// model base have fixed numbers (see baseFieldNumbers). A type whose shape
 // protobuf cannot express is reported as a diagnostic instead of being
 // approximated, and no file is generated then.
 //
@@ -46,15 +46,15 @@ import (
 	"github.com/hydroan/gst/internal/modelinfo"
 )
 
-// Tag is the struct tag naming a field's protobuf field number, as in
+// pbTag is the struct tag naming a field's protobuf field number, as in
 // `pb:"11"`.
-const Tag = "pb"
+const pbTag = "pb"
 
-// BaseFieldNumbers are the field numbers of the keys the framework's model
+// baseFieldNumbers are the field numbers of the keys the framework's model
 // base, model.Base and model.AutoBase, encodes to. They are fixed so that every
-// model agrees on them; the numbers below FirstBusinessFieldNumber stay with
+// model agrees on them; the numbers below firstBusinessFieldNumber stay with
 // the framework.
-var BaseFieldNumbers = map[string]int32{
+var baseFieldNumbers = map[string]int32{
 	"id":         1,
 	"created_by": 2,
 	"updated_by": 3,
@@ -73,10 +73,10 @@ var baseFieldComments = map[string]string{
 	"updated_at": "When the record was last updated.",
 }
 
-// FirstBusinessFieldNumber is the lowest field number a business field of a
+// firstBusinessFieldNumber is the lowest field number a business field of a
 // model embedding the framework's base may carry: 1 to 10 belong to the
 // framework. A type without the base numbers its fields from 1.
-const FirstBusinessFieldNumber int32 = 11
+const firstBusinessFieldNumber int32 = 11
 
 // Config describes one generation run.
 type Config struct {
