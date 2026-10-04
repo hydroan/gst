@@ -775,6 +775,7 @@ func sampleHandlers() map[string]rpcHandler {
 	standardRPCs[*versionedSample](handlers, versionedRoute, "Versioned")
 	standardRPCs[*shapedSample](handlers, shapedRoute, "Shaped")
 	standardRPCs[*validatedSample](handlers, validatedRoute, "Validated")
+	standardRPCs[*datedSample](handlers, datedRoute, "Dated")
 
 	action := controller.ServiceCall[*sampleRecord, *sampleActionReq, *sampleActionRsp](consts.Create, actionRoute)
 	actionList := controller.ServiceCall[*sampleRecord, *sampleActionReq, *sampleActionRsp](consts.List, actionRoute)

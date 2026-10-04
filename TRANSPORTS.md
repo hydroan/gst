@@ -287,7 +287,7 @@ call --> client : OK，或映射后的 status；取消答 Canceled，停机答 U
 | 什么都没点到的补丁 | AIP-134 的掩码省略即按已填字段；RFC 7396 的空补丁 `{}` 合法、表示不改 | HTTP 的 `{}` 与只含模型没有的键的 body 照 encoding/json 的惯例忽略未知键、整行按原样写回并刷新 updated_at；gRPC 的掩码不剩可改字段时拒绝。这是两线唯一有意不同的地方，internal/controller 的对照用例把它写成显式的差异行 |
 | 包名无版本段 | Buf 的 PACKAGE_VERSION_SUFFIX 要 `v1` 这样的后缀 | gst 没有 API 版本，包名就是项目名加目录 |
 | 不生成枚举 | AIP-126 用 enum | 字符串枚举保持 string，取值列在字段注释里，HTTP 与数据库里都是字符串 |
-| 时间类型 | AIP-142 一天里的时刻用 `google.type.TimeOfDay`、日期用 `google.type.Date` | `datatypes.Time` 映射 `google.protobuf.Duration`（从零点起的时长），`datatypes.Date` 映射 `google.protobuf.Timestamp`，不引入 googleapis 的类型 |
+| 时间类型 | AIP-142 一天里的时刻用 `google.type.TimeOfDay`、日期用 `google.type.Date` | `datatypes.Time` 映射 `google.protobuf.Duration`（从零点起的时长），`datatypes.Date` 映射 `google.protobuf.Timestamp`，两线都按 UTC 日历日取日期（controller 绑定后统一归一），不引入 googleapis 的类型 |
 | Delete 的响应 | AIP-135 返回 `google.protobuf.Empty` | 每个 rpc 独享自己的空 `DeleteXxxResponse`，照 Buf 风格指南，日后加字段不换类型 |
 | 不写 HTTP 注解 | AIP 用 `google.api.http`、`google.api.field_behavior` 标路由与必填 | 没有 gateway，路由与 HTTP 方法由注册物描述（`grpc.Method`），必填由模型的 binding tag 决定，注释里写明 |
 | proto3 表达不了的形态 | proto3 的标量没有「未设置」，repeated 与 map 的元素不能为 nil，`google.protobuf.Value` 的数字是 double | 这些照 protobuf 的本性走，写在这里不另加机制：切片、map 的 nil 与空过线后分不开（nil 的 JSONSlice 经 gRPC 写库是空数组还是 null 取决于对端怎么发）；`[]*T`、`map[K]*T` 里指向消息的 nil 元素过线变成空消息、解出来是零值（指向标量的指针元素 gg gen 直接拒绝，无从表达「未设置」）；any 与 JSON 对象字段里超过 2^53 的整数经 Value 丢精度，NaN 与无穷按 Value 的 JSON 映射变成字符串 "NaN"、"Infinity"；集合、map 值与可选字段里的零值时间编成 0001-01-01 再读回零值 |

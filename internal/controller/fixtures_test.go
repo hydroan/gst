@@ -22,6 +22,7 @@ import (
 	"github.com/hydroan/gst/internal/serviceregistry"
 	"github.com/hydroan/gst/internal/types"
 	"github.com/stretchr/testify/require"
+	"gorm.io/datatypes"
 )
 
 // sampleRecord is the table model the handler tests read and write, keyed by
@@ -85,6 +86,17 @@ type shapedSample struct {
 
 func (shapedSample) TableName() string { return "controller_shaped_samples" }
 
+// datedSample carries a calendar date, stored in a date column: a date the
+// client sends with its own offset is read as the UTC day on both transports.
+type datedSample struct {
+	Name string         `json:"name"`
+	Day  datatypes.Date `json:"day"`
+
+	modelregistry.Base
+}
+
+func (datedSample) TableName() string { return "controller_dated_samples" }
+
 // sampleAddress is the struct value of a shaped sample.
 type sampleAddress struct {
 	City string `json:"city" binding:"required"`
@@ -110,6 +122,7 @@ const (
 	counterRoute       = "controller-counters"
 	versionedRoute     = "controller-versioned-samples"
 	validatedRoute     = "controller-validated-samples"
+	datedRoute         = "controller-dated-samples"
 	observedRoute      = "controller-observed-samples"
 	cookieBeforeRoute  = "controller-cookie-before-samples"
 	cookieAfterRoute   = "controller-cookie-after-samples"
@@ -403,6 +416,15 @@ func requireSampleName(t *testing.T, id, name string) {
 }
 
 // loadSample returns the stored sample id names.
+// requireDatedDay requires the dated sample id to hold want as its day.
+func requireDatedDay(t *testing.T, id string, want time.Time) {
+	t.Helper()
+
+	record := new(datedSample)
+	require.NoError(t, database.Database[*datedSample](context.Background()).Get(record, id))
+	require.True(t, time.Time(record.Day).Equal(want), "stored day %s, want %s", time.Time(record.Day), want)
+}
+
 func loadSample(t *testing.T, id string) *sampleRecord {
 	t.Helper()
 	stored := new(sampleRecord)

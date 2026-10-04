@@ -10,6 +10,7 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/errors"
 	"github.com/gin-gonic/gin"
@@ -22,6 +23,7 @@ import (
 	"github.com/hydroan/gst/internal/testutil/swap"
 	"github.com/hydroan/gst/internal/types"
 	"github.com/stretchr/testify/require"
+	"gorm.io/datatypes"
 )
 
 // normalizeProbeModel is the model fixture of the request-normalization tests.
@@ -504,9 +506,9 @@ func TestClientSafeBindError(t *testing.T) {
 	}
 }
 
-// TestCompactNilSliceElements covers the reflective walk over the value
+// TestNormalizeValueCompactsNilSliceElements covers the reflective walk over the value
 // shapes JSON binding can produce.
-func TestCompactNilSliceElements(t *testing.T) {
+func TestNormalizeValueCompactsNilSliceElements(t *testing.T) {
 	type inner struct {
 		Records []*normalizeProbeItem `json:"records"`
 	}
@@ -527,7 +529,7 @@ func TestCompactNilSliceElements(t *testing.T) {
 		ByKey:   map[string][]*normalizeProbeItem{"only": {nil, first, nil}},
 		Names:   []string{"kept", "", "kept-too"},
 	}
-	compactNilSliceElements(reflect.ValueOf(s))
+	normalizeValue(reflect.ValueOf(s))
 
 	require.Equal(t, []*normalizeProbeItem{first, second}, s.Items, "top-level slice keeps order without nils")
 	require.Equal(t, []*normalizeProbeItem{first}, s.Nested.Records, "slices inside nested structs are compacted")
@@ -535,6 +537,49 @@ func TestCompactNilSliceElements(t *testing.T) {
 	require.Equal(t, []*normalizeProbeItem{first}, s.ByKey["only"], "slices held as map values are compacted")
 	require.Equal(t, []string{"kept", "", "kept-too"}, s.Names, "slices of non-nilable elements stay untouched")
 	require.Nil(t, s.Missing, "nil slices stay nil instead of becoming empty")
+}
+
+// TestNormalizeValueReadsDatesInUTC covers the date half of the walk: every
+// datatypes.Date it can set — a field, behind a pointer, in a slice, held as
+// a map value, inside a nested struct — becomes the UTC day of the instant
+// at midnight, the zero date stays zero, and a time.Time, an instant, is
+// left as it is.
+func TestNormalizeValueReadsDatesInUTC(t *testing.T) {
+	type inner struct {
+		Day datatypes.Date `json:"day"`
+	}
+	type sample struct {
+		Day     datatypes.Date            `json:"day"`
+		Ptr     *datatypes.Date           `json:"ptr"`
+		Days    []datatypes.Date          `json:"days"`
+		ByKey   map[string]datatypes.Date `json:"by_key"`
+		Nested  inner                     `json:"nested"`
+		Zero    datatypes.Date            `json:"zero"`
+		Instant time.Time                 `json:"instant"`
+	}
+
+	shanghai := time.FixedZone("CST", 8*60*60)
+	sent := time.Date(2026, time.January, 2, 0, 0, 0, 0, shanghai)
+	ptr := datatypes.Date(sent)
+	s := &sample{
+		Day:     datatypes.Date(sent),
+		Ptr:     &ptr,
+		Days:    []datatypes.Date{datatypes.Date(sent)},
+		ByKey:   map[string]datatypes.Date{"only": datatypes.Date(sent)},
+		Nested:  inner{Day: datatypes.Date(sent)},
+		Instant: sent,
+	}
+	normalizeValue(reflect.ValueOf(s))
+
+	want := datatypes.Date(time.Date(2026, time.January, 1, 0, 0, 0, 0, time.UTC))
+	require.Equal(t, want, s.Day)
+	require.Equal(t, want, *s.Ptr)
+	require.Equal(t, []datatypes.Date{want}, s.Days)
+	require.Equal(t, map[string]datatypes.Date{"only": want}, s.ByKey)
+	require.Equal(t, want, s.Nested.Day)
+	require.True(t, time.Time(s.Zero).IsZero(), "the zero date stays zero")
+	require.True(t, s.Instant.Equal(sent), "an instant is not a calendar date and stays as sent")
+	require.Equal(t, shanghai, s.Instant.Location())
 }
 
 // newNormalizeProbeEngine wires the probe service into a fresh engine on its

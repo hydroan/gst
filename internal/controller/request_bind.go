@@ -8,6 +8,7 @@ import (
 	"reflect"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/cockroachdb/errors"
 	"github.com/gin-gonic/gin"
@@ -17,6 +18,7 @@ import (
 	"github.com/go-playground/validator/v10"
 	entranslations "github.com/go-playground/validator/v10/translations/en"
 	"github.com/hydroan/gst/internal/types"
+	"gorm.io/datatypes"
 )
 
 // This file keeps every bound request body service-safe and every body
@@ -408,29 +410,48 @@ func clientSafeItemBindError(i int, err error) error {
 
 // normalizeRequest restores req to the zero-value instance when a JSON null
 // body left it nil — indistinguishable from an empty body for the service —
-// and compacts nil slice elements away.
+// and normalizes what it holds (see normalizeValue). Both transports run it
+// on what they decoded, so a request reads the same whichever carried it.
 func (a *action[M, REQ, RSP]) normalizeRequest(req *REQ) {
 	if a.reqKind == reflect.Pointer && reflect.ValueOf(*req).IsNil() {
 		*req = a.newRequest()
 	}
-	compactNilSliceElements(reflect.ValueOf(req))
+	normalizeValue(reflect.ValueOf(req))
 }
 
 // normalizeModel is the model-path counterpart of normalizeRequest for
 // handlers that bind the request body straight into the model type. Model
-// types are pointers by construction, so only the nil restore and the slice
-// compaction apply.
+// types are pointers by construction, so only the nil restore and the
+// normalization of what the model holds apply.
 func (a *action[M, REQ, RSP]) normalizeModel(m *M) {
 	if reflect.ValueOf(*m).IsNil() {
 		*m = a.newModel()
 	}
-	compactNilSliceElements(reflect.ValueOf(m))
+	normalizeValue(reflect.ValueOf(m))
 }
 
-// normalizeBatch compacts nil entries out of the bound batch payload
-// so the shared batch pipeline never dereferences a nil item.
+// normalizeBatch normalizes what the bound batch payload holds (see
+// normalizeValue), nil entries compacted away so the shared batch pipeline
+// never dereferences a nil item.
 func normalizeBatch[M types.Model](req *batch[M]) {
-	compactNilSliceElements(reflect.ValueOf(req))
+	normalizeValue(reflect.ValueOf(req))
+}
+
+// dateType is datatypes.Date, the calendar date normalizeValue reads in UTC.
+var dateType = reflect.TypeFor[datatypes.Date]()
+
+// utcDate returns the calendar day d holds, read in UTC — the one time base
+// of the framework (see dbruntime.NowUTC) — at midnight, so that a date a
+// client sends with its own offset, 2026-01-02T00:00:00+08:00, is the same
+// day, 2026-01-01, on every transport and in every database, and the value
+// answered is the value a date column stores. The zero date stays zero.
+func utcDate(d datatypes.Date) datatypes.Date {
+	t := time.Time(d)
+	if t.IsZero() {
+		return d
+	}
+	year, month, day := t.UTC().Date()
+	return datatypes.Date(time.Date(year, month, day, 0, 0, 0, 0, time.UTC))
 }
 
 // nilableKind reports whether values of kind k can hold nil, i.e. whether a
@@ -444,22 +465,29 @@ func nilableKind(k reflect.Kind) bool {
 	}
 }
 
-// compactNilSliceElements walks the value graph reachable from v and removes
-// nil elements from every settable slice whose elements can hold nil. Only
+// normalizeValue walks the value graph reachable from v, removes nil
+// elements from every settable slice whose elements can hold nil, and sets
+// every settable datatypes.Date to the UTC day it holds (see utcDate). Only
 // exported struct fields are visited, matching what encoding/json can bind.
 // JSON-decoded values are acyclic, so the walk needs no cycle tracking.
 // Interface values are descended into only when they carry a pointer: other
-// interface payloads are not addressable, so their inner slices cannot be
-// compacted in place and are left untouched.
-func compactNilSliceElements(v reflect.Value) {
+// interface payloads are not addressable, so their inner values cannot be
+// changed in place and are left untouched.
+func normalizeValue(v reflect.Value) {
+	if v.Type() == dateType {
+		if v.CanSet() {
+			v.Set(reflect.ValueOf(utcDate(v.Interface().(datatypes.Date)))) //nolint:errcheck // the type was just checked
+		}
+		return
+	}
 	switch v.Kind() {
 	case reflect.Pointer:
 		if !v.IsNil() {
-			compactNilSliceElements(v.Elem())
+			normalizeValue(v.Elem())
 		}
 	case reflect.Interface:
 		if !v.IsNil() && v.Elem().Kind() == reflect.Pointer {
-			compactNilSliceElements(v.Elem())
+			normalizeValue(v.Elem())
 		}
 	case reflect.Struct:
 		t := v.Type()
@@ -467,7 +495,7 @@ func compactNilSliceElements(v reflect.Value) {
 			if !t.Field(i).IsExported() {
 				continue
 			}
-			compactNilSliceElements(v.Field(i))
+			normalizeValue(v.Field(i))
 		}
 	case reflect.Slice:
 		if v.IsNil() {
@@ -489,11 +517,11 @@ func compactNilSliceElements(v reflect.Value) {
 			}
 		}
 		for i := range v.Len() {
-			compactNilSliceElements(v.Index(i))
+			normalizeValue(v.Index(i))
 		}
 	case reflect.Array:
 		for i := range v.Len() {
-			compactNilSliceElements(v.Index(i))
+			normalizeValue(v.Index(i))
 		}
 	case reflect.Map:
 		if v.IsNil() {
@@ -503,7 +531,7 @@ func compactNilSliceElements(v reflect.Value) {
 			value := v.MapIndex(key)
 			tmp := reflect.New(value.Type()).Elem()
 			tmp.Set(value)
-			compactNilSliceElements(tmp)
+			normalizeValue(tmp)
 			v.SetMapIndex(key, tmp)
 		}
 	default:

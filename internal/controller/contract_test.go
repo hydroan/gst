@@ -11,6 +11,7 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/hydroan/gst/consts"
@@ -50,6 +51,7 @@ func TestTransportsAnswerTheContractAlike(t *testing.T) {
 	counters := standardFixture[*sampleCounter](counterRoute, "Counter")
 	versioned := standardFixture[*versionedSample](versionedRoute, "Versioned")
 	validated := standardFixture[*validatedSample](validatedRoute, "Validated")
+	dated := standardFixture[*datedSample](datedRoute, "Dated")
 
 	ok := contractWant{status: http.StatusOK}
 	refused := contractWant{status: http.StatusConflict, msg: refusedMsg}
@@ -97,6 +99,19 @@ func TestTransportsAnswerTheContractAlike(t *testing.T) {
 		{
 			name: "Create refuses a request carrying no record", fixture: samples, phase: consts.Create,
 			want: noRecord,
+		},
+		{
+			// A date sent with the client's own offset names the UTC day of
+			// that instant, stored and answered as the day at midnight UTC.
+			name: "Create stores a date as the UTC day", fixture: dated, phase: consts.Create,
+			input: contractInput{record: map[string]any{"name": uniqueName("contract-dated"), "day": "2026-01-02T00:00:00+08:00"}},
+			want:  ok,
+			check: func(t *testing.T, in contractInput, got contractAnswer) {
+				t.Helper()
+				data := dataMap(t, got)
+				require.Equal(t, "2026-01-01T00:00:00Z", data["day"])
+				requireDatedDay(t, stringOf(data["id"]), time.Date(2026, time.January, 1, 0, 0, 0, 0, time.UTC))
+			},
 		},
 		{
 			name: "Create refuses a record failing validation", fixture: validated, phase: consts.Create,
@@ -414,6 +429,17 @@ func TestTransportsAnswerTheContractAlike(t *testing.T) {
 				require.Len(t, created, 2)
 				requireSampleName(t, created[0], stringOf(in.items[0]["name"]))
 				requireSampleName(t, created[1], stringOf(in.items[1]["name"]))
+			},
+		},
+		{
+			name: "CreateMany stores the dates of the items as UTC days", fixture: dated, phase: consts.CreateMany,
+			input: contractInput{items: []map[string]any{{"name": uniqueName("contract-dated-many"), "day": "2026-01-02T00:00:00+08:00"}}},
+			want:  ok,
+			check: func(t *testing.T, in contractInput, got contractAnswer) {
+				t.Helper()
+				created := ids(dataMap(t, got)["items"])
+				require.Len(t, created, 1)
+				requireDatedDay(t, created[0], time.Date(2026, time.January, 1, 0, 0, 0, 0, time.UTC))
 			},
 		},
 		{
