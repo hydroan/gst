@@ -8,7 +8,7 @@ import (
 
 // SessionDeleteAllService handles invalidation of all sessions for the current authenticated user.
 type SessionDeleteAllService struct {
-	service.Base[*modeliamsession.Session2, *modeliamsession.SessionDeleteAllReq, *modeliamsession.SessionDeleteAllRsp]
+	service.Base[*modeliamsession.SelfSession, *modeliamsession.SessionDeleteAllReq, *modeliamsession.SessionDeleteAllRsp]
 }
 
 // Delete invalidates all sessions for the current authenticated user.

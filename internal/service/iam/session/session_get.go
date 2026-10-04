@@ -12,7 +12,7 @@ import (
 
 // SessionGetService handles retrieval of a specified session for the current authenticated user.
 type SessionGetService struct {
-	service.Base[*modeliamsession.Session2, *model.Empty, *modeliamsession.SessionGetRsp]
+	service.Base[*modeliamsession.SelfSession, *model.Empty, *modeliamsession.SessionGetRsp]
 }
 
 // Get returns the detail of a specified session for the current authenticated user.

@@ -222,7 +222,7 @@ func TestRunModuleCopyGenAllowsPreexistingProjectCheckViolations(t *testing.T) {
 	if !ok {
 		return
 	}
-	writePluralModelFile(t, projectDir, "session", "sessions.go", "Session2", "copytest/sessions")
+	writePluralModelFile(t, projectDir, "session", "sessions.go", "SelfSession", "copytest/sessions")
 
 	baseline := collectProjectCheckBaseline()
 	if len(baseline) == 0 {
@@ -247,7 +247,7 @@ func TestRunModuleCopyGenFailsOnNewProjectCheckViolations(t *testing.T) {
 	if !ok {
 		return
 	}
-	writePluralModelFile(t, projectDir, "session", "sessions.go", "Session2", "copytest/sessions")
+	writePluralModelFile(t, projectDir, "session", "sessions.go", "SelfSession", "copytest/sessions")
 
 	baseline := collectProjectCheckBaseline()
 	if len(baseline) == 0 {

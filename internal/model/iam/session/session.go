@@ -5,9 +5,9 @@ import (
 	"github.com/hydroan/gst/model"
 )
 
-// Session2 declares the self-service session API routes. The suffix avoids
-// colliding with Session, the stored session snapshot.
-type Session2 struct {
+// SelfSession declares the self-service session API routes, which act on
+// the sessions of the current user; Session is the stored session snapshot.
+type SelfSession struct {
 	model.Empty
 }
 
@@ -34,7 +34,7 @@ type SessionDeleteAllReq struct{}
 // SessionDeleteAllRsp returns the delete result for all sessions of the current user.
 type SessionDeleteAllRsp struct{}
 
-func (Session2) Design() {
+func (SelfSession) Design() {
 	Route("/iam/sessions", func() {
 		List(func() {
 			Flatten()

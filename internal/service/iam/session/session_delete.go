@@ -11,7 +11,7 @@ import (
 
 // SessionDeleteService handles invalidation of a specified session for the current authenticated user.
 type SessionDeleteService struct {
-	service.Base[*modeliamsession.Session2, *modeliamsession.SessionDeleteReq, *modeliamsession.SessionDeleteRsp]
+	service.Base[*modeliamsession.SelfSession, *modeliamsession.SessionDeleteReq, *modeliamsession.SessionDeleteRsp]
 }
 
 // Delete invalidates a specified session for the current authenticated user.

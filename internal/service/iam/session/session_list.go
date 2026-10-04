@@ -13,7 +13,7 @@ import (
 
 // SessionListService handles retrieval of all active sessions for the current authenticated user.
 type SessionListService struct {
-	service.Base[*modeliamsession.Session2, *model.Empty, *modeliamsession.SessionListRsp]
+	service.Base[*modeliamsession.SelfSession, *model.Empty, *modeliamsession.SessionListRsp]
 }
 
 // List returns all active sessions for the current authenticated user.
