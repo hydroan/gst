@@ -2,11 +2,10 @@
 
 /**
  * Envelope is the JSON body of every API response. A successful request
- * carries code 0 and the data of the route; a failed one carries another code,
- * the error message and data null.
+ * answers 200 with the data of the route; a failed one answers its 4xx or 5xx
+ * status with the error message and data null.
  */
 export interface Envelope<T> {
-  code: number;
   data: T;
   msg: string;
   trace_id: string;
