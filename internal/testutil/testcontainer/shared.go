@@ -261,7 +261,7 @@ const (
 )
 
 // awaitSharedDatabase pings admin until the database answers, or reports the
-// last ping's error once timeout has passed. A shared container that was
+// last ping's error once timeout has passed or ctx ends. A shared container that was
 // stopped — with the docker daemon, say — is started again by the reuse, and
 // the log the library's wait strategy reads still holds the ready lines of
 // every earlier start, so the strategy returns while the database is still
@@ -277,7 +277,11 @@ func awaitSharedDatabase(ctx context.Context, admin *sql.DB, timeout time.Durati
 		if time.Now().After(deadline) {
 			return errors.Wrap(err, "the shared container's database did not answer in time")
 		}
-		time.Sleep(sharedDatabasePingInterval)
+		select {
+		case <-ctx.Done():
+			return errors.Wrap(err, "the shared container's database did not answer before the context ended")
+		case <-time.After(sharedDatabasePingInterval):
+		}
 	}
 }
 

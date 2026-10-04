@@ -139,6 +139,14 @@ func TestAwaitSharedDatabaseGivesUpAfterTheTimeout(t *testing.T) {
 	err = awaitSharedDatabase(t.Context(), admin, 50*time.Millisecond)
 	require.ErrorContains(t, err, "did not answer in time")
 	require.ErrorContains(t, err, "connection refused")
+
+	// A context that ends stops the wait before the timeout.
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+	started := time.Now()
+	err = awaitSharedDatabase(ctx, admin, time.Hour)
+	require.ErrorContains(t, err, "before the context ended")
+	require.Less(t, time.Since(started), sharedDatabasePingInterval)
 }
 
 func TestSharedDatabaseAbandoned(t *testing.T) {
