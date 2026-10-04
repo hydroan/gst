@@ -94,8 +94,12 @@ func attachReplicas(db *gorm.DB, cfg config.MySQL) (*gorm.DB, error) {
 	return dbruntime.AttachResolver(db, dialectors)
 }
 
-// sqlMode is the sql_mode every connection runs under (see buildDSN).
-const sqlMode = "ONLY_FULL_GROUP_BY,STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION"
+// strictSQLMode is the sql_mode a strict connection sets: the modes the
+// server is configured with, STRICT_TRANS_TABLES added. The driver decodes
+// the %27 quotes and writes the value as it is into the SET sql_mode
+// statement it runs as the connection opens, so the server evaluates the
+// expression for every connection (see buildDSN).
+const strictSQLMode = "CONCAT(@@sql_mode,%27,STRICT_TRANS_TABLES%27)"
 
 // buildDSN assembles the go-sql-driver DSN. clientFoundRows=true makes UPDATE
 // report matched rows instead of changed rows — the SQL-standard semantics
@@ -129,12 +133,12 @@ const sqlMode = "ONLY_FULL_GROUP_BY,STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_
 // per server timezone), which is what breaks time bucket labels, boundary
 // comparisons, and URL time filters.
 //
-// sql_mode pins every connection to MySQL 8's default modes, whatever the
-// server is configured with, STRICT_TRANS_TABLES among them: without the
+// sql_mode, while config.MySQL.Strict is on, adds STRICT_TRANS_TABLES to
+// the modes the server is configured with and keeps the rest: without the
 // strict mode the server cuts a value too long for its column short and
 // warns, where the refusal is what the framework answers 400 with (see
-// errCodes). The list is MySQL 8's own default; the driver sets it on the
-// session as the connection opens.
+// errCodes), and the server's other modes are the operator's to choose. Off,
+// the connection runs under the server's modes alone.
 //
 // The timeout parameters mirror config.MySQL: timeout (dial) is on by
 // default so a black-holed host fails in seconds instead of blocking until
@@ -143,9 +147,12 @@ const sqlMode = "ONLY_FULL_GROUP_BY,STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_
 // comments on config.MySQL.
 func buildDSN(cfg config.MySQL) string {
 	dsn := fmt.Sprintf(
-		"%s:%s@tcp(%s:%d)/%s?charset=utf8mb4&parseTime=True&loc=UTC&clientFoundRows=true&interpolateParams=true&sql_mode=%%27%s%%27",
-		cfg.Username, cfg.Password, cfg.Host, cfg.Port, cfg.Database, sqlMode,
+		"%s:%s@tcp(%s:%d)/%s?charset=utf8mb4&parseTime=True&loc=UTC&clientFoundRows=true&interpolateParams=true",
+		cfg.Username, cfg.Password, cfg.Host, cfg.Port, cfg.Database,
 	)
+	if cfg.Strict {
+		dsn += "&sql_mode=" + strictSQLMode
+	}
 	if cfg.DialTimeout > 0 {
 		dsn += "&timeout=" + cfg.DialTimeout.String()
 	}

@@ -19,6 +19,8 @@ const (
 
 	MYSQL_REPLICAS = "MYSQL_REPLICAS"
 
+	MYSQL_STRICT = "MYSQL_STRICT"
+
 	MYSQL_ENABLED = "MYSQL_ENABLED"
 )
 
@@ -54,6 +56,14 @@ type MySQL struct {
 	// prefer a single load-balanced read endpoint where one exists.
 	Replicas []string `json:"replicas" mapstructure:"replicas" ini:"replicas" yaml:"replicas"`
 
+	// Strict adds STRICT_TRANS_TABLES to the sql_mode of every connection,
+	// keeping the modes the server is configured with: a value too long for
+	// its column is then refused, which the framework answers 400 with,
+	// instead of stored cut short with a warning. On by default; off leaves
+	// the server's modes alone, and a too-long value is stored cut short
+	// wherever the server itself is not strict.
+	Strict bool `json:"strict" mapstructure:"strict" ini:"strict" yaml:"strict"`
+
 	Enabled bool `json:"enabled" mapstructure:"enabled" ini:"enabled" yaml:"enabled"`
 }
 
@@ -67,6 +77,8 @@ func (*MySQL) setDefault(v *viper.Viper) {
 	v.SetDefault("mysql.dial_timeout", 10*time.Second)
 	v.SetDefault("mysql.read_timeout", 0)
 	v.SetDefault("mysql.write_timeout", 0)
+
+	v.SetDefault("mysql.strict", true)
 
 	v.SetDefault("mysql.enabled", true)
 }

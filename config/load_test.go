@@ -24,6 +24,8 @@ func TestLoadAppliesFrameworkDefaults(t *testing.T) {
 	require.Equal(t, 10*time.Second, c.MySQL.DialTimeout)
 	require.Zero(t, c.MySQL.ReadTimeout)
 	require.Zero(t, c.MySQL.WriteTimeout)
+	// Connections add the strict mode by default; see config.MySQL.Strict.
+	require.True(t, c.MySQL.Strict)
 }
 
 func TestLoadReadsFileContent(t *testing.T) {

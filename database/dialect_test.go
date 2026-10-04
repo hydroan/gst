@@ -2,10 +2,12 @@ package database_test
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/database"
+	gstmysql "github.com/hydroan/gst/database/mysql"
 	"github.com/stretchr/testify/require"
 	"gorm.io/datatypes"
 	"gorm.io/driver/mysql"
@@ -32,17 +34,48 @@ func TestDialectAppliesItsNamingLimits(t *testing.T) {
 	require.Equal(t, want, naming.IdentifierMaxLength)
 }
 
-// TestMySQLConnectionsRunInStrictMode pins the sql_mode every MySQL
-// connection runs under, the one the DSN sets whatever the server is
-// configured with: MySQL 8's own default, STRICT_TRANS_TABLES among it, so
-// that a value too long for its column is refused and never cut short.
+// TestMySQLConnectionsRunInStrictMode pins the sql_mode a MySQL connection
+// runs under: the modes the server is configured with plus
+// STRICT_TRANS_TABLES, so that a value too long for its column is refused
+// and never cut short while the server's other modes stay the operator's;
+// and, with the strict switch off, the server's modes alone.
 func TestMySQLConnectionsRunInStrictMode(t *testing.T) {
 	if config.App.Database.Type != config.DBMySQL {
 		t.Skip("the sql_mode is MySQL's")
 	}
-	var mode string
-	require.NoError(t, database.DB().Raw("SELECT @@SESSION.sql_mode").Scan(&mode).Error)
-	require.Equal(t, "ONLY_FULL_GROUP_BY,STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION", mode)
+	var global, session string
+	require.NoError(t, database.DB().Raw("SELECT @@GLOBAL.sql_mode").Scan(&global).Error)
+	require.NoError(t, database.DB().Raw("SELECT @@SESSION.sql_mode").Scan(&session).Error)
+	require.ElementsMatch(t, modeSet(global+",STRICT_TRANS_TABLES"), modeSet(session), "global %q, session %q", global, session)
+
+	t.Run("strict off", func(t *testing.T) {
+		cfg := config.App.MySQL
+		cfg.Strict = false
+		db, err := gstmysql.New(cfg)
+		require.NoError(t, err)
+		t.Cleanup(func() {
+			sqlDB, err := db.DB()
+			require.NoError(t, err)
+			require.NoError(t, sqlDB.Close())
+		})
+		var session string
+		require.NoError(t, db.Raw("SELECT @@SESSION.sql_mode").Scan(&session).Error)
+		require.ElementsMatch(t, modeSet(global), modeSet(session))
+	})
+}
+
+// modeSet splits a sql_mode list into its distinct modes.
+func modeSet(modes string) []string {
+	var set []string
+	seen := map[string]bool{}
+	for mode := range strings.SplitSeq(modes, ",") {
+		if mode == "" || seen[mode] {
+			continue
+		}
+		seen[mode] = true
+		set = append(set, mode)
+	}
+	return set
 }
 
 // TestJSONValuesFindTheRowTheyWereWrittenFrom pins that a JSON value bound

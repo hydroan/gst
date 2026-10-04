@@ -56,6 +56,17 @@ func TestInitReadsTheEnvironmentForKeysTheFileLeavesOut(t *testing.T) {
 	require.Equal(t, []string{"10.0.0.1:3306", "10.0.0.2:3306"}, App.MySQL.Replicas)
 }
 
+// TestInitReadsMySQLStrictFromTheEnvironment proves the strict switch, on
+// by default, reads its environment variable.
+func TestInitReadsMySQLStrictFromTheEnvironment(t *testing.T) {
+	withFreshRegistry(t, "")
+	t.Setenv(MYSQL_STRICT, "false")
+
+	require.NoError(t, Init())
+
+	require.False(t, App.MySQL.Strict)
+}
+
 // TestRegisteredSectionTakesEveryEnvironmentValue proves a registered
 // section's fields read their environment variables over the file and the
 // default tags — an empty string, false and 0 included, a nested field, a list

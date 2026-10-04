@@ -9,11 +9,18 @@ import (
 )
 
 func TestBuildDSN(t *testing.T) {
-	base := config.MySQL{Host: "127.0.0.1", Port: 3306, Database: "sample", Username: "root", Password: "secret"}
-	prefix := "root:secret@tcp(127.0.0.1:3306)/sample?charset=utf8mb4&parseTime=True&loc=UTC&clientFoundRows=true&interpolateParams=true&sql_mode=%27ONLY_FULL_GROUP_BY,STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION%27"
+	base := config.MySQL{Host: "127.0.0.1", Port: 3306, Database: "sample", Username: "root", Password: "secret", Strict: true}
+	plain := "root:secret@tcp(127.0.0.1:3306)/sample?charset=utf8mb4&parseTime=True&loc=UTC&clientFoundRows=true&interpolateParams=true"
+	prefix := plain + "&sql_mode=CONCAT(@@sql_mode,%27,STRICT_TRANS_TABLES%27)"
 
 	t.Run("without timeouts", func(t *testing.T) {
 		require.Equal(t, prefix, buildDSN(base))
+	})
+
+	t.Run("strict off", func(t *testing.T) {
+		cfg := base
+		cfg.Strict = false
+		require.Equal(t, plain, buildDSN(cfg))
 	})
 
 	t.Run("dial timeout", func(t *testing.T) {
