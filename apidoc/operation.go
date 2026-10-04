@@ -16,8 +16,8 @@ type Operation struct {
 	Method string
 	// Path is the route path, eg. "/api/groups/{id}/disable".
 	Path string
-	// Verb is the framework action verb, eg. consts.Create.
-	Verb consts.Phase
+	// Phase is the framework action phase, eg. consts.Create.
+	Phase consts.Phase
 	// CustomTypes reports whether the operation declares its own request and
 	// response types instead of reusing the model (custom action routes do,
 	// default CRUD routes do not).
@@ -95,12 +95,12 @@ func normalizeOperationPath(path string) string {
 //
 // The action is the trailing literal path segment when it follows a path
 // parameter (a custom action route such as "/api/users/{id}/disable"),
-// otherwise the framework verb. Without a model comment it falls back to the
+// otherwise the phase. Without a model comment it falls back to the
 // resource path segments, then to the model name, keeping the summary useful
 // for models that have no doc comment yet.
 func DefaultSummary(op Operation) string {
 	actionSegment := trailingActionSegment(op)
-	action := verbDisplay(op.Verb)
+	action := phaseDisplay(op.Phase)
 	if actionSegment != "" {
 		action = titleToken(actionSegment)
 	}
@@ -140,7 +140,7 @@ func DefaultDescription(op Operation) string {
 // types, and never for List: a trailing literal in a List route is the
 // collection being listed, not an action.
 func trailingActionSegment(op Operation) string {
-	if !op.CustomTypes || op.Verb == consts.List {
+	if !op.CustomTypes || op.Phase == consts.List {
 		return ""
 	}
 	segments := strings.Split(strings.Trim(op.Path, "/"), "/")
@@ -164,16 +164,17 @@ func isParamSegment(segment string) bool {
 	return strings.HasPrefix(segment, "{") && strings.HasSuffix(segment, "}")
 }
 
-// verbDisplay renders the framework verb as a summary token, eg. "Create",
-// "Batch Create" for the *_many verbs, or "Stream" for the SSE verb.
-func verbDisplay(verb consts.Phase) string {
-	if verb == consts.SSE {
-		return "Stream"
+// phaseDisplay renders the phase as a summary token, eg. "Create", or "Batch
+// Create" for the *_many phases. The SSE phase shows as "SSE", its own name,
+// so that its summaries do not read like those of a Stream action.
+func phaseDisplay(phase consts.Phase) string {
+	if phase == consts.SSE {
+		return phase.Name()
 	}
-	if base, ok := strings.CutSuffix(string(verb), "_many"); ok {
+	if base, ok := strings.CutSuffix(string(phase), "_many"); ok {
 		return "Batch " + titleToken(base)
 	}
-	return titleToken(string(verb))
+	return titleToken(string(phase))
 }
 
 // titleToken converts a snake_case or kebab-case token to space-separated

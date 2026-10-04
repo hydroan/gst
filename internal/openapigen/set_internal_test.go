@@ -462,7 +462,7 @@ func TestSetBuildsExampleForUntypedMapValues(t *testing.T) {
 	}
 }
 
-// openapiKeyModel exercises every verb so each generated component key is
+// openapiKeyModel exercises every phase so each generated component key is
 // covered.
 type openapiKeyModel struct {
 	// Name is the record name.
@@ -477,7 +477,7 @@ var componentKeyCharset = regexp.MustCompile(`^[a-zA-Z0-9._-]+$`)
 
 // TestSetBuildsComponentKeysWithinSpecCharset asserts that every registered
 // component key stays inside the character set the spec allows, across all
-// verbs. A key outside it makes the whole document invalid.
+// phases. A key outside it makes the whole document invalid.
 func TestSetBuildsComponentKeysWithinSpecCharset(t *testing.T) {
 	set[*openapiKeyModel, *openapiKeyModel, *openapiKeyModel]("/api/openapi-keys", true,
 		consts.Create, consts.Delete, consts.Update, consts.Patch, consts.List, consts.Get,

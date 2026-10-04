@@ -54,7 +54,7 @@ func TestSummaryCombinesVerbAndStructCommentFirstLine(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			got := summary("/api/sample/records", consts.Patch, typ, false)
 			if got != "Patch The human readable summary line" {
-				t.Fatalf("summary() = %q, want the verb plus the first comment line", got)
+				t.Fatalf("summary() = %q, want the phase plus the first comment line", got)
 			}
 		})
 	}
@@ -68,11 +68,11 @@ func TestSummaryUsesTrailingActionSegmentForCustomTypes(t *testing.T) {
 	}
 }
 
-func TestSummaryKeepsVerbForDefaultCRUDNestedCollection(t *testing.T) {
+func TestSummaryKeepsPhaseForDefaultCRUDNestedCollection(t *testing.T) {
 	typ := reflect.TypeFor[*summaryFirstLineModel]()
 	got := summary("/api/tenants/{tenant}/users", consts.Create, typ, false)
 	if got != "Create The human readable summary line" {
-		t.Fatalf("summary() = %q, want the verb for a default CRUD nested collection", got)
+		t.Fatalf("summary() = %q, want the phase for a default CRUD nested collection", got)
 	}
 }
 

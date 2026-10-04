@@ -61,7 +61,7 @@ func operationDocInput(path string, phase consts.Phase, typ reflect.Type, custom
 	return apidoc.Operation{
 		Method:       phase.HTTPMethod(),
 		Path:         path,
-		Verb:         phase,
+		Phase:        phase,
 		CustomTypes:  customTypes,
 		ModelName:    elem.Name(),
 		ModelComment: openAPIStructComment(typ),

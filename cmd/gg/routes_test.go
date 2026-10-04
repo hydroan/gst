@@ -14,11 +14,11 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestParseModelRoutesReadsTheRuntimeMethodOfEveryVerb builds a router file
+// TestParseModelRoutesReadsTheRuntimeMethodOfEveryPhase builds a router file
 // the way gg gen writes router/router.gen.go, one route per action phase, and
 // reads each route back under the method the framework router registers the
-// verb by, consts.Phase.HTTPMethod (see the router's own test of that).
-func TestParseModelRoutesReadsTheRuntimeMethodOfEveryVerb(t *testing.T) {
+// phase by, consts.Phase.HTTPMethod (see the router's own test of that).
+func TestParseModelRoutesReadsTheRuntimeMethodOfEveryPhase(t *testing.T) {
 	phases := []consts.Phase{
 		consts.Create, consts.Delete, consts.Update, consts.Patch,
 		consts.List, consts.Get,

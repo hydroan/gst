@@ -65,10 +65,10 @@ func TestDefaultSummary(t *testing.T) {
 		want string
 	}{
 		{
-			name: "verb with model comment",
+			name: "phase with model comment",
 			op: apidoc.Operation{
 				Path:         "/api/users",
-				Verb:         consts.List,
+				Phase:        consts.List,
 				ModelComment: "The user record.",
 			},
 			want: "List The user record",
@@ -77,7 +77,7 @@ func TestDefaultSummary(t *testing.T) {
 			name: "trailing Chinese period of the comment line is trimmed",
 			op: apidoc.Operation{
 				Path:         "/api/users",
-				Verb:         consts.Create,
+				Phase:        consts.Create,
 				ModelComment: "用户。",
 			},
 			want: "Create 用户",
@@ -86,25 +86,34 @@ func TestDefaultSummary(t *testing.T) {
 			name: "only the first comment line is used",
 			op: apidoc.Operation{
 				Path:         "/api/users/{id}",
-				Verb:         consts.Update,
+				Phase:        consts.Update,
 				ModelComment: "The user record.\nThe second line must not leak into the summary.",
 			},
 			want: "Update The user record",
 		},
 		{
-			name: "many verb becomes a batch action",
+			name: "many phase becomes a batch action",
 			op: apidoc.Operation{
 				Path:         "/api/users/batch",
-				Verb:         consts.CreateMany,
+				Phase:        consts.CreateMany,
 				ModelComment: "The user record.",
 			},
 			want: "Batch Create The user record",
 		},
 		{
-			name: "trailing action segment after a path param wins over the verb",
+			name: "SSE phase shows its own name",
+			op: apidoc.Operation{
+				Path:         "/api/notices",
+				Phase:        consts.SSE,
+				ModelComment: "The notice stream.",
+			},
+			want: "SSE The notice stream",
+		},
+		{
+			name: "trailing action segment after a path param wins over the phase",
 			op: apidoc.Operation{
 				Path:         "/api/users/{id}/disable",
-				Verb:         consts.Create,
+				Phase:        consts.Create,
 				CustomTypes:  true,
 				ModelComment: "The user record.",
 			},
@@ -114,26 +123,26 @@ func TestDefaultSummary(t *testing.T) {
 			name: "gin-style trailing action segment",
 			op: apidoc.Operation{
 				Path:         "/api/users/:id/reset_password",
-				Verb:         consts.Create,
+				Phase:        consts.Create,
 				CustomTypes:  true,
 				ModelComment: "The user record.",
 			},
 			want: "Reset Password The user record",
 		},
 		{
-			name: "default CRUD nested collection route keeps the verb",
+			name: "default CRUD nested collection route keeps the phase",
 			op: apidoc.Operation{
 				Path:         "/api/tenants/{tenant}/users",
-				Verb:         consts.Create,
+				Phase:        consts.Create,
 				ModelComment: "The user record.",
 			},
 			want: "Create The user record",
 		},
 		{
-			name: "custom list route keeps the verb",
+			name: "custom list route keeps the phase",
 			op: apidoc.Operation{
 				Path:         "/api/tenants/{tenant}/users",
-				Verb:         consts.List,
+				Phase:        consts.List,
 				CustomTypes:  true,
 				ModelComment: "The user record.",
 			},
@@ -142,8 +151,8 @@ func TestDefaultSummary(t *testing.T) {
 		{
 			name: "no comment falls back to resource path segments",
 			op: apidoc.Operation{
-				Path: "/api/sample/records/{id}",
-				Verb: consts.Patch,
+				Path:  "/api/sample/records/{id}",
+				Phase: consts.Patch,
 			},
 			want: "Patch sample records",
 		},
@@ -151,7 +160,7 @@ func TestDefaultSummary(t *testing.T) {
 			name: "no comment with a trailing action segment does not repeat the action",
 			op: apidoc.Operation{
 				Path:        "/api/users/{id}/disable",
-				Verb:        consts.Create,
+				Phase:       consts.Create,
 				CustomTypes: true,
 			},
 			want: "Disable users",
@@ -160,7 +169,7 @@ func TestDefaultSummary(t *testing.T) {
 			name: "no comment and no resource segments falls back to the model name",
 			op: apidoc.Operation{
 				Path:      "/api",
-				Verb:      consts.Get,
+				Phase:     consts.Get,
 				ModelName: "User",
 			},
 			want: "Get User",
@@ -180,7 +189,7 @@ func TestDefaultDescription(t *testing.T) {
 	t.Run("uses the full model comment", func(t *testing.T) {
 		op := apidoc.Operation{
 			Path:         "/api/users",
-			Verb:         consts.List,
+			Phase:        consts.List,
 			ModelComment: "The user record.\nIt keeps the account and status fields.",
 		}
 		want := "The user record.\nIt keeps the account and status fields."
@@ -191,8 +200,8 @@ func TestDefaultDescription(t *testing.T) {
 
 	t.Run("falls back to the default summary without a comment", func(t *testing.T) {
 		op := apidoc.Operation{
-			Path: "/api/sample/records/{id}",
-			Verb: consts.Patch,
+			Path:  "/api/sample/records/{id}",
+			Phase: consts.Patch,
 		}
 		if got := apidoc.DefaultDescription(op); got != apidoc.DefaultSummary(op) {
 			t.Errorf("DefaultDescription() = %q, want DefaultSummary fallback", got)
