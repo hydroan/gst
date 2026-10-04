@@ -8,7 +8,6 @@ import (
 
 	"github.com/hydroan/gst/consts"
 	"github.com/hydroan/gst/internal/execctx"
-	"github.com/hydroan/gst/internal/serviceregistry"
 	"github.com/hydroan/gst/internal/types"
 	"github.com/hydroan/gst/logger"
 	"github.com/stretchr/testify/require"
@@ -75,7 +74,7 @@ func TestEnforceRefusesAnAnonymousSubject(t *testing.T) {
 
 	_, tenantID, err := Enforce(execctx.WithTraceID(context.Background(), "trace-1"), Subject{}, "/api/samples", http.MethodGet)
 
-	var serviceErr *serviceregistry.Error
+	var serviceErr *types.Error
 	require.ErrorAs(t, err, &serviceErr)
 	require.Equal(t, http.StatusForbidden, serviceErr.Status())
 	require.Equal(t, "permission denied", serviceErr.Msg())
@@ -95,7 +94,7 @@ func TestEnforceDeniesThroughAnUninitializedPolicySet(t *testing.T) {
 
 	_, tenantID, err := Enforce(context.Background(), Subject{UserID: "u-1", Username: "alice"}, "/api/samples", http.MethodGet)
 
-	var serviceErr *serviceregistry.Error
+	var serviceErr *types.Error
 	require.ErrorAs(t, err, &serviceErr)
 	require.Equal(t, http.StatusForbidden, serviceErr.Status())
 	require.Equal(t, "default", tenantID)

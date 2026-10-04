@@ -26,11 +26,11 @@ func (c *Creator) Create(ctx *gst.ServiceContext, req *model.RebuildReq) (*model
 	err := dao.Rebuild(ctx, seconds, req.InTransaction)
 	switch {
 	case errors.Is(err, lock.ErrInTransaction):
-		return nil, service.NewError(http.StatusBadRequest, "a lock cannot be taken inside a transaction")
+		return nil, gst.NewError(http.StatusBadRequest, "a lock cannot be taken inside a transaction")
 	case errors.Is(err, lock.ErrHeld):
-		return nil, service.NewError(http.StatusConflict, "a rebuild is already running")
+		return nil, gst.NewError(http.StatusConflict, "a rebuild is already running")
 	case err != nil:
-		return nil, service.NewErrorWithCause(http.StatusInternalServerError, "the rebuild did not finish", err)
+		return nil, gst.NewErrorWithCause(http.StatusInternalServerError, "the rebuild did not finish", err)
 	}
 	return &model.RebuildRsp{Replica: helper.Replica(), Seconds: seconds}, nil
 }

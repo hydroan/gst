@@ -6,7 +6,6 @@ import (
 	"github.com/hydroan/gst"
 	"github.com/hydroan/gst/database"
 	modeliamprofile "github.com/hydroan/gst/internal/model/iam/profile"
-	"github.com/hydroan/gst/service"
 	"gorm.io/datatypes"
 )
 
@@ -24,7 +23,7 @@ func loadProfileByUserID(ctx *gst.ServiceContext, userID string) (*modeliamprofi
 		WithLimit(1).
 		WithQuery(&modeliamprofile.Profile{UserID: userID}).
 		List(&profiles); err != nil {
-		return nil, false, service.NewErrorWithCause(http.StatusInternalServerError, "failed to load profile", err)
+		return nil, false, gst.NewErrorWithCause(http.StatusInternalServerError, "failed to load profile", err)
 	}
 	if len(profiles) == 0 {
 		return nil, false, nil

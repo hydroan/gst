@@ -28,16 +28,16 @@ func (l *List2) List(ctx *gst.ServiceContext, req *model.Empty) (rsp *bench.List
 	var cursor gst.Cursor
 
 	if m, err = l.QueryModel(ctx); err != nil {
-		return nil, service.NewError(http.StatusBadRequest, err.Error())
+		return nil, gst.NewError(http.StatusBadRequest, err.Error())
 	}
 	if filters, err = l.QueryFilters(ctx); err != nil {
-		return nil, service.NewError(http.StatusBadRequest, err.Error())
+		return nil, gst.NewError(http.StatusBadRequest, err.Error())
 	}
 	if orders, err = l.QueryOrders(ctx); err != nil {
-		return nil, service.NewError(http.StatusBadRequest, err.Error())
+		return nil, gst.NewError(http.StatusBadRequest, err.Error())
 	}
 	if cursor, err = l.QueryCursor(ctx); err != nil {
-		return nil, service.NewError(http.StatusBadRequest, err.Error())
+		return nil, gst.NewError(http.StatusBadRequest, err.Error())
 	}
 	page, size := l.QueryPagination(ctx)
 
@@ -54,7 +54,7 @@ func (l *List2) List(ctx *gst.ServiceContext, req *model.Empty) (rsp *bench.List
 		WithCursor(cursor).
 		WithOrder(orders...).
 		List(&items); err != nil {
-		return nil, service.NewErrorWithCause(http.StatusInternalServerError, "build list query failed", err)
+		return nil, gst.NewErrorWithCause(http.StatusInternalServerError, "build list query failed", err)
 	}
 	// Mirror the standard List action: the total reuses the same query conditions through a separately built COUNT.
 	count := new(int)
@@ -62,7 +62,7 @@ func (l *List2) List(ctx *gst.ServiceContext, req *model.Empty) (rsp *bench.List
 		WithDryRun().
 		WithQuery(m, opts).
 		Count(count); err != nil {
-		return nil, service.NewErrorWithCause(http.StatusInternalServerError, "build count query failed", err)
+		return nil, gst.NewErrorWithCause(http.StatusInternalServerError, "build count query failed", err)
 	}
 
 	return &bench.ListRsp{Msg: "hi list2"}, nil

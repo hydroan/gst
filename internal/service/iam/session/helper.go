@@ -9,18 +9,18 @@ import (
 	"time"
 
 	"github.com/cockroachdb/errors"
+	"github.com/hydroan/gst"
 	modeliamsession "github.com/hydroan/gst/internal/model/iam/session"
 	modeliamuser "github.com/hydroan/gst/internal/model/iam/user"
-	"github.com/hydroan/gst/service"
 )
 
 // ensureSessionUserActive verifies that the authenticated user can keep using an existing session.
 func ensureSessionUserActive(targetUser *modeliamuser.User) error {
 	switch targetUser.Status {
 	case modeliamuser.UserStatusInactive:
-		return service.NewError(http.StatusForbidden, "account disabled")
+		return gst.NewError(http.StatusForbidden, "account disabled")
 	case modeliamuser.UserStatusLocked:
-		return service.NewError(http.StatusForbidden, "account locked")
+		return gst.NewError(http.StatusForbidden, "account locked")
 	default:
 		return nil
 	}
@@ -58,7 +58,7 @@ func sessionViewActiveAt(view modeliamsession.SessionView) time.Time {
 func NewSessionID() (string, error) {
 	buf := make([]byte, sessionIDBytes)
 	if _, err := rand.Read(buf); err != nil {
-		return "", service.NewErrorWithCause(http.StatusInternalServerError, "failed to generate session id", err)
+		return "", gst.NewErrorWithCause(http.StatusInternalServerError, "failed to generate session id", err)
 	}
 	return hex.EncodeToString(buf), nil
 }

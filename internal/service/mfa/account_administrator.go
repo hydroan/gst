@@ -6,7 +6,6 @@ import (
 
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst"
-	"github.com/hydroan/gst/service"
 )
 
 // ErrAccountAdministratorNotConfigured is returned by administrative MFA flows
@@ -58,16 +57,16 @@ func currentAccountAdministrator() AccountAdministrator {
 // ensureCanAdministerMFA runs the installed administrative authorizer and
 // shapes its outcome as a service error: adapters already answer with one and
 // are passed through untouched, while anything else is reported as 500.
-func ensureCanAdministerMFA(ctx *gst.ServiceContext, targetUserID string) *service.Error {
+func ensureCanAdministerMFA(ctx *gst.ServiceContext, targetUserID string) *gst.Error {
 	err := currentAccountAdministrator().EnsureCanAdminister(ctx, targetUserID)
 	if err == nil {
 		return nil
 	}
-	var svcErr *service.Error
+	var svcErr *gst.Error
 	if errors.As(err, &svcErr) {
 		return svcErr
 	}
-	return service.NewErrorWithCause(http.StatusInternalServerError, "administrative authorization failed", err)
+	return gst.NewErrorWithCause(http.StatusInternalServerError, "administrative authorization failed", err)
 }
 
 // missingAccountAdministrator is the deny-by-default used until the host
@@ -77,6 +76,6 @@ func ensureCanAdministerMFA(ctx *gst.ServiceContext, targetUserID string) *servi
 type missingAccountAdministrator struct{}
 
 func (missingAccountAdministrator) EnsureCanAdminister(*gst.ServiceContext, string) error {
-	return service.NewErrorWithCause(http.StatusInternalServerError,
+	return gst.NewErrorWithCause(http.StatusInternalServerError,
 		"MFA account administrator is not configured", ErrAccountAdministratorNotConfigured)
 }

@@ -270,14 +270,14 @@ func TestClientSafeBindErrorNamesTheFieldsTheValidatorRefused(t *testing.T) {
 	require.Error(t, refused)
 
 	wrapped := clientSafeBindError(refused)
-	var serviceErr *serviceregistry.Error
+	var serviceErr *types.Error
 	require.ErrorAs(t, wrapped, &serviceErr)
 	require.Equal(t, http.StatusBadRequest, serviceErr.Status())
 	require.Equal(t, "name is a required field; address.city is a required field", serviceErr.Msg())
-	require.Equal(t, []serviceregistry.FieldViolation{
+	require.Equal(t, []types.FieldViolation{
 		{Field: "name", Description: "name is a required field"},
 		{Field: "address.city", Description: "address.city is a required field"},
-	}, serviceregistry.FieldViolations(serviceErr))
+	}, types.FieldViolations(serviceErr))
 	var cause, direct validator.ValidationErrors
 	require.ErrorAs(t, wrapped, &cause, "the validator's error travels as the cause")
 	require.ErrorAs(t, refused, &direct)
@@ -285,7 +285,7 @@ func TestClientSafeBindErrorNamesTheFieldsTheValidatorRefused(t *testing.T) {
 
 	require.ErrorAs(t, clientSafeItemBindError(1, refused), &serviceErr)
 	require.Equal(t, "items[1].name is a required field; items[1].address.city is a required field", serviceErr.Msg())
-	require.Equal(t, "items[1].name", serviceregistry.FieldViolations(serviceErr)[0].Field)
+	require.Equal(t, "items[1].name", types.FieldViolations(serviceErr)[0].Field)
 }
 
 // untranslatedProbe carries rules the validator has no English sentence for:
@@ -310,14 +310,14 @@ func TestClientSafeBindErrorSpeaksOfTheRuleWithoutATranslation(t *testing.T) {
 	refused := validateRequest(&untranslatedProbe{})
 	require.Error(t, refused)
 
-	var serviceErr *serviceregistry.Error
+	var serviceErr *types.Error
 	require.ErrorAs(t, clientSafeBindError(refused), &serviceErr)
-	require.Equal(t, []serviceregistry.FieldViolation{
+	require.Equal(t, []types.FieldViolation{
 		{Field: "host", Description: "host failed the hostname check"},
 		{Field: "address.zip", Description: "address.zip failed the hostname check"},
 		{Field: "tag", Description: "tag failed the startswith=ab check"},
 		{Field: "own", Description: "own failed the gstprobe check"},
-	}, serviceregistry.FieldViolations(serviceErr))
+	}, types.FieldViolations(serviceErr))
 	require.NotContains(t, serviceErr.Msg(), "Key:")
 	require.NotContains(t, serviceErr.Msg(), "untranslatedProbe")
 }
@@ -364,15 +364,15 @@ func TestClientSafeBindErrorNamesTheFieldsByTheirJSONPath(t *testing.T) {
 	refused := validateRequest(&jsonPathProbe{Items: []probeAudit{{}, {}}})
 	require.Error(t, refused)
 
-	var serviceErr *serviceregistry.Error
+	var serviceErr *types.Error
 	require.ErrorAs(t, clientSafeBindError(refused), &serviceErr)
-	fields := make([]string, 0, len(serviceregistry.FieldViolations(serviceErr)))
-	for _, v := range serviceregistry.FieldViolations(serviceErr) {
+	fields := make([]string, 0, len(types.FieldViolations(serviceErr)))
+	for _, v := range types.FieldViolations(serviceErr) {
 		fields = append(fields, v.Field)
 	}
 	require.Equal(t, []string{"reviewer", "audit.signer", "ProbeCode", "named.approver", "Plain.approver", "items[0].reviewer", "items[1].reviewer", "name"}, fields)
-	require.Equal(t, "reviewer is a required field", serviceregistry.FieldViolations(serviceErr)[0].Description)
-	require.Equal(t, "ProbeCode is a required field", serviceregistry.FieldViolations(serviceErr)[2].Description)
+	require.Equal(t, "reviewer is a required field", types.FieldViolations(serviceErr)[0].Description)
+	require.Equal(t, "ProbeCode is a required field", types.FieldViolations(serviceErr)[2].Description)
 }
 
 // freshPatchHelper marks the child process of
@@ -389,7 +389,7 @@ func TestPatchNamesTheFieldInAFreshProcess(t *testing.T) {
 	if os.Getenv(freshPatchHelper) == "1" {
 		refused := validatePatchFields(&validatedProbe{}, patchFieldSet{"Name": {}})
 		require.Error(t, refused)
-		var serviceErr *serviceregistry.Error
+		var serviceErr *types.Error
 		require.ErrorAs(t, clientSafeBindError(refused), &serviceErr)
 		require.Equal(t, "name is a required field", serviceErr.Msg())
 		return
@@ -444,7 +444,7 @@ func TestBindJSONRequestDecodesWithStandardLibrary(t *testing.T) {
 	require.Len(t, target.Items, 1)
 
 	_, err = bind(`{"items":3}`)
-	var serviceErr *serviceregistry.Error
+	var serviceErr *types.Error
 	require.ErrorAs(t, err, &serviceErr)
 	require.Equal(t, "invalid value for field 'items'", serviceErr.Msg())
 }
@@ -494,7 +494,7 @@ func TestClientSafeBindError(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			wrapped := clientSafeBindError(tt.err)
 
-			var serviceErr *serviceregistry.Error
+			var serviceErr *types.Error
 			require.ErrorAs(t, wrapped, &serviceErr)
 			require.Equal(t, tt.wantMsg, serviceErr.Msg())
 			require.Equal(t, http.StatusBadRequest, serviceErr.Status())

@@ -43,7 +43,7 @@ func (s *SessionListService) List(ctx *gst.ServiceContext, req *model.Empty) (rs
 				_ = Store.DropSessionIndexes(ctx, currentSession.UserID, sessionID)
 				continue
 			}
-			return nil, service.NewErrorWithCause(http.StatusInternalServerError, "failed to load session", getErr)
+			return nil, gst.NewErrorWithCause(http.StatusInternalServerError, "failed to load session", getErr)
 		}
 		if validateErr := ValidateSession(sessionID, sessionData); validateErr != nil {
 			_, _ = Store.DeleteSession(ctx, sessionID)

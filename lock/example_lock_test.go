@@ -6,11 +6,11 @@ import (
 	"net/http"
 
 	"github.com/cockroachdb/errors"
+	"github.com/hydroan/gst"
 	"github.com/hydroan/gst/cronjob"
 	"github.com/hydroan/gst/database"
 	"github.com/hydroan/gst/lock"
 	"github.com/hydroan/gst/logger"
-	"github.com/hydroan/gst/service"
 )
 
 // rebuildReport is declared the way a project declares a lock: once, in a
@@ -45,9 +45,9 @@ func ExampleLock_TryRun() {
 	})
 	switch {
 	case errors.Is(err, lock.ErrHeld):
-		err = service.NewError(http.StatusConflict, "a rebuild is already running")
+		err = gst.NewError(http.StatusConflict, "a rebuild is already running")
 	case errors.Is(err, lock.ErrLost):
-		err = service.NewError(http.StatusConflict, "the rebuild was cut short, try again")
+		err = gst.NewError(http.StatusConflict, "the rebuild was cut short, try again")
 	}
 	_ = err // returned by the service method
 }

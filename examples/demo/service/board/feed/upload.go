@@ -27,7 +27,7 @@ func (u *Upload) Stream(_ *gst.ServiceContext, stream *grpc.ClientStream[*board.
 			if errors.Is(err, io.EOF) {
 				return &board.FeedUploadRsp{Accepted: accepted}, nil
 			}
-			return nil, service.NewErrorWithCause(http.StatusBadRequest, "failed to read the event", err)
+			return nil, gst.NewErrorWithCause(http.StatusBadRequest, "failed to read the event", err)
 		}
 		accepted++
 	}

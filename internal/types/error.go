@@ -1,4 +1,4 @@
-package serviceregistry
+package types
 
 import (
 	"net/http"
@@ -21,9 +21,10 @@ var (
 	_ errbase.StackTraceProvider = (*Error)(nil)
 )
 
-// Error represents a service-layer error that can be converted to an API response.
-//
-// It is re-exported to application code through the public service package.
+// Error is the error a request is answered with: a status and a client-safe
+// message, with an internal cause for the logs. Service methods, model hooks,
+// middleware and interceptors build it; the root gst package re-exports it
+// and its constructors to application code.
 type Error struct {
 	status int
 	msg    string
@@ -63,7 +64,8 @@ func NewInvalidFields(violations []FieldViolation, cause error) *Error {
 	return err
 }
 
-// NewError creates a service-layer error with a client-safe message.
+// NewError creates the error a request is answered with: status and a
+// client-safe message.
 //
 // The status must be a 4xx or 5xx HTTP status code. Invalid statuses, including
 // 2xx/3xx success or redirect statuses such as http.StatusOK, are normalized to
@@ -72,7 +74,8 @@ func NewError(status int, msg string) *Error {
 	return newError(status, msg, nil)
 }
 
-// NewErrorWithCause creates a service-layer error with an internal cause.
+// NewErrorWithCause creates the error a request is answered with, carrying
+// an internal cause.
 //
 // The status must be a 4xx or 5xx HTTP status code. Invalid statuses, including
 // 2xx/3xx success or redirect statuses such as http.StatusOK, are normalized to

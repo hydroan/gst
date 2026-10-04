@@ -38,13 +38,13 @@ import (
 //
 //	query, err := s.QueryModel(ctx)
 //	if err != nil {
-//	    return nil, service.NewError(http.StatusBadRequest, err.Error())
+//	    return nil, gst.NewError(http.StatusBadRequest, err.Error())
 //	}
 //	query.TenantID = tenant // mandatory scoping the client cannot influence
 //
 //	filters, err := s.QueryFilters(ctx)
 //	if err != nil {
-//	    return nil, service.NewError(http.StatusBadRequest, err.Error())
+//	    return nil, gst.NewError(http.StatusBadRequest, err.Error())
 //	}
 //	opts := types.QueryOptions{
 //	    AllowEmpty:    true,
@@ -54,11 +54,11 @@ import (
 //
 //	cursor, err := s.QueryCursor(ctx)
 //	if err != nil {
-//	    return nil, service.NewError(http.StatusBadRequest, err.Error())
+//	    return nil, gst.NewError(http.StatusBadRequest, err.Error())
 //	}
 //	orders, err := s.QueryOrders(ctx)
 //	if err != nil {
-//	    return nil, service.NewError(http.StatusBadRequest, err.Error())
+//	    return nil, gst.NewError(http.StatusBadRequest, err.Error())
 //	}
 //	err = database.Database[*Sample](ctx).
 //	    WithQuery(query, opts).

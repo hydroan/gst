@@ -11,7 +11,6 @@ import (
 	"github.com/hydroan/gst/database"
 	"github.com/hydroan/gst/dsl"
 	"github.com/hydroan/gst/model"
-	"github.com/hydroan/gst/service"
 	"github.com/hydroan/gst/tenant"
 	"gorm.io/datatypes"
 )
@@ -83,14 +82,14 @@ func (r *Role) validate() error {
 	r.ID = strings.TrimSpace(r.ID)
 	r.Name = strings.TrimSpace(r.Name)
 	if len(r.Name) == 0 {
-		return service.NewError(http.StatusBadRequest, "role name is required")
+		return gst.NewError(http.StatusBadRequest, "role name is required")
 	}
 
 	// The system role is addressed by its constant ID and never lives in the
 	// roles table; reject both the ID and the name to avoid a user-created
 	// role masquerading as it.
 	if r.ID == consts.AUTHZ_SYSTEM_ROLE_ROOT || r.Name == consts.AUTHZ_SYSTEM_ROLE_ROOT {
-		return service.NewError(http.StatusBadRequest, "system_root is reserved for the system role")
+		return gst.NewError(http.StatusBadRequest, "system_root is reserved for the system role")
 	}
 
 	// Both checks below are on the ID alone, because the ID is what authorization
@@ -104,7 +103,7 @@ func (r *Role) validate() error {
 	// created under this ID hands tenant-wide superuser access to everyone bound
 	// to it, whatever permissions it appears to select.
 	if r.ID == consts.AUTHZ_ROLE_ADMIN {
-		return service.NewError(http.StatusBadRequest, "admin is reserved for the built-in tenant administrator role")
+		return gst.NewError(http.StatusBadRequest, "admin is reserved for the built-in tenant administrator role")
 	}
 
 	// Policies written for the authenticated role are matched without a role
@@ -113,7 +112,7 @@ func (r *Role) validate() error {
 	// policy syncPermissions generates for it would allow every subject that can
 	// log in, including subjects that were never bound to the role.
 	if r.ID == consts.AUTHZ_ROLE_AUTHENTICATED {
-		return service.NewError(http.StatusBadRequest, "authenticated is reserved for the implicit role of every authenticated subject")
+		return gst.NewError(http.StatusBadRequest, "authenticated is reserved for the implicit role of every authenticated subject")
 	}
 
 	return nil
@@ -161,7 +160,7 @@ func (r *Role) validateMenuIDs(ctx context.Context) error {
 		missing = append(missing, id)
 	}
 	if len(missing) > 0 {
-		return service.NewError(http.StatusBadRequest, "menus do not exist: "+strings.Join(missing, ", "))
+		return gst.NewError(http.StatusBadRequest, "menus do not exist: "+strings.Join(missing, ", "))
 	}
 	return nil
 }
@@ -207,7 +206,7 @@ func (r *Role) UpdateAfter(ctx context.Context) error {
 // for DeleteAfter, which runs on the other side of the row lock.
 func (r *Role) DeleteBefore(ctx context.Context) error {
 	if r.ID == "" {
-		return service.NewError(http.StatusBadRequest, "role id is required")
+		return gst.NewError(http.StatusBadRequest, "role id is required")
 	}
 
 	current := new(Role)

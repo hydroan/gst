@@ -31,7 +31,7 @@ func (t *TOTPStatusService) List(ctx *gst.ServiceContext, req *model.Empty) (rsp
 
 	// 1. Verify the authenticated account.
 	if len(ctx.UserID()) == 0 {
-		return nil, service.NewError(http.StatusUnauthorized, "authentication required")
+		return nil, gst.NewError(http.StatusUnauthorized, "authentication required")
 	}
 
 	// 2. Build the status view scoped to the current user.
@@ -58,7 +58,7 @@ func buildTOTPStatusRsp(ctx *gst.ServiceContext, userID string) (*modelmfa.TOTPS
 		UserID:   userID,
 		IsActive: true,
 	}).List(&devices); err != nil {
-		return nil, service.NewErrorWithCause(http.StatusInternalServerError, "failed to retrieve device information", err)
+		return nil, gst.NewErrorWithCause(http.StatusInternalServerError, "failed to retrieve device information", err)
 	}
 
 	deviceInfos := make([]modelmfa.TOTPDeviceInfo, 0, len(devices))

@@ -22,12 +22,12 @@ type Getter struct {
 func (a *Getter) Get(ctx *gst.ServiceContext, _ *model.Empty) (*document.AttachmentRsp, error) {
 	object, info, err := minio.Get(ctx, attachmentKey(ctx.Param("document")))
 	if err != nil {
-		return nil, service.NewErrorWithCause(http.StatusNotFound, "attachment not found", err)
+		return nil, gst.NewErrorWithCause(http.StatusNotFound, "attachment not found", err)
 	}
 	defer object.Close()
 	content, err := io.ReadAll(object)
 	if err != nil {
-		return nil, service.NewErrorWithCause(http.StatusInternalServerError, "failed to read the attachment", err)
+		return nil, gst.NewErrorWithCause(http.StatusInternalServerError, "failed to read the attachment", err)
 	}
 	return &document.AttachmentRsp{Key: info.Key, Size: info.Size, Content: string(content)}, nil
 }

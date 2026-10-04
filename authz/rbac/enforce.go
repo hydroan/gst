@@ -8,7 +8,7 @@ import (
 
 	"github.com/hydroan/gst/consts"
 	"github.com/hydroan/gst/internal/execctx"
-	"github.com/hydroan/gst/internal/serviceregistry"
+	"github.com/hydroan/gst/internal/types"
 	"github.com/hydroan/gst/logger"
 	"github.com/hydroan/gst/tenant"
 	"github.com/hydroan/gst/util"
@@ -61,7 +61,7 @@ func Enforce(ctx context.Context, subject Subject, obj, act string) (context.Con
 		// Anonymous subjects are refused before the tenant is resolved, so
 		// the decision is recorded without one.
 		logDeny(ctx, subject, "", sub, obj, act, consts.DenyReasonUnauthenticated, time.Since(start))
-		return ctx, "", serviceregistry.NewError(http.StatusForbidden, "permission denied")
+		return ctx, "", types.NewError(http.StatusForbidden, "permission denied")
 	}
 	tenantID := strings.TrimSpace(subject.TenantID)
 	if tenantID == "" {
@@ -71,11 +71,11 @@ func Enforce(ctx context.Context, subject Subject, obj, act string) (context.Con
 	decision, err := RBAC().Authorize(ctx, tenantID, sub, obj, act)
 	if err != nil {
 		logFailure(ctx, subject, tenantID, sub, obj, act, err, time.Since(start))
-		return ctx, tenantID, serviceregistry.NewErrorWithCause(http.StatusInternalServerError, "authorization unavailable", err)
+		return ctx, tenantID, types.NewErrorWithCause(http.StatusInternalServerError, "authorization unavailable", err)
 	}
 	if !decision.Allowed {
 		logDeny(ctx, subject, tenantID, sub, obj, act, decision.Reason, time.Since(start))
-		return ctx, tenantID, serviceregistry.NewError(http.StatusForbidden, "permission denied")
+		return ctx, tenantID, types.NewError(http.StatusForbidden, "permission denied")
 	}
 	// The scope is taken from the decision itself rather than looked up
 	// again, which is what keeps the reach of the data equal to the reach

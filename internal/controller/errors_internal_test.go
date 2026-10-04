@@ -6,7 +6,7 @@ import (
 
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/database"
-	"github.com/hydroan/gst/internal/serviceregistry"
+	"github.com/hydroan/gst/internal/types"
 	"github.com/stretchr/testify/require"
 )
 
@@ -16,7 +16,7 @@ import (
 // the constraints a client's data breaks among them, and everything else is
 // answered as it is, the server's own failure carrying no service error.
 func TestDatabaseError(t *testing.T) {
-	serviceErr := serviceregistry.NewError(http.StatusForbidden, "operation refused")
+	serviceErr := types.NewError(http.StatusForbidden, "operation refused")
 
 	tests := []struct {
 		name       string
@@ -38,7 +38,7 @@ func TestDatabaseError(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			answer := databaseError(tt.err)
 
-			var answered *serviceregistry.Error
+			var answered *types.Error
 			require.ErrorAs(t, answer, &answered)
 			require.Equal(t, tt.wantStatus, answered.Status())
 			require.Equal(t, tt.wantMsg, answered.Msg())
@@ -51,7 +51,7 @@ func TestDatabaseError(t *testing.T) {
 
 		answer := databaseError(internal)
 
-		var answered *serviceregistry.Error
+		var answered *types.Error
 		require.False(t, errors.As(answer, &answered), "no status and message were chosen: %v", answer)
 		require.Equal(t, internal, answer)
 	})
@@ -63,7 +63,7 @@ func TestDatabaseError(t *testing.T) {
 // error behind as the cause either way.
 func TestInvalidArgumentCarriesTheClientSafeText(t *testing.T) {
 	cause := errors.New("database password leaked")
-	serviceErr := serviceregistry.NewErrorWithCause(http.StatusInternalServerError, "failed to load user", cause)
+	serviceErr := types.NewErrorWithCause(http.StatusInternalServerError, "failed to load user", cause)
 
 	for name, tt := range map[string]struct {
 		err     error

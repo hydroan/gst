@@ -29,7 +29,7 @@ func (s *ChangeCancelService) Create(ctx *gst.ServiceContext, req *modelemail.Ch
 				Msg:      "invalid or expired email change cancellation token",
 			}, nil
 		}
-		return nil, service.NewErrorWithCause(http.StatusInternalServerError, "failed to consume email change cancellation flow", err)
+		return nil, gst.NewErrorWithCause(http.StatusInternalServerError, "failed to consume email change cancellation flow", err)
 	}
 	if err = validateEmailChangeFlow(flow); err != nil {
 		return nil, err
@@ -41,7 +41,7 @@ func (s *ChangeCancelService) Create(ctx *gst.ServiceContext, req *modelemail.Ch
 			log.Errorz("email account gateway is not configured", zap.Error(err))
 			return nil, newAccountGatewayNotConfiguredServiceError(err)
 		}
-		return nil, service.NewErrorWithCause(http.StatusInternalServerError, "failed to load email change cancellation account", err)
+		return nil, gst.NewErrorWithCause(http.StatusInternalServerError, "failed to load email change cancellation account", err)
 	}
 	if err = validAccountSnapshot(user, flow.UserID); err != nil {
 		log.Errorz("email account gateway returned invalid email change cancellation account", zap.Error(err))
@@ -64,7 +64,7 @@ func (s *ChangeCancelService) Create(ctx *gst.ServiceContext, req *modelemail.Ch
 	}
 
 	if err = markEmailChangeCanceled(ctx, flow); err != nil {
-		return nil, service.NewErrorWithCause(http.StatusInternalServerError, "failed to mark email change as canceled", err)
+		return nil, gst.NewErrorWithCause(http.StatusInternalServerError, "failed to mark email change as canceled", err)
 	}
 
 	return &modelemail.ChangeCancelRsp{

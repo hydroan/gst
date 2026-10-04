@@ -105,7 +105,7 @@ func (other) NewError() error { return errors.New("raw constructor") }
 
 type manager struct{}
 
-func (manager) Do() error { return service.NewError(http.StatusBadRequest, "bad request") }
+func (manager) Do() error { return gst.NewError(http.StatusBadRequest, "bad request") }
 
 var mgr = manager{}
 
@@ -115,8 +115,8 @@ func (g *Getter) Get(ctx *gst.ServiceContext, req *model.RecordReq) (*model.Reco
 }
 
 func (g *Getter) Delete(ctx *gst.ServiceContext, req *model.RecordReq) (*model.RecordRsp, error) {
-	service := other{}
-	return nil, service.NewError()
+	gst := other{}
+	return nil, gst.NewError()
 }
 
 // List calls Do on a local variable whose declaration does not spell its
@@ -171,13 +171,13 @@ func (g *Getter) Get(ctx *gst.ServiceContext, req *model.RecordReq) (*model.Reco
 	writeCheckFile(t, filepath.Join(projectDir, "helper", "helper.go"), `package helper
 
 import (
+	"github.com/hydroan/gst"
 	"net/http"
 
-	"github.com/hydroan/gst/service"
 )
 
 func CheckRecord() error {
-	return service.NewError(http.StatusBadRequest, "bad request")
+	return gst.NewError(http.StatusBadRequest, "bad request")
 }
 `)
 	writeCheckFile(t, filepath.Join(projectDir, "service", "imported", "imported.go"), `package imported
@@ -231,8 +231,8 @@ func (g *Getter) Get(ctx *gst.ServiceContext, req *model.RecordReq) (*model.Reco
 		}
 	}
 	for _, v := range violations {
-		if !strings.Contains(v, "service.NewError") {
-			t.Fatalf("violation should point at service.NewError as the fix, got %q", v)
+		if !strings.Contains(v, "gst.NewError") {
+			t.Fatalf("violation should point at gst.NewError as the fix, got %q", v)
 		}
 	}
 }
@@ -280,7 +280,7 @@ func (u *Updater) Update(ctx *gst.ServiceContext, req *model.RecordReq) (*model.
 	}
 	err := database.Transaction(ctx, func(txCtx context.Context) error {
 		if err := database.Database[*model.Record](txCtx).Update(record); err != nil {
-			return service.NewErrorWithCause(http.StatusConflict, "record update failed", err)
+			return gst.NewErrorWithCause(http.StatusConflict, "record update failed", err)
 		}
 		return nil
 	})
@@ -292,7 +292,7 @@ func (u *Updater) Update(ctx *gst.ServiceContext, req *model.RecordReq) (*model.
 
 func (u *Updater) validate(req *model.RecordReq) error {
 	if req.ID == "" {
-		return service.NewError(http.StatusBadRequest, "id is required")
+		return gst.NewError(http.StatusBadRequest, "id is required")
 	}
 	return nil
 }
@@ -309,15 +309,15 @@ func (u *Updater) SSE(ctx *gst.ServiceContext) error {
 // be transparent when the exit flow is resolved.
 func loadChecked[T any](ctx *gst.ServiceContext) error {
 	if ctx == nil {
-		return service.NewError(http.StatusBadRequest, "context is required")
+		return gst.NewError(http.StatusBadRequest, "context is required")
 	}
 	return nil
 }
 
-// newRecordMissingError returns *service.Error, which is compliant by
+// newRecordMissingError returns *gst.Error, which is compliant by
 // construction and needs no body analysis.
-func newRecordMissingError(err error) *service.Error {
-	return service.NewErrorWithCause(http.StatusNotFound, "record not found", err)
+func newRecordMissingError(err error) *gst.Error {
+	return gst.NewErrorWithCause(http.StatusNotFound, "record not found", err)
 }
 
 // Patch reuses one err variable for several sources. The early compliant
@@ -331,7 +331,7 @@ func (u *Updater) Patch(ctx *gst.ServiceContext, req *model.RecordReq) (*model.R
 	record := new(model.Record)
 	err = database.Database[*model.Record](ctx).Get(record, req.ID)
 	if err != nil {
-		return nil, service.NewErrorWithCause(http.StatusNotFound, "record not found", err)
+		return nil, gst.NewErrorWithCause(http.StatusNotFound, "record not found", err)
 	}
 	return &model.RecordRsp{}, nil
 }
@@ -343,14 +343,14 @@ func (u *Updater) Delete(ctx *gst.ServiceContext, req *model.RecordReq) (*model.
 	record := new(model.Record)
 	err := database.Database[*model.Record](ctx).Get(record, req.ID)
 	if err != nil {
-		return nil, service.NewErrorWithCause(http.StatusNotFound, "record not found", err)
+		return nil, gst.NewErrorWithCause(http.StatusNotFound, "record not found", err)
 	}
 	err = guard.RequireAdmin(ctx)
 	if err != nil {
 		return nil, err
 	}
 	if err = database.Database[*model.Record](ctx).Delete(record); err != nil {
-		return nil, service.NewErrorWithCause(http.StatusInternalServerError, "record delete failed", err)
+		return nil, gst.NewErrorWithCause(http.StatusInternalServerError, "record delete failed", err)
 	}
 	if err = guard.RequireAdmin(ctx); err != nil {
 		return nil, err
@@ -367,7 +367,7 @@ func (u *Updater) Import(ctx *gst.ServiceContext, req *model.RecordReq) (*model.
 	err := database.Database[*model.Record](ctx).Get(record, req.ID)
 	if err != nil {
 		if !errors.Is(err, database.ErrRecordNotFound) {
-			return nil, service.NewErrorWithCause(http.StatusInternalServerError, "failed to load record", err)
+			return nil, gst.NewErrorWithCause(http.StatusInternalServerError, "failed to load record", err)
 		}
 		record = &model.Record{}
 	}
@@ -396,7 +396,7 @@ type Getter struct {
 
 type manager struct{}
 
-func (manager) Do() error { return service.NewError(http.StatusBadRequest, "bad request") }
+func (manager) Do() error { return gst.NewError(http.StatusBadRequest, "bad request") }
 
 var mgr = manager{}
 
@@ -429,7 +429,7 @@ func (g *Getter) Update(ctx *gst.ServiceContext, req *model.RecordReq) (*model.R
 
 func countdown(n int) error {
 	if n == 0 {
-		return service.NewError(http.StatusBadRequest, "countdown finished")
+		return gst.NewError(http.StatusBadRequest, "countdown finished")
 	}
 	return countdown(n - 1)
 }
@@ -440,12 +440,11 @@ import (
 	"net/http"
 
 	"github.com/hydroan/gst"
-	"github.com/hydroan/gst/service"
 )
 
 func RequireAdmin(ctx *gst.ServiceContext) error {
 	if ctx == nil {
-		return service.NewError(http.StatusForbidden, "admin required")
+		return gst.NewError(http.StatusForbidden, "admin required")
 	}
 	return nil
 }
@@ -482,12 +481,12 @@ func (g *Getter) Get(ctx *ServiceContext, req *model.RecordReq) (*model.RecordRs
 	writeCheckFile(t, filepath.Join(projectDir, "helper", "v2", "limit.go"), `package limit
 
 import (
+	"github.com/hydroan/gst"
 	"net/http"
 
-	"github.com/hydroan/gst/service"
 )
 
-func Check() error { return service.NewError(http.StatusTooManyRequests, "slow down") }
+func Check() error { return gst.NewError(http.StatusTooManyRequests, "slow down") }
 `)
 	writeCheckFile(t, filepath.Join(projectDir, "service", "limited", "limited.go"), `package limited
 

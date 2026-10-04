@@ -9,7 +9,6 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst"
 	modeliamsession "github.com/hydroan/gst/internal/model/iam/session"
-	"github.com/hydroan/gst/service"
 	"github.com/mssola/useragent"
 	"go.uber.org/zap"
 )
@@ -39,7 +38,7 @@ func loadSession(ctx context.Context, sessionID string) (modeliamsession.Session
 		return modeliamsession.Session{}, false, nil
 	default:
 		logStoreWarning("failed to load iam session", sessionID, err)
-		return modeliamsession.Session{}, false, service.NewErrorWithCause(http.StatusInternalServerError, "failed to load session", err)
+		return modeliamsession.Session{}, false, gst.NewErrorWithCause(http.StatusInternalServerError, "failed to load session", err)
 	}
 }
 
@@ -80,7 +79,7 @@ func loadSession(ctx context.Context, sessionID string) (modeliamsession.Session
 func Authenticate(ctx context.Context, sessionID, userAgent, method, path string) (modeliamsession.Session, error) {
 	sessionID = strings.TrimSpace(sessionID)
 	if sessionID == "" {
-		return modeliamsession.Session{}, service.NewError(http.StatusUnauthorized, "no session")
+		return modeliamsession.Session{}, gst.NewError(http.StatusUnauthorized, "no session")
 	}
 
 	current, found, err := loadSession(ctx, sessionID)
@@ -102,10 +101,10 @@ func Authenticate(ctx context.Context, sessionID, userAgent, method, path string
 		// A service error carries a status and a message written for the
 		// client. Anything else is an internal failure whose text belongs
 		// in logs, not in the answer.
-		var serviceErr *service.Error
+		var serviceErr *gst.Error
 		if !errors.As(err, &serviceErr) {
 			zap.S().Warnw("iam session rejected", "reason", err.Error(), "path", path, "method", method)
-			serviceErr = service.NewError(http.StatusForbidden, "session invalid")
+			serviceErr = gst.NewError(http.StatusForbidden, "session invalid")
 			err = serviceErr
 		}
 		// A refused user — gone, disabled or locked — ends the session; a
@@ -116,7 +115,7 @@ func Authenticate(ctx context.Context, sessionID, userAgent, method, path string
 		return modeliamsession.Session{}, err
 	}
 	if current.MustChangePassword && !MustChangePasswordExempt(method, path) {
-		return modeliamsession.Session{}, service.NewError(http.StatusForbidden, "password change required before using this resource")
+		return modeliamsession.Session{}, gst.NewError(http.StatusForbidden, "password change required before using this resource")
 	}
 
 	if err = Store.TouchSession(ctx, sessionID, current, time.Now()); err != nil {
@@ -150,5 +149,5 @@ func deviceMismatch(current modeliamsession.Session, userAgent string) string {
 // refusal with the one fixed message.
 func rejected(reason, method, path string) error {
 	zap.S().Warnw("iam session rejected", "reason", reason, "path", path, "method", method)
-	return service.NewError(http.StatusUnauthorized, "session invalid")
+	return gst.NewError(http.StatusUnauthorized, "session invalid")
 }

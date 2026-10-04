@@ -5,8 +5,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/hydroan/gst"
 	"github.com/hydroan/gst/internal/errorstack"
-	"github.com/hydroan/gst/service"
 	"github.com/stretchr/testify/require"
 )
 
@@ -42,14 +42,14 @@ func TestNewErrorWithCauseStackTraceStartsAtPublicConstructionSite(t *testing.T)
 // newSamplePublicStackError constructs a service error through the public
 // constructor inside a dedicated helper, so tests can assert the captured
 // stack points at this construction site.
-func newSamplePublicStackError() *service.Error {
-	return service.NewError(http.StatusConflict, "sample record missing")
+func newSamplePublicStackError() *gst.Error {
+	return gst.NewError(http.StatusConflict, "sample record missing")
 }
 
 // newSamplePublicStackErrorWithPlainCause wraps a cause without an embedded
 // stack trace, so the construction-site stack is the only origin candidate.
-func newSamplePublicStackErrorWithPlainCause() *service.Error {
-	return service.NewErrorWithCause(http.StatusInternalServerError, "sample load failed", samplePlainCauseError{})
+func newSamplePublicStackErrorWithPlainCause() *gst.Error {
+	return gst.NewErrorWithCause(http.StatusInternalServerError, "sample load failed", samplePlainCauseError{})
 }
 
 // samplePlainCauseError is a cause error without any embedded stack trace.

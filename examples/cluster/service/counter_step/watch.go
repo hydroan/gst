@@ -39,11 +39,11 @@ func (w *Watch) Stream(ctx *gst.ServiceContext, req *model.CounterStepWatchReq, 
 			WithOrder(model.CounterStepCols.Seq.Asc()).
 			List(&steps)
 		if err != nil {
-			return service.NewErrorWithCause(http.StatusInternalServerError, "the numbers were not read", err)
+			return gst.NewErrorWithCause(http.StatusInternalServerError, "the numbers were not read", err)
 		}
 		for _, step := range steps {
 			if err := stream.Send(step); err != nil {
-				return service.NewErrorWithCause(http.StatusInternalServerError, "failed to send the number", err)
+				return gst.NewErrorWithCause(http.StatusInternalServerError, "failed to send the number", err)
 			}
 			after = step.Seq
 		}

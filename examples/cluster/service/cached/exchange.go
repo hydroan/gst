@@ -30,14 +30,14 @@ func (e *Exchange) Stream(ctx *gst.ServiceContext, stream *grpc.BidiStream[*mode
 			return nil
 		}
 		if err != nil {
-			return service.NewErrorWithCause(http.StatusBadRequest, "failed to read the key", err)
+			return gst.NewErrorWithCause(http.StatusBadRequest, "failed to read the key", err)
 		}
 		value, found, err := dao.CacheGet(ctx, req.Key)
 		if err != nil {
-			return service.NewErrorWithCause(http.StatusInternalServerError, "the entry was not read", err)
+			return gst.NewErrorWithCause(http.StatusInternalServerError, "the entry was not read", err)
 		}
 		if err := stream.Send(&model.CachedExchangeRsp{Replica: helper.Replica(), Key: req.Key, Value: value, Found: found}); err != nil {
-			return service.NewErrorWithCause(http.StatusInternalServerError, "failed to send the entry", err)
+			return gst.NewErrorWithCause(http.StatusInternalServerError, "failed to send the entry", err)
 		}
 	}
 }

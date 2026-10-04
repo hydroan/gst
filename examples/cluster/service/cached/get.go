@@ -22,11 +22,11 @@ type Getter struct {
 func (g *Getter) Get(ctx *gst.ServiceContext, _ *gstmodel.Empty) (*model.CachedGetRsp, error) {
 	key := ctx.Param("id")
 	if key == "" {
-		return nil, service.NewError(http.StatusBadRequest, "a key is required")
+		return nil, gst.NewError(http.StatusBadRequest, "a key is required")
 	}
 	value, found, err := dao.CacheGet(ctx, key)
 	if err != nil {
-		return nil, service.NewErrorWithCause(http.StatusInternalServerError, "the entry was not read", err)
+		return nil, gst.NewErrorWithCause(http.StatusInternalServerError, "the entry was not read", err)
 	}
 	return &model.CachedGetRsp{Replica: helper.Replica(), Key: key, Value: value, Found: found}, nil
 }

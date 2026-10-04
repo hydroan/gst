@@ -29,7 +29,7 @@ func (s *ChangeConfirmService) Create(ctx *gst.ServiceContext, req *modelemail.C
 				Msg:     "invalid or expired email change token",
 			}, nil
 		}
-		return nil, service.NewErrorWithCause(http.StatusInternalServerError, "failed to consume email change confirmation flow", err)
+		return nil, gst.NewErrorWithCause(http.StatusInternalServerError, "failed to consume email change confirmation flow", err)
 	}
 	if err = validateEmailChangeFlow(flow); err != nil {
 		return nil, err
@@ -37,7 +37,7 @@ func (s *ChangeConfirmService) Create(ctx *gst.ServiceContext, req *modelemail.C
 
 	canceled, err := emailChangeCanceled(ctx, flow.UserID, flow.OldEmail, flow.NewEmail)
 	if err != nil {
-		return nil, service.NewErrorWithCause(http.StatusInternalServerError, "failed to check email change cancellation state", err)
+		return nil, gst.NewErrorWithCause(http.StatusInternalServerError, "failed to check email change cancellation state", err)
 	}
 	if canceled {
 		return &modelemail.ChangeConfirmRsp{
@@ -53,7 +53,7 @@ func (s *ChangeConfirmService) Create(ctx *gst.ServiceContext, req *modelemail.C
 			log.Errorz("email account gateway is not configured", zap.Error(err))
 			return nil, newAccountGatewayNotConfiguredServiceError(err)
 		}
-		return nil, service.NewErrorWithCause(http.StatusInternalServerError, "failed to load email change confirmation account", err)
+		return nil, gst.NewErrorWithCause(http.StatusInternalServerError, "failed to load email change confirmation account", err)
 	}
 	if err = validAccountSnapshot(user, flow.UserID); err != nil {
 		log.Errorz("email account gateway returned invalid email change confirmation account", zap.Error(err))
@@ -82,7 +82,7 @@ func (s *ChangeConfirmService) Create(ctx *gst.ServiceContext, req *modelemail.C
 			return nil, newAccountGatewayNotConfiguredServiceError(err)
 		}
 		if !errors.Is(err, ErrAccountNotFound) {
-			return nil, service.NewErrorWithCause(http.StatusInternalServerError, "failed to lookup target email for confirmation", err)
+			return nil, gst.NewErrorWithCause(http.StatusInternalServerError, "failed to lookup target email for confirmation", err)
 		}
 	}
 	if existingUser != nil && existingUser.ID != user.ID {
@@ -97,10 +97,10 @@ func (s *ChangeConfirmService) Create(ctx *gst.ServiceContext, req *modelemail.C
 			log.Errorz("email account gateway is not configured", zap.Error(err))
 			return nil, newAccountGatewayNotConfiguredServiceError(err)
 		}
-		return nil, service.NewErrorWithCause(http.StatusInternalServerError, "failed to update email change state", err)
+		return nil, gst.NewErrorWithCause(http.StatusInternalServerError, "failed to update email change state", err)
 	}
 	if err = clearEmailChangeCancellation(ctx, flow.UserID, flow.OldEmail, flow.NewEmail); err != nil {
-		return nil, service.NewErrorWithCause(http.StatusInternalServerError, "failed to clear email change cancellation marker", err)
+		return nil, gst.NewErrorWithCause(http.StatusInternalServerError, "failed to clear email change cancellation marker", err)
 	}
 
 	return &modelemail.ChangeConfirmRsp{

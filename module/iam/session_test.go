@@ -20,7 +20,6 @@ import (
 	"github.com/hydroan/gst/internal/response"
 	"github.com/hydroan/gst/internal/router"
 	serviceiamsession "github.com/hydroan/gst/internal/service/iam/session"
-	"github.com/hydroan/gst/internal/serviceregistry"
 	"github.com/hydroan/gst/internal/testutil"
 	"github.com/hydroan/gst/internal/types"
 	"github.com/hydroan/gst/module/iam"
@@ -348,7 +347,7 @@ func TestSessionUserStateRefresh(t *testing.T) {
 		_, err := serviceiamsession.ValidateSessionUserState(canceledCtx, session)
 		require.Error(t, err)
 
-		var serviceErr *serviceregistry.Error
+		var serviceErr *types.Error
 		require.True(t, errors.As(err, &serviceErr))
 		require.Equal(t, http.StatusInternalServerError, serviceErr.Status())
 		require.Contains(t, err.Error(), "failed to refresh session user state")

@@ -37,7 +37,7 @@ func (t *TOTPConfirmService) Create(ctx *gst.ServiceContext, req *modelmfa.TOTPC
 	log := t.WithContext(ctx, ctx.Phase())
 
 	if len(ctx.UserID()) == 0 {
-		return nil, service.NewError(http.StatusUnauthorized, "authentication required")
+		return nil, gst.NewError(http.StatusUnauthorized, "authentication required")
 	}
 	sessionID, err := currentTOTPBindSessionID(ctx)
 	if err != nil {
@@ -49,26 +49,26 @@ func (t *TOTPConfirmService) Create(ctx *gst.ServiceContext, req *modelmfa.TOTPC
 		if errors.Is(err, errTOTPBindChallengeNotFound) ||
 			errors.Is(err, errTOTPBindChallengeExpired) ||
 			errors.Is(err, errTOTPBindChallengeInvalid) {
-			return nil, service.NewErrorWithCause(http.StatusBadRequest, "invalid or expired TOTP binding challenge", err)
+			return nil, gst.NewErrorWithCause(http.StatusBadRequest, "invalid or expired TOTP binding challenge", err)
 		}
-		return nil, service.NewErrorWithCause(http.StatusInternalServerError, "failed to load TOTP binding challenge", err)
+		return nil, gst.NewErrorWithCause(http.StatusInternalServerError, "failed to load TOTP binding challenge", err)
 	}
 	if challenge.UserID != ctx.UserID() || challenge.SessionID != sessionID {
-		return nil, service.NewError(http.StatusBadRequest, "invalid or expired TOTP binding challenge")
+		return nil, gst.NewError(http.StatusBadRequest, "invalid or expired TOTP binding challenge")
 	}
 
 	valid := totp.Validate(req.Code, challenge.Secret)
 	if !valid {
-		return nil, service.NewError(http.StatusBadRequest, "invalid TOTP code")
+		return nil, gst.NewError(http.StatusBadRequest, "invalid TOTP code")
 	}
 	// A wrong code above keeps the challenge alive for retry; a replayed code
 	// answers like a wrong one and also keeps the challenge, so the user can
 	// retry with the next period's code.
 	if err = markTOTPCodeUsed(ctx, ctx.UserID(), req.Code); err != nil {
 		if errors.Is(err, errTOTPCodeReplayed) {
-			return nil, service.NewError(http.StatusBadRequest, "invalid TOTP code")
+			return nil, gst.NewError(http.StatusBadRequest, "invalid TOTP code")
 		}
-		return nil, service.NewErrorWithCause(http.StatusInternalServerError, "failed to confirm TOTP binding", err)
+		return nil, gst.NewErrorWithCause(http.StatusInternalServerError, "failed to confirm TOTP binding", err)
 	}
 
 	log.Infoz("totp code validated successfully", zap.String("user_id", ctx.UserID()))
@@ -79,7 +79,7 @@ func (t *TOTPConfirmService) Create(ctx *gst.ServiceContext, req *modelmfa.TOTPC
 	// silently lost. Concurrent confirms that already loaded the challenge are
 	// stopped by the (user_id, secret) unique index instead.
 	if err = consumeTOTPBindChallenge(ctx, req.ChallengeID); err != nil {
-		return nil, service.NewErrorWithCause(http.StatusInternalServerError, "failed to consume TOTP binding challenge", err)
+		return nil, gst.NewErrorWithCause(http.StatusInternalServerError, "failed to consume TOTP binding challenge", err)
 	}
 
 	// No duplicate pre-check: the challenge secret is a fresh 256-bit random
@@ -88,11 +88,11 @@ func (t *TOTPConfirmService) Create(ctx *gst.ServiceContext, req *modelmfa.TOTPC
 	// conflict on Create anyway.
 	backupCodes, err := GenerateTOTPBackupCodes()
 	if err != nil {
-		return nil, service.NewErrorWithCause(http.StatusInternalServerError, "failed to generate backup codes", err)
+		return nil, gst.NewErrorWithCause(http.StatusInternalServerError, "failed to generate backup codes", err)
 	}
 	backupCodeHashes, err := HashTOTPBackupCodes(challenge.Secret, backupCodes)
 	if err != nil {
-		return nil, service.NewErrorWithCause(http.StatusInternalServerError, "failed to hash backup codes", err)
+		return nil, gst.NewErrorWithCause(http.StatusInternalServerError, "failed to hash backup codes", err)
 	}
 
 	now := time.Now().UTC()
@@ -106,7 +106,7 @@ func (t *TOTPConfirmService) Create(ctx *gst.ServiceContext, req *modelmfa.TOTPC
 	}
 
 	if err = database.Database[*modelmfa.TOTPDevice](ctx).Create(device); err != nil {
-		return nil, service.NewErrorWithCause(http.StatusInternalServerError, "failed to save device", err)
+		return nil, gst.NewErrorWithCause(http.StatusInternalServerError, "failed to save device", err)
 	}
 
 	log.Infoz("totp device created successfully",

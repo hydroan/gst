@@ -7,7 +7,7 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/gin-gonic/gin"
 	"github.com/hydroan/gst/consts"
-	"github.com/hydroan/gst/internal/serviceregistry"
+	"github.com/hydroan/gst/internal/types"
 )
 
 // SuccessMsg is the msg of the success envelope, the one JSON writes.
@@ -19,7 +19,7 @@ const SuccessMsg = "success"
 // stays out of the envelope.
 const (
 	failureStatus = http.StatusInternalServerError
-	failureMsg    = serviceregistry.FailureMsg
+	failureMsg    = types.FailureMsg
 )
 
 // JSON writes data in the success envelope: status 200, SuccessMsg, data
@@ -39,7 +39,7 @@ func JSON(c *gin.Context, data ...any) {
 // and columns, third-party client output — never reaches the envelope;
 // callers log the full error themselves before answering it here.
 func Error(c *gin.Context, err error) {
-	var serviceErr *serviceregistry.Error
+	var serviceErr *types.Error
 	if errors.As(err, &serviceErr) {
 		envelope(c, serviceErr.Status(), serviceErr.Msg(), nil)
 		return

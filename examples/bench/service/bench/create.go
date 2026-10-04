@@ -30,7 +30,7 @@ func (c *Create) Create(ctx *gst.ServiceContext, req *bench.CreateReq) (rsp *ben
 		err = database.Database[*bench.Bench](ctx).Create(data)
 	}
 	if err != nil {
-		return nil, service.NewErrorWithCause(http.StatusInternalServerError, "create bench data failed", err)
+		return nil, gst.NewErrorWithCause(http.StatusInternalServerError, "create bench data failed", err)
 	}
 
 	return data, nil

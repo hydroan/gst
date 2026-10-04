@@ -17,7 +17,6 @@ import (
 	"github.com/hydroan/gst/consts"
 	"github.com/hydroan/gst/database"
 	modelmfa "github.com/hydroan/gst/internal/model/mfa"
-	"github.com/hydroan/gst/service"
 	"gorm.io/datatypes"
 )
 
@@ -95,7 +94,7 @@ func hashTOTPBackupCode(secret, normalizedCode string) string {
 // recovery codes be guessed outside that budget.
 func consumeTOTPBackupCode(ctx *gst.ServiceContext, userID, code string) error {
 	if ctx == nil || strings.TrimSpace(userID) == "" {
-		return service.NewError(http.StatusUnauthorized, "authentication required")
+		return gst.NewError(http.StatusUnauthorized, "authentication required")
 	}
 
 	return database.Transaction(ctx, func(ctx context.Context) error {

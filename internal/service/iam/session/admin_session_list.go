@@ -59,7 +59,7 @@ func (a *AdminSessionListService) List(ctx *gst.ServiceContext, req *model.Empty
 				_ = Store.DropSessionIndexes(ctx, "", sessionID)
 				continue
 			}
-			return nil, service.NewErrorWithCause(http.StatusInternalServerError, "failed to load session", getErr)
+			return nil, gst.NewErrorWithCause(http.StatusInternalServerError, "failed to load session", getErr)
 		}
 		if validateErr := ValidateSession(sessionID, sessionData); validateErr != nil {
 			_, _ = Store.DeleteSession(ctx, sessionID)
@@ -131,7 +131,7 @@ func (a *AdminSessionListService) buildItem(ctx *gst.ServiceContext, sourceSessi
 			_, _ = Store.DeleteSession(ctx, sourceSession.ID)
 			return nil, false, nil
 		}
-		return nil, false, service.NewErrorWithCause(http.StatusInternalServerError, "failed to load session owner", err)
+		return nil, false, gst.NewErrorWithCause(http.StatusInternalServerError, "failed to load session owner", err)
 	}
 	credential, err := loadSessionPasswordCredential(ctx, targetUser.ID)
 	if err != nil {
@@ -139,11 +139,11 @@ func (a *AdminSessionListService) buildItem(ctx *gst.ServiceContext, sourceSessi
 			_, _ = Store.DeleteSession(ctx, sourceSession.ID)
 			return nil, false, nil
 		}
-		return nil, false, service.NewErrorWithCause(http.StatusInternalServerError, "failed to load session owner", err)
+		return nil, false, gst.NewErrorWithCause(http.StatusInternalServerError, "failed to load session owner", err)
 	}
 	email, err := loadSessionEmail(ctx, targetUser.ID)
 	if err != nil {
-		return nil, false, service.NewErrorWithCause(http.StatusInternalServerError, "failed to load session owner", err)
+		return nil, false, gst.NewErrorWithCause(http.StatusInternalServerError, "failed to load session owner", err)
 	}
 
 	return &adminSessionOwnerItem{

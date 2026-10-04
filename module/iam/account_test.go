@@ -19,7 +19,6 @@ import (
 	modeliamuser "github.com/hydroan/gst/internal/model/iam/user"
 	serviceiamaccount "github.com/hydroan/gst/internal/service/iam/account"
 	serviceiamsession "github.com/hydroan/gst/internal/service/iam/session"
-	"github.com/hydroan/gst/internal/serviceregistry"
 	"github.com/hydroan/gst/internal/testutil"
 	"github.com/hydroan/gst/internal/types"
 	"github.com/hydroan/gst/logger"
@@ -229,7 +228,7 @@ func TestAccountLoginSecondFactorVerifier(t *testing.T) {
 		if allow {
 			return nil
 		}
-		return serviceregistry.NewError(http.StatusUnauthorized, authn.MsgSecondFactorRequired)
+		return types.NewError(http.StatusUnauthorized, authn.MsgSecondFactorRequired)
 	})
 
 	t.Run("verifier_rejection_blocks_login", func(t *testing.T) {
@@ -493,7 +492,7 @@ func TestAccountChangePassword(t *testing.T) {
 		})
 		require.Error(t, err)
 
-		var serviceErr *serviceregistry.Error
+		var serviceErr *types.Error
 		require.True(t, errors.As(err, &serviceErr))
 		require.Equal(t, http.StatusInternalServerError, serviceErr.Status())
 

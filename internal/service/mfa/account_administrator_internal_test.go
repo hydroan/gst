@@ -6,7 +6,6 @@ import (
 
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst"
-	"github.com/hydroan/gst/service"
 	"github.com/stretchr/testify/require"
 )
 
@@ -24,7 +23,7 @@ func TestMissingAccountAdministratorDeniesEverything(t *testing.T) {
 	err := currentAccountAdministrator().EnsureCanAdminister(&gst.ServiceContext{}, "user-1")
 
 	require.ErrorIs(t, err, ErrAccountAdministratorNotConfigured)
-	var svcErr *service.Error
+	var svcErr *gst.Error
 	require.True(t, errors.As(err, &svcErr))
 	require.Equal(t, http.StatusInternalServerError, svcErr.Status())
 }

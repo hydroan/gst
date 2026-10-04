@@ -15,21 +15,16 @@ import (
 	"github.com/hydroan/gst/internal/goast"
 )
 
-// gstServiceImportPath is the framework package whose NewError and
-// NewErrorWithCause constructors are the only sanctioned way to build errors
-// that leave a service method.
-const gstServiceImportPath = "github.com/hydroan/gst/service"
-
 // ServiceErrorDiscipline requires the errors leaving service methods to be
-// built by service.NewError or service.NewErrorWithCause.
+// built by gst.NewError or gst.NewErrorWithCause.
 var ServiceErrorDiscipline = Check{
 	Name: "Service error discipline",
-	Rule: "errors leaving service methods must be built by service.NewError or service.NewErrorWithCause",
+	Rule: "errors leaving service methods must be built by gst.NewError or gst.NewErrorWithCause",
 	run:  checkServiceErrorDiscipline,
 }
 
 // checkServiceErrorDiscipline checks that every error a service method can
-// return is created by service.NewError or service.NewErrorWithCause, either
+// return is created by gst.NewError or gst.NewErrorWithCause, either
 // directly at the exit or inside a project function the exit's error flows
 // from. An error built any other way reaches the client and the logs as-is:
 // its message leaks internal wording instead of an operator-facing one, and
@@ -208,7 +203,6 @@ func (a *svcErrAnalysis) collectFile(path string) {
 		analysis:   a,
 		path:       filepath.ToSlash(path),
 		pkgDir:     filepath.ToSlash(filepath.Dir(path)),
-		svc:        goast.ImportedNames(file, gstServiceImportPath, "service"),
 		db:         goast.ImportedNames(file, gstDatabaseImportPath, "database"),
 		gst:        goast.ImportedNames(file, gstImportPath, "gst"),
 		projectPkg: map[string]string{},
@@ -257,9 +251,7 @@ type svcErrFileCollector struct {
 	// serviceTypes are the service struct types the file declares, the
 	// ones entryTypes records for its package.
 	serviceTypes []string
-	// svc, db and gst are the names of the framework service, database and
-	// root packages.
-	svc goast.PackageNames
+	// db and gst are the names of the framework database and root packages.
 	db  goast.PackageNames
 	gst goast.PackageNames
 	// projectPkg maps every qualifier of a project package to its directory.
@@ -350,7 +342,7 @@ func (c *svcErrFileCollector) collectFunc(decl *ast.FuncDecl) {
 	}
 	results := decl.Type.Results.List
 	last := results[len(results)-1]
-	// A function returning *service.Error is compliant by construction: every
+	// A function returning *gst.Error is compliant by construction: every
 	// non-nil value of that type came from NewError or NewErrorWithCause.
 	if c.isServiceErrorPtr(last.Type) {
 		key := svcErrFuncKey{pkgDir: c.pkgDir, recv: svcErrReceiverTypeName(receiverType(decl)), name: decl.Name.Name}
@@ -410,11 +402,11 @@ func receiverType(decl *ast.FuncDecl) ast.Expr {
 	return decl.Recv.List[0].Type
 }
 
-// isServiceErrorPtr reports whether expr denotes *service.Error under the
-// names the file knows the framework service package by.
+// isServiceErrorPtr reports whether expr denotes *gst.Error under the names
+// the file knows the framework root package by.
 func (c *svcErrFileCollector) isServiceErrorPtr(expr ast.Expr) bool {
 	star, ok := expr.(*ast.StarExpr)
-	return ok && c.svc.Refers(star.X, "Error")
+	return ok && c.gst.Refers(star.X, "Error")
 }
 
 // svcErrReceiverTypeName extracts the receiver's type name, unwrapping
@@ -730,7 +722,7 @@ func (s *svcErrFuncScope) resolveCall(call *ast.CallExpr, visiting map[varObj]bo
 		// transaction without a qualifier; a name the function declares
 		// itself hides them (see calleeOf).
 		if !s.declaresLocally(declObj(fun)) {
-			if s.file.svc.Refers(fun, "NewError", "NewErrorWithCause") {
+			if s.file.gst.Refers(fun, "NewError", "NewErrorWithCause") {
 				return []svcErrSource{{kind: svcErrSourceNewError}}
 			}
 			if s.file.db.Refers(fun, "Transaction") {
@@ -744,20 +736,20 @@ func (s *svcErrFuncScope) resolveCall(call *ast.CallExpr, visiting map[varObj]bo
 		}
 		// The receiver, a parameter or a local variable hides every
 		// package-level meaning of its name, an import included: with
-		// service := other{} in the body, service.NewError() is other's
+		// gst := other{} in the body, gst.NewError() is other's
 		// method, not the framework constructor.
 		if obj := declObj(ident); s.declaresLocally(obj) {
 			// ServiceContext.SSE errors are framework-governed: a setup
 			// failure carries a framework-built message, and an error after
 			// the stream opened never reaches the response envelope, so
-			// wrapping the call in service.NewError adds nothing the client
+			// wrapping the call in gst.NewError adds nothing the client
 			// could see.
 			if s.ctxParams[obj] && fun.Sel.Name == "SSE" {
 				return []svcErrSource{{kind: svcErrSourceNewError}}
 			}
 			break
 		}
-		if s.file.svc.Refers(fun, "NewError", "NewErrorWithCause") {
+		if s.file.gst.Refers(fun, "NewError", "NewErrorWithCause") {
 			return []svcErrSource{{kind: svcErrSourceNewError}}
 		}
 		if s.file.db.Refers(fun, "Transaction") {
@@ -958,7 +950,7 @@ func (a *svcErrAnalysis) report() []string {
 	violations := make([]string, 0, len(positions))
 	for _, pos := range positions {
 		violations = append(violations, fmt.Sprintf(
-			"%s:%d: error on a service exit path is created outside service.NewError/service.NewErrorWithCause; construct it here (or in the project function it flows through) so the client gets a curated status and message and the log gets a service-level stack",
+			"%s:%d: error on a service exit path is created outside gst.NewError/gst.NewErrorWithCause; construct it here (or in the project function it flows through) so the client gets a curated status and message and the log gets a service-level stack",
 			filepath.ToSlash(pos.Filename), pos.Line,
 		))
 	}

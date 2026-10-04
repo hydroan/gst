@@ -10,7 +10,6 @@ import (
 	"github.com/hydroan/gst/authn"
 	"github.com/hydroan/gst/database"
 	modelmfa "github.com/hydroan/gst/internal/model/mfa"
-	"github.com/hydroan/gst/service"
 	"github.com/pquerna/otp/totp"
 )
 
@@ -33,12 +32,12 @@ import (
 func LoginSecondFactorVerifier(ctx *gst.ServiceContext, userID string, factor authn.LoginSecondFactor) error {
 	userID = strings.TrimSpace(userID)
 	if ctx == nil || userID == "" {
-		return service.NewError(http.StatusUnauthorized, "authentication required")
+		return gst.NewError(http.StatusUnauthorized, "authentication required")
 	}
 
 	devices, err := listActiveLoginTOTPDevices(ctx, userID)
 	if err != nil {
-		return service.NewErrorWithCause(http.StatusInternalServerError, "failed to verify second factor", err)
+		return gst.NewErrorWithCause(http.StatusInternalServerError, "failed to verify second factor", err)
 	}
 	if len(devices) == 0 {
 		return nil
@@ -50,9 +49,9 @@ func LoginSecondFactorVerifier(ctx *gst.ServiceContext, userID string, factor au
 	case totpCode == "" && backupCode == "":
 		// authn.MsgSecondFactorRequired is a stable client contract: login UIs match
 		// it to prompt for the code.
-		return service.NewError(http.StatusUnauthorized, authn.MsgSecondFactorRequired)
+		return gst.NewError(http.StatusUnauthorized, authn.MsgSecondFactorRequired)
 	case totpCode != "" && backupCode != "":
-		return service.NewError(http.StatusBadRequest, "provide exactly one second factor")
+		return gst.NewError(http.StatusBadRequest, "provide exactly one second factor")
 	}
 
 	// Only a submitted proof spends the budget; the rejections above guess
@@ -60,9 +59,9 @@ func LoginSecondFactorVerifier(ctx *gst.ServiceContext, userID string, factor au
 	// that cannot be reached refuses the login without touching a recovery code.
 	if err = reserveTOTPVerificationAttempt(ctx, totpVerificationLogin, userID); err != nil {
 		if errors.Is(err, errTOTPVerificationLocked) {
-			return service.NewError(http.StatusTooManyRequests, "too many failed verification attempts")
+			return gst.NewError(http.StatusTooManyRequests, "too many failed verification attempts")
 		}
-		return service.NewErrorWithCause(http.StatusInternalServerError, "failed to verify second factor", err)
+		return gst.NewErrorWithCause(http.StatusInternalServerError, "failed to verify second factor", err)
 	}
 	if totpCode != "" {
 		return verifyLoginTOTPCode(ctx, devices, totpCode)
@@ -87,15 +86,15 @@ func listActiveLoginTOTPDevices(ctx *gst.ServiceContext, userID string) ([]*mode
 func verifyLoginTOTPCode(ctx *gst.ServiceContext, devices []*modelmfa.TOTPDevice, code string) error {
 	device := findLoginTOTPDeviceByCode(devices, code)
 	if device == nil {
-		return service.NewError(http.StatusUnauthorized, "invalid TOTP code")
+		return gst.NewError(http.StatusUnauthorized, "invalid TOTP code")
 	}
 
 	// A replayed code fails login exactly like a wrong one.
 	if err := markTOTPCodeUsed(ctx, device.UserID, code); err != nil {
 		if errors.Is(err, errTOTPCodeReplayed) {
-			return service.NewError(http.StatusUnauthorized, "invalid TOTP code")
+			return gst.NewError(http.StatusUnauthorized, "invalid TOTP code")
 		}
-		return service.NewErrorWithCause(http.StatusInternalServerError, "failed to verify second factor", err)
+		return gst.NewErrorWithCause(http.StatusInternalServerError, "failed to verify second factor", err)
 	}
 
 	now := time.Now().UTC()
@@ -105,7 +104,7 @@ func verifyLoginTOTPCode(ctx *gst.ServiceContext, devices []*modelmfa.TOTPDevice
 	if err := database.Database[*modelmfa.TOTPDevice](ctx).
 		WithSelect(colTOTPDeviceLastUsedAt).
 		Update(device); err != nil {
-		return service.NewErrorWithCause(http.StatusInternalServerError, "failed to verify second factor", err)
+		return gst.NewErrorWithCause(http.StatusInternalServerError, "failed to verify second factor", err)
 	}
 	clearTOTPVerificationFailures(ctx, device.UserID, totpVerificationLogin)
 	return nil
@@ -116,9 +115,9 @@ func verifyLoginTOTPCode(ctx *gst.ServiceContext, devices []*modelmfa.TOTPDevice
 func verifyLoginBackupCode(ctx *gst.ServiceContext, userID, code string) error {
 	if err := consumeTOTPBackupCode(ctx, userID, code); err != nil {
 		if errors.Is(err, errTOTPBackupCodeInvalid) {
-			return service.NewError(http.StatusUnauthorized, "invalid backup code")
+			return gst.NewError(http.StatusUnauthorized, "invalid backup code")
 		}
-		return service.NewErrorWithCause(http.StatusInternalServerError, "failed to verify second factor", err)
+		return gst.NewErrorWithCause(http.StatusInternalServerError, "failed to verify second factor", err)
 	}
 	clearTOTPVerificationFailures(ctx, userID, totpVerificationLogin)
 	return nil

@@ -36,7 +36,7 @@ func (r *ResetPasswordService) Create(ctx *gst.ServiceContext, req *modeliamacco
 	credential, err := LoadPasswordCredential(ctx, target.ID)
 	if err != nil {
 		if !errors.Is(err, database.ErrRecordNotFound) {
-			return nil, service.NewErrorWithCause(http.StatusInternalServerError, "failed to load password credential", err)
+			return nil, gst.NewErrorWithCause(http.StatusInternalServerError, "failed to load password credential", err)
 		}
 		credential = &modeliamaccount.PasswordCredential{UserID: target.ID}
 	}
@@ -45,19 +45,19 @@ func (r *ResetPasswordService) Create(ctx *gst.ServiceContext, req *modeliamacco
 	}
 	if credential.ID == "" {
 		if err = database.Database[*modeliamaccount.PasswordCredential](ctx).Create(credential); err != nil {
-			return nil, service.NewErrorWithCause(http.StatusInternalServerError, "failed to update password", err)
+			return nil, gst.NewErrorWithCause(http.StatusInternalServerError, "failed to update password", err)
 		}
 	} else {
 		if err = database.Database[*modeliamaccount.PasswordCredential](ctx).
 			WithoutHook().
 			WithSelect(colUserID, colPasswordHash, colMustChangePassword, colPasswordChangedAt).
 			Update(credential); err != nil {
-			return nil, service.NewErrorWithCause(http.StatusInternalServerError, "failed to update password", err)
+			return nil, gst.NewErrorWithCause(http.StatusInternalServerError, "failed to update password", err)
 		}
 	}
 
 	if err = serviceiamsession.Store.DeleteUserSessions(ctx, req.UserID); err != nil {
-		return nil, service.NewErrorWithCause(http.StatusInternalServerError, "failed to revoke user sessions", err)
+		return nil, gst.NewErrorWithCause(http.StatusInternalServerError, "failed to revoke user sessions", err)
 	}
 
 	log.Info("password reset successfully", "target_user_id", req.UserID, "actor_user_id", actor.GetID(), "actor_username", actor.Username)

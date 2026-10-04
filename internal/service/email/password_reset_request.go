@@ -33,7 +33,7 @@ func (s *PasswordResetRequestService) Create(ctx *gst.ServiceContext, req *model
 		if errors.Is(err, errEmailFlowThrottled) {
 			return rsp, nil
 		}
-		return nil, service.NewErrorWithCause(http.StatusInternalServerError, "failed to reserve password reset throttle", err)
+		return nil, gst.NewErrorWithCause(http.StatusInternalServerError, "failed to reserve password reset throttle", err)
 	}
 
 	user, err := currentAccountGateway().FindByEmail(ctx, email)
@@ -45,7 +45,7 @@ func (s *PasswordResetRequestService) Create(ctx *gst.ServiceContext, req *model
 			log.Errorz("email account gateway is not configured", zap.Error(err))
 			return nil, newAccountGatewayNotConfiguredServiceError(err)
 		}
-		return nil, service.NewErrorWithCause(http.StatusInternalServerError, "failed to load password reset account", err)
+		return nil, gst.NewErrorWithCause(http.StatusInternalServerError, "failed to load password reset account", err)
 	}
 	if !eligiblePasswordResetAccount(user, email) {
 		return rsp, nil
@@ -56,11 +56,11 @@ func (s *PasswordResetRequestService) Create(ctx *gst.ServiceContext, req *model
 		Email:  email,
 	})
 	if err != nil {
-		return nil, service.NewErrorWithCause(http.StatusInternalServerError, "failed to issue password reset flow", err)
+		return nil, gst.NewErrorWithCause(http.StatusInternalServerError, "failed to issue password reset flow", err)
 	}
 
 	if err = dispatchEmail(ctx, passwordResetDelivery(token, flow)); err != nil {
-		return nil, service.NewErrorWithCause(http.StatusInternalServerError, "failed to dispatch password reset email", err)
+		return nil, gst.NewErrorWithCause(http.StatusInternalServerError, "failed to dispatch password reset email", err)
 	}
 
 	return rsp, nil

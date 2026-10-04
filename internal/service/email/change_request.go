@@ -45,7 +45,7 @@ func (s *ChangeRequestService) Create(ctx *gst.ServiceContext, req *modelemail.C
 // email can enter the change flow.
 func prepareEmailChangeRequest(ctx *gst.ServiceContext, newEmail string) (*AccountSnapshot, string, *modelemail.ChangeRequestRsp, error) {
 	if ctx == nil || strings.TrimSpace(ctx.UserID()) == "" {
-		return nil, "", nil, service.NewError(http.StatusUnauthorized, "authentication required")
+		return nil, "", nil, gst.NewError(http.StatusUnauthorized, "authentication required")
 	}
 
 	user, err := currentAccountGateway().GetByID(ctx, ctx.UserID())
@@ -53,7 +53,7 @@ func prepareEmailChangeRequest(ctx *gst.ServiceContext, newEmail string) (*Accou
 		if errors.Is(err, ErrAccountGatewayNotConfigured) {
 			return nil, "", nil, newAccountGatewayNotConfiguredServiceError(err)
 		}
-		return nil, "", nil, service.NewErrorWithCause(http.StatusInternalServerError, "failed to load current account", err)
+		return nil, "", nil, gst.NewErrorWithCause(http.StatusInternalServerError, "failed to load current account", err)
 	}
 	if err = validAccountSnapshot(user, ctx.UserID()); err != nil {
 		return nil, "", nil, newAccountGatewayInvalidAccountServiceError(err)
@@ -73,19 +73,19 @@ func prepareEmailChangeRequest(ctx *gst.ServiceContext, newEmail string) (*Accou
 // email change tokens.
 func verifyEmailChangePassword(ctx *gst.ServiceContext, userID, password string) error {
 	if strings.TrimSpace(userID) == "" {
-		return service.NewError(http.StatusBadRequest, "current account id is required")
+		return gst.NewError(http.StatusBadRequest, "current account id is required")
 	}
 	if err := currentAccountGateway().VerifyPassword(ctx, userID, password); err != nil {
 		if errors.Is(err, ErrAccountAuthenticationFailed) {
-			return service.NewError(http.StatusBadRequest, "current password is incorrect")
+			return gst.NewError(http.StatusBadRequest, "current password is incorrect")
 		}
 		if errors.Is(err, ErrAccountGatewayNotConfigured) {
 			return newAccountGatewayNotConfiguredServiceError(err)
 		}
-		return service.NewErrorWithCause(http.StatusInternalServerError, "failed to verify current password", err)
+		return gst.NewErrorWithCause(http.StatusInternalServerError, "failed to verify current password", err)
 	}
 	if strings.TrimSpace(password) == "" {
-		return service.NewError(http.StatusBadRequest, "current password is incorrect")
+		return gst.NewError(http.StatusBadRequest, "current password is incorrect")
 	}
 	return nil
 }
@@ -95,20 +95,20 @@ func verifyEmailChangePassword(ctx *gst.ServiceContext, userID, password string)
 func startEmailChangeFlow(ctx *gst.ServiceContext, user *AccountSnapshot, newEmail string, includeCancel bool) error {
 	currentEmail := normalizeAccountEmail(user.Email)
 	if err := clearEmailChangeCancellation(ctx, user.ID, currentEmail, newEmail); err != nil {
-		return service.NewErrorWithCause(http.StatusInternalServerError, "failed to clear previous email change cancellation", err)
+		return gst.NewErrorWithCause(http.StatusInternalServerError, "failed to clear previous email change cancellation", err)
 	}
 	if _, err := reserveEmailThrottle(ctx, iamEmailFlowKindChangeConfirm, emailThrottleRequest, newEmail, 0); err != nil {
 		if errors.Is(err, errEmailFlowThrottled) {
-			return service.NewErrorWithCause(http.StatusInternalServerError, "email change confirmation throttled", err)
+			return gst.NewErrorWithCause(http.StatusInternalServerError, "email change confirmation throttled", err)
 		}
-		return service.NewErrorWithCause(http.StatusInternalServerError, "failed to reserve email change confirmation throttle", err)
+		return gst.NewErrorWithCause(http.StatusInternalServerError, "failed to reserve email change confirmation throttle", err)
 	}
 	if includeCancel {
 		if _, err := reserveEmailThrottle(ctx, iamEmailFlowKindChangeCancel, emailThrottleRequest, currentEmail, 0); err != nil {
 			if errors.Is(err, errEmailFlowThrottled) {
-				return service.NewErrorWithCause(http.StatusInternalServerError, "email change cancellation throttled", err)
+				return gst.NewErrorWithCause(http.StatusInternalServerError, "email change cancellation throttled", err)
 			}
-			return service.NewErrorWithCause(http.StatusInternalServerError, "failed to reserve email change cancellation throttle", err)
+			return gst.NewErrorWithCause(http.StatusInternalServerError, "failed to reserve email change cancellation throttle", err)
 		}
 	}
 
@@ -119,10 +119,10 @@ func startEmailChangeFlow(ctx *gst.ServiceContext, user *AccountSnapshot, newEma
 		Email:    newEmail,
 	})
 	if err != nil {
-		return service.NewErrorWithCause(http.StatusInternalServerError, "failed to issue email change confirmation flow", err)
+		return gst.NewErrorWithCause(http.StatusInternalServerError, "failed to issue email change confirmation flow", err)
 	}
 	if err = dispatchEmail(ctx, changeConfirmDelivery(confirmToken, confirmFlow)); err != nil {
-		return service.NewErrorWithCause(http.StatusInternalServerError, "failed to dispatch email change confirmation", err)
+		return gst.NewErrorWithCause(http.StatusInternalServerError, "failed to dispatch email change confirmation", err)
 	}
 
 	if !includeCancel {
@@ -136,10 +136,10 @@ func startEmailChangeFlow(ctx *gst.ServiceContext, user *AccountSnapshot, newEma
 		Email:    currentEmail,
 	})
 	if err != nil {
-		return service.NewErrorWithCause(http.StatusInternalServerError, "failed to issue email change cancellation flow", err)
+		return gst.NewErrorWithCause(http.StatusInternalServerError, "failed to issue email change cancellation flow", err)
 	}
 	if err = dispatchEmail(ctx, changeCancelDelivery(cancelToken, cancelFlow)); err != nil {
-		return service.NewErrorWithCause(http.StatusInternalServerError, "failed to dispatch email change cancellation", err)
+		return gst.NewErrorWithCause(http.StatusInternalServerError, "failed to dispatch email change cancellation", err)
 	}
 
 	return nil

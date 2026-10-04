@@ -1,4 +1,4 @@
-package serviceregistry_test
+package types_test
 
 import (
 	"fmt"
@@ -9,12 +9,12 @@ import (
 
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/internal/errorstack"
-	"github.com/hydroan/gst/internal/serviceregistry"
+	"github.com/hydroan/gst/internal/types"
 	"github.com/stretchr/testify/require"
 )
 
 func TestNewError(t *testing.T) {
-	err := serviceregistry.NewError(http.StatusBadRequest, "invalid input")
+	err := types.NewError(http.StatusBadRequest, "invalid input")
 
 	require.Error(t, err)
 	require.Equal(t, http.StatusBadRequest, err.Status())
@@ -24,7 +24,7 @@ func TestNewError(t *testing.T) {
 
 func TestNewErrorNormalizesInvalidStatus(t *testing.T) {
 	for _, status := range []int{0, http.StatusOK, http.StatusFound, 99, 600} {
-		err := serviceregistry.NewError(status, "should not leak")
+		err := types.NewError(status, "should not leak")
 
 		require.Equal(t, http.StatusInternalServerError, err.Status())
 		require.Equal(t, http.StatusText(http.StatusInternalServerError), err.Msg())
@@ -32,7 +32,7 @@ func TestNewErrorNormalizesInvalidStatus(t *testing.T) {
 }
 
 func TestNewErrorUsesHTTPStatusTextWhenMessageIsEmpty(t *testing.T) {
-	err := serviceregistry.NewError(http.StatusNotFound, "")
+	err := types.NewError(http.StatusNotFound, "")
 
 	require.Equal(t, http.StatusNotFound, err.Status())
 	require.Equal(t, http.StatusText(http.StatusNotFound), err.Msg())
@@ -40,7 +40,7 @@ func TestNewErrorUsesHTTPStatusTextWhenMessageIsEmpty(t *testing.T) {
 
 func TestNewErrorWithCauseIncludesCauseInErrorButNotMsg(t *testing.T) {
 	cause := errors.New("database password leaked")
-	err := serviceregistry.NewErrorWithCause(http.StatusInternalServerError, "failed to load user", cause)
+	err := types.NewErrorWithCause(http.StatusInternalServerError, "failed to load user", cause)
 
 	require.ErrorIs(t, err, cause)
 	// Msg stays client-safe: the response envelope renders Msg, never Error.
@@ -51,7 +51,7 @@ func TestNewErrorWithCauseIncludesCauseInErrorButNotMsg(t *testing.T) {
 }
 
 func TestNewErrorCapturesStackTraceAtConstructionSite(t *testing.T) {
-	err := serviceregistry.NewError(http.StatusConflict, "sample record missing")
+	err := types.NewError(http.StatusConflict, "sample record missing")
 
 	stackTrace := errorstack.Origin(err)
 	require.NotEmpty(t, stackTrace)
@@ -68,7 +68,7 @@ func TestNewErrorWithCauseStackTracePrefersCauseOrigin(t *testing.T) {
 	_, _, line, ok := runtime.Caller(0)
 	require.True(t, ok)
 	cause := errors.New("sample cause failure") // two lines below the lookup
-	err := serviceregistry.NewErrorWithCause(http.StatusInternalServerError, "failed to load record", cause)
+	err := types.NewErrorWithCause(http.StatusInternalServerError, "failed to load record", cause)
 
 	stackTrace := errorstack.Origin(err)
 	require.NotEmpty(t, stackTrace)
@@ -83,7 +83,7 @@ func TestNewErrorWithCauseStackTracePrefersCauseOrigin(t *testing.T) {
 }
 
 func TestErrorStackTraceOnNilReceiverIsEmpty(t *testing.T) {
-	require.Nil(t, (*serviceregistry.Error)(nil).StackTrace())
+	require.Nil(t, (*types.Error)(nil).StackTrace())
 }
 
 // TestNewInvalidFieldsJoinsTheViolations pins the error of a request whose
@@ -92,16 +92,16 @@ func TestErrorStackTraceOnNilReceiverIsEmpty(t *testing.T) {
 // details, and the validator's error as the cause.
 func TestNewInvalidFieldsJoinsTheViolations(t *testing.T) {
 	cause := errors.New("validation failed")
-	violations := []serviceregistry.FieldViolation{
+	violations := []types.FieldViolation{
 		{Field: "name", Description: "name is a required field"},
 		{Field: "address.city", Description: "address.city is a required field"},
 	}
 
-	err := serviceregistry.NewInvalidFields(violations, cause)
+	err := types.NewInvalidFields(violations, cause)
 
 	require.Equal(t, http.StatusBadRequest, err.Status())
 	require.Equal(t, "name is a required field; address.city is a required field", err.Msg())
-	require.Equal(t, violations, serviceregistry.FieldViolations(err))
+	require.Equal(t, violations, types.FieldViolations(err))
 	require.ErrorIs(t, err, cause)
-	require.Empty(t, serviceregistry.FieldViolations(serviceregistry.NewError(http.StatusBadRequest, "plain")))
+	require.Empty(t, types.FieldViolations(types.NewError(http.StatusBadRequest, "plain")))
 }

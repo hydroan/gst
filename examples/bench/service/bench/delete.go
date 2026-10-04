@@ -33,7 +33,7 @@ func (d *Delete) Delete(ctx *gst.ServiceContext, req *model.Empty) (rsp *bench.D
 		err = database.Database[*bench.Bench](ctx).Delete(data)
 	}
 	if err != nil {
-		return nil, service.NewErrorWithCause(http.StatusInternalServerError, "delete bench data failed", err)
+		return nil, gst.NewErrorWithCause(http.StatusInternalServerError, "delete bench data failed", err)
 	}
 
 	return &bench.DeleteRsp{Msg: "hi delete"}, nil

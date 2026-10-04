@@ -38,7 +38,7 @@ func (u *AdminUserCreateService) Create(ctx *gst.ServiceContext, req *modeliamus
 
 	username := strings.TrimSpace(req.Username)
 	if username == "" {
-		return nil, service.NewError(http.StatusBadRequest, "username is required")
+		return nil, gst.NewError(http.StatusBadRequest, "username is required")
 	}
 
 	actor, err := serviceiamaccount.LoadActor(ctx)
@@ -89,14 +89,14 @@ func (u *AdminUserCreateService) Create(ctx *gst.ServiceContext, req *modeliamus
 		// hashing helper already said which rule it broke. Its status and message
 		// are rebuilt here rather than passed through, so this exit is one the
 		// service constructed and the cause keeps its stack.
-		var svcErr *service.Error
+		var svcErr *gst.Error
 		if errors.As(err, &svcErr) {
-			return nil, service.NewErrorWithCause(svcErr.Status(), svcErr.Msg(), err)
+			return nil, gst.NewErrorWithCause(svcErr.Status(), svcErr.Msg(), err)
 		}
 		if errors.Is(err, database.ErrDuplicatedKey) {
-			return nil, service.NewErrorWithCause(http.StatusConflict, "username or email already exists", err)
+			return nil, gst.NewErrorWithCause(http.StatusConflict, "username or email already exists", err)
 		}
-		return nil, service.NewErrorWithCause(http.StatusInternalServerError, "failed to create user", err)
+		return nil, gst.NewErrorWithCause(http.StatusInternalServerError, "failed to create user", err)
 	}
 
 	view, err := buildAdminUserView(ctx, newUser)

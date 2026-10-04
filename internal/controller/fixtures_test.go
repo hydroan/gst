@@ -177,7 +177,7 @@ type refusingService struct {
 	serviceregistry.Base[*sampleRecord, *sampleRecord, *sampleRecord]
 }
 
-func refusal() error { return serviceregistry.NewError(http.StatusConflict, refusedMsg) }
+func refusal() error { return types.NewError(http.StatusConflict, refusedMsg) }
 
 func (*refusingService) CreateBefore(*types.ServiceContext, *sampleRecord) error { return refusal() }
 
@@ -231,7 +231,7 @@ type importingService struct {
 func (*importingService) Import(_ *types.ServiceContext, r io.Reader) ([]*sampleRecord, error) {
 	var records []*sampleRecord
 	if err := json.NewDecoder(r).Decode(&records); err != nil {
-		return nil, serviceregistry.NewError(http.StatusBadRequest, "malformed sample file")
+		return nil, types.NewError(http.StatusBadRequest, "malformed sample file")
 	}
 	return records, nil
 }
@@ -321,7 +321,7 @@ type actionService struct {
 func (*actionService) Create(sc *types.ServiceContext, req *sampleActionReq) (*sampleActionRsp, error) {
 	switch req.Note {
 	case actionRefuse:
-		return nil, serviceregistry.NewError(http.StatusForbidden, "not yours")
+		return nil, types.NewError(http.StatusForbidden, "not yours")
 	case actionBreak:
 		return nil, errors.New("dial tcp: connection refused")
 	case actionWrite:
@@ -464,7 +464,7 @@ type watchService struct {
 func (*watchService) Stream(sc *types.ServiceContext, req *sampleActionReq, stream *types.ServerStream[*sampleActionRsp]) error {
 	switch req.Note {
 	case actionRefuse:
-		return serviceregistry.NewError(http.StatusForbidden, "not yours")
+		return types.NewError(http.StatusForbidden, "not yours")
 	case actionBreak:
 		return errors.New("dial tcp: connection refused")
 	}

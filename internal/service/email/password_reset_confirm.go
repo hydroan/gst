@@ -31,10 +31,10 @@ func (s *PasswordResetConfirmService) Create(ctx *gst.ServiceContext, req *model
 				Msg:   "invalid or expired password reset token",
 			}, nil
 		}
-		return nil, service.NewErrorWithCause(http.StatusInternalServerError, "failed to consume password reset flow", err)
+		return nil, gst.NewErrorWithCause(http.StatusInternalServerError, "failed to consume password reset flow", err)
 	}
 	if strings.TrimSpace(flow.UserID) == "" {
-		return nil, service.NewError(http.StatusBadRequest, "password reset account id is required")
+		return nil, gst.NewError(http.StatusBadRequest, "password reset account id is required")
 	}
 
 	gateway := currentAccountGateway()
@@ -44,7 +44,7 @@ func (s *PasswordResetConfirmService) Create(ctx *gst.ServiceContext, req *model
 			log.Errorz("email account gateway is not configured", zap.Error(err))
 			return nil, newAccountGatewayNotConfiguredServiceError(err)
 		}
-		return nil, service.NewErrorWithCause(http.StatusInternalServerError, "failed to load password reset account", err)
+		return nil, gst.NewErrorWithCause(http.StatusInternalServerError, "failed to load password reset account", err)
 	}
 	if err = validAccountSnapshot(user, flow.UserID); err != nil {
 		log.Errorz("email account gateway returned invalid password reset account", zap.Error(err))
@@ -62,7 +62,7 @@ func (s *PasswordResetConfirmService) Create(ctx *gst.ServiceContext, req *model
 			log.Errorz("email account gateway is not configured", zap.Error(err))
 			return nil, newAccountGatewayNotConfiguredServiceError(err)
 		}
-		return nil, service.NewErrorWithCause(http.StatusInternalServerError, "failed to update password", err)
+		return nil, gst.NewErrorWithCause(http.StatusInternalServerError, "failed to update password", err)
 	}
 
 	gateway.InvalidateSessions(ctx, user.ID)

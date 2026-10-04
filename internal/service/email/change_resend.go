@@ -22,7 +22,7 @@ type ChangeResendService struct {
 func (s *ChangeResendService) Create(ctx *gst.ServiceContext, req *modelemail.ChangeResendReq) (rsp *modelemail.ChangeResendRsp, err error) {
 	log := s.WithContext(ctx, ctx.Phase())
 	if ctx == nil || strings.TrimSpace(ctx.UserID()) == "" {
-		return nil, service.NewError(http.StatusBadRequest, "authentication required")
+		return nil, gst.NewError(http.StatusBadRequest, "authentication required")
 	}
 
 	user, err := currentAccountGateway().GetByID(ctx, ctx.UserID())
@@ -31,7 +31,7 @@ func (s *ChangeResendService) Create(ctx *gst.ServiceContext, req *modelemail.Ch
 			log.Errorz("email account gateway is not configured", zap.Error(err))
 			return nil, newAccountGatewayNotConfiguredServiceError(err)
 		}
-		return nil, service.NewErrorWithCause(http.StatusInternalServerError, "failed to load current account", err)
+		return nil, gst.NewErrorWithCause(http.StatusInternalServerError, "failed to load current account", err)
 	}
 	if err = validAccountSnapshot(user, ctx.UserID()); err != nil {
 		log.Errorz("email account gateway returned invalid email change resend account", zap.Error(err))
@@ -48,7 +48,7 @@ func (s *ChangeResendService) Create(ctx *gst.ServiceContext, req *modelemail.Ch
 		if errors.Is(err, errEmailFlowThrottled) {
 			return &modelemail.ChangeResendRsp{Msg: "email change confirmation resent successfully"}, nil
 		}
-		return nil, service.NewErrorWithCause(http.StatusInternalServerError, "failed to reserve email change resend throttle", err)
+		return nil, gst.NewErrorWithCause(http.StatusInternalServerError, "failed to reserve email change resend throttle", err)
 	}
 
 	confirmToken, confirmFlow, err := issueEmailFlow(ctx, iamEmailFlowKindChangeConfirm, iamEmailFlowState{
@@ -58,10 +58,10 @@ func (s *ChangeResendService) Create(ctx *gst.ServiceContext, req *modelemail.Ch
 		Email:    newEmail,
 	})
 	if err != nil {
-		return nil, service.NewErrorWithCause(http.StatusInternalServerError, "failed to issue email change resend flow", err)
+		return nil, gst.NewErrorWithCause(http.StatusInternalServerError, "failed to issue email change resend flow", err)
 	}
 	if err = dispatchEmail(ctx, changeConfirmDelivery(confirmToken, confirmFlow)); err != nil {
-		return nil, service.NewErrorWithCause(http.StatusInternalServerError, "failed to dispatch email change resend confirmation", err)
+		return nil, gst.NewErrorWithCause(http.StatusInternalServerError, "failed to dispatch email change resend confirmation", err)
 	}
 
 	return &modelemail.ChangeResendRsp{Msg: "email change confirmation resent successfully"}, nil

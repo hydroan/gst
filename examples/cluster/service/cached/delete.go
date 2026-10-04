@@ -22,10 +22,10 @@ type Deleter struct {
 func (d *Deleter) Delete(ctx *gst.ServiceContext, _ *gstmodel.Empty) (*model.CachedDeleteRsp, error) {
 	key := ctx.Param("id")
 	if key == "" {
-		return nil, service.NewError(http.StatusBadRequest, "a key is required")
+		return nil, gst.NewError(http.StatusBadRequest, "a key is required")
 	}
 	if err := dao.CacheDelete(ctx, key); err != nil {
-		return nil, service.NewErrorWithCause(http.StatusInternalServerError, "the entry was not removed", err)
+		return nil, gst.NewErrorWithCause(http.StatusInternalServerError, "the entry was not removed", err)
 	}
 	return &model.CachedDeleteRsp{Replica: helper.Replica(), Key: key}, nil
 }

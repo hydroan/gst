@@ -12,7 +12,6 @@ import (
 	modeliamsession "github.com/hydroan/gst/internal/model/iam/session"
 	modeliamuser "github.com/hydroan/gst/internal/model/iam/user"
 	"github.com/hydroan/gst/internal/service/iam/adminauth"
-	"github.com/hydroan/gst/service"
 )
 
 const adminSessionOnlineWithinQuery = "online_within"
@@ -25,12 +24,12 @@ func ensureAdminSessionActor(ctx *gst.ServiceContext) error {
 	}
 	systemRoot, err := rbac.RBAC().HasSystemRole(ctx, user.GetID(), consts.AUTHZ_SYSTEM_ROLE_ROOT)
 	if err != nil {
-		return service.NewErrorWithCause(http.StatusInternalServerError, "authorization unavailable", err)
+		return gst.NewErrorWithCause(http.StatusInternalServerError, "authorization unavailable", err)
 	}
 	if systemRoot {
 		return nil
 	}
-	return service.NewError(http.StatusForbidden, "forbidden")
+	return gst.NewError(http.StatusForbidden, "forbidden")
 }
 
 func ensureAdminSessionTarget(ctx *gst.ServiceContext, target *modeliamuser.User) error {
@@ -49,7 +48,7 @@ func loadAdminSessionActor(ctx *gst.ServiceContext) (*modeliamuser.User, error) 
 
 	actor := new(modeliamuser.User)
 	if err = database.Database[*modeliamuser.User](ctx).Get(actor, session.UserID); err != nil {
-		return nil, service.NewError(http.StatusUnauthorized, "session invalid")
+		return nil, gst.NewError(http.StatusUnauthorized, "session invalid")
 	}
 	if err = ensureSessionUserActive(actor); err != nil {
 		return nil, err
@@ -74,7 +73,7 @@ func parseAdminSessionOnlineSince(ctx *gst.ServiceContext) (time.Time, bool, err
 
 	onlineWithin, err := time.ParseDuration(raw)
 	if err != nil || onlineWithin <= 0 {
-		return time.Time{}, false, service.NewError(http.StatusBadRequest, "online_within must be a positive duration")
+		return time.Time{}, false, gst.NewError(http.StatusBadRequest, "online_within must be a positive duration")
 	}
 	return time.Now().Add(-onlineWithin), true, nil
 }

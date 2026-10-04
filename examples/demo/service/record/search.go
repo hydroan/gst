@@ -29,18 +29,18 @@ type Search struct {
 func (s *Search) List(ctx *gst.ServiceContext, _ *gstmodel.Empty) (*model.RecordSearchRsp, error) {
 	query, err := s.QueryModel(ctx)
 	if err != nil {
-		return nil, service.NewError(http.StatusBadRequest, err.Error())
+		return nil, gst.NewError(http.StatusBadRequest, err.Error())
 	}
 	// A condition the client cannot lift: the caller's own records.
 	query.UserID = ctx.UserID()
 	filters, err := s.QueryFilters(ctx)
 	if err != nil {
-		return nil, service.NewError(http.StatusBadRequest, err.Error())
+		return nil, gst.NewError(http.StatusBadRequest, err.Error())
 	}
 	opts := gst.QueryOptions{AllowEmpty: true, PresentFields: s.QueryPresentFields(ctx), Filters: filters}
 	orders, err := s.QueryOrders(ctx)
 	if err != nil {
-		return nil, service.NewError(http.StatusBadRequest, err.Error())
+		return nil, gst.NewError(http.StatusBadRequest, err.Error())
 	}
 	page, size := s.QueryPagination(ctx)
 
@@ -50,11 +50,11 @@ func (s *Search) List(ctx *gst.ServiceContext, _ *gstmodel.Empty) (*model.Record
 		WithOrder(orders...).
 		WithPagination(page, size).
 		List(&rsp.Items); err != nil {
-		return nil, service.NewErrorWithCause(http.StatusInternalServerError, "failed to list the records", err)
+		return nil, gst.NewErrorWithCause(http.StatusInternalServerError, "failed to list the records", err)
 	}
 	// The count takes the same query and options, so the total matches the page.
 	if err := database.Database[*model.Record](ctx).WithQuery(query, opts).Count(&rsp.Total); err != nil {
-		return nil, service.NewErrorWithCause(http.StatusInternalServerError, "failed to count the records", err)
+		return nil, gst.NewErrorWithCause(http.StatusInternalServerError, "failed to count the records", err)
 	}
 	return rsp, nil
 }

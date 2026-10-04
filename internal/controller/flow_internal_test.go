@@ -15,7 +15,6 @@ import (
 	modellogmgmt "github.com/hydroan/gst/internal/model/logmgmt"
 	"github.com/hydroan/gst/internal/modelregistry"
 	"github.com/hydroan/gst/internal/requestctx"
-	"github.com/hydroan/gst/internal/serviceregistry"
 	"github.com/hydroan/gst/internal/types"
 	"github.com/hydroan/gst/pkg/auditmanager"
 	"github.com/stretchr/testify/require"
@@ -67,7 +66,7 @@ func TestGetFlowAnswersNotFoundAsAServiceError(t *testing.T) {
 
 	_, err := a.getFlow(ctx, plainServiceContext, "missing")
 
-	var serviceErr *serviceregistry.Error
+	var serviceErr *types.Error
 	require.ErrorAs(t, err, &serviceErr)
 	require.Equal(t, http.StatusNotFound, serviceErr.Status())
 	require.Equal(t, notFoundMsg, serviceErr.Msg())

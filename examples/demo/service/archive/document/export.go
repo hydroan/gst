@@ -27,7 +27,7 @@ func (d *Exporter) Export(_ *gst.ServiceContext, documents ...*archive.Document)
 		rows = append(rows, []string{doc.BoxID, doc.Name, string(doc.Format), doc.Content})
 	}
 	if err := w.WriteAll(rows); err != nil {
-		return nil, service.NewErrorWithCause(http.StatusInternalServerError, "failed to render the csv", err)
+		return nil, gst.NewErrorWithCause(http.StatusInternalServerError, "failed to render the csv", err)
 	}
 	return buf.Bytes(), nil
 }

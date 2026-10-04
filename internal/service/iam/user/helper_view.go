@@ -9,7 +9,6 @@ import (
 	"github.com/hydroan/gst/database"
 	modeliamaccount "github.com/hydroan/gst/internal/model/iam/account"
 	modeliamuser "github.com/hydroan/gst/internal/model/iam/user"
-	"github.com/hydroan/gst/service"
 )
 
 // Column references for the per-user lookups below, one per model; module
@@ -97,7 +96,7 @@ func loadAdminUserEmailMap(ctx context.Context, userIDs []string) (map[string]*m
 		if errors.Is(err, database.ErrRecordNotFound) {
 			return items, nil
 		}
-		return nil, service.NewErrorWithCause(http.StatusInternalServerError, "failed to load email identities", err)
+		return nil, gst.NewErrorWithCause(http.StatusInternalServerError, "failed to load email identities", err)
 	}
 	for _, identity := range identities {
 		if identity != nil && identity.UserID != "" {
@@ -125,7 +124,7 @@ func loadAdminUserCredentialMap(ctx context.Context, userIDs []string) (map[stri
 		if errors.Is(err, database.ErrRecordNotFound) {
 			return items, nil
 		}
-		return nil, service.NewErrorWithCause(http.StatusInternalServerError, "failed to load password credentials", err)
+		return nil, gst.NewErrorWithCause(http.StatusInternalServerError, "failed to load password credentials", err)
 	}
 	for _, credential := range credentials {
 		if credential != nil && credential.UserID != "" {

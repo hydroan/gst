@@ -32,17 +32,17 @@ func (c *ChangePasswordService) Create(ctx *gst.ServiceContext, req *modeliamacc
 	// Get user from database
 	currentUser := new(modeliamuser.User)
 	if err = database.Database[*modeliamuser.User](ctx).Get(currentUser, currentSession.UserID); err != nil {
-		return nil, service.NewErrorWithCause(http.StatusInternalServerError, "failed to query user", err)
+		return nil, gst.NewErrorWithCause(http.StatusInternalServerError, "failed to query user", err)
 	}
 
 	credential, err := LoadPasswordCredential(ctx, currentUser.ID)
 	if err != nil {
-		return nil, service.NewErrorWithCause(http.StatusInternalServerError, "failed to load password credential", err)
+		return nil, gst.NewErrorWithCause(http.StatusInternalServerError, "failed to load password credential", err)
 	}
 
 	// Verify old password
 	if err = VerifyPasswordCredential(ctx, credential, req.OldPassword); err != nil {
-		return nil, service.NewError(http.StatusBadRequest, "old password is incorrect")
+		return nil, gst.NewError(http.StatusBadRequest, "old password is incorrect")
 	}
 
 	if err = ApplyPasswordCredentialUpdate(ctx, credential, req.NewPassword, false); err != nil {
@@ -57,7 +57,7 @@ func (c *ChangePasswordService) Create(ctx *gst.ServiceContext, req *modeliamacc
 		WithoutHook().
 		WithSelect(colUserID, colPasswordHash, colMustChangePassword, colPasswordChangedAt).
 		Update(credential); err != nil {
-		return nil, service.NewErrorWithCause(http.StatusInternalServerError, "failed to update password", err)
+		return nil, gst.NewErrorWithCause(http.StatusInternalServerError, "failed to update password", err)
 	}
 
 	// Dropping the cache is the whole of the sync for the session that stays.
@@ -72,7 +72,7 @@ func (c *ChangePasswordService) Create(ctx *gst.ServiceContext, req *modeliamacc
 	// a caller can act on by asking again. The reverse order could only report
 	// the same failure for a password that had not changed at all.
 	if err = serviceiamsession.Store.DeleteUserSessionsExcept(ctx, currentUser.GetID(), sessionID); err != nil {
-		return nil, service.NewErrorWithCause(http.StatusInternalServerError, "failed to revoke other sessions", err)
+		return nil, gst.NewErrorWithCause(http.StatusInternalServerError, "failed to revoke other sessions", err)
 	}
 
 	log.Info("password changed successfully", "username", currentUser.Username)

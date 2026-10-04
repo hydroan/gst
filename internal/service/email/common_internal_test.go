@@ -11,13 +11,13 @@ import (
 	"time"
 
 	"github.com/cockroachdb/errors"
+	"github.com/hydroan/gst"
 	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/consts"
 	modelemail "github.com/hydroan/gst/internal/model/email"
 	"github.com/hydroan/gst/internal/requestctx"
 	"github.com/hydroan/gst/internal/types"
 	"github.com/hydroan/gst/logger"
-	"github.com/hydroan/gst/service"
 	"github.com/stretchr/testify/require"
 )
 
@@ -160,7 +160,7 @@ func testEmailAccount(id, email string, verified bool) *AccountSnapshot {
 func requireServiceError(t *testing.T, err error, status int, message string) {
 	t.Helper()
 
-	var serviceErr *service.Error
+	var serviceErr *gst.Error
 	require.ErrorAs(t, err, &serviceErr)
 	require.Equal(t, status, serviceErr.Status())
 	require.Equal(t, message, serviceErr.Msg())
@@ -874,11 +874,11 @@ func TestChangeConfirmCreateCanceled(t *testing.T) {
 	SetAccountGateway(testAccountGateway{
 		getByID: func(*types.ServiceContext, string) (*AccountSnapshot, error) {
 			t.Fatalf("GetByID should not be called for canceled flow")
-			return nil, service.NewError(http.StatusBadRequest, "unexpected GetByID call")
+			return nil, gst.NewError(http.StatusBadRequest, "unexpected GetByID call")
 		},
 		findByEmail: func(*types.ServiceContext, string) (*AccountSnapshot, error) {
 			t.Fatalf("FindByEmail should not be called for canceled flow")
-			return nil, service.NewError(http.StatusBadRequest, "unexpected FindByEmail call")
+			return nil, gst.NewError(http.StatusBadRequest, "unexpected FindByEmail call")
 		},
 		applyEmailChange: func(*types.ServiceContext, string, string, time.Time) error {
 			t.Fatalf("ApplyEmailChange should not be called for canceled flow")

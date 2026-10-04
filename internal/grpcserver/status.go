@@ -5,7 +5,7 @@ import (
 
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/database"
-	"github.com/hydroan/gst/internal/serviceregistry"
+	"github.com/hydroan/gst/internal/types"
 	"google.golang.org/genproto/googleapis/rpc/errdetails"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -15,9 +15,9 @@ import (
 // error, anywhere in the wrap chain, answers with the gRPC code its HTTP
 // status maps to (see codeOf) and the client-safe message it was constructed
 // with, the answer the HTTP envelope would carry, and, for the fields a
-// validator refused (see serviceregistry.FieldViolations), a
+// validator refused (see types.FieldViolations), a
 // google.rpc.BadRequest detail listing each field and its description; any
-// other error answers Internal with serviceregistry.FailureMsg, the message
+// other error answers Internal with types.FailureMsg, the message
 // the HTTP envelope answers the server's own failure with, its text kept
 // out of the answer for the caller to log before mapping; nil stays nil.
 // The public grpc.StatusError forwards to it.
@@ -25,12 +25,12 @@ func StatusError(err error) error {
 	if err == nil {
 		return nil
 	}
-	var serviceErr *serviceregistry.Error
+	var serviceErr *types.Error
 	if !errors.As(err, &serviceErr) {
-		return status.Error(codes.Internal, serviceregistry.FailureMsg)
+		return status.Error(codes.Internal, types.FailureMsg)
 	}
 	st := status.New(codeOf(serviceErr.Status(), err), serviceErr.Msg())
-	if violations := serviceregistry.FieldViolations(serviceErr); len(violations) > 0 {
+	if violations := types.FieldViolations(serviceErr); len(violations) > 0 {
 		bad := &errdetails.BadRequest{FieldViolations: make([]*errdetails.BadRequest_FieldViolation, 0, len(violations))}
 		for _, v := range violations {
 			bad.FieldViolations = append(bad.FieldViolations, &errdetails.BadRequest_FieldViolation{Field: v.Field, Description: v.Description})

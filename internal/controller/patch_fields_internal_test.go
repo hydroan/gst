@@ -11,7 +11,6 @@ import (
 
 	"github.com/hydroan/gst/consts"
 	"github.com/hydroan/gst/internal/modelregistry"
-	"github.com/hydroan/gst/internal/serviceregistry"
 	"github.com/hydroan/gst/internal/types"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
@@ -321,7 +320,7 @@ func TestPatchFieldSetFromJSONBodyWrapsDecodeError(t *testing.T) {
 
 	_, err := patchFieldSetFromJSONBody(typ, []byte(`{"enabled":`))
 
-	var serviceErr *serviceregistry.Error
+	var serviceErr *types.Error
 	require.ErrorAs(t, err, &serviceErr)
 	require.Equal(t, "request body is not valid JSON", serviceErr.Msg())
 }
@@ -347,7 +346,7 @@ func TestPatchManyFieldSetsFromJSONBodyWrapsDecodeError(t *testing.T) {
 
 	_, err := patchManyFieldSetsFromJSONBody(typ, []byte(`{"items":3}`))
 
-	var serviceErr *serviceregistry.Error
+	var serviceErr *types.Error
 	require.ErrorAs(t, err, &serviceErr)
 	require.Equal(t, "invalid value for field 'items'", serviceErr.Msg())
 }

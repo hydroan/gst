@@ -24,12 +24,12 @@ type Summary struct {
 func (s *Summary) List(ctx *gst.ServiceContext, _ *gstmodel.Empty) (*model.RecordSummaryRsp, error) {
 	rsp := &model.RecordSummaryRsp{ByType: map[model.RecordType]int{}}
 	if err := database.Database[*model.Record](ctx).WithQuery(&model.Record{UserID: ctx.UserID()}).Count(&rsp.Total); err != nil {
-		return nil, service.NewErrorWithCause(http.StatusInternalServerError, "failed to count the records", err)
+		return nil, gst.NewErrorWithCause(http.StatusInternalServerError, "failed to count the records", err)
 	}
 	for _, kind := range []model.RecordType{model.RecordTypeText, model.RecordTypeImage} {
 		var total int
 		if err := database.Database[*model.Record](ctx).WithQuery(&model.Record{UserID: ctx.UserID(), Type: kind}).Count(&total); err != nil {
-			return nil, service.NewErrorWithCause(http.StatusInternalServerError, "failed to count the records", err)
+			return nil, gst.NewErrorWithCause(http.StatusInternalServerError, "failed to count the records", err)
 		}
 		rsp.ByType[kind] = total
 	}

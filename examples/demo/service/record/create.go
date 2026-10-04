@@ -29,12 +29,12 @@ func (r *Creator) CreateBefore(ctx *gst.ServiceContext, record *model.Record) er
 
 // CreateAfter writes the audit row of the creation through the database
 // chain, on the request's context. An error a service returns is a
-// service.Error: it names the status the client gets and the message, and
+// gst.Error: it names the status the client gets and the message, and
 // carries the cause for the log.
 func (r *Creator) CreateAfter(ctx *gst.ServiceContext, record *model.Record) error {
 	audit := &model.Audit{Action: "create", RecordID: record.ID, Actor: ctx.Username()}
 	if err := database.Database[*model.Audit](ctx).Create(audit); err != nil {
-		return service.NewErrorWithCause(http.StatusInternalServerError, "failed to write the audit row", err)
+		return gst.NewErrorWithCause(http.StatusInternalServerError, "failed to write the audit row", err)
 	}
 	return nil
 }

@@ -16,7 +16,6 @@ import (
 	ut "github.com/go-playground/universal-translator"
 	"github.com/go-playground/validator/v10"
 	entranslations "github.com/go-playground/validator/v10/translations/en"
-	"github.com/hydroan/gst/internal/serviceregistry"
 	"github.com/hydroan/gst/internal/types"
 )
 
@@ -194,13 +193,13 @@ func fieldJSONName(field reflect.StructField) string {
 // instead names the Go type of the request and is not the client's. nil for
 // any other error, and for the errors of a validator other than the one
 // init configured, whose sentences and field names are its own.
-func fieldViolations(err error, prefix string) []serviceregistry.FieldViolation {
+func fieldViolations(err error, prefix string) []types.FieldViolation {
 	var request *refusedRequestError
 	var fieldErrors validator.ValidationErrors
 	if validatorEngine == nil || binding.Validator == nil || binding.Validator.Engine() != validatorEngine || !errors.As(err, &request) || !errors.As(request.err, &fieldErrors) {
 		return nil
 	}
-	violations := make([]serviceregistry.FieldViolation, 0, len(fieldErrors))
+	violations := make([]types.FieldViolation, 0, len(fieldErrors))
 	for _, fe := range fieldErrors {
 		path := prefix + jsonFieldPath(request.typ, fe)
 		description := fe.Translate(validatorTranslator)
@@ -213,7 +212,7 @@ func fieldViolations(err error, prefix string) []serviceregistry.FieldViolation 
 		} else {
 			description = path + strings.TrimPrefix(description, fe.Field())
 		}
-		violations = append(violations, serviceregistry.FieldViolation{Field: path, Description: description})
+		violations = append(violations, types.FieldViolation{Field: path, Description: description})
 	}
 	return violations
 }
@@ -363,7 +362,7 @@ func validatePatchFields(target any, fields patchFieldSet) error {
 // decoding entry points.
 func requiredBodyError(err error) error {
 	if errors.Is(err, io.EOF) {
-		return serviceregistry.NewErrorWithCause(http.StatusBadRequest, "request body is required", err)
+		return types.NewErrorWithCause(http.StatusBadRequest, "request body is required", err)
 	}
 	return err
 }
@@ -380,20 +379,20 @@ func requiredBodyError(err error) error {
 // paths come from the target struct's JSON tags, not from client input.
 func clientSafeBindError(err error) error {
 	if violations := fieldViolations(err, ""); len(violations) > 0 {
-		return serviceregistry.NewInvalidFields(violations, err)
+		return types.NewInvalidFields(violations, err)
 	}
 	var typeErr *json.UnmarshalTypeError
 	var syntaxErr *json.SyntaxError
 	switch {
 	case errors.As(err, &typeErr):
 		if typeErr.Field != "" {
-			return serviceregistry.NewErrorWithCause(http.StatusBadRequest, "invalid value for field '"+typeErr.Field+"'", err)
+			return types.NewErrorWithCause(http.StatusBadRequest, "invalid value for field '"+typeErr.Field+"'", err)
 		}
-		return serviceregistry.NewErrorWithCause(http.StatusBadRequest, "request body has an unexpected JSON type", err)
+		return types.NewErrorWithCause(http.StatusBadRequest, "request body has an unexpected JSON type", err)
 	case errors.As(err, &syntaxErr):
-		return serviceregistry.NewErrorWithCause(http.StatusBadRequest, "request body is not valid JSON", err)
+		return types.NewErrorWithCause(http.StatusBadRequest, "request body is not valid JSON", err)
 	default:
-		return serviceregistry.NewErrorWithCause(http.StatusBadRequest, "invalid request body", err)
+		return types.NewErrorWithCause(http.StatusBadRequest, "invalid request body", err)
 	}
 }
 
@@ -402,7 +401,7 @@ func clientSafeBindError(err error) error {
 // front, items[1].name.
 func clientSafeItemBindError(i int, err error) error {
 	if violations := fieldViolations(err, "items["+strconv.Itoa(i)+"]."); len(violations) > 0 {
-		return serviceregistry.NewInvalidFields(violations, err)
+		return types.NewInvalidFields(violations, err)
 	}
 	return clientSafeBindError(err)
 }

@@ -9,7 +9,6 @@ import (
 	"github.com/hydroan/gst/authz/rbac"
 	"github.com/hydroan/gst/consts"
 	modeliamuser "github.com/hydroan/gst/internal/model/iam/user"
-	"github.com/hydroan/gst/service"
 	"github.com/hydroan/gst/tenant"
 )
 
@@ -24,23 +23,23 @@ import (
 func EnsureTenantAdmin(ctx *gst.ServiceContext, actor *modeliamuser.User, target *modeliamuser.User) error {
 	systemRootActor, err := isSystemRoot(ctx, actor)
 	if err != nil {
-		return service.NewErrorWithCause(http.StatusInternalServerError, "authorization unavailable", err)
+		return gst.NewErrorWithCause(http.StatusInternalServerError, "authorization unavailable", err)
 	}
 	if systemRootActor {
 		return nil
 	}
 	if actor == nil || actor.GetID() == "" {
-		return service.NewError(http.StatusForbidden, "permission denied")
+		return gst.NewError(http.StatusForbidden, "permission denied")
 	}
 
 	// Root may appear in tenant RBAC bindings for setup or bootstrap purposes,
 	// but tenant-local administrators must not manage root as a target user.
 	systemRootTarget, err := isSystemRoot(ctx, target)
 	if err != nil {
-		return service.NewErrorWithCause(http.StatusInternalServerError, "authorization unavailable", err)
+		return gst.NewErrorWithCause(http.StatusInternalServerError, "authorization unavailable", err)
 	}
 	if systemRootTarget {
-		return service.NewError(http.StatusForbidden, "permission denied")
+		return gst.NewError(http.StatusForbidden, "permission denied")
 	}
 
 	tenant := currentTenant(ctx)
@@ -49,10 +48,10 @@ func EnsureTenantAdmin(ctx *gst.ServiceContext, actor *modeliamuser.User, target
 	// particular target outside the current tenant.
 	decision, err := rbac.RBAC().Authorize(ctx, tenant, actor.GetID(), operationObject(ctx), operationAction(ctx))
 	if err != nil {
-		return service.NewErrorWithCause(http.StatusInternalServerError, "authorization unavailable", err)
+		return gst.NewErrorWithCause(http.StatusInternalServerError, "authorization unavailable", err)
 	}
 	if !decision.Allowed {
-		return service.NewError(http.StatusForbidden, "permission denied")
+		return gst.NewError(http.StatusForbidden, "permission denied")
 	}
 
 	if target == nil {
@@ -60,10 +59,10 @@ func EnsureTenantAdmin(ctx *gst.ServiceContext, actor *modeliamuser.User, target
 	}
 	belongs, err := targetBelongsToTenant(ctx, tenant, target.GetID())
 	if err != nil {
-		return service.NewErrorWithCause(http.StatusInternalServerError, "failed to verify target tenant", err)
+		return gst.NewErrorWithCause(http.StatusInternalServerError, "failed to verify target tenant", err)
 	}
 	if !belongs {
-		return service.NewError(http.StatusForbidden, "target user is outside tenant")
+		return gst.NewError(http.StatusForbidden, "target user is outside tenant")
 	}
 	return nil
 }

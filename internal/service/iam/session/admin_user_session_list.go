@@ -32,15 +32,15 @@ func (a *AdminUserSessionListService) List(ctx *gst.ServiceContext, req *model.E
 
 	targetUserID := ctx.Param("id")
 	if targetUserID == "" {
-		return nil, service.NewError(http.StatusBadRequest, "user id is required")
+		return nil, gst.NewError(http.StatusBadRequest, "user id is required")
 	}
 
 	targetUser := new(modeliamuser.User)
 	if err = database.Database[*modeliamuser.User](ctx).Get(targetUser, targetUserID); err != nil {
 		if errors.Is(err, database.ErrRecordNotFound) {
-			return nil, service.NewError(http.StatusNotFound, "user not found")
+			return nil, gst.NewError(http.StatusNotFound, "user not found")
 		}
-		return nil, service.NewErrorWithCause(http.StatusInternalServerError, "failed to load user", err)
+		return nil, gst.NewErrorWithCause(http.StatusInternalServerError, "failed to load user", err)
 	}
 	if err = ensureAdminSessionTarget(ctx, targetUser); err != nil {
 		return nil, err
@@ -66,7 +66,7 @@ func (a *AdminUserSessionListService) List(ctx *gst.ServiceContext, req *model.E
 func (a *AdminUserSessionListService) buildView(ctx *gst.ServiceContext, user *modeliamuser.User, currentSessionID string, onlineSince time.Time, onlineOnly bool) (modeliamsession.AdminSessionOwnerView, error) {
 	credential, err := loadSessionPasswordCredential(ctx, user.ID)
 	if err != nil {
-		return modeliamsession.AdminSessionOwnerView{}, service.NewErrorWithCause(http.StatusInternalServerError, "failed to load password credential", err)
+		return modeliamsession.AdminSessionOwnerView{}, gst.NewErrorWithCause(http.StatusInternalServerError, "failed to load password credential", err)
 	}
 	email, err := loadSessionEmail(ctx, user.ID)
 	if err != nil {
@@ -106,7 +106,7 @@ func (a *AdminUserSessionListService) buildView(ctx *gst.ServiceContext, user *m
 				_ = Store.DropSessionIndexes(ctx, indexUserID, sessionID)
 				continue
 			}
-			return modeliamsession.AdminSessionOwnerView{}, service.NewErrorWithCause(http.StatusInternalServerError, "failed to load session", getErr)
+			return modeliamsession.AdminSessionOwnerView{}, gst.NewErrorWithCause(http.StatusInternalServerError, "failed to load session", getErr)
 		}
 		if validateErr := ValidateSession(sessionID, sessionData); validateErr != nil {
 			_, _ = Store.DeleteSession(ctx, sessionID)

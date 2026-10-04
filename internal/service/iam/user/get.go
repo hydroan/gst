@@ -25,7 +25,7 @@ type AdminUserGetService struct {
 func (a *AdminUserGetService) Get(ctx *gst.ServiceContext, req *model.Empty) (rsp *modeliamuser.AdminUserGetRsp, err error) {
 	targetUserID := ctx.Param("id")
 	if targetUserID == "" {
-		return nil, service.NewError(http.StatusBadRequest, "user id is required")
+		return nil, gst.NewError(http.StatusBadRequest, "user id is required")
 	}
 
 	// Load the actor and target before authorization so EnsureTenantAdmin can

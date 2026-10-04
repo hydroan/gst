@@ -30,7 +30,7 @@ func (p *ProfilePatchService) Patch(ctx *gst.ServiceContext, req *modeliamprofil
 		record = &modeliamprofile.Profile{UserID: session.UserID}
 		applyProfilePatch(record, req)
 		if err = database.Database[*modeliamprofile.Profile](ctx).Create(record); err != nil {
-			return nil, service.NewErrorWithCause(http.StatusInternalServerError, "failed to create profile", err)
+			return nil, gst.NewErrorWithCause(http.StatusInternalServerError, "failed to create profile", err)
 		}
 		return record, nil
 	}
@@ -40,7 +40,7 @@ func (p *ProfilePatchService) Patch(ctx *gst.ServiceContext, req *modeliamprofil
 		return record, nil
 	}
 	if err = database.Database[*modeliamprofile.Profile](ctx).UpdateByID(record.ID, assignments...); err != nil {
-		return nil, service.NewErrorWithCause(http.StatusInternalServerError, "failed to update profile", err)
+		return nil, gst.NewErrorWithCause(http.StatusInternalServerError, "failed to update profile", err)
 	}
 
 	return record, nil

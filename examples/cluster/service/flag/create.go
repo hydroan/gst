@@ -21,7 +21,7 @@ type Creator struct {
 // apply to everyone.
 func (f *Creator) CreateBefore(_ *gst.ServiceContext, flag *model.Flag) error {
 	if flag.Name == "" {
-		return service.NewError(http.StatusBadRequest, "a flag needs a name")
+		return gst.NewError(http.StatusBadRequest, "a flag needs a name")
 	}
 	if flag.On && flag.Percent == 0 {
 		flag.Percent = 100

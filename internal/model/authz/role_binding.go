@@ -4,11 +4,11 @@ import (
 	"context"
 	"net/http"
 
+	"github.com/hydroan/gst"
 	"github.com/hydroan/gst/authz/rbac"
 	"github.com/hydroan/gst/database"
 	"github.com/hydroan/gst/dsl"
 	"github.com/hydroan/gst/model"
-	"github.com/hydroan/gst/service"
 	"github.com/hydroan/gst/tenant"
 	"github.com/hydroan/gst/util"
 )
@@ -51,10 +51,10 @@ func (RoleBinding) Design() {
 
 func (r *RoleBinding) CreateBefore(ctx context.Context) error {
 	if len(r.SubjectID) == 0 {
-		return service.NewError(http.StatusBadRequest, "subject_id is required")
+		return gst.NewError(http.StatusBadRequest, "subject_id is required")
 	}
 	if len(r.RoleID) == 0 {
-		return service.NewError(http.StatusBadRequest, "role_id is required")
+		return gst.NewError(http.StatusBadRequest, "role_id is required")
 	}
 
 	// The tenant comes from the context, not from the binding. The framework
@@ -73,7 +73,7 @@ func (r *RoleBinding) CreateBefore(ctx context.Context) error {
 		return err
 	}
 	if role.tenant() != scoped {
-		return service.NewError(http.StatusBadRequest, "role tenant does not match binding tenant")
+		return gst.NewError(http.StatusBadRequest, "role tenant does not match binding tenant")
 	}
 
 	// A subject holds a role at most once in a tenant, so the same three values

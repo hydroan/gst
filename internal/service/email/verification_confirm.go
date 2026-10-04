@@ -31,10 +31,10 @@ func (s *VerificationConfirmService) Create(ctx *gst.ServiceContext, req *modele
 				Msg:      "invalid or expired verification token",
 			}, nil
 		}
-		return nil, service.NewErrorWithCause(http.StatusInternalServerError, "failed to consume verification flow", err)
+		return nil, gst.NewErrorWithCause(http.StatusInternalServerError, "failed to consume verification flow", err)
 	}
 	if strings.TrimSpace(flow.UserID) == "" {
-		return nil, service.NewError(http.StatusBadRequest, "verification account id is required")
+		return nil, gst.NewError(http.StatusBadRequest, "verification account id is required")
 	}
 
 	gateway := currentAccountGateway()
@@ -44,7 +44,7 @@ func (s *VerificationConfirmService) Create(ctx *gst.ServiceContext, req *modele
 			log.Errorz("email account gateway is not configured", zap.Error(err))
 			return nil, newAccountGatewayNotConfiguredServiceError(err)
 		}
-		return nil, service.NewErrorWithCause(http.StatusInternalServerError, "failed to load verification account", err)
+		return nil, gst.NewErrorWithCause(http.StatusInternalServerError, "failed to load verification account", err)
 	}
 	if err = validAccountSnapshot(user, flow.UserID); err != nil {
 		log.Errorz("email account gateway returned invalid verification account", zap.Error(err))
@@ -68,7 +68,7 @@ func (s *VerificationConfirmService) Create(ctx *gst.ServiceContext, req *modele
 			log.Errorz("email account gateway is not configured", zap.Error(err))
 			return nil, newAccountGatewayNotConfiguredServiceError(err)
 		}
-		return nil, service.NewErrorWithCause(http.StatusInternalServerError, "failed to update email verification state", err)
+		return nil, gst.NewErrorWithCause(http.StatusInternalServerError, "failed to update email verification state", err)
 	}
 
 	return &modelemail.VerificationConfirmRsp{

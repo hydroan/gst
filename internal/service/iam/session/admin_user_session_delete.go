@@ -25,15 +25,15 @@ func (a *AdminUserSessionDeleteService) Delete(ctx *gst.ServiceContext, req *mod
 
 	targetUserID := ctx.Param("id")
 	if targetUserID == "" {
-		return nil, service.NewError(http.StatusBadRequest, "user id is required")
+		return nil, gst.NewError(http.StatusBadRequest, "user id is required")
 	}
 
 	targetUser := new(modeliamuser.User)
 	if err = database.Database[*modeliamuser.User](ctx).Get(targetUser, targetUserID); err != nil {
 		if errors.Is(err, database.ErrRecordNotFound) {
-			return nil, service.NewError(http.StatusNotFound, "user not found")
+			return nil, gst.NewError(http.StatusNotFound, "user not found")
 		}
-		return nil, service.NewErrorWithCause(http.StatusInternalServerError, "failed to load user", err)
+		return nil, gst.NewErrorWithCause(http.StatusInternalServerError, "failed to load user", err)
 	}
 	if err = ensureAdminSessionTarget(ctx, targetUser); err != nil {
 		return nil, err

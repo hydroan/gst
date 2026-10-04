@@ -94,7 +94,7 @@ func (m *MenuService) ListAfter(ctx *gst.ServiceContext, data *[]*modelauthz.Men
 func visibleMenuIDs(ctx *gst.ServiceContext, log gst.Logger) ([]string, bool, error) {
 	systemRoot, err := rbac.RBAC().HasSystemRole(ctx, ctx.UserID(), consts.AUTHZ_SYSTEM_ROLE_ROOT)
 	if err != nil {
-		return nil, false, service.NewErrorWithCause(http.StatusInternalServerError, "authorization unavailable", err)
+		return nil, false, gst.NewErrorWithCause(http.StatusInternalServerError, "authorization unavailable", err)
 	}
 	if systemRoot {
 		return nil, false, nil
@@ -105,7 +105,7 @@ func visibleMenuIDs(ctx *gst.ServiceContext, log gst.Logger) ([]string, bool, er
 	if err := database.Database[*modelauthz.RoleBinding](ctx).
 		WithQuery(&modelauthz.RoleBinding{SubjectID: ctx.UserID()}).
 		List(&roleBindings); err != nil {
-		return nil, false, service.NewErrorWithCause(http.StatusInternalServerError, "failed to load role bindings", err)
+		return nil, false, gst.NewErrorWithCause(http.StatusInternalServerError, "failed to load role bindings", err)
 	}
 
 	roles := make([]*modelauthz.Role, 0)
@@ -123,7 +123,7 @@ func visibleMenuIDs(ctx *gst.ServiceContext, log gst.Logger) ([]string, bool, er
 		if err := database.Database[*modelauthz.Role](ctx).
 			WithQuery(nil, gst.QueryOptions{Filters: []gst.Filter{colRoleID.In(roleIDs...)}}).
 			List(&roles); err != nil {
-			return nil, false, service.NewErrorWithCause(http.StatusInternalServerError, "failed to load roles", err)
+			return nil, false, gst.NewErrorWithCause(http.StatusInternalServerError, "failed to load roles", err)
 		}
 		if len(roles) == 0 {
 			log.Warn("subject has role-binding records but no matching roles")
@@ -133,7 +133,7 @@ func visibleMenuIDs(ctx *gst.ServiceContext, log gst.Logger) ([]string, bool, er
 		if err := database.Database[*modelauthz.Role](ctx).
 			WithQuery(&modelauthz.Role{Default: new(true)}).
 			List(&roles); err != nil {
-			return nil, false, service.NewErrorWithCause(http.StatusInternalServerError, "failed to load roles", err)
+			return nil, false, gst.NewErrorWithCause(http.StatusInternalServerError, "failed to load roles", err)
 		}
 	}
 	if len(roles) == 0 {

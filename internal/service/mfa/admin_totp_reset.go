@@ -34,7 +34,7 @@ func (a *AdminTOTPResetService) Delete(ctx *gst.ServiceContext, req *model.Empty
 
 	targetUserID := strings.TrimSpace(ctx.Param("id"))
 	if targetUserID == "" {
-		return nil, service.NewError(http.StatusBadRequest, "user id is required")
+		return nil, gst.NewError(http.StatusBadRequest, "user id is required")
 	}
 	if svcErr := ensureCanAdministerMFA(ctx, targetUserID); svcErr != nil {
 		return nil, svcErr
@@ -46,13 +46,13 @@ func (a *AdminTOTPResetService) Delete(ctx *gst.ServiceContext, req *model.Empty
 		if listErr := database.Database[*modelmfa.TOTPDevice](ctx).WithLock(consts.LockUpdate).WithQuery(&modelmfa.TOTPDevice{
 			UserID: targetUserID,
 		}).List(&devices); listErr != nil {
-			return service.NewErrorWithCause(http.StatusInternalServerError, "failed to list TOTP devices", listErr)
+			return gst.NewErrorWithCause(http.StatusInternalServerError, "failed to list TOTP devices", listErr)
 		}
 		if len(devices) == 0 {
 			return nil
 		}
 		if deleteErr := database.Database[*modelmfa.TOTPDevice](ctx).WithPurge(true).Delete(devices...); deleteErr != nil {
-			return service.NewErrorWithCause(http.StatusInternalServerError, "failed to reset TOTP devices", deleteErr)
+			return gst.NewErrorWithCause(http.StatusInternalServerError, "failed to reset TOTP devices", deleteErr)
 		}
 		removed = len(devices)
 		return nil

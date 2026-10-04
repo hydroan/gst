@@ -27,7 +27,7 @@ func (s *SessionDeleteService) Delete(ctx *gst.ServiceContext, req *modeliamsess
 
 	targetSessionID := ctx.Param("id")
 	if targetSessionID == "" {
-		return nil, service.NewError(http.StatusBadRequest, "session id is required")
+		return nil, gst.NewError(http.StatusBadRequest, "session id is required")
 	}
 	if targetSessionID == sessionsDeleteOthersID {
 		// DELETE /api/iam/sessions/others is a bulk self-service logout for
@@ -47,7 +47,7 @@ func (s *SessionDeleteService) Delete(ctx *gst.ServiceContext, req *modeliamsess
 			}
 			return &modeliamsession.SessionDeleteRsp{}, nil
 		}
-		return nil, service.NewErrorWithCause(http.StatusInternalServerError, "failed to load target session", err)
+		return nil, gst.NewErrorWithCause(http.StatusInternalServerError, "failed to load target session", err)
 	}
 	if err = ValidateSession(targetSessionID, targetSession); err != nil {
 		_, _ = Store.DeleteSession(ctx, targetSessionID)
@@ -57,7 +57,7 @@ func (s *SessionDeleteService) Delete(ctx *gst.ServiceContext, req *modeliamsess
 		return &modeliamsession.SessionDeleteRsp{}, nil
 	}
 	if targetSession.UserID != currentSession.UserID {
-		return nil, service.NewError(http.StatusForbidden, "forbidden")
+		return nil, gst.NewError(http.StatusForbidden, "forbidden")
 	}
 
 	if _, err = Store.DeleteSession(ctx, targetSessionID); err != nil {
@@ -67,7 +67,7 @@ func (s *SessionDeleteService) Delete(ctx *gst.ServiceContext, req *modeliamsess
 			}
 			return &modeliamsession.SessionDeleteRsp{}, nil
 		}
-		return nil, service.NewErrorWithCause(http.StatusInternalServerError, "failed to delete session", err)
+		return nil, gst.NewErrorWithCause(http.StatusInternalServerError, "failed to delete session", err)
 	}
 	if targetSessionID == currentSessionID {
 		ClearCookie(ctx)

@@ -27,10 +27,10 @@ func (c *Chat) Stream(_ *gst.ServiceContext, stream *grpc.BidiStream[*board.Feed
 			return nil
 		}
 		if err != nil {
-			return service.NewErrorWithCause(http.StatusBadRequest, "failed to read the event", err)
+			return gst.NewErrorWithCause(http.StatusBadRequest, "failed to read the event", err)
 		}
 		if err := stream.Send(&board.FeedEvent{Seq: event.Seq, Body: "echo: " + event.Body}); err != nil {
-			return service.NewErrorWithCause(http.StatusInternalServerError, "failed to send the event", err)
+			return gst.NewErrorWithCause(http.StatusInternalServerError, "failed to send the event", err)
 		}
 	}
 }

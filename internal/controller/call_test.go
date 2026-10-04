@@ -10,8 +10,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/hydroan/gst/internal/serviceregistry"
-
 	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/consts"
 	"github.com/hydroan/gst/database"
@@ -133,14 +131,14 @@ func TestCreateCallRefusesAnHTTPOnlyMethodBeforeWriting(t *testing.T) {
 	t.Run("called in a before hook, nothing is written", func(t *testing.T) {
 		name := uniqueName("call-cookie-before")
 		_, err := invoke(t, conn, "CookieBeforeCreate", map[string]any{"record": map[string]any{"name": name}})
-		requireStatus(t, err, codes.Internal, serviceregistry.FailureMsg)
+		requireStatus(t, err, codes.Internal, types.FailureMsg)
 		require.Zero(t, countSamplesNamed(t, name))
 	})
 
 	t.Run("called in an after hook, the record written stays", func(t *testing.T) {
 		name := uniqueName("call-cookie-after")
 		_, err := invoke(t, conn, "CookieAfterCreate", map[string]any{"record": map[string]any{"name": name}})
-		requireStatus(t, err, codes.Internal, serviceregistry.FailureMsg)
+		requireStatus(t, err, codes.Internal, types.FailureMsg)
 		require.Equal(t, 1, countSamplesNamed(t, name))
 	})
 }
@@ -602,7 +600,7 @@ func TestServiceCallDelegatesToThePhaseService(t *testing.T) {
 
 	t.Run("any other error answers Internal", func(t *testing.T) {
 		_, err := invoke(t, conn, "Action", map[string]any{"payload": map[string]any{"note": actionBreak}})
-		requireStatus(t, err, codes.Internal, serviceregistry.FailureMsg)
+		requireStatus(t, err, codes.Internal, types.FailureMsg)
 	})
 
 	t.Run("a canceled call is answered as canceled", func(t *testing.T) {
@@ -625,12 +623,12 @@ func TestServiceCallDelegatesToThePhaseService(t *testing.T) {
 
 	t.Run("a response the service tried to write answers Internal", func(t *testing.T) {
 		_, err := invoke(t, conn, "Action", map[string]any{"payload": map[string]any{"note": actionWrite}})
-		requireStatus(t, err, codes.Internal, serviceregistry.FailureMsg)
+		requireStatus(t, err, codes.Internal, types.FailureMsg)
 	})
 
 	t.Run("a form value the service tried to read answers Internal", func(t *testing.T) {
 		_, err := invoke(t, conn, "Action", map[string]any{"payload": map[string]any{"note": actionRead}})
-		requireStatus(t, err, codes.Internal, serviceregistry.FailureMsg)
+		requireStatus(t, err, codes.Internal, types.FailureMsg)
 	})
 }
 

@@ -17,7 +17,6 @@ import (
 	"github.com/hydroan/gst/database"
 	"github.com/hydroan/gst/internal/controller"
 	"github.com/hydroan/gst/internal/response"
-	"github.com/hydroan/gst/internal/serviceregistry"
 	"github.com/hydroan/gst/internal/types"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc/codes"
@@ -65,7 +64,7 @@ func TestTransportsAnswerTheContractAlike(t *testing.T) {
 	noField := &grpcAnswer{code: codes.InvalidArgument, msg: "update_mask must name at least one field a patch applies"}
 	// A service calling a method of its context only an HTTP request can
 	// serve: served over HTTP, refused over gRPC.
-	httpOnly := &grpcAnswer{code: codes.Internal, msg: serviceregistry.FailureMsg}
+	httpOnly := &grpcAnswer{code: codes.Internal, msg: types.FailureMsg}
 	// twice is the input of a batch naming one stored record in two items,
 	// the second carrying change: the batch is refused before any record is
 	// read, so both transports are sent the same input, and namedTwice
@@ -631,7 +630,7 @@ func TestTransportsAnswerTheContractAlike(t *testing.T) {
 		{
 			name: "A custom action answers any other error as the server's own failure", fixture: actionFixture, phase: consts.Create,
 			input: contractInput{payload: map[string]any{"note": actionBreak}},
-			want:  contractWant{status: http.StatusInternalServerError, msg: serviceregistry.FailureMsg},
+			want:  contractWant{status: http.StatusInternalServerError, msg: types.FailureMsg},
 		},
 		{
 			name: "A custom List reads the query", fixture: actionFixture, phase: consts.List,

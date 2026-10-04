@@ -23,7 +23,7 @@ type Watch struct {
 func (w *Watch) Stream(_ *gst.ServiceContext, req *board.FeedWatchReq, stream *grpc.ServerStream[*board.FeedEvent]) error {
 	for seq := int64(1); seq <= 3; seq++ {
 		if err := stream.Send(&board.FeedEvent{Seq: seq, Body: req.Topic + " #" + strconv.FormatInt(seq, 10)}); err != nil {
-			return service.NewErrorWithCause(http.StatusInternalServerError, "failed to send the event", err)
+			return gst.NewErrorWithCause(http.StatusInternalServerError, "failed to send the event", err)
 		}
 	}
 	return nil

@@ -6,7 +6,6 @@ import (
 	"time"
 
 	"github.com/hydroan/gst"
-	"github.com/hydroan/gst/service"
 )
 
 // CookieSessionID returns the session id carried by the request cookie.
@@ -17,11 +16,11 @@ import (
 func CookieSessionID(ctx *gst.ServiceContext) (string, error) {
 	sessionID, err := ctx.Cookie(SessionCookieName)
 	if err != nil {
-		return "", service.NewError(http.StatusUnauthorized, err.Error())
+		return "", gst.NewError(http.StatusUnauthorized, err.Error())
 	}
 	sessionID = strings.TrimSpace(sessionID)
 	if sessionID == "" {
-		return "", service.NewError(http.StatusUnauthorized, "session id is required")
+		return "", gst.NewError(http.StatusUnauthorized, "session id is required")
 	}
 	return sessionID, nil
 }

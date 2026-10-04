@@ -289,13 +289,13 @@ service.Base[M, REQ, RSP]
 ```go
 query, err := s.QueryModel(ctx)
 if err != nil {
-	return nil, service.NewError(http.StatusBadRequest, err.Error())
+	return nil, gst.NewError(http.StatusBadRequest, err.Error())
 }
 query.TenantID = tenant // 客户端影响不了的强制条件
 
 filters, err := s.QueryFilters(ctx)
 if err != nil {
-	return nil, service.NewError(http.StatusBadRequest, err.Error())
+	return nil, gst.NewError(http.StatusBadRequest, err.Error())
 }
 opts := gst.QueryOptions{
 	AllowEmpty:    true,
@@ -304,11 +304,11 @@ opts := gst.QueryOptions{
 }
 cursor, err := s.QueryCursor(ctx)
 if err != nil {
-	return nil, service.NewError(http.StatusBadRequest, err.Error())
+	return nil, gst.NewError(http.StatusBadRequest, err.Error())
 }
 orders, err := s.QueryOrders(ctx)
 if err != nil {
-	return nil, service.NewError(http.StatusBadRequest, err.Error())
+	return nil, gst.NewError(http.StatusBadRequest, err.Error())
 }
 items := make([]*appmodel.Sample, 0)
 if err = database.Database[*appmodel.Sample](ctx).
@@ -317,7 +317,7 @@ if err = database.Database[*appmodel.Sample](ctx).
 	WithOrder(orders...).
 	WithPagination(s.QueryPagination(ctx)).
 	List(&items); err != nil {
-	return nil, service.NewErrorWithCause(http.StatusInternalServerError, "failed to list samples", err)
+	return nil, gst.NewErrorWithCause(http.StatusInternalServerError, "failed to list samples", err)
 }
 ```
 
@@ -399,7 +399,7 @@ type Creator struct {
 
 func (c *Creator) CreateBefore(ctx *gst.ServiceContext, record *appmodel.Record) error {
 	if record.Title == "" {
-		return service.NewError(http.StatusBadRequest, "title is required")
+		return gst.NewError(http.StatusBadRequest, "title is required")
 	}
 	return nil
 }

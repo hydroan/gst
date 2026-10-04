@@ -28,7 +28,7 @@ func (u *Updatebyid) Patch(ctx *gst.ServiceContext, req *bench.UpdateByIDReq) (r
 		err = database.Database[*bench.Bench](ctx).UpdateByID("not exists", bench.BenchCols.Field1.Set(req.Field1))
 	}
 	if err != nil {
-		return nil, service.NewErrorWithCause(http.StatusInternalServerError, "update bench data by id failed", err)
+		return nil, gst.NewErrorWithCause(http.StatusInternalServerError, "update bench data by id failed", err)
 	}
 
 	return &bench.UpdateByIDRsp{Msg: "hi updatebyid"}, nil

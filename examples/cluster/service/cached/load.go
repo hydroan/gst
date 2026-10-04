@@ -31,10 +31,10 @@ func (l *Load) Stream(ctx *gst.ServiceContext, stream *grpc.ClientStream[*model.
 			return &model.CachedLoadRsp{Replica: helper.Replica(), Count: count}, nil
 		}
 		if err != nil {
-			return nil, service.NewErrorWithCause(http.StatusBadRequest, "failed to read the entry", err)
+			return nil, gst.NewErrorWithCause(http.StatusBadRequest, "failed to read the entry", err)
 		}
 		if err := dao.CacheSet(ctx, entry.Key, entry.Value); err != nil {
-			return nil, service.NewErrorWithCause(http.StatusInternalServerError, "the entry was not cached", err)
+			return nil, gst.NewErrorWithCause(http.StatusInternalServerError, "the entry was not cached", err)
 		}
 		count++
 	}

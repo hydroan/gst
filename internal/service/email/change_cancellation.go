@@ -5,8 +5,6 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/hydroan/gst/service"
-
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst"
 )
@@ -43,7 +41,7 @@ func markEmailChangeCanceled(ctx context.Context, flow iamEmailFlowState) error 
 		AvailableAt: now.Add(ttl),
 	}
 	if err := emailThrottleCache().Set(ctx, key, record, ttl); err != nil {
-		return service.NewErrorWithCause(http.StatusInternalServerError, "store email change cancellation marker", err)
+		return gst.NewErrorWithCause(http.StatusInternalServerError, "store email change cancellation marker", err)
 	}
 
 	return nil
@@ -75,7 +73,7 @@ func emailChangeCanceled(ctx context.Context, userID, oldEmail, newEmail string)
 func clearEmailChangeCancellation(ctx context.Context, userID, oldEmail, newEmail string) error {
 	key := emailChangeCancellationKey(userID, oldEmail, newEmail)
 	if err := emailThrottleCache().Delete(ctx, key); err != nil && !errors.Is(err, gst.ErrEntryNotFound) {
-		return service.NewErrorWithCause(http.StatusInternalServerError, "delete email change cancellation marker", err)
+		return gst.NewErrorWithCause(http.StatusInternalServerError, "delete email change cancellation marker", err)
 	}
 	return nil
 }

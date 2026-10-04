@@ -5,17 +5,17 @@ import (
 	"net/http"
 
 	"github.com/cockroachdb/errors"
+	"github.com/hydroan/gst"
 	"github.com/hydroan/gst/database"
 	modeliamaccount "github.com/hydroan/gst/internal/model/iam/account"
 	modeliamsession "github.com/hydroan/gst/internal/model/iam/session"
 	modeliamuser "github.com/hydroan/gst/internal/model/iam/user"
-	"github.com/hydroan/gst/service"
 )
 
 // ValidateSessionUserState refreshes the mutable user state required to keep using a session.
 func ValidateSessionUserState(ctx context.Context, session modeliamsession.Session) (modeliamsession.Session, error) {
 	if session.UserID == "" {
-		return session, service.NewError(http.StatusUnauthorized, "session invalid")
+		return session, gst.NewError(http.StatusUnauthorized, "session invalid")
 	}
 
 	state, ok := Store.LoadUserState(ctx, session.UserID)
@@ -44,19 +44,19 @@ func refreshSessionUserState(ctx context.Context, userID string) (UserState, err
 	targetUser := new(modeliamuser.User)
 	if err := database.Database[*modeliamuser.User](ctx).Get(targetUser, userID); err != nil {
 		if errors.Is(err, database.ErrRecordNotFound) {
-			return UserState{}, service.NewError(http.StatusUnauthorized, "session invalid")
+			return UserState{}, gst.NewError(http.StatusUnauthorized, "session invalid")
 		}
 		logStoreWarning("failed to refresh iam session user state", userID, err)
-		return UserState{}, service.NewErrorWithCause(http.StatusInternalServerError, "failed to refresh session user state", err)
+		return UserState{}, gst.NewErrorWithCause(http.StatusInternalServerError, "failed to refresh session user state", err)
 	}
 
 	credential, err := loadSessionPasswordCredential(ctx, userID)
 	if err != nil {
 		if errors.Is(err, database.ErrRecordNotFound) {
-			return UserState{}, service.NewError(http.StatusUnauthorized, "session invalid")
+			return UserState{}, gst.NewError(http.StatusUnauthorized, "session invalid")
 		}
 		logStoreWarning("failed to refresh iam session password credential state", userID, err)
-		return UserState{}, service.NewErrorWithCause(http.StatusInternalServerError, "failed to refresh session user state", err)
+		return UserState{}, gst.NewErrorWithCause(http.StatusInternalServerError, "failed to refresh session user state", err)
 	}
 
 	state := UserState{
@@ -101,7 +101,7 @@ func loadSessionEmail(ctx context.Context, userID string) (string, error) {
 		if errors.Is(err, database.ErrRecordNotFound) {
 			return "", nil
 		}
-		return "", service.NewErrorWithCause(http.StatusInternalServerError, "failed to load email identity", err)
+		return "", gst.NewErrorWithCause(http.StatusInternalServerError, "failed to load email identity", err)
 	}
 	return identity.Email, nil
 }

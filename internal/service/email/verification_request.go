@@ -32,7 +32,7 @@ func (s *VerificationRequestService) Create(ctx *gst.ServiceContext, req *modele
 		if errors.Is(err, errEmailFlowThrottled) {
 			return rsp, nil
 		}
-		return nil, service.NewErrorWithCause(http.StatusInternalServerError, "failed to reserve verification request throttle", err)
+		return nil, gst.NewErrorWithCause(http.StatusInternalServerError, "failed to reserve verification request throttle", err)
 	}
 
 	user, err := currentAccountGateway().FindByEmail(ctx, email)
@@ -44,7 +44,7 @@ func (s *VerificationRequestService) Create(ctx *gst.ServiceContext, req *modele
 			log.Errorz("email account gateway is not configured", zap.Error(err))
 			return nil, newAccountGatewayNotConfiguredServiceError(err)
 		}
-		return nil, service.NewErrorWithCause(http.StatusInternalServerError, "failed to load verification account", err)
+		return nil, gst.NewErrorWithCause(http.StatusInternalServerError, "failed to load verification account", err)
 	}
 	if !eligibleVerificationAccount(user, email) {
 		return rsp, nil
@@ -55,11 +55,11 @@ func (s *VerificationRequestService) Create(ctx *gst.ServiceContext, req *modele
 		Email:  email,
 	})
 	if err != nil {
-		return nil, service.NewErrorWithCause(http.StatusInternalServerError, "failed to issue verification flow", err)
+		return nil, gst.NewErrorWithCause(http.StatusInternalServerError, "failed to issue verification flow", err)
 	}
 
 	if err = dispatchEmail(ctx, verificationDelivery(token, flow)); err != nil {
-		return nil, service.NewErrorWithCause(http.StatusInternalServerError, "failed to dispatch verification email", err)
+		return nil, gst.NewErrorWithCause(http.StatusInternalServerError, "failed to dispatch verification email", err)
 	}
 
 	return rsp, nil

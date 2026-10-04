@@ -39,7 +39,7 @@ func (u *Update) Update(ctx *gst.ServiceContext, req *bench.UpdateReq) (rsp *ben
 		err = database.Database[*bench.Bench](ctx).Update(data)
 	}
 	if err != nil && !errors.Is(err, database.ErrRecordNotFound) {
-		return nil, service.NewErrorWithCause(http.StatusInternalServerError, "update bench data failed", err)
+		return nil, gst.NewErrorWithCause(http.StatusInternalServerError, "update bench data failed", err)
 	}
 
 	return &bench.UpdateRsp{Msg: "hi update"}, nil

@@ -10,7 +10,6 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst"
 	serviceiamsession "github.com/hydroan/gst/internal/service/iam/session"
-	"github.com/hydroan/gst/service"
 )
 
 const (
@@ -34,7 +33,7 @@ func ensureLoginNotLockedOut(ctx *gst.ServiceContext, username string) error {
 	if serviceiamsession.Store.LoginFailures(ctx, username) < loginFailureLimit() {
 		return nil
 	}
-	return service.NewError(http.StatusUnauthorized, "invalid username or password")
+	return gst.NewError(http.StatusUnauthorized, "invalid username or password")
 }
 
 // recordLoginFailure counts one failed credential attempt against an account.

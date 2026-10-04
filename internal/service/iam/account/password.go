@@ -10,7 +10,6 @@ import (
 	"github.com/hydroan/gst/database"
 	modeliamaccount "github.com/hydroan/gst/internal/model/iam/account"
 	gstotel "github.com/hydroan/gst/otel"
-	"github.com/hydroan/gst/service"
 	"go.opentelemetry.io/otel/attribute"
 	"golang.org/x/crypto/bcrypt"
 )
@@ -29,30 +28,30 @@ var (
 
 func validateChangePasswordInput(req *modeliamaccount.ChangePasswordReq) error {
 	if req == nil {
-		return service.NewError(http.StatusBadRequest, "change password request is required")
+		return gst.NewError(http.StatusBadRequest, "change password request is required")
 	}
 	if req.OldPassword == "" {
-		return service.NewError(http.StatusBadRequest, "old password is required")
+		return gst.NewError(http.StatusBadRequest, "old password is required")
 	}
 	return validateNewAccountPassword(req.NewPassword)
 }
 
 func validateResetPasswordInput(req *modeliamaccount.ResetPasswordReq) error {
 	if req == nil {
-		return service.NewError(http.StatusBadRequest, "reset password request is required")
+		return gst.NewError(http.StatusBadRequest, "reset password request is required")
 	}
 	if req.UserID == "" {
-		return service.NewError(http.StatusBadRequest, "user_id is required")
+		return gst.NewError(http.StatusBadRequest, "user_id is required")
 	}
 	return validateNewAccountPassword(req.NewPassword)
 }
 
 func validateNewAccountPassword(password string) error {
 	if password == "" {
-		return service.NewError(http.StatusBadRequest, "new password is required")
+		return gst.NewError(http.StatusBadRequest, "new password is required")
 	}
 	if len(password) < minAccountPasswordLength {
-		return service.NewError(http.StatusBadRequest, "password must be at least 6 characters long")
+		return gst.NewError(http.StatusBadRequest, "password must be at least 6 characters long")
 	}
 	return nil
 }
@@ -60,7 +59,7 @@ func validateNewAccountPassword(password string) error {
 // NewPasswordCredential creates a password credential for the given IAM user.
 func NewPasswordCredential(ctx context.Context, userID, password string, mustChangePassword bool) (*modeliamaccount.PasswordCredential, error) {
 	if userID == "" {
-		return nil, service.NewError(http.StatusBadRequest, "user_id is required")
+		return nil, gst.NewError(http.StatusBadRequest, "user_id is required")
 	}
 
 	credential := &modeliamaccount.PasswordCredential{UserID: userID}
@@ -73,7 +72,7 @@ func NewPasswordCredential(ctx context.Context, userID, password string, mustCha
 // LoadPasswordCredential loads the password credential owned by the given IAM user.
 func LoadPasswordCredential(ctx context.Context, userID string) (*modeliamaccount.PasswordCredential, error) {
 	if userID == "" {
-		return nil, service.NewError(http.StatusBadRequest, "user_id is required")
+		return nil, gst.NewError(http.StatusBadRequest, "user_id is required")
 	}
 
 	credentials := make([]*modeliamaccount.PasswordCredential, 0, 1)
@@ -81,7 +80,7 @@ func LoadPasswordCredential(ctx context.Context, userID string) (*modeliamaccoun
 		WithLimit(1).
 		WithQuery(&modeliamaccount.PasswordCredential{UserID: userID}).
 		List(&credentials); err != nil {
-		return nil, service.NewErrorWithCause(http.StatusInternalServerError, "failed to load password credential", err)
+		return nil, gst.NewErrorWithCause(http.StatusInternalServerError, "failed to load password credential", err)
 	}
 	if len(credentials) == 0 {
 		return nil, database.ErrRecordNotFound
@@ -120,7 +119,7 @@ func VerifyPasswordCredential(ctx context.Context, credential *modeliamaccount.P
 // ApplyPasswordCredentialUpdate replaces the credential hash and password-change state.
 func ApplyPasswordCredentialUpdate(ctx context.Context, credential *modeliamaccount.PasswordCredential, newPassword string, mustChangePassword bool) error {
 	if credential == nil {
-		return service.NewError(http.StatusInternalServerError, "password credential is required")
+		return gst.NewError(http.StatusInternalServerError, "password credential is required")
 	}
 
 	passwordHash, err := hashAccountPassword(ctx, newPassword)
@@ -148,7 +147,7 @@ func hashAccountPassword(ctx context.Context, password string) (string, error) {
 
 	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
 	if err != nil {
-		serviceErr := service.NewErrorWithCause(http.StatusInternalServerError, "failed to hash password", err)
+		serviceErr := gst.NewErrorWithCause(http.StatusInternalServerError, "failed to hash password", err)
 		gstotel.RecordError(span, serviceErr)
 		return "", serviceErr
 	}

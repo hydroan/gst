@@ -38,7 +38,7 @@ func (l *LogoutService) Create(ctx *gst.ServiceContext, req *model.Empty) (rsp *
 			return &modeliamaccount.LogoutRsp{Msg: "logout successful"}, nil
 		}
 
-		return nil, service.NewErrorWithCause(http.StatusInternalServerError, "failed to logout", err)
+		return nil, gst.NewErrorWithCause(http.StatusInternalServerError, "failed to logout", err)
 	}
 
 	// Only a logout that actually ended a session is a lifecycle event; the

@@ -26,7 +26,7 @@ func (a *AdminTOTPStatusService) Get(ctx *gst.ServiceContext, req *model.Empty) 
 
 	targetUserID := strings.TrimSpace(ctx.Param("id"))
 	if targetUserID == "" {
-		return nil, service.NewError(http.StatusBadRequest, "user id is required")
+		return nil, gst.NewError(http.StatusBadRequest, "user id is required")
 	}
 	if svcErr := ensureCanAdministerMFA(ctx, targetUserID); svcErr != nil {
 		return nil, svcErr

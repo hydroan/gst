@@ -8,7 +8,6 @@ import (
 	"github.com/hydroan/gst/database"
 	modeliamuser "github.com/hydroan/gst/internal/model/iam/user"
 	serviceiamsession "github.com/hydroan/gst/internal/service/iam/session"
-	"github.com/hydroan/gst/service"
 )
 
 // LoadActor resolves the authenticated user for the current request.
@@ -19,18 +18,18 @@ import (
 func LoadActor(ctx *gst.ServiceContext) (*modeliamuser.User, error) {
 	_, session, err := serviceiamsession.CurrentSession(ctx)
 	if err != nil {
-		return nil, service.NewErrorWithCause(http.StatusUnauthorized, "invalid session", err)
+		return nil, gst.NewErrorWithCause(http.StatusUnauthorized, "invalid session", err)
 	}
 	if session.UserID == "" {
-		return nil, service.NewError(http.StatusUnauthorized, "current user not found")
+		return nil, gst.NewError(http.StatusUnauthorized, "current user not found")
 	}
 
 	actor := new(modeliamuser.User)
 	if err = database.Database[*modeliamuser.User](ctx).Get(actor, session.UserID); err != nil {
 		if errors.Is(err, database.ErrRecordNotFound) {
-			return nil, service.NewError(http.StatusUnauthorized, "current user not found")
+			return nil, gst.NewError(http.StatusUnauthorized, "current user not found")
 		}
-		return nil, service.NewErrorWithCause(http.StatusInternalServerError, "failed to load current user", err)
+		return nil, gst.NewErrorWithCause(http.StatusInternalServerError, "failed to load current user", err)
 	}
 	return actor, nil
 }
@@ -50,9 +49,9 @@ func LoadActorAndTarget(ctx *gst.ServiceContext, targetUserID string) (*modeliam
 	target := new(modeliamuser.User)
 	if err = database.Database[*modeliamuser.User](ctx).Get(target, targetUserID); err != nil {
 		if errors.Is(err, database.ErrRecordNotFound) {
-			return nil, nil, service.NewError(http.StatusNotFound, "user not found")
+			return nil, nil, gst.NewError(http.StatusNotFound, "user not found")
 		}
-		return nil, nil, service.NewErrorWithCause(http.StatusInternalServerError, "failed to load target user", err)
+		return nil, nil, gst.NewErrorWithCause(http.StatusInternalServerError, "failed to load target user", err)
 	}
 
 	return actor, target, nil

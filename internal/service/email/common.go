@@ -9,8 +9,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/hydroan/gst/service"
-
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst"
 	gstredis "github.com/hydroan/gst/redis"
@@ -100,7 +98,7 @@ var (
 func dispatchEmail(ctx context.Context, delivery emailDelivery) error {
 	delivery.To = normalizeEmailScope(delivery.To)
 	if delivery.To == "" {
-		return service.NewError(http.StatusBadRequest, "email recipient is required")
+		return gst.NewError(http.StatusBadRequest, "email recipient is required")
 	}
 	return activeEmailSender.Send(ctx, delivery)
 }

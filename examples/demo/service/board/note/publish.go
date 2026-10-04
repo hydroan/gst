@@ -23,20 +23,20 @@ type Publish struct {
 // Create marks the note published on the channel, now.
 func (p *Publish) Create(ctx *gst.ServiceContext, req *board.NotePublishReq) (*board.NotePublishRsp, error) {
 	if req.Channel == "" {
-		return nil, service.NewError(http.StatusBadRequest, "channel is required")
+		return nil, gst.NewError(http.StatusBadRequest, "channel is required")
 	}
 	note := new(board.Note)
 	if err := database.Database[*board.Note](ctx).Get(note, ctx.Param("id")); err != nil {
 		if errors.Is(err, database.ErrRecordNotFound) {
-			return nil, service.NewErrorWithCause(http.StatusNotFound, "note not found", err)
+			return nil, gst.NewErrorWithCause(http.StatusNotFound, "note not found", err)
 		}
-		return nil, service.NewErrorWithCause(http.StatusInternalServerError, "failed to load the note", err)
+		return nil, gst.NewErrorWithCause(http.StatusInternalServerError, "failed to load the note", err)
 	}
 	now := time.Now().UTC().Truncate(time.Millisecond)
 	note.Published = true
 	note.PublishedAt = &now
 	if err := database.Database[*board.Note](ctx).Update(note); err != nil {
-		return nil, service.NewErrorWithCause(http.StatusInternalServerError, "failed to publish the note", err)
+		return nil, gst.NewErrorWithCause(http.StatusInternalServerError, "failed to publish the note", err)
 	}
 	return &board.NotePublishRsp{ID: note.ID, Channel: req.Channel, PublishedAt: now}, nil
 }

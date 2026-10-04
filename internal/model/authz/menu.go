@@ -13,7 +13,6 @@ import (
 	"github.com/hydroan/gst/database"
 	"github.com/hydroan/gst/dsl"
 	"github.com/hydroan/gst/model"
-	"github.com/hydroan/gst/service"
 	"github.com/hydroan/gst/tenant"
 	"go.uber.org/zap"
 	"gorm.io/datatypes"
@@ -153,10 +152,10 @@ func errIfMenuWriteForbidden(ctx context.Context) error {
 	}
 	systemRoot, err := rbac.RBAC().HasSystemRole(ctx, subject, consts.AUTHZ_SYSTEM_ROLE_ROOT)
 	if err != nil {
-		return service.NewErrorWithCause(http.StatusInternalServerError, "authorization unavailable", err)
+		return gst.NewErrorWithCause(http.StatusInternalServerError, "authorization unavailable", err)
 	}
 	if !systemRoot {
-		return service.NewError(http.StatusForbidden, "only system administrators may modify menus")
+		return gst.NewError(http.StatusForbidden, "only system administrators may modify menus")
 	}
 	return nil
 }

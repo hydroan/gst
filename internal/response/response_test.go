@@ -12,8 +12,8 @@ import (
 	ginjson "github.com/gin-gonic/gin/codec/json"
 	"github.com/hydroan/gst/consts"
 	"github.com/hydroan/gst/internal/response"
-	"github.com/hydroan/gst/internal/serviceregistry"
 	"github.com/hydroan/gst/internal/testutil/swap"
+	"github.com/hydroan/gst/internal/types"
 	"github.com/stretchr/testify/require"
 )
 
@@ -68,7 +68,7 @@ func TestJSONEncodesWithStandardLibrary(t *testing.T) {
 func TestErrorAnswersServiceErrorsAndHidesTheRest(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	cause := errors.New("database password leaked")
-	serviceErr := serviceregistry.NewErrorWithCause(http.StatusInternalServerError, "failed to load user", cause)
+	serviceErr := types.NewErrorWithCause(http.StatusInternalServerError, "failed to load user", cause)
 	internal := errors.New("dial tcp 10.0.0.1:3306: connection refused")
 
 	tests := []struct {
@@ -80,7 +80,7 @@ func TestErrorAnswersServiceErrorsAndHidesTheRest(t *testing.T) {
 	}{
 		{"service error", serviceErr, http.StatusInternalServerError, `{"data":null,"msg":"failed to load user","trace_id":""}`, cause.Error()},
 		{"wrapped service error", errors.Wrap(serviceErr, "load account"), http.StatusInternalServerError, `{"data":null,"msg":"failed to load user","trace_id":""}`, cause.Error()},
-		{"forbidden", serviceregistry.NewError(http.StatusForbidden, "account disabled"), http.StatusForbidden, `{"data":null,"msg":"account disabled","trace_id":""}`, ""},
+		{"forbidden", types.NewError(http.StatusForbidden, "account disabled"), http.StatusForbidden, `{"data":null,"msg":"account disabled","trace_id":""}`, ""},
 		{"other error", internal, http.StatusInternalServerError, `{"data":null,"msg":"The server could not process the request.","trace_id":""}`, internal.Error()},
 	}
 	for _, tt := range tests {
@@ -126,8 +126,8 @@ func TestAbortErrorAnswersTheErrorAndStopsTheChain(t *testing.T) {
 		status int
 		msg    string
 	}{
-		"a service error":          {serviceregistry.NewError(http.StatusForbidden, "permission denied"), http.StatusForbidden, "permission denied"},
-		"the server's own failure": {errors.New("store down"), http.StatusInternalServerError, serviceregistry.FailureMsg},
+		"a service error":          {types.NewError(http.StatusForbidden, "permission denied"), http.StatusForbidden, "permission denied"},
+		"the server's own failure": {errors.New("store down"), http.StatusInternalServerError, types.FailureMsg},
 	} {
 		t.Run(name, func(t *testing.T) {
 			w := httptest.NewRecorder()

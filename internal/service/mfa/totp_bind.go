@@ -35,10 +35,10 @@ func (t *TOTPBindService) Create(ctx *gst.ServiceContext, req *model.Empty) (rsp
 	log := t.WithContext(ctx, ctx.Phase())
 
 	if len(ctx.UserID()) == 0 {
-		return nil, service.NewError(http.StatusUnauthorized, "authentication required")
+		return nil, gst.NewError(http.StatusUnauthorized, "authentication required")
 	}
 	if len(ctx.Username()) == 0 {
-		return nil, service.NewError(http.StatusUnauthorized, "authentication required")
+		return nil, gst.NewError(http.StatusUnauthorized, "authentication required")
 	}
 	sessionID, err := currentTOTPBindSessionID(ctx)
 	if err != nil {
@@ -53,14 +53,14 @@ func (t *TOTPBindService) Create(ctx *gst.ServiceContext, req *model.Empty) (rsp
 		SecretSize:  32, // 32 bytes = 256 bits
 	})
 	if err != nil {
-		return nil, service.NewErrorWithCause(http.StatusInternalServerError, "failed to generate TOTP key", err)
+		return nil, gst.NewErrorWithCause(http.StatusInternalServerError, "failed to generate TOTP key", err)
 	}
 
 	qrCodeURL := key.URL()
 
 	qrCodeImage, err := generateQRCode(qrCodeURL)
 	if err != nil {
-		return nil, service.NewErrorWithCause(http.StatusInternalServerError, "failed to generate QR code image", err)
+		return nil, gst.NewErrorWithCause(http.StatusInternalServerError, "failed to generate QR code image", err)
 	}
 
 	challengeID, _, err := issueTOTPBindChallenge(ctx, totpBindChallenge{
@@ -70,7 +70,7 @@ func (t *TOTPBindService) Create(ctx *gst.ServiceContext, req *model.Empty) (rsp
 		Secret:    key.Secret(),
 	})
 	if err != nil {
-		return nil, service.NewErrorWithCause(http.StatusInternalServerError, "failed to issue TOTP binding challenge", err)
+		return nil, gst.NewErrorWithCause(http.StatusInternalServerError, "failed to issue TOTP binding challenge", err)
 	}
 
 	rsp = &modelmfa.TOTPBindRsp{

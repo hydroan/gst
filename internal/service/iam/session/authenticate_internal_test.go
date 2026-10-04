@@ -10,7 +10,6 @@ import (
 	"github.com/hydroan/gst"
 	modeliamsession "github.com/hydroan/gst/internal/model/iam/session"
 	modeliamuser "github.com/hydroan/gst/internal/model/iam/user"
-	"github.com/hydroan/gst/service"
 	"github.com/mssola/useragent"
 	"github.com/stretchr/testify/require"
 )
@@ -35,12 +34,12 @@ func TestAuthenticateDeletesTheSessionOnlyWhenTheUserIsRefused(t *testing.T) {
 	}{
 		{
 			name:   "the state cannot be read",
-			err:    service.NewError(http.StatusInternalServerError, "failed to refresh session user state"),
+			err:    gst.NewError(http.StatusInternalServerError, "failed to refresh session user state"),
 			status: http.StatusInternalServerError,
 		},
 		{
 			name:    "the user is gone",
-			err:     service.NewError(http.StatusUnauthorized, "session invalid"),
+			err:     gst.NewError(http.StatusUnauthorized, "session invalid"),
 			status:  http.StatusUnauthorized,
 			deleted: true,
 		},
@@ -76,7 +75,7 @@ func TestAuthenticateDeletesTheSessionOnlyWhenTheUserIsRefused(t *testing.T) {
 			Store.DropUserState(t.Context(), session.UserID)
 
 			_, err := Authenticate(t.Context(), session.ID, sampleUserAgent, http.MethodGet, "/api/records")
-			var serviceErr *service.Error
+			var serviceErr *gst.Error
 			require.ErrorAs(t, err, &serviceErr)
 			require.Equal(t, tc.status, serviceErr.Status())
 

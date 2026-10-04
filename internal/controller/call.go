@@ -14,7 +14,6 @@ import (
 	"github.com/hydroan/gst/consts"
 	"github.com/hydroan/gst/internal/grpcserver"
 	"github.com/hydroan/gst/internal/requestctx"
-	"github.com/hydroan/gst/internal/serviceregistry"
 	"github.com/hydroan/gst/internal/types"
 	"github.com/hydroan/gst/logger"
 	gstotel "github.com/hydroan/gst/otel"
@@ -301,7 +300,7 @@ func (c *call) invalid(err error) error {
 // names none.
 func (c *call) invalidMessage(err error) error {
 	if violations := fieldViolations(err, ""); len(violations) > 0 {
-		return c.refuse(serviceregistry.NewInvalidFields(violations, err), err)
+		return c.refuse(types.NewInvalidFields(violations, err), err)
 	}
 	return c.refuse(badRequest(invalidMessageMsg), err)
 }
@@ -311,7 +310,7 @@ func (c *call) invalidMessage(err error) error {
 // clientSafeItemBindError).
 func (c *call) invalidItemMessage(i int, err error) error {
 	if violations := fieldViolations(err, "items["+strconv.Itoa(i)+"]."); len(violations) > 0 {
-		return c.refuse(serviceregistry.NewInvalidFields(violations, err), err)
+		return c.refuse(types.NewInvalidFields(violations, err), err)
 	}
 	return c.invalidMessage(err)
 }

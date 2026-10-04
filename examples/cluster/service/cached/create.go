@@ -20,10 +20,10 @@ type Creator struct {
 // every other replica must catch up with.
 func (c *Creator) Create(ctx *gst.ServiceContext, req *model.CachedReq) (*model.CachedCreateRsp, error) {
 	if req.Key == "" {
-		return nil, service.NewError(http.StatusBadRequest, "a key is required")
+		return nil, gst.NewError(http.StatusBadRequest, "a key is required")
 	}
 	if err := dao.CacheSet(ctx, req.Key, req.Value); err != nil {
-		return nil, service.NewErrorWithCause(http.StatusInternalServerError, "the entry was not cached", err)
+		return nil, gst.NewErrorWithCause(http.StatusInternalServerError, "the entry was not cached", err)
 	}
 	return &model.CachedCreateRsp{Replica: helper.Replica(), Key: req.Key, Value: req.Value, Found: true}, nil
 }

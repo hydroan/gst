@@ -6,7 +6,6 @@ import (
 
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/database"
-	"github.com/hydroan/gst/internal/serviceregistry"
 	"github.com/hydroan/gst/internal/types"
 	gstotel "github.com/hydroan/gst/otel"
 	"go.opentelemetry.io/otel/trace"
@@ -34,24 +33,24 @@ const (
 // carry, err: 400 with the client-safe text of err — the message of the
 // service error err wraps, when it does, err's own text otherwise — and err
 // as the cause.
-func invalidArgument(err error) *serviceregistry.Error {
+func invalidArgument(err error) *types.Error {
 	msg := err.Error()
-	var serviceErr *serviceregistry.Error
+	var serviceErr *types.Error
 	if errors.As(err, &serviceErr) {
 		msg = serviceErr.Msg()
 	}
-	return serviceregistry.NewErrorWithCause(http.StatusBadRequest, msg, err)
+	return types.NewErrorWithCause(http.StatusBadRequest, msg, err)
 }
 
 // badRequest returns the 400 refusal carrying msg.
-func badRequest(msg string) *serviceregistry.Error {
-	return serviceregistry.NewError(http.StatusBadRequest, msg)
+func badRequest(msg string) *types.Error {
+	return types.NewError(http.StatusBadRequest, msg)
 }
 
 // notFound returns the 404 refusal of a record the flow could not find, with
 // cause, when there is one, behind it.
-func notFound(cause error) *serviceregistry.Error {
-	return serviceregistry.NewErrorWithCause(http.StatusNotFound, notFoundMsg, cause)
+func notFound(cause error) *types.Error {
+	return types.NewErrorWithCause(http.StatusNotFound, notFoundMsg, cause)
 }
 
 // failWith logs err under msg, records it on the controller span ctx
@@ -93,36 +92,36 @@ func failDatabase(ctx context.Context, log types.Logger, err error) error {
 // answering 403 — and flattening that to the server's own failure would
 // misreport a permission boundary as a server fault.
 func databaseError(err error) error {
-	var serviceErr *serviceregistry.Error
+	var serviceErr *types.Error
 	switch {
 	case errors.As(err, &serviceErr):
 		return err
 	case errors.Is(err, database.ErrRecordNotFound):
 		return notFound(err)
 	case errors.Is(err, database.ErrDuplicatedKey):
-		return serviceregistry.NewErrorWithCause(http.StatusConflict, alreadyExistsMsg, err)
+		return types.NewErrorWithCause(http.StatusConflict, alreadyExistsMsg, err)
 	case errors.Is(err, database.ErrStaleObject):
 		// The optimistic-lock miss of a versioned model: modified or deleted
 		// by someone else after this caller read it. 409, reload and retry.
-		return serviceregistry.NewErrorWithCause(http.StatusConflict, staleObjectMsg, err)
+		return types.NewErrorWithCause(http.StatusConflict, staleObjectMsg, err)
 	case errors.Is(err, database.ErrVersionRequired):
 		// A versioned record arrived without the version it was read with —
 		// a request defect, not a conflict.
-		return serviceregistry.NewErrorWithCause(http.StatusBadRequest, invalidArgumentMsg, err)
+		return types.NewErrorWithCause(http.StatusBadRequest, invalidArgumentMsg, err)
 	case errors.Is(err, database.ErrIDRequired):
 		// A batch item arrived without the id naming its record — a request
 		// defect as well.
-		return serviceregistry.NewErrorWithCause(http.StatusBadRequest, invalidArgumentMsg, err)
+		return types.NewErrorWithCause(http.StatusBadRequest, invalidArgumentMsg, err)
 	case errors.Is(err, database.ErrForeignKeyViolated):
 		// The request names a record that is not there, or would leave one
 		// other records still refer to: a conflict with the records as they
 		// are, to retry once they are in place, FailedPrecondition over gRPC
 		// (see grpcserver.StatusError).
-		return serviceregistry.NewErrorWithCause(http.StatusConflict, foreignKeyMsg, err)
+		return types.NewErrorWithCause(http.StatusConflict, foreignKeyMsg, err)
 	case errors.Is(err, database.ErrCheckConstraintViolated), errors.Is(err, database.ErrValueTooLong), errors.Is(err, database.ErrNotNullViolated):
 		// A value the table refuses, by a check, by the length of the
 		// column or by a column that requires one: the request's own defect.
-		return serviceregistry.NewErrorWithCause(http.StatusBadRequest, invalidArgumentMsg, err)
+		return types.NewErrorWithCause(http.StatusBadRequest, invalidArgumentMsg, err)
 	default:
 		// Any other database error is the server's own failure.
 		return err

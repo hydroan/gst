@@ -6,7 +6,7 @@ import (
 
 	"github.com/cockroachdb/errors"
 	gstgrpc "github.com/hydroan/gst/grpc"
-	"github.com/hydroan/gst/internal/serviceregistry"
+	"github.com/hydroan/gst/internal/types"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -17,12 +17,12 @@ import (
 // status maps to and its own message, any other error answers Internal
 // without its text.
 func TestStatusErrorAnswersAServiceErrorWithItsStatus(t *testing.T) {
-	refused := status.Convert(gstgrpc.StatusError(serviceregistry.NewError(http.StatusForbidden, "not yours")))
+	refused := status.Convert(gstgrpc.StatusError(types.NewError(http.StatusForbidden, "not yours")))
 	require.Equal(t, codes.PermissionDenied, refused.Code())
 	require.Equal(t, "not yours", refused.Message())
 
 	broken := status.Convert(gstgrpc.StatusError(errors.New("dial tcp: connection refused")))
 	require.Equal(t, codes.Internal, broken.Code())
-	require.Equal(t, serviceregistry.FailureMsg, broken.Message())
+	require.Equal(t, types.FailureMsg, broken.Message())
 	require.NoError(t, gstgrpc.StatusError(nil))
 }

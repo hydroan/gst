@@ -77,20 +77,20 @@ func (a *AdminUserListService) List(ctx *gst.ServiceContext, _ *model.Empty) (rs
 func (a *AdminUserListService) listUsers(ctx *gst.ServiceContext, actor *modeliamuser.User) ([]*modeliamuser.User, int, error) {
 	opts, err := userVisibilityQueryOptions(ctx, actor)
 	if err != nil {
-		return nil, 0, service.NewErrorWithCause(http.StatusInternalServerError, "failed to list users", err)
+		return nil, 0, gst.NewErrorWithCause(http.StatusInternalServerError, "failed to list users", err)
 	}
 
 	userQuery, err := a.QueryModel(ctx)
 	if err != nil {
-		return nil, 0, service.NewError(http.StatusBadRequest, err.Error())
+		return nil, 0, gst.NewError(http.StatusBadRequest, err.Error())
 	}
 	filters, err := a.QueryFilters(ctx)
 	if err != nil {
-		return nil, 0, service.NewError(http.StatusBadRequest, err.Error())
+		return nil, 0, gst.NewError(http.StatusBadRequest, err.Error())
 	}
 	orders, err := a.QueryOrders(ctx)
 	if err != nil {
-		return nil, 0, service.NewError(http.StatusBadRequest, err.Error())
+		return nil, 0, gst.NewError(http.StatusBadRequest, err.Error())
 	}
 	// The visibility filters come first: they are the scope the client cannot
 	// influence, and appending the client's own filters to them can only narrow
@@ -100,7 +100,7 @@ func (a *AdminUserListService) listUsers(ctx *gst.ServiceContext, actor *modelia
 
 	var total int
 	if err = database.Database[*modeliamuser.User](ctx).WithQuery(userQuery, opts).Count(&total); err != nil {
-		return nil, 0, service.NewErrorWithCause(http.StatusInternalServerError, "failed to count users", err)
+		return nil, 0, gst.NewErrorWithCause(http.StatusInternalServerError, "failed to count users", err)
 	}
 
 	if len(orders) == 0 {
@@ -113,7 +113,7 @@ func (a *AdminUserListService) listUsers(ctx *gst.ServiceContext, actor *modelia
 		WithOrder(orders...).
 		WithPagination(page, size).
 		List(&users); err != nil {
-		return nil, 0, service.NewErrorWithCause(http.StatusInternalServerError, "failed to list users", err)
+		return nil, 0, gst.NewErrorWithCause(http.StatusInternalServerError, "failed to list users", err)
 	}
 	return users, total, nil
 }
@@ -128,7 +128,7 @@ func (a *AdminUserListService) listUsers(ctx *gst.ServiceContext, actor *modelia
 func userVisibilityQueryOptions(ctx *gst.ServiceContext, actor *modeliamuser.User) (gst.QueryOptions, error) {
 	systemRoot, err := isSystemRoot(ctx, actor)
 	if err != nil {
-		return gst.QueryOptions{}, service.NewErrorWithCause(http.StatusInternalServerError, "failed to resolve actor system role", err)
+		return gst.QueryOptions{}, gst.NewErrorWithCause(http.StatusInternalServerError, "failed to resolve actor system role", err)
 	}
 	if systemRoot {
 		return gst.QueryOptions{AllowEmpty: true}, nil
@@ -138,7 +138,7 @@ func userVisibilityQueryOptions(ctx *gst.ServiceContext, actor *modeliamuser.Use
 	// default authorization domain when the application has no tenant resolver.
 	subjectIDs, err := rbac.RBAC().SubjectsInTenant(ctx, currentTenant(ctx))
 	if err != nil {
-		return gst.QueryOptions{}, service.NewErrorWithCause(http.StatusInternalServerError, "failed to list tenant subjects", err)
+		return gst.QueryOptions{}, gst.NewErrorWithCause(http.StatusInternalServerError, "failed to list tenant subjects", err)
 	}
 	if len(subjectIDs) == 0 {
 		return emptyUserVisibilityQueryOptions(), nil
@@ -168,7 +168,7 @@ func excludeSystemRootSubjects(ctx *gst.ServiceContext, subjectIDs []string) ([]
 	for _, subjectID := range subjectIDs {
 		systemRoot, err := rbac.RBAC().HasSystemRole(ctx, subjectID, consts.AUTHZ_SYSTEM_ROLE_ROOT)
 		if err != nil {
-			return nil, service.NewErrorWithCause(http.StatusInternalServerError, "authorization unavailable", err)
+			return nil, gst.NewErrorWithCause(http.StatusInternalServerError, "authorization unavailable", err)
 		}
 		if systemRoot {
 			continue

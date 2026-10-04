@@ -24,10 +24,10 @@ type Importer struct {
 func (d *Importer) Import(_ *gst.ServiceContext, reader io.Reader) ([]*archive.Document, error) {
 	rows, err := csv.NewReader(reader).ReadAll()
 	if err != nil {
-		return nil, service.NewErrorWithCause(http.StatusBadRequest, "the file is not valid csv", err)
+		return nil, gst.NewErrorWithCause(http.StatusBadRequest, "the file is not valid csv", err)
 	}
 	if len(rows) < 2 {
-		return nil, service.NewError(http.StatusBadRequest, "the file has no rows under its header")
+		return nil, gst.NewError(http.StatusBadRequest, "the file has no rows under its header")
 	}
 	documents := make([]*archive.Document, 0, len(rows)-1)
 	for _, row := range rows[1:] {

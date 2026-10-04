@@ -9,7 +9,6 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst"
 	modeliamsession "github.com/hydroan/gst/internal/model/iam/session"
-	"github.com/hydroan/gst/service"
 )
 
 // ValidateSession reports whether a stored snapshot is usable as the session
@@ -75,7 +74,7 @@ func CurrentSession(ctx *gst.ServiceContext) (string, modeliamsession.Session, e
 	if sessionID, sessionData, ok := currentSessionFromContext(ctx); ok {
 		if err := ValidateSession(sessionID, sessionData); err != nil {
 			_, _ = Store.DeleteSession(ctx, sessionID)
-			return "", modeliamsession.Session{}, service.NewErrorWithCause(http.StatusUnauthorized, "session invalid", err)
+			return "", modeliamsession.Session{}, gst.NewErrorWithCause(http.StatusUnauthorized, "session invalid", err)
 		}
 		return sessionID, sessionData, nil
 	}
@@ -89,11 +88,11 @@ func CurrentSession(ctx *gst.ServiceContext) (string, modeliamsession.Session, e
 		return "", modeliamsession.Session{}, err
 	}
 	if !found {
-		return "", modeliamsession.Session{}, service.NewError(http.StatusUnauthorized, "session not exists")
+		return "", modeliamsession.Session{}, gst.NewError(http.StatusUnauthorized, "session not exists")
 	}
 	if err = ValidateSession(sessionID, sessionData); err != nil {
 		_, _ = Store.DeleteSession(ctx, sessionID)
-		return "", modeliamsession.Session{}, service.NewErrorWithCause(http.StatusUnauthorized, "session invalid", err)
+		return "", modeliamsession.Session{}, gst.NewErrorWithCause(http.StatusUnauthorized, "session invalid", err)
 	}
 
 	return sessionID, sessionData, nil
