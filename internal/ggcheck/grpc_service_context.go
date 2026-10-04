@@ -36,7 +36,7 @@ var GRPCServiceContext = Check{
 // whatever file declares them included, and the functions of that file;
 // from there it reaches every function of the project they call, in the
 // package or another, each call resolved the way the Go compiler reads it
-// (see svcErrFuncScope.calleeOf), so a method of another type sharing a
+// (see errDiscFuncScope.calleeOf), so a method of another type sharing a
 // name is not taken for the one called. Left alone are the services of the
 // actions gRPC does not serve (see dsl.HTTPOnlyAction), the helpers only
 // those reach, and the files of models served over HTTP alone. A violation
@@ -57,13 +57,13 @@ func checkGRPCServiceContext(ignore gghelper.ProjectIgnore) []string {
 	}
 	// Every function and method of the project by key, and every file by
 	// path, for the calls to be followed.
-	funcs := make(map[svcErrFuncKey]projectFunc)
-	files := make(map[string]*svcErrFileCollector, len(analysis.files))
+	funcs := make(map[errDiscFuncKey]projectFunc)
+	files := make(map[string]*errDiscFileCollector, len(analysis.files))
 	for _, c := range analysis.files {
 		files[c.path] = c
 		for _, decl := range c.file.Decls {
 			if fn, ok := decl.(*ast.FuncDecl); ok && fn.Body != nil {
-				funcs[svcErrFuncKey{pkgDir: c.pkgDir, recv: svcErrReceiverTypeName(receiverType(fn)), name: fn.Name.Name}] = projectFunc{file: c, decl: fn}
+				funcs[errDiscFuncKey{pkgDir: c.pkgDir, recv: errDiscReceiverTypeName(receiverType(fn)), name: fn.Name.Name}] = projectFunc{file: c, decl: fn}
 			}
 		}
 	}
@@ -75,7 +75,7 @@ func checkGRPCServiceContext(ignore gghelper.ProjectIgnore) []string {
 		if m.Design == nil || !m.Design.GRPC || ignore.Ignores(m.ModelFilePath, false) {
 			continue
 		}
-		var entries []svcErrFuncKey
+		var entries []errDiscFuncKey
 		m.Design.Range(func(_ string, act *dsl.Action) {
 			if !act.Service || dsl.HTTPOnlyAction(act.Phase.Name()) {
 				return
@@ -94,7 +94,7 @@ func checkGRPCServiceContext(ignore gghelper.ProjectIgnore) []string {
 				}
 			}
 		})
-		visited := make(map[svcErrFuncKey]bool)
+		visited := make(map[errDiscFuncKey]bool)
 		for len(entries) > 0 {
 			key := entries[0]
 			entries = entries[1:]
@@ -140,7 +140,7 @@ func checkGRPCServiceContext(ignore gghelper.ProjectIgnore) []string {
 // projectFunc is a function or method of the project, with the file
 // declaring it.
 type projectFunc struct {
-	file *svcErrFileCollector
+	file *errDiscFileCollector
 	decl *ast.FuncDecl
 }
 
@@ -156,7 +156,7 @@ type violationAt struct {
 // violation naming the model whose call reaches the function, in source
 // order; a call reported already, by an earlier model reaching the
 // function, is left out, reported tracking them by position.
-func httpOnlyCalls(scope *svcErrFuncScope, model string, reported map[string]bool) []violationAt {
+func httpOnlyCalls(scope *errDiscFuncScope, model string, reported map[string]bool) []violationAt {
 	if len(scope.ctxParams) == 0 {
 		return nil
 	}

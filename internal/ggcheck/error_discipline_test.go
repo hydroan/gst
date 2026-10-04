@@ -1,6 +1,7 @@
 package ggcheck_test
 
 import (
+	"fmt"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -8,7 +9,7 @@ import (
 	"github.com/hydroan/gst/internal/ggcheck"
 )
 
-func TestServiceErrorDisciplineFlagsRawErrorSources(t *testing.T) {
+func TestErrorDisciplineFlagsRawErrorSources(t *testing.T) {
 	projectDir := t.TempDir()
 	t.Chdir(projectDir)
 
@@ -198,7 +199,7 @@ func (g *Getter) Get(ctx *gst.ServiceContext, req *model.RecordReq) (*model.Reco
 }
 `)
 
-	violations := runCheck(ggcheck.ServiceErrorDiscipline)
+	violations := runCheck(ggcheck.ErrorDiscipline)
 
 	// Violations point at the raw error expressions themselves: the raw
 	// constructor of the dot-imported service on dotted.go:15, the call into
@@ -237,7 +238,7 @@ func (g *Getter) Get(ctx *gst.ServiceContext, req *model.RecordReq) (*model.Reco
 	}
 }
 
-func TestServiceErrorDisciplineAllowsCompliantSources(t *testing.T) {
+func TestErrorDisciplineAllowsCompliantSources(t *testing.T) {
 	projectDir := t.TempDir()
 	t.Chdir(projectDir)
 
@@ -520,16 +521,16 @@ func Sweep() error {
 }
 `)
 
-	violations := runCheck(ggcheck.ServiceErrorDiscipline)
+	violations := runCheck(ggcheck.ErrorDiscipline)
 	if len(violations) != 0 {
 		t.Fatalf("expected no violations, got %#v", violations)
 	}
 }
 
-// TestServiceErrorDisciplineReportsAnUnreadableModulePath pins that a project
+// TestErrorDisciplineReportsAnUnreadableModulePath pins that a project
 // whose module path cannot be read fails the check instead of passing it: the
 // checker needs the module path to tell the project's own packages apart.
-func TestServiceErrorDisciplineReportsAnUnreadableModulePath(t *testing.T) {
+func TestErrorDisciplineReportsAnUnreadableModulePath(t *testing.T) {
 	projectDir := t.TempDir()
 	t.Chdir(projectDir)
 
@@ -540,9 +541,115 @@ import "errors"
 func Create() error { return errors.New("boom") }
 `)
 
-	violations := runCheck(ggcheck.ServiceErrorDiscipline)
+	violations := runCheck(ggcheck.ErrorDiscipline)
 
 	if len(violations) != 1 || !strings.Contains(violations[0], "reading the module path") {
 		t.Fatalf("expected one violation naming the unreadable module path, got %#v", violations)
+	}
+}
+
+// TestErrorDisciplineChecksModelHooks pins that the lifecycle hooks
+// of a model — a struct embedding model.Base or model.AutoBase — are entry
+// points like service methods: a raw error leaving a hook, directly or
+// through a function the hook calls, is reported, while an exported method
+// of the model that is no hook, a hook on a struct that is no model, and a
+// hook on a virtual model embedding model.Empty are left alone. The errors
+// of the framework database package — a call chain, a sentinel, through a
+// helper or not — are accepted on a hook, since the framework answers them
+// by its own mapping; any other call's error is raw as it is in a service.
+func TestErrorDisciplineChecksModelHooks(t *testing.T) {
+	projectDir := t.TempDir()
+	t.Chdir(projectDir)
+
+	writeCheckFile(t, filepath.Join(projectDir, "go.mod"), "module tmpapp\n\ngo 1.26\n")
+	source := `package record
+
+import (
+	"context"
+	"net/http"
+	"strconv"
+
+	"github.com/cockroachdb/errors"
+	"github.com/hydroan/gst"
+	"github.com/hydroan/gst/database"
+	"github.com/hydroan/gst/model"
+)
+
+type Record struct {
+	Name string
+
+	model.Base
+}
+
+func (r *Record) GetBefore(ctx context.Context) error {
+	current := new(Record)
+	return database.Database[*Record](ctx).WithoutHook().Get(current, r.ID)
+}
+
+func (r *Record) ListBefore(context.Context) error { return database.ErrRecordNotFound }
+
+func (r *Record) UpdateAfter(ctx context.Context) error { return deleteQueried(ctx, &Record{Name: r.Name}) }
+
+func deleteQueried(ctx context.Context, query *Record) error {
+	records := make([]*Record, 0)
+	if err := database.Database[*Record](ctx).WithQuery(query).List(&records); err != nil {
+		return err
+	}
+	return database.Database[*Record](ctx).Delete(records...)
+}
+
+func (r *Record) GetAfter(context.Context) error {
+	_, err := strconv.Atoi(r.Name)
+	return err
+}
+
+func (r *Record) CreateBefore(context.Context) error {
+	if r.Name == "" {
+		return errors.New("name is required")
+	}
+	return nil
+}
+
+func (r *Record) UpdateBefore(context.Context) error {
+	if r.Name == "" {
+		return gst.NewError(http.StatusBadRequest, "name is required")
+	}
+	return nil
+}
+
+func (r *Record) DeleteBefore(context.Context) error { return r.validate() }
+
+func (r *Record) validate() error { return errors.New("raw") }
+
+// Describe is exported but no lifecycle hook, so the framework never runs it.
+func (r *Record) Describe() error { return errors.New("not a hook") }
+
+type plain struct{}
+
+func (plain) CreateBefore(context.Context) error { return errors.New("not a model") }
+
+type Action struct {
+	model.Empty
+}
+
+func (Action) CreateBefore(context.Context) error { return errors.New("never runs") }
+`
+	writeCheckFile(t, filepath.Join(projectDir, "model", "record", "record.go"), source)
+
+	violations := runCheck(ggcheck.ErrorDiscipline)
+
+	file := filepath.Join("model", "record", "record.go")
+	want := []string{
+		fmt.Sprintf("%s:%d:", file, sourceLine(t, source, `strconv.Atoi(r.Name)`)),
+		fmt.Sprintf("%s:%d:", file, sourceLine(t, source, `errors.New("name is required")`)),
+		fmt.Sprintf("%s:%d:", file, sourceLine(t, source, `errors.New("raw")`)),
+	}
+	if len(violations) != len(want) {
+		t.Fatalf("expected %d violations, got %#v", len(want), violations)
+	}
+	for i, prefix := range want {
+		if !strings.HasPrefix(violations[i], prefix) {
+			t.Fatalf("violation %d = %q, want prefix %q", i, violations[i], prefix)
+		}
 	}
 }

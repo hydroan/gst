@@ -37,7 +37,7 @@ var projectChecks = []ggcheck.Check{
 	ggcheck.DatabaseChainTermination,
 	ggcheck.TransactionClosureContext,
 	ggcheck.DetachedContext,
-	ggcheck.ServiceErrorDiscipline,
+	ggcheck.ErrorDiscipline,
 	ggcheck.ServiceTestCoverage,
 	ggcheck.ServiceTestOrganization,
 	ggcheck.LogFieldBoundedness,

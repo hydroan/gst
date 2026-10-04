@@ -142,7 +142,7 @@ func genServiceMethod4(info *modelinfo.Model, modelQualifier string, action *dsl
 // genServiceMethod5 uses AST to generate Import method, referring to the model
 // package by modelQualifier (see genServiceMethod1). The scaffold returns a
 // literal nil error: returning the never-assigned named err would fail the
-// service error discipline check on the very next gg run. For the model User
+// error discipline check on the very next gg run. For the model User
 // it generates
 //
 //	func (u *Importer) Import(ctx *gst.ServiceContext, reader io.Reader) (users []*model.User, err error) {
@@ -164,7 +164,7 @@ func genServiceMethod5(info *modelinfo.Model, modelQualifier string, action *dsl
 // genServiceMethod6 uses AST to generate Export method, referring to the model
 // package by modelQualifier (see genServiceMethod1). Like the Import scaffold,
 // it returns a literal nil error to keep generated code compliant with the
-// service error discipline check. For the model User it generates
+// error discipline check. For the model User it generates
 //
 //	func (u *Exporter) Export(ctx *gst.ServiceContext, users ...*model.User) (data []byte, err error) {
 //		log := u.WithContext(ctx, ctx.Phase())
@@ -184,7 +184,7 @@ func genServiceMethod6(info *modelinfo.Model, modelQualifier string, action *dsl
 
 // genServiceMethod7 uses AST to generate the SSE method scaffold. Like the
 // Import scaffold, it returns a literal nil error to keep generated code
-// compliant with the service error discipline check; the business fills in
+// compliant with the error discipline check; the business fills in
 // the streaming callback through ctx.SSE. For the model User it generates
 //
 //	func (u *Streamer) SSE(ctx *gst.ServiceContext) (err error) {
@@ -228,7 +228,7 @@ func genServiceMethod8(info *modelinfo.Model, modelQualifier string, action *dsl
 // Stream action, referring to the model package by modelQualifier (see
 // genServiceMethod1): the method takes what the action declares (see
 // serviceMethod9) and, like the SSE scaffold, returns literal nil so the
-// generated code passes the service error discipline check; the business
+// generated code passes the error discipline check; the business
 // fills in the stream. For the model Feed and a Service("watch") Stream
 // declaring Payload[*FeedWatchReq] and StreamingResult[*FeedEvent] it
 // generates

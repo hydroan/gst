@@ -7,36 +7,55 @@ import (
 	"go/token"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
 
+	"github.com/hydroan/gst/internal/ggconst"
 	"github.com/hydroan/gst/internal/gghelper"
 	"github.com/hydroan/gst/internal/goast"
+	"github.com/hydroan/gst/internal/modelregistry"
 )
 
-// ServiceErrorDiscipline requires the errors leaving service methods to be
-// built by gst.NewError or gst.NewErrorWithCause.
-var ServiceErrorDiscipline = Check{
-	Name: "Service error discipline",
-	Rule: "errors leaving service methods must be built by gst.NewError or gst.NewErrorWithCause",
-	run:  checkServiceErrorDiscipline,
+// ErrorDiscipline requires the errors leaving service methods and
+// model hooks to be built by gst.NewError or gst.NewErrorWithCause.
+var ErrorDiscipline = Check{
+	Name: "Error discipline",
+	Rule: "errors leaving service methods and model hooks must be built by gst.NewError or gst.NewErrorWithCause",
+	run:  checkErrorDiscipline,
 }
 
-// checkServiceErrorDiscipline checks that every error a service method can
-// return is created by gst.NewError or gst.NewErrorWithCause, either
-// directly at the exit or inside a project function the exit's error flows
-// from. An error built any other way reaches the client and the logs as-is:
-// its message leaks internal wording instead of an operator-facing one, and
-// it usually carries no useful stack, so the error_stack log field cannot
-// locate the failing service code.
+// hookMethods are the lifecycle hooks of a model by method name, the entry
+// points of a model type (see collectModelTypes).
+var hookMethods = func() map[string]bool {
+	set := map[string]bool{}
+	for _, name := range modelregistry.HookMethodNames() {
+		set[name] = true
+	}
+	return set
+}()
+
+// checkErrorDiscipline checks that every error a service method or a
+// model's lifecycle hook can return is created by gst.NewError or
+// gst.NewErrorWithCause, either directly at the exit or inside a project
+// function the exit's error flows from. An error built any other way is
+// answered as the server's own failure, 500 with the generic message,
+// instead of the status and message the refusal meant for the client.
 //
 // The analysis is purely syntactic, mirroring the other project checks. It
 // summarizes, per project function whose last result is error, where the
 // returned error values come from, then walks the flow from every service
-// method (a method on a struct embedding service.Base) and reports each raw
-// source it can reach: framework and third-party calls returned as-is, raw
+// method (a method on a struct embedding service.Base) and every lifecycle
+// hook of a model (a struct embedding model.Base or model.AutoBase) and
+// reports each raw source it can reach: framework and third-party calls returned as-is, raw
 // cockroachdb constructors, and identifiers whose origin cannot be resolved.
+// A model hook may return the error of a framework database call or
+// sentinel as it is: the framework answers it by its own mapping, 404 for a
+// record that does not exist, 409 for a duplicate, a stale version or a
+// foreign key and 500 for the rest, so a hook that reads or writes records
+// before admitting a write is compliant without wrapping; on a service exit
+// the same error is raw, since a service answers whatever it returns.
 // database.Transaction calls are transparent: their closure exits are
 // treated as exits of the enclosing flow. Unresolvable constructs fail
 // closed, so an exit the checker cannot prove compliant is a violation.
@@ -59,7 +78,7 @@ var ServiceErrorDiscipline = Check{
 // a type switch variable, fails closed at the call, and so does a type of
 // another package or an interface, whose method bodies the checker cannot
 // see.
-func checkServiceErrorDiscipline(ignore gghelper.ProjectIgnore) []string {
+func checkErrorDiscipline(ignore gghelper.ProjectIgnore) []string {
 	modulePath, err := gghelper.ModulePath()
 	if err != nil {
 		return []string{fmt.Sprintf("reading the module path: %v", err)}
@@ -83,58 +102,67 @@ func checkServiceErrorDiscipline(ignore gghelper.ProjectIgnore) []string {
 	return analysis.report()
 }
 
-// svcErrFuncKey identifies a project function or method: the package
+// errDiscFuncKey identifies a project function or method: the package
 // directory, the receiver type name ("" for package-level functions), and
 // the function name.
-type svcErrFuncKey struct {
+type errDiscFuncKey struct {
 	pkgDir string
 	recv   string
 	name   string
 }
 
-// svcErrSourceKind classifies where an error exit value comes from: nil, a
-// framework error constructor, a project function whose own exits decide, or
-// a raw source the check reports.
-type svcErrSourceKind int
+// errDiscSourceKind classifies where an error exit value comes from: nil, a
+// framework error constructor, a project function whose own exits decide, a
+// framework database call or sentinel, or a raw source the check reports.
+type errDiscSourceKind int
 
 const (
-	svcErrSourceNil svcErrSourceKind = iota
-	svcErrSourceNewError
-	svcErrSourceCall
-	svcErrSourceRaw
+	errDiscSourceNil errDiscSourceKind = iota
+	errDiscSourceNewError
+	errDiscSourceCall
+	// errDiscSourceDatabase is an error of the framework database package,
+	// a call rooted at it or one of its sentinels: raw on a service exit,
+	// accepted on a model hook's, whose errors the framework maps itself.
+	errDiscSourceDatabase
+	errDiscSourceRaw
 )
 
-// svcErrSource is one origin an error exit value can flow from.
-type svcErrSource struct {
-	kind   svcErrSourceKind
-	callee svcErrFuncKey  // set for svcErrSourceCall
-	pos    token.Position // set for svcErrSourceCall and svcErrSourceRaw
+// errDiscSource is one origin an error exit value can flow from.
+type errDiscSource struct {
+	kind   errDiscSourceKind
+	callee errDiscFuncKey // set for errDiscSourceCall
+	pos    token.Position // set for errDiscSourceCall, errDiscSourceDatabase and errDiscSourceRaw
 }
 
-// svcErrFuncSummary aggregates the origins of every error exit of one
+// errDiscFuncSummary aggregates the origins of every error exit of one
 // function, closure exits of database.Transaction included.
-type svcErrFuncSummary struct {
-	sources []svcErrSource
+type errDiscFuncSummary struct {
+	sources []errDiscSource
 }
 
-// svcErrAnalysis carries the whole-project state: per-function summaries and
+// errDiscAnalysis carries the whole-project state: per-function summaries and
 // the service struct types whose methods are the checked entry points.
-type svcErrAnalysis struct {
+type errDiscAnalysis struct {
 	modulePath string
 	fset       *token.FileSet
-	summaries  map[svcErrFuncKey]*svcErrFuncSummary
+	summaries  map[errDiscFuncKey]*errDiscFuncSummary
 	// entryTypes holds, per package directory, the service struct types
 	// declared there.
 	entryTypes map[string]map[string]bool
+	// hookTypes holds, per package directory, the model struct types
+	// declared there, whose lifecycle hooks are entry points as well.
+	hookTypes map[string]map[string]bool
 	// pkgVarTypes maps, per package directory, a package-level variable to
 	// the type its declaration spells out, see collectPackageVars.
 	pkgVarTypes map[string]map[string]string
 	// entries lists the service methods the report walks the error flow
-	// from.
-	entries []svcErrFuncKey
+	// from, and hookEntries the model hooks, whose walk accepts the errors
+	// of the framework database package.
+	entries     []errDiscFuncKey
+	hookEntries []errDiscFuncKey
 	// files holds the collector of every parsed file, whose functions are
 	// summarized once every file was collected.
-	files []*svcErrFileCollector
+	files []*errDiscFileCollector
 	// packageNames caches the package clause of every project directory an
 	// import names, see packageName.
 	packageNames map[string]string
@@ -146,17 +174,18 @@ type svcErrAnalysis struct {
 // collectProject parses every Go file of the project but the tests, under
 // the ignore rules, into the analysis of the project of module path
 // modulePath: the files with the service struct types and the package-level
-// variable types they declare (see svcErrFileCollector), from which the
+// variable types they declare (see errDiscFileCollector), from which the
 // error discipline check summarizes the error exits and the gRPC service
 // context check follows the calls. The function bodies are read once every
 // file is collected, so that cross-file knowledge is complete regardless of
 // walk order.
-func collectProject(modulePath string, ignore gghelper.ProjectIgnore) (*svcErrAnalysis, error) {
-	analysis := &svcErrAnalysis{
+func collectProject(modulePath string, ignore gghelper.ProjectIgnore) (*errDiscAnalysis, error) {
+	analysis := &errDiscAnalysis{
 		modulePath:   modulePath,
 		fset:         token.NewFileSet(),
-		summaries:    map[svcErrFuncKey]*svcErrFuncSummary{},
+		summaries:    map[errDiscFuncKey]*errDiscFuncSummary{},
 		entryTypes:   map[string]map[string]bool{},
+		hookTypes:    map[string]map[string]bool{},
 		pkgVarTypes:  map[string]map[string]string{},
 		packageNames: map[string]string{},
 		parseErrors:  map[string]error{},
@@ -180,7 +209,7 @@ func collectProject(modulePath string, ignore gghelper.ProjectIgnore) (*svcErrAn
 // packageName returns the package clause of the project directory dir, the
 // name an import of it without an alias goes by. It reads the directory once
 // per analysis, however many files import it.
-func (a *svcErrAnalysis) packageName(dir string) string {
+func (a *errDiscAnalysis) packageName(dir string) string {
 	if name, ok := a.packageNames[dir]; ok {
 		return name
 	}
@@ -192,19 +221,20 @@ func (a *svcErrAnalysis) packageName(dir string) string {
 // collectFile parses one project file and records service struct types and
 // package-level variable types; a file the parser refuses is recorded by
 // its error.
-func (a *svcErrAnalysis) collectFile(path string) {
+func (a *errDiscAnalysis) collectFile(path string) {
 	file, err := parser.ParseFile(a.fset, path, nil, 0)
 	if err != nil {
 		a.parseErrors[filepath.ToSlash(path)] = err
 		return
 	}
 
-	collector := &svcErrFileCollector{
+	collector := &errDiscFileCollector{
 		analysis:   a,
 		path:       filepath.ToSlash(path),
 		pkgDir:     filepath.ToSlash(filepath.Dir(path)),
 		db:         goast.ImportedNames(file, gstDatabaseImportPath, "database"),
 		gst:        goast.ImportedNames(file, gstImportPath, "gst"),
+		model:      goast.ImportedNames(file, ggconst.ImportPathModel, ggconst.PkgModel),
 		projectPkg: map[string]string{},
 	}
 	for _, imp := range file.Imports {
@@ -235,25 +265,28 @@ func (a *svcErrAnalysis) collectFile(path string) {
 	for _, decl := range file.Decls {
 		if decl, ok := decl.(*ast.GenDecl); ok {
 			collector.collectServiceTypes(decl)
+			collector.collectModelTypes(decl)
 			collector.collectPackageVars(decl)
 		}
 	}
 	a.files = append(a.files, collector)
 }
 
-// svcErrFileCollector is the per-file context: the parsed file plus the names
+// errDiscFileCollector is the per-file context: the parsed file plus the names
 // it knows the framework packages and the project's own packages by.
-type svcErrFileCollector struct {
-	analysis *svcErrAnalysis
+type errDiscFileCollector struct {
+	analysis *errDiscAnalysis
 	file     *ast.File
 	path     string
 	pkgDir   string
 	// serviceTypes are the service struct types the file declares, the
 	// ones entryTypes records for its package.
 	serviceTypes []string
-	// db and gst are the names of the framework database and root packages.
-	db  goast.PackageNames
-	gst goast.PackageNames
+	// db, gst and model are the names of the framework database, root and
+	// model packages.
+	db    goast.PackageNames
+	gst   goast.PackageNames
+	model goast.PackageNames
 	// projectPkg maps every qualifier of a project package to its directory.
 	projectPkg map[string]string
 }
@@ -262,7 +295,7 @@ type svcErrFileCollector struct {
 // declared as composite literals or with an explicit type, so method calls on
 // them (for example a package-level manager singleton) resolve to that type's
 // methods instead of failing closed.
-func (c *svcErrFileCollector) collectPackageVars(decl *ast.GenDecl) {
+func (c *errDiscFileCollector) collectPackageVars(decl *ast.GenDecl) {
 	if decl.Tok != token.VAR {
 		return
 	}
@@ -275,9 +308,9 @@ func (c *svcErrFileCollector) collectPackageVars(decl *ast.GenDecl) {
 			typeName := ""
 			switch {
 			case valueSpec.Type != nil:
-				typeName = svcErrReceiverTypeName(valueSpec.Type)
+				typeName = errDiscReceiverTypeName(valueSpec.Type)
 			case i < len(valueSpec.Values):
-				typeName = svcErrCompositeTypeName(valueSpec.Values[i])
+				typeName = errDiscCompositeTypeName(valueSpec.Values[i])
 			}
 			if typeName == "" {
 				continue
@@ -292,13 +325,13 @@ func (c *svcErrFileCollector) collectPackageVars(decl *ast.GenDecl) {
 	}
 }
 
-// svcErrCompositeTypeName extracts the local type name from a composite
+// errDiscCompositeTypeName extracts the local type name from a composite
 // literal value, with or without a leading address operator.
-func svcErrCompositeTypeName(expr ast.Expr) string {
+func errDiscCompositeTypeName(expr ast.Expr) string {
 	switch expr := expr.(type) {
 	case *ast.UnaryExpr:
 		if expr.Op == token.AND {
-			return svcErrCompositeTypeName(expr.X)
+			return errDiscCompositeTypeName(expr.X)
 		}
 	case *ast.CompositeLit:
 		if ident, ok := expr.Type.(*ast.Ident); ok {
@@ -310,7 +343,7 @@ func svcErrCompositeTypeName(expr ast.Expr) string {
 
 // collectServiceTypes records struct types that embed service.Base; their
 // methods are the service entry points of the check.
-func (c *svcErrFileCollector) collectServiceTypes(decl *ast.GenDecl) {
+func (c *errDiscFileCollector) collectServiceTypes(decl *ast.GenDecl) {
 	for _, spec := range decl.Specs {
 		typeSpec, ok := spec.(*ast.TypeSpec)
 		if !ok {
@@ -335,8 +368,32 @@ func (c *svcErrFileCollector) collectServiceTypes(decl *ast.GenDecl) {
 	}
 }
 
+// collectModelTypes records struct types that embed model.Base or
+// model.AutoBase by value; their lifecycle hooks are entry points of the
+// check, since the framework runs them inside its own database writes and
+// answers their errors the way it answers a service method's. A virtual
+// model embedding model.Empty has no hook the framework runs.
+func (c *errDiscFileCollector) collectModelTypes(decl *ast.GenDecl) {
+	for _, spec := range decl.Specs {
+		typeSpec, ok := spec.(*ast.TypeSpec)
+		if !ok {
+			continue
+		}
+		structType, ok := typeSpec.Type.(*ast.StructType)
+		if !ok || structType.Fields == nil || embeddedBaseName(structType, c.model) == "" {
+			continue
+		}
+		types := c.analysis.hookTypes[c.pkgDir]
+		if types == nil {
+			types = map[string]bool{}
+			c.analysis.hookTypes[c.pkgDir] = types
+		}
+		types[typeSpec.Name.Name] = true
+	}
+}
+
 // collectFunc summarizes one function whose last result is error.
-func (c *svcErrFileCollector) collectFunc(decl *ast.FuncDecl) {
+func (c *errDiscFileCollector) collectFunc(decl *ast.FuncDecl) {
 	if decl.Body == nil || decl.Type.Results == nil || len(decl.Type.Results.List) == 0 {
 		return
 	}
@@ -345,8 +402,8 @@ func (c *svcErrFileCollector) collectFunc(decl *ast.FuncDecl) {
 	// A function returning *gst.Error is compliant by construction: every
 	// non-nil value of that type came from NewError or NewErrorWithCause.
 	if c.isServiceErrorPtr(last.Type) {
-		key := svcErrFuncKey{pkgDir: c.pkgDir, recv: svcErrReceiverTypeName(receiverType(decl)), name: decl.Name.Name}
-		c.analysis.summaries[key] = &svcErrFuncSummary{sources: []svcErrSource{{kind: svcErrSourceNewError}}}
+		key := errDiscFuncKey{pkgDir: c.pkgDir, recv: errDiscReceiverTypeName(receiverType(decl)), name: decl.Name.Name}
+		c.analysis.summaries[key] = &errDiscFuncSummary{sources: []errDiscSource{{kind: errDiscSourceNewError}}}
 		return
 	}
 	if ident, ok := last.Type.(*ast.Ident); !ok || ident.Name != "error" {
@@ -355,22 +412,28 @@ func (c *svcErrFileCollector) collectFunc(decl *ast.FuncDecl) {
 
 	scope := c.newScope(decl)
 	scope.collectAssigns(decl.Body)
-	summary := &svcErrFuncSummary{}
+	summary := &errDiscFuncSummary{}
 	scope.collectExits(decl.Body, summary)
 
-	key := svcErrFuncKey{pkgDir: c.pkgDir, recv: scope.recvType, name: decl.Name.Name}
+	key := errDiscFuncKey{pkgDir: c.pkgDir, recv: scope.recvType, name: decl.Name.Name}
 	c.analysis.summaries[key] = summary
-	if decl.Recv != nil && decl.Name.IsExported() && c.analysis.entryTypes[c.pkgDir][scope.recvType] {
+	if decl.Recv == nil {
+		return
+	}
+	switch {
+	case decl.Name.IsExported() && c.analysis.entryTypes[c.pkgDir][scope.recvType]:
 		c.analysis.entries = append(c.analysis.entries, key)
+	case hookMethods[decl.Name.Name] && c.analysis.hookTypes[c.pkgDir][scope.recvType]:
+		c.analysis.hookEntries = append(c.analysis.hookEntries, key)
 	}
 }
 
 // newScope returns the scope of decl, a function of the file: what the
 // function declares itself, its receiver, its *gst.ServiceContext
 // parameters and its results, for its calls and exits to be resolved
-// against (see svcErrFuncScope).
-func (c *svcErrFileCollector) newScope(decl *ast.FuncDecl) *svcErrFuncScope {
-	scope := &svcErrFuncScope{file: c, decl: decl, ctxParams: serviceContextParams(decl, c.gst)}
+// against (see errDiscFuncScope).
+func (c *errDiscFileCollector) newScope(decl *ast.FuncDecl) *errDiscFuncScope {
+	scope := &errDiscFuncScope{file: c, decl: decl, ctxParams: serviceContextParams(decl, c.gst)}
 	if decl.Type.Results != nil && len(decl.Type.Results.List) > 0 {
 		results := decl.Type.Results.List
 		for _, field := range results {
@@ -385,7 +448,7 @@ func (c *svcErrFileCollector) newScope(decl *ast.FuncDecl) *svcErrFuncScope {
 		}
 	}
 	if decl.Recv != nil && len(decl.Recv.List) == 1 {
-		scope.recvType = svcErrReceiverTypeName(decl.Recv.List[0].Type)
+		scope.recvType = errDiscReceiverTypeName(decl.Recv.List[0].Type)
 		if names := decl.Recv.List[0].Names; len(names) == 1 {
 			scope.recvObj = declObj(names[0])
 		}
@@ -404,31 +467,31 @@ func receiverType(decl *ast.FuncDecl) ast.Expr {
 
 // isServiceErrorPtr reports whether expr denotes *gst.Error under the names
 // the file knows the framework root package by.
-func (c *svcErrFileCollector) isServiceErrorPtr(expr ast.Expr) bool {
+func (c *errDiscFileCollector) isServiceErrorPtr(expr ast.Expr) bool {
 	star, ok := expr.(*ast.StarExpr)
 	return ok && c.gst.Refers(star.X, "Error")
 }
 
-// svcErrReceiverTypeName extracts the receiver's type name, unwrapping
+// errDiscReceiverTypeName extracts the receiver's type name, unwrapping
 // pointers and type parameters.
-func svcErrReceiverTypeName(expr ast.Expr) string {
+func errDiscReceiverTypeName(expr ast.Expr) string {
 	switch expr := expr.(type) {
 	case *ast.StarExpr:
-		return svcErrReceiverTypeName(expr.X)
+		return errDiscReceiverTypeName(expr.X)
 	case *ast.IndexExpr:
-		return svcErrReceiverTypeName(expr.X)
+		return errDiscReceiverTypeName(expr.X)
 	case *ast.IndexListExpr:
-		return svcErrReceiverTypeName(expr.X)
+		return errDiscReceiverTypeName(expr.X)
 	case *ast.Ident:
 		return expr.Name
 	}
 	return ""
 }
 
-// svcErrFuncScope carries the per-function state used to resolve where the
+// errDiscFuncScope carries the per-function state used to resolve where the
 // error values returned by the function come from.
-type svcErrFuncScope struct {
-	file *svcErrFileCollector
+type errDiscFuncScope struct {
+	file *errDiscFileCollector
 	// decl is the function the scope summarizes; a name declared inside it
 	// is the function's own, see declaresLocally.
 	decl       *ast.FuncDecl
@@ -445,27 +508,27 @@ type svcErrFuncScope struct {
 	// records its position so a return only pools assignments that happened
 	// before it: reusing one err variable for several sources must not let a
 	// later raw assignment pollute an earlier compliant exit.
-	assigns map[varObj][]svcErrAssign
+	assigns map[varObj][]errDiscAssign
 	// windows lists the exclusive visibility windows per variable; a use
 	// inside a window sees only the window's own assignment.
-	windows map[varObj][]svcErrWindow
+	windows map[varObj][]errDiscWindow
 }
 
-// svcErrAssign is one recorded assignment: the assigned expression, where
+// errDiscAssign is one recorded assignment: the assigned expression, where
 // the assignment happens, and where its value stops being visible. killEnd
 // is set when the assignment is immediately answered by an
 // `if <var> != nil { return ... }` style check: past that check the variable
 // no longer holds this value, so later uses must not pool it.
-type svcErrAssign struct {
+type errDiscAssign struct {
 	expr    ast.Expr
 	pos     token.Pos
 	killEnd token.Pos
 }
 
-// svcErrWindow is an exclusive visibility window: inside the body of an
+// errDiscWindow is an exclusive visibility window: inside the body of an
 // `if <var> != nil` check that the assignment at assignPos feeds, the
 // variable can hold only that value, regardless of what it held before.
-type svcErrWindow struct {
+type errDiscWindow struct {
 	assignPos token.Pos
 	bodyStart token.Pos
 	bodyEnd   token.Pos
@@ -473,8 +536,8 @@ type svcErrWindow struct {
 
 // collectAssigns records every assignment in the function body, closures
 // included, keyed by the assigned variable's declaration object.
-func (s *svcErrFuncScope) collectAssigns(body *ast.BlockStmt) {
-	s.assigns = map[varObj][]svcErrAssign{}
+func (s *errDiscFuncScope) collectAssigns(body *ast.BlockStmt) {
+	s.assigns = map[varObj][]errDiscAssign{}
 	ast.Inspect(body, func(n ast.Node) bool {
 		assign, ok := n.(*ast.AssignStmt)
 		if !ok {
@@ -485,7 +548,7 @@ func (s *svcErrFuncScope) collectAssigns(body *ast.BlockStmt) {
 			// call as origin; only the error-typed one ever reaches an exit.
 			for _, lhs := range assign.Lhs {
 				if ident, ok := lhs.(*ast.Ident); ok && declObj(ident) != nil {
-					s.assigns[declObj(ident)] = append(s.assigns[declObj(ident)], svcErrAssign{expr: assign.Rhs[0], pos: assign.Pos()})
+					s.assigns[declObj(ident)] = append(s.assigns[declObj(ident)], errDiscAssign{expr: assign.Rhs[0], pos: assign.Pos()})
 				}
 			}
 			return true
@@ -495,7 +558,7 @@ func (s *svcErrFuncScope) collectAssigns(body *ast.BlockStmt) {
 		}
 		for i, lhs := range assign.Lhs {
 			if ident, ok := lhs.(*ast.Ident); ok && declObj(ident) != nil {
-				s.assigns[declObj(ident)] = append(s.assigns[declObj(ident)], svcErrAssign{expr: assign.Rhs[i], pos: assign.Pos()})
+				s.assigns[declObj(ident)] = append(s.assigns[declObj(ident)], errDiscAssign{expr: assign.Rhs[i], pos: assign.Pos()})
 			}
 		}
 		return true
@@ -509,8 +572,8 @@ func (s *svcErrFuncScope) collectAssigns(body *ast.BlockStmt) {
 // of the check as the assignment's kill point. Past a check whose body
 // always leaves (return, branch, or panic), the variable no longer carries
 // that value, which is exactly how idiomatic Go reuses one err variable.
-func (s *svcErrFuncScope) markKilledAssigns(body *ast.BlockStmt) {
-	s.windows = map[varObj][]svcErrWindow{}
+func (s *errDiscFuncScope) markKilledAssigns(body *ast.BlockStmt) {
+	s.windows = map[varObj][]errDiscWindow{}
 	ast.Inspect(body, func(n ast.Node) bool {
 		var stmts []ast.Stmt
 		switch n := n.(type) {
@@ -528,7 +591,7 @@ func (s *svcErrFuncScope) markKilledAssigns(body *ast.BlockStmt) {
 			if !ok {
 				continue
 			}
-			checkedObj := svcErrNilCheckedObj(ifStmt)
+			checkedObj := errDiscNilCheckedObj(ifStmt)
 			if checkedObj == nil {
 				continue
 			}
@@ -541,14 +604,14 @@ func (s *svcErrFuncScope) markKilledAssigns(body *ast.BlockStmt) {
 			}
 			// Inside the check's body the variable holds only the value this
 			// assignment just gave it, no matter what it held before.
-			s.windows[checkedObj] = append(s.windows[checkedObj], svcErrWindow{
+			s.windows[checkedObj] = append(s.windows[checkedObj], errDiscWindow{
 				assignPos: assign.Pos(),
 				bodyStart: ifStmt.Body.Pos(),
 				bodyEnd:   ifStmt.Body.End(),
 			})
 			// A check whose body always leaves also consumes the value for
 			// everything after the check.
-			if svcErrStmtsAlwaysLeave(ifStmt.Body.List) {
+			if errDiscStmtsAlwaysLeave(ifStmt.Body.List) {
 				s.killAssign(checkedObj, assign, ifStmt.End())
 			}
 		}
@@ -556,9 +619,9 @@ func (s *svcErrFuncScope) markKilledAssigns(body *ast.BlockStmt) {
 	})
 }
 
-// svcErrNilCheckedObj returns the declaration object of v when cond is a
+// errDiscNilCheckedObj returns the declaration object of v when cond is a
 // plain `v != nil` comparison, nil otherwise.
-func svcErrNilCheckedObj(ifStmt *ast.IfStmt) varObj {
+func errDiscNilCheckedObj(ifStmt *ast.IfStmt) varObj {
 	cond, ok := ifStmt.Cond.(*ast.BinaryExpr)
 	if !ok || cond.Op != token.NEQ {
 		return nil
@@ -573,9 +636,9 @@ func svcErrNilCheckedObj(ifStmt *ast.IfStmt) varObj {
 	return declObj(ident)
 }
 
-// svcErrStmtsAlwaysLeave reports whether a statement list ends by leaving
+// errDiscStmtsAlwaysLeave reports whether a statement list ends by leaving
 // the surrounding flow: a return, a branch statement, or a panic call.
-func svcErrStmtsAlwaysLeave(stmts []ast.Stmt) bool {
+func errDiscStmtsAlwaysLeave(stmts []ast.Stmt) bool {
 	if len(stmts) == 0 {
 		return false
 	}
@@ -595,7 +658,7 @@ func svcErrStmtsAlwaysLeave(stmts []ast.Stmt) bool {
 
 // killAssign records the kill point on the recorded entries of one
 // assignment statement for the checked variable.
-func (s *svcErrFuncScope) killAssign(obj varObj, assign *ast.AssignStmt, killEnd token.Pos) {
+func (s *errDiscFuncScope) killAssign(obj varObj, assign *ast.AssignStmt, killEnd token.Pos) {
 	entries := s.assigns[obj]
 	for i := range entries {
 		if entries[i].pos == assign.Pos() {
@@ -608,7 +671,7 @@ func (s *svcErrFuncScope) killAssign(obj varObj, assign *ast.AssignStmt, killEnd
 // the function body itself; closures are skipped, since their returns are
 // not exits of the enclosing function (database.Transaction closures are
 // expanded at their call sites instead).
-func (s *svcErrFuncScope) collectExits(body *ast.BlockStmt, summary *svcErrFuncSummary) {
+func (s *errDiscFuncScope) collectExits(body *ast.BlockStmt, summary *errDiscFuncSummary) {
 	ast.Inspect(body, func(n ast.Node) bool {
 		if _, ok := n.(*ast.FuncLit); ok {
 			return false
@@ -624,7 +687,7 @@ func (s *svcErrFuncScope) collectExits(body *ast.BlockStmt, summary *svcErrFuncS
 
 // resolveReturn resolves the origins of the error value produced by one
 // return statement.
-func (s *svcErrFuncScope) resolveReturn(ret *ast.ReturnStmt) []svcErrSource {
+func (s *errDiscFuncScope) resolveReturn(ret *ast.ReturnStmt) []errDiscSource {
 	visiting := map[varObj]bool{}
 	switch {
 	case len(ret.Results) == 0:
@@ -640,24 +703,56 @@ func (s *svcErrFuncScope) resolveReturn(ret *ast.ReturnStmt) []svcErrSource {
 }
 
 // resolveExpr resolves the origins of one error-typed expression.
-func (s *svcErrFuncScope) resolveExpr(expr ast.Expr, visiting map[varObj]bool) []svcErrSource {
+func (s *errDiscFuncScope) resolveExpr(expr ast.Expr, visiting map[varObj]bool) []errDiscSource {
 	switch expr := expr.(type) {
 	case *ast.Ident:
 		if expr.Name == "nil" {
-			return []svcErrSource{{kind: svcErrSourceNil}}
+			return []errDiscSource{{kind: errDiscSourceNil}}
 		}
 		if declObj(expr) == nil {
 			// Unresolved identifier: a package-level error variable (a raw
 			// sentinel) or a cross-file symbol; fail closed.
-			return []svcErrSource{s.raw(expr)}
+			return []errDiscSource{s.raw(expr)}
 		}
 		return s.resolveObj(declObj(expr), expr, visiting)
 	case *ast.CallExpr:
 		return s.resolveCall(expr, visiting)
 	case *ast.ParenExpr:
 		return s.resolveExpr(expr.X, visiting)
+	case *ast.SelectorExpr:
+		if s.database(expr) {
+			return []errDiscSource{{kind: errDiscSourceDatabase, pos: s.file.analysis.fset.Position(expr.Pos())}}
+		}
+		return []errDiscSource{s.raw(expr)}
 	default:
-		return []svcErrSource{s.raw(expr)}
+		return []errDiscSource{s.raw(expr)}
+	}
+}
+
+// database reports whether expr is rooted at the framework database
+// package: a call chain starting from one of its functions, such as
+// database.Database[*Record](ctx).WithQuery(q).List(&records), or one of
+// its exported names, such as the sentinel database.ErrRecordNotFound. A
+// name the function declares itself hides the import (see calleeOf).
+func (s *errDiscFuncScope) database(expr ast.Expr) bool {
+	for {
+		switch e := expr.(type) {
+		case *ast.SelectorExpr:
+			if ident, ok := e.X.(*ast.Ident); ok {
+				return !s.declaresLocally(declObj(ident)) && slices.Contains(s.file.db.Qualifiers, ident.Name)
+			}
+			expr = e.X
+		case *ast.CallExpr:
+			expr = e.Fun
+		case *ast.IndexExpr:
+			expr = e.X
+		case *ast.IndexListExpr:
+			expr = e.X
+		case *ast.ParenExpr:
+			expr = e.X
+		default:
+			return false
+		}
 	}
 }
 
@@ -665,18 +760,18 @@ func (s *svcErrFuncScope) resolveExpr(expr ast.Expr, visiting map[varObj]bool) [
 // variable, pooling the assignments recorded for its declaration object that
 // happen before the use site. at names the use — the expression or statement
 // to blame when nothing was recorded.
-func (s *svcErrFuncScope) resolveObj(obj varObj, at ast.Node, visiting map[varObj]bool) []svcErrSource {
+func (s *errDiscFuncScope) resolveObj(obj varObj, at ast.Node, visiting map[varObj]bool) []errDiscSource {
 	if obj == nil || visiting[obj] {
 		return nil
 	}
 	visiting[obj] = true
 	defer delete(visiting, obj)
-	var sources []svcErrSource
+	var sources []errDiscSource
 	found := false
 	// A use inside an exclusive window sees only the window's own
 	// assignment: the check's init just overwrote the variable. Nested
 	// windows pick the innermost one, the most recent overwrite.
-	var window *svcErrWindow
+	var window *errDiscWindow
 	for i := range s.windows[obj] {
 		w := &s.windows[obj][i]
 		if at.Pos() > w.bodyStart && at.Pos() < w.bodyEnd {
@@ -704,7 +799,7 @@ func (s *svcErrFuncScope) resolveObj(obj varObj, at ast.Node, visiting map[varOb
 	if !found {
 		// No assignment before the use: a parameter or captured value the
 		// checker cannot see through; fail closed.
-		return []svcErrSource{{kind: svcErrSourceRaw, pos: s.file.analysis.fset.Position(at.Pos())}}
+		return []errDiscSource{{kind: errDiscSourceRaw, pos: s.file.analysis.fset.Position(at.Pos())}}
 	}
 	return sources
 }
@@ -715,7 +810,7 @@ func (s *svcErrFuncScope) resolveObj(obj varObj, at ast.Node, visiting map[varOb
 // errors are framework-governed; a project function or method the call
 // resolves to (see calleeOf) answers through its own summary, and a call
 // the checker cannot follow fails closed.
-func (s *svcErrFuncScope) resolveCall(call *ast.CallExpr, visiting map[varObj]bool) []svcErrSource {
+func (s *errDiscFuncScope) resolveCall(call *ast.CallExpr, visiting map[varObj]bool) []errDiscSource {
 	switch fun := instantiated(call.Fun).(type) {
 	case *ast.Ident:
 		// A dot import names the framework constructors and the
@@ -723,7 +818,7 @@ func (s *svcErrFuncScope) resolveCall(call *ast.CallExpr, visiting map[varObj]bo
 		// itself hides them (see calleeOf).
 		if !s.declaresLocally(declObj(fun)) {
 			if s.file.gst.Refers(fun, "NewError", "NewErrorWithCause") {
-				return []svcErrSource{{kind: svcErrSourceNewError}}
+				return []errDiscSource{{kind: errDiscSourceNewError}}
 			}
 			if s.file.db.Refers(fun, "Transaction") {
 				return s.resolveTransaction(call, visiting)
@@ -745,23 +840,26 @@ func (s *svcErrFuncScope) resolveCall(call *ast.CallExpr, visiting map[varObj]bo
 			// wrapping the call in gst.NewError adds nothing the client
 			// could see.
 			if s.ctxParams[obj] && fun.Sel.Name == "SSE" {
-				return []svcErrSource{{kind: svcErrSourceNewError}}
+				return []errDiscSource{{kind: errDiscSourceNewError}}
 			}
 			break
 		}
 		if s.file.gst.Refers(fun, "NewError", "NewErrorWithCause") {
-			return []svcErrSource{{kind: svcErrSourceNewError}}
+			return []errDiscSource{{kind: errDiscSourceNewError}}
 		}
 		if s.file.db.Refers(fun, "Transaction") {
 			return s.resolveTransaction(call, visiting)
 		}
 	}
+	if s.database(call.Fun) {
+		return []errDiscSource{{kind: errDiscSourceDatabase, pos: s.file.analysis.fset.Position(call.Pos())}}
+	}
 	callee, ok := s.calleeOf(call)
 	if !ok {
-		return []svcErrSource{s.raw(call)}
+		return []errDiscSource{s.raw(call)}
 	}
 	// Whether the call is compliant is the callee summary's business.
-	return []svcErrSource{{kind: svcErrSourceCall, callee: callee, pos: s.file.analysis.fset.Position(call.Pos())}}
+	return []errDiscSource{{kind: errDiscSourceCall, callee: callee, pos: s.file.analysis.fset.Position(call.Pos())}}
 }
 
 // instantiated returns the function a call expression calls, the
@@ -799,49 +897,49 @@ func instantiated(fun ast.Expr) ast.Expr {
 // a type it cannot see; a call of another package's function the file does
 // not import as a project package. A dot-imported project package names
 // nothing here: its calls read as same-package calls.
-func (s *svcErrFuncScope) calleeOf(call *ast.CallExpr) (svcErrFuncKey, bool) {
+func (s *errDiscFuncScope) calleeOf(call *ast.CallExpr) (errDiscFuncKey, bool) {
 	switch fun := instantiated(call.Fun).(type) {
 	case *ast.Ident:
 		if s.declaresLocally(declObj(fun)) {
-			return svcErrFuncKey{}, false
+			return errDiscFuncKey{}, false
 		}
-		return svcErrFuncKey{pkgDir: s.file.pkgDir, name: fun.Name}, true
+		return errDiscFuncKey{pkgDir: s.file.pkgDir, name: fun.Name}, true
 	case *ast.SelectorExpr:
 		if fun.Sel == nil {
-			return svcErrFuncKey{}, false
+			return errDiscFuncKey{}, false
 		}
 		if varSel, ok := fun.X.(*ast.SelectorExpr); ok {
 			if pkgIdent, ok := varSel.X.(*ast.Ident); ok && varSel.Sel != nil {
 				if pkgDir, ok := s.file.projectPkg[pkgIdent.Name]; ok {
 					if typeName, ok := s.file.analysis.pkgVarTypes[pkgDir][varSel.Sel.Name]; ok {
-						return svcErrFuncKey{pkgDir: pkgDir, recv: typeName, name: fun.Sel.Name}, true
+						return errDiscFuncKey{pkgDir: pkgDir, recv: typeName, name: fun.Sel.Name}, true
 					}
 				}
 			}
-			return svcErrFuncKey{}, false
+			return errDiscFuncKey{}, false
 		}
 		ident, ok := fun.X.(*ast.Ident)
 		if !ok {
-			return svcErrFuncKey{}, false
+			return errDiscFuncKey{}, false
 		}
 		if obj := declObj(ident); s.declaresLocally(obj) {
 			recvType := s.recvType
 			if obj != s.recvObj {
-				recvType = svcErrDeclaredTypeName(obj)
+				recvType = errDiscDeclaredTypeName(obj)
 			}
 			if recvType == "" {
-				return svcErrFuncKey{}, false
+				return errDiscFuncKey{}, false
 			}
-			return svcErrFuncKey{pkgDir: s.file.pkgDir, recv: recvType, name: fun.Sel.Name}, true
+			return errDiscFuncKey{pkgDir: s.file.pkgDir, recv: recvType, name: fun.Sel.Name}, true
 		}
 		if pkgDir, ok := s.file.projectPkg[ident.Name]; ok {
-			return svcErrFuncKey{pkgDir: pkgDir, name: fun.Sel.Name}, true
+			return errDiscFuncKey{pkgDir: pkgDir, name: fun.Sel.Name}, true
 		}
 		if typeName, ok := s.file.analysis.pkgVarTypes[s.file.pkgDir][ident.Name]; ok {
-			return svcErrFuncKey{pkgDir: s.file.pkgDir, recv: typeName, name: fun.Sel.Name}, true
+			return errDiscFuncKey{pkgDir: s.file.pkgDir, recv: typeName, name: fun.Sel.Name}, true
 		}
 	}
-	return svcErrFuncKey{}, false
+	return errDiscFuncKey{}, false
 }
 
 // declaresLocally reports whether obj, the declaration object of a name used
@@ -849,7 +947,7 @@ func (s *svcErrFuncScope) calleeOf(call *ast.CallExpr) (svcErrFuncKey, bool) {
 // parameter or result, or a variable of its body or of a closure inside it.
 // A package-level declaration, even one in the same file, is not, and
 // neither is the function's own name, which a recursive call uses.
-func (s *svcErrFuncScope) declaresLocally(obj varObj) bool {
+func (s *errDiscFuncScope) declaresLocally(obj varObj) bool {
 	if obj == nil {
 		return false
 	}
@@ -860,15 +958,15 @@ func (s *svcErrFuncScope) declaresLocally(obj varObj) bool {
 	return node.Pos() >= s.decl.Pos() && node.Pos() < s.decl.End()
 }
 
-// svcErrDeclaredTypeName returns the same-package type name a variable's
+// errDiscDeclaredTypeName returns the same-package type name a variable's
 // declaration spells out, the way collectPackageVars reads a package-level
 // one: other for p other and p *other (a parameter), var x other,
 // var x = other{} and x := &other{}. It returns "" when the declaration
 // names no such type, as for x := newOther() or var x pkg.Other.
-func svcErrDeclaredTypeName(obj varObj) string {
+func errDiscDeclaredTypeName(obj varObj) string {
 	switch decl := declNode(obj).(type) {
 	case *ast.Field:
-		return svcErrReceiverTypeName(decl.Type)
+		return errDiscReceiverTypeName(decl.Type)
 	case *ast.ValueSpec:
 		for i, name := range decl.Names {
 			if declObj(name) != obj {
@@ -876,9 +974,9 @@ func svcErrDeclaredTypeName(obj varObj) string {
 			}
 			switch {
 			case decl.Type != nil:
-				return svcErrReceiverTypeName(decl.Type)
+				return errDiscReceiverTypeName(decl.Type)
 			case i < len(decl.Values):
-				return svcErrCompositeTypeName(decl.Values[i])
+				return errDiscCompositeTypeName(decl.Values[i])
 			}
 		}
 	case *ast.AssignStmt:
@@ -887,7 +985,7 @@ func svcErrDeclaredTypeName(obj varObj) string {
 		}
 		for i, lhs := range decl.Lhs {
 			if name, ok := lhs.(*ast.Ident); ok && declObj(name) == obj {
-				return svcErrCompositeTypeName(decl.Rhs[i])
+				return errDiscCompositeTypeName(decl.Rhs[i])
 			}
 		}
 	}
@@ -898,15 +996,15 @@ func svcErrDeclaredTypeName(obj varObj) string {
 // returns is whatever the closure exits return, so those exits join the
 // enclosing flow. A non-literal transaction function cannot be followed and
 // fails closed.
-func (s *svcErrFuncScope) resolveTransaction(call *ast.CallExpr, visiting map[varObj]bool) []svcErrSource {
+func (s *errDiscFuncScope) resolveTransaction(call *ast.CallExpr, visiting map[varObj]bool) []errDiscSource {
 	if len(call.Args) != 2 {
-		return []svcErrSource{s.raw(call)}
+		return []errDiscSource{s.raw(call)}
 	}
 	closure, ok := call.Args[1].(*ast.FuncLit)
 	if !ok || closure.Body == nil {
-		return []svcErrSource{s.raw(call)}
+		return []errDiscSource{s.raw(call)}
 	}
-	var sources []svcErrSource
+	var sources []errDiscSource
 	ast.Inspect(closure.Body, func(n ast.Node) bool {
 		if inner, ok := n.(*ast.FuncLit); ok && inner != closure {
 			return false
@@ -926,18 +1024,24 @@ func (s *svcErrFuncScope) resolveTransaction(call *ast.CallExpr, visiting map[va
 
 // raw builds the fail-closed source pointing at the expression itself: that
 // is the place to wrap.
-func (s *svcErrFuncScope) raw(expr ast.Expr) svcErrSource {
-	return svcErrSource{kind: svcErrSourceRaw, pos: s.file.analysis.fset.Position(expr.Pos())}
+func (s *errDiscFuncScope) raw(expr ast.Expr) errDiscSource {
+	return errDiscSource{kind: errDiscSourceRaw, pos: s.file.analysis.fset.Position(expr.Pos())}
 }
 
-// report walks the error flow from every service entry method and lists each
-// reachable raw source once, ordered by position.
-func (a *svcErrAnalysis) report() []string {
+// report walks the error flow from every service method and every model
+// hook and lists each reachable raw source once, ordered by position. The
+// two walks keep separate visited sets: a function reached from both is
+// read once with the database errors raw and once with them accepted.
+func (a *errDiscAnalysis) report() []string {
 	seen := map[string]bool{}
 	var positions []token.Position
-	visited := map[svcErrFuncKey]bool{}
+	visited := map[errDiscFuncKey]bool{}
 	for _, entry := range a.entries {
-		a.collectRawSources(entry, visited, seen, &positions)
+		a.collectRawSources(entry, visited, seen, &positions, false)
+	}
+	hookVisited := map[errDiscFuncKey]bool{}
+	for _, entry := range a.hookEntries {
+		a.collectRawSources(entry, hookVisited, seen, &positions, true)
 	}
 
 	sort.Slice(positions, func(i, j int) bool {
@@ -950,7 +1054,7 @@ func (a *svcErrAnalysis) report() []string {
 	violations := make([]string, 0, len(positions))
 	for _, pos := range positions {
 		violations = append(violations, fmt.Sprintf(
-			"%s:%d: error on a service exit path is created outside gst.NewError/gst.NewErrorWithCause; construct it here (or in the project function it flows through) so the client gets a curated status and message and the log gets a service-level stack",
+			"%s:%d: error on an exit path of a service method or model hook is created outside gst.NewError/gst.NewErrorWithCause; construct it here (or in the project function it flows through) so the client gets the status and message meant for it",
 			filepath.ToSlash(pos.Filename), pos.Line,
 		))
 	}
@@ -958,8 +1062,9 @@ func (a *svcErrAnalysis) report() []string {
 }
 
 // collectRawSources accumulates the raw sources reachable from one function's
-// error exits, following project calls and deduplicating by position.
-func (a *svcErrAnalysis) collectRawSources(key svcErrFuncKey, visited map[svcErrFuncKey]bool, seen map[string]bool, out *[]token.Position) {
+// error exits, following project calls and deduplicating by position; with
+// acceptDatabase the errors of the framework database package are not raw.
+func (a *errDiscAnalysis) collectRawSources(key errDiscFuncKey, visited map[errDiscFuncKey]bool, seen map[string]bool, out *[]token.Position, acceptDatabase bool) {
 	if visited[key] {
 		return
 	}
@@ -970,22 +1075,26 @@ func (a *svcErrAnalysis) collectRawSources(key svcErrFuncKey, visited map[svcErr
 	}
 	for _, source := range summary.sources {
 		switch source.kind {
-		case svcErrSourceRaw:
+		case errDiscSourceRaw:
 			a.recordRaw(source.pos, seen, out)
-		case svcErrSourceCall:
+		case errDiscSourceDatabase:
+			if !acceptDatabase {
+				a.recordRaw(source.pos, seen, out)
+			}
+		case errDiscSourceCall:
 			if _, ok := a.summaries[source.callee]; !ok {
 				// A call the checker cannot follow (builtin, embedded method,
 				// unresolved package): fail closed at the call site.
 				a.recordRaw(source.pos, seen, out)
 				continue
 			}
-			a.collectRawSources(source.callee, visited, seen, out)
+			a.collectRawSources(source.callee, visited, seen, out, acceptDatabase)
 		}
 	}
 }
 
 // recordRaw appends one raw-source position, deduplicated across entries.
-func (a *svcErrAnalysis) recordRaw(pos token.Position, seen map[string]bool, out *[]token.Position) {
+func (a *errDiscAnalysis) recordRaw(pos token.Position, seen map[string]bool, out *[]token.Position) {
 	id := fmt.Sprintf("%s:%d", pos.Filename, pos.Line)
 	if seen[id] {
 		return
