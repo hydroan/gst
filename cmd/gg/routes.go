@@ -180,10 +180,10 @@ func modelRouteFromCall(call *ast.CallExpr, modelSources map[string]string) (mod
 		// The registration carries the path the route is served at, which
 		// the listing prints as it is.
 		Path: consts.APIPath(path),
-		// The last argument names the verb the way gg gen writes it,
+		// The last argument names the phase the way gg gen writes it,
 		// consts.<Phase.Name()> such as consts.CreateMany; the route
 		// is served under the method the framework router registers that
-		// verb by.
+		// phase by.
 		Method: consts.Phase(strcase.SnakeCase(phase)).HTTPMethod(),
 		Phase:  phase,
 		Param:  routeParamName(call.Args[2]),

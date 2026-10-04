@@ -42,7 +42,7 @@ func init() {
 		"summaryFirstLineModel is the human readable summary line.\nThe second comment line must not leak into the summary.", nil)
 }
 
-func TestSummaryCombinesVerbAndStructCommentFirstLine(t *testing.T) {
+func TestSummaryCombinesPhaseAndStructCommentFirstLine(t *testing.T) {
 	types := map[string]reflect.Type{
 		"value":             reflect.TypeFor[summaryFirstLineModel](),
 		"pointer":           reflect.TypeFor[*summaryFirstLineModel](),
