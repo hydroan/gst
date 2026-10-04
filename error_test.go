@@ -1,4 +1,4 @@
-package service_test
+package gst_test
 
 import (
 	"net/http"
@@ -16,7 +16,7 @@ func TestNewErrorStackTraceStartsAtPublicConstructionSite(t *testing.T) {
 	stackTrace := errorstack.Origin(err)
 	require.NotEmpty(t, stackTrace)
 
-	// The public package forwards to serviceregistry without adding a stack
+	// The root package forwards to internal/types without adding a stack
 	// frame, so the innermost frame must be the application construction
 	// site, not a framework wrapper.
 	lines := strings.Split(stackTrace, "\n")
@@ -32,14 +32,14 @@ func TestNewErrorWithCauseStackTraceStartsAtPublicConstructionSite(t *testing.T)
 	require.NotEmpty(t, stackTrace)
 
 	// The plain cause carries no stack trace of its own, so the reported
-	// origin falls back to the service error construction site.
+	// origin falls back to the request error construction site.
 	lines := strings.Split(stackTrace, "\n")
 	require.GreaterOrEqual(t, len(lines), 2)
 	require.Contains(t, lines[0], "newSamplePublicStackErrorWithPlainCause")
 	require.Contains(t, lines[1], "error_test.go")
 }
 
-// newSamplePublicStackError constructs a service error through the public
+// newSamplePublicStackError constructs a request error through the public
 // constructor inside a dedicated helper, so tests can assert the captured
 // stack points at this construction site.
 func newSamplePublicStackError() *gst.Error {

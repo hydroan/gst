@@ -114,8 +114,8 @@ linters:
           files:
             - "$all"
             - "!**/example_*_test.go"
+            - "!**/error_test.go"
             - "!**/modelschema/modelschema_test.go"
-            - "!**/service/error_test.go"
             - "!**/service/service_bench_test.go"
             - "!**/service/service_test.go"
             - "!**/internal/model/**"
