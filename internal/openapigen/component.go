@@ -243,10 +243,10 @@ func registerFailureResponse() {
 // failure with, documented next to the 200 of its success; every other
 // failure is the default response. Any action answers 400 for a payload, a
 // query or a route parameter it refuses and for a constraint the data breaks.
-// The framework's own actions add 404 for a record the path or an item names
-// that does not exist, and 409 for a duplicate, a stale version or a foreign
-// key; a custom action — the project's own request and response types —
-// answers beyond 400 whatever its service decides.
+// The framework's own actions add 404 for a record the path, an item or an
+// imported row names that does not exist, and 409 for a duplicate, a stale
+// version or a foreign key; a custom action — the project's own request and
+// response types — answers beyond 400 whatever its service decides.
 func failureStatuses(phase consts.Phase, custom bool) []int {
 	if custom {
 		return []int{http.StatusBadRequest}
@@ -254,9 +254,9 @@ func failureStatuses(phase consts.Phase, custom bool) []int {
 	switch phase {
 	case consts.Get:
 		return []int{http.StatusBadRequest, http.StatusNotFound}
-	case consts.Update, consts.Patch, consts.Delete, consts.UpdateMany, consts.PatchMany:
+	case consts.Update, consts.Patch, consts.Delete, consts.UpdateMany, consts.PatchMany, consts.Import:
 		return []int{http.StatusBadRequest, http.StatusNotFound, http.StatusConflict}
-	case consts.Create, consts.CreateMany, consts.DeleteMany, consts.Import:
+	case consts.Create, consts.CreateMany, consts.DeleteMany:
 		return []int{http.StatusBadRequest, http.StatusConflict}
 	default:
 		return []int{http.StatusBadRequest}

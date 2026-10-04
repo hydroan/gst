@@ -173,7 +173,7 @@ func TestOperationsDocumentTheFailuresTheyAnswer(t *testing.T) {
 				setImport[*model, *model, *model]("/api/failures/import", p)
 				return p.Post
 			},
-			statuses: []string{"200", "400", "409", "default"},
+			statuses: []string{"200", "400", "404", "409", "default"},
 		},
 		{
 			name: "export",
