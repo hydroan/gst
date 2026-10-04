@@ -5,8 +5,8 @@ import (
 	"github.com/hydroan/gst/model"
 )
 
-// SelfSession declares the self-service session API routes, which act on
-// the sessions of the current user; Session is the stored session snapshot.
+// SelfSession is the current user's own session.
+// Its routes list, read and delete the Session snapshots stored for that user.
 type SelfSession struct {
 	model.Empty
 }
