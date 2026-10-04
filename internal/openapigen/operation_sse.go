@@ -26,13 +26,15 @@ func setSSE[M types.Model, REQ types.Request, RSP types.Response](path string, p
 		Description: description(path, consts.SSE, typ, !modelregistry.AreTypesEqual[M, REQ, RSP]()),
 		Tags:        tags(path, consts.SSE, typ),
 		Parameters:  parseParametersFromPath(path),
-		Responses:   sseStreamResponses(),
+		Responses:   sseStreamResponses(!modelregistry.AreTypesEqual[M, REQ, RSP]()),
 	}
 }
 
 // sseStreamResponses documents the event stream: a 200 response whose body is
-// a text/event-stream of SSE frames.
-func sseStreamResponses() *openapi3.Responses {
+// a text/event-stream of SSE frames, and the failures the stream answers
+// before it opens (see responsesOf), custom when the action's types are the
+// project's own.
+func sseStreamResponses(custom bool) *openapi3.Responses {
 	streamSchema := &openapi3.SchemaRef{
 		Value: &openapi3.Schema{
 			Type:        &openapi3.Types{openapi3.TypeString},
@@ -44,5 +46,5 @@ func sseStreamResponses() *openapi3.Responses {
 		WithContent(openapi3.Content{
 			sseMediaType: openapi3.NewMediaType().WithSchemaRef(streamSchema),
 		})
-	return openapi3.NewResponses(openapi3.WithStatus(200, &openapi3.ResponseRef{Value: response}))
+	return responsesOf(&openapi3.ResponseRef{Value: response}, consts.SSE, custom)
 }

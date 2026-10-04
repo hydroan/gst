@@ -2,11 +2,13 @@ package openapigen
 
 import (
 	"fmt"
+	"net/http"
 	"reflect"
 	"strings"
 	"sync"
 
 	"github.com/getkin/kin-openapi/openapi3"
+	"github.com/hydroan/gst/consts"
 	"github.com/hydroan/gst/internal/modelregistry"
 	"github.com/hydroan/gst/internal/types"
 	"go.uber.org/zap"
@@ -212,16 +214,87 @@ func newRequestBody[REQ types.Request](reqKey string) *openapi3.RequestBodyRef {
 	}
 }
 
-// newResponses references the response component for one action. Every
-// operation declares a response, including actions whose response type carries
-// no fields: those still answer with the envelope, and responses is a required
-// member of an OpenAPI operation.
+// failureResponseKey names the response component every failure refers to:
+// the envelope with msg and trace_id and data null, the one body a failed
+// request of any action answers with.
+const failureResponseKey = "Failure"
+
+// registerFailureResponse registers the failure response component, once.
+func registerFailureResponse() {
+	docMutex.Lock()
+	defer docMutex.Unlock()
+	if doc.Components.Responses == nil {
+		doc.Components.Responses = openapi3.ResponseBodies{}
+	}
+	if _, ok := doc.Components.Responses[failureResponseKey]; ok {
+		return
+	}
+	schemaRef := newSchemaRefWithDocs(apiResponse[struct{}]{})
+	markEmptyResponseData(schemaRef)
+	doc.Components.Responses[failureResponseKey] = &openapi3.ResponseRef{
+		Value: &openapi3.Response{
+			Description: new("Failure Response"),
+			Content:     openapi3.NewContentWithJSONSchemaRef(schemaRef),
+		},
+	}
+}
+
+// failureStatuses returns the statuses an action answers a client's own
+// failure with, documented next to the 200 of its success; every other
+// failure is the default response. Any action answers 400 for a payload, a
+// query or a route parameter it refuses and for a constraint the data breaks.
+// The framework's own actions add 404 for a record the path or an item names
+// that does not exist, and 409 for a duplicate, a stale version or a foreign
+// key; a custom action — the project's own request and response types —
+// answers beyond 400 whatever its service decides.
+func failureStatuses(phase consts.Phase, custom bool) []int {
+	if custom {
+		return []int{http.StatusBadRequest}
+	}
+	switch phase {
+	case consts.Get:
+		return []int{http.StatusBadRequest, http.StatusNotFound}
+	case consts.Update, consts.Patch, consts.Delete, consts.UpdateMany, consts.PatchMany:
+		return []int{http.StatusBadRequest, http.StatusNotFound, http.StatusConflict}
+	case consts.Create, consts.CreateMany, consts.DeleteMany, consts.Import:
+		return []int{http.StatusBadRequest, http.StatusConflict}
+	default:
+		return []int{http.StatusBadRequest}
+	}
+}
+
+// newResponses references the response component for one action, with the
+// failures the action answers (see responsesOf). Every operation declares a
+// response, including actions whose response type carries no fields: those
+// still answer with the envelope, and responses is a required member of an
+// OpenAPI operation.
 //
 // The success status is fixed at 200 rather than taken from the caller: a
 // successful request answers 200 whichever action handled it, so a generated
 // document that says otherwise would describe a runtime that does not exist.
-func newResponses[RSP types.Response](rspKey string) *openapi3.Responses {
-	return openapi3.NewResponses(openapi3.WithStatus(200, &openapi3.ResponseRef{Ref: "#/components/responses/" + rspKey}))
+func newResponses[RSP types.Response](rspKey string, phase consts.Phase, custom bool) *openapi3.Responses {
+	return responsesOf(&openapi3.ResponseRef{Ref: "#/components/responses/" + rspKey}, phase, custom)
+}
+
+// responsesOf declares the responses of one action: success as its 200, the
+// statuses failureStatuses lists for the action, and the default response
+// for every other failure, each failure referring to the failure envelope
+// component. For the create of a Record, the framework's own:
+//
+//	200: #/components/responses/RecordCreateResponse
+//	400: #/components/responses/Failure
+//	409: #/components/responses/Failure
+//	default: #/components/responses/Failure
+func responsesOf(success *openapi3.ResponseRef, phase consts.Phase, custom bool) *openapi3.Responses {
+	registerFailureResponse()
+	failure := &openapi3.ResponseRef{Ref: "#/components/responses/" + failureResponseKey}
+	opts := []openapi3.NewResponsesOption{openapi3.WithStatus(http.StatusOK, success)}
+	for _, status := range failureStatuses(phase, custom) {
+		opts = append(opts, openapi3.WithStatus(status, failure))
+	}
+	responses := openapi3.NewResponses(opts...)
+	responses.Set("default", failure)
+	return responses
 }
 
 // markEmptyResponseData rewrites the data member of an envelope whose action

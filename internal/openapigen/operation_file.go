@@ -47,7 +47,7 @@ func setImport[M types.Model, REQ types.Request, RSP types.Response](path string
 		Tags:        tags(path, consts.Import, typ),
 		Parameters:  parseParametersFromPath(path),
 		RequestBody: importFileRequestBody(),
-		Responses:   newResponses[RSP](rspKey),
+		Responses:   newResponses[RSP](rspKey, consts.Import, !modelregistry.AreTypesEqual[M, REQ, RSP]()),
 	}
 }
 
@@ -93,7 +93,7 @@ func setExport[M types.Model, REQ types.Request, RSP types.Response](path string
 		Description: description(path, consts.Export, typ, !modelregistry.AreTypesEqual[M, REQ, RSP]()),
 		Tags:        tags(path, consts.Export, typ),
 		Parameters:  append(parseParametersFromPath(path), exportFormatParameter()),
-		Responses:   exportFileResponses(),
+		Responses:   exportFileResponses(!modelregistry.AreTypesEqual[M, REQ, RSP]()),
 	}
 	addQueryParameters[M, REQ, RSP](pathItem.Get)
 }
@@ -118,8 +118,10 @@ func exportFormatParameter() *openapi3.ParameterRef {
 }
 
 // exportFileResponses documents the export download: a 200 response whose body
-// is the generated csv or xlsx file delivered as a binary stream.
-func exportFileResponses() *openapi3.Responses {
+// is the generated csv or xlsx file delivered as a binary stream, and the
+// failures the export answers (see responsesOf), custom when the action's
+// types are the project's own.
+func exportFileResponses(custom bool) *openapi3.Responses {
 	fileSchema := &openapi3.SchemaRef{
 		Value: &openapi3.Schema{
 			Type:   &openapi3.Types{openapi3.TypeString},
@@ -132,5 +134,5 @@ func exportFileResponses() *openapi3.Responses {
 			exportMediaTypeCSV:  openapi3.NewMediaType().WithSchemaRef(fileSchema),
 			exportMediaTypeXLSX: openapi3.NewMediaType().WithSchemaRef(fileSchema),
 		})
-	return openapi3.NewResponses(openapi3.WithStatus(200, &openapi3.ResponseRef{Value: response}))
+	return responsesOf(&openapi3.ResponseRef{Value: response}, consts.Export, custom)
 }
