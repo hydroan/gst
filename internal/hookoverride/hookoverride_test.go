@@ -4,7 +4,7 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/hydroan/gst/internal/modelregistry/hookoverride"
+	"github.com/hydroan/gst/internal/hookoverride"
 	"github.com/stretchr/testify/require"
 )
 

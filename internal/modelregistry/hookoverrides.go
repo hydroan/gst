@@ -5,7 +5,7 @@ import (
 	"sync"
 
 	"github.com/hydroan/gst/consts"
-	"github.com/hydroan/gst/internal/modelregistry/hookoverride"
+	"github.com/hydroan/gst/internal/hookoverride"
 )
 
 // Hook override detection for models.
@@ -81,6 +81,16 @@ var hookMethodNames = func() (names [hookCount]string) {
 	}
 	return names
 }()
+
+// HookMethodNames returns the Go method names of the lifecycle hooks of
+// types.Model, CreateBefore to GetAfter in the order the interface declares
+// them: the one list of what a hook is, read by gg check to tell a model's
+// hooks from its other methods. The slice is the caller's own.
+func HookMethodNames() []string {
+	names := make([]string, hookCount)
+	copy(names, hookMethodNames[:])
+	return names
+}
 
 // hookIndex returns the position of phase in hookPhases, or false when the
 // phase is not a model hook.
