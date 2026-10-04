@@ -4,8 +4,9 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"net/http"
 
-	"github.com/cockroachdb/errors"
+	"github.com/hydroan/gst"
 	. "github.com/hydroan/gst/dsl"
 	"github.com/hydroan/gst/model"
 )
@@ -73,10 +74,10 @@ func (d *Document) UpdateBefore(context.Context) error { return d.derive() }
 // follow from its content.
 func (d *Document) derive() error {
 	if d.BoxID == "" {
-		return errors.New("box id is required")
+		return gst.NewError(http.StatusBadRequest, "box id is required")
 	}
 	if d.Name == "" {
-		return errors.New("name is required")
+		return gst.NewError(http.StatusBadRequest, "name is required")
 	}
 	if d.Format == "" {
 		d.Format = DocumentFormatText

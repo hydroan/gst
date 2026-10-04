@@ -173,7 +173,7 @@ func (m *Menu) UpdateAfter(ctx context.Context) error {
 	}
 	for _, r := range roles {
 		if slices.Contains(r.MenuIDs, m.ID) {
-			if err := r.syncPermissions(ctx); err != nil {
+			if err := syncRolePermissions(ctx, r); err != nil {
 				return err
 			}
 			zap.L().Info("successfully update role's permissions", zap.Any("role", r))

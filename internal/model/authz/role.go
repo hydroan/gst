@@ -93,7 +93,7 @@ func (r *Role) validate() error {
 	}
 
 	// Both checks below are on the ID alone, because the ID is what authorization
-	// reads: a role binding stores Role.ID as the policy role, and syncPermissions
+	// reads: a role binding stores Role.ID as the policy role, and syncRolePermissions
 	// writes it into the role column of every policy it generates. The name is
 	// display text no matcher ever compares, so reserving it would forbid an
 	// ordinary label without closing anything.
@@ -109,7 +109,7 @@ func (r *Role) validate() error {
 	// Policies written for the authenticated role are matched without a role
 	// membership or tenant check, so they apply to every authenticated subject. A
 	// role created under this ID turns its own permissions into global ones: every
-	// policy syncPermissions generates for it would allow every subject that can
+	// policy syncRolePermissions generates for it would allow every subject that can
 	// log in, including subjects that were never bound to the role.
 	if r.ID == consts.AUTHZ_ROLE_AUTHENTICATED {
 		return gst.NewError(http.StatusBadRequest, "authenticated is reserved for the implicit role of every authenticated subject")
@@ -131,7 +131,7 @@ func (r *Role) CreateBefore(ctx context.Context) error {
 // validateMenuIDs refuses a menu selection naming menus that do not exist.
 //
 // A dangling ID kept as it stands would be stored and echoed back, while
-// syncPermissions silently expands only the menus it can find — a role that
+// syncRolePermissions silently expands only the menus it can find — a role that
 // looks configured while a slice of its permissions never exists. Nothing
 // downstream could see it either: the drift report derives its expectations
 // from the same join, so the gap never reads as drift. Refusing the write is
@@ -171,7 +171,7 @@ func (r *Role) CreateAfter(ctx context.Context) error {
 	if err := database.Database[*Role](ctx).WithoutHook().Get(r, r.ID); err != nil {
 		return err
 	}
-	return r.syncPermissions(ctx)
+	return syncRolePermissions(ctx, r)
 }
 
 // UpdateBefore validates role updates before database writes. Role ID is immutable.
@@ -198,7 +198,7 @@ func (r *Role) UpdateAfter(ctx context.Context) error {
 	if err := database.Database[*Role](ctx).WithoutHook().Get(r, r.ID); err != nil {
 		return err
 	}
-	return r.syncPermissions(ctx)
+	return syncRolePermissions(ctx, r)
 }
 
 // DeleteBefore checks the role exists and captures the tenant its rules were
@@ -257,10 +257,13 @@ func (r *Role) DeleteAfter(ctx context.Context) error {
 		}
 	}
 
-	return rbac.RBAC().RemoveRole(ctx, r.tenant(), r.ID)
+	if err := rbac.RBAC().RemoveRole(ctx, r.tenant(), r.ID); err != nil {
+		return gst.NewErrorWithCause(http.StatusInternalServerError, "failed to remove the role's policies", err)
+	}
+	return nil
 }
 
-// syncPermissions rebuilds the authz policy rows for this role from Menu.Routes.
+// syncRolePermissions rebuilds the authz policy rows for this role from Menu.Routes.
 // Role.MenuIDs is the authoritative source for backend route grants.
 //
 // The whole set is replaced rather than diffed. Menu routes can be removed,
@@ -268,7 +271,7 @@ func (r *Role) DeleteAfter(ctx context.Context) error {
 // rows behind. Rebuilding the role's policy set keeps authz_rules consistent with
 // the current menu bindings, and SetRolePermissions applies it as one step so the
 // role's members are never authorized against a partially rebuilt set.
-func (r *Role) syncPermissions(ctx context.Context) error {
+func syncRolePermissions(ctx context.Context, r *Role) error {
 	// Batch-load bound menus with a typed IN filter. The comma-joined ID
 	// shortcut is avoided on purpose: it breaks on integer AutoBase keys and
 	// relies on values never containing commas. An empty selection skips the
@@ -289,7 +292,10 @@ func (r *Role) syncPermissions(ctx context.Context) error {
 		permissions = append(permissions, RoutePermissionsForMenu(m)...)
 	}
 
-	return rbac.RBAC().SetRolePermissions(ctx, r.tenant(), r.ID, permissions)
+	if err := rbac.RBAC().SetRolePermissions(ctx, r.tenant(), r.ID, permissions); err != nil {
+		return gst.NewErrorWithCause(http.StatusInternalServerError, "failed to sync the role's permissions", err)
+	}
+	return nil
 }
 
 // RoutePermissionsForMenu renders the backend route grants a menu carries. It

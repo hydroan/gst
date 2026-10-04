@@ -85,7 +85,7 @@ func (r *RoleBinding) CreateBefore(ctx context.Context) error {
 
 func (r *RoleBinding) CreateAfter(ctx context.Context) error {
 	if err := rbac.RBAC().AssignRole(ctx, r.tenant(), r.SubjectID, r.RoleID); err != nil {
-		return err
+		return gst.NewErrorWithCause(http.StatusInternalServerError, "failed to assign the role", err)
 	}
 
 	return nil
@@ -96,5 +96,8 @@ func (r *RoleBinding) DeleteBefore(ctx context.Context) error {
 	if err := database.Database[*RoleBinding](ctx).Get(r, r.ID); err != nil {
 		return err
 	}
-	return rbac.RBAC().UnassignRole(ctx, r.tenant(), r.SubjectID, r.RoleID)
+	if err := rbac.RBAC().UnassignRole(ctx, r.tenant(), r.SubjectID, r.RoleID); err != nil {
+		return gst.NewErrorWithCause(http.StatusInternalServerError, "failed to unassign the role", err)
+	}
+	return nil
 }
