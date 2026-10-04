@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst"
 	modeliamsession "github.com/hydroan/gst/internal/model/iam/session"
 	serviceiamsession "github.com/hydroan/gst/internal/service/iam/session"
@@ -117,7 +118,10 @@ func TestLoadSessionTellsAnUnreadableValueFromAMissingOne(t *testing.T) {
 	key := serviceiamsession.SessionDataKey(sessionID)
 	require.NoError(t, gstredis.Set(t.Context(), key, "not a snapshot", time.Hour))
 	_, err := serviceiamsession.Store.LoadSession(t.Context(), sessionID)
-	require.ErrorIs(t, err, serviceiamsession.ErrSnapshotUnreadable)
+	// The mark is the errors package's own: testify's ErrorIs asks the
+	// standard library, which does not see it.
+	require.True(t, errors.Is(err, serviceiamsession.ErrSnapshotUnreadable), "%v", err)
+	require.ErrorContains(t, err, "invalid character", "the decoder's own error stays behind the mark")
 
 	require.NoError(t, gstredis.Del(t.Context(), key))
 	_, err = serviceiamsession.Store.LoadSession(t.Context(), sessionID)

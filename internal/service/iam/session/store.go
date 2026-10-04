@@ -100,11 +100,12 @@ type UserState struct {
 var errSnapshotUnreadable = errors.New("session snapshot cannot be read")
 
 // LoadSession returns the stored snapshot of a session: gst.ErrEntryNotFound
-// when the store holds none, errSnapshotUnreadable when what it holds is not
-// a snapshot, and the store's own error when it did not answer. The value is
-// read raw and decoded here, where the last two tell apart; the typed cache
-// answers a value it cannot decode and a store it cannot reach with the same
-// error.
+// when the store holds none, an error marked errSnapshotUnreadable when what
+// it holds is not a snapshot, and the store's own error when it did not
+// answer. The value is read raw and decoded here, where the last two tell
+// apart; the typed cache answers a value it cannot decode and a store it
+// cannot reach with the same error. SaveSession and TouchSession write the
+// snapshot the same way, so one codec reads and writes it.
 func (store) LoadSession(ctx context.Context, sessionID string) (modeliamsession.Session, error) {
 	sessionID = strings.TrimSpace(sessionID)
 	if sessionID == "" {
@@ -119,7 +120,7 @@ func (store) LoadSession(ctx context.Context, sessionID string) (modeliamsession
 	}
 	var current modeliamsession.Session
 	if err = json.Unmarshal(data, &current); err != nil {
-		return modeliamsession.Session{}, errors.Wrap(errSnapshotUnreadable, err.Error())
+		return modeliamsession.Session{}, errors.Mark(err, errSnapshotUnreadable)
 	}
 	return current, nil
 }
@@ -140,7 +141,14 @@ func (store) SaveSession(ctx context.Context, sessionData modeliamsession.Sessio
 	if sessionData.ID == "" {
 		return service.NewError(http.StatusInternalServerError, "session id is required")
 	}
-	if err := gstredis.Cache[modeliamsession.Session]().Set(ctx, sessionDataKey(sessionData.ID), sessionData, ttl); err != nil {
+	if ttl < 0 {
+		return service.NewError(http.StatusInternalServerError, "session ttl is negative")
+	}
+	payload, err := json.Marshal(sessionData)
+	if err != nil {
+		return service.NewErrorWithCause(http.StatusInternalServerError, "failed to store session", err)
+	}
+	if err = gstredis.Set(ctx, sessionDataKey(sessionData.ID), payload, ttl); err != nil {
 		return service.NewErrorWithCause(http.StatusInternalServerError, "failed to store session", err)
 	}
 	return nil
@@ -156,14 +164,12 @@ func (store) DeleteSession(ctx context.Context, sessionID string) (modeliamsessi
 	if sessionID == "" {
 		return modeliamsession.Session{}, nil
 	}
-	cache := gstredis.Cache[modeliamsession.Session]()
 
-	sessionKey := sessionDataKey(sessionID)
-	sessionData, err := cache.Get(ctx, sessionKey)
+	sessionData, err := Store.LoadSession(ctx, sessionID)
 	if err != nil {
 		return modeliamsession.Session{}, err
 	}
-	if err = cache.Delete(ctx, sessionKey); err != nil {
+	if err = gstredis.Del(ctx, sessionDataKey(sessionID)); err != nil {
 		return sessionData, err
 	}
 	if err = Store.DropSessionIndexes(ctx, sessionData.UserID, sessionID); err != nil {
@@ -417,7 +423,7 @@ func (store) TouchSession(ctx context.Context, sessionID string, sessionData mod
 	// index alone, out of reach of the revocations that walk the user and all
 	// indexes. A snapshot already gone stays gone: this request was
 	// authenticated before the revocation, and the next one finds nothing to
-	// load. The value is the JSON gstredis.Cache reads the snapshot back from.
+	// load. The value is the JSON LoadSession reads the snapshot back from.
 	written, err := gstredis.SetXX(ctx, sessionDataKey(sessionID), string(payload), ttl)
 	if err != nil {
 		return touchSessionError(err)
