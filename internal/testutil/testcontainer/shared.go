@@ -229,6 +229,9 @@ func provisionSharedDatabase(ctx context.Context, d sharedSQLDialect, host strin
 		return "", nil, errors.Wrap(err, "failed to open the shared container admin connection")
 	}
 
+	if err := awaitSharedDatabase(ctx, admin, sharedDatabaseReadyTimeout); err != nil {
+		return "", nil, errors.CombineErrors(err, admin.Close())
+	}
 	if err := dropAbandonedSharedDatabases(ctx, admin, d); err != nil {
 		return "", nil, errors.CombineErrors(err, admin.Close())
 	}
@@ -247,6 +250,35 @@ func provisionSharedDatabase(ctx context.Context, d sharedSQLDialect, host strin
 		)
 	}
 	return database, release, nil
+}
+
+// sharedDatabaseReadyTimeout bounds how long provisioning waits for the
+// database of a shared container to answer, and sharedDatabasePingInterval
+// is how often it asks.
+const (
+	sharedDatabaseReadyTimeout = time.Minute
+	sharedDatabasePingInterval = 500 * time.Millisecond
+)
+
+// awaitSharedDatabase pings admin until the database answers, or reports the
+// last ping's error once timeout has passed. A shared container that was
+// stopped — with the docker daemon, say — is started again by the reuse, and
+// the log the library's wait strategy reads still holds the ready lines of
+// every earlier start, so the strategy returns while the database is still
+// coming up; a connection it accepts and drops meanwhile fails the ping, and
+// only an answered ping proves this start is ready.
+func awaitSharedDatabase(ctx context.Context, admin *sql.DB, timeout time.Duration) error {
+	deadline := time.Now().Add(timeout)
+	for {
+		err := admin.PingContext(ctx)
+		if err == nil {
+			return nil
+		}
+		if time.Now().After(deadline) {
+			return errors.Wrap(err, "the shared container's database did not answer in time")
+		}
+		time.Sleep(sharedDatabasePingInterval)
+	}
 }
 
 // dropAbandonedSharedDatabases drops the test databases whose owning binary

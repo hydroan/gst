@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"net"
 	"os"
 	"strconv"
 	"strings"
@@ -119,6 +120,25 @@ func TestWithSharedContainerLock(t *testing.T) {
 	wg.Wait()
 
 	require.Equal(t, int32(1), peak.Load(), "the lock must serialize its holders")
+}
+
+// TestAwaitSharedDatabaseGivesUpAfterTheTimeout pins that a database that
+// never answers — the port is one nothing listens on — is reported with the
+// ping's own error once the timeout has passed, instead of being waited for
+// forever.
+func TestAwaitSharedDatabaseGivesUpAfterTheTimeout(t *testing.T) {
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	require.NoError(t, err)
+	addr := listener.Addr().String()
+	require.NoError(t, listener.Close())
+
+	admin, err := sql.Open(mysqlSharedDialect.driver, fmt.Sprintf("root:secret@tcp(%s)/?timeout=200ms", addr))
+	require.NoError(t, err)
+	defer admin.Close()
+
+	err = awaitSharedDatabase(t.Context(), admin, 50*time.Millisecond)
+	require.ErrorContains(t, err, "did not answer in time")
+	require.ErrorContains(t, err, "connection refused")
 }
 
 func TestSharedDatabaseAbandoned(t *testing.T) {
