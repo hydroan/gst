@@ -26,7 +26,7 @@ func DecodeResp[RSP any](t *testing.T, resp *client.Envelope) RSP {
 }
 
 // RequireError asserts that err is a server-side rejection with the given
-// HTTP status code and that the business message contains every msgContains
+// HTTP status code and that the message contains every msgContains
 // entry. The rejection is returned by value for follow-up asserts, such as
 // the raw body; the value form keeps ignoring it errcheck-clean.
 func RequireError(t *testing.T, err error, statusCode int, msgContains ...string) client.Error {

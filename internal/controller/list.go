@@ -157,7 +157,8 @@ func (a *action[M, REQ, RSP]) listFlow(ctx context.Context, newServiceContext se
 		return nil, 0, failService(ctx, log, err)
 	}
 	var total int
-	// NOTE: Total count is not provided when using cursor-based pagination.
+	// The count is skipped under cursor pagination, so the total answered
+	// stays 0.
 	if !cursor.Enabled() {
 		if err = database.Database[M](ctx).
 			WithQuery(m, queryOpts).

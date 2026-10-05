@@ -30,7 +30,7 @@ gst · HTTP 与 gRPC 两条传输线
     <div class="arch-arrow">▼</div>
     <div class="arch-layer stage">
       <div class="arch-layer-title">② 生成 · gg gen</div>
-      <div class="arch-grid arch-grid-3"><div class="arch-box lane http"><b>router/router.gen.go</b><ul><li>每个模型一条 <code>router.Register[M,REQ,RSP](group, route, cfg, phases…)</code>，路由串带 <code>/api</code> 前缀。</li><li><code>model/apidoc.gen.go</code>：Swagger 注释，服务启动后在 <code>/docs/index.html</code>。</li></ul></div><div class="arch-box lane shared"><b>main.go、model.gen.go、service.gen.go、骨架</b><ul><li><code>main.go</code> 空导入 configx / cronjob / middleware / interceptor / pb 并调 bootstrap。</li><li><code>model/model.gen.go</code>：模型注册与 <code>XxxCols</code> 列引用。</li><li><code>service/service.gen.go</code>：<code>service.Register[*svc](phase, "/api/…")</code>，键是 route|phase。</li><li>新 service 文件旁生成 <code>_test.go</code> 骨架（含 main_test.go），Stream 的骨架直接拨 gRPC。</li></ul></div><div class="arch-box lane grpc"><b>pb/ 镜像 model 目录</b><ul><li><code>x.proto</code>：从 Go 类型与 Design() 推导，包名 <code>&lt;app&gt;[.&lt;dir&gt;]</code>（app 是模块路径去掉主版本后缀的末段），注册路径是 app 名加 pb/ 下的路径（<code>tmpapp/board/feed.proto</code>，Buf 的「目录即包名」规则），两个服务链接进同一二进制也不撞，外部使用时把 pb/ 复制成名为 app 的目录放进 proto 根目录即可；对照已提交文件拒绝改号、改类型、删 service / rpc / 消息、改流向，请求响应消息按字段名沿用已提交号，自动写 <code>reserved</code>。</li><li>进程内 protocompile 编译，经 <code>gghelper.PinnedCommand</code> 驱动 protoc-gen-go / protoc-gen-go-grpc 得到 <code>x.pb.go</code>、<code>x_grpc.pb.go</code>。</li><li>gg 自己写 <code>x.gen.go</code>（适配层）与每个 pb 包一个的 <code>pb.gen.go</code>（注册；根目录的空导入子包，main.go 只导入根目录）。</li><li>gg check 查 pb tag，gg gen 写盘前对 pb/ 的 Go 文件做类型检查、删过期的 Go 文件，gg prune 清过期的 .proto。</li></ul></div></div>
+      <div class="arch-grid arch-grid-3"><div class="arch-box lane http"><b>router/router.gen.go</b><ul><li>每个动作一条 <code>router.Register[M,REQ,RSP](group, route, cfg, phase)</code>，路由串带 <code>/api</code> 前缀。</li><li><code>model/apidoc.gen.go</code>：Swagger 注释，服务启动后在 <code>/docs/index.html</code>。</li></ul></div><div class="arch-box lane shared"><b>main.go、model.gen.go、service.gen.go、骨架</b><ul><li><code>main.go</code> 空导入 configx / cronjob / middleware / interceptor / pb 并调 bootstrap。</li><li><code>model/model.gen.go</code>：模型注册与 <code>XxxCols</code> 列引用。</li><li><code>service/service.gen.go</code>：<code>service.Register[*svc](phase, "/api/…")</code>，键是 route|phase。</li><li>新 service 文件旁生成 <code>_test.go</code> 骨架（含 main_test.go），Stream 的骨架直接拨 gRPC。</li></ul></div><div class="arch-box lane grpc"><b>pb/ 镜像 model 目录</b><ul><li><code>x.proto</code>：从 Go 类型与 Design() 推导，包名 <code>&lt;app&gt;[.&lt;dir&gt;]</code>（app 是模块路径去掉主版本后缀的末段），注册路径是 app 名加 pb/ 下的路径（<code>tmpapp/board/feed.proto</code>，Buf 的「目录即包名」规则），两个服务链接进同一二进制也不撞，外部使用时把 pb/ 复制成名为 app 的目录放进 proto 根目录即可；对照已提交文件拒绝改号、改类型、删 service / rpc / 消息、改流向，请求响应消息按字段名沿用已提交号，自动写 <code>reserved</code>。</li><li>进程内 protocompile 编译，经 <code>gghelper.PinnedCommand</code> 驱动 protoc-gen-go / protoc-gen-go-grpc 得到 <code>x.pb.go</code>、<code>x_grpc.pb.go</code>。</li><li>gg 自己写 <code>x.gen.go</code>（适配层）与每个 pb 包一个的 <code>pb.gen.go</code>（注册；根目录的空导入子包，main.go 只导入根目录）。</li><li>gg check 查 pb tag，gg gen 写盘前对 pb/ 的 Go 文件做类型检查、删过期的 Go 文件，gg prune 清过期的 .proto。</li></ul></div></div>
     </div>
     <div class="arch-arrow">▼</div>
     <div class="arch-layer stage">
@@ -40,7 +40,7 @@ gst · HTTP 与 gRPC 两条传输线
     <div class="arch-arrow">▼</div>
     <div class="arch-layer stage">
       <div class="arch-layer-title">④ 监听与链 · bootstrap 起两个监听</div>
-      <div class="arch-grid arch-grid-3"><div class="arch-box lane http"><b>gin，[server] 默认 8080</b><ul><li>内建链 <code>middleware.Builtin()</code>：tracing → accessLogger → bodyLogger → recovery → cors → routeParams → strictQuery。</li><li>再挂 <code>middleware.Register</code> 的通用中间件；认证组再挂 <code>middleware.RegisterAuth</code> 的（JwtAuth / IAMSession / Authz）。</li></ul></div><div class="arch-box lane shared"><b>bootstrap</b><ul><li><code>router.Init()</code> 装好路由后 <code>RegisterGo(router.Run, grpcserver.Run)</code> 并行起监听。</li><li>logger、metrics、otel、database、redis 两边共用同一份初始化。</li></ul></div><div class="arch-box lane grpc"><b>grpc.NewServer，[grpc] 默认 8081</b><ul><li>一元链与流链同序：requestScope → 指标 → recovery → <code>interceptor.Register</code> 的通用拦截器（health、reflection 不经过）→ <code>interceptor.RegisterAuth</code> 的鉴权拦截器（Public 方法与 health、reflection 不经过）。</li><li>OTEL 开着时加 otelgrpc stats handler；health 服务（整体与每个服务）、反射（可关）、keepalive 与 ping 策略、连接寿命、消息上限、TLS。</li><li>没有注册任何服务就不开监听。</li></ul></div></div>
+      <div class="arch-grid arch-grid-3"><div class="arch-box lane http"><b>gin，[server] 默认 8080</b><ul><li>内建链 <code>middleware.Builtin()</code>：tracing → accessLogger → bodyLogger → recovery → cors → routeParams → strictQuery。</li><li>再挂 <code>middleware.Register</code> 的通用中间件；认证组再挂 <code>middleware.RegisterAuth</code> 的（JwtAuth / IAMSession / Authz）。</li></ul></div><div class="arch-box lane shared"><b>bootstrap</b><ul><li><code>router.Init()</code> 装好路由后 <code>RegisterGo(router.Run, grpcserver.Run)</code> 并行起监听。</li><li>logger、metrics、otel、database、redis 两边共用同一份初始化。</li></ul></div><div class="arch-box lane grpc"><b>grpc.NewServer，[grpc] 默认 8081</b><ul><li>一元链与流链同序：requestScope → 指标 → recovery → <code>interceptor.Register</code> 的通用拦截器（health、reflection 不经过）→ <code>interceptor.RegisterAuth</code> 的鉴权拦截器（Public 方法与 health、reflection 不经过）；流链最内层再加 streamShutdown，停机时让流答 Unavailable 结束。</li><li>OTEL 开着时加 otelgrpc stats handler；health 服务（整体与每个服务）、反射（可关）、keepalive 与 ping 策略、连接寿命、消息上限、TLS。</li><li>没有注册任何服务就不开监听。</li></ul></div></div>
     </div>
     <div class="arch-arrow">▼</div>
     <div class="arch-layer stage">
@@ -155,10 +155,10 @@ handler --> client : RecordToProto；失败映射成 status
 |---|---|---|---|
 | 挂载 | `middleware.RegisterAuth(middleware.IAMSession(), …)`，只作用于非 Public 路由 | `interceptor.RegisterAuth(interceptor.IAMSession(), …)`，selector 放过 Public 方法与 health、reflection | 项目在自己的 middleware/ 与 interceptor/ 注册文件里显式挂，链按注册顺序跑 |
 | 凭证 | IAMSession 读会话 Cookie，JwtAuth 读 `Authorization: Bearer` 头 | 两者都读 metadata `authorization: Bearer …`，经 `grpc.Bearer(ctx)` 取；会话经 gRPC 使用时登录的 user-agent 要和 gRPC 客户端一致，设备绑定按它比对 | |
-| 会话认证 | `middleware.IAMSession()` | `interceptor.IAMSession()` | `serviceiamsession.Authenticate(ctx, sessionID, userAgent, method, path)`：加载、校验、设备绑定按 user-agent 比对、用户状态、改密豁免、续期 |
+| 会话认证 | `middleware.IAMSession()` | `interceptor.IAMSession()` | `serviceiamsession.Authenticate(ctx, sessionID, userAgent, method, path)`：加载、校验、设备绑定按 user-agent 比对、用户状态、改密豁免、记录活跃（只前移 LastSeenAt，不续期） |
 | JWT | `middleware.JwtAuth()` | `interceptor.JwtAuth()`，拒绝一律 Unauthenticated | jwt 包解析与校验 |
 | 授权 | `middleware.Authz()`，obj 是请求的具体路径（`/api/records/42`）、act 是 HTTP 方法 | `interceptor.Authz()`，obj 是路由模板（`/api/records/{id}`，拦截器把注册时记下的路由写成路由清单的写法）、act 是该 rpc 对应的 HTTP 方法，流式动作是 STREAM | `rbac.Enforce(ctx, Subject, obj, act)`，策略只有一份：写 `{id}`、`/*` 或静态路径的两边一致，写具体段的只在 HTTP 生效，写 `:id` 字面的两边都不命中 |
-| 调用者 | gin 上下文里的用户 | `grpc.WithCaller / CallerOf`，写进访问日志 | `execctx` 里的身份与 trace id |
+| 调用者 | gin 上下文里的用户 | `grpc.WithCaller / CallerOf`，写进访问日志 | `requestctx.Metadata` 里的调用者；trace id 在 `execctx` |
 | 失败的形状 | JSON 错误体 `{msg, data, trace_id}`，状态码取 `gst.Error` 的 status，没有业务状态码；没有 `gst.Error` 的错误是服务端自身的故障，答 500「The server could not process the request.」 | `gst.Error` 映射成 status code 加同一句 msg；框架自己的拒绝（Internal、Unimplemented、Canceled、JwtAuth 的 Unauthenticated）同样只有 status | `gst.NewError / NewErrorWithCause` |
 
 HTTP 状态到 gRPC status 的映射（`grpcserver.StatusError`）：
@@ -167,12 +167,12 @@ HTTP 状态到 gRPC status 的映射（`grpcserver.StatusError`）：
 - 409 → AlreadyExists，其中乐观锁冲突（错误链里带 `database.ErrStaleObject`）→ Aborted，外键不满足（带 `database.ErrForeignKeyViolated`，指向不存在或还被引用的记录）→ FailedPrecondition；412 → FailedPrecondition；429 → ResourceExhausted；501 → Unimplemented；503 → Unavailable。
 - 其他 5xx → Internal；其他 4xx → InvalidArgument；数据库未知错误与钩子里的非 gst.Error → Internal，和 HTTP 的 500 同一句文案；请求消息校验失败 → InvalidArgument，message 是点名字段的句子（`name is a required field`，多个字段用分号连，字段用 JSON 名路径，批量项带 `items[1].`），并附 `google.rpc.BadRequest` 明细逐字段列出，HTTP 的 `msg` 是同一句；panic 经 recovery → Internal。
 - 请求消息里 HTTP 收不进来的值由生成的 FromProto 当场拒绝，答 InvalidArgument「invalid value for field 'rank'」并附 `google.rpc.BadRequest` 明细：窄整数越界（`grpc.Narrow`）、不是 JSON 数字的字符串与可选字段显式给的空串（`grpc.Number`）、Timestamp 超出公元 1 到 9999 年（`grpc.Time`）、不是合法 JSON 的文档字节（`grpc.Document`）、NaN 与无穷（`grpc.Finite`），map 的窄整数键同样经 Narrow。反方向生成的 ToProto 把字符串里的非法 UTF-8 逐字节换成 U+FFFD（`grpc.UTF8`），和 encoding/json 写出的一样，不让一条记录拖垮整页响应。
-- 客户端已取消或超时的调用答 Canceled / DeadlineExceeded，不记错误日志。
+- 客户端已取消或超时的调用答 Canceled / DeadlineExceeded；自定义动作与流不记错误日志，标准 CRUD 流程在判定取消之前已按服务端失败记了一条 Error。
 - 路由参数来自请求消息开头的字段：留空或含 `/` 的值答 InvalidArgument（`route parameter "parent" is required`、`route parameter "parent" must not contain "/"`），HTTP 上一个参数只对应路径的一段，这两种值它永远送不进来。
 
 ## 5. 动作承载矩阵
 
-规则一句话：动作在能承载它的每种传输上都提供；只有一种传输能承载的，只在那一种上提供。Import / Export / SSE 不进 .proto；Stream 不进 router.gen.go、service.gen.go 和接口文档，它在 .proto 里的 rpc 注释写着 served over gRPC alone。
+规则一句话：动作在能承载它的每种传输上都提供；只有一种传输能承载的，只在那一种上提供。Import / Export / SSE 不进 .proto；Stream 不进 router.gen.go 和接口文档，service.gen.go 照常注册它的 service，它在 .proto 里的 rpc 注释写着 served over gRPC alone。
 
 | 动作 | HTTP | gRPC（模型声明了 GRPC()） | 说明 |
 |---|:---:|:---:|---|
@@ -180,7 +180,7 @@ HTTP 状态到 gRPC status 的映射（`grpcserver.StatusError`）：
 | CreateMany / UpdateMany / PatchMany / DeleteMany | ✓ | ✓ | 批量逐条校验，UpdateMany / PatchMany 同一个 id 出现两次即拒绝；PatchMany 的每一项就是单条 Patch 的请求（id、记录、update_mask），和单条一样以项的 id 为准、记录自带的 id 不读，项里的路由参数与外层不一致即拒绝 |
 | Route() 里的自定义动作 | ✓ | ✓ | rpc 名 = Service 名 + 模型名；Payload 挂成 `payload`，Result 挂成 `result` |
 | Import / Export / SSE | ✓ | — | 文件流与事件流只有 HTTP 能承载；gg check 在 GRPC() 模型的其他 service 里拦住 HTTP 专属的 ServiceContext 方法（Cookie、FormFile、SSE 等），这三种动作自己的 service 文件不扫，运行期在 gRPC 调用里碰到其中任何一个，调用一律答 Internal，钩子一返回就拦：Before 钩子里的在写库之前拦下，After 钩子里的在写库之后（和 After 钩子返回错误一样，行已写入） |
-| Stream | — | ✓ | 只允许自定义动作，必须 Service("name") 与 GRPC()；router、service.gen.go、TS 类型都跳过它 |
+| Stream | — | ✓ | 只允许自定义动作，必须 Service("name") 与 GRPC()；router 与 TS 类型跳过它，service.gen.go 照常注册 |
 
 ## 6. 流式动作
 
@@ -190,7 +190,7 @@ HTTP 状态到 gRPC status 的映射（`grpcserver.StatusError`）：
 
 - `Stream(func(){ Service("watch"); Payload[*Req](); StreamingResult[*Rsp]() })`：Payload / Result 写一问一答的一侧，Streaming 版写流的一侧，至少一侧是流，三种组合都支持。
 - .proto：`rpc WatchFeed (WatchFeedRequest) returns (stream WatchFeedResponse)`；请求消息开头仍是路由参数。
-- `x.gen.go`：服务端流把 `srv.Send` 交给流程；客户端流与双向流先用 `grpc.FirstMessage(srv.Recv)` 读首条消息取路由参数，再把它当第一条交回；第二条起的消息里的路由参数留空或与首条相同放行，不同的那条让 Recv 返回 InvalidArgument（`message 3 names the feed parameter "b", the first names "a"`，`grpc.SameParams`），和批量项对外层参数的规则一样。
+- `x.gen.go`：服务端流把 `srv.Send` 交给流程；路由带参数时，客户端流与双向流先用 `grpc.FirstMessage(srv.Recv)` 读首条消息取路由参数，再把它当第一条交回，不带参数的直接把 `srv.Recv` 交给流程；第二条起的消息里的路由参数留空或与首条相同放行，不同的那条让 Recv 返回 InvalidArgument（`message 3 names the feed parameter "b", the first names "a"`，`grpc.SameParams`），和批量项对外层参数的规则一样。
 - authz：act 是 `STREAM`，obj 是声明的 `/api/…` 路径的模板（`/api/records/{id}/tail`）；`GET /api/authz/routes` 只列 HTTP 路由，流式动作的策略按这个写法手写。
 
 运行时与 service 签名：
@@ -248,7 +248,7 @@ call --> client : OK，或映射后的 status；取消答 Canceled，停机答 U
 
 - 访问日志：HTTP 写 access.log，gRPC 由 requestScope 写 grpc.log，字段对齐；gRPC 的 status 记状态码名，失败再加 error 字段。
 - 指标：HTTP 是 `gst_backend_*`，gRPC 保持库默认 `grpc_server_*`，方便现成看板。
-- 追踪：HTTP 的 tracing 中间件与 gRPC 的 otelgrpc 各起服务端 span，trace id 都盖进 ctx；没带 W3C 头时两边都认 X-Trace-ID，gRPC 还回写 `x-trace-id`。
+- 追踪：HTTP 的 tracing 中间件与 gRPC 的 otelgrpc 各起服务端 span，trace id 都盖进 ctx；没带 W3C 头时两边都认 X-Trace-ID，并都把 trace id 回写给客户端（HTTP 的 `X-Trace-ID` 头、gRPC 的 `x-trace-id` 元数据）。
 - panic：两边共用 logger.Recovery 写 recovery.log，并记在 span 上。
 - 测试：`testutil.Run` 同时起两个空闲端口的监听，`testutil.GRPCTarget()` 给 `grpc.NewClient`；测试二进制没注册任何 gRPC 服务（声明 TestMain 的文件没导入 `pb` 包）时 `GRPCTarget()` 直接 panic 点名要加的导入，`gg gen` 为带 gRPC 的项目写服务测试骨架时发现这种文件也会警告。
 
@@ -289,7 +289,7 @@ call --> client : OK，或映射后的 status；取消答 Canceled，停机答 U
 | 不生成枚举 | AIP-126 用 enum | 字符串枚举保持 string，取值列在字段注释里，HTTP 与数据库里都是字符串 |
 | 时间类型 | AIP-142 一天里的时刻用 `google.type.TimeOfDay`、日期用 `google.type.Date` | `datatypes.Time` 映射 `google.protobuf.Duration`（从零点起的时长），`datatypes.Date` 映射 `google.protobuf.Timestamp`，两线都按 UTC 日历日取日期（controller 绑定后统一归一），不引入 googleapis 的类型 |
 | Delete 的响应 | AIP-135 返回 `google.protobuf.Empty` | 每个 rpc 独享自己的空 `DeleteXxxResponse`，照 Buf 风格指南，日后加字段不换类型 |
-| 不写 HTTP 注解 | AIP 用 `google.api.http`、`google.api.field_behavior` 标路由与必填 | 没有 gateway，路由与 HTTP 方法由注册物描述（`grpc.Method`），必填由模型的 binding tag 决定，注释里写明 |
+| 不写 HTTP 注解 | AIP 用 `google.api.http`、`google.api.field_behavior` 标路由与必填 | 没有 gateway，路由与 HTTP 方法由注册物描述（`grpc.Method`），必填由模型的 binding tag 决定，.proto 不标注 |
 | proto3 表达不了的形态 | proto3 的标量没有「未设置」，repeated 与 map 的元素不能为 nil，`google.protobuf.Value` 的数字是 double | 这些照 protobuf 的本性走，写在这里不另加机制：切片、map 的 nil 与空过线后分不开（nil 的 JSONSlice 经 gRPC 写库是空数组还是 null 取决于对端怎么发）；`[]*T`、`map[K]*T` 里指向消息的 nil 元素过线变成空消息、解出来是零值（指向标量的指针元素 gg gen 直接拒绝，无从表达「未设置」）；any 与 JSON 对象字段里超过 2^53 的整数经 Value 丢精度，NaN 与无穷按 Value 的 JSON 映射变成字符串 "NaN"、"Infinity"；集合、map 值与可选字段里的零值时间编成 0001-01-01 再读回零值 |
 
 这页跟着代码走：拦截器链、映射表、产物名、差异清单以仓库为准，改了代码就改这页。两线对同一输入的答复由 internal/controller 的对照用例 TestTransportsAnswerTheContractAlike 逐场景比对（状态码按第 4 节的映射、msg 逐字、落库结果），有意的差异在它的表里是显式的差异行：改了一边它先红，新增一处差异要同时写进表和这页。

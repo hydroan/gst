@@ -107,9 +107,9 @@ func Init() error {
 
 	root.Use(middleware.Builtin()...)
 	// A request matching no route is answered in the envelope like every other
-	// refusal, instead of gin's plain-text default — which carries no code and
-	// no trace id, so a client parsing the documented shape cannot tell it from
-	// a malformed response.
+	// refusal, instead of gin's plain-text default — which carries no trace id
+	// and none of the envelope's fields, so a client parsing the documented
+	// shape cannot tell it from a malformed response.
 	root.NoRoute(func(c *gin.Context) {
 		response.Abort(c, http.StatusNotFound, "not found")
 	})

@@ -1,6 +1,7 @@
 // Package client is the official HTTP client for gst backends, designed as
-// the client-side pairing of the framework's DSL: every interface shape a
-// model's Design() can declare has a first-class counterpart here.
+// the client-side pairing of the framework's DSL: every HTTP interface shape
+// a model's Design() can declare has a first-class counterpart here; the
+// Stream action is served over gRPC alone and has none.
 //
 //	DSL declaration                       client entry
 //	-----------------------------------   ------------------------------------------
@@ -13,9 +14,9 @@
 //	Import()                              Upload
 //	SSE responses                         Stream
 //	model.Pagination / Query / Cursor     WithPage/WithSortBy/WithExpand/WithCursor
-//	envelope (code/msg/data/trace_id)     Envelope on success, *Error on rejection
+//	envelope (msg/data/trace_id)          Envelope on success, *Error on rejection
 //
-// Evolution rule: whenever the DSL grows a new action or protocol shape, this
+// Evolution rule: whenever the DSL grows a new HTTP action or protocol shape, this
 // package must grow the matching entry in the same change; a DSL capability
 // without a client counterpart is an incomplete feature.
 //

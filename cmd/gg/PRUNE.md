@@ -169,7 +169,7 @@ stop
 
 找到的目录列在 `Service Helper Directories Kept` 下面，每行标注 `(imported by live project code)`。
 
-项目代码里有读不了的目录或文件（比如权限不够），或者某个文件的 import 部分写错、解析不出来时，gg 没法确认那里的代码 import 了什么，所以不判定孤儿：打印警告 `failed to trace which service directories live code imports, so orphan service directories are not checked: ...`，这次不清孤儿目录和孤儿中间件文件，停用的 service 文件照常处理。`middleware/` 或 `interceptor/` 目录本身读不了时也一样，警告是 `failed to read the middleware or interceptor directory, so orphans are not checked: ...`。
+项目代码里有读不了的目录或文件（比如权限不够），或者某个文件的 import 部分写错、解析不出来时，gg 没法确认那里的代码 import 了什么，所以不判定孤儿：打印警告 `failed to trace which service directories live code imports, so orphan service directories are not checked: ...`，这次不清孤儿目录和孤儿中间件、拦截器文件，停用的 service 文件照常处理。`middleware/` 或 `interceptor/` 目录本身读不了时也一样，警告是 `failed to read the middleware or interceptor directory, so orphans are not checked: ...`。
 
 ### 1.3 找出孤儿目录
 
@@ -234,7 +234,7 @@ stop
 
 ## 第 2 步：列出并确认
 
-- **清单为空**（没有停用的 service 文件、孤儿目录和孤儿中间件、拦截器文件）：打印 `Nothing to prune`，删掉空目录（做法见第 3 步最后一项），不提问。之后照样列出 `Files Ignored By Config` 和 `Service Helper Directories Kept`，说明哪些东西因为什么留下。
+- **清单为空**（没有停用的 service 文件、孤儿目录、孤儿中间件与拦截器文件、过期的 protobuf 文件）：打印 `Nothing to prune`，删掉空目录（做法见第 3 步最后一项），不提问。之后照样列出 `Files Ignored By Config` 和 `Service Helper Directories Kept`，说明哪些东西因为什么留下。
 - **否则**先列出 `Files Ignored By Config`、`Service Helper Directories Kept`，再依次列出要删的：
   - `Disabled Service Files`：停用的 service 文件；
   - `Unmanaged Orphan Service Directories`：孤儿目录，每个标注 `(no current model maps to this directory)`，下面缩进列出要删的文件；

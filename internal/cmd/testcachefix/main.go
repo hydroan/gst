@@ -10,9 +10,8 @@
 // a test binary — a function no test of that package reaches — changes the
 // link action ID and not the binary, so the first lookup misses for good
 // while the second hits, and go writes a result back only after running a
-// test. Every later run links the binary again: in this repository about
-// 100 seconds of CPU across the 34 largest test binaries, 9 seconds of wall
-// clock on a run that runs no test. See runTestActor.Act, tryCacheWithID
+// test. Every later run links the binary again, which is most of the wall
+// clock of a run that runs no test. See runTestActor.Act, tryCacheWithID
 // and saveOutput in cmd/go/internal/test/test.go of Go 1.27.
 //
 // # How the write-back works

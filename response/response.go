@@ -17,8 +17,9 @@ import (
 )
 
 // Abort refuses the request with status and msg, written in the API envelope,
-// and stops the handler chain. It is the one way to refuse a request from
-// outside the controller path.
+// and stops the handler chain. Abort and AbortError are the ways to refuse a
+// request from outside the controller path: Abort states the status and msg,
+// AbortError answers an error value.
 func Abort(c *gin.Context, status int, msg string) {
 	response.Abort(c, status, msg)
 }

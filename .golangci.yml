@@ -260,16 +260,15 @@ linters:
 
     forbidigo:
       # Refusing a request outside the controller path goes through
-      # response.Abort, which is the single place the API envelope is written.
-      # gin's own aborts stay reachable on *gin.Context forever, so nothing but
-      # this rule stops the next middleware from writing a second envelope by
-      # hand — which is how the response code the body logger records came to be
-      # present on the framework path and missing from every other one.
+      # response.Abort or response.AbortError, the places the API envelope is
+      # written. gin's own aborts stay reachable on *gin.Context forever, so
+      # nothing but this rule stops the next middleware from writing a second
+      # envelope shape by hand.
       forbid:
         - pattern: '^.*\.AbortWithStatusJSON$'
           msg: "write the envelope through response.Abort instead of building it by hand"
         - pattern: '^.*\.AbortWithStatus$'
-          msg: "an empty body carries neither a code nor a trace id; refuse through response.Abort"
+          msg: "an empty body carries no envelope and no trace id; refuse through response.Abort"
 
     godoclint:
       # Default set of rules to enable.

@@ -79,9 +79,11 @@ func failDatabase(ctx context.Context, log types.Logger, err error) error {
 
 // databaseError maps a database error to the error the flow answers with: a
 // service-layer error keeps the status and message it was constructed with;
-// database.ErrRecordNotFound answers 404, database.ErrDuplicatedKey and
-// database.ErrStaleObject 409, and database.ErrVersionRequired and
-// database.ErrIDRequired, request defects both, 400, each with its fixed
+// database.ErrRecordNotFound answers 404; database.ErrDuplicatedKey,
+// database.ErrStaleObject and database.ErrForeignKeyViolated 409;
+// database.ErrVersionRequired, database.ErrIDRequired,
+// database.ErrCheckConstraintViolated, database.ErrValueTooLong and
+// database.ErrNotNullViolated, request defects all, 400, each with its fixed
 // client-safe message and err behind it as the cause; anything else is
 // answered as it is, the server's own failure. Handlers log the full error
 // themselves, so every branch deliberately keeps internal detail out of the

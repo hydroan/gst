@@ -83,10 +83,10 @@ const (
 //
 // Tracing Hierarchy:
 //
-//	HTTP → Controller → Service → Database → GORM
+//	HTTP or gRPC → Controller → Service → Database → GORM
 //
 // Note: Must be called after `defer db.reset()` to ensure proper cleanup order.
-// Jaeger tracing is automatically enabled when gstotel.IsEnabled() returns true.
+// Spans are recorded when gstotel.IsEnabled() returns true.
 func (db *database[M]) trace(phase consts.Phase, batch ...int) (func(error), trace.Span) {
 	return db.traceAs(reflect.TypeOf(*new(M)).Elem().Name(), phase, batch...)
 }

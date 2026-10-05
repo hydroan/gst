@@ -23,7 +23,7 @@ var pluralizeCli = pluralize.NewClient()
 // take the ServiceContext from, io for the Reader an Import method reads,
 // and the gst grpc package the stream of a Stream method comes from. The
 // gst model package a model.Empty request or result needs is imported
-// separately (see emptyReqImport).
+// separately (see emptyReqExpr).
 func serviceScaffoldImports(phase consts.Phase) []string {
 	importPaths := []string{ggconst.ImportPathService, ggconst.ImportPathGst}
 	switch phase {

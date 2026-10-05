@@ -211,7 +211,7 @@ func (e *CopyExecution) pruneStaleFiles() error {
 // project no longer serves gRPC, its last module interceptor is gone, and
 // the file registers nothing — so a project without gRPC holds no gRPC code
 // at all. A registration file with an import or a statement left, or any
-// other file beside it, is the project's and stays.
+// other Go file beside it, is the project's and stays.
 func (e *CopyExecution) removeEmptyRegistration(dir string, md managedDir) error {
 	files, err := goFilesInPackageDir(dir)
 	if err != nil || len(files) != 1 || filepath.Base(files[0]) != md.registrationFile {

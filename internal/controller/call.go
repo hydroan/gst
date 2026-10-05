@@ -353,15 +353,14 @@ func (c *call) failService(err error) error {
 }
 
 // ended returns the status of the call's context once the call ended, nil
-// while it goes on: Canceled once the client canceled the call, or went
-// away, DeadlineExceeded once the deadline it set passed. A call ending
-// this way is the client's doing, or the listener's stop, which answers a
-// stream it ended Unavailable in this status's place (see grpcserver), not
-// a failure of the flow or the service,
-// whatever they returned then — a database access cut short, a Send or Recv
-// of a stream the client stopped — so the failure is answered as the
-// context's status, which the access log records, and not logged as a
-// failure of the server's.
+// while it goes on: Canceled once the client canceled the call or went away,
+// DeadlineExceeded once the deadline it set passed. A call ending this way is
+// the client's doing, or the listener's stop, which answers a stream it ended
+// Unavailable in this status's place (see grpcserver); it is not a failure of
+// the flow or the service, whatever they returned then — a database access
+// cut short, a Send or Recv of a stream the client stopped — so the failure
+// is answered as the context's status, which the access log records, and not
+// logged as a failure of the server's.
 func (c *call) ended() error {
 	if err := c.ctx.Err(); err != nil {
 		return status.FromContextError(err).Err()
@@ -421,7 +420,8 @@ func answer[T any](c *call, result T) (T, error) {
 // validates a bound body — not for a List or Get, whose HTTP request binds
 // no body — runs the method in its service span on a service context
 // answering the parameters, the query and the caller, and answers with its
-// result, or with the status its error maps to (see statusOf). phase must be
+// result, or with the status its error maps to (see grpcserver.StatusError).
+// phase must be
 // one gRPC serves: the HTTP-only actions have no rpc, so their phase panics
 // here, as the route registers.
 func ServiceCall[M types.Model, REQ types.Request, RSP types.Response](phase consts.Phase, route string) func(ctx context.Context, params map[string]string, query Query, req REQ) (RSP, error) {

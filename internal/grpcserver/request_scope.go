@@ -69,9 +69,10 @@ const accessLogFieldCap = 11
 // registration described with no action, the health and reflection
 // services' among them, keeps the full method as its route and POST, the
 // method every gRPC call is on the wire, as its method. The forwarding
-// headers of a proxy in front are not read: the HTTP listener believes them
-// from the peers server.trusted_proxies names alone, a judgement gin makes
-// for it and this listener has no gin to make.
+// headers of a proxy in front are not read: the HTTP listener believes the
+// client address they carry from the peers server.trusted_proxies names
+// alone, a judgement gin makes for it and this listener has no gin to make,
+// and the protocol they carry from any peer.
 func requestScope(ctx context.Context, req any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (any, error) {
 	scope := enterCall(ctx, info.FullMethod)
 	rsp, err := handler(scope.ctx, req)

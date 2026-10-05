@@ -136,8 +136,7 @@ const (
 	// HTTPBodyLogModeAll writes the captured body for every request.
 	HTTPBodyLogModeAll HTTPBodyLogMode = "all"
 	// HTTPBodyLogModeError writes the captured body only for failed requests:
-	// HTTP status >= 400, or a non-zero envelope code recorded by the
-	// response helpers.
+	// HTTP status >= 400.
 	HTTPBodyLogModeError HTTPBodyLogMode = "error"
 	// HTTPBodyLogModeNone disables body logging for that side entirely.
 	HTTPBodyLogModeNone HTTPBodyLogMode = "none"

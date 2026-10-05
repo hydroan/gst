@@ -22,11 +22,12 @@ import (
 // and nil to nil, so a value comes back from a message as it went in. It
 // also holds what a generated FromProto reads a value through when the
 // message's type is wider than the model's, or than what the HTTP listener
-// lets through: Narrow and Number, Time, Document, Finite, Map and Any
-// refuse what the model's field cannot hold, the way encoding/json refuses
-// it over HTTP, so that a record a gRPC call wrote reads back over HTTP;
-// and what a generated ToProto writes a string through, UTF8, which
-// replaces what a message cannot carry the way the JSON encoder does.
+// lets through: Narrow and Number, Time, Document and Finite refuse what
+// the model's field cannot hold, the way encoding/json refuses it over HTTP,
+// so that a record a gRPC call wrote reads back over HTTP, while Map and
+// Value carry a dynamic value either way; and what a generated ToProto
+// writes a string through, UTF8, which replaces what a message cannot carry
+// the way the JSON encoder does.
 
 // Narrow returns v as the narrower integer type T a model field holds, int8
 // for the int32 its message carries, and refuses a value T cannot hold, 300
@@ -160,7 +161,7 @@ func invalidValue(field, description string) error {
 // Value returns the Value holding v, the JSON value encoding/json encodes v
 // to, and nil for nil: a Go value travels in a Value as it travels in a JSON
 // body. It panics on a value encoding/json cannot encode, a channel or a
-// function, the way the JSON renderer panics on one over HTTP; the recovery
+// function, which the HTTP envelope answers 500 instead; the recovery
 // interceptor answers Internal and logs it.
 func Value(v any) *structpb.Value {
 	if v == nil {

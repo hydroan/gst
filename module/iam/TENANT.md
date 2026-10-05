@@ -59,7 +59,7 @@
 
 ## tenant 来源
 
-请求 tenant 只有一个来源：请求上下文中的 `CTX_TENANT_ID`。`IAMSession` 会把 `Session.TenantID` 写入它，`Authz` 中间件按现值读取，为空时回退到默认 tenant（`tenant.Default`）。
+请求 tenant 只有一个来源：请求上下文中的 `CTX_TENANT_ID`。`IAMSession` 会把 `Session.TenantID` 写入它，`Authz` 中间件按现值读取，为空时回退到默认 tenant（`tenant.Default`）。gRPC 上同理：`interceptor.IAMSession()` 把会话的 tenant 写进调用者信息（`grpc.Caller` 的 `TenantID`），`interceptor.Authz()` 从那里读。
 
 无论通过 `gg module add` 使用内置模块，还是通过 `gg module copy` 复制到业务项目（此时注册的是项目自己的零参 `Authz()`），只要项目使用 IAM session tenant，在登录时传入 `tenant_id` 即可，不需要任何额外配置。
 

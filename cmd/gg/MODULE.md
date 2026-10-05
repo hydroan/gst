@@ -258,7 +258,7 @@ copy 让复制来的目录和模块源码保持一致：copy 写过、这一次�
 
 - **`model/<name>/`、`service/<name>/`**：这两个目录镜像模块源码，这次规划不写的 Go 文件都算过期。例外：测试文件、以 `.` 开头的文件、`vendor/` 和 `testdata/` 目录下的文件，以及生成文件，永远不算过期。项目自己的代码应放在这两个目录以外。
 - **`middleware/`**：这个目录是共用的，只有带着本模块所有权标记、而 `module.json` 已经不再声明的文件才算过期；`middleware/middleware.go` 永远不算。
-- **`interceptor/`**：判断同 `middleware/`；此外项目不再有声明了 `GRPC()` 的 model 时，本模块标记的拦截器文件全部算过期；`interceptor/interceptor.go` 永远不算。
+- **`interceptor/`**：判断同 `middleware/`；此外项目不再有声明了 `GRPC()` 的 model 时，本模块标记的拦截器文件全部算过期；`interceptor/interceptor.go` 只在项目不再有 `GRPC()` 模型、它又什么都不再注册时随目录一起删，否则不算。
 
 ```plantuml
 @startuml

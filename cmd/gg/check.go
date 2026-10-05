@@ -51,8 +51,8 @@ var projectChecks = []ggcheck.Check{
 }
 
 // generationChecks are the project checks gg gen runs before generating:
-// every one but Protobuf definitions, whose work gg gen does itself right
-// after, deriving the definitions once instead of twice.
+// every one but Protobuf definitions, whose work gg gen did itself right
+// before (see fillPBTags), deriving the definitions once instead of twice.
 func generationChecks() []ggcheck.Check {
 	checks := make([]ggcheck.Check, 0, len(projectChecks))
 	for _, check := range projectChecks {

@@ -17,8 +17,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestJSONEncodesWithStandardLibrary pins the success envelope — its three
-// fields, no code among them — and its encoding through encoding/json
+// TestJSONEncodesWithStandardLibrary pins the success envelope — msg, data
+// and trace_id, its three fields — and its encoding through encoding/json
 // whatever JSON codec gin was built with. The codecs the jsoniter and go_json
 // build tags select ignore omitzero, so an envelope encoded through gin's
 // codec grows keys, such as a zero created_at, that the framework's models

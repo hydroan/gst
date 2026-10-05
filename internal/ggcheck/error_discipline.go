@@ -53,7 +53,8 @@ var hookMethods = func() map[string]bool {
 // A model hook may return the error of a framework database call or
 // sentinel as it is: the framework answers it by its own mapping, 404 for a
 // record that does not exist, 409 for a duplicate, a stale version or a
-// foreign key and 500 for the rest, so a hook that reads or writes records
+// foreign key, 400 for a value the table refuses or a missing version or
+// id, and 500 for the rest, so a hook that reads or writes records
 // before admitting a write is compliant without wrapping; on a service exit
 // the same error is raw, since a service answers whatever it returns.
 // database.Transaction calls are transparent: their closure exits are

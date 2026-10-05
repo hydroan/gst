@@ -114,7 +114,7 @@ L -> O : NotifyLogin succeeded
 ```plantuml
 @startuml
 start
-if (Cookie session_id?) then (缺失)
+if (Cookie session_id 或 metadata authorization: Bearer?) then (缺失)
   :401 no session;
   end
 else (存在)
@@ -318,17 +318,17 @@ T6 --> P4
 | 触发 | 入口 | data 键 | index:user | index:all + seen | user:state | Cookie |
 | --- | --- | --- | --- | --- | --- | --- |
 | 登出 | `POST /api/logout` | DEL 当前 | ZREM | ZREM | — | 清 |
-| 删当前会话 | `DELETE /iam/session/current` | DEL 当前 | ZREM | ZREM | — | 清 |
-| 删指定会话 | `DELETE /iam/sessions/:id` | DEL 目标 | ZREM | ZREM | — | 仅当目标是自己 |
-| 踢掉其他设备 | `DELETE /iam/sessions/others` | 逐个 DEL | 剪枝 + 逐个 ZREM | ZREM | — | 保留 |
-| 删我的全部会话 | `DELETE /iam/sessions` | 逐个 DEL | 逐个 ZREM + DEL 整键 | ZREM | DEL | 清 |
-| 管理员删单个会话 | `DELETE /iam/admin/sessions/:id` | DEL 目标 | ZREM | ZREM | — | 仅当目标是自己 |
-| 管理员删某用户会话 | `DELETE /iam/admin/users/:id/sessions` | 逐个 DEL | 逐个 ZREM + DEL 整键 | ZREM | DEL | 仅当目标是自己 |
-| 禁用 / 锁定用户 | `PATCH /iam/admin/users/:id` | 逐个 DEL | 逐个 ZREM + DEL 整键 | ZREM | DEL | — |
-| 恢复用户为 active | `PATCH /iam/admin/users/:id` | — | — | — | DEL | — |
-| 管理员重置密码 | `POST /iam/reset-password` | 逐个 DEL | 逐个 ZREM + DEL 整键 | ZREM | DEL | — |
-| 自助修改密码 | `POST /iam/change-password` | 除当前外逐个 DEL | 剪枝 + 逐个 ZREM | ZREM | DEL | 保留 |
-| 邮件找回密码确认 | `POST /iam/email/password-reset-confirm` | 逐个 DEL | 逐个 ZREM + DEL 整键 | ZREM | DEL | — |
+| 删当前会话 | `DELETE /api/iam/session/current` | DEL 当前 | ZREM | ZREM | — | 清 |
+| 删指定会话 | `DELETE /api/iam/sessions/:id` | DEL 目标 | ZREM | ZREM | — | 仅当目标是自己 |
+| 踢掉其他设备 | `DELETE /api/iam/sessions/others` | 逐个 DEL | 剪枝 + 逐个 ZREM | ZREM | — | 保留 |
+| 删我的全部会话 | `DELETE /api/iam/sessions` | 逐个 DEL | 逐个 ZREM + DEL 整键 | ZREM | DEL | 清 |
+| 管理员删单个会话 | `DELETE /api/iam/admin/sessions/:id` | DEL 目标 | ZREM | ZREM | — | 仅当目标是自己 |
+| 管理员删某用户会话 | `DELETE /api/iam/admin/users/:id/sessions` | 逐个 DEL | 逐个 ZREM + DEL 整键 | ZREM | DEL | 仅当目标是自己 |
+| 禁用 / 锁定用户 | `PATCH /api/iam/admin/users/:id` | 逐个 DEL | 逐个 ZREM + DEL 整键 | ZREM | DEL | — |
+| 恢复用户为 active | `PATCH /api/iam/admin/users/:id` | — | — | — | DEL | — |
+| 管理员重置密码 | `POST /api/iam/reset-password` | 逐个 DEL | 逐个 ZREM + DEL 整键 | ZREM | DEL | — |
+| 自助修改密码 | `POST /api/iam/change-password` | 除当前外逐个 DEL | 剪枝 + 逐个 ZREM | ZREM | DEL | 保留 |
+| 邮件找回密码确认 | `POST /api/iam/email/password-reset-confirm` | 逐个 DEL | 逐个 ZREM + DEL 整键 | ZREM | DEL | — |
 
 索引指名而 Redis 已经没有的快照是陈旧成员，不是失败：它被剪掉，其余会话照常删除，
 这让每一种批量吊销都保持幂等。
@@ -346,9 +346,9 @@ T6 --> P4
 **Redis 不可用时 IAM 谁也认证不了。** 会话不落库，所以没有降级路径；存储没应答时答 500 而不是 401——这是服务端的故障，
 客户端不该因此清掉 cookie，存储恢复后会话照常可用，回查用户状态失败同样答 500 且不删快照。存储应答了、但存的值解不成快照
 （比如发版改了快照字段的类型）就删掉它答 401，让用户重新登录，而不是答 500 直到键过期。`iam.Register()` 因此在启动期检查
-`Redis.Enabled`，没开就拒绝启动。需要注意框架层的行为并不整齐：typed `redis.Cache` 在禁用时返回
-`ErrRedisIsDisabled`，而 `ZAdd` / `ZRem` / `SetNX` / `Expire` / `Del` 是静默 no-op，`SetNX` 甚至返回
-`true`。启动期那道检查就是为了让这种不对称永远没机会发生。
+`Redis.Enabled`，没开就拒绝启动。框架层在 Redis 禁用时的行为是整齐的：typed `redis.Cache` 与
+`ZAdd` / `ZRem` / `SetNX` / `Expire` / `Del` 都经 `redis.Client()` 返回 `ErrRedisIsDisabled`；启动期那道检查让
+它们永远没机会被调到。
 
 **会话不会因活跃而续期。** 见上面的 TTL 节奏。
 

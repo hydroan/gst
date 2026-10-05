@@ -44,7 +44,7 @@ import (
 // decoded into and the function sending one response, it runs the service's
 // Stream method with a ServerStream sending through the function, and
 // answers with nil once the stream is over, or with the status a failure
-// maps to (see statusOf).
+// maps to (see grpcserver.StatusError).
 func ServerStreamCall[M types.Model, REQ types.Request, RSP types.Response](route string) func(ctx context.Context, params map[string]string, req REQ, send func(RSP) error) error {
 	a := newAction[M, REQ, RSP](route, consts.Stream)
 	return func(ctx context.Context, params map[string]string, req REQ, send func(RSP) error) error {

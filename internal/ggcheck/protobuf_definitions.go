@@ -20,11 +20,12 @@ var ProtobufDefinitions = Check{
 
 // checkProtobufDefinitions derives the protobuf definitions the way gg gen
 // does (see pb.Generate), writing nothing, and reports each diagnostic it
-// raises, so the project learns at check time what would stop its
-// generation: a type protobuf cannot describe, a field without a pb tag or
-// with a number another field holds, a name clashing with a generated
-// message, a model left with nothing to serve, a definition breaking the
-// contract committed under pb/. The models are read the way gg gen reads
+// raises, so the project learns at check time what its generation would
+// refuse — a type protobuf cannot describe, a field with a number another
+// field holds, a name clashing with a generated message, a model left with
+// nothing to serve, a definition breaking the contract committed under pb/ —
+// and the fields without a pb tag gg gen would number and write back
+// instead. The models are read the way gg gen reads
 // them, the gst.yaml route and model ignores applied, since the definitions
 // reflect them. A project without a model declaring GRPC() has nothing to
 // derive and costs nothing here.

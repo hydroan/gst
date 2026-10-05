@@ -167,9 +167,9 @@ func findModelsInFile(module string, modelDir string, filename string) ([]*Model
 	}
 
 	designs := dsl.Parse(node)
-	// Note: route assembly (prefixing the model file dir onto Design.Endpoint)
-	// lives in cmd/gg/gen.go so custom routes declared in the DSL are handled
-	// in one place.
+	// Route assembly (prefixing the model file dir onto Design.Endpoint) lives
+	// in ResolveRoutes, so custom routes declared in the DSL are handled in one
+	// place.
 
 	var models []*Model
 	for _, decl := range node.Decls {

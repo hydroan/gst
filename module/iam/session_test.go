@@ -447,7 +447,7 @@ func TestInvalidateUserSessions(t *testing.T) {
 // the session middleware, which every request in a deployment can receive.
 //
 // Two properties are asserted. A refusal answers in the documented envelope: a
-// bare {"error": ...} would carry no code and no trace id, so a rejection could
+// bare {"error": ...} would carry no trace id, so a rejection could
 // not be told apart from a malformed response, and the one identifier tying it
 // to the server's logs would be absent. And the message does not come from
 // whatever layer failed: answering a cookie naming a session the cache no

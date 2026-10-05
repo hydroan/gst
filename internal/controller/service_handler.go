@@ -85,8 +85,10 @@ func (a *action[M, REQ, RSP]) serviceHandler() gin.HandlerFunc {
 
 // serviceMethod returns the method of a service serving phase, the one the
 // handler and the call of an action with a payload or result of its own
-// dispatch to. A phase gRPC does not serve — the HTTP-only actions Import,
-// Export and SSE, and the hook phases — has neither, so it panics.
+// dispatch to. The HTTP-only actions Import, Export and SSE, served by
+// handlers of their own, and the hook phases have no such method, so it
+// panics; only a gRPC ServiceCall can name one of them here, the HTTP
+// handler being built for actions with a payload or result alone.
 func serviceMethod[M types.Model, REQ types.Request, RSP types.Response](phase consts.Phase) func(svc types.Service[M, REQ, RSP], sc *types.ServiceContext, req REQ) (RSP, error) {
 	switch phase {
 	case consts.Create:

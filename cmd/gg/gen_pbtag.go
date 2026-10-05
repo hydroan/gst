@@ -28,9 +28,11 @@ import (
 // gg gen sees it and keeps them from then on, and the definitions check
 // passes the very command that fixes them. The generator picks the numbers
 // because it alone knows what the committed definitions reserve. Any other
-// diagnostic stops the run here, before a file is written, so that a model
-// the generator refuses leaves the project as it was; a project whose
-// packages cannot be loaded is left to the checks to report.
+// diagnostic stops the run here: alone, before a file is written, so that a
+// model the generator refuses leaves the project as it was; beside missing
+// tags, after those are written, the second derivation reporting it, so the
+// numbers a model was given stay with it. A project whose packages cannot
+// be loaded is left to the checks to report.
 //
 // It returns the files the derivation produced: the generation below
 // reuses them instead of loading and type checking the model packages a

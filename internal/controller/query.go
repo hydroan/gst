@@ -96,7 +96,8 @@ func checkCursorOrderConflict(cursor types.Cursor, orders []types.Order) error {
 	return nil
 }
 
-// maxExpandDepth caps the _depth parameter. Every depth level becomes one
+// maxExpandDepth is the largest _depth a request may ask for; a value
+// outside 1 to maxExpandDepth falls back to 1 (see parseExpandQuery). Every depth level becomes one
 // more recursive preload query, so the cap keeps a single request from
 // fanning out unbounded database work.
 const maxExpandDepth = 10
@@ -125,10 +126,10 @@ func cachedModelFieldKinds(typ reflect.Type) map[string]reflect.Kind {
 // query against the model's expandable association paths. Expand names are
 // matched against m.Expands() ignoring case and snake case punctuation, so
 // "childItems" and "child_items" both select "ChildItems"; "_expand=all"
-// selects every expandable path. _depth (clamped to [1,10], default 1)
-// repeats slice associations for recursive preloading, e.g. expand "Children"
-// with depth 3 becomes "Children.Children.Children"; non-slice associations
-// ignore depth.
+// selects every expandable path. _depth (default 1; a value outside 1 to
+// maxExpandDepth falls back to 1) repeats slice associations for recursive
+// preloading, e.g. expand "Children" with depth 3 becomes
+// "Children.Children.Children"; non-slice associations ignore depth.
 func parseExpandQuery(query url.Values, m types.Model) []string {
 	expandStr, ok := queryValue(query, consts.QUERY_EXPAND)
 	if !ok {

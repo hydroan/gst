@@ -12,8 +12,8 @@ import (
 
 // ScanPBFiles lists the files gg gen writes under pbDir, the directory the
 // protobuf definitions, the Go files serving them and the Go files compiled
-// from them go to, in walk order: pb/pb.gen.go, pb/record.gen.go,
-// pb/record.pb.go, pb/record.proto, pb/record/item.proto and
+// from them go to, in walk order: pb/pb.gen.go, pb/record/item.proto,
+// pb/record.gen.go, pb/record.pb.go, pb/record.proto and
 // pb/record_grpc.pb.go for a project serving Record and Item over gRPC. Only
 // the .proto, .gen.go and .pb.go files are listed, the kinds gg gen writes.
 // Like ScanServiceFiles it reads the directory whole, the directory being

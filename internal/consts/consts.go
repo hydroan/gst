@@ -181,7 +181,8 @@ func (p Phase) Name() string {
 	return strcase.UpperCamelCase(string(p))
 }
 
-// Filename returns the Phase generated filename converted to lower case format.
+// Filename returns the name of the service file of the phase's action, the
+// action's name with the .go suffix.
 // Example:
 //
 //	Create       -> "create.go"

@@ -39,9 +39,9 @@ func ValidateSession(sessionID string, sessionData modeliamsession.Session) erro
 // MustChangePasswordExempt reports whether the action at the HTTP method and
 // path may proceed while the session's MustChangePassword flag is set: the
 // ones a user needs to get out of that state, changing the password, logging
-// out and reading or ending the current session. Both the HTTP middleware
-// and the gRPC interceptor of the module ask it, the gRPC one with the HTTP
-// method and route its call's action is served at.
+// out and reading or ending the current session. Authenticate asks it for
+// both the HTTP middleware and the gRPC interceptor of the module, the gRPC
+// one with the HTTP method and route its call's action is served at.
 func MustChangePasswordExempt(method, path string) bool {
 	switch {
 	case method == http.MethodPost && path == "/api/iam/change-password":

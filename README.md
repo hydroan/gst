@@ -208,7 +208,7 @@ func (Entry) Design() {
 
 这个接口会生成 `POST /api/entries/merge`，并生成
 `service/tool/entry/merge.go`。`Service("merge")` 给动作起名：service 文件叫
-`merge.go`、service 类型叫 `Merge`，模型声明了 `GRPC()` 时 rpc 也叫这个名，
+`merge.go`、service 类型叫 `Merge`，模型声明了 `GRPC()` 时 rpc 名是它加模型名（`MergeEntry`），
 避免同一个 model 内多个 `Create` action 都生成 `create.go`。
 
 ### 路由和可见性
@@ -225,7 +225,7 @@ func (Entry) Design() {
   `Export(ctx, ...M)` 返回附件字节），禁止声明 `Payload[T]()` 和 `Result[T]()`。
 - `Service()` 表示当前 action 需要生成并注册业务 service，默认按动作命名
   （`Create` 生成 `create.go`、类型 `Creator`）；`Service("merge")` 同时给它起名，
-  service 文件、service 类型和 rpc 都用这个名。
+  service 文件和 service 类型用这个名，rpc 名是它加模型名。
 - 只声明 `Create(func(){})`、`List(func(){})` 等 action 就会启用对应接口；
   不需要的接口不声明即可。
 
@@ -254,8 +254,8 @@ ping 得更勤的客户端会被 `too_many_pings` 断开，客户端的 keepaliv
 停机延迟过后两个监听一起关闭，在途的流在那一刻以 Unavailable 结束、客户端据此换副本重连，一元调用照常排空；以及反射服务。认证在 `interceptor/` 里挂，和 `middleware/` 一一对应：
 `interceptor.RegisterAuth(interceptor.IAMSession())` 之后，每个没声明 `Public()` 的 rpc 都要在
 `authorization` 元数据里带 `Bearer <会话 id>`；会话绑定登录时的 User-Agent，程序要拿会话调 gRPC，登录时得带和 gRPC 客户端
-一样的 User-Agent（grpc-go 默认是 `grpc-go/<版本>`），浏览器登录的会话在 gRPC 上会被拒；健康与反射服务不经过项目的认证拦截器（`RegisterAuth` 挂的那些），
-`Register` 挂的通用拦截器对它们照样生效。多副本下的用法和核对步骤见 [examples/cluster](./examples/cluster/README.md) 的「gRPC 与认证」一章；
+一样的 User-Agent（grpc-go 默认是 `grpc-go/<版本>`），浏览器登录的会话在 gRPC 上会被拒；健康与反射服务不经过项目挂的任何拦截器，
+`Register` 的通用拦截器和 `RegisterAuth` 的认证拦截器都不经过。多副本下的用法和核对步骤见 [examples/cluster](./examples/cluster/README.md) 的「gRPC 与认证」一章；
 两条传输线怎么从声明、生成、注册、链路一路接到同一份 service 代码，见 [TRANSPORTS.md](TRANSPORTS.md)：它只画架构全景，
 不展开细节，细节以本文各节和代码为准。
 
@@ -747,7 +747,7 @@ err := database.Select[*appmodel.Record, recordWithTags](ctx, RecordCols.ID, tag
 ## 调用其他 gst 服务
 
 `client` 包是调用另一个 gst 服务的官方入口，也是接口测试发请求的入口。它按 DSL 的形态设计：
-`Design()` 能声明的每种接口在这里都有对应的调用方式，响应按统一信封解析。
+`Design()` 能声明的每种 HTTP 接口在这里都有对应的调用方式，响应按统一信封解析；只走 gRPC 的 Stream 用生成的 gRPC 客户端调。
 
 | DSL 声明 | client 入口 |
 | --- | --- |
@@ -1056,7 +1056,7 @@ gen:
 **`gg prune`（以及 `gg gen --prune`）只动 `service/`、`middleware/`、`interceptor/` 和 `pb/` 四个目录**，
 项目其他地方一个文件都不删、不改。它清理停用 action 的 service 文件连同配对的测试
 文件、孤儿 service 目录、被删掉的复制模块留下的中间件和 gRPC 拦截器文件，以及 `pb/` 下这次
-`gg gen` 不会再写出的 `.proto` 文件和由它们编出来的 `.pb.go`、`_grpc.pb.go` 文件
+`gg gen` 不会再写出的 `.proto` 文件、由它们编出来的 `.pb.go`、`_grpc.pb.go` 文件和对应的 `.gen.go` 适配文件
 （model 去掉 `GRPC()`、model 被删或改了路径之后留下的），要删的先一次列出、问一次再删；
 `prune.ignore` 列出的路径一律跳过：
 
@@ -1205,7 +1205,7 @@ Pod 端口，Ingress 只转发写进规则的路径——**只转发 `/api` 前�
 | 端点 | 暴露什么 |
 | --- | --- |
 | `/-/healthz`、`/-/readyz` | 进程是否存活、是否正在停机，此外没有别的 |
-| `/metrics` | 已被访问过的路由（gin 路由模式）及其请求数与延迟分布、缓存计数器上的数据库表名、进程内存与 CPU、构建信息；框架自己的指标名以 `gst_backend_` 开头，gRPC 的是 grpc-go 生态默认的 `grpc_server_` |
+| `/metrics` | 已被访问过的路由（gin 路由模式）及其请求数与延迟分布、缓存计数器上的数据库表名、进程内存与 CPU、构建信息；框架自己的指标名以 `gst_backend_` 开头、进程指标以 `gst_process_` 开头，gRPC 的是 grpc-go 生态默认的 `grpc_server_` |
 | `/openapi.json` | 本服务注册的全部路由，以及每个路由的请求模型、成功响应与会答的失败状态 |
 | `/docs` | 同一份文档的 Swagger UI 渲染；页面资源编译进二进制，不从任何 CDN 加载脚本，离线可用 |
 | gRPC 的 `grpc.health.v1.Health` 与反射服务 | 进程和每个服务是否在服务，以及注册了哪些服务和消息；不经过项目的认证拦截器，`Register` 挂的通用拦截器照样经过 |

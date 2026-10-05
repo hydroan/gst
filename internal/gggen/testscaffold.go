@@ -71,9 +71,9 @@ var serviceStreamTestDoc = []string{
 // package holding one test named after the action, which fails until the
 // project deletes its first line, and then is the example request of the
 // action, typed by the action's request and response types. route is the
-// route the router registers the action under, without the API prefix (see
+// path the router registers the action at, API prefix included (see
 // modelinfo.RouterTargetForAction). For the Create action of the model Record
-// of the root model package of helloworld, registered under records, it
+// of the root model package of helloworld, registered at /api/records, it
 // generates
 //
 //	package record_test

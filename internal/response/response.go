@@ -60,10 +60,10 @@ func AbortError(c *gin.Context, err error) {
 // envelope, and stops the handler chain.
 //
 // It exists so that code outside the controller path — middleware, and the
-// middleware a module ships to the projects that copy it — has one way to
-// refuse: what the envelope looks like on the wire is the framework's to
-// decide and to change, and a caller here states only the refusal it is
-// making.
+// middleware a module ships to the projects that copy it — refuses through
+// it, or through AbortError with an error value, and nowhere else: what the
+// envelope looks like on the wire is the framework's to decide and to change,
+// and a caller here states only the refusal it is making.
 func Abort(c *gin.Context, status int, msg string) {
 	c.Abort()
 	envelope(c, status, msg, nil)

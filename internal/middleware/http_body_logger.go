@@ -50,8 +50,7 @@ const (
 //
 // Capturing happens up front, but whether the captured bodies are written is
 // decided after the handler chain finished, so the all|error|none modes can
-// use the final response status and the envelope code recorded by the
-// response helpers.
+// use the final response status.
 func bodyLogger() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		cfg := config.App.Logger.HTTPBody

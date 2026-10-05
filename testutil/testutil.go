@@ -58,8 +58,8 @@ type Server = testutil.Server
 // The log files of the run live in a temporary directory that is removed at
 // release, and their sinks are buffered, so they are not something a test can
 // read back. A test that asserts on logging swaps in a scratch logger of its
-// own; the note at the log directory setup in the internal harness's
-// Server.prepare shows the pattern.
+// own and flushes it before reading; the cronjob package's tests show the
+// pattern.
 func Run(m *testing.M, s Server) {
 	testutil.Run(m, s)
 }
@@ -95,9 +95,9 @@ func DecodeResp[RSP any](t *testing.T, resp *client.Envelope) RSP {
 }
 
 // RequireError asserts that err is a server-side rejection with the given
-// HTTP status code and that the business message contains every msgContains
-// entry. The rejection is returned by value for follow-up asserts, such as
-// the business code.
+// HTTP status code and that the message contains every msgContains entry.
+// The rejection is returned by value for follow-up asserts, such as the raw
+// body.
 func RequireError(t *testing.T, err error, statusCode int, msgContains ...string) client.Error {
 	t.Helper()
 

@@ -123,9 +123,9 @@ var grpcOnlyActionMethodNames = map[string]bool{
 
 // GRPCOnlyAction reports whether the action named name is one HTTP cannot
 // serve (see grpcOnlyActionMethodNames): true for Stream, false for Create
-// or SSE. The generator registers no route, generates no service and
-// declares no TypeScript type for these actions, and the route ignore rules
-// of gst.yaml, written as HTTP methods and paths, never match them.
+// or SSE. The generator registers no HTTP route and declares no TypeScript
+// type for these actions, and the route ignore rules of gst.yaml, written as
+// HTTP methods and paths, never match them.
 func GRPCOnlyAction(name string) bool {
 	return grpcOnlyActionMethodNames[name]
 }

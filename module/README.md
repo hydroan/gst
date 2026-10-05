@@ -29,7 +29,7 @@
 - exact 路由语义必须一致。内置 module 使用 `module.Exact(...)` 原样注册路径时，`Design()` 对应 action 必须写 `Exact()`，避免 `gg gen` 追加默认 CRUD 后缀。
 - public/auth 语义必须一致。内置 module 的 `Pub()` 或 `module.NewWrapper(..., pub, ...)` 是 public 时，`Design()` 对应 action 必须写 `Public()`；需要登录的 action 不写 `Public()`。
 - request/response 契约必须一致。自定义请求、响应类型要通过 `Payload[T]()`、`Result[T]()` 写进 `Design()`，避免 copy 后生成默认模型签名。List、Get 是 HTTP GET 接口，禁止声明 `Payload[T]()`，只声明 `Result[T]()`，service 请求类型统一使用 `*model.Empty`。Import、Export 委托固定签名的 service 方法，禁止声明 `Payload[T]()` 和 `Result[T]()`。
-- service 文件目标必须一致。存在自定义 service 代码的 action 必须写 `Service()`；如果多个 action 共用一个 service 文件，所有相关 action 都要写相同的 `Service("name")`。
+- service 文件目标必须一致。存在自定义 service 代码的 action 必须写 `Service()`，每个 action 一个 service 文件；`Service("name")` 给文件起名，两个 action 写同一个名会被 gg gen 当撞车拒绝。
 
 
 
