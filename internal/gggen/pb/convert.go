@@ -367,8 +367,8 @@ func typeKey(t types.Type) string {
 //	p.Due = grpc.Timestamp(m.Due)
 //	p.Meta = RecordMetaToProto(&m.Meta)
 //	p.Window = new(RecordWindow)
-//	p.Window.From = m.Window.From
-//	p.Window.To = m.Window.To
+//	p.Window.From = grpc.UTF8(m.Window.From)
+//	p.Window.To = grpc.UTF8(m.Window.To)
 //
 // a slice of the Link struct, the links field of Item, as
 //
@@ -403,7 +403,7 @@ func typeKey(t types.Type) string {
 //	if m.Scores != nil {
 //		p.Scores = make(map[string]int64, len(m.Scores))
 //		for k, v := range m.Scores {
-//			p.Scores[k] = int64(v)
+//			p.Scores[grpc.UTF8(k)] = int64(v)
 //		}
 //	}
 //	if m.ByCode != nil {
@@ -413,9 +413,9 @@ func typeKey(t types.Type) string {
 //		}
 //	}
 //	if m.Spans != nil {
-//		p.Spans = make([]*Shape_Spans, len(m.Spans))
+//		p.Spans = make([]*ShapeSpans, len(m.Spans))
 //		for i, v := range m.Spans {
-//			p.Spans[i] = new(Shape_Spans)
+//			p.Spans[i] = new(ShapeSpans)
 //			p.Spans[i].From = int64(v.From)
 //			p.Spans[i].To = int64(v.To)
 //		}
@@ -655,12 +655,20 @@ func selPath(x ast.Expr, path []string) ast.Expr {
 //	}
 //
 // and, of the Shape model, the date, time of day, JSON document, JSON
-// object, JSON wrapper, struct held by value, JSON number, integer enum,
-// optional integer and narrow integer as
+// object, JSON wrapper, struct held by value, JSON number, integer enum
+// and optional integer as
 //
-//	m.Date = datatypes.Date(grpc.Time(p.GetDate()))
+//	var day time.Time
+//	day, err = grpc.Time("date", p.GetDate())
+//	if err != nil {
+//		return nil, err
+//	}
+//	m.Date = datatypes.Date(day)
 //	m.Clock = datatypes.Time(p.GetClock().AsDuration())
-//	m.Doc = p.GetDoc()
+//	m.Doc, err = grpc.Document("doc", p.GetDoc())
+//	if err != nil {
+//		return nil, err
+//	}
 //	m.Attrs = grpc.Map(p.GetAttrs())
 //	var data model.ShapeOptions
 //	if v := p.GetOptions(); v != nil {
@@ -680,15 +688,20 @@ func selPath(x ast.Expr, path []string) ast.Expr {
 //		}
 //		m.Audit = *x
 //	}
-//	m.Amount, err = grpc.Number("amount", p.GetAmount())
-//	if err != nil {
-//		return nil, err
+//	if s := p.GetAmount(); s != "" {
+//		m.Amount, err = grpc.Number("amount", s)
+//		if err != nil {
+//			return nil, err
+//		}
 //	}
 //	m.Level = model.ShapeLevel(p.GetLevel())
 //	if p.Score != nil {
 //		x := int(*p.Score)
 //		m.Score = &x
 //	}
+//
+// the narrow integer as
+//
 //	m.Rank, err = grpc.Narrow[int8]("rank", p.GetRank())
 //	if err != nil {
 //		return nil, err
@@ -702,10 +715,14 @@ func selPath(x ast.Expr, path []string) ast.Expr {
 //		})
 //		m.Note.Text = v.GetText()
 //	}
-//	if p.GetWhen() != nil {
-//		x := grpc.Time(p.GetWhen())
-//		m.When = &x
-//	}
+//		if p.GetWhen() != nil {
+//			var x time.Time
+//			x, err = grpc.Time("when", p.GetWhen())
+//			if err != nil {
+//				return nil, err
+//			}
+//			m.When = &x
+//		}
 func (w *fileWriter) fromProto(dst, src ast.Expr, t types.Type, ft fieldType, name string) []ast.Stmt {
 	// declared is t as the model spells it, an alias kept, which is how the
 	// file spells it too; t itself decides the conversion.

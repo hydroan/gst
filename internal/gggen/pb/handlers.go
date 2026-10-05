@@ -156,18 +156,19 @@ func (w *fileWriter) serviceType(service string, model *modelinfo.Model) {
 // router registers the action under, or ServiceCall for an action with a
 // payload or result of its own, on its phase and route.
 //
-// The Item model of the golden fixture, with its two standard actions on
-// records/:record/items, a Service("seal") Create on items/:id/seal and a
-// Service("merge") Create on items/merge taking a MergeReq and answering a
-// MergedItemRsp, gets
+// The Item model of the golden fixture, with its Create, Get and PatchMany
+// on records/:record/items, a Service("seal") Create on items/:id/seal and
+// a Service("merge") Create on items/merge taking a MergeReq and answering
+// a MergedItemRsp, gets
 //
 //	// The calls of the actions of Item, one per rpc of ItemService, built once
 //	// at package initialization.
 //	var (
-//		createItem = grpc.CreateCall[*record.Item]("/api/records/:record/items")
-//		getItem    = grpc.GetCall[*record.Item]("/api/records/:record/items/:id")
-//		sealItem   = grpc.CreateCall[*record.Item]("/api/items/:id/seal")
-//		mergeItem  = grpc.ServiceCall[*record.Item, *record.MergeReq, *record.MergedItemRsp](consts.Create, "/api/items/merge")
+//		createItem    = grpc.CreateCall[*record.Item]("/api/records/:record/items")
+//		getItem       = grpc.GetCall[*record.Item]("/api/records/:record/items/:id")
+//		patchManyItem = grpc.PatchManyCall[*record.Item]("/api/records/:record/items/batch")
+//		sealItem      = grpc.CreateCall[*record.Item]("/api/items/:id/seal")
+//		mergeItem     = grpc.ServiceCall[*record.Item, *record.MergeReq, *record.MergedItemRsp](consts.Create, "/api/items/merge")
 //	)
 func (w *fileWriter) actionCalls(service string, rpcs []*rpc) {
 	model := rpcs[0].model
@@ -260,7 +261,7 @@ func (w *fileWriter) actionType(model *modelinfo.Model, typeName string) ast.Exp
 // records/:record get, among others,
 //
 //	// CreateRecord serves the Create action of Record on /api/records.
-//	func (RecordService) CreateRecord(ctx context.Context, req *CreateRecordRequest) (*CreateRecordResponse, error) {
+//	func (recordService) CreateRecord(ctx context.Context, req *CreateRecordRequest) (*CreateRecordResponse, error) {
 //		in, err := RecordFromProto(req.GetRecord())
 //		if err != nil {
 //			return nil, err
@@ -272,8 +273,10 @@ func (w *fileWriter) actionType(model *modelinfo.Model, typeName string) ast.Exp
 //		return &CreateRecordResponse{Record: RecordToProto(m)}, nil
 //	}
 //
+// the Patch action, taking the paths of the update_mask field,
+//
 //	// PatchRecord serves the Patch action of Record on /api/records/:record.
-//	func (RecordService) PatchRecord(ctx context.Context, req *PatchRecordRequest) (*PatchRecordResponse, error) {
+//	func (recordService) PatchRecord(ctx context.Context, req *PatchRecordRequest) (*PatchRecordResponse, error) {
 //		in, err := RecordFromProto(req.GetRecord())
 //		if err != nil {
 //			return nil, err
@@ -285,8 +288,10 @@ func (w *fileWriter) actionType(model *modelinfo.Model, typeName string) ast.Exp
 //		return &PatchRecordResponse{Record: RecordToProto(m)}, nil
 //	}
 //
+// the List action, taking the query fields of the request,
+//
 //	// ListRecord serves the List action of Record on /api/records.
-//	func (RecordService) ListRecord(ctx context.Context, req *ListRecordRequest) (*ListRecordResponse, error) {
+//	func (recordService) ListRecord(ctx context.Context, req *ListRecordRequest) (*ListRecordResponse, error) {
 //		models, total, err := listRecord(ctx, nil, grpc.Query{
 //			Filters:     grpc.Filters(req.GetFilters()),
 //			SortBy:      req.GetSortBy(),
@@ -308,9 +313,11 @@ func (w *fileWriter) actionType(model *modelinfo.Model, typeName string) ast.Exp
 //		return &ListRecordResponse{Items: items, Total: int64(total)}, nil
 //	}
 //
+// and the PatchMany of Item, each item decoded and patched by its id,
+//
 //	// PatchManyItem serves the PatchMany action of Item on
 //	// /api/records/:record/items/batch.
-//	func (ItemService) PatchManyItem(ctx context.Context, req *PatchManyItemRequest) (*PatchManyItemResponse, error) {
+//	func (itemService) PatchManyItem(ctx context.Context, req *PatchManyItemRequest) (*PatchManyItemResponse, error) {
 //		params := map[string]string{"record": req.GetRecord()}
 //		models := make([]*record.Item, len(req.GetItems()))
 //		masks := make([][]string, len(req.GetItems()))
@@ -341,7 +348,7 @@ func (w *fileWriter) actionType(model *modelinfo.Model, typeName string) ast.Exp
 // as its payload and answering a MergedItemRsp,
 //
 //	// MergeItem serves the Create action of Item on /api/items/merge.
-//	func (ItemService) MergeItem(ctx context.Context, req *MergeItemRequest) (*MergeItemResponse, error) {
+//	func (itemService) MergeItem(ctx context.Context, req *MergeItemRequest) (*MergeItemResponse, error) {
 //		payload, err := MergeReqFromProto(req.GetPayload())
 //		if err != nil {
 //			return nil, err
@@ -554,7 +561,7 @@ func (w *fileWriter) query(phase consts.Phase, req func(string) ast.Expr, has fu
 //
 //	// WatchFeed serves the Stream action of Feed declared on feeds/watch, served
 //	// over gRPC alone.
-//	func (FeedService) WatchFeed(req *WatchFeedRequest, srv FeedService_WatchFeedServer) error {
+//	func (feedService) WatchFeed(req *WatchFeedRequest, srv FeedService_WatchFeedServer) error {
 //		payload, err := FeedWatchReqFromProto(req.GetPayload())
 //		if err != nil {
 //			return err
@@ -570,7 +577,7 @@ func (w *fileWriter) query(phase consts.Phase, req func(string) ast.Expr, has fu
 //
 //	// UploadFeedByFeed serves the Stream action of Feed declared on
 //	// feeds/:feed/upload, served over gRPC alone.
-//	func (FeedService) UploadFeedByFeed(srv FeedService_UploadFeedByFeedServer) error {
+//	func (feedService) UploadFeedByFeed(srv FeedService_UploadFeedByFeedServer) error {
 //		first, err := grpc.FirstMessage(srv.Recv)
 //		if err != nil {
 //			return err
@@ -602,7 +609,7 @@ func (w *fileWriter) query(phase consts.Phase, req func(string) ast.Expr, has fu
 //
 //	// ChatFeed serves the Stream action of Feed declared on feeds/chat, served
 //	// over gRPC alone.
-//	func (FeedService) ChatFeed(srv FeedService_ChatFeedServer) error {
+//	func (feedService) ChatFeed(srv FeedService_ChatFeedServer) error {
 //		return chatFeed(srv.Context(), nil, func() (*model.FeedEvent, error) {
 //			msg, recvErr := srv.Recv()
 //			if recvErr != nil {

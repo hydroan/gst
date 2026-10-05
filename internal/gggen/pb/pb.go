@@ -173,12 +173,14 @@ func (e *DiagnosticsError) Error() string {
 //		model.Base
 //	}
 //
+//	func (Note) TableName() string { return "notes" }
+//
 //	func (Note) Design() {
-//		GRPC()
-//		Migrate()
-//		Endpoint("notes")
-//		Create(func() {})
-//		Get(func() {})
+//		dsl.GRPC()
+//		dsl.Migrate()
+//		dsl.Endpoint("notes")
+//		dsl.Create(func() {})
+//		dsl.Get(func() {})
 //	}
 //
 // gets the file pb/note.proto:

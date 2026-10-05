@@ -36,12 +36,13 @@ var update = flag.Bool("update", false, "rewrite the golden files under testdata
 // them as well. The files
 // are where the examples in the doc comments of the pb package come from:
 // pb.Generate's whole note.proto, the excerpts of buildMessage,
-// fieldTypeOf, fieldComment, declareService, rpcMessages, customRequest,
-// customResponse, standardMessages, queryFields and descriptor; the whole
-// report.gen.go of handlerFile, the excerpts of serviceType, actionCalls,
-// handler, toProto, fromProto and conversionFuncs; and the two pb.gen.go of
-// registrationFiles. Nothing compares the two: a change here is a change to
-// those examples, to carry over by hand.
+// declareService, rpcMessages, customRequest, customResponse, queryFields
+// and descriptor; the whole report.gen.go of handlerFile, the excerpts of
+// serviceType, actionCalls, handler, streamHandler, toProto, fromProto and
+// conversionFuncs; and the two pb.gen.go of registrationFiles.
+// TestPBDocExamplesComeFromTheGoldenFiles holds the two together: every code
+// block of those doc comments must be a passage of a file here, or of the
+// model sources this test writes.
 //
 // Beside every .proto the run writes the Go files the protobuf plugins
 // compile from it (see pb.Compile): the messages in note.pb.go and the

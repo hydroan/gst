@@ -21,15 +21,16 @@ import (
 // each with a request and a response message of its own.
 
 // declareService builds the service of m in the file mirroring its model
-// file: <Model>Service with an rpc per action of every route (see rpcName),
+// file: <Model>Service with an rpc per action of every route (see
+// modelinfo.RPCName),
 // each taking and returning the messages rpcMessages resolves. The model's
 // own message is queued unless the model is virtual. Two actions resolving to
 // one rpc name are reported, and so is a model left with no action to serve,
 // every one being disabled, ignored by gst.yaml or HTTP only: its GRPC()
 // promises a service that would have no rpc.
 //
-// The Item model of the golden fixture, declaring Create and Get on its
-// endpoint items under model/record/ and two routes, gets
+// The Item model of the golden fixture, declaring Create, Get and PatchMany
+// on its endpoint items under model/record/ and two routes, gets
 //
 //	// ItemService serves the actions of Item over gRPC.
 //	service ItemService {
@@ -38,6 +39,9 @@ import (
 //
 //	  // GetItem is the Get action of Item on /api/records/:record/items/:id.
 //	  rpc GetItem ( GetItemRequest ) returns ( GetItemResponse );
+//
+//	  // PatchManyItem is the PatchMany action of Item on /api/records/:record/items/batch.
+//	  rpc PatchManyItem ( PatchManyItemRequest ) returns ( PatchManyItemResponse );
 //
 //	  // SealItem is the Create action of Item on /api/items/:id/seal.
 //	  rpc SealItem ( SealItemRequest ) returns ( SealItemResponse );
@@ -771,7 +775,7 @@ func messageField(name string, number int32, typeName string) *descriptorpb.Fiel
 }
 
 // repeatedMessageField returns a repeated field of the message typeName
-// names, to be numbered by numberInOrder.
+// names, to be numbered by numberFields.
 func repeatedMessageField(name string, typeName string) *descriptorpb.FieldDescriptorProto {
 	field := messageField(name, 0, typeName)
 	field.Label = descriptorpb.FieldDescriptorProto_LABEL_REPEATED.Enum()
@@ -779,7 +783,7 @@ func repeatedMessageField(name string, typeName string) *descriptorpb.FieldDescr
 }
 
 // modelField returns the singular field carrying the model's message, to be
-// numbered by numberInOrder.
+// numbered by numberFields.
 func modelField(name string, model *message) *descriptorpb.FieldDescriptorProto {
 	return messageField(name, 0, model.fullName())
 }
