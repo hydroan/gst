@@ -13,20 +13,6 @@ type IndexOption struct {
 	Mappings map[string]any
 }
 
-/*
-打开/关闭索引
-获取索引设置
-更新索引设置
-获取索引映射
-更新索引映射
-刷新索引
-强制合并索引
-复制索引（Reindex）
-收缩索引（Shrink）
-拆分索引（Split）
-获取索引统计信息
-*/
-
 // Create creates a new Elasticsearch index with the specified settings and mappings.
 //
 // Parameters:
@@ -78,13 +64,6 @@ func (*index) Create(indexName string, options ...*IndexOption) error {
 			}
 		}
 	}
-	// if settings != nil {
-	// 	body["settings"] = settings
-	// }
-	// if mappings != nil {
-	// 	body["mappings"] = mappings
-	// }
-
 	// Convert the body to JSON
 	bodyJSON, err := json.Marshal(body)
 	if err != nil {
