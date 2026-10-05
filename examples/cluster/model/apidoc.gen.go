@@ -51,7 +51,7 @@ func init() {
 		},
 	})
 	apidoc.Register("cluster/model", "Flag", apidoc.StructDoc{
-		Comment: "Flag is a switch every replica reads from the shared database: turned on or\noff through any replica, over HTTP or gRPC, it is what all of them see from\nthen on. It declares the whole standard set of actions, the batch ones\nincluded, so every standard rpc has a table behind it in this project. The\nCreate hook in service/flag checks the name and fills in the percent of a\nflag turned on without one: a binding tag would apply to a patch too, which\ncarries only the fields it changes.",
+		Comment: "Flag is a switch every replica reads from the shared database: turned on or\noff through any replica, over HTTP or gRPC, it is what all of them see from\nthen on. It declares the whole standard set of actions, the batch ones\nincluded, so every standard rpc has a table behind it in this project. The\nCreate hook in service/flag checks the name and fills in the percent of a\nflag turned on without one.",
 		Fields: map[string]string{
 			"Percent": "the share of traffic the flag applies to, 0 to 100",
 		},

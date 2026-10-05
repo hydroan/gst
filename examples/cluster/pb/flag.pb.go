@@ -30,8 +30,7 @@ const (
 // then on. It declares the whole standard set of actions, the batch ones
 // included, so every standard rpc has a table behind it in this project. The
 // Create hook in service/flag checks the name and fills in the percent of a
-// flag turned on without one: a binding tag would apply to a patch too, which
-// carries only the fields it changes.
+// flag turned on without one.
 type Flag struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// The identifier of the record, assigned when it is created.

@@ -1,6 +1,6 @@
 # cluster：多副本部署示例
 
-一个用 `gg` 生成的最小项目，演示同一份代码在 Kubernetes 里起多个副本时框架的协调能力：定时任务每个调度时刻全部署只领一次、被打断的一轮换个副本再跑一次、常驻任务同一时刻只有一个副本在跑、一件事同一时刻只做一次、多个副本同时对空库建表、一个副本写进复制缓存的条目其余副本都跟上。定时任务、选主和锁都建在主库的租约表 `gst_leases` 上，不需要 Redis 或 etcd；复制缓存另外需要 Kafka 广播。
+一个用 `gg` 生成的最小项目，演示同一份代码在 Kubernetes 里起多个副本时框架的协调能力：定时任务每个调度时刻全部署只领一次、被打断的一轮换个副本再跑一次、常驻任务同一时刻只有一个副本在跑、一件事同一时刻只做一次、多个副本同时对空库建表、一个副本写进复制缓存的条目其余副本都跟上。定时任务、选主和锁都建在主库的租约表 `gst_leases` 上，协调能力本身不需要 Redis 或 etcd；复制缓存另外需要 Kafka 广播，示例的 iam 会话另外需要 Redis。
 
 每个场景都给了制造故障和核对结果的命令，可以拿它在真实集群里检验这些能力。
 
@@ -11,12 +11,12 @@
 | `cronjob/cronjob.go`、`configx/jobs.go` | `tick`：每 10 秒一轮，全部署只领一次；`local_tick`：每个副本各跑；`slow`：一轮跑 `JOBS_SLOW_SECONDS` 秒（默认 20），比 15 秒的租约长，靠续期保住；把它调到大于 30 秒，`slow` 就会跑过自己的下一个时刻 |
 | `leader/leader.go`、`service/step_down/` | 常驻任务 `counter`：每秒在事务里给计数器追加下一个数字，并记下是哪一任写的；接手的副本从库里最后一个数字接着数。`POST /api/step-downs` 让当前副本的 leader 工作自己返回，用来看「工作提前返回」时框架怎么处理 |
 | `lock/lock.go`、`dao/rebuild.go`、`service/rebuild/` | `POST /api/rebuilds` 在锁 `rebuild` 下跑，同时来第二个请求立刻 409；带 `"in_transaction":true` 则演示事务里拿锁被框架拒掉 |
-| `dao/cache.go`、`component/cache.go`、`service/cached/` | 复制缓存：每个副本在开始服务之前打开缓存，`POST /api/caches` 写一条、`GET /api/caches/:key` 只读本副本自己的那份、`DELETE /api/caches/:key` 删一条；这三个动作也是 gRPC 的 `CreateCached`、`GetCached`、`DeleteCached`，另有两条只在 gRPC 上有的流：`LoadCached` 客户端流一次灌一批，`ExchangeCached` 双向流逐个键问本副本的值 |
+| `dao/cache.go`、`component/cache.go`、`service/cached/` | 复制缓存：每个副本在开始服务之前打开缓存，`POST /api/caches` 写一条、`GET /api/caches/:id` 只读本副本自己的那份、`DELETE /api/caches/:id` 删一条；这三个动作也是 gRPC 的 `CreateCached`、`GetCached`、`DeleteCached`，另有两条只在 gRPC 上有的流：`LoadCached` 客户端流一次灌一批，`ExchangeCached` 双向流逐个键问本副本的值 |
 | `model/run.go`、`dao/run.go` | 每一轮定时任务、每一次锁下的运行：开始时记一行，跑完时补上结束时间，都写在工作自己的事务里；被打断的没有结束时间。`GET /api/runs`，也是 gRPC 的 `ListRun` |
 | `model/counter_step.go`、`service/counter_step/` | 计数器的每个数字，和写它的那一任、那个副本。`GET /api/counter_steps`；`WatchCounterStep` 服务端流从某个数字之后一直推送，哪个副本都能服务，被切断的客户端换个副本从上次的数字接着读 |
 | `model/flag.go`、`service/flag/` | 功能开关，全部署共用一张表：十个标准动作全开，含批量和 Patch，HTTP 的 `/api/flags` 和 gRPC 的 `CreateFlag`、`PatchFlag`、`CreateManyFlag` 等一一对应，Create 钩子给没写 percent 的开关补成 100，两种传输都经过它 |
 | `module/module.go`、`middleware/middleware.go`、`interceptor/interceptor.go` | iam 模块的注册、登录和会话；会话检查在 HTTP 上挂 `middleware.IAMSession()`、在 gRPC 上挂 `interceptor.IAMSession()`，会话存在 Redis 里，三个副本共用，在哪个副本登录都算数 |
-| `interceptor/served_by.go` | 项目自己的 gRPC 拦截器：每个调用的响应头带 `x-served-by`，写的是答话的副本，和行里的 `replica` 对得上 |
+| `interceptor/served_by.go` | 项目自己的 gRPC 拦截器：每个经过项目拦截器的调用（健康与反射不经过）响应头带 `x-served-by`，写的是答话的副本，和行里的 `replica` 对得上 |
 | `pb/` | `gg gen` 从声明了 `GRPC()` 的模型推导的 `.proto` 和 Go 代码，提交进仓库 |
 | `Dockerfile` | 镜像：以非 root 用户运行，配置全部来自环境变量；PID 1 是 tini，方便从 Pod 里给进程发信号；带 curl 和 grpcurl，场景里在 Pod 里调本副本或集群内地址 |
 | `deploy/k8s/` | 纯 YAML 清单：命名空间（强制 restricted 安全标准）、MySQL、Redis、单 broker Kafka（KRaft，给复制缓存广播用）、三副本 Deployment（探针、资源、只读根文件系统、停机宽限、滚动更新策略）、Service（HTTP 与 gRPC 两个端口）、集群内 gRPC 客户端用的 headless Service `cluster-grpc`、PodDisruptionBudget |
@@ -566,7 +566,7 @@ sleep 3; kubectl -n $NS rollout restart deployment/cluster; wait $W
 grep '"seq"' watch.out | tail -1; grep -E 'Code|Message' watch.out
 kubectl -n $NS rollout status deployment/cluster --timeout=240s
 LAST=$(grep '"seq"' watch.out | tail -1 | tr -dc '0-9')
-timeout 3 rpc "$(pods | sed -n 1p)" -v -d "{\"payload\":{\"after\":$LAST}}" localhost:8081 cluster.CounterStepService/WatchCounterStep | grep -E 'x-served-by|"seq"|"replica"'
+rpc "$(pods | sed -n 1p)" -max-time 3 -v -d "{\"payload\":{\"after\":$LAST}}" localhost:8081 cluster.CounterStepService/WatchCounterStep | grep -E 'x-served-by|"seq"|"replica"'
 ```
 
 流从 A 上一个数字一个数字地推，滚动更新停掉 A 时流以 `Unavailable` 结束，消息是 `the server is shutting down`：停机时框架先让健康服务说 NOT_SERVING，延迟过后关监听、结束在途的流并等一元调用排空。客户端拿上次看到的数字向任意一个新副本要 `after` 之后的，紧接着的数字就来了，`replica` 里写的是此刻的 leader，`x-served-by` 写的是答话的副本，两者不必是同一个。
