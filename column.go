@@ -1,8 +1,6 @@
 package gst
 
-import (
-	"github.com/hydroan/gst/internal/types"
-)
+import "github.com/hydroan/gst/internal/types"
 
 // AnyColumnRef is the type-erased view of every generated column reference,
 // for options that take a heterogeneous column list: WithSelect accepts
@@ -69,3 +67,8 @@ type TimeColumn = types.TimeColumn
 func NewTimeColumn[M TableNamer](name string) TimeColumn {
 	return types.NewTimeColumn[M](name)
 }
+
+// Bound is one end of the range a column's comparison filters confine it to:
+// the value at that end, whether the range includes it, and whether any filter
+// gave that end at all. An absent end leaves the range open on that side.
+type Bound[T any] = types.Bound[T]
