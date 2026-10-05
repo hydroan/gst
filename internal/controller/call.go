@@ -421,9 +421,8 @@ func answer[T any](c *call, result T) (T, error) {
 // no body — runs the method in its service span on a service context
 // answering the parameters, the query and the caller, and answers with its
 // result, or with the status its error maps to (see grpcserver.StatusError).
-// phase must be
-// one gRPC serves: the HTTP-only actions have no rpc, so their phase panics
-// here, as the route registers.
+// phase must be one gRPC serves: the HTTP-only actions have no rpc, so their
+// phase panics here, as the route registers.
 func ServiceCall[M types.Model, REQ types.Request, RSP types.Response](phase consts.Phase, route string) func(ctx context.Context, params map[string]string, query Query, req REQ) (RSP, error) {
 	invoke := serviceMethod[M, REQ, RSP](phase)
 	a := newAction[M, REQ, RSP](route, phase)

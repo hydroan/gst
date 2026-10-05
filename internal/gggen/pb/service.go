@@ -22,12 +22,11 @@ import (
 
 // declareService builds the service of m in the file mirroring its model
 // file: <Model>Service with an rpc per action of every route (see
-// modelinfo.RPCName),
-// each taking and returning the messages rpcMessages resolves. The model's
-// own message is queued unless the model is virtual. Two actions resolving to
-// one rpc name are reported, and so is a model left with no action to serve,
-// every one being disabled, ignored by gst.yaml or HTTP only: its GRPC()
-// promises a service that would have no rpc.
+// modelinfo.RPCName), each taking and returning the messages rpcMessages
+// resolves. The model's own message is queued unless the model is virtual.
+// Two actions resolving to one rpc name are reported, and so is a model left
+// with no action to serve, every one being disabled, ignored by gst.yaml or
+// HTTP only: its GRPC() promises a service that would have no rpc.
 //
 // The Item model of the golden fixture, declaring Create, Get and PatchMany
 // on its endpoint items under model/record/ and two routes, gets

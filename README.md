@@ -1208,7 +1208,7 @@ Pod 端口，Ingress 只转发写进规则的路径——**只转发 `/api` 前�
 | `/metrics` | 已被访问过的路由（gin 路由模式）及其请求数与延迟分布、缓存计数器上的数据库表名、进程内存与 CPU、构建信息；框架自己的指标名以 `gst_backend_` 开头、进程指标以 `gst_process_` 开头，gRPC 的是 grpc-go 生态默认的 `grpc_server_` |
 | `/openapi.json` | 本服务注册的全部路由，以及每个路由的请求模型、成功响应与会答的失败状态 |
 | `/docs` | 同一份文档的 Swagger UI 渲染；页面资源编译进二进制，不从任何 CDN 加载脚本，离线可用 |
-| gRPC 的 `grpc.health.v1.Health` 与反射服务 | 进程和每个服务是否在服务，以及注册了哪些服务和消息；不经过项目的认证拦截器，`Register` 挂的通用拦截器照样经过 |
+| gRPC 的 `grpc.health.v1.Health` 与反射服务 | 进程和每个服务是否在服务，以及注册了哪些服务和消息；不经过项目挂的任何拦截器，`Register` 的通用拦截器和 `RegisterAuth` 的认证拦截器都不经过 |
 
 ### 为什么 `gg gen` 之后 `go test` 是红的？
 
