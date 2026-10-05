@@ -7,10 +7,19 @@ import (
 	"go.uber.org/zap"
 )
 
-// StandardLogger provides plain and printf-style leveled logging methods.
-// Fatal and Fatalf follow the underlying logger's fatal behavior and should
-// terminate the process after writing the log entry.
-type StandardLogger interface {
+// Logger is the logger the framework hands to services and modules and keeps
+// in the logger package's streams. It writes an entry three ways: plain and
+// printf-style, sugared with alternating key/value fields (the methods with
+// suffix "w", with fields), and with typed zap.Field values (the methods with
+// suffix "z", the low-allocation variants). With attaches string key/value
+// fields; WithContext derives a logger carrying request metadata fields.
+// Fatal and its variants follow the underlying logger's fatal behavior and
+// terminate the process after writing the entry.
+type Logger interface {
+	With(fields ...string) Logger
+
+	WithContext(context.Context, consts.Phase) Logger
+
 	Debug(args ...any)
 	Info(args ...any)
 	Warn(args ...any)
@@ -22,37 +31,16 @@ type StandardLogger interface {
 	Warnf(format string, args ...any)
 	Errorf(format string, args ...any)
 	Fatalf(format string, args ...any)
-}
 
-// StructuredLogger provides sugared structured logging with alternating
-// key/value fields. Methods with suffix "w" mean "with fields".
-type StructuredLogger interface {
 	Debugw(msg string, keysAndValues ...any)
 	Infow(msg string, keysAndValues ...any)
 	Warnw(msg string, keysAndValues ...any)
 	Errorw(msg string, keysAndValues ...any)
 	Fatalw(msg string, keysAndValues ...any)
-}
 
-// ZapLogger provides structured logging with typed zap.Field values.
-// Methods with suffix "z" are the low-allocation typed-field variants.
-type ZapLogger interface {
 	Debugz(msg string, fields ...zap.Field)
 	Infoz(msg string, fields ...zap.Field)
 	Warnz(msg string, fields ...zap.Field)
 	Errorz(msg string, fields ...zap.Field)
 	Fatalz(msg string, fields ...zap.Field)
-}
-
-// Logger combines plain, sugared structured, and typed zap logging methods.
-// With attaches string key/value fields; WithContext derives a logger carrying
-// request metadata fields.
-type Logger interface {
-	With(fields ...string) Logger
-
-	WithContext(context.Context, consts.Phase) Logger
-
-	StandardLogger
-	StructuredLogger
-	ZapLogger
 }

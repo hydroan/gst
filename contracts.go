@@ -88,20 +88,9 @@ type Decision = types.Decision
 // roles, and refuses every write rather than reporting a change it did not make.
 type RBAC = types.RBAC
 
-// StandardLogger provides plain and printf-style leveled logging methods.
-// Fatal and Fatalf follow the underlying logger's fatal behavior and should
-// terminate the process after writing the log entry.
-type StandardLogger = types.StandardLogger
-
-// StructuredLogger provides sugared structured logging with alternating
-// key/value fields. Methods with suffix "w" mean "with fields".
-type StructuredLogger = types.StructuredLogger
-
-// ZapLogger provides structured logging with typed zap.Field values.
-// Methods with suffix "z" are the low-allocation typed-field variants.
-type ZapLogger = types.ZapLogger
-
-// Logger combines plain, sugared structured, and typed zap logging methods.
-// With attaches string key/value fields; WithContext derives a logger carrying
-// request metadata fields.
+// Logger is the logger the framework hands to services and modules and keeps
+// in the logger package's streams. It writes an entry plain and printf-style,
+// sugared with key/value fields (the "w" methods) and with typed zap.Field
+// values (the "z" methods); With attaches string key/value fields and
+// WithContext derives a logger carrying request metadata fields.
 type Logger = types.Logger
