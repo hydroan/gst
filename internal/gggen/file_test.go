@@ -4,7 +4,7 @@ import (
 	"go/ast"
 	"testing"
 
-	"github.com/hydroan/gst/consts"
+	"github.com/hydroan/gst/internal/consts"
 	"github.com/hydroan/gst/internal/gggen"
 	"github.com/kr/pretty"
 )

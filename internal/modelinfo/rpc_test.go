@@ -3,7 +3,7 @@ package modelinfo_test
 import (
 	"testing"
 
-	"github.com/hydroan/gst/consts"
+	"github.com/hydroan/gst/internal/consts"
 	"github.com/hydroan/gst/internal/dsl"
 	"github.com/hydroan/gst/internal/modelinfo"
 	"github.com/stretchr/testify/require"

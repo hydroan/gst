@@ -6,7 +6,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/errors"
-	"github.com/hydroan/gst/consts"
+	"github.com/hydroan/gst/internal/consts"
 	"github.com/hydroan/gst/internal/ggconst"
 	"github.com/jhump/protoreflect/v2/protoprint"
 	"google.golang.org/protobuf/reflect/protodesc"

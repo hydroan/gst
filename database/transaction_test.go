@@ -6,8 +6,8 @@ import (
 	"time"
 
 	"github.com/cockroachdb/errors"
-	"github.com/hydroan/gst/consts"
 	"github.com/hydroan/gst/database"
+	"github.com/hydroan/gst/internal/consts"
 	"github.com/hydroan/gst/internal/testutil/oteltest"
 	gstotel "github.com/hydroan/gst/otel"
 	"github.com/stretchr/testify/require"

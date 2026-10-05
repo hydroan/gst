@@ -5,7 +5,7 @@ import (
 	"reflect"
 
 	"github.com/cockroachdb/errors"
-	"github.com/hydroan/gst/consts"
+	"github.com/hydroan/gst/internal/consts"
 	"github.com/hydroan/gst/internal/types"
 	"go.opentelemetry.io/otel/trace"
 	"gorm.io/gorm"

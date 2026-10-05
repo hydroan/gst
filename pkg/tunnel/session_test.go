@@ -8,7 +8,7 @@ import (
 
 	"github.com/hydroan/gst/bootstrap"
 	"github.com/hydroan/gst/config"
-	"github.com/hydroan/gst/consts"
+	"github.com/hydroan/gst/internal/consts"
 	"github.com/hydroan/gst/internal/testutil/testlog"
 	"github.com/hydroan/gst/pkg/tunnel"
 	"github.com/stretchr/testify/assert"

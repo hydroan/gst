@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/hydroan/gst/consts"
+	"github.com/hydroan/gst/internal/consts"
 	"github.com/hydroan/gst/internal/testutil/oteltest"
 	"github.com/hydroan/gst/internal/types"
 	"github.com/stretchr/testify/require"

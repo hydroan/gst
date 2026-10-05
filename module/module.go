@@ -34,7 +34,7 @@ import (
 	"sync"
 	"sync/atomic"
 
-	"github.com/hydroan/gst/consts"
+	"github.com/hydroan/gst/internal/consts"
 	"github.com/hydroan/gst/internal/modelregistry"
 	"github.com/hydroan/gst/internal/router"
 	"github.com/hydroan/gst/internal/serviceregistry"

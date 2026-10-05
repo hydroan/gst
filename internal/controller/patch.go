@@ -8,8 +8,8 @@ import (
 
 	"github.com/cockroachdb/errors"
 	"github.com/gin-gonic/gin"
-	"github.com/hydroan/gst/consts"
 	"github.com/hydroan/gst/database"
+	"github.com/hydroan/gst/internal/consts"
 	modellogmgmt "github.com/hydroan/gst/internal/model/logmgmt"
 	"github.com/hydroan/gst/internal/modelregistry"
 	"github.com/hydroan/gst/internal/requestctx"

@@ -2,7 +2,7 @@ package mfa
 
 import (
 	"github.com/hydroan/gst/authn"
-	"github.com/hydroan/gst/consts"
+	"github.com/hydroan/gst/internal/consts"
 	modelmfa "github.com/hydroan/gst/internal/model/mfa"
 	"github.com/hydroan/gst/internal/modelregistry"
 	servicemfa "github.com/hydroan/gst/internal/service/mfa"

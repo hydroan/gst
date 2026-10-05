@@ -5,7 +5,7 @@ import (
 	"strings"
 
 	"github.com/hydroan/gst/apidoc"
-	"github.com/hydroan/gst/consts"
+	"github.com/hydroan/gst/internal/consts"
 )
 
 // operationID derives a unique, stable operation id from the route path and

@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/hydroan/gst/consts"
+	"github.com/hydroan/gst/internal/consts"
 )
 
 func TestGenTypeScriptRunWritesTheDeclarationsOfTheRoutes(t *testing.T) {

@@ -10,7 +10,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/hydroan/gst/consts"
+	"github.com/hydroan/gst/internal/consts"
 	"github.com/hydroan/gst/internal/dsl"
 	"github.com/hydroan/gst/internal/modelinfo"
 	"github.com/stoewer/go-strcase"

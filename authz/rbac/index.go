@@ -1,7 +1,7 @@
 package rbac
 
 import (
-	"github.com/hydroan/gst/consts"
+	"github.com/hydroan/gst/internal/consts"
 )
 
 // decisionIndex is what the policy branches of a decision answer from: the

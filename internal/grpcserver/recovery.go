@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"runtime/debug"
 
-	"github.com/hydroan/gst/consts"
+	"github.com/hydroan/gst/internal/consts"
 	"github.com/hydroan/gst/internal/execctx"
 	"github.com/hydroan/gst/internal/types"
 	"github.com/hydroan/gst/logger"

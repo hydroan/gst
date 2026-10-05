@@ -21,7 +21,7 @@ import (
 
 	"github.com/cloverstd/tcping/ping"
 	"github.com/cockroachdb/errors"
-	"github.com/hydroan/gst/consts"
+	"github.com/hydroan/gst/internal/consts"
 	probing "github.com/prometheus-community/pro-bing"
 	"github.com/rs/xid"
 	"go.uber.org/multierr"

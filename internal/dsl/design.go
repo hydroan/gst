@@ -13,7 +13,7 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/hydroan/gst/consts"
+	"github.com/hydroan/gst/internal/consts"
 	"github.com/stoewer/go-strcase"
 )
 

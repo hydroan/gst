@@ -1,7 +1,7 @@
 package email
 
 import (
-	"github.com/hydroan/gst/consts"
+	"github.com/hydroan/gst/internal/consts"
 	serviceemail "github.com/hydroan/gst/internal/service/email"
 	"github.com/hydroan/gst/module"
 )

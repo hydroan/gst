@@ -11,8 +11,8 @@ import (
 	"time"
 
 	"github.com/hydroan/gst/config"
-	"github.com/hydroan/gst/consts"
 	"github.com/hydroan/gst/database"
+	"github.com/hydroan/gst/internal/consts"
 	"github.com/hydroan/gst/internal/controller"
 	"github.com/hydroan/gst/internal/grpcserver"
 	"github.com/hydroan/gst/internal/testutil/oteltest"

@@ -3,7 +3,7 @@ package config
 import (
 	"time"
 
-	"github.com/hydroan/gst/consts"
+	"github.com/hydroan/gst/internal/consts"
 
 	"github.com/spf13/viper"
 )

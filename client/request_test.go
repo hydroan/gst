@@ -11,7 +11,7 @@ import (
 
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/client"
-	"github.com/hydroan/gst/consts"
+	"github.com/hydroan/gst/internal/consts"
 	"github.com/hydroan/gst/internal/execctx"
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/otel"

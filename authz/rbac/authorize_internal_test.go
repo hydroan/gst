@@ -5,7 +5,7 @@ import (
 	"slices"
 	"testing"
 
-	"github.com/hydroan/gst/consts"
+	"github.com/hydroan/gst/internal/consts"
 	prommetrics "github.com/hydroan/gst/metrics"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_model/go"

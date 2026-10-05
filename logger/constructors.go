@@ -6,7 +6,7 @@ import (
 	"strings"
 
 	"github.com/hydroan/gst/config"
-	"github.com/hydroan/gst/consts"
+	"github.com/hydroan/gst/internal/consts"
 	"github.com/hydroan/gst/internal/instance"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"

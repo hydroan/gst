@@ -11,8 +11,8 @@ import (
 
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/config"
-	"github.com/hydroan/gst/consts"
 	"github.com/hydroan/gst/internal/clioutput"
+	"github.com/hydroan/gst/internal/consts"
 	"github.com/hydroan/gst/internal/dsl"
 	"github.com/hydroan/gst/internal/ggconst"
 	"github.com/hydroan/gst/internal/gggen/ts"

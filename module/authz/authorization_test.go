@@ -7,8 +7,8 @@ import (
 
 	"github.com/hydroan/gst/authz/rbac"
 	"github.com/hydroan/gst/client"
-	"github.com/hydroan/gst/consts"
 	"github.com/hydroan/gst/database"
+	"github.com/hydroan/gst/internal/consts"
 	"github.com/hydroan/gst/internal/testutil"
 	"github.com/hydroan/gst/internal/types"
 	"github.com/hydroan/gst/module/authz"

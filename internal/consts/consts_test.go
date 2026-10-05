@@ -4,7 +4,7 @@ import (
 	"net/http"
 	"testing"
 
-	"github.com/hydroan/gst/consts"
+	"github.com/hydroan/gst/internal/consts"
 )
 
 // TestPhase_Name pins that the name of every phase is the identifier its

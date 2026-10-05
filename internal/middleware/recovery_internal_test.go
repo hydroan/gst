@@ -9,7 +9,7 @@ import (
 	"github.com/hydroan/gst/internal/types"
 
 	"github.com/gin-gonic/gin"
-	"github.com/hydroan/gst/consts"
+	"github.com/hydroan/gst/internal/consts"
 	"github.com/hydroan/gst/logger"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"

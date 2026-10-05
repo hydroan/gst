@@ -10,9 +10,9 @@ import (
 
 	"github.com/hydroan/gst/client"
 	"github.com/hydroan/gst/config"
-	"github.com/hydroan/gst/consts"
 	"github.com/hydroan/gst/database"
 	gstgrpc "github.com/hydroan/gst/grpc"
+	"github.com/hydroan/gst/internal/consts"
 	"github.com/hydroan/gst/internal/grpcserver"
 	modeliamaccount "github.com/hydroan/gst/internal/model/iam/account"
 	"github.com/hydroan/gst/internal/modelregistry"

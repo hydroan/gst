@@ -3,8 +3,8 @@ package grpc_test
 import (
 	"testing"
 
-	"github.com/hydroan/gst/consts"
 	gstgrpc "github.com/hydroan/gst/grpc"
+	"github.com/hydroan/gst/internal/consts"
 	"github.com/hydroan/gst/internal/modelregistry"
 	"github.com/stretchr/testify/require"
 )

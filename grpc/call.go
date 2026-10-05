@@ -3,7 +3,7 @@ package grpc
 import (
 	"context"
 
-	"github.com/hydroan/gst/consts"
+	"github.com/hydroan/gst/internal/consts"
 	"github.com/hydroan/gst/internal/controller"
 	"github.com/hydroan/gst/internal/types"
 )

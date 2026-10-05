@@ -6,7 +6,7 @@ import (
 	"time"
 	"uuid"
 
-	"github.com/hydroan/gst/consts"
+	"github.com/hydroan/gst/internal/consts"
 	"github.com/hydroan/gst/internal/types"
 	"gorm.io/gorm"
 )

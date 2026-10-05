@@ -7,7 +7,7 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/config"
 
-	"github.com/hydroan/gst/consts"
+	"github.com/hydroan/gst/internal/consts"
 	modeliamaccount "github.com/hydroan/gst/internal/model/iam/account"
 	modeliamprofile "github.com/hydroan/gst/internal/model/iam/profile"
 	modeliamuser "github.com/hydroan/gst/internal/model/iam/user"

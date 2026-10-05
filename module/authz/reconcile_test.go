@@ -6,8 +6,8 @@ import (
 	"uuid"
 
 	"github.com/hydroan/gst/authz/rbac"
-	"github.com/hydroan/gst/consts"
 	"github.com/hydroan/gst/database"
+	"github.com/hydroan/gst/internal/consts"
 	modelauthz "github.com/hydroan/gst/internal/model/authz"
 	"github.com/hydroan/gst/internal/types"
 	"github.com/hydroan/gst/module/authz"

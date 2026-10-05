@@ -6,7 +6,7 @@ import (
 	"slices"
 	"strconv"
 
-	"github.com/hydroan/gst/consts"
+	"github.com/hydroan/gst/internal/consts"
 )
 
 var routePhaseOrder = []consts.Phase{

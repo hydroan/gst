@@ -3,7 +3,7 @@ package types
 import (
 	"context"
 
-	"github.com/hydroan/gst/consts"
+	"github.com/hydroan/gst/internal/consts"
 	"go.uber.org/zap"
 )
 

@@ -9,7 +9,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/hydroan/gst/consts"
+	"github.com/hydroan/gst/internal/consts"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 )

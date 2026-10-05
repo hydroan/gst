@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/hydroan/gst/consts"
+	"github.com/hydroan/gst/internal/consts"
 
 	"github.com/spf13/viper"
 	"golang.org/x/mod/module"
