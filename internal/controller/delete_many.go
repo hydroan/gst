@@ -48,7 +48,6 @@ func DeleteManyHandler[M types.Model, REQ types.Request, RSP types.Response](cfg
 			gstotel.RecordError(span, reqErr)
 			return
 		}
-		normalizeBatch(&req)
 
 		if err := a.deleteManyFlow(requestContext(c), ginServiceContext(c), &req); err != nil {
 			response.Error(c, err)
