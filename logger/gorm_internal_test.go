@@ -134,7 +134,8 @@ func TestGormLoggerTraceFlagsSlowQuery(t *testing.T) {
 	entry := requireSingleEntry(t, logs)
 	require.Equal(t, zapcore.WarnLevel, entry.Level)
 	require.Equal(t, "slow sql detected", entry.Message)
-	require.Contains(t, entry.ContextMap(), "threshold")
+	require.Equal(t, time.Nanosecond, entry.ContextMap()["threshold"],
+		"the threshold is a duration, rendered as integer nanoseconds like the duration it is measured against")
 }
 
 // TestTraceFieldsFitTheCapacityInTheWorstCase pins traceFieldCap to the entry

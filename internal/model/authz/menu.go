@@ -176,7 +176,7 @@ func (m *Menu) UpdateAfter(ctx context.Context) error {
 			if err := syncRolePermissions(ctx, r); err != nil {
 				return err
 			}
-			zap.L().Info("successfully update role's permissions", zap.Any("role", r))
+			zap.L().Info("successfully update role's permissions", zap.Reflect("role", r))
 		}
 	}
 

@@ -6,8 +6,10 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/hydroan/gst/internal/logfield"
 	"github.com/hydroan/gst/internal/types"
 	"github.com/hydroan/gst/util"
+	"go.uber.org/zap"
 )
 
 // elasticLogger is a simple logger adapter that uses the zap logger.
@@ -36,14 +38,14 @@ func (l *elasticLogger) LogRoundTrip(
 		}
 	}
 
-	l.logger.Debugw(
+	l.logger.Debugz(
 		"Elasticsearch HTTP Request",
-		"method", req.Method,
-		"url", req.URL.String(),
-		"status", status,
+		zap.String("method", req.Method),
+		zap.String("url", req.URL.String()),
+		logfield.Status(status),
 		util.LogDuration(dur),
-		"error", err,
-		"response", body,
+		zap.Error(err),
+		zap.String("response", body),
 	)
 
 	return nil

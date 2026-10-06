@@ -337,7 +337,7 @@ func newReplicatedCache[T any](store types.Cache[entry[T]]) (*replicatedCache[T]
 		ants.WithPanicHandler(func(r any) {
 			dc.logger.Errorz(
 				"publishing task panicked",
-				zap.Any("panic", r),
+				zap.String("panic", fmt.Sprint(r)),
 				zap.ByteString("stack", debug.Stack()),
 			)
 		}))
@@ -486,7 +486,7 @@ func (dc *replicatedCache[T]) logPanic(goroutine string) {
 		dc.logger.Errorz(
 			"goroutine panicked",
 			zap.String("goroutine", goroutine),
-			zap.Any("panic", r),
+			zap.String("panic", fmt.Sprint(r)),
 			zap.ByteString("stack", debug.Stack()),
 		)
 	}
@@ -583,12 +583,12 @@ func (dc *replicatedCache[T]) listenEvents() {
 				if evt.Typ != dc.typ {
 					continue
 				}
-				dc.logger.Debugz("consume event", zap.Any("event", eventLogView{evt}))
+				dc.logger.Debugz("consume event", zap.Reflect("event", eventLogView{evt}))
 				switch evt.Op {
 				case opSet:
 					var val T
 					if err := json.Unmarshal(evt.Val, &val); err != nil {
-						dc.logger.Errorz("failed to unmarshal event value", zap.Error(err), zap.Any("event", eventLogView{evt}))
+						dc.logger.Errorz("failed to unmarshal event value", zap.Error(err), zap.Reflect("event", eventLogView{evt}))
 						continue
 					}
 					stale, err := dc.applyPeerSet(evt, val)
@@ -597,7 +597,7 @@ func (dc *replicatedCache[T]) listenEvents() {
 						continue
 					}
 					if stale {
-						dc.logger.Debugz("skipping a stale peer event superseded by a newer write", zap.Any("event", eventLogView{evt}))
+						dc.logger.Debugz("skipping a stale peer event superseded by a newer write", zap.Reflect("event", eventLogView{evt}))
 						continue
 					}
 					dc.peerSets.Add(1)
@@ -608,12 +608,12 @@ func (dc *replicatedCache[T]) listenEvents() {
 						continue
 					}
 					if stale {
-						dc.logger.Debugz("skipping a stale peer event superseded by a newer write", zap.Any("event", eventLogView{evt}))
+						dc.logger.Debugz("skipping a stale peer event superseded by a newer write", zap.Reflect("event", eventLogView{evt}))
 						continue
 					}
 					dc.peerDeletes.Add(1)
 				default:
-					dc.logger.Warnz("unknown event op", zap.Any("event", eventLogView{evt}))
+					dc.logger.Warnz("unknown event op", zap.Reflect("event", eventLogView{evt}))
 				}
 			}
 		}
@@ -736,15 +736,15 @@ func (dc *replicatedCache[T]) sendEvent(evt *event) error {
 			Key:   []byte(evt.Key),
 			Value: data,
 		}
-		dc.logger.Debugz("publish event", zap.Any("event", eventLogView{evt}))
+		dc.logger.Debugz("publish event", zap.Reflect("event", eventLogView{evt}))
 		if pubErr := dc.pub.ProduceSync(context.Background(), record).FirstErr(); pubErr != nil {
 			dc.publishFailed.Add(1)
-			dc.logger.Errorz("failed to publish event", zap.Error(pubErr), zap.Any("event", eventLogView{evt}))
+			dc.logger.Errorz("failed to publish event", zap.Error(pubErr), zap.Reflect("event", eventLogView{evt}))
 		}
 	})
 	if err != nil {
 		dc.publishDropped.Add(1)
-		dc.logger.Errorz("event dropped: failed to submit it to the publishing pool", zap.Error(err), zap.Any("event", eventLogView{evt}))
+		dc.logger.Errorz("event dropped: failed to submit it to the publishing pool", zap.Error(err), zap.Reflect("event", eventLogView{evt}))
 	}
 	return nil
 }
@@ -755,7 +755,7 @@ func (dc *replicatedCache[T]) startMonitor() {
 		defer dc.logPanic("replicatedCache.startMonitor")
 		for range ticker.C {
 			if flag.Lookup("test.v") == nil {
-				dc.logger.Infoz("cache metrics", zap.Any("metrics", dc.metrics()))
+				dc.logger.Infoz("cache metrics", zap.Reflect("metrics", dc.metrics()))
 			}
 		}
 	}()

@@ -38,7 +38,7 @@ func RecordLoginEvent(ctx *gst.ServiceContext, event authn.LoginEvent) {
 		if logger.App != nil {
 			logger.App.Warnz("failed to write login log",
 				zap.String("username", event.Username),
-				zap.String("status", string(entry.Status)),
+				zap.String("login_status", string(entry.Status)),
 				zap.Error(err))
 		}
 	}

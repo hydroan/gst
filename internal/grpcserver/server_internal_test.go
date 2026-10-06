@@ -467,7 +467,7 @@ func TestStopEndsTheStreamsAsTheUnaryCallsDrain(t *testing.T) {
 	require.Eventually(t, func() bool {
 		unavailable := 0
 		for _, entry := range accessLog.All() {
-			if entry.ContextMap()["status"] == codes.Unavailable.String() {
+			if entry.ContextMap()[grpcCodeKey] == codes.Unavailable.String() {
 				unavailable++
 			}
 		}

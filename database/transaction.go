@@ -6,6 +6,7 @@ import (
 
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/internal/dbruntime"
+	"github.com/hydroan/gst/internal/logfield"
 	"github.com/hydroan/gst/logger"
 	gstotel "github.com/hydroan/gst/otel"
 	"go.opentelemetry.io/otel/attribute"
@@ -72,7 +73,7 @@ func reportLongTransaction(ctx context.Context, held time.Duration) {
 	logger.Database.WithContext(ctx, phaseTransaction).Warnz(
 		"transaction held its connection for a long time",
 		zap.Duration("held", held),
-		zap.Duration("threshold", longTransaction),
+		logfield.Threshold(longTransaction),
 	)
 }
 

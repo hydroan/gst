@@ -246,7 +246,7 @@ call --> client : OK，或映射后的 status；取消答 Canceled，停机答 U
 
 观测两边对齐：
 
-- 访问日志：HTTP 写 access.log，gRPC 由 requestScope 写 grpc.log，字段对齐；gRPC 的 status 记状态码名，失败再加 error 字段。
+- 访问日志：HTTP 写 access.log，gRPC 由 requestScope 写 grpc.log，共用的字段都经 internal/logfield 的构造函数写出，键与类型一致；HTTP 的 status 是数字状态码，gRPC 的状态码名记在 grpc_code（两套码不共用一个键），失败再加 error 字段。
 - 指标：HTTP 是 `gst_backend_*`，gRPC 保持库默认 `grpc_server_*`，方便现成看板。
 - 追踪：HTTP 的 tracing 中间件与 gRPC 的 otelgrpc 各起服务端 span，trace id 都盖进 ctx；没带 W3C 头时两边都认 X-Trace-ID，并都把 trace id 回写给客户端（HTTP 的 `X-Trace-ID` 头、gRPC 的 `x-trace-id` 元数据）。
 - panic：两边共用 logger.Recovery 写 recovery.log，并记在 span 上。

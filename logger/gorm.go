@@ -9,6 +9,7 @@ import (
 	"github.com/hydroan/gst/internal/consts"
 	"github.com/hydroan/gst/internal/dbruntime/dbnode"
 	"github.com/hydroan/gst/internal/execctx"
+	"github.com/hydroan/gst/internal/logfield"
 	"github.com/hydroan/gst/internal/requestctx"
 	"github.com/hydroan/gst/internal/types"
 	"github.com/hydroan/gst/util"
@@ -64,11 +65,11 @@ func (g *GormLogger) Trace(ctx context.Context, begin time.Time, fc func() (sql 
 	}
 	fields = append(
 		fields,
-		zap.String(consts.CTX_ROUTE, meta.Route()),
-		zap.String(consts.CTX_METHOD, meta.Method()),
-		zap.String(consts.CTX_USERNAME, username),
-		zap.String(consts.CTX_USER_ID, userID),
-		zap.String(consts.TRACE_ID, id.TraceID),
+		logfield.Route(meta.Route()),
+		logfield.Method(meta.Method()),
+		logfield.Username(username),
+		logfield.UserID(userID),
+		logfield.TraceID(id.TraceID),
 		zap.String("sql", sql),
 		util.LogDuration(elapsed),
 		zap.Int64("rows", rows),
@@ -97,7 +98,7 @@ func (g *GormLogger) Trace(ctx context.Context, begin time.Time, fc func() (sql 
 	case err != nil && !notFound:
 		g.l.Errorz("sql failed", append(fields, zap.Error(err))...)
 	case elapsed > config.App.Database.SlowQueryThreshold:
-		g.l.Warnz("slow sql detected", append(fields, zap.String("threshold", config.App.Database.SlowQueryThreshold.String()))...)
+		g.l.Warnz("slow sql detected", append(fields, logfield.Threshold(config.App.Database.SlowQueryThreshold))...)
 	default:
 		g.l.Infoz("sql executed", fields...)
 	}

@@ -96,7 +96,7 @@ func (s *Session) Read() (*Event, error) {
 		return nil, err
 	}
 
-	protocolLog().Infow("Session.Read()", "key", s.locker.key, "event", event.Cmd)
+	protocolLog().Infow("Session.Read()", "key", s.locker.key, "cmd", event.Cmd)
 	return event, nil
 }
 
@@ -118,9 +118,9 @@ func (s *Session) Write(event *Event) error {
 	if event == nil {
 		return nil
 	}
-	protocolLog().Infow("Session.Write() S", "key", s.locker.key, "event", event.Cmd) // S: start
+	protocolLog().Infow("Session.Write() S", "key", s.locker.key, "cmd", event.Cmd) // S: start
 	s.locker.wmu.Lock()
-	protocolLog().Infow("Session.Write() L", "key", s.locker.key, "event", event.Cmd) // L: lock
+	protocolLog().Infow("Session.Write() L", "key", s.locker.key, "cmd", event.Cmd) // L: lock
 	defer s.locker.wmu.Unlock()
 	// This ID is critical: never overwrite an ID the caller already set,
 	// because events sharing the same ID belong to the same ongoing exchange,

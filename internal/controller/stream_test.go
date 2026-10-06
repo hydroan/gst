@@ -193,7 +193,7 @@ func TestServerStreamCallStreamsTheResponses(t *testing.T) {
 		cancel()
 		require.Eventually(t, func() bool {
 			entries := accessLog.FilterMessage("/gst.test.Samples/Watch").All()
-			return len(entries) > before && entries[len(entries)-1].ContextMap()["status"] == codes.Canceled.String()
+			return len(entries) > before && entries[len(entries)-1].ContextMap()["grpc_code"] == codes.Canceled.String()
 		}, 10*time.Second, 20*time.Millisecond, "the access log records the stream as canceled, not as a failure of the service")
 	})
 }

@@ -9,8 +9,10 @@ import (
 
 	"github.com/cockroachdb/errors"
 	"github.com/elastic/go-elasticsearch/v8/esapi"
+	"github.com/hydroan/gst/internal/logfield"
 	"github.com/hydroan/gst/logger"
 	"github.com/hydroan/gst/util"
+	"go.uber.org/zap"
 )
 
 type GetRequest struct {
@@ -67,10 +69,10 @@ func (*document) Get(ctx context.Context, indexName string, id string, req *GetR
 		}, nil
 	}
 	if res.IsError() {
-		logger.Errorw(
+		logger.Errorz(
 			"elasticsearch error response",
-			"status", res.Status(),
-			"body", string(body),
+			logfield.Status(res.StatusCode),
+			zap.String("body", string(body)),
 		)
 		return nil, errors.Newf("elasticsearch error [%s]: %s", res.Status(), string(body))
 	}

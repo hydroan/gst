@@ -173,7 +173,7 @@ func TestCallsAreLoggedLikeHTTPRequests(t *testing.T) {
 	require.Len(t, entries, 2)
 	require.Equal(t, "/gst.test.Echo/Ping", entries[0].Message)
 	ok := entries[0].ContextMap()
-	require.Equal(t, "OK", ok["status"])
+	require.Equal(t, "OK", ok["grpc_code"])
 	require.Equal(t, http.MethodPost, ok[consts.CTX_METHOD])
 	require.Equal(t, "/gst.test.Echo/Ping", ok[consts.CTX_ROUTE])
 	require.Equal(t, "/gst.test.Echo/Ping", ok[consts.CTX_PATH])
@@ -186,7 +186,7 @@ func TestCallsAreLoggedLikeHTTPRequests(t *testing.T) {
 	require.Contains(t, ok, consts.LOG_DURATION_HUMAN)
 	require.NotContains(t, ok, "error")
 	failed := entries[1].ContextMap()
-	require.Equal(t, "NotFound", failed["status"])
+	require.Equal(t, "NotFound", failed["grpc_code"])
 	require.Equal(t, "no such record", failed["error"])
 	require.Len(t, entries[1].Context, accessLogFieldCap, "the worst case must fill the capacity exactly: a new field bumps accessLogFieldCap")
 }

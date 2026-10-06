@@ -5,6 +5,7 @@ import (
 
 	"github.com/hydroan/gst/internal/consts"
 	"github.com/hydroan/gst/internal/execctx"
+	"github.com/hydroan/gst/internal/logfield"
 	"github.com/hydroan/gst/internal/requestctx"
 	"github.com/hydroan/gst/internal/types"
 	"go.uber.org/zap"
@@ -109,9 +110,10 @@ const contextFieldCap = 10
 // would cost a clone per link on every call. When adding metadata fields,
 // extend this single call instead of chaining further With calls.
 //
-// Route params stay structured because their keys come from the registered
-// routes and are therefore bounded; the query is logged as one raw string
-// because its keys are not. See requestctx.Metadata.RawQuery.
+// The request fields come from logfield, which fixes the key and the type of
+// each one for every stream writing it; see logfield.Params for why the route
+// parameters are an object and logfield.Query for why the query is one
+// string.
 //
 // The cron job name is present only inside a round and the leader name only
 // inside a tenure: a request's lines carry no empty field for a capability
@@ -120,14 +122,14 @@ func (l *Logger) withContextFields(meta requestctx.Metadata, id execctx.Identity
 	fields := make([]zap.Field, 0, contextFieldCap)
 	fields = append(fields,
 		zap.String(consts.PHASE, string(phase)),
-		zap.String(consts.CTX_ROUTE, meta.Route()),
-		zap.String(consts.CTX_PATH, meta.Path()),
-		zap.String(consts.CTX_METHOD, meta.Method()),
-		zap.String(consts.CTX_USERNAME, meta.Username()),
-		zap.String(consts.CTX_USER_ID, meta.UserID()),
-		zap.String(consts.TRACE_ID, id.TraceID),
-		zap.Object(consts.PARAMS, paramsObject(meta.Params())),
-		zap.String(consts.QUERY, meta.RawQuery()),
+		logfield.Route(meta.Route()),
+		logfield.Path(meta.Path()),
+		logfield.Method(meta.Method()),
+		logfield.Username(meta.Username()),
+		logfield.UserID(meta.UserID()),
+		logfield.TraceID(id.TraceID),
+		logfield.Params(meta.Params()),
+		logfield.Query(meta.RawQuery()),
 	)
 	if len(id.Cronjob) > 0 {
 		fields = append(fields, zap.String(consts.CRONJOB, id.Cronjob))
@@ -146,18 +148,4 @@ func (l *Logger) WithContext(ctx context.Context, phase consts.Phase) types.Logg
 	}
 
 	return l.withContextFields(requestctx.FromContext(ctx), execctx.FromContext(ctx), phase)
-}
-
-// paramsObject logs the route parameters as one object field, a key per
-// parameter.
-type paramsObject map[string]string
-
-func (o paramsObject) MarshalLogObject(enc zapcore.ObjectEncoder) error {
-	if o == nil {
-		return nil
-	}
-	for k, v := range o {
-		enc.AddString(k, v)
-	}
-	return nil
 }

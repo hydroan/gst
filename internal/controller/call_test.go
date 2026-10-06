@@ -617,7 +617,7 @@ func TestServiceCallDelegatesToThePhaseService(t *testing.T) {
 		require.Equal(t, codes.Canceled, status.Code(<-done))
 		require.Eventually(t, func() bool {
 			entries := accessLog.FilterMessage("/gst.test.Samples/Action").All()
-			return len(entries) > before && entries[len(entries)-1].ContextMap()["status"] == codes.Canceled.String()
+			return len(entries) > before && entries[len(entries)-1].ContextMap()["grpc_code"] == codes.Canceled.String()
 		}, 10*time.Second, 20*time.Millisecond, "the access log records the call as canceled, not as a failure of the service")
 	})
 

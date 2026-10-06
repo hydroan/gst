@@ -116,7 +116,7 @@ func TestHTTPBodyLoggerLogsRequestAndResponseAsOneEntry(t *testing.T) {
 	require.NotEmpty(t, ctx["duration_human"])
 }
 
-func TestHTTPBodyLoggerRecordsRoutePatternAndConcretePath(t *testing.T) {
+func TestHTTPBodyLoggerRecordsRoutePathAndParams(t *testing.T) {
 	logs := setupHTTPBodyLoggerTest(t, config.HTTPBodyLogger{
 		Enabled:     true,
 		LogRequest:  config.HTTPBodyLogModeAll,
@@ -138,10 +138,14 @@ func TestHTTPBodyLoggerRecordsRoutePatternAndConcretePath(t *testing.T) {
 
 	// The route groups every request of the endpoint together, the path
 	// identifies this one request; both are logged so aggregation and lookup
-	// each have a field of the right cardinality.
+	// each have a field of the right cardinality. The parameters are one
+	// object field, a key per parameter, the shape every stream logging them
+	// renders: a store maps a key by the type it first sees, so a stream
+	// rendering them as a string would lose its entries to the mapping.
 	ctx := entries[0].ContextMap()
 	require.Equal(t, "/api/records/:id/notes", ctx["route"])
 	require.Equal(t, "/api/records/42/notes", ctx["path"])
+	require.Equal(t, map[string]any{"id": "42"}, ctx["params"])
 }
 
 func TestHTTPBodyLoggerDefaultModesLogRequestAlwaysResponseOnError(t *testing.T) {

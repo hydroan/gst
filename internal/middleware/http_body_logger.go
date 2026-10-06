@@ -11,6 +11,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/internal/consts"
+	"github.com/hydroan/gst/internal/logfield"
 	"github.com/hydroan/gst/logger"
 	"github.com/hydroan/gst/util"
 	"go.uber.org/zap"
@@ -249,15 +250,15 @@ func writeHTTPBodyLog(
 	fields := make([]zap.Field, 0, httpBodyLogFieldCap)
 	fields = append(
 		fields,
-		zap.String(consts.CTX_ROUTE, c.FullPath()),
-		zap.String(consts.CTX_PATH, c.Request.URL.Path),
-		zap.String(consts.CTX_METHOD, c.Request.Method),
-		zap.String(consts.CTX_USERNAME, c.GetString(consts.CTX_USERNAME)),
-		zap.String(consts.CTX_USER_ID, c.GetString(consts.CTX_USER_ID)),
-		zap.String(consts.TRACE_ID, c.GetString(consts.TRACE_ID)),
-		zap.Any(consts.PARAMS, httpBodyLogParams(c.Params)),
-		zap.String(consts.QUERY, c.Request.URL.RawQuery),
-		zap.Int("status", c.Writer.Status()),
+		logfield.Route(c.FullPath()),
+		logfield.Path(c.Request.URL.Path),
+		logfield.Method(c.Request.Method),
+		logfield.Username(c.GetString(consts.CTX_USERNAME)),
+		logfield.UserID(c.GetString(consts.CTX_USER_ID)),
+		logfield.TraceID(c.GetString(consts.TRACE_ID)),
+		logfield.Params(httpBodyLogParams(c.Params)),
+		logfield.Query(c.Request.URL.RawQuery),
+		logfield.Status(c.Writer.Status()),
 		util.LogDuration(elapsed),
 	)
 	fields = appendHTTPBodyLogFields(fields, "request", request)

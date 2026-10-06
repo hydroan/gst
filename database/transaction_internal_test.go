@@ -32,6 +32,8 @@ func TestLongTransactionIsReported(t *testing.T) {
 	require.NotNil(t, entry, "a transaction past the threshold must leave an entry")
 	require.Equal(t, "transaction", entry["phase"], "the entry names the operation it reports on")
 	require.NotEmpty(t, entry["held"], "the entry carries how long the connection was held")
+	require.InDelta(t, float64(50*time.Millisecond), entry["threshold"], 0,
+		"the threshold travels as integer nanoseconds, like the duration it is compared with")
 }
 
 // TestShortTransactionIsNotReported pins the other half: the ordinary

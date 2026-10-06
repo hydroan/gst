@@ -7,6 +7,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/hydroan/gst/internal/consts"
+	"github.com/hydroan/gst/internal/logfield"
 	"github.com/hydroan/gst/internal/requestctx"
 	"github.com/hydroan/gst/logger"
 	prommetrics "github.com/hydroan/gst/metrics"
@@ -54,14 +55,14 @@ func accessLogger() gin.HandlerFunc {
 		fields := make([]zapcore.Field, 0, accessLogFieldCap)
 		fields = append(
 			fields,
-			zap.Int("status", c.Writer.Status()),
-			zap.String(consts.CTX_METHOD, c.Request.Method),
-			zap.String(consts.CTX_USERNAME, c.GetString(consts.CTX_USERNAME)),
-			zap.String(consts.CTX_USER_ID, c.GetString(consts.CTX_USER_ID)),
-			zap.String(consts.TRACE_ID, traceID),
-			zap.String(consts.CTX_ROUTE, route),
-			zap.String(consts.CTX_PATH, path),
-			zap.String(consts.QUERY, query),
+			logfield.Status(c.Writer.Status()),
+			logfield.Method(c.Request.Method),
+			logfield.Username(c.GetString(consts.CTX_USERNAME)),
+			logfield.UserID(c.GetString(consts.CTX_USER_ID)),
+			logfield.TraceID(traceID),
+			logfield.Route(route),
+			logfield.Path(path),
+			logfield.Query(query),
 			zap.String("ip", requestctx.GinClientIP(c)),
 			zap.String("user_agent", c.Request.UserAgent()),
 			util.LogDuration(time.Since(start)),

@@ -1,6 +1,7 @@
 package authn
 
 import (
+	"fmt"
 	"sync"
 	"time"
 
@@ -109,7 +110,7 @@ func notifyLoginObserver(ctx *types.ServiceContext, observer LoginObserver, even
 			if logger.App != nil {
 				logger.App.Errorz(
 					"login observer panicked",
-					zap.Any("recovered", recovered),
+					zap.String("recovered", fmt.Sprint(recovered)),
 					zap.Stack("stack"),
 				)
 			}

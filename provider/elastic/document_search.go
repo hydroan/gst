@@ -9,8 +9,10 @@ import (
 	"time"
 
 	"github.com/cockroachdb/errors"
+	"github.com/hydroan/gst/internal/logfield"
 	"github.com/hydroan/gst/logger"
 	"github.com/hydroan/gst/util"
+	"go.uber.org/zap"
 )
 
 // SearchRequest represents an Elasticsearch search query.
@@ -164,10 +166,10 @@ func (*document) Search(ctx context.Context, indexName string, req *SearchReques
 
 	if res.IsError() {
 		body, _ := io.ReadAll(res.Body)
-		logger.Errorw(
+		logger.Errorz(
 			"elasticsearch error response",
-			"status", res.Status(),
-			"body", string(body),
+			logfield.Status(res.StatusCode),
+			zap.String("body", string(body)),
 		)
 		return nil, errors.Newf("elasticsearch error [%s]: %s", res.Status(), string(body))
 	}

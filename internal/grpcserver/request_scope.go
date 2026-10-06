@@ -7,8 +7,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/hydroan/gst/internal/consts"
 	"github.com/hydroan/gst/internal/execctx"
+	"github.com/hydroan/gst/internal/logfield"
 	"github.com/hydroan/gst/internal/requestctx"
 	"github.com/hydroan/gst/logger"
 	gstotel "github.com/hydroan/gst/otel"
@@ -33,6 +33,12 @@ const (
 	userAgentKey = "user-agent"
 	authorityKey = ":authority"
 )
+
+// grpcCodeKey is the access-log field naming the status code a call ended
+// with, OK or NotFound. It is not the HTTP access log's status, a number: the
+// two codes share no number space, so each listener's log names its own (see
+// logfield.Status).
+const grpcCodeKey = "grpc_code"
 
 // accessLogFieldCap is the most fields an access-log entry carries, the ten
 // every entry has plus the error of a failed call, so the slice is allocated
@@ -163,13 +169,13 @@ func (s *callScope) leave(err error) {
 	fields := make([]zapcore.Field, 0, accessLogFieldCap)
 	fields = append(
 		fields,
-		zap.String("status", st.Code().String()),
-		zap.String(consts.CTX_METHOD, s.meta.Method()),
-		zap.String(consts.CTX_USERNAME, s.record.caller.Username),
-		zap.String(consts.CTX_USER_ID, s.record.caller.UserID),
-		zap.String(consts.TRACE_ID, s.traceID),
-		zap.String(consts.CTX_ROUTE, s.meta.Route()),
-		zap.String(consts.CTX_PATH, s.meta.Path()),
+		zap.String(grpcCodeKey, st.Code().String()),
+		logfield.Method(s.meta.Method()),
+		logfield.Username(s.record.caller.Username),
+		logfield.UserID(s.record.caller.UserID),
+		logfield.TraceID(s.traceID),
+		logfield.Route(s.meta.Route()),
+		logfield.Path(s.meta.Path()),
 		zap.String("ip", s.meta.ClientIP()),
 		zap.String("user_agent", s.meta.UserAgent()),
 		util.LogDuration(time.Since(s.start)),
