@@ -48,13 +48,12 @@ func (a *action[M, REQ, RSP]) serviceHandler() gin.HandlerFunc {
 		form := a.phase == consts.Create && strings.EqualFold(c.ContentType(), "multipart/form-data")
 		if binds && !form {
 			reqErr := bindJSONRequest(c, &req)
-			// The bound request, or the zero one of an absent body, a JSON
-			// null restored from the nil pointer it leaves before the
-			// validator sees it: the zero request meets the binding tags all
-			// the same, a required field refusing it the way the gRPC call
-			// refuses a payload the message left unset.
-			a.normalizeRequest(&req)
 			if errors.Is(reqErr, io.EOF) {
+				// An absent body, or a JSON null, binds nothing: the zero
+				// request, restored from the nil pointer the null leaves, is
+				// validated all the same, a required field refusing it the
+				// way the gRPC call refuses a payload the message left unset.
+				a.normalizeRequest(&req)
 				reqErr = nil
 				if err := validateRequest(req); err != nil {
 					reqErr = clientSafeBindError(err)

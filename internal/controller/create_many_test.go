@@ -30,16 +30,26 @@ func TestCreateManyWritesNothingWhenOneItemCollides(t *testing.T) {
 // batch are validated against their binding tags the way a single
 // resource's body is: the validator descends into the items, so an item
 // without its required field refuses the whole batch before anything is
-// written.
+// written. The items are validated as the service would receive them, the
+// null entries dropped first, so the refusal names the item by the position
+// it holds in the batch the service sees, the way the gRPC call does.
 func TestCreateManyRefusesAnItemFailingValidation(t *testing.T) {
 	rsp := serve(t, http.MethodPost, "/controller-validated-samples/batch",
 		controller.CreateManyHandler[*validatedSample, *validatedSample, *validatedSample](configFor[*validatedSample](validatedRoute)),
 		"/controller-validated-samples/batch", `{"items":[{"name":"valid"},{}]}`)
 
 	require.Equal(t, http.StatusBadRequest, rsp.Code)
+	require.Contains(t, rsp.Body.String(), `"msg":"items[1].name is a required field"`)
 	var total int
 	require.NoError(t, database.Database[*validatedSample](context.Background()).WithQuery(&validatedSample{Name: "valid"}).Count(&total))
 	require.Zero(t, total)
+
+	rsp = serve(t, http.MethodPost, "/controller-validated-samples/batch",
+		controller.CreateManyHandler[*validatedSample, *validatedSample, *validatedSample](configFor[*validatedSample](validatedRoute)),
+		"/controller-validated-samples/batch", `{"items":[null,{}]}`)
+
+	require.Equal(t, http.StatusBadRequest, rsp.Code)
+	require.Contains(t, rsp.Body.String(), `"msg":"items[0].name is a required field"`, "the null entry is dropped before the items are validated")
 }
 
 // TestCreateManyWritesNothingTheBeforeHookRefuses pins that a

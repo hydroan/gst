@@ -88,6 +88,7 @@ func PatchHandler[M types.Model, REQ types.Request, RSP types.Response](cfg ...*
 			gstotel.RecordError(span, err)
 			return
 		}
+		a.normalizeModel(&req)
 		if err = validatePatchFields(req, fields); err != nil {
 			err = clientSafeBindError(err)
 			log.Errorz("bind request body failed", zap.Error(err))
@@ -95,7 +96,6 @@ func PatchHandler[M types.Model, REQ types.Request, RSP types.Response](cfg ...*
 			gstotel.RecordError(span, err)
 			return
 		}
-		a.normalizeModel(&req)
 		if len(id) == 0 {
 			log.Errorz(missingRouteParamMsg)
 			response.Error(c, badRequest(missingRouteParamMsg))

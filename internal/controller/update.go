@@ -52,7 +52,6 @@ func UpdateHandler[M types.Model, REQ types.Request, RSP types.Response](cfg ...
 			gstotel.RecordError(span, reqErr)
 			return
 		}
-		a.normalizeModel(&req)
 
 		// The resource id comes from the configured route parameter only.
 		var id string

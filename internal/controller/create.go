@@ -51,7 +51,6 @@ func CreateHandler[M types.Model, REQ types.Request, RSP types.Response](cfg ...
 			gstotel.RecordError(span, reqErr)
 			return
 		}
-		a.normalizeModel(&req)
 
 		if err := a.createFlow(requestContext(c), ginServiceContext(c), req); err != nil {
 			response.Error(c, err)

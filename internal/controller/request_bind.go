@@ -27,8 +27,8 @@ import (
 // gin's validator step, null entries inside JSON arrays decode into nil slice
 // elements, and decoder errors spell out Go struct and package internals.
 // Phase services and the shared batch pipeline must never observe the former
-// shapes, so every handler binds through bindJSONRequest and normalizes the
-// bound value right after it succeeds; response envelopes must never carry
+// shapes, so every handler binds through bindJSONRequest, which normalizes
+// the bound value before validating it; response envelopes must never carry
 // the latter text, so every body-decoding entry point wraps its errors
 // through clientSafeBindError.
 
@@ -36,14 +36,17 @@ import (
 var jsonNull = []byte("null")
 
 // bindJSONRequest decodes the JSON request body into target (see
-// decodeJSONRequest) and validates it against its binding tags (see
-// validateRequest): what every handler binding a body does, but the patch
-// handlers, which validate the fields the body names alone once they know
-// which (see validatePatchFields).
+// decodeJSONRequest), normalizes what it holds (see normalizeValue) and
+// validates it against its binding tags (see validateRequest), in that
+// order, so the body is validated as the service receives it, the way the
+// gRPC calls validate a message: what every handler binding a body does, but
+// the patch handlers, which validate the fields the body names alone once
+// they know which (see validatePatchFields).
 func bindJSONRequest(c *gin.Context, target any) error {
 	if err := decodeJSONRequest(c, target); err != nil {
 		return err
 	}
+	normalizeValue(reflect.ValueOf(target))
 	if err := validateRequest(target); err != nil {
 		return clientSafeBindError(err)
 	}
