@@ -3,6 +3,11 @@
 // directory; the gg command running the checks decides which run, in what
 // order, and how their results print.
 //
+// A rule earns its place by stopping a mistaken use of the framework or by
+// holding the project to a best practice of using it. One that stops no
+// mistake, because the framework settles the matter itself, and only makes an
+// ordinary way of writing the code awkward is not a rule of gg check.
+//
 // Every check lives in a file of its own, named after the check: the file
 // dsl_design_rules.go declares the DSL design rules Check, its name and rule,
 // the function finding its violations and the helpers no other check uses.
