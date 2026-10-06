@@ -1,9 +1,11 @@
 package openapigen
 
 import (
+	"reflect"
 	"testing"
 
 	"github.com/getkin/kin-openapi/openapi3"
+	"github.com/hydroan/gst/apidoc"
 	"github.com/hydroan/gst/config"
 )
 
@@ -24,25 +26,37 @@ func TestSetDocInfoAlwaysDeclaresAVersion(t *testing.T) {
 	}
 }
 
-func TestSetDocSecurityDeclaresSchemes(t *testing.T) {
+// TestSetDocSecurityDeclaresTheRegisteredSchemes pins that the document
+// declares the schemes the project's middleware registered and no other: a
+// project registering none declares none and requires nothing, and once a
+// cookie and a bearer scheme are registered both are declared, each a
+// requirement of its own, in name order.
+func TestSetDocSecurityDeclaresTheRegisteredSchemes(t *testing.T) {
+	bare := &openapi3.T{Components: &openapi3.Components{}}
+	setDocSecurity(bare)
+	if len(bare.Components.SecuritySchemes) != 0 || bare.Security != nil {
+		t.Fatalf("with no scheme registered the document declares %+v and requires %+v, want nothing", bare.Components.SecuritySchemes, bare.Security)
+	}
+
+	apidoc.RegisterSecurityScheme("sampleCookie", apidoc.SecurityScheme{Type: "apiKey", In: "cookie", Name: "sample_session", Description: "the sample session cookie"})
+	apidoc.RegisterSecurityScheme("sampleBearer", apidoc.SecurityScheme{Type: "http", Scheme: "bearer"})
 	testDoc := &openapi3.T{Components: &openapi3.Components{}}
 	setDocSecurity(testDoc)
 
-	cookie := testDoc.Components.SecuritySchemes[securitySchemeCookie]
+	cookie := testDoc.Components.SecuritySchemes["sampleCookie"]
 	if cookie == nil || cookie.Value == nil {
-		t.Fatal("cookieAuth scheme missing")
+		t.Fatal("sampleCookie scheme missing")
 	}
-	if cookie.Value.Type != "apiKey" || cookie.Value.In != "cookie" || cookie.Value.Name != "session_id" {
-		t.Fatalf("cookieAuth scheme = %+v, want apiKey in cookie named session_id", cookie.Value)
+	if cookie.Value.Type != "apiKey" || cookie.Value.In != "cookie" || cookie.Value.Name != "sample_session" || cookie.Value.Description != "the sample session cookie" {
+		t.Fatalf("sampleCookie scheme = %+v, want apiKey in cookie named sample_session", cookie.Value)
 	}
-
-	bearer := testDoc.Components.SecuritySchemes[securitySchemeBearer]
+	bearer := testDoc.Components.SecuritySchemes["sampleBearer"]
 	if bearer == nil || bearer.Value == nil || bearer.Value.Type != "http" || bearer.Value.Scheme != "bearer" {
-		t.Fatal("bearerAuth scheme missing or malformed")
+		t.Fatal("sampleBearer scheme missing or malformed")
 	}
-
-	if len(testDoc.Security) != 2 {
-		t.Fatalf("doc.Security = %+v, want cookie or bearer requirement", testDoc.Security)
+	want := openapi3.SecurityRequirements{{"sampleBearer": []string{}}, {"sampleCookie": []string{}}}
+	if !reflect.DeepEqual(testDoc.Security, want) {
+		t.Fatalf("doc.Security = %+v, want one requirement per scheme in name order", testDoc.Security)
 	}
 }
 

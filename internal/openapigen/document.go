@@ -2,12 +2,14 @@ package openapigen
 
 import (
 	"encoding/json"
+	"maps"
 	"net/http"
+	"slices"
 	"sync"
 
 	"github.com/getkin/kin-openapi/openapi3"
+	"github.com/hydroan/gst/apidoc"
 	"github.com/hydroan/gst/config"
-	serviceiamsession "github.com/hydroan/gst/internal/service/iam/session"
 )
 
 var (
@@ -57,40 +59,36 @@ func setDocInfo(doc *openapi3.T) {
 	setDocSecurity(doc)
 }
 
-// The component names of the supported authentication mechanisms: the IAM
-// session cookie and the bearer token.
-const (
-	securitySchemeCookie = "cookieAuth"
-	securitySchemeBearer = "bearerAuth"
-)
-
-// setDocSecurity declares the authentication mechanisms and requires one of
-// them for every operation by default. Public operations override this with
-// an empty security requirement (see markPublic).
+// setDocSecurity declares the authentication schemes the project's
+// middleware registered (see apidoc.RegisterSecurityScheme), by name, and
+// requires any one of them of every operation by default; public operations
+// override this with an empty requirement (see markPublic). A project that
+// registered none, serving no authentication, declares none and requires
+// nothing.
 func setDocSecurity(doc *openapi3.T) {
+	schemes := apidoc.SecuritySchemes()
+	if len(schemes) == 0 {
+		return
+	}
 	if doc.Components == nil {
 		doc.Components = &openapi3.Components{}
 	}
 	if doc.Components.SecuritySchemes == nil {
 		doc.Components.SecuritySchemes = openapi3.SecuritySchemes{}
 	}
-	doc.Components.SecuritySchemes[securitySchemeCookie] = &openapi3.SecuritySchemeRef{
-		Value: &openapi3.SecurityScheme{
-			Type:        "apiKey",
-			In:          "cookie",
-			Name:        serviceiamsession.SessionCookieName,
-			Description: "IAM session cookie issued by POST /api/login",
-		},
-	}
-	doc.Components.SecuritySchemes[securitySchemeBearer] = &openapi3.SecuritySchemeRef{
-		Value: &openapi3.SecurityScheme{
-			Type:   "http",
-			Scheme: "bearer",
-		},
-	}
-	doc.Security = openapi3.SecurityRequirements{
-		{securitySchemeCookie: []string{}},
-		{securitySchemeBearer: []string{}},
+	doc.Security = openapi3.SecurityRequirements{}
+	for _, name := range slices.Sorted(maps.Keys(schemes)) {
+		scheme := schemes[name]
+		doc.Components.SecuritySchemes[name] = &openapi3.SecuritySchemeRef{
+			Value: &openapi3.SecurityScheme{
+				Type:        scheme.Type,
+				Scheme:      scheme.Scheme,
+				In:          scheme.In,
+				Name:        scheme.Name,
+				Description: scheme.Description,
+			},
+		}
+		doc.Security = append(doc.Security, openapi3.SecurityRequirement{name: []string{}})
 	}
 }
 

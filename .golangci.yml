@@ -161,6 +161,7 @@ linters:
             - "!**/example_*_test.go"
             - "!**/middleware/authz_test.go"
             - "!**/middleware/ip_filter_test.go"
+            - "!**/middleware/security_scheme_test.go"
             - "!**/middleware/timeout_test.go"
             - "!**/internal/model/**"
             - "!**/internal/service/**"

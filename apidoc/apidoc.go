@@ -38,10 +38,24 @@ type EnumDoc struct {
 	Values []EnumValue
 }
 
+// SecurityScheme is one way a request authenticates, as the OpenAPI document
+// declares it under components.securitySchemes: Type is apiKey or http; In
+// and Name place an apiKey, the cookie and its name for a session cookie;
+// Scheme names an http scheme, bearer for a token; Description tells the
+// reader where the credential comes from.
+type SecurityScheme struct {
+	Type        string
+	Scheme      string
+	In          string
+	Name        string
+	Description string
+}
+
 var (
-	mu           sync.RWMutex
-	registry     = make(map[string]StructDoc)
-	enumRegistry = make(map[string]EnumDoc)
+	mu              sync.RWMutex
+	registry        = make(map[string]StructDoc)
+	enumRegistry    = make(map[string]EnumDoc)
+	securitySchemes = make(map[string]SecurityScheme)
 
 	// signatureRegistry maps a struct's field-name signature to its field
 	// docs, so an anonymous struct (a type alias to an unnamed struct, which
@@ -159,4 +173,24 @@ func LookupEnum(pkgPath, typeName string) (EnumDoc, bool) {
 	}
 	doc.Values = slices.Clone(doc.Values)
 	return doc, true
+}
+
+// RegisterSecurityScheme records, under the component name given, a way a
+// request authenticates: the authentication middleware a project mounts
+// registers its own as it is built, so the document declares the schemes the
+// project serves and no other, and requires any one of them of every
+// operation not declared public. Registering a name again replaces the
+// previous scheme.
+func RegisterSecurityScheme(name string, scheme SecurityScheme) {
+	mu.Lock()
+	defer mu.Unlock()
+	securitySchemes[name] = scheme
+}
+
+// SecuritySchemes returns the registered schemes by component name, a copy
+// the caller may keep.
+func SecuritySchemes() map[string]SecurityScheme {
+	mu.RLock()
+	defer mu.RUnlock()
+	return maps.Clone(securitySchemes)
 }

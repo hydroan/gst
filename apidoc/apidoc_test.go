@@ -110,3 +110,20 @@ func TestRegisterAndLookupCopyFields(t *testing.T) {
 		t.Fatalf("again.Fields[Name] = %q, want %q", again.Fields["Name"], "original")
 	}
 }
+
+// TestRegisterSecuritySchemeKeepsEachNameOnce pins the registry of the
+// authentication schemes: a scheme is read back under its name, registering
+// the name again replaces it, and the map returned is the caller's own.
+func TestRegisterSecuritySchemeKeepsEachNameOnce(t *testing.T) {
+	apidoc.RegisterSecurityScheme("sampleCookie", apidoc.SecurityScheme{Type: "apiKey", In: "cookie", Name: "sample_session", Description: "the sample session cookie"})
+	apidoc.RegisterSecurityScheme("sampleCookie", apidoc.SecurityScheme{Type: "apiKey", In: "cookie", Name: "sample_session_v2"})
+
+	schemes := apidoc.SecuritySchemes()
+	if want := (apidoc.SecurityScheme{Type: "apiKey", In: "cookie", Name: "sample_session_v2"}); schemes["sampleCookie"] != want {
+		t.Fatalf("SecuritySchemes()[sampleCookie] = %+v, want %+v, the later registration", schemes["sampleCookie"], want)
+	}
+	schemes["sampleCookie"] = apidoc.SecurityScheme{}
+	if name := apidoc.SecuritySchemes()["sampleCookie"].Name; name != "sample_session_v2" {
+		t.Fatalf("SecuritySchemes()[sampleCookie].Name = %q after the caller changed its copy, want sample_session_v2", name)
+	}
+}

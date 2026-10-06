@@ -2,6 +2,7 @@ package middleware
 
 import (
 	"github.com/gin-gonic/gin"
+	"github.com/hydroan/gst/apidoc"
 	"github.com/hydroan/gst/consts"
 	serviceiamsession "github.com/hydroan/gst/internal/service/iam/session"
 	"github.com/hydroan/gst/requestctx"
@@ -13,8 +14,16 @@ import (
 // of the module takes as well: the session is admitted or refused the same
 // way over both listeners, and what differs here is only where the session
 // id comes from, the cookie, and how a refusal is answered, in the API
-// envelope with the status and message the service error carries.
+// envelope with the status and message the service error carries. Building
+// the middleware declares the cookie to the OpenAPI document as the
+// cookieAuth scheme.
 func IAMSession() gin.HandlerFunc {
+	apidoc.RegisterSecurityScheme("cookieAuth", apidoc.SecurityScheme{
+		Type:        "apiKey",
+		In:          "cookie",
+		Name:        serviceiamsession.SessionCookieName,
+		Description: "IAM session cookie issued by POST /api/login",
+	})
 	return func(c *gin.Context) {
 		sessionID, _ := c.Cookie(serviceiamsession.SessionCookieName)
 

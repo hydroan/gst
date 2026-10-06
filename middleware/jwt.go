@@ -4,6 +4,7 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
+	"github.com/hydroan/gst/apidoc"
 	"github.com/hydroan/gst/authn/jwt"
 	"github.com/hydroan/gst/internal/consts"
 	"github.com/hydroan/gst/internal/logfield"
@@ -35,8 +36,11 @@ func abortUnauthenticatedJWT(c *gin.Context, err error) {
 // The token answers for itself: it is verified from its signature and claims,
 // with nothing read from storage. Revoking one before it expires therefore is
 // not something this middleware can do, which is the trade a stateless token
-// makes and the reason IAM's own sessions are not built on it.
+// makes and the reason IAM's own sessions are not built on it. Building the
+// middleware declares the token to the OpenAPI document as the bearerAuth
+// scheme.
 func JwtAuth() gin.HandlerFunc {
+	apidoc.RegisterSecurityScheme("bearerAuth", apidoc.SecurityScheme{Type: "http", Scheme: "bearer"})
 	return func(c *gin.Context) {
 		_, claims, err := jwt.ParseTokenFromHeader(c.Request.Header)
 		if err != nil {
