@@ -24,6 +24,16 @@ type taggedVersionRecord struct {
 
 func (*taggedVersionRecord) TableName() string { return "tagged_version_records" }
 
+// capitalizedTagVersionRecord spells the column tag key as gorm reads it too,
+// case-insensitively: gorm builds and writes the column ver.
+type capitalizedTagVersionRecord struct {
+	Version modelregistry.Version `json:"version,omitempty" gorm:"Column:ver;not null;default:1"`
+
+	modelregistry.Base
+}
+
+func (*capitalizedTagVersionRecord) TableName() string { return "capitalized_tag_version_records" }
+
 type plainRecord struct {
 	Name string
 
@@ -44,6 +54,10 @@ func TestVersionFieldDetection(t *testing.T) {
 	column, ok = modelregistry.VersionColumn(&taggedVersionRecord{})
 	require.True(t, ok)
 	require.Equal(t, "rev", column, "an explicit column tag wins")
+
+	column, ok = modelregistry.VersionColumn(&capitalizedTagVersionRecord{})
+	require.True(t, ok)
+	require.Equal(t, "ver", column, "the column is the one gorm resolves, the tag key read case-insensitively")
 
 	_, ok = modelregistry.VersionColumn(&plainRecord{})
 	require.False(t, ok)

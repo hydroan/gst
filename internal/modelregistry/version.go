@@ -6,7 +6,7 @@ import (
 	"strings"
 	"sync"
 
-	gormschema "gorm.io/gorm/schema"
+	"github.com/hydroan/gst/internal/modelschema"
 )
 
 // Version is the optimistic-locking column type. A model opts in by declaring
@@ -170,7 +170,18 @@ func versionFieldOf(m any) versionField {
 				"model %s field %s (model.Version) must carry json:\",omitempty\" and gorm:\"not null;default:1\", missing %s; default:1 backfills existing rows to a live version when the column is added — without it they are locked out of Update forever — and omitempty keeps an unset version out of marshaled request bodies, where an explicit zero is rejected. Run \"gg gen\" to fill the tags in",
 				typ, field.Name, strings.Join(quoted, " and ")))
 		}
-		info = versionField{index: i, fieldName: field.Name, column: versionColumnName(field), has: true}
+		// The column is the one gorm reads and writes, resolved by the one
+		// authority on column names (see modelschema): a column tag spelt
+		// in any case, or the configured naming strategy.
+		columns, err := modelschema.GoNameIndex(typ)
+		if err != nil {
+			panic(fmt.Sprintf("model %s: the columns gorm reads cannot be resolved for the Version field %s: %v", typ, field.Name, err))
+		}
+		column, ok := columns[field.Name]
+		if !ok {
+			panic(fmt.Sprintf("model %s: gorm reads no column for the Version field %s; optimistic locking needs the field stored", typ, field.Name))
+		}
+		info = versionField{index: i, fieldName: field.Name, column: column.DBName, has: true}
 		break
 	}
 	versionFieldCache.Store(typ, info)
@@ -242,18 +253,6 @@ func versionTagMissing(tag reflect.StructTag) []string {
 		missing = append(missing, versionJSONRequirement)
 	}
 	return missing
-}
-
-// versionColumnName resolves the database column of the Version field the
-// same way gorm does: an explicit column tag wins, the naming strategy
-// renders the field name otherwise.
-func versionColumnName(field reflect.StructField) string {
-	for part := range strings.SplitSeq(field.Tag.Get("gorm"), ";") {
-		if name, ok := strings.CutPrefix(strings.TrimSpace(part), "column:"); ok && len(name) > 0 {
-			return name
-		}
-	}
-	return gormschema.NamingStrategy{}.ColumnName("", field.Name)
 }
 
 // IsVersioned reports whether m declares a Version field and therefore takes
