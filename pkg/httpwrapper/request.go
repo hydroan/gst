@@ -15,10 +15,10 @@ type WrappedRequest struct {
 	*http.Request
 }
 
-// NOTE: do not add "omitempty" to the json tags, otherwise the jsoniter
-// package fails to marshal/unmarshal this type. sonic and encoding/json
-// handle WrappedRequest fine, while go-json fails with
-// "unsupported type: func() io.ReadCloser".
+// wrappedRequest is the JSON shape WrappedRequest marshals through. Do not
+// add "omitempty" to its json tags: the jsoniter package then fails to
+// marshal/unmarshal this type; sonic and encoding/json handle WrappedRequest
+// fine, while go-json fails with "unsupported type: func() io.ReadCloser".
 type wrappedRequest struct {
 	Body    json.RawMessage `json:"Body"`
 	GetBody string          `json:"GetBody"`

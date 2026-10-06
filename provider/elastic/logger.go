@@ -10,7 +10,7 @@ import (
 	"github.com/hydroan/gst/util"
 )
 
-// A simple logger adapter that uses zap logger
+// elasticLogger is a simple logger adapter that uses the zap logger.
 type elasticLogger struct {
 	logger types.Logger
 }

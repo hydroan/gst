@@ -44,9 +44,10 @@ func TestEnsureTableFailsFastWhenDisabledAndTableMissing(t *testing.T) {
 	require.False(t, db.Migrator().HasTable("plain_records"))
 }
 
-// An in-memory sqlite database is migrated even with auto_migrate off,
-// whichever way the configuration selects it: the flag, no path, or a path
-// naming memory, plainly, as a file URI, or through a file URI's mode.
+// TestEnsureTableMigratesInMemorySqliteWhenDisabled pins that an in-memory
+// sqlite database is migrated even with auto_migrate off, whichever way the
+// configuration selects it: the flag, no path, or a path naming memory,
+// plainly, as a file URI, or through a file URI's mode.
 func TestEnsureTableMigratesInMemorySqliteWhenDisabled(t *testing.T) {
 	for name, cfg := range map[string]config.Sqlite{
 		"the_flag":                  {IsMemory: true, Path: "data.db"},

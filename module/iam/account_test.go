@@ -856,7 +856,8 @@ func accountRequireUserSessionNotContains(t *testing.T, userID, sessionID string
 	require.NotContains(t, userSessionIDs, sessionID)
 }
 
-// The two helpers below spell out Redis keys the store keeps private.
+// accountUserSessionIndexKey, and the helper after it, spell out the Redis
+// keys the store keeps private.
 //
 // They exist for the cases that plant broken storage — an index that is not a
 // sorted set, a snapshot that is not a session — which no method of the store

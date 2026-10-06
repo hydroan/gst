@@ -99,7 +99,11 @@ func (t *Tree[K, V]) Put(key K, val V) {
 	t.put(key, val, nil, &t.root)
 }
 
-// ref: https://github.com/emirpasic/gods/blob/8323d02ee3ca1499478f9ccd7a299fb1c5005780/trees/avltree/avltree.go#L225
+// put inserts key with value into the subtree *qp, whose parent is p, or
+// replaces the value of an existing key, and reports whether the subtree's
+// height changed.
+//
+// references: https://github.com/emirpasic/gods/blob/8323d02ee3ca1499478f9ccd7a299fb1c5005780/trees/avltree/avltree.go#L225
 func (t *Tree[K, V]) put(key K, value V, p *Node[K, V], qp **Node[K, V]) bool {
 	q := *qp
 	if q == nil {
@@ -192,7 +196,10 @@ func (t *Tree[K, V]) Delete(key K) {
 	t.delete(key, &t.root)
 }
 
-// ref: https://github.com/emirpasic/gods/blob/8323d02ee3ca1499478f9ccd7a299fb1c5005780/trees/avltree/avltree.go#L254
+// delete removes key from the subtree *qp and reports whether the subtree's
+// height changed.
+//
+// references: https://github.com/emirpasic/gods/blob/8323d02ee3ca1499478f9ccd7a299fb1c5005780/trees/avltree/avltree.go#L254
 func (t *Tree[K, V]) delete(key K, qp **Node[K, V]) bool {
 	q := *qp
 	if q == nil {

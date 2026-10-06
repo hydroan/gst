@@ -219,9 +219,10 @@ func IsSpanRecording(span trace.Span) bool {
 	return span != nil && span.IsRecording()
 }
 
-// Hot-path span attribute value derived from the service name. Building it
-// per request means string concatenation on every traced request, which shows
-// up directly in allocation profiles under load, so Init precomputes it.
+// serviceNameAttr is the hot-path span attribute value derived from the
+// service name. Building it per request means string concatenation on every
+// traced request, which shows up directly in allocation profiles under load,
+// so Init precomputes it.
 // It is a plain variable instead of sync.OnceValue so re-running Init with a
 // different configuration (tests do this) refreshes it.
 var serviceNameAttr attribute.KeyValue

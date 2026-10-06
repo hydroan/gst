@@ -14,11 +14,12 @@ import (
 )
 
 const (
-	// The file sinks and the shared stdout sink buffer their entries and
-	// write them out when the buffer fills, the flush interval elapses, or
-	// Clean (or a Sync on the logger) runs. Until then the output stays
-	// behind what was logged, which is all a reader inspecting it right after
-	// the fact gets to see.
+	// defaultLogBufferSize and defaultLogFlushInterval bound the buffering of
+	// the file sinks and the shared stdout sink, which write their entries out
+	// when the buffer fills, the flush interval elapses, or Clean (or a Sync
+	// on the logger) runs. Until then the output stays behind what was
+	// logged, which is all a reader inspecting it right after the fact gets
+	// to see.
 	defaultLogBufferSize    = 256 * 1024
 	defaultLogFlushInterval = time.Second
 )

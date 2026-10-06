@@ -145,7 +145,8 @@ func componentDescriptionName(typ, modelTyp reflect.Type) string {
 	return modelTyp.Name()
 }
 
-// register Model, Model Payload, Model Result into openapi3 schema.
+// registerSchema registers Model, Model Payload and Model Result into the
+// openapi3 schema.
 func registerSchema[M types.Model, REQ types.Request, RSP types.Response](reqKey, rspKey string, reqSchemaRef *openapi3.SchemaRef, rspSchemaRef *openapi3.SchemaRef) {
 	if !modelregistry.IsEmpty[M]() {
 		typ := reflect.TypeFor[M]()

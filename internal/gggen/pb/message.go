@@ -34,9 +34,10 @@ const (
 	fieldMaskProto = "google/protobuf/field_mask.proto"
 )
 
-// The Go types mapped to a well-known time type, keyed by package path and
-// name: an instant to Timestamp, gorm's date to a Timestamp at the start of
-// the day, and gorm's time of day, a duration since midnight, to Duration.
+// timeTypes maps the Go types with a well-known time type, keyed by package
+// path and name: an instant to Timestamp, gorm's date to a Timestamp at the
+// start of the day, and gorm's time of day, a duration since midnight, to
+// Duration.
 var timeTypes = map[string]struct{ typeName, proto string }{
 	"time.Time":              {wellKnownTimestamp, timestampProto},
 	"gorm.io/datatypes.Date": {wellKnownTimestamp, timestampProto},

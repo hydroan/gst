@@ -521,10 +521,11 @@ func cleanupAggregateData() {
 	_ = database.DB().Exec("DELETE FROM test_aggregate_records").Error
 }
 
-// Column references for the fixture. gg gen writes these next to a real
-// model; the database package has no generated code, so the tests build the
-// same values by hand, named the way gg gen names them, and exercise the same
-// API. Test and example code therefore reads like project code.
+// TestAggregateRecordCols are the column references of the fixture. gg gen
+// writes these next to a real model; the database package has no generated
+// code, so the tests build the same values by hand, named the way gg gen
+// names them, and exercise the same API. Test and example code therefore
+// reads like project code.
 var TestAggregateRecordCols = struct {
 	ID         types.Column[string]
 	Category   types.Column[string]

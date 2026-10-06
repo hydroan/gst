@@ -16,10 +16,12 @@ const (
 	postgresImage = "postgres:17-alpine"
 	postgresPort  = "5432/tcp"
 
-	// The dedicated setup runs on the database the container creates for its
-	// bootstrap user; the shared setup runs as the postgres superuser, which
-	// is what lets it create and drop a database per test binary. Both use the
-	// same password.
+	// postgresDatabase, postgresUsername, postgresSuperUsername and
+	// postgresPassword are the credentials of the two setups: the dedicated
+	// setup runs on the database the container creates for its bootstrap
+	// user; the shared setup runs as the postgres superuser, which is what
+	// lets it create and drop a database per test binary. Both use the same
+	// password.
 	postgresDatabase      = "test"
 	postgresUsername      = "test"
 	postgresSuperUsername = "postgres"

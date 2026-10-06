@@ -166,7 +166,7 @@ func TestRouterParamsManager(t *testing.T) {
 	})
 }
 
-// table-driven test
+// TestRouteParamsManagerTableDriven runs the manager's cases as a table.
 func TestRouteParamsManagerTableDriven(t *testing.T) {
 	tests := []struct {
 		name     string

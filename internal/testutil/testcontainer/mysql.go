@@ -16,9 +16,11 @@ const (
 	mysqlImage = "mysql:8.4"
 	mysqlPort  = "3306/tcp"
 
-	// The dedicated setup runs as a plain user on the database the container
-	// creates; the shared setup runs as root, which is what lets it create and
-	// drop a database per test binary. Both use the same password.
+	// mysqlDatabase, mysqlUsername, mysqlRootUsername and mysqlPassword are
+	// the credentials of the two setups: the dedicated setup runs as a plain
+	// user on the database the container creates; the shared setup runs as
+	// root, which is what lets it create and drop a database per test binary.
+	// Both use the same password.
 	mysqlDatabase     = "test"
 	mysqlUsername     = "test"
 	mysqlRootUsername = "root"

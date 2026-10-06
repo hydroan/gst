@@ -471,8 +471,9 @@ func countSamplesNamed(t *testing.T, name string) int {
 	return total
 }
 
-// The stream fixture services, one per kind of stream, each answering what
-// it found on the service context beside its notes. watchService streams as
+// watchService, uploadService, chatService and forkingChatService are the
+// stream fixture services, one per kind of stream, each answering what it
+// found on the service context beside its notes. watchService streams as
 // many responses as the request's note counts, numbered from 0, refusing
 // and failing for the notes the action service does; uploadService reads
 // the requests until the client is done and answers their notes joined;

@@ -180,12 +180,13 @@ func TestMigrate(t *testing.T) {
 	})
 }
 
-// A sqlite database file that does not exist yet is planned against as the
-// empty database it would be, whichever way the path spells it — plainly,
-// with the driver's parameters, or as a file URI, relative or absolute, whose
-// escapes name a space: a dry run creates nothing and reports that applying
-// the plan creates the file, and applying it does. Planned again, the file
-// needs nothing.
+// TestMigratePlansAMissingSqliteFileWithoutCreatingIt pins that a sqlite
+// database file that does not exist yet is planned against as the empty
+// database it would be, whichever way the path spells it — plainly, with the
+// driver's parameters, or as a file URI, relative or absolute, whose escapes
+// name a space: a dry run creates nothing and reports that applying the plan
+// creates the file, and applying it does. Planned again, the file needs
+// nothing.
 func TestMigratePlansAMissingSqliteFileWithoutCreatingIt(t *testing.T) {
 	dumper, err := dbmigrate.NewSchemaDumper()
 	require.NoError(t, err)
@@ -227,10 +228,11 @@ func TestMigratePlansAMissingSqliteFileWithoutCreatingIt(t *testing.T) {
 	}
 }
 
-// A sqlite database file that cannot come into being is refused while
-// planning instead of promised: the driver creates a missing file but not
-// the directory it goes in, and none where a regular file stands in for that
-// directory. The refusal names the cause, and nothing is created on the way.
+// TestMigrateRefusesASqliteFileItCannotCreate pins that a sqlite database
+// file that cannot come into being is refused while planning instead of
+// promised: the driver creates a missing file but not the directory it goes
+// in, and none where a regular file stands in for that directory. The refusal
+// names the cause, and nothing is created on the way.
 func TestMigrateRefusesASqliteFileItCannotCreate(t *testing.T) {
 	dumper, err := dbmigrate.NewSchemaDumper()
 	require.NoError(t, err)

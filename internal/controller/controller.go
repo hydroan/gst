@@ -21,7 +21,7 @@ import (
 // TODO: Record failed operations.
 
 var (
-	// Global audit manager instance.
+	// audit is the global audit manager, which records the operation log.
 	audit *auditmanager.AuditManager
 
 	initMu      sync.Mutex

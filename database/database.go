@@ -189,7 +189,8 @@ var (
 	// -1, GORM's own "no limit", so a read that asks for none stays unbounded.
 	defaultLimit = -1
 
-	// The write paths slice batches themselves instead of delegating to
+	// defaultBatchSize and defaultDeleteBatchSize are the batch sizes of the
+	// write paths, which slice batches themselves instead of delegating to
 	// GORM's CreateBatchSize/CreateInBatches, deliberately:
 	//   - The write's transaction boundary must span the model hooks around
 	//     the statements (withWriteTransaction); the transaction

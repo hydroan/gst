@@ -16,14 +16,14 @@ import (
 	"github.com/hydroan/gst/internal/gghelper"
 )
 
-// The migration program's model set is whatever the linked packages
-// registered, so it has to link the project packages a generated main.go
-// links and the framework entry point that links the rest, and it has to
-// initialize the router and modules through that entry point instead of
-// guessing when module registration is done. A
-// scaffold package the project lacks — restored by gg gen, never by migrate
-// — is left out rather than failing the build, which is what a project that
-// has not run gen yet looks like.
+// TestMigrateProgramLinksWhatMainLinks pins what the migration program links:
+// its model set is whatever the linked packages registered, so it has to link
+// the project packages a generated main.go links and the framework entry
+// point that links the rest, and it has to initialize the router and modules
+// through that entry point instead of guessing when module registration is
+// done. A scaffold package the project lacks — restored by gg gen, never by
+// migrate — is left out rather than failing the build, which is what a
+// project that has not run gen yet looks like.
 func TestMigrateProgramLinksWhatMainLinks(t *testing.T) {
 	projectDir := t.TempDir()
 	for _, dir := range ggconst.ProjectImportDirs {
@@ -64,7 +64,8 @@ func TestMigrateProgramLinksWhatMainLinks(t *testing.T) {
 	}
 }
 
-// The migration program reads the tables modules register as well as the
+// TestMigrateSchemaProgramReadsTheTablesModulesRegister pins that the
+// migration program reads the tables modules register as well as the
 // project's own. A module registers its models only once the framework
 // releases module registration, and registering mounts its routes on the
 // router, so the program has to bring up the router and the modules and wait
@@ -84,9 +85,10 @@ func TestMigrateSchemaProgramReadsTheTablesModulesRegister(t *testing.T) {
 	}
 }
 
-// With a source, the program dumps the registered models declared in the
-// files gg listed under it: here the module package, which declares the
-// model it registers.
+// TestMigrateSchemaProgramReadsTheModelsItsSourceDeclares pins that with a
+// source, the program dumps the registered models declared in the files gg
+// listed under it: here the module package, which declares the model it
+// registers.
 func TestMigrateSchemaProgramReadsTheModelsItsSourceDeclares(t *testing.T) {
 	if !newMigrateSampleProject(t) {
 		return
@@ -103,7 +105,8 @@ func TestMigrateSchemaProgramReadsTheModelsItsSourceDeclares(t *testing.T) {
 	}
 }
 
-// On an in-memory sqlite database, the default configuration, the migration
+// TestMigrateProgramHasNothingToMigrateOnAnInMemorySqliteDatabase pins that
+// on an in-memory sqlite database, the default configuration, the migration
 // program has nothing to migrate: the application creates the tables from the
 // models every time it starts, and the program, running in a process of its
 // own, cannot reach that database. It says so, and opens no database file:
@@ -130,9 +133,10 @@ func TestMigrateProgramHasNothingToMigrateOnAnInMemorySqliteDatabase(t *testing.
 	requireOnlySchemaSnapshotWritten(t, before)
 }
 
-// Planning against a sqlite database file that does not exist yet creates
-// nothing: the plan starts from the empty database the file would be, and the
-// program says applying it creates the file.
+// TestMigrateProgramPlansAMissingSqliteFileWithoutCreatingIt pins that
+// planning against a sqlite database file that does not exist yet creates
+// nothing: the plan starts from the empty database the file would be, and
+// the program says applying it creates the file.
 func TestMigrateProgramPlansAMissingSqliteFileWithoutCreatingIt(t *testing.T) {
 	if !newMigrateSampleProject(t) {
 		return
@@ -151,10 +155,10 @@ func TestMigrateProgramPlansAMissingSqliteFileWithoutCreatingIt(t *testing.T) {
 	requireOnlySchemaSnapshotWritten(t, before)
 }
 
-// On a sqlite database file the migration program migrates the file
-// sqlite.path names, the database the application opens: applied, the plan
-// creates the file and the tables there, and planned again, it finds nothing
-// to change.
+// TestMigrateProgramMigratesTheSqliteFileThePathNames pins that on a sqlite
+// database file the migration program migrates the file sqlite.path names,
+// the database the application opens: applied, the plan creates the file and
+// the tables there, and planned again, it finds nothing to change.
 func TestMigrateProgramMigratesTheSqliteFileThePathNames(t *testing.T) {
 	if !newMigrateSampleProject(t) {
 		return

@@ -136,8 +136,8 @@ func (a *failAfterAdapter) addPolicies(ctx context.Context, ptype string, rules 
 	return a.adapter.addPolicies(ctx, ptype, rules)
 }
 
-// The removal overrides intercept the counted entry points, which are the ones
-// mutate drives.
+// removePoliciesCount is one of the removal overrides, which intercept the
+// counted entry points, the ones mutate drives.
 func (a *failAfterAdapter) removePoliciesCount(
 	ctx context.Context, ptype string, rules [][]string,
 ) (int64, error) {

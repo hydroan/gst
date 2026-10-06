@@ -11,7 +11,7 @@ import (
 )
 
 var stringKeys [1000]string // random string keys
-// var stringKeys [100000]string // random string keys
+
 const bytesPerKey = 30
 
 func init() {
