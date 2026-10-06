@@ -257,6 +257,7 @@ func validateDesignFunc(fn *ast.FuncDecl, modelName string, rootModelFile, virtu
 	records := make([]serviceActionRecord, 0)
 	errs := make([]error, 0)
 	seenActions := make(map[string]bool)
+	seenPathKeywords := make(map[string]bool)
 	grpc, grpcServable, grpcOnly := false, false, false
 	for _, stmt := range fn.Body.List {
 		call, name, ok := keywordCall(stmt)
@@ -286,6 +287,12 @@ func validateDesignFunc(fn *ast.FuncDecl, modelName string, rootModelFile, virtu
 			errs = append(errs, routeErrs...)
 		case name == "GRPC":
 			grpc = true
+		case name == "Endpoint", name == "Param":
+			if seenPathKeywords[name] {
+				errs = append(errs, errors.Newf("%s: %s declares %s twice at Design() top level; declare it once", filename, modelName, name))
+			}
+			seenPathKeywords[name] = true
+			errs = append(errs, validateEndpointOrParam(call, name, modelName, filename)...)
 		case designOnlyMethodNames[name]:
 			continue
 		case actionOnlyMethodNames[name]:
@@ -299,6 +306,31 @@ func validateDesignFunc(fn *ast.FuncDecl, modelName string, rootModelFile, virtu
 		errs = append(errs, errors.Newf("%s: %s declares a Stream action but no GRPC(); a stream is served over gRPC alone, declare GRPC() or remove the Stream action", filename, modelName))
 	}
 	return records, errs
+}
+
+// validateEndpointOrParam reports an Endpoint or Param call at Design() top
+// level the parser cannot take a value from: an argument that is not a
+// string literal, or a value that declares nothing once read the way the
+// parser reads it (see endpointSegment and paramName), Endpoint("/") or
+// Param(":"), either of which would leave the model on its default without a
+// word, a Param of "" besides registering a route the router refuses at
+// startup. The argument count is the compiler's to report.
+func validateEndpointOrParam(call *ast.CallExpr, name, modelName, filename string) []error {
+	if len(call.Args) != 1 {
+		return nil
+	}
+	reads, names, placeholder := endpointSegment, "path", "path"
+	if name == "Param" {
+		reads, names, placeholder = paramName, "route parameter", "name"
+	}
+	value, ok := stringLiteral(call.Args[0])
+	if !ok {
+		return []error{errors.Newf("%s: %s gives %s something other than a string literal; write %s(%q)", filename, modelName, name, name, placeholder)}
+	}
+	if reads(value) == "" {
+		return []error{errors.Newf("%s: %s declares %s %q, which names no %s; write %s(%q) or omit %s for the default", filename, modelName, name, value, names, name, placeholder, name)}
+	}
+	return nil
 }
 
 // functionLiteralArg returns the function literal a block keyword takes as
@@ -322,14 +354,23 @@ func functionLiteralArg(call *ast.CallExpr, i int) *ast.FuncLit {
 // is written :name, the one form the router reads; one written {name},
 // which the router would serve as that literal segment, is refused with
 // "the Route("archive/boxes/{box}/documents") of Record writes the
-// parameter box as {box}; write :box, the form the router reads".
+// parameter box as {box}; write :box, the form the router reads". A path
+// that is not a string literal, or one that trims to nothing (see
+// routePath), Route("/", block), is refused as well: the parser would
+// declare no route for it without a word.
 func validateRouteCall(call *ast.CallExpr, modelName string, rootModelFile, virtual bool, filename string) (records []serviceActionRecord, grpcServable, grpcOnly bool, errs []error) {
 	flit := functionLiteralArg(call, 1)
 	if flit == nil {
 		return nil, false, false, []error{errors.Newf("%s: Route takes a function literal, Route(\"path\", func() {...}); a call passing anything else, nil included, declares no route: delete it or write the block", filename)}
 	}
 
-	route := stringArgValue(call, "")
+	route, isLiteral := stringLiteral(call.Args[0])
+	if !isLiteral {
+		return nil, false, false, []error{errors.Newf("%s: %s gives Route something other than a string literal; write Route(\"path\", func() {...})", filename, modelName)}
+	}
+	if routePath(route) == "" {
+		return nil, false, false, []error{errors.Newf("%s: %s declares Route %q, which names no path; write Route(\"path\", func() {...})", filename, modelName, route)}
+	}
 	records = make([]serviceActionRecord, 0)
 	errs = make([]error, 0)
 	for part := range strings.SplitSeq(route, "/") {
@@ -426,8 +467,14 @@ func validateActionCall(call *ast.CallExpr, actionName string, rootModelFile, vi
 			default:
 				info.result = true
 			}
-			if arg, ok := actionTypeArgument(child); ok && !modelPackageType(arg) {
-				errs = append(errs, errors.Newf("%s: %s action declares %s[%s]; Payload, Result, StreamingPayload and StreamingResult name a type of the model package, T or *T", filename, actionName, name, nodeSource(arg)))
+			if arg, ok := actionTypeArgument(child); ok {
+				ident, named := modelPackageType(arg)
+				switch {
+				case !named:
+					errs = append(errs, errors.Newf("%s: %s action declares %s[%s]; Payload, Result, StreamingPayload and StreamingResult name a type of the model package, T or *T", filename, actionName, name, nodeSource(arg)))
+				case !ast.IsExported(ident.Name):
+					errs = append(errs, errors.Newf("%s: %s action declares %s[%s]; the type must be exported, since the generated code refers to it from another package", filename, actionName, name, nodeSource(arg)))
+				}
 			}
 		case name == "Public":
 			continue
@@ -752,25 +799,16 @@ func actionTypeArgument(call *ast.CallExpr) (ast.Expr, bool) {
 	return nil, false
 }
 
-// modelPackageType reports whether expr names a type of the model package,
-// T or *T: the parser reads those alone (see parse), so any other form, a
-// type of another package or a slice, would declare nothing.
-func modelPackageType(expr ast.Expr) bool {
+// modelPackageType returns the identifier of the type of the model package
+// expr names, T or *T, and false when expr is any other form: the parser
+// reads those two alone (see parse), so a type of another package or a
+// slice would declare nothing.
+func modelPackageType(expr ast.Expr) (*ast.Ident, bool) {
 	if star, ok := expr.(*ast.StarExpr); ok {
 		expr = star.X
 	}
-	_, ok := expr.(*ast.Ident)
-	return ok
-}
-
-func stringArgValue(call *ast.CallExpr, current string) string {
-	if len(call.Args) == 0 {
-		return current
-	}
-	if value, ok := stringLiteral(call.Args[0]); ok {
-		return value
-	}
-	return current
+	ident, ok := expr.(*ast.Ident)
+	return ident, ok
 }
 
 func isRootModelFile(file *ast.File, modelDir string, filename string) bool {

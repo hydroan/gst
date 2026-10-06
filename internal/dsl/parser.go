@@ -263,18 +263,14 @@ func parseDesign(fn *ast.FuncDecl) *Design {
 		// Parse "Endpoint()".
 		if funcName == "Endpoint" && len(call.Args) == 1 {
 			if value, ok := stringLiteral(call.Args[0]); ok {
-				defaults.Endpoint = strings.TrimLeft(value, "/")
-				defaults.Endpoint = strings.ReplaceAll(defaults.Endpoint, "/", "-")
+				defaults.Endpoint = endpointSegment(value)
 			}
 		}
 
 		// Parse "Param()".
 		if funcName == "Param" && len(call.Args) == 1 {
 			if value, ok := stringLiteral(call.Args[0]); ok {
-				defaults.Param = strings.TrimFunc(value, func(r rune) bool {
-					return r == ' ' || r == '{' || r == '}' || r == '[' || r == ']' || r == ':'
-				})
-				defaults.Param = ":" + defaults.Param
+				defaults.Param = ":" + paramName(value)
 			}
 		}
 
@@ -292,7 +288,7 @@ func parseDesign(fn *ast.FuncDecl) *Design {
 		if funcName == "Route" && len(call.Args) == 2 {
 			var route string
 			if value, ok := stringLiteral(call.Args[0]); ok {
-				route = strings.TrimLeft(value, "/")
+				route = routePath(value)
 			}
 			if len(route) > 0 {
 				if defaults.routes == nil {

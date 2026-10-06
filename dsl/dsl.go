@@ -84,6 +84,9 @@ import (
 // e.g. "sample_records" for a SampleRecord model.
 // Leading slashes are automatically removed and forward slashes are replaced with hyphens.
 // Example: Endpoint("users") for a User model, Endpoint("/iam/users") becomes "iam-users"
+//
+// gg refuses a Design() that declares Endpoint twice, gives it anything but a
+// string literal, or gives it a path that trims to nothing, Endpoint("/").
 func Endpoint(path string) { dsl.Endpoint(path) }
 
 // Param defines a path parameter for dynamic routing in RESTful APIs.
@@ -108,6 +111,10 @@ func Endpoint(path string) { dsl.Endpoint(path) }
 //
 // The parameter creates RESTful nested resource patterns, enabling hierarchical API designs
 // where child resources are scoped under parent resources through URL path parameters.
+//
+// gg refuses a Design() that declares Param twice, gives it anything but a
+// string literal, or gives it a name that trims to nothing, Param("") or
+// Param(":").
 func Param(name string) { dsl.Param(name) }
 
 // Route defines an alternative API route for the model beyond the default hierarchical route.
@@ -178,6 +185,9 @@ func Param(name string) { dsl.Param(name) }
 //   - /api/samples/:sample/items (default hierarchical route)
 //   - /api/items and /api/items/:item (additional global route)
 //   - /api/archive/items and /api/archive/items/:item (additional archive route)
+//
+// gg refuses a Route given anything but a string literal for its path, or a
+// path that trims to nothing, Route("/", ...).
 func Route(path string, fn func()) { dsl.Route(path, fn) }
 
 // Migrate marks the model as a database model that requires schema migration.
@@ -303,6 +313,10 @@ func Exact() { dsl.Exact() }
 // Result only and read query parameters from ServiceContext.Query().
 // Payload must not be declared on Import and Export actions either: they
 // delegate to fixed service method signatures that never bind a request type.
+//
+// Payload, Result, StreamingPayload and StreamingResult take an exported type
+// of the model package, T or *T: the generated code refers to it from another
+// package, so gg refuses any other form.
 func Payload[T any]() { dsl.Payload[T]() }
 
 // Result specifies the response result type for the current action.

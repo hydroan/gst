@@ -5,6 +5,7 @@ import (
 	"go/token"
 	"slices"
 	"strconv"
+	"strings"
 
 	"github.com/hydroan/gst/internal/consts"
 )
@@ -64,4 +65,29 @@ func stringLiteral(expr ast.Expr) (value string, ok bool) {
 	}
 	value, err := strconv.Unquote(lit.Value)
 	return value, err == nil
+}
+
+// endpointSegment returns the path segment Endpoint(value) declares: value
+// without its leading slashes and with each slash left written as a hyphen,
+// so Endpoint("/iam/users") declares iam-users and Endpoint("/") declares
+// nothing, "", which leaves the model on its default segment.
+func endpointSegment(value string) string {
+	return strings.ReplaceAll(strings.TrimLeft(value, "/"), "/", "-")
+}
+
+// paramName returns the route parameter name Param(value) declares: value
+// without the spaces, braces, brackets and colons around it, so
+// Param("user"), Param(":user") and Param("{user}") all declare user and
+// Param(":") declares nothing, "".
+func paramName(value string) string {
+	return strings.TrimFunc(value, func(r rune) bool {
+		return r == ' ' || r == '{' || r == '}' || r == '[' || r == ']' || r == ':'
+	})
+}
+
+// routePath returns the path Route(value, block) declares: value without its
+// leading slashes, so Route("/archive/items", block) declares archive/items
+// and Route("/", block) declares nothing, "".
+func routePath(value string) string {
+	return strings.TrimLeft(value, "/")
 }

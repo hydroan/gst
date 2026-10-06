@@ -2932,7 +2932,34 @@ func TestValidateRejectsActionTypesOutsideTheModelPackage(t *testing.T) {
 		{name: "payload_of_another_package", source: validatePayloadForeignTypeSource, wantError: "Create action declares Payload[*shared.Event]; Payload, Result, StreamingPayload and StreamingResult name a type of the model package, T or *T"},
 		{name: "result_slice", source: validateResultSliceTypeSource, wantError: "Create action declares Result[[]Event]; Payload, Result, StreamingPayload and StreamingResult name a type of the model package, T or *T"},
 		{name: "streaming_result_of_another_package", source: validateStreamingResultForeignTypeSource, wantError: "Stream action declares StreamingResult[*shared.Event]; Payload, Result, StreamingPayload and StreamingResult name a type of the model package, T or *T"},
+		{name: "unexported_payload", source: validateUnexportedPayloadTypeSource, wantError: "Create action declares Payload[*probeReq]; the type must be exported, since the generated code refers to it from another package"},
+		{name: "unexported_result", source: validateUnexportedResultTypeSource, wantError: "Create action declares Result[probeRsp]; the type must be exported, since the generated code refers to it from another package"},
 		{name: "model_package_types", source: validateActionTypesOfTheModelPackageSource},
+	} {
+		t.Run(tt.name, func(t *testing.T) { requireValidateError(t, tt.source, tt.wantError) })
+	}
+}
+
+// TestValidateRejectsPathKeywordsTheParserCannotRead pins that Endpoint and
+// Param are declared once at Design() top level and that they and Route are
+// given a string literal spelling a path or a parameter name: the parser
+// takes a value from nothing else, so a second call, a variable or a value
+// that trims to nothing would leave the model on its default, or declare no
+// route, without a word, and a Param of "" would besides register a route
+// the router refuses at startup. The argument count is the compiler's to
+// report, so no case covers it.
+func TestValidateRejectsPathKeywordsTheParserCannotRead(t *testing.T) {
+	for _, tt := range []struct{ name, source, wantError string }{
+		{name: "endpoint_twice", source: validateEndpointTwiceSource, wantError: "Record declares Endpoint twice at Design() top level; declare it once"},
+		{name: "param_twice", source: validateParamTwiceSource, wantError: "Record declares Param twice at Design() top level; declare it once"},
+		{name: "endpoint_variable", source: validateEndpointVariableSource, wantError: `Record gives Endpoint something other than a string literal; write Endpoint("path")`},
+		{name: "param_constant", source: validateParamConstantSource, wantError: `Record gives Param something other than a string literal; write Param("name")`},
+		{name: "route_variable", source: validateRouteVariableSource, wantError: `Record gives Route something other than a string literal; write Route("path", func() {...})`},
+		{name: "endpoint_slash_alone", source: validateEndpointSlashSource, wantError: `Record declares Endpoint "/", which names no path; write Endpoint("path") or omit Endpoint for the default`},
+		{name: "param_empty", source: validateParamEmptySource, wantError: `Record declares Param "", which names no route parameter; write Param("name") or omit Param for the default`},
+		{name: "param_colon_alone", source: validateParamColonSource, wantError: `Record declares Param ":", which names no route parameter; write Param("name") or omit Param for the default`},
+		{name: "route_slash_alone", source: validateRouteSlashSource, wantError: `Record declares Route "/", which names no path; write Route("path", func() {...})`},
+		{name: "endpoint_and_param_once", source: validateEndpointAndParamOnceSource},
 	} {
 		t.Run(tt.name, func(t *testing.T) { requireValidateError(t, tt.source, tt.wantError) })
 	}
@@ -3316,6 +3343,251 @@ func (Record) Design() {
 	Stream(func() {
 		Service("watch")
 		StreamingResult[*WatchRsp]()
+	})
+}
+`
+
+const validateEndpointTwiceSource = `
+package sample
+
+import (
+	. "github.com/hydroan/gst/dsl"
+	"github.com/hydroan/gst/model"
+)
+
+type Record struct {
+	model.Base
+}
+
+func (Record) Design() {
+	Endpoint("records")
+	Endpoint("items")
+	Create(func() {})
+}
+`
+
+const validateParamTwiceSource = `
+package sample
+
+import (
+	. "github.com/hydroan/gst/dsl"
+	"github.com/hydroan/gst/model"
+)
+
+type Record struct {
+	model.Base
+}
+
+func (Record) Design() {
+	Param("record")
+	Param("item")
+	Create(func() {})
+}
+`
+
+const validateEndpointVariableSource = `
+package sample
+
+import (
+	. "github.com/hydroan/gst/dsl"
+	"github.com/hydroan/gst/model"
+)
+
+type Record struct {
+	model.Base
+}
+
+var path = "records"
+
+func (Record) Design() {
+	Endpoint(path)
+	Create(func() {})
+}
+`
+
+const validateParamConstantSource = `
+package sample
+
+import (
+	. "github.com/hydroan/gst/dsl"
+	"github.com/hydroan/gst/model"
+)
+
+type Record struct {
+	model.Base
+}
+
+const idParam = "id"
+
+func (Record) Design() {
+	Param(idParam)
+	Create(func() {})
+}
+`
+
+const validateEndpointSlashSource = `
+package sample
+
+import (
+	. "github.com/hydroan/gst/dsl"
+	"github.com/hydroan/gst/model"
+)
+
+type Record struct {
+	model.Base
+}
+
+func (Record) Design() {
+	Endpoint("/")
+	Create(func() {})
+}
+`
+
+const validateParamEmptySource = `
+package sample
+
+import (
+	. "github.com/hydroan/gst/dsl"
+	"github.com/hydroan/gst/model"
+)
+
+type Record struct {
+	model.Base
+}
+
+func (Record) Design() {
+	Param("")
+	Create(func() {})
+}
+`
+
+const validateParamColonSource = `
+package sample
+
+import (
+	. "github.com/hydroan/gst/dsl"
+	"github.com/hydroan/gst/model"
+)
+
+type Record struct {
+	model.Base
+}
+
+func (Record) Design() {
+	Param(":")
+	Create(func() {})
+}
+`
+
+const validateRouteVariableSource = `
+package sample
+
+import (
+	. "github.com/hydroan/gst/dsl"
+	"github.com/hydroan/gst/model"
+)
+
+type Record struct {
+	model.Base
+}
+
+var path = "archive/records"
+
+func (Record) Design() {
+	Route(path, func() {
+		Create(func() {})
+	})
+}
+`
+
+const validateRouteSlashSource = `
+package sample
+
+import (
+	. "github.com/hydroan/gst/dsl"
+	"github.com/hydroan/gst/model"
+)
+
+type Record struct {
+	model.Base
+}
+
+func (Record) Design() {
+	Route("/", func() {
+		Create(func() {})
+	})
+}
+`
+
+const validateEndpointAndParamOnceSource = `
+package sample
+
+import (
+	. "github.com/hydroan/gst/dsl"
+	"github.com/hydroan/gst/model"
+)
+
+type Record struct {
+	model.Base
+}
+
+func (Record) Design() {
+	Endpoint("records")
+	Param("record")
+	Create(func() {})
+}
+`
+
+const validateUnexportedPayloadTypeSource = `
+package sample
+
+import (
+	. "github.com/hydroan/gst/dsl"
+	"github.com/hydroan/gst/model"
+)
+
+type Record struct {
+	model.Base
+}
+
+type probeReq struct{}
+
+type ProbeRsp struct{}
+
+func (Record) Design() {
+	Route("sample/probe", func() {
+		Create(func() {
+			Service("probe")
+			Payload[*probeReq]()
+			Result[*ProbeRsp]()
+		})
+	})
+}
+`
+
+const validateUnexportedResultTypeSource = `
+package sample
+
+import (
+	. "github.com/hydroan/gst/dsl"
+	"github.com/hydroan/gst/model"
+)
+
+type Record struct {
+	model.Base
+}
+
+type ProbeReq struct{}
+
+type probeRsp struct{}
+
+func (Record) Design() {
+	Route("sample/probe", func() {
+		Create(func() {
+			Service("probe")
+			Payload[*ProbeReq]()
+			Result[probeRsp]()
+		})
 	})
 }
 `
