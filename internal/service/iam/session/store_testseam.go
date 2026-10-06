@@ -1,9 +1,8 @@
-// This file is a test seam: Store.Purge exists for the tests of this module
-// and of the projects that copy it, which need a store with nothing in it.
-// The framework's own paths never call it, since IAM only ever removes the
-// sessions, user states and login counters of one user at a time, and the
-// module manifest excludes this file from gg module copy so no project
-// inherits it.
+// This file is a test seam: Store.Purge exists for the tests of this module,
+// which need a store with nothing in it. The framework's own paths never call
+// it, since IAM only ever removes the sessions, user states and login counters
+// of one user at a time, and the module manifest excludes this file from gg
+// module copy so no project inherits it.
 
 package serviceiamsession
 
