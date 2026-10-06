@@ -290,6 +290,14 @@ linters:
         - start-with-name
         # Check deprecated symbols have proper deprecation notice.
         - deprecated
+      options:
+        start-with-name:
+          # A doc comment that opens with another declaration's name was
+          # left behind by an insertion between a neighbour's comment and its
+          # declaration, so every declaration, unexported ones included, must
+          # open with its own name; the exclusions below keep this rule on for
+          # test files as well.
+          include-unexported: true
 
     govet:
       # shadow and nilness are not part of the default go vet analyzer set;
@@ -403,7 +411,6 @@ linters:
       - path: _test\.go
         linters:
           - gosec
-          - godoclint
           - unparam
       # The gofix //go:fix directive is valid but not yet in
       # gocheckcompilerdirectives' known directive list.

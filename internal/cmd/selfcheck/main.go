@@ -45,6 +45,17 @@
 // renamed instead. checkImportAlias reports every other alias, and a package
 // spelt two ways anywhere in the tree.
 //
+// # Test doc comments
+//
+// golangci-lint's godoclint holds the doc comment of every declaration to
+// opening with the declaration's name, test files excepted: godoclint has a
+// switch to include them that golangci-lint does not expose (v2.14.0 still
+// exposes include-unexported alone). A doc comment opening with another name
+// is one an insertion between a neighbor's comment and its declaration took
+// along, and test files see as many insertions as any other, so checkTestDoc
+// holds them to the same rule, read the way godoclint reads it, until a
+// golangci-lint exposes the switch and a line of .golangci.yml replaces it.
+//
 // # Layout
 //
 // Each check lives in the file named after it, testplacement.go for the
@@ -85,6 +96,7 @@ var checks = []check{
 	{name: "forwarding", run: checkForwarding},
 	{name: "sourceformat", run: checkSourceFormat},
 	{name: "importalias", run: checkImportAlias},
+	{name: "testdoc", run: checkTestDoc},
 }
 
 func main() {
