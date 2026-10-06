@@ -1,4 +1,4 @@
-.PHONY: check build format vet lint selfcheck test testv testvv generate fix install uninstall help testcachefix
+.PHONY: check build format vet lint selfcheck ggcheck test testv testvv generate fix install uninstall help testcachefix
 
 # Tool versions - must match go.mod exactly
 GOLANGCI_LINT_VERSION := $(shell go list -m -f '{{.Version}}' github.com/golangci/golangci-lint/v2)
@@ -60,6 +60,7 @@ help:
 	@echo "  vet            - Run go vet"
 	@echo "  lint           - Run golangci-lint (includes modernize, nilness and shadow)"
 	@echo "  selfcheck      - Check the framework's source against the rules golangci-lint cannot express"
+	@echo "  ggcheck        - Run gg check on the example projects with the gg built from the tree"
 	@echo "  test           - Run unit tests, a line per package"
 	@echo "  testv          - Run unit tests, a line per test"
 	@echo "  testvv         - Run unit tests with the full go test -v output"
@@ -71,7 +72,7 @@ help:
 
 # Run all code quality checks
 # Order matches make install tool installation order
-check: build lint selfcheck format vet
+check: build lint selfcheck format vet ggcheck
 	@echo "All checks passed successfully!"
 
 # Build the project, then build it again with cgo off, the way a project
@@ -124,6 +125,19 @@ lint:
 selfcheck:
 	@echo "Running the framework's self check..."
 	go run ./internal/cmd/selfcheck
+
+# The example projects are held to gg check with the gg built from the
+# tree: a project check or a DSL rule an example breaks fails here, the way
+# a project's own gg check would, not first on a developer's gg gen. The gg
+# is built where make install puts it, so the installed one is the tree's.
+GG := $(GO_BIN_DIR)/gg
+ggcheck:
+	@echo "Running gg check on the examples..."
+	@mkdir -p "$(GO_BIN_DIR)"
+	@go build -o "$(GG)" ./cmd/gg
+	cd examples/demo && "$(GG)" check
+	cd examples/cluster && "$(GG)" check
+	cd examples/bench && "$(GG)" check
 
 # Run unit tests
 # Every package is tested, so a newly added package is covered without editing
