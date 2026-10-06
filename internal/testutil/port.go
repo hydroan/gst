@@ -16,12 +16,16 @@ import (
 // hand the same port out twice.
 var serverPort, grpcPort = mustFreeLocalPorts()
 
+// loopbackHost is the address the test server listens on and its clients
+// dial: only this process reaches it.
+const loopbackHost = "127.0.0.1"
+
 // listenOnFreePort configures the HTTP server to listen on the port URL
 // resolves to, and the gRPC server on the one GRPCTarget resolves to.
 func listenOnFreePort() {
-	os.Setenv(config.SERVER_LISTEN, "127.0.0.1")
+	os.Setenv(config.SERVER_LISTEN, loopbackHost)
 	os.Setenv(config.SERVER_PORT, strconv.Itoa(serverPort))
-	os.Setenv(config.GRPC_LISTEN, "127.0.0.1")
+	os.Setenv(config.GRPC_LISTEN, loopbackHost)
 	os.Setenv(config.GRPC_PORT, strconv.Itoa(grpcPort))
 }
 
@@ -45,7 +49,7 @@ func freeLocalPorts(n int) (ports []int, err error) {
 		}
 	}()
 	for range n {
-		l, listenErr := net.Listen("tcp", "127.0.0.1:0")
+		l, listenErr := net.Listen("tcp", net.JoinHostPort(loopbackHost, "0"))
 		if listenErr != nil {
 			return nil, listenErr
 		}

@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/hydroan/gst/internal/ggconst"
+
 	"github.com/hydroan/gst/internal/gghelper"
 )
 
@@ -39,34 +41,34 @@ func checkDirectoryRestrictions(ignore gghelper.ProjectIgnore) []string {
 
 	// Define allowed directories for gst framework projects
 	allowedDirs := map[string]bool{
-		"model":       true,
-		"module":      true,
-		"service":     true,
-		"router":      true,
-		"dao":         true,
-		"provider":    true,
-		"middleware":  true,
-		"interceptor": true,
-		"pb":          true,
-		"cronjob":     true,
-		"leader":      true,
-		"lock":        true,
-		"component":   true,
-		"configx":     true,
-		"config":      true,
-		"typesx":      true,
-		"consts":      true,
-		"constx":      true,
-		"type":        true,
-		"typex":       true,
-		"helper":      true,
-		"internal":    true,
-		"cmd":         true,
-		"errorx":      true,
-		"testcode":    true,
-		"test":        true,
-		"docs":        true,
-		"doc":         true,
+		ggconst.DirModel:       true,
+		ggconst.DirModule:      true,
+		ggconst.DirService:     true,
+		ggconst.DirRouter:      true,
+		ggconst.DirDAO:         true,
+		"provider":             true,
+		ggconst.DirMiddleware:  true,
+		ggconst.DirInterceptor: true,
+		ggconst.DirPB:          true,
+		ggconst.DirCronjob:     true,
+		ggconst.DirLeader:      true,
+		ggconst.DirLock:        true,
+		ggconst.DirComponent:   true,
+		ggconst.DirConfigx:     true,
+		"config":               true,
+		"typesx":               true,
+		"consts":               true,
+		"constx":               true,
+		"type":                 true,
+		"typex":                true,
+		"helper":               true,
+		"internal":             true,
+		"cmd":                  true,
+		"errorx":               true,
+		"testcode":             true,
+		"test":                 true,
+		"docs":                 true,
+		"doc":                  true,
 	}
 
 	// Directories that hold no Go packages: build and log output, and the

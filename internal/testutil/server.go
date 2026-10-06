@@ -18,7 +18,7 @@ func BaseURL() string {
 
 // URL returns an absolute URL of the test server for path.
 func URL(path string) string {
-	return fmt.Sprintf("http://127.0.0.1:%d%s", serverPort, path)
+	return fmt.Sprintf("http://%s%s", net.JoinHostPort(loopbackHost, strconv.Itoa(serverPort)), path)
 }
 
 // GRPCTarget returns the address the test server's gRPC listener is dialed
@@ -33,7 +33,7 @@ func GRPCTarget() string {
 	if !grpcServed() {
 		panic(`testutil: the test binary registered no gRPC service, so the test server serves no gRPC; import the project's pb package in the test file declaring TestMain the way main.go does, _ "<module>/pb"`)
 	}
-	return net.JoinHostPort("127.0.0.1", strconv.Itoa(grpcPort))
+	return net.JoinHostPort(loopbackHost, strconv.Itoa(grpcPort))
 }
 
 // grpcServed reports whether the test binary registered gRPC services; a

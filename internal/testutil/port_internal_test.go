@@ -19,8 +19,8 @@ func TestListenOnFreePortConfiguresLocalEphemeralPorts(t *testing.T) {
 	require.Positive(t, serverPort)
 	require.Positive(t, grpcPort)
 	require.NotEqual(t, serverPort, grpcPort)
-	require.Equal(t, "127.0.0.1", os.Getenv(config.SERVER_LISTEN))
+	require.Equal(t, loopbackHost, os.Getenv(config.SERVER_LISTEN))
 	require.Equal(t, strconv.Itoa(serverPort), os.Getenv(config.SERVER_PORT))
-	require.Equal(t, "127.0.0.1", os.Getenv(config.GRPC_LISTEN))
+	require.Equal(t, loopbackHost, os.Getenv(config.GRPC_LISTEN))
 	require.Equal(t, strconv.Itoa(grpcPort), os.Getenv(config.GRPC_PORT))
 }

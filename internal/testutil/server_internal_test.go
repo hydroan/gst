@@ -9,11 +9,11 @@ import (
 )
 
 func TestURLTargetsTheTestServerPort(t *testing.T) {
-	require.Equal(t, fmt.Sprintf("http://127.0.0.1:%d/api/samples", serverPort), URL("/api/samples"))
+	require.Equal(t, fmt.Sprintf("http://"+loopbackHost+":%d/api/samples", serverPort), URL("/api/samples"))
 }
 
 func TestGRPCTargetTargetsTheTestServersGRPCPort(t *testing.T) {
-	require.Equal(t, fmt.Sprintf("127.0.0.1:%d", grpcPort), GRPCTarget())
+	require.Equal(t, fmt.Sprintf(loopbackHost+":%d", grpcPort), GRPCTarget())
 }
 
 // TestGRPCTargetPanicsWhenNoServiceIsRegistered pins what a test binary
