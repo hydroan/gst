@@ -3,7 +3,6 @@ package modelinfo
 import (
 	"fmt"
 	"path/filepath"
-	"slices"
 	"strings"
 
 	"github.com/cockroachdb/errors"
@@ -145,7 +144,7 @@ func RouterTargetForAction(route string, design *dsl.Design, action *dsl.Action)
 	}
 
 	if action.Exact {
-		return route, routerPathParamName(route)
+		return route, consts.LastRouteParam(route)
 	}
 
 	paramName := ""
@@ -156,7 +155,7 @@ func RouterTargetForAction(route string, design *dsl.Design, action *dsl.Action)
 	switch action.Phase {
 	case consts.Delete, consts.Update, consts.Patch, consts.Get:
 		route = filepath.Join(route, ItemParam(design))
-		paramName = routerPathParamName(route)
+		paramName = consts.LastRouteParam(route)
 	case consts.CreateMany, consts.DeleteMany, consts.UpdateMany, consts.PatchMany:
 		route = filepath.Join(route, "batch")
 	case consts.Import:
@@ -166,18 +165,6 @@ func RouterTargetForAction(route string, design *dsl.Design, action *dsl.Action)
 	}
 
 	return route, paramName
-}
-
-// routerPathParamName returns the name of the last parameter segment of
-// route, written :name, the one form the router reads (see dsl.Validate):
-// id for iam/admin/users/:id/sessions, and "" for a route without one.
-func routerPathParamName(route string) string {
-	for _, part := range slices.Backward(strings.Split(route, "/")) {
-		if name, ok := strings.CutPrefix(strings.TrimSpace(part), ":"); ok && name != "" {
-			return name
-		}
-	}
-	return ""
 }
 
 // buildHierarchicalEndpoints constructs complete hierarchical endpoint paths for all models.

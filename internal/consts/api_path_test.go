@@ -21,3 +21,15 @@ func TestAPIPathServesEveryRouteUnderThePrefix(t *testing.T) {
 		require.Equal(t, "/api/", consts.APIPath(route), route)
 	}
 }
+
+// TestLastRouteParamNamesTheLastParameterSegment pins the examples of the
+// LastRouteParam doc comment: the last :name of a route whatever follows it,
+// spaces around a segment passed over, and "" for a route naming none or
+// writing a colon alone.
+func TestLastRouteParamNamesTheLastParameterSegment(t *testing.T) {
+	require.Equal(t, "record", consts.LastRouteParam("/api/records/:record"))
+	require.Equal(t, "id", consts.LastRouteParam("iam/admin/users/:id/sessions"))
+	require.Equal(t, "item", consts.LastRouteParam("/api/items/ :item /notes"))
+	require.Empty(t, consts.LastRouteParam("records"))
+	require.Empty(t, consts.LastRouteParam("records/:"))
+}

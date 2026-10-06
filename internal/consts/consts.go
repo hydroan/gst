@@ -3,6 +3,7 @@ package consts
 import (
 	"fmt"
 	"net/http"
+	"slices"
 	"strings"
 	"time"
 
@@ -31,6 +32,21 @@ func APIPath(route string) string {
 		route = strings.TrimPrefix(strings.TrimPrefix(route, prefix), "/")
 	}
 	return apiPathPrefix + "/" + route
+}
+
+// LastRouteParam returns the name of the last parameter segment of route,
+// written :name: record for /api/records/:record, id for
+// iam/admin/users/:id/sessions, and "" for records, a route naming none. It
+// is the one rule of which parameter a route carries a record's id under: gg
+// gen names the parameter of an item action's route and of an Exact route by
+// it, and the gRPC call of an item action reads the id from it.
+func LastRouteParam(route string) string {
+	for _, part := range slices.Backward(strings.Split(route, "/")) {
+		if name, ok := strings.CutPrefix(strings.TrimSpace(part), ":"); ok && name != "" {
+			return name
+		}
+	}
+	return ""
 }
 
 func CodeGeneratedComment() string {

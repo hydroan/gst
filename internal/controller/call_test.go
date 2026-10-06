@@ -6,7 +6,6 @@ import (
 	"maps"
 	"net"
 	"net/http"
-	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -897,23 +896,21 @@ func params(in map[string]any) map[string]string {
 
 // itemParams returns the route parameters of an item call the way a
 // generated handler builds them: the parameters the message carries plus,
-// under the last parameter segment of route, record for /api/records/:record
-// and id for iam/admin/users/:id/sessions, the id the message names the
-// record by, whatever it holds (see the golden record.gen.go of cmd/gg). A
-// route naming no parameter, as the fixture routes are written, gets the
-// parameters as they are.
+// under the last parameter segment of route (see consts.LastRouteParam), the
+// id the message names the record by, whatever it holds (see the golden
+// record.gen.go of cmd/gg). A route naming no parameter, as the fixture
+// routes are written, gets the parameters as they are.
 func itemParams(route string, given map[string]string, id string) map[string]string {
-	for _, part := range slices.Backward(strings.Split(route, "/")) {
-		if name, ok := strings.CutPrefix(part, ":"); ok && name != "" {
-			params := maps.Clone(given)
-			if params == nil {
-				params = make(map[string]string, 1)
-			}
-			params[name] = id
-			return params
-		}
+	name := consts.LastRouteParam(route)
+	if name == "" {
+		return given
 	}
-	return given
+	params := maps.Clone(given)
+	if params == nil {
+		params = make(map[string]string, 1)
+	}
+	params[name] = id
+	return params
 }
 
 // field converts in[key] into T through its JSON shape, the way a generated
