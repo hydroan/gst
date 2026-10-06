@@ -40,6 +40,34 @@ type batch[M types.Model] struct {
 	Items []M `json:"items,omitempty" binding:"dive"`
 }
 
+// itemIDs returns the ids the items of req carry, in order.
+func (req *batch[M]) itemIDs() []string {
+	ids := make([]string, 0, len(req.Items))
+	for _, m := range req.Items {
+		ids = append(ids, m.GetID())
+	}
+	return ids
+}
+
+// recordsByID reads the live records the ids name in one statement through
+// db, the chain prepared the way the caller reads (the primary, the
+// expands), and returns them by id; an id naming no live record is absent.
+// No ids read nothing.
+func recordsByID[M types.Model](db types.Database[M], model M, ids []string) (map[string]M, error) {
+	byID := make(map[string]M, len(ids))
+	if len(ids) == 0 {
+		return byID, nil
+	}
+	var records []M
+	if err := db.WithQuery(model, types.QueryOptions{Filters: []types.Filter{types.NewColumn[M, string]("id").In(ids...)}}).List(&records); err != nil {
+		return nil, err
+	}
+	for _, record := range records {
+		byID[record.GetID()] = record
+	}
+	return byID, nil
+}
+
 // repeatedID returns the error of a batch update or patch whose items name
 // one record twice, items[1] names the record "r1", which items[0] already
 // names, and nil when every item names a record of its own. The batch

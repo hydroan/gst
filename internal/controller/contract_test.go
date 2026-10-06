@@ -464,18 +464,25 @@ func TestTransportsAnswerTheContractAlike(t *testing.T) {
 			},
 		},
 		{
-			name: "UpdateMany replaces the items", fixture: samples, phase: consts.UpdateMany,
+			name: "UpdateMany replaces the items for the caller", fixture: samples, phase: consts.UpdateMany,
 			prepare: func(t *testing.T) contractInput {
 				t.Helper()
 				a, b := createSample(t, "contract-update-many-a"), createSample(t, "contract-update-many-b")
-				return contractInput{items: []map[string]any{{"id": a.GetID(), "name": "contract-update-many-a2"}, {"id": b.GetID(), "name": "contract-update-many-b2"}}}
+				return contractInput{items: []map[string]any{{"id": a.GetID(), "name": "contract-update-many-a2", "updated_by": "mallory"}, {"id": b.GetID(), "name": "contract-update-many-b2"}}}
 			},
 			want: ok,
 			check: func(t *testing.T, in contractInput, got contractAnswer) {
 				t.Helper()
+				answered := itemMaps(t, dataMap(t, got)["items"])
 				require.Equal(t, []string{stringOf(in.items[0]["id"]), stringOf(in.items[1]["id"])}, ids(dataMap(t, got)["items"]))
 				requireSampleName(t, stringOf(in.items[0]["id"]), "contract-update-many-a2")
 				requireSampleName(t, stringOf(in.items[1]["id"]), "contract-update-many-b2")
+				for i, item := range answered {
+					stored := loadSample(t, stringOf(in.items[i]["id"]))
+					require.Equal(t, "alice", stored.GetUpdatedBy(), "the caller is who updated the record, whatever the item carried")
+					require.Equal(t, "alice", item["updated_by"])
+					requireSameInstant(t, stored.GetCreatedAt(), item["created_at"], "the answer carries the creation audit as stored")
+				}
 			},
 		},
 		{
@@ -531,10 +538,13 @@ func TestTransportsAnswerTheContractAlike(t *testing.T) {
 			check: func(t *testing.T, in contractInput, got contractAnswer) {
 				t.Helper()
 				require.Equal(t, []string{stringOf(in.items[0]["id"]), stringOf(in.items[1]["id"])}, ids(dataMap(t, got)["items"]))
-				requireSampleName(t, stringOf(in.items[0]["id"]), "contract-patch-many-a2")
+				first := loadSample(t, stringOf(in.items[0]["id"]))
+				require.Equal(t, "contract-patch-many-a2", first.Name)
+				require.Equal(t, "alice", first.GetUpdatedBy(), "the caller is who patched the record")
 				second := loadSample(t, stringOf(in.items[1]["id"]))
 				require.Equal(t, "contract-patch-many-b", second.Name, "a field the item does not name stays as stored")
 				require.Equal(t, "masked", second.Note)
+				require.Equal(t, "alice", second.GetUpdatedBy(), "the caller is who patched the record")
 			},
 		},
 		{
@@ -1037,6 +1047,29 @@ func dataMap(t *testing.T, got contractAnswer) map[string]any {
 	data, ok := got.data.(map[string]any)
 	require.True(t, ok, "%#v", got.data)
 	return data
+}
+
+// itemMaps returns the items of an answer, each as the map it decoded into.
+func itemMaps(t *testing.T, items any) []map[string]any {
+	t.Helper()
+	list, ok := items.([]any)
+	require.True(t, ok, "%#v", items)
+	maps := make([]map[string]any, 0, len(list))
+	for _, item := range list {
+		m, ok := item.(map[string]any)
+		require.True(t, ok, "%#v", item)
+		maps = append(maps, m)
+	}
+	return maps
+}
+
+// requireSameInstant requires got, the RFC 3339 string a timestamp decoded
+// into over either transport, to name the instant want.
+func requireSameInstant(t *testing.T, want time.Time, got any, msg string) {
+	t.Helper()
+	parsed, err := time.Parse(time.RFC3339Nano, stringOf(got))
+	require.NoError(t, err, "%s: %#v", msg, got)
+	require.True(t, parsed.Equal(want), "%s: want %s, got %s", msg, want, parsed)
 }
 
 // createValidated stores a validated sample named name and returns it with

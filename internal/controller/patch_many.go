@@ -12,6 +12,7 @@ import (
 	"github.com/hydroan/gst/internal/consts"
 	modellogmgmt "github.com/hydroan/gst/internal/model/logmgmt"
 	"github.com/hydroan/gst/internal/modelregistry"
+	"github.com/hydroan/gst/internal/requestctx"
 	"github.com/hydroan/gst/internal/response"
 	"github.com/hydroan/gst/internal/types"
 	"github.com/hydroan/gst/logger"
@@ -180,35 +181,39 @@ func (a *action[M, REQ, RSP]) patchManyFlow(ctx context.Context, newServiceConte
 	if err := req.repeatedID(); err != nil {
 		return zero, failWith(ctx, log, "batch patch naming a record twice", err, invalidArgument(err))
 	}
-	var shouldUpdates []M
+	// An item without an id names no record: a defective request, refused
+	// before any record is read. Setting an empty id on a UUID-keyed model
+	// would mint a fresh one instead.
 	for i, m := range req.Items {
-		// An item without an id names no record: a defective request,
-		// refused before any record is read. Setting an empty id on a
-		// UUID-keyed model would mint a fresh one instead.
 		if len(m.GetID()) == 0 {
 			err := errors.Wrapf(database.ErrIDRequired, "patch many %s item %d", a.name, i)
 			return zero, failWith(ctx, log, "batch patch item without its id", err, databaseError(err))
 		}
-		var results []M
-		v := a.newModel()
-		v.SetID(m.GetID())
-		// Pinned to the primary: the row read here is merged with the
-		// patch and written straight back, so a stale one would write
-		// the untouched fields back as they were on the replica.
-		if err := database.Database[M](ctx).WithReplica(false).WithLimit(1).WithQuery(v).List(&results); err != nil {
-			return zero, failDatabase(ctx, log, err)
-		}
-		if len(results) != 1 || len(results[0].GetID()) == 0 {
+	}
+	// One statement reads the records of the batch, pinned to the primary:
+	// each row read here is merged with its patch and written straight back,
+	// so a stale one would write the untouched fields back as they were on
+	// the replica.
+	stored, err := recordsByID(database.Database[M](ctx).WithReplica(false), a.newModel(), req.itemIDs())
+	if err != nil {
+		return zero, failDatabase(ctx, log, err)
+	}
+	// The caller is who patches the records, whatever the items carry.
+	username := requestctx.FromContext(ctx).Username()
+	shouldUpdates := make([]M, 0, len(req.Items))
+	for i, m := range req.Items {
+		current, ok := stored[m.GetID()]
+		if !ok {
 			err := errors.Wrapf(database.ErrRecordNotFound, "patch many %s id=%s", a.name, m.GetID())
 			return zero, failWith(ctx, log, "partial update resource not found", err, databaseError(err))
 		}
-		oldVal, newVal := reflect.ValueOf(results[0]).Elem(), reflect.ValueOf(m).Elem()
+		current.SetUpdatedBy(username)
 		fields := patchFieldSet{}
 		if i < len(fieldSets) {
 			fields = fieldSets[i]
 		}
-		applyPatch(log, a.typ, oldVal, newVal, fields)
-		shouldUpdates = append(shouldUpdates, oldVal.Addr().Interface().(M)) //nolint:errcheck
+		applyPatch(log, a.typ, reflect.ValueOf(current).Elem(), reflect.ValueOf(m).Elem(), fields)
+		shouldUpdates = append(shouldUpdates, current)
 	}
 
 	// 1.Perform business logic processing before batch patch resource.

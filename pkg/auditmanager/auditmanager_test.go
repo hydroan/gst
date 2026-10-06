@@ -62,6 +62,17 @@ func TestRecordOperationSkipsBuildWhenOperationExcluded(t *testing.T) {
 	require.Zero(t, built, "an excluded operation must not build the entry")
 }
 
+// TestEnabledFollowsTheSwitchAndTheExclusions pins the question a flow asks
+// before it reads anything only the operation log wants: whether the log
+// records this operation, which is the audit switch and the exclusions.
+func TestEnabledFollowsTheSwitchAndTheExclusions(t *testing.T) {
+	require.False(t, auditmanager.New(&config.Audit{}).Enabled(consts.OP_DELETE), "a disabled audit records nothing")
+
+	manager := auditmanager.New(&config.Audit{Enabled: true, ExcludeOperations: []consts.OP{consts.OP_LIST}})
+	require.True(t, manager.Enabled(consts.OP_DELETE))
+	require.False(t, manager.Enabled(consts.OP_LIST), "an excluded operation is not recorded")
+}
+
 // TestRecordOperationStampsOperationAndTable pins what the manager fills in
 // itself: the caller names the operation once, in the argument, and never
 // names the table.

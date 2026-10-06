@@ -35,6 +35,13 @@ func New(auditConfig *config.Audit) *AuditManager {
 	return &AuditManager{config: auditConfig}
 }
 
+// Enabled reports whether the log records op: the audit is on and op is not
+// excluded. A flow asks it before reading what only the entry needs, so a
+// disabled audit costs no query.
+func (am *AuditManager) Enabled(op consts.OP) bool {
+	return am.config.Enabled && !slices.Contains(am.config.ExcludeOperations, op)
+}
+
 // RecordOperation records a single operation audit log, leaving out what the
 // configuration excludes.
 //
@@ -68,13 +75,7 @@ func (am *AuditManager) RecordOperation(ctx context.Context, m types.Model, op c
 		return errors.New("audit: RecordOperation was given no build function")
 	}
 
-	// Skip if audit is disabled
-	if !am.config.Enabled {
-		return nil
-	}
-
-	// Skip if the operation is excluded.
-	if slices.Contains(am.config.ExcludeOperations, op) {
+	if !am.Enabled(op) {
 		return nil
 	}
 

@@ -16,6 +16,7 @@ import (
 	"github.com/hydroan/gst/logger"
 	gstotel "github.com/hydroan/gst/otel"
 	"github.com/hydroan/gst/util"
+	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
 )
 
@@ -85,11 +86,13 @@ func DeleteManyCall[M types.Model](route string) func(ctx context.Context, param
 
 // deleteManyFlow runs the batch delete flow on the ids of req: it converts
 // them into model instances, which become the items of req, runs the batch
-// delete hooks around the write, and records the operation. An empty id, or
-// one of whitespace alone, names no record and fails the whole batch before
-// anything is deleted; an id the model rejects is skipped, which keeps the
-// batch idempotent. Whether the rows are purged is the model's decision (its
-// Purge method), never the request's.
+// delete hooks around the write, reads the records in one statement first
+// when the operation log records batch deletes, and records the operation
+// with the records as they were. An empty id, or one of whitespace alone,
+// names no record and fails the whole batch before anything is deleted; an
+// id the model rejects is skipped, which keeps the batch idempotent. Whether
+// the rows are purged is the model's decision (its Purge method), never the
+// request's.
 func (a *action[M, REQ, RSP]) deleteManyFlow(ctx context.Context, newServiceContext serviceContextFunc, req *batch[M]) error {
 	log := logger.Controller.WithContext(ctx, consts.DeleteMany)
 	svc := a.service()
@@ -119,6 +122,23 @@ func (a *action[M, REQ, RSP]) deleteManyFlow(ctx context.Context, newServiceCont
 	}); err != nil {
 		return failService(ctx, log, err)
 	}
+	// The records as they were, for the operation log: read before the
+	// delete, since afterwards there is nothing to read, in one statement
+	// for the batch, and only when the log records batch deletes, so a
+	// disabled audit costs no query.
+	var deleted []M
+	if audit.Enabled(consts.OP_DELETE_MANY) {
+		stored, err := recordsByID(database.Database[M](ctx).WithExpand(a.newModel().Expands()), a.newModel(), req.itemIDs())
+		if err != nil {
+			log.Errorz("database operation failed", zap.Error(err))
+			gstotel.RecordError(trace.SpanFromContext(ctx), err)
+		}
+		for _, m := range req.Items {
+			if record, ok := stored[m.GetID()]; ok {
+				deleted = append(deleted, record)
+			}
+		}
+	}
 	// 2.Batch delete resources in database. A batch without items deletes
 	// nothing.
 	if err := database.Database[M](ctx).Delete(req.Items...); err != nil {
@@ -134,7 +154,7 @@ func (a *action[M, REQ, RSP]) deleteManyFlow(ctx context.Context, newServiceCont
 	// 4.record operation log to database.
 	if err := audit.RecordOperation(ctx, a.newModel(), consts.OP_DELETE_MANY,
 		func() *modellogmgmt.OperationLog {
-			record, _ := json.Marshal(req)
+			record, _ := json.Marshal(batch[M]{IDs: req.IDs, Items: deleted})
 			entry := operationLog(ctx, a.name)
 			entry.Record = util.BytesToString(record)
 			return entry

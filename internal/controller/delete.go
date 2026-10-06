@@ -86,10 +86,10 @@ func DeleteCall[M types.Model](route string) func(ctx context.Context, params ma
 }
 
 // deleteFlow runs the delete flow on the record id names: it runs the delete
-// hooks around the write, keeps a copy of the record for the operation log,
-// and records the operation. id must not be empty (see setID); an id the
-// model rejects answers 404 (see notFound). Whether the row is purged is the
-// model's decision (its Purge method), never the request's.
+// hooks around the write, reads the record first when the operation log
+// records deletes, and records the operation. id must not be empty (see
+// setID); an id the model rejects answers 404 (see notFound). Whether the row
+// is purged is the model's decision (its Purge method), never the request's.
 func (a *action[M, REQ, RSP]) deleteFlow(ctx context.Context, newServiceContext serviceContextFunc, id string) error {
 	log := logger.Controller.WithContext(ctx, consts.Delete)
 	svc := a.service()
@@ -110,12 +110,17 @@ func (a *action[M, REQ, RSP]) deleteFlow(ctx context.Context, newServiceContext 
 		return failService(ctx, log, err)
 	}
 
-	// find out the record and keep a copy for the operation log.
-	copied := a.newModel()
-	copied.SetID(m.GetID())
-	if err := database.Database[M](ctx).WithExpand(copied.Expands()).Get(copied, m.GetID()); err != nil {
-		log.Errorz("database operation failed", zap.Error(err))
-		gstotel.RecordError(trace.SpanFromContext(ctx), err)
+	// The record as it was, for the operation log: read before the delete,
+	// since afterwards there is nothing to read, and only when the log
+	// records deletes, so a disabled audit costs no query.
+	var copied M
+	if audit.Enabled(consts.OP_DELETE) {
+		copied = a.newModel()
+		copied.SetID(m.GetID())
+		if err := database.Database[M](ctx).WithExpand(copied.Expands()).Get(copied, m.GetID()); err != nil {
+			log.Errorz("database operation failed", zap.Error(err))
+			gstotel.RecordError(trace.SpanFromContext(ctx), err)
+		}
 	}
 
 	// 2.Delete resource in database.
