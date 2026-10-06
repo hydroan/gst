@@ -57,8 +57,8 @@ func TestCreateCallCreatesTheRecordForTheCaller(t *testing.T) {
 	stored := new(sampleRecord)
 	require.NoError(t, database.Database[*sampleRecord](context.Background()).Get(stored, stringOf(created["id"])))
 	require.Equal(t, name, stored.Name)
-	require.Equal(t, "alice", stored.GetCreatedBy())
-	require.Equal(t, "alice", stored.GetUpdatedBy())
+	require.Equal(t, "u-1", stored.GetCreatedBy())
+	require.Equal(t, "u-1", stored.GetUpdatedBy())
 
 	t.Run("the hooks find the call on their service context", func(t *testing.T) {
 		_, err := invoke(t, conn, "ObservedCreate", map[string]any{
@@ -253,7 +253,7 @@ func TestUpdateCallReplacesTheRecord(t *testing.T) {
 	updated, err := invoke(t, conn, "Update", map[string]any{"id": record.GetID(), "record": map[string]any{"name": "call-updated"}})
 	require.NoError(t, err)
 	require.Equal(t, "call-updated", updated["name"])
-	require.Equal(t, "alice", updated["updated_by"])
+	require.Equal(t, "u-1", updated["updated_by"])
 	requireSampleName(t, record.GetID(), "call-updated")
 
 	_, err = invoke(t, conn, "Update", map[string]any{"id": "missing", "record": map[string]any{"name": "call-updated"}})

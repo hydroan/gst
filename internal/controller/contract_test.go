@@ -92,7 +92,7 @@ func TestTransportsAnswerTheContractAlike(t *testing.T) {
 				t.Helper()
 				data := dataMap(t, got)
 				require.Equal(t, in.record["name"], data["name"])
-				require.Equal(t, "alice", data["created_by"])
+				require.Equal(t, "u-1", data["created_by"])
 				requireSampleName(t, stringOf(data["id"]), stringOf(in.record["name"]))
 			},
 		},
@@ -198,7 +198,7 @@ func TestTransportsAnswerTheContractAlike(t *testing.T) {
 				t.Helper()
 				data := dataMap(t, got)
 				require.Equal(t, "contract-updated", data["name"])
-				require.Equal(t, "alice", data["updated_by"])
+				require.Equal(t, "u-1", data["updated_by"])
 				requireSampleName(t, in.id, "contract-updated")
 			},
 		},
@@ -269,7 +269,7 @@ func TestTransportsAnswerTheContractAlike(t *testing.T) {
 				stored := loadSample(t, in.id)
 				require.Equal(t, "contract-patched", stored.Name)
 				require.Equal(t, "kept", stored.Note)
-				require.Equal(t, "alice", stored.GetUpdatedBy())
+				require.Equal(t, "u-1", stored.GetUpdatedBy())
 			},
 		},
 		{
@@ -284,7 +284,7 @@ func TestTransportsAnswerTheContractAlike(t *testing.T) {
 				stored := loadSample(t, in.id)
 				require.Equal(t, "contract-patch-nothing", stored.Name)
 				if got.status == http.StatusOK {
-					require.Equal(t, "alice", stored.GetUpdatedBy(), "the record is written back as stored")
+					require.Equal(t, "u-1", stored.GetUpdatedBy(), "the record is written back as stored")
 				} else {
 					require.Empty(t, stored.GetUpdatedBy(), "nothing is written")
 				}
@@ -479,8 +479,8 @@ func TestTransportsAnswerTheContractAlike(t *testing.T) {
 				requireSampleName(t, stringOf(in.items[1]["id"]), "contract-update-many-b2")
 				for i, item := range answered {
 					stored := loadSample(t, stringOf(in.items[i]["id"]))
-					require.Equal(t, "alice", stored.GetUpdatedBy(), "the caller is who updated the record, whatever the item carried")
-					require.Equal(t, "alice", item["updated_by"])
+					require.Equal(t, "u-1", stored.GetUpdatedBy(), "the caller is who updated the record, whatever the item carried")
+					require.Equal(t, "u-1", item["updated_by"])
 					requireSameInstant(t, stored.GetCreatedAt(), item["created_at"], "the answer carries the creation audit as stored")
 				}
 			},
@@ -540,11 +540,11 @@ func TestTransportsAnswerTheContractAlike(t *testing.T) {
 				require.Equal(t, []string{stringOf(in.items[0]["id"]), stringOf(in.items[1]["id"])}, ids(dataMap(t, got)["items"]))
 				first := loadSample(t, stringOf(in.items[0]["id"]))
 				require.Equal(t, "contract-patch-many-a2", first.Name)
-				require.Equal(t, "alice", first.GetUpdatedBy(), "the caller is who patched the record")
+				require.Equal(t, "u-1", first.GetUpdatedBy(), "the caller is who patched the record")
 				second := loadSample(t, stringOf(in.items[1]["id"]))
 				require.Equal(t, "contract-patch-many-b", second.Name, "a field the item does not name stays as stored")
 				require.Equal(t, "masked", second.Note)
-				require.Equal(t, "alice", second.GetUpdatedBy(), "the caller is who patched the record")
+				require.Equal(t, "u-1", second.GetUpdatedBy(), "the caller is who patched the record")
 			},
 		},
 		{

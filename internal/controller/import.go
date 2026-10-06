@@ -86,13 +86,11 @@ func ImportHandler[M types.Model, REQ types.Request, RSP types.Response](cfg ...
 		}
 
 		// The service's Import only parses the file into models; the controller
-		// owns persistence. Stamp the audit fields, then split rows by intent:
-		// an ID marks a replacement of that record, no ID marks a creation.
+		// owns persistence and splits the rows by intent: an ID marks a
+		// replacement of that record, no ID marks a creation.
 		toCreate := make([]M, 0, len(ml))
 		toUpdate := make([]M, 0, len(ml))
 		for i := range ml {
-			ml[i].SetCreatedBy(c.GetString(consts.CTX_USERNAME))
-			ml[i].SetUpdatedBy(c.GetString(consts.CTX_USERNAME))
 			if len(ml[i].GetID()) > 0 {
 				toUpdate = append(toUpdate, ml[i])
 			} else {

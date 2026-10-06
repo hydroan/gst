@@ -10,7 +10,6 @@ import (
 	"github.com/hydroan/gst/database"
 	"github.com/hydroan/gst/internal/consts"
 	modellogmgmt "github.com/hydroan/gst/internal/model/logmgmt"
-	"github.com/hydroan/gst/internal/requestctx"
 	"github.com/hydroan/gst/internal/response"
 	"github.com/hydroan/gst/internal/types"
 	"github.com/hydroan/gst/logger"
@@ -92,11 +91,6 @@ func (a *action[M, REQ, RSP]) createManyFlow(ctx context.Context, newServiceCont
 	log := logger.Controller.WithContext(ctx, consts.CreateMany)
 	svc := a.service()
 	val := a.newModel()
-	username := requestctx.FromContext(ctx).Username()
-	for _, m := range req.Items {
-		m.SetCreatedBy(username)
-		m.SetUpdatedBy(username)
-	}
 
 	// 1.Perform business logic processing before batch create resource.
 	if err := a.traceServiceHook(ctx, consts.CreateManyBefore, svc, newServiceContext, func(sc *types.ServiceContext) error {

@@ -46,14 +46,14 @@ func plainServiceContext(ctx context.Context, phase consts.Phase) *types.Service
 // metadata.
 func TestCreateFlowRunsOnRequestMetadataAlone(t *testing.T) {
 	a := newAction[*flowSample, *flowSample, *flowSample]("flow-samples", consts.Create, consts.CreateBefore, consts.CreateAfter)
-	ctx := requestctx.WithMetadata(context.Background(), requestctx.New(requestctx.Fields{Username: "flow-user"}))
+	ctx := requestctx.WithMetadata(context.Background(), requestctx.New(requestctx.Fields{Username: "flow-user", UserID: "u-flow"}))
 	record := &flowSample{Name: "created by the flow"}
 
 	require.NoError(t, a.createFlow(ctx, plainServiceContext, record))
 
 	require.NotEmpty(t, record.GetID())
-	require.Equal(t, "flow-user", record.GetCreatedBy())
-	require.Equal(t, "flow-user", record.GetUpdatedBy())
+	require.Equal(t, "u-flow", record.GetCreatedBy())
+	require.Equal(t, "u-flow", record.GetUpdatedBy())
 }
 
 // TestGetFlowAnswersNotFoundAsAServiceError pins how a flow reports a
@@ -115,7 +115,7 @@ func TestPatchFlowRecordsTheRecordIDInTheOperationLog(t *testing.T) {
 	t.Cleanup(func() { audit = previous })
 
 	a := newAction[*flowSample, *flowSample, *flowSample]("flow-samples", consts.Patch, consts.PatchBefore, consts.PatchAfter)
-	ctx := requestctx.WithMetadata(context.Background(), requestctx.New(requestctx.Fields{Username: "flow-user"}))
+	ctx := requestctx.WithMetadata(context.Background(), requestctx.New(requestctx.Fields{Username: "flow-user", UserID: "u-flow"}))
 	record := &flowSample{Name: "before the patch"}
 	require.NoError(t, database.Database[*flowSample](ctx).Create(record))
 

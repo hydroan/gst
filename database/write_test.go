@@ -9,6 +9,7 @@ import (
 
 	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/database"
+	"github.com/hydroan/gst/internal/requestctx"
 	"github.com/hydroan/gst/internal/types"
 	"github.com/stretchr/testify/require"
 	"gorm.io/gorm"
@@ -513,6 +514,75 @@ func TestDatabaseUpdate(t *testing.T) {
 		require.NoError(t, database.Database[*TestAutoItem](context.Background()).List(&items))
 		require.Len(t, items, 1, "update should not insert a new row")
 		require.Equal(t, "after", items[0].Name)
+	})
+}
+
+// TestWritesStampTheCallerTheContextCarries pins who the audit columns name:
+// the id of the user the context carries, written by the database layer on
+// every write path whatever the objects hold, and left as the objects hold
+// it when the context carries no caller, as a job's does.
+func TestWritesStampTheCallerTheContextCarries(t *testing.T) {
+	defer cleanupTestData()
+	as := func(userID string) context.Context {
+		return requestctx.WithMetadata(context.Background(), requestctx.New(requestctx.Fields{Username: "alice", UserID: userID}))
+	}
+	stored := func(t *testing.T, id string) *TestUser {
+		t.Helper()
+		u := new(TestUser)
+		require.NoError(t, database.Database[*TestUser](context.Background()).Get(u, id))
+		return u
+	}
+
+	t.Run("Create names the caller as creator and updater", func(t *testing.T) {
+		u := &TestUser{Name: "stamped-create", Email: "stamped-create@example.com"}
+		u.SetCreatedBy("forged")
+		require.NoError(t, database.Database[*TestUser](as("u-1")).Create(u))
+		require.Equal(t, "u-1", u.CreatedBy)
+		require.Equal(t, "u-1", u.UpdatedBy)
+		require.Equal(t, "u-1", stored(t, u.ID).CreatedBy)
+		require.Equal(t, "u-1", stored(t, u.ID).UpdatedBy)
+	})
+	t.Run("Update names the caller as updater and keeps the creator", func(t *testing.T) {
+		u := &TestUser{Name: "stamped-update", Email: "stamped-update@example.com"}
+		require.NoError(t, database.Database[*TestUser](as("u-1")).Create(u))
+		u.Name = "stamped-update-2"
+		u.SetUpdatedBy("forged")
+		require.NoError(t, database.Database[*TestUser](as("u-2")).Update(u))
+		require.Equal(t, "u-2", u.UpdatedBy)
+		require.Equal(t, "u-1", stored(t, u.ID).CreatedBy)
+		require.Equal(t, "u-2", stored(t, u.ID).UpdatedBy)
+
+		u.Name = "stamped-update-3"
+		require.NoError(t, database.Database[*TestUser](as("u-3")).WithSelect(colName).Update(u))
+		require.Equal(t, "u-3", stored(t, u.ID).UpdatedBy, "a narrowed update still writes the updater")
+	})
+	t.Run("UpdateByID names the caller as updater", func(t *testing.T) {
+		u := &TestUser{Name: "stamped-by-id", Email: "stamped-by-id@example.com"}
+		require.NoError(t, database.Database[*TestUser](as("u-1")).Create(u))
+		require.NoError(t, database.Database[*TestUser](as("u-2")).UpdateByID(u.ID, colName.Set("stamped-by-id-2")))
+		require.Equal(t, "u-1", stored(t, u.ID).CreatedBy)
+		require.Equal(t, "u-2", stored(t, u.ID).UpdatedBy)
+	})
+	t.Run("Upsert names the caller on insert and refreshes only the updater on conflict", func(t *testing.T) {
+		item := &TestUniqueItem{UniqueCode: "stamped-upsert", Name: "first"}
+		require.NoError(t, database.Database[*TestUniqueItem](as("u-1")).Upsert(item))
+		item.Name = "second"
+		require.NoError(t, database.Database[*TestUniqueItem](as("u-2")).Upsert(item))
+		got := new(TestUniqueItem)
+		require.NoError(t, database.Database[*TestUniqueItem](context.Background()).Get(got, item.ID))
+		require.Equal(t, "second", got.Name)
+		require.Equal(t, "u-1", got.CreatedBy, "a conflict update keeps the creator")
+		require.Equal(t, "u-2", got.UpdatedBy)
+	})
+	t.Run("a write without a caller keeps what the objects hold", func(t *testing.T) {
+		u := &TestUser{Name: "stamped-job", Email: "stamped-job@example.com"}
+		u.SetCreatedBy("job")
+		u.SetUpdatedBy("job")
+		require.NoError(t, database.Database[*TestUser](context.Background()).Create(u))
+		u.SetUpdatedBy("job-2")
+		require.NoError(t, database.Database[*TestUser](context.Background()).Update(u))
+		require.Equal(t, "job", stored(t, u.ID).CreatedBy)
+		require.Equal(t, "job-2", stored(t, u.ID).UpdatedBy)
 	})
 }
 

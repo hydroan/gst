@@ -10,7 +10,6 @@ import (
 	"github.com/hydroan/gst/database"
 	"github.com/hydroan/gst/internal/consts"
 	modellogmgmt "github.com/hydroan/gst/internal/model/logmgmt"
-	"github.com/hydroan/gst/internal/requestctx"
 	"github.com/hydroan/gst/internal/response"
 	"github.com/hydroan/gst/internal/types"
 	"github.com/hydroan/gst/logger"
@@ -85,21 +84,16 @@ func UpdateManyCall[M types.Model](route string) func(ctx context.Context, param
 }
 
 // updateManyFlow runs the batch update flow on the items of req: it refuses
-// a batch naming one record twice with 400 (see repeatedID), stamps the
-// caller on every item as its updater, runs the batch update hooks around
-// the write and records the operation. The items are req's own, as the
-// write and the hooks left them, with the creation audit as stored.
+// a batch naming one record twice with 400 (see repeatedID), runs the batch
+// update hooks around the write and records the operation. The items are
+// req's own, as the write and the hooks left them, with the creation audit
+// as stored.
 func (a *action[M, REQ, RSP]) updateManyFlow(ctx context.Context, newServiceContext serviceContextFunc, req *batch[M]) error {
 	log := logger.Controller.WithContext(ctx, consts.UpdateMany)
 	svc := a.service()
 
 	if err := req.repeatedID(); err != nil {
 		return failWith(ctx, log, "batch update naming a record twice", err, invalidArgument(err))
-	}
-	// The caller is who updates the records, whatever the items carry.
-	username := requestctx.FromContext(ctx).Username()
-	for _, m := range req.Items {
-		m.SetUpdatedBy(username)
 	}
 	// 1.Perform business logic processing before batch update resource.
 	if err := a.traceServiceHook(ctx, consts.UpdateManyBefore, svc, newServiceContext, func(sc *types.ServiceContext) error {

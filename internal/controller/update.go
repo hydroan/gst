@@ -135,7 +135,6 @@ func (a *action[M, REQ, RSP]) updateFlow(ctx context.Context, newServiceContext 
 	}
 	req.ClearID()
 	req.SetID(id)
-	req.SetUpdatedBy(requestctx.FromContext(ctx).Username()) // set updated_by to current user
 
 	// 1.Perform business logic processing before update resource.
 	if err := a.traceServiceHook(ctx, consts.UpdateBefore, svc, newServiceContext, func(sc *types.ServiceContext) error {

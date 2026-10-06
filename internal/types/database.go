@@ -22,10 +22,11 @@ import "github.com/hydroan/gst/internal/consts"
 // function; the context it passes to fn makes every chain started from that
 // context join the transaction automatically.
 type Database[M Model] interface {
-	// Create inserts one or more records (pure INSERT), setting framework IDs
-	// and forcing created_at/updated_at to now. A primary or unique key
-	// collision fails with database.ErrDuplicatedKey instead of updating the
-	// existing row.
+	// Create inserts one or more records (pure INSERT), setting framework IDs,
+	// forcing created_at/updated_at to now and created_by/updated_by to the id
+	// of the caller the context carries, when it carries one. A primary or
+	// unique key collision fails with database.ErrDuplicatedKey instead of
+	// updating the existing row.
 	Create(objs ...M) error
 	// Delete removes one or more records using WithPurge, the model Purge setting, or soft delete by default.
 	Delete(objs ...M) error
@@ -33,19 +34,22 @@ type Database[M Model] interface {
 	// zero values included). Objects without an ID fail with
 	// database.ErrIDRequired; records without a live row fail with
 	// database.ErrRecordNotFound. created_at/created_by/deleted_at are never
-	// written; updated_at is always refreshed by the framework.
+	// written; updated_at is always refreshed by the framework, and updated_by
+	// set to the id of the caller the context carries, when it carries one.
 	// Concurrent updates of one record resolve as last writer wins: each
 	// writes the whole value it holds, including columns another writer
 	// changed in between. A model declares model.Version to have the stale
 	// write refused instead.
 	Update(objs ...M) error
 	// Upsert inserts records or, on any unique-key collision, overwrites the
-	// conflicting row (INSERT ... ON DUPLICATE KEY UPDATE). It runs no model
-	// hooks and re-syncs caller objects with the persisted rows; reserve it
-	// for deliberate merge writes such as imports and sync jobs.
+	// conflicting row (INSERT ... ON DUPLICATE KEY UPDATE), keeping the row's
+	// creation facts and naming the caller the context carries as updater. It
+	// runs no model hooks and re-syncs caller objects with the persisted rows;
+	// reserve it for deliberate merge writes such as imports and sync jobs.
 	Upsert(objs ...M) error
 	// UpdateByID updates database columns of a record by its ID in one
-	// UPDATE statement, without running model hooks. Assignments come from
+	// UPDATE statement, without running model hooks, refreshing updated_at and
+	// naming the caller the context carries as updater. Assignments come from
 	// column references, such as SampleCols.Status.Set(v); at least one is
 	// required, and empty columns, nil values and a column assigned twice are
 	// rejected.

@@ -1,7 +1,7 @@
 package modelregistry
 
 // The sentinel rows of a model tree and the names of the columns every model
-// shares, declared here for the public model package to forward.
+// shares; the public model package forwards them.
 var (
 	RootID      = "root"
 	RootName    = "root"

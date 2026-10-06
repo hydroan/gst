@@ -8,6 +8,7 @@ import (
 	"github.com/hydroan/gst/internal/consts"
 	"github.com/hydroan/gst/internal/dbruntime"
 	"github.com/hydroan/gst/internal/modelregistry"
+	"github.com/hydroan/gst/internal/requestctx"
 	"github.com/hydroan/gst/internal/types"
 	"github.com/hydroan/gst/util"
 	"gorm.io/gorm"
@@ -44,10 +45,11 @@ func compactModels[M types.Model](objs []M) []M {
 //
 // Behavior:
 //   - Automatically generates ID if empty using SetID()
-//   - Forces created_at and updated_at to the current time. Values carried by
-//     objs are deliberately ignored: HTTP controllers bind client JSON straight
-//     into models, so honoring caller-supplied timestamps would let clients
-//     forge audit fields.
+//   - Forces created_at and updated_at to the current time, and created_by
+//     and updated_by to the id of the caller the context carries, when it
+//     carries one. Values carried by objs are deliberately ignored: HTTP
+//     controllers bind client JSON straight into models, so honoring
+//     caller-supplied values would let clients forge audit fields.
 //   - Runs hooks and all batches in one transaction: a failure in any batch or
 //     hook rolls back the whole call (all-or-nothing), joining the transaction
 //     carried by ctx when present. A call that fits one batch and runs no
@@ -68,6 +70,14 @@ func compactModels[M types.Model](objs []M) []M {
 //
 //	Create(&Sample{Name: "alpha", Code: "a-1"})  // Create single record
 //	Create(user1, user2, user3)  // Batch create multiple records
+//
+// caller returns the id of the user the context carries, whom the audit
+// columns name as creator and updater, or "" when it carries none, as the
+// context of a job or a seeding does: the objects then keep what they hold.
+func (db *database[M]) caller() string {
+	return requestctx.FromContext(db.ctx).UserID()
+}
+
 func (db *database[M]) Create(objs ...M) (err error) {
 	defer db.reset()
 
@@ -94,6 +104,16 @@ func (db *database[M]) Create(objs ...M) (err error) {
 	batchSize := defaultBatchSize
 	if db.batchSize > 0 {
 		batchSize = db.batchSize
+	}
+
+	// The caller is who created the records: created_by and updated_by take
+	// the id the context carries, when it carries one, whatever the objects
+	// hold.
+	if caller := db.caller(); caller != "" {
+		for i := range objs {
+			objs[i].SetCreatedBy(caller)
+			objs[i].SetUpdatedBy(caller)
+		}
 	}
 
 	if db.dryRun {
@@ -388,8 +408,10 @@ func (db *database[M]) Delete(objs ...M) (err error) {
 //   - Timestamp and audit columns are framework-managed and cannot be forged
 //     by callers: created_at/created_by are never written (creation facts),
 //     deleted_at is never written (rows cannot be soft-deleted or resurrected
-//     through Update), and updated_at is always refreshed to the current UTC
-//     time by GORM (dbruntime.NowUTC) regardless of the value carried by objs.
+//     through Update), updated_at is always refreshed to the current UTC
+//     time by GORM (dbruntime.NowUTC) regardless of the value carried by objs,
+//     and updated_by is the id of the caller the context carries, when it
+//     carries one, regardless of the value carried by objs.
 //   - A record matching no live row (missing or soft deleted) fails with
 //     ErrRecordNotFound. Detection relies on matched-rows semantics: the
 //     framework MySQL DSN enables clientFoundRows=true so an update that
@@ -468,6 +490,18 @@ func (db *database[M]) Update(objs ...M) (err error) {
 
 	tableName := db.m.TableName()
 
+	// The caller is who updated the records: updated_by takes the id the
+	// context carries, when it carries one, whatever the objects hold, and a
+	// narrowed update writes it along with its columns, as it does updated_at.
+	if caller := db.caller(); caller != "" {
+		for i := range objs {
+			objs[i].SetUpdatedBy(caller)
+		}
+		if len(db.selectColumns) > 0 {
+			db.selectColumns = ensureSelected(db.selectColumns, "updated_by")
+		}
+	}
+
 	// The bump happens per statement below; on any failure the whole batch is
 	// rolled back, so every bumped object is restored to the version its row
 	// still has.
@@ -482,8 +516,8 @@ func (db *database[M]) Update(objs ...M) (err error) {
 	if versioned && len(db.selectColumns) > 0 {
 		// A narrowed update still bumps: leaving the version column out of
 		// the SET would pass the check and keep every other carried version
-		// alive. See ensureVersionSelected.
-		db.selectColumns = ensureVersionSelected(db.selectColumns, versionColumn)
+		// alive. See ensureSelected.
+		db.selectColumns = ensureSelected(db.selectColumns, versionColumn)
 	}
 
 	if db.dryRun {
@@ -574,7 +608,8 @@ func (db *database[M]) Update(objs ...M) (err error) {
 // Delete; omitting them means callers cannot forge creation audit data,
 // soft-delete a row, or resurrect one through Update. updated_at stays
 // writable because GORM's auto-update-time handling always overwrites it with
-// the current time, even under a narrowed WithSelect.
+// the current time, even under a narrowed WithSelect, and updated_by stays
+// writable because Update sets it to the caller first (see caller).
 func (db *database[M]) updateRowStatement(session *gorm.DB, obj M) *gorm.DB {
 	tx := session.Model(obj)
 	if len(db.selectColumns) > 0 {
@@ -597,7 +632,8 @@ func (db *database[M]) updateRowStatement(session *gorm.DB, obj M) *gorm.DB {
 //     a reference minted for the type parameter. At least one is required.
 //
 // Behavior:
-//   - Automatically updates the updated_at timestamp
+//   - Automatically updates the updated_at timestamp, and updated_by to the
+//     id of the caller the context carries, when it carries one
 //   - Does not invoke UpdateBefore/UpdateAfter hooks for performance reasons
 //   - Runs as one bare UPDATE without any transaction wrapper; inside an
 //     ambient transaction it joins that transaction unchanged
@@ -653,6 +689,11 @@ func (db *database[M]) UpdateByID(id string, assignments ...types.Assignment) (e
 			return ErrDuplicateColumn
 		}
 		updates[assignment.Column()] = assignment.Value()
+	}
+	// The caller is who updated the record: updated_by takes the id the
+	// context carries, when it carries one, over any assignment of it.
+	if caller := db.caller(); caller != "" {
+		updates["updated_by"] = caller
 	}
 
 	if err = db.prepare(); err != nil {

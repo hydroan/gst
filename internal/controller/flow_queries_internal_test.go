@@ -100,7 +100,7 @@ func operationLogEntries(ctx context.Context, t *testing.T, a *action[*flowSampl
 
 func TestUpdateManyFlowBackfillsTheCreationAuditInOneStatement(t *testing.T) {
 	a := newAction[*flowSample, *flowSample, *flowSample]("flow-samples", consts.UpdateMany, consts.UpdateManyBefore, consts.UpdateManyAfter)
-	ctx := requestctx.WithMetadata(context.Background(), requestctx.New(requestctx.Fields{Username: "flow-user"}))
+	ctx := requestctx.WithMetadata(context.Background(), requestctx.New(requestctx.Fields{Username: "flow-user", UserID: "u-flow"}))
 	stored := createFlowSamples(ctx, t, uniqueFlowName("update many"), 3)
 	req := batch[*flowSample]{}
 	for _, record := range stored {
@@ -112,14 +112,14 @@ func TestUpdateManyFlowBackfillsTheCreationAuditInOneStatement(t *testing.T) {
 
 	require.Len(t, selects(), 1, "the batch reads its rows back in one statement")
 	for i, item := range req.Items {
-		require.Equal(t, "flow-user", item.GetUpdatedBy())
+		require.Equal(t, "u-flow", item.GetUpdatedBy())
 		require.True(t, item.GetCreatedAt().Equal(stored[i].GetCreatedAt()), "the creation audit is backfilled as stored")
 	}
 }
 
 func TestPatchManyFlowReadsTheBatchInOneStatement(t *testing.T) {
 	a := newAction[*flowSample, *flowSample, *flowSample]("flow-samples", consts.PatchMany, consts.PatchManyBefore, consts.PatchManyAfter)
-	ctx := requestctx.WithMetadata(context.Background(), requestctx.New(requestctx.Fields{Username: "flow-user"}))
+	ctx := requestctx.WithMetadata(context.Background(), requestctx.New(requestctx.Fields{Username: "flow-user", UserID: "u-flow"}))
 	stored := createFlowSamples(ctx, t, uniqueFlowName("patch many"), 3)
 	req := batch[*flowSample]{}
 	fieldSets := make([]patchFieldSet, 0, len(stored))
@@ -136,13 +136,13 @@ func TestPatchManyFlowReadsTheBatchInOneStatement(t *testing.T) {
 	require.Len(t, rsp.Items, 3)
 	for i, item := range rsp.Items {
 		require.Equal(t, stored[i].Name+" patched", item.Name)
-		require.Equal(t, "flow-user", item.GetUpdatedBy())
+		require.Equal(t, "u-flow", item.GetUpdatedBy())
 	}
 }
 
 func TestPatchManyFlowRefusesAnItemWithoutAnIDBeforeReading(t *testing.T) {
 	a := newAction[*flowSample, *flowSample, *flowSample]("flow-samples", consts.PatchMany, consts.PatchManyBefore, consts.PatchManyAfter)
-	ctx := requestctx.WithMetadata(context.Background(), requestctx.New(requestctx.Fields{Username: "flow-user"}))
+	ctx := requestctx.WithMetadata(context.Background(), requestctx.New(requestctx.Fields{Username: "flow-user", UserID: "u-flow"}))
 	stored := createFlowSamples(ctx, t, uniqueFlowName("patch many without id"), 1)
 	req := batch[*flowSample]{Items: []*flowSample{
 		flowItem(stored[0].GetID(), "renamed"),
@@ -160,7 +160,7 @@ func TestPatchManyFlowRefusesAnItemWithoutAnIDBeforeReading(t *testing.T) {
 
 func TestDeleteFlowReadsTheRecordOnlyForTheOperationLog(t *testing.T) {
 	a := newAction[*flowSample, *flowSample, *flowSample]("flow-samples", consts.Delete, consts.DeleteBefore, consts.DeleteAfter)
-	ctx := requestctx.WithMetadata(context.Background(), requestctx.New(requestctx.Fields{Username: "flow-user"}))
+	ctx := requestctx.WithMetadata(context.Background(), requestctx.New(requestctx.Fields{Username: "flow-user", UserID: "u-flow"}))
 
 	t.Run("a disabled audit reads nothing", func(t *testing.T) {
 		useAudit(t, config.Audit{})
@@ -188,7 +188,7 @@ func TestDeleteFlowReadsTheRecordOnlyForTheOperationLog(t *testing.T) {
 
 func TestDeleteManyFlowRecordsTheDeletedRecordsWhenAudited(t *testing.T) {
 	a := newAction[*flowSample, *flowSample, *flowSample]("flow-samples", consts.DeleteMany, consts.DeleteManyBefore, consts.DeleteManyAfter)
-	ctx := requestctx.WithMetadata(context.Background(), requestctx.New(requestctx.Fields{Username: "flow-user"}))
+	ctx := requestctx.WithMetadata(context.Background(), requestctx.New(requestctx.Fields{Username: "flow-user", UserID: "u-flow"}))
 
 	t.Run("a disabled audit reads nothing", func(t *testing.T) {
 		useAudit(t, config.Audit{})

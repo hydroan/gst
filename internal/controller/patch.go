@@ -198,8 +198,6 @@ func (a *action[M, REQ, RSP]) patchFlow(ctx context.Context, newServiceContext s
 		log.Errorz("records matched by id is not exactly one", zap.Int("count", len(data)), zap.String("id", id))
 		return zero, notFound(nil)
 	}
-	data[0].SetUpdatedBy(requestctx.FromContext(ctx).Username())
-
 	newVal := reflect.ValueOf(req).Elem()
 	oldVal := reflect.ValueOf(data[0]).Elem()
 	applyPatch(log, a.typ, oldVal, newVal, fields)

@@ -56,33 +56,38 @@ func initializeVersions[M types.Model](objs []M) {
 	}
 }
 
-// ensureVersionSelected widens a narrowed column selection so the bumped
-// version still reaches the statement: WithSelect names the caller's columns,
-// but a versioned update that did not write the version column would pass its
-// check and then leave every other carried version alive.
-func ensureVersionSelected(selectColumns []string, versionColumn string) []string {
-	if slices.Contains(selectColumns, versionColumn) {
+// ensureSelected widens a narrowed column selection by column, a
+// framework-managed one the write must carry: WithSelect names the caller's
+// columns, but a versioned update that did not write the version column would
+// pass its check and then leave every other carried version alive, and an
+// update that did not write updated_by would leave the row naming the wrong
+// updater.
+func ensureSelected(selectColumns []string, column string) []string {
+	if slices.Contains(selectColumns, column) {
 		return selectColumns
 	}
-	return append(append(make([]string, 0, len(selectColumns)+1), selectColumns...), versionColumn)
+	return append(append(make([]string, 0, len(selectColumns)+1), selectColumns...), column)
 }
 
-// versionedOnConflict builds the ON CONFLICT clause Upsert pre-sets for
-// versioned models. gorm's slice Save would otherwise add UpdateAll, whose
-// expansion assigns "column = VALUES(column)" to every column — version
-// included, which would write the object's version over the row's and could
-// move a row backwards, silently reviving every stale version out there.
+// upsertOnConflict builds the ON CONFLICT clause Upsert pre-sets, versionColumn
+// naming the version column of a versioned model and "" for any other. gorm's
+// slice Save would otherwise add UpdateAll, whose expansion assigns
+// "column = VALUES(column)" to every column: created_by included, which would
+// write the object's creator over the row's, and the version column of a
+// versioned model, which would write the object's version over the row's and
+// could move a row backwards, silently reviving every stale version out there.
 //
-// The clause reproduces the UpdateAll expansion verbatim (skip primary keys,
-// creation timestamps and defaulted columns; refresh updated_at to now) with
-// one divergence: the version column bumps the row's own value. Save adopts a
-// pre-set ON CONFLICT clause instead of adding its own, so every other
-// slice-save behavior is preserved.
+// The clause reproduces the UpdateAll expansion (skip primary keys, creation
+// timestamps and defaulted columns; refresh updated_at to now) with two
+// divergences: created_by stays, a creation fact like created_at, and the
+// version column bumps the row's own value. Save adopts a pre-set ON CONFLICT
+// clause instead of adding its own, so every other slice-save behavior is
+// preserved.
 //
 // Under WithSelect the conflict update narrows to the selected columns, and
 // updated_at is still refreshed: a narrowed upsert that touched a row must
 // not leave its update timestamp claiming otherwise.
-func (db *database[M]) versionedOnConflict(versionColumn string) (clause.OnConflict, error) {
+func (db *database[M]) upsertOnConflict(versionColumn string) (clause.OnConflict, error) {
 	stmt := &gorm.Statement{DB: db.ins}
 	if err := stmt.Parse(db.m); err != nil {
 		return clause.OnConflict{}, err
@@ -98,10 +103,13 @@ func (db *database[M]) versionedOnConflict(versionColumn string) (clause.OnConfl
 	// postgres an unqualified name inside DO UPDATE SET is ambiguous between
 	// the existing row and the excluded pseudo-row (SQLSTATE 42702), and the
 	// qualified form reads as the existing row on every dialect.
-	doUpdates := clause.Set{{
-		Column: clause.Column{Name: versionColumn},
-		Value:  clause.Expr{SQL: "? + 1", Vars: []any{clause.Column{Table: clause.CurrentTable, Name: versionColumn}}},
-	}}
+	var doUpdates clause.Set
+	if versionColumn != "" {
+		doUpdates = append(doUpdates, clause.Assignment{
+			Column: clause.Column{Name: versionColumn},
+			Value:  clause.Expr{SQL: "? + 1", Vars: []any{clause.Column{Table: clause.CurrentTable, Name: versionColumn}}},
+		})
+	}
 	columns := make([]string, 0, len(stmt.Schema.DBNames))
 	for _, dbName := range stmt.Schema.DBNames {
 		field := stmt.Schema.LookUpField(dbName)
@@ -109,7 +117,7 @@ func (db *database[M]) versionedOnConflict(versionColumn string) (clause.OnConfl
 			continue
 		}
 		// Creation facts belong to the insert; a conflict update keeps them.
-		if field.AutoCreateTime > 0 {
+		if field.AutoCreateTime > 0 || dbName == "created_by" {
 			continue
 		}
 		// gorm's own expansion leaves defaulted columns alone (unless the

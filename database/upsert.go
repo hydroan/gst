@@ -11,7 +11,6 @@ import (
 	"github.com/hydroan/gst/internal/dbruntime"
 	"github.com/hydroan/gst/internal/modelregistry"
 	"gorm.io/gorm"
-	"gorm.io/gorm/clause"
 	gormschema "gorm.io/gorm/schema"
 )
 
@@ -39,10 +38,12 @@ import (
 // The remaining sharp edges the caller owns on every dialect:
 //   - A merging collision with a soft-deleted row updates that row and clears
 //     its deleted_at, resurrecting it.
-//   - created_at is preserved on conflict updates (auto-create-time columns
-//     are excluded from the conflict update set); on inserted rows
-//     created_at/updated_at are forced to the current time exactly like
-//     Create, so caller-supplied timestamps are never honored.
+//   - created_at and created_by are preserved on conflict updates (creation
+//     facts are excluded from the conflict update set); on inserted rows
+//     created_at/updated_at are forced to the current time and
+//     created_by/updated_by to the id of the caller the context carries,
+//     exactly like Create, so caller-supplied values are never honored; a
+//     conflict update refreshes updated_at and updated_by the same way.
 //   - After each batch, caller-owned objects are re-synced from the database
 //     by complete unique-index values: an object that collided exposes the
 //     persisted row's ID instead of the one generated for the insert attempt.
@@ -101,17 +102,32 @@ func (db *database[M]) Upsert(objs ...M) (err error) {
 		batchSize = db.batchSize
 	}
 
-	// A versioned model replaces the UpdateAll clause gorm's slice Save would
-	// add: the conflict branch must bump the row's own version rather than
-	// write the object's over it. Save adopts a pre-set ON CONFLICT clause,
-	// so everything else about the slice save stays as it is. See
-	// versionedOnConflict and model.Version.
-	var onConflict clause.OnConflict
-	versionColumn, versioned := modelregistry.VersionColumn(db.m)
-	if versioned {
-		if onConflict, err = db.versionedOnConflict(versionColumn); err != nil {
-			return err
+	// The caller is who wrote the records: created_by and updated_by take the
+	// id the context carries, when it carries one, whatever the objects hold;
+	// the values land on inserted rows, and the conflict update keeps
+	// created_by and takes updated_by. A narrowed upsert carries both along.
+	if caller := db.caller(); caller != "" {
+		for i := range objs {
+			objs[i].SetCreatedBy(caller)
+			objs[i].SetUpdatedBy(caller)
 		}
+		if len(db.selectColumns) > 0 {
+			db.selectColumns = ensureSelected(ensureSelected(db.selectColumns, "created_by"), "updated_by")
+		}
+	}
+
+	// The pre-set clause replaces the UpdateAll clause gorm's slice Save would
+	// add: the conflict branch must keep the row's creator and, on a versioned
+	// model, bump the row's own version rather than write the object's over
+	// it. Save adopts a pre-set ON CONFLICT clause, so everything else about
+	// the slice save stays as it is. See upsertOnConflict and model.Version.
+	versionColumn, versioned := modelregistry.VersionColumn(db.m)
+	if !versioned {
+		versionColumn = ""
+	}
+	onConflict, err := db.upsertOnConflict(versionColumn)
+	if err != nil {
+		return err
 	}
 
 	if db.dryRun {
@@ -122,10 +138,7 @@ func (db *database[M]) Upsert(objs ...M) (err error) {
 		initializeVersions(dryRunObjs)
 		for i := 0; i < len(dryRunObjs); i += batchSize {
 			end := min(i+batchSize, len(dryRunObjs))
-			tx := dryRunSession(db.ins)
-			if versioned {
-				tx = tx.Clauses(onConflict)
-			}
+			tx := dryRunSession(db.ins).Clauses(onConflict)
 			if err = db.collectSQL(tx.Save(dryRunObjs[i:end])); err != nil {
 				return err
 			}
@@ -153,10 +166,7 @@ func (db *database[M]) Upsert(objs ...M) (err error) {
 		}
 		for i := 0; i < len(objs); i += batchSize {
 			end := min(i+batchSize, len(objs))
-			tx := db.ins.Session(&gorm.Session{})
-			if versioned {
-				tx = tx.Clauses(onConflict)
-			}
+			tx := db.ins.Session(&gorm.Session{}).Clauses(onConflict)
 			if err = tx.Save(objs[i:end]).Error; err != nil {
 				// First-hand exit of a stack-less GORM/driver error; see the
 				// error-stack contract in doc.go.
