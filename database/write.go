@@ -33,6 +33,13 @@ func compactModels[M types.Model](objs []M) []M {
 	return compacted
 }
 
+// caller returns the id of the user the context carries, whom the audit
+// columns name as creator and updater, or "" when it carries none, as the
+// context of a job or a seeding does: the objects then keep what they hold.
+func (db *database[M]) caller() string {
+	return requestctx.FromContext(db.ctx).UserID()
+}
+
 // Create inserts one or multiple records into the database.
 // It is a pure INSERT: a record whose primary key or any unique key collides
 // with an existing row fails with ErrDuplicatedKey instead of silently
@@ -70,14 +77,6 @@ func compactModels[M types.Model](objs []M) []M {
 //
 //	Create(&Sample{Name: "alpha", Code: "a-1"})  // Create single record
 //	Create(user1, user2, user3)  // Batch create multiple records
-//
-// caller returns the id of the user the context carries, whom the audit
-// columns name as creator and updater, or "" when it carries none, as the
-// context of a job or a seeding does: the objects then keep what they hold.
-func (db *database[M]) caller() string {
-	return requestctx.FromContext(db.ctx).UserID()
-}
-
 func (db *database[M]) Create(objs ...M) (err error) {
 	defer db.reset()
 

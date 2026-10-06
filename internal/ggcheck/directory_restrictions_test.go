@@ -10,6 +10,11 @@ import (
 	"github.com/hydroan/gst/internal/ggcheck"
 )
 
+// TestDirectoryRestrictionsAcceptsConventionalProjectDirectories proves the
+// directories a project conventionally keeps beside its packages — test
+// suites, development scripts and Helm charts, next to the deployment
+// manifests and operator scripts — pass the directory check, while a
+// directory the project structure has no place for is still reported.
 func TestDirectoryRestrictionsAcceptsConventionalProjectDirectories(t *testing.T) {
 	projectDir := t.TempDir()
 	t.Chdir(projectDir)

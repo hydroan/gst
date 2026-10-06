@@ -1724,8 +1724,6 @@ func (Record) Design() {
 }
 `
 
-// TestHTTPOnlyActionNamesTheActionsGRPCCannotServe pins the examples of the
-// HTTPOnlyAction doc comment.
 // TestValidateStreamUsage pins the rules of a Stream action: it streams one
 // side of the call or both, each side declared either unary or streaming,
 // it is named by Service("name"), shaped by no Exact, and
@@ -2175,6 +2173,8 @@ func TestKeywordPredicatesNameTheTypedKeywords(t *testing.T) {
 	}
 }
 
+// TestHTTPOnlyActionNamesTheActionsGRPCCannotServe pins the examples of the
+// HTTPOnlyAction doc comment.
 func TestHTTPOnlyActionNamesTheActionsGRPCCannotServe(t *testing.T) {
 	for _, name := range []string{"Import", "Export", "SSE"} {
 		if !dsl.HTTPOnlyAction(name) {

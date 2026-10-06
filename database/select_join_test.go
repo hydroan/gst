@@ -40,7 +40,7 @@ func cleanupJoinData() {
 	cleanupAccountData()
 }
 
-// joinedTable renders a quoted table.column the way the dialect under test
+// qualified renders a quoted table.column the way the dialect under test
 // quotes it.
 func qualified(table, column string) string {
 	return quoteIdent(table) + "." + quoteIdent(column)
