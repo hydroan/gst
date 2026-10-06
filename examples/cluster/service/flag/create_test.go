@@ -234,8 +234,8 @@ func TestBatch(t *testing.T) {
 	require.EqualValues(t, 0, listed.GetTotal())
 }
 
-// flagName returns a flag name no other test uses: the name is unique in the
-// table, and every test of this package writes the one table.
+// flagName returns a flag name no other test uses, every test of this
+// package writing the one table.
 func flagName(prefix string) string {
 	return prefix + "-" + strconv.FormatInt(time.Now().UnixNano(), 36)
 }

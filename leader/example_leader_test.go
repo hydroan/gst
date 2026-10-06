@@ -31,7 +31,7 @@ func ExampleRegister() {
 	// leader/leader.go:
 	//
 	//	func init() {
-	//		leader.Register(followUpstream, "upstream-follower")
+	//		leader.Register(followUpstream, "upstream_follower")
 	//	}
 	leader.Register(func(ctx context.Context) error {
 		ticker := time.NewTicker(5 * time.Second)
@@ -48,7 +48,7 @@ func ExampleRegister() {
 				}
 			}
 		}
-	}, "upstream-follower")
+	}, "upstream_follower")
 }
 
 // ExampleRegister_outboxRelay forwards the records waiting in an outbox table.

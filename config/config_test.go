@@ -352,6 +352,20 @@ func clearConfigEnvForTest(t *testing.T) {
 		config.DATABASE_TYPE,
 		config.DATABASE_AUTO_MIGRATE,
 		config.SQLITE_IS_MEMORY,
+		config.MYSQL_STRICT,
+		config.GRPC_PORT,
+		config.GRPC_LISTEN,
+		config.GRPC_REFLECTION,
+		config.GRPC_TLS_ENABLED,
+		config.GRPC_CERT_FILE,
+		config.GRPC_KEY_FILE,
+		config.GRPC_KEEPALIVE_TIME,
+		config.GRPC_KEEPALIVE_TIMEOUT,
+		config.GRPC_KEEPALIVE_MIN_TIME,
+		config.GRPC_KEEPALIVE_PERMIT_WITHOUT_STREAM,
+		config.GRPC_MAX_CONNECTION_AGE,
+		config.GRPC_MAX_CONNECTION_AGE_GRACE,
+		config.GRPC_MAX_RECV_MSG_SIZE,
 	}
 	for _, key := range keys {
 		t.Setenv(key, "")

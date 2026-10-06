@@ -26,7 +26,7 @@ func ExampleRegister() {
 	// component/component.go:
 	//
 	//	func init() {
-	//		component.Register(consumeRecordEvents, "record-events")
+	//		component.Register(consumeRecordEvents, "record_events")
 	//	}
 	component.Register(func(ctx context.Context) error {
 		for {
@@ -47,7 +47,7 @@ func ExampleRegister() {
 				}
 			}
 		}
-	}, "record-events")
+	}, "record_events")
 }
 
 // ExampleRegister_transientFailure waits out a failure the loop can recover
@@ -84,7 +84,7 @@ func ExampleRegister_transientFailure() {
 				}
 			}
 		}
-	}, "record-events")
+	}, "record_events")
 }
 
 // ExampleRegister_disabled keeps a loop the configuration switches off
@@ -111,7 +111,7 @@ func ExampleRegister_disabled() {
 				}
 			}
 		}
-	}, "record-events")
+	}, "record_events")
 }
 
 // ExampleRegister_watch follows a change stream every replica applies to
@@ -182,10 +182,10 @@ func ExampleRegister_onceAcrossTheDeployment() {
 			}
 			publishToConnectedClients(events)
 		}
-	}, "record-events")
+	}, "record_events")
 
 	// One replica at a time, for the outside system.
-	leader.Register(forwardRecordEvents, "record-events-forwarder")
+	leader.Register(forwardRecordEvents, "record_events_forwarder")
 }
 
 // The declarations below stand in for the project's own code.

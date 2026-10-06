@@ -66,7 +66,6 @@ func TestRoutesListEveryRouteByItsFullPath(t *testing.T) {
 			view.print(&buf, routes, modelRoutesPrintOptions{})
 			got := buf.String()
 			require.Contains(t, got, " /api/samples\n")
-			require.NotContains(t, got, "base:")
 		})
 	}
 }

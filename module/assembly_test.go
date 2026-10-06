@@ -17,13 +17,16 @@ import (
 // Module registration calls are matched through import paths rather than by
 // the qualifier spelling, so an aliased import is read correctly. A module
 // registers middleware through the framework's internal registry, or through
-// the public middleware package that forwards to it; both mount the handler
-// the same way, so both count. The handler itself comes from the public
-// middleware package, which is where gg module copy takes its source file
-// from.
+// the public middleware package that forwards to it, and interceptors the
+// same way through the gRPC server's registry or the public interceptor
+// package; all four mount the handler the same way, so all four count. The
+// handler itself comes from the public middleware or interceptor package,
+// which is where gg module copy takes its source file from.
 const (
-	middlewareRegistryImportPath = "github.com/hydroan/gst/internal/middleware"
-	middlewareImportPath         = "github.com/hydroan/gst/middleware"
+	middlewareRegistryImportPath  = "github.com/hydroan/gst/internal/middleware"
+	middlewareImportPath          = "github.com/hydroan/gst/middleware"
+	interceptorRegistryImportPath = "github.com/hydroan/gst/internal/grpcserver"
+	interceptorImportPath         = "github.com/hydroan/gst/interceptor"
 )
 
 // moduleTreeImportPrefixes are the framework import prefixes whose next path
@@ -110,26 +113,26 @@ func TestCopyableModuleServicesInstallNoHookFromInit(t *testing.T) {
 	}
 }
 
-// TestModuleRegistersMountNoMiddleware pins add/copy parity for middleware:
-// the project mounts the handlers module.json declares itself, in the order
+// TestModuleRegistersMountNoHandlers pins add/copy parity for middleware and
+// interceptors: the project mounts the handlers module.json declares itself, in the order
 // it wants, on the add path as on the copy path, so Register mounts none —
 // a registration in Register would mount the handler a second time behind
 // the project's on the add path, and be absent on the copy path.
-func TestModuleRegistersMountNoMiddleware(t *testing.T) {
+func TestModuleRegistersMountNoHandlers(t *testing.T) {
 	for name := range copyableModuleManifests(t) {
 		t.Run(name, func(t *testing.T) {
 			registered := make([]string, 0)
 			for _, file := range parseModulePackage(t, name) {
-				registered = append(registered, middlewareRegistrations(t, name, file)...)
+				registered = append(registered, handlerRegistrations(t, name, file)...)
 			}
-			require.Empty(t, registered, "module %s mounts %v from Register; the project mounts the middleware module.json declares", name, registered)
+			require.Empty(t, registered, "module %s mounts %v from Register; the project mounts the handlers module.json declares", name, registered)
 		})
 	}
 }
 
-// middlewareRegistrations returns the "<scope>:<handler>" of every middleware
-// registration the file makes.
-func middlewareRegistrations(t *testing.T, module string, file *ast.File) []string {
+// handlerRegistrations returns the "<scope>:<handler>" of every middleware
+// or interceptor registration the file makes.
+func handlerRegistrations(t *testing.T, module string, file *ast.File) []string {
 	t.Helper()
 
 	imports := importPathsByLocalName(file)
@@ -139,16 +142,16 @@ func middlewareRegistrations(t *testing.T, module string, file *ast.File) []stri
 		if !ok {
 			return true
 		}
-		scope, ok := middlewareRegisterScope(call, imports)
+		scope, ok := handlerRegisterScope(call, imports)
 		if !ok {
 			return true
 		}
 		for _, arg := range call.Args {
-			handler, handlerOK := middlewareHandlerName(arg, imports)
+			handler, handlerOK := handlerName(arg, imports)
 			require.Truef(t, handlerOK,
-				"module %s registers middleware from an expression that is not a %s handler call; "+
-					"the implementation must live in the framework middleware package so gg module copy can carry it",
-				module, middlewareImportPath)
+				"module %s registers a handler from an expression that is not a call of the framework middleware or interceptor package, "+
+					"where the implementation must live so gg module copy can carry it",
+				module)
 			found = append(found, scope+":"+handler)
 		}
 
@@ -158,9 +161,9 @@ func middlewareRegistrations(t *testing.T, module string, file *ast.File) []stri
 	return found
 }
 
-// middlewareRegisterScope reports the manifest scope a middleware registration
-// call corresponds to.
-func middlewareRegisterScope(call *ast.CallExpr, imports map[string]string) (string, bool) {
+// handlerRegisterScope reports the manifest scope a middleware or interceptor
+// registration call corresponds to.
+func handlerRegisterScope(call *ast.CallExpr, imports map[string]string) (string, bool) {
 	selector, ok := call.Fun.(*ast.SelectorExpr)
 	if !ok || selector.Sel == nil {
 		return "", false
@@ -169,21 +172,24 @@ func middlewareRegisterScope(call *ast.CallExpr, imports map[string]string) (str
 	if !ok {
 		return "", false
 	}
-	if path := imports[qualifier.Name]; path != middlewareRegistryImportPath && path != middlewareImportPath {
+	switch imports[qualifier.Name] {
+	case middlewareRegistryImportPath, middlewareImportPath, interceptorRegistryImportPath, interceptorImportPath:
+	default:
 		return "", false
 	}
 	switch selector.Sel.Name {
-	case "Register":
+	case "Register", "Use":
 		return "global", true
-	case "RegisterAuth":
+	case "RegisterAuth", "UseAuth":
 		return "auth", true
 	default:
 		return "", false
 	}
 }
 
-// middlewareHandlerName returns the handler name of a middleware.Xxx() argument.
-func middlewareHandlerName(arg ast.Expr, imports map[string]string) (string, bool) {
+// handlerName returns the handler name of a middleware.Xxx() or
+// interceptor.Xxx() argument.
+func handlerName(arg ast.Expr, imports map[string]string) (string, bool) {
 	call, ok := arg.(*ast.CallExpr)
 	if !ok || len(call.Args) > 0 {
 		return "", false
@@ -193,7 +199,7 @@ func middlewareHandlerName(arg ast.Expr, imports map[string]string) (string, boo
 		return "", false
 	}
 	qualifier, ok := selector.X.(*ast.Ident)
-	if !ok || imports[qualifier.Name] != middlewareImportPath {
+	if path := imports[qualifier.Name]; !ok || (path != middlewareImportPath && path != interceptorImportPath) {
 		return "", false
 	}
 

@@ -188,7 +188,7 @@ func ExampleLock_TryRun_onceOnly() {
 // The declarations below stand in for the project's own code.
 
 // recordNotices is the lock the notices of records are sent under.
-var recordNotices = lock.New("record-notices")
+var recordNotices = lock.New("record_notices")
 
 // rebuildReportRows rebuilds the rows of the report.
 func rebuildReportRows(context.Context) error { return nil }

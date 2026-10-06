@@ -6,7 +6,6 @@ import (
 	"testing"
 
 	"github.com/hydroan/gst/internal/ggcheck"
-	"github.com/stretchr/testify/require"
 )
 
 func TestActionTypeFormStructAndSliceForms(t *testing.T) {
@@ -99,8 +98,12 @@ type SampleWatchRsp struct {
 
 	violations := runCheck(ggcheck.ActionTypeForm)
 
-	require.Len(t, violations, 1, "%#v", violations)
-	require.Contains(t, violations[0], "Stream action declares StreamingResult[SampleWatchRsp] with the value form; a struct action type must use the pointer form StreamingResult[*SampleWatchRsp]")
+	if len(violations) != 1 {
+		t.Fatalf("violations = %#v, want one", violations)
+	}
+	if want := "Stream action declares StreamingResult[SampleWatchRsp] with the value form; a struct action type must use the pointer form StreamingResult[*SampleWatchRsp]"; !strings.Contains(violations[0], want) {
+		t.Fatalf("violation = %q, want it to contain %q", violations[0], want)
+	}
 }
 
 func TestActionTypeFormEmptyStructPairRule(t *testing.T) {
