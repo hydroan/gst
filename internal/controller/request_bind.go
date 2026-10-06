@@ -231,7 +231,7 @@ func fieldViolations(err error, prefix string) []types.FieldViolation {
 // of tag names (see fieldPath).
 func jsonFieldPath(typ reflect.Type, fe validator.FieldError) string {
 	fallback := fieldPath(fe.Namespace())
-	path := make([]string, 0, 4)
+	var path []string
 	current := typ
 	for _, segment := range splitOutsideBrackets(fieldPath(fe.StructNamespace())) {
 		name, indexes, indexed := strings.Cut(segment, "[")
@@ -286,7 +286,7 @@ func jsonFieldPath(typ reflect.Type, fe validator.FieldError) string {
 // the key of a map field carrying any character: items[a.b].name is the two
 // segments items[a.b] and name.
 func splitOutsideBrackets(namespace string) []string {
-	segments := make([]string, 0, 4)
+	var segments []string
 	depth, start := 0, 0
 	for i, r := range namespace {
 		switch r {

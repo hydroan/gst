@@ -129,7 +129,7 @@ func run(m *testing.M, s Server) int {
 // succeed, so the returned function undoes whatever was already prepared even
 // when a later step fails.
 func (s Server) prepare() (release func(), afterMigrate func(), err error) {
-	releases := make([]func(), 0, 6)
+	var releases []func()
 	release = func() {
 		for _, done := range slices.Backward(releases) {
 			done()
