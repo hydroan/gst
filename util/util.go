@@ -102,8 +102,9 @@ func RunOrDie(fn func() error) {
 		name := GetFunctionName(fn)
 		logFatalFailure(name, err)
 		// %+w renders the cause with its stack into the message, the one
-		// report of a failed start a terminal shows.
-		HandleErr(fmt.Errorf("%s error: %+w", name, err)) //nolint:forbidigo // the printed message carries the cause's stack
+		// report of a failed start a terminal shows, and keeps the cause
+		// wrapped; errors.Newf hands a format carrying %w to fmt.Errorf.
+		HandleErr(errors.Newf("%s error: %+w", name, err))
 	}
 }
 
