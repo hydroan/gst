@@ -67,8 +67,8 @@ var baseFieldNumbers = map[string]int32{
 // the generator reads no doc comment, so each key gets a fixed one.
 var baseFieldComments = map[string]string{
 	"id":         "The identifier of the record, assigned when it is created.",
-	"created_by": "The username of the user who created the record.",
-	"updated_by": "The username of the user who last updated the record.",
+	"created_by": "The id of the user who created the record.",
+	"updated_by": "The id of the user who last updated the record.",
 	"created_at": "When the record was created.",
 	"updated_at": "When the record was last updated.",
 }
@@ -200,10 +200,10 @@ func (e *DiagnosticsError) Error() string {
 //	  // The identifier of the record, assigned when it is created.
 //	  string id = 1;
 //
-//	  // The username of the user who created the record.
+//	  // The id of the user who created the record.
 //	  string created_by = 2;
 //
-//	  // The username of the user who last updated the record.
+//	  // The id of the user who last updated the record.
 //	  string updated_by = 3;
 //
 //	  // When the record was created.

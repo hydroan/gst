@@ -58,9 +58,9 @@ func TestGeneratedDocsKeepImplementationNotesOutOfFieldDocs(t *testing.T) {
 		want     string
 	}{
 		{typeName: "Base", field: "ID", want: "UUIDv7 identifier for the record"},
-		{typeName: "Base", field: "CreatedBy", want: "Username of the user who created the record"},
-		{typeName: "AutoBase", field: "CreatedBy", want: "Username of the user who created the record"},
-		{typeName: "AutoBase", field: "UpdatedBy", want: "Username of the user who last updated the record"},
+		{typeName: "Base", field: "CreatedBy", want: "ID of the user who created the record"},
+		{typeName: "AutoBase", field: "CreatedBy", want: "ID of the user who created the record"},
+		{typeName: "AutoBase", field: "UpdatedBy", want: "ID of the user who last updated the record"},
 	}
 
 	for _, tt := range tests {

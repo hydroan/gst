@@ -15,17 +15,17 @@ type BaseSample struct {
 	modelregistry.Base
 }
 
-// TestBaseAuditorColumnsHoldAUsername pins the width of created_by and
-// updated_by on Base and AutoBase: 191 characters, room for a username of
-// any source the framework authenticates, within what MySQL indexes.
-func TestBaseAuditorColumnsHoldAUsername(t *testing.T) {
+// TestBaseAuditorColumnsHoldAUserID pins the width of created_by and
+// updated_by on Base and AutoBase: 36 characters, the width of the id column
+// of Base, since they hold the id of the user who wrote the record.
+func TestBaseAuditorColumnsHoldAUserID(t *testing.T) {
 	for _, model := range []any{&BaseSample{}, &AutoUser{}} {
 		s, err := gormschema.Parse(model, &sync.Map{}, gormschema.NamingStrategy{})
 		require.NoError(t, err)
 		for _, name := range []string{"CreatedBy", "UpdatedBy"} {
 			field := s.LookUpField(name)
 			require.NotNil(t, field, name)
-			require.Equal(t, 191, field.Size, "%T.%s", model, name)
+			require.Equal(t, 36, field.Size, "%T.%s", model, name)
 		}
 	}
 }

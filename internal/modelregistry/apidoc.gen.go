@@ -9,22 +9,22 @@ func init() {
 		Comment: "AutoBase implements types.Model for database-backed resources that use an\nauto-increment integer primary key instead of Base's UUIDv7 string key.\nA narrow monotonic primary key keeps the clustered index append-only and\nkeeps every secondary index entry small, which suits high-growth tables.\n\nKey behavior differences from Base:\n  - SetID never generates an ID; the database assigns one on insert.\n  - GetID returns \"\" while the ID is unset (0) so framework emptiness\n    checks such as not-found detection keep working.\n\nCaveat: updating a record whose ID is unset fails with\ndatabase.ErrIDRequired; use database.Upsert for insert-or-update\nsemantics.\n\ncreated_at/updated_at follow the same NOT NULL, no-database-default\ncontract as Base: every writer provides both explicitly, in UTC.\n\nThe uuid columns take a size instead of an explicit char type for the same\nreason as Base: postgres blank-pads char values on read. The note belongs\nhere rather than above the field, for the reason Base's comment spells out.",
 		Fields: map[string]string{
 			"CreatedAt": "Timestamp when the record was created",
-			"CreatedBy": "Username of the user who created the record",
+			"CreatedBy": "ID of the user who created the record",
 			"DeletedAt": "Timestamp when the record was deleted",
 			"ID":        "Auto-increment identifier assigned by the database",
 			"UpdatedAt": "Timestamp when the record was last updated",
-			"UpdatedBy": "Username of the user who last updated the record",
+			"UpdatedBy": "ID of the user who last updated the record",
 		},
 	})
 	apidoc.Register("github.com/hydroan/gst/internal/modelregistry", "Base", apidoc.StructDoc{
 		Comment: "Base implements types.Model for database-backed resources.\nCustom models can override these default methods when needed.\n\nUsually, there are some gorm tags that may be of interest to you.\ngorm:\"foreignKey:ParentID;constraint:-\"\ngorm:\"foreignKey:ParentID;references:ID;constraint:-\"\n\nIndexes are not declared through gorm tags; models declare them through\nthe optional Indexes() []Index method instead.\n\nAssociations are declared so queries can preload them, not to create physical\nforeign keys, so they carry constraint:- and leave referential integrity to\nthe model hooks.\n\nTimestamps: created_at/updated_at are NOT NULL and carry no database\ndefault. The framework always provides both, in UTC via dbruntime.NowUTC\n(Create/Upsert force them, Update refreshes updated_at). A writer that\nbypasses the framework must set both columns itself, in UTC; omitting them\nfails fast under strict SQL mode instead of silently storing NULL, which\nwould break created_at ordering, cursor pagination, and time-range\nfiltering. A database default is ruled out on purpose: CURRENT_TIMESTAMP\nfills in the session-timezone wall clock, which silently diverges from the\nframework's UTC time base. deleted_at stays nullable: NULL marks the live\nrow under soft deletion.\n\nThe uuid columns take a size instead of an explicit char type: postgres\nblank-pads char values, so an id shorter than 36 would come back with\ntrailing spaces there. varchar stores every id verbatim on all dialects.\nThe note belongs here rather than above the field: doc comment extraction\nprefers a field's doc comment over its trailing one, so an implementation\nnote placed above a field becomes that field's API-facing description.",
 		Fields: map[string]string{
 			"CreatedAt": "Timestamp when the record was created",
-			"CreatedBy": "Username of the user who created the record",
+			"CreatedBy": "ID of the user who created the record",
 			"DeletedAt": "Timestamp when the record was deleted",
 			"ID":        "UUIDv7 identifier for the record",
 			"UpdatedAt": "Timestamp when the record was last updated",
-			"UpdatedBy": "Username of the user who last updated the record",
+			"UpdatedBy": "ID of the user who last updated the record",
 		},
 	})
 	apidoc.Register("github.com/hydroan/gst/internal/modelregistry", "Cursor", apidoc.StructDoc{
