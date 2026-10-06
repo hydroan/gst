@@ -56,6 +56,24 @@
 // holds them to the same rule, read the way godoclint reads it, until a
 // golangci-lint exposes the switch and a line of .golangci.yml replaces it.
 //
+// # Log fields
+//
+// A log store that maps fields as they arrive types a key by the first entry
+// carrying it and drops every later entry carrying the key with another type,
+// so a key written two ways loses one writer's entries without a word.
+// internal/logfield declares the keys more than one stream writes, one
+// constructor each, and checkLogFields holds the tree to them: a key of
+// logfield's is written through its constructor alone, the module sources
+// under internal/model and internal/service excepted, which are copied into
+// projects that cannot import logfield; every other key is
+// written with one type wherever it appears, a key-value pair typed the way
+// zap.Any types its value, and a value of interface type, typed at run time,
+// is refused; zap.Object, zap.Dict, zap.Namespace and zap.Inline, which nest
+// keys of their own under the entry, belong to logfield and util alone, whose
+// key sets are fixed. golangci-lint's loggercheck reads the key-value pairs
+// for their shape alone, and no linter compares the type a key is given
+// across the tree.
+//
 // # Layout
 //
 // Each check lives in the file named after it, testplacement.go for the
@@ -97,6 +115,7 @@ var checks = []check{
 	{name: "sourceformat", run: checkSourceFormat},
 	{name: "importalias", run: checkImportAlias},
 	{name: "testdoc", run: checkTestDoc},
+	{name: "logfields", run: checkLogFields},
 }
 
 func main() {

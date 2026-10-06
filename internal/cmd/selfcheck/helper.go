@@ -12,13 +12,13 @@ import (
 // only one check uses lives in that check's file.
 
 // load loads the packages matching patterns under dir with their tests,
-// syntax and type information, reading the overlay in place of the files it
-// names.
+// syntax, type and module information, reading the overlay in place of the
+// files it names.
 func load(dir string, overlay map[string][]byte, patterns ...string) ([]*packages.Package, error) {
 	cfg := &packages.Config{
 		Mode: packages.NeedName | packages.NeedFiles | packages.NeedCompiledGoFiles |
 			packages.NeedSyntax | packages.NeedTypes | packages.NeedTypesInfo | packages.NeedImports |
-			packages.NeedForTest,
+			packages.NeedForTest | packages.NeedModule,
 		Tests:   true,
 		Dir:     dir,
 		Overlay: overlay,

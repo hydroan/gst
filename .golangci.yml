@@ -274,6 +274,13 @@ linters:
         # comes from github.com/cockroachdb/errors.
         - pattern: '^fmt\.Errorf$'
           msg: "build errors with github.com/cockroachdb/errors: Newf for a new error, Wrap or Wrapf around a cause"
+        # zap.Any types the field by the Go type of its value at run time, so
+        # one key can be a string in one entry and a number or an object in
+        # another, which a log store mapping keys by type then drops; a field
+        # names its type. selfcheck's logfields check holds the key-value pairs
+        # to the same rule.
+        - pattern: '^zap\.Any$'
+          msg: "name the field's type: a typed constructor for a scalar, zap.Reflect for a struct or a map, zap.String with fmt.Sprint for a value of any type"
 
     godoclint:
       # Default set of rules to enable.
