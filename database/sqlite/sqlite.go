@@ -111,7 +111,7 @@ func Init() (err error) {
 		zap.S().Warnw("failed to optimize sqlite database", "error", err)
 	}
 
-	zap.S().Infow("successfully connect to sqlite", "path", cfg.Path, "is_memory", cfg.IsMemory)
+	zap.S().Infow("successfully connect to sqlite", "file", cfg.Path, "is_memory", cfg.IsMemory)
 	return dbruntime.InitDatabase(Default)
 }
 

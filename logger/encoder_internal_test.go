@@ -64,11 +64,12 @@ func TestNewLogEncoderReflectedObjectsAndArraysCollapseToOneStringField(t *testi
 	}
 
 	// The struct, map, and slice shapes below all reach the encoder through
-	// zap.Any's reflection fallback. Each must land as a single string field
-	// so the log store's field mapping stays bounded; the string still parses
-	// as the value's JSON.
+	// reflection, which zap.Reflect asks for and a sugared logger's key-value
+	// pair falls back to for a value zap has no typed field for. Each must
+	// land as a single string field so the log store's field mapping stays
+	// bounded; the string still parses as the value's JSON.
 	t.Run("struct", func(t *testing.T) {
-		entry := encode(t, zap.Any("record", &sampleRecord{Name: "sample", Count: 3}))
+		entry := encode(t, zap.Reflect("record", &sampleRecord{Name: "sample", Count: 3}))
 		collapsed, ok := entry["record"].(string)
 		require.True(t, ok, "reflected struct must encode as one string field, got %T", entry["record"])
 		var record sampleRecord
@@ -77,21 +78,21 @@ func TestNewLogEncoderReflectedObjectsAndArraysCollapseToOneStringField(t *testi
 	})
 
 	t.Run("map", func(t *testing.T) {
-		entry := encode(t, zap.Any("attributes", map[string]int{"total": 7}))
+		entry := encode(t, zap.Reflect("attributes", map[string]int{"total": 7}))
 		collapsed, ok := entry["attributes"].(string)
 		require.True(t, ok, "reflected map must encode as one string field, got %T", entry["attributes"])
 		require.JSONEq(t, `{"total":7}`, collapsed)
 	})
 
 	t.Run("slice of structs", func(t *testing.T) {
-		entry := encode(t, zap.Any("records", []sampleRecord{{Name: "first", Count: 1}}))
+		entry := encode(t, zap.Reflect("records", []sampleRecord{{Name: "first", Count: 1}}))
 		collapsed, ok := entry["records"].(string)
 		require.True(t, ok, "reflected slice must encode as one string field, got %T", entry["records"])
 		require.JSONEq(t, `[{"name":"first","count":1}]`, collapsed)
 	})
 
 	t.Run("unmarshalable value falls back to Go syntax", func(t *testing.T) {
-		entry := encode(t, zap.Any("stream", map[string]chan int{"items": make(chan int)}))
+		entry := encode(t, zap.Reflect("stream", map[string]chan int{"items": make(chan int)}))
 		collapsed, ok := entry["stream"].(string)
 		require.True(t, ok, "fallback must still encode as one string field, got %T", entry["stream"])
 		require.Contains(t, collapsed, "chan int")
@@ -102,7 +103,7 @@ func TestNewLogEncoderReflectedObjectsAndArraysCollapseToOneStringField(t *testi
 	// is never rendered as HTML, so escaping them would only cost readability.
 	t.Run("html characters stay verbatim", func(t *testing.T) {
 		const raw = `<h2>Bad Gateway</h2> a&b`
-		entry := encode(t, zap.Any("payload", map[string]string{"body": raw}))
+		entry := encode(t, zap.Reflect("payload", map[string]string{"body": raw}))
 		collapsed, ok := entry["payload"].(string)
 		require.True(t, ok, "reflected map must encode as one string field, got %T", entry["payload"])
 		require.Contains(t, collapsed, raw, "html characters must not be escaped")
@@ -117,7 +118,7 @@ func TestNewLogEncoderReflectedObjectsAndArraysCollapseToOneStringField(t *testi
 	// buffer instead of recycling it; the entry it produces must be unaffected.
 	t.Run("value larger than the pooled buffer size", func(t *testing.T) {
 		oversized := strings.Repeat("x", maxPooledReflectedValueBytes+1)
-		entry := encode(t, zap.Any("payload", map[string]string{"body": oversized}))
+		entry := encode(t, zap.Reflect("payload", map[string]string{"body": oversized}))
 		collapsed, ok := entry["payload"].(string)
 		require.True(t, ok, "reflected map must encode as one string field, got %T", entry["payload"])
 
@@ -136,8 +137,8 @@ func TestNewLogEncoderReflectedObjectsAndArraysCollapseToOneStringField(t *testi
 	})
 
 	// Named scalar types — enums declared as `type Mode string` and the like —
-	// reach the encoder through the same reflection fallback, since zap.Any
-	// recognizes only the unnamed types. A scalar adds a single key whatever
+	// reach the encoder through the same reflection, a sugared logger's
+	// key-value pair recognizing only the unnamed types. A scalar adds a single key whatever
 	// its type, so each keeps the native JSON type its typed field would give
 	// it rather than landing as a quoted copy of its JSON.
 	t.Run("named scalar types keep their native JSON types", func(t *testing.T) {
@@ -145,11 +146,11 @@ func TestNewLogEncoderReflectedObjectsAndArraysCollapseToOneStringField(t *testi
 		type sampleLevel int
 		type sampleFlag bool
 		entry := encode(t,
-			zap.Any("kind", sampleKind("sample")),
-			zap.Any("level", sampleLevel(3)),
-			zap.Any("enabled", sampleFlag(true)),
-			zap.Any("status", sampleStatus{name: "active"}),
-			zap.Any("record", (*sampleRecord)(nil)),
+			zap.Reflect("kind", sampleKind("sample")),
+			zap.Reflect("level", sampleLevel(3)),
+			zap.Reflect("enabled", sampleFlag(true)),
+			zap.Reflect("status", sampleStatus{name: "active"}),
+			zap.Reflect("record", (*sampleRecord)(nil)),
 		)
 		require.Equal(t, "sample", entry["kind"])
 		require.IsType(t, float64(0), entry["level"], "level must stay a native JSON number")
@@ -179,8 +180,8 @@ func BenchmarkNewLogEncoderReflectedValue(b *testing.B) {
 		name  string
 		field zapcore.Field
 	}{
-		{name: "named scalar", field: zap.Any("kind", sampleKind("sample"))},
-		{name: "struct", field: zap.Any("record", sampleRecord{Name: "sample", Count: 3})},
+		{name: "named scalar", field: zap.Reflect("kind", sampleKind("sample"))},
+		{name: "struct", field: zap.Reflect("record", sampleRecord{Name: "sample", Count: 3})},
 	} {
 		b.Run(bc.name, func(b *testing.B) {
 			b.ReportAllocs()

@@ -8,6 +8,7 @@ import (
 
 	"github.com/hydroan/gst/internal/consts"
 	"github.com/hydroan/gst/internal/execctx"
+	"github.com/hydroan/gst/internal/logfield"
 	"github.com/hydroan/gst/internal/types"
 	"github.com/hydroan/gst/logger"
 	"github.com/hydroan/gst/tenant"
@@ -173,8 +174,8 @@ func enforceLogFields(ctx context.Context, subject Subject, tenantID, sub, obj, 
 		zap.String("sub", sub),
 		zap.String("obj", obj),
 		zap.String("act", act),
-		zap.String("username", subject.Username),
-		zap.String(consts.TRACE_ID, execctx.FromContext(ctx).TraceID),
+		logfield.Username(subject.Username),
+		logfield.TraceID(execctx.FromContext(ctx).TraceID),
 		util.LogDuration(elapsed),
 	)
 }

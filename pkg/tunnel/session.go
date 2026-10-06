@@ -2,6 +2,7 @@ package tunnel
 
 import (
 	"encoding/binary"
+	"fmt"
 	"io"
 	"net"
 	"sync"
@@ -63,9 +64,7 @@ type Session struct {
 //   - Failed to read the event data
 //   - Failed to unmarshal the data into Event
 func (s *Session) Read() (*Event, error) {
-	// protocolLog().Infow("Session.Read() S", "key", s.locker.key) // S: start
 	// s.locker.rmu.Lock()
-	// protocolLog().Infow("Session.Read() L", "key", s.locker.key) // L: lock
 	// defer s.locker.rmu.Unlock()
 
 	// cmdBuf, err := internal.ReadBinary(s.tcpconn)
@@ -96,7 +95,7 @@ func (s *Session) Read() (*Event, error) {
 		return nil, err
 	}
 
-	protocolLog().Infow("Session.Read()", "key", s.locker.key, "cmd", event.Cmd)
+	protocolLog().Infow("Session.Read()", "key", fmt.Sprint(s.locker.key), "cmd", event.Cmd)
 	return event, nil
 }
 
@@ -118,9 +117,9 @@ func (s *Session) Write(event *Event) error {
 	if event == nil {
 		return nil
 	}
-	protocolLog().Infow("Session.Write() S", "key", s.locker.key, "cmd", event.Cmd) // S: start
+	protocolLog().Infow("Session.Write() S", "key", fmt.Sprint(s.locker.key), "cmd", event.Cmd) // S: start
 	s.locker.wmu.Lock()
-	protocolLog().Infow("Session.Write() L", "key", s.locker.key, "cmd", event.Cmd) // L: lock
+	protocolLog().Infow("Session.Write() L", "key", fmt.Sprint(s.locker.key), "cmd", event.Cmd) // L: lock
 	defer s.locker.wmu.Unlock()
 	// This ID is critical: never overwrite an ID the caller already set,
 	// because events sharing the same ID belong to the same ongoing exchange,

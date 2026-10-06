@@ -6,6 +6,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/hydroan/gst/authn/jwt"
 	"github.com/hydroan/gst/internal/consts"
+	"github.com/hydroan/gst/internal/logfield"
 	"github.com/hydroan/gst/internal/response"
 	"go.uber.org/zap"
 )
@@ -19,11 +20,11 @@ import (
 // of a valid token is told nothing by the distinction either, so only the log
 // keeps it.
 func abortUnauthenticatedJWT(c *gin.Context, err error) {
-	zap.S().Warnw(
+	zap.L().Warn(
 		"jwt authentication rejected",
-		"error", err.Error(),
-		"path", c.Request.URL.Path,
-		"method", c.Request.Method,
+		zap.String("error", err.Error()),
+		logfield.Path(c.Request.URL.Path),
+		logfield.Method(c.Request.Method),
 	)
 	response.Abort(c, http.StatusUnauthorized, "invalid token")
 }

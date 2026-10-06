@@ -55,7 +55,7 @@ func start(_ context.Context) (err error) {
 		conn = nil
 		return errors.New("failed to connect to nats: connection status check failed")
 	}
-	zap.S().Infow("successfully connect to nats", "url", cfg.Addrs, "client_name", cfg.ClientName)
+	zap.S().Infow("successfully connect to nats", "urls", cfg.Addrs, "client_name", cfg.ClientName)
 
 	return nil
 }

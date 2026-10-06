@@ -6,10 +6,10 @@ import (
 	"slices"
 	"time"
 
-	"github.com/hydroan/gst/internal/consts"
 	"github.com/hydroan/gst/internal/execctx"
 	"github.com/hydroan/gst/internal/lease"
 	"github.com/hydroan/gst/internal/lifecycle"
+	"github.com/hydroan/gst/internal/logfield"
 	"github.com/hydroan/gst/util"
 	"go.uber.org/zap"
 )
@@ -103,7 +103,7 @@ func (w *work) lead(ctx context.Context, h *lease.Handle) {
 	held, stopHold := lease.Hold(ctx, h, log)
 	traceID := util.TraceID()
 	tenure := execctx.WithLeader(lease.WithHandle(held, h), w.name, traceID)
-	fields := []zap.Field{zap.String("name", w.name), zap.Uint64("term", h.Term()), zap.String(consts.TRACE_ID, traceID)}
+	fields := []zap.Field{zap.String("name", w.name), zap.Uint64("term", h.Term()), logfield.TraceID(traceID)}
 	log.Infoz("elected leader", fields...)
 
 	begin := time.Now()

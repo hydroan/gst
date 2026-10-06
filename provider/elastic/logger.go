@@ -40,7 +40,7 @@ func (l *elasticLogger) LogRoundTrip(
 
 	l.logger.Debugz(
 		"Elasticsearch HTTP Request",
-		zap.String("method", req.Method),
+		logfield.Method(req.Method),
 		zap.String("url", req.URL.String()),
 		logfield.Status(status),
 		util.LogDuration(dur),

@@ -5,6 +5,7 @@ import (
 
 	"github.com/hydroan/gst/authn/jwt"
 	gstgrpc "github.com/hydroan/gst/grpc"
+	"github.com/hydroan/gst/internal/logfield"
 	"github.com/hydroan/gst/internal/requestctx"
 	"go.uber.org/zap"
 	"google.golang.org/grpc/codes"
@@ -45,7 +46,7 @@ func JwtAuth() gstgrpc.Interceptor {
 			// it can read the server's checks off of, so only the log keeps
 			// the distinction.
 			meta := requestctx.FromContext(ctx)
-			zap.S().Warnw("jwt authentication rejected", "error", err.Error(), "path", meta.Path(), "method", meta.Method())
+			zap.L().Warn("jwt authentication rejected", zap.String("error", err.Error()), logfield.Path(meta.Path()), logfield.Method(meta.Method()))
 			return nil, status.Error(codes.Unauthenticated, "invalid token")
 		}
 		var sessionID string

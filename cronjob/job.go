@@ -5,10 +5,10 @@ import (
 	"time"
 
 	"github.com/cockroachdb/errors"
-	"github.com/hydroan/gst/internal/consts"
 	"github.com/hydroan/gst/internal/execctx"
 	"github.com/hydroan/gst/internal/lease"
 	"github.com/hydroan/gst/internal/lifecycle"
+	"github.com/hydroan/gst/internal/logfield"
 	gstotel "github.com/hydroan/gst/otel"
 	"github.com/hydroan/gst/util"
 	"github.com/robfig/cron/v3"
@@ -354,7 +354,7 @@ func (j *job) warnWhileOverrunning(ctx context.Context, at time.Time, fields ...
 // so the round is found again from any of them.
 func (j *job) run(ctx context.Context, at time.Time, fields ...zap.Field) (runErr error) {
 	ctx, traceID, end := beginRound(ctx, j.name)
-	round := append([]zap.Field{zap.String("name", j.name), zap.String("spec", j.spec), zap.String(consts.TRACE_ID, traceID), zap.Time("at", at)}, fields...)
+	round := append([]zap.Field{zap.String("name", j.name), zap.String("spec", j.spec), logfield.TraceID(traceID), zap.Time("at", at)}, fields...)
 	// Registered before the recovery below so that it runs after it: a
 	// panic is recorded on the round's span as its outcome.
 	defer func() { end(runErr, interruption(ctx, runErr)) }()

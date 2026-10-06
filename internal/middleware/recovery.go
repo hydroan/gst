@@ -12,6 +12,7 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/gin-gonic/gin"
 	"github.com/hydroan/gst/internal/consts"
+	"github.com/hydroan/gst/internal/logfield"
 	"github.com/hydroan/gst/internal/response"
 	"github.com/hydroan/gst/internal/types"
 	"github.com/hydroan/gst/logger"
@@ -79,7 +80,7 @@ func recoveryWithTracing(log *zap.Logger, stack bool) gin.HandlerFunc {
 			// the message would be zone-less text on the host clock. The trace
 			// id is a field, so one search of the file finds the panic that
 			// explains a response.
-			traceID := zap.String(consts.TRACE_ID, c.GetString(consts.TRACE_ID))
+			traceID := logfield.TraceID(c.GetString(consts.TRACE_ID))
 			switch {
 			case brokenPipe:
 				log.Error(fmt.Sprintf("%s\n%s", recovered, headersToStr), traceID)

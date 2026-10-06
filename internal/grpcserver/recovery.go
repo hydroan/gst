@@ -6,14 +6,13 @@ import (
 	"runtime/debug"
 
 	"github.com/cockroachdb/errors"
-	"github.com/hydroan/gst/internal/consts"
 	"github.com/hydroan/gst/internal/execctx"
+	"github.com/hydroan/gst/internal/logfield"
 	"github.com/hydroan/gst/internal/types"
 	"github.com/hydroan/gst/logger"
 	gstotel "github.com/hydroan/gst/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
-	"go.uber.org/zap"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -38,7 +37,7 @@ func recovered(ctx context.Context, p any) error {
 		method, _ := grpc.Method(ctx)
 		logger.Recovery.Error(
 			fmt.Sprintf("[recovery] panic recovered:\n%s\n%v\n%s", method, p, debug.Stack()),
-			zap.String(consts.TRACE_ID, execctx.FromContext(ctx).TraceID),
+			logfield.TraceID(execctx.FromContext(ctx).TraceID),
 		)
 	}
 	return status.Error(codes.Internal, types.FailureMsg)

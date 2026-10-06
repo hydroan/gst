@@ -10,6 +10,7 @@ import (
 
 	"github.com/cockroachdb/errors"
 	"github.com/gin-gonic/gin"
+	"github.com/hydroan/gst/internal/logfield"
 	"github.com/hydroan/gst/internal/middleware"
 	"github.com/hydroan/gst/internal/response"
 	"go.uber.org/zap"
@@ -67,11 +68,11 @@ func Timeout(timeout time.Duration) gin.HandlerFunc {
 		// it set along with what it wrote, and answer 504 instead.
 		clear(c.Writer.Header())
 		maps.Copy(c.Writer.Header(), header)
-		zap.S().Warnw(
+		zap.L().Warn(
 			"request timeout",
-			"path", c.Request.URL.Path,
-			"method", c.Request.Method,
-			"timeout", timeout,
+			logfield.Path(c.Request.URL.Path),
+			logfield.Method(c.Request.Method),
+			zap.Duration("timeout", timeout),
 		)
 		response.Abort(c, http.StatusGatewayTimeout, "request timeout")
 	}

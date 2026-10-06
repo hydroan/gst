@@ -25,6 +25,7 @@ import (
 	"github.com/hydroan/gst/internal/consts"
 	"github.com/hydroan/gst/internal/controller"
 	"github.com/hydroan/gst/internal/lifecycle"
+	"github.com/hydroan/gst/internal/logfield"
 	"github.com/hydroan/gst/internal/middleware"
 	"github.com/hydroan/gst/internal/openapigen"
 	"github.com/hydroan/gst/internal/response"
@@ -267,7 +268,7 @@ func Run() error {
 	log := zap.S()
 	addr := net.JoinHostPort(config.App.Server.Listen, strconv.Itoa(config.App.Server.Port))
 	for _, r := range root.Routes() {
-		log.Debugw("", "method", r.Method, "path", r.Path)
+		zap.L().Debug("", logfield.Method(r.Method), logfield.Route(r.Path))
 	}
 
 	server = newServer(addr, root)

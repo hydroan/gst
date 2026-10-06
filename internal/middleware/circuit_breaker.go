@@ -5,6 +5,7 @@ import (
 
 	"github.com/cockroachdb/errors"
 	"github.com/gin-gonic/gin"
+	"github.com/hydroan/gst/internal/logfield"
 	"github.com/hydroan/gst/internal/response"
 	"github.com/sony/gobreaker"
 	"go.uber.org/zap"
@@ -56,11 +57,11 @@ func CircuitBreaker() gin.HandlerFunc {
 			return
 		}
 
-		zap.S().Errorw(
+		zap.L().Error(
 			"circuit breaker error",
-			"error", err.Error(),
-			"path", path,
-			"method", method,
+			zap.String("error", err.Error()),
+			logfield.Path(path),
+			logfield.Method(method),
 		)
 
 		// The caller is told the one thing it can act on, which is to try again
