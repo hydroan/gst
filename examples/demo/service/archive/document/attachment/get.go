@@ -18,11 +18,20 @@ type Getter struct {
 	service.Base[*document.Attachment, *model.Empty, *document.AttachmentRsp]
 }
 
-// Get reads the attachment back from object storage.
+// Get reads the attachment back from object storage: a document without one
+// answers 404, a store that cannot be read 500.
 func (a *Getter) Get(ctx *gst.ServiceContext, _ *model.Empty) (*document.AttachmentRsp, error) {
-	object, info, err := minio.Get(ctx, attachmentKey(ctx.Param("document")))
+	key := attachmentKey(ctx.Param("document"))
+	found, err := minio.Exists(ctx, key)
 	if err != nil {
-		return nil, gst.NewErrorWithCause(http.StatusNotFound, "attachment not found", err)
+		return nil, gst.NewErrorWithCause(http.StatusInternalServerError, "failed to look the attachment up", err)
+	}
+	if !found {
+		return nil, gst.NewError(http.StatusNotFound, "attachment not found")
+	}
+	object, info, err := minio.Get(ctx, key)
+	if err != nil {
+		return nil, gst.NewErrorWithCause(http.StatusInternalServerError, "failed to read the attachment", err)
 	}
 	defer object.Close()
 	content, err := io.ReadAll(object)

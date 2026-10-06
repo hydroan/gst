@@ -29,6 +29,11 @@ func (d *Importer) Import(_ *gst.ServiceContext, reader io.Reader) ([]*archive.D
 	if len(rows) < 2 {
 		return nil, gst.NewError(http.StatusBadRequest, "the file has no rows under its header")
 	}
+	// The reader holds every row to the header's number of columns, so the
+	// header alone decides whether the rows below carry the four.
+	if len(rows[0]) < 4 {
+		return nil, gst.NewError(http.StatusBadRequest, "the header needs the columns box_id, name, format and content")
+	}
 	documents := make([]*archive.Document, 0, len(rows)-1)
 	for _, row := range rows[1:] {
 		documents = append(documents, &archive.Document{
