@@ -70,7 +70,7 @@ type IndexPlan struct {
 // CreateSQL renders the CREATE INDEX statement for the plan using the
 // dialector's identifier quoting. Every consumer must render statements
 // through this single method so DDL text never diverges between the
-// database and the migration gormschema.
+// database and the migration schema.
 func (p IndexPlan) CreateSQL(dialector gorm.Dialector) string {
 	var b strings.Builder
 	b.WriteString("CREATE ")
