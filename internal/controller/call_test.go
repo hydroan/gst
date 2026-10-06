@@ -3,6 +3,7 @@ package controller_test
 import (
 	"context"
 	"encoding/json"
+	"maps"
 	"net"
 	"net/http"
 	"strings"
@@ -403,7 +404,9 @@ func TestPatchCallValidatesTheMaskedFieldsAlone(t *testing.T) {
 }
 
 // TestDeleteCallDeletesTheRecord pins the delete call: the record the id
-// names is gone afterwards, and a hook's refusal keeps it.
+// names is gone afterwards, a hook's refusal keeps it, and a message naming
+// no record is refused by the name of the field it lacks, id, not by the
+// route parameter the handler carries the id under.
 func TestDeleteCallDeletesTheRecord(t *testing.T) {
 	conn := sampleServer(t)
 	record := createSample(t, "call-delete")
@@ -411,6 +414,9 @@ func TestDeleteCallDeletesTheRecord(t *testing.T) {
 	_, err := invoke(t, conn, "Delete", map[string]any{"id": record.GetID()})
 	require.NoError(t, err)
 	require.Zero(t, countSamplesNamed(t, "call-delete"))
+
+	_, err = invoke(t, conn, "Delete", map[string]any{})
+	requireStatus(t, err, codes.InvalidArgument, "id is required")
 
 	kept := createSample(t, "call-delete-refused")
 	_, err = invoke(t, conn, "RefusedDelete", map[string]any{"id": kept.GetID()})
@@ -811,19 +817,23 @@ func standardRPCs[M types.Model](handlers map[string]rpcHandler, route, prefix s
 		return create(ctx, params(in), field[M](in, "record"))
 	}
 	handlers[prefix+consts.Get.Name()] = func(ctx context.Context, in map[string]any) (any, error) {
-		return get(ctx, params(in), field[string](in, "id"), field[controller.Query](in, "query"))
+		id := field[string](in, "id")
+		return get(ctx, itemParams(route, params(in), id), id, field[controller.Query](in, "query"))
 	}
 	handlers[prefix+consts.List.Name()] = func(ctx context.Context, in map[string]any) (any, error) {
 		return listing(list(ctx, params(in), field[controller.Query](in, "query")))
 	}
 	handlers[prefix+consts.Update.Name()] = func(ctx context.Context, in map[string]any) (any, error) {
-		return update(ctx, params(in), field[string](in, "id"), field[M](in, "record"))
+		id := field[string](in, "id")
+		return update(ctx, itemParams(route, params(in), id), id, field[M](in, "record"))
 	}
 	handlers[prefix+consts.Patch.Name()] = func(ctx context.Context, in map[string]any) (any, error) {
-		return patch(ctx, params(in), field[string](in, "id"), field[M](in, "record"), field[[]string](in, "mask"))
+		id := field[string](in, "id")
+		return patch(ctx, itemParams(route, params(in), id), id, field[M](in, "record"), field[[]string](in, "mask"))
 	}
 	handlers[prefix+consts.Delete.Name()] = func(ctx context.Context, in map[string]any) (any, error) {
-		return done(del(ctx, params(in), field[string](in, "id")))
+		id := field[string](in, "id")
+		return done(del(ctx, itemParams(route, params(in), id), id))
 	}
 	handlers[prefix+consts.CreateMany.Name()] = func(ctx context.Context, in map[string]any) (any, error) {
 		return batch(createMany(ctx, params(in), field[[]M](in, "items")))
@@ -842,6 +852,24 @@ func standardRPCs[M types.Model](handlers map[string]rpcHandler, route, prefix s
 // params returns the route parameters the message carries under params.
 func params(in map[string]any) map[string]string {
 	return field[map[string]string](in, "params")
+}
+
+// itemParams returns the route parameters of an item call the way a
+// generated handler builds them: the parameters the message carries plus,
+// under the parameter the route ends in, record for /api/records/:record,
+// or id for a route ending in none, the id the message names the record by,
+// whatever it holds (see the golden record.gen.go of cmd/gg).
+func itemParams(route string, given map[string]string, id string) map[string]string {
+	params := maps.Clone(given)
+	if params == nil {
+		params = make(map[string]string, 1)
+	}
+	name := consts.PARAM_ID
+	if last := route[strings.LastIndex(route, "/")+1:]; strings.HasPrefix(last, ":") {
+		name = last[1:]
+	}
+	params[name] = id
+	return params
 }
 
 // field converts in[key] into T through its JSON shape, the way a generated

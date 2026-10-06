@@ -234,14 +234,17 @@ type call struct {
 // matches one segment of the path, so no request carries an empty one or
 // one with a slash in it, while a message may carry either, and a service
 // scoping its work by the parameter would then scope it by nothing, or by a
-// path of its own.
+// path of its own. The parameter carrying the id of an item action (see
+// action.itemParam) is left to the caller when empty: the generated handler
+// fills it from the id field of the message, so an empty one is an empty id,
+// which the caller refuses by that field's name (see missingID).
 func (a *action[M, REQ, RSP]) beginCall(ctx context.Context, params map[string]string, query url.Values) (*call, error) {
 	ctx = grpcserver.WithParams(ctx, params, query)
 	reqMeta := requestctx.FromContext(ctx)
 	spanCtx, span := a.startSpan(ctx, reqMeta.Method(), reqMeta.Route())
 	c := &call{ctx: spanCtx, span: span, log: logger.Controller.WithContext(ctx, a.phase)}
 	for _, name := range slices.Sorted(maps.Keys(params)) {
-		if params[name] == "" {
+		if params[name] == "" && name != a.itemParam {
 			return c, errors.Newf("route parameter %q is required", name)
 		}
 		if strings.Contains(params[name], "/") {

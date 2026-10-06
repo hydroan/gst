@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"reflect"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -42,6 +43,13 @@ type action[M types.Model, REQ types.Request, RSP types.Response] struct {
 	serviceSpans   map[consts.Phase]phaseSpan // service span names keyed by phase
 
 	idColumn types.Column[string] // the id column of M, the reference the batch flows read records by
+
+	// itemParam is the route parameter carrying the id of an item action,
+	// the last :segment of the route or id for a route ending in none, the
+	// default name; the generated gRPC handler fills it from the id field of
+	// the message, so beginCall leaves an empty one to the call to refuse by
+	// that field's name.
+	itemParam string
 }
 
 // phaseSpan carries the precomputed span name and operation label of one phase.
@@ -81,6 +89,10 @@ func newAction[M types.Model, REQ types.Request, RSP types.Response](route strin
 	for _, hookPhase := range hookPhases {
 		serviceSpans[hookPhase] = newPhaseSpan("service", name, hookPhase)
 	}
+	itemParam := consts.PARAM_ID
+	if last := route[strings.LastIndex(route, "/")+1:]; strings.HasPrefix(last, ":") {
+		itemParam = last[1:]
+	}
 
 	return &action[M, REQ, RSP]{
 		typ:            typ,
@@ -93,6 +105,7 @@ func newAction[M types.Model, REQ types.Request, RSP types.Response](route strin
 		controllerSpan: newPhaseSpan("controller", name, phase),
 		serviceSpans:   serviceSpans,
 		idColumn:       types.NewColumn[M, string](modelregistry.KeyID),
+		itemParam:      itemParam,
 	}
 }
 
