@@ -14,7 +14,7 @@ import (
 type Operation struct {
 	// Method is the HTTP request method, eg. "POST".
 	Method string
-	// Path is the route path, eg. "/api/groups/{id}/disable".
+	// Path is the route path, eg. "/api/records/{id}/disable".
 	Path string
 	// Phase is the framework action phase, eg. consts.Create.
 	Phase consts.Phase

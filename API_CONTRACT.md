@@ -1,7 +1,7 @@
 # API 对接契约
 
 本文档是前后端共同遵守的对接契约：后端按此实现默认资源接口，前端按此调用，
-出现分歧以本文为准。下面以 `group` 资源为例，对应资源路径为 `/api/groups`。
+出现分歧以本文为准。下面以 `record` 资源为例，对应资源路径为 `/api/records`。
 
 本文只描述默认资源接口。自定义接口可能有自己的路径、请求结构和响应结构，应以
 对应接口文档或 Swagger 为准。请求体统一使用 JSON：
@@ -24,16 +24,16 @@ HTTP 与 gRPC 一致。
 
 | 操作 | 方法和路径 | 请求数据硬性要求 |
 | --- | --- | --- |
-| 创建一个 group | `POST /api/groups` | 必须把一个 group 对象放在 body |
-| 删除一个 group | `DELETE /api/groups/:id` | 必须把 `id` 放在 URL；body 不承载语义 |
-| 全量更新一个 group | `PUT /api/groups/:id` | 必须把 `id` 放在 URL，完整更新内容放在 body |
-| 部分更新一个 group | `PATCH /api/groups/:id` | 必须把 `id` 放在 URL，只把要修改的字段放在 body |
-| 查询 group 列表 | `GET /api/groups?name=g1&status=enabled` | 查询条件必须放在 URL query；不允许用 body 传查询条件 |
-| 获取一个 group | `GET /api/groups/:id` | 必须把 `id` 放在 URL；body 不承载语义 |
-| 创建多个 group | `POST /api/groups/batch` | body 必须使用 `{ "items": [...] }` |
-| 删除多个 group | `DELETE /api/groups/batch` | body 必须使用 `{ "ids": [...] }` |
-| 全量更新多个 group | `PUT /api/groups/batch` | body 必须使用 `{ "items": [...] }`，每个 item 必须带 `id`，同一个 `id` 只能出现一次 |
-| 部分更新多个 group | `PATCH /api/groups/batch` | body 必须使用 `{ "items": [...] }`，每个 item 必须带 `id` 和要修改的字段，同一个 `id` 只能出现一次 |
+| 创建一个 record | `POST /api/records` | 必须把一个 record 对象放在 body |
+| 删除一个 record | `DELETE /api/records/:id` | 必须把 `id` 放在 URL；body 不承载语义 |
+| 全量更新一个 record | `PUT /api/records/:id` | 必须把 `id` 放在 URL，完整更新内容放在 body |
+| 部分更新一个 record | `PATCH /api/records/:id` | 必须把 `id` 放在 URL，只把要修改的字段放在 body |
+| 查询 record 列表 | `GET /api/records?name=r1&status=enabled` | 查询条件必须放在 URL query；不允许用 body 传查询条件 |
+| 获取一个 record | `GET /api/records/:id` | 必须把 `id` 放在 URL；body 不承载语义 |
+| 创建多个 record | `POST /api/records/batch` | body 必须使用 `{ "items": [...] }` |
+| 删除多个 record | `DELETE /api/records/batch` | body 必须使用 `{ "ids": [...] }` |
+| 全量更新多个 record | `PUT /api/records/batch` | body 必须使用 `{ "items": [...] }`，每个 item 必须带 `id`，同一个 `id` 只能出现一次 |
+| 部分更新多个 record | `PATCH /api/records/batch` | body 必须使用 `{ "items": [...] }`，每个 item 必须带 `id` 和要修改的字段，同一个 `id` 只能出现一次 |
 
 ## 列表通用查询参数
 
@@ -59,7 +59,7 @@ query 名不要以 `_` 开头。反过来，所有裸名参数都属于业务字
 
 ## 请求体格式
 
-创建一个 group：
+创建一个 record：
 
 ```json
 {
@@ -68,7 +68,7 @@ query 名不要以 `_` 开头。反过来，所有裸名参数都属于业务字
 }
 ```
 
-部分更新一个 group：
+部分更新一个 record：
 
 ```json
 {
@@ -76,18 +76,18 @@ query 名不要以 `_` 开头。反过来，所有裸名参数都属于业务字
 }
 ```
 
-创建多个、全量更新多个、部分更新多个 group：
+创建多个、全量更新多个、部分更新多个 record：
 
 ```json
 {
   "items": [
     {
-      "id": "group-id-1",
+      "id": "record-id-1",
       "name": "g1",
       "status": "enabled"
     },
     {
-      "id": "group-id-2",
+      "id": "record-id-2",
       "name": "g2",
       "status": "disabled"
     }
@@ -100,11 +100,11 @@ query 名不要以 `_` 开头。反过来，所有裸名参数都属于业务字
 批次里只能出现一次，重复返回 400。删除多个时 `ids` 里同样不能有空值或只含空白的值，
 否则返回 400。
 
-删除多个 group：
+删除多个 record：
 
 ```json
 {
-  "ids": ["group-id-1", "group-id-2"]
+  "ids": ["record-id-1", "record-id-2"]
 }
 ```
 
@@ -133,7 +133,7 @@ query 名不要以 `_` 开头。反过来，所有裸名参数都属于业务字
 ```json
 {
   "total": 2,
-  "items": [{ "id": "group-id-1" }, { "id": "group-id-2" }]
+  "items": [{ "id": "record-id-1" }, { "id": "record-id-2" }]
 }
 ```
 
@@ -176,7 +176,7 @@ query 名不要以 `_` 开头。反过来，所有裸名参数都属于业务字
 
 ## 关键规则
 
-- 单个资源的 `id` 必须放在 URL 中，例如 `/api/groups/group-id-1`。
+- 单个资源的 `id` 必须放在 URL 中，例如 `/api/records/record-id-1`。
 - body 中的 `id` 不能替代 URL 中的 `:id`。
 - `GET` 请求只认 URL query 中的查询条件，不使用 body。
 - `PUT` 表示全量更新，body 应包含完整更新内容。

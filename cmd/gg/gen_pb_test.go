@@ -567,14 +567,14 @@ func TestGenRunNamesTheFilesImportingEachOther(t *testing.T) {
 		return
 	}
 	writeProtobufProject(t, projectDir, map[string]string{
-		"model/user.go":  protobufCycleUserModel,
-		"model/group.go": protobufCycleGroupModel,
+		"model/author.go": protobufCycleAuthorModel,
+		"model/book.go":   protobufCycleBookModel,
 	})
 
 	err := genRunWithOptions(genRunOptions{Quiet: true})
 
 	require.Error(t, err)
-	require.Contains(t, err.Error(), "the generated files group.proto and user.proto import each other in a cycle: a type of one Go file refers to a type of the other and back; keep the types referring to each other in one Go file")
+	require.Contains(t, err.Error(), "the generated files author.proto and book.proto import each other in a cycle: a type of one Go file refers to a type of the other and back; keep the types referring to each other in one Go file")
 }
 
 // TestGenRunWritesNoProtobufDefinitionWhenAShapeCannotBeDescribed pins the
@@ -2164,54 +2164,54 @@ func (Record) Design() {
 }
 `
 
-// protobufCycleUserModel and protobufCycleGroupModel refer to each other
+// protobufCycleAuthorModel and protobufCycleBookModel refer to each other
 // across two files.
-const protobufCycleUserModel = `package model
+const protobufCycleAuthorModel = `package model
 
 import (
 	"github.com/hydroan/gst/dsl"
 	"github.com/hydroan/gst/model"
 )
 
-// User belongs to groups.
-type User struct {
-	Name   string  'json:"name" pb:"11"'
-	Groups []Group 'json:"groups" pb:"12" gorm:"-"'
+// Author writes books.
+type Author struct {
+	Name  string 'json:"name" pb:"11"'
+	Books []Book 'json:"books" pb:"12" gorm:"-"'
 
 	model.Base
 }
 
-func (User) TableName() string { return "users" }
+func (Author) TableName() string { return "authors" }
 
-func (User) Design() {
+func (Author) Design() {
 	dsl.GRPC()
 	dsl.Migrate()
-	dsl.Endpoint("users")
+	dsl.Endpoint("authors")
 	dsl.Create(func() {})
 }
 `
 
-const protobufCycleGroupModel = `package model
+const protobufCycleBookModel = `package model
 
 import (
 	"github.com/hydroan/gst/dsl"
 	"github.com/hydroan/gst/model"
 )
 
-// Group is owned by a user.
-type Group struct {
-	Title string 'json:"title" pb:"11"'
-	Owner *User  'json:"owner" pb:"12" gorm:"-"'
+// Book is written by an author.
+type Book struct {
+	Title  string  'json:"title" pb:"11"'
+	Author *Author 'json:"author" pb:"12" gorm:"-"'
 
 	model.Base
 }
 
-func (Group) TableName() string { return "groups" }
+func (Book) TableName() string { return "books" }
 
-func (Group) Design() {
+func (Book) Design() {
 	dsl.GRPC()
 	dsl.Migrate()
-	dsl.Endpoint("groups")
+	dsl.Endpoint("books")
 	dsl.Create(func() {})
 }
 `
