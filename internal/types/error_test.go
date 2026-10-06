@@ -86,6 +86,18 @@ func TestErrorStackTraceOnNilReceiverIsEmpty(t *testing.T) {
 	require.Nil(t, (*types.Error)(nil).StackTrace())
 }
 
+// TestErrorOnANilReceiverAnswersTheServerFailure pins what a typed nil
+// *Error answers, the error a `var e *Error; return e` hands its caller: the
+// default status, 500, and FailureMsg as its message and its text alike, so
+// the envelope and the gRPC status word it as they word every other failure
+// of the server's own.
+func TestErrorOnANilReceiverAnswersTheServerFailure(t *testing.T) {
+	var err *types.Error
+	require.Equal(t, http.StatusInternalServerError, err.Status())
+	require.Equal(t, types.FailureMsg, err.Msg())
+	require.Equal(t, types.FailureMsg, err.Error())
+}
+
 // TestNewInvalidFieldsJoinsTheViolations pins the error of a request whose
 // fields the validator refused: 400, a message joining the description of
 // each violation with a semicolon, the violations readable for the gRPC

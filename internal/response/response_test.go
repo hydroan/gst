@@ -82,6 +82,7 @@ func TestErrorAnswersServiceErrorsAndHidesTheRest(t *testing.T) {
 		{"wrapped service error", errors.Wrap(serviceErr, "load account"), http.StatusInternalServerError, `{"data":null,"msg":"failed to load user","trace_id":""}`, cause.Error()},
 		{"forbidden", types.NewError(http.StatusForbidden, "account disabled"), http.StatusForbidden, `{"data":null,"msg":"account disabled","trace_id":""}`, ""},
 		{"other error", internal, http.StatusInternalServerError, `{"data":null,"msg":"The server could not process the request.","trace_id":""}`, internal.Error()},
+		{"typed nil service error", (*types.Error)(nil), http.StatusInternalServerError, `{"data":null,"msg":"The server could not process the request.","trace_id":""}`, ""},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

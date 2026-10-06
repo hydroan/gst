@@ -158,6 +158,9 @@ func FieldViolations(err *Error) []FieldViolation {
 	return err.violations
 }
 
+// Status returns the HTTP status the error answers with; a nil receiver,
+// the typed nil a `var e *Error; return e` hands its caller, answers the
+// default, 500.
 func (e *Error) Status() int {
 	if e == nil {
 		return defaultErrorStatus
@@ -165,9 +168,12 @@ func (e *Error) Status() int {
 	return e.status
 }
 
+// Msg returns the client-safe message the error answers with; a nil
+// receiver answers FailureMsg, the message of every other failure of the
+// server's own, so the envelope and the gRPC status word the two alike.
 func (e *Error) Msg() string {
 	if e == nil {
-		return http.StatusText(defaultErrorStatus)
+		return FailureMsg
 	}
 	return e.msg
 }

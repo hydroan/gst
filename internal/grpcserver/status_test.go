@@ -54,6 +54,17 @@ func TestStatusErrorMapsTheStatusToTheCode(t *testing.T) {
 	}
 }
 
+// TestStatusErrorAnswersATypedNilServiceErrorAsTheServerFailure pins that a
+// typed nil *types.Error, the error a `var e *gst.Error; return e` hands its
+// caller, answers Internal with types.FailureMsg, as every failure of the
+// server's own does.
+func TestStatusErrorAnswersATypedNilServiceErrorAsTheServerFailure(t *testing.T) {
+	st := status.Convert(grpcserver.StatusError((*types.Error)(nil)))
+
+	require.Equal(t, codes.Internal, st.Code())
+	require.Equal(t, types.FailureMsg, st.Message())
+}
+
 // TestStatusErrorAttachesTheFieldViolations pins that a service error
 // carrying the fields the validator refused answers InvalidArgument with
 // the message naming them, and a google.rpc.BadRequest detail listing each
