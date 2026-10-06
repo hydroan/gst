@@ -1,11 +1,11 @@
 package tunnel_test
 
 import (
-	"fmt"
 	"net"
 	"os"
 	"testing"
 
+	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/bootstrap"
 	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/internal/consts"
@@ -104,7 +104,7 @@ func server(addrCh chan<- string, errCh chan<- error) {
 				return
 			}
 			if helloPayload1 != *payload {
-				errCh <- fmt.Errorf("expected hello payload %+v, got %+v", helloPayload1, *payload)
+				errCh <- errors.Newf("expected hello payload %+v, got %+v", helloPayload1, *payload)
 				return
 			}
 			if err := session.Write(&tunnel.Event{Cmd: Hello, Payload: helloPayload2}); err != nil {
@@ -118,7 +118,7 @@ func server(addrCh chan<- string, errCh chan<- error) {
 				return
 			}
 			if byePayload1 != *payload {
-				errCh <- fmt.Errorf("expected bye payload %+v, got %+v", byePayload1, *payload)
+				errCh <- errors.Newf("expected bye payload %+v, got %+v", byePayload1, *payload)
 				return
 			}
 			if err := session.Write(&tunnel.Event{Cmd: Bye, Payload: byePayload2}); err != nil {

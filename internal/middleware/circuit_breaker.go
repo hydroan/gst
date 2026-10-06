@@ -1,7 +1,6 @@
 package middleware
 
 import (
-	"fmt"
 	"net/http"
 
 	"github.com/cockroachdb/errors"
@@ -35,14 +34,14 @@ func CircuitBreaker() gin.HandlerFunc {
 
 			if c.Writer.Written() {
 				if c.Writer.Status() >= 500 {
-					return nil, fmt.Errorf("server error: %d, path: %s, method: %s",
+					return nil, errors.Newf("server error: %d, path: %s, method: %s",
 						c.Writer.Status(), path, method)
 				}
 				return nil, nil
 			}
 
 			if len(c.Errors) > 0 {
-				return nil, fmt.Errorf("gin errors: %s, path: %s, method: %s",
+				return nil, errors.Newf("gin errors: %s, path: %s, method: %s",
 					c.Errors.String(), path, method)
 			}
 

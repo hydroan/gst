@@ -6,7 +6,6 @@ import (
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
-	"fmt"
 	"math/big"
 	"net/http"
 	"strings"
@@ -150,7 +149,7 @@ func generateTOTPBackupCode() (string, error) {
 	for range totpBackupCodeRawLength {
 		idx, err := rand.Int(rand.Reader, big.NewInt(int64(len(totpBackupCodeAlphabet))))
 		if err != nil {
-			return "", fmt.Errorf("generate TOTP backup code: %w", err)
+			return "", errors.Wrap(err, "generate TOTP backup code")
 		}
 		b.WriteByte(totpBackupCodeAlphabet[idx.Int64()])
 	}

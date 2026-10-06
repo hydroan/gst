@@ -1,7 +1,6 @@
 package modelinfo
 
 import (
-	"fmt"
 	"go/ast"
 	"go/parser"
 	"go/token"
@@ -159,7 +158,7 @@ func findModelsInFile(module string, modelDir string, filename string) ([]*Model
 
 	modelPkgName := node.Name.Name
 	if len(modelPkgName) == 0 {
-		return nil, fmt.Errorf("file %s has no model package", filename)
+		return nil, errors.Newf("file %s has no model package", filename)
 	}
 
 	if errs := dsl.Validate(node, modelDir, filename); len(errs) > 0 {

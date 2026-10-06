@@ -30,7 +30,7 @@ starts.`,
 		// 1. Get module name
 		moduleName, err := gghelper.ModulePath()
 		if err != nil {
-			return fmt.Errorf("failed to get module path: %w", err)
+			return errors.Wrap(err, "failed to get module path")
 		}
 
 		return runGeneratedMigrateProgram(buildMigrateProgramForMode(moduleName, false, "", nil), "Migration", "Preparing migration...")
@@ -45,7 +45,7 @@ var migrateSchemaCmd = &cobra.Command{
 	RunE: func(cmd *cobra.Command, args []string) error {
 		moduleName, err := gghelper.ModulePath()
 		if err != nil {
-			return fmt.Errorf("failed to get module path: %w", err)
+			return errors.Wrap(err, "failed to get module path")
 		}
 
 		source := ""

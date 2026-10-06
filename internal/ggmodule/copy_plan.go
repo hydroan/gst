@@ -1,7 +1,6 @@
 package ggmodule
 
 import (
-	"fmt"
 	"go/parser"
 	"go/token"
 	"os"
@@ -11,6 +10,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/internal/dsl"
 	"github.com/hydroan/gst/internal/gghelper"
 	"github.com/hydroan/gst/internal/modelinfo"
@@ -128,7 +128,7 @@ func BuildCopyPlan(name string, opts CopyOptions) (*CopyPlan, error) {
 		return nil, err
 	}
 	if _, err := os.Stat("go.mod"); err != nil {
-		return nil, fmt.Errorf("gg module copy must run from the project root: %w", err)
+		return nil, errors.Wrap(err, "gg module copy must run from the project root")
 	}
 
 	projectModule, err := gghelper.ModulePath()
@@ -244,13 +244,13 @@ func BuildCopyPlan(name string, opts CopyOptions) (*CopyPlan, error) {
 
 func (p *CopyPlan) checkSourceDirs() error {
 	if err := requireDir(filepath.Join(p.FrameworkRoot, "module", p.Name)); err != nil {
-		return fmt.Errorf("module %q not found: %w", p.Name, err)
+		return errors.Wrapf(err, "module %q not found", p.Name)
 	}
 	if err := requireDir(p.SourceModelDir); err != nil {
-		return fmt.Errorf("module %q model source not found: %w", p.Name, err)
+		return errors.Wrapf(err, "module %q model source not found", p.Name)
 	}
 	if err := requireDir(p.SourceServiceDir); err != nil {
-		return fmt.Errorf("module %q service source not found: %w", p.Name, err)
+		return errors.Wrapf(err, "module %q service source not found", p.Name)
 	}
 	return nil
 }
@@ -273,7 +273,7 @@ func (p *CopyPlan) staleTargetFiles(dir string, kinds ...moduleCopyFileKind) ([]
 		return nil, err
 	}
 	if !info.IsDir() {
-		return nil, fmt.Errorf("%s is not a directory", dir)
+		return nil, errors.Newf("%s is not a directory", dir)
 	}
 
 	expectedTargets := make(map[string]bool)
@@ -327,7 +327,7 @@ func (p *CopyPlan) checkConflicts(force bool) error {
 			continue
 		}
 		if !force {
-			return fmt.Errorf("%s already exists; use --force to overwrite", file.TargetPath)
+			return errors.Newf("%s already exists; use --force to overwrite", file.TargetPath)
 		}
 	}
 	return nil
@@ -342,24 +342,24 @@ func (p *CopyPlan) resolveIncludeSourceFiles(includes []string) error {
 	servicePrefix := path.Join("internal", "service", p.Name) + "/"
 	for _, rel := range includes {
 		if !strings.HasPrefix(rel, servicePrefix) {
-			return fmt.Errorf("includeSourceFiles entry %q must live under %s", rel, servicePrefix)
+			return errors.Newf("includeSourceFiles entry %q must live under %s", rel, servicePrefix)
 		}
 		if strings.HasSuffix(rel, "_test.go") {
-			return fmt.Errorf("includeSourceFiles entry %q must not be a test file", rel)
+			return errors.Newf("includeSourceFiles entry %q must not be a test file", rel)
 		}
 		if slices.Contains(p.ExcludeSourceFiles, rel) {
-			return fmt.Errorf("includeSourceFiles entry %q is also listed in excludeSourceFiles", rel)
+			return errors.Newf("includeSourceFiles entry %q is also listed in excludeSourceFiles", rel)
 		}
 		sourcePath := filepath.Join(p.FrameworkRoot, filepath.FromSlash(rel))
 		if _, err := os.Stat(sourcePath); err != nil {
-			return fmt.Errorf("includeSourceFiles entry %q not found: %w", rel, err)
+			return errors.Wrapf(err, "includeSourceFiles entry %q not found", rel)
 		}
 		count, err := countServiceStructsInFile(sourcePath)
 		if err != nil {
 			return err
 		}
 		if count > 0 {
-			return fmt.Errorf("includeSourceFiles entry %q declares a service struct; action service files are copied through their DSL actions", rel)
+			return errors.Newf("includeSourceFiles entry %q declares a service struct; action service files are copied through their DSL actions", rel)
 		}
 	}
 	p.IncludeSourceFiles = includes

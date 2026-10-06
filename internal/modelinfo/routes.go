@@ -6,6 +6,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/ds/tree/trie"
 	"github.com/hydroan/gst/internal/consts"
 	"github.com/hydroan/gst/internal/dsl"
@@ -75,7 +76,7 @@ func RouteConflicts(models []*Model) []error {
 			}
 			current := registration{file: m.ModelFilePath, model: m.ModelName, action: act.Phase.Name(), path: path}
 			if earlier, ok := registered[key]; ok {
-				conflicts = append(conflicts, fmt.Errorf("%s: the %s action of %s registers %s, as the %s action of %s in %s does; %s",
+				conflicts = append(conflicts, errors.Newf("%s: the %s action of %s registers %s, as the %s action of %s in %s does; %s",
 					current.file, current.action, current.model, registers, earlier.action, earlier.model, earlier.file, serves))
 				return
 			}
@@ -85,7 +86,7 @@ func RouteConflicts(models []*Model) []error {
 			}
 			for _, earlier := range paths[method] {
 				if name, earlierName, clash := parameterClash(path, earlier.path); clash {
-					conflicts = append(conflicts, fmt.Errorf("%s: the %s action of %s registers %s %s, naming the parameter :%s where the %s action of %s in %s, registering %s %s, names :%s; the router reads one parameter name at a position",
+					conflicts = append(conflicts, errors.Newf("%s: the %s action of %s registers %s %s, naming the parameter :%s where the %s action of %s in %s, registering %s %s, names :%s; the router reads one parameter name at a position",
 						current.file, current.action, current.model, method, path, name, earlier.action, earlier.model, earlier.file, method, earlier.path, earlierName))
 					break
 				}

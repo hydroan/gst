@@ -1,13 +1,14 @@
 package ggmodule
 
 import (
-	"fmt"
 	"go/ast"
 	"go/parser"
 	"go/token"
 	"os"
 	"path/filepath"
 	"strconv"
+
+	"github.com/cockroachdb/errors"
 )
 
 // existingModuleAlias returns the qualifier already used for this framework
@@ -101,7 +102,7 @@ func checkModuleNotRegistered(name string) error {
 		}
 		if spec.Name != nil {
 			if spec.Name.Name == "." {
-				return fmt.Errorf("framework module %s is already imported in %s", name, moduleFile)
+				return errors.Newf("framework module %s is already imported in %s", name, moduleFile)
 			}
 			if spec.Name.Name != "_" {
 				aliases[spec.Name.Name] = true
@@ -135,7 +136,7 @@ func checkModuleNotRegistered(name string) error {
 		return true
 	})
 	if registered {
-		return fmt.Errorf("framework module %s is already registered; remove it before copying local source", name)
+		return errors.Newf("framework module %s is already registered; remove it before copying local source", name)
 	}
 	return nil
 }

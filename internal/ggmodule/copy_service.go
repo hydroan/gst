@@ -1,7 +1,6 @@
 package ggmodule
 
 import (
-	"fmt"
 	"go/ast"
 	"go/parser"
 	"go/token"
@@ -43,11 +42,11 @@ func mergeModuleServiceSource(input moduleServiceMergeInput) ([]byte, error) {
 
 	sourceStructs := serviceStructNames(sourceFile)
 	if len(sourceStructs) == 0 {
-		return nil, fmt.Errorf("source action service file %s has no service struct", input.SourcePath)
+		return nil, errors.Newf("source action service file %s has no service struct", input.SourcePath)
 	}
 	targetStruct := findServiceStructName(targetFile)
 	if targetStruct == "" {
-		return nil, fmt.Errorf("target action service file %s has no service struct", input.TargetPath)
+		return nil, errors.Newf("target action service file %s has no service struct", input.TargetPath)
 	}
 	if uniqueErr := requireUniqueSourceMethods(sourceFile, sourceStructs, input.SourcePath); uniqueErr != nil {
 		return nil, uniqueErr
@@ -107,7 +106,7 @@ func requireUniqueSourceMethods(file *ast.File, sourceStructs []string, sourcePa
 			continue
 		}
 		if owner, seen := owners[fn.Name.Name]; seen {
-			return fmt.Errorf("source action service file %s declares method %s on both %s and %s; module copy merges every service struct onto one target struct", sourcePath, fn.Name.Name, owner, receiver)
+			return errors.Newf("source action service file %s declares method %s on both %s and %s; module copy merges every service struct onto one target struct", sourcePath, fn.Name.Name, owner, receiver)
 		}
 		owners[fn.Name.Name] = receiver
 	}
@@ -519,7 +518,7 @@ func generateTargetServiceShell(actions []moduleCopyAction) ([]byte, error) {
 	for _, action := range actions {
 		next := gggen.GenerateService(action.ModelInfo, action.Action, action.Action.Phase, moduleCopyServicePackageName(action))
 		if next == nil {
-			return nil, fmt.Errorf("failed to generate service shell for %s", action.Action.ServiceFilename())
+			return nil, errors.Newf("failed to generate service shell for %s", action.Action.ServiceFilename())
 		}
 		if file == nil {
 			file = next

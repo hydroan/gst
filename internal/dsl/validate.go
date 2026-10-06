@@ -11,6 +11,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/internal/consts"
 	"github.com/hydroan/gst/internal/ggconst"
 	"github.com/hydroan/gst/internal/goast"
@@ -239,7 +240,7 @@ func validatePointerEmbeddings(file *ast.File, filename string) []error {
 				}
 				for _, baseType := range []string{ggconst.FieldBase, ggconst.FieldAutoBase, ggconst.FieldEmpty} {
 					if names.Refers(star.X, baseType) {
-						errs = append(errs, fmt.Errorf("%s: struct %s embeds *model.%s; embed model.%[3]s by value: the framework recognizes model.%[3]s only when it is embedded by value", filename, typeSpec.Name.Name, baseType))
+						errs = append(errs, errors.Newf("%s: struct %s embeds *model.%s; embed model.%[3]s by value: the framework recognizes model.%[3]s only when it is embedded by value", filename, typeSpec.Name.Name, baseType))
 					}
 				}
 			}
@@ -260,14 +261,14 @@ func validateDesignFunc(fn *ast.FuncDecl, modelName string, rootModelFile, virtu
 	for _, stmt := range fn.Body.List {
 		call, name, ok := keywordCall(stmt)
 		if !ok {
-			errs = append(errs, fmt.Errorf("%s: Design() of %s reads DSL keywords alone; delete %s", filename, modelName, nodeSource(stmt)))
+			errs = append(errs, errors.Newf("%s: Design() of %s reads DSL keywords alone; delete %s", filename, modelName, nodeSource(stmt)))
 			continue
 		}
 
 		switch {
 		case isActionMethod(name):
 			if seenActions[name] {
-				errs = append(errs, fmt.Errorf("%s: %s declares %s twice at Design() top level; declare an action once", filename, modelName, name))
+				errs = append(errs, errors.Newf("%s: %s declares %s twice at Design() top level; declare an action once", filename, modelName, name))
 			}
 			seenActions[name] = true
 			grpcServable = grpcServable || !httpOnlyActionMethodNames[name]
@@ -288,14 +289,14 @@ func validateDesignFunc(fn *ast.FuncDecl, modelName string, rootModelFile, virtu
 		case designOnlyMethodNames[name]:
 			continue
 		case actionOnlyMethodNames[name]:
-			errs = append(errs, fmt.Errorf("%s: %s() can only be used inside an action block", filename, name))
+			errs = append(errs, errors.Newf("%s: %s() can only be used inside an action block", filename, name))
 		}
 	}
 	if grpc && !grpcServable {
-		errs = append(errs, fmt.Errorf("%s: %s declares GRPC() but no action gRPC can serve: Import, Export and SSE are HTTP only; declare another action or remove GRPC()", filename, modelName))
+		errs = append(errs, errors.Newf("%s: %s declares GRPC() but no action gRPC can serve: Import, Export and SSE are HTTP only; declare another action or remove GRPC()", filename, modelName))
 	}
 	if grpcOnly && !grpc {
-		errs = append(errs, fmt.Errorf("%s: %s declares a Stream action but no GRPC(); a stream is served over gRPC alone, declare GRPC() or remove the Stream action", filename, modelName))
+		errs = append(errs, errors.Newf("%s: %s declares a Stream action but no GRPC(); a stream is served over gRPC alone, declare GRPC() or remove the Stream action", filename, modelName))
 	}
 	return records, errs
 }
@@ -325,7 +326,7 @@ func functionLiteralArg(call *ast.CallExpr, i int) *ast.FuncLit {
 func validateRouteCall(call *ast.CallExpr, modelName string, rootModelFile, virtual bool, filename string) (records []serviceActionRecord, grpcServable, grpcOnly bool, errs []error) {
 	flit := functionLiteralArg(call, 1)
 	if flit == nil {
-		return nil, false, false, []error{fmt.Errorf("%s: Route takes a function literal, Route(\"path\", func() {...}); a call passing anything else, nil included, declares no route: delete it or write the block", filename)}
+		return nil, false, false, []error{errors.Newf("%s: Route takes a function literal, Route(\"path\", func() {...}); a call passing anything else, nil included, declares no route: delete it or write the block", filename)}
 	}
 
 	route := stringArgValue(call, "")
@@ -334,7 +335,7 @@ func validateRouteCall(call *ast.CallExpr, modelName string, rootModelFile, virt
 	for part := range strings.SplitSeq(route, "/") {
 		if strings.HasPrefix(part, "{") && strings.HasSuffix(part, "}") {
 			name := strings.TrimSuffix(strings.TrimPrefix(part, "{"), "}")
-			errs = append(errs, fmt.Errorf("%s: the Route(%q) of %s writes the parameter %s as {%[4]s}; write :%[4]s, the form the router reads", filename, route, modelName, name))
+			errs = append(errs, errors.Newf("%s: the Route(%q) of %s writes the parameter %s as {%[4]s}; write :%[4]s, the form the router reads", filename, route, modelName, name))
 		}
 	}
 	// An action is declared once per route and form: an Exact() action
@@ -349,7 +350,7 @@ func validateRouteCall(call *ast.CallExpr, modelName string, rootModelFile, virt
 	for _, stmt := range flit.Body.List {
 		child, name, ok := keywordCall(stmt)
 		if !ok {
-			errs = append(errs, fmt.Errorf("%s: the Route(%q) block of %s reads DSL keywords alone; delete %s", filename, route, modelName, nodeSource(stmt)))
+			errs = append(errs, errors.Newf("%s: the Route(%q) block of %s reads DSL keywords alone; delete %s", filename, route, modelName, nodeSource(stmt)))
 			continue
 		}
 
@@ -359,7 +360,7 @@ func validateRouteCall(call *ast.CallExpr, modelName string, rootModelFile, virt
 			grpcOnly = grpcOnly || grpcOnlyActionMethodNames[name]
 			info, actionErrs := validateActionCall(child, name, rootModelFile, virtual, filename)
 			if seenForms[form{name, info.exact}] {
-				errs = append(errs, fmt.Errorf("%s: the Route(%q) block of %s declares %s twice; declare an action once per route, an Exact() one and one without at most", filename, route, modelName, name))
+				errs = append(errs, errors.Newf("%s: the Route(%q) block of %s declares %s twice; declare an action once per route, an Exact() one and one without at most", filename, route, modelName, name))
 			}
 			seenForms[form{name, info.exact}] = true
 			if record, ok := newServiceActionRecord(info, name, modelName, route); ok {
@@ -367,11 +368,11 @@ func validateRouteCall(call *ast.CallExpr, modelName string, rootModelFile, virt
 			}
 			errs = append(errs, actionErrs...)
 		case name == "Route":
-			errs = append(errs, fmt.Errorf("%s: Route() can only be used at Design() top level", filename))
+			errs = append(errs, errors.Newf("%s: Route() can only be used at Design() top level", filename))
 		case actionOnlyMethodNames[name]:
-			errs = append(errs, fmt.Errorf("%s: %s() can only be used inside an action block", filename, name))
+			errs = append(errs, errors.Newf("%s: %s() can only be used inside an action block", filename, name))
 		case designOnlyMethodNames[name]:
-			errs = append(errs, fmt.Errorf("%s: %s() can only be used at Design() top level", filename, name))
+			errs = append(errs, errors.Newf("%s: %s() can only be used at Design() top level", filename, name))
 		}
 	}
 	return records, grpcServable, grpcOnly, errs
@@ -395,14 +396,14 @@ func validateActionCall(call *ast.CallExpr, actionName string, rootModelFile, vi
 	info := actionCallInfo{}
 	flit := functionLiteralArg(call, 0)
 	if flit == nil {
-		return info, []error{fmt.Errorf("%s: %s takes a function literal, %s(func() {...}); a call passing anything else, nil included, declares no action: delete it or write the block", filename, actionName, actionName)}
+		return info, []error{errors.Newf("%s: %s takes a function literal, %s(func() {...}); a call passing anything else, nil included, declares no action: delete it or write the block", filename, actionName, actionName)}
 	}
 
 	errs := make([]error, 0)
 	for _, stmt := range flit.Body.List {
 		child, name, ok := keywordCall(stmt)
 		if !ok {
-			errs = append(errs, fmt.Errorf("%s: the %s block reads DSL keywords alone; delete %s", filename, actionName, nodeSource(stmt)))
+			errs = append(errs, errors.Newf("%s: the %s block reads DSL keywords alone; delete %s", filename, actionName, nodeSource(stmt)))
 			continue
 		}
 
@@ -426,48 +427,48 @@ func validateActionCall(call *ast.CallExpr, actionName string, rootModelFile, vi
 				info.result = true
 			}
 			if arg, ok := actionTypeArgument(child); ok && !modelPackageType(arg) {
-				errs = append(errs, fmt.Errorf("%s: %s action declares %s[%s]; Payload, Result, StreamingPayload and StreamingResult name a type of the model package, T or *T", filename, actionName, name, nodeSource(arg)))
+				errs = append(errs, errors.Newf("%s: %s action declares %s[%s]; Payload, Result, StreamingPayload and StreamingResult name a type of the model package, T or *T", filename, actionName, name, nodeSource(arg)))
 			}
 		case name == "Public":
 			continue
 		case isActionMethod(name):
-			errs = append(errs, fmt.Errorf("%s: %s action cannot contain nested %s action", filename, actionName, name))
+			errs = append(errs, errors.Newf("%s: %s action cannot contain nested %s action", filename, actionName, name))
 		case name == "Route":
-			errs = append(errs, fmt.Errorf("%s: Route() can only be used at Design() top level", filename))
+			errs = append(errs, errors.Newf("%s: Route() can only be used at Design() top level", filename))
 		case designOnlyMethodNames[name]:
-			errs = append(errs, fmt.Errorf("%s: %s() can only be used at Design() top level", filename, name))
+			errs = append(errs, errors.Newf("%s: %s() can only be used at Design() top level", filename, name))
 		}
 	}
 
 	if info.flatten {
 		if !info.service {
-			errs = append(errs, fmt.Errorf("%s: %s action uses dsl.Flatten() but does not enable Service()", filename, actionName))
+			errs = append(errs, errors.Newf("%s: %s action uses dsl.Flatten() but does not enable Service()", filename, actionName))
 		}
 		if info.serviceName == "" {
-			errs = append(errs, fmt.Errorf("%s: %s action uses dsl.Flatten() but names no service; write Service(\"name\")", filename, actionName))
+			errs = append(errs, errors.Newf("%s: %s action uses dsl.Flatten() but names no service; write Service(\"name\")", filename, actionName))
 		}
 		if rootModelFile {
-			errs = append(errs, fmt.Errorf("%s: dsl.Flatten() cannot be used by root model file %s; move the model under model/<package>/<file>.go or remove Flatten()", filename, filename))
+			errs = append(errs, errors.Newf("%s: dsl.Flatten() cannot be used by root model file %s; move the model under model/<package>/<file>.go or remove Flatten()", filename, filename))
 		}
 	}
 	if info.payload && getVerbActionMethodNames[actionName] {
-		errs = append(errs, fmt.Errorf("%s: %s action handles an HTTP GET request and cannot declare Payload; declare Result for a custom service method and read query parameters from ServiceContext.Query()", filename, actionName))
+		errs = append(errs, errors.Newf("%s: %s action handles an HTTP GET request and cannot declare Payload; declare Result for a custom service method and read query parameters from ServiceContext.Query()", filename, actionName))
 	}
 	if sig, ok := fixedContractActionSignatures[actionName]; ok {
 		if info.payload {
-			errs = append(errs, fmt.Errorf("%s: %s action delegates to the fixed service method %s and cannot declare Payload", filename, actionName, sig))
+			errs = append(errs, errors.Newf("%s: %s action delegates to the fixed service method %s and cannot declare Payload", filename, actionName, sig))
 		}
 		if info.result {
-			errs = append(errs, fmt.Errorf("%s: %s action delegates to the fixed service method %s and cannot declare Result", filename, actionName, sig))
+			errs = append(errs, errors.Newf("%s: %s action delegates to the fixed service method %s and cannot declare Result", filename, actionName, sig))
 		}
 	}
 	if info.exact && routeIDActionMethodNames[actionName] {
 		if getVerbActionMethodNames[actionName] {
 			if !info.result {
-				errs = append(errs, fmt.Errorf("%s: %s action uses dsl.Exact() but relies on the built-in controller which reads the resource id from the route parameter only; declare Result with a custom service method or remove Exact()", filename, actionName))
+				errs = append(errs, errors.Newf("%s: %s action uses dsl.Exact() but relies on the built-in controller which reads the resource id from the route parameter only; declare Result with a custom service method or remove Exact()", filename, actionName))
 			}
 		} else if !info.payload && !info.result {
-			errs = append(errs, fmt.Errorf("%s: %s action uses dsl.Exact() but relies on the built-in controller which reads the resource id from the route parameter only; declare Payload/Result with a custom service method or remove Exact()", filename, actionName))
+			errs = append(errs, errors.Newf("%s: %s action uses dsl.Exact() but relies on the built-in controller which reads the resource id from the route parameter only; declare Payload/Result with a custom service method or remove Exact()", filename, actionName))
 		}
 	}
 	// A List without a custom Result runs the built-in list controller, which
@@ -475,14 +476,14 @@ func validateActionCall(call *ast.CallExpr, actionName string, rootModelFile, vi
 	// could only fail at runtime. The Export action is exempt: its controller
 	// skips the table phases for virtual models and delegates to the service.
 	if virtual && actionName == consts.List.Name() && !info.result {
-		errs = append(errs, fmt.Errorf("%s: %s action on a virtual model relies on the built-in list controller, but a virtual model has no table to list from; declare Result with a custom service method", filename, actionName))
+		errs = append(errs, errors.Newf("%s: %s action on a virtual model relies on the built-in list controller, but a virtual model has no table to list from; declare Result with a custom service method", filename, actionName))
 	}
 	// These actions have no built-in implementation able to answer a request
 	// on its own: SSE's stream, Import's parsing, and Export's rendering all
 	// live in the custom service, so a block without Service() registers a
 	// route that can only answer "not implemented".
 	if serviceRequiredActionMethodNames[actionName] && !info.service {
-		errs = append(errs, fmt.Errorf("%s: %s action has no built-in implementation and must declare Service()", filename, actionName))
+		errs = append(errs, errors.Newf("%s: %s action has no built-in implementation and must declare Service()", filename, actionName))
 	}
 	// A Stream streams one side of the call or both, and each side is
 	// either one message or a stream of them; its rpc is named after the
@@ -490,27 +491,27 @@ func validateActionCall(call *ast.CallExpr, actionName string, rootModelFile, vi
 	// it has no HTTP route for Exact to shape. No other action streams.
 	if !grpcOnlyActionMethodNames[actionName] {
 		if info.streamingPayload {
-			errs = append(errs, fmt.Errorf("%s: %s action cannot declare StreamingPayload; only a Stream action streams", filename, actionName))
+			errs = append(errs, errors.Newf("%s: %s action cannot declare StreamingPayload; only a Stream action streams", filename, actionName))
 		}
 		if info.streamingResult {
-			errs = append(errs, fmt.Errorf("%s: %s action cannot declare StreamingResult; only a Stream action streams", filename, actionName))
+			errs = append(errs, errors.Newf("%s: %s action cannot declare StreamingResult; only a Stream action streams", filename, actionName))
 		}
 		return info, errs
 	}
 	if !info.streamingPayload && !info.streamingResult {
-		errs = append(errs, fmt.Errorf("%s: %s action must declare StreamingPayload or StreamingResult; a call streaming neither side is a plain action, declare it with Create", filename, actionName))
+		errs = append(errs, errors.Newf("%s: %s action must declare StreamingPayload or StreamingResult; a call streaming neither side is a plain action, declare it with Create", filename, actionName))
 	}
 	if info.payload && info.streamingPayload {
-		errs = append(errs, fmt.Errorf("%s: %s action declares both Payload and StreamingPayload; the request is either one message or a stream of them", filename, actionName))
+		errs = append(errs, errors.Newf("%s: %s action declares both Payload and StreamingPayload; the request is either one message or a stream of them", filename, actionName))
 	}
 	if info.result && info.streamingResult {
-		errs = append(errs, fmt.Errorf("%s: %s action declares both Result and StreamingResult; the response is either one message or a stream of them", filename, actionName))
+		errs = append(errs, errors.Newf("%s: %s action declares both Result and StreamingResult; the response is either one message or a stream of them", filename, actionName))
 	}
 	if info.serviceName == "" {
-		errs = append(errs, fmt.Errorf("%s: %s action must name its service, Service(\"name\"), which names its rpc", filename, actionName))
+		errs = append(errs, errors.Newf("%s: %s action must name its service, Service(\"name\"), which names its rpc", filename, actionName))
 	}
 	if info.exact {
-		errs = append(errs, fmt.Errorf("%s: %s action has no HTTP route for dsl.Exact() to shape; remove Exact()", filename, actionName))
+		errs = append(errs, errors.Newf("%s: %s action has no HTTP route for dsl.Exact() to shape; remove Exact()", filename, actionName))
 	}
 
 	return info, errs
@@ -591,7 +592,7 @@ func validateServiceCollisions(records []serviceActionRecord, filename string) [
 	keys, files := collisions(func(r serviceActionRecord) key { return key{flatten: r.flatten, name: r.filename} })
 	for _, k := range keys {
 		if group := files[k]; len(group) > 1 {
-			errs = append(errs, fmt.Errorf("%s: service file %q is generated by multiple actions: %s; give each Service action a distinct name, Service(\"name\")", filename, k.name, describe(group)))
+			errs = append(errs, errors.Newf("%s: service file %q is generated by multiple actions: %s; give each Service action a distinct name, Service(\"name\")", filename, k.name, describe(group)))
 		}
 	}
 	keys, roles := collisions(func(r serviceActionRecord) key { return key{flatten: r.flatten, name: r.role} })
@@ -611,7 +612,7 @@ func validateServiceCollisions(records []serviceActionRecord, filename string) [
 		if oneFile {
 			continue
 		}
-		errs = append(errs, fmt.Errorf("%s: service type %q is generated by multiple actions: %s; give each Service action a distinct name, Service(\"name\")", filename, k.name, describe(group)))
+		errs = append(errs, errors.Newf("%s: service type %q is generated by multiple actions: %s; give each Service action a distinct name, Service(\"name\")", filename, k.name, describe(group)))
 	}
 	return errs
 }
@@ -681,20 +682,20 @@ func validateServiceName(call *ast.CallExpr, actionName, filename string, info *
 	case len(call.Args) == 0:
 		return nil
 	case len(call.Args) > 1:
-		return []error{fmt.Errorf("%s: %s action calls Service with %d arguments; Service takes one at most, the name of the service", filename, actionName, len(call.Args))}
+		return []error{errors.Newf("%s: %s action calls Service with %d arguments; Service takes one at most, the name of the service", filename, actionName, len(call.Args))}
 	}
 	value, ok := stringLiteral(call.Args[0])
 	if !ok {
-		return []error{fmt.Errorf("%s: %s action names its service with something other than a string literal; write Service(\"name\")", filename, actionName)}
+		return []error{errors.Newf("%s: %s action names its service with something other than a string literal; write Service(\"name\")", filename, actionName)}
 	}
 	if value == "" {
-		return []error{fmt.Errorf("%s: %s action names its service \"\"; write Service() to name the service after the action, or Service(\"name\") to name it", filename, actionName)}
+		return []error{errors.Newf("%s: %s action names its service \"\"; write Service() to name the service after the action, or Service(\"name\") to name it", filename, actionName)}
 	}
 	if refusal := serviceNameRefusal(value); refusal != "" {
 		if base := strings.TrimSuffix(filepath.Base(value), filepath.Ext(value)); serviceNameRefusal(base) == "" {
 			refusal += fmt.Sprintf(": Service(%q)", base)
 		}
-		return []error{fmt.Errorf("%s: %s action names its service %q; %s", filename, actionName, value, refusal)}
+		return []error{errors.Newf("%s: %s action names its service %q; %s", filename, actionName, value, refusal)}
 	}
 	info.serviceName = value
 	return nil

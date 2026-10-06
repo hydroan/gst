@@ -2,7 +2,6 @@ package main
 
 import (
 	"bytes"
-	"fmt"
 	"go/ast"
 	"go/format"
 	"go/parser"
@@ -11,6 +10,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/internal/clioutput"
 	"github.com/hydroan/gst/internal/ggcheck"
 	"github.com/hydroan/gst/internal/ggconst"
@@ -42,12 +42,12 @@ func fillVersionFieldTags(quiet bool) error {
 	byFile := make(map[string][]ggcheck.VersionFieldFinding)
 	for _, finding := range findings {
 		if finding.Embedded {
-			return fmt.Errorf(
+			return errors.Newf(
 				"%s:%d: struct '%s' embeds model.Version; optimistic locking requires a named field (Version model.Version `json:\"version,omitempty\" gorm:\"%s\"`) — gen cannot heal a field shape",
 				gghelper.RelativePath(finding.Path), finding.Line, finding.Struct, ggcheck.VersionRequiredTag)
 		}
 		if finding.JSONBlocked {
-			return fmt.Errorf(
+			return errors.Newf(
 				"%s:%d: field '%s.%s' (model.Version) carries json:\"-\"; the version must serialize so clients can hand it back — gen cannot un-hide a field its author silenced",
 				gghelper.RelativePath(finding.Path), finding.Line, finding.Struct, finding.Field)
 		}
@@ -115,18 +115,18 @@ func rewriteVersionFieldTags(path string, findings []ggcheck.VersionFieldFinding
 	for _, finding := range findings {
 		field := versionField(file, finding)
 		if field == nil {
-			return fmt.Errorf("%s:%d: field '%s.%s' not found for the version tag rewrite", gghelper.RelativePath(path), finding.Line, finding.Struct, finding.Field)
+			return errors.Newf("%s:%d: field '%s.%s' not found for the version tag rewrite", gghelper.RelativePath(path), finding.Line, finding.Struct, finding.Field)
 		}
 		tag, err := healedVersionTag(fset, field.Tag, finding)
 		if err != nil {
-			return fmt.Errorf("%s: %w", gghelper.RelativePath(path), err)
+			return errors.Wrapf(err, "%s", gghelper.RelativePath(path))
 		}
 		field.Tag = tag
 	}
 
 	var buf bytes.Buffer
 	if err := format.Node(&buf, fset, file); err != nil {
-		return fmt.Errorf("%s: version tag rewrite produced unparsable code: %w", gghelper.RelativePath(path), err)
+		return errors.Wrapf(err, "%s: version tag rewrite produced unparsable code", gghelper.RelativePath(path))
 	}
 	return os.WriteFile(safePath, buf.Bytes(), stat.Mode().Perm())
 }
@@ -171,7 +171,7 @@ func healedVersionTag(fset *token.FileSet, tag *ast.BasicLit, finding ggcheck.Ve
 	for _, insertion := range insertions {
 		at := insertion.Offset - start
 		if at < 0 || at > len(value) {
-			return nil, fmt.Errorf("version tag rewrite offset out of range for %s.%s", finding.Struct, finding.Field)
+			return nil, errors.Newf("version tag rewrite offset out of range for %s.%s", finding.Struct, finding.Field)
 		}
 		value = value[:at] + insertion.Text + value[at:]
 	}

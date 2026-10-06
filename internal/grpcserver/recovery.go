@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"runtime/debug"
 
+	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/internal/consts"
 	"github.com/hydroan/gst/internal/execctx"
 	"github.com/hydroan/gst/internal/types"
@@ -27,7 +28,7 @@ import (
 // back the trace id the response header carries.
 func recovered(ctx context.Context, p any) error {
 	if span := trace.SpanFromContext(ctx); span.IsRecording() {
-		gstotel.RecordError(span, fmt.Errorf("panic recovered: %v", p))
+		gstotel.RecordError(span, errors.Newf("panic recovered: %v", p))
 		span.SetAttributes(
 			attribute.Bool("error.panic", true),
 			attribute.String("error.recovered", fmt.Sprintf("%v", p)),

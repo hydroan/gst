@@ -43,7 +43,7 @@ func recoveryWithTracing(log *zap.Logger, stack bool) gin.HandlerFunc {
 		// Record panic in tracing span
 		span := requestSpan(c)
 		if span != nil && span.IsRecording() {
-			gstotel.RecordError(span, fmt.Errorf("panic recovered: %v", recovered))
+			gstotel.RecordError(span, errors.Newf("panic recovered: %v", recovered))
 			span.SetAttributes(
 				attribute.Bool("error.panic", true),
 				attribute.String("error.recovered", fmt.Sprintf("%v", recovered)),

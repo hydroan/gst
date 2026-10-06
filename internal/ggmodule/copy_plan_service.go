@@ -1,13 +1,13 @@
 package ggmodule
 
 import (
-	"fmt"
 	"os"
 	"path/filepath"
 	"slices"
 	"sort"
 	"strings"
 
+	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/internal/dsl"
 	"github.com/hydroan/gst/internal/gghelper"
 	"github.com/hydroan/gst/internal/modelinfo"
@@ -80,14 +80,14 @@ func (p *CopyPlan) actionServicePaths(sourceModel *modelinfo.Model, targetModel 
 // main method, and one file may host multiple action service structs.
 func requireServiceSourceFile(action moduleCopyAction) error {
 	if _, err := os.Stat(action.SourcePath); err != nil {
-		return fmt.Errorf("source action service file not found for %s: %w", action.Action.ServiceFilename(), err)
+		return errors.Wrapf(err, "source action service file not found for %s", action.Action.ServiceFilename())
 	}
 	count, err := countServiceStructsInFile(action.SourcePath)
 	if err != nil {
 		return err
 	}
 	if count == 0 {
-		return fmt.Errorf("source action service file %s must contain at least one service struct", action.SourcePath)
+		return errors.Newf("source action service file %s must contain at least one service struct", action.SourcePath)
 	}
 	return nil
 }
@@ -277,7 +277,7 @@ func (p *CopyPlan) targetServicePath(sourcePath string) (string, error) {
 		return "", err
 	}
 	if rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
-		return "", fmt.Errorf("source service file %s is outside %s", sourcePath, p.SourceServiceDir)
+		return "", errors.Newf("source service file %s is outside %s", sourcePath, p.SourceServiceDir)
 	}
 	return filepath.Join(p.TargetServiceDir, rel), nil
 }

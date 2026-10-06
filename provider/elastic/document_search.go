@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"fmt"
 	"io"
 	"strconv"
 	"time"
@@ -108,7 +107,7 @@ func (d *document) SearchNext(ctx context.Context, indexName string, req *Search
 // default size is 10
 func (*document) Search(ctx context.Context, indexName string, req *SearchRequest) (*SearchResult, error) {
 	if err := _check(); err != nil {
-		return nil, fmt.Errorf("elasticsearch client check: %w", err)
+		return nil, errors.Wrap(err, "elasticsearch client check")
 	}
 	if indexName == "" {
 		return nil, errors.New("index name cannot be empty")
@@ -148,7 +147,7 @@ func (*document) Search(ctx context.Context, indexName string, req *SearchReques
 	// Convert request to JSON
 	body, err := json.Marshal(req)
 	if err != nil {
-		return nil, fmt.Errorf("failed to marshal search request: %w", err)
+		return nil, errors.Wrap(err, "failed to marshal search request")
 	}
 
 	// Perform search request
@@ -159,7 +158,7 @@ func (*document) Search(ctx context.Context, indexName string, req *SearchReques
 	)
 	if err != nil {
 		logger.Errorw("failed to execute search", "error", err)
-		return nil, fmt.Errorf("failed to execute search: %w", err)
+		return nil, errors.Wrap(err, "failed to execute search")
 	}
 	defer res.Body.Close()
 
@@ -170,12 +169,12 @@ func (*document) Search(ctx context.Context, indexName string, req *SearchReques
 			"status", res.Status(),
 			"body", string(body),
 		)
-		return nil, fmt.Errorf("elasticsearch error [%s]: %s", res.Status(), string(body))
+		return nil, errors.Newf("elasticsearch error [%s]: %s", res.Status(), string(body))
 	}
 	var esRes map[string]any
 	if err := json.NewDecoder(res.Body).Decode(&esRes); err != nil {
 		logger.Errorw("failed to decode response", "error", err)
-		return nil, fmt.Errorf("failed to decode response: %w", err)
+		return nil, errors.Wrap(err, "failed to decode response")
 	}
 	return parseSearchResult(esRes)
 }
@@ -205,7 +204,7 @@ func parseSearchResult(esRes map[string]any) (*SearchResult, error) {
 	}
 	// Process search result with safe type assertions
 	if total, err = extractTotal(hits); err != nil {
-		return nil, fmt.Errorf("failed to extract total: %w", err)
+		return nil, errors.Wrap(err, "failed to extract total")
 	}
 	result := &SearchResult{Total: total}
 	// Safely extract max_score
@@ -220,13 +219,13 @@ func parseSearchResult(esRes map[string]any) (*SearchResult, error) {
 
 	for i, hit := range hitsList {
 		if hitMap, ok = hit.(map[string]any); !ok {
-			return nil, fmt.Errorf("invalid hit format at index %d", i)
+			return nil, errors.Newf("invalid hit format at index %d", i)
 		}
 		if id, ok = hitMap["_id"].(string); !ok {
-			return nil, fmt.Errorf("invalid or missing _id at index %d", i)
+			return nil, errors.Newf("invalid or missing _id at index %d", i)
 		}
 		if source, ok = hitMap["_source"].(map[string]any); !ok {
-			return nil, fmt.Errorf("invalid or missing _source at index %d", i)
+			return nil, errors.Newf("invalid or missing _source at index %d", i)
 		}
 		var score *float64
 		if scoreVal, ok := hitMap["_score"].(float64); ok {

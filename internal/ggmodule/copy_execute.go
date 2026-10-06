@@ -1,7 +1,6 @@
 package ggmodule
 
 import (
-	"fmt"
 	"go/ast"
 	"go/parser"
 	"go/token"
@@ -320,7 +319,7 @@ func writeModuleCopyFile(path string, content []byte, preexisting bool, force bo
 			return CopyWriteSkip, false, nil
 		}
 		if preexisting && !force {
-			return "", false, fmt.Errorf("%s already exists; use --force to overwrite", path)
+			return "", false, errors.Newf("%s already exists; use --force to overwrite", path)
 		}
 		if err := os.WriteFile(path, content, 0o600); err != nil {
 			return "", false, err

@@ -1,7 +1,6 @@
 package ggmodule
 
 import (
-	"fmt"
 	"go/ast"
 	"go/parser"
 	"go/token"
@@ -11,6 +10,8 @@ import (
 	"strconv"
 
 	"golang.org/x/tools/go/packages"
+
+	"github.com/cockroachdb/errors"
 )
 
 // moduleCopyPackageTree is the type-checked view of one module source tree
@@ -52,7 +53,7 @@ func loadModuleCopyPackageTree(root string) (*moduleCopyPackageTree, error) {
 		return nil, err
 	}
 	if packages.PrintErrors(pkgs) > 0 {
-		return nil, fmt.Errorf("failed to load module source packages under %s", root)
+		return nil, errors.Newf("failed to load module source packages under %s", root)
 	}
 
 	tree := &moduleCopyPackageTree{fset: fset, files: make(map[string]moduleCopyTreeFile), packages: make(map[string]*packages.Package, len(pkgs))}

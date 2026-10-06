@@ -1,9 +1,9 @@
 package skiplist
 
 import (
-	"fmt"
 	"sync"
 
+	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/ds/types"
 )
 
@@ -24,7 +24,7 @@ func WithSafe[K comparable, V any]() Option[K, V] {
 func WithMaxLevel[K comparable, V any](maxLevel int) Option[K, V] {
 	return func(sl *SkipList[K, V]) error {
 		if maxLevel <= 0 {
-			return fmt.Errorf("max level must be greater than 0, got %d", maxLevel)
+			return errors.Newf("max level must be greater than 0, got %d", maxLevel)
 		}
 		sl.head.next = make([]*Node[K, V], maxLevel)
 		sl.maxLevel = maxLevel
@@ -37,7 +37,7 @@ func WithMaxLevel[K comparable, V any](maxLevel int) Option[K, V] {
 func WithProbability[K comparable, V any](p float64) Option[K, V] {
 	return func(sl *SkipList[K, V]) error {
 		if p < 0.0 || p > 1.0 {
-			return fmt.Errorf("probability must be in range (0,1), got %v", p)
+			return errors.Newf("probability must be in range (0,1), got %v", p)
 		}
 		sl.p = p
 		return nil

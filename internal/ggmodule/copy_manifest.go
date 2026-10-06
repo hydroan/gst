@@ -2,12 +2,13 @@ package ggmodule
 
 import (
 	"encoding/json"
-	"fmt"
 	"go/token"
 	"os"
 	"path"
 	"path/filepath"
 	"strings"
+
+	"github.com/cockroachdb/errors"
 )
 
 const moduleManifestFilename = "module.json"
@@ -79,40 +80,40 @@ func loadModuleManifest(moduleDir string) (moduleManifest, error) {
 	data, err := os.ReadFile(manifestPath)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return moduleManifest{}, fmt.Errorf("module copy requires %s: %w", manifestPath, err)
+			return moduleManifest{}, errors.Wrapf(err, "module copy requires %s", manifestPath)
 		}
 		return moduleManifest{}, err
 	}
 
 	var manifest moduleManifest
 	if err := json.Unmarshal(data, &manifest); err != nil {
-		return moduleManifest{}, fmt.Errorf("parse %s: %w", manifestPath, err)
+		return moduleManifest{}, errors.Wrapf(err, "parse %s", manifestPath)
 	}
 
 	manifest.Copy.PostNotes = cleanModuleCopyPostNotes(manifest.Copy.PostNotes)
 	excludeSourceFiles, excludeErr := cleanModuleCopySourceFiles("excludeSourceFiles", manifest.Copy.ExcludeSourceFiles)
 	if excludeErr != nil {
-		return moduleManifest{}, fmt.Errorf("parse %s: %w", manifestPath, excludeErr)
+		return moduleManifest{}, errors.Wrapf(excludeErr, "parse %s", manifestPath)
 	}
 	manifest.Copy.ExcludeSourceFiles = excludeSourceFiles
 	includeSourceFiles, includeErr := cleanModuleCopySourceFiles("includeSourceFiles", manifest.Copy.IncludeSourceFiles)
 	if includeErr != nil {
-		return moduleManifest{}, fmt.Errorf("parse %s: %w", manifestPath, includeErr)
+		return moduleManifest{}, errors.Wrapf(includeErr, "parse %s", manifestPath)
 	}
 	manifest.Copy.IncludeSourceFiles = includeSourceFiles
 	middleware, middlewareErr := cleanModuleCopyHandlers("middleware", manifest.Copy.Middleware)
 	if middlewareErr != nil {
-		return moduleManifest{}, fmt.Errorf("parse %s: %w", manifestPath, middlewareErr)
+		return moduleManifest{}, errors.Wrapf(middlewareErr, "parse %s", manifestPath)
 	}
 	manifest.Copy.Middleware = middleware
 	interceptors, interceptorsErr := cleanModuleCopyHandlers("interceptors", manifest.Copy.Interceptors)
 	if interceptorsErr != nil {
-		return moduleManifest{}, fmt.Errorf("parse %s: %w", manifestPath, interceptorsErr)
+		return moduleManifest{}, errors.Wrapf(interceptorsErr, "parse %s", manifestPath)
 	}
 	manifest.Copy.Interceptors = interceptors
 	assembly, assemblyErr := cleanModuleCopyAssembly(manifest.Copy.RequiredAssembly)
 	if assemblyErr != nil {
-		return moduleManifest{}, fmt.Errorf("parse %s: %w", manifestPath, assemblyErr)
+		return moduleManifest{}, errors.Wrapf(assemblyErr, "parse %s", manifestPath)
 	}
 	manifest.Copy.RequiredAssembly = assembly
 	return manifest, nil
@@ -135,7 +136,7 @@ func cleanModuleCopySourceFiles(field string, values []string) ([]string, error)
 	for _, raw := range values {
 		value, err := cleanModuleCopyRelativePath(raw)
 		if err != nil {
-			return nil, fmt.Errorf("%s contains unsafe framework-root relative path %q", field, raw)
+			return nil, errors.Newf("%s contains unsafe framework-root relative path %q", field, raw)
 		}
 		if value == "" {
 			continue
@@ -155,7 +156,7 @@ func cleanModuleCopyHandlers(field string, values []moduleCopyHandlerManifest) (
 	for i, value := range values {
 		sourceFile, err := cleanModuleCopyRelativePath(value.SourceFile)
 		if err != nil || sourceFile == "" {
-			return nil, fmt.Errorf("%s[%d].sourceFile contains unsafe framework-root relative path %q", field, i, value.SourceFile)
+			return nil, errors.Newf("%s[%d].sourceFile contains unsafe framework-root relative path %q", field, i, value.SourceFile)
 		}
 		// Keep the copy intentionally narrow: sources must come from the
 		// framework package of the kind and targets always land in the
@@ -163,17 +164,17 @@ func cleanModuleCopyHandlers(field string, values []moduleCopyHandlerManifest) (
 		// avoids hidden copy-time routing rules in copytest/register.go or
 		// arbitrary manifest target paths.
 		if path.Dir(sourceFile) != sourceDir || !strings.HasSuffix(path.Base(sourceFile), ".go") || strings.HasSuffix(path.Base(sourceFile), "_test.go") {
-			return nil, fmt.Errorf("%s[%d].sourceFile must match %s/*.go: %s", field, i, sourceDir, sourceFile)
+			return nil, errors.Newf("%s[%d].sourceFile must match %s/*.go: %s", field, i, sourceDir, sourceFile)
 		}
 
 		scope := moduleCopyHandlerScope(strings.TrimSpace(string(value.Scope)))
 		if scope != moduleCopyHandlerScopeGlobal && scope != moduleCopyHandlerScopeAuth {
-			return nil, fmt.Errorf("%s[%d].scope must be %q or %q: %q", field, i, moduleCopyHandlerScopeGlobal, moduleCopyHandlerScopeAuth, value.Scope)
+			return nil, errors.Newf("%s[%d].scope must be %q or %q: %q", field, i, moduleCopyHandlerScopeGlobal, moduleCopyHandlerScopeAuth, value.Scope)
 		}
 
 		handler := strings.TrimSpace(value.Handler)
 		if !token.IsIdentifier(handler) {
-			return nil, fmt.Errorf("%s[%d].handler must be a Go identifier: %q", field, i, value.Handler)
+			return nil, errors.Newf("%s[%d].handler must be a Go identifier: %q", field, i, value.Handler)
 		}
 
 		cleaned = append(cleaned, moduleCopyHandlerManifest{
@@ -193,17 +194,17 @@ func cleanModuleCopyAssembly(values []moduleCopyAssemblyManifest) ([]moduleCopyA
 	for i, value := range values {
 		importPath := strings.TrimSpace(value.Import)
 		if importPath == "" {
-			return nil, fmt.Errorf("requiredAssembly[%d].import must not be empty", i)
+			return nil, errors.Newf("requiredAssembly[%d].import must not be empty", i)
 		}
 
 		function := strings.TrimSpace(value.Function)
 		if !token.IsIdentifier(function) || !token.IsExported(function) {
-			return nil, fmt.Errorf("requiredAssembly[%d].function must be an exported Go identifier: %q", i, value.Function)
+			return nil, errors.Newf("requiredAssembly[%d].function must be an exported Go identifier: %q", i, value.Function)
 		}
 
 		reason := strings.TrimSpace(value.Reason)
 		if reason == "" {
-			return nil, fmt.Errorf("requiredAssembly[%d].reason must not be empty", i)
+			return nil, errors.Newf("requiredAssembly[%d].reason must not be empty", i)
 		}
 
 		cleaned = append(cleaned, moduleCopyAssemblyManifest{Import: importPath, Function: function, Reason: reason})
@@ -218,7 +219,7 @@ func cleanModuleCopyRelativePath(value string) (string, error) {
 	}
 	value = path.Clean(value)
 	if value == "." || path.IsAbs(value) || value == ".." || strings.HasPrefix(value, "../") {
-		return "", fmt.Errorf("unsafe framework-root relative path %q", value)
+		return "", errors.Newf("unsafe framework-root relative path %q", value)
 	}
 	return value, nil
 }

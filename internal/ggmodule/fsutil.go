@@ -1,13 +1,13 @@
 package ggmodule
 
 import (
-	"fmt"
 	"os"
 	"path/filepath"
 	"regexp"
 	"sort"
 	"strings"
 
+	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/internal/ggconst"
 )
 
@@ -17,7 +17,7 @@ func requireDir(path string) error {
 		return err
 	}
 	if !info.IsDir() {
-		return fmt.Errorf("%s is not a directory", path)
+		return errors.Newf("%s is not a directory", path)
 	}
 	return nil
 }
@@ -114,7 +114,7 @@ func requirePathUnderRoot(path, root string) (string, error) {
 		return "", err
 	}
 	if rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
-		return "", fmt.Errorf("path %s is not under root %s", path, root)
+		return "", errors.Newf("path %s is not under root %s", path, root)
 	}
 	return path, nil
 }

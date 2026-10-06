@@ -4,8 +4,9 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"fmt"
 	"net/http"
+
+	"github.com/cockroachdb/errors"
 )
 
 type IndexOption struct {
@@ -67,7 +68,7 @@ func (*index) Create(indexName string, options ...*IndexOption) error {
 	// Convert the body to JSON
 	bodyJSON, err := json.Marshal(body)
 	if err != nil {
-		return fmt.Errorf("error marshaling index body: %w", err)
+		return errors.Wrap(err, "error marshaling index body")
 	}
 
 	// Create the index
@@ -77,13 +78,13 @@ func (*index) Create(indexName string, options ...*IndexOption) error {
 		client.Indices.Create.WithContext(context.Background()),
 	)
 	if err != nil {
-		return fmt.Errorf("error creating index: %w", err)
+		return errors.Wrap(err, "error creating index")
 	}
 	defer res.Body.Close()
 
 	// Check the response
 	if res.IsError() {
-		return fmt.Errorf("error creating index: %s", res.String())
+		return errors.Newf("error creating index: %s", res.String())
 	}
 
 	return nil
@@ -116,7 +117,7 @@ func (*index) Create(indexName string, options ...*IndexOption) error {
 func (*index) Exists(indexName string) (bool, error) {
 	res, err := client.Indices.Exists([]string{indexName})
 	if err != nil {
-		return false, fmt.Errorf("error checking index existence: %w", err)
+		return false, errors.Wrap(err, "error checking index existence")
 	}
 	defer res.Body.Close()
 
@@ -146,13 +147,13 @@ func (*index) Delete(indexName string) error {
 	// Delete the index
 	res, err := client.Indices.Delete([]string{indexName})
 	if err != nil {
-		return fmt.Errorf("error deleting index: %w", err)
+		return errors.Wrap(err, "error deleting index")
 	}
 	defer res.Body.Close()
 
 	// Check the response
 	if res.IsError() {
-		return fmt.Errorf("error deleting index: %s", res.String())
+		return errors.Newf("error deleting index: %s", res.String())
 	}
 
 	return nil

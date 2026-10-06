@@ -12,6 +12,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/internal/dsl"
 	"github.com/hydroan/gst/internal/ggconst"
 	"github.com/hydroan/gst/internal/gghelper"
@@ -126,7 +127,7 @@ func collectVersionFieldFindings(ignore gghelper.ProjectIgnore) ([]VersionFieldF
 
 	owned, err := copyableModuleOwners()
 	if err != nil {
-		return nil, fmt.Errorf("listing copyable framework modules: %w", err)
+		return nil, errors.Wrap(err, "listing copyable framework modules")
 	}
 
 	var findings []VersionFieldFinding
@@ -149,7 +150,7 @@ func collectVersionFieldFindings(ignore gghelper.ProjectIgnore) ([]VersionFieldF
 		return nil
 	})
 	if walkErr != nil {
-		return nil, fmt.Errorf("walking model directory: %w", walkErr)
+		return nil, errors.Wrap(walkErr, "walking model directory")
 	}
 	return findings, nil
 }
@@ -260,7 +261,7 @@ func versionJSONName(fieldName string) string {
 func scanVersionFieldFile(path string) ([]VersionFieldFinding, error) {
 	imports, err := parser.ParseFile(token.NewFileSet(), path, nil, parser.ImportsOnly)
 	if err != nil {
-		return nil, fmt.Errorf("%s has parse error: %w", gghelper.RelativePath(path), err)
+		return nil, errors.Wrapf(err, "%s has parse error", gghelper.RelativePath(path))
 	}
 	names := goast.ImportedNames(imports, ggconst.ImportPathModel, ggconst.PkgModel)
 	if len(names.Qualifiers) == 0 && !names.DotImported {
@@ -270,7 +271,7 @@ func scanVersionFieldFile(path string) ([]VersionFieldFinding, error) {
 	fset := token.NewFileSet()
 	file, err := parser.ParseFile(fset, path, nil, parser.ParseComments)
 	if err != nil {
-		return nil, fmt.Errorf("%s has parse error: %w", gghelper.RelativePath(path), err)
+		return nil, errors.Wrapf(err, "%s has parse error", gghelper.RelativePath(path))
 	}
 
 	var findings []VersionFieldFinding
@@ -402,7 +403,7 @@ func collectActionTypeVersionFindings(ignore gghelper.ProjectIgnore) ([]actionTy
 
 	owned, err := copyableModuleOwners()
 	if err != nil {
-		return nil, fmt.Errorf("listing copyable framework modules: %w", err)
+		return nil, errors.Wrap(err, "listing copyable framework modules")
 	}
 
 	var packageDirs []string
@@ -426,7 +427,7 @@ func collectActionTypeVersionFindings(ignore gghelper.ProjectIgnore) ([]actionTy
 		return nil
 	})
 	if walkErr != nil {
-		return nil, fmt.Errorf("walking model directory: %w", walkErr)
+		return nil, errors.Wrap(walkErr, "walking model directory")
 	}
 
 	var findings []actionTypeVersionFinding

@@ -1,7 +1,6 @@
 package ggmodule
 
 import (
-	"fmt"
 	"os"
 	"path/filepath"
 
@@ -77,7 +76,7 @@ func checkNoLocalSource(projectDir string, name string) error {
 			return err
 		}
 		if hasGoFiles {
-			return fmt.Errorf("module %q already exists as local source; remove local model/service files before adding framework module", name)
+			return errors.Newf("module %q already exists as local source; remove local model/service files before adding framework module", name)
 		}
 	}
 	return nil

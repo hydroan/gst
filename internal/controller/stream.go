@@ -242,7 +242,7 @@ func (a *action[M, REQ, RSP]) requests(c *call, recv func() (REQ, error)) *reque
 // refusal of a call nothing serves. Which action, on which route, is for
 // the log and the span, like the cause of any other internal failure.
 func (a *action[M, REQ, RSP]) unimplemented(c *call, route string) error {
-	err := fmt.Errorf("the Stream action of %s on %s is served by no Stream method of its kind; gg gen declares the method in the service file", a.name, route)
+	err := errors.Newf("the Stream action of %s on %s is served by no Stream method of its kind; gg gen declares the method in the service file", a.name, route)
 	c.log.Errorz("service operation failed", zap.Error(err))
 	gstotel.RecordError(c.span, err)
 	return status.Error(codes.Unimplemented, unimplementedMsg)

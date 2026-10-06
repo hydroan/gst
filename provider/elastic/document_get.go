@@ -3,7 +3,6 @@ package elastic
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"io"
 	"net/http"
 	"time"
@@ -27,7 +26,7 @@ type GetResult struct {
 // Get retrieves a document from elasticsearch by index name and id
 func (*document) Get(ctx context.Context, indexName string, id string, req *GetRequest) (*GetResult, error) {
 	if err := _check(); err != nil {
-		return nil, fmt.Errorf("elasticsearch client check: %w", err)
+		return nil, errors.Wrap(err, "elasticsearch client check")
 	}
 	if indexName == "" || id == "" {
 		return nil, errors.New("invalid parameters: indexName or id is empty")
@@ -52,14 +51,14 @@ func (*document) Get(ctx context.Context, indexName string, id string, req *GetR
 	res, err := client.Get(indexName, id, opts...)
 	if err != nil {
 		logger.Errorw("failed to get document", "error", err)
-		return nil, fmt.Errorf("failed to get document: %w", err)
+		return nil, errors.Wrap(err, "failed to get document")
 	}
 	defer res.Body.Close()
 
 	body, err := io.ReadAll(res.Body)
 	if err != nil {
 		logger.Errorw("failed to read response body", "error", err)
-		return nil, fmt.Errorf("failed to read response body: %w", err)
+		return nil, errors.Wrap(err, "failed to read response body")
 	}
 	if res.StatusCode == http.StatusNotFound {
 		return &GetResult{
@@ -73,7 +72,7 @@ func (*document) Get(ctx context.Context, indexName string, id string, req *GetR
 			"status", res.Status(),
 			"body", string(body),
 		)
-		return nil, fmt.Errorf("elasticsearch error [%s]: %s", res.Status(), string(body))
+		return nil, errors.Newf("elasticsearch error [%s]: %s", res.Status(), string(body))
 	}
 	var result GetResult
 	if err := json.Unmarshal(body, &result); err != nil {
@@ -82,7 +81,7 @@ func (*document) Get(ctx context.Context, indexName string, id string, req *GetR
 			"error", err,
 			"body", string(body),
 		)
-		return nil, fmt.Errorf("failed to decode response: %w", err)
+		return nil, errors.Wrap(err, "failed to decode response")
 	}
 	return &result, nil
 }

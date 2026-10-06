@@ -1,7 +1,6 @@
 package main
 
 import (
-	"fmt"
 	"go/ast"
 	"go/parser"
 	"go/token"
@@ -587,7 +586,7 @@ func protobufDefinitions(models []*modelinfo.Model) ([]pb.File, error) {
 // registers.
 func scanModels(quiet bool, ignore gghelper.ProjectIgnore) (scannedModels, error) {
 	if !gghelper.FileExists(ggconst.DirModel) {
-		return scannedModels{}, fmt.Errorf("model dir not found: %s", ggconst.DirModel)
+		return scannedModels{}, errors.Newf("model dir not found: %s", ggconst.DirModel)
 	}
 
 	if !quiet {
@@ -689,7 +688,7 @@ func pathUnderRoot(path, root string) (string, error) {
 		return "", err
 	}
 	if rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
-		return "", fmt.Errorf("path %s is not under root %s", path, root)
+		return "", errors.Newf("path %s is not under root %s", path, root)
 	}
 	return path, nil
 }

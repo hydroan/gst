@@ -1,7 +1,6 @@
 package ggmodule
 
 import (
-	"fmt"
 	"go/ast"
 	"go/parser"
 	"go/token"
@@ -11,6 +10,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/internal/gghelper"
 	"golang.org/x/tools/go/ast/astutil"
 )
@@ -51,7 +51,7 @@ func managedDirOf(dir string) (managedDir, error) {
 	case interceptorManagedDir.pkg:
 		return interceptorManagedDir, nil
 	}
-	return managedDir{}, fmt.Errorf("%s is not a directory module copy manages", dir)
+	return managedDir{}, errors.Newf("%s is not a directory module copy manages", dir)
 }
 
 // handlerMarkerPrefix opens the ownership marker line module copy writes at
@@ -130,7 +130,7 @@ func (p *CopyPlan) resolveHandlers(manifest []moduleCopyHandlerManifest, targetD
 
 func requireHandlerSourceFile(sourcePath string, handler string) error {
 	if _, err := os.Stat(sourcePath); err != nil {
-		return fmt.Errorf("source handler file not found for %s: %w", filepath.Base(sourcePath), err)
+		return errors.Wrapf(err, "source handler file not found for %s", filepath.Base(sourcePath))
 	}
 
 	fset := token.NewFileSet()
@@ -148,12 +148,12 @@ func requireHandlerSourceFile(sourcePath string, handler string) error {
 		// does not compile. Failing here names the manifest entry instead of
 		// leaving the copied project broken.
 		if fn.Type.Params != nil && len(fn.Type.Params.List) > 0 {
-			return fmt.Errorf("handler %s in %s must take no arguments", handler, sourcePath)
+			return errors.Newf("handler %s in %s must take no arguments", handler, sourcePath)
 		}
 
 		return nil
 	}
-	return fmt.Errorf("source handler file %s does not declare handler %s", sourcePath, handler)
+	return errors.Newf("source handler file %s does not declare handler %s", sourcePath, handler)
 }
 
 // addHandlerFiles plans the copies of the handler files items, middleware
@@ -204,7 +204,7 @@ func (p *CopyPlan) staleHandlerFiles(dir string, planned []string) ([]string, er
 		return nil, err
 	}
 	if !info.IsDir() {
-		return nil, fmt.Errorf("%s is not a directory", dir)
+		return nil, errors.Newf("%s is not a directory", dir)
 	}
 
 	written := make(map[string]bool, len(planned))
@@ -262,7 +262,7 @@ func OrphanManagedFiles(dir, modelDir string) ([]OrphanManagedFile, error) {
 		return nil, err
 	}
 	if !info.IsDir() {
-		return nil, fmt.Errorf("%s is not a directory", dir)
+		return nil, errors.Newf("%s is not a directory", dir)
 	}
 
 	files, err := goFilesInPackageDir(dir)

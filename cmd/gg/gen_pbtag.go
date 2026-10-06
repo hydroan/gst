@@ -159,20 +159,20 @@ func rewritePBTags(path string, tags []pb.MissingTag) error {
 	for _, tag := range tags {
 		field := fieldAtLine(fset, file, tag.Line, tag.Field)
 		if field == nil {
-			return fmt.Errorf("%s:%d: field %s of %s not found for the pb tag rewrite", path, tag.Line, tag.Field, tag.Struct)
+			return errors.Newf("%s:%d: field %s of %s not found for the pb tag rewrite", path, tag.Line, tag.Field, tag.Struct)
 		}
 		if len(field.Names) > 1 {
 			names := make([]string, 0, len(field.Names))
 			for _, id := range field.Names {
 				names = append(names, id.Name)
 			}
-			return fmt.Errorf("%s:%d: %s share one declaration, which one pb tag would number alike; declare each field on a line of its own, then run gg gen again", path, tag.Line, strings.Join(names, ", "))
+			return errors.Newf("%s:%d: %s share one declaration, which one pb tag would number alike; declare each field on a line of its own, then run gg gen again", path, tag.Line, strings.Join(names, ", "))
 		}
 		field.Tag = withPBTag(field.Tag, tag.Number)
 	}
 	var buf bytes.Buffer
 	if err := format.Node(&buf, fset, file); err != nil {
-		return fmt.Errorf("%s: pb tag rewrite produced unparsable code: %w", path, err)
+		return errors.Wrapf(err, "%s: pb tag rewrite produced unparsable code", path)
 	}
 	return os.WriteFile(safePath, buf.Bytes(), stat.Mode().Perm())
 }

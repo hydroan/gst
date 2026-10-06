@@ -1,7 +1,6 @@
 package ggmodule
 
 import (
-	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -40,13 +39,13 @@ func moduleForRegistration(name string) (Module, error) {
 	}
 	module, err := moduleByName(name)
 	if os.IsNotExist(err) {
-		return Module{}, fmt.Errorf("module %q not found", name)
+		return Module{}, errors.Newf("module %q not found", name)
 	}
 	if err != nil {
 		return Module{}, err
 	}
 	if !module.Addable {
-		return Module{}, fmt.Errorf("module %q cannot be added automatically because Register requires arguments", name)
+		return Module{}, errors.Newf("module %q cannot be added automatically because Register requires arguments", name)
 	}
 	return module, nil
 }
@@ -61,13 +60,13 @@ func validateModuleCommandName(name string, subject string) error {
 		return errors.New("module name is required")
 	}
 	if name != strings.TrimSpace(name) {
-		return fmt.Errorf("module name %q must not contain surrounding whitespace", name)
+		return errors.Newf("module name %q must not contain surrounding whitespace", name)
 	}
 	if strings.HasPrefix(name, ".") || strings.ContainsAny(name, `/\`) {
-		return fmt.Errorf("%s accepts a module name, not a path: %s", subject, name)
+		return errors.Newf("%s accepts a module name, not a path: %s", subject, name)
 	}
 	if filepath.Clean(name) != name || filepath.Base(name) != name {
-		return fmt.Errorf("%s accepts a module name, not a path: %s", subject, name)
+		return errors.Newf("%s accepts a module name, not a path: %s", subject, name)
 	}
 	return nil
 }

@@ -144,7 +144,7 @@ func runConfigDefaults(cmd *cobra.Command, args []string, opts *configDefaultsOp
 		section := strings.ToLower(args[0])
 		value, ok := data[section]
 		if !ok {
-			return fmt.Errorf("unknown configuration section %q; run 'gg config list' to see available sections", args[0])
+			return errors.Newf("unknown configuration section %q; run 'gg config list' to see available sections", args[0])
 		}
 		data = map[string]any{section: value}
 	}
@@ -324,7 +324,7 @@ func decodeConfigData(content []byte, format configFileFormat) (map[string]any, 
 		}
 		return data, nil
 	default:
-		return nil, fmt.Errorf("unsupported config format %q", format)
+		return nil, errors.Newf("unsupported config format %q", format)
 	}
 }
 
@@ -351,7 +351,7 @@ func encodeConfigData(data map[string]any, format configFileFormat) ([]byte, err
 		}
 		return content, nil
 	default:
-		return nil, fmt.Errorf("unsupported config format %q", format)
+		return nil, errors.Newf("unsupported config format %q", format)
 	}
 }
 
@@ -470,7 +470,7 @@ func writeConfigOutput(stdout io.Writer, output string, force bool, content []by
 		return err
 	}
 	if _, err := os.Stat(output); err == nil && !force {
-		return fmt.Errorf("output file %s already exists; use --force to overwrite it", output)
+		return errors.Newf("output file %s already exists; use --force to overwrite it", output)
 	} else if err != nil && !errors.Is(err, os.ErrNotExist) {
 		return errors.Wrapf(err, "failed to inspect output file %s", output)
 	}
@@ -502,7 +502,7 @@ func resolveOutputFormat(output, override string) (configFileFormat, error) {
 func inferConfigFormat(filename string) (configFileFormat, error) {
 	ext := strings.TrimPrefix(filepath.Ext(filename), ".")
 	if ext == "" {
-		return "", fmt.Errorf("cannot infer config format from %s; use --from or --to", filename)
+		return "", errors.Newf("cannot infer config format from %s; use --from or --to", filename)
 	}
 	return normalizeConfigFormat(ext)
 }
@@ -518,7 +518,7 @@ func normalizeConfigFormat(format string) (configFileFormat, error) {
 	case "yaml", "yml":
 		return configFormatYAML, nil
 	default:
-		return "", fmt.Errorf("unsupported config format %q; supported formats: ini, json, toml, yaml", format)
+		return "", errors.Newf("unsupported config format %q; supported formats: ini, json, toml, yaml", format)
 	}
 }
 
