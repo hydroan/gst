@@ -5,6 +5,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"strconv"
 	"strings"
 	"testing"
@@ -108,6 +109,36 @@ func TestPinnedCommandBuildsWithTheGoCommandAtHand(t *testing.T) {
 	require.Contains(t, string(goMod), "\ngo "+strings.TrimPrefix(older, "go")+"\n")
 	out, err := cmd.Output()
 	require.NoError(t, err)
+	require.Equal(t, "protoc-gen-go "+version+"\n", string(out))
+}
+
+// TestPinnedCommandBuildsForTheHostWhateverTheProjectTargets pins that the
+// program is built for the platform gg runs on: a caller cross-compiling its
+// project has GOOS and GOARCH set for the target, and the program, which gg
+// itself runs, must not inherit them. The environment names a platform other
+// than the host's, and the program still runs.
+func TestPinnedCommandBuildsForTheHostWhateverTheProjectTargets(t *testing.T) {
+	cache := t.TempDir()
+	original := userCacheDir
+	userCacheDir = func() (string, error) { return cache, nil }
+	t.Cleanup(func() { userCacheDir = original })
+	const module, pkg = "google.golang.org/protobuf", "google.golang.org/protobuf/cmd/protoc-gen-go"
+	version := requiredVersion(t, module)
+	targetOS, targetArch := "linux", "arm64"
+	if runtime.GOOS == targetOS {
+		targetOS = "windows"
+	}
+	if runtime.GOARCH == targetArch {
+		targetArch = "amd64"
+	}
+	t.Setenv("GOOS", targetOS)
+	t.Setenv("GOARCH", targetArch)
+
+	cmd, err := PinnedCommand(module, version, pkg, "--version")
+	require.NoError(t, err)
+
+	out, err := cmd.Output()
+	require.NoError(t, err, "the program runs on the host whatever platform the caller builds its project for")
 	require.Equal(t, "protoc-gen-go "+version+"\n", string(out))
 }
 

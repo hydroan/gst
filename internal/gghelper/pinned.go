@@ -7,6 +7,7 @@ import (
 	"path"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"strings"
 
 	"github.com/cockroachdb/errors"
@@ -22,7 +23,8 @@ import (
 // the user cache directory a go.mod of gg's own requires the module at that
 // version and nothing else (see pinnedModFile), and go build, run in that
 // directory with -mod=mod so that it fills the go.sum in beside it and with
-// GOWORK=off so that no workspace above it chooses the versions, writes the
+// GOWORK=off so that no workspace above it chooses the versions, and for the
+// host platform however the environment sets GOOS and GOARCH, writes the
 // program there too. The go directive of that go.mod names the go command
 // at hand, so the build runs on it rather than fetching a toolchain. The
 // module is downloaded on the first build and read from the module cache
@@ -58,7 +60,11 @@ func PinnedCommand(module, version, pkg string, args ...string) (*exec.Cmd, erro
 	// the callers spell out in constants.
 	build := exec.Command("go", "build", "-mod=mod", "-o", program, pkg)
 	build.Dir = dir
-	build.Env = append(os.Environ(), "GOWORK=off")
+	// The program runs on this host, whatever platform the caller builds
+	// its project for, so GOOS and GOARCH name the host after whatever the
+	// environment set them to: the go command reads the last value of a
+	// repeated variable.
+	build.Env = append(os.Environ(), "GOWORK=off", "GOOS="+runtime.GOOS, "GOARCH="+runtime.GOARCH)
 	build.Stderr = os.Stderr
 	if err = build.Run(); err != nil {
 		return nil, errors.Wrapf(err, "build %s@%s", pkg, version)
