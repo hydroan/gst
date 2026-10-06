@@ -217,18 +217,23 @@ func Init() error {
 	auth = root.Group("")
 	auth.Use(middleware.AuthMarker())
 	pub = root.Group("")
+	// A middleware registered once the server runs would guard nothing: gin
+	// fixes the chain of a route as the route registers. The handlers report
+	// it at once, as grpcserver.Use reports an interceptor registered late.
 	middleware.SetApplyHandlers(
 		func(mid gin.HandlerFunc) {
-			if started.Load() == 0 {
-				auth.Use(mid)
-				pub.Use(mid)
+			if started.Load() != 0 {
+				panic("router: middleware.Register after the server started; register middleware at package initialization")
 			}
+			auth.Use(mid)
+			pub.Use(mid)
 		},
 		func(mid gin.HandlerFunc) {
-			if started.Load() == 0 {
-				auth.Use(mid)
-				authGuarded.Store(true)
+			if started.Load() != 0 {
+				panic("router: middleware.RegisterAuth after the server started; register middleware at package initialization")
 			}
+			auth.Use(mid)
+			authGuarded.Store(true)
 		},
 	)
 

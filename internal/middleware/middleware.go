@@ -36,7 +36,9 @@ var (
 // Register wraps each middleware for tracing, under the name of the function
 // that built it, and keeps it for every API route: SetApplyHandlers mounts the
 // ones kept before it, and the handlers it installs mount each later one as it
-// arrives. The public middleware.Register forwards to it and documents the
+// arrives, panicking once the server runs (see router), so a middleware
+// registered late is reported rather than left off the routes, and nothing is
+// kept of it. The public middleware.Register forwards to it and documents the
 // contract.
 func Register(middlewares ...gin.HandlerFunc) {
 	middlewareMu.Lock()
@@ -51,18 +53,19 @@ func Register(middlewares ...gin.HandlerFunc) {
 		// Automatically wrap middleware with tracing for performance monitoring
 		wrapped := middlewareWrapper(name, middleware)
 		zap.S().Infow("register common middleware", "name", name)
-		commonMiddlewares = append(commonMiddlewares, wrapped)
 		if applyCommonHandler != nil {
 			applyCommonHandler(wrapped)
 		}
+		commonMiddlewares = append(commonMiddlewares, wrapped)
 	}
 }
 
 // RegisterAuth wraps each middleware for tracing, under the name of the
 // function that built it, and keeps it for the routes of the authenticated
 // group: SetApplyHandlers mounts the ones kept before it, and the handlers it
-// installs mount each later one as it arrives. The public
-// middleware.RegisterAuth forwards to it and documents the contract.
+// installs mount each later one as it arrives, panicking once the server runs
+// like Register's. The public middleware.RegisterAuth forwards to it and
+// documents the contract.
 func RegisterAuth(middlewares ...gin.HandlerFunc) {
 	middlewareMu.Lock()
 	defer middlewareMu.Unlock()
@@ -76,10 +79,10 @@ func RegisterAuth(middlewares ...gin.HandlerFunc) {
 		// Automatically wrap middleware with tracing for performance monitoring
 		wrapped := middlewareWrapper(name, middleware)
 		zap.S().Infow("register auth middleware", "name", name)
-		authMiddlewares = append(authMiddlewares, wrapped)
 		if applyAuthHandler != nil {
 			applyAuthHandler(wrapped)
 		}
+		authMiddlewares = append(authMiddlewares, wrapped)
 	}
 }
 
