@@ -142,21 +142,21 @@ func registerFixtureServices() {
 		consts.Create, consts.Delete, consts.Update, consts.Patch, consts.List,
 		consts.CreateMany, consts.DeleteMany, consts.UpdateMany, consts.PatchMany,
 	} {
-		serviceregistry.Register[*sampleRecord, *sampleRecord, *sampleRecord](phase, refusalRoute, &refusingService{})
+		serviceregistry.RegisterInstance[*sampleRecord, *sampleRecord, *sampleRecord](phase, refusalRoute, &refusingService{})
 	}
-	serviceregistry.Register[*sampleRecord, *sampleRecord, *sampleRecord](consts.List, filterRefusalRoute, &filterRefusingService{})
-	serviceregistry.Register[*sampleRecord, *sampleRecord, *sampleRecord](consts.Import, importRoute, &importingService{})
-	serviceregistry.Register[*sampleRecord, *sampleRecord, *sampleRecord](consts.Import, refusedImportRoute, &refusingService{})
-	serviceregistry.Register[*sampleRecord, *sampleRecord, *sampleRecord](consts.Create, observedRoute, &observingService{})
-	serviceregistry.Register[*sampleRecord, *sampleRecord, *sampleRecord](consts.Create, cookieBeforeRoute, &cookieBeforeService{})
-	serviceregistry.Register[*sampleRecord, *sampleRecord, *sampleRecord](consts.Create, cookieAfterRoute, &cookieAfterService{})
-	serviceregistry.Register[*sampleRecord, *sampleActionReq, *sampleActionRsp](consts.Create, actionRoute, &actionService{})
-	serviceregistry.Register[*sampleRecord, *sampleActionReq, *sampleActionRsp](consts.List, actionRoute, &actionService{})
-	serviceregistry.Register[*sampleRecord, *sampleActionReq, *sampleActionRsp](consts.Stream, watchRoute, &watchService{})
-	serviceregistry.Register[*sampleRecord, *sampleActionReq, *sampleActionRsp](consts.Stream, uploadRoute, &uploadService{})
-	serviceregistry.Register[*sampleRecord, *sampleActionReq, *sampleActionRsp](consts.Stream, chatRoute, &chatService{})
-	serviceregistry.Register[*sampleRecord, *sampleActionReq, *sampleActionRsp](consts.Stream, silentRoute, &actionService{})
-	serviceregistry.Register[*sampleRecord, *sampleActionReq, *sampleActionRsp](consts.Stream, forkRoute, forkingChat)
+	serviceregistry.RegisterInstance[*sampleRecord, *sampleRecord, *sampleRecord](consts.List, filterRefusalRoute, &filterRefusingService{})
+	serviceregistry.RegisterInstance[*sampleRecord, *sampleRecord, *sampleRecord](consts.Import, importRoute, &importingService{})
+	serviceregistry.RegisterInstance[*sampleRecord, *sampleRecord, *sampleRecord](consts.Import, refusedImportRoute, &refusingService{})
+	serviceregistry.RegisterInstance[*sampleRecord, *sampleRecord, *sampleRecord](consts.Create, observedRoute, &observingService{})
+	serviceregistry.RegisterInstance[*sampleRecord, *sampleRecord, *sampleRecord](consts.Create, cookieBeforeRoute, &cookieBeforeService{})
+	serviceregistry.RegisterInstance[*sampleRecord, *sampleRecord, *sampleRecord](consts.Create, cookieAfterRoute, &cookieAfterService{})
+	serviceregistry.RegisterInstance[*sampleRecord, *sampleActionReq, *sampleActionRsp](consts.Create, actionRoute, &actionService{})
+	serviceregistry.RegisterInstance[*sampleRecord, *sampleActionReq, *sampleActionRsp](consts.List, actionRoute, &actionService{})
+	serviceregistry.RegisterInstance[*sampleRecord, *sampleActionReq, *sampleActionRsp](consts.Stream, watchRoute, &watchService{})
+	serviceregistry.RegisterInstance[*sampleRecord, *sampleActionReq, *sampleActionRsp](consts.Stream, uploadRoute, &uploadService{})
+	serviceregistry.RegisterInstance[*sampleRecord, *sampleActionReq, *sampleActionRsp](consts.Stream, chatRoute, &chatService{})
+	serviceregistry.RegisterInstance[*sampleRecord, *sampleActionReq, *sampleActionRsp](consts.Stream, silentRoute, &actionService{})
+	serviceregistry.RegisterInstance[*sampleRecord, *sampleActionReq, *sampleActionRsp](consts.Stream, forkRoute, forkingChat)
 }
 
 // cookieBeforeService and cookieAfterService set a cookie, which only an

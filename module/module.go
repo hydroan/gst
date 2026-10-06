@@ -152,10 +152,10 @@ func Use[M types.Model, REQ types.Request, RSP types.Response](mod types.Module[
 				// services by path and phase.
 				switch option.mode {
 				case useRouteModeCRUD:
-					serviceregistry.Register[M, REQ, RSP](p, crudRoute(route, param, p), mod.Service())
+					serviceregistry.RegisterInstance[M, REQ, RSP](p, crudRoute(route, param, p), mod.Service())
 					registerCRUDRouter(mod, route, param, p)
 				case useRouteModeExact:
-					serviceregistry.Register[M, REQ, RSP](p, route, mod.Service())
+					serviceregistry.RegisterInstance[M, REQ, RSP](p, route, mod.Service())
 					registerRouter(mod, route, nil, p)
 				}
 			}

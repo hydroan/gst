@@ -65,8 +65,8 @@ func (s *endlessStreamer) SSE(ctx *types.ServiceContext) error {
 // before the framework bootstraps, while the routes below register after
 // router.Init — the same split generated code has.
 func init() {
-	serviceregistry.Register[*modelregistry.Empty, *modelregistry.Empty, *modelregistry.Empty](consts.SSE, sseStreamRoute, &noticeStreamer{})
-	serviceregistry.Register[*modelregistry.Empty, *modelregistry.Empty, *modelregistry.Empty](consts.SSE, sseEndlessRoute, &endlessStreamer{})
+	serviceregistry.RegisterInstance[*modelregistry.Empty, *modelregistry.Empty, *modelregistry.Empty](consts.SSE, sseStreamRoute, &noticeStreamer{})
+	serviceregistry.RegisterInstance[*modelregistry.Empty, *modelregistry.Empty, *modelregistry.Empty](consts.SSE, sseEndlessRoute, &endlessStreamer{})
 }
 
 // registerSSERoutes registers the streaming routes; TestMain calls it after

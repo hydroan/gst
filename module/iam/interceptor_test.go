@@ -208,7 +208,7 @@ func grpcProbe(t *testing.T) *grpc.ClientConn {
 		// Session runs the framework's call function over the probe's
 		// Session action, the way a generated handler runs a service, so the
 		// call goes through the check of the HTTP-only methods as well.
-		serviceregistry.Register[*modelregistry.Empty, *modelregistry.Empty, *probeSessionRsp](consts.Get, probeSessionRoute, &probeSessionService{})
+		serviceregistry.RegisterInstance[*modelregistry.Empty, *modelregistry.Empty, *probeSessionRsp](consts.Get, probeSessionRoute, &probeSessionService{})
 		sessionCall := gstgrpc.ServiceCall[*modelregistry.Empty, *modelregistry.Empty, *probeSessionRsp](consts.Get, probeSessionRoute)
 		session := grpc.MethodDesc{
 			MethodName: "Session",

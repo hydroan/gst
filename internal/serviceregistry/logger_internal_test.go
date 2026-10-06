@@ -33,7 +33,7 @@ func TestRegisterPanicsOnAPointerEmbeddedBaseOnceTheLoggerExists(t *testing.T) {
 	setServiceLogger(t, logger.Fallback("service"))
 
 	require.Panics(t, func() {
-		Register[*loggerTestRecord, *loggerTestRecord, *loggerTestRecord](
+		RegisterInstance[*loggerTestRecord, *loggerTestRecord, *loggerTestRecord](
 			consts.Phase("test_pointer_base_after_logger"), "samples", &pointerBaseService{})
 	})
 }
@@ -45,7 +45,7 @@ func TestRegisterPanicsOnAPointerEmbeddedBaseOnceTheLoggerExists(t *testing.T) {
 func TestInitPanicsOnAPointerEmbeddedBaseRegisteredBeforeTheLogger(t *testing.T) {
 	setServiceLogger(t, nil)
 	phase := consts.Phase("test_pointer_base_before_logger")
-	Register[*loggerTestRecord, *loggerTestRecord, *loggerTestRecord](phase, "samples", &pointerBaseService{})
+	RegisterInstance[*loggerTestRecord, *loggerTestRecord, *loggerTestRecord](phase, "samples", &pointerBaseService{})
 	t.Cleanup(func() {
 		mu.Lock()
 		defer mu.Unlock()

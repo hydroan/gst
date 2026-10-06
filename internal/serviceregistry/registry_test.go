@@ -29,7 +29,7 @@ func TestRegisterAndResolve(t *testing.T) {
 	registered := &svc{}
 	phase := newPhase("test_register_and_resolve")
 
-	serviceregistry.Register[*testUser, *testUser, *testUser](phase, "samples", registered)
+	serviceregistry.RegisterInstance[*testUser, *testUser, *testUser](phase, "samples", registered)
 	resolved := serviceregistry.Resolve[*testUser, *testUser, *testUser](serviceregistry.Key(phase, "samples"))
 
 	require.Same(t, registered, resolved)
@@ -46,7 +46,7 @@ func TestKeyOfABlankRouteResolvesNoService(t *testing.T) {
 	}
 
 	phase := newPhase("test_blank_route_key")
-	serviceregistry.Register[*testUser, *testUser, *testUser](phase, "/", &svc{})
+	serviceregistry.RegisterInstance[*testUser, *testUser, *testUser](phase, "/", &svc{})
 	resolved := serviceregistry.Resolve[*testUser, *testUser, *testUser](serviceregistry.Key(phase, ""))
 
 	_, ok := resolved.(*serviceregistry.Base[*testUser, *testUser, *testUser])
@@ -77,7 +77,7 @@ func TestResolveSeesLateRegistration(t *testing.T) {
 	require.True(t, ok, "missing service should resolve to the no-op Base")
 
 	registered := &svc{}
-	serviceregistry.Register[*testUser, *testUser, *testUser](phase, "samples", registered)
+	serviceregistry.RegisterInstance[*testUser, *testUser, *testUser](phase, "samples", registered)
 
 	require.Same(t, registered, serviceregistry.Resolve[*testUser, *testUser, *testUser](key))
 }
@@ -98,8 +98,8 @@ func TestRegisterKeysByRoute(t *testing.T) {
 	start := &startSvc{}
 	stop := &stopSvc{}
 
-	serviceregistry.Register[*testUser, *testUser, *testUser](phase, "samples/:id/start", start)
-	serviceregistry.Register[*testUser, *testUser, *testUser](phase, "samples/:id/stop", stop)
+	serviceregistry.RegisterInstance[*testUser, *testUser, *testUser](phase, "samples/:id/start", start)
+	serviceregistry.RegisterInstance[*testUser, *testUser, *testUser](phase, "samples/:id/stop", stop)
 
 	require.Same(t, start, serviceregistry.Resolve[*testUser, *testUser, *testUser](serviceregistry.Key(phase, "samples/:id/start")))
 	require.Same(t, stop, serviceregistry.Resolve[*testUser, *testUser, *testUser](serviceregistry.Key(phase, "samples/:id/stop")))
@@ -114,10 +114,10 @@ func TestRegisterPanicsOnDuplicateRouteAndPhase(t *testing.T) {
 	}
 
 	phase := newPhase("test_register_duplicate")
-	serviceregistry.Register[*testUser, *testUser, *testUser](phase, "samples", &svc{})
+	serviceregistry.RegisterInstance[*testUser, *testUser, *testUser](phase, "samples", &svc{})
 
 	require.Panics(t, func() {
-		serviceregistry.Register[*testUser, *testUser, *testUser](phase, "samples", &svc{})
+		serviceregistry.RegisterInstance[*testUser, *testUser, *testUser](phase, "samples", &svc{})
 	})
 }
 
@@ -127,7 +127,7 @@ func TestRegisterPanicsOnEmptyRoute(t *testing.T) {
 	}
 
 	require.Panics(t, func() {
-		serviceregistry.Register[*testUser, *testUser, *testUser](consts.Phase("test_register_empty_route"), "  ", &svc{})
+		serviceregistry.RegisterInstance[*testUser, *testUser, *testUser](consts.Phase("test_register_empty_route"), "  ", &svc{})
 	})
 }
 
@@ -141,7 +141,7 @@ func TestResolveReturnsBaseOnTypeMismatch(t *testing.T) {
 	}
 
 	phase := newPhase("test_resolve_type_mismatch")
-	serviceregistry.Register[*testUser, *testUser, *testUser](phase, "samples", &svc{})
+	serviceregistry.RegisterInstance[*testUser, *testUser, *testUser](phase, "samples", &svc{})
 
 	var resolved any
 	require.NotPanics(t, func() {

@@ -28,7 +28,7 @@ var registeredTestServices sync.Map
 // shared across the runs, and the test resets that state first.
 func registerTestService[M types.Model, REQ types.Request, RSP types.Response](phase consts.Phase, route string, svc types.Service[M, REQ, RSP]) {
 	if _, registered := registeredTestServices.LoadOrStore(string(phase)+"|"+route, true); !registered {
-		serviceregistry.Register[M, REQ, RSP](phase, route, svc)
+		serviceregistry.RegisterInstance[M, REQ, RSP](phase, route, svc)
 	}
 }
 

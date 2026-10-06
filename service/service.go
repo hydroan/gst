@@ -7,9 +7,6 @@
 package service
 
 import (
-	"fmt"
-	"reflect"
-
 	"github.com/hydroan/gst/internal/consts"
 	"github.com/hydroan/gst/internal/serviceregistry"
 	"github.com/hydroan/gst/internal/types"
@@ -54,18 +51,5 @@ type Base[M types.Model, REQ types.Request, RSP types.Response] = serviceregistr
 //   - If Register is called after initialization (e.g., in Init function),
 //     logger.Service is already available, and the service.Logger will be set directly.
 func Register[S types.Service[M, REQ, RSP], M types.Model, REQ types.Request, RSP types.Response](phase consts.Phase, route string) {
-	typ := reflect.TypeFor[S]()
-	for typ.Kind() == reflect.Pointer {
-		typ = typ.Elem()
-	}
-
-	// A pointer to any concrete type that satisfies the constraint implements
-	// the service interface, so only an interface type argument fails here:
-	// it names no service to dispatch to, and registering nothing in its place
-	// would leave the route on the built-in handling without a word.
-	svc, ok := reflect.TypeAssert[types.Service[M, REQ, RSP]](reflect.New(typ))
-	if !ok {
-		panic(fmt.Sprintf("service: register of route %q phase %q requires a concrete service type, not the interface %s", route, phase, typ))
-	}
-	serviceregistry.Register[M, REQ, RSP](phase, route, svc)
+	serviceregistry.Register[S, M, REQ, RSP](phase, route)
 }
