@@ -6,6 +6,7 @@ import (
 	"maps"
 	"net"
 	"net/http"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -142,6 +143,25 @@ func TestCreateCallRefusesAnHTTPOnlyMethodBeforeWriting(t *testing.T) {
 		requireStatus(t, err, codes.Internal, types.FailureMsg)
 		require.Equal(t, 1, countSamplesNamed(t, name))
 	})
+}
+
+// TestCallsRefuseAnEmptyParentParameterWhateverItsName pins that only the
+// parameter carrying the id of an item action, the last one of its route, is
+// left to the call's own refusal: a parent parameter named id, the default
+// name of a model declaring no Param, is refused when empty on a collection
+// action and on an item action alike, and the item action refuses an empty
+// id by the field's name.
+func TestCallsRefuseAnEmptyParentParameterWhateverItsName(t *testing.T) {
+	conn := sampleServer(t)
+
+	_, err := invoke(t, conn, "ParentList", map[string]any{"params": map[string]string{"id": ""}})
+	requireStatus(t, err, codes.InvalidArgument, `route parameter "id" is required`)
+
+	_, err = invoke(t, conn, "ParentGet", map[string]any{"params": map[string]string{"id": ""}, "id": "s-1"})
+	requireStatus(t, err, codes.InvalidArgument, `route parameter "id" is required`)
+
+	_, err = invoke(t, conn, "ParentGet", map[string]any{"params": map[string]string{"id": "p-1"}})
+	requireStatus(t, err, codes.InvalidArgument, "id is required")
 }
 
 // TestGetCallAnswersTheRecordOrNotFound pins the get call: the record the id
@@ -766,8 +786,19 @@ func sampleServer(t *testing.T) *grpc.ClientConn {
 // message carries, and answers what the response message would.
 type rpcHandler func(ctx context.Context, in map[string]any) (any, error)
 
+// parentRoute nests the samples under a parent whose parameter is named id,
+// the default name of a model declaring no Param, written the way the
+// generated code writes the route of a collection action; parentItemRoute
+// is the route of its item actions, ending in the parameter carrying the
+// sample's id.
+const (
+	parentRoute     = "controller-parents/:id/samples"
+	parentItemRoute = parentRoute + "/:sample"
+)
+
 // sampleHandlers builds the rpcs of the sample service: the ten standard
 // actions of every fixture model on every fixture route (see standardRPCs),
+// the list and get of the samples nested under a parent (see parentRoute),
 // and the custom action of the sample, taking the query and the payload.
 func sampleHandlers() map[string]rpcHandler {
 	handlers := make(map[string]rpcHandler)
@@ -782,6 +813,16 @@ func sampleHandlers() map[string]rpcHandler {
 	standardRPCs[*shapedSample](handlers, shapedRoute, "Shaped")
 	standardRPCs[*validatedSample](handlers, validatedRoute, "Validated")
 	standardRPCs[*datedSample](handlers, datedRoute, "Dated")
+
+	parentList := controller.ListCall[*sampleRecord](parentRoute)
+	parentGet := controller.GetCall[*sampleRecord](parentItemRoute)
+	handlers["ParentList"] = func(ctx context.Context, in map[string]any) (any, error) {
+		return listing(parentList(ctx, params(in), field[controller.Query](in, "query")))
+	}
+	handlers["ParentGet"] = func(ctx context.Context, in map[string]any) (any, error) {
+		id := field[string](in, "id")
+		return parentGet(ctx, itemParams(parentItemRoute, params(in), id), id, field[controller.Query](in, "query"))
+	}
 
 	action := controller.ServiceCall[*sampleRecord, *sampleActionReq, *sampleActionRsp](consts.Create, actionRoute)
 	actionList := controller.ServiceCall[*sampleRecord, *sampleActionReq, *sampleActionRsp](consts.List, actionRoute)
@@ -856,20 +897,23 @@ func params(in map[string]any) map[string]string {
 
 // itemParams returns the route parameters of an item call the way a
 // generated handler builds them: the parameters the message carries plus,
-// under the parameter the route ends in, record for /api/records/:record,
-// or id for a route ending in none, the id the message names the record by,
-// whatever it holds (see the golden record.gen.go of cmd/gg).
+// under the last parameter segment of route, record for /api/records/:record
+// and id for iam/admin/users/:id/sessions, the id the message names the
+// record by, whatever it holds (see the golden record.gen.go of cmd/gg). A
+// route naming no parameter, as the fixture routes are written, gets the
+// parameters as they are.
 func itemParams(route string, given map[string]string, id string) map[string]string {
-	params := maps.Clone(given)
-	if params == nil {
-		params = make(map[string]string, 1)
+	for _, part := range slices.Backward(strings.Split(route, "/")) {
+		if name, ok := strings.CutPrefix(part, ":"); ok && name != "" {
+			params := maps.Clone(given)
+			if params == nil {
+				params = make(map[string]string, 1)
+			}
+			params[name] = id
+			return params
+		}
 	}
-	name := consts.PARAM_ID
-	if last := route[strings.LastIndex(route, "/")+1:]; strings.HasPrefix(last, ":") {
-		name = last[1:]
-	}
-	params[name] = id
-	return params
+	return given
 }
 
 // field converts in[key] into T through its JSON shape, the way a generated

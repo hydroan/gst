@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"reflect"
+	"slices"
 	"strings"
 	"time"
 
@@ -44,11 +45,12 @@ type action[M types.Model, REQ types.Request, RSP types.Response] struct {
 
 	idColumn types.Column[string] // the id column of M, the reference the batch flows read records by
 
-	// itemParam is the route parameter carrying the id of an item action,
-	// the last :segment of the route or id for a route ending in none, the
-	// default name; the generated gRPC handler fills it from the id field of
-	// the message, so beginCall leaves an empty one to the call to refuse by
-	// that field's name.
+	// itemParam is the route parameter carrying the id of an item action, a
+	// Get, Update, Patch or Delete: the last parameter segment of its route,
+	// the one the generated gRPC handler fills from the id field of the
+	// message (see modelinfo.RouterTargetForAction), so beginCall leaves an
+	// empty one to the call to refuse by that field's name; "" for any other
+	// action, which exempts no parameter.
 	itemParam string
 }
 
@@ -89,9 +91,9 @@ func newAction[M types.Model, REQ types.Request, RSP types.Response](route strin
 	for _, hookPhase := range hookPhases {
 		serviceSpans[hookPhase] = newPhaseSpan("service", name, hookPhase)
 	}
-	itemParam := consts.PARAM_ID
-	if last := route[strings.LastIndex(route, "/")+1:]; strings.HasPrefix(last, ":") {
-		itemParam = last[1:]
+	itemParam := ""
+	if itemPhases[phase] {
+		itemParam = lastRouteParam(route)
 	}
 
 	return &action[M, REQ, RSP]{
@@ -107,6 +109,24 @@ func newAction[M types.Model, REQ types.Request, RSP types.Response](route strin
 		idColumn:       types.NewColumn[M, string](modelregistry.KeyID),
 		itemParam:      itemParam,
 	}
+}
+
+// itemPhases are the phases of the item actions, whose route ends in the
+// parameter carrying the record's id.
+var itemPhases = map[consts.Phase]bool{consts.Get: true, consts.Update: true, consts.Patch: true, consts.Delete: true}
+
+// lastRouteParam returns the name of the last parameter segment of route,
+// written :name: record for /api/records/:record, id for
+// iam/admin/users/:id/sessions, and "" for a route naming none. It reads the
+// route the way the generator names the parameter the handler carries the
+// id under (see modelinfo.RouterTargetForAction).
+func lastRouteParam(route string) string {
+	for _, part := range slices.Backward(strings.Split(route, "/")) {
+		if name, ok := strings.CutPrefix(part, ":"); ok && name != "" {
+			return name
+		}
+	}
+	return ""
 }
 
 func newPhaseSpan(component, modelName string, phase consts.Phase) phaseSpan {
