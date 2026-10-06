@@ -1,6 +1,8 @@
 {
   "copy": {
-    "excludeSourceFiles": [],
+    "excludeSourceFiles": [
+      "internal/service/iam/session/store_testseam.go"
+    ],
     "middleware": [
       {
         "sourceFile": "middleware/iam_session.go",

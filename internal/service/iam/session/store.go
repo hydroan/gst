@@ -592,24 +592,6 @@ func (store) ClearLoginFailures(ctx context.Context, username string) {
 	_ = gstredis.Del(ctx, loginFailureKey(username))
 }
 
-// ---------- maintenance ----------
-
-// Purge drops every key IAM owns.
-//
-// It exists for tests that need a store with nothing in it. Every namespace is
-// dropped, not just the session one: the user-state cache and the login failure
-// counters are deliberately outside it, and a purge that left them would hand
-// the next test a locked-out account.
-func (store) Purge(ctx context.Context) error {
-	if err := gstredis.RemovePrefix(ctx, sessionNamespace); err != nil {
-		return err
-	}
-	if err := gstredis.RemovePrefix(ctx, userNamespace); err != nil {
-		return err
-	}
-	return gstredis.RemovePrefix(ctx, loginNamespace)
-}
-
 // logStoreWarning reports a storage failure the caller is not expected to act
 // on, which is why it is logged here rather than returned.
 //
