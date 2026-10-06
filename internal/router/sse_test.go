@@ -16,7 +16,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// The two routes below wire the SSE verb the way generated code does: the
+// The two routes below wire the SSE phase the way generated code does: the
 // service registers under the same raw route the router registers, and the
 // controller resolves it through the route-derived registry key.
 const (
@@ -99,7 +99,7 @@ func TestSSERouteStreamsEvents(t *testing.T) {
 
 func TestSSERouteIsMarkedStreaming(t *testing.T) {
 	require.True(t, middleware.IsStreamingRoute(http.MethodGet, "/api/"+sseStreamRoute),
-		"the SSE verb must mark its route as streaming for the middleware exemptions")
+		"the SSE phase must mark its route as streaming for the middleware exemptions")
 	require.False(t, middleware.IsStreamingRoute(http.MethodPost, "/api/"+sseStreamRoute))
 }
 

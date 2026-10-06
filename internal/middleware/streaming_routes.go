@@ -16,7 +16,7 @@ import (
 // concerned consult the registry and leave streaming requests alone.
 //
 // Routes are marked as they register — the router marks every route
-// registered with the SSE verb; tests mark theirs by hand — keyed by method
+// registered with the SSE phase; tests mark theirs by hand — keyed by method
 // and the route pattern gin reports as FullPath.
 var (
 	streamingRouteMu sync.RWMutex

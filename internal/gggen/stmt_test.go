@@ -160,8 +160,8 @@ func TestStmtModelRegister(t *testing.T) {
 		},
 		{
 			name:       "model_of_another_package",
-			structName: "sample.Group",
-			want:       `model.Register[*sample.Group]()`,
+			structName: "sample.Record",
+			want:       `model.Register[*sample.Record]()`,
 		},
 	}
 	for _, tt := range tests {
@@ -230,71 +230,71 @@ func TestStmtRouterRegister(t *testing.T) {
 		routerGroup  string
 		route        string
 		paramName    string
-		verb         string
+		phase        string
 		want         string
 	}{
 		{
 			// An example of the StmtRouterRegister doc comment.
 			name:         "model_as_payload_and_result",
 			modelPkgName: "model",
-			modelName:    "Group",
-			reqName:      "*Group",
-			rspName:      "*Group",
+			modelName:    "Record",
+			reqName:      "*Record",
+			rspName:      "*Record",
 			gstModelPkg:  "model",
 			routerGroup:  "Auth",
-			route:        "/api/group",
-			verb:         "Create",
-			want:         `router.Register[*model.Group, *model.Group, *model.Group](router.Auth(), "/api/group", &gst.ControllerConfig[*model.Group]{}, consts.Create)`,
+			route:        "/api/records",
+			phase:        "Create",
+			want:         `router.Register[*model.Record, *model.Record, *model.Record](router.Auth(), "/api/records", &gst.ControllerConfig[*model.Record]{}, consts.Create)`,
 		},
 		{
 			// Bare action type names (the declared form of slice and map
 			// action types) are transcribed as value types.
 			name:         "bare_names_transcribed",
 			modelPkgName: "pkgmodel",
-			modelName:    "Group",
+			modelName:    "Record",
 			reqName:      "GroupRequest",
 			rspName:      "GroupResponse",
 			gstModelPkg:  "model",
 			routerGroup:  "Auth",
 			route:        "/api/group2",
-			verb:         "Update",
-			want:         `router.Register[*pkgmodel.Group, pkgmodel.GroupRequest, pkgmodel.GroupResponse](router.Auth(), "/api/group2", &gst.ControllerConfig[*pkgmodel.Group]{}, consts.Update)`,
+			phase:        "Update",
+			want:         `router.Register[*pkgmodel.Record, pkgmodel.GroupRequest, pkgmodel.GroupResponse](router.Auth(), "/api/group2", &gst.ControllerConfig[*pkgmodel.Record]{}, consts.Update)`,
 		},
 		{
 			name:         "starred_names_in_pub_group",
 			modelPkgName: "pkgmodel",
-			modelName:    "Group",
+			modelName:    "Record",
 			reqName:      "*GroupRequest",
 			rspName:      "*GroupResponse",
 			gstModelPkg:  "model",
 			routerGroup:  "Pub",
 			route:        "/api/login",
-			verb:         "Update",
-			want:         `router.Register[*pkgmodel.Group, *pkgmodel.GroupRequest, *pkgmodel.GroupResponse](router.Pub(), "/api/login", &gst.ControllerConfig[*pkgmodel.Group]{}, consts.Update)`,
+			phase:        "Update",
+			want:         `router.Register[*pkgmodel.Record, *pkgmodel.GroupRequest, *pkgmodel.GroupResponse](router.Pub(), "/api/login", &gst.ControllerConfig[*pkgmodel.Record]{}, consts.Update)`,
 		},
 		{
 			name:         "list_with_empty_payload",
 			modelPkgName: "group",
-			modelName:    "Group",
+			modelName:    "Record",
 			reqName:      dsl.PayloadEmpty,
 			rspName:      "*GroupListRsp",
 			gstModelPkg:  "model",
 			routerGroup:  "Auth",
 			route:        "/api/groups",
-			verb:         "List",
-			want:         `router.Register[*group.Group, *model.Empty, *group.GroupListRsp](router.Auth(), "/api/groups", &gst.ControllerConfig[*group.Group]{}, consts.List)`,
+			phase:        "List",
+			want:         `router.Register[*group.Record, *model.Empty, *group.GroupListRsp](router.Auth(), "/api/groups", &gst.ControllerConfig[*group.Record]{}, consts.List)`,
 		},
 		{
 			name:         "create_with_empty_result",
 			modelPkgName: "group",
-			modelName:    "Group",
+			modelName:    "Record",
 			reqName:      "*GroupCreateReq",
 			rspName:      dsl.PayloadEmpty,
 			gstModelPkg:  "model",
 			routerGroup:  "Auth",
 			route:        "/api/groups",
-			verb:         "Create",
-			want:         `router.Register[*group.Group, *group.GroupCreateReq, *model.Empty](router.Auth(), "/api/groups", &gst.ControllerConfig[*group.Group]{}, consts.Create)`,
+			phase:        "Create",
+			want:         `router.Register[*group.Record, *group.GroupCreateReq, *model.Empty](router.Auth(), "/api/groups", &gst.ControllerConfig[*group.Record]{}, consts.Create)`,
 		},
 		{
 			// A project routing a root model package keeps the gstmodel
@@ -303,34 +303,34 @@ func TestStmtRouterRegister(t *testing.T) {
 			// comment.
 			name:         "empty_payload_in_root_model_package_keeps_gstmodel_alias",
 			modelPkgName: "model",
-			modelName:    "Group",
+			modelName:    "Record",
 			reqName:      dsl.PayloadEmpty,
 			rspName:      "*GroupListRsp",
 			gstModelPkg:  "gstmodel",
 			routerGroup:  "Auth",
 			route:        "/api/groups",
-			verb:         "List",
-			want:         `router.Register[*model.Group, *gstmodel.Empty, *model.GroupListRsp](router.Auth(), "/api/groups", &gst.ControllerConfig[*model.Group]{}, consts.List)`,
+			phase:        "List",
+			want:         `router.Register[*model.Record, *gstmodel.Empty, *model.GroupListRsp](router.Auth(), "/api/groups", &gst.ControllerConfig[*model.Record]{}, consts.List)`,
 		},
 		{
 			// A route ending in a path parameter names it in the controller
 			// config. An example of the StmtRouterRegister doc comment.
 			name:         "route_param_named_in_controller_config",
 			modelPkgName: "group",
-			modelName:    "Group",
-			reqName:      "*Group",
-			rspName:      "*Group",
+			modelName:    "Record",
+			reqName:      "*Record",
+			rspName:      "*Record",
 			gstModelPkg:  "model",
 			routerGroup:  "Auth",
 			route:        "/api/groups/:id",
 			paramName:    "id",
-			verb:         "Get",
-			want:         `router.Register[*group.Group, *group.Group, *group.Group](router.Auth(), "/api/groups/:id", &gst.ControllerConfig[*group.Group]{ParamName: "id"}, consts.Get)`,
+			phase:        "Get",
+			want:         `router.Register[*group.Record, *group.Record, *group.Record](router.Auth(), "/api/groups/:id", &gst.ControllerConfig[*group.Record]{ParamName: "id"}, consts.Get)`,
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			res := gggen.StmtRouterRegister(tt.modelPkgName, tt.modelName, tt.reqName, tt.rspName, tt.gstModelPkg, tt.routerGroup, tt.route, tt.paramName, tt.verb)
+			res := gggen.StmtRouterRegister(tt.modelPkgName, tt.modelName, tt.reqName, tt.rspName, tt.gstModelPkg, tt.routerGroup, tt.route, tt.paramName, tt.phase)
 			got, err := gggen.FormatNode(res)
 			if err != nil {
 				t.Error(err)

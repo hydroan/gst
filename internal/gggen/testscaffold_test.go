@@ -96,7 +96,7 @@ func feedTarget(file string) modelinfo.ServiceTargetInfo {
 }
 
 // TestGenerateServiceTestExamples pins the example request of every action
-// shape: the verb picks the client call, the route and its parameter the
+// shape: the phase picks the client call, the route and its parameter the
 // path, and the action types the request and response types.
 func TestGenerateServiceTestExamples(t *testing.T) {
 	tests := []struct {

@@ -37,30 +37,30 @@ func TestRegisterPanicsOnDeclarationMistakes(t *testing.T) {
 	})
 }
 
-// TestRegisterServesEveryVerbUnderItsMethod pins the method the router serves
-// each verb under to consts.Phase.HTTPMethod, the table gg routes, gg
+// TestRegisterServesEveryPhaseUnderItsMethod pins the method the router serves
+// each phase under to consts.Phase.HTTPMethod, the table gg routes, gg
 // route-tree and gg gen's route ignore rules read as well: the engine routes
 // the method, and Routes records it.
-func TestRegisterServesEveryVerbUnderItsMethod(t *testing.T) {
+func TestRegisterServesEveryPhaseUnderItsMethod(t *testing.T) {
 	engine := gin.New()
 	group := engine.Group("")
-	verbs := []consts.Phase{
+	phases := []consts.Phase{
 		consts.Create, consts.Delete, consts.Update, consts.Patch, consts.List, consts.Get,
 		consts.CreateMany, consts.DeleteMany, consts.UpdateMany, consts.PatchMany,
 		consts.Import, consts.Export, consts.SSE,
 	}
-	for _, verb := range verbs {
-		router.Register[*modelregistry.Empty, *modelregistry.Empty, *modelregistry.Empty](group, "verb-methods/"+string(verb), nil, verb)
+	for _, phase := range phases {
+		router.Register[*modelregistry.Empty, *modelregistry.Empty, *modelregistry.Empty](group, "phase-methods/"+string(phase), nil, phase)
 	}
 
-	served := make(map[string]string, len(verbs))
+	served := make(map[string]string, len(phases))
 	for _, route := range engine.Routes() {
 		served[route.Path] = route.Method
 	}
 	recorded := router.Routes()
-	for _, verb := range verbs {
-		path := consts.APIPath("verb-methods/" + string(verb))
-		require.Equal(t, verb.HTTPMethod(), served[path], "verb %s", verb)
-		require.Equal(t, []string{verb.HTTPMethod()}, recorded[path], "verb %s", verb)
+	for _, phase := range phases {
+		path := consts.APIPath("phase-methods/" + string(phase))
+		require.Equal(t, phase.HTTPMethod(), served[path], "phase %s", phase)
+		require.Equal(t, []string{phase.HTTPMethod()}, recorded[path], "phase %s", phase)
 	}
 }

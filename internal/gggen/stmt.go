@@ -159,9 +159,9 @@ func StmtServiceRegister(serviceImport string, phase consts.Phase, route string)
 // RouterGstModelUse. routerGroup names the router group accessor ("Auth" or
 // "Pub"), route is the path the route is served at, shared verbatim with the
 // matching StmtServiceRegister statement, paramName is the route parameter the
-// controller reads the resource id from, "" for none, and verb names the
+// controller reads the resource id from, "" for none, and phase names the
 // consts value of the action, such as Create.
-func StmtRouterRegister(modelPkgName, modelName, reqName, rspName, gstModelPkg string, routerGroup string, route string, paramName string, verb string) *ast.ExprStmt {
+func StmtRouterRegister(modelPkgName, modelName, reqName, rspName, gstModelPkg string, routerGroup string, route string, paramName string, phase string) *ast.ExprStmt {
 	// The dsl.PayloadEmpty sentinel on either side resolves to
 	// *<gstModelPkg>.Empty. gstModelPkg is the file-level qualifier decided
 	// once per router file by RouterGstModelUse: plain "model" by default,
@@ -263,7 +263,7 @@ func StmtRouterRegister(modelPkgName, modelName, reqName, rspName, gstModelPkg s
 				paramExpr,
 				&ast.SelectorExpr{
 					X:   ast.NewIdent("consts"),
-					Sel: ast.NewIdent(verb),
+					Sel: ast.NewIdent(phase),
 				},
 			},
 		},
