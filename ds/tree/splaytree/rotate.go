@@ -3,18 +3,18 @@ package splaytree
 // rotateZigRight 右单旋（Zig 旋转）
 //
 //	Before Rotation:
-//	    g
-//	   / \
-//	  p   C
-//	 / \
-//	A   B
+//	     g
+//	    / \
+//	   p   C
+//	  / \
+//	 A   B
 //
 //	After Rotation:
-//	    p
-//	   / \
-//	  A   g
-//	     / \
-//	    B   C
+//	     p
+//	    / \
+//	   A   g
+//	      / \
+//	     B   C
 func rotateZigRight[K comparable, V any](g *Node[K, V]) *Node[K, V] {
 	if g == nil || g.Children[0] == nil {
 		return g
@@ -43,18 +43,18 @@ func rotateZigRight[K comparable, V any](g *Node[K, V]) *Node[K, V] {
 // rotateZigLeft 左单旋（Zig 旋转）
 //
 //	Before Rotation:
-//	    g
-//	   / \
-//	  A   p
-//	     / \
-//	    B   C
+//	     g
+//	    / \
+//	   A   p
+//	      / \
+//	     B   C
 //
 //	After Rotation:
-//	    p
-//	   / \
-//	  g   C
-//	 / \
-//	A   B
+//	     p
+//	    / \
+//	   g   C
+//	  / \
+//	 A   B
 func rotateZigLeft[K comparable, V any](g *Node[K, V]) *Node[K, V] {
 	if g == nil || g.Children[1] == nil {
 		return g
@@ -84,20 +84,20 @@ func rotateZigLeft[K comparable, V any](g *Node[K, V]) *Node[K, V] {
 //
 // Step 1: 先对 g 和 p 进行 **Zig 右旋**
 //
-//	     g
+//	       g
+//	      / \
+//	     p   D
 //	    / \
-//	   p   D
+//	   x   C
 //	  / \
-//	 x   C
-//	/ \
-//	A   B
+//	 A   B
 //
 //	Zig 右旋后：
-//	   p
-//	  / \
-//	 x   g
-//	/ \  / \
-//	A   B C  D
+//	     p
+//	    / \
+//	   x   g
+//	  / \  / \
+//	 A   B C  D
 //
 // Step 2: 再对 p 和 x 进行 **Zig 右旋**
 //
@@ -155,28 +155,28 @@ func rotateZigZigRight[K comparable, V any](g *Node[K, V]) *Node[K, V] {
 //
 // Step 1: 先对 g 和 p 进行 **Zig 左旋**
 //
-//	 g
-//	/ \
-//	A   p
+//	   g
 //	  / \
-//	 B   x
+//	 A   p
 //	    / \
-//	   C   D
+//	   B   x
+//	      / \
+//	     C   D
 //
 //	Zig 左旋后：
-//	   p
-//	  / \
-//	 g   x
-//	/ \  / \
-//	A   B C  D
+//	     p
+//	    / \
+//	   g   x
+//	  / \  / \
+//	 A   B C  D
 //
 // Step 2: 再对 p 和 x 进行 **Zig 左旋**
 //
-//	   x
+//	     x
+//	    / \
+//	   p   D
 //	  / \
-//	 p   D
-//	/ \
-//	g   C
+//	 g   C
 //	/ \
 //
 // A   B
@@ -227,29 +227,29 @@ func rotateZigZigLeft[K comparable, V any](g *Node[K, V]) *Node[K, V] {
 //
 // Step 1: 先对 p 和 x 进行 **Zig 右旋**
 //
-//	 g
-//	/ \
-//	D   p
-//	  / \
-//	 x   C
-//	/ \
-//	A   B
-//
-//	右旋后：
 //	   g
 //	  / \
-//	 D   x
+//	 D   p
 //	    / \
-//	   A   p
+//	   x   C
+//	  / \
+//	 A   B
+//
+//	右旋后：
+//	     g
+//	    / \
+//	   D   x
 //	      / \
-//	     B   C
+//	     A   p
+//	        / \
+//	       B   C
 //
 // Step 2: 再对 g 和 x 进行 **Zig 左旋**
 //
-//	   x
-//	  / \
-//	 g   p
-//	/   / \
+//	    x
+//	   / \
+//	  g   p
+//	 /   / \
 //	D   B   C
 func rotateZigZagRightLeft[K comparable, V any](g *Node[K, V]) *Node[K, V] {
 	if g == nil || g.Children[1] == nil || g.Children[1].Children[0] == nil {
@@ -297,30 +297,30 @@ func rotateZigZagRightLeft[K comparable, V any](g *Node[K, V]) *Node[K, V] {
 //
 // Step 1: 先对 p 和 x 进行 **Zig 左旋**
 //
-//	   g
-//	  / \
-//	 p   C
-//	  \
-//	   x
-//	  / \
-//	 A   B
+//	     g
+//	    / \
+//	   p   C
+//	    \
+//	     x
+//	    / \
+//	   A   B
 //
 //	左旋后：
-//	   g
+//	     g
+//	    / \
+//	   x   C
 //	  / \
-//	 x   C
-//	/ \
-//	p   B
+//	 p   B
 //	/
 //
-// # A
+// A
 //
 // Step 2: 再对 g 和 x 进行 **Zig 右旋**
 //
-//	   x
-//	  / \
-//	 p   g
-//	/   / \
+//	    x
+//	   / \
+//	  p   g
+//	 /   / \
 //	A   B   C
 func rotateZigZagLeftRight[K comparable, V any](g *Node[K, V]) *Node[K, V] {
 	if g == nil || g.Children[0] == nil || g.Children[0].Children[1] == nil {

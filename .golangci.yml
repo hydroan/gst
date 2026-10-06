@@ -293,10 +293,13 @@ linters:
       options:
         start-with-name:
           # A doc comment that opens with another declaration's name was
-          # left behind by an insertion between a neighbour's comment and its
+          # left behind by an insertion between a neighbor's comment and its
           # declaration, so every declaration, unexported ones included, must
-          # open with its own name; the exclusions below keep this rule on for
-          # test files as well.
+          # open with its own name. golangci-lint never lets this rule read
+          # test files, so their doc comments are held to it by selfcheck's
+          # testdoc check instead; godoclint is still kept off the test file
+          # exclusions below so that its other rules, deprecated among them,
+          # read test files too.
           include-unexported: true
 
     govet:
