@@ -127,10 +127,10 @@ func TestLoadModuleManifestReadsMiddleware(t *testing.T) {
 	manifest, err := loadModuleManifest(moduleDir)
 
 	require.NoError(t, err)
-	require.Equal(t, []moduleCopyMiddlewareManifest{
+	require.Equal(t, []moduleCopyHandlerManifest{
 		{
 			SourceFile: "middleware/copy_auth.go",
-			Scope:      moduleCopyMiddlewareScopeAuth,
+			Scope:      moduleCopyHandlerScopeAuth,
 			Handler:    "CopyAuth",
 		},
 	}, manifest.Copy.Middleware)

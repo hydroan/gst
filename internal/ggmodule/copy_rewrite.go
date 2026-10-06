@@ -44,12 +44,12 @@ func normalizeModuleServiceSource(filename string, src []byte, config moduleCopy
 	return normalizeModuleCopySource(filename, src, config, true)
 }
 
-// normalizeModuleMiddlewareSource rewrites manifest-declared middleware files
-// into the current project's middleware package. Middleware can legitimately
-// depend on copied model/service packages, so it uses the same import rewrite
-// rules as service helpers while keeping the target package owned by the
-// middleware destination directory.
-func normalizeModuleMiddlewareSource(filename string, src []byte, config moduleCopyRewriteConfig) ([]byte, error) {
+// normalizeModuleHandlerSource rewrites manifest-declared handler files,
+// middleware and interceptors, into the current project's package of that
+// kind. A handler can legitimately depend on copied model/service packages,
+// so it uses the same import rewrite rules as service helpers while keeping
+// the target package owned by the destination directory.
+func normalizeModuleHandlerSource(filename string, src []byte, config moduleCopyRewriteConfig) ([]byte, error) {
 	return normalizeModuleCopySource(filename, src, config, true)
 }
 

@@ -54,28 +54,29 @@ func managedDirOf(dir string) (managedDir, error) {
 	return managedDir{}, fmt.Errorf("%s is not a directory module copy manages", dir)
 }
 
-// middlewareMarkerPrefix opens the ownership marker line module copy writes at
-// the top of every copied middleware file. The middleware directory is shared
-// with project-owned handlers, so this marker is the only proof that a file
-// belongs to a copied module and may be pruned with it.
-const middlewareMarkerPrefix = "// Managed by gg module copy (module "
+// handlerMarkerPrefix opens the ownership marker line module copy writes at
+// the top of every copied handler file, middleware or interceptor. Both
+// directories are shared with project-owned handlers, so this marker is the
+// only proof that a file belongs to a copied module and may be pruned with
+// it.
+const handlerMarkerPrefix = "// Managed by gg module copy (module "
 
-// moduleCopyMiddlewareMarker returns the ownership marker line for one module.
-func moduleCopyMiddlewareMarker(moduleName string) string {
-	return middlewareMarkerPrefix + moduleName + "). Removing the module removes this file."
+// moduleCopyHandlerMarker returns the ownership marker line for one module.
+func moduleCopyHandlerMarker(moduleName string) string {
+	return handlerMarkerPrefix + moduleName + "). Removing the module removes this file."
 }
 
-// middlewareMarkerModule returns the module name a middleware file declares in
+// handlerMarkerModule returns the module name a middleware file declares in
 // its ownership marker, or "" for files module copy does not own. Only lines
 // before the package clause count, mirroring where the copy writes the marker.
-func middlewareMarkerModule(path string) (string, error) {
+func handlerMarkerModule(path string) (string, error) {
 	content, err := os.ReadFile(path)
 	if err != nil {
 		return "", err
 	}
 	for line := range strings.SplitSeq(string(content), "\n") {
 		line = strings.TrimSuffix(line, "\r")
-		if after, ok := strings.CutPrefix(line, middlewareMarkerPrefix); ok {
+		if after, ok := strings.CutPrefix(line, handlerMarkerPrefix); ok {
 			if name, _, found := strings.Cut(after, ")"); found {
 				return name, nil
 			}
@@ -87,34 +88,34 @@ func middlewareMarkerModule(path string) (string, error) {
 	return "", nil
 }
 
-// moduleCopyMiddleware connects one manifest-declared framework middleware
+// moduleCopyHandler connects one manifest-declared framework middleware
 // or interceptor file to the project-owned file and registration call that
 // module copy will create. Unlike action service files, such a file is not
 // merged onto a generated shell. The whole source file is normalized into
 // the project's package of the same name, which rewrites only the package
 // clause and the copied model/service imports.
-type moduleCopyMiddleware struct {
+type moduleCopyHandler struct {
 	SourcePath string
 	TargetPath string
-	Scope      moduleCopyMiddlewareScope
+	Scope      moduleCopyHandlerScope
 	Handler    string
 }
 
 // resolveHandlers connects the manifest-declared handler files, middleware
 // or interceptors, to their targets under targetDir, the project's
 // directory of the same kind.
-func (p *CopyPlan) resolveHandlers(manifest []moduleCopyMiddlewareManifest, targetDir string) ([]moduleCopyMiddleware, error) {
-	middleware := make([]moduleCopyMiddleware, 0, len(manifest))
+func (p *CopyPlan) resolveHandlers(manifest []moduleCopyHandlerManifest, targetDir string) ([]moduleCopyHandler, error) {
+	middleware := make([]moduleCopyHandler, 0, len(manifest))
 	for _, item := range manifest {
 		// The manifest stores framework-root relative paths so module.json
 		// remains stable wherever the framework source resolves: the module
 		// cache, a replace directory, or the framework repository itself.
 		sourcePath := filepath.Join(p.FrameworkRoot, filepath.FromSlash(item.SourceFile))
 		targetPath := filepath.Join(targetDir, filepath.Base(item.SourceFile))
-		if err := requireMiddlewareSourceFile(sourcePath, item.Handler); err != nil {
+		if err := requireHandlerSourceFile(sourcePath, item.Handler); err != nil {
 			return nil, err
 		}
-		middleware = append(middleware, moduleCopyMiddleware{
+		middleware = append(middleware, moduleCopyHandler{
 			SourcePath: sourcePath,
 			TargetPath: targetPath,
 			Scope:      item.Scope,
@@ -127,9 +128,9 @@ func (p *CopyPlan) resolveHandlers(manifest []moduleCopyMiddlewareManifest, targ
 	return middleware, nil
 }
 
-func requireMiddlewareSourceFile(sourcePath string, handler string) error {
+func requireHandlerSourceFile(sourcePath string, handler string) error {
 	if _, err := os.Stat(sourcePath); err != nil {
-		return fmt.Errorf("source middleware file not found for %s: %w", filepath.Base(sourcePath), err)
+		return fmt.Errorf("source handler file not found for %s: %w", filepath.Base(sourcePath), err)
 	}
 
 	fset := token.NewFileSet()
@@ -147,35 +148,35 @@ func requireMiddlewareSourceFile(sourcePath string, handler string) error {
 		// does not compile. Failing here names the manifest entry instead of
 		// leaving the copied project broken.
 		if fn.Type.Params != nil && len(fn.Type.Params.List) > 0 {
-			return fmt.Errorf("middleware handler %s in %s must take no arguments", handler, sourcePath)
+			return fmt.Errorf("handler %s in %s must take no arguments", handler, sourcePath)
 		}
 
 		return nil
 	}
-	return fmt.Errorf("source middleware file %s does not declare handler %s", sourcePath, handler)
+	return fmt.Errorf("source handler file %s does not declare handler %s", sourcePath, handler)
 }
 
 // addHandlerFiles plans the copies of the handler files items, middleware
 // or interceptors, as files of kind.
-func (p *CopyPlan) addHandlerFiles(items []moduleCopyMiddleware, kind moduleCopyFileKind) error {
-	for _, middleware := range items {
-		src, err := os.ReadFile(middleware.SourcePath)
+func (p *CopyPlan) addHandlerFiles(items []moduleCopyHandler, kind moduleCopyFileKind) error {
+	for _, handler := range items {
+		src, err := os.ReadFile(handler.SourcePath)
 		if err != nil {
 			return err
 		}
-		content, err := normalizeModuleMiddlewareSource(middleware.SourcePath, src, p.rewriteConfig(middleware.TargetPath))
+		content, err := normalizeModuleHandlerSource(handler.SourcePath, src, p.rewriteConfig(handler.TargetPath))
 		if err != nil {
 			return err
 		}
 		// The ownership marker is part of the planned content, so idempotent
 		// re-copies compare equal and a marker-less file at the target shows up
 		// as a --force overwrite that brings it under prune management.
-		content = append([]byte(moduleCopyMiddlewareMarker(p.Name)+"\n\n"), content...)
+		content = append([]byte(moduleCopyHandlerMarker(p.Name)+"\n\n"), content...)
 		p.Files = append(p.Files, moduleCopyFile{
 			Kind:        kind,
-			TargetPath:  middleware.TargetPath,
+			TargetPath:  handler.TargetPath,
 			Content:     content,
-			Preexisting: gghelper.FileExists(middleware.TargetPath),
+			Preexisting: gghelper.FileExists(handler.TargetPath),
 		})
 	}
 	return nil
@@ -219,7 +220,7 @@ func (p *CopyPlan) staleHandlerFiles(dir string, planned []string) ([]string, er
 		if filepath.Base(path) == md.registrationFile || written[path] {
 			continue
 		}
-		owner, ownerErr := middlewareMarkerModule(path)
+		owner, ownerErr := handlerMarkerModule(path)
 		if ownerErr != nil {
 			return nil, ownerErr
 		}
@@ -273,7 +274,7 @@ func OrphanManagedFiles(dir, modelDir string) ([]OrphanManagedFile, error) {
 		if filepath.Base(path) == md.registrationFile {
 			continue
 		}
-		owner, ownerErr := middlewareMarkerModule(path)
+		owner, ownerErr := handlerMarkerModule(path)
 		if ownerErr != nil {
 			return nil, ownerErr
 		}
@@ -299,20 +300,20 @@ func OrphanManagedFiles(dir, modelDir string) ([]OrphanManagedFile, error) {
 // this module, so the proof must be taken while the old content is still
 // there. Only files carrying this module's marker count — an unmarked
 // preexisting file is not provably module-owned.
-func (e *CopyExecution) handlersOnDisk(items []moduleCopyMiddleware) (map[string]bool, error) {
+func (e *CopyExecution) handlersOnDisk(items []moduleCopyHandler) (map[string]bool, error) {
 	handlers := make(map[string]bool)
-	for _, middleware := range items {
-		if !gghelper.FileExists(middleware.TargetPath) {
+	for _, handler := range items {
+		if !gghelper.FileExists(handler.TargetPath) {
 			continue
 		}
-		owner, err := middlewareMarkerModule(middleware.TargetPath)
+		owner, err := handlerMarkerModule(handler.TargetPath)
 		if err != nil {
 			return nil, err
 		}
 		if owner != e.Plan.Name {
 			continue
 		}
-		names, err := topLevelFunctionNames(middleware.TargetPath)
+		names, err := topLevelFunctionNames(handler.TargetPath)
 		if err != nil {
 			return nil, err
 		}
@@ -338,7 +339,7 @@ func (e *CopyExecution) handlersOnDisk(items []moduleCopyMiddleware) (map[string
 // explanatory comments, grouped imports, or existing init work; AST editing
 // preserves those structures while touching only the import and calls owned
 // by module copy.
-func (e *CopyExecution) reconcileRegistrations(md managedDir, targetDir string, items []moduleCopyMiddleware, obsoleteHandlers map[string]bool) (status CopyWriteStatus, path string, err error) {
+func (e *CopyExecution) reconcileRegistrations(md managedDir, targetDir string, items []moduleCopyHandler, obsoleteHandlers map[string]bool) (status CopyWriteStatus, path string, err error) {
 	targetPath := filepath.Join(targetDir, md.registrationFile)
 	fset, file, preexisting, err := parseOrCreateRegistrationFile(targetPath, md.pkg)
 	if err != nil {
@@ -350,15 +351,15 @@ func (e *CopyExecution) reconcileRegistrations(md managedDir, targetDir string, 
 		ownedHandlers[name] = true
 	}
 	expected := make(map[string]bool, len(items))
-	for _, middleware := range items {
-		names, namesErr := topLevelFunctionNames(middleware.TargetPath)
+	for _, item := range items {
+		names, namesErr := topLevelFunctionNames(item.TargetPath)
 		if namesErr != nil {
 			return "", "", namesErr
 		}
 		for _, name := range names {
 			ownedHandlers[name] = true
 		}
-		expected[middlewareRegisterMethod(middleware)+"/"+middleware.Handler] = true
+		expected[handlerRegisterMethod(item)+"/"+item.Handler] = true
 	}
 
 	changed := false
@@ -372,7 +373,7 @@ func (e *CopyExecution) reconcileRegistrations(md managedDir, targetDir string, 
 			kept := make([]ast.Stmt, 0, len(fn.Body.List))
 			for _, stmt := range fn.Body.List {
 				if call, isCall := callExprFromStmt(stmt); isCall {
-					if method, handler, isRegister := parseMiddlewareRegisterCall(call, importAlias); isRegister && ownedHandlers[handler] && !expected[method+"/"+handler] {
+					if method, handler, isRegister := parseHandlerRegisterCall(call, importAlias); isRegister && ownedHandlers[handler] && !expected[method+"/"+handler] {
 						changed = true
 						continue
 					}
@@ -387,7 +388,7 @@ func (e *CopyExecution) reconcileRegistrations(md managedDir, targetDir string, 
 		importAlias = md.pkg
 	}
 	for _, item := range items {
-		if ensureMiddlewareRegisterCall(file, importAlias, item) {
+		if ensureHandlerRegisterCall(file, importAlias, item) {
 			changed = true
 		}
 	}
@@ -469,7 +470,7 @@ func RemoveManagedFiles(dir string, paths []string, report func(status CopyWrite
 // framework package of md, whose zero-argument handler constructors are
 // named in handlerNames from the registration file of the managed directory
 // dir, and returns the file and whether it rewrote it. It edits only init
-// functions, mirrors the shape matching of ensureMiddlewareRegisterCall, and
+// functions, mirrors the shape matching of ensureHandlerRegisterCall, and
 // leaves the registration file untouched when nothing matches. When the
 // dropped calls were the framework import's last use, the import goes with
 // them, so the file still compiles.
@@ -502,7 +503,7 @@ func removeRegistrations(md managedDir, dir string, handlerNames map[string]bool
 		}
 		kept := make([]ast.Stmt, 0, len(fn.Body.List))
 		for _, stmt := range fn.Body.List {
-			if call, isCall := callExprFromStmt(stmt); isCall && isPrunedMiddlewareRegisterCall(call, importAlias, handlerNames) {
+			if call, isCall := callExprFromStmt(stmt); isCall && isPrunedHandlerRegisterCall(call, importAlias, handlerNames) {
 				changed = true
 				continue
 			}
@@ -524,19 +525,19 @@ func removeRegistrations(md managedDir, dir string, handlerNames map[string]bool
 	return safePath, true, nil
 }
 
-// isPrunedMiddlewareRegisterCall matches middleware.Register(Handler()) and
+// isPrunedHandlerRegisterCall matches middleware.Register(Handler()) and
 // middleware.RegisterAuth(Handler()) calls whose handler name a pruned file
 // declared.
-func isPrunedMiddlewareRegisterCall(call *ast.CallExpr, importAlias string, handlerNames map[string]bool) bool {
-	_, handler, ok := parseMiddlewareRegisterCall(call, importAlias)
+func isPrunedHandlerRegisterCall(call *ast.CallExpr, importAlias string, handlerNames map[string]bool) bool {
+	_, handler, ok := parseHandlerRegisterCall(call, importAlias)
 	return ok && handlerNames[handler]
 }
 
-// parseMiddlewareRegisterCall recognizes the exact call shape module copy
+// parseHandlerRegisterCall recognizes the exact call shape module copy
 // manages — middleware.Register(Handler()) or middleware.RegisterAuth(
 // Handler()) with a zero-argument handler constructor — and returns its
 // method and handler names.
-func parseMiddlewareRegisterCall(call *ast.CallExpr, importAlias string) (method string, handler string, ok bool) {
+func parseHandlerRegisterCall(call *ast.CallExpr, importAlias string) (method string, handler string, ok bool) {
 	sel, selOK := call.Fun.(*ast.SelectorExpr)
 	if !selOK || (sel.Sel.Name != "Register" && sel.Sel.Name != "RegisterAuth") || len(call.Args) != 1 {
 		return "", "", false
@@ -619,23 +620,23 @@ func dropUnusedFrameworkImport(fset *token.FileSet, file *ast.File, md managedDi
 	}
 }
 
-func ensureMiddlewareRegisterCall(file *ast.File, importAlias string, middleware moduleCopyMiddleware) bool {
+func ensureHandlerRegisterCall(file *ast.File, importAlias string, handler moduleCopyHandler) bool {
 	return ensureInitCall(file,
-		func(initFn *ast.FuncDecl) bool { return middlewareRegisterCallExists(initFn, importAlias, middleware) },
-		func(pos token.Pos) ast.Stmt { return middlewareRegisterCallStmt(importAlias, middleware, pos) })
+		func(initFn *ast.FuncDecl) bool { return handlerRegisterCallExists(initFn, importAlias, handler) },
+		func(pos token.Pos) ast.Stmt { return handlerRegisterCallStmt(importAlias, handler, pos) })
 }
 
-func middlewareRegisterCallExists(fn *ast.FuncDecl, importAlias string, middleware moduleCopyMiddleware) bool {
+func handlerRegisterCallExists(fn *ast.FuncDecl, importAlias string, handler moduleCopyHandler) bool {
 	if fn == nil || fn.Body == nil {
 		return false
 	}
-	method := middlewareRegisterMethod(middleware)
+	method := handlerRegisterMethod(handler)
 	for _, stmt := range fn.Body.List {
 		call, ok := callExprFromStmt(stmt)
 		if !ok {
 			continue
 		}
-		if !isMiddlewareRegisterCall(call, importAlias, method, middleware.Handler) {
+		if !isHandlerRegisterCall(call, importAlias, method, handler.Handler) {
 			continue
 		}
 		return true
@@ -643,7 +644,7 @@ func middlewareRegisterCallExists(fn *ast.FuncDecl, importAlias string, middlewa
 	return false
 }
 
-func isMiddlewareRegisterCall(call *ast.CallExpr, importAlias string, method string, handlerName string) bool {
+func isHandlerRegisterCall(call *ast.CallExpr, importAlias string, method string, handlerName string) bool {
 	sel, ok := call.Fun.(*ast.SelectorExpr)
 	if !ok || sel.Sel.Name != method || len(call.Args) != 1 {
 		return false
@@ -661,19 +662,19 @@ func isMiddlewareRegisterCall(call *ast.CallExpr, importAlias string, method str
 	return ok && handlerIdent.Name == handlerName
 }
 
-// middlewareRegisterCallStmt anchors every generated node at pos for the reason
+// handlerRegisterCallStmt anchors every generated node at pos for the reason
 // spelled out on registerCallStmt: go/printer merges comments by token
 // position, so a node at token.NoPos can be printed around existing init
 // comments.
-func middlewareRegisterCallStmt(importAlias string, middleware moduleCopyMiddleware, pos token.Pos) ast.Stmt {
+func handlerRegisterCallStmt(importAlias string, handler moduleCopyHandler, pos token.Pos) ast.Stmt {
 	return &ast.ExprStmt{X: &ast.CallExpr{
 		Fun: &ast.SelectorExpr{
 			X:   &ast.Ident{NamePos: pos, Name: importAlias},
-			Sel: &ast.Ident{NamePos: pos, Name: middlewareRegisterMethod(middleware)},
+			Sel: &ast.Ident{NamePos: pos, Name: handlerRegisterMethod(handler)},
 		},
 		Args: []ast.Expr{
 			&ast.CallExpr{
-				Fun:    &ast.Ident{NamePos: pos, Name: middleware.Handler},
+				Fun:    &ast.Ident{NamePos: pos, Name: handler.Handler},
 				Lparen: pos,
 				Rparen: pos,
 			},
@@ -683,8 +684,8 @@ func middlewareRegisterCallStmt(importAlias string, middleware moduleCopyMiddlew
 	}}
 }
 
-func middlewareRegisterMethod(middleware moduleCopyMiddleware) string {
-	if middleware.Scope == moduleCopyMiddlewareScopeAuth {
+func handlerRegisterMethod(handler moduleCopyHandler) string {
+	if handler.Scope == moduleCopyHandlerScopeAuth {
 		return "RegisterAuth"
 	}
 	return "Register"

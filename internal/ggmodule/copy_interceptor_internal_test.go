@@ -95,7 +95,7 @@ func TestBuildCopyPlanIncludesInterceptorFilesWhenTheProjectServesGRPC(t *testin
 		t.Fatalf("InterceptorTargets() = %v, want %s", targets, target)
 	}
 	content := moduleCopyPlanFileContent(t, plan, target)
-	if !strings.HasPrefix(content, moduleCopyMiddlewareMarker("copytest")+"\n\n") {
+	if !strings.HasPrefix(content, moduleCopyHandlerMarker("copytest")+"\n\n") {
 		t.Fatalf("copied interceptor must open with the ownership marker:\n%s", content)
 	}
 	for _, want := range []string{"package interceptor\n", `"tmpapp/model/copytest"`, `servicecopytest "tmpapp/service/copytest"`} {
@@ -117,7 +117,7 @@ func TestBuildCopyPlanLeavesInterceptorsOutOfAProjectWithoutGRPC(t *testing.T) {
 	if err := gghelper.EnsureParentDir(leftover); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(leftover, []byte(moduleCopyMiddlewareMarker("copytest")+"\n\npackage interceptor\n"), 0o600); err != nil {
+	if err := os.WriteFile(leftover, []byte(moduleCopyHandlerMarker("copytest")+"\n\npackage interceptor\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	t.Chdir(projectDir)
@@ -176,10 +176,10 @@ func CopyAuth() any {
 			TargetPath: filepath.Join("interceptor", "copy_auth.go"),
 			Content:    source,
 		}},
-		Interceptors: []moduleCopyMiddleware{{
+		Interceptors: []moduleCopyHandler{{
 			SourcePath: filepath.Join("internal", "gst", "interceptor", "copy_auth.go"),
 			TargetPath: filepath.Join("interceptor", "copy_auth.go"),
-			Scope:      moduleCopyMiddlewareScopeAuth,
+			Scope:      moduleCopyHandlerScopeAuth,
 			Handler:    "CopyAuth",
 		}},
 	}
@@ -215,9 +215,9 @@ func CopyAuth() any {
 func TestOrphanManagedFilesReadsTheInterceptorDirectory(t *testing.T) {
 	t.Chdir(t.TempDir())
 	for name, content := range map[string]string{
-		"removed_auth.go": moduleCopyMiddlewareMarker("removed") + "\n\npackage interceptor\n",
-		"kept_auth.go":    moduleCopyMiddlewareMarker("kept") + "\n\npackage interceptor\n",
-		"interceptor.go":  moduleCopyMiddlewareMarker("removed") + "\n\npackage interceptor\n",
+		"removed_auth.go": moduleCopyHandlerMarker("removed") + "\n\npackage interceptor\n",
+		"kept_auth.go":    moduleCopyHandlerMarker("kept") + "\n\npackage interceptor\n",
+		"interceptor.go":  moduleCopyHandlerMarker("removed") + "\n\npackage interceptor\n",
 	} {
 		path := filepath.Join("interceptor", name)
 		if err := gghelper.EnsureParentDir(path); err != nil {
@@ -252,7 +252,7 @@ func TestRemoveManagedFilesRewritesTheInterceptorRegistration(t *testing.T) {
 	if err := gghelper.EnsureParentDir(oldAuth); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(oldAuth, []byte(moduleCopyMiddlewareMarker("copytest")+"\n\npackage interceptor\n\nfunc OldAuth() any {\n\treturn nil\n}\n"), 0o600); err != nil {
+	if err := os.WriteFile(oldAuth, []byte(moduleCopyHandlerMarker("copytest")+"\n\npackage interceptor\n\nfunc OldAuth() any {\n\treturn nil\n}\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.WriteFile(registration, []byte("package interceptor\n\nimport \"github.com/hydroan/gst/interceptor\"\n\nfunc init() {\n\tinterceptor.RegisterAuth(OldAuth())\n}\n"), 0o600); err != nil {
@@ -292,7 +292,7 @@ func TestCopyExecutionRemovesTheInterceptorPackageOnceTheProjectServesNoGRPC(t *
 	if err := gghelper.EnsureParentDir(stale); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(stale, []byte(moduleCopyMiddlewareMarker("copytest")+"\n\npackage interceptor\n\nfunc CopyAuth() any {\n\treturn nil\n}\n"), 0o600); err != nil {
+	if err := os.WriteFile(stale, []byte(moduleCopyHandlerMarker("copytest")+"\n\npackage interceptor\n\nfunc CopyAuth() any {\n\treturn nil\n}\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.WriteFile(registration, []byte("package interceptor\n\nimport \"github.com/hydroan/gst/interceptor\"\n\nfunc init() {\n\tinterceptor.RegisterAuth(CopyAuth())\n}\n"), 0o600); err != nil {

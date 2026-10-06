@@ -51,10 +51,10 @@ type CopyPlan struct {
 	PostNotes          []string
 
 	Actions    []moduleCopyAction
-	Middleware []moduleCopyMiddleware
+	Middleware []moduleCopyHandler
 	// Interceptors are the module's gRPC interceptors the copy writes into
 	// the project's interceptor directory, none unless ServesGRPC.
-	Interceptors []moduleCopyMiddleware
+	Interceptors []moduleCopyHandler
 	// ServesGRPC reports whether the project has a model declaring GRPC():
 	// only then does it get the module's interceptors, so a project without
 	// gRPC holds no gRPC code at all.

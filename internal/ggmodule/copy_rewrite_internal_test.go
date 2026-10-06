@@ -340,7 +340,7 @@ func withMetadata(ctx context.Context) context.Context {
 }
 `)
 
-	_, err := normalizeModuleMiddlewareSource("sample.go", source, moduleCopyRewriteConfig{
+	_, err := normalizeModuleHandlerSource("sample.go", source, moduleCopyRewriteConfig{
 		ModuleName:        "copytest",
 		ProjectModulePath: "tmpapp",
 		ModelDir:          "model",
@@ -348,7 +348,7 @@ func withMetadata(ctx context.Context) context.Context {
 		TargetPackage:     "middleware",
 	})
 	if err == nil {
-		t.Fatal("normalizeModuleMiddlewareSource() must reject a surviving framework internal import")
+		t.Fatal("normalizeModuleHandlerSource() must reject a surviving framework internal import")
 	}
 	for _, want := range []string{"github.com/hydroan/gst/internal/requestctx", "public"} {
 		if !strings.Contains(err.Error(), want) {

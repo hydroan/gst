@@ -220,8 +220,8 @@ func pruneLeftovers(oldServiceFiles []string, allModels []*modelinfo.Model, kept
 
 	plan := ggprune.PlanFiles(oldServiceFiles, allModels, keptFiles, protect)
 	pbPlan := ggprune.PlanPBFiles(oldPBFiles, generatedPBFiles, protect)
-	orphans, keptHelpers, orphanMiddleware := findOrphans(allModels, keptDirs, plan.Delete, ignore, protect)
-	nothingToDelete := len(plan.Delete) == 0 && len(orphans) == 0 && len(orphanMiddleware) == 0 && len(pbPlan.Delete) == 0
+	orphans, keptHelpers, orphanHandlers := findOrphans(allModels, keptDirs, plan.Delete, ignore, protect)
+	nothingToDelete := len(plan.Delete) == 0 && len(orphans) == 0 && len(orphanHandlers) == 0 && len(pbPlan.Delete) == 0
 	if nothingToDelete {
 		clioutput.Success("", "Nothing to prune")
 		removeEmptyDirs(protect)
@@ -244,7 +244,7 @@ func pruneLeftovers(oldServiceFiles []string, allModels []*modelinfo.Model, kept
 		}
 	}
 	reportOrphanServiceDirs(orphans)
-	reportOrphanModuleFiles(orphanMiddleware)
+	reportOrphanModuleFiles(orphanHandlers)
 	if len(pbPlan.Delete) > 0 {
 		clioutput.Section("Stale Protobuf Files")
 		for _, file := range pbPlan.Delete {
@@ -269,24 +269,24 @@ func pruneLeftovers(oldServiceFiles []string, allModels []*modelinfo.Model, kept
 		return
 	}
 
-	deleteLeftovers(plan.Delete, orphans, orphanMiddleware, pbPlan.Delete, protect)
+	deleteLeftovers(plan.Delete, orphans, orphanHandlers, pbPlan.Delete, protect)
 }
 
 // findOrphans works out the orphans prune deletes along with deleting, the
 // service files it deletes anyway: the service directories no model owns,
-// see ggprune.FindOrphanDirs for the ownership rules, and the middleware
-// module copy wrote for modules the project removed, see
-// orphanModuleMiddleware. It returns as well the helper directories kept
+// see ggprune.FindOrphanDirs for the ownership rules, and the middleware and
+// interceptors module copy wrote for modules the project removed, see
+// orphanModuleFiles. It returns as well the helper directories kept
 // because live code imports them. When the project's code cannot be read in
 // full, it warns and finds no orphans.
-func findOrphans(allModels []*modelinfo.Model, keptDirs map[string]bool, deleting []string, ignore gghelper.ProjectIgnore, protect ggconfig.PruneConfig) (orphans, keptHelpers []ggprune.OrphanDir, orphanMiddleware []ggmodule.OrphanManagedFile) {
-	orphanMiddleware, err := orphanModuleFiles(protect)
+func findOrphans(allModels []*modelinfo.Model, keptDirs map[string]bool, deleting []string, ignore gghelper.ProjectIgnore, protect ggconfig.PruneConfig) (orphans, keptHelpers []ggprune.OrphanDir, orphanHandlers []ggmodule.OrphanManagedFile) {
+	orphanHandlers, err := orphanModuleFiles(protect)
 	if err != nil {
 		clioutput.Warn("", "failed to read the middleware or interceptor directory, so orphans are not checked: %v", err)
 		return nil, nil, nil
 	}
 	deleting = slices.Clone(deleting)
-	for _, file := range orphanMiddleware {
+	for _, file := range orphanHandlers {
 		deleting = append(deleting, file.Path)
 	}
 	orphans, keptHelpers, err = ggprune.FindOrphanDirs(allModels, keptDirs, deleting, module, ignore, protect)
@@ -294,7 +294,7 @@ func findOrphans(allModels []*modelinfo.Model, keptDirs map[string]bool, deletin
 		clioutput.Warn("", "failed to trace which service directories live code imports, so orphan service directories are not checked: %v", err)
 		return nil, nil, nil
 	}
-	return orphans, keptHelpers, orphanMiddleware
+	return orphans, keptHelpers, orphanHandlers
 }
 
 // deleteLeftovers deletes what pruneLeftovers listed, in this order: the
@@ -303,14 +303,14 @@ func findOrphans(allModels []*modelinfo.Model, keptDirs map[string]bool, deletin
 // definitions, and last the directories this leaves empty. The orphan
 // directories are orphans because the files before them go, so when one of
 // those cannot be deleted they stay.
-func deleteLeftovers(disabledFiles []string, orphans []ggprune.OrphanDir, orphanMiddleware []ggmodule.OrphanManagedFile, staleProtoFiles []string, protect ggconfig.PruneConfig) {
+func deleteLeftovers(disabledFiles []string, orphans []ggprune.OrphanDir, orphanHandlers []ggmodule.OrphanManagedFile, staleProtoFiles []string, protect ggconfig.PruneConfig) {
 	disabledKept := false
 	ggprune.RemoveFiles(disabledFiles, func(path string, err error) {
 		disabledKept = disabledKept || err != nil
 		reportRemoval(path, err)
 	})
-	if len(orphanMiddleware) > 0 {
-		if err := cleanOrphanModuleFiles(orphanMiddleware); err != nil {
+	if len(orphanHandlers) > 0 {
+		if err := cleanOrphanModuleFiles(orphanHandlers); err != nil {
 			clioutput.Error("", "Failed to delete orphan module middleware, so orphan service directories are kept: %v", err)
 			orphans = nil
 		}

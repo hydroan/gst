@@ -54,7 +54,7 @@ func CopyAuth() any {
 	}
 
 	middleware := moduleCopyPlanFileContent(t, plan, filepath.Join("middleware", "copy_auth.go"))
-	if !strings.HasPrefix(middleware, moduleCopyMiddlewareMarker("copytest")+"\n\n") {
+	if !strings.HasPrefix(middleware, moduleCopyHandlerMarker("copytest")+"\n\n") {
 		t.Fatalf("copied middleware must open with the ownership marker:\n%s", middleware)
 	}
 	for _, want := range []string{
@@ -145,15 +145,15 @@ func CopyAuth() any {
 		}
 	}
 	// Owned by this module but no longer in the manifest: the only stale file.
-	write("old_auth.go", moduleCopyMiddlewareMarker("copytest")+"\n\npackage middleware\n\nfunc OldAuth() any {\n\treturn nil\n}\n")
+	write("old_auth.go", moduleCopyHandlerMarker("copytest")+"\n\npackage middleware\n\nfunc OldAuth() any {\n\treturn nil\n}\n")
 	// Owned by another module's copy: not this copy's business.
-	write("other_module.go", moduleCopyMiddlewareMarker("othermod")+"\n\npackage middleware\n\nfunc OtherAuth() any {\n\treturn nil\n}\n")
+	write("other_module.go", moduleCopyHandlerMarker("othermod")+"\n\npackage middleware\n\nfunc OtherAuth() any {\n\treturn nil\n}\n")
 	// Project-owned handler without a marker: never touched.
 	write("project_own.go", "package middleware\n\nfunc ProjectOwn() any {\n\treturn nil\n}\n")
 	// The registration file is project infrastructure, skipped even with a marker.
-	write("middleware.go", moduleCopyMiddlewareMarker("copytest")+"\n\npackage middleware\n\nfunc init() {}\n")
+	write("middleware.go", moduleCopyHandlerMarker("copytest")+"\n\npackage middleware\n\nfunc init() {}\n")
 	// Still declared by the manifest: a plan target, not stale.
-	write("copy_auth.go", moduleCopyMiddlewareMarker("copytest")+"\n\npackage middleware\n\nfunc CopyAuth() any {\n\treturn nil\n}\n")
+	write("copy_auth.go", moduleCopyHandlerMarker("copytest")+"\n\npackage middleware\n\nfunc CopyAuth() any {\n\treturn nil\n}\n")
 
 	t.Chdir(projectDir)
 
@@ -181,7 +181,7 @@ func TestBuildCopyPlanCollectsStaleMiddlewareWhenManifestDeclaresNone(t *testing
 	if err := os.MkdirAll(projectMiddlewareDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(projectMiddlewareDir, "old_auth.go"), []byte(moduleCopyMiddlewareMarker("copytest")+"\n\npackage middleware\n\nfunc OldAuth() any {\n\treturn nil\n}\n"), 0o600); err != nil {
+	if err := os.WriteFile(filepath.Join(projectMiddlewareDir, "old_auth.go"), []byte(moduleCopyHandlerMarker("copytest")+"\n\npackage middleware\n\nfunc OldAuth() any {\n\treturn nil\n}\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 
@@ -206,7 +206,7 @@ func TestCopyExecutionReconcilesMiddlewareRegistrationScopeChange(t *testing.T) 
 	if err := os.MkdirAll(filepath.Join(projectDir, "middleware"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	markedSource := moduleCopyMiddlewareMarker("copytest") + "\n\npackage middleware\n\nfunc CopyAuth() any {\n\treturn nil\n}\n"
+	markedSource := moduleCopyHandlerMarker("copytest") + "\n\npackage middleware\n\nfunc CopyAuth() any {\n\treturn nil\n}\n"
 	if err := os.WriteFile(filepath.Join(projectDir, "middleware", "copy_auth.go"), []byte(markedSource), 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -240,11 +240,11 @@ func init() {
 				Preexisting: true,
 			},
 		},
-		Middleware: []moduleCopyMiddleware{
+		Middleware: []moduleCopyHandler{
 			{
 				SourcePath: filepath.Join("internal", "gst", "middleware", "copy_auth.go"),
 				TargetPath: filepath.Join("middleware", "copy_auth.go"),
-				Scope:      moduleCopyMiddlewareScopeGlobal,
+				Scope:      moduleCopyHandlerScopeGlobal,
 				Handler:    "CopyAuth",
 			},
 		},
@@ -287,7 +287,7 @@ func TestCopyExecutionReconcilesMiddlewareRegistrationHandlerRename(t *testing.T
 	if err := os.MkdirAll(filepath.Join(projectDir, "middleware"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	oldSource := moduleCopyMiddlewareMarker("copytest") + "\n\npackage middleware\n\nfunc OldAuth() any {\n\treturn nil\n}\n"
+	oldSource := moduleCopyHandlerMarker("copytest") + "\n\npackage middleware\n\nfunc OldAuth() any {\n\treturn nil\n}\n"
 	if err := os.WriteFile(filepath.Join(projectDir, "middleware", "copy_auth.go"), []byte(oldSource), 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -304,7 +304,7 @@ func init() {
 
 	t.Chdir(projectDir)
 
-	newSource := moduleCopyMiddlewareMarker("copytest") + "\n\npackage middleware\n\nfunc NewAuth() any {\n\treturn nil\n}\n"
+	newSource := moduleCopyHandlerMarker("copytest") + "\n\npackage middleware\n\nfunc NewAuth() any {\n\treturn nil\n}\n"
 	plan := &CopyPlan{
 		Name:                "copytest",
 		ModelDir:            "model",
@@ -318,11 +318,11 @@ func init() {
 				Preexisting: true,
 			},
 		},
-		Middleware: []moduleCopyMiddleware{
+		Middleware: []moduleCopyHandler{
 			{
 				SourcePath: filepath.Join("internal", "gst", "middleware", "copy_auth.go"),
 				TargetPath: filepath.Join("middleware", "copy_auth.go"),
-				Scope:      moduleCopyMiddlewareScopeAuth,
+				Scope:      moduleCopyHandlerScopeAuth,
 				Handler:    "NewAuth",
 			},
 		},
@@ -356,7 +356,7 @@ func TestCopyExecutionPrunesStaleMiddlewareAndItsRegistration(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	write("old_auth.go", moduleCopyMiddlewareMarker("copytest")+"\n\npackage middleware\n\nfunc OldAuth() any {\n\treturn nil\n}\n")
+	write("old_auth.go", moduleCopyHandlerMarker("copytest")+"\n\npackage middleware\n\nfunc OldAuth() any {\n\treturn nil\n}\n")
 	write("middleware.go", `package middleware
 
 import "github.com/hydroan/gst/middleware"
@@ -432,7 +432,7 @@ func TestCopyExecutionPrunesLastRegistrationAndItsImport(t *testing.T) {
 					t.Fatal(err)
 				}
 			}
-			write("old_auth.go", moduleCopyMiddlewareMarker("copytest")+"\n\npackage middleware\n\nfunc OldAuth() any {\n\treturn nil\n}\n")
+			write("old_auth.go", moduleCopyHandlerMarker("copytest")+"\n\npackage middleware\n\nfunc OldAuth() any {\n\treturn nil\n}\n")
 			write("middleware.go", "package middleware\n\n"+tc.importLine+"\n\nfunc init() {\n\t"+tc.alias+".RegisterAuth(OldAuth())\n}\n")
 
 			t.Chdir(projectDir)
@@ -506,11 +506,11 @@ func CopyAuth() any {
 				Content:    source,
 			},
 		},
-		Middleware: []moduleCopyMiddleware{
+		Middleware: []moduleCopyHandler{
 			{
 				SourcePath: filepath.Join("internal", "gst", "middleware", "copy_auth.go"),
 				TargetPath: filepath.Join("middleware", "copy_auth.go"),
-				Scope:      moduleCopyMiddlewareScopeAuth,
+				Scope:      moduleCopyHandlerScopeAuth,
 				Handler:    "CopyAuth",
 			},
 		},
@@ -561,11 +561,11 @@ func CopyAuth() any {
 func TestOrphanManagedFiles(t *testing.T) {
 	t.Chdir(t.TempDir())
 	for name, content := range map[string]string{
-		"removed_auth.go": moduleCopyMiddlewareMarker("removed") + "\n\npackage middleware\n",
-		"stray_auth.go":   moduleCopyMiddlewareMarker("stray") + "\n\npackage middleware\n",
-		"kept_auth.go":    moduleCopyMiddlewareMarker("kept") + "\n\npackage middleware\n",
+		"removed_auth.go": moduleCopyHandlerMarker("removed") + "\n\npackage middleware\n",
+		"stray_auth.go":   moduleCopyHandlerMarker("stray") + "\n\npackage middleware\n",
+		"kept_auth.go":    moduleCopyHandlerMarker("kept") + "\n\npackage middleware\n",
 		"project.go":      "package middleware\n",
-		"middleware.go":   moduleCopyMiddlewareMarker("removed") + "\n\npackage middleware\n",
+		"middleware.go":   moduleCopyHandlerMarker("removed") + "\n\npackage middleware\n",
 	} {
 		path := filepath.Join("middleware", name)
 		if err := gghelper.EnsureParentDir(path); err != nil {
@@ -629,7 +629,7 @@ func TestRemoveManagedFiles(t *testing.T) {
 	if err := gghelper.EnsureParentDir(oldAuth); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(oldAuth, []byte(moduleCopyMiddlewareMarker("copytest")+"\n\npackage middleware\n\nfunc OldAuth() any {\n\treturn nil\n}\n"), 0o600); err != nil {
+	if err := os.WriteFile(oldAuth, []byte(moduleCopyHandlerMarker("copytest")+"\n\npackage middleware\n\nfunc OldAuth() any {\n\treturn nil\n}\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.WriteFile(registration, []byte("package middleware\n\nimport \"github.com/hydroan/gst/middleware\"\n\nfunc init() {\n\tmiddleware.RegisterAuth(OldAuth())\n}\n"), 0o600); err != nil {

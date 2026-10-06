@@ -120,7 +120,7 @@ func (e *CopyExecution) Run() error {
 // copyHandlers writes the handler files items of kind into the managed
 // directory targetDir and reconciles their registrations there, under the
 // two section titles.
-func (e *CopyExecution) copyHandlers(copyTitle, registerTitle string, md managedDir, targetDir string, items []moduleCopyMiddleware, kind moduleCopyFileKind) error {
+func (e *CopyExecution) copyHandlers(copyTitle, registerTitle string, md managedDir, targetDir string, items []moduleCopyHandler, kind moduleCopyFileKind) error {
 	e.section(copyTitle)
 	// Snapshot module-owned handler names before the writes below replace
 	// the old file contents; reconciliation needs them to retire register

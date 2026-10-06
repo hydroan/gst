@@ -27,12 +27,12 @@ type moduleCopyManifest struct {
 	// no action service file references them. Modules declare source here that
 	// serves no route and is reached only from project-owned assembly code, such
 	// as a login second-factor verifier or a login observer.
-	IncludeSourceFiles []string                       `json:"includeSourceFiles"`
-	Middleware         []moduleCopyMiddlewareManifest `json:"middleware"`
+	IncludeSourceFiles []string                    `json:"includeSourceFiles"`
+	Middleware         []moduleCopyHandlerManifest `json:"middleware"`
 	// Interceptors are the module's gRPC interceptors, declared like its
 	// middleware and copied into the project's interceptor directory, into a
 	// project serving gRPC alone: one with a model declaring GRPC().
-	Interceptors []moduleCopyMiddlewareManifest `json:"interceptors"`
+	Interceptors []moduleCopyHandlerManifest `json:"interceptors"`
 	// RequiredAssembly lists the framework calls a copied module needs the
 	// project to make, because copy reproduces routes, models and middleware
 	// but not the rest of the module's Register body. Declaring a call here
@@ -52,22 +52,23 @@ type moduleCopyAssemblyManifest struct {
 	Reason   string `json:"reason"`
 }
 
-type moduleCopyMiddlewareScope string
+type moduleCopyHandlerScope string
 
 const (
-	moduleCopyMiddlewareScopeGlobal moduleCopyMiddlewareScope = "global"
-	moduleCopyMiddlewareScopeAuth   moduleCopyMiddlewareScope = "auth"
+	moduleCopyHandlerScopeGlobal moduleCopyHandlerScope = "global"
+	moduleCopyHandlerScopeAuth   moduleCopyHandlerScope = "auth"
 )
 
-type moduleCopyMiddlewareManifest struct {
+type moduleCopyHandlerManifest struct {
 	// SourceFile is framework-root relative and must point at a Go source file
-	// in the framework middleware package. The target path is intentionally not
-	// configurable: copied middleware becomes project-owned middleware with the
-	// same filename under the project's middleware directory.
+	// in the framework middleware or interceptor package. The target path is
+	// intentionally not configurable: a copied handler becomes a project-owned
+	// file with the same name under the project's directory of that kind.
 	SourceFile string `json:"sourceFile"`
-	// Scope selects middleware.RegisterAuth ("auth") or middleware.Register
-	// ("global") when module copy wires the handler into middleware/middleware.go.
-	Scope moduleCopyMiddlewareScope `json:"scope"`
+	// Scope selects RegisterAuth ("auth") or Register ("global") of the
+	// framework package of the directory when module copy wires the handler
+	// into its registration file.
+	Scope moduleCopyHandlerScope `json:"scope"`
 	// Handler is the zero-argument function in SourceFile that returns the
 	// handler registered in middleware/middleware.go, for example CopyAuth.
 	Handler string `json:"handler"`
@@ -148,9 +149,9 @@ func cleanModuleCopySourceFiles(field string, values []string) ([]string, error)
 // field named field, "middleware" or "interceptors", whose source files
 // must lie in the framework directory of the same kind: middleware/*.go for
 // the middleware, interceptor/*.go for the interceptors.
-func cleanModuleCopyHandlers(field string, values []moduleCopyMiddlewareManifest) ([]moduleCopyMiddlewareManifest, error) {
+func cleanModuleCopyHandlers(field string, values []moduleCopyHandlerManifest) ([]moduleCopyHandlerManifest, error) {
 	sourceDir := map[string]string{"middleware": middlewareManagedDir.pkg, "interceptors": interceptorManagedDir.pkg}[field]
-	cleaned := make([]moduleCopyMiddlewareManifest, 0, len(values))
+	cleaned := make([]moduleCopyHandlerManifest, 0, len(values))
 	for i, value := range values {
 		sourceFile, err := cleanModuleCopyRelativePath(value.SourceFile)
 		if err != nil || sourceFile == "" {
@@ -165,9 +166,9 @@ func cleanModuleCopyHandlers(field string, values []moduleCopyMiddlewareManifest
 			return nil, fmt.Errorf("%s[%d].sourceFile must match %s/*.go: %s", field, i, sourceDir, sourceFile)
 		}
 
-		scope := moduleCopyMiddlewareScope(strings.TrimSpace(string(value.Scope)))
-		if scope != moduleCopyMiddlewareScopeGlobal && scope != moduleCopyMiddlewareScopeAuth {
-			return nil, fmt.Errorf("%s[%d].scope must be %q or %q: %q", field, i, moduleCopyMiddlewareScopeGlobal, moduleCopyMiddlewareScopeAuth, value.Scope)
+		scope := moduleCopyHandlerScope(strings.TrimSpace(string(value.Scope)))
+		if scope != moduleCopyHandlerScopeGlobal && scope != moduleCopyHandlerScopeAuth {
+			return nil, fmt.Errorf("%s[%d].scope must be %q or %q: %q", field, i, moduleCopyHandlerScopeGlobal, moduleCopyHandlerScopeAuth, value.Scope)
 		}
 
 		handler := strings.TrimSpace(value.Handler)
@@ -175,7 +176,7 @@ func cleanModuleCopyHandlers(field string, values []moduleCopyMiddlewareManifest
 			return nil, fmt.Errorf("%s[%d].handler must be a Go identifier: %q", field, i, value.Handler)
 		}
 
-		cleaned = append(cleaned, moduleCopyMiddlewareManifest{
+		cleaned = append(cleaned, moduleCopyHandlerManifest{
 			SourceFile: sourceFile,
 			Scope:      scope,
 			Handler:    handler,
