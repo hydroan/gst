@@ -580,9 +580,10 @@ func TestGenRunNamesTheFilesImportingEachOther(t *testing.T) {
 // TestGenRunWritesNoProtobufDefinitionWhenAShapeCannotBeDescribed pins the
 // diagnostics of the shapes protobuf cannot express, one per field, that a
 // field without a pb tag is numbered instead of reported (see
-// TestGenRunNumbersTheFieldsWithoutPBTags), and that a failed run writes no
-// file at all, the registration files included: the run stops on the
-// diagnostics before anything is written.
+// TestGenRunNumbersTheFieldsWithoutPBTags) while a field whose tag cannot be
+// read is reported and left as written, a second run changing nothing, and
+// that a failed run writes no file at all, the registration files included:
+// the run stops on the diagnostics before anything is written.
 func TestGenRunWritesNoProtobufDefinitionWhenAShapeCannotBeDescribed(t *testing.T) {
 	projectDir, ok := newGenProject(t)
 	if !ok {
@@ -599,6 +600,9 @@ func TestGenRunWritesNoProtobufDefinitionWhenAShapeCannotBeDescribed(t *testing.
 	require.NoError(t, readErr)
 	require.Regexp(t, "Untagged string +`json:\"untagged\" pb:\"18\"`", string(healed))
 	require.NotContains(t, err.Error(), "Rejected.untagged")
+	// The tag that cannot be read is left as it is: numbering it would add a
+	// pb tag beside the unreadable one on every run.
+	require.Regexp(t, "Spaced +string +`json:\"spaced\" pb: \"21\"`", string(healed))
 	for _, want := range []string{
 		"tmpapp/model.Rejected.low: the pb tag names field number 3, but 1 to 10 belong to the framework's base fields; number business fields from 11",
 		"tmpapp/model.Rejected.reserved: the pb tag names field number 19500, inside the range 19000 to 19999 protobuf reserves",
@@ -607,6 +611,7 @@ func TestGenRunWritesNoProtobufDefinitionWhenAShapeCannotBeDescribed(t *testing.
 		"tmpapp/model.Rejected.speaker: an interface with methods has no protobuf type, the dynamic type decides it; use a concrete type",
 		"tmpapp/model.Rejected.comment: type database/sql.NullString is declared outside the project, so its fields cannot carry pb tags; use a project type",
 		"tmpapp/model.Rejected.word: the pb tag \"eleven\" is not a field number; write the number alone, as in pb:\"11\"",
+		`tmpapp/model.Rejected.spaced: the struct tag cannot be read from "pb: \"21\"" on, so its pb tag is not found; write each pair as key:"value", as in pb:"11"`,
 		"tmpapp/model.Rejected.note: the field is promoted through an embedded pointer, which a message has no way to leave unset; embed the struct by value",
 		"tmpapp/model.Rejected.limits: a map of pointers to a scalar has no protobuf type, a value is never unset; use a map of values",
 		"tmpapp/model.Rejected.slots: a slice of pointers to a scalar has no protobuf type, an element is never unset; use a slice of values",
@@ -618,6 +623,11 @@ func TestGenRunWritesNoProtobufDefinitionWhenAShapeCannotBeDescribed(t *testing.
 		_, statErr := os.Stat(filepath.Join(projectDir, path))
 		require.True(t, os.IsNotExist(statErr), "a failed run must write no file, %s: stat error = %v", path, statErr)
 	}
+
+	require.Error(t, genRunWithOptions(genRunOptions{Quiet: true}))
+	again, readErr := os.ReadFile(filepath.Join(projectDir, "model", "rejected.go"))
+	require.NoError(t, readErr)
+	require.Equal(t, string(healed), string(again), "a second run leaves the model file as the first left it")
 }
 
 // TestGenRunNumbersTheFieldsWithoutPBTags pins that gg gen writes the pb
@@ -1304,6 +1314,7 @@ type Rejected struct {
 	Voice    Speaker        'json:"speaker" pb:"13" gorm:"-"'
 	Comment  sql.NullString 'json:"comment" pb:"14"'
 	Word     string         'json:"word" pb:"eleven"'
+	Spaced   string         'json:"spaced" pb: "21"'
 	Limits   map[string]*int32 'json:"limits" pb:"15" gorm:"-"'
 	Slots    []*int32          'json:"slots" pb:"16" gorm:"-"'
 	Keyed    map[RejectedKey]string 'json:"keyed" pb:"17" gorm:"-"'

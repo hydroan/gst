@@ -330,6 +330,10 @@ func (g *generator) messageOfStruct(name, comment string, st *types.Struct, file
 		default:
 			tag, tagged := reflect.StructTag(f.Tag).Lookup(pbTag)
 			if !tagged {
+				if rest, malformed := malformedTag(f.Tag); malformed {
+					g.project.Report(fs, "the struct tag cannot be read from %q on, so its pb tag is not found; write each pair as key:\"value\", as in pb:%q", rest, strconv.Itoa(int(firstFieldNumber(base))))
+					continue
+				}
 				untagged = append(untagged, i)
 				continue
 			}
@@ -486,10 +490,7 @@ func isBaseField(f jsonshape.Field) bool {
 // protobuf reserves, and from firstBusinessFieldNumber on in a message
 // embedding the base. A number that fails these is reported and yields 0.
 func (g *generator) taggedNumber(tag string, base bool, s jsonshape.Site) int32 {
-	first := int32(1)
-	if base {
-		first = firstBusinessFieldNumber
-	}
+	first := firstFieldNumber(base)
 	number, err := strconv.ParseInt(tag, 10, 32)
 	switch {
 	case err != nil:
@@ -508,6 +509,61 @@ func (g *generator) taggedNumber(tag string, base bool, s jsonshape.Site) int32 
 		return int32(number)
 	}
 	return 0
+}
+
+// firstFieldNumber returns the lowest number a business field of a message
+// may take: 11 in a message embedding the base, whose fields take 1 to 10,
+// and 1 in any other.
+func firstFieldNumber(base bool) int32 {
+	if base {
+		return firstBusinessFieldNumber
+	}
+	return 1
+}
+
+// malformedTag returns the part of a struct tag from the first pair that
+// reflect.StructTag.Lookup cannot read, `pb: "21"` for the tag
+// `json:"spaced" pb: "21"`, and false for a tag it reads to the end. Lookup
+// scans the pairs in order the way this function does and stops at the
+// first it cannot read, so every key written after that point is lost, the
+// pb tag among them: a field whose tag has gone unreadable is reported
+// rather than numbered as one without a tag, which would add a pb tag beside
+// the unreadable one on every run.
+func malformedTag(tag string) (string, bool) {
+	for tag != "" {
+		i := 0
+		for i < len(tag) && tag[i] == ' ' {
+			i++
+		}
+		tag = tag[i:]
+		if tag == "" {
+			break
+		}
+		pair := tag
+		i = 0
+		for i < len(tag) && tag[i] > ' ' && tag[i] != ':' && tag[i] != '"' && tag[i] != 0x7f {
+			i++
+		}
+		if i == 0 || i+1 >= len(tag) || tag[i] != ':' || tag[i+1] != '"' {
+			return pair, true
+		}
+		tag = tag[i+1:]
+		i = 1
+		for i < len(tag) && tag[i] != '"' {
+			if tag[i] == '\\' {
+				i++
+			}
+			i++
+		}
+		if i >= len(tag) {
+			return pair, true
+		}
+		if _, err := strconv.Unquote(tag[:i+1]); err != nil {
+			return pair, true
+		}
+		tag = tag[i+1:]
+	}
+	return "", false
 }
 
 // fieldTypeOf maps the Go type t of a field to its protobuf type: bool to
