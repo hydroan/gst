@@ -131,19 +131,18 @@ func cachedModelFieldKinds(typ reflect.Type) map[string]reflect.Kind {
 // preloading, e.g. expand "Children" with depth 3 becomes
 // "Children.Children.Children"; non-slice associations ignore depth.
 func parseExpandQuery(query url.Values, m types.Model) []string {
-	expandStr, ok := queryValue(query, consts.QUERY_EXPAND)
-	if !ok {
+	if !query.Has(consts.QUERY_EXPAND) {
 		return nil
 	}
 	depth := 1
-	if depthStr, ok := queryValue(query, consts.QUERY_DEPTH); ok {
-		depth, _ = strconv.Atoi(depthStr)
+	if query.Has(consts.QUERY_DEPTH) {
+		depth, _ = strconv.Atoi(query.Get(consts.QUERY_DEPTH))
 		if depth < 1 || depth > maxExpandDepth {
 			depth = 1
 		}
 	}
 
-	items := strings.Split(expandStr, ",")
+	items := strings.Split(query.Get(consts.QUERY_EXPAND), ",")
 	if len(items) > 0 && items[0] == consts.VALUE_ALL { // expand all fields
 		items = m.Expands()
 	}
@@ -178,14 +177,4 @@ func parseExpandQuery(query url.Values, m types.Model) []string {
 		expands = append(expands, strings.Join(t, "."))
 	}
 	return expands
-}
-
-// queryValue returns the first value of key in query and whether the key was
-// sent at all, the way gin's GetQuery answers.
-func queryValue(query url.Values, key string) (string, bool) {
-	values, ok := query[key]
-	if !ok || len(values) == 0 {
-		return "", false
-	}
-	return values[0], true
 }

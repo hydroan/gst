@@ -252,13 +252,13 @@ func (a *Action) RoleName() string {
 
 // ServiceFilename returns the name of the generated service file: the
 // ServiceName in lower case plus .go, archive.go for Service("archive") and
-// Service("Archive") alike, or the lower case Phase plus .go for Service(),
-// create.go for Create.
+// Service("Archive") alike, or Phase.Filename() for Service(), create.go for
+// Create.
 func (a *Action) ServiceFilename() string {
 	if a.ServiceName != "" {
 		return strings.ToLower(a.ServiceName) + ".go"
 	}
-	return strings.ToLower(string(a.Phase)) + ".go"
+	return a.Phase.Filename()
 }
 
 var methodList = []string{

@@ -84,13 +84,7 @@ func ExportHandler[M types.Model, REQ types.Request, RSP types.Response](cfg ...
 		// query parameters itself.
 		data := make([]M, 0)
 		if !modelregistry.IsVirtual(m) {
-			var page, size, limit int
-			if pageStr, ok := c.GetQuery(consts.QUERY_PAGE); ok {
-				page, _ = strconv.Atoi(pageStr)
-			}
-			if sizeStr, ok := c.GetQuery(consts.QUERY_SIZE); ok {
-				size, _ = strconv.Atoi(sizeStr)
-			}
+			var limit int
 			if limitStr, ok := c.GetQuery(consts.QUERY_LIMIT); ok {
 				limit, _ = strconv.Atoi(limitStr)
 			}
@@ -145,7 +139,6 @@ func ExportHandler[M types.Model, REQ types.Request, RSP types.Response](cfg ...
 				gstotel.RecordError(span, err)
 				return
 			}
-			_, _ = page, size
 			// 2.Let the service rewrite the query condition and options; the
 			// typical use is row-level data scoping, sharing the exact List
 			// semantics so an export can never see rows the list hides.
@@ -160,9 +153,9 @@ func ExportHandler[M types.Model, REQ types.Request, RSP types.Response](cfg ...
 				gstotel.RecordError(span, err)
 				return
 			}
-			// 3.List resources from database.
+			// 3.List resources from database. An export is bounded by the limit
+			// alone and never paginated.
 			if err = database.Database[M](requestContext(c)).
-				// WithPagination(page, size). // don't use WithPagination, it makes WithLimit ineffective
 				WithLimit(limit).
 				WithQuery(m, queryOpts).
 				WithExpand(expands, orders...).
