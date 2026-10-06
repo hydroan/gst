@@ -123,10 +123,10 @@ logs '.level == "WARN" or .level == "ERROR"' | jq -r '[.level, .logger, .msg] | 
 - 锁被占时接口返回 409，controller 那一路照例记一条 ERROR `service operation failed`（`a rebuild is already running`）；经 gRPC 抢锁被拒的一样记这条，调用方看到的是 `AlreadyExists`。
 - 会话无效的调用：`iam session rejected`（WARN，`reason` 写明原因，Redis 连不上时是连接错误）；没带会话的调用不记 WARN，只在 gRPC 访问日志里记 `Unauthenticated`。
 
-除此之外的 WARN、ERROR 都值得查清楚。gRPC 的每个调用在 `grpc` 那一路记一条，`status` 是 gRPC 状态名、`path` 是 rpc 全名；没成功的都在这里：
+除此之外的 WARN、ERROR 都值得查清楚。gRPC 的每个调用在 `grpc` 那一路记一条，`grpc_code` 是 gRPC 状态名、`path` 是 rpc 全名；没成功的都在这里：
 
 ```bash
-logs '.logger == "grpc" and .status != "OK"' | jq -r '[.status, .path, .error] | @tsv' | sort | uniq -c
+logs '.logger == "grpc" and .grpc_code != "OK"' | jq -r '[.grpc_code, .path, .error] | @tsv' | sort | uniq -c
 ```
 
 ## 场景
