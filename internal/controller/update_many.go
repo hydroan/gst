@@ -127,7 +127,7 @@ func (a *action[M, REQ, RSP]) updateManyFlow(ctx context.Context, newServiceCont
 	// Only these two fields are copied, so the values the hooks set survive.
 	// On a reload failure the items stay as they are: the update itself
 	// already committed.
-	if stored, reloadErr := recordsByID(database.Database[M](ctx).WithReplica(false), a.newModel(), req.itemIDs()); reloadErr != nil {
+	if stored, reloadErr := a.recordsByID(database.Database[M](ctx).WithReplica(false), req.itemIDs()); reloadErr != nil {
 		log.Warnz("reload audit columns failed", zap.Error(reloadErr))
 	} else {
 		for _, m := range req.Items {

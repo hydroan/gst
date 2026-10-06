@@ -194,7 +194,7 @@ func (a *action[M, REQ, RSP]) patchManyFlow(ctx context.Context, newServiceConte
 	// each row read here is merged with its patch and written straight back,
 	// so a stale one would write the untouched fields back as they were on
 	// the replica.
-	stored, err := recordsByID(database.Database[M](ctx).WithReplica(false), a.newModel(), req.itemIDs())
+	stored, err := a.recordsByID(database.Database[M](ctx).WithReplica(false), req.itemIDs())
 	if err != nil {
 		return zero, failDatabase(ctx, log, err)
 	}

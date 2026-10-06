@@ -128,7 +128,7 @@ func (a *action[M, REQ, RSP]) deleteManyFlow(ctx context.Context, newServiceCont
 	// disabled audit costs no query.
 	var deleted []M
 	if audit.Enabled(consts.OP_DELETE_MANY) {
-		stored, err := recordsByID(database.Database[M](ctx).WithExpand(a.newModel().Expands()), a.newModel(), req.itemIDs())
+		stored, err := a.recordsByID(database.Database[M](ctx).WithExpand(a.newModel().Expands()), req.itemIDs())
 		if err != nil {
 			log.Errorz("database operation failed", zap.Error(err))
 			gstotel.RecordError(trace.SpanFromContext(ctx), err)

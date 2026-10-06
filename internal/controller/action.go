@@ -40,7 +40,12 @@ type action[M types.Model, REQ types.Request, RSP types.Response] struct {
 
 	controllerSpan phaseSpan                  // controller span of the action's primary phase
 	serviceSpans   map[consts.Phase]phaseSpan // service span names keyed by phase
+
+	idColumn types.Column[string] // the id column of M, the reference the batch flows read records by
 }
+
+// idColumnName is the primary key column every framework model carries.
+const idColumnName = "id"
 
 // phaseSpan carries the precomputed span name and operation label of one phase.
 type phaseSpan struct {
@@ -90,6 +95,7 @@ func newAction[M types.Model, REQ types.Request, RSP types.Response](route strin
 		reqTyp:         reqTyp,
 		controllerSpan: newPhaseSpan("controller", name, phase),
 		serviceSpans:   serviceSpans,
+		idColumn:       types.NewColumn[M, string](idColumnName),
 	}
 }
 
