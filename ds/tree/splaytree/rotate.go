@@ -172,14 +172,13 @@ func rotateZigZigRight[K comparable, V any](g *Node[K, V]) *Node[K, V] {
 //
 // Step 2: 再对 p 和 x 进行 **Zig 左旋**
 //
-//	     x
-//	    / \
-//	   p   D
-//	  / \
-//	 g   C
-//	/ \
-//
-// A   B
+//	      x
+//	     / \
+//	    p   D
+//	   / \
+//	  g   C
+//	 / \
+//	A   B
 func rotateZigZigLeft[K comparable, V any](g *Node[K, V]) *Node[K, V] {
 	if g == nil || g.Children[1] == nil || g.Children[1].Children[1] == nil {
 		return g
@@ -305,15 +304,14 @@ func rotateZigZagRightLeft[K comparable, V any](g *Node[K, V]) *Node[K, V] {
 //	    / \
 //	   A   B
 //
-//	左旋后：
-//	     g
-//	    / \
-//	   x   C
-//	  / \
-//	 p   B
-//	/
-//
-// A
+//	 左旋后：
+//	      g
+//	     / \
+//	    x   C
+//	   / \
+//	  p   B
+//	 /
+//	A
 //
 // Step 2: 再对 g 和 x 进行 **Zig 右旋**
 //
