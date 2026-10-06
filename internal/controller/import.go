@@ -16,10 +16,10 @@ import (
 	"go.uber.org/zap"
 )
 
-// MaxImportSize is the largest upload an import accepts, 5 MiB.
-const MaxImportSize = 5 * 1024 * 1024
+// maxImportSize is the largest upload an import accepts, 5 MiB.
+const maxImportSize = 5 * 1024 * 1024
 
-// tooLargeFileMsg answers, with 400, an upload over MaxImportSize.
+// tooLargeFileMsg answers, with 400, an upload over maxImportSize.
 const tooLargeFileMsg = "too large file"
 
 // missingUploadFileMsg answers an import request whose multipart form carries
@@ -30,7 +30,7 @@ const missingUploadFileMsg = "upload file is required"
 // ImportHandler returns a Gin handler that imports resources from an uploaded file.
 //
 // The handler reads the multipart form file named "file", rejects files larger
-// than MaxImportSize, passes the file content to the phase service's Import
+// than maxImportSize, passes the file content to the phase service's Import
 // method, and fills creator/updater fields on the returned models. Rows are
 // then written by explicit intent instead of an upsert: a row carrying an ID
 // replaces that existing record (missing IDs fail with 404), and a row without
@@ -52,7 +52,7 @@ func ImportHandler[M types.Model, REQ types.Request, RSP types.Response](cfg ...
 			return
 		}
 		// check file size.
-		if file.Size > int64(MaxImportSize) {
+		if file.Size > int64(maxImportSize) {
 			log.Errorz(tooLargeFileMsg)
 			response.Error(c, badRequest(tooLargeFileMsg))
 			gstotel.RecordError(span, errors.New(tooLargeFileMsg))

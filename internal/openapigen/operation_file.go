@@ -47,7 +47,7 @@ func setImport[M types.Model, REQ types.Request, RSP types.Response](path string
 		Tags:        tags(path, consts.Import, typ),
 		Parameters:  parseParametersFromPath(path),
 		RequestBody: importFileRequestBody(),
-		Responses:   newResponses[RSP](rspKey, consts.Import, !modelregistry.AreTypesEqual[M, REQ, RSP]()),
+		Responses:   newResponses(rspKey, consts.Import, !modelregistry.AreTypesEqual[M, REQ, RSP]()),
 	}
 }
 

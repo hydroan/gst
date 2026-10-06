@@ -13,7 +13,7 @@ import (
 )
 
 // TestImportRefusesARequestWithoutItsFile pins the 400 of an import whose
-// form carries no file, and of one whose file is over MaxImportSize.
+// form carries no file, and of one whose file is over the 5 MiB limit.
 func TestImportRefusesARequestWithoutItsFile(t *testing.T) {
 	handler := controller.ImportHandler[*sampleRecord, *sampleRecord, *sampleRecord](configFor[*sampleRecord](importRoute))
 
@@ -25,7 +25,7 @@ func TestImportRefusesARequestWithoutItsFile(t *testing.T) {
 	})
 
 	t.Run("a file over the limit", func(t *testing.T) {
-		rsp := upload(t, handler, bytes.Repeat([]byte(" "), controller.MaxImportSize+1))
+		rsp := upload(t, handler, bytes.Repeat([]byte(" "), 5*1024*1024+1))
 
 		require.Equal(t, http.StatusBadRequest, rsp.Code)
 		require.Contains(t, rsp.Body.String(), "too large file")

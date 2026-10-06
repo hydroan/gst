@@ -134,8 +134,7 @@ func typeScriptRoots(models []*modelinfo.Model) []ts.TypeRef {
 	for _, m := range models {
 		pkgPath := m.ImportPath()
 		m.Design.Range(func(_ string, action *dsl.Action) {
-			switch action.Phase {
-			case consts.Import, consts.Export, consts.SSE, consts.Stream:
+			if name := action.Phase.Name(); dsl.HTTPOnlyAction(name) || dsl.GRPCOnlyAction(name) {
 				return
 			}
 			for _, typeName := range []string{action.Payload, action.Result} {

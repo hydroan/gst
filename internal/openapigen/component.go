@@ -272,7 +272,7 @@ func failureStatuses(phase consts.Phase, custom bool) []int {
 // The success status is fixed at 200 rather than taken from the caller: a
 // successful request answers 200 whichever action handled it, so a generated
 // document that says otherwise would describe a runtime that does not exist.
-func newResponses[RSP types.Response](rspKey string, phase consts.Phase, custom bool) *openapi3.Responses {
+func newResponses(rspKey string, phase consts.Phase, custom bool) *openapi3.Responses {
 	return responsesOf(&openapi3.ResponseRef{Ref: "#/components/responses/" + rspKey}, phase, custom)
 }
 

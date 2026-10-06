@@ -24,7 +24,7 @@ func setCreate[M types.Model, REQ types.Request, RSP types.Response](path string
 		Tags:        tags(path, consts.Create, typ),
 		Parameters:  parseParametersFromPath(path),
 		RequestBody: newRequestBody[REQ](reqKey),
-		Responses:   newResponses[RSP](rspKey, consts.Create, !modelregistry.AreTypesEqual[M, REQ, RSP]()),
+		Responses:   newResponses(rspKey, consts.Create, !modelregistry.AreTypesEqual[M, REQ, RSP]()),
 	}
 	removeBaseAutoFieldsFromRequestBody(pathItem.Post)
 }
@@ -47,7 +47,7 @@ func setDelete[M types.Model, REQ types.Request, RSP types.Response](path string
 		Description: description(path, consts.Delete, typ, !modelregistry.AreTypesEqual[M, REQ, RSP]()),
 		Tags:        tags(path, consts.Delete, typ),
 		Parameters:  parseParametersFromPath(path),
-		Responses:   newResponses[RSP](rspKey, consts.Delete, !modelregistry.AreTypesEqual[M, REQ, RSP]()),
+		Responses:   newResponses(rspKey, consts.Delete, !modelregistry.AreTypesEqual[M, REQ, RSP]()),
 	}
 }
 
@@ -66,7 +66,7 @@ func setUpdate[M types.Model, REQ types.Request, RSP types.Response](path string
 		Tags:        tags(path, consts.Update, typ),
 		Parameters:  parseParametersFromPath(path),
 		RequestBody: newRequestBody[REQ](reqKey),
-		Responses:   newResponses[RSP](rspKey, consts.Update, !modelregistry.AreTypesEqual[M, REQ, RSP]()),
+		Responses:   newResponses(rspKey, consts.Update, !modelregistry.AreTypesEqual[M, REQ, RSP]()),
 	}
 	removeBaseAutoFieldsFromRequestBody(pathItem.Put)
 }
@@ -86,7 +86,7 @@ func setPatch[M types.Model, REQ types.Request, RSP types.Response](path string,
 		Tags:        tags(path, consts.Patch, typ),
 		Parameters:  parseParametersFromPath(path),
 		RequestBody: newRequestBody[REQ](reqKey),
-		Responses:   newResponses[RSP](rspKey, consts.Patch, !modelregistry.AreTypesEqual[M, REQ, RSP]()),
+		Responses:   newResponses(rspKey, consts.Patch, !modelregistry.AreTypesEqual[M, REQ, RSP]()),
 	}
 	removeBaseAutoFieldsFromRequestBody(pathItem.Patch)
 }
@@ -110,7 +110,7 @@ func setList[M types.Model, REQ types.Request, RSP types.Response](path string, 
 		Description: description(path, consts.List, typ, !modelregistry.AreTypesEqual[M, REQ, RSP]()),
 		Tags:        tags(path, consts.List, typ),
 		Parameters:  parseParametersFromPath(path),
-		Responses:   newResponses[RSP](rspKey, consts.List, !modelregistry.AreTypesEqual[M, REQ, RSP]()),
+		Responses:   newResponses(rspKey, consts.List, !modelregistry.AreTypesEqual[M, REQ, RSP]()),
 	}
 	addQueryParameters[M, REQ, RSP](pathItem.Get)
 }
@@ -128,7 +128,7 @@ func setGet[M types.Model, REQ types.Request, RSP types.Response](path string, p
 		Description: description(path, consts.Get, typ, !modelregistry.AreTypesEqual[M, REQ, RSP]()),
 		Tags:        tags(path, consts.Get, typ),
 		Parameters:  parseParametersFromPath(path),
-		Responses:   newResponses[RSP](rspKey, consts.Get, !modelregistry.AreTypesEqual[M, REQ, RSP]()),
+		Responses:   newResponses(rspKey, consts.Get, !modelregistry.AreTypesEqual[M, REQ, RSP]()),
 	}
 }
 
@@ -155,7 +155,7 @@ func setCreateMany[M types.Model, REQ types.Request, RSP types.Response](path st
 		Tags:        tags(path, consts.CreateMany, typ),
 		Parameters:  parseParametersFromPath(path),
 		RequestBody: newRequestBody[REQ](reqKey),
-		Responses:   newResponses[RSP](rspKey, consts.CreateMany, !modelregistry.AreTypesEqual[M, REQ, RSP]()),
+		Responses:   newResponses(rspKey, consts.CreateMany, !modelregistry.AreTypesEqual[M, REQ, RSP]()),
 	}
 	removeBaseAutoFieldsFromBatchRequestBody(pathItem.Post)
 }
@@ -180,7 +180,7 @@ func setDeleteMany[M types.Model, REQ types.Request, RSP types.Response](path st
 		Tags:        tags(path, consts.DeleteMany, typ),
 		Parameters:  parseParametersFromPath(path),
 		RequestBody: newRequestBody[REQ](reqKey),
-		Responses:   newResponses[RSP](rspKey, consts.DeleteMany, !modelregistry.AreTypesEqual[M, REQ, RSP]()),
+		Responses:   newResponses(rspKey, consts.DeleteMany, !modelregistry.AreTypesEqual[M, REQ, RSP]()),
 	}
 }
 
@@ -231,7 +231,7 @@ func setUpdateMany[M types.Model, REQ types.Request, RSP types.Response](path st
 		Tags:        tags(path, consts.UpdateMany, typ),
 		Parameters:  parseParametersFromPath(path),
 		RequestBody: newRequestBody[REQ](reqKey),
-		Responses:   newResponses[RSP](rspKey, consts.UpdateMany, !modelregistry.AreTypesEqual[M, REQ, RSP]()),
+		Responses:   newResponses(rspKey, consts.UpdateMany, !modelregistry.AreTypesEqual[M, REQ, RSP]()),
 	}
 	removeBaseAutoFieldsFromBatchRequestBody(pathItem.Put)
 }
@@ -259,7 +259,7 @@ func setPatchMany[M types.Model, REQ types.Request, RSP types.Response](path str
 		Tags:        tags(path, consts.PatchMany, typ),
 		Parameters:  parseParametersFromPath(path),
 		RequestBody: newRequestBody[REQ](reqKey),
-		Responses:   newResponses[RSP](rspKey, consts.PatchMany, !modelregistry.AreTypesEqual[M, REQ, RSP]()),
+		Responses:   newResponses(rspKey, consts.PatchMany, !modelregistry.AreTypesEqual[M, REQ, RSP]()),
 	}
 	removeBaseAutoFieldsFromBatchRequestBody(pathItem.Patch)
 }
