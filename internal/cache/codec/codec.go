@@ -14,6 +14,9 @@
 //
 // The encoding is process-local and carries no compatibility promise: it is
 // not JSON for scalars, and nothing persists across a restart.
+//
+// DropUnreadable is the one answer to an entry that still fails to decode,
+// shared by every backend that stores bytes, the Redis one included.
 package codec
 
 import (
@@ -21,7 +24,9 @@ import (
 	"strconv"
 
 	"github.com/cockroachdb/errors"
+	"github.com/hydroan/gst/internal/types"
 	jsoniter "github.com/json-iterator/go"
+	"go.uber.org/zap"
 )
 
 var json = jsoniter.ConfigCompatibleWithStandardLibrary
@@ -40,6 +45,22 @@ func Unmarshal[T any](data []byte, value *T) error {
 		return json.Unmarshal(data, value)
 	}
 	return unmarshal(data, value)
+}
+
+// DropUnreadable answers a Get whose stored bytes cannot be decoded as the
+// caller's type, the same way for every backend that stores bytes: the entry
+// is logged at Warn with its key and the decode error, removed through drop so
+// the next read does not trip over it again, and reported as a miss with
+// types.ErrEntryNotFound, so the caller falls back to its source of truth and
+// rewrites the entry as it would for a key never stored. A drop that fails is
+// logged as well; the read is still a miss and the entry is retried on the
+// next read.
+func DropUnreadable(key string, err error, drop func() error) error {
+	zap.L().Warn("dropping a cache entry that cannot be decoded", zap.String("key", key), zap.Error(err))
+	if dropErr := drop(); dropErr != nil {
+		zap.L().Warn("failed to drop the unreadable cache entry", zap.String("key", key), zap.Error(dropErr))
+	}
+	return types.ErrEntryNotFound
 }
 
 // isInterface reports whether T is an interface type, in which case a value's

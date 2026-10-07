@@ -63,7 +63,8 @@ type SQLStatement = types.SQLStatement
 // and inert.
 type Selector[M Model, R any] = types.Selector[M, R]
 
-// ErrEntryNotFound is returned when a cache entry is not found.
+// ErrEntryNotFound is returned when a cache entry is not found, or when the
+// stored value cannot be decoded as the handle's type and the entry is dropped.
 var ErrEntryNotFound = types.ErrEntryNotFound
 
 // ErrTTLNotSupported is returned by Cache.Set when the backend cannot honor

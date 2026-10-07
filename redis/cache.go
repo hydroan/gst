@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/errors"
+	"github.com/hydroan/gst/internal/cache/codec"
 	"github.com/hydroan/gst/internal/cache/registry"
 	"github.com/hydroan/gst/internal/cache/tracing"
 	"github.com/hydroan/gst/internal/types"
@@ -35,7 +36,10 @@ type cache[T any] struct{}
 // not rewrite keys behind the caller's back.
 //
 // Errors are returned to the caller without logging here; the service and
-// controller layers own error reporting.
+// controller layers own error reporting. The one exception is an entry whose
+// bytes do not decode as T: Get drops it, logs the key at Warn and answers
+// ErrEntryNotFound, so a stale or foreign encoding reads as a miss instead of
+// a failure.
 func Cache[T any]() types.Cache[T] {
 	return registry.Load(handles, func() types.Cache[T] {
 		return tracing.NewWrapper[T](cache[T]{}, "redis")
@@ -62,7 +66,7 @@ func (cache[T]) Set(ctx context.Context, key string, data T, ttl time.Duration) 
 	return errors.WithStack(client.Set(ctx, Key(key), val, ttl).Err())
 }
 
-func (cache[T]) Get(ctx context.Context, key string) (T, error) {
+func (c cache[T]) Get(ctx context.Context, key string) (T, error) {
 	var zero T
 	client, err := Client()
 	if err != nil {
@@ -80,7 +84,7 @@ func (cache[T]) Get(ctx context.Context, key string) (T, error) {
 	}
 	var result T
 	if err = json.Unmarshal(data, &result); err != nil {
-		return zero, errors.WithStack(err)
+		return zero, codec.DropUnreadable(key, err, func() error { return c.Delete(ctx, key) })
 	}
 	return result, nil
 }

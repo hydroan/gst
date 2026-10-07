@@ -10,6 +10,8 @@ import (
 	"github.com/hydroan/gst/internal/cache/cachetest"
 	"github.com/hydroan/gst/internal/types"
 	gstredis "github.com/hydroan/gst/redis"
+	"go.uber.org/zap"
+	"go.uber.org/zap/zaptest/observer"
 )
 
 // TestCacheConformance runs the shared types.Cache conformance suite against
@@ -112,20 +114,42 @@ func TestCacheSetOverwriteResetsTTL(t *testing.T) {
 
 // TestCacheKeyspaceIsSharedAcrossTypes pins the documented contract: unlike
 // the in-memory backends, gstredis.Cache handles of different types share one
-// keyspace, so key isolation belongs to the caller's key builders. A cache of
-// another type sees the raw bytes and fails to decode them instead of
-// answering ErrEntryNotFound.
+// keyspace, so key isolation belongs to the caller's key builders. A handle of
+// another type reads the same entry whenever its bytes decode as that type.
 func TestCacheKeyspaceIsSharedAcrossTypes(t *testing.T) {
 	ctx := context.Background()
-	if err := gstredis.Cache[string]().Set(ctx, "cache-test:shared-keyspace", "text", time.Minute); err != nil {
+	if err := gstredis.Cache[int]().Set(ctx, "cache-test:shared-keyspace", 42, time.Minute); err != nil {
 		t.Fatalf("set: %v", err)
 	}
-
-	_, err := gstredis.Cache[int]().Get(ctx, "cache-test:shared-keyspace")
-	if err == nil {
-		t.Fatal("want a decode error when reading another type's entry")
+	got, err := gstredis.Cache[int64]().Get(ctx, "cache-test:shared-keyspace")
+	if err != nil {
+		t.Fatalf("want the other type's handle to read the shared entry, got %v", err)
 	}
-	if errors.Is(err, types.ErrEntryNotFound) {
-		t.Fatal("want a shared keyspace: ErrEntryNotFound would mean the types are isolated")
+	if got != 42 {
+		t.Fatalf("want 42, got %d", got)
+	}
+}
+
+// TestCacheDropsAnEntryItCannotDecode pins the read contract for an entry
+// whose bytes do not decode as T, here a string read through an int handle of
+// the shared keyspace: Get answers ErrEntryNotFound like a plain miss, drops
+// the entry so the next read is a plain miss, and logs the key once at Warn.
+func TestCacheDropsAnEntryItCannotDecode(t *testing.T) {
+	ctx := context.Background()
+	if err := gstredis.Cache[string]().Set(ctx, "cache-test:unreadable", "text", time.Minute); err != nil {
+		t.Fatalf("set: %v", err)
+	}
+	core, logs := observer.New(zap.WarnLevel)
+	t.Cleanup(zap.ReplaceGlobals(zap.New(core)))
+
+	_, err := gstredis.Cache[int]().Get(ctx, "cache-test:unreadable")
+	if !errors.Is(err, types.ErrEntryNotFound) {
+		t.Fatalf("want ErrEntryNotFound for an entry that cannot be decoded, got %v", err)
+	}
+	if gstredis.Cache[string]().Exists(ctx, "cache-test:unreadable") {
+		t.Fatal("want the unreadable entry dropped from the shared keyspace")
+	}
+	if entries := logs.FilterField(zap.String("key", "cache-test:unreadable")).All(); len(entries) != 1 {
+		t.Fatalf("want one warning naming the dropped key, got %d in %+v", len(entries), logs.All())
 	}
 }

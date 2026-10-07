@@ -56,7 +56,7 @@ func (c *cache[T]) Set(_ context.Context, key string, value T, ttl time.Duration
 	return c.c.Set([]byte(key), val, seconds)
 }
 
-func (c *cache[T]) Get(_ context.Context, key string) (T, error) {
+func (c *cache[T]) Get(ctx context.Context, key string) (T, error) {
 	var zero T
 	val, err := c.c.Get([]byte(key))
 	if err != nil {
@@ -65,7 +65,7 @@ func (c *cache[T]) Get(_ context.Context, key string) (T, error) {
 	}
 	var result T
 	if err := codec.Unmarshal(val, &result); err != nil {
-		return zero, err
+		return zero, codec.DropUnreadable(key, err, func() error { return c.Delete(ctx, key) })
 	}
 	return result, nil
 }

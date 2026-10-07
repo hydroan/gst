@@ -7,7 +7,8 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-// ErrEntryNotFound is returned when a cache entry is not found.
+// ErrEntryNotFound is returned when a cache entry is not found, or when the
+// stored value cannot be decoded as the handle's type and the entry is dropped.
 var ErrEntryNotFound = errors.New("cache entry not found")
 
 // ErrTTLNotSupported is returned by Cache.Set when the backend cannot honor
@@ -21,7 +22,10 @@ var ErrTTLNotSupported = errors.New("cache backend does not support the requeste
 //   - T: Cached value type
 //
 // Error Handling:
-//   - Get returns ErrEntryNotFound when the key does not exist.
+//   - Get returns ErrEntryNotFound when the key does not exist, and when the
+//     stored value cannot be decoded as T: such an entry is dropped and logged
+//     at Warn, so the caller falls back to its source of truth and rewrites it
+//     exactly as it does for a missing key.
 //   - Delete is idempotent: deleting a missing key returns nil.
 //   - Set returns ErrTTLNotSupported when the backend cannot honor the
 //     requested ttl semantics.
@@ -37,7 +41,8 @@ var ErrTTLNotSupported = errors.New("cache backend does not support the requeste
 // as context.Background(), so callers never need to normalize it themselves.
 type Cache[T any] interface {
 	// Get retrieves a value from the cache by key.
-	// Returns ErrEntryNotFound if the key does not exist.
+	// Returns ErrEntryNotFound if the key does not exist or its value cannot
+	// be decoded as T; an undecodable entry is dropped and logged.
 	Get(ctx context.Context, key string) (T, error)
 
 	// Set stores a value in the cache with the specified TTL.
