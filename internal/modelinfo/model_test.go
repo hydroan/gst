@@ -181,3 +181,22 @@ func TestModel_InModelRoot(t *testing.T) {
 		})
 	}
 }
+
+// TestPackageImportPath pins the examples of PackageImportPath's doc comment
+// and that a model's ImportPath is the same rule applied to its directory.
+func TestPackageImportPath(t *testing.T) {
+	for _, tt := range []struct{ dir, want string }{
+		{"model/sample", "tmpapp/model/sample"},
+		{"model/", "tmpapp/model"},
+		{"", "tmpapp"},
+		{".", "tmpapp"},
+	} {
+		if got := modelinfo.PackageImportPath("tmpapp", tt.dir); got != tt.want {
+			t.Fatalf("PackageImportPath(tmpapp, %q) = %q, want %q", tt.dir, got, tt.want)
+		}
+	}
+	m := &modelinfo.Model{ModulePath: "tmpapp", ModelFileDir: "model/sample"}
+	if got := m.ImportPath(); got != "tmpapp/model/sample" {
+		t.Fatalf("ImportPath() = %q, want tmpapp/model/sample", got)
+	}
+}

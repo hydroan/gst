@@ -68,7 +68,7 @@ func columnInspectionOverlay(module string, modelDir string, models []*modelinfo
 	// The scan only sees the column vars an earlier run declared; a first
 	// run, or a model added since, has none on disk yet.
 	for _, m := range models {
-		files.omit(modelPkgPath(m), columnVarName(m.ModelName))
+		files.omit(m.ImportPath(), columnVarName(m.ModelName))
 	}
 	rewrites, err := leaveOutColumnDependents(files)
 	if err != nil {
@@ -132,7 +132,7 @@ func scanColumnInspectionFiles(module string, modelDir string, ignore gghelper.P
 		if readErr != nil {
 			return errors.Wrapf(readErr, "read %s", path)
 		}
-		pkg := packageImportPath(module, filepath.Dir(path))
+		pkg := modelinfo.PackageImportPath(module, filepath.Dir(path))
 		// A file without the generated header is hand-written, whatever its
 		// name, and keeps participating in the build.
 		if isColumnFileCandidate(path) && bytes.HasPrefix(content, []byte(consts.CodeGeneratedComment())) {

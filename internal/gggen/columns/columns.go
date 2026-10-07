@@ -56,7 +56,7 @@ func Generate(module string, modelDir string, models []*modelinfo.Model, ignore 
 	// model, so the resolved columns only need to be matched to it.
 	sources := make(map[string]string, len(models))
 	for _, m := range models {
-		sources[modelPkgPath(m)+"."+m.ModelName] = m.ModelFilePath
+		sources[m.ImportPath()+"."+m.ModelName] = m.ModelFilePath
 	}
 
 	byFile := groupColumnsByFile(resolved, sources)
@@ -172,21 +172,4 @@ func isColumnFileCandidate(path string) bool {
 	}
 	base := filepath.Base(path)
 	return base != ggconst.FileModelGen && base != ggconst.FileAPIDocGen
-}
-
-// modelPkgPath rebuilds the import path of the package declaring a model:
-// tmpapp/model/sample for a model of model/sample in module tmpapp.
-func modelPkgPath(m *modelinfo.Model) string {
-	return packageImportPath(m.ModulePath, m.ModelFileDir)
-}
-
-// packageImportPath rebuilds the import path of the project package in dir, a
-// directory relative to the module root: in module tmpapp, model/sample gives
-// tmpapp/model/sample, and the module root, "." or "", gives tmpapp.
-func packageImportPath(module string, dir string) string {
-	dir = strings.Trim(filepath.ToSlash(filepath.Clean(dir)), "/")
-	if dir == "" || dir == "." {
-		return module
-	}
-	return module + "/" + dir
 }

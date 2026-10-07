@@ -7,7 +7,6 @@ import (
 
 	"github.com/hydroan/gst/internal/consts"
 	"github.com/hydroan/gst/internal/ggconst"
-	"github.com/hydroan/gst/internal/modelinfo"
 	"github.com/hydroan/gst/internal/modelinspect"
 	"github.com/stretchr/testify/require"
 )
@@ -93,13 +92,4 @@ func TestRemoveOrphanColumnFilesRefusesHandWrittenFile(t *testing.T) {
 	_, err := removeOrphanColumnFiles(scanDir, map[string]struct{}{})
 	require.Error(t, err, "a file without the generated header must not be deleted")
 	require.FileExists(t, intruder)
-}
-
-func TestModelPkgPath(t *testing.T) {
-	require.Equal(t, "tmpapp/model/sample",
-		modelPkgPath(&modelinfo.Model{ModulePath: "tmpapp", ModelFileDir: "model/sample"}))
-	require.Equal(t, "tmpapp/model",
-		modelPkgPath(&modelinfo.Model{ModulePath: "tmpapp", ModelFileDir: "model/"}))
-	require.Equal(t, "tmpapp",
-		modelPkgPath(&modelinfo.Model{ModulePath: "tmpapp", ModelFileDir: ""}))
 }

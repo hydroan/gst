@@ -5,7 +5,6 @@ import (
 	"testing"
 
 	"github.com/hydroan/gst/internal/modelinspect"
-
 	"github.com/stretchr/testify/require"
 )
 

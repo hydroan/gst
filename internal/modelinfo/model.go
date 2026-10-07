@@ -125,9 +125,22 @@ func flattenedServiceOutputRel(modelFilePath, modelDir string) string {
 	return dir
 }
 
-// ImportPath returns the import path of the package the model is declared in.
+// ImportPath returns the import path of the package the model is declared in
+// (see PackageImportPath).
 func (m *Model) ImportPath() string {
-	return filepath.Join(m.ModulePath, m.ModelFileDir)
+	return PackageImportPath(m.ModulePath, m.ModelFileDir)
+}
+
+// PackageImportPath returns the import path of the project package in dir, a
+// directory relative to the module root, with forward slashes whatever the
+// host writes paths with: in module tmpapp, model/sample gives
+// tmpapp/model/sample, and the module root, "." or "", gives tmpapp.
+func PackageImportPath(module string, dir string) string {
+	dir = strings.Trim(filepath.ToSlash(filepath.Clean(dir)), "/")
+	if dir == "" || dir == "." {
+		return module
+	}
+	return module + "/" + dir
 }
 
 // InModelRoot reports whether the model is declared in the root model package,
