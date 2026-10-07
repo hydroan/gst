@@ -3,8 +3,9 @@
 // string literals. Every model file gets a generated file of the same name
 // declaring a <Model>Cols var per model it declares: model/sample/record.go,
 // declaring Record, gets model/sample/record.gen.go with RecordCols. The
-// columns come from gorm's own schema parser, run by a program compiled
-// inside the project's module against the project's real model types.
+// columns come from gorm's own schema parser, run inside the project's module
+// against the project's real model types by the inspection of package
+// modelinspect.
 package columns
 
 import (
@@ -19,6 +20,7 @@ import (
 	"github.com/hydroan/gst/internal/ggconst"
 	"github.com/hydroan/gst/internal/gghelper"
 	"github.com/hydroan/gst/internal/modelinfo"
+	"github.com/hydroan/gst/internal/modelinspect"
 )
 
 // Result lists the column files a Generate run changed on disk.
@@ -40,43 +42,14 @@ type Result struct {
 func Generate(module string, modelDir string, models []*modelinfo.Model, ignore gghelper.ProjectIgnore) (Result, error) {
 	var result Result
 
-	// Resolving columns compiles a program that imports the project's models,
-	// which only works once the project depends on the framework. A project
-	// that does not cannot hold column references either, so there is nothing
-	// to generate yet.
-	dependsOnGst, err := gghelper.RequiresFramework(".")
-	if err != nil {
-		return result, err
-	}
-	if !dependsOnGst {
-		return result, nil
-	}
-
-	program := buildColumnsProgram(module, models)
-
-	// Compiling and running the inspection program costs seconds, which would
-	// otherwise be paid on every gg gen even when nothing that affects columns
-	// changed. The cache key covers every such input, so a hit skips the build
-	// entirely and a miss is unavoidable work.
-	cacheKey, err := columnsCacheKey(program, modelDir, ignore)
-	if err != nil {
-		return result, err
-	}
-	resolved, cached := readColumnsCache(cacheKey)
-	if !cached {
+	resolved, inspected, err := modelinspect.Inspect(module, modelDir, models, ignore, func() (map[string]string, error) {
 		// The inspection build compiles the model packages before this run
 		// writes their column references, so it stubs out the previous
 		// generation and leaves out the handwritten code that reads it.
-		overlay, overlayErr := columnInspectionOverlay(module, modelDir, models, ignore)
-		if overlayErr != nil {
-			return result, overlayErr
-		}
-		if resolved, err = inspectColumns(program, overlay); err != nil {
-			return result, err
-		}
-		if err = writeColumnsCache(cacheKey, resolved); err != nil {
-			return result, err
-		}
+		return columnInspectionOverlay(module, modelDir, models, ignore)
+	})
+	if err != nil || !inspected {
+		return result, err
 	}
 
 	// The scan that drives generation already knows which file declares each
@@ -115,8 +88,8 @@ func Generate(module string, modelDir string, models []*modelinfo.Model, ignore 
 // var would reference nothing; a model without a source file here was
 // registered from outside the project's model directory, such as a framework
 // module, and has no file to generate alongside.
-func groupColumnsByFile(resolved []modelColumns, sources map[string]string) map[string][]modelColumns {
-	byFile := make(map[string][]modelColumns)
+func groupColumnsByFile(resolved []modelinspect.ModelColumns, sources map[string]string) map[string][]modelinspect.ModelColumns {
+	byFile := make(map[string][]modelinspect.ModelColumns)
 	for _, m := range resolved {
 		if len(m.Columns) == 0 {
 			continue

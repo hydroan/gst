@@ -8,23 +8,24 @@ import (
 	"github.com/hydroan/gst/internal/consts"
 	"github.com/hydroan/gst/internal/ggconst"
 	"github.com/hydroan/gst/internal/modelinfo"
+	"github.com/hydroan/gst/internal/modelinspect"
 	"github.com/stretchr/testify/require"
 )
 
 func TestGroupColumnsByFile(t *testing.T) {
-	id := columnInfo{GoName: "ID", DBName: "id", TypeExpr: "string", TypeName: "string"}
+	id := modelinspect.ColumnInfo{GoName: "ID", DBName: "id", TypeExpr: "string", TypeName: "string"}
 	sources := map[string]string{
 		"tmpapp/model/sample.Record":  "model/sample/record.go",
 		"tmpapp/model/report.Summary": "model/report/summary.go",
 	}
-	resolved := []modelColumns{
-		{PkgPath: "tmpapp/model/sample", PkgName: "sample", Name: "Record", Columns: []columnInfo{id}},
+	resolved := []modelinspect.ModelColumns{
+		{PkgPath: "tmpapp/model/sample", PkgName: "sample", Name: "Record", Columns: []modelinspect.ColumnInfo{id}},
 		// Summary resolved no columns: an action-only model would render an
 		// empty Cols var that references nothing.
 		{PkgPath: "tmpapp/model/report", PkgName: "report", Name: "Summary"},
 		// External has no source file in the scan: it was registered from
 		// outside the project's model directory, such as a framework module.
-		{PkgPath: "github.com/elsewhere/mod", PkgName: "ext", Name: "External", Columns: []columnInfo{id}},
+		{PkgPath: "github.com/elsewhere/mod", PkgName: "ext", Name: "External", Columns: []modelinspect.ColumnInfo{id}},
 	}
 
 	byFile := groupColumnsByFile(resolved, sources)

@@ -15,6 +15,7 @@ import (
 	"github.com/hydroan/gst/internal/ggconst"
 	"github.com/hydroan/gst/internal/gggen"
 	"github.com/hydroan/gst/internal/goast"
+	"github.com/hydroan/gst/internal/modelinspect"
 )
 
 // renderColumnsFile builds the generated source for one model source file: a
@@ -50,7 +51,7 @@ import (
 //		ID:        gst.NewColumn[*Record, uuid.UUID]("id"),
 //		Tags:      gst.NewColumn[*Record, any]("tags"),
 //	}
-func renderColumnsFile(module string, pkgName string, source string, models []modelColumns) (string, error) {
+func renderColumnsFile(module string, pkgName string, source string, models []modelinspect.ModelColumns) (string, error) {
 	imports := map[string]string{ggconst.ImportPathGst: "gst"}
 	for _, m := range models {
 		for _, col := range m.Columns {
@@ -230,7 +231,7 @@ func columnVarName(model string) string {
 // whose type cannot be written as source, gets the plain reference. In the
 // example of renderColumnsFile, Amount gets gst.NumericColumn[int64],
 // CreatedAt gst.TimeColumn, ID gst.Column[uuid.UUID] and Tags gst.Column[any].
-func columnRefType(col columnInfo) (ast.Expr, error) {
+func columnRefType(col modelinspect.ColumnInfo) (ast.Expr, error) {
 	switch {
 	case col.Time && col.TypeExpr != "":
 		return gstSelector("TimeColumn"), nil
@@ -260,7 +261,7 @@ func columnRefType(col columnInfo) (ast.Expr, error) {
 // CreatedAt gst.NewTimeColumn[*Record]("created_at"), ID
 // gst.NewColumn[*Record, uuid.UUID]("id") and Tags
 // gst.NewColumn[*Record, any]("tags").
-func columnRefLiteral(model string, col columnInfo) (ast.Expr, error) {
+func columnRefLiteral(model string, col modelinspect.ColumnInfo) (ast.Expr, error) {
 	modelArg := &ast.StarExpr{X: ast.NewIdent(model)}
 	dbName := &ast.BasicLit{Kind: token.STRING, Value: strconv.Quote(col.DBName)}
 	switch {
@@ -298,7 +299,7 @@ func endColumnRefType(refType ast.Expr, pos token.Pos) {
 
 // columnTypeParam returns the type argument for a column reference, falling
 // back to any when the column type cannot be written as source.
-func columnTypeParam(col columnInfo) (ast.Expr, error) {
+func columnTypeParam(col modelinspect.ColumnInfo) (ast.Expr, error) {
 	if col.TypeExpr == "" {
 		return ast.NewIdent("any"), nil
 	}

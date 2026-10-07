@@ -6,7 +6,7 @@ import (
 	"strconv"
 	"testing"
 
-	"github.com/hydroan/gst/internal/gggen/columns"
+	"github.com/hydroan/gst/internal/modelinspect"
 	"github.com/stretchr/testify/require"
 )
 
@@ -108,7 +108,7 @@ func (i *Item) DeleteBefore(ctx context.Context) error {
 }
 `)
 
-	cacheDir, err := columns.CacheDir()
+	cacheDir, err := modelinspect.CacheDir()
 	require.NoError(t, err)
 	recordColumnsFile := filepath.Join("model", "sample", "record.gen.go")
 	itemColumnsFile := filepath.Join("model", "item", "item.gen.go")

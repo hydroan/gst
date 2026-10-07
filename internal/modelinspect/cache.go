@@ -1,4 +1,4 @@
-package columns
+package modelinspect
 
 import (
 	"crypto/sha256"
@@ -15,7 +15,7 @@ import (
 	"github.com/hydroan/gst/internal/gghelper"
 )
 
-// columnsCacheKey hashes everything that can change the resolved columns:
+// inspectionCacheKey hashes everything that can change the resolved columns:
 //
 //   - the gg binary itself, which changes whenever the framework changes how
 //     columns are resolved (a local framework checkout does not show up in
@@ -39,7 +39,7 @@ import (
 // Model files are the project's declared home for those types; if a stale
 // result is ever suspected, deleting the cache directory forces a fresh
 // inspection.
-func columnsCacheKey(program string, modelDir string, ignore gghelper.ProjectIgnore) (string, error) {
+func inspectionCacheKey(program string, modelDir string, ignore gghelper.ProjectIgnore) (string, error) {
 	digest := sha256.New()
 	digest.Write([]byte(program))
 
@@ -84,9 +84,9 @@ func columnsCacheKey(program string, modelDir string, ignore gghelper.ProjectIgn
 	return hex.EncodeToString(digest.Sum(nil)), nil
 }
 
-// readColumnsCache returns a previously stored inspection result for the key.
-func readColumnsCache(key string) ([]modelColumns, bool) {
-	dir, err := columnsCacheDir()
+// readInspectionCache returns a previously stored inspection result for the key.
+func readInspectionCache(key string) ([]ModelColumns, bool) {
+	dir, err := inspectionCacheDir()
 	if err != nil {
 		return nil, false
 	}
@@ -94,17 +94,17 @@ func readColumnsCache(key string) ([]modelColumns, bool) {
 	if err != nil {
 		return nil, false
 	}
-	var resolved []modelColumns
+	var resolved []ModelColumns
 	if err = json.Unmarshal(content, &resolved); err != nil {
 		return nil, false
 	}
 	return resolved, true
 }
 
-// writeColumnsCache stores an inspection result, replacing the project's
+// writeInspectionCache stores an inspection result, replacing the project's
 // previous entry: only the current inputs are ever worth keeping.
-func writeColumnsCache(key string, resolved []modelColumns) error {
-	dir, err := columnsCacheDir()
+func writeInspectionCache(key string, resolved []ModelColumns) error {
+	dir, err := inspectionCacheDir()
 	if err != nil {
 		return err
 	}
@@ -134,10 +134,10 @@ func writeColumnsCache(key string, resolved []modelColumns) error {
 	return nil
 }
 
-// columnsCacheDir returns the per-project cache directory. Results live under
+// inspectionCacheDir returns the per-project cache directory. Results live under
 // the user cache directory rather than in the project, so a generated tree
 // stays free of tooling state.
-func columnsCacheDir() (string, error) {
+func inspectionCacheDir() (string, error) {
 	base, err := os.UserCacheDir()
 	if err != nil {
 		return "", errors.Wrap(err, "resolve user cache directory")

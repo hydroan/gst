@@ -13,7 +13,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/errors"
-	"github.com/hydroan/gst/internal/gggen/columns"
+	"github.com/hydroan/gst/internal/modelinspect"
 	"github.com/stretchr/testify/require"
 )
 
@@ -347,7 +347,7 @@ func newGenProject(t *testing.T) (projectDir string, ok bool) {
 	prune = false
 
 	writeProjectGoModAgainstRealFramework(t, projectDir)
-	cacheDir, err := columns.CacheDir()
+	cacheDir, err := modelinspect.CacheDir()
 	if err != nil {
 		t.Fatal(err)
 	}

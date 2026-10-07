@@ -4,6 +4,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/hydroan/gst/internal/modelinspect"
+
 	"github.com/stretchr/testify/require"
 )
 
@@ -12,11 +14,11 @@ import (
 // comment, and its columns are the examples of the doc comments of
 // importSpec, columnRefType and columnRefLiteral.
 func TestRenderColumnsFileWritesATypedReferencePerColumn(t *testing.T) {
-	models := []modelColumns{{
+	models := []modelinspect.ModelColumns{{
 		PkgPath: "tmpapp/model/sample",
 		PkgName: "sample",
 		Name:    "Record",
-		Columns: []columnInfo{
+		Columns: []modelinspect.ColumnInfo{
 			{GoName: "Amount", DBName: "amount", TypeExpr: "int64", TypeName: "int64", Numeric: true},
 			{GoName: "CreatedAt", DBName: "created_at", TypeExpr: "time.Time", TypePkg: "time", TypeName: "time.Time", Time: true},
 			{GoName: "Elapsed", DBName: "elapsed", TypeExpr: "time.Duration", TypePkg: "time", TypeName: "time.Duration", Numeric: true},
@@ -61,11 +63,11 @@ var RecordCols = struct {
 // whose type is an anonymous struct, as a serialized column's is, gets the
 // struct written out as its type argument.
 func TestRenderColumnsFileWritesAnAnonymousStructType(t *testing.T) {
-	models := []modelColumns{{
+	models := []modelinspect.ModelColumns{{
 		PkgPath: "tmpapp/model/sample",
 		PkgName: "sample",
 		Name:    "Record",
-		Columns: []columnInfo{
+		Columns: []modelinspect.ColumnInfo{
 			{GoName: "Meta", DBName: "meta", TypeExpr: `struct { A int "json:\"a\"" }`, TypeName: `struct { A int "json:\"a\"" }`},
 		},
 	}}
@@ -78,11 +80,11 @@ func TestRenderColumnsFileWritesAnAnonymousStructType(t *testing.T) {
 }
 
 func TestRenderColumnsFile(t *testing.T) {
-	models := []modelColumns{{
+	models := []modelinspect.ModelColumns{{
 		PkgPath: "tmpapp/model/sample",
 		PkgName: "sample",
 		Name:    "Record",
-		Columns: []columnInfo{
+		Columns: []modelinspect.ColumnInfo{
 			{GoName: "Amount", DBName: "amount", TypeExpr: "int64", TypeName: "int64", Numeric: true},
 			{GoName: "CreatedAt", DBName: "created_at", TypeExpr: "time.Time", TypePkg: "time", TypeName: "time.Time", Time: true},
 			{GoName: "ID", DBName: "id", TypeExpr: "string", TypeName: "string"},
@@ -154,11 +156,11 @@ func TestRenderColumnsFile(t *testing.T) {
 func TestRenderColumnsFileKeepsImportsUsedByTypeArguments(t *testing.T) {
 	// time.Duration is numeric, so its reference keeps the type argument and
 	// with it the import; only the TimeColumn specialization drops both.
-	models := []modelColumns{{
+	models := []modelinspect.ModelColumns{{
 		PkgPath: "tmpapp/model/sample",
 		PkgName: "sample",
 		Name:    "Record",
-		Columns: []columnInfo{
+		Columns: []modelinspect.ColumnInfo{
 			{GoName: "CreatedAt", DBName: "created_at", TypeExpr: "time.Time", TypePkg: "time", TypeName: "time.Time", Time: true},
 			{GoName: "Elapsed", DBName: "elapsed", TypeExpr: "time.Duration", TypePkg: "time", TypeName: "time.Duration", Numeric: true},
 		},
@@ -171,10 +173,10 @@ func TestRenderColumnsFileKeepsImportsUsedByTypeArguments(t *testing.T) {
 }
 
 func TestRenderColumnsFileRejectsImportAliasCollision(t *testing.T) {
-	models := []modelColumns{{
+	models := []modelinspect.ModelColumns{{
 		PkgName: "sample",
 		Name:    "Record",
-		Columns: []columnInfo{
+		Columns: []modelinspect.ColumnInfo{
 			{GoName: "Left", DBName: "left", TypeExpr: "shared.Kind", TypePkg: "tmpapp/a/shared"},
 			{GoName: "Right", DBName: "right", TypeExpr: "shared.Kind", TypePkg: "tmpapp/b/shared"},
 		},

@@ -1,4 +1,4 @@
-package columns
+package modelinspect
 
 import (
 	"go/parser"
@@ -11,7 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestBuildColumnsProgram(t *testing.T) {
+func TestBuildProgram(t *testing.T) {
 	registered := &modelinfo.Model{
 		ModulePath: "tmpapp", ModelPkgName: "sample", ModelName: "Record",
 		ModelFileDir: "model/sample", Design: &dsl.Design{Migrate: true},
@@ -30,7 +30,17 @@ func TestBuildColumnsProgram(t *testing.T) {
 	}
 	all := []*modelinfo.Model{registered, summary, trend, note}
 
-	program := buildColumnsProgram("tmpapp", all)
+	program := buildProgram("tmpapp", all)
+
+	t.Run("ValidatesTheIndexDeclarationsOfEveryTableBackedModel", func(t *testing.T) {
+		// The declarations are validated against a MySQL handle that never
+		// connects, and a table-backed model is compiled in by name as well:
+		// the registry lists it once gg gen wrote model.gen.go, and gg check
+		// validates it before that too.
+		require.Contains(t, program, "schemaDB, err := gstmysql.DryRun()")
+		require.Contains(t, program, "model.ValidateIndexes(schemaDB, m)")
+		require.Contains(t, program, "\t\t&vm2.Record{},\n")
+	})
 
 	t.Run("EnumeratesUnregisteredModelsBehindCapabilityGuard", func(t *testing.T) {
 		// A model that declares a Design but no Migrate never reaches the
@@ -52,10 +62,13 @@ func TestBuildColumnsProgram(t *testing.T) {
 		require.Contains(t, program, "&vm0.Note{},")
 	})
 
-	t.Run("LeavesRegisteredModelsToTheRegistry", func(t *testing.T) {
-		// A migrated model arrives through model.RegisteredModels; enumerating
-		// it as well would list it twice behind the registry's back.
-		require.NotContains(t, program, "model/sample")
+	t.Run("CompilesTableBackedModelsInByName", func(t *testing.T) {
+		// A migrated model arrives through model.RegisteredModels once gg gen
+		// wrote the registration; it is compiled in by name as well so that
+		// gg check validates its index declarations before that, and the
+		// program inspects a model listed twice once (see seen).
+		require.Contains(t, program, `vm2 "tmpapp/model/sample"`)
+		require.Contains(t, program, "\tmodels = append(models,\n\t\t&vm2.Record{},\n\t)\n")
 	})
 
 	t.Run("ProducesParseableSource", func(t *testing.T) {
@@ -70,21 +83,29 @@ func TestBuildColumnsProgram(t *testing.T) {
 	})
 
 	t.Run("IsDeterministic", func(t *testing.T) {
-		require.Equal(t, program, buildColumnsProgram("tmpapp", all))
+		require.Equal(t, program, buildProgram("tmpapp", all))
 	})
 
-	t.Run("LeavesEnumerationToTheRegistryWhenEveryModelIsRegistered", func(t *testing.T) {
-		// The registry already enumerates every migrated model, so nothing is
-		// compiled in beyond the template itself.
-		bare := buildColumnsProgram("tmpapp", []*modelinfo.Model{registered})
-		template := strings.NewReplacer("{{MODULE}}", "tmpapp", "{{UNREGISTERED_IMPORTS}}", "", "{{UNREGISTERED_MODELS}}", "").Replace(columnsProgram)
+	t.Run("CompilesALoneTableBackedModelInByName", func(t *testing.T) {
+		// With every model registered, the program still carries the
+		// table-backed entries: nothing else, and no capability guard.
+		bare := buildProgram("tmpapp", []*modelinfo.Model{registered})
+		entries := `	// Table-backed models are compiled in by name as well: the registry
+	// lists them once gg gen wrote model.gen.go, and gg check validates their
+	// index declarations before that too. One the registry already lists is
+	// inspected once (see seen).
+	models = append(models,
+		&vm0.Record{},
+	)
+`
+		template := strings.NewReplacer("{{MODULE}}", "tmpapp", "{{UNREGISTERED_IMPORTS}}", "\tvm0 \"tmpapp/model/sample\"\n", "{{UNREGISTERED_MODELS}}", entries).Replace(inspectionProgram)
 		require.Equal(t, template, bare)
 		_, err := parser.ParseFile(token.NewFileSet(), "main.go", bare, 0)
 		require.NoError(t, err)
 	})
 }
 
-func TestBuildColumnsProgramInspectsIgnoredModelsUnconditionally(t *testing.T) {
+func TestBuildProgramInspectsIgnoredModelsUnconditionally(t *testing.T) {
 	ignored := &modelinfo.Model{
 		ModulePath: "tmpapp", ModelPkgName: "user", ModelName: "User",
 		ModelFileDir: "model/iam/user", ModelFilePath: "model/iam/user/user.go",
@@ -96,13 +117,18 @@ func TestBuildColumnsProgramInspectsIgnoredModelsUnconditionally(t *testing.T) {
 		ModelFileDir: "model/report", ModelFilePath: "model/report/summary.go",
 		Design: &dsl.Design{Migrate: false},
 	}
+	registered := &modelinfo.Model{
+		ModulePath: "tmpapp", ModelPkgName: "sample", ModelName: "Record",
+		ModelFileDir: "model/sample", ModelFilePath: "model/sample/record.go",
+		Design: &dsl.Design{Migrate: true},
+	}
 
-	program := buildColumnsProgram("tmpapp", []*modelinfo.Model{ignored, virtual})
+	program := buildProgram("tmpapp", []*modelinfo.Model{ignored, virtual, registered})
 
 	t.Run("FillsTheTemplateWithAliasedImportsAndModelEntries", func(t *testing.T) {
-		// The imports and entries are the example of buildColumnsProgram's doc
+		// The imports and entries are the example of buildProgram's doc
 		// comment.
-		imports := "\tvm0 \"tmpapp/model/iam/user\"\n\tvm1 \"tmpapp/model/report\"\n"
+		imports := "\tvm0 \"tmpapp/model/iam/user\"\n\tvm1 \"tmpapp/model/report\"\n\tvm2 \"tmpapp/model/sample\"\n"
 		entries := `	// Models that declare a Design but no Migrate never reach the registry.
 	// Their query columns resolve the same way, so those that opted in to
 	// framework query parameters are inspected alongside the registered ones.
@@ -120,8 +146,15 @@ func TestBuildColumnsProgramInspectsIgnoredModelsUnconditionally(t *testing.T) {
 	models = append(models,
 		&vm0.User{},
 	)
+	// Table-backed models are compiled in by name as well: the registry
+	// lists them once gg gen wrote model.gen.go, and gg check validates their
+	// index declarations before that too. One the registry already lists is
+	// inspected once (see seen).
+	models = append(models,
+		&vm2.Record{},
+	)
 `
-		want := strings.NewReplacer("{{MODULE}}", "tmpapp", "{{UNREGISTERED_IMPORTS}}", imports, "{{UNREGISTERED_MODELS}}", entries).Replace(columnsProgram)
+		want := strings.NewReplacer("{{MODULE}}", "tmpapp", "{{UNREGISTERED_IMPORTS}}", imports, "{{UNREGISTERED_MODELS}}", entries).Replace(inspectionProgram)
 		require.Equal(t, want, program)
 	})
 
@@ -143,7 +176,7 @@ func TestBuildColumnsProgramInspectsIgnoredModelsUnconditionally(t *testing.T) {
 	})
 
 	t.Run("ProducesParseableSourceForIgnoredModelsAlone", func(t *testing.T) {
-		alone := buildColumnsProgram("tmpapp", []*modelinfo.Model{ignored})
+		alone := buildProgram("tmpapp", []*modelinfo.Model{ignored})
 		require.Contains(t, alone, "models = append(models,\n\t\t&vm0.User{},\n\t)")
 		_, err := parser.ParseFile(token.NewFileSet(), "main.go", alone, 0)
 		require.NoError(t, err)

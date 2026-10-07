@@ -1,4 +1,4 @@
-package columns
+package modelinspect
 
 import (
 	"encoding/json"
@@ -12,33 +12,14 @@ import (
 	"github.com/hydroan/gst/internal/modelinfo"
 )
 
-// columnInfo is one generated column reference, as reported by the inspection
-// program that runs inside the project module.
-type columnInfo struct {
-	GoName   string `json:"go_name"`
-	DBName   string `json:"db_name"`
-	TypeExpr string `json:"type_expr"` // Source-level type expression, empty when the type cannot be reproduced.
-	TypePkg  string `json:"type_pkg"`  // Import path required by TypeExpr, empty for builtin or same-package types.
-	TypeName string `json:"type_name"` // Original type, recorded in a comment when TypeExpr is empty.
-	Numeric  bool   `json:"numeric"`   // Column type is a numeric kind, so the reference gains SUM and AVG.
-	Time     bool   `json:"time"`      // Column type is time.Time, so the reference gains time bucketing.
-}
-
-// modelColumns groups the columns of one model.
-type modelColumns struct {
-	PkgPath string       `json:"pkg_path"`
-	PkgName string       `json:"pkg_name"`
-	Name    string       `json:"name"`
-	Columns []columnInfo `json:"columns"`
-}
-
-// columnsProgram is the template of the inspection program that reports the
-// project models' columns as JSON. It runs inside the project module, so it
+// inspectionProgram is the template of the inspection program that reports the
+// project models' columns, and what their index declarations violate on MySQL,
+// as JSON. It runs inside the project module, so it
 // resolves exactly the columns the framework resolves at runtime.
-// buildColumnsProgram fills {{MODULE}} and the unregistered-model
+// buildProgram fills {{MODULE}} and the unregistered-model
 // placeholders. The result path, which differs on every run, reaches the
 // program as its argument, so the source stays the same between runs.
-const columnsProgram = `package main
+const inspectionProgram = `package main
 
 import (
 	"encoding/json"
@@ -48,6 +29,7 @@ import (
 	"strings"
 
 	"github.com/hydroan/gst/config"
+	gstmysql "github.com/hydroan/gst/database/mysql"
 	"github.com/hydroan/gst/model"
 	"github.com/hydroan/gst/modelschema"
 
@@ -65,10 +47,11 @@ type columnInfo struct {
 }
 
 type modelColumns struct {
-	PkgPath string       ` + "`json:\"pkg_path\"`" + `
-	PkgName string       ` + "`json:\"pkg_name\"`" + `
-	Name    string       ` + "`json:\"name\"`" + `
-	Columns []columnInfo ` + "`json:\"columns\"`" + `
+	PkgPath        string       ` + "`json:\"pkg_path\"`" + `
+	PkgName        string       ` + "`json:\"pkg_name\"`" + `
+	Name           string       ` + "`json:\"name\"`" + `
+	Columns        []columnInfo ` + "`json:\"columns\"`" + `
+	IndexViolation string       ` + "`json:\"index_violation\"`" + `
 }
 
 func main() {
@@ -80,6 +63,14 @@ func main() {
 		fail(err)
 	}
 	defer config.Clean()
+
+	// The index declarations are validated against the MySQL dialect whatever
+	// database the configuration names: the handle never connects, and gg
+	// check decides from the configuration whether what it finds is reported.
+	schemaDB, err := gstmysql.DryRun()
+	if err != nil {
+		fail(err)
+	}
 
 	seen := make(map[string]struct{})
 	out := make([]modelColumns, 0)
@@ -103,6 +94,9 @@ func main() {
 			fail(fmt.Errorf("resolve columns of %s: %w", key, err))
 		}
 		entry := modelColumns{PkgPath: typ.PkgPath(), PkgName: packageName(typ), Name: typ.Name()}
+		if validateErr := model.ValidateIndexes(schemaDB, m); validateErr != nil {
+			entry.IndexViolation = validateErr.Error()
+		}
 		for _, col := range cols {
 			expr, pkg := describeType(col.Type, typ.PkgPath())
 			class := modelschema.ClassifyColumn(col.Type)
@@ -184,7 +178,7 @@ func fail(err error) {
 }
 `
 
-// buildColumnsProgram renders the inspection program for the project.
+// buildProgram renders the inspection program for the project.
 // Registered models are enumerated at run time through
 // model.RegisteredModels; a model that declares a Design but no Migrate never
 // reaches the registry, so it is compiled into the program as an explicit
@@ -196,14 +190,21 @@ func fail(err error) {
 // explicit entries but skip the query-parameter gate: they remain
 // table-backed and their column files must not drift from the sources.
 //
+// Table-backed models, those declaring Migrate, are compiled in by name as
+// well: the registry lists them once gg gen wrote model.gen.go, and gg check
+// validates their index declarations before that too; one the registry
+// already lists is inspected once.
+//
 // For the model Summary of model/report, which declares a Design but no
-// Migrate, and the model User of model/iam/user, whose registration
-// gen.models.ignore drops, it imports their packages in module tmpapp next to
-// the registration import,
+// Migrate, the model User of model/iam/user, whose registration
+// gen.models.ignore drops, and the model Record of model/sample, which
+// declares Migrate, it imports their packages in module tmpapp next to the
+// registration import,
 //
 //	_ "tmpapp/model"
 //	vm0 "tmpapp/model/iam/user"
 //	vm1 "tmpapp/model/report"
+//	vm2 "tmpapp/model/sample"
 //
 // and adds them to the models the registry returns:
 //
@@ -225,30 +226,41 @@ func fail(err error) {
 //	models = append(models,
 //		&vm0.User{},
 //	)
-func buildColumnsProgram(module string, models []*modelinfo.Model) string {
-	program := strings.ReplaceAll(columnsProgram, "{{MODULE}}", module)
+//	// Table-backed models are compiled in by name as well: the registry
+//	// lists them once gg gen wrote model.gen.go, and gg check validates their
+//	// index declarations before that too. One the registry already lists is
+//	// inspected once (see seen).
+//	models = append(models,
+//		&vm2.Record{},
+//	)
+func buildProgram(module string, models []*modelinfo.Model) string {
+	program := strings.ReplaceAll(inspectionProgram, "{{MODULE}}", module)
 
 	unregistered := make([]*modelinfo.Model, 0, len(models))
 	ignored := make([]*modelinfo.Model, 0, len(models))
+	tableBacked := make([]*modelinfo.Model, 0, len(models))
 	for _, m := range models {
 		switch {
 		case m.RegisterIgnored:
 			ignored = append(ignored, m)
 		case !m.Design.Migrate:
 			unregistered = append(unregistered, m)
+		default:
+			tableBacked = append(tableBacked, m)
 		}
 	}
 
 	// One deterministic alias per package: the fixed prefix cannot collide
 	// with the template's own imports, and sorting keeps the program text,
 	// and with it the inspection cache key, stable across runs.
-	extra := make([]*modelinfo.Model, 0, len(unregistered)+len(ignored))
+	extra := make([]*modelinfo.Model, 0, len(unregistered)+len(ignored)+len(tableBacked))
 	extra = append(extra, unregistered...)
 	extra = append(extra, ignored...)
+	extra = append(extra, tableBacked...)
 	aliases := make(map[string]string, len(extra))
 	paths := make([]string, 0, len(extra))
 	for _, m := range extra {
-		path := modelPkgPath(m)
+		path := m.ImportPath()
 		if _, ok := aliases[path]; !ok {
 			aliases[path] = ""
 			paths = append(paths, path)
@@ -260,7 +272,7 @@ func buildColumnsProgram(module string, models []*modelinfo.Model) string {
 	}
 	sortByPackageAndName := func(entries []*modelinfo.Model) {
 		sort.Slice(entries, func(i, j int) bool {
-			if pi, pj := modelPkgPath(entries[i]), modelPkgPath(entries[j]); pi != pj {
+			if pi, pj := entries[i].ImportPath(), entries[j].ImportPath(); pi != pj {
 				return pi < pj
 			}
 			return entries[i].ModelName < entries[j].ModelName
@@ -268,6 +280,7 @@ func buildColumnsProgram(module string, models []*modelinfo.Model) string {
 	}
 	sortByPackageAndName(unregistered)
 	sortByPackageAndName(ignored)
+	sortByPackageAndName(tableBacked)
 
 	var imports strings.Builder
 	for _, path := range paths {
@@ -282,7 +295,7 @@ func buildColumnsProgram(module string, models []*modelinfo.Model) string {
 	for _, m := range []any{
 `)
 		for _, m := range unregistered {
-			fmt.Fprintf(&entries, "\t\t&%s.%s{},\n", aliases[modelPkgPath(m)], m.ModelName)
+			fmt.Fprintf(&entries, "\t\t&%s.%s{},\n", aliases[m.ImportPath()], m.ModelName)
 		}
 		entries.WriteString(`	} {
 		if !modelschema.IsQueryable(m) {
@@ -299,7 +312,19 @@ func buildColumnsProgram(module string, models []*modelinfo.Model) string {
 	models = append(models,
 `)
 		for _, m := range ignored {
-			fmt.Fprintf(&entries, "\t\t&%s.%s{},\n", aliases[modelPkgPath(m)], m.ModelName)
+			fmt.Fprintf(&entries, "\t\t&%s.%s{},\n", aliases[m.ImportPath()], m.ModelName)
+		}
+		entries.WriteString("\t)\n")
+	}
+	if len(tableBacked) > 0 {
+		entries.WriteString(`	// Table-backed models are compiled in by name as well: the registry
+	// lists them once gg gen wrote model.gen.go, and gg check validates their
+	// index declarations before that too. One the registry already lists is
+	// inspected once (see seen).
+	models = append(models,
+`)
+		for _, m := range tableBacked {
+			fmt.Fprintf(&entries, "\t\t&%s.%s{},\n", aliases[m.ImportPath()], m.ModelName)
 		}
 		entries.WriteString("\t)\n")
 	}
@@ -308,13 +333,12 @@ func buildColumnsProgram(module string, models []*modelinfo.Model) string {
 	return strings.ReplaceAll(program, "{{UNREGISTERED_MODELS}}", entries.String())
 }
 
-// inspectColumns compiles and runs the inspection program and decodes what it
+// runProgram compiles and runs the inspection program and decodes what it
 // reports. The result travels through a file rather than stdout, because
-// framework initialization writes progress lines to stdout. The build runs
-// with the overlay columnInspectionOverlay returns, so neither a stale
-// generation nor the handwritten code reading it blocks the run that would
-// refresh it.
-func inspectColumns(program string, overlay map[string]string) ([]modelColumns, error) {
+// framework initialization writes progress lines to stdout. The build takes
+// the files overlay maps in place of the project's own, none for the project
+// as it is (see Inspect).
+func runProgram(program string, overlay map[string]string) ([]ModelColumns, error) {
 	resultFile, err := os.CreateTemp("", "gg-columns-*.json")
 	if err != nil {
 		return nil, errors.Wrap(err, "create column result file")
@@ -333,7 +357,7 @@ func inspectColumns(program string, overlay map[string]string) ([]modelColumns, 
 	if err != nil {
 		return nil, errors.Wrap(err, "read resolved columns")
 	}
-	var resolved []modelColumns
+	var resolved []ModelColumns
 	if err = json.Unmarshal(output, &resolved); err != nil {
 		return nil, errors.Wrap(err, "decode model columns")
 	}

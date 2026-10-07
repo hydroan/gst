@@ -109,7 +109,7 @@ git init
 
 普通资源使用 `model.Base`。如果这个资源需要建表或迁移，声明 `Migrate()`。
 
-索引一律通过模型的 `Indexes() []model.Index` 方法集中声明：`Fields` 写 Go 字段名、顺序即列序，`Unique` 声明唯一索引，索引名由框架统一生成（`idx_` 或 `uniq_` 加表名加列名，超过方言上限的截短后带哈希：PostgreSQL 最长 63，MySQL 与 SQLite 64）。唯一的例外是主键——它由 `model.Base`/`model.AutoBase` 内置声明，业务模型不写主键。不要用 gorm tag 的 `index`/`uniqueIndex`/`unique` 配置索引，`gg check` 会拒绝。
+索引一律通过模型的 `Indexes() []model.Index` 方法集中声明：`Fields` 写 Go 字段名、顺序即列序，`Unique` 声明唯一索引，索引名由框架统一生成（`idx_` 或 `uniq_` 加表名加列名，超过方言上限的截短后带哈希：PostgreSQL 最长 63，MySQL 与 SQLite 64）。唯一的例外是主键——它由 `model.Base`/`model.AutoBase` 内置声明，业务模型不写主键。不要用 gorm tag 的 `index`/`uniqueIndex`/`unique` 配置索引，`gg check` 会拒绝。被索引的字符串字段要写列宽（如 `gorm:"size:36"`）：没有长度的字符串在 MySQL 上是 longtext 列，MySQL 不能给它建索引，配置为 mysql 的项目 `gg check` 会拒绝，启动期与 `gg migrate` 也在建表之前拒绝。
 
 ```go
 package model

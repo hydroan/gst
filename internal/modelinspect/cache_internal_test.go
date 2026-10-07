@@ -1,6 +1,7 @@
-package columns
+package modelinspect
 
 import (
+	"os"
 	"path/filepath"
 	"testing"
 
@@ -9,11 +10,11 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestColumnsCacheKeyCoversTheModelCode pins which files the cache key
+// TestInspectionCacheKeyCoversTheModelCode pins which files the cache key
 // hashes: every model source a walk over the project's code reads, a model
 // package named generated among them, and none it leaves out, such as a
 // testdata directory.
-func TestColumnsCacheKeyCoversTheModelCode(t *testing.T) {
+func TestInspectionCacheKeyCoversTheModelCode(t *testing.T) {
 	t.Chdir(t.TempDir())
 	writeProjectFile(t, "go.mod", "module tmpapp\n\ngo 1.26\n")
 	writeProjectFile(t, filepath.Join(ggconst.DirModel, "record.go"), "package model\n")
@@ -23,7 +24,7 @@ func TestColumnsCacheKeyCoversTheModelCode(t *testing.T) {
 	writeProjectFile(t, fixture, "package fixture\n")
 	key := func() string {
 		t.Helper()
-		k, err := columnsCacheKey("program", ggconst.DirModel, gghelper.NewProjectIgnore())
+		k, err := inspectionCacheKey("program", ggconst.DirModel, gghelper.NewProjectIgnore())
 		require.NoError(t, err)
 		return k
 	}
@@ -35,4 +36,11 @@ func TestColumnsCacheKeyCoversTheModelCode(t *testing.T) {
 	before = key()
 	writeProjectFile(t, fixture, "package fixture\n\ntype Fixture struct{}\n")
 	require.Equal(t, before, key(), "a change under testdata must leave the key alone")
+}
+
+// writeProjectFile writes content at path, creating the directories on the way.
+func writeProjectFile(t *testing.T, path string, content string) {
+	t.Helper()
+	require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o755))
+	require.NoError(t, os.WriteFile(path, []byte(content), 0o600))
 }
