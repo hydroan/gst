@@ -2,13 +2,18 @@ package grpcserver
 
 import (
 	"context"
+	"net/http"
+	"strings"
 	"sync"
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/errors"
+	"github.com/hydroan/gst/internal/types"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/health/grpc_health_v1"
+	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 )
 
@@ -153,4 +158,52 @@ func TestUseAfterRunPanics(t *testing.T) {
 
 	require.Panics(t, func() { Use(pass) })
 	require.Panics(t, func() { UseAuth(pass) })
+}
+
+// TestARefusalFromAProjectInterceptorAnswersItsStatus pins how the error an
+// interceptor returns reaches the client: a status error as it is; a service
+// error with the code its HTTP status maps to and its client-safe message,
+// the cause it wraps kept out of the answer; any other error as Internal with
+// the server failure message. Every error but a status error goes to the gRPC
+// log first, cause included.
+func TestARefusalFromAProjectInterceptorAnswersItsStatus(t *testing.T) {
+	reset(t)
+	UseAuth(func(ctx context.Context) (context.Context, error) {
+		md, _ := metadata.FromIncomingContext(ctx)
+		switch strings.Join(md.Get("refusal"), "") {
+		case "status":
+			return nil, status.Error(codes.Unauthenticated, "no credentials")
+		case "service":
+			return nil, types.NewError(http.StatusForbidden, "forbidden")
+		case "service with cause":
+			return nil, types.NewErrorWithCause(http.StatusUnauthorized, "no session", errors.New("session store unreachable"))
+		default:
+			return nil, errors.New("boom")
+		}
+	})
+	serve(map[string]func(context.Context) error{"Ping": func(context.Context) error { return nil }})
+	conn := dial(t, start(t), nil)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	for _, tt := range []struct {
+		refusal string
+		code    codes.Code
+		message string
+	}{
+		{"status", codes.Unauthenticated, "no credentials"},
+		{"service", codes.PermissionDenied, "forbidden"},
+		{"service with cause", codes.Unauthenticated, "no session"},
+		{"plain", codes.Internal, types.FailureMsg},
+	} {
+		err := call(metadata.AppendToOutgoingContext(ctx, "refusal", tt.refusal), conn, "Ping")
+		st, ok := status.FromError(err)
+		require.True(t, ok, tt.refusal)
+		require.Equal(t, tt.code, st.Code(), tt.refusal)
+		require.Equal(t, tt.message, st.Message(), tt.refusal)
+	}
+
+	logged := accessLog.FilterMessage("interceptor refused the call").All()
+	require.Len(t, logged, 3, "every error but a status error is logged before it is mapped")
+	require.Contains(t, logged[1].ContextMap()["error"], "session store unreachable")
 }

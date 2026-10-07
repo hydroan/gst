@@ -153,7 +153,7 @@ handler --> client : RecordToProto；失败映射成 status
 
 | 环节 | HTTP | gRPC | 共用的实现 |
 |---|---|---|---|
-| 挂载 | `middleware.RegisterAuth(middleware.IAMSession(), …)`，只作用于非 Public 路由 | `interceptor.RegisterAuth(interceptor.IAMSession(), …)`，selector 放过 Public 方法与 health、reflection | 项目在自己的 middleware/ 与 interceptor/ 注册文件里显式挂，链按注册顺序跑 |
+| 挂载 | `middleware.RegisterAuth(middleware.IAMSession(), …)`，只作用于非 Public 路由 | `interceptor.RegisterAuth(interceptor.IAMSession(), …)`，selector 放过 Public 方法与 health、reflection；拦截器返回的 status 错误原样答复，gst 错误按其 HTTP 状态映射、只带 msg，其他错误答 Internal | 项目在自己的 middleware/ 与 interceptor/ 注册文件里显式挂，链按注册顺序跑 |
 | 凭证 | IAMSession 读会话 Cookie，JwtAuth 读 `Authorization: Bearer` 头 | 两者都读 metadata `authorization: Bearer …`，经 `grpc.Bearer(ctx)` 取；会话经 gRPC 使用时登录的 user-agent 要和 gRPC 客户端一致，设备绑定按它比对 | |
 | 会话认证 | `middleware.IAMSession()` | `interceptor.IAMSession()` | `serviceiamsession.Authenticate(ctx, sessionID, userAgent, method, path)`：加载、校验、设备绑定按 user-agent 比对、用户状态、改密豁免、记录活跃（只前移 LastSeenAt，不续期） |
 | JWT | `middleware.JwtAuth()` | `interceptor.JwtAuth()`，拒绝一律 Unauthenticated | jwt 包解析与校验 |

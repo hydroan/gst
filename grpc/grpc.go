@@ -21,9 +21,12 @@ import (
 // interceptor.Register or interceptor.RegisterAuth: it reads what the call
 // carries, its metadata, its caller (see CallerOf) and the action it maps
 // to (see Route), and returns the context the call goes on with, the
-// caller established on it (see WithCaller), or the status error refusing
-// the call (see StatusError). The one form serves a unary call and a stream
-// alike, an authentication running once, ahead of the first message.
+// caller established on it (see WithCaller), or the error refusing the
+// call: a status error answers as it is, a gst.Error with the code its HTTP
+// status maps to and its client-safe message (see StatusError), any other
+// error as Internal with the server failure message. The one form serves a
+// unary call and a stream alike, an authentication running once, ahead of
+// the first message.
 type Interceptor = grpcserver.Interceptor
 
 // MethodStream is what the registration describes the rpc of a Stream

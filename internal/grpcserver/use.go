@@ -6,14 +6,21 @@ import (
 	middleware "github.com/grpc-ecosystem/go-grpc-middleware/v2"
 	"github.com/grpc-ecosystem/go-grpc-middleware/v2/interceptors"
 	"github.com/grpc-ecosystem/go-grpc-middleware/v2/interceptors/selector"
+	"github.com/hydroan/gst/internal/execctx"
+	"github.com/hydroan/gst/internal/logfield"
+	"github.com/hydroan/gst/logger"
+	"go.uber.org/zap"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/status"
 )
 
 // Interceptor is an interceptor a project or a copied module mounts through
 // Use or UseAuth: it reads what the call carries, its metadata, its caller,
 // the action it maps to (see Route), and returns the context the call goes
-// on with, the caller established on it (see WithCaller), or the status
-// error refusing the call. The one form serves a unary call and a stream
+// on with, the caller established on it (see WithCaller), or the error
+// refusing the call: a status error answers as it is, a service error with
+// the code its HTTP status maps to and its message, any other error as
+// Internal (see refused). The one form serves a unary call and a stream
 // alike, which is why an interceptor here transforms the context rather
 // than wrapping the handler the way a grpc.UnaryServerInterceptor does: an
 // authentication runs once, ahead of the first message either way. The
@@ -100,28 +107,48 @@ func projectStreamInterceptors() []grpc.StreamServerInterceptor {
 }
 
 // unaryOf runs ic on a unary call: the handler gets the context ic
-// returns, or the call is refused with its error.
+// returns, or the call is refused with the status its error maps to (see
+// refused).
 func unaryOf(ic Interceptor) grpc.UnaryServerInterceptor {
 	return func(ctx context.Context, req any, _ *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (any, error) {
-		ctx, err := ic(ctx)
+		next, err := ic(ctx)
 		if err != nil {
-			return nil, err
+			return nil, refused(ctx, err)
 		}
-		return handler(ctx, req)
+		return handler(next, req)
 	}
 }
 
 // streamOf runs ic on a stream, once, ahead of the first message: the
 // handler gets the stream on the context ic returns, or the stream is
-// refused with its error.
+// refused with the status its error maps to (see refused).
 func streamOf(ic Interceptor) grpc.StreamServerInterceptor {
 	return func(srv any, ss grpc.ServerStream, _ *grpc.StreamServerInfo, handler grpc.StreamHandler) error {
-		ctx, err := ic(ss.Context())
+		next, err := ic(ss.Context())
 		if err != nil {
-			return err
+			return refused(ss.Context(), err)
 		}
-		return handler(srv, withStreamContext(ctx, ss))
+		return handler(srv, withStreamContext(next, ss))
 	}
+}
+
+// refused maps the error an interceptor returned to the status the call is
+// refused with: a status error as it is; a service error, gst.Error, by the
+// code its HTTP status maps to and its client-safe message, what the HTTP
+// middleware's Abort answers for the same refusal; any other error as
+// Internal with the server failure message (see StatusError). gRPC itself
+// would answer any other error as Unknown with its text, the wrapped cause
+// included. The error goes to the gRPC log first, cause included, since the
+// answer leaves that out, the way a failing service operation is logged
+// before it is mapped.
+func refused(ctx context.Context, err error) error {
+	if _, ok := status.FromError(err); ok {
+		return err
+	}
+	if logger.GRPC != nil {
+		logger.GRPC.Error("interceptor refused the call", zap.Error(err), logfield.TraceID(execctx.FromContext(ctx).TraceID))
+	}
+	return StatusError(err)
 }
 
 // withStreamContext returns ss carrying ctx as its context, what the
