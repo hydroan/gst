@@ -16,7 +16,7 @@ import (
 // configured database accepts.
 var IndexDeclarations = Check{
 	Name: "Index declarations",
-	Rule: "the Indexes() declarations of every model must be ones the configured database accepts: the fields exist, no column repeats and, on MySQL, every column can be indexed, which a string field without a size cannot, being a longtext column; give it a size (gorm:\"size:191\") or a bounded type",
+	Rule: "on a project configured for MySQL, the Indexes() declarations of every model must be ones MySQL accepts: the fields exist, no column repeats, no declaration duplicates a struct tag index, and every column can be indexed, which a string field without a size cannot, being a longtext column; give it a size (gorm:\"size:191\") or a bounded type",
 	run:  checkIndexDeclarations,
 }
 
