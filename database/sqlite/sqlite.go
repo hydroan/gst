@@ -47,9 +47,9 @@ func Init() (err error) {
 // narrowed to a single connection, the same as the default handle.
 // Connections open through this package's own driver, which carries the
 // framework's REGEXP implementation and binds every time in UTC; see
-// registerRegexpFunc and utcConn. Every handle on
-// the in-memory database shares the one database of the process, which lives
-// until the process ends; see anchorMemoryDatabase.
+// registerRegexpFunc and utcConn. Every handle on the in-memory database
+// shares the one database of the process, which lives until the process
+// ends; see anchorMemoryDatabase.
 // Built without cgo, the driver is a stub whose connections all fail to open,
 // so New fails with the driver's error saying the binary needs cgo.
 func New(cfg config.Sqlite) (*gorm.DB, error) {

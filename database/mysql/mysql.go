@@ -152,10 +152,9 @@ const strictSQLMode = "CONCAT(@@sql_mode,%27,STRICT_TRANS_TABLES%27)"
 // time, which is the framework's one time base across dialects: the postgres
 // DSN pins the session time zone its timestamptz values are read in to UTC,
 // and the sqlite driver binds and reads every time in UTC (see that
-// package's utcConn). A local loc
-// would make the same instant a different stored wall clock per dialect (and
-// per server timezone), which is what breaks time bucket labels, boundary
-// comparisons, and URL time filters.
+// package's utcConn). A local loc would make the same instant a different
+// stored wall clock per dialect (and per server timezone), which is what
+// breaks time bucket labels, boundary comparisons, and URL time filters.
 //
 // sql_mode, while config.MySQL.Strict is on, adds STRICT_TRANS_TABLES to
 // the modes the server is configured with and keeps the rest: without the

@@ -49,8 +49,11 @@ func (d *utcDriver) Open(dsn string) (driver.Conn, error) {
 // The framework's own timestamps are UTC already (see dbruntime.NowUTC);
 // what a request or a service writes is converted here, the one place every
 // statement's parameters pass through, so gorm's statements and raw SQL alike
-// store the instant. The connection string's _loc=UTC reads the text back in
-// UTC (see buildDSN and memoryDSN).
+// store the instant. The driver itself offers no way to do this: go-sqlite3
+// formats a time it binds in the zone the value carries, and its _loc
+// connection parameter governs reading alone, which is what the connection
+// string's _loc=UTC covers, reading the text back in UTC (see buildDSN and
+// memoryDSN).
 //
 // The stock connection is held as a driver.Conn and the optional interfaces
 // database/sql looks for are forwarded one by one: embedding the stock type
