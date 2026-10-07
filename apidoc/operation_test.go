@@ -83,13 +83,58 @@ func TestDefaultSummary(t *testing.T) {
 			want: "Create 用户",
 		},
 		{
-			name: "only the first comment line is used",
+			name: "only the first sentence is used",
 			op: apidoc.Operation{
 				Path:         "/api/users/{id}",
 				Phase:        consts.Update,
 				ModelComment: "The user record.\nThe second line must not leak into the summary.",
 			},
 			want: "Update The user record",
+		},
+		{
+			name: "a first sentence wrapped across lines is joined",
+			op: apidoc.Operation{
+				Path:         "/api/users",
+				Phase:        consts.List,
+				ModelComment: "The user record kept for\neach account.\nIt keeps the status fields.",
+			},
+			want: "List The user record kept for each account",
+		},
+		{
+			name: "a blank line ends the first sentence",
+			op: apidoc.Operation{
+				Path:         "/api/users",
+				Phase:        consts.List,
+				ModelComment: "The user record of an account\n\nMore about the fields.",
+			},
+			want: "List The user record of an account",
+		},
+		{
+			name: "a period after a single capital letter is an initial, not a sentence end",
+			op: apidoc.Operation{
+				Path:         "/api/users",
+				Phase:        consts.List,
+				ModelComment: "The records kept by A. Smith for review.\nMore.",
+			},
+			want: "List The records kept by A. Smith for review",
+		},
+		{
+			name: "an ideographic period ends the first sentence",
+			op: apidoc.Operation{
+				Path:         "/api/users",
+				Phase:        consts.Create,
+				ModelComment: "用户的档案。包含状态字段。",
+			},
+			want: "Create 用户的档案",
+		},
+		{
+			name: "a comment starting with author keeps its summary",
+			op: apidoc.Operation{
+				Path:         "/api/users",
+				Phase:        consts.List,
+				ModelComment: "Author attribution of a record.\nMore.",
+			},
+			want: "List Author attribution of a record",
 		},
 		{
 			name: "many phase becomes a batch action",

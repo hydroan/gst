@@ -90,7 +90,7 @@ func normalizeOperationPath(path string) string {
 }
 
 // DefaultSummary builds an operation summary from the action and the first
-// line of the model doc comment, eg. "List The user record" for a model
+// sentence of the model doc comment, eg. "List The user record" for a model
 // documented as "User is the user record.".
 //
 // The action is the trailing literal path segment when it follows a path
@@ -105,7 +105,7 @@ func DefaultSummary(op Operation) string {
 		action = titleToken(actionSegment)
 	}
 
-	if noun := firstCommentLine(op.ModelComment); noun != "" {
+	if noun := firstCommentSentence(op.ModelComment); noun != "" {
 		return action + " " + noun
 	}
 	segments := operationResourceSegments(op.Path)
@@ -188,13 +188,47 @@ func titleToken(token string) string {
 	return strings.Join(words, " ")
 }
 
-// firstCommentLine returns the first line of the comment with the trailing
-// sentence period removed, so it reads naturally after the action token.
-func firstCommentLine(comment string) string {
-	line := strings.TrimSpace(strings.SplitN(comment, "\n", 2)[0])
-	line = strings.TrimSuffix(line, "。")
-	line = strings.TrimSuffix(line, ".")
-	return line
+// firstCommentSentence returns the first sentence of the comment, its line
+// breaks folded into single spaces and the trailing period removed, so it
+// reads naturally after the action token: "The user record kept for\neach
+// account.\nIt keeps the status fields." yields "The user record kept for each
+// account". The sentence ends where go/doc ends a synopsis: at a period
+// followed by white space unless the period follows a single capital letter
+// (an initial such as "A. Smith"), at an ideographic or full-width period, or
+// at the first blank line. go/doc's own Synopsis is not called: it answers an
+// empty string for any text starting with "author", "copyright" or "all
+// rights", a guard against license headers mistaken for package comments,
+// which would drop the summary of a model documented as "Authorization ...".
+func firstCommentSentence(comment string) string {
+	lines := strings.Split(strings.TrimSpace(comment), "\n")
+	for i, line := range lines {
+		if strings.TrimSpace(line) == "" {
+			lines = lines[:i]
+			break
+		}
+	}
+	text := strings.Join(lines, "\n")
+	end := len(text)
+	var ppp, pp, p rune
+	for i, q := range text {
+		if q == '\n' || q == '\r' || q == '\t' {
+			q = ' '
+		}
+		if q == ' ' && p == '.' && (!unicode.IsUpper(pp) || unicode.IsUpper(ppp)) {
+			end = i
+			break
+		}
+		if p == '。' || p == '．' {
+			end = i
+			break
+		}
+		ppp, pp, p = pp, p, q
+	}
+	sentence := strings.Join(strings.Fields(text[:end]), " ")
+	for _, period := range []string{"。", "．", "."} {
+		sentence = strings.TrimSuffix(sentence, period)
+	}
+	return sentence
 }
 
 // operationResourceSegments returns the resource segments of a route path:
