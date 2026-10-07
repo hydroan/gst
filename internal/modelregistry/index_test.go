@@ -6,6 +6,7 @@ import (
 
 	"github.com/hydroan/gst/internal/modelregistry"
 	"github.com/stretchr/testify/require"
+	"gorm.io/datatypes"
 	"gorm.io/driver/mysql"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
@@ -404,6 +405,20 @@ func (*SizedIndexSample) Indexes() []modelregistry.Index {
 	return []modelregistry.Index{{Fields: []string{"Owner"}}}
 }
 
+// JSONIndexSample indexes a JSON column, which MySQL does not index at all,
+// so no size would help.
+type JSONIndexSample struct {
+	Attrs datatypes.JSON `json:"attrs"`
+
+	modelregistry.Base
+}
+
+func (*JSONIndexSample) TableName() string { return "json_index_samples" }
+
+func (*JSONIndexSample) Indexes() []modelregistry.Index {
+	return []modelregistry.Index{{Fields: []string{"Attrs"}}}
+}
+
 // TestParseIndexPlansRefusesAColumnMySQLCannotIndex pins the column rule of
 // the MySQL dialect: a string field without a size is a longtext column,
 // which MySQL cannot index without a key length, so the declaration is
@@ -413,6 +428,9 @@ func TestParseIndexPlansRefusesAColumnMySQLCannotIndex(t *testing.T) {
 	mysqlDB := newMySQLSchemaDB(t)
 	_, err := modelregistry.ParseIndexPlans(mysqlDB, &UnsizedIndexSample{})
 	require.ErrorContains(t, err, `model UnsizedIndexSample: index field Owner is a longtext column, which MySQL cannot index without a key length; give it a size (gorm:"size:191") or a bounded type`)
+
+	_, err = modelregistry.ParseIndexPlans(mysqlDB, &JSONIndexSample{})
+	require.ErrorContains(t, err, `model JSONIndexSample: index field Attrs is a json column, which MySQL does not index; index a bounded column holding the value or a generated column instead`)
 
 	plans, err := modelregistry.ParseIndexPlans(mysqlDB, &SizedIndexSample{})
 	require.NoError(t, err)

@@ -155,8 +155,8 @@ func buildIndexPlans(db *gorm.DB, sch *gormschema.Schema, tableName string, decl
 			if field == nil {
 				return nil, errors.Newf("model %s: custom index references unknown field %q", sch.Name, name)
 			}
-			if columnType, ok := unindexableColumn(db, field); ok {
-				return nil, errors.Newf("model %s: index field %s is a %s column, which MySQL cannot index without a key length; give it a size (gorm:\"size:191\") or a bounded type", sch.Name, name, columnType)
+			if columnType, fix, ok := unindexableColumn(db, field); ok {
+				return nil, errors.Newf("model %s: index field %s is a %s column, which %s", sch.Name, name, columnType, fix)
 			}
 			if _, ok := seenColumns[field.DBName]; ok {
 				return nil, errors.Newf("model %s: custom index repeats column %q", sch.Name, field.DBName)
@@ -182,34 +182,38 @@ func buildIndexPlans(db *gorm.DB, sch *gormschema.Schema, tableName string, decl
 	return plans, nil
 }
 
-// mysqlUnindexableTypes are the MySQL column types an index cannot cover
-// without a key length, which the declaration cannot express (see Index):
-// TEXT and BLOB in every size, and JSON, which MySQL does not index at all.
-// gorm's MySQL dialect stores a string field without a size as longtext, so
-// a plain string column lands here unless the field declares a size or a
-// bounded type; the dialect's own varchar(191) default covers only indexes
-// declared in struct tags, which gg check bans.
-var mysqlUnindexableTypes = map[string]bool{
-	"tinytext": true, "text": true, "mediumtext": true, "longtext": true,
-	"tinyblob": true, "blob": true, "mediumblob": true, "longblob": true,
-	"json": true,
+// mysqlUnindexableTypes maps the MySQL column types an index cannot cover to
+// the fix the refusal names. TEXT and BLOB in every size need a key length,
+// which the declaration cannot express (see Index); JSON MySQL does not index
+// at all. gorm's MySQL dialect stores a string field without a size as
+// longtext, so a plain string column lands here unless the field declares a
+// size or a bounded type; the dialect's own varchar(191) default covers only
+// indexes declared in struct tags, which gg check bans.
+var mysqlUnindexableTypes = map[string]string{
+	"tinytext": keyLengthFix, "text": keyLengthFix, "mediumtext": keyLengthFix, "longtext": keyLengthFix,
+	"tinyblob": keyLengthFix, "blob": keyLengthFix, "mediumblob": keyLengthFix, "longblob": keyLengthFix,
+	"json": "MySQL does not index; index a bounded column holding the value or a generated column instead",
 }
 
-// unindexableColumn reports the column type db's dialect gives field when
-// that dialect cannot index it. Only MySQL has such types; PostgreSQL and
-// SQLite index text columns of any length, so on them nothing is reported.
-// The type is gorm's own mapping, FullDataTypeOf, which honors the size and
-// type tags and the GormDataType and GormDBDataType methods of the field's
-// type alike; its first word is the type, what may follow it (NOT NULL, a
-// default, a character set) is not.
-func unindexableColumn(db *gorm.DB, field *gormschema.Field) (string, bool) {
+// keyLengthFix is the fix for a TEXT or BLOB column.
+const keyLengthFix = "MySQL cannot index without a key length; give it a size (gorm:\"size:191\") or a bounded type"
+
+// unindexableColumn reports the column type db's dialect gives field, and the
+// fix, when that dialect cannot index it. Only MySQL has such types;
+// PostgreSQL and SQLite index text columns of any length, so on them nothing
+// is reported. The type is gorm's own mapping, FullDataTypeOf, which honors
+// the size and type tags and the GormDataType and GormDBDataType methods of
+// the field's type alike; its first word is the type, what may follow it (NOT
+// NULL, a default, a character set) is not.
+func unindexableColumn(db *gorm.DB, field *gormschema.Field) (columnType, fix string, ok bool) {
 	if db == nil || db.Dialector == nil || !strings.EqualFold(db.Dialector.Name(), string(config.DBMySQL)) {
-		return "", false
+		return "", "", false
 	}
-	columnType, _, _ := strings.Cut(strings.TrimSpace(db.Migrator().FullDataTypeOf(field).SQL), " ")
+	columnType, _, _ = strings.Cut(strings.TrimSpace(db.Migrator().FullDataTypeOf(field).SQL), " ")
 	columnType = strings.ToLower(columnType)
 	base, _, _ := strings.Cut(columnType, "(")
-	return columnType, mysqlUnindexableTypes[base]
+	fix, ok = mysqlUnindexableTypes[base]
+	return columnType, fix, ok
 }
 
 // checkTagIndexConflicts rejects declarations that duplicate a struct tag
