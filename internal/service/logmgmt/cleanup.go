@@ -54,7 +54,9 @@ func cleanupExpired[M gst.Model](ctx context.Context, cutoff time.Time) error {
 		if len(batch) == 0 {
 			return nil
 		}
-		if err := database.Database[M](ctx).Delete(batch...); err != nil {
+		// A row another cleaner removed since the listing is already what
+		// this one wants gone.
+		if err := database.Database[M](ctx).WithAllowMissing().Delete(batch...); err != nil {
 			return errors.Wrap(err, "delete expired rows")
 		}
 		if len(batch) < cleanupBatchSize {

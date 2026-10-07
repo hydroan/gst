@@ -272,6 +272,7 @@ type database[M types.Model] struct {
 
 	// options
 	enablePurge    *bool // delete resource permanently, not only update deleted_at field, only works on 'Delete' method.
+	allowMissing   bool  // Delete skips the records that are gone instead of failing; see WithAllowMissing.
 	includeDeleted bool  // include soft-deleted records in read operations; see WithDeleted.
 	replicaRead    *bool // WithReplica's routing choice for this read; nil when the option was not used.
 	batchSize      int   // batch size for the operations that slice their rows: Create, Upsert and Delete.
@@ -338,6 +339,7 @@ func (db *database[M]) reset() {
 	db.typ = nil
 
 	db.enablePurge = nil
+	db.allowMissing = false
 	db.includeDeleted = false
 	db.replicaRead = nil
 	db.batchSize = 0

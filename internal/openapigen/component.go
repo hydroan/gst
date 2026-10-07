@@ -255,9 +255,9 @@ func failureStatuses(phase consts.Phase, custom bool) []int {
 	switch phase {
 	case consts.Get:
 		return []int{http.StatusBadRequest, http.StatusNotFound}
-	case consts.Update, consts.Patch, consts.Delete, consts.UpdateMany, consts.PatchMany, consts.Import:
+	case consts.Update, consts.Patch, consts.Delete, consts.UpdateMany, consts.PatchMany, consts.DeleteMany, consts.Import:
 		return []int{http.StatusBadRequest, http.StatusNotFound, http.StatusConflict}
-	case consts.Create, consts.CreateMany, consts.DeleteMany:
+	case consts.Create, consts.CreateMany:
 		return []int{http.StatusBadRequest, http.StatusConflict}
 	default:
 		return []int{http.StatusBadRequest}

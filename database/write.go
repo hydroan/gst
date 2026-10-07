@@ -195,6 +195,16 @@ func (db *database[M]) Create(objs ...M) (err error) {
 // Use WithPurge() for permanent deletion (hard delete).
 // Executes DeleteBefore and DeleteAfter model hooks unless disabled with WithoutHook or WithDryRun.
 //
+// Every record named by its id must match a live row: a record that is
+// missing, or soft deleted already, fails the call with ErrRecordNotFound,
+// and the batch deletes nothing. A record is named once however many times
+// the objects repeat it. Detection relies on matched-rows semantics, like
+// Update's: the framework MySQL DSN enables clientFoundRows=true, and custom
+// connections must keep that flag. WithAllowMissing lifts the check, for a
+// delete that may run after the rows are gone. A zero model names no record:
+// it deletes the rows the chain's conditions (WithQuery) match, and matching
+// none of them is not a missing record; without conditions it is refused.
+//
 // A versioned record (a model declaring model.Version) is checked when it
 // carries a non-zero version — the statement matches it, and a miss fails
 // with ErrStaleObject: a delete decided over stale data must fail like a
@@ -211,17 +221,21 @@ func (db *database[M]) Create(objs ...M) (err error) {
 //   - Soft-deleted records are automatically excluded from List, Get, First, Last, Count, and other query operations
 //   - Supports batch processing for performance
 //   - Runs hooks and all batches in one transaction, joining the transaction
-//     carried by ctx when present. A call that fits one batch and runs no
-//     overridden delete hooks skips the wrapping transaction: the single
-//     UPDATE ... IN / DELETE ... IN statement's own atomicity is the whole
-//     contract.
+//     carried by ctx when present. A call that fits one batch, runs no
+//     overridden delete hooks and names at most one record (or allows
+//     missing ones) skips the wrapping transaction: the single UPDATE ... IN
+//     / DELETE ... IN statement's own atomicity is the whole contract. A
+//     batch naming several records that must all exist runs in a
+//     transaction, so a statement that found fewer rows than named is rolled
+//     back and the batch deletes nothing.
 //   - Returns nil if no valid objects provided (empty slice or all objects are empty)
 //   - WithDryRun builds SQL only and does not execute hooks, database I/O, or object field filling
 //
 // On a ClickHouse instance the contract is weaker (see clickhouseDelete):
 // a lightweight DELETE by primary key with no hooks and no transaction, and
 // always physical — ClickHouse has no application-level soft delete, so the
-// model's Purge and WithPurge are ignored there.
+// model's Purge and WithPurge are ignored there — and a missing record
+// passes silently instead of ErrRecordNotFound.
 //
 // Example:
 //
@@ -256,6 +270,19 @@ func (db *database[M]) Delete(objs ...M) (err error) {
 	if db.batchSize > 0 {
 		batchSize = db.batchSize
 	}
+
+	// The records the call names, each once: what the statements must match
+	// unless the caller allows missing records. A zero model names none; it
+	// deletes the rows the chain's conditions match.
+	named := make(map[string]struct{}, len(objs))
+	for i := range objs {
+		if id := objs[i].GetID(); id != "" {
+			named[id] = struct{}{}
+		}
+	}
+	expected := int64(len(named))
+	strict := !db.allowMissing && expected > 0
+	tableName := db.m.TableName()
 
 	// A delete over a versioned model splits by what the objects carry (see
 	// model.Version): when any object carries a non-zero version, every row
@@ -321,6 +348,9 @@ func (db *database[M]) Delete(objs ...M) (err error) {
 				return err
 			}
 		}
+		// matched counts the rows the statements found, which must reach the
+		// records named unless missing ones are allowed.
+		var matched int64
 		switch {
 		case guarded:
 			// Per-row statements, each matching the version its object
@@ -331,7 +361,6 @@ func (db *database[M]) Delete(objs ...M) (err error) {
 			// update. The version column is never bumped here: a soft-deleted
 			// row is unreachable to every later write already, and a purged
 			// row is gone.
-			tableName := db.m.TableName()
 			for i := range objs {
 				tx := db.ins.Session(&gorm.Session{})
 				v, _ := modelschema.VersionValue(objs[i])
@@ -348,14 +377,17 @@ func (db *database[M]) Delete(objs ...M) (err error) {
 				if v > 0 && res.RowsAffected == 0 {
 					return errors.Wrapf(ErrStaleObject, "delete %s id=%s version=%d", tableName, objs[i].GetID(), v)
 				}
+				matched += res.RowsAffected
 			}
 		case util.Deref(db.enablePurge):
 			// delete permanently.
 			for i := 0; i < len(objs); i += batchSize {
 				end := min(i+batchSize, len(objs))
-				if err = db.ins.Session(&gorm.Session{}).Unscoped().Delete(objs[i:end]).Error; err != nil {
-					return errors.WithStack(err)
+				res := db.ins.Session(&gorm.Session{}).Unscoped().Delete(objs[i:end])
+				if res.Error != nil {
+					return errors.WithStack(res.Error)
 				}
+				matched += res.RowsAffected
 			}
 		default:
 			// Soft delete: only set "deleted_at" to the current time. The row keeps
@@ -363,10 +395,15 @@ func (db *database[M]) Delete(objs ...M) (err error) {
 			// fails with ErrDuplicatedKey; only Upsert can update such a row again.
 			for i := 0; i < len(objs); i += batchSize {
 				end := min(i+batchSize, len(objs))
-				if err = db.ins.Session(&gorm.Session{}).Delete(objs[i:end]).Error; err != nil {
-					return errors.WithStack(err)
+				res := db.ins.Session(&gorm.Session{}).Delete(objs[i:end])
+				if res.Error != nil {
+					return errors.WithStack(res.Error)
 				}
+				matched += res.RowsAffected
 			}
+		}
+		if strict && matched < expected {
+			return errors.Wrapf(ErrRecordNotFound, "delete %s: %d of %d records matched", tableName, matched, expected)
 		}
 		// Invoke model hook: DeleteAfter.
 		if !db.noHook {
@@ -385,8 +422,10 @@ func (db *database[M]) Delete(objs ...M) (err error) {
 	}
 	// One batch is one UPDATE ... IN (soft delete) or DELETE ... IN (purge);
 	// without overridden delete hooks the statement's own atomicity is the
-	// whole contract.
-	if (db.noHook || !modelregistry.OverridesDeleteHooks(db.m)) && len(objs) <= batchSize {
+	// whole contract, as long as the statement cannot be partly right: one
+	// naming several records that must all exist runs in a transaction, so
+	// finding fewer rows than named rolls it back.
+	if (db.noHook || !modelregistry.OverridesDeleteHooks(db.m)) && len(objs) <= batchSize && (!strict || expected <= 1) {
 		return db.withSingleStatementWrite(write)
 	}
 	return db.withWriteTransaction(write)

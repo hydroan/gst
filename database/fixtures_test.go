@@ -149,10 +149,11 @@ func cleanupTestData() {
 }
 
 // setupTestData deletes existing test data and creates all test users (ul).
-// This is a common setup pattern used in most test cases.
+// This is a common setup pattern used in most test cases. The users may be
+// gone already, so the delete allows missing records.
 func setupTestData(tb testing.TB) {
 	tb.Helper()
-	require.NoError(tb, database.Database[*TestUser](context.Background()).Delete(ul...))
+	require.NoError(tb, database.Database[*TestUser](context.Background()).WithAllowMissing().Delete(ul...))
 	require.NoError(tb, database.Database[*TestUser](context.Background()).Create(ul...))
 }
 

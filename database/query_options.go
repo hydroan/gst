@@ -507,6 +507,26 @@ func (db *database[M]) WithPurge(enable ...bool) types.Database[M] {
 	return db
 }
 
+// WithAllowMissing lets Delete pass over the records that are gone: a record
+// named by id that matches no live row is skipped instead of failing the
+// call with ErrRecordNotFound, and the records that do exist are deleted.
+// It is the deliberate spelling for a delete that may run after another
+// writer removed the rows (cleanup, cascades, retries) and for a delete the
+// caller does not expect to find. Without it Delete requires every named
+// record to exist.
+//
+// Usage:
+//
+//	WithAllowMissing().Delete(&sample)   // nil whether or not the row is still there
+//
+// Only works on 'Delete' method.
+func (db *database[M]) WithAllowMissing() types.Database[M] {
+	db.mu.Lock()
+	defer db.mu.Unlock()
+	db.allowMissing = true
+	return db
+}
+
 // WithDeleted includes soft-deleted records in read operations: List, Get,
 // First, Last, Take and Count stop filtering on deleted_at, so live and
 // soft-deleted rows come back together. A returned row's DeletedAt field

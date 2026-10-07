@@ -88,8 +88,11 @@ func DeleteCall[M types.Model](route string) func(ctx context.Context, params ma
 // deleteFlow runs the delete flow on the record id names: it runs the delete
 // hooks around the write, reads the record first when the operation log
 // records deletes, and records the operation. id must not be empty (see
-// setID); an id the model rejects answers 404 (see notFound). Whether the row
-// is purged is the model's decision (its Purge method), never the request's.
+// setID); an id the model rejects answers 404 (see notFound), and so does a
+// record that is missing or soft deleted: existence is enforced by the
+// database layer, whose ErrRecordNotFound renders 404, or by the read the
+// operation log needs when that runs first. Whether the row is purged is the
+// model's decision (its Purge method), never the request's.
 func (a *action[M, REQ, RSP]) deleteFlow(ctx context.Context, newServiceContext serviceContextFunc, id string) error {
 	log := logger.Controller.WithContext(ctx, consts.Delete)
 	svc := a.service()
@@ -118,12 +121,18 @@ func (a *action[M, REQ, RSP]) deleteFlow(ctx context.Context, newServiceContext 
 		copied = a.newModel()
 		copied.SetID(m.GetID())
 		if err := database.Database[M](ctx).WithExpand(copied.Expands()).Get(copied, m.GetID()); err != nil {
+			// The read has answered existence: a record that is gone is
+			// the 404 the delete below would answer.
+			if errors.Is(err, database.ErrRecordNotFound) {
+				return notFound(err)
+			}
 			log.Errorz("database operation failed", zap.Error(err))
 			gstotel.RecordError(trace.SpanFromContext(ctx), err)
 		}
 	}
 
-	// 2.Delete resource in database.
+	// 2.Delete resource in database. The database layer answers existence:
+	// ErrRecordNotFound renders 404.
 	if err := database.Database[M](ctx).Delete(m); err != nil {
 		return failDatabase(ctx, log, err)
 	}

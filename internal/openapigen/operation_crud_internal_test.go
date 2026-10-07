@@ -165,7 +165,7 @@ func TestOperationsDocumentTheFailuresTheyAnswer(t *testing.T) {
 				setDeleteMany[*model, *model, *model]("/api/failures/delete-many", p)
 				return p.Delete
 			},
-			statuses: []string{"200", "400", "409", "default"},
+			statuses: []string{"200", "400", "404", "409", "default"},
 		},
 		{
 			name: "import",

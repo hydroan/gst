@@ -87,11 +87,12 @@ func DeleteManyCall[M types.Model](route string) func(ctx context.Context, param
 // them into model instances, which become the items of req, runs the batch
 // delete hooks around the write, reads the records in one statement first
 // when the operation log records batch deletes, and records the operation
-// with the records as they were. An empty id, or one of whitespace alone,
-// names no record and fails the whole batch before anything is deleted; an
-// id the model rejects is skipped, which keeps the batch idempotent. Whether
-// the rows are purged is the model's decision (its Purge method), never the
-// request's.
+// with the records as they were. The batch is all or nothing: an empty id,
+// or one of whitespace alone, is a defective request refused before anything
+// is deleted; an id the model rejects names no record and answers 404 with
+// nothing deleted, as does an id no stored record carries, which the
+// database layer reports as ErrRecordNotFound. Whether the rows are purged
+// is the model's decision (its Purge method), never the request's.
 func (a *action[M, REQ, RSP]) deleteManyFlow(ctx context.Context, newServiceContext serviceContextFunc, req *batch[M]) error {
 	log := logger.Controller.WithContext(ctx, consts.DeleteMany)
 	svc := a.service()
@@ -109,10 +110,10 @@ func (a *action[M, REQ, RSP]) deleteManyFlow(ctx context.Context, newServiceCont
 		}
 		m := a.newModel()
 		if !setID(m, id) {
-			// An id the model rejects cannot match any row; skip it to keep
-			// batch delete idempotent instead of failing the whole batch.
-			log.Warnz("skip id rejected by model", zap.String("id", id))
-			continue
+			// An id the model rejects names no record, and every id of the
+			// batch must name one: answer 404 with nothing deleted.
+			log.Errorz("batch delete with an id the model rejects", zap.String("id", id))
+			return notFound(nil)
 		}
 		req.Items = append(req.Items, m)
 	}
@@ -139,7 +140,8 @@ func (a *action[M, REQ, RSP]) deleteManyFlow(ctx context.Context, newServiceCont
 		}
 	}
 	// 2.Batch delete resources in database. A batch without items deletes
-	// nothing.
+	// nothing; every id must name a live record (see database.Delete), so
+	// ErrRecordNotFound renders 404 with nothing deleted.
 	if err := database.Database[M](ctx).Delete(req.Items...); err != nil {
 		return failDatabase(ctx, log, err)
 	}

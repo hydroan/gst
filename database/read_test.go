@@ -111,8 +111,9 @@ func TestDatabaseList(t *testing.T) {
 	require.NoError(t, database.Database[*TestUser](context.Background()).List(&users))
 	require.Len(t, users, 2, "should have 2 records after soft delete")
 
-	// Test List with empty result - should overwrite existing slice
-	require.NoError(t, database.Database[*TestUser](context.Background()).Delete(ul...))
+	// Test List with empty result - should overwrite existing slice. u1 is
+	// gone already, so the two left are the ones to delete.
+	require.NoError(t, database.Database[*TestUser](context.Background()).Delete(u2, u3))
 	users = make([]*TestUser, 0, len(ul))
 	users = append(users, u1, u2, u3) // Pre-populate with data
 	require.Len(t, users, 3, "slice should have 3 items before List")

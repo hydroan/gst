@@ -35,9 +35,10 @@ func createSampleRecord(t *testing.T, name, tag string) *SampleRecord {
 	record.SetID()
 	require.NoError(t, database.Database[*SampleRecord](t.Context()).Create(record))
 	t.Cleanup(func() {
-		// The test context is done by the time cleanups run.
+		// The test context is done by the time cleanups run, and the test
+		// may have deleted the row itself.
 		ctx := context.WithoutCancel(t.Context())
-		require.NoError(t, database.Database[*SampleRecord](ctx).WithPurge(true).Delete(record))
+		require.NoError(t, database.Database[*SampleRecord](ctx).WithPurge(true).WithAllowMissing().Delete(record))
 	})
 	return record
 }

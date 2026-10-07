@@ -34,20 +34,21 @@ var databaseTerminalMethods = map[string]bool{
 // chain open. TestDatabaseChainMethodSetsMatchDatabaseInterfaces guards this set
 // against drifting from the interface declaration.
 var databaseChainMethods = map[string]bool{
-	"WithQuery":      true,
-	"WithCursor":     true,
-	"WithSelect":     true,
-	"WithLock":       true,
-	"WithBatchSize":  true,
-	"WithPagination": true,
-	"WithLimit":      true,
-	"WithOrder":      true,
-	"WithExpand":     true,
-	"WithPurge":      true,
-	"WithDeleted":    true,
-	"WithReplica":    true,
-	"WithDryRun":     true,
-	"WithoutHook":    true,
+	"WithQuery":        true,
+	"WithCursor":       true,
+	"WithSelect":       true,
+	"WithLock":         true,
+	"WithBatchSize":    true,
+	"WithPagination":   true,
+	"WithLimit":        true,
+	"WithOrder":        true,
+	"WithExpand":       true,
+	"WithPurge":        true,
+	"WithAllowMissing": true,
+	"WithDeleted":      true,
+	"WithReplica":      true,
+	"WithDryRun":       true,
+	"WithoutHook":      true,
 }
 
 // DatabaseChainTermination requires every database.Database chain to end in a

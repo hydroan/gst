@@ -28,7 +28,11 @@ type Database[M Model] interface {
 	// unique key collision fails with database.ErrDuplicatedKey instead of
 	// updating the existing row.
 	Create(objs ...M) error
-	// Delete removes one or more records using WithPurge, the model Purge setting, or soft delete by default.
+	// Delete removes one or more records using WithPurge, the model Purge
+	// setting, or soft delete by default. Every record named by id must
+	// exist: a missing or soft-deleted one fails with
+	// database.ErrRecordNotFound and the batch deletes nothing, unless
+	// WithAllowMissing is set.
 	Delete(objs ...M) error
 	// Update saves one or more full model values by primary key (pure UPDATE,
 	// zero values included). Objects without an ID fail with
@@ -107,6 +111,9 @@ type DatabaseOption[M Model] interface {
 	WithExpand(expand []string, orders ...Order) Database[M]
 	// WithPurge controls whether Delete permanently removes records instead of soft deleting them.
 	WithPurge(...bool) Database[M]
+	// WithAllowMissing lets Delete skip the records that are already gone
+	// instead of failing with database.ErrRecordNotFound.
+	WithAllowMissing() Database[M]
 	// WithDeleted includes soft-deleted records in read operations (List, Get,
 	// First, Last, Take, Count). Only the soft-delete condition is lifted;
 	// combining it with a write operation or Cleanup fails the chain.

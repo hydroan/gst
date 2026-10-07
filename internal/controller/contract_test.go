@@ -445,6 +445,11 @@ func TestTransportsAnswerTheContractAlike(t *testing.T) {
 			},
 		},
 		{
+			name: "Delete answers NotFound for an id no record carries", fixture: samples, phase: consts.Delete,
+			input: contractInput{id: "missing"},
+			want:  notFound,
+		},
+		{
 			name: "Delete answers NotFound for an id the integer key cannot hold", fixture: counters, phase: consts.Delete,
 			input: contractInput{id: "first"},
 			want:  notFound,
@@ -663,6 +668,23 @@ func TestTransportsAnswerTheContractAlike(t *testing.T) {
 				t.Helper()
 				requireSampleName(t, in.ids[0], "contract-delete-many-kept")
 			},
+		},
+		{
+			name: "DeleteMany answers NotFound when an id names no stored record and removes nothing", fixture: samples, phase: consts.DeleteMany,
+			prepare: func(t *testing.T) contractInput {
+				t.Helper()
+				return contractInput{ids: []string{createSample(t, "contract-delete-many-missing-kept").GetID(), "missing"}}
+			},
+			want: notFound,
+			check: func(t *testing.T, in contractInput, _ contractAnswer) {
+				t.Helper()
+				requireSampleName(t, in.ids[0], "contract-delete-many-missing-kept")
+			},
+		},
+		{
+			name: "DeleteMany answers NotFound for an id the integer key cannot hold", fixture: counters, phase: consts.DeleteMany,
+			input: contractInput{ids: []string{"first"}},
+			want:  notFound,
 		},
 		{
 			name: "DeleteMany answers the hook's refusal and removes nothing", fixture: refusals, phase: consts.DeleteMany,

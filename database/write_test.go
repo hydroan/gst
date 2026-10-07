@@ -252,7 +252,8 @@ func TestDatabaseDelete(t *testing.T) {
 	// Test Delete with empty resources - should not return error
 	require.NoError(t, database.Database[*TestUser](context.Background()).Delete(nil))
 	require.NoError(t, database.Database[*TestUser](context.Background()).Delete([]*TestUser{nil, nil, nil}...))
-	require.NoError(t, database.Database[*TestUser](context.Background()).Delete([]*TestUser{nil, u1, nil}...))
+	// nil entries are skipped; the one record named is gone by now.
+	require.ErrorIs(t, database.Database[*TestUser](context.Background()).Delete([]*TestUser{nil, u1, nil}...), database.ErrRecordNotFound)
 
 	t.Run("auto increment model rows are deleted by id", func(t *testing.T) {
 		items := []*TestAutoItem{
@@ -286,6 +287,70 @@ func TestDatabaseDelete(t *testing.T) {
 		require.NoError(t, database.DB().Unscoped().Where("id = ?", item.ID).First(buried).Error)
 		require.True(t, buried.DeletedAt.Valid, "soft delete should persist deleted_at")
 		require.WithinDuration(t, time.Now().UTC(), buried.DeletedAt.Time, time.Minute, "deleted_at stamped by soft delete should be the current instant")
+	})
+
+	t.Run("a record that is gone fails with ErrRecordNotFound", func(t *testing.T) {
+		defer cleanupTestData()
+		setupTestData(t)
+		require.NoError(t, database.Database[*TestUser](context.Background()).Delete(u1))
+		require.ErrorIs(t, database.Database[*TestUser](context.Background()).Delete(u1), database.ErrRecordNotFound)
+		require.ErrorIs(t, database.Database[*TestUser](context.Background()).WithPurge().Delete(u1), database.ErrRecordNotFound)
+	})
+
+	t.Run("a batch naming a missing record deletes nothing", func(t *testing.T) {
+		defer cleanupTestData()
+		setupTestData(t)
+		require.NoError(t, database.Database[*TestUser](context.Background()).Delete(u1))
+		require.ErrorIs(t, database.Database[*TestUser](context.Background()).Delete(u2, u1, u3), database.ErrRecordNotFound)
+		count := new(int)
+		require.NoError(t, database.Database[*TestUser](context.Background()).Count(count))
+		require.Equal(t, 2, *count, "the records that exist stay: the batch is all or nothing")
+	})
+
+	t.Run("WithAllowMissing deletes the records that exist", func(t *testing.T) {
+		defer cleanupTestData()
+		setupTestData(t)
+		require.NoError(t, database.Database[*TestUser](context.Background()).Delete(u1))
+		require.NoError(t, database.Database[*TestUser](context.Background()).WithAllowMissing().Delete(u1))
+		require.NoError(t, database.Database[*TestUser](context.Background()).WithAllowMissing().Delete(u2, u1, u3))
+		count := new(int)
+		require.NoError(t, database.Database[*TestUser](context.Background()).Count(count))
+		require.Zero(t, *count)
+	})
+
+	t.Run("a repeated record counts once", func(t *testing.T) {
+		defer cleanupTestData()
+		setupTestData(t)
+		require.NoError(t, database.Database[*TestUser](context.Background()).Delete(u1, u1))
+		count := new(int)
+		require.NoError(t, database.Database[*TestUser](context.Background()).Count(count))
+		require.Equal(t, 2, *count)
+	})
+
+	t.Run("a soft-deleted record is gone", func(t *testing.T) {
+		require.NoError(t, database.DB().AutoMigrate(&TestSoftDeleteItem{}))
+		defer func() {
+			_ = database.DB().Exec("DELETE FROM test_soft_delete_items").Error
+		}()
+
+		item := &TestSoftDeleteItem{Code: "soft-twice", Name: "alive"}
+		require.NoError(t, database.Database[*TestSoftDeleteItem](context.Background()).Create(item))
+		require.NoError(t, database.Database[*TestSoftDeleteItem](context.Background()).Delete(item))
+		require.ErrorIs(t, database.Database[*TestSoftDeleteItem](context.Background()).Delete(item), database.ErrRecordNotFound)
+		require.NoError(t, database.Database[*TestSoftDeleteItem](context.Background()).WithAllowMissing().Delete(item))
+	})
+
+	t.Run("a delete by conditions removes what matches and matches none without error", func(t *testing.T) {
+		defer cleanupTestData()
+		setupTestData(t)
+		require.NoError(t, database.Database[*TestUser](context.Background()).WithQuery(&TestUser{Name: u1.Name}).Delete(&TestUser{}))
+		require.NoError(t, database.Database[*TestUser](context.Background()).WithQuery(&TestUser{Name: u1.Name}).Delete(&TestUser{}),
+			"matching no row is not a missing record: the conditions name no record")
+		count := new(int)
+		require.NoError(t, database.Database[*TestUser](context.Background()).Count(count))
+		require.Equal(t, 2, *count)
+		require.Error(t, database.Database[*TestUser](context.Background()).Delete(&TestUser{}),
+			"the zero model without conditions names no row and is refused")
 	})
 }
 

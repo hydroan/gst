@@ -108,6 +108,11 @@ func (t *TOTPUnbindService) Create(ctx *gst.ServiceContext, req *modelmfa.TOTPUn
 		}
 
 		if deleteErr := database.Database[*modelmfa.TOTPDevice](ctx).WithPurge(true).Delete(device); deleteErr != nil {
+			// The device went away between the listing and the delete: it is
+			// unbound already, the same answer as not finding it above.
+			if errors.Is(deleteErr, database.ErrRecordNotFound) {
+				return gst.NewError(http.StatusNotFound, "device not found or already unbound")
+			}
 			return gst.NewErrorWithCause(http.StatusInternalServerError, "failed to unbind device", deleteErr)
 		}
 
