@@ -88,8 +88,8 @@ gst 是强约定框架（Apple 风格），不是自由框架（Windows 风格�
 
 - 只给项目用、或主要给项目用的能力，是顶层公开包，实现就写在包里，如 `bootstrap`、`database`、`controller`、`cronjob`、`leader`。
 - 只有框架自己用的包一律放 `internal`：项目开发者看不到，就不必理解这些细节。
-- 项目和框架都大量使用的能力，实现下沉到 internal 包，再由一个顶层包做 alias 转发，只转发项目用得到的那部分，框架私用的符号不暴露；转发是唯一形状，符号只是空函数、常量或类型也一样，公开包自己不声明任何东西：根包 `gst` 转发 `internal/types`，`model` 转发 `internal/modelregistry`，`service` 转发 `internal/serviceregistry`，`sse` 转发 `internal/sse`，`router` 转发 `internal/router`，`middleware` 转发 `internal/middleware`，`dsl` 转发 `internal/dsl`，`consts` 转发 `internal/consts`。
-- middleware 与 interceptor 是例外：中间件和拦截器大多是给项目用的，所以这两个包按谁挂载分家，而不是像 router、dsl 那样全部在 internal 实现、公开包只转发。框架内建链上的中间件与拦截器是框架逻辑，放 internal/middleware 与 internal/grpcserver，由 internal/router、internal/grpcserver 装配；项目经 Register、RegisterAuth 自己挂的是项目能力，实现直接写在公开包里，不进 internal，也不得改动内建链与监听器的逻辑；随 gg module copy 复制的中间件同样在公开包，只引用公开包。公开包对 Register、RegisterAuth 这类挂载入口只做转发。
+- 项目和框架都大量使用的能力，实现下沉到 internal 包，再由一个顶层包做 alias 转发，只转发项目用得到的那部分，框架私用的符号不暴露；转发是唯一形状，符号只是空函数、常量或类型也一样，公开包自己不声明任何东西：根包 `gst` 转发 `internal/types`，`model` 转发 `internal/modelregistry`，`service` 转发 `internal/serviceregistry`，`sse` 转发 `internal/sse`，`router` 转发 `internal/router`，`middleware` 转发 `internal/middleware`，`dsl` 转发 `internal/dsl`，`consts` 转发 `internal/consts`。`grpc` 是混合形态：生成代码和项目用到的调用函数、拦截器与调用者类型转发 `internal/controller`、`internal/grpcserver`，只有生成代码用的转换帮手（Narrow、UTF8、Value 等）按第一条实现就写在包里。
+- middleware 与 interceptor 是例外：中间件和拦截器大多是给项目用的，所以这两个包按谁挂载分家，而不是像 router、dsl 那样全部在 internal 实现、公开包只转发。框架内建链上的中间件与拦截器是框架逻辑，放 internal/middleware 与 internal/grpcserver，由 internal/router、internal/grpcserver 装配；项目经 Register、RegisterAuth 自己挂的是项目能力，实现直接写在公开包里，不进 internal，也不得改动内建链与监听器的逻辑；随 gg module copy 复制的中间件同样在公开包，只引用公开包。公开包对 Register、RegisterAuth 这类挂载入口只做转发。框架自己构建、交给项目挂载的中间件（如 CircuitBreaker）实现在 internal/middleware，公开包只转发它的构造函数。
 
 引用方向随之固定：internal 包（含测试）需要这些能力时直接引用对应的 internal 包，禁止反向 import 公开包，避免 internal → 公开 → internal 的依赖绕行和潜在 import 环；框架自身代码（含公开包）使用 internal 能力时同样直接引用 internal 实现包，公开转发包只服务业务项目。如果所需符号只存在于公开包，把实现下沉到 internal、公开包改为转发，而不是让 internal 反向引用。
 
@@ -145,7 +145,7 @@ gst 是强约定框架（Apple 风格），不是自由框架（Windows 风格�
 
 开发 module 时，每个接口对应的【model/REQ/RSP】、【业务逻辑】必须写在自己对应的单独代码文件中，禁止将多个接口的【model/REQ/RSP】写在同一个 model 代码文件中，禁止将多个不同接口的【业务逻辑】写在同一个 service 代码文件中。三种场景如下：
 
-- 完全不同的业务逻辑和接口：/api/users，/api/groups，那么需要两个 model 文件和两个 service 文件
+- 完全不同的业务逻辑和接口：/api/users，/api/records，那么需要两个 model 文件和两个 service 文件
 - 同一资源对象则走框架提供的 CRUD：POST /api/records、DELETE /api/records/:id、 DELETE /api/records、PUT /api/records/:id、PATCH /api/records/:id、GET /api/records、GET /api/records/:id，只需要一个 model 文件且 model 文件中没有自定义 REQ 和 RSP，service 文件中只有一个结构体，在结构体上加上不同的 hooks。
 - 同一资源对象走自定义业务逻辑：GET /api/iam/sessions、DELETE /api/iam/sessions/:id。还是只需要一个 model 文件和一个 service 文件，但都有自己的 REQ、RSP service 结构体。注意 List、Get 是 HTTP GET 接口，禁止声明 `Payload[T]()`，只声明 `Result[T]()`，请求类型固定为 `*model.Empty`：
   - model 代码文件中的结构体：`SessionListRsp`、`SessionDeleteReq`、`SessionDeleteRsp`。
@@ -235,9 +235,9 @@ cluster 是多副本示例，也是框架分布式、多副本和 gRPC 能力的
 
 - `model/record.go`：普通数据库资源 model，启用 CRUD，并通过 service hook 做当前用户过滤、返回字段补充、关联对象填充等逻辑。
 - `model/tool/entry.go`：通用工具类接口，使用 `model.Empty` 定义非数据库动作，并为当前接口单独定义请求和响应。适合条目合并、格式转换、批量转换等没有独立数据表的动作。
-- `model/auth/login.go`：登录跳转类公开接口，使用 `model.Empty` 定义动作模型，在 DSL 中声明 `Public()`，service 返回登录地址、token 等响应。
-- `model/sample/item.go`：嵌套资源 model，同一个 model 可以同时提供默认资源路由和自定义嵌套路由；必填校验、默认值、派生字段等轻量逻辑放在 model hook。
-- `model/sample/item/archive.go`：动作类接口，归档、封存、恢复这类动作使用空模型加独立 `XXXReq`、`XXXRsp`，业务逻辑放在对应 service。
+- `model/ping.go`：公开探活类接口，使用 `model.Empty` 定义动作模型，在 DSL 中声明 `Public()`，只声明 `Result`，service 返回探活结果。
+- `model/record/item.go`：嵌套资源 model，默认挂在父资源之下，再用 `Route("items")` 给同一个 model 一条全局路由。
+- `model/archive/document/attachment.go`：子资源动作，`model.Empty` 加 `Exact()` 挂在父资源路径下，独立的 `XXXReq`、`XXXRsp`，业务逻辑放在对应 service；`model/board/note.go` 的 `Route("board/notes/:id/publish")` 是同一资源的额外动作。
 
 #### 后端项目使用注意事项
 
