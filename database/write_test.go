@@ -3,6 +3,7 @@ package database_test
 import (
 	"context"
 	"strconv"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -11,6 +12,7 @@ import (
 	"github.com/hydroan/gst/database"
 	"github.com/hydroan/gst/internal/requestctx"
 	"github.com/hydroan/gst/internal/types"
+	"github.com/hydroan/gst/tenant"
 	"github.com/stretchr/testify/require"
 	"gorm.io/gorm"
 )
@@ -353,6 +355,69 @@ func TestDatabaseDelete(t *testing.T) {
 		require.Equal(t, 1, *count)
 		require.Error(t, database.Database[*TestUser](context.Background()).Delete(&TestUser{}),
 			"the zero model without conditions names no row and is refused")
+	})
+
+	t.Run("a delete by conditions reaches the model's table only", func(t *testing.T) {
+		// The table comes from the model type alone, and a condition can only
+		// name the model's own columns: one built from another model's column
+		// reference fails the chain before any statement is rendered.
+		stmts := make([]types.SQLStatement, 0)
+		require.NoError(t, database.Database[*TestUser](context.Background()).
+			WithDryRun(&stmts).WithQuery(&TestUser{Name: "anyone"}).Delete())
+		require.Len(t, stmts, 1)
+		require.Contains(t, stmts[0].RenderedSQL, "DELETE FROM "+quoteIdent("test_users")+" WHERE ")
+		require.ErrorIs(t, database.Database[*TestUser](context.Background()).
+			WithQuery(nil, types.QueryOptions{Filters: []types.Filter{TestAggregateRecordCols.Category.Eq("alpha")}}).Delete(),
+			database.ErrColumnTable)
+	})
+
+	t.Run("AllowEmpty deletes every row of the model's table", func(t *testing.T) {
+		defer cleanupTestData()
+		setupTestData(t)
+		// Without AllowEmpty the empty query keeps its safety condition and
+		// the delete reaches nothing.
+		require.NoError(t, database.Database[*TestUser](context.Background()).WithQuery(nil).Delete())
+		count := new(int)
+		require.NoError(t, database.Database[*TestUser](context.Background()).Count(count))
+		require.Equal(t, 3, *count)
+
+		stmts := make([]types.SQLStatement, 0)
+		require.NoError(t, database.Database[*TestUser](context.Background()).
+			WithDryRun(&stmts).WithQuery(nil, types.QueryOptions{AllowEmpty: true}).Delete())
+		require.Len(t, stmts, 1)
+		// MySQL renders a trailing space where the WHERE clause would start.
+		require.True(t, strings.HasSuffix(strings.TrimRight(stmts[0].RenderedSQL, " "), "DELETE FROM "+quoteIdent("test_users")), stmts[0].RenderedSQL)
+
+		require.NoError(t, database.Database[*TestUser](context.Background()).WithQuery(nil, types.QueryOptions{AllowEmpty: true}).Delete())
+		require.NoError(t, database.Database[*TestUser](context.Background()).Count(count))
+		require.Zero(t, *count)
+
+		// Records do not combine with the whole table either.
+		setupTestData(t)
+		require.ErrorIs(t, database.Database[*TestUser](context.Background()).WithQuery(&TestUser{}, types.QueryOptions{AllowEmpty: true}).Delete(u1),
+			database.ErrConditionsWithRecords)
+	})
+
+	t.Run("AllowEmpty soft deletes a soft-deleting model's table within the caller's tenant", func(t *testing.T) {
+		require.NoError(t, database.DB().AutoMigrate(&TestTenantSoftDeleteItem{}))
+		defer func() {
+			_ = database.DB().Exec("DELETE FROM test_tenant_soft_delete_items").Error
+		}()
+
+		ctxA := tenant.In(context.Background(), "tenant-a")
+		ctxB := tenant.In(context.Background(), "tenant-b")
+		require.NoError(t, database.Database[*TestTenantSoftDeleteItem](ctxA).Create(&TestTenantSoftDeleteItem{Name: "mine"}, &TestTenantSoftDeleteItem{Name: "mine too"}))
+		require.NoError(t, database.Database[*TestTenantSoftDeleteItem](ctxB).Create(&TestTenantSoftDeleteItem{Name: "theirs"}))
+
+		require.NoError(t, database.Database[*TestTenantSoftDeleteItem](ctxA).WithQuery(nil, types.QueryOptions{AllowEmpty: true}).Delete())
+
+		rows := make([]*TestTenantSoftDeleteItem, 0)
+		require.NoError(t, database.Database[*TestTenantSoftDeleteItem](ctxA).List(&rows))
+		require.Empty(t, rows, "every row of the tenant is gone")
+		require.NoError(t, database.Database[*TestTenantSoftDeleteItem](ctxA).WithDeleted().List(&rows))
+		require.Len(t, rows, 2, "soft deleted, not purged")
+		require.NoError(t, database.Database[*TestTenantSoftDeleteItem](ctxB).List(&rows))
+		require.Len(t, rows, 1, "the other tenant's row is untouched")
 	})
 
 	t.Run("conditions and records do not combine", func(t *testing.T) {

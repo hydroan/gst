@@ -205,9 +205,13 @@ func (db *database[M]) Create(objs ...M) (err error) {
 //
 // A delete by conditions passes no record: WithQuery(...).Delete() removes
 // the rows the conditions match, and matching none of them is not a missing
-// record. Records and conditions do not combine: a call carrying both fails
-// with ErrConditionsWithRecords, since the mix would turn an empty record
-// list into a delete of everything the conditions match.
+// record. Every row of the table is spelled the one way a query spells it,
+// WithQuery(nil, QueryOptions{AllowEmpty: true}).Delete(): on a
+// tenant-scoped model that is every row of the caller's tenant, and the rows
+// soft delete or purge as the model and WithPurge decide. Records and
+// conditions do not combine: a call carrying both fails with
+// ErrConditionsWithRecords, since the mix would turn an empty record list
+// into a delete of everything the conditions match.
 //
 // A versioned record (a model declaring model.Version) is checked when it
 // carries a non-zero version — the statement matches it, and a miss fails
@@ -246,6 +250,7 @@ func (db *database[M]) Create(objs ...M) (err error) {
 //	Delete(&sample)  // Soft delete by primary key
 //	Delete(user1, user2, user3)  // Batch soft delete multiple records
 //	WithQuery(params).Delete()  // Delete the rows the conditions match
+//	WithQuery(nil, QueryOptions{AllowEmpty: true}).Delete()  // Delete every row of the model's table
 //	WithPurge().Delete(&sample)  // Permanent deletion
 func (db *database[M]) Delete(objs ...M) (err error) {
 	defer db.reset()
@@ -256,19 +261,21 @@ func (db *database[M]) Delete(objs ...M) (err error) {
 	if db.replicaRead != nil {
 		return errors.Wrap(ErrWithReplicaOnWrite, "Delete")
 	}
-	// Conditions on the chain (WithQuery) name rows; records name themselves.
-	// A delete passes one or the other.
-	conditioned := false
-	if db.ins != nil && db.ins.Statement != nil {
-		_, conditioned = db.ins.Statement.Clauses["WHERE"]
+	if err = db.prepare(); err != nil {
+		return err
+	}
+	// Conditions on the chain (WithQuery) name rows, every row of the table
+	// when AllowEmpty declared it; records name themselves. A delete passes
+	// one or the other.
+	conditioned := db.matchAll
+	if db.ins.Statement != nil {
+		if _, where := db.ins.Statement.Clauses["WHERE"]; where {
+			conditioned = true
+		}
 	}
 	objs = compactModels(objs)
 	if len(objs) == 0 && !conditioned {
 		return nil
-	}
-
-	if err = db.prepare(); err != nil {
-		return err
 	}
 	// The records the call names, each once: what the statements must match
 	// unless the caller allows missing records.
@@ -289,6 +296,9 @@ func (db *database[M]) Delete(objs ...M) (err error) {
 	}
 	strict := !db.allowMissing && expected > 0
 	tableName := db.m.TableName()
+	// The delete of every row of the table, declared through AllowEmpty, is
+	// the one statement allowed to run without a condition of its own.
+	session := &gorm.Session{AllowGlobalUpdate: db.matchAll}
 
 	if db.dialect() == dialectClickHouse {
 		return db.clickhouseDelete(objs)
@@ -321,7 +331,7 @@ func (db *database[M]) Delete(objs ...M) (err error) {
 		dryRunObjs := cloneDryRunModels(objs)
 		if guarded {
 			for i := range dryRunObjs {
-				tx := dryRunSession(db.ins)
+				tx := dryRunSession(db.ins).Session(session)
 				if v, _ := modelschema.VersionValue(dryRunObjs[i]); v > 0 {
 					tx = tx.Where(db.quoteIdent(versionColumn)+" = ?", v)
 				}
@@ -337,13 +347,13 @@ func (db *database[M]) Delete(objs ...M) (err error) {
 		for i := 0; i < len(dryRunObjs); i += batchSize {
 			end := min(i+batchSize, len(dryRunObjs))
 			if util.Deref(db.enablePurge) {
-				tx := dryRunSession(db.ins).Unscoped().Delete(dryRunObjs[i:end])
+				tx := dryRunSession(db.ins).Session(session).Unscoped().Delete(dryRunObjs[i:end])
 				if err = db.collectSQL(tx); err != nil {
 					return err
 				}
 				continue
 			}
-			tx := dryRunSession(db.ins).Delete(dryRunObjs[i:end])
+			tx := dryRunSession(db.ins).Session(session).Delete(dryRunObjs[i:end])
 			if err = db.collectSQL(tx); err != nil {
 				return err
 			}
@@ -379,7 +389,7 @@ func (db *database[M]) Delete(objs ...M) (err error) {
 			// row is unreachable to every later write already, and a purged
 			// row is gone.
 			for i := range objs {
-				tx := db.ins.Session(&gorm.Session{})
+				tx := db.ins.Session(session)
 				v, _ := modelschema.VersionValue(objs[i])
 				if v > 0 {
 					tx = tx.Where(db.quoteIdent(versionColumn)+" = ?", v)
@@ -400,7 +410,7 @@ func (db *database[M]) Delete(objs ...M) (err error) {
 			// delete permanently.
 			for i := 0; i < len(objs); i += batchSize {
 				end := min(i+batchSize, len(objs))
-				res := db.ins.Session(&gorm.Session{}).Unscoped().Delete(objs[i:end])
+				res := db.ins.Session(session).Unscoped().Delete(objs[i:end])
 				if res.Error != nil {
 					return errors.WithStack(res.Error)
 				}
@@ -412,7 +422,7 @@ func (db *database[M]) Delete(objs ...M) (err error) {
 			// fails with ErrDuplicatedKey; only Upsert can update such a row again.
 			for i := 0; i < len(objs); i += batchSize {
 				end := min(i+batchSize, len(objs))
-				res := db.ins.Session(&gorm.Session{}).Delete(objs[i:end])
+				res := db.ins.Session(session).Delete(objs[i:end])
 				if res.Error != nil {
 					return errors.WithStack(res.Error)
 				}

@@ -33,7 +33,8 @@ type Database[M Model] interface {
 	// exist: a missing or soft-deleted one fails with
 	// database.ErrRecordNotFound and the batch deletes nothing, unless
 	// WithAllowMissing is set. Passed no record, it removes the rows the
-	// WithQuery conditions match; records and conditions do not combine.
+	// WithQuery conditions match, every row of the table when AllowEmpty
+	// declared it; records and conditions do not combine.
 	Delete(objs ...M) error
 	// Update saves one or more full model values by primary key (pure UPDATE,
 	// zero values included). Objects without an ID fail with
@@ -140,7 +141,8 @@ type QueryOptions struct {
 	// By default a nil model, a zero-value model, or all-empty field values
 	// add the "1 = 0" safety condition instead, so a forgotten filter cannot
 	// return or delete the whole table. Filters count as real conditions
-	// and disable the safety check on their own.
+	// and disable the safety check on their own. With it, a Delete passed no
+	// record removes every row of the model's table (see Database.Delete).
 	AllowEmpty bool
 
 	// PresentFields marks columns whose filter values were explicitly provided

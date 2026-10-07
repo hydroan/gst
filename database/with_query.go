@@ -49,7 +49,7 @@ import (
 //	- By default (false): Empty queries are blocked for safety (adds WHERE 1 = 0)
 //	- When true: Allows empty queries to match all records (full table scan)
 //	- Empty query cases: nil, empty struct, all fields are zero values, all field values are empty strings
-//	- Critical: Use with caution, especially for Delete operations
+//	- On Delete passed no record it means every row of the model's table (see Delete)
 //
 // Examples:
 //
@@ -114,7 +114,9 @@ func (db *database[M]) WithQuery(query M, opts ...types.QueryOptions) types.Data
 			db.ins = db.ins.Where("1 = 0")
 			return db
 		}
-		// AllowEmpty=true: allow matching all records
+		// AllowEmpty=true: allow matching all records. A Delete passed no
+		// record then removes every row of the table (see Delete).
+		db.matchAll = true
 		return db
 	}
 
@@ -173,7 +175,9 @@ func (db *database[M]) WithQuery(query M, opts ...types.QueryOptions) types.Data
 			db.ins = db.ins.Where("1 = 0")
 			return db
 		}
-		// AllowEmpty=true: allow matching all records
+		// AllowEmpty=true: allow matching all records. A Delete passed no
+		// record then removes every row of the table (see Delete).
+		db.matchAll = true
 		return db
 	}
 
