@@ -169,7 +169,7 @@ func versionFieldOf(m any) versionField {
 				typ, field.Name, strings.Join(quoted, " and ")))
 		}
 		// The column is the one gorm reads and writes, resolved by the one
-		// authority on column names (see modelschema): a column tag spelt
+		// authority on column names (see GoNameIndex): a column tag spelt
 		// in any case, or the configured naming strategy.
 		columns, err := GoNameIndex(typ)
 		if err != nil {
