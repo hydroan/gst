@@ -2,6 +2,7 @@ package urlquery
 
 import (
 	"net/url"
+	"reflect"
 	"testing"
 	"time"
 
@@ -9,6 +10,7 @@ import (
 	"github.com/hydroan/gst/internal/modelschema"
 	"github.com/hydroan/gst/internal/types"
 	"github.com/stretchr/testify/require"
+	"gorm.io/datatypes"
 )
 
 type filterTestModel struct {
@@ -18,6 +20,12 @@ type filterTestModel struct {
 	ItemCount int       `json:"item_count"`
 	Enabled   bool      `json:"enabled"`
 	ExpiredAt time.Time `json:"expired_at"`
+	// Day is a calendar day; ClosedAt, Retries and Archived are optional
+	// values behind pointers, checked like the values they point to.
+	Day      datatypes.Date `json:"day"`
+	ClosedAt *time.Time     `json:"closed_at"`
+	Retries  *int           `json:"retries"`
+	Archived *bool          `json:"archived"`
 	// GroupIDs and Renamed anchor the column resolution: gorm renders the
 	// former as group_ids (a plain snake case conversion would not) and the
 	// latter through its column tag, while the URL keeps the json name.
@@ -185,6 +193,41 @@ func TestFilters(t *testing.T) {
 		for _, key := range []string{"expired_at[like]", "expired_at[notlike]", "expired_at[in]", "expired_at[notin]", "expired_at[startswith]", "expired_at[endswith]"} {
 			_, err := Filters(url.Values{key: {"2026-07-01"}}, &filterTestModel{})
 			require.Error(t, err, "key %q must be rejected on a time field", key)
+		}
+	})
+
+	t.Run("DateFieldReadsTheUTCDay", func(t *testing.T) {
+		// Midnight in Shanghai on the 2nd is the 1st in UTC, the day a date
+		// column stores (see API_CONTRACT.md), so the bound is that day at
+		// midnight in the canonical layout.
+		conds, err := Filters(url.Values{"day[eq]": {"2026-01-02T00:00:00+08:00"}}, &filterTestModel{})
+		require.NoError(t, err)
+		require.Equal(t, []types.Filter{types.NewFilter("", "day", types.FilterOpEq, "2026-01-01 00:00:00")}, conds)
+
+		conds, err = Filters(url.Values{"day[gte]": {"2026-01-02T15:30:00Z"}}, &filterTestModel{})
+		require.NoError(t, err)
+		require.Equal(t, "2026-01-02 00:00:00", conds[0].Value(), "the time of day is dropped")
+
+		_, err = Filters(url.Values{"day[eq]": {"not-a-date"}}, &filterTestModel{})
+		require.Error(t, err, "a value that is not RFC 3339 is a client error, not an empty page")
+		for _, key := range []string{"day[like]", "day[in]"} {
+			_, err = Filters(url.Values{key: {"2026-01-02T00:00:00Z"}}, &filterTestModel{})
+			require.Error(t, err, "key %q must be rejected on a date field", key)
+		}
+	})
+
+	t.Run("OptionalFieldsAreCheckedLikeTheirValues", func(t *testing.T) {
+		conds, err := Filters(url.Values{"closed_at[lt]": {"2026-07-01T08:00:00+08:00"}}, &filterTestModel{})
+		require.NoError(t, err)
+		require.Equal(t, "2026-07-01 00:00:00", conds[0].Value(), "an optional time travels as the UTC wall clock too")
+
+		for key, value := range map[string]string{
+			"closed_at[gte]": "07/01/2026",
+			"retries[gt]":    "many",
+			"archived[eq]":   "maybe",
+		} {
+			_, err := Filters(url.Values{key: {value}}, &filterTestModel{})
+			require.Error(t, err, "%s=%s must be rejected: the pointer holds a value of the column's type", key, value)
 		}
 	})
 
@@ -815,6 +858,28 @@ func TestCursor(t *testing.T) {
 		require.NoError(t, err)
 		require.False(t, cursor.Enabled(), "a zero cursor makes WithCursor a no-op")
 	})
+}
+
+// TestNormalizeCursorValueFollowsTheColumnType pins the boundary check on
+// the value the column holds, a pointer dereferenced, and on the UTC day a
+// date column compares by.
+func TestNormalizeCursorValueFollowsTheColumnType(t *testing.T) {
+	value, err := normalizeCursorValue(reflect.TypeFor[datatypes.Date](), "2026-01-02T00:00:00+08:00")
+	require.NoError(t, err)
+	require.Equal(t, "2026-01-01 00:00:00", value, "a date boundary is the UTC day at midnight")
+
+	value, err = normalizeCursorValue(reflect.TypeFor[*time.Time](), "2026-01-02T08:00:00+08:00")
+	require.NoError(t, err)
+	require.Equal(t, "2026-01-02 00:00:00", value, "an optional time boundary is the UTC wall clock")
+
+	for typ, raw := range map[reflect.Type]string{
+		reflect.TypeFor[*time.Time](): "abc",
+		reflect.TypeFor[*int]():       "abc",
+		reflect.TypeFor[*bool]():      "abc",
+	} {
+		_, err = normalizeCursorValue(typ, raw)
+		require.Error(t, err, "%s cannot hold %q", typ, raw)
+	}
 }
 
 func TestParseQueryTime(t *testing.T) {

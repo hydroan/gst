@@ -51,6 +51,7 @@ type sampleDocumentRecord struct {
 	Payload   datatypes.JSON `json:"payload"`
 	Note      string         `json:"note"`
 	CreatedAt time.Time      `json:"created_at"`
+	Day       datatypes.Date `json:"day"`
 }
 
 func (sampleDocumentRecord) TableName() string { return "sample_document_records" }
@@ -60,6 +61,7 @@ func (sampleDocumentRecord) TableName() string { return "sample_document_records
 func TestTimeColumnSetReportsTimeColumns(t *testing.T) {
 	set := TimeColumnSet(reflect.TypeFor[*sampleDocumentRecord]())
 	require.Contains(t, set, "created_at")
+	require.Contains(t, set, "day", "a date column compares as a time")
 	require.NotContains(t, set, "note")
 	require.NotContains(t, set, "payload")
 

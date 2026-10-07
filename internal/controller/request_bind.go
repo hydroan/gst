@@ -17,6 +17,7 @@ import (
 	ut "github.com/go-playground/universal-translator"
 	"github.com/go-playground/validator/v10"
 	entranslations "github.com/go-playground/validator/v10/translations/en"
+	"github.com/hydroan/gst/internal/modelschema"
 	"github.com/hydroan/gst/internal/types"
 	"gorm.io/datatypes"
 )
@@ -440,22 +441,10 @@ func normalizeBatch[M types.Model](req *batch[M]) {
 	normalizeValue(reflect.ValueOf(req))
 }
 
-// dateType is datatypes.Date, the calendar date normalizeValue reads in UTC.
+// dateType is datatypes.Date, the calendar date normalizeValue reads as the
+// UTC day it holds (see modelschema.UTCDay), so that the value answered is
+// the value a date column stores.
 var dateType = reflect.TypeFor[datatypes.Date]()
-
-// utcDate returns the calendar day d holds, read in UTC — the one time base
-// of the framework (see dbruntime.NowUTC) — at midnight, so that a date a
-// client sends with its own offset, 2026-01-02T00:00:00+08:00, is the same
-// day, 2026-01-01, on every transport and in every database, and the value
-// answered is the value a date column stores. The zero date stays zero.
-func utcDate(d datatypes.Date) datatypes.Date {
-	t := time.Time(d)
-	if t.IsZero() {
-		return d
-	}
-	year, month, day := t.UTC().Date()
-	return datatypes.Date(time.Date(year, month, day, 0, 0, 0, 0, time.UTC))
-}
 
 // nilableKind reports whether values of kind k can hold nil, i.e. whether a
 // JSON null entry can decode into them.
@@ -470,7 +459,7 @@ func nilableKind(k reflect.Kind) bool {
 
 // normalizeValue walks the value graph reachable from v, removes nil
 // elements from every settable slice whose elements can hold nil, and sets
-// every settable datatypes.Date to the UTC day it holds (see utcDate). Only
+// every settable datatypes.Date to the UTC day it holds (see dateType). Only
 // exported struct fields are visited, matching what encoding/json can bind.
 // JSON-decoded values are acyclic, so the walk needs no cycle tracking.
 // Interface values are descended into only when they carry a pointer: other
@@ -479,7 +468,8 @@ func nilableKind(k reflect.Kind) bool {
 func normalizeValue(v reflect.Value) {
 	if v.Type() == dateType {
 		if v.CanSet() {
-			v.Set(reflect.ValueOf(utcDate(v.Interface().(datatypes.Date)))) //nolint:errcheck // the type was just checked
+			day := modelschema.UTCDay(time.Time(v.Interface().(datatypes.Date))) //nolint:errcheck // the type was just checked
+			v.Set(reflect.ValueOf(datatypes.Date(day)))
 		}
 		return
 	}

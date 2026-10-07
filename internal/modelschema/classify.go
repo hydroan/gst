@@ -5,6 +5,7 @@ import (
 	"strings"
 	"time"
 
+	"gorm.io/datatypes"
 	gormschema "gorm.io/gorm/schema"
 )
 
@@ -24,10 +25,16 @@ const (
 	ColumnClassTime
 )
 
-// timeType is the one type that gets time bucketing. A named type whose
-// underlying type is time.Time is deliberately excluded: it is not a
-// time.Time, so a reference typed on it would not compile.
-var timeType = reflect.TypeFor[time.Time]()
+// timeType and dateType are the two column types holding a time value, the
+// ones that get time bucketing: time.Time, an instant, and datatypes.Date,
+// the calendar day a date column stores, which binds as a time at midnight
+// and reads back as one. A named type whose underlying type is time.Time is
+// neither: the framework knows how these two bind and read back, and nothing
+// of another type.
+var (
+	timeType = reflect.TypeFor[time.Time]()
+	dateType = reflect.TypeFor[datatypes.Date]()
+)
 
 // ClassifyColumn reports the aggregate capability of a column type. Pointers
 // are dereferenced, since an aggregate reads the pointed-to value.
@@ -49,7 +56,7 @@ func ClassifyColumn(typ reflect.Type) ColumnClass {
 	for typ.Kind() == reflect.Pointer {
 		typ = typ.Elem()
 	}
-	if typ == timeType {
+	if typ == timeType || typ == dateType {
 		return ColumnClassTime
 	}
 	switch typ.Kind() {
@@ -60,6 +67,28 @@ func ClassifyColumn(typ reflect.Type) ColumnClass {
 	default:
 		return ColumnClassOther
 	}
+}
+
+// IsDateType reports whether a column type stores a calendar day, which is
+// datatypes.Date, pointers dereferenced. A date column is a time column to
+// ClassifyColumn; this tells the consumers reading values for it apart from
+// an instant's: a value sent for a date column names a day, not a time of
+// day, and is read as the UTC day the column stores (see UTCDay).
+func IsDateType(typ reflect.Type) bool {
+	for typ != nil && typ.Kind() == reflect.Pointer {
+		typ = typ.Elem()
+	}
+	return typ == dateType
+}
+
+// UTCDay returns the calendar day t falls on in UTC, the one time base of
+// the framework, at midnight: the value a date column stores for t and the
+// value a date filter compares by, so that a day a client spells with its
+// own offset, 2026-01-02T00:00:00+08:00, is the same day, 2026-01-01, on
+// every transport and in every database. The zero time stays zero.
+func UTCDay(t time.Time) time.Time {
+	year, month, day := t.UTC().Date()
+	return time.Date(year, month, day, 0, 0, 0, 0, time.UTC)
 }
 
 // IsJSONType reports whether a column type stores as a JSON document. The

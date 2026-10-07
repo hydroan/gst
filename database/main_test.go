@@ -35,6 +35,7 @@ func TestMain(m *testing.M) {
 			modelregistry.Register[*TestCategory]()
 			modelregistry.Register[*TestAggregateRecord]()
 			modelregistry.Register[*TestCursorSnapshot]()
+			modelregistry.Register[*TestDatedRecord]()
 			modelregistry.Register[*TestRecordTag]()
 			modelregistry.Register[*TestTagNote]()
 			modelregistry.Register[*TestPayment]()

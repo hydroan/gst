@@ -123,25 +123,21 @@ func splitFilterKey(key string) (field, op string, ok bool) {
 	return field, op, true
 }
 
-// timeType is the reflect type time-typed columns are recognized by.
-var timeType = reflect.TypeFor[time.Time]()
-
 // normalizeFilterValue validates a filter value against the
 // column's Go type and rewrites it into the canonical typed value bound to
 // the statement, so a malformed value is rejected with an error instead of
 // being passed to the database where implicit conversion could silently
-// match the wrong rows.
+// match the wrong rows. A pointer column holds a value of the pointed-to
+// type and is checked as that type.
 //
 //   - isnull applies to any column and requires a boolean value, carried as
 //     a bool; it is handled before the type dispatch below.
-//   - time columns accept the comparison operators only; the value must be
-//     RFC 3339 (see parseQueryTime) and travels as the UTC wall clock in
-//     FilterTimeLayout. The canonical string form is kept on purpose: binding
-//     time.Time would let the driver re-render the value in its own location,
-//     while the string pins the wall-clock time the parser resolved.
+//   - time columns (see modelschema.ClassifyColumn) accept the comparison
+//     operators only; the value must be RFC 3339 and travels as timeBound
+//     renders it.
 //   - bool columns accept eq/ne with a boolean value, carried as a bool.
-//   - numeric columns require numeric values; in/notin validate every
-//     comma-separated member.
+//   - numeric columns (see modelschema.ClassifyColumn) require numeric
+//     values; in/notin validate every comma-separated member.
 //   - in/notin values split on commas here, so the members travel as a real
 //     slice: the URL list encoding never reaches the database layer.
 //   - string and other scalar values pass through unchanged.
@@ -156,17 +152,15 @@ func normalizeFilterValue(columnTyp reflect.Type, op types.FilterOp, value strin
 		}
 		return b, nil
 	}
+	for columnTyp.Kind() == reflect.Pointer {
+		columnTyp = columnTyp.Elem()
+	}
+	class := modelschema.ClassifyColumn(columnTyp)
 	switch {
-	case columnTyp == timeType:
+	case class == modelschema.ColumnClassTime:
 		switch op {
 		case types.FilterOpEq, types.FilterOpNe, types.FilterOpGt, types.FilterOpGte, types.FilterOpLt, types.FilterOpLte:
-			t, err := parseQueryTime(value)
-			if err != nil {
-				return nil, err
-			}
-			// The bound travels as the UTC wall clock, which is the one wall
-			// clock the framework stores on every dialect; see FilterTimeLayout.
-			return t.In(time.UTC).Format(types.FilterTimeLayout), nil
+			return timeBound(columnTyp, value)
 		default:
 			return nil, errors.Newf("operator %q is not supported on a time field", op)
 		}
@@ -181,7 +175,7 @@ func normalizeFilterValue(columnTyp reflect.Type, op types.FilterOp, value strin
 		default:
 			return nil, errors.Newf("operator %q is not supported on a bool field", op)
 		}
-	case isNumericKind(columnTyp.Kind()):
+	case class == modelschema.ColumnClassNumeric:
 		switch op {
 		case types.FilterOpIn, types.FilterOpNotIn:
 			items := strings.Split(value, ",")
@@ -213,16 +207,6 @@ func normalizeFilterValue(columnTyp reflect.Type, op types.FilterOp, value strin
 	}
 }
 
-func isNumericKind(kind reflect.Kind) bool {
-	switch kind {
-	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64,
-		reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64,
-		reflect.Float32, reflect.Float64:
-		return true
-	}
-	return false
-}
-
 func validateNumericValue(kind reflect.Kind, value string) error {
 	var err error
 	switch kind {
@@ -252,4 +236,23 @@ func parseQueryTime(value string) (time.Time, error) {
 		return time.Time{}, errors.Newf("unsupported time format %q, expect RFC 3339", value)
 	}
 	return t, nil
+}
+
+// timeBound is the value a comparison with a time column binds for the RFC
+// 3339 value a client sent (see parseQueryTime): the UTC wall clock in
+// FilterTimeLayout, the one wall clock the framework stores on every
+// dialect, and for a date column the UTC day at midnight the column stores
+// (see modelschema.UTCDay). The canonical string form is kept on purpose:
+// binding time.Time would let the driver re-render the value in its own
+// location, while the string pins the wall clock the parser resolved.
+func timeBound(columnTyp reflect.Type, value string) (string, error) {
+	t, err := parseQueryTime(value)
+	if err != nil {
+		return "", err
+	}
+	t = t.UTC()
+	if modelschema.IsDateType(columnTyp) {
+		t = modelschema.UTCDay(t)
+	}
+	return t.Format(types.FilterTimeLayout), nil
 }

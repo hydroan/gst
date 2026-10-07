@@ -181,6 +181,40 @@ func TestTransportsAnswerTheContractAlike(t *testing.T) {
 			want:  contractWant{status: http.StatusBadRequest},
 		},
 		{
+			name: "List matches a date filter by the UTC day", fixture: dated, phase: consts.List,
+			prepare: func(t *testing.T) contractInput {
+				t.Helper()
+				name := uniqueName("contract-dated-list")
+				createDated(t, name, time.Date(2026, time.January, 1, 0, 0, 0, 0, time.UTC))
+				createDated(t, name, time.Date(2026, time.January, 2, 0, 0, 0, 0, time.UTC))
+				// Midnight in Shanghai on the 2nd is the 1st in UTC, the day
+				// the first sample stores (see API_CONTRACT.md).
+				return contractInput{query: controller.Query{Filters: []controller.Filter{
+					{Field: "name", Op: "eq", Values: []string{name}},
+					{Field: "day", Op: "eq", Values: []string{"2026-01-02T00:00:00+08:00"}},
+				}}}
+			},
+			want: ok,
+			check: func(t *testing.T, in contractInput, got contractAnswer) {
+				t.Helper()
+				data := dataMap(t, got)
+				require.EqualValues(t, 1, data["total"])
+				listed := ids(data["items"])
+				require.Len(t, listed, 1)
+				requireDatedDay(t, listed[0], time.Date(2026, time.January, 1, 0, 0, 0, 0, time.UTC))
+			},
+		},
+		{
+			name: "List refuses a date filter it cannot read", fixture: dated, phase: consts.List,
+			input: contractInput{query: controller.Query{Filters: []controller.Filter{{Field: "day", Op: "eq", Values: []string{"not-a-date"}}}}},
+			want:  contractWant{status: http.StatusBadRequest},
+		},
+		{
+			name: "List refuses a time filter it cannot read on an optional time", fixture: dated, phase: consts.List,
+			input: contractInput{query: controller.Query{Filters: []controller.Filter{{Field: "closed_at", Op: "gte", Values: []string{"not-a-time"}}}}},
+			want:  contractWant{status: http.StatusBadRequest},
+		},
+		{
 			name: "List refuses a page on a model that does not page", fixture: counters, phase: consts.List,
 			input: contractInput{query: controller.Query{Page: 2}},
 			want:  contractWant{status: http.StatusBadRequest},

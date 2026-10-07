@@ -5,7 +5,6 @@ import (
 	"reflect"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/internal/consts"
@@ -109,31 +108,35 @@ func Cursor(q url.Values, m types.Model) (types.Cursor, error) {
 // instead of failing — a non-numeric boundary on a numeric column becomes 0 —
 // and the feed silently restarts from the first page.
 //
-// A time boundary is not only validated but normalized to the UTC wall clock
-// in FilterTimeLayout, exactly like a time filter bound: the client spells
-// the boundary in RFC 3339, and the database compares the one wall clock the
-// framework stores on every dialect.
+// A time boundary is not only validated but normalized exactly like a time
+// filter bound (see timeBound): the client spells the boundary in RFC 3339,
+// and the database compares the one wall clock the framework stores on every
+// dialect, the UTC day at midnight for a date column.
 //
 // Only types the database coerces lossily are gated: numeric, bool and time
-// columns. String and other column types accept any value, and a nil column
-// type (the model cannot resolve the fallback column, see Cursor) keeps the
-// plain passthrough.
+// columns, a pointer column checked as the type it points to. String and
+// other column types accept any value, and a nil column type (the model
+// cannot resolve the fallback column, see Cursor) keeps the plain
+// passthrough.
 func normalizeCursorValue(columnTyp reflect.Type, value string) (string, error) {
 	if columnTyp == nil {
 		return value, nil
 	}
+	for columnTyp.Kind() == reflect.Pointer {
+		columnTyp = columnTyp.Elem()
+	}
 	var err error
-	switch {
-	case columnTyp == timeType:
-		var t time.Time
-		if t, err = parseQueryTime(value); err == nil {
-			value = t.In(time.UTC).Format(types.FilterTimeLayout)
+	switch class := modelschema.ClassifyColumn(columnTyp); {
+	case class == modelschema.ColumnClassTime:
+		var bound string
+		if bound, err = timeBound(columnTyp, value); err == nil {
+			value = bound
 		}
 	case columnTyp.Kind() == reflect.Bool:
 		if _, parseErr := strconv.ParseBool(value); parseErr != nil {
 			err = errors.Newf("expect a boolean value, got %q", value)
 		}
-	case isNumericKind(columnTyp.Kind()):
+	case class == modelschema.ColumnClassNumeric:
 		err = validateNumericValue(columnTyp.Kind(), value)
 	}
 	if err != nil {

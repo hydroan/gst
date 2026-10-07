@@ -87,12 +87,16 @@ type shapedSample struct {
 
 func (shapedSample) TableName() string { return "controller_shaped_samples" }
 
-// datedSample carries a calendar date, stored in a date column: a date the
-// client sends with its own offset is read as the UTC day on both transports.
+// datedSample carries a calendar date, stored in a date column, beside an
+// optional instant: a date the client sends with its own offset is read as
+// the UTC day on both transports, in a record and in a filter alike, and a
+// filter on either column is checked against the value the column holds.
 type datedSample struct {
-	Name string         `json:"name"`
-	Day  datatypes.Date `json:"day"`
+	Name     string         `json:"name"`
+	Day      datatypes.Date `json:"day"`
+	ClosedAt *time.Time     `json:"closed_at"`
 
+	modelregistry.Query
 	modelregistry.Base
 }
 
@@ -422,6 +426,16 @@ func loadSample(t *testing.T, id string) *sampleRecord {
 	stored := new(sampleRecord)
 	require.NoError(t, database.Database[*sampleRecord](context.Background()).Get(stored, id))
 	return stored
+}
+
+// createDated stores a dated sample named name on the UTC day and returns it
+// with its id.
+func createDated(t *testing.T, name string, day time.Time) *datedSample {
+	t.Helper()
+	record := &datedSample{Name: name, Day: datatypes.Date(day)}
+	require.NoError(t, database.Database[*datedSample](context.Background()).Create(record))
+	require.NotEmpty(t, record.GetID())
+	return record
 }
 
 // requireDatedDay requires the dated sample id to hold want as its day.

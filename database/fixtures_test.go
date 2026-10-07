@@ -432,6 +432,18 @@ func (*TestCursorSnapshot) Indexes() []modelschema.Index {
 	return []modelschema.Index{{Fields: []string{"SnapshotAt"}, Unique: true}}
 }
 
+// TestDatedRecord stores a calendar day in a date column: the day a date
+// filter compares by, in UTC, whatever offset the value was sent with. Every
+// record has its day, so a report can group by it into a plain string.
+type TestDatedRecord struct {
+	Label string         `json:"label" gorm:"size:191"`
+	Day   datatypes.Date `json:"day" gorm:"not null"`
+
+	modelregistry.Base
+}
+
+func (*TestDatedRecord) TableName() string { return "test_dated_records" }
+
 // TestRecordTag is the related model of TestAggregateRecord, used by the
 // correlated-subquery filters. It soft deletes like its parent, so the tests
 // can assert that a subquery hides the same rows a List on it hides. Category
@@ -522,6 +534,11 @@ func cleanupAggregateData() {
 	_ = database.DB().Exec("DELETE FROM test_aggregate_records").Error
 }
 
+// cleanupDatedData removes the dated fixture rows.
+func cleanupDatedData() {
+	_ = database.DB().Exec("DELETE FROM test_dated_records").Error
+}
+
 // TestAggregateRecordCols are the column references of the fixture. gg gen
 // writes these next to a real model; the database package has no generated
 // code, so the tests build the same values by hand, named the way gg gen
@@ -543,6 +560,18 @@ var TestAggregateRecordCols = struct {
 	Score:      types.NewNumericColumn[*TestAggregateRecord, float64]("score"),
 	OccurredAt: types.NewTimeColumn[*TestAggregateRecord]("occurred_at"),
 	ClosedAt:   types.NewTimeColumn[*TestAggregateRecord]("closed_at"),
+}
+
+// TestDatedRecordCols are the column references of the dated fixture, typed
+// the way gg gen types them: a date column gets the time reference.
+var TestDatedRecordCols = struct {
+	ID    types.Column[string]
+	Label types.Column[string]
+	Day   types.TimeColumn
+}{
+	ID:    types.NewColumn[*TestDatedRecord, string]("id"),
+	Label: types.NewColumn[*TestDatedRecord, string]("label"),
+	Day:   types.NewTimeColumn[*TestDatedRecord]("day"),
 }
 
 // TestRecordTagCols mirrors the generated column references of the related

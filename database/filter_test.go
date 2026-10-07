@@ -703,6 +703,65 @@ func TestDatabaseFiltersOnTimeColumns(t *testing.T) {
 	})
 }
 
+// TestDatabaseFiltersOnDateColumns pins the runtime behavior of comparisons
+// on a date column across dialects: the URL parser binds the UTC day at
+// midnight in types.FilterTimeLayout, service code binds a time.Time through
+// the time reference gg gen writes for the column, and both must select the
+// rows of that day however the dialect stores the date. The same reference
+// buckets the column, so a report groups by it.
+func TestDatabaseFiltersOnDateColumns(t *testing.T) {
+	defer cleanupDatedData()
+	day := func(d int) time.Time { return time.Date(2026, time.January, d, 0, 0, 0, 0, time.UTC) }
+	require.NoError(t, database.Database[*TestDatedRecord](context.Background()).Create(
+		&TestDatedRecord{Label: "d1", Day: datatypes.Date(day(1))},
+		&TestDatedRecord{Label: "d2", Day: datatypes.Date(day(2))},
+		&TestDatedRecord{Label: "d3", Day: datatypes.Date(day(3))},
+	))
+
+	labels := func(t *testing.T, f types.Filter) []string {
+		t.Helper()
+		records := make([]*TestDatedRecord, 0)
+		require.NoError(t, database.Database[*TestDatedRecord](context.Background()).
+			WithQuery(nil, types.QueryOptions{Filters: []types.Filter{f}}).
+			WithOrder(types.Asc("label")).
+			List(&records))
+		labels := make([]string, 0, len(records))
+		for _, r := range records {
+			labels = append(labels, r.Label)
+		}
+		return labels
+	}
+
+	t.Run("CanonicalStringBound", func(t *testing.T) {
+		require.Equal(t, []string{"d2"}, labels(t, types.FilterEq("day", "2026-01-02 00:00:00")))
+		require.Equal(t, []string{"d2", "d3"}, labels(t, types.FilterGte("day", "2026-01-02 00:00:00")))
+	})
+
+	t.Run("TimeValueBound", func(t *testing.T) {
+		require.Equal(t, []string{"d2"}, labels(t, TestDatedRecordCols.Day.Eq(day(2))))
+		require.Equal(t, []string{"d1"}, labels(t, TestDatedRecordCols.Day.Lt(day(2))))
+	})
+
+	t.Run("BucketsByDay", func(t *testing.T) {
+		type row struct {
+			Bucket  string
+			Records int64
+		}
+		rows := make([]row, 0)
+		require.NoError(t, database.Select[*TestDatedRecord, row](context.Background(),
+			TestDatedRecordCols.Day.ByDay().As("bucket"),
+			types.Count().As("records"),
+		).
+			OrderBy(TestDatedRecordCols.Day.ByDay().As("bucket").Asc()).
+			Scan(&rows))
+		require.Equal(t, []row{
+			{Bucket: "2026-01-01", Records: 1},
+			{Bucket: "2026-01-02", Records: 1},
+			{Bucket: "2026-01-03", Records: 1},
+		}, rows)
+	})
+}
+
 func TestFilterOfAnotherTableFailsTheChain(t *testing.T) {
 	defer cleanupTestData()
 	setupTestData(t)
