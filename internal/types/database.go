@@ -32,7 +32,8 @@ type Database[M Model] interface {
 	// setting, or soft delete by default. Every record named by id must
 	// exist: a missing or soft-deleted one fails with
 	// database.ErrRecordNotFound and the batch deletes nothing, unless
-	// WithAllowMissing is set.
+	// WithAllowMissing is set. Passed no record, it removes the rows the
+	// WithQuery conditions match; records and conditions do not combine.
 	Delete(objs ...M) error
 	// Update saves one or more full model values by primary key (pure UPDATE,
 	// zero values included). Objects without an ID fail with

@@ -201,9 +201,13 @@ func (db *database[M]) Create(objs ...M) (err error) {
 // the objects repeat it. Detection relies on matched-rows semantics, like
 // Update's: the framework MySQL DSN enables clientFoundRows=true, and custom
 // connections must keep that flag. WithAllowMissing lifts the check, for a
-// delete that may run after the rows are gone. A zero model names no record:
-// it deletes the rows the chain's conditions (WithQuery) match, and matching
-// none of them is not a missing record; without conditions it is refused.
+// delete that may run after the rows are gone.
+//
+// A delete by conditions passes no record: WithQuery(...).Delete() removes
+// the rows the conditions match, and matching none of them is not a missing
+// record. Records and conditions do not combine: a call carrying both fails
+// with ErrConditionsWithRecords, since the mix would turn an empty record
+// list into a delete of everything the conditions match.
 //
 // A versioned record (a model declaring model.Version) is checked when it
 // carries a non-zero version — the statement matches it, and a miss fails
@@ -228,7 +232,7 @@ func (db *database[M]) Create(objs ...M) (err error) {
 //     batch naming several records that must all exist runs in a
 //     transaction, so a statement that found fewer rows than named is rolled
 //     back and the batch deletes nothing.
-//   - Returns nil if no valid objects provided (empty slice or all objects are empty)
+//   - Returns nil if no valid objects provided (empty slice or all objects are empty) and the chain carries no conditions
 //   - WithDryRun builds SQL only and does not execute hooks, database I/O, or object field filling
 //
 // On a ClickHouse instance the contract is weaker (see clickhouseDelete):
@@ -241,7 +245,7 @@ func (db *database[M]) Create(objs ...M) (err error) {
 //
 //	Delete(&sample)  // Soft delete by primary key
 //	Delete(user1, user2, user3)  // Batch soft delete multiple records
-//	WithQuery(params).Delete(&Sample{})  // Delete with conditions
+//	WithQuery(params).Delete()  // Delete the rows the conditions match
 //	WithPurge().Delete(&sample)  // Permanent deletion
 func (db *database[M]) Delete(objs ...M) (err error) {
 	defer db.reset()
@@ -252,14 +256,40 @@ func (db *database[M]) Delete(objs ...M) (err error) {
 	if db.replicaRead != nil {
 		return errors.Wrap(ErrWithReplicaOnWrite, "Delete")
 	}
+	// Conditions on the chain (WithQuery) name rows; records name themselves.
+	// A delete passes one or the other.
+	conditioned := false
+	if db.ins != nil && db.ins.Statement != nil {
+		_, conditioned = db.ins.Statement.Clauses["WHERE"]
+	}
 	objs = compactModels(objs)
-	if len(objs) == 0 {
+	if len(objs) == 0 && !conditioned {
 		return nil
 	}
 
 	if err = db.prepare(); err != nil {
 		return err
 	}
+	// The records the call names, each once: what the statements must match
+	// unless the caller allows missing records.
+	named := make(map[string]struct{}, len(objs))
+	for i := range objs {
+		if id := objs[i].GetID(); id != "" {
+			named[id] = struct{}{}
+		}
+	}
+	expected := int64(len(named))
+	if conditioned && expected > 0 {
+		return errors.Wrap(ErrConditionsWithRecords, "Delete")
+	}
+	if len(objs) == 0 {
+		// A delete by conditions addresses the rows the conditions match
+		// through a zero model, which names no record.
+		objs = []M{reflect.New(db.typ).Interface().(M)} //nolint:errcheck
+	}
+	strict := !db.allowMissing && expected > 0
+	tableName := db.m.TableName()
+
 	if db.dialect() == dialectClickHouse {
 		return db.clickhouseDelete(objs)
 	}
@@ -270,19 +300,6 @@ func (db *database[M]) Delete(objs ...M) (err error) {
 	if db.batchSize > 0 {
 		batchSize = db.batchSize
 	}
-
-	// The records the call names, each once: what the statements must match
-	// unless the caller allows missing records. A zero model names none; it
-	// deletes the rows the chain's conditions match.
-	named := make(map[string]struct{}, len(objs))
-	for i := range objs {
-		if id := objs[i].GetID(); id != "" {
-			named[id] = struct{}{}
-		}
-	}
-	expected := int64(len(named))
-	strict := !db.allowMissing && expected > 0
-	tableName := db.m.TableName()
 
 	// A delete over a versioned model splits by what the objects carry (see
 	// model.Version): when any object carries a non-zero version, every row

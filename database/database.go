@@ -144,6 +144,12 @@ var (
 	// tolerating.
 	ErrWithReplicaOnWrite = errors.New("WithReplica applies only to read operations")
 
+	// ErrConditionsWithRecords is returned when Delete is handed records while
+	// the chain carries WithQuery conditions. A delete removes the records it
+	// names or the rows the conditions match, never a mix: the mix would turn
+	// an empty record list into a delete of everything the conditions match.
+	ErrConditionsWithRecords = errors.New("WithQuery conditions cannot be combined with records: Delete removes the records named or the rows the conditions match")
+
 	// ErrAfterCommit marks a failure that happened after the transaction
 	// committed. Callers distinguish it with errors.Is because the two outcomes
 	// call for opposite handling: an ordinary error means the write was rolled

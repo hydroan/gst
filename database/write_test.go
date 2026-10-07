@@ -343,14 +343,28 @@ func TestDatabaseDelete(t *testing.T) {
 	t.Run("a delete by conditions removes what matches and matches none without error", func(t *testing.T) {
 		defer cleanupTestData()
 		setupTestData(t)
-		require.NoError(t, database.Database[*TestUser](context.Background()).WithQuery(&TestUser{Name: u1.Name}).Delete(&TestUser{}))
-		require.NoError(t, database.Database[*TestUser](context.Background()).WithQuery(&TestUser{Name: u1.Name}).Delete(&TestUser{}),
+		require.NoError(t, database.Database[*TestUser](context.Background()).WithQuery(&TestUser{Name: u1.Name}).Delete())
+		require.NoError(t, database.Database[*TestUser](context.Background()).WithQuery(&TestUser{Name: u1.Name}).Delete(),
 			"matching no row is not a missing record: the conditions name no record")
+		require.NoError(t, database.Database[*TestUser](context.Background()).WithQuery(&TestUser{Name: u2.Name}).Delete(nil),
+			"a nil record is no record: the conditions still name the rows")
 		count := new(int)
 		require.NoError(t, database.Database[*TestUser](context.Background()).Count(count))
-		require.Equal(t, 2, *count)
+		require.Equal(t, 1, *count)
 		require.Error(t, database.Database[*TestUser](context.Background()).Delete(&TestUser{}),
 			"the zero model without conditions names no row and is refused")
+	})
+
+	t.Run("conditions and records do not combine", func(t *testing.T) {
+		defer cleanupTestData()
+		setupTestData(t)
+		// Allowing the mix would turn an empty record list into a delete of
+		// everything the conditions match, so the mix is refused outright.
+		require.ErrorIs(t, database.Database[*TestUser](context.Background()).WithQuery(&TestUser{Name: u1.Name}).Delete(u2),
+			database.ErrConditionsWithRecords)
+		count := new(int)
+		require.NoError(t, database.Database[*TestUser](context.Background()).Count(count))
+		require.Equal(t, 3, *count, "nothing is deleted")
 	})
 }
 
