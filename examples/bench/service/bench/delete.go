@@ -19,9 +19,9 @@ type Delete struct {
 // DELETE statement against a primary key that does not exist (Bench.Purge()
 // is true, so the model's delete policy is a hard delete), exercising the
 // full chain of hook detection, transaction routing, and the DB round trip
-// while matching zero rows and changing nothing. Delete does not error on
-// zero matched rows; the benchmark therefore needs no seeding and no cleanup,
-// and table contents do not affect the numbers.
+// while matching zero rows and changing nothing. WithAllowMissing keeps the
+// zero matched rows from being an error; the benchmark therefore needs no
+// seeding and no cleanup, and table contents do not affect the numbers.
 func (d *Delete) Delete(ctx *gst.ServiceContext, req *model.Empty) (rsp *bench.DeleteRsp, err error) {
 	isDryRun := isDryRun(ctx)
 
@@ -30,7 +30,7 @@ func (d *Delete) Delete(ctx *gst.ServiceContext, req *model.Empty) (rsp *bench.D
 	if isDryRun {
 		err = database.Database[*bench.Bench](ctx).WithDryRun().Delete(data)
 	} else {
-		err = database.Database[*bench.Bench](ctx).Delete(data)
+		err = database.Database[*bench.Bench](ctx).WithAllowMissing().Delete(data)
 	}
 	if err != nil {
 		return nil, gst.NewErrorWithCause(http.StatusInternalServerError, "delete bench data failed", err)

@@ -34,5 +34,7 @@ func purgeAudits(ctx context.Context) error {
 	if len(stale) == 0 {
 		return nil
 	}
-	return database.Database[*model.Audit](ctx).Delete(stale...)
+	// A row another round removed since the listing is already gone, which
+	// is what this round wants.
+	return database.Database[*model.Audit](ctx).WithAllowMissing().Delete(stale...)
 }
