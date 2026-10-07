@@ -210,8 +210,9 @@ func (db *database[M]) Create(objs ...M) (err error) {
 // tenant-scoped model that is every row of the caller's tenant, and the rows
 // soft delete or purge as the model and WithPurge decide. Records and
 // conditions do not combine: a call carrying both fails with
-// ErrConditionsWithRecords, since the mix would turn an empty record list
-// into a delete of everything the conditions match.
+// ErrConditionsWithRecords, since a mix leaves it unclear which rows are
+// meant, and a named record the conditions do not match would be skipped in
+// silence or reported as missing.
 //
 // A versioned record (a model declaring model.Version) is checked when it
 // carries a non-zero version — the statement matches it, and a miss fails

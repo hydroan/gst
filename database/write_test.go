@@ -423,8 +423,9 @@ func TestDatabaseDelete(t *testing.T) {
 	t.Run("conditions and records do not combine", func(t *testing.T) {
 		defer cleanupTestData()
 		setupTestData(t)
-		// Allowing the mix would turn an empty record list into a delete of
-		// everything the conditions match, so the mix is refused outright.
+		// A mix leaves it unclear which rows are meant: a named record the
+		// conditions do not match would be skipped in silence or reported as
+		// missing, so the mix is refused outright.
 		require.ErrorIs(t, database.Database[*TestUser](context.Background()).WithQuery(&TestUser{Name: u1.Name}).Delete(u2),
 			database.ErrConditionsWithRecords)
 		count := new(int)
