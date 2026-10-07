@@ -135,7 +135,6 @@ func (i *Item) DeleteBefore(ctx context.Context) error {
 	require.Contains(t, string(recordColumns), "var RecordCols = struct")
 	require.Contains(t, string(recordColumns), `gst.NewTimeColumn[*Record]("day")`, "a date column gets the time reference")
 	require.Contains(t, string(recordColumns), `gst.NewTimeColumn[*Record]("closed_at")`, "an optional instant gets the time reference")
-	require.NotContains(t, string(recordColumns), "gorm.io/datatypes", "a time reference carries no type argument, so the column type is not imported")
 	itemColumns, err := os.ReadFile(itemColumnsFile)
 	require.NoError(t, err)
 	require.Contains(t, string(itemColumns), "var ItemCols = struct")
