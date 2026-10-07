@@ -8,6 +8,14 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// queuedSample is a table-backed model the queue tests register; what it
+// declares beyond its table is beside their point.
+type queuedSample struct {
+	modelregistry.Base
+}
+
+func (*queuedSample) TableName() string { return "queued_samples" }
+
 func TestTableDoneSignalsWaiters(t *testing.T) {
 	// The queue and its wakeup are package-level state, so every subtest starts
 	// from a drained signal and hands back a drained one.
@@ -28,7 +36,7 @@ func TestTableDoneSignalsWaiters(t *testing.T) {
 	enqueue := func(t *testing.T, count int) {
 		t.Helper()
 		for range count {
-			modelregistry.Register[*IndexedSample]()
+			modelregistry.Register[*queuedSample]()
 			<-modelregistry.TableChan
 		}
 	}

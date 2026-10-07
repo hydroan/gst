@@ -19,6 +19,7 @@ import (
 	"github.com/hydroan/gst/internal/consts"
 	"github.com/hydroan/gst/internal/middleware"
 	"github.com/hydroan/gst/internal/modelregistry"
+	"github.com/hydroan/gst/internal/modelschema"
 	"github.com/hydroan/gst/internal/serviceregistry"
 	"github.com/hydroan/gst/internal/types"
 	"github.com/stretchr/testify/require"
@@ -50,8 +51,8 @@ func (sampleCounter) TableName() string { return "controller_counters" }
 // versionedSample is a table model under optimistic locking: a patch of it
 // must carry the version it was read at.
 type versionedSample struct {
-	Name    string                `json:"name"`
-	Version modelregistry.Version `json:"version,omitempty" gorm:"not null;default:1"`
+	Name    string              `json:"name"`
+	Version modelschema.Version `json:"version,omitempty" gorm:"not null;default:1"`
 
 	modelregistry.Base
 }

@@ -11,7 +11,7 @@ import (
 	"github.com/hydroan/gst/database"
 	"github.com/hydroan/gst/internal/consts"
 	modellogmgmt "github.com/hydroan/gst/internal/model/logmgmt"
-	"github.com/hydroan/gst/internal/modelregistry"
+	"github.com/hydroan/gst/internal/modelschema"
 	"github.com/hydroan/gst/internal/requestctx"
 	"github.com/hydroan/gst/internal/response"
 	"github.com/hydroan/gst/internal/types"
@@ -66,8 +66,8 @@ func PatchHandler[M types.Model, REQ types.Request, RSP types.Response](cfg ...*
 		// partial update, exactly like Update: the merge would otherwise keep
 		// the freshly loaded row's version and the lock would silently check
 		// the row against itself. Enforced before the existence query so a
-		// defective request costs no database work. See modelregistry.Version.
-		if versionField, versioned := modelregistry.VersionFieldName(req); versioned {
+		// defective request costs no database work. See modelschema.Version.
+		if versionField, versioned := modelschema.VersionFieldName(req); versioned {
 			if _, ok := fields[versionField]; !ok {
 				log.Errorz("versioned model patched without its version", zap.String("field", versionField))
 				response.Error(c, databaseError(database.ErrVersionRequired))
@@ -140,7 +140,7 @@ func PatchCall[M types.Model](route string) func(ctx context.Context, params map
 		if err != nil {
 			return zero, c.invalid(err)
 		}
-		if versionField, versioned := modelregistry.VersionFieldName(m); versioned {
+		if versionField, versioned := modelschema.VersionFieldName(m); versioned {
 			if _, ok := fields[versionField]; !ok {
 				return zero, c.refuse(databaseError(database.ErrVersionRequired), errors.Wrapf(database.ErrVersionRequired, "patch %s without its %s", a.name, versionField))
 			}

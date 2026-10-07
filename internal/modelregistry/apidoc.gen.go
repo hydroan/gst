@@ -38,29 +38,6 @@ func init() {
 	apidoc.Register("github.com/hydroan/gst/internal/modelregistry", "Empty", apidoc.StructDoc{
 		Comment: "Empty is a no-op types.Model implementation for non-persistent actions.\n\nKey characteristics:\n  - Structs with an anonymous model.Empty field are never migrated to the database\n  - All interface methods return zero values or no-op implementations\n  - IsEmpty reports true for structs containing only model.Empty markers\n  - IsVirtual reports true for any struct embedding model.Empty, however many\n    other fields it declares\n  - Service hooks are bypassed when AreTypesEqual returns false for Empty types\n  - Commonly used for request/response DTOs that don't require persistence\n\nUsage example:\n\n\ttype LoginRequest struct {\n\t    model.Empty\n\t    Username string `json:\"username\"`\n\t    Password string `json:\"password\"`\n\t}",
 	})
-	apidoc.Register("github.com/hydroan/gst/internal/modelregistry", "Index", apidoc.StructDoc{
-		Comment: "Index declares one secondary index on the model's table.\n\nIndexes are the single way models declare secondary indexes: gorm struct\ntag indexes (index, uniqueIndex, unique) are banned in business projects\nby gg check, and the declaration also covers index shapes struct tags\ncannot express, such as indexes on columns promoted from the embedded\nBase or AutoBase.\n\nThe declaration shape is deliberately minimal: ordered columns plus\nuniqueness cover the index forms whose semantics are identical on every\nsupported dialect. Extensions follow real demand, descending columns\nfirst (identical semantics everywhere), then MySQL prefix lengths\n(dialect-specific, so they need an explicit cross-dialect failure\ncontract). Partial, functional and fulltext indexes stay out: their\nsemantics diverge per dialect, so hand-written DDL owns them.",
-		Fields: map[string]string{
-			"Fields": "Go struct field names; slice order is the index column order",
-			"Unique": "Unique makes the index a unique index",
-		},
-	})
-	apidoc.Register("github.com/hydroan/gst/internal/modelregistry", "IndexPlan", apidoc.StructDoc{
-		Comment: "IndexPlan is one resolved custom index: a validated declaration bound to a\nconcrete table with a framework-generated name and database column names.\nThe bootstrap executor and the migration schema dumper both consume\nIndexPlan, so the executed DDL and the desired-schema DDL always stay\nliterally identical.",
-		Fields: map[string]string{
-			"Columns": "database column names in index order",
-			"Name":    "framework-generated index name",
-			"Table":   "table the index belongs to",
-			"Unique":  "whether the index is unique",
-		},
-	})
-	apidoc.Register("github.com/hydroan/gst/internal/modelregistry", "ModelIndexPlans", apidoc.StructDoc{
-		Comment: "ModelIndexPlans binds the resolved index plans to the model that declared\nthem, so cross-model validation can name both sides of a conflict.",
-		Fields: map[string]string{
-			"Model": "display name of the declaring model",
-			"Plans": "the model's resolved plans",
-		},
-	})
 	apidoc.Register("github.com/hydroan/gst/internal/modelregistry", "Pagination", apidoc.StructDoc{
 		Comment: "Pagination declares offset-pagination query parameters for List actions.\n\nEmbedding Pagination only enables _page and _size. It does not imply\nsorting, fuzzy matching, cursor pagination, or any other List query\ncontrols.\n\nLike every framework-owned query parameter, _page and _size live in the\n\"_\" prefix namespace, so bare names such as page and size stay available\nas business filter fields on embedding models.\n\nNeither parameter can be used to retrieve a whole table. A size the client\ndoes not set, or sets to zero or less, becomes the default page size; a size\nabove the cap is clamped to it rather than refused, which is what keeps a\nclient asking for everything from being served everything. Bulk retrieval is\nthe Export action's job, and it is the only one that answers unbounded.",
 		Fields: map[string]string{

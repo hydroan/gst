@@ -5,7 +5,7 @@ import (
 	"strings"
 
 	"github.com/hydroan/gst/internal/dbruntime"
-	"github.com/hydroan/gst/internal/modelregistry"
+	"github.com/hydroan/gst/internal/modelschema"
 	"github.com/hydroan/gst/internal/types"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
@@ -35,9 +35,9 @@ import (
 // statement must match — and a restore function that undoes the bump.
 // The caller has already rejected zero versions, so prev is always >= 1.
 func bumpVersionForUpdate[M types.Model](obj M) (prev int64, restore func()) {
-	prev, _ = modelregistry.VersionValue(obj)
-	modelregistry.SetVersionValue(obj, prev+1)
-	return prev, func() { modelregistry.SetVersionValue(obj, prev) }
+	prev, _ = modelschema.VersionValue(obj)
+	modelschema.SetVersionValue(obj, prev+1)
+	return prev, func() { modelschema.SetVersionValue(obj, prev) }
 }
 
 // initializeVersions stamps 1 into every object whose carried version is
@@ -46,12 +46,12 @@ func bumpVersionForUpdate[M types.Model](obj M) (prev int64, restore func()) {
 // kept, so imports and sync jobs can carry existing history. Create and
 // Upsert both run this over their insert candidates.
 func initializeVersions[M types.Model](objs []M) {
-	if len(objs) == 0 || !modelregistry.IsVersioned(objs[0]) {
+	if len(objs) == 0 || !modelschema.IsVersioned(objs[0]) {
 		return
 	}
 	for i := range objs {
-		if v, _ := modelregistry.VersionValue(objs[i]); v == 0 {
-			modelregistry.SetVersionValue(objs[i], 1)
+		if v, _ := modelschema.VersionValue(objs[i]); v == 0 {
+			modelschema.SetVersionValue(objs[i], 1)
 		}
 	}
 }

@@ -157,12 +157,12 @@ func describeType(typ reflect.Type, modelPkg string) (expr string, importPath st
 	// Framework-internal types reach business models only through the public
 	// packages that alias them. Reflection sees the defined type's internal
 	// path, which a business project cannot import, so the reference is
-	// rewritten to the alias the model source actually wrote: model.Version,
-	// model.Base and their siblings for internal/modelregistry, and the root gst
-	// package, which forwards everything internal/types defines under the same
-	// name.
+	// rewritten to the alias the model source actually wrote: model.Base and
+	// its siblings for internal/modelregistry, model.Version for
+	// internal/modelschema, and the root gst package, which forwards
+	// everything internal/types defines under the same name.
 	switch typ.PkgPath() {
-	case "github.com/hydroan/gst/internal/modelregistry":
+	case "github.com/hydroan/gst/internal/modelregistry", "github.com/hydroan/gst/internal/modelschema":
 		return "model." + name, "github.com/hydroan/gst/model"
 	case "github.com/hydroan/gst/internal/types":
 		return "gst." + name, "github.com/hydroan/gst"

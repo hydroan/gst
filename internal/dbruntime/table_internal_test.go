@@ -11,6 +11,7 @@ import (
 
 	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/internal/modelregistry"
+	"github.com/hydroan/gst/internal/modelschema"
 	"github.com/stretchr/testify/require"
 	"gorm.io/gorm"
 	gormlogger "gorm.io/gorm/logger"
@@ -35,8 +36,8 @@ type unsizedOwnerRecord struct {
 
 func (*unsizedOwnerRecord) TableName() string { return "unsized_owner_records" }
 
-func (*unsizedOwnerRecord) Indexes() []modelregistry.Index {
-	return []modelregistry.Index{{Fields: []string{"Owner"}}}
+func (*unsizedOwnerRecord) Indexes() []modelschema.Index {
+	return []modelschema.Index{{Fields: []string{"Owner"}}}
 }
 
 func TestEnsureTableCreatesTableWhenAutoMigrateEnabled(t *testing.T) {
@@ -118,8 +119,8 @@ type raceRecord struct {
 
 func (*raceRecord) TableName() string { return "race_records" }
 
-func (*raceRecord) Indexes() []modelregistry.Index {
-	return []modelregistry.Index{{Fields: []string{"Name"}}}
+func (*raceRecord) Indexes() []modelschema.Index {
+	return []modelschema.Index{{Fields: []string{"Name"}}}
 }
 
 // TestMigrateTableCreatesOnceAcrossProcesses proves replicas starting
@@ -178,8 +179,8 @@ type uniqueRecord struct {
 
 func (*uniqueRecord) TableName() string { return "unique_records" }
 
-func (*uniqueRecord) Indexes() []modelregistry.Index {
-	return []modelregistry.Index{{Fields: []string{"Code"}, Unique: true}}
+func (*uniqueRecord) Indexes() []modelschema.Index {
+	return []modelschema.Index{{Fields: []string{"Code"}, Unique: true}}
 }
 
 // TestMigrateTableCreatesMySQLTablesLikeTheMigrationDoes pins the table the
@@ -254,7 +255,7 @@ func TestMigrateTableLeavesTheIndexesAlone(t *testing.T) {
 				require.NotContainsf(t, []string{"ALTER", "CREATE", "DROP"}, keyword,
 					"a start against a prepared table must leave it as it is, ran: %s", statement)
 			}
-			plans, err := modelregistry.ParseIndexPlans(second, &uniqueRecord{})
+			plans, err := modelschema.ParseIndexPlans(second, &uniqueRecord{})
 			require.NoError(t, err)
 			require.Len(t, plans, 1)
 			matches, err := indexMatchesPlan(second, "unique_records", plans[0])

@@ -1,9 +1,10 @@
-package modelregistry_test
+package modelschema_test
 
 import (
 	"testing"
 
 	"github.com/hydroan/gst/internal/modelregistry"
+	"github.com/hydroan/gst/internal/modelschema"
 	"github.com/stretchr/testify/require"
 )
 
@@ -21,8 +22,8 @@ type identifyingSample struct {
 
 func (identifyingSample) TableName() string { return "identifying_samples" }
 
-func (identifyingSample) Indexes() []modelregistry.Index {
-	return []modelregistry.Index{
+func (identifyingSample) Indexes() []modelschema.Index {
+	return []modelschema.Index{
 		{Fields: []string{"Code"}, Unique: true},
 		{Fields: []string{"Shard", "Slot"}, Unique: true},
 		{Fields: []string{"Name"}},
@@ -33,7 +34,7 @@ func (identifyingSample) Indexes() []modelregistry.Index {
 // page by: a column no two rows share. A shared one splits the rows on the
 // boundary between pages, and the ones a page had no room for are never read.
 func TestIdentifyingColumnsSeparatesWhatIdentifiesARow(t *testing.T) {
-	identifying, err := modelregistry.IdentifyingColumns(&identifyingSample{})
+	identifying, err := modelschema.IdentifyingColumns(&identifyingSample{})
 	require.NoError(t, err)
 
 	require.Contains(t, identifying, "id", "the primary key identifies a row")
@@ -48,7 +49,7 @@ func TestIdentifyingColumnsSeparatesWhatIdentifiesARow(t *testing.T) {
 // makes: it holds no instance, only the type, and a nil pointer must answer
 // the same declaration rather than panic inside a value method.
 func TestIdentifyingColumnsReadsATypeAlone(t *testing.T) {
-	identifying, err := modelregistry.IdentifyingColumns((*identifyingSample)(nil))
+	identifying, err := modelschema.IdentifyingColumns((*identifyingSample)(nil))
 	require.NoError(t, err)
 	require.Contains(t, identifying, "code")
 	require.Contains(t, identifying, "id")

@@ -1,10 +1,8 @@
-package modelregistry
+package modelschema
 
 import (
 	"reflect"
 	"sync"
-
-	"github.com/hydroan/gst/internal/modelschema"
 )
 
 // identifyingColumnsCache memoizes the answer per model type; a model's
@@ -29,7 +27,7 @@ func IdentifyingColumns(m any) (map[string]struct{}, error) {
 		return cached.(map[string]struct{}), nil //nolint:errcheck
 	}
 
-	columns, err := modelschema.Columns(typ)
+	columns, err := Columns(typ)
 	if err != nil {
 		return nil, err
 	}
@@ -48,16 +46,14 @@ func IdentifyingColumns(m any) (map[string]struct{}, error) {
 	if typ.Kind() == reflect.Pointer && reflect.ValueOf(m).IsNil() {
 		declared = reflect.New(typ.Elem()).Interface()
 	}
-	if declarer, ok := asIndexer(declared); ok {
-		for _, index := range declarer.Indexes() {
-			// Only an index over one column identifies a row on its own: a
-			// unique index over two says nothing about either column alone.
-			if !index.Unique || len(index.Fields) != 1 {
-				continue
-			}
-			if dbName, ok := byGoName[index.Fields[0]]; ok {
-				identifying[dbName] = struct{}{}
-			}
+	for _, index := range IndexDeclarations(declared) {
+		// Only an index over one column identifies a row on its own: a
+		// unique index over two says nothing about either column alone.
+		if !index.Unique || len(index.Fields) != 1 {
+			continue
+		}
+		if dbName, ok := byGoName[index.Fields[0]]; ok {
+			identifying[dbName] = struct{}{}
 		}
 	}
 

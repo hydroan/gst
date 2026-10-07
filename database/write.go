@@ -8,6 +8,7 @@ import (
 	"github.com/hydroan/gst/internal/consts"
 	"github.com/hydroan/gst/internal/dbruntime"
 	"github.com/hydroan/gst/internal/modelregistry"
+	"github.com/hydroan/gst/internal/modelschema"
 	"github.com/hydroan/gst/internal/requestctx"
 	"github.com/hydroan/gst/internal/types"
 	"github.com/hydroan/gst/util"
@@ -261,11 +262,11 @@ func (db *database[M]) Delete(objs ...M) (err error) {
 	// gets its own statement so each version is checked individually; when
 	// none does, the delete is the deliberate unconditional kind and keeps
 	// the batched IN statements below.
-	versionColumn, versioned := modelregistry.VersionColumn(db.m)
+	versionColumn, versioned := modelschema.VersionColumn(db.m)
 	guarded := false
 	if versioned {
 		for i := range objs {
-			if v, _ := modelregistry.VersionValue(objs[i]); v > 0 {
+			if v, _ := modelschema.VersionValue(objs[i]); v > 0 {
 				guarded = true
 				break
 			}
@@ -277,7 +278,7 @@ func (db *database[M]) Delete(objs ...M) (err error) {
 		if guarded {
 			for i := range dryRunObjs {
 				tx := dryRunSession(db.ins)
-				if v, _ := modelregistry.VersionValue(dryRunObjs[i]); v > 0 {
+				if v, _ := modelschema.VersionValue(dryRunObjs[i]); v > 0 {
 					tx = tx.Where(db.quoteIdent(versionColumn)+" = ?", v)
 				}
 				if util.Deref(db.enablePurge) {
@@ -333,7 +334,7 @@ func (db *database[M]) Delete(objs ...M) (err error) {
 			tableName := db.m.TableName()
 			for i := range objs {
 				tx := db.ins.Session(&gorm.Session{})
-				v, _ := modelregistry.VersionValue(objs[i])
+				v, _ := modelschema.VersionValue(objs[i])
 				if v > 0 {
 					tx = tx.Where(db.quoteIdent(versionColumn)+" = ?", v)
 				}
@@ -466,13 +467,13 @@ func (db *database[M]) Update(objs ...M) (err error) {
 	// record must carry the version it was read with (see model.Version);
 	// fail fast before any database work so a partially valid batch never
 	// starts writing.
-	versionColumn, versioned := modelregistry.VersionColumn(objs[0])
+	versionColumn, versioned := modelschema.VersionColumn(objs[0])
 	for i := range objs {
 		if len(objs[i].GetID()) == 0 {
 			return ErrIDRequired
 		}
 		if versioned {
-			if v, _ := modelregistry.VersionValue(objs[i]); v == 0 {
+			if v, _ := modelschema.VersionValue(objs[i]); v == 0 {
 				return errors.Wrapf(ErrVersionRequired, "update id=%s", objs[i].GetID())
 			}
 		}
@@ -710,7 +711,7 @@ func (db *database[M]) UpdateByID(id string, assignments ...types.Assignment) (e
 	// Update would silently overwrite what this call wrote. The bump is the
 	// column expression because the row's current version is unknown. An
 	// explicit version assignment takes the write over; see model.Version.
-	if versionColumn, isVersioned := modelregistry.VersionColumn(db.m); isVersioned {
+	if versionColumn, isVersioned := modelschema.VersionColumn(db.m); isVersioned {
 		if _, userAssigned := updates[versionColumn]; !userAssigned {
 			updates[versionColumn] = gorm.Expr(db.quoteIdent(versionColumn) + " + 1")
 		}

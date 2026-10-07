@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/hydroan/gst/internal/modelregistry"
+	"github.com/hydroan/gst/internal/modelschema"
 	"github.com/stretchr/testify/require"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
@@ -25,8 +26,8 @@ type syncCollectMergedItem struct {
 func (*syncCollectMergedItem) TableName() string { return "sync_collect_merged_items" }
 
 // Indexes declares the unique key on Ref, next to the tag-declared one on Code.
-func (*syncCollectMergedItem) Indexes() []modelregistry.Index {
-	return []modelregistry.Index{{Fields: []string{"Ref"}, Unique: true}}
+func (*syncCollectMergedItem) Indexes() []modelschema.Index {
+	return []modelschema.Index{{Fields: []string{"Ref"}, Unique: true}}
 }
 
 type syncCollectCompositeItem struct {
@@ -39,8 +40,8 @@ type syncCollectCompositeItem struct {
 func (*syncCollectCompositeItem) TableName() string { return "sync_collect_composite_items" }
 
 // Indexes declares a composite unique key whose column order must survive.
-func (*syncCollectCompositeItem) Indexes() []modelregistry.Index {
-	return []modelregistry.Index{{Fields: []string{"Kind", "Code"}, Unique: true}}
+func (*syncCollectCompositeItem) Indexes() []modelschema.Index {
+	return []modelschema.Index{{Fields: []string{"Kind", "Code"}, Unique: true}}
 }
 
 type syncCollectPlainIndexItem struct {
@@ -52,8 +53,8 @@ type syncCollectPlainIndexItem struct {
 func (*syncCollectPlainIndexItem) TableName() string { return "sync_collect_plain_index_items" }
 
 // Indexes declares a non-unique index, which the sync must ignore.
-func (*syncCollectPlainIndexItem) Indexes() []modelregistry.Index {
-	return []modelregistry.Index{{Fields: []string{"Code"}}}
+func (*syncCollectPlainIndexItem) Indexes() []modelschema.Index {
+	return []modelschema.Index{{Fields: []string{"Code"}}}
 }
 
 type syncCollectPrimaryOnlyItem struct {
@@ -64,8 +65,8 @@ func (*syncCollectPrimaryOnlyItem) TableName() string { return "sync_collect_pri
 
 // Indexes declares a unique key covering only the primary key: a primary-key
 // merge keeps the caller's id, so the sync must drop the declaration.
-func (*syncCollectPrimaryOnlyItem) Indexes() []modelregistry.Index {
-	return []modelregistry.Index{{Fields: []string{"ID"}, Unique: true}}
+func (*syncCollectPrimaryOnlyItem) Indexes() []modelschema.Index {
+	return []modelschema.Index{{Fields: []string{"ID"}, Unique: true}}
 }
 
 // newSyncCollectDB opens the DryRun sqlite instance the collect tests parse
@@ -82,11 +83,11 @@ func newSyncCollectDB(t *testing.T) *gorm.DB {
 
 // syncCollectInputs resolves the parsed schema and the index plans of m the
 // way saveResultSyncUniqueIndexes does before collecting.
-func syncCollectInputs(t *testing.T, gormDB *gorm.DB, m any) (*gormschema.Schema, []modelregistry.IndexPlan) {
+func syncCollectInputs(t *testing.T, gormDB *gorm.DB, m any) (*gormschema.Schema, []modelschema.IndexPlan) {
 	t.Helper()
 	stmt := &gorm.Statement{DB: gormDB}
 	require.NoError(t, stmt.Parse(m))
-	plans, err := modelregistry.ParseIndexPlans(gormDB, m)
+	plans, err := modelschema.ParseIndexPlans(gormDB, m)
 	require.NoError(t, err)
 	return stmt.Schema, plans
 }
@@ -141,7 +142,7 @@ func TestCollectSaveResultSyncUniqueIndexes(t *testing.T) {
 
 	t.Run("fails on a plan column the schema does not carry", func(t *testing.T) {
 		schema, _ := syncCollectInputs(t, gormDB, &syncCollectMergedItem{})
-		_, err := collectSaveResultSyncUniqueIndexes(schema, []modelregistry.IndexPlan{
+		_, err := collectSaveResultSyncUniqueIndexes(schema, []modelschema.IndexPlan{
 			{Name: "uniq_sync_collect_merged_items_ghost", Table: "sync_collect_merged_items", Columns: []string{"ghost"}, Unique: true},
 		})
 		require.ErrorContains(t, err, `column "ghost"`)

@@ -11,7 +11,7 @@ import (
 	"github.com/hydroan/gst/database"
 	"github.com/hydroan/gst/internal/consts"
 	modellogmgmt "github.com/hydroan/gst/internal/model/logmgmt"
-	"github.com/hydroan/gst/internal/modelregistry"
+	"github.com/hydroan/gst/internal/modelschema"
 	"github.com/hydroan/gst/internal/response"
 	"github.com/hydroan/gst/internal/types"
 	"github.com/hydroan/gst/logger"
@@ -67,9 +67,9 @@ func PatchManyHandler[M types.Model, REQ types.Request, RSP types.Response](cfg 
 		// A versioned model must carry a version on every item, exactly like
 		// the single-resource patch; failing the whole batch up front keeps
 		// the all-or-nothing shape a defective request deserves. See
-		// modelregistry.Version. Each item is then validated on the fields it
+		// modelschema.Version. Each item is then validated on the fields it
 		// names, like the single-resource patch too.
-		versionField, versioned := modelregistry.VersionFieldName(a.newModel())
+		versionField, versioned := modelschema.VersionFieldName(a.newModel())
 		for i, item := range req.Items {
 			itemFields := patchFieldSet{}
 			if i < len(fieldSets) {
@@ -136,7 +136,7 @@ func PatchManyCall[M types.Model](route string) func(ctx context.Context, params
 			}
 			fieldSets[i] = fields
 		}
-		if versionField, versioned := modelregistry.VersionFieldName(a.newModel()); versioned {
+		if versionField, versioned := modelschema.VersionFieldName(a.newModel()); versioned {
 			for i, itemFields := range fieldSets {
 				if _, ok := itemFields[versionField]; !ok {
 					return nil, c.refuse(databaseError(database.ErrVersionRequired), errors.Wrapf(database.ErrVersionRequired, "patch many %s item %d without its %s", a.name, i, versionField))

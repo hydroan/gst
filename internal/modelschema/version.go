@@ -1,12 +1,10 @@
-package modelregistry
+package modelschema
 
 import (
 	"fmt"
 	"reflect"
 	"strings"
 	"sync"
-
-	"github.com/hydroan/gst/internal/modelschema"
 )
 
 // Version is the optimistic-locking column type. A model opts in by declaring
@@ -173,7 +171,7 @@ func versionFieldOf(m any) versionField {
 		// The column is the one gorm reads and writes, resolved by the one
 		// authority on column names (see modelschema): a column tag spelt
 		// in any case, or the configured naming strategy.
-		columns, err := modelschema.GoNameIndex(typ)
+		columns, err := GoNameIndex(typ)
 		if err != nil {
 			panic(fmt.Sprintf("model %s: the columns gorm reads cannot be resolved for the Version field %s: %v", typ, field.Name, err))
 		}

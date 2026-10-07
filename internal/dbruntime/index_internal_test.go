@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/hydroan/gst/internal/modelregistry"
+	"github.com/hydroan/gst/internal/modelschema"
 	"github.com/stretchr/testify/require"
 )
 
@@ -17,8 +18,8 @@ type indexedRecord struct {
 
 func (*indexedRecord) TableName() string { return "indexed_records" }
 
-func (*indexedRecord) Indexes() []modelregistry.Index {
-	return []modelregistry.Index{
+func (*indexedRecord) Indexes() []modelschema.Index {
+	return []modelschema.Index{
 		{Fields: []string{"Kind", "CreatedAt"}},
 		{Fields: []string{"Code", "Kind"}, Unique: true},
 	}
@@ -33,8 +34,8 @@ type renamedRecord struct {
 
 func (*renamedRecord) TableName() string { return "renamed_records" }
 
-func (*renamedRecord) Indexes() []modelregistry.Index {
-	return []modelregistry.Index{{Fields: []string{"Kind", "CreatedAt"}}}
+func (*renamedRecord) Indexes() []modelschema.Index {
+	return []modelschema.Index{{Fields: []string{"Kind", "CreatedAt"}}}
 }
 
 // occupiedRecord reproduces a plan name occupied by a different definition.
@@ -47,8 +48,8 @@ type occupiedRecord struct {
 
 func (*occupiedRecord) TableName() string { return "occupied_records" }
 
-func (*occupiedRecord) Indexes() []modelregistry.Index {
-	return []modelregistry.Index{{Fields: []string{"Kind", "CreatedAt"}}}
+func (*occupiedRecord) Indexes() []modelschema.Index {
+	return []modelschema.Index{{Fields: []string{"Kind", "CreatedAt"}}}
 }
 
 // unnamedRecord leaves TableName at the Base default; ensuring its indexes
@@ -60,8 +61,8 @@ type unnamedRecord struct {
 	modelregistry.Base
 }
 
-func (*unnamedRecord) Indexes() []modelregistry.Index {
-	return []modelregistry.Index{{Fields: []string{"Code", "Kind"}, Unique: true}}
+func (*unnamedRecord) Indexes() []modelschema.Index {
+	return []modelschema.Index{{Fields: []string{"Code", "Kind"}, Unique: true}}
 }
 
 // sizedRecord declares its table name and caps the indexed column sizes so
@@ -75,8 +76,8 @@ type sizedRecord struct {
 
 func (*sizedRecord) TableName() string { return "sized_records" }
 
-func (*sizedRecord) Indexes() []modelregistry.Index {
-	return []modelregistry.Index{{Fields: []string{"Code", "Kind"}, Unique: true}}
+func (*sizedRecord) Indexes() []modelschema.Index {
+	return []modelschema.Index{{Fields: []string{"Code", "Kind"}, Unique: true}}
 }
 
 // invalidRecord declares an index on a field that does not exist.
@@ -88,8 +89,8 @@ type invalidRecord struct {
 
 func (*invalidRecord) TableName() string { return "invalid_records" }
 
-func (*invalidRecord) Indexes() []modelregistry.Index {
-	return []modelregistry.Index{{Fields: []string{"Missing"}}}
+func (*invalidRecord) Indexes() []modelschema.Index {
+	return []modelschema.Index{{Fields: []string{"Missing"}}}
 }
 
 // conflictKindRecord and conflictKindTwin declare an index over the same
@@ -103,8 +104,8 @@ type conflictKindRecord struct {
 
 func (*conflictKindRecord) TableName() string { return "conflict_kind_records" }
 
-func (*conflictKindRecord) Indexes() []modelregistry.Index {
-	return []modelregistry.Index{{Fields: []string{"Kind", "CreatedAt"}}}
+func (*conflictKindRecord) Indexes() []modelschema.Index {
+	return []modelschema.Index{{Fields: []string{"Kind", "CreatedAt"}}}
 }
 
 type conflictKindTwin struct {
@@ -115,8 +116,8 @@ type conflictKindTwin struct {
 
 func (*conflictKindTwin) TableName() string { return "conflict_kind_records" }
 
-func (*conflictKindTwin) Indexes() []modelregistry.Index {
-	return []modelregistry.Index{{Fields: []string{"Kind", "CreatedAt"}}}
+func (*conflictKindTwin) Indexes() []modelschema.Index {
+	return []modelschema.Index{{Fields: []string{"Kind", "CreatedAt"}}}
 }
 
 func TestEnsureCustomIndexes(t *testing.T) {

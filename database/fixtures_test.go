@@ -10,6 +10,7 @@ import (
 	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/database"
 	"github.com/hydroan/gst/internal/modelregistry"
+	"github.com/hydroan/gst/internal/modelschema"
 	"github.com/hydroan/gst/internal/types"
 	"github.com/hydroan/gst/tenant"
 	"github.com/stretchr/testify/require"
@@ -329,8 +330,8 @@ func (*TestIndexerUniqueItem) TableName() string { return "test_indexer_unique_i
 func (*TestIndexerUniqueItem) Purge() bool       { return true }
 
 // Indexes declares the composite unique key on (Code, Kind).
-func (*TestIndexerUniqueItem) Indexes() []modelregistry.Index {
-	return []modelregistry.Index{{Fields: []string{"Code", "Kind"}, Unique: true}}
+func (*TestIndexerUniqueItem) Indexes() []modelschema.Index {
+	return []modelschema.Index{{Fields: []string{"Code", "Kind"}, Unique: true}}
 }
 
 // TestMixedUniqueItem carries one unique key in a struct tag and a second one
@@ -348,8 +349,8 @@ func (*TestMixedUniqueItem) TableName() string { return "test_mixed_unique_items
 func (*TestMixedUniqueItem) Purge() bool       { return true }
 
 // Indexes declares the unique key on Ref, next to the tag-declared one on Code.
-func (*TestMixedUniqueItem) Indexes() []modelregistry.Index {
-	return []modelregistry.Index{{Fields: []string{"Ref"}, Unique: true}}
+func (*TestMixedUniqueItem) Indexes() []modelschema.Index {
+	return []modelschema.Index{{Fields: []string{"Ref"}, Unique: true}}
 }
 
 type TestAutoItem struct {
@@ -427,8 +428,8 @@ type TestCursorSnapshot struct {
 
 func (*TestCursorSnapshot) TableName() string { return "test_cursor_snapshots" }
 
-func (*TestCursorSnapshot) Indexes() []modelregistry.Index {
-	return []modelregistry.Index{{Fields: []string{"SnapshotAt"}, Unique: true}}
+func (*TestCursorSnapshot) Indexes() []modelschema.Index {
+	return []modelschema.Index{{Fields: []string{"SnapshotAt"}, Unique: true}}
 }
 
 // TestRecordTag is the related model of TestAggregateRecord, used by the
@@ -719,8 +720,8 @@ type TestAccount struct {
 
 func (*TestAccount) TableName() string { return "test_accounts" }
 
-func (*TestAccount) Indexes() []modelregistry.Index {
-	return []modelregistry.Index{{Fields: []string{"Code"}, Unique: true}}
+func (*TestAccount) Indexes() []modelschema.Index {
+	return []modelschema.Index{{Fields: []string{"Code"}, Unique: true}}
 }
 
 // TestAccountCols mirrors the generated column references of the account

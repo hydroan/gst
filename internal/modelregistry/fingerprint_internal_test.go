@@ -4,6 +4,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/hydroan/gst/internal/modelschema"
 	"github.com/hydroan/gst/internal/types"
 	"github.com/stretchr/testify/require"
 )
@@ -21,8 +22,8 @@ type fingerprintSample struct {
 
 func (*fingerprintSample) TableName() string { return "fingerprint_samples" }
 
-func (*fingerprintSample) Indexes() []Index {
-	return []Index{{Fields: []string{"Name"}}}
+func (*fingerprintSample) Indexes() []modelschema.Index {
+	return []modelschema.Index{{Fields: []string{"Name"}}}
 }
 
 // fingerprintSampleWithoutField drops a column. It is the case a migration
@@ -34,8 +35,8 @@ type fingerprintSampleWithoutField struct {
 
 func (*fingerprintSampleWithoutField) TableName() string { return "fingerprint_samples" }
 
-func (*fingerprintSampleWithoutField) Indexes() []Index {
-	return []Index{{Fields: []string{"Name"}}}
+func (*fingerprintSampleWithoutField) Indexes() []modelschema.Index {
+	return []modelschema.Index{{Fields: []string{"Name"}}}
 }
 
 // fingerprintSampleWiderField keeps the column and moves its definition.
@@ -47,8 +48,8 @@ type fingerprintSampleWiderField struct {
 
 func (*fingerprintSampleWiderField) TableName() string { return "fingerprint_samples" }
 
-func (*fingerprintSampleWiderField) Indexes() []Index {
-	return []Index{{Fields: []string{"Name"}}}
+func (*fingerprintSampleWiderField) Indexes() []modelschema.Index {
+	return []modelschema.Index{{Fields: []string{"Name"}}}
 }
 
 // fingerprintSampleWithoutIndex drops an index, the other change a migration
@@ -70,8 +71,8 @@ type fingerprintSampleUniqueIndex struct {
 
 func (*fingerprintSampleUniqueIndex) TableName() string { return "fingerprint_samples" }
 
-func (*fingerprintSampleUniqueIndex) Indexes() []Index {
-	return []Index{{Fields: []string{"Name"}, Unique: true}}
+func (*fingerprintSampleUniqueIndex) Indexes() []modelschema.Index {
+	return []modelschema.Index{{Fields: []string{"Name"}, Unique: true}}
 }
 
 // fingerprintSampleOtherTable changes nothing but the table it maps to.
@@ -83,8 +84,8 @@ type fingerprintSampleOtherTable struct {
 
 func (*fingerprintSampleOtherTable) TableName() string { return "other_fingerprint_samples" }
 
-func (*fingerprintSampleOtherTable) Indexes() []Index {
-	return []Index{{Fields: []string{"Name"}}}
+func (*fingerprintSampleOtherTable) Indexes() []modelschema.Index {
+	return []modelschema.Index{{Fields: []string{"Name"}}}
 }
 
 func TestModelDeclaration(t *testing.T) {

@@ -123,6 +123,7 @@ import (
 	"github.com/hydroan/gst/internal/dbruntime"
 	"github.com/hydroan/gst/internal/instance"
 	"github.com/hydroan/gst/internal/modelregistry"
+	"github.com/hydroan/gst/internal/modelschema"
 	"gorm.io/gorm"
 )
 
@@ -218,8 +219,8 @@ func (*row) Purge() bool       { return true }
 
 // Indexes declares the name unique: one row per coordinated name is what
 // makes a claim's INSERT insert nothing when another process inserted first.
-func (*row) Indexes() []modelregistry.Index {
-	return []modelregistry.Index{{Fields: []string{"Name"}, Unique: true}}
+func (*row) Indexes() []modelschema.Index {
+	return []modelschema.Index{{Fields: []string{"Name"}, Unique: true}}
 }
 
 func init() {

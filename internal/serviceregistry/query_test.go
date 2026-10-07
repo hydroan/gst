@@ -8,6 +8,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/hydroan/gst/internal/modelregistry"
+	"github.com/hydroan/gst/internal/modelschema"
 	"github.com/hydroan/gst/internal/serviceregistry"
 	"github.com/hydroan/gst/internal/types"
 	"github.com/stretchr/testify/require"
@@ -35,8 +36,8 @@ type querySnapshot struct {
 
 func (querySnapshot) TableName() string { return "query_snapshots" }
 
-func (querySnapshot) Indexes() []modelregistry.Index {
-	return []modelregistry.Index{{Fields: []string{"SnapshotAt"}, Unique: true}}
+func (querySnapshot) Indexes() []modelschema.Index {
+	return []modelschema.Index{{Fields: []string{"SnapshotAt"}, Unique: true}}
 }
 
 type queryPlainSample struct {

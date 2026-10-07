@@ -58,7 +58,7 @@ func Cursor(q url.Values, m types.Model) (types.Cursor, error) {
 		if !ok {
 			return types.Cursor{}, errors.Newf("unknown cursor column %q", field)
 		}
-		identifying, err := modelregistry.IdentifyingColumns(m)
+		identifying, err := modelschema.IdentifyingColumns(m)
 		if err != nil {
 			return types.Cursor{}, err
 		}

@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/hydroan/gst/internal/modelregistry"
+	"github.com/hydroan/gst/internal/modelschema"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 	gormlogger "gorm.io/gorm/logger"
@@ -34,8 +35,8 @@ type syncBenchIndexerItem struct {
 func (*syncBenchIndexerItem) TableName() string { return "sync_bench_indexer_items" }
 
 // Indexes declares the unique key the sync must resolve from index plans.
-func (*syncBenchIndexerItem) Indexes() []modelregistry.Index {
-	return []modelregistry.Index{{Fields: []string{"Code"}, Unique: true}}
+func (*syncBenchIndexerItem) Indexes() []modelschema.Index {
+	return []modelschema.Index{{Fields: []string{"Code"}, Unique: true}}
 }
 
 func BenchmarkSyncSaveResultsByUniqueIndexes(b *testing.B) {

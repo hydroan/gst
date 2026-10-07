@@ -9,7 +9,7 @@ import (
 
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/internal/dbruntime"
-	"github.com/hydroan/gst/internal/modelregistry"
+	"github.com/hydroan/gst/internal/modelschema"
 	"gorm.io/gorm"
 	gormschema "gorm.io/gorm/schema"
 )
@@ -121,7 +121,7 @@ func (db *database[M]) Upsert(objs ...M) (err error) {
 	// model, bump the row's own version rather than write the object's over
 	// it. Save adopts a pre-set ON CONFLICT clause, so everything else about
 	// the slice save stays as it is. See upsertOnConflict and model.Version.
-	versionColumn, versioned := modelregistry.VersionColumn(db.m)
+	versionColumn, versioned := modelschema.VersionColumn(db.m)
 	if !versioned {
 		versionColumn = ""
 	}
@@ -299,7 +299,7 @@ func (db *database[M]) saveResultSyncUniqueIndexes() ([]*gormschema.Index, error
 	if err := stmt.Parse(db.m); err != nil {
 		return nil, err
 	}
-	plans, err := modelregistry.ParseIndexPlans(db.ins, db.m)
+	plans, err := modelschema.ParseIndexPlans(db.ins, db.m)
 	if err != nil {
 		return nil, err
 	}
@@ -318,7 +318,7 @@ func (db *database[M]) saveResultSyncUniqueIndexes() ([]*gormschema.Index, error
 // deduplication: plan declarations duplicating a parsed tag index are already
 // rejected at resolution (checkTagIndexConflicts), and the sync marks
 // reconciled objects, so a redundant index entry could never re-sync one.
-func collectSaveResultSyncUniqueIndexes(schema *gormschema.Schema, plans []modelregistry.IndexPlan) ([]*gormschema.Index, error) {
+func collectSaveResultSyncUniqueIndexes(schema *gormschema.Schema, plans []modelschema.IndexPlan) ([]*gormschema.Index, error) {
 	indexes := make([]*gormschema.Index, 0)
 	for _, index := range schema.ParseIndexes() {
 		if !saveResultSyncUniqueIndexUsable(index) {

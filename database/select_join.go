@@ -10,7 +10,6 @@ import (
 	"sync"
 
 	"github.com/cockroachdb/errors"
-	"github.com/hydroan/gst/internal/modelregistry"
 	"github.com/hydroan/gst/internal/modelschema"
 	"github.com/hydroan/gst/internal/types"
 	"github.com/hydroan/gst/tenant"
@@ -409,7 +408,7 @@ func uniqueKeysOf(ins *gorm.DB, model any) ([][]string, error) {
 	if err := stmt.Parse(model); err != nil {
 		return nil, errors.Wrapf(err, "parse schema of %T", model)
 	}
-	plans, err := modelregistry.ParseIndexPlans(ins, model)
+	plans, err := modelschema.ParseIndexPlans(ins, model)
 	if err != nil {
 		return nil, err
 	}

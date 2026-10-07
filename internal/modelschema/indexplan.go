@@ -1,4 +1,4 @@
-package modelregistry
+package modelschema
 
 import (
 	"fmt"
@@ -94,17 +94,13 @@ func (p IndexPlan) CreateSQL(dialector gorm.Dialector) string {
 
 // ParseIndexPlans resolves and validates the custom index declarations of
 // model against its gorm schema parsed through db. It returns nil plans when
-// the model does not implement indexer or declares no indexes.
+// the model declares no indexes (see IndexDeclarations).
 //
 // The table name comes from the parsed schema, which reads the model's own
 // TableName method through gorm's Tabler; a model without an explicit name is
 // rejected so no plan ever targets an empty table.
 func ParseIndexPlans(db *gorm.DB, model any) ([]IndexPlan, error) {
-	declarer, ok := asIndexer(model)
-	if !ok {
-		return nil, nil
-	}
-	decls := declarer.Indexes()
+	decls := IndexDeclarations(model)
 	if len(decls) == 0 {
 		return nil, nil
 	}
@@ -325,18 +321,21 @@ func indexName(table string, columns []string, unique bool, limit int) string {
 	return fmt.Sprintf("%s_%08x", name[:limit-9], h.Sum32())
 }
 
-// asIndexer reports the indexer implementation of model, tolerating both
-// value and pointer callers because registry snapshots and schema dump
-// inputs mix the two forms. Value models are probed through a zero-value
-// pointer, which is safe because Indexes must be a pure declaration.
-func asIndexer(model any) (indexer, bool) {
+// IndexDeclarations returns the secondary indexes model declares through its
+// Indexes method, nil when it declares none. A value and a pointer alike are
+// probed, since registry snapshots and schema dump inputs mix the two forms;
+// a value is probed through a zero-value pointer, which is safe because
+// Indexes must be a pure declaration.
+func IndexDeclarations(model any) []Index {
 	if declarer, ok := model.(indexer); ok {
-		return declarer, true
+		return declarer.Indexes()
 	}
 	typ := reflect.TypeOf(model)
 	if typ == nil || typ.Kind() == reflect.Pointer {
-		return nil, false
+		return nil
 	}
-	declarer, ok := reflect.TypeAssert[indexer](reflect.New(typ))
-	return declarer, ok
+	if declarer, ok := reflect.TypeAssert[indexer](reflect.New(typ)); ok {
+		return declarer.Indexes()
+	}
+	return nil
 }

@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/hydroan/gst/internal/modelregistry"
+	"github.com/hydroan/gst/internal/modelschema"
 	"github.com/hydroan/gst/internal/types"
 	"github.com/stretchr/testify/require"
 )
@@ -628,8 +629,8 @@ type cursorUniqueTestModel struct {
 
 func (cursorUniqueTestModel) TableName() string { return "cursor_unique_test_models" }
 
-func (cursorUniqueTestModel) Indexes() []modelregistry.Index {
-	return []modelregistry.Index{
+func (cursorUniqueTestModel) Indexes() []modelschema.Index {
+	return []modelschema.Index{
 		{Fields: []string{"Code"}, Unique: true},
 		{Fields: []string{"SnapshotAt"}, Unique: true},
 		{Fields: []string{"Shard", "Slot"}, Unique: true},

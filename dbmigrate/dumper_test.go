@@ -7,6 +7,7 @@ import (
 	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/dbmigrate"
 	"github.com/hydroan/gst/internal/modelregistry"
+	"github.com/hydroan/gst/internal/modelschema"
 	"github.com/stretchr/testify/require"
 )
 
@@ -40,8 +41,8 @@ type Sample struct {
 
 func (*Sample) TableName() string { return "samples" }
 
-func (*Sample) Indexes() []modelregistry.Index {
-	return []modelregistry.Index{
+func (*Sample) Indexes() []modelschema.Index {
+	return []modelschema.Index{
 		{Fields: []string{"Tag", "CreatedAt"}},
 		{Fields: []string{"Title"}, Unique: true},
 	}
@@ -71,8 +72,8 @@ type ConflictSampleA struct {
 
 func (*ConflictSampleA) TableName() string { return "conflict_samples" }
 
-func (*ConflictSampleA) Indexes() []modelregistry.Index {
-	return []modelregistry.Index{{Fields: []string{"Kind"}}}
+func (*ConflictSampleA) Indexes() []modelschema.Index {
+	return []modelschema.Index{{Fields: []string{"Kind"}}}
 }
 
 type ConflictSampleB struct {
@@ -83,8 +84,8 @@ type ConflictSampleB struct {
 
 func (*ConflictSampleB) TableName() string { return "conflict_samples" }
 
-func (*ConflictSampleB) Indexes() []modelregistry.Index {
-	return []modelregistry.Index{{Fields: []string{"Kind"}, Unique: true}}
+func (*ConflictSampleB) Indexes() []modelschema.Index {
+	return []modelschema.Index{{Fields: []string{"Kind"}, Unique: true}}
 }
 
 func TestDumper(t *testing.T) {

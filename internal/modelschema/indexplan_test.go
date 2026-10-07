@@ -1,10 +1,11 @@
-package modelregistry_test
+package modelschema_test
 
 import (
 	"strings"
 	"testing"
 
 	"github.com/hydroan/gst/internal/modelregistry"
+	"github.com/hydroan/gst/internal/modelschema"
 	"github.com/stretchr/testify/require"
 	"gorm.io/datatypes"
 	"gorm.io/driver/mysql"
@@ -23,8 +24,8 @@ type IndexedSample struct {
 
 func (*IndexedSample) TableName() string { return "indexed_samples" }
 
-func (*IndexedSample) Indexes() []modelregistry.Index {
-	return []modelregistry.Index{
+func (*IndexedSample) Indexes() []modelschema.Index {
+	return []modelschema.Index{
 		{Fields: []string{"Kind", "CreatedAt"}},
 		{Fields: []string{"Code", "Kind"}, Unique: true},
 	}
@@ -46,8 +47,8 @@ type EmptyFieldsSample struct {
 
 func (*EmptyFieldsSample) TableName() string { return "empty_fields_samples" }
 
-func (*EmptyFieldsSample) Indexes() []modelregistry.Index {
-	return []modelregistry.Index{{}}
+func (*EmptyFieldsSample) Indexes() []modelschema.Index {
+	return []modelschema.Index{{}}
 }
 
 // UnknownFieldSample references a field that does not exist on the model.
@@ -59,8 +60,8 @@ type UnknownFieldSample struct {
 
 func (*UnknownFieldSample) TableName() string { return "unknown_field_samples" }
 
-func (*UnknownFieldSample) Indexes() []modelregistry.Index {
-	return []modelregistry.Index{{Fields: []string{"Missing"}}}
+func (*UnknownFieldSample) Indexes() []modelschema.Index {
+	return []modelschema.Index{{Fields: []string{"Missing"}}}
 }
 
 // RepeatedColumnSample repeats the same column inside one index.
@@ -72,8 +73,8 @@ type RepeatedColumnSample struct {
 
 func (*RepeatedColumnSample) TableName() string { return "repeated_column_samples" }
 
-func (*RepeatedColumnSample) Indexes() []modelregistry.Index {
-	return []modelregistry.Index{{Fields: []string{"Kind", "Kind"}}}
+func (*RepeatedColumnSample) Indexes() []modelschema.Index {
+	return []modelschema.Index{{Fields: []string{"Kind", "Kind"}}}
 }
 
 // DuplicateDeclSample declares two indexes with the same column sequence.
@@ -85,8 +86,8 @@ type DuplicateDeclSample struct {
 
 func (*DuplicateDeclSample) TableName() string { return "duplicate_decl_samples" }
 
-func (*DuplicateDeclSample) Indexes() []modelregistry.Index {
-	return []modelregistry.Index{
+func (*DuplicateDeclSample) Indexes() []modelschema.Index {
+	return []modelschema.Index{
 		{Fields: []string{"Kind"}},
 		{Fields: []string{"Kind"}, Unique: true},
 	}
@@ -103,8 +104,8 @@ type TagNameConflictSample struct {
 
 func (*TagNameConflictSample) TableName() string { return "tag_name_conflict_samples" }
 
-func (*TagNameConflictSample) Indexes() []modelregistry.Index {
-	return []modelregistry.Index{{Fields: []string{"Kind"}}}
+func (*TagNameConflictSample) Indexes() []modelschema.Index {
+	return []modelschema.Index{{Fields: []string{"Kind"}}}
 }
 
 // TagColumnsConflictSample owns a struct tag index with the same column
@@ -117,8 +118,8 @@ type TagColumnsConflictSample struct {
 
 func (*TagColumnsConflictSample) TableName() string { return "tag_columns_conflict_samples" }
 
-func (*TagColumnsConflictSample) Indexes() []modelregistry.Index {
-	return []modelregistry.Index{{Fields: []string{"Code"}}}
+func (*TagColumnsConflictSample) Indexes() []modelschema.Index {
+	return []modelschema.Index{{Fields: []string{"Code"}}}
 }
 
 // UniqueTagConflictSample marks a column unique through the bare unique tag
@@ -132,8 +133,8 @@ type UniqueTagConflictSample struct {
 
 func (*UniqueTagConflictSample) TableName() string { return "unique_tag_conflict_samples" }
 
-func (*UniqueTagConflictSample) Indexes() []modelregistry.Index {
-	return []modelregistry.Index{{Fields: []string{"Code"}, Unique: true}}
+func (*UniqueTagConflictSample) Indexes() []modelschema.Index {
+	return []modelschema.Index{{Fields: []string{"Code"}, Unique: true}}
 }
 
 // NoTableNameSample implements indexer but never declares its table name.
@@ -143,8 +144,8 @@ type NoTableNameSample struct {
 	modelregistry.Base
 }
 
-func (*NoTableNameSample) Indexes() []modelregistry.Index {
-	return []modelregistry.Index{{Fields: []string{"Kind"}}}
+func (*NoTableNameSample) Indexes() []modelschema.Index {
+	return []modelschema.Index{{Fields: []string{"Kind"}}}
 }
 
 // ColumnNameSample references its column by database name instead of the Go
@@ -157,30 +158,30 @@ type ColumnNameSample struct {
 
 func (*ColumnNameSample) TableName() string { return "column_name_samples" }
 
-func (*ColumnNameSample) Indexes() []modelregistry.Index {
-	return []modelregistry.Index{{Fields: []string{"kind"}}}
+func (*ColumnNameSample) Indexes() []modelschema.Index {
+	return []modelschema.Index{{Fields: []string{"kind"}}}
 }
 
 func TestParseIndexPlans(t *testing.T) {
 	db := newSchemaDB(t)
 
 	t.Run("value and pointer models resolve identically", func(t *testing.T) {
-		want := []modelregistry.IndexPlan{
+		want := []modelschema.IndexPlan{
 			{Name: "idx_indexed_samples_kind_created_at", Table: "indexed_samples", Columns: []string{"kind", "created_at"}},
 			{Name: "uniq_indexed_samples_code_kind", Table: "indexed_samples", Columns: []string{"code", "kind"}, Unique: true},
 		}
 
-		plans, err := modelregistry.ParseIndexPlans(db, &IndexedSample{})
+		plans, err := modelschema.ParseIndexPlans(db, &IndexedSample{})
 		require.NoError(t, err)
 		require.Equal(t, want, plans)
 
-		plans, err = modelregistry.ParseIndexPlans(db, IndexedSample{})
+		plans, err = modelschema.ParseIndexPlans(db, IndexedSample{})
 		require.NoError(t, err)
 		require.Equal(t, want, plans)
 	})
 
 	t.Run("models without the capability yield no plans", func(t *testing.T) {
-		plans, err := modelregistry.ParseIndexPlans(db, &PlainSample{})
+		plans, err := modelschema.ParseIndexPlans(db, &PlainSample{})
 		require.NoError(t, err)
 		require.Nil(t, plans)
 	})
@@ -205,7 +206,7 @@ func TestParseIndexPlansValidation(t *testing.T) {
 		{"column name instead of field name", &ColumnNameSample{}, `unknown field "kind"`},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
-			_, err := modelregistry.ParseIndexPlans(db, tt.model)
+			_, err := modelschema.ParseIndexPlans(db, tt.model)
 			require.ErrorContains(t, err, tt.want)
 		})
 	}
@@ -224,22 +225,22 @@ func (*LongTableNameSample) TableName() string {
 	return "an_extremely_long_table_name_used_to_exercise_truncation"
 }
 
-func (*LongTableNameSample) Indexes() []modelregistry.Index {
-	return []modelregistry.Index{{Fields: []string{"Kind", "CreatedAt"}}}
+func (*LongTableNameSample) Indexes() []modelschema.Index {
+	return []modelschema.Index{{Fields: []string{"Kind", "CreatedAt"}}}
 }
 
 func TestParseIndexPlansTruncatesLongNames(t *testing.T) {
 	db := newSchemaDB(t)
 	table := (&LongTableNameSample{}).TableName()
 
-	plans, err := modelregistry.ParseIndexPlans(db, &LongTableNameSample{})
+	plans, err := modelschema.ParseIndexPlans(db, &LongTableNameSample{})
 	require.NoError(t, err)
 	require.Len(t, plans, 1)
 	require.Len(t, plans[0].Name, 64)
 	require.True(t, strings.HasPrefix(plans[0].Name, "idx_"+table[:20]))
 
 	// Truncation must stay deterministic across runs.
-	again, err := modelregistry.ParseIndexPlans(db, &LongTableNameSample{})
+	again, err := modelschema.ParseIndexPlans(db, &LongTableNameSample{})
 	require.NoError(t, err)
 	require.Equal(t, plans[0].Name, again[0].Name)
 }
@@ -262,16 +263,16 @@ func (*LimitNameSample) TableName() string {
 	return "limit_name_samples_of_fifty_four_characters_in_allxxxx"
 }
 
-func (*LimitNameSample) Indexes() []modelregistry.Index {
-	return []modelregistry.Index{{Fields: []string{"Kind"}}}
+func (*LimitNameSample) Indexes() []modelschema.Index {
+	return []modelschema.Index{{Fields: []string{"Kind"}}}
 }
 
 func (*OverLimitNameSample) TableName() string {
 	return "over_limit_name_samples_of_fifty_five_characters_in_all"
 }
 
-func (*OverLimitNameSample) Indexes() []modelregistry.Index {
-	return []modelregistry.Index{{Fields: []string{"Kind"}}}
+func (*OverLimitNameSample) Indexes() []modelschema.Index {
+	return []modelschema.Index{{Fields: []string{"Kind"}}}
 }
 
 // postgresDialector is a dialector named like PostgreSQL's, for the plans
@@ -294,28 +295,28 @@ func TestParseIndexPlansHoldsNamesToTheDialectsLimit(t *testing.T) {
 
 	postgres, err := gorm.Open(postgresDialector{}, &gorm.Config{DryRun: true})
 	require.NoError(t, err)
-	limit, err := modelregistry.ParseIndexPlans(postgres, &LimitNameSample{})
+	limit, err := modelschema.ParseIndexPlans(postgres, &LimitNameSample{})
 	require.NoError(t, err)
 	require.Equal(t, limitName, limit[0].Name)
-	over, err := modelregistry.ParseIndexPlans(postgres, &OverLimitNameSample{})
+	over, err := modelschema.ParseIndexPlans(postgres, &OverLimitNameSample{})
 	require.NoError(t, err)
 	require.Len(t, over[0].Name, 63)
 	require.True(t, strings.HasPrefix(over[0].Name, "idx_over_limit_name_samples"))
 
-	other, err := modelregistry.ParseIndexPlans(newSchemaDB(t), &OverLimitNameSample{})
+	other, err := modelschema.ParseIndexPlans(newSchemaDB(t), &OverLimitNameSample{})
 	require.NoError(t, err)
 	require.Equal(t, overName, other[0].Name)
 }
 
 func TestCheckCrossModelIndexPlanConflicts(t *testing.T) {
-	plan := func(table, name string, unique bool, columns ...string) modelregistry.IndexPlan {
-		return modelregistry.IndexPlan{Name: name, Table: table, Columns: columns, Unique: unique}
+	plan := func(table, name string, unique bool, columns ...string) modelschema.IndexPlan {
+		return modelschema.IndexPlan{Name: name, Table: table, Columns: columns, Unique: unique}
 	}
 
 	t.Run("same column sequence on one table conflicts whatever the uniqueness", func(t *testing.T) {
-		err := modelregistry.CheckCrossModelIndexPlanConflicts([]modelregistry.ModelIndexPlans{
-			{Model: "pkg.SampleA", Plans: []modelregistry.IndexPlan{plan("samples", "idx_samples_kind", false, "kind")}},
-			{Model: "pkg.SampleB", Plans: []modelregistry.IndexPlan{plan("samples", "uniq_samples_kind", true, "kind")}},
+		err := modelschema.CheckCrossModelIndexPlanConflicts([]modelschema.ModelIndexPlans{
+			{Model: "pkg.SampleA", Plans: []modelschema.IndexPlan{plan("samples", "idx_samples_kind", false, "kind")}},
+			{Model: "pkg.SampleB", Plans: []modelschema.IndexPlan{plan("samples", "uniq_samples_kind", true, "kind")}},
 		})
 		require.ErrorContains(t, err, `conflict on table "samples"`)
 		require.ErrorContains(t, err, "pkg.SampleA")
@@ -324,23 +325,23 @@ func TestCheckCrossModelIndexPlanConflicts(t *testing.T) {
 	})
 
 	t.Run("same generated name for different definitions conflicts", func(t *testing.T) {
-		err := modelregistry.CheckCrossModelIndexPlanConflicts([]modelregistry.ModelIndexPlans{
-			{Model: "pkg.SampleA", Plans: []modelregistry.IndexPlan{plan("samples", "idx_samples_collision", false, "code")}},
-			{Model: "pkg.SampleB", Plans: []modelregistry.IndexPlan{plan("samples", "idx_samples_collision", false, "kind")}},
+		err := modelschema.CheckCrossModelIndexPlanConflicts([]modelschema.ModelIndexPlans{
+			{Model: "pkg.SampleA", Plans: []modelschema.IndexPlan{plan("samples", "idx_samples_collision", false, "code")}},
+			{Model: "pkg.SampleB", Plans: []modelschema.IndexPlan{plan("samples", "idx_samples_collision", false, "kind")}},
 		})
 		require.ErrorContains(t, err, `same index name "idx_samples_collision"`)
 	})
 
 	t.Run("same columns on different tables do not conflict", func(t *testing.T) {
-		require.NoError(t, modelregistry.CheckCrossModelIndexPlanConflicts([]modelregistry.ModelIndexPlans{
-			{Model: "pkg.SampleA", Plans: []modelregistry.IndexPlan{plan("samples", "idx_samples_kind", false, "kind")}},
-			{Model: "pkg.RecordB", Plans: []modelregistry.IndexPlan{plan("records", "idx_records_kind", false, "kind")}},
+		require.NoError(t, modelschema.CheckCrossModelIndexPlanConflicts([]modelschema.ModelIndexPlans{
+			{Model: "pkg.SampleA", Plans: []modelschema.IndexPlan{plan("samples", "idx_samples_kind", false, "kind")}},
+			{Model: "pkg.RecordB", Plans: []modelschema.IndexPlan{plan("records", "idx_records_kind", false, "kind")}},
 		}))
 	})
 
 	t.Run("one declaring model per table passes", func(t *testing.T) {
-		require.NoError(t, modelregistry.CheckCrossModelIndexPlanConflicts([]modelregistry.ModelIndexPlans{
-			{Model: "pkg.SampleA", Plans: []modelregistry.IndexPlan{
+		require.NoError(t, modelschema.CheckCrossModelIndexPlanConflicts([]modelschema.ModelIndexPlans{
+			{Model: "pkg.SampleA", Plans: []modelschema.IndexPlan{
 				plan("samples", "idx_samples_kind", false, "kind"),
 				plan("samples", "uniq_samples_code", true, "code"),
 			}},
@@ -349,7 +350,7 @@ func TestCheckCrossModelIndexPlanConflicts(t *testing.T) {
 }
 
 func TestIndexPlanCreateSQL(t *testing.T) {
-	plan := modelregistry.IndexPlan{
+	plan := modelschema.IndexPlan{
 		Name:    "idx_samples_kind_created_at",
 		Table:   "samples",
 		Columns: []string{"kind", "created_at"},
@@ -358,7 +359,7 @@ func TestIndexPlanCreateSQL(t *testing.T) {
 		"CREATE INDEX `idx_samples_kind_created_at` ON `samples` (`kind`,`created_at`)",
 		plan.CreateSQL(mysql.New(mysql.Config{})))
 
-	unique := modelregistry.IndexPlan{
+	unique := modelschema.IndexPlan{
 		Name:    "uniq_samples_code",
 		Table:   "samples",
 		Columns: []string{"code"},
@@ -388,8 +389,8 @@ type UnsizedIndexSample struct {
 
 func (*UnsizedIndexSample) TableName() string { return "unsized_index_samples" }
 
-func (*UnsizedIndexSample) Indexes() []modelregistry.Index {
-	return []modelregistry.Index{{Fields: []string{"Owner"}}}
+func (*UnsizedIndexSample) Indexes() []modelschema.Index {
+	return []modelschema.Index{{Fields: []string{"Owner"}}}
 }
 
 // SizedIndexSample indexes the same field with a size, a varchar on MySQL.
@@ -401,8 +402,8 @@ type SizedIndexSample struct {
 
 func (*SizedIndexSample) TableName() string { return "sized_index_samples" }
 
-func (*SizedIndexSample) Indexes() []modelregistry.Index {
-	return []modelregistry.Index{{Fields: []string{"Owner"}}}
+func (*SizedIndexSample) Indexes() []modelschema.Index {
+	return []modelschema.Index{{Fields: []string{"Owner"}}}
 }
 
 // JSONIndexSample indexes a JSON column, which MySQL does not index at all,
@@ -415,8 +416,8 @@ type JSONIndexSample struct {
 
 func (*JSONIndexSample) TableName() string { return "json_index_samples" }
 
-func (*JSONIndexSample) Indexes() []modelregistry.Index {
-	return []modelregistry.Index{{Fields: []string{"Attrs"}}}
+func (*JSONIndexSample) Indexes() []modelschema.Index {
+	return []modelschema.Index{{Fields: []string{"Attrs"}}}
 }
 
 // TestParseIndexPlansRefusesAColumnMySQLCannotIndex pins the column rule of
@@ -426,19 +427,19 @@ func (*JSONIndexSample) Indexes() []modelregistry.Index {
 // PostgreSQL, which indexes text columns, is not held to the rule.
 func TestParseIndexPlansRefusesAColumnMySQLCannotIndex(t *testing.T) {
 	mysqlDB := newMySQLSchemaDB(t)
-	_, err := modelregistry.ParseIndexPlans(mysqlDB, &UnsizedIndexSample{})
+	_, err := modelschema.ParseIndexPlans(mysqlDB, &UnsizedIndexSample{})
 	require.ErrorContains(t, err, `model UnsizedIndexSample: index field Owner is a longtext column, which MySQL cannot index without a key length; give it a size (gorm:"size:191") or a bounded type`)
 
-	_, err = modelregistry.ParseIndexPlans(mysqlDB, &JSONIndexSample{})
+	_, err = modelschema.ParseIndexPlans(mysqlDB, &JSONIndexSample{})
 	require.ErrorContains(t, err, `model JSONIndexSample: index field Attrs is a json column, which MySQL does not index; index a bounded column holding the value or a generated column instead`)
 
-	plans, err := modelregistry.ParseIndexPlans(mysqlDB, &SizedIndexSample{})
+	plans, err := modelschema.ParseIndexPlans(mysqlDB, &SizedIndexSample{})
 	require.NoError(t, err)
 	require.Len(t, plans, 1)
 
 	postgres, err := gorm.Open(postgresDialector{}, &gorm.Config{DryRun: true})
 	require.NoError(t, err)
-	_, err = modelregistry.ParseIndexPlans(postgres, &UnsizedIndexSample{})
+	_, err = modelschema.ParseIndexPlans(postgres, &UnsizedIndexSample{})
 	require.NoError(t, err)
 }
 

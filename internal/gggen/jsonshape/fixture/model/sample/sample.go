@@ -10,6 +10,7 @@ import (
 	"github.com/hydroan/gst/internal/gggen/jsonshape/fixture/model/record"
 	"github.com/hydroan/gst/internal/gggen/jsonshape/fixture/pkg/notifier"
 	"github.com/hydroan/gst/internal/modelregistry"
+	"github.com/hydroan/gst/internal/modelschema"
 	"gorm.io/datatypes"
 	"gorm.io/gorm"
 )
@@ -58,7 +59,7 @@ type Sample struct {
 	Deadline time.Time                    `json:"deadline,omitzero"`
 	Archived gorm.DeletedAt               `json:"archived"`
 	Comment  sql.NullString               `json:"comment"`
-	Version  modelregistry.Version        `json:"version,omitempty"`
+	Version  modelschema.Version          `json:"version,omitempty"`
 
 	Record   *record.Record    `json:"record"`
 	Endpoint notifier.Endpoint `json:"endpoint"`

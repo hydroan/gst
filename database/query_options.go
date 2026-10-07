@@ -79,7 +79,7 @@ func (db *database[M]) WithCursor(cursor types.Cursor) types.Database[M] {
 // holes in it that nothing reports. The primary key and a column with a
 // unique index of its own leave no such gap.
 func (db *database[M]) identifyingCursorColumn(column string) error {
-	identifying, err := modelregistry.IdentifyingColumns(*new(M))
+	identifying, err := modelschema.IdentifyingColumns(*new(M))
 	if err != nil {
 		return err
 	}

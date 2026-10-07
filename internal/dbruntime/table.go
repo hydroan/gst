@@ -11,6 +11,7 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/internal/modelregistry"
+	"github.com/hydroan/gst/internal/modelschema"
 	"github.com/hydroan/gst/internal/types"
 	"github.com/hydroan/gst/util"
 	"go.uber.org/zap"
@@ -32,7 +33,7 @@ func prepareTable(db *gorm.DB, m types.Model) {
 	// Touching the version metadata here makes a defective model.Version
 	// declaration (embedded, or missing its required tag) fail at startup
 	// for every registered model, instead of on its first write.
-	modelregistry.IsVersioned(m)
+	modelschema.IsVersioned(m)
 
 	begin := time.Now()
 	typ := reflect.TypeOf(m).Elem()
@@ -149,7 +150,7 @@ func migrateTable(handler *gorm.DB, m types.Model, tableName string) error {
 			// The index declarations are validated before the table exists, so
 			// a declaration the database cannot honor fails the start with the
 			// fix instead of leaving a half-prepared table behind.
-			if _, err := modelregistry.ParseIndexPlans(handler, m); err != nil {
+			if _, err := modelschema.ParseIndexPlans(handler, m); err != nil {
 				return err
 			}
 			if err := automigrating(handler).AutoMigrate(m); err != nil {

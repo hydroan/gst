@@ -17,7 +17,7 @@ import (
 	"github.com/hydroan/gst/internal/ggconst"
 	"github.com/hydroan/gst/internal/gghelper"
 	"github.com/hydroan/gst/internal/goast"
-	"github.com/hydroan/gst/internal/modelregistry"
+	"github.com/hydroan/gst/internal/modelschema"
 	gormschema "gorm.io/gorm/schema"
 )
 
@@ -159,7 +159,7 @@ func collectVersionFieldFindings(ignore gghelper.ProjectIgnore) ([]VersionFieldF
 //
 // The declaration shape is a framework contract with no user freedom: a
 // NAMED top-level field carrying json:",omitempty" serialization and
-// gorm:"not null;default:1" (see modelregistry.Version for why the default
+// gorm:"not null;default:1" (see modelschema.Version for why the default
 // and the omitempty are load-bearing). Three layers enforce it, all reading
 // the detection below: "gg gen" heals named fields by filling the tags in,
 // "gg check" reports deviations read-only, and the framework panics at
@@ -335,8 +335,8 @@ func versionFieldDeviation(fset *token.FileSet, path, structName string, field *
 		}
 	}
 
-	finding.Missing = modelregistry.VersionGormTagMissing(reflect.StructTag(rawTag))
-	jsonCompliant, jsonHealable := modelregistry.VersionJSONTagState(reflect.StructTag(rawTag))
+	finding.Missing = modelschema.VersionGormTagMissing(reflect.StructTag(rawTag))
+	jsonCompliant, jsonHealable := modelschema.VersionJSONTagState(reflect.StructTag(rawTag))
 	finding.JSONMissing = !jsonCompliant
 	finding.JSONBlocked = !jsonHealable
 	if len(finding.Missing) == 0 && !finding.JSONMissing {

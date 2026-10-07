@@ -14,7 +14,7 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/internal/dbruntime"
-	"github.com/hydroan/gst/internal/modelregistry"
+	"github.com/hydroan/gst/internal/modelschema"
 	"github.com/maxrichie5/go-sqlfmt/sqlfmt"
 	"gorm.io/driver/mysql"
 	"gorm.io/driver/postgres"
@@ -103,7 +103,7 @@ func (s *SchemaDumper) Dump(driver config.DBType, dst ...any) (string, error) {
 	}
 
 	statements := make([]schemaStatement, 0, len(models))
-	indexSets := make([]modelregistry.ModelIndexPlans, 0, len(models))
+	indexSets := make([]modelschema.ModelIndexPlans, 0, len(models))
 	for _, v := range models {
 		if err = requireExplicitTableName(v); err != nil {
 			return "", err
@@ -129,12 +129,12 @@ func (s *SchemaDumper) Dump(driver config.DBType, dst ...any) (string, error) {
 		// Plans and statement rendering are shared with the bootstrap
 		// executor, so the desired schema always matches the DDL that the
 		// runtime actually applies.
-		plans, planErr := modelregistry.ParseIndexPlans(db, v)
+		plans, planErr := modelschema.ParseIndexPlans(db, v)
 		if planErr != nil {
 			return "", planErr
 		}
 		if len(plans) > 0 {
-			indexSets = append(indexSets, modelregistry.ModelIndexPlans{Model: schemaModelName(v), Plans: plans})
+			indexSets = append(indexSets, modelschema.ModelIndexPlans{Model: schemaModelName(v), Plans: plans})
 		}
 		for _, plan := range plans {
 			statements = append(statements, schemaStatement{
@@ -147,7 +147,7 @@ func (s *SchemaDumper) Dump(driver config.DBType, dst ...any) (string, error) {
 	// Models resolve their plans in isolation; colliding declarations across
 	// the models of one table would render duplicate statements here and split
 	// into two indexes on the database, so they fail the dump instead.
-	if err = modelregistry.CheckCrossModelIndexPlanConflicts(indexSets); err != nil {
+	if err = modelschema.CheckCrossModelIndexPlanConflicts(indexSets); err != nil {
 		return "", err
 	}
 

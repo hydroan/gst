@@ -7,7 +7,7 @@ import (
 	"sync"
 
 	"github.com/cockroachdb/errors"
-	"github.com/hydroan/gst/internal/modelregistry"
+	"github.com/hydroan/gst/internal/modelschema"
 	"github.com/hydroan/gst/internal/types"
 	"gorm.io/gorm"
 )
@@ -23,30 +23,30 @@ import (
 // never removed.
 var (
 	crossModelIndexPlansMu sync.Mutex
-	crossModelIndexPlans   = make(map[*gorm.DB]map[reflect.Type]modelregistry.ModelIndexPlans)
+	crossModelIndexPlans   = make(map[*gorm.DB]map[reflect.Type]modelschema.ModelIndexPlans)
 )
 
 // checkCrossModelIndexPlans records m's resolved plans and validates them
 // against every other model already ensured on handler. Repeated arrivals of
 // one model type are no conflict: the recorded plans are replaced.
-func checkCrossModelIndexPlans(handler *gorm.DB, m types.Model, plans []modelregistry.IndexPlan) error {
+func checkCrossModelIndexPlans(handler *gorm.DB, m types.Model, plans []modelschema.IndexPlan) error {
 	crossModelIndexPlansMu.Lock()
 	defer crossModelIndexPlansMu.Unlock()
 
 	byType := crossModelIndexPlans[handler]
 	if byType == nil {
-		byType = make(map[reflect.Type]modelregistry.ModelIndexPlans)
+		byType = make(map[reflect.Type]modelschema.ModelIndexPlans)
 		crossModelIndexPlans[handler] = byType
 	}
-	byType[reflect.TypeOf(m)] = modelregistry.ModelIndexPlans{Model: modelDisplayName(m), Plans: plans}
+	byType[reflect.TypeOf(m)] = modelschema.ModelIndexPlans{Model: modelDisplayName(m), Plans: plans}
 
-	sets := make([]modelregistry.ModelIndexPlans, 0, len(byType))
+	sets := make([]modelschema.ModelIndexPlans, 0, len(byType))
 	for _, set := range byType {
 		sets = append(sets, set)
 	}
 	// Deterministic order keeps the reported conflict pair stable across runs.
 	sort.Slice(sets, func(i, j int) bool { return sets[i].Model < sets[j].Model })
-	return modelregistry.CheckCrossModelIndexPlanConflicts(sets)
+	return modelschema.CheckCrossModelIndexPlanConflicts(sets)
 }
 
 // modelDisplayName renders the model's type name without pointer markers.
@@ -79,7 +79,7 @@ func ensureCustomIndexes(handler *gorm.DB, m types.Model) error {
 		return err
 	}
 
-	plans, err := modelregistry.ParseIndexPlans(handler, m)
+	plans, err := modelschema.ParseIndexPlans(handler, m)
 	if err != nil || len(plans) == 0 {
 		return err
 	}
@@ -120,7 +120,7 @@ func ensureCustomIndexes(handler *gorm.DB, m types.Model) error {
 
 // indexMatchesPlan reports whether the table carries an index of the plan's
 // name and definition at this moment.
-func indexMatchesPlan(handler *gorm.DB, tableName string, plan modelregistry.IndexPlan) (bool, error) {
+func indexMatchesPlan(handler *gorm.DB, tableName string, plan modelschema.IndexPlan) (bool, error) {
 	existing, err := handler.Migrator().GetIndexes(tableName)
 	if err != nil {
 		return false, err
@@ -136,7 +136,7 @@ func indexMatchesPlan(handler *gorm.DB, tableName string, plan modelregistry.Ind
 // matchesPlan reports whether an existing index carries the plan's column
 // sequence and uniqueness. Uniqueness participates only when the driver
 // reports it.
-func matchesPlan(idx gorm.Index, plan modelregistry.IndexPlan) bool {
+func matchesPlan(idx gorm.Index, plan modelschema.IndexPlan) bool {
 	columns := idx.Columns()
 	if len(columns) != len(plan.Columns) {
 		return false
@@ -154,7 +154,7 @@ func matchesPlan(idx gorm.Index, plan modelregistry.IndexPlan) bool {
 
 // sameDefinitionName returns the name of an existing non-primary index that
 // matches the plan's definition, signaling a rename candidate.
-func sameDefinitionName(existing []gorm.Index, plan modelregistry.IndexPlan) string {
+func sameDefinitionName(existing []gorm.Index, plan modelschema.IndexPlan) string {
 	for _, idx := range existing {
 		if isPrimary, ok := idx.PrimaryKey(); ok && isPrimary {
 			continue
