@@ -352,6 +352,8 @@ linters:
           alias: casbinmodel
         - pkg: github.com/gin-gonic/gin/codec/json
           alias: ginjson
+        - pkg: github.com/grpc-ecosystem/go-grpc-middleware/v2
+          alias: grpcmiddleware
 
     misspell:
       locale: US

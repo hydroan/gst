@@ -3,7 +3,7 @@ package grpcserver
 import (
 	"context"
 
-	middleware "github.com/grpc-ecosystem/go-grpc-middleware/v2"
+	grpcmiddleware "github.com/grpc-ecosystem/go-grpc-middleware/v2"
 	"github.com/grpc-ecosystem/go-grpc-middleware/v2/interceptors"
 	"github.com/grpc-ecosystem/go-grpc-middleware/v2/interceptors/selector"
 	"github.com/hydroan/gst/internal/execctx"
@@ -155,7 +155,7 @@ func refused(ctx context.Context, err error) error {
 // handler and the calls downstream read the call's metadata and caller
 // from.
 func withStreamContext(ctx context.Context, ss grpc.ServerStream) grpc.ServerStream {
-	wrapped := middleware.WrapServerStream(ss)
+	wrapped := grpcmiddleware.WrapServerStream(ss)
 	wrapped.WrappedContext = ctx
 	return wrapped
 }
