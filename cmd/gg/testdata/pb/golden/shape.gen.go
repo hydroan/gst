@@ -71,7 +71,7 @@ func ShapeToProto(m *model.Shape) *Shape {
 	data := m.Options.Data()
 	p.Options = ShapeOptionsToProto(&data)
 	p.Audit = ShapeAuditToProto(&m.Audit)
-	p.Amount = string(m.Amount)
+	p.Amount = grpc.UTF8(string(m.Amount))
 	p.Level = int64(m.Level)
 	if m.Score != nil {
 		x := int64(*m.Score)
@@ -117,7 +117,12 @@ func ShapeToProto(m *model.Shape) *Shape {
 	}
 	p.Any = grpc.Value(m.Any)
 	p.Blob = m.Blob
-	p.Names = m.Names
+	if m.Names != nil {
+		p.Names = make([]string, len(m.Names))
+		for i, v := range m.Names {
+			p.Names[i] = grpc.UTF8(v)
+		}
+	}
 	p.Version = int64(m.Version)
 	if m.Steps != nil {
 		p.Steps = make([]*ShapePoint, len(m.Steps))
@@ -125,9 +130,19 @@ func ShapeToProto(m *model.Shape) *Shape {
 			p.Steps[i] = ShapePointToProto(&v)
 		}
 	}
-	p.Words = m.Words
+	if m.Words != nil {
+		p.Words = make([]string, len(m.Words))
+		for i, v := range m.Words {
+			p.Words[i] = grpc.UTF8(v)
+		}
+	}
 	if m.Aliases != nil {
-		p.Aliases = *m.Aliases
+		if *m.Aliases != nil {
+			p.Aliases = make([]string, len(*m.Aliases))
+			for i, v := range *m.Aliases {
+				p.Aliases[i] = grpc.UTF8(v)
+			}
+		}
 	}
 	if m.Corners != nil {
 		if *m.Corners != nil {
@@ -138,7 +153,12 @@ func ShapeToProto(m *model.Shape) *Shape {
 		}
 	}
 	if m.Weights != nil {
-		p.Weights = *m.Weights
+		if *m.Weights != nil {
+			p.Weights = make(map[string]int32, len(*m.Weights))
+			for k, v := range *m.Weights {
+				p.Weights[grpc.UTF8(k)] = v
+			}
+		}
 	}
 	if m.Raw != nil {
 		p.Raw = *m.Raw
@@ -175,7 +195,7 @@ func ShapeToProto(m *model.Shape) *Shape {
 		}
 	}
 	if m.Price != nil {
-		x := string(*m.Price)
+		x := grpc.UTF8(string(*m.Price))
 		p.Price = &x
 	}
 	if m.Stamps != nil {
@@ -188,6 +208,14 @@ func ShapeToProto(m *model.Shape) *Shape {
 		p.Owners = make(map[string]*ShapeOwner, len(m.Owners))
 		for k, v := range m.Owners {
 			p.Owners[grpc.UTF8(k)] = ShapeOwnerToProto(v)
+		}
+	}
+	p.Ratio = m.Ratio
+	p.Factors = m.Factors
+	if m.Costs != nil {
+		p.Costs = make(map[string]float64, len(m.Costs))
+		for k, v := range m.Costs {
+			p.Costs[grpc.UTF8(k)] = v
 		}
 	}
 	return p
@@ -468,6 +496,32 @@ func ShapeFromProto(p *Shape) (*model.Shape, error) {
 		m.Owners = make(map[string]*model.ShapeOwner, len(p.GetOwners()))
 		for k, v := range p.GetOwners() {
 			m.Owners[k], err = ShapeOwnerFromProto(v)
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	if p.Ratio != nil {
+		var x float64
+		x, err = grpc.Finite[float64]("ratio", *p.Ratio)
+		if err != nil {
+			return nil, err
+		}
+		m.Ratio = &x
+	}
+	if p.GetFactors() != nil {
+		m.Factors = make([]float64, len(p.GetFactors()))
+		for i, v := range p.GetFactors() {
+			m.Factors[i], err = grpc.Finite[float64]("factors", v)
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	if p.GetCosts() != nil {
+		m.Costs = make(map[string]float64, len(p.GetCosts()))
+		for k, v := range p.GetCosts() {
+			m.Costs[k], err = grpc.Finite[float64]("costs", v)
 			if err != nil {
 				return nil, err
 			}

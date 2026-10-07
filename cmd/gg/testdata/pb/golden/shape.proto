@@ -141,6 +141,15 @@ message Shape {
   // Owners is a map of pointers to structs, whose nil values travel as
   // empty messages.
   map<string, ShapeOwner> owners = 52;
+
+  // Ratio, Factors and Costs hold floats in an optional field, a repeated
+  // field and a map, each read back through grpc.Finite, which refuses
+  // NaN and the infinities.
+  optional double ratio = 53;
+
+  repeated double factors = 54;
+
+  map<string, double> costs = 55;
 }
 
 // ShapeSpans is the message of the spans field of Shape.

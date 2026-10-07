@@ -192,7 +192,12 @@ func MergeReqToProto(m *record.MergeReq) *MergeReq {
 		return nil
 	}
 	p := new(MergeReq)
-	p.Ids = m.IDs
+	if m.IDs != nil {
+		p.Ids = make([]string, len(m.IDs))
+		for i, v := range m.IDs {
+			p.Ids[i] = grpc.UTF8(v)
+		}
+	}
 	return p
 }
 

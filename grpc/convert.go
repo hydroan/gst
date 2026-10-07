@@ -64,7 +64,9 @@ func Number(field, s string) (json.Number, error) {
 // infinities with invalidValue naming field, "NaN is not a finite number"
 // the detail: a message carries them where JSON has no spelling for them,
 // so the HTTP listener never lets one in and could not write one out. The
-// generated FromProto reads every float32 and float64 field through it.
+// generated FromProto reads every float32 and float64 through it wherever
+// it sits: a field, an optional one, an element of a slice or a value of a
+// map.
 func Finite[T ~float32 | ~float64, V ~float32 | ~float64](field string, v V) (T, error) {
 	if math.IsNaN(float64(v)) || math.IsInf(float64(v), 0) {
 		return 0, invalidValue(field, fmt.Sprintf("%v is not a finite number", v))
@@ -121,8 +123,9 @@ func Document(field string, b []byte) ([]byte, error) {
 // U+FFFD, the way encoding/json writes a string out: a message carries
 // valid UTF-8 alone and would fail to encode otherwise, failing the whole
 // response for one value, where the JSON encoder replaces the bytes and
-// goes on. The generated ToProto writes every string through it. A valid
-// string comes back as it is.
+// goes on. The generated ToProto writes every string through it wherever it
+// sits: a field, an optional one, an element of a slice, a key or a value
+// of a map. A valid string comes back as it is.
 func UTF8(s string) string {
 	if utf8.ValidString(s) {
 		return s

@@ -305,9 +305,32 @@ func scalarGoType(kind descriptorpb.FieldDescriptorProto_Type) string {
 // field of protobuf type ft, or to one element of it when elem is set, and
 // the field's value back to the Go type: []string to a repeated string and
 // a named slice of strings too, but not a named string type, which converts.
+// Whether the value is then assigned as it is also depends on what it holds:
+// a string is written through grpc.UTF8 and a float read through grpc.Finite
+// wherever it sits (see utf8Guarded and finiteGuarded).
 func assignable(t types.Type, ft fieldType, elem bool) bool {
 	pt := protoGoType(ft, elem)
 	return pt != nil && types.AssignableTo(t, pt) && types.AssignableTo(pt, t)
+}
+
+// utf8Guarded reports whether a Go value of type t is written through
+// grpc.UTF8 on its way into a message: a string, or a type over one. An
+// optional field, a slice or a map of such values converts value by value
+// so that every one passes through it; assigned whole, it would carry bytes
+// a message cannot and fail the marshaling of the whole message.
+func utf8Guarded(t types.Type) bool {
+	b, ok := types.Unalias(t).Underlying().(*types.Basic)
+	return ok && b.Info()&types.IsString != 0
+}
+
+// finiteGuarded reports whether a Go value of type t is read through
+// grpc.Finite on its way out of a message: a float32 or float64, or a type
+// over one. An optional field, a slice or a map of such values converts
+// value by value so that every one passes through it; assigned whole, it
+// would let NaN and the infinities in, which JSON has no spelling for.
+func finiteGuarded(t types.Type) bool {
+	b, ok := types.Unalias(t).Underlying().(*types.Basic)
+	return ok && b.Info()&types.IsFloat != 0
 }
 
 // converted spells the conversion of x to the type typ, (*string)(x) for a
@@ -337,9 +360,11 @@ func typeKey(t types.Type) string {
 
 // toProto returns the statements encoding src, a Go value of type t, into
 // dst, a message field of protobuf type ft. A value the field holds as it
-// is, a []string, is assigned; one of another type, an int for an int64,
-// a string enum for a string, is converted; a string is written through
-// grpc.UTF8; a time becomes a Timestamp through grpc.Timestamp, a duration
+// is, a []byte or a []int64, is assigned; one of another type, an int for an
+// int64, a string enum for a string, is converted; a string is written
+// through grpc.UTF8 wherever it sits, alone, optional, as an element or as a
+// key, so a []string converts element by element (see utf8Guarded); a time
+// becomes a Timestamp through grpc.Timestamp, a duration
 // a Duration, any value a Value through grpc.Value, a JSON object a Struct
 // through grpc.Struct, and raw JSON travels as its bytes; a project struct converts through its
 // XToProto, an unnamed one field by field into its own message; a slice
@@ -355,9 +380,22 @@ func typeKey(t types.Type) string {
 //	p.UpdatedAt = grpc.Timestamp(m.UpdatedAt)
 //	p.Title = grpc.UTF8(m.Title)
 //	p.Status = grpc.UTF8(string(m.Status))
-//	p.Summary = m.Summary
-//	p.Tags = m.Tags
-//	p.Labels = m.Labels
+//	if m.Summary != nil {
+//		x := grpc.UTF8(*m.Summary)
+//		p.Summary = &x
+//	}
+//	if m.Tags != nil {
+//		p.Tags = make([]string, len(m.Tags))
+//		for i, v := range m.Tags {
+//			p.Tags[i] = grpc.UTF8(v)
+//		}
+//	}
+//	if m.Labels != nil {
+//		p.Labels = make(map[string]string, len(m.Labels))
+//		for k, v := range m.Labels {
+//			p.Labels[grpc.UTF8(k)] = grpc.UTF8(v)
+//		}
+//	}
 //	p.Count = int64(m.Count)
 //	p.Ratio = m.Ratio
 //	p.Enabled = m.Enabled
@@ -390,7 +428,7 @@ func typeKey(t types.Type) string {
 //	data := m.Options.Data()
 //	p.Options = ShapeOptionsToProto(&data)
 //	p.Audit = ShapeAuditToProto(&m.Audit)
-//	p.Amount = string(m.Amount)
+//	p.Amount = grpc.UTF8(string(m.Amount))
 //	p.Level = int64(m.Level)
 //	if m.Score != nil {
 //		x := int64(*m.Score)
@@ -436,13 +474,13 @@ func (w *fileWriter) toProto(dst, src ast.Expr, t types.Type, ft fieldType, inne
 			// the pointer itself when the types agree; a repeated one
 			// holds the value pointed to.
 			if ft.optional {
-				if assignable(t, ft, false) {
+				if assignable(t, ft, false) && !utf8Guarded(elem) {
 					return []ast.Stmt{assign(dst, src)}
 				}
 				x := w.temp("x")
-				return []ast.Stmt{ifNotNil(src, define([]string{x}, converted(w.protoType(elementOf(ft), true), star(src))), assign(dst, addr(ident(x))))}
+				return []ast.Stmt{ifNotNil(src, define([]string{x}, w.scalar(elem, elementOf(ft), star(src))), assign(dst, addr(ident(x))))}
 			}
-			return []ast.Stmt{ifNotNil(src, assign(dst, w.encoded(elem, ft, star(src))))}
+			return []ast.Stmt{ifNotNil(src, assign(dst, w.scalar(elem, ft, star(src))))}
 		}
 		// A pointer to a time, a JSON value, a slice, an array or a map:
 		// what it points to encodes when there is anything.
@@ -459,7 +497,7 @@ func (w *fileWriter) toProto(dst, src ast.Expr, t types.Type, ft fieldType, inne
 	case "gorm.io/gorm.DeletedAt":
 		return []ast.Stmt{ifStmt(nil, sel(src, "Valid"), assign(dst, call(sel(w.out.imports.fixedRef(importPathTimestampPB), "New"), sel(src, "Time"))))}
 	case "encoding/json.Number":
-		return []ast.Stmt{assign(dst, call(ident("string"), src))}
+		return []ast.Stmt{assign(dst, call(w.grpc("UTF8"), call(ident("string"), src)))}
 	}
 	if n, ok := t.(*types.Named); ok {
 		if kind, builtin := jsonshape.BuiltinOf(n); builtin {
@@ -478,15 +516,9 @@ func (w *fileWriter) toProto(dst, src ast.Expr, t types.Type, ft fieldType, inne
 
 	switch u := t.Underlying().(type) {
 	case *types.Basic:
-		// A string is written through UTF8, a message carrying valid UTF-8
-		// alone where a JSON body replaces what is not.
-		value := w.encoded(t, ft, src)
-		if u.Info()&types.IsString != 0 {
-			value = call(w.grpc("UTF8"), value)
-		}
-		return []ast.Stmt{assign(dst, value)}
+		return []ast.Stmt{assign(dst, w.scalar(t, ft, src))}
 	case *types.Slice:
-		if ft.kind == descriptorpb.FieldDescriptorProto_TYPE_BYTES || assignable(t, ft, false) {
+		if ft.kind == descriptorpb.FieldDescriptorProto_TYPE_BYTES || (assignable(t, ft, false) && !utf8Guarded(u.Elem())) {
 			return []ast.Stmt{assign(dst, src)}
 		}
 		i, v := w.temp("i"), w.temp("v")
@@ -504,7 +536,7 @@ func (w *fileWriter) toProto(dst, src ast.Expr, t types.Type, ft fieldType, inne
 		if ft.typeName == wellKnownStruct {
 			return []ast.Stmt{assign(dst, call(w.grpc("Struct"), src))}
 		}
-		if assignable(t, ft, false) {
+		if assignable(t, ft, false) && !utf8Guarded(u.Key()) && !utf8Guarded(u.Elem()) {
 			return []ast.Stmt{assign(dst, src)}
 		}
 		k, v := w.temp("k"), w.temp("v")
@@ -548,6 +580,18 @@ func (w *fileWriter) encoded(t types.Type, ft fieldType, src ast.Expr) ast.Expr 
 		return src
 	}
 	return converted(w.protoType(ft, true), src)
+}
+
+// scalar returns src, a scalar Go value of type t, as a message field or
+// element of protobuf type ft holds it (see encoded), a string written
+// through grpc.UTF8: a message carries valid UTF-8 alone where a JSON body
+// replaces what is not.
+func (w *fileWriter) scalar(t types.Type, ft fieldType, src ast.Expr) ast.Expr {
+	value := w.encoded(t, ft, src)
+	if utf8Guarded(t) {
+		value = call(w.grpc("UTF8"), value)
+	}
+	return value
 }
 
 // elementOf is the protobuf type of one element of a repeated field.
@@ -707,6 +751,27 @@ func selPath(x ast.Expr, path []string) ast.Expr {
 //		return nil, err
 //	}
 //
+// the floats of an optional field and of a repeated one, each read through
+// grpc.Finite wherever it sits (see finiteGuarded), as
+//
+//	if p.Ratio != nil {
+//		var x float64
+//		x, err = grpc.Finite[float64]("ratio", *p.Ratio)
+//		if err != nil {
+//			return nil, err
+//		}
+//		m.Ratio = &x
+//	}
+//	if p.GetFactors() != nil {
+//		m.Factors = make([]float64, len(p.GetFactors()))
+//		for i, v := range p.GetFactors() {
+//			m.Factors[i], err = grpc.Finite[float64]("factors", v)
+//			if err != nil {
+//				return nil, err
+//			}
+//		}
+//	}
+//
 // then the pointer to an unnamed struct and the optional time as
 //
 //	if v := p.GetNote(); v != nil {
@@ -743,7 +808,7 @@ func (w *fileWriter) fromProto(dst, src ast.Expr, t types.Type, ft fieldType, na
 			// maps to when the types agree, otherwise a pointer to the
 			// decoded value, of the optional field when it is set, of the
 			// element or value the pointer is when it is one.
-			if ft.optional && assignable(t, ft, false) {
+			if ft.optional && assignable(t, ft, false) && !finiteGuarded(elem) {
 				return []ast.Stmt{assign(dst, src)}
 			}
 			x := w.temp("x")
@@ -827,7 +892,7 @@ func (w *fileWriter) fromProto(dst, src ast.Expr, t types.Type, ft fieldType, na
 		}
 		return []ast.Stmt{assign(dst, w.decoded(declared, ft, src))}
 	case *types.Slice:
-		if ft.kind == descriptorpb.FieldDescriptorProto_TYPE_BYTES || assignable(t, ft, false) {
+		if ft.kind == descriptorpb.FieldDescriptorProto_TYPE_BYTES || (assignable(t, ft, false) && !finiteGuarded(u.Elem())) {
 			return []ast.Stmt{assign(dst, src)}
 		}
 		i, v := w.temp("i"), w.temp("v")
@@ -843,7 +908,7 @@ func (w *fileWriter) fromProto(dst, src ast.Expr, t types.Type, ft fieldType, na
 		if ft.typeName == wellKnownStruct {
 			return []ast.Stmt{assign(dst, call(w.grpc("Map"), src))}
 		}
-		if assignable(t, ft, false) {
+		if assignable(t, ft, false) && !finiteGuarded(u.Elem()) {
 			return []ast.Stmt{assign(dst, src)}
 		}
 		k, v := w.temp("k"), w.temp("v")

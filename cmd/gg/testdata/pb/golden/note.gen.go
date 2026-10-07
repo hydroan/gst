@@ -58,7 +58,12 @@ func NoteToProto(m *model.Note) *Note {
 	p.CreatedAt = grpc.Timestamp(m.CreatedAt)
 	p.UpdatedAt = grpc.Timestamp(m.UpdatedAt)
 	p.Title = grpc.UTF8(m.Title)
-	p.Tags = m.Tags
+	if m.Tags != nil {
+		p.Tags = make([]string, len(m.Tags))
+		for i, v := range m.Tags {
+			p.Tags[i] = grpc.UTF8(v)
+		}
+	}
 	return p
 }
 

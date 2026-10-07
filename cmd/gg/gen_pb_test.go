@@ -1609,6 +1609,12 @@ type Shape struct {
 	// Owners is a map of pointers to structs, whose nil values travel as
 	// empty messages.
 	Owners map[string]*ShapeOwner 'json:"owners,omitempty" pb:"52" gorm:"-"'
+	// Ratio, Factors and Costs hold floats in an optional field, a repeated
+	// field and a map, each read back through grpc.Finite, which refuses
+	// NaN and the infinities.
+	Ratio   *float64           'json:"ratio,omitempty" pb:"53" gorm:"-"'
+	Factors []float64          'json:"factors,omitempty" pb:"54" gorm:"-"'
+	Costs   map[string]float64 'json:"costs,omitempty" pb:"55" gorm:"-"'
 	// Name shadows the Name of the embedded ShapeMeta, which keeps its own
 	// key and is selected by its path.
 	Name string 'json:"name" pb:"41"'
@@ -1775,6 +1781,7 @@ func TestShapeRoundTrips(t *testing.T) {
 	day := time.Date(2026, 9, 26, 0, 0, 0, 0, time.UTC)
 	when := day.Add(time.Hour)
 	score := 7
+	ratio := 0.5
 	price := json.Number("1.5")
 	rawDoc := json.RawMessage('{"b":1}')
 	extra := datatypes.JSON('{"c":2}')
@@ -1817,6 +1824,9 @@ func TestShapeRoundTrips(t *testing.T) {
 		Price:   &price,
 		Stamps:  []time.Time{{}, day},
 		Owners:  map[string]*model.ShapeOwner{"o": {Name: "o"}},
+		Ratio:   &ratio,
+		Factors: []float64{1.5, 2},
+		Costs:   map[string]float64{"c": 0.25},
 	}
 	in.Window = struct {
 		Width int32 'json:"width" pb:"1"'
@@ -1853,6 +1863,9 @@ func TestShapeRoundTrips(t *testing.T) {
 	require.Equal(t, "outer", msg.GetName())
 	require.Equal(t, "inner", msg.GetMetaName())
 	require.Equal(t, int32(3), msg.GetFrame().GetWidth(), "frame is the named type Window")
+	require.Equal(t, 0.5, msg.GetRatio())
+	require.Equal(t, []float64{1.5, 2}, msg.GetFactors())
+	require.Equal(t, 0.25, msg.GetCosts()["c"])
 	require.Equal(t, int32(4), msg.GetWindow().GetWidth(), "window is the message of the unnamed struct")
 	require.Equal(t, int32(-3), msg.GetRank())
 	require.Equal(t, uint32(65000), msg.GetPort())
@@ -1945,6 +1958,46 @@ func TestPinRoundTrips(t *testing.T) {
 	out, err := pb.PinFromProto(msg)
 	require.NoError(t, err)
 	require.Equal(t, in, out)
+}
+
+func TestConversionsGuardContainerElements(t *testing.T) {
+	// A string element or map key with bytes that are no UTF-8 is written
+	// through grpc.UTF8 like a string field, so the message marshals and the
+	// bytes come out as U+FFFD.
+	bad := "a\xffb"
+	summary := bad
+	record := pb.RecordToProto(&model.Record{Summary: &summary, Tags: []string{bad}, Labels: map[string]string{bad: bad}})
+	_, err := proto.Marshal(record)
+	require.NoError(t, err)
+	require.Equal(t, "a\uFFFDb", record.GetSummary())
+	require.Equal(t, []string{"a\uFFFDb"}, record.GetTags())
+	require.Equal(t, map[string]string{"a\uFFFDb": "a\uFFFDb"}, record.GetLabels())
+	aliases := []string{bad}
+	weights := map[string]int32{bad: 1}
+	shape := pb.ShapeToProto(&model.Shape{Names: model.ShapeNames{bad}, Words: datatypes.JSONSlice[string]{bad}, Aliases: &aliases, Weights: &weights})
+	_, err = proto.Marshal(shape)
+	require.NoError(t, err)
+	require.Equal(t, []string{"a\uFFFDb"}, shape.GetNames())
+	require.Equal(t, []string{"a\uFFFDb"}, shape.GetWords())
+	require.Equal(t, []string{"a\uFFFDb"}, shape.GetAliases())
+	require.Equal(t, int32(1), shape.GetWeights()["a\uFFFDb"])
+
+	// A float in an optional field, a repeated field or a map is read
+	// through grpc.Finite like a float field, so NaN is refused naming the
+	// field.
+	nan := math.NaN()
+	for _, tt := range []struct {
+		field string
+		msg   *pb.Shape
+	}{
+		{"ratio", &pb.Shape{Ratio: &nan}},
+		{"factors", &pb.Shape{Factors: []float64{1, nan}}},
+		{"costs", &pb.Shape{Costs: map[string]float64{"c": nan}}},
+	} {
+		_, err := pb.ShapeFromProto(tt.msg)
+		require.Equal(t, codes.InvalidArgument, status.Code(err), tt.field)
+		require.Equal(t, "invalid value for field \x27"+tt.field+"\x27", status.Convert(err).Message(), tt.field)
+	}
 }
 `
 

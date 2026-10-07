@@ -230,9 +230,22 @@ func RecordToProto(m *model.Record) *Record {
 	p.UpdatedAt = grpc.Timestamp(m.UpdatedAt)
 	p.Title = grpc.UTF8(m.Title)
 	p.Status = grpc.UTF8(string(m.Status))
-	p.Summary = m.Summary
-	p.Tags = m.Tags
-	p.Labels = m.Labels
+	if m.Summary != nil {
+		x := grpc.UTF8(*m.Summary)
+		p.Summary = &x
+	}
+	if m.Tags != nil {
+		p.Tags = make([]string, len(m.Tags))
+		for i, v := range m.Tags {
+			p.Tags[i] = grpc.UTF8(v)
+		}
+	}
+	if m.Labels != nil {
+		p.Labels = make(map[string]string, len(m.Labels))
+		for k, v := range m.Labels {
+			p.Labels[grpc.UTF8(k)] = grpc.UTF8(v)
+		}
+	}
 	p.Count = int64(m.Count)
 	p.Ratio = m.Ratio
 	p.Enabled = m.Enabled
