@@ -252,7 +252,11 @@ func (r *Role) DeleteAfter(ctx context.Context) error {
 		// writes one: a binding's own CreateBefore refuses a role belonging to
 		// another tenant. Such a row is written around the framework, and the
 		// drift report is what surfaces it.
-		if err := database.Database[*RoleBinding](ctx).WithoutHook().Delete(roleBindings...); err != nil {
+		//
+		// A binding another request removed since the listing is gone
+		// already, which is what this delete wants, so missing ones are
+		// allowed.
+		if err := database.Database[*RoleBinding](ctx).WithAllowMissing().WithoutHook().Delete(roleBindings...); err != nil {
 			return err
 		}
 	}
