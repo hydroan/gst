@@ -376,3 +376,60 @@ func newSchemaDB(t *testing.T) *gorm.DB {
 	require.NoError(t, err)
 	return db
 }
+
+// UnsizedIndexSample indexes a string field that declares no size, which
+// gorm's MySQL dialect stores as longtext.
+type UnsizedIndexSample struct {
+	Owner string `json:"owner"`
+
+	modelregistry.Base
+}
+
+func (*UnsizedIndexSample) TableName() string { return "unsized_index_samples" }
+
+func (*UnsizedIndexSample) Indexes() []modelregistry.Index {
+	return []modelregistry.Index{{Fields: []string{"Owner"}}}
+}
+
+// SizedIndexSample indexes the same field with a size, a varchar on MySQL.
+type SizedIndexSample struct {
+	Owner string `json:"owner" gorm:"size:36"`
+
+	modelregistry.Base
+}
+
+func (*SizedIndexSample) TableName() string { return "sized_index_samples" }
+
+func (*SizedIndexSample) Indexes() []modelregistry.Index {
+	return []modelregistry.Index{{Fields: []string{"Owner"}}}
+}
+
+// TestParseIndexPlansRefusesAColumnMySQLCannotIndex pins the column rule of
+// the MySQL dialect: a string field without a size is a longtext column,
+// which MySQL cannot index without a key length, so the declaration is
+// refused with the fix before any DDL runs; the sized field passes, and
+// PostgreSQL, which indexes text columns, is not held to the rule.
+func TestParseIndexPlansRefusesAColumnMySQLCannotIndex(t *testing.T) {
+	mysqlDB := newMySQLSchemaDB(t)
+	_, err := modelregistry.ParseIndexPlans(mysqlDB, &UnsizedIndexSample{})
+	require.ErrorContains(t, err, `model UnsizedIndexSample: index field Owner is a longtext column, which MySQL cannot index without a key length; give it a size (gorm:"size:191") or a bounded type`)
+
+	plans, err := modelregistry.ParseIndexPlans(mysqlDB, &SizedIndexSample{})
+	require.NoError(t, err)
+	require.Len(t, plans, 1)
+
+	postgres, err := gorm.Open(postgresDialector{}, &gorm.Config{DryRun: true})
+	require.NoError(t, err)
+	_, err = modelregistry.ParseIndexPlans(postgres, &UnsizedIndexSample{})
+	require.NoError(t, err)
+}
+
+// newMySQLSchemaDB opens a dry-run handle on the MySQL dialect without a
+// server, for the column types the dialect gives.
+func newMySQLSchemaDB(t *testing.T) *gorm.DB {
+	t.Helper()
+
+	db, err := gorm.Open(mysql.New(mysql.Config{DSN: "/", SkipInitializeWithVersion: true}), &gorm.Config{DryRun: true, DisableAutomaticPing: true})
+	require.NoError(t, err)
+	return db
+}

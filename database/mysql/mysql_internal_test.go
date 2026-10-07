@@ -1,11 +1,13 @@
 package mysql
 
 import (
+	"sync"
 	"testing"
 	"time"
 
 	"github.com/hydroan/gst/config"
 	"github.com/stretchr/testify/require"
+	gormschema "gorm.io/gorm/schema"
 )
 
 func TestBuildDSN(t *testing.T) {
@@ -36,4 +38,21 @@ func TestBuildDSN(t *testing.T) {
 		cfg.WriteTimeout = time.Minute
 		require.Equal(t, prefix+"&timeout=5s&readTimeout=30s&writeTimeout=1m0s", buildDSN(cfg))
 	})
+}
+
+// TestDryRunAnswersColumnTypesWithoutAServer pins what DryRun is for: a
+// handle on the MySQL dialect that never connects and still answers the
+// column type a field gets, longtext for a string field without a size.
+func TestDryRunAnswersColumnTypesWithoutAServer(t *testing.T) {
+	db, err := DryRun()
+	require.NoError(t, err)
+	require.True(t, db.DryRun)
+	require.Equal(t, "mysql", db.Dialector.Name())
+
+	type sample struct {
+		Owner string
+	}
+	parsed, err := gormschema.Parse(&sample{}, &sync.Map{}, db.NamingStrategy)
+	require.NoError(t, err)
+	require.Equal(t, "longtext", db.Migrator().FullDataTypeOf(parsed.FieldsByName["Owner"]).SQL)
 }

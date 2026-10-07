@@ -25,6 +25,20 @@ type plainRecord struct {
 
 func (*plainRecord) TableName() string { return "plain_records" }
 
+// unsizedOwnerRecord indexes a string field without a size, a longtext
+// column on MySQL.
+type unsizedOwnerRecord struct {
+	Owner string
+
+	modelregistry.Base
+}
+
+func (*unsizedOwnerRecord) TableName() string { return "unsized_owner_records" }
+
+func (*unsizedOwnerRecord) Indexes() []modelregistry.Index {
+	return []modelregistry.Index{{Fields: []string{"Owner"}}}
+}
+
 func TestEnsureTableCreatesTableWhenAutoMigrateEnabled(t *testing.T) {
 	db := newSQLiteDB(t)
 	withAutoMigrate(t, true)
@@ -188,6 +202,21 @@ func TestMigrateTableCreatesMySQLTablesLikeTheMigrationDoes(t *testing.T) {
 		"SELECT table_collation FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = ?",
 		"race_records").Scan(&collation).Error)
 	require.Equal(t, "utf8mb4_bin", collation, "a table created at startup carries the collation gg migrate writes")
+}
+
+// TestEnsureTableRefusesAnUnindexableColumnBeforeCreatingTheTable pins where
+// the index declarations are validated: before the table is created, so a
+// declaration MySQL cannot honor leaves no half-prepared table behind, and
+// the start fails with the fix instead of MySQL's own error.
+func TestEnsureTableRefusesAnUnindexableColumnBeforeCreatingTheTable(t *testing.T) {
+	withAutoMigrate(t, true)
+	withFastStartupLock(t)
+
+	handle := newMySQLDB(t)
+	require.NoError(t, handle.Migrator().DropTable(&unsizedOwnerRecord{}))
+	err := ensureTable(handle, &unsizedOwnerRecord{})
+	require.ErrorContains(t, err, `index field Owner is a longtext column`)
+	require.False(t, handle.Migrator().HasTable(&unsizedOwnerRecord{}))
 }
 
 // TestMigrateTableLeavesTheIndexesAlone proves a process starting against a

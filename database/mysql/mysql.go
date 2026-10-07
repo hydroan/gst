@@ -11,6 +11,7 @@ import (
 	"go.uber.org/zap"
 	"gorm.io/driver/mysql"
 	"gorm.io/gorm"
+	gormlogger "gorm.io/gorm/logger"
 )
 
 var Default *gorm.DB
@@ -60,6 +61,28 @@ func New(cfg config.MySQL) (*gorm.DB, error) {
 	dbruntime.ConfigurePool(pool)
 	dbruntime.InstallTracing(db)
 	return attachReplicas(db, cfg)
+}
+
+// dryRunDSN is the shortest DSN the driver parses; the dry-run handle never
+// dials it.
+const dryRunDSN = "/"
+
+// DryRun returns a handle on the MySQL dialect that never connects: gorm's
+// dry-run mode builds statements without running them, the version query of
+// the dialect's initialization is skipped and no ping is made. It answers
+// schema questions where no server is at hand, above all the column type a
+// field gets on MySQL: the column inspection gg builds into a project
+// validates the models' index declarations against it (see
+// model.ValidateIndexes), which is how gg check refuses a declaration MySQL
+// cannot honor without a database. The handle logs nothing, since it runs
+// nothing.
+func DryRun() (*gorm.DB, error) {
+	db, err := gorm.Open(mysql.New(mysql.Config{DSN: dryRunDSN, SkipInitializeWithVersion: true}),
+		&gorm.Config{DryRun: true, DisableAutomaticPing: true, Logger: gormlogger.Discard})
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to open the mysql dry-run handle")
+	}
+	return db, nil
 }
 
 // attachReplicas wires the configured read replicas into the handle and pins

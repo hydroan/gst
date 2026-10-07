@@ -146,6 +146,12 @@ func requireTableName(m types.Model) (string, error) {
 func migrateTable(handler *gorm.DB, m types.Model, tableName string) error {
 	return serialized(context.Background(), handler, "migrate", func() error {
 		migrate := func() error {
+			// The index declarations are validated before the table exists, so
+			// a declaration the database cannot honor fails the start with the
+			// fix instead of leaving a half-prepared table behind.
+			if _, err := modelregistry.ParseIndexPlans(handler, m); err != nil {
+				return err
+			}
 			if err := automigrating(handler).AutoMigrate(m); err != nil {
 				return err
 			}

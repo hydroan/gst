@@ -3,6 +3,7 @@ package model
 import (
 	"github.com/hydroan/gst/internal/modelregistry"
 	"github.com/hydroan/gst/internal/types"
+	"gorm.io/gorm"
 )
 
 var (
@@ -60,6 +61,18 @@ type (
 // is "gg gen" and "gg migrate", not anything in this repository.
 func RegisteredModels() []any {
 	return modelregistry.RegisteredModels()
+}
+
+// ValidateIndexes refuses in model's Indexes() declarations what the
+// framework refuses at startup and in gg migrate under the dialect of db: an
+// unknown field, a repeated column, a duplicate of a struct tag index, and on
+// MySQL a column the database cannot index, such as the longtext a string
+// field without a size becomes. Like RegisteredModels it exists for the
+// program templates gg writes into a business project: the column inspection
+// asks it against a MySQL handle that never connects (see mysql.DryRun), which
+// is how gg check refuses such a declaration without a database.
+func ValidateIndexes(db *gorm.DB, model any) error {
+	return modelregistry.ValidateIndexes(db, model)
 }
 
 // Register registers a database-backed model for table setup.
