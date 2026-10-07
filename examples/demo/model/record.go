@@ -26,7 +26,7 @@ type Record struct {
 	Type  RecordType `json:"type" query:"type"`
 	Title string     `json:"title" query:"title"`
 	// UserID is the owner, taken from the session when the record is created.
-	UserID string `json:"user_id" query:"user_id"`
+	UserID string `json:"user_id" query:"user_id" gorm:"size:36;not null"`
 	// Username is the owner's name, filled in for the client; not a column.
 	Username string `json:"username,omitempty" gorm:"-"`
 
