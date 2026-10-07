@@ -151,7 +151,8 @@ const strictSQLMode = "CONCAT(@@sql_mode,%27,STRICT_TRANS_TABLES%27)"
 // loc=UTC makes the driver store and read DATETIME values as UTC wall-clock
 // time, which is the framework's one time base across dialects: the postgres
 // DSN pins the session time zone its timestamptz values are read in to UTC,
-// and sqlite time text is read in UTC by its date functions. A local loc
+// and the sqlite driver binds and reads every time in UTC (see that
+// package's utcConn). A local loc
 // would make the same instant a different stored wall clock per dialect (and
 // per server timezone), which is what breaks time bucket labels, boundary
 // comparisons, and URL time filters.

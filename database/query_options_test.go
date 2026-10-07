@@ -1609,3 +1609,30 @@ func TestDatabaseWithDeleted(t *testing.T) {
 		require.NotContains(t, withDeletedStmts[0].RenderedSQL, "deleted_at", "WithDeleted lifts the soft-delete condition from the built SQL")
 	})
 }
+
+// TestOrderByATimeColumnFollowsTheInstantWhateverOffsetWasWritten pins the
+// one time base across dialects on the rows themselves: two instants written
+// with different offsets, one in UTC and one as the next day's midnight in
+// UTC+8, come back in the order of the instants and as the instants, on every
+// dialect. SQLite stores a time as text and sorts the text, so it holds this
+// only when every time is stored in one zone.
+func TestOrderByATimeColumnFollowsTheInstantWhateverOffsetWasWritten(t *testing.T) {
+	ctx := context.Background()
+	later := &TestCursorSnapshot{Label: "offset-later", SnapshotAt: time.Date(2024, 3, 1, 20, 0, 0, 0, time.UTC)}
+	later.ID = "offset-later"
+	earlier := &TestCursorSnapshot{Label: "offset-earlier", SnapshotAt: time.Date(2024, 3, 2, 0, 0, 0, 0, time.FixedZone("UTC+8", 8*60*60))}
+	earlier.ID = "offset-earlier"
+	require.NoError(t, database.Database[*TestCursorSnapshot](ctx).Create(later, earlier))
+	defer func() {
+		require.NoError(t, database.Database[*TestCursorSnapshot](ctx).WithPurge().Delete(later, earlier))
+	}()
+
+	rows := make([]*TestCursorSnapshot, 0)
+	require.NoError(t, database.Database[*TestCursorSnapshot](ctx).
+		WithQuery(nil, types.QueryOptions{AllowEmpty: true, Filters: []types.Filter{types.FilterStartsWith("label", "offset-")}}).
+		WithOrder(types.Asc("snapshot_at")).
+		List(&rows))
+	require.Len(t, rows, 2)
+	require.Equal(t, []string{"offset-earlier", "offset-later"}, []string{rows[0].Label, rows[1].Label}, "rows sort by instant, not by the clock their writer kept")
+	require.True(t, rows[0].SnapshotAt.Equal(earlier.SnapshotAt), "the instant reads back whatever offset it was written with")
+}
