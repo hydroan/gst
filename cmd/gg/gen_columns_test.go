@@ -13,10 +13,13 @@ import (
 // TestGenRunGeneratesColumnsReadByHandwrittenModelCode runs gg gen against a
 // project whose handwritten model code reads generated column references: a
 // hook, package-level vars read by an init function and by other functions,
-// and a hook of another model package. The inspection build compiles that
-// code before the run writes the references, first with no column file at all
-// and then with the previous generation stubbed out; the references the run
-// writes must then satisfy the same code in the project's own build.
+// the time buckets of a date column and of an optional instant, and a hook
+// of another model package. The inspection build compiles that code before
+// the run writes the references, first with no column file at all and then
+// with the previous generation stubbed out; the references the run writes
+// must then satisfy the same code in the project's own build, which is what
+// pins the date column to the time reference: a plain reference has no
+// bucket to read.
 func TestGenRunGeneratesColumnsReadByHandwrittenModelCode(t *testing.T) {
 	projectDir, ok := newGenProject(t)
 	if !ok {
@@ -26,15 +29,19 @@ func TestGenRunGeneratesColumnsReadByHandwrittenModelCode(t *testing.T) {
 
 import (
 	"context"
+	"time"
 
 	"github.com/hydroan/gst/database"
 	"github.com/hydroan/gst/dsl"
 	"github.com/hydroan/gst/model"
+	"gorm.io/datatypes"
 )
 
 type Record struct {
-	Status string `+"`json:\"status\"`"+`
-	Score  int64  `+"`json:\"score\"`"+`
+	Status   string         `+"`json:\"status\"`"+`
+	Score    int64          `+"`json:\"score\"`"+`
+	Day      datatypes.Date `+"`json:\"day\"`"+`
+	ClosedAt *time.Time     `+"`json:\"closed_at\"`"+`
 
 	model.Base
 }
@@ -65,6 +72,9 @@ var (
 
 var sortableColumns = []gst.AnyColumnRef{statusColumn, RecordCols.Score}
 
+// The date column and the optional instant are time references: they bucket.
+var reportKeys = []gst.Term{RecordCols.Day.ByDay(), RecordCols.ClosedAt.ByMonth()}
+
 func init() {
 	if strings.TrimSpace(statusColumn.Name()) == "" {
 		panic("status column has no name")
@@ -77,6 +87,10 @@ func statusFilter() gst.Filter {
 
 func sortColumns() []gst.AnyColumnRef {
 	return sortableColumns
+}
+
+func reportKeyCount() int {
+	return len(reportKeys)
 }
 `)
 	writeProjectFile(t, filepath.Join(projectDir, "model", "item", "item.go"), `package item
@@ -119,6 +133,9 @@ func (i *Item) DeleteBefore(ctx context.Context) error {
 	recordColumns, err := os.ReadFile(recordColumnsFile)
 	require.NoError(t, err)
 	require.Contains(t, string(recordColumns), "var RecordCols = struct")
+	require.Contains(t, string(recordColumns), `gst.NewTimeColumn[*Record]("day")`, "a date column gets the time reference")
+	require.Contains(t, string(recordColumns), `gst.NewTimeColumn[*Record]("closed_at")`, "an optional instant gets the time reference")
+	require.NotContains(t, string(recordColumns), "gorm.io/datatypes", "a time reference carries no type argument, so the column type is not imported")
 	itemColumns, err := os.ReadFile(itemColumnsFile)
 	require.NoError(t, err)
 	require.Contains(t, string(itemColumns), "var ItemCols = struct")
