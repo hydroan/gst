@@ -23,6 +23,14 @@ type patchFieldsRecord struct {
 	Enabled bool   `json:"enabled"`
 }
 
+// patchFieldsCasedRecord encodes two fields to keys differing only in case,
+// the pair encoding/json tells apart by an exact key and otherwise binds to
+// the first in declaration order.
+type patchFieldsCasedRecord struct {
+	Lower string `json:"name"`
+	Upper string `json:"Name"`
+}
+
 // patchFieldsKeyedRecord declares its primary key itself, the way a model
 // shadowing model.Base.ID does.
 type patchFieldsKeyedRecord struct {
@@ -310,6 +318,29 @@ func TestPatchFieldSetFromJSONBodyUsesJSONTags(t *testing.T) {
 	require.Contains(t, fields, "Enabled")
 	require.Contains(t, fields, "Count")
 	require.NotContains(t, fields, "Name")
+}
+
+// TestPatchFieldSetFromJSONBodyMatchesKeysLikeTheDecoder pins that a key
+// names its field the way encoding/json binds the value under it: the field
+// encoding to the key, else the first field in declaration order whose key
+// differs from it only in case, so the field the decoder bound is the field
+// the patch applies.
+func TestPatchFieldSetFromJSONBodyMatchesKeysLikeTheDecoder(t *testing.T) {
+	fields, err := patchFieldSetFromJSONBody(reflect.TypeFor[patchFieldsRecord](), []byte(`{"Enabled":false,"COUNT":0}`))
+	require.NoError(t, err)
+	require.Equal(t, patchFieldSet{"Enabled": {}, "Count": {}}, fields)
+
+	cased := reflect.TypeFor[patchFieldsCasedRecord]()
+	fields, err = patchFieldSetFromJSONBody(cased, []byte(`{"Name":"x"}`))
+	require.NoError(t, err)
+	require.Equal(t, patchFieldSet{"Upper": {}}, fields, "an exact key wins")
+
+	var bound patchFieldsCasedRecord
+	require.NoError(t, json.Unmarshal([]byte(`{"NAME":"x"}`), &bound))
+	require.Equal(t, patchFieldsCasedRecord{Lower: "x"}, bound, "encoding/json binds the first field in declaration order")
+	fields, err = patchFieldSetFromJSONBody(cased, []byte(`{"NAME":"x"}`))
+	require.NoError(t, err)
+	require.Equal(t, patchFieldSet{"Lower": {}}, fields, "the patch applies the field the decoder bound")
 }
 
 // TestPatchFieldSetFromJSONBodyWrapsDecodeError pins that patch-path body

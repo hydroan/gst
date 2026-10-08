@@ -44,6 +44,22 @@ type patchFieldTable struct {
 	managed map[string]struct{}
 }
 
+// lookup returns the field a JSON key names, the way encoding/json binds the
+// value under the key: the field encoding to the key, else the first field
+// in declaration order whose key differs from it only in case, so the field
+// the decoder bound is the field the patch applies.
+func (t *patchFieldTable) lookup(key string) (*patchField, bool) {
+	if field, ok := t.byKey[key]; ok {
+		return field, true
+	}
+	for _, field := range t.fields {
+		if strings.EqualFold(field.key, key) {
+			return field, true
+		}
+	}
+	return nil, false
+}
+
 // patchFieldSet is the set of fields a patch applies, keyed by the Go path
 // of each (see patchField).
 type patchFieldSet map[string]struct{}
@@ -350,8 +366,9 @@ func patchManyFieldSetsFromJSONBody(typ reflect.Type, body []byte) ([]patchField
 }
 
 // patchFieldSetFromJSONFields returns the fields of typ the keys of fields
-// name; a key no field encodes to names nothing and is left out, the way the
-// JSON decoder ignores an unknown key.
+// name, each key read the way the JSON decoder reads it (see lookup); a key
+// no field encodes to names nothing and is left out, the way the decoder
+// ignores an unknown key.
 func patchFieldSetFromJSONFields(typ reflect.Type, fields map[string]json.RawMessage) patchFieldSet {
 	if len(fields) == 0 {
 		return patchFieldSet{}
@@ -359,7 +376,7 @@ func patchFieldSetFromJSONFields(typ reflect.Type, fields map[string]json.RawMes
 	table := patchFieldsOf(typ)
 	fieldSet := make(patchFieldSet, len(fields))
 	for key := range fields {
-		if field, ok := table.byKey[key]; ok {
+		if field, ok := table.lookup(key); ok {
 			fieldSet[field.name] = struct{}{}
 		}
 	}
