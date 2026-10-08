@@ -27,9 +27,9 @@ func TestOperationIDDerivesFromPath(t *testing.T) {
 }
 
 func TestTagsSkipPathParameters(t *testing.T) {
-	got := tags("/api/{tenant}/groups", consts.List, reflect.TypeFor[*summarySentenceModel]())
-	if len(got) != 1 || got[0] != "groups" {
-		t.Fatalf("tags() = %v, want [groups]", got)
+	got := tags("/api/{tenant}/records", consts.List, reflect.TypeFor[*summarySentenceModel]())
+	if len(got) != 1 || got[0] != "records" {
+		t.Fatalf("tags() = %v, want [records]", got)
 	}
 }
 
