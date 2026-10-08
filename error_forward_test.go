@@ -22,7 +22,7 @@ func TestNewErrorStackTraceStartsAtPublicConstructionSite(t *testing.T) {
 	lines := strings.Split(stackTrace, "\n")
 	require.GreaterOrEqual(t, len(lines), 2)
 	require.Contains(t, lines[0], "newSamplePublicStackError")
-	require.Contains(t, lines[1], "error_test.go")
+	require.Contains(t, lines[1], "error_forward_test.go")
 }
 
 func TestNewErrorWithCauseStackTraceStartsAtPublicConstructionSite(t *testing.T) {
@@ -36,7 +36,7 @@ func TestNewErrorWithCauseStackTraceStartsAtPublicConstructionSite(t *testing.T)
 	lines := strings.Split(stackTrace, "\n")
 	require.GreaterOrEqual(t, len(lines), 2)
 	require.Contains(t, lines[0], "newSamplePublicStackErrorWithPlainCause")
-	require.Contains(t, lines[1], "error_test.go")
+	require.Contains(t, lines[1], "error_forward_test.go")
 }
 
 // newSamplePublicStackError constructs a request error through the public
