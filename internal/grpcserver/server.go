@@ -65,9 +65,9 @@ var (
 // services of the models declaring GRPC(): fn gets the server as a
 // grpc.ServiceRegistrar and calls the RegisterXxxServiceServer function the
 // protobuf plugin generated, and described describes the service's rpcs (see
-// Method): which are public and what the same actions are over HTTP. It runs at package initialization,
-// before bootstrap starts the listeners; registering once the server runs
-// would serve nothing, so it panics.
+// Method): which are public and what the same actions are over HTTP. It runs
+// at package initialization, before bootstrap starts the listeners;
+// registering once the server runs would serve nothing, so it panics.
 func Register(fn func(grpc.ServiceRegistrar), described ...Method) {
 	mu.Lock()
 	defer mu.Unlock()

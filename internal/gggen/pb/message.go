@@ -526,9 +526,10 @@ func firstFieldNumber(base bool) int32 {
 // `json:"spaced" pb: "21"`, and false for a tag it reads to the end. Lookup
 // scans the pairs in order the way this function does and stops at the
 // first it cannot read, so every key written after that point is lost, the
-// pb tag among them: a field whose tag has gone unreadable is reported
-// rather than numbered as one without a tag, which would add a pb tag beside
-// the unreadable one on every run.
+// pb tag among them, and reflect gives no way to tell where it stopped, so
+// the pairs are scanned here: a field whose tag has gone unreadable is
+// reported rather than numbered as one without a tag, which would add a pb
+// tag beside the unreadable one on every run.
 func malformedTag(tag string) (string, bool) {
 	for tag != "" {
 		i := 0
