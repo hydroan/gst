@@ -102,7 +102,7 @@ func ServiceTarget(m *Model, action *dsl.Action, modelDir, serviceDir string) Se
 	return ServiceTargetInfo{
 		Dir:         dir,
 		FilePath:    filepath.Join(dir, action.ServiceFilename()),
-		ImportPath:  filepath.Join(m.ModulePath, serviceDir, rel),
+		ImportPath:  PackageImportPath(m.ModulePath, dir),
 		PackageName: packageName,
 	}
 }
