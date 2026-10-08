@@ -120,7 +120,7 @@ func PatchManyCall[M types.Model](route string) func(ctx context.Context, params
 		}
 		for i, item := range items {
 			if reflect.ValueOf(item).IsNil() {
-				return nil, c.invalid(errors.Newf("item %d carries no record", i))
+				return nil, c.invalid(errors.Newf("items[%d] carries no record", i))
 			}
 		}
 		req := batch[M]{Items: items}
@@ -132,7 +132,7 @@ func PatchManyCall[M types.Model](route string) func(ctx context.Context, params
 		for i, itemPaths := range paths {
 			fields, maskErr := maskFieldSet(a.typ, itemPaths)
 			if maskErr != nil {
-				return nil, c.invalid(errors.Wrapf(maskErr, "item %d", i))
+				return nil, c.invalid(errors.Wrapf(maskErr, "items[%d]", i))
 			}
 			fieldSets[i] = fields
 		}
@@ -181,12 +181,13 @@ func (a *action[M, REQ, RSP]) patchManyFlow(ctx context.Context, newServiceConte
 		return zero, failWith(ctx, log, "batch patch naming a record twice", err, invalidArgument(err))
 	}
 	// An item without an id names no record: a defective request, refused
-	// before any record is read. Setting an empty id on a UUID-keyed model
-	// would mint a fresh one instead.
+	// before any record is read with the sentence PatchItem refuses it with
+	// for the generated handler (see itemWithoutID). Setting an empty id on
+	// a UUID-keyed model would mint a fresh one instead.
 	for i, m := range req.Items {
 		if len(m.GetID()) == 0 {
 			err := errors.Wrapf(database.ErrIDRequired, "patch many %s item %d", a.name, i)
-			return zero, failWith(ctx, log, "batch patch item without its id", err, databaseError(err))
+			return zero, failWith(ctx, log, "batch patch item without its id", err, itemWithoutID(i))
 		}
 	}
 	// One statement reads the records of the batch, pinned to the primary:

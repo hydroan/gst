@@ -166,7 +166,7 @@ HTTP 状态到 gRPC status 的映射（`grpcserver.StatusError`）：
 - 400 → InvalidArgument；401 → Unauthenticated；403 → PermissionDenied；404 → NotFound；408、504 → DeadlineExceeded。
 - 409 → AlreadyExists，其中乐观锁冲突（错误链里带 `database.ErrStaleObject`）→ Aborted，外键不满足（带 `database.ErrForeignKeyViolated`，指向不存在或还被引用的记录）→ FailedPrecondition；412 → FailedPrecondition；429 → ResourceExhausted；501 → Unimplemented；503 → Unavailable。
 - 其他 5xx → Internal；其他 4xx → InvalidArgument；数据库未知错误与钩子里的非 gst.Error → Internal，和 HTTP 的 500 同一句文案；请求消息校验失败 → InvalidArgument，message 是点名字段的句子（`name is a required field`，多个字段用分号连，字段用 JSON 名路径，批量项带 `items[1].`），并附 `google.rpc.BadRequest` 明细逐字段列出，HTTP 的 `msg` 是同一句；panic 经 recovery → Internal。
-- 请求消息里 HTTP 收不进来的值由生成的 FromProto 当场拒绝，答 InvalidArgument「invalid value for field 'rank'」并附 `google.rpc.BadRequest` 明细：窄整数越界（`grpc.Narrow`）、不是 JSON 数字的字符串与可选字段显式给的空串（`grpc.Number`）、Timestamp 超出公元 1 到 9999 年（`grpc.Time`）、不是合法 JSON 的文档字节（`grpc.Document`）、NaN 与无穷（`grpc.Finite`，可选指针、切片元素与 map 的值同样逐个经过），map 的窄整数键同样经 Narrow。反方向生成的 ToProto 把字符串里的非法 UTF-8 逐字节换成 U+FFFD（`grpc.UTF8`，可选指针、切片元素与 map 的键值同样逐个经过），和 encoding/json 写出的一样，不让一条记录拖垮整页响应。
+- 请求消息里 HTTP 收不进来的值由生成的 FromProto 当场拒绝，答 InvalidArgument「invalid value for field 'rank'」并附 `google.rpc.BadRequest` 明细：窄整数越界（`grpc.Narrow`）、不是 JSON 数字的字符串与可选字段显式给的空串（`grpc.Number`）、Timestamp 超出公元 1 到 9999 年（`grpc.Time`）、不是合法 JSON 的文档字节（`grpc.Document`）、NaN 与无穷（`grpc.Finite`，可选指针、切片元素与 map 的值同样逐个经过），map 的窄整数键同样经 Narrow；批量请求的项由生成的批量 handler 经 `grpc.ItemError` 点名，答「invalid value for field 'items[1].rank'」、明细里的字段同样带项，和校验失败、HTTP 解码失败的写法一致。反方向生成的 ToProto 把字符串里的非法 UTF-8 逐字节换成 U+FFFD（`grpc.UTF8`，可选指针、切片元素与 map 的键值同样逐个经过），和 encoding/json 写出的一样，不让一条记录拖垮整页响应。
 - 客户端已取消或超时的调用答 Canceled / DeadlineExceeded；自定义动作与流不记错误日志，标准 CRUD 流程在判定取消之前已按服务端失败记了一条 Error。
 - 路由参数来自请求消息开头的字段：留空或含 `/` 的值答 InvalidArgument（`route parameter "parent" is required`、`route parameter "parent" must not contain "/"`），HTTP 上一个参数只对应路径的一段，这两种值它永远送不进来。
 
@@ -283,8 +283,9 @@ call --> client : OK，或映射后的 status；取消答 Canceled，停机答 U
 | rpc 名单数、批量用 Many | AIP-132 要 `ListRecords` 复数，AIP-231/233/234/235 批量要 `Batch` 前缀 | rpc 名 = DSL 动作名 + 模型名（`ListRecord`、`CreateManyRecord`），和 HTTP 路由用同一套动作名，一个动作在两条线上一个名字 |
 | 列表响应与分页 | AIP-132/158 要 `<resources>` 复数字段、不透明的 `next_page_token`、`total_size` | 响应是 `items` 加 `total`，请求按模型嵌入的 Query、Pagination、Cursor 带 `page`、`size`、`cursor_*`，和 HTTP 契约同形，走同一个 urlquery 解析 |
 | 过滤 | AIP-160 是一段字符串表达式 | `filters` 是结构化的 `{field, op, values}`，和 HTTP 的 `field[op]=value` 一一对应，运行期同一套拒绝规则 |
-| update_mask | AIP-134 允许省略（省略即按已填字段）、必须支持 `*`；AIP-161 要求整字段与子字段路径都合法 | 必填，不认 `*`（等于 Update），只认顶层键、不点进字段内部：点名的字段整体替换，和 HTTP 的 PATCH 一致；点到 id、created_at 这类框架管理的字段时跳过（AIP-161/203 对只读字段的规定）、点到模型没有的字段拒绝（AIP-161） |
-| 什么都没点到的补丁 | AIP-134 的掩码省略即按已填字段；RFC 7396 的空补丁 `{}` 合法、表示不改 | HTTP 的 `{}` 与只含模型没有的键的 body 照 encoding/json 的惯例忽略未知键、整行按原样写回并刷新 updated_at；gRPC 的掩码不剩可改字段时拒绝。这是两线唯一有意不同的地方，internal/controller 的对照用例把它写成显式的差异行 |
+| update_mask | AIP-134 允许省略（省略即按已填字段）、必须支持 `*`；AIP-161 要求整字段与子字段路径都合法 | 必填，不认 `*`（等于 Update），只认顶层键、不点进字段内部，路径必须和 JSON 名精确相同（HTTP 的 body 键照 encoding/json 的规则匹配，只差大小写也算同一个键）：点名的字段整体替换，和 HTTP 的 PATCH 一致；点到 id、created_at 这类框架管理的字段时跳过（AIP-161/203 对只读字段的规定）、点到模型没有的字段拒绝（AIP-161） |
+| 什么都没点到的补丁 | AIP-134 的掩码省略即按已填字段；RFC 7396 的空补丁 `{}` 合法、表示不改 | HTTP 的 `{}` 与只含模型没有的键的 body 照 encoding/json 的惯例忽略未知键、整行按原样写回并刷新 updated_at；gRPC 的掩码不剩可改字段时拒绝。两线有意不同的两处之一，另一处是缺记录的提示文字（见下行），internal/controller 的对照用例把它们写成显式的差异行 |
+| 缺记录的请求 | AIP-203 把必填字段缺失定为 INVALID_ARGUMENT | 两线都答 400 / InvalidArgument，提示文字各按自己缺的东西说：HTTP 缺 body 答「request body is required」，gRPC 缺 record 字段答「record is required」 |
 | 包名无版本段 | Buf 的 PACKAGE_VERSION_SUFFIX 要 `v1` 这样的后缀 | gst 没有 API 版本，包名就是项目名加目录 |
 | 不生成枚举 | AIP-126 用 enum | 字符串枚举保持 string，取值列在字段注释里，HTTP 与数据库里都是字符串 |
 | 时间类型 | AIP-142 一天里的时刻用 `google.type.TimeOfDay`、日期用 `google.type.Date` | `datatypes.Time` 映射 `google.protobuf.Duration`（从零点起的时长），`datatypes.Date` 映射 `google.protobuf.Timestamp`，两线都按 UTC 日历日取日期（controller 绑定后统一归一），不引入 googleapis 的类型 |

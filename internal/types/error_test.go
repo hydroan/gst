@@ -117,3 +117,21 @@ func TestNewInvalidFieldsJoinsTheViolations(t *testing.T) {
 	require.ErrorIs(t, err, cause)
 	require.Empty(t, types.FieldViolations(types.NewError(http.StatusBadRequest, "plain")))
 }
+
+// TestNewInvalidValueNamesTheField pins the error of a request whose field
+// carries a value it cannot hold: 400, the message naming the field by its
+// JSON key path, one violation carrying the field and the description for
+// the gRPC details, and the decoder's error as the cause, reported by Error
+// and kept out of the message.
+func TestNewInvalidValueNamesTheField(t *testing.T) {
+	cause := errors.New("300 does not fit int8")
+
+	err := types.NewInvalidValue("items[1].rank", "300 is out of range", cause)
+
+	require.Equal(t, http.StatusBadRequest, err.Status())
+	require.Equal(t, "invalid value for field 'items[1].rank'", err.Msg())
+	require.Equal(t, []types.FieldViolation{{Field: "items[1].rank", Description: "300 is out of range"}}, types.FieldViolations(err))
+	require.ErrorIs(t, err, cause)
+	require.Equal(t, "invalid value for field 'items[1].rank': 300 does not fit int8", err.Error())
+	require.Equal(t, "invalid value for field 'rank'", types.NewInvalidValue("rank", "300 is out of range", nil).Error())
+}

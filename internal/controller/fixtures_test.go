@@ -75,9 +75,11 @@ func (validatedSample) TableName() string { return "controller_validated_samples
 // the plain ones: a time stored in a column of its own, a struct stored as
 // a JSON column, whose city is required whenever the address is written,
 // and the fields of an embedded struct of the model's own, promoted to keys
-// of the model's own.
+// of the model's own; and an integer narrower than a JSON number, for a
+// value a field cannot hold.
 type shapedSample struct {
 	Name    string        `json:"name"`
+	Rank    int8          `json:"rank"`
 	DueAt   time.Time     `json:"due_at"`
 	Address sampleAddress `json:"address" gorm:"serializer:json"`
 	SampleAudit
@@ -483,6 +485,15 @@ func countSamplesNamed(t *testing.T, name string) int {
 	var total int
 	require.NoError(t, database.Database[*sampleRecord](context.Background()).
 		WithQuery(&sampleRecord{Name: name}).Count(&total))
+	return total
+}
+
+// countShapedNamed counts the stored shaped samples named name.
+func countShapedNamed(t *testing.T, name string) int {
+	t.Helper()
+	var total int
+	require.NoError(t, database.Database[*shapedSample](context.Background()).
+		WithQuery(&shapedSample{Name: name}).Count(&total))
 	return total
 }
 

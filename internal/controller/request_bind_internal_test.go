@@ -479,15 +479,25 @@ func BenchmarkBindJSONRequest(b *testing.B) {
 }
 
 // TestClientSafeBindError pins the translation table of body decoding
-// failures: one stable client-safe message per decoder error kind, with the
-// original error preserved as the cause so logs keep the full decoder text.
+// failures: one stable client-safe message per decoder error kind, a field
+// inside a batch item named as the contract spells it, items[1].rank, with
+// the original error preserved as the cause so logs keep the full decoder
+// text.
 func TestClientSafeBindError(t *testing.T) {
+	// batchProbe carries an integer narrower than a JSON number inside its
+	// items, for a value a field of an item cannot hold.
+	type batchProbe struct {
+		Items []struct {
+			Rank int8 `json:"rank"`
+		} `json:"items"`
+	}
 	tests := []struct {
 		name    string
 		err     error
 		wantMsg string
 	}{
 		{"type_mismatch_names_the_field", json.Unmarshal([]byte(`{"items":3}`), &normalizeProbeReq{}), "invalid value for field 'items'"},
+		{"type_mismatch_inside_an_item_names_the_item", json.Unmarshal([]byte(`{"items":[{"rank":1},{"rank":300}]}`), &batchProbe{}), "invalid value for field 'items[1].rank'"},
 		{"top-level_type_mismatch_has_no_field", json.Unmarshal([]byte(`[1]`), &normalizeProbeReq{}), "request body has an unexpected JSON type"},
 		{"malformed_body", json.Unmarshal([]byte(`{`), &normalizeProbeReq{}), "request body is not valid JSON"},
 		{"other_errors_fall_back_to_the_generic_message", errors.New("read failed"), "invalid request body"},

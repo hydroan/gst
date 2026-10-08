@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/database"
 	"github.com/hydroan/gst/internal/consts"
@@ -416,9 +417,9 @@ func TestPatchCallValidatesTheMaskedFieldsAlone(t *testing.T) {
 	_, err = invoke(t, conn, "ValidatedPatch", map[string]any{"id": id, "record": map[string]any{"name": ""}, "mask": []string{"name"}})
 	requireStatus(t, err, codes.InvalidArgument, "name is a required field")
 
-	_, err = invoke(t, conn, "ValidatedPatchMany", map[string]any{"items": []map[string]any{{"id": id, "note": "batch note"}}, "masks": [][]string{{"note"}}})
+	_, err = invoke(t, conn, "ValidatedPatchMany", map[string]any{"items": []map[string]any{{"id": id, "record": map[string]any{"note": "batch note"}, "mask": []string{"note"}}}})
 	require.NoError(t, err)
-	_, err = invoke(t, conn, "ValidatedPatchMany", map[string]any{"items": []map[string]any{{"id": id, "name": ""}}, "masks": [][]string{{"name"}}})
+	_, err = invoke(t, conn, "ValidatedPatchMany", map[string]any{"items": []map[string]any{{"id": id, "record": map[string]any{"name": ""}, "mask": []string{"name"}}}})
 	requireStatus(t, err, codes.InvalidArgument, "items[0].name is a required field")
 }
 
@@ -446,9 +447,9 @@ func TestDeleteCallDeletesTheRecord(t *testing.T) {
 // TestBatchCallsWriteAllOrNothing pins the four batch calls: the items are
 // created, replaced, patched under their masks and deleted as one batch; a
 // hook's refusal writes nothing; an item failing its binding tags refuses
-// the batch; a batch patch carries one mask per item and a record in every
-// item; a batch update or patch names each record once; and a delete naming
-// an empty id is refused before anything is deleted.
+// the batch; a batch patch carries a record in every item, and the call it
+// runs one mask per item; a batch update or patch names each record once;
+// and a delete naming an empty id is refused before anything is deleted.
 func TestBatchCallsWriteAllOrNothing(t *testing.T) {
 	conn := sampleServer(t)
 	prefix := uniqueName("call-batch")
@@ -466,10 +467,10 @@ func TestBatchCallsWriteAllOrNothing(t *testing.T) {
 	require.Equal(t, createdIDs, ids(updated["items"]))
 	requireSampleName(t, createdIDs[0], prefix+"-a2")
 
-	patched, err := invoke(t, conn, "PatchMany", map[string]any{
-		"items": []map[string]any{{"id": createdIDs[0], "name": prefix + "-a3"}, {"id": createdIDs[1], "name": prefix + "-b3", "note": "masked"}},
-		"masks": [][]string{{"name"}, {"note"}},
-	})
+	patched, err := invoke(t, conn, "PatchMany", map[string]any{"items": []map[string]any{
+		{"id": createdIDs[0], "record": map[string]any{"name": prefix + "-a3"}, "mask": []string{"name"}},
+		{"id": createdIDs[1], "record": map[string]any{"name": prefix + "-b3", "note": "masked"}, "mask": []string{"note"}},
+	}})
 	require.NoError(t, err)
 	require.Equal(t, createdIDs, ids(patched["items"]))
 	requireSampleName(t, createdIDs[0], prefix+"-a3")
@@ -477,21 +478,23 @@ func TestBatchCallsWriteAllOrNothing(t *testing.T) {
 	require.Equal(t, prefix+"-b2", second.Name, "the second mask does not name the name")
 	require.Equal(t, "masked", second.Note)
 
-	t.Run("a batch patch with fewer masks than items", func(t *testing.T) {
-		_, patchErr := invoke(t, conn, "PatchMany", map[string]any{
-			"items": []map[string]any{{"id": createdIDs[0], "name": prefix + "-a4"}, {"id": createdIDs[1], "name": prefix + "-b4"}},
-			"masks": [][]string{{"name"}},
-		})
+	t.Run("a batch patch call with fewer masks than items", func(t *testing.T) {
+		// The generated handler reads one mask off every item; the call
+		// refuses a caller of its own handing it fewer.
+		first, second := &sampleRecord{Name: prefix + "-a4"}, &sampleRecord{Name: prefix + "-b4"}
+		first.SetID(createdIDs[0])
+		second.SetID(createdIDs[1])
+		_, patchErr := controller.PatchManyCall[*sampleRecord](sampleRoute)(t.Context(), nil, []*sampleRecord{first, second}, [][]string{{"name"}})
 		requireStatus(t, patchErr, codes.InvalidArgument, "2 items carry 1 update masks; each item names the fields to apply in a mask of its own")
 		requireSampleName(t, createdIDs[0], prefix+"-a3")
 	})
 
 	t.Run("a batch patch with an item carrying no record", func(t *testing.T) {
-		_, patchErr := invoke(t, conn, "PatchMany", map[string]any{
-			"items": []any{map[string]any{"id": createdIDs[0], "name": prefix + "-a4"}, nil},
-			"masks": [][]string{{"name"}, {"name"}},
-		})
-		requireStatus(t, patchErr, codes.InvalidArgument, "item 1 carries no record")
+		_, patchErr := invoke(t, conn, "PatchMany", map[string]any{"items": []map[string]any{
+			{"id": createdIDs[0], "record": map[string]any{"name": prefix + "-a4"}, "mask": []string{"name"}},
+			{"id": createdIDs[1], "mask": []string{"name"}},
+		}})
+		requireStatus(t, patchErr, codes.InvalidArgument, "items[1] carries no record")
 		requireSampleName(t, createdIDs[0], prefix+"-a3")
 	})
 
@@ -504,10 +507,10 @@ func TestBatchCallsWriteAllOrNothing(t *testing.T) {
 	})
 
 	t.Run("a batch patch naming a record twice", func(t *testing.T) {
-		_, patchErr := invoke(t, conn, "PatchMany", map[string]any{
-			"items": []map[string]any{{"id": createdIDs[0], "name": prefix + "-a5"}, {"id": createdIDs[0], "note": "twice"}},
-			"masks": [][]string{{"name"}, {"note"}},
-		})
+		_, patchErr := invoke(t, conn, "PatchMany", map[string]any{"items": []map[string]any{
+			{"id": createdIDs[0], "record": map[string]any{"name": prefix + "-a5"}, "mask": []string{"name"}},
+			{"id": createdIDs[0], "record": map[string]any{"note": "twice"}, "mask": []string{"note"}},
+		}})
 		requireStatus(t, patchErr, codes.InvalidArgument, `items[1] names the record "`+createdIDs[0]+`", which items[0] already names`)
 		requireSampleName(t, createdIDs[0], prefix+"-a3")
 		require.Empty(t, loadSample(t, createdIDs[0]).Note)
@@ -562,10 +565,10 @@ func TestPatchItemReadiesTheRecordOfABatchItem(t *testing.T) {
 	require.Equal(t, "r1", readied.GetID(), "the id of the item names the record, whatever id the record carries")
 
 	_, err = controller.PatchItem(2, nil, nil, "", &sampleRecord{})
-	requireStatus(t, err, codes.InvalidArgument, "item 2 names no id")
+	requireStatus(t, err, codes.InvalidArgument, "items[2] names no id")
 
 	_, err = controller.PatchItem(3, map[string]string{"record": "a"}, map[string]string{"record": "b"}, "r1", &sampleRecord{})
-	requireStatus(t, err, codes.InvalidArgument, `item 3 names the record parameter "b", the request names "a"`)
+	requireStatus(t, err, codes.InvalidArgument, `items[3] names the record parameter "b", the request names "a"`)
 
 	readied, err = controller.PatchItem(4, map[string]string{"record": "a"}, map[string]string{"record": ""}, "r1", &sampleRecord{})
 	require.NoError(t, err)
@@ -575,6 +578,32 @@ func TestPatchItemReadiesTheRecordOfABatchItem(t *testing.T) {
 	readied, err = controller.PatchItem(5, nil, nil, "r1", absent)
 	require.NoError(t, err)
 	require.Nil(t, readied)
+}
+
+// TestItemErrorNamesTheItemOfARefusedRecord pins ItemError, what the
+// generated handler of a batch rpc answers the refusal of an item's record
+// through: the field a FromProto refused is named as the item's,
+// items[1].rank, in the message and in the BadRequest detail alike, the
+// description kept; a status naming no field and an error that is no status
+// are answered as they are.
+func TestItemErrorNamesTheItemOfARefusedRecord(t *testing.T) {
+	refused := grpcserver.StatusError(types.NewInvalidValue("rank", "300 is out of range", nil))
+
+	err := controller.ItemError(1, refused)
+
+	requireStatus(t, err, codes.InvalidArgument, "invalid value for field 'items[1].rank'")
+	details := status.Convert(err).Details()
+	require.Len(t, details, 1)
+	bad, ok := details[0].(*errdetails.BadRequest)
+	require.True(t, ok, "%T", details[0])
+	require.Len(t, bad.GetFieldViolations(), 1)
+	require.Equal(t, "items[1].rank", bad.GetFieldViolations()[0].GetField())
+	require.Equal(t, "300 is out of range", bad.GetFieldViolations()[0].GetDescription())
+
+	plain := status.Error(codes.InvalidArgument, "nothing named")
+	require.Equal(t, plain, controller.ItemError(2, plain))
+	other := errors.New("not a status")
+	require.Equal(t, other, controller.ItemError(3, other))
 }
 
 // TestServiceCallDelegatesToThePhaseService pins the call of an action with
@@ -838,9 +867,12 @@ func sampleHandlers() map[string]rpcHandler {
 // standardRPCs adds to handlers the rpcs of the ten standard actions of M
 // on route, each named prefix followed by the action's name, Create and
 // PatchMany for the samples, RefusedCreate for the refusals: each runs the
-// call function of its action with what the request message carries, the
-// route parameters under params, the id, the record or the items, the
-// update mask or masks, the query and the ids.
+// call function of its action the way the generated handler does (see the
+// golden record.gen.go of cmd/gg), with what the request message carries,
+// the route parameters under params, the id, the record or the items
+// decoded as a FromProto decodes them (see fromProto), the update mask, the
+// query and the ids; an item of a PatchMany carries its id, its record and
+// its mask, and is readied through PatchItem.
 func standardRPCs[M types.Model](handlers map[string]rpcHandler, route, prefix string) {
 	create := controller.CreateCall[M](route)
 	get := controller.GetCall[M](route)
@@ -854,7 +886,11 @@ func standardRPCs[M types.Model](handlers map[string]rpcHandler, route, prefix s
 	deleteMany := controller.DeleteManyCall[M](route)
 
 	handlers[prefix+consts.Create.Name()] = func(ctx context.Context, in map[string]any) (any, error) {
-		return create(ctx, params(in), field[M](in, "record"))
+		record, err := fromProto[M](in["record"])
+		if err != nil {
+			return nil, err
+		}
+		return create(ctx, params(in), record)
 	}
 	handlers[prefix+consts.Get.Name()] = func(ctx context.Context, in map[string]any) (any, error) {
 		id := field[string](in, "id")
@@ -864,25 +900,56 @@ func standardRPCs[M types.Model](handlers map[string]rpcHandler, route, prefix s
 		return listing(list(ctx, params(in), field[controller.Query](in, "query")))
 	}
 	handlers[prefix+consts.Update.Name()] = func(ctx context.Context, in map[string]any) (any, error) {
+		record, err := fromProto[M](in["record"])
+		if err != nil {
+			return nil, err
+		}
 		id := field[string](in, "id")
-		return update(ctx, itemParams(route, params(in), id), id, field[M](in, "record"))
+		return update(ctx, itemParams(route, params(in), id), id, record)
 	}
 	handlers[prefix+consts.Patch.Name()] = func(ctx context.Context, in map[string]any) (any, error) {
+		record, err := fromProto[M](in["record"])
+		if err != nil {
+			return nil, err
+		}
 		id := field[string](in, "id")
-		return patch(ctx, itemParams(route, params(in), id), id, field[M](in, "record"), field[[]string](in, "mask"))
+		return patch(ctx, itemParams(route, params(in), id), id, record, field[[]string](in, "mask"))
 	}
 	handlers[prefix+consts.Delete.Name()] = func(ctx context.Context, in map[string]any) (any, error) {
 		id := field[string](in, "id")
 		return done(del(ctx, itemParams(route, params(in), id), id))
 	}
 	handlers[prefix+consts.CreateMany.Name()] = func(ctx context.Context, in map[string]any) (any, error) {
-		return batch(createMany(ctx, params(in), field[[]M](in, "items")))
+		items, err := itemsFromProto[M](in)
+		if err != nil {
+			return nil, err
+		}
+		return batch(createMany(ctx, params(in), items))
 	}
 	handlers[prefix+consts.UpdateMany.Name()] = func(ctx context.Context, in map[string]any) (any, error) {
-		return batch(updateMany(ctx, params(in), field[[]M](in, "items")))
+		items, err := itemsFromProto[M](in)
+		if err != nil {
+			return nil, err
+		}
+		return batch(updateMany(ctx, params(in), items))
 	}
 	handlers[prefix+consts.PatchMany.Name()] = func(ctx context.Context, in map[string]any) (any, error) {
-		return batch(patchMany(ctx, params(in), field[[]M](in, "items"), field[[][]string](in, "masks")))
+		raw := field[[]map[string]any](in, "items")
+		models := make([]M, len(raw))
+		masks := make([][]string, len(raw))
+		for i, item := range raw {
+			record, err := fromProto[M](item["record"])
+			if err != nil {
+				return nil, controller.ItemError(i, err)
+			}
+			m, err := controller.PatchItem(i, params(in), nil, field[string](item, "id"), record)
+			if err != nil {
+				return nil, err
+			}
+			models[i] = m
+			masks[i] = field[[]string](item, "mask")
+		}
+		return batch(patchMany(ctx, params(in), models, masks))
 	}
 	handlers[prefix+consts.DeleteMany.Name()] = func(ctx context.Context, in map[string]any) (any, error) {
 		return done(deleteMany(ctx, params(in), field[[]string](in, "ids")))
@@ -930,6 +997,51 @@ func field[T any](in map[string]any, key string) T {
 		panic(err)
 	}
 	return value
+}
+
+// fromProto converts raw, the record or the item a message carries, into T
+// through its JSON shape, the way a generated FromProto converts a message
+// into its model, refusing a value a field cannot hold the way one does
+// (see grpc.Narrow): with the status of types.NewInvalidValue naming the
+// field as encoding/json names it. A message carrying none, nil, is the nil
+// model.
+func fromProto[T any](raw any) (T, error) {
+	var value T
+	if raw == nil {
+		return value, nil
+	}
+	encoded, err := json.Marshal(raw)
+	if err != nil {
+		panic(err)
+	}
+	if err = json.Unmarshal(encoded, &value); err != nil {
+		var typeErr *json.UnmarshalTypeError
+		if errors.As(err, &typeErr) {
+			return value, grpcserver.StatusError(types.NewInvalidValue(typeErr.Field, typeErr.Value+" does not fit the field", err))
+		}
+		panic(err)
+	}
+	return value, nil
+}
+
+// itemsFromProto converts the items a batch message carries into models the
+// way the generated handler of a CreateMany or UpdateMany rpc does: each
+// through fromProto, the refusal of one naming the item (see
+// controller.ItemError); a message carrying no items is nil items.
+func itemsFromProto[M types.Model](in map[string]any) ([]M, error) {
+	raw := field[[]any](in, "items")
+	if raw == nil {
+		return nil, nil
+	}
+	items := make([]M, len(raw))
+	for i, item := range raw {
+		m, err := fromProto[M](item)
+		if err != nil {
+			return nil, controller.ItemError(i, err)
+		}
+		items[i] = m
+	}
+	return items, nil
 }
 
 // listing, batch and done shape what a list, a batch and a call answering

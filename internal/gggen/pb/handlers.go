@@ -254,7 +254,8 @@ func (w *fileWriter) actionType(model *modelinfo.Model, typeName string) ast.Exp
 // the items and the update masks off the request message, runs the call of
 // the action on them and answers the response message holding what the
 // call answered. A record, an item or a payload is decoded first, and the
-// refusal of one its conversion function answers is the call's answer.
+// refusal of one its conversion function answers is the call's answer, an
+// item's naming the item (see grpc.ItemError).
 //
 // The rpcs of the Record model of the golden fixture on records, with the
 // parameter record, and the PatchMany of the Item model under
@@ -324,7 +325,7 @@ func (w *fileWriter) actionType(model *modelinfo.Model, typeName string) ast.Exp
 //		for i, item := range req.GetItems() {
 //			in, err := ItemFromProto(item.GetItem())
 //			if err != nil {
-//				return nil, err
+//				return nil, grpc.ItemError(i, err)
 //			}
 //			m, err := grpc.PatchItem(i, params, map[string]string{"record": item.GetRecord()}, item.GetId(), in)
 //			if err != nil {
@@ -390,9 +391,17 @@ func (w *fileWriter) handler(r *rpc) {
 	if r.standard {
 		x := modelFieldName(r.model)
 		// decoded decodes the message expression into the variable name
-		// through the model's FromProto, the handler answering a refusal.
+		// through the model's FromProto, the handler answering a refusal;
+		// decodedItem decodes the item at index i of a batch the same way,
+		// the refusal naming the item (see grpc.ItemError).
 		decoded := func(name string, message ast.Expr) []ast.Stmt {
 			return []ast.Stmt{define([]string{name, "err"}, call(w.conversionFunc(r.message, "FromProto"), message)), failing()}
+		}
+		decodedItem := func(name string, message ast.Expr) []ast.Stmt {
+			return []ast.Stmt{
+				define([]string{name, "err"}, call(w.conversionFunc(r.message, "FromProto"), message)),
+				ifNotNil(ident("err"), returns(ident("nil"), call(w.grpc("ItemError"), ident("i"), ident("err")))),
+			}
 		}
 		toProto := func(m ast.Expr) ast.Expr { return call(w.conversionFunc(r.message, "ToProto"), m) }
 		// single runs the call answering one record and answers it.
@@ -410,7 +419,7 @@ func (w *fileWriter) handler(r *rpc) {
 		modelsOf := func() []ast.Stmt {
 			return []ast.Stmt{
 				define([]string{"models"}, makeCall(&ast.ArrayType{Elt: star(w.modelPkgType(r.model, r.model.ModelName))}, lenCall(req("items")))),
-				rangeStmt("i", "item", req("items"), append(decoded("in", ident("item")), assign(index(ident("models"), ident("i")), ident("in")))...),
+				rangeStmt("i", "item", req("items"), append(decodedItem("in", ident("item")), assign(index(ident("models"), ident("i")), ident("in")))...),
 			}
 		}
 		switch r.action.Phase {
@@ -459,7 +468,7 @@ func (w *fileWriter) handler(r *rpc) {
 			body = append(body,
 				define([]string{"models"}, makeCall(&ast.ArrayType{Elt: star(w.modelPkgType(r.model, r.model.ModelName))}, lenCall(req("items")))),
 				define([]string{"masks"}, makeCall(&ast.ArrayType{Elt: &ast.ArrayType{Elt: ident("string")}}, lenCall(req("items")))),
-				rangeStmt("i", "item", req("items"), append(decoded("in", call(sel(ident("item"), "Get"+itemFields[x]))),
+				rangeStmt("i", "item", req("items"), append(decodedItem("in", call(sel(ident("item"), "Get"+itemFields[x]))),
 					define([]string{"m", "err"}, call(w.grpc("PatchItem"), ident("i"), params, itemParams, call(sel(ident("item"), "Get"+itemFields["id"])), ident("in"))),
 					failing(),
 					assign(index(ident("models"), ident("i")), ident("m")),

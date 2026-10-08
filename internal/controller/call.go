@@ -19,6 +19,7 @@ import (
 	gstotel "github.com/hydroan/gst/otel"
 	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
+	"google.golang.org/genproto/googleapis/rpc/errdetails"
 	"google.golang.org/grpc/status"
 )
 
@@ -312,7 +313,7 @@ func (c *call) invalidMessage(err error) error {
 // validated on its own, the fields it names carrying the item in front (see
 // clientSafeItemBindError).
 func (c *call) invalidItemMessage(i int, err error) error {
-	if violations := fieldViolations(err, "items["+strconv.Itoa(i)+"]."); len(violations) > 0 {
+	if violations := fieldViolations(err, itemPrefix(i)); len(violations) > 0 {
 		return c.refuse(types.NewInvalidFields(violations, err), err)
 	}
 	return c.invalidMessage(err)
@@ -462,20 +463,18 @@ func ServiceCall[M types.Model, REQ types.Request, RSP types.Response](phase con
 // parameters it carries, keyed as the request's params are, may be left
 // empty or repeat the request's. An item naming no id, or naming a
 // parameter otherwise than the request does, is refused with
-// InvalidArgument, the way a batch request whose sub-request names another
-// parent must fail (AIP-234), the way a call's refusal does (see
-// grpcserver.StatusError); an item carrying no record is answered as it is,
-// for the call to refuse (see PatchManyCall). The public grpc.PatchItem
-// forwards to it.
+// InvalidArgument naming the item as the contract spells a batch item,
+// items[1] names no id (see itemWithoutID), the way a batch request whose
+// sub-request names another parent must fail (AIP-234), the way a call's
+// refusal does (see grpcserver.StatusError); an item carrying no record is
+// answered as it is, for the call to refuse (see PatchManyCall). The public
+// grpc.PatchItem forwards to it.
 func PatchItem[M types.Model](i int, params, itemParams map[string]string, id string, m M) (M, error) {
-	invalid := func(format string, args ...any) error {
-		return grpcserver.StatusError(badRequest(fmt.Sprintf(format, args...)))
-	}
 	if name, value, differs := disagreeingParam(params, itemParams); differs {
-		return m, invalid("item %d names the %s parameter %q, the request names %q", i, name, value, params[name])
+		return m, grpcserver.StatusError(badRequest(fmt.Sprintf("items[%d] names the %s parameter %q, the request names %q", i, name, value, params[name])))
 	}
 	if id == "" {
-		return m, invalid("item %d names no id", i)
+		return m, grpcserver.StatusError(itemWithoutID(i))
 	}
 	if reflect.ValueOf(m).IsNil() {
 		return m, nil
@@ -485,6 +484,38 @@ func PatchItem[M types.Model](i int, params, itemParams map[string]string, id st
 	m.ClearID()
 	m.SetID(id)
 	return m, nil
+}
+
+// ItemError names the item at index i of a batch in err, the refusal a
+// generated FromProto answered the item's record with (see
+// types.NewInvalidValue): the field refused, rank, becomes the item's,
+// items[1].rank, in the message and in the google.rpc.BadRequest detail
+// alike, the way the fields a validator refuses are named in a batch (see
+// invalidItemMessage), so that both transports name a refused value of an
+// item the same. The generated handler of a CreateMany, UpdateMany or
+// PatchMany rpc answers each item's decoding through it. An error naming no
+// field, a status without the detail or no status at all, is answered as it
+// is. The public grpc.ItemError forwards to it.
+func ItemError(i int, err error) error {
+	st, ok := status.FromError(err)
+	if !ok {
+		return err
+	}
+	for _, detail := range st.Details() {
+		bad, ok := detail.(*errdetails.BadRequest)
+		if !ok || len(bad.GetFieldViolations()) == 0 {
+			continue
+		}
+		violation := bad.GetFieldViolations()[0]
+		return grpcserver.StatusError(types.NewInvalidValue(itemPrefix(i)+violation.GetField(), violation.GetDescription(), err))
+	}
+	return err
+}
+
+// itemPrefix is what the field of the item at index i of a batch is named
+// behind, items[1]., in a refusal naming it.
+func itemPrefix(i int) string {
+	return "items[" + strconv.Itoa(i) + "]."
 }
 
 // disagreeingParam returns the first route parameter, by name, that given

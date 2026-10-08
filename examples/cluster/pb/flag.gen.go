@@ -117,7 +117,7 @@ func (flagService) CreateManyFlag(ctx context.Context, req *CreateManyFlagReques
 	for i, item := range req.GetItems() {
 		in, err := FlagFromProto(item)
 		if err != nil {
-			return nil, err
+			return nil, grpc.ItemError(i, err)
 		}
 		models[i] = in
 	}
@@ -146,7 +146,7 @@ func (flagService) UpdateManyFlag(ctx context.Context, req *UpdateManyFlagReques
 	for i, item := range req.GetItems() {
 		in, err := FlagFromProto(item)
 		if err != nil {
-			return nil, err
+			return nil, grpc.ItemError(i, err)
 		}
 		models[i] = in
 	}
@@ -168,7 +168,7 @@ func (flagService) PatchManyFlag(ctx context.Context, req *PatchManyFlagRequest)
 	for i, item := range req.GetItems() {
 		in, err := FlagFromProto(item.GetFlag())
 		if err != nil {
-			return nil, err
+			return nil, grpc.ItemError(i, err)
 		}
 		m, err := grpc.PatchItem(i, nil, nil, item.GetId(), in)
 		if err != nil {

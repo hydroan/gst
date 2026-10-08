@@ -175,6 +175,16 @@ func PatchItem[M types.Model](i int, params, itemParams map[string]string, id st
 	return controller.PatchItem(i, params, itemParams, id, m)
 }
 
+// ItemError names the item at index i of a batch in err, the refusal a
+// FromProto answered the item's record with: the field refused becomes the
+// item's, items[1].rank, in the message and in the google.rpc.BadRequest
+// detail alike, as the fields a validator refuses are named in a batch; any
+// other error is answered as it is. The generated handler of a CreateMany,
+// UpdateMany or PatchMany rpc answers each item's decoding through it.
+func ItemError(i int, err error) error {
+	return controller.ItemError(i, err)
+}
+
 // PatchManyCall returns the batch patch call of M on route: given the route
 // parameters, the items and the paths of each item's update mask, in order,
 // it answers with the records patched.

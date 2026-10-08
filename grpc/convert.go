@@ -8,9 +8,8 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"google.golang.org/genproto/googleapis/rpc/errdetails"
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
+	"github.com/hydroan/gst/internal/grpcserver"
+	"github.com/hydroan/gst/internal/types"
 	"google.golang.org/protobuf/types/known/structpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -146,19 +145,15 @@ func UTF8(s string) string {
 
 // invalidValue is the InvalidArgument a generated FromProto refuses a
 // message field with when the value it carries is not one the model field
-// holds: the sentence HTTP answers with for a body value it cannot decode
-// into a field it can name, "invalid value for field 'rank'", and a
+// holds: the refusal HTTP answers with for a body value it cannot decode
+// into a field it can name (see types.NewInvalidValue), "invalid value for
+// field 'rank'", as the status it maps to (see grpcserver.StatusError), a
 // google.rpc.BadRequest detail naming the field with description, the way
 // the fields a validator refused are detailed. HTTP names the field of a
 // number it cannot decode only when encoding/json reports it, which for a
 // json.Number field it does not, answering without the name there.
 func invalidValue(field, description string) error {
-	st := status.New(codes.InvalidArgument, "invalid value for field '"+field+"'")
-	detail := &errdetails.BadRequest{FieldViolations: []*errdetails.BadRequest_FieldViolation{{Field: field, Description: description}}}
-	if detailed, err := st.WithDetails(detail); err == nil {
-		st = detailed
-	}
-	return st.Err()
+	return grpcserver.StatusError(types.NewInvalidValue(field, description, nil))
 }
 
 // Value returns the Value holding v, the JSON value encoding/json encodes v

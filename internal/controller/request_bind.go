@@ -6,7 +6,6 @@ import (
 	"io"
 	"net/http"
 	"reflect"
-	"strconv"
 	"strings"
 	"time"
 
@@ -379,10 +378,14 @@ func requiredBodyError(err error) error {
 // internals ("json: cannot unmarshal bool into Go struct field ..."), and the
 // response envelope renders non-service errors verbatim, so wrapping at the
 // decoding entry points is what keeps that text out of every bind failure at
-// once. The original error stays wrapped as the cause: logs render the full
-// decoder text through Error, io.EOF sentinels never reach this function
-// (each entry point returns them before decoding), and type-mismatch field
-// paths come from the target struct's JSON tags, not from client input.
+// once. A value a field cannot hold is refused naming the field (see
+// types.NewInvalidValue) by the path the contract spells, items[1].rank
+// (see indexedJSONPath), the way a generated FromProto refuses the value
+// over gRPC. The original error stays wrapped as the cause: logs render the
+// full decoder text through Error, io.EOF sentinels never reach this
+// function (each entry point returns them before decoding), and
+// type-mismatch field paths come from the target struct's JSON tags, not
+// from client input.
 func clientSafeBindError(err error) error {
 	if violations := fieldViolations(err, ""); len(violations) > 0 {
 		return types.NewInvalidFields(violations, err)
@@ -392,7 +395,7 @@ func clientSafeBindError(err error) error {
 	switch {
 	case errors.As(err, &typeErr):
 		if typeErr.Field != "" {
-			return types.NewErrorWithCause(http.StatusBadRequest, "invalid value for field '"+typeErr.Field+"'", err)
+			return types.NewInvalidValue(indexedJSONPath(typeErr.Field), typeErr.Value+" does not fit the field", err)
 		}
 		return types.NewErrorWithCause(http.StatusBadRequest, "request body has an unexpected JSON type", err)
 	case errors.As(err, &syntaxErr):
@@ -402,11 +405,32 @@ func clientSafeBindError(err error) error {
 	}
 }
 
+// indexedJSONPath spells path, the field path of a json.UnmarshalTypeError,
+// the way the contract spells a field of a batch item: encoding/json joins
+// every step with a dot, items.1.rank, and a step that is an index is
+// written in brackets instead, items[1].rank, as the validator's paths are
+// (see jsonFieldPath). A map key of digits alone reads as an index too,
+// encoding/json spelling the two alike.
+func indexedJSONPath(path string) string {
+	var b strings.Builder
+	for i, step := range strings.Split(path, ".") {
+		switch {
+		case step != "" && strings.Trim(step, "0123456789") == "":
+			b.WriteString("[" + step + "]")
+		case i > 0:
+			b.WriteString("." + step)
+		default:
+			b.WriteString(step)
+		}
+	}
+	return b.String()
+}
+
 // clientSafeItemBindError is clientSafeBindError for the item at index i of
 // a batch validated on its own, the fields it names carrying the item in
 // front, items[1].name.
 func clientSafeItemBindError(i int, err error) error {
-	if violations := fieldViolations(err, "items["+strconv.Itoa(i)+"]."); len(violations) > 0 {
+	if violations := fieldViolations(err, itemPrefix(i)); len(violations) > 0 {
 		return types.NewInvalidFields(violations, err)
 	}
 	return clientSafeBindError(err)

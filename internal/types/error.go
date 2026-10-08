@@ -64,6 +64,19 @@ func NewInvalidFields(violations []FieldViolation, cause error) *Error {
 	return err
 }
 
+// NewInvalidValue creates the 400 of a request whose field carries a value
+// the field cannot hold, an integer out of its range, a string where a
+// number is due: the message names the field by its JSON key path, "invalid
+// value for field 'items[1].rank'", the one violation carries field and
+// description for the gRPC details (see FieldViolations), and cause, the
+// decoder's error, is reported by Error for logs and available through
+// Unwrap.
+func NewInvalidValue(field, description string, cause error) *Error {
+	err := newError(http.StatusBadRequest, "invalid value for field '"+field+"'", cause)
+	err.violations = []FieldViolation{{Field: field, Description: description}}
+	return err
+}
+
 // NewError creates the error a request is answered with: status and a
 // client-safe message.
 //

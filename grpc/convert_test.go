@@ -194,6 +194,20 @@ func TestNarrowRefusesWhatTheTypeCannotHold(t *testing.T) {
 	requireFieldViolation(t, err, "level", "128 is out of range")
 }
 
+// TestItemErrorNamesTheItemOfARefusedRecord pins ItemError, what a generated
+// batch handler answers an item's FromProto refusal through: the field
+// refused is named as the item's, items[1].count, in the message and in the
+// BadRequest detail alike, the description kept.
+func TestItemErrorNamesTheItemOfARefusedRecord(t *testing.T) {
+	_, refused := gstgrpc.Narrow[int8]("count", int32(300))
+
+	err := gstgrpc.ItemError(1, refused)
+
+	require.Equal(t, codes.InvalidArgument, status.Code(err))
+	require.Equal(t, "invalid value for field 'items[1].count'", status.Convert(err).Message())
+	requireFieldViolation(t, err, "items[1].count", "300 is out of range")
+}
+
 // requireFieldViolation asserts that err carries one google.rpc.BadRequest
 // detail naming field with description.
 func requireFieldViolation(t *testing.T, err error, field, description string) {

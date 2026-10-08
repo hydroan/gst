@@ -59,7 +59,7 @@ func (itemService) PatchManyItem(ctx context.Context, req *PatchManyItemRequest)
 	for i, item := range req.GetItems() {
 		in, err := ItemFromProto(item.GetItem())
 		if err != nil {
-			return nil, err
+			return nil, grpc.ItemError(i, err)
 		}
 		m, err := grpc.PatchItem(i, params, map[string]string{"record": item.GetRecord()}, item.GetId(), in)
 		if err != nil {

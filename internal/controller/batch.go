@@ -1,6 +1,8 @@
 package controller
 
 import (
+	"fmt"
+
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/internal/types"
 )
@@ -74,4 +76,13 @@ func (req *batch[M]) repeatedID() error {
 		named[id] = i
 	}
 	return nil
+}
+
+// itemWithoutID returns the refusal of a batch patch whose item at index i
+// names no record, items[1] names no id: a defective request, refused before
+// any record is read, by PatchItem for the generated handler of a PatchMany
+// rpc and by patchManyFlow for the HTTP handler, the same sentence on both
+// transports.
+func itemWithoutID(i int) *types.Error {
+	return badRequest(fmt.Sprintf("items[%d] names no id", i))
 }

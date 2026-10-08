@@ -119,7 +119,7 @@ func (recordService) CreateManyRecord(ctx context.Context, req *CreateManyRecord
 	for i, item := range req.GetItems() {
 		in, err := RecordFromProto(item)
 		if err != nil {
-			return nil, err
+			return nil, grpc.ItemError(i, err)
 		}
 		models[i] = in
 	}
@@ -150,7 +150,7 @@ func (recordService) UpdateManyRecord(ctx context.Context, req *UpdateManyRecord
 	for i, item := range req.GetItems() {
 		in, err := RecordFromProto(item)
 		if err != nil {
-			return nil, err
+			return nil, grpc.ItemError(i, err)
 		}
 		models[i] = in
 	}
@@ -173,7 +173,7 @@ func (recordService) PatchManyRecord(ctx context.Context, req *PatchManyRecordRe
 	for i, item := range req.GetItems() {
 		in, err := RecordFromProto(item.GetRecord())
 		if err != nil {
-			return nil, err
+			return nil, grpc.ItemError(i, err)
 		}
 		m, err := grpc.PatchItem(i, nil, nil, item.GetId(), in)
 		if err != nil {

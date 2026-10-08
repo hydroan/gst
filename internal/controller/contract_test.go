@@ -52,6 +52,7 @@ func TestTransportsAnswerTheContractAlike(t *testing.T) {
 	versioned := standardFixture[*versionedSample](versionedRoute, "Versioned")
 	validated := standardFixture[*validatedSample](validatedRoute, "Validated")
 	dated := standardFixture[*datedSample](datedRoute, "Dated")
+	shaped := standardFixture[*shapedSample](shapedRoute, "Shaped")
 
 	ok := contractWant{status: http.StatusOK}
 	refused := contractWant{status: http.StatusConflict, msg: refusedMsg}
@@ -117,6 +118,15 @@ func TestTransportsAnswerTheContractAlike(t *testing.T) {
 			name: "Create refuses a record failing validation", fixture: validated, phase: consts.Create,
 			input: contractInput{record: map[string]any{}},
 			want:  nameRequired,
+		},
+		{
+			name: "Create refuses a value the field cannot hold and stores nothing", fixture: shaped, phase: consts.Create,
+			input: contractInput{record: map[string]any{"name": uniqueName("contract-narrow"), "rank": 300}},
+			want:  contractWant{status: http.StatusBadRequest, msg: "invalid value for field 'rank'"},
+			check: func(t *testing.T, in contractInput, _ contractAnswer) {
+				t.Helper()
+				require.Zero(t, countShapedNamed(t, stringOf(in.record["name"])))
+			},
 		},
 		{
 			name: "Create answers the hook's refusal and stores nothing", fixture: refusals, phase: consts.Create,
@@ -339,6 +349,24 @@ func TestTransportsAnswerTheContractAlike(t *testing.T) {
 			},
 		},
 		{
+			// HTTP binds a key differing only in case the way encoding/json
+			// does; gRPC refuses the path, which must be exact.
+			name: "Patch applies a field named by a key differing only in case", fixture: samples, phase: consts.Patch,
+			prepare: func(t *testing.T) contractInput {
+				t.Helper()
+				return contractInput{id: createSample(t, "contract-patch-cased").GetID(), record: map[string]any{"Name": "contract-patched-cased"}}
+			},
+			want: contractWant{status: http.StatusOK, grpc: &grpcAnswer{code: codes.InvalidArgument, msg: `update_mask names "Name", which is no field a patch applies`}},
+			check: func(t *testing.T, in contractInput, got contractAnswer) {
+				t.Helper()
+				if got.status == http.StatusOK {
+					requireSampleName(t, in.id, "contract-patched-cased")
+				} else {
+					requireSampleName(t, in.id, "contract-patch-cased")
+				}
+			},
+		},
+		{
 			name: "Patch leaves a field the framework manages as stored and applies the field beside it", fixture: samples, phase: consts.Patch,
 			prepare: func(t *testing.T) contractInput {
 				t.Helper()
@@ -397,6 +425,17 @@ func TestTransportsAnswerTheContractAlike(t *testing.T) {
 				return contractInput{id: createVersioned(t, "contract-patch-stale").GetID(), record: map[string]any{"name": "contract-patched", "version": 5}}
 			},
 			want: contractWant{status: http.StatusConflict, msg: staleObjectMsg, code: codes.Aborted},
+		},
+		{
+			// HTTP finds the version under a key differing only in case the
+			// way encoding/json binds it; gRPC refuses the path.
+			name: "Patch accepts the version under a key differing only in case", fixture: versioned, phase: consts.Patch,
+			prepare: func(t *testing.T) contractInput {
+				t.Helper()
+				record := createVersioned(t, "contract-patch-cased-version")
+				return contractInput{id: record.GetID(), record: map[string]any{"name": "contract-patched", "Version": record.Version}}
+			},
+			want: contractWant{status: http.StatusOK, grpc: &grpcAnswer{code: codes.InvalidArgument, msg: `update_mask names "Version", which is no field a patch applies`}},
 		},
 		{
 			name: "Patch answers NotFound for an id no record carries", fixture: samples, phase: consts.Patch,
@@ -592,7 +631,7 @@ func TestTransportsAnswerTheContractAlike(t *testing.T) {
 				t.Helper()
 				return contractInput{items: []map[string]any{{"id": createSample(t, "contract-patch-many-kept").GetID(), "name": "contract-patch-many-renamed"}, {"name": "contract-patch-many-other"}}}
 			},
-			want: invalid,
+			want: contractWant{status: http.StatusBadRequest, msg: "items[1] names no id"},
 			check: func(t *testing.T, in contractInput, _ contractAnswer) {
 				t.Helper()
 				requireSampleName(t, stringOf(in.items[0]["id"]), "contract-patch-many-kept")
@@ -631,6 +670,19 @@ func TestTransportsAnswerTheContractAlike(t *testing.T) {
 				return contractInput{items: []map[string]any{{"id": createValidated(t, "contract-patch-many-validated").GetID(), "name": ""}}}
 			},
 			want: contractWant{status: http.StatusBadRequest, msg: "items[0].name is a required field"},
+		},
+		{
+			name: "PatchMany refuses an item carrying a value its field cannot hold and writes nothing", fixture: shaped, phase: consts.PatchMany,
+			prepare: func(t *testing.T) contractInput {
+				t.Helper()
+				a, b := createShaped(t, "contract-patch-many-narrow-a"), createShaped(t, "contract-patch-many-narrow-b")
+				return contractInput{items: []map[string]any{{"id": a.GetID(), "rank": 1}, {"id": b.GetID(), "rank": 300}}}
+			},
+			want: contractWant{status: http.StatusBadRequest, msg: "invalid value for field 'items[1].rank'"},
+			check: func(t *testing.T, in contractInput, _ contractAnswer) {
+				t.Helper()
+				require.Zero(t, loadShaped(t, stringOf(in.items[0]["id"])).Rank, "the item in range is not written either")
+			},
 		},
 		{
 			name: "PatchMany answers the hook's refusal and writes nothing", fixture: refusals, phase: consts.PatchMany,
@@ -804,8 +856,9 @@ type contractScenario struct {
 // contractInput is what a scenario sends, on either transport: the id of
 // the record the action names; the record of a Create, an Update or a
 // Patch, the body over HTTP, the record of the message over gRPC, its keys
-// the paths of the mask of a Patch; the items of a batch, over gRPC each
-// item's keys but the id its mask; the ids of a batch delete; the query of
+// the paths of the mask of a Patch; the items of a batch, over gRPC an item
+// of a batch patch carrying its id, the record and, as its mask, its keys
+// but the id; the ids of a batch delete; the query of
 // a List, the query string over HTTP; and the payload of a custom action. A
 // nil record is a request carrying none: an absent body, a message without
 // a record.
@@ -968,9 +1021,10 @@ func overHTTP(t *testing.T, f contractFixture, phase consts.Phase, in contractIn
 
 // overGRPC sends in as the rpc of the action on the sample service, as
 // alice, and returns the status answered, or the response message: the
-// route parameters, the id, the record with the mask of a Patch, the items
-// with the masks of a PatchMany, the ids, the query and the payload, as the
-// rpcs of the sample service read them (see standardRPCs).
+// route parameters, the id, the record with the mask of a Patch, the items,
+// each with its id, its record and its mask in a PatchMany, the ids, the
+// query and the payload, as the rpcs of the sample service read them (see
+// standardRPCs).
 func overGRPC(t *testing.T, f contractFixture, phase consts.Phase, in contractInput) contractAnswer {
 	t.Helper()
 	message := map[string]any{}
@@ -986,11 +1040,13 @@ func overGRPC(t *testing.T, f contractFixture, phase consts.Phase, in contractIn
 	if in.items != nil {
 		message["items"] = in.items
 		if phase == consts.PatchMany {
-			masks := make([][]string, len(in.items))
+			// An item of a batch patch is the request of a single Patch:
+			// its id, the record and, as its mask, the keys but the id.
+			items := make([]map[string]any, len(in.items))
 			for i, item := range in.items {
-				masks[i] = slices.DeleteFunc(slices.Sorted(maps.Keys(item)), func(key string) bool { return key == "id" })
+				items[i] = map[string]any{"id": item["id"], "record": item, "mask": slices.DeleteFunc(slices.Sorted(maps.Keys(item)), func(key string) bool { return key == "id" })}
 			}
-			message["masks"] = masks
+			message["items"] = items
 		}
 	}
 	if in.ids != nil {
