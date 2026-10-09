@@ -20,6 +20,10 @@ func TestCursorConstructors(t *testing.T) {
 
 func TestCursorEnabled(t *testing.T) {
 	require.False(t, types.Cursor{}.Enabled(), "a zero cursor makes WithCursor a no-op")
-	require.False(t, types.CursorForward(types.Asc("id"), "").Enabled(), "a cursor without a boundary value is not enabled")
-	require.True(t, types.CursorForward(types.Asc("id"), "abc").Enabled())
+	first := types.CursorForward(types.Asc("id"), "")
+	require.True(t, first.Enabled(), "a cursor without a boundary value is the feed's first page, ordered by its column")
+	require.False(t, first.Bounded(), "the first page has no boundary to start past")
+	next := types.CursorForward(types.Asc("id"), "abc")
+	require.True(t, next.Enabled())
+	require.True(t, next.Bounded())
 }

@@ -22,26 +22,32 @@ import (
 // condition rather than a row count to skip.
 //
 // The cursor carries the feed's ordering, so it also decides the ORDER BY of
-// the query: combining WithCursor with WithOrder produces two competing sort
-// sources and breaks the boundary condition, which the list controller
-// rejects as a client error.
+// the query, on every page including the first: a cursor without a boundary
+// value reads the feed from its start, or from its end when traveling
+// backward, in the feed's order, so the row a client pages on from is the
+// row the order puts last. Combining WithCursor with WithOrder fails the
+// chain with ErrCursorWithOrder, whichever comes first: two sort sources
+// would demote the cursor column to a secondary key and break the boundary
+// condition. The zero Cursor leaves the query as it is, so a model without a
+// cursor needs no special case at the call site.
 //
-// A cursor without a boundary value is a no-op, so an unpaginated first page
-// needs no special case at the call site. A time-typed cursor value is the
-// UTC wall clock formatted as "YYYY-MM-DD HH:MM:SS.ffffff" — UTC is the one
-// wall clock the framework stores on every dialect, so a boundary read back
-// from a row formats as row.CreatedAt.UTC().
+// A time-typed cursor value is the UTC wall clock formatted as
+// "YYYY-MM-DD HH:MM:SS.ffffff" — UTC is the one wall clock the framework
+// stores on every dialect, so a boundary read back from a row formats as
+// row.CreatedAt.UTC().
 //
 // The column must be one rows cannot share: the primary key, or a column
-// carrying a unique index of its own. A cursor is a single boundary value,
-// so on a column two rows can share, the rows on the boundary's own value
-// are split between pages and the ones a page had no room for are never
-// read — a feed with holes nothing reports. Naming any other column fails
-// the chain. A feed in creation order pages by the primary key of a base
-// model, which the rows are created in the order of.
+// carrying a unique index of its own that cannot be NULL (see
+// modelschema.IdentifyingColumns). A cursor is a single boundary value, so
+// on a column two rows can share, the rows on the boundary's own value are
+// split between pages and the ones a page had no room for are never read —
+// a feed with holes nothing reports. Naming any other column fails the
+// chain. A feed in creation order pages by the primary key of a base model,
+// which the rows are created in the order of.
 //
 // Examples:
 //
+//	WithCursor(types.CursorForward(SampleCols.ID.Asc(), "")).WithLimit(10).List(&first)
 //	WithCursor(types.CursorForward(SampleCols.ID.Asc(), lastID)).WithLimit(10).List(&next)
 //	WithCursor(types.CursorBackward(SampleCols.ID.Asc(), firstID)).WithLimit(10).List(&prev)
 //	WithCursor(types.CursorForward(SampleCols.ID.Desc(), lastID)).WithLimit(10).List(&older)
@@ -50,6 +56,10 @@ func (db *database[M]) WithCursor(cursor types.Cursor) types.Database[M] {
 	defer db.mu.Unlock()
 
 	if !cursor.Enabled() {
+		return db
+	}
+	if db.ordered {
+		db.err = errors.Wrap(ErrCursorWithOrder, "WithCursor after WithOrder")
 		return db
 	}
 	if err := db.ownOrder("WithCursor", cursor.Order()); err != nil {
@@ -85,7 +95,7 @@ func (db *database[M]) identifyingCursorColumn(column string) error {
 	}
 	if _, ok := identifying[column]; !ok {
 		return errors.Wrapf(ErrSharedCursorColumn,
-			"WithCursor pages by %q: page by the primary key, or by a column with a unique index of its own", column)
+			"WithCursor pages by %q: page by the primary key, or by a NOT NULL column with a unique index of its own", column)
 	}
 	return nil
 }
@@ -104,7 +114,8 @@ func (db *database[M]) ownOrder(option string, order types.Order) error {
 }
 
 // applyCursorPagination applies cursor-based pagination to the query if a
-// cursor is set. Traveling backward reads the feed in reverse, so both the
+// cursor is set: the ORDER BY on every page, and the boundary comparison on
+// a bounded one. Traveling backward reads the feed in reverse, so both the
 // boundary comparison and the ORDER BY flip; List reverses the rows afterwards
 // to hand them back in the feed's own order. A boundary on a time column goes
 // through timeComparableExpr on both sides, so the comparison agrees across
@@ -117,15 +128,17 @@ func (db *database[M]) applyCursorPagination() {
 	if db.cursor.Backward() {
 		direction = direction.Flip()
 	}
-	operator := " > "
-	if direction == types.OrderDesc {
-		operator = " < "
+	if db.cursor.Bounded() {
+		operator := " > "
+		if direction == types.OrderDesc {
+			operator = " < "
+		}
+		lhs, rhs := db.quoteOrderField(db.cursor.Order().Column()), "?"
+		if _, isTime := modelschema.TimeColumnSet(reflect.TypeOf(*new(M)))[db.cursor.Order().Column()]; isTime {
+			lhs, rhs = db.timeComparableExpr(lhs), db.timeComparableExpr(rhs)
+		}
+		db.ins = db.ins.Where(lhs+operator+rhs, db.cursor.Value())
 	}
-	lhs, rhs := db.quoteOrderField(db.cursor.Order().Column()), "?"
-	if _, isTime := modelschema.TimeColumnSet(reflect.TypeOf(*new(M)))[db.cursor.Order().Column()]; isTime {
-		lhs, rhs = db.timeComparableExpr(lhs), db.timeComparableExpr(rhs)
-	}
-	db.ins = db.ins.Where(lhs+operator+rhs, db.cursor.Value())
 	db.ins = db.ins.Order(db.orderClause(types.NewOrder("", db.cursor.Order().Column(), direction)))
 }
 
@@ -316,11 +329,16 @@ func (db *database[M]) WithOrder(orders ...types.Order) types.Database[M] {
 		if len(order.Column()) == 0 {
 			continue
 		}
+		if db.cursor.Enabled() {
+			db.err = errors.Wrap(ErrCursorWithOrder, "WithOrder after WithCursor")
+			return db
+		}
 		if err := db.ownOrder("WithOrder", order); err != nil {
 			db.err = err
 			return db
 		}
 		db.ins = db.ins.Order(db.orderClause(order))
+		db.ordered = true
 	}
 	return db
 }

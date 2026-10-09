@@ -689,6 +689,13 @@ type plainTestModel struct {
 	modelregistry.Base
 }
 
+// queryTestModel pages both ways, by offset and by cursor, the way a model
+// embedding model.Query does.
+type queryTestModel struct {
+	modelregistry.Query
+	modelregistry.Base
+}
+
 func TestPagination(t *testing.T) {
 	t.Run("PaginatableModelReadsBothParameters", func(t *testing.T) {
 		page, size := Pagination(url.Values{"_page": {"2"}, "_size": {"50"}}, &paginatableTestModel{})
@@ -735,6 +742,11 @@ func TestPagination(t *testing.T) {
 
 		page, _ = Pagination(url.Values{"_page": {"3"}, "_cursor_value": {"abc"}}, &plainTestModel{})
 		require.Equal(t, 1, page, "a model without cursor support never sees a cursor; the page still normalizes to 1")
+	})
+
+	t.Run("FirstPageCursorResetsPage", func(t *testing.T) {
+		page, _ := Pagination(url.Values{"_page": {"3"}, "_cursor_next": {"true"}}, &queryTestModel{})
+		require.Equal(t, 1, page, "a cursor parameter without a value asks for the feed's first page; offset paging must not stack on it")
 	})
 }
 
@@ -843,10 +855,52 @@ func TestCursor(t *testing.T) {
 		require.Error(t, err, "a value the bool cursor column cannot represent is a client error, matching filter semantics")
 	})
 
-	t.Run("MissingValueYieldsZeroCursor", func(t *testing.T) {
+	t.Run("MissingValueIsTheFirstPage", func(t *testing.T) {
 		cursor, err := Cursor(url.Values{"_cursor_next": {"true"}}, &cursorTestModel{})
 		require.NoError(t, err)
-		require.False(t, cursor.Enabled())
+		require.True(t, cursor.Enabled(), "a cursor model's feed is ordered from its first page on")
+		require.False(t, cursor.Bounded(), "the first page has no boundary to start past")
+		require.False(t, cursor.Backward())
+		require.Empty(t, cursor.Order().Column(), "an unnamed column leaves the primary key fallback to the database layer")
+	})
+
+	t.Run("MissingValueKeepsTheNamedColumn", func(t *testing.T) {
+		cursor, err := Cursor(url.Values{"_cursor_field": {"code"}}, &cursorUniqueTestModel{})
+		require.NoError(t, err)
+		require.True(t, cursor.Enabled())
+		require.False(t, cursor.Bounded())
+		require.Equal(t, "code", cursor.Order().Column(), "the first page is ordered by the column the feed will page by")
+	})
+
+	t.Run("UnknownColumnFailsOnTheFirstPage", func(t *testing.T) {
+		_, err := Cursor(url.Values{"_cursor_field": {"no_such_column"}}, &cursorTestModel{})
+		require.Error(t, err, "a mistyped cursor column is refused on the first page, not on the second")
+	})
+
+	t.Run("SortByWithoutValueYieldsZeroCursor", func(t *testing.T) {
+		cursor, err := Cursor(url.Values{"_sort_by": {"name"}}, &cursorTestModel{})
+		require.NoError(t, err)
+		require.False(t, cursor.Enabled(), "a list sorted by the client is not a feed; the cursor orders nothing")
+	})
+
+	t.Run("PlainRequestOnAnOffsetPagedModelIsNotAFeed", func(t *testing.T) {
+		cursor, err := Cursor(url.Values{"_size": {"2"}}, &queryTestModel{})
+		require.NoError(t, err)
+		require.False(t, cursor.Enabled(), "a model paging by offset too reads its first page by offset unless a cursor parameter asks for the feed")
+	})
+
+	t.Run("CursorParameterWithoutValueIsTheFirstPageOfAnOffsetPagedModel", func(t *testing.T) {
+		cursor, err := Cursor(url.Values{"_cursor_next": {"true"}}, &queryTestModel{})
+		require.NoError(t, err)
+		require.True(t, cursor.Enabled())
+		require.False(t, cursor.Bounded())
+	})
+
+	t.Run("CursorOnlyModelReadsItsFirstPageFromAPlainRequest", func(t *testing.T) {
+		cursor, err := Cursor(url.Values{"_size": {"2"}}, &cursorTestModel{})
+		require.NoError(t, err)
+		require.True(t, cursor.Enabled(), "a model with no other paging has nothing but the feed")
+		require.False(t, cursor.Bounded())
 	})
 
 	t.Run("ModelWithoutCursorYieldsZeroCursor", func(t *testing.T) {

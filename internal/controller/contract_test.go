@@ -224,6 +224,33 @@ func TestTransportsAnswerTheContractAlike(t *testing.T) {
 			},
 		},
 		{
+			// A cursor parameter without a boundary value asks for the first
+			// page of the feed, read in the feed's order from the start; a
+			// feed answers no total, on the first page as on any other.
+			name: "List reads the first page of a feed in the feed's order and answers no total", fixture: dated, phase: consts.List,
+			prepare: func(t *testing.T) contractInput {
+				t.Helper()
+				name := uniqueName("contract-dated-feed")
+				for range 3 {
+					createDated(t, name, time.Date(2026, time.January, 1, 0, 0, 0, 0, time.UTC))
+				}
+				return contractInput{query: controller.Query{
+					Filters:    []controller.Filter{{Field: "name", Op: "eq", Values: []string{name}}},
+					Size:       2,
+					CursorNext: true,
+				}}
+			},
+			want: ok,
+			check: func(t *testing.T, in contractInput, got contractAnswer) {
+				t.Helper()
+				data := dataMap(t, got)
+				require.EqualValues(t, 0, data["total"], "a feed answers no total")
+				listed := ids(data["items"])
+				require.Len(t, listed, 2)
+				require.Less(t, listed[0], listed[1], "the page comes back in the feed's order, by id")
+			},
+		},
+		{
 			name: "List refuses a date filter it cannot read", fixture: dated, phase: consts.List,
 			input: contractInput{query: controller.Query{Filters: []controller.Filter{{Field: "day", Op: "eq", Values: []string{"not-a-date"}}}}},
 			want:  contractWant{status: http.StatusBadRequest},
@@ -1143,8 +1170,8 @@ func grpcCodeOf(httpStatus int) codes.Code {
 
 // queryString renders q as the query string of the HTTP request: a filter
 // as field[op]=value, the members of an in joined by commas, the orderings
-// under _sort_by and the page and size under their parameters, the way the
-// request message of the rpc carries them (see controller.Query).
+// under _sort_by, the page and size and the cursor under their parameters,
+// the way the request message of the rpc carries them (see controller.Query).
 func queryString(q controller.Query) string {
 	values := url.Values{}
 	for _, f := range q.Filters {
@@ -1162,6 +1189,15 @@ func queryString(q controller.Query) string {
 	}
 	if q.Size != 0 {
 		values.Set(consts.QUERY_SIZE, strconv.FormatUint(uint64(q.Size), 10))
+	}
+	if q.CursorField != "" {
+		values.Set(consts.QUERY_CURSOR_FIELD, q.CursorField)
+	}
+	if q.CursorValue != "" {
+		values.Set(consts.QUERY_CURSOR_VALUE, q.CursorValue)
+	}
+	if q.CursorNext {
+		values.Set(consts.QUERY_CURSOR_NEXT, "true")
 	}
 	return values.Encode()
 }

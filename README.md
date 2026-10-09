@@ -328,8 +328,9 @@ model 声明的 `model.Query`、`model.Pagination`、`model.Cursor`。`QueryOrde
 条件：统计总数时必须传入同样的查询值和 `gst.QueryOptions`（把 `opts` 存成变量复用是
 最省事的写法），否则 total 会和当页数据对不上。
 
-cursor 分页自带 ORDER BY，所以一次请求不能同时用 `_cursor_value` 和 `_sort_by`，
-框架列表接口会直接返回 400。
+cursor 分页自带 ORDER BY，首页也是：带 `_cursor_next=true` 而不带 `_cursor_value` 的请求按游标列
+升序返回第一页，之后用末行的值接着翻。所以一次请求不能同时用 `_cursor_value` 和 `_sort_by`，
+框架列表接口会直接返回 400；`Database` 链上 `WithCursor` 与 `WithOrder` 同时出现也会报错。
 
 #### OR 查询
 

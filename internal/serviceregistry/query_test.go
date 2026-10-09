@@ -212,6 +212,19 @@ func TestBaseQueryCursor(t *testing.T) {
 		require.NoError(t, err)
 		require.False(t, cursor.Enabled())
 	})
+
+	t.Run("CursorParameterWithoutValueIsTheFirstPage", func(t *testing.T) {
+		cursor, err := svc.QueryCursor(newQueryContext(t, "/samples?_size=2&_cursor_next=true"))
+		require.NoError(t, err)
+		require.True(t, cursor.Enabled(), "the feed is ordered from its first page on")
+		require.False(t, cursor.Bounded())
+	})
+
+	t.Run("PlainRequestOnAnOffsetPagedModelIsNotAFeed", func(t *testing.T) {
+		cursor, err := svc.QueryCursor(newQueryContext(t, "/samples?_size=2"))
+		require.NoError(t, err)
+		require.False(t, cursor.Enabled(), "a model embedding model.Query reads its first page by offset unless a cursor parameter asks for the feed")
+	})
 }
 
 // newQueryContext builds a service context carrying a GET request with the

@@ -157,8 +157,9 @@ func (a *action[M, REQ, RSP]) listFlow(ctx context.Context, newServiceContext se
 		return nil, 0, failService(ctx, log, err)
 	}
 	var total int
-	// The count is skipped under cursor pagination, so the total answered
-	// stays 0.
+	// The count is skipped under cursor pagination, the first page included,
+	// so the total answered stays 0: a feed is read page by page at constant
+	// cost, and a count of it would be stale by the next page.
 	if !cursor.Enabled() {
 		if err = database.Database[M](ctx).
 			WithQuery(m, queryOpts).

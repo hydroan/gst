@@ -114,15 +114,18 @@ type Ordering = types.Ordering
 // feed's stable ordering, the boundary row, and whether the read travels along
 // that ordering or back down it. Its fields are unexported, so a cursor comes
 // from CursorForward, CursorBackward or the framework's URL parsing; Order,
-// Value and Backward read it back.
+// Value, Backward and Bounded read it back. The cursor orders the feed on
+// every page, the first one included.
 type Cursor = types.Cursor
 
-// CursorForward pages along order, starting just past value.
+// CursorForward pages along order, starting just past value, or at the
+// feed's first row when value is empty.
 func CursorForward(order Order, value string) Cursor {
 	return types.CursorForward(order, value)
 }
 
-// CursorBackward pages against order, starting just before value.
+// CursorBackward pages against order, starting just before value, or at the
+// feed's last row when value is empty.
 func CursorBackward(order Order, value string) Cursor {
 	return types.CursorBackward(order, value)
 }

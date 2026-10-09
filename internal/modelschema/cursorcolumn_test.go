@@ -8,14 +8,17 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// identifyingSample declares the three shapes the answer separates: a column
-// under a unique index of its own, one under a unique index it shares, and
-// one under an index that is not unique at all.
+// identifyingSample declares the shapes the answer separates: a column under
+// a unique index of its own, one under a unique index it shares, one under an
+// index that is not unique at all, and two unique columns that may be NULL,
+// one of which the schema forbids NULL on.
 type identifyingSample struct {
-	Code  string `json:"code"`
-	Shard string `json:"shard"`
-	Slot  int    `json:"slot"`
-	Name  string `json:"name"`
+	Code  string  `json:"code"`
+	Shard string  `json:"shard"`
+	Slot  int     `json:"slot"`
+	Name  string  `json:"name"`
+	Alias *string `json:"alias"`
+	Token *string `json:"token" gorm:"not null"`
 
 	modelregistry.Base
 }
@@ -27,6 +30,8 @@ func (identifyingSample) Indexes() []modelschema.Index {
 		{Fields: []string{"Code"}, Unique: true},
 		{Fields: []string{"Shard", "Slot"}, Unique: true},
 		{Fields: []string{"Name"}},
+		{Fields: []string{"Alias"}, Unique: true},
+		{Fields: []string{"Token"}, Unique: true},
 	}
 }
 
@@ -43,6 +48,8 @@ func TestIdentifyingColumnsSeparatesWhatIdentifiesARow(t *testing.T) {
 	require.NotContains(t, identifying, "slot")
 	require.NotContains(t, identifying, "name", "an index that is not unique says nothing about uniqueness")
 	require.NotContains(t, identifying, "created_at", "rows are created in the same instant all the time")
+	require.NotContains(t, identifying, "alias", "a unique column that may be NULL is shared by every row without a value")
+	require.Contains(t, identifying, "token", "a unique column the schema forbids NULL on identifies a row")
 }
 
 // TestIdentifyingColumnsReadsATypeAlone pins the call the database chain

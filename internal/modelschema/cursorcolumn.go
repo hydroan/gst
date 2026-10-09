@@ -11,7 +11,10 @@ var identifyingColumnsCache sync.Map
 
 // IdentifyingColumns returns the database columns of m a single row can be
 // told apart by: the primary key, and every column carrying a unique index
-// of its own, as declared through Indexes.
+// of its own, as declared through Indexes, that cannot be NULL — the schema
+// forbids it, or the Go type has no way to hold one (see nullable). A unique
+// index tells rows with a value apart; the rows without one all hold NULL,
+// which the index does not count as a duplicate.
 //
 // Cursor pagination reads them because a cursor is one boundary value: the
 // page after it is every row whose column compares past it. On a column two
@@ -32,9 +35,9 @@ func IdentifyingColumns(m any) (map[string]struct{}, error) {
 		return nil, err
 	}
 	identifying := make(map[string]struct{}, 2)
-	byGoName := make(map[string]string, len(columns))
+	byGoName := make(map[string]Column, len(columns))
 	for _, col := range columns {
-		byGoName[col.GoName] = col.DBName
+		byGoName[col.GoName] = col
 		if col.PrimaryKey {
 			identifying[col.DBName] = struct{}{}
 		}
@@ -52,11 +55,27 @@ func IdentifyingColumns(m any) (map[string]struct{}, error) {
 		if !index.Unique || len(index.Fields) != 1 {
 			continue
 		}
-		if dbName, ok := byGoName[index.Fields[0]]; ok {
-			identifying[dbName] = struct{}{}
+		if col, ok := byGoName[index.Fields[0]]; ok && (col.NotNull || !nullable(col.Type)) {
+			identifying[col.DBName] = struct{}{}
 		}
 	}
 
 	identifyingColumnsCache.Store(typ, identifying)
 	return identifying, nil
+}
+
+// nullable reports whether a column of the Go type t can hold NULL: a
+// pointer, an interface, a slice or a map is nil when unset and is written
+// as NULL, and a struct with a Valid flag, sql.NullString and its kind, says
+// so itself. A string, a number, a bool or a time has no way to hold NULL,
+// so a NOT NULL constraint adds nothing the type does not already say.
+func nullable(t reflect.Type) bool {
+	switch t.Kind() {
+	case reflect.Pointer, reflect.Interface, reflect.Slice, reflect.Map:
+		return true
+	case reflect.Struct:
+		valid, ok := t.FieldByName("Valid")
+		return ok && valid.Type.Kind() == reflect.Bool
+	}
+	return false
 }

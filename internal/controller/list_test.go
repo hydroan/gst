@@ -26,6 +26,7 @@ func TestListRefusesMalformedQueryParameters(t *testing.T) {
 		{name: "a sort column the model lacks", target: "/controller-samples?_sort_by=missing"},
 		{name: "a sort direction that does not exist", target: "/controller-samples?_sort_by=name+sideways"},
 		{name: "a cursor column the model lacks", target: "/controller-samples?_cursor_field=missing&_cursor_value=value"},
+		{name: "a cursor column the model lacks on the first page", target: "/controller-samples?_cursor_field=missing"},
 		{name: "a cursor beside an order of its own", target: "/controller-samples?_cursor_field=id&_cursor_value=value&_sort_by=name"},
 	} {
 		t.Run(tt.name, func(t *testing.T) {

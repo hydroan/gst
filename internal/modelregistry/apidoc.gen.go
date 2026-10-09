@@ -28,11 +28,11 @@ func init() {
 		},
 	})
 	apidoc.Register("github.com/hydroan/gst/internal/modelregistry", "Cursor", apidoc.StructDoc{
-		Comment: "Cursor declares cursor-pagination query parameters for List actions.\n\nCursor owns cursor position and direction only. Ordering for cursor pagination\nis derived from CursorField and CursorNext, so SortBy intentionally remains\noutside this struct to avoid multiple competing order sources. The field\nnamed must be one no two rows share — the primary key, or a field carrying\na unique index of its own — because the cursor is a single boundary value:\non a shared one the rows holding it are split between pages and the ones a\npage had no room for are never read. Any other field is a 400. Embedding\nCursor also lets the client tune the batch size via _size (the field lives\nin Pagination; the controller reads it from the URL directly), while _page\nstays rejected: offset paging conflicts with cursor semantics.",
+		Comment: "Cursor declares cursor-pagination query parameters for List actions.\n\nCursor owns cursor position and direction only. Ordering for cursor pagination\nis derived from CursorField and CursorNext, so SortBy intentionally remains\noutside this struct to avoid multiple competing order sources. The field\nnamed must be one no two rows share — the primary key, or a NOT NULL field\ncarrying a unique index of its own — because the cursor is a single\nboundary value: on a shared one the rows holding it are split between pages\nand the ones a page had no room for are never read. Any other field is a\n400. The feed is ordered from its first page on: a request with a cursor\nparameter but no _cursor_value reads the first page in the feed's order,\nand a model embedding Cursor alone reads it from a request naming no\ncursor parameter at all. Embedding Cursor also lets the client tune the\nbatch size via _size (the field lives in Pagination; the controller reads\nit from the URL directly), while _page stays rejected: offset paging\nconflicts with cursor semantics.",
 		Fields: map[string]string{
-			"CursorField": "CursorField names the single field the cursor orders by; it must be the primary key or a field with a unique index of its own, see DefaultCursorColumn.",
+			"CursorField": "CursorField names the single field the cursor orders by; it must be the primary key or a NOT NULL field with a unique index of its own, see DefaultCursorColumn.",
 			"CursorNext":  "CursorNext chooses the cursor direction; false requests the previous page.",
-			"CursorValue": "CursorValue is the current cursor token; it must parse as the cursor column's Go type.",
+			"CursorValue": "CursorValue is the current cursor token; it must parse as the cursor column's Go type. Unset, the request is the feed's first page.",
 		},
 	})
 	apidoc.Register("github.com/hydroan/gst/internal/modelregistry", "Empty", apidoc.StructDoc{

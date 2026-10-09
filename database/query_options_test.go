@@ -8,6 +8,7 @@ import (
 
 	"github.com/hydroan/gst/database"
 	"github.com/hydroan/gst/internal/modelregistry"
+	"github.com/hydroan/gst/internal/modelschema"
 	"github.com/hydroan/gst/internal/types"
 	"github.com/hydroan/gst/tenant"
 	"github.com/stretchr/testify/require"
@@ -34,6 +35,20 @@ type cursorableTestUser struct {
 
 	modelregistry.Cursor
 	modelregistry.Base
+}
+
+// cursorNullableTestUser carries a unique column that may be NULL: every row
+// without a value shares NULL, so the column cannot tell rows apart.
+type cursorNullableTestUser struct {
+	Code *string `json:"code"`
+
+	modelregistry.Base
+}
+
+func (*cursorNullableTestUser) TableName() string { return "cursor_nullable_test_users" }
+
+func (*cursorNullableTestUser) Indexes() []modelschema.Index {
+	return []modelschema.Index{{Fields: []string{"Code"}, Unique: true}}
 }
 
 func TestDatabaseWithCursor(t *testing.T) {
@@ -175,17 +190,30 @@ func TestDatabaseWithCursor(t *testing.T) {
 		require.Equal(t, "s3", page[0].Label)
 	})
 
-	t.Run("EmptyCursor", func(t *testing.T) {
+	t.Run("UnboundedCursorIsTheFirstPageInOrder", func(t *testing.T) {
 		defer cleanupTestData()
-		setupTestData(t)
+		// Written one by one out of id order, so a read in storage order
+		// comes back out of order on the dialects without a clustered
+		// primary key.
+		for _, id := range []string{"user00001", "user00009", "user00003", "user00005", "user00007"} {
+			require.NoError(t, database.Database[*TestUser](context.Background()).Create(&TestUser{Name: id, ID: id}))
+		}
 
-		// Test with empty cursor value (should be ignored)
-		users := make([]*TestUser, 0)
-		require.NoError(t, database.Database[*TestUser](context.Background()).
-			WithLimit(10).
-			WithCursor(types.CursorForward(types.Asc("id"), "")).
-			List(&users))
-		require.Len(t, users, 3, "empty cursor should be ignored, return all records")
+		visited := make([]string, 0, 5)
+		cursor := types.CursorForward(types.Asc("id"), "")
+		for range 4 {
+			page := make([]*TestUser, 0)
+			require.NoError(t, database.Database[*TestUser](context.Background()).WithLimit(2).WithCursor(cursor).List(&page))
+			if len(page) == 0 {
+				break
+			}
+			for _, u := range page {
+				visited = append(visited, u.ID)
+			}
+			cursor = types.CursorForward(types.Asc("id"), page[len(page)-1].ID)
+		}
+		require.Equal(t, []string{"user00001", "user00003", "user00005", "user00007", "user00009"}, visited,
+			"the first page is read in the feed's order, so paging on from its last row reaches every row once")
 	})
 
 	t.Run("DescendingFeedForward", func(t *testing.T) {
@@ -268,23 +296,24 @@ func TestDatabaseWithCursor(t *testing.T) {
 		defer cleanupTestData()
 		count := 50
 		data := make([]*TestUser, 0, count)
+		// The rows are written out of id order, so a page read in storage
+		// order comes back out of order on the dialects without a clustered
+		// primary key; 7 is coprime with 50, so the sequence visits every id.
 		for i := range count {
-			name := fmt.Sprintf("user%05d", i)
+			name := fmt.Sprintf("user%05d", i*7%count)
 			data = append(data, &TestUser{Name: name, ID: name})
 		}
 		require.NoError(t, database.Database[*TestUser](context.Background()).WithBatchSize(1000).Create(data...))
 
-		// Test pagination with page size > 1
+		// Test pagination with page size > 1, from the unbounded first page on
 		pageSize := 10
 		cursorValue := ""
 		allFetched := make([]string, 0)
 
 		for range 5 {
 			users := make([]*TestUser, 0)
-			db := database.Database[*TestUser](context.Background()).WithLimit(pageSize)
-			if cursorValue != "" {
-				db = db.WithCursor(types.CursorForward(types.Asc("id"), cursorValue))
-			}
+			db := database.Database[*TestUser](context.Background()).WithLimit(pageSize).
+				WithCursor(types.CursorForward(types.Asc("id"), cursorValue))
 			require.NoError(t, db.List(&users))
 			require.LessOrEqual(t, len(users), pageSize, "should not exceed page size")
 
@@ -298,13 +327,35 @@ func TestDatabaseWithCursor(t *testing.T) {
 			cursorValue = users[len(users)-1].ID
 		}
 
-		require.NotEmpty(t, allFetched, "should fetch at least some records")
-		// Verify no duplicates
-		seen := make(map[string]bool)
-		for _, id := range allFetched {
-			require.False(t, seen[id], "should not have duplicate records: %s", id)
-			seen[id] = true
+		// Every row exactly once: the first page is read in the feed's order,
+		// so paging on from its last row skips nothing.
+		expected := make([]string, 0, count)
+		for i := range count {
+			expected = append(expected, fmt.Sprintf("user%05d", i))
 		}
+		require.Equal(t, expected, allFetched)
+	})
+
+	t.Run("CursorWithOrderFails", func(t *testing.T) {
+		users := make([]*TestUser, 0)
+		require.ErrorIs(t, database.Database[*TestUser](context.Background()).
+			WithCursor(types.CursorForward(types.Asc("id"), "a1")).
+			WithOrder(types.Desc("name")).
+			List(&users),
+			database.ErrCursorWithOrder, "the cursor orders the feed; a second order would break its boundary")
+		require.ErrorIs(t, database.Database[*TestUser](context.Background()).
+			WithOrder(types.Desc("name")).
+			WithCursor(types.CursorForward(types.Asc("id"), "a1")).
+			List(&users),
+			database.ErrCursorWithOrder, "whichever of the two comes first on the chain")
+	})
+
+	t.Run("NullableUniqueColumnFails", func(t *testing.T) {
+		users := make([]*cursorNullableTestUser, 0)
+		require.ErrorIs(t, database.Database[*cursorNullableTestUser](context.Background()).
+			WithCursor(types.CursorForward(types.Asc("code"), "")).
+			List(&users),
+			database.ErrSharedCursorColumn, "rows without a value share NULL, so the column splits them between pages")
 	})
 }
 

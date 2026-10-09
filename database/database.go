@@ -189,6 +189,12 @@ var (
 	// reports. The primary key, and any column carrying a unique index of
 	// its own, leave no such gap.
 	ErrSharedCursorColumn = errors.New("cursor column is not unique")
+
+	// ErrCursorWithOrder is returned when WithCursor and WithOrder meet on one
+	// chain. The cursor orders the feed by its column on every page; a second
+	// ORDER BY would demote that column to a secondary sort key, and the
+	// boundary comparison the cursor relies on would skip and repeat rows.
+	ErrCursorWithOrder = errors.New("WithCursor and WithOrder cannot be combined: the cursor orders the feed")
 )
 
 var (
@@ -291,7 +297,8 @@ type database[M types.Model] struct {
 	sqlStatements *[]types.SQLStatement // collector supplied to WithDryRun, nil when the dry run only builds.
 
 	// cursor pagination
-	cursor types.Cursor // feed ordering, boundary value, and travel direction; a zero Value disables cursor pagination.
+	cursor  types.Cursor // feed ordering, boundary value, and travel direction; the zero Cursor pages nothing.
+	ordered bool         // WithOrder added an ORDER BY; WithCursor refuses to join it (see ErrCursorWithOrder).
 
 	// select
 	selectColumns []string
@@ -360,6 +367,7 @@ func (db *database[M]) reset() {
 
 	// reset cursor pagination
 	db.cursor = types.Cursor{}
+	db.ordered = false
 
 	// reset select
 	db.selectColumns = nil

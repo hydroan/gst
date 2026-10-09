@@ -120,9 +120,11 @@ func (Base[M, REQ, RSP]) QueryPagination(ctx *types.ServiceContext) (page, size 
 
 // QueryCursor returns the cursor position of the request, ready to be passed
 // to Database.WithCursor. Models that did not embed model.Cursor yield a zero
-// cursor, which WithCursor treats as a no-op. An unknown cursor column, or a
-// cursor value the column's Go type cannot represent, is a client error and
-// is reported as such.
+// cursor, which WithCursor treats as a no-op; a request without _cursor_value
+// yields the feed's first page, ordered but unbounded, and one with _sort_by
+// and no _cursor_value yields a zero cursor, a list the client sorts. An
+// unknown cursor column, or a cursor value the column's Go type cannot
+// represent, is a client error and is reported as such.
 func (Base[M, REQ, RSP]) QueryCursor(ctx *types.ServiceContext) (types.Cursor, error) {
 	return urlquery.Cursor(requestctx.QueryValues(ctx), zeroModel[M]())
 }

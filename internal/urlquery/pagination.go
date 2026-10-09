@@ -35,8 +35,9 @@ const (
 // the first page — so a caller can compute offsets or slice in-memory pages
 // without normalizing again. An unset size defaults to a small first page and
 // an oversized one clamps to the cap, while a model without client size
-// control keeps the full-table safety limit. An active cursor resets page to
-// 1 so offset paging cannot stack on top of cursor filtering.
+// control keeps the full-table safety limit. A request reading the feed
+// through a cursor (see cursorRequested), its first page included, resets
+// page to 1 so offset paging cannot stack on top of cursor filtering.
 func Pagination(q url.Values, m types.Model) (page, size int) {
 	paginatable := modelregistry.IsPaginatable(m)
 	cursorable := modelregistry.IsCursorable(m)
@@ -58,7 +59,7 @@ func Pagination(q url.Values, m types.Model) (page, size int) {
 	} else {
 		size = defaultLimit
 	}
-	if cursorable && len(q.Get(consts.QUERY_CURSOR_VALUE)) > 0 {
+	if cursorRequested(q, m) {
 		page = 1
 	}
 	return page, size
