@@ -59,6 +59,9 @@ message Shape {
 
   map<int32, ShapePoint> by_code = 24;
 
+  // Spans and Note are unnamed structs, held in a slice and by a pointer;
+  // their Weight and Level are narrower than the int32 their fields carry,
+  // so a refusal names the field by the path of the struct.
   repeated ShapeSpans spans = 25;
 
   ShapeNote note = 26;
@@ -157,11 +160,15 @@ message ShapeSpans {
   int64 from = 1;
 
   int64 to = 2;
+
+  int32 weight = 3;
 }
 
 // ShapeNote is the message of the note field of Shape.
 message ShapeNote {
   string text = 1;
+
+  int32 level = 2;
 }
 
 // ShapeCells is the message of the cells field of Shape.

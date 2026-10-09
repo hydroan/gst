@@ -1556,12 +1556,17 @@ type Shape struct {
 	Grid    [2]int32                         'json:"grid" pb:"22" gorm:"-"'
 	Scores  map[string]int                   'json:"scores,omitempty" pb:"23" gorm:"-"'
 	ByCode  map[int32]ShapePoint             'json:"by_code,omitempty" pb:"24" gorm:"-"'
-	Spans   []struct {
-		From int 'json:"from" pb:"1"'
-		To   int 'json:"to" pb:"2"'
+	// Spans and Note are unnamed structs, held in a slice and by a pointer;
+	// their Weight and Level are narrower than the int32 their fields carry,
+	// so a refusal names the field by the path of the struct.
+	Spans []struct {
+		From   int  'json:"from" pb:"1"'
+		To     int  'json:"to" pb:"2"'
+		Weight int8 'json:"weight" pb:"3"'
 	} 'json:"spans,omitempty" pb:"25" gorm:"-"'
 	Note *struct {
-		Text string 'json:"text" pb:"1"'
+		Text  string 'json:"text" pb:"1"'
+		Level int8   'json:"level" pb:"2"'
 	} 'json:"note,omitempty" pb:"26" gorm:"-"'
 	When  *time.Time 'json:"when,omitempty" pb:"27"'
 	Any   any        'json:"any,omitempty" pb:"28" gorm:"-"'
@@ -1832,12 +1837,14 @@ func TestShapeRoundTrips(t *testing.T) {
 		Width int32 'json:"width" pb:"1"'
 	}{Width: 4}
 	in.Spans = append(in.Spans, struct {
-		From int 'json:"from" pb:"1"'
-		To   int 'json:"to" pb:"2"'
-	}{From: 1, To: 2})
+		From   int  'json:"from" pb:"1"'
+		To     int  'json:"to" pb:"2"'
+		Weight int8 'json:"weight" pb:"3"'
+	}{From: 1, To: 2, Weight: 3})
 	in.Note = &struct {
-		Text string 'json:"text" pb:"1"'
-	}{Text: "note"}
+		Text  string 'json:"text" pb:"1"'
+		Level int8   'json:"level" pb:"2"'
+	}{Text: "note", Level: 4}
 
 	msg := pb.ShapeToProto(in)
 	require.Equal(t, day, msg.GetDate().AsTime())
@@ -1938,6 +1945,8 @@ func TestShapeRoundTrips(t *testing.T) {
 			{name: "a timestamp in a slice past the year 9999", msg: &pb.Shape{Stamps: []*timestamppb.Timestamp{{Seconds: 253402300800}}}, want: "invalid value for field \x27stamps[0]\x27"},
 			{name: "a timestamp inside a nested message past the year 9999", msg: &pb.Shape{Audit: &pb.ShapeAudit{Removed: &timestamppb.Timestamp{Seconds: 253402300800}}}, want: "invalid value for field \x27audit.removed\x27"},
 			{name: "a map key out of range", msg: &pb.Shape{ByRank: map[int32]*pb.ShapePoint{300: {}}}, want: "invalid value for field \x27by_rank\x27"},
+			{name: "an integer out of range inside an unnamed struct", msg: &pb.Shape{Note: &pb.ShapeNote{Level: 300}}, want: "invalid value for field \x27note.level\x27"},
+			{name: "an integer out of range inside an unnamed struct of a slice", msg: &pb.Shape{Spans: []*pb.ShapeSpans{{}, {Weight: 300}}}, want: "invalid value for field \x27spans[1].weight\x27"},
 		} {
 			t.Run(tt.name, func(t *testing.T) {
 				_, err := pb.ShapeFromProto(tt.msg)

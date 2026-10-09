@@ -106,11 +106,13 @@ func ShapeToProto(m *model.Shape) *Shape {
 			p.Spans[i] = new(ShapeSpans)
 			p.Spans[i].From = int64(v.From)
 			p.Spans[i].To = int64(v.To)
+			p.Spans[i].Weight = int32(v.Weight)
 		}
 	}
 	if m.Note != nil {
 		p.Note = new(ShapeNote)
 		p.Note.Text = grpc.UTF8(m.Note.Text)
+		p.Note.Level = int32(m.Note.Level)
 	}
 	if m.When != nil {
 		p.When = timestamppb.New(*m.When)
@@ -320,21 +322,31 @@ func ShapeFromProto(p *Shape) (*model.Shape, error) {
 	}
 	if p.GetSpans() != nil {
 		m.Spans = make([]struct {
-			From int `json:"from" pb:"1"`
-			To   int `json:"to" pb:"2"`
+			From   int  `json:"from" pb:"1"`
+			To     int  `json:"to" pb:"2"`
+			Weight int8 `json:"weight" pb:"3"`
 		}, len(p.GetSpans()))
 		for i, v := range p.GetSpans() {
 			if v != nil {
 				m.Spans[i].From = int(v.GetFrom())
 				m.Spans[i].To = int(v.GetTo())
+				m.Spans[i].Weight, err = grpc.Narrow[int8](grpc.Element("spans", i)+".weight", v.GetWeight())
+				if err != nil {
+					return nil, err
+				}
 			}
 		}
 	}
 	if v := p.GetNote(); v != nil {
 		m.Note = new(struct {
-			Text string `json:"text" pb:"1"`
+			Text  string `json:"text" pb:"1"`
+			Level int8   `json:"level" pb:"2"`
 		})
 		m.Note.Text = v.GetText()
+		m.Note.Level, err = grpc.Narrow[int8]("note.level", v.GetLevel())
+		if err != nil {
+			return nil, err
+		}
 	}
 	if p.GetWhen() != nil {
 		var x time.Time

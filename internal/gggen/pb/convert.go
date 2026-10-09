@@ -456,6 +456,7 @@ func typeKey(t types.Type) string {
 //			p.Spans[i] = new(ShapeSpans)
 //			p.Spans[i].From = int64(v.From)
 //			p.Spans[i].To = int64(v.To)
+//			p.Spans[i].Weight = int32(v.Weight)
 //		}
 //	}
 func (w *fileWriter) toProto(dst, src ast.Expr, t types.Type, ft fieldType, inner bool) []ast.Stmt {
@@ -628,10 +629,13 @@ func selPath(x ast.Expr, path []string) ast.Expr {
 // fromProto returns the statements decoding src, the value of a message
 // field of protobuf type ft, the field at path, into dst, a Go value of
 // type t: the mirror of toProto. path spells the field in a refusal (see
-// keyPath): a string literal, meta.score, for a field reached through
-// message fields alone, and an expression evaluated at run time, built on
-// grpc.Element or grpc.Entry (see elementPath), for a field inside a
-// repeated field or a map, points[1].x. A message is read through its
+// keyPath): a string literal for a field of the message or of an unnamed
+// struct held by a field, rank or note.level, and an expression evaluated
+// at run time, built on grpc.Element or grpc.Entry (see elementPath), for a
+// field inside a repeated field or a map, spans[1].weight. A nested message
+// is decoded by its own conversion function, which names its fields on
+// their own, score, and the refusal gains the field holding the message at
+// run time (see refusingAt), meta.score. A message is read through its
 // getters, so an unset one decodes into the zero value; the pointer of an
 // optional scalar is taken as it is. A value the Go type may not hold, a
 // narrow integer, a floating-point number or a JSON number (see reader), a
@@ -780,9 +784,14 @@ func selPath(x ast.Expr, path []string) ast.Expr {
 //
 //	if v := p.GetNote(); v != nil {
 //		m.Note = new(struct {
-//			Text string `json:"text" pb:"1"`
+//			Text  string `json:"text" pb:"1"`
+//			Level int8   `json:"level" pb:"2"`
 //		})
 //		m.Note.Text = v.GetText()
+//		m.Note.Level, err = grpc.Narrow[int8]("note.level", v.GetLevel())
+//		if err != nil {
+//			return nil, err
+//		}
 //	}
 //		if p.GetWhen() != nil {
 //			var x time.Time
@@ -1059,9 +1068,10 @@ func (w *fileWriter) entryPath(path, k ast.Expr) ast.Expr {
 
 // keyPath is the path of the field key of the value at path: the key alone
 // for a field of the message being converted (path nil), the two joined into
-// one literal for a field of a struct held by a field, note.text, and joined
-// at run time for a field of a struct held in a container, whose path names
-// the element.
+// one literal for a field of an unnamed struct held by a field, note.level,
+// and joined at run time for a field of an unnamed struct held in a
+// container, whose path names the element,
+// grpc.Element("spans", i)+".weight".
 func keyPath(path ast.Expr, key string) ast.Expr {
 	if path == nil {
 		return strLit(key)
