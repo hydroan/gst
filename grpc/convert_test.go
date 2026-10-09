@@ -208,6 +208,23 @@ func TestItemErrorNamesTheItemOfARefusedRecord(t *testing.T) {
 	requireFieldViolation(t, err, "items[1].count", "300 is out of range")
 }
 
+// TestPathErrorNamesTheElementOfARefusedValue pins PathError with Element
+// and Entry, what a generated conversion names the refused value of a
+// nested message held in a container through: the path of the element or
+// the map value in front of the field refused, in the message and in the
+// BadRequest detail alike.
+func TestPathErrorNamesTheElementOfARefusedValue(t *testing.T) {
+	_, refused := gstgrpc.Narrow[int8]("x", int32(300))
+
+	err := gstgrpc.PathError(gstgrpc.Element("points", 1), refused)
+	require.Equal(t, codes.InvalidArgument, status.Code(err))
+	require.Equal(t, "invalid value for field 'points[1].x'", status.Convert(err).Message())
+	requireFieldViolation(t, err, "points[1].x", "300 is out of range")
+
+	err = gstgrpc.PathError(gstgrpc.Entry("by_code", int32(7)), refused)
+	require.Equal(t, "invalid value for field 'by_code[7].x'", status.Convert(err).Message())
+}
+
 // requireFieldViolation asserts that err carries one google.rpc.BadRequest
 // detail naming field with description.
 func requireFieldViolation(t *testing.T, err error, field, description string) {

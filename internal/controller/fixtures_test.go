@@ -104,10 +104,13 @@ type datedSample struct {
 
 func (datedSample) TableName() string { return "controller_dated_samples" }
 
-// sampleAddress is the struct value of a shaped sample.
+// sampleAddress is the struct value of a shaped sample; the floor is an
+// integer narrower than a JSON number, for a nested value a field cannot
+// hold.
 type sampleAddress struct {
-	City string `json:"city" binding:"required"`
-	Zip  string `json:"zip"`
+	City  string `json:"city" binding:"required"`
+	Zip   string `json:"zip"`
+	Floor int8   `json:"floor"`
 }
 
 // SampleAudit is embedded in a shaped sample, its fields promoted.

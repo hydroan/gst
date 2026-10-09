@@ -406,24 +406,16 @@ func clientSafeBindError(err error) error {
 }
 
 // indexedJSONPath spells path, the field path of a json.UnmarshalTypeError,
-// the way the contract spells a field of a batch item: encoding/json joins
-// every step with a dot, items.1.rank, and a step that is an index is
-// written in brackets instead, items[1].rank, as the validator's paths are
-// (see jsonFieldPath). A map key of digits alone reads as an index too,
-// encoding/json spelling the two alike.
+// the way the contract spells it: encoding/json joins every step with a
+// dot, items.1.rank, and a step that is an index is written in brackets
+// instead, items[1].rank, as the validator's paths are (see jsonFieldPath)
+// and as the gRPC side names a refused value (see pathStep).
 func indexedJSONPath(path string) string {
-	var b strings.Builder
-	for i, step := range strings.Split(path, ".") {
-		switch {
-		case step != "" && strings.Trim(step, "0123456789") == "":
-			b.WriteString("[" + step + "]")
-		case i > 0:
-			b.WriteString("." + step)
-		default:
-			b.WriteString(step)
-		}
+	spelled := ""
+	for step := range strings.SplitSeq(path, ".") {
+		spelled = pathStep(spelled, step)
 	}
-	return b.String()
+	return spelled
 }
 
 // clientSafeItemBindError is clientSafeBindError for the item at index i of

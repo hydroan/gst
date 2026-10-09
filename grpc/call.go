@@ -185,6 +185,30 @@ func ItemError(i int, err error) error {
 	return controller.ItemError(i, err)
 }
 
+// PathError names the field err, the refusal a FromProto answered a value
+// with, refers to behind path, meta.score, in the message and in the
+// google.rpc.BadRequest detail alike; any other error is answered as it is.
+// A generated conversion answers the refusal of a nested message, of an
+// element of a repeated field (see Element) and of a value of a map (see
+// Entry) through it.
+func PathError(path string, err error) error {
+	return controller.PathError(path, err)
+}
+
+// Element returns the path of the element at index i of the repeated field
+// at path, points[1], what a generated conversion names a refused element
+// by.
+func Element(path string, i int) string {
+	return controller.Element(path, i)
+}
+
+// Entry returns the path of the value under key of the map field at path,
+// costs.k1, and by_rank[7] for a key of digits alone, what a generated
+// conversion names a refused map value by.
+func Entry[K comparable](path string, key K) string {
+	return controller.Entry(path, key)
+}
+
 // PatchManyCall returns the batch patch call of M on route: given the route
 // parameters, the items and the paths of each item's update mask, in order,
 // it answers with the records patched.

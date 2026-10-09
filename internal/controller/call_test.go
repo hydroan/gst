@@ -606,6 +606,28 @@ func TestItemErrorNamesTheItemOfARefusedRecord(t *testing.T) {
 	require.Equal(t, other, controller.ItemError(3, other))
 }
 
+// TestPathErrorNamesTheFieldBehindThePath pins PathError, Element and Entry,
+// what the generated conversions name a refused value of a nested message,
+// a container element or a map value through: the field a FromProto refused
+// is named behind the path, meta.score, the path of an element carries its
+// index, points[1], the path of a map value its key, costs.k1, a key of
+// digits alone in brackets like an index, by_rank[7], and the prefixes
+// compose from the inside out, items[1].meta.score.
+func TestPathErrorNamesTheFieldBehindThePath(t *testing.T) {
+	refused := grpcserver.StatusError(types.NewInvalidValue("score", "NaN is not finite", nil))
+
+	requireStatus(t, controller.PathError("meta", refused), codes.InvalidArgument, "invalid value for field 'meta.score'")
+	require.Equal(t, "points[1]", controller.Element("points", 1))
+	require.Equal(t, "costs.k1", controller.Entry("costs", "k1"))
+	require.Equal(t, "by_rank[7]", controller.Entry("by_rank", int8(7)))
+	require.Equal(t, "by_rank.-1", controller.Entry("by_rank", int8(-1)))
+	requireStatus(t, controller.ItemError(1, controller.PathError("meta", refused)), codes.InvalidArgument, "invalid value for field 'items[1].meta.score'")
+	requireStatus(t, controller.PathError(controller.Element("points", 2), refused), codes.InvalidArgument, "invalid value for field 'points[2].score'")
+
+	plain := status.Error(codes.InvalidArgument, "nothing named")
+	require.Equal(t, plain, controller.PathError("meta", plain))
+}
+
 // TestServiceCallDelegatesToThePhaseService pins the call of an action with
 // a payload and result of its own: the phase service's method runs with the
 // payload, on a service context answering the parameters, the query, the

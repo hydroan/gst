@@ -120,6 +120,15 @@ func TestTransportsAnswerTheContractAlike(t *testing.T) {
 			want:  nameRequired,
 		},
 		{
+			name: "Create refuses a value a nested field cannot hold and stores nothing", fixture: shaped, phase: consts.Create,
+			input: contractInput{record: map[string]any{"name": uniqueName("contract-nested"), "address": map[string]any{"city": "c", "floor": 300}}},
+			want:  contractWant{status: http.StatusBadRequest, msg: "invalid value for field 'address.floor'"},
+			check: func(t *testing.T, in contractInput, _ contractAnswer) {
+				t.Helper()
+				require.Zero(t, countShapedNamed(t, stringOf(in.record["name"])))
+			},
+		},
+		{
 			name: "Create refuses a value the field cannot hold and stores nothing", fixture: shaped, phase: consts.Create,
 			input: contractInput{record: map[string]any{"name": uniqueName("contract-narrow"), "rank": 300}},
 			want:  contractWant{status: http.StatusBadRequest, msg: "invalid value for field 'rank'"},
@@ -682,6 +691,19 @@ func TestTransportsAnswerTheContractAlike(t *testing.T) {
 			check: func(t *testing.T, in contractInput, _ contractAnswer) {
 				t.Helper()
 				require.Zero(t, loadShaped(t, stringOf(in.items[0]["id"])).Rank, "the item in range is not written either")
+			},
+		},
+		{
+			name: "PatchMany refuses an item whose nested field cannot hold a value and writes nothing", fixture: shaped, phase: consts.PatchMany,
+			prepare: func(t *testing.T) contractInput {
+				t.Helper()
+				a, b := createShaped(t, "contract-patch-many-nested-a"), createShaped(t, "contract-patch-many-nested-b")
+				return contractInput{items: []map[string]any{{"id": a.GetID(), "address": map[string]any{"city": "a", "floor": 1}}, {"id": b.GetID(), "address": map[string]any{"city": "b", "floor": 300}}}}
+			},
+			want: contractWant{status: http.StatusBadRequest, msg: "invalid value for field 'items[1].address.floor'"},
+			check: func(t *testing.T, in contractInput, _ contractAnswer) {
+				t.Helper()
+				require.Equal(t, "old", loadShaped(t, stringOf(in.items[0]["id"])).Address.City, "the item in range is not written either")
 			},
 		},
 		{
