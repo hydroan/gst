@@ -17,11 +17,11 @@ import (
 // the same sanitized view the self-service status endpoint renders: device
 // metadata only, never secrets or recovery-code hashes.
 type AdminTOTPStatusService struct {
-	service.Base[*modelmfa.AdminTOTP, *model.Empty, *modelmfa.TOTPStatusRsp]
+	service.Base[*modelmfa.AdminTOTP, *model.Empty, *modelmfa.AdminTOTPStatusRsp]
 }
 
 // Get loads the target user's TOTP enrollment view for an administrator.
-func (a *AdminTOTPStatusService) Get(ctx *gst.ServiceContext, req *model.Empty) (rsp *modelmfa.TOTPStatusRsp, err error) {
+func (a *AdminTOTPStatusService) Get(ctx *gst.ServiceContext, req *model.Empty) (rsp *modelmfa.AdminTOTPStatusRsp, err error) {
 	log := a.WithContext(ctx, ctx.Phase())
 
 	targetUserID := strings.TrimSpace(ctx.Param("id"))

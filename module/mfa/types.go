@@ -16,5 +16,6 @@ type (
 	TOTPUnbindReq = modelmfa.TOTPUnbindReq
 	TOTPUnbindRsp = modelmfa.TOTPUnbindRsp
 
-	AdminTOTPResetRsp = modelmfa.AdminTOTPResetRsp
+	AdminTOTPStatusRsp = modelmfa.AdminTOTPStatusRsp
+	AdminTOTPResetRsp  = modelmfa.AdminTOTPResetRsp
 )

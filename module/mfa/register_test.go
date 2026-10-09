@@ -555,7 +555,7 @@ func TestTOTPAdmin(t *testing.T) {
 	t.Run("root_reads_target_status", func(t *testing.T) {
 		resp, err := rootCli.Do(t.Context(), http.MethodGet, adminPath, nil)
 		require.NoError(t, err)
-		rsp := testutil.DecodeResp[*mfa.TOTPStatusRsp](t, resp)
+		rsp := testutil.DecodeResp[*mfa.AdminTOTPStatusRsp](t, resp)
 		require.True(t, rsp.Enabled)
 		require.Len(t, rsp.Devices, 1)
 		require.Equal(t, deviceID, rsp.Devices[0].ID)
@@ -578,7 +578,7 @@ func TestTOTPAdmin(t *testing.T) {
 		// bypass the target checks entirely.
 		resp, err := rootCli.Do(t.Context(), http.MethodGet, "/api/mfa/admin/users/"+consts.AUTHZ_USER_ROOT+"/totp", nil)
 		require.NoError(t, err)
-		rsp := testutil.DecodeResp[*mfa.TOTPStatusRsp](t, resp)
+		rsp := testutil.DecodeResp[*mfa.AdminTOTPStatusRsp](t, resp)
 		require.False(t, rsp.Enabled)
 	})
 
