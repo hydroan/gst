@@ -259,7 +259,7 @@ func ShapeFromProto(p *Shape) (*model.Shape, error) {
 		var x *model.ShapeOptions
 		x, err = ShapeOptionsFromProto(v)
 		if err != nil {
-			return nil, err
+			return nil, grpc.PathError("options", err)
 		}
 		data = *x
 	}
@@ -268,7 +268,7 @@ func ShapeFromProto(p *Shape) (*model.Shape, error) {
 		var x *model.ShapeAudit
 		x, err = ShapeAuditFromProto(v)
 		if err != nil {
-			return nil, err
+			return nil, grpc.PathError("audit", err)
 		}
 		m.Audit = *x
 	}
@@ -285,14 +285,14 @@ func ShapeFromProto(p *Shape) (*model.Shape, error) {
 	}
 	m.Owner, err = ShapeOwnerFromProto(p.GetOwner())
 	if err != nil {
-		return nil, err
+		return nil, grpc.PathError("owner", err)
 	}
 	if p.GetPoints() != nil {
 		m.Points = make([]*model.ShapePoint, len(p.GetPoints()))
 		for i, v := range p.GetPoints() {
 			m.Points[i], err = ShapePointFromProto(v)
 			if err != nil {
-				return nil, err
+				return nil, grpc.PathError(grpc.Element("points", i), err)
 			}
 		}
 	}
@@ -312,7 +312,7 @@ func ShapeFromProto(p *Shape) (*model.Shape, error) {
 				var x *model.ShapePoint
 				x, err = ShapePointFromProto(v)
 				if err != nil {
-					return nil, err
+					return nil, grpc.PathError(grpc.Entry("by_code", k), err)
 				}
 				m.ByCode[k] = *x
 			}
@@ -355,7 +355,7 @@ func ShapeFromProto(p *Shape) (*model.Shape, error) {
 				var x *model.ShapePoint
 				x, err = ShapePointFromProto(v)
 				if err != nil {
-					return nil, err
+					return nil, grpc.PathError(grpc.Element("steps", i), err)
 				}
 				m.Steps[i] = *x
 			}
@@ -375,7 +375,7 @@ func ShapeFromProto(p *Shape) (*model.Shape, error) {
 					var x2 *model.ShapePoint
 					x2, err = ShapePointFromProto(v)
 					if err != nil {
-						return nil, err
+						return nil, grpc.PathError(grpc.Element("corners", i), err)
 					}
 					x[i] = *x2
 				}
@@ -418,7 +418,7 @@ func ShapeFromProto(p *Shape) (*model.Shape, error) {
 		var x *model.Window
 		x, err = WindowFromProto(v)
 		if err != nil {
-			return nil, err
+			return nil, grpc.PathError("frame", err)
 		}
 		m.Frame = *x
 	}
@@ -438,7 +438,7 @@ func ShapeFromProto(p *Shape) (*model.Shape, error) {
 		var x *model.ShapeOptions
 		x, err = ShapeOptionsFromProto(v)
 		if err != nil {
-			return nil, err
+			return nil, grpc.PathError("extras", err)
 		}
 		data2 = *x
 	}
@@ -469,7 +469,7 @@ func ShapeFromProto(p *Shape) (*model.Shape, error) {
 				var x *model.ShapePoint
 				x, err = ShapePointFromProto(v)
 				if err != nil {
-					return nil, err
+					return nil, grpc.PathError(grpc.Entry("by_rank", k), err)
 				}
 				m.ByRank[key] = *x
 			}
@@ -486,7 +486,7 @@ func ShapeFromProto(p *Shape) (*model.Shape, error) {
 	if p.GetStamps() != nil {
 		m.Stamps = make([]time.Time, len(p.GetStamps()))
 		for i, v := range p.GetStamps() {
-			m.Stamps[i], err = grpc.Time("stamps", v)
+			m.Stamps[i], err = grpc.Time(grpc.Element("stamps", i), v)
 			if err != nil {
 				return nil, err
 			}
@@ -497,7 +497,7 @@ func ShapeFromProto(p *Shape) (*model.Shape, error) {
 		for k, v := range p.GetOwners() {
 			m.Owners[k], err = ShapeOwnerFromProto(v)
 			if err != nil {
-				return nil, err
+				return nil, grpc.PathError(grpc.Entry("owners", k), err)
 			}
 		}
 	}
@@ -512,7 +512,7 @@ func ShapeFromProto(p *Shape) (*model.Shape, error) {
 	if p.GetFactors() != nil {
 		m.Factors = make([]float64, len(p.GetFactors()))
 		for i, v := range p.GetFactors() {
-			m.Factors[i], err = grpc.Finite[float64]("factors", v)
+			m.Factors[i], err = grpc.Finite[float64](grpc.Element("factors", i), v)
 			if err != nil {
 				return nil, err
 			}
@@ -521,7 +521,7 @@ func ShapeFromProto(p *Shape) (*model.Shape, error) {
 	if p.GetCosts() != nil {
 		m.Costs = make(map[string]float64, len(p.GetCosts()))
 		for k, v := range p.GetCosts() {
-			m.Costs[k], err = grpc.Finite[float64]("costs", v)
+			m.Costs[k], err = grpc.Finite[float64](grpc.Entry("costs", k), v)
 			if err != nil {
 				return nil, err
 			}

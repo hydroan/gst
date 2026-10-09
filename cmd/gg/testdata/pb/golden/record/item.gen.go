@@ -155,7 +155,7 @@ func ItemFromProto(p *Item) (*record.Item, error) {
 				var x *record.Link
 				x, err = LinkFromProto(v)
 				if err != nil {
-					return nil, err
+					return nil, grpc.PathError(grpc.Element("links", i), err)
 				}
 				m.Links[i] = *x
 			}
@@ -233,7 +233,7 @@ func MergeRspFromProto(p *MergeRsp) (*record.MergeRsp, error) {
 	var err error
 	m.Item, err = ItemFromProto(p.GetItem())
 	if err != nil {
-		return nil, err
+		return nil, grpc.PathError("item", err)
 	}
 	return m, nil
 }

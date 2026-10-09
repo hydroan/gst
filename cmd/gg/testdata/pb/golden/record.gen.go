@@ -306,7 +306,7 @@ func RecordFromProto(p *Record) (*model.Record, error) {
 		var x *model.RecordMeta
 		x, err = RecordMetaFromProto(v)
 		if err != nil {
-			return nil, err
+			return nil, grpc.PathError("meta", err)
 		}
 		m.Meta = *x
 	}

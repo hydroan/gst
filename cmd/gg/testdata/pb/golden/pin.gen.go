@@ -107,7 +107,7 @@ func PinFromProto(p *Pin) (*model.Pin, error) {
 		var x *model_record.Link
 		x, err = pb_record.LinkFromProto(v)
 		if err != nil {
-			return nil, err
+			return nil, grpc.PathError("link", err)
 		}
 		m.Link = *x
 	}

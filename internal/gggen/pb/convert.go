@@ -626,14 +626,18 @@ func selPath(x ast.Expr, path []string) ast.Expr {
 }
 
 // fromProto returns the statements decoding src, the value of a message
-// field of protobuf type ft, the field named name, into dst, a Go value of
-// type t: the mirror of toProto. A message is read through its getters, so
-// an unset one decodes into the zero value; the pointer of an optional
-// scalar is taken as it is. A value the Go type may not hold, a narrow
-// integer, a floating-point number or a JSON number (see reader), a time,
-// a JSON document, and a message decoded through a conversion function
-// are read as statements that may refuse it (see refusing), the field's
-// name in the refusal.
+// field of protobuf type ft, the field at path, into dst, a Go value of
+// type t: the mirror of toProto. path spells the field in a refusal (see
+// keyPath): a string literal, meta.score, for a field reached through
+// message fields alone, and an expression evaluated at run time, built on
+// grpc.Element or grpc.Entry (see elementPath), for a field inside a
+// repeated field or a map, points[1].x. A message is read through its
+// getters, so an unset one decodes into the zero value; the pointer of an
+// optional scalar is taken as it is. A value the Go type may not hold, a
+// narrow integer, a floating-point number or a JSON number (see reader), a
+// time, a JSON document, and a message decoded through a conversion
+// function are read as statements that may refuse it (see refusing and
+// refusingAt), the path in the refusal.
 //
 // The fields of the Record model of the golden fixture decode as
 //
@@ -673,7 +677,7 @@ func selPath(x ast.Expr, path []string) ast.Expr {
 //		var x *model.RecordMeta
 //		x, err = RecordMetaFromProto(v)
 //		if err != nil {
-//			return nil, err
+//			return nil, grpc.PathError("meta", err)
 //		}
 //		m.Meta = *x
 //	}
@@ -691,7 +695,7 @@ func selPath(x ast.Expr, path []string) ast.Expr {
 //				var x *record.Link
 //				x, err = LinkFromProto(v)
 //				if err != nil {
-//					return nil, err
+//					return nil, grpc.PathError(grpc.Element("links", i), err)
 //				}
 //				m.Links[i] = *x
 //			}
@@ -719,7 +723,7 @@ func selPath(x ast.Expr, path []string) ast.Expr {
 //		var x *model.ShapeOptions
 //		x, err = ShapeOptionsFromProto(v)
 //		if err != nil {
-//			return nil, err
+//			return nil, grpc.PathError("options", err)
 //		}
 //		data = *x
 //	}
@@ -728,7 +732,7 @@ func selPath(x ast.Expr, path []string) ast.Expr {
 //		var x *model.ShapeAudit
 //		x, err = ShapeAuditFromProto(v)
 //		if err != nil {
-//			return nil, err
+//			return nil, grpc.PathError("audit", err)
 //		}
 //		m.Audit = *x
 //	}
@@ -765,7 +769,7 @@ func selPath(x ast.Expr, path []string) ast.Expr {
 //	if p.GetFactors() != nil {
 //		m.Factors = make([]float64, len(p.GetFactors()))
 //		for i, v := range p.GetFactors() {
-//			m.Factors[i], err = grpc.Finite[float64]("factors", v)
+//			m.Factors[i], err = grpc.Finite[float64](grpc.Element("factors", i), v)
 //			if err != nil {
 //				return nil, err
 //			}
@@ -788,7 +792,7 @@ func selPath(x ast.Expr, path []string) ast.Expr {
 //			}
 //			m.When = &x
 //		}
-func (w *fileWriter) fromProto(dst, src ast.Expr, t types.Type, ft fieldType, name string) []ast.Stmt {
+func (w *fileWriter) fromProto(dst, src ast.Expr, t types.Type, ft fieldType, path ast.Expr) []ast.Stmt {
 	// declared is t as the model spells it, an alias kept, which is how the
 	// file spells it too; t itself decides the conversion.
 	declared := t
@@ -796,11 +800,11 @@ func (w *fileWriter) fromProto(dst, src ast.Expr, t types.Type, ft fieldType, na
 	if p, ok := t.(*types.Pointer); ok {
 		elem := types.Unalias(p.Elem())
 		if msg := w.namedMessage(elem); msg != nil {
-			return w.refusing(dst, call(w.conversionFunc(msg, "FromProto"), src))
+			return w.refusingAt(dst, call(w.conversionFunc(msg, "FromProto"), src), path)
 		}
 		if _, anonymous := elem.(*types.Struct); anonymous {
 			return []ast.Stmt{w.guarded(src, func(v ast.Expr) []ast.Stmt {
-				return append([]ast.Stmt{assign(dst, newCall(w.goType(p.Elem())))}, w.structFromProto(dst, v, ft.nested)...)
+				return append([]ast.Stmt{assign(dst, newCall(w.goType(p.Elem())))}, w.structFromProto(dst, v, ft.nested, path)...)
 			})}
 		}
 		if _, scalar := elem.Underlying().(*types.Basic); scalar && ft.kind != descriptorpb.FieldDescriptorProto_TYPE_MESSAGE {
@@ -817,7 +821,7 @@ func (w *fileWriter) fromProto(dst, src ast.Expr, t types.Type, ft fieldType, na
 				value, elemFt = star(src), elementOf(ft)
 			}
 			var body []ast.Stmt
-			if read, ok := w.reader(p.Elem(), name, value); ok {
+			if read, ok := w.reader(p.Elem(), path, value); ok {
 				body = append(append([]ast.Stmt{w.varDecl(x, p.Elem())}, w.refusing(ident(x), read)...), assign(dst, addr(ident(x))))
 			} else {
 				body = []ast.Stmt{define([]string{x}, w.decoded(p.Elem(), elemFt, value)), assign(dst, addr(ident(x)))}
@@ -833,16 +837,16 @@ func (w *fileWriter) fromProto(dst, src ast.Expr, t types.Type, ft fieldType, na
 		// is declared inside the guard, so the fields of a struct share the
 		// name.
 		x := w.temp("x")
-		body := append(w.declared(x, p.Elem(), w.fromProto(ident(x), src, p.Elem(), ft, name)), assign(dst, addr(ident(x))))
+		body := append(w.declared(x, p.Elem(), w.fromProto(ident(x), src, p.Elem(), ft, path)), assign(dst, addr(ident(x))))
 		return []ast.Stmt{ifNotNil(src, body...)}
 	}
 
 	switch typeKey(t) {
 	case "time.Time":
-		return w.refusing(dst, call(w.grpc("Time"), strLit(name), src))
+		return w.refusing(dst, call(w.grpc("Time"), path, src))
 	case "gorm.io/datatypes.Date":
 		day := w.temp("day")
-		read := append([]ast.Stmt{w.varDeclExpr(day, w.timeType())}, w.refusing(ident(day), call(w.grpc("Time"), strLit(name), src))...)
+		read := append([]ast.Stmt{w.varDeclExpr(day, w.timeType())}, w.refusing(ident(day), call(w.grpc("Time"), path, src))...)
 		return append(read, assign(dst, call(sel(w.out.imports.fixedRef(importPathDatatypes), "Date"), ident(day))))
 	case "gorm.io/datatypes.Time":
 		return []ast.Stmt{assign(dst, call(sel(w.out.imports.fixedRef(importPathDatatypes), "Time"), call(sel(src, "AsDuration"))))}
@@ -850,7 +854,7 @@ func (w *fileWriter) fromProto(dst, src ast.Expr, t types.Type, ft fieldType, na
 		return []ast.Stmt{w.guarded(src, func(v ast.Expr) []ast.Stmt {
 			at := w.temp("at")
 			deleted := compositeLit(sel(w.out.imports.fixedRef(importPathGorm), "DeletedAt"), keyValue("Time", ident(at)), keyValue("Valid", ident("true")))
-			read := append([]ast.Stmt{w.varDeclExpr(at, w.timeType())}, w.refusing(ident(at), call(w.grpc("Time"), strLit(name), v))...)
+			read := append([]ast.Stmt{w.varDeclExpr(at, w.timeType())}, w.refusing(ident(at), call(w.grpc("Time"), path, v))...)
 			return append(read, assign(dst, deleted))
 		})}
 	}
@@ -858,20 +862,20 @@ func (w *fileWriter) fromProto(dst, src ast.Expr, t types.Type, ft fieldType, na
 		if kind, builtin := jsonshape.BuiltinOf(n); builtin {
 			switch kind {
 			case jsonshape.BuiltinAny:
-				return w.refusing(dst, call(w.grpc("Document"), strLit(name), src))
+				return w.refusing(dst, call(w.grpc("Document"), path, src))
 			case jsonshape.BuiltinObject:
 				return []ast.Stmt{assign(dst, call(w.grpc("Map"), src))}
 			case jsonshape.BuiltinWrapper:
 				data := w.funcTemp("data")
 				arg := n.TypeArgs().At(0)
-				stmts := w.declared(data, arg, w.fromProto(ident(data), src, arg, ft, name))
+				stmts := w.declared(data, arg, w.fromProto(ident(data), src, arg, ft, path))
 				return append(stmts, assign(dst, call(sel(w.out.imports.fixedRef(importPathDatatypes), "NewJSONType"), ident(data))))
 			}
 		}
 		if msg := w.namedMessage(n); msg != nil {
 			return []ast.Stmt{w.guarded(src, func(v ast.Expr) []ast.Stmt {
 				x := w.temp("x")
-				read := w.refusing(ident(x), call(w.conversionFunc(msg, "FromProto"), v))
+				read := w.refusingAt(ident(x), call(w.conversionFunc(msg, "FromProto"), v), path)
 				return append(append([]ast.Stmt{w.varDecl(x, types.NewPointer(n))}, read...), assign(dst, star(ident(x))))
 			})}
 		}
@@ -879,13 +883,13 @@ func (w *fileWriter) fromProto(dst, src ast.Expr, t types.Type, ft fieldType, na
 
 	switch u := t.Underlying().(type) {
 	case *types.Basic:
-		if read, ok := w.reader(declared, name, src); ok {
+		if read, ok := w.reader(declared, path, src); ok {
 			if typeKey(t) == "encoding/json.Number" {
 				// The empty string is the field unset, read as it is; any
 				// other is read through Number, which refuses what is no
 				// number, the empty string among them.
 				s := w.temp("s")
-				read, _ = w.reader(declared, name, ident(s))
+				read, _ = w.reader(declared, path, ident(s))
 				return []ast.Stmt{ifStmt(define([]string{s}, src), &ast.BinaryExpr{X: ident(s), Op: token.NEQ, Y: strLit("")}, w.refusing(dst, read)...)}
 			}
 			return w.refusing(dst, read)
@@ -898,12 +902,12 @@ func (w *fileWriter) fromProto(dst, src ast.Expr, t types.Type, ft fieldType, na
 		i, v := w.temp("i"), w.temp("v")
 		return []ast.Stmt{ifNotNil(src,
 			assign(dst, makeCall(w.goType(declared), lenCall(src))),
-			rangeStmt(i, v, src, w.fromProto(index(dst, ident(i)), ident(v), u.Elem(), elementOf(ft), name)...),
+			rangeStmt(i, v, src, w.fromProto(index(dst, ident(i)), ident(v), u.Elem(), elementOf(ft), w.elementPath(path, ident(i)))...),
 		)}
 	case *types.Array:
 		i := w.temp("i")
 		return []ast.Stmt{rangeStmt(i, "", call(ident("min"), lenCall(src), lenCall(dst)),
-			w.fromProto(index(dst, ident(i)), index(src, ident(i)), u.Elem(), elementOf(ft), name)...)}
+			w.fromProto(index(dst, ident(i)), index(src, ident(i)), u.Elem(), elementOf(ft), w.elementPath(path, ident(i)))...)}
 	case *types.Map:
 		if ft.typeName == wellKnownStruct {
 			return []ast.Stmt{assign(dst, call(w.grpc("Map"), src))}
@@ -914,7 +918,7 @@ func (w *fileWriter) fromProto(dst, src ast.Expr, t types.Type, ft fieldType, na
 		k, v := w.temp("k"), w.temp("v")
 		key := ast.Expr(ident(k))
 		var body []ast.Stmt
-		if read, ok := w.reader(u.Key(), name, ident(k)); ok {
+		if read, ok := w.reader(u.Key(), path, ident(k)); ok {
 			// A key narrower than the message's is read through Narrow,
 			// like a field, two keys folding into one otherwise.
 			narrowed := w.temp("key")
@@ -923,13 +927,13 @@ func (w *fileWriter) fromProto(dst, src ast.Expr, t types.Type, ft fieldType, na
 		} else if !types.Identical(types.Unalias(u.Key()), scalarType(ft.mapKey)) {
 			key = converted(w.goType(u.Key()), ident(k))
 		}
-		value := w.fromProto(index(dst, key), ident(v), u.Elem(), *ft.mapValue, name)
+		value := w.fromProto(index(dst, key), ident(v), u.Elem(), *ft.mapValue, w.entryPath(path, ident(k)))
 		if _, anonymous := types.Unalias(u.Elem()).(*types.Struct); anonymous {
 			// The fields of a struct held in a map cannot be assigned one
 			// by one, the element not being addressable: the struct is
 			// decoded into a value of its own, put in whole.
 			e := w.temp("e")
-			value = append(append([]ast.Stmt{w.varDecl(e, u.Elem())}, w.fromProto(ident(e), ident(v), u.Elem(), *ft.mapValue, name)...), assign(index(dst, key), ident(e)))
+			value = append(append([]ast.Stmt{w.varDecl(e, u.Elem())}, w.fromProto(ident(e), ident(v), u.Elem(), *ft.mapValue, w.entryPath(path, ident(k)))...), assign(index(dst, key), ident(e)))
 		}
 		return []ast.Stmt{ifNotNil(src,
 			assign(dst, makeCall(w.goType(declared), lenCall(src))),
@@ -938,7 +942,7 @@ func (w *fileWriter) fromProto(dst, src ast.Expr, t types.Type, ft fieldType, na
 	case *types.Interface:
 		return []ast.Stmt{assign(dst, call(sel(src, "AsInterface")))}
 	case *types.Struct:
-		return []ast.Stmt{w.guarded(src, func(v ast.Expr) []ast.Stmt { return w.structFromProto(dst, v, ft.nested) })}
+		return []ast.Stmt{w.guarded(src, func(v ast.Expr) []ast.Stmt { return w.structFromProto(dst, v, ft.nested, path) })}
 	}
 	panic(fmt.Sprintf("pb: no decoding for a %s", t))
 }
@@ -995,24 +999,24 @@ func (w *fileWriter) decoded(t types.Type, ft fieldType, src ast.Expr) ast.Expr 
 }
 
 // reader returns the call a FromProto reads src through when the Go type t
-// of the field name is narrower than what its message field carries, or
+// of the field at path is narrower than what its message field carries, or
 // than what a JSON body carries, and false when the value is read as it
 // is: grpc.Narrow for an int8, int16, uint8 or uint16, or a type over one,
 // read from an int32 or uint32, grpc.Finite for a float32 or float64, or
 // a type over one, and grpc.Number for a json.Number read from a string.
 // All refuse what t cannot hold, which is why the reading is a statement
 // of its own (see refusing) and not an expression.
-func (w *fileWriter) reader(t types.Type, name string, src ast.Expr) (ast.Expr, bool) {
+func (w *fileWriter) reader(t types.Type, path ast.Expr, src ast.Expr) (ast.Expr, bool) {
 	u := types.Unalias(t)
 	if typeKey(u) == "encoding/json.Number" {
-		return call(w.grpc("Number"), strLit(name), src), true
+		return call(w.grpc("Number"), path, src), true
 	}
 	if b, ok := u.Underlying().(*types.Basic); ok {
 		switch b.Kind() {
 		case types.Int8, types.Int16, types.Uint8, types.Uint16:
-			return call(&ast.IndexExpr{X: w.grpc("Narrow"), Index: w.goType(t)}, strLit(name), src), true
+			return call(&ast.IndexExpr{X: w.grpc("Narrow"), Index: w.goType(t)}, path, src), true
 		case types.Float32, types.Float64:
-			return call(&ast.IndexExpr{X: w.grpc("Finite"), Index: w.goType(t)}, strLit(name), src), true
+			return call(&ast.IndexExpr{X: w.grpc("Finite"), Index: w.goType(t)}, path, src), true
 		}
 	}
 	return nil, false
@@ -1022,34 +1026,74 @@ func (w *fileWriter) reader(t types.Type, name string, src ast.Expr) (ast.Expr, 
 // value the call may refuse, a reading (see reader) or a conversion
 // function: its error ends the conversion function being written, which
 // declares err once for every such statement (see conversionFuncs).
-func (w *fileWriter) refusing(dst, call ast.Expr) []ast.Stmt {
+func (w *fileWriter) refusing(dst, expr ast.Expr) []ast.Stmt {
 	w.fallible = true
 	return []ast.Stmt{
-		&ast.AssignStmt{Lhs: []ast.Expr{dst, ident("err")}, Tok: token.ASSIGN, Rhs: []ast.Expr{call}},
+		&ast.AssignStmt{Lhs: []ast.Expr{dst, ident("err")}, Tok: token.ASSIGN, Rhs: []ast.Expr{expr}},
 		ifNotNil(ident("err"), returns(ident("nil"), ident("err"))),
 	}
+}
+
+// refusingAt is refusing for the conversion of a nested message, the value
+// at path: the refusal of a field inside it names the field behind the path
+// (see grpc.PathError), meta.score for the score of the message of meta.
+func (w *fileWriter) refusingAt(dst, expr, path ast.Expr) []ast.Stmt {
+	w.fallible = true
+	return []ast.Stmt{
+		&ast.AssignStmt{Lhs: []ast.Expr{dst, ident("err")}, Tok: token.ASSIGN, Rhs: []ast.Expr{expr}},
+		ifNotNil(ident("err"), returns(ident("nil"), call(w.grpc("PathError"), path, ident("err")))),
+	}
+}
+
+// elementPath and entryPath are the paths of the element at index i of the
+// repeated field at path and of the value under key k of the map field at
+// path, spelled at run time (see grpc.Element and grpc.Entry): points[1],
+// costs.k1.
+func (w *fileWriter) elementPath(path, i ast.Expr) ast.Expr {
+	return call(w.grpc("Element"), path, i)
+}
+
+func (w *fileWriter) entryPath(path, k ast.Expr) ast.Expr {
+	return call(w.grpc("Entry"), path, k)
+}
+
+// keyPath is the path of the field key of the value at path: the key alone
+// for a field of the message being converted (path nil), the two joined into
+// one literal for a field of a struct held by a field, note.text, and joined
+// at run time for a field of a struct held in a container, whose path names
+// the element.
+func keyPath(path ast.Expr, key string) ast.Expr {
+	if path == nil {
+		return strLit(key)
+	}
+	if lit, ok := path.(*ast.BasicLit); ok && lit.Kind == token.STRING {
+		parent, _ := strconv.Unquote(lit.Value)
+		return strLit(parent + "." + key)
+	}
+	return &ast.BinaryExpr{X: path, Op: token.ADD, Y: strLit("." + key)}
 }
 
 // structFromProto returns the statements decoding the fields of src, a
 // message of the conversion conv known to be set, into the fields of dst,
 // its struct.
-func (w *fileWriter) structFromProto(dst, src ast.Expr, conv *conversion) []ast.Stmt {
+func (w *fileWriter) structFromProto(dst, src ast.Expr, conv *conversion, path ast.Expr) []ast.Stmt {
 	var stmts []ast.Stmt
 	for _, fc := range conv.fields {
-		stmts = append(stmts, w.fieldFromProto(dst, src, fc)...)
+		stmts = append(stmts, w.fieldFromProto(dst, src, fc, path)...)
 	}
 	return stmts
 }
 
 // fieldFromProto decodes the field fc of the message src, known to be set,
 // into the field of its struct dst: through the getter of the field, or the
-// field itself for the pointer of an optional scalar.
-func (w *fileWriter) fieldFromProto(dst, src ast.Expr, fc fieldConversion) []ast.Stmt {
+// field itself for the pointer of an optional scalar. The field is named by
+// its path behind path, that of the struct (see keyPath).
+func (w *fileWriter) fieldFromProto(dst, src ast.Expr, fc fieldConversion, path ast.Expr) []ast.Stmt {
 	var value ast.Expr = call(sel(src, "Get"+fc.goName))
 	if fc.ft.optional {
 		value = sel(src, fc.goName)
 	}
-	return w.fromProto(selPath(dst, fc.path), value, fc.field.Var.Type(), fc.ft, fc.field.Key)
+	return w.fromProto(selPath(dst, fc.path), value, fc.field.Var.Type(), fc.ft, keyPath(path, fc.field.Key))
 }
 
 // conversionFuncs builds the two conversion functions of the message of
@@ -1110,7 +1154,7 @@ func (w *fileWriter) conversionFuncs(msg *message) {
 	var fields []ast.Stmt
 	for _, fc := range msg.conv.fields {
 		w.resetTemps()
-		fields = append(fields, w.fieldFromProto(ident("m"), ident("p"), fc)...)
+		fields = append(fields, w.fieldFromProto(ident("m"), ident("p"), fc, nil)...)
 	}
 	body = []ast.Stmt{
 		ifStmt(nil, &ast.BinaryExpr{X: ident("p"), Op: token.EQL, Y: ident("nil")}, returns(ident("nil"), ident("nil"))),

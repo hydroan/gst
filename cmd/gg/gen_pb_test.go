@@ -1935,7 +1935,8 @@ func TestShapeRoundTrips(t *testing.T) {
 			{name: "a pointed-to document that is no JSON", msg: &pb.Shape{RawDoc: []byte("nope")}, want: "invalid value for field \x27raw_doc\x27"},
 			{name: "a timestamp past the year 9999", msg: &pb.Shape{When: &timestamppb.Timestamp{Seconds: 253402300800}}, want: "invalid value for field \x27when\x27"},
 			{name: "a framework timestamp past the year 9999", msg: &pb.Shape{CreatedAt: &timestamppb.Timestamp{Seconds: 253402300800}}, want: "invalid value for field \x27created_at\x27"},
-			{name: "a timestamp in a slice past the year 9999", msg: &pb.Shape{Stamps: []*timestamppb.Timestamp{{Seconds: 253402300800}}}, want: "invalid value for field \x27stamps\x27"},
+			{name: "a timestamp in a slice past the year 9999", msg: &pb.Shape{Stamps: []*timestamppb.Timestamp{{Seconds: 253402300800}}}, want: "invalid value for field \x27stamps[0]\x27"},
+			{name: "a timestamp inside a nested message past the year 9999", msg: &pb.Shape{Audit: &pb.ShapeAudit{Removed: &timestamppb.Timestamp{Seconds: 253402300800}}}, want: "invalid value for field \x27audit.removed\x27"},
 			{name: "a map key out of range", msg: &pb.Shape{ByRank: map[int32]*pb.ShapePoint{300: {}}}, want: "invalid value for field \x27by_rank\x27"},
 		} {
 			t.Run(tt.name, func(t *testing.T) {
@@ -1984,15 +1985,15 @@ func TestConversionsGuardContainerElements(t *testing.T) {
 
 	// A float in an optional field, a repeated field or a map is read
 	// through grpc.Finite like a float field, so NaN is refused naming the
-	// field.
+	// field, the element by its index and the map value by its key.
 	nan := math.NaN()
 	for _, tt := range []struct {
 		field string
 		msg   *pb.Shape
 	}{
 		{"ratio", &pb.Shape{Ratio: &nan}},
-		{"factors", &pb.Shape{Factors: []float64{1, nan}}},
-		{"costs", &pb.Shape{Costs: map[string]float64{"c": nan}}},
+		{"factors[1]", &pb.Shape{Factors: []float64{1, nan}}},
+		{"costs.c", &pb.Shape{Costs: map[string]float64{"c": nan}}},
 	} {
 		_, err := pb.ShapeFromProto(tt.msg)
 		require.Equal(t, codes.InvalidArgument, status.Code(err), tt.field)
