@@ -16,7 +16,7 @@ import (
 const (
 	golangciLintModule  = "github.com/golangci/golangci-lint/v2"
 	golangciLintPackage = "github.com/golangci/golangci-lint/v2/cmd/golangci-lint"
-	golangciLintVersion = "v2.13.1"
+	golangciLintVersion = "v2.14.0"
 )
 
 var lintCmd = &cobra.Command{

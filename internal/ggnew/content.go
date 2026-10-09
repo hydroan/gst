@@ -77,9 +77,7 @@ linters:
     - gomoddirectives
 
     # Project-specific checks.
-    # canonicalheader v1.1.2 panics on parameterized method calls (go1.27);
-    # re-enable once an upstream release handles them.
-    # - canonicalheader
+    - canonicalheader
     - loggercheck
     - spancheck
 

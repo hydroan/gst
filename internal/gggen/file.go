@@ -281,11 +281,10 @@ func BuildRouterFile(pkgName, gstModelPkg string, aliases map[string]string, stm
 
 	// Every import after the lead ones is ordered by its entry: the import
 	// path, or "gstmodel path" for the gst model package imported under the
-	// gstmodel alias. Where the imports stand decides how the file groups
-	// them: gofumpt lifts a project import without a dot in its path, which
-	// it takes for a standard library one, to the top, and the imports on
-	// either side of the gap it leaves become separate groups. Ordering by
-	// the entry keeps that grouping as it has always been.
+	// gstmodel alias. gofumpt then lifts a project import without a dot in
+	// its path, which it takes for a standard library one, into a group of
+	// its own at the top and sorts the rest by path in one group, so the
+	// entry order only has to be deterministic for the printed file to be.
 	entries := slices.Concat(slices.Collect(maps.Keys(aliases)), routerFileSortedImports)
 	if gstModelPkg != "" {
 		entries = append(entries, GstModelImportEntry(gstModelPkg))

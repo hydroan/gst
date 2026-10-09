@@ -10,11 +10,10 @@ import (
 	"demo/model/record"
 	"demo/model/tool"
 
-	"github.com/hydroan/gst/consts"
-	"github.com/hydroan/gst/router"
-
 	"github.com/hydroan/gst"
+	"github.com/hydroan/gst/consts"
 	gstmodel "github.com/hydroan/gst/model"
+	"github.com/hydroan/gst/router"
 )
 
 func Init() error {

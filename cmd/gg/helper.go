@@ -41,7 +41,7 @@ func writeGeneratedFile(filename string, content string, log bool) error {
 			if log {
 				clioutput.Status(clioutput.StyleWarn, clioutput.SymbolSuccess, "UPDATE", "%s", filename)
 			}
-			if err := os.WriteFile(filename, []byte(content), ggconst.FileModeGenerated); err != nil {
+			if err := os.WriteFile(filename, []byte(content), ggconst.FileModeGenerated); err != nil { //nolint:gosec // G703: the path is the project file the generator was asked to write.
 				return err
 			}
 		}
@@ -52,7 +52,7 @@ func writeGeneratedFile(filename string, content string, log bool) error {
 		if err := gghelper.EnsureParentDir(filename); err != nil {
 			return err
 		}
-		if err := os.WriteFile(filename, []byte(content), ggconst.FileModeGenerated); err != nil {
+		if err := os.WriteFile(filename, []byte(content), ggconst.FileModeGenerated); err != nil { //nolint:gosec // G703: the path is the project file the generator was asked to write.
 			return err
 		}
 	}

@@ -5,11 +5,10 @@ package router
 import (
 	"bench/model/bench"
 
-	"github.com/hydroan/gst/consts"
-	"github.com/hydroan/gst/router"
-
 	"github.com/hydroan/gst"
+	"github.com/hydroan/gst/consts"
 	"github.com/hydroan/gst/model"
+	"github.com/hydroan/gst/router"
 )
 
 func Init() error {

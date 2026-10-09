@@ -303,10 +303,9 @@ import (
 	"demo/model"
 	"demo/model/sample"
 
+	"github.com/hydroan/gst"
 	"github.com/hydroan/gst/consts"
 	"github.com/hydroan/gst/router"
-
-	"github.com/hydroan/gst"
 )
 
 func Init() error {
@@ -353,11 +352,10 @@ package router
 import (
 	"demo/model"
 
-	"github.com/hydroan/gst/consts"
-	"github.com/hydroan/gst/router"
-
 	"github.com/hydroan/gst"
+	"github.com/hydroan/gst/consts"
 	gstmodel "github.com/hydroan/gst/model"
+	"github.com/hydroan/gst/router"
 )
 
 func Init() error {

@@ -154,7 +154,7 @@ func TestRequestCarriesTraceOfContext(t *testing.T) {
 		_, err := cli.Do(ctx, http.MethodGet, "/api/records", nil)
 		require.NoError(t, err)
 		require.Equal(t, "trace-sample", captured.Header.Get(consts.HEADER_TRACE_ID))
-		require.Empty(t, captured.Header.Get("traceparent"))
+		require.Empty(t, captured.Header.Get("Traceparent"))
 	})
 
 	t.Run("the span open on the context", func(t *testing.T) {
@@ -172,7 +172,7 @@ func TestRequestCarriesTraceOfContext(t *testing.T) {
 		_, err := cli.Do(ctx, http.MethodGet, "/api/records", nil)
 		require.NoError(t, err)
 		traceID := span.SpanContext().TraceID().String()
-		require.Contains(t, captured.Header.Get("traceparent"), traceID)
+		require.Contains(t, captured.Header.Get("Traceparent"), traceID)
 		// The framework header names the same trace, borrowed from the span.
 		require.Equal(t, traceID, captured.Header.Get(consts.HEADER_TRACE_ID))
 	})
@@ -181,6 +181,6 @@ func TestRequestCarriesTraceOfContext(t *testing.T) {
 		_, err := cli.Do(t.Context(), http.MethodGet, "/api/records", nil)
 		require.NoError(t, err)
 		require.Empty(t, captured.Header.Get(consts.HEADER_TRACE_ID))
-		require.Empty(t, captured.Header.Get("traceparent"))
+		require.Empty(t, captured.Header.Get("Traceparent"))
 	})
 }
