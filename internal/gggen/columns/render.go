@@ -5,7 +5,9 @@ import (
 	"go/ast"
 	"go/parser"
 	"go/token"
+	"maps"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -56,30 +58,24 @@ func renderColumnsFile(module string, pkgName string, source string, models []mo
 	for _, m := range models {
 		for _, col := range m.Columns {
 			// A TimeColumn reference carries no type argument, so the column
-			// type's import would be unused in the generated file.
+			// type's imports would be unused in the generated file.
 			if col.Time && col.TypeExpr != "" {
 				continue
 			}
-			if col.TypePkg == "" {
-				continue
-			}
-			dot := strings.Index(col.TypeExpr, ".")
-			if dot <= 0 {
-				return "", errors.Newf("model %s column %q has import %q but its type %q carries no package qualifier",
-					m.Name, col.DBName, col.TypePkg, col.TypeExpr)
-			}
-			alias := col.TypeExpr[:dot]
-			if existing, ok := imports[col.TypePkg]; ok && existing != alias {
-				return "", errors.Newf("model %s column %q needs import %q as %q but it is already imported as %q",
-					m.Name, col.DBName, col.TypePkg, alias, existing)
-			}
-			for path, other := range imports {
-				if other == alias && path != col.TypePkg {
-					return "", errors.Newf("model %s column %q imports %q as %q, colliding with %q; add an explicit gorm column type or rename the package",
-						m.Name, col.DBName, col.TypePkg, alias, path)
+			for _, path := range slices.Sorted(maps.Keys(col.TypeImports)) {
+				alias := col.TypeImports[path]
+				if existing, ok := imports[path]; ok && existing != alias {
+					return "", errors.Newf("model %s column %q needs import %q as %q but it is already imported as %q",
+						m.Name, col.DBName, path, alias, existing)
 				}
+				for other, otherAlias := range imports {
+					if otherAlias == alias && other != path {
+						return "", errors.Newf("model %s column %q imports %q as %q, colliding with %q; add an explicit gorm column type or rename the package",
+							m.Name, col.DBName, path, alias, other)
+					}
+				}
+				imports[path] = alias
 			}
-			imports[col.TypePkg] = alias
 		}
 	}
 

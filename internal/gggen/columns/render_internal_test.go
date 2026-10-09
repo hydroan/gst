@@ -19,9 +19,9 @@ func TestRenderColumnsFileWritesATypedReferencePerColumn(t *testing.T) {
 		Name:    "Record",
 		Columns: []modelinspect.ColumnInfo{
 			{GoName: "Amount", DBName: "amount", TypeExpr: "int64", TypeName: "int64", Numeric: true},
-			{GoName: "CreatedAt", DBName: "created_at", TypeExpr: "time.Time", TypePkg: "time", TypeName: "time.Time", Time: true},
-			{GoName: "Elapsed", DBName: "elapsed", TypeExpr: "time.Duration", TypePkg: "time", TypeName: "time.Duration", Numeric: true},
-			{GoName: "ID", DBName: "id", TypeExpr: "uuid.UUID", TypePkg: "github.com/gofrs/uuid/v5", TypeName: "uuid.UUID"},
+			{GoName: "CreatedAt", DBName: "created_at", TypeExpr: "time.Time", TypeImports: map[string]string{"time": "time"}, TypeName: "time.Time", Time: true},
+			{GoName: "Elapsed", DBName: "elapsed", TypeExpr: "time.Duration", TypeImports: map[string]string{"time": "time"}, TypeName: "time.Duration", Numeric: true},
+			{GoName: "ID", DBName: "id", TypeExpr: "uuid.UUID", TypeImports: map[string]string{"github.com/gofrs/uuid/v5": "uuid"}, TypeName: "uuid.UUID"},
 			{GoName: "Tags", DBName: "tags", TypeName: "datatypes.JSONSlice[string]"},
 		},
 	}}
@@ -85,7 +85,7 @@ func TestRenderColumnsFile(t *testing.T) {
 		Name:    "Record",
 		Columns: []modelinspect.ColumnInfo{
 			{GoName: "Amount", DBName: "amount", TypeExpr: "int64", TypeName: "int64", Numeric: true},
-			{GoName: "CreatedAt", DBName: "created_at", TypeExpr: "time.Time", TypePkg: "time", TypeName: "time.Time", Time: true},
+			{GoName: "CreatedAt", DBName: "created_at", TypeExpr: "time.Time", TypeImports: map[string]string{"time": "time"}, TypeName: "time.Time", Time: true},
 			{GoName: "ID", DBName: "id", TypeExpr: "string", TypeName: "string"},
 			{GoName: "Score", DBName: "score", TypeExpr: "RecordScore", TypeName: "sample.RecordScore", Numeric: true},
 			{GoName: "Status", DBName: "status", TypeExpr: "RecordStatus", TypeName: "sample.RecordStatus"},
@@ -160,8 +160,8 @@ func TestRenderColumnsFileKeepsImportsUsedByTypeArguments(t *testing.T) {
 		PkgName: "sample",
 		Name:    "Record",
 		Columns: []modelinspect.ColumnInfo{
-			{GoName: "CreatedAt", DBName: "created_at", TypeExpr: "time.Time", TypePkg: "time", TypeName: "time.Time", Time: true},
-			{GoName: "Elapsed", DBName: "elapsed", TypeExpr: "time.Duration", TypePkg: "time", TypeName: "time.Duration", Numeric: true},
+			{GoName: "CreatedAt", DBName: "created_at", TypeExpr: "time.Time", TypeImports: map[string]string{"time": "time"}, TypeName: "time.Time", Time: true},
+			{GoName: "Elapsed", DBName: "elapsed", TypeExpr: "time.Duration", TypeImports: map[string]string{"time": "time"}, TypeName: "time.Duration", Numeric: true},
 		},
 	}}
 
@@ -171,13 +171,34 @@ func TestRenderColumnsFileKeepsImportsUsedByTypeArguments(t *testing.T) {
 	require.Contains(t, rendered, "import (\n\t\"time\"\n", "the standard library import is kept, with the name left to the path")
 }
 
+// TestRenderColumnsFileImportsEveryPackageACompositeTypeNames pins a column
+// of a composite type naming types of two packages: the reference carries
+// the type as the inspection wrote it and the file imports both.
+func TestRenderColumnsFileImportsEveryPackageACompositeTypeNames(t *testing.T) {
+	models := []modelinspect.ModelColumns{{
+		PkgPath: "tmpapp/model/sample",
+		PkgName: "sample",
+		Name:    "Record",
+		Columns: []modelinspect.ColumnInfo{{
+			GoName: "ByKind", DBName: "by_kind", TypeExpr: "map[shared.Kind][]uuid.UUID", TypeName: "map[shared.Kind][]uuid.UUID",
+			TypeImports: map[string]string{"tmpapp/shared": "shared", "github.com/gofrs/uuid/v5": "uuid"},
+		}},
+	}}
+
+	rendered, err := renderColumnsFile("tmpapp", "sample", "model/sample/record.go", models)
+	require.NoError(t, err)
+	require.Contains(t, rendered, `gst.NewColumn[*Record, map[shared.Kind][]uuid.UUID]("by_kind")`)
+	require.Contains(t, rendered, "\tuuid \"github.com/gofrs/uuid/v5\"\n")
+	require.Contains(t, rendered, "\t\"tmpapp/shared\"\n")
+}
+
 func TestRenderColumnsFileRejectsImportAliasCollision(t *testing.T) {
 	models := []modelinspect.ModelColumns{{
 		PkgName: "sample",
 		Name:    "Record",
 		Columns: []modelinspect.ColumnInfo{
-			{GoName: "Left", DBName: "left", TypeExpr: "shared.Kind", TypePkg: "tmpapp/a/shared"},
-			{GoName: "Right", DBName: "right", TypeExpr: "shared.Kind", TypePkg: "tmpapp/b/shared"},
+			{GoName: "Left", DBName: "left", TypeExpr: "shared.Kind", TypeImports: map[string]string{"tmpapp/a/shared": "shared"}},
+			{GoName: "Right", DBName: "right", TypeExpr: "shared.Kind", TypeImports: map[string]string{"tmpapp/b/shared": "shared"}},
 		},
 	}}
 

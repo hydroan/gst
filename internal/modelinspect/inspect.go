@@ -15,13 +15,13 @@ import (
 
 // ColumnInfo is one column of a model, as the inspection program reports it.
 type ColumnInfo struct {
-	GoName   string `json:"go_name"`
-	DBName   string `json:"db_name"`
-	TypeExpr string `json:"type_expr"` // Source-level type expression, empty when the type cannot be reproduced.
-	TypePkg  string `json:"type_pkg"`  // Import path required by TypeExpr, empty for builtin or same-package types.
-	TypeName string `json:"type_name"` // Original type, recorded in a comment when TypeExpr is empty.
-	Numeric  bool   `json:"numeric"`   // Column type is a numeric kind, so the reference gains SUM and AVG.
-	Time     bool   `json:"time"`      // Column type is time.Time, so the reference gains time bucketing.
+	GoName      string            `json:"go_name"`
+	DBName      string            `json:"db_name"`
+	TypeExpr    string            `json:"type_expr"`    // Source-level type expression, empty when the type cannot be reproduced.
+	TypeImports map[string]string `json:"type_imports"` // The imports TypeExpr needs, by path, each under the package name it qualifies the type with; none for builtin or same-package types.
+	TypeName    string            `json:"type_name"`    // Original type, recorded in a comment when TypeExpr is empty.
+	Numeric     bool              `json:"numeric"`      // Column type is a numeric kind, so the reference gains SUM and AVG.
+	Time        bool              `json:"time"`         // Column type is time.Time, so the reference gains time bucketing.
 }
 
 // ModelColumns is one model as the inspection program reports it: its columns,

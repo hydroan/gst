@@ -37,11 +37,18 @@ import (
 	"gorm.io/datatypes"
 )
 
+// RecordKind is a type of the model's own package, which a column of a
+// composite type names.
+type RecordKind string
+
 type Record struct {
-	Status   string         `+"`json:\"status\"`"+`
-	Score    int64          `+"`json:\"score\"`"+`
-	Day      datatypes.Date `+"`json:\"day\"`"+`
-	ClosedAt *time.Time     `+"`json:\"closed_at\"`"+`
+	Status   string              `+"`json:\"status\"`"+`
+	Score    int64               `+"`json:\"score\"`"+`
+	Day      datatypes.Date      `+"`json:\"day\"`"+`
+	ClosedAt *time.Time          `+"`json:\"closed_at\"`"+`
+	Times    []time.Time         `+"`json:\"times\" gorm:\"serializer:json\"`"+`
+	Kinds    []RecordKind        `+"`json:\"kinds\" gorm:\"serializer:json\"`"+`
+	ByKind   map[RecordKind]int64 `+"`json:\"by_kind\" gorm:\"serializer:json\"`"+`
 
 	model.Base
 }
@@ -135,6 +142,12 @@ func (i *Item) DeleteBefore(ctx context.Context) error {
 	require.Contains(t, string(recordColumns), "var RecordCols = struct")
 	require.Contains(t, string(recordColumns), `gst.NewTimeColumn[*Record]("day")`, "a date column gets the time reference")
 	require.Contains(t, string(recordColumns), `gst.NewTimeColumn[*Record]("closed_at")`, "an optional instant gets the time reference")
+	// A composite type is written from its elements: a type of another
+	// package qualified and imported, one of the model's own package bare.
+	require.Contains(t, string(recordColumns), `gst.NewColumn[*Record, []time.Time]("times")`)
+	require.Contains(t, string(recordColumns), "\t\"time\"\n", "the import of a type an element names")
+	require.Contains(t, string(recordColumns), `gst.NewColumn[*Record, []RecordKind]("kinds")`)
+	require.Contains(t, string(recordColumns), `gst.NewColumn[*Record, map[RecordKind]int64]("by_kind")`)
 	itemColumns, err := os.ReadFile(itemColumnsFile)
 	require.NoError(t, err)
 	require.Contains(t, string(itemColumns), "var ItemCols = struct")

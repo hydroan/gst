@@ -26,6 +26,7 @@ import (
 	"fmt"
 	"os"
 	"reflect"
+	"strconv"
 	"strings"
 
 	"github.com/hydroan/gst/config"
@@ -37,13 +38,13 @@ import (
 {{UNREGISTERED_IMPORTS}})
 
 type columnInfo struct {
-	GoName   string ` + "`json:\"go_name\"`" + `
-	DBName   string ` + "`json:\"db_name\"`" + `
-	TypeExpr string ` + "`json:\"type_expr\"`" + `
-	TypePkg  string ` + "`json:\"type_pkg\"`" + `
-	TypeName string ` + "`json:\"type_name\"`" + `
-	Numeric  bool   ` + "`json:\"numeric\"`" + `
-	Time     bool   ` + "`json:\"time\"`" + `
+	GoName      string            ` + "`json:\"go_name\"`" + `
+	DBName      string            ` + "`json:\"db_name\"`" + `
+	TypeExpr    string            ` + "`json:\"type_expr\"`" + `
+	TypeImports map[string]string ` + "`json:\"type_imports\"`" + `
+	TypeName    string            ` + "`json:\"type_name\"`" + `
+	Numeric     bool              ` + "`json:\"numeric\"`" + `
+	Time        bool              ` + "`json:\"time\"`" + `
 }
 
 type modelColumns struct {
@@ -98,16 +99,16 @@ func main() {
 			entry.IndexViolation = validateErr.Error()
 		}
 		for _, col := range cols {
-			expr, pkg := describeType(col.Type, typ.PkgPath())
+			expr, imports := describeType(col.Type, typ.PkgPath())
 			class := modelschema.ClassifyColumn(col.Type)
 			entry.Columns = append(entry.Columns, columnInfo{
-				GoName:   col.GoName,
-				DBName:   col.DBName,
-				TypeExpr: expr,
-				TypePkg:  pkg,
-				TypeName: col.Type.String(),
-				Numeric:  class == modelschema.ColumnClassNumeric,
-				Time:     class == modelschema.ColumnClassTime,
+				GoName:      col.GoName,
+				DBName:      col.DBName,
+				TypeExpr:    expr,
+				TypeImports: imports,
+				TypeName:    col.Type.String(),
+				Numeric:     class == modelschema.ColumnClassNumeric,
+				Time:        class == modelschema.ColumnClassTime,
 			})
 		}
 		out = append(out, entry)
@@ -133,43 +134,83 @@ func packageName(typ reflect.Type) string {
 	return ""
 }
 
-// describeType renders a column type as a source-level expression plus the
-// import it needs. Pointers are dereferenced, since a filter compares the
-// pointed-to value. A type whose name cannot be written back as source, such
-// as a generic instantiation, yields an empty expression and is generated as
-// Column[any]: the column name stays exact and the JSON operators, which take
-// a string, keep working.
-func describeType(typ reflect.Type, modelPkg string) (expr string, importPath string) {
+// describeType renders a column type as a source-level expression relative
+// to the model's package, modelPkg, plus the imports the expression needs by
+// path, each under the package name the compiler recorded, which is how the
+// expression qualifies the type: a type of the model's own package is
+// written bare, one of another package qualified, the way go/types prints a
+// type relative to a package, and a composite type, a slice, an array, a map
+// or a pointer, is written from its elements, each qualified and imported
+// on its own. The pointer of a pointer column is dereferenced first, since a
+// filter compares the pointed-to value. A type that cannot be written back
+// as source, a generic instantiation, or an anonymous struct, interface,
+// channel or function naming a type of some package, yields an empty
+// expression and is generated as Column[any]: the column name stays exact
+// and the JSON operators, which take a string, keep working.
+func describeType(typ reflect.Type, modelPkg string) (expr string, imports map[string]string) {
 	for typ.Kind() == reflect.Pointer {
 		typ = typ.Elem()
 	}
-	if typ.PkgPath() == "" {
-		// Builtin or composite of builtins: string, int64, []uint8.
-		return typ.String(), ""
+	imports = make(map[string]string)
+	expr, ok := typeExpr(typ, modelPkg, imports)
+	if !ok {
+		return "", nil
 	}
-	name := typ.Name()
-	if name == "" || strings.ContainsAny(name, "[]*") {
-		return "", ""
+	return expr, imports
+}
+
+// typeExpr writes typ the way describeType does, adding the imports it needs
+// to imports; false for a type that cannot be written back as source.
+// Framework-internal types reach business models only through the public
+// packages that alias them. Reflection sees the defined type's internal
+// path, which a business project cannot import, so the reference is
+// rewritten to the alias the model source actually wrote: model.Base and
+// its siblings for internal/modelregistry, model.Version for
+// internal/modelschema, and the root gst package, which forwards everything
+// internal/types defines under the same name.
+func typeExpr(typ reflect.Type, modelPkg string, imports map[string]string) (string, bool) {
+	if name := typ.Name(); name != "" {
+		if strings.ContainsAny(name, "[]*") {
+			return "", false
+		}
+		switch pkg := typ.PkgPath(); pkg {
+		case "", modelPkg:
+			return name, true
+		case "github.com/hydroan/gst/internal/modelregistry", "github.com/hydroan/gst/internal/modelschema":
+			imports["github.com/hydroan/gst/model"] = "model"
+			return "model." + name, true
+		case "github.com/hydroan/gst/internal/types":
+			imports["github.com/hydroan/gst"] = "gst"
+			return "gst." + name, true
+		default:
+			alias := packageName(typ)
+			imports[pkg] = alias
+			return alias + "." + name, true
+		}
 	}
-	if typ.PkgPath() == modelPkg {
-		return name, ""
+	switch typ.Kind() {
+	case reflect.Pointer:
+		elem, ok := typeExpr(typ.Elem(), modelPkg, imports)
+		return "*" + elem, ok
+	case reflect.Slice:
+		elem, ok := typeExpr(typ.Elem(), modelPkg, imports)
+		return "[]" + elem, ok
+	case reflect.Array:
+		elem, ok := typeExpr(typ.Elem(), modelPkg, imports)
+		return "[" + strconv.Itoa(typ.Len()) + "]" + elem, ok
+	case reflect.Map:
+		key, ok := typeExpr(typ.Key(), modelPkg, imports)
+		elem, elemOK := typeExpr(typ.Elem(), modelPkg, imports)
+		return "map[" + key + "]" + elem, ok && elemOK
 	}
-	// Framework-internal types reach business models only through the public
-	// packages that alias them. Reflection sees the defined type's internal
-	// path, which a business project cannot import, so the reference is
-	// rewritten to the alias the model source actually wrote: model.Base and
-	// its siblings for internal/modelregistry, model.Version for
-	// internal/modelschema, and the root gst package, which forwards
-	// everything internal/types defines under the same name.
-	switch typ.PkgPath() {
-	case "github.com/hydroan/gst/internal/modelregistry", "github.com/hydroan/gst/internal/modelschema":
-		return "model." + name, "github.com/hydroan/gst/model"
-	case "github.com/hydroan/gst/internal/types":
-		return "gst." + name, "github.com/hydroan/gst"
+	// An anonymous struct, interface, channel or function is written as the
+	// compiler prints it, struct { X int } or interface {}, as long as it
+	// names no type of any package, which the compiler would qualify by a
+	// package name the file does not import.
+	if text := typ.String(); !strings.Contains(text, ".") {
+		return text, true
 	}
-	// typ.String() carries the package name the compiler recorded, which the
-	// generated file then imports under that exact alias.
-	return typ.String(), typ.PkgPath()
+	return "", false
 }
 
 func fail(err error) {
