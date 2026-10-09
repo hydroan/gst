@@ -86,8 +86,9 @@ func (db *database[M]) WithCursor(cursor types.Cursor) types.Database[M] {
 // identifyingCursorColumn refuses a cursor over a column two rows can share.
 // The boundary is one value, so those rows are split between pages: the ones
 // the page had no room for are skipped, and the caller reads a feed with
-// holes in it that nothing reports. The primary key and a column with a
-// unique index of its own leave no such gap.
+// holes in it that nothing reports. The primary key and a NOT NULL column
+// with a unique index of its own leave no such gap (see
+// modelschema.IdentifyingColumns).
 func (db *database[M]) identifyingCursorColumn(column string) error {
 	identifying, err := modelschema.IdentifyingColumns(*new(M))
 	if err != nil {

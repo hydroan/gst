@@ -186,8 +186,10 @@ var (
 	// rows can share. The cursor is one boundary value, so the rows holding
 	// that same value are split between pages: the ones the page had no room
 	// for are never read again, and the feed has a hole in it nothing
-	// reports. The primary key, and any column carrying a unique index of
-	// its own, leave no such gap.
+	// reports. The primary key, and any NOT NULL column carrying a unique
+	// index of its own, leave no such gap; a unique column that may be NULL
+	// is shared by every row without a value (see
+	// modelschema.IdentifyingColumns).
 	ErrSharedCursorColumn = errors.New("cursor column is not unique")
 
 	// ErrCursorWithOrder is returned when WithCursor and WithOrder meet on one
