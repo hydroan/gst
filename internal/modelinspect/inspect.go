@@ -21,7 +21,7 @@ type ColumnInfo struct {
 	TypeImports map[string]string `json:"type_imports"` // The imports TypeExpr needs, by path, each under the package name it qualifies the type with; none for builtin or same-package types.
 	TypeName    string            `json:"type_name"`    // Original type, recorded in a comment when TypeExpr is empty.
 	Numeric     bool              `json:"numeric"`      // Column type is a numeric kind, so the reference gains SUM and AVG.
-	Time        bool              `json:"time"`         // Column type is time.Time, so the reference gains time bucketing.
+	Time        bool              `json:"time"`         // Column type holds a time value, time.Time or datatypes.Date, so the reference gains time bucketing.
 }
 
 // ModelColumns is one model as the inspection program reports it: its columns,
