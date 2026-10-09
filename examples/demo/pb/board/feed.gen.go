@@ -19,21 +19,21 @@ type feedService struct {
 // The calls of the actions of Feed, one per rpc of FeedService, built once
 // at package initialization.
 var (
-	chatFeed   = grpc.BidiStreamCall[*board.Feed, *board.FeedEvent, *board.FeedEvent]("/api/board/feeds/chat")
-	uploadFeed = grpc.ClientStreamCall[*board.Feed, *board.FeedEvent, *board.FeedUploadRsp]("/api/board/feeds/upload")
-	watchFeed  = grpc.ServerStreamCall[*board.Feed, *board.FeedWatchReq, *board.FeedEvent]("/api/board/feeds/watch")
+	chatFeed   = grpc.BidiStreamCall[*board.Feed, *board.FeedChatReq, *board.FeedChatRsp]("/api/board/feeds/chat")
+	uploadFeed = grpc.ClientStreamCall[*board.Feed, *board.FeedUploadReq, *board.FeedUploadRsp]("/api/board/feeds/upload")
+	watchFeed  = grpc.ServerStreamCall[*board.Feed, *board.FeedWatchReq, *board.FeedWatchRsp]("/api/board/feeds/watch")
 )
 
 // ChatFeed serves the Stream action of Feed declared on board/feeds/chat,
 // served over gRPC alone.
 func (feedService) ChatFeed(srv FeedService_ChatFeedServer) error {
-	return chatFeed(srv.Context(), nil, func() (*board.FeedEvent, error) {
+	return chatFeed(srv.Context(), nil, func() (*board.FeedChatReq, error) {
 		msg, recvErr := srv.Recv()
 		if recvErr != nil {
 			return nil, recvErr
 		}
 		return FeedEventFromProto(msg.GetPayload())
-	}, func(rsp *board.FeedEvent) error {
+	}, func(rsp *board.FeedChatRsp) error {
 		return srv.Send(&ChatFeedResponse{Result: FeedEventToProto(rsp)})
 	})
 }
@@ -41,7 +41,7 @@ func (feedService) ChatFeed(srv FeedService_ChatFeedServer) error {
 // UploadFeed serves the Stream action of Feed declared on
 // board/feeds/upload, served over gRPC alone.
 func (feedService) UploadFeed(srv FeedService_UploadFeedServer) error {
-	result, err := uploadFeed(srv.Context(), nil, func() (*board.FeedEvent, error) {
+	result, err := uploadFeed(srv.Context(), nil, func() (*board.FeedUploadReq, error) {
 		msg, recvErr := srv.Recv()
 		if recvErr != nil {
 			return nil, recvErr
@@ -61,7 +61,7 @@ func (feedService) WatchFeed(req *WatchFeedRequest, srv FeedService_WatchFeedSer
 	if err != nil {
 		return err
 	}
-	return watchFeed(srv.Context(), nil, payload, func(rsp *board.FeedEvent) error {
+	return watchFeed(srv.Context(), nil, payload, func(rsp *board.FeedWatchRsp) error {
 		return srv.Send(&WatchFeedResponse{Result: FeedEventToProto(rsp)})
 	})
 }

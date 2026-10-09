@@ -56,7 +56,7 @@ func init() {
 		Comment: "Feed is the streaming half of the gRPC example, served over gRPC alone: a\nStream action carries a stream of messages on one side of the call or on\nboth, which HTTP cannot, so a model declaring one needs GRPC(). WatchFeed\nanswers one request with a stream of events, UploadFeed takes a stream of\nevents and answers once, ChatFeed streams both ways. A Stream action names\nits rpc with Service(\"name\") and always has service code, in service/board/feed;\nthe router registers nothing for it.",
 	})
 	apidoc.Register("demo/model/board", "FeedEvent", apidoc.StructDoc{
-		Comment: "FeedEvent is one event of a feed.",
+		Comment: "FeedEvent is one event of a feed: what every stream carries, each\nunder a name of its own.",
 	})
 	apidoc.Register("demo/model/board", "FeedUploadRsp", apidoc.StructDoc{
 		Comment: "FeedUploadRsp counts the events a client streamed in.",

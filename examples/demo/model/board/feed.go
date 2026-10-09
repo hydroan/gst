@@ -24,21 +24,21 @@ func (Feed) Design() {
 			Public()
 			Service("watch")
 			Payload[*FeedWatchReq]()
-			StreamingResult[*FeedEvent]()
+			StreamingResult[*FeedWatchRsp]()
 		})
 	})
 	Route("board/feeds/upload", func() {
 		Stream(func() {
 			Service("upload")
-			StreamingPayload[*FeedEvent]()
+			StreamingPayload[*FeedUploadReq]()
 			Result[*FeedUploadRsp]()
 		})
 	})
 	Route("board/feeds/chat", func() {
 		Stream(func() {
 			Service("chat")
-			StreamingPayload[*FeedEvent]()
-			StreamingResult[*FeedEvent]()
+			StreamingPayload[*FeedChatReq]()
+			StreamingResult[*FeedChatRsp]()
 		})
 	})
 }
@@ -49,11 +49,23 @@ type (
 		Topic string `json:"topic" pb:"1"`
 	}
 
-	// FeedEvent is one event of a feed.
+	// FeedEvent is one event of a feed: what every stream carries, each
+	// under a name of its own.
 	FeedEvent struct {
 		Seq  int64  `json:"seq" pb:"1"`
 		Body string `json:"body" pb:"2"`
 	}
+
+	// FeedWatchRsp is an event the watch streams out.
+	FeedWatchRsp = FeedEvent
+
+	// FeedUploadReq is an event the upload streams in.
+	FeedUploadReq = FeedEvent
+
+	// FeedChatReq is an event the chat streams in; FeedChatRsp one it
+	// streams back.
+	FeedChatReq = FeedEvent
+	FeedChatRsp = FeedEvent
 
 	// FeedUploadRsp counts the events a client streamed in.
 	FeedUploadRsp struct {

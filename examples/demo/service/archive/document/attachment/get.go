@@ -15,12 +15,12 @@ import (
 // Getter serves GET /api/archive/documents/:document/attachment, the route
 // as declared: the action is Exact, so no id of its own is appended.
 type Getter struct {
-	service.Base[*document.Attachment, *model.Empty, *document.AttachmentRsp]
+	service.Base[*document.Attachment, *model.Empty, *document.AttachmentGetRsp]
 }
 
 // Get reads the attachment back from object storage: a document without one
 // answers 404, a store that cannot be read 500.
-func (a *Getter) Get(ctx *gst.ServiceContext, _ *model.Empty) (*document.AttachmentRsp, error) {
+func (a *Getter) Get(ctx *gst.ServiceContext, _ *model.Empty) (*document.AttachmentGetRsp, error) {
 	key := attachmentKey(ctx.Param("document"))
 	found, err := minio.Exists(ctx, key)
 	if err != nil {
@@ -38,5 +38,5 @@ func (a *Getter) Get(ctx *gst.ServiceContext, _ *model.Empty) (*document.Attachm
 	if err != nil {
 		return nil, gst.NewErrorWithCause(http.StatusInternalServerError, "failed to read the attachment", err)
 	}
-	return &document.AttachmentRsp{Key: info.Key, Size: info.Size, Content: string(content)}, nil
+	return &document.AttachmentGetRsp{Key: info.Key, Size: info.Size, Content: string(content)}, nil
 }

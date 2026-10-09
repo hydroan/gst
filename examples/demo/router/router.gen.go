@@ -19,7 +19,7 @@ import (
 
 func Init() error {
 	router.Register[*document.Attachment, *document.AttachmentReq, *document.AttachmentRsp](router.Auth(), "/api/archive/documents/:document/attachment", &gst.ControllerConfig[*document.Attachment]{}, consts.Create)
-	router.Register[*document.Attachment, *gstmodel.Empty, *document.AttachmentRsp](router.Auth(), "/api/archive/documents/:document/attachment", &gst.ControllerConfig[*document.Attachment]{ParamName: "document"}, consts.Get)
+	router.Register[*document.Attachment, *gstmodel.Empty, *document.AttachmentGetRsp](router.Auth(), "/api/archive/documents/:document/attachment", &gst.ControllerConfig[*document.Attachment]{ParamName: "document"}, consts.Get)
 	router.Register[*archive.Document, *archive.Document, *archive.Document](router.Auth(), "/api/archive/boxes/:box_id/documents", &gst.ControllerConfig[*archive.Document]{}, consts.List)
 	router.Register[*archive.Document, *archive.Document, *archive.Document](router.Auth(), "/api/archive/documents", &gst.ControllerConfig[*archive.Document]{}, consts.Create)
 	router.Register[*archive.Document, *archive.Document, *archive.Document](router.Auth(), "/api/archive/documents/:document", &gst.ControllerConfig[*archive.Document]{ParamName: "document"}, consts.Delete)

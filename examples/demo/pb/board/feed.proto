@@ -42,7 +42,8 @@ message WatchFeedResponse {
   FeedEvent result = 1;
 }
 
-// FeedEvent is one event of a feed.
+// FeedEvent is one event of a feed: what every stream carries, each
+// under a name of its own.
 message FeedEvent {
   int64 seq = 1;
 

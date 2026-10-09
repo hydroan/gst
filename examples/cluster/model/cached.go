@@ -40,7 +40,7 @@ func (Cached) Design() {
 	Route("caches/load", func() {
 		Stream(func() {
 			Service("load")
-			StreamingPayload[*CachedReq]()
+			StreamingPayload[*CachedLoadReq]()
 			Result[*CachedLoadRsp]()
 		})
 	})
@@ -59,6 +59,10 @@ type (
 		Key   string `json:"key" pb:"1"`   // what the entry is filed under
 		Value string `json:"value" pb:"2"` // what every other replica must end up holding for it
 	}
+
+	// CachedLoadReq is an entry the load stream writes: the same entry as
+	// CachedReq, under the stream's own name.
+	CachedLoadReq = CachedReq
 
 	// CachedKeyReq names an entry to look up.
 	CachedKeyReq struct {

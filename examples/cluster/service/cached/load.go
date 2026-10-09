@@ -18,12 +18,12 @@ import (
 // out. Every entry is written to the store of this replica the way a single
 // Create is, so its peers catch up with all of them.
 type Load struct {
-	service.Base[*model.Cached, *model.CachedReq, *model.CachedLoadRsp]
+	service.Base[*model.Cached, *model.CachedLoadReq, *model.CachedLoadRsp]
 }
 
 // Stream caches every entry until the client closes its side, which Recv
 // reports as io.EOF, and answers the count.
-func (l *Load) Stream(ctx *gst.ServiceContext, stream *grpc.ClientStream[*model.CachedReq]) (*model.CachedLoadRsp, error) {
+func (l *Load) Stream(ctx *gst.ServiceContext, stream *grpc.ClientStream[*model.CachedLoadReq]) (*model.CachedLoadRsp, error) {
 	var count int64
 	for {
 		entry, err := stream.Recv()

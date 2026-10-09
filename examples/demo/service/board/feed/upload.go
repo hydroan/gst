@@ -15,12 +15,12 @@ import (
 // Upload serves the UploadFeed rpc, a client stream: a stream of events in,
 // one answer out.
 type Upload struct {
-	service.Base[*board.Feed, *board.FeedEvent, *board.FeedUploadRsp]
+	service.Base[*board.Feed, *board.FeedUploadReq, *board.FeedUploadRsp]
 }
 
 // Stream counts the events until the client closes its side, which Recv
 // reports as io.EOF, and answers the count.
-func (u *Upload) Stream(_ *gst.ServiceContext, stream *grpc.ClientStream[*board.FeedEvent]) (*board.FeedUploadRsp, error) {
+func (u *Upload) Stream(_ *gst.ServiceContext, stream *grpc.ClientStream[*board.FeedUploadReq]) (*board.FeedUploadRsp, error) {
 	var accepted int64
 	for {
 		if _, err := stream.Recv(); err != nil {

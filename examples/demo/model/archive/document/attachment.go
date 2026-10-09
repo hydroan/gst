@@ -24,7 +24,7 @@ func (Attachment) Design() {
 		Get(func() {
 			Exact()
 			Service()
-			Result[*AttachmentRsp]()
+			Result[*AttachmentGetRsp]()
 		})
 	})
 }
@@ -41,4 +41,8 @@ type (
 		Size    int64  `json:"size"`
 		Content string `json:"content,omitempty"` // included when read back
 	}
+
+	// AttachmentGetRsp describes the file read back: the same description as
+	// AttachmentRsp, under the Get's own name.
+	AttachmentGetRsp = AttachmentRsp
 )

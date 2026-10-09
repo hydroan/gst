@@ -19,12 +19,12 @@ func TestGet(t *testing.T) {
 	doc := createDocument(t, account)
 	path := "/api/archive/documents/" + doc.ID + "/attachment"
 
-	_, err := account.Client.Get[document.AttachmentRsp](t.Context(), path)
+	_, err := account.Client.Get[document.AttachmentGetRsp](t.Context(), path)
 	testutil.RequireError(t, err, http.StatusNotFound, "attachment not found")
 
 	_, err = account.Client.Post[document.AttachmentRsp](t.Context(), path, &document.AttachmentReq{Content: "attached text"})
 	require.NoError(t, err)
-	rsp, err := account.Client.Get[document.AttachmentRsp](t.Context(), path)
+	rsp, err := account.Client.Get[document.AttachmentGetRsp](t.Context(), path)
 	require.NoError(t, err)
 	require.Equal(t, "attached text", rsp.Content)
 	require.Equal(t, int64(len("attached text")), rsp.Size)

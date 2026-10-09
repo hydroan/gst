@@ -299,7 +299,8 @@ func (x *WatchFeedResponse) GetResult() *FeedEvent {
 	return nil
 }
 
-// FeedEvent is one event of a feed.
+// FeedEvent is one event of a feed: what every stream carries, each
+// under a name of its own.
 type FeedEvent struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Seq           int64                  `protobuf:"varint,1,opt,name=seq,proto3" json:"seq,omitempty"`

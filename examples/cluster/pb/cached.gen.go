@@ -26,7 +26,7 @@ var (
 	deleteCached   = grpc.ServiceCall[*model.Cached, *gstmodel.Empty, *model.CachedDeleteRsp](consts.Delete, "/api/caches/:id")
 	getCached      = grpc.ServiceCall[*model.Cached, *gstmodel.Empty, *model.CachedGetRsp](consts.Get, "/api/caches/:id")
 	exchangeCached = grpc.BidiStreamCall[*model.Cached, *model.CachedKeyReq, *model.CachedExchangeRsp]("/api/caches/exchange")
-	loadCached     = grpc.ClientStreamCall[*model.Cached, *model.CachedReq, *model.CachedLoadRsp]("/api/caches/load")
+	loadCached     = grpc.ClientStreamCall[*model.Cached, *model.CachedLoadReq, *model.CachedLoadRsp]("/api/caches/load")
 )
 
 // CreateCached serves the Create action of Cached on /api/caches.
@@ -77,7 +77,7 @@ func (cachedService) ExchangeCached(srv CachedService_ExchangeCachedServer) erro
 // LoadCached serves the Stream action of Cached declared on caches/load,
 // served over gRPC alone.
 func (cachedService) LoadCached(srv CachedService_LoadCachedServer) error {
-	result, err := loadCached(srv.Context(), nil, func() (*model.CachedReq, error) {
+	result, err := loadCached(srv.Context(), nil, func() (*model.CachedLoadReq, error) {
 		msg, recvErr := srv.Recv()
 		if recvErr != nil {
 			return nil, recvErr
