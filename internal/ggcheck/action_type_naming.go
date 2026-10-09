@@ -12,16 +12,16 @@ import (
 	"github.com/hydroan/gst/internal/gghelper"
 )
 
-// ModelActionTypeNaming holds explicit DSL Payload type names to the Req
-// suffix and Result type names to Rsp.
-var ModelActionTypeNaming = Check{
-	Name: "Model action type naming",
+// ActionTypeNaming holds explicit DSL Payload type names to the Req suffix
+// and Result type names to Rsp.
+var ActionTypeNaming = Check{
+	Name: "Action type naming",
 	Rule: "explicit DSL Payload types must end with Req and Result types with Rsp",
-	run:  checkModelActionTypeNaming,
+	run:  checkActionTypeNaming,
 }
 
-// checkModelActionTypeNaming checks explicit DSL Payload and Result type names.
-func checkModelActionTypeNaming(ignore gghelper.ProjectIgnore) []string {
+// checkActionTypeNaming checks explicit DSL Payload and Result type names.
+func checkActionTypeNaming(ignore gghelper.ProjectIgnore) []string {
 	var violations []string
 
 	if _, err := os.Stat(ggconst.DirModel); os.IsNotExist(err) {

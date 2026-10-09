@@ -2,6 +2,7 @@ package ggcheck_test
 
 import (
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -387,5 +388,71 @@ type SampleChatRsp interface {
 	want := "Stream action declares StreamingPayload[SampleChatReq] whose type is an interface with methods, which no request body decodes into; declare a struct type and use the pointer form StreamingPayload[*SampleChatReq]"
 	if len(violations) != 1 || !strings.Contains(violations[0], want) {
 		t.Fatalf("expected the streaming payload interface to be reported once as %q, got %#v", want, violations)
+	}
+}
+
+// TestActionTypeFormRefusesATypeDefinedOverANamedType pins that an action
+// type declared as a defined type over another named type, of the package or
+// of another, is refused for an alias, which shares the shape under
+// the action's own name, or a struct of the action's own; the alias passes.
+func TestActionTypeFormRefusesATypeDefinedOverANamedType(t *testing.T) {
+	projectDir := t.TempDir()
+	t.Chdir(projectDir)
+
+	writeCheckFile(t, filepath.Join(projectDir, "model", "sample", "sample.go"), `package sample
+
+import (
+	. "github.com/hydroan/gst/dsl"
+	"github.com/hydroan/gst/model"
+
+	"tmpapp/model/shared"
+)
+
+type Sample struct {
+	model.Base
+}
+
+type SampleRsp struct {
+	Name string `+"`json:\"name\"`"+`
+}
+
+// SampleGetRsp is defined over SampleRsp: a type of its own with the same
+// fields, which an alias is for.
+type SampleGetRsp SampleRsp
+
+// SampleSyncRsp is defined over another package's type.
+type SampleSyncRsp shared.SyncRsp
+
+// SampleListRsp is an alias of SampleRsp: the shape under the List's own name.
+type SampleListRsp = SampleRsp
+
+func (Sample) Design() {
+	Endpoint("samples")
+	Create(func() {
+		Result[*SampleRsp]()
+	})
+	Get(func() {
+		Result[*SampleGetRsp]()
+	})
+	List(func() {
+		Result[*SampleListRsp]()
+	})
+	Route("samples/sync", func() {
+		Create(func() {
+			Service()
+			Result[*SampleSyncRsp]()
+		})
+	})
+}
+`)
+
+	violations := runCheck(ggcheck.ActionTypeForm)
+
+	want := []string{
+		"model/sample/sample.go: Get action declares Result[*SampleGetRsp] whose type is defined over SampleRsp; share the shape through an alias, type SampleGetRsp = SampleRsp, or declare a struct type of its own",
+		"model/sample/sample.go: Create action declares Result[*SampleSyncRsp] whose type is defined over shared.SyncRsp; share the shape through an alias, type SampleSyncRsp = shared.SyncRsp, or declare a struct type of its own",
+	}
+	if !slices.Equal(violations, want) {
+		t.Fatalf("violations = %#v, want %#v", violations, want)
 	}
 }

@@ -20,7 +20,7 @@ import (
 // forms the generated code relies on.
 var ActionTypeForm = Check{
 	Name: "Action type form",
-	Rule: "explicit DSL Payload/Result types must be named types declared in the same model package: struct types use the pointer form, slice and map types use the value form, an empty struct type may only pair with an empty peer side, and a Payload type is never an interface with methods",
+	Rule: "explicit DSL Payload/Result types must be named types declared in the same model package: struct types use the pointer form, slice and map types use the value form, an empty struct type may only pair with an empty peer side, a Payload type is never an interface with methods, and a type defined over another named type (type A B) gives way to an alias (type A = B) or a struct of its own",
 	run:  checkActionTypeForm,
 }
 
@@ -32,7 +32,12 @@ var ActionTypeForm = Check{
 // empty peer side (an omitted side counts as empty). A Payload type must not
 // be an interface with methods, which no request body decodes into, named by
 // value or through a pointer; a Result is only encoded, so any interface
-// serves there.
+// serves there. A type defined over another named type, type SampleGetRsp
+// SampleRsp, is refused: it is the shape of that type under a second
+// identity, which costs a conversion at every use and a message and schema
+// of its own in the generated artifacts for nothing an alias, type
+// SampleGetRsp = SampleRsp, does not give; an action whose shape differs
+// declares a struct of its own.
 func checkActionTypeForm(ignore gghelper.ProjectIgnore) []string {
 	var violations []string
 
@@ -101,8 +106,10 @@ func checkPackageActionTypeForm(paths []string) []string {
 	}
 
 	// Collect every named type declaration of the package so action types can
-	// be resolved across files.
+	// be resolved across files, and the types defined over another named type
+	// (type A B, not an alias), by the text of that type.
 	typeExprs := make(map[string]ast.Expr)
+	definedOver := make(map[string]string)
 	for _, file := range files {
 		for _, decl := range file.node.Decls {
 			genDecl, ok := decl.(*ast.GenDecl)
@@ -115,7 +122,17 @@ func checkPackageActionTypeForm(paths []string) []string {
 					continue
 				}
 				typeExprs[typeSpec.Name.Name] = typeSpec.Type
+				if over, ok := namedTypeText(typeSpec.Type); ok && !typeSpec.Assign.IsValid() {
+					definedOver[typeSpec.Name.Name] = over
+				}
 			}
+		}
+	}
+	// A type defined over a name the package does not declare, a builtin or
+	// a dot-imported type, is reported as undeclared below, not here.
+	for name, over := range definedOver {
+		if _, declared := typeExprs[over]; !declared && !strings.Contains(over, ".") {
+			delete(definedOver, name)
 		}
 	}
 	resolve := func(name string) actionTypeKind {
@@ -191,12 +208,27 @@ func checkPackageActionTypeForm(paths []string) []string {
 		designs := dsl.Parse(file.node)
 		for _, modelName := range slices.Sorted(maps.Keys(designs)) {
 			designs[modelName].Range(func(_ string, action *dsl.Action) {
-				violations = append(violations, checkActionTypePair(relPath, action, resolve)...)
+				violations = append(violations, checkActionTypePair(relPath, action, resolve, definedOver)...)
 			})
 		}
 	}
 
 	return violations
+}
+
+// namedTypeText returns the text of expr when it names a type, SampleRsp or
+// shared.SyncRsp, the shapes a defined type is written over; false for any
+// other form, a struct, slice, map, pointer or interface literal.
+func namedTypeText(expr ast.Expr) (string, bool) {
+	switch x := expr.(type) {
+	case *ast.Ident:
+		return x.Name, true
+	case *ast.SelectorExpr:
+		if pkg, ok := x.X.(*ast.Ident); ok && x.Sel != nil {
+			return pkg.Name + "." + x.Sel.Name, true
+		}
+	}
+	return "", false
 }
 
 // interfaceDeclaresMethods reports whether the interface expr declares a
@@ -245,7 +277,7 @@ func interfaceDeclaresMethods(expr ast.Expr, typeExprs map[string]ast.Expr, seen
 
 // checkActionTypePair checks the Payload and Result type strings of one
 // action against the package type table.
-func checkActionTypePair(relPath string, action *dsl.Action, resolve func(string) actionTypeKind) []string {
+func checkActionTypePair(relPath string, action *dsl.Action, resolve func(string) actionTypeKind, definedOver map[string]string) []string {
 	var violations []string
 
 	actionName := action.Phase.Name()
@@ -257,30 +289,20 @@ func checkActionTypePair(relPath string, action *dsl.Action, resolve func(string
 	}
 	bothEmpty := sideEmpty(action.Payload) && sideEmpty(action.Result)
 
-	// A Stream action declares a streaming side as StreamingPayload or
-	// StreamingResult, and is told so.
-	payloadKind, resultKind := "Payload", "Result"
-	if action.StreamingPayload {
-		payloadKind = "StreamingPayload"
-	}
-	if action.StreamingResult {
-		resultKind = "StreamingResult"
-	}
-	sides := []struct {
-		kind string
-		raw  string
-	}{
-		{kind: payloadKind, raw: action.Payload},
-		{kind: resultKind, raw: action.Result},
-	}
-	for _, side := range sides {
+	// A Stream action is told its streaming side as StreamingPayload or
+	// StreamingResult (see actionTypeSides).
+	for _, side := range actionTypeSides(action) {
 		kind, raw := side.kind, side.raw
-		if raw == dsl.PayloadEmpty || raw == "" {
-			continue
-		}
 		name := strings.TrimPrefix(raw, "*")
 		pointer := strings.HasPrefix(raw, "*")
 
+		if over, defined := definedOver[name]; defined {
+			violations = append(violations, fmt.Sprintf(
+				"%s: %s action declares %s[%s] whose type is defined over %s; share the shape through an alias, type %s = %s, or declare a struct type of its own",
+				relPath, actionName, kind, raw, over, name, over,
+			))
+			continue
+		}
 		switch resolve(name) {
 		case actionTypeNotFound:
 			violations = append(violations, fmt.Sprintf(

@@ -103,6 +103,36 @@ func localActionTypeName(expr ast.Expr) (string, bool) {
 	return "", false
 }
 
+// actionTypeSide is one side of an action that declares a type: the DSL
+// keyword declaring it, Payload, Result, StreamingPayload or StreamingResult,
+// and the type as the declaration wrote it, *SampleRsp.
+type actionTypeSide struct {
+	kind string
+	raw  string
+}
+
+// actionTypeSides returns the sides of action that declare a type, a Stream
+// action's streaming side as StreamingPayload or StreamingResult; a side the
+// framework fills in, *model.Empty for the payload of a List or Get (see
+// dsl.PayloadEmpty), is left out.
+func actionTypeSides(action *dsl.Action) []actionTypeSide {
+	payloadKind, resultKind := "Payload", "Result"
+	if action.StreamingPayload {
+		payloadKind = "StreamingPayload"
+	}
+	if action.StreamingResult {
+		resultKind = "StreamingResult"
+	}
+	sides := make([]actionTypeSide, 0, 2)
+	for _, side := range []actionTypeSide{{kind: payloadKind, raw: action.Payload}, {kind: resultKind, raw: action.Result}} {
+		if side.raw == "" || side.raw == dsl.PayloadEmpty {
+			continue
+		}
+		sides = append(sides, side)
+	}
+	return sides
+}
+
 // typeBaseName returns the name a type expression ends in, the way a
 // receiver, an embedded field or a DSL type argument names its type: Record
 // for Record, *Record and model.Record. Any other form, such as a slice or a

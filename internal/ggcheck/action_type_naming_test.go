@@ -9,10 +9,10 @@ import (
 	"github.com/hydroan/gst/internal/ggcheck"
 )
 
-// TestModelActionTypeNamingFlagsSuffixlessPayloadAndResultTypes pins the
-// naming rule of explicit DSL action types: a Payload type ends with Req and a
+// TestActionTypeNamingFlagsSuffixlessPayloadAndResultTypes pins the naming
+// rule of explicit DSL action types: a Payload type ends with Req and a
 // Result type with Rsp, while the model's own type is exempt.
-func TestModelActionTypeNamingFlagsSuffixlessPayloadAndResultTypes(t *testing.T) {
+func TestActionTypeNamingFlagsSuffixlessPayloadAndResultTypes(t *testing.T) {
 	projectDir := t.TempDir()
 	t.Chdir(projectDir)
 	source := `package sample
@@ -52,7 +52,7 @@ func (Sample) Design() {
 	path := filepath.Join("model", "sample", "sample.go")
 	writeCheckFile(t, filepath.Join(projectDir, path), source)
 
-	violations := runCheck(ggcheck.ModelActionTypeNaming)
+	violations := runCheck(ggcheck.ActionTypeNaming)
 
 	want := []string{
 		fmt.Sprintf("%s:%d: Payload type 'SampleUpdateInput' should end with Req", path, sourceLine(t, source, "dsl.Payload[*SampleUpdateInput]()")),

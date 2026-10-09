@@ -219,7 +219,7 @@ cluster 是多副本示例，也是框架分布式、多副本和 gRPC 能力的
 - 不落数据库、只表示动作或自定义接口的模型优先使用 `model.Empty`，例如登录、刷新 token、格式转换、批量处理等接口。
 - 默认 CRUD 资源优先交给框架处理：在 `Design()` 中启用对应动作即可。如果没有额外业务逻辑，不声明 `Service()`。
 - 需要自定义业务逻辑时，在对应动作中声明 `Service()`，然后在同名 service 子目录中实现对应 phase 的 service 结构体。
-- 自定义接口必须为当前接口单独定义 `XXXReq`、`XXXRsp`，即使字段和其他接口完全相同也不要复用。请求和响应类型通过 `Payload[*XXXReq]()`、`Result[*XXXRsp]()` 绑定到 DSL。例外：List、Get 是 HTTP GET 接口，禁止声明 `Payload`，只定义并声明 `Result[*XXXRsp]()`，请求类型固定生成为 `*model.Empty`。
+- 自定义接口必须为当前接口单独命名 `XXXReq`、`XXXRsp`，不要两个接口写同一个类型名（gg check 强制）；字段和其他接口完全相同时写别名 `type XXXGetRsp = XXXRsp`。请求和响应类型通过 `Payload[*XXXReq]()`、`Result[*XXXRsp]()` 绑定到 DSL。例外：List、Get 是 HTTP GET 接口，禁止声明 `Payload`，只定义并声明 `Result[*XXXRsp]()`，请求类型固定生成为 `*model.Empty`。
 - 同一资源的嵌套路由或额外动作使用 `Route(...)` 包裹，例如 `/archive/documents/seal`、`/items/batch` 这类非默认 CRUD 路由。
 
 #### service 实现规则

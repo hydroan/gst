@@ -164,7 +164,8 @@ func (Record) Design() {
 ### 自定义动作
 
 不直接表示数据库表的接口优先使用 `model.Empty`，并为当前接口单独定义自己的
-`XXXReq`、`XXXRsp`。即使字段完全一样，也不要复用其他接口的请求和响应结构体。
+`XXXReq`、`XXXRsp`。两个接口不要写同一个类型名，`gg check` 会拦下；字段完全一样时写别名
+`type XXXGetRsp = XXXRsp`。
 
 ```go
 package tool
