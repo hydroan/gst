@@ -760,10 +760,8 @@ func serviceNameRefusal(name string) string {
 	if strings.HasSuffix(lower, "_test") {
 		return "a name ending in _test names a test file, choose another name"
 	}
-	if i := strings.LastIndex(lower, "_"); i >= 0 {
-		if suffix := lower[i+1:]; knownOS[suffix] || knownArch[suffix] {
-			return fmt.Sprintf("a name ending in _%s names a file built for that platform alone, choose another name", suffix)
-		}
+	if _, suffix, found := strings.CutLast(lower, "_"); found && (knownOS[suffix] || knownArch[suffix]) {
+		return fmt.Sprintf("a name ending in _%s names a file built for that platform alone, choose another name", suffix)
 	}
 	return ""
 }

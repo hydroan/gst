@@ -218,8 +218,8 @@ func importPathsByLocalName(file *ast.File) map[string]string {
 			continue
 		}
 		name := path
-		if index := strings.LastIndex(path, "/"); index >= 0 {
-			name = path[index+1:]
+		if _, base, found := strings.CutLast(path, "/"); found {
+			name = base
 		}
 		if spec.Name != nil {
 			name = spec.Name.Name

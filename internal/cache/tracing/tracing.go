@@ -156,11 +156,11 @@ func (tw *Wrapper[T]) attributes(operation, key string) []attribute.KeyValue {
 // domain without the identifier that follows it. Keys with no separator have
 // no namespace to report rather than being reported whole.
 func keyNamespace(key string) string {
-	i := strings.LastIndex(key, ":")
-	if i < 0 {
+	namespace, _, found := strings.CutLast(key, ":")
+	if !found {
 		return ""
 	}
-	return key[:i]
+	return namespace
 }
 
 // keyDigest returns a truncated SHA-256 of the key, enough to correlate the

@@ -50,9 +50,8 @@ func schemaComponentNameFromPath(pkgPath, name string) string {
 		return pkgPath[strings.LastIndex(pkgPath, "/")+1:] + "." + name
 	}
 
-	if index := strings.LastIndex(pkgPath, "/model/"); index >= 0 {
-		suffix := strings.ReplaceAll(pkgPath[index+len("/model/"):], "/", ".")
-		return suffix + "." + name
+	if _, below, found := strings.CutLast(pkgPath, "/model/"); found {
+		return strings.ReplaceAll(below, "/", ".") + "." + name
 	}
 	if pkgPath == "model" || strings.HasSuffix(pkgPath, "/model") {
 		return name
