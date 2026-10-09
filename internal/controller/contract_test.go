@@ -569,7 +569,7 @@ func TestTransportsAnswerTheContractAlike(t *testing.T) {
 				t.Helper()
 				return contractInput{items: []map[string]any{{"id": createSample(t, "contract-update-many-kept").GetID(), "name": "contract-update-many-renamed"}, {"name": "contract-update-many-other"}}}
 			},
-			want: invalid,
+			want: contractWant{status: http.StatusBadRequest, msg: "items[1] names no id"},
 			check: func(t *testing.T, in contractInput, _ contractAnswer) {
 				t.Helper()
 				requireSampleName(t, stringOf(in.items[0]["id"]), "contract-update-many-kept")

@@ -83,16 +83,26 @@ func UpdateManyCall[M types.Model](route string) func(ctx context.Context, param
 }
 
 // updateManyFlow runs the batch update flow on the items of req: it refuses
-// a batch naming one record twice with 400 (see repeatedID), runs the batch
-// update hooks around the write and records the operation. The items are
-// req's own, as the write and the hooks left them, with the creation audit
-// as stored.
+// a batch naming one record twice (see repeatedID) and an item naming no
+// record (see itemWithoutID) with 400, runs the batch update hooks around
+// the write and records the operation. The items are req's own, as the
+// write and the hooks left them, with the creation audit as stored.
 func (a *action[M, REQ, RSP]) updateManyFlow(ctx context.Context, newServiceContext serviceContextFunc, req *batch[M]) error {
 	log := logger.Controller.WithContext(ctx, consts.UpdateMany)
 	svc := a.service()
 
 	if err := req.repeatedID(); err != nil {
 		return failWith(ctx, log, "batch update naming a record twice", err, invalidArgument(err))
+	}
+	// An item without an id names no record: a defective request, refused
+	// before anything is written with the sentence a batch patch refuses it
+	// with (see itemWithoutID); the write would refuse it as well (see
+	// database.ErrIDRequired), without naming the item.
+	for i, m := range req.Items {
+		if len(m.GetID()) == 0 {
+			err := errors.Wrapf(database.ErrIDRequired, "update many %s item %d", a.name, i)
+			return failWith(ctx, log, "batch update item without its id", err, itemWithoutID(i))
+		}
 	}
 	// 1.Perform business logic processing before batch update resource.
 	if err := a.traceServiceHook(ctx, consts.UpdateManyBefore, svc, newServiceContext, func(sc *types.ServiceContext) error {
@@ -101,10 +111,9 @@ func (a *action[M, REQ, RSP]) updateManyFlow(ctx context.Context, newServiceCont
 		return failService(ctx, log, err)
 	}
 	// 2.Batch update resource in database. Pure UPDATE with one transaction
-	// around the batch: an item without an id fails the whole request, and
-	// an item without a live row renders 404 and rolls the batch back, so
-	// the batch endpoint can never insert rows. A batch without items writes
-	// nothing.
+	// around the batch: an item without a live row renders 404 and rolls the
+	// batch back, so the batch endpoint can never insert rows. A batch
+	// without items writes nothing.
 	if err := database.Database[M](ctx).Update(req.Items...); err != nil {
 		return failDatabase(ctx, log, err)
 	}

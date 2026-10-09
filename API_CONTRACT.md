@@ -175,8 +175,8 @@ query 名不要以 `_` 开头。反过来，所有裸名参数都属于业务字
   嵌入结构体不占路径一层，它的字段按 JSON 提升后的名字写。校验器没有现成句子的规则（含项目自己注册的）
   写成 `host failed the hostname check`，规则带参数时带上：`tag failed the startswith=ab check`。
 - 值放不进字段（整数越界、该是数字却给了字符串）同样返回 `400`，`msg` 点名字段：`invalid value for field 'rank'`，
-  路径写法和校验失败一样，批量请求的项写 `items[1].rank`。批量部分更新的项没带 `id` 返回 `400`，
-  `msg` 是 `items[1] names no id`。
+  路径写法和校验失败一样，批量请求的项写 `items[1].rank`。批量全量更新、批量部分更新的项没带 `id`
+  返回 `400`，`msg` 是 `items[1] names no id`。
 
 ## 关键规则
 

@@ -112,7 +112,8 @@ func databaseError(err error) error {
 		return types.NewErrorWithCause(http.StatusBadRequest, invalidArgumentMsg, err)
 	case errors.Is(err, database.ErrIDRequired):
 		// An id of a batch delete is empty and names no record — a request
-		// defect as well.
+		// defect as well; a batch update or patch refuses an item without
+		// an id before it writes, naming the item (see itemWithoutID).
 		return types.NewErrorWithCause(http.StatusBadRequest, invalidArgumentMsg, err)
 	case errors.Is(err, database.ErrForeignKeyViolated):
 		// The request names a record that is not there, or would leave one
