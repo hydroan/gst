@@ -564,9 +564,9 @@ func (w *fileWriter) query(phase consts.Phase, req func(string) ast.Expr, has fu
 // response encoded into a response message; a client stream answers its
 // response with SendAndClose.
 //
-// The Feed model of the golden fixture, streaming FeedEvent messages, gets
-// for its Service("watch") Stream on feeds/watch, a Payload with a
-// streaming Result,
+// The Feed model of the golden fixture, each of whose streams carries
+// FeedEvent messages under a name of its own, gets for its Service("watch")
+// Stream on feeds/watch, a Payload with a streaming Result,
 //
 //	// WatchFeed serves the Stream action of Feed declared on feeds/watch, served
 //	// over gRPC alone.
@@ -575,7 +575,7 @@ func (w *fileWriter) query(phase consts.Phase, req func(string) ast.Expr, has fu
 //		if err != nil {
 //			return err
 //		}
-//		return watchFeed(srv.Context(), nil, payload, func(rsp *model.FeedEvent) error {
+//		return watchFeed(srv.Context(), nil, payload, func(rsp *model.FeedWatchRsp) error {
 //			return srv.Send(&WatchFeedResponse{Result: FeedEventToProto(rsp)})
 //		})
 //	}
@@ -593,7 +593,7 @@ func (w *fileWriter) query(phase consts.Phase, req func(string) ast.Expr, has fu
 //		}
 //		params := map[string]string{"feed": first.GetFeed()}
 //		n := 1
-//		result, err := uploadFeedByFeed(srv.Context(), params, func() (*model.FeedEvent, error) {
+//		result, err := uploadFeedByFeed(srv.Context(), params, func() (*model.FeedUploadReq, error) {
 //			if msg := first; msg != nil {
 //				first = nil
 //				return FeedEventFromProto(msg.GetPayload())
@@ -619,13 +619,13 @@ func (w *fileWriter) query(phase consts.Phase, req func(string) ast.Expr, has fu
 //	// ChatFeed serves the Stream action of Feed declared on feeds/chat, served
 //	// over gRPC alone.
 //	func (feedService) ChatFeed(srv FeedService_ChatFeedServer) error {
-//		return chatFeed(srv.Context(), nil, func() (*model.FeedEvent, error) {
+//		return chatFeed(srv.Context(), nil, func() (*model.FeedChatReq, error) {
 //			msg, recvErr := srv.Recv()
 //			if recvErr != nil {
 //				return nil, recvErr
 //			}
 //			return FeedEventFromProto(msg.GetPayload())
-//		}, func(rsp *model.FeedEvent) error {
+//		}, func(rsp *model.FeedChatRsp) error {
 //			return srv.Send(&ChatFeedResponse{Result: FeedEventToProto(rsp)})
 //		})
 //	}

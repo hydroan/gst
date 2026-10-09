@@ -20,17 +20,17 @@ type feedService struct {
 // The calls of the actions of Feed, one per rpc of FeedService, built once
 // at package initialization.
 var (
-	tailFeedByFeed   = grpc.ServerStreamCall[*model.Feed, *gstmodel.Empty, *model.FeedEvent]("/api/feeds/:feed/tail")
-	uploadFeedByFeed = grpc.ClientStreamCall[*model.Feed, *model.FeedEvent, *model.FeedUploadRsp]("/api/feeds/:feed/upload")
-	chatFeed         = grpc.BidiStreamCall[*model.Feed, *model.FeedEvent, *model.FeedEvent]("/api/feeds/chat")
-	ingestFeed       = grpc.ClientStreamCall[*model.Feed, *model.FeedEvent, *gstmodel.Empty]("/api/feeds/ingest")
-	watchFeed        = grpc.ServerStreamCall[*model.Feed, *model.FeedWatchReq, *model.FeedEvent]("/api/feeds/watch")
+	tailFeedByFeed   = grpc.ServerStreamCall[*model.Feed, *gstmodel.Empty, *model.FeedTailRsp]("/api/feeds/:feed/tail")
+	uploadFeedByFeed = grpc.ClientStreamCall[*model.Feed, *model.FeedUploadReq, *model.FeedUploadRsp]("/api/feeds/:feed/upload")
+	chatFeed         = grpc.BidiStreamCall[*model.Feed, *model.FeedChatReq, *model.FeedChatRsp]("/api/feeds/chat")
+	ingestFeed       = grpc.ClientStreamCall[*model.Feed, *model.FeedIngestReq, *gstmodel.Empty]("/api/feeds/ingest")
+	watchFeed        = grpc.ServerStreamCall[*model.Feed, *model.FeedWatchReq, *model.FeedWatchRsp]("/api/feeds/watch")
 )
 
 // TailFeedByFeed serves the Stream action of Feed declared on
 // feeds/:feed/tail, served over gRPC alone.
 func (feedService) TailFeedByFeed(req *TailFeedByFeedRequest, srv FeedService_TailFeedByFeedServer) error {
-	return tailFeedByFeed(srv.Context(), map[string]string{"feed": req.GetFeed()}, new(gstmodel.Empty), func(rsp *model.FeedEvent) error {
+	return tailFeedByFeed(srv.Context(), map[string]string{"feed": req.GetFeed()}, new(gstmodel.Empty), func(rsp *model.FeedTailRsp) error {
 		return srv.Send(&TailFeedByFeedResponse{Result: FeedEventToProto(rsp)})
 	})
 }
@@ -44,7 +44,7 @@ func (feedService) UploadFeedByFeed(srv FeedService_UploadFeedByFeedServer) erro
 	}
 	params := map[string]string{"feed": first.GetFeed()}
 	n := 1
-	result, err := uploadFeedByFeed(srv.Context(), params, func() (*model.FeedEvent, error) {
+	result, err := uploadFeedByFeed(srv.Context(), params, func() (*model.FeedUploadReq, error) {
 		if msg := first; msg != nil {
 			first = nil
 			return FeedEventFromProto(msg.GetPayload())
@@ -68,13 +68,13 @@ func (feedService) UploadFeedByFeed(srv FeedService_UploadFeedByFeedServer) erro
 // ChatFeed serves the Stream action of Feed declared on feeds/chat, served
 // over gRPC alone.
 func (feedService) ChatFeed(srv FeedService_ChatFeedServer) error {
-	return chatFeed(srv.Context(), nil, func() (*model.FeedEvent, error) {
+	return chatFeed(srv.Context(), nil, func() (*model.FeedChatReq, error) {
 		msg, recvErr := srv.Recv()
 		if recvErr != nil {
 			return nil, recvErr
 		}
 		return FeedEventFromProto(msg.GetPayload())
-	}, func(rsp *model.FeedEvent) error {
+	}, func(rsp *model.FeedChatRsp) error {
 		return srv.Send(&ChatFeedResponse{Result: FeedEventToProto(rsp)})
 	})
 }
@@ -82,7 +82,7 @@ func (feedService) ChatFeed(srv FeedService_ChatFeedServer) error {
 // IngestFeed serves the Stream action of Feed declared on feeds/ingest,
 // served over gRPC alone.
 func (feedService) IngestFeed(srv FeedService_IngestFeedServer) error {
-	if _, err := ingestFeed(srv.Context(), nil, func() (*model.FeedEvent, error) {
+	if _, err := ingestFeed(srv.Context(), nil, func() (*model.FeedIngestReq, error) {
 		msg, recvErr := srv.Recv()
 		if recvErr != nil {
 			return nil, recvErr
@@ -101,7 +101,7 @@ func (feedService) WatchFeed(req *WatchFeedRequest, srv FeedService_WatchFeedSer
 	if err != nil {
 		return err
 	}
-	return watchFeed(srv.Context(), nil, payload, func(rsp *model.FeedEvent) error {
+	return watchFeed(srv.Context(), nil, payload, func(rsp *model.FeedWatchRsp) error {
 		return srv.Send(&WatchFeedResponse{Result: FeedEventToProto(rsp)})
 	})
 }

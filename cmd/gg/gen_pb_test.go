@@ -188,10 +188,10 @@ func TestGenRunServesStreamActionsOverGRPCAlone(t *testing.T) {
 	require.Contains(t, string(services), `service.Register[*feed.Watch](consts.Stream, "/api/feeds/watch")`)
 	require.Contains(t, string(services), `service.Register[*feed.Upload](consts.Stream, "/api/feeds/:feed/upload")`)
 	for name, signature := range map[string]string{
-		"watch":  "func (w *Watch) Stream(ctx *gst.ServiceContext, req *model.FeedWatchReq, stream *grpc.ServerStream[*model.FeedEvent]) (err error)",
-		"tail":   "func (t *Tail) Stream(ctx *gst.ServiceContext, req *gstmodel.Empty, stream *grpc.ServerStream[*model.FeedEvent]) (err error)",
-		"upload": "func (u *Upload) Stream(ctx *gst.ServiceContext, stream *grpc.ClientStream[*model.FeedEvent]) (rsp *model.FeedUploadRsp, err error)",
-		"chat":   "func (c *Chat) Stream(ctx *gst.ServiceContext, stream *grpc.BidiStream[*model.FeedEvent, *model.FeedEvent]) (err error)",
+		"watch":  "func (w *Watch) Stream(ctx *gst.ServiceContext, req *model.FeedWatchReq, stream *grpc.ServerStream[*model.FeedWatchRsp]) (err error)",
+		"tail":   "func (t *Tail) Stream(ctx *gst.ServiceContext, req *gstmodel.Empty, stream *grpc.ServerStream[*model.FeedTailRsp]) (err error)",
+		"upload": "func (u *Upload) Stream(ctx *gst.ServiceContext, stream *grpc.ClientStream[*model.FeedUploadReq]) (rsp *model.FeedUploadRsp, err error)",
+		"chat":   "func (c *Chat) Stream(ctx *gst.ServiceContext, stream *grpc.BidiStream[*model.FeedChatReq, *model.FeedChatRsp]) (err error)",
 	} {
 		code, readErr := os.ReadFile(filepath.Join(projectDir, ggconst.DirService, "feed", name+".go"))
 		require.NoError(t, readErr, name)
@@ -2024,11 +2024,25 @@ type FeedWatchReq struct {
 	Topic string 'json:"topic" pb:"1"'
 }
 
-// FeedEvent is one event of a feed.
+// FeedEvent is one event of a feed: what every stream carries, each under a
+// name of its own.
 type FeedEvent struct {
 	Seq  int64  'json:"seq" pb:"1"'
 	Body string 'json:"body" pb:"2"'
 }
+
+// FeedWatchRsp is an event the watch streams out, FeedTailRsp one the tail
+// streams out, FeedUploadReq one the upload streams in, FeedChatReq one the
+// chat streams in and FeedChatRsp one it streams back, FeedIngestReq one the
+// ingest streams in.
+type (
+	FeedWatchRsp  = FeedEvent
+	FeedTailRsp   = FeedEvent
+	FeedUploadReq = FeedEvent
+	FeedChatReq   = FeedEvent
+	FeedChatRsp   = FeedEvent
+	FeedIngestReq = FeedEvent
+)
 
 // FeedUploadRsp counts the events a client streamed in.
 type FeedUploadRsp struct {
@@ -2045,33 +2059,33 @@ func (Feed) Design() {
 		dsl.Stream(func() {
 			dsl.Service("watch")
 			dsl.Payload[*FeedWatchReq]()
-			dsl.StreamingResult[*FeedEvent]()
+			dsl.StreamingResult[*FeedWatchRsp]()
 		})
 	})
 	dsl.Route("feeds/:feed/tail", func() {
 		dsl.Stream(func() {
 			dsl.Service("tail")
-			dsl.StreamingResult[*FeedEvent]()
+			dsl.StreamingResult[*FeedTailRsp]()
 		})
 	})
 	dsl.Route("feeds/:feed/upload", func() {
 		dsl.Stream(func() {
 			dsl.Service("upload")
-			dsl.StreamingPayload[*FeedEvent]()
+			dsl.StreamingPayload[*FeedUploadReq]()
 			dsl.Result[*FeedUploadRsp]()
 		})
 	})
 	dsl.Route("feeds/chat", func() {
 		dsl.Stream(func() {
 			dsl.Service("chat")
-			dsl.StreamingPayload[*FeedEvent]()
-			dsl.StreamingResult[*FeedEvent]()
+			dsl.StreamingPayload[*FeedChatReq]()
+			dsl.StreamingResult[*FeedChatRsp]()
 		})
 	})
 	dsl.Route("feeds/ingest", func() {
 		dsl.Stream(func() {
 			dsl.Service("ingest")
-			dsl.StreamingPayload[*FeedEvent]()
+			dsl.StreamingPayload[*FeedIngestReq]()
 		})
 	})
 }
@@ -2534,7 +2548,7 @@ func TestGenRunHoldsTheCommittedServicesAndMessages(t *testing.T) {
 		fresh(t, nil)
 		writeProtobufProject(t, projectDir, map[string]string{"model/feed.go": protobufFeedModel})
 		require.NoError(t, genRunWithOptions(genRunOptions{Quiet: true}))
-		writeProtobufProject(t, projectDir, map[string]string{"model/feed.go": strings.Replace(protobufFeedModel, "\t\t\tdsl.Payload[*FeedWatchReq]()\n\t\t\tdsl.StreamingResult[*FeedEvent]()", "\t\t\tdsl.StreamingPayload[*FeedWatchReq]()\n\t\t\tdsl.StreamingResult[*FeedEvent]()", 1)})
+		writeProtobufProject(t, projectDir, map[string]string{"model/feed.go": strings.Replace(protobufFeedModel, "\t\t\tdsl.Payload[*FeedWatchReq]()\n\t\t\tdsl.StreamingResult[*FeedWatchRsp]()", "\t\t\tdsl.StreamingPayload[*FeedWatchReq]()\n\t\t\tdsl.StreamingResult[*FeedWatchRsp]()", 1)})
 
 		err := genRunWithOptions(genRunOptions{Quiet: true})
 
