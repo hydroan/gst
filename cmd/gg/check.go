@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"os"
+	"slices"
 	"strings"
 
 	"github.com/hydroan/gst/internal/clioutput"
@@ -55,9 +56,25 @@ var projectChecks = []ggcheck.Check{
 // every one but Protobuf definitions, whose work gg gen did itself right
 // before (see fillPBTags), deriving the definitions once instead of twice.
 func generationChecks() []ggcheck.Check {
+	return projectChecksWithout(ggcheck.ProtobufDefinitions.Name)
+}
+
+// moduleCopyChecks are the project checks the gg gen run of gg module copy
+// makes: the generation checks but Module assembly. The copy itself brings
+// that violation about, the assembly a copied module declares needing the
+// service code the copy writes only after this run, so the copy leaves the
+// assembly to the project, printing what is pending once it is done (see
+// printModuleCopyAssembly); gg gen and gg check enforce it from then on.
+func moduleCopyChecks() []ggcheck.Check {
+	return projectChecksWithout(ggcheck.ProtobufDefinitions.Name, ggcheck.ModuleAssembly.Name)
+}
+
+// projectChecksWithout returns projectChecks in their order but the checks
+// named.
+func projectChecksWithout(names ...string) []ggcheck.Check {
 	checks := make([]ggcheck.Check, 0, len(projectChecks))
 	for _, check := range projectChecks {
-		if check.Name != ggcheck.ProtobufDefinitions.Name {
+		if !slices.Contains(names, check.Name) {
 			checks = append(checks, check)
 		}
 	}

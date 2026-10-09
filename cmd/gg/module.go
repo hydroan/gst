@@ -10,6 +10,7 @@ import (
 	"charm.land/lipgloss/v2"
 	"charm.land/lipgloss/v2/table"
 	"github.com/hydroan/gst/internal/clioutput"
+	"github.com/hydroan/gst/internal/ggcheck"
 	"github.com/hydroan/gst/internal/ggmodule"
 	"github.com/spf13/cobra"
 )
@@ -165,6 +166,7 @@ func runModuleCopy(name string, opts moduleCopyOptions) error {
 	clioutput.Section("Done")
 	clioutput.Done("Module copied successfully")
 	printModuleCopyCleanup(name)
+	printModuleCopyAssembly()
 	printModuleCopyPostNotes(plan.PostNotes)
 	return nil
 }
@@ -191,16 +193,18 @@ func runModuleCopyGen(baseline map[string]struct{}) error {
 	// turn this copy operation into a prune/cleanup pass over user service files.
 	// Project checks stay enabled through genRunWithOptions(Quiet: true), scoped
 	// by baseline to violations introduced by this copy: pre-existing project
-	// violations must not block copying an unrelated module. If copied module
-	// sources introduce new violations, fix the framework module or the check
-	// rule instead of bypassing validation here.
+	// violations must not block copying an unrelated module. The one check
+	// the copy itself fails, Module assembly, is left out and printed once
+	// the copy is done (see moduleCopyChecks). If copied module sources
+	// introduce new violations, fix the framework module or the check rule
+	// instead of bypassing validation here.
 	oldPrune := prune
 	prune = false
 	defer func() {
 		prune = oldPrune
 	}()
 
-	return genRunWithOptions(genRunOptions{Quiet: true, BaselineViolations: baseline})
+	return genRunWithOptions(genRunOptions{Quiet: true, BaselineViolations: baseline, Checks: moduleCopyChecks()})
 }
 
 func confirmModuleCopy(name string) bool {
@@ -317,6 +321,19 @@ func printModuleCopyStaleInterceptorFiles(plan *ggmodule.CopyPlan) {
 		clioutput.Item("", "%s", file)
 	}
 	clioutput.Item("", "These files will be deleted together with their register calls in interceptor/interceptor.go, and the framework interceptor import once nothing there uses it")
+}
+
+// printModuleCopyAssembly prints the assembly calls the copied modules
+// declare and the project has yet to make, each as gg check reports it: the
+// copy left them out of its own checks (see moduleCopyChecks), so they are
+// the first thing to do once it is done. A project that makes them all
+// prints nothing.
+func printModuleCopyAssembly() {
+	for _, result := range ggcheck.Run([]ggcheck.Check{ggcheck.ModuleAssembly}) {
+		for _, violation := range result.Violations {
+			clioutput.Warn("ASSEMBLY", "%s", violation)
+		}
+	}
 }
 
 func printModuleCopyPostNotes(notes []string) {

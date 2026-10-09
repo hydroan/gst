@@ -40,7 +40,7 @@
 - 模块的 `internal/service/<name>` 禁止用 `init()` 安装框架钩子。包只在被 import 时才链接，而 copy 路径的 import 来自生成的路由注册，项目屏蔽路由就会连带抹掉它，装配随之静默失效。
 - 需要安装的钩子实现必须导出，由 `Register()` 显式调用；copy 路径由项目自有装配代码调用同一个函数。
 - 该实现文件如果不服务任何路由，必须写进 `module.json` 的 `includeSourceFiles`，否则 copy 不会带上它。
-- copy 路径必须执行的装配调用写进 `module.json` 的 `requiredAssembly`，`gg check` 会强制项目做出该调用；`postNotes` 只保留机器检查不了的接入步骤。
+- copy 路径必须执行的装配调用写进 `module.json` 的 `requiredAssembly`，copy 结束时逐条提示还没做的，`gg check` 会强制项目做出该调用；`postNotes` 只保留机器检查不了的接入步骤。
 - 中间件实现必须放在框架 `middleware/<file>.go` 并导出零参构造函数，同一文件和 handler 写进 `module.json` 的 `middleware`；`Register()` 不挂载它，add 路径由项目在自己的 `middleware/middleware.go` 里挂，和 copy 路径复制过去之后一样，顺序由项目定。实现写在 `module/<name>` 内部会让 copy 路径拿不到它。
 - gRPC 拦截器同理：实现放在框架 `interceptor/<file>.go` 并导出零参构造函数，同一文件和 handler 写进 `module.json` 的 `interceptors`，项目在 `interceptor/interceptor.go` 里挂；copy 只在项目声明了 `GRPC()` 时复制它们。
 

@@ -2,8 +2,11 @@ package main
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 	"testing"
+
+	"github.com/hydroan/gst/internal/ggcheck"
 )
 
 // TestProjectCheckHelpNumbersEveryCheckInRunOrder pins the help
@@ -29,5 +32,27 @@ func TestProjectCheckHelpNumbersEveryCheckInRunOrder(t *testing.T) {
 	}
 	if !strings.HasSuffix(help, "\n\n"+projectCheckSkips) {
 		t.Fatal("help does not close with the paths the checks skip")
+	}
+}
+
+// TestModuleCopyChecksLeaveTheModuleAssemblyToTheProject pins the checks the
+// gg gen run of gg module copy makes: the generation checks but Module
+// assembly, which the copy itself cannot satisfy and prints for the project
+// to write instead.
+func TestModuleCopyChecksLeaveTheModuleAssemblyToTheProject(t *testing.T) {
+	names := func(checks []ggcheck.Check) []string {
+		got := make([]string, 0, len(checks))
+		for _, check := range checks {
+			got = append(got, check.Name)
+		}
+		return got
+	}
+	generation := names(generationChecks())
+	if !slices.Contains(generation, ggcheck.ModuleAssembly.Name) {
+		t.Fatal("gg gen runs the Module assembly check")
+	}
+	want := slices.DeleteFunc(slices.Clone(generation), func(name string) bool { return name == ggcheck.ModuleAssembly.Name })
+	if got := names(moduleCopyChecks()); !slices.Equal(got, want) {
+		t.Fatalf("moduleCopyChecks() = %v, want %v", got, want)
 	}
 }

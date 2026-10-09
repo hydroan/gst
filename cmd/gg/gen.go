@@ -13,6 +13,7 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/internal/clioutput"
 	"github.com/hydroan/gst/internal/dsl"
+	"github.com/hydroan/gst/internal/ggcheck"
 	"github.com/hydroan/gst/internal/ggconfig"
 	"github.com/hydroan/gst/internal/ggconst"
 	"github.com/hydroan/gst/internal/gggen"
@@ -47,6 +48,9 @@ type genRunOptions struct {
 	// violations outside this baseline; module copy uses it so pre-existing
 	// project issues do not block copying an unrelated module.
 	BaselineViolations map[string]struct{}
+	// Checks are the project checks the run makes before generating; nil
+	// runs generationChecks. Module copy passes moduleCopyChecks.
+	Checks []ggcheck.Check
 }
 
 func genRun() {
@@ -80,7 +84,11 @@ func genRunWithOptions(opts genRunOptions) error {
 		return err
 	}
 
-	if runProjectChecks(generationChecks(), opts.Quiet, opts.BaselineViolations) > 0 {
+	checks := opts.Checks
+	if checks == nil {
+		checks = generationChecks()
+	}
+	if runProjectChecks(checks, opts.Quiet, opts.BaselineViolations) > 0 {
 		return errors.New("project checks failed")
 	}
 

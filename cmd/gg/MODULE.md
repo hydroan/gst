@@ -127,14 +127,16 @@ partition "第 3 步：执行（出错不回滚）" {
   :删过期文件：model、service、中间件，
   以及过期中间件的注册调用;
   :运行 gg gen：不清理，
-  只拦本次新增的检查违规;
+  只拦本次新增的检查违规，
+  不查 Module assembly;
   :写动作 service 文件、辅助文件;
   :写中间件文件，
   核对 middleware/middleware.go 的注册调用;
   :项目用 gRPC 时写拦截器文件，
   核对 interceptor/interceptor.go 的注册调用;
 }
-:打印 module.json 的 postNotes;
+:打印还没做的装配调用，
+再打印 module.json 的 postNotes;
 stop
 @enduml
 ```
@@ -235,7 +237,9 @@ service 目录不是镜像复制，分两类文件。
 8. **写拦截器文件**（`Copy Interceptor Files`，模块声明了拦截器且项目用 gRPC 时才有）。
 9. **核对拦截器注册**（`Register Interceptors`），规则同第 7 步，文件是 `interceptor/interceptor.go`，注册走框架 interceptor 包。
 
-全部成功后打印 `Done`、`Module copied successfully`、删除模块的提示（见「删除复制来的模块」），最后逐行打印 `module.json` 的 `postNotes`。
+全部成功后打印 `Done`、`Module copied successfully`、删除模块的提示（见「删除复制来的模块」），接着逐条打印复制进项目的模块声明了、项目还没做的装配调用（`ASSEMBLY`，措辞同 gg check 的「Module assembly」检查项；copy 内嵌的 gg gen 不查这一项，因为消除它要引用 copy 这一步才写进来的 service 代码），最后逐行打印 `module.json` 的 `postNotes`。
+
+copy 不改 go.mod：复制来的 service 引用了项目还没有的依赖时，先 `go mod tidy` 再编译。
 
 执行不回滚：已经写入或删除文件之后出错，写了、删了的保持原样，命令打印删除模块的提示后报错退出。
 
@@ -313,7 +317,7 @@ stop
 | `includeSourceFiles` | 即使没有动作引用，也必须作为辅助文件复制的文件，给只被项目自己的装配代码调用的钩子实现用 | 必须在 `internal/service/<name>/` 下、存在、不是测试文件、没被排除、没有声明 service 结构体 |
 | `middleware` | 要复制的中间件，每项有 `sourceFile`、`scope`、`handler`，见「中间件」 | `sourceFile` 必须是 `middleware/*.go` 的非测试文件；`scope` 只能是 `global` 或 `auth`；`handler` 必须是合法的 Go 标识符，并且是源文件里一个不带参数的顶层函数 |
 | `interceptors` | 要复制的 gRPC 拦截器，每项同 `middleware`，见「拦截器」；只复制进用 gRPC 的项目 | `sourceFile` 必须是 `interceptor/*.go` 的非测试文件，其余同 `middleware` |
-| `requiredAssembly` | copy 之后项目必须自己写的调用，每项有 `import`、`function`、`reason`。gg check 的「Module assembly」检查项据此要求项目在非测试代码里调用它们 | 三个字段都不能为空；`function` 必须是导出的 Go 标识符 |
+| `requiredAssembly` | copy 之后项目必须自己写的调用，每项有 `import`、`function`、`reason`。copy 结束时逐条提示还没做的；gg check 的「Module assembly」检查项据此要求项目在非测试代码里调用它们 | 三个字段都不能为空；`function` 必须是导出的 Go 标识符 |
 | `postNotes` | copy 成功后逐行打印的提示，写 copy 自动化不了的后续步骤 | 去掉首尾空白，空行丢弃 |
 
 ## 删除复制来的模块

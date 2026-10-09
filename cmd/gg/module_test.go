@@ -272,6 +272,71 @@ func TestRunModuleCopyGenFailsOnNewProjectCheckViolations(t *testing.T) {
 	}
 }
 
+// TestPrintModuleCopyAssemblyNamesThePendingCalls pins what the copy prints
+// once it is done, before the module's notes: the assembly calls the copied
+// modules declare and the project has yet to make, worded as gg check reports
+// them, and nothing once the project makes them.
+func TestPrintModuleCopyAssemblyNamesThePendingCalls(t *testing.T) {
+	projectDir := newModuleCopyAssemblyProject(t)
+	t.Chdir(projectDir)
+
+	output := captureStdout(t, printModuleCopyAssembly)
+	want := "module sample is copied but the project never calls authn.SetSampleGate: the sample gate stays off until it is installed"
+	if !strings.Contains(output, want) {
+		t.Fatalf("output lacks the pending call %q:\n%s", want, output)
+	}
+
+	if err := os.WriteFile(filepath.Join(projectDir, "wiring.go"), []byte(`package tmpapp
+
+import "github.com/hydroan/gst/authn"
+
+func init() {
+	authn.SetSampleGate(nil)
+}
+`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if output := captureStdout(t, printModuleCopyAssembly); output != "" {
+		t.Fatalf("output = %q, want nothing once the project makes the call", output)
+	}
+}
+
+// newModuleCopyAssemblyProject builds a project that copied the model of a
+// framework module declaring one required assembly call: the framework tree
+// holds the module's register.go and manifest, the project the module's model
+// directory and nothing calling the declared function.
+func newModuleCopyAssemblyProject(t *testing.T) string {
+	t.Helper()
+
+	projectDir := t.TempDir()
+	frameworkRoot := filepath.Join(projectDir, "internal", "gst")
+	write := func(path string, content string) {
+		t.Helper()
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	write(filepath.Join(projectDir, "go.mod"), "module tmpapp\n\ngo 1.26\n\nrequire github.com/hydroan/gst v0.0.0-00010101000000-000000000000\n\nreplace github.com/hydroan/gst => ./internal/gst\n")
+	write(filepath.Join(frameworkRoot, "go.mod"), "module github.com/hydroan/gst\n\ngo 1.26\n")
+	write(filepath.Join(frameworkRoot, "module", "sample", "register.go"), "package sample\n\nfunc Register() {}\n")
+	write(filepath.Join(frameworkRoot, "module", "sample", "module.json"), `{
+	"copy": {
+		"requiredAssembly": [
+			{
+				"import": "github.com/hydroan/gst/authn",
+				"function": "SetSampleGate",
+				"reason": "the sample gate stays off until it is installed"
+			}
+		]
+	}
+}`)
+	write(filepath.Join(projectDir, "model", "sample", "sample.go"), "package sample\n")
+	return projectDir
+}
+
 // writePluralModelFile writes a model file whose plural file name violates the
 // singular-naming project check, giving tests a deterministic violation.
 func writePluralModelFile(t *testing.T, projectDir, pkgName, fileName, modelName, route string) {
