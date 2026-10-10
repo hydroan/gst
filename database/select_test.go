@@ -973,8 +973,8 @@ func TestSelectPageCompletesTheOrder(t *testing.T) {
 				Page(1, 2).
 				Scan(&rows)
 		})
-		require.Contains(t, sql, "ORDER BY "+quoteIdent("total")+" DESC,"+quoteIdent("category")+" ASC",
-			"groups sharing a total are told apart by their key")
+		require.Contains(t, sql, "ORDER BY "+quoteIdent("total")+" DESC,"+quoteIdent("category")+" DESC",
+			"groups sharing a total are told apart by their key, running with the last ordering")
 	})
 
 	t.Run("GroupedPageOrderedByItsKeyGainsNothing", func(t *testing.T) {

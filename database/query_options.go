@@ -58,7 +58,7 @@ func (db *database[M]) WithCursor(cursor types.Cursor) types.Database[M] {
 	if !cursor.Enabled() {
 		return db
 	}
-	if db.ordered {
+	if len(db.orders) > 0 {
 		db.err = errors.Wrap(ErrCursorWithOrder, "WithCursor after WithOrder")
 		return db
 	}
@@ -340,12 +340,7 @@ func (db *database[M]) WithOrder(orders ...types.Order) types.Database[M] {
 			return db
 		}
 		db.ins = db.ins.Order(db.orderClause(order))
-		db.ordered = true
-		if identifying, err := modelschema.IdentifyingColumns(*new(M)); err == nil {
-			if _, ok := identifying[order.Column()]; ok {
-				db.orderIdentifies = true
-			}
-		}
+		db.orders = append(db.orders, order)
 	}
 	return db
 }
@@ -355,13 +350,28 @@ func (db *database[M]) WithOrder(orders ...types.Order) types.Database[M] {
 // place them differently from one page query to the next, so a row falls
 // between the pages or shows up on two of them. An order by a column no two
 // rows share (see modelschema.IdentifyingColumns) is total already, and so
-// is a cursor's; any other order, or none, is completed with the primary key
-// ascending, the way Django's admin appends the key to every ordering it
-// pages. A read without a page is left as the caller ordered it, and a model
-// without a primary key has nothing to complete the order with.
+// is a cursor's; any other order, or none, is completed with the primary key,
+// the way Django's admin appends the key to every ordering it pages. The key
+// takes the direction of the last term, ascending when there is none: a
+// (column, key) index is read in one direction, so a key running against the
+// last term would cost MySQL a full sort of every matching row where a key
+// running with it is read off the index. A read without a page is left as
+// the caller ordered it, and a model without a primary key has nothing to
+// complete the order with.
 func (db *database[M]) completeOrder() {
-	if !db.paginated || db.orderIdentifies || db.cursor.Enabled() {
+	if !db.paginated || db.cursor.Enabled() {
 		return
+	}
+	identifying, err := modelschema.IdentifyingColumns(*new(M))
+	if err != nil {
+		return
+	}
+	direction := types.OrderAsc
+	for _, order := range db.orders {
+		if _, ok := identifying[order.Column()]; ok {
+			return
+		}
+		direction = orderDirection(types.OrderDirectionOf(order))
 	}
 	columns, err := modelschema.Columns(reflect.TypeOf(*new(M)))
 	if err != nil {
@@ -369,7 +379,7 @@ func (db *database[M]) completeOrder() {
 	}
 	for _, col := range columns {
 		if col.PrimaryKey {
-			db.ins = db.ins.Order(db.orderClause(types.Asc(col.DBName)))
+			db.ins = db.ins.Order(db.orderClause(types.NewOrder("", col.DBName, direction)))
 		}
 	}
 }
@@ -405,8 +415,9 @@ func (db *database[M]) orderClause(order types.Order) string {
 // reset that Count applies to keep paging out of a count query.
 //
 // A page is read in a total order: an ORDER BY no column of which tells every
-// row apart, or none at all, is completed with the primary key ascending when
-// List runs (see completeOrder), so the pages hold still between queries.
+// row apart, or none at all, is completed with the primary key when List runs,
+// in the direction of the last term (see completeOrder), so the pages hold
+// still between queries.
 func (db *database[M]) WithPagination(page, size int) types.Database[M] {
 	db.mu.Lock()
 	defer db.mu.Unlock()

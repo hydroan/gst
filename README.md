@@ -324,8 +324,8 @@ if err = database.Database[*appmodel.Sample](ctx).
 
 这六个方法覆盖 `field[op]` 过滤、零值过滤、排序、分页和 cursor 分页，各项是否生效取决于
 model 声明的 `model.Query`、`model.Pagination`、`model.Cursor`。`WithPagination` 的每一页都按
-确定的顺序返回：排序列里没有主键（或不可为 NULL 的唯一列）时，框架在 ORDER BY 末尾补主键升序，
-翻页不漏不重。`QueryOrders` 会校验
+确定的顺序返回：排序列里没有主键（或不可为 NULL 的唯一列）时，框架在 ORDER BY 末尾补主键，方向
+跟随最后一个排序项（不带 `_sort_by` 时按主键升序），翻页不漏不重，索引照常可用。`QueryOrders` 会校验
 `_sort_by` 的排序列，未知列名直接报错；但它们**不**保证 `List` 与 `Count` 用同一份查询
 条件：统计总数时必须传入同样的查询值和 `gst.QueryOptions`（把 `opts` 存成变量复用是
 最省事的写法），否则 total 会和当页数据对不上。

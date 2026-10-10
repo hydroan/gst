@@ -567,24 +567,28 @@ func (a *selectBuilder[M]) build(mode buildMode) (*gorm.DB, error) {
 // projection is told apart by its group keys, each appended unless ordered
 // on already; a row-level one by the primary key of the queried table, unless
 // the order names it or another column no two rows share, or the table has
-// no such column. The key is rendered as the column while the statement
-// reads the table, and through its alias once Qualify wrapped the projection,
-// where only the projected terms are in reach: a wrapped projection that
-// leaves the key out keeps the caller's order.
+// no such column. The appended terms take the direction of the last ordering,
+// ascending when there is none, so an index read in that direction serves
+// them too. The key is rendered as the column while the statement reads the
+// table, and through its alias once Qualify wrapped the projection, where
+// only the projected terms are in reach: a wrapped projection that leaves the
+// key out keeps the caller's order.
 func (a *selectBuilder[M]) pageTieBreakers(shape projectionShape) []string {
 	if !a.paged {
 		return nil
 	}
 	ordered := make(map[string]struct{}, len(a.orders))
+	direction := types.OrderAsc
 	for _, o := range a.orders {
-		term, _ := a.orderedTerm(o, shape)
+		term, d := a.orderedTerm(o, shape)
 		ordered[termAlias(term)] = struct{}{}
+		direction = d
 	}
 	if shape.grouped {
 		exprs := make([]string, 0, len(shape.keys))
 		for _, key := range shape.keys {
 			if _, ok := ordered[termAlias(key)]; !ok {
-				exprs = append(exprs, a.db.quoteIdent(termAlias(key))+" "+string(types.OrderAsc))
+				exprs = append(exprs, a.db.quoteIdent(termAlias(key))+" "+string(direction))
 			}
 		}
 		return exprs
@@ -606,12 +610,12 @@ func (a *selectBuilder[M]) pageTieBreakers(shape projectionShape) []string {
 	if len(a.qualifies) > 0 {
 		for _, t := range a.terms {
 			if t.IsPlain() && types.TermColumnOf(t) == key && (types.TermTableOf(t) == "" || types.TermTableOf(t) == shape.main) {
-				return []string{a.db.quoteIdent(termAlias(t)) + " " + string(types.OrderAsc)}
+				return []string{a.db.quoteIdent(termAlias(t)) + " " + string(direction)}
 			}
 		}
 		return nil
 	}
-	return []string{a.keyExpr(types.PlainTerm(shape.main, key), shape) + " " + string(types.OrderAsc)}
+	return []string{a.keyExpr(types.PlainTerm(shape.main, key), shape) + " " + string(direction)}
 }
 
 // orderedTerm resolves one ordering of the select to the projected term it

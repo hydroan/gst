@@ -447,8 +447,17 @@ func TestDatabaseWithDryRunCollector(t *testing.T) {
 				WithPagination(2, 10).
 				List(&users))
 			require.Len(t, stmts, 1)
-			require.Contains(t, stmts[0].Query, "ORDER BY "+quoteIdent("name")+" DESC,"+quoteIdent("id")+" ASC",
-				"rows sharing a name are told apart by the primary key, so no page skips or repeats one")
+			require.Contains(t, stmts[0].Query, "ORDER BY "+quoteIdent("name")+" DESC,"+quoteIdent("id")+" DESC",
+				"rows sharing a name are told apart by the primary key, running with the last term so an index read backward serves both")
+
+			stmts = stmts[:0]
+			require.NoError(t, database.Database[*TestUser](context.Background()).
+				WithDryRun(&stmts).
+				WithOrder(types.Asc("name")).
+				WithPagination(2, 10).
+				List(&users))
+			require.Len(t, stmts, 1)
+			require.Contains(t, stmts[0].Query, "ORDER BY "+quoteIdent("name")+" ASC,"+quoteIdent("id")+" ASC")
 		})
 
 		t.Run("PaginationKeepsAnIdentifyingOrder", func(t *testing.T) {
