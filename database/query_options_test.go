@@ -3,6 +3,7 @@ package database_test
 import (
 	"context"
 	"fmt"
+	"slices"
 	"testing"
 	"time"
 
@@ -854,6 +855,41 @@ func TestDatabaseWithPagination(t *testing.T) {
 			List(&users))
 		return users
 	}
+
+	t.Run("PagesOfASharedOrderVisitEveryRowOnce", func(t *testing.T) {
+		defer cleanupTestData()
+		// Three names share 200 rows, written out of id order: an ORDER BY on
+		// the name alone leaves the executor free to arrange the rows of a
+		// name differently from one page query to the next, so pages skip
+		// and repeat rows unless the order is completed to a total one.
+		const count = 200
+		expected := make([]string, 0, count)
+		for i := range count {
+			id := fmt.Sprintf("pg_shared_%05d", i*7%count)
+			expected = append(expected, id)
+			require.NoError(t, database.Database[*TestUser](context.Background()).Create(&TestUser{
+				Name:  fmt.Sprintf("shared_%d", i%3),
+				Email: id + "@example.com",
+				Age:   18 + i%7,
+				ID:    id,
+			}))
+		}
+		slices.Sort(expected)
+
+		visited := make([]string, 0, count)
+		for page := 1; page <= 10; page++ {
+			users := make([]*TestUser, 0)
+			require.NoError(t, database.Database[*TestUser](context.Background()).
+				WithOrder(types.Asc("name")).
+				WithPagination(page, 20).
+				List(&users))
+			for _, u := range users {
+				visited = append(visited, u.ID)
+			}
+		}
+		slices.Sort(visited)
+		require.Equal(t, expected, visited, "every row exactly once across the pages")
+	})
 
 	t.Run("BasicPaging", func(t *testing.T) {
 		defer cleanupTestData()

@@ -102,7 +102,10 @@ type Selector[M Model, R any] interface {
 	// Page keeps one page of the result rows: size rows after the first
 	// page-1 pages. A page below 1 is the first, so a request's page passes
 	// straight through; a size below 1 pages nothing, as a Limit below 1
-	// caps nothing.
+	// caps nothing. The page is read in a total order: the ORDER BY is
+	// completed with the group keys of a grouped projection, or the primary
+	// key of a row-level one, unless it tells every row apart already, so
+	// the pages hold still between queries.
 	Page(page, size int) Selector[M, R]
 
 	// Scan runs the query and fills dest with one element per result row: a

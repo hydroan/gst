@@ -298,9 +298,11 @@ type database[M types.Model] struct {
 	// sql
 	sqlStatements *[]types.SQLStatement // collector supplied to WithDryRun, nil when the dry run only builds.
 
-	// cursor pagination
-	cursor  types.Cursor // feed ordering, boundary value, and travel direction; the zero Cursor pages nothing.
-	ordered bool         // WithOrder added an ORDER BY; WithCursor refuses to join it (see ErrCursorWithOrder).
+	// ordering and pagination
+	cursor          types.Cursor // feed ordering, boundary value, and travel direction; the zero Cursor pages nothing.
+	ordered         bool         // WithOrder added an ORDER BY; WithCursor refuses to join it (see ErrCursorWithOrder).
+	orderIdentifies bool         // WithOrder sorted by a column no two rows share, so the order is total already (see completeOrder).
+	paginated       bool         // WithPagination set a page, whose order List completes to a total one (see completeOrder).
 
 	// select
 	selectColumns []string
@@ -367,9 +369,11 @@ func (db *database[M]) reset() {
 	// reset sql build state
 	db.sqlStatements = nil
 
-	// reset cursor pagination
+	// reset ordering and pagination
 	db.cursor = types.Cursor{}
 	db.ordered = false
+	db.orderIdentifies = false
+	db.paginated = false
 
 	// reset select
 	db.selectColumns = nil

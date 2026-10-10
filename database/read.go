@@ -83,6 +83,7 @@ func (db *database[M]) List(dest *[]M) (err error) {
 	db.applyDeletedScope()
 	if db.dryRun {
 		db.applyCursorPagination()
+		db.completeOrder()
 		tx := dryRunSession(db.ins).Find(dest)
 		return db.collectSQL(tx)
 	}
@@ -101,8 +102,9 @@ func (db *database[M]) List(dest *[]M) (err error) {
 			return err
 		}
 	}
-	// apply cursor-based pagination.
+	// apply cursor-based pagination, and complete the order of a page.
 	db.applyCursorPagination()
+	db.completeOrder()
 	if err = db.ins.Find(dest).Error; err != nil {
 		// First-hand exit of a stack-less GORM/driver error; see the
 		// error-stack contract in doc.go.

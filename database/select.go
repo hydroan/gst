@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/errors"
+	"github.com/hydroan/gst/internal/modelregistry"
 	"github.com/hydroan/gst/internal/modelschema"
 	"github.com/hydroan/gst/internal/types"
 	"gorm.io/gorm"
@@ -100,6 +101,7 @@ type selectBuilder[M types.Model] struct {
 	limit     int
 	offset    int
 	hasLimit  bool
+	paged     bool // Page set the limit and offset; buildRead completes the order (see pageTieBreakers).
 
 	// The pushdown a union set on this member: the union's ordering by
 	// output alias and its offset plus limit, rendered inside the member so
@@ -204,6 +206,7 @@ func (a *selector[M, R]) nested() nestedSelect { return a.b }
 // mean opposite things.
 func (a *selectBuilder[M]) setLimit(n int) {
 	a.offset = 0
+	a.paged = false
 	if n <= 0 {
 		a.limit, a.hasLimit = 0, false
 		return
@@ -219,13 +222,13 @@ func (a *selectBuilder[M]) setLimit(n int) {
 // all.
 func (a *selectBuilder[M]) setPage(page, size int) {
 	if size <= 0 {
-		a.limit, a.offset, a.hasLimit = 0, 0, false
+		a.limit, a.offset, a.hasLimit, a.paged = 0, 0, false, false
 		return
 	}
 	if page < 1 {
 		page = 1
 	}
-	a.limit, a.offset, a.hasLimit = size, (page-1)*size, true
+	a.limit, a.offset, a.hasLimit, a.paged = size, (page-1)*size, true, true
 }
 
 // The option methods never touch the chain, so they stay safe on a selector
@@ -533,6 +536,9 @@ func (a *selectBuilder[M]) build(mode buildMode) (*gorm.DB, error) {
 			term, direction := a.orderedTerm(o, shape)
 			tx = tx.Order(a.db.quoteIdent(termAlias(term)) + " " + string(direction))
 		}
+		for _, expr := range a.pageTieBreakers(shape) {
+			tx = tx.Order(expr)
+		}
 		if a.hasLimit {
 			tx = tx.Limit(a.limit)
 		}
@@ -552,6 +558,60 @@ func (a *selectBuilder[M]) build(mode buildMode) (*gorm.DB, error) {
 		}
 	}
 	return tx, nil
+}
+
+// pageTieBreakers completes the ORDER BY of a paged projection to a total
+// order, as completeOrder does for a paged List: a page is a window onto a
+// sorted list, and rows sorting equal may be arranged differently from one
+// page query to the next, so a page skips or repeats them. A grouped
+// projection is told apart by its group keys, each appended unless ordered
+// on already; a row-level one by the primary key of the queried table, unless
+// the order names it or another column no two rows share, or the table has
+// no such column. The key is rendered as the column while the statement
+// reads the table, and through its alias once Qualify wrapped the projection,
+// where only the projected terms are in reach: a wrapped projection that
+// leaves the key out keeps the caller's order.
+func (a *selectBuilder[M]) pageTieBreakers(shape projectionShape) []string {
+	if !a.paged {
+		return nil
+	}
+	ordered := make(map[string]struct{}, len(a.orders))
+	for _, o := range a.orders {
+		term, _ := a.orderedTerm(o, shape)
+		ordered[termAlias(term)] = struct{}{}
+	}
+	if shape.grouped {
+		exprs := make([]string, 0, len(shape.keys))
+		for _, key := range shape.keys {
+			if _, ok := ordered[termAlias(key)]; !ok {
+				exprs = append(exprs, a.db.quoteIdent(termAlias(key))+" "+string(types.OrderAsc))
+			}
+		}
+		return exprs
+	}
+	identifying, err := modelschema.IdentifyingColumns(*new(M))
+	if err != nil {
+		return nil
+	}
+	for _, o := range a.orders {
+		term, _ := a.orderedTerm(o, shape)
+		if _, ok := identifying[types.TermColumnOf(term)]; ok && term.IsPlain() && (types.TermTableOf(term) == "" || types.TermTableOf(term) == shape.main) {
+			return nil
+		}
+	}
+	key := modelregistry.DefaultCursorColumn
+	if _, ok := shape.columns[key]; !ok {
+		return nil
+	}
+	if len(a.qualifies) > 0 {
+		for _, t := range a.terms {
+			if t.IsPlain() && types.TermColumnOf(t) == key && (types.TermTableOf(t) == "" || types.TermTableOf(t) == shape.main) {
+				return []string{a.db.quoteIdent(termAlias(t)) + " " + string(types.OrderAsc)}
+			}
+		}
+		return nil
+	}
+	return []string{a.keyExpr(types.PlainTerm(shape.main, key), shape) + " " + string(types.OrderAsc)}
 }
 
 // orderedTerm resolves one ordering of the select to the projected term it

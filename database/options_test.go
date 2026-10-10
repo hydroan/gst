@@ -426,6 +426,56 @@ func TestDatabaseWithDryRunCollector(t *testing.T) {
 			require.Empty(t, users, "WithDryRun should not execute the query or fill the destination")
 		})
 
+		t.Run("PaginationWithoutAnOrderReadsInPrimaryKeyOrder", func(t *testing.T) {
+			var stmts []types.SQLStatement
+			users := make([]*TestUser, 0)
+			require.NoError(t, database.Database[*TestUser](context.Background()).
+				WithDryRun(&stmts).
+				WithPagination(2, 10).
+				List(&users))
+			require.Len(t, stmts, 1)
+			require.Contains(t, stmts[0].Query, "ORDER BY "+quoteIdent("id")+" ASC LIMIT ",
+				"a page without an order of its own is read in primary key order, so the pages hold still")
+		})
+
+		t.Run("PaginationCompletesASharedOrder", func(t *testing.T) {
+			var stmts []types.SQLStatement
+			users := make([]*TestUser, 0)
+			require.NoError(t, database.Database[*TestUser](context.Background()).
+				WithDryRun(&stmts).
+				WithOrder(types.Desc("name")).
+				WithPagination(2, 10).
+				List(&users))
+			require.Len(t, stmts, 1)
+			require.Contains(t, stmts[0].Query, "ORDER BY "+quoteIdent("name")+" DESC,"+quoteIdent("id")+" ASC",
+				"rows sharing a name are told apart by the primary key, so no page skips or repeats one")
+		})
+
+		t.Run("PaginationKeepsAnIdentifyingOrder", func(t *testing.T) {
+			var stmts []types.SQLStatement
+			users := make([]*TestUser, 0)
+			require.NoError(t, database.Database[*TestUser](context.Background()).
+				WithDryRun(&stmts).
+				WithOrder(types.Desc("id")).
+				WithPagination(2, 10).
+				List(&users))
+			require.Len(t, stmts, 1)
+			require.Equal(t, 1, strings.Count(stmts[0].Query, quoteIdent("id")+" "),
+				"an order the primary key already completes gains no second term")
+			require.Contains(t, stmts[0].Query, "ORDER BY "+quoteIdent("id")+" DESC")
+		})
+
+		t.Run("LimitAloneAddsNoOrder", func(t *testing.T) {
+			var stmts []types.SQLStatement
+			users := make([]*TestUser, 0)
+			require.NoError(t, database.Database[*TestUser](context.Background()).
+				WithDryRun(&stmts).
+				WithLimit(5).
+				List(&users))
+			require.Len(t, stmts, 1)
+			require.NotContains(t, stmts[0].Query, "ORDER BY", "a cap on the rows is not a page; the order stays the caller's")
+		})
+
 		t.Run("Cursor", func(t *testing.T) {
 			var stmts []types.SQLStatement
 			users := make([]*cursorableTestUser, 0)

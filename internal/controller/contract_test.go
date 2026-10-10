@@ -224,6 +224,29 @@ func TestTransportsAnswerTheContractAlike(t *testing.T) {
 			},
 		},
 		{
+			// A page without an order of its own is read in primary key order
+			// on both lines, so the pages of a listing hold still.
+			name: "List answers a page in primary key order when no order is given", fixture: dated, phase: consts.List,
+			prepare: func(t *testing.T) contractInput {
+				t.Helper()
+				name := uniqueName("contract-dated-page")
+				for range 3 {
+					createDated(t, name, time.Date(2026, time.January, 1, 0, 0, 0, 0, time.UTC))
+				}
+				return contractInput{query: controller.Query{
+					Filters: []controller.Filter{{Field: "name", Op: "eq", Values: []string{name}}},
+					Size:    3,
+				}}
+			},
+			want: ok,
+			check: func(t *testing.T, in contractInput, got contractAnswer) {
+				t.Helper()
+				listed := ids(dataMap(t, got)["items"])
+				require.Len(t, listed, 3)
+				require.True(t, slices.IsSorted(listed), "the page is in primary key order: %v", listed)
+			},
+		},
+		{
 			// A cursor parameter without a boundary value asks for the first
 			// page of the feed, read in the feed's order from the start; a
 			// feed answers no total, on the first page as on any other.

@@ -936,3 +936,81 @@ func TestSelectScanReplacesDest(t *testing.T) {
 		ScanOne(&got))
 	require.EqualValues(t, 0, got.Total, "the stale 999 must not survive")
 }
+
+// TestSelectPageCompletesTheOrder pins that a paged projection is read in a
+// total order, the way a paged List is: rows or groups sorting equal would
+// otherwise be arranged differently from one page query to the next, and a
+// page would skip or repeat them. A grouped projection is completed with its
+// group keys, a row-level one with the primary key; an order the key already
+// completes gains nothing, and a Limit alone is no page.
+func TestSelectPageCompletesTheOrder(t *testing.T) {
+	ctx := context.Background()
+	total := TestAggregateRecordCols.Amount.Sum().As("total")
+	type group struct {
+		Category string
+		Total    int64
+	}
+	type row struct {
+		Category string
+		Amount   int64
+		Rn       int64
+	}
+	rn := types.RowNumber().Over(types.OrderBy(TestAggregateRecordCols.OccurredAt.Desc())).As("rn")
+	render := func(t *testing.T, scan func(statements *[]types.SQLStatement) error) string {
+		t.Helper()
+		statements := make([]types.SQLStatement, 0)
+		require.NoError(t, scan(&statements))
+		require.Len(t, statements, 1)
+		return statements[0].Query
+	}
+
+	t.Run("GroupedPageGainsItsKeys", func(t *testing.T) {
+		sql := render(t, func(statements *[]types.SQLStatement) error {
+			rows := make([]group, 0)
+			return database.Select[*TestAggregateRecord, group](ctx, TestAggregateRecordCols.Category.Group(), total).
+				WithDryRun(statements).
+				OrderBy(total.Desc()).
+				Page(1, 2).
+				Scan(&rows)
+		})
+		require.Contains(t, sql, "ORDER BY "+quoteIdent("total")+" DESC,"+quoteIdent("category")+" ASC",
+			"groups sharing a total are told apart by their key")
+	})
+
+	t.Run("GroupedPageOrderedByItsKeyGainsNothing", func(t *testing.T) {
+		sql := render(t, func(statements *[]types.SQLStatement) error {
+			rows := make([]group, 0)
+			return database.Select[*TestAggregateRecord, group](ctx, TestAggregateRecordCols.Category.Group(), total).
+				WithDryRun(statements).
+				OrderBy(TestAggregateRecordCols.Category.Group().Asc()).
+				Page(1, 2).
+				Scan(&rows)
+		})
+		require.Equal(t, 1, strings.Count(sql, quoteIdent("category")+" ASC"))
+	})
+
+	t.Run("RowLevelPageGainsThePrimaryKey", func(t *testing.T) {
+		sql := render(t, func(statements *[]types.SQLStatement) error {
+			rows := make([]row, 0)
+			return database.Select[*TestAggregateRecord, row](ctx, TestAggregateRecordCols.Category, TestAggregateRecordCols.Amount, rn).
+				WithDryRun(statements).
+				OrderBy(TestAggregateRecordCols.Category.Asc()).
+				Page(2, 2).
+				Scan(&rows)
+		})
+		require.Contains(t, sql, "ORDER BY "+quoteIdent("category")+" ASC,")
+		require.Contains(t, sql, quoteIdent("id")+" ASC", "rows sharing a category are told apart by the primary key")
+	})
+
+	t.Run("LimitAloneGainsNothing", func(t *testing.T) {
+		sql := render(t, func(statements *[]types.SQLStatement) error {
+			rows := make([]group, 0)
+			return database.Select[*TestAggregateRecord, group](ctx, TestAggregateRecordCols.Category.Group(), total).
+				WithDryRun(statements).
+				OrderBy(total.Desc()).
+				Limit(2).
+				Scan(&rows)
+		})
+		require.NotContains(t, sql, quoteIdent("category")+" ASC", "a cap on the rows is not a page")
+	})
+}

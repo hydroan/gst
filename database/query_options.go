@@ -306,7 +306,8 @@ func (db *database[M]) WithLock(mode ...consts.LockMode) types.Database[M] {
 
 // WithOrder adds ORDER BY terms to sort query results (List, Get, First,
 // Last, etc.). Terms apply in the order they are given, so the first one is
-// the primary sort key.
+// the primary sort key. A paged List completes an order no column of which
+// tells every row apart with the primary key (see completeOrder).
 //
 // Orders are built from the generated column references, which cannot name a
 // column the model does not have, or, in generic code, from a reference minted
@@ -340,8 +341,37 @@ func (db *database[M]) WithOrder(orders ...types.Order) types.Database[M] {
 		}
 		db.ins = db.ins.Order(db.orderClause(order))
 		db.ordered = true
+		if identifying, err := modelschema.IdentifyingColumns(*new(M)); err == nil {
+			if _, ok := identifying[order.Column()]; ok {
+				db.orderIdentifies = true
+			}
+		}
 	}
 	return db
+}
+
+// completeOrder makes the ORDER BY of a paged List a total order. A page is a
+// window onto a sorted list, and when two rows sort equal the executor may
+// place them differently from one page query to the next, so a row falls
+// between the pages or shows up on two of them. An order by a column no two
+// rows share (see modelschema.IdentifyingColumns) is total already, and so
+// is a cursor's; any other order, or none, is completed with the primary key
+// ascending, the way Django's admin appends the key to every ordering it
+// pages. A read without a page is left as the caller ordered it, and a model
+// without a primary key has nothing to complete the order with.
+func (db *database[M]) completeOrder() {
+	if !db.paginated || db.orderIdentifies || db.cursor.Enabled() {
+		return
+	}
+	columns, err := modelschema.Columns(reflect.TypeOf(*new(M)))
+	if err != nil {
+		return
+	}
+	for _, col := range columns {
+		if col.PrimaryKey {
+			db.ins = db.ins.Order(db.orderClause(types.Asc(col.DBName)))
+		}
+	}
 }
 
 // orderClause renders one ORDER BY term. A zero direction is read as
@@ -373,9 +403,14 @@ func (db *database[M]) orderClause(order types.Order) string {
 // Scopes run when the statement executes, which is after a terminal operation
 // has built its own statement, so a scope would override the LIMIT and OFFSET
 // reset that Count applies to keep paging out of a count query.
+//
+// A page is read in a total order: an ORDER BY no column of which tells every
+// row apart, or none at all, is completed with the primary key ascending when
+// List runs (see completeOrder), so the pages hold still between queries.
 func (db *database[M]) WithPagination(page, size int) types.Database[M] {
 	db.mu.Lock()
 	defer db.mu.Unlock()
+	db.paginated = true
 	if page <= 0 {
 		page = 1
 	}
