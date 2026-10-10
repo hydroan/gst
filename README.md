@@ -811,6 +811,8 @@ rsp, err := cli.Post[model.SampleSealRsp](ctx, "/api/samples/seal", &model.Sampl
 `config.ini.example` 是新项目的默认配置模板。复制为 `config.ini` 后按环境修改。
 默认模板会开启 sqlite，适合本地快速启动。SQLite 驱动依赖 cgo：用 `CGO_ENABLED=0` 构建的静态二进制照常编译，
 但启用 SQLite 会在启动时报错，这类部署要换成 MySQL 或 PostgreSQL。
+用 MySQL 时 `binlog_format` 必须是 `ROW`（5.7.7 起的默认值）或 `MIXED`：Upsert 在 MySQL 上以读已提交事务执行，
+`STATEMENT` 格式下 MySQL 拒绝这样的写入（错误 1665），每一次 Upsert 都会失败。
 
 每个配置键都按"环境变量 > 配置文件 > 默认值"取值，配置文件里没写的键、`configx` 里 `config.Register`
 注册的自定义段都一样。变量名是键名转大写、点换成下划线：`server.port` 对应 `SERVER_PORT`，
@@ -863,6 +865,9 @@ gg migrate
 执行前先确认 `config.ini` 指向目标环境，避免把开发中的模型变化迁移到错误数据库。
 用 SQLite 时迁移的是 `sqlite.path` 指向的库文件；内存库（`sqlite.is_memory = true`，默认值）每次启动都按模型建表，
 `gg migrate` 提示没有可迁移的内容后直接退出。
+SQLite 的 `ALTER TABLE` 改不了已有列的类型、非空、默认值和 CHECK，sqldef 也不会为这类变化生成语句：`gg migrate`
+发现库里的列定义与模型不一致时直接报错，点名表和列并给出 SQLite 官方的重建步骤（按模型新建一张表、拷贝数据、
+删旧表、改名），不会把这种库当成「无变化」放过。
 
 ### 索引改名必须先迁移后发布
 
@@ -879,9 +884,9 @@ MySQL 是 `RENAME INDEX`，PostgreSQL 是 `ALTER INDEX ... RENAME TO`）：确�
 
 改表名（`TableName` 返回值变化）时迁移计划会生成 `DROP TABLE` + `CREATE TABLE`，直接执行会
 清空整表数据。只要新表列覆盖旧表全部列（改名不丢数据），`gg migrate` 就会随迁移计划给出表改名
-指引（MySQL 是 `RENAME TABLE`，PostgreSQL 是 `ALTER TABLE ... RENAME TO`），并附上表名变化连带
-的索引改名语句；同批的加列、索引调整会标注为剩余变更。手工执行改名语句后重跑 `gg migrate`，
-剩余变更会以原地 ALTER 呈现。
+指引（MySQL 是 `RENAME TABLE`，PostgreSQL 和 SQLite 是 `ALTER TABLE ... RENAME TO`），并附上表名变化连带
+的索引改名语句（SQLite 不能给索引改名，给出的是 `DROP INDEX`，重跑 `gg migrate` 时按新名重建）；同批的加列、
+索引调整会标注为剩余变更。手工执行改名语句后重跑 `gg migrate`，剩余变更会以原地 ALTER 呈现。
 
 ## 内置模块
 

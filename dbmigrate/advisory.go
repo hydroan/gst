@@ -12,11 +12,12 @@ import (
 // dialectFor returns the name of the dialect the generator mode targets,
 // the one dbruntime renders the identifiers and rename statements of the
 // advisory for, so the executable block pastes into that server as it is.
-// Only the modes migrate runs the detectors for, MySQL and PostgreSQL, get
-// here.
 func dialectFor(mode schema.GeneratorMode) string {
-	if mode == schema.GeneratorModePostgres {
+	switch mode {
+	case schema.GeneratorModePostgres:
 		return string(config.DBPostgres)
+	case schema.GeneratorModeSQLite3:
+		return string(config.DBSqlite)
 	}
 	return string(config.DBMySQL)
 }
@@ -44,7 +45,9 @@ func combineAdvisories(sections ...string) string {
 // grouped at the end after a blank line. Each table rename precedes the
 // index renames of its own table, which only apply once the table is
 // renamed. Remaining changes render as comments only: they belong to the
-// next migration run, not to the rename.
+// next migration run, not to the rename. On SQLite, which renames no index,
+// the index statements drop the old names for the next run to create the
+// new ones, and a comment line says so.
 func formatTableRenames(mode schema.GeneratorMode, pairs []tableRenamePair) string {
 	if len(pairs) == 0 {
 		return ""
@@ -59,6 +62,14 @@ func formatTableRenames(mode schema.GeneratorMode, pairs []tableRenamePair) stri
 		if len(pair.Residual) > 0 {
 			b.WriteString("  -- Changes marked \"remaining\" are not covered by the rename; re-run gg migrate after renaming to apply them as in-place ALTERs.\n")
 			break
+		}
+	}
+	if mode == schema.GeneratorModeSQLite3 {
+		for _, pair := range pairs {
+			if len(pair.IndexRenames) > 0 {
+				b.WriteString("  -- SQLite renames no index: the index statements below drop the old names, and the next gg migrate creates the indexes under their new names.\n")
+				break
+			}
 		}
 	}
 	for _, pair := range pairs {
@@ -93,8 +104,12 @@ func formatTableRenames(mode schema.GeneratorMode, pairs []tableRenamePair) stri
 // SQL comment prefix so pasting the whole block into the server stays
 // harmless, and only directly executable rename statements appear
 // unprefixed, grouped at the end after a blank line.
+//
+// SQLite renames no index: dropping the old one and creating the new one,
+// which is what the plan already holds, is the only way to the new name, so
+// the plan stands and no advisory is rendered.
 func formatIndexRenames(mode schema.GeneratorMode, pairs []indexRenamePair) string {
-	if len(pairs) == 0 {
+	if len(pairs) == 0 || mode == schema.GeneratorModeSQLite3 {
 		return ""
 	}
 	dialect := dialectFor(mode)

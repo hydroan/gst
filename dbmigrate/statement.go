@@ -40,7 +40,10 @@ var (
 // statements a migration plan would apply.
 var (
 	// currentTablePattern matches the CREATE TABLE header of one statement.
-	currentTablePattern = regexp.MustCompile("^\\s*CREATE TABLE `?([^` (]+)`? \\(")
+	// The quote around the table name — backticks in MySQL and SQLite,
+	// double quotes in PostgreSQL — is captured apart from the name, which
+	// is the second group, so a rewrite of the name keeps the quoting.
+	currentTablePattern = regexp.MustCompile("^\\s*CREATE TABLE ([`\"]?)([^`\" (]+)([`\"]?) \\(")
 	// currentIndexPattern matches one secondary index line inside a CREATE
 	// TABLE body. The column list is captured up to the line's last closing
 	// parenthesis by the caller, so prefix lengths like col(10) survive.
@@ -90,7 +93,7 @@ func parseCurrentIndexes(currentDDLs string) map[string]map[string]currentIndex 
 	table := ""
 	for line := range strings.SplitSeq(currentDDLs, "\n") {
 		if m := currentTablePattern.FindStringSubmatch(line); m != nil {
-			table = unquoteIdent(m[1])
+			table = unquoteIdent(m[2])
 			ensure(table)
 			continue
 		}
@@ -135,7 +138,7 @@ func parseCurrentTables(currentDDLs string) map[string]string {
 	lines := make([]string, 0)
 	for line := range strings.SplitSeq(currentDDLs, "\n") {
 		if m := currentTablePattern.FindStringSubmatch(line); m != nil {
-			table = unquoteIdent(m[1])
+			table = unquoteIdent(m[2])
 			lines = append(lines[:0], line)
 			continue
 		}

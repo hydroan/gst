@@ -106,13 +106,21 @@ func (p Plan) Changed() bool { return len(p.Statements) > 0 }
 // production default) the start passes, but the model and the database keep
 // drifting until the migration runs.
 //
-// When a MySQL or PostgreSQL plan drops and re-creates an identical
-// definition — an index on the same table, or a whole table under a new name
-// — the suspected renames are returned as advisory text with ready-to-run
-// rename statements in that server's syntax. For tables the advisory doubles
-// as a data-loss guard, because the planned DROP TABLE would discard every
-// row that the metadata-only rename keeps. The caller owns when and how to
-// present it; executing the rename stays a human decision.
+// When a plan drops and re-creates an identical definition — an index on the
+// same table, or a whole table under a new name — the suspected renames are
+// returned as advisory text with ready-to-run rename statements in that
+// server's syntax. For tables the advisory doubles as a data-loss guard,
+// because the planned DROP TABLE would discard every row that the
+// metadata-only rename keeps. SQLite renames tables but no index, so its
+// advisory covers table renames alone and drops the renamed table's indexes
+// for the next run to create under their new names. The caller owns when and
+// how to present it; executing the rename stays a human decision.
+//
+// A SQLite database whose columns no longer match the models' definitions —
+// type, nullability, default or check — fails the migration instead of
+// planning nothing: SQLite's ALTER TABLE cannot change a column, and sqldef
+// plans no statement for it. The error names the table and the columns and
+// points to the rebuild SQLite documents for such changes.
 func Migrate(schemas []string, dbtyp config.DBType, cfg *DatabaseConfig, opt *MigrateOption) (plan Plan, err error) {
 	if len(schemas) == 0 || cfg == nil {
 		return Plan{}, nil
@@ -235,6 +243,16 @@ func runMigration(generatorMode schema.GeneratorMode, db database.Database, sqlP
 	if genErr != nil {
 		return Plan{}, genErr
 	}
+	// sqldef plans no statement for a changed column definition on SQLite,
+	// whose ALTER TABLE cannot express one, and would answer "no changes"
+	// for a database that no longer matches the models. The migration
+	// refuses instead, before an empty plan can pass for an up-to-date
+	// database.
+	if generatorMode == schema.GeneratorModeSQLite3 {
+		if err = refuseSQLiteColumnDrift(sqlParser, options.DesiredDDLs, currentDDLs); err != nil {
+			return Plan{}, err
+		}
+	}
 	if len(ddls) == 0 {
 		return Plan{}, nil
 	}
@@ -244,14 +262,10 @@ func runMigration(generatorMode schema.GeneratorMode, db database.Database, sqlP
 	// alongside the plan. Detection guides only; nothing is rewritten or
 	// executed here. Table renames come first: their DROP TABLE would discard
 	// data, so they are the ones a reviewer must act on before anything else.
-	// SQLite stays out: it backs local development and tests, where databases
-	// are created fresh and hold no schema worth renaming.
-	if generatorMode == schema.GeneratorModeMysql || generatorMode == schema.GeneratorModePostgres {
-		plan.Advisory = combineAdvisories(
-			formatTableRenames(generatorMode, detectTableRenames(generatorMode, sqlParser, options.Config, defaultSchema, ddls, currentDDLs)),
-			formatIndexRenames(generatorMode, detectIndexRenames(ddls, currentDDLs)),
-		)
-	}
+	plan.Advisory = combineAdvisories(
+		formatTableRenames(generatorMode, detectTableRenames(generatorMode, sqlParser, options.Config, defaultSchema, ddls, currentDDLs)),
+		formatIndexRenames(generatorMode, detectIndexRenames(ddls, currentDDLs)),
+	)
 
 	if options.DryRun {
 		dryRunDB, dryRunErr := newDryRunDatabase(db)

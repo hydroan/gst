@@ -509,12 +509,13 @@ func TestMigrateTableRenameAdvisoryOnPostgres(t *testing.T) {
 	})
 	databaseConfig := postgresDatabaseConfig(database)
 
-	before := "CREATE TABLE samples (\n" +
-		"  id char(36) NOT NULL,\n" +
-		"  code varchar(64) NOT NULL,\n" +
-		"  PRIMARY KEY (id)\n" +
+	// Quoted the way the schema dumper writes a postgres schema.
+	before := "CREATE TABLE \"samples\" (\n" +
+		"  \"id\" char(36) NOT NULL,\n" +
+		"  \"code\" varchar(64) NOT NULL,\n" +
+		"  PRIMARY KEY (\"id\")\n" +
 		");\n" +
-		"CREATE INDEX idx_samples_code ON samples (code);"
+		"CREATE INDEX \"idx_samples_code\" ON \"samples\" (\"code\");"
 	after := strings.ReplaceAll(before, "samples", "records")
 
 	plan, err := dbmigrate.Migrate([]string{before}, config.DBPostgres, databaseConfig, &dbmigrate.MigrateOption{})
@@ -523,7 +524,8 @@ func TestMigrateTableRenameAdvisoryOnPostgres(t *testing.T) {
 	require.Empty(t, plan.Advisory)
 
 	// The plan for the renamed model drops "samples" and creates "records";
-	// the advisory must offer the metadata-only statements in postgres syntax.
+	// the advisory must offer the metadata-only statements in postgres syntax,
+	// the names quoted once.
 	plan, err = dbmigrate.Migrate([]string{after}, config.DBPostgres, databaseConfig,
 		&dbmigrate.MigrateOption{DryRun: true, EnableDrop: true})
 	require.NoError(t, err)
@@ -753,4 +755,146 @@ func postgresDSN(cfg *dbmigrate.DatabaseConfig) string {
 	dsn.RawQuery = options.Encode()
 
 	return dsn.String()
+}
+
+// TestMigrateTableRenameAdvisoryOnSQLite pins that a sqlite database file,
+// a migration target in its own right, gets the rename advisory the server
+// dialects get: the plan for a renamed model drops and re-creates the table,
+// and the advisory offers the metadata-only rename instead. SQLite renames
+// no index, so the advisory drops the old one for the next run to create
+// under its new name.
+func TestMigrateTableRenameAdvisoryOnSQLite(t *testing.T) {
+	file := filepath.Join(t.TempDir(), "rename.db")
+	databaseConfig := &dbmigrate.DatabaseConfig{Database: file}
+
+	before := "CREATE TABLE `samples` (\n" +
+		"  `id` text NOT NULL,\n" +
+		"  `code` text NOT NULL,\n" +
+		"  PRIMARY KEY (`id`)\n" +
+		");\n" +
+		"CREATE INDEX `idx_samples_code` ON `samples` (`code`);"
+	after := strings.ReplaceAll(before, "samples", "records")
+
+	plan, err := dbmigrate.Migrate([]string{before}, config.DBSqlite, databaseConfig, &dbmigrate.MigrateOption{})
+	require.NoError(t, err)
+	require.True(t, plan.Changed())
+	require.Empty(t, plan.Advisory)
+
+	plan, err = dbmigrate.Migrate([]string{after}, config.DBSqlite, databaseConfig,
+		&dbmigrate.MigrateOption{DryRun: true, EnableDrop: true})
+	require.NoError(t, err)
+	require.True(t, plan.Changed())
+	require.Contains(t, plan.Advisory, `ALTER TABLE "samples" RENAME TO "records";`)
+	require.Contains(t, plan.Advisory, `DROP INDEX "idx_samples_code";`, "sqlite renames no index: the old one is dropped for the next run to create the new one")
+
+	// Applying the advisory instead of the plan leaves only the index to
+	// create under its new name.
+	execSQLite(t, file, `ALTER TABLE "samples" RENAME TO "records"`)
+	execSQLite(t, file, `DROP INDEX "idx_samples_code"`)
+	plan, err = dbmigrate.Migrate([]string{after}, config.DBSqlite, databaseConfig,
+		&dbmigrate.MigrateOption{DryRun: true, EnableDrop: true})
+	require.NoError(t, err)
+	require.Len(t, plan.Statements, 1, "%v", plan.Statements)
+	require.Contains(t, plan.Statements[0], "idx_records_code")
+	require.Empty(t, plan.Advisory)
+}
+
+// TestMigrateRefusesASQLiteColumnChangeItCannotPlan pins that a change to a
+// column's definition on a sqlite database file is refused rather than
+// planned as nothing: SQLite's ALTER TABLE cannot change a column's type,
+// nullability, default or check, and the migration must say so, naming the
+// table and the columns, instead of answering "no changes".
+func TestMigrateRefusesASQLiteColumnChangeItCannotPlan(t *testing.T) {
+	t.Run("hand-written schema", func(t *testing.T) {
+		file := filepath.Join(t.TempDir(), "drift.db")
+		databaseConfig := &dbmigrate.DatabaseConfig{Database: file}
+
+		before := "CREATE TABLE `samples` (\n" +
+			"  `id` text NOT NULL,\n" +
+			"  `amount` integer NOT NULL,\n" +
+			"  `note` text,\n" +
+			"  PRIMARY KEY (`id`)\n" +
+			");"
+		after := "CREATE TABLE `samples` (\n" +
+			"  `id` text NOT NULL,\n" +
+			"  `amount` text NOT NULL,\n" +
+			"  `note` text NOT NULL,\n" +
+			"  `extra` text,\n" +
+			"  PRIMARY KEY (`id`)\n" +
+			");"
+
+		plan, err := dbmigrate.Migrate([]string{before}, config.DBSqlite, databaseConfig, &dbmigrate.MigrateOption{})
+		require.NoError(t, err)
+		require.True(t, plan.Changed())
+
+		// A changed type and a changed nullability beside an added column:
+		// the addition could be planned, the other two cannot, and the
+		// migration refuses the whole rather than apply the half it can
+		// express.
+		_, err = dbmigrate.Migrate([]string{after}, config.DBSqlite, databaseConfig, &dbmigrate.MigrateOption{DryRun: true})
+		require.Error(t, err)
+		require.ErrorContains(t, err, "samples")
+		require.ErrorContains(t, err, "amount")
+		require.ErrorContains(t, err, "note")
+		require.ErrorContains(t, err, "rebuild")
+
+		// The same schema again plans nothing and refuses nothing.
+		plan, err = dbmigrate.Migrate([]string{before}, config.DBSqlite, databaseConfig, &dbmigrate.MigrateOption{DryRun: true})
+		require.NoError(t, err)
+		require.False(t, plan.Changed())
+	})
+
+	t.Run("schema the models dump", func(t *testing.T) {
+		dumper, err := dbmigrate.NewSchemaDumper()
+		require.NoError(t, err)
+		before, err := dumper.Dump(config.DBSqlite, SampleWithIntegerAmount{})
+		require.NoError(t, err)
+		after, err := dumper.Dump(config.DBSqlite, SampleWithTextAmount{})
+		require.NoError(t, err)
+
+		file := filepath.Join(t.TempDir(), "drift.db")
+		databaseConfig := &dbmigrate.DatabaseConfig{Database: file}
+		plan, err := dbmigrate.Migrate([]string{before}, config.DBSqlite, databaseConfig, &dbmigrate.MigrateOption{})
+		require.NoError(t, err)
+		require.True(t, plan.Changed())
+
+		// The model's amount column changed from integer to text.
+		_, err = dbmigrate.Migrate([]string{after}, config.DBSqlite, databaseConfig, &dbmigrate.MigrateOption{DryRun: true})
+		require.Error(t, err)
+		require.ErrorContains(t, err, "amount_samples")
+		require.ErrorContains(t, err, "amount")
+		require.ErrorContains(t, err, "rebuild")
+
+		plan, err = dbmigrate.Migrate([]string{before}, config.DBSqlite, databaseConfig, &dbmigrate.MigrateOption{DryRun: true})
+		require.NoError(t, err)
+		require.False(t, plan.Changed())
+	})
+}
+
+// SampleWithIntegerAmount and SampleWithTextAmount are two revisions of one
+// model: the same table, whose amount column changes type between them.
+type SampleWithIntegerAmount struct {
+	Amount int64 `json:"amount"`
+
+	modelregistry.Base
+}
+
+func (*SampleWithIntegerAmount) TableName() string { return "amount_samples" }
+
+type SampleWithTextAmount struct {
+	Amount string `json:"amount" gorm:"size:191"`
+
+	modelregistry.Base
+}
+
+func (*SampleWithTextAmount) TableName() string { return "amount_samples" }
+
+// execSQLite runs one statement on the sqlite database file.
+func execSQLite(t *testing.T, file, statement string) {
+	t.Helper()
+	db, err := sql.Open("sqlite3", file)
+	require.NoError(t, err)
+	defer db.Close()
+	_, err = db.Exec(statement)
+	require.NoError(t, err)
 }

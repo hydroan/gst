@@ -49,8 +49,9 @@ func detectTableRenames(generatorMode schema.GeneratorMode, sqlParser database.P
 			continue
 		}
 		if m := currentTablePattern.FindStringSubmatch(statement); m != nil {
-			added = append(added, m[1])
-			addedTables[m[1]] = statement
+			table := unquoteIdent(m[2])
+			added = append(added, table)
+			addedTables[table] = statement
 			continue
 		}
 		if m := createIndexPattern.FindStringSubmatch(statement); m != nil {
@@ -76,12 +77,12 @@ func detectTableRenames(generatorMode schema.GeneratorMode, sqlParser database.P
 				continue
 			}
 			currentDDL := renameCurrentTable(current, to)
-			if generatorMode == schema.GeneratorModePostgres {
-				// PostgreSQL exports indexes as standalone statements outside
-				// the CREATE TABLE body, so the dropped table's definition has
-				// to carry them explicitly for the re-diff to see them. They
-				// are synthesized from the parsed definitions, pointed at the
-				// created name like the table itself.
+			if generatorMode == schema.GeneratorModePostgres || generatorMode == schema.GeneratorModeSQLite3 {
+				// PostgreSQL and SQLite export indexes as standalone statements
+				// outside the CREATE TABLE body, so the dropped table's
+				// definition has to carry them explicitly for the re-diff to
+				// see them. They are synthesized from the parsed definitions,
+				// pointed at the created name like the table itself.
 				currentDDL = appendCurrentIndexes(currentDDL, to, currentIndexes[from])
 			}
 			indexRenames, residual, ok := classifyTableRename(generatorMode, sqlParser, config, defaultSchema, desired, currentDDL)
@@ -204,7 +205,7 @@ func renameCurrentTable(statement, to string) string {
 	if loc == nil {
 		return ""
 	}
-	return statement[:loc[2]] + to + statement[loc[3]:]
+	return statement[:loc[4]] + to + statement[loc[5]:]
 }
 
 // appendCurrentIndexes appends CREATE INDEX statements synthesized from the
