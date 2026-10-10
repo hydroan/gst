@@ -8,6 +8,7 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/internal/dbruntime"
 	"gorm.io/gorm"
+	"gorm.io/plugin/dbresolver"
 )
 
 // transactionBoundary collects the actions registered to run once the
@@ -94,7 +95,12 @@ func withTransactionBoundary(
 	fn func(txCtx context.Context, tx *gorm.DB) error,
 ) error {
 	boundary := new(transactionBoundary)
-	if err := ins.Transaction(func(tx *gorm.DB) error {
+	// The transaction opens on the primary whatever the chain reads from: a
+	// chain of a PreferReplica model carries the replica as its read side,
+	// and dbresolver routes a statement back to the primary only outside a
+	// transaction, so a transaction opened on that chain would run its writes
+	// on the replica. Without replicas the clause names the one pool there is.
+	if err := ins.Clauses(dbresolver.Write).Transaction(func(tx *gorm.DB) error {
 		txCtx := dbruntime.WithTx(ctx, tx, base)
 		txCtx = context.WithValue(txCtx, boundaryContextKey{}, boundary)
 		return fn(txCtx, tx)

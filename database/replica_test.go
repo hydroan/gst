@@ -79,6 +79,24 @@ func (*replicaFirstRecord) TableName() string { return "replica_first_records" }
 
 func (*replicaFirstRecord) PreferReplica() bool { return true }
 
+// replicaFirstHookedRecord is replicaFirstRecord with a create hook: a hook
+// takes the write through the framework's own transaction, the way a batch,
+// an Upsert or a multi-record Update does.
+type replicaFirstHookedRecord struct {
+	Note string `json:"note" gorm:"size:191"`
+
+	modelregistry.Base
+}
+
+func (*replicaFirstHookedRecord) TableName() string { return "replica_first_hooked_records" }
+
+func (*replicaFirstHookedRecord) PreferReplica() bool { return true }
+
+func (r *replicaFirstHookedRecord) CreateBefore(context.Context) error {
+	r.Note += " (hooked)"
+	return nil
+}
+
 // replicaTopology is the two-server test bed: handle is the system under
 // test (a replica-configured, Write-pinned connection), replica is a plain
 // probe connection onto the stand-in replica for seeding and assertions, and
@@ -130,15 +148,15 @@ func setupReplicaTopology(t *testing.T) replicaTopology {
 	// replica-configured handle must reach only the primary. Were HasTable
 	// routed to the (empty, lagging) replica, a freshly migrated deployment
 	// would fail its startup verification right after "gg migrate".
-	require.NoError(t, handle.AutoMigrate(&routedRecord{}, &replicaFirstRecord{}))
+	require.NoError(t, handle.AutoMigrate(&routedRecord{}, &replicaFirstRecord{}, &replicaFirstHookedRecord{}))
 	t.Cleanup(func() {
-		require.NoError(t, database.DB().Migrator().DropTable(&routedRecord{}, &replicaFirstRecord{}))
+		require.NoError(t, database.DB().Migrator().DropTable(&routedRecord{}, &replicaFirstRecord{}, &replicaFirstHookedRecord{}))
 	})
 	require.False(t, replicaHandle.Migrator().HasTable("routed_records"),
 		"AutoMigrate over the replica-configured handle must not reach the replica")
 
 	// The stand-in replica gets the same tables through its own plain handle.
-	require.NoError(t, replicaHandle.AutoMigrate(&routedRecord{}, &replicaFirstRecord{}))
+	require.NoError(t, replicaHandle.AutoMigrate(&routedRecord{}, &replicaFirstRecord{}, &replicaFirstHookedRecord{}))
 
 	return replicaTopology{handle: handle, replica: replicaHandle}
 }
@@ -268,6 +286,35 @@ func TestReplicaRouting(t *testing.T) {
 		rows = rows[:0]
 		require.NoError(t, database.DatabaseOn[*routedRecord](ctx, session).WithReplica().List(&rows))
 		require.Equal(t, dbnode.RoleReplica, capture.last(), "a WithReplica read logs as served by the replica")
+	})
+
+	t.Run("framework transactions of a PreferReplica model run on the primary", func(t *testing.T) {
+		// Writes never read from the replica: a write the framework wraps in
+		// a transaction of its own — an Upsert, a multi-record Update, a
+		// hooked Create — opens that transaction on the primary even for a
+		// model whose reads default to the replica.
+		upserted := &replicaFirstRecord{Note: "upserted"}
+		upserted.ID = "pref-upsert"
+		require.NoError(t, database.DatabaseOn[*replicaFirstRecord](ctx, top.handle).Upsert(upserted))
+		require.EqualValues(t, 1, countOn(t, database.DB(), "replica_first_records", "pref-upsert"), "an Upsert lands on the primary")
+		require.EqualValues(t, 0, countOn(t, top.replica, "replica_first_records", "pref-upsert"))
+
+		first, second := &replicaFirstRecord{Note: "first"}, &replicaFirstRecord{Note: "second"}
+		first.ID, second.ID = "pref-update-1", "pref-update-2"
+		require.NoError(t, database.DatabaseOn[*replicaFirstRecord](ctx, top.handle).Create(first))
+		require.NoError(t, database.DatabaseOn[*replicaFirstRecord](ctx, top.handle).Create(second))
+		first.Note, second.Note = "first updated", "second updated"
+		require.NoError(t, database.DatabaseOn[*replicaFirstRecord](ctx, top.handle).Update(first, second),
+			"a multi-record Update finds the rows where they are, on the primary")
+		var note string
+		require.NoError(t, database.DB().Table("replica_first_records").Where("id = ?", "pref-update-2").Select("note").Scan(&note).Error)
+		require.Equal(t, "second updated", note)
+
+		hooked := &replicaFirstHookedRecord{Note: "hooked"}
+		hooked.ID = "pref-hooked"
+		require.NoError(t, database.DatabaseOn[*replicaFirstHookedRecord](ctx, top.handle).Create(hooked))
+		require.EqualValues(t, 1, countOn(t, database.DB(), "replica_first_hooked_records", "pref-hooked"), "a hooked Create lands on the primary")
+		require.EqualValues(t, 0, countOn(t, top.replica, "replica_first_hooked_records", "pref-hooked"))
 	})
 
 	t.Run("WithReplica on a write is refused", func(t *testing.T) {
