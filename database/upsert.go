@@ -202,6 +202,12 @@ func (db *database[M]) Upsert(objs ...M) (err error) {
 // ErrDuplicatedKey, the answer a key already taken gets; a soft-deleted row
 // counts, since a merge would resurrect it. A model whose rows belong to no
 // tenant, and a caller acting across every tenant, pay no read.
+//
+// The read answers for the rows that exist when it runs. A row another tenant
+// inserts under one of the keys between the read and the write is merged into
+// on postgres, where FOR UPDATE locks no row that is not there yet; MySQL
+// locks the gap such a key would take under its default isolation level, and
+// SQLite has one writer at a time, so neither has the window.
 func (db *database[M]) refuseForeignTenantRows(tableName string, objs []M) error {
 	columns, err := modelschema.Columns(reflect.TypeOf(db.m))
 	if err != nil {
