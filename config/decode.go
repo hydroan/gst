@@ -18,6 +18,7 @@ import (
 // strings.
 func decodeHooks() viper.DecoderConfigOption {
 	return viper.DecodeHook(mapstructure.ComposeDecodeHookFunc(
+		numberToDurationHookFunc(),
 		mapstructure.StringToTimeDurationHookFunc(),
 		mapstructure.StringToSliceHookFunc(","),
 		// RFC 3339 is the one time format the framework reads from outside,
@@ -26,6 +27,34 @@ func decodeHooks() viper.DecoderConfigOption {
 		mapstructure.StringToTimeHookFunc(time.RFC3339),
 		stringToStringMapHookFunc(),
 	))
+}
+
+// numberToDurationHookFunc refuses a duration written as a bare number. A
+// format with numbers of its own, YAML, JSON or TOML, hands one over as a
+// number, which the decoder would otherwise read as nanoseconds: a read
+// timeout of 15 is fifteen nanoseconds and a retention of 2160 meant in hours
+// is gone in an instant, and nothing reports it. A number needs its unit, 15s
+// or 2160h, the spelling a string is held to already (time.ParseDuration), so
+// an INI file and an environment variable refuse the same mistake on their
+// own. Zero alone carries no unit, as it carries none in time.ParseDuration.
+func numberToDurationHookFunc() mapstructure.DecodeHookFuncType {
+	return func(from, to reflect.Type, data any) (any, error) {
+		// A duration that already is one, a default or a value decoded
+		// earlier, is an int64 by kind and carries its unit by type.
+		if to != reflect.TypeFor[time.Duration]() || from == reflect.TypeFor[time.Duration]() {
+			return data, nil
+		}
+		switch from.Kind() {
+		case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64,
+			reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64,
+			reflect.Float32, reflect.Float64:
+			if reflect.ValueOf(data).IsZero() {
+				return time.Duration(0), nil
+			}
+			return nil, errors.Newf("want a duration with a unit, such as %vs, got %v", data, data)
+		}
+		return data, nil
+	}
 }
 
 // stringToStringMapHookFunc decodes "key=value,key=value" into a map of

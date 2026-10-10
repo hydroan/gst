@@ -105,3 +105,42 @@ func TestSectionRefusesAKeySharingAVariable(t *testing.T) {
 		func() { config.Register[LoggerHTTP]() },
 		"a section registered after Init reports the clash by panicking, the way every other registration failure does")
 }
+
+// TestDurationWrittenAsANumberIsRefused pins that a duration needs its unit in
+// every file format: a bare number in YAML, JSON or TOML arrives as a number,
+// which would otherwise decode as nanoseconds and leave a timeout of "15" at
+// fifteen nanoseconds without a word; an INI file hands the same text over as
+// a string, which the string hook refuses already. Zero alone carries no unit.
+func TestDurationWrittenAsANumberIsRefused(t *testing.T) {
+	clearConfigEnvForTest(t)
+	for _, tt := range []struct {
+		format string
+		bare   string
+		unit   string
+		zero   string
+	}{
+		{format: "yaml", bare: "server:\n  read_timeout: 15\n", unit: "server:\n  read_timeout: 15s\n", zero: "server:\n  read_timeout: 0\n"},
+		{format: "json", bare: `{"server": {"read_timeout": 15}}`, unit: `{"server": {"read_timeout": "15s"}}`, zero: `{"server": {"read_timeout": 0}}`},
+		{format: "toml", bare: "[server]\nread_timeout = 15\n", unit: "[server]\nread_timeout = \"15s\"\n", zero: "[server]\nread_timeout = 0\n"},
+		{format: "ini", bare: "[server]\nread_timeout = 15\n", unit: "[server]\nread_timeout = 15s\n", zero: "[server]\nread_timeout = 0\n"},
+	} {
+		t.Run(tt.format, func(t *testing.T) {
+			filename := filepath.Join(t.TempDir(), "config."+tt.format)
+			config.SetConfigFile(filename)
+
+			requireWriteConfigFile(t, filename, tt.bare)
+			err := config.Init()
+			require.Error(t, err, "a duration without a unit must be refused, not read as nanoseconds")
+			require.ErrorContains(t, err, "read_timeout", "the refusal names the key")
+			require.ErrorContains(t, err, "unit")
+
+			requireWriteConfigFile(t, filename, tt.unit)
+			require.NoError(t, config.Init())
+			require.Equal(t, 15*time.Second, config.App.Server.ReadTimeout)
+
+			requireWriteConfigFile(t, filename, tt.zero)
+			require.NoError(t, config.Init(), "zero carries no unit, as it carries none in time.ParseDuration")
+			require.Equal(t, time.Duration(0), config.App.Server.ReadTimeout)
+		})
+	}
+}
