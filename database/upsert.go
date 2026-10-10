@@ -10,7 +10,9 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/internal/dbruntime"
 	"github.com/hydroan/gst/internal/modelschema"
+	"github.com/hydroan/gst/tenant"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 	gormschema "gorm.io/gorm/schema"
 )
 
@@ -44,6 +46,11 @@ import (
 //     created_by/updated_by to the id of the caller the context carries,
 //     exactly like Create, so caller-supplied values are never honored; a
 //     conflict update refreshes updated_at and updated_by the same way.
+//   - On a model whose rows belong to a tenant, a key held by another
+//     tenant's row fails the call with ErrDuplicatedKey instead of merging
+//     into that row (see refuseForeignTenantRows): the conflict update is no
+//     UPDATE statement, so the tenant predicate every update carries would
+//     not reach it.
 //   - After each batch, caller-owned objects are re-synced from the database
 //     by complete unique-index values: an object that collided exposes the
 //     persisted row's ID instead of the one generated for the insert attempt.
@@ -161,6 +168,9 @@ func (db *database[M]) Upsert(objs ...M) (err error) {
 		// Insert candidates start at version 1; a conflict never reads the
 		// object's version (the pre-set clause bumps the row's own instead).
 		initializeVersions(objs)
+		if err = db.refuseForeignTenantRows(tableName, objs); err != nil {
+			return err
+		}
 		if len(db.selectColumns) > 0 {
 			db.ins = db.ins.Select(db.selectColumns)
 		}
@@ -178,6 +188,77 @@ func (db *database[M]) Upsert(objs ...M) (err error) {
 		}
 		return nil
 	})
+}
+
+// refuseForeignTenantRows refuses an Upsert whose rows would merge into
+// another tenant's. The conflict update of an INSERT is no UPDATE statement,
+// so the tenant predicate every update carries (see tenant.ID) never reaches
+// it: a row keyed like another tenant's would be rewritten and the call
+// answered with success, where an Update of the same key answers that the
+// row is not there. The rows the batch could merge into are read first,
+// across tenants and locked for the transaction the write runs in: by
+// primary key, and by every complete unique index value, since MySQL merges
+// on any unique key. One held by another tenant fails the batch with
+// ErrDuplicatedKey, the answer a key already taken gets; a soft-deleted row
+// counts, since a merge would resurrect it. A model whose rows belong to no
+// tenant, and a caller acting across every tenant, pay no read.
+func (db *database[M]) refuseForeignTenantRows(tableName string, objs []M) error {
+	columns, err := modelschema.Columns(reflect.TypeOf(db.m))
+	if err != nil {
+		return err
+	}
+	column := tenantColumn(columns)
+	if column == "" {
+		return nil
+	}
+	acting, one := tenant.From(db.ctx)
+	if !one {
+		return nil
+	}
+
+	primaryKeys := make([]string, 0, 1)
+	for _, c := range columns {
+		if c.PrimaryKey {
+			primaryKeys = append(primaryKeys, c.DBName)
+		}
+	}
+	query := db.ins.Session(&gorm.Session{NewDB: true}).Table(tableName)
+	if len(primaryKeys) == 1 {
+		ids := make([]string, 0, len(objs))
+		for _, obj := range objs {
+			ids = append(ids, obj.GetID())
+		}
+		query = query.Where(db.quoteTableColumn(tableName, primaryKeys[0])+" IN ?", ids)
+	}
+	indexes, err := db.saveResultSyncUniqueIndexes()
+	if err != nil {
+		return err
+	}
+	for _, index := range indexes {
+		for _, obj := range objs {
+			values, ok := saveResultSyncUniqueValues(db.ctx, index, obj)
+			if !ok {
+				continue
+			}
+			condition, args := db.saveResultSyncUniqueCondition(tableName, index, values)
+			query = query.Or(condition, args...)
+		}
+	}
+	if db.dialect() != dialectClickHouse {
+		query = query.Clauses(clause.Locking{Strength: "UPDATE"})
+	}
+	held := make([]string, 0)
+	if err := query.Pluck(column, &held).Error; err != nil {
+		// First-hand exit of a stack-less GORM/driver error; see the
+		// error-stack contract in doc.go.
+		return errors.WithStack(err)
+	}
+	for _, owner := range held {
+		if owner != acting {
+			return errors.Wrapf(ErrDuplicatedKey, "upsert into %s: a key of the batch is held by a row of tenant %q", tableName, owner)
+		}
+	}
+	return nil
 }
 
 // syncSaveResultsByUniqueIndexes refreshes caller-owned objects after GORM

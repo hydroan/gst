@@ -786,6 +786,39 @@ func TestDatabaseUpsert(t *testing.T) {
 		require.Equal(t, "upsert-select", got.UniqueCode, "columns outside WithSelect must not be written")
 	})
 
+	t.Run("refuses to merge into another tenant's row", func(t *testing.T) {
+		require.NoError(t, database.DB().AutoMigrate(&TestTenantSoftDeleteItem{}))
+		defer func() {
+			_ = database.DB().Exec("DELETE FROM test_tenant_soft_delete_items").Error
+		}()
+		ctxA := tenant.In(context.Background(), "tenant-a")
+		ctxB := tenant.In(context.Background(), "tenant-b")
+
+		// Tenant b holds the row; a caller acting in tenant a names the same
+		// id. An Upsert that merged would rewrite b's row and answer success,
+		// where an Update of the same id answers that the row is not there.
+		theirs := &TestTenantSoftDeleteItem{Name: "theirs"}
+		theirs.ID = "shared-id"
+		require.NoError(t, database.Database[*TestTenantSoftDeleteItem](ctxB).Create(theirs))
+
+		mine := &TestTenantSoftDeleteItem{Name: "written-by-a"}
+		mine.ID = "shared-id"
+		require.ErrorIs(t, database.Database[*TestTenantSoftDeleteItem](ctxA).Upsert(mine), database.ErrDuplicatedKey,
+			"the key is held by another tenant's row")
+
+		got := new(TestTenantSoftDeleteItem)
+		require.NoError(t, database.Database[*TestTenantSoftDeleteItem](ctxB).Get(got, "shared-id"))
+		require.Equal(t, "theirs", got.Name, "the other tenant's row is untouched")
+		require.Equal(t, "tenant-b", got.GetTenantID())
+
+		// The same key under the row's own tenant merges as before.
+		ours := &TestTenantSoftDeleteItem{Name: "theirs updated"}
+		ours.ID = "shared-id"
+		require.NoError(t, database.Database[*TestTenantSoftDeleteItem](ctxB).Upsert(ours))
+		require.NoError(t, database.Database[*TestTenantSoftDeleteItem](ctxB).Get(got, "shared-id"))
+		require.Equal(t, "theirs updated", got.Name)
+	})
+
 	t.Run("merges on a primary key collision on every dialect", func(t *testing.T) {
 		item := &TestUniqueItem{UniqueCode: "upsert-pk", Name: "before"}
 		require.NoError(t, database.Database[*TestUniqueItem](context.Background()).Upsert(item))
