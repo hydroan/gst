@@ -52,9 +52,15 @@ import (
 //     into that row (see refuseForeignTenantRows): the conflict update is no
 //     UPDATE statement, so the tenant predicate every update carries would
 //     not reach it.
-//   - On MySQL the batches run in a read-committed transaction of their own
-//     (see upsertTxOptions): under the dialect's default level, writers
-//     upserting distinct keys into one index gap deadlock on it.
+//   - On MySQL a transaction Upsert opens for itself reads committed (see
+//     upsertTxOptions): under the dialect's default level the tenant check
+//     above locks the index gap a missing key falls into, and writers of
+//     distinct keys deadlock on it. An Upsert joining the transaction ctx
+//     carries runs at that transaction's level, so concurrent Upserts of a
+//     tenant model inside callers' transactions can still deadlock (error
+//     1213; the transaction to retry is the caller's). MySQL refuses a
+//     read-committed write under binlog_format=STATEMENT (error 1665): the
+//     binary log format has to be ROW, the default since 5.7.7, or MIXED.
 //   - After each batch, caller-owned objects are re-synced from the database
 //     by complete unique-index values: an object that collided exposes the
 //     persisted row's ID instead of the one generated for the insert attempt.
@@ -194,15 +200,19 @@ func (db *database[M]) Upsert(objs ...M) (err error) {
 	}, db.upsertTxOptions()...)
 }
 
-// upsertTxOptions is how the transaction of an Upsert opens. On MySQL it
-// reads committed: under the repeatable-read level the dialect defaults to,
-// the duplicate-key check of INSERT ... ON DUPLICATE KEY UPDATE locks the
-// index gap the new row goes into, and two writers inserting distinct keys
-// into one gap each hold the gap and wait for the other's, which InnoDB
-// resolves by rolling one of them back (error 1213). Read committed locks
-// the record alone, so writers of distinct keys never meet, and nothing an
-// Upsert reads needs a repeatable snapshot. The other dialects take no gap
-// locks and open the transaction they default to.
+// upsertTxOptions are the options of the transaction Upsert opens for
+// itself. On MySQL it reads committed: under the repeatable-read level the
+// dialect defaults to, the FOR UPDATE read of refuseForeignTenantRows locks
+// the index gap a key with no row yet falls into, and two writers whose new
+// keys fall into one gap each hold the gap and wait for the other's when
+// they insert, which InnoDB resolves by rolling one of them back (error
+// 1213); the insert itself takes no gap lock for a key no row holds, so a
+// model without that read never meets another writer. Read committed locks
+// only rows that exist, so writers of distinct keys never meet, and nothing
+// an Upsert reads needs a repeatable snapshot. The other dialects take no
+// gap locks and open the transaction they default to. An Upsert inside a
+// caller's transaction never gets here: withWriteTransaction joins that
+// transaction at its own level.
 func (db *database[M]) upsertTxOptions() []*sql.TxOptions {
 	if db.dialect() != dialectMySQL {
 		return nil
@@ -226,8 +236,11 @@ func (db *database[M]) upsertTxOptions() []*sql.TxOptions {
 // The read answers for the rows that exist when it runs. A row another tenant
 // inserts under one of the keys between the read and the write is merged
 // into: FOR UPDATE locks no row that is not there yet on postgres, nor on
-// MySQL in the read-committed transaction an Upsert runs in (see
-// upsertTxOptions). SQLite has one writer at a time, so it has no window.
+// MySQL in the read-committed transaction an Upsert opens for itself (see
+// upsertTxOptions); in a caller's repeatable-read transaction on MySQL it
+// locks the gap instead, closing the window at the price of the deadlocks
+// upsertTxOptions describes. SQLite has one writer at a time, so it has no
+// window.
 func (db *database[M]) refuseForeignTenantRows(tableName string, objs []M) error {
 	columns, err := modelschema.Columns(reflect.TypeOf(db.m))
 	if err != nil {
