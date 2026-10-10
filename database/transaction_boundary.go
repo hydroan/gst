@@ -88,11 +88,16 @@ func boundaryFromContext(ctx context.Context) (*transactionBoundary, bool) {
 //
 // They receive ctx, the context from before the boundary opened, which carries
 // neither the transaction nor the boundary.
+//
+// opts, when given, are the options the transaction opens with: the isolation
+// level a write asks for on a dialect whose default locks more than the write
+// needs (see upsertTxOptions).
 func withTransactionBoundary(
 	ctx context.Context,
 	base *gorm.DB,
 	ins *gorm.DB,
 	fn func(txCtx context.Context, tx *gorm.DB) error,
+	opts ...*sql.TxOptions,
 ) error {
 	boundary := new(transactionBoundary)
 	// The transaction opens on the primary whatever the chain reads from: a
@@ -104,7 +109,7 @@ func withTransactionBoundary(
 		txCtx := dbruntime.WithTx(ctx, tx, base)
 		txCtx = context.WithValue(txCtx, boundaryContextKey{}, boundary)
 		return fn(txCtx, tx)
-	}); err != nil {
+	}, opts...); err != nil {
 		// A context that ends while its transaction is open has the standard
 		// library roll the transaction back, and the commit after that
 		// reports the transaction done rather than the ending that undid it —
@@ -167,7 +172,7 @@ func isOpenTransaction(instance *gorm.DB) bool {
 // Unlike database.Transaction, this write boundary does not create its own
 // span: spans of hooks and nested writes keep the operation span created by
 // db.trace as their parent instead of moving under a transaction span.
-func (db *database[M]) withWriteTransaction(fn func() error) error {
+func (db *database[M]) withWriteTransaction(fn func() error, opts ...*sql.TxOptions) error {
 	if db.dryRun {
 		return fn()
 	}
@@ -189,7 +194,7 @@ func (db *database[M]) withWriteTransaction(fn func() error) error {
 		}()
 
 		return fn()
-	})
+	}, opts...)
 }
 
 // withSingleStatementWrite runs a write that needs no transaction of its own:

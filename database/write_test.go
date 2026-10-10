@@ -2,6 +2,7 @@ package database_test
 
 import (
 	"context"
+	"fmt"
 	"strconv"
 	"strings"
 	"sync"
@@ -1206,4 +1207,74 @@ func TestDatabaseSingleStatementWriteSkipsTransaction(t *testing.T) {
 		require.NoError(t, database.Database[*TestItem](context.Background()).Get(got, item.ID))
 		require.Equal(t, "tx-updatebyid-b", got.Name)
 	})
+}
+
+// TestDatabaseUpsertConcurrentDistinctKeys pins that Upserts of keys no two
+// of which collide never fail each other: eight writers each upsert forty new
+// records of their own, with ids that interleave across the writers the way
+// an import numbering its rows produces them, and every call answers nil.
+// Writers that only ever insert distinct keys share no row, so nothing they
+// do can be in conflict from the caller's point of view.
+func TestDatabaseUpsertConcurrentDistinctKeys(t *testing.T) {
+	defer cleanupTestData()
+	const writers, perWriter = 8, 40
+
+	var wg sync.WaitGroup
+	errs := make(chan error, writers*perWriter)
+	for w := range writers {
+		wg.Go(func() {
+			for i := range perWriter {
+				item := &TestUniqueItem{UniqueCode: fmt.Sprintf("concurrent-%03d-%d", i, w), Name: "concurrent"}
+				item.ID = fmt.Sprintf("concurrent-%03d-%d", i, w)
+				if err := database.Database[*TestUniqueItem](context.Background()).Upsert(item); err != nil {
+					errs <- err
+				}
+			}
+		})
+	}
+	wg.Wait()
+	close(errs)
+
+	failures := make([]string, 0)
+	for err := range errs {
+		failures = append(failures, err.Error())
+	}
+	require.Empty(t, failures, "%d of %d upserts failed, the first: %s", len(failures), writers*perWriter, strings.Join(failures[:min(1, len(failures))], ""))
+
+	count := new(int)
+	require.NoError(t, database.Database[*TestUniqueItem](context.Background()).Count(count))
+	require.Equal(t, writers*perWriter, *count)
+}
+
+// TestDatabaseUpsertConcurrentDistinctKeysOnATenantModel is the probe above on
+// a tenant-scoped, soft-deleting model, whose rows carry the tenant stamp and
+// the deletion column the plain fixture lacks.
+func TestDatabaseUpsertConcurrentDistinctKeysOnATenantModel(t *testing.T) {
+	require.NoError(t, database.DB().AutoMigrate(&TestTenantSoftDeleteItem{}))
+	defer func() {
+		_ = database.DB().Exec("DELETE FROM test_tenant_soft_delete_items").Error
+	}()
+	const writers, perWriter = 8, 40
+
+	var wg sync.WaitGroup
+	errs := make(chan error, writers*perWriter)
+	for w := range writers {
+		wg.Go(func() {
+			for i := range perWriter {
+				item := &TestTenantSoftDeleteItem{Name: "n"}
+				item.ID = fmt.Sprintf("probe-%02d-%03d", w, i)
+				if err := database.Database[*TestTenantSoftDeleteItem](context.Background()).Upsert(item); err != nil {
+					errs <- err
+				}
+			}
+		})
+	}
+	wg.Wait()
+	close(errs)
+
+	failures := make([]string, 0)
+	for err := range errs {
+		failures = append(failures, err.Error())
+	}
+	require.Empty(t, failures, "%d of %d upserts failed, the first: %s", len(failures), writers*perWriter, strings.Join(failures[:min(1, len(failures))], ""))
 }

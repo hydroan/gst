@@ -2,6 +2,7 @@ package database
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"reflect"
 	"strings"
@@ -51,6 +52,9 @@ import (
 //     into that row (see refuseForeignTenantRows): the conflict update is no
 //     UPDATE statement, so the tenant predicate every update carries would
 //     not reach it.
+//   - On MySQL the batches run in a read-committed transaction of their own
+//     (see upsertTxOptions): under the dialect's default level, writers
+//     upserting distinct keys into one index gap deadlock on it.
 //   - After each batch, caller-owned objects are re-synced from the database
 //     by complete unique-index values: an object that collided exposes the
 //     persisted row's ID instead of the one generated for the insert attempt.
@@ -187,7 +191,23 @@ func (db *database[M]) Upsert(objs ...M) (err error) {
 			}
 		}
 		return nil
-	})
+	}, db.upsertTxOptions()...)
+}
+
+// upsertTxOptions is how the transaction of an Upsert opens. On MySQL it
+// reads committed: under the repeatable-read level the dialect defaults to,
+// the duplicate-key check of INSERT ... ON DUPLICATE KEY UPDATE locks the
+// index gap the new row goes into, and two writers inserting distinct keys
+// into one gap each hold the gap and wait for the other's, which InnoDB
+// resolves by rolling one of them back (error 1213). Read committed locks
+// the record alone, so writers of distinct keys never meet, and nothing an
+// Upsert reads needs a repeatable snapshot. The other dialects take no gap
+// locks and open the transaction they default to.
+func (db *database[M]) upsertTxOptions() []*sql.TxOptions {
+	if db.dialect() != dialectMySQL {
+		return nil
+	}
+	return []*sql.TxOptions{{Isolation: sql.LevelReadCommitted}}
 }
 
 // refuseForeignTenantRows refuses an Upsert whose rows would merge into
@@ -204,10 +224,10 @@ func (db *database[M]) Upsert(objs ...M) (err error) {
 // tenant, and a caller acting across every tenant, pay no read.
 //
 // The read answers for the rows that exist when it runs. A row another tenant
-// inserts under one of the keys between the read and the write is merged into
-// on postgres, where FOR UPDATE locks no row that is not there yet; MySQL
-// locks the gap such a key would take under its default isolation level, and
-// SQLite has one writer at a time, so neither has the window.
+// inserts under one of the keys between the read and the write is merged
+// into: FOR UPDATE locks no row that is not there yet on postgres, nor on
+// MySQL in the read-committed transaction an Upsert runs in (see
+// upsertTxOptions). SQLite has one writer at a time, so it has no window.
 func (db *database[M]) refuseForeignTenantRows(tableName string, objs []M) error {
 	columns, err := modelschema.Columns(reflect.TypeOf(db.m))
 	if err != nil {
