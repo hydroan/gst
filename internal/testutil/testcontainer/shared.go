@@ -67,7 +67,8 @@ func dedicatedContainersRequested() bool {
 }
 
 // reuseAcrossRuns attaches to the shared container named name, creating it
-// when it does not exist yet, and keeps it out of the reaper's reach.
+// when it does not exist yet, keeps it out of the reaper's reach, and caps
+// the log Docker keeps of it.
 //
 // The reaper removes every container carrying the labels of its session once
 // the test binaries of that session are gone, and testcontainers gives a
@@ -77,23 +78,46 @@ func dedicatedContainersRequested() bool {
 // stay on for everything else, so every dedicated container keeps its crash
 // cleanup. The labels come from testcontainers.GenericLabels, the library's
 // own account of what the reaper matches, not from a copy of their names.
+//
+// Docker's json-file log driver keeps everything a container ever wrote to
+// its standard streams, with no limit unless one is set, and a shared
+// container lives for weeks: the cap (see sharedContainerLogConfig) keeps a
+// chatty instance from growing a log file for as long as it runs. Like the
+// command line, the cap shapes a container only when it is created; a
+// container running without it is replaced by hand (docker rm -f).
 func reuseAcrossRuns(name string) testcontainers.CustomizeRequestOption {
 	return func(req *testcontainers.GenericContainerRequest) error {
 		if err := testcontainers.WithReuseByName(name)(req); err != nil {
 			return err
 		}
-		return testcontainers.WithConfigModifier(func(config *container.Config) {
+		if err := testcontainers.WithConfigModifier(func(config *container.Config) {
 			for key := range testcontainers.GenericLabels() {
 				delete(config.Labels, key)
 			}
+		})(req); err != nil {
+			return err
+		}
+		return testcontainers.WithHostConfigModifier(func(hostConfig *container.HostConfig) {
+			hostConfig.LogConfig = sharedContainerLogConfig()
 		})(req)
 	}
 }
 
+// sharedContainerLogConfig is the log driver configuration of a shared
+// container: the json-file driver Docker defaults to, rotated at ten
+// megabytes and keeping one rotated file, so a container's log never holds
+// more than twenty megabytes.
+func sharedContainerLogConfig() container.LogConfig {
+	return container.LogConfig{
+		Type:   "json-file",
+		Config: map[string]string{"max-size": "10m", "max-file": "2"},
+	}
+}
+
 // sharedContainerName derives the fixed container name from an image
-// reference and the command line the container is created with, e.g.
-// "mysql:8.4" without arguments becomes "gst-test-mysql-8-4" and with
-// arguments "gst-test-mysql-8-4-1f2e3d4c".
+// reference and what the container is created with, the command line or a
+// configuration file's content, e.g. "mysql:8.4" without arguments becomes
+// "gst-test-mysql-8-4" and with arguments "gst-test-mysql-8-4-1f2e3d4c".
 //
 // Both inputs shape the name because reuse attaches to whatever container
 // already carries it, while the creation options only shape a container that

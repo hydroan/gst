@@ -3,6 +3,7 @@ package testcontainer
 import (
 	"context"
 	"fmt"
+	"os"
 
 	// Registers the "clickhouse" driver the shared setup provisions databases
 	// with.
@@ -19,6 +20,51 @@ const (
 	clickhouseUsername = "test"
 	clickhousePassword = "test"
 )
+
+// clickhouseQuietConfig is the server configuration the test containers run
+// with. A server with the stock configuration writes a row of asynchronous
+// metrics, traces and text into system log tables every second and spends
+// its idle time merging them, which is what a test instance that lives for
+// weeks is mostly busy with; the logs are removed and the asynchronous
+// metrics collected once a minute. The content shapes the shared container's
+// name (see sharedContainerName), so a change here starts a fresh container
+// instead of attaching to one running the old configuration.
+const clickhouseQuietConfig = `<clickhouse>
+    <query_log remove="remove"/>
+    <query_thread_log remove="remove"/>
+    <query_views_log remove="remove"/>
+    <part_log remove="remove"/>
+    <text_log remove="remove"/>
+    <trace_log remove="remove"/>
+    <metric_log remove="remove"/>
+    <asynchronous_metric_log remove="remove"/>
+    <processors_profile_log remove="remove"/>
+    <session_log remove="remove"/>
+    <error_log remove="remove"/>
+    <asynchronous_metrics_update_period_s>60</asynchronous_metrics_update_period_s>
+</clickhouse>
+`
+
+// clickhouseConfigFile writes clickhouseQuietConfig to a file the clickhouse
+// module copies into a container it creates, and returns the path and the
+// function removing the file: the module reads it while the container is
+// created, and nothing afterwards.
+func clickhouseConfigFile() (string, func(), error) {
+	f, err := os.CreateTemp("", "gst-clickhouse-*.xml")
+	if err != nil {
+		return "", nil, errors.Wrap(err, "failed to write the clickhouse configuration")
+	}
+	if _, err = f.WriteString(clickhouseQuietConfig); err != nil {
+		_ = f.Close()
+		_ = os.Remove(f.Name())
+		return "", nil, errors.Wrap(err, "failed to write the clickhouse configuration")
+	}
+	if err = f.Close(); err != nil {
+		_ = os.Remove(f.Name())
+		return "", nil, errors.Wrap(err, "failed to write the clickhouse configuration")
+	}
+	return f.Name(), func() { _ = os.Remove(f.Name()) }, nil
+}
 
 // clickhouseSharedDialect provisions per-binary databases inside the shared
 // clickhouse container. The bootstrap user of the image holds every grant
@@ -55,11 +101,17 @@ func setupDedicatedClickhouse() (config.Clickhouse, func() error, error) {
 	muteContainerLog()
 	ctx := context.Background()
 
+	configFile, removeConfig, err := clickhouseConfigFile()
+	if err != nil {
+		return config.Clickhouse{}, nil, err
+	}
+	defer removeConfig()
 	c, err := clickhouse.Run(
 		ctx, clickhouseImage,
 		clickhouse.WithDatabase(clickhouseDatabase),
 		clickhouse.WithUsername(clickhouseUsername),
 		clickhouse.WithPassword(clickhousePassword),
+		clickhouse.WithConfigFile(configFile),
 	)
 	if err != nil {
 		return config.Clickhouse{}, nil, errors.Wrap(err, "failed to start clickhouse container")
@@ -84,7 +136,7 @@ func setupDedicatedClickhouse() (config.Clickhouse, func() error, error) {
 func setupSharedClickhouse() (config.Clickhouse, func() error, error) {
 	muteContainerLog()
 	ctx := context.Background()
-	containerName := sharedContainerName(clickhouseImage)
+	containerName := sharedContainerName(clickhouseImage, clickhouseQuietConfig)
 
 	var (
 		host     string
@@ -93,10 +145,16 @@ func setupSharedClickhouse() (config.Clickhouse, func() error, error) {
 		release  func() error
 	)
 	err := withSharedContainerLock(containerName, func() error {
+		configFile, removeConfig, err := clickhouseConfigFile()
+		if err != nil {
+			return err
+		}
+		defer removeConfig()
 		c, err := clickhouse.Run(
 			ctx, clickhouseImage,
 			clickhouse.WithUsername(clickhouseUsername),
 			clickhouse.WithPassword(clickhousePassword),
+			clickhouse.WithConfigFile(configFile),
 			reuseAcrossRuns(containerName),
 		)
 		if err != nil {
