@@ -1210,43 +1210,66 @@ func TestDatabaseSingleStatementWriteSkipsTransaction(t *testing.T) {
 }
 
 // TestDatabaseUpsertConcurrentDistinctKeysOnATenantModel pins that Upserts
-// of keys no two of which collide never fail each other: eight writers each
-// upsert forty new records of their own, and every call answers nil. The
-// model is tenant-scoped on purpose: on MySQL the tenant check reads the
-// rows a batch could merge into before writing, and a locked read of a key
-// no row holds yet is what deadlocked writers under the dialect's default
-// isolation level (see upsertTxOptions); a model without a tenant column has
-// no such read, and nothing in its Upsert can meet another writer's.
+// of keys no two of which collide never fail each other, whether each Upsert
+// opens a transaction of its own or joins one the caller opened: eight
+// writers each upsert forty new records of their own, and every call answers
+// nil. The model is tenant-scoped on purpose: the tenant check reads the rows
+// a batch could merge into before writing, and that read is where a lock
+// would put writers of distinct keys in each other's way — on MySQL under
+// the repeatable-read level it defaults to, a FOR UPDATE read of a key no
+// row holds yet locks the index gap the key falls into, and writers whose
+// new keys share a gap deadlock on it (error 1213). A model without a tenant
+// column has no such read, and nothing in its Upsert can meet another
+// writer's. The caller's-transaction scenario runs first: with such a lock in
+// place its deadlocks reproduce in every run there, and only rarely once the
+// other scenario has run before it.
 func TestDatabaseUpsertConcurrentDistinctKeysOnATenantModel(t *testing.T) {
 	require.NoError(t, database.DB().AutoMigrate(&TestTenantSoftDeleteItem{}))
 	purge := func() { _ = database.DB().Exec("DELETE FROM test_tenant_soft_delete_items").Error }
-	purge()
-	defer purge()
 	const writers, perWriter = 8, 40
 
-	var wg sync.WaitGroup
-	errs := make(chan error, writers*perWriter)
-	for w := range writers {
-		wg.Go(func() {
-			for i := range perWriter {
-				item := &TestTenantSoftDeleteItem{Name: "n"}
-				item.ID = fmt.Sprintf("probe-%02d-%03d", w, i)
-				if err := database.Database[*TestTenantSoftDeleteItem](context.Background()).Upsert(item); err != nil {
-					errs <- err
-				}
+	for _, tc := range []struct {
+		name  string
+		write func(item *TestTenantSoftDeleteItem) error
+	}{
+		{"inside the caller's transaction", func(item *TestTenantSoftDeleteItem) error {
+			return database.Transaction(context.Background(), func(ctx context.Context) error {
+				return database.Database[*TestTenantSoftDeleteItem](ctx).Upsert(item)
+			})
+		}},
+		{"in a transaction of its own", func(item *TestTenantSoftDeleteItem) error {
+			return database.Database[*TestTenantSoftDeleteItem](context.Background()).Upsert(item)
+		}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			purge()
+			defer purge()
+
+			var wg sync.WaitGroup
+			errs := make(chan error, writers*perWriter)
+			for w := range writers {
+				wg.Go(func() {
+					for i := range perWriter {
+						item := &TestTenantSoftDeleteItem{Name: "n"}
+						item.ID = fmt.Sprintf("probe-%02d-%03d", w, i)
+						if err := tc.write(item); err != nil {
+							errs <- err
+						}
+					}
+				})
 			}
+			wg.Wait()
+			close(errs)
+
+			failures := make([]string, 0)
+			for err := range errs {
+				failures = append(failures, err.Error())
+			}
+			require.Empty(t, failures, "%d of %d upserts failed, the first: %s", len(failures), writers*perWriter, strings.Join(failures[:min(1, len(failures))], ""))
+
+			count := new(int)
+			require.NoError(t, database.Database[*TestTenantSoftDeleteItem](context.Background()).Count(count))
+			require.Equal(t, writers*perWriter, *count)
 		})
 	}
-	wg.Wait()
-	close(errs)
-
-	failures := make([]string, 0)
-	for err := range errs {
-		failures = append(failures, err.Error())
-	}
-	require.Empty(t, failures, "%d of %d upserts failed, the first: %s", len(failures), writers*perWriter, strings.Join(failures[:min(1, len(failures))], ""))
-
-	count := new(int)
-	require.NoError(t, database.Database[*TestTenantSoftDeleteItem](context.Background()).Count(count))
-	require.Equal(t, writers*perWriter, *count)
 }
