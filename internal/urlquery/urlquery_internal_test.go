@@ -31,10 +31,31 @@ type filterTestModel struct {
 	// latter through its column tag, while the URL keeps the json name.
 	GroupIDs string `json:"group_ids"`
 	Renamed  string `json:"renamed" gorm:"column:custom_column"`
+	// Secret is a column hidden from clients: json:"-" keeps it out of
+	// responses and out of every query. Virtual is no column at all: a bare
+	// key fills it for the service's own use.
+	Secret  string `json:"-"`
+	Virtual string `json:"virtual" gorm:"-"`
 
 	modelregistry.Query
 	modelregistry.Base
 }
+
+// HiddenCredentials is embedded by embeddingTestModel: its column is hidden
+// from clients from inside an embedded struct, where the field's index path
+// is the one gorm composes.
+type HiddenCredentials struct {
+	Token string `json:"-"`
+}
+
+type embeddingTestModel struct {
+	HiddenCredentials
+	Name string `json:"name"`
+
+	modelregistry.Base
+}
+
+func (*embeddingTestModel) TableName() string { return "embedding_test_models" }
 
 func TestFilters(t *testing.T) {
 	t.Run("ExtractsOperatorConditionsAndIgnoresOtherKeys", func(t *testing.T) {
@@ -413,6 +434,28 @@ func TestDecode(t *testing.T) {
 		require.EqualError(t, Decode(url.Values{"expired_at": {"2026-07-01"}}, &m),
 			`unsupported query parameter "expired_at"`,
 			"a time column filters through created_at-style operator keys, never through a bare key")
+	})
+
+	t.Run("RejectsColumnsHiddenFromClients", func(t *testing.T) {
+		var m filterTestModel
+		require.EqualError(t, Decode(url.Values{"secret": {"s"}}, &m),
+			`unsupported query parameter "secret"`,
+			"a column hidden from JSON is not the client's to filter, by a bare key no more than by an operator key")
+		require.Empty(t, m.Secret)
+	})
+
+	t.Run("RejectsHiddenColumnsOfEmbeddedStructs", func(t *testing.T) {
+		var m embeddingTestModel
+		require.EqualError(t, Decode(url.Values{"token": {"t"}}, &m),
+			`unsupported query parameter "token"`)
+		require.NoError(t, Decode(url.Values{"name": {"n"}}, &m))
+		require.Equal(t, "n", m.Name)
+	})
+
+	t.Run("FillsFieldsThatAreNotColumns", func(t *testing.T) {
+		var m filterTestModel
+		require.NoError(t, Decode(url.Values{"virtual": {"v"}}, &m))
+		require.Equal(t, "v", m.Virtual, "a field that is no column is the service's parameter and decodes like any other")
 	})
 
 	t.Run("KeepsFilterKeysAwayFromTheDecoder", func(t *testing.T) {

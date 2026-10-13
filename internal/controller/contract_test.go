@@ -200,6 +200,28 @@ func TestTransportsAnswerTheContractAlike(t *testing.T) {
 			want:  contractWant{status: http.StatusBadRequest},
 		},
 		{
+			name: "List refuses a bare key on a column hidden from clients", fixture: samples, phase: consts.List,
+			input: contractInput{query: controller.Query{Filters: []controller.Filter{{Field: "secret", Values: []string{"value"}}}}},
+			want:  contractWant{status: http.StatusBadRequest},
+		},
+		{
+			name: "List accepts a bare key on a field that is not a column and leaves the records to the service", fixture: samples, phase: consts.List,
+			prepare: func(t *testing.T) contractInput {
+				t.Helper()
+				prefix := uniqueName("contract-virtual")
+				createSample(t, prefix+"-a")
+				return contractInput{query: controller.Query{Filters: []controller.Filter{
+					{Field: "name", Op: "startswith", Values: []string{prefix}},
+					{Field: "virtual", Values: []string{"value"}},
+				}}}
+			},
+			want: ok,
+			check: func(t *testing.T, in contractInput, got contractAnswer) {
+				t.Helper()
+				require.EqualValues(t, 1, dataMap(t, got)["total"])
+			},
+		},
+		{
 			name: "List matches a date filter by the UTC day", fixture: dated, phase: consts.List,
 			prepare: func(t *testing.T) contractInput {
 				t.Helper()

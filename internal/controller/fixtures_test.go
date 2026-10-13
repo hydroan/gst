@@ -27,10 +27,15 @@ import (
 )
 
 // sampleRecord is the table model the handler tests read and write, keyed by
-// a string id; the note is a second field for a patch to leave alone.
+// a string id; the note is a second field for a patch to leave alone. Secret
+// is a column hidden from clients: json:"-" keeps it out of responses and
+// out of every query. Virtual is no column: a bare key fills it for the
+// service's own use, and the listing leaves it alone.
 type sampleRecord struct {
-	Name string `json:"name"`
-	Note string `json:"note"`
+	Name    string `json:"name"`
+	Note    string `json:"note"`
+	Secret  string `json:"-"`
+	Virtual string `json:"virtual,omitempty" gorm:"-"`
 
 	modelregistry.Query
 	modelregistry.Base
