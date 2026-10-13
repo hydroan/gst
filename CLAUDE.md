@@ -244,7 +244,7 @@ cluster 是多副本示例，也是框架分布式、多副本和 gRPC 能力的
 - 修改 model 的 DSL、接口路径、REQ/RSP、service 开关后，需要重新执行 `gg gen`，并检查生成的 router 和 service 注册是否符合预期。
 - 修改声明了 `Migrate()` 的数据库模型字段后，需要执行 `gg migrate --dry-run` 检查 `generated/migrate/<dbtype>/schema.sql` 和迁移计划，再用 `gg migrate` 按确认处理 schema 变化。
 - 改索引名必须"先 `gg migrate` 后发布"：开启 auto_migrate 的环境先发布，启动期会发现同定义的索引还挂在旧名下，直接报错退出并给出改名语句（启动期不 DROP 任何索引）；关闭 auto_migrate 的环境先发布不报错，但模型与库会一直漂移到执行 `gg migrate` 为止；migrate 计划前的疑似改名提示应优先按指引执行改名语句（advisory 按方言给出：MySQL `RENAME INDEX`，PostgreSQL `ALTER INDEX ... RENAME TO`）。
-- 改表名同理：迁移计划会给出 `DROP TABLE` + `CREATE TABLE`，直接执行会清空整表数据；应按 Rename Advisory 指引执行表改名语句（MySQL `RENAME TABLE`，PostgreSQL `ALTER TABLE ... RENAME TO`，连同伴生的索引改名）后重跑 `gg migrate`。
+- 改表名同理：迁移计划会给出 `DROP TABLE` + `CREATE TABLE`，直接执行会清空整表数据；应按 Rename Advisory 指引执行表改名语句（MySQL `RENAME TABLE`，PostgreSQL 和 SQLite `ALTER TABLE ... RENAME TO`，连同伴生的索引改名；SQLite 不能给索引改名，指引给的是 `DROP INDEX`，重跑后按新名重建）后重跑 `gg migrate`。SQLite 库里已有列的类型、非空、默认值或 CHECK 与模型不一致时，`gg migrate` 直接报错并给出重建步骤，不会当成无变化。
 - 不要手写覆盖生成文件；如果生成结果不符合预期，优先修正 model DSL 或框架生成逻辑。
 - 后端服务启动后，通过 `/docs/index.html` 检查生成的 Swagger 文档和接口路径。
 - 后端项目自身如果已有测试，修改业务逻辑后需要运行对应测试；涉及框架仓库改动时仍按 gst 仓库要求执行 `make check`。
