@@ -64,6 +64,42 @@ import _ "tmpapp/service/adminauth"
 	}
 }
 
+// TestFindOrphanDirsKeepsTheFilesOfAnImportedHelperDirItWasToDelete pins
+// that a file prune was to delete — one named like a disabled action's
+// service file — is kept when it sits in a helper directory live code
+// imports, and counts as live code from then on: what it imports keeps its
+// directory too.
+func TestFindOrphanDirsKeepsTheFilesOfAnImportedHelperDirItWasToDelete(t *testing.T) {
+	setupOrphanPruneProject(t)
+
+	writeProjectFile(t, filepath.Join("service", "authz", "role.go"), `package authz
+
+import _ "tmpapp/service/shared"
+`)
+	listFile := filepath.Join("service", "shared", "list.go")
+	writeProjectFile(t, listFile, `package shared
+
+import _ "tmpapp/service/sharedb"
+`)
+	writeProjectFile(t, filepath.Join("service", "sharedb", "sharedb.go"), `package sharedb
+`)
+
+	orphans, keptHelpers, keptFiles, err := ggprune.FindOrphanDirs([]*modelinfo.Model{orphanPruneModel()}, nil, []string{listFile}, "tmpapp", gghelper.NewProjectIgnore(), ggconfig.PruneConfig{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(orphans) != 0 {
+		t.Fatalf("a helper the kept file imports is no orphan, got %#v", orphans)
+	}
+	if !reflect.DeepEqual(keptFiles, []string{listFile}) {
+		t.Fatalf("keptFiles = %#v, want [%s]", keptFiles, listFile)
+	}
+	wantDirs := []string{filepath.Join("service", "shared"), filepath.Join("service", "sharedb")}
+	if len(keptHelpers) != 2 || keptHelpers[0].Path != wantDirs[0] || keptHelpers[1].Path != wantDirs[1] {
+		t.Fatalf("keptHelpers = %#v, want %v", keptHelpers, wantDirs)
+	}
+}
+
 func TestFindOrphanDirsKeepsTransitiveHelperImports(t *testing.T) {
 	setupOrphanPruneProject(t)
 
@@ -273,7 +309,7 @@ func TestFindOrphanDirsFailsOnImportsItCannotRead(t *testing.T) {
 				lockPath(t, tt.locked)
 			}
 
-			orphans, keptHelpers, err := ggprune.FindOrphanDirs([]*modelinfo.Model{helperImportModel()}, nil, nil, "tmpapp", gghelper.NewProjectIgnore(), ggconfig.PruneConfig{})
+			orphans, keptHelpers, _, err := ggprune.FindOrphanDirs([]*modelinfo.Model{helperImportModel()}, nil, nil, "tmpapp", gghelper.NewProjectIgnore(), ggconfig.PruneConfig{})
 
 			if err == nil || !strings.Contains(err.Error(), tt.want) {
 				t.Fatalf("FindOrphanDirs() error = %v, want one naming %s", err, tt.want)
@@ -492,7 +528,7 @@ func setupOrphanPruneProject(t *testing.T) {
 func findOrphanDirs(t *testing.T, models []*modelinfo.Model, keptDirs map[string]bool, protect ggconfig.PruneConfig, deleting ...string) (orphans, keptHelpers []ggprune.OrphanDir) {
 	t.Helper()
 
-	orphans, keptHelpers, err := ggprune.FindOrphanDirs(models, keptDirs, deleting, "tmpapp", gghelper.NewProjectIgnore(), protect)
+	orphans, keptHelpers, _, err := ggprune.FindOrphanDirs(models, keptDirs, deleting, "tmpapp", gghelper.NewProjectIgnore(), protect)
 	if err != nil {
 		t.Fatal(err)
 	}

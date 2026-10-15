@@ -475,6 +475,45 @@ func TestPruneLeftoversKeepsOrphansWhenADisabledFileStays(t *testing.T) {
 	}
 }
 
+// TestPruneLeftoversKeepsTheServiceFilesOfAnImportedHelperDir pins that a
+// file named like a disabled action's service file is kept when it sits in
+// a helper directory live code imports: the file is part of the package the
+// import needs, so deleting it would break the build the directory was kept
+// for. It is reported with the kept directory, not among the disabled files,
+// and with nothing else to delete prune has nothing to prune.
+func TestPruneLeftoversKeepsTheServiceFilesOfAnImportedHelperDir(t *testing.T) {
+	oldModule := module
+	t.Cleanup(func() { module = oldModule })
+	module = "tmpapp"
+	t.Chdir(t.TempDir())
+	writeProjectFile(t, "go.mod", "module tmpapp\n\ngo 1.26\n")
+	roleDir := filepath.Join(ggconst.DirService, "authz", "role")
+	currentFile := filepath.Join(roleDir, "role.go")
+	helperDir := filepath.Join(ggconst.DirService, "shared")
+	helperListFile := filepath.Join(helperDir, "list.go")
+	writeProjectFile(t, currentFile, "package role\n\nimport _ \"tmpapp/service/shared\"\n")
+	writeProjectFile(t, helperListFile, "package shared\n")
+
+	var stdout string
+	withStdin(t, "y\n", func() {
+		stdout = captureStdout(t, func() {
+			pruneLeftovers([]string{currentFile, helperListFile}, []*modelinfo.Model{pruneTestModel()}, nil, nil, gghelper.NewProjectIgnore(), ggconfig.PruneConfig{}, nil, nil)
+		})
+	})
+
+	if _, err := os.Stat(helperListFile); err != nil {
+		t.Errorf("%s is part of a helper package live code imports and should be kept: %v", helperListFile, err)
+	}
+	for _, want := range []string{"Service Helper Directories Kept", helperDir + " (imported by live project code)", "Nothing to prune"} {
+		if !strings.Contains(stdout, want) {
+			t.Errorf("output lacks %q:\n%s", want, stdout)
+		}
+	}
+	if strings.Contains(stdout, "Disabled Service Files") {
+		t.Errorf("a kept helper's file must not be listed as a disabled service file:\n%s", stdout)
+	}
+}
+
 // TestPruneLeftoversCleansUpAfterARemovedCopiedModule pins that the removal
 // path gg module copy prints, deleting model/<name> and then pruning, takes
 // the middleware the copy wrote as well: the file carrying the module's

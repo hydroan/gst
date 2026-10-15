@@ -28,7 +28,10 @@ type OrphanDir struct {
 
 // FindOrphanDirs resolves service directory ownership and returns the orphan
 // directories plus the helper directories kept because live project code
-// still imports them. It reads the project's code through ignore, as gg check
+// still imports them, and the files of deleting kept along with those
+// directories: a file inside a kept directory is part of the package the
+// import needs, whatever it is named, and deleting it would break the build
+// the directory is kept for. It reads the project's code through ignore, as gg check
 // and gg gen do: code the project ignores keeps nothing. Directories in
 // keptDirs hold service files of gst.yaml-ignored actions and are treated as
 // owned; keptDirs may be nil. deleting are the files prune deletes besides
@@ -39,7 +42,7 @@ type OrphanDir struct {
 // code it reads cannot be read, because a directory or a file cannot be
 // opened or its imports do not parse: an import it could not see might be all
 // that keeps a directory.
-func FindOrphanDirs(allModels []*modelinfo.Model, keptDirs map[string]bool, deleting []string, modulePath string, ignore gghelper.ProjectIgnore, protect ggconfig.PruneConfig) (orphans, keptHelpers []OrphanDir, err error) {
+func FindOrphanDirs(allModels []*modelinfo.Model, keptDirs map[string]bool, deleting []string, modulePath string, ignore gghelper.ProjectIgnore, protect ggconfig.PruneConfig) (orphans, keptHelpers []OrphanDir, keptFiles []string, err error) {
 	currentDirs := currentServiceDirs(allModels)
 	for dir := range keptDirs {
 		currentDirs.ownedDirs = append(currentDirs.ownedDirs, dir)
@@ -47,10 +50,24 @@ func FindOrphanDirs(allModels []*modelinfo.Model, keptDirs map[string]bool, dele
 	}
 	sort.Strings(currentDirs.ownedDirs)
 
-	helperDirs, err := importedServiceHelperDirs(currentDirs, deleting, modulePath, ignore, protect)
-	if err != nil {
-		return nil, nil, err
+	// A file of deleting inside a directory live code imports is live code
+	// itself, so it is kept, and what it imports then counts: the directories
+	// are worked out again without it, until no file of deleting is left
+	// inside a kept one.
+	deleting = slices.Clone(deleting)
+	var helperDirs []string
+	for {
+		if helperDirs, err = importedServiceHelperDirs(currentDirs, deleting, modulePath, ignore, protect); err != nil {
+			return nil, nil, nil, err
+		}
+		kept := filesInsideDirs(deleting, helperDirs)
+		if len(kept) == 0 {
+			break
+		}
+		keptFiles = append(keptFiles, kept...)
+		deleting = slices.DeleteFunc(deleting, func(file string) bool { return slices.Contains(kept, file) })
 	}
+	sort.Strings(keptFiles)
 	keptHelpers = make([]OrphanDir, 0, len(helperDirs))
 	for _, dir := range helperDirs {
 		keptHelpers = append(keptHelpers, OrphanDir{
@@ -63,7 +80,20 @@ func FindOrphanDirs(allModels []*modelinfo.Model, keptDirs map[string]bool, dele
 	sort.Strings(currentDirs.ownedDirs)
 
 	orphans = scanOrphanServiceDirs(currentDirs, deleting, protect)
-	return orphans, keptHelpers, nil
+	return orphans, keptHelpers, keptFiles, nil
+}
+
+// filesInsideDirs returns the files among files that sit right in one of
+// dirs or anywhere below it.
+func filesInsideDirs(files, dirs []string) []string {
+	inside := make([]string, 0)
+	for _, file := range files {
+		dir := filepath.Clean(filepath.Dir(file))
+		if slices.Contains(dirs, dir) || isInsideAnyDir(dir, dirs) {
+			inside = append(inside, file)
+		}
+	}
+	return inside
 }
 
 // serviceDirSet is the part of the service directory orphan cleanup leaves

@@ -146,6 +146,7 @@ stop
 1. 现有的 gg 管的 service 文件，去掉当前应有的；`gg gen --prune` 时再去掉被路由屏蔽的 action 的 service 文件。
 2. 每个停用的 service 文件后面跟上它磁盘上存在的配对测试文件。
 3. 剩下的里面被 `prune.ignore` 覆盖的，移出清单，列在 `Files Ignored By Config` 下面；配对测试文件也按同一条规则各自判断。
+4. 落在 1.2 保留的目录（含子目录）里的，移出清单：它们是被 import 的包的一部分，不管叫什么名字，删了项目编不过。移出后它们算活代码，它们 import 的目录按 1.2 重算，直到清单不再变化。这些文件列在 `Service Helper Directories Kept` 下面。
 
 ### 1.2 找出还有活代码在用的目录
 

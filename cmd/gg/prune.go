@@ -220,7 +220,11 @@ func pruneLeftovers(oldServiceFiles []string, allModels []*modelinfo.Model, kept
 
 	plan := ggprune.PlanFiles(oldServiceFiles, allModels, keptFiles, protect)
 	pbPlan := ggprune.PlanPBFiles(oldPBFiles, generatedPBFiles, protect)
-	orphans, keptHelpers, orphanHandlers := findOrphans(allModels, keptDirs, plan.Delete, ignore, protect)
+	orphans, keptHelpers, keptHelperFiles, orphanHandlers := findOrphans(allModels, keptDirs, plan.Delete, ignore, protect)
+	// A disabled action's file name inside a helper directory live code
+	// imports names a file of that package: kept with the directory (see
+	// ggprune.FindOrphanDirs), it leaves the deletion list.
+	plan.Delete = slices.DeleteFunc(plan.Delete, func(file string) bool { return slices.Contains(keptHelperFiles, file) })
 	nothingToDelete := len(plan.Delete) == 0 && len(orphans) == 0 && len(orphanHandlers) == 0 && len(pbPlan.Delete) == 0
 	if nothingToDelete {
 		clioutput.Success("", "Nothing to prune")
@@ -232,7 +236,7 @@ func pruneLeftovers(oldServiceFiles []string, allModels []*modelinfo.Model, kept
 			clioutput.Item("", "ignore %s", file)
 		}
 	}
-	reportKeptServiceHelperDirs(keptHelpers)
+	reportKeptServiceHelperDirs(keptHelpers, keptHelperFiles)
 	if nothingToDelete {
 		return
 	}
@@ -277,24 +281,25 @@ func pruneLeftovers(oldServiceFiles []string, allModels []*modelinfo.Model, kept
 // see ggprune.FindOrphanDirs for the ownership rules, and the middleware and
 // interceptors module copy wrote for modules the project removed, see
 // orphanModuleFiles. It returns as well the helper directories kept
-// because live code imports them. When the project's code cannot be read in
-// full, it warns and finds no orphans.
-func findOrphans(allModels []*modelinfo.Model, keptDirs map[string]bool, deleting []string, ignore gghelper.ProjectIgnore, protect ggconfig.PruneConfig) (orphans, keptHelpers []ggprune.OrphanDir, orphanHandlers []ggmodule.OrphanManagedFile) {
+// because live code imports them, with the files of deleting kept along
+// with them. When the project's code cannot be read in full, it warns and
+// finds no orphans.
+func findOrphans(allModels []*modelinfo.Model, keptDirs map[string]bool, deleting []string, ignore gghelper.ProjectIgnore, protect ggconfig.PruneConfig) (orphans, keptHelpers []ggprune.OrphanDir, keptFiles []string, orphanHandlers []ggmodule.OrphanManagedFile) {
 	orphanHandlers, err := orphanModuleFiles(protect)
 	if err != nil {
 		clioutput.Warn("", "failed to read the middleware or interceptor directory, so orphans are not checked: %v", err)
-		return nil, nil, nil
+		return nil, nil, nil, nil
 	}
 	deleting = slices.Clone(deleting)
 	for _, file := range orphanHandlers {
 		deleting = append(deleting, file.Path)
 	}
-	orphans, keptHelpers, err = ggprune.FindOrphanDirs(allModels, keptDirs, deleting, module, ignore, protect)
+	orphans, keptHelpers, keptFiles, err = ggprune.FindOrphanDirs(allModels, keptDirs, deleting, module, ignore, protect)
 	if err != nil {
 		clioutput.Warn("", "failed to trace which service directories live code imports, so orphan service directories are not checked: %v", err)
-		return nil, nil, nil
+		return nil, nil, nil, nil
 	}
-	return orphans, keptHelpers, orphanHandlers
+	return orphans, keptHelpers, keptFiles, orphanHandlers
 }
 
 // deleteLeftovers deletes what pruneLeftovers listed, in this order: the
@@ -443,12 +448,15 @@ func reportOrphanServiceDirs(orphans []ggprune.OrphanDir) {
 
 // reportKeptServiceHelperDirs explains why unmanaged helper directories are
 // no orphans: live project code still imports them.
-func reportKeptServiceHelperDirs(keptHelpers []ggprune.OrphanDir) {
+func reportKeptServiceHelperDirs(keptHelpers []ggprune.OrphanDir, keptFiles []string) {
 	if len(keptHelpers) == 0 {
 		return
 	}
 	clioutput.Section("Service Helper Directories Kept")
 	for _, helper := range keptHelpers {
 		clioutput.Item("", "%s (imported by live project code)", helper.Path)
+	}
+	for _, file := range keptFiles {
+		clioutput.Item("", "%s (part of a kept helper package, not a disabled service file)", file)
 	}
 }
