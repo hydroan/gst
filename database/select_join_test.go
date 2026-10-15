@@ -9,7 +9,6 @@ import (
 	"github.com/hydroan/gst/internal/types"
 	"github.com/hydroan/gst/tenant"
 	"github.com/stretchr/testify/require"
-	"gorm.io/datatypes"
 )
 
 // The join tests read the seeded payments (see paymentSeed in
@@ -492,7 +491,7 @@ func TestSelectJoinRowLevelReads(t *testing.T) {
 		// column under its table; bare, two tables with the column name
 		// would make the statement ambiguous.
 		userID := types.NewColumn[*TestUser, string]("id")
-		userAddr := types.NewColumn[*TestUser, datatypes.JSONSlice[string]]("addr")
+		userAddr := types.NewJSONStringsColumn[*TestUser]("addr")
 		type named struct {
 			ID   string
 			Name string

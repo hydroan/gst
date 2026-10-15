@@ -70,6 +70,19 @@ func NewTimeColumn[M TableNamer](name string) TimeColumn {
 	return types.NewTimeColumn[M](name)
 }
 
+// JSONStringsColumn is the reference generated for a column storing a JSON
+// array of strings. It embeds Column over datatypes.JSONSlice[string], the
+// type that binds such an array as a JSON document, and adds the membership
+// test, which only such a column answers alike on every dialect.
+type JSONStringsColumn = types.JSONStringsColumn
+
+// NewJSONStringsColumn returns the reference to the named column of M's
+// table storing a JSON array of strings, carrying JSONContains on top of
+// everything Column has.
+func NewJSONStringsColumn[M TableNamer](name string) JSONStringsColumn {
+	return types.NewJSONStringsColumn[M](name)
+}
+
 // Bound is one end of the range a column's comparison filters confine it to:
 // the value at that end, whether the range includes it, and whether any filter
 // gave that end at all. An absent end leaves the range open on that side.

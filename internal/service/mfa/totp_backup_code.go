@@ -16,7 +16,6 @@ import (
 	"github.com/hydroan/gst/consts"
 	"github.com/hydroan/gst/database"
 	modelmfa "github.com/hydroan/gst/internal/model/mfa"
-	"gorm.io/datatypes"
 )
 
 const (
@@ -31,7 +30,7 @@ const (
 // stale in-memory device snapshot can never write back a recovery-code hash
 // that a concurrently committed consumption already removed.
 var (
-	colTOTPDeviceBackupCodeHashes = gst.NewColumn[*modelmfa.TOTPDevice, datatypes.JSONSlice[string]]("backup_code_hashes")
+	colTOTPDeviceBackupCodeHashes = gst.NewJSONStringsColumn[*modelmfa.TOTPDevice]("backup_code_hashes")
 	colTOTPDeviceLastUsedAt       = gst.NewTimeColumn[*modelmfa.TOTPDevice]("last_used_at")
 )
 

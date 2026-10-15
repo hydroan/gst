@@ -31,6 +31,7 @@ var (
 	code   = gst.NewColumn[*Sample, string]("code")
 	amount = gst.NewNumericColumn[*Sample, int64]("amount")
 	at     = gst.NewTimeColumn[*Sample]("created_at")
+	tags   = gst.NewJSONStringsColumn[*Sample]("tags")
 )
 
 func filters(since time.Time) []gst.Filter {
@@ -59,11 +60,11 @@ var group = NewColumn[*Row, string]("group_id")
 
 	violations := runCheck(ggcheck.ColumnReferenceMinting)
 
-	if len(violations) != 5 {
-		t.Fatalf("expected five violations, got %#v", violations)
+	if len(violations) != 6 {
+		t.Fatalf("expected six violations, got %#v", violations)
 	}
 	helperPath := filepath.Join("service", "record", "helper.go")
-	for _, constructor := range []string{"gst.NewColumn;", "gst.NewNumericColumn;", "gst.NewTimeColumn;"} {
+	for _, constructor := range []string{"gst.NewColumn;", "gst.NewNumericColumn;", "gst.NewTimeColumn;", "gst.NewJSONStringsColumn;"} {
 		matched := 0
 		for _, violation := range violations {
 			if strings.Contains(violation, helperPath) && strings.Contains(violation, constructor) {

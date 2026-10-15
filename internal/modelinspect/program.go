@@ -45,6 +45,7 @@ type columnInfo struct {
 	TypeName    string            ` + "`json:\"type_name\"`" + `
 	Numeric     bool              ` + "`json:\"numeric\"`" + `
 	Time        bool              ` + "`json:\"time\"`" + `
+	JSONStrings bool              ` + "`json:\"json_strings\"`" + `
 }
 
 type modelColumns struct {
@@ -109,6 +110,7 @@ func main() {
 				TypeName:    col.Type.String(),
 				Numeric:     class == modelschema.ColumnClassNumeric,
 				Time:        class == modelschema.ColumnClassTime,
+				JSONStrings: modelschema.IsJSONStringsType(col.Type),
 			})
 		}
 		out = append(out, entry)

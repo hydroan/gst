@@ -22,7 +22,8 @@ func TestRenderColumnsFileWritesATypedReferencePerColumn(t *testing.T) {
 			{GoName: "CreatedAt", DBName: "created_at", TypeExpr: "time.Time", TypeImports: map[string]string{"time": "time"}, TypeName: "time.Time", Time: true},
 			{GoName: "Elapsed", DBName: "elapsed", TypeExpr: "time.Duration", TypeImports: map[string]string{"time": "time"}, TypeName: "time.Duration", Numeric: true},
 			{GoName: "ID", DBName: "id", TypeExpr: "uuid.UUID", TypeImports: map[string]string{"github.com/gofrs/uuid/v5": "uuid"}, TypeName: "uuid.UUID"},
-			{GoName: "Tags", DBName: "tags", TypeName: "datatypes.JSONSlice[string]"},
+			{GoName: "Tags", DBName: "tags", TypeName: "datatypes.JSONSlice[string]", JSONStrings: true},
+			{GoName: "Weights", DBName: "weights", TypeName: "datatypes.JSONSlice[float64]"},
 		},
 	}}
 
@@ -47,13 +48,15 @@ var RecordCols = struct {
 	CreatedAt gst.TimeColumn
 	Elapsed   gst.NumericColumn[time.Duration]
 	ID        gst.Column[uuid.UUID]
-	Tags      gst.Column[any] // datatypes.JSONSlice[string]
+	Tags      gst.JSONStringsColumn
+	Weights   gst.Column[any] // datatypes.JSONSlice[float64]
 }{
 	Amount:    gst.NewNumericColumn[*Record, int64]("amount"),
 	CreatedAt: gst.NewTimeColumn[*Record]("created_at"),
 	Elapsed:   gst.NewNumericColumn[*Record, time.Duration]("elapsed"),
 	ID:        gst.NewColumn[*Record, uuid.UUID]("id"),
-	Tags:      gst.NewColumn[*Record, any]("tags"),
+	Tags:      gst.NewJSONStringsColumn[*Record]("tags"),
+	Weights:   gst.NewColumn[*Record, any]("weights"),
 }
 `, rendered)
 }
@@ -89,7 +92,8 @@ func TestRenderColumnsFile(t *testing.T) {
 			{GoName: "ID", DBName: "id", TypeExpr: "string", TypeName: "string"},
 			{GoName: "Score", DBName: "score", TypeExpr: "RecordScore", TypeName: "sample.RecordScore", Numeric: true},
 			{GoName: "Status", DBName: "status", TypeExpr: "RecordStatus", TypeName: "sample.RecordStatus"},
-			{GoName: "Tags", DBName: "tags", TypeName: "datatypes.JSONSlice[string]"},
+			{GoName: "Tags", DBName: "tags", TypeName: "datatypes.JSONSlice[string]", JSONStrings: true},
+			{GoName: "Weights", DBName: "weights", TypeName: "datatypes.JSONSlice[float64]"},
 			{GoName: "Weight", DBName: "weight", TypeName: "weird.Numeric[int]", Numeric: true},
 		},
 	}}
@@ -120,12 +124,20 @@ func TestRenderColumnsFile(t *testing.T) {
 		require.Contains(t, rendered, `gst.NewTimeColumn[*Record]("created_at")`)
 	})
 
+	t.Run("SpecializesJSONStringsColumns", func(t *testing.T) {
+		// A JSON array of strings is the one column the membership test is
+		// generated for; the reference carries no type argument, so the
+		// original type needs no comment.
+		require.Contains(t, rendered, `gst.NewJSONStringsColumn[*Record]("tags")`)
+		require.NotContains(t, rendered, "datatypes.JSONSlice[string]")
+	})
+
 	t.Run("DegradesUnreproducibleTypesToAny", func(t *testing.T) {
 		// A generic instantiation cannot be written back as source, so the
 		// column keeps its exact name but loses the value type. The original
 		// type is recorded in a comment.
-		require.Contains(t, rendered, `gst.NewColumn[*Record, any]("tags")`)
-		require.Contains(t, rendered, "datatypes.JSONSlice[string]")
+		require.Contains(t, rendered, `gst.NewColumn[*Record, any]("weights")`)
+		require.Contains(t, rendered, "datatypes.JSONSlice[float64]")
 	})
 
 	t.Run("DoesNotSpecializeWhenTypeIsUnreproducible", func(t *testing.T) {

@@ -127,3 +127,30 @@ func TestIsJSONType(t *testing.T) {
 		require.False(t, modelschema.IsJSONType(nil))
 	})
 }
+
+// sampleStringsDocument is a custom JSON wrapper over a slice of strings: it
+// declares its column type the way the datatypes family does.
+type sampleStringsDocument []string
+
+func (sampleStringsDocument) GormDataType() string { return "json" }
+
+// TestIsJSONStringsType pins which column types store a JSON array of
+// strings: a JSON document type whose Go shape is a slice of strings,
+// pointers dereferenced, and nothing else.
+func TestIsJSONStringsType(t *testing.T) {
+	for _, typ := range []reflect.Type{
+		reflect.TypeFor[datatypes.JSONSlice[string]](),
+		reflect.TypeFor[*datatypes.JSONSlice[string]](),
+		reflect.TypeFor[sampleStringsDocument](),
+	} {
+		require.True(t, modelschema.IsJSONStringsType(typ), typ.String())
+	}
+	for _, typ := range []reflect.Type{
+		reflect.TypeFor[datatypes.JSONSlice[int]](), reflect.TypeFor[datatypes.JSONMap](),
+		reflect.TypeFor[datatypes.JSON](), reflect.TypeFor[datatypes.JSONType[[]string]](),
+		reflect.TypeFor[[]string](), reflect.TypeFor[string](),
+	} {
+		require.False(t, modelschema.IsJSONStringsType(typ), typ.String())
+	}
+	require.False(t, modelschema.IsJSONStringsType(nil))
+}

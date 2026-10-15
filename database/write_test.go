@@ -15,6 +15,7 @@ import (
 	"github.com/hydroan/gst/internal/types"
 	"github.com/hydroan/gst/tenant"
 	"github.com/stretchr/testify/require"
+	"gorm.io/datatypes"
 	"gorm.io/gorm"
 )
 
@@ -933,6 +934,29 @@ func TestDatabaseUpsert(t *testing.T) {
 		require.NoError(t, database.Database[*TestMixedUniqueItem](context.Background()).Upsert(byRef))
 		require.Equal(t, rowB.ID, byRef.ID, "a collision on the Indexes-declared key must reconcile the id")
 	})
+}
+
+// TestDatabaseUpdateByIDWritesAJSONStringsColumnAsADocument pins that an
+// assignment through the reference of a JSON array of strings binds the
+// document as JSON: the value keeps the type that encodes it, instead of
+// being read as a list of parameters; the same reference then answers
+// membership of a written element.
+func TestDatabaseUpdateByIDWritesAJSONStringsColumnAsADocument(t *testing.T) {
+	defer cleanupTestData()
+	setupTestData(t)
+	addr := types.NewJSONStringsColumn[*TestUser]("addr")
+	require.NoError(t, database.Database[*TestUser](context.Background()).UpdateByID(u1.ID, addr.Set(datatypes.NewJSONSlice([]string{"home", "office"}))))
+
+	u := new(TestUser)
+	require.NoError(t, database.Database[*TestUser](context.Background()).Get(u, u1.ID))
+	require.Equal(t, datatypes.NewJSONSlice([]string{"home", "office"}), u.Addr)
+
+	users := make([]*TestUser, 0)
+	require.NoError(t, database.Database[*TestUser](context.Background()).
+		WithQuery(nil, types.QueryOptions{Filters: []types.Filter{addr.JSONContains("office")}}).
+		List(&users))
+	require.Len(t, users, 1)
+	require.Equal(t, u1.ID, users[0].ID)
 }
 
 func TestDatabaseUpdateByID(t *testing.T) {

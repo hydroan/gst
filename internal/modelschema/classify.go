@@ -120,3 +120,21 @@ func IsJSONType(typ reflect.Type) bool {
 	}
 	return strings.HasPrefix(strings.ToLower(decl.GormDataType()), "json")
 }
+
+// IsJSONStringsType reports whether a column type stores a JSON array of
+// strings: a JSON document type by IsJSONType whose Go shape is a slice of
+// strings, datatypes.JSONSlice[string] for one. Pointers are dereferenced.
+//
+// gg gen writes the JSONStringsColumn reference for such a column, the one
+// carrying the membership test: the dialects agree on membership of a string
+// element only (PostgreSQL's jsonb ? operator matches no other), so a
+// document of another shape gets no reference that offers the test.
+func IsJSONStringsType(typ reflect.Type) bool {
+	if !IsJSONType(typ) {
+		return false
+	}
+	for typ.Kind() == reflect.Pointer {
+		typ = typ.Elem()
+	}
+	return typ.Kind() == reflect.Slice && typ.Elem().Kind() == reflect.String
+}

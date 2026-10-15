@@ -23,6 +23,7 @@ func TestNewColumnReferences(t *testing.T) {
 		// available on them alongside the filter and order constructors.
 		require.Equal(t, "amount", types.NewNumericColumn[sampleTable, int64]("amount").Name())
 		require.Equal(t, "created_at", types.NewTimeColumn[sampleTable]("created_at").Name())
+		require.Equal(t, "tags", types.NewJSONStringsColumn[sampleTable]("tags").Name())
 	})
 
 	t.Run("CarriesTheTable", func(t *testing.T) {
@@ -32,6 +33,7 @@ func TestNewColumnReferences(t *testing.T) {
 		require.Equal(t, "samples", types.NewColumn[sampleTable, int]("age").Table())
 		require.Equal(t, "samples", types.NewNumericColumn[sampleTable, int64]("amount").Table())
 		require.Equal(t, "samples", types.NewTimeColumn[sampleTable]("created_at").Table())
+		require.Equal(t, "samples", types.NewJSONStringsColumn[sampleTable]("tags").Table())
 	})
 
 	// Column references are built by generated code during package
@@ -106,7 +108,6 @@ func TestColumnBuildsFilters(t *testing.T) {
 		{"IsNotNull", name.IsNotNull(), types.NewFilter("samples", "name", types.FilterOpIsNull, false)},
 		{"Regex", name.Regex("^sa"), types.NewFilter("samples", "name", types.FilterOpRegex, "^sa")},
 		{"NotRegex", name.NotRegex("^sa"), types.NewFilter("samples", "name", types.FilterOpNotRegex, "^sa")},
-		{"JSONContains", name.JSONContains("sam"), types.NewFilter("samples", "name", types.FilterOpJSONContains, "sam")},
 		{
 			"EqCol",
 			age.EqCol(types.NewColumn[sampleTable, int]("parent_age")),
@@ -211,4 +212,16 @@ func TestAnyColumnRefMixesReferenceKinds(t *testing.T) {
 		types.NewNumericColumn[sampleTable, int64]("amount"),
 		types.NewTimeColumn[sampleTable]("created_at"),
 	))
+}
+
+// TestJSONStringsColumnBuildsTheMembershipFilter pins that the membership
+// test belongs to the reference of a JSON array of strings alone: it builds
+// the jsoncontains filter on the column under its table, with the member as
+// the value.
+func TestJSONStringsColumnBuildsTheMembershipFilter(t *testing.T) {
+	f := types.NewJSONStringsColumn[sampleTable]("tags").JSONContains("vip")
+	require.Equal(t, types.FilterOpJSONContains, f.Op())
+	require.Equal(t, "tags", f.Column())
+	require.Equal(t, "samples", f.Table())
+	require.Equal(t, "vip", f.Value())
 }

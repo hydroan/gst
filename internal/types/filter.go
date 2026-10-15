@@ -182,7 +182,7 @@ func FilterNotRegex(column, expr string) Filter {
 }
 
 // FilterJSONContains matches rows whose JSON array column contains value as
-// a member.
+// a member; on a column storing no JSON document the filter fails closed.
 func FilterJSONContains(column, value string) Filter {
 	return Filter{column: column, op: FilterOpJSONContains, value: value}
 }

@@ -5,6 +5,8 @@ import (
 	"reflect"
 	"sync"
 	"time"
+
+	"gorm.io/datatypes"
 )
 
 // AnyColumnRef is the type-erased view of every generated column reference,
@@ -65,9 +67,9 @@ type ColumnRef[T any] interface {
 // the plain-name constructors are left to code that learns the column only at
 // run time, such as framework internals reading it from a request.
 //
-// Columns whose Go type is numeric or time.Time are generated as NumericColumn
-// or TimeColumn instead, which embed this type and add the functions that are
-// only meaningful there.
+// Columns whose Go type is numeric, time.Time, or a JSON array of strings are
+// generated as NumericColumn, TimeColumn or JSONStringsColumn instead, which
+// embed this type and add the functions that are only meaningful there.
 type Column[T any] struct {
 	table string
 	name  string
@@ -199,9 +201,6 @@ func (c Column[T]) Regex(expr string) Filter { return c.filter(FilterOpRegex, ex
 // NotRegex matches rows where the column does not match the regular
 // expression expr.
 func (c Column[T]) NotRegex(expr string) Filter { return c.filter(FilterOpNotRegex, expr) }
-
-// JSONContains matches rows whose JSON array column contains value.
-func (c Column[T]) JSONContains(value string) Filter { return c.filter(FilterOpJSONContains, value) }
 
 // EqCol ties this column to parent, a column of another table of the query:
 // the enclosing query's model inside a subquery, the queried model or an
@@ -368,4 +367,28 @@ func (c TimeColumn) bucket(bucket TimeBucket) Term {
 	term := c.term(FnNone)
 	term.bucket = bucket
 	return term
+}
+
+// JSONStringsColumn is the reference generated for a column storing a JSON
+// array of strings. It embeds Column over datatypes.JSONSlice[string], the
+// type that binds such an array as a JSON document — a document held in a
+// type of its own converts to it, a plain []string would bind as a list of
+// parameters — and adds the membership test, which only such a column
+// answers alike on every dialect: PostgreSQL's jsonb ? operator matches a
+// string element only, so over an array of numbers the test is silently
+// empty, and over a column storing no JSON document it is a SQL error.
+type JSONStringsColumn struct {
+	Column[datatypes.JSONSlice[string]]
+}
+
+// NewJSONStringsColumn returns the reference to the named column of M's
+// table storing a JSON array of strings, carrying JSONContains on top of
+// everything Column has.
+func NewJSONStringsColumn[M TableNamer](name string) JSONStringsColumn {
+	return JSONStringsColumn{Column: NewColumn[M, datatypes.JSONSlice[string]](name)}
+}
+
+// JSONContains matches rows whose array contains value as a member.
+func (c JSONStringsColumn) JSONContains(value string) Filter {
+	return c.filter(FilterOpJSONContains, value)
 }

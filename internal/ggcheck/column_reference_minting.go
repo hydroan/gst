@@ -19,19 +19,20 @@ import (
 // variables gg gen writes from the model schema; a reference minted by hand
 // names a column the schema is never asked about, so a typo or a renamed
 // field surfaces only when the query runs.
-var columnConstructors = []string{"NewColumn", "NewNumericColumn", "NewTimeColumn"}
+var columnConstructors = []string{"NewColumn", "NewNumericColumn", "NewTimeColumn", "NewJSONStringsColumn"}
 
 // ColumnReferenceMinting keeps project code from minting column references by
 // hand.
 var ColumnReferenceMinting = Check{
 	Name: "Column reference minting",
-	Rule: "project code, tests included, must not mint column references through gst.NewColumn, NewNumericColumn or NewTimeColumn; columns are read through the XxxCols variables gg gen writes, which the model schema checks, generated files excepted. Generic code, which has no Cols variable to read, may mint a reference whose model is its own type parameter",
+	Rule: "project code, tests included, must not mint column references through gst.NewColumn, NewNumericColumn, NewTimeColumn or NewJSONStringsColumn; columns are read through the XxxCols variables gg gen writes, which the model schema checks, generated files excepted. Generic code, which has no Cols variable to read, may mint a reference whose model is its own type parameter",
 	run:  checkColumnReferenceMinting,
 }
 
 // checkColumnReferenceMinting reports project code that mints column
-// references through gst.NewColumn, NewNumericColumn or NewTimeColumn
-// instead of reading the XxxCols variables gg gen writes. The one exception is
+// references through gst.NewColumn, NewNumericColumn, NewTimeColumn or
+// NewJSONStringsColumn instead of reading the XxxCols variables gg gen
+// writes. The one exception is
 // generic code naming its own type parameter as the model, see
 // mintsForTypeParameter. Generated files carry the constructors by design and
 // are skipped, as are model and service subtrees owned by copyable framework

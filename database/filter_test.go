@@ -478,6 +478,16 @@ func TestDatabaseFilters(t *testing.T) {
 		List(&users))
 	require.Empty(t, users, "jsoncontains must not match absent members")
 
+	// jsoncontains on a column that stores no JSON document fails closed
+	// rather than reaching the database as a SQL error.
+	users = make([]*TestUser, 0)
+	require.NoError(t, database.Database[*TestUser](context.Background()).
+		WithQuery(nil, types.QueryOptions{
+			Filters: []types.Filter{types.NewFilter("", "name", types.FilterOpJSONContains, "user6")},
+		}).
+		List(&users))
+	require.Empty(t, users, "jsoncontains on a column storing no JSON document must fail closed")
+
 	// Test fail-closed behavior: an unknown operator or an empty column adds
 	// "1 = 0" instead of being dropped, so the query returns no records.
 	users = make([]*TestUser, 0)

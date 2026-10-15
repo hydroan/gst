@@ -353,10 +353,14 @@ func (db *database[M]) renderFilter(f types.Filter, scope filterScope) (clause.E
 		// jsonb operator on Postgres, a json_each EXISTS subquery on SQLite.
 		// It covers only those three — on any other dialect its expression
 		// renders empty, which would silently WIDEN the result, so the filter
-		// fails closed there instead. The column is passed unquoted, under
-		// the table it was placed in, because the expression quotes it
-		// itself, every dialect's quoting spelling table.column as two
-		// identifiers.
+		// fails closed there instead, as it does on a column storing no JSON
+		// document, where the expression is a SQL error on every dialect.
+		// The column is passed unquoted, under the table it was placed in,
+		// because the expression quotes it itself, every dialect's quoting
+		// spelling table.column as two identifiers.
+		if _, isJSON := info.jsonColumns[f.Column()]; !isJSON {
+			return db.failClosedFilter(f, "expects a JSON column")
+		}
 		switch db.dialect() {
 		case dialectMySQL, dialectPostgres, dialectSQLite:
 		default:

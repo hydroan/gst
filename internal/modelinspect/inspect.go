@@ -22,6 +22,7 @@ type ColumnInfo struct {
 	TypeName    string            `json:"type_name"`    // Original type, recorded in a comment when TypeExpr is empty.
 	Numeric     bool              `json:"numeric"`      // Column type is a numeric kind, so the reference gains SUM and AVG.
 	Time        bool              `json:"time"`         // Column type holds a time value, time.Time or datatypes.Date, so the reference gains time bucketing.
+	JSONStrings bool              `json:"json_strings"` // Column type stores a JSON array of strings, which gets the JSONStringsColumn reference.
 }
 
 // ModelColumns is one model as the inspection program reports it: its columns,

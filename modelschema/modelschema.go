@@ -45,6 +45,13 @@ func ClassifyColumn(typ reflect.Type) ColumnClass {
 	return modelschema.ClassifyColumn(typ)
 }
 
+// IsJSONStringsType reports whether a column type stores a JSON array of
+// strings, which decides whether gg gen writes the JSONStringsColumn
+// reference for it.
+func IsJSONStringsType(typ reflect.Type) bool {
+	return modelschema.IsJSONStringsType(typ)
+}
+
 // IsQueryable reports whether m opted in to framework query parameters by
 // embedding model.Query. The inspection program uses it to keep only the
 // unregistered models that own a filter and sort column namespace; the
