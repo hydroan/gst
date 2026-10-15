@@ -31,8 +31,8 @@ type OrphanDir struct {
 // still imports them, and the files of deleting kept along with those
 // directories: a file inside a kept directory is part of the package the
 // import needs, whatever it is named, and deleting it would break the build
-// the directory is kept for. It reads the project's code through ignore, as gg check
-// and gg gen do: code the project ignores keeps nothing. Directories in
+// the directory is kept for. It reads the project's code through ignore, as
+// gg check and gg gen do: code the project ignores keeps nothing. Directories in
 // keptDirs hold service files of gst.yaml-ignored actions and are treated as
 // owned; keptDirs may be nil. deleting are the files prune deletes besides
 // the orphans' own, the service files of disabled actions and the middleware
