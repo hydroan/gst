@@ -43,7 +43,9 @@ func StatusError(err error) error {
 }
 
 // codeOf maps the HTTP status a failure answers with to its gRPC code: the
-// standard correspondence for the statuses that have one; the 409 of a stale
+// standard correspondence for the statuses that have one, the client-closed
+// status of a client that went away (see types.StatusClientClosedRequest)
+// as Canceled among them; the 409 of a stale
 // object — err wraps database.ErrStaleObject, the optimistic-lock miss of a
 // versioned model — as Aborted rather than AlreadyExists, since it is a
 // concurrent change to retry after and not a duplicate; the 409 of a
@@ -64,6 +66,8 @@ func codeOf(httpStatus int, err error) codes.Code {
 		return codes.NotFound
 	case http.StatusRequestTimeout, http.StatusGatewayTimeout:
 		return codes.DeadlineExceeded
+	case types.StatusClientClosedRequest:
+		return codes.Canceled
 	case http.StatusConflict:
 		if errors.Is(err, database.ErrStaleObject) {
 			return codes.Aborted

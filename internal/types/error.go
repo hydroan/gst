@@ -16,6 +16,13 @@ const defaultErrorStatus = http.StatusInternalServerError
 // grpcserver.StatusError). What went wrong stays in the log.
 const FailureMsg = "The server could not process the request."
 
+// StatusClientClosedRequest is the HTTP status a request is answered with
+// once its client went away before the answer: nginx's 499, which the gRPC
+// mapping answers Canceled (see grpcserver.StatusError), as google.rpc's
+// canonical mapping of its Canceled code does. The standard library names
+// no status for it.
+const StatusClientClosedRequest = 499
+
 var (
 	_ error                      = (*Error)(nil)
 	_ errbase.StackTraceProvider = (*Error)(nil)

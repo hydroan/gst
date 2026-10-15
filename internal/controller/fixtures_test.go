@@ -132,6 +132,7 @@ const (
 	shapedRoute        = "controller-shaped-samples"
 	refusalRoute       = "controller-refusals"
 	filterRefusalRoute = "controller-filter-refusals"
+	hangingRoute       = "controller-hanging-samples"
 	importRoute        = "controller-imports"
 	refusedImportRoute = "controller-refused-imports"
 	counterRoute       = "controller-counters"
@@ -160,6 +161,7 @@ func registerFixtureServices() {
 		serviceregistry.RegisterInstance[*sampleRecord, *sampleRecord, *sampleRecord](phase, refusalRoute, &refusingService{})
 	}
 	serviceregistry.RegisterInstance[*sampleRecord, *sampleRecord, *sampleRecord](consts.List, filterRefusalRoute, &filterRefusingService{})
+	serviceregistry.RegisterInstance[*sampleRecord, *sampleRecord, *sampleRecord](consts.List, hangingRoute, &hangingService{})
 	serviceregistry.RegisterInstance[*sampleRecord, *sampleRecord, *sampleRecord](consts.Import, importRoute, &importingService{})
 	serviceregistry.RegisterInstance[*sampleRecord, *sampleRecord, *sampleRecord](consts.Import, refusedImportRoute, &refusingService{})
 	serviceregistry.RegisterInstance[*sampleRecord, *sampleRecord, *sampleRecord](consts.Create, observedRoute, &observingService{})
@@ -368,6 +370,43 @@ func (*actionService) List(sc *types.ServiceContext, req *sampleActionReq) (*sam
 	return &sampleActionRsp{Note: req.Note, observedCall: observe(sc)}, nil
 }
 
+// hangCancel is the cancellation of the client's context a scenario arms
+// before sending a List to the hanging service, which fires it from inside
+// the flow (see hangingService): the client goes away while the flow runs,
+// on either transport, at a moment the scenario controls.
+var hangCancel struct {
+	mu     sync.Mutex
+	cancel context.CancelFunc
+}
+
+func armHangCancel(cancel context.CancelFunc) {
+	hangCancel.mu.Lock()
+	defer hangCancel.mu.Unlock()
+	hangCancel.cancel = cancel
+}
+
+func fireHangCancel() {
+	hangCancel.mu.Lock()
+	defer hangCancel.mu.Unlock()
+	if hangCancel.cancel != nil {
+		hangCancel.cancel()
+	}
+}
+
+// hangingService is the List service whose hook makes the client go away:
+// it fires the cancellation the scenario armed, waits for the call to end
+// and returns what the context reports, the way a flow cut short by its
+// client fails.
+type hangingService struct {
+	serviceregistry.Base[*sampleRecord, *sampleRecord, *sampleRecord]
+}
+
+func (*hangingService) ListBefore(sc *types.ServiceContext, _ *[]*sampleRecord) error {
+	fireHangCancel()
+	<-sc.Done()
+	return sc.Err()
+}
+
 // configFor is the controller config a handler is mounted with: the route
 // the service registry resolves the phase service by, and the id parameter
 // of the single-resource paths.
@@ -380,13 +419,14 @@ func configFor[M types.Model](route string) *types.ControllerConfig[M] {
 // is empty, and returns the recorded response.
 func serve(t *testing.T, method, pattern string, handler gin.HandlerFunc, target, body string) *httptest.ResponseRecorder {
 	t.Helper()
-	return serveAs(t, method, pattern, handler, target, body, "")
+	return serveAs(context.Background(), t, method, pattern, handler, target, body, "")
 }
 
 // serveAs is serve for a request of the user named username, the caller
 // the identity middleware would have named, whom the flows record as the
-// creator and updater; "" sends the request anonymous.
-func serveAs(t *testing.T, method, pattern string, handler gin.HandlerFunc, target, body, username string) *httptest.ResponseRecorder {
+// creator and updater; "" sends the request anonymous. The request is sent
+// in ctx, which a test ending the request on the client's behalf cancels.
+func serveAs(ctx context.Context, t *testing.T, method, pattern string, handler gin.HandlerFunc, target, body, username string) *httptest.ResponseRecorder {
 	t.Helper()
 	gin.SetMode(gin.TestMode)
 
@@ -406,7 +446,7 @@ func serveAs(t *testing.T, method, pattern string, handler gin.HandlerFunc, targ
 	if body != "" {
 		reader = strings.NewReader(body)
 	}
-	req := httptest.NewRequest(method, target, reader)
+	req := httptest.NewRequestWithContext(ctx, method, target, reader)
 	if body != "" {
 		req.Header.Set("Content-Type", "application/json")
 	}

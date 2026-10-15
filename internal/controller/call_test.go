@@ -855,6 +855,7 @@ func sampleHandlers() map[string]rpcHandler {
 	standardRPCs[*sampleRecord](handlers, sampleRoute, "")
 	standardRPCs[*sampleRecord](handlers, refusalRoute, "Refused")
 	standardRPCs[*sampleRecord](handlers, filterRefusalRoute, "FilterRefused")
+	standardRPCs[*sampleRecord](handlers, hangingRoute, "Hanging")
 	standardRPCs[*sampleRecord](handlers, observedRoute, "Observed")
 	standardRPCs[*sampleRecord](handlers, cookieBeforeRoute, "CookieBefore")
 	standardRPCs[*sampleRecord](handlers, cookieAfterRoute, "CookieAfter")
@@ -1117,7 +1118,14 @@ func invoke(t *testing.T, conn *grpc.ClientConn, name string, in map[string]any)
 // invokeAs calls the rpc name presenting authorization, none when empty.
 func invokeAs(t *testing.T, conn *grpc.ClientConn, name string, in map[string]any, authorization string) (map[string]any, error) {
 	t.Helper()
-	ctx, cancel := context.WithTimeout(t.Context(), 20*time.Second)
+	return invokeIn(t.Context(), t, conn, name, in, authorization)
+}
+
+// invokeIn is invokeAs for a call made in ctx, which a test ending the
+// call on the client's behalf cancels; every call is given twenty seconds.
+func invokeIn(ctx context.Context, t *testing.T, conn *grpc.ClientConn, name string, in map[string]any, authorization string) (map[string]any, error) {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(ctx, 20*time.Second)
 	defer cancel()
 	if authorization != "" {
 		ctx = metadata.AppendToOutgoingContext(ctx, "authorization", authorization)

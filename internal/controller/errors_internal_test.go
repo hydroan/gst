@@ -1,13 +1,16 @@
 package controller
 
 import (
+	"context"
 	"net/http"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/database"
 	"github.com/hydroan/gst/internal/types"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/zap"
 )
 
 // TestDatabaseError pins the canonical mapping of database errors: a service
@@ -81,4 +84,59 @@ func TestInvalidArgumentCarriesTheClientSafeText(t *testing.T) {
 			require.ErrorIs(t, answer, tt.err)
 		})
 	}
+}
+
+// levelRecorder records the messages failWith logs at info and at error.
+type levelRecorder struct {
+	nopControllerLogger
+	infos  []string
+	errors []string
+}
+
+func (r *levelRecorder) Infoz(msg string, _ ...zap.Field)  { r.infos = append(r.infos, msg) }
+func (r *levelRecorder) Errorz(msg string, _ ...zap.Field) { r.errors = append(r.errors, msg) }
+
+// TestFailWithAnswersAnEndedContextAsTheClientsDoing pins what failWith
+// makes of a failure once the request's context ended: a client that went
+// away is answered the client-closed status at info, a deadline that passed
+// 504, each with the context's own message and the failure behind it as
+// cause, while a failure in a live context stays the server's: the flow's
+// answer, logged at error.
+func TestFailWithAnswersAnEndedContextAsTheClientsDoing(t *testing.T) {
+	cause := errors.New("read tcp: connection reset by peer")
+	answer := errors.New("the flow's answer")
+
+	t.Run("a live context answers the flow's answer and logs an error", func(t *testing.T) {
+		rec := &levelRecorder{}
+		require.Same(t, answer, failWith(context.Background(), rec, "database operation failed", cause, answer))
+		require.Equal(t, []string{"database operation failed"}, rec.errors)
+		require.Empty(t, rec.infos)
+	})
+
+	t.Run("a canceled context answers the client-closed status at info", func(t *testing.T) {
+		ctx, cancel := context.WithCancel(context.Background())
+		cancel()
+		rec := &levelRecorder{}
+		got := failWith(ctx, rec, "database operation failed", cause, answer)
+		var serviceErr *types.Error
+		require.ErrorAs(t, got, &serviceErr)
+		require.Equal(t, types.StatusClientClosedRequest, serviceErr.Status())
+		require.Equal(t, "context canceled", serviceErr.Msg())
+		require.ErrorIs(t, got, cause)
+		require.Equal(t, []string{"database operation failed"}, rec.infos)
+		require.Empty(t, rec.errors, "a client that went away is not a failure of the server")
+	})
+
+	t.Run("a passed deadline answers 504 at info", func(t *testing.T) {
+		ctx, cancel := context.WithDeadline(context.Background(), time.Now().Add(-time.Second))
+		defer cancel()
+		rec := &levelRecorder{}
+		got := failWith(ctx, rec, "database operation failed", cause, answer)
+		var serviceErr *types.Error
+		require.ErrorAs(t, got, &serviceErr)
+		require.Equal(t, 504, serviceErr.Status())
+		require.Equal(t, "context deadline exceeded", serviceErr.Msg())
+		require.Equal(t, []string{"database operation failed"}, rec.infos)
+		require.Empty(t, rec.errors)
+	})
 }

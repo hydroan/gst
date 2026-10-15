@@ -46,6 +46,7 @@ func TestTransportsAnswerTheContractAlike(t *testing.T) {
 	samples := standardFixture[*sampleRecord](sampleRoute, "")
 	refusals := standardFixture[*sampleRecord](refusalRoute, "Refused")
 	filterRefusals := standardFixture[*sampleRecord](filterRefusalRoute, "FilterRefused")
+	hanging := standardFixture[*sampleRecord](hangingRoute, "Hanging")
 	cookieBefore := standardFixture[*sampleRecord](cookieBeforeRoute, "CookieBefore")
 	cookieAfter := standardFixture[*sampleRecord](cookieAfterRoute, "CookieAfter")
 	counters := standardFixture[*sampleCounter](counterRoute, "Counter")
@@ -312,6 +313,17 @@ func TestTransportsAnswerTheContractAlike(t *testing.T) {
 		},
 		{name: "List answers the hook's refusal", fixture: refusals, phase: consts.List, want: refused},
 		{name: "List answers the Filter hook's refusal", fixture: filterRefusals, phase: consts.List, want: refused},
+		{
+			name: "List answers a client that went away as canceled, not as a failure of the server", fixture: hanging, phase: consts.List,
+			prepare: func(t *testing.T) contractInput {
+				t.Helper()
+				ctx, cancel := context.WithCancel(context.Background())
+				t.Cleanup(cancel)
+				armHangCancel(cancel)
+				return contractInput{ctx: ctx}
+			},
+			want: contractWant{status: types.StatusClientClosedRequest, msg: "context canceled"},
+		},
 		{
 			name: "Update replaces the record for the caller", fixture: samples, phase: consts.Update,
 			prepare: func(t *testing.T) contractInput {
@@ -955,8 +967,11 @@ type contractScenario struct {
 // but the id; the ids of a batch delete; the query of
 // a List, the query string over HTTP; and the payload of a custom action. A
 // nil record is a request carrying none: an absent body, a message without
-// a record.
+// a record. ctx is the context the request is sent in, set by a scenario
+// that ends the request on the client's behalf; nil sends it in a context
+// of the transport's own.
 type contractInput struct {
+	ctx     context.Context
 	id      string
 	record  map[string]any
 	items   []map[string]any
@@ -1101,7 +1116,11 @@ func overHTTP(t *testing.T, f contractFixture, phase consts.Phase, in contractIn
 	case in.record != nil:
 		body = encodeJSON(in.record)
 	}
-	rsp := serveAs(t, phase.HTTPMethod(), pattern, f.handler(phase), target, body, "alice")
+	ctx := in.ctx
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	rsp := serveAs(ctx, t, phase.HTTPMethod(), pattern, f.handler(phase), target, body, "alice")
 	answer := contractAnswer{status: rsp.Code}
 	var envelope struct {
 		Msg  string `json:"msg"`
@@ -1152,7 +1171,11 @@ func overGRPC(t *testing.T, f contractFixture, phase consts.Phase, in contractIn
 	if in.payload != nil {
 		message["payload"] = in.payload
 	}
-	out, err := invoke(t, sampleServer(t), f.rpc(phase), message)
+	ctx := in.ctx
+	if ctx == nil {
+		ctx = t.Context()
+	}
+	out, err := invokeIn(ctx, t, sampleServer(t), f.rpc(phase), message, sampleCredential)
 	if err != nil {
 		st := status.Convert(err)
 		return contractAnswer{code: st.Code(), msg: st.Message()}
@@ -1209,6 +1232,8 @@ func grpcCodeOf(httpStatus int) codes.Code {
 		return codes.AlreadyExists
 	case http.StatusInternalServerError:
 		return codes.Internal
+	case types.StatusClientClosedRequest:
+		return codes.Canceled
 	}
 	panic("no gRPC code of " + strconv.Itoa(httpStatus))
 }

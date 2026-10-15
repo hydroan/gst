@@ -55,7 +55,22 @@ func notFound(cause error) *types.Error {
 
 // failWith logs err under msg, records it on the controller span ctx
 // carries, and returns answer, the error the flow's failure answers with.
+//
+// A ctx that ended — the client canceled or went away, or the deadline it
+// set passed — makes the failure the client's doing, not the server's: err
+// is logged at info and kept off the span, and the failure is answered as
+// the context's ending, types.StatusClientClosedRequest for a cancellation
+// and 504 for a deadline, the statuses gRPC answers Canceled and
+// DeadlineExceeded (see call.ended), with the context's own message.
 func failWith(ctx context.Context, log types.Logger, msg string, err, answer error) error {
+	if ended := ctx.Err(); ended != nil {
+		log.Infoz(msg, zap.Error(err))
+		status := types.StatusClientClosedRequest
+		if errors.Is(ended, context.DeadlineExceeded) {
+			status = http.StatusGatewayTimeout
+		}
+		return types.NewErrorWithCause(status, ended.Error(), err)
+	}
 	log.Errorz(msg, zap.Error(err))
 	gstotel.RecordError(trace.SpanFromContext(ctx), err)
 	return answer
