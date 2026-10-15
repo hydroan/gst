@@ -55,6 +55,7 @@ func reset(t *testing.T) {
 	started.Store(false)
 	drainTimeout = lifecycle.StopTimeout
 	config.App.GRPC = config.GRPC{Listen: "127.0.0.1", Reflection: true}
+	config.App.Server.TrustedProxies = nil
 	accessLog = observe(t, &logger.GRPC)
 	recoveryLog = observe(t, &logger.Recovery)
 }

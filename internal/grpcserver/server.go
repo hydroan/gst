@@ -124,7 +124,11 @@ func Run() error {
 		stop()
 		return err
 	}
-	srv := grpc.NewServer(append(chains(stopping), configured...)...)
+	chained, err := chains(stopping)
+	if err != nil {
+		return failed(err)
+	}
+	srv := grpc.NewServer(append(chained, configured...)...)
 	for _, register := range registrations {
 		register(srv)
 	}

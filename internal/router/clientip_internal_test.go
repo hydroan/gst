@@ -65,15 +65,6 @@ func TestClientIPFromUntrustedPeerIgnoresForwardedAddress(t *testing.T) {
 	require.Equal(t, "192.0.2.7", clientIPFrom(t, "192.0.2.7:41000", "203.0.113.9"))
 }
 
-// TestTrustedProxiesNormalizesConfiguredEntries covers the two shapes a hand
-// written list arrives in: entries spaced out after the separator, and an
-// environment variable set to nothing at all.
-func TestTrustedProxiesNormalizesConfiguredEntries(t *testing.T) {
-	withTrustedProxies(t, " 10.1.2.0/24 ", "", "   ")
-
-	require.Equal(t, []string{"10.1.2.0/24"}, trustedProxies())
-}
-
 // TestApplyTrustedProxiesRejectsUnparseableEntry asserts startup stops on a
 // configuration gin cannot read, rather than running on a stance nobody chose.
 func TestApplyTrustedProxiesRejectsUnparseableEntry(t *testing.T) {

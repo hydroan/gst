@@ -1,11 +1,10 @@
 package router
 
 import (
-	"strings"
-
 	"github.com/cockroachdb/errors"
 	"github.com/gin-gonic/gin"
 	"github.com/hydroan/gst/config"
+	"github.com/hydroan/gst/internal/requestctx"
 )
 
 // applyTrustedProxies declares which peers may speak for the client.
@@ -18,27 +17,21 @@ import (
 // which no header can rewrite.
 //
 // A deployment behind a load balancer or ingress names that network in
-// server.trusted_proxies, and the forwarding headers of those peers alone are
-// then believed. An entry gin cannot parse fails startup instead of quietly
-// leaving the process on a stance nobody chose.
+// server.trusted_proxies, read through requestctx.TrustedProxies the way the
+// gRPC listener reads it, and the forwarding headers of those peers alone are
+// then believed. An entry that cannot be read fails startup instead of
+// quietly leaving the process on a stance nobody chose.
 func applyTrustedProxies(engine *gin.Engine) error {
-	if err := engine.SetTrustedProxies(trustedProxies()); err != nil {
+	proxies, err := requestctx.TrustedProxies(config.App.Server.TrustedProxies)
+	if err != nil {
+		return err
+	}
+	networks := make([]string, 0, len(proxies))
+	for _, proxy := range proxies {
+		networks = append(networks, proxy.String())
+	}
+	if err := engine.SetTrustedProxies(networks); err != nil {
 		return errors.Wrap(err, "invalid server.trusted_proxies")
 	}
 	return nil
-}
-
-// trustedProxies returns the configured networks with surrounding spaces
-// trimmed and blank entries dropped, so that a list written as
-// "10.0.0.0/8, 192.168.0.0/16" and an environment variable set to nothing both
-// reach gin as something it can parse.
-func trustedProxies() []string {
-	configured := config.App.Server.TrustedProxies
-	proxies := make([]string, 0, len(configured))
-	for _, proxy := range configured {
-		if proxy = strings.TrimSpace(proxy); proxy != "" {
-			proxies = append(proxies, proxy)
-		}
-	}
-	return proxies
 }

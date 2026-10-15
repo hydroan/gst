@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/internal/consts"
 	"github.com/hydroan/gst/internal/execctx"
 	"github.com/hydroan/gst/internal/requestctx"
@@ -189,4 +190,43 @@ func TestCallsAreLoggedLikeHTTPRequests(t *testing.T) {
 	require.Equal(t, "NotFound", failed["grpc_code"])
 	require.Equal(t, "no such record", failed["error"])
 	require.Len(t, entries[1].Context, accessLogFieldCap, "the worst case must fill the capacity exactly: a new field bumps accessLogFieldCap")
+}
+
+// TestTheClientAddressForwardedByATrustedPeerIsTheClients pins that the
+// scope believes the forwarding headers of the peers server.trusted_proxies
+// names, the way the HTTP listener does: from such a peer the client address
+// is the one X-Forwarded-For carries, in the metadata and in the access log
+// alike, and from any other peer it is the peer itself, whatever it forwards.
+func TestTheClientAddressForwardedByATrustedPeerIsTheClients(t *testing.T) {
+	seen := make(chan string, 1)
+	whoami := map[string]func(context.Context) error{
+		"Whoami": func(ctx context.Context) error { seen <- requestctx.FromContext(ctx).ClientIP(); return nil },
+	}
+	forwarded := func(ctx context.Context) context.Context {
+		return metadata.AppendToOutgoingContext(ctx, "x-forwarded-for", "203.0.113.9")
+	}
+
+	t.Run("from a trusted peer", func(t *testing.T) {
+		reset(t)
+		config.App.Server.TrustedProxies = []string{"127.0.0.1", "::1"}
+		serve(whoami)
+		conn := dial(t, start(t), nil)
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+
+		require.NoError(t, call(forwarded(ctx), conn, "Whoami"))
+		require.Equal(t, "203.0.113.9", <-seen)
+		require.Equal(t, "203.0.113.9", accessLog.All()[0].ContextMap()["ip"])
+	})
+
+	t.Run("from any other peer", func(t *testing.T) {
+		reset(t)
+		serve(whoami)
+		conn := dial(t, start(t), nil)
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+
+		require.NoError(t, call(forwarded(ctx), conn, "Whoami"))
+		require.Equal(t, "127.0.0.1", <-seen)
+	})
 }

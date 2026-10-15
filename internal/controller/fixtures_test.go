@@ -272,7 +272,7 @@ func (*importingService) Import(_ *types.ServiceContext, r io.Reader) ([]*sample
 
 // observedCall is what a service saw on its service context: the box route
 // parameter, the caller, the method and route the request or call carried,
-// and whether the action requires authentication.
+// whether the action requires authentication, and the client address.
 type observedCall struct {
 	Box          string
 	Username     string
@@ -280,6 +280,7 @@ type observedCall struct {
 	Route        string
 	RequiresAuth bool
 	Query        url.Values
+	ClientIP     string
 }
 
 // observe reads what sc answers into an observedCall.
@@ -291,6 +292,7 @@ func observe(sc *types.ServiceContext) observedCall {
 		Route:        sc.Route(),
 		RequiresAuth: sc.RequiresAuth(),
 		Query:        sc.Query(),
+		ClientIP:     sc.ClientIP(),
 	}
 }
 
@@ -423,14 +425,16 @@ func configFor[M types.Model](route string) *types.ControllerConfig[M] {
 // is empty, and returns the recorded response.
 func serve(t *testing.T, method, pattern string, handler gin.HandlerFunc, target, body string) *httptest.ResponseRecorder {
 	t.Helper()
-	return serveAs(context.Background(), t, method, pattern, handler, target, body, "")
+	return serveAs(context.Background(), t, method, pattern, handler, target, body, "", "")
 }
 
 // serveAs is serve for a request of the user named username, the caller
 // the identity middleware would have named, whom the flows record as the
 // creator and updater; "" sends the request anonymous. The request is sent
-// in ctx, which a test ending the request on the client's behalf cancels.
-func serveAs(ctx context.Context, t *testing.T, method, pattern string, handler gin.HandlerFunc, target, body, username string) *httptest.ResponseRecorder {
+// in ctx, which a test ending the request on the client's behalf cancels,
+// and claims to forward forwardedFor, when set, the way a proxy in front
+// of the engine would.
+func serveAs(ctx context.Context, t *testing.T, method, pattern string, handler gin.HandlerFunc, target, body, username, forwardedFor string) *httptest.ResponseRecorder {
 	t.Helper()
 	gin.SetMode(gin.TestMode)
 
@@ -453,6 +457,9 @@ func serveAs(ctx context.Context, t *testing.T, method, pattern string, handler 
 	req := httptest.NewRequestWithContext(ctx, method, target, reader)
 	if body != "" {
 		req.Header.Set("Content-Type", "application/json")
+	}
+	if forwardedFor != "" {
+		req.Header.Set("X-Forwarded-For", forwardedFor)
 	}
 	recorder := httptest.NewRecorder()
 	engine.ServeHTTP(recorder, req)

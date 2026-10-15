@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/grpc-ecosystem/go-grpc-middleware/v2/interceptors/realip"
 	"github.com/hydroan/gst/internal/execctx"
 	"github.com/hydroan/gst/internal/logfield"
 	"github.com/hydroan/gst/internal/requestctx"
@@ -74,11 +75,12 @@ const accessLogFieldCap = 11
 // auth, as the registration described it (see Method.Public). A method the
 // registration described with no action, the health and reflection
 // services' among them, keeps the full method as its route and POST, the
-// method every gRPC call is on the wire, as its method. The forwarding
-// headers of a proxy in front are not read: the HTTP listener believes the
-// client address they carry from the peers server.trusted_proxies names
-// alone, a judgement gin makes for it and this listener has no gin to make,
-// and the protocol they carry from any peer.
+// method every gRPC call is on the wire, as its method. The client address
+// a proxy in front forwards is believed from the peers server.trusted_proxies
+// names alone, the stance the HTTP listener takes through gin: realip
+// resolves it ahead of the scope (see chains), and from any other peer the
+// address is the peer's own. The protocol such headers carry is not read:
+// whether the connection speaks TLS is the connection's own fact.
 func requestScope(ctx context.Context, req any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (any, error) {
 	scope := enterCall(ctx, info.FullMethod)
 	rsp, err := handler(scope.ctx, req)
@@ -131,6 +133,9 @@ func enterCall(ctx context.Context, fullMethod string) *callScope {
 	}
 	ctx = execctx.WithTraceID(ctx, traceID)
 	address, tls := peerOf(ctx)
+	if forwarded, ok := realip.FromContext(ctx); ok {
+		address = forwarded.String()
+	}
 	method := methods[fullMethod]
 	route, httpMethod := fullMethod, http.MethodPost
 	if method.Route != "" {

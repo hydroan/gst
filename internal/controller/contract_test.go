@@ -21,6 +21,7 @@ import (
 	"github.com/hydroan/gst/internal/types"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 )
 
@@ -54,6 +55,7 @@ func TestTransportsAnswerTheContractAlike(t *testing.T) {
 	validated := standardFixture[*validatedSample](validatedRoute, "Validated")
 	dated := standardFixture[*datedSample](datedRoute, "Dated")
 	shaped := standardFixture[*shapedSample](shapedRoute, "Shaped")
+	observed := standardFixture[*sampleRecord](observedRoute, "Observed")
 
 	ok := contractWant{status: http.StatusOK}
 	refused := contractWant{status: http.StatusConflict, msg: refusedMsg}
@@ -933,6 +935,19 @@ func TestTransportsAnswerTheContractAlike(t *testing.T) {
 				require.Equal(t, 1, countSamplesNamed(t, stringOf(in.record["name"])), "written before the hook refused over gRPC")
 			},
 		},
+		{
+			name: "Create hands the hooks the client address a trusted peer forwards", fixture: observed, phase: consts.Create,
+			prepare: func(*testing.T) contractInput {
+				return contractInput{record: map[string]any{"name": uniqueName("contract-forwarded")}, forwardedFor: "203.0.113.9"}
+			},
+			want: ok,
+			check: func(t *testing.T, _ contractInput, _ contractAnswer) {
+				t.Helper()
+				observedMu.Lock()
+				defer observedMu.Unlock()
+				require.Equal(t, "203.0.113.9", lastObserved.ClientIP, "the loopback the transports are reached over is a trusted proxy here")
+			},
+		},
 	}
 
 	for _, s := range scenarios {
@@ -986,13 +1001,14 @@ type contractScenario struct {
 // that ends the request on the client's behalf; nil sends it in a context
 // of the transport's own.
 type contractInput struct {
-	ctx     context.Context
-	id      string
-	record  map[string]any
-	items   []map[string]any
-	ids     []string
-	query   controller.Query
-	payload map[string]any
+	ctx          context.Context
+	id           string
+	record       map[string]any
+	items        []map[string]any
+	ids          []string
+	query        controller.Query
+	payload      map[string]any
+	forwardedFor string
 }
 
 // contractAnswer is what a transport answered: the HTTP status and the msg
@@ -1135,7 +1151,7 @@ func overHTTP(t *testing.T, f contractFixture, phase consts.Phase, in contractIn
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	rsp := serveAs(ctx, t, phase.HTTPMethod(), pattern, f.handler(phase), target, body, "alice")
+	rsp := serveAs(ctx, t, phase.HTTPMethod(), pattern, f.handler(phase), target, body, "alice", in.forwardedFor)
 	answer := contractAnswer{status: rsp.Code}
 	var envelope struct {
 		Msg  string `json:"msg"`
@@ -1189,6 +1205,9 @@ func overGRPC(t *testing.T, f contractFixture, phase consts.Phase, in contractIn
 	ctx := in.ctx
 	if ctx == nil {
 		ctx = t.Context()
+	}
+	if in.forwardedFor != "" {
+		ctx = metadata.AppendToOutgoingContext(ctx, "x-forwarded-for", in.forwardedFor)
 	}
 	out, err := invokeIn(ctx, t, sampleServer(t), f.rpc(phase), message, sampleCredential)
 	if err != nil {

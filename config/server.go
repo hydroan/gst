@@ -50,8 +50,9 @@ type Server struct {
 	Port   int    `json:"port" mapstructure:"port" ini:"port" yaml:"port"`
 	Domain string `json:"domain" mapstructure:"domain" ini:"domain" yaml:"domain"`
 
-	// TrustedProxies lists the CIDR blocks of the proxies allowed to report a
-	// client address through X-Forwarded-For or X-Real-IP.
+	// TrustedProxies lists the CIDR blocks, or lone addresses, of the
+	// proxies allowed to report a client address through X-Forwarded-For or
+	// X-Real-IP, to the HTTP and the gRPC listener alike.
 	//
 	// It is empty by default, and an empty list trusts no peer: the client
 	// address is then read off the connection, which the caller cannot
