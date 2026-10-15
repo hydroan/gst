@@ -70,8 +70,9 @@
 //   - a write path with a deliberately weaker contract — no model hooks, no
 //     transaction boundary: Create is plain batch INSERTs (no
 //     ErrDuplicatedKey; ClickHouse has no unique constraints), Delete is a
-//     lightweight DELETE by primary key and always physical (no soft
-//     delete), Update and UpdateByID are asynchronous ALTER TABLE ... UPDATE
+//     lightweight DELETE by primary key, within the caller's tenant like
+//     every other write, and always physical (no soft delete), Update and
+//     UpdateByID are asynchronous ALTER TABLE ... UPDATE
 //     mutations for low-frequency data correction (accepted, not awaited; no
 //     ErrRecordNotFound). Each entry point's doc states the details.
 //

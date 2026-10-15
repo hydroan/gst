@@ -9,6 +9,7 @@ import (
 	"github.com/hydroan/gst/database/clickhouse"
 	"github.com/hydroan/gst/internal/testutil/testcontainer"
 	"github.com/hydroan/gst/internal/types"
+	"github.com/hydroan/gst/tenant"
 	"github.com/stretchr/testify/require"
 )
 
@@ -216,6 +217,52 @@ func TestClickhouse(t *testing.T) {
 
 		require.ErrorIs(t, database.DatabaseOn[*TestAggregateRecord](ctx, ins).Delete(&TestAggregateRecord{}), database.ErrIDRequired,
 			"a delete without a primary key must fail fast")
+	})
+
+	t.Run("DeleteStopsAtTheTenantsOwnRows", func(t *testing.T) {
+		// A tenant-scoped table: clickhouse has no unique constraint, so two
+		// tenants can each hold a row of one id, which is what a delete by
+		// id has to tell apart.
+		require.NoError(t, ins.Exec(`CREATE TABLE test_tenant_soft_delete_items (
+			id         String,
+			created_by String,
+			updated_by String,
+			created_at DateTime64(3),
+			updated_at DateTime64(3),
+			deleted_at Nullable(DateTime64(3)),
+			name       String,
+			tenant_id  String
+		) ENGINE = MergeTree ORDER BY (tenant_id, id)`).Error)
+		a, b := tenant.In(ctx, "tenant-a"), tenant.In(ctx, "tenant-b")
+		shared := func() *TestTenantSoftDeleteItem {
+			item := &TestTenantSoftDeleteItem{Name: "shared"}
+			item.ID = "shared-id"
+			return item
+		}
+		require.NoError(t, database.DatabaseOn[*TestTenantSoftDeleteItem](a, ins).Create(shared()))
+		require.NoError(t, database.DatabaseOn[*TestTenantSoftDeleteItem](b, ins).Create(shared()))
+		count := func(ctx context.Context) int {
+			rows := make([]*TestTenantSoftDeleteItem, 0)
+			require.NoError(t, database.DatabaseOn[*TestTenantSoftDeleteItem](ctx, ins).
+				WithQuery(nil, types.QueryOptions{AllowEmpty: true}).List(&rows))
+			return len(rows)
+		}
+		require.Equal(t, 1, count(a))
+		require.Equal(t, 1, count(b))
+
+		require.NoError(t, database.DatabaseOn[*TestTenantSoftDeleteItem](a, ins).Delete(shared()))
+		require.Equal(t, 0, count(a))
+		require.Equal(t, 1, count(b), "a tenant's delete must stop at its own rows")
+
+		// The statement of clickhouseDeleteStatement's example: the delete
+		// carries the tenant predicate like every other write.
+		stmts := make([]types.SQLStatement, 0)
+		require.NoError(t, database.DatabaseOn[*TestTenantSoftDeleteItem](a, ins).WithDryRun(&stmts).Delete(shared()))
+		require.Len(t, stmts, 1)
+		require.Equal(t, "DELETE FROM `test_tenant_soft_delete_items` WHERE `id` = 'shared-id' AND `tenant_id` = 'tenant-a'", stmts[0].RenderedSQL)
+
+		require.NoError(t, database.DatabaseOn[*TestTenantSoftDeleteItem](tenant.Across(ctx), ins).Delete(shared()))
+		require.Equal(t, 0, count(b), "a cross-tenant delete reaches every tenant's row")
 	})
 
 	t.Run("UpdateMutatesAsynchronously", func(t *testing.T) {

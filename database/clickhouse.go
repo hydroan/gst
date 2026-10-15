@@ -5,6 +5,7 @@ import (
 	"github.com/hydroan/gst/internal/consts"
 	"github.com/hydroan/gst/internal/dbruntime"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 // This file is the ClickHouse write path: Create, Delete, Update and
@@ -14,7 +15,8 @@ import (
 // each entry point's doc spells it out: no model hooks, no transaction
 // boundary, no unique-key or matched-rows semantics. What stays identical:
 // id and timestamp filling, batch splitting, dry-run SQL building, tracing
-// and SQL logging.
+// and SQL logging, and the clauses a column type attaches to a statement,
+// the tenant predicate among them (see tenant.ID).
 
 // clickhouseCreate is Create on a ClickHouse instance: plain batch INSERTs.
 // A single INSERT statement lands atomically (within one partition and the
@@ -63,12 +65,15 @@ func (db *database[M]) clickhouseCreate(objs []M) (err error) {
 // by primary key. ClickHouse has no application-level soft delete — its own
 // lightweight delete already is a mark-then-merge removal — so every delete
 // here is physical, regardless of the model's Purge and of WithPurge, and no
-// row count is reported.
+// row count is reported: a named row the statement does not reach, one of
+// another tenant for instance, passes silently, where the transactional
+// path answers ErrRecordNotFound.
 //
-// The statement is built by hand rather than through gorm's Delete: the
-// dialect driver renders Delete as the far heavier ALTER TABLE ... DELETE
-// mutation, while DELETE FROM completes synchronously by default and leaves
-// merges to the background.
+// The DELETE FROM is spelled by hand rather than rendered through gorm's
+// Delete: the dialect driver renders Delete as the far heavier ALTER TABLE
+// ... DELETE mutation, while DELETE FROM completes synchronously by default
+// and leaves merges to the background. Its WHERE is gorm's own rendering,
+// see clickhouseDeleteStatement.
 func (db *database[M]) clickhouseDelete(objs []M) (err error) {
 	// A delete without a primary key would have to guess a row set; fail
 	// fast before any statement runs, matching Update's contract.
@@ -88,19 +93,130 @@ func (db *database[M]) clickhouseDelete(objs []M) (err error) {
 	if db.batchSize > 0 {
 		batchSize = db.batchSize
 	}
-	deleteSQL := "DELETE FROM " + db.quoteIdent(db.outerTableName()) + " WHERE " + db.quoteIdent("id") + " IN ?"
-
-	if db.dryRun {
-		tx := dryRunSession(db.ins).Exec(deleteSQL, ids)
-		return db.collectSQL(tx)
-	}
 	for i := 0; i < len(ids); i += batchSize {
 		end := min(i+batchSize, len(ids))
-		if err = db.ins.Session(&gorm.Session{}).Exec(deleteSQL, ids[i:end]).Error; err != nil {
+		deleteSQL, vars, err := db.clickhouseDeleteStatement(ids[i:end])
+		if err != nil {
+			return err
+		}
+		if db.dryRun {
+			if err = db.collectSQL(dryRunSession(db.ins).Exec(deleteSQL, vars...)); err != nil {
+				return err
+			}
+			continue
+		}
+		if err = db.ins.Session(&gorm.Session{}).Exec(deleteSQL, vars...).Error; err != nil {
 			return errors.WithStack(err)
 		}
 	}
 	return nil
+}
+
+// clickhouseDeleteStatement renders the lightweight DELETE of the rows ids
+// name, with the values the placeholders take. The WHERE is gorm's own: the
+// statement takes the id list and then, as gorm's delete callback does, the
+// clauses the model's schema attaches to a delete, which is how the tenant
+// predicate reaches the statement. The soft-delete clause among them is
+// kept from turning the statement into an UPDATE by Unscoped, every delete
+// here being physical; the tenant predicate ignores Unscoped on purpose
+// (see tenant.ID). The columns render without their table qualifier (see
+// unqualified). For the id shared-id of a tenant-scoped model on the table
+// test_tenant_soft_delete_items, in the tenant tenant-a, the statement
+// reads
+//
+//	DELETE FROM `test_tenant_soft_delete_items` WHERE `id` = ? AND `tenant_id` = ?
+//
+// with the values shared-id and tenant-a; gorm renders the IN of one id as
+// that equality, and several ids as `id` IN (?,?).
+func (db *database[M]) clickhouseDeleteStatement(ids []string) (string, []any, error) {
+	stmt := db.ins.Session(&gorm.Session{NewDB: true}).Statement
+	if err := stmt.Parse(db.m); err != nil {
+		return "", nil, errors.WithStack(err)
+	}
+	stmt.Table = db.outerTableName()
+	stmt.Unscoped = true
+	values := make([]any, 0, len(ids))
+	for _, id := range ids {
+		values = append(values, id)
+	}
+	stmt.AddClause(clause.Where{Exprs: []clause.Expression{clause.IN{Column: clause.PrimaryColumn, Values: values}}})
+	for _, c := range stmt.Schema.DeleteClauses {
+		stmt.AddClause(c)
+	}
+	where, err := unqualified(stmt.Clauses["WHERE"].Expression)
+	if err != nil {
+		return "", nil, err
+	}
+	stmt.Clauses["WHERE"] = clause.Clause{Name: "WHERE", Expression: where}
+	stmt.Build("WHERE")
+	return "DELETE FROM " + db.quoteIdent(db.outerTableName()) + " " + stmt.SQL.String(), stmt.Vars, nil
+}
+
+// unqualified returns expr with every column naming the current table
+// stripped of its table qualifier. The lightweight DELETE of clickhouse
+// resolves no qualified column in its WHERE, while gorm renders a column a
+// clause names on the current table as table.column without exception. An
+// expression of a shape this cannot see into is an error rather than a
+// statement clickhouse would then refuse.
+func unqualified(expr clause.Expression) (clause.Expression, error) {
+	unqualifyAll := func(exprs []clause.Expression) ([]clause.Expression, error) {
+		out := make([]clause.Expression, 0, len(exprs))
+		for _, e := range exprs {
+			u, err := unqualified(e)
+			if err != nil {
+				return nil, err
+			}
+			out = append(out, u)
+		}
+		return out, nil
+	}
+	unqualifyColumn := func(column any) any {
+		if col, ok := column.(clause.Column); ok && col.Table == clause.CurrentTable {
+			col.Table = ""
+			return col
+		}
+		return column
+	}
+	var err error
+	switch e := expr.(type) {
+	case clause.Where:
+		e.Exprs, err = unqualifyAll(e.Exprs)
+		return e, err
+	case clause.AndConditions:
+		e.Exprs, err = unqualifyAll(e.Exprs)
+		return e, err
+	case clause.OrConditions:
+		e.Exprs, err = unqualifyAll(e.Exprs)
+		return e, err
+	case clause.NotConditions:
+		e.Exprs, err = unqualifyAll(e.Exprs)
+		return e, err
+	case clause.IN:
+		e.Column = unqualifyColumn(e.Column)
+		return e, nil
+	case clause.Eq:
+		e.Column = unqualifyColumn(e.Column)
+		return e, nil
+	case clause.Neq:
+		e.Column = unqualifyColumn(e.Column)
+		return e, nil
+	case clause.Gt:
+		e.Column = unqualifyColumn(e.Column)
+		return e, nil
+	case clause.Gte:
+		e.Column = unqualifyColumn(e.Column)
+		return e, nil
+	case clause.Lt:
+		e.Column = unqualifyColumn(e.Column)
+		return e, nil
+	case clause.Lte:
+		e.Column = unqualifyColumn(e.Column)
+		return e, nil
+	case clause.Like:
+		e.Column = unqualifyColumn(e.Column)
+		return e, nil
+	}
+	return nil, errors.Newf("clickhouse delete: cannot render a %T condition without table qualifiers", expr)
 }
 
 // clickhouseUpdate is Update on a ClickHouse instance: one ALTER TABLE ...
