@@ -97,8 +97,11 @@ func New(cfg config.Sqlite) (*gorm.DB, error) {
 // process has exactly one in-memory database. Foreign keys are checked on
 // its connections as on the file database's (see buildDSN): sqlite checks
 // them per connection and only when asked. Times read back in UTC, as they
-// are stored (see utcConn).
-const memoryDSN = "file::memory:?cache=shared&_foreign_keys=ON&_loc=UTC"
+// are stored (see utcConn), and LIKE compares case, as it does on MySQL and
+// postgres: sqlite ignores ASCII case by default, per connection, and a
+// like filter answering more rows here than there would pass a project's
+// tests on this dialect and fail its users on the others.
+const memoryDSN = "file::memory:?cache=shared&_foreign_keys=ON&_loc=UTC&_cslike=true"
 
 var (
 	// memoryAnchorMu guards memoryAnchor.
@@ -188,6 +191,7 @@ func buildDSN(cfg config.Sqlite) string {
 		"_cache_size=-32000",  // 32MB cache size (negative value means KB)
 		"_foreign_keys=ON",    // Enable foreign key constraint checking
 		"_loc=UTC",            // Read times back in UTC, as they are stored (see utcConn)
+		"_cslike=true",        // LIKE compares case, as on MySQL and postgres (see memoryDSN)
 	}
 
 	separator := "?"

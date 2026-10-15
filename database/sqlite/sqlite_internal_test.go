@@ -172,5 +172,7 @@ func TestBuildDSNKeepsWhatThePathAsked(t *testing.T) {
 		dsn := buildDSN(config.Sqlite{Path: "/tmp/app.db"})
 		require.True(t, strings.HasPrefix(dsn, "/tmp/app.db?"))
 		require.Contains(t, dsn, "_busy_timeout=5000")
+		require.Contains(t, dsn, "_cslike=true", "LIKE compares case on the file database as on the in-memory one")
+		require.Contains(t, memoryDSN, "_cslike=true")
 	})
 }

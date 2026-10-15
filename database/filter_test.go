@@ -2,6 +2,7 @@ package database_test
 
 import (
 	"context"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -1344,4 +1345,34 @@ func TestFilterExistsMultipleCorrelations(t *testing.T) {
 		)
 		require.Empty(t, ids(unknown))
 	})
+}
+
+// TestLikeFiltersCompareCase pins that the like family compares case on every
+// dialect: a pattern in one case matches no row spelled in the other, so a
+// project testing on sqlite sees the rows MySQL and postgres answer.
+func TestLikeFiltersCompareCase(t *testing.T) {
+	defer cleanupTestData()
+	ctx := context.Background()
+	rows := []*TestUser{
+		{Name: "case-lower", Email: "lower@example.com"},
+		{Name: "Case-Upper", Email: "upper@example.com"},
+	}
+	require.NoError(t, database.Database[*TestUser](ctx).Create(rows...))
+
+	names := func(filter types.Filter) []string {
+		users := make([]*TestUser, 0)
+		require.NoError(t, database.Database[*TestUser](ctx).
+			WithQuery(nil, types.QueryOptions{Filters: []types.Filter{filter}}).
+			List(&users))
+		got := make([]string, 0, len(users))
+		for _, u := range users {
+			got = append(got, u.Name)
+		}
+		slices.Sort(got)
+		return got
+	}
+	require.Equal(t, []string{"case-lower"}, names(types.NewFilter("", "name", types.FilterOpLike, "case")))
+	require.Equal(t, []string{"Case-Upper"}, names(types.NewFilter("", "name", types.FilterOpNotLike, "case")))
+	require.Equal(t, []string{"Case-Upper"}, names(types.NewFilter("", "name", types.FilterOpStartsWith, "Case")))
+	require.Equal(t, []string{"case-lower"}, names(types.NewFilter("", "name", types.FilterOpEndsWith, "lower")))
 }
