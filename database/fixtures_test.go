@@ -3,6 +3,8 @@ package database_test
 import (
 	"context"
 	"database/sql"
+	"database/sql/driver"
+	"encoding/hex"
 	"strings"
 	"testing"
 	"time"
@@ -210,8 +212,9 @@ func (t *TestUser) UpdateBefore(ctx context.Context) error {
 // TestScoredRecord carries JSON documents of every shape the datatypes
 // family stores — arrays of numbers, a map and a typed document — on which
 // an exact match fails closed the way it does on a JSON array of strings;
-// binary data, which an exact match compares byte for byte; and a nullable
-// string, which an exact match compares by the value it carries.
+// binary data, which an exact match compares byte for byte; a token held in
+// an array, which binds through driver.Valuer; and a nullable string, which
+// an exact match compares by the value it carries.
 type TestScoredRecord struct {
 	Name    string                                `json:"name"`
 	Scores  datatypes.JSONSlice[int]              `json:"scores"`
@@ -219,12 +222,37 @@ type TestScoredRecord struct {
 	Meta    datatypes.JSONMap                     `json:"meta"`
 	Extra   datatypes.JSONType[map[string]string] `json:"extra"`
 	Digest  []byte                                `json:"digest"`
+	Token   sampleToken                           `json:"token"`
 	Grade   sql.NullString                        `json:"grade"`
 
 	modelregistry.Base
 }
 
 func (*TestScoredRecord) TableName() string { return "test_scored_records" }
+
+// sampleToken is a 16-byte identifier held in an array, the shape of a UUID:
+// it binds through driver.Valuer as its hex text and scans back from it.
+type sampleToken [16]byte //nolint:recvcheck // Scan writes through the pointer and Value binds the value, the receiver pair database/sql documents for a Scanner and a Valuer.
+
+func (t sampleToken) Value() (driver.Value, error) { return hex.EncodeToString(t[:]), nil }
+
+func (t *sampleToken) Scan(src any) error {
+	var text string
+	switch v := src.(type) {
+	case string:
+		text = v
+	case []byte:
+		text = string(v)
+	default:
+		return errors.Newf("sampleToken: cannot scan %T", src)
+	}
+	if text == "" {
+		*t = sampleToken{}
+		return nil
+	}
+	_, err := hex.Decode(t[:], []byte(text))
+	return err
+}
 
 type TestUser2 struct {
 	Name     string  `json:"name"`
@@ -593,6 +621,31 @@ var TestRecordTagCols = struct {
 	RecordID: types.NewColumn[*TestRecordTag, string]("record_id"),
 	Label:    types.NewColumn[*TestRecordTag, string]("label"),
 	Category: types.NewColumn[*TestRecordTag, string]("category"),
+}
+
+// TestScoredRecordCols are the column references of the scored fixture, typed
+// the way gg gen types them: a JSON document, a byte slice, a Valuer and a
+// nullable string each keep their Go type.
+var TestScoredRecordCols = struct {
+	ID      types.Column[string]
+	Name    types.Column[string]
+	Scores  types.Column[datatypes.JSONSlice[int]]
+	Weights types.Column[datatypes.JSONSlice[float64]]
+	Meta    types.Column[datatypes.JSONMap]
+	Extra   types.Column[datatypes.JSONType[map[string]string]]
+	Digest  types.Column[[]byte]
+	Token   types.Column[sampleToken]
+	Grade   types.Column[sql.NullString]
+}{
+	ID:      types.NewColumn[*TestScoredRecord, string]("id"),
+	Name:    types.NewColumn[*TestScoredRecord, string]("name"),
+	Scores:  types.NewColumn[*TestScoredRecord, datatypes.JSONSlice[int]]("scores"),
+	Weights: types.NewColumn[*TestScoredRecord, datatypes.JSONSlice[float64]]("weights"),
+	Meta:    types.NewColumn[*TestScoredRecord, datatypes.JSONMap]("meta"),
+	Extra:   types.NewColumn[*TestScoredRecord, datatypes.JSONType[map[string]string]]("extra"),
+	Digest:  types.NewColumn[*TestScoredRecord, []byte]("digest"),
+	Token:   types.NewColumn[*TestScoredRecord, sampleToken]("token"),
+	Grade:   types.NewColumn[*TestScoredRecord, sql.NullString]("grade"),
 }
 
 // tagSeed is the related-row fixture: two vip tags on alpha records and one

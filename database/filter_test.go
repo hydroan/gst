@@ -601,6 +601,40 @@ func TestDatabaseTypedFilterValues(t *testing.T) {
 	require.Len(t, users, 2, "typed scalar values must bind directly")
 }
 
+// TestDatabaseScalarFiltersOnBytesAndValuers pins that a comparison binds a
+// byte slice, and a value that binds itself through driver.Valuer such as a
+// token held in an array, as the one value it is, the way gorm's own
+// parameter binding does, where any other slice or array value fails closed;
+// and that a JSON array column keeps failing closed on a comparison.
+func TestDatabaseScalarFiltersOnBytesAndValuers(t *testing.T) {
+	ctx := context.Background()
+	t.Cleanup(func() { _ = database.DB().Exec("DELETE FROM test_scored_records").Error })
+	require.NoError(t, database.Database[*TestScoredRecord](ctx).Create(
+		&TestScoredRecord{Name: "first", Digest: []byte{0x00, 0xff, 0x10}, Token: sampleToken{1}, Scores: datatypes.NewJSONSlice([]int{1, 2})},
+		&TestScoredRecord{Name: "second", Digest: []byte{0x01}, Token: sampleToken{2}, Scores: datatypes.NewJSONSlice([]int{3})},
+	))
+	names := func(filter types.Filter) []string {
+		rows := make([]*TestScoredRecord, 0)
+		require.NoError(t, database.Database[*TestScoredRecord](ctx).
+			WithQuery(nil, types.QueryOptions{Filters: []types.Filter{filter}}).
+			WithOrder(TestScoredRecordCols.Name.Asc()).
+			List(&rows))
+		names := make([]string, 0, len(rows))
+		for _, row := range rows {
+			names = append(names, row.Name)
+		}
+		return names
+	}
+
+	require.Equal(t, []string{"first"}, names(TestScoredRecordCols.Digest.Eq([]byte{0x00, 0xff, 0x10})), "a byte slice is one value")
+	require.Equal(t, []string{"second"}, names(TestScoredRecordCols.Digest.Ne([]byte{0x00, 0xff, 0x10})))
+	require.Equal(t, []string{"first"}, names(TestScoredRecordCols.Token.Eq(sampleToken{1})), "a Valuer held in an array is one value")
+	require.Equal(t, []string{"second"}, names(TestScoredRecordCols.Token.Ne(sampleToken{1})))
+	require.Equal(t, []string{"second"}, names(TestScoredRecordCols.Token.Gt(sampleToken{1})))
+	require.Equal(t, []string{"first", "second"}, names(TestScoredRecordCols.Token.In(sampleToken{1}, sampleToken{2})))
+	require.Empty(t, names(TestScoredRecordCols.Scores.Eq(datatypes.NewJSONSlice([]int{1, 2}))), "a JSON array column keeps failing closed on a comparison")
+}
+
 // TestFilterOrSingleChild is the regression test for a group that collapses to
 // one alternative. gorm reads a one-element OrConditions as an OR *connector*,
 // so handing it that shape joins the group to the preceding condition with OR

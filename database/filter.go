@@ -1,6 +1,7 @@
 package database
 
 import (
+	"database/sql/driver"
 	"fmt"
 	"reflect"
 	"strings"
@@ -299,17 +300,17 @@ func (db *database[M]) renderFilter(f types.Filter, scope filterScope) (clause.E
 	}
 	switch f.Op() {
 	case types.FilterOpEq:
-		return db.scalarFilter(f, db.comparisonSQL(info, f.Column(), column, " = "))
+		return db.scalarFilter(f, info, db.comparisonSQL(info, f.Column(), column, " = "))
 	case types.FilterOpNe:
-		return db.scalarFilter(f, db.comparisonSQL(info, f.Column(), column, " <> "))
+		return db.scalarFilter(f, info, db.comparisonSQL(info, f.Column(), column, " <> "))
 	case types.FilterOpGt:
-		return db.scalarFilter(f, db.comparisonSQL(info, f.Column(), column, " > "))
+		return db.scalarFilter(f, info, db.comparisonSQL(info, f.Column(), column, " > "))
 	case types.FilterOpGte:
-		return db.scalarFilter(f, db.comparisonSQL(info, f.Column(), column, " >= "))
+		return db.scalarFilter(f, info, db.comparisonSQL(info, f.Column(), column, " >= "))
 	case types.FilterOpLt:
-		return db.scalarFilter(f, db.comparisonSQL(info, f.Column(), column, " < "))
+		return db.scalarFilter(f, info, db.comparisonSQL(info, f.Column(), column, " < "))
 	case types.FilterOpLte:
-		return db.scalarFilter(f, db.comparisonSQL(info, f.Column(), column, " <= "))
+		return db.scalarFilter(f, info, db.comparisonSQL(info, f.Column(), column, " <= "))
 	case types.FilterOpIn:
 		return db.listFilter(f, column+" IN ?")
 	case types.FilterOpNotIn:
@@ -601,14 +602,23 @@ func (db *database[M]) likeColumn(info tableInfo, dbName, quotedColumn string) s
 	return db.textPatternColumn(quotedColumn, isJSON)
 }
 
-// scalarFilter binds a comparison filter whose value must be a scalar; nil,
-// slice, and array values fail closed.
-func (db *database[M]) scalarFilter(f types.Filter, sql string) (clause.Expression, error) {
+// scalarFilter binds a comparison filter whose value must be one value: nil,
+// a slice and an array fail closed, except a byte slice and a value that
+// binds itself through driver.Valuer, a UUID held in an array for one, which
+// gorm's own parameter binding hands the driver as one value too. A JSON
+// column's documents are slices and maps by kind and compare by rules of
+// the dialect's own, so the exception is not made for them.
+func (db *database[M]) scalarFilter(f types.Filter, info tableInfo, sql string) (clause.Expression, error) {
 	if f.Value() == nil {
 		return db.failClosedFilter(f, "expects a scalar value")
 	}
 	if k := reflect.ValueOf(f.Value()).Kind(); k == reflect.Slice || k == reflect.Array {
-		return db.failClosedFilter(f, "expects a scalar value")
+		_, isJSON := info.jsonColumns[f.Column()]
+		_, isBytes := f.Value().([]byte)
+		_, isValuer := f.Value().(driver.Valuer)
+		if isJSON || (!isBytes && !isValuer) {
+			return db.failClosedFilter(f, "expects a scalar value")
+		}
 	}
 	return clause.Expr{SQL: sql, Vars: []any{f.Value()}}, nil
 }
