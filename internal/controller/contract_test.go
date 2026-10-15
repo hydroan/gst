@@ -307,6 +307,21 @@ func TestTransportsAnswerTheContractAlike(t *testing.T) {
 			want:  contractWant{status: http.StatusBadRequest},
 		},
 		{
+			name: "List refuses a comparison on a JSON column", fixture: dated, phase: consts.List,
+			input: contractInput{query: controller.Query{Filters: []controller.Filter{{Field: "meta", Op: "ne", Values: []string{"value"}}}}},
+			want:  contractWant{status: http.StatusBadRequest},
+		},
+		{
+			name: "List matches a JSON column by its text", fixture: dated, phase: consts.List,
+			input: contractInput{query: controller.Query{Filters: []controller.Filter{{Field: "meta", Op: "like", Values: []string{"value"}}}}},
+			want:  ok,
+		},
+		{
+			name: "List matches a numeric column by the number's text", fixture: dated, phase: consts.List,
+			input: contractInput{query: controller.Query{Filters: []controller.Filter{{Field: "count", Op: "like", Values: []string{"1"}}}}},
+			want:  ok,
+		},
+		{
 			name: "List refuses a page on a model that does not page", fixture: counters, phase: consts.List,
 			input: contractInput{query: controller.Query{Page: 2}},
 			want:  contractWant{status: http.StatusBadRequest},

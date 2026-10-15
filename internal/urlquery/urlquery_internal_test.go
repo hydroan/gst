@@ -36,6 +36,8 @@ type filterTestModel struct {
 	// key fills it for the service's own use.
 	Secret  string `json:"-"`
 	Virtual string `json:"virtual" gorm:"-"`
+	// Meta is a JSON document, matched by its text and never compared.
+	Meta datatypes.JSONMap `json:"meta"`
 
 	modelregistry.Query
 	modelregistry.Base
@@ -58,6 +60,20 @@ type embeddingTestModel struct {
 func (*embeddingTestModel) TableName() string { return "embedding_test_models" }
 
 func TestFilters(t *testing.T) {
+	t.Run("MatchesAJSONColumnByItsTextAndRefusesComparingIt", func(t *testing.T) {
+		conds, err := Filters(url.Values{"meta[like]": {"alice"}, "meta[isnull]": {"true"}}, &filterTestModel{})
+		require.NoError(t, err)
+		require.Equal(t, []types.Filter{
+			types.NewFilter("", "meta", types.FilterOpIsNull, true),
+			types.NewFilter("", "meta", types.FilterOpLike, "alice"),
+		}, conds)
+		for _, op := range []string{"eq", "ne", "gt", "in"} {
+			_, err := Filters(url.Values{"meta[" + op + "]": {"alice"}}, &filterTestModel{})
+			require.EqualError(t, err, `invalid field filter "meta[`+op+`]": operator "`+op+`" is not supported on a JSON field`,
+				"a JSON document compares by rules of the dialect's own, so the comparison is refused up front")
+		}
+	})
+
 	t.Run("ExtractsOperatorConditionsAndIgnoresOtherKeys", func(t *testing.T) {
 		conds, err := Filters(url.Values{
 			"age[gt]":      {"20"},

@@ -84,22 +84,17 @@ func FilterableIndex(typ reflect.Type) (map[string]Column, error) {
 	return index, nil
 }
 
-// timeColumnSetCache memoizes the time-typed column set per model type.
-var timeColumnSetCache sync.Map
-
-// TimeColumnSet reports the time-typed columns of a model type by database
-// name, resolved once per type and cached. The type may be a struct or a
-// pointer to one.
-//
-// Its consumer is the filter renderer normalizing time comparisons; on a type
-// whose columns cannot be resolved it renders without normalization, which is
-// the exact SQL every column renders on the dialects that compare time
-// natively — hence nil on failure rather than an error.
-func TimeColumnSet(typ reflect.Type) map[string]struct{} {
+// columnSet reports the columns of a model type that keep selects, by
+// database name, resolved once per type into cache. The type may be a struct
+// or a pointer to one. On a type whose columns cannot be resolved it reports
+// nil rather than an error: its consumers then render every column without
+// the treatment the set selects for, which is the SQL every column renders
+// on the dialects that need none.
+func columnSet(cache *sync.Map, typ reflect.Type, keep func(Column) bool) map[string]struct{} {
 	for typ != nil && typ.Kind() == reflect.Pointer {
 		typ = typ.Elem()
 	}
-	if cached, ok := timeColumnSetCache.Load(typ); ok {
+	if cached, ok := cache.Load(typ); ok {
 		return cached.(map[string]struct{}) //nolint:errcheck
 	}
 
@@ -107,43 +102,45 @@ func TimeColumnSet(typ reflect.Type) map[string]struct{} {
 	if columns, err := Columns(typ); err == nil {
 		set = make(map[string]struct{})
 		for _, c := range columns {
-			if ClassifyColumn(c.Type) == ColumnClassTime {
+			if keep(c) {
 				set[c.DBName] = struct{}{}
 			}
 		}
 	}
-	timeColumnSetCache.Store(typ, set)
+	cache.Store(typ, set)
 	return set
+}
+
+// timeColumnSetCache memoizes the time-typed column set per model type.
+var timeColumnSetCache sync.Map
+
+// TimeColumnSet reports the time-typed columns of a model type by database
+// name, resolved once per type and cached; see columnSet. Its consumer is the
+// filter renderer normalizing time comparisons, which every column renders
+// without on the dialects that compare time natively.
+func TimeColumnSet(typ reflect.Type) map[string]struct{} {
+	return columnSet(&timeColumnSetCache, typ, func(c Column) bool { return ClassifyColumn(c.Type) == ColumnClassTime })
 }
 
 // jsonColumnSetCache memoizes the JSON-typed column set per model type.
 var jsonColumnSetCache sync.Map
 
 // JSONColumnSet reports the JSON-typed columns of a model type by database
-// name, resolved once per type and cached. The type may be a struct or a
-// pointer to one.
-//
-// Its consumers are the like-family cast in the filter renderer and the
-// exact-match fail-closed rule in WithQuery; on a type whose columns cannot
-// be resolved the columns render without the cast — hence nil on failure
-// rather than an error.
+// name, resolved once per type and cached; see columnSet. Its consumers are
+// the text pattern cast in the filter renderer and the exact-match
+// fail-closed rule in WithQuery.
 func JSONColumnSet(typ reflect.Type) map[string]struct{} {
-	for typ != nil && typ.Kind() == reflect.Pointer {
-		typ = typ.Elem()
-	}
-	if cached, ok := jsonColumnSetCache.Load(typ); ok {
-		return cached.(map[string]struct{}) //nolint:errcheck
-	}
+	return columnSet(&jsonColumnSetCache, typ, func(c Column) bool { return IsJSONType(c.Type) })
+}
 
-	var set map[string]struct{}
-	if columns, err := Columns(typ); err == nil {
-		set = make(map[string]struct{})
-		for _, c := range columns {
-			if IsJSONType(c.Type) {
-				set[c.DBName] = struct{}{}
-			}
-		}
-	}
-	jsonColumnSetCache.Store(typ, set)
-	return set
+// numericColumnSetCache memoizes the numeric column set per model type.
+var numericColumnSetCache sync.Map
+
+// NumericColumnSet reports the numeric columns of a model type by database
+// name, resolved once per type and cached; see columnSet. Its consumer is the
+// text pattern cast in the filter renderer, which every column renders
+// without on the dialects that read a number in a string context by
+// themselves.
+func NumericColumnSet(typ reflect.Type) map[string]struct{} {
+	return columnSet(&numericColumnSetCache, typ, func(c Column) bool { return ClassifyColumn(c.Type) == ColumnClassNumeric })
 }

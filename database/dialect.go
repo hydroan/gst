@@ -79,11 +79,12 @@ func (db *database[M]) timeComparableExpr(operand string) string {
 
 // textPatternColumn renders a column so the text pattern operators (LIKE and
 // the regex operator) accept it. PostgreSQL is strict about operand types:
-// json and jsonb carry no text operators, so a JSON column is cast to text
-// there. MySQL and SQLite already read a JSON value in its text form in a
-// string context, and skipping the cast keeps their SQL unchanged.
-func (db *database[M]) textPatternColumn(quotedColumn string, isJSON bool) string {
-	if isJSON && db.dialect() == dialectPostgres {
+// json, jsonb and the numeric types carry no text operators, so a column of
+// those types, which cast marks, is cast to text there. MySQL and SQLite
+// already read such a value in its text form in a string context, and
+// skipping the cast keeps their SQL unchanged.
+func (db *database[M]) textPatternColumn(quotedColumn string, cast bool) string {
+	if cast && db.dialect() == dialectPostgres {
 		return "CAST(" + quotedColumn + " AS TEXT)"
 	}
 	return quotedColumn

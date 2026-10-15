@@ -62,10 +62,15 @@ type filterScope struct {
 	// timeComparableExpr; see comparisonSQL.
 	timeColumns map[string]struct{}
 	// jsonColumns names the columns of the scope's model that store a JSON
-	// document, keyed by database name. The like-family filters match against
+	// document, keyed by database name. The text pattern filters match against
 	// the document's text form and cast the column where the dialect requires
 	// it; see textPatternColumn.
 	jsonColumns map[string]struct{}
+	// numericColumns names the columns of the scope's model that store a
+	// number, keyed by database name. The text pattern filters match against
+	// the number's text form and cast the column where the dialect requires
+	// it; see textPatternColumn.
+	numericColumns map[string]struct{}
 	// depth numbers the nesting level so each subquery can take a distinct
 	// alias when it reads the same table as the query enclosing it.
 	depth int
@@ -87,14 +92,15 @@ type filterScope struct {
 }
 
 // tableInfo is what the renderer knows about one table's columns: which
-// exist, and which store time or JSON, keyed by database name. A derived
-// table also knows the name it is read under and the aliases its key columns
-// project as, which is how a column named through the joined select's model
-// reaches the derived column it became.
+// exist, and which store time, JSON or a number, keyed by database name. A
+// derived table also knows the name it is read under and the aliases its key
+// columns project as, which is how a column named through the joined select's
+// model reaches the derived column it became.
 type tableInfo struct {
-	columns     map[string]struct{}
-	timeColumns map[string]struct{}
-	jsonColumns map[string]struct{}
+	columns        map[string]struct{}
+	timeColumns    map[string]struct{}
+	jsonColumns    map[string]struct{}
+	numericColumns map[string]struct{}
 	// qualify is the name the table's columns are qualified with in SQL;
 	// empty means the table's own name.
 	qualify string
@@ -114,14 +120,19 @@ func (info tableInfo) column(name string) string {
 // tableInfoOf reads a model's resolved columns into a tableInfo.
 func tableInfoOf(columns []modelschema.Column) tableInfo {
 	info := tableInfo{
-		columns:     make(map[string]struct{}, len(columns)),
-		timeColumns: make(map[string]struct{}),
-		jsonColumns: make(map[string]struct{}),
+		columns:        make(map[string]struct{}, len(columns)),
+		timeColumns:    make(map[string]struct{}),
+		jsonColumns:    make(map[string]struct{}),
+		numericColumns: make(map[string]struct{}),
 	}
 	for _, c := range columns {
 		info.columns[c.DBName] = struct{}{}
-		if modelschema.ClassifyColumn(c.Type) == modelschema.ColumnClassTime {
+		class := modelschema.ClassifyColumn(c.Type)
+		if class == modelschema.ColumnClassTime {
 			info.timeColumns[c.DBName] = struct{}{}
+		}
+		if class == modelschema.ColumnClassNumeric {
+			info.numericColumns[c.DBName] = struct{}{}
 		}
 		if modelschema.IsJSONType(c.Type) {
 			info.jsonColumns[c.DBName] = struct{}{}
@@ -132,7 +143,7 @@ func tableInfoOf(columns []modelschema.Column) tableInfo {
 
 // own is the scope's own table as a tableInfo.
 func (s filterScope) own() tableInfo {
-	return tableInfo{columns: s.columns, timeColumns: s.timeColumns, jsonColumns: s.jsonColumns, qualify: s.qualify, rename: s.rename}
+	return tableInfo{columns: s.columns, timeColumns: s.timeColumns, jsonColumns: s.jsonColumns, numericColumns: s.numericColumns, qualify: s.qualify, rename: s.rename}
 }
 
 // outerScope is the filterScope of a top-level predicate: it correlates
@@ -141,10 +152,11 @@ func (s filterScope) own() tableInfo {
 func (db *database[M]) outerScope() filterScope {
 	typ := reflect.TypeOf(*new(M))
 	return filterScope{
-		parent:      db.outerTableName(),
-		table:       db.outerTableName(),
-		timeColumns: modelschema.TimeColumnSet(typ),
-		jsonColumns: modelschema.JSONColumnSet(typ),
+		parent:         db.outerTableName(),
+		table:          db.outerTableName(),
+		timeColumns:    modelschema.TimeColumnSet(typ),
+		jsonColumns:    modelschema.JSONColumnSet(typ),
+		numericColumns: modelschema.NumericColumnSet(typ),
 	}
 }
 
@@ -316,13 +328,13 @@ func (db *database[M]) renderFilter(f types.Filter, scope filterScope) (clause.E
 	case types.FilterOpNotIn:
 		return db.listFilter(f, column+" NOT IN ?")
 	case types.FilterOpLike:
-		return db.patternFilter(f, db.likeColumn(info, f.Column(), column)+" LIKE ?"+db.likeEscapeSuffix(), "%", "%")
+		return db.patternFilter(f, db.patternColumn(info, f.Column(), column)+" LIKE ?"+db.likeEscapeSuffix(), "%", "%")
 	case types.FilterOpNotLike:
-		return db.patternFilter(f, db.likeColumn(info, f.Column(), column)+" NOT LIKE ?"+db.likeEscapeSuffix(), "%", "%")
+		return db.patternFilter(f, db.patternColumn(info, f.Column(), column)+" NOT LIKE ?"+db.likeEscapeSuffix(), "%", "%")
 	case types.FilterOpStartsWith:
-		return db.patternFilter(f, db.likeColumn(info, f.Column(), column)+" LIKE ?"+db.likeEscapeSuffix(), "", "%")
+		return db.patternFilter(f, db.patternColumn(info, f.Column(), column)+" LIKE ?"+db.likeEscapeSuffix(), "", "%")
 	case types.FilterOpEndsWith:
-		return db.patternFilter(f, db.likeColumn(info, f.Column(), column)+" LIKE ?"+db.likeEscapeSuffix(), "%", "")
+		return db.patternFilter(f, db.patternColumn(info, f.Column(), column)+" LIKE ?"+db.likeEscapeSuffix(), "%", "")
 	case types.FilterOpIsNull:
 		b, ok := f.Value().(bool)
 		if !ok {
@@ -333,9 +345,9 @@ func (db *database[M]) renderFilter(f types.Filter, scope filterScope) (clause.E
 		}
 		return clause.Expr{SQL: column + " IS NOT NULL"}, nil
 	case types.FilterOpRegex:
-		return db.stringFilter(f, column+" "+db.regexpOperator()+" ?")
+		return db.stringFilter(f, db.patternColumn(info, f.Column(), column)+" "+db.regexpOperator()+" ?")
 	case types.FilterOpNotRegex:
-		return db.stringFilter(f, "NOT ("+column+" "+db.regexpOperator()+" ?)")
+		return db.stringFilter(f, "NOT ("+db.patternColumn(info, f.Column(), column)+" "+db.regexpOperator()+" ?)")
 	case types.FilterOpJSONContains:
 		// datatypes handles the dialect split: JSON_CONTAINS on MySQL, a
 		// jsonb operator on Postgres, a json_each EXISTS subquery on SQLite.
@@ -530,9 +542,9 @@ func eqColParent(value any) (name, table string, ok bool) {
 }
 
 // hasCorrelation reports whether a subquery's predicates tie it to the query
-// around it: an EqCol predicate directly in the list or inside a group, at this level
-// only. A nested subquery correlates against this level, not on its behalf,
-// so its own predicates do not count.
+// around it: an EqCol predicate directly in the list or inside a group, at
+// this level only. A nested subquery correlates against this level, not on
+// its behalf, so its own predicates do not count.
 func hasCorrelation(filters []types.Filter) bool {
 	for _, f := range filters {
 		switch f.Op() {
@@ -594,12 +606,14 @@ func (db *database[M]) comparisonSQL(info tableInfo, dbName, quotedColumn, op st
 	return quotedColumn + op + "?"
 }
 
-// likeColumn renders the column a like-family filter matches against: a JSON
-// document matches by its text form, so a JSON column goes through
-// textPatternColumn and is cast where the dialect requires it.
-func (db *database[M]) likeColumn(info tableInfo, dbName, quotedColumn string) string {
+// patternColumn renders the column a text pattern filter, the like family
+// and the regex operators, matches against: a JSON document and a number
+// match by their text form, so such a column goes through textPatternColumn
+// and is cast where the dialect requires it.
+func (db *database[M]) patternColumn(info tableInfo, dbName, quotedColumn string) string {
 	_, isJSON := info.jsonColumns[dbName]
-	return db.textPatternColumn(quotedColumn, isJSON)
+	_, isNumeric := info.numericColumns[dbName]
+	return db.textPatternColumn(quotedColumn, isJSON || isNumeric)
 }
 
 // scalarFilter binds a comparison filter whose value must be one value: nil,
@@ -676,8 +690,8 @@ func (db *database[M]) scopedColumn(column string, scope filterScope) string {
 // a value, so they are written into the SQL as identifiers quoted by the
 // dialect (see eqColCondition): the related side is checked against the
 // related model's columns, and both sides are named by service code — through
-// a column reference or a plain name — never by a client, because the operator
-// has no URL spelling.
+// a column reference or a plain name — never by a client, because the
+// operator has no URL spelling.
 //
 // scope carries the table the outer side of the correlation refers to. It
 // travels with the renderer rather than being read from the chain, because a

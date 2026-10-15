@@ -97,11 +97,15 @@ func (shapedSample) TableName() string { return "controller_shaped_samples" }
 // datedSample carries a calendar date, stored in a date column, beside an
 // optional instant: a date the client sends with its own offset is read as
 // the UTC day on both transports, in a record and in a filter alike, and a
-// filter on either column is checked against the value the column holds.
+// filter on either column is checked against the value the column holds. It
+// also carries a JSON document, which a filter matches by its text and never
+// compares, and a number, which a filter matches by its text as well.
 type datedSample struct {
-	Name     string         `json:"name"`
-	Day      datatypes.Date `json:"day"`
-	ClosedAt *time.Time     `json:"closed_at"`
+	Name     string            `json:"name"`
+	Day      datatypes.Date    `json:"day"`
+	ClosedAt *time.Time        `json:"closed_at"`
+	Meta     datatypes.JSONMap `json:"meta"`
+	Count    int               `json:"count"`
 
 	modelregistry.Query
 	modelregistry.Base

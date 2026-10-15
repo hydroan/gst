@@ -138,6 +138,10 @@ func splitFilterKey(key string) (field, op string, ok bool) {
 //   - bool columns accept eq/ne with a boolean value, carried as a bool.
 //   - numeric columns (see modelschema.ClassifyColumn) require numeric
 //     values; in/notin validate every comma-separated member.
+//   - JSON columns (see modelschema.IsJSONType) accept the like family only,
+//     matching the document's text; a comparison on a document is refused,
+//     since whether two documents compare equal or order is the dialect's
+//     own affair.
 //   - in/notin values split on commas here, so the members travel as a real
 //     slice: the URL list encoding never reaches the database layer.
 //   - string and other scalar values pass through unchanged.
@@ -194,6 +198,13 @@ func normalizeFilterValue(columnTyp reflect.Type, op types.FilterOp, value strin
 				return nil, err
 			}
 			return value, nil
+		}
+	case modelschema.IsJSONType(columnTyp):
+		switch op {
+		case types.FilterOpLike, types.FilterOpNotLike, types.FilterOpStartsWith, types.FilterOpEndsWith:
+			return value, nil
+		default:
+			return nil, errors.Newf("operator %q is not supported on a JSON field", op)
 		}
 	default:
 		switch op {

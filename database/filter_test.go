@@ -635,6 +635,35 @@ func TestDatabaseScalarFiltersOnBytesAndValuers(t *testing.T) {
 	require.Empty(t, names(TestScoredRecordCols.Scores.Eq(datatypes.NewJSONSlice([]int{1, 2}))), "a JSON array column keeps failing closed on a comparison")
 }
 
+// TestDatabasePatternFiltersOnNumericColumns pins that the like family and
+// the regex operators match a numeric column by the number's text form on
+// every dialect: the same request answers the same rows whether the dialect
+// reads a number in a string context by itself or needs the column cast.
+func TestDatabasePatternFiltersOnNumericColumns(t *testing.T) {
+	defer cleanupTestData()
+	setupTestData(t)
+
+	ages := func(filter types.Filter) []int {
+		users := make([]*TestUser, 0)
+		require.NoError(t, database.Database[*TestUser](context.Background()).
+			WithQuery(nil, types.QueryOptions{Filters: []types.Filter{filter}}).
+			WithOrder(types.NewColumn[*TestUser, int]("age").Asc()).
+			List(&users))
+		ages := make([]int, 0, len(users))
+		for _, u := range users {
+			ages = append(ages, u.Age)
+		}
+		return ages
+	}
+
+	require.Equal(t, []int{18, 19}, ages(types.NewFilter("", "age", types.FilterOpLike, "1")))
+	require.Equal(t, []int{20}, ages(types.NewFilter("", "age", types.FilterOpNotLike, "1")))
+	require.Equal(t, []int{20}, ages(types.NewFilter("", "age", types.FilterOpStartsWith, "2")))
+	require.Equal(t, []int{19}, ages(types.NewFilter("", "age", types.FilterOpEndsWith, "9")))
+	require.Equal(t, []int{18, 19}, ages(types.NewFilter("", "age", types.FilterOpRegex, "^1")))
+	require.Equal(t, []int{20}, ages(types.NewFilter("", "age", types.FilterOpNotRegex, "^1")))
+}
+
 // TestFilterOrSingleChild is the regression test for a group that collapses to
 // one alternative. gorm reads a one-element OrConditions as an OR *connector*,
 // so handing it that shape joins the group to the preceding condition with OR

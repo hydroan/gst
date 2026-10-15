@@ -50,6 +50,7 @@ type sampleDocumentRecord struct {
 	ID        string         `json:"id" gorm:"primaryKey"`
 	Payload   datatypes.JSON `json:"payload"`
 	Note      string         `json:"note"`
+	Count     int            `json:"count"`
 	CreatedAt time.Time      `json:"created_at"`
 	Day       datatypes.Date `json:"day"`
 }
@@ -86,5 +87,22 @@ func TestJSONColumnSetReportsJSONColumns(t *testing.T) {
 		"pointer and struct type must share one cached set")
 
 	require.Nil(t, JSONColumnSet(reflect.TypeFor[string]()),
+		"a type without resolvable columns yields nil, not an error")
+}
+
+// TestNumericColumnSetReportsNumericColumns pins the same three properties
+// for the numeric column set.
+func TestNumericColumnSetReportsNumericColumns(t *testing.T) {
+	set := NumericColumnSet(reflect.TypeFor[*sampleDocumentRecord]())
+	require.Contains(t, set, "count")
+	require.NotContains(t, set, "note")
+	require.NotContains(t, set, "payload")
+	require.NotContains(t, set, "created_at")
+
+	second := NumericColumnSet(reflect.TypeFor[sampleDocumentRecord]())
+	require.Equal(t, reflect.ValueOf(set).Pointer(), reflect.ValueOf(second).Pointer(),
+		"pointer and struct type must share one cached set")
+
+	require.Nil(t, NumericColumnSet(reflect.TypeFor[string]()),
 		"a type without resolvable columns yields nil, not an error")
 }
