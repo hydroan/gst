@@ -1,11 +1,17 @@
 package controller
 
 import (
+	"context"
 	"net/url"
 	"testing"
+	"time"
 
+	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/internal/consts"
 	"github.com/stretchr/testify/require"
+	"go.opentelemetry.io/otel/trace"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 // TestQueryValuesRenderTheHTTPQuery pins the example of the Query.values
@@ -115,4 +121,40 @@ func TestQueryValuesRefuseWhatTheHTTPQueryCannotCarry(t *testing.T) {
 			require.EqualError(t, err, tt.message)
 		})
 	}
+}
+
+// TestFailServiceTellsACancellationFromAPassedDeadline pins what failService
+// makes of a delegated service's error once the call ended: a call the
+// client canceled answers Canceled with the error unlogged, a call whose
+// deadline passed answers DeadlineExceeded with the error logged, the
+// server's failure to answer in time; a live call answers the status the
+// error maps to, logged as well.
+func TestFailServiceTellsACancellationFromAPassedDeadline(t *testing.T) {
+	cause := errors.New("dial tcp: connection refused")
+	span := trace.SpanFromContext(context.Background())
+
+	t.Run("a live call answers the mapped status and logs an error", func(t *testing.T) {
+		rec := &levelRecorder{}
+		c := &call{ctx: context.Background(), span: span, log: rec}
+		require.Equal(t, codes.Internal, status.Code(c.failService(cause)))
+		require.Equal(t, []string{"service operation failed"}, rec.errors)
+	})
+
+	t.Run("a canceled call answers Canceled unlogged", func(t *testing.T) {
+		ctx, cancel := context.WithCancel(context.Background())
+		cancel()
+		rec := &levelRecorder{}
+		c := &call{ctx: ctx, span: span, log: rec}
+		require.Equal(t, codes.Canceled, status.Code(c.failService(cause)))
+		require.Empty(t, rec.errors, "a client that went away is not a failure of the server")
+	})
+
+	t.Run("a call whose deadline passed answers DeadlineExceeded and logs an error", func(t *testing.T) {
+		ctx, cancel := context.WithDeadline(context.Background(), time.Now().Add(-time.Second))
+		defer cancel()
+		rec := &levelRecorder{}
+		c := &call{ctx: ctx, span: span, log: rec}
+		require.Equal(t, codes.DeadlineExceeded, status.Code(c.failService(cause)))
+		require.Equal(t, []string{"service operation failed"}, rec.errors, "the server did not answer in time: its failure, not the client's")
+	})
 }

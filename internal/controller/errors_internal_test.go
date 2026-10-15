@@ -96,14 +96,14 @@ type levelRecorder struct {
 func (r *levelRecorder) Infoz(msg string, _ ...zap.Field)  { r.infos = append(r.infos, msg) }
 func (r *levelRecorder) Errorz(msg string, _ ...zap.Field) { r.errors = append(r.errors, msg) }
 
-// TestFailWithAnswersAnEndedContextAsTheClientsDoing pins what failWith
+// TestFailWithTellsACancellationFromAPassedDeadline pins what failWith
 // makes of a failure once the request's context ended: a client that went
 // away is answered the client-closed status at info, off the span, while a
 // deadline that passed is the server's failure to answer in time, answered
 // 504 and logged at error, each with the context's own message and the
 // failure behind it as cause; a failure in a live context stays the flow's
 // answer, logged at error.
-func TestFailWithAnswersAnEndedContextAsTheClientsDoing(t *testing.T) {
+func TestFailWithTellsACancellationFromAPassedDeadline(t *testing.T) {
 	cause := errors.New("read tcp: connection reset by peer")
 	answer := errors.New("the flow's answer")
 

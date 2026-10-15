@@ -20,6 +20,7 @@ import (
 	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
 	"google.golang.org/genproto/googleapis/rpc/errdetails"
+	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
 
@@ -345,26 +346,33 @@ func (c *call) fail(err error) error {
 
 // failService answers a delegated service's error the way the HTTP handler
 // does: logged and recorded on the span, then the status it maps to (see
-// grpcserver.StatusError). A call that ended is answered with the status of
-// its context instead, the error unlogged (see ended).
+// grpcserver.StatusError). A call the client canceled is answered Canceled
+// with the error unlogged, the client's doing; one whose deadline passed is
+// the server's failure to answer in time, logged and recorded like any
+// other and answered DeadlineExceeded (see ended).
 func (c *call) failService(err error) error {
-	if ended := c.ended(); ended != nil {
+	ended := c.ended()
+	if status.Code(ended) == codes.Canceled {
 		return ended
 	}
 	c.log.Errorz("service operation failed", zap.Error(err))
 	gstotel.RecordError(c.span, err)
+	if ended != nil {
+		return ended
+	}
 	return grpcserver.StatusError(err)
 }
 
 // ended returns the status of the call's context once the call ended, nil
 // while it goes on: Canceled once the client canceled the call or went away,
-// DeadlineExceeded once the deadline it set passed. A call ending this way is
-// the client's doing, or the listener's stop, which answers a stream it ended
-// Unavailable in this status's place (see grpcserver); it is not a failure of
-// the flow or the service, whatever they returned then — a database access
-// cut short, a Send or Recv of a stream the client stopped — so the failure
-// is answered as the context's status, which the access log records, and not
-// logged as a failure of the server's.
+// DeadlineExceeded once the deadline passed. The failure a call returns after
+// ending — a database access cut short, a Send or Recv of a stream the
+// client stopped — is answered as the context's status, which the access log
+// records. A cancellation is the client's doing, or the listener's stop,
+// which answers a stream it ended Unavailable in this status's place (see
+// grpcserver), and is not logged as a failure of the server's; a deadline
+// that passed is the server failing to answer in time, logged and recorded
+// like any failure (see failService and failWith).
 func (c *call) ended() error {
 	if err := c.ctx.Err(); err != nil {
 		return status.FromContextError(err).Err()
