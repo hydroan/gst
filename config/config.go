@@ -34,6 +34,11 @@
 //     names the variable, its value and the key, such as a SERVER_PORT of
 //     "tcp://10.0.0.1:8080" injected by a Kubernetes service link. A
 //     duration or a map has no empty form, so an empty value fails too.
+//   - A key in the file under a section of the framework's own configuration
+//     that the section does not have, such as leve under logger. The error
+//     names the section and the key. A section the framework does not know
+//     is not checked: a project registers its own sections before Init or
+//     after it.
 //   - A registered section named like a section of the framework's own
 //     configuration, such as a type named Mysql.
 //   - Two types registering the same section. Registering the same type again
@@ -181,7 +186,7 @@ func Init() (err error) {
 	if err = bindEnv("", reflect.ValueOf(App).Elem()); err != nil {
 		return err
 	}
-	if err = cv.Unmarshal(App, decodeHooks()); err != nil {
+	if err = unmarshalConfig(cv, App); err != nil {
 		return errors.Wrap(err, "failed to unmarshal config")
 	}
 

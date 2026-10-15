@@ -24,7 +24,9 @@ func newViper() (*viper.Viper, error) {
 // configuration files outside a running application (tooling, tests) use
 // it to learn what a file means on its own: the result depends on framework
 // defaults and file content alone, so two machines loading the same file
-// always reach the same conclusion regardless of their environments.
+// always reach the same conclusion regardless of their environments. A key
+// under a framework section that the section does not have fails it, as it
+// fails Init.
 func Load(file string) (*Config, error) {
 	v, err := newViper()
 	if err != nil {
@@ -38,7 +40,7 @@ func Load(file string) (*Config, error) {
 	if err := v.ReadInConfig(); err != nil {
 		return nil, errors.Wrapf(err, "failed to read config file %s", file)
 	}
-	if err := v.Unmarshal(c, decodeHooks()); err != nil {
+	if err := unmarshalConfig(v, c); err != nil {
 		return nil, errors.Wrapf(err, "failed to unmarshal config file %s", file)
 	}
 	return c, nil

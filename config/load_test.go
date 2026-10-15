@@ -60,3 +60,16 @@ func writeLoadFile(t *testing.T, name, content string) string {
 	require.NoError(t, os.WriteFile(path, []byte(content), 0o600))
 	return path
 }
+
+// TestLoadRefusesAKeyTheFrameworkSectionLacks pins that Load reads a file
+// the way Init does: a key one of the framework's own sections does not have
+// fails it naming the section and the key, and a section the framework does
+// not know passes.
+func TestLoadRefusesAKeyTheFrameworkSectionLacks(t *testing.T) {
+	_, err := config.Load(writeLoadFile(t, "config.ini", "[logger]\nleve = debug\n"))
+	require.ErrorContains(t, err, `section "logger" has no key "leve"`)
+
+	c, err := config.Load(writeLoadFile(t, "config.ini", "[nosuchsection]\nkey = 1\n\n[logger]\nlevel = debug\n"))
+	require.NoError(t, err)
+	require.Equal(t, "debug", c.Logger.Level)
+}

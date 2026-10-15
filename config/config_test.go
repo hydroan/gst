@@ -374,3 +374,39 @@ func clearConfigEnvForTest(t *testing.T) {
 		}
 	}
 }
+
+// TestInitRefusesAKeyTheFrameworkSectionLacks pins that a key one of the
+// framework's own sections does not have — misspelled, or under a nested
+// group — fails Init naming the section and the key, every such key at once
+// in sorted order, instead of being ignored while the value it meant to set
+// stays at its default; a section the framework does not know is left alone,
+// for a project to register before or after Init.
+func TestInitRefusesAKeyTheFrameworkSectionLacks(t *testing.T) {
+	for _, tc := range []struct {
+		name, content, want string
+	}{
+		{"a misspelled key", "[logger]\nleve = debug\n", `failed to unmarshal config: section "logger" has no key "leve"`},
+		{"a key the section lacks", "[sqlite]\ndatabase = gone\n", `failed to unmarshal config: section "sqlite" has no key "database"`},
+		{"a key under a nested group", "[logger.http_body]\nfoo = 1\n", `failed to unmarshal config: section "logger" has no key "http_body.foo"`},
+		{"every unknown key, in order", "[sqlite]\ndatabase = gone\n\n[logger]\nleve = debug\n", `failed to unmarshal config: section "logger" has no key "leve"; section "sqlite" has no key "database"`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			filename := filepath.Join(t.TempDir(), "config.ini")
+			requireWriteConfigFile(t, filename, tc.content)
+			config.SetConfigFile(filename)
+			err := config.Init()
+			if assert.Error(t, err) {
+				assert.ErrorContains(t, err, tc.want)
+			}
+		})
+	}
+
+	t.Run("a section the framework does not know passes", func(t *testing.T) {
+		filename := filepath.Join(t.TempDir(), "config.ini")
+		requireWriteConfigFile(t, filename, "[nosuchsection]\nkey = 1\n\n[logger]\nlevel = debug\n")
+		config.SetConfigFile(filename)
+		if assert.NoError(t, config.Init()) {
+			assert.Equal(t, "debug", config.App.Logger.Level)
+		}
+	})
+}

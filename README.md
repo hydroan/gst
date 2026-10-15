@@ -817,7 +817,7 @@ rsp, err := cli.Post[model.SampleSealRsp](ctx, "/api/samples/seal", &model.Sampl
 `logger.http_body.enabled` 对应 `LOGGER_HTTP_BODY_ENABLED`，自定义段 `Sample` 的 `endpoint` 对应
 `SAMPLE_ENDPOINT`。设成空串、`false`、`0` 同样生效，只有时长和 map 类型的键没有空的写法，设成空串启动失败。时长一律带单位（`15s`、`500ms`、`2160h`），配置文件里写成裸数字（如 YAML 的 `read_timeout: 15`）启动失败，只有 `0` 例外。启动时这几种情况直接失败：变量的值转不成对应类型
 （报错写明变量名和原值，例如 `SERVER_PORT=tcp://…`）；自定义段和框架内置段重名（比如类型叫 `Mysql`）；
-两个类型注册成同一个段；自定义段的 `default` 标签写错（比如 bool 字段写成 `default:"yes"`）。变量名写错、
+两个类型注册成同一个段；自定义段的 `default` 标签写错（比如 bool 字段写成 `default:"yes"`）；配置文件在框架内置段下写了框架没有的键（比如 `[logger]` 下写成 `leve`），报错点名段和键，不认识的段名不检查，自定义段按注册的类型解码。变量名写错、
 或者只写到段名（比如 `SERVER`）都不会报错，也不生效，按上面的规则核对。
 
 服务启动默认不自动建表、不自动迁移（`database.auto_migrate = false`）：启动期只校验注册模型

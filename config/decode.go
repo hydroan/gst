@@ -1,7 +1,9 @@
 package config
 
 import (
+	"fmt"
 	"reflect"
+	"slices"
 	"strings"
 	"time"
 
@@ -9,6 +11,32 @@ import (
 	"github.com/go-viper/mapstructure/v2"
 	"github.com/spf13/viper"
 )
+
+// unmarshalConfig decodes the configuration v holds into c, the framework's
+// own, and refuses a key under one of the framework's sections that no field
+// of the section reads: a misspelled key, such as leve under logger, would
+// otherwise leave the value it meant to set at its default with nothing
+// reporting it. A key outside the framework's sections passes: it is under a
+// section a project registers, before Init or after it, whose own decode
+// reads it. The decoder lists the keys it leaves unused in its metadata; its
+// ErrorUnused option would refuse those sections too.
+func unmarshalConfig(v *viper.Viper, c *Config) error {
+	var md mapstructure.Metadata
+	if err := v.Unmarshal(c, decodeHooks(), func(dc *mapstructure.DecoderConfig) { dc.Metadata = &md }); err != nil {
+		return err
+	}
+	var unknown []string
+	for _, key := range md.Unused {
+		if section, rest, ok := strings.Cut(key, "."); ok && builtinSections()[section] {
+			unknown = append(unknown, fmt.Sprintf("section %q has no key %q", section, rest))
+		}
+	}
+	if len(unknown) == 0 {
+		return nil
+	}
+	slices.Sort(unknown)
+	return errors.New(strings.Join(unknown, "; "))
+}
 
 // decodeHooks is how every configuration value is decoded, wherever it is
 // read: the whole configuration, a registered section, and the check that an
