@@ -871,14 +871,18 @@ func spanEventAttribute(event trace.Event, key string) string {
 
 // TestNeverMatchingScheduleEndsItsLoop proves a schedule with no instant
 // left — a day that never comes — ends its loop with a warning instead of
-// spinning on a zero instant.
+// spinning on a zero instant. Registration refuses such a schedule, so the
+// job goes in behind it, the way the loop would meet one whose instants
+// ran out.
 func TestNeverMatchingScheduleEndsItsLoop(t *testing.T) {
 	dir := withCronjobLoggerConfig(t)
 	resetCronjobState(t)
 	withBoundCronjobLogger(t)
 	withFakeClock(t, time.Date(2026, 1, 1, 10, 0, 0, 0, time.UTC))
 
-	Register(noopJob, "0 0 0 30 2 *", "never-job")
+	parsed, err := parser.Parse("0 0 0 30 2 *")
+	require.NoError(t, err)
+	jobs = append(jobs, &job{name: "never-job", spec: "0 0 0 30 2 *", fn: noopJob, schedule: inUTC(parsed)})
 	require.NoError(t, start(context.Background()))
 
 	<-current.done

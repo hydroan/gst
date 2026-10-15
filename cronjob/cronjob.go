@@ -9,7 +9,9 @@
 //
 // Every schedule is read in UTC, and "@every" runs on the multiples of its
 // period counted from the Unix epoch, so every replica of a deployment
-// computes the same instants for a job. An expression that must follow
+// computes the same instants for a job; the period is a whole number of
+// seconds, at least one, and a schedule that never fires is refused at
+// registration. An expression that must follow
 // another wall clock says so itself, with a CRON_TZ= prefix. The instants
 // are read off each replica's own clock — the lease decides who runs one,
 // on the database's clock — so the replicas' clocks must agree to within
@@ -145,7 +147,10 @@ func setLogger(l types.Logger) {
 // wall clock carries a CRON_TZ= prefix naming a fixed zone; Local, the
 // process's own zone, is refused because replicas need not share it — and
 // "@every" runs on the multiples of its period from the Unix epoch, so every
-// replica computes the same instants. Registration belongs in package init
+// replica computes the same instants; its period is a whole number of
+// seconds, at least one, the resolution of the scheduler's instants, and a
+// shorter, fractional, zero or negative one is a registration error, as is
+// a schedule that never fires. Registration belongs in package init
 // functions: the scheduler starts with the process, and a registration after
 // that panics.
 //
@@ -232,12 +237,30 @@ func newJob(fn func(ctx context.Context) error, spec, name string) (*job, error)
 	if zone, named := zoneOf(spec); named && zone == "Local" {
 		return nil, errors.Newf("cronjob %q: schedule %q names the Local zone, which is the process's own and need not be shared by every replica; name a fixed zone, or none for UTC", name, spec)
 	}
+	// The parser rounds the period of an @every up to one second and down to
+	// whole seconds, and the job would run on a period the registration
+	// never named; the scheduler resolves instants to the second, so the
+	// period has to be a whole number of them.
+	if period, isEvery := strings.CutPrefix(spec, "@every "); isEvery {
+		d, err := time.ParseDuration(period)
+		if err != nil {
+			return nil, errors.Wrapf(err, "cronjob %q: invalid schedule %q", name, spec)
+		}
+		if d < time.Second || d%time.Second != 0 {
+			return nil, errors.Newf("cronjob %q: schedule %q: the period of @every is a whole number of seconds, at least one", name, spec)
+		}
+	}
 
 	parsed, err := parser.Parse(spec)
 	if err != nil {
 		return nil, errors.Wrapf(err, "cronjob %q: invalid schedule %q", name, spec)
 	}
 	j := &job{name: name, spec: spec, fn: fn, schedule: inUTC(parsed)}
+	// A schedule with no instant ahead — a day that never comes — would
+	// start a loop with nothing to do.
+	if j.schedule.Next(clk.Now()).IsZero() {
+		return nil, errors.Newf("cronjob %q: schedule %q never fires", name, spec)
+	}
 	if err := lease.ValidateName(j.leaseName()); err != nil {
 		return nil, errors.Wrapf(err, "cronjob %q", name)
 	}

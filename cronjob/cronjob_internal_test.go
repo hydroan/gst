@@ -244,6 +244,37 @@ func TestRegistrationErrorsFailStartup(t *testing.T) {
 			want: `cronjob "sample-job": registered twice`,
 		},
 		{
+			// The parser would round these up to one second, or down to the
+			// second, and run the job on a period the registration never
+			// named; the scheduler resolves instants to the second, so the
+			// period has to be a whole number of them.
+			name:     "@every shorter than a second",
+			register: func() { Register(noopJob, "@every 500ms", "sample-job") },
+			want:     `cronjob "sample-job": schedule "@every 500ms": the period of @every`,
+		},
+		{
+			name:     "@every of zero",
+			register: func() { Register(noopJob, "@every 0s", "sample-job") },
+			want:     `cronjob "sample-job": schedule "@every 0s": the period of @every`,
+		},
+		{
+			name:     "@every negative",
+			register: func() { Register(noopJob, "@every -5m", "sample-job") },
+			want:     `cronjob "sample-job": schedule "@every -5m": the period of @every`,
+		},
+		{
+			name:     "@every with a fraction of a second",
+			register: func() { Register(noopJob, "@every 1m30.5s", "sample-job") },
+			want:     `cronjob "sample-job": schedule "@every 1m30.5s": the period of @every`,
+		},
+		{
+			// A day that never comes would start a scheduler loop with
+			// nothing to do, ending with a warning nobody asked for.
+			name:     "schedule that never fires",
+			register: func() { Register(noopJob, "0 0 0 30 2 *", "sample-job") },
+			want:     `cronjob "sample-job": schedule "0 0 0 30 2 *" never fires`,
+		},
+		{
 			// The lease table holds 191 characters, "cron:" included; a job
 			// that could never claim its instants must not start at all.
 			name:     "name the lease table cannot hold",
