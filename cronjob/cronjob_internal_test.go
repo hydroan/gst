@@ -268,6 +268,11 @@ func TestRegistrationErrorsFailStartup(t *testing.T) {
 			want:     `cronjob "sample-job": schedule "@every 1m30.5s": the period of @every`,
 		},
 		{
+			name:     "@every behind a zone prefix",
+			register: func() { Register(noopJob, "CRON_TZ=UTC @every 500ms", "sample-job") },
+			want:     `cronjob "sample-job": schedule "CRON_TZ=UTC @every 500ms": the period of @every`,
+		},
+		{
 			// A day that never comes would start a scheduler loop with
 			// nothing to do, ending with a warning nobody asked for.
 			name:     "schedule that never fires",

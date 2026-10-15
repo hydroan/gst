@@ -56,7 +56,9 @@ func (j *job) leaseName() string {
 // keeps overrunning its period does not quietly run less often. A round of a
 // job under a lease that runs to its end records its skips too, see
 // runClaimed, so no replica starting afterwards catches one of them up. A
-// schedule with no instant left — a day that never comes — ends the loop.
+// schedule with no instant left ends the loop: registration refuses one
+// that never fires, so this is a safety net against spinning on a zero
+// instant.
 func (j *job) loop(ctx context.Context, next time.Time, cutShort <-chan lease.Unfinished) {
 	if !j.perInstance {
 		if ran, ok := j.catchUp(ctx); ok {

@@ -871,9 +871,10 @@ func spanEventAttribute(event trace.Event, key string) string {
 
 // TestNeverMatchingScheduleEndsItsLoop proves a schedule with no instant
 // left — a day that never comes — ends its loop with a warning instead of
-// spinning on a zero instant. Registration refuses such a schedule, so the
-// job goes in behind it, the way the loop would meet one whose instants
-// ran out.
+// spinning on a zero instant. Registration refuses such a schedule and a
+// cron expression that fires once keeps firing, so the job goes in behind
+// registration: the branch is the loop's safety net against a zero
+// instant, kept though no registered schedule reaches it.
 func TestNeverMatchingScheduleEndsItsLoop(t *testing.T) {
 	dir := withCronjobLoggerConfig(t)
 	resetCronjobState(t)

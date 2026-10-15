@@ -240,8 +240,14 @@ func newJob(fn func(ctx context.Context) error, spec, name string) (*job, error)
 	// The parser rounds the period of an @every up to one second and down to
 	// whole seconds, and the job would run on a period the registration
 	// never named; the scheduler resolves instants to the second, so the
-	// period has to be a whole number of them.
-	if period, isEvery := strings.CutPrefix(spec, "@every "); isEvery {
+	// period has to be a whole number of them. A zone prefix may come first:
+	// the parser allows one, and ignores it, on an @every too.
+	body := spec
+	if _, named := zoneOf(spec); named {
+		_, body, _ = strings.Cut(spec, " ")
+		body = strings.TrimSpace(body)
+	}
+	if period, isEvery := strings.CutPrefix(body, "@every "); isEvery {
 		d, err := time.ParseDuration(period)
 		if err != nil {
 			return nil, errors.Wrapf(err, "cronjob %q: invalid schedule %q", name, spec)
