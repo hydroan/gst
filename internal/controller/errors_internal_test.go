@@ -98,9 +98,10 @@ func (r *levelRecorder) Errorz(msg string, _ ...zap.Field) { r.errors = append(r
 
 // TestFailWithAnswersAnEndedContextAsTheClientsDoing pins what failWith
 // makes of a failure once the request's context ended: a client that went
-// away is answered the client-closed status at info, a deadline that passed
-// 504, each with the context's own message and the failure behind it as
-// cause, while a failure in a live context stays the server's: the flow's
+// away is answered the client-closed status at info, off the span, while a
+// deadline that passed is the server's failure to answer in time, answered
+// 504 and logged at error, each with the context's own message and the
+// failure behind it as cause; a failure in a live context stays the flow's
 // answer, logged at error.
 func TestFailWithAnswersAnEndedContextAsTheClientsDoing(t *testing.T) {
 	cause := errors.New("read tcp: connection reset by peer")
@@ -127,16 +128,17 @@ func TestFailWithAnswersAnEndedContextAsTheClientsDoing(t *testing.T) {
 		require.Empty(t, rec.errors, "a client that went away is not a failure of the server")
 	})
 
-	t.Run("a passed deadline answers 504 at info", func(t *testing.T) {
+	t.Run("a passed deadline answers 504 and logs an error", func(t *testing.T) {
 		ctx, cancel := context.WithDeadline(context.Background(), time.Now().Add(-time.Second))
 		defer cancel()
 		rec := &levelRecorder{}
 		got := failWith(ctx, rec, "database operation failed", cause, answer)
 		var serviceErr *types.Error
 		require.ErrorAs(t, got, &serviceErr)
-		require.Equal(t, 504, serviceErr.Status())
+		require.Equal(t, http.StatusGatewayTimeout, serviceErr.Status())
 		require.Equal(t, "context deadline exceeded", serviceErr.Msg())
-		require.Equal(t, []string{"database operation failed"}, rec.infos)
-		require.Empty(t, rec.errors)
+		require.ErrorIs(t, got, cause)
+		require.Equal(t, []string{"database operation failed"}, rec.errors, "the server did not answer in time: its failure, not the client's")
+		require.Empty(t, rec.infos)
 	})
 }
