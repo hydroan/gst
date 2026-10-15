@@ -2,6 +2,7 @@ package database_test
 
 import (
 	"context"
+	"database/sql"
 	"strings"
 	"testing"
 	"time"
@@ -206,14 +207,19 @@ func (t *TestUser) UpdateBefore(ctx context.Context) error {
 	return nil
 }
 
-// TestScoredRecord carries JSON arrays of numbers, on which an exact match
-// fails closed the way it does on a JSON array of strings, and binary data,
-// which an exact match compares byte for byte.
+// TestScoredRecord carries JSON documents of every shape the datatypes
+// family stores — arrays of numbers, a map and a typed document — on which
+// an exact match fails closed the way it does on a JSON array of strings;
+// binary data, which an exact match compares byte for byte; and a nullable
+// string, which an exact match compares by the value it carries.
 type TestScoredRecord struct {
-	Name    string                       `json:"name"`
-	Scores  datatypes.JSONSlice[int]     `json:"scores"`
-	Weights datatypes.JSONSlice[float64] `json:"weights"`
-	Digest  []byte                       `json:"digest"`
+	Name    string                                `json:"name"`
+	Scores  datatypes.JSONSlice[int]              `json:"scores"`
+	Weights datatypes.JSONSlice[float64]          `json:"weights"`
+	Meta    datatypes.JSONMap                     `json:"meta"`
+	Extra   datatypes.JSONType[map[string]string] `json:"extra"`
+	Digest  []byte                                `json:"digest"`
+	Grade   sql.NullString                        `json:"grade"`
 
 	modelregistry.Base
 }

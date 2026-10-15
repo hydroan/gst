@@ -2,6 +2,7 @@ package database_test
 
 import (
 	"context"
+	"database/sql"
 	"slices"
 	"strings"
 	"testing"
@@ -208,10 +209,16 @@ func TestDatabaseWithQuery(t *testing.T) {
 		require.Len(t, users, 2, "an explicit list of values is the in filter's job")
 	})
 
-	t.Run("NumberArraysOnJSONColumnsFailClosed", func(t *testing.T) {
+	t.Run("JSONColumnsFailClosed", func(t *testing.T) {
 		ctx := context.Background()
 		t.Cleanup(func() { _ = database.DB().Exec("DELETE FROM test_scored_records").Error })
-		row := &TestScoredRecord{Name: "scored", Scores: datatypes.NewJSONSlice([]int{1, 2}), Weights: datatypes.NewJSONSlice([]float64{0.5})}
+		row := &TestScoredRecord{
+			Name:    "scored",
+			Scores:  datatypes.NewJSONSlice([]int{1, 2}),
+			Weights: datatypes.NewJSONSlice([]float64{0.5}),
+			Meta:    datatypes.JSONMap{"k": "v"},
+			Extra:   datatypes.NewJSONType(map[string]string{"k": "v"}),
+		}
 		require.NoError(t, database.Database[*TestScoredRecord](ctx).Create(row))
 
 		rows := make([]*TestScoredRecord, 0)
@@ -219,16 +226,83 @@ func TestDatabaseWithQuery(t *testing.T) {
 		require.Len(t, rows, 1)
 
 		// An exact match on a JSON document cannot compare, so a condition on
-		// a number array answers no rows, as one on a string array does,
-		// instead of being dropped and leaving the name alone to match.
+		// a number array, a map or a typed document answers no rows, as one
+		// on a string array does, instead of being dropped and leaving the
+		// name alone to match.
 		for _, query := range []*TestScoredRecord{
 			{Name: "scored", Scores: datatypes.NewJSONSlice([]int{1, 2})},
 			{Name: "scored", Weights: datatypes.NewJSONSlice([]float64{0.5})},
+			{Name: "scored", Meta: datatypes.JSONMap{"k": "v"}},
+			{Name: "scored", Extra: datatypes.NewJSONType(map[string]string{"k": "v"})},
 		} {
 			rows = make([]*TestScoredRecord, 0)
 			require.NoError(t, database.Database[*TestScoredRecord](ctx).WithQuery(query).List(&rows))
 			require.Empty(t, rows)
 		}
+	})
+
+	t.Run("NullableValuesMatchByTheirValue", func(t *testing.T) {
+		ctx := context.Background()
+		t.Cleanup(func() { _ = database.DB().Exec("DELETE FROM test_scored_records").Error })
+		row := &TestScoredRecord{Name: "graded", Grade: sql.NullString{String: "a", Valid: true}}
+		require.NoError(t, database.Database[*TestScoredRecord](ctx).Create(row))
+
+		rows := make([]*TestScoredRecord, 0)
+		require.NoError(t, database.Database[*TestScoredRecord](ctx).WithQuery(&TestScoredRecord{Name: "graded", Grade: sql.NullString{String: "a", Valid: true}}).List(&rows))
+		require.Len(t, rows, 1, "a nullable value is a condition on the value it carries")
+		require.Equal(t, row.ID, rows[0].ID)
+
+		rows = make([]*TestScoredRecord, 0)
+		require.NoError(t, database.Database[*TestScoredRecord](ctx).WithQuery(&TestScoredRecord{Name: "graded", Grade: sql.NullString{String: "b", Valid: true}}).List(&rows))
+		require.Empty(t, rows)
+	})
+
+	t.Run("InstantsAreConditions", func(t *testing.T) {
+		ctx := context.Background()
+		cleanupAggregateData()
+		t.Cleanup(cleanupAggregateData)
+		first, second, closed := seedTime(3, 1, 8), seedTime(3, 2, 9), seedTime(3, 3, 10)
+		rows := []*TestAggregateRecord{
+			{Category: "timed", OccurredAt: first, ClosedAt: &closed},
+			{Category: "timed", OccurredAt: second},
+		}
+		require.NoError(t, database.Database[*TestAggregateRecord](ctx).Create(rows...))
+
+		listed := make([]*TestAggregateRecord, 0)
+		require.NoError(t, database.Database[*TestAggregateRecord](ctx).WithQuery(&TestAggregateRecord{Category: "timed", OccurredAt: first}).List(&listed))
+		require.Len(t, listed, 1, "an instant on the query model is a condition, not a field the query ignores")
+		require.Equal(t, rows[0].ID, listed[0].ID)
+
+		// The same instant spelled in another offset names the same row.
+		listed = make([]*TestAggregateRecord, 0)
+		require.NoError(t, database.Database[*TestAggregateRecord](ctx).WithQuery(&TestAggregateRecord{Category: "timed", OccurredAt: first.In(time.FixedZone("", 8*3600))}).List(&listed))
+		require.Len(t, listed, 1)
+		require.Equal(t, rows[0].ID, listed[0].ID)
+
+		listed = make([]*TestAggregateRecord, 0)
+		require.NoError(t, database.Database[*TestAggregateRecord](ctx).WithQuery(&TestAggregateRecord{Category: "timed", ClosedAt: &closed}).List(&listed))
+		require.Len(t, listed, 1, "an optional instant behind a pointer is a condition too")
+		require.Equal(t, rows[0].ID, listed[0].ID)
+	})
+
+	t.Run("DaysMatchTheUTCDay", func(t *testing.T) {
+		ctx := context.Background()
+		cleanupAggregateData()
+		t.Cleanup(cleanupAggregateData)
+		rows := []*TestDatedRecord{
+			{Label: "dated-first", Day: datatypes.Date(seedTime(1, 10, 0))},
+			{Label: "dated-second", Day: datatypes.Date(seedTime(1, 11, 0))},
+		}
+		require.NoError(t, database.Database[*TestDatedRecord](ctx).Create(rows...))
+
+		// A day on the query model is matched by the UTC day it names,
+		// whatever time of day and offset the value carries: 23:30 at +08:00
+		// on the tenth is the tenth in UTC.
+		listed := make([]*TestDatedRecord, 0)
+		day := datatypes.Date(time.Date(2024, 1, 10, 23, 30, 0, 0, time.FixedZone("", 8*3600)))
+		require.NoError(t, database.Database[*TestDatedRecord](ctx).WithQuery(&TestDatedRecord{Day: day}).List(&listed))
+		require.Len(t, listed, 1, "a day on the query model is a condition, not a field the query ignores")
+		require.Equal(t, rows[0].ID, listed[0].ID)
 	})
 
 	t.Run("ByteSliceMatchesByteForByte", func(t *testing.T) {

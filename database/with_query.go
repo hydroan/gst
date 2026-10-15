@@ -9,6 +9,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/hydroan/gst/internal/modelregistry"
 	"github.com/hydroan/gst/internal/modelschema"
@@ -25,8 +26,10 @@ import (
 //   - query: A model instance with fields set as query conditions. Can be nil to indicate empty query.
 //     When nil or all fields are zero values, it's treated as an empty query.
 //     Supported field types: string, int, int8, int16, int32, int64, uint, uint8, uint16, uint32, uint64, float32, float64, bool, pointer types,
-//     slices of strings, integers and floats, whose elements join with commas into one value, and byte slices,
-//     which match byte for byte.
+//     slices of strings, integers and floats, whose elements join with commas into one value, byte slices,
+//     which match byte for byte, time.Time, compared as the instant it names whatever its offset,
+//     datatypes.Date, compared by the UTC day it names, and one-column structs implementing
+//     driver.Valuer such as sql.NullString, compared by the value they carry.
 //   - opts: Optional QueryOptions to control query behavior (empty-query safety, operator filters)
 //
 // Query Behavior:
@@ -39,9 +42,10 @@ import (
 //	  (types.Column.In, URL form "field[in]=a,b"), where the list is explicit.
 //
 //	JSON columns (fields whose type declares a JSON gorm data type, such as
-//	the gorm.io/datatypes types): a JSON document is not a scalar, so an
-//	exact match fails closed to an empty result on every dialect instead of
-//	comparing, a JSON array of numbers as much as one of strings. Substring matching on a JSON document goes through the
+//	the gorm.io/datatypes types JSON, JSONSlice, JSONMap and JSONType): a
+//	JSON document is not a scalar, so an exact match fails closed to an
+//	empty result on every dialect instead of comparing, a JSON array of
+//	numbers as much as one of strings or a map. Substring matching on a JSON document goes through the
 //	like-family operator filters, which cast the column where the dialect
 //	requires it.
 //
@@ -142,8 +146,11 @@ func (db *database[M]) WithQuery(query M, opts ...types.QueryOptions) types.Data
 
 	// A JSON document is not a scalar, so both matching modes below treat its
 	// columns specially: exact matching fails closed and fuzzy matching runs
-	// over the document's text form.
+	// over the document's text form. A time column compares through
+	// timeComparableExpr on both sides, as the operator filters do, so the
+	// comparison agrees across the storage spellings of an instant.
 	jsonColumns := modelschema.JSONColumnSet(typ)
+	timeColumns := modelschema.TimeColumnSet(typ)
 
 	// CRITICAL SAFETY CHECK: Empty query conditions
 	//
@@ -203,6 +210,10 @@ func (db *database[M]) WithQuery(query M, opts ...types.QueryOptions) types.Data
 			db.ins = db.ins.Where("1 = 0")
 			continue
 		}
+		if _, isTime := timeColumns[k]; isTime {
+			db.ins = db.ins.Where(db.timeComparableExpr(db.quoteIdent(k))+" = "+db.timeComparableExpr("?"), v)
+			continue
+		}
 		db.ins = db.ins.Where(db.quoteIdent(k)+" = ?", v)
 	}
 	// CRITICAL: Check if all query values are empty after filtering
@@ -224,7 +235,9 @@ func (db *database[M]) WithQuery(query M, opts ...types.QueryOptions) types.Data
 
 // structFieldToMap extracts the field tags from a struct and writes them into a map.
 // This map can then be used to build SQL query conditions: each value is the
-// string a condition binds, except for a byte slice, which binds as it is.
+// string a condition binds, except for a byte slice, which binds as it is,
+// and a column that is one struct or map, which binds by value (see
+// columnStructValue).
 //
 // Zero-value fields are treated as unset and skipped, unless their column name
 // is listed in present: presence marks filter values explicitly provided by the
@@ -265,13 +278,22 @@ func structFieldToMap(ctx context.Context, typ reflect.Type, val reflect.Value, 
 		}
 
 		switch fieldTyp.Kind() {
-		case reflect.Chan, reflect.Map, reflect.Func:
+		case reflect.Chan, reflect.Func:
+			continue
+		case reflect.Map:
+			// A map that is a column is a JSON document, which the exact
+			// match fails closed on; one that is no column is no condition.
+			if isColumn {
+				q[col.DBName] = fieldVal.Interface()
+			}
 			continue
 		case reflect.Struct:
-			// Base and AutoBase are the framework base models: lift only their
-			// query-relevant fields instead of recursing, so framework-managed
-			// fields such as DeletedAt never leak into query conditions.
-			if field.Name == "Base" || field.Name == "AutoBase" {
+			switch {
+			case field.Name == "Base" || field.Name == "AutoBase":
+				// Base and AutoBase are the framework base models: lift only
+				// their query-relevant fields instead of recursing, so
+				// framework-managed fields such as DeletedAt never leak into
+				// query conditions.
 				if !fieldVal.FieldByName("CreatedBy").IsZero() {
 					// Not overwrite the "CreatedBy" value set in types.Model.
 					// The "CreatedBy" value set in types.Model has higher priority than base model.
@@ -298,7 +320,12 @@ func structFieldToMap(ctx context.Context, typ reflect.Type, val reflect.Value, 
 						}
 					}
 				}
-			} else {
+			case isColumn:
+				// A struct that is itself one column — an instant, a day, a
+				// JSON document, a Valuer — is a condition on its value, not
+				// a struct to look for columns in.
+				q[col.DBName] = columnStructValue(fieldTyp, fieldVal)
+			default:
 				structFieldToMap(ctx, fieldTyp, fieldVal, q, present, columns)
 			}
 			continue
@@ -359,13 +386,27 @@ func structFieldToMap(ctx context.Context, typ reflect.Type, val reflect.Value, 
 			default:
 				_v = fmt.Sprintf("%v", v)
 			}
-		case reflect.Struct, reflect.Map, reflect.Chan, reflect.Func: // ignore the struct, map, chan, func
 		default:
 			_v = fmt.Sprintf("%v", v)
 		}
 
 		q[columnName] = _v
 	}
+}
+
+// columnStructValue is the value a struct field that is itself one column
+// binds: an instant in UTC, a day as the UTC day the date column stores
+// (see modelschema.UTCDay), and anything else — a JSON document, a Valuer
+// such as sql.NullString — as it is.
+func columnStructValue(typ reflect.Type, val reflect.Value) any {
+	if modelschema.IsDateType(typ) {
+		day, _ := reflect.TypeAssert[time.Time](val.Convert(reflect.TypeFor[time.Time]()))
+		return modelschema.UTCDay(day)
+	}
+	if t, ok := reflect.TypeAssert[time.Time](val); ok {
+		return t.UTC()
+	}
+	return val.Interface()
 }
 
 // joinSliceElements formats every element of the slice v with format, the

@@ -2,6 +2,7 @@ package database
 
 import (
 	"context"
+	"database/sql"
 	"reflect"
 	"testing"
 	"time"
@@ -31,6 +32,17 @@ type sliceQueryItem struct {
 	Ranks   datatypes.JSONSlice[int8]    `json:"ranks"`
 	Weights datatypes.JSONSlice[float64] `json:"weights"`
 	Digest  []byte                       `json:"digest"`
+
+	modelregistry.Base
+}
+
+// valuedQueryItem carries the columns that are one struct or map each: an
+// instant, a day, a nullable string and a JSON document.
+type valuedQueryItem struct {
+	At    time.Time         `json:"at"`
+	Day   datatypes.Date    `json:"day"`
+	Grade sql.NullString    `json:"grade"`
+	Meta  datatypes.JSONMap `json:"meta"`
 
 	modelregistry.Base
 }
@@ -114,6 +126,28 @@ func TestStructFieldToMap(t *testing.T) {
 		require.Equal(t, "c1", q["code"])
 		require.NotContains(t, q, "valid", "gorm.DeletedAt internals should not leak into conditions")
 		require.NotContains(t, q, "deleted_at", "deleted_at is managed by soft delete, not query mapping")
+	})
+
+	t.Run("an instant binds in UTC", func(t *testing.T) {
+		at := time.Date(2024, 3, 1, 8, 30, 0, 0, time.FixedZone("", 8*3600))
+		q := toMap(&valuedQueryItem{At: at}, nil, nil)
+		require.Equal(t, map[string]any{"at": at.UTC()}, q)
+	})
+
+	t.Run("a day binds as the UTC day it names", func(t *testing.T) {
+		day := datatypes.Date(time.Date(2024, 1, 10, 23, 30, 0, 0, time.FixedZone("", 8*3600)))
+		q := toMap(&valuedQueryItem{Day: day}, nil, nil)
+		require.Equal(t, map[string]any{"day": time.Date(2024, 1, 10, 0, 0, 0, 0, time.UTC)}, q)
+	})
+
+	t.Run("a nullable string binds as it is", func(t *testing.T) {
+		q := toMap(&valuedQueryItem{Grade: sql.NullString{String: "a", Valid: true}}, nil, nil)
+		require.Equal(t, map[string]any{"grade": sql.NullString{String: "a", Valid: true}}, q)
+	})
+
+	t.Run("a json document binds for the json check to fail closed on", func(t *testing.T) {
+		q := toMap(&valuedQueryItem{Meta: datatypes.JSONMap{"k": "v"}}, nil, nil)
+		require.Equal(t, map[string]any{"meta": datatypes.JSONMap{"k": "v"}}, q)
 	})
 
 	t.Run("zero values without presence stay ignored", func(t *testing.T) {
