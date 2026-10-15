@@ -16,31 +16,35 @@ import (
 )
 
 // detachedContextDirs are the project directories whose code runs under a
-// context handed down to it — a request's, a round's, a tenure's, a lock's,
-// the process's for a component, the start's for a routes-ready hook — and
-// must pass that context on to the database.
-var detachedContextDirs = []string{"service", "dao", "cronjob", "leader", "lock", "component", "router"}
+// context handed down to it — the write's for a model hook, a request's, a
+// round's, a tenure's, a lock's, the process's for a component, the start's
+// for a routes-ready hook — and must pass that context on to the database.
+var detachedContextDirs = []string{"model", "service", "dao", "cronjob", "leader", "lock", "component", "router"}
 
 // DetachedContext keeps context.Background() and context.TODO() out of the
 // framework database and dao calls of project code.
 var DetachedContext = Check{
 	Name: "Detached context",
-	Rule: "in service, dao, cronjob, leader, lock, component and router code, the context passed to a framework database function or to a dao function must not be context.Background() or context.TODO(): the context handed down — a request's, a round's, a tenure's, a lock's, the process's, the start's — carries the identity, the transaction and the lease the work runs under; startup seeding runs in the router package's routes-ready hooks on the context the hook receives",
+	Rule: "in model, service, dao, cronjob, leader, lock, component and router code, the context passed to a framework database function or to a dao function must not be context.Background() or context.TODO(): the context handed down — the write's for a model hook, a request's, a round's, a tenure's, a lock's, the process's, the start's — carries the identity, the transaction and the lease the work runs under; startup seeding runs in the router package's routes-ready hooks on the context the hook receives",
 	run:  checkDetachedContext,
 }
 
-// checkDetachedContext checks that in service, dao, cronjob, leader, lock,
-// component and router code, the context passed to a framework database
-// entry point or to a function of the project's dao packages is never
-// context.Background() or context.TODO() — written at the call, held in a
-// local variable first, or wrapped in a context derivation such as
+// checkDetachedContext checks that in model, service, dao, cronjob, leader,
+// lock, component and router code, the context passed to a framework
+// database entry point or to a function of the project's dao packages is
+// never context.Background() or context.TODO() — written at the call, held
+// in a local variable first, or wrapped in a context derivation such as
 // context.WithTimeout. The context handed down to that code carries the
 // request's or the round's identity for every log line and statement, the
 // transaction the work may already be in, and the lease behind cluster-once
 // work; a detached context loses all three, so a transaction opened on it
-// neither joins the enclosing one nor stops when the lease is lost. Startup
-// seeding runs in the router package's routes-ready hooks, on the context
-// the hook receives, and is checked like the rest.
+// neither joins the enclosing one nor stops when the lease is lost. A model
+// hook runs inside the write's transaction on the context it receives: a
+// database access on a detached context there needs a second connection,
+// which on SQLite waits for the one the transaction holds, and the
+// transaction waits for the hook. Startup seeding runs in the router
+// package's routes-ready hooks, on the context the hook receives, and is
+// checked like the rest.
 //
 // The check is syntactic. Variables are resolved by function scope: a name
 // declared in a closure is the closure's, a parameter is the function's,

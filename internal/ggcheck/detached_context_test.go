@@ -10,7 +10,8 @@ import (
 
 // TestDetachedContextFlagsBackgroundAtDatabaseEntry pins the rule's
 // reach: a detached context handed to a framework database function or a
-// dao function is flagged in the directories that run under a context —
+// dao function is flagged in the directories that run under a context, a
+// model hook's among them —
 // written at the call, held in a variable first, derived through the context
 // package, under dot imports, and through a dao package whose name differs
 // from its directory's — a generic instantiation included, while the context
@@ -26,6 +27,26 @@ func TestDetachedContextFlagsBackgroundAtDatabaseEntry(t *testing.T) {
 	writeFrameworkModuleFixture(t, projectDir, "sample")
 	writeCheckFile(t, filepath.Join(projectDir, ".gitignore"), "service/scratch/\n")
 
+	// A model hook runs on the context of the write it is part of; making
+	// its own is flagged, passing the hook's on is not.
+	writeCheckFile(t, filepath.Join(projectDir, "model", "audit.go"), `package model
+
+import (
+	"context"
+
+	"tmpapp/dao"
+)
+
+type Audit struct{}
+
+func (*Audit) CreateBefore(ctx context.Context) error {
+	if _, err := dao.Records(ctx); err != nil {
+		return err
+	}
+	_, err := dao.Records(context.Background())
+	return err
+}
+`)
 	// A variable holding a detached context is the context at the call.
 	writeCheckFile(t, filepath.Join(projectDir, "leader", "counter.go"), `package leader
 
@@ -311,9 +332,10 @@ func poll(ctx context.Context) error {
 
 	violations := runCheck(ggcheck.DetachedContext)
 
-	if len(violations) != 13 {
-		t.Fatalf("expected thirteen violations, got %#v", violations)
+	if len(violations) != 14 {
+		t.Fatalf("expected fourteen violations, got %#v", violations)
 	}
+	assertViolationContains(t, violations, filepath.Join("model", "audit.go"), ":15: dao.Records receives context.Background()")
 	assertViolationContains(t, violations, filepath.Join("router", "init.go"), ":15: dao.Records receives context.Background()")
 	assertViolationContains(t, violations, filepath.Join("component", "consumer.go"), ":10: dao.Records receives context.Background()")
 	assertViolationContains(t, violations, filepath.Join("service", "shadow", "shadow.go"), ":15: database.Transaction receives a context held in ctx")
