@@ -1,11 +1,15 @@
 package config
 
 import (
+	"strconv"
+	"strings"
 	"time"
 
+	"github.com/cockroachdb/errors"
 	"github.com/spf13/viper"
 )
 
+// ReadConcern names the read concern level of the mongo client.
 type ReadConcern string
 
 const (
@@ -16,6 +20,17 @@ const (
 	ReadConcernSnapshot     ReadConcern = "snapshot"
 )
 
+// UnmarshalText reads text as one of the levels, in any letter case; any
+// other text is a configuration error naming the key.
+func (c *ReadConcern) UnmarshalText(text []byte) (err error) {
+	*c, err = oneOf(text, ReadConcernLocal, ReadConcernMajority, ReadConcernAvailable, ReadConcernLinearizable, ReadConcernSnapshot)
+	return err
+}
+
+// WriteConcern names the write concern of the mongo client: majority,
+// journaled, the number of members that must acknowledge a write (the
+// constants name the first ten; any non-negative number is accepted), or the
+// name of a write concern the replica set itself defines.
 type WriteConcern string
 
 const (
@@ -32,6 +47,29 @@ const (
 	WriteConcernW8        WriteConcern = "8"
 	WriteConcernW9        WriteConcern = "9"
 )
+
+// UnmarshalText reads text as a write concern: majority or journaled in any
+// letter case, a non-negative number, or the name of a write concern the
+// replica set defines, kept as written. A negative or malformed number is a
+// configuration error naming the key.
+func (c *WriteConcern) UnmarshalText(text []byte) error {
+	value := strings.TrimSpace(string(text))
+	switch lower := WriteConcern(strings.ToLower(value)); lower {
+	case "", WriteConcernMajority, WriteConcernJournaled:
+		*c = lower
+		return nil
+	}
+	if first := value[0]; first == '-' || ('0' <= first && first <= '9') {
+		n, err := strconv.Atoi(value)
+		if err != nil || n < 0 {
+			return errors.Newf("want majority, journaled, a non-negative number or the name of a write concern, got %q", text)
+		}
+		*c = WriteConcern(strconv.Itoa(n))
+		return nil
+	}
+	*c = WriteConcern(value)
+	return nil
+}
 
 const (
 	MONGO_HOST          = "MONGO_HOST"

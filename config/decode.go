@@ -41,9 +41,12 @@ func unmarshalConfig(v *viper.Viper, c *Config) error {
 // decodeHooks is how every configuration value is decoded, wherever it is
 // read: the whole configuration, a registered section, and the check that an
 // environment variable fits the key it carries. Viper's own defaults are
-// repeated here because naming any hook replaces them, and two of the
-// framework's own fields need one viper does not have: a time, and a map of
-// strings.
+// repeated here because naming any hook replaces them; two of the
+// framework's own fields need one viper does not have, a time and a map of
+// strings; and a type that spells out its own values, one implementing
+// encoding.TextUnmarshaler, reads its text itself and refuses text it does
+// not know — the closed-set types of the framework's sections, DBType or
+// LoggerOutput, and any such type a registered section declares.
 func decodeHooks() viper.DecoderConfigOption {
 	return viper.DecodeHook(mapstructure.ComposeDecodeHookFunc(
 		numberToDurationHookFunc(),
@@ -54,6 +57,10 @@ func decodeHooks() viper.DecoderConfigOption {
 		// the same text means the same instant on every machine.
 		mapstructure.StringToTimeHookFunc(time.RFC3339),
 		stringToStringMapHookFunc(),
+		// Last, once the hooks above have converted a duration, a slice and
+		// a time, so only text no earlier hook claimed reaches a type that
+		// reads it itself.
+		mapstructure.TextUnmarshallerHookFunc(),
 	))
 }
 
@@ -111,4 +118,22 @@ func stringToStringMapHookFunc() mapstructure.DecodeHookFuncType {
 		}
 		return pairs, nil
 	}
+}
+
+// oneOf reads text as one of set, the spellings a configuration type admits,
+// and returns the spelling as the type writes it: surrounding space and
+// letter case belong to the writer, so " MySQL " reads as mysql. Empty text
+// is the zero value, the "not set" each consumer of such a type reads as its
+// default. Any other text is an error naming the set; the decoder adds the
+// key it was under.
+func oneOf[T ~string](text []byte, set ...T) (T, error) {
+	value := T(strings.ToLower(strings.TrimSpace(string(text))))
+	if value == "" || slices.Contains(set, value) {
+		return value, nil
+	}
+	names := make([]string, len(set))
+	for i, s := range set {
+		names[i] = string(s)
+	}
+	return "", errors.Newf("want one of %s, got %q", strings.Join(names, ", "), text)
 }

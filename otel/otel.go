@@ -439,8 +439,7 @@ func isEndpointURL(endpoint string) bool {
 
 // newSampler creates an OpenTelemetry sampler from standard sampler names.
 func newSampler(cfg config.OTEL) (sdktrace.Sampler, error) {
-	sampler := config.TracesSampler(strings.ToLower(strings.TrimSpace(string(cfg.TracesSampler))))
-	switch sampler {
+	switch cfg.TracesSampler {
 	case config.TracesSamplerAlwaysOn:
 		return sdktrace.AlwaysSample(), nil
 	case config.TracesSamplerAlwaysOff:

@@ -6,6 +6,7 @@ import (
 	"github.com/spf13/viper"
 )
 
+// ConsumeFromWhere names where a new consumer group starts reading a queue.
 type ConsumeFromWhere string
 
 const (
@@ -13,6 +14,13 @@ const (
 	ConsumeFromWhereFirstOffset ConsumeFromWhere = "first_offset" // consume from the beginning of the queue
 	ConsumeFromWhereTimestamp   ConsumeFromWhere = "timestamp"    // consume from the given timestamp
 )
+
+// UnmarshalText reads text as one of the starting points, in any letter case;
+// any other text is a configuration error naming the key.
+func (w *ConsumeFromWhere) UnmarshalText(text []byte) (err error) {
+	*w, err = oneOf(text, ConsumeFromWhereLastOffset, ConsumeFromWhereFirstOffset, ConsumeFromWhereTimestamp)
+	return err
+}
 
 const (
 	ROCKETMQ_NAMESRV_ADDRS = "ROCKETMQ_NAMESRV_ADDRS"

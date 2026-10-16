@@ -49,6 +49,13 @@ const (
 	OTLPProtocolHTTPProtobuf OTLPProtocol = "http/protobuf"
 )
 
+// UnmarshalText reads text as one of the protocols, in any letter case; any
+// other text is a configuration error naming the key.
+func (p *OTLPProtocol) UnmarshalText(text []byte) (err error) {
+	*p, err = oneOf(text, OTLPProtocolGRPC, OTLPProtocolHTTPProtobuf)
+	return err
+}
+
 // OTLPCompression is the compression mode used by OTLP trace exporters.
 type OTLPCompression string
 
@@ -58,6 +65,13 @@ const (
 	// OTLPCompressionGzip compresses OTLP trace payloads with gzip.
 	OTLPCompressionGzip OTLPCompression = "gzip"
 )
+
+// UnmarshalText reads text as one of the compression modes, in any letter
+// case; any other text is a configuration error naming the key.
+func (c *OTLPCompression) UnmarshalText(text []byte) (err error) {
+	*c, err = oneOf(text, OTLPCompressionNone, OTLPCompressionGzip)
+	return err
+}
 
 // TracesSampler is the OpenTelemetry sampler name used for traces.
 type TracesSampler string
@@ -76,6 +90,14 @@ const (
 	// TracesSamplerParentBasedTraceIDRatio samples roots by ratio and honors upstream parent decisions.
 	TracesSamplerParentBasedTraceIDRatio TracesSampler = "parentbased_traceidratio"
 )
+
+// UnmarshalText reads text as one of the sampler names, in any letter case;
+// any other text is a configuration error naming the key.
+func (s *TracesSampler) UnmarshalText(text []byte) (err error) {
+	*s, err = oneOf(text, TracesSamplerAlwaysOn, TracesSamplerAlwaysOff, TracesSamplerTraceIDRatio,
+		TracesSamplerParentBasedAlwaysOn, TracesSamplerParentBasedAlwaysOff, TracesSamplerParentBasedTraceIDRatio)
+	return err
+}
 
 // OTEL represents OpenTelemetry tracing configuration using OTLP exporters.
 // This configuration supports sending traces to Jaeger, Uptrace, or other OTLP-compatible backends.

@@ -26,8 +26,8 @@ const (
 // Logger represents section "logger" for client-side or server-side configuration,
 // and there is only one copy during the application entire lifetime.
 type Logger struct {
-	// Output selects where every log stream writes (stdout|file). Any other
-	// value fails logger initialization.
+	// Output selects where every log stream writes (stdout|file), in any
+	// letter case. Any other value is a configuration error at startup.
 	//
 	// With stdout, every stream — the global one, access, SQL, HTTP body, the
 	// component streams such as cronjob and leader, and the rest — writes to
@@ -127,6 +127,13 @@ const (
 	// for a deployment whose log collector reads files.
 	LoggerOutputFile LoggerOutput = "file"
 )
+
+// UnmarshalText reads text as one of the outputs, in any letter case; any
+// other text is a configuration error naming the key.
+func (o *LoggerOutput) UnmarshalText(text []byte) (err error) {
+	*o, err = oneOf(text, LoggerOutputStdout, LoggerOutputFile)
+	return err
+}
 
 // HTTPBodyLogMode selects which finished requests get a captured HTTP body
 // written to the log.

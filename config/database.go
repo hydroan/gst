@@ -6,6 +6,7 @@ import (
 	"github.com/spf13/viper"
 )
 
+// DBType names the dialect of the primary database.
 type DBType string
 
 const (
@@ -14,6 +15,13 @@ const (
 	DBMySQL      DBType = "mysql"
 	DBClickHouse DBType = "clickhouse"
 )
+
+// UnmarshalText reads text as one of the dialects, in any letter case; any
+// other text is a configuration error naming the key.
+func (t *DBType) UnmarshalText(text []byte) (err error) {
+	*t, err = oneOf(text, DBSqlite, DBPostgres, DBMySQL, DBClickHouse)
+	return err
+}
 
 const (
 	DATABASE_TYPE                 = "DATABASE_TYPE"

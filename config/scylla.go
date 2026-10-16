@@ -6,6 +6,7 @@ import (
 	"github.com/spf13/viper"
 )
 
+// Consistency names the consistency level of the scylla session's queries.
 type Consistency string
 
 const (
@@ -20,6 +21,15 @@ const (
 	ConsistencyLocalOne    Consistency = "local_one"
 )
 
+// UnmarshalText reads text as one of the levels, in any letter case; any
+// other text is a configuration error naming the key.
+func (c *Consistency) UnmarshalText(text []byte) (err error) {
+	*c, err = oneOf(text, ConsistencyAny, ConsistencyOne, ConsistencyTwo, ConsistencyThree, ConsistencyQuorum,
+		ConsistencyAll, ConsistencyLocalQuorum, ConsistencyEachQuorum, ConsistencyLocalOne)
+	return err
+}
+
+// RetryPolicy names how the scylla session retries a failed query.
 type RetryPolicy string
 
 const (
@@ -28,12 +38,27 @@ const (
 	RetryPolicyExponentialBackoff     RetryPolicy = "exponential_backoff"
 )
 
+// UnmarshalText reads text as one of the policies, in any letter case; any
+// other text is a configuration error naming the key.
+func (p *RetryPolicy) UnmarshalText(text []byte) (err error) {
+	*p, err = oneOf(text, RetryPolicySimple, RetryPolicyDowngradingConsistency, RetryPolicyExponentialBackoff)
+	return err
+}
+
+// ReconnectPolicy names how the scylla session reconnects to a lost host.
 type ReconnectPolicy string
 
 const (
 	ReconnectPolicyConstant    ReconnectPolicy = "constant"
 	ReconnectPolicyExponential ReconnectPolicy = "exponential"
 )
+
+// UnmarshalText reads text as one of the policies, in any letter case; any
+// other text is a configuration error naming the key.
+func (p *ReconnectPolicy) UnmarshalText(text []byte) (err error) {
+	*p, err = oneOf(text, ReconnectPolicyConstant, ReconnectPolicyExponential)
+	return err
+}
 
 const (
 	SCYLLA_HOSTS           = "SCYLLA_HOSTS"
