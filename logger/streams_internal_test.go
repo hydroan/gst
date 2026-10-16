@@ -56,7 +56,8 @@ func TestInitInstallsFallbackForOptionalProviderLoggers(t *testing.T) {
 	require.FileExists(t, filepath.Join(dir, "app.log"))
 	require.FileExists(t, filepath.Join(dir, "dcache.log"))
 
-	// A fallback entry routes to the global sink instead of vanishing.
+	// A fallback entry routes to the global sink instead of vanishing. Clean
+	// flushes it out before the file is read; the cleanup runs it again, idly.
 	Kafka.Infow("fallback routed to the global sink")
 	Clean()
 	data, err := os.ReadFile(filepath.Join(dir, "global.log"))
@@ -118,6 +119,8 @@ func TestEveryLoggerStampsTheProcessIdentity(t *testing.T) {
 	NewGin("gin.log").Info("gin")
 	NewZap("plain.log").Info("plain")
 	NewSugared("sugared.log").Info("sugared")
+	// Clean flushes the entries out before the files are read; the cleanup
+	// runs it again, idly.
 	Clean()
 
 	for _, file := range []string{"global.log", "typed.log", "gin.log", "plain.log", "sugared.log"} {
@@ -152,6 +155,8 @@ func TestInitBuildsTheListenerLoggers(t *testing.T) {
 	}
 
 	Recovery.Error("[recovery] panic recovered: boom", zap.String(consts.TRACE_ID, "trace-panic"))
+	// Clean flushes the entry out before the file is read; the cleanup runs
+	// it again, idly.
 	Clean()
 
 	data, err := os.ReadFile(filepath.Join(dir, "recovery.log"))
