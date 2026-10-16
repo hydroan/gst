@@ -11,6 +11,7 @@ import (
 	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/internal/response"
 	"github.com/hydroan/gst/internal/testutil/oteltest"
+	"github.com/hydroan/gst/internal/types"
 	"github.com/hydroan/gst/middleware/ratelimiter"
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/otel/trace"
@@ -161,7 +162,7 @@ func TestMiddlewareWrapperSpanAttributesFitTheCapacityInTheWorstCase(t *testing.
 	router := gin.New()
 	router.Use(tracing())
 	router.Use(middlewareWrapper("sample", func(c *gin.Context) {
-		response.Abort(c, http.StatusForbidden, "sample refusal")
+		response.Abort(c, types.NewError(http.StatusForbidden, "sample refusal"))
 	}))
 	router.GET("/api/ping", func(c *gin.Context) { c.Status(http.StatusNoContent) })
 

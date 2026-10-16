@@ -101,7 +101,7 @@ func recoveryWithTracing(log *zap.Logger, stack bool) gin.HandlerFunc {
 			// What the panic was stays in the log above. The caller gets the
 			// envelope every other response carries, so one reader can parse
 			// them all and quote back the trace id that explains this one.
-			response.Abort(c, http.StatusInternalServerError, types.FailureMsg)
+			response.Abort(c, types.NewError(http.StatusInternalServerError, types.FailureMsg))
 		}
 	})
 }

@@ -13,6 +13,7 @@ import (
 	"github.com/hydroan/gst/internal/logfield"
 	"github.com/hydroan/gst/internal/middleware"
 	"github.com/hydroan/gst/internal/response"
+	"github.com/hydroan/gst/internal/types"
 	"go.uber.org/zap"
 )
 
@@ -74,7 +75,7 @@ func Timeout(timeout time.Duration) gin.HandlerFunc {
 			logfield.Method(c.Request.Method),
 			zap.Duration("timeout", timeout),
 		)
-		response.Abort(c, http.StatusGatewayTimeout, "request timeout")
+		response.Abort(c, types.NewError(http.StatusGatewayTimeout, "request timeout"))
 	}
 }
 

@@ -47,26 +47,18 @@ func Error(c *gin.Context, err error) {
 	envelope(c, failureStatus, failureMsg, nil)
 }
 
-// AbortError refuses the request with err, written in the failure envelope
-// the way Error writes it, and stops the handler chain: what middleware
-// outside the controller path, the middleware a module ships among it,
-// answers an error with. The public response.AbortError forwards to it.
-func AbortError(c *gin.Context, err error) {
+// Abort refuses the request with err, written in the failure envelope the
+// way Error writes it, and stops the handler chain: what code outside the
+// controller path — middleware, and the middleware a module ships to the
+// projects that copy it — refuses through, and nowhere else. A refusal with
+// a status and message of its own is a service error, types.NewError(status,
+// msg), so the one rule NewError holds for statuses and messages holds for
+// every refusal: what the envelope looks like on the wire is the framework's
+// to decide and to change, and a caller here states only the refusal it is
+// making. The public response.Abort forwards to it.
+func Abort(c *gin.Context, err error) {
 	c.Abort()
 	Error(c, err)
-}
-
-// Abort refuses the request with status and msg, written in the failure
-// envelope, and stops the handler chain.
-//
-// It exists so that code outside the controller path — middleware, and the
-// middleware a module ships to the projects that copy it — refuses through
-// it, or through AbortError with an error value, and nowhere else: what the
-// envelope looks like on the wire is the framework's to decide and to change,
-// and a caller here states only the refusal it is making.
-func Abort(c *gin.Context, status int, msg string) {
-	c.Abort()
-	envelope(c, status, msg, nil)
 }
 
 // envelope writes the API envelope — msg, data and the trace id — with

@@ -9,6 +9,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/hydroan/gst/internal/requestctx"
 	"github.com/hydroan/gst/internal/response"
+	"github.com/hydroan/gst/internal/types"
 	"github.com/hydroan/gst/util"
 	"go.uber.org/zap"
 )
@@ -144,7 +145,7 @@ func IPFilter(config *IPFilterConfig) gin.HandlerFunc {
 		ip := net.ParseIP(clientIP)
 		if ip == nil {
 			zap.S().Warnw("failed to parse client IP", "ip", clientIP)
-			response.Abort(c, http.StatusForbidden, "invalid client IP")
+			response.Abort(c, types.NewError(http.StatusForbidden, "invalid client IP"))
 			return
 		}
 
@@ -153,13 +154,13 @@ func IPFilter(config *IPFilterConfig) gin.HandlerFunc {
 			return ip.Equal(blockedIP)
 		}) {
 			zap.S().Warnw("request blocked by blacklist", "ip", clientIP)
-			response.Abort(c, http.StatusForbidden, "access denied")
+			response.Abort(c, types.NewError(http.StatusForbidden, "access denied"))
 			return
 		}
 		for _, blockedNet := range blacklistNets {
 			if blockedNet.Contains(ip) {
 				zap.S().Warnw("request blocked by blacklist", "ip", clientIP, "cidr", blockedNet.String())
-				response.Abort(c, http.StatusForbidden, "access denied")
+				response.Abort(c, types.NewError(http.StatusForbidden, "access denied"))
 				return
 			}
 		}
@@ -180,7 +181,7 @@ func IPFilter(config *IPFilterConfig) gin.HandlerFunc {
 
 			if !allowed {
 				zap.S().Warnw("request blocked by whitelist", "ip", clientIP)
-				response.Abort(c, http.StatusForbidden, "access denied")
+				response.Abort(c, types.NewError(http.StatusForbidden, "access denied"))
 				return
 			}
 		}

@@ -10,6 +10,7 @@
 //		"net/http"
 //
 //		"github.com/gin-gonic/gin"
+//		"github.com/hydroan/gst"
 //		"github.com/hydroan/gst/middleware"
 //		"github.com/hydroan/gst/response"
 //	)
@@ -26,7 +27,7 @@
 //		// all the same way and can quote back the trace id that explains
 //		// this one.
 //		if c.GetHeader("X-Sample") == "" {
-//			response.Abort(c, http.StatusForbidden, "sample header required")
+//			response.Abort(c, gst.NewError(http.StatusForbidden, "sample header required"))
 //			return
 //		}
 //	}

@@ -112,7 +112,7 @@ func RateLimiter(opts ...Option) gin.HandlerFunc {
 		} else if err != nil {
 			// The limiter is security state: a cache that cannot answer refuses
 			// the request rather than switching the limit off.
-			response.Abort(c, http.StatusInternalServerError, "rate limiter unavailable")
+			response.Abort(c, types.NewError(http.StatusInternalServerError, "rate limiter unavailable"))
 			return
 		}
 		// Every request restarts the bucket's lifetime, the refused ones too: a
@@ -121,7 +121,7 @@ func RateLimiter(opts ...Option) gin.HandlerFunc {
 		// lifetime under a millisecond, and this one never is.
 		_ = limiterCache().Set(c.Request.Context(), key, limiter, idleLifetime)
 		if !limiter.Allow() {
-			response.Abort(c, http.StatusTooManyRequests, "too many requests")
+			response.Abort(c, types.NewError(http.StatusTooManyRequests, "too many requests"))
 			return
 		}
 	}

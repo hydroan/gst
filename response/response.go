@@ -16,18 +16,12 @@ import (
 	"github.com/hydroan/gst/internal/response"
 )
 
-// Abort refuses the request with status and msg, written in the API envelope,
-// and stops the handler chain. Abort and AbortError are the ways to refuse a
-// request from outside the controller path: Abort states the status and msg,
-// AbortError answers an error value.
-func Abort(c *gin.Context, status int, msg string) {
-	response.Abort(c, status, msg)
-}
-
-// AbortError refuses the request with err, written in the API envelope the
-// way the controller path answers an error — a service error with its
-// status and message, any other error as the server's own failure — and
-// stops the handler chain.
-func AbortError(c *gin.Context, err error) {
-	response.AbortError(c, err)
+// Abort refuses the request with err, written in the API envelope the way
+// the controller path answers an error — a service error with its status and
+// message, any other error as the server's own failure — and stops the
+// handler chain. It is the one way to refuse a request from outside the
+// controller path; a refusal with a status and message of its own passes
+// gst.NewError(status, msg).
+func Abort(c *gin.Context, err error) {
+	response.Abort(c, err)
 }

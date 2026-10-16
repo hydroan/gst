@@ -42,7 +42,7 @@ func Authz() gin.HandlerFunc {
 		}
 		ctx, tenantID, err := rbac.Enforce(c.Request.Context(), subject, c.Request.URL.Path, c.Request.Method)
 		if err != nil {
-			response.AbortError(c, err)
+			response.Abort(c, err)
 			return
 		}
 		c.Set(consts.CTX_TENANT_ID, tenantID)

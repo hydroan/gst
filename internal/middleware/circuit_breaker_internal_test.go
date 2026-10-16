@@ -10,6 +10,7 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/gin-gonic/gin"
 	"github.com/hydroan/gst/internal/response"
+	"github.com/hydroan/gst/internal/types"
 	"github.com/sony/gobreaker"
 	"github.com/stretchr/testify/require"
 )
@@ -25,7 +26,7 @@ func TestCircuitBreakerLeavesTheAnswerOfARequestItLetThrough(t *testing.T) {
 		withClosedBreaker(t)
 
 		w := serveThroughBreaker(func(c *gin.Context) {
-			response.Abort(c, http.StatusInternalServerError, "sample failure")
+			response.Abort(c, types.NewError(http.StatusInternalServerError, "sample failure"))
 		})
 
 		require.Equal(t, http.StatusInternalServerError, w.Code)

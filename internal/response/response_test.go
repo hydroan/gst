@@ -100,27 +100,12 @@ func TestErrorAnswersServiceErrorsAndHidesTheRest(t *testing.T) {
 	}
 }
 
-// TestAbortWritesTheFailureEnvelopeAndStopsTheChain pins the refusal of
-// code outside the controller path: the status and message given, in the
-// failure envelope, with the handler chain aborted.
-func TestAbortWritesTheFailureEnvelopeAndStopsTheChain(t *testing.T) {
-	gin.SetMode(gin.TestMode)
-	w := httptest.NewRecorder()
-	c, _ := gin.CreateTestContext(w)
-	c.Set(consts.TRACE_ID, "trace-sample")
-
-	response.Abort(c, http.StatusForbidden, "permission denied")
-
-	require.Equal(t, http.StatusForbidden, w.Code)
-	require.JSONEq(t, `{"data":null,"msg":"permission denied","trace_id":"trace-sample"}`, w.Body.String())
-	require.True(t, c.IsAborted())
-}
-
-// TestAbortErrorAnswersTheErrorAndStopsTheChain pins the refusal of code
-// outside the controller path holding an error: a service error answers with
-// its status and message, any other error with the server's own failure,
-// the way Error answers them, with the handler chain aborted.
-func TestAbortErrorAnswersTheErrorAndStopsTheChain(t *testing.T) {
+// TestAbortAnswersTheErrorAndStopsTheChain pins the refusal of code outside
+// the controller path: a service error, the form a refusal with a status and
+// message of its own takes, answers with its status and message, any other
+// error with the server's own failure, the way Error answers them, with the
+// handler chain aborted.
+func TestAbortAnswersTheErrorAndStopsTheChain(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	for name, tt := range map[string]struct {
 		err    error
@@ -135,7 +120,7 @@ func TestAbortErrorAnswersTheErrorAndStopsTheChain(t *testing.T) {
 			c, _ := gin.CreateTestContext(w)
 			c.Set(consts.TRACE_ID, "trace-sample")
 
-			response.AbortError(c, tt.err)
+			response.Abort(c, tt.err)
 
 			require.Equal(t, tt.status, w.Code)
 			require.JSONEq(t, `{"data":null,"msg":"`+tt.msg+`","trace_id":"trace-sample"}`, w.Body.String())
@@ -160,24 +145,24 @@ func TestJSONKeepsContentTypeSetBeforehand(t *testing.T) {
 	}
 }
 
-// TestAbortWritesNoBodyForBodylessStatus pins the envelope on a status that
-// cannot carry a body: the JSON Content-Type is still announced and nothing is
-// written.
-func TestAbortWritesNoBodyForBodylessStatus(t *testing.T) {
+// TestAbortNeverAnswersWithASuccessStatus pins that a refusal from outside
+// the controller path cannot leave with a status a client reads as success:
+// a status that is not a failure is answered the way NewError normalizes it,
+// 500 with the status text, never the status given.
+func TestAbortNeverAnswersWithASuccessStatus(t *testing.T) {
 	gin.SetMode(gin.TestMode)
-	w := httptest.NewRecorder()
-	c, _ := gin.CreateTestContext(w)
+	for _, status := range []int{http.StatusOK, http.StatusNoContent, http.StatusFound} {
+		t.Run(http.StatusText(status), func(t *testing.T) {
+			w := httptest.NewRecorder()
+			c, _ := gin.CreateTestContext(w)
+			c.Set(consts.TRACE_ID, "trace-sample")
 
-	response.Abort(c, http.StatusNoContent, "")
+			response.Abort(c, types.NewError(status, "refused"))
 
-	if w.Code != http.StatusNoContent {
-		t.Errorf("status = %d, want %d", w.Code, http.StatusNoContent)
-	}
-	if got := w.Header().Get("Content-Type"); got != "application/json; charset=utf-8" {
-		t.Errorf("Content-Type = %q, want %q", got, "application/json; charset=utf-8")
-	}
-	if got := w.Body.String(); got != "" {
-		t.Errorf("body = %q, want empty", got)
+			require.Equal(t, http.StatusInternalServerError, w.Code)
+			require.JSONEq(t, `{"data":null,"msg":"Internal Server Error","trace_id":"trace-sample"}`, w.Body.String())
+			require.True(t, c.IsAborted())
+		})
 	}
 }
 

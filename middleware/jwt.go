@@ -9,6 +9,7 @@ import (
 	"github.com/hydroan/gst/internal/consts"
 	"github.com/hydroan/gst/internal/logfield"
 	"github.com/hydroan/gst/internal/response"
+	"github.com/hydroan/gst/internal/types"
 	"go.uber.org/zap"
 )
 
@@ -27,7 +28,7 @@ func abortUnauthenticatedJWT(c *gin.Context, err error) {
 		logfield.Path(c.Request.URL.Path),
 		logfield.Method(c.Request.Method),
 	)
-	response.Abort(c, http.StatusUnauthorized, "invalid token")
+	response.Abort(c, types.NewError(http.StatusUnauthorized, "invalid token"))
 }
 
 // JwtAuth authenticates a request from the bearer token in its Authorization

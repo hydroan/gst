@@ -35,7 +35,7 @@ func IAMSession() gin.HandlerFunc {
 		ctx := requestctx.WithGinMetadata(c)
 		current, err := serviceiamsession.Authenticate(ctx, sessionID, c.Request.UserAgent(), c.Request.Method, c.Request.URL.Path)
 		if err != nil {
-			response.AbortError(c, err)
+			response.Abort(c, err)
 			return
 		}
 

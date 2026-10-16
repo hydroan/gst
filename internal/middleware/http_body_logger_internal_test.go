@@ -11,6 +11,7 @@ import (
 	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/internal/consts"
 	"github.com/hydroan/gst/internal/response"
+	"github.com/hydroan/gst/internal/types"
 	"github.com/hydroan/gst/logger"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
@@ -196,7 +197,7 @@ func TestHTTPBodyLoggerDefaultModesLogRequestAlwaysResponseOnError(t *testing.T)
 		// path counts as an error by its status, like a handler's own.
 		logs := setupHTTPBodyLoggerTest(t, config.HTTPBodyLogger{Enabled: true, MaxBodySize: 64_000})
 		router := newRouter(func(c *gin.Context) {
-			response.Abort(c, http.StatusForbidden, "permission denied")
+			response.Abort(c, types.NewError(http.StatusForbidden, "permission denied"))
 		})
 
 		w := performHTTPBodyLoggerRequest(router, "/api/records", `{"a":1}`, "application/json")
