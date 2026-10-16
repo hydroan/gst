@@ -1,4 +1,4 @@
-.PHONY: check build format vet lint selfcheck ggcheck test testv testvv generate fix install uninstall help testcachefix
+.PHONY: check build format vet lint selfcheck ggcheck test test-short testv testvv generate fix install uninstall help testcachefix
 
 # Tool versions - must match go.mod exactly
 GOLANGCI_LINT_VERSION := $(shell go list -m -f '{{.Version}}' github.com/golangci/golangci-lint/v2)
@@ -62,6 +62,7 @@ help:
 	@echo "  selfcheck      - Check the framework's source against the rules golangci-lint cannot express"
 	@echo "  ggcheck        - Run gg check on the example projects with the gg built from the tree"
 	@echo "  test           - Run unit tests, a line per package"
+	@echo "  test-short     - Run the main module's unit tests alone, the gg end-to-end cases skipped"
 	@echo "  testv          - Run unit tests, a line per test"
 	@echo "  testvv         - Run unit tests with the full go test -v output"
 	@echo "  generate       - Regenerate the framework's own generated sources"
@@ -227,6 +228,19 @@ test: testcachefix
 	@echo "Running example project tests..."
 	$(call run_test_suite_in,examples/demo,./...)
 	$(call run_test_suite_in,examples/cluster,./...)
+
+# test-short runs the main module alone with -short, the signal for a change
+# in progress: the gg command's cases that build a project against the
+# framework, a minute or more together, skip themselves (see newGenProject in
+# cmd/gg), and the per-dialect suites and the example projects are left out.
+# make test is the verdict. -short is a test flag, so the two share no cached
+# results.
+test-short: TOOL_ENV = PATH="$(TEST_PATH)"
+test-short: TEST_FLAGS += -short
+test-short: testcachefix
+	$(call install_tool_if_missing,gotestsum,$(GOTESTSUM_VERSION),$(GOTESTSUM_PKG))
+	@echo "Running unit tests in short mode (main module; the gg end-to-end cases skipped)..."
+	$(call run_test_suite,./...)
 
 # Run unit tests with more output: testv and testvv run what test runs, with
 # the output switched to a line per test, or to what go test -v prints.

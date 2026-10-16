@@ -326,9 +326,15 @@ const childProjectEnv = "GG_TEST_PROJECT_CHILD"
 // under the user cache directory, keyed by project directory; nothing ever
 // reads a throwaway project's entry again, so the entry is removed when the
 // test ends. A test calls newGenProject first: whatever it does before the
-// call, it does in both processes.
+// call, it does in both processes. Under -short, what make test-short
+// passes, the test is skipped before any of this: these cases, building
+// against the framework for real, are what keeps the suite past a minute,
+// and make test runs them.
 func newGenProject(t *testing.T) (projectDir string, ok bool) {
 	t.Helper()
+	if testing.Short() {
+		t.Skip("builds a project against the framework; make test runs it, make test-short leaves it out")
+	}
 	if os.Getenv(childProjectEnv) == "" {
 		runInChild(t)
 		return "", false
