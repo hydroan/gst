@@ -49,8 +49,7 @@ var (
 	HTTPBody *zap.Logger
 	GRPC     *zap.Logger
 	// Recovery records the panics the handlers of both listeners recover
-	// from, with their stacks. One logger serves both so the file has one
-	// writer: a second one on the same path would race it at rotation.
+	// from, with their stacks; one logger serves both.
 	Recovery *zap.Logger
 	Gorm     gormlogger.Interface
 )
@@ -176,10 +175,9 @@ func Clean() {
 // lifecycle registry binds its dedicated one (see
 // lifecycle.Component.SetLogger): a provider's until the provider stage
 // starts, a lock's for a try made before Run. It derives from the global zap
-// logger installed by Init — no file, no extra sink, and in particular no
-// second lumberjack instance on any path, which the binding would then race
-// at rotation — so an entry written through it lands in the global log
-// stream, tagged with the component name. In a process that never ran Init
+// logger installed by Init — no file and no sink of its own — so an entry
+// written through it lands in the global log stream, tagged with the
+// component name. In a process that never ran Init
 // (unit tests), the global logger is zap's no-op and the entry is dropped,
 // which matches how such processes behave for every other logger. The
 // caller-skip mirrors New so callers are attributed identically through

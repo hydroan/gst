@@ -349,3 +349,44 @@ func withLogWriterConfig(t *testing.T, dir, file string) {
 		config.App.Logger = oldLogger
 	})
 }
+
+// TestFileSinksShareOneWriterPerPath pins that every stream writing one file
+// writes through one sink: the constructors hand out the same buffered
+// writer for one path, so one lumberjack rotates the file and the streams
+// interleave in it — a second lumberjack on the path would rotate the file
+// under the first and carry its own entries off into files of its own.
+func TestFileSinksShareOneWriterPerPath(t *testing.T) {
+	dir := t.TempDir()
+	t.Cleanup(Clean)
+	withLogWriterConfig(t, dir, "shared.log")
+	config.App.Logger.MaxSize = 1
+	config.App.Logger.MaxBackups = 10
+
+	cfg := readConf("shared.log")
+	first, second := newLogWriter(cfg), newLogWriter(cfg)
+	require.Same(t, first, second, "one path, one sink")
+
+	one, other := New("shared.log"), New("shared.log")
+	payload := strings.Repeat("x", 1024)
+	const entries = 1500
+	for i := range entries {
+		one.Infoz("entry", zap.String("stream", "first"), zap.Int("n", i), zap.String("payload", payload))
+		other.Infoz("entry", zap.String("stream", "second"), zap.Int("n", i), zap.String("payload", payload))
+	}
+	Clean()
+
+	current, err := os.ReadFile(filepath.Join(dir, "shared.log"))
+	require.NoError(t, err)
+	require.Contains(t, string(current), `"stream":"first"`, "the current file holds both streams")
+	require.Contains(t, string(current), `"stream":"second"`)
+	files, err := filepath.Glob(filepath.Join(dir, "shared*.log"))
+	require.NoError(t, err)
+	require.Greater(t, len(files), 1, "the file rotated")
+	lines := 0
+	for _, file := range files {
+		data, err := os.ReadFile(file)
+		require.NoError(t, err)
+		lines += strings.Count(string(data), "\n")
+	}
+	require.Equal(t, 2*entries, lines, "every entry survives the rotations")
+}

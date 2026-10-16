@@ -33,7 +33,8 @@ var (
 )
 
 // newLogWriter selects log sink: the shared stdout sink in stdout mode, and in
-// file mode stdout/stderr or a rolling file.
+// file mode stdout/stderr or a rolling file, one sink per path shared by
+// every stream writing it (see fileLogWriter).
 // opts: opts[0].Console additionally mirrors a file sink to os.Stdout.
 func newLogWriter(cfg logConfig, opts ...Option) zapcore.WriteSyncer {
 	if cfg.output == config.LoggerOutputStdout {
@@ -47,25 +48,55 @@ func newLogWriter(cfg logConfig, opts ...Option) zapcore.WriteSyncer {
 	case "":
 		return zapcore.AddSync(os.Stdout)
 	default:
-		precreateLogFile(filepath.Join(config.App.Dir, cfg.file))
-		writer := &zapcore.BufferedWriteSyncer{
-			WS: zapcore.AddSync(&lumberjack.Logger{
-				Filename:   filepath.Join(config.App.Dir, cfg.file),
-				MaxAge:     cfg.maxAge,
-				MaxSize:    cfg.maxSize,
-				MaxBackups: cfg.maxBackups,
-				LocalTime:  true,
-				Compress:   false, // openwrt may not support compress.
-			}),
-			Size:          defaultLogBufferSize,
-			FlushInterval: defaultLogFlushInterval,
-		}
-		registerBufferedLogWriter(writer)
+		writer := fileLogWriter(filepath.Join(config.App.Dir, cfg.file), cfg)
 		if len(opts) > 0 && opts[0].Console {
 			return zapcore.NewMultiWriteSyncer(zapcore.AddSync(os.Stdout), writer)
 		}
 		return writer
 	}
+}
+
+// fileLogWriters are the file sinks by the path they write, so that every
+// stream of one path writes through one sink: the global stream and a stream
+// named after the same file, or a client's logger built on the global file,
+// share one lumberjack. Lumberjack assumes it is the file's only writer; a
+// second instance on the path would rotate the file under the first and
+// carry its own entries off into backups of its own, where the backup
+// limit then deletes them. The first constructor's rotation settings serve
+// the path, which every stream reads from the one configuration. Clean
+// stops the sinks with the stdout one, and the next file-mode logger starts
+// afresh.
+var (
+	fileLogWritersMu sync.Mutex
+	fileLogWriters   = map[string]*zapcore.BufferedWriteSyncer{}
+)
+
+// fileLogWriter returns the sink of the file at path, starting it on first
+// use.
+func fileLogWriter(path string, cfg logConfig) *zapcore.BufferedWriteSyncer {
+	path = filepath.Clean(path)
+	fileLogWritersMu.Lock()
+	defer fileLogWritersMu.Unlock()
+
+	if writer, ok := fileLogWriters[path]; ok {
+		return writer
+	}
+	precreateLogFile(path)
+	writer := &zapcore.BufferedWriteSyncer{
+		WS: zapcore.AddSync(&lumberjack.Logger{
+			Filename:   path,
+			MaxAge:     cfg.maxAge,
+			MaxSize:    cfg.maxSize,
+			MaxBackups: cfg.maxBackups,
+			LocalTime:  true,
+			Compress:   false, // openwrt may not support compress.
+		}),
+		Size:          defaultLogBufferSize,
+		FlushInterval: defaultLogFlushInterval,
+	}
+	fileLogWriters[path] = writer
+	registerBufferedLogWriter(writer)
+	return writer
 }
 
 // precreateLogFile creates the log file and its directory at sink construction
@@ -133,6 +164,10 @@ func stopBufferedLogWriters() {
 	sharedStdoutWriterMu.Lock()
 	sharedStdoutWriter = nil
 	sharedStdoutWriterMu.Unlock()
+
+	fileLogWritersMu.Lock()
+	fileLogWriters = map[string]*zapcore.BufferedWriteSyncer{}
+	fileLogWritersMu.Unlock()
 
 	bufferedLogWritersMu.Lock()
 	writers := bufferedLogWriters
