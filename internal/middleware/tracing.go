@@ -149,15 +149,13 @@ func tracing() gin.HandlerFunc {
 				span.End()
 			}()
 		} else {
-			// Fallback to custom ID generation if OTEL is not enabled
+			// Tracing off: the id the request carries when it is a W3C trace
+			// id, a new one otherwise, the rule the propagator applies with
+			// tracing on (see requestctx.TraceIDOf); the span id is new either
+			// way.
 			ctx = c.Request.Context()
-			customTraceID := c.Request.Header.Get(consts.HEADER_TRACE_ID)
-			customSpanID := util.SpanID()
-			if len(customTraceID) == 0 {
-				customTraceID = customSpanID
-			}
-			traceID = customTraceID
-			spanID = customSpanID
+			traceID = requestctx.TraceIDOf(c.Request.Header.Get(consts.HEADER_TRACE_ID))
+			spanID = util.SpanID()
 		}
 
 		// The trace id is the identity of this execution: everything downstream

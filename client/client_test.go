@@ -184,8 +184,9 @@ func TestClientEnvelopeCompleteness(t *testing.T) {
 	require.NotEmpty(t, resp.TraceID)
 
 	// The server continues the trace the call belongs to: the trace id
-	// stamped on the context is the trace id of the answer.
-	resp, err = cli.Do(execctx.WithTraceID(t.Context(), "trace-sample"), http.MethodGet, recordPath, nil)
+	// stamped on the context, a W3C trace id, is the trace id of the answer.
+	const traceID = "4bf92f3577b34da6a3ce929d0e0e4736"
+	resp, err = cli.Do(execctx.WithTraceID(t.Context(), traceID), http.MethodGet, recordPath, nil)
 	require.NoError(t, err)
-	require.Equal(t, "trace-sample", resp.TraceID)
+	require.Equal(t, traceID, resp.TraceID)
 }

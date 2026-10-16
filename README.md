@@ -801,6 +801,8 @@ rsp, err := cli.Post[model.SampleSealRsp](ctx, "/api/samples/seal", &model.Sampl
   `X-Trace-ID`；ctx 不属于任何追踪（不在请求里，也不在定时任务或 leader 的一轮里）时两个头
   都不带。上游沿用这个 trace_id，它的访问日志、SQL 注释和响应里的 `trace_id` 都是调用方
   的那一个；`client.Error` 的 `TraceID` 也是它，排查时拿一个 id 就能把整条调用链查到底。
+  服务端只沿用 W3C 形态的 trace id（32 位小写十六进制、不全为零），其他值一律另生成一个，
+  OTEL 开着关着都是这一条规则。
 
 接口测试用的是同一个客户端：`testutil.Run` 启动整个应用，`client.New(testutil.BaseURL())` 发请求，
 上下文传 `t.Context()`，`testutil.DecodeResp`、`testutil.RequireError` 配合它断言，见

@@ -128,8 +128,8 @@ func enterCall(ctx context.Context, fullMethod string) *callScope {
 	if sc := trace.SpanContextFromContext(ctx); sc.HasTraceID() {
 		traceID = sc.TraceID().String()
 		ctx = gstotel.ContextWithRequestRootSpan(ctx)
-	} else if traceID = first(md, traceIDKey); traceID == "" {
-		traceID = util.SpanID()
+	} else {
+		traceID = requestctx.TraceIDOf(first(md, traceIDKey))
 	}
 	ctx = execctx.WithTraceID(ctx, traceID)
 	address, tls := peerOf(ctx)

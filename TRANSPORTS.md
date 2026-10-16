@@ -248,7 +248,7 @@ call --> client : OK，或映射后的 status；取消答 Canceled，停机答 U
 
 - 访问日志：HTTP 写 access.log，gRPC 由 requestScope 写 grpc.log，共用的字段都经 internal/logfield 的构造函数写出，键与类型一致；HTTP 的 status 是数字状态码，gRPC 的状态码名记在 grpc_code（两套码不共用一个键），失败再加 error 字段。
 - 指标：HTTP 是 `gst_backend_*`，gRPC 保持库默认 `grpc_server_*`，方便现成看板。
-- 追踪：HTTP 的 tracing 中间件与 gRPC 的 otelgrpc 各起服务端 span，trace id 都盖进 ctx；没带 W3C 头时两边都认 X-Trace-ID，并都把 trace id 回写给客户端（HTTP 的 `X-Trace-ID` 头、gRPC 的 `x-trace-id` 元数据）。
+- 追踪：HTTP 的 tracing 中间件与 gRPC 的 otelgrpc 各起服务端 span，trace id 都盖进 ctx；没带 W3C 头时两边都认 X-Trace-ID，但只认 W3C trace id 形态的值、其他值另生成（`requestctx.TraceIDOf`，开关 OTel 都是这一条），并都把 trace id 回写给客户端（HTTP 的 `X-Trace-ID` 头、gRPC 的 `x-trace-id` 元数据）。
 - panic：两边共用 logger.Recovery 写 recovery.log，并记在 span 上。
 - 测试：`testutil.Run` 同时起两个空闲端口的监听，`testutil.GRPCTarget()` 给 `grpc.NewClient`；测试二进制没注册任何 gRPC 服务（声明 TestMain 的文件没导入 `pb` 包）时 `GRPCTarget()` 直接 panic 点名要加的导入，`gg gen` 为带 gRPC 的项目写服务测试骨架时发现这种文件也会警告。
 

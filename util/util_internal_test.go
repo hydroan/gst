@@ -16,11 +16,20 @@ import (
 	"go.uber.org/zap/zaptest/observer"
 )
 
-func TestTraceID(t *testing.T) {
+// TestTraceIDAndSpanIDAreW3CIDs pins the form of the ids the framework
+// generates for an execution outside any trace: a trace id of 16 random
+// bytes and a span id of 8, in lower-case hex and never all zero, the form
+// the W3C trace context defines and the X-Trace-ID header carries.
+func TestTraceIDAndSpanIDAreW3CIDs(t *testing.T) {
 	first, second := TraceID(), TraceID()
-
-	require.Regexp(t, `^[0-9a-v]{20}$`, first)
+	require.Regexp(t, `^[0-9a-f]{32}$`, first)
+	require.NotEqual(t, strings.Repeat("0", 32), first)
 	require.NotEqual(t, first, second)
+
+	span, other := SpanID(), SpanID()
+	require.Regexp(t, `^[0-9a-f]{16}$`, span)
+	require.NotEqual(t, strings.Repeat("0", 16), span)
+	require.NotEqual(t, span, other)
 }
 
 func BenchmarkTraceID(b *testing.B) {

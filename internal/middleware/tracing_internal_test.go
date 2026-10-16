@@ -68,29 +68,75 @@ func TestTracingUsesIncomingTraceIDHeader(t *testing.T) {
 	require.Equal(t, incomingTraceID, w.Header().Get(consts.HEADER_TRACE_ID))
 }
 
-// TestTracingStampsGeneratedTraceIDWhenOTELDisabled pins the fallback branch:
-// with tracing off the middleware still stamps the id it publishes, so the
-// annotations downstream carry the same id the caller was handed.
-func TestTracingStampsGeneratedTraceIDWhenOTELDisabled(t *testing.T) {
+// TestTracingHoldsTheTraceIDHeaderToOneRuleWhenOTELDisabled pins the branch
+// with tracing off: the middleware reads X-Trace-ID the way the propagator
+// does with tracing on (see requestctx.TraceIDOf), keeping a W3C trace id
+// and replacing anything else, an absent header included, with a new id of
+// the same form; the id it stamps on the context is the one it publishes
+// in the gin context and hands the caller back, so the annotations
+// downstream carry the id the caller sees; and the span id is new either
+// way.
+func TestTracingHoldsTheTraceIDHeaderToOneRuleWhenOTELDisabled(t *testing.T) {
 	original := config.App.OTEL.Enabled
 	config.App.OTEL.Enabled = false
 	t.Cleanup(func() { config.App.OTEL.Enabled = original })
 
-	var stamped, published string
+	const sent = "4bf92f3577b34da6a3ce929d0e0e4736"
+	for name, tt := range map[string]struct{ header, want string }{
+		"a W3C trace id is kept":         {header: sent, want: sent},
+		"a bare word is replaced":        {header: "trace-1"},
+		"an absent header gets a new id": {},
+	} {
+		t.Run(name, func(t *testing.T) {
+			var stamped, published, spanID string
+			router := gin.New()
+			router.Use(tracing())
+			router.GET("/api/ping", func(c *gin.Context) {
+				stamped = execctx.FromContext(c.Request.Context()).TraceID
+				published = c.GetString(consts.TRACE_ID)
+				spanID = c.GetString(consts.SPAN_ID)
+				c.Status(http.StatusNoContent)
+			})
+
+			w := httptest.NewRecorder()
+			req := httptest.NewRequest(http.MethodGet, "/api/ping", nil)
+			if tt.header != "" {
+				req.Header.Set(consts.HEADER_TRACE_ID, tt.header)
+			}
+			router.ServeHTTP(w, req)
+
+			require.Regexp(t, `^[0-9a-f]{32}$`, stamped)
+			if tt.want != "" {
+				require.Equal(t, tt.want, stamped)
+			} else {
+				require.NotEqual(t, tt.header, stamped)
+			}
+			require.Equal(t, stamped, published)
+			require.Equal(t, stamped, w.Header().Get(consts.HEADER_TRACE_ID))
+			require.Regexp(t, `^[0-9a-f]{16}$`, spanID)
+		})
+	}
+}
+
+// TestTracingReplacesATraceIDHeaderThatIsNotOne pins the same rule with
+// tracing on: the propagator ignores a header that is not a W3C trace id,
+// the server span brings a new one, and that is what the caller is handed
+// back.
+func TestTracingReplacesATraceIDHeaderThatIsNotOne(t *testing.T) {
+	setupTracingTest(t)
+
 	router := gin.New()
 	router.Use(tracing())
-	router.GET("/api/ping", func(c *gin.Context) {
-		stamped = execctx.FromContext(c.Request.Context()).TraceID
-		published = c.GetString(consts.TRACE_ID)
-		c.Status(http.StatusNoContent)
-	})
+	router.GET("/api/ping", func(c *gin.Context) { c.Status(http.StatusNoContent) })
 
 	w := httptest.NewRecorder()
-	router.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/api/ping", nil))
+	req := httptest.NewRequest(http.MethodGet, "/api/ping", nil)
+	req.Header.Set(consts.HEADER_TRACE_ID, "trace-1")
+	router.ServeHTTP(w, req)
 
-	require.NotEmpty(t, stamped)
-	require.Equal(t, published, stamped)
-	require.Equal(t, stamped, w.Header().Get(consts.HEADER_TRACE_ID))
+	got := w.Header().Get(consts.HEADER_TRACE_ID)
+	require.Regexp(t, `^[0-9a-f]{32}$`, got)
+	require.NotEqual(t, "trace-1", got)
 }
 
 func TestTracingSkipsRecordingOnlyStateWhenSamplerDrops(t *testing.T) {

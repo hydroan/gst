@@ -41,8 +41,9 @@ func look(seen chan<- observed) {
 // carries the action's, see TestCallsDescribedByAnActionCarryItsRouteAndMethod),
 // the peer's address, the authority the call was addressed to, the user
 // agent, no TLS on a plaintext listener — and the trace id, the caller's
-// x-trace-id when it sent one and a generated one otherwise, published
-// back in the response header either way.
+// x-trace-id when it is a W3C trace id and a generated one otherwise (see
+// requestctx.TraceIDOf, the rule the HTTP listener reads the header by too),
+// published back in the response header either way.
 func TestCallsCarryTheRequestMetadataAndTraceID(t *testing.T) {
 	reset(t)
 	seen := make(chan observed, 1)
@@ -50,10 +51,11 @@ func TestCallsCarryTheRequestMetadataAndTraceID(t *testing.T) {
 	addr := start(t)
 	conn := dial(t, addr, nil)
 
+	const callerTraceID = "0123456789abcdef0123456789abcdef"
 	t.Run("with the caller's trace id", func(t *testing.T) {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
-		ctx = metadata.AppendToOutgoingContext(ctx, "x-trace-id", "trace-1")
+		ctx = metadata.AppendToOutgoingContext(ctx, "x-trace-id", callerTraceID)
 		var header metadata.MD
 
 		require.NoError(t, call(ctx, conn, "Look", grpc.Header(&header)))
@@ -68,8 +70,21 @@ func TestCallsCarryTheRequestMetadataAndTraceID(t *testing.T) {
 		require.Contains(t, got.meta.UserAgent(), "grpc-go/")
 		require.False(t, got.meta.TLS())
 		require.True(t, got.meta.RequiresAuth(), "a method not described public requires auth")
-		require.Equal(t, "trace-1", got.identity.TraceID)
-		require.Equal(t, []string{"trace-1"}, header.Get("x-trace-id"))
+		require.Equal(t, callerTraceID, got.identity.TraceID)
+		require.Equal(t, []string{callerTraceID}, header.Get("x-trace-id"))
+	})
+
+	t.Run("with a trace id that is not one", func(t *testing.T) {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		ctx = metadata.AppendToOutgoingContext(ctx, "x-trace-id", "trace-1")
+		var header metadata.MD
+
+		require.NoError(t, call(ctx, conn, "Look", grpc.Header(&header)))
+
+		got := <-seen
+		require.Regexp(t, `^[0-9a-f]{32}$`, got.identity.TraceID, "a bare word is replaced by a new W3C trace id")
+		require.Equal(t, []string{got.identity.TraceID}, header.Get("x-trace-id"))
 	})
 
 	t.Run("with a generated trace id", func(t *testing.T) {
@@ -80,7 +95,7 @@ func TestCallsCarryTheRequestMetadataAndTraceID(t *testing.T) {
 		require.NoError(t, call(ctx, conn, "Look", grpc.Header(&header)))
 
 		got := <-seen
-		require.NotEmpty(t, got.identity.TraceID)
+		require.Regexp(t, `^[0-9a-f]{32}$`, got.identity.TraceID)
 		require.Equal(t, []string{got.identity.TraceID}, header.Get("x-trace-id"))
 	})
 }
@@ -165,7 +180,8 @@ func TestCallsAreLoggedLikeHTTPRequests(t *testing.T) {
 	conn := dial(t, start(t), nil)
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	ctx = metadata.AppendToOutgoingContext(ctx, "x-trace-id", "trace-log")
+	const traceID = "1a2b3c4d5e6f70818293a4b5c6d7e8f9"
+	ctx = metadata.AppendToOutgoingContext(ctx, "x-trace-id", traceID)
 
 	require.NoError(t, call(ctx, conn, "Ping"))
 	require.Error(t, call(ctx, conn, "Missing"))
@@ -182,7 +198,7 @@ func TestCallsAreLoggedLikeHTTPRequests(t *testing.T) {
 	require.Contains(t, ok, consts.CTX_USER_ID)
 	require.Equal(t, "127.0.0.1", ok["ip"])
 	require.Contains(t, ok["user_agent"], "grpc-go/")
-	require.Equal(t, "trace-log", ok[consts.TRACE_ID])
+	require.Equal(t, traceID, ok[consts.TRACE_ID])
 	require.Contains(t, ok, consts.LOG_DURATION)
 	require.Contains(t, ok, consts.LOG_DURATION_HUMAN)
 	require.NotContains(t, ok, "error")
