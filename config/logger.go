@@ -1,6 +1,12 @@
 package config
 
-import "github.com/spf13/viper"
+import (
+	"strings"
+
+	"github.com/cockroachdb/errors"
+	"github.com/spf13/viper"
+	"go.uber.org/zap/zapcore"
+)
 
 const (
 	LOGGER_OUTPUT                  = "LOGGER_OUTPUT"
@@ -70,13 +76,16 @@ type Logger struct {
 	// Default: true
 	Console bool `json:"console" ini:"console" yaml:"console" mapstructure:"console"`
 
-	// Level specifies the log level,  supported values are: (error|warn|warning|info|debug).
-	// The value default to "info" and ignore case.
-	Level string `json:"level" ini:"level" yaml:"level" mapstructure:"level"`
+	// Level is the least severe level the log streams write, one zap knows
+	// (debug|info|warn|error|dpanic|panic|fatal, warning for warn), in any
+	// letter case. Any other value is a configuration error at startup.
+	// Default: info
+	Level LogLevel `json:"level" ini:"level" yaml:"level" mapstructure:"level"`
 
-	// Format specifies the log format, supported values are: (json|text).
-	// The Value default to "json" and ignore case.
-	Format string `json:"format" ini:"format" yaml:"format" mapstructure:"format"`
+	// Format lays out each log entry (json|text), in any letter case. Any
+	// other value is a configuration error at startup.
+	// Default: json
+	Format LogFormat `json:"format" ini:"format" yaml:"format" mapstructure:"format"`
 
 	// ErrorStackDisabled disables attaching the error_stack field to
 	// error-level logs when a logged error carries a stack trace embedded at
@@ -135,6 +144,54 @@ func (o *LoggerOutput) UnmarshalText(text []byte) (err error) {
 	return err
 }
 
+// LogLevel names the least severe level the log streams write, one of the
+// levels zap knows.
+type LogLevel string
+
+const (
+	LogLevelDebug  LogLevel = "debug"
+	LogLevelInfo   LogLevel = "info"
+	LogLevelWarn   LogLevel = "warn"
+	LogLevelError  LogLevel = "error"
+	LogLevelDPanic LogLevel = "dpanic"
+	LogLevelPanic  LogLevel = "panic"
+	LogLevelFatal  LogLevel = "fatal"
+)
+
+// UnmarshalText reads text as a level zap parses, in any letter case, and
+// keeps it as zap spells it, so warning reads as warn; any other text is a
+// configuration error naming the key.
+func (l *LogLevel) UnmarshalText(text []byte) error {
+	value := strings.TrimSpace(string(text))
+	if value == "" {
+		*l = ""
+		return nil
+	}
+	var level zapcore.Level
+	if err := level.UnmarshalText([]byte(value)); err != nil {
+		return errors.Newf("want one of %s, %s, %s, %s, %s, %s, %s, got %q",
+			LogLevelDebug, LogLevelInfo, LogLevelWarn, LogLevelError, LogLevelDPanic, LogLevelPanic, LogLevelFatal, text)
+	}
+	*l = LogLevel(level.String())
+	return nil
+}
+
+// LogFormat names how a log entry is laid out: json, one object per line,
+// or text, the console layout.
+type LogFormat string
+
+const (
+	LogFormatJSON LogFormat = "json"
+	LogFormatText LogFormat = "text"
+)
+
+// UnmarshalText reads text as one of the formats, in any letter case; any
+// other text is a configuration error naming the key.
+func (f *LogFormat) UnmarshalText(text []byte) (err error) {
+	*f, err = oneOf(text, LogFormatJSON, LogFormatText)
+	return err
+}
+
 // HTTPBodyLogMode selects which finished requests get a captured HTTP body
 // written to the log.
 type HTTPBodyLogMode string
@@ -149,26 +206,35 @@ const (
 	HTTPBodyLogModeNone HTTPBodyLogMode = "none"
 )
 
+// UnmarshalText reads text as one of the modes, in any letter case; any
+// other text is a configuration error naming the key.
+func (m *HTTPBodyLogMode) UnmarshalText(text []byte) (err error) {
+	*m, err = oneOf(text, HTTPBodyLogModeAll, HTTPBodyLogModeError, HTTPBodyLogModeNone)
+	return err
+}
+
 // HTTPBodyLogger represents HTTP body logging configuration.
 type HTTPBodyLogger struct {
 	// Enabled enables the HTTP request and response body logging middleware.
 	// Default: true
 	Enabled bool `json:"enabled" ini:"enabled" yaml:"enabled" mapstructure:"enabled"`
 
-	// LogRequest selects which requests get their JSON body logged (all|error|none).
-	// Empty or unknown values fall back to the default.
+	// LogRequest selects which requests get their JSON body logged
+	// (all|error|none), in any letter case. Empty is the default; any other
+	// value is a configuration error at startup.
 	// Default: all
 	LogRequest HTTPBodyLogMode `json:"log_request" ini:"log_request" yaml:"log_request" mapstructure:"log_request"`
 
-	// LogResponse selects which responses get their JSON body logged (all|error|none).
-	// Empty or unknown values fall back to the default.
+	// LogResponse selects which responses get their JSON body logged
+	// (all|error|none), in any letter case. Empty is the default; any other
+	// value is a configuration error at startup.
 	// Default: error
 	LogResponse HTTPBodyLogMode `json:"log_response" ini:"log_response" yaml:"log_response" mapstructure:"log_response"`
 
-	// MaxBodySize limits how much request or response body data can be logged.
-	// Values are parsed with github.com/dustin/go-humanize, for example "64KB".
+	// MaxBodySize limits how much request or response body data can be logged,
+	// a size with its unit (see ByteSize); empty or 0 is the default.
 	// Default: 64KB
-	MaxBodySize string `json:"max_body_size" ini:"max_body_size" yaml:"max_body_size" mapstructure:"max_body_size"`
+	MaxBodySize ByteSize `json:"max_body_size" ini:"max_body_size" yaml:"max_body_size" mapstructure:"max_body_size"`
 
 	// SkipRoutes lists routes whose bodies are never logged, for example login
 	// or other credential-carrying endpoints. Bodies are logged verbatim and
@@ -185,8 +251,8 @@ func (*Logger) setDefault(v *viper.Viper) {
 	v.SetDefault("logger.prefix", "")
 	v.SetDefault("logger.file", "")
 	v.SetDefault("logger.console", true)
-	v.SetDefault("logger.level", "info")
-	v.SetDefault("logger.format", "json")
+	v.SetDefault("logger.level", LogLevelInfo)
+	v.SetDefault("logger.format", LogFormatJSON)
 	v.SetDefault("logger.error_stack_disabled", false)
 	v.SetDefault("logger.max_age", 30)
 	v.SetDefault("logger.max_size", 100)

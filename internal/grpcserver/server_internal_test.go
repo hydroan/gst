@@ -543,7 +543,7 @@ func TestRunLimitsTheMessagesItReceivesToMaxRecvMsgSize(t *testing.T) {
 	})
 	t.Run("1KB refuses a 2048-byte message", func(t *testing.T) {
 		reset(t)
-		config.App.GRPC.MaxRecvMsgSize = "1KB"
+		config.App.GRPC.MaxRecvMsgSize = 1000
 		echo(nil, nil)
 		conn := dial(t, start(t), nil)
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -555,31 +555,28 @@ func TestRunLimitsTheMessagesItReceivesToMaxRecvMsgSize(t *testing.T) {
 	})
 }
 
-// TestRunRefusesAMaxRecvMsgSizeItCannotApply pins that a max_recv_msg_size
-// the listener cannot apply, not a size, nothing, or more than a message
-// may carry, is an error Run reports before it opens the listener, which
-// brings the process down the way a port it cannot bind does, rather than
-// a limit quietly left at grpc-go's own.
-func TestRunRefusesAMaxRecvMsgSizeItCannotApply(t *testing.T) {
-	for _, size := range []string{"lots", "0", "3GB"} {
-		t.Run(size, func(t *testing.T) {
-			reset(t)
-			config.App.GRPC.MaxRecvMsgSize = size
-			echo(nil, nil)
-			opened := make(chan net.Addr, 1)
-			listened = func(addr net.Addr) { opened <- addr }
-			t.Cleanup(func() { listened = nil })
-			t.Cleanup(func() { Stop(context.Background()) })
-			errs := make(chan error, 1)
-			go func() { errs <- Run() }()
+// TestRunRefusesAMaxRecvMsgSizeAboveWhatAMessageMayCarry pins that a
+// max_recv_msg_size over 2GiB, more than the 32-bit length of a message on
+// the wire, is an error Run reports before it opens the listener, which
+// brings the process down the way a port it cannot bind does, rather than a
+// limit quietly left at grpc-go's own. Text that is not a size never gets
+// this far: the configuration decode refuses it.
+func TestRunRefusesAMaxRecvMsgSizeAboveWhatAMessageMayCarry(t *testing.T) {
+	reset(t)
+	config.App.GRPC.MaxRecvMsgSize = 3 << 30
+	echo(nil, nil)
+	opened := make(chan net.Addr, 1)
+	listened = func(addr net.Addr) { opened <- addr }
+	t.Cleanup(func() { listened = nil })
+	t.Cleanup(func() { Stop(context.Background()) })
+	errs := make(chan error, 1)
+	go func() { errs <- Run() }()
 
-			select {
-			case err := <-errs:
-				require.ErrorContains(t, err, "grpc.max_recv_msg_size")
-			case <-opened:
-				t.Fatal("the listener opened with a size it cannot apply")
-			}
-		})
+	select {
+	case err := <-errs:
+		require.ErrorContains(t, err, "grpc.max_recv_msg_size")
+	case <-opened:
+		t.Fatal("the listener opened with a size it cannot apply")
 	}
 }
 
@@ -633,7 +630,7 @@ func TestRunRefusesADurationItCannotApply(t *testing.T) {
 		require.ErrorContains(t, Run(), "grpc.max_connection_age")
 
 		reset(t)
-		config.App.GRPC.MaxRecvMsgSize = "lots"
+		config.App.GRPC.MaxRecvMsgSize = 3 << 30
 		require.ErrorContains(t, Run(), "grpc.max_recv_msg_size")
 	})
 }

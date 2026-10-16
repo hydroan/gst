@@ -27,7 +27,7 @@ func TestBodyLoggerLeavesStreamingResponseUnwrapped(t *testing.T) {
 		Enabled:     true,
 		LogRequest:  config.HTTPBodyLogModeAll,
 		LogResponse: config.HTTPBodyLogModeAll,
-		MaxBodySize: "64KB",
+		MaxBodySize: 64_000,
 	})
 	MarkStreamingRoute(http.MethodGet, "/api/bodylogger/stream")
 

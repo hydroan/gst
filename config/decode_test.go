@@ -1,6 +1,7 @@
 package config_test
 
 import (
+	"fmt"
 	"path/filepath"
 	"testing"
 	"time"
@@ -163,6 +164,13 @@ func TestValueOutsideItsSetIsRefused(t *testing.T) {
 	}{
 		{config.DATABASE_TYPE, "database.type", "oracle", " MySQL ", "mysql", func() string { return string(config.App.Database.Type) }},
 		{config.LOGGER_OUTPUT, "logger.output", "syslog", "File", "file", func() string { return string(config.App.Logger.Output) }},
+		{config.LOGGER_LEVEL, "logger.level", "verbose", " WARNING ", "warn", func() string { return string(config.App.Logger.Level) }},
+		{config.LOGGER_FORMAT, "logger.format", "console", "Text", "text", func() string { return string(config.App.Logger.Format) }},
+		{config.KAFKA_SASL_MECHANISM, "kafka.sasl_mechanism", "oauth", "SCRAM-SHA-256", "scram-sha-256", func() string { return string(config.App.Kafka.SASLMechanism) }},
+		{config.LOGGER_HTTP_BODY_LOG_REQUEST, "logger.http_body.log_request", "sometimes", "Error", "error", func() string { return string(config.App.Logger.HTTPBody.LogRequest) }},
+		{config.LOGGER_HTTP_BODY_LOG_RESPONSE, "logger.http_body.log_response", "sometimes", " All ", "all", func() string { return string(config.App.Logger.HTTPBody.LogResponse) }},
+		{config.CASSANDRA_CONSISTENCY, "cassandra.consistency", "most", "QUORUM", "quorum", func() string { return string(config.App.Cassandra.Consistency) }},
+		{config.CASSANDRA_RETRY_POLICY, "cassandra.retry_policy", "fallthrough", "Exponential_Backoff", "exponential_backoff", func() string { return string(config.App.Cassandra.RetryPolicy) }},
 		{config.MONGO_READ_CONCERN, "mongo.read_concern", "eventual", "Majority", "majority", func() string { return string(config.App.Mongo.ReadConcern) }},
 		{config.MONGO_WRITE_CONCERN, "mongo.write_concern", "-1", " Journaled ", "journaled", func() string { return string(config.App.Mongo.WriteConcern) }},
 		{config.SCYLLA_CONSISTENCY, "scylla.consistency", "most", "LOCAL_QUORUM", "local_quorum", func() string { return string(config.App.Scylla.Consistency) }},
@@ -233,4 +241,80 @@ func TestWriteConcernAdmitsNumbersAndTagNames(t *testing.T) {
 		require.Error(t, err, text)
 		require.ErrorContains(t, err, "mongo.write_concern")
 	}
+}
+
+// TestSizeReadsAUnitAndRefusesTheRest pins how a key carrying a size reads:
+// text with a unit is bytes, SI or binary, a bare number is bytes, an empty
+// value is zero, and any other text, a negative size among it, fails Init
+// naming the key. A file hands a bare number over as a number and it reads
+// the same.
+func TestSizeReadsAUnitAndRefusesTheRest(t *testing.T) {
+	t.Run("file", func(t *testing.T) {
+		clearConfigEnvForTest(t)
+		filename := filepath.Join(t.TempDir(), "config.yaml")
+		config.SetConfigFile(filename)
+		requireWriteConfigFile(t, filename, "logger:\n  http_body:\n    max_body_size: 65536\n")
+		require.NoError(t, config.Init())
+		require.Equal(t, "65536", fmt.Sprint(config.App.Logger.HTTPBody.MaxBodySize))
+	})
+
+	clearConfigEnvForTest(t)
+	filename := filepath.Join(t.TempDir(), "config.ini")
+	requireWriteConfigFile(t, filename, "[app]\nname = \"sample\"\n")
+	config.SetConfigFile(filename)
+
+	for _, tt := range []struct{ text, want string }{
+		{"8MiB", "8388608"},
+		{" 64KB ", "64000"},
+		{"4096", "4096"},
+		{"", "0"},
+	} {
+		t.Setenv(config.LOGGER_HTTP_BODY_MAX_BODY_SIZE, tt.text)
+		require.NoError(t, config.Init(), tt.text)
+		require.Equal(t, tt.want, fmt.Sprint(config.App.Logger.HTTPBody.MaxBodySize), tt.text)
+	}
+	for _, text := range []string{"lots", "-1KB"} {
+		t.Setenv(config.LOGGER_HTTP_BODY_MAX_BODY_SIZE, text)
+		err := config.Init()
+		require.Error(t, err, text)
+		require.ErrorContains(t, err, "logger.http_body.max_body_size")
+	}
+}
+
+// TestNumberOutsideItsRangeIsRefused pins the keys with a bounded range: a
+// value outside it fails Init naming the key, from the environment and as a
+// number in a file alike, and the bounds themselves pass.
+func TestNumberOutsideItsRangeIsRefused(t *testing.T) {
+	for _, tt := range []struct{ variable, key, outside, inside string }{
+		{config.CACHE_MAX_ENTRIES, "cache.max_entries", "-1", "10000000"},
+		{config.CACHE_MAX_ENTRIES, "cache.max_entries", "10000001", "0"},
+		{config.LDAP_SCOPE, "ldap.scope", "3", "0"},
+		{config.LDAP_DEREF, "ldap.deref", "-1", "3"},
+	} {
+		t.Run(tt.key+"="+tt.outside, func(t *testing.T) {
+			clearConfigEnvForTest(t)
+			filename := filepath.Join(t.TempDir(), "config.ini")
+			requireWriteConfigFile(t, filename, "[app]\nname = \"sample\"\n")
+			config.SetConfigFile(filename)
+
+			t.Setenv(tt.variable, tt.outside)
+			err := config.Init()
+			require.Error(t, err, "a value outside the range must be refused, not read as a default")
+			require.ErrorContains(t, err, tt.key)
+			require.ErrorContains(t, err, tt.outside)
+
+			t.Setenv(tt.variable, tt.inside)
+			require.NoError(t, config.Init())
+		})
+	}
+
+	t.Run("file", func(t *testing.T) {
+		clearConfigEnvForTest(t)
+		filename := filepath.Join(t.TempDir(), "config.yaml")
+		config.SetConfigFile(filename)
+		requireWriteConfigFile(t, filename, "cache:\n  max_entries: -5\n")
+		err := config.Init()
+		require.Error(t, err, "a number in a file is held to the range the same as the environment")
+		require.ErrorContains(t, err, "cache.max_entries")
+	})
 }

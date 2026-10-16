@@ -308,7 +308,7 @@ func TestInitDefaultsTheGRPCListener(t *testing.T) {
 		KeepalivePermitWithoutStream: true,
 		MaxConnectionAge:             5 * time.Minute,
 		MaxConnectionAgeGrace:        20 * time.Second,
-		MaxRecvMsgSize:               "8MB",
+		MaxRecvMsgSize:               8_000_000,
 	}, config.App.GRPC)
 }
 
@@ -406,7 +406,7 @@ func TestInitRefusesAKeyTheFrameworkSectionLacks(t *testing.T) {
 		requireWriteConfigFile(t, filename, "[nosuchsection]\nkey = 1\n\n[logger]\nlevel = debug\n")
 		config.SetConfigFile(filename)
 		if assert.NoError(t, config.Init()) {
-			assert.Equal(t, "debug", config.App.Logger.Level)
+			assert.Equal(t, config.LogLevelDebug, config.App.Logger.Level)
 		}
 	})
 }

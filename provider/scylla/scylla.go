@@ -76,13 +76,13 @@ func New(cfg config.Scylla) (gocqlx.Session, error) {
 	if len(cfg.Keyspace) > 0 {
 		cluster.Keyspace = cfg.Keyspace
 	}
-	// An empty consistency keeps the driver's own default. The driver's
-	// ParseConsistency is not used: it panics on a name it does not know
-	// instead of returning an error.
+	// An empty consistency keeps the driver's own default. The driver reads
+	// the name in any letter case and reports one it does not know; its
+	// ParseConsistency panics on such a name instead.
 	if cfg.Consistency != "" {
-		level, ok := consistencyLevels[cfg.Consistency]
-		if !ok {
-			return gocqlx.Session{}, errors.Newf("unsupported scylla consistency: %s", cfg.Consistency)
+		level, err := gocql.ParseConsistencyWrapper(string(cfg.Consistency))
+		if err != nil {
+			return gocqlx.Session{}, errors.Wrapf(err, "unsupported scylla consistency: %s", cfg.Consistency)
 		}
 		cluster.Consistency = level
 	}
@@ -190,20 +190,6 @@ func (o *batchObserver) ObserveBatch(ctx context.Context, batch gocql.ObservedBa
 		util.LogDuration(batch.End.Sub(batch.Start)),
 		"error", batch.Err,
 	)
-}
-
-// consistencyLevels maps each consistency level the configuration admits onto
-// the driver's own.
-var consistencyLevels = map[config.Consistency]gocql.Consistency{
-	config.ConsistencyAny:         gocql.Any,
-	config.ConsistencyOne:         gocql.One,
-	config.ConsistencyTwo:         gocql.Two,
-	config.ConsistencyThree:       gocql.Three,
-	config.ConsistencyQuorum:      gocql.Quorum,
-	config.ConsistencyAll:         gocql.All,
-	config.ConsistencyLocalQuorum: gocql.LocalQuorum,
-	config.ConsistencyEachQuorum:  gocql.EachQuorum,
-	config.ConsistencyLocalOne:    gocql.LocalOne,
 }
 
 // Client returns the initialized ScyllaDB session, the client handle of

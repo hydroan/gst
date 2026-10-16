@@ -37,12 +37,18 @@ type Cassandra struct {
 	Username string   `json:"username" mapstructure:"username" ini:"username" yaml:"username"`
 	Password string   `json:"password" mapstructure:"password" ini:"password" yaml:"password"`
 
-	Consistency       string        `json:"consistency" mapstructure:"consistency" ini:"consistency" yaml:"consistency"`
-	Timeout           time.Duration `json:"timeout" mapstructure:"timeout" ini:"timeout" yaml:"timeout"`
-	ConnectTimeout    time.Duration `json:"connect_timeout" mapstructure:"connect_timeout" ini:"connect_timeout" yaml:"connect_timeout"`
-	NumConns          int           `json:"num_conns" mapstructure:"num_conns" ini:"num_conns" yaml:"num_conns"`
-	PageSize          int           `json:"page_size" mapstructure:"page_size" ini:"page_size" yaml:"page_size"`
-	RetryPolicy       string        `json:"retry_policy" mapstructure:"retry_policy" ini:"retry_policy" yaml:"retry_policy"`
+	// Consistency is the consistency level of the session's queries (see
+	// Consistency); empty keeps the driver's own default.
+	// Default: quorum
+	Consistency    Consistency   `json:"consistency" mapstructure:"consistency" ini:"consistency" yaml:"consistency"`
+	Timeout        time.Duration `json:"timeout" mapstructure:"timeout" ini:"timeout" yaml:"timeout"`
+	ConnectTimeout time.Duration `json:"connect_timeout" mapstructure:"connect_timeout" ini:"connect_timeout" yaml:"connect_timeout"`
+	NumConns       int           `json:"num_conns" mapstructure:"num_conns" ini:"num_conns" yaml:"num_conns"`
+	PageSize       int           `json:"page_size" mapstructure:"page_size" ini:"page_size" yaml:"page_size"`
+	// RetryPolicy is how a failed query is retried (see RetryPolicy), each
+	// policy retrying MaxRetryCount times; empty is simple.
+	// Default: simple
+	RetryPolicy       RetryPolicy   `json:"retry_policy" mapstructure:"retry_policy" ini:"retry_policy" yaml:"retry_policy"`
 	ReconnectInterval time.Duration `json:"reconnect_interval" mapstructure:"reconnect_interval" ini:"reconnect_interval" yaml:"reconnect_interval"`
 	MaxRetryCount     int           `json:"max_retry_count" mapstructure:"max_retry_count" ini:"max_retry_count" yaml:"max_retry_count"`
 
@@ -62,12 +68,12 @@ func (*Cassandra) setDefault(v *viper.Viper) {
 	v.SetDefault("cassandra.username", "")
 	v.SetDefault("cassandra.password", "")
 
-	v.SetDefault("cassandra.consistency", "QUORUM")
+	v.SetDefault("cassandra.consistency", ConsistencyQuorum)
 	v.SetDefault("cassandra.timeout", 5*time.Second)
 	v.SetDefault("cassandra.connect_timeout", 5*time.Second)
 	v.SetDefault("cassandra.num_conns", 2)
 	v.SetDefault("cassandra.page_size", 5000)
-	v.SetDefault("cassandra.retry_policy", "default")
+	v.SetDefault("cassandra.retry_policy", RetryPolicySimple)
 	v.SetDefault("cassandra.reconnect_interval", 1*time.Second)
 	v.SetDefault("cassandra.max_retry_count", 3)
 

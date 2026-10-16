@@ -5,25 +5,27 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"strings"
 	"sync"
 	"time"
 
+	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/internal/consts"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 )
 
-// newLogLevel parses the configured level; defaults to Info.
+// newLogLevel parses the configured level; empty is info. The configuration
+// admits only levels zap parses, so a level zap does not know can only be
+// set in code, and reads as info.
 func newLogLevel(cfg logConfig) zapcore.Level {
-	if len(cfg.level) == 0 {
+	if cfg.level == "" {
 		return zapcore.InfoLevel
 	}
-	level := new(zapcore.Level)
+	var level zapcore.Level
 	if err := level.UnmarshalText([]byte(cfg.level)); err != nil {
 		return zapcore.InfoLevel
 	}
-	return *level
+	return level
 }
 
 // newLogEncoder builds the JSON or console encoder cfg names, with the
@@ -59,14 +61,12 @@ func newLogEncoder(cfg logConfig, opts ...Option) zapcore.Encoder {
 			encConfig.CallerKey = ""
 		}
 	}
-	switch strings.ToLower(cfg.format) {
-	case "json":
-		return zapcore.NewJSONEncoder(encConfig)
-	case "text", "console":
+	// text lays entries out for a console; json, the default, is one object
+	// per line. The configuration admits no other format.
+	if cfg.format == config.LogFormatText {
 		return zapcore.NewConsoleEncoder(encConfig)
-	default:
-		return zapcore.NewJSONEncoder(encConfig)
 	}
+	return zapcore.NewJSONEncoder(encConfig)
 }
 
 // stringifyReflectedEncoder renders a reflected log value whose JSON is an

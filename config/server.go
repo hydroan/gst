@@ -7,9 +7,13 @@ import (
 )
 
 type (
+	// Mode is the deployment environment label of the process, shown by the
+	// version endpoint, the startup log and the otel resource. Any text is
+	// accepted; the constants below are the conventional values.
 	Mode string
 )
 
+// The conventional values of Mode.
 const (
 	Prod  = "prod"
 	Stg   = "stg"

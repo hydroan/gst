@@ -77,11 +77,11 @@ type GRPC struct {
 	MaxConnectionAgeGrace time.Duration `json:"max_connection_age_grace" mapstructure:"max_connection_age_grace" ini:"max_connection_age_grace" yaml:"max_connection_age_grace"`
 
 	// MaxRecvMsgSize is the largest message a call may carry to the server,
-	// a size with its unit, parsed with github.com/dustin/go-humanize like
-	// logger.http_body.max_body_size: "8MiB" is 8 times 1024 squared bytes,
-	// "8MB" 8 times 1000 squared; a larger message is answered
-	// ResourceExhausted. Empty leaves grpc-go's own limit, 4MiB.
-	MaxRecvMsgSize string `json:"max_recv_msg_size" mapstructure:"max_recv_msg_size" ini:"max_recv_msg_size" yaml:"max_recv_msg_size"`
+	// a size with its unit (see ByteSize): "8MiB" is 8 times 1024 squared
+	// bytes, "8MB" 8 times 1000 squared; a larger message is answered
+	// ResourceExhausted. Empty or 0 leaves grpc-go's own limit, 4MiB; more
+	// than 2GiB, the most a message may carry, fails startup.
+	MaxRecvMsgSize ByteSize `json:"max_recv_msg_size" mapstructure:"max_recv_msg_size" ini:"max_recv_msg_size" yaml:"max_recv_msg_size"`
 }
 
 func (*GRPC) setDefault(v *viper.Viper) {

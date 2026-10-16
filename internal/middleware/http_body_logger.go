@@ -2,12 +2,12 @@ package middleware
 
 import (
 	"bytes"
+	"cmp"
 	"io"
 	"net/http"
 	"strings"
 	"time"
 
-	"github.com/dustin/go-humanize"
 	"github.com/gin-gonic/gin"
 	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/internal/consts"
@@ -23,7 +23,9 @@ const (
 	// field, so this only shows up when a custom logger keeps that field.
 	httpBodyLogMessage = "http_body"
 
-	defaultHTTPBodyLogMaxSize = "64KB"
+	// defaultHTTPBodyLogMaxSize is what an unset max_body_size reads as, the
+	// 64KB the configuration defaults the key to.
+	defaultHTTPBodyLogMaxSize config.ByteSize = 64_000
 )
 
 // bodyLogger returns a middleware that logs JSON HTTP request and response
@@ -55,15 +57,15 @@ const (
 func bodyLogger() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		cfg := config.App.Logger.HTTPBody
-		reqMode := normalizeHTTPBodyLogMode(cfg.LogRequest, config.HTTPBodyLogModeAll)
-		rspMode := normalizeHTTPBodyLogMode(cfg.LogResponse, config.HTTPBodyLogModeError)
+		reqMode := httpBodyLogModeOrDefault(cfg.LogRequest, config.HTTPBodyLogModeAll)
+		rspMode := httpBodyLogModeOrDefault(cfg.LogResponse, config.HTTPBodyLogModeError)
 		if !cfg.Enabled ||
 			(reqMode == config.HTTPBodyLogModeNone && rspMode == config.HTTPBodyLogModeNone) ||
 			matchHTTPBodyLogSkipRoute(cfg.SkipRoutes, httpBodyLogSkipTarget(c)) {
 			return
 		}
 
-		maxBodySize := httpBodyLogMaxSize(cfg.MaxBodySize)
+		maxBodySize := safeHTTPBodyLogSize(uint64(cmp.Or(cfg.MaxBodySize, defaultHTTPBodyLogMaxSize)))
 
 		// The entry times the request itself, even though the access log already
 		// times the same one: a log store cannot join two files, so "which
@@ -306,19 +308,13 @@ func httpBodyLogWanted(mode config.HTTPBodyLogMode, isError bool) bool {
 	}
 }
 
-// normalizeHTTPBodyLogMode maps a configured mode onto a known value, falling
-// back to the side's default for empty or unknown input.
-func normalizeHTTPBodyLogMode(mode, fallback config.HTTPBodyLogMode) config.HTTPBodyLogMode {
-	switch config.HTTPBodyLogMode(strings.ToLower(strings.TrimSpace(string(mode)))) {
-	case config.HTTPBodyLogModeAll:
-		return config.HTTPBodyLogModeAll
-	case config.HTTPBodyLogModeError:
-		return config.HTTPBodyLogModeError
-	case config.HTTPBodyLogModeNone:
-		return config.HTTPBodyLogModeNone
-	default:
+// httpBodyLogModeOrDefault returns the configured mode, or the side's default
+// when none is set. The configuration admits no mode outside the set.
+func httpBodyLogModeOrDefault(mode, fallback config.HTTPBodyLogMode) config.HTTPBodyLogMode {
+	if mode == "" {
 		return fallback
 	}
+	return mode
 }
 
 // matchHTTPBodyLogSkipRoute reports whether route matches a configured skip
@@ -366,19 +362,8 @@ func httpBodyLogParams(params gin.Params) map[string]string {
 	return values
 }
 
-func httpBodyLogMaxSize(value string) int64 {
-	size, err := humanize.ParseBytes(value)
-	if err == nil && size > 0 {
-		return safeHTTPBodyLogSize(size)
-	}
-
-	size, err = humanize.ParseBytes(defaultHTTPBodyLogMaxSize)
-	if err == nil && size > 0 {
-		return safeHTTPBodyLogSize(size)
-	}
-	return 64 * 1024
-}
-
+// safeHTTPBodyLogSize converts a configured size to the signed length the
+// body captures compare against, capping a size past the signed range.
 func safeHTTPBodyLogSize(size uint64) int64 {
 	const maxInt64AsUint64 = uint64(1<<63 - 1)
 	if size > maxInt64AsUint64 {

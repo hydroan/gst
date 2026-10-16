@@ -20,12 +20,22 @@ const (
 	KAFKA_ENABLED = "KAFKA_ENABLED"
 )
 
-// Supported Kafka SASL mechanisms.
+// KafkaSASLMechanism names the SASL mechanism the Kafka client authenticates
+// with.
+type KafkaSASLMechanism string
+
 const (
-	KafkaSASLMechanismPlain       = "plain"
-	KafkaSASLMechanismScramSHA256 = "scram-sha-256"
-	KafkaSASLMechanismScramSHA512 = "scram-sha-512"
+	KafkaSASLMechanismPlain       KafkaSASLMechanism = "plain"
+	KafkaSASLMechanismScramSHA256 KafkaSASLMechanism = "scram-sha-256"
+	KafkaSASLMechanismScramSHA512 KafkaSASLMechanism = "scram-sha-512"
 )
+
+// UnmarshalText reads text as one of the mechanisms, in any letter case; any
+// other text is a configuration error naming the key.
+func (m *KafkaSASLMechanism) UnmarshalText(text []byte) (err error) {
+	*m, err = oneOf(text, KafkaSASLMechanismPlain, KafkaSASLMechanismScramSHA256, KafkaSASLMechanismScramSHA512)
+	return err
+}
 
 // Kafka configures the framework-managed Kafka client backed by franz-go.
 //
@@ -39,10 +49,10 @@ type Kafka struct {
 	Brokers  []string `json:"brokers" mapstructure:"brokers" ini:"brokers" yaml:"brokers"`
 	ClientID string   `json:"client_id" mapstructure:"client_id" ini:"client_id" yaml:"client_id"`
 
-	SASLEnabled   bool   `json:"sasl_enabled" mapstructure:"sasl_enabled" ini:"sasl_enabled" yaml:"sasl_enabled"`
-	SASLMechanism string `json:"sasl_mechanism" mapstructure:"sasl_mechanism" ini:"sasl_mechanism" yaml:"sasl_mechanism"`
-	SASLUsername  string `json:"sasl_username" mapstructure:"sasl_username" ini:"sasl_username" yaml:"sasl_username"`
-	SASLPassword  string `json:"sasl_password" mapstructure:"sasl_password" ini:"sasl_password" yaml:"sasl_password"`
+	SASLEnabled   bool               `json:"sasl_enabled" mapstructure:"sasl_enabled" ini:"sasl_enabled" yaml:"sasl_enabled"`
+	SASLMechanism KafkaSASLMechanism `json:"sasl_mechanism" mapstructure:"sasl_mechanism" ini:"sasl_mechanism" yaml:"sasl_mechanism"`
+	SASLUsername  string             `json:"sasl_username" mapstructure:"sasl_username" ini:"sasl_username" yaml:"sasl_username"`
+	SASLPassword  string             `json:"sasl_password" mapstructure:"sasl_password" ini:"sasl_password" yaml:"sasl_password"`
 
 	TLSEnabled         bool   `json:"tls_enabled" mapstructure:"tls_enabled" ini:"tls_enabled" yaml:"tls_enabled"`
 	CertFile           string `json:"cert_file" mapstructure:"cert_file" ini:"cert_file" yaml:"cert_file"`

@@ -232,17 +232,12 @@ func serverOptions(cfg config.GRPC) ([]grpc.ServerOption, error) {
 			PermitWithoutStream: cfg.KeepalivePermitWithoutStream,
 		}),
 	}
-	if cfg.MaxRecvMsgSize != "" {
-		size, err := humanize.ParseBytes(cfg.MaxRecvMsgSize)
-		if err != nil {
-			return nil, errors.Wrapf(err, "parse grpc.max_recv_msg_size %q", cfg.MaxRecvMsgSize)
+	if cfg.MaxRecvMsgSize != 0 {
+		// A message's length is a 32-bit field of the wire.
+		if cfg.MaxRecvMsgSize > math.MaxInt32 {
+			return nil, errors.Newf("grpc.max_recv_msg_size %d bytes is more than %s, the most a message may carry", cfg.MaxRecvMsgSize, humanize.IBytes(math.MaxInt32))
 		}
-		// A message's length is a 32-bit field of the wire, and no message
-		// at all would fit under zero.
-		if size == 0 || size > math.MaxInt32 {
-			return nil, errors.Newf("grpc.max_recv_msg_size %q is not between 1 byte and %s", cfg.MaxRecvMsgSize, humanize.IBytes(math.MaxInt32))
-		}
-		opts = append(opts, grpc.MaxRecvMsgSize(int(size)))
+		opts = append(opts, grpc.MaxRecvMsgSize(int(cfg.MaxRecvMsgSize)))
 	}
 	if cfg.TLSEnabled {
 		creds, err := credentials.NewServerTLSFromFile(cfg.CertFile, cfg.KeyFile)

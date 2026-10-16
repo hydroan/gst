@@ -70,11 +70,13 @@ func New(cfg config.Cassandra) (*gocql.Session, error) {
 		}
 	}
 
-	// Set consistency level
+	// Set consistency level; empty keeps the driver's own default. The driver
+	// reads the name in any letter case and reports one it does not know;
+	// its ParseConsistency panics on such a name instead.
 	if cfg.Consistency != "" {
-		consistency, err := parseConsistency(cfg.Consistency)
+		consistency, err := gocql.ParseConsistencyWrapper(string(cfg.Consistency))
 		if err != nil {
-			return nil, errors.Wrap(err, "invalid consistency level")
+			return nil, errors.Wrapf(err, "unsupported cassandra consistency: %s", cfg.Consistency)
 		}
 		cluster.Consistency = consistency
 	}
@@ -99,9 +101,9 @@ func New(cfg config.Cassandra) (*gocql.Session, error) {
 	}
 
 	// Configure retry policy
-	retryPolicy, err := getRetryPolicy(cfg.RetryPolicy, cfg.MaxRetryCount)
+	retryPolicy, err := newRetryPolicy(cfg.RetryPolicy, cfg.MaxRetryCount)
 	if err != nil {
-		return nil, errors.Wrap(err, "invalid retry policy")
+		return nil, err
 	}
 	cluster.RetryPolicy = retryPolicy
 
@@ -131,45 +133,19 @@ func New(cfg config.Cassandra) (*gocql.Session, error) {
 	return s, nil
 }
 
-// parseConsistency parses a consistency level name into its gocql value.
-func parseConsistency(consistency string) (gocql.Consistency, error) {
-	switch consistency {
-	case "ANY":
-		return gocql.Any, nil
-	case "ONE":
-		return gocql.One, nil
-	case "TWO":
-		return gocql.Two, nil
-	case "THREE":
-		return gocql.Three, nil
-	case "QUORUM":
-		return gocql.Quorum, nil
-	case "ALL":
-		return gocql.All, nil
-	case "LOCAL_QUORUM":
-		return gocql.LocalQuorum, nil
-	case "EACH_QUORUM":
-		return gocql.EachQuorum, nil
-	case "LOCAL_ONE":
-		return gocql.LocalOne, nil
-	default:
-		return gocql.Quorum, errors.New("unknown consistency level: " + consistency)
-	}
-}
-
-// getRetryPolicy returns the retry policy named by policyName. An empty policy
-// name falls back to the simple policy; an unknown name is a configuration
-// error, mirroring how parseConsistency rejects unknown consistency levels.
-func getRetryPolicy(policyName string, maxRetryCount int) (gocql.RetryPolicy, error) {
-	switch policyName {
-	case "", "default":
+// newRetryPolicy returns the retry policy named by policy, retrying
+// maxRetryCount times; an empty policy is the simple one. The configuration
+// admits no other name; one set in code is an error.
+func newRetryPolicy(policy config.RetryPolicy, maxRetryCount int) (gocql.RetryPolicy, error) {
+	switch policy {
+	case "", config.RetryPolicySimple:
 		return &gocql.SimpleRetryPolicy{NumRetries: maxRetryCount}, nil
-	case "exponential":
+	case config.RetryPolicyExponentialBackoff:
 		return &gocql.ExponentialBackoffRetryPolicy{NumRetries: maxRetryCount}, nil
-	case "fallthrough":
+	case config.RetryPolicyDowngradingConsistency:
 		return &gocql.DowngradingConsistencyRetryPolicy{}, nil
 	default:
-		return nil, errors.New("unknown retry policy: " + policyName)
+		return nil, errors.Newf("unsupported cassandra retry policy: %s", policy)
 	}
 }
 

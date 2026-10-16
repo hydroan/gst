@@ -55,7 +55,7 @@ func TestApplyConfigToEnv(t *testing.T) {
 				Enabled:     true,
 				LogRequest:  config.HTTPBodyLogModeAll,
 				LogResponse: config.HTTPBodyLogModeError,
-				MaxBodySize: "64KB",
+				MaxBodySize: 64_000,
 				SkipRoutes:  []string{"/api/login"},
 			},
 		})
@@ -66,7 +66,7 @@ func TestApplyConfigToEnv(t *testing.T) {
 		require.Equal(t, "true", os.Getenv(config.LOGGER_HTTP_BODY_ENABLED))
 		require.Equal(t, string(config.HTTPBodyLogModeAll), os.Getenv(config.LOGGER_HTTP_BODY_LOG_REQUEST))
 		require.Equal(t, string(config.HTTPBodyLogModeError), os.Getenv(config.LOGGER_HTTP_BODY_LOG_RESPONSE))
-		require.Equal(t, "64KB", os.Getenv(config.LOGGER_HTTP_BODY_MAX_BODY_SIZE))
+		require.Equal(t, "64000", os.Getenv(config.LOGGER_HTTP_BODY_MAX_BODY_SIZE))
 
 		require.Empty(t, os.Getenv(config.LOGGER_DIR))
 		// A false bool is indistinguishable from an unset one, so it is left

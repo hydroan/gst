@@ -495,7 +495,7 @@ func databaseFor[M types.Model](ctx context.Context, base *gorm.DB) types.Databa
 	running := dbruntime.Handle(gctx, base)
 
 	var ins *gorm.DB
-	if strings.ToLower(config.App.Logger.Level) == "debug" {
+	if config.App.Logger.Level == config.LogLevelDebug {
 		ins = running.Debug().WithContext(gctx).Limit(defaultLimit)
 	} else {
 		ins = running.WithContext(gctx).Limit(defaultLimit)

@@ -29,7 +29,7 @@ func TestHTTPBodyLoggerDisabledDoesNothing(t *testing.T) {
 				Enabled:     false,
 				LogRequest:  config.HTTPBodyLogModeAll,
 				LogResponse: config.HTTPBodyLogModeAll,
-				MaxBodySize: "64KB",
+				MaxBodySize: 64_000,
 			},
 		},
 		{
@@ -38,7 +38,7 @@ func TestHTTPBodyLoggerDisabledDoesNothing(t *testing.T) {
 				Enabled:     true,
 				LogRequest:  config.HTTPBodyLogModeNone,
 				LogResponse: config.HTTPBodyLogModeNone,
-				MaxBodySize: "64KB",
+				MaxBodySize: 64_000,
 			},
 		},
 	}
@@ -69,7 +69,7 @@ func TestHTTPBodyLoggerLogsRequestAndResponseAsOneEntry(t *testing.T) {
 		Enabled:     true,
 		LogRequest:  config.HTTPBodyLogModeAll,
 		LogResponse: config.HTTPBodyLogModeAll,
-		MaxBodySize: "64KB",
+		MaxBodySize: 64_000,
 	})
 
 	router := gin.New()
@@ -121,7 +121,7 @@ func TestHTTPBodyLoggerRecordsRoutePathAndParams(t *testing.T) {
 		Enabled:     true,
 		LogRequest:  config.HTTPBodyLogModeAll,
 		LogResponse: config.HTTPBodyLogModeNone,
-		MaxBodySize: "64KB",
+		MaxBodySize: 64_000,
 	})
 
 	router := gin.New()
@@ -159,7 +159,7 @@ func TestHTTPBodyLoggerDefaultModesLogRequestAlwaysResponseOnError(t *testing.T)
 	}
 
 	t.Run("success omits response", func(t *testing.T) {
-		logs := setupHTTPBodyLoggerTest(t, config.HTTPBodyLogger{Enabled: true, MaxBodySize: "64KB"})
+		logs := setupHTTPBodyLoggerTest(t, config.HTTPBodyLogger{Enabled: true, MaxBodySize: 64_000})
 		router := newRouter(func(c *gin.Context) {
 			c.JSON(http.StatusOK, gin.H{"msg": "success"})
 		})
@@ -175,7 +175,7 @@ func TestHTTPBodyLoggerDefaultModesLogRequestAlwaysResponseOnError(t *testing.T)
 	})
 
 	t.Run("http error logs response", func(t *testing.T) {
-		logs := setupHTTPBodyLoggerTest(t, config.HTTPBodyLogger{Enabled: true, MaxBodySize: "64KB"})
+		logs := setupHTTPBodyLoggerTest(t, config.HTTPBodyLogger{Enabled: true, MaxBodySize: 64_000})
 		router := newRouter(func(c *gin.Context) {
 			c.JSON(http.StatusBadRequest, gin.H{"msg": "failure"})
 		})
@@ -194,7 +194,7 @@ func TestHTTPBodyLoggerDefaultModesLogRequestAlwaysResponseOnError(t *testing.T)
 	t.Run("a refusal through response.Abort logs its status and envelope", func(t *testing.T) {
 		// The refusal of the only way to refuse from outside the controller
 		// path counts as an error by its status, like a handler's own.
-		logs := setupHTTPBodyLoggerTest(t, config.HTTPBodyLogger{Enabled: true, MaxBodySize: "64KB"})
+		logs := setupHTTPBodyLoggerTest(t, config.HTTPBodyLogger{Enabled: true, MaxBodySize: 64_000})
 		router := newRouter(func(c *gin.Context) {
 			response.Abort(c, http.StatusForbidden, "permission denied")
 		})
@@ -216,7 +216,7 @@ func TestHTTPBodyLoggerSkipsConfiguredRoutes(t *testing.T) {
 		Enabled:     true,
 		LogRequest:  config.HTTPBodyLogModeAll,
 		LogResponse: config.HTTPBodyLogModeAll,
-		MaxBodySize: "64KB",
+		MaxBodySize: 64_000,
 		SkipRoutes:  []string{"/api/login", "/api/records/*"},
 	}
 	newRouter := func() *gin.Engine {
@@ -275,7 +275,7 @@ func TestHTTPBodyLoggerSkipsLargeRequestBodyContent(t *testing.T) {
 		Enabled:     true,
 		LogRequest:  config.HTTPBodyLogModeAll,
 		LogResponse: config.HTTPBodyLogModeNone,
-		MaxBodySize: "4B",
+		MaxBodySize: 4,
 	})
 
 	router := gin.New()
@@ -305,7 +305,7 @@ func TestHTTPBodyLoggerTruncatesLargeResponseBody(t *testing.T) {
 		Enabled:     true,
 		LogRequest:  config.HTTPBodyLogModeNone,
 		LogResponse: config.HTTPBodyLogModeAll,
-		MaxBodySize: "4B",
+		MaxBodySize: 4,
 	})
 
 	router := gin.New()
@@ -332,7 +332,7 @@ func TestHTTPBodyLoggerIgnoresNonJSONBodies(t *testing.T) {
 		Enabled:     true,
 		LogRequest:  config.HTTPBodyLogModeAll,
 		LogResponse: config.HTTPBodyLogModeAll,
-		MaxBodySize: "64KB",
+		MaxBodySize: 64_000,
 	})
 
 	router := gin.New()
@@ -352,7 +352,7 @@ func TestHTTPBodyLoggerLogsMalformedJSONVerbatim(t *testing.T) {
 		Enabled:     true,
 		LogRequest:  config.HTTPBodyLogModeAll,
 		LogResponse: config.HTTPBodyLogModeNone,
-		MaxBodySize: "64KB",
+		MaxBodySize: 64_000,
 	})
 
 	router := gin.New()
@@ -383,7 +383,7 @@ func TestHTTPBodyLoggerFieldsFitTheCapacityInTheWorstCase(t *testing.T) {
 		Enabled:     true,
 		LogRequest:  config.HTTPBodyLogModeAll,
 		LogResponse: config.HTTPBodyLogModeAll,
-		MaxBodySize: "4B",
+		MaxBodySize: 4,
 	})
 
 	router := gin.New()

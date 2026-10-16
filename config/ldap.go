@@ -64,26 +64,34 @@ const (
 )
 
 type Ldap struct {
-	Host           string        `json:"host" mapstructure:"host" ini:"host" yaml:"host"`
-	Port           int           `json:"port" mapstructure:"port" ini:"port" yaml:"port"`
-	BaseDN         string        `json:"base_dn" mapstructure:"base_dn" ini:"base_dn" yaml:"base_dn"`
-	BindDN         string        `json:"bind_dn" mapstructure:"bind_dn" ini:"bind_dn" yaml:"bind_dn"`
-	BindPassword   string        `json:"bind_password" mapstructure:"bind_password" ini:"bind_password" yaml:"bind_password"`
-	Attributes     []string      `json:"attributes" mapstructure:"attributes" ini:"attributes" yaml:"attributes"`
-	Filter         string        `json:"filter" mapstructure:"filter" ini:"filter" yaml:"filter"`
-	GroupFilter    string        `json:"group_filter" mapstructure:"group_filter" ini:"group_filter" yaml:"group_filter"`
-	UserFilter     string        `json:"user_filter" mapstructure:"user_filter" ini:"user_filter" yaml:"user_filter"`
-	GroupDN        string        `json:"group_dn" mapstructure:"group_dn" ini:"group_dn" yaml:"group_dn"`
-	UserDN         string        `json:"user_dn" mapstructure:"user_dn" ini:"user_dn" yaml:"user_dn"`
-	GroupAttribute string        `json:"group_attribute" mapstructure:"group_attribute" ini:"group_attribute" yaml:"group_attribute"`
-	UserAttribute  string        `json:"user_attribute" mapstructure:"user_attribute" ini:"user_attribute" yaml:"user_attribute"`
-	Scope          int           `json:"scope" mapstructure:"scope" ini:"scope" yaml:"scope"`
+	Host           string   `json:"host" mapstructure:"host" ini:"host" yaml:"host"`
+	Port           int      `json:"port" mapstructure:"port" ini:"port" yaml:"port"`
+	BaseDN         string   `json:"base_dn" mapstructure:"base_dn" ini:"base_dn" yaml:"base_dn"`
+	BindDN         string   `json:"bind_dn" mapstructure:"bind_dn" ini:"bind_dn" yaml:"bind_dn"`
+	BindPassword   string   `json:"bind_password" mapstructure:"bind_password" ini:"bind_password" yaml:"bind_password"`
+	Attributes     []string `json:"attributes" mapstructure:"attributes" ini:"attributes" yaml:"attributes"`
+	Filter         string   `json:"filter" mapstructure:"filter" ini:"filter" yaml:"filter"`
+	GroupFilter    string   `json:"group_filter" mapstructure:"group_filter" ini:"group_filter" yaml:"group_filter"`
+	UserFilter     string   `json:"user_filter" mapstructure:"user_filter" ini:"user_filter" yaml:"user_filter"`
+	GroupDN        string   `json:"group_dn" mapstructure:"group_dn" ini:"group_dn" yaml:"group_dn"`
+	UserDN         string   `json:"user_dn" mapstructure:"user_dn" ini:"user_dn" yaml:"user_dn"`
+	GroupAttribute string   `json:"group_attribute" mapstructure:"group_attribute" ini:"group_attribute" yaml:"group_attribute"`
+	UserAttribute  string   `json:"user_attribute" mapstructure:"user_attribute" ini:"user_attribute" yaml:"user_attribute"`
+	// Scope is how deep a search looks from its base: 0 the base object
+	// alone, 1 its children, 2 the whole subtree. Any other value fails
+	// startup.
+	// Default: 2
+	Scope          Scope         `json:"scope" mapstructure:"scope" ini:"scope" yaml:"scope"`
 	RequestTimeout time.Duration `json:"request_timeout" mapstructure:"request_timeout" ini:"request_timeout" yaml:"request_timeout"`
 	ConnTimeout    time.Duration `json:"conn_timeout" mapstructure:"conn_timeout" ini:"conn_timeout" yaml:"conn_timeout"`
 	Referrals      bool          `json:"referrals" mapstructure:"referrals" ini:"referrals" yaml:"referrals"`
-	Deref          int           `json:"deref" mapstructure:"deref" ini:"deref" yaml:"deref"`
-	PageSize       int           `json:"page_size" mapstructure:"page_size" ini:"page_size" yaml:"page_size"`
-	Heartbeat      time.Duration `json:"heartbeat" mapstructure:"heartbeat" ini:"heartbeat" yaml:"heartbeat"`
+	// Deref is when a search dereferences aliases: 0 never, 1 while
+	// searching, 2 when finding the base object, 3 always. Any other value
+	// fails startup.
+	// Default: 0
+	Deref     DerefAliases  `json:"deref" mapstructure:"deref" ini:"deref" yaml:"deref"`
+	PageSize  int           `json:"page_size" mapstructure:"page_size" ini:"page_size" yaml:"page_size"`
+	Heartbeat time.Duration `json:"heartbeat" mapstructure:"heartbeat" ini:"heartbeat" yaml:"heartbeat"`
 
 	TLSEnabled         bool   `json:"tls_enabled" mapstructure:"tls_enabled" ini:"tls_enabled" yaml:"tls_enabled"`
 	CertFile           string `json:"cert_file" mapstructure:"cert_file" ini:"cert_file" yaml:"cert_file"`
@@ -109,11 +117,11 @@ func (*Ldap) setDefault(v *viper.Viper) {
 	v.SetDefault("ldap.user_dn", "")
 	v.SetDefault("ldap.group_attribute", "member")
 	v.SetDefault("ldap.user_attribute", "uid")
-	v.SetDefault("ldap.scope", int(ScopeWholeSubtree))
+	v.SetDefault("ldap.scope", ScopeWholeSubtree)
 	v.SetDefault("ldap.request_timeout", 10*time.Second)
 	v.SetDefault("ldap.conn_timeout", 10*time.Second)
 	v.SetDefault("ldap.referrals", false)
-	v.SetDefault("ldap.deref", int(NeverDerefAliases))
+	v.SetDefault("ldap.deref", NeverDerefAliases)
 	v.SetDefault("ldap.page_size", 1000)
 	v.SetDefault("ldap.heartbeat", 30*time.Second)
 

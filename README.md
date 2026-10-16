@@ -247,8 +247,8 @@ func (Entry) Design() {
 `keepalive_min_time`、`keepalive_permit_without_stream`（客户端两次 ping 最少隔多久、没有调用时能不能 ping，默认 5 分钟、不能，
 ping 得更勤的客户端会被 `too_many_pings` 断开，客户端的 keepalive 要照这两个值配）；`max_connection_age`、`max_connection_age_grace`
 （一条连接活多久就让客户端重连、在途的调用再宽限多久，默认不限；经 Kubernetes Service 这类按连接分流的入口，长连接不换就一直落在老副本上，靠它换到新副本）；
-`max_recv_msg_size`（收多大的消息，写 `8MiB` 这样带单位的值，默认 4MiB 即 4,194,304 字节，更大的消息答 ResourceExhausted；MiB 按 1024 进、MB 按 1000 进，`4MB` 只有 4,000,000 字节，比默认值还小）。
-时长键不能是负数，`keepalive_time`、`max_connection_age` 填了就至少 1 秒，`max_recv_msg_size` 要在 1 字节到 2GiB 之间；写错的值和读不出来的证书都让启动直接报错退出，没有模型声明 `GRPC()` 的项目也一样检查。
+`max_recv_msg_size`（收多大的消息，写 `8MiB` 这样带单位的值或裸字节数，空或 0 用 grpc-go 的默认 4MiB 即 4,194,304 字节，更大的消息答 ResourceExhausted；MiB 按 1024 进、MB 按 1000 进，`4MB` 只有 4,000,000 字节，比默认值还小）。
+时长键不能是负数，`keepalive_time`、`max_connection_age` 填了就至少 1 秒，`max_recv_msg_size` 最多 2GiB；写错的值和读不出来的证书都让启动直接报错退出，没有模型声明 `GRPC()` 的项目也一样检查。
 没有模型声明 `GRPC()` 的项目不开这个端口。监听上还有两个框架自带的服务：标准的健康服务
 `grpc.health.v1.Health`，进程在服务时答 SERVING，收到停机信号后和 `/-/readyz` 同时变成 NOT_SERVING，
 每个服务按全名也各报一份、和整体同起同落，Kubernetes 的 gRPC 探针指名 `service` 时问的就是它；
@@ -817,7 +817,7 @@ rsp, err := cli.Post[model.SampleSealRsp](ctx, "/api/samples/seal", &model.Sampl
 `logger.http_body.enabled` 对应 `LOGGER_HTTP_BODY_ENABLED`，自定义段 `Sample` 的 `endpoint` 对应
 `SAMPLE_ENDPOINT`。设成空串、`false`、`0` 同样生效，只有时长和 map 类型的键没有空的写法，设成空串启动失败。时长一律带单位（`15s`、`500ms`、`2160h`），配置文件里写成裸数字（如 YAML 的 `read_timeout: 15`）启动失败，只有 `0` 例外。启动时这几种情况直接失败：变量的值转不成对应类型
 （报错写明变量名和原值，例如 `SERVER_PORT=tcp://…`）；自定义段和框架内置段重名（比如类型叫 `Mysql`）；
-两个类型注册成同一个段；自定义段的 `default` 标签写错（比如 bool 字段写成 `default:"yes"`）；配置文件在框架内置段下写了框架没有的键（比如 `[logger]` 下写成 `leve`），报错点名段和键，不认识的段名不检查，自定义段按注册的类型解码；取值固定的键写了集合外的值（比如 `logger.output = syslog`、`database.type = oracle`），报错点名键、原值和可选的值，这类键不分大小写。变量名写错、
+两个类型注册成同一个段；自定义段的 `default` 标签写错（比如 bool 字段写成 `default:"yes"`）；配置文件在框架内置段下写了框架没有的键（比如 `[logger]` 下写成 `leve`），报错点名段和键，不认识的段名不检查，自定义段按注册的类型解码；取值固定的键写了集合外的值（比如 `logger.output = syslog`、`database.type = oracle`），报错点名键、原值和可选的值，这类键不分大小写；带大小的键（`logger.http_body.max_body_size`、`grpc.max_recv_msg_size`）写带单位的值或裸字节数，其他写法启动失败；有范围的键（`cache.max_entries` 0 到 10,000,000，`ldap.scope` 0 到 2，`ldap.deref` 0 到 3）越界启动失败。变量名写错、
 或者只写到段名（比如 `SERVER`）都不会报错，也不生效，按上面的规则核对。
 
 服务启动默认不自动建表、不自动迁移（`database.auto_migrate = false`）：启动期只校验注册模型

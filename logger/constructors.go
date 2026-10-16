@@ -20,8 +20,8 @@ import (
 type logConfig struct {
 	output     config.LoggerOutput
 	file       string
-	level      string
-	format     string
+	level      config.LogLevel
+	format     config.LogFormat
 	maxAge     int
 	maxSize    int
 	maxBackups int

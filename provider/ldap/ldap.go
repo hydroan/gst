@@ -216,7 +216,7 @@ func Search(baseDN, filter string, attributes []string, scope int) ([]*ldap.Entr
 	searchRequest := ldap.NewSearchRequest(
 		baseDN,
 		scope,
-		cfg.Deref,
+		int(cfg.Deref),
 		0, // Size limit
 		int(cfg.RequestTimeout.Seconds()),
 		false, // Types only
@@ -311,7 +311,7 @@ func Authenticate(username, password string) (bool, error) {
 		searchDN = cfg.BaseDN
 	}
 
-	entries, err := Search(searchDN, filter, []string{"dn"}, cfg.Scope)
+	entries, err := Search(searchDN, filter, []string{"dn"}, int(cfg.Scope))
 	if err != nil {
 		return false, errors.Wrap(err, "failed to find user")
 	}
@@ -360,7 +360,7 @@ func GetUser(username string, attributes []string) (*ldap.Entry, error) {
 		searchDN = cfg.BaseDN
 	}
 
-	entries, err := Search(searchDN, filter, attributes, cfg.Scope)
+	entries, err := Search(searchDN, filter, attributes, int(cfg.Scope))
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to find user")
 	}
@@ -392,7 +392,7 @@ func GetGroup(groupName string, attributes []string) (*ldap.Entry, error) {
 		searchDN = cfg.BaseDN
 	}
 
-	entries, err := Search(searchDN, filter, attributes, cfg.Scope)
+	entries, err := Search(searchDN, filter, attributes, int(cfg.Scope))
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to find group")
 	}
@@ -421,7 +421,7 @@ func GetUserGroups(username string) ([]string, error) {
 		searchDN = cfg.BaseDN
 	}
 
-	entries, err := Search(searchDN, userFilter, []string{"dn"}, cfg.Scope)
+	entries, err := Search(searchDN, userFilter, []string{"dn"}, int(cfg.Scope))
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to find user")
 	}
@@ -440,7 +440,7 @@ func GetUserGroups(username string) ([]string, error) {
 
 	groupFilter := fmt.Sprintf("(&%s(%s=%s))", cfg.GroupFilter, cfg.GroupAttribute, ldap.EscapeFilter(userDN))
 
-	groupEntries, err := Search(groupSearchDN, groupFilter, []string{"cn"}, cfg.Scope)
+	groupEntries, err := Search(groupSearchDN, groupFilter, []string{"cn"}, int(cfg.Scope))
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to find user groups")
 	}

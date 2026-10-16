@@ -6,7 +6,8 @@ import (
 	"github.com/spf13/viper"
 )
 
-// Consistency names the consistency level of the scylla session's queries.
+// Consistency names the consistency level of a cassandra or scylla session's
+// queries.
 type Consistency string
 
 const (
@@ -29,7 +30,7 @@ func (c *Consistency) UnmarshalText(text []byte) (err error) {
 	return err
 }
 
-// RetryPolicy names how the scylla session retries a failed query.
+// RetryPolicy names how a cassandra or scylla session retries a failed query.
 type RetryPolicy string
 
 const (

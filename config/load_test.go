@@ -71,5 +71,5 @@ func TestLoadRefusesAKeyTheFrameworkSectionLacks(t *testing.T) {
 
 	c, err := config.Load(writeLoadFile(t, "config.ini", "[nosuchsection]\nkey = 1\n\n[logger]\nlevel = debug\n"))
 	require.NoError(t, err)
-	require.Equal(t, "debug", c.Logger.Level)
+	require.Equal(t, config.LogLevelDebug, c.Logger.Level)
 }
