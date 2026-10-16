@@ -63,7 +63,7 @@ type Kafka struct {
 	Enabled bool `json:"enabled" mapstructure:"enabled" ini:"enabled" yaml:"enabled"`
 }
 
-func (*Kafka) setDefault(v *viper.Viper) {
+func (*Kafka) setDefaults(v *viper.Viper) {
 	v.SetDefault("kafka.brokers", []string{"127.0.0.1:9092"})
 	v.SetDefault("kafka.client_id", "gst")
 

@@ -56,7 +56,7 @@ type RethinkDB struct {
 	Enabled bool `json:"enabled" mapstructure:"enabled" ini:"enabled" yaml:"enabled"`
 }
 
-func (*RethinkDB) setDefault(v *viper.Viper) {
+func (*RethinkDB) setDefaults(v *viper.Viper) {
 	v.SetDefault("rethinkdb.hosts", "127.0.0.1:28015")
 	v.SetDefault("rethinkdb.username", "")
 	v.SetDefault("rethinkdb.password", "")

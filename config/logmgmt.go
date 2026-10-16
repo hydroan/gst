@@ -23,6 +23,6 @@ type Logmgmt struct {
 	Retention time.Duration `json:"retention" mapstructure:"retention" ini:"retention" yaml:"retention"`
 }
 
-func (*Logmgmt) setDefault(v *viper.Viper) {
+func (*Logmgmt) setDefaults(v *viper.Viper) {
 	v.SetDefault("logmgmt.retention", "2160h") // 90 days
 }

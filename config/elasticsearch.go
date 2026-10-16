@@ -68,7 +68,7 @@ type Elasticsearch struct {
 	Enabled bool `json:"enabled" mapstructure:"enabled" ini:"enabled" yaml:"enabled"`
 }
 
-func (*Elasticsearch) setDefault(v *viper.Viper) {
+func (*Elasticsearch) setDefaults(v *viper.Viper) {
 	v.SetDefault("elasticsearch.addrs", []string{"http://localhost:9200"})
 	v.SetDefault("elasticsearch.username", "")
 	v.SetDefault("elasticsearch.password", "")

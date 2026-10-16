@@ -32,7 +32,7 @@ type Postgres struct {
 	Enabled bool `json:"enabled" mapstructure:"enabled" ini:"enabled" yaml:"enabled"`
 }
 
-func (*Postgres) setDefault(v *viper.Viper) {
+func (*Postgres) setDefaults(v *viper.Viper) {
 	v.SetDefault("postgres.host", "127.0.0.1")
 	v.SetDefault("postgres.port", 5432)
 	v.SetDefault("postgres.database", "postgres")

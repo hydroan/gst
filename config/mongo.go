@@ -125,7 +125,7 @@ type Mongo struct {
 	Enabled bool `json:"enabled" mapstructure:"enabled" ini:"enabled" yaml:"enabled"`
 }
 
-func (*Mongo) setDefault(v *viper.Viper) {
+func (*Mongo) setDefaults(v *viper.Viper) {
 	v.SetDefault("mongo.host", "127.0.0.1")
 	v.SetDefault("mongo.port", 27017)
 	v.SetDefault("mongo.username", "")

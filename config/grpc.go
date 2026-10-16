@@ -84,7 +84,7 @@ type GRPC struct {
 	MaxRecvMsgSize ByteSize `json:"max_recv_msg_size" mapstructure:"max_recv_msg_size" ini:"max_recv_msg_size" yaml:"max_recv_msg_size"`
 }
 
-func (*GRPC) setDefault(v *viper.Viper) {
+func (*GRPC) setDefaults(v *viper.Viper) {
 	v.SetDefault("grpc.listen", "")
 	v.SetDefault("grpc.port", 8081)
 	v.SetDefault("grpc.tls_enabled", false)

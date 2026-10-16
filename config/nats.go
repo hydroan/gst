@@ -65,7 +65,7 @@ type Nats struct {
 	Enabled bool `json:"enabled" mapstructure:"enabled" ini:"enabled" yaml:"enabled"`
 }
 
-func (*Nats) setDefault(v *viper.Viper) {
+func (*Nats) setDefaults(v *viper.Viper) {
 	v.SetDefault("nats.addrs", []string{"nats://127.0.0.1:4222"})
 	v.SetDefault("nats.client_name", "")
 	v.SetDefault("nats.username", "")

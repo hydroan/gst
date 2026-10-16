@@ -38,24 +38,6 @@ func unmarshalConfig(v *viper.Viper, c *Config) error {
 	return errors.New(strings.Join(unknown, "; "))
 }
 
-// validate holds the keys with a bounded range to it once the whole
-// configuration is decoded: a number from a file arrives as a number, which
-// no text hook reads, so the decode cannot hold it to a range on its own.
-// Every key outside its range is named at once.
-func (c *Config) validate() error {
-	var errs error
-	if n := c.Cache.MaxEntries; n < 0 || n > maxCacheEntries {
-		errs = errors.Join(errs, errors.Newf("cache.max_entries %d is not between 0 and %d", n, maxCacheEntries))
-	}
-	if s := c.Ldap.Scope; s < ScopeBaseObject || s > ScopeWholeSubtree {
-		errs = errors.Join(errs, errors.Newf("ldap.scope %d is not between %d and %d", s, ScopeBaseObject, ScopeWholeSubtree))
-	}
-	if d := c.Ldap.Deref; d < NeverDerefAliases || d > DerefAlways {
-		errs = errors.Join(errs, errors.Newf("ldap.deref %d is not between %d and %d", d, NeverDerefAliases, DerefAlways))
-	}
-	return errs
-}
-
 // decodeHooks is how every configuration value is decoded, wherever it is
 // read: the whole configuration, a registered section, and the check that an
 // environment variable fits the key it carries. Viper's own defaults are

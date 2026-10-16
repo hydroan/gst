@@ -89,7 +89,7 @@ type RocketMQ struct {
 	Enabled bool `json:"enabled" mapstructure:"enabled" ini:"enabled" yaml:"enabled"`
 }
 
-func (*RocketMQ) setDefault(v *viper.Viper) {
+func (*RocketMQ) setDefaults(v *viper.Viper) {
 	v.SetDefault("rocketmq.name_server_addrs", []string{"127.0.0.1:9876"})
 	v.SetDefault("rocketmq.access_key", "")
 	v.SetDefault("rocketmq.secret_key", "")

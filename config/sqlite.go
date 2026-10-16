@@ -14,7 +14,7 @@ type Sqlite struct {
 	Enabled  bool   `json:"enabled" mapstructure:"enabled" ini:"enabled" yaml:"enabled"`
 }
 
-func (*Sqlite) setDefault(v *viper.Viper) {
+func (*Sqlite) setDefaults(v *viper.Viper) {
 	v.SetDefault("sqlite.path", "./data.db")
 	v.SetDefault("sqlite.is_memory", true)
 	v.SetDefault("sqlite.enabled", true)

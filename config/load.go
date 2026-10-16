@@ -34,7 +34,7 @@ func Load(file string) (*Config, error) {
 	}
 
 	c := new(Config)
-	c.setDefault(v)
+	c.setDefaults(v)
 
 	v.SetConfigFile(file)
 	if err := v.ReadInConfig(); err != nil {

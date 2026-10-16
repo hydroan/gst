@@ -54,8 +54,8 @@ type AppInfo struct {
 	BuildTags    []string  `json:"build_tags" mapstructure:"build_tags" ini:"build_tags" yaml:"build_tags"`
 }
 
-// setDefault sets default values for AppInfo configuration
-func (a *AppInfo) setDefault(v *viper.Viper) {
+// setDefaults sets default values for AppInfo configuration
+func (a *AppInfo) setDefaults(v *viper.Viper) {
 	v.SetDefault("app.name", consts.FrameworkName)
 	v.SetDefault("app.version", "")
 	v.SetDefault("app.description", fmt.Sprintf("A Go application built with %s framework", consts.FrameworkName))

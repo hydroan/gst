@@ -38,7 +38,7 @@ type Mqtt struct {
 	Enabled            bool          `json:"enabled" mapstructure:"enabled" ini:"enabled" yaml:"enabled"`
 }
 
-func (*Mqtt) setDefault(v *viper.Viper) {
+func (*Mqtt) setDefaults(v *viper.Viper) {
 	v.SetDefault("mqtt.addr", "127.0.0.1:1883")
 	v.SetDefault("mqtt.username", "")
 	v.SetDefault("mqtt.password", "")

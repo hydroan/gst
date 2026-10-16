@@ -245,7 +245,7 @@ type HTTPBodyLogger struct {
 	SkipRoutes []string `json:"skip_routes" ini:"skip_routes" yaml:"skip_routes" mapstructure:"skip_routes"`
 }
 
-func (*Logger) setDefault(v *viper.Viper) {
+func (*Logger) setDefaults(v *viper.Viper) {
 	v.SetDefault("logger.output", LoggerOutputStdout)
 	v.SetDefault("logger.dir", "./logs")
 	v.SetDefault("logger.prefix", "")

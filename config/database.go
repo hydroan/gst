@@ -43,7 +43,7 @@ type Database struct {
 	ConnMaxIdleTime    time.Duration `json:"conn_max_idle_time" mapstructure:"conn_max_idle_time" ini:"conn_max_idle_time" yaml:"conn_max_idle_time"`
 }
 
-func (*Database) setDefault(v *viper.Viper) {
+func (*Database) setDefaults(v *viper.Viper) {
 	v.SetDefault("database.type", DBSqlite)
 	v.SetDefault("database.auto_migrate", false)
 	v.SetDefault("database.slow_query_threshold", 500*time.Millisecond)

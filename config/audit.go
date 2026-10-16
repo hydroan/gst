@@ -20,7 +20,7 @@ type Audit struct {
 	ExcludeOperations []consts.OP `json:"exclude_operations" mapstructure:"exclude_operations" ini:"exclude_operations" yaml:"exclude_operations"`
 }
 
-func (*Audit) setDefault(v *viper.Viper) {
+func (*Audit) setDefaults(v *viper.Viper) {
 	v.SetDefault("audit.enabled", false)
 	// Reads are left out by default: they are the bulk of the traffic, and an
 	// entry per read would cost a write per read.

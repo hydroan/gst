@@ -32,7 +32,7 @@ type Clickhouse struct {
 	Enabled     bool   `json:"enabled" mapstructure:"enabled" ini:"enabled" yaml:"enabled"`
 }
 
-func (*Clickhouse) setDefault(v *viper.Viper) {
+func (*Clickhouse) setDefaults(v *viper.Viper) {
 	v.SetDefault("clickhouse.host", "127.0.0.1")
 	v.SetDefault("clickhouse.port", 9000)
 	v.SetDefault("clickhouse.database", "default")

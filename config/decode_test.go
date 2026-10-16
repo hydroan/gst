@@ -317,4 +317,14 @@ func TestNumberOutsideItsRangeIsRefused(t *testing.T) {
 		require.Error(t, err, "a number in a file is held to the range the same as the environment")
 		require.ErrorContains(t, err, "cache.max_entries")
 	})
+
+	t.Run("every_section_at_once", func(t *testing.T) {
+		clearConfigEnvForTest(t)
+		filename := filepath.Join(t.TempDir(), "config.yaml")
+		config.SetConfigFile(filename)
+		requireWriteConfigFile(t, filename, "cache:\n  max_entries: -5\nldap:\n  scope: 7\n")
+		err := config.Init()
+		require.ErrorContains(t, err, "cache.max_entries", "each section with a range is checked")
+		require.ErrorContains(t, err, "ldap.scope", "and every key outside its range is named at once")
+	})
 }

@@ -126,7 +126,7 @@ type Scylla struct {
 	Enabled bool `json:"enabled" mapstructure:"enabled" ini:"enabled" yaml:"enabled"`
 }
 
-func (*Scylla) setDefault(v *viper.Viper) {
+func (*Scylla) setDefaults(v *viper.Viper) {
 	v.SetDefault("scylla.hosts", []string{"127.0.0.1:9042"})
 	v.SetDefault("scylla.username", "")
 	v.SetDefault("scylla.password", "")

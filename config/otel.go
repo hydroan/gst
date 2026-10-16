@@ -145,7 +145,7 @@ type OTEL struct {
 	BSPExportTimeout time.Duration `json:"bsp_export_timeout" mapstructure:"bsp_export_timeout" ini:"bsp_export_timeout" yaml:"bsp_export_timeout"`
 }
 
-func (o *OTEL) setDefault(v *viper.Viper) {
+func (o *OTEL) setDefaults(v *viper.Viper) {
 	v.SetDefault("otel.enabled", false)
 	v.SetDefault("otel.service_name", consts.FrameworkName)
 	v.SetDefault("otel.exporter_otlp_protocol", OTLPProtocolHTTPProtobuf)

@@ -21,7 +21,7 @@ type Auth struct {
 	RBACEnabled bool `json:"rbac_enabled" mapstructure:"rbac_enabled" ini:"rbac_enabled" yaml:"rbac_enabled"`
 }
 
-func (*Auth) setDefault(v *viper.Viper) {
+func (*Auth) setDefaults(v *viper.Viper) {
 	v.SetDefault("auth.access_token_expire_duration", "2h")
 	v.SetDefault("auth.refresh_token_expire_duration", "168h")
 

@@ -1,6 +1,9 @@
 package config
 
-import "github.com/spf13/viper"
+import (
+	"github.com/cockroachdb/errors"
+	"github.com/spf13/viper"
+)
 
 const (
 	CACHE_MAX_ENTRIES = "CACHE_MAX_ENTRIES"
@@ -22,7 +25,15 @@ type Cache struct {
 	Topic      string `json:"topic" mapstructure:"topic" ini:"topic" yaml:"topic"`
 }
 
-func (*Cache) setDefault(v *viper.Viper) {
+func (*Cache) setDefaults(v *viper.Viper) {
 	v.SetDefault("cache.max_entries", 0)
 	v.SetDefault("cache.topic", "")
+}
+
+// validate holds max_entries to its range once the section is decoded.
+func (c *Cache) validate() error {
+	if c.MaxEntries < 0 || c.MaxEntries > maxCacheEntries {
+		return errors.Newf("cache.max_entries %d is not between 0 and %d", c.MaxEntries, maxCacheEntries)
+	}
+	return nil
 }

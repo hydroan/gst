@@ -67,7 +67,7 @@ type MySQL struct {
 	Enabled bool `json:"enabled" mapstructure:"enabled" ini:"enabled" yaml:"enabled"`
 }
 
-func (*MySQL) setDefault(v *viper.Viper) {
+func (*MySQL) setDefaults(v *viper.Viper) {
 	v.SetDefault("mysql.host", "127.0.0.1")
 	v.SetDefault("mysql.port", 3306)
 	v.SetDefault("mysql.database", "")

@@ -14,7 +14,7 @@ type Middleware struct {
 	IAMSessionEnabled bool `json:"iam_session_enabled" mapstructure:"iam_session_enabled" ini:"iam_session_enabled" yaml:"iam_session_enabled"`
 }
 
-func (*Middleware) setDefault(v *viper.Viper) {
+func (*Middleware) setDefaults(v *viper.Viper) {
 	v.SetDefault("middleware.jwt_auth_enabled", false)
 	v.SetDefault("middleware.authz_enabled", false)
 	v.SetDefault("middleware.iam_session_enabled", false)

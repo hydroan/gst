@@ -53,7 +53,7 @@ type Etcd struct {
 	Enabled bool `json:"enabled" mapstructure:"enabled" ini:"enabled" yaml:"enabled"`
 }
 
-func (*Etcd) setDefault(v *viper.Viper) {
+func (*Etcd) setDefaults(v *viper.Viper) {
 	v.SetDefault("etcd.endpoints", []string{"127.0.0.1:2379"})
 	v.SetDefault("etcd.dial_timeout", 5*time.Second)
 	v.SetDefault("etcd.username", "")

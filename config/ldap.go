@@ -3,6 +3,7 @@ package config
 import (
 	"time"
 
+	"github.com/cockroachdb/errors"
 	"github.com/spf13/viper"
 )
 
@@ -102,8 +103,8 @@ type Ldap struct {
 	Enabled bool `json:"enabled" mapstructure:"enabled" ini:"enabled" yaml:"enabled"`
 }
 
-// setDefault sets default values for the LDAP configuration
-func (*Ldap) setDefault(v *viper.Viper) {
+// setDefaults sets default values for the LDAP configuration
+func (*Ldap) setDefaults(v *viper.Viper) {
 	v.SetDefault("ldap.host", "localhost")
 	v.SetDefault("ldap.port", 389)
 	v.SetDefault("ldap.base_dn", "")
@@ -132,4 +133,17 @@ func (*Ldap) setDefault(v *viper.Viper) {
 	v.SetDefault("ldap.insecure_skip_verify", false)
 
 	v.SetDefault("ldap.enabled", false)
+}
+
+// validate holds scope and deref to the values the directory protocol
+// defines once the section is decoded; see Scope and DerefAliases.
+func (l *Ldap) validate() error {
+	var errs error
+	if l.Scope < ScopeBaseObject || l.Scope > ScopeWholeSubtree {
+		errs = errors.Join(errs, errors.Newf("ldap.scope %d is not between %d and %d", l.Scope, ScopeBaseObject, ScopeWholeSubtree))
+	}
+	if l.Deref < NeverDerefAliases || l.Deref > DerefAlways {
+		errs = errors.Join(errs, errors.Newf("ldap.deref %d is not between %d and %d", l.Deref, NeverDerefAliases, DerefAlways))
+	}
+	return errs
 }

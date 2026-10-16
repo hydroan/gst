@@ -66,7 +66,7 @@ type Minio struct {
 	Enabled bool `json:"enabled" mapstructure:"enabled" ini:"enabled" yaml:"enabled"`
 }
 
-func (*Minio) setDefault(v *viper.Viper) {
+func (*Minio) setDefaults(v *viper.Viper) {
 	v.SetDefault("minio.endpoint", "localhost:9000")
 	v.SetDefault("minio.access_key", "")
 	v.SetDefault("minio.secret_key", "")

@@ -69,7 +69,7 @@ type Influxdb struct {
 	Enabled bool `json:"enabled" mapstructure:"enabled" ini:"enabled" yaml:"enabled"`
 }
 
-func (*Influxdb) setDefault(v *viper.Viper) {
+func (*Influxdb) setDefaults(v *viper.Viper) {
 	v.SetDefault("influxdb.host", "127.0.0.1")
 	v.SetDefault("influxdb.port", 8086)
 	v.SetDefault("influxdb.token", "")

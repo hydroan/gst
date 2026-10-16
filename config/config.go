@@ -107,22 +107,48 @@ type Config struct {
 }
 
 // section is a section of Config setting the defaults of its keys on v:
-// every section Config embeds is one, run in turn by setDefault.
+// every section Config embeds is one, run in turn by setDefaults.
 type section interface {
-	setDefault(v *viper.Viper)
+	setDefaults(v *viper.Viper)
 }
 
-// setDefault sets the default value of every framework key on v.
-func (c *Config) setDefault(v *viper.Viper) {
-	for _, s := range []section{
+// validator is a section holding its keys to their ranges once the whole
+// configuration is decoded: a number from a file arrives as a number, which
+// no text hook reads, so the decode cannot hold it to a range on its own. A
+// section with the method is checked by validate; one without is not.
+type validator interface {
+	validate() error
+}
+
+// sections lists every section Config embeds, in the order their defaults
+// are set and their ranges checked.
+func (c *Config) sections() []section {
+	return []section{
 		&c.AppInfo, &c.Server, &c.GRPC, &c.Cache, &c.Middleware, &c.Auth, &c.Logger,
 		&c.Database, &c.Sqlite, &c.Postgres, &c.MySQL, &c.Clickhouse, &c.Redis, &c.OTEL,
 		&c.Elasticsearch, &c.Mongo, &c.Kafka, &c.Ldap, &c.Influxdb, &c.Minio, &c.Mqtt,
 		&c.Nats, &c.Etcd, &c.Cassandra, &c.Scylla, &c.RethinkDB, &c.RocketMQ, &c.Debug,
 		&c.Audit, &c.Logmgmt,
-	} {
-		s.setDefault(v)
 	}
+}
+
+// setDefaults sets the default value of every framework key on v.
+func (c *Config) setDefaults(v *viper.Viper) {
+	for _, s := range c.sections() {
+		s.setDefaults(v)
+	}
+}
+
+// validate runs the range check of every section that has one and names
+// every key outside its range at once.
+func (c *Config) validate() error {
+	var errs error
+	for _, s := range c.sections() {
+		if v, ok := s.(validator); ok {
+			errs = errors.Join(errs, v.validate())
+		}
+	}
+	return errs
 }
 
 // defaultConfigName is the base name of the configuration file Init looks for.
@@ -166,7 +192,7 @@ func Init() (err error) {
 
 	// Set default values before unmarshaling
 	App = new(Config)
-	App.setDefault(cv)
+	App.setDefaults(cv)
 
 	cv.AddConfigPath(".")
 

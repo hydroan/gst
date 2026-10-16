@@ -97,7 +97,7 @@ type CircuitBreaker struct {
 	Enabled     bool          `json:"enabled" mapstructure:"enabled" ini:"enabled" yaml:"enabled"`
 }
 
-func (*Server) setDefault(v *viper.Viper) {
+func (*Server) setDefaults(v *viper.Viper) {
 	v.SetDefault("server.mode", Dev)
 	v.SetDefault("server.listen", "")
 	v.SetDefault("server.port", 8080)

@@ -63,7 +63,7 @@ type Redis struct {
 	Enabled bool `json:"enabled" mapstructure:"enabled" ini:"enabled" yaml:"enabled"`
 }
 
-func (*Redis) setDefault(v *viper.Viper) {
+func (*Redis) setDefaults(v *viper.Viper) {
 	v.SetDefault("redis.addr", "127.0.0.1:6379")
 	v.SetDefault("redis.addrs", []string{"127.0.0.1:6379"})
 	v.SetDefault("redis.db", 0)

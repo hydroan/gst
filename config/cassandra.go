@@ -61,7 +61,7 @@ type Cassandra struct {
 	Enabled bool `json:"enabled" mapstructure:"enabled" ini:"enabled" yaml:"enabled"`
 }
 
-func (*Cassandra) setDefault(v *viper.Viper) {
+func (*Cassandra) setDefaults(v *viper.Viper) {
 	v.SetDefault("cassandra.hosts", []string{"127.0.0.1"})
 	v.SetDefault("cassandra.port", 9042)
 	v.SetDefault("cassandra.keyspace", "")

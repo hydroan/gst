@@ -30,7 +30,7 @@ type Debug struct {
 	GopsPort    int    `json:"gops_port" mapstructure:"gops_port" ini:"gops_port" yaml:"gops_port"`
 }
 
-func (*Debug) setDefault(v *viper.Viper) {
+func (*Debug) setDefaults(v *viper.Viper) {
 	v.SetDefault("debug.statsviz_enabled", false)
 	v.SetDefault("debug.statsviz_listen", "127.0.0.1")
 	v.SetDefault("debug.statsviz_port", 10000)
