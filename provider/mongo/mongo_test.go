@@ -109,3 +109,25 @@ func TestMongo(t *testing.T) {
 		assert.Equal(t, int64(2), deleteMany.DeletedCount)
 	})
 }
+
+// TestNewReportsAConcernItDoesNotKnow pins that a read concern outside its
+// set, or a write concern that is a negative or malformed number, is an error
+// from New, before any server is contacted, instead of a concern left unset.
+// The configuration decode does not let such a value through; one set in
+// code arrives here.
+func TestNewReportsAConcernItDoesNotKnow(t *testing.T) {
+	for _, tt := range []struct {
+		name string
+		cfg  config.Mongo
+		want string
+	}{
+		{name: "read_concern", cfg: config.Mongo{ReadConcern: "eventual"}, want: "read concern: eventual"},
+		{name: "negative_write_concern", cfg: config.Mongo{WriteConcern: "-1"}, want: "write concern: -1"},
+		{name: "malformed_write_concern", cfg: config.Mongo{WriteConcern: "1x"}, want: "write concern: 1x"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := mongo.New(tt.cfg)
+			require.ErrorContains(t, err, tt.want)
+		})
+	}
+}

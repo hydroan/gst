@@ -103,10 +103,10 @@ func New(cfg config.Mongo) (*mongo.Client, error) {
 			rc = readconcern.Linearizable()
 		case config.ReadConcernSnapshot:
 			rc = readconcern.Snapshot()
+		default:
+			return nil, errors.Newf("unsupported mongo read concern: %s", cfg.ReadConcern)
 		}
-		if rc != nil {
-			opts.SetReadConcern(rc)
-		}
+		opts.SetReadConcern(rc)
 	}
 	if len(cfg.WriteConcern) > 0 {
 		var wc *writeconcern.WriteConcern
@@ -136,18 +136,19 @@ func New(cfg config.Mongo) (*mongo.Client, error) {
 		case config.WriteConcernW9:
 			wc = &writeconcern.WriteConcern{W: 9}
 		default:
-			if cfg.WriteConcern[0] >= '0' && cfg.WriteConcern[0] <= '9' {
-				var w int
-				if w, err = strconv.Atoi(string(cfg.WriteConcern)); err == nil && w > 1 {
-					wc = &writeconcern.WriteConcern{W: w}
+			// A number of acknowledging members beyond the named ones, or the
+			// name of a write concern the replica set defines.
+			if first := cfg.WriteConcern[0]; first == '-' || ('0' <= first && first <= '9') {
+				w, convErr := strconv.Atoi(string(cfg.WriteConcern))
+				if convErr != nil || w < 0 {
+					return nil, errors.Newf("unsupported mongo write concern: %s", cfg.WriteConcern)
 				}
+				wc = &writeconcern.WriteConcern{W: w}
 			} else {
 				wc = writeconcern.Custom(string(cfg.WriteConcern))
 			}
 		}
-		if wc != nil {
-			opts.SetWriteConcern(wc)
-		}
+		opts.SetWriteConcern(wc)
 	}
 	if cfg.TLSEnabled {
 		var tlsConfig *tls.Config

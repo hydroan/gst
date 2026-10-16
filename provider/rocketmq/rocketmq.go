@@ -147,6 +147,8 @@ func NewPushConsumer(cfg config.RocketMQ, consumerGroup string) (rocketmq.PushCo
 	}
 
 	switch cfg.ConsumeFromWhere {
+	case "", config.ConsumeFromWhereLastOffset:
+		opts = append(opts, consumer.WithConsumeFromWhere(consumer.ConsumeFromLastOffset))
 	case config.ConsumeFromWhereFirstOffset:
 		opts = append(opts, consumer.WithConsumeFromWhere(consumer.ConsumeFromFirstOffset))
 	case config.ConsumeFromWhereTimestamp:
@@ -156,7 +158,7 @@ func NewPushConsumer(cfg config.RocketMQ, consumerGroup string) (rocketmq.PushCo
 			opts = append(opts, consumer.WithConsumeTimestamp(time.Now().Format("20060102150405")))
 		}
 	default:
-		opts = append(opts, consumer.WithConsumeFromWhere(consumer.ConsumeFromLastOffset))
+		return nil, errors.Newf("unsupported rocketmq consume_from_where: %s", cfg.ConsumeFromWhere)
 	}
 	if cfg.ConsumeOrderly {
 		opts = append(opts, consumer.WithConsumerOrder(true))

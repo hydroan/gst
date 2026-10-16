@@ -3,7 +3,6 @@ package scylla
 import (
 	"context"
 	"crypto/tls"
-	"strings"
 	"sync"
 	"time"
 
@@ -77,9 +76,16 @@ func New(cfg config.Scylla) (gocqlx.Session, error) {
 	if len(cfg.Keyspace) > 0 {
 		cluster.Keyspace = cfg.Keyspace
 	}
-	// NOTE: you cannot call ParseConsistency, because it will panic
-	// cluster.Consistency = gocql.ParseConsistency(string(cfg.Consistency))
-	cluster.Consistency = parseConsistencyLevel(cfg.Consistency)
+	// An empty consistency keeps the driver's own default. The driver's
+	// ParseConsistency is not used: it panics on a name it does not know
+	// instead of returning an error.
+	if cfg.Consistency != "" {
+		level, ok := consistencyLevels[cfg.Consistency]
+		if !ok {
+			return gocqlx.Session{}, errors.Newf("unsupported scylla consistency: %s", cfg.Consistency)
+		}
+		cluster.Consistency = level
+	}
 	if cfg.NumConns > 0 {
 		cluster.NumConns = cfg.NumConns
 	}
@@ -93,37 +99,22 @@ func New(cfg config.Scylla) (gocqlx.Session, error) {
 		cluster.PageSize = cfg.PageSize
 	}
 
-	// Configure retry policy
+	// Configure retry policy; an empty policy keeps the driver's own default.
 	switch cfg.RetryPolicy {
+	case "":
 	case config.RetryPolicySimple:
 		cluster.RetryPolicy = &gocql.SimpleRetryPolicy{NumRetries: cfg.RetryNumRetries}
 	case config.RetryPolicyDowngradingConsistency:
-		// Create a downgrading consistency retry policy that tries multiple consistency levels
-		consistencyLevels := []gocql.Consistency{
-			gocql.Quorum,
-			gocql.One,
-			gocql.Any,
-		}
-
-		// If a specific consistency was configured, put it first in the list
-		if len(cfg.Consistency) > 0 {
-			configuredConsistency := parseConsistencyLevel(cfg.Consistency)
-			// Create a new slice with the configured consistency first
-			newConsistencyLevels := make([]gocql.Consistency, 0, len(consistencyLevels)+1)
-			newConsistencyLevels = append(newConsistencyLevels, configuredConsistency)
-
-			// Add the other consistency levels that are different
-			for _, c := range consistencyLevels {
-				if c != configuredConsistency {
-					newConsistencyLevels = append(newConsistencyLevels, c)
-				}
+		// The session's own consistency is tried first, then quorum, one and
+		// any, each once.
+		levelsToTry := []gocql.Consistency{cluster.Consistency}
+		for _, c := range []gocql.Consistency{gocql.Quorum, gocql.One, gocql.Any} {
+			if c != cluster.Consistency {
+				levelsToTry = append(levelsToTry, c)
 			}
-
-			consistencyLevels = newConsistencyLevels
 		}
-
 		cluster.RetryPolicy = &gocql.DowngradingConsistencyRetryPolicy{
-			ConsistencyLevelsToTry: consistencyLevels,
+			ConsistencyLevelsToTry: levelsToTry,
 		}
 	case config.RetryPolicyExponentialBackoff:
 		cluster.RetryPolicy = &gocql.ExponentialBackoffRetryPolicy{
@@ -131,10 +122,13 @@ func New(cfg config.Scylla) (gocqlx.Session, error) {
 			Min:        cfg.RetryMinInterval,
 			Max:        cfg.RetryMaxInterval,
 		}
+	default:
+		return gocqlx.Session{}, errors.Newf("unsupported scylla retry policy: %s", cfg.RetryPolicy)
 	}
 
-	// Configure reconnect policy
+	// Configure reconnect policy; an empty policy keeps the driver's own default.
 	switch cfg.ReconnectPolicy {
+	case "":
 	case config.ReconnectPolicyConstant:
 		cluster.ReconnectionPolicy = &gocql.ConstantReconnectionPolicy{
 			Interval:   cfg.ReconnectConstantInterval,
@@ -146,6 +140,8 @@ func New(cfg config.Scylla) (gocqlx.Session, error) {
 			InitialInterval: cfg.ReconnectInitialInterval,
 			MaxInterval:     cfg.ReconnectMaxInterval,
 		}
+	default:
+		return gocqlx.Session{}, errors.Newf("unsupported scylla reconnect policy: %s", cfg.ReconnectPolicy)
 	}
 
 	if cfg.TracingEnabled {
@@ -196,30 +192,18 @@ func (o *batchObserver) ObserveBatch(ctx context.Context, batch gocql.ObservedBa
 	)
 }
 
-// parseConsistencyLevel converts a string consistency level to gocql.Consistency
-func parseConsistencyLevel(level config.Consistency) gocql.Consistency {
-	switch {
-	case strings.EqualFold(string(level), gocql.Any.String()):
-		return gocql.Any
-	case strings.EqualFold(string(level), gocql.One.String()):
-		return gocql.One
-	case strings.EqualFold(string(level), gocql.Two.String()):
-		return gocql.Two
-	case strings.EqualFold(string(level), gocql.Three.String()):
-		return gocql.Three
-	case strings.EqualFold(string(level), gocql.Quorum.String()):
-		return gocql.Quorum
-	case strings.EqualFold(string(level), gocql.All.String()):
-		return gocql.All
-	case strings.EqualFold(string(level), gocql.LocalQuorum.String()):
-		return gocql.LocalQuorum
-	case strings.EqualFold(string(level), gocql.EachQuorum.String()):
-		return gocql.EachQuorum
-	case strings.EqualFold(string(level), gocql.LocalOne.String()):
-		return gocql.LocalOne
-	default:
-		return gocql.Quorum
-	}
+// consistencyLevels maps each consistency level the configuration admits onto
+// the driver's own.
+var consistencyLevels = map[config.Consistency]gocql.Consistency{
+	config.ConsistencyAny:         gocql.Any,
+	config.ConsistencyOne:         gocql.One,
+	config.ConsistencyTwo:         gocql.Two,
+	config.ConsistencyThree:       gocql.Three,
+	config.ConsistencyQuorum:      gocql.Quorum,
+	config.ConsistencyAll:         gocql.All,
+	config.ConsistencyLocalQuorum: gocql.LocalQuorum,
+	config.ConsistencyEachQuorum:  gocql.EachQuorum,
+	config.ConsistencyLocalOne:    gocql.LocalOne,
 }
 
 // Client returns the initialized ScyllaDB session, the client handle of
