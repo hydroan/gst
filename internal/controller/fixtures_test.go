@@ -15,11 +15,13 @@ import (
 
 	"github.com/cockroachdb/errors"
 	"github.com/gin-gonic/gin"
+	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/database"
 	"github.com/hydroan/gst/internal/consts"
 	"github.com/hydroan/gst/internal/middleware"
 	"github.com/hydroan/gst/internal/modelregistry"
 	"github.com/hydroan/gst/internal/modelschema"
+	"github.com/hydroan/gst/internal/requestctx"
 	"github.com/hydroan/gst/internal/serviceregistry"
 	"github.com/hydroan/gst/internal/types"
 	"github.com/stretchr/testify/require"
@@ -425,16 +427,16 @@ func configFor[M types.Model](route string) *types.ControllerConfig[M] {
 // is empty, and returns the recorded response.
 func serve(t *testing.T, method, pattern string, handler gin.HandlerFunc, target, body string) *httptest.ResponseRecorder {
 	t.Helper()
-	return serveAs(context.Background(), t, method, pattern, handler, target, body, "", "")
+	return serveAs(context.Background(), t, method, pattern, handler, target, body, "", nil)
 }
 
 // serveAs is serve for a request of the user named username, the caller
 // the identity middleware would have named, whom the flows record as the
 // creator and updater; "" sends the request anonymous. The request is sent
 // in ctx, which a test ending the request on the client's behalf cancels,
-// and claims to forward forwardedFor, when set, the way a proxy in front
-// of the engine would.
-func serveAs(ctx context.Context, t *testing.T, method, pattern string, handler gin.HandlerFunc, target, body, username, forwardedFor string) *httptest.ResponseRecorder {
+// and arrives from the loopback, the peer the gRPC line's calls arrive
+// from, carrying the headers forwarded, which a proxy in front would set.
+func serveAs(ctx context.Context, t *testing.T, method, pattern string, handler gin.HandlerFunc, target, body, username string, forwarded map[string]string) *httptest.ResponseRecorder {
 	t.Helper()
 	gin.SetMode(gin.TestMode)
 
@@ -442,6 +444,9 @@ func serveAs(ctx context.Context, t *testing.T, method, pattern string, handler 
 	// the framework's route middleware sets, as router.Register records them.
 	middleware.RouteManager.Add(pattern)
 	engine := gin.New()
+	// The engine takes the stance the router takes, so a forwarded address
+	// is believed from the same peers the gRPC line believes it from.
+	require.NoError(t, requestctx.ApplyTrustedProxies(engine, config.App.Server.TrustedProxies))
 	engine.Handle(method, pattern, func(c *gin.Context) {
 		c.Set(consts.PARAMS, middleware.RouteManager.Get(c.FullPath()))
 		if username != "" {
@@ -455,11 +460,12 @@ func serveAs(ctx context.Context, t *testing.T, method, pattern string, handler 
 		reader = strings.NewReader(body)
 	}
 	req := httptest.NewRequestWithContext(ctx, method, target, reader)
+	req.RemoteAddr = "127.0.0.1:41000"
 	if body != "" {
 		req.Header.Set("Content-Type", "application/json")
 	}
-	if forwardedFor != "" {
-		req.Header.Set("X-Forwarded-For", forwardedFor)
+	for name, value := range forwarded {
+		req.Header.Set(name, value)
 	}
 	recorder := httptest.NewRecorder()
 	engine.ServeHTTP(recorder, req)

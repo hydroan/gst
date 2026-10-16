@@ -4,10 +4,10 @@ import (
 	"context"
 	"net"
 	"net/http"
+	"net/netip"
 	"strings"
 	"time"
 
-	"github.com/grpc-ecosystem/go-grpc-middleware/v2/interceptors/realip"
 	"github.com/hydroan/gst/internal/execctx"
 	"github.com/hydroan/gst/internal/logfield"
 	"github.com/hydroan/gst/internal/requestctx"
@@ -77,8 +77,8 @@ const accessLogFieldCap = 11
 // services' among them, keeps the full method as its route and POST, the
 // method every gRPC call is on the wire, as its method. The client address
 // a proxy in front forwards is believed from the peers server.trusted_proxies
-// names alone, the stance the HTTP listener takes through gin: realip
-// resolves it ahead of the scope (see chains), and from any other peer the
+// names alone, the stance the HTTP listener takes through gin, resolved by
+// requestctx.ClientIP the way gin resolves it; from any other peer the
 // address is the peer's own. The protocol such headers carry is not read:
 // whether the connection speaks TLS is the connection's own fact.
 func requestScope(ctx context.Context, req any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (any, error) {
@@ -133,8 +133,8 @@ func enterCall(ctx context.Context, fullMethod string) *callScope {
 	}
 	ctx = execctx.WithTraceID(ctx, traceID)
 	address, tls := peerOf(ctx)
-	if forwarded, ok := realip.FromContext(ctx); ok {
-		address = forwarded.String()
+	if peer, err := netip.ParseAddr(address); err == nil {
+		address = requestctx.ClientIP(peer, trustedProxies, func(name string) string { return first(md, strings.ToLower(name)) }).String()
 	}
 	method := methods[fullMethod]
 	route, httpMethod := fullMethod, http.MethodPost

@@ -938,15 +938,34 @@ func TestTransportsAnswerTheContractAlike(t *testing.T) {
 		{
 			name: "Create hands the hooks the client address a trusted peer forwards", fixture: observed, phase: consts.Create,
 			prepare: func(*testing.T) contractInput {
-				return contractInput{record: map[string]any{"name": uniqueName("contract-forwarded")}, forwardedFor: "203.0.113.9"}
+				return contractInput{record: map[string]any{"name": uniqueName("contract-forwarded")}, forwarded: map[string]string{"X-Forwarded-For": "203.0.113.9"}}
 			},
-			want: ok,
-			check: func(t *testing.T, _ contractInput, _ contractAnswer) {
-				t.Helper()
-				observedMu.Lock()
-				defer observedMu.Unlock()
-				require.Equal(t, "203.0.113.9", lastObserved.ClientIP, "the loopback the transports are reached over is a trusted proxy here")
+			want:  ok,
+			check: observedClientIP("203.0.113.9"),
+		},
+		{
+			name: "Create hands the hooks the client address a trusted peer names in X-Real-IP alone", fixture: observed, phase: consts.Create,
+			prepare: func(*testing.T) contractInput {
+				return contractInput{record: map[string]any{"name": uniqueName("contract-real-ip")}, forwarded: map[string]string{"X-Real-IP": "203.0.113.9"}}
 			},
+			want:  ok,
+			check: observedClientIP("203.0.113.9"),
+		},
+		{
+			name: "Create hands the hooks the first of a chain of trusted proxies", fixture: observed, phase: consts.Create,
+			prepare: func(*testing.T) contractInput {
+				return contractInput{record: map[string]any{"name": uniqueName("contract-proxy-chain")}, forwarded: map[string]string{"X-Forwarded-For": "::1, 127.0.0.1"}}
+			},
+			want:  ok,
+			check: observedClientIP("::1"),
+		},
+		{
+			name: "Create hands the hooks X-Real-IP when X-Forwarded-For is malformed", fixture: observed, phase: consts.Create,
+			prepare: func(*testing.T) contractInput {
+				return contractInput{record: map[string]any{"name": uniqueName("contract-malformed")}, forwarded: map[string]string{"X-Forwarded-For": "junk", "X-Real-IP": "203.0.113.9"}}
+			},
+			want:  ok,
+			check: observedClientIP("203.0.113.9"),
 		},
 	}
 
@@ -1001,14 +1020,14 @@ type contractScenario struct {
 // that ends the request on the client's behalf; nil sends it in a context
 // of the transport's own.
 type contractInput struct {
-	ctx          context.Context
-	id           string
-	record       map[string]any
-	items        []map[string]any
-	ids          []string
-	query        controller.Query
-	payload      map[string]any
-	forwardedFor string
+	ctx       context.Context
+	id        string
+	record    map[string]any
+	items     []map[string]any
+	ids       []string
+	query     controller.Query
+	payload   map[string]any
+	forwarded map[string]string
 }
 
 // contractAnswer is what a transport answered: the HTTP status and the msg
@@ -1151,7 +1170,7 @@ func overHTTP(t *testing.T, f contractFixture, phase consts.Phase, in contractIn
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	rsp := serveAs(ctx, t, phase.HTTPMethod(), pattern, f.handler(phase), target, body, "alice", in.forwardedFor)
+	rsp := serveAs(ctx, t, phase.HTTPMethod(), pattern, f.handler(phase), target, body, "alice", in.forwarded)
 	answer := contractAnswer{status: rsp.Code}
 	var envelope struct {
 		Msg  string `json:"msg"`
@@ -1206,8 +1225,12 @@ func overGRPC(t *testing.T, f contractFixture, phase consts.Phase, in contractIn
 	if ctx == nil {
 		ctx = t.Context()
 	}
-	if in.forwardedFor != "" {
-		ctx = metadata.AppendToOutgoingContext(ctx, "x-forwarded-for", in.forwardedFor)
+	if len(in.forwarded) > 0 {
+		pairs := make([]string, 0, 2*len(in.forwarded))
+		for name, value := range in.forwarded {
+			pairs = append(pairs, strings.ToLower(name), value)
+		}
+		ctx = metadata.AppendToOutgoingContext(ctx, pairs...)
 	}
 	out, err := invokeIn(ctx, t, sampleServer(t), f.rpc(phase), message, sampleCredential)
 	if err != nil {
@@ -1215,6 +1238,19 @@ func overGRPC(t *testing.T, f contractFixture, phase consts.Phase, in contractIn
 		return contractAnswer{code: st.Code(), msg: st.Message()}
 	}
 	return contractAnswer{code: codes.OK, data: out}
+}
+
+// observedClientIP is the check of a row sending the observing service a
+// forwarded address: the client address its hook saw is want, on the line
+// the row just ran. The transports are reached over the loopback, a trusted
+// proxy here (see TestMain), so the forwarded address is believed.
+func observedClientIP(want string) func(*testing.T, contractInput, contractAnswer) {
+	return func(t *testing.T, _ contractInput, _ contractAnswer) {
+		t.Helper()
+		observedMu.Lock()
+		defer observedMu.Unlock()
+		require.Equal(t, want, lastObserved.ClientIP)
+	}
 }
 
 // requireHTTPAnswer requires got, what HTTP answered, to carry the status

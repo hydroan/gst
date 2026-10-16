@@ -219,6 +219,18 @@ func TestTheClientAddressForwardedByATrustedPeerIsTheClients(t *testing.T) {
 		require.Equal(t, "203.0.113.9", accessLog.All()[0].ContextMap()["ip"])
 	})
 
+	t.Run("from a trusted peer naming it in X-Real-IP alone", func(t *testing.T) {
+		reset(t)
+		config.App.Server.TrustedProxies = []string{"127.0.0.1", "::1"}
+		serve(whoami)
+		conn := dial(t, start(t), nil)
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+
+		require.NoError(t, call(metadata.AppendToOutgoingContext(ctx, "x-real-ip", "203.0.113.9"), conn, "Whoami"))
+		require.Equal(t, "203.0.113.9", <-seen)
+	})
+
 	t.Run("from any other peer", func(t *testing.T) {
 		reset(t)
 		serve(whoami)

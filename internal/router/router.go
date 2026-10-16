@@ -28,6 +28,7 @@ import (
 	"github.com/hydroan/gst/internal/logfield"
 	"github.com/hydroan/gst/internal/middleware"
 	"github.com/hydroan/gst/internal/openapigen"
+	"github.com/hydroan/gst/internal/requestctx"
 	"github.com/hydroan/gst/internal/response"
 	"github.com/hydroan/gst/internal/sse"
 	"github.com/hydroan/gst/internal/types"
@@ -102,7 +103,7 @@ func OnRoutesReady(fn func(ctx context.Context, routes map[string][]string) erro
 func Init() error {
 	gin.SetMode(gin.ReleaseMode)
 	root = gin.New()
-	if err := applyTrustedProxies(root); err != nil {
+	if err := requestctx.ApplyTrustedProxies(root, config.App.Server.TrustedProxies); err != nil {
 		return err
 	}
 

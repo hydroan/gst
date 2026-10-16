@@ -12,6 +12,7 @@ import (
 	"context"
 	"math"
 	"net"
+	"net/netip"
 	"strconv"
 	"sync"
 	"sync/atomic"
@@ -21,6 +22,7 @@ import (
 	"github.com/dustin/go-humanize"
 	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/internal/lifecycle"
+	"github.com/hydroan/gst/internal/requestctx"
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
@@ -48,6 +50,10 @@ var (
 	// beginStop ends the context every stream of server watches, the moment
 	// Stop begins (see streamShutdown); nil before Run and after Stop.
 	beginStop context.CancelFunc
+	// trustedProxies are the networks whose peers may speak for the client,
+	// server.trusted_proxies as Run read it; the request scope resolves the
+	// client address of every call under it (see enterCall).
+	trustedProxies []netip.Prefix
 
 	// listened, when set, is told the address the listener bound; a test
 	// seam, nothing in the framework sets it.
@@ -110,6 +116,9 @@ func Run() error {
 	if err != nil {
 		return err
 	}
+	if trustedProxies, err = requestctx.TrustedProxies(config.App.Server.TrustedProxies); err != nil {
+		return err
+	}
 	if len(registrations) == 0 {
 		log.Debugw("grpc server not started: no service registered")
 		return nil
@@ -124,11 +133,7 @@ func Run() error {
 		stop()
 		return err
 	}
-	chained, err := chains(stopping)
-	if err != nil {
-		return failed(err)
-	}
-	srv := grpc.NewServer(append(chained, configured...)...)
+	srv := grpc.NewServer(append(chains(stopping), configured...)...)
 	for _, register := range registrations {
 		register(srv)
 	}
