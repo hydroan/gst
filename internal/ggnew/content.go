@@ -186,7 +186,7 @@ linters:
         - github.com/hydroan/gst/dsl
 
   exclusions:
-    generated: lax
+    generated: strict
     presets:
       - comments
       - std-error-handling

@@ -410,7 +410,7 @@ linters:
 
   # Exclusions moved under linters.exclusions for v2
   exclusions:
-    generated: lax
+    generated: strict
     presets:
       - comments
       - std-error-handling
