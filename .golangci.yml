@@ -259,10 +259,10 @@ linters:
 
     forbidigo:
       # Refusing a request outside the controller path goes through
-      # response.Abort or response.AbortError, the places the API envelope is
-      # written. gin's own aborts stay reachable on *gin.Context forever, so
-      # nothing but this rule stops the next middleware from writing a second
-      # envelope shape by hand.
+      # response.Abort, the one place the API envelope is written there. gin's
+      # own aborts stay reachable on *gin.Context forever, so nothing but this
+      # rule stops the next middleware from writing a second envelope shape by
+      # hand.
       forbid:
         - pattern: '^.*\.AbortWithStatusJSON$'
           msg: "write the envelope through response.Abort instead of building it by hand"
