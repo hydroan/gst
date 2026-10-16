@@ -82,9 +82,9 @@ type Logger struct {
 	// Default: json
 	Format LogFormat `json:"format" ini:"format" yaml:"format" mapstructure:"format"`
 
-	// ErrorStackDisabled disables attaching the error_stack field to
-	// error-level logs when a logged error carries a stack trace embedded at
-	// its creation point. Stack traces are attached by default; set this to
+	// ErrorStackDisabled disables attaching the error_stack field, the stack
+	// trace embedded in a logged error at its creation point, to the entries
+	// logging such an error. Stack traces are attached by default; set this to
 	// true in environments where the extra payload is unwanted, such as local
 	// development.
 	// Default: false

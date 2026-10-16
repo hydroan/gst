@@ -89,7 +89,7 @@ func BenchmarkLoggerDiscard10000(b *testing.B) {
 func newDiscardLogger() *Logger {
 	core := zapcore.NewCore(newLogEncoder(readConf("")), zapcore.AddSync(io.Discard), newLogLevel(readConf("")))
 	return &Logger{zlog: zap.New(
-		core.With([]zapcore.Field{zap.String(consts.INSTANCE, instance.ID())}),
+		&errorFieldCore{Core: core.With([]zapcore.Field{zap.String(consts.INSTANCE, instance.ID())})},
 		zap.AddCaller(),
 		zap.AddCallerSkip(1),
 		zap.AddStacktrace(zapcore.FatalLevel),

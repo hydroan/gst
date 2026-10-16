@@ -147,9 +147,10 @@ func streamName(file string) string {
 // newLogCore builds the core every logger here writes through: the encoder,
 // sink and level cfg and opts select, with the process identity stamped on
 // every entry so the entries of replicas — on one host, or restarts of one
-// pod — can be told apart wherever they end up collected together. The field
-// is encoded once, here, not once per entry.
+// pod — can be told apart wherever they end up collected together, and the
+// error fields written as errorFieldCore says. The identity field is encoded
+// once, here, not once per entry.
 func newLogCore(cfg logConfig, opts ...Option) zapcore.Core {
 	core := zapcore.NewCore(newLogEncoder(cfg, opts...), newLogWriter(cfg, opts...), newLogLevel(cfg))
-	return core.With([]zapcore.Field{zap.String(consts.INSTANCE, instance.ID())})
+	return &errorFieldCore{Core: core.With([]zapcore.Field{zap.String(consts.INSTANCE, instance.ID())})}
 }
