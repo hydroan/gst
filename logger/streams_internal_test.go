@@ -18,6 +18,7 @@ import (
 
 func TestInitInstallsFallbackForOptionalProviderLoggers(t *testing.T) {
 	dir := t.TempDir()
+	t.Cleanup(Clean)
 	withLoggerInitConfig(t, dir, "global.log")
 	restoreGlobalLoggers(t)
 
@@ -65,6 +66,7 @@ func TestInitInstallsFallbackForOptionalProviderLoggers(t *testing.T) {
 
 func TestCleanFlushesBufferedFileSink(t *testing.T) {
 	dir := t.TempDir()
+	t.Cleanup(Clean)
 	withLogWriterConfig(t, dir, "clean.log")
 
 	log := New("clean.log")
@@ -86,6 +88,7 @@ func TestCleanFlushesBufferedFileSink(t *testing.T) {
 // directory the way a writer opening its file on its first write does.
 func TestCleanLeavesARemovedLogDirectoryRemoved(t *testing.T) {
 	dir := filepath.Join(t.TempDir(), "logs")
+	t.Cleanup(Clean)
 	withLogWriterConfig(t, dir, "sample.log")
 
 	log := New("sample.log")
@@ -105,6 +108,7 @@ func TestCleanLeavesARemovedLogDirectoryRemoved(t *testing.T) {
 // collected together.
 func TestEveryLoggerStampsTheProcessIdentity(t *testing.T) {
 	dir := t.TempDir()
+	t.Cleanup(Clean)
 	withLoggerInitConfig(t, dir, "global.log")
 	restoreGlobalLoggers(t)
 	require.NoError(t, Init())
@@ -134,6 +138,7 @@ func TestEveryLoggerStampsTheProcessIdentity(t *testing.T) {
 // and the stack, which the access-log encoder would drop.
 func TestInitBuildsTheListenerLoggers(t *testing.T) {
 	dir := t.TempDir()
+	t.Cleanup(Clean)
 	withLoggerInitConfig(t, dir, "global.log")
 	restoreGlobalLoggers(t)
 	require.NoError(t, Init())
@@ -225,6 +230,7 @@ func restoreGlobalLoggers(t *testing.T) {
 // entries the components logged moments before the exit reach their files.
 func TestSyncingTheGlobalLoggerFlushesEveryStream(t *testing.T) {
 	dir := t.TempDir()
+	t.Cleanup(Clean)
 	withLoggerInitConfig(t, dir, "global.log")
 	restoreGlobalLoggers(t)
 	require.NoError(t, Init())
@@ -240,5 +246,4 @@ func TestSyncingTheGlobalLoggerFlushesEveryStream(t *testing.T) {
 		require.NoError(t, err, file)
 		require.Contains(t, string(content), entry, file)
 	}
-	Clean()
 }

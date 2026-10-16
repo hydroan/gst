@@ -202,6 +202,7 @@ func TestNewLogWriterPrecreationFailureWarnsAndKeepsSink(t *testing.T) {
 // component logger writing into the global stream — and creates no file.
 func TestStdoutOutputWritesEveryStreamToStdoutUnderItsName(t *testing.T) {
 	dir := t.TempDir()
+	t.Cleanup(Clean)
 	withLoggerInitConfig(t, dir, "sample.log")
 	config.App.Logger.Output = config.LoggerOutputStdout
 	restoreGlobalLoggers(t)
@@ -242,6 +243,7 @@ func TestStdoutOutputWritesEveryStreamToStdoutUnderItsName(t *testing.T) {
 // buffer included.
 func TestStdoutOutputKeepsConcurrentEntriesWhole(t *testing.T) {
 	withLoggerInitConfig(t, t.TempDir(), "")
+	t.Cleanup(Clean)
 	config.App.Logger.Output = config.LoggerOutputStdout
 	payload := strings.Repeat("x", 16*1024)
 	oversized := strings.Repeat("y", defaultLogBufferSize+1024)
