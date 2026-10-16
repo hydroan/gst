@@ -2,7 +2,10 @@ package modelschema
 
 import (
 	"reflect"
+	"slices"
 	"sync"
+
+	gormschema "gorm.io/gorm/schema"
 )
 
 // The cached derivations below exist for the per-request paths: deriving the
@@ -143,4 +146,35 @@ var numericColumnSetCache sync.Map
 // themselves.
 func NumericColumnSet(typ reflect.Type) map[string]struct{} {
 	return columnSet(&numericColumnSetCache, typ, func(c Column) bool { return ClassifyColumn(c.Type) == ColumnClassNumeric })
+}
+
+// associationFieldsCache memoizes the association field paths per model type.
+var associationFieldsCache sync.Map
+
+// AssociationFields reports the struct field index paths of a model type's
+// associations — the fields gorm's schema holds as relationships, a has-many
+// or a belongs-to for one, declared for queries to preload — resolved once
+// per type and cached, in field order; nil for a type whose schema cannot be
+// resolved. Its consumer is the write path, which zeroes them: a write
+// touches the model's own table alone.
+func AssociationFields(typ reflect.Type) [][]int {
+	for typ != nil && typ.Kind() == reflect.Pointer {
+		typ = typ.Elem()
+	}
+	if cached, ok := associationFieldsCache.Load(typ); ok {
+		return cached.([][]int) //nolint:errcheck
+	}
+
+	var paths [][]int
+	if typ != nil && typ.Kind() == reflect.Struct {
+		if parsed, err := gormschema.Parse(reflect.New(typ).Interface(), schemaCache, namer); err == nil {
+			paths = make([][]int, 0, len(parsed.Relationships.Relations))
+			for _, rel := range parsed.Relationships.Relations {
+				paths = append(paths, rel.Field.StructField.Index)
+			}
+			slices.SortFunc(paths, slices.Compare)
+		}
+	}
+	associationFieldsCache.Store(typ, paths)
+	return paths
 }

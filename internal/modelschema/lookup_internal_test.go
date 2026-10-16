@@ -106,3 +106,31 @@ func TestNumericColumnSetReportsNumericColumns(t *testing.T) {
 	require.Nil(t, NumericColumnSet(reflect.TypeFor[string]()),
 		"a type without resolvable columns yields nil, not an error")
 }
+
+// sampleTreeRecord declares the two associations a model preloads, a has-many
+// and a belongs-to, beside its own columns.
+type sampleTreeRecord struct {
+	ID       string              `json:"id" gorm:"primaryKey"`
+	Name     string              `json:"name"`
+	ParentID string              `json:"parent_id"`
+	Children []*sampleTreeRecord `json:"children" gorm:"foreignKey:ParentID"`
+	Parent   *sampleTreeRecord   `json:"parent" gorm:"foreignKey:ParentID;references:ID"`
+}
+
+func (sampleTreeRecord) TableName() string { return "sample_tree_records" }
+
+// TestAssociationFieldsListsTheRelationshipFields pins the field paths of a
+// model's associations, the per-type caching, and the nil-on-failure
+// contract.
+func TestAssociationFieldsListsTheRelationshipFields(t *testing.T) {
+	paths := AssociationFields(reflect.TypeFor[*sampleTreeRecord]())
+	require.Equal(t, [][]int{{3}, {4}}, paths)
+
+	second := AssociationFields(reflect.TypeFor[sampleTreeRecord]())
+	require.Equal(t, reflect.ValueOf(paths).Pointer(), reflect.ValueOf(second).Pointer(),
+		"pointer and struct type must share one cached list")
+
+	require.Empty(t, AssociationFields(reflect.TypeFor[sampleDocumentRecord]()), "a model without associations has none")
+	require.Nil(t, AssociationFields(reflect.TypeFor[string]()),
+		"a type without resolvable columns yields nil, not an error")
+}

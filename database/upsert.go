@@ -12,6 +12,7 @@ import (
 	"github.com/hydroan/gst/internal/modelschema"
 	"github.com/hydroan/gst/tenant"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 	gormschema "gorm.io/gorm/schema"
 )
 
@@ -144,7 +145,7 @@ func (db *database[M]) Upsert(objs ...M) (err error) {
 		initializeVersions(dryRunObjs)
 		for i := 0; i < len(dryRunObjs); i += batchSize {
 			end := min(i+batchSize, len(dryRunObjs))
-			tx := dryRunSession(db.ins).Clauses(onConflict)
+			tx := dryRunSession(db.ins).Clauses(onConflict).Omit(clause.Associations)
 			if err = db.collectSQL(tx.Save(dryRunObjs[i:end])); err != nil {
 				return err
 			}
@@ -156,6 +157,7 @@ func (db *database[M]) Upsert(objs ...M) (err error) {
 		for i := range objs {
 			objs[i].SetID() // set id when id is empty.
 		}
+		clearAssociations(objs)
 		// Force created_at/updated_at like Create (dbruntime.NowUTC, the same
 		// one-time-base reason): the values only land on inserted rows,
 		// conflict updates keep the existing created_at.
@@ -175,7 +177,7 @@ func (db *database[M]) Upsert(objs ...M) (err error) {
 		}
 		for i := 0; i < len(objs); i += batchSize {
 			end := min(i+batchSize, len(objs))
-			tx := db.ins.Session(&gorm.Session{}).Clauses(onConflict)
+			tx := db.ins.Session(&gorm.Session{}).Clauses(onConflict).Omit(clause.Associations)
 			if err = tx.Save(objs[i:end]).Error; err != nil {
 				// First-hand exit of a stack-less GORM/driver error; see the
 				// error-stack contract in doc.go.

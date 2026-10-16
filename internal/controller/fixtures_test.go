@@ -96,6 +96,20 @@ type shapedSample struct {
 
 func (shapedSample) TableName() string { return "controller_shaped_samples" }
 
+// nestedSample carries the one thing a body may hold that is no column of
+// the model: an association, declared for queries to preload, which a write
+// leaves alone on both transports.
+type nestedSample struct {
+	Name     string          `json:"name"`
+	ParentID string          `json:"parent_id" gorm:"size:191;not null"`
+	Children []*nestedSample `json:"children,omitempty" gorm:"foreignKey:ParentID;constraint:-"`
+
+	modelregistry.Query
+	modelregistry.Base
+}
+
+func (nestedSample) TableName() string { return "controller_nested_samples" }
+
 // datedSample carries a calendar date, stored in a date column, beside an
 // optional instant: a date the client sends with its own offset is read as
 // the UTC day on both transports, in a record and in a filter alike, and a
@@ -136,6 +150,7 @@ type SampleAudit struct {
 const (
 	sampleRoute        = "controller-samples"
 	shapedRoute        = "controller-shaped-samples"
+	nestedRoute        = "controller-nested-samples"
 	refusalRoute       = "controller-refusals"
 	filterRefusalRoute = "controller-filter-refusals"
 	hangingRoute       = "controller-hanging-samples"
@@ -550,6 +565,15 @@ func countSamplesNamed(t *testing.T, name string) int {
 	var total int
 	require.NoError(t, database.Database[*sampleRecord](context.Background()).
 		WithQuery(&sampleRecord{Name: name}).Count(&total))
+	return total
+}
+
+// countNestedNamed counts the stored nested samples named name.
+func countNestedNamed(t *testing.T, name string) int {
+	t.Helper()
+	var total int
+	require.NoError(t, database.Database[*nestedSample](context.Background()).
+		WithQuery(&nestedSample{Name: name}).Count(&total))
 	return total
 }
 

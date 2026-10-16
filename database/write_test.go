@@ -959,6 +959,50 @@ func TestDatabaseUpdateByIDWritesAJSONStringsColumnAsADocument(t *testing.T) {
 	require.Equal(t, u1.ID, users[0].ID)
 }
 
+// TestDatabaseWritesLeaveAssociationsAlone pins that Create, Update and
+// Upsert write the model's own table alone: the associations an object
+// carries, declared for queries to preload, are neither written to their
+// tables nor kept on the object, so what a write hands back is what it
+// wrote.
+func TestDatabaseWritesLeaveAssociationsAlone(t *testing.T) {
+	ctx := context.Background()
+	prefix := "associations-" + strconv.FormatInt(time.Now().UnixNano(), 36)
+	t.Cleanup(func() {
+		_ = database.DB().Exec("DELETE FROM test_categories WHERE name LIKE ?", prefix+"%").Error
+	})
+	stored := func() int {
+		var total int
+		require.NoError(t, database.Database[*TestCategory](ctx).
+			WithQuery(nil, types.QueryOptions{Filters: []types.Filter{types.NewFilter("", "name", types.FilterOpStartsWith, prefix)}}).
+			Count(&total))
+		return total
+	}
+
+	// The fixture's foreign key is physical, so a record points at itself
+	// the way the category fixtures do; the parent the object carries is
+	// another record altogether.
+	rootID := prefix + "-root"
+	root := &TestCategory{Name: rootID, ParentID: rootID, Children: []*TestCategory{{Name: prefix + "-leaf"}}, Parent: &TestCategory{Name: prefix + "-ancestor"}}
+	root.ID = rootID
+	require.NoError(t, database.Database[*TestCategory](ctx).Create(root))
+	require.Equal(t, 1, stored(), "the record alone is inserted")
+	require.Nil(t, root.Children, "the children are not handed back as written")
+	require.Nil(t, root.Parent)
+	require.Equal(t, rootID, root.ParentID, "no parent row was written to point at")
+
+	root.Children = []*TestCategory{{Name: prefix + "-leaf"}}
+	require.NoError(t, database.Database[*TestCategory](ctx).Update(root))
+	require.Equal(t, 1, stored(), "an update inserts no child")
+	require.Nil(t, root.Children)
+
+	otherID := prefix + "-other"
+	other := &TestCategory{Name: otherID, ParentID: otherID, Children: []*TestCategory{{Name: prefix + "-leaf"}}}
+	other.ID = otherID
+	require.NoError(t, database.Database[*TestCategory](ctx).Upsert(other))
+	require.Equal(t, 2, stored(), "an upsert inserts the record alone")
+	require.Nil(t, other.Children)
+}
+
 func TestDatabaseUpdateByID(t *testing.T) {
 	defer cleanupTestData()
 

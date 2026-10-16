@@ -23,6 +23,7 @@ func TestMain(m *testing.M) {
 			modelregistry.Register[*versionedSample]()
 			modelregistry.Register[*validatedSample]()
 			modelregistry.Register[*shapedSample]()
+			modelregistry.Register[*nestedSample]()
 			modelregistry.Register[*datedSample]()
 			registerFixtureServices()
 		},

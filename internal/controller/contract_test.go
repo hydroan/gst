@@ -56,6 +56,7 @@ func TestTransportsAnswerTheContractAlike(t *testing.T) {
 	dated := standardFixture[*datedSample](datedRoute, "Dated")
 	shaped := standardFixture[*shapedSample](shapedRoute, "Shaped")
 	observed := standardFixture[*sampleRecord](observedRoute, "Observed")
+	nested := standardFixture[*nestedSample](nestedRoute, "Nested")
 
 	ok := contractWant{status: http.StatusOK}
 	refused := contractWant{status: http.StatusConflict, msg: refusedMsg}
@@ -933,6 +934,21 @@ func TestTransportsAnswerTheContractAlike(t *testing.T) {
 			check: func(t *testing.T, in contractInput, _ contractAnswer) {
 				t.Helper()
 				require.Equal(t, 1, countSamplesNamed(t, stringOf(in.record["name"])), "written before the hook refused over gRPC")
+			},
+		},
+		{
+			name: "Create writes the record alone and hands back no child the body carried", fixture: nested, phase: consts.Create,
+			prepare: func(*testing.T) contractInput {
+				name := uniqueName("contract-nested")
+				return contractInput{record: map[string]any{"name": name, "children": []map[string]any{{"name": name + "-child"}}}}
+			},
+			want: ok,
+			check: func(t *testing.T, in contractInput, got contractAnswer) {
+				t.Helper()
+				name := stringOf(in.record["name"])
+				require.Nil(t, dataMap(t, got)["children"], "the body's children are not handed back as written")
+				require.Equal(t, 1, countNestedNamed(t, name))
+				require.Equal(t, 0, countNestedNamed(t, name+"-child"), "no child row is written")
 			},
 		},
 		{

@@ -26,7 +26,8 @@ type Database[M Model] interface {
 	// forcing created_at/updated_at to now and created_by/updated_by to the id
 	// of the caller the context carries, when it carries one. A primary or
 	// unique key collision fails with database.ErrDuplicatedKey instead of
-	// updating the existing row.
+	// updating the existing row. It writes the model's own table alone: the
+	// associations an object carries are zeroed, not written.
 	Create(objs ...M) error
 	// Delete removes one or more records using WithPurge, the model Purge
 	// setting, or soft delete by default. Every record named by id must
@@ -37,7 +38,8 @@ type Database[M Model] interface {
 	// declared it; records and conditions do not combine.
 	Delete(objs ...M) error
 	// Update saves one or more full model values by primary key (pure UPDATE,
-	// zero values included). Objects without an ID fail with
+	// zero values included), the model's own table alone: the associations an
+	// object carries are zeroed, not written. Objects without an ID fail with
 	// database.ErrIDRequired; records without a live row fail with
 	// database.ErrRecordNotFound. created_at/created_by/deleted_at are never
 	// written; updated_at is always refreshed by the framework, and updated_by

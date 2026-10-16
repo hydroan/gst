@@ -25,7 +25,8 @@ var _ types.Model = (*Base)(nil)
 //
 // Associations are declared so queries can preload them, not to create physical
 // foreign keys, so they carry constraint:- and leave referential integrity to
-// the model hooks.
+// the model hooks; a write zeroes them and touches the model's own table
+// alone (see database.Create).
 //
 // Timestamps: created_at/updated_at are NOT NULL and carry no database
 // default. The framework always provides both, in UTC via dbruntime.NowUTC

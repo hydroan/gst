@@ -864,6 +864,7 @@ func sampleHandlers() map[string]rpcHandler {
 	standardRPCs[*shapedSample](handlers, shapedRoute, "Shaped")
 	standardRPCs[*validatedSample](handlers, validatedRoute, "Validated")
 	standardRPCs[*datedSample](handlers, datedRoute, "Dated")
+	standardRPCs[*nestedSample](handlers, nestedRoute, "Nested")
 
 	parentList := controller.ListCall[*sampleRecord](parentRoute)
 	parentGet := controller.GetCall[*sampleRecord](parentItemRoute)

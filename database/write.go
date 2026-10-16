@@ -13,6 +13,7 @@ import (
 	"github.com/hydroan/gst/internal/types"
 	"github.com/hydroan/gst/util"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 // compactModels drops the zero-value models from a write's input. Writes
@@ -45,6 +46,9 @@ func (db *database[M]) caller() string {
 // It is a pure INSERT: a record whose primary key or any unique key collides
 // with an existing row fails with ErrDuplicatedKey instead of silently
 // updating that row. Use Upsert for deliberate insert-or-update semantics.
+// It writes the model's own table alone: an association an object carries,
+// a field declared for queries to preload, is neither written nor kept on
+// the object, which hands back what was written (see clearAssociations).
 // Executes CreateBefore and CreateAfter model hooks unless disabled with WithoutHook or WithDryRun.
 // Supports batch processing for large datasets using configurable batch sizes.
 //
@@ -121,7 +125,7 @@ func (db *database[M]) Create(objs ...M) (err error) {
 		initializeVersions(dryRunObjs)
 		for i := 0; i < len(dryRunObjs); i += batchSize {
 			end := min(i+batchSize, len(dryRunObjs))
-			tx := dryRunSession(db.ins).Create(dryRunObjs[i:end])
+			tx := dryRunSession(db.ins).Omit(clause.Associations).Create(dryRunObjs[i:end])
 			if err = db.collectSQL(tx); err != nil {
 				return err
 			}
@@ -146,6 +150,7 @@ func (db *database[M]) Create(objs ...M) (err error) {
 		for i := range objs {
 			objs[i].SetID() // set id when id is empty.
 		}
+		clearAssociations(objs)
 
 		// Force created_at/updated_at to now; see the timestamp note in the doc
 		// comment. dbruntime.NowUTC owns the time base (UTC, millisecond
@@ -158,7 +163,7 @@ func (db *database[M]) Create(objs ...M) (err error) {
 		initializeVersions(objs)
 		for i := 0; i < len(objs); i += batchSize {
 			end := min(i+batchSize, len(objs))
-			if err = db.ins.Session(&gorm.Session{}).Create(objs[i:end]).Error; err != nil {
+			if err = db.ins.Session(&gorm.Session{}).Omit(clause.Associations).Create(objs[i:end]).Error; err != nil {
 				// First-hand exit of a stack-less GORM/driver error: embed the
 				// run-time stack here so the error_stack log field can locate
 				// any caller — service code, model hooks, cron jobs — without
@@ -461,7 +466,9 @@ func (db *database[M]) Delete(objs ...M) (err error) {
 
 // Update saves the full state of one or multiple existing records.
 // It is a pure UPDATE by primary key: it never inserts, and every record must
-// already exist. Use Upsert for deliberate insert-or-update semantics.
+// already exist. Use Upsert for deliberate insert-or-update semantics. It
+// writes the model's own table alone, the associations an object carries
+// zeroed rather than written (see clearAssociations).
 // Executes UpdateBefore and UpdateAfter model hooks unless disabled with WithoutHook or WithDryRun.
 //
 // Parameters:
@@ -617,6 +624,7 @@ func (db *database[M]) Update(objs ...M) (err error) {
 				return err
 			}
 		}
+		clearAssociations(objs)
 		for i := range objs {
 			session := db.ins.Session(&gorm.Session{})
 			var prev int64
@@ -671,12 +679,14 @@ func (db *database[M]) Update(objs ...M) (err error) {
 // updateRowStatement builds the single-row UPDATE statement Update issues per
 // record: full-row semantics by default (Select("*") writes zero values too),
 // narrowed by WithSelect when provided, with framework-managed audit columns
-// excluded. created_at/created_by belong to creation and deleted_at belongs to
-// Delete; omitting them means callers cannot forge creation audit data,
-// soft-delete a row, or resurrect one through Update. updated_at stays
-// writable because GORM's auto-update-time handling always overwrites it with
-// the current time, even under a narrowed WithSelect, and updated_by stays
-// writable because Update sets it to the caller first (see caller).
+// and the associations excluded. created_at/created_by belong to creation and
+// deleted_at belongs to Delete; omitting them means callers cannot forge
+// creation audit data, soft-delete a row, or resurrect one through Update.
+// updated_at stays writable because GORM's auto-update-time handling always
+// overwrites it with the current time, even under a narrowed WithSelect, and
+// updated_by stays writable because Update sets it to the caller first (see
+// caller). The associations are omitted as well as zeroed (see
+// clearAssociations), so the statement never reaches a related table.
 func (db *database[M]) updateRowStatement(session *gorm.DB, obj M) *gorm.DB {
 	tx := session.Model(obj)
 	if len(db.selectColumns) > 0 {
@@ -684,7 +694,29 @@ func (db *database[M]) updateRowStatement(session *gorm.DB, obj M) *gorm.DB {
 	} else {
 		tx = tx.Select("*")
 	}
-	return tx.Omit("created_at", "created_by", "deleted_at")
+	return tx.Omit("created_at", "created_by", "deleted_at", clause.Associations)
+}
+
+// clearAssociations zeroes the association fields of every object, the
+// fields declared for queries to preload (see modelschema.AssociationFields):
+// Create, Update and Upsert write the model's own table alone, so a related
+// record an object carries is neither written nor handed back as if it
+// were. gorm would otherwise write it along, inserting it or, on a conflict,
+// leaving it as it is, outside the hooks and the validation the model's own
+// rows go through.
+func clearAssociations[M types.Model](objs []M) {
+	paths := modelschema.AssociationFields(reflect.TypeOf(*new(M)))
+	if len(paths) == 0 {
+		return
+	}
+	for i := range objs {
+		value := reflect.ValueOf(objs[i]).Elem()
+		for _, path := range paths {
+			if field, err := value.FieldByIndexErr(path); err == nil {
+				field.Set(reflect.Zero(field.Type()))
+			}
+		}
+	}
 }
 
 // UpdateByID updates database columns of a single record identified by ID in
