@@ -20,9 +20,11 @@ import (
 	"github.com/hydroan/gst/internal/lease"
 	"github.com/hydroan/gst/internal/lifecycle"
 	"github.com/hydroan/gst/internal/testutil"
+	"github.com/hydroan/gst/internal/testutil/oteltest"
 	"github.com/hydroan/gst/internal/testutil/testcontainer"
 	"github.com/hydroan/gst/logger"
 	"github.com/stretchr/testify/require"
+	"go.opentelemetry.io/otel/trace"
 	"gorm.io/gorm"
 	gormlogger "gorm.io/gorm/logger"
 )
@@ -340,6 +342,40 @@ func TestTenureCarriesItsIdentity(t *testing.T) {
 	}
 }
 
+// TestTenureOpensASpanWhenTracingIsOn pins the tenure's identity when
+// tracing is on: the work runs under a root span named after the work, the
+// parent of every span its operations open, and the tenure's trace id is
+// that span's, so the trace in the tracing backend and the id in the logs
+// and statement comments are one trail. The span is ended at the tenure's
+// start: a tenure may last days, and the span is the parent, not a record
+// of the tenure's length.
+func TestTenureOpensASpanWhenTracingIsOn(t *testing.T) {
+	withLeaderLoggerConfig(t)
+	oteltest.Enable(t)
+	recorder := oteltest.Record(t)
+	resetLeaderState(t)
+
+	observed := make(chan tenureObservation, 1)
+	Register(func(ctx context.Context) error {
+		observed <- tenureObservation{identity: execctx.FromContext(ctx), span: trace.SpanFromContext(ctx).SpanContext()}
+		<-ctx.Done()
+		return nil
+	}, "traced-work")
+	startInstances(t, 1)
+
+	var got tenureObservation
+	select {
+	case got = <-observed:
+	case <-time.After(5 * time.Second):
+		t.Fatal("the work did not run")
+	}
+	require.True(t, got.span.HasTraceID(), "the work must run under the tenure's span")
+	require.Equal(t, got.span.TraceID().String(), got.identity.TraceID)
+	span := oteltest.EndedNamed(t, recorder, "leader.TracedWork")
+	require.Equal(t, got.identity.TraceID, span.SpanContext().TraceID().String())
+	require.Equal(t, got.span.SpanID(), span.SpanContext().SpanID(), "the span the work runs under is the one ended at the tenure's start")
+}
+
 // TestRegistrationErrorsFailStartup proves a registration that cannot be
 // honored is neither dropped nor panicked on at registration time, but
 // reported by start, all of them at once, so the process fails at startup.
@@ -432,6 +468,7 @@ func TestElectorIsALifecycleComponent(t *testing.T) {
 // tenureObservation is what the work saw on its context.
 type tenureObservation struct {
 	identity execctx.Identity
+	span     trace.SpanContext
 	term     uint64
 	leased   bool
 }

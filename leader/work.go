@@ -10,6 +10,7 @@ import (
 	"github.com/hydroan/gst/internal/lease"
 	"github.com/hydroan/gst/internal/lifecycle"
 	"github.com/hydroan/gst/internal/logfield"
+	"github.com/hydroan/gst/internal/operation"
 	"github.com/hydroan/gst/util"
 	"go.uber.org/zap"
 )
@@ -97,12 +98,17 @@ func wait(ctx context.Context, d time.Duration) bool {
 // unless the tenure ended because the name was no longer this holder's. The
 // work runs on the tenure's context: it ends with the tenure, its
 // database.Transaction calls verify the lease first, it carries the tenure's
-// identity, and work that will not stop once the lease is lost fails the
-// process, see lease.Run.
+// identity — with tracing on, a root span's, see operation.Begin — and work
+// that will not stop once the lease is lost fails the process, see lease.Run.
 func (w *work) lead(ctx context.Context, h *lease.Handle) {
 	held, stopHold := lease.Hold(ctx, h, log)
-	traceID := util.TraceID()
-	tenure := execctx.WithLeader(lease.WithHandle(held, h), w.name, traceID)
+	traced, span, traceID := operation.Begin(held, "leader", w.name)
+	if span != nil {
+		// The span is the parent of what the work opens, not a record of the
+		// tenure's length — a tenure may last days — so it ends here.
+		span.End()
+	}
+	tenure := execctx.WithLeader(lease.WithHandle(traced, h), w.name, traceID)
 	fields := []zap.Field{zap.String("name", w.name), zap.Uint64("term", h.Term()), logfield.TraceID(traceID)}
 	log.Infoz("elected leader", fields...)
 

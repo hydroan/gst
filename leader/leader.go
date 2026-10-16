@@ -106,7 +106,10 @@ func setLogger(l types.Logger) {
 // shutting down or not, fails the process, see the package documentation. The
 // context carries the tenure's identity — the name and a trace id of the
 // tenure's own, see execctx — so every statement and log line the work
-// produces is annotated with the tenure and found again from any of them.
+// produces is annotated with the tenure and found again from any of them;
+// with tracing on the id is that of a root span opened at the tenure's start,
+// the parent of every span the work's operations open, so the trace and the
+// log are one trail.
 //
 // fn that returns while still the leader — done, or failed — hands the name
 // back: the campaign resumes after the campaign interval, on this replica or
