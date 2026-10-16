@@ -11,7 +11,6 @@ import (
 const (
 	LOGGER_OUTPUT                  = "LOGGER_OUTPUT"
 	LOGGER_DIR                     = "LOGGER_DIR"
-	LOGGER_PREFIX                  = "LOGGER_PREFIX"
 	LOGGER_FILE                    = "LOGGER_FILE"
 	LOGGER_CONSOLE                 = "LOGGER_CONSOLE"
 	LOGGER_LEVEL                   = "LOGGER_LEVEL"
@@ -54,10 +53,6 @@ type Logger struct {
 
 	// Dir specifies which directory log to.
 	Dir string `json:"dir" ini:"dir" yaml:"dir" mapstructure:"dir"`
-
-	// Prefix specifies the log prefix.
-	// You can set the prefix name to your project name.
-	Prefix string `json:"prefix" ini:"prefix" yaml:"prefix" mapstructure:"prefix"`
 
 	// File specifies the which file the global logger logs to in file mode.
 	// If value is "/dev/stdout", log to os.Stdout.
@@ -248,7 +243,6 @@ type HTTPBodyLogger struct {
 func (*Logger) setDefaults(v *viper.Viper) {
 	v.SetDefault("logger.output", LoggerOutputStdout)
 	v.SetDefault("logger.dir", "./logs")
-	v.SetDefault("logger.prefix", "")
 	v.SetDefault("logger.file", "")
 	v.SetDefault("logger.console", true)
 	v.SetDefault("logger.level", LogLevelInfo)

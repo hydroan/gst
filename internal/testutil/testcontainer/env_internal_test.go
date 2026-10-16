@@ -42,13 +42,13 @@ func TestApplyConfigToEnv(t *testing.T) {
 
 	t.Run("nested_section", func(t *testing.T) {
 		isolateEnv(t,
-			config.LOGGER_PREFIX, config.LOGGER_DIR, config.LOGGER_CONSOLE,
+			config.LOGGER_FILE, config.LOGGER_DIR, config.LOGGER_CONSOLE,
 			config.LOGGER_MAX_AGE, config.LOGGER_HTTP_BODY_ENABLED,
 			config.LOGGER_HTTP_BODY_LOG_REQUEST, config.LOGGER_HTTP_BODY_LOG_RESPONSE,
 			config.LOGGER_HTTP_BODY_MAX_BODY_SIZE, config.LOGGER_HTTP_BODY_SKIP_ROUTES)
 
 		ApplyConfigToEnv(config.Logger{
-			Prefix:  "test",
+			File:    "test",
 			Console: false,
 			MaxAge:  7,
 			HTTPBody: config.HTTPBodyLogger{
@@ -60,7 +60,7 @@ func TestApplyConfigToEnv(t *testing.T) {
 			},
 		})
 
-		require.Equal(t, "test", os.Getenv(config.LOGGER_PREFIX))
+		require.Equal(t, "test", os.Getenv(config.LOGGER_FILE))
 		require.Equal(t, "7", os.Getenv(config.LOGGER_MAX_AGE))
 		// A nested section is named after its field, not after its type.
 		require.Equal(t, "true", os.Getenv(config.LOGGER_HTTP_BODY_ENABLED))

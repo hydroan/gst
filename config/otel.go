@@ -25,10 +25,6 @@ const (
 	OTEL_TRACES_SAMPLER = "OTEL_TRACES_SAMPLER"
 	// OTEL_TRACES_SAMPLER_ARG configures the OpenTelemetry traces sampler argument.
 	OTEL_TRACES_SAMPLER_ARG = "OTEL_TRACES_SAMPLER_ARG"
-	// OTEL_LOG_SPANS controls whether spans are also written to the OTEL logger.
-	OTEL_LOG_SPANS = "OTEL_LOG_SPANS"
-	// OTEL_MAX_TAG_VALUE_LEN configures the maximum helper tag value length.
-	OTEL_MAX_TAG_VALUE_LEN = "OTEL_MAX_TAG_VALUE_LEN"
 	// OTEL_BSP_MAX_QUEUE_SIZE configures the BatchSpanProcessor queue capacity.
 	OTEL_BSP_MAX_QUEUE_SIZE = "OTEL_BSP_MAX_QUEUE_SIZE"
 	// OTEL_BSP_MAX_EXPORT_BATCH_SIZE configures the BatchSpanProcessor export batch limit.
@@ -126,12 +122,6 @@ type OTEL struct {
 	// TracesSamplerArg configures samplers that need an argument, such as traceidratio.
 	TracesSamplerArg string `json:"traces_sampler_arg" mapstructure:"traces_sampler_arg" ini:"traces_sampler_arg" yaml:"traces_sampler_arg"`
 
-	// LogSpans controls whether spans are also written to the OTEL logger.
-	LogSpans bool `json:"log_spans" mapstructure:"log_spans" ini:"log_spans" yaml:"log_spans"`
-
-	// MaxTagValueLen is the maximum length of tag values added through helpers.
-	MaxTagValueLen int `json:"max_tag_value_len" mapstructure:"max_tag_value_len" ini:"max_tag_value_len" yaml:"max_tag_value_len"`
-
 	// BSPMaxQueueSize is the BatchSpanProcessor queue capacity.
 	BSPMaxQueueSize int `json:"bsp_max_queue_size" mapstructure:"bsp_max_queue_size" ini:"bsp_max_queue_size" yaml:"bsp_max_queue_size"`
 
@@ -154,8 +144,6 @@ func (o *OTEL) setDefaults(v *viper.Viper) {
 	v.SetDefault("otel.exporter_otlp_compression", OTLPCompressionNone)
 	v.SetDefault("otel.traces_sampler", TracesSamplerParentBasedAlwaysOn)
 	v.SetDefault("otel.traces_sampler_arg", "")
-	v.SetDefault("otel.log_spans", false)
-	v.SetDefault("otel.max_tag_value_len", 256)
 	v.SetDefault("otel.bsp_max_queue_size", 2048)
 	v.SetDefault("otel.bsp_max_export_batch_size", 512)
 	v.SetDefault("otel.bsp_schedule_delay", 5*time.Second)
