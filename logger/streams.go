@@ -66,7 +66,7 @@ func Init() error {
 	}
 	opt := Option{Console: config.App.Logger.Console}
 	zap.ReplaceGlobals(named(cfg, zap.New(
-		newLogCore(cfg, opt),
+		flushingCore{Core: newLogCore(cfg, opt)},
 		zap.AddCaller(),
 		zap.AddStacktrace(zapcore.FatalLevel),
 	)))

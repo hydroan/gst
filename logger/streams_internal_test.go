@@ -218,3 +218,27 @@ func restoreGlobalLoggers(t *testing.T) {
 		zap.ReplaceGlobals(savedZap)
 	})
 }
+
+// TestSyncingTheGlobalLoggerFlushesEveryStream pins that syncing the global
+// logger alone, what a process does before it exits on a failure (see
+// util.RunOrDie), writes out what every stream buffered in file mode: the
+// entries the components logged moments before the exit reach their files.
+func TestSyncingTheGlobalLoggerFlushesEveryStream(t *testing.T) {
+	dir := t.TempDir()
+	withLoggerInitConfig(t, dir, "global.log")
+	restoreGlobalLoggers(t)
+	require.NoError(t, Init())
+	App.Errorz("app stream")
+	Database.Errorz("database stream")
+	// The access-log encoder writes fields alone, no message.
+	Gin.Error("", zap.String("probe", "access stream"))
+
+	require.NoError(t, zap.L().Sync())
+
+	for file, entry := range map[string]string{"app.log": "app stream", "database.log": "database stream", "access.log": "access stream"} {
+		content, err := os.ReadFile(filepath.Join(dir, file))
+		require.NoError(t, err, file)
+		require.Contains(t, string(content), entry, file)
+	}
+	Clean()
+}

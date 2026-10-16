@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -141,4 +142,43 @@ func stopBufferedLogWriters() {
 	for _, writer := range writers {
 		_ = writer.Stop()
 	}
+}
+
+// syncBufferedLogWriters flushes every buffered writer the constructors
+// registered, the file writers and the shared stdout sink, and leaves them
+// running: what the global logger's Sync does for the streams (see
+// flushingCore).
+func syncBufferedLogWriters() {
+	bufferedLogWritersMu.Lock()
+	writers := slices.Clone(bufferedLogWriters)
+	bufferedLogWritersMu.Unlock()
+
+	for _, writer := range writers {
+		_ = writer.Sync()
+	}
+}
+
+// flushingCore is the core of the global logger: its Sync flushes every
+// buffered writer the constructors registered before syncing its own, so
+// syncing the global logger alone writes out what every stream buffered. A
+// process exiting on a failure syncs exactly that one logger (see
+// util.RunOrDie), the only one it reaches without importing this package;
+// zap's Logger.Sync reaches its own core alone, and a BufferedWriteSyncer
+// flushes on its own interval or size otherwise, so the entries a component
+// logged moments before the exit would stay in its buffer.
+type flushingCore struct {
+	zapcore.Core
+}
+
+// With keeps the fields' core flushing, as the loggers named and derived
+// from the global one sync through it.
+func (c flushingCore) With(fields []zapcore.Field) zapcore.Core {
+	return flushingCore{Core: c.Core.With(fields)}
+}
+
+// Sync flushes every registered writer, then syncs the core's own, whose
+// failure — syncing a terminal — must not stop the flush ahead of it.
+func (c flushingCore) Sync() error {
+	syncBufferedLogWriters()
+	return c.Core.Sync()
 }
