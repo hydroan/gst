@@ -49,6 +49,7 @@ func unmarshalConfig(v *viper.Viper, c *Config) error {
 // LoggerOutput, and any such type a registered section declares.
 func decodeHooks() viper.DecoderConfigOption {
 	return viper.DecodeHook(mapstructure.ComposeDecodeHookFunc(
+		negativeToUnsignedHookFunc(),
 		numberToDurationHookFunc(),
 		mapstructure.StringToTimeDurationHookFunc(),
 		mapstructure.StringToSliceHookFunc(","),
@@ -62,6 +63,33 @@ func decodeHooks() viper.DecoderConfigOption {
 		// reads it itself.
 		mapstructure.TextUnmarshallerHookFunc(),
 	))
+}
+
+// negativeToUnsignedHookFunc refuses a negative number for a key whose value
+// cannot be one: a port, a capacity, a size. A format with numbers of its
+// own, YAML, JSON or TOML, hands -1 over as a number, and the lenient decode
+// viper runs would read it into an unsigned field by wrapping it around: a
+// port of -1 becomes 18446744073709551615, and nothing reports it. A string,
+// from an INI file or the environment, the decoder refuses already.
+func negativeToUnsignedHookFunc() mapstructure.DecodeHookFuncType {
+	return func(from, to reflect.Type, data any) (any, error) {
+		switch to.Kind() {
+		case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uintptr:
+		default:
+			return data, nil
+		}
+		negative := false
+		switch from.Kind() {
+		case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+			negative = reflect.ValueOf(data).Int() < 0
+		case reflect.Float32, reflect.Float64:
+			negative = reflect.ValueOf(data).Float() < 0
+		}
+		if negative {
+			return nil, errors.Newf("want a number of zero or more, got %v", data)
+		}
+		return data, nil
+	}
 }
 
 // numberToDurationHookFunc refuses a duration written as a bare number. A

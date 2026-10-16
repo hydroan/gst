@@ -328,3 +328,55 @@ func TestNumberOutsideItsRangeIsRefused(t *testing.T) {
 		require.ErrorContains(t, err, "ldap.scope", "and every key outside its range is named at once")
 	})
 }
+
+// TestNegativeNumberIntoAnUnsignedKeyIsRefused pins that a key whose value
+// cannot be negative, a port, a capacity or a size, refuses a negative number
+// in every file format with numbers of its own: YAML, JSON and TOML hand -1
+// over as a number, which a lenient decode would otherwise wrap around to a
+// huge unsigned value without a word. An INI file and the environment hand
+// the same text over as a string, which the decoder refuses already.
+func TestNegativeNumberIntoAnUnsignedKeyIsRefused(t *testing.T) {
+	clearConfigEnvForTest(t)
+	for _, tt := range []struct {
+		format   string
+		negative string
+		zero     string
+	}{
+		{format: "yaml", negative: "mysql:\n  port: -1\nlogger:\n  http_body:\n    max_body_size: -5\n", zero: "mysql:\n  port: 0\n"},
+		{format: "json", negative: `{"mysql": {"port": -1}, "logger": {"http_body": {"max_body_size": -5}}}`, zero: `{"mysql": {"port": 0}}`},
+		{format: "toml", negative: "[mysql]\nport = -1\n[logger.http_body]\nmax_body_size = -5\n", zero: "[mysql]\nport = 0\n"},
+	} {
+		t.Run(tt.format, func(t *testing.T) {
+			filename := filepath.Join(t.TempDir(), "config."+tt.format)
+			config.SetConfigFile(filename)
+
+			requireWriteConfigFile(t, filename, tt.negative)
+			err := config.Init()
+			require.Error(t, err, "a negative number must be refused, not wrapped around")
+			require.ErrorContains(t, err, "mysql.port", "the refusal names the key")
+			require.ErrorContains(t, err, "-1", "and quotes the number")
+			require.ErrorContains(t, err, "logger.http_body.max_body_size", "a size is held to the same rule")
+
+			requireWriteConfigFile(t, filename, tt.zero)
+			require.NoError(t, config.Init())
+			require.Equal(t, uint(0), config.App.MySQL.Port)
+		})
+	}
+
+	t.Run("ini", func(t *testing.T) {
+		filename := filepath.Join(t.TempDir(), "config.ini")
+		config.SetConfigFile(filename)
+		requireWriteConfigFile(t, filename, "[mysql]\nport = -1\n")
+		require.ErrorContains(t, config.Init(), "mysql.port")
+	})
+
+	t.Run("environment", func(t *testing.T) {
+		filename := filepath.Join(t.TempDir(), "config.ini")
+		requireWriteConfigFile(t, filename, "[app]\nname = \"sample\"\n")
+		config.SetConfigFile(filename)
+		t.Setenv(config.MYSQL_PORT, "-1")
+		err := config.Init()
+		require.ErrorContains(t, err, "mysql.port")
+		require.ErrorContains(t, err, "-1")
+	})
+}
