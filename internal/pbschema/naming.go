@@ -1,4 +1,4 @@
-package pb
+package pbschema
 
 import (
 	"regexp"
@@ -65,12 +65,12 @@ func messageName(m *modelinfo.Model, route string, action *dsl.Action, kind stri
 	return modelinfo.RPCName(m, route, action) + kind
 }
 
-// requestParam is a route parameter as the request message of an rpc carries
+// RequestParam is a route parameter as the request message of an rpc carries
 // it: param as the route writes it, name the string field holding it, and
 // the comment of the field.
-type requestParam struct {
-	param   string
-	name    string
+type RequestParam struct {
+	Param   string
+	Name    string
 	comment string
 }
 
@@ -87,7 +87,7 @@ type requestParam struct {
 // Document, registered on /api/archive/documents/:document for
 // Param("document"), carries id; DeleteMany, registered on
 // /api/archive/documents/batch, carries nothing.
-func requestParams(m *modelinfo.Model, route string, action *dsl.Action) []requestParam {
+func requestParams(m *modelinfo.Model, route string, action *dsl.Action) []RequestParam {
 	registered, _ := modelinfo.RouterTargetForAction(route, m.Design, action)
 	// The route of a Stream action is no path a request reaches: its
 	// parameters are named by the route as declared.
@@ -96,13 +96,13 @@ func requestParams(m *modelinfo.Model, route string, action *dsl.Action) []reque
 		named = route
 	}
 	own := strings.TrimPrefix(modelinfo.ItemParam(m.Design), ":")
-	var params []requestParam
+	var params []RequestParam
 	for _, param := range modelinfo.RouteParams(registered) {
 		if param == own {
-			params = append(params, requestParam{param: param, name: "id", comment: "the id of the " + m.ModelName + ownParamPurpose(action.Phase)})
+			params = append(params, RequestParam{Param: param, Name: "id", comment: "the id of the " + m.ModelName + ownParamPurpose(action.Phase)})
 			continue
 		}
-		params = append(params, requestParam{param: param, name: protoIdentifier(param), comment: "the :" + param + " parameter of " + named})
+		params = append(params, RequestParam{Param: param, Name: protoIdentifier(param), comment: "the :" + param + " parameter of " + named})
 	}
 	return params
 }
@@ -122,8 +122,8 @@ func ownParamPurpose(phase consts.Phase) string {
 	return ""
 }
 
-// modelFieldName names the field carrying the model in a standard message:
+// ModelFieldName names the field carrying the model in a standard message:
 // the model name in snake case, record for Record and item_link for ItemLink.
-func modelFieldName(m *modelinfo.Model) string {
+func ModelFieldName(m *modelinfo.Model) string {
 	return strcase.SnakeCase(m.ModelName)
 }

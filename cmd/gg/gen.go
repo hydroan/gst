@@ -22,6 +22,7 @@ import (
 	"github.com/hydroan/gst/internal/gghelper"
 	"github.com/hydroan/gst/internal/ggnew"
 	"github.com/hydroan/gst/internal/modelinfo"
+	"github.com/hydroan/gst/internal/pbschema"
 	"github.com/spf13/cobra"
 )
 
@@ -574,8 +575,8 @@ func definitionsOf(files []pb.File) []pb.File {
 // describe come back as they are, one line each; any other failure is
 // wrapped.
 func protobufDefinitions(models []*modelinfo.Model) ([]pb.File, error) {
-	files, err := pb.Generate(pb.Config{Dir: ".", ModulePath: module, Models: models})
-	var diagnostics *pb.DiagnosticsError
+	files, err := pb.Generate(pbschema.Config{Dir: ".", ModulePath: module, Models: models})
+	var diagnostics *pbschema.DiagnosticsError
 	switch {
 	case errors.As(err, &diagnostics):
 		return nil, err

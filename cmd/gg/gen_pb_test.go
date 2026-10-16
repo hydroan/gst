@@ -14,6 +14,7 @@ import (
 	"github.com/bufbuild/protocompile"
 	"github.com/hydroan/gst/internal/ggconst"
 	"github.com/hydroan/gst/internal/gggen/pb"
+	"github.com/hydroan/gst/internal/pbschema"
 	"github.com/stretchr/testify/require"
 )
 
@@ -147,7 +148,7 @@ func TestGenRunTypeChecksTheGeneratedGoFiles(t *testing.T) {
 
 	broken := append(slices.Clone(files), pb.File{Path: "pb/broken.gen.go", Content: "package pb\n\nvar broken = missing\n"})
 	err := pb.TypeCheck(projectDir, "tmpapp", broken)
-	var diagnostics *pb.DiagnosticsError
+	var diagnostics *pbschema.DiagnosticsError
 	require.ErrorAs(t, err, &diagnostics)
 	require.Contains(t, err.Error(), "pb/broken.gen.go:3: tmpapp/pb: undefined: missing")
 

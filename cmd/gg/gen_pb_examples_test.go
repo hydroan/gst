@@ -13,15 +13,22 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// pbDocExampleFuncs are the functions of internal/gggen/pb whose doc comments
-// quote what the generator writes, every example a passage of a golden file
-// under testdata/pb/golden, and the model it writes it for a passage of the
-// model sources gen_pb_test.go writes (see TestGenRunMatchesGolden).
+// pbDocExampleFuncs are the functions of internal/pbschema and
+// internal/gggen/pb whose doc comments quote what the generator writes, every
+// example a passage of a golden file under testdata/pb/golden, and the model
+// it writes it for a passage of the model sources gen_pb_test.go writes (see
+// TestGenRunMatchesGolden).
 var pbDocExampleFuncs = []string{
 	"Generate", "buildMessage", "declareService", "rpcMessages", "customRequest",
-	"customResponse", "queryFields", "descriptor", "handlerFile", "serviceType",
+	"customResponse", "queryFields", "fileDescriptor", "handlerFile", "serviceType",
 	"actionCalls", "handler", "streamHandler", "toProto", "fromProto",
 	"conversionFuncs", "registrationFiles",
+}
+
+// pbDocExampleDirs are the packages pbDocExampleFuncs are declared in.
+var pbDocExampleDirs = []string{
+	filepath.Join("..", "..", "internal", "pbschema"),
+	filepath.Join("..", "..", "internal", "gggen", "pb"),
 }
 
 // TestPBDocExamplesComeFromTheGoldenFiles pins every indented code block in
@@ -37,33 +44,34 @@ func TestPBDocExamplesComeFromTheGoldenFiles(t *testing.T) {
 	// The model sources are raw string literals, so they spell a backtick as
 	// a single quote and the test writing them turns it back.
 	golden["gen_pb_test.go"] = trimmedLines(strings.Split(strings.ReplaceAll(string(fixture), "'", "`"), "\n"))
-	pbDir := filepath.Join("..", "..", "internal", "gggen", "pb")
-	entries, err := os.ReadDir(pbDir)
-	require.NoError(t, err)
 	fset := token.NewFileSet()
 	found := make(map[string]bool, len(pbDocExampleFuncs))
-	for _, entry := range entries {
-		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".go") || strings.HasSuffix(entry.Name(), "_test.go") {
-			continue
-		}
-		file, err := parser.ParseFile(fset, filepath.Join(pbDir, entry.Name()), nil, parser.ParseComments)
+	for _, dir := range pbDocExampleDirs {
+		entries, err := os.ReadDir(dir)
 		require.NoError(t, err)
-		for _, decl := range file.Decls {
-			fn, ok := decl.(*ast.FuncDecl)
-			if !ok || fn.Doc == nil || !slices.Contains(pbDocExampleFuncs, fn.Name.Name) {
+		for _, entry := range entries {
+			if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".go") || strings.HasSuffix(entry.Name(), "_test.go") {
 				continue
 			}
-			found[fn.Name.Name] = true
-			for i, block := range docCodeBlocks(fn.Doc.Text()) {
-				if !goldenHolds(golden, block) {
-					t.Errorf("%s: code block %d of the doc comment of %s is in no golden file; it starts with %q", fset.Position(fn.Pos()), i+1, fn.Name.Name, block[0])
+			file, err := parser.ParseFile(fset, filepath.Join(dir, entry.Name()), nil, parser.ParseComments)
+			require.NoError(t, err)
+			for _, decl := range file.Decls {
+				fn, ok := decl.(*ast.FuncDecl)
+				if !ok || fn.Doc == nil || !slices.Contains(pbDocExampleFuncs, fn.Name.Name) {
+					continue
+				}
+				found[fn.Name.Name] = true
+				for i, block := range docCodeBlocks(fn.Doc.Text()) {
+					if !goldenHolds(golden, block) {
+						t.Errorf("%s: code block %d of the doc comment of %s is in no golden file; it starts with %q", fset.Position(fn.Pos()), i+1, fn.Name.Name, block[0])
+					}
 				}
 			}
 		}
 	}
 	for _, name := range pbDocExampleFuncs {
 		if !found[name] {
-			t.Errorf("the pb package declares no function %s with a doc comment", name)
+			t.Errorf("neither package declares a function %s with a doc comment", name)
 		}
 	}
 }

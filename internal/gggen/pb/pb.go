@@ -1,94 +1,36 @@
 // Package pb generates the protobuf definitions of a gst project's gRPC
-// services and the Go files serving them: for every model whose Design
-// declares GRPC(), the messages its Go types encode to and the service
-// exposing its actions, printed as .proto files that mirror the model
-// directory under pb/; beside each, a .gen.go with the type serving the
-// service, the calls of its actions, the handlers of its rpcs and the
-// conversions between the messages and the Go types (see handlerFile); and,
-// in every package under pb/, a pb.gen.go registering its services on the
-// listener (see registrationFiles).
-//
-// The definitions are derived, never written by hand. Field shapes come from
-// jsonshape, the same reading of the Go types the TypeScript declarations
-// use, so both descriptions agree; field numbers come from the pb struct tag
-// every business field carries (see pbTag), while the keys of the framework's
-// model base have fixed numbers (see baseFieldNumbers). A type whose shape
-// protobuf cannot express is reported as a diagnostic instead of being
-// approximated, and no file is generated then.
+// services and the Go files serving them, from the schema pbschema derives
+// of the models declaring GRPC(): the definitions printed as .proto files
+// that mirror the model directory under pb/; beside each, a .gen.go with the
+// type serving the service, the calls of its actions, the handlers of its
+// rpcs and the conversions between the messages and the Go types (see
+// handlerFile); and, in every package under pb/, a pb.gen.go registering its
+// services on the listener (see registrationFiles). A diagnostic of the
+// derivation stops the generation before any file is produced.
 //
 // Two libraries stand in for protoc, so nothing needs it installed: the
 // files are written by protoprint, the one package of jhump/protoreflect
 // used, which prints the assembled descriptors as .proto source with their
 // comments and layout; they are read back by bufbuild/protocompile, a
 // protobuf compiler front end in pure Go that parses and links .proto
-// source into descriptors, here to hold a committed file's numbers, to
-// compile the definitions for the plugins that write the Go files beside
-// them (see Compile) and, in tests, to compile the generated files the way
-// protoc would.
-//
-// The files already under pb/ are the contract in force, what the clients
-// were built against, so a generated file replaces one only if every field
-// keeps its number and no number changes hands; the numbers and names of the
-// fields a model dropped stay reserved in the new file. A change that would
-// break the wire is reported, with the edit of the committed file that
-// accepts it on purpose while keeping what the file reserves (see
-// reconcile). The Go files are type-checked before any is written (see
-// TypeCheck).
+// source into descriptors, here to compile the definitions for the plugins
+// that write the Go files beside them (see Compile) and, in tests, to
+// compile the generated files the way protoc would. The Go files are
+// type-checked before any is written (see TypeCheck).
 package pb
 
 import (
-	"cmp"
-	"fmt"
+	"maps"
 	"slices"
 	"strings"
 
-	"github.com/hydroan/gst/internal/gggen/jsonshape"
-	"github.com/hydroan/gst/internal/modelinfo"
+	"github.com/hydroan/gst/internal/pbschema"
 )
 
-// pbTag is the struct tag naming a field's protobuf field number, as in
-// `pb:"11"`.
-const pbTag = "pb"
-
-// baseFieldNumbers are the field numbers of the keys the framework's model
-// base, model.Base and model.AutoBase, encodes to. They are fixed so that every
-// model agrees on them; the numbers below firstBusinessFieldNumber stay with
-// the framework.
-var baseFieldNumbers = map[string]int32{
-	"id":         1,
-	"created_by": 2,
-	"updated_by": 3,
-	"created_at": 4,
-	"updated_at": 5,
-}
-
-// baseFieldComments are the comments the keys of the framework's model base
-// carry in every message: the base is declared outside the project, where
-// the generator reads no doc comment, so each key gets a fixed one.
-var baseFieldComments = map[string]string{
-	"id":         "The identifier of the record, assigned when it is created.",
-	"created_by": "The id of the user who created the record.",
-	"updated_by": "The id of the user who last updated the record.",
-	"created_at": "When the record was created.",
-	"updated_at": "When the record was last updated.",
-}
-
-// firstBusinessFieldNumber is the lowest field number a business field of a
-// model embedding the framework's base may carry: 1 to 10 belong to the
-// framework. A type without the base numbers its fields from 1.
-const firstBusinessFieldNumber int32 = 11
-
-// Config describes one generation run.
-type Config struct {
-	// Dir is the project root the Go packages are loaded from. Diagnostic
-	// file names are relative to it.
-	Dir string
-	// ModulePath is the module path of the project, the import path prefix
-	// of every model package; its last element names the protobuf packages.
-	ModulePath string
-	// Models are the models of the project, their routes resolved (see
-	// modelinfo.ResolveRoutes). The ones declaring GRPC() get definitions.
-	Models []*modelinfo.Model
+// generator renders the files of a derived schema: the definitions, the Go
+// files serving them and the registration files.
+type generator struct {
+	*pbschema.Schema
 }
 
 // File is one generated file under pb/: a .proto definition, the Go file
@@ -113,54 +55,12 @@ type File struct {
 // Compile compiles, rather than a Go file.
 func (f File) Definition() bool { return strings.HasSuffix(f.Path, ".proto") }
 
-// DiagnosticsError is the error Generate returns when any diagnostic was
-// reported. No file is generated then: a partial set would leave a service
-// without the messages it refers to.
-type DiagnosticsError struct {
-	Diagnostics []jsonshape.Diagnostic
-	// MissingTags lists the fields reported for want of a pb tag, each with
-	// the number Generate gave it; gg gen writes them into the fields' tags
-	// and generates again.
-	MissingTags []MissingTag
-}
-
-// MissingTag is a field of a message that carries no pb tag, with the
-// number Generate chose for it (see the numbering in messageOfStruct): the
-// diagnostic reporting the field names the same number.
-type MissingTag struct {
-	// Path is the file declaring the field, slash-separated and relative to
-	// the project root, model/record.go; Line is the line of the field.
-	Path string
-	Line int
-	// Struct is the name of the message in its file, Record or RecordWindow
-	// for the message of an unnamed struct field, and Field the Go name of
-	// the field, Title.
-	Struct string
-	Field  string
-	// Number is the field number to give the field.
-	Number int32
-}
-
-// Error lists every diagnostic on a line of its own, under a line counting
-// them:
-//
-//	1 problem(s) keep the protobuf definitions from being generated:
-//	  model/sample.go:12: example.com/app/model.Sample.name: the field has no pb tag; number it pb:"11"
-func (e *DiagnosticsError) Error() string {
-	lines := make([]string, 0, len(e.Diagnostics)+1)
-	lines = append(lines, fmt.Sprintf("%d problem(s) keep the protobuf definitions from being generated:", len(e.Diagnostics)))
-	for _, d := range e.Diagnostics {
-		lines = append(lines, "  "+d.String())
-	}
-	return strings.Join(lines, "\n")
-}
-
-// Generate loads the packages of the models declaring GRPC() and renders the
-// protobuf definitions of their services and of every project type those
-// reach, one .proto file per Go file the types are declared in, with the Go
-// file serving each definition beside it and the registration file, sorted
-// by path (see File.Definition for telling the two kinds apart). Models
-// declaring no GRPC() produce no file at all.
+// Generate derives the protobuf definitions of the models declaring GRPC()
+// (see pbschema.Derive) and renders them: one .proto file per Go file the
+// types are declared in, with the Go file serving each definition beside it
+// and the registration file, sorted by path (see File.Definition for telling
+// the two kinds apart). Models declaring no GRPC() produce no file at all,
+// and a *pbschema.DiagnosticsError of the derivation is returned as is.
 //
 // For example, the model file model/note.go of module tmpapp declaring
 //
@@ -256,27 +156,28 @@ func (e *DiagnosticsError) Error() string {
 //	  // GetNote is the Get action of Note on /api/notes/:id.
 //	  rpc GetNote ( GetNoteRequest ) returns ( GetNoteResponse );
 //	}
-func Generate(cfg Config) ([]File, error) {
-	models := make([]*modelinfo.Model, 0)
-	for _, m := range cfg.Models {
-		if m.Design != nil && m.Design.GRPC {
-			models = append(models, m)
-		}
+func Generate(cfg pbschema.Config) ([]File, error) {
+	schema, err := pbschema.Derive(cfg)
+	if err != nil || len(schema.Files) == 0 {
+		return nil, err
 	}
-	if len(models) == 0 {
-		return nil, nil
-	}
-	slices.SortFunc(models, func(a, b *modelinfo.Model) int {
-		return cmp.Or(strings.Compare(a.ModelFilePath, b.ModelFilePath), strings.Compare(a.ModelName, b.ModelName))
-	})
-
-	roots := make([]string, 0, len(models))
-	for _, m := range models {
-		roots = append(roots, m.ImportPath())
-	}
-	project, err := jsonshape.Load(jsonshape.Config{Dir: cfg.Dir, ModulePath: cfg.ModulePath, Roots: roots})
+	g := &generator{Schema: schema}
+	files, err := g.print()
 	if err != nil {
 		return nil, err
 	}
-	return newGenerator(cfg, project, models).generate()
+	for _, name := range slices.Sorted(maps.Keys(g.Files)) {
+		var handlers File
+		if handlers, err = g.handlerFile(g.Files[name]); err != nil {
+			return nil, err
+		}
+		files = append(files, handlers)
+	}
+	registrations, err := g.registrationFiles()
+	if err != nil {
+		return nil, err
+	}
+	files = append(files, registrations...)
+	slices.SortFunc(files, func(a, b File) int { return strings.Compare(a.Path, b.Path) })
+	return files, nil
 }

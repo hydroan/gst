@@ -1,4 +1,4 @@
-package pb
+package pbschema
 
 import (
 	"cmp"
@@ -22,10 +22,10 @@ import (
 
 // The well-known types the mapping refers to, and the files declaring them.
 const (
-	wellKnownTimestamp = ".google.protobuf.Timestamp"
-	wellKnownDuration  = ".google.protobuf.Duration"
-	wellKnownValue     = ".google.protobuf.Value"
-	wellKnownStruct    = ".google.protobuf.Struct"
+	WellKnownTimestamp = ".google.protobuf.Timestamp"
+	WellKnownDuration  = ".google.protobuf.Duration"
+	WellKnownValue     = ".google.protobuf.Value"
+	WellKnownStruct    = ".google.protobuf.Struct"
 	wellKnownFieldMask = ".google.protobuf.FieldMask"
 
 	timestampProto = "google/protobuf/timestamp.proto"
@@ -39,10 +39,10 @@ const (
 // start of the day, and gorm's time of day, a duration since midnight, to
 // Duration.
 var timeTypes = map[string]struct{ typeName, proto string }{
-	"time.Time":              {wellKnownTimestamp, timestampProto},
-	"gorm.io/datatypes.Date": {wellKnownTimestamp, timestampProto},
-	"gorm.io/datatypes.Time": {wellKnownDuration, durationProto},
-	"gorm.io/gorm.DeletedAt": {wellKnownTimestamp, timestampProto},
+	"time.Time":              {WellKnownTimestamp, timestampProto},
+	"gorm.io/datatypes.Date": {WellKnownTimestamp, timestampProto},
+	"gorm.io/datatypes.Time": {WellKnownDuration, durationProto},
+	"gorm.io/gorm.DeletedAt": {WellKnownTimestamp, timestampProto},
 }
 
 // modelRegistryPath is the package declaring the framework's model base, whose
@@ -115,44 +115,44 @@ func (c *queryControls) collect(st *types.Struct) {
 	}
 }
 
-// fieldType is the protobuf type of one field.
-type fieldType struct {
-	kind     descriptorpb.FieldDescriptorProto_Type
-	typeName string // the fully-qualified message name for a message kind
-	repeated bool
-	optional bool // proto3 presence for a scalar held through a pointer
+// FieldType is the protobuf type of one field.
+type FieldType struct {
+	Kind     descriptorpb.FieldDescriptorProto_Type
+	TypeName string // the fully-qualified message name for a message kind
+	Repeated bool
+	Optional bool // proto3 presence for a scalar held through a pointer
 	// mapEntry is the synthetic entry message of a map field, nested in the
 	// enclosing message; mapKey and mapValue are the types of its key and
 	// its value.
-	mapEntry *descriptorpb.DescriptorProto
-	mapKey   descriptorpb.FieldDescriptorProto_Type
-	mapValue *fieldType
+	MapEntry *descriptorpb.DescriptorProto
+	MapKey   descriptorpb.FieldDescriptorProto_Type
+	MapValue *FieldType
 	// enum lists the values of a project enum, appended to the comment of
 	// the field.
 	enum *jsonshape.Enum
 	// nested is the conversion of the message of an anonymous struct, the
 	// field's own or the one its elements or values are.
-	nested *conversion
+	Nested *Conversion
 }
 
-// conversion describes the message of a Go struct type field by field, what
+// Conversion describes the message of a Go struct type field by field, what
 // the conversion functions of the generated handlers file are made of (see
 // convert.go): the Go name of the message and, for every field of the
 // message, the Go struct field it carries.
-type conversion struct {
-	goName string // the Go type name of the message, Record or RecordWindow
-	fields []fieldConversion
+type Conversion struct {
+	GoName string // the Go type name of the message, Record or RecordWindow
+	Fields []FieldConversion
 }
 
-// fieldConversion is one field of a conversion: the Go struct field it
+// FieldConversion is one field of a Conversion: the Go struct field it
 // carries, its protobuf type and its Go name in the message.
-type fieldConversion struct {
-	field  jsonshape.Field
-	ft     fieldType
-	goName string
+type FieldConversion struct {
+	Field  jsonshape.Field
+	Type   FieldType
+	GoName string
 	// path selects the field from a value of the struct, the embedded
 	// structs it is promoted through first (see fieldPath).
-	path []string
+	Path []string
 }
 
 // fieldPath returns the names selecting the field v from a value of the
@@ -252,8 +252,8 @@ func unexportedOnPath(s *types.Struct, path []string) string {
 //
 //	  repeated Link links = 12;
 //	}
-func (g *generator) buildMessage(obj *types.TypeName) {
-	m := g.messages[obj]
+func (g *Schema) buildMessage(obj *types.TypeName) {
+	m := g.Messages[obj]
 	s := jsonshape.Site{Subject: obj.Pkg().Path() + "." + obj.Name(), Pos: obj.Pos()}
 	if !g.project.Declares(obj) {
 		g.project.Report(s, "the type is declared outside the project, so its fields cannot carry pb tags; use a project type")
@@ -272,8 +272,8 @@ func (g *generator) buildMessage(obj *types.TypeName) {
 		g.project.Report(s, "the type declares %s, so its JSON shape is decided by code the generator cannot read; drop the method or use a type without one", method)
 		return
 	}
-	m.conv = g.messageOfStruct(m.name, g.project.TypeDoc(obj), st, m.file, s)
-	m.file.typed = append(m.file.typed, m)
+	m.Conversion = g.messageOfStruct(m.name, g.project.TypeDoc(obj), st, m.File, s)
+	m.File.Typed = append(m.File.Typed, m)
 }
 
 // numberedField is a field of a message being built, with its comment and
@@ -282,7 +282,7 @@ func (g *generator) buildMessage(obj *types.TypeName) {
 type numberedField struct {
 	field      *descriptorpb.FieldDescriptorProto
 	comment    string
-	conversion fieldConversion
+	conversion FieldConversion
 }
 
 // messageOfStruct adds the message named name to file under comment, the
@@ -300,12 +300,12 @@ type numberedField struct {
 // write every field of a message as a field of the struct, which a nil
 // pointer would have them leave out or allocate. So is a key promoted from
 // a struct outside the project, whose fields cannot carry pb tags.
-func (g *generator) messageOfStruct(name, comment string, st *types.Struct, file *protoFile, s jsonshape.Site) *conversion {
+func (g *Schema) messageOfStruct(name, comment string, st *types.Struct, file *ProtoFile, s jsonshape.Site) *Conversion {
 	desc := &descriptorpb.DescriptorProto{Name: new(name)}
 	goName, protoName := goCamelCase(name), name
 	g.goNames[desc] = goName
 	g.protoNames[desc] = protoName
-	prefix := []int32{fileMessagesTag, int32Index(len(file.messages))}
+	prefix := []int32{fileMessagesTag, int32Index(len(file.Messages))}
 	file.addMessage(desc, comment)
 	fields := g.project.Fields(st, s)
 	base := false
@@ -356,7 +356,7 @@ func (g *generator) messageOfStruct(name, comment string, st *types.Struct, file
 			fs := g.project.FieldSite(s, f.Key, f.Var)
 			number, ok := next(f.Key)
 			if !ok {
-				g.project.Report(fs, "the field has no pb tag, and every field number left is one the committed %s/%s reserves; lift a reservation, or delete the file to start over", ggconst.DirPB, file.name)
+				g.project.Report(fs, "the field has no pb tag, and every field number left is one the committed %s/%s reserves; lift a reservation, or delete the file to start over", ggconst.DirPB, file.Name)
 				continue
 			}
 			numbers[number] = f.Key
@@ -381,15 +381,15 @@ func (g *generator) messageOfStruct(name, comment string, st *types.Struct, file
 			Name:   new(f.Key),
 			Number: new(planned[i]),
 			Label:  descriptorpb.FieldDescriptorProto_LABEL_OPTIONAL.Enum(),
-			Type:   ft.kind.Enum(),
+			Type:   ft.Kind.Enum(),
 		}
-		if ft.typeName != "" {
-			field.TypeName = new(ft.typeName)
+		if ft.TypeName != "" {
+			field.TypeName = new(ft.TypeName)
 		}
-		if ft.repeated {
+		if ft.Repeated {
 			field.Label = descriptorpb.FieldDescriptorProto_LABEL_REPEATED.Enum()
 		}
-		if ft.optional {
+		if ft.Optional {
 			// A proto3 optional field lives in a synthetic oneof of its own.
 			field.Proto3Optional = new(true)
 			field.OneofIndex = new(int32Index(len(desc.OneofDecl)))
@@ -412,18 +412,18 @@ func (g *generator) messageOfStruct(name, comment string, st *types.Struct, file
 		if isBaseField(f) {
 			doc = baseFieldComments[f.Key]
 		}
-		numbered = append(numbered, numberedField{field: field, comment: fieldComment(doc, ft.enum), conversion: fieldConversion{field: f, ft: ft, path: path}})
+		numbered = append(numbered, numberedField{field: field, comment: fieldComment(doc, ft.enum), conversion: FieldConversion{Field: f, Type: ft, Path: path}})
 	}
 	slices.SortStableFunc(numbered, func(a, b numberedField) int { return cmp.Compare(a.field.GetNumber(), b.field.GetNumber()) })
 	for i, nf := range numbered {
 		file.comment(append(slices.Clone(prefix), messageFieldsTag, int32Index(i)), nf.comment)
 		desc.Field = append(desc.Field, nf.field)
 	}
-	conv := &conversion{goName: goName, fields: make([]fieldConversion, 0, len(numbered))}
-	goFields := goFieldNames(desc)
+	conv := &Conversion{GoName: goName, Fields: make([]FieldConversion, 0, len(numbered))}
+	goFields := GoFieldNames(desc)
 	for _, nf := range numbered {
-		nf.conversion.goName = goFields[nf.field.GetName()]
-		conv.fields = append(conv.fields, nf.conversion)
+		nf.conversion.GoName = goFields[nf.field.GetName()]
+		conv.Fields = append(conv.Fields, nf.conversion)
 	}
 	return conv
 }
@@ -439,7 +439,7 @@ func (g *generator) messageOfStruct(name, comment string, st *types.Struct, file
 // tags = 12 in its committed definition and declaring title tagged 11, tags
 // untagged and a new summary untagged, numbers tags 12 and summary 13; with
 // tags dropped and 12 reserved by the committed file, summary is 13 too.
-func (g *generator) nextNumbers(file *protoFile, protoName string, numbers map[int32]string, base bool) func(key string) (int32, bool) {
+func (g *Schema) nextNumbers(file *ProtoFile, protoName string, numbers map[int32]string, base bool) func(key string) (int32, bool) {
 	committed := g.committedMessage(file, protoName)
 	committedNumbers := make(map[int32]bool, len(committed.GetField()))
 	committedByName := make(map[string]int32, len(committed.GetField()))
@@ -489,7 +489,7 @@ func isBaseField(f jsonshape.Field) bool {
 // must be positive, at most 536870911, outside the range 19000 to 19999
 // protobuf reserves, and from firstBusinessFieldNumber on in a message
 // embedding the base. A number that fails these is reported and yields 0.
-func (g *generator) taggedNumber(tag string, base bool, s jsonshape.Site) int32 {
+func (g *Schema) taggedNumber(tag string, base bool, s jsonshape.Site) int32 {
 	first := firstFieldNumber(base)
 	number, err := strconv.ParseInt(tag, 10, 32)
 	switch {
@@ -604,12 +604,12 @@ func malformedTag(tag string) (string, bool) {
 //
 // the last with the message RecordWindow declared after Record, holding the
 // fields of the struct.
-func (g *generator) fieldTypeOf(t types.Type, file *protoFile, parent *descriptorpb.DescriptorProto, key string, s jsonshape.Site) (fieldType, bool) {
+func (g *Schema) fieldTypeOf(t types.Type, file *ProtoFile, parent *descriptorpb.DescriptorProto, key string, s jsonshape.Site) (FieldType, bool) {
 	t = types.Unalias(t)
 	if p, ok := t.(*types.Pointer); ok {
 		ft, ok := g.fieldTypeOf(types.Unalias(p.Elem()), file, parent, key, s)
-		if ok && ft.kind != descriptorpb.FieldDescriptorProto_TYPE_MESSAGE && !ft.repeated {
-			ft.optional = true
+		if ok && ft.Kind != descriptorpb.FieldDescriptorProto_TYPE_MESSAGE && !ft.Repeated {
+			ft.Optional = true
 		}
 		return ft, ok
 	}
@@ -620,12 +620,12 @@ func (g *generator) fieldTypeOf(t types.Type, file *protoFile, parent *descripto
 		kind, ok := scalarKind(u)
 		if !ok {
 			g.project.Report(s, "%s values have no protobuf type", u)
-			return fieldType{}, false
+			return FieldType{}, false
 		}
-		return fieldType{kind: kind}, true
+		return FieldType{Kind: kind}, true
 	case *types.Slice:
 		if g.project.IsByteSlice(u) {
-			return fieldType{kind: descriptorpb.FieldDescriptorProto_TYPE_BYTES}, true
+			return FieldType{Kind: descriptorpb.FieldDescriptorProto_TYPE_BYTES}, true
 		}
 		return g.repeatedOf(u.Elem(), file, parent, key, s)
 	case *types.Array:
@@ -635,10 +635,10 @@ func (g *generator) fieldTypeOf(t types.Type, file *protoFile, parent *descripto
 	case *types.Interface:
 		if u.Empty() {
 			file.importOf(structProto)
-			return fieldType{kind: descriptorpb.FieldDescriptorProto_TYPE_MESSAGE, typeName: wellKnownValue}, true
+			return FieldType{Kind: descriptorpb.FieldDescriptorProto_TYPE_MESSAGE, TypeName: WellKnownValue}, true
 		}
 		g.project.Report(s, "an interface with methods has no protobuf type, the dynamic type decides it; use a concrete type")
-		return fieldType{}, false
+		return FieldType{}, false
 	case *types.Struct:
 		// An unnamed struct becomes a message of its own beside the
 		// enclosing one, named after both: RecordWindow, RecordWindow in Go
@@ -650,23 +650,23 @@ func (g *generator) fieldTypeOf(t types.Type, file *protoFile, parent *descripto
 		name := g.protoNames[parent] + strcase.UpperCamelCase(key)
 		if holder, ok := file.claim(name, "the "+key+" field of "+g.protoNames[parent]); !ok {
 			g.project.Report(s, "the unnamed struct of the field becomes the message %s, which clashes with %s; name the field or the type differently", name, holder)
-			return fieldType{}, false
+			return FieldType{}, false
 		}
 		conv := g.messageOfStruct(name, name+" is the message of the "+key+" field of "+g.protoNames[parent]+".", u, file, s)
-		return fieldType{kind: descriptorpb.FieldDescriptorProto_TYPE_MESSAGE, typeName: "." + file.pkg + "." + name, nested: conv}, true
+		return FieldType{Kind: descriptorpb.FieldDescriptorProto_TYPE_MESSAGE, TypeName: "." + file.Package + "." + name, Nested: conv}, true
 	default:
 		g.project.Report(s, "%s values have no protobuf type", t)
-		return fieldType{}, false
+		return FieldType{}, false
 	}
 }
 
 // namedFieldType maps a named type (see fieldTypeOf).
-func (g *generator) namedFieldType(n *types.Named, file *protoFile, parent *descriptorpb.DescriptorProto, key string, s jsonshape.Site) (fieldType, bool) {
+func (g *Schema) namedFieldType(n *types.Named, file *ProtoFile, parent *descriptorpb.DescriptorProto, key string, s jsonshape.Site) (FieldType, bool) {
 	obj := n.Obj()
 	if obj.Pkg() != nil {
 		if wellKnown, ok := timeTypes[obj.Pkg().Path()+"."+obj.Name()]; ok {
 			file.importOf(wellKnown.proto)
-			return fieldType{kind: descriptorpb.FieldDescriptorProto_TYPE_MESSAGE, typeName: wellKnown.typeName}, true
+			return FieldType{Kind: descriptorpb.FieldDescriptorProto_TYPE_MESSAGE, TypeName: wellKnown.typeName}, true
 		}
 	}
 	if kind, ok := jsonshape.BuiltinOf(n); ok {
@@ -675,21 +675,21 @@ func (g *generator) namedFieldType(n *types.Named, file *protoFile, parent *desc
 	if g.project.Declares(obj) {
 		if n.TypeArgs().Len() > 0 {
 			g.project.Report(s, "the generic type %s of the project is not supported; declare a non-generic type for each instantiation the API uses", n)
-			return fieldType{}, false
+			return FieldType{}, false
 		}
 		if method := g.project.MarshalMethod(n); method != "" {
 			g.project.Report(s, "type %s declares %s, so its JSON shape is decided by code the generator cannot read; use a type without the method", n, method)
-			return fieldType{}, false
+			return FieldType{}, false
 		}
 		if e := g.project.Enum(obj); e != nil {
 			kind, _ := scalarKind(n.Underlying().(*types.Basic)) //nolint:errcheck // An enum has a string or integer underlying type.
-			return fieldType{kind: kind, enum: e}, true
+			return FieldType{Kind: kind, enum: e}, true
 		}
 		switch n.Underlying().(type) {
 		case *types.Struct:
 			m := g.messageOf(obj)
-			file.importOf(m.file.registered)
-			return fieldType{kind: descriptorpb.FieldDescriptorProto_TYPE_MESSAGE, typeName: m.fullName()}, true
+			file.importOf(m.File.Registered)
+			return FieldType{Kind: descriptorpb.FieldDescriptorProto_TYPE_MESSAGE, TypeName: m.fullName()}, true
 		default:
 			// A named slice, map or basic type encodes as its underlying
 			// type, which is what the field holds.
@@ -698,12 +698,12 @@ func (g *generator) namedFieldType(n *types.Named, file *protoFile, parent *desc
 	}
 	if method := g.project.MarshalMethod(n); method != "" {
 		g.project.Report(s, "type %s declares %s, so its JSON shape is decided by code the generator cannot read; use a type without the method", n, method)
-		return fieldType{}, false
+		return FieldType{}, false
 	}
 	switch n.Underlying().(type) {
 	case *types.Struct:
 		g.project.Report(s, "type %s is declared outside the project, so its fields cannot carry pb tags; use a project type", n)
-		return fieldType{}, false
+		return FieldType{}, false
 	default:
 		return g.fieldTypeOf(n.Underlying(), file, parent, key, s)
 	}
@@ -715,45 +715,45 @@ func (g *generator) namedFieldType(n *types.Named, file *protoFile, parent *desc
 // is, every digit of it, where a google.protobuf.Value would hold its
 // numbers as doubles), a JSON object to google.protobuf.Struct, and a
 // wrapper to the type it wraps.
-func (g *generator) builtinFieldType(kind jsonshape.Builtin, n *types.Named, file *protoFile, parent *descriptorpb.DescriptorProto, key string, s jsonshape.Site) (fieldType, bool) {
+func (g *Schema) builtinFieldType(kind jsonshape.Builtin, n *types.Named, file *ProtoFile, parent *descriptorpb.DescriptorProto, key string, s jsonshape.Site) (FieldType, bool) {
 	switch kind {
 	case jsonshape.BuiltinNumber:
-		return fieldType{kind: descriptorpb.FieldDescriptorProto_TYPE_STRING}, true
+		return FieldType{Kind: descriptorpb.FieldDescriptorProto_TYPE_STRING}, true
 	case jsonshape.BuiltinAny:
-		return fieldType{kind: descriptorpb.FieldDescriptorProto_TYPE_BYTES}, true
+		return FieldType{Kind: descriptorpb.FieldDescriptorProto_TYPE_BYTES}, true
 	case jsonshape.BuiltinObject:
 		file.importOf(structProto)
-		return fieldType{kind: descriptorpb.FieldDescriptorProto_TYPE_MESSAGE, typeName: wellKnownStruct}, true
+		return FieldType{Kind: descriptorpb.FieldDescriptorProto_TYPE_MESSAGE, TypeName: WellKnownStruct}, true
 	case jsonshape.BuiltinWrapper:
 		return g.fieldTypeOf(n.TypeArgs().At(0), file, parent, key, s)
 	default:
 		g.project.Report(s, "%s values have no protobuf type", n)
-		return fieldType{}, false
+		return FieldType{}, false
 	}
 }
 
 // repeatedOf maps a slice or array of elem: repeated of the element's type,
 // which must be a scalar or a message, since protobuf has no repeated of
 // repeated or of map.
-func (g *generator) repeatedOf(elem types.Type, file *protoFile, parent *descriptorpb.DescriptorProto, key string, s jsonshape.Site) (fieldType, bool) {
+func (g *Schema) repeatedOf(elem types.Type, file *ProtoFile, parent *descriptorpb.DescriptorProto, key string, s jsonshape.Site) (FieldType, bool) {
 	// A nil element has no spelling in a repeated field: a pointer to a
 	// message arrives as an empty message, which the value's zero value
 	// stands for, where a pointer to a scalar would arrive as the scalar's
 	// zero value, nothing telling it from a value that was never set.
 	if pointsToScalar(elem) {
 		g.project.Report(s, "a slice of pointers to a scalar has no protobuf type, an element is never unset; use a slice of values")
-		return fieldType{}, false
+		return FieldType{}, false
 	}
 	ft, ok := g.fieldTypeOf(elem, file, parent, key, s)
 	if !ok {
-		return fieldType{}, false
+		return FieldType{}, false
 	}
-	if ft.repeated || ft.mapEntry != nil {
+	if ft.Repeated || ft.MapEntry != nil {
 		g.project.Report(s, "a slice of slices or maps has no protobuf type; wrap the element in a struct type")
-		return fieldType{}, false
+		return FieldType{}, false
 	}
-	ft.repeated = true
-	ft.optional = false
+	ft.Repeated = true
+	ft.Optional = false
 	return ft, true
 }
 
@@ -772,50 +772,50 @@ func pointsToScalar(t types.Type) bool {
 // or integer type, without marshal methods of its own, and whose value is a
 // scalar or a message, a pointer to a message included, whose nil values
 // arrive as empty messages.
-func (g *generator) mapOf(m *types.Map, file *protoFile, parent *descriptorpb.DescriptorProto, key string, s jsonshape.Site) (fieldType, bool) {
+func (g *Schema) mapOf(m *types.Map, file *ProtoFile, parent *descriptorpb.DescriptorProto, key string, s jsonshape.Site) (FieldType, bool) {
 	keyBasic, keyOK := types.Unalias(m.Key()).Underlying().(*types.Basic)
 	if keyOK && keyBasic.Info()&types.IsString != 0 {
 		if elem, ok := types.Unalias(m.Elem()).Underlying().(*types.Interface); ok && elem.Empty() {
 			file.importOf(structProto)
-			return fieldType{kind: descriptorpb.FieldDescriptorProto_TYPE_MESSAGE, typeName: wellKnownStruct}, true
+			return FieldType{Kind: descriptorpb.FieldDescriptorProto_TYPE_MESSAGE, TypeName: WellKnownStruct}, true
 		}
 	}
 	if !keyOK || keyBasic.Info()&(types.IsString|types.IsInteger) == 0 {
 		g.project.Report(s, "map key type %s has no protobuf type; use a string or integer key type", m.Key())
-		return fieldType{}, false
+		return FieldType{}, false
 	}
 	// A key writing its own text keys the JSON object by that text, where
 	// the message keys by the value: the same check the TypeScript
 	// generator makes.
 	if g.project.CheckMapKey(m.Key(), s) {
-		return fieldType{}, false
+		return FieldType{}, false
 	}
 	keyKind, _ := scalarKind(keyBasic)
 	if pointsToScalar(m.Elem()) {
 		g.project.Report(s, "a map of pointers to a scalar has no protobuf type, a value is never unset; use a map of values")
-		return fieldType{}, false
+		return FieldType{}, false
 	}
 	value, ok := g.fieldTypeOf(m.Elem(), file, parent, key, s)
 	if !ok {
-		return fieldType{}, false
+		return FieldType{}, false
 	}
-	if value.repeated || value.mapEntry != nil {
+	if value.Repeated || value.MapEntry != nil {
 		g.project.Report(s, "a map of slices or maps has no protobuf type; wrap the value in a struct type")
-		return fieldType{}, false
+		return FieldType{}, false
 	}
 	entry := &descriptorpb.DescriptorProto{
 		Name:    new(mapEntryName(key)),
 		Options: &descriptorpb.MessageOptions{MapEntry: new(true)},
 		Field: []*descriptorpb.FieldDescriptorProto{
 			{Name: new("key"), Number: new(int32(1)), Label: descriptorpb.FieldDescriptorProto_LABEL_OPTIONAL.Enum(), Type: keyKind.Enum()},
-			{Name: new("value"), Number: new(int32(2)), Label: descriptorpb.FieldDescriptorProto_LABEL_OPTIONAL.Enum(), Type: value.kind.Enum()},
+			{Name: new("value"), Number: new(int32(2)), Label: descriptorpb.FieldDescriptorProto_LABEL_OPTIONAL.Enum(), Type: value.Kind.Enum()},
 		},
 	}
-	if value.typeName != "" {
-		entry.Field[1].TypeName = new(value.typeName)
+	if value.TypeName != "" {
+		entry.Field[1].TypeName = new(value.TypeName)
 	}
 	parent.NestedType = append(parent.NestedType, entry)
-	return fieldType{kind: descriptorpb.FieldDescriptorProto_TYPE_MESSAGE, typeName: entry.GetName(), repeated: true, mapEntry: entry, mapKey: keyKind, mapValue: &value, nested: value.nested}, true
+	return FieldType{Kind: descriptorpb.FieldDescriptorProto_TYPE_MESSAGE, TypeName: entry.GetName(), Repeated: true, MapEntry: entry, MapKey: keyKind, MapValue: &value, Nested: value.Nested}, true
 }
 
 // mapEntryName returns the name protoc gives the entry message of the map

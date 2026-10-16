@@ -17,6 +17,7 @@ import (
 
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/internal/gggen/jsonshape"
+	"github.com/hydroan/gst/internal/pbschema"
 	"golang.org/x/mod/modfile"
 	"golang.org/x/tools/go/packages"
 )
@@ -85,7 +86,7 @@ func TypeCheck(dir, modulePath string, files []File) error {
 		}
 	}
 	if len(diags) > 0 {
-		return &DiagnosticsError{Diagnostics: sortedDiagnostics(diags)}
+		return &pbschema.DiagnosticsError{Diagnostics: sortedDiagnostics(diags)}
 	}
 	slices.Sort(external)
 	external = slices.Compact(external)
@@ -165,7 +166,7 @@ func TypeCheck(dir, modulePath string, files []File) error {
 		}
 	}
 	if len(diags) > 0 {
-		return &DiagnosticsError{Diagnostics: sortedDiagnostics(diags)}
+		return &pbschema.DiagnosticsError{Diagnostics: sortedDiagnostics(diags)}
 	}
 	return nil
 }

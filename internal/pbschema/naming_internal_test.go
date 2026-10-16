@@ -1,4 +1,4 @@
-package pb
+package pbschema
 
 import (
 	"testing"
@@ -35,17 +35,17 @@ func TestRequestParamsCarryEveryParameterOfTheRegisteredRoute(t *testing.T) {
 	item := &modelinfo.Model{ModelName: "Item", Design: &dsl.Design{Endpoint: "records/:record/items"}}
 	document := &modelinfo.Model{ModelName: "Document", Design: &dsl.Design{Endpoint: "archive/documents", Param: ":document"}}
 
-	require.Equal(t, []requestParam{
-		{param: "record", name: "record", comment: "the :record parameter of /api/records/:record/items/:id"},
-		{param: "id", name: "id", comment: "the id of the Item"},
+	require.Equal(t, []RequestParam{
+		{Param: "record", Name: "record", comment: "the :record parameter of /api/records/:record/items/:id"},
+		{Param: "id", Name: "id", comment: "the id of the Item"},
 	}, requestParams(item, "records/:record/items", &dsl.Action{Phase: consts.Get}))
-	require.Equal(t, []requestParam{{param: "record", name: "record", comment: "the :record parameter of /api/records/:record/items"}},
+	require.Equal(t, []RequestParam{{Param: "record", Name: "record", comment: "the :record parameter of /api/records/:record/items"}},
 		requestParams(item, "records/:record/items", &dsl.Action{Phase: consts.Create}))
-	require.Equal(t, []requestParam{{param: "id", name: "id", comment: "the id of the Item"}},
+	require.Equal(t, []RequestParam{{Param: "id", Name: "id", comment: "the id of the Item"}},
 		requestParams(item, "items/:id/seal", &dsl.Action{Phase: consts.Create, ServiceName: "seal"}))
-	require.Equal(t, []requestParam{{param: "document", name: "id", comment: "the id of the Document to delete"}},
+	require.Equal(t, []RequestParam{{Param: "document", Name: "id", comment: "the id of the Document to delete"}},
 		requestParams(document, "archive/documents", &dsl.Action{Phase: consts.Delete}))
-	require.Equal(t, []requestParam{{param: "box-id", name: "box_id", comment: "the :box-id parameter of /api/archive/boxes/:box-id/documents"}},
+	require.Equal(t, []RequestParam{{Param: "box-id", Name: "box_id", comment: "the :box-id parameter of /api/archive/boxes/:box-id/documents"}},
 		requestParams(document, "archive/boxes/:box-id/documents", &dsl.Action{Phase: consts.List}))
 	require.Empty(t, requestParams(document, "archive/documents", &dsl.Action{Phase: consts.DeleteMany}))
 }
@@ -65,15 +65,15 @@ func TestMessageNameIsTheRPCNameAndTheKind(t *testing.T) {
 // TestModelFieldNameIsTheModelInSnakeCase pins the examples of the
 // modelFieldName doc comment.
 func TestModelFieldNameIsTheModelInSnakeCase(t *testing.T) {
-	require.Equal(t, "record", modelFieldName(&modelinfo.Model{ModelName: "Record"}))
-	require.Equal(t, "item_link", modelFieldName(&modelinfo.Model{ModelName: "ItemLink"}))
+	require.Equal(t, "record", ModelFieldName(&modelinfo.Model{ModelName: "Record"}))
+	require.Equal(t, "item_link", ModelFieldName(&modelinfo.Model{ModelName: "ItemLink"}))
 }
 
 // TestCommentTextRecordsCommentsLikeProtoc pins the examples of the
 // commentText doc comment.
 func TestCommentTextRecordsCommentsLikeProtoc(t *testing.T) {
-	require.Equal(t, " Title is the display title.\n", commentText("Title is the display title."))
-	require.Equal(t, " Title is the display title.\n\n Two lines.\n", commentText("Title is the display title.\n\nTwo lines.\n"))
+	require.Equal(t, " Title is the display title.\n", CommentText("Title is the display title."))
+	require.Equal(t, " Title is the display title.\n\n Two lines.\n", CommentText("Title is the display title.\n\nTwo lines.\n"))
 }
 
 // TestMapEntryNameFollowsProtoc pins the examples of the mapEntryName doc

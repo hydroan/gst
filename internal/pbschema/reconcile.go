@@ -1,4 +1,4 @@
-package pb
+package pbschema
 
 import (
 	"maps"
@@ -30,8 +30,8 @@ import (
 // the committed file declared having to be declared still. A committed file
 // that cannot be parsed is reported, so that it is never overwritten
 // blindly; a file without a committed counterpart is new and free.
-func (g *generator) reconcile() {
-	for name, f := range g.files {
+func (g *Schema) reconcile() {
+	for name, f := range g.Files {
 		s := jsonshape.Site{Subject: ggconst.DirPB + "/" + name}
 		committed := g.committed(name)
 		switch {
@@ -41,11 +41,11 @@ func (g *generator) reconcile() {
 			g.project.Report(s, "the committed file cannot be read: %v; fix it or delete it", committed.err)
 			continue
 		}
-		for _, m := range f.messages {
+		for _, m := range f.Messages {
 			g.holdMessage(s, m, "", committed.messages)
 		}
 		declared := make(map[string]*descriptorpb.DescriptorProto, len(committed.messages))
-		indexMessages(f.messages, "", declared)
+		indexMessages(f.Messages, "", declared)
 		for _, name := range slices.Sorted(maps.Keys(committed.messages)) {
 			// The entry message of a map field goes with the field, whose
 			// number holdMessage reserves: no client was built against it.
@@ -70,7 +70,7 @@ type committedFile struct {
 
 // committed returns the committed counterpart of the file name under pb/,
 // read once.
-func (g *generator) committed(name string) committedFile {
+func (g *Schema) committed(name string) committedFile {
 	if c, ok := g.committedFiles[name]; ok {
 		return c
 	}
@@ -95,8 +95,8 @@ func (g *generator) committed(name string) committedFile {
 // committedMessage returns the message protoName of the committed
 // counterpart of file, nil when the project holds no such file, or no such
 // message, or the file cannot be read, which reconcile reports.
-func (g *generator) committedMessage(file *protoFile, protoName string) *descriptorpb.DescriptorProto {
-	return g.committed(file.name).messages[protoName]
+func (g *Schema) committedMessage(file *ProtoFile, protoName string) *descriptorpb.DescriptorProto {
+	return g.committed(file.Name).messages[protoName]
 }
 
 // readCommitted parses the .proto file at path on its own, imports
@@ -154,7 +154,7 @@ func indexMessages(messages []*descriptorpb.DescriptorProto, parent string, inde
 //	reserved 12;
 //
 //	reserved "tags";
-func (g *generator) holdMessage(s jsonshape.Site, msg *descriptorpb.DescriptorProto, parent string, old map[string]*descriptorpb.DescriptorProto) {
+func (g *Schema) holdMessage(s jsonshape.Site, msg *descriptorpb.DescriptorProto, parent string, old map[string]*descriptorpb.DescriptorProto) {
 	name := msg.GetName()
 	if parent != "" {
 		name = parent + "." + name
@@ -223,9 +223,9 @@ func (g *generator) holdMessage(s jsonshape.Site, msg *descriptorpb.DescriptorPr
 // reported with the edit of the committed file that accepts the break. A committed
 // NoteService whose GetNote took GetNoteRequest and answered GetNoteResponse
 // as a unary rpc holds the file to exactly that.
-func (g *generator) holdServices(s jsonshape.Site, file *protoFile, old map[string]*descriptorpb.ServiceDescriptorProto) {
-	services := make(map[string]*descriptorpb.ServiceDescriptorProto, len(file.services))
-	for _, svc := range file.services {
+func (g *Schema) holdServices(s jsonshape.Site, file *ProtoFile, old map[string]*descriptorpb.ServiceDescriptorProto) {
+	services := make(map[string]*descriptorpb.ServiceDescriptorProto, len(file.Services))
+	for _, svc := range file.Services {
 		services[svc.GetName()] = svc
 	}
 	for _, name := range slices.Sorted(maps.Keys(old)) {

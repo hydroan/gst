@@ -260,7 +260,8 @@ call --> client : OK，或映射后的 status；取消答 Canceled，停机答 U
 |---|---|---|
 | `dsl` → `internal/dsl` | 共用 | 关键字、解析、校验；`HTTPOnlyAction`、`GRPCOnlyAction` 是「哪种传输承载」的单点 |
 | `internal/modelinfo` | 共用 | 模型元信息：路由、参数、`RPCName`、`PBPackage`，pb 生成与骨架共用 |
-| `internal/gggen` | 共用 | 所有生成器；子包 `pb` 出 .proto、适配层与注册文件并驱动插件 |
+| `internal/pbschema` | 共用 | 从模型推导 protobuf 定义并与 pb/ 下已提交的文件对账，认不出的形状与破坏线上契约的改动在这里成为诊断；gen 与 check 各自只依赖它 |
+| `internal/gggen` | 共用 | 所有生成器；子包 `pb` 把 pbschema 推导出的定义打印成 .proto、出适配层与注册文件并驱动插件 |
 | `internal/ggcheck`、`ggprune`、`ggmodule` | 共用 | 业务项目的静态检查、过期产物清理、模块复制（中间件与拦截器一起管） |
 | `internal/gghelper` | 共用 | gg 的运行帮手；`PinnedCommand` 把固定版本的 protoc 插件与 golangci-lint 编到用户缓存目录再运行 |
 | `router` → `internal/router` | HTTP | gin 引擎、路由注册、认证组、Run / Stop |

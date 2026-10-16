@@ -10,6 +10,7 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/internal/ggconst"
 	"github.com/hydroan/gst/internal/goast"
+	"github.com/hydroan/gst/internal/pbschema"
 )
 
 // This file builds the pb.gen.go of every package under pb/, the files
@@ -91,19 +92,19 @@ var httpMethodConsts = map[string]string{
 func (g *generator) registrationFiles() ([]File, error) {
 	// The definitions of each directory, in the order of their names, so
 	// that the registrations of a package follow its files.
-	byDir := make(map[string][]*protoFile)
-	for _, name := range slices.Sorted(maps.Keys(g.files)) {
-		f := g.files[name]
-		byDir[f.dir()] = append(byDir[f.dir()], f)
+	byDir := make(map[string][]*pbschema.ProtoFile)
+	for _, name := range slices.Sorted(maps.Keys(g.Files)) {
+		f := g.Files[name]
+		byDir[f.Dir()] = append(byDir[f.Dir()], f)
 	}
 	dirs := slices.Sorted(maps.Keys(byDir))
 	var files []File
 	for _, dir := range dirs {
-		out := newGoFile(byDir[dir][0].goPackageName())
+		out := newGoFile(byDir[dir][0].GoPackageName())
 		if dir == "." {
 			for _, below := range dirs {
 				if below != "." {
-					out.imports.blankImport(byDir[below][0].goImportPath())
+					out.imports.blankImport(byDir[below][0].GoImportPath())
 				}
 			}
 		}
@@ -119,7 +120,7 @@ func (g *generator) registrationFiles() ([]File, error) {
 		// same, so it exists to import the packages below it.
 		out := newGoFile(ggconst.DirPB)
 		for _, dir := range dirs {
-			out.imports.blankImport(byDir[dir][0].goImportPath())
+			out.imports.blankImport(byDir[dir][0].GoImportPath())
 		}
 		source, err := out.source()
 		if err != nil {
@@ -133,30 +134,30 @@ func (g *generator) registrationFiles() ([]File, error) {
 // registrations adds to out, a file of the package the definitions of files
 // belong to, the init function registering their services, one
 // grpc.Register call per service (see registrationFiles).
-func (g *generator) registrations(out *goFile, files []*protoFile) {
+func (g *generator) registrations(out *goFile, files []*pbschema.ProtoFile) {
 	var body []ast.Stmt
 	var calls []*ast.CallExpr
 	for _, f := range files {
 		var services []string
-		rpcs := make(map[string][]*rpc)
-		for _, r := range f.rpcs {
-			if _, seen := rpcs[r.service]; !seen {
-				services = append(services, r.service)
+		rpcs := make(map[string][]*pbschema.RPC)
+		for _, r := range f.RPCs {
+			if _, seen := rpcs[r.Service]; !seen {
+				services = append(services, r.Service)
 			}
-			rpcs[r.service] = append(rpcs[r.service], r)
+			rpcs[r.Service] = append(rpcs[r.Service], r)
 		}
 		for _, service := range services {
 			args := []ast.Expr{ident("Register" + service + "Server"), compositeLit(ident(serviceTypeName(service)))}
 			for _, r := range rpcs[service] {
-				elts := []ast.Expr{keyValue("Name", ident(service+"_"+r.name+"_FullMethodName"))}
+				elts := []ast.Expr{keyValue("Name", ident(service+"_"+r.Name+"_FullMethodName"))}
 				// A streaming rpc, served over gRPC alone, is described by
 				// the stream word in place of an HTTP method.
 				method := ast.Expr(sel(out.imports.fixedRef(ggconst.ImportPathGRPC), "MethodStream"))
-				if !r.streaming() {
-					method = sel(out.imports.fixedRef(importPathHTTP), httpMethodConsts[r.action.Phase.HTTPMethod()])
+				if !r.Streaming() {
+					method = sel(out.imports.fixedRef(importPathHTTP), httpMethodConsts[r.Action.Phase.HTTPMethod()])
 				}
-				elts = append(elts, keyValue("HTTPMethod", method), keyValue("Route", strLit(r.registered)))
-				if r.action.Public {
+				elts = append(elts, keyValue("HTTPMethod", method), keyValue("Route", strLit(r.Registered)))
+				if r.Action.Public {
 					elts = append(elts, keyValue("Public", ident("true")))
 				}
 				args = append(args, compositeLit(sel(out.imports.fixedRef(ggconst.ImportPathGRPC), "Method"), elts...))

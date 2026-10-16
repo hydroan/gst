@@ -52,7 +52,7 @@ func Compile(modulePath string, protos []File) ([]File, error) {
 	}
 	// The definitions are compiled under the paths they are registered
 	// under at run time, the application's name followed by their path
-	// under pb/, tmpapp/sample.proto (see protoFile.registered): the path
+	// under pb/, tmpapp/sample.proto (see pbschema.ProtoFile.Registered): the path
 	// they import one another by, and the one the compiler and the plugins
 	// see; the plugins' outputs are named the same way, and come back under
 	// pb/.

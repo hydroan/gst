@@ -5,35 +5,20 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/hydroan/gst/internal/pbschema"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/types/descriptorpb"
 )
 
-// TestGoCamelCaseNamesLikeTheProtobufPlugin pins the examples of the
-// goCamelCase doc comment.
-func TestGoCamelCaseNamesLikeTheProtobufPlugin(t *testing.T) {
-	for name, want := range map[string]string{
-		"sort_by":       "SortBy",
-		"box_id":        "BoxId",
-		"x_id":          "XId",
-		"foo_2bar":      "Foo_2Bar",
-		"_summary":      "XSummary",
-		"Record":        "Record",
-		"Record.Window": "Record_Window",
-	} {
-		require.Equal(t, want, goCamelCase(name), name)
-	}
-}
-
-// TestGoFieldNamesMatchWhatTheProtobufPluginWrites holds goFieldNames and
-// goCamelCase to the plugin itself: a message carrying every naming case the
-// doc comments describe is compiled with Compile, and the struct the plugin
-// writes declares exactly the field names the two derive. The field names
-// are read off the struct's own lines, one field per line, so a rule
-// drifting from the plugin's fails here rather than in a project that no
-// longer builds.
+// TestGoFieldNamesMatchWhatTheProtobufPluginWrites holds pbschema.GoFieldNames
+// and the camel casing under it to the plugin itself: a message carrying
+// every naming case the doc comments describe is compiled with Compile, and
+// the struct the plugin writes declares exactly the field names the two
+// derive. The field names are read off the struct's own lines, one field per
+// line, so a rule drifting from the plugin's fails here rather than in a
+// project that no longer builds.
 func TestGoFieldNamesMatchWhatTheProtobufPluginWrites(t *testing.T) {
-	desc := newMessage(
+	desc := &descriptorpb.DescriptorProto{Name: new("Naming"), Field: []*descriptorpb.FieldDescriptorProto{
 		stringField("title", 1),
 		stringField("reset", 2),
 		stringField("get_title", 3),
@@ -43,8 +28,7 @@ func TestGoFieldNamesMatchWhatTheProtobufPluginWrites(t *testing.T) {
 		stringField("descriptor", 7),
 		stringField("summary", 8),
 		stringField("x_summary", 9),
-	)
-	desc.Name = new("Naming")
+	}}
 	desc.Field[7].Proto3Optional = new(true)
 	desc.Field[7].OneofIndex = new(int32(0))
 	desc.OneofDecl = []*descriptorpb.OneofDescriptorProto{{Name: new("_summary")}}
@@ -60,7 +44,7 @@ func TestGoFieldNamesMatchWhatTheProtobufPluginWrites(t *testing.T) {
 		"summary":    "Summary",
 		"x_summary":  "XSummary_",
 	}
-	require.Equal(t, want, goFieldNames(desc))
+	require.Equal(t, want, pbschema.GoFieldNames(desc))
 
 	compiled, err := Compile("tmpapp", []File{{Path: "pb/naming.proto", Content: `syntax = "proto3";
 

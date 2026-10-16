@@ -11,6 +11,7 @@ import (
 	"github.com/hydroan/gst/internal/ggconst"
 	"github.com/hydroan/gst/internal/goast"
 	"github.com/hydroan/gst/internal/modelinfo"
+	"github.com/hydroan/gst/internal/pbschema"
 	"github.com/stoewer/go-strcase"
 )
 
@@ -87,31 +88,31 @@ import (
 //		m.Total = p.GetTotal()
 //		return m, nil
 //	}
-func (g *generator) handlerFile(f *protoFile) (File, error) {
+func (g *generator) handlerFile(f *pbschema.ProtoFile) (File, error) {
 	w := g.newFileWriter(f)
 	var services []string
-	rpcs := make(map[string][]*rpc)
-	for _, r := range f.rpcs {
-		if _, seen := rpcs[r.service]; !seen {
-			services = append(services, r.service)
+	rpcs := make(map[string][]*pbschema.RPC)
+	for _, r := range f.RPCs {
+		if _, seen := rpcs[r.Service]; !seen {
+			services = append(services, r.Service)
 		}
-		rpcs[r.service] = append(rpcs[r.service], r)
+		rpcs[r.Service] = append(rpcs[r.Service], r)
 	}
 	for _, service := range services {
-		w.serviceType(service, rpcs[service][0].model)
+		w.serviceType(service, rpcs[service][0].Model)
 		w.actionCalls(service, rpcs[service])
 		for _, r := range rpcs[service] {
-			if r.streaming() {
+			if r.Streaming() {
 				w.streamHandler(r)
 			} else {
 				w.handler(r)
 			}
 		}
 	}
-	for _, msg := range f.typed {
+	for _, msg := range f.Typed {
 		w.conversionFuncs(msg)
 	}
-	name := strings.TrimSuffix(f.name, ".proto") + ggconst.SuffixGenGo
+	name := strings.TrimSuffix(f.Name, ".proto") + ggconst.SuffixGenGo
 	source, err := w.out.source()
 	if err != nil {
 		return File{}, errors.Wrapf(err, "print %s", name)
@@ -170,25 +171,25 @@ func (w *fileWriter) serviceType(service string, model *modelinfo.Model) {
 //		sealItem      = grpc.CreateCall[*record.Item]("/api/items/:id/seal")
 //		mergeItem     = grpc.ServiceCall[*record.Item, *record.MergeReq, *record.MergedItemRsp](consts.Create, "/api/items/merge")
 //	)
-func (w *fileWriter) actionCalls(service string, rpcs []*rpc) {
-	model := rpcs[0].model
+func (w *fileWriter) actionCalls(service string, rpcs []*pbschema.RPC) {
+	model := rpcs[0].Model
 	specs := make([]ast.Spec, 0, len(rpcs))
 	for _, r := range rpcs {
 		modelType := star(w.modelPkgType(model, model.ModelName))
 		var value ast.Expr
 		switch {
-		case r.standard:
-			value = call(index(w.grpc(r.action.Phase.Name()+"Call"), modelType), strLit(r.registered))
-		case r.streaming():
+		case r.Standard:
+			value = call(index(w.grpc(r.Action.Phase.Name()+"Call"), modelType), strLit(r.Registered))
+		case r.Streaming():
 			value = call(
-				&ast.IndexListExpr{X: w.grpc(streamKind(r.action) + "StreamCall"), Indices: []ast.Expr{modelType, w.actionType(model, r.action.Payload), w.actionType(model, r.action.Result)}},
-				strLit(r.registered),
+				&ast.IndexListExpr{X: w.grpc(streamKind(r.Action) + "StreamCall"), Indices: []ast.Expr{modelType, w.actionType(model, r.Action.Payload), w.actionType(model, r.Action.Result)}},
+				strLit(r.Registered),
 			)
 		default:
 			value = call(
-				&ast.IndexListExpr{X: w.grpc("ServiceCall"), Indices: []ast.Expr{modelType, w.actionType(model, r.action.Payload), w.actionType(model, r.action.Result)}},
-				sel(w.out.imports.fixedRef(ggconst.ImportPathConsts), r.action.Phase.Name()),
-				strLit(r.registered),
+				&ast.IndexListExpr{X: w.grpc("ServiceCall"), Indices: []ast.Expr{modelType, w.actionType(model, r.Action.Payload), w.actionType(model, r.Action.Result)}},
+				sel(w.out.imports.fixedRef(ggconst.ImportPathConsts), r.Action.Phase.Name()),
+				strLit(r.Registered),
 			)
 		}
 		specs = append(specs, &ast.ValueSpec{Names: []*ast.Ident{ident(callName(r))}, Values: []ast.Expr{value}})
@@ -199,7 +200,7 @@ func (w *fileWriter) actionCalls(service string, rpcs []*rpc) {
 
 // callName names the variable holding the call of the rpc r: createRecord
 // for CreateRecord.
-func callName(r *rpc) string { return lowerFirst(r.name) }
+func callName(r *pbschema.RPC) string { return lowerFirst(r.Name) }
 
 // firstMessage returns the statements a client or bidirectional stream
 // handler on a route with parameters opens with: the first message read
@@ -360,50 +361,50 @@ func (w *fileWriter) actionType(model *modelinfo.Model, typeName string) ast.Exp
 //		}
 //		return &MergeItemResponse{Result: MergeRspToProto(result)}, nil
 //	}
-func (w *fileWriter) handler(r *rpc) {
+func (w *fileWriter) handler(r *pbschema.RPC) {
 	w.resetFuncTemps()
-	requestFields, responseFields := goFieldNames(r.request), goFieldNames(r.response)
+	requestFields, responseFields := pbschema.GoFieldNames(r.Request), pbschema.GoFieldNames(r.Response)
 	req := func(name string) ast.Expr { return call(sel(ident("req"), "Get"+requestFields[name])) }
 	callee := ident(callName(r))
 	failing := func() ast.Stmt { return ifNotNil(ident("err"), returns(ident("nil"), ident("err"))) }
 	respond := func(elts ...ast.Expr) ast.Stmt {
-		return returns(addr(compositeLit(ident(r.response.GetName()), elts...)), ident("nil"))
+		return returns(addr(compositeLit(ident(r.Response.GetName()), elts...)), ident("nil"))
 	}
 	run := func(args ...ast.Expr) ast.Expr { return call(callee, append([]ast.Expr{ident("ctx")}, args...)...) }
 	// params are the route parameters the message carries, keyed as the
 	// route names them; id is the one naming the record of an item action.
 	params := ast.Expr(ident("nil"))
 	var id ast.Expr
-	if len(r.params) > 0 {
+	if len(r.Params) > 0 {
 		lit := compositeLit(&ast.MapType{Key: ident("string"), Value: ident("string")})
-		for _, p := range r.params {
-			lit.Elts = append(lit.Elts, &ast.KeyValueExpr{Key: strLit(p.param), Value: req(p.name)})
-			if p.param == r.param {
-				id = req(p.name)
+		for _, p := range r.Params {
+			lit.Elts = append(lit.Elts, &ast.KeyValueExpr{Key: strLit(p.Param), Value: req(p.Name)})
+			if p.Param == r.Param {
+				id = req(p.Name)
 			}
 		}
 		params = lit
 	}
 	has := func(name string) bool { _, ok := requestFields[name]; return ok }
-	query, layout := w.query(r.action.Phase, req, has)
+	query, layout := w.query(r.Action.Phase, req, has)
 
 	var body []ast.Stmt
-	if r.standard {
-		x := modelFieldName(r.model)
+	if r.Standard {
+		x := pbschema.ModelFieldName(r.Model)
 		// decoded decodes the message expression into the variable name
 		// through the model's FromProto, the handler answering a refusal;
 		// decodedItem decodes the item at index i of a batch the same way,
 		// the refusal naming the item (see grpc.ItemError).
 		decoded := func(name string, message ast.Expr) []ast.Stmt {
-			return []ast.Stmt{define([]string{name, "err"}, call(w.conversionFunc(r.message, "FromProto"), message)), failing()}
+			return []ast.Stmt{define([]string{name, "err"}, call(w.conversionFunc(r.Message, "FromProto"), message)), failing()}
 		}
 		decodedItem := func(name string, message ast.Expr) []ast.Stmt {
 			return []ast.Stmt{
-				define([]string{name, "err"}, call(w.conversionFunc(r.message, "FromProto"), message)),
+				define([]string{name, "err"}, call(w.conversionFunc(r.Message, "FromProto"), message)),
 				ifNotNil(ident("err"), returns(ident("nil"), call(w.grpc("ItemError"), ident("i"), ident("err")))),
 			}
 		}
-		toProto := func(m ast.Expr) ast.Expr { return call(w.conversionFunc(r.message, "ToProto"), m) }
+		toProto := func(m ast.Expr) ast.Expr { return call(w.conversionFunc(r.Message, "ToProto"), m) }
 		// single runs the call answering one record and answers it.
 		single := func(args ...ast.Expr) []ast.Stmt {
 			return []ast.Stmt{define([]string{"m", "err"}, run(args...)), failing(), respond(keyValue(responseFields[x], toProto(ident("m"))))}
@@ -411,18 +412,18 @@ func (w *fileWriter) handler(r *rpc) {
 		// itemsOf encodes the records the variable from holds into items.
 		itemsOf := func(from string) []ast.Stmt {
 			return []ast.Stmt{
-				define([]string{"items"}, makeCall(&ast.ArrayType{Elt: star(w.messageType(r.message))}, lenCall(ident(from)))),
+				define([]string{"items"}, makeCall(&ast.ArrayType{Elt: star(w.messageType(r.Message))}, lenCall(ident(from)))),
 				rangeStmt("i", "m", ident(from), assign(index(ident("items"), ident("i")), toProto(ident("m")))),
 			}
 		}
 		// modelsOf decodes the items of the request into models.
 		modelsOf := func() []ast.Stmt {
 			return []ast.Stmt{
-				define([]string{"models"}, makeCall(&ast.ArrayType{Elt: star(w.modelPkgType(r.model, r.model.ModelName))}, lenCall(req("items")))),
+				define([]string{"models"}, makeCall(&ast.ArrayType{Elt: star(w.modelPkgType(r.Model, r.Model.ModelName))}, lenCall(req("items")))),
 				rangeStmt("i", "item", req("items"), append(decodedItem("in", ident("item")), assign(index(ident("models"), ident("i")), ident("in")))...),
 			}
 		}
-		switch r.action.Phase {
+		switch r.Action.Phase {
 		case consts.Create:
 			body = append(decoded("in", req(x)), single(params, ident("in"))...)
 		case consts.Get:
@@ -449,24 +450,24 @@ func (w *fileWriter) handler(r *rpc) {
 			// may number it ahead of a parameter the route took later, and
 			// the fields are printed in the order of their numbers.
 			var itemsType string
-			for _, f := range r.request.Field {
+			for _, f := range r.Request.Field {
 				if f.GetName() == "items" {
 					itemsType = f.GetTypeName()
 				}
 			}
-			itemFields := goFieldNames(w.file.messageNamed(strings.TrimPrefix(itemsType, "."+w.file.pkg+".")))
+			itemFields := pbschema.GoFieldNames(w.file.MessageNamed(strings.TrimPrefix(itemsType, "."+w.file.Package+".")))
 			itemParams := ast.Expr(ident("nil"))
-			if len(r.params) > 0 {
+			if len(r.Params) > 0 {
 				body = append(body, define([]string{"params"}, params))
 				params = ident("params")
 				lit := compositeLit(&ast.MapType{Key: ident("string"), Value: ident("string")})
-				for _, p := range r.params {
-					lit.Elts = append(lit.Elts, &ast.KeyValueExpr{Key: strLit(p.param), Value: call(sel(ident("item"), "Get"+itemFields[p.name]))})
+				for _, p := range r.Params {
+					lit.Elts = append(lit.Elts, &ast.KeyValueExpr{Key: strLit(p.Param), Value: call(sel(ident("item"), "Get"+itemFields[p.Name]))})
 				}
 				itemParams = lit
 			}
 			body = append(body,
-				define([]string{"models"}, makeCall(&ast.ArrayType{Elt: star(w.modelPkgType(r.model, r.model.ModelName))}, lenCall(req("items")))),
+				define([]string{"models"}, makeCall(&ast.ArrayType{Elt: star(w.modelPkgType(r.Model, r.Model.ModelName))}, lenCall(req("items")))),
 				define([]string{"masks"}, makeCall(&ast.ArrayType{Elt: &ast.ArrayType{Elt: ident("string")}}, lenCall(req("items")))),
 				rangeStmt("i", "item", req("items"), append(decodedItem("in", call(sel(ident("item"), "Get"+itemFields[x]))),
 					define([]string{"m", "err"}, call(w.grpc("PatchItem"), ident("i"), params, itemParams, call(sel(ident("item"), "Get"+itemFields["id"])), ident("in"))),
@@ -487,34 +488,34 @@ func (w *fileWriter) handler(r *rpc) {
 		// and declared otherwise; result is new either way.
 		var payload ast.Expr
 		var checked ast.Stmt
-		if r.payload == nil {
+		if r.Payload == nil {
 			payload = newCall(sel(w.out.imports.fixedRef(ggconst.ImportPathModel), "Empty"))
 			checked = ifStmt(define([]string{"_", "err"}, run(params, query, payload)), notNil(ident("err")), returns(ident("nil"), ident("err")))
 		} else {
-			body = append(body, define([]string{"payload", "err"}, call(w.conversionFunc(r.payload, "FromProto"), req("payload"))), failing())
+			body = append(body, define([]string{"payload", "err"}, call(w.conversionFunc(r.Payload, "FromProto"), req("payload"))), failing())
 			payload = ident("payload")
 			checked = ifStmt(&ast.AssignStmt{Lhs: []ast.Expr{ident("_"), ident("err")}, Tok: token.ASSIGN, Rhs: []ast.Expr{run(params, query, payload)}}, notNil(ident("err")), returns(ident("nil"), ident("err")))
 		}
-		if r.result == nil {
+		if r.Result == nil {
 			body = append(body, checked, respond())
 		} else {
 			body = append(body,
 				define([]string{"result", "err"}, run(params, query, payload)),
 				failing(),
-				respond(keyValue(responseFields["result"], call(w.conversionFunc(r.result, "ToProto"), ident("result")))),
+				respond(keyValue(responseFields["result"], call(w.conversionFunc(r.Result, "ToProto"), ident("result")))),
 			)
 		}
 	}
 
-	w.out.add(r.name+" serves the "+r.action.Phase.Name()+" action of "+r.model.ModelName+" on "+consts.APIPath(r.registered)+".", &ast.FuncDecl{
-		Recv: &ast.FieldList{List: []*ast.Field{{Type: ident(serviceTypeName(r.service))}}},
-		Name: ident(r.name),
+	w.out.add(r.Name+" serves the "+r.Action.Phase.Name()+" action of "+r.Model.ModelName+" on "+consts.APIPath(r.Registered)+".", &ast.FuncDecl{
+		Recv: &ast.FieldList{List: []*ast.Field{{Type: ident(serviceTypeName(r.Service))}}},
+		Name: ident(r.Name),
 		Type: &ast.FuncType{
 			Params: &ast.FieldList{List: []*ast.Field{
 				{Names: []*ast.Ident{ident("ctx")}, Type: sel(w.out.imports.fixedRef(importPathContext), "Context")},
-				{Names: []*ast.Ident{ident("req")}, Type: star(ident(r.request.GetName()))},
+				{Names: []*ast.Ident{ident("req")}, Type: star(ident(r.Request.GetName()))},
 			}},
-			Results: &ast.FieldList{List: []*ast.Field{{Type: star(ident(r.response.GetName()))}, {Type: ident("error")}}},
+			Results: &ast.FieldList{List: []*ast.Field{{Type: star(ident(r.Response.GetName()))}, {Type: ident("error")}}},
 		},
 		Body: block(body...),
 	}, layout)
@@ -629,33 +630,33 @@ func (w *fileWriter) query(phase consts.Phase, req func(string) ast.Expr, has fu
 //			return srv.Send(&ChatFeedResponse{Result: FeedEventToProto(rsp)})
 //		})
 //	}
-func (w *fileWriter) streamHandler(r *rpc) {
+func (w *fileWriter) streamHandler(r *pbschema.RPC) {
 	w.resetFuncTemps()
-	requestFields, responseFields := goFieldNames(r.request), goFieldNames(r.response)
+	requestFields, responseFields := pbschema.GoFieldNames(r.Request), pbschema.GoFieldNames(r.Response)
 	srv, callee := ident("srv"), ident(callName(r))
 	get := func(m ast.Expr, name string) ast.Expr { return call(sel(m, "Get"+requestFields[name])) }
 	// paramsOf reads the route parameters off the request message m, nil
 	// for a route without any.
 	paramsOf := func(m ast.Expr) ast.Expr {
-		if len(r.params) == 0 {
+		if len(r.Params) == 0 {
 			return ident("nil")
 		}
 		lit := compositeLit(&ast.MapType{Key: ident("string"), Value: ident("string")})
-		for _, p := range r.params {
-			lit.Elts = append(lit.Elts, &ast.KeyValueExpr{Key: strLit(p.param), Value: get(m, p.name)})
+		for _, p := range r.Params {
+			lit.Elts = append(lit.Elts, &ast.KeyValueExpr{Key: strLit(p.Param), Value: get(m, p.Name)})
 		}
 		return lit
 	}
 	// payloadOf decodes the payload the request message m carries, a call
 	// that may refuse the message; empty is the request of an action
 	// declaring no payload.
-	payloadOf := func(m ast.Expr) ast.Expr { return call(w.conversionFunc(r.payload, "FromProto"), get(m, "payload")) }
+	payloadOf := func(m ast.Expr) ast.Expr { return call(w.conversionFunc(r.Payload, "FromProto"), get(m, "payload")) }
 	empty := func() ast.Expr { return newCall(sel(w.out.imports.fixedRef(ggconst.ImportPathModel), "Empty")) }
 	// returnPayload returns the payload of m from a receiving function: what
 	// the decoding answers, the payload or its refusal, or the empty request
 	// and no error.
 	returnPayload := func(m ast.Expr) ast.Stmt {
-		if r.payload == nil {
+		if r.Payload == nil {
 			return returns(empty(), ident("nil"))
 		}
 		return returns(payloadOf(m))
@@ -663,12 +664,12 @@ func (w *fileWriter) streamHandler(r *rpc) {
 	// responseOf encodes the response rsp into the response message, empty
 	// for an action declaring no Result.
 	responseOf := func(rsp ast.Expr) ast.Expr {
-		if r.result == nil {
-			return addr(compositeLit(ident(r.response.GetName())))
+		if r.Result == nil {
+			return addr(compositeLit(ident(r.Response.GetName())))
 		}
-		return addr(compositeLit(ident(r.response.GetName()), keyValue(responseFields["result"], call(w.conversionFunc(r.result, "ToProto"), rsp))))
+		return addr(compositeLit(ident(r.Response.GetName()), keyValue(responseFields["result"], call(w.conversionFunc(r.Result, "ToProto"), rsp))))
 	}
-	reqType, rspType := w.actionType(r.model, r.action.Payload), w.actionType(r.model, r.action.Result)
+	reqType, rspType := w.actionType(r.Model, r.Action.Payload), w.actionType(r.Model, r.Action.Result)
 	// send is the function sending one response on the stream.
 	send := funcLit([]*ast.Field{{Names: []*ast.Ident{ident("rsp")}, Type: rspType}}, []*ast.Field{{Type: ident("error")}},
 		returns(call(sel(srv, "Send"), responseOf(ident("rsp")))))
@@ -700,12 +701,12 @@ func (w *fileWriter) streamHandler(r *rpc) {
 	run := func(args ...ast.Expr) ast.Expr {
 		return call(callee, append([]ast.Expr{call(sel(srv, "Context"))}, args...)...)
 	}
-	params := []*ast.Field{{Names: []*ast.Ident{srv}, Type: ident(r.service + "_" + r.name + "Server")}}
+	params := []*ast.Field{{Names: []*ast.Ident{srv}, Type: ident(r.Service + "_" + r.Name + "Server")}}
 	var body []ast.Stmt
-	switch streamKind(r.action) {
+	switch streamKind(r.Action) {
 	case "Server":
-		params = append([]*ast.Field{{Names: []*ast.Ident{ident("req")}, Type: star(ident(r.request.GetName()))}}, params...)
-		if r.payload == nil {
+		params = append([]*ast.Field{{Names: []*ast.Ident{ident("req")}, Type: star(ident(r.Request.GetName()))}}, params...)
+		if r.Payload == nil {
 			body = []ast.Stmt{returns(run(paramsOf(ident("req")), empty(), send))}
 		} else {
 			body = []ast.Stmt{
@@ -715,14 +716,14 @@ func (w *fileWriter) streamHandler(r *rpc) {
 			}
 		}
 	case "Client":
-		withFirst := len(r.params) > 0
+		withFirst := len(r.Params) > 0
 		params := paramsOf(ident("first"))
 		if withFirst {
 			body, params = append(body, firstMessage(w, srv, params)...), ident("params")
 		}
 		// With no Result declared the call answers nothing to encode, and
 		// the response message is sent empty.
-		if r.result == nil {
+		if r.Result == nil {
 			body = append(body, ifStmt(define([]string{"_", "err"}, run(params, recv(withFirst))), notNil(ident("err")), returns(ident("err"))))
 		} else {
 			body = append(body,
@@ -732,16 +733,16 @@ func (w *fileWriter) streamHandler(r *rpc) {
 		}
 		body = append(body, returns(call(sel(srv, "SendAndClose"), responseOf(ident("result")))))
 	default:
-		withFirst := len(r.params) > 0
+		withFirst := len(r.Params) > 0
 		params := paramsOf(ident("first"))
 		if withFirst {
 			body, params = append(body, firstMessage(w, srv, params)...), ident("params")
 		}
 		body = append(body, returns(run(params, recv(withFirst), send)))
 	}
-	w.out.add(r.name+" serves the "+r.action.Phase.Name()+" action of "+r.model.ModelName+" declared on "+r.route+", served over gRPC alone.", &ast.FuncDecl{
-		Recv: &ast.FieldList{List: []*ast.Field{{Type: ident(serviceTypeName(r.service))}}},
-		Name: ident(r.name),
+	w.out.add(r.Name+" serves the "+r.Action.Phase.Name()+" action of "+r.Model.ModelName+" declared on "+r.Route+", served over gRPC alone.", &ast.FuncDecl{
+		Recv: &ast.FieldList{List: []*ast.Field{{Type: ident(serviceTypeName(r.Service))}}},
+		Name: ident(r.Name),
 		Type: &ast.FuncType{Params: &ast.FieldList{List: params}, Results: &ast.FieldList{List: []*ast.Field{{Type: ident("error")}}}},
 		Body: block(body...),
 	}, nil)

@@ -18,6 +18,7 @@ import (
 	"github.com/hydroan/gst/internal/ggconst"
 	"github.com/hydroan/gst/internal/gggen/pb"
 	"github.com/hydroan/gst/internal/gghelper"
+	"github.com/hydroan/gst/internal/pbschema"
 )
 
 // fillPBTags numbers the fields of the models served over gRPC that carry no
@@ -48,11 +49,11 @@ func fillPBTags(quiet bool, ignore gghelper.ProjectIgnore) ([]pb.File, error) {
 	if err != nil {
 		return nil, err
 	}
-	files, err := pb.Generate(pb.Config{Dir: ".", ModulePath: module, Models: scanned.models})
+	files, err := pb.Generate(pbschema.Config{Dir: ".", ModulePath: module, Models: scanned.models})
 	if err == nil {
 		return files, nil
 	}
-	var diagnostics *pb.DiagnosticsError
+	var diagnostics *pbschema.DiagnosticsError
 	if !errors.As(err, &diagnostics) {
 		return nil, nil
 	}
@@ -63,7 +64,7 @@ func fillPBTags(quiet bool, ignore gghelper.ProjectIgnore) ([]pb.File, error) {
 	if err != nil {
 		return nil, err
 	}
-	byPath := make(map[string][]pb.MissingTag)
+	byPath := make(map[string][]pbschema.MissingTag)
 	for _, tag := range tags {
 		byPath[tag.Path] = append(byPath[tag.Path], tag)
 	}
@@ -77,7 +78,7 @@ func fillPBTags(quiet bool, ignore gghelper.ProjectIgnore) ([]pb.File, error) {
 			}
 		}
 	}
-	return pb.Generate(pb.Config{Dir: ".", ModulePath: module, Models: scanned.models})
+	return pb.Generate(pbschema.Config{Dir: ".", ModulePath: module, Models: scanned.models})
 }
 
 // oneTagPerField returns tags with the ones numbering a field several
@@ -85,13 +86,13 @@ func fillPBTags(quiet bool, ignore gghelper.ProjectIgnore) ([]pb.File, error) {
 // gets the number when the messages agree on it, and the run fails when
 // they do not, since a number one message leaves free may be taken in
 // another, so the field has to be numbered by hand.
-func oneTagPerField(tags []pb.MissingTag) ([]pb.MissingTag, error) {
+func oneTagPerField(tags []pbschema.MissingTag) ([]pbschema.MissingTag, error) {
 	type field struct {
 		path string
 		line int
 		name string
 	}
-	folded := make([]pb.MissingTag, 0, len(tags))
+	folded := make([]pbschema.MissingTag, 0, len(tags))
 	seen := make(map[field]int)
 	for _, tag := range tags {
 		key := field{tag.Path, tag.Line, tag.Field}
@@ -142,7 +143,7 @@ func oneTagPerField(tags []pb.MissingTag) ([]pb.MissingTag, error) {
 //
 //		model.Base
 //	}
-func rewritePBTags(path string, tags []pb.MissingTag) error {
+func rewritePBTags(path string, tags []pbschema.MissingTag) error {
 	safePath, err := pathUnderRoot(path, ".")
 	if err != nil {
 		return err

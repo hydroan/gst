@@ -10,6 +10,7 @@ import (
 
 	"github.com/hydroan/gst/internal/ggconst"
 	"github.com/hydroan/gst/internal/gggen/jsonshape"
+	"github.com/hydroan/gst/internal/pbschema"
 	"google.golang.org/protobuf/types/descriptorpb"
 )
 
@@ -25,7 +26,7 @@ import (
 // the temporaries of the function being written.
 type fileWriter struct {
 	g     *generator
-	file  *protoFile
+	file  *pbschema.ProtoFile
 	out   *goFile
 	temps map[string]int // the temporaries declared so far in the scope, by base name (see temp)
 	// funcTemps counts the temporaries declared at the top level of the
@@ -36,8 +37,8 @@ type fileWriter struct {
 	fallible bool
 }
 
-func (g *generator) newFileWriter(f *protoFile) *fileWriter {
-	return &fileWriter{g: g, file: f, out: newGoFile(f.goPackageName()), temps: make(map[string]int), funcTemps: make(map[string]int)}
+func (g *generator) newFileWriter(f *pbschema.ProtoFile) *fileWriter {
+	return &fileWriter{g: g, file: f, out: newGoFile(f.GoPackageName()), temps: make(map[string]int), funcTemps: make(map[string]int)}
 }
 
 // temp returns the name of a temporary of the scope being written: base
@@ -169,27 +170,27 @@ func (w *fileWriter) instantiated(expr ast.Expr, args *types.TypeList) ast.Expr 
 
 // messageType spells the Go type of the message of msg as the file refers to
 // it: Item in the file's own package, pb_record.Item from another.
-func (w *fileWriter) messageType(msg *message) ast.Expr {
-	if msg.file.dir() == w.file.dir() {
-		return ident(msg.conv.goName)
+func (w *fileWriter) messageType(msg *pbschema.Message) ast.Expr {
+	if msg.File.Dir() == w.file.Dir() {
+		return ident(msg.Conversion.GoName)
 	}
-	return sel(w.out.imports.ref(msg.file.goImportPath(), msg.file.goPackageName()), msg.conv.goName)
+	return sel(w.out.imports.ref(msg.File.GoImportPath(), msg.File.GoPackageName()), msg.Conversion.GoName)
 }
 
 // conversionFunc refers to the conversion function of msg with the given
 // suffix, ItemToProto or pb_record.ItemToProto.
-func (w *fileWriter) conversionFunc(msg *message, suffix string) ast.Expr {
-	if msg.file.dir() == w.file.dir() {
-		return ident(msg.conv.goName + suffix)
+func (w *fileWriter) conversionFunc(msg *pbschema.Message, suffix string) ast.Expr {
+	if msg.File.Dir() == w.file.Dir() {
+		return ident(msg.Conversion.GoName + suffix)
 	}
-	return sel(w.out.imports.ref(msg.file.goImportPath(), msg.file.goPackageName()), msg.conv.goName+suffix)
+	return sel(w.out.imports.ref(msg.File.GoImportPath(), msg.File.GoPackageName()), msg.Conversion.GoName+suffix)
 }
 
 // namedMessage returns the message of t when t is a project type given one,
 // nil otherwise.
-func (w *fileWriter) namedMessage(t types.Type) *message {
+func (w *fileWriter) namedMessage(t types.Type) *pbschema.Message {
 	if n, ok := t.(*types.Named); ok {
-		return w.g.messages[n.Obj()]
+		return w.g.Messages[n.Obj()]
 	}
 	return nil
 }
@@ -197,10 +198,10 @@ func (w *fileWriter) namedMessage(t types.Type) *message {
 // wellKnownGoTypes names the Go types of the well-known message types by
 // their package path and type name.
 var wellKnownGoTypes = map[string]struct{ importPath, name string }{
-	wellKnownTimestamp: {importPathTimestampPB, "Timestamp"},
-	wellKnownDuration:  {importPathDurationPB, "Duration"},
-	wellKnownValue:     {importPathStructPB, "Value"},
-	wellKnownStruct:    {importPathStructPB, "Struct"},
+	pbschema.WellKnownTimestamp: {importPathTimestampPB, "Timestamp"},
+	pbschema.WellKnownDuration:  {importPathDurationPB, "Duration"},
+	pbschema.WellKnownValue:     {importPathStructPB, "Value"},
+	pbschema.WellKnownStruct:    {importPathStructPB, "Struct"},
 }
 
 // protoType spells the Go type of a message field of protobuf type ft, or
@@ -209,35 +210,35 @@ var wellKnownGoTypes = map[string]struct{ importPath, name string }{
 // map[string]int64, a message as a pointer to its Go type, *RecordWindow
 // for the message of the window field and *timestamppb.Timestamp for a
 // Timestamp.
-func (w *fileWriter) protoType(ft fieldType, elem bool) ast.Expr {
-	if ft.mapEntry != nil {
-		return &ast.MapType{Key: ident(scalarGoType(ft.mapKey)), Value: w.protoType(*ft.mapValue, false)}
+func (w *fileWriter) protoType(ft pbschema.FieldType, elem bool) ast.Expr {
+	if ft.MapEntry != nil {
+		return &ast.MapType{Key: ident(scalarGoType(ft.MapKey)), Value: w.protoType(*ft.MapValue, false)}
 	}
 	var base ast.Expr
-	switch ft.kind {
+	switch ft.Kind {
 	case descriptorpb.FieldDescriptorProto_TYPE_MESSAGE:
 		switch {
-		case ft.nested != nil:
-			base = star(ident(ft.nested.goName))
-		case wellKnownGoTypes[ft.typeName].name != "":
-			known := wellKnownGoTypes[ft.typeName]
+		case ft.Nested != nil:
+			base = star(ident(ft.Nested.GoName))
+		case wellKnownGoTypes[ft.TypeName].name != "":
+			known := wellKnownGoTypes[ft.TypeName]
 			base = star(sel(w.out.imports.fixedRef(known.importPath), known.name))
 		default:
-			msg := w.g.byFullName[ft.typeName]
+			msg := w.g.ByFullName[ft.TypeName]
 			if msg == nil {
-				panic("pb: no message for " + ft.typeName)
+				panic("pb: no message for " + ft.TypeName)
 			}
 			base = star(w.messageType(msg))
 		}
 	case descriptorpb.FieldDescriptorProto_TYPE_BYTES:
 		base = &ast.ArrayType{Elt: ident("byte")}
 	default:
-		base = ident(scalarGoType(ft.kind))
+		base = ident(scalarGoType(ft.Kind))
 	}
-	if ft.optional {
+	if ft.Optional {
 		return star(base)
 	}
-	if ft.repeated && !elem {
+	if ft.Repeated && !elem {
 		return &ast.ArrayType{Elt: base}
 	}
 	return base
@@ -247,27 +248,27 @@ func (w *fileWriter) protoType(ft fieldType, elem bool) ast.Expr {
 // of one element of it when elem is set, for the assignability checks
 // deciding whether a Go value is assigned as it is or converted; nil for a
 // message, which is never assignable to a Go struct.
-func protoGoType(ft fieldType, elem bool) types.Type {
-	if ft.mapEntry != nil {
-		value := protoGoType(*ft.mapValue, false)
+func protoGoType(ft pbschema.FieldType, elem bool) types.Type {
+	if ft.MapEntry != nil {
+		value := protoGoType(*ft.MapValue, false)
 		if value == nil {
 			return nil
 		}
-		return types.NewMap(scalarType(ft.mapKey), value)
+		return types.NewMap(scalarType(ft.MapKey), value)
 	}
 	var base types.Type
-	switch ft.kind {
+	switch ft.Kind {
 	case descriptorpb.FieldDescriptorProto_TYPE_MESSAGE:
 		return nil
 	case descriptorpb.FieldDescriptorProto_TYPE_BYTES:
 		base = types.NewSlice(types.Typ[types.Byte])
 	default:
-		base = scalarType(ft.kind)
+		base = scalarType(ft.Kind)
 	}
-	if ft.optional {
+	if ft.Optional {
 		return types.NewPointer(base)
 	}
-	if ft.repeated && !elem {
+	if ft.Repeated && !elem {
 		return types.NewSlice(base)
 	}
 	return base
@@ -308,7 +309,7 @@ func scalarGoType(kind descriptorpb.FieldDescriptorProto_Type) string {
 // Whether the value is then assigned as it is also depends on what it holds:
 // a string is written through grpc.UTF8 and a float read through grpc.Finite
 // wherever it sits (see utf8Guarded and finiteGuarded).
-func assignable(t types.Type, ft fieldType, elem bool) bool {
+func assignable(t types.Type, ft pbschema.FieldType, elem bool) bool {
 	pt := protoGoType(ft, elem)
 	return pt != nil && types.AssignableTo(t, pt) && types.AssignableTo(pt, t)
 }
@@ -459,7 +460,7 @@ func typeKey(t types.Type) string {
 //			p.Spans[i].Weight = int32(v.Weight)
 //		}
 //	}
-func (w *fileWriter) toProto(dst, src ast.Expr, t types.Type, ft fieldType, inner bool) []ast.Stmt {
+func (w *fileWriter) toProto(dst, src ast.Expr, t types.Type, ft pbschema.FieldType, inner bool) []ast.Stmt {
 	t = types.Unalias(t)
 	if p, ok := t.(*types.Pointer); ok {
 		elem := types.Unalias(p.Elem())
@@ -467,14 +468,14 @@ func (w *fileWriter) toProto(dst, src ast.Expr, t types.Type, ft fieldType, inne
 			return []ast.Stmt{assign(dst, call(w.conversionFunc(msg, "ToProto"), src))}
 		}
 		if _, anonymous := elem.(*types.Struct); anonymous {
-			body := append([]ast.Stmt{assign(dst, newCall(ident(ft.nested.goName)))}, w.structToProto(dst, src, ft.nested)...)
+			body := append([]ast.Stmt{assign(dst, newCall(ident(ft.Nested.GoName)))}, w.structToProto(dst, src, ft.Nested)...)
 			return []ast.Stmt{ifNotNil(src, body...)}
 		}
-		if _, scalar := elem.Underlying().(*types.Basic); scalar && ft.kind != descriptorpb.FieldDescriptorProto_TYPE_MESSAGE {
+		if _, scalar := elem.Underlying().(*types.Basic); scalar && ft.Kind != descriptorpb.FieldDescriptorProto_TYPE_MESSAGE {
 			// A pointer to a scalar: the optional field it maps to holds
 			// the pointer itself when the types agree; a repeated one
 			// holds the value pointed to.
-			if ft.optional {
+			if ft.Optional {
 				if assignable(t, ft, false) && !utf8Guarded(elem) {
 					return []ast.Stmt{assign(dst, src)}
 				}
@@ -519,7 +520,7 @@ func (w *fileWriter) toProto(dst, src ast.Expr, t types.Type, ft fieldType, inne
 	case *types.Basic:
 		return []ast.Stmt{assign(dst, w.scalar(t, ft, src))}
 	case *types.Slice:
-		if ft.kind == descriptorpb.FieldDescriptorProto_TYPE_BYTES || (assignable(t, ft, false) && !utf8Guarded(u.Elem())) {
+		if ft.Kind == descriptorpb.FieldDescriptorProto_TYPE_BYTES || (assignable(t, ft, false) && !utf8Guarded(u.Elem())) {
 			return []ast.Stmt{assign(dst, src)}
 		}
 		i, v := w.temp("i"), w.temp("v")
@@ -534,7 +535,7 @@ func (w *fileWriter) toProto(dst, src ast.Expr, t types.Type, ft fieldType, inne
 			rangeStmt(i, v, src, w.toProto(index(dst, ident(i)), ident(v), u.Elem(), elementOf(ft), true)...),
 		}
 	case *types.Map:
-		if ft.typeName == wellKnownStruct {
+		if ft.TypeName == pbschema.WellKnownStruct {
 			return []ast.Stmt{assign(dst, call(w.grpc("Struct"), src))}
 		}
 		if assignable(t, ft, false) && !utf8Guarded(u.Key()) && !utf8Guarded(u.Elem()) {
@@ -542,20 +543,20 @@ func (w *fileWriter) toProto(dst, src ast.Expr, t types.Type, ft fieldType, inne
 		}
 		k, v := w.temp("k"), w.temp("v")
 		key := ast.Expr(ident(k))
-		if !types.Identical(types.Unalias(u.Key()), scalarType(ft.mapKey)) {
-			key = call(ident(scalarGoType(ft.mapKey)), ident(k))
+		if !types.Identical(types.Unalias(u.Key()), scalarType(ft.MapKey)) {
+			key = call(ident(scalarGoType(ft.MapKey)), ident(k))
 		}
 		if kb, ok := types.Unalias(u.Key()).Underlying().(*types.Basic); ok && kb.Info()&types.IsString != 0 {
 			key = call(w.grpc("UTF8"), key)
 		}
 		return []ast.Stmt{ifNotNil(src,
 			assign(dst, makeCall(w.protoType(ft, false), lenCall(src))),
-			rangeStmt(k, v, src, w.toProto(index(dst, key), ident(v), u.Elem(), *ft.mapValue, true)...),
+			rangeStmt(k, v, src, w.toProto(index(dst, key), ident(v), u.Elem(), *ft.MapValue, true)...),
 		)}
 	case *types.Interface:
 		return []ast.Stmt{assign(dst, call(w.grpc("Value"), src))}
 	case *types.Struct:
-		return append([]ast.Stmt{assign(dst, newCall(ident(ft.nested.goName)))}, w.structToProto(dst, src, ft.nested)...)
+		return append([]ast.Stmt{assign(dst, newCall(ident(ft.Nested.GoName)))}, w.structToProto(dst, src, ft.Nested)...)
 	}
 	panic(fmt.Sprintf("pb: no encoding for a %s", t))
 }
@@ -576,7 +577,7 @@ func (w *fileWriter) timestampOf(src ast.Expr, inner bool) ast.Expr {
 // encoded returns src, a scalar Go value of type t, as a message field or
 // element of protobuf type ft holds it: as it is when assignable, converted
 // to the field's Go type otherwise.
-func (w *fileWriter) encoded(t types.Type, ft fieldType, src ast.Expr) ast.Expr {
+func (w *fileWriter) encoded(t types.Type, ft pbschema.FieldType, src ast.Expr) ast.Expr {
 	if assignable(t, ft, true) {
 		return src
 	}
@@ -587,7 +588,7 @@ func (w *fileWriter) encoded(t types.Type, ft fieldType, src ast.Expr) ast.Expr 
 // element of protobuf type ft holds it (see encoded), a string written
 // through grpc.UTF8: a message carries valid UTF-8 alone where a JSON body
 // replaces what is not.
-func (w *fileWriter) scalar(t types.Type, ft fieldType, src ast.Expr) ast.Expr {
+func (w *fileWriter) scalar(t types.Type, ft pbschema.FieldType, src ast.Expr) ast.Expr {
 	value := w.encoded(t, ft, src)
 	if utf8Guarded(t) {
 		value = call(w.grpc("UTF8"), value)
@@ -596,17 +597,17 @@ func (w *fileWriter) scalar(t types.Type, ft fieldType, src ast.Expr) ast.Expr {
 }
 
 // elementOf is the protobuf type of one element of a repeated field.
-func elementOf(ft fieldType) fieldType {
-	ft.repeated = false
-	ft.optional = false
+func elementOf(ft pbschema.FieldType) pbschema.FieldType {
+	ft.Repeated = false
+	ft.Optional = false
 	return ft
 }
 
 // structToProto returns the statements encoding the fields of src, a struct
 // of the conversion conv, into the fields of dst, its message.
-func (w *fileWriter) structToProto(dst, src ast.Expr, conv *conversion) []ast.Stmt {
+func (w *fileWriter) structToProto(dst, src ast.Expr, conv *pbschema.Conversion) []ast.Stmt {
 	var stmts []ast.Stmt
-	for _, fc := range conv.fields {
+	for _, fc := range conv.Fields {
 		stmts = append(stmts, w.fieldToProto(dst, src, fc)...)
 	}
 	return stmts
@@ -614,8 +615,8 @@ func (w *fileWriter) structToProto(dst, src ast.Expr, conv *conversion) []ast.St
 
 // fieldToProto encodes the field fc of the struct src into the field of its
 // message dst.
-func (w *fileWriter) fieldToProto(dst, src ast.Expr, fc fieldConversion) []ast.Stmt {
-	return w.toProto(sel(dst, fc.goName), selPath(src, fc.path), fc.field.Var.Type(), fc.ft, false)
+func (w *fileWriter) fieldToProto(dst, src ast.Expr, fc pbschema.FieldConversion) []ast.Stmt {
+	return w.toProto(sel(dst, fc.GoName), selPath(src, fc.Path), fc.Field.Var.Type(), fc.Type, false)
 }
 
 // selPath selects the field at path from x, m.Audit.Name for Audit, Name.
@@ -801,7 +802,7 @@ func selPath(x ast.Expr, path []string) ast.Expr {
 //			}
 //			m.When = &x
 //		}
-func (w *fileWriter) fromProto(dst, src ast.Expr, t types.Type, ft fieldType, path ast.Expr) []ast.Stmt {
+func (w *fileWriter) fromProto(dst, src ast.Expr, t types.Type, ft pbschema.FieldType, path ast.Expr) []ast.Stmt {
 	// declared is t as the model spells it, an alias kept, which is how the
 	// file spells it too; t itself decides the conversion.
 	declared := t
@@ -813,20 +814,20 @@ func (w *fileWriter) fromProto(dst, src ast.Expr, t types.Type, ft fieldType, pa
 		}
 		if _, anonymous := elem.(*types.Struct); anonymous {
 			return []ast.Stmt{w.guarded(src, func(v ast.Expr) []ast.Stmt {
-				return append([]ast.Stmt{assign(dst, newCall(w.goType(p.Elem())))}, w.structFromProto(dst, v, ft.nested, path)...)
+				return append([]ast.Stmt{assign(dst, newCall(w.goType(p.Elem())))}, w.structFromProto(dst, v, ft.Nested, path)...)
 			})}
 		}
-		if _, scalar := elem.Underlying().(*types.Basic); scalar && ft.kind != descriptorpb.FieldDescriptorProto_TYPE_MESSAGE {
+		if _, scalar := elem.Underlying().(*types.Basic); scalar && ft.Kind != descriptorpb.FieldDescriptorProto_TYPE_MESSAGE {
 			// A pointer to a scalar: the pointer of the optional field it
 			// maps to when the types agree, otherwise a pointer to the
 			// decoded value, of the optional field when it is set, of the
 			// element or value the pointer is when it is one.
-			if ft.optional && assignable(t, ft, false) && !finiteGuarded(elem) {
+			if ft.Optional && assignable(t, ft, false) && !finiteGuarded(elem) {
 				return []ast.Stmt{assign(dst, src)}
 			}
 			x := w.temp("x")
 			value, elemFt := src, ft
-			if ft.optional {
+			if ft.Optional {
 				value, elemFt = star(src), elementOf(ft)
 			}
 			var body []ast.Stmt
@@ -835,7 +836,7 @@ func (w *fileWriter) fromProto(dst, src ast.Expr, t types.Type, ft fieldType, pa
 			} else {
 				body = []ast.Stmt{define([]string{x}, w.decoded(p.Elem(), elemFt, value)), assign(dst, addr(ident(x)))}
 			}
-			if ft.optional {
+			if ft.Optional {
 				return []ast.Stmt{ifNotNil(src, body...)}
 			}
 			return body
@@ -905,7 +906,7 @@ func (w *fileWriter) fromProto(dst, src ast.Expr, t types.Type, ft fieldType, pa
 		}
 		return []ast.Stmt{assign(dst, w.decoded(declared, ft, src))}
 	case *types.Slice:
-		if ft.kind == descriptorpb.FieldDescriptorProto_TYPE_BYTES || (assignable(t, ft, false) && !finiteGuarded(u.Elem())) {
+		if ft.Kind == descriptorpb.FieldDescriptorProto_TYPE_BYTES || (assignable(t, ft, false) && !finiteGuarded(u.Elem())) {
 			return []ast.Stmt{assign(dst, src)}
 		}
 		i, v := w.temp("i"), w.temp("v")
@@ -918,7 +919,7 @@ func (w *fileWriter) fromProto(dst, src ast.Expr, t types.Type, ft fieldType, pa
 		return []ast.Stmt{rangeStmt(i, "", call(ident("min"), lenCall(src), lenCall(dst)),
 			w.fromProto(index(dst, ident(i)), index(src, ident(i)), u.Elem(), elementOf(ft), w.elementPath(path, ident(i)))...)}
 	case *types.Map:
-		if ft.typeName == wellKnownStruct {
+		if ft.TypeName == pbschema.WellKnownStruct {
 			return []ast.Stmt{assign(dst, call(w.grpc("Map"), src))}
 		}
 		if assignable(t, ft, false) && !finiteGuarded(u.Elem()) {
@@ -933,16 +934,16 @@ func (w *fileWriter) fromProto(dst, src ast.Expr, t types.Type, ft fieldType, pa
 			narrowed := w.temp("key")
 			body = append([]ast.Stmt{w.varDecl(narrowed, u.Key())}, w.refusing(ident(narrowed), read)...)
 			key = ident(narrowed)
-		} else if !types.Identical(types.Unalias(u.Key()), scalarType(ft.mapKey)) {
+		} else if !types.Identical(types.Unalias(u.Key()), scalarType(ft.MapKey)) {
 			key = converted(w.goType(u.Key()), ident(k))
 		}
-		value := w.fromProto(index(dst, key), ident(v), u.Elem(), *ft.mapValue, w.entryPath(path, ident(k)))
+		value := w.fromProto(index(dst, key), ident(v), u.Elem(), *ft.MapValue, w.entryPath(path, ident(k)))
 		if _, anonymous := types.Unalias(u.Elem()).(*types.Struct); anonymous {
 			// The fields of a struct held in a map cannot be assigned one
 			// by one, the element not being addressable: the struct is
 			// decoded into a value of its own, put in whole.
 			e := w.temp("e")
-			value = append(append([]ast.Stmt{w.varDecl(e, u.Elem())}, w.fromProto(ident(e), ident(v), u.Elem(), *ft.mapValue, w.entryPath(path, ident(k)))...), assign(index(dst, key), ident(e)))
+			value = append(append([]ast.Stmt{w.varDecl(e, u.Elem())}, w.fromProto(ident(e), ident(v), u.Elem(), *ft.MapValue, w.entryPath(path, ident(k)))...), assign(index(dst, key), ident(e)))
 		}
 		return []ast.Stmt{ifNotNil(src,
 			assign(dst, makeCall(w.goType(declared), lenCall(src))),
@@ -951,7 +952,7 @@ func (w *fileWriter) fromProto(dst, src ast.Expr, t types.Type, ft fieldType, pa
 	case *types.Interface:
 		return []ast.Stmt{assign(dst, call(sel(src, "AsInterface")))}
 	case *types.Struct:
-		return []ast.Stmt{w.guarded(src, func(v ast.Expr) []ast.Stmt { return w.structFromProto(dst, v, ft.nested, path) })}
+		return []ast.Stmt{w.guarded(src, func(v ast.Expr) []ast.Stmt { return w.structFromProto(dst, v, ft.Nested, path) })}
 	}
 	panic(fmt.Sprintf("pb: no decoding for a %s", t))
 }
@@ -1000,7 +1001,7 @@ func (w *fileWriter) timeType() ast.Expr {
 // decoded returns src, the scalar value of a message field or element of
 // protobuf type ft, as the Go type t holds it: as it is when assignable,
 // converted to t, spelled as the model declares it, otherwise.
-func (w *fileWriter) decoded(t types.Type, ft fieldType, src ast.Expr) ast.Expr {
+func (w *fileWriter) decoded(t types.Type, ft pbschema.FieldType, src ast.Expr) ast.Expr {
 	if assignable(types.Unalias(t), ft, true) {
 		return src
 	}
@@ -1086,9 +1087,9 @@ func keyPath(path ast.Expr, key string) ast.Expr {
 // structFromProto returns the statements decoding the fields of src, a
 // message of the conversion conv known to be set, into the fields of dst,
 // its struct.
-func (w *fileWriter) structFromProto(dst, src ast.Expr, conv *conversion, path ast.Expr) []ast.Stmt {
+func (w *fileWriter) structFromProto(dst, src ast.Expr, conv *pbschema.Conversion, path ast.Expr) []ast.Stmt {
 	var stmts []ast.Stmt
-	for _, fc := range conv.fields {
+	for _, fc := range conv.Fields {
 		stmts = append(stmts, w.fieldFromProto(dst, src, fc, path)...)
 	}
 	return stmts
@@ -1098,12 +1099,12 @@ func (w *fileWriter) structFromProto(dst, src ast.Expr, conv *conversion, path a
 // into the field of its struct dst: through the getter of the field, or the
 // field itself for the pointer of an optional scalar. The field is named by
 // its path behind path, that of the struct (see keyPath).
-func (w *fileWriter) fieldFromProto(dst, src ast.Expr, fc fieldConversion, path ast.Expr) []ast.Stmt {
-	var value ast.Expr = call(sel(src, "Get"+fc.goName))
-	if fc.ft.optional {
-		value = sel(src, fc.goName)
+func (w *fileWriter) fieldFromProto(dst, src ast.Expr, fc pbschema.FieldConversion, path ast.Expr) []ast.Stmt {
+	var value ast.Expr = call(sel(src, "Get"+fc.GoName))
+	if fc.Type.Optional {
+		value = sel(src, fc.GoName)
 	}
-	return w.fromProto(selPath(dst, fc.path), value, fc.field.Var.Type(), fc.ft, keyPath(path, fc.field.Key))
+	return w.fromProto(selPath(dst, fc.Path), value, fc.Field.Var.Type(), fc.Type, keyPath(path, fc.Field.Key))
 }
 
 // conversionFuncs builds the two conversion functions of the message of
@@ -1136,24 +1137,24 @@ func (w *fileWriter) fieldFromProto(dst, src ast.Expr, fc fieldConversion, path 
 //		m.Title = p.GetTitle()
 //		return m, nil
 //	}
-func (w *fileWriter) conversionFuncs(msg *message) {
-	goName := msg.conv.goName
+func (w *fileWriter) conversionFuncs(msg *pbschema.Message) {
+	goName := msg.Conversion.GoName
 	body := []ast.Stmt{
 		ifStmt(nil, &ast.BinaryExpr{X: ident("m"), Op: token.EQL, Y: ident("nil")}, returns(ident("nil"))),
 		define([]string{"p"}, newCall(ident(goName))),
 	}
 	w.resetFuncTemps()
-	for _, fc := range msg.conv.fields {
+	for _, fc := range msg.Conversion.Fields {
 		// The temporaries of one field are scoped to its statements, but
 		// for the ones declared at the top level of the function.
 		w.resetTemps()
 		body = append(body, w.fieldToProto(ident("p"), ident("m"), fc)...)
 	}
 	body = append(body, returns(ident("p")))
-	w.out.add(goName+"ToProto encodes "+msg.obj.Name()+" values into their message, nil into nil.", &ast.FuncDecl{
+	w.out.add(goName+"ToProto encodes "+msg.TypeName.Name()+" values into their message, nil into nil.", &ast.FuncDecl{
 		Name: ident(goName + "ToProto"),
 		Type: &ast.FuncType{
-			Params:  &ast.FieldList{List: []*ast.Field{{Names: []*ast.Ident{ident("m")}, Type: star(w.goType(msg.obj.Type()))}}},
+			Params:  &ast.FieldList{List: []*ast.Field{{Names: []*ast.Ident{ident("m")}, Type: star(w.goType(msg.TypeName.Type()))}}},
 			Results: &ast.FieldList{List: []*ast.Field{{Type: star(ident(goName))}}},
 		},
 		Body: block(body...),
@@ -1162,15 +1163,15 @@ func (w *fileWriter) conversionFuncs(msg *message) {
 	w.fallible = false
 	w.resetFuncTemps()
 	var fields []ast.Stmt
-	for _, fc := range msg.conv.fields {
+	for _, fc := range msg.Conversion.Fields {
 		w.resetTemps()
 		fields = append(fields, w.fieldFromProto(ident("m"), ident("p"), fc, nil)...)
 	}
 	body = []ast.Stmt{
 		ifStmt(nil, &ast.BinaryExpr{X: ident("p"), Op: token.EQL, Y: ident("nil")}, returns(ident("nil"), ident("nil"))),
-		define([]string{"m"}, newCall(w.goType(msg.obj.Type()))),
+		define([]string{"m"}, newCall(w.goType(msg.TypeName.Type()))),
 	}
-	doc := goName + "FromProto decodes " + msg.obj.Name() + " messages into values, nil into nil."
+	doc := goName + "FromProto decodes " + msg.TypeName.Name() + " messages into values, nil into nil."
 	if w.fallible {
 		// err is declared once, for every value read through a helper or a
 		// conversion function that may refuse it (see refusing).
@@ -1183,7 +1184,7 @@ func (w *fileWriter) conversionFuncs(msg *message) {
 		Name: ident(goName + "FromProto"),
 		Type: &ast.FuncType{
 			Params:  &ast.FieldList{List: []*ast.Field{{Names: []*ast.Ident{ident("p")}, Type: star(ident(goName))}}},
-			Results: &ast.FieldList{List: []*ast.Field{{Type: star(w.goType(msg.obj.Type()))}, {Type: ident("error")}}},
+			Results: &ast.FieldList{List: []*ast.Field{{Type: star(w.goType(msg.TypeName.Type()))}, {Type: ident("error")}}},
 		},
 		Body: block(body...),
 	}, nil)

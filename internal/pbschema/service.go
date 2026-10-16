@@ -1,4 +1,4 @@
-package pb
+package pbschema
 
 import (
 	"cmp"
@@ -48,7 +48,7 @@ import (
 //	  // MergeItem is the Create action of Item on /api/items/merge.
 //	  rpc MergeItem ( MergeItemRequest ) returns ( MergeItemResponse );
 //	}
-func (g *generator) declareService(m *modelinfo.Model) {
+func (g *Schema) declareService(m *modelinfo.Model) {
 	s := jsonshape.Site{Subject: m.ImportPath() + "." + m.ModelName}
 	pkg := g.project.Package(m.ImportPath())
 	if pkg == nil || pkg.Types == nil {
@@ -62,7 +62,7 @@ func (g *generator) declareService(m *modelinfo.Model) {
 	}
 	s.Pos = obj.Pos()
 	file := g.fileOf(obj)
-	var model *message
+	var model *Message
 	if !m.Design.IsEmpty {
 		// The model's message and the types it reaches come first in the
 		// file, before the messages of its actions.
@@ -115,15 +115,15 @@ func (g *generator) declareService(m *modelinfo.Model) {
 		}
 		// A Stream action is served over gRPC alone: its route names it and
 		// tells it from the other actions, but is no path a request reaches.
-		comment := name + " is the " + action.Phase.Name() + " action of " + m.ModelName + " on " + consts.APIPath(r.registered) + "."
+		comment := name + " is the " + action.Phase.Name() + " action of " + m.ModelName + " on " + consts.APIPath(r.Registered) + "."
 		if dsl.GRPCOnlyAction(action.Phase.Name()) {
 			comment = name + " is the " + action.Phase.Name() + " action of " + m.ModelName + " declared on " + route + ", served over gRPC alone."
 		}
-		file.comment([]int32{fileServicesTag, int32Index(len(file.services)), serviceMethodsTag, int32Index(len(service.Method))}, comment)
+		file.comment([]int32{fileServicesTag, int32Index(len(file.Services)), serviceMethodsTag, int32Index(len(service.Method))}, comment)
 		method := &descriptorpb.MethodDescriptorProto{
 			Name:       new(name),
-			InputType:  new("." + file.pkg + "." + r.request.GetName()),
-			OutputType: new("." + file.pkg + "." + r.response.GetName()),
+			InputType:  new("." + file.Package + "." + r.Request.GetName()),
+			OutputType: new("." + file.Package + "." + r.Response.GetName()),
 		}
 		// A Stream action streams the side it declares streaming: the rpc
 		// takes a stream of its request message, returns a stream of its
@@ -135,7 +135,7 @@ func (g *generator) declareService(m *modelinfo.Model) {
 			method.ServerStreaming = new(true)
 		}
 		service.Method = append(service.Method, method)
-		file.rpcs = append(file.rpcs, r)
+		file.RPCs = append(file.RPCs, r)
 	})
 	if served == 0 {
 		g.project.Report(s, "the model declares GRPC() but none of its actions is served over gRPC, every one being ignored by gst.yaml or HTTP only; remove GRPC() or declare an action gRPC serves")
@@ -198,10 +198,10 @@ func standardAction(m *modelinfo.Model, action *dsl.Action) bool {
 //	  // item is the Item created.
 //	  Item item = 1;
 //	}
-func (g *generator) rpcMessages(m *modelinfo.Model, scope *types.Scope, model *message, file *protoFile, route string, action *dsl.Action, itemOf string, s jsonshape.Site) (*rpc, bool) {
-	r := &rpc{name: modelinfo.RPCName(m, route, action), service: m.ModelName + "Service", model: m, action: action, route: route}
-	r.registered, r.param = modelinfo.RouterTargetForAction(route, m.Design, action)
-	qualified := r.service + "." + r.name
+func (g *Schema) rpcMessages(m *modelinfo.Model, scope *types.Scope, model *Message, file *ProtoFile, route string, action *dsl.Action, itemOf string, s jsonshape.Site) (*RPC, bool) {
+	r := &RPC{Name: modelinfo.RPCName(m, route, action), Service: m.ModelName + "Service", Model: m, Action: action, Route: route}
+	r.Registered, r.Param = modelinfo.RouterTargetForAction(route, m.Design, action)
+	qualified := r.Service + "." + r.Name
 	var request, response *descriptorpb.DescriptorProto
 	var requestFields, responseFields []string
 	if standardAction(m, action) {
@@ -209,14 +209,14 @@ func (g *generator) rpcMessages(m *modelinfo.Model, scope *types.Scope, model *m
 			g.project.Report(s, "the %s action of the virtual model %s has no message to carry; declare Payload and Result", action.Phase.Name(), m.ModelName)
 			return nil, false
 		}
-		r.standard, r.message = true, model
+		r.Standard, r.Message = true, model
 		request, requestFields, response, responseFields = standardMessages(m, model, file, route, action)
 	} else {
 		var ok bool
-		if request, requestFields, r.payload, ok = g.customRequest(scope, file, action, s); !ok {
+		if request, requestFields, r.Payload, ok = g.customRequest(scope, file, action, s); !ok {
 			return nil, false
 		}
-		if response, responseFields, r.result, ok = g.customResponse(scope, file, action, s); !ok {
+		if response, responseFields, r.Result, ok = g.customResponse(scope, file, action, s); !ok {
 			return nil, false
 		}
 	}
@@ -231,7 +231,7 @@ func (g *generator) rpcMessages(m *modelinfo.Model, scope *types.Scope, model *m
 	if !ok {
 		return nil, false
 	}
-	r.params = params
+	r.Params = params
 	if responseFields, ok = g.numberFields(s, file, responseName, response, responseFields); !ok {
 		return nil, false
 	}
@@ -241,7 +241,7 @@ func (g *generator) rpcMessages(m *modelinfo.Model, scope *types.Scope, model *m
 		return nil, false
 	}
 	g.addRPCMessage(file, response, responseName+" is the response of "+qualified+".", responseFields)
-	r.request, r.response = request, response
+	r.Request, r.Response = request, response
 	return r, true
 }
 
@@ -252,12 +252,12 @@ func (g *generator) rpcMessages(m *modelinfo.Model, scope *types.Scope, model *m
 // fields are numbered after the committed definition (see numberFields);
 // the message takes name, claimed for owner, and comment, with the comment
 // of each field. It returns the parameters.
-func (g *generator) addRequest(m *modelinfo.Model, file *protoFile, route string, action *dsl.Action, request *descriptorpb.DescriptorProto, requestFields []string, name, comment, owner string, s jsonshape.Site) ([]requestParam, bool) {
+func (g *Schema) addRequest(m *modelinfo.Model, file *ProtoFile, route string, action *dsl.Action, request *descriptorpb.DescriptorProto, requestFields []string, name, comment, owner string, s jsonshape.Site) ([]RequestParam, bool) {
 	params := requestParams(m, route, action)
 	fields := make([]*descriptorpb.FieldDescriptorProto, 0, len(params)+len(request.Field))
 	comments := make([]string, 0, len(params)+len(requestFields))
 	for _, param := range params {
-		fields = append(fields, stringField(param.name, 0))
+		fields = append(fields, stringField(param.Name, 0))
 		comments = append(comments, param.comment)
 	}
 	request.Field = append(fields, request.Field...)
@@ -265,8 +265,8 @@ func (g *generator) addRequest(m *modelinfo.Model, file *protoFile, route string
 	registered, _ := modelinfo.RouterTargetForAction(route, m.Design, action)
 	for i, param := range params {
 		for _, field := range request.Field[i+1:] {
-			if field.GetName() == param.name {
-				g.project.Report(s, "the :%s parameter of %s clashes with the %s field of %s; rename the parameter", param.param, registered, param.name, name)
+			if field.GetName() == param.Name {
+				g.project.Report(s, "the :%s parameter of %s clashes with the %s field of %s; rename the parameter", param.Param, registered, param.Name, name)
 				return nil, false
 			}
 		}
@@ -274,8 +274,8 @@ func (g *generator) addRequest(m *modelinfo.Model, file *protoFile, route string
 		// controls the model reads: the handler reads a control off the
 		// field of its name, so a parameter taking the name is reported
 		// even when the request carries no such field.
-		if action.Phase == consts.List && slices.Contains(listQueryFieldNames, param.name) {
-			g.project.Report(s, "the :%s parameter of %s takes the name of the %s query field of a List request; rename the parameter", param.param, registered, param.name)
+		if action.Phase == consts.List && slices.Contains(listQueryFieldNames, param.Name) {
+			g.project.Report(s, "the :%s parameter of %s takes the name of the %s query field of a List request; rename the parameter", param.Param, registered, param.Name)
 			return nil, false
 		}
 	}
@@ -320,46 +320,46 @@ func patchAction(m *modelinfo.Model) *dsl.Action {
 //	  // update_mask is the fields of item to apply, named as the message names them.
 //	  google.protobuf.FieldMask update_mask = 4;
 //	}
-func (g *generator) patchRequest(m *modelinfo.Model, model *message, file *protoFile, route, batch string, s jsonshape.Site) {
+func (g *Schema) patchRequest(m *modelinfo.Model, model *Message, file *ProtoFile, route, batch string, s jsonshape.Site) {
 	action := patchAction(m)
 	request, requestFields, _, _ := standardMessages(m, model, file, route, action)
 	name := messageName(m, route, action, "Request")
 	g.addRequest(m, file, route, action, request, requestFields, name, name+" is an item of "+batch+": a patch of one "+m.ModelName+".", "the items of "+batch, s)
 }
 
-// rpc is one rpc of a service as the generated handler serves it (see
+// RPC is one rpc of a service as the generated handler serves it (see
 // handlers.go): the action it runs, the route the action's call is built on
 // and the messages it converts.
-type rpc struct {
-	name    string // CreateItem
-	service string // ItemService
-	model   *modelinfo.Model
-	action  *dsl.Action
-	route   string // the route the action is declared on, records/:record/items
+type RPC struct {
+	Name    string // CreateItem
+	Service string // ItemService
+	Model   *modelinfo.Model
+	Action  *dsl.Action
+	Route   string // the route the action is declared on, records/:record/items
 	// registered is the route the router registers the action under,
 	// records/:record/items/:id for its Get, the route the call is built on
 	// and the service registry keys the service by; param is the parameter
 	// that route ends in, id, which names the record an item action reads
 	// (the DSL refuses an item action on a route without one).
-	registered string
-	param      string
-	params     []requestParam
+	Registered string
+	Param      string
+	Params     []RequestParam
 	// standard marks an action run through the call of the model,
 	// CreateCall and its kind, on message, the model's; a custom action,
 	// one declaring a Payload or Result of its own, runs through
 	// ServiceCall on payload and result, either nil for a side not declared.
-	standard        bool
-	message         *message
-	payload, result *message
+	Standard        bool
+	Message         *Message
+	Payload, Result *Message
 	// request and response are the messages of the rpc.
-	request, response *descriptorpb.DescriptorProto
+	Request, Response *descriptorpb.DescriptorProto
 }
 
-// streaming reports whether the rpc streams a side of the call, which the
+// Streaming reports whether the rpc streams a side of the call, which the
 // rpcs of a Stream action do: streamHandler serves them, and the
 // registration describes them by the stream word.
-func (r *rpc) streaming() bool {
-	return r.action.StreamingPayload || r.action.StreamingResult
+func (r *RPC) Streaming() bool {
+	return r.Action.StreamingPayload || r.Action.StreamingResult
 }
 
 // customRequest builds what the request of a custom action holds after the
@@ -386,7 +386,7 @@ func (r *rpc) streaming() bool {
 //	  // depth is the depth of the expansion, as the _depth query parameter.
 //	  uint32 depth = 2;
 //	}
-func (g *generator) customRequest(scope *types.Scope, file *protoFile, action *dsl.Action, s jsonshape.Site) (*descriptorpb.DescriptorProto, []string, *message, bool) {
+func (g *Schema) customRequest(scope *types.Scope, file *ProtoFile, action *dsl.Action, s jsonshape.Site) (*descriptorpb.DescriptorProto, []string, *Message, bool) {
 	if action.Phase == consts.List || action.Phase == consts.Get {
 		fields, comments, nested := queryFields(action.Phase, allQueryControls)
 		request := newMessage(fields...)
@@ -400,7 +400,7 @@ func (g *generator) customRequest(scope *types.Scope, file *protoFile, action *d
 	if !ok {
 		return nil, nil, nil, false
 	}
-	return newMessage(messageField("payload", 0, msg.fullName())), []string{"the " + msg.name + " the action takes"}, msg, true
+	return newMessage(messageField("payload", msg.fullName())), []string{"the " + msg.name + " the action takes"}, msg, true
 }
 
 // customResponse builds what the response of a custom action holds, with
@@ -415,7 +415,7 @@ func (g *generator) customRequest(scope *types.Scope, file *protoFile, action *d
 //	  // result is the MergeRsp the action answers with.
 //	  MergeRsp result = 1;
 //	}
-func (g *generator) customResponse(scope *types.Scope, file *protoFile, action *dsl.Action, s jsonshape.Site) (*descriptorpb.DescriptorProto, []string, *message, bool) {
+func (g *Schema) customResponse(scope *types.Scope, file *ProtoFile, action *dsl.Action, s jsonshape.Site) (*descriptorpb.DescriptorProto, []string, *Message, bool) {
 	if action.Result == "" || action.Result == dsl.PayloadEmpty {
 		return newMessage(), nil, nil, true
 	}
@@ -423,13 +423,13 @@ func (g *generator) customResponse(scope *types.Scope, file *protoFile, action *
 	if !ok {
 		return nil, nil, nil, false
 	}
-	return newMessage(messageField("result", 0, msg.fullName())), []string{"the " + msg.name + " the action answers with"}, msg, true
+	return newMessage(messageField("result", msg.fullName())), []string{"the " + msg.name + " the action answers with"}, msg, true
 }
 
 // typeMessage resolves the message of the Go type a Payload or Result names,
 // queued to be built and imported into file. An alias stands for the type it
 // names, whose message it shares.
-func (g *generator) typeMessage(scope *types.Scope, file *protoFile, action *dsl.Action, typeName string, s jsonshape.Site) (*message, bool) {
+func (g *Schema) typeMessage(scope *types.Scope, file *ProtoFile, action *dsl.Action, typeName string, s jsonshape.Site) (*Message, bool) {
 	obj, ok := scope.Lookup(strings.TrimPrefix(typeName, "*")).(*types.TypeName)
 	if !ok {
 		g.project.Report(s, "the %s action declares the type %s, which the model's package does not declare", action.Phase.Name(), typeName)
@@ -444,14 +444,14 @@ func (g *generator) typeMessage(scope *types.Scope, file *protoFile, action *dsl
 		obj = named.Obj()
 	}
 	msg := g.messageOf(obj)
-	file.importOf(msg.file.registered)
+	file.importOf(msg.File.Registered)
 	return msg, true
 }
 
 // standardMessages builds the request and response messages of a standard
 // action, each with the comment of its fields: what they hold after the
 // route parameters rpcMessages puts first, numbered in order after them.
-// With X the model and x its field name (see modelFieldName):
+// With X the model and x its field name (see ModelFieldName):
 //
 //	Create:     ...Request { X x; }                                    ...Response { X x; }
 //	Get:        ...Request { repeated string expand; uint32 depth; }   ...Response { X x; }
@@ -489,8 +489,8 @@ func (g *generator) typeMessage(scope *types.Scope, file *protoFile, action *dsl
 //	  // record is the Record found.
 //	  Record record = 1;
 //	}
-func standardMessages(m *modelinfo.Model, model *message, file *protoFile, route string, action *dsl.Action) (request *descriptorpb.DescriptorProto, requestFields []string, response *descriptorpb.DescriptorProto, responseFields []string) {
-	x := modelFieldName(m)
+func standardMessages(m *modelinfo.Model, model *Message, file *ProtoFile, route string, action *dsl.Action) (request *descriptorpb.DescriptorProto, requestFields []string, response *descriptorpb.DescriptorProto, responseFields []string) {
+	x := ModelFieldName(m)
 	switch action.Phase {
 	case consts.Create:
 		request = newMessage(modelField(x, model))
@@ -510,7 +510,7 @@ func standardMessages(m *modelinfo.Model, model *message, file *protoFile, route
 		responseFields = append(responseFields, "the "+m.ModelName+" as stored")
 	case consts.Patch:
 		file.importOf(fieldMaskProto)
-		request = newMessage(modelField(x, model), messageField("update_mask", 0, wellKnownFieldMask))
+		request = newMessage(modelField(x, model), messageField("update_mask", wellKnownFieldMask))
 		requestFields = append(requestFields, "the values to apply", "the fields of "+x+" to apply, named as the message names them")
 		response = newMessage(modelField(x, model))
 		responseFields = append(responseFields, "the "+m.ModelName+" as stored")
@@ -518,7 +518,7 @@ func standardMessages(m *modelinfo.Model, model *message, file *protoFile, route
 		request = newMessage()
 		response = newMessage()
 	case consts.List:
-		fields, comments, nested := queryFields(action.Phase, queryControlsOf(model.obj))
+		fields, comments, nested := queryFields(action.Phase, queryControlsOf(model.TypeName))
 		request = newMessage(fields...)
 		request.NestedType = nested
 		requestFields = append(requestFields, comments...)
@@ -531,7 +531,7 @@ func standardMessages(m *modelinfo.Model, model *message, file *protoFile, route
 		responseFields = append(responseFields, "the "+m.ModelName+" records as stored")
 	case consts.PatchMany:
 		item := messageName(m, route, patchAction(m), "Request")
-		request = newMessage(repeatedMessageField("items", "."+file.pkg+"."+item))
+		request = newMessage(repeatedMessageField("items", "."+file.Package+"."+item))
 		requestFields = append(requestFields, "the patches, each a "+item+" naming the "+m.ModelName+" it applies to by its id")
 		response = newMessage(repeatedMessageField("items", model.fullName()))
 		responseFields = append(responseFields, "the "+m.ModelName+" records as stored")
@@ -686,13 +686,13 @@ func queryFields(phase consts.Phase, controls queryControls) (fields []*descript
 // the committed file holds id = 1, expand = 2 and reserves 3, depth takes 4.
 // It returns the comments in the order of the fields, or false once no
 // number is left, the message reported.
-func (g *generator) numberFields(s jsonshape.Site, file *protoFile, name string, desc *descriptorpb.DescriptorProto, comments []string) ([]string, bool) {
+func (g *Schema) numberFields(s jsonshape.Site, file *ProtoFile, name string, desc *descriptorpb.DescriptorProto, comments []string) ([]string, bool) {
 	numbers := make(map[int32]string, len(desc.Field))
 	next := g.nextNumbers(file, name, numbers, false)
 	for _, field := range desc.Field {
 		number, ok := next(field.GetName())
 		if !ok {
-			g.project.Report(s, "the field %s of message %s has no field number left: every one is one the committed %s/%s reserves; lift a reservation, or delete the file to start over", field.GetName(), name, ggconst.DirPB, file.name)
+			g.project.Report(s, "the field %s of message %s has no field number left: every one is one the committed %s/%s reserves; lift a reservation, or delete the file to start over", field.GetName(), name, ggconst.DirPB, file.Name)
 			return nil, false
 		}
 		numbers[number] = field.GetName()
@@ -724,8 +724,8 @@ const (
 // addRPCMessage appends a request or response message to file, with the
 // comment of the message, one per field, each field's comment starting with
 // its name, and the comment of its nested Filter, when it holds one.
-func (g *generator) addRPCMessage(file *protoFile, desc *descriptorpb.DescriptorProto, comment string, fieldComments []string) {
-	index := int32Index(len(file.messages))
+func (g *Schema) addRPCMessage(file *ProtoFile, desc *descriptorpb.DescriptorProto, comment string, fieldComments []string) {
+	index := int32Index(len(file.Messages))
 	for i, text := range fieldComments {
 		file.comment([]int32{fileMessagesTag, index, messageFieldsTag, int32Index(i)}, desc.Field[i].GetName()+" is "+text+".")
 	}
@@ -766,9 +766,10 @@ func repeatedStringField(name string, number int32) *descriptorpb.FieldDescripto
 	return field
 }
 
-// messageField returns a singular field of the message typeName names.
-func messageField(name string, number int32, typeName string) *descriptorpb.FieldDescriptorProto {
-	field := scalarField(name, number, descriptorpb.FieldDescriptorProto_TYPE_MESSAGE)
+// messageField returns a singular field of the message typeName names, to be
+// numbered by numberFields.
+func messageField(name, typeName string) *descriptorpb.FieldDescriptorProto {
+	field := scalarField(name, 0, descriptorpb.FieldDescriptorProto_TYPE_MESSAGE)
 	field.TypeName = new(typeName)
 	return field
 }
@@ -776,13 +777,13 @@ func messageField(name string, number int32, typeName string) *descriptorpb.Fiel
 // repeatedMessageField returns a repeated field of the message typeName
 // names, to be numbered by numberFields.
 func repeatedMessageField(name string, typeName string) *descriptorpb.FieldDescriptorProto {
-	field := messageField(name, 0, typeName)
+	field := messageField(name, typeName)
 	field.Label = descriptorpb.FieldDescriptorProto_LABEL_REPEATED.Enum()
 	return field
 }
 
 // modelField returns the singular field carrying the model's message, to be
 // numbered by numberFields.
-func modelField(name string, model *message) *descriptorpb.FieldDescriptorProto {
-	return messageField(name, 0, model.fullName())
+func modelField(name string, model *Message) *descriptorpb.FieldDescriptorProto {
+	return messageField(name, model.fullName())
 }

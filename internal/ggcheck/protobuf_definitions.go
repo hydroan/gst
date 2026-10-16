@@ -6,8 +6,8 @@ import (
 
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/internal/ggconst"
-	"github.com/hydroan/gst/internal/gggen/pb"
 	"github.com/hydroan/gst/internal/gghelper"
+	"github.com/hydroan/gst/internal/pbschema"
 )
 
 // ProtobufDefinitions holds the models declaring GRPC() to what gg gen
@@ -19,7 +19,7 @@ var ProtobufDefinitions = Check{
 }
 
 // checkProtobufDefinitions derives the protobuf definitions the way gg gen
-// does (see pb.Generate), writing nothing, and reports each diagnostic it
+// does (see pbschema.Derive), writing nothing, and reports each diagnostic it
 // raises, so the project learns at check time what its generation would
 // refuse — a type protobuf cannot describe, a field with a number another
 // field holds, a name clashing with a generated message, a model left with
@@ -39,8 +39,8 @@ func checkProtobufDefinitions(ignore gghelper.ProjectIgnore) []string {
 		return violations
 	}
 
-	_, err = pb.Generate(pb.Config{Dir: ".", ModulePath: scanned.Module, Models: scanned.Models})
-	var diagnostics *pb.DiagnosticsError
+	_, err = pbschema.Derive(pbschema.Config{Dir: ".", ModulePath: scanned.Module, Models: scanned.Models})
+	var diagnostics *pbschema.DiagnosticsError
 	switch {
 	case errors.As(err, &diagnostics):
 		for _, d := range diagnostics.Diagnostics {

@@ -8,6 +8,7 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/internal/consts"
 	"github.com/hydroan/gst/internal/ggconst"
+	"github.com/hydroan/gst/internal/pbschema"
 	"github.com/jhump/protoreflect/v2/protoprint"
 	"google.golang.org/protobuf/reflect/protodesc"
 	"google.golang.org/protobuf/reflect/protoreflect"
@@ -27,11 +28,11 @@ import (
 func (g *generator) print() ([]File, error) {
 	// The descriptors are keyed by their registration path, the one they
 	// import each other by; relative maps it back to the path under pb/.
-	protos := make(map[string]*descriptorpb.FileDescriptorProto, len(g.files))
-	relative := make(map[string]string, len(g.files))
-	for name, f := range g.files {
-		protos[f.registered] = f.descriptor()
-		relative[f.registered] = name
+	protos := make(map[string]*descriptorpb.FileDescriptorProto, len(g.Files))
+	relative := make(map[string]string, len(g.Files))
+	for name, f := range g.Files {
+		protos[f.Registered] = fileDescriptor(f)
+		relative[f.Registered] = name
 	}
 
 	// A file resolves once the generated files it imports have: they are
@@ -94,21 +95,21 @@ func (g *generator) print() ([]File, error) {
 		if err := printer.PrintProtoFile(resolved[name], &b); err != nil {
 			return nil, errors.Wrapf(err, "print %s", name)
 		}
-		files = append(files, File{Path: ggconst.DirPB + "/" + relative[name], Content: b.String(), Service: len(g.files[relative[name]].services) > 0})
+		files = append(files, File{Path: ggconst.DirPB + "/" + relative[name], Content: b.String(), Service: len(g.Files[relative[name]].Services) > 0})
 	}
 	// The printer writes the relative name of every type, which a nested
 	// message of that name would shadow (see readBack): a printed file
 	// meaning anything but the descriptor never reaches the disk.
-	if err := readBack(g.appName, files, resolved); err != nil {
+	if err := readBack(g.AppName, files, resolved); err != nil {
 		return nil, err
 	}
 	return files, nil
 }
 
-// descriptor assembles the FileDescriptorProto of the file: proto3 syntax,
-// its package, its imports in sorted order, the go_package option, its
-// messages and services, and the comments recorded for them, under the
-// generated-code header.
+// fileDescriptor assembles the FileDescriptorProto of f: proto3 syntax, its
+// package, its imports in sorted order, the go_package option, its messages
+// and services, and the comments recorded for them, under the generated-code
+// header.
 //
 // The file record.proto of module tmpapp, importing three well-known types,
 // opens with
@@ -126,19 +127,19 @@ func (g *generator) print() ([]File, error) {
 //	import "google/protobuf/timestamp.proto";
 //
 //	option go_package = "tmpapp/pb;pb";
-func (f *protoFile) descriptor() *descriptorpb.FileDescriptorProto {
+func fileDescriptor(f *pbschema.ProtoFile) *descriptorpb.FileDescriptorProto {
 	locations := append([]*descriptorpb.SourceCodeInfo_Location{{
-		Path:                    []int32{fileSyntaxTag},
+		Path:                    []int32{pbschema.FileSyntaxTag},
 		Span:                    []int32{0, 0, 0},
-		LeadingDetachedComments: []string{commentText(strings.TrimPrefix(consts.CodeGeneratedComment(), "// "))},
-	}}, f.locations...)
+		LeadingDetachedComments: []string{pbschema.CommentText(strings.TrimPrefix(consts.CodeGeneratedComment(), "// "))},
+	}}, f.Locations...)
 	return &descriptorpb.FileDescriptorProto{
-		Name:        new(f.registered),
-		Package:     new(f.pkg),
-		Dependency:  slices.Sorted(maps.Keys(f.imports)),
-		MessageType: f.messages,
-		Service:     f.services,
-		Options:     &descriptorpb.FileOptions{GoPackage: new(f.goPackage)},
+		Name:        new(f.Registered),
+		Package:     new(f.Package),
+		Dependency:  slices.Sorted(maps.Keys(f.Imports)),
+		MessageType: f.Messages,
+		Service:     f.Services,
+		Options:     &descriptorpb.FileOptions{GoPackage: new(f.GoPackage)},
 		Syntax:      new("proto3"),
 		SourceCodeInfo: &descriptorpb.SourceCodeInfo{
 			Location: locations,

@@ -1,4 +1,4 @@
-package pb
+package pbschema
 
 import (
 	"google.golang.org/protobuf/types/descriptorpb"
@@ -59,7 +59,7 @@ func isASCIIDigit(c byte) bool { return '0' <= c && c <= '9' }
 // field may be named like.
 var messageMethods = []string{"Reset", "String", "ProtoMessage", "Marshal", "Unmarshal", "ExtensionRangeArray", "ExtensionMap", "Descriptor"}
 
-// goFieldNames returns the Go name of every field of desc, keyed by the
+// GoFieldNames returns the Go name of every field of desc, keyed by the
 // field's protobuf name, the way protoc-gen-go names them in order: the camel
 // case of the name (see goCamelCase), given a trailing underscore for as long
 // as it is a method every message has or the getter of a field named before
@@ -67,7 +67,7 @@ var messageMethods = []string{"Reset", "String", "ProtoMessage", "Marshal", "Unm
 // GetTitle_, its getter being GetGetTitle_. The synthetic oneof of a proto3
 // optional field takes its name after the field, as the plugin does: an
 // optional summary followed by x_summary gives XSummary_ for the latter.
-func goFieldNames(desc *descriptorpb.DescriptorProto) map[string]string {
+func GoFieldNames(desc *descriptorpb.DescriptorProto) map[string]string {
 	used := make(map[string]bool, len(messageMethods)+3*len(desc.GetField()))
 	for _, method := range messageMethods {
 		used[method] = true
