@@ -9,6 +9,7 @@ import (
 	"github.com/hydroan/gst/internal/lease"
 	"github.com/hydroan/gst/internal/lifecycle"
 	"github.com/hydroan/gst/internal/logfield"
+	"github.com/hydroan/gst/internal/operation"
 	gstotel "github.com/hydroan/gst/otel"
 	"github.com/hydroan/gst/util"
 	"github.com/robfig/cron/v3"
@@ -411,22 +412,14 @@ func interruption(ctx context.Context, err error) string {
 // the business log annotate themselves with it, the way they do with a
 // request's. With tracing on the round also gets a root span, the parent of
 // every span the job's operations open, and the trace id is that span's; with
-// tracing off the id is generated, the way the request middleware generates
-// one.
+// tracing off the id is generated, see operation.Begin.
 //
 // The span's status says what the log entry says: a round that finished is
 // ok, one that failed is an error, and one that was interrupted is neither —
 // it carries an event naming the interruption and leaves the status unset,
 // so a trace search for failed rounds does not turn up every deployment.
 func beginRound(parent context.Context, name string) (ctx context.Context, traceID string, end func(err error, interruption string)) {
-	ctx = parent
-	var span trace.Span
-	if gstotel.IsEnabled() {
-		ctx, span = gstotel.StartSpan(ctx, gstotel.OperationSpanName("cronjob", name))
-		traceID = span.SpanContext().TraceID().String()
-	} else {
-		traceID = util.TraceID()
-	}
+	ctx, span, traceID := operation.Begin(parent, "cronjob", name)
 	ctx = execctx.WithCronjob(ctx, name, traceID)
 
 	return ctx, traceID, func(err error, interruption string) {
