@@ -10,8 +10,10 @@ package columns
 
 import (
 	"io/fs"
+	"maps"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 
@@ -37,8 +39,10 @@ type Result struct {
 // Generate writes one .gen.go file per model source file and removes the
 // generated files whose source is gone, and returns the files it wrote and
 // removed. Generated files are framework-owned for their whole life cycle:
-// projects never create, edit, or clean them up. When it fails, the result
-// still lists what it wrote and removed before the failure.
+// projects never create, edit, or clean them up. A model file of the model
+// directory named like one of the directory's own generated files is refused
+// before anything is written, see registrationFileOwner. When it fails, the
+// result still lists what it wrote and removed before the failure.
 func Generate(module string, modelDir string, models []*modelinfo.Model, ignore gghelper.ProjectIgnore) (Result, error) {
 	var result Result
 
@@ -60,6 +64,11 @@ func Generate(module string, modelDir string, models []*modelinfo.Model, ignore 
 	}
 
 	byFile := groupColumnsByFile(resolved, sources)
+	for _, file := range slices.Sorted(maps.Keys(byFile)) {
+		if owner := registrationFileOwner(modelDir, columnsFileName(file)); owner != "" {
+			return result, errors.Newf("the model file %s would get its column references at %s, the %s; rename the file", file, columnsFileName(file), owner)
+		}
+	}
 
 	wanted := make(map[string]struct{}, len(byFile))
 	for file, entries := range byFile {
@@ -137,7 +146,7 @@ func removeOrphanColumnFiles(dir string, wanted map[string]struct{}) ([]string, 
 		if walkErr != nil {
 			return walkErr
 		}
-		if entry.IsDir() || !isColumnFileCandidate(path) {
+		if entry.IsDir() || !isColumnFileCandidate(dir, path) {
 			return nil
 		}
 		if _, keep := wanted[path]; keep {
@@ -162,14 +171,29 @@ func removeOrphanColumnFiles(dir string, wanted map[string]struct{}) ([]string, 
 }
 
 // isColumnFileCandidate reports whether path can be a generated column file
-// at all: it carries the generated suffix and is not one of the files another
-// generation step owns, such as the model registration and apidoc files:
-// model/sample/record.gen.go can be one, while model/model.gen.go,
+// of the model directory modelDir at all: it carries the generated suffix and
+// is not one of the directory's own generated files, see
+// registrationFileOwner: model/sample/record.gen.go and
+// model/sample/model.gen.go can be one, while model/model.gen.go,
 // model/apidoc.gen.go and model/sample/record.go cannot.
-func isColumnFileCandidate(path string) bool {
-	if !strings.HasSuffix(path, ggconst.SuffixGenGo) {
-		return false
+func isColumnFileCandidate(modelDir, path string) bool {
+	return strings.HasSuffix(path, ggconst.SuffixGenGo) && registrationFileOwner(modelDir, path) == ""
+}
+
+// registrationFileOwner names the generation step owning path when it is one
+// of the generated files of the model directory modelDir itself: the
+// "registration file" for model/model.gen.go and the "api doc file" for
+// model/apidoc.gen.go; "" for every other path, the same names in a
+// subdirectory included, which are column files like any other.
+func registrationFileOwner(modelDir, path string) string {
+	if filepath.Dir(path) != filepath.Clean(modelDir) {
+		return ""
 	}
-	base := filepath.Base(path)
-	return base != ggconst.FileModelGen && base != ggconst.FileAPIDocGen
+	switch filepath.Base(path) {
+	case ggconst.FileModelGen:
+		return "registration file"
+	case ggconst.FileAPIDocGen:
+		return "api doc file"
+	}
+	return ""
 }

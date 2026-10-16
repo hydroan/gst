@@ -93,3 +93,15 @@ func TestRemoveOrphanColumnFilesRefusesHandWrittenFile(t *testing.T) {
 	require.Error(t, err, "a file without the generated header must not be deleted")
 	require.FileExists(t, intruder)
 }
+
+// TestIsColumnFileCandidateSparesTheModelDirectorysOwnFiles pins that the
+// registration and api doc files are spared in the model directory alone: a
+// subpackage's file of the same name is a column file like any other.
+func TestIsColumnFileCandidateSparesTheModelDirectorysOwnFiles(t *testing.T) {
+	require.True(t, isColumnFileCandidate("model", filepath.Join("model", "sample", "record.gen.go")))
+	require.True(t, isColumnFileCandidate("model", filepath.Join("model", "sample", "model.gen.go")))
+	require.True(t, isColumnFileCandidate("model", filepath.Join("model", "sample", "apidoc.gen.go")))
+	require.False(t, isColumnFileCandidate("model", filepath.Join("model", "model.gen.go")))
+	require.False(t, isColumnFileCandidate("model", filepath.Join("model", "apidoc.gen.go")))
+	require.False(t, isColumnFileCandidate("model", filepath.Join("model", "sample", "record.go")))
+}

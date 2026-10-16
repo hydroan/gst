@@ -307,3 +307,95 @@ func (Record) Design() {
 	require.Contains(t, stdout, "GENERATE "+filepath.Join("model", "sample", "record.gen.go"))
 	require.FileExists(t, handwritten)
 }
+
+// TestGenRunRefusesAModelFileNamedLikeAGeneratedFileOfTheModelDirectory pins
+// the two file names a model file of the model directory cannot take: its
+// column references would be written where the registration file or the
+// api doc file goes, replacing it, so gg gen refuses the file by name and
+// leaves the registration file as it wrote it. A subpackage's file of the
+// same name is a model file like any other, and its column file is cleaned
+// up like any other once the source is gone.
+func TestGenRunRefusesAModelFileNamedLikeAGeneratedFileOfTheModelDirectory(t *testing.T) {
+	note := `package model
+
+import (
+	"github.com/hydroan/gst/dsl"
+	"github.com/hydroan/gst/model"
+)
+
+type Note struct {
+	Name string ` + "`json:\"name\"`" + `
+
+	model.Base
+}
+
+func (*Note) TableName() string { return "notes" }
+
+func (Note) Design() {
+	dsl.Migrate()
+	dsl.Endpoint("notes")
+}
+`
+	t.Run("the registration file's name", func(t *testing.T) {
+		projectDir, ok := newGenProject(t)
+		if !ok {
+			return
+		}
+		writeProjectFile(t, filepath.Join(projectDir, "model", "model.go"), note)
+
+		require.EqualError(t, genRunWithOptions(genRunOptions{Quiet: true}),
+			"the model file model/model.go would get its column references at model/model.gen.go, the registration file; rename the file")
+		registration, err := os.ReadFile(filepath.Join("model", "model.gen.go"))
+		require.NoError(t, err)
+		require.Contains(t, string(registration), "Register[", "the registration file stays what the run wrote")
+		require.NotContains(t, string(registration), "NoteCols")
+	})
+
+	t.Run("the api doc file's name", func(t *testing.T) {
+		projectDir, ok := newGenProject(t)
+		if !ok {
+			return
+		}
+		writeProjectFile(t, filepath.Join(projectDir, "model", "apidoc.go"), note)
+
+		require.EqualError(t, genRunWithOptions(genRunOptions{Quiet: true}),
+			"the model file model/apidoc.go would get its column references at model/apidoc.gen.go, the api doc file; rename the file")
+	})
+
+	t.Run("the same name in a subpackage", func(t *testing.T) {
+		projectDir, ok := newGenProject(t)
+		if !ok {
+			return
+		}
+		source := filepath.Join(projectDir, "model", "shop", "model.go")
+		writeProjectFile(t, source, `package shop
+
+import (
+	"github.com/hydroan/gst/dsl"
+	"github.com/hydroan/gst/model"
+)
+
+type Item struct {
+	Name string `+"`json:\"name\"`"+`
+
+	model.Base
+}
+
+func (*Item) TableName() string { return "items" }
+
+func (Item) Design() {
+	dsl.Migrate()
+	dsl.Endpoint("items")
+}
+`)
+		require.NoError(t, genRunWithOptions(genRunOptions{Quiet: true}))
+		columns, err := os.ReadFile(filepath.Join("model", "shop", "model.gen.go"))
+		require.NoError(t, err)
+		require.Contains(t, string(columns), "ItemCols")
+
+		require.NoError(t, os.Remove(source))
+		require.NoError(t, genRunWithOptions(genRunOptions{Quiet: true}))
+		_, err = os.Stat(filepath.Join("model", "shop", "model.gen.go"))
+		require.ErrorIs(t, err, os.ErrNotExist, "the column file goes with its source")
+	})
+}

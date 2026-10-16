@@ -135,7 +135,7 @@ func scanColumnInspectionFiles(module string, modelDir string, ignore gghelper.P
 		pkg := modelinfo.PackageImportPath(module, filepath.Dir(path))
 		// A file without the generated header is hand-written, whatever its
 		// name, and keeps participating in the build.
-		if isColumnFileCandidate(path) && bytes.HasPrefix(content, []byte(consts.CodeGeneratedComment())) {
+		if isColumnFileCandidate(modelDir, path) && bytes.HasPrefix(content, []byte(consts.CodeGeneratedComment())) {
 			return files.addColumnFile(path, pkg, content)
 		}
 		files.addSource(path, pkg, content)
