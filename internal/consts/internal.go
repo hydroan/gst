@@ -38,6 +38,9 @@ const (
 	import_ = "import"
 	export  = "export"
 
+	// batch is the route segment of the batch actions (see RouteSuffix).
+	batch = "batch"
+
 	sse = "sse"
 
 	stream = "stream"

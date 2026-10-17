@@ -1,6 +1,7 @@
 package module
 
 import (
+	"github.com/hydroan/gst/internal/consts"
 	"github.com/hydroan/gst/internal/modelregistry"
 	"github.com/hydroan/gst/internal/serviceregistry"
 	"github.com/hydroan/gst/internal/types"
@@ -36,7 +37,7 @@ func (w *Wrapper[M, REQ, RSP]) Param() string {
 
 func NewWrapper[M types.Model, REQ types.Request, RSP types.Response](route string, param string, pub bool, svc ...types.Service[M, REQ, RSP]) types.Module[M, REQ, RSP] {
 	if len(param) == 0 {
-		param = "id"
+		param = consts.PARAM_ID
 	}
 
 	var serviceImpl types.Service[M, REQ, RSP]

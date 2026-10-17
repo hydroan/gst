@@ -140,6 +140,7 @@ func TestRouterTargetForAction(t *testing.T) {
 		{name: "batch action", route: "samples", phase: consts.CreateMany, wantRoute: "/api/samples/batch"},
 		{name: "import action", route: "samples", phase: consts.Import, wantRoute: "/api/samples/import"},
 		{name: "export action", route: "samples", phase: consts.Export, wantRoute: "/api/samples/export"},
+		{name: "sse action", route: "samples", phase: consts.SSE, wantRoute: "/api/samples"},
 		{name: "exact action", route: "iam/admin/users/:id/sessions", param: ":id", phase: consts.Delete, exact: true, wantRoute: "/api/iam/admin/users/:id/sessions", wantParam: "id"},
 	}
 	for _, tt := range tests {

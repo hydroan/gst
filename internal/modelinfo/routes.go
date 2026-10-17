@@ -123,7 +123,7 @@ func ItemParam(design *dsl.Design) string {
 	if design != nil && design.Param != "" {
 		return design.Param
 	}
-	return ":id"
+	return ":" + consts.PARAM_ID
 }
 
 // RouterTargetForAction returns the path the router registers action at,
@@ -133,9 +133,10 @@ func ItemParam(design *dsl.Design) string {
 // is served. An item action appends the parameter ItemParam returns: the Get
 // action of route samples with Param("sample") registers /api/samples/:sample,
 // whose parameter is sample. A batch action appends batch, Import import and
-// Export export: the CreateMany action of route samples registers
-// /api/samples/batch. An Exact action keeps the route it declares, parameter
-// included: /api/iam/admin/users/:id/sessions, whose parameter is id, for
+// Export export (see consts.RouteSuffix, the layout module.Use registers by
+// too): the CreateMany action of route samples registers /api/samples/batch.
+// An Exact action keeps the route it declares, parameter included:
+// /api/iam/admin/users/:id/sessions, whose parameter is id, for
 // iam/admin/users/:id/sessions.
 func RouterTargetForAction(route string, design *dsl.Design, action *dsl.Action) (string, string) {
 	route = consts.APIPath(route)
@@ -147,21 +148,18 @@ func RouterTargetForAction(route string, design *dsl.Design, action *dsl.Action)
 		return route, consts.LastRouteParam(route)
 	}
 
+	// The phase decides what follows the route (see consts.RouteSuffix): the
+	// item parameter for an action on one row, which the path then ends in
+	// and names, route "tenant" with param ":tenant" becoming "tenant/:tenant"
+	// and with param ":id" "tenant/:id", or the fixed segment of a batch,
+	// import or export action.
 	paramName := ""
-
-	// If the phase is matched, the route appends the param, eg:
-	// route "tenant" with param ":tenant" becomes "tenant/:tenant"
-	// route "tenant" with param ":id" becomes "tenant/:id"
-	switch action.Phase {
-	case consts.Delete, consts.Update, consts.Patch, consts.Get:
-		route = filepath.Join(route, ItemParam(design))
-		paramName = consts.LastRouteParam(route)
-	case consts.CreateMany, consts.DeleteMany, consts.UpdateMany, consts.PatchMany:
-		route = filepath.Join(route, "batch")
-	case consts.Import:
-		route = filepath.Join(route, "import")
-	case consts.Export:
-		route = filepath.Join(route, "export")
+	item := ItemParam(design)
+	if suffix := consts.RouteSuffix(action.Phase, item); suffix != "" {
+		route = filepath.Join(route, suffix)
+		if suffix == item {
+			paramName = consts.LastRouteParam(route)
+		}
 	}
 
 	return route, paramName

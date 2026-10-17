@@ -63,20 +63,38 @@ type UseOption struct {
 	phases []consts.Phase
 }
 
-// CRUD registers phases using the framework's default CRUD route pattern.
+// CRUD registers phases using the framework's default CRUD route pattern
+// (see crudRoute). A phase no HTTP route serves is refused by name, the way
+// Exact refuses it.
 func CRUD(phases ...consts.Phase) UseOption {
 	return UseOption{
 		mode:   useRouteModeCRUD,
-		phases: phases,
+		phases: servedPhases("CRUD", phases),
 	}
 }
 
-// Exact registers phases against the module route exactly as declared.
+// Exact registers phases against the module route exactly as declared. A
+// phase no HTTP route serves is refused by name.
 func Exact(phases ...consts.Phase) UseOption {
 	return UseOption{
 		mode:   useRouteModeExact,
-		phases: phases,
+		phases: servedPhases("Exact", phases),
 	}
+}
+
+// servedPhases returns phases once every one of them is an action an HTTP
+// route serves, panicking with the name of the first that is not, under the
+// name of the declaring call: Stream is served over gRPC alone, and a hook
+// phase is no action. A module declares its phases at registration, where
+// a wrong one is a defect of the module to fail on, not a route to go
+// missing without a word.
+func servedPhases(call string, phases []consts.Phase) []consts.Phase {
+	for _, p := range phases {
+		if p.HTTPMethod() == "" {
+			panic(fmt.Sprintf("module.%s: phase %s has no HTTP route", call, p))
+		}
+	}
+	return phases
 }
 
 // Init releases pending module registrations.
@@ -142,7 +160,7 @@ func Use[M types.Model, REQ types.Request, RSP types.Response](mod types.Module[
 			return r == ' ' || r == '{' || r == '}' || r == '[' || r == ']' || r == ':'
 		})
 		if len(param) == 0 {
-			param = "id"
+			param = consts.PARAM_ID
 		}
 
 		for _, option := range options {
@@ -193,44 +211,26 @@ func registersModel(options []UseOption) bool {
 	return false
 }
 
-// crudRoute returns the raw route string of the phase under the CRUD layout.
-// Service registration and router registration both derive the registry key
-// from this route, so they must share this single mapping.
+// crudRoute returns the raw route string of the phase under the CRUD layout,
+// the layout gg gen registers a generated project's routes by (see
+// consts.RouteSuffix). Service registration and router registration both
+// derive the registry key from this route, so they must share this single
+// mapping.
 func crudRoute(route, param string, phase consts.Phase) string {
-	switch phase {
-	case consts.Delete, consts.Update, consts.Patch, consts.Get:
-		return fmt.Sprintf("%s/:%s", route, param)
-	case consts.CreateMany, consts.DeleteMany, consts.UpdateMany, consts.PatchMany:
-		return route + "/batch"
-	default:
-		return route
+	if suffix := consts.RouteSuffix(phase, ":"+param); suffix != "" {
+		return route + "/" + suffix
 	}
+	return route
 }
 
+// registerCRUDRouter registers the route of phase under the CRUD layout; an
+// action on one row reads the row's id from the route's parameter.
 func registerCRUDRouter[M types.Model, REQ types.Request, RSP types.Response](mod types.Module[M, REQ, RSP], route, param string, phase consts.Phase) {
-	target := crudRoute(route, param, phase)
-	switch phase {
-	case consts.Create:
-		registerRouter(mod, target, nil, consts.Create)
-	case consts.Delete:
-		registerRouter(mod, target, &types.ControllerConfig[M]{ParamName: param}, consts.Delete)
-	case consts.Update:
-		registerRouter(mod, target, &types.ControllerConfig[M]{ParamName: param}, consts.Update)
-	case consts.Patch:
-		registerRouter(mod, target, &types.ControllerConfig[M]{ParamName: param}, consts.Patch)
-	case consts.List:
-		registerRouter(mod, target, nil, consts.List)
-	case consts.Get:
-		registerRouter(mod, target, &types.ControllerConfig[M]{ParamName: param}, consts.Get)
-	case consts.CreateMany:
-		registerRouter(mod, target, nil, consts.CreateMany)
-	case consts.DeleteMany:
-		registerRouter(mod, target, nil, consts.DeleteMany)
-	case consts.UpdateMany:
-		registerRouter(mod, target, nil, consts.UpdateMany)
-	case consts.PatchMany:
-		registerRouter(mod, target, nil, consts.PatchMany)
+	var cfg *types.ControllerConfig[M]
+	if item := ":" + param; consts.RouteSuffix(phase, item) == item {
+		cfg = &types.ControllerConfig[M]{ParamName: param}
 	}
+	registerRouter(mod, crudRoute(route, param, phase), cfg, phase)
 }
 
 // registerRouter registers an HTTP route with the appropriate router based on mod.Pub().

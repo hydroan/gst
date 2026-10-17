@@ -269,3 +269,34 @@ func TestPhase_Filename(t *testing.T) {
 		})
 	}
 }
+
+// TestRouteSuffix pins what the CRUD layout appends to a route for each
+// action, the one table module.Use and gg gen register routes by: the item
+// parameter for the actions on one row, "batch" for the batch actions,
+// "import" and "export" for Import and Export, and nothing for the actions
+// served on the route itself, SSE included.
+func TestRouteSuffix(t *testing.T) {
+	cases := []struct {
+		phase consts.Phase
+		want  string
+	}{
+		{consts.Create, ""},
+		{consts.List, ""},
+		{consts.SSE, ""},
+		{consts.Delete, ":id"},
+		{consts.Update, ":id"},
+		{consts.Patch, ":id"},
+		{consts.Get, ":id"},
+		{consts.CreateMany, "batch"},
+		{consts.DeleteMany, "batch"},
+		{consts.UpdateMany, "batch"},
+		{consts.PatchMany, "batch"},
+		{consts.Import, "import"},
+		{consts.Export, "export"},
+	}
+	for _, c := range cases {
+		if got := consts.RouteSuffix(c.phase, ":id"); got != c.want {
+			t.Errorf("RouteSuffix(%s) = %q, want %q", c.phase, got, c.want)
+		}
+	}
+}
