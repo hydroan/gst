@@ -40,7 +40,9 @@ import (
 // second time, which nothing between the two changes, the model files and
 // the tags they carry being what the definitions are derived from. After a
 // tag was written the definitions are derived again, from the files as
-// they now are, and what that derivation reports stops the run too.
+// they now are — the overlay they are type-checked through is built again
+// too, since it carries the model files that read their column references
+// as they were — and what that derivation reports stops the run too.
 func fillPBTags(quiet bool, ignore gghelper.ProjectIgnore) ([]pb.File, error) {
 	if !gghelper.FileExists(ggconst.DirModel) {
 		return nil, nil
@@ -73,7 +75,7 @@ func fillPBTags(quiet bool, ignore gghelper.ProjectIgnore) ([]pb.File, error) {
 		byPath[tag.Path] = append(byPath[tag.Path], tag)
 	}
 	for _, path := range slices.Sorted(maps.Keys(byPath)) {
-		if err := rewritePBTags(path, byPath[path]); err != nil {
+		if err = rewritePBTags(path, byPath[path]); err != nil {
 			return nil, err
 		}
 		if !quiet {
@@ -81,6 +83,9 @@ func fillPBTags(quiet bool, ignore gghelper.ProjectIgnore) ([]pb.File, error) {
 				clioutput.Success("FIX", "%s: numbered %s.%s pb:%q", path, tag.Struct, tag.Field, strconv.Itoa(int(tag.Number)))
 			}
 		}
+	}
+	if cfg, err = protobufConfig(scanned.models, ignore); err != nil {
+		return nil, err
 	}
 	return pb.Generate(cfg)
 }

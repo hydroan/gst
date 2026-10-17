@@ -717,6 +717,67 @@ func TestGenRunNumbersTheFieldsWithoutPBTagsAfterTheCommittedDefinition(t *testi
 	})
 }
 
+// TestGenRunNumbersATagWhileAModelIsDeleted pins one gg gen run numbering a
+// field added without a pb tag while a model was deleted: the numbering
+// derives the protobuf definitions before the registration files are
+// rewritten, when the previous registration still names the deleted model.
+// The deleted model's own files are prune's to remove.
+func TestGenRunNumbersATagWhileAModelIsDeleted(t *testing.T) {
+	projectDir, ok := newGenProject(t)
+	if !ok {
+		return
+	}
+	writeProtobufProject(t, projectDir, map[string]string{"model/note.go": protobufNoteModel, "model/sheet.go": protobufSheetModel})
+	if err := genRunWithOptions(genRunOptions{Quiet: true}); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Remove(filepath.Join(projectDir, "model", "sheet.go")); err != nil {
+		t.Fatal(err)
+	}
+	writeProtobufProject(t, projectDir, map[string]string{"model/note.go": strings.Replace(protobufNoteModel, "\tTags  []string 'json:\"tags,omitempty\" pb:\"12\" gorm:\"-\"'\n", "\tTags  []string 'json:\"tags,omitempty\" pb:\"12\" gorm:\"-\"'\n\tBody  string   'json:\"body\" gorm:\"-\"'\n", 1)})
+
+	if err := genRunWithOptions(genRunOptions{Quiet: true}); err != nil {
+		t.Fatalf("genRunWithOptions() error = %v, want one run to number the tag and drop the deleted model", err)
+	}
+	note, err := os.ReadFile(filepath.Join(projectDir, "model", "note.go"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(note), `pb:"13"`) {
+		t.Errorf("the added field should be numbered 13:\n%s", note)
+	}
+}
+
+// TestGenRunNumbersATagOfAModelReadingItsColumns pins one gg gen run
+// numbering a field added without a pb tag to a model whose file reads its
+// own column references: the overlay the derivation type-checks through
+// carries that file rewritten, so the derivation after the tag was written
+// must build its overlay again from the file as it now is.
+func TestGenRunNumbersATagOfAModelReadingItsColumns(t *testing.T) {
+	projectDir, ok := newGenProject(t)
+	if !ok {
+		return
+	}
+	reading := strings.Replace(protobufNoteModel, "func (Note) TableName() string { return \"notes\" }\n",
+		"func (Note) TableName() string { return \"notes\" }\n\n// describe reads the column references gg gen writes for Note.\nfunc (Note) describe() { _ = NoteCols }\n", 1)
+	writeProtobufProject(t, projectDir, map[string]string{"model/note.go": reading})
+	if err := genRunWithOptions(genRunOptions{Quiet: true}); err != nil {
+		t.Fatal(err)
+	}
+	writeProtobufProject(t, projectDir, map[string]string{"model/note.go": strings.Replace(reading, "\tTags  []string 'json:\"tags,omitempty\" pb:\"12\" gorm:\"-\"'\n", "\tTags  []string 'json:\"tags,omitempty\" pb:\"12\" gorm:\"-\"'\n\tBody  string   'json:\"body\" gorm:\"-\"'\n", 1)})
+
+	if err := genRunWithOptions(genRunOptions{Quiet: true}); err != nil {
+		t.Fatalf("genRunWithOptions() error = %v, want one run to number the tag", err)
+	}
+	note, err := os.ReadFile(filepath.Join(projectDir, "model", "note.go"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(note), `pb:"13"`) {
+		t.Errorf("the added field should be numbered 13:\n%s", note)
+	}
+}
+
 // TestGenRunRefusesTwoActionsBecomingOneRPC pins the refusal of two actions
 // of one model that would become one rpc: the same action on two routes that
 // add no path parameter of their own.

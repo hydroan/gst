@@ -230,37 +230,6 @@ func TestPruneRunDeletesTheFilesOfADeletedModelServedOverGRPC(t *testing.T) {
 	}
 }
 
-// TestGenRunNumbersATagWhileAModelIsDeleted pins one gg gen run numbering a
-// field added without a pb tag while a model was deleted: the numbering
-// derives the protobuf definitions before the registration files are
-// rewritten, when the previous registration still names the deleted model.
-// The deleted model's own files are prune's to remove.
-func TestGenRunNumbersATagWhileAModelIsDeleted(t *testing.T) {
-	projectDir, ok := newGenProject(t)
-	if !ok {
-		return
-	}
-	writeProtobufProject(t, projectDir, map[string]string{"model/note.go": protobufNoteModel, "model/sheet.go": protobufSheetModel})
-	if err := genRunWithOptions(genRunOptions{Quiet: true}); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.Remove(filepath.Join(projectDir, "model", "sheet.go")); err != nil {
-		t.Fatal(err)
-	}
-	writeProtobufProject(t, projectDir, map[string]string{"model/note.go": strings.Replace(protobufNoteModel, "\tTags  []string 'json:\"tags,omitempty\" pb:\"12\" gorm:\"-\"'\n", "\tTags  []string 'json:\"tags,omitempty\" pb:\"12\" gorm:\"-\"'\n\tBody  string   'json:\"body\" gorm:\"-\"'\n", 1)})
-
-	if err := genRunWithOptions(genRunOptions{Quiet: true}); err != nil {
-		t.Fatalf("genRunWithOptions() error = %v, want one run to number the tag and drop the deleted model", err)
-	}
-	note, err := os.ReadFile(filepath.Join(projectDir, "model", "note.go"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !strings.Contains(string(note), `pb:"13"`) {
-		t.Errorf("the added field should be numbered 13:\n%s", note)
-	}
-}
-
 // TestPruneLeftoversKeepsWhatPruneIgnoreCovers pins that prune never
 // deletes what a gst.yaml prune.ignore entry covers: a disabled service file,
 // a whole directory of them, or a directory left empty. An entry naming
