@@ -36,10 +36,10 @@ func TestInspectionOverlayStubsGeneratedFiles(t *testing.T) {
 	require.Equal(t, map[string]string{columns: "package sample\n", registration: "package model\n"}, overlay)
 }
 
-// TestColumnInspectionOverlayLeavesOutColumnDependents builds the overlay for
+// TestInspectionOverlayLeavesOutColumnDependents builds the overlay for
 // model packages that read column references no file declares, the state the
 // inspection build starts from, and compiles them through it.
-func TestColumnInspectionOverlayLeavesOutColumnDependents(t *testing.T) {
+func TestInspectionOverlayLeavesOutColumnDependents(t *testing.T) {
 	t.Chdir(t.TempDir())
 	writeProjectFile(t, "go.mod", "module tmpapp\n\ngo 1.27\n")
 	recordSource := filepath.Join("model", "sample", "record.go")
@@ -196,7 +196,7 @@ func archiveID() string {
 	})
 }
 
-func TestColumnInspectionOverlayLeavesUnparsableFilesToTheCompiler(t *testing.T) {
+func TestInspectionOverlayLeavesUnparsableFilesToTheCompiler(t *testing.T) {
 	t.Chdir(t.TempDir())
 	writeProjectFile(t, filepath.Join("model", "sample", "record.go"), "package sample\n\nfunc status() string {\n\treturn RecordCols.Status.Name()\n")
 	models := []*modelinfo.Model{{
