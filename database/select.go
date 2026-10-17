@@ -308,10 +308,10 @@ func (a *selectBuilder[M]) scanOne(dest any) (err error) {
 		// function or joined select's term makes it row-level; either yields
 		// one row per group or per row, never the single row ScanOne
 		// promises.
-		if t.IsGroupKey() {
+		if types.TermIsGroupKey(t) {
 			return errors.Wrapf(ErrGroupedScanOne, "group key %q", types.TermColumnOf(t))
 		}
-		if t.IsPlain() || t.IsWindowed() || a.readsDerived(t) {
+		if types.TermIsPlain(t) || types.TermIsWindowed(t) || a.readsDerived(t) {
 			return errors.Wrapf(ErrScanOneRowLevel, "term %q", termAlias(t))
 		}
 	}
@@ -599,7 +599,7 @@ func (a *selectBuilder[M]) pageTieBreakers(shape projectionShape) []string {
 	}
 	for _, o := range a.orders {
 		term, _ := a.orderedTerm(o, shape)
-		if _, ok := identifying[types.TermColumnOf(term)]; ok && term.IsPlain() && (types.TermTableOf(term) == "" || types.TermTableOf(term) == shape.main) {
+		if _, ok := identifying[types.TermColumnOf(term)]; ok && types.TermIsPlain(term) && (types.TermTableOf(term) == "" || types.TermTableOf(term) == shape.main) {
 			return nil
 		}
 	}
@@ -609,7 +609,7 @@ func (a *selectBuilder[M]) pageTieBreakers(shape projectionShape) []string {
 	}
 	if len(a.qualifies) > 0 {
 		for _, t := range a.terms {
-			if t.IsPlain() && types.TermColumnOf(t) == key && (types.TermTableOf(t) == "" || types.TermTableOf(t) == shape.main) {
+			if types.TermIsPlain(t) && types.TermColumnOf(t) == key && (types.TermTableOf(t) == "" || types.TermTableOf(t) == shape.main) {
 				return []string{a.db.quoteIdent(termAlias(t)) + " " + string(direction)}
 			}
 		}
@@ -691,7 +691,7 @@ func (a *selectBuilder[M]) consumeDryRun() {
 // it: the constant, the column, or the function over the column.
 func termLabel(t types.Term) string {
 	switch {
-	case t.IsLiteral():
+	case types.TermIsLiteral(t):
 		return fmt.Sprintf("constant %q", types.TermLiteralOf(t))
 	case types.TermFnOf(t) == types.FnNone:
 		return fmt.Sprintf("column %q", types.TermColumnOf(t))
@@ -719,17 +719,17 @@ func (a *selectBuilder[M]) termExpr(t types.Term, shape projectionShape) (string
 	if jt, derived := a.derivedOf(t, shape); derived {
 		return a.derivedExpr(jt, t), nil, nil
 	}
-	if t.IsLiteral() {
+	if types.TermIsLiteral(t) {
 		return literalExpr(types.TermLiteralOf(t)), nil, nil
 	}
-	if !t.IsMeasure() {
+	if !types.TermIsMeasure(t) {
 		return a.keyExpr(t, shape), nil, nil
 	}
 	sql, args, coalesce, err := a.functionExpr(t, shape)
 	if err != nil {
 		return "", nil, err
 	}
-	if t.IsWindowed() {
+	if types.TermIsWindowed(t) {
 		if sql, args, err = a.windowExpr(t, sql, args, shape); err != nil {
 			return "", nil, err
 		}

@@ -139,10 +139,10 @@ func (a *selectBuilder[M]) functionExpr(t types.Term, shape projectionShape) (sq
 // restricts a measure, a bucket only truncates a group key. Dropping either
 // without a word is how a report ends up silently counting the wrong rows.
 func (a *selectBuilder[M]) validateGrouping(t types.Term) error {
-	if !t.IsMeasure() && len(types.TermConditionsOf(t)) > 0 {
+	if !types.TermIsMeasure(t) && len(types.TermConditionsOf(t)) > 0 {
 		return errors.Wrapf(ErrConditionOnGroupKey, "%q", termAlias(t))
 	}
-	if t.IsMeasure() && types.TermBucketOf(t) != types.TimeBucketNone {
+	if types.TermIsMeasure(t) && types.TermBucketOf(t) != types.TimeBucketNone {
 		return errors.Wrapf(ErrBucketOnMeasure, "%q", termAlias(t))
 	}
 	return nil
@@ -165,7 +165,7 @@ func (a *selectBuilder[M]) validateColumnClass(t types.Term, column modelschema.
 		if class != modelschema.ColumnClassNumeric {
 			return errors.Wrapf(ErrAggregateType, "%s over non-numeric column %q", types.TermFnOf(t), types.TermColumnOf(t))
 		}
-	case !t.IsMeasure() && types.TermBucketOf(t) != types.TimeBucketNone:
+	case !types.TermIsMeasure(t) && types.TermBucketOf(t) != types.TimeBucketNone:
 		if class != modelschema.ColumnClassTime {
 			return errors.Wrapf(ErrAggregateType, "time bucket over non-time column %q", types.TermColumnOf(t))
 		}
@@ -185,7 +185,7 @@ func (a *selectBuilder[M]) validateHaving(shape projectionShape) error {
 		if !a.isSelected(types.TermConditionTermOf(h)) {
 			return errors.Wrapf(ErrHavingTermNotSelected, "%q", termAlias(types.TermConditionTermOf(h)))
 		}
-		if types.TermConditionTermOf(h).IsWindowed() {
+		if types.TermIsWindowed(types.TermConditionTermOf(h)) {
 			return errors.Wrapf(ErrHavingWindowTerm, "%q", termAlias(types.TermConditionTermOf(h)))
 		}
 		if err := validateConditionValue(h, termAlias(types.TermConditionTermOf(h)), a.termKind(types.TermConditionTermOf(h), shape)); err != nil {

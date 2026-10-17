@@ -93,20 +93,20 @@ func (a *selectBuilder[M]) validate(mode buildMode) (projectionShape, error) {
 			// windows the query.
 			continue
 		}
-		if isWindowFn(types.TermFnOf(t)) && !t.IsWindowed() {
+		if isWindowFn(types.TermFnOf(t)) && !types.TermIsWindowed(t) {
 			return shape, errors.Wrapf(ErrWindowFnWithoutWindow, "%q", termAlias(t))
 		}
 		switch {
-		case t.IsWindowed() && !t.IsMeasure():
+		case types.TermIsWindowed(t) && !types.TermIsMeasure(t):
 			return shape, errors.Wrapf(ErrWindowOnKey, "%q", termAlias(t))
-		case t.IsWindowed() && types.TermFnOf(t) == types.FnCountDistinct:
+		case types.TermIsWindowed(t) && types.TermFnOf(t) == types.FnCountDistinct:
 			return shape, errors.Wrapf(ErrWindowCountDistinct, "%q", termAlias(t))
-		case t.IsWindowed():
+		case types.TermIsWindowed(t):
 			windowed++
-		case t.IsMeasure():
+		case types.TermIsMeasure(t):
 			measures++
 			shape.grouped = true
-		case t.IsGroupKey() && types.TermBucketOf(t) == types.TimeBucketNone:
+		case types.TermIsGroupKey(t) && types.TermBucketOf(t) == types.TimeBucketNone:
 			shape.grouped = true
 		}
 	}
@@ -123,9 +123,9 @@ func (a *selectBuilder[M]) validate(mode buildMode) (projectionShape, error) {
 			continue
 		}
 		switch {
-		case shape.grouped && t.IsPlain():
+		case shape.grouped && types.TermIsPlain(t):
 			return shape, errors.Wrapf(ErrPlainColumnInGroupedSelect, "%q", termAlias(t))
-		case shape.grouped && t.IsGroupKey():
+		case shape.grouped && types.TermIsGroupKey(t):
 			shape.keys = append(shape.keys, t)
 		}
 	}
@@ -258,7 +258,7 @@ func (a *selectBuilder[M]) termKind(t types.Term, shape projectionShape) valueKi
 		return kindUnknown
 	}
 	switch {
-	case t.IsLiteral(), types.TermBucketOf(t) != types.TimeBucketNone:
+	case types.TermIsLiteral(t), types.TermBucketOf(t) != types.TimeBucketNone:
 		return kindText
 	case types.TermFnOf(t) == types.FnCount, types.TermFnOf(t) == types.FnCountDistinct, types.TermFnOf(t) == types.FnRowNumber,
 		types.TermFnOf(t) == types.FnRank, types.TermFnOf(t) == types.FnDenseRank, types.TermFnOf(t) == types.FnSum, types.TermFnOf(t) == types.FnAvg:
@@ -372,13 +372,13 @@ func (a *selectBuilder[M]) validateTerm(t types.Term, shape projectionShape) err
 	if err := a.validateWindow(t, shape); err != nil {
 		return err
 	}
-	if t.IsLiteral() {
+	if types.TermIsLiteral(t) {
 		// A constant names no column and reads no schema.
 		return validateLiteral(t)
 	}
 	if len(types.TermColumnOf(t)) == 0 {
 		// COUNT(*) and the ranking functions are the terms without a column.
-		if t.IsMeasure() && (types.TermFnOf(t) == types.FnCount || types.TermFnOf(t) == types.FnRowNumber || types.TermFnOf(t) == types.FnRank || types.TermFnOf(t) == types.FnDenseRank) {
+		if types.TermIsMeasure(t) && (types.TermFnOf(t) == types.FnCount || types.TermFnOf(t) == types.FnRowNumber || types.TermFnOf(t) == types.FnRank || types.TermFnOf(t) == types.FnDenseRank) {
 			return nil
 		}
 		return errors.Wrapf(ErrUnknownColumn, "term %q has no column", types.TermFnOf(t))
@@ -392,7 +392,7 @@ func (a *selectBuilder[M]) validateTerm(t types.Term, shape projectionShape) err
 	// Under GROUP BY a joined row is shared by every row of the group that
 	// matched it, so only the aggregates that answer the same over repeats
 	// may read a joined column.
-	if _, joined := shape.joined[types.TermTableOf(t)]; joined && shape.grouped && t.IsMeasure() && !joinedMeasureAllowed(types.TermFnOf(t)) {
+	if _, joined := shape.joined[types.TermTableOf(t)]; joined && shape.grouped && types.TermIsMeasure(t) && !joinedMeasureAllowed(types.TermFnOf(t)) {
 		return errors.Wrapf(ErrJoinMeasure, "%s over %q of %q", types.TermFnOf(t), types.TermColumnOf(t), types.TermTableOf(t))
 	}
 	return a.validateColumnClass(t, column)
@@ -525,12 +525,12 @@ func (a *selectBuilder[M]) nullableAliases(shape projectionShape) map[string]str
 		source, err := a.columnOf(types.TermTableOf(t), types.TermColumnOf(t), shape)
 		known := err == nil
 		switch {
-		case t.IsPlain():
+		case types.TermIsPlain(t):
 			if known && nullableColumn(source) && !proven[a.columnKey(types.TermTableOf(t), types.TermColumnOf(t))] {
 				nullable[termAlias(t)] = fmt.Sprintf("column %q, which is nullable unless a condition on it in Where keeps NULL out", types.TermColumnOf(t))
 			}
 			continue
-		case t.IsGroupKey():
+		case types.TermIsGroupKey(t):
 			// The rows without a value form a group of their own, keyed NULL;
 			// a bucket of NULL is NULL as well.
 			if known && nullableColumn(source) && !proven[a.columnKey(types.TermTableOf(t), types.TermColumnOf(t))] {
@@ -548,7 +548,7 @@ func (a *selectBuilder[M]) nullableAliases(shape projectionShape) map[string]str
 		// rejected the term — but if it ever is, requiring the pointer is the
 		// safe side of the guess.
 		switch {
-		case !grouped && !t.IsWindowed():
+		case !grouped && !types.TermIsWindowed(t):
 			nullable[termAlias(t)] = fmt.Sprintf("%s, which is NULL when the filters match no rows", types.TermFnOf(t))
 		case len(types.TermConditionsOf(t)) > 0:
 			nullable[termAlias(t)] = fmt.Sprintf("a conditional %s, which is NULL for a group where no row passes its conditions", types.TermFnOf(t))

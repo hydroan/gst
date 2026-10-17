@@ -82,7 +82,7 @@ func (a *selectBuilder[M]) qualifyWrap(tx *gorm.DB, mode buildMode) *gorm.DB {
 // term the projection declares and compares against a value SQL can order.
 func (a *selectBuilder[M]) validateQualify(shape projectionShape) error {
 	for _, q := range a.qualifies {
-		if !a.isSelected(types.TermConditionTermOf(q)) || !types.TermConditionTermOf(q).IsWindowed() {
+		if !a.isSelected(types.TermConditionTermOf(q)) || !types.TermIsWindowed(types.TermConditionTermOf(q)) {
 			return errors.Wrapf(ErrQualifyTermNotWindow, "%q", termAlias(types.TermConditionTermOf(q)))
 		}
 		if err := validateConditionValue(q, termAlias(types.TermConditionTermOf(q)), a.termKind(types.TermConditionTermOf(q), shape)); err != nil {
@@ -229,13 +229,13 @@ func isWindowFn(fn types.TermFn) bool {
 // and orders name what they may — the queried model's columns in a row-level
 // projection, the projection's own keys and terms in a grouped one.
 func (a *selectBuilder[M]) validateWindow(t types.Term, shape projectionShape) error {
-	if !t.IsWindowed() {
+	if !types.TermIsWindowed(t) {
 		if isWindowFn(types.TermFnOf(t)) {
 			return errors.Wrapf(ErrWindowFnWithoutWindow, "%q", termAlias(t))
 		}
 		return nil
 	}
-	if !t.IsMeasure() {
+	if !types.TermIsMeasure(t) {
 		return errors.Wrapf(ErrWindowOnKey, "%q", termAlias(t))
 	}
 	if types.TermFnOf(t) == types.FnCountDistinct {
@@ -269,10 +269,10 @@ func (a *selectBuilder[M]) validateWindow(t types.Term, shape projectionShape) e
 		if _, derived := a.derivedOf(key, shape); derived {
 			continue
 		}
-		if key.IsLiteral() {
+		if types.TermIsLiteral(key) {
 			return errors.Wrapf(ErrWindowTermNotSelected, "%q partitions by the constant '%s', which is the same on every row", termAlias(t), types.TermLiteralOf(key))
 		}
-		if key.IsMeasure() {
+		if types.TermIsMeasure(key) {
 			if a.readsDerived(key) {
 				return errors.Wrapf(ErrWindowTermNotSelected, "%q partitions by %q, a term of a joined select the projection does not read; project it to partition by it", termAlias(t), termAlias(key))
 			}
@@ -307,7 +307,7 @@ func (a *selectBuilder[M]) validateWindow(t types.Term, shape projectionShape) e
 			if !types.TermOrderDirectionOf(o).Valid() {
 				return errors.Wrapf(ErrUnknownOrderDirection, "%q", types.TermOrderDirectionOf(o))
 			}
-			if types.TermOrderTermOf(o).IsWindowed() {
+			if types.TermIsWindowed(types.TermOrderTermOf(o)) {
 				return errors.Wrapf(ErrWindowNested, "%q orders by %q", termAlias(t), termAlias(types.TermOrderTermOf(o)))
 			}
 			if !a.isSelected(types.TermOrderTermOf(o)) {

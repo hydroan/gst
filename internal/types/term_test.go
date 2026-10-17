@@ -53,10 +53,10 @@ func TestTermKinds(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.label, func(t *testing.T) {
-			require.Equal(t, tt.measure, tt.term.IsMeasure())
-			require.Equal(t, tt.groupKey, tt.term.IsGroupKey())
-			require.Equal(t, tt.plain, tt.term.IsPlain())
-			require.False(t, tt.term.IsWindowed(), "no term here declares a window")
+			require.Equal(t, tt.measure, types.TermIsMeasure(tt.term))
+			require.Equal(t, tt.groupKey, types.TermIsGroupKey(tt.term))
+			require.Equal(t, tt.plain, types.TermIsPlain(tt.term))
+			require.False(t, types.TermIsWindowed(tt.term), "no term here declares a window")
 		})
 	}
 }
@@ -88,8 +88,8 @@ func TestTermModifiersReturnNewTerms(t *testing.T) {
 		window := types.PartitionBy(types.NewColumn[sampleTable, string]("tenant_id"))
 		windowed := total.Over(window)
 		require.Equal(t, &window, types.TermWindowOf(windowed))
-		require.True(t, windowed.IsWindowed())
-		require.False(t, total.IsWindowed(), "the original term stays unwindowed")
+		require.True(t, types.TermIsWindowed(windowed))
+		require.False(t, types.TermIsWindowed(total), "the original term stays unwindowed")
 	})
 }
 

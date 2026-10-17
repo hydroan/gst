@@ -128,34 +128,32 @@ type Term struct {
 	literal string
 }
 
-// IsMeasure reports whether the term applies a function rather than naming a
-// column, a window function included; a constant is neither.
-func (t Term) IsMeasure() bool { return t.fn != FnNone && t.fn != FnLiteral }
-
-// IsLiteral reports whether the term projects a constant.
-func (t Term) IsLiteral() bool { return t.fn == FnLiteral }
-
-// IsWindowed reports whether the term is evaluated over a window.
-func (t Term) IsWindowed() bool { return t.window != nil }
-
-// IsGroupKey reports whether the term is a group key: a column or time bucket
-// projected next to aggregates, which the framework derives GROUP BY from.
-func (t Term) IsGroupKey() bool { return t.fn == FnNone && !t.plain }
-
-// IsPlain reports whether the term is a column projected as it is stored.
-func (t Term) IsPlain() bool { return t.fn == FnNone && t.plain }
-
 // The functions below read the parts of a term for the database layer, which
 // renders them. They are functions rather than methods so the public gst
 // package, which forwards Term, does not hand them to business code.
 
+// TermIsMeasure reports whether the term applies a function rather than
+// naming a column, a window function included; a constant is neither.
+func TermIsMeasure(t Term) bool { return t.fn != FnNone && t.fn != FnLiteral }
+
+// TermIsLiteral reports whether the term projects a constant.
+func TermIsLiteral(t Term) bool { return t.fn == FnLiteral }
+
+// TermIsWindowed reports whether the term is evaluated over a window.
+func TermIsWindowed(t Term) bool { return t.window != nil }
+
+// TermIsGroupKey reports whether the term is a group key: a column or time
+// bucket projected next to aggregates, which the framework derives GROUP BY
+// from.
+func TermIsGroupKey(t Term) bool { return t.fn == FnNone && !t.plain }
+
+// TermIsPlain reports whether the term is a column projected as it is
+// stored.
+func TermIsPlain(t Term) bool { return t.fn == FnNone && t.plain }
+
 // TermFnOf returns the function the term applies: FnNone for a group key or a
 // plain column, FnLiteral for a constant.
 func TermFnOf(t Term) TermFn { return t.fn }
-
-// TermPlainOf reports whether the term is marked as a column projected as it
-// is stored.
-func TermPlainOf(t Term) bool { return t.plain }
 
 // TermWindowOf returns the window the term is evaluated over, or nil.
 func TermWindowOf(t Term) *Window { return t.window }

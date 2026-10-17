@@ -556,7 +556,7 @@ func (a *selectBuilder[M]) derivedTerms(shape projectionShape) (map[string]*join
 			// silently become the select's. An alias is written on purpose, and
 			// passing the select's aliased term is reading it through.
 			if a.ownTerm(t) && defaultAlias(t) {
-				if t.IsLiteral() {
+				if types.TermIsLiteral(t) {
 					return nil, errors.Wrapf(ErrDuplicateAlias, "the constant %q is projected by the query and by the joined select over %q alike; a constant is the query's own, and whether a row matched the select is read from the select's key, NULL under LeftJoinSelect where none did", termAlias(t), jt.table)
 				}
 				return nil, errors.Wrapf(ErrDuplicateAlias, "%q is projected by the query and by the joined select over %q alike, under its default alias; give the query's own term an alias of its own, or alias the select's term and pass it to read it through", termAlias(t), jt.table)
