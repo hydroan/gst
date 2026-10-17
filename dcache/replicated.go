@@ -16,9 +16,9 @@ import (
 
 	"github.com/cockroachdb/errors"
 	lru "github.com/hashicorp/golang-lru/v2"
-	"github.com/hydroan/gst/cache"
 	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/internal/cache/capacity"
+	"github.com/hydroan/gst/internal/cache/defaultcache"
 	"github.com/hydroan/gst/internal/cache/registry"
 	"github.com/hydroan/gst/internal/consts"
 	"github.com/hydroan/gst/internal/instance"
@@ -175,7 +175,7 @@ func Cache[T any]() (types.Cache[T], error) {
 		if !config.App.Kafka.Enabled {
 			return nil, errors.New("kafka is not enabled, the replicated cache requires it")
 		}
-		return newReplicatedCache[T](cache.Cache[entry[T]]())
+		return newReplicatedCache[T](defaultcache.Cache[entry[T]]())
 	})
 }
 
@@ -191,11 +191,11 @@ func typeName[T any]() string {
 }
 
 // entry wraps the cached value so the store below is keyed by a type of
-// dcache's own. cache.Cache keeps one process-wide instance per value type,
-// and the wrapper gives dcache a registry slot — and so a key space — that
-// business code holding cache.Cache[T]() can never share or collide with,
-// while the store still follows whatever backend the cache facade forwards
-// to.
+// dcache's own. The default backend keeps one process-wide instance per
+// value type, and the wrapper gives dcache a registry slot — and so a key
+// space — that business code holding cache.Cache[T]() can never share or
+// collide with, while the store still follows whatever backend the cache
+// facade forwards to (see defaultcache).
 type entry[T any] struct{ Value T }
 
 // replicatedCache implements types.Cache by replication. Every instance owns

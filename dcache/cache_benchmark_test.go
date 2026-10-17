@@ -7,15 +7,15 @@ import (
 	"time"
 
 	"github.com/cockroachdb/errors"
-	"github.com/hydroan/gst/cache"
 	"github.com/hydroan/gst/dcache"
+	"github.com/hydroan/gst/internal/cache/defaultcache"
 	"github.com/hydroan/gst/internal/types"
 )
 
 var ttl = 1 * time.Minute
 
 func Benchmark(b *testing.B) {
-	localcache := cache.Cache[string]()
+	localcache := defaultcache.Cache[string]()
 	replicated, err := dcache.Cache[string]()
 	if err != nil {
 		b.Fatal(err)

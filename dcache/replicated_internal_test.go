@@ -7,8 +7,8 @@ import (
 	"time"
 
 	"github.com/cockroachdb/errors"
-	"github.com/hydroan/gst/cache"
 	"github.com/hydroan/gst/config"
+	"github.com/hydroan/gst/internal/cache/defaultcache"
 	"github.com/hydroan/gst/internal/types"
 	"github.com/stretchr/testify/require"
 	"github.com/twmb/franz-go/pkg/kerr"
@@ -31,7 +31,7 @@ func TestPeerPropagation(t *testing.T) {
 	// keeps a single instance per type. It also gets a private store, because
 	// the source's cache.Cache store is one instance per type and sharing it
 	// would satisfy the assertions without any kafka round trip.
-	source, err := newReplicatedCache[typedProbe](cache.Cache[entry[typedProbe]]())
+	source, err := newReplicatedCache[typedProbe](defaultcache.Cache[entry[typedProbe]]())
 	require.NoError(t, err)
 	peerStore := newFakeStore[typedProbe]()
 	peer, err := newReplicatedCache[typedProbe](peerStore)

@@ -74,11 +74,11 @@
 package cache
 
 import (
-	"github.com/hydroan/gst/internal/cache/freelru"
+	"github.com/hydroan/gst/internal/cache/defaultcache"
 	"github.com/hydroan/gst/internal/types"
 )
 
 // Cache returns the process-wide typed cache backed by the forwarded backend.
 func Cache[T any]() types.Cache[T] {
-	return freelru.Cache[T]()
+	return defaultcache.Cache[T]()
 }
